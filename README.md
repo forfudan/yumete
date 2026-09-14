@@ -21,15 +21,17 @@ A working editor — not finished, and used daily by its author. Implemented so
 far, oldest first:
 
 - **#1 Open file / new buffer** — `yumete <file>` opens a file (a non-existent
-  path opens an empty buffer bound to it); `yumete` with no argument starts a new
-  scratch buffer.
+  path opens an empty buffer bound to it); `yumete` with no argument reopens what
+  was open last time (#76), or starts a scratch buffer when there is no session
+  and when `[editor] session = false`.
 - **#2 Save / save-as** — `:w` and `:w <path>` write the buffer atomically.
 - **#3 Quit / force-quit** — `:q` refuses to quit with unsaved changes; `:q!`
   overrides.
 - **#5 Modal editing** — Normal / Insert / Command modes (Helix-style).
 - **#6 / #7 Cursor motions** — `h j k l` and goto mode (`gg` `ge` `gh` `gl`
   `gs`), grapheme-aware and visual-column–preserving.
-- **#8 Char search** — `f` `t` `F` `T` find / till a character on the line.
+- **#8 Char search** — `f` and `F` find a character on the line, forward and
+  back. ⚠️ **No `t`/`T`**: that letter is the table mode's, all of it.
 - **#9 / #10 / #12 Editing & selection** — `x` selects a line, `v` / `;` extend
   / collapse, `d` / `c` delete / change, `i a I A` insert, `o O` open lines.
 - **#11 Undo / redo** — `u` / `U` (snapshot-based, grouped per edit).
@@ -106,10 +108,10 @@ far, oldest first:
 - **#63 Word segmentation from Yume's language model** — `w`/`b`/`e` and the
   segmentation overlay are driven by Yume's 詞頻表 (1.25M weighted entries) and
   詞彙表, shared by reference with the running IME rather than loaded twice. The
-  bundled 214-word list covered almost no real prose, so `w` used to walk one
-  漢字 at a time; it now steps `那年冬天 ／ 雪 ／ 下 ／ 得 ／ 比 ／ 往常 ／ 都 ／
-  早`. Falls back to `segmentation.txt` or the bundled list when the IME data is
-  absent.
+  bundled list covered almost no real prose at 214 words, so `w` used to walk
+  one 漢字 at a time; it now steps `那年冬天 ／ 雪 ／ 下 ／ 得 ／ 比 ／ 往常 ／ 都
+  ／ 早`. Falls back to `segmentation.txt`, then to the bundled list — which is
+  75,000 entries now, cut from the same model in five script tracks.
 
 - **#70 標點旁置** — `:view-hanging` puts 。，、？！：；「」 in the margin beside the
   character they belong to, the way a 古籍 is punctuated, so the text column
@@ -189,9 +191,9 @@ has the table, through #150):
   back out byte for byte. The same cell model works on a **Markdown `|` table**
   inside a document, aligned by East-Asian display width, which is the thing
   every other formatter gets wrong for Chinese.
-- **A hundred chapters.** `:grep` and `:toc` make results that are *text*, so
-  `gf` walks them; `:grep` then `:replace` renames a character across the whole
-  book without touching disk until `:write-all`; a session reopens what was open; `M a`
+- **A hundred chapters.** `:search-gd` and `:toc` make results that are *text*,
+  so `gf` walks them; the search panel (`空格 /`) then `r`/`R` renames a
+  character across the whole book without touching disk until `:write-all`; a session reopens what was open; `M a`
   and `' a` name a place and come back to it.
 - **Not losing work.** A file changed on disk is not written over; a crash copy
   is kept for every buffer, including the ones with no name; an undo point has
@@ -201,7 +203,7 @@ has the table, through #150):
   and 拆分 shown beside every candidate.
 - **Prose the editor understands.** Word segmentation from Yume's language
   model drives `w`/`b`/`e`; `.yumete/words.txt` teaches it the names in *this*
-  book; `{}`/`()` move by paragraph and by sentence.
+  book; `{}` moves by paragraph and `H`/`L` by sentence.
 
 Launch `yumete <file>` in a terminal for the editor, or `yumete --preview <file>`
 (or pipe the output) for a non-interactive preview — with `--vertical`, the
@@ -286,11 +288,14 @@ Three things differ there and the script handles all three: the binary is
 `~/.local/share/yumete`, and the global `yumete` is a **copy** rather than a
 symlink, because a symlink needs Developer Mode.
 
-Without the sibling yume repo, `cargo build --release` alone still produces a
-working editor at `target\release\yumete.exe` — it just has no 碼表 beyond the
-one built into the binary. If yume is already installed on the machine, its own
-tables are found where it put them (`%APPDATA%\Yume\`); if they are somewhere
-else entirely, name the place:
+⚠️ **The sibling repo is not optional.** `yumete-ime` depends on `yume-core`
+by path, so `cargo build` without `..\yume` fails in `cargo metadata`, before a
+single crate compiles — it is not「builds but has no 碼表」. What *is* optional
+is yume's **data**: a build with the sibling source but no installed tables
+carries 靈明精華版 (`crates/yumete-ime/jinghua/`, 0.36 MB) and types 漢字 out of
+the box. If yume is installed on the machine, its own tables are found where it
+put them (`%APPDATA%\Yume\`); if they are somewhere else entirely, name the
+place:
 
 ```toml
 # %APPDATA%\yumete\config.toml

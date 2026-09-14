@@ -15,6 +15,18 @@ name: Build release tarballs
 # It travels its own way: yume's own install, a `yume-data` formula, or
 # `$YUME_DATA_DIR`. An editor with no tables is still an editor.
 #
+# ⚠️ **Two repositories are checked out, side by side.** `yumete-ime` depends
+# on `yume-core` by path — `../../../yume/crates/yume-core` — so a checkout of
+# this repository alone does not build: `cargo metadata` fails before a single
+# crate compiles. Both repositories are private, so `GITHUB_TOKEN` cannot read
+# the sibling: the run needs a `YUME_REPO_TOKEN` secret (a PAT or a deploy key
+# with read access to `forfudan/yume`). The guard below says so in one line
+# rather than letting cargo say it in twenty.
+#
+#   $GITHUB_WORKSPACE/
+#     yumete/   ← this repository, and every `run:` works from here
+#     yume/     ← the sibling, source only (no `data/` — nothing needs it)
+#
 # Two ways in:
 #
 #   * publish a GitHub Release, and the version is its tag without the `v`.
@@ -26,6 +38,12 @@ name: Build release tarballs
 #     otherwise comes from `Cargo.toml`. A manual run keeps the tarballs as
 #     artifacts and attaches nothing, since there may be no release to attach
 #     them to.
+#
+# ⚠️ The release page is live from the moment it is published, and the assets
+# arrive minutes later — a reader (or a tap) who looks in between sees a
+# release with nothing on it. **Do the manual run first**, look at the
+# artifacts, then publish the release; the build is cached by then and the
+# window is short.
 
 on:
   release:
@@ -53,8 +71,16 @@ jobs:
     outputs:
       version: ${{ steps.pick.outputs.version }}
       tag: ${{ steps.pick.outputs.tag }}
+    # Everything runs inside this repository's own checkout — see the header
+    # for why there are two. Steps that need the workspace root say so with
+    # `working-directory: .`, which is resolved against `$GITHUB_WORKSPACE`.
+    defaults:
+      run:
+        working-directory: yumete
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: yumete
       - id: pick
         run: |
           set -euo pipefail
@@ -103,32 +129,75 @@ jobs:
             target: linux-aarch64
           - os: macos-14          # Apple Silicon (arm64)
             target: darwin-arm64
+    # **Test and build share one environment**, so what was tested is what
+    # ships. Two of these matter:
+    #
+    #   * `YUMETE_RELEASE` makes `crates/yumete/build.rs` emit a bare `0.1.0`.
+    #     Without it the binary says `0.1.0-dev.20260914…+1f6aeb2` inside a
+    #     tarball called `0.1.0` — and SemVer sorts that *before* the release.
+    #   * `YUMETE_BUILTIN_DIR` pointed at an empty directory means「這台機器沒
+    #     有裝宇浩」, true on a runner anyway — but saying it makes the package
+    #     *deterministic*: `crates/yumete-ime/build.rs` then always falls back
+    #     to 靈明精華版 in `crates/yumete-ime/jinghua/`, and a runner image that
+    #     one day carries a 宇浩 data directory cannot silently put a different
+    #     碼表 into a release.
+    env:
+      YUMETE_RELEASE: "1"
+      YUMETE_BUILTIN_DIR: ${{ github.workspace }}/no-yume-data
+    defaults:
+      run:
+        working-directory: yumete
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: yumete
+
+      # The sibling. Source only — `yume-core` is a library, and none of its
+      # build scripts want `data/`.
+      - name: Check that the sibling can be read
+        working-directory: .
+        run: |
+          set -euo pipefail
+          if [[ -z "${YUME_REPO_TOKEN}" ]]; then
+            echo "!! no YUME_REPO_TOKEN secret." >&2
+            echo "   yumete-ime depends on yume-core by path (../../../yume)," >&2
+            echo "   and forfudan/yume is private, so GITHUB_TOKEN cannot read" >&2
+            echo "   it. Add a PAT or deploy key with read access as the" >&2
+            echo "   YUME_REPO_TOKEN secret on this repository." >&2
+            exit 1
+          fi
+        env:
+          YUME_REPO_TOKEN: ${{ secrets.YUME_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: forfudan/yume
+          path: yume
+          token: ${{ secrets.YUME_REPO_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+          workspaces: yumete
+
+      - name: The empty data directory the env var names
+        working-directory: .
+        run: mkdir -p no-yume-data
 
       # **The tests run here too.** A release built from a tree that does not
       # pass them is the one build where nobody would notice in time.
+      # `--locked` here as well as on the build: without it this step quietly
+      # repairs a stale `Cargo.lock` and the `--locked` below never sees it.
       - name: Test
-        run: cargo test --workspace --no-fail-fast
+        run: cargo test --workspace --locked --no-fail-fast
 
-      # `YUMETE_BUILTIN_DIR` pointed at an empty directory means「這台機器沒有
-      # 裝宇浩」, which on a runner is true anyway — but saying it makes the
-      # package *deterministic*: `build.rs` then always falls back to
-      # 靈明精華版 in `crates/yumete-ime/jinghua/`, and a runner image that one
-      # day happens to carry a 宇浩 data directory cannot silently put a
-      # different 碼表 into a release.
       - name: Build
-        run: |
-          set -euo pipefail
-          mkdir -p "${RUNNER_TEMP}/no-yume-data"
-          YUMETE_BUILTIN_DIR="${RUNNER_TEMP}/no-yume-data" \
-            cargo build --release --locked -p yumete
+        run: cargo build --release --locked -p yumete
+
+      - name: Say what went in
+        run: ./target/release/yumete --version
 
       - name: Package
         run: |
@@ -136,14 +205,23 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           PKG="yumete-${VERSION}-${{ matrix.target }}"
           STAGE="dist/${PKG}"
-          mkdir -p "${STAGE}/bin"
+          mkdir -p "${STAGE}/bin" "${STAGE}/docs"
           cp target/release/yumete "${STAGE}/bin/"
-          cp LICENSE README.md "${STAGE}/" 2>/dev/null || cp README.md "${STAGE}/"
+          # ⚠️ No `2>/dev/null || …` here. It used to fall back to copying only
+          # the README, so the day LICENSE moved, an Apache-2.0 project would
+          # have shipped tarballs with no licence text and a green build.
+          # `set -e` and a loud failure is the right answer.
+          cp LICENSE README.md CHANGELOG.md "${STAGE}/"
           # The manual travels with it: this editor's keys are not vi's, and a
-          # reader who installed it from a tap has nowhere else to look.
-          cp docs/manual.md "${STAGE}/"
+          # reader who installed it from a tap has nowhere else to look. It
+          # keeps its repository path, so `README.md`'s own link to
+          # `docs/manual.md` still resolves inside the tarball.
+          cp docs/manual.md "${STAGE}/docs/"
           ( cd dist && tar -czf "${PKG}.tar.gz" "${PKG}" )
-          shasum -a 256 "dist/${PKG}.tar.gz" | tee "dist/${PKG}.tar.gz.sha256"
+          # From inside `dist/`, so the file records a bare name and
+          # `shasum -c` works where the reader unpacked it. Piped through
+          # `tee` the path would be `dist/yumete-…`, which resolves nowhere.
+          ( cd dist && shasum -a 256 "${PKG}.tar.gz" | tee "${PKG}.tar.gz.sha256" )
 
       # Run it from somewhere unrelated to the build, so a binary that only
       # works beside its own build tree is caught here rather than by a reader.
@@ -154,7 +232,14 @@ jobs:
           PKG="yumete-${VERSION}-${{ matrix.target }}"
           mkdir -p "$RUNNER_TEMP/elsewhere"
           cp -R "dist/${PKG}" "$RUNNER_TEMP/elsewhere/"
-          "$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" --version
+          # The binary must say exactly the version the tarball is named for.
+          # `--version` prints `yumete <version> — …`, so match the field.
+          got=$("$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" --version)
+          echo "$got"
+          case "$got" in
+            "yumete ${VERSION} "*|"yumete ${VERSION}") ;;
+            *) echo "!! binary says ${got}, tarball says ${VERSION}" >&2; exit 1 ;;
+          esac
           # …and it draws a page. `--shot` runs the whole launch, so this
           # catches a binary that starts and then cannot render.
           printf '那年冬天。\n' > "$RUNNER_TEMP/a.md"
@@ -163,7 +248,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}
-          path: dist/yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}.tar.gz*
+          # ⚠️ `path:` is resolved against `$GITHUB_WORKSPACE`, **not** against
+          # `defaults.run.working-directory` — so it carries the checkout
+          # directory even though every `run:` above does not.
+          path: yumete/dist/yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}.tar.gz*
           if-no-files-found: error
           retention-days: 14
 
