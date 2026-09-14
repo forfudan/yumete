@@ -144,10 +144,16 @@ pub fn terminal_answer() -> Option<bool> {
 /// which they want, and their terminal is the thing whose ground the editor is
 /// about to paint over.
 ///
-/// Terminals that do not answer are left to the config's own fallback. The
-/// wait is bounded and the reply is read straight off the descriptor rather
-/// than through the event reader, so nothing the reader types can be eaten by
-/// it and an unanswering terminal costs a tenth of a second at start-up.
+/// Terminals that do not answer are left to the config's own fallback, and an
+/// unanswering one costs a tenth of a second at start-up.
+///
+/// ⚠️ The reply is read **straight off the descriptor**, which takes whatever
+/// is in it — the terminal's answer *and anything the reader has already
+/// typed*. That used to be dropped, and it is the first tenth of a second of
+/// the session: `yumete 第三章.md` followed straight away by `iHELLO` left the
+/// file untouched. What is not part of the reply now goes to
+/// [`crate::typed_ahead`], which the front end plays back before it enters the
+/// loop.
 #[cfg(unix)]
 pub fn ask_the_terminal() -> Option<bool> {
     use std::io::{IsTerminal, Read, Write};
@@ -170,6 +176,8 @@ pub fn ask_the_terminal() -> Option<bool> {
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
+                // Nothing came that was an answer, so all of it was a person.
+                crate::typed_ahead::keep(&reply, 0..0);
                 return None;
             }
             let mut watch = libc::pollfd {
@@ -180,18 +188,28 @@ pub fn ask_the_terminal() -> Option<bool> {
             // SAFETY: one initialised `pollfd` describing a descriptor this
             // process owns, and a timeout in milliseconds.
             if unsafe { libc::poll(&mut watch, 1, left.as_millis() as libc::c_int) } <= 0 {
+                // ⚠️ **The common path, and the one that drops keystrokes.**
+                // A terminal that does not answer times out here, and
+                // everything read on the way — which is the reader typing —
+                // was thrown away with the buffer.
+                crate::typed_ahead::keep(&reply, 0..0);
                 return None;
             }
             let mut chunk = [0u8; 64];
             match std::io::stdin().read(&mut chunk) {
-                Ok(0) | Err(_) => return None,
+                Ok(0) | Err(_) => {
+                    crate::typed_ahead::keep(&reply, 0..0);
+                    return None;
+                }
                 Ok(n) => reply.extend_from_slice(&chunk[..n]),
             }
             if let Some(dark) = ground_is_dark(&reply) {
+                crate::typed_ahead::keep(&reply, osc_span(&reply));
                 return Some(dark);
             }
             // A terminal that is answering something else entirely.
             if reply.len() > 256 {
+                crate::typed_ahead::keep(&reply, 0..0);
                 return None;
             }
         }
@@ -216,6 +234,34 @@ pub fn ask_the_terminal() -> Option<bool> {
 /// Only the probe above calls it, and the probe is the unix one — so on a
 /// platform without it this parser is dead code rather than a warning.
 #[cfg(unix)]
+/// Where the `\x1b]11;…rgb:…` answer sits inside everything that was read.
+///
+/// Everything outside it was typed by a person — see [`crate::typed_ahead`].
+/// An answer with no terminator yet runs to the end of what has arrived.
+fn osc_span(reply: &[u8]) -> std::ops::Range<usize> {
+    let Some(rgb) = find(reply, b"rgb:") else {
+        return 0..0;
+    };
+    // Back to the `\x1b]` that introduced it, and forward to `\x1b\` or BEL.
+    let start = reply[..rgb]
+        .windows(2)
+        .rposition(|w| w == b"\x1b]")
+        .unwrap_or(rgb);
+    let tail = &reply[rgb..];
+    let end = tail
+        .iter()
+        .position(|&b| b == 0x07)
+        .map(|i| rgb + i + 1)
+        .or_else(|| find(tail, b"\x1b\\").map(|i| rgb + i + 2))
+        .unwrap_or(reply.len());
+    start..end
+}
+
+/// The first index at which `needle` appears in `hay`.
+fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
+}
+
 fn ground_is_dark(reply: &[u8]) -> Option<bool> {
     let text = std::str::from_utf8(reply).ok()?;
     let rest = text.split("rgb:").nth(1)?;
@@ -528,6 +574,25 @@ impl Palette {
     /// Whether the page is painted.
     pub fn paints(self) -> bool {
         self.paint
+    }
+}
+
+#[cfg(all(test, unix))]
+mod span_tests {
+    use super::osc_span;
+
+    /// What is left when the OSC 11 answer is cut out is what a person typed.
+    #[test]
+    fn the_answer_is_cut_out_and_the_typing_is_not() {
+        let reply = b"\x1b]11;rgb:1c1c/1c1c/1c1c\x1b\\";
+        assert_eq!(&reply[osc_span(reply)], &reply[..]);
+        // Typed before the answer arrived, and after it.
+        let mixed = b"i\x1b]11;rgb:ffff/ffff/ffff\x07HELLO";
+        let span = osc_span(mixed);
+        assert_eq!(&mixed[..span.start], b"i");
+        assert_eq!(&mixed[span.end..], b"HELLO");
+        // A terminal that said nothing recognisable claims nothing.
+        assert_eq!(osc_span(b"iHELLO"), 0..0);
     }
 }
 

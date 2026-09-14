@@ -65,6 +65,8 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
+                // Nothing came that was an answer, so all of it was a person.
+                crate::typed_ahead::keep(&reply, 0..0);
                 return None;
             }
             let mut watch = libc::pollfd {
@@ -75,18 +77,28 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
             // SAFETY: one initialised `pollfd` describing a descriptor this
             // process owns, and a timeout in milliseconds.
             if unsafe { libc::poll(&mut watch, 1, left.as_millis() as libc::c_int) } <= 0 {
+                // ⚠️ **The common path, and the one that drops keystrokes.**
+                // A terminal that does not answer times out here, and
+                // everything read on the way — which is the reader typing —
+                // was thrown away with the buffer.
+                crate::typed_ahead::keep(&reply, 0..0);
                 return None;
             }
             let mut chunk = [0u8; 64];
             match std::io::stdin().read(&mut chunk) {
-                Ok(0) | Err(_) => return None,
+                Ok(0) | Err(_) => {
+                    crate::typed_ahead::keep(&reply, 0..0);
+                    return None;
+                }
                 Ok(n) => reply.extend_from_slice(&chunk[..n]),
             }
             if let Some(wide) = cursor_moved_two(&reply) {
+                crate::typed_ahead::keep(&reply, cpr_span(&reply));
                 return Some(wide);
             }
             // A terminal that is answering something else entirely.
             if reply.len() > 256 {
+                crate::typed_ahead::keep(&reply, 0..0);
                 return None;
             }
         }
@@ -144,6 +156,20 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
 /// wrapped, or answered about a different row — is no answer at all rather than
 /// a guess, because a guess here shifts every line on the page.
 #[cfg(unix)]
+/// Where the `\x1b[row;colR` answer sits inside everything that was read.
+///
+/// Everything outside it was typed by a person — see [`crate::typed_ahead`].
+fn cpr_span(reply: &[u8]) -> std::ops::Range<usize> {
+    let Some(end) = reply.iter().position(|&b| b == b'R') else {
+        return 0..0;
+    };
+    let start = reply[..end]
+        .windows(2)
+        .rposition(|w| w == b"\x1b[")
+        .unwrap_or(0);
+    start..end + 1
+}
+
 fn cursor_moved_two(reply: &[u8]) -> Option<bool> {
     let text = std::str::from_utf8(reply).ok()?;
     let rest = text.split(';').nth(1)?;
@@ -156,6 +182,21 @@ fn cursor_moved_two(reply: &[u8]) -> Option<bool> {
         2 => Some(false),
         3 => Some(true),
         _ => None,
+    }
+}
+
+#[cfg(all(test, unix))]
+mod span_tests {
+    use super::cpr_span;
+
+    /// What is left when the cursor report is cut out is what a person typed.
+    #[test]
+    fn the_report_is_cut_out_and_the_typing_is_not() {
+        let mixed = b"i\x1b[1;3RHELLO";
+        let span = cpr_span(mixed);
+        assert_eq!(&mixed[..span.start], b"i");
+        assert_eq!(&mixed[span.end..], b"HELLO");
+        assert_eq!(cpr_span(b"iHELLO"), 0..0);
     }
 }
 

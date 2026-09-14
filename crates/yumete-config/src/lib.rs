@@ -2323,20 +2323,61 @@ fn parse_line_numbers(value: &str) -> LineNumbers {
     }
 }
 
+/// `#rrggbb` as three bytes, or `None` for anything that is not one.
+///
+/// ⚠️ **It must not panic, and it used to.** The gate was `hex.len() != 6` —
+/// a count of *bytes* — and the digits were then cut with `&hex[0..2]`. Six
+/// bytes that are not six ASCII characters therefore sliced through the middle
+/// of a codepoint: `ink = "#aあbc"` is exactly six bytes, and yumete died on
+/// start-up with a Rust backtrace and exit 101, every launch, until the reader
+/// found and edited the file by hand.
+///
+/// Worse than the usual panic: the config is read in `main` **before**
+/// `install_panic_hook` and the `catch_unwind` around the editor, so there was
+/// no line in `yumete.log` and no draft rescue either. Ten keys reach here —
+/// the eight `[theme]` colours and `[panel] ink`/`paper`.
+///
+/// The fix is to ask for ASCII hex digits, which is what the format is.
 fn parse_hex(value: &str) -> Option<(u8, u8, u8)> {
-    let hex = value.trim().trim_start_matches('#');
-    if hex.len() != 6 {
+    let hex = value.trim().trim_start_matches('#').as_bytes();
+    if hex.len() != 6 || !hex.iter().all(u8::is_ascii_hexdigit) {
         return None;
     }
-    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-    Some((r, g, b))
+    let pair = |i: usize| -> u8 {
+        let digit = |b: u8| (b as char).to_digit(16).unwrap_or(0) as u8;
+        digit(hex[i]) * 16 + digit(hex[i + 1])
+    };
+    Some((pair(0), pair(2), pair(4)))
 }
 
 #[cfg(test)]
 mod runner_tests {
     use super::*;
+
+    /// A colour value that is not `#rrggbb` is refused, never fatal.
+    ///
+    /// The byte-length gate let six bytes of non-ASCII through and then sliced
+    /// them at 2/4, which is a panic **before the panic hook is installed** —
+    /// no log, no draft rescue, and an editor that would not start until the
+    /// reader edited the config by hand. `lib.rs`'s own comment two hundred
+    /// lines up says a typo must not take the panel away.
+    #[test]
+    fn a_colour_that_is_not_a_colour_is_refused_rather_than_fatal() {
+        assert_eq!(parse_hex("#1a2B3c"), Some((0x1a, 0x2b, 0x3c)));
+        assert_eq!(parse_hex("  1a2b3c  "), Some((0x1a, 0x2b, 0x3c)));
+        for bad in [
+            "#aあbc",     // six bytes, four characters — the crash
+            "#あいう",    // nine bytes, three characters
+            "#12345",
+            "#1234567",
+            "",
+            "#zzzzzz",
+            "#12 34 5",
+            "＃１２３４５６", // full-width, and not hex at all
+        ] {
+            assert_eq!(parse_hex(bad), None, "{bad:?}");
+        }
+    }
 
     #[test]
     fn a_placeholder_is_one_whole_argument() {

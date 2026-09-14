@@ -14,6 +14,7 @@ pub mod table;
 pub mod theme;
 pub mod vertical;
 pub mod ambiguous;
+pub mod typed_ahead;
 
 use std::io::{self, stdout, Write as _};
 
@@ -1115,6 +1116,22 @@ const WHEEL_DRAIN: std::time::Duration = std::time::Duration::from_millis(12);
 /// consuming what we send.
 fn spawn_reader() -> std::sync::mpsc::Receiver<io::Result<Event>> {
     let (tx, rx) = std::sync::mpsc::channel();
+    // **What the reader typed before the editor was on screen goes first.**
+    // The two start-up probes read the descriptor directly and used to throw
+    // away everything that was not the terminal's reply — which is the first
+    // four tenths of a second of the session. See [`crate::typed_ahead`] for
+    // what is kept and what is deliberately not.
+    for c in crate::typed_ahead::take() {
+        let code = match c {
+            '\r' | '\n' => KeyCode::Enter,
+            '\t' => KeyCode::Tab,
+            c => KeyCode::Char(c),
+        };
+        let event = KeyEvent::new(code, KeyModifiers::NONE);
+        if tx.send(Ok(Event::Key(event))).is_err() {
+            break;
+        }
+    }
     std::thread::spawn(move || loop {
         let outcome = event::read();
         let failed = outcome.is_err();
