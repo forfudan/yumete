@@ -566,23 +566,25 @@ impl Palette {
     ///
     /// **A rung, not a hue.** A square that belongs to the same word as its
     /// neighbour is a hair off the paper and nothing more — see
-    /// [`yumete_config::rung::WORD`]. Being on the ladder, it follows the mood
+    /// [`yumete_config::rung::WORD_TINT`]. Being on the ladder, it follows the mood
     /// and the theme without carrying any of the accents' meanings: a word
     /// boundary is structure, not a mark somebody made.
     pub fn word(self) -> Color {
-        self.at(yumete_config::rung::WORD)
+        self.at(yumete_config::rung::WORD_TINT)
     }
 
     /// The other way to mark a word: the **writing** a shade back, on paper
     /// left alone (Feature #278).
     ///
-    /// [`yumete_config::rung::QUIET`] — 「one shade back」 is exactly what this
-    /// has to say, and it is the rung a reading beside its base already uses,
-    /// so an alternated page never has two kinds of quiet on it. It is a rung
-    /// and not a hue for the same reason [`Ink::word`] is: a boundary is
-    /// structure, not a mark somebody made.
+    /// [`yumete_config::rung::WORD_INK`] — 第 15 檔, a small step and no more.
+    /// It is a rung and not a hue for the same reason [`Ink::word`] is: a word
+    /// boundary is structure, not a mark somebody made.
+    ///
+    /// ⚠️ **Not `QUIET`**, which is where this began. That rung means 「not
+    /// the prose」, and borrowing it made every second word on the page look
+    /// demoted rather than merely bounded.
     pub fn word_ink(self) -> Color {
-        self.at(yumete_config::rung::QUIET)
+        self.at(yumete_config::rung::WORD_INK)
     }
 
 
@@ -692,7 +694,7 @@ mod tests {
                     yumete_config::rung::SELECTION,
                     yumete_config::rung::HEAD,
                     yumete_config::rung::BAND,
-                    yumete_config::rung::WORD,
+                    yumete_config::rung::WORD_TINT,
                     yumete_config::rung::CHROME,
                 ] {
                     assert_ne!(

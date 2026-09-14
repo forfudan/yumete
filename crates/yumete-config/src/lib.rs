@@ -629,6 +629,15 @@ pub mod rung {
     //! ⚠️ **紙不在盡頭。** 從前紙就是梯子的末端，於是「比正文再沉一級」沒有
     //! 地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的方向。現在
     //! 紙在第 90 檔，後面十檔留給比紙更主題色的東西。
+    /// **第 15 檔** — the writing, one small step back, for the *other* word in
+    /// an alternated pair (`:word-show ink`, #278).
+    ///
+    /// ⚠️ **Not [`QUIET`].** That rung is 「read this, it is not the prose」 —
+    /// a reading, a 拆分, a candidate's number — and at 第 25 it is far enough
+    /// back that alternating words looked like every other word had been
+    /// demoted. 分詞 is structure, not rank: 第 15 is 「有一定辨識度但又不會讓
+    /// 詞語之間差別太大」, and both members of the pair still read as prose.
+    pub const WORD_INK: u16 = 1500; // 第 15 檔
     /// The writing, and anything that *is* the writing: a hung 句讀, the
     /// character a highlight covers.
     pub const TEXT: u16 = 0; // 第 0 檔
@@ -680,7 +689,7 @@ pub mod rung {
     /// family as `==marked==` (朱 washed rather less), and on a dark ground the
     /// two were the same colour: the reader could not tell a word boundary from
     /// a highlighter.
-    pub const WORD: u16 = 8600; // 第 86 檔
+    pub const WORD_TINT: u16 = 8600; // 第 86 檔
     /// A band that must be **seen**, because position is not separating it
     /// from the text: the 縱書 number band sits in the text's own columns, the
     /// lit tab sits among the unlit ones, and a table's cursor row sits among
