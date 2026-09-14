@@ -500,6 +500,27 @@ impl Default for PanelConfig {
     }
 }
 
+/// How the status line is set against the page.
+///
+/// The two answers are the two directions of the palette's own ladder, which
+/// runs 墨 → 紙 — **反主題色 → 主題色**. A raised strip steps back toward the
+/// ink; a sunken one carries on past the paper.
+///
+/// ⚠️ **Reversal is not one of them, and was tried once** — see `draw_status`:
+/// a white bar under a dark page is the loudest thing on the screen saying the
+/// least.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StatusBar {
+    /// A strip one rung off the page — the default. Present without shouting.
+    #[default]
+    Raised,
+    /// A strip **further into the theme's own colour** than the page is —
+    /// past 紙, where the ladder has no rung. On a dark theme that is darker
+    /// than the writing's ground; on a light theme, lighter. Nothing shouts,
+    /// and the bar cannot be mistaken for the page or for a panel.
+    Sunken,
+}
+
 /// Whether the editor wears its own colours or the terminal's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Ground {
@@ -559,11 +580,20 @@ pub struct Ladder {
 
 impl Ladder {
     /// One rung: `0` is the ink, `1000` the paper.
+    /// One rung. `0` is the ink, [`rung::PAPER`] the paper, and it does not
+    /// stop there.
+    ///
+    /// ⚠️ **The ladder runs past 紙** (第 18 檔) to [`rung::DEEP`] (第 20 檔):
+    /// same straight line, carried on. 紙 is 主題色 and 墨 is 反主題色, so one
+    /// step further is *deeper* on a dark theme and *lighter* on a light one —
+    /// one idea, not two, and no third colour to name. Channels clamp, so a
+    /// theme whose paper is already white simply gets its paper back.
     pub fn step(self, t: u16) -> (u8, u8, u8) {
-        let t = t.min(1000) as i64;
+        let t = t.min(rung::DEEP) as i64;
+        let full = rung::PAPER as i64;
         let mix = |a: u8, b: u8| -> u8 {
             let (a, b) = (a as i64, b as i64);
-            ((a * 1000 + (b - a) * t + 500) / 1000) as u8
+            ((a * full + (b - a) * t + full / 2) / full).clamp(0, 255) as u8
         };
         (
             mix(self.ink.0, self.paper.0),
@@ -581,12 +611,25 @@ impl Ladder {
 /// carries nothing — too faint to read, too pale to write on — so nothing here
 /// is placed there except the rules, which are neither.
 pub mod rung {
+    //! **21 檔，第 0 檔是墨，第 18 檔是紙，第 20 檔是最沉的那一級。**
+    //!
+    //! 底下的數字是 0–10000，第 20 檔就是 10000。⚠️ **1 到 19 不必等距** ——
+    //! 它們只是這條連續刻度上幾個有名字的位置，各自的值是量出來的（見每一條
+    //! 自己的說明），不是格子除出來的。格是給人說話用的（「第 18 檔」比
+    //! 「9000」好記），值是給眼睛用的。
+    //!
+    //! 12 個名字現在佔了其中 12 檔，另外 8 檔空着等以後命名。⚠️ 特別是
+    //! **第 19 檔（9500）還沒有主人**：紙和最沉之間還有一級。
+    //!
+    //! ⚠️ **紙不在盡頭。** 從前紙就是 1000、就是梯子的末端，於是「比正文再沉
+    //! 一級」沒有地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的
+    //! 方向。現在紙在 18 檔，19 和 20 留給比紙更主題色的東西。
     /// The writing, and anything that *is* the writing: a hung 句讀, the
     /// character a highlight covers.
-    pub const TEXT: u16 = 0;
+    pub const TEXT: u16 = 0; // 第 0 檔
     /// One shade back: a reading beside its base, a 拆分 annotation, a
     /// candidate's number, the second line of anything.
-    pub const QUIET: u16 = 300;
+    pub const QUIET: u16 = 2700; // 第 6 檔
     /// **The ruler over a table's columns** — Feature #232.
     ///
     /// Its own rung, and darker than the furniture it used to share, because
@@ -596,17 +639,17 @@ pub mod rung {
     /// [`FURNITURE`] on the worst of the twenty-one ladders, clearing the 3:1
     /// a border needs and missing the 4.5:1 small text does. At this rung the
     /// worst is 4.36.
-    pub const RULER: u16 = 250;
+    pub const RULER: u16 = 2250; // 第 5 檔
     /// Furniture you read once: line numbers, an unlit tab, a key's label, a
     /// 批注, a page's front matter.
-    pub const FURNITURE: u16 = 400;
+    pub const FURNITURE: u16 = 3600; // 第 8 檔
     /// The markup itself — `**`, `#`, `[]()`. Shown, and set back far enough
     /// that it is never read as a word.
-    pub const MARKER: u16 = 450;
+    pub const MARKER: u16 = 4050; // 第 9 檔
     /// A rule: a panel's ring, the sidebar's edge, the ruler's line, a 稿紙
     /// tick. Not text and not a ground, and the only thing that belongs in the
     /// middle of the ladder.
-    pub const RULE: u16 = 550;
+    pub const RULE: u16 = 4950; // 第 10 檔
     /// Chrome: a sidebar, a tab bar, a table's gutter and header, a detail
     /// panel, the status line.
     ///
@@ -619,10 +662,10 @@ pub mod rung {
     /// now touches it, and 970 against the page is a 1.03:1 ground: the bar the
     /// eye is supposed to find at the bottom of the window read as part of the
     /// page. A ground with no rule and no position of its own has to be seen.
-    pub const CHROME: u16 = 900;
+    pub const CHROME: u16 = 8100; // 第 16 檔
     /// A ground that must not shout: a table's alternating columns, its cursor
     /// row, a code fence, a callout, the tint past the measure.
-    pub const BAND: u16 = 940;
+    pub const BAND: u16 = 8460; // 第 17 檔
     /// **The word tint** (分詞著色), and the quietest ground there is.
     ///
     /// Every other ground says 「this block is a different kind of thing」; this
@@ -632,7 +675,7 @@ pub mod rung {
     /// family as `==marked==` (朱 washed rather less), and on a dark ground the
     /// two were the same colour: the reader could not tell a word boundary from
     /// a highlighter.
-    pub const WORD: u16 = 962;
+    pub const WORD: u16 = 8658; // 第 17 檔
     /// A band that must be **seen**, because position is not separating it
     /// from the text: the 縱書 number band sits in the text's own columns, the
     /// lit tab sits among the unlit ones, and a table's cursor row sits among
@@ -643,7 +686,7 @@ pub mod rung {
     /// difference a reader can see — so in a table with coloured columns the
     /// cursor's own row could not be told from the column beside it. At 820 it
     /// is 1.27:1 at worst, which can.
-    pub const HEAD: u16 = 815;
+    pub const HEAD: u16 = 7335; // 第 15 檔
     /// A selection: the loudest ground, and still only a ground — the ink on it
     /// is untouched, so a heading inside a selection is still a heading.
     ///
@@ -654,9 +697,16 @@ pub mod rung {
     /// clear of the row band, and the writing on it still over 4.5:1 — 莫蘭迪,
     /// the theme with the least contrast to spend, is the one that decides
     /// this pair of numbers).
-    pub const SELECTION: u16 = 700;
-    /// The page.
-    pub const PAPER: u16 = 1000;
+    pub const SELECTION: u16 = 6300; // 第 13 檔
+    /// The page — **第 18 檔**, not the end of the ladder.
+    pub const PAPER: u16 = 9000; // 第 18 檔
+    /// **第 20 檔** — as far into the theme's own colour as the ladder goes.
+    ///
+    /// The one strip that is not on the page: the status line. On a dark theme
+    /// this is deeper than the paper, on a light one lighter — the ladder runs
+    /// 墨 → 紙, which is 反主題色 → 主題色, so 「再往主題色走」 is one idea and
+    /// not two.
+    pub const DEEP: u16 = 10000; // 第 20 檔
 }
 
 /// Theme (colour) settings — 【墨香】 and anything shaped like it.
@@ -668,6 +718,8 @@ pub struct ThemeConfig {
     pub mode: Mode,
     /// Whether the page is painted.
     pub ground: Ground,
+    /// How the status line is set against the page.
+    pub status_bar: StatusBar,
     /// 墨 and 紙, dark.
     pub dark: Ladder,
     /// 墨 and 紙, light. **Not the dark pair swapped**: the ground goes deeper
@@ -921,6 +973,7 @@ impl Default for ThemeConfig {
             name: "ink".to_string(),
             mode: Mode::Auto,
             ground: Ground::Paint,
+            status_bar: StatusBar::Sunken,
             // **The page is cool and the writing is near-white.** 墨香's own
             // pair — a bone ink on a warm near-black — is the right skin for a
             // *panel*, where it has always been; laid over the whole page it
@@ -931,7 +984,7 @@ impl Default for ThemeConfig {
             // finding precisely because most of the screen is not warm.
             dark: Ladder {
                 ink: (0xE8, 0xE4, 0xDA),
-                paper: (0x24, 0x26, 0x2C),
+                paper: (0x16, 0x1A, 0x15),
             },
             // 墨 on paper is darker than 墨 on a screen — the light ladder's
             // ink is the dark ladder's *ground*, which is both true of the
@@ -1868,6 +1921,7 @@ struct RawTheme {
     name: Option<String>,
     mode: Option<String>,
     ground: Option<String>,
+    status_bar: Option<String>,
     /// 墨 and 紙, as `"#RRGGBB"`. Two keys per mood, and every other shade in
     /// the editor is worked out from them.
     ink: Option<String>,
@@ -2062,6 +2116,9 @@ impl RawConfig {
         }
         if other.theme.mode.is_some() {
             self.theme.mode = other.theme.mode.clone();
+        }
+        if other.theme.status_bar.is_some() {
+            self.theme.status_bar = other.theme.status_bar.clone();
         }
         if other.theme.ground.is_some() {
             self.theme.ground = other.theme.ground.clone();
@@ -2298,6 +2355,13 @@ impl RawConfig {
             match ground.trim().to_ascii_lowercase().as_str() {
                 "paint" | "theme" | "自己" => config.theme.ground = Ground::Paint,
                 "terminal" | "終端" | "终端" => config.theme.ground = Ground::Terminal,
+                _ => {}
+            }
+        }
+        if let Some(bar) = self.theme.status_bar.as_deref() {
+            match bar.trim().to_ascii_lowercase().as_str() {
+                "raised" | "quiet" | "淡" => config.theme.status_bar = StatusBar::Raised,
+                "sunken" | "deep" | "沉" => config.theme.status_bar = StatusBar::Sunken,
                 _ => {}
             }
         }

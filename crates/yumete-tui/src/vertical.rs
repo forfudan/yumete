@@ -1264,14 +1264,22 @@ impl Skin {
         Skin { ink, paper }
     }
 
-    /// One rung of the ladder: `0` is pure ink, `1000` pure paper.
+    /// One rung of the ladder: `0` is pure ink, [`yumete_config::rung::PAPER`]
+    /// pure paper — **the same scale the page uses**, so a rung can be named
+    /// here by the same constant it is named by everywhere else.
+    ///
+    /// ⚠️ It used to be its own 0–1000 while taking `rung::RULE` as an
+    /// argument; the day the page's ladder was restretched to 0–10000 that
+    /// argument became five times the scale and the mix overflowed.
     ///
     /// Mixed in sRGB, not linear light, because the hand-tuned original was
     /// picked by eye in sRGB and mixing linearly comes out far lighter.
     fn step(self, t: u32) -> Color {
+        let full = yumete_config::rung::PAPER as i64;
+        let t = (t as i64).min(yumete_config::rung::DEEP as i64);
         let mix = |a: u8, b: u8| -> u8 {
             let (a, b) = (a as i64, b as i64);
-            ((a * 1000 + (b - a) * t as i64 + 500) / 1000) as u8
+            ((a * full + (b - a) * t + full / 2) / full).clamp(0, 255) as u8
         };
         Color::Rgb(
             mix(self.ink.0, self.paper.0),
@@ -1282,7 +1290,7 @@ impl Skin {
 
     /// The panel's ground.
     pub fn paper(self) -> Color {
-        self.step(1000)
+        self.step(yumete_config::rung::PAPER as u32)
     }
     /// The ring around the panel.
     ///
@@ -1295,18 +1303,18 @@ impl Skin {
     }
     /// A candidate.
     pub fn text(self) -> Color {
-        self.step(0)
+        self.step(yumete_config::rung::TEXT as u32)
     }
     /// Numbers and the code — one shade back from the candidates.
     pub fn helper(self) -> Color {
-        self.step(300)
+        self.step(yumete_config::rung::QUIET as u32)
     }
     /// The ground of the highlighted candidate, and the text on it.
     pub fn highlight(self) -> Color {
-        self.step(0)
+        self.step(yumete_config::rung::TEXT as u32)
     }
     pub fn on_highlight(self) -> Color {
-        self.step(1000)
+        self.step(yumete_config::rung::PAPER as u32)
     }
 }
 

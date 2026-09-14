@@ -571,6 +571,16 @@ impl Palette {
         Style::default().bg(self.at(rung))
     }
 
+    /// The **第 20 檔** ground — as far into the theme's own colour as the
+    /// ladder goes, and the only place that is not the page.
+    ///
+    /// See `rung::DEEP`: the ladder runs 墨 → 紙 → 更沉, which is 反主題色 →
+    /// 主題色, so this is darker on a dark theme and lighter on a light one
+    /// without anything here having to ask which.
+    pub fn sunken(self) -> Color {
+        self.at(yumete_config::rung::DEEP)
+    }
+
     /// Whether the page is painted.
     pub fn paints(self) -> bool {
         self.paint
@@ -841,8 +851,12 @@ mod tests {
     #[test]
     fn the_ladder_is_evenly_spaced_enough_to_place_an_interface_on() {
         // sRGB mixing, and the reason for it: over this pair it steps 5.8–7.4
-        // L* per hundred rungs, where mixing in linear light steps 3.2–16.8 and
-        // piles nine tenths of the rungs into the light half.
+        // L* per tenth of the ink→paper run, where mixing in linear light steps
+        // 3.2–16.8 and piles nine tenths of the rungs into the light half.
+        //
+        // ⚠️ A tenth is `PAPER / 10`, not 100: the ladder was restretched to
+        // 0–10000 with 紙 at 9000 (第 18 檔), and sampling `i * 100` afterwards
+        // measured the first ninth of it and called the whole ladder uneven.
         let p = palette(true);
         let l = |c: Color| {
             let y = luminance(c);
@@ -851,11 +865,23 @@ mod tests {
                 false => 903.3 * y,
             }
         };
+        let tenth = yumete_config::rung::PAPER / 10;
         let steps: Vec<f64> = (0..10)
-            .map(|i| l(p.at(i * 100)) - l(p.at((i + 1) * 100)))
+            .map(|i| l(p.at(i * tenth)) - l(p.at((i + 1) * tenth)))
             .collect();
         let (lo, hi) = steps.iter().fold((f64::MAX, 0.0f64), |(a, b), &s| (a.min(s), b.max(s)));
-        assert!(lo > 4.0 && hi < 9.0, "uneven ladder: {steps:?}");
+        // ⚠️ **Evenness, not size.** This used to assert `hi < 9.0`, which is a
+        // number about *how far apart this theme puts its ink and paper* — a
+        // theme's own decision. 墨香's page went deeper on 2026-09-14 (#24262C
+        // → #161A15, the reader's 「太灰，没有松烟的深沉」) and every tenth of
+        // the run grew with it: 5.8–7.4 L* became 7.2–9.8. Nothing was less
+        // even — the spread is 1.37× against 1.28× — but the absolute bound
+        // failed, and widening it to 10 would only move the same mistake.
+        //
+        // What the interface actually needs is that no tenth is invisible and
+        // none swallows its neighbours, which is a floor and a ratio.
+        assert!(lo > 3.0, "a tenth of the ladder nobody can see: {steps:?}");
+        assert!(hi / lo < 1.6, "uneven ladder: {steps:?}");
     }
 
     #[cfg(unix)]
