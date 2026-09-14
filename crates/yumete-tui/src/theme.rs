@@ -595,6 +595,15 @@ impl Palette {
     /// held at a fixed distance off the page is a different proposition: the
     /// distance does the work of 「這是一塊」 and the hue does the work of
     /// 「哪一塊」, and neither is asked to do the other's job.
+    /// ⚠️ **1.5:1, not [`Ink::wash`]'s 1.9** (#465). That number was set when
+    /// 朱 was the only wash on the page and it is right for a small one — a
+    /// `==標記==` is a few characters and needs to be found. A callout is a
+    /// paragraph of prose the reader is meant to *read*, four of them are now
+    /// coloured, and a saturated hue reads louder than a grey at the same
+    /// distance: at 1.9 the writing inside came out at 5.8:1, the lowest
+    /// contrast anywhere on a page whose prose is otherwise over 9. 1.5 puts it
+    /// back to 7.4 and the block is still unmistakably a block — the table
+    /// stripe beside it is 1.09.
     pub fn washed(self, accent: Accent) -> Color {
         let colour = match accent {
             Accent::Gold => self.gold,
@@ -603,7 +612,7 @@ impl Palette {
             Accent::Green => self.green,
             Accent::Azure => self.azure,
         };
-        self.washed_to(colour, 1.9, 4.5)
+        self.washed_to(colour, 1.5, 4.5)
     }
 
     /// An accent washed toward the page until it sits `off_page` from it —
