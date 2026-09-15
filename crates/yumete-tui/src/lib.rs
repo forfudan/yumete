@@ -4924,8 +4924,14 @@ pub(crate) fn table_row_rung(nth: usize) -> Option<u16> {
     // paper would be right on a page and wrong inside a `:::`, where what is
     // under the row is the callout's wash — the table would have punched the
     // same hole in it that the fence used to.
-    match nth % 2 {
-        0 => Some(yumete_config::rung::WORD_TINT),
+    match nth {
+        // ⚠️ **The header and the rule under it are one thing** (#486), so they
+        // take one ground — and the page's, because the header is already told
+        // apart by its ink. Banding the header alone split the two: a band that
+        // stopped at the `---` read as a row of its own with a line under it,
+        // rather than as a head.
+        0 | 1 => None,
+        n if n % 2 == 0 => Some(yumete_config::rung::WORD_TINT),
         _ => None,
     }
 }
@@ -13388,19 +13394,17 @@ mod tests {
         let buffer = render(&editor, &config, 40, 8);
 
         let prose = buffer[(0, 0)].style().bg;
-        let head = buffer[(0, 1)].style().bg;
-        assert_ne!(head, prose, "a table is not prose with pipes in it");
-        // **Two grounds, and one of them is the page** (#480). The rows simply
-        // alternate — the header included — so one row's cells can be told from
-        // the next's when a cell wraps, and a table is not a third colour on a
-        // page that already has enough.
-        assert_eq!(buffer[(0, 2)].style().bg, prose, "every other row is the page");
-        assert_eq!(buffer[(0, 3)].style().bg, head, "…and the ones between are banded");
-        // The header is told apart by its **ink**, not by a ground of its own:
-        // 金, which is what this palette has always called a table's header.
+        // **Two grounds, and one of them is the page** (#480, #486). The body
+        // alternates so one row's cells can be told from the next's when a cell
+        // wraps; the header and the `---` under it are one thing and take the
+        // page, because the header is told apart by its **ink**.
+        assert_eq!(buffer[(0, 1)].style().bg, prose, "the header is not banded");
+        assert_eq!(buffer[(0, 2)].style().bg, prose, "…nor the rule under it");
+        assert_ne!(buffer[(0, 3)].style().bg, prose, "the body is");
         let ink = ink(&config);
         assert_eq!(buffer[(2, 1)].style().fg, Some(ink.gold()), "the header is 金");
         assert_ne!(buffer[(2, 3)].style().fg, Some(ink.gold()), "a body row is not");
+        let head = buffer[(0, 3)].style().bg;
         // **And the ground stops where the table does** (#460): a table is a
         // shape *on* the page with a width of its own, not a block *of* the
         // page taking the window's.
