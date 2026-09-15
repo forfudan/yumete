@@ -1866,7 +1866,7 @@ on this page a ground is usually the **reader's** mark — the selection
 the cursor's row. That is the argument that settled the fold mark one night
 earlier (#283): 「an ink rather than a ground, because a ground here is the
 reader's mark and the fold mark is the editor's」. But that rule governs the
-loud three and not the ladder's paper end: `Palette::word` (`rung::WORD`, 962)
+loud three and not the ladder's paper end: `Palette::word` (`rung::WORD_TINT`, 第 86 檔)
 is documented as 「the quietest ground there is … a word boundary is
 **structure, not a mark somebody made**」. A ground *is* on the table, so long
 as it is one of the structural rungs.
@@ -1932,7 +1932,7 @@ chose the ink and then asked the question that undid it:
 「淡一级是更明显还是更不明显？ 能不能配合背景色？我希望不要太 invasive
 但也不要太 low-profile」. The answers decide it:
 
-- **淡一級是更不明顯.** `word_ink` is `rung::QUIET` (300), the rung of a reading
+- **淡一級是更不明顯.** `word_ink` is `rung::WORD_INK` (第 15 檔; it was `QUIET`, now `ASIDE`, and that rung is a reading's
   beside its base and a 拆分 annotation — its meaning is 這一項次要. Literal
   Option 2 therefore says the opposite of what a wiki term means, and lands
   exactly on the low-profile end he ruled out.
@@ -7238,7 +7238,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     in a column is a stack of two-cell dashes *between* the glyphs and reads as
     separators, and the margin is contended by a reading, a hung 句讀, a 着重號
     and a 平仄 mark), and one steer settled it: 「不要太 invasive 但也不要太
-    low-profile」. The quiet ink (`word_ink` = `rung::QUIET`) is *less*
+    low-profile」. The quiet ink (`word_ink` = `rung::WORD_INK`) is *less*
     conspicuous, so it is the low-profile end he ruled out; a ground **is**
     allowed, because `Palette::word` says a word boundary is 「structure, not a
     mark somebody made」 — that rule governs SELECTION/HEAD/BAND and the 朱

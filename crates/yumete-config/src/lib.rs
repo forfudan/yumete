@@ -586,7 +586,7 @@ impl Ladder {
     /// One rung. `0` is the ink, [`rung::PAPER`] the paper, and it does not
     /// stop there.
     ///
-    /// ⚠️ **The ladder runs past 紙** (第 18 檔) to [`rung::DEEP`] (第 20 檔):
+    /// ⚠️ **The ladder runs past 紙** (第 90 檔) to [`rung::DEEP`] (第 100 檔):
     /// same straight line, carried on. 紙 is 主題色 and 墨 is 反主題色, so one
     /// step further is *deeper* on a dark theme and *lighter* on a light one —
     /// one idea, not two, and no third colour to name. Channels clamp, so a
@@ -1086,7 +1086,7 @@ impl Default for ThemeConfig {
                 //
                 // ⚠️ **11:1, not 10:1** — every rung below is a fraction of
                 // this one, so dimming the ink dims the whole page with it.
-                // At 10:1 the 第 6 檔 that marks 行内代碼 fell to 5.5:1 against
+                // At 10:1 行内代碼 — 第 27 檔 then, a 品色 now — fell to 5.5:1 against
                 // the paper and stopped reading as a mark at all; 11:1 puts it
                 // back over 6. The ink is the ceiling the ladder hangs from.
                 ink: (0xD2, 0xCE, 0xC4),

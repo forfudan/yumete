@@ -65,9 +65,9 @@ pub enum WordCommand {
     Edit,
     /// `:word-list global` — open the global `segmentation.txt`, existing or not.
     Global,
-    /// `:word-discover` — mine this book for the words no dictionary has, and
-    /// write them into `.yumete/words.txt` unsaved (Feature #239).
-    /// `:word-discover` and its three wider spellings — **how far to read**.
+    /// `:word-discover` and its three wider spellings — **how far to read**
+    /// (Feature #239). Mines the words no dictionary has and writes the list
+    /// to `.yumete/discovered_words.txt`, overwriting it.
     ///
     /// The same four scopes `:search` has, and for the same reason: 「這一篇／
     /// 這個資料夾／這個倉／打開的那個目錄」 is one idea, and a reader who has

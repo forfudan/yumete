@@ -229,22 +229,27 @@ impl Editor {
     /// `:word-discover` — the words this book has and no dictionary does
     /// (Feature #239).
     ///
-    /// **The whole project, not this file.** A name earns its place in the
-    /// list by turning up in chapter after chapter, and five sightings spread
-    /// over forty files is exactly the evidence a single open buffer cannot
-    /// show. Unsaved buffers count as they stand, the way `:grep` reads them.
+    /// **This file, unless `scope` says wider** (#452). `:word-discover` reads
+    /// the buffer alone; `-cd` its folder, `-gd` the repository, `-wd` the
+    /// workspace — the same four words `:search` uses. The scope is the whole
+    /// question: the three statistics are ratios, so what is read decides what
+    /// is found, and a repository of 拆分表 drowns the chapter being written.
+    /// Unsaved buffers count as they stand, the way `:grep` reads them.
     ///
-    /// **The candidates are written into the list, unsaved.** This is the same
-    /// bargain [`Self::replace_found`] strikes: the editor does the work, the
-    /// buffer holds it, `u` takes it back, and `:w` is the moment a person says
-    /// yes. A listing the writer would have to retype by hand is not an offer,
-    /// and a file quietly rewritten on disk is not a question. What lands is a
-    /// block of `詞　# 47 次` lines under a comment saying where it came from —
-    /// delete the ones that are not words and save.
+    /// **The list goes into memory, and a copy of it goes into a file that is
+    /// only ever written** (#448). `.yumete/discovered_words.txt`, overwritten
+    /// whole on every run and never read back — so there is nothing to accept,
+    /// nothing to save, and nothing a later scan can resurrect after the writer
+    /// struck it out. `.yumete/words.txt` is the writer's own and yumete only
+    /// reads it. The file is opened afterwards because this command exists to
+    /// be *looked at*; 自動認詞 does the same work without saying a word.
     ///
-    /// Nothing already in the list comes back on a second run: the segmenter
-    /// in force is wrapped in [`yumete_cjk::WithWords`], so a listed word is
-    /// one it already joins, and [`crate::discover`] never offers those.
+    /// ⚠️ **What autodetect found is cleared first and put back if this run
+    /// finds nothing.** The filter below asks the segmenter 「do you already
+    /// join this?」 and autodetect's own answer is *in* that segmenter, so a
+    /// second look with the first still installed finds nothing at all — while
+    /// a scan that genuinely finds nothing must not take away the words that
+    /// were working a moment ago (#466).
     pub(super) fn discover_words(
         &mut self,
         scope: &crate::search_panel::Where,
@@ -361,7 +366,12 @@ impl Editor {
         match scope {
             Where::Buffer => None,
             Where::Folder => Some(self.here_folder()),
-            Where::Workspace => std::env::current_dir().ok(),
+            // ⚠️ **Never `None` on failure** (#475): `None` means 「this
+            // buffer」 here, so an unreadable working directory would have
+            // turned `:word-discover-wd` quietly into `:word-discover`.
+            Where::Workspace => Some(
+                std::env::current_dir().unwrap_or_else(|_| self.here_folder()),
+            ),
             Where::Project => Some(self.project_root()),
             Where::Named(path) => Some(path.clone()),
         }

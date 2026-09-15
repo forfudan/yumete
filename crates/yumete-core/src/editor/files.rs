@@ -696,6 +696,22 @@ impl Editor {
         }
     }
 
+    /// The link the cursor is standing in, if it is standing in one.
+    ///
+    /// Only Markdown writes links this way; Typst spells them `#link(…)`,
+    /// which is code and is read as code.
+    pub(super) fn link_under_cursor(&self) -> Option<crate::markdown::Link> {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor);
+        let at = self.cursor - rope.line_to_char(line);
+        let text = rope.line(line).to_string();
+        let text = text.trim_end_matches(['\n', '\r']);
+        match self.current_buffer().syntax() {
+            crate::syntax::Syntax::Markdown => crate::markdown::link_at(text, at),
+            _ => None,
+        }
+    }
+
     /// Follow the link under the cursor (`gx`) — Feature #285.
     ///
     /// A link in a manuscript points at one of three things, and they are not
@@ -720,22 +736,9 @@ impl Editor {
     /// Nothing here goes through a shell. `open`/`xdg-open` are handed the URL
     /// as one argument by the front end (see `yumete_tui::show`), and this side
     /// never builds a command line at all.
-    /// The link the cursor is standing in, if it is standing in one.
     ///
-    /// Only Markdown writes links this way; Typst spells them `#link(…)`,
-    /// which is code and is read as code.
-    pub(super) fn link_under_cursor(&self) -> Option<crate::markdown::Link> {
-        let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor);
-        let at = self.cursor - rope.line_to_char(line);
-        let text = rope.line(line).to_string();
-        let text = text.trim_end_matches(['\n', '\r']);
-        match self.current_buffer().syntax() {
-            crate::syntax::Syntax::Markdown => crate::markdown::link_at(text, at),
-            _ => None,
-        }
-    }
-
+    /// ⚠️ **`gd` follows one too** (#454), by the same route: a link is a
+    /// definition, and the one a manuscript has most of.
     pub(super) fn follow_link(&mut self) {
         let Some(link) = self.link_under_cursor() else {
             self.status = say!("link.none-here");

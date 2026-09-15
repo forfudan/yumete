@@ -723,7 +723,7 @@ impl Palette {
         Style::default().bg(self.at(rung))
     }
 
-    /// The **第 20 檔** ground — as far into the theme's own colour as the
+    /// The **第 100 檔** ground — as far into the theme's own colour as the
     /// ladder goes, and the only place that is not the page.
     ///
     /// See `rung::DEEP`: the ladder runs 墨 → 紙 → 更沉, which is 反主題色 →
@@ -1007,7 +1007,7 @@ mod tests {
         // 3.2–16.8 and piles nine tenths of the rungs into the light half.
         //
         // ⚠️ A tenth is `PAPER / 10`, not 100: the ladder was restretched to
-        // 0–10000 with 紙 at 9000 (第 18 檔), and sampling `i * 100` afterwards
+        // 0–10000 with 紙 at 9000 (第 90 檔), and sampling `i * 100` afterwards
         // measured the first ninth of it and called the whole ladder uneven.
         let p = palette(true);
         let l = |c: Color| {

@@ -915,6 +915,83 @@ pub fn footnote_numbers(text: &str) -> Vec<usize> {
 mod tests {
     use super::*;
 
+    /// Every path that ends a table resets its row counter (#467).
+    ///
+    /// The counter used to be cleared on two of the eleven returns that end a
+    /// table, so a second table separated from the first by anything other
+    /// than a blank line went on counting: its header came out as a body row
+    /// and the banding was inverted for the rest of the table. No file in the
+    /// repository triggered it, which is exactly why it wanted a test.
+    #[test]
+    fn a_second_table_starts_counting_from_its_own_header() {
+        let nths = |between: &str| -> Vec<usize> {
+            let mut scan = BlockScanner::new();
+            let mut out = Vec::new();
+            let doc = format!("| 甲 | 乙 |\n| --- | --- |\n{between}\n| 丙 | 丁 |\n| 戊 | 己 |");
+            for line in doc.lines() {
+                if let Block::Table { nth, .. } = scan.feed(line, line.len()) {
+                    out.push(nth);
+                }
+            }
+            out
+        };
+        // ⚠️ A lone ``` **opens** a fence and swallows what follows, so the
+        // fence case is a fence: opened and closed.
+        for between in ["", "## 標題", ":::", "```\n```", "> 注", "- 注", "---", "[^1]: 註"] {
+            assert_eq!(
+                nths(between),
+                vec![0, 1, 0, 1],
+                "a {between:?} between two tables must end the first"
+            );
+        }
+        // …and a `|` row that is *not* a break does not restart it.
+        let mut scan = BlockScanner::new();
+        let doc = "| 甲 |\n| --- |\n| 丙 |\n| 丁 |";
+        let got: Vec<usize> = doc
+            .lines()
+            .filter_map(|l| match scan.feed(l, l.len()) {
+                Block::Table { nth, .. } => Some(nth),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(got, vec![0, 1, 2, 3]);
+    }
+
+    /// A quote, a fence and a table inside a `:::` are still themselves (#468).
+    ///
+    /// Everything inside a container used to come back as `Container`, which
+    /// was harmless while every block wore the same grey band and wrong the
+    /// moment they stopped: a fence draws no ground of its own now, so it
+    /// punched a page-coloured hole through the callout, and a quote lost its
+    /// colour entirely.
+    #[test]
+    fn a_block_inside_a_callout_is_still_that_block() {
+        let mut scan = BlockScanner::new();
+        let doc = "::: note\n> 引\n```\nx\n```\n| 甲 |\n| --- |\n散文\n:::";
+        let got: Vec<Block> = doc.lines().map(|l| scan.feed(l, l.len())).collect();
+        assert!(matches!(got[1], Block::Quote { inside: Some(Callout::Note) }), "{:?}", got[1]);
+        assert!(matches!(got[2], Block::Code { inside: Some(Callout::Note) }), "{:?}", got[2]);
+        assert!(matches!(got[4], Block::Code { inside: Some(Callout::Note) }), "{:?}", got[4]);
+        assert!(
+            matches!(got[5], Block::Table { nth: 0, inside: Some(Callout::Note) }),
+            "{:?}",
+            got[5]
+        );
+        // The prose between them is the callout's, and so is the closing line.
+        assert!(matches!(got[7], Block::Container(Callout::Note)));
+        assert!(matches!(got[8], Block::Container(Callout::Note)));
+        // Outside one, the same three carry no callout.
+        let mut scan = BlockScanner::new();
+        for line in ["> 引", "```", "```", "| 甲 |"] {
+            match scan.feed(line, line.len()) {
+                Block::Quote { inside } | Block::Code { inside } | Block::Table { inside, .. } => {
+                    assert_eq!(inside, None, "{line:?}")
+                }
+                other => panic!("{line:?} came back as {other:?}"),
+            }
+        }
+    }
+
     /// The kind covering each character, for reading a line's shape at a glance.
     /// Later spans win, which is how a heading's title also shows its emphasis.
     fn shape(line: &str) -> String {
@@ -1519,7 +1596,7 @@ mod typst_tests {
             .lines()
             .map(|l| match scanner.feed(l, l.chars().count()) {
                 Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
-                Block::Code => '`',
+                Block::Code { .. } => '`',
                 Block::Item { .. } => '-',
                 _ => '.',
             })
@@ -1547,7 +1624,7 @@ mod typst_tests {
                 let prefix: String = line.chars().take(crate::markdown::PREFIX).collect();
                 match scanner.feed(&prefix, len) {
                     Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
-                    Block::Code => '`',
+                    Block::Code { .. } => '`',
                     _ => '.',
                 }
             })
@@ -1567,7 +1644,7 @@ mod typst_tests {
                 let len = line.chars().count();
                 let prefix: String = line.chars().take(crate::markdown::PREFIX).collect();
                 match scanner.feed(&prefix, len) {
-                    Block::Code => '`',
+                    Block::Code { .. } => '`',
                     Block::Prose => '.',
                     _ => '?',
                 }
