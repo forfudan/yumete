@@ -151,7 +151,7 @@ impl Editor {
             .map(|block| {
                 matches!(
                     block,
-                    crate::markdown::Block::Code | crate::markdown::Block::FrontMatter
+                    crate::markdown::Block::Code { .. } | crate::markdown::Block::FrontMatter
                 )
             })
             .collect()

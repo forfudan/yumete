@@ -458,15 +458,30 @@ fn main() -> ExitCode {
         // path picks up none of them. Naming the ones actually left is cheap
         // and does not go stale — a tenth added tomorrow shows up here the day
         // somebody uses it.
+        // ⚠️ **Two of them this path can honour, and should** (#470). The
+        // colours are globals settled before anything is drawn, not state the
+        // loop owns — so `:theme`, `:theme-mode` and `:theme-fill` work here
+        // exactly as they do in the editor, and a reviewer asking 「what does
+        // `:theme-fill on` look like」 gets the answer instead of a warning.
+        // The ones below genuinely need the loop: they hold an input method, a
+        // child process, the clipboard or the window system.
+        if let Some((name, mood)) = editor.take_theme_request() {
+            let said = yumete_tui::set_theme(&config, name, mood);
+            editor.set_status(said);
+        }
+        if let Some(on) = editor.take_fill_request() {
+            let on = yumete_tui::theme::set_fill(on, &config);
+            editor.set_status(match on {
+                true => yumete_core::say!("theme.fill-on"),
+                false => yumete_core::say!("theme.fill-off"),
+            });
+        }
         let mut unheard: Vec<String> = Vec::new();
         if let Some(asked) = editor.take_scheme_request() {
             unheard.push(format!(":yume {asked}"));
         }
         if editor.take_chaifen_request().is_some() {
             unheard.push(":chaifen".into());
-        }
-        if editor.take_theme_request().is_some() {
-            unheard.push(":theme".into());
         }
         if editor.take_preview_request().is_some() {
             unheard.push(":preview".into());

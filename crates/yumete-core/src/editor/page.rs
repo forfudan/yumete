@@ -214,7 +214,7 @@ impl Editor {
         let prose = |l: usize| {
             matches!(
                 blocks.get(l).copied().unwrap_or_default(),
-                crate::markdown::Block::Prose | crate::markdown::Block::Quote
+                crate::markdown::Block::Prose | crate::markdown::Block::Quote { .. }
             )
         };
         let map: Vec<bool> = (0..lines)
@@ -237,7 +237,7 @@ impl Editor {
             .filter(|&l| {
                 matches!(
                     blocks.get(l).copied().unwrap_or_default(),
-                    crate::markdown::Block::Code | crate::markdown::Block::FrontMatter
+                    crate::markdown::Block::Code { .. } | crate::markdown::Block::FrontMatter
                 )
             })
             .fold((usize::MAX, 0usize), |(first, last), l| {

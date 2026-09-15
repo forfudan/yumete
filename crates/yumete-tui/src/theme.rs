@@ -103,6 +103,17 @@ pub fn set_dark(dark: bool) {
     MOOD.store(u8::from(dark), Ordering::Relaxed);
 }
 
+/// Whether the mood was chosen out loud (`:theme-mode`), rather than settled
+/// from the config or the terminal.
+static CHOSEN_MOOD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Say the mood **and remember that it was asked for**, so nothing settles over
+/// it afterwards. What `:theme-mode` calls; `settle` is what start-up calls.
+pub fn choose_mood(dark: bool) {
+    CHOSEN_MOOD.store(true, Ordering::Relaxed);
+    set_dark(dark);
+}
+
 /// Whether the page is dark.
 pub fn dark() -> bool {
     MOOD.load(Ordering::Relaxed) == 1
@@ -114,6 +125,15 @@ pub fn dark() -> bool {
 /// right question: a dark terminal on a light desktop wants a dark editor, and
 /// the reader who set it that way has already answered.
 pub fn settle(config: &Config, terminal_is_dark: Option<bool>) {
+    // ⚠️ **A mood somebody asked for out loud is not re-settled** (#470).
+    // `frame_to` settles before every offscreen frame, which is right for the
+    // ordinary case and wrong the moment `--keys=':theme-mode light'` has
+    // already answered: the config's `mode` would be applied straight over the
+    // reader's own word, and the picture would show the theme they did not
+    // ask for.
+    if CHOSEN_MOOD.load(Ordering::Relaxed) {
+        return;
+    }
     ANSWERED.store(
         match terminal_is_dark {
             None => 0,

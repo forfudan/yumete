@@ -278,14 +278,6 @@ const LISTING_LIMIT: usize = 500;
 /// anything above this is data that happens to live in the same directory.
 const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
-/// How many mined words `:word-discover` writes into the list (Feature #239).
-///
-/// Two hundred. What is being written is not a report but a *file the writer
-/// then reads line by line*, and a thousand lines of it would be deleted
-/// unread — which is worse than not offering them, because the ninety good
-/// ones go with the rest. Ranked by count, so the two hundred kept are the
-/// names that are on every page.
-const DISCOVER_LIMIT: usize = 200;
 
 /// How much of a project `:word-discover` reads before it stops.
 ///
@@ -1436,11 +1428,12 @@ pub struct DetectAsk {
 /// smaller dictionary there than the one in force only leaves a few redundant
 /// words in the list — words already joined cannot be joined harder.
 ///
-/// Answers the words and how many files were read.
+/// Answers the words, how many files were read, and **how many 漢字 they held**
+/// — the last is what [`crate::discover::cap`] is measured against.
 pub fn detect_words_in(
     root: &Path,
     joins: &dyn Fn(&str) -> bool,
-) -> (Vec<crate::discover::Found>, usize) {
+) -> (Vec<crate::discover::Found>, usize, usize) {
     let mut text = String::new();
     let mut files = 0usize;
     walk(root, &mut 0, &mut |path| {
@@ -1456,7 +1449,8 @@ pub fn detect_words_in(
         // chapters that never touch.
         text.push('\n');
     });
-    (crate::discover::words(&text, joins), files)
+    let han = crate::discover::han_count(&text);
+    (crate::discover::words(&text, joins), files, han)
 }
 
 /// How often a recovery copy is written while typing (Feature #79).

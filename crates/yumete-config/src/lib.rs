@@ -906,6 +906,20 @@ impl ThemeConfig {
                 gold_light: (0x00, 0x00, 0x00),
                 mark_dark: (0xB4, 0xB4, 0xB4),
                 mark_light: (0x6E, 0x6E, 0x6E),
+                // ⚠️ **官服品色 has no hue to spend here** (#471). The other
+                // nine themes inherit the three from the default, and 黑白
+                // inherited them too — so the one theme whose whole question is
+                // 「把顏色全拿走以後，這套設計還立不立得住」 shipped a purple
+                // code span, a green quote and a blue link. They say the same
+                // thing the way 金 and 朱 do in this theme: **by position**.
+                // Three rungs, spread so the three are told apart from each
+                // other and from the writing, and nothing is a colour.
+                purple_dark: (0xCF, 0xCF, 0xCF),
+                purple_light: (0x3C, 0x3C, 0x3C),
+                green_dark: (0xB9, 0xB9, 0xB9),
+                green_light: (0x55, 0x55, 0x55),
+                azure_dark: (0xA3, 0xA3, 0xA3),
+                azure_light: (0x6E, 0x6E, 0x6E),
                 ..ThemeConfig::default()
             }),
             // 藍曬 — 普魯士藍的地、白線的字——十套裏唯一底色真帶飽和色的一套。暗是氰版藍曬，明是重氮曬圖。

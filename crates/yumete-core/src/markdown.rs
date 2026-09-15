@@ -73,14 +73,21 @@ pub enum Block {
     Prose,
     /// `# 第一章`, at that depth.
     Heading(usize),
-    /// `> 引文`.
-    Quote,
+    /// `> 引文`, and which `:::` container it is inside, if any.
+    Quote { inside: Option<Callout> },
     /// A `-`, `*` or `1.` item, and whether it is a task and done.
     Item { task: Option<bool> },
     /// `---` or `***` on its own.
     Rule,
-    /// Inside a ``` fence, or the fence line itself.
-    Code,
+    /// Inside a ``` fence, or the fence line itself — and which `:::` container
+    /// it is inside, if any.
+    ///
+    /// ⚠️ **A block inside a callout is still that block** (#468). A fence in a
+    /// `::: details` used to come out as `Container`, which was harmless while
+    /// every block wore the same grey band and wrong the moment they stopped:
+    /// a fence draws no ground of its own now, so it punched a page-coloured
+    /// hole straight through the callout. A quote lost its 綠 the same way.
+    Code { inside: Option<Callout> },
     /// The `---`-delimited metadata a file may open with.
     FrontMatter,
     /// Inside a `::: tip` container, or its fence.
@@ -144,7 +151,7 @@ impl Block {
         // merge came to be drawn as somebody's yellow pen (#249).
         matches!(
             self,
-            Block::Code | Block::FrontMatter | Block::Conflict(None)
+            Block::Code { .. } | Block::FrontMatter | Block::Conflict(None)
         )
     }
 
@@ -195,6 +202,14 @@ impl BlockScanner {
     pub fn feed(&mut self, prefix: &str, len: usize) -> Block {
         let at = self.line;
         self.line += 1;
+        // ⚠️ **The table counter is reset by default, and only the table arm
+        // puts it back** (#467). It used to be cleared on two of the eleven
+        // paths that end a table — so a second table separated from the first
+        // by a heading, a `:::`, a fence, a quote or a list item went on
+        // counting, and its header was drawn as a body row with the banding
+        // inverted. Clearing here and restoring there cannot be forgotten by
+        // whoever adds the twelfth path.
+        let table_row = std::mem::take(&mut self.table_row);
         let text = prefix.trim_end_matches(['\n', '\r']);
         let trimmed = text.trim_start();
         let whole = len <= PREFIX;
@@ -235,16 +250,17 @@ impl BlockScanner {
             .starts_with("```")
             .then_some('`')
             .or_else(|| trimmed.starts_with("~~~").then_some('~'));
+        let inside = self.containers.last().copied();
         match (self.fence, fence) {
             (None, Some(opened)) => {
                 self.fence = Some(opened);
-                return Block::Code;
+                return Block::Code { inside };
             }
             (Some(open), Some(closing)) if open == closing => {
                 self.fence = None;
-                return Block::Code;
+                return Block::Code { inside };
             }
-            (Some(_), _) => return Block::Code,
+            (Some(_), _) => return Block::Code { inside },
             (None, None) => {}
         }
 
@@ -271,15 +287,18 @@ impl BlockScanner {
         // every line: which callout it is in rides along, so whoever draws can
         // lay the one over the other.
         if trimmed.starts_with('|') && trimmed.len() > 1 {
-            let nth = self.table_row;
-            self.table_row += 1;
+            self.table_row = table_row + 1;
             return Block::Table {
-                nth,
-                inside: self.containers.last().copied(),
+                nth: table_row,
+                inside,
             };
         }
-        if let Some(&kind) = self.containers.last() {
-            self.table_row = 0;
+        // A quotation inside a callout is a quotation — same reason as the
+        // fence above and the table before it.
+        if trimmed.starts_with('>') {
+            return Block::Quote { inside };
+        }
+        if let Some(kind) = inside {
             return Block::Container(kind);
         }
 
@@ -288,7 +307,7 @@ impl BlockScanner {
             return Block::Heading(hashes);
         }
         if trimmed.starts_with('>') {
-            return Block::Quote;
+            return Block::Quote { inside: None };
         }
         if whole && is_rule(trimmed) {
             return Block::Rule;
@@ -303,7 +322,6 @@ impl BlockScanner {
                 .and_then(|(mark, close)| (close == "]").then_some(mark != " "));
             return Block::Item { task };
         }
-        self.table_row = 0;
         Block::Prose
     }
 }
@@ -1061,12 +1079,12 @@ mod tests {
             .map(|line| match scanner.feed(line, line.chars().count()) {
                 Block::Prose => '.',
                 Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
-                Block::Quote => '>',
+                Block::Quote { .. } => '>',
                 Block::Item { task: None } => '-',
                 Block::Item { task: Some(false) } => 'o',
                 Block::Item { task: Some(true) } => 'x',
                 Block::Rule => '_',
-                Block::Code => '`',
+                Block::Code { .. } => '`',
                 Block::FrontMatter => 'y',
                 Block::Container(_) => ':',
                 Block::Table { .. } => '|',
@@ -1302,10 +1320,10 @@ pub mod typst {
             if trimmed.starts_with("```") {
                 self.in_raw = !self.in_raw;
                 self.depth = 0;
-                return Block::Code;
+                return Block::Code { inside: None };
             }
             if self.in_raw {
-                return Block::Code;
+                return Block::Code { inside: None };
             }
             // Inside a code body that opened on an earlier line.
             let was_open = self.depth > 0;
@@ -1338,7 +1356,7 @@ pub mod typst {
                 }
             }
             if was_open {
-                return Block::Code;
+                return Block::Code { inside: None };
             }
             let equals = trimmed.chars().take_while(|&c| c == '=').count();
             if equals > 0 && equals <= 6 && matches!(trimmed.chars().nth(equals), Some(' ') | None)

@@ -255,7 +255,15 @@ impl Editor {
         // look's answer still installed, finds nothing at all and writes an
         // empty list. This command recomputes the whole answer anyway, so the
         // right move is to start from none of it.
-        self.set_detected_words(yumete_cjk::WordList::default());
+        //
+        // ⚠️ …but **put them back if this look finds nothing** (#466). A scan
+        // of a short file, of an ASCII file, or of a tree with no 漢字 in it
+        // returns empty — and the writer, who asked a question, would have
+        // watched every tinted word on the page go out while the status line
+        // said only 「沒有找到」. A question that finds nothing must not also
+        // take away the last answer.
+        let had = std::mem::take(&mut self.detected_words);
+        self.rebuild_words();
         let mut text = String::new();
         let mut files = 0usize;
         // ⚠️ **這一篇，除非你說了別的** (#452). It used to read the whole
@@ -296,11 +304,15 @@ impl Editor {
             crate::discover::words(&text, &joins)
         };
         if found.is_empty() {
+            self.set_detected_words(had);
             self.status = say!("word.discover-none", files);
             return Ok(());
         }
         let total = found.len();
-        let kept: Vec<&crate::discover::Found> = found.iter().take(DISCOVER_LIMIT).collect();
+        // A share of what was read, not a constant: 200 for a chapter, a
+        // thousand for a novel (`discover::cap`).
+        let keep = crate::discover::cap(crate::discover::han_count(&text));
+        let kept: Vec<&crate::discover::Found> = found.iter().take(keep).collect();
 
         // **Into memory, and into a file that is only ever written.** The list
         // the segmenter uses is the one in memory — autodetect puts the same
@@ -333,8 +345,8 @@ impl Editor {
         // comes here: it is the `:word-discover` the writer typed that wants a
         // page, and a scan nobody asked for must not take one (#367).
         self.open_file(&path).map_err(EditorError::Io)?;
-        self.status = match total > DISCOVER_LIMIT {
-            true => say!("word.discover-too-many", DISCOVER_LIMIT, total),
+        self.status = match total > keep {
+            true => say!("word.discover-too-many", keep, total),
             false => say!("word.discover-found", total, path.display()),
         };
         Ok(())
