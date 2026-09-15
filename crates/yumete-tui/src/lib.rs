@@ -428,7 +428,7 @@ pub fn run(
     let mut last_mode = None;
     // The colour the terminal draws its own cursor in — ours to set, and the
     // one thing on the screen the palette could not reach (#493).
-    let mut last_caret: Option<(u8, u8, u8)> = None;
+    let mut last_caret: Option<((u8, u8, u8), (u8, u8, u8))> = None;
     // An event read ahead of its turn and handed back — see [`drain_the_flick`].
     // The queue is the terminal's, not ours, and this is the one place anything
     // is ever taken out of order: the rest of a wheel gesture, read early so it
@@ -474,11 +474,29 @@ pub fn run(
         // 縱書 does not need this: there the block is drawn *into* the page
         // with `REVERSED`, which takes its two colours from the cell it covers
         // and is therefore right in both moods by construction.
-        let caret = crate::theme::Palette::of(config).caret();
-        if last_caret != Some(caret) {
-            last_caret = Some(caret);
-            let (r, g, b) = caret;
-            let _ = write!(stdout(), "\x1b]12;#{r:02X}{g:02X}{b:02X}\x07");
+        //
+        // ⚠️ **And the page has to say its own two colours as well** (#502).
+        // A terminal draws the character *under* a block cursor in its own
+        // configured background, not in the cell's — so a dark profile under a
+        // light page gave a black block with a black character in it, and the
+        // 字 the caret was standing on could not be read at all: 「Light 的光标
+        // 是墨色的，但至少字应该是纸色吧。。。不然怎么看？？」 There is no
+        // per-cell control over that, and no need for one: OSC 10 and 11 tell
+        // the terminal what this page's ink and paper *are*, and then every
+        // answer it works out for itself — the character under the cursor, the
+        // padding round the grid — agrees with the page. Put back on the way
+        // out (110/111/112), because all three outlive the process.
+        let ink = crate::theme::Palette::of(config);
+        let colours = (ink.caret(), ink.paper_bytes());
+        if last_caret != Some(colours) {
+            last_caret = Some(colours);
+            let ((ir, ig, ib), (pr, pg, pb)) = colours;
+            let _ = write!(
+                stdout(),
+                "\x1b]10;#{ir:02X}{ig:02X}{ib:02X}\x07\
+                 \x1b]11;#{pr:02X}{pg:02X}{pb:02X}\x07\
+                 \x1b]12;#{ir:02X}{ig:02X}{ib:02X}\x07"
+            );
         }
         let shown = (editor.mode(), editor.is_extending());
         if last_mode != Some(shown) {
@@ -1268,10 +1286,10 @@ pub fn run(
         DisableMouseCapture,
         SetCursorStyle::DefaultUserShape
     );
-    // **Give the caret its own colour back** (#493). The cursor outlives the
-    // process, so a page that set it and did not put it back leaves the
-    // reader's shell wearing yumete's ink.
-    let _ = write!(stdout(), "\x1b]112\x07");
+    // **Give the terminal its own three colours back** (#493, #502). They
+    // outlive the process, so a page that set them and did not put them back
+    // leaves the reader's shell wearing yumete's ink and paper.
+    let _ = write!(stdout(), "\x1b]110\x07\x1b]111\x07\x1b]112\x07");
     if enhanced {
         if all_keys {
             let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
@@ -3413,13 +3431,14 @@ fn draw(
     if editor.picker().is_some() {
         // `draw_picker` put the caret in its query, which is the prompt while a
         // picker is open.
-    } else if let Some((prefix, _)) = editor.prompt() {
+    } else if let Some(prefix) = editor.prompt_label() {
         // Measured in cells, not characters: a Chinese search pattern is twice
         // as wide as it is long — and up to the **caret**, not to the end of
         // the line, now that the prompt can be edited in the middle.
         // The prefix is measured too, because `::` is two cells wide (#224)
-        // and a hard-coded 1 put the caret inside the second colon.
-        let col = yumete_cjk::str_width(prefix)
+        // and a hard-coded 1 put the caret inside the second colon — and since
+        // #505 a search says `搜索:`, which is five.
+        let col = yumete_cjk::str_width(&prefix)
             + yumete_cjk::str_width(&editor.prompt_before_caret())
             + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(prompt_area.x + col as u16, prompt_area.y));
@@ -6485,10 +6504,7 @@ fn draw_horizontal(
                 // of tints it replaces differed by *temperature* at 1.04 and
                 // 1.07 against the ground, so one read as the ground and the
                 // other as a stain.
-                // 色相 is the one mark that touches **both** halves — the
-                // pair is warm against cool, and a plain-ink half would make it
-                // white against cool instead (#501).
-                if n % 2 != 0 && mark != WordMark::Color {
+                if n % 2 != 0 {
                     continue;
                 }
                 let a = a.saturating_sub(start_in_line);
@@ -6528,7 +6544,12 @@ fn draw_horizontal(
                         // of weight (#501) — see [`Ink::word_hue`].
                         WordMark::Color => {
                             let from = style.fg.or(page_fg).unwrap_or(ink.text());
-                            *style = style.fg(ink.word_hue(from, n % 2 != 0));
+                            // `None` where the writing already has a colour of
+                            // its own — a heading's 金, a link's 藍. See
+                            // [`Ink::word_hue`].
+                            if let Some(hue) = ink.word_hue(from) {
+                                *style = style.fg(hue);
+                            }
                         }
                         // **Nothing on the writing at all**: a rule under the
                         // word, and bare line between. 橫排 can underline the
@@ -6922,7 +6943,8 @@ fn draw_status(
     // the file name and the position for as long as the sidebar has focus.
     let status = if editor.sidebar_focused() && !command_row {
         say!("ui.sidebar-mode", Editor::sidebar_keys())
-    } else if let (false, Some((prefix, text))) = (command_row, editor.prompt()) {
+    } else if let (false, Some((_, text))) = (command_row, editor.prompt()) {
+        let prefix = editor.prompt_label().unwrap_or_default();
         // The composition in progress belongs at the caret, so a search reads as
         // the pattern being typed rather than jumping into place on commit. The
         // 中/英 tag is pushed to the right edge, where it cannot be mistaken for
@@ -7569,7 +7591,8 @@ fn draw_command(
     // rather than one column in: the caret is placed by the same arithmetic in
     // `draw`, and a prompt that began a column further along than the caret
     // was told about is a prompt you cannot type into straight.
-    if let Some((prefix, text)) = editor.prompt() {
+    if let Some((_, text)) = editor.prompt() {
+        let prefix = editor.prompt_label().unwrap_or_default();
         let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
         // The guess is a rung back from what was actually typed — a colour,
         // not `DIM`, so it is still visibly *not yet* part of the line on a
@@ -8106,27 +8129,30 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// 色相：兩半**明度相同**，只有色相不同（#501）。
+    /// 色相：一半原墨，一半藍，**兩者一樣亮**（#501／#507）。
     ///
     /// 作者原話：「ink……有些字亮有些字暗，亮的像强调」——所以這一支的整個價值就在
     /// 那個亮度差要小。`ink` 量出來是 1.38:1；這裏要求 1.05:1 以內。
     ///
-    /// ⚠️ **兩半都上色**，不是一半原墨一半藍：原墨是飽和度 5 的暖灰，配藍看起來是
-    /// 「藍配白」而不是藍配黃（作者：「感觉不是蓝黄而更像蓝白」）。
+    /// ⚠️ **只換一半。** 兩半都上色試過（暖配冷），代價是整頁沒有一處是原墨：
+    /// 「还使用 ink 色比较好，这样只有蓝色的那些词才變色」。
+    ///
+    /// ⚠️ **本來有顏色的段落一點不碰**——標題的金、連結的藍照舊：色相轉過去就把
+    /// 人家的本色扔了（「标题本来是金色，现在变成兰黄」）。
     #[test]
-    fn the_hue_mark_keeps_both_halves_at_one_brightness() {
-        let mut editor = editor_with("那年冬天，山下起了大雪。\n");
+    fn the_hue_mark_keeps_one_half_in_plain_ink_at_one_brightness() {
+        let mut editor = editor_with("## 第一章\n\n那年冬天，山下起了大雪。\n");
         editor.set_word_mark(yumete_cjk::WordMark::Color);
         editor.set_segmentation_visible(true);
         let config = Config::default();
-        let buffer = render(&editor, &config, 60, 6);
+        let buffer = render(&editor, &config, 60, 8);
 
-        // ⚠️ **問兩個字，不是掃一整行。** 掃行會把行號欄的墨和標點（不在任何詞裏，
-        // 所以是原墨）一起算進來，於是量到 2.25:1 ——那不是這一支的錯，是量錯了。
-        // 「那年」和「冬天」是相鄰的兩個詞，各取第一個字。
-        let text = row_text(&buffer, 0);
+        let y = (0..8u16)
+            .position(|y| row_text(&buffer, y).contains('那'))
+            .expect("那 is on the page") as u16;
+        let text = row_text(&buffer, y);
         let ink_at = |ch: &str| -> (u8, u8, u8) {
-            match buffer[(column_of(&text, ch), 0)].style().fg {
+            match buffer[(column_of(&text, ch), y)].style().fg {
                 Some(ratatui::style::Color::Rgb(r, g, b)) => (r, g, b),
                 other => panic!("{ch} 的墨不是 RGB：{other:?}"),
             }
@@ -8139,6 +8165,12 @@ fn squeezed(text: &str) -> String {
             }
         }
         assert_eq!(seen.len(), 2, "整段漢字只有兩種墨：{seen:?}");
+
+        let plain = match ink(&config).text() {
+            ratatui::style::Color::Rgb(r, g, b) => (r, g, b),
+            other => panic!("原墨不是 RGB：{other:?}"),
+        };
+        assert!(seen.contains(&plain), "一半就是原墨：{seen:?} vs {plain:?}");
 
         let lum = |(r, g, b): (u8, u8, u8)| -> f64 {
             let f = |v: u8| {
@@ -8154,10 +8186,18 @@ fn squeezed(text: &str) -> String {
         let apart = (hi + 0.05) / (lo + 0.05);
         assert!(apart < 1.05, "明度幾乎不動，量到 {apart:.3}:1：{seen:?}");
 
-        // …而且色相真的分開了：一暖一冷，不是同一個顏色的兩級。
-        let warm = seen.iter().any(|&(r, _, b)| r > b);
-        let cool = seen.iter().any(|&(r, _, b)| b > r);
-        assert!(warm && cool, "一暖一冷：{seen:?}");
+        // 標題是金的，而且**整行一種墨**——色相沒有插手。
+        let hy = (0..8u16)
+            .position(|y| row_text(&buffer, y).contains('章'))
+            .expect("the heading is on the page") as u16;
+        let head = row_text(&buffer, hy);
+        let gold = buffer[(column_of(&head, "第"), hy)].style().fg;
+        assert_eq!(
+            buffer[(column_of(&head, "章"), hy)].style().fg,
+            gold,
+            "標題一種墨，沒有詞界：{head:?}"
+        );
+        assert_eq!(gold, Some(ink(&config).gold()), "而且還是金的");
     }
 
     /// 線：字本身一點不動，只在詞下畫一條（#501）。
@@ -14659,7 +14699,15 @@ fn squeezed(text: &str) -> String {
         let status: String = (0..buffer.area.width)
             .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
             .collect();
-        assert!(status.starts_with("/b"), "preedit missing: {status:?}");
+        // **`搜索:` now, not `/`** (#505) — the prompt says the word the way
+        // helix's does; `/` is still the key that opens it.
+        let label = yumete_core::messages::say("ui.prompt-search", &[]);
+        // Spaces out, because a 漢字 leaves its continuation cell blank in the
+        // test backend and the label is two of them.
+        assert!(
+            status.replace(' ', "").starts_with(&format!("{label}b")),
+            "preedit missing: {status:?}"
+        );
         assert!(status.contains("[中"), "language tag missing: {status:?}");
     }
 
