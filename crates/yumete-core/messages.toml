@@ -7108,9 +7108,9 @@ en = "# yumete never reads this back. To keep a word for good, copy it into .yum
 [[message]]
 # 挖到的比寫進去的多，說一聲
 key = "word.discover-too-many"
-zht = "最常見的 {0} 個（一共 {1} 個），已經按它們切了；名單寫出來了，每次覆蓋"
-zhs = "最常见的 {0} 个（一共 {1} 个），已经按它们切了；名单写出来了，每次覆盖"
-en = "the commonest {0} of {1}, segmenting already; the list has been written out, overwritten each run"
+zht = "最常見的 {0} 個（一共 {1} 個），已經按它們切了；名單在 {2}（每次覆蓋）"
+zhs = "最常见的 {0} 个（一共 {1} 个），已经按它们切了；名单在 {2}（每次覆盖）"
+en = "the commonest {0} of {1}, segmenting already; the list is in {2} (overwritten each run)"
 
 [[message]]
 # 分詞粒度設好了

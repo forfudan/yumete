@@ -470,14 +470,22 @@ pub fn draw(
     // where this mode is most useful: with 折行 on, a cell that wraps to three
     // lines has to be tellable from the row under it.
     //
-    // ⚠️ **Which ground is [`crate::table_row_rung`]'s to say, not this
-    // renderer's** (#458). A `|` table read in a chapter and the same table
-    // read in this window are the same table, and 「to tf tb tt 的隔行底色应该
-    // 是统一的参数」 — a number written out here is a number that drifts from
-    // the one written out there. `+ 2` because the header and its rule are
-    // rows 0 and 1 in that reckoning, and this grid draws only the body.
+    // ⚠️ **Which row this is, and which ground it gets, are both somebody
+    // else's to say** (#458, #478). A `|` table read in a chapter and the same
+    // table read in this window are the same table, and 「to tf tb tt 的隔行底
+    // 色应该是统一的参数」.
+    //
+    // The row number comes from the block scanner — the same count the page
+    // renderer bands by — rather than from `line - base + 2`, which assumed
+    // every table has a `---` rule under its header. A pipe table written
+    // without one had its parity inverted here and nowhere else.
     let banded = |line: usize, plain: Style| {
-        let nth = line - base.min(line) + 2;
+        let nth = match editor.block_of(line) {
+            yumete_core::markdown::Block::Table { nth, .. } => nth,
+            // Not a `|` table at all — a delimited file has no header rule and
+            // no scanner to ask, so the base row is row 0 of its body.
+            _ => line - base.min(line) + 2,
+        };
         plain.patch(ink.ground(crate::table_row_rung(nth)))
     };
     let quiet = Style::default().fg(ink.furniture());
