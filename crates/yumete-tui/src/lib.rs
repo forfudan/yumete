@@ -107,6 +107,59 @@ pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn S
     words
 }
 
+/// Install what a 自動認詞 worker found, or leave what is installed alone.
+///
+/// Its own function because the invariant is one a reader of the loop cannot
+/// see: **a worker sends twice** — the answer, then the empty message
+/// `Unlatch` posts as the thread ends — so this is called a second time, with
+/// nothing, on the turn after every successful scan.
+fn install_detected(
+    editor: &mut yumete_core::Editor,
+    found: &[yumete_core::discover::Found],
+) {
+    // ⚠️ **Nothing found, nothing touched** (#491). Every worker
+    // sends **twice**: its answer, and then the empty one `Unlatch`
+    // posts as the thread ends. The receiver takes one message per
+    // turn, so the empty one landed on the turn *after* the answer —
+    // and the clear below wiped the two hundred words that had just
+    // gone in, one keystroke after they went in. 自動認詞 installed
+    // nothing that outlived a single key, and 「宇夢」 in `yume.md`
+    // never tinted however often it was scanned for.
+    //
+    // So the clear belongs **inside** the branch that has something to
+    // put back, which is also the shape `discover_words` already uses.
+    if !found.is_empty() {
+        // ⚠️ **Forget the last scan before judging this one** (#466).
+        // The filter below asks the segmenter in force 「do you already
+        // join this?」 — and the segmenter in force **contains the
+        // previous scan's own answer**. The worker has its own
+        // dictionary and finds 阿寧 every time; the editor then threw it
+        // away because run 1 had taught it, and `set_detected_words`
+        // replaces rather than merges, so run 2 installed almost
+        // nothing. The tint came and went on alternate saves.
+        let had = editor.take_detected_words();
+        let mut list = yumete_cjk::WordList::default();
+        // The worker has already capped the list to a share of what it
+        // read; everything it sends is meant to be used.
+        for word in found.iter() {
+            if !editor.joins_as_one(&word.word) {
+                list.add(&word.word);
+            }
+        }
+        // ⚠️ **A scan whose every word was already known is not an
+        // answer either** (#466). `:word-discover` ends by *opening*
+        // the listing it wrote, and opening a file asks for a scan —
+        // of the listing, in `.yumete/`, where every word occurs once
+        // and `MIN_COUNT` is five. So the command that had just
+        // installed two hundred words watched them vanish on the next
+        // keystroke. A scan that learns nothing must not unteach.
+        editor.set_detected_words(match list.is_empty() {
+            true => had,
+            false => list,
+        });
+    }
+}
+
 /// Sends an empty answer when a 自動認詞 worker ends, however it ends.
 ///
 /// The receiver clears `detecting` on anything it takes and installs nothing
@@ -721,34 +774,7 @@ pub fn run(
         // that is the first moment it could have mattered anyway.
         if let Ok((found, _han)) = found_rx.try_recv() {
             detecting = false;
-            // ⚠️ **Forget the last scan before judging this one** (#466). The
-            // filter below asks the segmenter in force 「do you already join
-            // this?」 — and the segmenter in force **contains the previous
-            // scan's own answer**. The worker has its own dictionary and finds
-            // 阿寧 every time; the editor then threw it away because run 1 had
-            // taught it, and `set_detected_words` replaces rather than merges,
-            // so run 2 installed almost nothing. The tint came and went on
-            // alternate saves. `discover_words` already clears for exactly
-            // this reason — the automatic path needed the same clear.
-            editor.set_detected_words(yumete_cjk::WordList::default());
-            let mut list = yumete_cjk::WordList::default();
-            // The worker has already capped the list to a share of what it
-            // read; everything it sends is meant to be used.
-            for word in found.iter() {
-                if !editor.joins_as_one(&word.word) {
-                    list.add(&word.word);
-                }
-            }
-            // ⚠️ **An empty answer is not an answer** (#466). `:word-discover`
-            // ends by *opening* the listing it wrote, and opening a file asks
-            // for a scan — of the listing, in `.yumete/`, where every word
-            // occurs once and `MIN_COUNT` is five. So the command that had
-            // just installed two hundred words watched them vanish on the next
-            // keystroke. A scan that finds nothing has learnt nothing; it must
-            // not be allowed to unteach.
-            if !list.is_empty() {
-                editor.set_detected_words(list);
-            }
+            install_detected(editor, &found);
         }
         if editor.reload_auto() && inbox.is_empty() {
             match events.recv_timeout(DISK_POLL) {
@@ -7807,6 +7833,25 @@ mod tests {
         let ran = super::run_capturing("head -1", Some(&text)).expect("no error");
         assert!(ran.ok);
         assert_eq!(ran.said, "第一行\n");
+    }
+
+    /// 自動認詞裝上的詞要活過下一個按鍵（#491）。
+    ///
+    /// 每個 worker 送**兩次**：答案，以及線程結束時 `Unlatch` 補的那條空的。
+    /// 從前收到空的那一輪會無條件清空，於是剛裝進去的兩百個詞在下一個按鍵就
+    /// 沒了——`yume.md` 裏的「宇夢」掃多少遍都不著色，就是這一條。
+    #[test]
+    fn an_empty_second_answer_does_not_undo_the_first() {
+        use yumete_core::discover::Found;
+        let mut editor = yumete_core::Editor::new();
+        let found = vec![Found { word: "宇夢".to_string(), count: 24, cohesion: 1.0, entropy: 1.0 }];
+        super::install_detected(&mut editor, &found);
+        assert_eq!(editor.detected_word_count(), 1, "第一條答案裝上了");
+        assert!(editor.joins_as_one("宇夢"), "裝上了就併得起來");
+        // 守衛那條空的，下一輪到。
+        super::install_detected(&mut editor, &[]);
+        assert_eq!(editor.detected_word_count(), 1, "空的一條不許抹掉上一條");
+        assert!(editor.joins_as_one("宇夢"), "下一個按鍵之後還在");
     }
 
     /// 輸入框要看得出是個框（#447）。

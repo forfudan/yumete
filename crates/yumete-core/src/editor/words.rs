@@ -267,8 +267,7 @@ impl Editor {
         // watched every tinted word on the page go out while the status line
         // said only 「沒有找到」. A question that finds nothing must not also
         // take away the last answer.
-        let had = std::mem::take(&mut self.detected_words);
-        self.rebuild_words();
+        let had = self.take_detected_words();
         let mut text = String::new();
         let mut files = 0usize;
         // ⚠️ **這一篇，除非你說了別的** (#452). It used to read the whole
@@ -458,6 +457,19 @@ impl Editor {
     /// this is the one in force — 宇浩's 125 萬條 when the data is installed.
     pub fn joins_as_one(&self, word: &str) -> bool {
         self.segmenter.segment(word).len() == 1
+    }
+
+    /// Take back what autodetect installed, leaving it contributing nothing.
+    ///
+    /// Both callers want the same thing and for the same reason: the filter
+    /// that judges a fresh scan asks the segmenter in force, and the segmenter
+    /// in force contains the *last* scan — so the last one has to come out
+    /// before the new one is judged, and go back in if the new one turns out
+    /// to have learnt nothing.
+    pub fn take_detected_words(&mut self) -> yumete_cjk::WordList {
+        let had = std::mem::take(&mut self.detected_words);
+        self.rebuild_words();
+        had
     }
 
     /// How many words autodetect is contributing right now.
