@@ -432,14 +432,61 @@ fn from_hsl(hue: f64, light: f64, sat: f64) -> Color {
 /// Relative luminance (WCAG), for the palette's own contrast questions.
 fn luminance(c: Color) -> f64 {
     let Color::Rgb(r, g, b) = c else { panic!("not an rgb colour") };
-    let f = |v: u8| {
-        let v = v as f64 / 255.0;
-        match v <= 0.03928 {
-            true => v / 12.92,
-            false => ((v + 0.055) / 1.055).powf(2.4),
-        }
+    0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+}
+
+/// One channel, out of what the terminal is handed and into **light** — the
+/// space colours may be added in (#508).
+fn linear(v: u8) -> f64 {
+    let v = f64::from(v) / 255.0;
+    match v <= 0.03928 {
+        true => v / 12.92,
+        false => ((v + 0.055) / 1.055).powf(2.4),
+    }
+}
+
+/// How much colour a 分詞 `color` mark carries, as CIELAB chroma distance
+/// (Δab), for an ink of this `lightness` (#510).
+///
+/// ⚠️ **It depends on the ink, and it has to.** Equal measured chroma is not
+/// equal *visibility*: the eye tells hues apart worse the darker they get, and
+/// a light page's ink sits at L\* 17 where 「light 模式下墨色都是黑色的」 —
+/// 10.8, which reads clearly against the dark page's L\* 83 ink, was invisible
+/// there. The two ends are what the author picked by eye, a straight line
+/// between them.
+///
+/// ⚠️ It is **not** that the dark ink has no room: the walk lowers red as well
+/// as raising blue, and red carries little luminance, so 19.5 on the light page
+/// costs 1.047:1 of brightness — against the 1.38:1 that made `ink` read as
+/// emphasis in the first place.
+fn word_hue_chroma(lightness: f64) -> f64 {
+    // L* 82.8 → 10.8, L* 16.6 → 19.5.
+    (21.7 - 0.1314 * lightness).clamp(8.0, 26.0)
+}
+
+/// CIELAB, for asking how far apart two colours *look* rather than how far
+/// apart their bytes are (#510). D65, the sRGB white.
+fn lab((r, g, b): (u8, u8, u8)) -> (f64, f64, f64) {
+    let (rl, gl, bl) = (linear(r), linear(g), linear(b));
+    let x = (0.4124 * rl + 0.3576 * gl + 0.1805 * bl) / 0.95047;
+    let y = 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+    let z = (0.0193 * rl + 0.1192 * gl + 0.9505 * bl) / 1.08883;
+    let f = |t: f64| match t > 0.008_856 {
+        true => t.cbrt(),
+        false => 7.787 * t + 16.0 / 116.0,
     };
-    0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+    let (fx, fy, fz) = (f(x), f(y), f(z));
+    (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+}
+
+/// And back. Out of range is clamped: a walk through light can leave the cube.
+fn srgb(v: f64) -> u8 {
+    let v = v.clamp(0.0, 1.0);
+    let v = match v <= 0.003_130_8 {
+        true => v * 12.92,
+        false => 1.055 * v.powf(1.0 / 2.4) - 0.055,
+    };
+    (v * 255.0).round() as u8
 }
 
 /// The WCAG contrast ratio between two colours.
@@ -943,26 +990,42 @@ impl Palette {
     /// 接本来是蓝色，现在是兰黄」. A coloured run already stands apart from the
     /// prose, which is most of what the mark buys.
     pub fn word_hue(self, from: Color) -> Option<Color> {
-        /// Enough to read as a colour, not enough to read as a mark.
-        ///
-        /// 30 → **16** (#506): 30 was chosen off a swatch of one line, and a
-        /// page of it is 「过于花哨」.
-        const SAT: f64 = 16.0;
         if from != self.text() {
             return None;
         }
-        let want = luminance(from);
-        let hue = to_hsl(self.azure).0;
+        let Color::Rgb(r, g, b) = from else { return None };
+        // **A luminance-neutral direction, walked in linear light.** Summed
+        // against the luminance weights this vector comes to 0.026 — so moving
+        // along it changes the hue and leaves the brightness where it was,
+        // which is the whole point of this mark. Its direction is the one the
+        // author approved by eye (`#D2CEC4` → `#C4D1D7`), normalised: less red,
+        // a little more green, more blue.
+        const TOWARD_BLUE: (f64, f64, f64) = (-0.5821, 0.1284, 0.8029);
+        let base = (linear(r), linear(g), linear(b));
+        let walk = |k: f64| -> (u8, u8, u8) {
+            (
+                srgb(base.0 + k * TOWARD_BLUE.0),
+                srgb(base.1 + k * TOWARD_BLUE.1),
+                srgb(base.2 + k * TOWARD_BLUE.2),
+            )
+        };
+        let here = lab((r, g, b));
+        let want = word_hue_chroma(here.0);
+        // How far to walk is found, not fixed: near black a small step in
+        // linear light is a large step in what the terminal draws.
         let mut lo = 0.0;
-        let mut hi = 100.0;
-        for _ in 0..12 {
+        let mut hi = 2.0;
+        for _ in 0..24 {
             let mid = (lo + hi) / 2.0;
-            match luminance(from_hsl(hue, mid, SAT)) < want {
+            let there = lab(walk(mid));
+            let apart = ((there.1 - here.1).powi(2) + (there.2 - here.2).powi(2)).sqrt();
+            match apart < want {
                 true => lo = mid,
                 false => hi = mid,
             }
         }
-        Some(from_hsl(hue, (lo + hi) / 2.0, SAT))
+        let (nr, ng, nb) = walk((lo + hi) / 2.0);
+        Some(Color::Rgb(nr, ng, nb))
     }
 
     /// The rule a `line` word mark draws — see [`RULE_BACK`] (#501).
