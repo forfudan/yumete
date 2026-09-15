@@ -1150,7 +1150,28 @@ pub fn draw(
                 // alternation is strict per word, so an untinted word is always
                 // between two tinted ones and says exactly as much.
                 if let Some(word) = ranges.iter().position(|&(a, b)| column >= a && column < b) {
-                    if word % 2 == 0 {
+                    // ⚠️ **線 does not alternate** (#501). Down a column an
+                    // underline is drawn under each *character*, so underlining
+                    // every other word would give a run of ticks rather than a
+                    // boundary. Marking only each word's **last** cell puts one
+                    // short rule exactly where the word ends — which is the
+                    // whole of what the mark is for, and it is then every word
+                    // rather than every second one.
+                    if mark == WordMark::Line {
+                        let (_, end) = ranges[word];
+                        // A link's own underline wins — see the horizontal
+                        // renderer's note.
+                        let taken = style.add_modifier.contains(Modifier::UNDERLINED);
+                        if column + 1 == end && !taken {
+                            style = style
+                                .add_modifier(Modifier::UNDERLINED)
+                                .underline_color(ink.word_rule());
+                        }
+                    } else if mark == WordMark::Color {
+                        // Both halves, warm against cool — see `Ink::word_hue`.
+                        let from = style.fg.unwrap_or(ink.text());
+                        style = style.fg(ink.word_hue(from, word % 2 != 0));
+                    } else if word % 2 == 0 {
                         // 字色 leaves the paper alone and moves the writing
                         // instead (#278) — **whatever colour that writing
                         // already has, stepped 第 15 檔 toward the page**
@@ -1164,6 +1185,8 @@ pub fn draw(
                                 let from = style.fg.unwrap_or(ink.text());
                                 style = style.fg(ink.marked(from, yumete_config::rung::WORD_INK));
                             }
+                            // Both answered above, before the parity test.
+                            WordMark::Color | WordMark::Line => {}
                         }
                     }
                 }

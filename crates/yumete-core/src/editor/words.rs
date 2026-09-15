@@ -89,6 +89,8 @@ impl Editor {
                 self.status = match mark {
                     yumete_cjk::WordMark::Tint => say!("word.mark-tint"),
                     yumete_cjk::WordMark::Ink => say!("word.mark-ink"),
+                    yumete_cjk::WordMark::Color => say!("word.mark-color"),
+                    yumete_cjk::WordMark::Line => say!("word.mark-line"),
                 };
             }
             WordCommand::Show(on) => {

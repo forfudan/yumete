@@ -124,6 +124,34 @@ pub enum WordMark {
     /// still a page of prose.
     #[default]
     Ink,
+    /// Every other word's characters in a **second hue at the same
+    /// lightness** (#501).
+    ///
+    /// [`Ink`](WordMark::Ink) alternates *how dark* a word is, and a darker
+    /// run reads as emphasis whether or not it was meant to: 「有些字亮有些字
+    /// 暗，亮的像强调」. Hue carries the same one bit without saying anything
+    /// about weight — two inks equally dark, so no word is louder than its
+    /// neighbour.
+    ///
+    /// ⚠️ **On the 藍↔黃 axis, never 紅↔綠.** Eight men in a hundred cannot
+    /// tell red from green, and this is the one mark on the page whose whole
+    /// job is a distinction; blue against yellow survives every common form of
+    /// colour blindness. An isoluminant difference is subtle by construction —
+    /// that is what makes it quiet, and it is also why the axis has to be the
+    /// one nobody is missing.
+    Color,
+    /// A **line under the word**, and nothing on the writing at all (#501).
+    ///
+    /// The quietest of the four: it does not touch the ink, the ground, or a
+    /// cell. 橫排 underlines the word and breaks the line between words; 縱書
+    /// underlines only each word's **last** cell, which draws one short rule
+    /// across the column exactly where the word ends.
+    ///
+    /// ⚠️ **線, not 分界線.** It was called `separator` until the picture
+    /// settled it: down a column the mark really is a rule *between* two words,
+    /// but across a line it is a rule *under* one — 「在横排里本质上不是
+    /// separator」. The shorter name is true on both pages.
+    Line,
 }
 
 impl WordMark {
@@ -131,7 +159,15 @@ impl WordMark {
     pub fn parse(value: &str) -> Option<WordMark> {
         match value.trim().to_ascii_lowercase().as_str() {
             "tint" | "bg" | "background" | "底色" | "背景" => Some(WordMark::Tint),
-            "ink" | "fg" | "colour" | "color" | "字色" | "文字" => Some(WordMark::Ink),
+            // ⚠️ `colour`/`color` used to mean this one and now names the mode
+            // below (#501): 明度 is what `ink` varies, and 顏色 is what the new
+            // one varies. Leaving the old spelling here would put the reader on
+            // the mode they did not ask for.
+            "ink" | "fg" | "字色" | "文字" | "明度" => Some(WordMark::Ink),
+            "color" | "colour" | "hue" | "色相" | "顏色" | "颜色" => Some(WordMark::Color),
+            "line" | "rule" | "sep" | "separator" | "underline" | "線" | "线" => {
+                Some(WordMark::Line)
+            }
             _ => None,
         }
     }
@@ -141,6 +177,8 @@ impl WordMark {
         match self {
             WordMark::Tint => "tint",
             WordMark::Ink => "ink",
+            WordMark::Color => "color",
+            WordMark::Line => "line",
         }
     }
 }
