@@ -7541,6 +7541,31 @@ fn draw_command(
             }
         }
     }
+    // **The name of the thing, in the one corner nothing else wants** (#498).
+    //
+    // The author asked for it 「用一个比较淡雅的色号」, and the constraint is
+    // where rather than whether: the **left** of this row is the most useful
+    // strip on the screen — it is where a half-pressed `t` says what may follow
+    // it — so a signature there would be standing in the way exactly when the
+    // row has something to say. The right end is idle even when the row is
+    // busy, and it is the first thing to go when the row is not.
+    //
+    // FURNITURE, which is what line numbers and an unlit tab are drawn in: it
+    // reads as part of the frame rather than as something said. And **two
+    // clear cells or it does not appear** — a name run up against the last
+    // hint is worse than no name.
+    let signature = say!("ui.signature");
+    let wide = yumete_cjk::str_width(&signature) as u16;
+    if right > wide && x + 2 <= right - wide {
+        put_text(
+            buf,
+            right - wide,
+            area.y,
+            right,
+            &signature,
+            page.fg(ink.furniture()),
+        );
+    }
 }
 
 /// Where the cursor is, in the terms the layout is read in.
@@ -7911,6 +7936,36 @@ fn squeezed(text: &str) -> String {
         super::install_detected(&mut editor, &[]);
         assert_eq!(editor.detected_word_count(), 1, "空的一條不許抹掉上一條");
         assert!(editor.joins_as_one("宇夢"), "下一個按鍵之後還在");
+    }
+
+    /// 落款在提示行的右端，擠不下就沒有（#498）。
+    ///
+    /// 作者要的是一個 identity，而位置是有講究的：這一行的**左端**是全屏最有用的
+    /// 一條——按了半個 `t` 就靠它說下一個鍵能按什麼——所以落款只能在右端，而且
+    /// 一旦右端被佔就該讓開。
+    #[test]
+    fn the_signature_sits_at_the_right_and_yields_when_the_row_is_full() {
+        let signature = yumete_core::messages::say("ui.signature", &[]);
+        let editor = editor_with("那年冬天。\n");
+        let config = Config::default();
+
+        let wide = render(&editor, &config, 80, 8);
+        let row = row_text(&wide, 7);
+        assert!(row.contains(&signature), "寬的時候在：{row:?}");
+        assert!(
+            row.trim_end().ends_with(&signature),
+            "而且在最右邊：{row:?}"
+        );
+
+        // 提示行滿了就讓開：表格那一行有三組鍵，四十格裝不下它再加落款。
+        let mut editor = editor_with("| 星陳 | 卿雲 |\n| --- | --- |\n| 甲 | 乙 |\n");
+        for key in ['j', 'j', 't', 'b'] {
+            editor.on_key(Key::Char(key));
+        }
+        let narrow = render(&editor, &config, 40, 8);
+        let row = row_text(&narrow, 7);
+        assert!(row.contains('t'), "提示行確實在說話：{row:?}");
+        assert!(!row.contains(&signature), "擠不下就讓開：{row:?}");
     }
 
     /// 輸入框要看得出是個框（#447）。
