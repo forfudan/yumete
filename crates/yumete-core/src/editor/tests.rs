@@ -10291,7 +10291,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // ---- ② 前端算完交回來，只在内存，分詞立刻跟上 ---------------------
     let seg = DictionarySegmenter::builtin(0);
     let joins = |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
-    let (found, files) = crate::editor::detect_words_in(&dir, &joins);
+    let (found, files, _han) = crate::editor::detect_words_in(&dir, &joins);
     assert_eq!(files, 3, "三個章節都讀了");
     // 而光看眼前這一篇是看不出阿寧的：一章只有兩次。這正是範圍要能選的理由。
     assert!(
@@ -10354,7 +10354,28 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
         ed.segment_line(0)
     );
 
-    // ---- ⑤ 使用者自己那一份是另一件事，兩份一起生效 -------------------
+    // ---- ⑤ 一次什麼都沒找到的掃描，不許把上一次的答案抹掉（#466） -----
+    //
+    // 觸發它的正是 `:word-discover` 自己：那條命令末尾**打開**它寫出的名單，
+    // 而開文件會請一次自動認詞——請的是那份名單，在 `.yumete/` 裏，每個詞只
+    // 出現一次而 `MIN_COUNT` 是五。於是剛裝上的兩百個詞下一次按鍵就沒了。
+    {
+        let mut list = yumete_cjk::WordList::default();
+        list.add("阿寧");
+        ed.set_detected_words(list);
+        assert_eq!(ed.detected_word_count(), 1);
+        ed.open_file(&dir.join("ch01.md")).unwrap();
+        // 手動那一支掃這一篇（阿寧在這一章只有兩次，夠不上），名單該原封不動。
+        assert!(ed.execute("word-discover").is_ok(), "{}", ed.status());
+        assert_eq!(
+            ed.detected_word_count(),
+            1,
+            "找不到新詞不等於把舊的忘掉：{}",
+            ed.status()
+        );
+    }
+
+    // ---- ⑥ 使用者自己那一份是另一件事，兩份一起生效 -------------------
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     std::fs::write(dir.join(".yumete").join("words.txt"), "# 人物\n庚阿\n").unwrap();
     ed.reload_project_words();

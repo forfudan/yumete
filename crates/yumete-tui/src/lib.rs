@@ -107,6 +107,19 @@ pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn S
     words
 }
 
+/// Sends an empty answer when a 自動認詞 worker ends, however it ends.
+///
+/// The receiver clears `detecting` on anything it takes and installs nothing
+/// for an empty list, so this costs one channel message and buys the guarantee
+/// that a dead worker cannot switch the feature off for the session.
+struct Unlatch(std::sync::mpsc::Sender<(Vec<yumete_core::discover::Found>, usize)>);
+
+impl Drop for Unlatch {
+    fn drop(&mut self) {
+        let _ = self.0.send((Vec::new(), 0));
+    }
+}
+
 /// How long before 自動認詞 scans a project again (#448).
 ///
 /// 「其实我觉得 discover 可以过一段时间触发一次（不用太密集）」 — and a scan
@@ -660,6 +673,14 @@ pub fn run(
                     // knows less than 宇浩's own table, which only leaves a few
                     // words in the answer that are already joined — filtered
                     // below, where the segmenter in force can be asked.
+                    // ⚠️ **The flag is cleared by this guard, not by the
+                    // send** (#476). `found_tx` is held by the main loop, so a
+                    // worker that panicked would never disconnect the channel:
+                    // `try_recv` would answer `Empty` for ever and 自動認詞
+                    // would be off for the rest of the session with nothing
+                    // said. Dropping this sends an empty answer, which the
+                    // receiver ignores and which unlatches the flag.
+                    let _guard = Unlatch(tx.clone());
                     let seg = yumete_core::DictionarySegmenter::builtin(0);
                     let joins =
                         |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
@@ -5378,10 +5399,10 @@ fn draw_search(
     let quiet = ground.fg(ink.quiet());
     let wrong = ground.fg(ink.mark());
     // **A field is a hole in the panel, not another part of its face.** The
-    // panel's own ground is 第 16 檔 and the box used to be painted with it, so
+    // panel's own ground is 第 81 檔 and the box used to be painted with it, so
     // an empty 尋找 box was a blank strip of panel with a caret somewhere in it
     // — 「不然还是不知道这里有个可以输入的地方」. The ground of a field is the
-    // **page's** (第 18 檔), the one place in the interface where writing is
+    // **page's** (第 90 檔), the one place in the interface where writing is
     // typed, and a rule above and below closes it (#447).
     let field = ink.ground(yumete_config::rung::PAPER).fg(ink.text());
     let keys_here = editor.panel_focus() == Some((side, Layer::Top));
@@ -7691,7 +7712,7 @@ mod tests {
     ///
     /// 作者原話：「这里的输入框能不能画个上下框线什么的？不然还是不知道这里有个
     /// 可以输入的地方。」空的 尋找 框從前與面板同底色，只有一個光標浮在那裏，
-    /// 看不出是一格能打字的地方。現在框裏是**紙色**（第 18 檔，比面板的第 16 檔
+    /// 看不出是一格能打字的地方。現在框裏是**紙色**（第 90 檔，比面板的第 81 檔
     /// 沉一階），上下各一道線把它封起來。
     #[test]
     fn the_search_box_is_drawn_as_a_box() {

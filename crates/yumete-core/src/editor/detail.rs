@@ -190,8 +190,13 @@ impl Editor {
     /// One key, both directions: from a reference it goes to the note, and
     /// from the note it goes back to the sentence you left. A note read at the
     /// foot of a hundred-page file is no use if finding your place again is a
-    /// search. Standing on neither, `gd` has nothing to point at and asks the
-    /// other question a word raises — 「這個詞還在哪裏」, which is `g/`.
+    /// search. A link, a `[[章節]]` and a `#錨點` are followed the same way —
+    /// they are definitions too, and the ones a manuscript has most of.
+    ///
+    /// ⚠️ **Standing on none of them it does nothing** (#454). It used to fall
+    /// through to 「這個詞還在哪裏」, so `gd` in the middle of a paragraph
+    /// scattered hits across the book and moved the caret. That question is
+    /// still one key away and always was: `g/`.
     fn follow_note(&mut self) {
         // A reference with no note is the ordinary way a note gets written:
         // you type `[^1]` in the sentence and then need somewhere to put it.
@@ -207,6 +212,13 @@ impl Editor {
             // always followed them; `gd` asks the same question in the same
             // words, so it follows them as well.
             if self.link_under_cursor().is_some() {
+                // ⚠️ **`gD` on a link is `gd`** — say so rather than pretend.
+                // Everywhere else the capital means 「shown over there, and you
+                // do not move」, and `follow_link` has three destinations (a
+                // web page, another chapter, a heading in this file) of which
+                // only the last could be previewed at all. Doing it for one of
+                // three would be a rule nobody could hold; `Space w` puts the
+                // other pane up and `C-o` comes back.
                 return self.follow_link();
             }
             // ⚠️ **And on ordinary writing it does nothing** (#454). It used to
