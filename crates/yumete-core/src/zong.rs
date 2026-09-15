@@ -296,6 +296,14 @@ pub struct Position {
     /// the text, which is why the renderer reserves one row more than the wrap
     /// length.
     pub slot: usize,
+    /// How many slots into the **logical line** the cursor is — the same
+    /// measure a horizontal page calls its 列, counted down instead of across
+    /// (#500).
+    ///
+    /// [`slot`](Self::slot) restarts at every 縱 because it is what the goal
+    /// column is kept in; this one runs on through a wrapped paragraph, which
+    /// is what the status line wants: 「竖排的纵＝横排的行，竖排的横＝横排的列」.
+    pub slot_in_line: usize,
 }
 
 /// How many lines the 縱 grid covers.
@@ -1270,11 +1278,13 @@ pub fn position(rope: &Rope, pos: usize, grid: Grid) -> Position {
     // further 縱 to hold the end-of-paragraph caret, and this puts it on the
     // spare row under the last full one rather than opening a phantom column.
     let index_in_line = breaks.partition_point(|&b| b <= g).saturating_sub(1);
-    let slot = g - breaks.get(index_in_line).copied().unwrap_or(0);
+    let first = breaks.get(index_in_line).copied().unwrap_or(0);
+    let slot = g - first;
     Position {
         line,
         index_in_line,
         slot,
+        slot_in_line: g,
     }
 }
 

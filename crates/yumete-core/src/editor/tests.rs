@@ -142,6 +142,37 @@ fn a_note_follows_the_line_as_it_is_written() {
     assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
 }
 
+/// 縱書的 `橫` 和 `字` 會分家（#500）。
+///
+/// 縦中横把**兩個半角字擠進一個格**，所以一串寫成數字的縱，格數比字數少。作者：
+/// 「纵和字是相等的……如果有可能不相等，那就也加一下字」——會，所以狀態欄兩個都報。
+#[test]
+fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
+    // ⚠️ **兩個，不是四個**：`TATECHUYOKO` 是 2，長過它的一串數字照日文書的辦法
+    // 一個一格豎着排（`1997` 擠成 `19`／`97` 讀起來是兩個數）。
+    let mut ed = typed("26年的冬天\n");
+    ed.execute(":layout vertical").unwrap();
+
+    // 縦中横關着：一個字一格，兩個數一路相等。
+    ed.set_tatechuyoko(false);
+    for _ in 0..2 {
+        ed.on_key(Key::Char('j'));
+    }
+    let at = ed.zong_position();
+    assert_eq!(ed.cursor(), 2, "兩個字下去，停在「年」上");
+    assert_eq!(
+        (at.slot_in_line, ed.cursor_column()),
+        (2, 2),
+        "沒有縦中横，格與字同步"
+    );
+
+    // 開着：`26` 佔一格，所以「年」這個第三個字只在第二格上。
+    ed.set_tatechuyoko(true);
+    let at = ed.zong_position();
+    assert_eq!(ed.cursor_column(), 2, "還是第三個字");
+    assert_eq!(at.slot_in_line, 1, "可是只走了一格：{at:?}");
+}
+
 /// The point of #210: **one page**. A candidate the renderer alone knew
 /// about would put the caret, `j` and the mouse on three different ones.
 #[test]
