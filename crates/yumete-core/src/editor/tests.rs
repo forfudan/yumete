@@ -10384,6 +10384,42 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `gJ` 與 `gK` 是同一個編輯的兩個問法（#485）。
+///
+/// 「gK 就是 gJ 對稱语义，你可以考虑这两个共用部分逻辑」——共用的是整個接縫規則：
+/// 漢字之間不補空格、拉丁詞之間補、第二行的縮進吞掉。`gK` 只做一件自己的事：
+/// 站到上一行去。
+#[test]
+fn joining_up_and_joining_down_are_one_edit() {
+    let both = |keys: &str, from: usize| -> String {
+        let mut ed = typed("那年冬天\n山下起了雪\n");
+        ed.goto_line(from);
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    // 站在第一行按 gJ，與站在第二行按 gK，結果逐字相同——接縫也一樣，兩個漢字
+    // 之間不補空格。
+    assert_eq!(both("gJ", 1), both("gK", 2));
+    assert_eq!(both("gJ", 1), "那年冬天山下起了雪\n");
+
+    // 拉丁詞之間補一個空格，兩邊同樣。
+    let latin = |keys: &str, from: usize| -> String {
+        let mut ed = typed("one\ntwo\n");
+        ed.goto_line(from);
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(latin("gJ", 1), latin("gK", 2));
+    assert_eq!(latin("gJ", 1), "one two\n");
+
+    // 第一行上按 gK 什麼都不動，並且說一句。
+    let mut ed = typed("那年冬天\n山下起了雪\n");
+    ed.goto_line(1);
+    press(&mut ed, "gK");
+    assert_eq!(ed.current_buffer().text(), "那年冬天\n山下起了雪\n");
+    assert!(!ed.status().is_empty(), "要說一句：{}", ed.status());
+}
+
 #[test]
 fn a_mark_names_a_place_and_survives_the_afternoon() {
     // The jump list remembers where you came *from*; a mark remembers
