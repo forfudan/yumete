@@ -13037,7 +13037,7 @@ impl Segmenter for Counted {
         self.inner.segment(s)
     }
 
-    fn source(&self) -> String {
+    fn source(&self) -> yumete_cjk::WordSource {
         self.inner.source()
     }
 }

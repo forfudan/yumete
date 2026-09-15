@@ -657,6 +657,24 @@ impl Editor {
                 self.fill_request = Some(on);
                 Ok(CommandOutcome::Continue)
             }
+            // **Takes effect on the next thing said, including this one**
+            // (#494), so the confirmation is already in the new language —
+            // which is the only way a reader who asked for `en` because they
+            // could not read 繁體 gets an answer they can read.
+            Command::SayIn(want) => {
+                if let Some(language) = want {
+                    crate::messages::set_language(language);
+                }
+                self.status = say!(
+                    "ui.language-now",
+                    match crate::messages::language() {
+                        crate::messages::Language::Traditional => "zh",
+                        crate::messages::Language::Simplified => "zhs",
+                        crate::messages::Language::English => "en",
+                    }
+                );
+                Ok(CommandOutcome::Continue)
+            }
             Command::TableToPipe(delimiter) => {
                 self.table_to_pipe(delimiter);
                 Ok(CommandOutcome::Continue)

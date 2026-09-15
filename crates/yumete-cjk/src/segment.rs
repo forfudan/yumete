@@ -47,6 +47,23 @@ use bundled::BUILTIN_DICTIONARY;
 
 /// Splits a string into word ranges as character-index `(start, end)` pairs,
 /// with whitespace skipped. `end` is exclusive.
+/// What the segmenter in force is made of, for the status line to word (#494).
+///
+/// Numbers only. `entries` is the dictionary's; `book` is how many of them the
+/// manuscript added on top (its own list plus whatever 自動認詞 found).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WordSource {
+    /// How many words the dictionary underneath holds. Zero means there is no
+    /// dictionary — every 漢字 is its own word.
+    pub entries: usize,
+    /// How many the book itself contributes on top of that.
+    pub book: usize,
+    /// Whether `entries` counts 宇浩's language model rather than the bundled
+    /// dictionary. The two are named differently and the reader can tell which
+    /// one is loaded only if the status line says.
+    pub yume: bool,
+}
+
 pub trait Segmenter {
     /// Segment `s` into word ranges (character indices, whitespace skipped).
     fn segment(&self, s: &str) -> Vec<(usize, usize)>;
@@ -58,9 +75,13 @@ pub trait Segmenter {
     /// word of its own whatever anyone asks for.
     fn set_level(&mut self, _level: WordLevel) {}
 
-    /// Where these words come from, for the status line to name.
-    fn source(&self) -> String {
-        String::new()
+    /// Where these words come from, **as numbers, not as a sentence** (#494).
+    ///
+    /// This crate has no message table, so a `String` here could only ever be
+    /// 繁體 — and `yumete --lang=en` then drew 「75000 條（內置）」 in the middle
+    /// of an English status line. The wording belongs where the languages are.
+    fn source(&self) -> WordSource {
+        WordSource::default()
     }
 
     /// `ln P(word)` in ordinary prose, from whatever 詞頻表 this segmenter
@@ -444,8 +465,8 @@ impl Segmenter for DictionarySegmenter {
             .map(|&weight| (weight as f64 / self.total).ln())
     }
 
-    fn source(&self) -> String {
-        format!("{} 條（內置）", self.word_count())
+    fn source(&self) -> WordSource {
+        WordSource { entries: self.word_count(), book: 0, yume: false }
     }
 
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
@@ -709,12 +730,8 @@ impl Segmenter for WithWords {
     }
 
     /// The dictionary underneath, and this book's own words on top of it.
-    fn source(&self) -> String {
-        let inner = self.inner.source();
-        match self.words.borrow().len() {
-            0 => inner,
-            n => format!("{inner} ＋ 本書 {n} 個詞"),
-        }
+    fn source(&self) -> WordSource {
+        WordSource { book: self.words.borrow().len(), ..self.inner.source() }
     }
 
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
@@ -863,7 +880,7 @@ impl Segmenter for Memo {
         self.inner.log_prob(word)
     }
 
-    fn source(&self) -> String {
+    fn source(&self) -> WordSource {
         self.inner.source()
     }
 }

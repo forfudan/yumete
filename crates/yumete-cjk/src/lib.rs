@@ -47,7 +47,7 @@ pub use grapheme::{
 pub use reading::{NoReader, Reader};
 pub use segment::{
     best_path, CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo,
-    Segmenter, WithWords, WordLevel, WordList, WordMark,
+    Segmenter, WithWords, WordLevel, WordList, WordMark, WordSource,
 };
 pub use vertical::{
     hangs_in_the_margin, margin_form, narrow_form, opens_a_pair, vertical_form,
