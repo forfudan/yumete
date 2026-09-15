@@ -717,7 +717,37 @@ impl Palette {
             Accent::Azure => self.azure,
             Accent::Amber => self.amber,
         };
-        self.tinted(colour, 1.5)
+        // ⚠️ **Close to the page, and closer on a light one** (#489).
+        //
+        // This began at 1.5:1 both ways, which is a *field* of colour, not a
+        // pane of glass over the paper: 「太濃了……髒的要死」, 「侵略性太强」.
+        // Two measurements settled where it belongs.
+        //
+        // **One.** The same ratio is the same ΔL* on either page — 1.5:1 is
+        // fifteen points of L* in both moods — and nothing like the same
+        // weight. A tint on a page the eye has adapted to *takes light away*
+        // from a field twenty lines tall; the same step on a dark page adds a
+        // little to one that was giving off none. So the light page gets the
+        // smaller number.
+        //
+        // **Two.** A table's alternating rows sit at 1.13:1 and are read at a
+        // glance across one row — and a callout is fifteen times that area.
+        // 「面積大，對比可以低」 sets the floor, and these are under it, which
+        // is why they can be this quiet and still be seen.
+        //
+        // ⚠️ **The saturation does not come down with them.** Lowering both is
+        // what made the first attempt grey: the colour has to stay itself and
+        // only move toward the page. 「保證本色的狀態下讓他更淡。」
+        let off_page = match luminance(self.page_colour()) < luminance(self.text()) {
+            true => 1.12,
+            false => 1.08,
+        };
+        self.tinted(colour, off_page)
+    }
+
+    /// The paper, as a colour — the ground everything else is measured against.
+    fn page_colour(self) -> Color {
+        Color::Rgb(self.ladder.paper.0, self.ladder.paper.1, self.ladder.paper.2)
     }
 
     /// A ground of `accent`'s **hue**, set `off_page` away from the paper.
@@ -741,10 +771,33 @@ impl Palette {
     fn tinted(self, accent: (u8, u8, u8), off_page: f64) -> Color {
         /// A ground below this is a grey; above it, the luminous hues shout.
         const BAND: (f64, f64) = (22.0, 42.0);
-        let paper = Color::Rgb(self.ladder.paper.0, self.ladder.paper.1, self.ladder.paper.2);
+        let paper = self.page_colour();
         let (hue, _, sat) = to_hsl(accent);
-        let sat = sat.clamp(BAND.0, BAND.1);
-        let (_, page_light, _) = to_hsl(self.ladder.paper);
+        let (page_hue, page_light, page_sat) = to_hsl(self.ladder.paper);
+        // ⚠️ **A tint the paper's own hue has to out-saturate the paper**
+        // (#490). 墨香's light page is a warm cream at 45° and 46 saturation,
+        // and 黃 sits at 39° — six degrees away, and *under* the paper in
+        // saturation. So it did not read as yellow, it read as cream with the
+        // light knocked out of it: 「黃色有些不夠純」. The other four are a
+        // hundred degrees off and never meet this.
+        //
+        // Only the hue near the page's needs it, and only enough to be seen as
+        // a colour of its own — so the floor is the page's saturation with a
+        // margin, and every other accent keeps the band.
+        //
+        // ⚠️ **And only when the page is a colour at all.** The dark page is a
+        // near-neutral that happens to compute a hue (216°, at 9 saturation),
+        // and 藍 lands 16° from it — so without this the dark mood lifted the
+        // blue to 58 and the rule fired where there was nothing to collide
+        // with. A page nobody would call yellow cannot swallow a yellow.
+        let near = page_sat > 25.0 && {
+            let apart = (hue - page_hue).abs();
+            apart.min(360.0 - apart) < 30.0
+        };
+        let sat = match near {
+            true => sat.clamp(page_sat + 15.0, 100.0),
+            false => sat.clamp(BAND.0, BAND.1),
+        };
         // Away from the page: a dark page is lifted, a light one is lowered.
         let up = luminance(paper) < luminance(self.text());
         let step = if up { 0.4 } else { -0.4 };
