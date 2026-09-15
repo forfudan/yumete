@@ -449,6 +449,15 @@ fn contrast(a: Color, b: Color) -> f64 {
     (hi + 0.05) / (lo + 0.05)
 }
 
+/// How far back a 分詞 `line` sits from the writing (#501).
+///
+/// 第 50 檔. It went 35 → 70 → 50: 35 was 「不够淡」, and 70 — picked off a
+/// picture of the five candidates — turned out to disappear in use, because
+/// the rule sits **hard against the bottom half of the characters** rather
+/// than in clear space: 「他紧挨着字的下半部分，7000 看不出来」. A swatch and a
+/// page of prose are not the same test.
+const RULE_BACK: u16 = 5000;
+
 impl Palette {
     /// The palette in force.
     pub fn of(config: &Config) -> Palette {
@@ -894,6 +903,78 @@ impl Palette {
     /// demoted rather than merely bounded.
     pub fn word_ink(self) -> Color {
         self.at(yumete_config::rung::WORD_INK)
+    }
+
+    /// The third way: the same writing, the same **lightness**, a different
+    /// hue (#501).
+    ///
+    /// ⚠️ **Lightness is held and only the hue moves** — the exact opposite of
+    /// [`Self::tinted`], and for the mirror reason. `word_ink` steps a word
+    /// *darker*, and on a page of prose a darker run reads as emphasis whether
+    /// or not it was meant to: 「有些字亮有些字暗，亮的像强调」. Hue carries the
+    /// same one bit of 「this is a different word」 and says nothing at all
+    /// about weight.
+    ///
+    /// ⚠️ **The hue is the theme's 藍, never its 朱 or 綠.** About eight men in
+    /// a hundred cannot tell red from green, and this is the one mark on the
+    /// page whose entire job is to be told apart. Blue against the page's own
+    /// warm ink is a 藍↔黃 difference, which every common form of colour
+    /// blindness leaves intact.
+    ///
+    /// Saturation is modest on purpose: at equal lightness a saturated hue
+    /// still shouts, and this mark is meant to be findable, not read.
+    /// ⚠️ **Both halves take a hue, not one of them** (#501). Leaving every
+    /// other word on the plain ink looked like blue against *white*, because
+    /// the plain ink is a warm near-grey at saturation 5 — 「感觉不是蓝黄而更像
+    /// 蓝白」. The page's own ink already sits on the warm side of the wheel,
+    /// so bringing its saturation up to meet the blue's is what makes the pair
+    /// an actual 藍↔黃 difference. Neither is the plain ink; both are the same
+    /// lightness as it.
+    pub fn word_hue(self, from: Color, cool: bool) -> Color {
+        /// Enough to read as a colour, not enough to read as a mark.
+        const SAT: f64 = 30.0;
+        let (warm_hue, _, _) = to_hsl(self.ladder.ink);
+        let (_, light, _) = to_hsl(match from {
+            Color::Rgb(r, g, b) => (r, g, b),
+            _ => self.ladder.ink,
+        });
+        let hue = match cool {
+            true => to_hsl(self.azure).0,
+            false => warm_hue,
+        };
+        // ⚠️ **Equal HSL lightness is not equal brightness.** HSL's L is
+        // `(max+min)/2` and knows nothing about the eye: at L 62 the warm hue
+        // measured 0.647 in relative luminance and the cool one 0.608, a
+        // 1.06:1 difference — small, but this mark exists *because* 1.38:1 read
+        // as emphasis, so it is worth spending eight lines to take it out.
+        // The cool one is the target and the warm one is bent to meet it.
+        let want = luminance(from_hsl(to_hsl(self.azure).0, light, SAT));
+        let mut lo = 0.0;
+        let mut hi = 100.0;
+        for _ in 0..12 {
+            let mid = (lo + hi) / 2.0;
+            match luminance(from_hsl(hue, mid, SAT)) < want {
+                true => lo = mid,
+                false => hi = mid,
+            }
+        }
+        from_hsl(hue, (lo + hi) / 2.0, SAT)
+    }
+
+    /// The rule a `line` word mark draws — see [`RULE_BACK`] (#501).
+    ///
+    /// ⚠️ **Not 35.** It began on FURNITURE — line numbers, an unlit tab — and
+    /// the answer was 「不够淡」. Markdown already spends the solid underline on
+    /// a link, so this one has to be visibly the quieter of the two.
+    ///
+    /// ⚠️ **And it is not drawn on a link at all.** Composing it over the
+    /// link's own 藍 the way a table band composes over a callout was tried and
+    /// measured `#002857`, which on a dark page is a black line: 「那个蓝色线，
+    /// 深的看不出来了都」. So the rule that stands is the simple one — 「链接就
+    /// 是用链接颜色 overwrite 掉分词下划线」 — and it is the renderers that
+    /// enforce it, by leaving alone any cell that is underlined already.
+    pub fn word_rule(self) -> Color {
+        self.at(RULE_BACK)
     }
 
 

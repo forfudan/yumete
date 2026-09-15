@@ -1934,12 +1934,28 @@ en = "reread (this book's and the global one)"
 find = "詞表 词表 重讀 重读 刷新 reload"
 
 [[message]]
+# : 命令選單裏 color 那一項的說明（word-show 組）
+key = "cmd.word-show.color"
+zht = "換墨的顏色：一半暖一半冷，明度不動"
+zhs = "换墨的颜色：一半暖一半冷，明度不动"
+en = "a second hue at the same lightness"
+find = "色相 顏色 颜色 藍黃 蓝黄 color hue"
+
+[[message]]
 # : 命令選單裏 ink 那一項的說明（word-show 組）
 key = "cmd.word-show.ink"
 zht = "換墨色：紙不動，隔一個詞的字本身退後一格"
 zhs = "换墨色：纸不动，隔一个词的字本身退后一格"
 en = "mark by ink: the paper stays, every other word steps back"
 find = "分詞 分词 著色 着色 字色 文字 ink"
+
+[[message]]
+# : 命令選單裏 line 那一項的說明（word-show 組）
+key = "cmd.word-show.line"
+zht = "詞下畫一條淡線，字與紙都不動"
+zhs = "词下画一条淡线，字与纸都不动"
+en = "a faint rule under the word, ink and paper untouched"
+find = "線 线 下劃線 下划线 分界 line rule underline sep"
 
 [[message]]
 # : 命令選單裏 tint 那一項的說明（word-show 組）
@@ -7208,11 +7224,25 @@ zhs = "词表重读了：{0}"
 en = "word lists reread: {0}"
 
 [[message]]
+# 分詞著色換成「色相」：明度一樣，換顏色
+key = "word.mark-color"
+zht = "分詞著色：色相"
+zhs = "分词著色：色相"
+en = "word tint: hue"
+
+[[message]]
 # 分詞著色改用字色：不動紙，隔一個詞換一種墨色
 key = "word.mark-ink"
 zht = "分詞著色：字色"
 zhs = "分词著色：字色"
 en = "word tint: ink"
+
+[[message]]
+# 分詞著色換成「線」：字本身不動，詞底下畫一道淡線
+key = "word.mark-line"
+zht = "分詞著色：線"
+zhs = "分词著色：线"
+en = "word tint: a rule under the word"
 
 [[message]]
 # 分詞著色改用底色：隔一個詞在紙上鋪一層淡色

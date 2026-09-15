@@ -1990,6 +1990,16 @@ const WORD_SHOW: &[Word] = &[
         help: "cmd.word-show.ink",
         needs: &[],
     },
+    Word {
+        name: "color",
+        help: "cmd.word-show.color",
+        needs: &[],
+    },
+    Word {
+        name: "line",
+        help: "cmd.word-show.line",
+        needs: &[],
+    },
 ];
 
 const WORD_LISTS: &[Word] = &[

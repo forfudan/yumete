@@ -4373,6 +4373,13 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
             let bold = style
                 .add_modifier
                 .contains(ratatui::style::Modifier::BOLD);
+            // **The rule a 分詞 separator draws** (#501). It is a style and not
+            // a character, so a picture that dropped it would show the mode as
+            // doing nothing at all.
+            let underline = style
+                .add_modifier
+                .contains(ratatui::style::Modifier::UNDERLINED)
+                .then(|| hex(style.underline_color, &fg));
             let reversed = style
                 .add_modifier
                 .contains(ratatui::style::Modifier::REVERSED);
@@ -4393,8 +4400,15 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
                 x += yumete_cjk::drawn_width(here.symbol()).max(1) as u16;
             }
             let weight = if bold { ";font-weight:600" } else { "" };
+            let rule = match &underline {
+                Some(colour) => format!(
+                    ";text-decoration:underline;text-decoration-color:{colour}\
+                     ;text-underline-offset:2px"
+                ),
+                None => String::new(),
+            };
             out.push_str(&format!(
-                "<span style=\"color:{fg};background:{bg}{weight}\">{}</span>",
+                "<span style=\"color:{fg};background:{bg}{weight}{rule}\">{}</span>",
                 escape(&run)
             ));
         }
@@ -6471,7 +6485,10 @@ fn draw_horizontal(
                 // of tints it replaces differed by *temperature* at 1.04 and
                 // 1.07 against the ground, so one read as the ground and the
                 // other as a stain.
-                if n % 2 != 0 {
+                // 色相 is the one mark that touches **both** halves — the
+                // pair is warm against cool, and a plain-ink half would make it
+                // white against cool instead (#501).
+                if n % 2 != 0 && mark != WordMark::Color {
                     continue;
                 }
                 let a = a.saturating_sub(start_in_line);
@@ -6507,6 +6524,31 @@ fn draw_horizontal(
                             let from = style.fg.or(page_fg).unwrap_or(ink.text());
                             *style = style.fg(ink.marked(from, yumete_config::rung::WORD_INK));
                         }
+                        // The same question again, answered with hue instead
+                        // of weight (#501) — see [`Ink::word_hue`].
+                        WordMark::Color => {
+                            let from = style.fg.or(page_fg).unwrap_or(ink.text());
+                            *style = style.fg(ink.word_hue(from, n % 2 != 0));
+                        }
+                        // **Nothing on the writing at all**: a rule under the
+                        // word, and bare line between. 橫排 can underline the
+                        // whole word because the break between two runs of it
+                        // *is* the boundary; 縱書 cannot (there a continuous
+                        // underline is one tick per character), so that page
+                        // marks each word's last cell instead.
+                        // ⚠️ **Never on a cell that is underlined already.** A
+                        // link's underline is its own and it wins: 「链接就是用
+                        // 链接颜色 overwrite 掉分词下划线」. Composing the two was
+                        // tried (the table-band-over-a-callout trick) and came
+                        // out `#002857` — a black line on a dark page.
+                        WordMark::Line
+                            if !style.add_modifier.contains(Modifier::UNDERLINED) =>
+                        {
+                            *style = style
+                                .add_modifier(Modifier::UNDERLINED)
+                                .underline_color(ink.word_rule());
+                        }
+                        WordMark::Line => {}
                     }
                 }
             }
@@ -8062,6 +8104,87 @@ fn squeezed(text: &str) -> String {
         assert_ne!(gone, added, "而且兩種底分得開");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 色相：兩半**明度相同**，只有色相不同（#501）。
+    ///
+    /// 作者原話：「ink……有些字亮有些字暗，亮的像强调」——所以這一支的整個價值就在
+    /// 那個亮度差要小。`ink` 量出來是 1.38:1；這裏要求 1.05:1 以內。
+    ///
+    /// ⚠️ **兩半都上色**，不是一半原墨一半藍：原墨是飽和度 5 的暖灰，配藍看起來是
+    /// 「藍配白」而不是藍配黃（作者：「感觉不是蓝黄而更像蓝白」）。
+    #[test]
+    fn the_hue_mark_keeps_both_halves_at_one_brightness() {
+        let mut editor = editor_with("那年冬天，山下起了大雪。\n");
+        editor.set_word_mark(yumete_cjk::WordMark::Color);
+        editor.set_segmentation_visible(true);
+        let config = Config::default();
+        let buffer = render(&editor, &config, 60, 6);
+
+        // ⚠️ **問兩個字，不是掃一整行。** 掃行會把行號欄的墨和標點（不在任何詞裏，
+        // 所以是原墨）一起算進來，於是量到 2.25:1 ——那不是這一支的錯，是量錯了。
+        // 「那年」和「冬天」是相鄰的兩個詞，各取第一個字。
+        let text = row_text(&buffer, 0);
+        let ink_at = |ch: &str| -> (u8, u8, u8) {
+            match buffer[(column_of(&text, ch), 0)].style().fg {
+                Some(ratatui::style::Color::Rgb(r, g, b)) => (r, g, b),
+                other => panic!("{ch} 的墨不是 RGB：{other:?}"),
+            }
+        };
+        let mut seen: Vec<(u8, u8, u8)> = Vec::new();
+        for ch in ["那", "年", "冬", "天", "山", "下", "起", "了", "大", "雪"] {
+            let ink = ink_at(ch);
+            if !seen.contains(&ink) {
+                seen.push(ink);
+            }
+        }
+        assert_eq!(seen.len(), 2, "整段漢字只有兩種墨：{seen:?}");
+
+        let lum = |(r, g, b): (u8, u8, u8)| -> f64 {
+            let f = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                match v <= 0.03928 {
+                    true => v / 12.92,
+                    false => ((v + 0.055) / 1.055).powf(2.4),
+                }
+            };
+            0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+        };
+        let (hi, lo) = (lum(seen[0]).max(lum(seen[1])), lum(seen[0]).min(lum(seen[1])));
+        let apart = (hi + 0.05) / (lo + 0.05);
+        assert!(apart < 1.05, "明度幾乎不動，量到 {apart:.3}:1：{seen:?}");
+
+        // …而且色相真的分開了：一暖一冷，不是同一個顏色的兩級。
+        let warm = seen.iter().any(|&(r, _, b)| r > b);
+        let cool = seen.iter().any(|&(r, _, b)| b > r);
+        assert!(warm && cool, "一暖一冷：{seen:?}");
+    }
+
+    /// 線：字本身一點不動，只在詞下畫一條（#501）。
+    #[test]
+    fn the_line_mark_touches_the_writing_not_at_all() {
+        let plain = {
+            let mut editor = editor_with("那年冬天，山下起了大雪。\n");
+            editor.set_segmentation_visible(false);
+            render(&editor, &Config::default(), 60, 6)
+        };
+        let mut editor = editor_with("那年冬天，山下起了大雪。\n");
+        editor.set_word_mark(yumete_cjk::WordMark::Line);
+        editor.set_segmentation_visible(true);
+        let marked = render(&editor, &Config::default(), 60, 6);
+
+        let mut ruled = 0;
+        for x in 0..24u16 {
+            let (a, b) = (plain[(x, 0)].style(), marked[(x, 0)].style());
+            assert_eq!(a.fg, b.fg, "第 {x} 格的字色沒動");
+            assert_eq!(a.bg, b.bg, "第 {x} 格的底色沒動");
+            if b.add_modifier.contains(Modifier::UNDERLINED) {
+                ruled += 1;
+                assert!(b.underline_color.is_some(), "線有自己的顏色");
+            }
+        }
+        assert!(ruled > 0, "有詞被畫了線");
+        assert!(ruled < 24, "不是整行都畫——那就沒有分界了");
     }
 
     /// 落款在提示行的右端，擠不下就沒有（#498）。
