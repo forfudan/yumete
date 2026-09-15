@@ -117,19 +117,22 @@ impl Editor {
                 // `y Y`, `p` were here too and are gone — they are the keys
                 // this reader already has in the text, and `t` lists the
                 // ones that are not.
+                //
+                // ⚠️ **The grain is `T`'s own label, and nowhere else** (#496).
+                // The title said 「表格 · 字」 and the status line said 「· 字」
+                // again a row above, for a fact `T 按字移動` was already
+                // standing there stating — 「似乎不需要吧。因为挺明显的」. So the
+                // title is just 表格 in both, and `T` says what pressing it
+                // *does*: the grain you are not in.
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
-                match grain {
-                    Grain::Cell => Hint::Keys(say!("label.table"), vec![
-                            ("t", say!("hint.table.menu")),
-                            ("T", say!("hint.table.by-character-instead")),
-                            ("Tab", say!("hint.table.next-cell")),
-                        ]),
-                    Grain::Char => Hint::Keys(say!("hint.table.character-mode"), vec![
-                            ("t", say!("hint.table.menu")),
-                            ("T", say!("hint.table.by-cell-instead")),
-                            ("Tab", say!("hint.table.next-cell")),
-                        ]),
-                }
+                Hint::Keys(say!("label.table"), vec![
+                    ("t", say!("hint.table.menu")),
+                    ("T", match grain {
+                        Grain::Cell => say!("hint.table.by-character-instead"),
+                        Grain::Char => say!("hint.table.by-cell-instead"),
+                    }),
+                    ("Tab", say!("hint.table.next-cell")),
+                ])
             }
             _ => Hint::Quiet,
         }

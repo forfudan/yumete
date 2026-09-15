@@ -1048,16 +1048,6 @@ pub enum Grain {
     Char,
 }
 
-impl Grain {
-    /// Its name, for the status line.
-    pub fn label(self) -> String {
-        match self {
-            Grain::Cell => say!("label.cell"),
-            Grain::Char => say!("label.character"),
-        }
-    }
-}
-
 /// The depth of a Chinese chapter heading, if this line is one.
 ///
 /// 「第三章」, 「第四百一十二卷」, 「楔子」, 「後記」 — how a manuscript with no
@@ -2624,7 +2614,9 @@ impl Editor {
     /// `Tab` changes what every arrow key does, and a mode you cannot see is a
     /// mode you will be surprised by.
     pub fn table_status(&self) -> Option<String> {
-        let view = self.table.as_ref()?;
+        // There has to *be* a view; nothing else about it is wanted here any
+        // more (see the note on the tail below).
+        self.table.as_ref()?;
         if !self.table_here() {
             return None;
         }
@@ -2636,7 +2628,12 @@ impl Editor {
             .get(cell)
             .cloned()
             .unwrap_or_else(|| format!("+{}", cell + 1 - headings.len()));
-        Some(format!("{name} · {}", view.grain.label()))
+        // ⚠️ **No 「· 字」 tail** (#496). The grain used to be spelt out here
+        // and again in the hint row's title, and both were saying what the
+        // `T` key is already standing there saying — 「似乎不需要吧。因为挺明显
+        // 的」. The status line is a scarce row; what is on it has to be
+        // something not said anywhere else.
+        Some(name)
     }
 }
 
