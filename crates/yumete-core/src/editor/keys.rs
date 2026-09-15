@@ -769,8 +769,19 @@ impl Editor {
             }
             // Selection + changes (Helix: `x` selects the line, `d` deletes the
             // selection, `c` changes it).
+            //
+            // ⚠️ **Small letter deletes, capital cuts** (#492) — and that is
+            // *not* what Helix does. There `d` yanks and `A-d` does not, which
+            // the author calls its worst idea: 「d 作为剪切功能会污染
+            // register」. One clipboard, and the commonest key in the editor
+            // spends it, so every tidy-up between a copy and a paste throws
+            // the copy away. Here the pair is `d`/`D` and `c`/`C`, one rule
+            // for four keys: **the capital is the one that touches the
+            // register**. `D` and `C` were unbound in Helix, so nothing that
+            // had a key lost one; `A-d`/`A-c` are gone, because after the swap
+            // they are `d`/`c` spelt longer.
             Key::Char('x') => self.repeat(count, |e| e.select_line()),
-            Key::Char('d') => {
+            Key::Char('d') | Key::Char('D') | Key::Char('c') | Key::Char('C') => {
                 self.snapshot();
                 // A count deletes that many graphemes when there is nothing
                 // selected, the way `3x` does in vim; with a selection it is
@@ -778,30 +789,11 @@ impl Editor {
                 if self.span().0 == self.span().1 && count > 1 {
                     self.extend_by_graphemes(count);
                 }
-                self.delete_selection();
-            }
-            Key::Char('c') => {
-                self.snapshot();
-                if self.span().0 == self.span().1 && count > 1 {
-                    self.extend_by_graphemes(count);
+                match key {
+                    Key::Char('D') | Key::Char('C') => self.cut_selection_to_register(),
+                    _ => self.delete_selection(),
                 }
-                self.delete_selection();
-                self.enter_insert();
-            }
-            // **The same two, without spending the register** (Helix `A-d` and
-            // `A-c`, tutor 4.2). The register holds one thing: copy a
-            // paragraph, then take out a stray 、 before pasting it, and the
-            // paragraph is gone. These take the text out and leave what was
-            // copied where it was. Helix's `A-` keys are mostly the
-            // multi-cursor family (#405) — these two are not, and they earn
-            // their keys with one cursor.
-            Key::Alt('d') | Key::Alt('c') => {
-                self.snapshot();
-                if self.span().0 == self.span().1 && count > 1 {
-                    self.extend_by_graphemes(count);
-                }
-                self.delete_selection_keeping_register();
-                if key == Key::Alt('c') {
+                if matches!(key, Key::Char('c') | Key::Char('C')) {
                     self.enter_insert();
                 }
             }
@@ -1070,8 +1062,6 @@ impl Editor {
             // vi's 行首. It gets here only with no count under way — with one,
             // `0` is still the digit it looks like (`20l`).
             '0' => say!("hint.vi.zero"),
-            'D' => say!("hint.vi.d-upper"),
-            'C' => say!("hint.vi.c-upper"),
             's' | 'S' => say!("hint.vi.s"),
             'Z' => say!("hint.vi.z-upper"),
             '@' => say!("hint.vi.at"),

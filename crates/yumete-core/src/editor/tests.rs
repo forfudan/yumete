@@ -1669,43 +1669,66 @@ fn named_registers_keep_more_than_one_thing() {
 }
 
 #[test]
-fn deleting_yanks_so_text_can_be_moved() {
+fn cutting_yanks_so_text_can_be_moved() {
     let mut ed = typed("甲乙丙");
-    press(&mut ed, "ggvd"); // cut 甲
+    press(&mut ed, "ggvD"); // cut 甲 — the capital is the one that yanks
     assert_eq!(ed.current_buffer().text(), "乙丙");
     press(&mut ed, "glp"); // and put it at the end
     assert_eq!(ed.current_buffer().text(), "乙丙甲");
 }
 
 #[test]
-fn the_alt_pair_takes_text_out_without_spending_the_register() {
-    // Helix `A-d`／`A-c` (tutor 4.2). The register holds one thing: yank a
-    // sentence, notice a stray 、 on the way to where it goes, and plain `d`
-    // would throw the sentence away to hold that one character. #404.
+fn the_small_letters_delete_and_the_capitals_cut() {
+    // 「d 作为剪切功能会污染 register。这是我觉得 helix 最不好的地方」 (#492).
+    // The register holds one thing: yank a sentence, notice a stray 、 on the
+    // way to where it goes, and Helix's `d` would throw the sentence away to
+    // hold that one character. So here the commonest key is the safe one.
     let mut ed = typed("甲乙丙");
     press(&mut ed, "ggy"); // 甲 into the register
-    press(&mut ed, "l");
-    ed.on_key(Key::Alt('d')); // 乙 out, register untouched
+    press(&mut ed, "ld"); // 乙 out, register untouched
     assert_eq!(ed.current_buffer().text(), "甲丙");
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "甲丙甲");
 
-    // `A-c` is the same cut and then Insert, again keeping the register.
+    // `c` is the same delete and then Insert, again keeping the register.
     let mut ed = typed("甲乙丙");
     press(&mut ed, "ggy");
-    press(&mut ed, "l");
-    ed.on_key(Key::Alt('c'));
+    press(&mut ed, "lc");
     assert_eq!(ed.mode(), Mode::Insert, "{}", ed.status());
     ed.on_key(Key::Char('丁'));
     ed.on_key(Key::Esc);
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "甲丁丙甲");
 
-    // A count reaches that many characters, the way `d` and `c` do.
+    // `C` cuts and then types, so what it took out is what comes back.
+    let mut ed = typed("甲乙丙");
+    press(&mut ed, "ggy");
+    press(&mut ed, "lC");
+    assert_eq!(ed.mode(), Mode::Insert, "{}", ed.status());
+    ed.on_key(Key::Char('丁'));
+    ed.on_key(Key::Esc);
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丁丙乙", "C spent the register");
+
+    // A count reaches that many characters for all four.
     let mut ed = typed("甲乙丙丁");
-    press(&mut ed, "gg2");
-    ed.on_key(Key::Alt('d'));
+    press(&mut ed, "gg2d");
     assert_eq!(ed.current_buffer().text(), "丙丁");
+    let mut ed = typed("甲乙丙丁");
+    press(&mut ed, "gg2D");
+    assert_eq!(ed.current_buffer().text(), "丙丁");
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "丙丁甲乙");
+}
+
+/// Helix 的 `A-d`／`A-c` 已經沒有了（#492）——換完之後它們就是 `d`／`c` 的長寫法。
+#[test]
+fn the_alt_pair_is_gone() {
+    let mut ed = typed("甲乙丙");
+    press(&mut ed, "ggy");
+    press(&mut ed, "l");
+    ed.on_key(Key::Alt('d'));
+    assert_eq!(ed.current_buffer().text(), "甲乙丙", "什麼都沒發生");
 }
 
 #[test]
@@ -7223,9 +7246,9 @@ fn what_was_cut_three_edits_ago_is_still_reachable() {
     // that paragraph go" had no answer.
     let mut ed = typed("甲一\n乙二\n丙三\n");
     ed.goto_line(1);
-    press(&mut ed, "xd");
+    press(&mut ed, "xD");
     ed.goto_line(1);
-    press(&mut ed, "xd");
+    press(&mut ed, "xD");
     assert_eq!(ed.current_buffer().text(), "丙三\n");
 
     // Both are still there, newest first, and the named ones after them.
