@@ -7020,9 +7020,9 @@ en = "no character under the cursor to look up"
 [[message]]
 # 狀態欄的位置：橫排的正文
 key = "ui.position"
-zht = "行 {0}, 列 {1}"
-zhs = "行 {0}, 列 {1}"
-en = "Row {0}, Col {1}"
+zht = "行 {0}, 列 {1}, 字 {2}"
+zhs = "行 {0}, 列 {1}, 字 {2}"
+en = "Ln {0}, Col {1}, Chr {2}"
 
 [[message]]
 # 狀態欄的位置：光標在表格裏
@@ -7032,11 +7032,25 @@ zhs = "行 {0}, 列 {1} [{2}]"
 en = "Row {0}, Col {1} [{2}]"
 
 [[message]]
+# 狀態欄的位置：橫排，擠不下 字 那一格時
+key = "ui.position-short"
+zht = "行 {0}, 列 {1}"
+zhs = "行 {0}, 列 {1}"
+en = "Ln {0}, Col {1}"
+
+[[message]]
 # 狀態欄的位置：竪排
 key = "ui.position-vertical"
-zht = "橫 {0}, 字 {1}"
-zhs = "横 {0}, 字 {1}"
-en = "橫 {0}, 字 {1}"
+zht = "縱 {0}, 橫 {1}, 字 {2}"
+zhs = "纵 {0}, 横 {1}, 字 {2}"
+en = "Zong {0}, Heng {1}, Chr {2}"
+
+[[message]]
+# 狀態欄的位置：竪排，擠不下 字 那一格時
+key = "ui.position-vertical-short"
+zht = "縱 {0}, 橫 {1}"
+zhs = "纵 {0}, 横 {1}"
+en = "Zong {0}, Heng {1}"
 
 [[message]]
 # 狀態欄：這一份是只讀的（:readonly on，或磁盤上就不許寫）

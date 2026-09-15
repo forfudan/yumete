@@ -6951,6 +6951,7 @@ fn draw_status(
         // below's question — and with no command row it comes back here, because
         // a message nobody can see is not a message.
         let where_ = position_of(editor);
+        let where_short = position_short(editor);
         // **Whole fields give way, in order — the line is never cut through a
         // word.** It used to be one `format!`, and a narrow window simply
         // sliced the end off it: at twenty columns `long.csv   Ln 1, Col 1`
@@ -6979,7 +6980,7 @@ fn draw_status(
             false => format!("   {}", editor.status()),
         };
         let room = status_area.width as usize;
-        let build = |give: u8, gap: usize| -> String {
+        let build = |give: u8, gap: usize, where_: &str| -> String {
             let left: String = pieces
                 .iter()
                 .filter(|(_, rank)| *rank == 0 || *rank < give)
@@ -6995,13 +6996,21 @@ fn draw_status(
         // first, and only then does a field give way.
         let mut give = 7u8;
         let mut gap = 3usize;
+        let mut where_ = where_.as_str();
         let line = loop {
-            let line = build(give, gap);
+            let line = build(give, gap, where_);
             if yumete_cjk::str_width(&line) <= room {
                 break line;
             }
             if gap > 1 {
                 gap = 1;
+                continue;
+            }
+            // ⚠️ **字 goes before any field does** (#500). It is the third
+            // number of three, and the other two are what the status line
+            // exists to answer; a name or a `[3/20]` is worth more than it.
+            if where_ != where_short {
+                where_ = &where_short;
                 continue;
             }
             // The mode and the position are the floor; below that the terminal
@@ -7031,15 +7040,31 @@ fn draw_status(
         true => char_info(editor, config),
         false => [typed, String::new(), String::new()],
     };
-    let used = yumete_cjk::str_width(&status);
-    let room = (status_area.width as usize).saturating_sub(used);
+    let fits = |status: &str| -> &str {
+        let room = (status_area.width as usize)
+            .saturating_sub(yumete_cjk::str_width(status));
+        right
+            .iter()
+            .map(String::as_str)
+            .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 <= room)
+            .unwrap_or("")
+    };
     // Three stages of giving way — block name, then the 字, then the readout
     // altogether — and the left side is never squeezed.
-    let tail = right
-        .iter()
-        .map(String::as_str)
-        .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 <= room)
-        .unwrap_or("");
+    //
+    // ⚠️ **…and a fourth, one field to the left** (#500). 字 made the position
+    // six cells wider, and the position is this line's floor — so at sixty
+    // cells it pushed the readout off entirely, and the readout is the only
+    // thing on the screen that answers 「is the character wrong, or the font?」.
+    // 行 and 列 place the caret; 字 is the extra one. So when keeping 字 costs
+    // the whole readout, 字 is what goes.
+    let status = match fits(&status).is_empty() && right.iter().any(|t| !t.is_empty()) {
+        true => status.replace(&position_of(editor), &position_short(editor)),
+        false => status,
+    };
+    let tail = fits(&status);
+    let used = yumete_cjk::str_width(&status);
+    let room = (status_area.width as usize).saturating_sub(used);
     let gap = room.saturating_sub(yumete_cjk::str_width(tail));
     frame.render_widget(
         Paragraph::new(Line::from(vec![
@@ -7591,6 +7616,23 @@ fn draw_command(
 /// would each mean two things here. In a grid the useful pair is the row and
 /// *which column* — "column 143" of a line of 拆分 means nothing to anybody.
 fn position_of(editor: &Editor) -> String {
+    position_in(editor, true)
+}
+
+/// The same, one field shorter (#500).
+///
+/// ⚠️ **字 is the field that gives way.** Adding it made the position six cells
+/// wider, and the position is the status line's floor — so on a sixty-cell
+/// terminal it pushed the character readout off the line altogether, and that
+/// readout is the only thing on the screen that can answer 「is this character
+/// wrong, or is it the font?」. 行 and 列 place the caret; 字 is the extra one,
+/// so 字 is the one that goes. The readout already gives way in three stages;
+/// this is the same idea one field to the left.
+fn position_short(editor: &Editor) -> String {
+    position_in(editor, false)
+}
+
+fn position_in(editor: &Editor, full: bool) -> String {
     if let Some(where_) = editor.table_status() {
         // **The number the gutter shows.** In the window that is this
         // table's own row; in prose it is the file's line, which is what the
@@ -7605,26 +7647,53 @@ fn position_of(editor: &Editor) -> String {
     }
     if editor.layout() == WritingLayout::Vertical {
         let at = editor.zong_position();
-        // Two coordinates, not three: which 縱 the cursor is in, and how far
-        // down it. A paragraph long enough to wrap runs over several 縱, so the
-        // 縱 is named by the paragraph and which piece of it — `56-2` is the
-        // second 縱 of paragraph 56 — and the piece is dropped when there is
-        // only one, which is most paragraphs.
-        let which = if at.index_in_line == 0 {
-            format!("{}", at.line + 1)
-        } else {
-            format!("{}-{}", at.line + 1, at.index_in_line + 1)
+        // **縱橫字, and they are 行列字 turned a quarter turn** (#500). The
+        // author's own mapping: 「竖排的纵＝横排的行，竖排的横＝横排的列。我用纵横
+        // 是因为不想和行列混淆。」 So the three numbers mean exactly what the
+        // three on a horizontal page mean, and the names are different only so
+        // that a reader never has to ask which page they are looking at:
+        //
+        // * 縱 is the **logical line** — absolute, not the visual column. A
+        //   paragraph long enough to wrap runs over several columns and they
+        //   all carry the same 縱 number, exactly as a wrapped line on a
+        //   horizontal page carries one 行 number.
+        // * 橫 is how far along that line, in slots — the 列.
+        // * 字 is how far along in characters. It parts company with 橫 wherever
+        //   縦中横 packs two half-width characters into one slot.
+        // **Spelt out both ways, not looked up.** `messages.toml` is audited
+        // against the literal tags the tree says, so a key held in a variable
+        // reads as a tag nobody says.
+        return match full {
+            true => say!(
+                "ui.position-vertical",
+                at.line + 1,
+                at.slot_in_line + 1,
+                editor.cursor_column() + 1
+            ),
+            false => say!("ui.position-vertical-short", at.line + 1, at.slot_in_line + 1),
         };
-        return say!("ui.position-vertical", which, at.slot + 1);
     }
     // ⚠️ **Said, not spelt out** (#497). This was a hardcoded `Ln {}, Col {}`,
     // so the one part of the status line a reader looks at most was English on
     // a 繁體 page and stayed English under `--lang=zhs` too.
-    say!(
-        "ui.position",
-        editor.cursor_line() + 1,
-        editor.cursor_visual_column() + 1
-    )
+    // **列 and 字 are two different numbers on a Chinese page** (#500), and the
+    // author asked for both: 「横排因为有全角半角，列和字不一定一样，字表示的是字符
+    // （半角+全角），而列就是半角。」 Eleven cells into a line is the sixth
+    // character when five of them are 漢字, and which one you want depends on
+    // what you are doing — a ruler at 40 counts cells, a publisher counts 字.
+    match full {
+        true => say!(
+            "ui.position",
+            editor.cursor_line() + 1,
+            editor.cursor_visual_column() + 1,
+            editor.cursor_column() + 1
+        ),
+        false => say!(
+            "ui.position-short",
+            editor.cursor_line() + 1,
+            editor.cursor_visual_column() + 1
+        ),
+    }
 }
 
 /// What to say about the character under the cursor, in three lengths.
@@ -10911,7 +10980,9 @@ fn squeezed(text: &str) -> String {
         let config = vertical_config();
         editor.set_layout(WritingLayout::Vertical);
         editor.on_key(Key::Char('j')); // down the 縱
-        let buffer = render_vertical(&mut editor, &config, 60, 12);
+        // Wide enough for all three fields **and** the readout — narrower, 字
+        // gives way to it on purpose (#500).
+        let buffer = render_vertical(&mut editor, &config, 80, 12);
 
         // A wide glyph leaves its continuation cell blank in the test backend,
         // so the run of spaces after 橫 is an artefact of reading the grid.
@@ -10919,12 +10990,18 @@ fn squeezed(text: &str) -> String {
             .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
             .collect();
         let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(status.contains("橫 1"), "which 縱: {status:?}");
-        assert!(status.contains("字 2"), "how far down it: {status:?}");
+        // **縱橫字 ＝ 行列字 轉了個身** (#500). 「竖排的纵＝横排的行，竖排的横＝
+        // 横排的列」 — so 縱 is the absolute line, 橫 is how far along it, and
+        // 字 is how far along in characters.
+        assert!(status.contains("縱 1"), "which line: {status:?}");
+        assert!(status.contains("橫 2"), "how far down it: {status:?}");
+        assert!(status.contains("字 2"), "and in characters: {status:?}");
         assert!(!status.contains("Ln"), "no ambiguous line number");
 
-        // A paragraph long enough to wrap runs over several 縱, and then the
-        // piece is named too: `2-2` is the second 縱 of paragraph 2.
+        // ⚠️ **A wrapped paragraph keeps one 縱 number**, exactly as a wrapped
+        // line on a horizontal page keeps one 行 number — 「一段折成几列时，几列
+        // 同一个纵号」. It used to be written `2-2`, naming the piece; the piece
+        // is a *visual* fact and this coordinate is not.
         let mut editor = editor_with(&format!("一\n{}", "字".repeat(20)));
         editor.set_layout(WritingLayout::Vertical);
         // Into the long paragraph, then far enough down it to be past the first
@@ -10938,7 +11015,9 @@ fn squeezed(text: &str) -> String {
             .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
             .collect();
         let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(status.contains("橫 2-2"), "the wrapped piece: {status:?}");
+        assert!(status.contains("縱 2,"), "still the one line: {status:?}");
+        assert!(!status.contains("2-2"), "and no piece number: {status:?}");
+        assert!(status.contains("橫 13"), "thirteen slots down: {status:?}");
     }
 
     /// The guess has to be visibly *not yet* part of the line, or it reads as
@@ -11686,9 +11765,12 @@ fn squeezed(text: &str) -> String {
         let config = Config::default();
         // A wide glyph covers two cells and only the first carries it, so the
         // row reads back with a gap after every 字.
-        let hint = |e: &Editor| -> String {
+        // The落款 at the right end is furniture, not something the row said
+        // (#498) — it is there whatever is or is not going on.
+        let signature = yumete_core::messages::say("ui.signature", &[]);
+        let hint = move |e: &Editor| -> String {
             let b = render(e, &config, 100, 10);
-            command_line(&b).replace(' ', "")
+            command_line(&b).replace(&signature, "").replace(' ', "")
         };
 
         // Nothing begun, nothing to say: the row is blank rather than filled
@@ -11820,8 +11902,15 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('3'));
         let drawn = page(&editor);
         assert!(drawn.contains("╰3"), "beside the caret: {drawn}");
+        // **The status line's right end**, which is the row above the hint row
+        // — and since #498 the hint row's own right end carries the 落款, so
+        // 「the last line」 is no longer the same thing as 「the corner」.
+        let status = |page: &str| -> String {
+            let rows: Vec<&str> = page.lines().collect();
+            rows[rows.len() - 2].to_string()
+        };
         assert!(
-            drawn.lines().last().unwrap().ends_with('3'),
+            status(&drawn).ends_with('3'),
             "and in the corner: {drawn}"
         );
 
@@ -13208,8 +13297,12 @@ fn squeezed(text: &str) -> String {
         };
 
         // The cursor opens on the first 字.
-        let buffer = render(&editor, &config, 90, 10);
-        let line = row(&buffer, 90);
+        // **A hundred cells, not ninety** (#500). The position grew a third
+        // field, and ninety cells with an IME tag on them can no longer hold
+        // the block name as well — which is the readout's own third stage of
+        // giving way working correctly, not this test's subject.
+        let buffer = render(&editor, &config, 100, 10);
+        let line = row(&buffer, 100);
         assert!(
             line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
             "the 字 is named at the right edge: {line:?}"
