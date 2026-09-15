@@ -616,10 +616,10 @@ fn press(editor: &mut Editor, keys: &str) {
                         }
                         name.push(c);
                     }
-                    // `\{alt-d}` for the Meta chords. helix's tutor leans on
-                    // them — `Alt-d` `Alt-c` `Alt-s` `Alt-.` `Alt-,` `Alt-;`
-                    // `Alt-\`` — and without this none of that family could be
-                    // pressed offscreen (2026-09-11).
+                    // `\{alt-.}` for the Meta chords. helix's tutor leans on
+                    // them — `Alt-s` `Alt-.` `Alt-,` `Alt-;` `Alt-\`` — and
+                    // without this none of that family could be pressed
+                    // offscreen (2026-09-11).
                     if let Some(rest) = name.strip_prefix("alt-") {
                         match rest.chars().next() {
                             Some(c) if rest.chars().count() == 1 => Key::Alt(c),

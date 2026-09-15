@@ -2996,6 +2996,13 @@ zhs = "数字在前是次数"
 en = "a number in front is a count"
 
 [[message]]
+# 常用幫助：剪切／剪切後改（大寫的那一對纔動寄存器）
+key = "help.common.cut-change"
+zht = "同樣是刪／改，但先把它放進寄存器（剪切）"
+zhs = "同样是删／改，但先把它放进寄存器（剪切）"
+en = "the same two, but the text goes to the register first (cut)"
+
+[[message]]
 # 常用幫助：刪掉選區／換掉選區
 key = "help.common.delete-change"
 zht = "刪掉選區／換掉選區（換完就在打字了）"
@@ -4329,13 +4336,6 @@ zhs = "vi 的记号：M 记、' 回去"
 en = "vi's marks: M sets, ' returns"
 
 [[message]]
-# Normal 模式按 C（vi 的改到行尾，這裏沒有）
-key = "hint.vi.c-upper"
-zht = "改到行尾是 gl 選起來再 c"
-zhs = "改到行尾是 gl 选起来再 c"
-en = "to change to end of line, select with gl then c"
-
-[[message]]
 # Normal 模式按 ^（vi 的行首鍵，這裏沒有）
 key = "hint.vi.caret"
 zht = "行首第一個非空白是 gs"
@@ -4348,13 +4348,6 @@ key = "hint.vi.ctrl-r"
 zht = "重做是 U（撤銷是 u）"
 zhs = "重做是 U（撤销是 u）"
 en = "redo is U (undo is u)"
-
-[[message]]
-# Normal 模式按 D（vi 的刪到行尾，這裏沒有）
-key = "hint.vi.d-upper"
-zht = "刪到行尾是 gl 選起來再 d"
-zhs = "删到行尾是 gl 选起来再 d"
-en = "to delete to end of line, select with gl then d"
 
 [[message]]
 # Normal 模式按 $（vi 的行尾鍵，這裏沒有）

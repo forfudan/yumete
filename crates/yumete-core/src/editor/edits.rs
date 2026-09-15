@@ -418,21 +418,28 @@ impl Editor {
         self.cursor = end;
     }
 
-    /// Delete the current selection (Helix `d`). A collapsed selection deletes
-    /// the grapheme under the cursor. The caller takes the undo snapshot.
+    /// Delete the current selection (`d`), **leaving the register alone**.
+    ///
+    /// A collapsed selection deletes the grapheme under the cursor. The caller
+    /// takes the undo snapshot.
+    ///
+    /// ⚠️ **Deleting is not copying** (#492). Helix's `d` yanks, and the author
+    /// calls that its worst idea: 「d 作为剪切功能会污染 register」. The register
+    /// is a clipboard of one, so under that rule every tidy-up between a copy
+    /// and a paste silently throws the copy away — yank a paragraph, take out
+    /// a stray 、 before pasting it, and the paragraph is gone. Here the
+    /// register is only ever written by a key that says so: `y` and `D`/`C`.
     pub(super) fn delete_selection(&mut self) {
-        self.cut_selection(true);
+        self.cut_selection(false);
     }
 
-    /// Delete it and **leave the register alone** (Helix `A-d`, tutor 4.2).
+    /// Take the selection out **and put it in the register** (`D`).
     ///
-    /// The register is a clipboard of one, so every `d` overwrites what was in
-    /// it: yank a paragraph, delete a stray 、 to tidy the line before pasting,
-    /// and the paragraph is gone. That is what this is for, and it is worth a
-    /// key on its own even with one cursor — the multi-cursor half of Helix's
-    /// `A-` family (#405) is not what makes it useful.
-    pub(super) fn delete_selection_keeping_register(&mut self) {
-        self.cut_selection(false);
+    /// The other half of the pair above: cutting is a deliberate word, and it
+    /// gets the deliberate key. `D` and `C` were unbound in Helix, so this
+    /// costs nothing that was already spoken for.
+    pub(super) fn cut_selection_to_register(&mut self) {
+        self.cut_selection(true);
     }
 
     /// The one implementation of both: `yanks` says whether the text taken out
