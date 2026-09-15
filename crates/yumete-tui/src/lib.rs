@@ -8418,14 +8418,21 @@ mod tests {
         );
     }
 
-    /// 基本 does not open the detail panel unasked (author, 2026-09-11:
-    /// 「tb 模式（basic）默认不用打开 information panel」), and the levels that
-    /// fold cells away do — there it is the way to read one whole.
+    /// **A row on a page of prose never opens the panel unasked** — `to`,
+    /// `tb` and `tf` alike (author, 2026-09-11: 「tb 模式（basic）默认不用打开
+    /// information panel」; 2026-09-15: 「tf 和 tb 在信息面板显示上保持一致」).
+    /// Only `tt`, where the grid has the window, opens it: there the panel is
+    /// the way to read a folded cell whole and there is no prose to disturb.
+    ///
+    /// ⚠️ `tf` used to open it, and the reason it must not is the **cost on a
+    /// prose page**: the panel takes a fifth of the width, so the paragraphs
+    /// above and below rewrap the moment it appears — 「markdown 中如果向下移动
+    /// 遇到表格总是会发生 wrap 跳动」. Scrolling past a table made the page jump.
     ///
     /// And `t i` outranks all of it either way: what the reader asked for is
     /// not something a change of level may quietly undo.
     #[test]
-    fn the_panel_opens_where_a_cell_may_be_folded_and_not_in_基本() {
+    fn the_panel_opens_only_in_the_pane_and_never_unasked_on_a_page() {
         let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
         let source = format!("| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |");
         let at = |level: &str| {
@@ -8438,9 +8445,10 @@ mod tests {
             }
             editor
         };
+        assert!(!at("to").detail_visible(), "源碼 leaves it shut");
         assert!(!at("tb").detail_visible(), "基本 leaves it shut");
-        assert!(at("tf").detail_visible(), "全 folds, so the panel is the way in");
-        assert!(at("tt").detail_visible(), "and so does the pane");
+        assert!(!at("tf").detail_visible(), "全 too — it is still a page of prose");
+        assert!(at("tt").detail_visible(), "the pane is the one that opens it");
 
         // Asked for, it opens at 基本 too…
         let mut editor = at("tb");
@@ -8453,8 +8461,14 @@ mod tests {
         }
         assert!(editor.detail_visible(), "the reader's answer outlives the level");
 
-        // The other way round: shut at 全 stays shut at 全.
+        // The other way round: asked for at 全 and it opens there, which is
+        // the whole of what 「按 ti 自己打开」 buys.
         let mut editor = at("tf");
+        editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('i'));
+        assert!(editor.detail_visible(), "{}", editor.status());
+        // …and shutting the pane's own is equally the reader's to do.
+        let mut editor = at("tt");
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('i'));
         assert!(!editor.detail_visible(), "{}", editor.status());

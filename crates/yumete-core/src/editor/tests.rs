@@ -5395,7 +5395,12 @@ fn t_i_reads_a_markdown_row_by_the_columns_of_its_own_table() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
     press(&mut ed, "tf");
-    assert!(ed.detail_visible(), "the panel is on out of the box");
+    // **Asked for** (#495). It opened by itself until 2026-09-15; on a page of
+    // prose the fifth of the width it takes rewraps the paragraphs around the
+    // table, so now only `tt` opens it unasked. This test is about `t i`
+    // reaching the *row* panel in Markdown at all, which is unchanged.
+    press(&mut ed, "ti");
+    assert!(ed.detail_visible(), "the panel opens where it is asked for");
     let panel = ed.detail().expect("a row of a Markdown table answers");
     let names: Vec<String> = panel.rows.iter().map(|(n, _)| n.clone()).collect();
     assert!(names[0].ends_with("地名"), "the second table's own: {names:?}");

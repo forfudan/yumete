@@ -13,14 +13,18 @@ impl Editor {
 
     /// Whether the panel opens **without being asked**, where the cursor is.
     ///
-    /// Where a level folds cells away, the panel is how one is read whole, so
-    /// it opens; 基本 folds nothing, so it would be saying again what the page
-    /// is already saying, and charging a fifth of the width for it. A note in
-    /// prose is not a row and is not affected: there is nothing on the page
-    /// that says what a footnote holds.
+    /// ⚠️ **A row on a prose page never opens it** (#495) — `to`, `tb` and
+    /// `tf` alike. `tf` used to, on the reasoning that a level which folds
+    /// cells away owes the reader a way to read one whole. True in `tt`, where
+    /// the grid has the window; wrong on a page of prose, because the panel
+    /// takes a fifth of the width and **the paragraphs above and below rewrap
+    /// when it appears**: 「markdown 中如果向下移动遇到表格总是会发生 wrap
+    /// 跳动」. A panel that costs the whole page a reflow is not worth opening
+    /// unasked, and `t i` opens it in one keystroke for the reader who wants
+    /// it. A note in prose is not a row and is not affected: there is nothing
+    /// on the page that says what a footnote holds.
     fn detail_opens_here(&self) -> bool {
         !(self.detail_shows_a_row()
-            && self.table_level == TableLevel::Basic
             && !self.table.as_ref().is_some_and(|view| view.pane))
     }
 
