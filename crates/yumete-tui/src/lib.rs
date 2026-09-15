@@ -2989,11 +2989,23 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
     }
 }
 
-/// The width of the line-number gutter for a given mode (digits + one space).
+/// How much air stands between a line number and the writing.
+///
+/// **Two cells, and the second one is spoken for** (#484). It is where the
+/// 改動條 goes — the column that says which lines differ from the disk, or from
+/// git (#298, #55) — so the space is being left now rather than taken from the
+/// writing later: a page whose measure shifts by a cell the day a feature
+/// lands is a page that reflows under the reader.
+///
+/// Until then it is air, and air is no loss: one cell beside a 漢字 is half a
+/// character's margin, and the numbers crowded the text.
+const GUTTER_AIR: usize = 2;
+
+/// The width of the line-number gutter for a given mode (digits + the air).
 fn gutter_width(total_lines: usize, mode: LineNumbers) -> usize {
     match mode {
         LineNumbers::None => 0,
-        _ => total_lines.max(1).to_string().len() + 1,
+        _ => total_lines.max(1).to_string().len() + GUTTER_AIR,
     }
 }
 
@@ -3001,14 +3013,17 @@ fn gutter_width(total_lines: usize, mode: LineNumbers) -> usize {
 fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) -> String {
     match mode {
         LineNumbers::None => String::new(),
-        LineNumbers::Absolute => format!("{:>w$} ", i + 1, w = width - 1),
+        LineNumbers::Absolute => {
+            format!("{:>w$}{}", i + 1, " ".repeat(GUTTER_AIR), w = width - GUTTER_AIR)
+        }
         LineNumbers::Relative => {
+            let air = " ".repeat(GUTTER_AIR);
+            let w = width - GUTTER_AIR;
             if i == cursor_line {
                 // Show the absolute number on the cursor line, left-aligned.
-                format!("{:<w$} ", i + 1, w = width - 1)
+                format!("{:<w$}{air}", i + 1)
             } else {
-                let delta = i.abs_diff(cursor_line);
-                format!("{:>w$} ", delta, w = width - 1)
+                format!("{:>w$}{air}", i.abs_diff(cursor_line))
             }
         }
     }
@@ -4894,14 +4909,24 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
 /// ⚠️ **And a ground is not a mark: the area does the work.** 1.09:1 is
 /// invisible on a tick or a rule and plenty across a row of cells — 「底色虽然
 /// 靠近，但是因为面积大，还是有很好的区分效果」.
-pub(crate) fn table_row_rung(nth: usize) -> u16 {
-    match nth {
-        // The header and the rule under it, a step louder than the body.
-        // ⚠️ Not `HEAD`: that is the ground 表格模式 paints the cell the cursor
-        // is in, and a header wearing it would say an edit lands there.
-        0 | 1 => 8200,
-        n if n % 2 == 0 => 8500,
-        _ => 8800,
+pub(crate) fn table_row_rung(nth: usize) -> Option<u16> {
+    // **Two grounds, and one of them is the paper** (#480). It was three — a
+    // louder one for the header, two quieter ones alternating under the body —
+    // and three grounds is one more than a table has things to say: 「表格既然
+    // 已经隔行分色了……否则表格会有三种不同的」.
+    //
+    // So the rows simply alternate, the header included, and every other row
+    // is the page itself. ⚠️ **The header is still told apart** — by its ink,
+    // which is 金, the colour this palette has always given a table's header
+    // row. Ground says 「which row」, ink says 「which kind of row」, and neither
+    // is asked to do the other's job.
+    // ⚠️ **`None` is 「whatever is under it」, not 「the paper」.** Naming the
+    // paper would be right on a page and wrong inside a `:::`, where what is
+    // under the row is the callout's wash — the table would have punched the
+    // same hole in it that the fence used to.
+    match nth % 2 {
+        0 => Some(yumete_config::rung::WORD_TINT),
+        _ => None,
     }
 }
 
@@ -4922,15 +4947,30 @@ fn inked(
     }
 }
 
-/// Which 品色 a callout wears — the rank order, 「从轻到重」.
+/// Which colour a callout wears — GitHub's five, 「从轻到重」 (#483).
+///
+/// | | | 為什麼 |
+/// | --- | --- | --- |
+/// | `[!NOTE]` | 藍 八九品 | 記一筆 |
+/// | `[!TIP]` | 綠 六七品 | 幫得上忙 |
+/// | `[!IMPORTANT]` | 紫 一三品 | 不知道會辦不成 |
+/// | `[!WARNING]` | 黃 皇室 | 有風險，現在就看 |
+/// | `[!CAUTION]` | 朱 | 會出事 |
+///
+/// ⚠️ **朱 is not a rank here.** It is 四五品 on the robe chart and the last of
+/// these all the same: red for the worst thing is the one convention nobody has
+/// to learn, and in this editor 朱 already means 這裏不對 — a merge conflict's
+/// markers, a footnote's number, a row with the wrong number of columns. Two
+/// colours both meaning that is neither of them meaning it.
 fn wash_of(callout: yumete_core::markdown::Callout) -> crate::theme::Accent {
     use crate::theme::Accent;
     use yumete_core::markdown::Callout;
     match callout {
         Callout::Note => Accent::Azure,
         Callout::Tip => Accent::Green,
-        Callout::Warning => Accent::Purple,
-        Callout::Danger => Accent::Mark,
+        Callout::Important => Accent::Purple,
+        Callout::Warning => Accent::Amber,
+        Callout::Caution => Accent::Mark,
     }
 }
 
@@ -5000,8 +5040,14 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
             // the row's *width* is painted with (it is the callout that runs to
             // the edge), and the table's own band goes over it under the row's
             // own characters — see the fill in `draw_horizontal`.
-            let ground = Style::default().bg(ink.at(table_row_rung(nth)));
-            let _ = inside;
+            let under = match inside {
+                Some(callout) => Style::default().bg(ink.washed(wash_of(callout))),
+                None => Style::default(),
+            };
+            let ground = match table_row_rung(nth) {
+                Some(rung) => under.bg(ink.at(rung)),
+                None => under,
+            };
             Some(match nth {
                 0 => ground.fg(ink.gold()),
                 1 => ground.fg(ink.furniture()),
@@ -6473,13 +6519,17 @@ fn draw_horizontal(
                 // it stands for is banded at 第 82 檔 in 金 — so a scrolled
                 // table's header read as something floating outside the table
                 // rather than the top of it.
-                let head_ground = ink.ground(table_row_rung(0));
+                let head_ground = match table_row_rung(0) {
+                    Some(rung) => ink.ground(rung),
+                    None => ink.page(),
+                };
                 bar_lines = Some((
                     labels_line(
                         &cells,
                         |i| (i + 1).to_string(),
                         ink,
                         head_ground,
+                        gutter as usize,
                         drawn,
                         lead,
                         start_in_line,
@@ -6489,6 +6539,7 @@ fn draw_horizontal(
                         |i| names.get(i).cloned().unwrap_or_default(),
                         ink,
                         head_ground.fg(ink.gold()),
+                        gutter as usize,
                         drawn,
                         lead,
                         start_in_line,
@@ -6525,7 +6576,8 @@ fn draw_horizontal(
                 true => ink.page(),
                 false => fill,
             };
-            let mut reading = reading_line(editor, ink, over, rope, &row, drawn, gutter + indent)
+            let mut reading =
+                reading_line(editor, ink, over, gutter, rope, &row, drawn, gutter + indent)
                 .unwrap_or_else(|| Line::from(Span::styled("", over)));
             if over.bg.is_some() {
                 reading.spans.push(Span::styled(
@@ -6632,6 +6684,10 @@ fn draw_horizontal(
     // have had to learn what that means. A region is just a region: the page
     // is two rows shorter, which is arithmetic this file already does twice.
     if let Some(bar) = head.filter(|bar| bar.height > 0) {
+        let head_bar = match table_row_rung(0) {
+            Some(rung) => ink.ground(rung),
+            None => ink.page(),
+        };
         let (numbers, names) = bar_lines.unwrap_or((None, None));
         let blank = || Line::from(Span::styled("", ink.page()));
         // **The order the table's own top has**: the 列號標尺 above the head
@@ -6645,10 +6701,7 @@ fn draw_horizontal(
             scrolled(numbers.unwrap_or_else(blank), gutter, left),
             scrolled(names.unwrap_or_else(blank), gutter, left),
         ];
-        frame.render_widget(
-            Paragraph::new(rows).style(ink.ground(table_row_rung(0))),
-            bar,
-        );
+        frame.render_widget(Paragraph::new(rows).style(head_bar), bar);
     }
 
     // The margin: everything past the measure, whether or not there is writing
@@ -7077,11 +7130,12 @@ fn ruler_line(
     cells: &[(usize, usize)],
     ink: crate::theme::Palette,
     ground: Style,
+    gutter: usize,
     drawn: Drawn,
     lead: usize,
     start_in_line: usize,
 ) -> Option<Line<'static>> {
-    labels_line(cells, |i| (i + 1).to_string(), ink, ground, drawn, lead, start_in_line)
+    labels_line(cells, |i| (i + 1).to_string(), ink, ground, gutter, drawn, lead, start_in_line)
 }
 
 /// The same, with something other than a number over each column (#379).
@@ -7096,6 +7150,7 @@ fn labels_line(
     label: impl Fn(usize) -> String,
     ink: crate::theme::Palette,
     ground: Style,
+    gutter: usize,
     drawn: Drawn,
     lead: usize,
     start_in_line: usize,
@@ -7126,7 +7181,24 @@ fn labels_line(
         Some(_) => ground,
         None => ground.fg(ink.furniture()),
     };
-    (!out.trim().is_empty()).then(|| Line::from(Span::styled(out, style)))
+    if out.trim().is_empty() {
+        return None;
+    }
+    // ⚠️ **The line-number gutter is not part of the table** (#481). This line
+    // is built from column zero, so a ground meant for the table ran back
+    // across the numbers — 「表格列号的背景色侵入了序号栏」. Every other row
+    // draws its number on the page; so does this one.
+    let cut = out
+        .char_indices()
+        .take_while(|&(i, _)| i < gutter)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let (numbers, rest) = out.split_at(cut.min(out.len()));
+    Some(Line::from(vec![
+        Span::styled(numbers.to_string(), ink.page()),
+        Span::styled(rest.to_string(), style),
+    ]))
 }
 
 /// The readings over one row, as the line that is drawn above it.
@@ -7140,6 +7212,7 @@ fn reading_line(
     editor: &Editor,
     ink: crate::theme::Palette,
     ground: Style,
+    gutter: usize,
     rope: &yumete_core::Rope,
     row: &wrap::Row,
     drawn: Drawn,
@@ -7151,7 +7224,7 @@ fn reading_line(
     let ruler = editor.table_ruler_on_line(row.line);
     if !ruler.is_empty() && row.starts_line() {
         let start_in_line = row.start - rope.line_to_char(row.line);
-        return ruler_line(&ruler, ink, ground, drawn, lead, start_in_line);
+        return ruler_line(&ruler, ink, ground, gutter, drawn, lead, start_in_line);
     }
     let groups = readings_in_row(editor, rope, row);
     if groups.is_empty() {
@@ -10141,7 +10214,7 @@ mod tests {
         // the caret is the one on the caret's own row. It used to be at the
         // far right of the row *below*, half a screen away, which is what the
         // author's screenshot was of.
-        assert_eq!(rows[0].trim_end(), "1 吧   ─ b", "{:?}", rows[0]);
+        assert_eq!(rows[0].trim_end(), "1  吧   ─ b", "{:?}", rows[0]);
         // No panel: the second and third candidates are nowhere on the screen.
         assert!(
             !rows.iter().any(|r| r.contains('八') || r.contains('巴')),
@@ -13317,14 +13390,17 @@ mod tests {
         let prose = buffer[(0, 0)].style().bg;
         let head = buffer[(0, 1)].style().bg;
         assert_ne!(head, prose, "a table is not prose with pipes in it");
-        // Every row is grounded, all the way across — and **the body rows are
-        // banded alternately** (#449), so one row's cells can be told from the
-        // next's when a cell wraps.
-        for y in 1..=3 {
-            assert_ne!(buffer[(0, y)].style().bg, prose, "row {y} has a ground");
-        }
-        assert_eq!(buffer[(0, 2)].style().bg, head, "the rule belongs to the header");
-        assert_ne!(buffer[(0, 3)].style().bg, head, "…and the body does not");
+        // **Two grounds, and one of them is the page** (#480). The rows simply
+        // alternate — the header included — so one row's cells can be told from
+        // the next's when a cell wraps, and a table is not a third colour on a
+        // page that already has enough.
+        assert_eq!(buffer[(0, 2)].style().bg, prose, "every other row is the page");
+        assert_eq!(buffer[(0, 3)].style().bg, head, "…and the ones between are banded");
+        // The header is told apart by its **ink**, not by a ground of its own:
+        // 金, which is what this palette has always called a table's header.
+        let ink = ink(&config);
+        assert_eq!(buffer[(2, 1)].style().fg, Some(ink.gold()), "the header is 金");
+        assert_ne!(buffer[(2, 3)].style().fg, Some(ink.gold()), "a body row is not");
         // **And the ground stops where the table does** (#460): a table is a
         // shape *on* the page with a width of its own, not a block *of* the
         // page taking the window's.
@@ -14833,7 +14909,9 @@ mod tests {
         // the paragraph, not the screen row.
         let second = row_text(&buf, 1);
         assert!(second.starts_with(&" ".repeat(gutter)), "{second:?}");
-        assert_eq!(second.trim(), "夏", "{first:?} / {second:?}");
+        // ⚠️ Twelve cells, a two-cell gutter and 漢字 two cells wide: four
+        // characters fit on the first row now rather than five (#484).
+        assert_eq!(second.trim(), "春夏", "{first:?} / {second:?}");
     }
 
     #[test]

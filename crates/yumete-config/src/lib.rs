@@ -798,6 +798,14 @@ pub struct ThemeConfig {
     pub green_light: (u8, u8, u8),
     pub azure_dark: (u8, u8, u8),
     pub azure_light: (u8, u8, u8),
+    /// 黃 — **皇室, not 龍袍** (#483). The fifth callout wanted a colour and
+    /// there was one rank left above 紫: 明黃 is the emperor's and 杏黃 the
+    /// princes', so the page's 金 stays the emperor's and this sits under it.
+    /// 「黃色比金色看起來要更深一些」 — and it is: the same hue within six
+    /// degrees, half again the saturation, and twenty-four points of lightness
+    /// below, which is what tells the two apart at a glance.
+    pub amber_dark: (u8, u8, u8),
+    pub amber_light: (u8, u8, u8),
     /// Whether a coloured run also gets a **ground** (`:theme-fill`).
     ///
     /// Off. 「丙的视觉效果最『干净』，扰乱信息少……`` 本身就是边界」 — the
@@ -853,6 +861,14 @@ impl ThemeConfig {
         match dark {
             true => self.azure_dark,
             false => self.azure_light,
+        }
+    }
+
+    /// 黃（皇室）, in the mood in force.
+    pub fn amber(&self, dark: bool) -> (u8, u8, u8) {
+        match dark {
+            true => self.amber_dark,
+            false => self.amber_light,
         }
     }
 
@@ -920,6 +936,8 @@ impl ThemeConfig {
                 green_light: (0x55, 0x55, 0x55),
                 azure_dark: (0xA3, 0xA3, 0xA3),
                 azure_light: (0x6E, 0x6E, 0x6E),
+                amber_dark: (0xDA, 0xDA, 0xDA),
+                amber_light: (0x2A, 0x2A, 0x2A),
                 ..ThemeConfig::default()
             }),
             // 藍曬 — 普魯士藍的地、白線的字——十套裏唯一底色真帶飽和色的一套。暗是氰版藍曬，明是重氮曬圖。
@@ -1129,6 +1147,8 @@ impl Default for ThemeConfig {
             // purple; 「官袍的藍不是紫色」. 201° is sixty degrees clear of it.
             azure_dark: (0x6F, 0xB4, 0xD9),
             azure_light: (0x1F, 0x5C, 0x8A),
+            amber_dark: (0xC9, 0x93, 0x2E),
+            amber_light: (0x8A, 0x5F, 0x12),
             fill: false,
         }
     }
@@ -2086,6 +2106,8 @@ struct RawTheme {
     green_light: Option<String>,
     azure: Option<String>,
     azure_light: Option<String>,
+    amber: Option<String>,
+    amber_light: Option<String>,
     /// Whether a 品色 run also gets a ground (`:theme-fill`).
     fill: Option<bool>,
 }
@@ -2293,6 +2315,8 @@ impl RawConfig {
             (&other.theme.green_light, &mut self.theme.green_light),
             (&other.theme.azure, &mut self.theme.azure),
             (&other.theme.azure_light, &mut self.theme.azure_light),
+            (&other.theme.amber, &mut self.theme.amber),
+            (&other.theme.amber_light, &mut self.theme.amber_light),
         ] {
             if from.is_some() {
                 *to = from.clone();
@@ -2544,6 +2568,8 @@ impl RawConfig {
             (self.theme.green_light, &mut config.theme.green_light),
             (self.theme.azure, &mut config.theme.azure_dark),
             (self.theme.azure_light, &mut config.theme.azure_light),
+            (self.theme.amber, &mut config.theme.amber_dark),
+            (self.theme.amber_light, &mut config.theme.amber_light),
         ] {
             if let Some(rgb) = hex.as_deref().and_then(parse_hex) {
                 *slot = rgb;

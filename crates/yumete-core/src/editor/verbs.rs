@@ -115,6 +115,31 @@ impl Editor {
     /// full-width characters, because in CJK prose a line break carries no
     /// space and joining two 漢字 with one would insert text nobody ever
     /// typed. Between Latin words the space is kept.
+    /// `gK` — join this line onto the one **above** it.
+    ///
+    /// helix has `J` and nothing for the other direction, and 「把這一行接到上
+    /// 一行去」 is the commoner wish in prose: a line that broke where it should
+    /// not is mended from where you are standing, not from the line before it.
+    /// The cursor goes to the seam, which is where the eye already is.
+    pub(super) fn join_with_above(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let (start, _) = self.selection();
+        let line = rope.char_to_line(start);
+        if line == 0 {
+            self.status = say!("edit.no-line-above");
+            return;
+        }
+        // Stand on the line above and do the ordinary join: one implementation,
+        // so the seam rule (a space between Latin words, none between 漢字) can
+        // only ever be decided once.
+        let above = rope.line_to_char(line - 1);
+        self.set_cursor(above);
+        self.join_lines();
+    }
+
     pub(super) fn join_lines(&mut self) {
         if self.refuse_readonly() {
             return;

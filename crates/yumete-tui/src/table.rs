@@ -486,7 +486,11 @@ pub fn draw(
             // no scanner to ask, so the base row is row 0 of its body.
             _ => line - base.min(line) + 2,
         };
-        plain.patch(ink.ground(crate::table_row_rung(nth)))
+        match crate::table_row_rung(nth) {
+            Some(rung) => plain.patch(ink.ground(rung)),
+            // 「whatever is under it」 — in this window that is the page.
+            None => plain,
+        }
     };
     let quiet = Style::default().fg(ink.furniture());
     // A row the schema cannot account for. Not an error to be refused — this

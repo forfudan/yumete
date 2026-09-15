@@ -343,6 +343,7 @@ pub struct Palette {
     purple: (u8, u8, u8),
     green: (u8, u8, u8),
     azure: (u8, u8, u8),
+    amber: (u8, u8, u8),
     /// Whether a coloured run also gets a ground (`:theme-fill`).
     fill: bool,
     paint: bool,
@@ -371,6 +372,8 @@ pub enum Accent {
     Green,
     /// 八至九品.
     Azure,
+    /// 皇室 — under 龍袍's 金.
+    Amber,
 }
 
 /// Relative luminance (WCAG), for the palette's own contrast questions.
@@ -417,6 +420,7 @@ impl Palette {
             purple: theme.purple(dark),
             green: theme.green(dark),
             azure: theme.azure(dark),
+            amber: theme.amber(dark),
             fill: theme.fill,
             paint: theme.ground == Ground::Paint,
             faded: false,
@@ -567,6 +571,11 @@ impl Palette {
         self.accent(self.azure)
     }
 
+    /// 黃（皇室）— a `[!WARNING]`. Under 金, which is the emperor's.
+    pub fn amber(self) -> Color {
+        self.accent(self.amber)
+    }
+
     /// Whether coloured runs are also given a ground (`:theme-fill`).
     ///
     /// Off by default: the backtick and the `>` are drawn, so a run's extent
@@ -631,6 +640,7 @@ impl Palette {
             Accent::Purple => self.purple,
             Accent::Green => self.green,
             Accent::Azure => self.azure,
+            Accent::Amber => self.amber,
         };
         self.washed_to(colour, 1.5, 4.5)
     }

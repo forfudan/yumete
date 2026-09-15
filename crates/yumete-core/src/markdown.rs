@@ -116,23 +116,51 @@ pub enum Block {
     Conflict(Option<crate::conflict::Side>),
 }
 
-/// Which kind of aside a `:::` container is.
+/// Which kind of aside a `:::` container is — **GitHub's five** (#483).
+///
+/// GitHub's alerts and VitePress's containers are two spellings of one set, and
+/// a 宇浩 document uses both:
+///
+/// | 這裏 | GitHub | VitePress |
+/// | --- | --- | --- |
+/// | [`Callout::Note`] | `[!NOTE]` | `info`, `details` |
+/// | [`Callout::Tip`] | `[!TIP]` | `tip` |
+/// | [`Callout::Important`] | `[!IMPORTANT]` | — |
+/// | [`Callout::Warning`] | `[!WARNING]` | `warning` |
+/// | [`Callout::Caution`] | `[!CAUTION]` | `danger` |
+///
+/// GitHub's own words for the order they run in: 「information users should
+/// take into account」, 「optional information to help a user be more
+/// successful」, 「crucial information necessary for users to succeed」,
+/// 「critical content demanding immediate attention due to potential risks」,
+/// 「negative potential consequences of an action」.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Callout {
     Note,
     Tip,
+    Important,
     Warning,
-    Danger,
+    Caution,
 }
 
 impl Callout {
     /// Parse the word after `:::`.
+    ///
+    /// **VitePress's own set**, which is what a 宇浩 document is written
+    /// against: `info` `tip` `warning` `danger` `details`, plus the names its
+    /// GitHub-flavoured alerts use — `note`, `important`, `caution` (#482).
+    ///
+    /// ⚠️ **`caution` is the red one, not a warning.** GitHub gives
+    /// `[!CAUTION]` the red it gives nothing else, and VitePress's `danger` is
+    /// the same block; reading `caution` as a warning made the severest of the
+    /// five the second-severest here.
     fn parse(word: &str) -> Option<Callout> {
         match word.trim().to_ascii_lowercase().as_str() {
             "note" | "info" | "details" => Some(Callout::Note),
             "tip" => Some(Callout::Tip),
-            "warning" | "caution" => Some(Callout::Warning),
-            "danger" | "error" => Some(Callout::Danger),
+            "important" => Some(Callout::Important),
+            "warning" => Some(Callout::Warning),
+            "caution" | "danger" | "error" => Some(Callout::Caution),
             _ => None,
         }
     }

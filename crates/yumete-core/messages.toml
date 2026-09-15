@@ -2599,6 +2599,13 @@ zhs = "复制了 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
+# gK 按在第一行上——上面沒有行可以併
+key = "edit.no-line-above"
+zht = "這已經是第一行，上面沒有可以併的"
+zhs = "这已经是第一行，上面没有可以并的"
+en = "this is the first line; there is nothing above it to join"
+
+[[message]]
 # mi/ma 之類，光標外面沒有那一對符號
 key = "edit.no-pair-around"
 zht = "外面沒有 {0}{1}"
@@ -3552,6 +3559,13 @@ zhs = "命令一览"
 en = "every command"
 
 [[message]]
+# g 組：j／k 在這裏走的就是螢幕上那一行（同 helix 的 gj／gk）
+key = "hint.goto.by-drawn-row"
+zht = "上下一行（就是 j／k：這裏本來就走螢幕上的行）"
+zhs = "上下一行（就是 j／k：这里本来就走屏幕上的行）"
+en = "up or down a drawn row — which is what j and k already do here"
+
+[[message]]
 # g 組：關掉這一個工作區
 key = "hint.goto.close-this-pane"
 zht = "關掉這一個工作區，到另一個去"
@@ -3739,6 +3753,13 @@ key = "hint.hop.previous"
 zht = "上一個"
 zhs = "上一个"
 en = "previous…"
+
+[[message]]
+# g 組：併上一行
+key = "hint.join-with-line-above"
+zht = "併到上一行去"
+zhs = "并到上一行去"
+en = "join onto the line above"
 
 [[message]]
 # g 組：併下一行
