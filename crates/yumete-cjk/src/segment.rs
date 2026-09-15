@@ -122,7 +122,6 @@ pub enum WordMark {
     /// Every other word's characters in a second ink, the paper untouched.
     /// **The default**: the mark is on the writing itself, and a page of it is
     /// still a page of prose.
-    #[default]
     Ink,
     /// Every other word's characters in a **second hue at the same
     /// lightness** (#501).
@@ -139,6 +138,12 @@ pub enum WordMark {
     /// colour blindness. An isoluminant difference is subtle by construction —
     /// that is what makes it quiet, and it is also why the axis has to be the
     /// one nobody is missing.
+    ///
+    /// **The default** (#509): it answers the same question `Ink` does and is
+    /// the only one of the four that costs nothing — the paper is untouched,
+    /// no word is louder than its neighbour, and a coloured run keeps its own
+    /// colour (this mark simply does not draw there).
+    #[default]
     Color,
     /// A **line under the word**, and nothing on the writing at all (#501).
     ///
