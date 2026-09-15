@@ -73,7 +73,7 @@ impl Editor {
             WordCommand::Report | WordCommand::List => {
                 self.status = say!(
                     "word.status",
-                    self.segmenter.source(),
+                    self.words_in_force(),
                     self.word_level.name(),
                     match self.show_segmentation {
                         true => say!("cmd.on-off.on"),
@@ -162,8 +162,21 @@ impl Editor {
     }
 
     /// What the dictionary in force calls itself, for the status line.
+    ///
+    /// **The wording is here, the numbers are the segmenter's** (#494):
+    /// `yumete-cjk` has no message table, so anything it spelt out would be
+    /// 繁體 in an English status line.
     pub fn words_in_force(&self) -> String {
-        self.segmenter.source()
+        let source = self.segmenter.source();
+        let dictionary = match (source.entries, source.yume) {
+            (0, _) => say!("word.source-none"),
+            (n, true) => say!("word.source-yume", n),
+            (n, false) => say!("word.source-builtin", n),
+        };
+        match source.book {
+            0 => dictionary,
+            n => say!("word.source-and-book", dictionary, n),
+        }
     }
 
     /// The level in force, for the front end to keep across a rebuild.

@@ -150,11 +150,12 @@ impl Segmenter for YumeSegmenter {
         self.unigram.log_prob(word)
     }
 
-    fn source(&self) -> String {
-        format!(
-            "宇浩語言模型 {} 條",
-            self.unigram.count().max(self.lexicon.count())
-        )
+    fn source(&self) -> yumete_cjk::WordSource {
+        yumete_cjk::WordSource {
+            entries: self.unigram.count().max(self.lexicon.count()),
+            book: 0,
+            yume: true,
+        }
     }
 
     /// Non-CJK stretches keep the category rules; only the runs of 漢字 and

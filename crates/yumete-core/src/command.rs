@@ -204,6 +204,10 @@ pub enum Command {
     /// `:format`, `:run <名字>` — a command this language declares in the
     /// config, run by the front end.
     Language(String),
+    /// `:language [zh|zhs|en]` — the language the **editor** says things in
+    /// (#494). `None` only reports. Not to be confused with [`Self::Language`]
+    /// above, which runs a *programming* language's formatter.
+    SayIn(Option<crate::messages::Language>),
     /// `:markdown …` — write a piece of Markdown at the cursor.
     Markdown(MarkdownBit),
     /// `:view-typewriter [on|off]` — the cursor's row stays in the middle.
@@ -1908,6 +1912,25 @@ const MOODS: &[Word] = &[
     },
 ];
 
+/// The three languages the editor speaks (#494).
+const LANGUAGES: &[Word] = &[
+    Word {
+        name: "zh",
+        help: "cmd.languages.zh",
+        needs: &[],
+    },
+    Word {
+        name: "zhs",
+        help: "cmd.languages.zhs",
+        needs: &[],
+    },
+    Word {
+        name: "en",
+        help: "cmd.languages.en",
+        needs: &[],
+    },
+];
+
 const LAYOUTS: &[Word] = &[
     Word {
         name: "vertical",
@@ -2623,6 +2646,22 @@ pub const COMMANDS: &[Entry] = &[
                 _ => None,
             };
             Ok(Command::Theme { name: None, mood })
+        }),
+    },
+    Entry {
+        // **Not an alias of anything** (#494). `:run` is the *programming*
+        // language's formatter; this is the language the editor speaks, which
+        // is the one a reader who cannot read the current one needs to reach —
+        // and `yumete --lang=en` is the same answer for a reader who cannot
+        // reach the command line either.
+        name: "language",
+        aliases: &["lang"],
+        help: "cmd.commands.language",
+        needs: &[],
+        params: &[Param::Words { of: LANGUAGES, default: None }],
+        build: Some(|p| {
+            // Bare, it is the question — the status line says which is on.
+            Ok(Command::SayIn(p.arg(0).and_then(crate::messages::Language::parse)))
         }),
     },
     Entry {

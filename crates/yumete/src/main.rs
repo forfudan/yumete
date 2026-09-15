@@ -59,6 +59,11 @@ fn main() -> ExitCode {
     // not be looked at without a terminal and a pair of hands, and 「動了前端
     // 就出一張圖看看」 is the rule that catches what no assertion does.
     let mut keys: Option<String> = None;
+    // **The language the editor says things in, for one run** (#494). The
+    // config's `[editor] language` is the standing answer; this is the flag,
+    // because 「打開編輯器，然後去找哪個設定能改語言」 is exactly the loop a
+    // reader who cannot read the current language is stuck in.
+    let mut force_language: Option<yumete_core::messages::Language> = None;
 
     for arg in std::env::args().skip(1) {
         if want_syntax {
@@ -99,6 +104,17 @@ fn main() -> ExitCode {
             "-s" | "--syntax" => want_syntax = true,
             s if s.starts_with("--syntax=") => {
                 force_syntax = Some(s["--syntax=".len()..].to_string())
+            }
+            s if s.starts_with("--lang=") => {
+                let want = &s["--lang=".len()..];
+                match yumete_core::messages::Language::parse(want) {
+                    Some(language) => force_language = Some(language),
+                    None => {
+                        eprintln!("yumete: --lang: no language called {want:?}");
+                        eprintln!("try zh (繁體), zhs (简体) or en");
+                        return ExitCode::from(2);
+                    }
+                }
             }
             "-v" | "--vertical" => force_layout = Some(Layout::Vertical),
             "-H" | "--horizontal" => force_layout = Some(Layout::Horizontal),
@@ -146,7 +162,12 @@ fn main() -> ExitCode {
     });
     // …and the language everything says itself in, before anything says
     // anything: a config error is a message too.
-    if let Some(language) = yumete_core::messages::Language::parse(&config.editor.language) {
+    //
+    // The flag wins over the config, the way `-v` wins over `layout` — it was
+    // typed for this run, and the config was typed once.
+    if let Some(language) = force_language
+        .or_else(|| yumete_core::messages::Language::parse(&config.editor.language))
+    {
         yumete_core::messages::set_language(language);
     }
     editor.set_key_aliases(config.keys.normal.clone());
@@ -794,6 +815,10 @@ OPTIONS:
     -n, --new        Start on an empty buffer instead of reopening the files
                      that were open last time.
         --tutor      Open the lesson (the same as `:tutor` inside the editor).
+        --lang=LANG  Which language the editor says things in for this run:
+                     zh (繁體, the default), zhs (简体) or en. `[editor]
+                     language` in the config is the standing answer, and
+                     `:language` switches it without restarting.
     -s, --syntax     Which markup these files are written in: markdown, typst
                      or text. Outranks both the extension and the config.
     -p, --preview    Print a non-interactive preview instead of the editor.

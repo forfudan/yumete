@@ -3499,6 +3499,8 @@ dense = true                 # 密排（默认）：一纵两格，无注音、�
 session = true               # 不带文件名启动时，接着上次那些文件。false 从空白开始
 language = "zh"              # 编辑器说话用哪种语言："zh"（繁体）| "zhs"（简体）
                              # | "en"
+                             # 这一条是常设的答案；`yumete --lang=en` 只换这一趟，
+                             # `:language en`（短名 `:lang`）当场换，不用重开。
                              # 三种写法都在 crates/yumete-core/messages.toml 里，
                              # 一条消息一段，用一个英文 key 标明「什么时候说这句」，
                              # 下面 zht / zhs / en 三行是话本身——**改话直接改那里**，

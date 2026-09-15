@@ -616,6 +616,14 @@ en = "how a paragraph opens: `off` / `basic` (indented, blank line kept) / `full
 find = "縮進 缩进 首行 段落 indent paragraph"
 
 [[message]]
+# : 命令選單裏 language 那一項的說明（commands 組）
+key = "cmd.commands.language"
+zht = "編輯器自己說話用哪種語言：`zh` 繁體／`zhs` 简体／`en` English"
+zhs = "编辑器自己说话用哪种语言：`zh` 繁体／`zhs` 简体／`en` English"
+en = "which language the editor speaks: `zh` 繁體 / `zhs` 简体 / `en` English"
+find = "語言 语言 繁體 繁体 简体 簡體 英文 english language lang 界面"
+
+[[message]]
 # : 命令選單裏 layout 那一項的說明（commands 組）
 key = "cmd.commands.layout"
 zht = "橫排竪排互換"
@@ -1134,6 +1142,30 @@ zht = "不縮進"
 zhs = "不缩进"
 en = "no indent"
 find = "縮進 缩进 不縮 不缩 off"
+
+[[message]]
+# : 命令選單裏 en 那一項的說明（languages 組）
+key = "cmd.languages.en"
+zht = "English"
+zhs = "English"
+en = "English"
+find = "英文 英語 英语 english en"
+
+[[message]]
+# : 命令選單裏 zh 那一項的說明（languages 組）
+key = "cmd.languages.zh"
+zht = "繁體中文"
+zhs = "繁体中文"
+en = "繁體中文"
+find = "繁體 繁体 正體 正体 zh zht traditional"
+
+[[message]]
+# : 命令選單裏 zhs 那一項的說明（languages 組）
+key = "cmd.languages.zhs"
+zht = "简体中文"
+zhs = "简体中文"
+en = "简体中文"
+find = "简体 簡體 zhs simplified"
 
 [[message]]
 # : 命令選單裏 horizontal 那一項的說明（layouts 組）
@@ -5909,6 +5941,13 @@ zhs = "没有动你的字：{0}"
 en = "your text is untouched: {0}"
 
 [[message]]
+# :!命令 跑完了，可是一個字都沒印出來（寫進那個 buffer 裏）
+key = "shell.no-output"
+zht = "（沒有輸出）"
+zhs = "（没有输出）"
+en = "(no output)"
+
+[[message]]
 # :!命令 跑完，螢幕還在命令那邊，等你看完
 key = "shell.press-any-key"
 zht = "按任意鍵回到 yumete…"
@@ -6937,6 +6976,13 @@ zhs = "详情栏宽 {0}"
 en = "the detail panel is {0} wide"
 
 [[message]]
+# 界面語言現在是哪一種（`:language`）
+key = "ui.language-now"
+zht = "界面語言：{0}"
+zhs = "界面语言：{0}"
+en = "interface language: {0}"
+
+[[message]]
 # `::` 面板的名字
 key = "ui.lookfor"
 zht = "找命令"
@@ -7188,6 +7234,34 @@ key = "word.project-words-loaded"
 zht = "{0} 個本項目的詞：{1}"
 zhs = "{0} 个本项目的词：{1}"
 en = "{0} word(s) from this project: {1}"
+
+[[message]]
+# 分詞的詞表：詞表 ＋ 這本書自己的詞
+key = "word.source-and-book"
+zht = "{0} ＋ 本書 {1} 個詞"
+zhs = "{0} ＋ 本书 {1} 个词"
+en = "{0} + {1} from this book"
+
+[[message]]
+# 分詞的詞表：內置的那一份，帶條數
+key = "word.source-builtin"
+zht = "{0} 條（內置）"
+zhs = "{0} 条（内置）"
+en = "{0} entries (built in)"
+
+[[message]]
+# 分詞的詞表：沒有詞表，每個漢字自成一詞
+key = "word.source-none"
+zht = "沒有詞表（逐字）"
+zhs = "没有词表（逐字）"
+en = "no dictionary (character by character)"
+
+[[message]]
+# 分詞的詞表：宇浩自己的語言模型
+key = "word.source-yume"
+zht = "宇浩語言模型 {0} 條"
+zhs = "宇浩语言模型 {0} 条"
+en = "宇浩 language model, {0} entries"
 
 [[message]]
 # 分詞現在的狀態

@@ -105,7 +105,7 @@ impl Editor {
     /// on writing. It is the same place `:grep` puts its answers.
     pub fn provide_shell_output(&mut self, line: &str, output: &str) {
         let text = if output.trim().is_empty() {
-            format!("$ {line}\n（沒有輸出）\n")
+            format!("$ {line}\n{}\n", say!("shell.no-output"))
         } else {
             format!("$ {line}\n{output}")
         };

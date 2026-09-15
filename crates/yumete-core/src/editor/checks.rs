@@ -276,7 +276,7 @@ impl Editor {
         // 的 is in every table there is, so if the commonest word in the
         // language has no rate then no word does.
         if log_prob("的").is_none() {
-            self.status = say!("words.no-table", self.segmenter.source());
+            self.status = say!("words.no-table", self.words_in_force());
             return;
         }
         let found = crate::words::habits(&text, &segment, &log_prob);
