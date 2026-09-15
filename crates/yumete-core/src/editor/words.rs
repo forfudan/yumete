@@ -351,7 +351,12 @@ impl Editor {
         // page, and a scan nobody asked for must not take one (#367).
         self.open_file(&path).map_err(EditorError::Io)?;
         self.status = match total > keep {
-            true => say!("word.discover-too-many", keep, total),
+            // ⚠️ **Both outcomes name the file** (#479). Only the short one
+            // did, so a wide scope that overflowed said how many it found and
+            // never where it looked — and `-gd` in a tree with no `.git` in it
+            // falls back to the nearest `.yumete`, which can be two levels up.
+            // The path is the answer to 「掃了哪裏」.
+            true => say!("word.discover-too-many", keep, total, path.display()),
             false => say!("word.discover-found", total, path.display()),
         };
         Ok(())

@@ -6467,12 +6467,19 @@ fn draw_horizontal(
                 let start_in_line = row.start - rope.line_to_char(row.line);
                 let lead = gutter + indent;
                 let names = editor.table_headings();
+                // **The pinned copy wears what the real header wears** (#477).
+                // The bar is the table's own top two rows brought up the page,
+                // and it was drawn on the page in furniture grey while the row
+                // it stands for is banded at 第 82 檔 in 金 — so a scrolled
+                // table's header read as something floating outside the table
+                // rather than the top of it.
+                let head_ground = ink.ground(table_row_rung(0));
                 bar_lines = Some((
                     labels_line(
                         &cells,
                         |i| (i + 1).to_string(),
                         ink,
-                        ink.page(),
+                        head_ground,
                         drawn,
                         lead,
                         start_in_line,
@@ -6481,7 +6488,7 @@ fn draw_horizontal(
                         &cells,
                         |i| names.get(i).cloned().unwrap_or_default(),
                         ink,
-                        ink.page(),
+                        head_ground.fg(ink.gold()),
                         drawn,
                         lead,
                         start_in_line,
@@ -6638,7 +6645,10 @@ fn draw_horizontal(
             scrolled(numbers.unwrap_or_else(blank), gutter, left),
             scrolled(names.unwrap_or_else(blank), gutter, left),
         ];
-        frame.render_widget(Paragraph::new(rows).style(ink.page()), bar);
+        frame.render_widget(
+            Paragraph::new(rows).style(ink.ground(table_row_rung(0))),
+            bar,
+        );
     }
 
     // The margin: everything past the measure, whether or not there is writing
@@ -7110,8 +7120,13 @@ fn labels_line(
         out.push_str(&n);
         col = want + wide;
     }
-    (!out.trim().is_empty())
-        .then(|| Line::from(Span::styled(out, ground.fg(ink.furniture()))))
+    // The ground may already name an ink — the pinned header's 金 — and when it
+    // does that is the answer; furniture is the default for a ruler.
+    let style = match ground.fg {
+        Some(_) => ground,
+        None => ground.fg(ink.furniture()),
+    };
+    (!out.trim().is_empty()).then(|| Line::from(Span::styled(out, style)))
 }
 
 /// The readings over one row, as the line that is drawn above it.
