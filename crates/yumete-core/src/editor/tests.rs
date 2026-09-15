@@ -12921,13 +12921,35 @@ fn a_round_of_recovery_copies_is_bounded_and_the_backlog_drains() {
             .count()
     };
 
+    // ⚠️ **What a round may cost is measured, not assumed** (#511). The budget
+    // is 30 ms, but a round is *guaranteed* one other buffer whatever the clock
+    // says — otherwise a backlog never drains — so its floor is one write of
+    // one chapter, and how long that takes is the disk's business. CI's Linux
+    // runner took 329 ms for it and the hard 250 ms bound went red while the
+    // code did exactly what it was written to do. The invariant this test is
+    // for is 「a round costs about one chapter, not a hundred」, so one chapter
+    // is what it is weighed against.
+    let one = {
+        let path = dir.join("yardstick.md");
+        std::fs::write(&path, format!("{body}\n")).unwrap();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char('乙'));
+        ed.on_key(Key::Esc);
+        let at = ed.buffers.len() - 1;
+        let t = std::time::Instant::now();
+        ed.buffers[at].write_swap().expect("the yardstick is writable");
+        t.elapsed()
+    };
+    let bound = (one * 6).max(std::time::Duration::from_millis(250));
+
     ed.show_buffer_at(7);
     let started = std::time::Instant::now();
     ed.autosave_tick();
     let first = started.elapsed();
     assert!(
-        first < std::time::Duration::from_millis(250),
-        "one round held up the keyboard for {first:?}"
+        first < bound,
+        "one round held up the keyboard for {first:?} (one chapter costs {one:?})"
     );
     assert!(
         dir.join(".ch007.md.yumete").exists(),
@@ -12950,13 +12972,15 @@ fn a_round_of_recovery_copies_is_bounded_and_the_backlog_drains() {
         ed.autosave_tick();
         let took = t.elapsed();
         assert!(
-            took < std::time::Duration::from_millis(250),
-            "round {rounds} held up the keyboard for {took:?}"
+            took < bound,
+            "round {rounds} held up the keyboard for {took:?} \
+             (one chapter costs {one:?})"
         );
         rounds += 1;
         assert!(rounds < 400, "the backlog is not draining");
     }
-    assert_eq!(drafts(), 100, "every chapter is insured by the end");
+    // 101: the hundred chapters and the yardstick.
+    assert_eq!(drafts(), 101, "every chapter is insured by the end");
     assert_eq!(ed.autosave_due_in(), None, "and nothing is owed after that");
 
     let _ = std::fs::remove_dir_all(&dir);
