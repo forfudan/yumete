@@ -120,7 +120,14 @@ impl Editor {
     /// helix has `J` and nothing for the other direction, and 「把這一行接到上
     /// 一行去」 is the commoner wish in prose: a line that broke where it should
     /// not is mended from where you are standing, not from the line before it.
-    /// The cursor goes to the seam, which is where the eye already is.
+    ///
+    /// ⚠️ **The two directions are one edit, asked from two places.** This
+    /// stands on the line above and calls [`Self::join_lines`]; it decides
+    /// nothing of its own. The seam is the whole difficulty — a space between
+    /// Latin words, **none** between 漢字, and the indentation of the second
+    /// line swallowed — and a second copy of that rule is a second place for it
+    /// to be wrong. `gK` is `gJ` from one line up, and the count repeats it the
+    /// same way.
     pub(super) fn join_with_above(&mut self) {
         if self.refuse_readonly() {
             return;
