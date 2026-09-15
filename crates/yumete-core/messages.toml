@@ -7069,6 +7069,20 @@ zhs = "纵 {0}, 横 {1}"
 en = "Zong {0}, Heng {1}"
 
 [[message]]
+# `/` 搜索那一行的提示詞（helix 寫 search:）
+key = "ui.prompt-search"
+zht = "搜索:"
+zhs = "搜索:"
+en = "search:"
+
+[[message]]
+# `?` 倒着搜那一行的提示詞（helix 寫 rsearch:）
+key = "ui.prompt-search-back"
+zht = "倒搜:"
+zhs = "倒搜:"
+en = "rsearch:"
+
+[[message]]
 # 狀態欄：這一份是只讀的（:readonly on，或磁盤上就不許寫）
 key = "ui.readonly-tag"
 zht = " [只讀]"
@@ -7243,6 +7257,13 @@ key = "word.mark-line"
 zht = "分詞著色：線"
 zhs = "分词著色：线"
 en = "word tint: a rule under the word"
+
+[[message]]
+# 竪排選了「線」：畫不了，因爲 Insert 的光標就是那條下橫線
+key = "word.mark-line-not-vertical"
+zht = "竪排畫不了詞線——一格只有一條下橫線，Insert 的光標佔着它。分詞著色關了"
+zhs = "竖排画不了词线——一格只有一条下横线，Insert 的光标占着它。分词著色关了"
+en = "no word rule on a 縱書 page: one underline a cell, and the Insert caret is it — word tint off"
 
 [[message]]
 # 分詞著色改用底色：隔一個詞在紙上鋪一層淡色

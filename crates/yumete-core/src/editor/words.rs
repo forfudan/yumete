@@ -82,6 +82,19 @@ impl Editor {
                 );
             }
             WordCommand::Mark(mark) => {
+                // ⚠️ **線 is not on offer on a 縱書 page** (#503). A terminal
+                // gives one horizontal rule per cell — the underline — and in
+                // 縱書 the Insert caret is that rule (a bar turns with the text,
+                // so an underscore is the only thin *horizontal* cursor there
+                // is). Two things in one place: 「竖排不能用 line 分词，否则光标
+                // 在 insert 模式下就看不出来了」. So it is refused rather than
+                // drawn badly, and refused **out loud** — asking for a mark and
+                // getting a different one silently is worse than being told.
+                if mark == yumete_cjk::WordMark::Line && self.layout == Layout::Vertical {
+                    self.show_segmentation = false;
+                    self.status = say!("word.mark-line-not-vertical");
+                    return Ok(CommandOutcome::Continue);
+                }
                 // Naming a way of drawing it turns it on: nobody asks for 字色
                 // meaning「keep it hidden, but hide it differently」.
                 self.word_mark = mark;

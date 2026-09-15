@@ -1157,20 +1157,14 @@ pub fn draw(
                     // short rule exactly where the word ends — which is the
                     // whole of what the mark is for, and it is then every word
                     // rather than every second one.
+                    // ⚠️ **線 draws nothing here** (#503). The rule would land
+                    // on the cell's bottom edge, which in 縱書 is where the
+                    // Insert caret is — a terminal has one horizontal rule per
+                    // cell and the cursor has taken it. `:word-show line` on a
+                    // 縱書 page says so and turns the tint off instead; this is
+                    // the other door into the same state (the mark was chosen
+                    // on a 橫排 page and the layout changed under it).
                     if mark == WordMark::Line {
-                        let (_, end) = ranges[word];
-                        // A link's own underline wins — see the horizontal
-                        // renderer's note.
-                        let taken = style.add_modifier.contains(Modifier::UNDERLINED);
-                        if column + 1 == end && !taken {
-                            style = style
-                                .add_modifier(Modifier::UNDERLINED)
-                                .underline_color(ink.word_rule());
-                        }
-                    } else if mark == WordMark::Color {
-                        // Both halves, warm against cool — see `Ink::word_hue`.
-                        let from = style.fg.unwrap_or(ink.text());
-                        style = style.fg(ink.word_hue(from, word % 2 != 0));
                     } else if word % 2 == 0 {
                         // 字色 leaves the paper alone and moves the writing
                         // instead (#278) — **whatever colour that writing
@@ -1185,8 +1179,17 @@ pub fn draw(
                                 let from = style.fg.unwrap_or(ink.text());
                                 style = style.fg(ink.marked(from, yumete_config::rung::WORD_INK));
                             }
-                            // Both answered above, before the parity test.
-                            WordMark::Color | WordMark::Line => {}
+                            // 色相: one hue at the ink's own brightness, and
+                            // only where the writing *is* the plain ink — see
+                            // [`Ink::word_hue`].
+                            WordMark::Color => {
+                                let from = style.fg.unwrap_or(ink.text());
+                                if let Some(hue) = ink.word_hue(from) {
+                                    style = style.fg(hue);
+                                }
+                            }
+                            // Answered above, before the parity test.
+                            WordMark::Line => {}
                         }
                     }
                 }

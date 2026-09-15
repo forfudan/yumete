@@ -601,6 +601,12 @@ impl Palette {
     pub fn caret(self) -> (u8, u8, u8) {
         self.ladder.step(rung::TEXT)
     }
+
+    /// The paper, as three bytes — the other half of what OSC 10/11 tell the
+    /// terminal (#502). Same reason [`Self::caret`] is not a `Color`.
+    pub fn paper_bytes(self) -> (u8, u8, u8) {
+        self.ladder.paper
+    }
     /// 旁註 — read it, but it is not the prose: a reading, a 拆分, a
     /// candidate's number. [`yumete_config::rung::ASIDE`].
     pub fn quiet(self) -> Color {
@@ -905,15 +911,23 @@ impl Palette {
         self.at(yumete_config::rung::WORD_INK)
     }
 
-    /// The third way: the same writing, the same **lightness**, a different
-    /// hue (#501).
+    /// The third way: **a second hue at the ink's own brightness** (#501).
     ///
-    /// ⚠️ **Lightness is held and only the hue moves** — the exact opposite of
+    /// ⚠️ **One half is the plain ink; only the other takes a colour** (#507).
+    /// It gave both halves a hue for a while — warm against cool — on the
+    /// reasoning that blue against the near-grey ink reads as 「blue against
+    /// white」. True, and the cost was that a page of prose had no plain ink
+    /// anywhere on it. 「我觉得还使用 ink 色比较好，这样只有蓝色的那些词才變
+    /// 色。」 So the pair is 第 0 檔 against one cool hue, and the page is still
+    /// a page of ink.
+    ///
+    /// ⚠️ **Lightness is held and only the hue moves** — the opposite of
     /// [`Self::tinted`], and for the mirror reason. `word_ink` steps a word
     /// *darker*, and on a page of prose a darker run reads as emphasis whether
     /// or not it was meant to: 「有些字亮有些字暗，亮的像强调」. Hue carries the
-    /// same one bit of 「this is a different word」 and says nothing at all
-    /// about weight.
+    /// same one bit and says nothing about weight — so the blue is bisected to
+    /// the ink's **measured** brightness, not given the ink's HSL lightness:
+    /// HSL's L is `(max+min)/2` and knows nothing about the eye.
     ///
     /// ⚠️ **The hue is the theme's 藍, never its 朱 or 綠.** About eight men in
     /// a hundred cannot tell red from green, and this is the one mark on the
@@ -921,34 +935,24 @@ impl Palette {
     /// warm ink is a 藍↔黃 difference, which every common form of colour
     /// blindness leaves intact.
     ///
-    /// Saturation is modest on purpose: at equal lightness a saturated hue
-    /// still shouts, and this mark is meant to be findable, not read.
-    /// ⚠️ **Both halves take a hue, not one of them** (#501). Leaving every
-    /// other word on the plain ink looked like blue against *white*, because
-    /// the plain ink is a warm near-grey at saturation 5 — 「感觉不是蓝黄而更像
-    /// 蓝白」. The page's own ink already sits on the warm side of the wheel,
-    /// so bringing its saturation up to meet the blue's is what makes the pair
-    /// an actual 藍↔黃 difference. Neither is the plain ink; both are the same
-    /// lightness as it.
-    pub fn word_hue(self, from: Color, cool: bool) -> Color {
+    /// ⚠️ **Only where the writing is the plain ink.** The answer for a heading
+    /// or a link is `None`, and the renderers then leave that run alone.
+    /// `word_ink` can step *any* colour back a rung and keep it 金 or 藍; a hue
+    /// cannot — rotating a heading's 金 to 藍 does not mark a word boundary, it
+    /// throws the heading's own colour away: 「标题本来是金色，现在变成兰黄。连
+    /// 接本来是蓝色，现在是兰黄」. A coloured run already stands apart from the
+    /// prose, which is most of what the mark buys.
+    pub fn word_hue(self, from: Color) -> Option<Color> {
         /// Enough to read as a colour, not enough to read as a mark.
-        const SAT: f64 = 30.0;
-        let (warm_hue, _, _) = to_hsl(self.ladder.ink);
-        let (_, light, _) = to_hsl(match from {
-            Color::Rgb(r, g, b) => (r, g, b),
-            _ => self.ladder.ink,
-        });
-        let hue = match cool {
-            true => to_hsl(self.azure).0,
-            false => warm_hue,
-        };
-        // ⚠️ **Equal HSL lightness is not equal brightness.** HSL's L is
-        // `(max+min)/2` and knows nothing about the eye: at L 62 the warm hue
-        // measured 0.647 in relative luminance and the cool one 0.608, a
-        // 1.06:1 difference — small, but this mark exists *because* 1.38:1 read
-        // as emphasis, so it is worth spending eight lines to take it out.
-        // The cool one is the target and the warm one is bent to meet it.
-        let want = luminance(from_hsl(to_hsl(self.azure).0, light, SAT));
+        ///
+        /// 30 → **16** (#506): 30 was chosen off a swatch of one line, and a
+        /// page of it is 「过于花哨」.
+        const SAT: f64 = 16.0;
+        if from != self.text() {
+            return None;
+        }
+        let want = luminance(from);
+        let hue = to_hsl(self.azure).0;
         let mut lo = 0.0;
         let mut hi = 100.0;
         for _ in 0..12 {
@@ -958,7 +962,7 @@ impl Palette {
                 false => hi = mid,
             }
         }
-        from_hsl(hue, (lo + hi) / 2.0, SAT)
+        Some(from_hsl(hue, (lo + hi) / 2.0, SAT))
     }
 
     /// The rule a `line` word mark draws — see [`RULE_BACK`] (#501).

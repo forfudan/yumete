@@ -113,6 +113,28 @@ impl Editor {
         }
     }
 
+    /// What to **draw** before the open prompt — the label, not the key (#505).
+    ///
+    /// [`Self::prompt`] answers with the character that was typed, which is
+    /// what the caret arithmetic and the mode checks want and what the tests
+    /// read. This is what the reader sees, and for a search it says the word:
+    /// helix writes `search:` there, and a lone `/` on an otherwise empty row
+    /// says less than the row costs. 「Helix 按下 / 命令行出现了 search:，我們是
+    /// 不是可以對齊一下？」
+    ///
+    /// `:` and `::` keep their colons — those *are* the words, and `:` is the
+    /// one prompt whose prefix a reader retypes.
+    pub fn prompt_label(&self) -> Option<String> {
+        let (prefix, _) = self.prompt()?;
+        Some(match self.mode {
+            Mode::Search => match self.search_forward {
+                true => say!("ui.prompt-search"),
+                false => say!("ui.prompt-search-back"),
+            },
+            _ => prefix.to_string(),
+        })
+    }
+
     /// What the open prompt is about to complete to — the part not yet typed,
     /// shown after the caret in a lighter ink and adopted with Tab.
     ///

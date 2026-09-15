@@ -561,11 +561,19 @@ impl Editor {
                         first = true;
                     });
                 }
+                // ⚠️ **Across the break, the same as `h`/`l` are横排** (#504).
+                // These were `motion::right`/`left`, whose own doc says 「staying
+                // within the current line」 — so `j` walked to the end of a
+                // paragraph and stopped dead, and the next 縱 could not be
+                // reached by the key that walks the text: 「竖排的时候按 JK，无法
+                // 跨行」. 橫排's pair crossed the break years ago (「A line is not
+                // a wall」, below); this is the same rule on the other axis, and
+                // it is the *same* function — 縱書 only swaps which key is which.
                 Key::Char('j') | Key::Down => {
-                    return self.repeat(count, |e| e.move_horizontal(motion::right));
+                    return self.repeat(count, |e| e.move_horizontal(motion::next_grapheme));
                 }
                 Key::Char('k') | Key::Up => {
-                    return self.repeat(count, |e| e.move_horizontal(motion::left));
+                    return self.repeat(count, |e| e.move_horizontal(motion::prev_grapheme));
                 }
                 // ⚠️ **`H`/`L` are not here any more** (2026-09-12, #404).
                 // They turned the page sideways, and the rule was 「the capital
