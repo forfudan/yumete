@@ -796,8 +796,14 @@ pub fn draw(
                 // row the cursor is on, where the band runs unbroken so the row
                 // reads as one thing. A drawn rule goes in it — and keeps the
                 // row's ground, so the cursor's band is not cut into pieces.
+                // ⚠️ **The seam takes the row's own band too** (#473). It was
+                // the page, which is right when the columns are the only thing
+                // banded — and wrong since the rows are: every body row came
+                // out striped with page-coloured gaps where the walls are,
+                // while the same table read in a chapter is banded straight
+                // across. The seam is *inside* the table.
                 let seam = if w == 0 { 0 } else { GAP as u16 };
-                let ground = band_if(line == cursor_row, band, page);
+                let ground = band_if(line == cursor_row, band, banded(line, page));
                 for cx in (x + w)..(x + w + seam).min(right) {
                     if let Some(cell) = buf.cell_mut((cx, y)) {
                         match stroke {
@@ -845,7 +851,7 @@ pub fn draw(
             for cx in x.min(right)..right {
                 if let Some(cell) = buf.cell_mut((cx, y)) {
                     cell.set_symbol(" ")
-                        .set_style(band_if(line == cursor_row, band, page));
+                        .set_style(band_if(line == cursor_row, band, banded(line, page)));
                 }
             }
             if ragged && cells.len() < columns && k == 0 {

@@ -115,15 +115,6 @@ pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn S
 /// in the chapters the last scan read.
 const DETECT_AGAIN: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
-/// How many of the words found automatically are used, and — **half of it** —
-/// how many of those the file being written is guaranteed (#453).
-///
-/// The list is ordered commonest-first, and past the first couple of hundred a
-/// 「word」 is something that happened twice. The half is the quota that makes
-/// the folder worth reading at all: without it the near files take the whole
-/// cap, and 「给当前文件找出来的词一个大于等于 50% 的权重」 is exactly what a
-/// quota says that a multiplier on the counts cannot.
-const DETECT_LIMIT: usize = 200;
 
 /// A `word<TAB>weight` list the reader wrote, from the first data directory
 /// that has one.
@@ -386,7 +377,10 @@ pub fn run(
     // for it, and until it lands the page is segmented by the language model
     // alone. **This file only** (#452) — the wider reads are the three
     // `:word-discover-*` spellings, asked for by hand.
-    let (found_tx, found_rx) = std::sync::mpsc::channel::<Vec<yumete_core::discover::Found>>();
+    // The words, and how many 漢字 were read to find them — the cap is a share
+    // of the second, not a constant (`discover::cap`).
+    let (found_tx, found_rx) =
+        std::sync::mpsc::channel::<(Vec<yumete_core::discover::Found>, usize)>();
     let mut detecting = false;
     let mut detected: Option<(String, std::time::Instant)> = None;
 
@@ -638,7 +632,17 @@ pub fn run(
         // and a scan nobody asked for must not take the screen, the
         // status line or a tab. `:word-discover` is the one that talks.
         if let Some(ask) = editor.take_detect_request() {
-            let name = editor.current_buffer().display_name();
+            // ⚠️ **The path, not the name** (#466). `display_name()` is the
+            // file name alone, so a novel laid out as `卷一/ch01.md` and
+            // `卷二/ch01.md` gave both volumes one key: opening the second
+            // within five minutes of the first counted as 「already scanned」
+            // and kept the first volume's words. Every unnamed buffer shared
+            // `[scratch]` too.
+            let name = editor
+                .current_buffer()
+                .path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| editor.current_buffer().display_name());
             let due = match &detected {
                 // Another file is always due: its words are not the ones in
                 // hand, and 自動認詞 reads the file being written.
@@ -665,12 +669,20 @@ pub fn run(
                     // and its longer ones absorb this file's — measured, 「宇夢」
                     // goes from 8th of 60 to gone. The words of the chapter
                     // being written are the ones the writer is looking at.
+                    let mine = yumete_core::discover::han_count(&ask.text);
                     let mut out = yumete_core::discover::words(&ask.text, &joins);
-                    out.truncate(DETECT_LIMIT / 2);
+                    // **Half the list is this file's, and the list is a share
+                    // of what was read** — 200 for a chapter, a thousand for a
+                    // novel (`discover::cap`).
+                    let mut han = mine;
+                    out.truncate(yumete_core::discover::cap(mine));
                     if let Some(folder) = &ask.folder {
-                        let (near, _) = yumete_core::editor::detect_words_in(folder, &joins);
+                        let (near, _, near_han) =
+                            yumete_core::editor::detect_words_in(folder, &joins);
+                        han += near_han;
+                        let room = yumete_core::discover::cap(han);
                         for found in near {
-                            if out.len() >= DETECT_LIMIT {
+                            if out.len() >= room {
                                 break;
                             }
                             if !out.iter().any(|f| f.word == found.word) {
@@ -678,7 +690,7 @@ pub fn run(
                             }
                         }
                     }
-                    let _ = tx.send(out);
+                    let _ = tx.send((out, han));
                 });
             }
         }
@@ -686,15 +698,36 @@ pub fn run(
         // blocks on the terminal, so a scan that finishes while nobody is
         // typing lands on the next turn — the next key, click or resize — and
         // that is the first moment it could have mattered anyway.
-        if let Ok(found) = found_rx.try_recv() {
+        if let Ok((found, _han)) = found_rx.try_recv() {
             detecting = false;
+            // ⚠️ **Forget the last scan before judging this one** (#466). The
+            // filter below asks the segmenter in force 「do you already join
+            // this?」 — and the segmenter in force **contains the previous
+            // scan's own answer**. The worker has its own dictionary and finds
+            // 阿寧 every time; the editor then threw it away because run 1 had
+            // taught it, and `set_detected_words` replaces rather than merges,
+            // so run 2 installed almost nothing. The tint came and went on
+            // alternate saves. `discover_words` already clears for exactly
+            // this reason — the automatic path needed the same clear.
+            editor.set_detected_words(yumete_cjk::WordList::default());
             let mut list = yumete_cjk::WordList::default();
-            for word in found.iter().take(DETECT_LIMIT) {
+            // The worker has already capped the list to a share of what it
+            // read; everything it sends is meant to be used.
+            for word in found.iter() {
                 if !editor.joins_as_one(&word.word) {
                     list.add(&word.word);
                 }
             }
-            editor.set_detected_words(list);
+            // ⚠️ **An empty answer is not an answer** (#466). `:word-discover`
+            // ends by *opening* the listing it wrote, and opening a file asks
+            // for a scan — of the listing, in `.yumete/`, where every word
+            // occurs once and `MIN_COUNT` is five. So the command that had
+            // just installed two hundred words watched them vanish on the next
+            // keystroke. A scan that finds nothing has learnt nothing; it must
+            // not be allowed to unteach.
+            if !list.is_empty() {
+                editor.set_detected_words(list);
+            }
         }
         if editor.reload_auto() && inbox.is_empty() {
             match events.recv_timeout(DISK_POLL) {
@@ -1810,7 +1843,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
 /// left out, so a bare `:theme` changes nothing and reports. The config's own
 /// `[theme]` is not rewritten: this is for the afternoon the room gets bright,
 /// and the file is for what you want every day.
-fn set_theme(
+pub fn set_theme(
     config: &Config,
     name: Option<String>,
     mood: Option<yumete_core::command::Mood>,
@@ -1826,7 +1859,7 @@ fn set_theme(
         }
     }
     if let Some(mood) = mood {
-        crate::theme::set_dark(match mood {
+        crate::theme::choose_mood(match mood {
             Mood::Dark => true,
             Mood::Light => false,
             // Back to whatever the terminal said at start-up; a terminal that
@@ -4851,6 +4884,35 @@ pub(crate) fn table_row_rung(nth: usize) -> u16 {
     }
 }
 
+/// A 品色 block's style: the colour on the writing, and what is under it.
+///
+/// Three cases, and the third is the one that was missed: **inside a `:::` the
+/// callout's wash is the ground**, whatever `:theme-fill` says, because the
+/// callout is a rectangle and a hole in it is not a style, it is a mistake.
+fn inked(
+    colour: ratatui::style::Color,
+    inside: Option<yumete_core::markdown::Callout>,
+    ink: crate::theme::Palette,
+) -> Style {
+    match (inside, ink.fill()) {
+        (Some(callout), _) => Style::default().bg(ink.washed(wash_of(callout))).fg(colour),
+        (None, true) => Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(colour),
+        (None, false) => Style::default().fg(colour),
+    }
+}
+
+/// Which 品色 a callout wears — the rank order, 「从轻到重」.
+fn wash_of(callout: yumete_core::markdown::Callout) -> crate::theme::Accent {
+    use crate::theme::Accent;
+    use yumete_core::markdown::Callout;
+    match callout {
+        Callout::Note => Accent::Azure,
+        Callout::Tip => Accent::Green,
+        Callout::Warning => Accent::Purple,
+        Callout::Danger => Accent::Mark,
+    }
+}
+
 /// How a whole row is set, given the block its line belongs to.
 ///
 /// Blocks colour the *row*, inline runs colour the characters, and the two
@@ -4858,7 +4920,7 @@ pub(crate) fn table_row_rung(nth: usize) -> u16 {
 /// container's ground.
 fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) -> Option<Style> {
     use yumete_core::conflict::Side;
-    use yumete_core::markdown::{Block, Callout};
+    use yumete_core::markdown::Block;
     // **The four callouts are four 品色 now** (#459), in the order the ranks
     // themselves run — 「从轻到重」:
     //
@@ -4887,31 +4949,20 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         // as the fence and the quote: 「這裏是一塊」 is the whole message, and
         // the cell tint a grid draws (#212, #229) is patched onto this rather
         // than instead of it.
-        // 六至七品: a quotation is another voice. The ground stays only when
-        // `:theme-fill` asks for it — 「>」 is drawn on every line of a quote
-        // and a fence has its own ``` — so by default the colour does it.
-        Block::Quote => Some(match ink.fill() {
-            true => Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.green()),
-            false => Style::default().fg(ink.green()),
-        }),
-        // 一至三品, the same rank as the 行内 form: a fence is a literal that
-        // happens to be several lines long.
-        Block::Code => Some(match ink.fill() {
-            true => Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.purple()),
-            false => Style::default().fg(ink.purple()),
-        }),
+        // 六至七品: a quotation is another voice. 一至三品 for a fence, the
+        // same rank as the 行内 form: it is a literal that happens to be
+        // several lines long.
+        //
+        // The ground stays only when `:theme-fill` asks for it — 「>」 is drawn
+        // on every line of a quote and a fence has its own ``` — **except
+        // inside a `:::`**, where the callout's own wash has to carry on
+        // underneath or the block is cut in half (#468).
+        Block::Quote { inside } => Some(inked(ink.green(), inside, ink)),
+        Block::Code { inside } => Some(inked(ink.purple(), inside, ink)),
         // A callout keeps its ground whatever `:theme-fill` says: 「這是一塊」
         // is half of what it has to say, and it has no marker of its own on
         // every line the way a quote and a fence do.
-        Block::Container(callout) => {
-            use crate::theme::Accent;
-            Some(Style::default().bg(ink.washed(match callout {
-                Callout::Note => Accent::Azure,
-                Callout::Tip => Accent::Green,
-                Callout::Warning => Accent::Purple,
-                Callout::Danger => Accent::Mark,
-            })))
-        }
+        Block::Container(callout) => Some(Style::default().bg(ink.washed(wash_of(callout)))),
         // **A table is read across, so the rows are banded alternately** — one
         // row's cells must be tellable from the next's, and in 縱書 a cell that
         // wraps to three lines is unreadable without it. The header takes the
@@ -6039,29 +6090,45 @@ fn draw_horizontal(
         let block = blocks.get(row.line).copied();
         // A table's ground stops at its last `|` — unless it is inside a
         // `:::`, where the callout's own wash carries on to the edge under it.
+        use yumete_core::markdown::Block as Blk;
         let table_in = match block {
-            Some(yumete_core::markdown::Block::Table { inside, .. }) => Some(inside),
+            Some(Blk::Table { inside, .. }) => Some(inside),
             _ => None,
         };
         let row_is_a_table = matches!(table_in, Some(None));
+        // Which callout this row is inside, whatever kind of block it is — the
+        // fill below is the callout's, so a fence or a quote in a `:::` reaches
+        // the edge the way the prose around it does (#468).
+        let in_callout = match block {
+            Some(Blk::Table { inside, .. }) | Some(Blk::Quote { inside }) | Some(Blk::Code { inside }) => inside,
+            _ => None,
+        };
         let ground = ink
             .page()
             .patch(block.and_then(|b| block_style(b, ink)).unwrap_or_default());
         // The fill behind a table inside a callout is the **callout's**, so the
         // block still reaches the edge as a block; the table's band is only
         // under the row itself.
-        let fill = match table_in.flatten() {
-            Some(callout) => ink.page().patch(
-                block_style(yumete_core::markdown::Block::Container(callout), ink)
-                    .unwrap_or_default(),
-            ),
+        let fill = match in_callout {
+            Some(callout) => ink
+                .page()
+                .patch(block_style(Blk::Container(callout), ink).unwrap_or_default()),
             None => ground,
         };
         // The row the current hit is on, banded — 「在哪一行」 answered before
         // you have found the word itself.
-        let ground = match hit_line == Some(row.line) {
-            true => ground.patch(ink.ground(yumete_config::rung::BAND)),
-            false => ground,
+        //
+        // ⚠️ **The fill takes it too** (#469). `fill` was snapshotted from
+        // `ground` above and this line shadows `ground` alone, so the band
+        // stopped at the last character instead of crossing the row — and with
+        // `ground = "terminal"`, where the band is the *only* thing that ever
+        // gives `fill` a background, it was not drawn past the text at all.
+        let (ground, fill) = match hit_line == Some(row.line) {
+            true => {
+                let band = ink.ground(yumete_config::rung::BAND);
+                (ground.patch(band), fill.patch(band))
+            }
+            false => (ground, fill),
         };
         // 焦點模式 has to name its ink out loud on a page that has none of its
         // own. With `[theme] ground = "terminal"` the page's style is empty on
@@ -6155,6 +6222,23 @@ fn draw_horizontal(
         }
 
         let mut styles = vec![ground; chars.len()];
+        // ⚠️ **A table's ground starts at its first `|` as well** (#472). The
+        // right edge was trimmed to the last wall and the left was not, so a
+        // table indented inside a list item wore a two-cell tab sticking out
+        // to the left of it. The indent is the list's, not the table's.
+        if row_is_a_table {
+            // What is under a table is the page, or the callout it sits in —
+            // `fill` is the table's own band here, which is the thing being
+            // trimmed away.
+            let under = match in_callout {
+                Some(_) => fill,
+                None => ink.page(),
+            };
+            let indent = chars.iter().take_while(|c| c.is_whitespace()).count();
+            for style in styles.iter_mut().take(indent) {
+                *style = under;
+            }
+        }
         // Where a `==highlight==` covers this row, in this row's own indices,
         // so the cell ground below can step around it.
         //
@@ -6363,11 +6447,20 @@ fn draw_horizontal(
                 let lead = gutter + indent;
                 let names = editor.table_headings();
                 bar_lines = Some((
-                    labels_line(&cells, |i| (i + 1).to_string(), ink, drawn, lead, start_in_line),
+                    labels_line(
+                        &cells,
+                        |i| (i + 1).to_string(),
+                        ink,
+                        ink.page(),
+                        drawn,
+                        lead,
+                        start_in_line,
+                    ),
                     labels_line(
                         &cells,
                         |i| names.get(i).cloned().unwrap_or_default(),
                         ink,
+                        ink.page(),
                         drawn,
                         lead,
                         start_in_line,
@@ -6395,11 +6488,16 @@ fn draw_horizontal(
             // Not the table's band, though — that one belongs to the row
             // itself, and a ruler wearing it would read as another row of the
             // table.
+            // A plain table's ruler sits on the page — the table's own band
+            // belongs to its rows, and a ruler wearing it reads as one. Inside
+            // a callout it is a line of the callout like any other, and the
+            // wash has to run under the numbers as well as past them: half a
+            // row of page is a notch cut in the box (#468).
             let over = match row_is_a_table {
                 true => ink.page(),
                 false => fill,
             };
-            let mut reading = reading_line(editor, ink, rope, &row, drawn, gutter + indent)
+            let mut reading = reading_line(editor, ink, over, rope, &row, drawn, gutter + indent)
                 .unwrap_or_else(|| Line::from(Span::styled("", over)));
             if over.bg.is_some() {
                 reading.spans.push(Span::styled(
@@ -6476,7 +6574,7 @@ fn draw_horizontal(
         // the page's width; a table is a shape **on** the page and has a width
         // of its own, so a band carried past its last wall paints page as if it
         // were table. 「表格的底色不需要延伸到整个页宽，而是表格宽度就可以了。」
-        if fill.bg.is_some() && !row_is_a_table {
+        if fill.bg.is_some() && (!row_is_a_table || hit_line == Some(row.line)) {
             // A whole width of spaces, and the page truncates them. Working out
             // where the row ends and padding *exactly* the rest was one width
             // question too many: it asked `char_width`, while the columns are
@@ -6947,11 +7045,12 @@ fn drawn_columns(drawn: Drawn, lead: usize) -> Vec<usize> {
 fn ruler_line(
     cells: &[(usize, usize)],
     ink: crate::theme::Palette,
+    ground: Style,
     drawn: Drawn,
     lead: usize,
     start_in_line: usize,
 ) -> Option<Line<'static>> {
-    labels_line(cells, |i| (i + 1).to_string(), ink, drawn, lead, start_in_line)
+    labels_line(cells, |i| (i + 1).to_string(), ink, ground, drawn, lead, start_in_line)
 }
 
 /// The same, with something other than a number over each column (#379).
@@ -6965,6 +7064,7 @@ fn labels_line(
     cells: &[(usize, usize)],
     label: impl Fn(usize) -> String,
     ink: crate::theme::Palette,
+    ground: Style,
     drawn: Drawn,
     lead: usize,
     start_in_line: usize,
@@ -6989,7 +7089,8 @@ fn labels_line(
         out.push_str(&n);
         col = want + wide;
     }
-    (!out.trim().is_empty()).then(|| Line::from(Span::styled(out, ink.page().fg(ink.furniture()))))
+    (!out.trim().is_empty())
+        .then(|| Line::from(Span::styled(out, ground.fg(ink.furniture()))))
 }
 
 /// The readings over one row, as the line that is drawn above it.
@@ -7002,6 +7103,7 @@ fn labels_line(
 fn reading_line(
     editor: &Editor,
     ink: crate::theme::Palette,
+    ground: Style,
     rope: &yumete_core::Rope,
     row: &wrap::Row,
     drawn: Drawn,
@@ -7013,7 +7115,7 @@ fn reading_line(
     let ruler = editor.table_ruler_on_line(row.line);
     if !ruler.is_empty() && row.starts_line() {
         let start_in_line = row.start - rope.line_to_char(row.line);
-        return ruler_line(&ruler, ink, drawn, lead, start_in_line);
+        return ruler_line(&ruler, ink, ground, drawn, lead, start_in_line);
     }
     let groups = readings_in_row(editor, rope, row);
     if groups.is_empty() {
