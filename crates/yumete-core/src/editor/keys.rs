@@ -1131,6 +1131,25 @@ impl Editor {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
                 return self.repeat_writing(count, |e| e.join_lines());
             }
+            // …and the other direction, which helix does not have (#485).
+            Key::Char('K') => {
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                return self.repeat_writing(count, |e| e.join_with_above());
+            }
+            // **`gj` and `gk` are `j` and `k` here** (#485). In helix the plain
+            // pair walks *logical* lines and this pair walks the rows on the
+            // screen; in this editor a paragraph is one long line, so walking
+            // logical lines would step over a whole page at a time and `j`
+            // already walks what the reader sees. A helix hand types `gj`, and
+            // it gets what it meant.
+            Key::Char('j') | Key::Down => {
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                return self.repeat(count, |e| e.move_vertical(false));
+            }
+            Key::Char('k') | Key::Up => {
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                return self.repeat(count, |e| e.move_vertical(true));
+            }
             // Goto the next / previous buffer, as Helix binds them.
             Key::Char('n') => return self.next_buffer(),
             Key::Char('p') => return self.prev_buffer(),
@@ -1219,7 +1238,9 @@ impl Editor {
         ("n p", "hint.goto.next-or-previous-file"),
         ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),
+        ("j k", "hint.goto.by-drawn-row"),
         ("J", "hint.join-with-line-below"),
+        ("K", "hint.join-with-line-above"),
     ];
 
     /// What `m` may be finished with — 「這一對」，以及拿它做什麼.
