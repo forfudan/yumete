@@ -256,7 +256,12 @@ jobs:
           # reader who installed it from a tap has nowhere else to look. It
           # keeps its repository path, so `README.md`'s own link to
           # `docs/manual.md` still resolves inside the tarball.
-          cp docs/manual.md "${STAGE}/docs/"
+          #
+          # **Both scripts.** The editor speaks 简体 (`yumete --lang=zhs`) and
+          # the 简体 manual is kept in lockstep with the 繁體 one; shipping only
+          # one of them would leave half the readers reading the other half's
+          # characters.
+          cp docs/manual.md docs/manual_sc.md "${STAGE}/docs/"
           ( cd dist && tar -czf "${PKG}.tar.gz" "${PKG}" )
           # From inside `dist/`, so the file records a bare name and
           # `shasum -c` works where the reader unpacked it. Piped through
