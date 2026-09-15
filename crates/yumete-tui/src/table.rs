@@ -486,9 +486,13 @@ pub fn draw(
             // no scanner to ask, so the base row is row 0 of its body.
             _ => line - base.min(line) + 2,
         };
-        match crate::table_row_rung(nth) {
-            Some(rung) => plain.patch(ink.ground(rung)),
-            // 「whatever is under it」 — in this window that is the page.
+        match crate::table_row_depth(nth) {
+            // Over whatever this row sits on — in this window that is the page,
+            // but the arithmetic is the same one the chapter's tables use.
+            Some(depth) => {
+                let beneath = plain.bg.unwrap_or(ink.paper());
+                plain.bg(ink.over(beneath, depth))
+            }
             None => plain,
         }
     };

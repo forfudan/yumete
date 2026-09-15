@@ -376,6 +376,59 @@ pub enum Accent {
     Amber,
 }
 
+/// A colour as hue (degrees), lightness and saturation (both per cent).
+fn to_hsl((r, g, b): (u8, u8, u8)) -> (f64, f64, f64) {
+    let (r, g, b) = (f64::from(r) / 255.0, f64::from(g) / 255.0, f64::from(b) / 255.0);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let light = (max + min) / 2.0;
+    let span = max - min;
+    if span.abs() < f64::EPSILON {
+        return (0.0, light * 100.0, 0.0);
+    }
+    let sat = match light > 0.5 {
+        true => span / (2.0 - max - min),
+        false => span / (max + min),
+    };
+    let hue = if max == r {
+        ((g - b) / span) % 6.0
+    } else if max == g {
+        (b - r) / span + 2.0
+    } else {
+        (r - g) / span + 4.0
+    };
+    ((hue * 60.0).rem_euclid(360.0), light * 100.0, sat * 100.0)
+}
+
+/// The colour that hue, lightness and saturation name.
+fn from_hsl(hue: f64, light: f64, sat: f64) -> Color {
+    let (light, sat) = (light / 100.0, sat / 100.0);
+    if sat.abs() < f64::EPSILON {
+        let v = (light * 255.0).round().clamp(0.0, 255.0) as u8;
+        return Color::Rgb(v, v, v);
+    }
+    let q = match light < 0.5 {
+        true => light * (1.0 + sat),
+        false => light + sat - light * sat,
+    };
+    let p = 2.0 * light - q;
+    let channel = |mut t: f64| -> u8 {
+        t = t.rem_euclid(1.0);
+        let v = if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 0.5 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        };
+        (v * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    let h = hue / 360.0;
+    Color::Rgb(channel(h + 1.0 / 3.0), channel(h), channel(h - 1.0 / 3.0))
+}
+
 /// Relative luminance (WCAG), for the palette's own contrast questions.
 fn luminance(c: Color) -> f64 {
     let Color::Rgb(r, g, b) = c else { panic!("not an rgb colour") };
@@ -434,34 +487,56 @@ impl Palette {
     /// when it was a fixed one.
     const FADE: u32 = 260;
 
-    /// `colour`, stepped `rungs` of the ladder **toward the page**.
+    /// **`under`, marked `depth` rungs toward the ink** — the one way anything
+    /// is laid over anything else (#488).
     ///
-    /// What `:word-show ink` alternates with (#461). It used to reach for a
-    /// fixed grey — [`rung::WORD_INK`], 第 15 檔 of 墨 → 紙 — and that works for
-    /// prose and for nothing else: on a link, a code span or a heading the
-    /// writing already carries a colour, so the alternation either rubbed that
-    /// colour out or (as it was written) gave up and drew nothing, and a link
-    /// four lines long had no word boundaries in it at all.
+    /// ⚠️ **A mark is a displacement, not a position.** A rung is an absolute
+    /// place on the line from 墨 to 紙, so 第 86 檔 means 「four rungs off the
+    /// paper」 *and only on the paper*: a table banded at 第 86 inside a `:::`
+    /// kept the colour it would have had on the page, and read as a patch
+    /// glued onto the callout rather than a row of it. 「不是紙色的行還保持着
+    /// 原來的顏色，造成視覺上的不舒服。」
     ///
-    /// Stepping whatever colour is *there* keeps both answers: 藍 stays 藍, and
-    /// every other word of it is 藍 a step back. The ladder's own arithmetic,
-    /// applied to an arbitrary starting colour.
-    pub fn stepped(self, colour: Color, rungs: u16) -> Color {
-        let Color::Rgb(r, g, b) = colour else {
-            return colour;
+    /// The fix is the model a designer would reach for — a translucent sheet
+    /// laid over whatever is behind — and it is the same arithmetic the ladder
+    /// already uses, applied as a **vector**: `depth` rungs of the 墨→紙
+    /// distance, subtracted from `under`. On the paper that is exactly
+    /// [`Ink::at`] of the rung it names, so nothing on an ordinary page moves;
+    /// over a wash it is that wash, the same amount deeper.
+    ///
+    /// Negative `depth` lifts instead, toward the paper: that is what a quiet
+    /// ink is, and why [`Ink::stepped`] is this function with the sign flipped.
+    pub fn over(self, under: Color, depth: i32) -> Color {
+        let Color::Rgb(r, g, b) = under else {
+            return under;
         };
+        let (ir, ig, ib) = self.ladder.ink;
         let (pr, pg, pb) = self.ladder.paper;
-        // ⚠️ **The ladder's own arithmetic, rounding included.** `Ladder::step`
-        // rounds half up; truncating here instead put the plain-prose case one
-        // unit off [`Ink::at`], which is a different colour to every `==` in
-        // the suite and to nobody's eye.
-        let full = i64::from(rung::PAPER);
-        let t = i64::from(rungs.min(rung::PAPER));
-        let mix = |from: u8, to: u8| -> u8 {
-            let (a, b) = (i64::from(from), i64::from(to));
-            ((a * full + (b - a) * t + full / 2) / full).clamp(0, 255) as u8
+        // ⚠️ **Rounded, not truncated.** `Ladder::step` rounds half up, and a
+        // mark that is one unit off it is a second colour for the same rung —
+        // `over(paper, PAPER - WORD_TINT)` has to *be* `at(WORD_TINT)`, or the
+        // claim that an ordinary page does not move is one unit false.
+        let full = f64::from(rung::PAPER);
+        let shift = |c: u8, ink: u8, paper: u8| -> u8 {
+            let step = (f64::from(paper) - f64::from(ink)) * f64::from(depth) / full;
+            (f64::from(c) - step).round().clamp(0.0, 255.0) as u8
         };
-        Color::Rgb(mix(r, pr), mix(g, pg), mix(b, pb))
+        Color::Rgb(
+            shift(r, ir, pr),
+            shift(g, ig, pg),
+            shift(b, ib, pb),
+        )
+    }
+
+    /// The word mark, laid over whatever the writing already carries.
+    ///
+    /// The same displacement [`Ink::over`] does for a ground, with the sign the
+    /// other way: 「fifteen rungs quieter than what is there」. On plain prose
+    /// that is [`rung::WORD_INK`] exactly; on a link it is that link's 藍, a
+    /// step back — which is how a coloured run can show word boundaries and
+    /// stay the colour it is.
+    pub fn marked(self, ink: Color, depth: u16) -> Color {
+        self.over(ink, -i32::from(depth))
     }
 
     /// The same palette, a rung back: the half that is only being read.
@@ -642,7 +717,49 @@ impl Palette {
             Accent::Azure => self.azure,
             Accent::Amber => self.amber,
         };
-        self.washed_to(colour, 1.5, 4.5)
+        self.tinted(colour, 1.5)
+    }
+
+    /// A ground of `accent`'s **hue**, set `off_page` away from the paper.
+    ///
+    /// ⚠️ **Not a mix toward the paper** (#487). `washed_to` walks the straight
+    /// line from the accent to the page, which works when the accent is on the
+    /// far side of the page in luminance — a bright colour on a dark page — and
+    /// falls apart the other way round. In the light mood the accents are
+    /// *dark* (`#8A5F12` for 黃), so the walk from there to cream goes through
+    /// brown-grey: measured, the five callouts came out at **10–20 saturation
+    /// against the paper's 46**, twelve to seventeen points of lightness below
+    /// it. They were not pale colours, they were dirty greys. 「亮色模式下……底
+    /// 色太暗，不是亮色。」
+    ///
+    /// So the hue is kept and only the **lightness** moves, away from the page
+    /// until the ground sits `off_page` from it — up on a dark page, down on a
+    /// light one. Saturation is clamped into a band: under it a ground is a
+    /// grey whatever its hue says, over it the luminous hues (green, yellow)
+    /// shout while blue and purple whisper, because equal saturation is not
+    /// equal loudness.
+    fn tinted(self, accent: (u8, u8, u8), off_page: f64) -> Color {
+        /// A ground below this is a grey; above it, the luminous hues shout.
+        const BAND: (f64, f64) = (22.0, 42.0);
+        let paper = Color::Rgb(self.ladder.paper.0, self.ladder.paper.1, self.ladder.paper.2);
+        let (hue, _, sat) = to_hsl(accent);
+        let sat = sat.clamp(BAND.0, BAND.1);
+        let (_, page_light, _) = to_hsl(self.ladder.paper);
+        // Away from the page: a dark page is lifted, a light one is lowered.
+        let up = luminance(paper) < luminance(self.text());
+        let step = if up { 0.4 } else { -0.4 };
+        let mut light = page_light;
+        for _ in 0..300 {
+            light += step;
+            if !(0.0..=100.0).contains(&light) {
+                break;
+            }
+            let ground = from_hsl(hue, light, sat);
+            if contrast(ground, paper) >= off_page {
+                return ground;
+            }
+        }
+        from_hsl(hue, page_light, sat)
     }
 
     /// An accent washed toward the page until it sits `off_page` from it —

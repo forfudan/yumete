@@ -4909,7 +4909,7 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
 /// ⚠️ **And a ground is not a mark: the area does the work.** 1.09:1 is
 /// invisible on a tick or a rule and plenty across a row of cells — 「底色虽然
 /// 靠近，但是因为面积大，还是有很好的区分效果」.
-pub(crate) fn table_row_rung(nth: usize) -> Option<u16> {
+pub(crate) fn table_row_depth(nth: usize) -> Option<i32> {
     // **Two grounds, and one of them is the paper** (#480). It was three — a
     // louder one for the header, two quieter ones alternating under the body —
     // and three grounds is one more than a table has things to say: 「表格既然
@@ -4931,7 +4931,14 @@ pub(crate) fn table_row_rung(nth: usize) -> Option<u16> {
         // stopped at the `---` read as a row of its own with a line under it,
         // rather than as a head.
         0 | 1 => None,
-        n if n % 2 == 0 => Some(yumete_config::rung::WORD_TINT),
+        // **How deep, not which rung** (#488). Four rungs under whatever the
+        // row sits on: the paper on an ordinary page — which is 第 86 檔 to the
+        // character, so nothing there moves — and the callout's own wash inside
+        // a `:::`, which is what makes the band read as part of the block
+        // instead of a patch stuck on it.
+        n if n % 2 == 0 => {
+            Some(i32::from(yumete_config::rung::PAPER - yumete_config::rung::WORD_TINT))
+        }
         _ => None,
     }
 }
@@ -5050,8 +5057,9 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
                 Some(callout) => Style::default().bg(ink.washed(wash_of(callout))),
                 None => Style::default(),
             };
-            let ground = match table_row_rung(nth) {
-                Some(rung) => under.bg(ink.at(rung)),
+            let beneath = under.bg.unwrap_or(ink.paper());
+            let ground = match table_row_depth(nth) {
+                Some(depth) => under.bg(ink.over(beneath, depth)),
                 None => under,
             };
             Some(match nth {
@@ -6430,8 +6438,7 @@ fn draw_horizontal(
                         // *and* the boundary.
                         WordMark::Ink => {
                             let from = style.fg.or(page_fg).unwrap_or(ink.text());
-                            *style = style
-                                .fg(ink.stepped(from, yumete_config::rung::WORD_INK));
+                            *style = style.fg(ink.marked(from, yumete_config::rung::WORD_INK));
                         }
                     }
                 }
@@ -6525,8 +6532,8 @@ fn draw_horizontal(
                 // it stands for is banded at 第 82 檔 in 金 — so a scrolled
                 // table's header read as something floating outside the table
                 // rather than the top of it.
-                let head_ground = match table_row_rung(0) {
-                    Some(rung) => ink.ground(rung),
+                let head_ground = match table_row_depth(0) {
+                    Some(depth) => Style::default().bg(ink.over(ink.paper(), depth)),
                     None => ink.page(),
                 };
                 bar_lines = Some((
@@ -6690,8 +6697,8 @@ fn draw_horizontal(
     // have had to learn what that means. A region is just a region: the page
     // is two rows shorter, which is arithmetic this file already does twice.
     if let Some(bar) = head.filter(|bar| bar.height > 0) {
-        let head_bar = match table_row_rung(0) {
-            Some(rung) => ink.ground(rung),
+        let head_bar = match table_row_depth(0) {
+            Some(depth) => Style::default().bg(ink.over(ink.paper(), depth)),
             None => ink.page(),
         };
         let (numbers, names) = bar_lines.unwrap_or((None, None));
