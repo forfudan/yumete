@@ -5069,6 +5069,37 @@ fn with_lined_up_md_table() -> Editor {
 
 /// A document whose second table has a cell far wider than the cap, and a
 /// first table with different columns — so a test can tell the two apart.
+/// 小寫刪、大寫剪，格子裏也一樣（#492）。
+///
+/// 填表是這條規矩最值錢的地方：複製一個值，路上順手清掉兩格再貼，從前那個值就沒了
+/// ——`clear_cell` 無條件 `store`。
+#[test]
+fn clearing_a_cell_does_not_spend_the_register_but_cutting_one_does() {
+    let table = "| 姓名 | 年紀 |\n| --- | --- |\n| 甲 | 三十 |\n";
+
+    // `d`：清掉「甲」，剪貼板上那個「三十」原封不動。
+    let mut ed = typed(table);
+    ed.goto_line(3);
+    press(&mut ed, "tbT");
+    press(&mut ed, "l");
+    press(&mut ed, "y"); // 三十 進寄存器
+    press(&mut ed, "h");
+    press(&mut ed, "d");
+    assert!(ed.current_buffer().text().contains("|  | 三十"), "{}", ed.current_buffer().text());
+    assert_eq!(ed.paste_menu()[0].1, "三十", "寄存器沒被那一格吃掉");
+
+    // `D`：同樣清掉，但這一格進了寄存器。
+    let mut ed = typed(table);
+    ed.goto_line(3);
+    press(&mut ed, "tbT");
+    press(&mut ed, "l");
+    press(&mut ed, "y");
+    press(&mut ed, "h");
+    press(&mut ed, "D");
+    assert!(ed.current_buffer().text().contains("|  | 三十"), "{}", ed.current_buffer().text());
+    assert_eq!(ed.paste_menu()[0].1, "甲", "剪切纔進寄存器");
+}
+
 fn with_two_md_tables() -> Editor {
     let long = "一二三四五六七八九十一二三四五六七八九十一二三四五";
     typed(&format!(
@@ -6079,9 +6110,17 @@ fn d_on_a_grid_means_the_cell() {
     press(&mut ed, "d");
     assert_eq!(ed.cell_text(1, 0), "", "{}", ed.status());
     assert_eq!(ed.row_cells(1).len(), ed.row_cells(0).len(), "the row kept its shape");
-    // And what was cleared is on the register, so it can be put back.
-    press(&mut ed, "p");
+    // ⚠️ **`d` does not put it on the register any more** (#492) — that is
+    // `D`, here as in the prose. Clearing cells while filling a table is
+    // exactly where 「d 作为剪切功能会污染 register」 bites hardest.
+    press(&mut ed, "D");
+    assert_eq!(ed.cell_text(1, 0), "", "already empty, and it says so");
+    press(&mut ed, "u"); // back to the text, so D has something to cut
     assert_eq!(ed.cell_text(1, 0), cell);
+    press(&mut ed, "D");
+    assert_eq!(ed.cell_text(1, 0), "");
+    press(&mut ed, "p");
+    assert_eq!(ed.cell_text(1, 0), cell, "and what `D` cut can be put back");
     std::fs::remove_dir_all(&dir).ok();
 }
 

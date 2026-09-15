@@ -3055,7 +3055,8 @@ impl Editor {
             // exactly on the delimiter.
             // …with a selection standing, `d` still means the selection: `x d`
             // must go on being refused rather than quietly clearing one cell.
-            Key::Char('d') if self.anchor == self.cursor => self.clear_cell(),
+            Key::Char('d') if self.anchor == self.cursor => self.clear_cell(false),
+            Key::Char('D') if self.anchor == self.cursor => self.clear_cell(true),
             Key::Char('t') => self.pending = Pending::Table,
             // `o` in a grid means a new row, and on the header row the new row
             // has to go under the rule rather than between it and its names.
@@ -3255,8 +3256,13 @@ impl Editor {
         Some(file)
     }
 
-    /// Empty the cell the cursor is in, keeping its boundaries (`d`).
-    fn clear_cell(&mut self) {
+    /// Empty the cell the cursor is in, keeping its boundaries.
+    ///
+    /// `yanks` is the `d`/`D` rule (#492) reaching the grid: **`d` clears,
+    /// `D` cuts.** Filling a table is where that rule earns the most — copy a
+    /// value, then clear two cells on the way to where it goes, and under the
+    /// old behaviour the value was gone.
+    fn clear_cell(&mut self, yanks: bool) {
         let Some((line, cell)) = self.cell_position() else {
             return;
         };
@@ -3274,7 +3280,9 @@ impl Editor {
         self.snapshot();
         let text = self.current_buffer().rope().slice(start..end).to_string();
         let n = text.chars().count();
-        self.store(text);
+        if yanks {
+            self.store(text);
+        }
         if self.edit_remove(start..end) {
             self.set_cursor(start);
             self.format_md_table();
