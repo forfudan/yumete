@@ -4097,23 +4097,16 @@ en = "after t, in a table block: / ? g y p"
 [[message]]
 # 表格提示：改按格
 key = "hint.table.by-cell-instead"
-zht = "按格"
-zhs = "按格"
-en = "by cell"
+zht = "按格移動"
+zhs = "按格移动"
+en = "move by cell"
 
 [[message]]
 # 表格提示：改按字
 key = "hint.table.by-character-instead"
-zht = "按字"
-zhs = "按字"
-en = "by character"
-
-[[message]]
-# 表格提示欄的標題（按字）
-key = "hint.table.character-mode"
-zht = "表格 · 字"
-zhs = "表格 · 字"
-en = "table · character"
+zht = "按字移動"
+zhs = "按字移动"
+en = "move by character"
 
 [[message]]
 # 非 | 表格裏 t 之後可以按的鍵
@@ -4584,20 +4577,6 @@ en = "{0} over-long rows skipped"
 
 
 # ── label ─────────────────────────────────────────────────────────────
-
-[[message]]
-# 量詞標籤：格
-key = "label.cell"
-zht = "格"
-zhs = "格"
-en = "cell"
-
-[[message]]
-# 量詞標籤：字
-key = "label.character"
-zht = "字"
-zhs = "字"
-en = "character"
 
 [[message]]
 # 把幾樣東西連起來寫時的頓號
@@ -7039,11 +7018,18 @@ zhs = "光标下没有字可查"
 en = "no character under the cursor to look up"
 
 [[message]]
+# 狀態欄的位置：橫排的正文
+key = "ui.position"
+zht = "行 {0}, 列 {1}"
+zhs = "行 {0}, 列 {1}"
+en = "Row {0}, Col {1}"
+
+[[message]]
 # 狀態欄的位置：光標在表格裏
 key = "ui.position-in-table"
-zht = "第 {0} 行 · {1}"
-zhs = "第 {0} 行 · {1}"
-en = "row {0} · {1}"
+zht = "行 {0}, 列 {1} [{2}]"
+zhs = "行 {0}, 列 {1} [{2}]"
+en = "Row {0}, Col {1} [{2}]"
 
 [[message]]
 # 狀態欄的位置：竪排

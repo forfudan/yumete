@@ -4043,10 +4043,22 @@ fn the_hint_offers_the_key_that_really_changes_the_grain() {
             before,
             "the row offers `{key}` for 「{other}」 and it did not change the grain"
         );
-        assert!(ed.table_status().unwrap().ends_with(match before {
-            Grain::Char => "格",
-            Grain::Cell => "字",
-        }));
+        // ⚠️ **The grain is read off `T`'s own label now** (#496), not off
+        // the status line: 「表格 · 字」 and the position line's 「· 字」 were
+        // both saying what this row already says, and both are gone.
+        // A hint is a status line first, and `T` has just written one.
+        ed.status.clear();
+        let Hint::Keys(title, keys) = ed.hint() else { panic!("still in a grid") };
+        assert_eq!(title, say!("label.table"), "the title carries no grain");
+        let (_, now) = keys.iter().find(|(k, _)| *k == "T").expect("T is offered");
+        assert_eq!(
+            *now,
+            match before {
+                Grain::Char => say!("hint.table.by-character-instead"),
+                Grain::Cell => say!("hint.table.by-cell-instead"),
+            },
+            "pressed once, `T` now offers the way back"
+        );
     }
 
     std::fs::remove_dir_all(&dir).ok();
@@ -4073,11 +4085,13 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
     // **開着就是按字** (#356): the characters in a cell are what a writer
     // mostly wants; the grid is what they ask for, with `T`.
     assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Char);
-    assert!(ed.table_status().unwrap().ends_with("字"));
+    // **The status line names the column and stops there** (#496). It used to
+    // end 「· 字」, which `T` in the row below was already saying.
+    assert_eq!(ed.table_status().as_deref(), Some("char"));
 
     press(&mut ed, "T");
     assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Cell);
-    assert!(ed.table_status().unwrap().ends_with("格"));
+    assert_eq!(ed.table_status().as_deref(), Some("char"), "still just the column");
 
     // By the cell: one `l` crosses the whole of 「相」 and the delimiter.
     press(&mut ed, "l");
@@ -4087,7 +4101,12 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
     // `T`, and the same key steps one character.
     press(&mut ed, "T");
     assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Char);
-    assert!(ed.table_status().unwrap().ends_with("字"), "and it says so");
+    // …and `T` is where it says so: it now offers the grain you are *not* in.
+    // (A hint is a status line first, and `T` has just written one.)
+    ed.status.clear();
+    let Hint::Keys(_, keys) = ed.hint() else { panic!("still in a grid") };
+    let (_, offered) = keys.iter().find(|(k, _)| *k == "T").expect("T is offered");
+    assert_eq!(*offered, say!("hint.table.by-cell-instead"));
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('木'), "one 字, not one cell");
     press(&mut ed, "l");

@@ -7555,7 +7555,13 @@ fn position_of(editor: &Editor) -> String {
         // **The number the gutter shows.** In the window that is this
         // table's own row; in prose it is the file's line, which is what the
         // gutter draws there.
-        return say!("ui.position-in-table", editor.table_row_number(), where_);
+        // **Row, column, and which column that is** (#497): 「行 105, 列 2
+        // [星陳]」. The same shape as the prose line below it, so the two read
+        // as one readout rather than two — and the column *number* is what the
+        // `t1/` and `t2-10?` keys are addressed by, so it has to be on the
+        // page somewhere.
+        let column = editor.cell_position().map(|(_, cell)| cell + 1).unwrap_or(1);
+        return say!("ui.position-in-table", editor.table_row_number(), column, where_);
     }
     if editor.layout() == WritingLayout::Vertical {
         let at = editor.zong_position();
@@ -7571,10 +7577,13 @@ fn position_of(editor: &Editor) -> String {
         };
         return say!("ui.position-vertical", which, at.slot + 1);
     }
-    format!(
-        "Ln {}, Col {}",
+    // ⚠️ **Said, not spelt out** (#497). This was a hardcoded `Ln {}, Col {}`,
+    // so the one part of the status line a reader looks at most was English on
+    // a 繁體 page and stayed English under `--lang=zhs` too.
+    say!(
+        "ui.position",
         editor.cursor_line() + 1,
-        editor.cursor_visual_column() + 1,
+        editor.cursor_visual_column() + 1
     )
 }
 
@@ -7816,6 +7825,30 @@ fn draw_panel_rows(
 
 #[cfg(test)]
 mod tests {
+/// 把一行畫出來的字裏「寬字後面那個空格」擠掉，好照字面對句子（#497）。
+///
+/// `row_text` 逐格取符號，而一個漢字佔兩格——第二格是空的。從前狀態欄那一句是
+/// 純 ASCII 的 `Ln 1, Col 1`，對得上；換成「行 1, 列 1」之後每個漢字後面都多一個
+/// 空格。擠掉連續空格再比，就不必把畫面上的間距寫進斷言裏。
+fn squeezed(text: &str) -> String {
+    let mut out = String::new();
+    let mut blank = false;
+    for c in text.chars() {
+        match c == ' ' {
+            true if blank => {}
+            true => {
+                blank = true;
+                out.push(c);
+            }
+            false => {
+                blank = false;
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+
     /// A whole novel goes through `!` without deadlocking.
     ///
     /// The old `run_capturing` wrote all of stdin before reading any of
@@ -8755,7 +8788,10 @@ mod tests {
         let mut editor = editor_with(
             "一段話。\n\n| A | B | C | D | E |\n| --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 |",
         );
-        for key in ['4', 'j', 't', 'f'] {
+        // `t i`, because a table on a page of prose does not open the panel
+        // by itself any more (#495) — what is under test here is its *shape*
+        // once it is open.
+        for key in ['4', 'j', 't', 'f', 't', 'i'] {
             editor.on_key(Key::Char(key));
         }
         let config = Config::default();
@@ -9996,12 +10032,12 @@ mod tests {
         // Wide: everything, and the three-space gaps.
         let wide = status(70);
         assert!(wide.contains("long.csv"), "{wide:?}");
-        assert!(wide.contains("Ln 1, Col 1"), "{wide:?}");
+        assert!(wide.contains("行 1, 列 1"), "{wide:?}");
 
         // Narrow: **the position outlives the file name**, and what is left is
         // whole — no `Ln 1, C`, no `long.c`.
         let narrow = status(28);
-        assert!(narrow.contains("Ln 1, Col 1"), "the position stays: {narrow:?}");
+        assert!(narrow.contains("行 1, 列 1"), "the position stays: {narrow:?}");
         assert!(!narrow.contains("long.csv"), "the name gave way: {narrow:?}");
         assert!(narrow.contains("NORMAL"), "{narrow:?}");
         assert!(
@@ -11196,13 +11232,12 @@ mod tests {
         editor.on_key(Key::Char('4'));
         editor.on_key(Key::Enter);
         assert!(editor.enter_table(), "{}", editor.status());
-        // **The page, and only the page.** `t i`'s panel is showing the same
-        // row down the right, and since 2026-09-07 it *wraps* a value too long
-        // for its width — so 「==mu==」 lands there in pieces, one of which is
-        // on the rule row, and a search for `mu` across the whole window
-        // answers with a row of `┄` rather than with the cell.
-        editor.on_key(Key::Char('t'));
-        editor.on_key(Key::Char('i'));
+        // **The page, and only the page.** The detail panel would show the
+        // same row down the right, and since 2026-09-07 it *wraps* a value too
+        // long for its width — so 「==mu==」 would land there in pieces, one of
+        // which is on the rule row, and a search for `mu` across the whole
+        // window would answer with a row of `┄` rather than with the cell.
+        // Since #495 it is shut unless asked for, which is what this wants.
         assert!(!editor.detail_visible(), "{}", editor.status());
         let row_with = |buf: &ratatui::buffer::Buffer, needle: &str| {
             (0..8u16)
@@ -13024,7 +13059,7 @@ mod tests {
 
         editor.on_key(Key::Char('l'));
         let quiet = row(&render(&editor, &config, 100, 10), 100);
-        assert!(quiet.contains("Ln 1, Col 3"), "{quiet:?}");
+        assert!(squeezed(&quiet).contains("行 1, 列 3"), "{quiet:?}");
 
         // A yank says something, and it says it on the row below — the status
         // line goes on answering "where am I" while it does.
@@ -13033,7 +13068,7 @@ mod tests {
         let hint = command_line(&buffer);
         assert!(hint.contains("取"), "the message is below: {hint:?}");
         let status = row(&buffer, 100);
-        assert!(status.contains("Ln 1, Col 3"), "position kept: {status:?}");
+        assert!(squeezed(&status).contains("行 1, 列 3"), "position kept: {status:?}");
         assert!(!status.contains("取"), "and not repeated: {status:?}");
 
         // With the command row off the message comes back to the status line —
@@ -13042,7 +13077,7 @@ mod tests {
         let mut plain = config.clone();
         plain.editor.command_line = false;
         let status = row_text(&render(&editor, &plain, 100, 10), 9);
-        assert!(status.contains("取") && status.contains("Ln 1, Col 3"), "{status:?}");
+        assert!(status.contains("取") && squeezed(&status).contains("行 1, 列 3"), "{status:?}");
     }
 
     #[test]
@@ -13081,7 +13116,7 @@ mod tests {
         let line = row(&buffer, 60);
         assert!(line.contains("U+51AC"), "the code point survives: {line:?}");
         assert!(!line.contains("CJK Unified"), "the block name gives way first");
-        assert!(line.contains("Ln 1, Col 5"), "position kept: {line:?}");
+        assert!(squeezed(&line).contains("行 1, 列 5"), "position kept: {line:?}");
         // And the standing 中／ABC tag (#337) is not what pays for it: the 字
         // itself is, because it is already on the page under the cursor.
         assert!(line.contains("靈"), "the language tag stands: {line:?}");
