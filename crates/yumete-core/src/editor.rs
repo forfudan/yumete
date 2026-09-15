@@ -2282,7 +2282,7 @@ impl From<CommandError> for EditorError {
 impl Editor {
     /// Create an editor with a single empty scratch buffer.
     pub fn new() -> Self {
-        Editor {
+        let mut editor = Editor {
             buffers: vec![Buffer::scratch()],
             current: 0,
             mode: Mode::Normal,
@@ -2458,7 +2458,16 @@ impl Editor {
             usage_groups: Vec::new(),
             opened_with: HashMap::new(),
             time_offset: None,
-        }
+        };
+        // **The default segmenter goes on the same way every other one does**
+        // (#491). Built straight into the field it was the one segmenter in the
+        // program *not* wrapped in `WithWords`, so a front end that never got
+        // as far as installing a dictionary had the book's own names and
+        // everything 自動認詞 found silently doing nothing. Nobody would see
+        // it: `detected_word_count()` counts them, and they are simply never
+        // consulted.
+        editor.set_segmenter(Box::new(CategorySegmenter));
+        editor
     }
 
     // Grids — table mode, `|` tables and delimited text — are in
