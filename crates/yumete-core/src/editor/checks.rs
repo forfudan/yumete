@@ -310,8 +310,26 @@ impl Editor {
     /// is how a reader goes and fixes one, and that needs `listing_root` to be the
     /// directory the file it was run on lives in.
     pub(super) fn show_listing(&mut self, listing: String, name: String) {
+        self.show_listing_as(listing, name, None)
+    }
+
+    /// The same, with a syntax of its own (#499).
+    ///
+    /// Only `:diff` uses it: its listing carries `[-走了-]{+來了+}`, which is
+    /// markup in exactly one place in the program. The other listings are read
+    /// as Markdown, which is what they are — a `:check-punct` report quotes the
+    /// manuscript's own lines.
+    pub(super) fn show_listing_as(
+        &mut self,
+        listing: String,
+        name: String,
+        syntax: Option<crate::syntax::Syntax>,
+    ) {
         let mut buffer = Buffer::from_text(&listing);
         buffer.name_as(&name);
+        if let Some(syntax) = syntax {
+            buffer.set_syntax(syntax);
+        }
         self.listing_root = self
             .current_buffer()
             .path()

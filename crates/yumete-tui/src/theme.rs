@@ -724,14 +724,7 @@ impl Palette {
     /// back to 7.4 and the block is still unmistakably a block — the table
     /// stripe beside it is 1.09.
     pub fn washed(self, accent: Accent) -> Color {
-        let colour = match accent {
-            Accent::Gold => self.gold,
-            Accent::Mark => self.mark,
-            Accent::Purple => self.purple,
-            Accent::Green => self.green,
-            Accent::Azure => self.azure,
-            Accent::Amber => self.amber,
-        };
+        let colour = self.accent_colour(accent);
         // ⚠️ **Close to the page, and closer on a light one** (#489).
         //
         // This began at 1.5:1 both ways, which is a *field* of colour, not a
@@ -758,6 +751,32 @@ impl Palette {
             false => 1.08,
         };
         self.tinted(colour, off_page)
+    }
+
+    /// The raw three bytes behind one of the 品色.
+    fn accent_colour(self, accent: Accent) -> (u8, u8, u8) {
+        match accent {
+            Accent::Gold => self.gold,
+            Accent::Mark => self.mark,
+            Accent::Purple => self.purple,
+            Accent::Green => self.green,
+            Accent::Azure => self.azure,
+            Accent::Amber => self.amber,
+        }
+    }
+
+    /// A ground for a **short run** of one of the 品色 — a diff's changed
+    /// word, not a callout's field (#499).
+    ///
+    /// ⚠️ **Louder than [`Self::washed`], and that is not an inconsistency:
+    /// a ground's loudness has to be set by its area.** 1.5:1 over a paragraph
+    /// of prose was 「侵略性太强」 and became 1.08–1.12 for the callouts; the
+    /// same 1.5 under two characters is barely a tint, and those two characters
+    /// are the entire point of the line they are on. The reader is *hunting*
+    /// here, not reading — the nearest thing on the page is `==標記==`, which
+    /// sits at 1.9 for exactly that reason.
+    pub fn short_wash(self, accent: Accent) -> Color {
+        self.tinted(self.accent_colour(accent), 1.5)
     }
 
     /// The paper, as a colour — the ground everything else is measured against.

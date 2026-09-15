@@ -50,6 +50,16 @@ pub enum Kind {
     /// The markup itself — the asterisks, the brackets and the target. Shown
     /// and set back in source mode; hidden in 所見即所得.
     Marker,
+    /// `[-什麼走了-]` in a `:diff` listing — the old draft's words.
+    ///
+    /// Not Markdown; the listing has [`crate::syntax::Syntax::Diff`] and this
+    /// is what that syntax produces. It lives in this enum because everything
+    /// downstream of a span — hiding the markers, painting the run, measuring
+    /// the width — is written once against `Kind` and would have to be written
+    /// again for a second one.
+    Gone,
+    /// `{+什麼來了+}` in a `:diff` listing — the new draft's words.
+    Added,
     /// A heading's hashes.
     ///
     /// A [`Marker`](Kind::Marker) that is never hidden: a terminal cannot make
@@ -1039,6 +1049,9 @@ mod tests {
                 Kind::Comment => '%',
                 Kind::Code2 => '#',
                 Kind::Marker | Kind::HeadingMark => '.',
+                // Neither `spans` makes these — they are `diff::spans`'.
+                Kind::Gone => '-',
+                Kind::Added => '+',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
                 *slot = mark;
@@ -1559,6 +1572,9 @@ mod typst_tests {
                 Kind::Heading => 'H',
                 Kind::Comment => '%',
                 Kind::Marker | Kind::HeadingMark => '.',
+                // Neither `spans` makes these — they are `diff::spans`'.
+                Kind::Gone => '-',
+                Kind::Added => '+',
                 _ => '?',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {

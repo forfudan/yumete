@@ -43,6 +43,15 @@ pub enum Syntax {
     /// self is not Markdown, and colouring it as Markdown makes the writer's
     /// own punctuation flicker at them. `:syntax text` says so.
     Text,
+    /// A `:diff` listing (#499). Not a file format and not something
+    /// [`parse`](Syntax::parse) will hand back — the listing buffer is given
+    /// it, and nothing else ever is.
+    ///
+    /// The markup it knows is `[-什麼走了-]` and `{+什麼來了+}`, which are
+    /// [`crate::diff`]'s own and would be ordinary characters in a manuscript.
+    /// Keeping it out of `parse` is what makes that safe: a chapter containing
+    /// 「\[-3-\]」 cannot land here by accident.
+    Diff,
 }
 
 impl Syntax {
@@ -62,6 +71,7 @@ impl Syntax {
             Syntax::Markdown => "markdown",
             Syntax::Typst => "typst",
             Syntax::Text => "text",
+            Syntax::Diff => "diff",
         }
     }
 }

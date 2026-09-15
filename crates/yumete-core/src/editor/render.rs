@@ -315,7 +315,15 @@ impl Editor {
             .flat_map(|g| [(g.start, g.base.0), (g.base.1, g.end)])
             .filter(|(a, b)| b > a)
             .collect();
-        if self.wysiwyg() {
+        // ⚠️ **A `:diff` listing hides its markers whatever `:render` says**
+        // (#499). Everywhere else the choice is real: `**` is the writer's own
+        // text and `:render off` means 「show me what the file holds」. These
+        // four characters are not in any file — `line_changes` wrote them a
+        // moment ago to say 「this run changed」, and the colour now says the
+        // same thing better. Leaving them on would be showing the report's
+        // scaffolding, and the reader would be back to counting brackets.
+        let always = self.current_buffer().syntax() == crate::syntax::Syntax::Diff;
+        if self.wysiwyg() || always {
             let block = self.block_of(line);
             // **A conflict marker is markup too** (#249): seven brackets and
             // the space after them come off, exactly as a heading's hashes do,
@@ -1290,6 +1298,7 @@ impl Editor {
                     crate::syntax::Syntax::Typst => crate::markdown::typst::spans(&text),
                     // Nothing in the file means anything but itself.
                     crate::syntax::Syntax::Text => Vec::new(),
+                    crate::syntax::Syntax::Diff => crate::diff::spans(&text),
                 }
             })
     }
@@ -1322,8 +1331,9 @@ impl Editor {
             let want = match self.current_buffer().syntax() {
                 crate::syntax::Syntax::Markdown => '#',
                 crate::syntax::Syntax::Typst => '=',
-                // A file with no markup has its chapters found below instead.
-                crate::syntax::Syntax::Text => continue,
+                // A file with no markup has its chapters found below instead,
+                // and a `:diff` listing has no chapters at all.
+                crate::syntax::Syntax::Text | crate::syntax::Syntax::Diff => continue,
             };
             let mark = trimmed.chars().next().filter(|&c| c == want);
             let Some(mark) = mark else { continue };

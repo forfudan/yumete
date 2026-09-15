@@ -55,6 +55,63 @@ const NEW: (&str, &str) = ("{+", "+}");
 /// invisible change is the one a writer cannot check.
 const BREAK: &str = "⏎";
 
+/// The coloured runs of one line of a `:diff` listing (#499).
+///
+/// The listing is **text**, and stays text: `[-走了-]{+來了+}` is what the
+/// buffer holds, so it can be yanked, searched and read by anything that reads
+/// a file. What changes is how it is *drawn* — the four marker characters come
+/// off the page the way `**` does, and what was between them is painted 朱 or
+/// 綠. 「红色表示删除，绿色表示新增……对于修改的字加红/绿底色。」
+///
+/// Everything outside a pair is prose and gets no span, including the
+/// `yume.md:120:` the line opens with — it is a place, not a change.
+///
+/// ⚠️ **Only reached through [`crate::syntax::Syntax::Diff`]**, which nothing
+/// but the listing is given. A manuscript may perfectly well contain `[-`.
+pub fn spans(line: &str) -> Vec<crate::markdown::Span> {
+    use crate::markdown::{Kind, Span};
+    let chars: Vec<char> = line.chars().collect();
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    let mut construct = 0usize;
+    // A pair is two characters each side, and the inside may not be empty:
+    // `line_changes` never writes an empty run, and treating `[--]` as one
+    // would put a zero-width span on the page.
+    let starts = |i: usize, open: (char, char)| {
+        chars.get(i) == Some(&open.0) && chars.get(i + 1) == Some(&open.1)
+    };
+    while at < chars.len() {
+        let pair = [
+            (('[', '-'), ('-', ']'), Kind::Gone),
+            (('{', '+'), ('+', '}'), Kind::Added),
+        ]
+        .into_iter()
+        .find(|&(open, _, _)| starts(at, open));
+        let Some((_, close, kind)) = pair else {
+            at += 1;
+            continue;
+        };
+        let text = at + 2;
+        let Some(end) = (text..chars.len().saturating_sub(1))
+            .find(|&i| chars[i] == close.0 && chars[i + 1] == close.1)
+        else {
+            at += 1;
+            continue;
+        };
+        if end == text {
+            at += 1;
+            continue;
+        }
+        // Opener, the run, closer — one construct, the way `**bold**` is one.
+        out.push(Span { start: at, end: text, kind: Kind::Marker, construct });
+        out.push(Span { start: text, end, kind, construct });
+        out.push(Span { start: end, end: end + 2, kind: Kind::Marker, construct });
+        construct += 1;
+        at = end + 2;
+    }
+    out
+}
+
 /// Split `text` into the tokens the diff runs over: the words `segment` finds
 /// on each line, plus one `"\n"` between lines.
 ///
@@ -354,5 +411,75 @@ mod tests {
         let new: String = std::iter::repeat("戊己庚辛").take(2000).collect();
         let seg: &dyn Fn(&str) -> Vec<(usize, usize)> = &by_character;
         assert!(script(&tokens(&old, seg), &tokens(&new, seg)).is_none());
+    }
+}
+
+#[cfg(test)]
+mod spans_tests {
+    use super::spans;
+    use crate::markdown::Kind;
+
+    fn kinds(line: &str) -> Vec<(Kind, String)> {
+        let chars: Vec<char> = line.chars().collect();
+        spans(line)
+            .into_iter()
+            .map(|s| (s.kind, chars[s.start..s.end].iter().collect()))
+            .collect()
+    }
+
+    /// 一對括號 ＝ 開、內容、關，三段一個 construct（#499）。
+    #[test]
+    fn a_pair_is_marker_text_marker() {
+        assert_eq!(
+            kinds("[-很-]"),
+            [
+                (Kind::Marker, "[-".to_string()),
+                (Kind::Gone, "很".to_string()),
+                (Kind::Marker, "-]".to_string()),
+            ]
+        );
+        let out = spans("[-很-]");
+        assert!(out.iter().all(|s| s.construct == 0), "一對是一個 construct");
+    }
+
+    /// 兩對挨着，各是各的。
+    #[test]
+    fn a_change_is_the_old_run_then_the_new_one() {
+        let out = kinds("下[-很-]{+極+}早");
+        assert_eq!(
+            out.iter().map(|(k, _)| *k).collect::<Vec<_>>(),
+            [Kind::Marker, Kind::Gone, Kind::Marker, Kind::Marker, Kind::Added, Kind::Marker]
+        );
+        assert_eq!(out[1].1, "很");
+        assert_eq!(out[4].1, "極");
+        assert_eq!(spans("下[-很-]{+極+}早")[3].construct, 1, "第二對是第二個 construct");
+    }
+
+    /// 行首那個 `a.md:12:` 是個地點，不是改動——不着色。
+    #[test]
+    fn the_place_the_line_opens_with_is_not_a_change() {
+        assert!(kinds("a.md:12: 那年冬天。").is_empty());
+    }
+
+    /// ⚠️ **沒有配對就什麼都不是。** 半個括號、空的一對、跨不到底的開頭，都照字面
+    /// 留着——畫錯比不畫壞：一段沒關上的紅底會一路吃到行尾。
+    #[test]
+    fn half_a_pair_is_just_characters() {
+        assert!(kinds("[-沒關上").is_empty());
+        assert!(kinds("關上了-]").is_empty());
+        assert!(kinds("[--]").is_empty(), "空的一對是零寬，不畫");
+        assert!(kinds("{+沒關上").is_empty());
+    }
+
+    /// 換行畫成 `⏎`，而它也要進着色的那一段（作者 2026-09-15：「留着，带颜色」）。
+    ///
+    /// 看不見的變動正是最需要畫出來的那一種。
+    #[test]
+    fn the_break_mark_is_coloured_like_anything_else() {
+        assert_eq!(kinds("上句[-⏎-]下句"), [
+            (Kind::Marker, "[-".to_string()),
+            (Kind::Gone, super::BREAK.to_string()),
+            (Kind::Marker, "-]".to_string()),
+        ]);
     }
 }
