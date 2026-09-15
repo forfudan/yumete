@@ -426,6 +426,9 @@ pub fn run(
         });
     }
     let mut last_mode = None;
+    // The colour the terminal draws its own cursor in — ours to set, and the
+    // one thing on the screen the palette could not reach (#493).
+    let mut last_caret: Option<(u8, u8, u8)> = None;
     // An event read ahead of its turn and handed back — see [`drain_the_flick`].
     // The queue is the terminal's, not ours, and this is the one place anything
     // is ever taken out of order: the rest of a wheel gesture, read early so it
@@ -458,6 +461,25 @@ pub fn run(
         // rung for it: HEAD 815 and SELECTION 700 are already only 5% apart, so
         // a third ground between them would be a difference nobody can see. The
         // shape is free, and the terminal draws it.
+        // ⚠️ **The terminal's cursor is not painted by the palette** (#493).
+        // Horizontally the caret *is* the terminal's own — we only choose its
+        // shape — and its colour comes from the reader's terminal profile,
+        // which does not know the page turned light: 「浅色模式肉眼很难找到光标
+        // 的位置」. A white block on cream is invisible, and it is invisible
+        // exactly where the reader is typing. So the page says what colour its
+        // caret is (OSC 12), the way it already says what is on the clipboard
+        // (OSC 52) — and puts the profile's own colour back on the way out
+        // (OSC 112), because the cursor outlives the process.
+        //
+        // 縱書 does not need this: there the block is drawn *into* the page
+        // with `REVERSED`, which takes its two colours from the cell it covers
+        // and is therefore right in both moods by construction.
+        let caret = crate::theme::Palette::of(config).caret();
+        if last_caret != Some(caret) {
+            last_caret = Some(caret);
+            let (r, g, b) = caret;
+            let _ = write!(stdout(), "\x1b]12;#{r:02X}{g:02X}{b:02X}\x07");
+        }
         let shown = (editor.mode(), editor.is_extending());
         if last_mode != Some(shown) {
             let (mode, extending) = shown;
@@ -1244,6 +1266,10 @@ pub fn run(
         DisableMouseCapture,
         SetCursorStyle::DefaultUserShape
     );
+    // **Give the caret its own colour back** (#493). The cursor outlives the
+    // process, so a page that set it and did not put it back leaves the
+    // reader's shell wearing yumete's ink.
+    let _ = write!(stdout(), "\x1b]112\x07");
     if enhanced {
         if all_keys {
             let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
