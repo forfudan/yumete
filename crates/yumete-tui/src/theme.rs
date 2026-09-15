@@ -577,6 +577,21 @@ impl Palette {
     pub fn text(self) -> Color {
         self.at(rung::TEXT)
     }
+
+    /// The terminal's own caret, as three bytes for OSC 12 (#493).
+    ///
+    /// **Rung 0 — the ink itself**, which is the one thing on the page it has
+    /// to be: the block is drawn *over* a character and the character has to
+    /// stay readable against it, and the ladder's two ends are calibrated to
+    /// exactly that. It is also the only cursor colour that is right in both
+    /// moods without a second rule — white caret on a dark page, black caret
+    /// on a light one, which is what the reader asked for.
+    ///
+    /// Not a `Color`: OSC 12 wants the numbers, and `Color::Rgb` is the wrong
+    /// shape to carry them out of here.
+    pub fn caret(self) -> (u8, u8, u8) {
+        self.ladder.step(rung::TEXT)
+    }
     /// 旁註 — read it, but it is not the prose: a reading, a 拆分, a
     /// candidate's number. [`yumete_config::rung::ASIDE`].
     pub fn quiet(self) -> Color {
@@ -940,6 +955,44 @@ mod span_tests {
 
 #[cfg(test)]
 mod tests {
+
+    /// 光標在兩種模式下都看得見（#493）。
+    ///
+    /// 橫排的光標是終端機自己畫的，顏色來自使用者的終端機配置——它不知道頁面翻成了
+    /// 淺色。作者原話：「浅色模式肉眼很难找到光标的位置。」所以由頁面用 OSC 12 說。
+    #[test]
+    fn the_caret_is_the_ink_in_both_moods() {
+        let config = yumete_config::Config::default();
+        for (dark, want_light_caret) in [(true, true), (false, false)] {
+            super::set_dark(dark);
+            let palette = super::Palette::of(&config);
+            let caret = palette.caret();
+            let sum = |(r, g, b): (u8, u8, u8)| r as u32 + g as u32 + b as u32;
+            assert_eq!(
+                sum(caret) > 383 * 3 / 2,
+                want_light_caret,
+                "深色頁要淺光標，淺色頁要深光標：{caret:?}"
+            );
+            // 它蓋在字上，所以要和紙分得開——正文與紙的對比就是這一條的標準。
+            let paper = match palette.paper() {
+                ratatui::style::Color::Rgb(r, g, b) => (r, g, b),
+                other => panic!("紙不是 RGB：{other:?}"),
+            };
+            let apart = sum(caret).abs_diff(sum(paper));
+            assert!(apart > 300, "光標與紙只差 {apart}，在紙上看不見");
+        }
+        // 選區反過來：它是**底色**，所以深色頁配深灰、淺色頁配淺灰，這一半本來就
+        // 對——量在這裏，免得哪天有人「順手」把它也調成墨色。
+        super::set_dark(false);
+        let light = super::Palette::of(&config).selection();
+        super::set_dark(true);
+        let dark = super::Palette::of(&config).selection();
+        let lum = |c: ratatui::style::Color| match c {
+            ratatui::style::Color::Rgb(r, g, b) => r as u32 + g as u32 + b as u32,
+            other => panic!("選區不是 RGB：{other:?}"),
+        };
+        assert!(lum(light) > lum(dark), "淺色頁的選區要比深色頁的亮");
+    }
     use super::*;
 
     fn palette(dark: bool) -> Palette {
@@ -1245,3 +1298,4 @@ mod tests {
         assert_eq!(p.quiet(), palette(true).quiet());
     }
 }
+
