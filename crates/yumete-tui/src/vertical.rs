@@ -1162,8 +1162,7 @@ pub fn draw(
                             WordMark::Tint => style = style.bg(ink.word()),
                             WordMark::Ink => {
                                 let from = style.fg.unwrap_or(ink.text());
-                                style = style
-                                    .fg(ink.stepped(from, yumete_config::rung::WORD_INK));
+                                style = style.fg(ink.marked(from, yumete_config::rung::WORD_INK));
                             }
                         }
                     }
