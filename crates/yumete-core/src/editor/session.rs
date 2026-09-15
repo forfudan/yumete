@@ -602,7 +602,12 @@ impl Editor {
             listing.push_str(&say!("diff.line", name, change.line + 1, change.marked));
             listing.push('\n');
         }
-        self.show_listing(listing, say!("diff.results", name, against));
+        // **Its own syntax** (#499): the markers are drawn, not read.
+        self.show_listing_as(
+            listing,
+            say!("diff.results", name, against),
+            Some(crate::syntax::Syntax::Diff),
+        );
         // The count and the listing have to agree: saying "1,200 lines differ"
         // over a buffer holding 500 of them sends the reader looking for rows
         // that were never written.

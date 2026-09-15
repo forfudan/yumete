@@ -1092,8 +1092,10 @@ pub fn run(
                                 }
                             }
                             // Nothing to typeset: a file with no markup is
-                            // already what it is going to look like.
-                            yumete_core::syntax::Syntax::Text => {
+                            // already what it is going to look like, and a
+                            // `:diff` listing is a report about two of them.
+                            yumete_core::syntax::Syntax::Text
+                            | yumete_core::syntax::Syntax::Diff => {
                                 editor.set_status(say!("preview.nothing-to-preview"))
                             }
                         }
@@ -4932,6 +4934,19 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
         Kind::Highlight => Style::default().bg(ink.wash()).fg(ink.text()),
         // A footnote *is* a 朱批.
         Kind::Footnote => Style::default().fg(ink.mark()),
+        // **紅刪綠增** (#499), the one place on this page where a colour means
+        // what it means everywhere else in the world rather than what the 品色
+        // ladder says. 朱 is already 「這裏不對」 and 綠 is already 六七品, so
+        // the two ranks that were free are also the two a reader of any diff
+        // already knows. The ink says which and the ground says *where* — a
+        // changed 的 is one character wide, and one character of coloured ink
+        // in a paragraph is not findable.
+        Kind::Gone => Style::default()
+            .bg(ink.short_wash(crate::theme::Accent::Mark))
+            .fg(ink.text()),
+        Kind::Added => Style::default()
+            .bg(ink.short_wash(crate::theme::Accent::Green))
+            .fg(ink.text()),
         // Not part of the book: set back, but never hidden and never below
         // reading — a note you cannot see is a note you will not act on, and
         // this one measured 2.54:1.
@@ -7936,6 +7951,48 @@ fn squeezed(text: &str) -> String {
         super::install_detected(&mut editor, &[]);
         assert_eq!(editor.detected_word_count(), 1, "空的一條不許抹掉上一條");
         assert!(editor.joins_as_one("宇夢"), "下一個按鍵之後還在");
+    }
+
+    /// `:diff` 的改動段是**紅刪綠增**，而四個記號不在頁面上（#499）。
+    ///
+    /// 作者原話：「能不能和 git 模式一样，红色表示删除，绿色表示新增，然后对于修改
+    /// 的字加红/绿底色表示区别？」——所以驗三件事：記號撤了、兩段各有自己的底、
+    /// 兩段的底彼此不同也都不同於紙。
+    #[test]
+    fn a_diff_listing_paints_what_changed_and_shows_no_markers() {
+        let dir = std::env::temp_dir().join(format!("yumete-diff-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = dir.join("old.md");
+        std::fs::write(&old, "那年冬天，雪下得很早。\n").unwrap();
+        let new = dir.join("new.md");
+        std::fs::write(&new, "那年冬天，雪下得極早。\n").unwrap();
+
+        let mut editor = Editor::new();
+        editor.open_file(&new).unwrap();
+        editor.execute(&format!(":diff {}", old.display())).unwrap();
+
+        let config = Config::default();
+        let buf = render(&editor, &config, 60, 8);
+        let line = (0..8)
+            .map(|y| row_text(&buf, y))
+            .find(|row| row.contains('很'))
+            .expect("改動那一行在頁面上");
+        for marker in ["[-", "-]", "{+", "+}"] {
+            assert!(!line.contains(marker), "記號撤下頁面了：{line:?}");
+        }
+        assert!(line.contains('很') && line.contains('極'), "兩邊都畫：{line:?}");
+
+        let y = (0..8).position(|y| row_text(&buf, y).contains('很')).unwrap() as u16;
+        let text = row_text(&buf, y);
+        let gone = buf[(column_of(&text, "很"), y)].style().bg;
+        let added = buf[(column_of(&text, "極"), y)].style().bg;
+        let page = buf[(column_of(&text, "年"), y)].style().bg;
+        assert_ne!(gone, page, "刪掉的那一段有自己的底");
+        assert_ne!(added, page, "新增的那一段也有");
+        assert_ne!(gone, added, "而且兩種底分得開");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// 落款在提示行的右端，擠不下就沒有（#498）。

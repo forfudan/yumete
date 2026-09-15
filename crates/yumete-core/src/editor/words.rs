@@ -554,7 +554,13 @@ impl Editor {
 
     /// Whether the segmentation overlay (word background tint) is shown.
     pub fn segmentation_visible(&self) -> bool {
+        // ⚠️ **Never on a `:diff` listing** (#499). The tint alternates the ink
+        // by word, and inside a changed run that puts *two* inks on one
+        // coloured ground — the second measured 5.25:1 where the first was
+        // 7.40. A changed run is one thing and has to read as one. The listing
+        // is a report besides: there is no prose in it to be walked by word.
         self.show_segmentation
+            && self.current_buffer().syntax() != crate::syntax::Syntax::Diff
     }
 
     /// Whether the editor is in the state `need` asks for.
