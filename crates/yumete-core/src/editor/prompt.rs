@@ -55,8 +55,13 @@ impl Editor {
                     }
                     return;
                 }
-                Key::Home => return self.set_cursor(start),
-                Key::End => return self.set_cursor(end),
+                // `C-a`/`C-e` here too (#516): they are bound in Insert on a
+                // page of prose and on the `:` line, and a cell is the third
+                // place this editor takes a line of typing. Two out of three is
+                // a rule nobody can hold. **The cell's own ends**, not the
+                // file line's — inside a grid that is what 「行首」 means.
+                Key::Home | Key::Ctrl('a') => return self.set_cursor(start),
+                Key::End | Key::Ctrl('e') => return self.set_cursor(end),
                 // The same step `j` and `k` take from Normal, keeping to the
                 // column — one rule for「which cell is above this one」, not
                 // two.

@@ -3036,6 +3036,15 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
         return None;
     }
     match code {
+        // ⚠️ **`C-[` is Esc, and it is ours to give back** (#514). On a
+        // terminal with the Kitty protocol, `DISAMBIGUATE_ESCAPE_CODES` — which
+        // this editor asks for, a few hundred lines up — makes the terminal
+        // report `C-[` as a chord instead of as the escape byte it has always
+        // been. That flag buys `Esc` telling itself apart from the head of an
+        // arrow-key sequence, and it costs this: a reader for whom `C-[` has
+        // meant Esc since vi found that it meant it everywhere *except* here.
+        // The flag stays and the key is handed back.
+        KeyCode::Char('[') if modifiers.contains(KeyModifiers::CONTROL) => Some(Key::Esc),
         // Chords first: Helix binds `C-a`/`C-x` and `A-.`, and a bare control
         // character must never reach the buffer as a literal control code.
         KeyCode::Char(c) if modifiers.contains(KeyModifiers::CONTROL) => {
@@ -13584,11 +13593,13 @@ fn squeezed(text: &str) -> String {
         assert_eq!(fits(&loose), before, "back to where it was");
     }
 
+    /// 竪排的號碼是**兩位一行**的，而隔一縱換一檔把它們分開（#512）。
+    ///
+    /// ⚠️ 這一條從前叫 `..._a_digit_at_a_time`，斷言的正是相反的事：一位一行，
+    /// 理由是「密排時 `119` `118` 會讀成 `11` `11` 疊着 `9` `8`」。那個理由成立，
+    /// 而作者給了另一個解法——把**鄰居**分開，不必把號碼拉長。
     #[test]
-    fn a_zong_number_runs_down_its_own_column_a_digit_at_a_time() {
-        // Two digits to a row is half as tall, but with the 縱 packed tight
-        // there is no gap between them: 「119」「118」 came out as 「11」「11」
-        // over 「9」「8」, a wall of digits with no line number in it.
+    fn a_zong_number_is_two_digits_to_a_row_and_its_neighbour_is_a_rung_back() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         for i in 0..125 {
@@ -13604,18 +13615,27 @@ fn squeezed(text: &str) -> String {
         editor.execute("1").unwrap();
         let buffer = render_vertical(&mut editor, &config, 40, 16);
 
-        // Three rows of header for a file of three-digit lines, one digit each,
-        // and the first 縱 is numbered 1 — bottom-aligned, so its lone digit
-        // sits on the last header row.
+        // 126 lines: three digits, so **two** header rows, not three — and the
+        // numbers sit on the bottom one, the row against the text.
         let rightmost = 40 - 1;
-        assert_eq!(at(&buffer, rightmost, 2), "1", "縱 1 is numbered 1");
-        assert_eq!(at(&buffer, rightmost, 1), " ", "and nothing above it");
+        let head = 1u16;
+        let numbers: String = (0..40u16).map(|x| at(&buffer, x, head)).collect();
+        assert!(
+            numbers.ends_with("1110 9 8 7 6 5 4 3 2 1"),
+            "20 down to 1, two digits to a row: {numbers:?}"
+        );
+        assert_eq!(at(&buffer, rightmost, 0), " ", "the row above is blank");
 
-        // The 縱 beside it cannot borrow a digit: each column holds one.
-        for y in 0..3u16 {
-            let cell = at(&buffer, rightmost - 1, y);
-            assert!(cell == " " || cell.is_empty(), "the other cell of the slot: {cell:?}");
-        }
+        // 縱 12 is 「12」 — both cells of one slot, one row.
+        let x12 = rightmost - 11 * 2;
+        let pair = format!("{}{}", at(&buffer, x12 - 1, head), at(&buffer, x12, head));
+        assert_eq!(pair, "12", "two digits, one row: {pair:?}");
+
+        // …and 11 beside it is drawn a rung back, or the two would read as one
+        // run of four digits.
+        let ink11 = buffer[(rightmost - 10 * 2, head)].style().fg;
+        let ink12 = buffer[(x12, head)].style().fg;
+        assert_ne!(ink11, ink12, "neighbouring numbers are told apart by colour");
     }
 
     #[test]
@@ -14704,8 +14724,16 @@ fn squeezed(text: &str) -> String {
         let label = yumete_core::messages::say("ui.prompt-search", &[]);
         // Spaces out, because a 漢字 leaves its continuation cell blank in the
         // test backend and the label is two of them.
+        // Spaces out, because a 漢字 leaves its continuation cell blank in the
+        // test backend and the label is two of them — **and the label ends in a
+        // space of its own** (#505), so that `搜索:` and a typed `:s` do not run
+        // together.
         assert!(
-            status.replace(' ', "").starts_with(&format!("{label}b")),
+            status.replace(' ', "").starts_with(&label.replace(' ', "")),
+            "the prompt says its name: {status:?}"
+        );
+        assert!(
+            status.replace(' ', "").contains(&format!("{}b", label.trim_end())),
             "preedit missing: {status:?}"
         );
         assert!(status.contains("[中"), "language tag missing: {status:?}");
