@@ -1508,14 +1508,18 @@ const FRAME_CEILING: std::time::Duration = std::time::Duration::from_millis(500)
 
 /// Whether the IME may run for what is being typed **right now** (#225).
 ///
-/// The mode is not the whole answer in a command line. Its names are ASCII —
-/// so `:layout` is still typed straight, and lone-Shift on a command name does
-/// nothing, because there is no 中文 to type there — but its **arguments** are
-/// where a Chinese novel's file names and search patterns live. `:s/照首行/`
-/// and `:e 第三章.md` could only be pasted before this.
+/// ⚠️ **The command line is ASCII from `:` to the end** (author, 2026-09-16),
+/// arguments included. It used to permit 中文 once the caret had walked past
+/// the command's name — `:e 第三章.md` — and that was two things at once: a
+/// rule the writer had to hold in their head, and a boundary the caret crossed
+/// back and forth over, which with 模態掛起 means the system's input method is
+/// told to stand down and stand up again with every step of `←`. One line, one
+/// answer: 「命令模式完全不允許中文最好，這樣我們的 yume mode 也更加乾淨」.
 ///
-/// Not automatic on reaching an argument: `:s/[a-z]+/x/` is as common as the
-/// Chinese one, so the IME is *permitted* here rather than switched on.
+/// Nothing is lost that has nowhere else to go: `::` (命令搜索) takes 中文 and
+/// finds the command **by what it does**, the picker (`空格 f`) takes 中文 and
+/// finds the file, and `/` takes 中文 and finds the words. Those are the three
+/// places a Chinese name is actually typed.
 fn composes_here(editor: &Editor) -> bool {
     if editor.mode().composes() {
         return true;
@@ -1524,23 +1528,7 @@ fn composes_here(editor: &Editor) -> bool {
     // the next character is *text*. One line, because every gate in this file
     // asks this one question — the preedit, the panel and the lone-Shift tap
     // all light up together.
-    if editor.takes_a_character() {
-        return true;
-    }
-    if editor.mode() != Mode::Command {
-        return false;
-    }
-    // What is **before the caret**, not the whole line. Typing is done at the
-    // caret, so that is where the question is asked: on `:e 第三章.md` with the
-    // caret walked back onto `e`, the whole line says「a path」and the caret
-    // says「a command name」, and the caret is the one that is right.
-    let line = editor.command_line();
-    let caret = editor.prompt_caret();
-    let upto: String = match caret >= line.chars().count() {
-        true => line.to_string(),
-        false => line.chars().take(caret).collect(),
-    };
-    yumete_core::command::takes_text(&upto)
+    editor.takes_a_character()
 }
 
 /// Is this scheme request an answer about the **language**, as against the
@@ -14941,86 +14929,38 @@ fn squeezed(text: &str) -> String {
         }
     }
 
-    /// The command line is half ASCII and half prose (#225): its names are
-    /// commands, its arguments are a novel's file names and search patterns.
+    /// The command line takes no 中文 anywhere on it — not after the command
+    /// name, not after a bang, not in a path (author, 2026-09-16).
+    ///
+    /// The rule it replaced let the caret decide, which made the boundary a
+    /// thing `←` could step over; with 模態掛起 behind this gate, every such
+    /// step was a signal to the system's input method. One answer for the whole
+    /// line is the point, so the test walks the shapes that used to say yes.
     #[test]
-    fn the_command_line_composes_only_where_it_takes_text() {
+    fn the_command_line_never_composes() {
+        let line = |text: &str| {
+            let mut editor = Editor::new();
+            editor.on_key(Key::Char(':'));
+            for c in text.chars() {
+                editor.on_key(Key::Char(c));
+            }
+            editor
+        };
+        for text in ["", "layout ", "s/照首行", "e ", "w! ", "yume-tab ", "e 第三章.md"] {
+            let editor = line(text);
+            assert!(
+                !composes_here(&editor),
+                "`:{text}` is a command line: {:?}",
+                editor.command_line()
+            );
+        }
+        // …while the one next door still does: a second `:` is 命令搜索, which
+        // exists to be asked in 中文.
         let mut editor = Editor::new();
         editor.on_key(Key::Char(':'));
-        assert!(!composes_here(&editor), "a bare `:` is about to take a name");
-        for c in "s/照首行".chars() {
-            editor.on_key(Key::Char(c));
-        }
-        assert!(composes_here(&editor), "a substitution is prose: {:?}", editor.command_line());
-
-        let mut editor = Editor::new();
         editor.on_key(Key::Char(':'));
-        for c in "layout".chars() {
-            editor.on_key(Key::Char(c));
-        }
-        assert!(!composes_here(&editor), "`layout` takes one of its own words");
-        editor.on_key(Key::Char(' '));
-        assert!(!composes_here(&editor), "and still does after the space");
-
-        let mut editor = Editor::new();
-        editor.on_key(Key::Char(':'));
-        for c in "e ".chars() {
-            editor.on_key(Key::Char(c));
-        }
-        assert!(composes_here(&editor), "`:e 第三章.md` is a path");
-    }
-
-    /// Three ways the same question was answered wrongly, all found by the
-    /// review of #225.
-    #[test]
-    fn the_command_line_takes_text_after_a_bang_a_prefix_and_before_the_caret() {
-        // The bang belongs to the command, and `:w!` is the spelling you reach
-        // for **because** the file is already there — the one line where the
-        // path is most likely to be a chapter's Chinese name.
-        let mut editor = Editor::new();
-        editor.on_key(Key::Char(':'));
-        for c in "w! ".chars() {
-            editor.on_key(Key::Char(c));
-        }
-        assert!(composes_here(&editor), "`:w! 第三章.md` is a path too");
-
-        // A prefix of a command name is what the parser accepts, so it is
-        // what this has to accept: `:yume-tab 詞庫.txt` runs, and the walk has
-        // to reach `yume-table`'s path through the letters that were typed.
-        let mut editor = Editor::new();
-        editor.on_key(Key::Char(':'));
-        for c in "yume-tab ".chars() {
-            editor.on_key(Key::Char(c));
-        }
-        assert!(
-            composes_here(&editor),
-            "`yume-tab` is `yume-table`: {:?}",
-            editor.command_line()
-        );
-
-        // …and the question is asked at the caret. Walk back onto the command
-        // name and the IME must be out of the way again, whatever the tail of
-        // the line says.
-        let mut editor = Editor::new();
-        editor.on_key(Key::Char(':'));
-        for c in "e 第三章.md".chars() {
-            editor.on_key(Key::Char(c));
-        }
-        assert!(composes_here(&editor), "the caret is in the path");
-        for _ in 0..editor.command_line().chars().count() {
-            editor.on_key(Key::Left);
-        }
-        assert!(!composes_here(&editor), "the caret is on the command name");
-
-        // **A bang the command does not take is not stripped.** `:o!` is a
-        // spelling this editor retired outright; offering the IME for it puts
-        // a Chinese name on a line that can only end in an error.
-        let mut editor = Editor::new();
-        editor.on_key(Key::Char(':'));
-        for c in "o! 第三章.md".chars() {
-            editor.on_key(Key::Char(c));
-        }
-        assert!(!composes_here(&editor), "`:o!` is not `:open`");
+        assert_eq!(editor.mode(), Mode::Lookfor);
+        assert!(composes_here(&editor), "命令搜索 is asked in 中文");
     }
 
     #[test]

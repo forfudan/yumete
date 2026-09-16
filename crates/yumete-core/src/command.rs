@@ -87,6 +87,14 @@ pub enum WordCommand {
 pub enum Command {
     /// `:open <path>` (aliases `:o`, `:edit`, `:e`) — open a file into a buffer.
     Open(String),
+    /// `:open` with no path — the file picker, which is where a Chinese file
+    /// name is typed (2026-09-16).
+    ///
+    /// The command line takes no 中文 anywhere on it, so a path with 漢字 in it
+    /// has to be named somewhere that does. The picker is that somewhere, and
+    /// it was the better way to open a file before this was true: it completes,
+    /// it cannot be mistyped, and it shows what is actually there.
+    OpenPicker,
     /// `:new` (alias `:enew`) — create a new, empty scratch buffer.
     NewBuffer,
     /// `:write [path]` (alias `:w`) — save the current buffer, optionally to a
@@ -518,6 +526,8 @@ impl std::error::Error for CommandError {}
 /// ```
 /// use yumete_core::command::{parse, Command};
 /// assert_eq!(parse(":open notes.md"), Ok(Command::Open("notes.md".into())));
+/// // …and with nothing to open, the picker, where 中文 can be typed.
+/// assert_eq!(parse(":open"), Ok(Command::OpenPicker));
 /// assert_eq!(parse("e 日記.txt"), Ok(Command::Open("日記.txt".into())));
 /// assert_eq!(parse(":new"), Ok(Command::NewBuffer));
 /// ```
@@ -2172,7 +2182,12 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.open",
         needs: &[],
         params: &[Param::Path],
-        build: Some(|p| Ok(Command::Open(p.need(0)?.to_string()))),
+        build: Some(|p| {
+            Ok(match p.arg(0) {
+                Some(path) => Command::Open(path.to_string()),
+                None => Command::OpenPicker,
+            })
+        }),
     },
     Entry {
         name: "new",
@@ -3708,60 +3723,6 @@ pub const COMMANDS: &[Entry] = &[
     },
 ];
 
-/// Whether what is being typed **right now** is free text or a path (#225).
-///
-/// A command line's *names* are ASCII — that is why the IME was kept out of it
-/// altogether — but its **arguments are not**: `:s <正則> <換成什麼>` and
-/// `:e`/`:w`/`:r <檔名>` are exactly the two an editor for Chinese novels wants
-/// 中文 in, and until this they could only be pasted.
-///
-/// Three ways a line can be in text rather than in names:
-///
-/// * `:!…` hands the whole rest of the line to a shell, where a file name is
-///   as likely to be Chinese as anywhere else;
-/// * `:s/照首行/照全表/` is **one word** to a space-splitter, because a
-///   substitution's delimiter is whatever follows the `s` — so it is answered
-///   before the walk, or the case this feature is named after would be the one
-///   case it missed;
-/// * everything else: the finished words are walked, and what they lead to
-///   decides. Once the walk is in `Free` or `Path`, the rest of the line is
-///   too — `:grep 中文 再一個` is all pattern.
-pub fn takes_text(line: &str) -> bool {
-    let line = line.strip_prefix(':').unwrap_or(line);
-    let (_, rest) = parse_rows(line);
-    if rest.starts_with('!') {
-        return true;
-    }
-    if let Some(after) = rest.strip_prefix('s') {
-        if let Some(d) = after.chars().next() {
-            if !(d.is_alphanumeric() || d.is_whitespace() || d == '\\') {
-                return true;
-            }
-        }
-    }
-    // The word at the caret is the one being typed; what comes *before* it is
-    // what says whether it is a name or a value. A line ending in a space is
-    // already asking about the next word.
-    let mut words: Vec<&str> = line.split(' ').filter(|w| !w.is_empty()).collect();
-    if !line.ends_with(' ') {
-        words.pop();
-    }
-    let Some(head) = words.first() else {
-        // Still naming the command. `:層` names nothing and never will.
-        return false;
-    };
-    let Some(entry) = entry_named(head) else {
-        return false;
-    };
-    // **Which slot is being typed into**, which is all this has to know now:
-    // a parameter that takes a path or free text may hold 中文, and one that
-    // takes a word from a list never does.
-    matches!(
-        entry.params.get(words.len().saturating_sub(1)),
-        Some(Param::Path) | Some(Param::Free(_))
-    )
-}
-
 /// The seven commands the fold **renamed**, and where they went (§5.2.3 ④).
 ///
 /// Only seven, and only because these seven could not be computed. A command
@@ -4519,6 +4480,18 @@ mod tests {
     fn parses_open_and_aliases() {
         for cmd in [":open a.md", "open a.md", ":o a.md", ":edit a.md", "e a.md"] {
             assert_eq!(parse(cmd), Ok(Command::Open("a.md".into())), "{cmd}");
+        }
+    }
+
+    /// `:open` with nothing to open is the picker, not an error (2026-09-16).
+    ///
+    /// The command line takes no 中文 anywhere on it, and a chapter is called
+    /// 「第三章.md」, so the path has to be named somewhere that composes. Every
+    /// alias gets it, because they are the same command.
+    #[test]
+    fn open_with_no_path_is_the_picker() {
+        for cmd in [":open", ":o", ":e", ":edit", "open", "e"] {
+            assert_eq!(parse(cmd), Ok(Command::OpenPicker), "{cmd}");
         }
     }
 
@@ -5848,7 +5821,10 @@ mod tests {
     #[test]
     fn reports_errors() {
         assert_eq!(parse(":"), Err(CommandError::Empty));
-        assert_eq!(parse(":open"), Err(CommandError::MissingArgument("open")));
+        // ⚠️ **`:open` is not in this list any more** (2026-09-16): with no
+        // path it is the picker, not a missing argument. `:write-as` stands in
+        // for the shape — a command that really does need one.
+        assert_eq!(parse(":write-as"), Err(CommandError::MissingArgument("write-as")));
         assert_eq!(parse(":bogus"), Err(CommandError::Unknown("bogus".into())));
     }
     /// §5.2.3 ④: the signpost tells the truth on both sides.
