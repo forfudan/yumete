@@ -179,6 +179,9 @@ const DISOWNED: &[&str] = &[
     // old spelling is gone, and §「沒有了」 prints it beside the new one.
     ":wrap",
     ":dense",
+    // …and the leaf itself went a second time (2026-09-16): `:view-margin`
+    // asks the question it only half answered.
+    ":view-dense",
     ":bands",
     ":sentence",
     ":hanging",

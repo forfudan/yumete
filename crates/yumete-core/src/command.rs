@@ -301,9 +301,11 @@ pub enum Command {
     Search { pattern: String, by: Axis },
     /// `:table-check` — look the whole table over and list what is wrong.
     CheckTable,
-    /// `:view-dense` / `:view-dense off` — pack the 縱書 page as tight as a terminal can
-    /// (Feature #120).
-    SetDense(bool),
+    /// `:view-margin never|dense|loose|always` — whether a 縱 (or a row, across)
+    /// keeps the lane beside it for readings, hung 句讀, 着重號, 平仄 and ticks.
+    /// Bare, it says which is in force. Replaced `:view-dense` (2026-09-16); see
+    /// [`yumete_cjk::Margin`].
+    SetMargin(Option<yumete_cjk::Margin>),
     /// One 句 to a 縱 — a view of the page, not a change to the file.
     SetSentences(bool),
     /// `:render off|on|full` — how much of the result the page shows
@@ -963,8 +965,8 @@ pub struct Word {
 pub enum Need {
     /// The page runs 縱書.
     Vertical,
-    /// The page is not packed — 密排 drops the margin this needs.
-    Loose,
+    /// The margin exists — `:view-margin never` leaves nowhere to draw this.
+    Margin,
     /// A table is open.
     Table,
     /// A 碼表 has been loaded.
@@ -976,7 +978,7 @@ impl Need {
     pub fn says(self) -> String {
         match self {
             Need::Vertical => say!("need.vertical"),
-            Need::Loose => say!("need.loose"),
+            Need::Margin => say!("need.margin"),
             Need::Table => say!("need.table"),
             Need::Scheme => say!("need.scheme"),
         }
@@ -986,7 +988,7 @@ impl Need {
     pub fn how(self) -> &'static str {
         match self {
             Need::Vertical => ":layout vertical",
-            Need::Loose => ":view-dense off",
+            Need::Margin => ":view-margin dense",
             Need::Table => ":table",
             Need::Scheme => ":yume-scheme",
         }
@@ -2131,6 +2133,14 @@ fn named_panel(
 }
 
 /// The two words every switch takes — read back by [`switch`].
+/// The four margins, tightest first (`:view-margin`).
+const MARGINS: &[Word] = &[
+    Word { name: "never", help: "cmd.margins.never", needs: &[] },
+    Word { name: "dense", help: "cmd.margins.dense", needs: &[] },
+    Word { name: "loose", help: "cmd.margins.loose", needs: &[] },
+    Word { name: "always", help: "cmd.margins.always", needs: &[] },
+];
+
 const ON_OFF: &[Word] = &[
     Word {
         name: "on",
@@ -2950,15 +2960,19 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "view-dense",
+        name: "view-margin",
         aliases: &[],
-        help: "cmd.view.dense",
+        help: "cmd.view.margin",
         needs: &[],
         params: &[Param::Words {
-            of: ON_OFF,
-            default: Some("on"),
+            of: MARGINS,
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetDense(p.need(0)? == "on"))),
+        build: Some(|p| {
+            Ok(Command::SetMargin(
+                p.arg(0).and_then(yumete_cjk::Margin::parse),
+            ))
+        }),
     },
     Entry {
         name: "view-bands",
@@ -2997,7 +3011,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "view-hanging",
         aliases: &[],
         help: "cmd.view.hanging",
-        needs: &[Need::Vertical, Need::Loose],
+        needs: &[Need::Vertical, Need::Margin],
         params: &[Param::Words {
             of: ON_OFF,
             default: None,
@@ -3043,7 +3057,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "view-meter",
         aliases: &[],
         help: "cmd.view.meter",
-        needs: &[],
+        needs: &[Need::Margin],
         params: &[Param::Words {
             of: SWITCH,
             default: Some("on"),
@@ -3767,18 +3781,21 @@ const RENAMED: &[(&str, &str)] = &[
     ("appearance", "theme"),
     ("bclose", "buffer-close"),
     ("conflicts", "check-merge"),
+    // Two answers to one question it did not name; four answers now (2026-09-16).
+    ("dense", "view-margin"),
     ("note", "view-punct"),
     ("row", "table-jump"),
     ("sav", "write-as"),
     ("saveas", "write-as"),
+    ("view-dense", "view-margin"),
     ("wall", "write-all"),
 ];
 
 /// Where a word that is no longer a command went, if it went anywhere (#283).
 ///
 /// **The point of folding a table into a tree is that the leaves keep their
-/// names**, so most of this is a search rather than a record: `dense` is still
-/// spelled `dense`, one level down, and the way to find that out is to look
+/// names**, so most of this is a search rather than a record: `bands` is still
+/// spelled `bands`, one level down, and the way to find that out is to look
 /// for it. What cannot be looked up is a rename, and those are in [`RENAMED`].
 ///
 /// A prefix is tried only when nothing matches whole — `:prog` was a real
@@ -5545,11 +5562,10 @@ mod tests {
     #[test]
     fn a_space_offers_what_may_follow_the_command() {
         // The point of the whole arrangement: nobody has to remember an
-        // argument, only a verb. `:view-dense ` says what may come next.
+        // argument, only a verb. `:view-margin ` says what may come next.
         let words = |line: &str| -> Vec<&str> { complete(line).iter().map(|c| c.name).collect() };
-        assert_eq!(words("view-dense "), ["on", "off"]);
-        assert_eq!(words("view-dense o"), ["on", "off"]);
-        assert_eq!(words("view-dense of"), ["off"]);
+        assert_eq!(words("view-margin "), ["never", "dense", "loose", "always"]);
+        assert_eq!(words("view-margin l"), ["loose"]);
         assert_eq!(words("syntax "), ["markdown", "typst", "text"]);
         assert_eq!(words("layout v"), ["vertical"]);
 
@@ -5566,7 +5582,7 @@ mod tests {
         assert_eq!(complete_at("ruby ht").0, 5);
         assert_eq!(complete_at("ruby-html o").0, 10);
         // One word now, so the completion replaces the whole of it (#368).
-        assert_eq!(complete_at("view-dense").0, 0);
+        assert_eq!(complete_at("view-margin").0, 0);
 
         // A command that takes free text says what it wants rather than
         // offering a list it does not have.
@@ -5861,7 +5877,7 @@ mod tests {
     #[test]
     fn a_word_that_moved_under_a_parent_says_where_it_went() {
         for (word, sent_to) in [
-            ("dense", "`:view-dense`"),
+            ("bands", "`:view-bands`"),
             ("hanging", "`:view-hanging`"),
             ("preview", "`:view-preview`"),
             ("progress", "`:count-progress`"),

@@ -52,7 +52,7 @@ pub use segment::{
 pub use vertical::{
     hangs_in_the_margin, margin_form, narrow_form, opens_a_pair, vertical_form,
     vertical_grapheme, Layout,
-    DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH,
+    DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, Margin,
 };
 pub use width::{
     ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width,

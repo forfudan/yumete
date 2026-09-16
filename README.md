@@ -72,7 +72,7 @@ $ yumete --shot=22x18 -v --keys=':ruby full\n:view-hanging force\n' 記.md
 Around that: **首行縮進** (a paragraph opens two squares in — as a *view*, so
 the file keeps the blank line Markdown needs), **段組** (a tall page halved into
 bands read top-right to top-left, then bottom-right to bottom-left, the way a
-文庫本 is set), 圈點 in that same margin, `:view-dense` for a page that spends
+文庫本 is set), 圈點 in that same margin, `:view-margin never` for a page that spends
 every column on writing, and 禁則處理 in both directions — a column never opens
 with 。 or closes with 「. 稿紙 ticks (`paper_ticks`) and 縦中横
 (`tatechuyoko`, which turns `yume` sideways into two syllables that are not

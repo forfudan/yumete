@@ -694,20 +694,21 @@ fn taking_back_a_word_stays_inside_its_cell() {
 
 #[test]
 fn a_packed_page_still_says_where_a_paragraph_begins() {
-    // `:view-dense` is the default page, so masking the indent under it made
-    // 首行縮進 invisible out of the box. The three things `:view-dense` drops
-    // each cost a *column*; the indent costs two squares, and it is what
-    // replaces the blank line — which costs a whole 縱.
+    // A packed page was the default page, so masking the indent under it made
+    // 首行縮進 invisible out of the box. What `:view-margin never` drops each
+    // costs a *column*; the indent costs two squares, and it is what replaces
+    // the blank line — which costs a whole 縱.
     let mut ed = Editor::new();
     ed.set_layout(crate::zong::Layout::Vertical);
     ed.set_indent(2);
-    ed.set_dense(true);
+    ed.set_margin(yumete_cjk::Margin::Never);
     assert_eq!(ed.paragraph_indent(), 2);
     let nothing = |_: usize| Vec::new();
     let never = |_: usize| false;
     let bare = |_: usize| Vec::new();
-    assert_eq!(ed.grid_with(&nothing, &never, &bare).indent, 2);
-    assert!(ed.ruby().is_empty(), "…while the reading column still goes");
+    let grid = ed.grid_with(&nothing, &never, &bare);
+    assert_eq!(grid.indent, 2);
+    assert!(!grid.readings, "…while the reading column still goes");
 }
 
 #[test]
@@ -749,28 +750,65 @@ fn the_blank_line_an_indent_replaces_comes_off_the_page() {
     assert!(!ed.line_is_folded(1));
 }
 
+/// `:view-margin never` lays no reading out — but it still **reads** the ruby
+/// markup, so the tags stay off the page and the base is where it belongs.
+/// `:view-dense` hid readings by turning the dialects off, which put the
+/// `<ruby>…<rt>…</rt></ruby>` source on the page.
 #[test]
-fn a_packed_page_does_not_pay_for_a_reading_column() {
-    // `:view-dense` says in its own doc comment, and in the manual's table,
-    // that it drops the reading column. It did not: the mask was on the
-    // hung 句讀 and not on the readings, so a packed page still reserved
-    // two cells a 縱 for a column it was not drawing.
+fn no_margin_lays_out_no_reading_but_still_reads_the_markup() {
+    use yumete_cjk::Margin;
+    let text = "<ruby>永<rt>ㄩㄥˇ</rt></ruby>和";
     let mut ed = Editor::new();
+    assert_eq!(ed.margin(), Margin::Dense, "dense out of the box");
     ed.set_layout(crate::zong::Layout::Vertical);
-    assert!(!ed.ruby().is_empty(), "readings are laid out by default");
-    ed.set_dense(true);
-    assert!(ed.ruby().is_empty(), "a packed 縱書 page lays out none");
-    // …but a horizontal page pays no width for one, so packing takes
-    // nothing away there.
-    ed.set_layout(crate::zong::Layout::Horizontal);
-    assert!(!ed.ruby().is_empty(), "橫排 is not what 密排 packs");
-    ed.set_layout(crate::zong::Layout::Vertical);
-    assert!(
-        !ed.ruby_configured().is_empty(),
-        "but nothing was turned off — `:view-dense off` gives them back"
-    );
-    ed.set_dense(false);
-    assert!(!ed.ruby().is_empty());
+    let slots = |ed: &Editor| {
+        let nothing = |_: usize| Vec::new();
+        let never = |_: usize| false;
+        let bare = |_: usize| Vec::new();
+        let grid = ed.grid_with(&nothing, &never, &bare);
+        crate::zong::line_slots_in(text, grid, &[])
+    };
+    assert!(slots(&ed).iter().any(|s| s.ruby.is_some()), "a reading down the margin");
+    ed.set_margin(Margin::Never);
+    assert!(!ed.ruby().is_empty(), "the markup is still read");
+    let bare = slots(&ed);
+    assert!(bare.iter().all(|s| s.ruby.is_none()), "…but no reading is dealt out");
+    let drawn: String = bare.iter().map(|s| s.text.clone()).collect();
+    assert!(!drawn.contains('<') && drawn.contains('永'), "tags off, base on: {drawn:?}");
+    assert_eq!(bare.len(), 2, "one square each for 永 and 和: {drawn:?}");
+}
+
+/// The gap between 縱 is its own setting: no margin answer touches it. It was
+/// one of `:view-dense`'s five jobs, which forced it to nothing.
+#[test]
+fn the_gap_between_columns_is_not_the_margin() {
+    use yumete_cjk::Margin;
+    let mut ed = Editor::new();
+    assert_eq!(ed.zong_gap(), None, "the config's, until the writer sets one");
+    for margin in Margin::ALL {
+        ed.set_margin(margin);
+        assert_eq!(ed.zong_gap(), None, "{margin:?}");
+    }
+    assert_eq!(yumete_cjk::DEFAULT_ZONG_GAP, 0, "the page it always drew");
+}
+
+/// Four words and nothing else, and the bare command says which is in force.
+#[test]
+fn view_margin_takes_four_words_and_reports_bare() {
+    use yumete_cjk::Margin;
+    let mut ed = Editor::new();
+    for margin in Margin::ALL {
+        assert!(ed.execute(&format!(":view-margin {}", margin.name())).is_ok());
+        assert_eq!(ed.margin(), margin);
+    }
+    ed.execute(":view-margin").unwrap();
+    assert_eq!(ed.margin(), Margin::Always, "bare changes nothing");
+    assert!(ed.status().contains("總是"), "{}", ed.status());
+    // The old two-way words are not synonyms: whatever `off` answers, it does
+    // not quietly pick one of the middle two.
+    let _ = ed.execute(":view-margin off");
+    assert_eq!(ed.margin(), Margin::Always);
+    assert!(ed.execute(":view-dense").is_err(), "the old name is gone");
 }
 
 #[test]
@@ -1150,17 +1188,17 @@ fn a_command_says_what_it_is_waiting_for() {
     // nobody read: the setting said 「開」, the page did not change, and
     // there was nowhere to find out why.
     let mut ed = Editor::new();
-    ed.set_dense(true);
+    ed.set_margin(yumete_cjk::Margin::Never);
     ed.execute(":view-hanging on").unwrap();
     assert!(!ed.hanging_punctuation(), "{}", ed.status());
     let said = ed.status().to_string();
-    assert!(said.contains("竪排") && said.contains("密排關"), "{said}");
+    assert!(said.contains("竪排") && said.contains("邊欄不是 never"), "{said}");
     assert!(said.contains("force"), "{said}");
 
     // …and `force` brings the prerequisites about, in one line.
     ed.execute(":view-hanging on force").unwrap();
     assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
-    assert!(!ed.dense());
+    assert!(ed.margin().shown());
     assert!(ed.hanging_punctuation(), "{}", ed.status());
 
     // A command whose needs are met says nothing about them.
@@ -4821,12 +4859,12 @@ fn a_locked_buffer_refuses_every_way_in() {
 #[test]
 fn hanging_punctuation_listens_to_the_word_it_is_given() {
     let mut ed = typed("「春」。\n");
-    // 旁置 is a 竪排 word and says so (`Need::Vertical`, `Need::Loose`);
+    // 旁置 is a 竪排 word and says so (`Need::Vertical`, `Need::Margin`);
     // asked on a 橫排 page it answers 「還不行，需要：竪排」 and changes
     // nothing, which would make every assertion below pass for the wrong
     // reason.
     assert!(ed.execute("layout vertical").is_ok());
-    assert!(ed.execute("view-dense off").is_ok());
+    assert!(ed.execute("view-margin dense").is_ok());
     for _ in 0..2 {
         assert!(ed.execute("view-hanging off").is_ok());
         assert!(!ed.hanging, "`:view-hanging off` turned it on: {}", ed.status());

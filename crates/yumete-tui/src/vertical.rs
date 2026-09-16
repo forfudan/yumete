@@ -91,6 +91,8 @@ struct Margin {
     /// not — so that the 縱 do not change width as a poem scrolls past a line
     /// with no 漢字 on it.
     tone: bool,
+    /// `:view-margin always`: the lane is kept whether or not anything is in it.
+    forced: bool,
 }
 
 /// The screen geometry of a vertically laid-out page.
@@ -117,6 +119,8 @@ pub struct Metrics {
     /// every 縱 — including the rightmost, which otherwise sits flush against
     /// the edge and would have nowhere to put a tick.
     pub ticks: bool,
+    /// Which 縱 keep the margin lane (`:view-margin`).
+    pub margin: yumete_cjk::Margin,
     /// How many bands the page is divided into (段組).
     ///
     /// Japanese vertical typesetting halves a tall page and uses the width
@@ -143,7 +147,7 @@ impl Metrics {
             hanging,
             measure,
             gap,
-            dense,
+            margin,
             bands,
         } = look;
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
@@ -181,9 +185,9 @@ impl Metrics {
             ruby,
             hanging,
             ruby_width: 1,
-            // Ticks cost the column a 縱's reading would have used, so a page
-            // packed tight has none: that column is the whole point.
-            ticks: config.editor.paper_ticks > 0 && !dense,
+            // Ticks live in the lane; with no lane there is nowhere to rule.
+            ticks: config.editor.paper_ticks > 0 && margin.shown(),
+            margin,
             bands,
             band_height,
         }
@@ -214,7 +218,13 @@ impl Metrics {
             true => yumete_cjk::char_width(PING) as u16,
             false => 0,
         };
-        reading.max(u16::from(self.ticks)).max(dot).max(tone)
+        // `always`: the lane is there empty, as wide as a reading on this page
+        // would make it, so a reading arriving does not move the page.
+        let forced = match margin.forced {
+            true => self.ruby_width,
+            false => 0,
+        };
+        reading.max(u16::from(self.ticks)).max(dot).max(tone).max(forced)
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
@@ -268,7 +278,7 @@ pub fn char_at(
         &metrics,
         area,
         capacity,
-        &|line| markup.dotted(line),
+        &|line, from, to| markup.dotted(line, from, to),
         editor.meter_drawn(),
     );
 
@@ -363,12 +373,13 @@ impl<'a> Markup<'a> {
         }
     }
 
-    /// Whether this line has a `*emphasis*` on it, and so needs the cell beside
-    /// its 縱 for the 着重號 (Feature #236).
-    fn dotted(&self, line: usize) -> bool {
-        self.runs(line)
-            .iter()
-            .any(|r| r.kind == yumete_core::markdown::Kind::Emphasis)
+    /// Whether chars `from..to` of this line carry a `*emphasis*`, and so need
+    /// the cell beside their 縱 for the 着重號 (Feature #236). The whole line is
+    /// `0..usize::MAX`, which is what `:view-margin loose` asks.
+    fn dotted(&self, line: usize, from: usize, to: usize) -> bool {
+        self.runs(line).iter().any(|r| {
+            r.kind == yumete_core::markdown::Kind::Emphasis && r.end > from && r.start < to
+        })
     }
 }
 
@@ -381,7 +392,7 @@ fn layout_page(
     metrics: &Metrics,
     area: Rect,
     capacity: usize,
-    dotted: &dyn Fn(usize) -> bool,
+    dotted: &dyn Fn(usize, usize, usize) -> bool,
     metered: bool,
 ) -> Page {
     let zongs = zong::zongs_from(rope, anchor, grid, capacity);
@@ -389,18 +400,65 @@ fn layout_page(
         .iter()
         .map(|z| zong::zong_slots(rope, z, grid))
         .collect();
-    // What each 縱 needs the cell to its right for. A 着重號 is asked for by
-    // **line** rather than by 縱: a paragraph broken across three 縱 reserves the
-    // cell in all three, which costs a cell only on the rightmost 縱 of the page
-    // — every other one borrows the gap it already had — and in exchange the
-    // page does not change shape as it is scrolled through.
+    // What each 縱 needs the cell to its right for — asked the way
+    // `:view-margin` says (see [`yumete_cjk::Margin`]):
+    //
+    // * `dense` asks **this 縱**: a paragraph folded into three 縱 with one
+    //   reading in the first buys the cell for the first alone. What the author
+    //   asked for first — 「只對存在注釋的視覺縱出現」 — and the page it costs
+    //   is one whose 縱 are not all the same width.
+    // * `loose` asks **the paragraph**: any 縱 of it carrying something buys
+    //   the cell for all of them. This is how a 着重號 was always asked, for
+    //   the reason still worth having — the page does not change shape as it
+    //   scrolls through a paragraph — and now readings can be asked it too.
+    // * `never` asks nothing; `always` keeps the cell empty.
+    //
+    // A paragraph's other 縱 may be off the page, so `loose` lays the whole
+    // paragraph out once per paragraph on the page to ask. Bounded by the page:
+    // a page shows a handful of paragraphs.
+    let mode = metrics.margin;
+    let mut whole: std::collections::HashMap<usize, bool> = std::collections::HashMap::new();
+    let mut paragraph_carries = |line: usize| -> bool {
+        *whole.entry(line).or_insert_with(|| {
+            let count = zong::zong_count_in_line(rope, line, grid);
+            zong::zongs_from(rope, zong::Anchor { line, index_in_line: 0 }, grid, count)
+                .iter()
+                .take_while(|z| z.line == line)
+                .any(|z| {
+                    zong::zong_slots(rope, z, grid)
+                        .iter()
+                        .any(|r| r.ruby.is_some() || r.mark.is_some())
+                })
+        })
+    };
     let margins: Vec<Margin> = zongs
         .iter()
         .zip(&slots)
-        .map(|(z, rows)| Margin {
-            reading: rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some()),
-            dot: dotted(z.line),
-            tone: metered,
+        .map(|(z, rows)| {
+            let own = rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some());
+            let base = rope.line_to_char(z.line);
+            let own_dot = dotted(z.line, z.start - base, z.end - base);
+            match mode {
+                yumete_cjk::Margin::Never => Margin::default(),
+                yumete_cjk::Margin::Dense => Margin {
+                    reading: own,
+                    dot: own_dot,
+                    tone: metered,
+                    forced: false,
+                },
+                yumete_cjk::Margin::Loose => Margin {
+                    reading: own || paragraph_carries(z.line),
+                    dot: dotted(z.line, 0, usize::MAX),
+                    tone: metered,
+                    forced: false,
+                },
+                yumete_cjk::Margin::Always => Margin {
+                    reading: own,
+                    dot: own_dot,
+                    tone: metered,
+                    forced: true,
+                },
+            }
         })
         .collect();
     // Measured from the page itself: one full-width reading anywhere on it
@@ -468,7 +526,7 @@ pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
     match mode {
         LineNumbers::None => 0,
         // One row per digit. Two digits to a row packed twice as short, but
-        // with the 縱 packed tight (`:view-dense`) there is no gap between them and
+        // with the 縱 packed tight (no gap, the factory page) there is nothing between them and
         // 「119」「118」 ran together into 「11」「11」 over 「9」「8」 — a wall of
         // digits nobody can read a line number out of. One digit to a row
         // cannot merge with its neighbour, because there is nothing beside it.
@@ -503,15 +561,15 @@ pub struct Look {
     pub measure: Option<usize>,
     /// The gap between 縱 the writer asked for, if any.
     pub gap: Option<usize>,
-    /// Whether the page is packed as tight as a terminal allows.
-    pub dense: bool,
+    /// Which 縱 keep the margin lane (`:view-margin`).
+    pub margin: yumete_cjk::Margin,
     /// How many bands the page is divided into (段組).
     pub bands: usize,
 }
 
 impl Look {
     /// Ask the editor. The flags come from *it*, not from the config: `:ruby-off`,
-    /// `:view-hanging` and `:view-dense` change them at runtime, and a page laid out from
+    /// `:view-hanging` and `:view-margin` change them at runtime, and a page laid out from
     /// the config would disagree with the grid the cursor moves on.
     pub fn of(editor: &Editor) -> Look {
         Look {
@@ -519,7 +577,7 @@ impl Look {
             hanging: editor.hanging_punctuation(),
             measure: editor.measure(),
             gap: editor.zong_gap(),
-            dense: editor.dense(),
+            margin: editor.margin(),
             bands: editor.bands(),
         }
     }
@@ -745,7 +803,7 @@ pub fn draw(
         &metrics,
         area,
         capacity,
-        &|line| markup.dotted(line),
+        &|line, from, to| markup.dotted(line, from, to),
         editor.meter_drawn(),
     );
     let visible = page.len().max(1);
@@ -776,7 +834,7 @@ pub fn draw(
                 &metrics,
                 area,
                 capacity,
-                &|line| markup.dotted(line),
+                &|line, from, to| markup.dotted(line, from, to),
                 editor.meter_drawn(),
             );
             zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
@@ -1011,6 +1069,10 @@ pub fn draw(
             // for this line — but `has_margin` is still asked, because a page
             // one 縱 wide has run out of width before it could.
             let emphasised = has_margin
+                // …and only where this 縱 bought the lane: with `:view-margin
+                // never` (or a `dense` 縱 whose own text has no emphasis) the
+                // cell to the right is the next 縱's.
+                && placed.margin_cells > 0
                 && !row.text.is_empty()
                 && runs.iter().any(|r| {
                     r.kind == yumete_core::markdown::Kind::Emphasis

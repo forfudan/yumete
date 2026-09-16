@@ -31,9 +31,76 @@ pub const DEFAULT_ZONG_LENGTH: usize = 32;
 
 /// The default gap between two 縱, in half-width cells.
 ///
-/// One half-width cell against the two-cell 縱 gives a spacing of half an em —
-/// enough to keep them apart without the airy feel of a full em.
-pub const DEFAULT_ZONG_GAP: usize = 1;
+/// ⚠️ **Zero, and it always was on the page.** This said 1 while `:view-dense`
+/// was on out of the box and forced the gap to nothing, so the factory page
+/// never had one and the constant described a page nobody saw. When the gap
+/// stopped being one of `dense`'s five jobs (2026-09-16, [`Margin`]) the
+/// constant had to start telling the truth, or the factory page would have
+/// widened by a cell a 縱 on the day it changed name. A 縱 that carries
+/// something in its margin still buys that cell for itself — see `place`.
+pub const DEFAULT_ZONG_GAP: usize = 0;
+
+/// Whether each 縱 — or each row, across — keeps the narrow lane beside it for
+/// what is written *about* the text: readings, hung 句讀, 着重號, 平仄 and the
+/// 稿紙 ticks (`:view-margin`, 2026-09-16).
+///
+/// **One question, four answers, both layouts.** It replaced `:view-dense`,
+/// which was two answers to a question it did not name and meant different
+/// things across and down: packed down the page it hid the margin, packed
+/// across it *removed air* — and in each layout it covered a different pair of
+/// the four. From tightest to loosest:
+///
+/// | | 縱書 | 橫排 |
+/// | --- | --- | --- |
+/// | `never` | no lane, whatever is written | no reading row, whatever is written |
+/// | `dense` | a 縱 buys the lane if **it** carries something | a row buys the row above if **it** does |
+/// | `loose` | every 縱 of a paragraph buys it if **any** of them does | every row of a line, likewise |
+/// | `always` | every 縱 | a row of air above every row |
+///
+/// `dense` is the factory setting — the author's first framing, 「只對存在注釋
+/// 的**視覺**縱出現」. `loose` is what the page did for 着重號 before, and the
+/// reason given then still holds for anyone who prefers it: a paragraph does
+/// not change width as it is scrolled through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Margin {
+    /// Never kept. The margin's contents are suppressed, not switched off —
+    /// `:ruby` and `:view-hanging` still say what was asked for.
+    Never,
+    /// Kept per visual 縱 / row that carries something.
+    #[default]
+    Dense,
+    /// Kept for every 縱 / row of a paragraph if any of it carries something.
+    Loose,
+    /// Kept everywhere.
+    Always,
+}
+
+impl Margin {
+    /// All four, tightest first — the order `:view-margin` lists them in.
+    pub const ALL: [Margin; 4] = [Margin::Never, Margin::Dense, Margin::Loose, Margin::Always];
+
+    /// The word for it, as the config and the command spell it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Margin::Never => "never",
+            Margin::Dense => "dense",
+            Margin::Loose => "loose",
+            Margin::Always => "always",
+        }
+    }
+
+    /// Read the word back. **No synonyms**: `on`/`off` belonged to the old
+    /// two-way switch and would say nothing about which of the middle two.
+    pub fn parse(word: &str) -> Option<Margin> {
+        Margin::ALL.into_iter().find(|m| m.name() == word.trim())
+    }
+
+    /// Whether the lane exists at all — what `:view-hanging` and `:view-meter`
+    /// need before they have anywhere to draw.
+    pub fn shown(self) -> bool {
+        self != Margin::Never
+    }
+}
 
 /// The layout the editor arranges text in (Feature #61).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

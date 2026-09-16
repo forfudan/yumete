@@ -111,6 +111,7 @@ impl Editor {
             .with_folds(folded)
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
+            .with_readings(self.margin.shown())
             .with_sentences(self.sentences)
             .with_drawn(drawn)
     }
@@ -248,12 +249,12 @@ impl Editor {
 
     /// How many squares open a paragraph, as the page is drawn.
     ///
-    /// **Not** masked by `:view-dense`, unlike the readings, the hung 句讀 and the
-    /// ticks. Those three each cost a *column* — the width `:view-dense` exists to
-    /// win back. The indent costs two squares at the head of a paragraph, and
-    /// it is the one thing on a packed page that says where a paragraph
-    /// begins: it is what replaces the blank line, which costs a whole 縱.
-    /// Masking it made the feature invisible on the default page.
+    /// **Not** masked by `:view-margin never`, unlike the readings, the hung 句讀
+    /// and the ticks. Those each cost a *column* beside the 縱 — the lane that
+    /// setting is about. The indent costs two squares at the head of a
+    /// paragraph, and it is the one thing on a packed page that says where a
+    /// paragraph begins: it is what replaces the blank line, which costs a
+    /// whole 縱.
     pub fn paragraph_indent(&self) -> usize {
         self.indent
     }
@@ -291,7 +292,7 @@ impl Editor {
 
     /// Whether 句讀 hang in the margin beside the character they follow.
     pub fn hanging_punctuation(&self) -> bool {
-        self.hanging && !self.dense
+        self.hanging && self.margin.shown()
     }
 
     /// Set whether 句讀 hang in the margin, returning the new state.
@@ -307,28 +308,21 @@ impl Editor {
 
     /// Which ruby dialects are being laid out **on the page as it is drawn**.
     ///
-    /// Masked by `:view-dense`, the same way [`Self::hanging_punctuation`] is and
-    /// for the same reason: packing the page *suppresses* the reading column,
-    /// it does not turn readings off. `:view-dense` said it dropped the column in
-    /// its own doc comment and in the manual's table, and did not — so a
-    /// packed page kept paying two cells a 縱 for readings it was not drawing.
+    /// **Not** masked by `:view-margin never`. The dialects decide whether the
+    /// markup is *read* — tags off the page, base where it belongs — and a page
+    /// with no margin still reads it; what it does not do is lay the reading
+    /// out, which is [`crate::zong::Grid::readings`] down the page and the row
+    /// above not being bought across it. Masking the dialects instead, which is
+    /// what `:view-dense` did, left the `<ruby>…<rt>…</rt></ruby>` source on the
+    /// page for anybody to read.
     ///
-    /// The configured set — what `:ruby` reports and what `:view-dense off` gives
-    /// back — is [`Self::ruby_configured`].
+    /// The configured set, whatever `:ruby-html` and friends say about drawing
+    /// them, is [`Self::ruby_configured`].
     pub fn ruby(&self) -> Dialects {
-        // …and only where 密排 costs anything. It packs the *縱書* page: the
-        // reading column is a column off every 縱's width. A horizontal page
-        // pays no width for a reading — the row above is only taken where
-        // there is one — so there is nothing for packing to win there, and
-        // masking it would mean 橫排 could never show a reading at all, since
-        // 密排 is the default page.
         if !self.ruby_drawn {
             return Dialects::NONE;
         }
-        match self.dense && self.layout == Layout::Vertical {
-            true => Dialects::NONE,
-            false => self.ruby,
-        }
+        self.ruby
     }
 
     /// The dialects the writer asked for, whatever the page is doing with them.

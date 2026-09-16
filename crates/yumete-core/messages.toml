@@ -1184,6 +1184,34 @@ en = "vertical, 縱 running from the right"
 find = "竖排 竪排 直排 縱書 纵书 tategaki vertical"
 
 [[message]]
+# `:view-margin` 可选的一档：always
+key = "cmd.margins.always"
+zht = "總是：每一縱、每一行都留"
+zhs = "总是：每一纵、每一行都留"
+en = "always: every column and every row"
+
+[[message]]
+# `:view-margin` 可选的一档：dense（出厂）
+key = "cmd.margins.dense"
+zht = "按視覺縱／行：誰有東西誰留（出廠）"
+zhs = "按视觉纵／行：谁有东西谁留（出厂）"
+en = "dense: each column or row that carries something (default)"
+
+[[message]]
+# `:view-margin` 可选的一档：loose
+key = "cmd.margins.loose"
+zht = "按邏輯行：一段裏有就整段留"
+zhs = "按逻辑行：一段里有就整段留"
+en = "loose: a whole paragraph, if any of it carries something"
+
+[[message]]
+# `:view-margin` 可选的一档：never
+key = "cmd.margins.never"
+zht = "從不：再有注音也不留"
+zhs = "从不：再有注音也不留"
+en = "never: no lane, whatever is written"
+
+[[message]]
 # : 命令選單裏 footnote 那一項的說明（markdown-bits 組）
 key = "cmd.markdown-bits.footnote"
 zht = "腳注：號碼自己找空的，註也一併開好"
@@ -1251,7 +1279,7 @@ zhs = "没有「{0}」这个命令"
 en = "no such command as '{0}'"
 
 [[message]]
-# 打了一個不存在的命令，而那個名字現在住在別的命令下面（`:dense` 之於 `:view-dense`）
+# 打了一個不存在的命令，而那個名字現在住在別的命令下面（`:hanging` 之於 `:view-hanging`）
 key = "cmd.no-such-command-but"
 zht = "沒有「{0}」這個命令；你要的是 {1}"
 zhs = "没有「{0}」这个命令；你要的是 {1}"
@@ -1798,14 +1826,6 @@ en = "bands: divide the vertical page across — top right to top left, then bot
 find = "段組 段组 分欄 分栏 bands columns"
 
 [[message]]
-# : 命令選單裏 dense 那一項的說明（view 組）
-key = "cmd.view.dense"
-zht = "密排／疏排：竪排是縱與縱之間，橫排是行與行之間"
-zhs = "密排／疏排：竖排是纵与纵之间，横排是行与行之间"
-en = "tight or loose: between columns in 竪排, between rows in 橫排"
-find = "疏排 密排 行距 間距 间距 spacing leading"
-
-[[message]]
 # : 命令選單裏 focus 那一項的說明（view 組）
 key = "cmd.view.focus"
 zht = "焦點：正在寫的那一段留在紙上，其餘的退後一級"
@@ -1828,6 +1848,14 @@ zht = "光標旁邊那個小牌子：不畫、藥丸、帶框的面板"
 zhs = "光标旁边那个小牌子：不画、药丸、带框的面板"
 en = "the little sign beside the caret: nothing, a pill, a bordered panel"
 find = "提示 光標 光标 面板 藥丸 药丸 hud"
+
+[[message]]
+# `:` 命令選單裏 margin 那一項的說明（view 組）
+key = "cmd.view.margin"
+zht = "邊欄：注音、旁置標點、着重號、平仄那一格留不留"
+zhs = "边栏：注音、旁置标点、着重号、平仄那一格留不留"
+en = "margin: the lane for readings, hung marks, emphasis dots and 平仄"
+find = "邊欄 边栏 行間 行间 疏排 密排 注音 着重號 着重号 平仄 margin dense loose spacing"
 
 [[message]]
 # : 命令選單裏 meter 那一項的說明（view 組）
@@ -3394,11 +3422,11 @@ zhs = "标点旁置：句读挂到字旁边"
 en = "hanging punctuation: 句讀 sit beside the character"
 
 [[message]]
-# 竪排幫助：疏排
-key = "help.vertical.loose"
-zht = "疏排：每縱之間留一格"
-zhs = "疏排：每纵之间留一格"
-en = "loose setting: a cell of air between columns"
+# 竪排幫助：邊欄
+key = "help.vertical.margin"
+zht = "邊欄：每一縱旁邊都留一格"
+zhs = "边栏：每一纵旁边都留一格"
+en = "margin: a lane beside every column"
 
 [[message]]
 # 竪排幫助：上一縱／下一縱
@@ -4761,20 +4789,6 @@ zhs = "段组：一段（整页一纵到底）"
 en = "bands: one — a 縱 runs the whole page"
 
 [[message]]
-# 密排關掉
-key = "layout.dense-off"
-zht = "密排：關"
-zhs = "密排：关"
-en = "dense: off"
-
-[[message]]
-# 密排打開
-key = "layout.dense-on"
-zht = "密排：一縱兩格，無注音、無旁置、無刻度"
-zhs = "密排：一纵两格，无注音、无旁置、无刻度"
-en = "dense: two squares to a 縱, no readings, no hung marks, no ticks"
-
-[[message]]
 # :indent full — 縮進畫出來，段間的空行也收起
 key = "layout.first-line-indent-folded"
 zht = "首行縮進：{0} 格，段間空行收起"
@@ -4852,11 +4866,32 @@ zhs = "行号：无底"
 en = "line numbers: on the page"
 
 [[message]]
-# 疏排：每行之間留一行
-key = "layout.loose"
-zht = "疏排：每行之間留一行"
-zhs = "疏排：每行之间留一行"
-en = "loose: a row of air between rows"
+# `:view-margin always`
+key = "layout.margin-always"
+zht = "邊欄：總是——每一縱、每一行都留"
+zhs = "边栏：总是——每一纵、每一行都留"
+en = "margin: always — every column and every row"
+
+[[message]]
+# `:view-margin dense`
+key = "layout.margin-dense"
+zht = "邊欄：按視覺縱——哪一縱（行）有東西，哪一縱（行）纔留"
+zhs = "边栏：按视觉纵——哪一纵（行）有东西，哪一纵（行）才留"
+en = "margin: dense — only a column or row that carries something"
+
+[[message]]
+# `:view-margin loose`
+key = "layout.margin-loose"
+zht = "邊欄：按邏輯行——一段裏有一處，整段都留"
+zhs = "边栏：按逻辑行——一段里有一处，整段都留"
+en = "margin: loose — a whole paragraph, if any of it carries something"
+
+[[message]]
+# `:view-margin never`
+key = "layout.margin-never"
+zht = "邊欄：從不——注音、旁置標點、着重號、平仄都不擺"
+zhs = "边栏：从不——注音、旁置标点、着重号、平仄都不摆"
+en = "margin: never — no readings, hung marks, emphasis dots or 平仄"
 
 [[message]]
 # :measure 定了欄寬
@@ -4913,13 +4948,6 @@ key = "layout.note-on"
 zht = "標點提示：開（半角標點與 ... 旁邊畫出該用的那一個）"
 zhs = "标点提示：开（半角标点与 ... 旁边画出该用的那一个）"
 en = "notes: on (the mark a half-width one should have been, beside it)"
-
-[[message]]
-# 密排：行貼着行
-key = "layout.tight"
-zht = "密排：行貼着行"
-zhs = "密排：行贴着行"
-en = "tight: rows against rows"
 
 [[message]]
 # 打字機模式關掉
@@ -5074,11 +5102,11 @@ en = "paste: what has been taken"
 # ── need ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 一條要求關掉密排的命令被攔住時，數出來的那一項
-key = "need.loose"
-zht = "密排關"
-zhs = "密排关"
-en = "dense off"
+# 一條要邊欄的命令（`:view-hanging`、`:view-meter`）在 `never` 下被攔住時，數出來的那一項
+key = "need.margin"
+zht = "邊欄不是 never"
+zhs = "边栏不是 never"
+en = "a margin (not never)"
 
 [[message]]
 # 一條要先有碼表的命令被攔住時，數出來的那一項

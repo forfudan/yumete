@@ -582,7 +582,7 @@ impl Editor {
     pub(super) fn meets(&self, need: command::Need) -> bool {
         match need {
             command::Need::Vertical => self.layout == Layout::Vertical,
-            command::Need::Loose => !self.dense,
+            command::Need::Margin => self.margin.shown(),
             command::Need::Table => self.table_here(),
             command::Need::Scheme => self.ime_available,
         }
@@ -592,7 +592,7 @@ impl Editor {
     pub(super) fn satisfy(&mut self, need: command::Need) {
         match need {
             command::Need::Vertical => self.set_layout(Layout::Vertical),
-            command::Need::Loose => self.set_dense(false),
+            command::Need::Margin => self.set_margin(yumete_cjk::Margin::Dense),
             command::Need::Table => {
                 self.enter_table();
             }
