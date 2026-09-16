@@ -167,7 +167,7 @@ impl Reader for YumeReader {
         // exactly the one a reader stumbles on.
         const EVERYDAY: [char; 4] = ['簡', '繁', '臺', '港'];
         let field = self.charset(ch)?;
-        let tags = field.split('-').next().unwrap_or("");
+        let (tags, _block) = yumete_cjk::split_charset(&field);
         Some(!EVERYDAY.iter().any(|t| tags.contains(*t)))
     }
 

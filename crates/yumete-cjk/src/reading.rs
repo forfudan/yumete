@@ -69,3 +69,47 @@ impl Reader for NoReader {
         None
     }
 }
+
+/// The five 字集 marks a 拆分表 row can carry, in the order yume writes them:
+/// 通用規範, 通規繁體, 古籍通規, 國字常用（臺）, 常用字字形表（港）.
+pub const CHARSET_TAGS: [char; 5] = ['簡', '繁', '古', '臺', '港'];
+
+/// The 字集 field split into the two questions it answers — `簡古臺-CJK-A`
+/// becomes `("簡古臺", "CJK-A")`.
+///
+/// ⚠️ **Not `split('-')`.** A block name has hyphens of its own — `CJK-A`,
+/// `CJK-B`, `假名擴展-A` — so the first `-` is the separator only when
+/// something precedes it, and a character in *no* 字集 has a field that is
+/// nothing but a block name. Splitting on the first `-` read `CJK-A` as the
+/// tags `CJK`, which is not empty, so `:check-charset` answered 「每個字都在
+/// 字集裏」 for a page of 擴展A — the one answer it exists to disprove.
+///
+/// So the tags are the leading run of [`CHARSET_TAGS`] and nothing else. No
+/// block name begins with one of those five characters, which is what makes
+/// the prefix unambiguous.
+pub fn split_charset(field: &str) -> (&str, &str) {
+    let end = field
+        .char_indices()
+        .find(|(_, c)| !CHARSET_TAGS.contains(c))
+        .map_or(field.len(), |(i, _)| i);
+    let (tags, rest) = field.split_at(end);
+    (tags, rest.strip_prefix('-').unwrap_or(rest))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_block_keeps_its_own_hyphens() {
+        assert_eq!(split_charset("簡古臺-CJK-A"), ("簡古臺", "CJK-A"));
+        assert_eq!(split_charset("簡-CJK"), ("簡", "CJK"));
+        // No tags at all: the whole field is the block, hyphen and all.
+        assert_eq!(split_charset("CJK-A"), ("", "CJK-A"));
+        assert_eq!(split_charset("假名擴展-A"), ("", "假名擴展-A"));
+        assert_eq!(split_charset("康熙部首"), ("", "康熙部首"));
+        // Tags with no block, and a row the 拆分表 has nothing for.
+        assert_eq!(split_charset("簡繁古臺港"), ("簡繁古臺港", ""));
+        assert_eq!(split_charset(""), ("", ""));
+    }
+}
