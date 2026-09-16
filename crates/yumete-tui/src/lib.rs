@@ -14,6 +14,7 @@ pub mod table;
 pub mod theme;
 pub mod vertical;
 pub mod ambiguous;
+pub mod system_ime;
 pub mod typed_ahead;
 
 use std::io::{self, stdout, Write as _};
@@ -426,6 +427,10 @@ pub fn run(
         });
     }
     let mut last_mode = None;
+    // **讓開** — the system's own input method, held aside while yumete wants
+    // the keys (see [`system_ime`]). Its `Drop` puts the input source back, so
+    // leaving this function restores it however it is left, a panic included.
+    let mut system_ime = crate::system_ime::SystemIme::new(config.ime.system);
     // The colour the terminal draws its own cursor in — ours to set, and the
     // one thing on the screen the palette could not reach (#493).
     let mut last_caret: Option<((u8, u8, u8), (u8, u8, u8))> = None;
@@ -498,6 +503,21 @@ pub fn run(
                  \x1b]12;#{ir:02X}{ig:02X}{ib:02X}\x07"
             );
         }
+        // **Is yumete going to read this key itself?** In Normal every
+        // printable key is a command, so always. Where text is typed, only if
+        // yume can actually type it — which is the same pair the status line
+        // stands on (`standing_language_tag`) and the same pair the keyboard
+        // flags are pushed for, two lines apart from each other on purpose.
+        //
+        // ⚠️ **`engaged` alone is not enough, and shipping it that way made
+        // the editor useless for an hour.** `[ime] start` is `false` out of
+        // the box, so a fresh session is engaged with **no 碼表 loaded** — and
+        // the system's input method was taken away from somebody whose
+        // yumete could not type 漢字 either: 「你把输入法切走了，我 i 进入
+        // insert 模式用什么？」 The writer's own test is the marker on the
+        // status line, so that is the test here: no marker, no claim.
+        let yume_has_the_keys = ime.available() && ime.engaged();
+        system_ime.want(editor.mode() == Mode::Normal || yume_has_the_keys);
         let shown = (editor.mode(), editor.is_extending());
         if last_mode != Some(shown) {
             let (mode, extending) = shown;
@@ -980,10 +1000,18 @@ pub fn run(
                 if let Some(want) = editor.take_shell_request() {
                     use yumete_core::editor::How;
                     match want.how {
-                        How::Terminal => match hand_over(&mut terminal, &want.line, &events) {
-                            Ok(()) => editor.set_status(say!("shell.finished", want.line)),
-                            Err(err) => editor.set_status(say!("shell.cannot-run", err)),
-                        },
+                        How::Terminal => {
+                            // The screen is about to belong to somebody
+                            // else's program, which may well want a person to
+                            // type into it. Give the system's input method
+                            // back first; the next turn of the loop, which is
+                            // after that program has finished, takes it again.
+                            system_ime.release();
+                            match hand_over(&mut terminal, &want.line, &events) {
+                                Ok(()) => editor.set_status(say!("shell.finished", want.line)),
+                                Err(err) => editor.set_status(say!("shell.cannot-run", err)),
+                            }
+                        }
                         // Showing you the run: the complaints belong with the
                         // answer, since between them they are what happened.
                         How::Capture => match run_capturing(&want.line, None) {
@@ -1266,7 +1294,14 @@ pub fn run(
             // The release is not coming: whatever was held when focus left is
             // not a tap any more. Upstream keeps a `reset` for exactly this,
             // and without calling it the *next* genuine tap is eaten.
-            Ok(Event::FocusLost) => shift.reset(),
+            Ok(Event::FocusLost) => {
+                shift.reset();
+                // **And give the keyboard back** — the window in front is
+                // somebody else's, and arriving there in a layout yumete
+                // chose is worse than anything this feature prevents.
+                system_ime.set_focus(false);
+            }
+            Ok(Event::FocusGained) => system_ime.set_focus(true),
             Ok(_) => {}
             Err(err) => break Err(err),
         }
