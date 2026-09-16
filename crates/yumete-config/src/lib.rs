@@ -421,14 +421,19 @@ pub struct ImeConfig {
     /// have a switch — an unusual terminal, a remote session, a keyboard
     /// layout that must not move.
     ///
-    /// ⚠️ **`keep` out of the box, and the reason is not yumete's** (measured
-    /// 2026-09-16). 宇浩's own macOS input method does not take the keyboard
-    /// back after `TISSelectInputSource` has deselected and reselected it: the
-    /// second time yumete hands it back, keys arrive as plain letters and its
-    /// menu shows 「……」 until something else re-activates it. 蘋果全拼 through
-    /// the identical sequence is fine — 2/2 against 2/2, same editor, same
-    /// terminal, same keystrokes — so what this setting turns on is correct and
-    /// what it meets is not. It goes back to `auto` when yume is fixed.
+    /// What `auto` sends is yume's own 模態掛起 signal — the one
+    /// `ModalSuspend.swift` was written for and which `yume-mode off`/`on`
+    /// carries for helix and vim. Suspended, yume hands every key straight back
+    /// to the terminal; it does not switch the input source, does not touch
+    /// 中/英, and records which application asked, so a quiet terminal does not
+    /// mute the browser.
+    ///
+    /// ⚠️ **Not the input source.** The first version of this switched the
+    /// keyboard input source the way `im-select` does, and that road is broken
+    /// on macOS: a background process re-selecting an IMK input method fails to
+    /// re-engage about one time in three, for 宇浩 and 鼠鬚管 alike, with no
+    /// editor and no terminal in the picture. The measurements are in
+    /// `yumete_tui::system_ime`.
     pub system: SystemImePolicy,
 }
 
@@ -448,12 +453,9 @@ pub enum SystemImePolicy {
 }
 
 impl SystemImePolicy {
-    /// **Two words and no synonyms.** A word that is neither reads as `auto`,
-    /// because a typo in the *written* value means somebody was reaching for
-    /// the feature; the factory default when nothing is written at all is
-    /// [`SystemImePolicy::Keep`], for the reason on [`ImeConfig::system`].
-    /// Either way [`Self::is_written`] is how the config reader says the typo
-    /// out loud rather than leaving it to be discovered a mode at a time.
+    /// **Two words and no synonyms.** Anything else reads as `auto` — a typo
+    /// must not turn a feature off silently — and [`Self::is_written`] is how
+    /// the config reader says so out loud instead.
     pub fn from_config(text: &str) -> Self {
         match text.trim() {
             "keep" => SystemImePolicy::Keep,
@@ -474,7 +476,7 @@ impl Default for ImeConfig {
             start: false,
             commit: None,
             data_dirs: Vec::new(),
-            system: SystemImePolicy::Keep,
+            system: SystemImePolicy::Auto,
         }
     }
 }
@@ -2930,13 +2932,13 @@ mod tests {
         assert_eq!(commit("[ime]\ncommit = \"slow\""), None);
     }
 
-    /// The system's input method is left alone out of the box — see
-    /// [`ImeConfig::system`] for whose bug that is waiting on — and a word
-    /// nobody meant reads as `auto` rather than silently as nothing.
+    /// The system's input method is asked to stand down out of the box, and a
+    /// word nobody meant leaves it that way rather than silently turning the
+    /// feature off.
     #[test]
-    fn the_system_input_method_is_left_alone_until_asked() {
+    fn the_system_input_method_stands_down_unless_told_otherwise() {
         let system = |line: &str| Config::from_toml(line).ime.system;
-        assert_eq!(system(""), SystemImePolicy::Keep);
+        assert_eq!(system(""), SystemImePolicy::Auto);
         assert_eq!(system("[ime]\nsystem = \"auto\""), SystemImePolicy::Auto);
         assert_eq!(system("[ime]\nsystem = \"keep\""), SystemImePolicy::Keep);
         assert_eq!(system("[ime]\nsystem = \"kept\""), SystemImePolicy::Auto);

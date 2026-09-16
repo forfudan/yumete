@@ -503,21 +503,26 @@ pub fn run(
                  \x1b]12;#{ir:02X}{ig:02X}{ib:02X}\x07"
             );
         }
-        // **Is yumete going to read this key itself?** In Normal every
-        // printable key is a command, so always. Where text is typed, only if
-        // yume can actually type it — which is the same pair the status line
-        // stands on (`standing_language_tag`) and the same pair the keyboard
-        // flags are pushed for, two lines apart from each other on purpose.
+        // **Is yumete going to read this key itself?** Wherever 中文 does not
+        // belong the key is a command and the answer is always yes; where it
+        // does, only if yume can actually type it — which is the same pair the
+        // status line stands on (`standing_language_tag`) and the same pair
+        // the keyboard flags are pushed for, two lines apart on purpose.
         //
-        // ⚠️ **`engaged` alone is not enough, and shipping it that way made
-        // the editor useless for an hour.** `[ime] start` is `false` out of
-        // the box, so a fresh session is engaged with **no 碼表 loaded** — and
-        // the system's input method was taken away from somebody whose
-        // yumete could not type 漢字 either: 「你把输入法切走了，我 i 进入
-        // insert 模式用什么？」 The writer's own test is the marker on the
-        // status line, so that is the test here: no marker, no claim.
+        // ⚠️ **`composes_here`, not `mode != Normal`.** The narrow test cost
+        // an evening twice over. `[ime] start` is `false` out of the box, so a
+        // fresh session is engaged with **no 碼表**, and a first version that
+        // asked only `engaged` took the system's input method away from a
+        // writer whose yumete could not type 漢字 either: 「你把输入法切走了，
+        // 我 i 进入 insert 模式用什么？」 A second version then handed the
+        // keyboard back in *every* mode that is not Normal — including the
+        // command line, where the command **name** is ASCII, so `:w` had its
+        // `w` composed by the system's input method and the file was never
+        // written. `composes_here` is the one gate that already knows all of
+        // this: the preedit, the candidate panel and the lone-Shift tap light
+        // up together with it, and now so does this.
         let yume_has_the_keys = ime.available() && ime.engaged();
-        system_ime.want(editor.mode() == Mode::Normal || yume_has_the_keys);
+        system_ime.want(!composes_here(editor) || yume_has_the_keys);
         let shown = (editor.mode(), editor.is_extending());
         if last_mode != Some(shown) {
             let (mode, extending) = shown;
