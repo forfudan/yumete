@@ -88,6 +88,12 @@ impl Editor {
             }
         }
         match asked {
+            // `:open` with nothing to open is the picker — the command line
+            // takes no 中文, and a chapter's name is 中文 (2026-09-16).
+            Command::OpenPicker => {
+                self.open_file_picker();
+                Ok(CommandOutcome::Continue)
+            }
             Command::Open(path) => {
                 self.open_file(path).map_err(EditorError::Io)?;
                 // A file opened mid-session can carry a draft just as one named
