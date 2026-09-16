@@ -84,6 +84,16 @@ pub struct Grid<'a> {
     /// Which ruby dialects are laid out as readings. Empty shows the markup as
     /// the text it is.
     pub ruby: Dialects,
+    /// Whether a recognised ruby group's **reading** is dealt down the margin
+    /// and its base centred against it — or the group is only the base, with
+    /// its tags off the page (`:view-margin never`, 2026-09-16).
+    ///
+    /// ⚠️ **Not the same question as `ruby`**, and the reason this is a second
+    /// field: turning the dialects off to hide the readings — which is what
+    /// `:view-dense` did — left `<ruby>永<rt>ㄩㄥˇ</rt></ruby>` on the page as
+    /// the source it is, tags and all. A page with no margin still reads the
+    /// markup; it just has nowhere to put the reading.
+    pub readings: bool,
     /// Whether 句讀 hang in the margin rather than taking a square each
     /// (標點旁置).
     pub hanging: bool,
@@ -189,6 +199,7 @@ impl<'a> Grid<'a> {
             stamp: 0,
             zong_len: zong_len.max(1),
             ruby,
+            readings: true,
             hanging: false,
             sentences: false,
             tatechuyoko: false,
@@ -212,6 +223,15 @@ impl<'a> Grid<'a> {
     pub fn with_indent(self, n: usize) -> Grid<'a> {
         Grid {
             indent: n.min(8),
+            ..self
+        }
+    }
+
+    /// The same grid, dealing readings down the margin or leaving a ruby group
+    /// as its bare base.
+    pub fn with_readings(self, on: bool) -> Grid<'a> {
+        Grid {
+            readings: on,
             ..self
         }
     }
@@ -790,7 +810,12 @@ fn push_ruby(
     hidden: &[(usize, usize)],
 ) {
     let base = group.base_text(chars);
-    let reading: Vec<char> = group.reading_text(chars).to_vec();
+    // No margin, no reading: the group is its base, laid out like any text,
+    // and the tags come off the page all the same.
+    let reading: Vec<char> = match grid.readings {
+        true => group.reading_text(chars).to_vec(),
+        false => Vec::new(),
+    };
     let is_hidden = |at: usize| hidden.iter().any(|&(a, b)| at >= a && at < b);
     // The base's own rows, then as many more as the reading needs.
     //
@@ -1171,6 +1196,7 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
         grid.sentences,
         grid.tatechuyoko,
         grid.ruby.bits(),
+        grid.readings,
         grid.open_line == line,
     )
         .hash(&mut hasher);
@@ -1718,6 +1744,7 @@ mod tests {
         stamp: 0,
         zong_len: 32,
         ruby: Dialects::NONE,
+        readings: true,
         hanging: false,
         sentences: false,
         tatechuyoko: false,

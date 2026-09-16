@@ -6735,7 +6735,7 @@ fn draw_horizontal(
         // whenever the two disagree, and they disagree twice: a ruby group the
         // wrap cut in half is drawn over the row its base **begins** on, so the
         // tail row buys a reading nobody will draw; and 疏排's row of air is
-        // only reached when the line has no ruby at all, so `:view-dense off` over a
+        // only reached when the line has no ruby at all, so `:view-margin always` over a
         // line that does have some loses its air row too.
         if row_has_reading(editor, rope, &row) {
             // ⚠️ **The row above belongs to the block below it** (#464). This
@@ -7180,28 +7180,36 @@ fn draw_status(
 
 /// Whether `row` has any reading over it — which costs it a screen row.
 fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -> bool {
-    // **疏排 (`:view-dense off`) on the horizontal page** is line spacing: a row of
-    // air above every row. 密排 is a 縱書 word for the same thing — there it is
-    // the gap between columns — and this is the other axis of it.
-    //
-    // It is the row a reading lives in, which is why it is *this* function:
-    // the page already knows how to give a row two screen rows, and a page set
-    // loose has that row whether or not anything is written in it.
-    if editor.loose_rows() && editor.layout() == WritingLayout::Horizontal {
-        return true;
-    }
+    use yumete_cjk::Margin;
     // A table drawn among the prose (#275) takes one row above its first line
     // for its 列號標尺 — the same mechanism, and the reason this function is
     // the one that answers: the page already knows how to give a row two.
+    // **Not the margin.** The ruler is the table's own top edge, so no
+    // `:view-margin` answer takes it away.
     if row.starts_line() && !editor.table_ruler_on_line(row.line).is_empty() {
         return true;
     }
-    if !readings_in_row(editor, rope, row).is_empty() {
-        return true;
+    // Across the page the margin lane is **the row above** — which is what a
+    // reading and 平仄 (#247) are drawn in — so `:view-margin` decides which
+    // rows buy it, the same four ways it decides which 縱 do down the page.
+    match editor.margin() {
+        Margin::Never => false,
+        // A row of air above every row. What `:view-dense off` used to mean
+        // across the page, and the only thing it meant here.
+        Margin::Always => editor.layout() == WritingLayout::Horizontal,
+        // This row, if **it** carries something. A reading is drawn over the
+        // row its base begins on, so that is the row that asks.
+        Margin::Dense => {
+            !readings_in_row(editor, rope, row).is_empty()
+                || !meter_in_row(editor, rope, row).is_empty()
+        }
+        // Every row of the line, if **any** of it carries something — a
+        // wrapped paragraph keeps one line spacing all the way down.
+        Margin::Loose => {
+            !editor.readings_on_line(row.line).is_empty()
+                || (editor.meter_drawn() && !editor.meter_on_line(row.line).is_empty())
+        }
     }
-    // 平仄 (#247) live in that row too, when no reading has claimed it: the
-    // horizontal page's version of the margin the 縱書 page draws them in.
-    !meter_in_row(editor, rope, row).is_empty()
 }
 
 /// The readings **drawn over** `row` — the groups whose base begins on it.
@@ -7463,10 +7471,10 @@ fn reading_line(
                 ink.page().fg(ink.furniture()),
             )));
         }
-        // 疏排: the row of air itself. Painted rather than skipped, so the page
-        // keeps its ground.
-        return editor
-            .loose_rows()
+        // A row the margin bought with nothing in it — `always`, or a `loose`
+        // row whose paragraph carries something elsewhere. Painted rather than
+        // skipped, so the page keeps its ground.
+        return row_has_reading(editor, rope, row)
             .then(|| Line::from(Span::styled("", ink.page())));
     }
     let line_start = rope.line_to_char(row.line);
@@ -9734,7 +9742,9 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn paragraphs_stack_leftward_one_gap_apart() {
         let mut editor = editor_with("上\n中\n下");
-        let config = vertical_config();
+        let mut config = vertical_config();
+        // A one-cell gap, which the factory page no longer has (`:view-margin`, 2026-09-16).
+        config.editor.zong_gap = 1;
         let buffer = render_vertical(&mut editor, &config, 30, 12);
 
         // Two cells per 縱 plus a one-cell gap: 28, 25, 22, right to left.
@@ -9752,6 +9762,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&"字".repeat(8));
         let mut config = vertical_config();
         config.editor.command_line = false;
+        // A one-cell gap, which the factory page no longer has (`:view-margin`, 2026-09-16).
+        config.editor.zong_gap = 1;
         let buffer = render_vertical(&mut editor, &config, 20, 8);
 
         assert_eq!(at(&buffer, 18, 0), "字");
@@ -9819,12 +9831,13 @@ fn squeezed(text: &str) -> String {
     }
 
     /// A 着重號 is bought the way a reading is: the layout pays a cell for the
-    /// 縱 that needs one. So even packed flush — `:view-dense`, no gap, no 稿紙 rule
-    /// — the dots are there, and they never land on the next 縱's writing.
+    /// 縱 that needs one. So on the factory page — `:view-margin dense`, no gap,
+    /// no 稿紙 rule — the dots are there, and they never land on the next 縱's
+    /// writing.
     #[test]
-    fn a_dense_page_still_buys_the_cell_a_dot_needs() {
+    fn a_dense_margin_buys_the_cell_a_dot_needs() {
         let mut editor = editor_with("甲乙丙丁\n一*二三*四");
-        editor.set_dense(true);
+        editor.set_margin(yumete_cjk::Margin::Dense);
         let mut config = vertical_config();
         config.editor.zong_gap = 0;
         let buffer = render_vertical(&mut editor, &config, 20, 12);
@@ -9843,6 +9856,41 @@ fn squeezed(text: &str) -> String {
         for (row, ch) in ["甲", "乙", "丙", "丁"].iter().enumerate() {
             assert_eq!(at(&buffer, first, row as u16), *ch, "row {row}");
         }
+    }
+
+    /// `:view-margin`'s four answers, down the page: one paragraph folded into
+    /// two 縱 with a 着重號 **only in the first**, then a short paragraph.
+    ///
+    /// Where each 縱 lands is the whole answer — a 縱 that buys the lane is a
+    /// cell wider, and everything to its left moves over.
+    #[test]
+    fn view_margin_decides_which_zong_buy_the_lane() {
+        use yumete_cjk::Margin;
+        let lefts = |margin: Margin| -> (Vec<u16>, bool) {
+            let mut editor = editor_with("*甲*乙丙丁戊己庚辛\n末");
+            editor.set_margin(margin);
+            let mut config = vertical_config();
+            config.editor.command_line = false;
+            config.editor.zong_gap = 0;
+            let buffer = render_vertical(&mut editor, &config, 20, 8);
+            let find = |ch: &str, row: u16| (0..20).find(|&x| at(&buffer, x, row) == ch).unwrap();
+            let dotted = (0..20).any(|x| (0..8).any(|y| at(&buffer, x, y) == "·"));
+            (vec![find("甲", 1), find("戊", 0), find("末", 0)], dotted)
+        };
+        // Six to a 縱 here, and a half-width `*` is a square of its own:
+        // 「*甲*乙丙丁」 then 「戊己庚辛」 — the emphasis is in the first alone.
+        assert_eq!(lefts(Margin::Never), (vec![18, 16, 14], false), "nothing bought, no dots");
+        assert_eq!(
+            lefts(Margin::Dense),
+            (vec![17, 15, 13], true),
+            "only the first 縱 carries the dot, so only it is a cell wider"
+        );
+        assert_eq!(
+            lefts(Margin::Loose),
+            (vec![17, 14, 12], true),
+            "the paragraph carries one, so both its 縱 buy the lane; 末 does not"
+        );
+        assert_eq!(lefts(Margin::Always), (vec![17, 14, 11], true), "every 縱");
     }
 
     /// The cell a 縱 blanks is the one **it** bought, not the one the widest
@@ -9935,7 +9983,9 @@ fn squeezed(text: &str) -> String {
     fn a_one_cell_gap_is_shared_with_the_reading() {
         // With a gap of one, a reading costs nothing extra: it uses the gap.
         let mut editor = editor_with("甲乙\n<ruby>丙<rt>bǐng</rt></ruby>\n丁戊");
-        let config = vertical_config(); // zong_gap = 1
+        let mut config = vertical_config();
+        // A one-cell gap, which the factory page no longer has (`:view-margin`, 2026-09-16).
+        config.editor.zong_gap = 1;
         let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
         assert_eq!(at(&buffer, 18, 0), "甲");
         // 丙 is centred against its four-character reading, so it sits a row in.
@@ -10067,6 +10117,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("甲乙丙\n丁戊己");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        // A one-cell gap, which the factory page no longer has (`:view-margin`, 2026-09-16).
+        config.editor.zong_gap = 1;
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
         // One header row for a two-paragraph buffer, the number right-aligned
@@ -12714,7 +12766,7 @@ fn squeezed(text: &str) -> String {
 
     /// 疏排 on the horizontal page: a row of air above every row.
     #[test]
-    fn a_loose_horizontal_page_keeps_a_row_of_air() {
+    fn an_always_margin_keeps_a_row_of_air_across_the_page() {
         let mut editor = editor_with("那年冬天。\n雪一直下。\n山路斷了。\n");
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
@@ -12731,10 +12783,10 @@ fn squeezed(text: &str) -> String {
                 })
                 .collect()
         };
-        // Packed: the rows are against each other.
+        // The factory margin: nothing to read, so the rows are against each other.
         assert!(rows(&editor)[1].contains("雪"), "{:?}", rows(&editor));
 
-        editor.execute(":view-dense off").unwrap();
+        editor.execute(":view-margin always").unwrap();
         let loose = rows(&editor);
         assert!(loose[0].trim().is_empty(), "a row of air first: {loose:?}");
         assert!(loose[1].contains("那"), "{loose:?}");
@@ -12746,7 +12798,7 @@ fn squeezed(text: &str) -> String {
         let (_, caret) = render_caret(&editor, &config, 30, 10);
         assert_eq!(caret.map(|p| p.y), Some(3), "the second row is drawn at 3");
 
-        editor.execute(":view-dense on").unwrap();
+        editor.execute(":view-margin dense").unwrap();
         assert!(rows(&editor)[1].contains("雪"));
     }
 
@@ -12983,6 +13035,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&format!("{}\n短。\n", "長".repeat(12)));
         let mut config = vertical_config();
         config.editor.command_line = false;
+        // A one-cell gap, which the factory page no longer has (`:view-margin`, 2026-09-16).
+        config.editor.zong_gap = 1;
         editor.execute(":view-focus on").unwrap();
         let buffer = render_vertical(&mut editor, &config, 20, 8);
 
@@ -13578,17 +13632,20 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// `never` spends every column on writing: the 稿紙 ticks, which buy a cell
+    /// beside every 縱, have nowhere to go. The gap between 縱 is **not** one of
+    /// the things it takes — that is `zong_gap`, zero here so the ticks are the
+    /// whole difference being measured.
     #[test]
-    fn a_dense_page_spends_every_column_on_writing() {
+    fn no_margin_spends_every_column_on_writing() {
         // More text than the page can hold, so what is measured is how much of
-        // it fits — which is the only thing 密排 is for.
+        // it fits.
         let mut editor = editor_with(&"字".repeat(600));
         let mut config = vertical_config();
-        config.editor.zong_gap = 1;
+        config.editor.zong_gap = 0;
         config.editor.paper_ticks = 10;
 
-        // Ordinarily a 縱 costs three cells: two for the 字 and one for the gap
-        // it is read across, plus a column wherever a reading or a tick goes.
+        // With ticks a 縱 costs three cells: two for the 字 and one for its tick.
         let loose = render_vertical(&mut editor, &config, 40, 14);
         let fits = |b: &ratatui::buffer::Buffer| {
             // The text area only: the status line is inside the window and is
@@ -13600,8 +13657,8 @@ fn squeezed(text: &str) -> String {
         };
         let before = fits(&loose);
 
-        // Packed, a 縱 is two cells — one 漢字 — and nothing else is spent.
-        editor.execute("view-dense").unwrap();
+        // With no margin a 縱 is two cells — one 漢字 — and nothing else is spent.
+        editor.execute("view-margin never").unwrap();
         let tight = render_vertical(&mut editor, &config, 40, 14);
         assert!(
             fits(&tight) > before,
@@ -13612,11 +13669,11 @@ fn squeezed(text: &str) -> String {
         // The 稿紙 ticks are gone: that column is the whole point.
         assert!(
             (0..40u16).all(|x| (0..14u16).all(|y| at(&tight, x, y) != ".")),
-            "no ticks on a packed page"
+            "no ticks without a margin"
         );
 
         // …and it comes back, because a toggle that does not is not one.
-        editor.execute("view-dense off").unwrap();
+        editor.execute("view-margin dense").unwrap();
         let loose = render_vertical(&mut editor, &config, 40, 14);
         assert_eq!(fits(&loose), before, "back to where it was");
     }
@@ -13639,7 +13696,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Esc);
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
-        editor.execute("view-dense").unwrap();
+        editor.execute("view-margin never").unwrap();
         editor.execute("1").unwrap();
         let buffer = render_vertical(&mut editor, &config, 40, 16);
 
@@ -15532,6 +15589,47 @@ fn squeezed(text: &str) -> String {
     /// base begins on, so the tail's answer was 「nothing to draw」 and its air
     /// row was never pushed. Everything below it then sat one row higher than
     /// the page believed, and a click landed a line off.
+    /// `:view-margin`'s four answers, across the page: a line with a reading
+    /// **on its first row only**, wrapped into two, then a line with none.
+    #[test]
+    fn view_margin_decides_which_rows_buy_the_row_above() {
+        use yumete_cjk::Margin;
+        let rows = |margin: Margin| -> Vec<String> {
+            let mut editor =
+                editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年歲在癸丑暮春之初\n後面一行");
+            let mut config = Config::default();
+            config.editor.line_numbers = yumete_config::LineNumbers::None;
+            config.editor.command_line = false;
+            editor.set_margin(margin);
+            let buffer = render_with_ruby(&mut editor, &config, 16, 10);
+            (0..buffer.area.height)
+                .map(|y| row_text(&buffer, y).trim_end().to_string())
+                .take_while(|r| !r.contains("NORMAL"))
+                .collect()
+        };
+        let head = |r: Vec<String>, n: usize| r.into_iter().take(n).collect::<Vec<_>>();
+        assert_eq!(
+            head(rows(Margin::Never), 3),
+            ["永和九年歲在癸丑", "暮春之初", "後面一行"],
+            "no row above anything, reading and all"
+        );
+        assert_eq!(
+            head(rows(Margin::Dense), 4),
+            ["ㄩㄥˇ", "永和九年歲在癸丑", "暮春之初", "後面一行"],
+            "only the row the reading is over"
+        );
+        assert_eq!(
+            head(rows(Margin::Loose), 5),
+            ["ㄩㄥˇ", "永和九年歲在癸丑", "", "暮春之初", "後面一行"],
+            "both rows of the read line; the unread line keeps none"
+        );
+        assert_eq!(
+            head(rows(Margin::Always), 6),
+            ["ㄩㄥˇ", "永和九年歲在癸丑", "", "暮春之初", "", "後面一行"],
+            "every row"
+        );
+    }
+
     #[test]
     fn a_loose_page_keeps_its_air_over_the_tail_of_a_read_paragraph() {
         let mut editor =
@@ -15539,7 +15637,7 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
         config.editor.command_line = false;
-        editor.execute(":view-dense off").unwrap();
+        editor.execute(":view-margin always").unwrap();
         let buffer = render_with_ruby(&mut editor, &config, 16, 10);
         let rows: Vec<String> = (0..buffer.area.height)
             .map(|y| row_text(&buffer, y).trim_end().to_string())

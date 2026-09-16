@@ -246,7 +246,7 @@ fn main() -> ExitCode {
             editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
         }
     }
-    editor.set_dense(config.editor.dense);
+    editor.set_margin(config.editor.margin);
     // Before the files, so the files come up locked rather than being locked a
     // moment after they are on screen.
     if readonly {
@@ -896,7 +896,7 @@ KEYS (Normal mode, Helix-style):
               :buffer|next|previous|close   the open files (gn / gp)
               :search-gd <re>  :toc  across the project / this file's headings
               :export html|typst    write it out for a typesetter
-              :layout [horizontal|vertical]      :view-dense [on|off]
+              :layout [horizontal|vertical]      :view-margin [never|dense|loose|always]
               :yume-chaifen   the 拆分 annotation beside candidates
               :yume-where     the six places 碼表 and 字料 are looked
                               for, and what each one holds

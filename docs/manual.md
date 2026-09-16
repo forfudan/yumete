@@ -625,9 +625,9 @@ Typst 那邊認得 `= 標題`、`*粗*`、`_斜_`、`` `碼` ``、`$數學$`、`
 也不縮，但以 `[` 開頭的普通段落照縮——一段話當然可以從一個鏈接開始。本來就縮進了的行
 也不再加。
 
-`:view-dense` **不會**把它關掉。注音、旁置、刻度各佔一**欄**，那是密排要贏回來的東西；縮進
-佔的是一段開頭的兩格，而且它正是密排的頁面上唯一還在説「這裏換段了」的東西——它替掉的
-那個空行，本來要佔整整一縱。
+`:view-margin never` **不會**把它關掉。注音、旁置、刻度佔的是**邊欄**；縮進佔的是一段開頭的
+兩格，而且它正是没有邊欄的頁面上唯一還在説「這裏換段了」的東西——它替掉的那個空行，
+本來要佔整整一縱。
 
 ### 段組：把頁面横着分成兩條
 
@@ -652,26 +652,36 @@ Typst 那邊認得 `= 標題`、`*粗*`、`_斜_`、`` `碼` ``、`$數學$`、`
 **只對竪排有效。** 横排的對應物是 Emacs 的 `follow-mode`（一段文字流過並排的幾欄），
 那是另一件事，還没做。
 
-### 密排
+### 邊欄：`:view-margin`
 
-**密排是默認的。** 想要注音欄、句讀旁置的邊欄和稿紙刻度回來，`:view-dense off`（或者
-`[editor] dense = false`）。
+注音、旁置的句讀、着重號、平仄、稿紙刻度，都畫在正文旁邊那一格裏——竪排是一縱的右邊一欄，
+横排是一行的上面一行。這一格叫**邊欄**。它留在哪裏，由 `:view-margin` 説了算：
 
-`:view-dense` 把竪排的頁面壓到終端能給的最緊——**只管竪排**：横排的注音是上面多一行，不佔
-寬度，没有什麽可以省的，所以密排開着也照排。
+```
+:view-margin never     從不
+:view-margin dense     按視覺縱（出廠）
+:view-margin loose     按邏輯行
+:view-margin always    總是
+[editor] margin = "dense"
+```
 
-| 拿掉的 | 省下 |
-|---|---|
-| 縱與縱之間的間隔（`zong_gap`） | 每縱 1 欄 |
-| 注音欄 | 有注音的縱各 1 欄 |
-| 句讀旁置的邊欄 | 有句讀的縱各 1 欄 |
-| 稿紙刻度 | 每縱 1 欄 |
+| | 竪排 | 横排 |
+|---|---|---|
+| `never` | 不留 | 不留 |
+| `dense` | 有東西的那一縱 | 有東西的那一行 |
+| `loose` | 有東西的那一段 | 有東西的那一段 |
+| `always` | 每一縱 | 每一行 |
 
-之後**一縱就是兩格**——正好一個漢字，終端能畫的最窄。`:view-dense off` 還原**你原來的**
-配置，不是默認值：本來就關着注音的人，關掉密排不會發現它自己開了。
+「有東西」是説這裏有注音、要掛出去的標點、着重號或者平仄。「一段」是文件裏的一行：一段話
+折成三縱，`dense` 只讓帶注音的那一縱往左讓一格，`loose` 讓三縱都讓，讀起來間距整齊。
+`always` 最像稿紙，每一縱一樣寬。
 
-**首行縮進不在拿掉之列。** 上面那四樣各佔一**欄**，那是密排要贏回來的東西；縮進佔的是
-一段開頭的兩格，而且它正是密排的頁面上唯一還在説「這裏換段了」的東西。
+**`never` 也認得注音。** `<ruby>` 的標籤照樣藏起來，只剩正文，讀音不排。想看標籤本身，
+是 `:ruby off`。
+
+**邊欄不是縱間距。** `zong_gap`（出廠 0）是縱與縱之間的空白，每一縱都有，跟有没有東西無關；
+邊欄只在要畫東西的地方留。兩個都是 0／`never` 時**一縱就是兩格**——正好一個漢字，終端能畫
+的最窄。
 
 **字本身没法變窄。** 終端的格子是終端定的，yumete 只能決定用幾格。想要 90% 寬的
 字身（更瘦長的縱），那是終端的配置，各家名字不同——Ghostty 是 `adjust-cell-width`，
@@ -871,7 +881,7 @@ start = true          # 啟動就載入碼表
 就告訴你後面可以接什麽**。
 
 ```
-:view-dense ▊          on 開   off 關
+:view-margin ▊    never 從不   dense 按視覺縱   loose 按邏輯行   always 總是
 :syntax ▊         markdown 「#」標題、「**粗**」   typst 「=」標題、「#import」
 :yume ▊           on 開   abc 暫時打英文   off 關（子命令見 :yume-scheme 那一族）
 :ruby-html ▊      on 開   off 關
@@ -928,7 +938,7 @@ scheme lingming          靈明
 | `:render off/basic/full` | `:markup` `:wysiwyg` `:source` |
 | `:buffer` `:buffer-next/previous/close` | `:buffers` `:ls` `:bd` |
 | `:clipboard-yank/paste` | `:cy` `:cp` |
-| `:view-wrap/dense/bands/sentence/hanging/numbers/typewriter/focus/meter/punct/hud/preview` | `:wrap` `:dense` `:bands` `:sentence` `:hanging` `:numbers` `:typewriter` `:focus` `:meter` `:note` `:hud` `:preview` |
+| `:view-wrap/bands/sentence/hanging/numbers/typewriter/focus/meter/punct/hud/preview` | `:wrap` `:bands` `:sentence` `:hanging` `:numbers` `:typewriter` `:focus` `:meter` `:note` `:hud` `:preview` |
 | `:count-progress` `:count-target 3000` | `:progress` `:prog` `:target` |
 | `:write-all` `:write-as 新名.md` | `:wall` `:saveas` `:sav` |
 | `:table-jump 木` `:table-find column 甲` | `:row` `:search`（⚠️ `:search` 後來又活了，見下） |
@@ -957,17 +967,18 @@ scheme lingming          靈明
 `:table search` 讀起來是「表格搜索」，`:table-find` 讀起來是「在表格裏找」——後者纔是
 你要做的事。`:view note` 更糟：它像「看筆記」，而那條命令是把標點畫成淡的。
 
-**打舊名字，它會告訴你新的在哪。** `:dense` 不再是命令，可是打下去不會只説「不認識」：
+**打舊名字，它會告訴你新的在哪。** `:bands` 不再是命令，可是打下去不會只説「不認識」：
 
 ```
-:dense
-没有「dense」這個命令；你要的是 `:view-dense`
+:bands
+没有「bands」這個命令；你要的是 `:view-bands`
 ```
 
 這句話是**算出來的**——掃一遍命令樹，找名字對得上的孩子。所以以後再摺一次，指路的話
 自己就對了，不用有人記得回來改。算不出來的只有「改了名」的那幾條——上表四條，
 加上 `:bclose`→`:buffer-close`、`:wall`→`:write-all`、`:saveas`→`:write-as`、
-`:appearance`→`:theme`——因爲 `conflicts` 這個詞在樹裏已經不存在了，另記一張表。
+`:appearance`→`:theme`、`:dense` 和 `:view-dense`→`:view-margin`——
+因爲 `conflicts` 這個詞在樹裏已經不存在了，另記一張表。
 
 ### 短寫
 
@@ -1103,7 +1114,7 @@ scheme lingming          靈明
 - `:sh` — 跑一條命令，輸出收進一個緩衝區
 - `:!command` — 讓出終端跑一條命令，直接看它跑（vi 的寫法）
 - `:view-wrap` ｜ `on` `off` `0` `<幾欄>` — 長段落折到下一行；`:view-wrap 50` 定寬度
-- `:view-dense` ｜ `on` `off` — 密排／疏排：竪排是縱與縱之間，横排是行與行之間
+- `:view-margin` ｜ `never` `dense` `loose` `always` — 邊欄：注音、旁置標點、着重號、平仄那一格留在哪
 - `:view-bands` ｜ `on` `off` `<幾條，1–4>` — 段組：把竪排的頁面横着分成幾條，右上讀到左上，再右下讀到左下
 - `:view-sentence` ｜ `on` `off` — 一句一縱：竪排時每句話單起一縱，只是看法，不動文件
 - `:view-hanging` ｜ `on` `off` — 標點旁置：句讀掛在邊欄
@@ -1472,9 +1483,10 @@ HTML）。注了幾個詞狀態欄會説；不要就 `u`，一步全退回去。
 不點——那是另一種字重，兩樣都點的話半頁都是點。
 
 點畫在邊欄裏，和注音、旁置的句讀、稿紙刻度同一欄，**排在最後**：有注音或者有掛出去的
-標點，那一格歸它們。邊欄是**排版時買下來的**，和注音一樣：哪一段有強調，那一段的縱右邊
-就留一格——所以密排（`:view-dense`、縱間距 0）也照樣點得出來，只是那一縱會往左讓一格。没有強
-調的段落一格都不多花。`:render off` 時不點，那時候 `*` 是字面上的星號。
+標點，那一格歸它們。邊欄是**排版時買下來的**，和注音一樣：哪一縱有強調，那一縱右邊就留
+一格（`:view-margin loose` 是整段留）——所以縱間距 0 也照樣點得出來，只是那一縱會往左讓
+一格。没有強調的縱一格都不多花。`:view-margin never` 和 `:render off` 時不點，後者那時
+`*` 是字面上的星號。
 
 ### 5.8 一句一縱：`:view-sentence`
 
@@ -1494,7 +1506,7 @@ HTML）。注了幾個詞狀態欄會説；不要就 `u`，一步全退回去。
 
 斷句用的就是 `(` `)` 兩個動作跳的那條界——你看見的縱頭，正是按 `)` 會停的地方。
 
-它只是竪排的一個看法，跟 `:view-dense`、`:view-bands` 一樣：文件没有變，`:w` 存下去的還是原來
+它只是竪排的一個看法，跟 `:view-margin`、`:view-bands` 一樣：文件没有變，`:w` 存下去的還是原來
 那一段。
 
 ### 5.9 平仄：`:view-meter`
@@ -3434,14 +3446,14 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丢一句 Ru
 `:yume-chaifen`……所以「這個命令下面還有什麽」是看得見的，不必先知道才找得到。Tab 選
 中子命令時整句一起寫上去。
 
-**有前提的命令會先説前提。** 標點旁置要竪排、而且密排關着才有地方掛；密排和段組只管
+**有前提的命令會先説前提。** 標點旁置要竪排、而且邊欄不是 `never` 才有地方掛；段組只管
 竪排；`:table-jump`、`:table-check`、`:table-rules` 要先在表格模式裏；`:yume-chaifen` 要先有
 碼表。這些條件**寫在命令旁邊**，於是三處都説得出來：
 
-- 菜單裏那一條就標着 ⟨需要 竪排、密排關，句末加 force⟩；
-- 真按下去也不會默默設一個没人讀的旗標，而是説「還不行，需要：竪排、密排關」；
+- 菜單裏那一條就標着 ⟨需要 竪排、邊欄不是 never，句末加 force⟩；
+- 真按下去也不會默默設一個没人讀的旗標，而是説「還不行，需要：竪排、邊欄不是 never」；
 - **句末加 `force`** 就一併打開：`:view-hanging on force` 等於 `:layout vertical` +
-  `:view-dense off` + `:view-hanging on`。
+  `:view-margin dense` + `:view-hanging on`。
 
 没有 `force` 的時候**什麽都不動**——一條小命令不該把整個版面翻成竪排；缺什麽你看得見，
 換不換由你。
@@ -3497,7 +3509,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丢一句 Ru
 | `:view-meter` [`on`｜`off`] | 平仄：每個字的平仄畫在邊欄（`○` 平 `●` 仄），句末畫韻腳（`△▲`）。**今音**——入聲已派入三聲，見 §5.9 |
 | `:view-punct` [`on`｜`off`] | 標點提示：中文裏的半角標點、`...`，該寫的那個畫在旁邊。不是文件裏的字，見 §5.10 |
 | `:view-focus` [`on`｜`off`] | 焦點模式：正在寫的那一**段**照常，其餘的整頁退後一級。段而不是縱——折行不是寫作的單位，一段折成三縱，三縱都是你正在寫的那一段 |
-| `:view-dense off` | 疏排——竪排是縱與縱之間留一格，横排是行與行之間留一行 |
+| `:view-margin always` | 每一縱旁邊、每一行上面都留邊欄 |
 | `:table-new` [*行* *欄*] | 寫一張空表：`:table-new 3 4` 是三行四欄，首行是欄名（規則行不算一行），上下各留一個空行，光標停在第一個欄名裏、直接就能打字。不寫數字是 3×3 |
 | `:table-sort` *欄* `a`｜`d` … | 照這幾欄排；`t1a2d8as` 是鍵盤上的同一件事 |
 | `:table-numbers` [`on`｜`off`] | 表頭上面那一行欄號 |
@@ -3548,7 +3560,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丢一句 Ru
 | `:view-wrap 50` | 寫到五十欄寬（竪排：一縱五十字）；`:view-wrap 0` 還原 |
 | `:wheel`（或一個數字） | 滚輪一格走幾行（竪排：幾縱）；`:wheel 1` 是終端自己的一格 |
 | `:ruby off`／`basic`／`full` | 源碼／認得讀音但不排／排在正文旁邊（`:ruby` 單獨用是改這裏的注音，鍵是 `空格 r`） |
-| `:view-dense`（`off`） | 竪排密排：一縱兩格，無注音、無旁置、無刻度 |
+| `:view-margin` *never*｜*dense*｜*loose*｜*always* | 邊欄留在哪：不留／有東西的縱或行／有東西的段／處處 |
 | `:indent off`／`basic`／`full`（或一個數字） | 首行縮進；`full` 連段間空行一起收（中文的段落是縮進兩格） |
 | `:view-bands`（`off`、或 1–4） | 段組：把竪排頁面横着分成幾條 |
 | `:view-sentence`（`off`） | 一句一縱，校對用；只是看法，文件不動（見 5.8） |
@@ -3599,7 +3611,7 @@ layout = "horizontal"        # "horizontal" | "vertical"
 zong_length = 0              # 每縱字數，4–64；0 = 窗口能給多長就多長
 indent = 0                   # 首行縮進幾格；中文段落慣例是 2
 bands = 1                    # 段組：竪排頁面横着分成幾條，1–4
-dense = true                 # 密排（默認）：一縱兩格，無注音、無旁置、無刻度
+margin = "dense"             # 邊欄："never" | "dense"（默認）| "loose" | "always"
 session = true               # 不帶文件名啓動時，接着上次那些文件。false 從空白開始
 language = "zh"              # 編輯器説話用哪種語言："zh"（繁體）| "zhs"（简体）
                              # | "en"
@@ -3610,8 +3622,8 @@ language = "zh"              # 編輯器説話用哪種語言："zh"（繁體）
                              # 下面 zht / zhs / en 三行是話本身——**改話直接改那裏**，
                              # 不必動代碼。key 上面那一行 # 註明它在什麽條件下出現。
                              # zhs 或 en 留空就退回 zht
-zong_gap = 1                 # 縱之間的半角格數，0–4。設 0 則縱與縱相貼，
-                             # 只有帶注音的那一縱佔一格
+zong_gap = 0                 # 縱之間的半角格數，0–4。0（默認）縱與縱相貼；
+                             # 注音那一格另算，見 margin
 tatechuyoko = false          # 半角字兩個擠進一格（縦中横）
 hanging_punctuation = false  # 。，、？！：；「」 掛在邊欄（標點旁置）
 soft_wrap = true             # 横排時長段落折到下一行；關掉則跑出右邊看不見

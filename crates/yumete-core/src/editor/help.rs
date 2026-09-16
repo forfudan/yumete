@@ -179,7 +179,7 @@ impl Editor {
             (":view-wrap 24", say!("help.vertical.column-length")),
             (":view-bands 2", say!("help.vertical.bands")),
             (":view-hanging on", say!("help.vertical.hung-punctuation")),
-            (":view-dense off", say!("help.vertical.loose")),
+            (":view-margin always", say!("help.vertical.margin")),
             (":view-sentence", say!("help.vertical.sentence")),
             (":indent 2", say!("help.vertical.first-line-indent")),
             (":render full", say!("help.vertical.wysiwyg")),

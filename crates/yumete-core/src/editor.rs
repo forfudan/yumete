@@ -1623,12 +1623,6 @@ pub struct Editor {
     words_request: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
-    /// **疏排 on the horizontal page** (Feature #181): a row of air above every
-    /// row, which is what 密排's opposite means when the writing runs across
-    /// rather than down. Its own field rather than `!dense`, because `dense`
-    /// starts out false on a fresh editor and 疏排 must be something the reader
-    /// asked for.
-    loose_rows: bool,
     /// **Typewriter mode** (Feature #166): the row being written stays in the
     /// middle of the screen and the paper moves under it, the way a typewriter
     /// works and the way every focus mode since has.
@@ -1833,12 +1827,11 @@ pub struct Editor {
     /// walked through them.
     /// A gap between 縱 set at runtime, overriding the config's.
     ///
-    /// The one piece of the dense arrangement that was a startup-only setting
-    /// while the other three were live toggles — which is why `:view-dense` had to
-    /// exist rather than being three keys anybody could find.
+    /// Its own setting now, and nothing else's: `:view-dense` used to force it
+    /// to nothing, which made it one of five jobs one switch did.
     zong_gap: Option<usize>,
-    /// Whether the dense arrangement is on, so the ticks know to stay away.
-    dense: bool,
+    /// Which 縱 and rows keep the margin lane (`:view-margin`).
+    margin: yumete_cjk::Margin,
     /// Whether every 句 opens a 縱 of its own (`:view-sentence`, Feature #237).
     sentences: bool,
     /// How many squares open a paragraph (首行縮進), as configured.
@@ -2377,9 +2370,8 @@ impl Editor {
             session_file: None,
             turned_for_table: None,
             zong_gap: None,
-            dense: false,
+            margin: yumete_cjk::Margin::default(),
             sentences: false,
-            loose_rows: false,
             indent: 0,
             indent_folds: true,
             cell_folds: None,
@@ -2588,7 +2580,9 @@ impl Editor {
     /// was busy saying there is no reading table. The command says so
     /// *instead* of drawing an empty margin, which is what it always claimed.
     pub fn meter_drawn(&self) -> bool {
-        self.meter && self.reader.available()
+        // 平仄 live in the margin lane, down the page and across it, so no lane
+        // means nowhere to draw them — suppressed, not turned off.
+        self.meter && self.reader.available() && self.margin.shown()
     }
 
     /// Whether the cursor's row is kept in the middle of the page.

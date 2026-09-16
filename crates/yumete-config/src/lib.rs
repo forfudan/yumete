@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-pub use yumete_cjk::{Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
+pub use yumete_cjk::{Layout, Margin, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
 
 /// How line numbers are displayed in the gutter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -246,14 +246,16 @@ pub struct EditorConfig {
     /// sequence you have begun are listed. Turned off, all three fall back
     /// onto the status line and take turns with the position readout.
     pub command_line: bool,
-    /// Whether the 縱書 page is packed as tight as a terminal allows.
+    /// Whether a 縱 — or a row, across — keeps the lane beside it for readings,
+    /// hung 句讀, 着重號, 平仄 and ticks: `never`, `dense`, `loose` or `always`
+    /// (`:view-margin`, see [`Margin`]).
     ///
-    /// On by default: a terminal has few enough columns as it is, and the gap,
-    /// the reading column, the hung margin and the ticks together cost about a
-    /// third of them. `:view-dense off` gives them back for as long as you want
-    /// them — it suppresses those things, it does not turn them off, so what
-    /// the config says about readings and 句讀 is still what it says.
-    pub dense: bool,
+    /// `dense` out of the box: the lane is bought only where something is
+    /// written in it, so a terminal's few columns go to the writing. It
+    /// replaced `dense = true|false`, which was two answers to a question it
+    /// did not name — and the gap between 縱 is no longer one of its jobs:
+    /// that is `zong_gap`, which it used to force to nothing.
+    pub margin: Margin,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
     ///
@@ -330,7 +332,7 @@ impl Default for EditorConfig {
             char_info: true,
             command_line: true,
             smart_case: true,
-            dense: true,
+            margin: Margin::Dense,
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
@@ -1602,6 +1604,16 @@ impl Config {
 
         // …and for the same reason: a misspelt `system` reads as `auto`, which
         // is the opposite of what somebody writing `keep` wanted.
+        // A misspelt margin reads as the factory one, which is a setting that
+        // silently does nothing — so it is named here.
+        if let Some(word) = raw.editor.margin.as_deref() {
+            if Margin::parse(word).is_none() {
+                problems.push(format!(
+                    "[editor] margin = \"{word}\" 只能是 never、dense、loose、always"
+                ));
+            }
+        }
+
         if let Some(word) = raw.ime.system.as_deref() {
             if !SystemImePolicy::is_written(word) {
                 problems.push(format!("[ime] system = \"{word}\" 只能是 auto 或 keep"));
@@ -2149,7 +2161,7 @@ struct RawEditor {
     char_info: Option<bool>,
     command_line: Option<bool>,
     smart_case: Option<bool>,
-    dense: Option<bool>,
+    margin: Option<String>,
     paper_ticks: Option<usize>,
 }
 
@@ -2311,8 +2323,8 @@ impl RawConfig {
         if other.editor.smart_case.is_some() {
             self.editor.smart_case = other.editor.smart_case;
         }
-        if other.editor.dense.is_some() {
-            self.editor.dense = other.editor.dense;
+        if other.editor.margin.is_some() {
+            self.editor.margin = other.editor.margin.clone();
         }
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
@@ -2532,8 +2544,8 @@ impl RawConfig {
         if let Some(on) = self.editor.smart_case {
             config.editor.smart_case = on;
         }
-        if let Some(on) = self.editor.dense {
-            config.editor.dense = on;
+        if let Some(word) = self.editor.margin.as_deref().and_then(Margin::parse) {
+            config.editor.margin = word;
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);

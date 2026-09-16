@@ -642,8 +642,11 @@ impl Editor {
             // A measure is only a measure if the rows honour it, so setting
             // one turns wrapping on: `:view-wrap 50` says "write to fifty", and
             // fifty columns of text running off the edge is not that.
-            Command::SetDense(on) => {
-                self.set_dense(on);
+            Command::SetMargin(want) => {
+                match want {
+                    Some(margin) => self.set_margin(margin),
+                    None => self.status = self.margin_report(),
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::SetSentences(on) => {

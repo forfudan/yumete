@@ -32,45 +32,46 @@ impl Editor {
     }
 
     /// The gap between 縱, if the writer has set one for this session.
+    ///
+    /// Its own setting and nothing else's. `:view-dense` used to force it to
+    /// nothing, which is why the factory gap is now 0 rather than the 1 this
+    /// used to be quietly overriding.
     pub fn zong_gap(&self) -> Option<usize> {
-        // Packed, there is none; otherwise whatever was asked for.
-        self.dense.then_some(0).or(self.zong_gap)
+        self.zong_gap
     }
 
-    /// Pack the page as tight as a terminal can, or let it breathe again.
+    /// Which 縱 — and which rows, across — keep the margin lane
+    /// (`:view-margin`, see [`yumete_cjk::Margin`]).
     ///
-    /// Four things at once, because they are one thing: **how much of the
-    /// window is writing**. The gap between 縱 goes, the reading column goes,
-    /// the margin 句讀 hang in goes, and the 稿紙 ticks go — after which a 縱 is
-    /// two cells wide, which is exactly one 漢字 and the narrowest a terminal
-    /// can draw one.
+    /// **A view, not a change of settings.** `never` *suppresses* readings,
+    /// hung 句讀, 着重號, 平仄 and ticks; it does not turn them off, because
+    /// those are choices about the book and this is a choice about the window.
+    /// So going back needs nothing remembered: what was configured was never
+    /// touched, and simply applies again.
     ///
-    /// What it cannot do is make the 字 itself narrower: a terminal cell is a
-    /// fixed size that the terminal decides, and 90%-wide cells are a setting
-    /// in the terminal, not here.
-    pub fn set_dense(&mut self, on: bool) {
-        // A view, not a change of settings. Packing the page *suppresses* the
-        // readings, the hung 句讀 and the ticks; it does not turn them off,
-        // because they are choices about the book and this is a choice about
-        // the window. So `:view-dense off` needs nothing remembered — what was
-        // configured was never touched, and simply applies again.
-        self.dense = on;
-        // 橫排 has no columns to pack, so `:view-dense` means the other axis there:
-        // the row of air above every row.
-        if self.layout == Layout::Horizontal {
-            self.loose_rows = !on;
+    /// It replaced `:view-dense` (2026-09-16), which did five jobs and did
+    /// different ones in each layout — down the page it hid the margin, across
+    /// it took away the air between rows — and whose two answers covered a
+    /// different pair of these four in each. The gap between 縱 was the fifth,
+    /// and is its own setting now.
+    pub fn set_margin(&mut self, margin: yumete_cjk::Margin) {
+        self.margin = margin;
+        self.status = self.margin_report();
+    }
+
+    /// What the reader is told about the margin: which of the four, in words.
+    pub(super) fn margin_report(&self) -> String {
+        match self.margin {
+            yumete_cjk::Margin::Never => say!("layout.margin-never"),
+            yumete_cjk::Margin::Dense => say!("layout.margin-dense"),
+            yumete_cjk::Margin::Loose => say!("layout.margin-loose"),
+            yumete_cjk::Margin::Always => say!("layout.margin-always"),
         }
-        self.status = match (on, self.layout) {
-            (true, Layout::Vertical) => say!("layout.dense-on"),
-            (false, Layout::Vertical) => say!("layout.dense-off"),
-            (true, Layout::Horizontal) => say!("layout.tight"),
-            (false, Layout::Horizontal) => say!("layout.loose"),
-        };
     }
 
-    /// Whether the page is packed tight.
-    pub fn dense(&self) -> bool {
-        self.dense
+    /// Which margin is in force.
+    pub fn margin(&self) -> yumete_cjk::Margin {
+        self.margin
     }
 
     /// One 句 to a 縱 (`:view-sentence`, Feature #237).
@@ -97,11 +98,6 @@ impl Editor {
     /// Whether every 句 opens a 縱 of its own.
     pub fn sentences(&self) -> bool {
         self.sentences
-    }
-
-    /// Whether the horizontal page keeps a row of air above every row (疏排).
-    pub fn loose_rows(&self) -> bool {
-        self.loose_rows
     }
 
     /// The measure the writer set, if any.
