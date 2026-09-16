@@ -405,6 +405,66 @@ pub struct ImeConfig {
     /// portable install on a USB stick — has no convention to follow, and
     /// guessing harder is not the answer. `~` is expanded.
     pub data_dirs: Vec<PathBuf>,
+    /// Whether yumete may switch the **system's** input method out of the way
+    /// while it wants the keys: `"auto"` (the default) or `"keep"`.
+    ///
+    /// In Normal mode every printable key is a command, so the system's input
+    /// method taking the keystroke first is the one thing that must not
+    /// happen. Where text is typed it is moved aside **only when yumete can
+    /// type 漢字 itself** — the tag the status line stands. With no tag (`:yume
+    /// off`, or no 碼表 loaded, which is what `start = false` means) it is left
+    /// exactly alone, because otherwise `i` would land somewhere that can type
+    /// no Chinese at all.
+    ///
+    /// `keep` never touches it. Switching the input source is a system-wide
+    /// side effect, and a side effect that reaches outside the process should
+    /// have a switch — an unusual terminal, a remote session, a keyboard
+    /// layout that must not move.
+    ///
+    /// ⚠️ **`keep` out of the box, and the reason is not yumete's** (measured
+    /// 2026-09-16). 宇浩's own macOS input method does not take the keyboard
+    /// back after `TISSelectInputSource` has deselected and reselected it: the
+    /// second time yumete hands it back, keys arrive as plain letters and its
+    /// menu shows 「……」 until something else re-activates it. 蘋果全拼 through
+    /// the identical sequence is fine — 2/2 against 2/2, same editor, same
+    /// terminal, same keystrokes — so what this setting turns on is correct and
+    /// what it meets is not. It goes back to `auto` when yume is fixed.
+    pub system: SystemImePolicy,
+}
+
+/// Whether yumete may switch the **system's** input method out of the way.
+///
+/// The word lives here rather than beside the code that acts on it, because
+/// it is a word in a config file: the reader that checks it and the reader
+/// that obeys it have to agree about the list, and two lists is how a setting
+/// comes to be accepted, reported as fine, and then quietly ignored.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SystemImePolicy {
+    /// Move it aside while yumete wants the keys, and put it back.
+    #[default]
+    Auto,
+    /// Never touch it.
+    Keep,
+}
+
+impl SystemImePolicy {
+    /// **Two words and no synonyms.** A word that is neither reads as `auto`,
+    /// because a typo in the *written* value means somebody was reaching for
+    /// the feature; the factory default when nothing is written at all is
+    /// [`SystemImePolicy::Keep`], for the reason on [`ImeConfig::system`].
+    /// Either way [`Self::is_written`] is how the config reader says the typo
+    /// out loud rather than leaving it to be discovered a mode at a time.
+    pub fn from_config(text: &str) -> Self {
+        match text.trim() {
+            "keep" => SystemImePolicy::Keep,
+            _ => SystemImePolicy::Auto,
+        }
+    }
+
+    /// Whether the config file's word is one of the two.
+    pub fn is_written(text: &str) -> bool {
+        matches!(text.trim(), "auto" | "keep")
+    }
 }
 
 impl Default for ImeConfig {
@@ -414,6 +474,7 @@ impl Default for ImeConfig {
             start: false,
             commit: None,
             data_dirs: Vec::new(),
+            system: SystemImePolicy::Keep,
         }
     }
 }
@@ -1537,6 +1598,14 @@ impl Config {
             }
         }
 
+        // …and for the same reason: a misspelt `system` reads as `auto`, which
+        // is the opposite of what somebody writing `keep` wanted.
+        if let Some(word) = raw.ime.system.as_deref() {
+            if !SystemImePolicy::is_written(word) {
+                problems.push(format!("[ime] system = \"{word}\" 只能是 auto 或 keep"));
+            }
+        }
+
         // A command a language declares that will not do what it says is a
         // problem *about the config*, named here rather than discovered when
         // the key is pressed.
@@ -2019,6 +2088,7 @@ struct RawIme {
     start: Option<bool>,
     commit: Option<String>,
     data_dirs: Option<Vec<String>>,
+    system: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -2256,6 +2326,9 @@ impl RawConfig {
         }
         if other.ime.start.is_some() {
             self.ime.start = other.ime.start;
+        }
+        if other.ime.system.is_some() {
+            self.ime.system = other.ime.system.clone();
         }
         // Merged entry by entry, so a project can add to what the global config
         // says rather than having to restate it.
@@ -2518,6 +2591,9 @@ impl RawConfig {
         }
         if let Some(dirs) = self.ime.data_dirs {
             config.ime.data_dirs = dirs.iter().map(|d| PathBuf::from(expand_tilde(d))).collect();
+        }
+        if let Some(system) = self.ime.system {
+            config.ime.system = SystemImePolicy::from_config(&system);
         }
         config.syntax.by_name = self.syntax;
         config.sidebar.side = self.sidebar;
@@ -2852,6 +2928,20 @@ mod tests {
         // A word that is not one of the three is dropped rather than passed on
         // as something no front end can read.
         assert_eq!(commit("[ime]\ncommit = \"slow\""), None);
+    }
+
+    /// The system's input method is left alone out of the box — see
+    /// [`ImeConfig::system`] for whose bug that is waiting on — and a word
+    /// nobody meant reads as `auto` rather than silently as nothing.
+    #[test]
+    fn the_system_input_method_is_left_alone_until_asked() {
+        let system = |line: &str| Config::from_toml(line).ime.system;
+        assert_eq!(system(""), SystemImePolicy::Keep);
+        assert_eq!(system("[ime]\nsystem = \"auto\""), SystemImePolicy::Auto);
+        assert_eq!(system("[ime]\nsystem = \"keep\""), SystemImePolicy::Keep);
+        assert_eq!(system("[ime]\nsystem = \"kept\""), SystemImePolicy::Auto);
+        assert!(SystemImePolicy::is_written("keep"));
+        assert!(!SystemImePolicy::is_written("kept"));
     }
 
     #[test]
