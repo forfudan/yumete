@@ -7071,16 +7071,16 @@ en = "Zong {0}, Heng {1}"
 [[message]]
 # `/` 搜索那一行的提示詞（helix 寫 search:）
 key = "ui.prompt-search"
-zht = "搜索:"
-zhs = "搜索:"
-en = "search:"
+zht = "搜索: "
+zhs = "搜索: "
+en = "search: "
 
 [[message]]
 # `?` 倒着搜那一行的提示詞（helix 寫 rsearch:）
 key = "ui.prompt-search-back"
-zht = "倒搜:"
-zhs = "倒搜:"
-en = "rsearch:"
+zht = "倒搜: "
+zhs = "倒搜: "
+en = "rsearch: "
 
 [[message]]
 # 狀態欄：這一份是只讀的（:readonly on，或磁盤上就不許寫）

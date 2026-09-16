@@ -472,7 +472,8 @@ pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
         // 「119」「118」 ran together into 「11」「11」 over 「9」「8」 — a wall of
         // digits nobody can read a line number out of. One digit to a row
         // cannot merge with its neighbour, because there is nothing beside it.
-        _ => (total_lines.max(1).to_string().len()).clamp(1, 6) as u16,
+        // Two digits to a row (#512) — see `put_number`.
+        _ => (total_lines.max(1).to_string().len().div_ceil(2)).clamp(1, 3) as u16,
     }
 }
 
@@ -635,24 +636,46 @@ pub(crate) fn index_mark(markers: &str, i: usize) -> String {
 /// Draw a paragraph number above its 縱, two digits to a row (縦中横), so it
 /// reads as a number rather than a stack of loose digits.
 fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: Style) {
+    // ⚠️ **Two digits to a row — 縦中横, which is what a Japanese book does with
+    // a number in a column** (#512). A 縱 is two cells wide and a digit is one,
+    // so the pair costs nothing and a four-digit line number is two rows deep
+    // instead of four. On an eighty-row terminal that is two rows of every
+    // column given back to the writing.
+    //
+    // This was tried once and taken out again: 「119」「118」 in neighbouring
+    // 縱 read as 「11」「11」 over 「9」「8」, a wall of digits. The reason it
+    // stands now is that the *neighbours* are told apart — every other 縱's
+    // number is drawn a rung back — so two numbers side by side are two
+    // colours, not one run. Position could never separate them here (the
+    // number sits above the text, in the text's own columns), and colour is
+    // what vertical layout has instead.
     let digits = n.to_string();
-    let shown = digits.len().min(rows as usize);
-    // The last `shown` digits: a number too long for the header loses its
-    // leading digits rather than its trailing ones, since it is the units that
-    // tell two neighbouring 縱 apart.
-    let digits = &digits[digits.len() - shown..];
-    for (row, ch) in digits.chars().enumerate() {
-        // Bottom-aligned, against the text it labels.
-        let y = top + rows - shown as u16 + row as u16;
-        // Hung right, on the same edge the 漢字 below it are hung on, so the
-        // number reads as belonging to this 縱 and not to the one beside it.
-        // Half-width: a full-width digit would fill the slot and centre nicely,
-        // but then 1–9 and 10–99 would mix the two widths down one gutter.
-        if let Some(cell) = buf.cell_mut((x + 1, y)) {
+    let room = rows as usize * 2;
+    // A number too long for the header loses its leading digits rather than its
+    // trailing ones: it is the units that tell two neighbouring 縱 apart.
+    let digits = &digits[digits.len().saturating_sub(room)..];
+    let chars: Vec<char> = digits.chars().collect();
+    // Bottom-aligned against the text it labels, and **the top row is the one
+    // that goes short**: `123` is 「 1」 over 「23」, the way it is written.
+    let used = chars.len().div_ceil(2) as u16;
+    let odd = chars.len() % 2 == 1;
+    for (i, ch) in chars.iter().enumerate() {
+        let at = i + usize::from(odd);
+        let y = top + rows - used + (at / 2) as u16;
+        // Hung on the same two cells the 漢字 below are hung on, so the number
+        // reads as belonging to this 縱 and not to the one beside it.
+        if let Some(cell) = buf.cell_mut((x + (at % 2) as u16, y)) {
             cell.set_symbol(&ch.to_string()).set_style(style);
         }
-        if let Some(cell) = buf.cell_mut((x, y)) {
-            cell.set_symbol(" ").set_style(style);
+    }
+    // The ground runs the whole header, so a short top row is still a band.
+    for row in 0..rows {
+        for cell in 0..2u16 {
+            if let Some(c) = buf.cell_mut((x + cell, top + row)) {
+                if c.symbol().trim().is_empty() {
+                    c.set_symbol(" ").set_style(style);
+                }
+            }
         }
     }
 }
@@ -942,12 +965,22 @@ pub fn draw(
             // are a real rung. They used to be the terminal's own foreground on
             // a band at 1.04:1, which made the cursor's number the brightest
             // thing on a page of somebody's novel.
+            // ⚠️ **Every other 縱's number stands a rung back** (#512). Two
+            // numbers now sit two cells apart with nothing between them, so
+            // 「23」「24」 would read as 「2324」 — the very objection that kept
+            // the numbers one digit to a row for so long. This is the answer
+            // the author gave: 「相邻的纵号会混在一起，建议每隔一纵序号用不同的
+            // 颜色／色阶区分」, and it is the device the table's own banding
+            // already uses. The *line* number decides the parity, not the 縱's
+            // place on the screen, so scrolling does not make the pattern
+            // crawl.
             let style = band_ground;
-            let style = match zong.line == cursor_line {
+            let style = match (zong.line == cursor_line, zong.line % 2 == 0) {
                 // 朱 for the one you are in: the one question vertical layout
                 // strips position of, answered by the one colour off the ladder.
-                true => style.fg(band_ink.mark()),
-                false => style.fg(band_ink.furniture()),
+                (true, _) => style.fg(band_ink.mark()),
+                (false, true) => style.fg(band_ink.furniture()),
+                (false, false) => style.fg(band_ink.at(yumete_config::rung::RULE)),
             };
             // Above its own band, not above the page.
             let band_top = text_top.saturating_sub(metrics.head_rows);
