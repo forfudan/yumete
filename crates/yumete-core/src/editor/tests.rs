@@ -1891,6 +1891,43 @@ fn join_omits_the_space_between_two_wide_characters() {
     assert_eq!(ed.current_buffer().text(), "one two");
 }
 
+/// `gJ` 合幾行，三種說法（#518）。
+///
+/// ⚠️ 兩處是修好的，不是新加的：**選區從前只合頭兩行**（選一整段按下去，看起來像做完了
+/// 其實只動了一對），而 **`g3J` 完全沒反應**——它讀的是 `g` *之前*打的數字，而那個 `3`
+/// 打在 `g` 之後，進的是序列自己的參數。隔壁 `g30g` 一直是對的。
+#[test]
+fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
+    let five = "一\n二\n三\n四\n五\n";
+
+    // 一、選區跨幾行就合幾次——helix 的 `J`、vi 在 visual 模式下的 `J`。
+    let mut ed = typed(five);
+    press(&mut ed, "xxx");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n", "選三行合成一行");
+
+    // 二、`g3J`——本編輯器定的順序（命令＋選擇＋動作）。
+    let mut ed = typed(five);
+    press(&mut ed, "g3J");
+    assert_eq!(ed.current_buffer().text(), "一二三四\n五\n");
+
+    // 三、`4gJ`——vi 的順序，數字在命令前面。
+    let mut ed = typed(five);
+    press(&mut ed, "4gJ");
+    assert_eq!(ed.current_buffer().text(), "一二三四五\n");
+
+    // 不給數字也不選：還是「和下一行合併」。
+    let mut ed = typed(five);
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "一二\n三\n四\n五\n");
+
+    // `gK` 同一套，往上合。
+    let mut ed = typed(five);
+    ed.goto_line(3);
+    press(&mut ed, "g2K");
+    assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n", "{}", ed.current_buffer().text());
+}
+
 #[test]
 fn the_case_group_leaves_han_alone() {
     // 漢字 is why these three stopped being top-level keys (§5.2.3 ②):
@@ -11123,9 +11160,14 @@ fn line_operators_follow_the_selection_not_the_cursor() {
     // `x` parks the cursor on the line *after* the one it selected, so
     // anything reading the cursor's line acted on a line the writer had
     // not selected and could not see was selected.
+    // ⚠️ **三行合成一行**（#518）. This asserted 「一二\n三\n四」 until 2026-09-16
+    // — the first pair and no more — which is what `gJ` did with a selection
+    // and was not what anybody selecting three lines meant. The point this test
+    // is *for* is unchanged: the lines acted on are the selection's, not the
+    // cursor's, and `x` parks the cursor on the line after.
     let mut ed = typed("一\n二\n三\n四\n");
     type_keys(&mut ed, "ggxxxgJ");
-    assert_eq!(ed.current_buffer().text(), "一二\n三\n四\n");
+    assert_eq!(ed.current_buffer().text(), "一二三\n四\n");
 
     let mut ed = typed("甲甲\n甲甲\n");
     type_keys(&mut ed, "ggx");
