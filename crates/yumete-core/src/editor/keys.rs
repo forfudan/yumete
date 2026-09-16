@@ -1092,6 +1092,44 @@ impl Editor {
     /// Handle the second key of a goto (`g`) sequence, Helix-style: `gg` to the
     /// buffer start, `ge` to the last line, `gh`/`gl` to line start/end, `gs` to
     /// the first non-blank character.
+    /// How many joins `gJ`/`gK` should make (#518).
+    ///
+    /// Three ways to say it, in the order they are looked for:
+    ///
+    /// * **A selection spanning lines** — `xxx gJ` makes those three lines one,
+    ///   which is what Helix's `J` does and what vi's does in visual mode.
+    ///   ⚠️ It used to join the first pair and stop: `join_lines` reads the
+    ///   selection's first line and joins it with the next, once, and nothing
+    ///   asked it to go on. Selecting a paragraph and pressing `gJ` looked like
+    ///   it had worked.
+    /// * **`g3J`** — the sequence's own number, which is the order this editor
+    ///   settled on (「命令＋選擇＋動作」, §5.2). ⚠️ It was read from
+    ///   `operator_count`, which holds a count typed *before* the `g`, so the
+    ///   documented spelling was the one that did nothing: `g4J` joined one
+    ///   pair. `g30g` next door had it right all along.
+    /// * **`4gJ`** — vi's order, a count before the command. This one worked.
+    fn join_count(&mut self) -> usize {
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        // ⚠️ **The last character *in* the selection, not the one past it.**
+        // `x` takes the line break with the line, so the end sits at the start
+        // of the next line — counting to `end` says four lines where three are
+        // selected, and `xxx gJ` welded a line nobody had picked.
+        if end > start {
+            let first = rope.char_to_line(start);
+            let last = rope.char_to_line((end - 1).min(rope.len_chars().saturating_sub(1)));
+            if last > first {
+                // N lines make N−1 joins.
+                return last - first;
+            }
+        }
+        self.sequence_span()
+            .map(|(n, _)| n)
+            .or_else(|| self.operator_count.take())
+            .unwrap_or(1)
+            .max(1)
+    }
+
     fn handle_goto(&mut self, key: Key) {
         // `10gg` is "goto line 10", the way Helix reads a count before `gg`;
         // a bare `gg` is the same thing with the count 1.
@@ -1125,13 +1163,12 @@ impl Editor {
                 return;
             }
             Key::Char('J') => {
-                // The count belongs to the `g`, which has already spent it.
-                let count = self.operator_count.take().unwrap_or(1).max(1);
+                let count = self.join_count();
                 return self.repeat_writing(count, |e| e.join_lines());
             }
             // …and the other direction, which helix does not have (#485).
             Key::Char('K') => {
-                let count = self.operator_count.take().unwrap_or(1).max(1);
+                let count = self.join_count();
                 return self.repeat_writing(count, |e| e.join_with_above());
             }
             // **`gj` and `gk` are `j` and `k` here** (#485). In helix the plain
