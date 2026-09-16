@@ -430,7 +430,7 @@ impl Editor {
         let mut order: Vec<char> = Vec::new();
         for (line, body) in text.lines().enumerate() {
             for ch in body.chars() {
-                if !is_han(ch) {
+                if !is_han(ch) || EVERY_FONT_HAS.contains(&ch) {
                     continue;
                 }
                 if let Some(entry) = seen.get_mut(&ch) {
@@ -443,12 +443,11 @@ impl Editor {
                     self.status = say!("check.charset-no-data");
                     return;
                 };
-                let mut parts = field.splitn(2, '-');
-                let tags = parts.next().unwrap_or("");
-                let block = parts.next().unwrap_or("").to_string();
+                let (tags, block) = split_charset(&field);
                 if !tags.is_empty() {
                     continue;
                 }
+                let block = block.to_string();
                 order.push(ch);
                 seen.insert(ch, (line, 1, block));
             }

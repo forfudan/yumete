@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use regex::Regex;
 use ropey::Rope;
-use yumete_cjk::{is_han, CategorySegmenter, NoReader, Reader, Segmenter};
+use yumete_cjk::{is_han, split_charset, CategorySegmenter, NoReader, Reader, Segmenter};
 
 use crate::buffer::Buffer;
 use crate::command::{self, Command, CommandError};
@@ -273,6 +273,15 @@ const OVERSIZE_JUMP: u64 = 256 * 1024;
 /// can have thousands: the count is the useful half of that answer, and the
 /// list is for walking.
 const LISTING_LIMIT: usize = 500;
+
+/// The two 漢字 [`is_han`] adds by hand — 〇 the year digit and 々 the
+/// repetition mark — which `:check-charset` never reports.
+///
+/// They are in no 字集 list, because those list 漢字 proper and these two are
+/// ideographs that live among the punctuation. But they are in the 標點 block
+/// every CJK font ships, so reporting them would put 〇 on the page for every
+/// 二〇二五年 in the book and bury the finding the check exists for.
+const EVERY_FONT_HAS: [char; 2] = ['〇', '々'];
 
 /// The largest file `:grep` will read. A manuscript chapter is kilobytes;
 /// anything above this is data that happens to live in the same directory.

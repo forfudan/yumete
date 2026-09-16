@@ -44,7 +44,7 @@ pub mod word;
 pub use grapheme::{
     grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, prev_grapheme_boundary,
 };
-pub use reading::{NoReader, Reader};
+pub use reading::{split_charset, NoReader, Reader, CHARSET_TAGS};
 pub use segment::{
     best_path, CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo,
     Segmenter, WithWords, WordLevel, WordList, WordMark, WordSource,

@@ -1037,7 +1037,14 @@ impl yumete_cjk::Reader for Toy {
             // In 古籍 only, so rare — but a standard does carry it.
             '龘' => "古-CJK".to_string(),
             // In nothing at all, and in a block a font may well lack.
-            '𠮷' => "-CJK擴展B".to_string(),
+            //
+            // ⚠️ **`CJK-B`, with no leading `-`** — that is how yume spells a
+            // row with no 字集 marks, and the hyphen inside the block name is
+            // the whole reason [`split_charset`] exists. This fixture used to
+            // write `-CJK擴展B`, a shape yume never produces, and that is what
+            // hid the bug: on real data every 擴展A character came back 「in
+            // 字集」 because `CJK-A` split into the tags `CJK`.
+            '𠮷' => "CJK-B".to_string(),
             _ => "簡繁臺港-CJK".to_string(),
         })
     }
@@ -6420,6 +6427,35 @@ fn check_charset_reports_each_character_once() {
     let mut ed = typed("漢字");
     assert!(ed.execute("check-charset").is_ok());
     assert!(!ed.status().is_empty(), "no 字集 data is worth saying");
+}
+
+/// The block name is not the tags, however many hyphens it has.
+///
+/// A character in no 字集 carries a field that is nothing but its block —
+/// `CJK-B`, `CJK-A`, `假名擴展-A` — and the check used to take everything
+/// before the first `-` as the 字集 marks. `CJK` is not empty, so every such
+/// character was passed over: a page of 擴展A came back 「每個字都在字集裏」,
+/// which is the one answer `:check-charset` exists to disprove.
+#[test]
+fn a_hyphen_in_the_block_name_is_not_a_charset_mark() {
+    let mut ed = with_toy_reader("𠮷
+");
+    assert!(ed.execute("check-charset").is_ok());
+    let out = ed.current_buffer().text();
+    assert!(out.contains('𠮷'), "the character in no 字集 is the finding: {out}");
+    assert!(out.contains("CJK-B"), "and the block is named whole: {out}");
+}
+
+/// 〇 and 々 are in no 字集 list and in every CJK font, so they are not a
+/// typesetting risk — and 二〇二五年 would otherwise put 〇 at the top of the
+/// findings for most manuscripts.
+#[test]
+fn the_year_digit_is_not_a_finding() {
+    let mut ed = with_toy_reader("二〇二五年，人々。
+");
+    let before = ed.buffer_count();
+    assert!(ed.execute("check-charset").is_ok());
+    assert_eq!(ed.buffer_count(), before, "clean: no listing");
 }
 
 /// `:check-punct` answers in the same jumpable shape, and the finding that
