@@ -502,6 +502,8 @@ impl Editor {
             // Its own store, its own shape: a form and a list of hits, not
             // rows of a tree (#419).
             View::Search => return,
+            // Drawn from the cursor every frame, not from rows (#287).
+            View::Wiki => return,
         };
         if let Some(panel) = self.panel_mut(side) {
             panel.set_rows(rows);

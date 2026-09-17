@@ -14226,3 +14226,47 @@ fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
     assert!(ed.wiki.by_name.contains_key("雁門關"), "{:?}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// 作品百科, second part (#287): the entry under the cursor, re-levelled; one
+/// place at a time; `gd` goes to where it is written.
+#[test]
+fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
+    use crate::editor::WikiLine;
+    let dir = std::env::temp_dir().join(format!("yumete-wiki-panel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(
+        dir.join(".yumete/wiki.md"),
+        "# 人物\n## 阿寧\n主角。\n### 小時候\n江邊。\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("第一章.md"), "阿寧回來了\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.reload_project_words();
+
+    let view = ed.wiki_floating().expect("standing on 阿寧");
+    assert_eq!(view.name, "阿寧");
+    assert_eq!(view.parts[0].trail, ["人物"]);
+    assert_eq!(
+        view.parts[0].lines,
+        [
+            WikiLine::Text("主角。".into()),
+            WikiLine::Heading(2, "小時候".into()),
+            WikiLine::Text("江邊。".into())
+        ],
+        "### under ## reads as ## under the entry"
+    );
+
+    ed.execute(":wiki panel").unwrap();
+    assert!(ed.wiki_here().is_some());
+    assert!(ed.wiki_floating().is_none(), "the sidebar page has it: it does not float too");
+
+    ed.execute(":wiki panel").unwrap();
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('d'));
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("wiki.md")));
+    assert_eq!(ed.cursor_line(), 1, "on the heading");
+    std::fs::remove_dir_all(&dir).ok();
+}

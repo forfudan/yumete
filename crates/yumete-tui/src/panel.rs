@@ -45,11 +45,22 @@ pub struct Panel {
 /// not close one. Wrapping it any other way would put a full stop alone at the
 /// head of the panel's second line, which is the one thing everybody notices.
 fn wrap(text: &str, width: usize) -> Vec<String> {
-    let chars: Vec<char> = text.chars().collect();
-    let mut rows: Vec<String> = yumete_core::wrap::line_rows(text, width)
-        .into_iter()
-        .map(|(from, to)| chars[from.min(chars.len())..to.min(chars.len())].iter().collect())
-        .collect();
+    // A line break in the text is a line break in the panel: a wiki entry is
+    // several paragraphs and a heading, not one run of prose (#287).
+    let mut rows: Vec<String> = Vec::new();
+    for paragraph in text.split('\n') {
+        let chars: Vec<char> = paragraph.chars().collect();
+        if chars.is_empty() {
+            rows.push(String::new());
+            continue;
+        }
+        rows.extend(
+            yumete_core::wrap::line_rows(paragraph, width)
+                .into_iter()
+                .map(|(from, to)| chars[from.min(chars.len())..to.min(chars.len())].iter().collect::<String>())
+                .filter(|row| !row.is_empty()),
+        );
+    }
     // A note that fills its last row exactly gets an empty row after it —
     // right on the page, where the caret has to have somewhere to stand past
     // the final character, and wrong in a ring, where it is a blank row the
@@ -99,7 +110,8 @@ pub fn draw(
             // sentence it belongs to, and one that fills the window has taken
             // the place of the thing it was explaining.
             let want = widest.saturating_sub(2).min(((area.width as usize) * 2 / 3).max(24));
-            let inner = yumete_cjk::str_width(text).min(want).max(1);
+            let longest = text.split('\n').map(yumete_cjk::str_width).max().unwrap_or(0);
+            let inner = longest.min(want).max(1);
             let lines = wrap(text, inner);
             // Shrink to the longest line actually drawn: wrapping a 40-cell
             // note at 60 leaves twenty cells of ring around nothing.

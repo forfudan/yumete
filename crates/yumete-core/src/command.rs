@@ -2095,6 +2095,7 @@ const WORD_LISTS: &[Word] = &[
 const WIKI_WORDS: &[Word] = &[
     Word { name: "edit", help: "cmd.wikis.edit", needs: &[] },
     Word { name: "global", help: "cmd.wikis.global", needs: &[] },
+    Word { name: "panel", help: "cmd.wikis.panel", needs: &[] },
     Word { name: "reload", help: "cmd.wikis.reload", needs: &[] },
 ];
 
@@ -2227,6 +2228,7 @@ const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "detail", help: "label.panel.detail", needs: &[] },
+    Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
 ];
 
 /// Every command, for the completion list.
