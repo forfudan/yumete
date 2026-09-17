@@ -309,6 +309,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Word(what) => self.word_command(what),
+            Command::Wiki(what) => self.wiki_command(what.as_deref()),
             Command::SetBands(n) => {
                 self.set_bands(n);
                 Ok(CommandOutcome::Continue)

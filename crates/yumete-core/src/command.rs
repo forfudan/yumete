@@ -181,6 +181,8 @@ pub enum Command {
     /// begins**, which is one subject and used to be several commands
     /// (`:segment` coloured the boundaries, `:words` weighed them).
     Word(WordCommand),
+    /// `:wiki [edit|global|reload]` — 作品百科 (#287). Bare, the report.
+    Wiki(Option<String>),
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
@@ -2089,6 +2091,13 @@ const WORD_LISTS: &[Word] = &[
     },
 ];
 
+/// What `:wiki` takes.
+const WIKI_WORDS: &[Word] = &[
+    Word { name: "edit", help: "cmd.wikis.edit", needs: &[] },
+    Word { name: "global", help: "cmd.wikis.global", needs: &[] },
+    Word { name: "reload", help: "cmd.wikis.reload", needs: &[] },
+];
+
 const WORD_LEVELS: &[Word] = &[
     Word {
         name: "off",
@@ -2590,6 +2599,14 @@ pub const COMMANDS: &[Entry] = &[
                 },
             }))
         }),
+    },
+    Entry {
+        name: "wiki",
+        aliases: &[],
+        help: "cmd.commands.wiki",
+        needs: &[],
+        params: &[Param::Words { of: WIKI_WORDS, default: None }],
+        build: Some(|p| Ok(Command::Wiki(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "word-list",

@@ -1590,6 +1590,8 @@ pub struct Editor {
     /// apart from what autodetect found so that reloading one does not throw
     /// the other away.
     own_words: yumete_cjk::WordList,
+    /// 作品百科 (#287) — this book's wiki and the global one, as last read.
+    wiki: crate::wiki::Wiki,
     /// The half autodetect found in the manuscript, which lives **only here**:
     /// no file, no buffer, nothing to accept or refuse. `:word-discover`
     /// writes a copy out to be read, and that copy is not read back.
@@ -2324,6 +2326,7 @@ impl Editor {
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             own_words: yumete_cjk::WordList::default(),
+            wiki: crate::wiki::Wiki::default(),
             detected_words: yumete_cjk::WordList::default(),
             detect_request: None,
             fill_request: None,
@@ -3239,6 +3242,7 @@ mod sidebar;
 mod tables;
 mod undo;
 mod verbs;
+mod wiki;
 mod words;
 mod wrap;
 
