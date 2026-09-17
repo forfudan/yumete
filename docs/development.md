@@ -626,7 +626,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 401 | **`ye`：像 helix 的 `hx` 一樣給一個簡稱** | build | P3 | 一個二進制，兩個名字 [^401] | Fixed 2026-09-11 |
 | 402 | **三國演義和天龍八部根本沒有大綱** | core | P2 | 一個藏在網頁箭頭裏，一個只數數 [^402] | Fixed 2026-09-12 |
 | 403 | **Insert 模式認一套 Windows 的鍵** | tui | P4 | nice to have；⌘ 那半邊已經有結論 [^403] | Proposed |
-| 404 | **對齊 tutor 教的鍵：補、改、或不暴露** | tui+core | P1 | 七處啞的補完；`t` 撞鍵留給作者 [^404] | Fixed 2026-09-12 |
+| 404 | **對齊 tutor 教的鍵：補、改、或不暴露** | tui+core | P1 | 七處啞的補完；`t` 撞鍵另定 [^404] | Fixed 2026-09-12 |
 | 405 | **多光標：`C` `s` `S` `&` 與 Alt 那一族** | core | P2 | 0.2.0；核心要持有一組選區 [^405] | Planned |
 | 406 | **`gw`：兩字符跳轉標籤，適配中文** | tui+core | P2 | 標籤落在分詞的詞首 [^406] | Planned |
 | 407 | **格子裏的選區看不見** | tui | P1 | 光標格和選區同一個顏色 [^407] | Fixed 2026-09-12 |
@@ -645,7 +645,7 @@ index, and a row with no number anywhere else is a row that got lost.
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
-**The author's model, 2026-09-05:** 「csv
+**The model, 2026-09-05:** 「csv
 文件等同于一个从第一行到最后一行都是表格 的普通文本文件」 — a CSV file is not a
 different kind of thing from a table inside a document, it is the case where the
 boundary happens to be the whole file.
@@ -1070,7 +1070,7 @@ built on rather than instance by instance:
 
 ### 5.6 · Four ways to look at a table, and two kinds of file (#275, #277)
 
-**The author's model, 2026-09-05**, after I had built one of the three and
+**The model, 2026-09-05**, after I had built one of the three and
 called it the other:
 
 > 有三种模式。一种是 prose/source 模式，表格当作普通文本。第二个是**表格操作
@@ -1146,7 +1146,7 @@ Neither applies to `WholeFile`: there is no prose to walk into.
   nothing else, and leaving it drops straight back to prose; to see it again,
   press again.
 
-The author's reason for the split, which is also the reason it is safe: a file
+The reason for the split, which is also the reason it is safe: a file
 whose syntax says「table」can be turned on with confidence, and a file where we
 are *guessing* from a run of tab characters should never leave that guess
 standing on screen after the reader has walked away from it.
@@ -1438,7 +1438,7 @@ Twenty-eight columns of a 拆分表 were never meant to be read across.
 - **The level decides unasked; `t w` is asked.** 「`basic` 不藏、不摺、不替
   換」 says what a *level* may do with nobody asking, and folding is all three
   — so 基本 folds nothing on its own. It is not a reason to refuse the reader
-  (author, 2026-09-07: 「虽然 tb 在默认状态下不折叠，但能不能在按下 tw 之后折
+  (2026-09-07: 「虽然 tb 在默认状态下不折叠，但能不能在按下 tw 之后折
   叠？这个应该不违反我们之前说的 render -> table 链条吧」), and it does not
   violate the chain: `t w` writes nothing into `table_level`. What folding
   actually needs is a column squared up to fold *against*, which 基本 does
@@ -1648,7 +1648,7 @@ a paste is made to.
 
 ### 5.8 · 作品百科 — 一本書自己的百科 (#287)
 
-The author, 2026-09-07: 「我想在 yumete 中加一個「作品百科」功能……wiki
+2026-09-07: 「我想在 yumete 中加一個「作品百科」功能……wiki
 的所有詞條加入分詞、都使用虛線下劃線、光標移到這個詞上則會在右側信息欄顯示它的詞條內容……你覺得這個想法怎麼樣呢？」
 
 **The idea is right, and most of it is already built.** A novel with forty
@@ -1680,9 +1680,8 @@ the manuscript, not to the session that opened it. The global one is
 buffer's syntax is chosen from the extension, so `:wiki edit` on a `.txt`
 opens a file full of `##` with **no markup highlighting, no outline panel and
 no 所見即所得** — the writer would be editing Markdown in a window that has
-been told the file is not Markdown. `wiki.txt` should still be *read* (the
-author asked for it, and a reader who names it that is not wrong about
-anything), but `wiki.md` is what `:wiki edit` creates when neither exists, and
+been told the file is not Markdown. `wiki.txt` should still be *read* (a
+reader who names it that is not wrong about anything), but `wiki.md` is what `:wiki edit` creates when neither exists, and
 a `wiki.txt` is opened with Markdown forced on, the way `:syntax markdown`
 does it.
 
@@ -1692,19 +1691,19 @@ this book's. Requirement 5 already says two entries of the same name are both
 shown, sorted by level — so a name in both files is not a conflict to resolve,
 it is two entries, and the book's is the one a reader is asking about.
 
-The author settled it and added the part that makes it readable (2026-09-07):
+Settled 2026-09-07, with the part that makes it readable:
 「本书排前面，然后本书和全局之间有个分界线，并且全局的部份注上“全局”两个字。这样
 用户就不会混淆了。」 So the panel draws the book's entries, then a rule, then
 the global ones under a 金 「全局」 — 金 because that word is the panel speaking
 about the text rather than being text (§5.4's 這不是正文), and a rule because
 「一本書的設定」 and 「一套書的設定」 are two different authorities and the
-reader must never have to guess which one he is reading. The rule and the label
+reader must never have to guess which one they are reading. The rule and the label
 appear **only when both files contributed** to this entry; a term that exists in
 one place is drawn with neither.
 
 ##### `[yumete] 檔名` — one wiki, many files
 
-The author, 2026-09-07: 「wiki.md 的注释中如果有 `[yumete] filename` 就说明它指
+2026-09-07: 「wiki.md 的注释中如果有 `[yumete] filename` 就说明它指
 向 local 路径中的一个文件，他也被认作是 wiki 来源。如果写多行
 `[yumete] filename` 就是多个来源。」 A wiki that is worth having outgrows one
 file — 人物, 地理, 門派, 年表 — and this is the cheapest possible way to say so.
@@ -1787,7 +1786,7 @@ form that ships with #287 is one per line:
 <!-- [yumete] 地理.md -->
 ```
 
-The author asked for both and chose to do it in two steps: multi-line blocks
+Both, in two steps: multi-line blocks
 become correct **for free** once #288 gives `spans()` cross-line state, and
 #287 is not held up waiting for it.
 
@@ -1801,15 +1800,15 @@ a wiki source and no reader could say where a term came from.
 
 #### 5.8.2 What counts as an entry
 
-**`##` and below. `#` is not an entry.** The author's rule, and it is the
+**`##` and below. `#` is not an entry.** The rule, and it is the
 right one: a wiki wants dividers (`# 人物`, `# 地理`, `# 名詞`) that are not
 themselves words in the book, and `#` is where they go. An `h1` therefore
 never enters the segmenter and is never marked on the page — it only shows up
 in a breadcrumb.
 
 An entry is `(name, depth, ancestors, body)` where `body` runs from the line
-after the heading to **the next heading of depth ≤ its own** — that is the
-author's 「包括子章節」 verbatim, and it is one comparison.
+after the heading to **the next heading of depth ≤ its own** — that is
+「包括子章節」 verbatim, and it is one comparison.
 
 Duplicated names are kept, not merged: `entries: Vec<Entry>` plus
 `by_name: HashMap<String, Vec<usize>>`, the indices sorted by `(depth, order
@@ -1848,8 +1847,8 @@ word and the segmenter, not this feature, decides where 詞 ends.
 
 #### 5.8.4 The mark on the page — the one hard part
 
-The author asked for **虛線下劃線**, and named the fallback himself: 「如果無法
-做到，就用背景色等」. It cannot be done, and the fallback he named is the one
+The request was **虛線下劃線**, with a fallback: 「如果無法
+做到，就用背景色等」. It cannot be done, and the fallback named is the one
 option the house style has already ruled out. So this needs deciding rather
 than assuming.
 
@@ -1927,15 +1926,15 @@ a reading, a hung 句讀 mark, a 着重號 and a 平仄 mark all want it
 (`vertical::Margin`), so a 側線 would be silently absent on exactly the lines
 that are most annotated.
 
-Put as 「側線 in the contended margin, or the quiet ink」, he
-chose the ink and then asked the question that undid it:
+Put as 「側線 in the contended margin, or the quiet ink」, the
+ink was chosen, and then the question that undid it:
 「淡一级是更明显还是更不明显？ 能不能配合背景色？我希望不要太 invasive
 但也不要太 low-profile」. The answers decide it:
 
 - **淡一級是更不明顯.** `word_ink` is `rung::WORD_INK` (第 15 檔; it was `QUIET`, now `ASIDE`, and that rung is a reading's
   beside its base and a 拆分 annotation — its meaning is 這一項次要. Literal
   Option 2 therefore says the opposite of what a wiki term means, and lands
-  exactly on the low-profile end he ruled out.
+  exactly on the low-profile end that was ruled out.
 - **A ground is available**, per `Palette::word` above — but not `WORD` (962) or
   `BAND` (940) for this: those two are already compressed at the paper end
   (§5.4 measures 880 against 940 at 1.11–1.20:1, which is not a visible
@@ -1982,7 +1981,7 @@ wins** (you are in a grid, editing cells), then **a footnote or a comment**
 (an explicit construct the writer typed), then the wiki term (something the
 editor recognised). Recognition never displaces something typed.
 
-**What it shows** is requirement 4, and two details in his
+**What it shows** is requirement 4, and two details in the
 example are worth naming because they are what make it read well:
 
 ```
@@ -2011,7 +2010,7 @@ standing on 亞洲人 gives
 - **The breadcrumb is the ancestor chain**, drawn under the title, and it is
   the h1 dividers' one job — `人物 › 亞洲人` tells a reader which of two
   同名詞條 they are looking at before they read a word of it.
-- (The author's sketch omits 亞洲人's own paragraph from the output. His prose
+- (The sketch omits 亞洲人's own paragraph from the output. Its prose
   says 「顯示這個詞條下方所有內容」, so the paragraph is in — read as a slip in
   the sketch, not as a rule. Flagged in §5.8.8.)
 
@@ -2071,7 +2070,7 @@ gesture with a split, and that is the version worth waiting for.
 
 #### 5.8.8 What was decided (2026-09-07)
 
-All five went to him and all five came back. Recorded in his words so that a
+All five were answered. Recorded in the answers' own words so that a
 later reader does not reopen them:
 
 1. **The entry's own paragraph is in.** The sketch in requirement 4 omits it and
@@ -2081,14 +2080,14 @@ later reader does not reopen them:
    「本书排前面，然后本书和全局之间有个分界线，并且
    全局的部份注上“全局”两个字。这样用户就不会混淆了。」 Neither replaces the
    other (§5.8.1, §5.8.5).
-3. **縱書: a `rung::HEAD` ground, one cell, ink untouched** — he asked for
+3. **縱書: a `rung::HEAD` ground, one cell, ink untouched** — the ask was
    「不要太 invasive 但也不要太 low-profile」 and the quiet ink was the
    low-profile end (§5.8.4).
 4. **The mark is on out of the box.** 「開（推薦）」
 5. **Both spellings are read**, `wiki.txt` opened with Markdown forced on;
    `wiki.md` is what `:wiki edit` creates (§5.8.1).
 
-And one he raised himself: **horizontal takes a dotted underline**, not a faint
+And one more: **horizontal takes a dotted underline**, not a faint
 one — 「这样和 markdown 的下划线语法可以分开」 — which buys a custom `Backend`
 and pays for it in a difference that survives any theme (§5.8.4).
 
@@ -2135,7 +2134,7 @@ for prioritizing. **Done** = implemented; **Pn** = planned in that phase;
 >
 > **前置條件：Helix／vi 的共識鍵不動——爲的是遷移**（2026-09-09 說清楚）。
 > yumete is CJK-aware and made for writing, but it is also a general editor,
-> and **作者自己有一半時間在寫英文、讀代碼**。共識鍵是別人建好的資產，不是空地。
+> and **這裏有一半時間在寫英文、讀代碼**。共識鍵是別人建好的資產，不是空地。
 > 判準因此不是「我按不按它」，而是「**大多數 vi／helix 使用者從來不碰**」——那樣的
 > 鍵纔可以換給中文的功能。代理有三個：vi 與 helix 的交集、cheatsheet 的第一頁、
 > **helix 自己的 `tutor`**（一份教程只教得下幾十個鍵，選哪幾十個就是那個社羣調查的
@@ -2281,7 +2280,7 @@ The reviewer's finding: `yume-core` is a **path dependency**, so `cargo build`
 on a clone of yumete alone fails, and `scripts/build.sh` needs the sibling tree
 for the data.
 
-**The author's answer, 2026-09-03, and it is the right one:** this is still
+**The answer, 2026-09-03, and it is the right one:** this is still
 development, and during development you build from the tree — that is what
 `scripts/build.sh` is *for*, and 上手 opening with it is not the editor telling
 a novelist to compile, it is the repository telling a developer how to run it.
@@ -2504,7 +2503,7 @@ four are done; the outcomes are noted here rather than in a second list.
 
 ### 14 · One night's work, 2026-09-04
 
-The author went to sleep and left the list. What came out of it, in the order it
+The list was left to run overnight. What came out of it, in the order it
 was done — the numbered entries in §5.2 carry the detail:
 
 **The keys became one grammar.** 命令 ＋ 選擇 ＋ 動作: inside a sequence the
@@ -2710,7 +2709,7 @@ moment, after an hour of typing into a stale buffer. `:reload` is the way back,
 a dirty one is warned about and left alone, because merging is not the editor's
 decision), and `:readonly` is the way to open something you have no business
 changing. `:e!` and `:o!` retire outright: no alias and no hint, per the
-author's standing rule that a better spelling replaces the old one rather than
+standing rule that a better spelling replaces the old one rather than
 joining it.
 
 **#215 is done** (2026-09-05). `t i` is the table detail panel, `空格 d` is
@@ -3113,7 +3112,7 @@ Two more the review raised that were left as they are:
   thing standing there.
 - **`5fdcbe2` looks like it rewords a message that was already correct.** It
   does, against the parent *commit* — the hand edit it repairs was in the
-  working tree, never committed. The author's wording is kept; 己→已, 丢→丟 and
+  working tree, never committed. The original wording is kept; 己→已, 丢→丟 and
   the 繁 forms that had leaked into the `zhs` line are what changed.
 
 ### 19 · What the review of #229 / #169 found, 2026-09-05
@@ -3322,7 +3321,7 @@ flip. The terminal designer argues **four**, adding 青 for reference/furniture,
 on the evidence that a cool family *already exists unnamed*: ten blue-shifted
 values across four files agreeing by accident. Both agree the five markup hues
 should go: they differ in hue at the same weight as the prose, which is
-backwards for a manuscript. **The author picks.**
+backwards for a manuscript. **Still to pick.**
 
 **Also found:** `fg(Color::White)` on the selection (three files) flattens every
 markup colour exactly when the writer is looking hardest, and is *brighter than
@@ -3820,7 +3819,7 @@ version of this that ships adopts #283's three words.
 
 ### ② ~~Whether `r` and the case keys are worth their places~~ — decided 2026-09-06
 
-**The author gave the rule this question needed, and the rule threw out the
+**The rule this question needed threw out the
 proposal that raised it.**
 
 > **一級鍵是「按下去必須立刻做事」這件事本身的配額。** A key earns the top
@@ -3831,14 +3830,14 @@ proposal that raised it.**
 > writing, but it is also a general editor — English and code are typed in it.
 > The consensus keys are an asset somebody else built; they are not free space.
 
-**前置條件說清楚了，2026-09-09**：共識鍵不動，**爲的是遷移**——不是因爲作者按得多。
+**前置條件說清楚了，2026-09-09**：共識鍵不動，**爲的是遷移**——不是因爲自己按得多。
 
 > 判準不是「我按不按它」，而是「**一個從 vi／helix 過來的人，會不會因爲它不在而覺得
 > 這編輯器壞了**」。所以讓得出去的，是**大多數 vi／helix 使用者從來不碰**的那些。
 
 這是一個關於**別人**的問題，於是有兩個後果。
 
-**一、不量，用判斷。** 這一半問的是一整個社羣，作者一個人的頻次答不了它；外面也沒有
+**一、不量，用判斷。** 這一半問的是一整個社羣，一個人的頻次答不了它；外面也沒有
 數可抄——helix 不收任何遙測，vim 那邊的問卷與 vimgolf 記錄遷移不到 helix 的選擇優先
 模型。所以靠的是**「它在不在 vi 與 helix 的交集裏，在不在每份 cheatsheet 的第一頁，
 在不在 tutor 裏」加上常識**，而不是靠統計。一個要量兩週纔敢動的鍵，本來也不值得動。
@@ -3847,8 +3846,8 @@ proposal that raised it.**
 helix 自己對「一個新人非學不可的是什麼」的回答——它替我們把那個社羣調查做完了。
 在 tutor 裏的鍵，遷移過來的人一定按過；不在的，多半一輩子沒碰。
 
-**二、按「中文稿子上按不按」列的降級名單作廢。** `f`／`F` 與 `>`／`<` 撤回：作者一半
-時間在寫英文、讀代碼，那半邊它們天天按。`%`、`q`／`Q`、`R`、`"` 也移出候選——都是第一
+**二、按「中文稿子上按不按」列的降級名單作廢。** `f`／`F` 與 `>`／`<` 撤回：寫英文、讀代碼
+的那一半時間，那半邊它們天天按。`%`、`q`／`Q`、`R`、`"` 也移出候選——都是第一
 頁的東西，正是遷移會絆倒的地方。
 
 **真正安全的儲備是多數人從來不碰的那些**：`A-` 整族（`A-s` `A-,` `A-_` `A-C` `A-K`
@@ -3872,7 +3871,7 @@ justification for one key is now the law for all of them.
 
 1. **`r` stays where Helix has it, and learns to type Chinese.** Replacing a
    character is frequent and must act on one press. The fault was never the
-   key — it was that the IME did not run while it waited. The author's design:
+   key — it was that the IME did not run while it waited. The design:
    「按下 r，進入一個替換模式，如果我們是在中文模式，就打中文（出現候選面板），
    一旦選定，直接完成替換。如果我們是在英文模式，那麼按下英文字母就直接替換。
    這個替換模式下，按 shift 可以切換中英文。」
@@ -3939,7 +3938,7 @@ without being told.
 
 ### ③ ~~Whether to fold the command table, and when~~ — decided 2026-09-08
 
-**一次摺完.** The author, asked to choose between folding now and the review's
+**一次摺完.** Choosing between folding now and the review's
 own 「fix the ground for 0.1.0, fold in 0.1.1」: 「現在就摺，一次摺完」. The
 reason the review gave for waiting is the reason for not waiting: a half-folded
 table is worse than an unfolded one, and every month the table stays flat is
@@ -4058,7 +4057,7 @@ sites do not share one, which is exactly what makes ⑤ still a question. See
 ## 5.2.4 The command tree, folded — 2026-09-08 (③ ＋ ④ landed)
 
 61 named commands stood at the top level and 21 of them were somebody's child.
-The author's two calls — 「現在就摺，一次摺完」 (③) and 「可以，父親給動詞」 (④)
+The two calls — 「現在就摺，一次摺完」 (③) and 「可以，父親給動詞」 (④)
 — are one change, because ④'s renames only exist inside ③'s tree. This is the
 tree, the rule that built it, and what it actually cost, measured.
 
@@ -4391,7 +4390,7 @@ dropping a `；` into the manuscript.」* `;` `'` `-` `=` 上踩過一次，Shif
 
 ### 七、GPU 加速（問過一次，答在這裏）
 
-作者，2026-09-12：「大家都說用 GPU 加速。我們 yumete 能通過 GPU 加速嗎？」
+2026-09-12：「大家都說用 GPU 加速。我們 yumete 能通過 GPU 加速嗎？」
 
 **已經在用了，只是不歸我們用。** 終端編輯器不畫像素：yumete 交出去的是一格一格的字符
 與顏色，把字形柵格化、貼上螢幕的是終端模擬器。Alacritty／Kitty／WezTerm／Ghostty 都是
@@ -4502,7 +4501,7 @@ four steps were dropped, and the reasons are the interesting part.
 
 ⚠️ **`forfudan/yumete` has to be public before the tap is worth publishing** —
 a public formula pointing at a private repository's release assets 404s for
-everyone but the author. The author settled on making it public (2026-09-14).
+everyone but its owner. Decided 2026-09-14: make it public.
 `forfudan/yume` stays private: nothing outside CI needs it, and the data the
 binary carries comes from `forfudan/yume-release`, which is public.
 
@@ -5766,7 +5765,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^199]: the rule for the table sugars: `t20-20g` goes to cell 20,20 and
     `t1a2d8as` sorts by column 1 ascending, 2 descending, 8 ascending — the
     digits are the argument and the verb ends the sequence, so no separator and
-    no space is needed. The author respelled the sort chord on 2026-09-05: 「原
+    no space is needed. The sort chord was respelled on 2026-09-05: 「原
     来的设计用的是 t1s2S8s 这样的命令，这个会在 t1s 直接生效（因为他是前綴碼的指
     令）」, so the direction moved onto `a`/`d`, which do not act, and `s` alone
     acts. Supersedes the spellings in #183 and #185
@@ -6096,7 +6095,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     所以整句輸入退成逐字。`build.rs` 在找不到已安裝的完整表時退到它，面板報
     「出廠自帶 精華版 ⋯⋯」把兩者分開。
 
-    ⚠️ **純數據表格不在 yumete 的倉庫裏**（作者 2026-09-14 定）。碼表、符號表、分詞詞表
+    ⚠️ **純數據表格不在 yumete 的倉庫裏**（2026-09-14 定）。碼表、符號表、分詞詞表
     三份都是生成物，整份重寫，提交進 git 等於每次再付一份全額——量過：兩個 `.ytab` 在
     pack 裏佔 184 KB，`common_words.txt` 佔 **475 KB**（倉庫最大的一個 blob，比碼表貴
     2.6 倍）。所以它們是**建構時的輸入**：
@@ -6814,7 +6813,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     Kakoune `:db`, and **not one of them uses an uppercase twin** — `:Q` differs
     from `:q` by a Shift, which is exactly the key the hand slips on, and the
     two would mean different things. So the short spelling is Helix's: **`:bc`／
-    `:bc!`／`:bclose`**. The author then took the larger half (「Option 2 同時加
+    `:bc!`／`:bclose`**. Then the larger half (「Option 2 同時加
     上 qa。我們還沒發佈，所以沒有破壞性改動這個擔憂」): **`:q` now closes this
     file and leaves only when it was the last one**, and **`:qa`／`:qa!`**
     leaves however many are open. That is Vim's arrangement and the reason it is
@@ -6882,7 +6881,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     lines, `with_md_tables` took only the ones Markdown parses. One rule now
     (`md_table_parses`), and a `table_here()` gate above every key that edits a
     grid. `indent` is the fourth dimension and `:render` does **not** write it
-    (author, 2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排
+    (2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排
     用的」); the level of a dimension with a real third state is computed from
     the pair that holds it, never stored (`ruby_level`, `indent_level`). **`t w`
     and `t i` landed 2026-09-07** (「markdown中的表格没办法用ti打开信息边栏…在
@@ -6941,7 +6940,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     emptied the panel outright. A block is walked out afresh every time the
     cursor enters one (`Reach::Cursor`), so its view schema is already the right
     one — only ` | ` tables need the header read back. **The cap was buying
-    nothing on a squared-up table, fixed 2026-09-07** (author, off this very
+    nothing on a squared-up table, fixed 2026-09-07** (off this very
     table: 「the long cells are trimmed with a `>` symbol. However, the width of
     the cell are still padded with white spaces at the tail」). `folds` cuts
     inside the cell's **content**; the width a column is drawn to is the widest
@@ -6963,8 +6962,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     cell to walk into its writing would swell the column under the reader's
     hands at every step of `l`. A rule row's dashes are slack too (they are
     drawing, and `padding` redraws them), down to one and never over the colons.
-    **The pane had none of this until 2026-09-07** (author, off the `t t`
-    window he reads this very table in: 「tw 功能无法在 tt 模式下使用，导致所有
+    **The pane had none of this until 2026-09-07** (off the `t t`
+    window this very table is read in: 「tw 功能无法在 tt 模式下使用，导致所有
     的长单元格都是保持折叠状态且没有折叠符号，光标进入该单元格后不会自动展开……进
     入 insert 模式后，也无法导航到被折叠的部分」). Three faults, one sentence
     apart: the grid's own 32-cell ceiling was a constant in the widget with **no
@@ -6997,8 +6996,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     number stays right-aligned to the end of its column or to the edge of the
     window, whichever comes first — a number past the edge is no number. **`t w`
     reached 基本 the same night** (「虽然 tb 在默认状态下不折叠，但能不能在按下
-    tw 之后折叠？这个应该不违反我们之前说的 render -> table 链条吧」) — and he
-    is right that it does not, because `t w` writes nothing into `table_level`.
+    tw 之后折叠？这个应该不违反我们之前说的 render -> table 链条吧」) — and
+    it does not, because `t w` writes nothing into `table_level`.
     「`basic` 不藏、不摺、不替換」 is a law about what a **level** does with
     nobody asking, and it was being read as a law about what the reader may ask
     for. What folding needs is a column squared up to fold against, and
@@ -7032,7 +7031,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     moved down; `t w` and `t a` are two toggles over one axis
     (`CellWidth::{Fold,Whole,Wrap}`) that are never both on, rather than a
     three-way cycle on `t w`, so `t w` means the same thing in prose and in the
-    window (author's call). Prose cannot have it: its rows come from `wrap`,
+    window (decided). Prose cannot have it: its rows come from `wrap`,
     which every motion, the mouse, 縱書 and the split panes read, and it has no
     hanging indent — so the key says so and still sets the switch. **And the
     pane became bounded**: `gg`, `G`, `g30g`, `:120` and a search hit are all
@@ -7221,7 +7220,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     surfaces are now settled (§5.8.4). 虛線 is not in ratatui — 0.29 has exactly
     one underline (`UNDERLINED` = SGR 4), no dotted/dashed/curly — but it was
     asked for anyway with the right reason (「这样和 markdown 的下划线语法可以分
-    开」), and he is right: a chapter really can contain `[[第三章|那一夜]]`,
+    开」), and that is right: a chapter really can contain `[[第三章|那一夜]]`,
     and the difference must be **shape**, not value, because a faint
     `underline_color` is the first thing a dark theme eats — while SGR 58 and
     SGR `4:4` came into terminals together, so the value axis buys no
@@ -7239,7 +7238,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     separators, and the margin is contended by a reading, a hung 句讀, a 着重號
     and a 平仄 mark), and one steer settled it: 「不要太 invasive 但也不要太
     low-profile」. The quiet ink (`word_ink` = `rung::WORD_INK`) is *less*
-    conspicuous, so it is the low-profile end he ruled out; a ground **is**
+    conspicuous, so it is the low-profile end that was ruled out; a ground **is**
     allowed, because `Palette::word` says a word boundary is 「structure, not a
     mark somebody made」 — that rule governs SELECTION/HEAD/BAND and the 朱
     wash, not the paper end — but not `WORD` (962) or `BAND` (940), which are
@@ -7347,7 +7346,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `KeyCode::Char` could not carry a two-character commit if it were not. The
     way out was a state, not a flag: the answer was 「shift只是讓yume進入abc狀
     態，不是off。yume off的意思是完全關閉」 — and yumete had **two** states
-    where his model has three, `:yume off`, `C-Space` and the Shift tap all
+    where the model has three, `:yume off`, `C-Space` and the Shift tap all
     calling the same `toggle_language()`. So 中文 and ABC are now both *yume
     holding the keyboard* (`ImeSession::engaged`), 關 is the third,
     `REPORT_ALL_KEYS_AS_ESCAPE_CODES` is pushed and popped with engagement, and
@@ -7656,7 +7655,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     参数可以是标题、正文、快捷键提示、位置（左下、右下、文本区中央），这样快捷键
     提示、脚注、保存确认等都可以统一模块化，便于维护和解耦。」
     屬實：`page_areas`（`lib.rs:2180`）只要 `[editor] hints` 開着就永遠扣掉那一行，
-    空不空都扣，而它畫在正文的底色上，所以一則訊息看起來像作者自己打的一行字。
+    空不空都扣，而它畫在正文的底色上，所以一則訊息看起來像寫稿的人自己打的一行字。
     **四個東西已經是同一個形狀**，只是各寫各的：`空格` 的 which-key（#273 從矩形改成
     面板）、腳註／註釋那條橫條（#294）、`:write` 的安全核驗（#295），和這條提示行。
     收成一個之後參數就是**標題、正文、鍵提示、位置**（左下／右下／正文區中央），
@@ -8051,7 +8050,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一輪自己寫在哪，`clear_swap` 只刪那一個，別人那份留着。`read_draft` 跟着要多看一眼
     ——**如果崩的是第二個 session，它那份帶 pid 的纔是它全部的工作**——所以除了規範名字，
     還掃同目錄下 `.名.yumete.<純數字>`，取最新的一份offer；後綴不是純數字的（`.bak`）
-    不算，免得把作者自己放在旁邊的檔案當成草稿。`adopt_draft` 認領之後把自己那份 pid
+    不算，免得把寫稿的人自己放在旁邊的檔案當成草稿。`adopt_draft` 認領之後把自己那份 pid
     副本收掉，兩個名字不留給同一個 buffer。
 
     `docs/.development.md.yumete` 那 4.3 MB 同日刪除：它比正文舊，`read_draft` 的
@@ -8147,7 +8146,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     （`looks_delimited` 要求每行格數一致），而編輯器回的是「游標不在 | 表格裏」——對着一個
     整體就是表格的檔案。
 
-    作者，2026-09-10：「带引号的 .csv 根本进不了表格模式是权宜之策，现在有时间了就可以把
+    2026-09-10：「带引号的 .csv 根本进不了表格模式是权宜之策，现在有时间了就可以把
     它做好了。如果你觉得写parser不方便也可以调用现成的库。」
 
     **沒有用庫，理由與「坑多不多」無關**：這個編輯器要的是 `cells` 交出**原文行裏的字元
@@ -8909,8 +8908,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     順帶：`GOTO_KEYS` 那一行 `("d w", …)` 與手冊第 177–178 行一起改。
 
     **2026-09-09 落地。** `gD` 接手，`gw` 留一句 `hint.goto.w-moved` 說它去了哪裏——
-    這個倉對退役鍵一向如此（`~`、`*`、`t`／`T` 都有），而這一次學會舊鍵的手指是作者
-    自己的。手冊三處、測試九處一起改。**small**
+    這個倉對退役鍵一向如此（`~`、`*`、`t`／`T` 都有），而這一次學會舊鍵的手指是這個
+    專案自己的。手冊三處、測試九處一起改。**small**
 
 [^356]: 今天 `Grain::Cell` 是預設（`keys.rs:265`、`tables.rs:179/295/523/554` 四處），
     `Tab` 用來切粒度。實際用下來格視圖用得並不多，而**按字纔是寫東西時的常態**。
@@ -8968,10 +8967,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     就吞多少，然後一次做完。爆發再大也有天然的上界，因為 `scroll` 走到緩衝盡頭就自己
     停（`page.rs:568`），所以代價是「一份文件」而不是「一條隊列」。
     順帶：#314 的跳幀（有輸入排隊就不畫）先把這件事去掉了一大半——重編之後一口氣滾到
-    七千行不卡，只剩上下來回時的殘餘。作者同日試了 helix，**它卡在第 80 行**。
+    七千行不卡，只剩上下來回時的殘餘。同日試了 helix，**它卡在第 80 行**。
     **small**
 
-[^359]: #300 的第一刀，2026-09-09 作者提的：「是不是需要有個 yumete.log 記錄這種情況
+[^359]: #300 的第一刀，2026-09-09 提的：「是不是需要有個 yumete.log 記錄這種情況
     便於 debug？」需要，而且比想的更需要——**這個編輯器從前一個 panic hook 都沒有**。
     終端編輯器 panic 的樣子是：預設 hook 往 stderr 印，而那是在備用螢幕裏、正被拆掉，
     於是讀的人只剩一個 shell 提示符和一句都沒有；#344 那個已複現的上游崩潰就會這麼結束，
@@ -8992,7 +8991,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     演練過一遍（臨時在 `catch_unwind` 裏索引一個空 `Vec`，`script` 分配僞終端）：終端
     復原了、話印在正常螢幕上、日誌四項俱全。
 
-    **還有一半：不崩，只是不動。** 2026-09-09 作者報滾輪卡死，重編之後**日誌是空的**
+    **還有一半：不崩，只是不動。** 2026-09-09 報滾輪卡死，重編之後**日誌是空的**
     ——於是知道了一件確切的事：**那不是 panic**。可一個 hang 什麼都不留下，讀的人只
     說得出「它卡住了」。所以加了心跳：主迴圈每一步 `beat(Stage, detail)`（兩個 relaxed
     store 加一次讀鐘，不分配、不加鎖、不格式化），另一條執行緒每 250 ms 看一眼，超過
@@ -9002,7 +9001,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     同樣演練過（臨時在讀事件之前睡六秒）：日誌寫出
     `no beat for 2140 ms; last stage scrolling (999)`。**medium**
 
-[^360]: #359 的心跳第一次派上用場，2026-09-09：作者報「新版本四次滾動後卡死」，日誌
+[^360]: #359 的心跳第一次派上用場，2026-09-09：報「新版本四次滾動後卡死」，日誌
     **空的**——於是先確定了**那不是 panic**；裝上看門狗再滾一次，日誌說
     `no beat for 2056 ms; last stage drawing (0)`。**一次 `terminal.draw` 超過兩秒。**
 
@@ -9026,7 +9025,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **是一個管道死鎖，兩邊互等。** `terminal.draw` 在寫；終端跟不上就不再讀，於是那個
     寫阻塞。而同一個終端正想寫給我們——猛滾一次發出成千上萬個鼠標報告——**沒人在讀，
     於是它那個寫也阻塞**，它便不再消費我們的輸出。兩邊各等對方。要幾次手勢纔填滿兩個
-    緩衝區，正是「第四次猛滾卡死」的樣子。作者同日試 helix 也卡，這一類毛病不是這裏獨有。
+    緩衝區，正是「第四次猛滾卡死」的樣子。同日試 helix 也卡，這一類毛病不是這裏獨有。
 
     **修法是拆掉死鎖的必要條件：讀的那一方不能被寫的那一方擋住。** 讀終端移到自己的
     執行緒，事件經一條無界通道交給主迴圈——終端寫給我們的那一下永遠立刻完成，於是它
@@ -9035,7 +9034,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `event::read`，而鍵已經被執行緒取走了——它現在也從通道取。
     冒烟過一遍（`script` 分配僞終端，送 `jjkk` 再送 `:q`）：收鍵、退出、日誌乾淨。
     #314 的自適應下限與 #358 的時間盒都留着——它們各自減少無謂的幀與輪次，只是都不是
-    根因。**覆核過了**：作者同日回報不再卡，並拿一部三萬六千行、一百萬字的小說滾過，
+    根因。**覆核過了**：同日回報不再卡，並拿一部三萬六千行、一百萬字的小說滾過，
     也沒事。**medium**
 
 [^361]: `commands.rs:400`：`Command::Grep` 的根是 `std::env::current_dir()`——**不是這個
@@ -9093,7 +9092,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     算一組）——`aho-corasick`、`memchr`、`regex-automata`、`regex-syntax` 本來就跟着
     `regex` 進來了。
 
-[^363]: 2026-09-10 作者定的規矩：**完整命令一律摺疊，短寫可以有，而短寫一定是那條完整
+[^363]: 2026-09-10 定的規矩：**完整命令一律摺疊，短寫可以有，而短寫一定是那條完整
     命令的首字母**。`:buffer-close` 有，`:bc` 有，`:bclose` 沒有——半長半短的拼法既不是
     名字也不是首字母，正是 §5.2.4 那次摺疊要去掉的形狀。
     做成一張展開表（`SHORTHANDS`）而不是六個 `parse` 分支：短寫因此**不可能**與它所短
@@ -9103,7 +9102,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `wq` 因此不再是 `COMMANDS` 裏的一個條目——它是短寫，完整命令是 `:write-quit`。
     `x` 是唯一的例外：它不是任何東西的首字母，可是五十年的手指都這麼打。
 
-    **它們在選單裏和一級命令排在一起**（2026-09-10 作者定的）：「alias 不是 shortcut」
+    **它們在選單裏和一級命令排在一起**（2026-09-10 定的）：「alias 不是 shortcut」
     ——別名**就是那條命令的另一個名字**，所以它進同一張表、用同一句說明、按同一條前綴
     規則收窄。打 `:b` 留下的是 `:buffer` `:bc` `:bn` `:bp`，而讀者看不出哪一個底下拼法
     不同——因為要用它的時候，那確實沒有不同。
@@ -9112,9 +9111,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     那是別名表達不了的。括號現在顯示**全部**別名而不是第一個——`x` 在選單別處根本不
     出現，只顯示第一個就等於把它藏起來了；代價是 `:open` 那一格從 `(o)` 變成
     `(o e edit)`，更寬，也更全。
-    ⚠️ **一個坑，和作者給的解法。** 最初把長寫做成 `write` 底下的一個 `quit` 詞，於是
+    ⚠️ **一個坑，和它的解法。** 最初把長寫做成 `write` 底下的一個 `quit` 詞，於是
     `:wq!` 展開成兩個詞加一個驚嘆號，而 `write` 那一支收的是**路徑**——沒攔住的話，稿子
-    會被寫進一個叫 `./quit!` 的檔案。作者看穿了形狀：**`quit` 根本不是 `write` 的一種**。
+    會被寫進一個叫 `./quit!` 的檔案。形狀看穿了就簡單：**`quit` 根本不是 `write` 的一種**。
 
     **空格是樹，連字號是並列。** `:buffer-close` 是 buffer 的一種、`:write-all` 是寫的
     一種，選單一層層點得進去；`:write-quit` 是「寫，然後退」，兩個動詞，本來就不該掛在
@@ -9128,7 +9127,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     和 `:bclose` 完全同形，只是躲過了那次摺疊。
     改完之後 `:quit` 有了自己的詞表，`:quit ` 會提示 `all`，`:qa` 補全成 `quit all`，
     `FORCEABLE` 裏 `quitall!` 換成 `quit all!`。
-    2026-09-10 作者順帶定了一條更要緊的：**「yumete 還在初期，不存在肌肉記憶這個東西」**
+    2026-09-10順帶定了一條更要緊的：**「yumete 還在初期，不存在肌肉記憶這個東西」**
     ——所以拿「大家用慣了」擋一個更好的形狀，在這個倉裏不是理由。要護的只有**繼承來的**
     那部分（vi／helix 帶過來、讀者一進門就會的），因為那是別人建好的遷移面（§5.2.3 ②）；
     yumete 自己發明的拼法沒有這種主張。**small**
@@ -9197,7 +9196,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `(usize, usize)` 在一次按鍵裏被抄好幾遍（緩存讀出、前綴複製、兩處記錄）。要再往下就
     得讓行表共享而不是複製（`Rc<[_]>`），那是另一件事。**large**
 
-[^367]: 作者，2026-09-10：「如果用户就是单纯想要在显示词，并不想看那个文件的话，该怎么办？」
+[^367]: 2026-09-10：「如果用户就是单纯想要在显示词，并不想看那个文件的话，该怎么办？」
     查下來，分詞**已經立刻生效**了——`discover_words` 把找到的詞直接加進在用的分詞器，
     不必存盤（`words.rs:278` 的註釋：「They segment before they are saved」）。所以嫌的
     不是那份文件存在，是它把人從正文裏拽走。做法：統計塊照舊寫進詞表 buffer——那份
@@ -9215,10 +9214,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     做法是 `:replace` 跨 buffer 時就用的那一招：記住 `was = self.current`，開詞表、寫進去，
     再 `show_buffer(was)` 回來——`add_buffer` 本來就替離開的 buffer 存好了光標，所以回去
-    的位置是對的。作者，2026-09-10：「大多数人都只是希望能用自己的词来 `w` 跳词。查看那个
+    的位置是對的。2026-09-10：「大多数人都只是希望能用自己的词来 `w` 跳词。查看那个
     统计文件不是第一需求。」**small**
 
-[^368]: 作者，2026-09-10：「如果把它類比為函數：你覺得它應該在括號裏面的，就當作參數
+[^368]: 2026-09-10：「如果把它類比為函數：你覺得它應該在括號裏面的，就當作參數
     （空格分隔）；你覺得它應該是函數名的一部分，就用 hyphen。」逐條判定見
     `local/command-names.md`：213 條路徑，129 條改名。框架同時併攏——`Param` 說一條命令
     收什麼、缺省是什麼，`Parsed` 交給每條命令唯一的 `build`，一趟走表讀所有的線。
@@ -9232,7 +9231,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     量的正是「140×24 的窗口裏一屏放得下全部」——現在放不下了。菜單是**瞥一眼**的東西，
     不是讀的。
 
-    作者定，2026-09-10：**列出每一族的頭**，`view-` 這些折在一起。「命令雖然現在變成了
+    2026-09-10 定：**列出每一族的頭**，`view-` 這些折在一起。「命令雖然現在變成了
     hyphen 連接的詞，但本質上還是有級別的。`view-aaaa` 就是 `view` 的二級命令。」
 
     要緊的是**這個級別不必再聲明一次**——它已經寫在名字裏了。菜單從名字自己的分段推導
@@ -9245,7 +9244,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     不必打滿六個字母。菜單折，`::` 的搜索不折——否則「密排」會被答成沒有這種東西，而它
     離得只有三個鍵。**medium**
 
-[^370]: #369 折起來之後，作者逐行寫出「應該顯示成什麼」，讓我從差異裏把規則推回來
+[^370]: #369 折起來之後，逐行寫出「應該顯示成什麼」，再從差異裏把規則推回來
     （2026-09-10）。三條：
 
     **`+n` 放最後**——`:write (w) +3`。它是關於這一行的一句附註，不是名字的一部分。
@@ -9258,18 +9257,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **是另一個詞**的一律印，多長都印（`wc` 是 word count、`ro` 不是 `readonly` 的開頭、
     `outline` 是 `:toc` 在別處的名字、`fmt` 是有人選的縮寫）。剩下的是**名字的截短**
     且長於兩個字符——`syn` `red` `rel` `lay` `sho` `rec`——一概不印，因為它只說了
-    「前三個字母管用」，而前綴規則對每一條命令都這麼說。作者：「Too many shortcuts
+    「前三個字母管用」，而前綴規則對每一條命令都這麼說。「Too many shortcuts
     is a burden for reading.」
 
-    另加一條是作者更早就說過、我在 #368 裏一併刪掉的：**被折走而有自己名字的命令，
+    另加一條是更早就定過、在 #368 裏被一併刪掉的：**被折走而有自己名字的命令，
     單開一行**（`:wa` `:wq (x)` `:qa` `:bn` `:bp` `:bc`），排在它那一族的下面。理由還是
     那句「alias 不是 shortcut」——它是這條命令的另一個名字，而一旦命令被折起來，這一行
     就是它唯一還看得見的地方。用第一個別名作名字，其餘的進括號。
 
-    作者又定了一條（2026-09-10）：**一條命令的 stem 也是 stem**。`markdown-` 底下眼下
+    又定了一條（2026-09-10）：**一條命令的 stem 也是 stem**。`markdown-` 底下眼下
     只有 `markdown-footnote`，仍然折成 `:markdown- +1`——「未來 markdown 肯定還有別的
     命令（比如 format）」，而今天把它攤開、明天再收起來，是讓列表的形狀跟着內容抖動。
-    `markdown-footnote` 原有的別名 `fn` 一併取消（作者：「太 specific to markdown」），
+    `markdown-footnote` 原有的別名 `fn` 一併取消（「太 specific to markdown」），
     所以那一族仍是一行。族人的判準是 `head-…`，不是「開頭一樣」——`shot` 以 `sh` 起頭，
     和 `:sh` 沒有關係。
 
@@ -9294,7 +9293,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     卻沒有攔住下一步。**small**
 
 [^372]: `draw_list` 選形狀的規則本來是「**能顯示全部的最少列**」——註釋論證得也有道理：
-    「三條長列用三次掃視讀完，六條短列要六次」。可是作者，2026-09-10：「列數吃滿終端
+    「三條長列用三次掃視讀完，六條短列要六次」。可是2026-09-10：「列數吃滿終端
     寬度就行了，這樣似乎看起來效果更好。」
 
     反過來即可。最後定成兩步，從上到下、從左到右填：
@@ -9314,10 +9313,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     再補一句上限：**深度不超過實際有幾條**。全表是形狀的**依據**，不是要湊滿的格子——
     `:t` 只剩四條時，下面墊六行空白是圍着虛無畫了一個框。
 
-    作者補的一個好處：多數二級族（`write` 4、`buffer` 4、`ruby` 5、`word` 6、`yume` 9）
+    另一個好處：多數二級族（`write` 4、`buffer` 4、`ruby` 5、`word` 6、`yume` 9）
     都在十行以內，展開時一列就裝得下，眼睛不必橫跳。
 
-    副產品（作者說明不是主要追求）：面板寬度由列寬之和決定，而 `inner` 裏本有一項
+    副產品（不是主要追求）：面板寬度由列寬之和決定，而 `inner` 裏本有一項
     `.max(footer 寬 + 1)`——面板一旦鋪滿，那一項就再也頂不動它，於是連着按 Tab 時面板
     不再一呼一吸地變寬。
 
@@ -9326,7 +9325,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `MENU_ROWS`，只是從「地板」變成了「就是它」。`MENU_SHARE` 與那一整段搜索隨之
     無人使用，刪掉。**small**
 
-[^373]: 作者，2026-09-10：「我们现在把命令用 `-` 连接后，没办法用 fuzzy-matching 了，
+[^373]: 2026-09-10：「我们现在把命令用 `-` 连接后，没办法用 fuzzy-matching 了，
     比如 `:discover` 不再会提示 `:word-discover`。」量了一下比報的更廣——`:discover`
     `:dense` `:close` `:footnote` `:punct` **一個都找不到**，只有 `:vert` 還行，因為
     `vertical` 仍是個參數詞、沒變成名字的一段。
@@ -9343,7 +9342,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `::` 的模糊搜索本來就找得到（`::discover → word-discover`），那是另一張網；
     這一條補的是 `:` 自己那張。**small**
 
-[^374]: 作者截圖，2026-09-10：一份碼表 `dl<TAB>叭`，畫出來是 `dl叭`——**TAB 完全看不見**，
+[^374]: 截圖，2026-09-10：一份碼表 `dl<TAB>叭`，畫出來是 `dl叭`——**TAB 完全看不見**，
     寬度 0、也沒有字形。查下來：`yumete_cjk::tab_width_at` 存在、`lib.rs` 也導出了，
     **可是全倉沒有一個呼叫者**。`char_width('\t')` 走的是 `UnicodeWidthChar::width`，
     對控制字元返回 `None`，於是 `unwrap_or(0)`。
@@ -9352,7 +9351,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     停在 TAB 上時狀態行說 `Col 3 · U+0009`，可畫面上那一格根本不存在，於是「光標在哪」
     和「畫了什麼」對不上——#212 立下的那條法（光標永遠不許停在畫面上沒有的字元裏）
     在這裏是破的。做法：`char_width` 之外給繪製一條走 `tab_width_at` 的路，並且要決定
-    畫什麼——作者定，2026-09-10：「tab 不用符号，但可以用一个背景色。」沒有字形就沒有
+    畫什麼——2026-09-10 定：「tab 不用符号，但可以用一个背景色。」沒有字形就沒有
     寬度問題（補白就是空格），而底色本身說明「這是一個 tab」。用 `rung::BAND`，表格隔行
     與代碼圍欄坐的那一級。
 
@@ -9366,17 +9365,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     在真的碼表上量過（`mabiao-ling.txt`，124,082 行）：編碼長度 4 的有 119,973 行、
     長度 3 的 3,376 行。`tab_width = 4` 時前者停在第 8 格、後者停在第 4 格——**分成兩撥、
-    不齊**；`= 8` 纔全部落在第 8 格。作者，2026-09-10：「既然是 Unix 老默认就用他。」
+    不齊**；`= 8` 纔全部落在第 8 格。2026-09-10：「既然是 Unix 老默认就用他。」
 
     改默認時發現這個設置**一個管着兩件事**：手冊裏寫的是「`>` 加、`<` 減的列數」，而
     它的欄位文檔寫的是 "Tab stop width in cells."。把制表位改成 8 會連帶讓 `>` 縮進八格。
     所以拆成兩個：`tab_width`（制表位，8，終端自己的答案）與 `indent_width`（`>` `<` 的
     步長，4，和 Python 一致）。
 
-    作者隨後量到 `tf`／`tb` 下有幾行對不齊——那正是這個 4：三字母的編碼停在第 4 格、
+    隨後量到 `tf`／`tb` 下有幾行對不齊——那正是這個 4：三字母的編碼停在第 4 格、
     四字母的停在第 8 格。改成 8 之後三種模式全齊。
 
-    不過作者接着指出我把這一條想岔了一半，2026-09-11：「tf 状态下，tab 分隔符会被表格
+    不過這一條原先想岔了一半，2026-09-11：「tf 状态下，tab 分隔符会被表格
     虚线接管，不需要绘制，这个时候，它本质上和 markdown 中的 pipe、csv 中的逗号一样，
     都被 tf 的分割线替代了。tb 状态下……他也是个普通的符号，显示 1 格宽都行。」
 
@@ -9429,7 +9428,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     那句假設就是這個洞：「Newlines never reach a row, and **tabs are expanded
     upstream**」——狀態行根本不走 `put_text`，走的是 `Paragraph`。
 
-    三、作者把它上升成了一條法，2026-09-11：「TAB 是个不稳定渲染。除了文本区有 tab 外，
+    三、它上升成了一條法，2026-09-11：「TAB 是个不稳定渲染。除了文本区有 tab 外，
     我们在其他位置不应该有 tab 存在。太危险了。」對的，而且**逐個 span 去記着加是守不住
     的**：`lib.rs` 裏有三十來個 `Span::styled`／`Paragraph::new` 從不過 `drawable`，塊標題
     和標籤欄拿的是檔名，HUD 拿的是剛敲下的東西。所以規則收在所有路的**共同出口**——每一
@@ -9450,7 +9449,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **終端將要消耗的寬度 == 編輯器量出來的寬度**，以及**沒有一個 cell 裝着終端會服從的
     字元**。前兩道一起拆，四條全紅。**small**
 
-[^376]: 作者，2026-09-11：「我们应该允许表格模式在 insert 状态下通过上下左右键跨表格移动
+[^376]: 2026-09-11：「我们应该允许表格模式在 insert 状态下通过上下左右键跨表格移动
     （包括行末跨到下一行的头）。」現在 `prompt.rs` 的 `insert_bounds` 把 Insert 鎖在一格
     裏：左右到格邊就停，上下答「先按 Esc」。當初的理由寫在那裏——「Insert 模式在格子裏
     的意思就是編這一格」，而會把兩格併成一格或把一行劈成兩半的鍵要擋住。
@@ -9469,11 +9468,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     `table.esc-before-moving` 那一則沒有呼叫方了，刪掉；手冊 §「格子裏怎麼移動光標」
     整段重寫。擋着的仍然是會改字的那兩個：`Enter` 劈行，格首 `Backspace` 併格。
-[^377]: 作者，2026-09-11：「这个码表文件，tt 进入表格视图，我的光标在两列间移动的时候
+[^377]: 2026-09-11：「这个码表文件，tt 进入表格视图，我的光标在两列间移动的时候
     下方的状态栏出现复制问题。」截圖上不只是狀態行——正文的行、狀態行、右邊的
     `CJK Uni U+0009 · Basic` 一路往下重複了十幾遍，整頁糊掉。
 
-    和 #375 是同一件事的兩張臉，作者當時就是這麼猜的，猜對了：狀態行一折，這一幀就比
+    和 #375 是同一件事的兩張臉，當時就是這麼猜的，猜對了：狀態行一折，這一幀就比
     終端**高了一行**，終端只好往上捲，於是上一幀畫過的東西全部留在原地。
 
     而「在兩列間移動」正好解釋了觸發時機——狀態行右半截寫的是光標底下那個字元，光標落在
@@ -9483,7 +9482,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     留一句給將來：**折行本身不該把幀撐高**。這裏的根因是控制字元而不是寬度算錯，所以
     沒有第三道閘；如果哪天狀態行真的因為寬度算錯而溢出，該做的是截斷而不是換行。**small**
 
-[^378]: 作者，2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用逗号。他们
+[^378]: 2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用逗号。他们
     本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是一样的。现在 markdown/csv
     怎么做你就怎么做。」
 
@@ -9519,9 +9518,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     編輯器不是編輯器。
 
     第一版我立了個 `MEASURE_ROWS = 4096` 的窗口，理由是「別讓 Markdown 表的欄寬跟着
-    滾動抖」——5.0–6.5 ms。作者問這 4096 是要幹嘛，然後把前提抽掉了，2026-09-11：
+    滾動抖」——5.0–6.5 ms。問題是這 4096 要幹嘛，答案是把前提抽掉，2026-09-11：
     「markdown 会抖其实也没问题呀……其实我觉得 tf/tb 就按照可视区域来调整宽度+折叠过长
-    单元格挺好的。」並且一眼看穿這正是窗格裏的 grid 的做法。
+    单元格挺好的。」這正是窗格裏的 grid 的做法。
 
     確實是。那 4096 整個不必要：**只量屏幕上的**。一頁高，上下各一頁，錨在**被問到的
     那一行**上而不是光標上——備忘錄會留住一幀裏第一個答案，於是那一頁的每一行都落在同
@@ -9531,7 +9530,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     160 ms → **常態 26 µs、最壞 120 µs**（`j` 之後重新錨定的那一次）。快了一千倍，常數
     還少了一個。這也仍是一條法：Markdown 表和 delimited 檔案問的是同一個 `measured_window`。
 
-    **代價是欄寬會隨滾動呼吸**，作者許了。grid 一直是這樣的，它的模組開頭連理由都寫好
+    **代價是欄寬會隨滾動呼吸**，這是接受了的。grid 一直是這樣的，它的模組開頭連理由都寫好
     了：「a column that suddenly needs more room is telling you something true about the
     rows you just reached.」
 
@@ -9541,7 +9540,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     測試照 #374 的教訓寫了一條**帧級**的：run 列表已經騙過一次。**medium**
 
-[^379]: 作者，2026-09-11：「tb 模式可不可以也标注列号（和 tf 模式一样）。然后 tb 和 tf 在
+[^379]: 2026-09-11：「tb 模式可不可以也标注列号（和 tf 模式一样）。然后 tb 和 tf 在
     浏览表格中部的时候，有没有办法在顶上显示列号和列名？」
 
     現狀量過：
@@ -9554,7 +9553,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **兩件事，難度差得遠，分開做。**
 
-    一、tb 也給欄號條。**做了。**合 tb 自己那條法——作者，2026-09-11：「tb 的原则是只能
+    一、tb 也給欄號條。**做了。**合 tb 自己那條法——2026-09-11：「tb 的原则是只能
     多字（标注）不能少字。」欄號條是加在表格上頭的一行標註，不藏、不摺、不替換任何字，
     正是「多字」。
 
@@ -9579,11 +9578,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     的——它依賴進程級全局（`MOOD` 那一類，#371 同族）。我拿單測結果推了十幾分鐘，結論全
     不可靠。**在這個倉庫裏驗證要跑整個 crate，不能跑單條。**
 
-    二、滾到中部時把欄號與欄名釘在頂上。**先決定不做，然後作者換了個設計，就做了。**
+    二、滾到中部時把欄號與欄名釘在頂上。**先決定不做，然後換了個設計，就做了。**
 
     我反對的是「在正文的行上蓋一行」：那是渲染模型裏的新概念——一個不屬於它所在位置的
     屏幕行——折行、光標、點擊圖三者都得學會它，而這個倉庫反覆栽跟頭的地方恰恰是「頁面
-    有兩個生產者，互相不同意」。作者，2026-09-11：「其实还有一个方法，就是在顶部预留一
+    有兩個生產者，互相不同意」。2026-09-11：「其实还有一个方法，就是在顶部预留一
     个信息栏（两行：列号+列名）……这样它是独立的，也就不会侵扰文本的区域了。」
 
     這一句把反對意見整個消解掉了。**區域不是覆蓋**：頁面只是矮了兩行，而這正是提示欄
@@ -9598,12 +9597,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     裝不下的表，你遲早在它中間。不閃、不延遲、無循環，而且「平常不显示」照樣成立——散文
     裏沒有，小表裏也沒有。
 
-    欄號在上、欄名在下。我第一版擺反了，作者一眼看出來：「你的序號是不是跑到列名的下面
-    了」——是。理由比我原先想的更硬：表頭沒滾走時，從上到下本來就是**欄號條、表頭行
+    欄號在上、欄名在下。第一版擺反了：「你的序號是不是跑到列名的下面
+    了」——是。理由比原先想的更硬：表頭沒滾走時，從上到下本來就是**欄號條、表頭行
     （欄名）、資料**，所以這條橫幅就是那三行的前兩行原樣搬上來，看見橫幅和看見表格真正的
     頂端是同一幅畫面。我當時只拿它跟欄號條比，忘了欄號條底下坐着的正是表頭行。
 
-    第一版的判據是「這張表比一頁高」，作者一看就指出太糙了：「光标进入表格但是表格头部
+    第一版的判據是「這張表比一頁高」，太糙了：「光标进入表格但是表格头部
     还没出屏幕，顶上的表头就开始显示了。」對。現在問的是真正的條件——**表頭在不在頁上**
     ——用兩個東西合起來答：上一幀的滾動位置（真答案，但要到畫的時候纔定，所以在滾過表頭
     的那一幀會短一格），加上「光標比表頭低了超過一頁」（無論滾動如何，這時表頭一定不在
@@ -9615,7 +9614,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     因為**這個問題已經有人回答了，而且答得更好**。`Editor::table_status` 返回的就是光標
     所在那一欄的名字——用的是**這張表自己的**表頭，沒有表頭就退回 `+N`——狀態行把它畫成
-    `第 62 行 · ch · 字`。作者那張截圖上就有這一行。也就是說「我在哪一欄」不管滾到哪裏
+    `第 62 行 · ch · 字`。報告的那張截圖上就有這一行。也就是說「我在哪一欄」不管滾到哪裏
     都一直有答案，而且比釘在頂上的表頭更直接：釘頂的表頭要你把視線移上去、再橫向對位找
     到自己那一欄；狀態行直接把欄名念出來，零對位。
 
@@ -9630,12 +9629,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     要改善的話，成本低得多的做法是在狀態行那條已有的讀出上做文章（欄名旁邊補個欄號，
     `3/28 · 小傳`），一行改動，不碰渲染模型。沒有動手，等有人真的需要。
 
-[^380]: 作者，2026-09-11：「它打开的时候是 to 模式！我以为是 tb 模式。因为他是 txt 文件，
+[^380]: 2026-09-11：「它打开的时候是 to 模式！我以为是 tb 模式。因为他是 txt 文件，
     并且没有 scheme，所以虽然内部是 tsv 但是还是以 to 模式打开的。」
 
-    這是一次假 bug 查出來的真問題。作者連報兩張截圖說「tb 沒對齊」，我拿同一個檔案、
+    這是一次假 bug 查出來的真問題。兩張截圖說「tb 沒對齊」，拿同一個檔案、
     同一份未存的 buffer、長碼在前和 `t b` 在前兩種順序全試過，**每一次都對齊**——因為
-    我每次都顯式按了 `t b`，而作者是打開就看。我測的是「tb 生效之後對不對齊」，他看的是
+    測的時候每次都顯式按了 `t b`，而截圖是打開就看。測的是「tb 生效之後對不對齊」，截圖看的是
     「它壓根沒生效」。問題問錯了，所以答案全綠。
 
     真相：層級的默認值其實是 `Basic`（`TableLevel` 上就標着 `#[default]`），畫出來像
@@ -9644,12 +9643,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     並畫上底色。那條灰底就是全部的線索：它只在 tab 被當成內容時才畫，tb／tf 一生效就該
     消失。**下次先問「這個模式真的生效了嗎」，再問「這個模式對不對」。**
 
-    作者要的：`.txt` 內容明顯是 space／tab／comma／semicolon 分欄時，直接以 基本 打開，
+    要的是：`.txt` 內容明顯是 space／tab／comma／semicolon 分欄時，直接以 基本 打開，
     並在信息欄寫「本文件格式似乎是 {type}，故而以表格模式打開，按 t o 回到源碼模式」。
     `{type}` 用現成的 `named_delimiter`（`'\t'` → 「Tab」）。
 
     四種分隔符**都**自動進，空格也在內。我一度反對把空格算進去，理由是「認錯了會悄悄
-    改掉 `hjkl` 的含義」——那是**錯的**，作者當場駁回：「tb tf to 模式都是按字走的不是按
+    改掉 `hjkl` 的含義」——那是**錯的**：「tb tf to 模式都是按字走的不是按
     格走的！」測出來 `l` 在四個層級下一律 `0→1→2→3`。我讀的是 `TableLevel::Basic` 上那
     句「the **keys** belong to the grid where a table is: `hjkl` walk cells」，而它自
     #356 起就不成立了——粒度處處默認 `Grain::Char`，按格走是 `T` 顯式換的。三處註釋一起
@@ -9679,7 +9678,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     蓋得過它。一開始我圖省事直接存 `editor.status()`，結果連 `密排：行貼着行` 那種閒話也
     一起活了下來，這正是那句擦除存在的理由。
 
-[^381]: 作者，2026-09-11：「比如 329 行，其实 `**` 的后面有很多的空白，我们没有显示出来。
+[^381]: 2026-09-11：「比如 329 行，其实 `**` 的后面有很多的空白，我们没有显示出来。
     如果我一直按 l，光标是定住不动的，然后突然跳到右边一格……tf tt 模式下这种 padding 的
     空格既然没有显示，就应该允许用户直接跳过去。」
 
@@ -10231,7 +10230,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     ⚠️ `C-a` 在 Windows 是「全選」，在這裏是「行首」——**已經衝突了，而且不吭聲**。
     三個最想要的各有一個坑：`C-s` 是終端的 **XOFF**（raw mode 關掉 `IXON` 纔行，要驗）；
     `C-c` 是 **SIGINT**，搶走它使用者就失去「怎麼都能出來」那一下；`C-z` 是 **SIGTSTP**，
-    而且與 helix 那套挂起處理打架（作者的 `.zshrc` 裏有一整段在處理它）。
+    而且與 helix 那套挂起處理打架（開發機的 `.zshrc` 裏有一整段在處理它）。
     另外 `C-i`＝Tab、`C-m`＝Enter、`C-h`＝Backspace、`C-[`＝Esc，在老終端裏**分不開**，
     只有 Kitty 協議能分——那又連着 #339。
     ⚠️ **做之前先等 tutor 審計（#404）**：「Insert 模式該暴露多少」是同一個問題的另一面。
@@ -10323,10 +10322,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `runtime/tutor` 三十課，vi 一列對着 `/usr/share/vim/vim91/` 的 tutor 與
     `doc/motion.txt`。
     ⚠️ **一度有 Emacs 第四列，撤掉了。** 本機沒有可對照的來源，那一列只能憑印象填——
-    **一列看起來很有底氣而其實沒有驗過的東西，比沒有那一列糟**（作者原話：「不能量就不
+    **一列看起來很有底氣而其實沒有驗過的東西，比沒有那一列糟**（原話：「不能量就不
     寫這一列」）。這條規矩往後對這張表一直有效：要加一列，先有可以按的東西。
 
-    ## 建議的動作（作者定）
+    ## 建議的動作（已定）
 
     1. **補那七句話**（三、），small，最划算。
     2. **`t` 的撞鍵**單獨定：讓 `t<ch>` 回到 till 而表格換一個字母，還是保持現狀並在
@@ -10334,7 +10333,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     3. **註釋**：做不做是一個決定，不是一個 bug。
     4. **多光標九課**：0.1.0 明說不做，那 tutor 裏就不該留鉤子；要做就是 0.2 的大件。
     5. ⚠️ **`Q`／`q` 角色與 helix 互換**（我們 `q` 錄、`Q` 播；helix 反過來）。
-       兩邊都有提示，但**這是最容易手滑的一種分歧**——要不要對齊，作者定。
+       兩邊都有提示，但**這是最容易手滑的一種分歧**——要不要對齊，另定。
 
     ## 落地（2026-09-12）
 
@@ -10369,7 +10368,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     ⚠️ **上面那一段的結論在 #492 被推翻了，`Alt-d`／`Alt-c` 已經刪掉。** 診斷是對的，
     修法選錯了邊：既然「刪除順手吃掉剪貼板」是這一族唯一的坑，那**常用的那個鍵就不該是
-    踩坑的那個**。作者原話：「d 作为剪切功能会污染 register。这是我觉得 helix 最不好的
+    踩坑的那個**。原話：「d 作为剪切功能会污染 register。这是我觉得 helix 最不好的
     地方。」現在是 `d`／`c` 刪改不動寄存器、`D`／`C` 剪切，四個鍵一條規矩——**小寫不碰
     剪貼板，大寫纔碰**。`D`／`C` 在 helix 的 normal 模式本來就空着（原表把它們算進多光標
     族是錯的：那是 `C`／`Alt-C` 的**複製光標到上下行**，`D` 則從來沒綁過），所以這一換
@@ -10395,7 +10394,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     （vi 是 `;`，`motion.txt:303`）、「註釋掉」三行；字形組那一行原本寫着「`~` 在這裏
     沒有綁定」，那是 `~` 升成別名之前的話。
 
-    ## 還開着的一條（作者定）
+    ## 還開着的一條（已定）
 
     **`t` 的撞鍵**（建議動作 2）。`t<ch>` 是表格族的字頭，vi 的 till 沒有位子。
     要麼表格換一個字母，要麼在 `ta` 那句提示裏補一句「till 在這裏叫 …」——
@@ -10454,7 +10453,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^409]: 2026-09-11 定要做（「block comment 註釋快捷鍵太重要了」），2026-09-12 定形式。
     helix 有四個入口：`C-c`、`空格 c`（聰明的那個：有行注釋就行，沒有退塊）、`空格 C`
-    （強制塊）、`空格 A-c`（強制行）。作者的版本比它**確定**：
+    （強制塊）、`空格 A-c`（強制行）。這裏的版本比它**確定**：
     「`space + c`: 強制行注釋，没有纔退到塊注釋；`space + C`: 強制塊注釋，没有纔退到
     行注釋。這樣更加有確定性。」——退的時候不是猜，是那個格式只有一個答案。
     三種格式各有什麼：typst `//` 與 `/* */`（唯一兩種都有的），markdown 只有
@@ -10555,7 +10554,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     的「下一處」還是沒有。
     四、**`:replace` 改幾個檔算幾次撤銷**沒有定論，要當面驗。
     五、名字五個形狀：一個鍵、一個 `g` 前綴、一個帶斜線的命令、兩個帶參數的命令。
-    ⚠️ **先做完手頭那串再研究**（作者 2026-09-12 定）。動之前先把上面五條逐條驗一遍，
+    ⚠️ **先做完手頭那串再研究**（2026-09-12 定）。動之前先把上面五條逐條驗一遍，
     別照這則裏的印象直接改。**medium**
 
     **五條驗過了（2026-09-12）**，結論與上面的印象不盡相同：
@@ -10565,7 +10564,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     個檔要在二十個緩衝區裏各按一次 `u`——比記下來的更難用。五、照舊。
     另外看見兩處沒記過的：`空格 ?` 開的是一條空命令行，沒有配對的意思；範圍的
     `,` 與全編輯器的 `-`／`,` 規矩相反。
-    ⚠️ **「在第 3 欄裏找完全相等的那一格」不補了**（作者 2026-09-12 定，`t3/`、`t2-5/`
+    ⚠️ **「在第 3 欄裏找完全相等的那一格」不補了**（2026-09-12 定，`t3/`、`t2-5/`
     夠用）。**`g/`、`g?` 留着**——另開一個工作區看搜索結果靠的就是它們。
 
     **落地 ① 範圍（2026-09-12）**：`:s` 的行號範圍改成全編輯器同一條規矩——`-` 是一段
@@ -10574,7 +10573,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `Chosen`（`editor/search.rs`），逐行問 `has(idx)` 而不是比首尾。混着寫
     （`:1-5,9s`）與 `:1-5-9s` 都不猜，回 `substitute.range-not-one-thing`；那句話
     **只在確定這一行真是 `:s` 之後纔說**，否則 `:1-5,9` 這種別的東西會被冒名頂替。
-    ⚠️ **`:21-50x` 選行不做**（作者 2026-09-12 定：「我不是很有把握」）。
+    ⚠️ **`:21-50x` 選行不做**（2026-09-12 定：「我不是很有把握」）。
 
     **落地 ② `f` 旗標（2026-09-12）**：`:s` 多一個 `f`＝照字面——`regex::escape` 過
     一遍模式（`editor/search.rs`）。稿子裏 `.` `*` `(` `)` `$` 就是它們自己的時候居多，
@@ -10775,7 +10774,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     * **列表裏 `j`／`k` 走，正文不動**（同大綱），`Enter` 纔跳。一條規矩管所有面板；
       好處是可以安心翻完全部再決定，原來在哪一章不會被抹掉。
     * ⚠️ **於是摘要就是唯一的判斷依據**，所以高亮那一條的**前後文寫在命令行那一行**
-      （2026-09-13 作者提的）。那一行是**整窗寬**的（100 多欄），比面板那 28 欄裝得多
+      （2026-09-13 提的）。那一行是**整窗寬**的（100 多欄），比面板那 28 欄裝得多
       得多，而它本來就是「你眼下站在什麼上面」——大綱、腳註、表格都在用它。
       代價：在結果列表裏時它原本寫的是面板的鍵，讓位；`Esc` 回到表單那幾格鍵就回來。
       **列表每條仍是一行**——「少就多行、多就壓扁」想過，代價是每打一個字整張表重排。
@@ -10831,7 +10830,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       `:grep` 的測試蓋着的。`walk()` 本身還在（選擇器用），**第二次坐下要把那兩條補回來**。
     * ⚠️ **`/` 並不高亮全部命中**——查證過了，畫面上那些交替底色是字格條紋。所以「面板一
       搜正文全亮」**不是接管 `last_search` 就白拿的**，是一個還不存在的功能，而且做了會
-      同時改變 `/` 的行為（整頁亮起來）。**沒做，等作者定。**
+      同時改變 `/` 的行為（整頁亮起來）。**沒做，待定。**
 
     ---
 

@@ -401,6 +401,9 @@ pub enum Command {
     /// `:syntax [markdown|typst]` — which markup this file is in
     /// (Feature #106). No argument says what it was guessed to be.
     SetSyntax(Option<String>),
+    /// `:keymap [helix|vim]` — lay a shipped keymap under the reader's own
+    /// aliases; bare reports which (#428).
+    SetKeymap(Option<yumete_cjk::KeyPreset>),
     /// `:write-as <path>` (and `:write-as!`) — write this buffer to another file
     /// **and go on editing that one**. `:w <path>` is the other half: a copy,
     /// leaving the buffer where it is.
@@ -1164,7 +1167,7 @@ fn resolve(word: &str) -> &str {
     // **A head is not ambiguous with its own family** (#368). `:tab` matches
     // `table` and the twelve `table-…` beside it, and it has always meant the
     // first of them: the hyphen says the others are *under* it — 「命令雖然
-    // 現在變成了 hyphen 連接的詞，但本質上還是有級別的」 (author, 2026-09-10)
+    // 現在變成了 hyphen 連接的詞，但本質上還是有級別的」 (2026-09-10)
     // — so a spelling that reaches the head reaches the head.
     let child_of = |head: &str, name: &str| {
         name.len() > head.len() + 1 && name.starts_with(head) && name.as_bytes()[head.len()] == b'-'
@@ -1385,7 +1388,7 @@ impl Choice {
 
     /// The **other** spellings worth printing beside this one, if any.
     ///
-    /// Not all of them (author, 2026-09-10): a menu is read, and a column of
+    /// Not all of them (2026-09-10): a menu is read, and a column of
     /// parentheses holding `(rec)` `(rel)` `(red)` `(lay)` `(sho)` is a column
     /// of noise. Two rules, and between them they keep only what a reader
     /// could not have worked out:
@@ -1770,6 +1773,12 @@ const INDENT_LEVELS: &[Word] = &[
     Word { name: "off", help: "cmd.indent.off", needs: &[] },
     Word { name: "basic", help: "cmd.indent.basic", needs: &[] },
     Word { name: "full", help: "cmd.indent.full", needs: &[] },
+];
+
+/// The shipped keymaps (#428).
+const KEYMAPS: &[Word] = &[
+    Word { name: "helix", help: "cmd.keymaps.helix", needs: &[] },
+    Word { name: "vim", help: "cmd.keymaps.vim", needs: &[] },
 ];
 
 /// What Tab types in Insert mode.
@@ -2746,6 +2755,14 @@ pub const COMMANDS: &[Entry] = &[
             // Bare, it is the question — the status line says which is on.
             Ok(Command::SayIn(p.arg(0).and_then(crate::messages::Language::parse)))
         }),
+    },
+    Entry {
+        name: "keymap",
+        aliases: &[],
+        help: "cmd.commands.keymap",
+        needs: &[],
+        params: &[Param::Words { of: KEYMAPS, default: None }],
+        build: Some(|p| Ok(Command::SetKeymap(p.arg(0).and_then(yumete_cjk::KeyPreset::parse)))),
     },
     Entry {
         name: "theme-fill",
@@ -3848,7 +3865,7 @@ pub const COMMANDS: &[Entry] = &[
 /// the names are: `:bc` was a real thing to type and stopped being one.
 /// A short spelling, and the whole line it stands for (#363).
 ///
-/// **The rule the author gave**: a full command is folded and says what it does
+/// **The rule**: a full command is folded and says what it does
 /// — `:buffer-close`, `:write-quit` — and a shorthand is **its initials**,
 /// nothing else. So `:bc` yes, `:bclose` no: a half-short, half-long spelling
 /// is neither one thing nor the other, and it is the shape the fold of §5.2.4
@@ -4014,8 +4031,8 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         // choose, so `:b` opens `buffer-…` rather than making a reader type
         // the other five letters to see what they already know is there.
         //
-        // **A stem with one command under it is still a stem** (author,
-        // 2026-09-10: 「未來 markdown 肯定還有別的命令」). `markdown-` names a
+        // **A stem with one command under it is still a stem**
+        // (2026-09-10: 「未來 markdown 肯定還有別的命令」). `markdown-` names a
         // group whether or not it has grown one yet, and a list that spelled
         // it out today would change shape the day it does.
         let a_family = |head: &str, n: usize| {
@@ -4082,7 +4099,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
             }
         }
         // **A folded family still shows the spellings worth reaching for**
-        // (author, 2026-09-10: 「wq, bc 這種重要的別名可以單開一行」). An alias
+        // (2026-09-10: 「wq, bc 這種重要的別名可以單開一行」). An alias
         // is another name for the command, not a shortcut to it, so it belongs
         // in the list beside the names — and once its command is folded away,
         // this row is the only place it can be seen. Named by the first of
@@ -5104,7 +5121,7 @@ mod tests {
     /// 主題與深淺是兩條命令，不是一條命令的兩個位置（#449）。
     ///
     /// `:theme light` used to work, and so did `:theme moxiang dark` — which
-    /// made 「主題」 name two things on one line. 作者：「現在的 :theme
+    /// made 「主題」 name two things on one line. 「現在的 :theme
     /// dark/light/system 其實應該改成 :theme-mode，防止和其他的主題混淆。」
     #[test]
     fn a_theme_and_a_mood_are_two_questions() {
@@ -5362,7 +5379,7 @@ mod tests {
         assert_eq!(parse(":theme-fill"), Ok(Command::ThemeFill(None)));
     }
 
-    /// What a menu row says, and what it leaves out (author, 2026-09-10).
+    /// What a menu row says, and what it leaves out (2026-09-10).
     ///
     /// Three rules, and every one of them is about what a reader could not
     /// have worked out for themselves. A column of `(rec)` `(rel)` `(red)`

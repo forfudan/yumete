@@ -464,6 +464,16 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetKeymap(want) => {
+                if let Some(preset) = want {
+                    self.set_key_preset(preset);
+                }
+                self.status = match self.key_preset {
+                    yumete_cjk::KeyPreset::Helix => say!("keys.preset-helix"),
+                    yumete_cjk::KeyPreset::Vim => say!("keys.preset-vim"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetSyntax(name) => {
                 match name {
                     Some(name) => match crate::syntax::Syntax::parse(&name) {

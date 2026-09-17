@@ -399,7 +399,7 @@ impl Editor {
         match key {
             Key::Tab => self.search.field = self.search.field.step(false, self.search.replacing),
             Key::BackTab => self.search.field = self.search.field.step(true, self.search.replacing),
-            // `hjkl` walk the form in Normal, as the author asked; in the list
+            // `hjkl` walk the form in Normal, as a form should; in the list
             // `j`/`k` walk the hits instead, because that is what is there.
             // In the list, `h`/`l` fold a file away and open it again — the
             // same 「less of this / more of this」 the tree and the outline

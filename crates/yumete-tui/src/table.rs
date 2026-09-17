@@ -59,6 +59,14 @@ const GAP: usize = 1;
 
 /// Measure the visible rows and say how wide each column should be drawn.
 ///
+/// ⚠️ **The visible rows, on purpose — not a bug to fix**
+/// (2026-09-17). Measuring the whole table lets one very long cell a thousand
+/// rows away widen its column on every screen, and push the other columns off
+/// the right edge. The price — columns narrowing and widening as that row
+/// scrolls in and out — is the one chosen. A 2026-09-15 review
+/// logged it as 「列寬跟着可見範圍變，滾動時整表橫跳」; it was answered, and
+/// the answer is this.
+///
 /// `last` is the table's last row, not the file's: since 2026-09-05 the widget
 /// is given `|` tables that are three lines of a chapter, and measuring the
 /// chapter under them would make every column as wide as the prose.
@@ -115,7 +123,7 @@ fn widths(
             // that one cell against the window instead of the cap.
             //
             // It used to open for the caret in Normal too, and that was the
-            // page's rule read one word too widely. The author, 2026-09-11:
+            // page's rule read one word too widely. 2026-09-11:
             // 「我觉得这个有一个问题就是列宽容易跳。所以我建议这个和 tf 保持
             // 一致（光标不自动展开，insert 模式展开这个格子），这样我们的逻辑
             // 更简洁、一致，而且不用每个单元格都重算这一列的列宽。」Right on

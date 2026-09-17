@@ -147,7 +147,7 @@ impl Editor {
         if self.completion.is_some() {
             return String::new();
         }
-        // **An empty search prompt already guesses** (#274). The author,
+        // **An empty search prompt already guesses** (#274).
         // 2026-09-05: 「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是
         // 應該預填寫（灰色）上次搜索過內容？」 — `Enter` on an empty line has
         // always repeated the last pattern, and the only thing missing was

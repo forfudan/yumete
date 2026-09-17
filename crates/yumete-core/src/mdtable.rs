@@ -186,7 +186,7 @@ pub fn row_lines(text: &str) -> Vec<bool> {
 /// How a row's cells are told apart (#378).
 ///
 /// A `|` in Markdown, a `,` in a CSV, a `;` in what Excel writes, a TAB in a
-/// 碼表, a space in an SSV: **one idea in five punctuations**. The author,
+/// 碼表, a space in an SSV: **one idea in five punctuations**.
 /// 2026-09-11：「他们本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是
 /// 一样的。」So the separator is a *value* carried through the one code path
 /// that squares a table up, and nothing downstream asks what kind of file it
@@ -916,7 +916,7 @@ pub fn format(lines: &[String]) -> Vec<String> {
 /// is the screen. It was 「one page either side of the row being asked about」
 /// until 2026-09-11 — which needed no viewport, and which let a long cell up to
 /// a page away widen every column around it with nothing visible to say why.
-/// The author: 「可以都只量屏幕上的吗？」Yes, and it is better for the reason
+/// 「可以都只量屏幕上的吗？」Yes, and it is better for the reason
 /// the grid gives for the same choice: a column that suddenly needs more room
 /// is telling you something true about the rows you just reached — which it
 /// only is if the change and its cause arrive together.
@@ -932,7 +932,7 @@ pub fn format(lines: &[String]) -> Vec<String> {
 /// better measured against the rows beside it than against everything it
 /// happens to be far from.
 ///
-/// The columns therefore breathe as you scroll, which the author allowed
+/// The columns therefore breathe as you scroll, which is accepted
 /// (「markdown 会抖其实也没问题呀」) and which the grid has always done.
 pub fn measured_window(
     first: usize,

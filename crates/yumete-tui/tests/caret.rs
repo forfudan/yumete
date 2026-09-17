@@ -19,7 +19,7 @@ fn rgb(colour: ratatui::style::Color) -> (u8, u8, u8) {
 }
 
 /// 橫排的光標是終端機自己畫的，顏色來自使用者的終端機配置——它不知道頁面翻成了
-/// 淺色。作者原話：「浅色模式肉眼很难找到光标的位置。」所以由頁面用 OSC 12 說。
+/// 淺色。原話：「浅色模式肉眼很难找到光标的位置。」所以由頁面用 OSC 12 說。
 #[test]
 fn the_caret_is_the_ink_in_both_moods() {
     let config = yumete_config::Config::default();

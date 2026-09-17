@@ -358,9 +358,34 @@ impl Editor {
         zong::position(self.current_buffer().rope(), self.caret(), grid)
     }
 
-    /// Install Normal-mode single-key aliases (from the config keymap).
-    pub fn set_key_aliases(&mut self, aliases: HashMap<char, String>) {
-        self.key_aliases = aliases;
+    /// Install the reader's own Normal-mode aliases (`[keys.normal]`).
+    pub fn set_key_aliases(&mut self, aliases: HashMap<String, String>) {
+        self.user_aliases = aliases;
+        self.lay_aliases();
+    }
+
+    /// Lay a shipped keymap under the reader's aliases (`:keymap`, #428).
+    pub fn set_key_preset(&mut self, preset: yumete_cjk::KeyPreset) {
+        self.key_preset = preset;
+        self.lay_aliases();
+    }
+
+    /// Which shipped keymap is laid under the reader's aliases.
+    pub fn key_preset(&self) -> yumete_cjk::KeyPreset {
+        self.key_preset
+    }
+
+    /// The preset's lines, then the reader's own over them.
+    fn lay_aliases(&mut self) {
+        let mut all: HashMap<String, String> = self
+            .key_preset
+            .table()
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        all.extend(self.user_aliases.clone());
+        self.key_aliases = all;
+        self.alias_held.clear();
     }
 
     /// Take a pending `:scheme` request, if one is waiting for the IME.

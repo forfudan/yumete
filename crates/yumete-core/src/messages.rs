@@ -37,8 +37,8 @@
 //! never a missing message.
 //!
 //! **But it is not where a message is written.** Since 2026-09-08 a new
-//! message is composed in `zhs`, in 大陆用语, and converted into `zht` — the
-//! author's rule, and the reason is vocabulary rather than characters: 檔案 and
+//! message is composed in `zhs`, in 大陆用语, and converted into `zht` —
+//! the rule, and the reason is vocabulary rather than characters: 檔案 and
 //! 文件 are the same file, 預設 and 默认 the same default, and a sentence
 //! drafted in 繁體 quietly picks the 港臺 word for both. Converting runs one
 //! way only, over the characters; the words have to be chosen first.

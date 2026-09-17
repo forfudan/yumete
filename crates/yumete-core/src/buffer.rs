@@ -542,7 +542,7 @@ impl Buffer {
     /// redrew. **The state around the text is exactly what a silent refusal
     /// cannot protect**, and the `Err` is what lets a caller protect it — see
     /// [`Buffer::replace`] for the two-step case, where half an edit is the
-    /// hazard. The author's call, 2026-09-08: 「閘搬進 Buffer，回 Result」.
+    /// hazard. Decided 2026-09-08: 「閘搬進 Buffer，回 Result」.
     #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
     pub fn insert(&mut self, char_idx: usize, text: &str) -> Edit {
         if self.readonly {

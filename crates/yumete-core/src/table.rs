@@ -277,7 +277,7 @@ impl Schema {
         };
         // The only quoting this reads is none at all, and saying so out loud
         // beats silently treating `"` as an ordinary character in a file whose
-        // author believed otherwise.
+        // is believed to be otherwise.
         if let Some(q) = t.quoting.as_deref() {
             if q != "none" {
                 return Err(format!(

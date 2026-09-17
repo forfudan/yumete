@@ -174,6 +174,7 @@ fn main() -> ExitCode {
         yumete_core::messages::set_language(language);
     }
     editor.set_key_aliases(config.keys.normal.clone());
+    editor.set_key_preset(config.keys.preset);
     // Layout (Feature #61): the config sets it, a flag overrides for one run,
     // and `:layout` switches it live.
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));

@@ -404,7 +404,7 @@ fn layout_page(
     // `:view-margin` says (see [`yumete_cjk::Margin`]):
     //
     // * `dense` asks **this 縱**: a paragraph folded into three 縱 with one
-    //   reading in the first buys the cell for the first alone. What the author
+    //   reading in the first buys the cell for the first alone. What was
     //   asked for first — 「只對存在注釋的視覺縱出現」 — and the page it costs
     //   is one whose 縱 are not all the same width.
     // * `loose` asks **the paragraph**: any 縱 of it carrying something buys
@@ -1027,7 +1027,7 @@ pub fn draw(
             // numbers now sit two cells apart with nothing between them, so
             // 「23」「24」 would read as 「2324」 — the very objection that kept
             // the numbers one digit to a row for so long. This is the answer
-            // the author gave: 「相邻的纵号会混在一起，建议每隔一纵序号用不同的
+            // settled on: 「相邻的纵号会混在一起，建议每隔一纵序号用不同的
             // 颜色／色阶区分」, and it is the device the table's own banding
             // already uses. The *line* number decides the parity, not the 縱's
             // place on the screen, so scrolling does not make the pattern
@@ -1179,8 +1179,8 @@ pub fn draw(
             let at = line_start + row.start;
             let len = row.end - row.start;
 
-            // Virtual text (#248) is not the manuscript, and 縱書 is where the
-            // author reads: a note set in the writing's own ink would be read
+            // Virtual text (#248) is not the manuscript, and 縱書 is where
+            // a writer reads: a note set in the writing's own ink would be read
             // as a word of it. It takes the ink it was drawn in — a note in the
             // marker's colour, a candidate or a table's padding in the quiet
             // one — and none of the layers below, every one of which describes

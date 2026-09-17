@@ -457,7 +457,7 @@ fn linear(v: u8) -> f64 {
 /// equal *visibility*: the eye tells hues apart worse the darker they get, and
 /// a light page's ink sits at L\* 17 where 「light 模式下墨色都是黑色的」 —
 /// 10.8, which reads clearly against the dark page's L\* 83 ink, was invisible
-/// there. The two ends are what the author picked by eye, a straight line
+/// there. The two ends were picked by eye, a straight line
 /// between them.
 ///
 /// ⚠️ It is **not** that the dark ink has no room: the walk lowers red as well
@@ -1026,8 +1026,8 @@ impl Palette {
         // **A luminance-neutral direction, walked in linear light.** Summed
         // against the luminance weights this vector comes to 0.026 — so moving
         // along it changes the hue and leaves the brightness where it was,
-        // which is the whole point of this mark. Its direction is the one the
-        // author approved by eye (`#D2CEC4` → `#C4D1D7`), normalised: less red,
+        // which is the whole point of this mark. Its direction is the one
+        // approved by eye (`#D2CEC4` → `#C4D1D7`), normalised: less red,
         // a little more green, more blue.
         const TOWARD_BLUE: (f64, f64, f64) = (-0.5821, 0.1284, 0.8029);
         let base = (linear(r), linear(g), linear(b));
