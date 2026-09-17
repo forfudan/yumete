@@ -140,6 +140,13 @@ impl Editor {
         // A code file has no blocks: `# 註` in Python is not a heading, and a
         // ``` in a string does not open a fence.
         let code = matches!(buffer.syntax(), crate::syntax::Syntax::Code(_));
+        // **A note that runs over lines** (#288): the closer of a `<!--` or
+        // `%%` some line above opened and nothing has closed yet. The scanner
+        // is not shown those lines — a ``` inside a note must not open a fence
+        // — and the opening line is looked at whole only when it holds one of
+        // the two marks, so a novel costs this a byte search a line.
+        let markdown_syntax = buffer.syntax() == crate::syntax::Syntax::Markdown;
+        let mut note: Option<&'static str> = None;
         let mut markdown = crate::markdown::BlockScanner::new();
         let mut typst_scanner = crate::markdown::typst::BlockScanner::new();
         let mut blocks = Vec::with_capacity(lines);
@@ -176,6 +183,16 @@ impl Editor {
             if let Some(kind) = crate::conflict::marker(head) {
                 marks.push((line, kind, crate::conflict::label(head)));
             }
+            if let Some(closer) = note.filter(|_| markdown_syntax) {
+                let whole = text.to_string();
+                let close = crate::markdown::comment_closes(&whole, closer);
+                if let Some(at) = close {
+                    let rest: String = whole.chars().skip(at + closer.chars().count()).collect();
+                    note = crate::markdown::comment_left_open(&rest);
+                }
+                blocks.push(crate::markdown::Block::Comment { close });
+                continue;
+            }
             blocks.push(if code {
                 crate::markdown::Block::Prose
             } else if typst {
@@ -183,6 +200,16 @@ impl Editor {
             } else {
                 markdown.feed(head, len)
             });
+            // Does this line leave a note open? Only a line that holds a mark
+            // is read whole, and never inside a fence or the metadata.
+            if markdown_syntax && !blocks[line].is_literal() {
+                // A byte search for the marks' first characters, which a
+                // mark split across two of the rope's chunks cannot slip past;
+                // a paragraph with neither is never copied.
+                if text.chunks().any(|c| c.contains('<') || c.contains('%')) {
+                    note = crate::markdown::comment_left_open(&text.to_string());
+                }
+            }
         }
         // **Laid over the answer, not woven into it.** A forward scan cannot
         // know whether a `<<<<<<<` ever closes, and a paragraph *about* merges
@@ -1268,9 +1295,46 @@ impl Editor {
         match block {
             // Not markup either — the code's own grammar, in colour (#420).
             crate::markdown::Block::Code { .. } => self.code_line(line),
+            // Inside a note that opened lines above (#288): the note up to its
+            // closer, and the line's own runs after it.
+            crate::markdown::Block::Comment { close } => self.note_line(line, close),
             _ if block.is_literal() => Vec::new(),
             _ => self.markup_line(line),
         }
+    }
+
+    /// The runs of a line inside a note that opened above it (#288).
+    fn note_line(&self, line: usize, close: Option<usize>) -> Vec<crate::markdown::Span> {
+        use crate::markdown::{Kind, Span};
+        if !self.markup_visible() {
+            return Vec::new();
+        }
+        let mut text = self.current_buffer().rope().line(line).to_string();
+        while text.ends_with('\n') || text.ends_with('\r') {
+            text.pop();
+        }
+        let length = text.chars().count();
+        let construct = usize::MAX / 2;
+        let Some(at) = close else {
+            return vec![Span { start: 0, end: length, kind: Kind::Comment, construct }];
+        };
+        let closer = match text.chars().nth(at) {
+            Some('%') => 2,
+            _ => 3,
+        };
+        let after = (at + closer).min(length);
+        let mut out = Vec::new();
+        if at > 0 {
+            out.push(Span { start: 0, end: at, kind: Kind::Comment, construct });
+        }
+        out.push(Span { start: at, end: after, kind: Kind::Marker, construct });
+        let rest: String = text.chars().skip(after).collect();
+        out.extend(crate::markdown::spans(&rest).into_iter().map(|s| Span {
+            start: s.start + after,
+            end: s.end + after,
+            ..s
+        }));
+        out
     }
 
     /// The Markdown runs of `line`, worked out once per revision and kept
@@ -1351,6 +1415,13 @@ impl Editor {
                 | crate::syntax::Syntax::Diff
                 | crate::syntax::Syntax::Code(_) => continue,
             };
+            // A `#` inside a note or a fence is not a chapter (#288).
+            if matches!(
+                self.block_of(line),
+                crate::markdown::Block::Comment { .. } | crate::markdown::Block::Code { .. }
+            ) {
+                continue;
+            }
             let mark = trimmed.chars().next().filter(|&c| c == want);
             let Some(mark) = mark else { continue };
             let depth = trimmed.chars().take_while(|&c| c == mark).count();

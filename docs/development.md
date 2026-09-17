@@ -510,7 +510,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 285 | **A Markdown link is something to follow, not only to read** | core+tui | P3 | `gx`, a click, and a local path opened by the OS [^285] | Done |
 | 286 | **A panel whose left edge lands inside a 漢字 loses its whole left wall** | tui | P2 | the second cell of a 漢字 is not free [^286] | Fixed |
 | 287 | **作品百科 — 一本書自己的百科** | core+tui | P3 | `.yumete/wiki.md` headings become 詞條 [^287] | Proposed |
-| 288 | **A multi-line `<!-- … -->` is drawn half-lit** | core+tui | P3 | an unclosed `<!--` runs to the end of the *line* [^288] | Proposed |
+| 288 | **A multi-line `<!-- … -->` is drawn half-lit** | core+tui | P3 | `Block::Comment` laid over the scan; outline and export skip it [^288] | Done 2026-09-17 |
 | 289 | **`t a` 攤開時，找視窗頂那一步每滾一行重算一次折行** | tui | P4 | 量了：折行一幀只多 0.04–2.9 ms，先不修 [^289] | Planned |
 | 290 | **A lone Shift stopped switching 中/英, and nothing said so** | tui+ime | P1 | the Kitty flag #271 removed was the one reporting it [^290] | Done |
 | 291 | **A list of hexadecimal names is a list you have to Tab through to read** | core+tui | P3 | `Choice` grows a grey note beside the name [^291] | Done |

@@ -380,7 +380,8 @@ fn html(text: &str, style: &Style) -> String {
     out.push_str(&print_rules(style));
     out.push_str("</style>\n");
 
-    for block in blocks(text) {
+    let text = crate::markdown::strip_comments(text);
+    for block in blocks(&text) {
         match block {
             Block::Heading(depth, title) => {
                 let inner = line_into(title, style.dialects, Dialect::Html, escape_html);
@@ -486,7 +487,8 @@ fn typst(text: &str, style: &Style) -> String {
          #place(top + center, dy: -0.9em, text(size: 0.5em, reading))\n  #base\n]\n\n",
     );
 
-    for block in blocks(text) {
+    let text = crate::markdown::strip_comments(text);
+    for block in blocks(&text) {
         match block {
             Block::Heading(depth, title) => {
                 let inner = line_into(title, style.dialects, Dialect::Typst, escape_typst);
