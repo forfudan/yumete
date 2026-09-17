@@ -364,8 +364,14 @@ impl Editor {
                 self.search.ask(String::new());
                 self.run_search();
             }
-            Key::Tab => self.leave_field(false),
-            Key::BackTab => self.leave_field(true),
+            // ⚠️ **`Tab` is the slot's own key** (2026-09-17): it walks the
+            // views that live in this slot, in every panel, and this one had
+            // taken it — so a reader who opened 尋找 could not get back to the
+            // tree without closing it. 「到了高級搜索的，tab 變成了『下一個』
+            // 項目，再也切不到其他面板了」. The next box is `↓`, which is
+            // where a form's next field is anyway.
+            Key::Down => self.leave_field(false),
+            Key::Up => self.leave_field(true),
             // Out of the box, into the panel's own Normal.
             Key::Esc => self.mode = Mode::Normal,
             _ => {}
@@ -397,8 +403,10 @@ impl Editor {
     /// (`Mode::Normal`, the keys in the panel).
     pub(super) fn on_search_panel_key(&mut self, key: Key, side: crate::sidebar::Side) {
         match key {
-            Key::Tab => self.search.field = self.search.field.step(false, self.search.replacing),
-            Key::BackTab => self.search.field = self.search.field.step(true, self.search.replacing),
+            // `Tab` walks the slot's views, as it does in every other panel;
+            // the form's own cells are `hjkl` (below) and `↑`／`↓`.
+            Key::Tab => return self.cycle_view(side, false),
+            Key::BackTab => return self.cycle_view(side, true),
             // `hjkl` walk the form in Normal, as a form should; in the list
             // `j`/`k` walk the hits instead, because that is what is there.
             // In the list, `h`/`l` fold a file away and open it again — the

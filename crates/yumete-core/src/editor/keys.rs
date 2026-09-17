@@ -1325,6 +1325,10 @@ impl Editor {
         ('P', "hint.space.paste-before"),
         ('d', "hint.goto.dictionary"),
         ('r', "hint.space.ruby"),
+        // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
+        // 快捷鍵太不方便」. The chord stays; this is the same thing with the
+        // hand already on the space bar.
+        ('s', "hint.space.next-region"),
         ('w', "hint.goto.other-pane"),
         ('W', "hint.goto.only-this-pane"),
         ('q', "hint.goto.close-this-pane"),
@@ -1559,6 +1563,7 @@ impl Editor {
     /// Run one key of a `Space` sequence.
     fn handle_space(&mut self, key: Key) {
         match key {
+            Key::Char('s') => self.cycle_region(),
             Key::Char('e') => self.show_sidebar(crate::sidebar::View::Explorer),
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),

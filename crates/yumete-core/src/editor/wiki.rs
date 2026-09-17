@@ -68,7 +68,22 @@ impl Editor {
                 let path = self.book_wiki_path();
                 self.open_wiki_file(&path)?;
             }
-            Some("panel") => self.show_sidebar(crate::sidebar::View::Wiki),
+            // **The keys stay in the writing** (2026-09-17). Every other view
+            // is a list to walk; this page is drawn from where the cursor is,
+            // so putting the keys in it would freeze what it shows.
+            Some("panel") => self.show_wiki_panel(),
+            Some("hide") => {
+                self.wiki_mark = crate::wiki::Mark::Off;
+                self.status = say!("wiki.marks-off");
+            }
+            Some("color") => {
+                self.wiki_mark = crate::wiki::Mark::Color;
+                self.status = say!("wiki.marks-color");
+            }
+            Some("line") => {
+                self.wiki_mark = crate::wiki::Mark::Line;
+                self.status = say!("wiki.marks-line");
+            }
             Some("global") => match self.global_wiki_path() {
                 Some(path) => self.open_wiki_file(&path)?,
                 None => self.status = say!("word.no-data-directory"),
@@ -190,6 +205,18 @@ impl WikiView {
 }
 
 impl Editor {
+    /// `:wiki panel` — put the 百科 page up (or take it down), and leave the
+    /// keys where they are.
+    fn show_wiki_panel(&mut self) {
+        match self.showing(crate::sidebar::View::Wiki) {
+            Some(side) => self.close_panel(side),
+            None => {
+                self.show_sidebar(crate::sidebar::View::Wiki);
+                self.panel_focus = None;
+            }
+        }
+    }
+
     /// The entries of the word under the cursor, if it names any (#287).
     ///
     /// The word is the one the segmenter cut — which is exactly where a wiki
@@ -247,6 +274,9 @@ impl Editor {
     /// typed answers first (a row, a footnote, a comment), and only while the
     /// sidebar's 百科 page is not open: one place at a time.
     pub fn wiki_floating(&self) -> Option<WikiView> {
+        if self.wiki_include_here().is_some() {
+            return None;
+        }
         if self.showing(crate::sidebar::View::Wiki).is_some() || self.detail().is_some() {
             return None;
         }
@@ -266,6 +296,108 @@ impl Editor {
         self.remember_jump();
         if self.open_file(&path).is_ok() {
             self.goto_line(line + 1);
+        }
+        true
+    }
+}
+
+impl Editor {
+    /// How wiki names are marked on the page (`:wiki hide|color|line`).
+    pub fn wiki_mark(&self) -> crate::wiki::Mark {
+        self.wiki_mark
+    }
+
+    /// Whether wiki names are marked on the page at all.
+    pub fn wiki_marks_visible(&self) -> bool {
+        self.wiki_mark != crate::wiki::Mark::Off
+            && !self.wiki.by_name.is_empty()
+            && self.markup_visible()
+    }
+
+    /// Where on `line` a wiki name is, as char ranges (#287, §5.8.3).
+    ///
+    /// **Exactly where the segmenter cut one out**, which is where the name
+    /// was merged in: the segmentation this reads is the cached one, so a
+    /// frame costs a hash lookup per word on the drawn rows and nothing walks
+    /// the document. A one-character entry is never marked.
+    pub fn wiki_marks_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if !self.wiki_marks_visible() {
+            return Vec::new();
+        }
+        let block = self.block_of(line);
+        if block.is_literal() || matches!(block, crate::markdown::Block::Comment { .. }) {
+            return Vec::new();
+        }
+        let chars = crate::zong::line_chars(self.current_buffer().rope(), line);
+        self.segment_line(line)
+            .into_iter()
+            .filter(|&(a, b)| {
+                b - a >= 2 && {
+                    let word: String = chars[a..b.min(chars.len())].iter().collect();
+                    self.wiki.by_name.contains_key(&word)
+                }
+            })
+            .collect()
+    }
+}
+
+/// What became of the file a `[yumete]` line names (#287).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WikiInclude {
+    /// The name as written, for the title of the panel.
+    pub named: String,
+    /// Where it resolves to, whether or not it is there.
+    pub path: PathBuf,
+    /// What the last read made of it — `None` when this file is not one the
+    /// wiki reached for at all (a directive in a chapter, say).
+    pub state: Option<crate::wiki::Source>,
+}
+
+impl Editor {
+    /// The `[yumete] 檔名` line the cursor is on, if it is on one.
+    ///
+    /// **Only in a wiki file**: a directive in a chapter is a note to self,
+    /// and honouring it would make every file in the book a wiki source.
+    pub fn wiki_include_here(&self) -> Option<WikiInclude> {
+        let here = self.current_buffer().path()?.to_path_buf();
+        if !self.is_wiki_file(&here) {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.line(self.cursor_line()).to_string();
+        // Inside a comment, and the first thing in it — the loader's own rule,
+        // asked the same way so the two can never disagree.
+        let named = line
+            .split("[yumete]")
+            .nth(1)?
+            .trim_end_matches(['\n', '\r'])
+            .trim_end_matches("-->")
+            .trim_end_matches("%%")
+            .trim()
+            .to_string();
+        if named.is_empty() {
+            return None;
+        }
+        let path = here.parent().unwrap_or(Path::new(".")).join(&named);
+        let same = |a: &Path| std::fs::canonicalize(a).ok() == std::fs::canonicalize(&path).ok();
+        let state = self.wiki.sources.iter().find(|source| match source {
+            crate::wiki::Source::Read { path: p, .. } => same(p),
+            crate::wiki::Source::Missing { path: p } => same(p) || p == &path,
+            crate::wiki::Source::Again { path: p } => same(p) || p == &path,
+            crate::wiki::Source::Refused { named: n, .. } => *n == named,
+            crate::wiki::Source::TooMany { named: n } => *n == named,
+        });
+        Some(WikiInclude { named, path, state: state.cloned() })
+    }
+
+    /// `gf` on a `[yumete]` line: open the file it names, existing or not —
+    /// the way `gf` opens a `#include`\'s chapter.
+    pub(super) fn open_wiki_include(&mut self) -> bool {
+        let Some(include) = self.wiki_include_here() else {
+            return false;
+        };
+        if let Err(err) = self.open_file(&include.path) {
+            self.status = say!("buffer.cannot-open", include.named, err);
         }
         true
     }

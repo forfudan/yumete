@@ -106,10 +106,14 @@ pub fn draw(
     // `panel.body` and needs only its `count`.
     let (inner, count, lines, columns, key_w, one) = match &panel.body {
         Body::Prose(text) => {
-            // Two thirds of the page at most: a note is read *beside* the
-            // sentence it belongs to, and one that fills the window has taken
-            // the place of the thing it was explaining.
-            let want = widest.saturating_sub(2).min(((area.width as usize) * 2 / 3).max(24));
+            // **A quarter of the page at most: half the width and half the
+            // height** (2026-09-17). Then whichever corner the panel takes,
+            // the caret's own corner is outside it — 「光標在任何位置，面板都
+            // 一定在它對面的屏幕裏」 — and the page keeps the other half of
+            // both. It used to be allowed two thirds of the width, which could
+            // reach across the middle and cover the caret it had moved to
+            // avoid.
+            let want = widest.saturating_sub(2).min(((area.width as usize) / 2).max(24));
             let longest = text.split('\n').map(yumete_cjk::str_width).max().unwrap_or(0);
             let inner = longest.min(want).max(1);
             let lines = wrap(text, inner);
@@ -148,10 +152,33 @@ pub fn draw(
         }
     };
 
+    // **Prose too tall for half the page is cut, not dropped** (2026-09-17).
+    // The cap below used to refuse the whole panel — so a long footnote, or a
+    // wiki entry of several paragraphs, simply did not appear, which reads as
+    // 「the panel is unreliable」 rather than as 「there is no room」. A cut body
+    // says what it can and ends in an ellipsis; the tag on the bottom border
+    // still says where to read the rest.
+    let cap = (area.height / 2 + 1).saturating_sub(2) as usize;
+    let (count, lines) = match &panel.body {
+        Body::Prose(_) if count > cap && cap > 0 => {
+            let mut kept: Vec<String> = lines.into_iter().take(cap).collect();
+            if let Some(last) = kept.last_mut() {
+                *last = "…".to_string();
+            }
+            (kept.len(), kept)
+        }
+        _ => (count, lines),
+    };
     let deep = count.div_ceil(columns);
     let width = (inner + 2 + pad * 2)
         .max(title_w + 4)
         .max(tag_w + 4)
+        .min(match &panel.body {
+            // Prose keeps to half the width (above); a key menu has its own
+            // rule about how many columns it may spread into.
+            Body::Prose(_) => (area.width as usize / 2).max(24),
+            Body::Keys(_) => area.width as usize,
+        })
         .min(area.width as usize) as u16;
     let height = (deep + 2) as u16;
     // It may take half the page and no more, and it must leave the page

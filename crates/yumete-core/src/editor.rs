@@ -1592,6 +1592,8 @@ pub struct Editor {
     own_words: yumete_cjk::WordList,
     /// 作品百科 (#287) — this book's wiki and the global one, as last read.
     wiki: crate::wiki::Wiki,
+    /// How wiki names are marked on the page (§5.8.4).
+    wiki_mark: crate::wiki::Mark,
     /// The half autodetect found in the manuscript, which lives **only here**:
     /// no file, no buffer, nothing to accept or refuse. `:word-discover`
     /// writes a copy out to be read, and that copy is not read back.
@@ -2327,6 +2329,7 @@ impl Editor {
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             own_words: yumete_cjk::WordList::default(),
             wiki: crate::wiki::Wiki::default(),
+            wiki_mark: crate::wiki::Mark::Color,
             detected_words: yumete_cjk::WordList::default(),
             detect_request: None,
             fill_request: None,

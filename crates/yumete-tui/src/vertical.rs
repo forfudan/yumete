@@ -960,6 +960,8 @@ pub fn draw(
     // segment each paragraph once as the page is walked. Its Markdown runs are
     // held the same way, for the same reason.
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
+    // The wiki names of the line last asked about (#287), for the same reason.
+    let mut wiki_names: Option<(usize, Vec<(usize, usize)>)> = None;
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
     // And its 平仄, for the same reason: the editor caches the answer per line
     // too, but a page is forty 縱 and this saves the lookup as well as the walk.
@@ -1228,6 +1230,24 @@ pub fn draw(
             //
             // Fixed in one renderer and not the other is worse than not fixed:
             // 「模式不应该影响分词的闪烁」.
+            // **A wiki name in 縱書**: 金 ink under `:wiki color`, otherwise one
+            // cell of ground at 第 80 檔, ink untouched (#287, §5.8.4) — an
+            // underline down a column is a stack of dashes between the glyphs,
+            // and the margin is already contended. Set before the word tint,
+            // which then finds the ground taken: the wiki mark must be seen.
+            let names = match &wiki_names {
+                Some((line, names)) if *line == zong.line => names,
+                _ => {
+                    wiki_names = Some((zong.line, editor.wiki_marks_on_line(zong.line)));
+                    &wiki_names.as_ref().unwrap().1
+                }
+            };
+            if names.iter().any(|&(a, b)| column >= a && column < b) {
+                style = match editor.wiki_mark() {
+                    yumete_core::wiki::Mark::Color => style.fg(ink.gold()),
+                    _ => style.bg(ink.at(8000)),
+                };
+            }
             if show_segmentation && (mark == WordMark::Ink || style.bg.is_none()) {
                 let ranges = match &segmented {
                     Some((line, ranges)) if *line == zong.line => ranges,
