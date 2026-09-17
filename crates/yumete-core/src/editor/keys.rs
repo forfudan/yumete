@@ -1140,6 +1140,18 @@ impl Editor {
                 return self.goto_line(n);
             }
         }
+        // **縱書 turns the four the way it turns `hjkl`** (2026-09-17). On the
+        // horizontal page `gj`／`gk` cross lines and `gh`／`gl` run along one;
+        // on a 縱書 page the line runs down the 縱 and the lines stack
+        // leftward, so running along is `k`／`j` and crossing is `h`／`l` —
+        // `h`, leftward, being onward, as it is for `h` alone.
+        let key = match (self.layout == Layout::Vertical, key) {
+            (true, Key::Char('h')) => Key::Char('j'),
+            (true, Key::Char('l')) => Key::Char('k'),
+            (true, Key::Char('j') | Key::Down) => Key::Char('l'),
+            (true, Key::Char('k') | Key::Up) => Key::Char('h'),
+            (_, key) => key,
+        };
         // `gg` and `ge` cross a document; `gh`, `gl` and `gs` cross a line.
         // `remember_jump`'s own doc comment said every far motion went through
         // `goto_line` and so had a way back — and `gg`/`ge` did not, because
@@ -1171,19 +1183,19 @@ impl Editor {
                 let count = self.join_count();
                 return self.repeat_writing(count, |e| e.join_with_above());
             }
-            // **`gj` and `gk` are `j` and `k` here** (#485). In helix the plain
-            // pair walks *logical* lines and this pair walks the rows on the
-            // screen; in this editor a paragraph is one long line, so walking
-            // logical lines would step over a whole page at a time and `j`
-            // already walks what the reader sees. A helix hand types `gj`, and
-            // it gets what it meant.
+            // **`gj` and `gk` walk lines of the file, as helix's do** — `j`
+            // and `k` walk the rows on the screen, and in a manuscript a line
+            // of the file is a paragraph, so this is the next paragraph at
+            // the same column. ⚠️ Until 2026-09-17 this was a copy of `j`／`k`,
+            // on a comment that had helix the wrong way round (「In helix the
+            // plain pair walks logical lines」 — it is `move_visual_line_down`).
             Key::Char('j') | Key::Down => {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                return self.repeat(count, |e| e.move_vertical(false));
+                return self.repeat(count, |e| e.move_textual_line(false));
             }
             Key::Char('k') | Key::Up => {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                return self.repeat(count, |e| e.move_vertical(true));
+                return self.repeat(count, |e| e.move_textual_line(true));
             }
             // Goto the next / previous buffer, as Helix binds them.
             Key::Char('n') => return self.next_buffer(),
@@ -1273,7 +1285,24 @@ impl Editor {
         ("n p", "hint.goto.next-or-previous-file"),
         ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),
-        ("j k", "hint.goto.by-drawn-row"),
+        ("j k", "hint.goto.by-file-line"),
+        ("J", "hint.join-with-line-below"),
+        ("K", "hint.join-with-line-above"),
+    ];
+
+    /// The same menu on a 縱書 page, where the four directions turn (see
+    /// `handle_goto`).
+    pub(super) const GOTO_KEYS_VERTICAL: &'static [(&'static str, &'static str)] = &[
+        ("g", "hint.goto.start-of-file"),
+        ("e", "hint.goto.end-of-file"),
+        ("k j", "hint.goto.line-start-or-end"),
+        ("s", "hint.goto.first-non-blank"),
+        ("f", "hint.goto.open-this-file"),
+        ("x", "hint.goto.follow-link"),
+        ("n p", "hint.goto.next-or-previous-file"),
+        ("d D", "hint.goto.follow-note"),
+        ("/ ?", "hint.goto.word-elsewhere"),
+        ("h l", "hint.goto.by-file-line-vertical"),
         ("J", "hint.join-with-line-below"),
         ("K", "hint.join-with-line-above"),
     ];

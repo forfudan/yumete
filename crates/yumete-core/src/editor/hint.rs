@@ -165,7 +165,13 @@ impl Editor {
                     })
                     .collect(),
             ),
-            Pending::Goto => (say!("hint.goto.title"), Self::said(Self::GOTO_KEYS.iter().copied())),
+            Pending::Goto => (
+                say!("hint.goto.title"),
+                Self::said(match self.layout == crate::zong::Layout::Vertical {
+                    true => Self::GOTO_KEYS_VERTICAL.iter().copied(),
+                    false => Self::GOTO_KEYS.iter().copied(),
+                }),
+            ),
             Pending::Find(_) => (say!("hint.find"), vec![("", say!("hint.type-a-character"))]),
             Pending::Replace => (say!("hint.overwrite"), vec![("", say!("hint.type-a-character-to-overwrite"))]),
             Pending::Case => (say!("hint.case.title"), Self::said(Self::CASE_KEYS.iter().copied())),
