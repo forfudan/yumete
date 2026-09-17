@@ -274,7 +274,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 49 | Word-count / reading-time (prose) | view | P4 | `:count`; 字 and 字符 differ | Done |
 | 50 | Custom 碼表 upload / register | ime | P4 | user `txt` (code table only) — #136 `:yume-table` | Done |
 | 51 | Bracket/quote auto-pair (CJK-aware) | core | P4 | 「」『』（） | Planned |
-| 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96／#116／#162); what is left is *code* | Planned |
+| 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96／#116／#162); code in a fence, seven grammars, `:view-code` (#420, 2026-09-17) | Done |
 | 53 | Coding LSP (Rust/Python/…) | lsp | P5 | reuse helix-lsp | Planned |
 | 54 | Diagnostics / code actions | lsp | P5 |  | Planned |
 | 55 | Git gutter / blame | vcs | P3 | 那條豎線的第二個來源（#298）；blame 另算 | Planned |

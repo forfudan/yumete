@@ -19,6 +19,7 @@
 
 pub mod buffer;
 pub mod clock;
+pub mod code;
 pub mod command;
 pub mod comment;
 pub mod conflict;

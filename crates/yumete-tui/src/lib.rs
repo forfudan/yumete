@@ -5027,6 +5027,34 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
         // around writing. Set back, never taken away.
         // Typst's own code: a literal too, and the same rank.
         Kind::Code2 => Style::default().fg(ink.purple()),
+        // **Code in its own grammar's colours** (#420), after the themes
+        // everyone already reads code in — One Dark, Catppuccin, VS Code's
+        // Dark+ agree on nearly all of it: keywords purple, functions blue,
+        // types yellow, strings green, numbers orange, comments grey and
+        // italic, and **names in the plain foreground**. A parsed fence is
+        // drawn in the page's ink; the one colour a fence has always had is
+        // left to a fence nothing could parse.
+        //
+        // The palette is the theme's own six, so every theme keeps working:
+        // 紫 keyword, 藍 function and tag, 黃 type and escape, 綠 string,
+        // 金 property and attribute, 朱 — the orange of every one of those
+        // themes — for a number or a constant.
+        Kind::Token(token) => {
+            use yumete_core::code::Token;
+            let fg = |c| Style::default().fg(c);
+            match token {
+                Token::Plain | Token::Operator => fg(ink.text()),
+                Token::Keyword => fg(ink.purple()),
+                Token::Builtin => fg(ink.purple()).add_modifier(Modifier::ITALIC),
+                Token::Function | Token::Tag => fg(ink.azure()),
+                Token::Type | Token::Escape => fg(ink.amber()),
+                Token::Property | Token::Attribute => fg(ink.gold()),
+                Token::String => fg(ink.green()),
+                Token::Constant => fg(ink.mark()),
+                Token::Comment => fg(ink.furniture()).add_modifier(Modifier::ITALIC),
+                Token::Punctuation => fg(ink.marker()),
+            }
+        }
     }
 }
 

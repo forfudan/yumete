@@ -66,6 +66,10 @@ pub enum Kind {
     /// a heading bigger, so the hashes are the only thing that says whether
     /// this is a chapter or a scene, and a writer needs to know which.
     HeadingMark,
+    /// A run of code inside a fence, as its own grammar reads it (#420).
+    ///
+    /// Not markup and never hidden: it is what the file says, in colour.
+    Token(crate::code::Token),
 }
 
 /// What kind of block a line belongs to.
@@ -1052,6 +1056,8 @@ mod tests {
                 // Neither `spans` makes these — they are `diff::spans`'.
                 Kind::Gone => '-',
                 Kind::Added => '+',
+                // Only a fence's grammar makes these (`code::highlight`).
+                Kind::Token(_) => '~',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
                 *slot = mark;

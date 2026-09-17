@@ -226,6 +226,8 @@ pub enum Command {
     SetMeter(Option<bool>),
     /// `:view-punct [on|off]` — the mark that is wrong, named on the page beside it.
     SetNote(Option<bool>),
+    /// `:view-code [on|off]` — fenced code in its own grammar's colours (#420).
+    SetCode(Option<bool>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
     /// `:search` — open the search panel (#419).
@@ -3077,6 +3079,17 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetNote(switched(p)?))),
     },
     Entry {
+        name: "view-code",
+        aliases: &[],
+        help: "cmd.view.code",
+        needs: &[],
+        params: &[Param::Words {
+            of: SWITCH,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetCode(switched(p)?))),
+    },
+    Entry {
         // The bare word reports, the same shape `:render` has: with three
         // levels, 「which one am I on」 is a better use of the word than a
         // fourth spelling of the middle one.
@@ -5284,8 +5297,8 @@ mod tests {
         assert_eq!(row("", "write"), ":write (w) +3");
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
-        // `view-wrap`'s spelling, not the twelve's.
-        assert_eq!(row("", "view-"), ":view- +12");
+        // `view-wrap`'s spelling, not the thirteen's.
+        assert_eq!(row("", "view-"), ":view- +13");
         assert_eq!(row("", "check-"), ":check- +4");
         // …and one command under a stem is still a stem: `markdown-` names a
         // group whether or not it has grown a second one yet.
