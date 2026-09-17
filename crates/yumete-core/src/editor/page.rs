@@ -100,7 +100,7 @@ impl Editor {
             self.render as u8,
             // …and the syntax, which decides what counts as markup and does
             // not move the revision when `:syntax text` changes it.
-            self.current_buffer().syntax() as u8,
+            self.current_buffer().syntax().tag(),
         )
             .hash(&mut stamp);
         Grid::plain(self.zong_length, self.ruby())

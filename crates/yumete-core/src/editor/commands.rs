@@ -321,6 +321,23 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetTabInserts(want) => {
+                if let Some(spaces) = want {
+                    self.tab_spaces = spaces;
+                }
+                self.status = match self.tab_spaces {
+                    true => say!("layout.tab-spaces", self.indent_width),
+                    false => say!("layout.tab-tab", self.indent_width),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetIndentWidth(want) => {
+                if let Some(width) = want {
+                    self.set_indent_width(width);
+                }
+                self.status = say!("layout.indent-width", self.indent_width);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetIndentHint(hint) => {
                 self.indent_hint = hint;
                 self.status = say!("layout.indent-hint", hint.name());

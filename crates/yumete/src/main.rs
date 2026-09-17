@@ -53,6 +53,8 @@ fn main() -> ExitCode {
     // jot one thing down and getting five chapters back is the same annoyance
     // as the reverse, in the other direction.
     let mut fresh = false;
+    // `-c`: reopen last time's files even though `session` is off (the default).
+    let mut resume = false;
     let mut tutor = false;
     // Keys to press before the picture is taken. A panel that only opens after
     // three keystrokes — the `:` menu, `::`, which-key, the候選 list — could
@@ -84,6 +86,7 @@ fn main() -> ExitCode {
             "-t" | "--table" => force_table = true,
             "-R" | "--readonly" => readonly = true,
             "-n" | "--new" => fresh = true,
+            "-c" | "--continue" => resume = true,
             // **`-t` is already the table**, so this one is long only. Worth a
             // flag at all because the lesson is what a first run wants, and
             // 「open the editor, then find out how to ask for the lesson」 is
@@ -190,6 +193,7 @@ fn main() -> ExitCode {
     }
     editor.set_paper(config.export.page.0, config.export.page.1);
     editor.set_indent_width(config.editor.indent_width);
+    editor.set_tab_spaces(config.editor.tab_spaces);
     editor.set_tab_stop(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_code_colours(config.editor.code_highlight);
@@ -242,10 +246,12 @@ fn main() -> ExitCode {
     }
     // …and somewhere to remember which files were open. Keyed by the working
     // directory, so a novel and a codebase do not share one.
-    if config.editor.session {
-        if let Ok(here) = std::env::current_dir() {
-            editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
-        }
+    //
+    // **Always kept, whatever `session` says** (2026-09-17). `session` only
+    // decides whether a bare `yumete` reopens it; `-c` reopens it on the day
+    // it is off, and it can only do that if the files were written down.
+    if let Ok(here) = std::env::current_dir() {
+        editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
     }
     editor.set_margin(config.editor.margin);
     // Before the files, so the files come up locked rather than being locked a
@@ -280,7 +286,8 @@ fn main() -> ExitCode {
     // …and not when printing: `yumete -p` and `yumete | cat` are a look at one
     // thing, not a return to work.
     let printing = force_preview || !std::io::stdout().is_terminal();
-    let restored = if files.is_empty() && !printing && !fresh {
+    let wants_last_time = config.editor.session || resume;
+    let restored = if files.is_empty() && !printing && !fresh && wants_last_time {
         editor.restore_session()
     } else {
         0
@@ -801,9 +808,9 @@ USAGE:
 ARGS:
     FILE    One or more files to open. Each is loaded into its own buffer;
             a file that does not yet exist opens an empty buffer bound to it.
-            With no FILE, yumete opens again what was open last time in this
-            directory, each at the line it was left on — or an empty scratch
-            buffer the first time.
+            With no FILE, an empty scratch buffer; -c (or `[editor] session =
+            true`) opens again what was open last time in this directory,
+            each at the line it was left on.
 
 OPTIONS:
     -t, --table      Read the file as a grid. A schema in .yumete/tables/ names
@@ -813,8 +820,9 @@ OPTIONS:
                      the config. -H / --horizontal forces the ordinary layout.
     -R, --readonly   Open locked: nothing this run opens can be typed into.
                      `:readonly off` unlocks the one you are looking at.
-    -n, --new        Start on an empty buffer instead of reopening the files
-                     that were open last time.
+    -c, --continue   Reopen the files that were open last time here.
+    -n, --new        Start on an empty buffer even when `[editor] session` is
+                     on.
         --tutor      Open the lesson (the same as `:tutor` inside the editor).
         --lang=LANG  Which language the editor says things in for this run:
                      zh (繁體, the default), zhs (简体) or en. `[editor]

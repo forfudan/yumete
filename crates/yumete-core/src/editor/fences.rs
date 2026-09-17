@@ -74,19 +74,32 @@ impl Editor {
         let Some(language) = fence.language else {
             return Vec::new();
         };
-        let body = self.fence_body(fence, language);
+        let end = fence.close.unwrap_or(self.current_buffer().rope().len_lines());
+        let body = self.parsed(fence.open, fence.open + 1..end, language);
         body.get(line - fence.open - 1).cloned().unwrap_or_default()
     }
 
-    /// The parsed body of `fence`, from this revision's cache, the content
-    /// cache, or the parser — in that order.
-    fn fence_body(&self, fence: Fence, language: Language) -> Lines {
-        if let Some(found) = self.code_cache.borrow().by_open.get(&fence.open) {
+    /// The coloured runs of `line` in a file that is code from top to bottom.
+    pub(super) fn code_file_line(&self, line: usize, language: Language) -> Vec<Span> {
+        if !self.code_colours {
+            return Vec::new();
+        }
+        // Read for the key's sake: a new revision clears the per-revision
+        // answers, and the whole file is one of them.
+        self.fences();
+        let lines = self.current_buffer().rope().len_lines();
+        let body = self.parsed(usize::MAX, 0..lines, language);
+        body.get(line).cloned().unwrap_or_default()
+    }
+
+    /// The parsed runs of `range`, from this revision's cache (under `key`),
+    /// the content cache, or the parser — in that order.
+    fn parsed(&self, key: usize, range: std::ops::Range<usize>, language: Language) -> Lines {
+        if let Some(found) = self.code_cache.borrow().by_open.get(&key) {
             return found.clone();
         }
         let rope = self.current_buffer().rope();
-        let end = fence.close.unwrap_or(rope.len_lines());
-        let lines: Vec<String> = (fence.open + 1..end)
+        let lines: Vec<String> = range
             .map(|l| {
                 let mut text = rope.line(l).to_string();
                 while text.ends_with('\n') || text.ends_with('\r') {
@@ -114,14 +127,14 @@ impl Editor {
                 body
             }
         };
-        cache.by_open.insert(fence.open, body.clone());
+        cache.by_open.insert(key, body.clone());
         body
     }
 
     /// Every fence in the buffer, in order — read once per revision.
     fn fences(&self) -> Rc<Vec<Fence>> {
         let buffer = self.current_buffer();
-        let key = (buffer.id(), buffer.revision(), buffer.syntax() as u8);
+        let key = (buffer.id(), buffer.revision(), buffer.syntax().tag());
         if self.code_cache.borrow().key == Some(key) {
             return self.code_cache.borrow().fences.clone();
         }

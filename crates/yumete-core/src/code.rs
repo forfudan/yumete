@@ -103,6 +103,21 @@ impl Language {
         })
     }
 
+    /// The language a file's extension says it is in. Narrower than
+    /// [`Self::from_info`]: a file called `node` is not JavaScript.
+    pub fn from_extension(extension: &str) -> Option<Language> {
+        Some(match extension {
+            "css" => Language::Css,
+            "html" | "htm" | "xhtml" => Language::Html,
+            "js" | "mjs" | "cjs" | "jsx" => Language::JavaScript,
+            "json" | "jsonc" | "json5" | "geojson" => Language::Json,
+            "py" | "pyw" => Language::Python,
+            "toml" => Language::Toml,
+            "yaml" | "yml" => Language::Yaml,
+            _ => return None,
+        })
+    }
+
     /// Its name, as a fence would spell it.
     pub fn name(self) -> &'static str {
         match self {
