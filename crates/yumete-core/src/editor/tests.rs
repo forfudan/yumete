@@ -14191,3 +14191,38 @@ fn a_note_over_several_lines_leaves_the_export() {
     // The note's own lines go; the lines it began and ended on keep their break.
     assert_eq!(out, "甲\n乙\n\n丙\n```\n<!-- 留着\n```\n");
 }
+
+/// 作品百科, first part (#287): the wiki's names walk as one word, `:wiki`
+/// says what was read, and saving a wiki file reads it again.
+#[test]
+fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
+    let dir = std::env::temp_dir().join(format!("yumete-wiki-editor-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(dir.join(".yumete/wiki.md"), "# 地理\n<!-- [yumete] 地理.md -->\n").unwrap();
+    std::fs::write(dir.join(".yumete/地理.md"), "## 落霞鎮\n小鎮。\n").unwrap();
+    std::fs::write(dir.join("第一章.md"), "他走進落霞鎮\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.reload_project_words();
+    let line = "他走進落霞鎮";
+    let words: Vec<String> = ed
+        .segment_line(0)
+        .iter()
+        .map(|&(a, b)| line.chars().skip(a).take(b - a).collect())
+        .collect();
+    assert!(words.iter().any(|w| w == "落霞鎮"), "{words:?}");
+
+    ed.execute(":wiki").unwrap();
+    let report = ed.current_buffer().text();
+    assert!(report.contains("地理.md") && report.contains('1'), "{report}");
+
+    // A new entry in the included file, saved: in force without a command.
+    ed.open_file(&dir.join(".yumete/地理.md")).unwrap();
+    ed.current_buffer_mut().replace(0..0, "## 雁門關\n關口。\n").unwrap();
+    ed.execute(":w").unwrap();
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    assert!(ed.wiki.by_name.contains_key("雁門關"), "{:?}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}

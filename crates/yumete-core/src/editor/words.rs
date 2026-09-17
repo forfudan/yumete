@@ -448,6 +448,7 @@ impl Editor {
         };
         let n = list.len();
         self.own_words = list;
+        self.reload_wiki();
         self.rebuild_words();
         self.status = match where_from {
             Some(path) => say!("word.project-words-loaded", n, path.display()),
@@ -463,6 +464,9 @@ impl Editor {
     fn rebuild_words(&mut self) {
         let mut all = self.own_words.clone();
         all.merge(&self.detected_words);
+        // The wiki's names join too (#287): `w` walks 落霞鎮 in one step
+        // because it has a page, as it would if it were in words.txt.
+        all.merge(&self.wiki_words());
         *self.project_words.borrow_mut() = all;
         self.forget_the_words();
     }
@@ -544,6 +548,11 @@ impl Editor {
         let global = self.global_word_list().is_some_and(|g| g == path);
         let project = path.file_name().is_some_and(|n| n == "words.txt")
             && path.parent().is_some_and(|d| d.file_name().is_some_and(|n| n == ".yumete"));
+        if self.is_wiki_file(&path) {
+            self.reload_project_words();
+            self.status = say!("wiki.reloaded", self.wiki.entries.len(), self.wiki.files().len());
+            return true;
+        }
         if !project && !global {
             return false;
         }
