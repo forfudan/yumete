@@ -1826,6 +1826,14 @@ en = "bands: divide the vertical page across — top right to top left, then bot
 find = "段組 段组 分欄 分栏 bands columns"
 
 [[message]]
+# : 命令選單裏 code 那一項的說明（view 組）
+key = "cmd.view.code"
+zht = "代碼上色：圍欄裏的代碼按它自己的語法上色"
+zhs = "代码上色：围栏里的代码按它自己的语法上色"
+en = "code colours: code in a fence, coloured by its own grammar"
+find = "代碼 代码 高亮 語法 语法 上色 圍欄 围栏 highlight syntax fence tree-sitter"
+
+[[message]]
 # : 命令選單裏 focus 那一項的說明（view 組）
 key = "cmd.view.focus"
 zht = "焦點：正在寫的那一段留在紙上，其餘的退後一級"
@@ -4787,6 +4795,20 @@ key = "layout.bands-one"
 zht = "段組：一段（整頁一縱到底）"
 zhs = "段组：一段（整页一纵到底）"
 en = "bands: one — a 縱 runs the whole page"
+
+[[message]]
+# :view-code off — 圍欄裏的代碼回到一種顏色
+key = "layout.code-off"
+zht = "代碼上色：關（圍欄裏的代碼一種顏色）"
+zhs = "代码上色：关（围栏里的代码一种颜色）"
+en = "code colours: off (a fence is one colour)"
+
+[[message]]
+# :view-code on — 圍欄裏的代碼按語法上色；認得的語言列出來
+key = "layout.code-on"
+zht = "代碼上色：開（認得 css html javascript json python toml yaml）"
+zhs = "代码上色：开（认得 css html javascript json python toml yaml）"
+en = "code colours: on (css html javascript json python toml yaml)"
 
 [[message]]
 # :indent full — 縮進畫出來，段間的空行也收起

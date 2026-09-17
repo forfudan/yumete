@@ -1252,16 +1252,20 @@ impl Editor {
     ///
     /// `block` says what kind of line it is: inside a fence or a page's
     /// metadata there is no markup at all, and colouring `**` there — let alone
-    /// taking it off the page — would misreport what the file says.
+    /// taking it off the page — would misreport what the file says. A fence's
+    /// lines get the runs of their own grammar instead, which are never hidden
+    /// ([`crate::code`]).
     pub fn markup_line_in(
         &self,
         line: usize,
         block: crate::markdown::Block,
     ) -> Vec<crate::markdown::Span> {
-        if block.is_literal() {
-            return Vec::new();
+        match block {
+            // Not markup either — the code's own grammar, in colour (#420).
+            crate::markdown::Block::Code { .. } => self.code_line(line),
+            _ if block.is_literal() => Vec::new(),
+            _ => self.markup_line(line),
         }
-        self.markup_line(line)
     }
 
     /// The Markdown runs of `line`, worked out once per revision and kept

@@ -769,6 +769,14 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetCode(want) => {
+                self.code_colours = want.unwrap_or(!self.code_colours);
+                self.status = match self.code_colours {
+                    true => say!("layout.code-on"),
+                    false => say!("layout.code-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::OpenSearch(scope) => {
                 self.open_search_in(scope, false);
                 Ok(CommandOutcome::Continue)

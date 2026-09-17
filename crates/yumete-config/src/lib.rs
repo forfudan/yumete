@@ -190,6 +190,9 @@ pub struct EditorConfig {
     /// Whether a pair of half-width characters shares one slot in vertical
     /// layout (縦中横). Off by default: one letter to a row, hung right.
     pub tatechuyoko: bool,
+    /// Whether code in a fence is coloured by its own grammar (#420). On by
+    /// default; `:view-code` toggles.
+    pub code_highlight: bool,
     /// Whether 句讀 hang in the margin beside the character they follow rather
     /// than taking a square each (標點旁置). Off by default; `:view-hanging` toggles.
     pub hanging_punctuation: bool,
@@ -321,6 +324,7 @@ impl Default for EditorConfig {
             ruby_dialects: Vec::new(),
             usage_groups: Vec::new(),
             tatechuyoko: false,
+            code_highlight: true,
             hanging_punctuation: false,
             soft_wrap: true,
             autosave: true,
@@ -2148,6 +2152,7 @@ struct RawEditor {
     ruby_dialects: Option<Vec<String>>,
     usage_groups: Option<Vec<String>>,
     tatechuyoko: Option<bool>,
+    code_highlight: Option<bool>,
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
     autosave: Option<bool>,
@@ -2286,6 +2291,9 @@ impl RawConfig {
         }
         if other.editor.tatechuyoko.is_some() {
             self.editor.tatechuyoko = other.editor.tatechuyoko;
+        }
+        if other.editor.code_highlight.is_some() {
+            self.editor.code_highlight = other.editor.code_highlight;
         }
         if other.editor.hanging_punctuation.is_some() {
             self.editor.hanging_punctuation = other.editor.hanging_punctuation;
@@ -2519,6 +2527,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.tatechuyoko {
             config.editor.tatechuyoko = on;
+        }
+        if let Some(on) = self.editor.code_highlight {
+            config.editor.code_highlight = on;
         }
         if let Some(on) = self.editor.hanging_punctuation {
             config.editor.hanging_punctuation = on;

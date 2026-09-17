@@ -1956,6 +1956,10 @@ pub struct Editor {
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
+    /// Whether fenced code is coloured by its own grammar (#420, `:view-code`).
+    code_colours: bool,
+    /// Where the fences are, and their code parsed — see `fences.rs`.
+    code_cache: RefCell<fences::CodeCache>,
     /// The drawn padding of the table last asked about (Feature #212).
     ///
     /// One table at a time: the page asks per line, every line of a table
@@ -2400,6 +2404,8 @@ impl Editor {
             markup_memo: memo::LineMemo::default(),
             ruby_memo: memo::LineMemo::default(),
             block_cache: RefCell::new(None),
+            code_colours: true,
+            code_cache: RefCell::default(),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             pipe_region: RefCell::new(None),
@@ -3201,6 +3207,7 @@ mod conflicts;
 mod convert;
 mod detail;
 mod edits;
+mod fences;
 mod files;
 mod help;
 mod find;
