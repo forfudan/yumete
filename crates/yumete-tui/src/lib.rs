@@ -5187,7 +5187,9 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
     // to learn.
     let band = || Some(Style::default().bg(ink.at(yumete_config::rung::BAND)));
     match block {
-        Block::Prose | Block::Heading(_) | Block::Item { .. } => None,
+        // A note running over several lines has its ink from its runs, and no
+        // ground: a one-line note has none either (#288).
+        Block::Prose | Block::Heading(_) | Block::Item { .. } | Block::Comment { .. } => None,
         // An aside is a block on the page because it is a block on paper.
         // **A table is a block too** (#270). It was the one thing in this list
         // that had a shape on the page and no ground under it, so a table in a

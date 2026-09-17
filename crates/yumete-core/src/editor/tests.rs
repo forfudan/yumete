@@ -14163,3 +14163,31 @@ fn the_vim_preset_translates_what_a_vim_hand_types() {
     press(&mut ed, "2x");
     assert_eq!(text(&ed), "丙丁\n戊己庚\n辛壬\n", "a count reaches the translation");
 }
+
+/// A note that runs over several lines is a note on every one of them — drawn
+/// as one, not in the outline, not in the export (#288).
+#[test]
+fn a_note_over_several_lines_is_a_note_on_all_of_them() {
+    use crate::markdown::{Block, Kind};
+    let ed = markdown("正文<!-- 想想\n# 不是一章\n**不粗**\n再想想 -->之後**粗**\n\n# 第一章\n```\n<!-- 代碼\n```\n尾巴");
+    let kinds = |line: usize| -> Vec<Kind> {
+        ed.markup_line_in(line, ed.block_of(line)).iter().map(|s| s.kind).collect()
+    };
+    assert_eq!(ed.block_of(1), Block::Comment { close: None });
+    assert_eq!(kinds(1), [Kind::Comment], "the # inside the note is the note's");
+    assert_eq!(kinds(2), [Kind::Comment], "and so is the **");
+    assert_eq!(ed.block_of(3), Block::Comment { close: Some(4) });
+    assert!(kinds(3).contains(&Kind::Strong), "after the closer the line is itself: {:?}", kinds(3));
+    assert_eq!(ed.block_of(4), Block::Prose, "closed");
+    assert!(matches!(ed.block_of(7), Block::Code { .. }), "a <!-- in a fence opens nothing");
+    assert_eq!(ed.block_of(9), Block::Prose, "…so the line after the fence is prose");
+    let chapters: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+    assert_eq!(chapters, ["第一章"], "a # in a note is not a chapter");
+}
+
+#[test]
+fn a_note_over_several_lines_leaves_the_export() {
+    let out = crate::markdown::strip_comments("甲<!-- 一\n二\n三 -->乙\n\n<!--\n整段\n-->\n丙\n```\n<!-- 留着\n```\n");
+    // The note's own lines go; the lines it began and ended on keep their break.
+    assert_eq!(out, "甲\n乙\n\n丙\n```\n<!-- 留着\n```\n");
+}

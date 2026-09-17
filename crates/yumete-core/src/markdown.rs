@@ -120,6 +120,16 @@ pub enum Block {
     },
     /// `[^1]: the note itself`.
     FootnoteDef,
+    /// A line **after** the one a `<!--` or `%%` opened on, up to the line that
+    /// closes it (#288) — and where on that line it closes: `close` is the char
+    /// index of the `-->` or `%%`, or `None` when the whole line is the note.
+    ///
+    /// Not read by [`BlockScanner`], which looks at a line's opening only and
+    /// could not see a `<!--` halfway along a paragraph; the editor finds the
+    /// comments in the same walk and lays them over its answer, as it does a
+    /// merge conflict. The opening line itself stays whatever it was: its own
+    /// runs already carry the comment to the end of the line.
+    Comment { close: Option<usize> },
     /// A line of a merge conflict (#249) — which side of it, or [`None`] for
     /// one of the four marker lines.
     ///
@@ -846,6 +856,106 @@ fn comment(chars: &[char], at: usize) -> Option<(usize, usize, usize)> {
     None
 }
 
+/// The closer of a `<!--` or `%%` that `line` opens and does not close, if it
+/// does (#288).
+///
+/// Read the way [`spans`] reads a line — a comment is taken before a code span
+/// at the same place, and a code span hides a `<!--` inside it — so a line this
+/// says is left open is a line whose runs carry a comment to its end.
+pub fn comment_left_open(line: &str) -> Option<&'static str> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut at = 0;
+    while at < chars.len() {
+        if let Some((open, close, end)) = comment(&chars, at) {
+            if close == 0 {
+                return Some(if chars[at] == '%' { "%%" } else { "-->" });
+            }
+            at = end.max(at + open);
+            continue;
+        }
+        if chars[at] == '`' {
+            if let Some(close) = find(&chars, at + 1, |c| c == '`') {
+                at = close + 1;
+                continue;
+            }
+        }
+        at += 1;
+    }
+    None
+}
+
+/// Where on `line` a comment left open above closes: the char index of
+/// `closer`, if the line holds one (#288).
+pub fn comment_closes(line: &str, closer: &str) -> Option<usize> {
+    let chars: Vec<char> = line.chars().collect();
+    run(&chars, 0, closer)
+}
+
+/// `text` with every `<!-- -->` and `%% %%` taken out — across lines too — for a
+/// file handed to somebody else (#288). A line that was nothing but a note goes
+/// with it, so a note between two paragraphs does not become a third, empty
+/// one. Fences keep everything: a `<!--` in a code block is code.
+pub fn strip_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut open: Option<&'static str> = None;
+    let mut fence: Option<char> = None;
+    for line in text.split_inclusive('\n') {
+        let body = line.trim_end_matches(['\n', '\r']);
+        let ending = &line[body.len()..];
+        let trimmed = body.trim_start();
+        if open.is_none() {
+            let mark = ['`', '~']
+                .into_iter()
+                .find(|&c| trimmed.starts_with(&c.to_string().repeat(3)));
+            match (fence, mark) {
+                (None, Some(m)) => fence = Some(m),
+                (Some(f), Some(m)) if f == m => fence = None,
+                _ => {}
+            }
+            if fence.is_some() || mark.is_some() {
+                out.push_str(line);
+                continue;
+            }
+        }
+        let chars: Vec<char> = body.chars().collect();
+        let mut kept = String::new();
+        let mut at = 0;
+        if let Some(closer) = open {
+            match run(&chars, 0, closer) {
+                Some(i) => {
+                    at = i + closer.chars().count();
+                    open = None;
+                }
+                None => at = chars.len(),
+            }
+        }
+        while at < chars.len() {
+            if let Some((_, close, end)) = comment(&chars, at) {
+                if close == 0 {
+                    open = Some(if chars[at] == '%' { "%%" } else { "-->" });
+                }
+                at = end;
+                continue;
+            }
+            if chars[at] == '`' {
+                if let Some(close) = find(&chars, at + 1, |c| c == '`') {
+                    kept.extend(&chars[at..=close]);
+                    at = close + 1;
+                    continue;
+                }
+            }
+            kept.push(chars[at]);
+            at += 1;
+        }
+        if kept.trim().is_empty() && !body.trim().is_empty() {
+            continue;
+        }
+        out.push_str(&kept);
+        out.push_str(ending);
+    }
+    out
+}
+
 /// Where `text` next occurs at or after `from`.
 fn run(chars: &[char], from: usize, text: &str) -> Option<usize> {
     let want: Vec<char> = text.chars().collect();
@@ -1213,6 +1323,7 @@ mod tests {
                 Block::Container(_) => ':',
                 Block::Table { .. } => '|',
                 Block::FootnoteDef => 'F',
+                Block::Comment { .. } => '%',
                 // The scanner never says this — a conflict is laid over its
                 // answer by the editor, which is the only thing that can know
                 // whether a `<<<<<<<` ever closes.
