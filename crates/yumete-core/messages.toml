@@ -1982,6 +1982,13 @@ en = "wrap long paragraphs to the next row; `:view-wrap 50` sets a measure"
 find = "折行 換行 换行 自動換行 自动换行 寬度 宽度 wrap width"
 
 [[message]]
+# : 命令選單裏 color 那一項的說明（wiki 組）
+key = "cmd.wikis.color"
+zht = "詞條名染成金色，橫排竪排一樣（出廠）"
+zhs = "词条名染成金色，横排竖排一样（出厂）"
+en = "wiki names in 金, across and down alike (default)"
+
+[[message]]
 # : 命令選單裏 edit 那一項的說明（wiki 組）
 key = "cmd.wikis.edit"
 zht = "打開這本書的 .yumete/wiki.md，沒有就建一個"
@@ -1994,6 +2001,20 @@ key = "cmd.wikis.global"
 zht = "打開全局的 wiki.md——整個系列共用的設定"
 zhs = "打开全局的 wiki.md——整个系列共用的设定"
 en = "open the global wiki.md — what a whole series shares"
+
+[[message]]
+# : 命令選單裏 hide 那一項的說明（wiki 組）
+key = "cmd.wikis.hide"
+zht = "正文裏不給詞條名做記號"
+zhs = "正文里不给词条名做记号"
+en = "stop marking wiki names in the prose"
+
+[[message]]
+# : 命令選單裏 line 那一項的說明（wiki 組）
+key = "cmd.wikis.line"
+zht = "橫排虛線下劃線，竪排底色"
+zhs = "横排虚线下划线，竖排底色"
+en = "a dotted underline across, a ground down a 縱"
 
 [[message]]
 # : 命令選單裏 panel 那一項的說明（wiki 組）
@@ -4185,6 +4206,13 @@ key = "hint.space.comment-line"
 zht = "行注釋"
 zhs = "行注释"
 en = "comment out, by the line"
+
+[[message]]
+# 空格選單裏的 s：換到下一個區域（正文、側欄、另一個窗格）
+key = "hint.space.next-region"
+zht = "換到下一個區域（正文／側欄／另一個窗格），同 C-w"
+zhs = "换到下一个区域（正文／侧栏／另一个窗格），同 C-w"
+en = "the next region — the writing, a panel, the other pane (also C-w)"
 
 [[message]]
 # 空格組：從系統剪貼簿貼在前面
@@ -7375,6 +7403,27 @@ zhs = "全局"
 en = "global"
 
 [[message]]
+# :wiki color
+key = "wiki.marks-color"
+zht = "百科記號：金色字"
+zhs = "百科记号：金色字"
+en = "wiki marks: 金 ink"
+
+[[message]]
+# :wiki line
+key = "wiki.marks-line"
+zht = "百科記號：橫排虛線下劃線，竪排底色"
+zhs = "百科记号：横排虚线下划线，竖排底色"
+en = "wiki marks: a dotted underline across, a ground down a 縱"
+
+[[message]]
+# :wiki hide
+key = "wiki.marks-off"
+zht = "百科記號：關"
+zhs = "百科记号：关"
+en = "wiki marks: off"
+
+[[message]]
 # :wiki 報告裏：引到的檔不存在
 key = "wiki.missing"
 zht = "{0}：沒有這個檔"
@@ -7387,6 +7436,13 @@ key = "wiki.none"
 zht = "這本書還沒有百科——:wiki edit 會建 {0}"
 zhs = "这本书还没有百科——:wiki edit 会建 {0}"
 en = "this book has no wiki yet — :wiki edit makes {0}"
+
+[[message]]
+# 引用那一行的面板底邊：怎麽打開它
+key = "wiki.open-it"
+zht = "gf 打開"
+zhs = "gf 打开"
+en = "gf opens it"
 
 [[message]]
 # :wiki edit 打開了一個空的百科

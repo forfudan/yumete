@@ -2096,6 +2096,9 @@ const WIKI_WORDS: &[Word] = &[
     Word { name: "edit", help: "cmd.wikis.edit", needs: &[] },
     Word { name: "global", help: "cmd.wikis.global", needs: &[] },
     Word { name: "panel", help: "cmd.wikis.panel", needs: &[] },
+    Word { name: "line", help: "cmd.wikis.line", needs: &[] },
+    Word { name: "color", help: "cmd.wikis.color", needs: &[] },
+    Word { name: "hide", help: "cmd.wikis.hide", needs: &[] },
     Word { name: "reload", help: "cmd.wikis.reload", needs: &[] },
 ];
 

@@ -7,7 +7,9 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-ratatui = "0.29"
+# `unstable-backend-writer` for `writer_mut`: `backend.rs` writes the dotted
+# underline (#287) past the crossterm backend, into the same stdout.
+ratatui = { version = "0.29", features = ["unstable-backend-writer"] }
 yumete-cjk = {path = "../yumete-cjk"}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}

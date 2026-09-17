@@ -651,6 +651,11 @@ impl Editor {
     /// The shape a grep result has, and the shape every compiler and every
     /// other grep prints — so it also works on a line pasted in from a shell.
     pub(super) fn goto_file_under_cursor(&mut self) {
+        // A `[yumete] 檔名` line names a file too (#287), and it is the one
+        // line in a wiki where `gf` has something to open.
+        if self.open_wiki_include() {
+            return;
+        }
         let rope = self.current_buffer().rope();
         let line = rope.line(rope.char_to_line(self.cursor)).to_string();
         let text = line.trim();

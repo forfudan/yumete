@@ -14,6 +14,7 @@ pub mod table;
 pub mod theme;
 pub mod vertical;
 pub mod ambiguous;
+pub mod backend;
 pub mod system_ime;
 pub mod typed_ahead;
 
@@ -349,7 +350,11 @@ pub fn run(
     // alternate screen, because the question is put to the terminal and read
     // back off the descriptor.
     crate::theme::settle_at_startup(config);
-    let mut terminal = ratatui::init();
+    // `ratatui::init` for the raw mode, the alternate screen and the panic hook
+    // that undoes both — and then a terminal of our own over it, so a wiki
+    // name can be underlined with dots (#287, `backend.rs`).
+    drop(ratatui::init());
+    let mut terminal = ratatui::Terminal::new(crate::backend::Dotted::new(stdout()))?;
 
     // Enable the Kitty keyboard protocol — the base level, which every session
     // holds: unambiguous escape codes, and press told from release.
@@ -4387,6 +4392,27 @@ fn draw_note(
     // **A wiki name floats the same way** (#287) — when nothing the writer
     // typed answers first, and when the sidebar's 百科 page is not already
     // showing it: one place at a time.
+    // **A `[yumete]` line says whether it was read** (#287): the line is
+    // inside a comment, so the 批注 panel would otherwise answer first — and
+    // 「this comment says `[yumete] 人物.md`」 is not the question anybody has
+    // standing on one. Which file, and what became of it, is.
+    if let Some(include) = editor.wiki_include_here() {
+        use yumete_core::wiki::Source;
+        let said = match &include.state {
+            Some(Source::Read { entries, .. }) => say!("wiki.read", &include.named, entries),
+            Some(Source::Missing { .. }) | None => say!("wiki.missing", &include.named),
+            Some(Source::Refused { from, .. }) => {
+                say!("wiki.refused", &include.named, from.display())
+            }
+            Some(Source::Again { .. }) => say!("wiki.again", &include.named),
+            Some(Source::TooMany { .. }) => say!("wiki.too-many", &include.named),
+        };
+        return panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+            title: say!("wiki.title"),
+            body: panel::Body::Prose(said),
+            tag: Some(say!("wiki.open-it")),
+        });
+    }
     if editor.detail().is_none() {
         let view = editor.wiki_floating()?;
         let tag = view.parts.first().map(|p| {
@@ -4472,9 +4498,14 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
                 x += yumete_cjk::drawn_width(here.symbol()).max(1) as u16;
             }
             let weight = if bold { ";font-weight:600" } else { "" };
+            // A wiki name's dots survive into the picture (#287).
+            let dotted = match style.add_modifier.contains(crate::backend::DOTTED) {
+                true => " dotted",
+                false => "",
+            };
             let rule = match &underline {
                 Some(colour) => format!(
-                    ";text-decoration:underline;text-decoration-color:{colour}\
+                    ";text-decoration:underline{dotted};text-decoration-color:{colour}\
                      ;text-underline-offset:2px"
                 ),
                 None => String::new(),
@@ -6639,6 +6670,25 @@ fn draw_horizontal(
                 .and_then(|i| styles.get_mut(i))
             {
                 *style = style.fg(ink.furniture()).remove_modifier(Modifier::BOLD);
+            }
+        }
+
+        // **A wiki name is underlined with dots** (#287, §5.8.4): told apart
+        // from a link's solid line by shape, which survives any theme. The
+        // cells ask for it with a modifier bit only `backend::Dotted` reads.
+        let wiki = editor.wiki_marks_on_line(row.line);
+        let wiki_color = editor.wiki_mark() == yumete_core::wiki::Mark::Color;
+        if !wiki.is_empty() {
+            let start_in_line = row.start - rope.line_to_char(row.line);
+            for &(a, b) in &wiki {
+                let a = a.saturating_sub(start_in_line);
+                let b = b.saturating_sub(start_in_line).min(chars.len());
+                for style in styles.iter_mut().take(b).skip(a.min(b)) {
+                    *style = match wiki_color {
+                        true => style.fg(ink.gold()),
+                        false => style.add_modifier(Modifier::UNDERLINED | crate::backend::DOTTED),
+                    };
+                }
             }
         }
 

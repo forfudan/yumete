@@ -8343,7 +8343,9 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().total, 0, "a literal dot is not in the text");
     ed.on_key(Key::Esc);
     assert_eq!(ed.mode(), Mode::Normal, "Esc leaves the box, not the panel");
-    ed.on_key(Key::Tab);
+    // `j` walks the form's cells with the keys in the panel; `Tab` is the
+    // slot's own key and walks its views (2026-09-17).
+    ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Regex);
     ed.on_key(Key::Char(' '));
     assert!(ed.search().regex);
@@ -8360,8 +8362,8 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
 
     // 大小寫 is three ways round, not a tick.
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Tab);
-    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Case);
     assert_eq!(ed.search().case, Case::Smart);
     ed.on_key(Key::Enter);
@@ -8623,9 +8625,9 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     for c in "阿甯".chars() {
         ed.on_key(Key::Char(c));
     }
-    // **`Tab` between the boxes keeps you typing** — they are filled in one
-    // after the other.
-    ed.on_key(Key::Tab);
+    // **`↓` between the boxes keeps you typing** — they are filled in one
+    // after the other. (`Tab` belongs to the slot: it walks its views.)
+    ed.on_key(Key::Down);
     assert_eq!(ed.search().field, Field::Replace);
     assert_eq!(ed.mode(), Mode::Field);
     for c in "阿寧".chars() {
@@ -8636,7 +8638,7 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
 
     ed.on_key(Key::Esc);
     for _ in 0..4 {
-        ed.on_key(Key::Tab);
+        ed.on_key(Key::Char('j'));
     }
     assert_eq!(ed.search().field, Field::Results);
 
@@ -14269,4 +14271,46 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
     assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("wiki.md")));
     assert_eq!(ed.cursor_line(), 1, "on the heading");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// 作品百科, third part (#287): the names are marked where the segmenter cut
+/// them, in three modes, and never inside a fence.
+#[test]
+fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
+    let dir = std::env::temp_dir().join(format!("yumete-wiki-mark-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(dir.join(".yumete/wiki.md"), "## 落霞鎮\n小鎮。\n## 墨\n一個字。\n").unwrap();
+    std::fs::write(dir.join("第一章.md"), "他到落霞鎮，墨還在。\n```\n落霞鎮\n```\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.reload_project_words();
+
+    assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)], "落霞鎮, and 墨 is one character");
+    assert!(ed.wiki_marks_on_line(2).is_empty(), "a name quoted in a fence is code");
+
+    ed.execute(":wiki hide").unwrap();
+    assert!(!ed.wiki_marks_visible());
+    assert!(ed.wiki_marks_on_line(0).is_empty());
+    ed.execute(":wiki color").unwrap();
+    assert_eq!(ed.wiki_mark(), crate::wiki::Mark::Color);
+    assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)]);
+    ed.execute(":wiki line").unwrap();
+    assert_eq!(ed.wiki_mark(), crate::wiki::Mark::Line);
+    std::fs::remove_dir_all(&dir).ok();
+}
+/// `:wiki panel` leaves the keys in the writing — the page is drawn from where
+/// the cursor is — and the two doors in and out still work (2026-09-17).
+#[test]
+fn the_wiki_panel_leaves_the_keys_in_the_writing() {
+    let mut ed = Editor::new();
+    ed.execute(":wiki panel").unwrap();
+    assert!(ed.panel_focus().is_none(), "the keys stayed in the writing");
+    ed.on_key(Key::Ctrl('w'));
+    assert!(ed.panel_focus().is_some(), "C-w walks into the panel");
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('s'));
+    assert!(ed.panel_focus().is_none(), "空格 s walks back out");
+    ed.execute(":wiki panel").unwrap();
+    assert!(ed.showing(crate::sidebar::View::Wiki).is_none(), "and again puts it away");
 }

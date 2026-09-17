@@ -18,6 +18,19 @@ const MAX_DEPTH: usize = 8;
 pub const WIKI_MD: &str = "wiki.md";
 const WIKI_TXT: &str = "wiki.txt";
 
+/// How a wiki name is marked on the page (`:wiki hide|color|line`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mark {
+    /// Not at all.
+    Off,
+    /// 金 ink, in both layouts — the factory answer (2026-09-17).
+    #[default]
+    Color,
+    /// A dotted underline across; a ground (第 80 檔) down a 縱, where an
+    /// underline would be a stack of dashes between the glyphs.
+    Line,
+}
+
 /// One entry: a heading of depth two or more, and everything under it up to
 /// the next heading that is not deeper.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -405,4 +418,25 @@ mod tests {
         assert_eq!(wiki.unmarkable(), ["墨"]);
         assert!(!wiki.words().any(|w| w == "墨"));
     }
+#[test]
+fn repro_second_level() {
+    let dir = std::env::temp_dir().join("yumete-wiki-repro");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("書/.yumete")).unwrap();
+    std::fs::create_dir_all(dir.join("書/辭典")).unwrap();
+    std::fs::write(
+        dir.join("書/.yumete/wiki.md"),
+        "# 辭典\n<!-- [yumete] ../辭典/天門真境辭典.md -->\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("書/辭典/天門真境辭典.md"),
+        "# 天門真境辭典\n\n## 天門\n山口。\n\n## 真境\n境界。\n\n### 內境\n更深。\n",
+    )
+    .unwrap();
+    let wiki = crate::wiki::Wiki::load(Some(&dir.join("書/.yumete/wiki.md")), None);
+    println!("sources: {:#?}", wiki.sources);
+    println!("names: {:?}", wiki.entries.iter().map(|e| (&e.name, e.depth, &e.ancestors)).collect::<Vec<_>>());
+    std::fs::remove_dir_all(&dir).ok();
+}
 }
