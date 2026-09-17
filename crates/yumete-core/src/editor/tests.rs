@@ -14074,3 +14074,42 @@ fn tab_types_spaces_to_the_next_stop_and_shift_tab_types_a_tab() {
     ed.on_key(Key::BackTab);
     assert!(ed.current_buffer().text().ends_with("\n\t  "), "{:?}", ed.current_buffer().text());
 }
+
+/// helix's four, on the horizontal page — `gj`／`gk` a line of the *file*,
+/// `gh`／`gl` its ends — and the same four turned with `hjkl` on a 縱書 page:
+/// `gh`／`gl` the next and previous line, `gk`／`gj` the start and end
+/// (2026-09-17).
+#[test]
+fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
+    let text = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳\n天地玄黃\n";
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor);
+        (line, ed.cursor - rope.line_to_char(line))
+    };
+    let mut ed = typed(text);
+    ed.set_wrap_width(10); // five characters a row: line 0 is four rows
+    press(&mut ed, "ggll");
+    press(&mut ed, "j");
+    assert_eq!(at(&ed).0, 0, "j walks a drawn row, inside the paragraph");
+    press(&mut ed, "gj");
+    assert_eq!(at(&ed).0, 1, "gj is the next line of the file");
+    press(&mut ed, "gk");
+    assert_eq!(at(&ed).0, 0);
+    press(&mut ed, "gl");
+    assert_eq!(at(&ed), (0, 15));
+    press(&mut ed, "gh");
+    assert_eq!(at(&ed), (0, 0));
+
+    let mut ed = typed(text);
+    ed.set_layout(crate::zong::Layout::Vertical);
+    press(&mut ed, "ggjj");
+    press(&mut ed, "gj");
+    assert_eq!(at(&ed), (0, 15), "down the 縱 to the end of the line");
+    press(&mut ed, "gk");
+    assert_eq!(at(&ed), (0, 0), "up to its start");
+    press(&mut ed, "gh");
+    assert_eq!(at(&ed).0, 1, "leftward is onward: the next line");
+    press(&mut ed, "gl");
+    assert_eq!(at(&ed).0, 0, "and back");
+}

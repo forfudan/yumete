@@ -3688,11 +3688,18 @@ zhs = "命令一览"
 en = "every command"
 
 [[message]]
-# g 組：j／k 在這裏走的就是螢幕上那一行（同 helix 的 gj／gk）
-key = "hint.goto.by-drawn-row"
-zht = "上下一行（就是 j／k：這裏本來就走螢幕上的行）"
-zhs = "上下一行（就是 j／k：这里本来就走屏幕上的行）"
-en = "up or down a drawn row — which is what j and k already do here"
+# g 選單裏的 j k（橫排）
+key = "hint.goto.by-file-line"
+zht = "下／上一行（文件裏的行：一段是一行，所以是下一段／上一段）"
+zhs = "下／上一行（文件里的行：一段是一行，所以是下一段／上一段）"
+en = "down / up a line of the file — a paragraph, where it is one line"
+
+[[message]]
+# g 選單裏的 h l（縱書：方向跟 hjkl 一起轉）
+key = "hint.goto.by-file-line-vertical"
+zht = "下／上一段（文件裏的一行，往左是往後）"
+zhs = "下／上一段（文件里的一行，往左是往后）"
+en = "next / previous line of the file — leftward is onward"
 
 [[message]]
 # g 組：關掉這一個工作區

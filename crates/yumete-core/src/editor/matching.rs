@@ -303,6 +303,17 @@ impl Editor {
     /// where a paragraph is one line of several hundred characters, a logical
     /// `j` would jump a whole screen at a time.
     pub(super) fn move_vertical(&mut self, up: bool) {
+        self.move_row(up, false);
+    }
+
+    /// Step one line **of the file** — a whole paragraph where a paragraph is
+    /// one line — keeping the goal column: helix's `gj`／`gk`
+    /// (`move_line_down`, 「textual (instead of visual) line」).
+    pub(super) fn move_textual_line(&mut self, up: bool) {
+        self.move_row(up, true);
+    }
+
+    fn move_row(&mut self, up: bool, textual: bool) {
         // **In a grid, the column is the cell** (#357). The goal column is
         // worked out from the *document* — the text and the padding a `|`
         // table carries in it — while `t f` and `t t` draw a grid of their own
@@ -323,7 +334,10 @@ impl Editor {
             // off a row is a paragraph, which is what `NO_WRAP` gives — through
             // this same code, so the two cases cannot answer differently about
             // what is off the page.
-            let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+            let width = match textual {
+                true => crate::wrap::NO_WRAP,
+                false => self.wrap_width().unwrap_or(crate::wrap::NO_WRAP),
+            };
             let drawn = |line: usize| self.drawn_on_line(line);
             let typed = |line: usize| self.typed_on_line(line);
             // A table row is one row (#275) — and `j` has to be walking the
