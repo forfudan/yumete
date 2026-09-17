@@ -225,6 +225,11 @@ impl Editor {
                 // other pane up and `C-o` comes back.
                 return self.follow_link();
             }
+            // **A wiki name is a definition too** (#287): `gd` opens the file
+            // its entry is written in, on the heading.
+            if self.follow_wiki() {
+                return;
+            }
             // ⚠️ **And on ordinary writing it does nothing** (#454). It used to
             // fall through here too — a whole-document search for whatever the
             // cursor happened to be on — so `gd` in the middle of a paragraph

@@ -4384,6 +4384,21 @@ fn draw_note(
     bottom: u16,
     caret: (u16, u16),
 ) -> Option<Rect> {
+    // **A wiki name floats the same way** (#287) — when nothing the writer
+    // typed answers first, and when the sidebar's 百科 page is not already
+    // showing it: one place at a time.
+    if editor.detail().is_none() {
+        let view = editor.wiki_floating()?;
+        let tag = view.parts.first().map(|p| {
+            let file = p.source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            format!("{file}:{}", p.line + 1)
+        });
+        return panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+            title: view.name.clone(),
+            body: panel::Body::Prose(view.as_prose()),
+            tag,
+        });
+    }
     if !editor.detail_visible() || editor.detail_shows_a_row() {
         return None;
     }
@@ -5495,6 +5510,11 @@ fn draw_sidebar(
     if sidebar.view() == View::Search {
         return draw_search(frame, editor, config, side, area);
     }
+    // The entry under the cursor, drawn from the cursor (#287).
+    if sidebar.view() == View::Wiki {
+        draw_wiki(frame, editor, config, side, area);
+        return None;
+    }
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
     let text = ground.fg(ink.text());
@@ -5595,13 +5615,92 @@ fn draw_sidebar(
                 };
                 format!("{mark}{}", row.name)
             }
-            // Handled above: it fills no rows.
-            View::Search => row.name.clone(),
+            // Handled above: they fill no rows.
+            View::Search | View::Wiki => row.name.clone(),
         };
         put_text(buf, from + 1, y, to, &line, style);
     }
     // Only the search panel has a caret to report.
     None
+}
+
+/// **The sidebar's 百科 page** (#287): the entry the cursor is on, kept in
+/// place. The name in 金, the breadcrumb set back, sub-headings in 金 at the
+/// depth they have *within* the entry, and the global entries under 「全局」.
+fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
+    use yumete_core::editor::WikiLine;
+    let ink = crate::theme::Palette::of(config);
+    let ground = ink.ground(yumete_config::rung::CHROME);
+    let text = ground.fg(ink.text());
+    let head = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
+    let quiet = ground.fg(ink.quiet());
+    frame.render_widget(Clear, area);
+    vertical::clear_wide_left_edge(frame.buffer_mut(), area);
+    let rule = match side {
+        Side::Left => area.x + area.width - 1,
+        Side::Right => area.x,
+    };
+    let (from, to) = match side {
+        Side::Left => (area.x + 1, rule),
+        Side::Right => (area.x + 2, area.x + area.width),
+    };
+    let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in area.x..area.x + area.width {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(ground);
+            }
+        }
+        if let Some(cell) = buf.cell_mut((rule, y)) {
+            cell.set_symbol("│").set_style(quiet);
+        }
+    }
+    let bottom = area.y + area.height;
+    let width = to.saturating_sub(from).max(1) as usize;
+    let Some(view) = editor.wiki_here() else {
+        put_text(buf, from, area.y, to, &say!("wiki.panel-empty"), quiet);
+        return;
+    };
+    let mut y = area.y;
+    let line = |buf: &mut ratatui::buffer::Buffer, y: &mut u16, s: &str, style: Style| {
+        let chars: Vec<char> = s.chars().collect();
+        for (a, b) in yumete_core::wrap::line_rows(s, width) {
+            if *y >= bottom {
+                return;
+            }
+            let row: String = chars[a.min(chars.len())..b.min(chars.len())].iter().collect();
+            put_text(buf, from, *y, to, &row, style);
+            *y += 1;
+        }
+    };
+    let mixed = view.parts.iter().any(|p| p.global) && view.parts.iter().any(|p| !p.global);
+    let mut global_said = false;
+    for (i, part) in view.parts.iter().enumerate() {
+        if i > 0 {
+            y += 1;
+            let mark = match mixed && part.global && !global_said {
+                true => {
+                    global_said = true;
+                    format!("── {} ──", say!("wiki.global"))
+                }
+                false => "──".to_string(),
+            };
+            line(buf, &mut y, &mark, head);
+        }
+        line(buf, &mut y, &view.name, head);
+        if !part.trail.is_empty() {
+            line(buf, &mut y, &part.trail.join(" › "), quiet);
+        }
+        y += 1;
+        for body in &part.lines {
+            match body {
+                WikiLine::Heading(depth, title) => {
+                    line(buf, &mut y, &format!("{} {title}", "#".repeat(*depth)), head)
+                }
+                WikiLine::Text(t) => line(buf, &mut y, t, text),
+            }
+        }
+    }
 }
 
 /// **The search panel** — Feature #419.

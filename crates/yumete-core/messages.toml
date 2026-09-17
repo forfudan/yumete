@@ -1996,6 +1996,13 @@ zhs = "打开全局的 wiki.md——整个系列共用的设定"
 en = "open the global wiki.md — what a whole series shares"
 
 [[message]]
+# : 命令選單裏 panel 那一項的說明（wiki 組）
+key = "cmd.wikis.panel"
+zht = "把詞條固定在側欄——開着的時候不再浮出來"
+zhs = "把词条固定在侧栏——开着的时候不再浮出来"
+en = "keep the entry in the sidebar — while it is open it no longer floats"
+
+[[message]]
 # : 命令選單裏 reload 那一項的說明（wiki 組）
 key = "cmd.wikis.reload"
 zht = "重讀百科和它引到的每一個檔"
@@ -4811,6 +4818,13 @@ zhs = "寻找"
 en = "search"
 
 [[message]]
+# 側欄的百科頁，放進句子裏說的名字
+key = "label.panel.wiki"
+zht = "百科"
+zhs = "百科"
+en = "wiki"
+
+[[message]]
 # 標籤：右邊
 key = "label.right"
 zht = "右邊"
@@ -7354,6 +7368,13 @@ zhs = "{0}：已经读过一次，这一次不再读"
 en = "{0}: already read once, not read again"
 
 [[message]]
+# 同名詞條裏，全局百科那一部分前面的標記
+key = "wiki.global"
+zht = "全局"
+zhs = "全局"
+en = "global"
+
+[[message]]
 # :wiki 報告裏：引到的檔不存在
 key = "wiki.missing"
 zht = "{0}：沒有這個檔"
@@ -7373,6 +7394,13 @@ key = "wiki.opened-empty"
 zht = "{0}——## 開始一個詞條，# 是分組；<!-- [yumete] 人物.md --> 引另一個檔"
 zhs = "{0}——## 开始一个词条，# 是分组；<!-- [yumete] 人物.md --> 引另一个文件"
 en = "{0} — ## starts an entry, # a group; <!-- [yumete] 人物.md --> pulls in another file"
+
+[[message]]
+# 側欄的百科頁：光標不在詞條名上
+key = "wiki.panel-empty"
+zht = "光標停在一個詞條名上，這裏就是它的內容"
+zhs = "光标停在一个词条名上，这里就是它的内容"
+en = "stand on a wiki name and its entry is shown here"
 
 [[message]]
 # :wiki 報告裏：讀到的一個檔和它給的詞條數

@@ -2460,6 +2460,7 @@ impl Editor {
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Right,
                 crate::sidebar::Side::Right,
+                crate::sidebar::Side::Right,
             ],
             dictionary_anchor: None,
             transient_scroll: 0,
@@ -3243,6 +3244,7 @@ mod tables;
 mod undo;
 mod verbs;
 mod wiki;
+pub use wiki::{WikiLine, WikiPart, WikiView};
 mod words;
 mod wrap;
 

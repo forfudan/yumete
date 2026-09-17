@@ -1971,6 +1971,15 @@ on a terminal we guessed wrong about is one line from a fix.
 
 #### 5.8.5 The panel
 
+⚠️ **Superseded 2026-09-17 — one place at a time.** The entry **floats** by the
+cursor the way a footnote does, over the page and not beside it: a slot that
+comes and goes as the cursor walks past names rewraps every paragraph on the
+screen (the #495 complaint), and a wiki name is on every third line. When the
+sidebar's 百科 page is open (`:wiki panel`), the entry shows **there** and does
+not also float. The same rule is to be brought to a table row and to 字典 (a
+row floats unless the 詳情 page is open; 字典 floats on `空格 d` unless its page
+is open) — a separate item.
+
 `wiki_detail()` joins the match in `Editor::detail()`. It follows the cursor
 with no key pressed, the way `note_detail` already does — requirement 3 needs
 nothing new — and it is a **tall** thing, so `detail_shows_a_row()` becomes

@@ -136,17 +136,20 @@ pub enum Panel {
     Dictionary,
     /// What the cursor is standing in, field by field.
     Detail,
+    /// The wiki entry the cursor is standing on (#287).
+    Wiki,
 }
 
 impl Panel {
     /// Every one of them, in the order a setting file lists them.
-    pub const ALL: [Panel; 6] = [
+    pub const ALL: [Panel; 7] = [
         Panel::Files,
         Panel::Buffers,
         Panel::Outline,
         Panel::Search,
         Panel::Dictionary,
         Panel::Detail,
+        Panel::Wiki,
     ];
 
     /// Its name in the config file and on the command line.
@@ -158,6 +161,7 @@ impl Panel {
             Panel::Search => "search",
             Panel::Dictionary => "dictionary",
             Panel::Detail => "detail",
+            Panel::Wiki => "wiki",
         }
     }
 
@@ -181,6 +185,7 @@ impl Panel {
             Panel::Search => "label.panel.search",
             Panel::Dictionary => "label.panel.dictionary",
             Panel::Detail => "label.panel.detail",
+            Panel::Wiki => "label.panel.wiki",
         }
     }
 }
@@ -192,6 +197,7 @@ impl From<View> for Panel {
             View::Buffers => Panel::Buffers,
             View::Outline => Panel::Outline,
             View::Search => Panel::Search,
+            View::Wiki => Panel::Wiki,
         }
     }
 }
@@ -226,15 +232,20 @@ pub enum View {
     Outline,
     /// Look for a pattern, and what it found — Feature #419.
     Search,
+    /// The wiki entry under the cursor, kept on the page (#287). While it is
+    /// open the floating panel does not show the entry too: one place at a
+    /// time.
+    Wiki,
 }
 
 impl View {
     /// Every view, in the order `Tab` walks them.
-    pub const ALL: [View; 4] = [
+    pub const ALL: [View; 5] = [
         View::Explorer,
         View::Buffers,
         View::Outline,
         View::Search,
+        View::Wiki,
     ];
 
     /// Its name, for the sidebar's header.
@@ -244,6 +255,7 @@ impl View {
             View::Buffers => "緩衝區",
             View::Outline => "大綱",
             View::Search => "尋找",
+            View::Wiki => "百科",
         }
     }
 }
@@ -470,7 +482,7 @@ impl Sidebar {
             }
             // Never reached: the search panel has a store of its own and
             // never fills these rows (`refresh_panel`).
-            View::Search => return None,
+            View::Search | View::Wiki => return None,
             View::Explorer => {}
         }
         if !row.is_dir {

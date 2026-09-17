@@ -68,6 +68,7 @@ impl Editor {
                 let path = self.book_wiki_path();
                 self.open_wiki_file(&path)?;
             }
+            Some("panel") => self.show_sidebar(crate::sidebar::View::Wiki),
             Some("global") => match self.global_wiki_path() {
                 Some(path) => self.open_wiki_file(&path)?,
                 None => self.status = say!("word.no-data-directory"),
@@ -123,5 +124,149 @@ impl Editor {
             }
         }
         self.show_listing(out, say!("wiki.title"));
+    }
+}
+
+/// One entry, laid out to be read (#287, §5.8.5): the breadcrumb, then its
+/// body with its own sub-headings re-levelled so the entry reads as `#`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WikiPart {
+    /// From the global wiki rather than this book's.
+    pub global: bool,
+    /// The headings above it, outermost first.
+    pub trail: Vec<String>,
+    pub lines: Vec<WikiLine>,
+    /// Where the heading is written.
+    pub source: PathBuf,
+    pub line: usize,
+}
+
+/// A line of an entry's body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WikiLine {
+    /// A sub-heading, at its depth **within the entry** (2 is the first level
+    /// under the entry itself).
+    Heading(usize, String),
+    Text(String),
+}
+
+/// Every entry of the name the cursor is standing on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WikiView {
+    pub name: String,
+    /// Book first, then global; `(depth, order)` within each.
+    pub parts: Vec<WikiPart>,
+}
+
+impl WikiView {
+    /// The whole view as prose, for the floating panel: one entry after
+    /// another, a rule between, and the global ones under 「全局」.
+    pub fn as_prose(&self) -> String {
+        let mut out: Vec<String> = Vec::new();
+        let mixed = self.parts.iter().any(|p| p.global) && self.parts.iter().any(|p| !p.global);
+        let mut global_said = false;
+        for (i, part) in self.parts.iter().enumerate() {
+            if i > 0 {
+                out.push(String::new());
+            }
+            if mixed && part.global && !global_said {
+                out.push(format!("── {} ──", say!("wiki.global")));
+                global_said = true;
+            } else if i > 0 {
+                out.push("──".to_string());
+            }
+            if !part.trail.is_empty() {
+                out.push(part.trail.join(" › "));
+            }
+            for line in &part.lines {
+                out.push(match line {
+                    WikiLine::Heading(depth, title) => format!("{} {title}", "#".repeat(*depth)),
+                    WikiLine::Text(text) => text.clone(),
+                });
+            }
+        }
+        out.join("\n")
+    }
+}
+
+impl Editor {
+    /// The entries of the word under the cursor, if it names any (#287).
+    ///
+    /// The word is the one the segmenter cut — which is exactly where a wiki
+    /// name was merged in — so 中國人 inside 中國人民 is not asked about. A
+    /// one-character entry is never answered here: it could not be marked,
+    /// and a panel over every 墨 in a novel would be a panel over the novel.
+    pub fn wiki_here(&self) -> Option<WikiView> {
+        if self.wiki.by_name.is_empty() || self.mode == Mode::Insert {
+            return None;
+        }
+        let line = self.cursor_line();
+        let block = self.block_of(line);
+        if block.is_literal() || matches!(block, crate::markdown::Block::Comment { .. }) {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let at = self.cursor - rope.line_to_char(line);
+        let chars = crate::zong::line_chars(rope, line);
+        let &(a, b) = self.segment_line(line).iter().find(|&&(a, b)| at >= a && at < b)?;
+        if b - a < 2 {
+            return None;
+        }
+        let name: String = chars[a..b.min(chars.len())].iter().collect();
+        let found = self.wiki.by_name.get(&name)?;
+        let parts = found
+            .iter()
+            .map(|&i| {
+                let entry = &self.wiki.entries[i];
+                let lines = entry
+                    .body
+                    .iter()
+                    .map(|text| {
+                        let trimmed = text.trim_start();
+                        let depth = trimmed.chars().take_while(|&c| c == '#').count();
+                        if depth > entry.depth && trimmed[depth..].starts_with(' ') {
+                            WikiLine::Heading(depth - entry.depth + 1, trimmed[depth..].trim().to_string())
+                        } else {
+                            WikiLine::Text(text.clone())
+                        }
+                    })
+                    .collect();
+                WikiPart {
+                    global: entry.global,
+                    trail: entry.ancestors.clone(),
+                    lines,
+                    source: entry.source.clone(),
+                    line: entry.line,
+                }
+            })
+            .collect();
+        Some(WikiView { name, parts })
+    }
+
+    /// The entry for the **floating** panel — only while nothing the writer
+    /// typed answers first (a row, a footnote, a comment), and only while the
+    /// sidebar's 百科 page is not open: one place at a time.
+    pub fn wiki_floating(&self) -> Option<WikiView> {
+        if self.showing(crate::sidebar::View::Wiki).is_some() || self.detail().is_some() {
+            return None;
+        }
+        self.wiki_here()
+    }
+
+    /// `gd` on a wiki name: open the file the entry is written in, on its
+    /// heading.
+    pub(super) fn follow_wiki(&mut self) -> bool {
+        let Some(view) = self.wiki_here() else {
+            return false;
+        };
+        let Some(part) = view.parts.first() else {
+            return false;
+        };
+        let (path, line) = (part.source.clone(), part.line);
+        self.remember_jump();
+        if self.open_file(&path).is_ok() {
+            self.goto_line(line + 1);
+        }
+        true
     }
 }
