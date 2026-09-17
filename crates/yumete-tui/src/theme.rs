@@ -344,6 +344,11 @@ pub struct Palette {
     green: (u8, u8, u8),
     azure: (u8, u8, u8),
     amber: (u8, u8, u8),
+    /// 變調 — 橙、粉、青、黃綠.
+    orange: (u8, u8, u8),
+    pink: (u8, u8, u8),
+    cyan: (u8, u8, u8),
+    lime: (u8, u8, u8),
     /// Whether a coloured run also gets a ground (`:theme-fill`).
     fill: bool,
     paint: bool,
@@ -530,6 +535,10 @@ impl Palette {
             green: theme.green(dark),
             azure: theme.azure(dark),
             amber: theme.amber(dark),
+            orange: theme.orange(dark),
+            pink: theme.pink(dark),
+            cyan: theme.cyan(dark),
+            lime: theme.lime(dark),
             fill: theme.fill,
             paint: theme.ground == Ground::Paint,
             faded: false,
@@ -726,6 +735,26 @@ impl Palette {
     /// 黃（皇室）— a `[!WARNING]`. Under 金, which is the emperor's.
     pub fn amber(self) -> Color {
         self.accent(self.amber)
+    }
+
+    /// 橙 — 朱's second tone: a number in a fence. Never 「這裏不對」.
+    pub fn orange(self) -> Color {
+        self.accent(self.orange)
+    }
+
+    /// 粉 — 紫's second tone.
+    pub fn pink(self) -> Color {
+        self.accent(self.pink)
+    }
+
+    /// 青 — 藍's second tone.
+    pub fn cyan(self) -> Color {
+        self.accent(self.cyan)
+    }
+
+    /// 黃綠 — 綠's second tone.
+    pub fn lime(self) -> Color {
+        self.accent(self.lime)
     }
 
     /// Whether coloured runs are also given a ground (`:theme-fill`).

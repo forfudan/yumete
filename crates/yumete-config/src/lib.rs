@@ -875,6 +875,21 @@ pub struct ThemeConfig {
     /// below, which is what tells the two apart at a glance.
     pub amber_dark: (u8, u8, u8),
     pub amber_light: (u8, u8, u8),
+    /// **變調** — the second tone of four of the ranks (2026-09-17).
+    ///
+    /// 金 already had one (黃). Code wanted more hues than five ranks give it,
+    /// and spending 朱 on a number made 「這裏不對」 mean something else as
+    /// well — so each rank gets a neighbour: 朱 → 橙, 紫 → 粉, 藍 → 青,
+    /// 綠 → 黃綠. **A second tone never takes its rank's job**: 朱 still only
+    /// says 「這裏不對」, and 橙 is the number in a fence.
+    pub orange_dark: (u8, u8, u8),
+    pub orange_light: (u8, u8, u8),
+    pub pink_dark: (u8, u8, u8),
+    pub pink_light: (u8, u8, u8),
+    pub cyan_dark: (u8, u8, u8),
+    pub cyan_light: (u8, u8, u8),
+    pub lime_dark: (u8, u8, u8),
+    pub lime_light: (u8, u8, u8),
     /// Whether a coloured run also gets a **ground** (`:theme-fill`).
     ///
     /// Off. 「丙的视觉效果最『干净』，扰乱信息少……`` 本身就是边界」 — the
@@ -939,6 +954,26 @@ impl ThemeConfig {
             true => self.amber_dark,
             false => self.amber_light,
         }
+    }
+
+    /// 橙 — 朱's second tone, in the mood in force.
+    pub fn orange(&self, dark: bool) -> (u8, u8, u8) {
+        if dark { self.orange_dark } else { self.orange_light }
+    }
+
+    /// 粉 — 紫's second tone, in the mood in force.
+    pub fn pink(&self, dark: bool) -> (u8, u8, u8) {
+        if dark { self.pink_dark } else { self.pink_light }
+    }
+
+    /// 青 — 藍's second tone, in the mood in force.
+    pub fn cyan(&self, dark: bool) -> (u8, u8, u8) {
+        if dark { self.cyan_dark } else { self.cyan_light }
+    }
+
+    /// 黃綠 — 綠's second tone, in the mood in force.
+    pub fn lime(&self, dark: bool) -> (u8, u8, u8) {
+        if dark { self.lime_dark } else { self.lime_light }
     }
 
     /// A theme by name, or `None` if nothing is called that.
@@ -1007,6 +1042,16 @@ impl ThemeConfig {
                 azure_light: (0x6E, 0x6E, 0x6E),
                 amber_dark: (0xDA, 0xDA, 0xDA),
                 amber_light: (0x2A, 0x2A, 0x2A),
+                // The second tones have even less room than the ranks: a new
+                // grey where one is left, and the rank's own where none is.
+                orange_dark: (0xC4, 0xC4, 0xC4),
+                orange_light: (0x48, 0x48, 0x48),
+                pink_dark: (0xCF, 0xCF, 0xCF),
+                pink_light: (0x3C, 0x3C, 0x3C),
+                cyan_dark: (0xA3, 0xA3, 0xA3),
+                cyan_light: (0x6E, 0x6E, 0x6E),
+                lime_dark: (0xB9, 0xB9, 0xB9),
+                lime_light: (0x55, 0x55, 0x55),
                 ..ThemeConfig::default()
             }),
             // 藍曬 — 普魯士藍的地、白線的字——十套裏唯一底色真帶飽和色的一套。暗是氰版藍曬，明是重氮曬圖。
@@ -1022,8 +1067,16 @@ impl ThemeConfig {
                 },
                 gold_dark: (0xC7, 0x9A, 0x45),
                 gold_light: (0x7A, 0x5A, 0x18),
-                mark_dark: (0xE2, 0x60, 0x4B),
-                mark_light: (0xA6, 0x37, 0x1F),
+                mark_dark: (0xE2, 0x5F, 0x4F),
+                mark_light: (0xA6, 0x35, 0x29),
+                orange_dark: (0xFD, 0xB9, 0x91),
+                orange_light: (0xA6, 0x54, 0x12),
+                pink_dark: (0xFE, 0xBB, 0xDA),
+                pink_light: (0xAD, 0x44, 0x7D),
+                cyan_dark: (0x84, 0xE3, 0xE7),
+                cyan_light: (0x1D, 0x75, 0x7E),
+                lime_dark: (0xC6, 0xE4, 0x92),
+                lime_light: (0x55, 0x73, 0x27),
                 ..ThemeConfig::default()
             }),
             // 琥珀 — 整頁只有一種顏色。正文本身就是磷光，金是同一個琥珀燒得更亮，不是第二個色相。
@@ -1039,8 +1092,16 @@ impl ThemeConfig {
                 },
                 gold_dark: (0xFF, 0xE9, 0xB0),
                 gold_light: (0x6B, 0x46, 0x10),
-                mark_dark: (0xFF, 0x3B, 0x30),
-                mark_light: (0xA6, 0x31, 0x1F),
+                mark_dark: (0xFF, 0x3C, 0x2C),
+                mark_light: (0xA6, 0x30, 0x24),
+                orange_dark: (0xE8, 0x8F, 0x56),
+                orange_light: (0x86, 0x3F, 0x03),
+                pink_dark: (0xE3, 0x91, 0xB9),
+                pink_light: (0x91, 0x2A, 0x64),
+                cyan_dark: (0x5B, 0xBA, 0xC0),
+                cyan_light: (0x00, 0x5C, 0x65),
+                lime_dark: (0x99, 0xB6, 0x66),
+                lime_light: (0x3F, 0x5B, 0x06),
                 ..ThemeConfig::default()
             }),
             // 莫高 — 墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物。
@@ -1056,8 +1117,16 @@ impl ThemeConfig {
                 },
                 gold_dark: (0x56, 0x98, 0x73),
                 gold_light: (0x38, 0x6B, 0x4D),
-                mark_dark: (0xD9, 0x78, 0x54),
-                mark_light: (0x9C, 0x41, 0x28),
+                mark_dark: (0xDB, 0x74, 0x66),
+                mark_light: (0x9D, 0x3F, 0x33),
+                orange_dark: (0xF4, 0x9A, 0x61),
+                orange_light: (0xA3, 0x51, 0x0D),
+                pink_dark: (0xEF, 0x9C, 0xC4),
+                pink_light: (0xA9, 0x41, 0x79),
+                cyan_dark: (0x69, 0xC8, 0xCD),
+                cyan_light: (0x17, 0x71, 0x7A),
+                lime_dark: (0xAC, 0xC8, 0x79),
+                lime_light: (0x53, 0x70, 0x23),
                 ..ThemeConfig::default()
             }),
             // 莫蘭迪 — 十套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
@@ -1073,8 +1142,18 @@ impl ThemeConfig {
                 },
                 gold_dark: (0xC7, 0xA7, 0x8C),
                 gold_light: (0x82, 0x64, 0x49),
-                mark_dark: (0xB9, 0x7C, 0x6E),
-                mark_light: (0x96, 0x50, 0x3E),
+                mark_dark: (0xB9, 0x7B, 0x71),
+                mark_light: (0x97, 0x4F, 0x44),
+                // 橙 leans toward 朱 here: this theme's 金 is a tan, and 52° sat
+                // nine degrees from it.
+                orange_dark: (0xE2, 0x9D, 0x83),
+                orange_light: (0x94, 0x56, 0x3D),
+                pink_dark: (0xD1, 0xA0, 0xB6),
+                pink_light: (0x90, 0x52, 0x70),
+                cyan_dark: (0x83, 0xB6, 0xB9),
+                cyan_light: (0x42, 0x6D, 0x71),
+                lime_dark: (0xA2, 0xB3, 0x86),
+                lime_light: (0x59, 0x6C, 0x42),
                 ..ThemeConfig::default()
             }),
             // 夜螢 — 近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點。
@@ -1090,8 +1169,16 @@ impl ThemeConfig {
                 },
                 gold_dark: (0xD9, 0xC2, 0x4A),
                 gold_light: (0x7A, 0x6D, 0x0A),
-                mark_dark: (0xE0, 0x6A, 0x52),
-                mark_light: (0xB2, 0x3D, 0x22),
+                mark_dark: (0xE0, 0x69, 0x59),
+                mark_light: (0xB3, 0x3B, 0x2E),
+                orange_dark: (0xE5, 0x8D, 0x54),
+                orange_light: (0xAC, 0x59, 0x1B),
+                pink_dark: (0xE0, 0x8E, 0xB6),
+                pink_light: (0xB3, 0x4A, 0x81),
+                cyan_dark: (0x5A, 0xBA, 0xBF),
+                cyan_light: (0x24, 0x7A, 0x83),
+                lime_dark: (0x9E, 0xBB, 0x6B),
+                lime_light: (0x5B, 0x79, 0x2D),
                 ..ThemeConfig::default()
             }),
             // 明度階 — 朱不是紅的，是藍的：紅綠色盲也分得開。金與朱在色相和明度上各自分開了兩次。
@@ -1109,6 +1196,14 @@ impl ThemeConfig {
                 gold_light: (0x8A, 0x65, 0x12),
                 mark_dark: (0x5A, 0xA6, 0xEE),
                 mark_light: (0x1D, 0x4C, 0x88),
+                orange_dark: (0xEF, 0x95, 0x5C),
+                orange_light: (0xAE, 0x5A, 0x1C),
+                pink_dark: (0xEA, 0x98, 0xBF),
+                pink_light: (0xB4, 0x4B, 0x82),
+                cyan_dark: (0x64, 0xC2, 0xC8),
+                cyan_light: (0x26, 0x7C, 0x84),
+                lime_dark: (0xA7, 0xC4, 0x74),
+                lime_light: (0x5B, 0x7A, 0x2E),
                 ..ThemeConfig::default()
             }),
             // 陶窯 — 灰釉炻器：地是窯灰，金是草木灰的青綠。橘色只留給錯誤——那是窯裏的火。
@@ -1126,6 +1221,17 @@ impl ThemeConfig {
                 gold_light: (0x4A, 0x5A, 0x2C),
                 mark_dark: (0xE2, 0x79, 0x3D),
                 mark_light: (0xA8, 0x50, 0x1E),
+                // ⚠️ **橙 is red in this theme.** Its 朱 is the kiln's orange and
+                // keeps it — 「橘色只留給錯誤」 — so the number in a fence takes the
+                // red that 朱 left free, not a second orange.
+                orange_dark: (0xFE, 0x71, 0x5F),
+                orange_light: (0xAC, 0x32, 0x26),
+                pink_dark: (0xFB, 0xA6, 0xCE),
+                pink_light: (0x9E, 0x37, 0x6F),
+                cyan_dark: (0x74, 0xD3, 0xD7),
+                cyan_light: (0x04, 0x69, 0x71),
+                lime_dark: (0xB6, 0xD4, 0x83),
+                lime_light: (0x49, 0x67, 0x17),
                 ..ThemeConfig::default()
             }),
             // 靛橘 — 顏色只活在底色裏，正文永遠是中性灰。唯一破例的是朱，它用紫，故意違反自己這條規矩。
@@ -1143,6 +1249,16 @@ impl ThemeConfig {
                 gold_light: (0xA8, 0x54, 0x00),
                 mark_dark: (0xB9, 0x8C, 0xFF),
                 mark_light: (0x5B, 0x3F, 0xA0),
+                // ⚠️ **橙 is red in this theme**: its 金 is the orange, and a number
+                // the colour of a heading says nothing.
+                orange_dark: (0xF6, 0x5D, 0x4C),
+                orange_light: (0xC1, 0x3D, 0x30),
+                pink_dark: (0xEB, 0x99, 0xC0),
+                pink_light: (0xAE, 0x45, 0x7E),
+                cyan_dark: (0x65, 0xC4, 0xC9),
+                cyan_light: (0x1E, 0x76, 0x7F),
+                lime_dark: (0xA8, 0xC5, 0x75),
+                lime_light: (0x56, 0x74, 0x28),
                 ..ThemeConfig::default()
             }),
             _ => None,
@@ -1196,8 +1312,13 @@ impl Default for ThemeConfig {
             },
             // A seal's red on paper; lighter in the dark, for the same reason
             // the ink is dimmer there.
-            mark_light: (0xA8, 0x30, 0x1C),
-            mark_dark: (0xD2, 0x78, 0x5A),
+            //
+            // ⚠️ **朱 is 朱, not orange** (2026-09-17). The dark one was
+            // #D2785A — OKLCH hue 39°, a washed terracotta that read as orange
+            // the moment a real orange stood beside it. Both moods now sit at
+            // 29–30°, the hue of sRGB's own red, and 橙 has a slot of its own.
+            mark_light: (0xB3, 0x24, 0x1B),
+            mark_dark: (0xEC, 0x5D, 0x4B),
             // 墨香's own bone, kept for the one job it is best at. On a light
             // page a bone would be invisible, so there it is the same warmth
             // taken the other way down: a dark gold on cream.
@@ -1218,6 +1339,17 @@ impl Default for ThemeConfig {
             azure_light: (0x1F, 0x5C, 0x8A),
             amber_dark: (0xC9, 0x93, 0x2E),
             amber_light: (0x8A, 0x5F, 0x12),
+            // The four second tones, worked out in OKLCH against this ground:
+            // 橙 52°, 粉 350°, 青 200°, 黃綠 125°, each held under the prose
+            // (7.8–9.3:1 dark, 4.7–5.0:1 light) like the ranks they belong to.
+            orange_dark: (0xF2, 0x98, 0x5F),
+            orange_light: (0xA4, 0x52, 0x0F),
+            pink_dark: (0xED, 0x9A, 0xC1),
+            pink_light: (0xA5, 0x3C, 0x75),
+            cyan_dark: (0x67, 0xC6, 0xCB),
+            cyan_light: (0x15, 0x70, 0x79),
+            lime_dark: (0xAA, 0xC7, 0x77),
+            lime_light: (0x51, 0x6F, 0x21),
             fill: false,
         }
     }
@@ -2197,6 +2329,15 @@ struct RawTheme {
     azure_light: Option<String>,
     amber: Option<String>,
     amber_light: Option<String>,
+    /// 變調 — 橙、粉、青、黃綠.
+    orange: Option<String>,
+    orange_light: Option<String>,
+    pink: Option<String>,
+    pink_light: Option<String>,
+    cyan: Option<String>,
+    cyan_light: Option<String>,
+    lime: Option<String>,
+    lime_light: Option<String>,
     /// Whether a 品色 run also gets a ground (`:theme-fill`).
     fill: Option<bool>,
 }
@@ -2412,6 +2553,14 @@ impl RawConfig {
             (&other.theme.azure_light, &mut self.theme.azure_light),
             (&other.theme.amber, &mut self.theme.amber),
             (&other.theme.amber_light, &mut self.theme.amber_light),
+            (&other.theme.orange, &mut self.theme.orange),
+            (&other.theme.orange_light, &mut self.theme.orange_light),
+            (&other.theme.pink, &mut self.theme.pink),
+            (&other.theme.pink_light, &mut self.theme.pink_light),
+            (&other.theme.cyan, &mut self.theme.cyan),
+            (&other.theme.cyan_light, &mut self.theme.cyan_light),
+            (&other.theme.lime, &mut self.theme.lime),
+            (&other.theme.lime_light, &mut self.theme.lime_light),
         ] {
             if from.is_some() {
                 *to = from.clone();
@@ -2671,6 +2820,14 @@ impl RawConfig {
             (self.theme.azure_light, &mut config.theme.azure_light),
             (self.theme.amber, &mut config.theme.amber_dark),
             (self.theme.amber_light, &mut config.theme.amber_light),
+            (self.theme.orange, &mut config.theme.orange_dark),
+            (self.theme.orange_light, &mut config.theme.orange_light),
+            (self.theme.pink, &mut config.theme.pink_dark),
+            (self.theme.pink_light, &mut config.theme.pink_light),
+            (self.theme.cyan, &mut config.theme.cyan_dark),
+            (self.theme.cyan_light, &mut config.theme.cyan_light),
+            (self.theme.lime, &mut config.theme.lime_dark),
+            (self.theme.lime_light, &mut config.theme.lime_light),
         ] {
             if let Some(rgb) = hex.as_deref().and_then(parse_hex) {
                 *slot = rgb;
