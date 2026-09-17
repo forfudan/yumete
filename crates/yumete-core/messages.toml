@@ -1144,6 +1144,22 @@ en = "no indent"
 find = "縮進 缩进 不縮 不缩 off"
 
 [[message]]
+# : 命令選單裏 tab 那一項的說明（indent 組）
+key = "cmd.indent.tab"
+zht = "Tab 鍵打什麼：空格還是製表符（Shift-Tab 打另一種）"
+zhs = "Tab 键打什么：空格还是制表符（Shift-Tab 打另一种）"
+en = "what Tab types: spaces or a tab (Shift-Tab types the other)"
+find = "Tab 製表符 制表符 空格 縮進 缩进 spaces soft tab"
+
+[[message]]
+# : 命令選單裏 width 那一項的說明（indent 組）
+key = "cmd.indent.width"
+zht = "縮進寬度：Tab 打幾個空格、> 和 < 挪幾格"
+zhs = "缩进宽度：Tab 打几个空格、> 和 < 挪几格"
+en = "indent width: the spaces Tab types, and how far > and < shift"
+find = "縮進 缩进 寬度 宽度 空格 indent width"
+
+[[message]]
 # : 命令選單裏 en 那一項的說明（languages 組）
 key = "cmd.languages.en"
 zht = "English"
@@ -1597,6 +1613,14 @@ en = "solid │"
 find = "欄線 栏线 實線 实线 solid"
 
 [[message]]
+# : 命令選單裏 python、json 這些代碼語言的說明（syntaxes 組）——同一句
+key = "cmd.syntaxes.code"
+zht = "代碼：整個文件按這種語言的語法上色，沒有標記"
+zhs = "代码：整个文件按这种语言的语法上色，没有标记"
+en = "code: the whole file coloured by this language's grammar, no markup"
+find = "語法 语法 代碼 代码 python javascript json yaml toml html css"
+
+[[message]]
 # : 命令選單裏 markdown 那一項的說明（syntaxes 組）
 key = "cmd.syntaxes.markdown"
 zht = "`#` 標題、`**粗**`"
@@ -1739,6 +1763,20 @@ zht = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒�
 zhs = "照这几栏排：`sort 1 a 2 d` 是先第一栏顺排、再第二栏倒排"
 en = "sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending"
 find = "排序 排列 順序 顺序 升序 降序 sort order"
+
+[[message]]
+# : 命令選單裏 spaces 那一項的說明（indent-tab 組）
+key = "cmd.tabs.spaces"
+zht = "空格：Tab 打空格，Shift-Tab 打製表符（出廠）"
+zhs = "空格：Tab 打空格，Shift-Tab 打制表符（出厂）"
+en = "spaces: Tab types spaces, Shift-Tab a tab (default)"
+
+[[message]]
+# : 命令選單裏 tab 那一項的說明（indent-tab 組）
+key = "cmd.tabs.tab"
+zht = "製表符：Tab 打製表符，Shift-Tab 打空格"
+zhs = "制表符：Tab 打制表符，Shift-Tab 打空格"
+en = "tab: Tab types a tab, Shift-Tab spaces"
 
 [[message]]
 # 那個詞後面本來不跟東西，而後面跟了東西
@@ -4874,6 +4912,13 @@ zhs = "缩进标记：{0}"
 en = "indent hint: {0}"
 
 [[message]]
+# :indent-width — 報告或改了縮進寬度
+key = "layout.indent-width"
+zht = "縮進寬度：{0} 格"
+zhs = "缩进宽度：{0} 格"
+en = "indent width: {0}"
+
+[[message]]
 # 行號那一條有自己的底色
 key = "layout.line-numbers-on-a-band"
 zht = "行號：有底"
@@ -4970,6 +5015,20 @@ key = "layout.note-on"
 zht = "標點提示：開（半角標點與 ... 旁邊畫出該用的那一個）"
 zhs = "标点提示：开（半角标点与 ... 旁边画出该用的那一个）"
 en = "notes: on (the mark a half-width one should have been, beside it)"
+
+[[message]]
+# :indent-tab spaces — Tab 打空格
+key = "layout.tab-spaces"
+zht = "Tab 鍵：{0} 個空格以內到下一個縮進位（Shift-Tab 打製表符）"
+zhs = "Tab 键：{0} 个空格以内到下一个缩进位（Shift-Tab 打制表符）"
+en = "Tab: spaces to the next multiple of {0} (Shift-Tab types a tab)"
+
+[[message]]
+# :indent-tab tab — Tab 打製表符
+key = "layout.tab-tab"
+zht = "Tab 鍵：製表符（Shift-Tab 打空格，縮進寬度 {0}）"
+zhs = "Tab 键：制表符（Shift-Tab 打空格，缩进宽度 {0}）"
+en = "Tab: a tab (Shift-Tab types spaces, width {0})"
 
 [[message]]
 # 打字機模式關掉

@@ -150,7 +150,7 @@ actually be taught.
 ### A book is many files
 
 `gn` / `gp` and a tab bar move between open buffers, each keeping its own cursor
-and its own undo history; a session reopens what was open, at the line it was
+and its own undo history; `yumete -c` reopens what was open, at the line it was
 left on. The sidebar holds three views on `Tab` — the file tree, the buffers,
 and an **outline** built from Markdown headings or Typst's own (following
 `#include` across chapter files, with no compiler in the loop).

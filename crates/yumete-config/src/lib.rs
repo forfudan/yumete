@@ -71,6 +71,10 @@ pub struct EditorConfig {
     /// elsewhere is written to it; how far *this* editor shifts a line when
     /// asked is a preference, and four is the one nearly everybody has.
     pub indent_width: usize,
+    /// What Tab types in Insert mode: `indent_width` spaces (`true`, the
+    /// factory answer, as in VS Code and Zed) or a literal TAB. Shift-Tab
+    /// types the other one. `[editor] tab_inserts = "spaces" | "tab"`.
+    pub tab_spaces: bool,
     /// Line-number display mode.
     pub line_numbers: LineNumbers,
     /// Minimum number of lines to keep above/below the cursor when scrolling.
@@ -161,6 +165,8 @@ pub struct EditorConfig {
     /// How many bands the vertical page is divided into (段組). 1 is none.
     pub bands: usize,
     /// Whether `yumete` with no file opens again what was open last time.
+    /// Off: a bare `yumete` is a blank page, and `yumete -c` is last time
+    /// (2026-09-17, 「打 ye 應該建一個新的文檔」).
     pub session: bool,
     /// What language the editor says things in: `"zh"` (繁體, the
     /// default), `"zhs"` (简体) or `"en"`.
@@ -296,6 +302,7 @@ impl Default for EditorConfig {
         EditorConfig {
             tab_width: 8,
             indent_width: 4,
+            tab_spaces: true,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
             wheel_step: 3,
@@ -316,7 +323,7 @@ impl Default for EditorConfig {
             zong_length: 0,
             indent: 0,
             bands: 1,
-            session: true,
+            session: false,
             language: "zh".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
@@ -1750,6 +1757,12 @@ impl Config {
             }
         }
 
+        if let Some(word) = raw.editor.tab_inserts.as_deref() {
+            if !matches!(word, "spaces" | "tab") {
+                problems.push(format!("[editor] tab_inserts = \"{word}\" 只能是 spaces 或 tab"));
+            }
+        }
+
         if let Some(word) = raw.ime.system.as_deref() {
             if !SystemImePolicy::is_written(word) {
                 problems.push(format!("[ime] system = \"{word}\" 只能是 auto 或 keep"));
@@ -2299,6 +2312,7 @@ struct RawEditor {
     command_line: Option<bool>,
     smart_case: Option<bool>,
     margin: Option<String>,
+    tab_inserts: Option<String>,
     paper_ticks: Option<usize>,
 }
 
@@ -2474,6 +2488,9 @@ impl RawConfig {
         }
         if other.editor.margin.is_some() {
             self.editor.margin = other.editor.margin.clone();
+        }
+        if other.editor.tab_inserts.is_some() {
+            self.editor.tab_inserts = other.editor.tab_inserts.clone();
         }
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
@@ -2706,6 +2723,11 @@ impl RawConfig {
         }
         if let Some(word) = self.editor.margin.as_deref().and_then(Margin::parse) {
             config.editor.margin = word;
+        }
+        match self.editor.tab_inserts.as_deref() {
+            Some("spaces") => config.editor.tab_spaces = true,
+            Some("tab") => config.editor.tab_spaces = false,
+            _ => {}
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);

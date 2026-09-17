@@ -1713,6 +1713,8 @@ pub struct Editor {
     last_find: Option<(FindKind, char)>,
     /// Columns of indentation added by `>` and removed by `<`.
     indent_width: usize,
+    /// What Tab types in Insert mode — spaces, or a TAB (Shift-Tab the other).
+    tab_spaces: bool,
     /// Set by `:chaifen`, cleared once the TUI has passed it to the IME. The
     /// core owns no IME, so a command that configures one leaves a request here
     /// rather than reaching across the layers.
@@ -2349,6 +2351,7 @@ impl Editor {
             insert_recording: String::new(),
             last_find: None,
             indent_width: 4,
+            tab_spaces: true,
             chaifen_request: None,
             scheme_request: None,
             theme_request: None,

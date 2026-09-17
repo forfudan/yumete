@@ -166,6 +166,12 @@ impl Editor {
         self.indent_width = width.max(1);
     }
 
+    /// Whether Tab types spaces (Shift-Tab then types a TAB), or the other
+    /// way round.
+    pub fn set_tab_spaces(&mut self, spaces: bool) {
+        self.tab_spaces = spaces;
+    }
+
     /// The count typed so far (`3` of a pending `3w`), for the status line.
     pub fn pending_count(&self) -> Option<usize> {
         self.count

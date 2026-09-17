@@ -52,6 +52,10 @@ pub enum Syntax {
     /// Keeping it out of `parse` is what makes that safe: a chapter containing
     /// 「\[-3-\]」 cannot land here by accident.
     Diff,
+    /// A file that **is** code — a `.py`, a `.json` — coloured by its grammar
+    /// the way a fence of it would be (#420). No markup: a `#` in Python is a
+    /// comment, not a heading.
+    Code(crate::code::Language),
 }
 
 impl Syntax {
@@ -61,7 +65,19 @@ impl Syntax {
             "markdown" | "md" => Some(Syntax::Markdown),
             "typst" | "typ" => Some(Syntax::Typst),
             "text" | "txt" | "raw" | "none" | "plain" => Some(Syntax::Text),
-            _ => None,
+            other => crate::code::Language::from_info(other).map(Syntax::Code),
+        }
+    }
+
+    /// One number per syntax, for a cache key — the same characters mean
+    /// different things in different syntaxes.
+    pub fn tag(self) -> u8 {
+        match self {
+            Syntax::Markdown => 0,
+            Syntax::Typst => 1,
+            Syntax::Text => 2,
+            Syntax::Diff => 3,
+            Syntax::Code(language) => 16 + language as u8,
         }
     }
 
@@ -72,6 +88,7 @@ impl Syntax {
             Syntax::Typst => "typst",
             Syntax::Text => "text",
             Syntax::Diff => "diff",
+            Syntax::Code(language) => language.name(),
         }
     }
 }
@@ -82,7 +99,7 @@ pub fn from_extension(name: &str) -> Option<Syntax> {
     match extension.as_str() {
         "md" | "markdown" | "mdown" => Some(Syntax::Markdown),
         "typ" | "typst" => Some(Syntax::Typst),
-        _ => None,
+        other => crate::code::Language::from_extension(other).map(Syntax::Code),
     }
 }
 

@@ -172,14 +172,36 @@ impl Editor {
                 let mut buf = [0u8; 4];
                 self.insert_str(c.encode_utf8(&mut buf));
             }
-            // A literal tab, so indentation can still be typed.
-            Key::Tab => {
-                self.insert_recording.push('\t');
-                self.insert_str("\t");
+            // **Tab types what the editor was told to, and Shift-Tab the
+            // other one** — spaces out of the box, as VS Code and Zed do, so a
+            // snippet pasted into a Markdown fence lines up wherever it is
+            // read; a TAB is still one chord away.
+            Key::Tab | Key::BackTab => {
+                let spaces = (key == Key::Tab) == self.tab_spaces;
+                let text = match spaces {
+                    // To the next multiple of the indent, not a fixed run: a
+                    // Tab after `ab` lands on the same column a Tab after
+                    // nothing would, which is what makes a column line up.
+                    true => {
+                        let rope = self.current_buffer().rope();
+                        let start = rope.line_to_char(rope.char_to_line(self.cursor));
+                        // A TAB already on the line lands on its own stop.
+                        let column = rope.slice(start..self.cursor).chars().fold(0, |col, c| {
+                            match c {
+                                '\t' => col + self.tab_stop - col % self.tab_stop,
+                                c => col + yumete_cjk::width::char_width(c),
+                            }
+                        });
+                        let width = self.indent_width;
+                        " ".repeat(width - column % width)
+                    }
+                    false => "\t".to_string(),
+                };
+                self.insert_recording.push_str(&text);
+                self.insert_str(&text);
             }
-            // Chords and Shift-Tab are not text; ignore them rather than
-            // inserting a literal.
-            Key::BackTab | Key::Ctrl(_) | Key::Alt(_) => {}
+            // Chords are not text; ignore them rather than inserting a literal.
+            Key::Ctrl(_) | Key::Alt(_) => {}
         }
     }
 

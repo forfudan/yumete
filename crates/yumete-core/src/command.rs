@@ -296,6 +296,10 @@ pub enum Command {
     /// `:indent-hint color` — what, if anything, is drawn in the opening
     /// squares.
     SetIndentHint(crate::zong::IndentHint),
+    /// `:indent-tab [spaces|tab]` — what Tab types in Insert mode; bare reports.
+    SetTabInserts(Option<bool>),
+    /// `:indent-width [n]` — how many columns Tab and `>` move; bare reports.
+    SetIndentWidth(Option<usize>),
     /// `:view-bands 2` — how many bands the 縱書 page is divided into (段組).
     SetBands(usize),
 
@@ -1719,6 +1723,42 @@ const SYNTAXES: &[Word] = &[
         help: "cmd.syntaxes.text",
         needs: &[],
     },
+    // A file that is code (#420): coloured by its grammar, no markup.
+    Word {
+        name: "python",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "javascript",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "json",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "yaml",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "toml",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "html",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "css",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
 ];
 
 /// Which way the page runs.
@@ -1730,6 +1770,12 @@ const INDENT_LEVELS: &[Word] = &[
     Word { name: "off", help: "cmd.indent.off", needs: &[] },
     Word { name: "basic", help: "cmd.indent.basic", needs: &[] },
     Word { name: "full", help: "cmd.indent.full", needs: &[] },
+];
+
+/// What Tab types in Insert mode.
+const TAB_INSERTS: &[Word] = &[
+    Word { name: "spaces", help: "cmd.tabs.spaces", needs: &[] },
+    Word { name: "tab", help: "cmd.tabs.tab", needs: &[] },
 ];
 
 const HINTS: &[Word] = &[
@@ -3165,6 +3211,47 @@ pub const COMMANDS: &[Entry] = &[
                     }
                 },
             })
+        }),
+    },
+    Entry {
+        name: "indent-tab",
+        aliases: &[],
+        help: "cmd.indent.tab",
+        needs: &[],
+        params: &[Param::Words { of: TAB_INSERTS, default: None }],
+        build: Some(|p| {
+            Ok(Command::SetTabInserts(match p.arg(0) {
+                None => None,
+                Some("spaces") => Some(true),
+                Some("tab") => Some(false),
+                Some(other) => {
+                    return Err(CommandError::InvalidArgument {
+                        command: "indent-tab",
+                        value: other.to_string(),
+                    })
+                }
+            }))
+        }),
+    },
+    Entry {
+        name: "indent-width",
+        aliases: &[],
+        help: "cmd.indent.width",
+        needs: &[],
+        params: &[Param::Free("<幾格，1–8>")],
+        build: Some(|p| {
+            Ok(Command::SetIndentWidth(match p.arg(0) {
+                None => None,
+                Some(_) => match p.number(0)? {
+                    n @ 1..=8 => Some(n),
+                    n => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "indent-width",
+                            value: n.to_string(),
+                        })
+                    }
+                },
+            }))
         }),
     },
     Entry {
@@ -5579,7 +5666,10 @@ mod tests {
         let words = |line: &str| -> Vec<&str> { complete(line).iter().map(|c| c.name).collect() };
         assert_eq!(words("view-margin "), ["never", "dense", "loose", "always"]);
         assert_eq!(words("view-margin l"), ["loose"]);
-        assert_eq!(words("syntax "), ["markdown", "typst", "text"]);
+        assert_eq!(
+            words("syntax "),
+            ["markdown", "typst", "text", "python", "javascript", "json", "yaml", "toml", "html", "css"]
+        );
         assert_eq!(words("layout v"), ["vertical"]);
 
         // A parent command is not a mechanism of its own — its subcommands are

@@ -1146,7 +1146,8 @@ pub fn run(
                             // already what it is going to look like, and a
                             // `:diff` listing is a report about two of them.
                             yumete_core::syntax::Syntax::Text
-                            | yumete_core::syntax::Syntax::Diff => {
+                            | yumete_core::syntax::Syntax::Diff
+                            | yumete_core::syntax::Syntax::Code(_) => {
                                 editor.set_status(say!("preview.nothing-to-preview"))
                             }
                         }

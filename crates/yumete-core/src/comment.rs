@@ -38,6 +38,19 @@ pub fn marks(syntax: Syntax) -> Marks {
         // A listing is not a file anybody comments — and a `:diff` listing is
         // a report, not writing.
         Syntax::Text | Syntax::Diff => Marks { line: None, block: None },
+        Syntax::Code(language) => {
+            use crate::code::Language;
+            match language {
+                Language::Python | Language::Toml | Language::Yaml => {
+                    Marks { line: Some("#"), block: None }
+                }
+                Language::JavaScript => Marks { line: Some("//"), block: Some(("/*", "*/")) },
+                Language::Css => Marks { line: None, block: Some(("/*", "*/")) },
+                Language::Html => Marks { line: None, block: Some(("<!--", "-->")) },
+                // JSON has no comment at all.
+                Language::Json => Marks { line: None, block: None },
+            }
+        }
     }
 }
 

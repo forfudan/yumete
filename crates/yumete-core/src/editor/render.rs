@@ -137,6 +137,9 @@ impl Editor {
             }
         }
         let typst = buffer.syntax() == crate::syntax::Syntax::Typst;
+        // A code file has no blocks: `# 註` in Python is not a heading, and a
+        // ``` in a string does not open a fence.
+        let code = matches!(buffer.syntax(), crate::syntax::Syntax::Code(_));
         let mut markdown = crate::markdown::BlockScanner::new();
         let mut typst_scanner = crate::markdown::typst::BlockScanner::new();
         let mut blocks = Vec::with_capacity(lines);
@@ -173,7 +176,9 @@ impl Editor {
             if let Some(kind) = crate::conflict::marker(head) {
                 marks.push((line, kind, crate::conflict::label(head)));
             }
-            blocks.push(if typst {
+            blocks.push(if code {
+                crate::markdown::Block::Prose
+            } else if typst {
                 typst_scanner.feed(head, len)
             } else {
                 markdown.feed(head, len)
@@ -1278,6 +1283,10 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
+        // A code file is one fence with no fence lines, and has its own cache.
+        if let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() {
+            return self.code_file_line(line, language);
+        }
         // **Which version of the document, not what it says.** Reading the
         // paragraph to find out whether it had changed made the cache cost more
         // than it saved: a chapter written as one 500,000-character paragraph
@@ -1289,7 +1298,7 @@ impl Editor {
         // different syntaxes, and `:syntax text` is one keystroke away.
         let stamp = super::memo::stamp((
             self.current_buffer().revision(),
-            self.current_buffer().syntax() as u8,
+            self.current_buffer().syntax().tag(),
         ));
         self.markup_memo
             .or_work_out(self.current_buffer().id(), line, stamp, || {
@@ -1303,6 +1312,7 @@ impl Editor {
                     // Nothing in the file means anything but itself.
                     crate::syntax::Syntax::Text => Vec::new(),
                     crate::syntax::Syntax::Diff => crate::diff::spans(&text),
+                    crate::syntax::Syntax::Code(_) => Vec::new(),
                 }
             })
     }
@@ -1337,7 +1347,9 @@ impl Editor {
                 crate::syntax::Syntax::Typst => '=',
                 // A file with no markup has its chapters found below instead,
                 // and a `:diff` listing has no chapters at all.
-                crate::syntax::Syntax::Text | crate::syntax::Syntax::Diff => continue,
+                crate::syntax::Syntax::Text
+                | crate::syntax::Syntax::Diff
+                | crate::syntax::Syntax::Code(_) => continue,
             };
             let mark = trimmed.chars().next().filter(|&c| c == want);
             let Some(mark) = mark else { continue };

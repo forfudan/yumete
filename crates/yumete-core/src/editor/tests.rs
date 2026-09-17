@@ -13983,7 +13983,8 @@ fn tab_is_still_a_tab_where_there_is_no_reference() {
     ed.on_key(Key::Char('^'));
     assert!(ed.reference_menu().is_none(), "a plain manuscript has no footnotes");
     ed.on_key(Key::Tab);
-    assert!(ed.current_buffer().text().starts_with("正文[^\t"), "a tab character");
+    // Indentation to the next stop — 正文[^ is six columns — not a reference.
+    assert!(ed.current_buffer().text().starts_with("正文[^  \n"), "{:?}", ed.current_buffer().text());
 }
 
 /// #418 二. A `[^` quoted in a fence is somebody's example, not a reference.
@@ -13998,7 +13999,7 @@ fn a_reference_in_a_fence_is_offered_nothing() {
     ed.on_key(Key::Char('^'));
     assert!(ed.reference_menu().is_none(), "inside the fence, nothing");
     ed.on_key(Key::Tab);
-    assert!(ed.current_buffer().text().contains("[^\t"), "Tab is a tab in here");
+    assert!(ed.current_buffer().text().contains("[^  "), "Tab indents in here: {:?}", ed.current_buffer().text());
 
     // …and the same two keys in the prose below it do open the panel, so the
     // gate is the fence and not the file.
@@ -14032,4 +14033,44 @@ fn a_fence_is_coloured_by_its_own_grammar_and_nothing_else_is() {
     let mut ed = ed;
     ed.set_code_colours(false);
     assert!(tokens(&ed, 1).is_empty(), ":view-code off");
+}
+
+/// A file that is code is one fence from top to bottom, and has no markup:
+/// `# 註` in Python is a comment, not a heading (#420).
+#[test]
+fn a_code_file_is_coloured_whole_and_has_no_headings() {
+    use crate::code::{Language, Token};
+    use crate::markdown::{Block, Kind};
+    assert_eq!(crate::syntax::from_extension("a.py"), Some(crate::syntax::Syntax::Code(Language::Python)));
+    assert_eq!(crate::syntax::Syntax::parse("yml"), Some(crate::syntax::Syntax::Code(Language::Yaml)));
+    let mut ed = typed("# 註\ndef f():\n    return 1");
+    ed.execute(":syntax python").unwrap();
+    assert_eq!(ed.block_of(0), Block::Prose, "not a heading");
+    let kinds = |ed: &Editor, line: usize| -> Vec<Kind> {
+        ed.markup_line_in(line, ed.block_of(line)).iter().map(|s| s.kind).collect()
+    };
+    assert_eq!(kinds(&ed, 0), [Kind::Token(Token::Comment)]);
+    assert_eq!(kinds(&ed, 1).first(), Some(&Kind::Token(Token::Keyword)));
+    assert!(ed.outline().is_empty(), "a comment is not a chapter");
+}
+
+/// Tab types spaces to the next indent stop, Shift-Tab a TAB — and
+/// `:indent-tab tab` swaps them (2026-09-17).
+#[test]
+fn tab_types_spaces_to_the_next_stop_and_shift_tab_types_a_tab() {
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('a'));
+    ed.on_key(Key::Char('b'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::BackTab);
+    assert_eq!(ed.current_buffer().text(), "    ab  \t");
+    ed.on_key(Key::Esc);
+    ed.execute(":indent-tab tab").unwrap();
+    ed.execute(":indent-width 2").unwrap();
+    ed.on_key(Key::Char('o'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::BackTab);
+    assert!(ed.current_buffer().text().ends_with("\n\t  "), "{:?}", ed.current_buffer().text());
 }
