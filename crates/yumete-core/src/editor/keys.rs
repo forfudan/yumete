@@ -105,7 +105,7 @@ impl Editor {
     }
 
     /// **全窗表格 is a window onto one table, and nothing walks out of it**
-    /// (author, 2026-09-07: 「理論上不能通過鼠標滾動或者 hjkl 前往正文……衹能
+    /// (2026-09-07: 「理論上不能通過鼠標滾動或者 hjkl 前往正文……衹能
     /// 通過 tq/tf/tb 離開回到其他模式，或者 t[ t] 去下一個表格」).
     ///
     /// The pane used to be a leaky mode: `gg`, `G`, `:120` and a search hit
@@ -168,7 +168,7 @@ impl Editor {
 
     /// Drop a table mode that was **guessed**, once the cursor has left it.
     ///
-    /// The author's rule for the second class of file (#275): 「如果一個文件沒
+    /// The rule for the second class of file (#275): 「如果一個文件沒
     /// 有確切的表格語法，比如 txt、yaml 用空格制表符隔開…離開表格立刻回到
     /// prose 狀態，如果要再進入表格狀態需要再次按 ti tt。」
     ///
@@ -211,8 +211,8 @@ impl Editor {
     ///   may rewrite the buffer, opening a file may not.
     /// - **Never a `.csv`, a file a schema claims, or a guessed block.** The
     ///   first two are a whole-file takeover with a cursor jump ([`Self::
-    ///   table_on_open`] has them already), and the third is an inference the
-    ///   author's rule says must be asked for: 「離開表格立刻回到 prose 狀
+    ///   table_on_open`] has them already), and the third is an inference
+    ///   rule says must be asked for: 「離開表格立刻回到 prose 狀
     ///   態，如果要再進入表格狀態需要再次按 ti tt」.
     /// - **Never the pane**, which is a different question with its own key.
     /// - **Nothing is said, nothing moves, nothing is written.** No status, no
@@ -323,6 +323,26 @@ impl Editor {
             return;
         }
         self.last_edit_keys = std::mem::take(&mut self.edit_keys);
+    }
+
+    /// Press `keys` as though they had been typed, **without** reading them
+    /// as aliases again — an alias whose expansion uses its own key would
+    /// otherwise call itself forever — and without recording them twice.
+    ///
+    /// A count typed before the alias goes to the first key that acts, not to
+    /// a leading `;`: `2x` is `;` then `2D`, and `3dd` is `3x` then `d`.
+    fn play_keys(&mut self, keys: &str) {
+        self.expanding_alias = true;
+        let mut count = self.count.take();
+        for c in keys.chars() {
+            if c != ';' {
+                if let Some(n) = count.take() {
+                    self.count = Some(n);
+                }
+            }
+            self.on_key(Key::Char(c));
+        }
+        self.expanding_alias = false;
     }
 
     fn on_normal_key(&mut self, key: Key) {
@@ -494,22 +514,57 @@ impl Editor {
         // swapped, and everything downstream sees the keys it would have seen
         // if they had been typed. `self.replaying` stops an alias for a key
         // that its own expansion uses from calling itself forever.
-        let key = match key {
-            Key::Char(c) => match self.key_aliases.get(&c).cloned() {
-                Some(keys) if keys.chars().count() == 1 => {
-                    Key::Char(keys.chars().next().unwrap())
-                }
-                Some(keys) if !self.expanding_alias => {
-                    self.expanding_alias = true;
-                    for c in keys.chars() {
-                        self.on_key(Key::Char(c));
-                    }
-                    self.expanding_alias = false;
+        //
+        // **The left may be a sequence too** (#428) — `dd`, which is what a vim
+        // preset is made of. A key that begins a longer alias is *held*, and
+        // the next key decides: it completes one (played), or it does not, and
+        // then what was held is pressed for real and the new key goes through
+        // as itself. `Esc` lets go of what was held without pressing it.
+        let key = if self.expanding_alias || self.key_aliases.is_empty() {
+            key
+        } else {
+            let typed = match key {
+                // A digit inside a count is the count's, not an alias — `10`
+                // must not fire a `0`.
+                Key::Char(c) if !(c.is_ascii_digit() && self.count.is_some()) => Some(c),
+                _ => None,
+            };
+            if key == Key::Esc && !self.alias_held.is_empty() {
+                self.alias_held.clear();
+                return;
+            }
+            let mut held = std::mem::take(&mut self.alias_held);
+            if let Some(c) = typed {
+                held.push(c);
+                let longer = self
+                    .key_aliases
+                    .keys()
+                    .any(|k| k.len() > held.len() && k.starts_with(held.as_str()));
+                if longer {
+                    self.alias_held = held;
                     return;
                 }
-                _ => key,
-            },
-            other => other,
+                match self.key_aliases.get(&held).cloned() {
+                    Some(keys) if held.chars().count() == 1 && keys.chars().count() == 1 => {
+                        Key::Char(keys.chars().next().unwrap())
+                    }
+                    Some(keys) => return self.play_keys(&keys),
+                    None => {
+                        held.pop();
+                        if held.is_empty() {
+                            key
+                        } else {
+                            self.play_keys(&held);
+                            return self.on_normal_key(key);
+                        }
+                    }
+                }
+            } else {
+                if !held.is_empty() {
+                    self.play_keys(&held);
+                }
+                key
+            }
         };
 
         // A digit prefix builds a count (`3w`), Helix-style. `0` only extends a
@@ -780,7 +835,7 @@ impl Editor {
             //
             // ⚠️ **Small letter deletes, capital cuts** (#492) — and that is
             // *not* what Helix does. There `d` yanks and `A-d` does not, which
-            // the author calls its worst idea: 「d 作为剪切功能会污染
+            // is its worst idea: 「d 作为剪切功能会污染
             // register」. One clipboard, and the commonest key in the editor
             // spends it, so every tidy-up between a copy and a paste throws
             // the copy away. Here the pair is `d`/`D` and `c`/`C`, one rule
@@ -935,6 +990,15 @@ impl Editor {
             Key::Alt(';') => self.flip_selection(),
             // Whole file, and extending the selection to whole lines.
             Key::Char('%') => self.select_all(),
+            // vim's `X` under the vim preset (#428): the character *before*
+            // the cursor, cut, and never across the start of the line — which
+            // is why it is an action and not a line in the preset's table: a
+            // translation into `h` would walk over the break and join two
+            // lines, and could not carry `3X` to the cut.
+            Key::Char('X') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.snapshot();
+                self.cut_before_cursor(count);
+            }
             Key::Char('X') => self.extend_to_line_bounds(),
             // 字形變換 (§5.2.3 ②): `` `l `` 小寫, `` `u `` 大寫, `` `` `` 互換.
             // `~` and `` A-` `` are Helix's and are **unbound** here — the
@@ -1219,7 +1283,7 @@ impl Editor {
             Key::Char('d') => return self.show_definition(false),
             Key::Char('D') => return self.show_definition(true),
             // It was `gw` until 2026-09-09, and the fingers that learned it
-            // are the author's own.
+            // are this project's own.
             Key::Char('w') => {
                 self.status = say!("hint.goto.w-moved");
                 return;

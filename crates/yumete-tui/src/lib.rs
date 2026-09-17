@@ -1509,7 +1509,7 @@ const FRAME_CEILING: std::time::Duration = std::time::Duration::from_millis(500)
 
 /// Whether the IME may run for what is being typed **right now** (#225).
 ///
-/// ⚠️ **The command line is ASCII from `:` to the end** (author, 2026-09-16),
+/// ⚠️ **The command line is ASCII from `:` to the end** (2026-09-16),
 /// arguments included. It used to permit 中文 once the caret had walked past
 /// the command's name — `:e 第三章.md` — and that was two things at once: a
 /// rule the writer had to hold in their head, and a boundary the caret crossed
@@ -3546,7 +3546,7 @@ fn draw(
 /// not: block titles carry a file's name, the tab bar carries it again, the
 /// HUD carries what has just been typed, and the status line carried the
 /// character under the cursor, which on a 碼表 is a TAB. That one cost #375
-/// and #377 together, and the author's reading of it is the rule this
+/// and #377 together, and the reading of it is the rule this
 /// enforces, 2026-09-11：「TAB 是个不稳定渲染。除了文本区有 tab 外，我们在其他
 /// 位置不应该有 tab 存在。太危险了。」
 ///
@@ -3728,7 +3728,7 @@ fn standing_language_tag(ime: &ImeSession) -> String {
 /// glance at. Twenty-odd commands laid out across the whole page hid the very
 /// document the command was about to act on.
 ///
-/// How many columns the `:` menu may spread into (author, 2026-09-10).
+/// How many columns the `:` menu may spread into (2026-09-10).
 ///
 /// The width is what the columns fill (#372), but not without end: past a
 /// half-dozen the eye has to find its way back across too far a page, and a
@@ -3792,7 +3792,7 @@ struct List<'a> {
     /// Whether it may spread across the window.
     columns: bool,
     /// The name in the top-left of the ring, the way a which-key panel is
-    /// named. The author, 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示
+    /// named. 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示
     /// 面板。」 — a floating rectangle with no edge and no name is a thing that
     /// appeared, not a panel that opened.
     title: &'a str,
@@ -3900,7 +3900,7 @@ fn draw_list(
         widths
     };
     //
-    // **The shape is two caps and nothing else** (author, 2026-09-10): eight
+    // **The shape is two caps and nothing else** (2026-09-10): eight
     // rows, or half the window when that is shorter; and as many columns as
     // the width holds, up to six. The entries fill it downwards and then
     // across, so nine commands on eight rows are eight and one.
@@ -6891,7 +6891,7 @@ fn draw_horizontal(
     // 墨香's light page on a dark terminal made that half of the window black.
     frame.render_widget(Paragraph::new(lines).style(ink.page()), text_area);
 
-    // **The bar, into its own region** (#379). The author's design, and the
+    // **The bar, into its own region** (#379). The design, and the
     // reason this is buildable at all — 2026-09-11：「在顶部预留一个信息栏
     // （两行：列号+列名）……这样它是独立的，也就不会侵扰文本的区域了。」A row
     // drawn *over* the text would be a screen row that does not belong to the
@@ -6908,8 +6908,8 @@ fn draw_horizontal(
         // **The order the table's own top has**: the 列號標尺 above the head
         // row, and the head row's names under it. The bar is those two rows
         // brought up the page, so seeing it and seeing the table's real top
-        // are the same sight. Drawn the other way round until the author
-        // caught it, 2026-09-11：「你的序號是不是跑到列名的下面了」— it was,
+        // are the same sight. Drawn the other way round until it was
+        // caught, 2026-09-11：「你的序號是不是跑到列名的下面了」— it was,
         // because I had compared the bar to the ruler alone and forgotten what
         // the ruler sits above.
         let rows = vec![
@@ -7728,7 +7728,7 @@ fn draw_command(
     }
     // **The name of the thing, in the one corner nothing else wants** (#498).
     //
-    // The author asked for it 「用一个比较淡雅的色号」, and the constraint is
+    // Asked for as 「用一个比较淡雅的色号」, and the constraint is
     // where rather than whether: the **left** of this row is the most useful
     // strip on the screen — it is where a half-pressed `t` says what may follow
     // it — so a signature there would be standing in the way exactly when the
@@ -7792,8 +7792,8 @@ fn position_in(editor: &Editor, full: bool) -> String {
     }
     if editor.layout() == WritingLayout::Vertical {
         let at = editor.zong_position();
-        // **縱橫字, and they are 行列字 turned a quarter turn** (#500). The
-        // author's own mapping: 「竖排的纵＝横排的行，竖排的横＝横排的列。我用纵横
+        // **縱橫字, and they are 行列字 turned a quarter turn** (#500).
+        // The mapping: 「竖排的纵＝横排的行，竖排的横＝横排的列。我用纵横
         // 是因为不想和行列混淆。」 So the three numbers mean exactly what the
         // three on a horizontal page mean, and the names are different only so
         // that a reader never has to ask which page they are looking at:
@@ -7821,8 +7821,8 @@ fn position_in(editor: &Editor, full: bool) -> String {
     // ⚠️ **Said, not spelt out** (#497). This was a hardcoded `Ln {}, Col {}`,
     // so the one part of the status line a reader looks at most was English on
     // a 繁體 page and stayed English under `--lang=zhs` too.
-    // **列 and 字 are two different numbers on a Chinese page** (#500), and the
-    // author asked for both: 「横排因为有全角半角，列和字不一定一样，字表示的是字符
+    // **列 and 字 are two different numbers on a Chinese page** (#500), and
+    // Both are wanted: 「横排因为有全角半角，列和字不一定一样，字表示的是字符
     // （半角+全角），而列就是半角。」 Eleven cells into a line is the sixth
     // character when five of them are 漢字, and which one you want depends on
     // what you are doing — a ruler at 40 counts cells, a publisher counts 字.
@@ -8169,7 +8169,7 @@ fn squeezed(text: &str) -> String {
 
     /// `:diff` 的改動段是**紅刪綠增**，而四個記號不在頁面上（#499）。
     ///
-    /// 作者原話：「能不能和 git 模式一样，红色表示删除，绿色表示新增，然后对于修改
+    /// 原話：「能不能和 git 模式一样，红色表示删除，绿色表示新增，然后对于修改
     /// 的字加红/绿底色表示区别？」——所以驗三件事：記號撤了、兩段各有自己的底、
     /// 兩段的底彼此不同也都不同於紙。
     #[test]
@@ -8211,7 +8211,7 @@ fn squeezed(text: &str) -> String {
 
     /// 色相：一半原墨，一半藍，**兩者一樣亮**（#501／#507）。
     ///
-    /// 作者原話：「ink……有些字亮有些字暗，亮的像强调」——所以這一支的整個價值就在
+    /// 原話：「ink……有些字亮有些字暗，亮的像强调」——所以這一支的整個價值就在
     /// 那個亮度差要小。`ink` 量出來是 1.38:1；這裏要求 1.05:1 以內。
     ///
     /// ⚠️ **只換一半。** 兩半都上色試過（暖配冷），代價是整頁沒有一處是原墨：
@@ -8309,7 +8309,7 @@ fn squeezed(text: &str) -> String {
 
     /// 落款在提示行的右端，擠不下就沒有（#498）。
     ///
-    /// 作者要的是一個 identity，而位置是有講究的：這一行的**左端**是全屏最有用的
+    /// 要的是一個 identity，而位置是有講究的：這一行的**左端**是全屏最有用的
     /// 一條——按了半個 `t` 就靠它說下一個鍵能按什麼——所以落款只能在右端，而且
     /// 一旦右端被佔就該讓開。
     #[test]
@@ -8339,7 +8339,7 @@ fn squeezed(text: &str) -> String {
 
     /// 輸入框要看得出是個框（#447）。
     ///
-    /// 作者原話：「这里的输入框能不能画个上下框线什么的？不然还是不知道这里有个
+    /// 原話：「这里的输入框能不能画个上下框线什么的？不然还是不知道这里有个
     /// 可以输入的地方。」空的 尋找 框從前與面板同底色，只有一個光標浮在那裏，
     /// 看不出是一格能打字的地方。現在框裏是**紙色**（第 90 檔，比面板的第 81 檔
     /// 沉一階），上下各一道線把它封起來。
@@ -8702,7 +8702,7 @@ fn squeezed(text: &str) -> String {
         ));
     }
 
-    /// The rule the author set on 2026-09-11：「TAB 是个不稳定渲染。除了文本
+    /// The rule, set on 2026-09-11：「TAB 是个不稳定渲染。除了文本
     /// 区有 tab 外，我们在其他位置不应该有 tab 存在。太危险了。」
     ///
     /// Not one guard per drawing path — about thirty of them draw spans that
@@ -8759,7 +8759,7 @@ fn squeezed(text: &str) -> String {
         assert!(row.contains("錐 U+9310"), "{row:?}");
     }
 
-    /// #379, the author's design: 「在顶部预留一个信息栏（两行：列号+列名）。
+    /// #379, the design: 「在顶部预留一个信息栏（两行：列号+列名）。
     /// 这个平常不显示，只是在下方是表格中间部分的时候显示。这样它是独立的，
     /// 也就不会侵扰文本的区域了。」
     ///
@@ -8812,7 +8812,7 @@ fn squeezed(text: &str) -> String {
 
     /// The bar is the table's own top two rows brought up the page: the ruler
     /// above, the names under it, exactly as they stand when the head is in
-    /// view. Drawn the other way round until the author caught it.
+    /// view. Drawn the other way round until it was caught.
     #[test]
     fn the_bar_is_ordered_the_way_the_table_top_is() {
         let mut source = String::from("| 地名 | 年代 |\n| --- | --- |\n");
@@ -8876,7 +8876,7 @@ fn squeezed(text: &str) -> String {
     }
 
     /// **A row on a page of prose never opens the panel unasked** — `to`,
-    /// `tb` and `tf` alike (author, 2026-09-11: 「tb 模式（basic）默认不用打开
+    /// `tb` and `tf` alike (2026-09-11: 「tb 模式（basic）默认不用打开
     /// information panel」; 2026-09-15: 「tf 和 tb 在信息面板显示上保持一致」).
     /// Only `tt`, where the grid has the window, opens it: there the panel is
     /// the way to read a folded cell whole and there is no prose to disturb.
@@ -8933,7 +8933,7 @@ fn squeezed(text: &str) -> String {
 
     /// #379: 基本 numbers the columns too.    /// #379: 基本 numbers the columns too.
     ///
-    /// The author, 2026-09-11：「tb 模式可不可以也标注列号（和 tf 模式一样）」，
+    /// 2026-09-11：「tb 模式可不可以也标注列号（和 tf 模式一样）」，
     /// which 基本's own law allows — 「tb 的原则是只能多字（标注）不能少字」 —
     /// because a strip above the table adds a row and hides nothing. 源碼 gets
     /// none: there the file is drawn as it is written.
@@ -9148,7 +9148,7 @@ fn squeezed(text: &str) -> String {
     }
 
     /// #283. 「折叠标志要不要加个下划线背景色什么的突出一下避免用户当作它是个
-    /// 普通的 `>`」 (author, 2026-09-07). The glyph itself cannot change — every
+    /// 普通的 `>`」 (2026-09-07). The glyph itself cannot change — every
     /// ellipsis Unicode has is East Asian *Ambiguous*, and a table is where the
     /// two width tables must agree to the cell — so the ink carries it: 金, and
     /// bold, on a page that is otherwise a run of greys.
@@ -9232,8 +9232,8 @@ fn squeezed(text: &str) -> String {
     /// Three answers, and this is all three: the cut is marked, `t w` lifts
     /// the cap, and the cell **being typed in** is drawn whole.
     ///
-    /// That last one used to open for the caret in Normal as well, and the
-    /// author had it taken back to the prose page's rule on 2026-09-11：
+    /// That last one used to open for the caret in Normal as well, and
+    /// it was taken back to the prose page's rule on 2026-09-11：
     /// 「列宽容易跳……建议这个和 tf 保持一致」. Which leaves Normal three ways
     /// to read a cut cell and no moving columns: the panel down the right has
     /// it whole already, `i` opens it in place, and `t w` opens every one.
@@ -9307,7 +9307,7 @@ fn squeezed(text: &str) -> String {
         assert!(typing.contains(long), "the cell being typed in is whole:\n{typing}");
     }
 
-    /// `t a` — 格內折行 (author, 2026-09-07: 「把所有超长的单元格都在单元格下方
+    /// `t a` — 格內折行 (2026-09-07: 「把所有超长的单元格都在单元格下方
     /// 的空行中 soft wrap」). The grid can do this and the prose page cannot:
     /// it owns its own layout, so a row is as tall as its tallest cell and the
     /// rows under it move down.
@@ -10564,7 +10564,7 @@ fn squeezed(text: &str) -> String {
 
     /// 快捷符號 is not a candidate list, and the panel must not say it is.
     ///
-    /// 作者原話：「yume 的分号默认是快捷符号，他不是一个候选面板而是一个特殊面板，
+    /// 原話：「yume 的分号默认是快捷符号，他不是一个候选面板而是一个特殊面板，
     /// 是按字母、空格、分号等按键上屏的。」 Drawn through the ordinary candidate
     /// path it came out as `㊀ ：「 ㊁ ～ …` — nine of twenty-seven, numbered,
     /// and every number a key that commits **something else**. The labels have
@@ -10606,7 +10606,7 @@ fn squeezed(text: &str) -> String {
 
     /// 快捷符號 mode is the engine's, key by key — **驅動鍵盤**，不是讀那張表。
     ///
-    /// 作者原話：「我按 `;;` 上屏的是第二個（b 對應的波浪號），而不是分號。」
+    /// 原話：「我按 `;;` 上屏的是第二個（b 對應的波浪號），而不是分號。」
     /// 那是把 `;` 交給 `key_action` 的下場：緩衝裏有引導鍵、表算作候選，狀態於是
     /// 讀成「組字中，有候選」，而靈明在那個狀態下的 `;` 是**選二**。
     ///
@@ -10814,8 +10814,8 @@ fn squeezed(text: &str) -> String {
         // The gutter, the candidate — and the code two cells on, which is
         // where #269 put it: with the sentence empty, the nearest margin to
         // the caret is the one on the caret's own row. It used to be at the
-        // far right of the row *below*, half a screen away, which is what the
-        // author's screenshot was of.
+        // far right of the row *below*, half a screen away, which is what
+        // the reported screenshot was of.
         assert_eq!(rows[0].trim_end(), "1  吧   ─ b", "{:?}", rows[0]);
         // No panel: the second and third candidates are nowhere on the screen.
         assert!(
@@ -11370,7 +11370,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
     }
 
-    /// The author, 2026-09-05: `:view-wrap 50` then `:view-wrap off` left a rule down
+    /// 2026-09-05: `:view-wrap 50` then `:view-wrap off` left a rule down
     /// the middle of the page with the writing running straight through it.
     ///
     /// The measure is kept on purpose — `:view-wrap` on its own has to be able to
@@ -13717,7 +13717,7 @@ fn squeezed(text: &str) -> String {
     ///
     /// ⚠️ 這一條從前叫 `..._a_digit_at_a_time`，斷言的正是相反的事：一位一行，
     /// 理由是「密排時 `119` `118` 會讀成 `11` `11` 疊着 `9` `8`」。那個理由成立，
-    /// 而作者給了另一個解法——把**鄰居**分開，不必把號碼拉長。
+    /// 而另一個解法——把**鄰居**分開，不必把號碼拉長。
     #[test]
     fn a_zong_number_is_two_digits_to_a_row_and_its_neighbour_is_a_rung_back() {
         let mut editor = Editor::new();
@@ -14306,7 +14306,7 @@ fn squeezed(text: &str) -> String {
     }
 
     /// **The shape is two caps, and a taller window does not change them**
-    /// (author, 2026-09-10). Eight rows, or half the window when that is
+    /// (2026-09-10). Eight rows, or half the window when that is
     /// shorter; and as many columns as the width holds, up to six.
     ///
     /// It used to grow: the fewest columns that showed every entry, worked out
@@ -14545,7 +14545,7 @@ fn squeezed(text: &str) -> String {
         assert!(text.contains("ruby") || text.contains("redo"), "{text:?}");
     }
 
-    /// The author, 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示面板。
+    /// 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示面板。
     /// 請你對齊一下：面板有個邊框 ＋ 左上有個「命令」文字。」
     ///
     /// It was a rectangle of ground with no edge and no name — a thing that
@@ -15022,7 +15022,7 @@ fn squeezed(text: &str) -> String {
     }
 
     /// The command line takes no 中文 anywhere on it — not after the command
-    /// name, not after a bang, not in a path (author, 2026-09-16).
+    /// name, not after a bang, not in a path (2026-09-16).
     ///
     /// The rule it replaced let the caret decide, which made the boundary a
     /// thing `←` could step over; with 模態掛起 behind this gate, every such

@@ -1,6 +1,6 @@
 //! A separator is a separator (#378).
 //!
-//! The author, 2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用
+//! 2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用
 //! 逗号。他们本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是一样的。」
 //!
 //! So these tests are written the same way for all of them: one table, said in
@@ -131,8 +131,8 @@ fn only_the_pipe_is_written_with_a_space_off_it() {
 /// file's table *is* the file: the 碼表 this editor exists for is 124,083 rows,
 /// and measuring them all took 160 ms on every keystroke.
 ///
-/// The window was one page either side of the row being asked about until the
-/// author asked why, 2026-09-11：「可以都只量屏幕上的吗？」It can, and it
+/// The window was one page either side of the row being asked about until
+/// 2026-09-11：「可以都只量屏幕上的吗？」It can, and it
 /// should: the wider window let a cell a page below the screen widen every
 /// column in view with nothing visible to say why.
 #[test]
@@ -171,7 +171,7 @@ fn a_table_is_measured_over_what_is_on_the_page() {
 /// Written down as a test because the doc comment that said otherwise stood
 /// for months after #356 made it false, and on 2026-09-11 it was read as law:
 /// an argument against recognising a delimited file on open was built on「自动
-/// 进 tb 会悄悄改掉 hjkl 的含义」, which the author answered with 「tb tf to
+/// 进 tb 会悄悄改掉 hjkl 的含义」, which was wrong: 「tb tf to
 /// 模式都是按字走的不是按格走的」. A comment cannot fail; this can.
 #[test]
 fn the_levels_leave_hjkl_alone() {
@@ -191,7 +191,7 @@ fn the_levels_leave_hjkl_alone() {
 ///
 /// Under `t f` the file's own padding comes off the page, so `l` through a
 /// cell's trailing spaces moved the caret and moved nothing on the screen —
-/// the author, 2026-09-11：「如果我一直按 l，光标是定住不动的，然后突然跳到右
+/// 2026-09-11：「如果我一直按 l，光标是定住不动的，然后突然跳到右
 /// 边一格……既然没有显示，就应该允许用户直接跳过去。」
 #[test]
 fn the_caret_steps_over_what_a_table_keeps_off_the_page() {

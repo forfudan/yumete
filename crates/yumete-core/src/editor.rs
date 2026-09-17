@@ -826,7 +826,7 @@ pub enum TableLevel {
     /// has been wrong since: the grain defaults to [`Grain::Char`] everywhere
     /// it is set, and `T` is what asks for cells. A stale comment is worse
     /// than none — this one was read as law and an argument built on top of it
-    /// (「自动进 tb 会悄悄改掉 hjkl 的含义」), which the author had to knock
+    /// (「自动进 tb 会悄悄改掉 hjkl 的含义」), and it had to be knocked
     /// down with the obvious answer: 「tb tf to 模式都是按字走的」.
     #[default]
     Basic,
@@ -976,7 +976,7 @@ pub enum Bounds {
 
 /// How far a table mode reaches (#275).
 ///
-/// **The author's rule, 2026-09-05**, and the reason it is safe:
+/// **The rule, 2026-09-05**, and the reason it is safe:
 ///
 /// > 有明確表格語法定義的文檔（csv tsv markdown），可以在文件任何位置通過 `ti`
 /// > `tt` 進入表格視圖…對於這個文件中所有的表格都生效。如果一個文件沒有確切的
@@ -1563,7 +1563,12 @@ pub struct Editor {
     last_search: String,
     search_forward: bool,
     /// Normal-mode single-key aliases from the config (Feature #23).
-    key_aliases: HashMap<char, String>,
+    key_aliases: HashMap<String, String>,
+    /// The two layers `key_aliases` is laid from (#428).
+    user_aliases: HashMap<String, String>,
+    key_preset: yumete_cjk::KeyPreset,
+    /// The keys typed so far of an alias that may still be completed (#428).
+    alias_held: String,
     /// Whether a key alias is being played out — so one cannot call itself,
     /// and so a macro records the key that was pressed rather than the key
     /// *and* everything it stands for.
@@ -1807,7 +1812,7 @@ pub struct Editor {
     /// where the reader is standing: a level that folds cells away (全, 全窗)
     /// needs it, because it is then the way to read one whole; 基本 folds
     /// nothing, so the panel would be repeating what is already on the page
-    /// while taking a fifth of the width to do it (author, 2026-09-11:
+    /// while taking a fifth of the width to do it (2026-09-11:
     /// 「tb 模式（basic）默认不用打开 information panel」).
     ///
     /// `t i` writes an answer here and that answer outlives the level — the
@@ -2147,7 +2152,7 @@ pub struct Editor {
     /// 碼表: `dl` and `bkd` are two and three cells, and a tab of a fixed four
     /// puts their second column at six and seven — not lined up, which is all
     /// a tab-separated file is for. To the next multiple of eight they both
-    /// land on eight — 「既然是 Unix 老默认就用他」 (author, 2026-09-10).
+    /// land on eight — 「既然是 Unix 老默认就用他」 (2026-09-10).
     tab_stop: usize,
     /// The width the *writer* wants to write to, if they have said one.
     ///
@@ -2311,6 +2316,9 @@ impl Editor {
             last_search: String::new(),
             search_forward: true,
             key_aliases: HashMap::new(),
+            user_aliases: HashMap::new(),
+            key_preset: yumete_cjk::KeyPreset::Helix,
+            alias_held: String::new(),
             expanding_alias: false,
             segmenter: Box::new(CategorySegmenter),
             reader: Box::new(NoReader),

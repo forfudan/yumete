@@ -423,8 +423,8 @@ impl Editor {
     /// A collapsed selection deletes the grapheme under the cursor. The caller
     /// takes the undo snapshot.
     ///
-    /// ⚠️ **Deleting is not copying** (#492). Helix's `d` yanks, and the author
-    /// calls that its worst idea: 「d 作为剪切功能会污染 register」. The register
+    /// ⚠️ **Deleting is not copying** (#492). Helix's `d` yanks, and that is
+    /// its worst idea: 「d 作为剪切功能会污染 register」. The register
     /// is a clipboard of one, so under that rule every tidy-up between a copy
     /// and a paste silently throws the copy away — yank a paragraph, take out
     /// a stray 、 before pasting it, and the paragraph is gone. Here the
@@ -440,6 +440,30 @@ impl Editor {
     /// costs nothing that was already spoken for.
     pub(super) fn cut_selection_to_register(&mut self) {
         self.cut_selection(true);
+    }
+
+    /// Cut up to `count` graphemes **before** the cursor into the register,
+    /// stopping at the start of the line — vim's `X`. The cursor ends on the
+    /// character it was on.
+    pub(super) fn cut_before_cursor(&mut self, count: usize) {
+        let (start, last) = {
+            let rope = self.current_buffer().rope();
+            let line_start = motion::line_start(rope, self.cursor);
+            let mut start = self.cursor;
+            for _ in 0..count.max(1) {
+                if start <= line_start {
+                    break;
+                }
+                start = motion::prev_grapheme(rope, start);
+            }
+            (start, motion::prev_grapheme(rope, self.cursor))
+        };
+        if start == self.cursor {
+            return;
+        }
+        self.anchor = start;
+        self.cursor = last;
+        self.cut_selection_to_register();
     }
 
     /// The one implementation of both: `yanks` says whether the text taken out

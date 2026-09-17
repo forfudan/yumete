@@ -227,7 +227,7 @@ impl Editor {
     /// **A step the reader cannot see is not a step.** Under `t f` the file's
     /// own padding comes off the page (`cell_slack_against`), so `l` through a
     /// cell's trailing spaces moved the caret and moved nothing on the screen:
-    /// it sat still for four presses and then jumped a column. The author,
+    /// it sat still for four presses and then jumped a column.
     /// 2026-09-11：「既然没有显示，就应该允许用户直接跳过去。」
     ///
     /// Only what a table keeps — see [`Editor::cell_hidden_on_line`]. Markup

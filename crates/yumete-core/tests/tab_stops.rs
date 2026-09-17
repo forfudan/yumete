@@ -80,7 +80,7 @@ fn the_caret_stands_where_the_tab_put_it() {
     assert_eq!(ed.cursor_visual_column(), 8, "and 錐 begins at the stop");
 }
 
-/// The author, 2026-09-11: 「tf状态下，tab 分隔符会被表格虚线接管，不需要绘
+/// 2026-09-11: 「tf状态下，tab 分隔符会被表格虚线接管，不需要绘
 /// 制…tb状态下，tab分隔符会被表格的对齐代替，这时候他也是个普通的符号，显示
 /// 1格宽都行（和markdown 中的pipe一样）」.
 ///

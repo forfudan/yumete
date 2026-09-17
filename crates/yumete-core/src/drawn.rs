@@ -41,7 +41,7 @@ pub enum Ink {
     /// is to say 「this is not what the writer typed」 was drawn in the
     /// colour of what the writer typed. The mark is ASCII `>` for a reason
     /// the width table settles and the ink cannot change, so the ink is
-    /// where the difference has to be said (author, 2026-09-07).
+    /// where the difference has to be said (2026-09-07).
     ///
     /// Never at the same anchor as the padding beside it: this one stands at
     /// the first character it hides, and the padding at the end of the cell.
@@ -57,7 +57,7 @@ pub enum Ink {
     /// **No character at all**, because a marker's width is a question the
     /// terminal answers and a tab already has enough of those. What says
     /// 「this is a tab and not spaces」 is the ground under it — quiet, the
-    /// rung a table's own bands sit on. The author's call, 2026-09-10:
+    /// rung a table's own bands sit on. Decided 2026-09-10:
     /// 「tab 不用符号，但可以用一个背景色」.
     Tab,
 }

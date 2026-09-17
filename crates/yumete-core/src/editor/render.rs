@@ -546,7 +546,7 @@ impl Editor {
     /// **It asks for a table that has been squared up, not for 全.** The law
     /// 「`basic` 不藏、不摺、不替換」 says what a *level* does on its own, and
     /// `t w` is the reader's own key — asking for it at 基本 is not the editor
-    /// hiding anything behind anybody's back (author, 2026-09-07: 「虽然 tb 在
+    /// hiding anything behind anybody's back (2026-09-07: 「虽然 tb 在
     /// 默认状态下不折叠，但能不能在按下 tw 之后折叠？」). What folding really
     /// needs is a column to fold *against*, and 基本 squares one up exactly as
     /// 全 does. Only 源碼 has none, and there the answer is still a refusal
@@ -558,18 +558,18 @@ impl Editor {
     /// **The pane is not below 全 — it is beside it.** `t t` draws its own
     /// grid at its own cap, so the switch means there exactly what it means
     /// in prose, and refusing it there left over-wide cells
-    /// that could not be opened by any key at all (author, 2026-09-07:
+    /// that could not be opened by any key at all (2026-09-07:
     /// 「tw 功能无法在 tt 模式下使用……长单元格被折叠的信息永远无法读取」).
     pub(super) fn toggle_cell_folds(&mut self) {
-        // **Two toggles over one axis, and they cannot both be on** (author,
-        // 2026-09-07). A three-way cycle on `t w` was the other way to spell
+        // **Two toggles over one axis, and they cannot both be on**
+        // (2026-09-07). A three-way cycle on `t w` was the other way to spell
         // this, and it would have made the same key mean a toggle in prose
         // and a cycle in the window; a reader learns 「`t w` 摺不摺」 once and
         // it has to hold everywhere. So `t w` answers 摺／不摺, and either
         // key pulls the table out of whatever the other one had done.
         //
         // From 折行, `t w` **opens the table out** rather than folding it
-        // (author, 2026-09-08). Both keys name a way of not showing a cell
+        // (2026-09-08). Both keys name a way of not showing a cell
         // whole, so the way back from either of them is the whole cell: from
         // 折行 the reader who presses the other key is asking to stop wrapping,
         // and answering with 摺起 hands them the one state they did not name.
@@ -587,7 +587,7 @@ impl Editor {
     }
 
     /// `t a` — 格內折行: the tail is drawn **under** the cell, in its own
-    /// column, rather than taken off the page (author, 2026-09-07: 「把所有超
+    /// column, rather than taken off the page (2026-09-07: 「把所有超
     /// 长的单元格都在单元格下方的空行中 soft wrap」).
     ///
     /// **The grid's answer, and only the grid's.** The prose page's rows come
@@ -713,7 +713,7 @@ impl Editor {
     /// The other half of [`Self::hidden_on_line`] — the markup — comes back
     /// the moment the caret is in it, which is what 所見即所得 means, so the
     /// caret is welcome to walk into it. This half does not: `t w` opens a
-    /// fold and nothing at all opens the slack. The author, 2026-09-11：
+    /// fold and nothing at all opens the slack. 2026-09-11：
     /// 「tf tt 模式下这种 padding 的空格既然没有显示，就应该允许用户直接跳过
     /// 去，而不是把光标定在那里但后台还是在过空格。」Which is #212's own law
     /// read from the other end: if the caret may never stand in a column the
@@ -805,7 +805,7 @@ impl Editor {
     /// on **every** keystroke, because a caret in the key is a caret in the
     /// key whether or not the cell it moved to was ever folded — a `j` down
     /// the `#` column of this project's own `development.md` rebuilt 286 rows
-    /// and took 15 ms, in a column two characters wide (author, 2026-09-07:
+    /// and took 15 ms, in a column two characters wide (2026-09-07:
     /// 「不是说撑开的时候卡，而是不撑开的单元格也卡」).
     ///
     /// So reading and editing are told apart. **Reading** does not need the
@@ -870,7 +870,7 @@ impl Editor {
     /// Which punctuation the table on `line` is told apart by, if there is a
     /// table on it at all (#378).
     ///
-    /// **The separator is a value, never a kind of file.** The author,
+    /// **The separator is a value, never a kind of file.**
     /// 2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用逗号。他们
     /// 本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是一样的。」So this
     /// is the only place that asks, and everything past it — the widths, the

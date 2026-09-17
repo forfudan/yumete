@@ -35,6 +35,7 @@
 
 pub mod blocks;
 pub mod grapheme;
+pub mod keymap;
 pub mod reading;
 pub mod segment;
 pub mod vertical;
@@ -44,6 +45,7 @@ pub mod word;
 pub use grapheme::{
     grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, prev_grapheme_boundary,
 };
+pub use keymap::KeyPreset;
 pub use reading::{split_charset, NoReader, Reader, CHARSET_TAGS};
 pub use segment::{
     best_path, CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo,

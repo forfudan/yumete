@@ -144,7 +144,7 @@ fn a_note_follows_the_line_as_it_is_written() {
 
 /// 縱書的 `橫` 和 `字` 會分家（#500）。
 ///
-/// 縦中横把**兩個半角字擠進一個格**，所以一串寫成數字的縱，格數比字數少。作者：
+/// 縦中横把**兩個半角字擠進一個格**，所以一串寫成數字的縱，格數比字數少。
 /// 「纵和字是相等的……如果有可能不相等，那就也加一下字」——會，所以狀態欄兩個都報。
 #[test]
 fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
@@ -311,7 +311,7 @@ fn the_retired_keys_say_what_replaced_them() {
     assert!(ed.status().is_empty(), "{}", ed.status());
 
     // `gw` moved to `gD` on the same day (#355), and the fingers that learned
-    // it are the author's own — so it says where it went rather than nothing.
+    // it are this project's own — so it says where it went rather than nothing.
     let mut ed = typed("那年冬天。\n");
     press(&mut ed, "gw");
     assert!(ed.status().contains("gD"), "{}", ed.status());
@@ -2120,7 +2120,7 @@ impl Segmenter for Counting {
 
 /// 標點不是詞，一個都不許塗（#446）。
 ///
-/// 作者報的原話：「`w`（按詞移動）高亮了 `` `( `` 这两个标点符号，还有 `` )、` ``
+/// 報來的原話：「`w`（按詞移動）高亮了 `` `( `` 这两个标点符号，还有 `` )、` ``
 /// 这样的標點符號組。反而反引号形成的 verbatim 却没有被高亮，让人觉得是 verbatim
 /// 出现了错位。」病根在那道「兩邊都看得見就不塗」的閘上：它從前問的是
 /// `char::is_alphanumeric`，而拉丁字母也算 alphanumeric，於是
@@ -3255,7 +3255,7 @@ fn gd_goes_gw_shows_and_a_missing_note_gets_written() {
 
     // ---- gd 只跟腳注與鏈接走（#454） -----------------------------------
     //
-    // 作者：「gd 现在他似乎对于普通文本就是个搜索。我希望它对于普通文本不适用
+    // 「gd 现在他似乎对于普通文本就是个搜索。我希望它对于普通文本不适用
     // （按下去没有效果），对于脚注、链接、章节链接等方才实现跳转。」
     {
         let mut ed = typed("# 雪夜\n\n那年冬天下了雪，雪很大。\n見 [手冊](docs/manual.md) 與 [雪](#雪夜)。\n");
@@ -3775,7 +3775,7 @@ fn a_dash_spans_and_a_comma_pairs() {
 }
 
 /// A row number a table does not have lands **in the table anyway**
-/// (author, 2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行而
+/// (2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行而
 /// 不是表格的第一行」).
 ///
 /// The number is the gutter's, which is what makes it the same key in a
@@ -5262,7 +5262,7 @@ fn t_w_folds_a_cell_too_wide_to_scan_and_gives_it_back() {
     assert!(!ed.hidden_on_line(8).is_empty(), "and folded again");
 }
 
-/// The author, off his own `development.md`: 「the long cells are trimmed
+/// Off this project's own `development.md`: 「the long cells are trimmed
 /// with a `>` symbol. However, the width of the cell are still padded
 /// with white spaces at the tail.」
 ///
@@ -5304,7 +5304,7 @@ fn a_table_squared_up_in_the_file_is_still_folded_to_the_cap() {
 }
 
 /// 「`basic` 不藏、不摺、不替換」 is a law about what a *level* does with
-/// nobody asking. `t w` is the reader asking (author, 2026-09-07: 「虽然
+/// nobody asking. `t w` is the reader asking (2026-09-07: 「虽然
 /// tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？」), and 基本 squares
 /// its columns up exactly as 全 does — so there is something to fold
 /// against, and folding it is the reader's call and not the level's.
@@ -5383,7 +5383,7 @@ fn t_w_is_answered_in_the_pane_which_is_not_below_全() {
 }
 
 /// **全窗表格 is bounded**: `gg`, `G` and `:120` do not walk out of it
-/// (author, 2026-09-07: 「衹能通過 tq/tf/tb 離開回到其他模式，或者 t[ t]
+/// (2026-09-07: 「衹能通過 tq/tf/tb 離開回到其他模式，或者 t[ t]
 /// 去下一個表格」), and the gutter numbers this table's own rows, so
 /// `t1g` is its first row.
 #[test]
@@ -5442,7 +5442,7 @@ fn the_window_holds_the_table_it_was_opened_on() {
 }
 
 /// `t w` and `t a` are two toggles over **one** axis: 摺起, 攤平, 折行,
-/// and never two of them at once (author, 2026-09-07: 「ta on 和 tw on 两
+/// and never two of them at once (2026-09-07: 「ta on 和 tw on 两
 /// 者不会叠在一起」).
 ///
 /// A three-way cycle on `t w` was the other way to spell it, and it would
@@ -5459,8 +5459,8 @@ fn t_w_and_t_a_are_two_toggles_over_one_axis() {
     press(&mut ed, "ta");
     assert!(ed.cell_wrap(), "{}", ed.status());
     assert!(ed.cell_folds(), "the cap is what 折行 wraps at: {}", ed.status());
-    // …and `t w` takes it back off — to 攤平, not to 摺起 (author,
-    // 2026-09-08). Both keys name a way of *not* showing a cell whole, so
+    // …and `t w` takes it back off — to 攤平, not to 摺起
+    // (2026-09-08). Both keys name a way of *not* showing a cell whole, so
     // the way back from either of them is the whole cell; answering 折行
     // with 摺起 handed the reader the one state they had not named.
     press(&mut ed, "tw");
@@ -6742,7 +6742,7 @@ fn a_column_search_reads_down_before_across() {
 /// `J K H L` and `C-d`/`C-u` mean "several rows" in a table, and a table's
 /// rows are not the same width twice — so aiming at a *character* column,
 /// which is what the page motions do everywhere else, drifts sideways as
-/// it goes. The author reported it as 「in column 5, press J, land in
+/// it goes. Reported as 「in column 5, press J, land in
 /// column 10」.
 #[test]
 fn paging_through_a_table_keeps_to_the_column() {
@@ -7018,8 +7018,8 @@ fn only_the_drawn_mode_draws_the_grid() {
     press(&mut ed, "tb");
     assert!(ed.grid_on_line(1).is_empty(), "the pipes stay pipes");
     // **The ruler is not part of the drawing** (#379). It used to be — it came
-    // through `grid_walls`, which answers only at 全 — and the author asked
-    // for the numbers at 基本 too, 2026-09-11：「tb 模式可不可以也标注列号」.
+    // through `grid_walls`, which answers only at 全 — and the numbers are
+    // wanted at 基本 too, 2026-09-11：「tb 模式可不可以也标注列号」.
     // Which 基本's own law allows: 「tb 的原则是只能多字（标注）不能少字」, and
     // a strip above the table adds a row of annotation without hiding, folding
     // or replacing one character of what the writer typed.
@@ -7863,7 +7863,7 @@ fn a_file_with_no_schema_is_read_by_its_own_header() {
 
 #[test]
 fn a_table_with_no_schema_gets_one_written_beside_it() {
-    // #218. The author's own 碼表 has no header and a tab between its two
+    // #218. This project's own 碼表 has no header and a tab between its two
     // columns, and both facts have to survive into the file.
     let dir = std::env::temp_dir().join(format!("yumete-schema-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -9234,7 +9234,7 @@ fn markdown_writes_a_footnote_and_a_table() {
 
 }
 
-/// #276. The author, 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入
+/// #276. 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入
 /// 一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模
 /// 式。」 It used to be `:markdown table 4x3` — columns first, rows meaning
 /// *data* rows, no blank lines and no Insert mode — and that spelling is
@@ -10355,7 +10355,7 @@ fn key_aliases_remap_normal_mode_keys() {
 
     // Remap `q` to behave as `d` (delete).
     let mut aliases = std::collections::HashMap::new();
-    aliases.insert('q', "d".to_string());
+    aliases.insert("q".to_string(), "d".to_string());
     ed.set_key_aliases(aliases);
 
     ed.on_key(Key::Char('g'));
@@ -10484,7 +10484,7 @@ fn a_book_can_teach_the_editor_its_own_names() {
 
 /// 自動認詞：三件事各歸各位（#448）。
 ///
-/// 作者定的分工：**autodetect 只在内存**（開文件觸發，後台算，分詞用它）；
+/// 定下的分工：**autodetect 只在内存**（開文件觸發，後台算，分詞用它）；
 /// **`:word-discover`** 手動跑，把那份名單寫成 `.yumete/discovered_words.txt`
 /// 給人看，每次覆蓋；**`.yumete/words.txt` 是使用者的**，yumete 只讀不寫。
 ///
@@ -10770,7 +10770,7 @@ fn a_key_alias_may_name_a_sequence() {
     let mut ed = typed("上一句\n下一句\n");
     ed.goto_line(1);
     let mut aliases = std::collections::HashMap::new();
-    aliases.insert('J', "gJ".to_string());
+    aliases.insert("J".to_string(), "gJ".to_string());
     ed.set_key_aliases(aliases);
     ed.on_key(Key::Char('J'));
     assert_eq!(ed.current_buffer().text(), "上一句下一句\n");
@@ -10782,7 +10782,7 @@ fn an_alias_that_names_itself_does_not_spin() {
     ed.goto_line(1);
     let mut aliases = std::collections::HashMap::new();
     // `x` stands for `xx` — which stands for `xx`, and so on.
-    aliases.insert('x', "xx".to_string());
+    aliases.insert("x".to_string(), "xx".to_string());
     ed.set_key_aliases(aliases);
     ed.on_key(Key::Char('x'));
     // It ran once, one level deep, and came back.
@@ -11895,7 +11895,7 @@ fn the_c_flag_asks_at_each_match_before_writing() {
 /// The walk asks `next_hit`, which serialises the whole document and rescans
 /// it from the top; `write_one` then copies it again for the grid guard. That
 /// is one keystroke's work per `y` and fine. Under `a` it ran N times with no
-/// key in between — quadratic. Measured on the author's machine before the
+/// key in between — quadratic. Measured on the development machine before the
 /// fix: 680 KB with 20,000 matches took **28.5 s**, 2 MB took **4m35s**, both
 /// on the main thread with no progress and no key that could stop it, against
 /// 0.02 s for the same `:s` without `c`.
@@ -12483,8 +12483,8 @@ fn stepping_sideways_crosses_the_line_break() {
 }
 
 /// `t w` and `t a` are two switches over one axis, and **either of them,
-/// pressed while the other is on, opens the table out** (author,
-/// 2026-09-08). Answering `t w` from 折行 with 摺起 handed the reader the
+/// pressed while the other is on, opens the table out**
+/// (2026-09-08). Answering `t w` from 折行 with 摺起 handed the reader the
 /// one state they had not named — a second way of hiding, when what they
 /// asked for was to stop hiding.
 #[test]
@@ -14112,4 +14112,54 @@ fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
     assert_eq!(at(&ed).0, 1, "leftward is onward: the next line");
     press(&mut ed, "gl");
     assert_eq!(at(&ed).0, 0, "and back");
+}
+
+/// The vim preset: what a vim hand types does what it means (#428).
+#[test]
+fn the_vim_preset_translates_what_a_vim_hand_types() {
+    let vim = || {
+        let mut ed = typed("甲乙丙丁\n戊己庚\n辛壬\n");
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let text = |ed: &Editor| ed.current_buffer().text();
+
+    let mut ed = vim();
+    press(&mut ed, "x");
+    assert_eq!(text(&ed), "乙丙丁\n戊己庚\n辛壬\n", "x cuts one character");
+    press(&mut ed, "p");
+    assert!(text(&ed).starts_with("乙甲"), "…into the register: {:?}", text(&ed));
+
+    let mut ed = vim();
+    press(&mut ed, "dd");
+    assert_eq!(text(&ed), "戊己庚\n辛壬\n", "dd takes the line");
+
+    let mut ed = vim();
+    press(&mut ed, "$");
+    assert_eq!(ed.cursor, 3, "$ is the end of the line");
+    press(&mut ed, "0");
+    assert_eq!(ed.cursor, 0, "0 its start");
+
+    // A held `d` that nothing completes is pressed for real, and `Esc` lets
+    // go of it without pressing it.
+    let mut ed = vim();
+    ed.on_key(Key::Char('d'));
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "甲乙丙丁\n戊己庚\n辛壬\n", "Esc drops the held d");
+
+    // vim's `X`: the character before, cut, never across the line's start.
+    let mut ed = vim();
+    press(&mut ed, "llX");
+    assert_eq!(text(&ed), "甲丙丁\n戊己庚\n辛壬\n", "X cuts the one before");
+    press(&mut ed, "p");
+    assert!(text(&ed).starts_with("甲丙乙"), "into the register: {:?}", text(&ed));
+    let mut ed = vim();
+    press(&mut ed, "j5X");
+    assert_eq!(text(&ed), "甲乙丙丁\n戊己庚\n辛壬\n", "nothing before the start of a line");
+
+    // `10` is a count, not a `0`.
+    let mut ed = vim();
+    press(&mut ed, "2x");
+    assert_eq!(text(&ed), "丙丁\n戊己庚\n辛壬\n", "a count reaches the translation");
 }

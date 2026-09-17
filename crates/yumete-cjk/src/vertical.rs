@@ -57,7 +57,7 @@ pub const DEFAULT_ZONG_GAP: usize = 0;
 /// | `loose` | every 縱 of a paragraph buys it if **any** of them does | every row of a line, likewise |
 /// | `always` | every 縱 | a row of air above every row |
 ///
-/// `dense` is the factory setting — the author's first framing, 「只對存在注釋
+/// `dense` is the factory setting — the first framing, 「只對存在注釋
 /// 的**視覺**縱出現」. `loose` is what the page did for 着重號 before, and the
 /// reason given then still holds for anyone who prefers it: a paragraph does
 /// not change width as it is scrolled through.

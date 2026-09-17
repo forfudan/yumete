@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-pub use yumete_cjk::{Layout, Margin, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
+pub use yumete_cjk::{KeyPreset, Layout, Margin, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
 
 /// How line numbers are displayed in the gutter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1404,7 +1404,11 @@ pub struct KeyConfig {
     /// chose on purpose — `J`/`K` paging a page of a book rather than joining
     /// lines — are exactly the ones a Vim reader wants back, and what they
     /// want back is `gJ`. One config line instead of leaving.
-    pub normal: HashMap<char, String>,
+    ///
+    /// **The left may be a sequence too** (#428): `"dd" = "xd"`.
+    pub normal: HashMap<String, String>,
+    /// A whole table of such lines, shipped: `[keys] preset = "vim"`.
+    pub preset: KeyPreset,
 }
 
 /// **What a language can be told to run** (Feature #197).
@@ -1757,6 +1761,12 @@ impl Config {
             }
         }
 
+        if let Some(word) = raw.keys.preset.as_deref() {
+            if KeyPreset::parse(word).is_none() {
+                problems.push(format!("[keys] preset = \"{word}\" 只能是 helix 或 vim"));
+            }
+        }
+
         if let Some(word) = raw.editor.tab_inserts.as_deref() {
             if !matches!(word, "spaces" | "tab") {
                 problems.push(format!("[editor] tab_inserts = \"{word}\" 只能是 spaces 或 tab"));
@@ -2016,7 +2026,7 @@ fn env_data_dirs() -> Vec<PathBuf> {
 /// `/Library` when it was installed for everyone) and keeps what it compiles
 /// and what the writer installed under `~/Library/Application Support/Yume`.
 /// So a Mac with five schemes installed and working answered 「沒有裝」 to
-/// every question yumete could ask (author, 2026-09-07: 「我安装了 yume 并且
+/// every question yumete could ask (2026-09-07: 「我安装了 yume 并且
 /// 有五个方案，但是 :yume-installed 没有办法检测到他们」).
 ///
 /// The bundle's `Contents/Resources` is handed over **as a data directory**
@@ -2361,6 +2371,7 @@ struct RawTheme {
 struct RawKeys {
     #[serde(default)]
     normal: HashMap<String, String>,
+    preset: Option<String>,
 }
 
 impl RawConfig {
@@ -2588,6 +2599,9 @@ impl RawConfig {
         }
         for (k, v) in other.keys.normal {
             self.keys.normal.insert(k, v);
+        }
+        if other.keys.preset.is_some() {
+            self.keys.preset = other.keys.preset;
         }
     }
 
@@ -2890,15 +2904,12 @@ impl RawConfig {
             config.export.page = page;
         }
         for (k, v) in self.keys.normal {
-            // The key on the left is one key — there is no key sequence to
-            // *press* here, only one to be sent — and the right may be any
-            // number of them.
-            let mut ks = k.chars();
-            if let Some(from) = ks.next() {
-                if ks.next().is_none() && !v.is_empty() {
-                    config.keys.normal.insert(from, v);
-                }
+            if !k.is_empty() && !v.is_empty() {
+                config.keys.normal.insert(k, v);
             }
+        }
+        if let Some(preset) = self.keys.preset.as_deref().and_then(KeyPreset::parse) {
+            config.keys.preset = preset;
         }
         config
     }
@@ -3158,12 +3169,12 @@ mod tests {
             "toolong" = "x"
             "#,
         );
-        assert_eq!(c.keys.normal.get(&'j').map(String::as_str), Some("h"));
+        assert_eq!(c.keys.normal.get("j").map(String::as_str), Some("h"));
         // The right-hand side may be a whole sequence: one config line puts
         // vi's join back on `J` without the editor keeping two spellings.
-        assert_eq!(c.keys.normal.get(&'J').map(String::as_str), Some("gJ"));
-        // Multi-character keys are ignored — there is no sequence to press.
-        assert!(!c.keys.normal.contains_key(&'t'));
+        assert_eq!(c.keys.normal.get("J").map(String::as_str), Some("gJ"));
+        // …and so may the left (#428).
+        assert_eq!(c.keys.normal.get("toolong").map(String::as_str), Some("x"));
     }
 
     #[test]
@@ -3317,8 +3328,8 @@ mod tests {
         // ...but keeps the global line_numbers it didn't touch...
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         // ...and the keymaps are merged.
-        assert_eq!(c.keys.normal.get(&'a').map(String::as_str), Some("b"));
-        assert_eq!(c.keys.normal.get(&'c').map(String::as_str), Some("d"));
+        assert_eq!(c.keys.normal.get("a").map(String::as_str), Some("b"));
+        assert_eq!(c.keys.normal.get("c").map(String::as_str), Some("d"));
     }
 
     #[test]

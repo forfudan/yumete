@@ -18,7 +18,7 @@
 #
 # Three languages: `zhs` 简体, `zht` 繁體, `en`. **Write `zhs` first** — in
 # 大陆用语 — and convert it to `zht`; that is the
-# author's rule of 2026-09-08, and the reason for it is that 簡體 is not only
+# rule of 2026-09-08, and the reason for it is that 簡體 is not only
 # different characters, it is sometimes a different word (檔案／文件,
 # 預設／默认, 程式／程序, 游標／光标), and a sentence composed in the second
 # language picks the second language's vocabulary without meaning to.
@@ -616,6 +616,14 @@ en = "how a paragraph opens: `off` / `basic` (indented, blank line kept) / `full
 find = "縮進 缩进 首行 段落 indent paragraph"
 
 [[message]]
+# : 命令選單裏 keymap 那一項的說明
+key = "cmd.commands.keymap"
+zht = "鍵位預設：helix（出廠）或 vim——把 vim 的 x s dd ^ $ 翻過來"
+zhs = "键位预设：helix（出厂）或 vim——把 vim 的 x s dd ^ $ 翻过来"
+en = "keymap preset: helix (default) or vim — vim's x s dd ^ $ translated"
+find = "鍵位 键位 快捷鍵 快捷键 預設 预设 vim vi helix keymap keys"
+
+[[message]]
 # : 命令選單裏 language 那一項的說明（commands 組）
 key = "cmd.commands.language"
 zht = "編輯器自己說話用哪種語言：`zh` 繁體／`zhs` 简体／`en` English"
@@ -1158,6 +1166,20 @@ zht = "縮進寬度：Tab 打幾個空格、> 和 < 挪幾格"
 zhs = "缩进宽度：Tab 打几个空格、> 和 < 挪几格"
 en = "indent width: the spaces Tab types, and how far > and < shift"
 find = "縮進 缩进 寬度 宽度 空格 indent width"
+
+[[message]]
+# : 命令選單裏 helix 那一項的說明（keymap 組）
+key = "cmd.keymaps.helix"
+zht = "helix：這個編輯器自己的鍵（出廠）"
+zhs = "helix：这个编辑器自己的键（出厂）"
+en = "helix: this editor's own keys (default)"
+
+[[message]]
+# : 命令選單裏 vim 那一項的說明（keymap 組）
+key = "cmd.keymaps.vim"
+zht = "vim：x X 剪字、s 改一個字、V 選行、dd yy cc dw cw、^ $ 0"
+zhs = "vim：x X 剪字、s 改一个字、V 选行、dd yy cc dw cw、^ $ 0"
+en = "vim: x X cut a character, s changes one, V selects the line, dd yy cc dw cw, ^ $ 0"
 
 [[message]]
 # : 命令選單裏 en 那一項的說明（languages 組）
@@ -4674,6 +4696,20 @@ en = "{0} over-long rows skipped"
 
 
 # ── label ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :keymap — 現在是 helix
+key = "keys.preset-helix"
+zht = "鍵位：helix（出廠）"
+zhs = "键位：helix（出厂）"
+en = "keymap: helix (default)"
+
+[[message]]
+# :keymap — 現在是 vim
+key = "keys.preset-vim"
+zht = "鍵位：vim——x X 剪字、s 改一個字、V 選行、dd yy cc dw cw、^ $ 0"
+zhs = "键位：vim——x X 剪字、s 改一个字、V 选行、dd yy cc dw cw、^ $ 0"
+en = "keymap: vim — x X cut a character, s changes one, V selects the line, dd yy cc dw cw, ^ $ 0"
 
 [[message]]
 # 把幾樣東西連起來寫時的頓號

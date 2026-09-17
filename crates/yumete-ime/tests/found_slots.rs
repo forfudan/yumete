@@ -1,5 +1,5 @@
 //! 自定義方案 are found where yume put them, not where the manifest looks
-//! (author, 2026-09-08: 「yume 現在重構之後，分爲內置方案和自定義方案兩個文件
+//! (2026-09-08: 「yume 現在重構之後，分爲內置方案和自定義方案兩個文件
 //! 夾……只要掃到這兩個文件夾就能得到這些方案的碼表和設置信息了」).
 //!
 //! The built-in half of that is `found_schemes.rs`: a `schemes/<tag>.toml` any

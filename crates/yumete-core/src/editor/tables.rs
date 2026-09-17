@@ -957,7 +957,7 @@ impl Editor {
         }
     }
 
-    /// **Where the window starts counting rows** (author, 2026-09-07: 「她的
+    /// **Where the window starts counting rows** (2026-09-07: 「她的
     /// 行號用自己的行號而不是全文的行號」).
     ///
     /// 全窗表格 is a window onto one table and nothing walks out of it
@@ -1356,7 +1356,7 @@ impl Editor {
     /// moved it.
     pub fn table_ruler_on_line(&self, line: usize) -> Vec<(usize, usize)> {
         // **基本 gets it too** (#379). It used to ask `grid_walls`, which
-        // answers only at 全, and the author asked for the numbers at 基本 as
+        // answers only at 全, and the numbers are wanted at 基本 as
         // well — which its own law allows: 「tb 的原则是只能多字（标注）不能
         // 少字」, and a strip above the table adds a row of annotation without
         // hiding, folding or replacing a single character. 源碼 keeps none:
@@ -1400,7 +1400,7 @@ impl Editor {
     /// Whether the head of the table being read is **off the page**, so the
     /// reader is in its middle with nothing naming the columns (#379).
     ///
-    /// The author, 2026-09-11：「在顶部预留一个信息栏（两行：列号+列名）。这个
+    /// 2026-09-11：「在顶部预留一个信息栏（两行：列号+列名）。这个
     /// 平常不显示，只是在下方是表格中间部分的时候显示。这样它是独立的，也就不
     /// 会侵扰文本的区域了。」The region is what makes it buildable — the page
     /// is simply two rows shorter, which is the arithmetic the command row and the
@@ -1410,7 +1410,7 @@ impl Editor {
     ///
     /// **The first answer was too coarse**: 「is this table taller than the
     /// page」, which put the bar up the moment the cursor entered a long table
-    /// even with its head in plain view two rows above. The author, 2026-09-11:
+    /// even with its head in plain view two rows above. 2026-09-11:
     /// 「光标进入表格但是表格头部还没出屏幕，顶上的表头就开始显示了。」
     ///
     /// Reserving rows changes how many lines the page shows, which is the
@@ -1556,7 +1556,7 @@ impl Editor {
             // **A `|` table says what it is on every one of its own lines**,
             // so the mode is the file's (#275): every `|` table in the file is
             // read as one, and walking into the paragraph between two of them
-            // leaves both drawn. The author's second class — 「沒有確切的表格
+            // leaves both drawn. The second class of file — 「沒有確切的表格
             // 語法，比如 txt、yaml 用空格制表符隔開」 — is the *guessed* block,
             // and that is `enter_block_table`'s.
             reach: Reach::File,
@@ -1945,7 +1945,7 @@ impl Editor {
 
     /// Write an empty `|` table here and stand in its first heading (#276).
     ///
-    /// The author, 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入一個三
+    /// 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入一個三
     /// 行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」
     ///
     /// **`rows` counts the heading**, the way a word processor's「3 × 4」does:
@@ -3409,7 +3409,7 @@ impl Editor {
             // that is why `t q` can undo it without anything being written
             // down: the level it was taken from was never touched.
             //
-            // **`f`, not `a`** (author, 2026-09-06): 排齊 gave the letter up
+            // **`f`, not `a`** (2026-09-06): 排齊 gave the letter up
             // and went to `t F`, where the capital reads as the confirmation a
             // whole-file reformat should always have asked for.
             Key::Char('b') | Key::Char('f') => {
@@ -3521,8 +3521,8 @@ impl Editor {
                         (row, self.cell_position().map(|(_, c)| c).unwrap_or(0))
                     }
                 };
-                // **Clamped into the table you are standing in** (author,
-                // 2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行
+                // **Clamped into the table you are standing in**
+                // (2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行
                 // 而不是表格的第一行」). The number is still the one in the
                 // gutter — that is what makes `t238g` mean the row a reader
                 // can see the number of, in a `.csv` and in a chapter alike —
