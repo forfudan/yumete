@@ -301,6 +301,22 @@ const DISCOVER_MAX_BYTES: usize = 16 * 1024 * 1024;
 /// from, and gathering all of it would make `Space f` pause before it drew.
 const PICKER_LIMIT: usize = 4000;
 
+/// **What a writer's files are named** — the extensions `空格 f` lists first.
+///
+/// Not a filter: a manuscript folder holds a `.png` of a map and a `.csv` of
+/// names, and hiding them would make the picker lie about what is there. It is
+/// an order, and the order is 「the things you write in, then everything
+/// else」.
+const PROSE: &[&str] = &["md", "markdown", "txt", "typ", "tex", "org", "rst", "csv", "tsv"];
+
+/// What the file this session opened most recently is worth in the picker's
+/// order, dropping by 20 for each one before it and never below 20.
+///
+/// Small on purpose: a run of two adjacent letters in a name is worth 800, so
+/// this settles which of two equally good matches comes first and never what
+/// matches.
+const VISITED_BONUS: i64 = 400;
+
 /// A byte count the way a person says it: `425 KB`, `2.9 MB`.
 ///
 /// Rounded on purpose. The question this feeds (#295) is 「did the file just
@@ -2089,6 +2105,8 @@ pub struct Editor {
     reload_warned: bool,
     /// The open picker, if `Space f` or `Space b` is up (Feature #90).
     picker: Option<crate::picker::Picker>,
+    /// The head of the file the picker is standing on, kept until it moves.
+    preview: RefCell<Option<(PathBuf, Vec<String>)>>,
     /// The two panel slots, indexed by [`crate::sidebar::Side`] — Feature #94,
     /// #293.
     ///
@@ -2121,6 +2139,15 @@ pub struct Editor {
     /// The directory the last `:grep` listing was gathered from, so `gf` on one
     /// of its lines resolves the same relative path it printed.
     listing_root: Option<PathBuf>,
+    /// **The files this session has been in, newest first** (2026-09-18).
+    ///
+    /// What `空格 f` puts at the top of its list. Alphabetical is chapter
+    /// order, which is the right answer for reading a book and the wrong one
+    /// for coming back to what you were writing five minutes ago — so the
+    /// picker asks this, and every editor with a file picker asks something
+    /// like it. Held in memory only: it is a fact about this afternoon, like
+    /// the session, and a stale one is worse than none.
+    visited: Vec<PathBuf>,
     /// The reader's own 用字 groups, from `[editor] usage_groups` (#233).
     ///
     /// The built-in table cannot hold a novel's own names, and a novel's own
@@ -2450,6 +2477,7 @@ impl Editor {
             compiled: RefCell::new(None),
             smart_case: true,
             picker: None,
+            preview: RefCell::new(None),
             panels: [None, None],
             panel_focus: None,
             // 檔案／緩衝區／大綱 on the left — 「what is there, and where am
@@ -2470,6 +2498,7 @@ impl Editor {
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             listing_root: None,
+            visited: Vec::new(),
             usage_groups: Vec::new(),
             opened_with: HashMap::new(),
             time_offset: None,

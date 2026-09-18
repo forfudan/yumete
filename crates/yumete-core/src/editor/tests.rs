@@ -8163,9 +8163,9 @@ fn one_key_moves_between_the_two_panes() {
 
     // With no sidebar open it does nothing at all.
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('e'));
+    ed.on_key(Key::Char('o'));
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('e'));
+    ed.on_key(Key::Char('o'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
     ed.on_key(Key::Ctrl('w'));
     assert!(!ed.sidebar_focused());
@@ -8186,27 +8186,35 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     ed.open_sidebar_showing(&dir, crate::sidebar::View::Explorer);
     assert!(ed.sidebar_focused());
 
-    // The same key again closes it: a toggle that cannot undo itself is not
-    // a toggle.
-    type_keys(&mut ed, " e");
-    assert!(ed.panel(crate::sidebar::Side::Left).is_none());
-
-    // A *different* view's key opens on that view…
+    // A *different* view's key means 「show me the outline」, not 「close」.
     type_keys(&mut ed, " o");
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Outline);
-    // …and from there `Space e` means "show me the files", not "close".
-    type_keys(&mut ed, " e");
-    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Explorer);
     assert!(ed.sidebar_focused());
+
+    // The same key again closes it: a toggle that cannot undo itself is not
+    // a toggle.
+    type_keys(&mut ed, " o");
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none());
 
     // `C-w` hands the keys back without putting it away, and the key takes
     // them again rather than closing something the writer is not in.
+    type_keys(&mut ed, " o");
     ed.on_key(Key::Ctrl('w'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_some() && !ed.sidebar_focused());
-    type_keys(&mut ed, " e");
+    type_keys(&mut ed, " o");
     assert!(ed.sidebar_focused(), "the keys came back");
-    type_keys(&mut ed, " e");
+    type_keys(&mut ed, " o");
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "and now it closes");
+
+    // **The file tree has no key of its own** since 2026-09-18 — `空格 e` was
+    // cut, `空格 f` being what 「open a file」 means — so the command names it,
+    // and `off` is the door out the command line never had.
+    ed.execute(":sidebar-left files").unwrap();
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Explorer);
+    ed.execute(":sidebar-left off").unwrap();
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none());
+    ed.execute(":sidebar-left").unwrap();
+    assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "bare is a toggle");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -8286,13 +8294,12 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     assert!(!ed.sidebar_focused(), "the keys went back to the text");
     assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "but the tree stays up");
 
-    // The keys are with the text now, so `Space e` takes them back rather
-    // than closing something the writer is not in; the press after that
-    // closes it.
-    type_keys(&mut ed, " e");
+    // The keys are with the text now, so `空格 s` walks back into the tree;
+    // `q` in the panel is the door out.
+    type_keys(&mut ed, " s");
     assert!(ed.sidebar_focused());
-    type_keys(&mut ed, " e");
-    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "Space e closes it again");
+    ed.on_key(Key::Char('q'));
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "q closes it");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -8821,8 +8828,12 @@ fn space_b_picks_a_buffer_by_name() {
     assert_eq!(ed.current_buffer().text(), "第二篇");
 }
 
+/// `Esc` in the list is the door out; in the query it is the way back to the
+/// list, and so is backspacing past the start of it (2026-09-17) — `/` is how
+/// the keys got there, and going back over the query lands where `/` was
+/// pressed rather than shutting the whole panel.
 #[test]
-fn a_picker_closes_on_esc_and_on_backspacing_past_the_start() {
+fn a_picker_closes_on_esc_and_backspacing_past_the_query_goes_back_to_the_list() {
     let mut ed = Editor::new();
     type_keys(&mut ed, " b");
     ed.on_key(Key::Esc);
@@ -8830,11 +8841,15 @@ fn a_picker_closes_on_esc_and_on_backspacing_past_the_start() {
     assert!(ed.picker().is_none());
 
     type_keys(&mut ed, " b");
+    ed.on_key(Key::Char('/'));
     ed.on_key(Key::Char('x'));
     ed.on_key(Key::Backspace); // back over the `x`
     assert_eq!(ed.mode(), Mode::Picker);
+    assert!(ed.picker().is_some_and(|p| p.typing()), "still in the query");
     ed.on_key(Key::Backspace); // nothing left to go back over
-    assert_eq!(ed.mode(), Mode::Normal);
+    assert!(ed.picker().is_some_and(|p| !p.typing()), "and the keys are in the list");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Normal, "from the list, Esc is the door out");
 }
 
 /// `空格 /` opens the panel, not a prompt — Feature #419.
@@ -9190,9 +9205,11 @@ fn every_prompt_has_a_caret() {
     assert_eq!(ed.prompt_before_caret(), "Z");
     ed.on_key(Key::Esc);
 
-    // The picker's query, the same way.
+    // The picker's query, the same way — `/` first, because the keys start in
+    // the list (2026-09-18).
     let mut ed = typed("那年冬天。\n");
     ed.open_buffer_picker();
+    ed.on_key(Key::Char('/'));
     for c in "abc".chars() {
         ed.on_key(Key::Char(c));
     }
@@ -10364,6 +10381,45 @@ fn key_aliases_remap_normal_mode_keys() {
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('q')); // aliased to `d` → deletes 'a'
     assert_eq!(ed.current_buffer().text(), "bc");
+}
+
+/// **A binding may say what it does, not which key does it** (#429,
+/// 2026-09-18): an action's name, a `:command`, or — as before — keys.
+#[test]
+fn a_binding_takes_an_action_name_or_a_command_or_keys() {
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    type_keys(&mut ed, "abc");
+    ed.on_key(Key::Esc);
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("q".to_string(), "delete_selection".to_string());
+    aliases.insert("Z".to_string(), ":goto 1".to_string());
+    aliases.insert("Y".to_string(), "gl".to_string());
+    ed.set_key_aliases(aliases);
+
+    // A name: what `d` does today, whatever key that is tomorrow.
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.current_buffer().text(), "bc");
+
+    // Keys still work, so every keymap written before this goes on working.
+    ed.on_key(Key::Char('Y'));
+    assert_eq!(ed.cursor(), 1, "gl went to the end of the line");
+
+    // And a command line runs as though typed.
+    ed.on_key(Key::Char('Z'));
+    assert_eq!(ed.cursor(), 0);
+
+    // Every name in the table is spelled the way the table spells it — a
+    // typo here would be silently played as keys into the manuscript.
+    for action in yumete_cjk::actions::ALL {
+        assert!(
+            yumete_cjk::actions::action(action.name).is_some(),
+            "{} is not findable by its own name",
+            action.name
+        );
+    }
 }
 
 #[test]
@@ -14313,4 +14369,46 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     assert!(ed.panel_focus().is_none(), "空格 s walks back out");
     ed.execute(":wiki panel").unwrap();
     assert!(ed.showing(crate::sidebar::View::Wiki).is_none(), "and again puts it away");
+}
+
+/// The picker has two layers and a preview (2026-09-17): it opens in the list,
+/// where `jk` walk; `/` puts the keys in the query, where typing narrows it and
+/// `Esc` hands them back; and what is highlighted is shown beside it.
+#[test]
+fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
+    let dir = std::env::temp_dir().join(format!("yumete-picker-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("一.md"), "第一章的頭一句。\n第二句。\n").unwrap();
+    std::fs::write(dir.join("二.md"), "另一章。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&dir.join("一.md")).unwrap();
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('f'));
+    assert!(ed.picker().is_some_and(|p| !p.typing()), "the keys start in the list");
+
+    // The preview is the file the highlight is on — the open buffer where
+    // there is one, so unsaved writing shows.
+    let (name, lines) = ed.picker_preview(4).expect("something highlighted");
+    assert!(name.ends_with(".md"), "{name}");
+    assert!(!lines.is_empty());
+
+    // `jk` walk from the first keystroke, and the preview follows.
+    let first = ed.picker_preview(4).unwrap().0;
+    ed.on_key(Key::Char('j'));
+    assert_ne!(ed.picker_preview(4).unwrap().0, first, "j walked, and the preview followed");
+
+    // `/` is the query; `Esc` hands the keys back to the list, and does not
+    // close the picker.
+    ed.on_key(Key::Char('/'));
+    assert!(ed.picker().is_some_and(|p| p.typing()), "/ puts the keys in the query");
+    ed.on_key(Key::Esc);
+    assert!(ed.picker().is_some_and(|p| !p.typing()), "Esc is the layer, not the door out");
+    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Char('二'));
+    assert_eq!(ed.picker().unwrap().matches().len(), 1);
+    ed.on_key(Key::Enter);
+    assert!(ed.picker().is_none());
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("二.md")));
+    std::fs::remove_dir_all(&dir).ok();
 }

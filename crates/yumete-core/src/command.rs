@@ -244,9 +244,14 @@ pub enum Command {
     /// `:replace [folder]` and its `-cd`/`-wd`/`-gd` — the same panel with the
     /// replace row already showing (#419).
     OpenReplace(crate::search_panel::Where),
-    /// `:sidebar-show-left|right [panel]` — which side a panel lives on
+    /// `:panel-left|right [panel]` — which side a panel lives on
     /// (#293). No name means the one holding the keys.
     ShowSidebarAt(crate::sidebar::Side, Option<crate::sidebar::Panel>),
+    /// `:sidebar-left|right [off|panel]` — that side of the screen itself
+    /// (2026-09-18): bare it opens or puts away, `off` puts away, a panel name
+    /// opens it showing that one. The keys had a toggle from the first day
+    /// (`空格 e`, `空格 o`) and the command line had no way to say it at all.
+    SidebarSide(crate::sidebar::Side, SidebarAsk),
     /// `:table-header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
     SetTableHeader(Option<bool>),
@@ -406,6 +411,9 @@ pub enum Command {
     /// `:keymap [helix|vim]` — lay a shipped keymap under the reader's own
     /// aliases; bare reports which (#428).
     SetKeymap(Option<yumete_cjk::KeyPreset>),
+    /// `:keymap actions` — every name a key may be bound to, in a listing
+    /// (#429).
+    ListActions,
     /// `:write-as <path>` (and `:write-as!`) — write this buffer to another file
     /// **and go on editing that one**. `:w <path>` is the other half: a copy,
     /// leaving the buffer where it is.
@@ -1781,6 +1789,7 @@ const INDENT_LEVELS: &[Word] = &[
 const KEYMAPS: &[Word] = &[
     Word { name: "helix", help: "cmd.keymaps.helix", needs: &[] },
     Word { name: "vim", help: "cmd.keymaps.vim", needs: &[] },
+    Word { name: "actions", help: "cmd.keymaps.actions", needs: &[] },
 ];
 
 /// What Tab types in Insert mode.
@@ -2181,10 +2190,33 @@ const SWITCH: &[Word] = &[
     },
 ];
 
-/// Which panel a `:sidebar-show-*` names, or `None` for 「the one I am in」.
+/// Which panel a `:panel-left`／`:panel-right` names, or `None` for 「the one
+/// I am in」.
 ///
 /// A word nobody knows is an error rather than 「the one I am in」: silently
 /// moving the wrong panel is worse than saying the name is not one.
+/// What a `:sidebar-left`／`:sidebar-right` was asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidebarAsk {
+    /// No name: open that side if it is away, put it away if it is there.
+    Toggle,
+    /// `off`.
+    Off,
+    /// A panel's name: open that side showing it.
+    Show(crate::sidebar::Panel),
+}
+
+/// `off`, or one of the panels — [`SIDEBAR_SIDES`]'s words read back.
+fn sidebar_ask(command: &'static str, word: Option<&str>) -> Result<SidebarAsk, CommandError> {
+    match word {
+        None => Ok(SidebarAsk::Toggle),
+        Some("off") => Ok(SidebarAsk::Off),
+        Some(word) => Ok(SidebarAsk::Show(
+            named_panel(command, Some(word))?.expect("a word was given"),
+        )),
+    }
+}
+
 fn named_panel(
     command: &'static str,
     word: Option<&str>,
@@ -2224,8 +2256,23 @@ const ON_OFF: &[Word] = &[
     },
 ];
 
-/// The five panels a slot can hold, for `:sidebar-show-*` — Feature #293.
+/// The panels a slot can hold, for `:panel-left`／`:panel-right` — Feature #293.
 const SIDEBAR_PANELS: &[Word] = &[
+    Word { name: "files", help: "label.panel.files", needs: &[] },
+    Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
+    Word { name: "outline", help: "label.panel.outline", needs: &[] },
+    Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
+    Word { name: "detail", help: "label.panel.detail", needs: &[] },
+    Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
+];
+
+/// What `:sidebar-left` and `:sidebar-right` take: `off`, or a panel to open
+/// there. The panels are [`SIDEBAR_PANELS`] again rather than a reference to
+/// it — a `&[Word]` cannot be concatenated in a `const`, and the two lists
+/// answer different questions anyway (one 「which panel」, one 「what to do
+/// with this side」).
+const SIDEBAR_SIDES: &[Word] = &[
+    Word { name: "off", help: "label.sidebar-off", needs: &[] },
     Word { name: "files", help: "label.panel.files", needs: &[] },
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
@@ -2784,7 +2831,14 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.keymap",
         needs: &[],
         params: &[Param::Words { of: KEYMAPS, default: None }],
-        build: Some(|p| Ok(Command::SetKeymap(p.arg(0).and_then(yumete_cjk::KeyPreset::parse)))),
+        build: Some(|p| {
+            Ok(match p.arg(0) {
+                // 「What can I bind a key to」 is the other half of a keymap,
+                // so it is asked of the same command (#429).
+                Some("actions") => Command::ListActions,
+                word => Command::SetKeymap(word.and_then(yumete_cjk::KeyPreset::parse)),
+            })
+        }),
     },
     Entry {
         name: "theme-fill",
@@ -3502,9 +3556,35 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Workspace))),
     },
     Entry {
-        name: "sidebar-show-left",
+        name: "sidebar-left",
         aliases: &[],
-        help: "cmd.sidebar.left",
+        help: "cmd.sidebar.left-side",
+        needs: &[],
+        params: &[Param::Words { of: SIDEBAR_SIDES, default: None }],
+        build: Some(|p| {
+            Ok(Command::SidebarSide(
+                crate::sidebar::Side::Left,
+                sidebar_ask(p.name, p.arg(0))?,
+            ))
+        }),
+    },
+    Entry {
+        name: "sidebar-right",
+        aliases: &[],
+        help: "cmd.sidebar.right-side",
+        needs: &[],
+        params: &[Param::Words { of: SIDEBAR_SIDES, default: None }],
+        build: Some(|p| {
+            Ok(Command::SidebarSide(
+                crate::sidebar::Side::Right,
+                sidebar_ask(p.name, p.arg(0))?,
+            ))
+        }),
+    },
+    Entry {
+        name: "panel-left",
+        aliases: &[],
+        help: "cmd.panel.left",
         needs: &[],
         params: &[Param::Words { of: SIDEBAR_PANELS, default: None }],
         build: Some(|p| {
@@ -3515,9 +3595,9 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "sidebar-show-right",
+        name: "panel-right",
         aliases: &[],
-        help: "cmd.sidebar.right",
+        help: "cmd.panel.right",
         needs: &[],
         params: &[Param::Words { of: SIDEBAR_PANELS, default: None }],
         build: Some(|p| {

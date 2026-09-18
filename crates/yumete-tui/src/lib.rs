@@ -9,6 +9,7 @@
 //! The terminal stack is `ratatui` (the maintained `tui-rs` fork) over its
 //! bundled `crossterm` backend, so no ANSI escapes are hand-written here.
 
+pub mod chrome;
 pub mod panel;
 pub mod table;
 pub mod theme;
@@ -33,7 +34,7 @@ use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
+use ratatui::widgets::{Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
@@ -1527,6 +1528,13 @@ const FRAME_CEILING: std::time::Duration = std::time::Duration::from_millis(500)
 /// finds the file, and `/` takes 中文 and finds the words. Those are the three
 /// places a Chinese name is actually typed.
 fn composes_here(editor: &Editor) -> bool {
+    // ⚠️ **The picker has two layers, and only one of them is typing**
+    // (2026-09-17). `Mode::Picker` composes because the query takes 中文 — but
+    // with the keys in the *list*, `j` and `k` walk it, and handing them to the
+    // engine made them a code: 「我按了 space f 進入 picker，按 jk 他開始輸入」.
+    if let Some(picker) = editor.picker() {
+        return picker.typing();
+    }
     if editor.mode().composes() {
         return true;
     }
@@ -3423,7 +3431,7 @@ fn draw(
     panels.extend(draw_reference_menu(frame, editor, config, area, footer));
     // Where the picker put its caret, so the candidate panel can stand under
     // the query instead of over the page the list is already covering.
-    let picker = draw_picker(frame, editor, config, ime, area, footer);
+    let picker = draw_picker(frame, editor, config, ime, area);
     let picker_caret = picker.map(|(caret, _)| caret);
     panels.extend(picker.and_then(|(_, list)| list));
     // One panel for every half-pressed sequence, `空格` included — it used to
@@ -3622,25 +3630,15 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
         width,
         height,
     );
-    frame.render_widget(Clear, panel);
-    // The same 漢字 half-cell rule every other panel here obeys (#286).
-    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(if config.panel.rounded {
-                BorderType::Rounded
-            } else {
-                BorderType::Plain
-            })
-            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
-            .title(Span::styled(
-                asked.title.clone(),
-                Style::default().fg(ink.gold()).bg(ink.paper()),
-            ))
-            .style(Style::default().bg(ink.paper())),
-        panel,
-    );
+    crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        rounded: config.panel.rounded,
+        border: Style::default().fg(ink.rule()).bg(ink.paper()),
+        ground: Style::default().bg(ink.paper()),
+        title: Some((
+            asked.title.clone(),
+            Style::default().fg(ink.gold()).bg(ink.paper()),
+        )),
+    });
     let ground = Style::default().bg(ink.paper());
     let limit = panel.x + width - 1;
     let buf = frame.buffer_mut();
@@ -3968,30 +3966,18 @@ fn draw_list(
         .max(yumete_cjk::str_width(title) + 2);
     let width = (inner + 2).min(area.width as usize) as u16;
     let menu = Rect::new(area.x, bottom - height, width, height);
-    frame.render_widget(Clear, menu);
-    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
-    // renderer skips whatever a wide glyph covers — so a border written into
-    // the second of them is stored and then never emitted, and the panel opens
-    // with its whole left wall missing. Blank the glyph; the wall gets a cell.
-    vertical::clear_wide_left_edge(frame.buffer_mut(), menu);
     // The same ring, at the same rung, with its name in the same corner as the
     // which-key panel's: two panels that open in the same place and do the
     // same kind of thing should not look like two different programs.
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(match rounded {
-                true => BorderType::Rounded,
-                false => BorderType::Plain,
-            })
-            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
-            .title(Span::styled(
-                title,
-                Style::default().fg(ink.gold()).bg(ink.paper()),
-            ))
-            .style(Style::default().bg(ink.paper())),
-        menu,
-    );
+    crate::chrome::draw(frame, menu, &crate::chrome::Ring {
+        rounded,
+        border: Style::default().fg(ink.rule()).bg(ink.paper()),
+        ground: Style::default().bg(ink.paper()),
+        title: Some((
+            title.to_string(),
+            Style::default().fg(ink.gold()).bg(ink.paper()),
+        )),
+    });
 
     let ground = Style::default().bg(ink.paper());
     let text = ground.fg(ink.text());
@@ -4316,26 +4302,17 @@ fn draw_hud_panel(
         return;
     };
     let panel = Rect::new(x, y, width, 3);
-    frame.render_widget(Clear, panel);
-    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
-    // renderer skips whatever a wide glyph covers — so a border written into
-    // the second of them is stored and then never emitted, and the panel opens
-    // with its whole left wall missing. Blank the glyph; the wall gets a cell.
-    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(match config.panel.rounded {
-                true => BorderType::Rounded,
-                false => BorderType::Plain,
-            })
-            // The same ring at the same rung as every other panel on the
-            // screen: what separates a panel from the page is its rule and its
-            // 金墨, not a lighter ground.
-            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
-            .style(Style::default().bg(ink.paper())),
-        panel,
-    );
+    crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        rounded: config.panel.rounded,
+        // The same ring at the same rung as every other panel on the screen:
+        // what separates a panel from the page is its rule and its 金墨, not a
+        // lighter ground.
+        border: Style::default().fg(ink.rule()).bg(ink.paper()),
+        ground: Style::default().bg(ink.paper()),
+        // No name: it is one line of what you just typed, and a title over it
+        // would be taller than the thing it names.
+        title: None,
+    });
     put_text(
         frame.buffer_mut(),
         panel.x + 1,
@@ -6033,61 +6010,279 @@ fn draw_picker(
     config: &Config,
     ime: &ImeSession,
     area: Rect,
-    status: Rect,
 ) -> Option<(Position, Option<Rect>)> {
     let picker = editor.picker()?;
     let ink = crate::theme::Palette::of(config);
     let matches = picker.matches();
-    let items: Vec<Row> = matches
+    // The name, and **which of its characters the query is standing on** — the
+    // one thing that says why a name with scattered letters is on the list at
+    // all (2026-09-18).
+    let items: Vec<(String, Vec<usize>)> = matches
         .iter()
-        .map(|i| Row::plain(i.label().to_string()))
+        .map(|i| (i.label().to_string(), picker.hits(i.label())))
         .collect();
     // The code being composed shows in the query, where a `/` search shows it
     // too: the reader has to see 「di3」 turn into 「第」 before choosing.
     let preedit = prompt_preedit(editor, ime);
-    let footer = format!(
-        "{}/{}  {}{}",
+    // ⚠️ **Built in three parts, because the caret is measured off the first
+    // one** (2026-09-17). It used to be one `format!` and the caret's column
+    // was worked out backwards — `footer.len() - query.len() - preedit.len()`
+    // — which was a byte index into the footer. Adding anything *after* the
+    // query put that index inside 「開」 and the editor panicked while drawing:
+    // 「space + f + j + j + Esc 我就退出 yumete 了」. Now nothing is sliced.
+    let counted = format!(
+        "{}/{}  ",
         if items.is_empty() {
             0
         } else {
             picker.selected() + 1
         },
         picker.total(),
-        picker.query(),
-        preedit
     );
+    // Which layer the keys are in, said after the query rather than where it
+    // would be typed.
+    let hint = match picker.typing() {
+        true => format!("  {}", say!("picker.in-the-query")),
+        false => format!("  {}", say!("picker.in-the-list")),
+    };
+    let footer = format!("{counted}{}{preedit}{hint}", picker.query());
     let at = picker.selected();
+    // **In the middle of the window, the list on the left and what it is
+    // standing on to the right of it** (2026-09-17: 「左側是文件窗口，右側是
+    // 預覽」). A picker is the one panel that is the whole of what you are
+    // doing while it is open — the writing behind it is not being read — so
+    // unlike a note it takes the middle rather than a corner.
+    //
+    // ⚠️ **The box does not measure itself off the list.** It used to be drawn
+    // by [`draw_list`], which shrinks to whatever is in it — so a query that
+    // matched nothing collapsed the whole picker into a three-line box with no
+    // preview beside it, and the one frame where a reader most needs to see
+    // 「nothing matched」 is the frame that looked broken: 「一模一样的问题根本
+    // 没有变好」. A picker is a place on the page; it keeps its shape whether
+    // it holds one name or a hundred and thirty-seven.
+    // **Half the window, and never less than ten rows** (2026-09-18:
+    // 「面板可以再大一些，比如高度是 max(10, 一半行數)」) — which is what every
+    // picker worth copying does: a list eight rows deep in an eighty-row
+    // terminal is a keyhole.
+    let rows = ((area.height / 2).max(10) + 3).min(area.height).max(4);
+    let wide = (area.width * 4 / 5).clamp(24, 120).min(area.width.saturating_sub(2));
+    let box_ = Rect::new(
+        area.x + (area.width.saturating_sub(wide)) / 2,
+        area.y + (area.height.saturating_sub(rows)) / 2,
+        wide,
+        rows,
+    );
+    // Two fifths for the names, the rest for the preview — and a window too
+    // narrow for both gives the whole of itself to the names.
+    let names = match box_.width >= 56 {
+        true => (box_.width * 2 / 5).max(24),
+        false => box_.width,
+    };
+    let left = Rect::new(box_.x, box_.y, names, rows);
+    let ground = Style::default().bg(ink.paper());
+    crate::chrome::draw(frame, left, &crate::chrome::Ring {
+        rounded: config.panel.rounded,
+        border: ground.fg(ink.rule()),
+        ground,
+        title: Some((picker.title.clone(), ground.fg(ink.gold()))),
+    });
     // One column: these are paths, long and of every length, and columns of
     // ragged paths are harder to read down than a single list.
-    let list = draw_list(
-        frame,
-        ink,
-        config.panel.rounded,
-        area,
-        status.y,
-        List {
-            items: &items,
-            focus: at,
-            highlight: Some(at),
-            footer: &footer,
-            columns: false,
-            // The picker already says what it is picking; now it says it in
-            // the corner of its own ring instead of at the head of the footer.
-            title: &picker.title,
-            cap: MENU_WIDTH as usize,
-            whole: None,
-        },
-    );
-    // The caret sits in the query, which is typed text like any other prompt.
-    // The footer is `title  n/total  query`, so the query begins as far in as
-    // everything before it is wide.
-    let before = footer.len() - picker.query().len() - preedit.len();
-    let col = yumete_cjk::str_width(&footer[..before])
-        + yumete_cjk::str_width(&picker.before_caret())
-        + yumete_cjk::str_width(&preedit);
-    let caret = Position::new(status.x + 1 + col as u16, status.y);
+    let deep = rows.saturating_sub(3) as usize;
+    let first = at
+        .saturating_sub(deep.saturating_sub(1))
+        .min(items.len().saturating_sub(deep.min(items.len())));
+    let on = Style::default().bg(ink.text()).fg(ink.paper());
+    let limit = left.x + names - 1;
+    {
+        let buf = frame.buffer_mut();
+        for slot in 0..deep {
+            let Some(item) = items.get(first + slot) else {
+                break;
+            };
+            let y = left.y + 1 + slot as u16;
+            let picked = first + slot == at;
+            let style = match picked {
+                true => on,
+                false => ground.fg(ink.text()),
+            };
+            if picked {
+                for x in left.x + 1..limit {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.set_symbol(" ").set_style(style);
+                    }
+                }
+            }
+            // **The name first, the folders after it in the quiet ink**
+            // (2026-09-18). A row is forty cells and
+            // `crates/yumete-core/src/editor/sidebar.rs` is forty-two, so
+            // drawing the path as it is spells out the folders and cuts off
+            // the one word that was typed. Every picker worth copying puts
+            // the name first for this reason; the cut then falls on the
+            // folder, which is the half a reader can do without.
+            //
+            // Character by character, so the ones the query found can be 金 —
+            // and on the inked row they stay the inked row's own two colours,
+            // where a third would read as a mistake.
+            let chars: Vec<char> = item.0.chars().collect();
+            let name_at = chars
+                .iter()
+                .rposition(|&c| c == '/' || c == '\\')
+                .map_or(0, |i| i + 1);
+            let mut x = left.x + 1;
+            let mut ink_at = |n: Option<usize>, ch: char, x: &mut u16, quiet: bool| {
+                let w = yumete_cjk::char_width(ch) as u16;
+                if *x + w > limit {
+                    return false;
+                }
+                let hit = n.is_some_and(|n| item.1.contains(&n));
+                let this = match (hit, picked, quiet) {
+                    (true, false, _) => ground.fg(ink.gold()),
+                    (true, true, _) => on.add_modifier(Modifier::BOLD),
+                    (false, false, true) => ground.fg(ink.quiet()),
+                    (false, _, _) => style,
+                };
+                put_text(buf, *x, y, limit, &ch.to_string(), this);
+                *x += w;
+                true
+            };
+            for n in name_at..chars.len() {
+                if !ink_at(Some(n), chars[n], &mut x, false) {
+                    break;
+                }
+            }
+            if name_at > 0 {
+                for ch in "  ".chars() {
+                    ink_at(None, ch, &mut x, true);
+                }
+                // The folders, without the separator the name was split on.
+                for n in 0..name_at - 1 {
+                    if !ink_at(Some(n), chars[n], &mut x, true) {
+                        break;
+                    }
+                }
+            }
+        }
+        // Nothing matched is something to say, not an empty box to puzzle over.
+        if items.is_empty() {
+            put_text(
+                buf,
+                left.x + 1,
+                left.y + 1,
+                limit,
+                &say!("picker.nothing-matched"),
+                ground.fg(ink.quiet()),
+            );
+        }
+        put_text(
+            buf,
+            left.x + 1,
+            left.y + rows - 2,
+            limit,
+            &footer,
+            ground.fg(ink.quiet()),
+        );
+    }
+    // The preview, in the columns the names left: the head of the file, or of
+    // the buffer if it is already open and has unsaved writing in it.
+    let over = Rect::new(box_.x + names, box_.y, box_.width.saturating_sub(names), rows);
+    if over.width >= 20 {
+        draw_preview(frame, editor, config, ink, over);
+    }
+    let panels = Some(Rect::new(box_.x, box_.y, names + over.width.max(0), rows));
+    // **The caret sits in the query, and the query is inside the panel** — not
+    // on the status line, which is where it used to be put and where it was
+    // seen to be: 「光标在状态栏中打了j」. Nothing is being typed while the
+    // keys are in the list, so there the caret is on the name it is standing
+    // on instead.
+    let caret = match picker.typing() {
+        true => Position::new(
+            left.x
+                + 1
+                + (yumete_cjk::str_width(&counted)
+                    + yumete_cjk::str_width(&picker.before_caret())
+                    + yumete_cjk::str_width(&preedit)) as u16,
+            left.y + rows - 2,
+        ),
+        false => Position::new(left.x + 1, left.y + 1 + (at - first) as u16),
+    };
     frame.set_cursor_position(caret);
-    Some((caret, list))
+    Some((caret, panels))
+}
+
+/// What the picker is standing on, drawn beside the list.
+///
+/// Plain text at the page's own ink: this is a glance at a file to say 「yes,
+/// that one」, not a second window on it — the editor itself is one `Enter`
+/// away, and anything more here would be a renderer in a panel.
+fn draw_preview(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    ink: crate::theme::Palette,
+    area: Rect,
+) {
+    let ground = Style::default().bg(ink.at(yumete_config::rung::CHROME));
+    // **The ring is drawn even when there is nothing to put in it** — a query
+    // that matches no file left the writing showing through the shape the
+    // preview had been occupying a keystroke ago, which reads as a panel that
+    // broke rather than one with nothing to say (2026-09-17).
+    let (name, lines) = editor
+        .picker_preview(area.height.saturating_sub(2) as usize)
+        .unwrap_or_default();
+    crate::chrome::draw(frame, area, &crate::chrome::Ring {
+        rounded: config.panel.rounded,
+        border: ground.fg(ink.rule()),
+        ground,
+        title: Some((name.clone(), ground.fg(ink.gold()))),
+    });
+    // **Coloured the way the file itself would be** (2026-09-18): a chapter's
+    // headings in 金, a `.py`'s keywords through the same tree-sitter pass the
+    // page uses. A preview in one flat ink asks the reader to read it; a
+    // coloured one they can glance at, which is the whole job of this pane.
+    let language = yumete_core::code::Language::from_extension(
+        std::path::Path::new(&name).extension().and_then(|e| e.to_str()).unwrap_or(""),
+    );
+    let coloured = language.map(|language| yumete_core::code::highlight(language, &lines));
+    let buf = frame.buffer_mut();
+    let limit = area.x + area.width - 1;
+    for (i, line) in lines.iter().enumerate() {
+        let y = area.y + 1 + i as u16;
+        if y + 1 >= area.y + area.height {
+            break;
+        }
+        match coloured.as_ref().and_then(|all| all.get(i)) {
+            Some(spans) if !spans.is_empty() => {
+                let mut x = area.x + 1;
+                for span in spans {
+                    let text: String = line
+                        .chars()
+                        .skip(span.start)
+                        .take(span.end.saturating_sub(span.start))
+                        .collect();
+                    let style = ground.patch(markup_style(span.kind, ink));
+                    let after = put_text(buf, x, y, limit, &text, style);
+                    x = after;
+                    if x >= limit {
+                        break;
+                    }
+                }
+            }
+            // Markdown and plain writing: the one distinction worth drawing is
+            // a heading, which is how a reader knows *where* in the chapter
+            // this glance lands.
+            _ => {
+                let style = match line.trim_start().starts_with('#') {
+                    true => ground.fg(ink.gold()),
+                    false => match line.trim_start().starts_with('>') {
+                        true => ground.fg(ink.quiet()),
+                        false => ground.fg(ink.text()),
+                    },
+                };
+                put_text(buf, area.x + 1, y, limit, line, style);
+            }
+        }
+    }
 }
 
 /// The composition in progress, when a `/` or `:` prompt — or a picker's
@@ -8207,25 +8402,16 @@ fn draw_panel_rows(
         }
     }
 
-    frame.render_widget(Clear, panel);
-    // A wide glyph in the column left of the panel covers the panel's own border
-    // cell, and the renderer skips what a wide glyph covers — so without this
-    // the left border is never emitted.
-    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
-    frame.render_widget(
-        Paragraph::new(lines).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(if config.panel.rounded {
-                    BorderType::Rounded
-                } else {
-                    BorderType::Plain
-                })
-                .border_style(Style::default().fg(skin.border()).bg(skin.paper()))
-                .style(Style::default().bg(skin.paper()).fg(skin.text())),
-        ),
-        panel,
-    );
+    let ground = Style::default().bg(skin.paper()).fg(skin.text());
+    let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        rounded: config.panel.rounded,
+        border: Style::default().fg(skin.border()).bg(skin.paper()),
+        ground,
+        title: None,
+    });
+    // The rows go inside the ring rather than through a `Paragraph`'s own
+    // block: the ring is `chrome`'s now, and one thing should draw it.
+    frame.render_widget(Paragraph::new(lines).style(ground), inner);
 }
 
 #[cfg(test)]
@@ -14353,14 +14539,25 @@ fn squeezed(text: &str) -> String {
         let text = page_text(&buffer);
         assert!(text.contains("緩衝區"), "{text:?}");
         assert!(!text.contains("打開文件"), "the menu is gone: {text:?}");
-        // And it is a small box, not the page.
+        // And it is a box in the middle of the page, not the page: half the
+        // window and three rows of furniture (2026-09-18 — it was eight rows
+        // and a keyhole).
+        //
+        // ⚠️ **Counted off the ring, not off the ground.** This asked for a
+        // hard-coded `Rgb(0x26, 0x2a, 0x27)` and got it nowhere — the palette
+        // moved under it — while the assertion it carried was 「at most nine
+        // rows」, which zero satisfies. A test that passes by measuring nothing
+        // is worse than no test; the border is drawn by definition.
         let drawn = (0..buffer.area.height)
             .filter(|&y| {
                 (0..buffer.area.width)
-                    .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x26, 0x2a, 0x27)))
+                    .any(|x| matches!(buffer[(x, y)].symbol(), "│" | "╭" | "╰" | "┌" | "└"))
             })
             .count();
-        assert!(drawn <= 9, "the picker took {drawn} rows");
+        assert!(
+            (10..=24 / 2 + 3).contains(&drawn),
+            "half the page and its rings, and never fewer than ten rows: {drawn}"
+        );
     }
 
     /// Which rows a command menu covers, and where its columns start.
@@ -15170,6 +15367,56 @@ fn squeezed(text: &str) -> String {
                 keys.concat()
             );
         }
+    }
+
+    /// **A query, then `Esc`, and the frame still draws** (2026-09-17).
+    ///
+    /// The hint that says what the list layer's keys are goes on the end of
+    /// the footer, and the caret's column used to be worked out by subtracting
+    /// byte lengths from the whole of it — so anything after the query put the
+    /// index inside a 漢字 and the editor panicked **while drawing**, which is
+    /// the one place a panic takes the session with it: 「space + f + j + j +
+    /// Esc 我就退出 yumete 了」.
+    #[test]
+    fn the_picker_draws_with_a_query_and_the_keys_in_the_list() {
+        let mut editor = Editor::new();
+        let config = Config::default();
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('f'));
+        editor.on_key(Key::Char('/'));
+        for c in "jj".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.on_key(Key::Esc);
+        assert!(editor.picker().is_some_and(|p| !p.typing()));
+        // Panicked here before the fix, whatever the query matched.
+        let text = buffer_to_text(&render_with(&editor, &config, &no_ime(), 80, 24));
+        assert!(text.contains("jj"), "the query is drawn: {text}");
+        // **And the box keeps its shape with nothing in it** — the query
+        // matches no file, and the panel is still a panel, with the reason
+        // written in it.
+        assert!(text.contains(&yumete_core::say!("picker.nothing-matched")), "{text}");
+    }
+
+    /// **The picker's query composes; its list does not** (2026-09-17).
+    ///
+    /// The gate used to ask only 「is this mode a typing one」, and `Mode::Picker`
+    /// is — so with the keys in the list, `j` and `k` went to the engine as a
+    /// code instead of walking the list: 「我按了 space f 進入 picker，按 jk 他
+    /// 開始輸入」. One line in `composes_here`, and this is the test that keeps
+    /// it: a layer nobody asked about is how that bug happened.
+    #[test]
+    fn the_pickers_list_layer_does_not_compose() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('f'));
+        assert!(editor.picker().is_some(), "the picker is open");
+        assert!(!composes_here(&editor), "it opens in the list, where jk walk");
+        editor.on_key(Key::Char('/'));
+        assert!(composes_here(&editor), "the query takes 中文");
+        editor.on_key(Key::Esc);
+        assert!(editor.picker().is_some(), "Esc is the layer, not the door out");
+        assert!(!composes_here(&editor), "…and back in the list");
     }
 
     /// The command line takes no 中文 anywhere on it — not after the command

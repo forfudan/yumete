@@ -202,6 +202,75 @@ Dependency direction (no cycles): `yumete` → {view, tui, lsp, config} →
 
 ---
 
+## 4.9 畫在屏幕上的東西，各叫什麽（2026-09-18 定）
+
+一個詞一個東西，代碼註釋、手冊、對話都用這幾個。以前一律叫「面板」，於是
+「那個面板」指不定是哪一個。
+
+| 名字 | 是什麽 | 例子 |
+| --- | --- | --- |
+| **邊欄** | 占列、常駐、鍵可以進去。左右兩槽，每槽上層常駐、下層臨時 | 檔案樹、緩衝區、大綱（`空格 o`）、高級搜索（`空格 /`）、百科頁；下層：字典（`空格 d`）、表格詳情（`t i`） |
+| **浮框（鍵表）** | 貼光標、不收鍵、按一下就走 | `空格`／`g`／`m`／`z`／`t` 的鍵表，`:` 命令選單，`::` 命令搜索 |
+| **浮框（正文）** | 貼光標、不收鍵、光標一走就没 | 百科詞條、`[yumete]` 那行的讀取結果、腳註與批註、短的單元格詳情 |
+| **挑選器** | 居中、模態、收全部鍵，讓你**挑一個** | `空格 f`／`空格 b`／`空格 "`，`:open` 不帶參數，表格跳轉命中多行 |
+| **問句** | 居中、模態、收全部鍵，讓你**答一次** | 這一存把檔案撐大了一倍以上、`:reload` 發現外面改了、`R y` 全部換掉 |
+| **候選欄** | 輸入法自己畫，錨在光標 | 橫排／竪排／格狀／內嵌四種 |
+| **狀態欄 ＋ 提示** | 永遠在 | 底行的模式、檔名、行列字數；右端的碼位；光標旁打了一半的命令 |
+
+**兩條軸就說完了**：貼光標還是居中、收鍵還是不收鍵。收不收鍵不是畫法的事，是
+`Mode`（`Picker`／`Query`／其餘）——那一層已經分開了。
+
+### 4.9.1 代碼層面該切三層（2026-09-18 定，先只做第一層）
+
+同一件事現在寫了**八遍**：`Borders::ALL` ＋ 圓角開關 ＋ 金色標題 ＋
+`clear_wide_left_edge`（那道「漢字不能被切半格」的規矩）在 `panel.rs` 一處、
+`vertical.rs` 一處、`lib.rs` 六處。
+
+| 層 | 職責 | 現狀 |
+| --- | --- | --- |
+| **框** | 邊框、圓角、標題、底色、半格規矩，交回內框 | 八處各寫一遍 |
+| **擺放** | ① 貼光標並躲開它（含四分之一屏上限）② 居中 | ① 在 `panel.rs`；② 在 `draw_picker` 與 `draw_query` 各一份 |
+| **肚子** | 鍵表／正文（折行）／清單（滾動＋高亮＋頁腳） | 前兩個在 `panel::Body`，清單在 `draw_list` 另立一套 |
+
+**重構的好處不是少幾行**，是作者說的那兩條：呼叫統一明確，而且**有優先級、保證
+同一時刻只出現一個**。今天「一處只開一個」是散在各處的 `if`（百科頁開着就不浮
+詞條、批註先於 `[yumete]` 提示、挑選器一定拿走候選欄的位置……），不是一條規矩。
+
+順帶一條線索：竪排提示框缺一角，很可能就是八份裏某一份少了半格規矩或者邊算錯
+一格——抽框的時候一起查。
+
+---
+
+## 4.10 鍵位自定義的兩層（#428／#429）
+
+**第一層（#428，2026-09-17 落地）**：`[keys.normal]` 把一串鍵翻成另一串鍵。左右都可以
+是序列（`"dd" = "xd"`），`[keys] preset = "vim"` 是一整張這樣的表，`:keymap vim` 當場換。
+vim 那張表是**翻譯**，不是第二套語法：只翻「按下去會改錯字」的那幾個。
+
+**第二層（#429，2026-09-18 落地）**：右邊可以是**動作的名字**。
+
+```toml
+[keys.normal]
+x  = "delete_selection"   # 動作名
+"\\" = ":write"            # 或者一條命令
+"dj" = "xxd"              # 或者還是鍵（第一層照舊）
+```
+
+三種右邊按這個順序認：`:` 開頭是命令行；認得的動作名是那個動作；剩下的當鍵。
+`yumete_cjk::actions::ALL` 是那張表（八十條），`:keymap actions` 把它列成三列——名字、
+做什麽、現在是哪個鍵。名字取 helix 的，理由是從那邊來的人猜得到、往那邊去的人搜得到。
+
+⚠️ **名字是門面，默認鍵還在 `match` 裏。** 一條動作眼下說的是「它是什麽」和「現在怎麽
+做到」（播一串鍵，或跑一條命令）。今天買到的是配置與手冊有了一套穩定的詞；還没買到的是
+「默認鍵從表裏讀」。那是下一批，可以一條一條搬，**而已經照這些名字寫過的配置一行都不用
+改**——這正是分兩層的意思。
+
+⚠️ **名字壓過拼得出它的鍵。** `search` 是動作名，也是六個字母。没人想按那六個字母，所以
+名字贏；寫錯的名字在讀配置時就說出來（右邊帶下劃線却不認得＝本來想寫名字），不會悄悄打
+進文章裏。
+
+---
+
 ## 5. Feature table & phasing
 
 Phases are ordered by priority, most writer-critical first:
@@ -3687,6 +3756,38 @@ and were corrected with fault 12.
 **The class this belongs to** is stated under §5.2.2's heading: a key's name
 lives in as many as seven places. Nothing here was found by a test, and the
 one that would have found all four is already named below.
+
+### 13 · The picker was a keyhole — **reworked 2026-09-18**
+
+`空格 f` was a box eight rows deep in the corner with one column of paths in
+it, no preview, and the keys in the query — so `jk` were letters, and the
+arrows were the only way to walk. Reported twice in one evening: 「我按了
+space f 進入 picker，按 jk 他開始輸入，而且光標在狀態欄中打了 j」, and then
+「一模一樣的問題根本没有變好」 when the first fix only stopped the panic.
+
+| what | now |
+| --- | --- |
+| 尺寸 | `max(10, 半屏) + 3` 行、八成寬（上限 120），**固定** |
+| 佈局 | 左邊名字，右邊預覽（開着的檔案預覽緩衝區，所以没存的字也看得見） |
+| 鍵 | 開在**列表**層：`jk` 走、`g`／`G`、`PageUp`／`PageDown`、`Enter` 開、`q`／`Esc` 關；`/` 或 `i` 進查詢層，`Esc` 回來 |
+| 行 | **檔名在前**，目錄淡墨跟在後面 |
+| 命中 | 金色；選中那一行用粗體 |
+| 算分 | 相鄰、詞首、**在檔名裏**加分，短名壓長名；兩趟對齊（正向找終點、反向收緊） |
+| 空查詢的次序 | 這次待過的檔案置頂，其餘 `.md`／`.txt`／`.typ`／`.csv` 在代碼與構建産物之前 |
+| 預覽 | 有 grammar 的走 tree-sitter，markdown 的標題金色、引用淡墨 |
+
+**四件事是這一輪學到的，不是設計出來的：**
+
+1. **崩在畫面上的 panic 會帶走整個會話。** 頁腳本來是一個 `format!`，光標列靠
+   減字節長度算——在查詢後面加了一句提示，那個下標就落進「開」字中間。頁腳現在分三
+   段拼，光標只量前面那一段，一個字節都不切。
+2. **`draw_list` 會按內容縮尺寸**，所以「搜不到」那一幀把整個面板塌成三行、預覽整塊
+   消失——最需要看見「没有符合的」的那一幀，看起來像壞了。面板是頁面上的一個**位置**，
+   不是內容的函數。
+3. **`composes_here` 問的是模式，不是層。** `Mode::Picker` 是打字模式，於是列表層的
+   `j` 也送進了輸入法。層要自己回答。
+4. **只驗「不崩」不算驗。** 第一版拿 `--shot` 看見一幀畫出來就交了，而那一幀是個空
+   盒子。拿真文件開、把每種情況都拍一遍纔算。
 
 ### ~~What has to be built once, not twelve times~~ — built 2026-09-07
 
@@ -7412,9 +7513,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     （side bar），右邊歸 `空格 i`（information bar），各自**隱藏／顯示／操作**三
     態。⚠️ 三態**今天已經存在，只是沒有名字**：`show_sidebar` 那條四段規則裏「側
     欄開着、鍵在正文」就是顯示（editor.rs:15134）。新的是把狀態從「命名視圖的
-    鍵」上剝下來交給一個統一鍵——隱藏或顯示按一下進操作，操作按一下進隱藏。**四個
-    具名鍵留着**（已定）：`空格 e` 檔案、`空格 o` 大綱、`空格 d` 字典、`t i` 表
-    格詳情；統一鍵說「哪個邊欄、什麼狀態」，具名鍵說「哪個視圖」，兩件事而不是別
+    鍵」上剝下來交給一個統一鍵——隱藏或顯示按一下進操作，操作按一下進隱藏。**具名鍵
+    留着**（已定）：`空格 o` 大綱、`空格 d` 字典、`t i` 表格詳情——檔案那一個
+    （空格底下那個 e）2026-09-18 撤了，命令 `:sidebar-left files`
+    接手；統一鍵說「哪個邊欄、什麼狀態」，具名鍵說「哪個視圖」，兩件事而不是別
     名，`空格 s` 開在上次那個視圖。**`Tab`／`Shift+Tab` 各輪自己那三格，輪到空的
     畫「這裏沒有」**（已定）——這**推翻**了 `View::Dictionary` 不進輪換的現行規矩
     （sidebar.rs:33「Cycling into it would show an empty panel most of the
@@ -7461,7 +7563,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **四（2026-09-13 落地，當天又改寬了一次）**：**一格一個側**，不是一組一個側。
     新增 `sidebar::Panel`（`files`／`buffers`／`outline`／`dictionary`／`detail`），
     每格各自認自己在哪邊；配置是 `[sidebar]` 一節、一格一行（原先 `[editor]` 那兩個
-    `sidebar_side`／`info_side` **刪了，不留別名**）。命令 `:sidebar-show-left`／
+    `sidebar_side`／`info_side` **刪了，不留別名**）。命令 `:panel-left`／
     `-right`，不寫名字＝手上這一格。
 
     ⚠️ **`Tab` 因此挪給了編輯器。** 「哪幾個視圖共用這一槽」是設置決定的，`Sidebar`
@@ -7524,7 +7626,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 二 | 面板聲明屬性，三態／`Tab` 輪／寬度由宿主按屬性算 | `View::Dictionary` 那個寫死的特例消失 |
     | 三 a | 每槽分兩層；詳情搬進右槽下層（`split_detail` 退休） | 兩側同時有東西 |
     | 三 b | 字典變成臨時層（右槽下層，收鍵、`j`/`k` 滾），`View::Dictionary` 刪掉 | 槽位真的解耦了 |
-    | 四 | 一格一個側：`[sidebar]` 配置 ＋ `:sidebar-show-left`／`-right` | 大綱挪到對面時 `Tab` 只輪這一側的 |
+    | 四 | 一格一個側：`[sidebar]` 配置 ＋ `:panel-left`／`:panel-right` | 大綱挪到對面時 `Tab` 只輪這一側的 |
     | 五 | #419 高級搜索 | 只是「一個聲明了可編輯的面板」，不動宿主。**還沒做** |
 
 [^294]: 2026-09-08：「如果真的要更好看，我覺得可以使用快捷鍵提示的那個面板風格，

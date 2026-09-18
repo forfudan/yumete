@@ -21,7 +21,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
 use ratatui::Frame;
 
 use yumete_cjk::{graphemes, str_width, WordMark};
@@ -1562,20 +1561,15 @@ pub fn draw_candidate_panel(
     let y = cursor_y.min(area.y + area.height.saturating_sub(panel_h));
     let panel = Rect::new(x, y, panel_w, panel_h);
 
-    frame.render_widget(Clear, panel);
-    clear_wide_left_edge(frame.buffer_mut(), panel);
     let ground = Style::default().bg(skin.paper()).fg(skin.text());
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(if config.panel.rounded {
-            BorderType::Rounded
-        } else {
-            BorderType::Plain
-        })
-        .border_style(Style::default().fg(skin.border()).bg(skin.paper()))
-        .style(ground);
-    let inner = block.inner(panel);
-    block.render(panel, frame.buffer_mut());
+    // The candidate list's ring is the editor's ring with the IME's own
+    // colours in it — one shape, two palettes (`chrome`).
+    let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        rounded: config.panel.rounded,
+        border: Style::default().fg(skin.border()).bg(skin.paper()),
+        ground,
+        title: None,
+    });
 
     let buf = frame.buffer_mut();
     let dim = ground.fg(skin.helper());
