@@ -5169,6 +5169,20 @@ en = "line start is gh, first non-blank gs"
 # ── hud ───────────────────────────────────────────────────────────────
 
 [[message]]
+# vim 預設：按下 d／c／y 之後，狀態行說它在等什麽
+key = "hint.vim-operator"
+zht = "{0} 等一個動作：w e b W E B $ 0 ^ G gg j k {{ }} f i a，或者再按一次 {0} 取整行"
+zhs = "{0} 等一个动作：w e b W E B $ 0 ^ G gg j k {{ }} f i a，或者再按一次 {0} 取整行"
+en = "{0} is waiting for a motion: w e b W E B $ 0 ^ G gg j k {{ }} f i a — or {0} again for the line"
+
+[[message]]
+# vim 預設：動作按了一半（gg 的 g、f 的那個字）
+key = "hint.vim-operator-more"
+zht = "{0}{1} 還没說完"
+zhs = "{0}{1} 还没说完"
+en = "{0}{1} is not finished"
+
+[[message]]
 # :view-hud basic（出廠）——也是 :view-hud 不帶參數時的回答
 key = "hud.basic"
 zht = "光標提示：藥丸——找空白處，不蓋字"
@@ -5348,6 +5362,13 @@ key = "keys.actions-title"
 zht = "能綁的動作"
 zhs = "能绑的动作"
 en = "actions"
+
+[[message]]
+# vim 預設下，`d` `c` `y` 等的是一個動作，而按下的那個鍵不是
+key = "keys.not-a-motion"
+zht = "`{0}` 不是一個動作——d、c、y 等的是動作（w、e、$、G、f、i…）"
+zhs = "`{0}` 不是一个动作——d、c、y 等的是动作（w、e、$、G、f、i…）"
+en = "`{0}` is not a motion — d, c and y are waiting for one"
 
 [[message]]
 # :keymap — 現在是 helix

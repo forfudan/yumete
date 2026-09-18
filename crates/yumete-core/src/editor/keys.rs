@@ -331,6 +331,168 @@ impl Editor {
     ///
     /// A count typed before the alias goes to the first key that acts, not to
     /// a leading `;`: `2x` is `;` then `2D`, and `3dd` is `3x` then `d`.
+    /// **One key of a vim operator's motion** (#429, 2026-09-18).
+    ///
+    /// `d`, `c` and `y` in vim are operators: they wait, and what they wait
+    /// for is a motion. This editor has no operators — a motion here *is* a
+    /// selection, so `d` acts on what is already selected — which is why the
+    /// translation table could offer `dw` and `dd` and nothing else. The wait
+    /// is what this adds, and once there is a wait every motion the editor
+    /// already has comes with it: `d$`, `de`, `dG`, `df,`, `di(`.
+    ///
+    /// **How it is carried out**: 延伸模式, the motion, and then the action —
+    /// `v` `w` `D` for `dw`. `v` is what makes the steps add up, so a count
+    /// works; `X` is added for the line-wise ones (`dj` takes both lines
+    /// whole, as vim does); a text object needs neither, because `mi(` *is*
+    /// the selection.
+    ///
+    /// ⚠️ **The action is the cutting one.** vim's `d` fills the unnamed
+    /// register — `dd` then `p` puts the line back — so it is this editor's
+    /// `D` (剪切), not its `d` (刪除，不動寄存器).
+    fn vim_operator_key(&mut self, op: char, first: Option<char>, key: Key) {
+        // ⚠️ **Let go of the wait before doing anything** (2026-09-18). The
+        // keys this plays go back through `on_normal_key`, which reads
+        // `pending` first — so an operator still holding the wait answers its
+        // own `v` and `w` as though they were the motion, plays the motion
+        // again, and the stack goes. Every other `Pending` arm clears itself
+        // at the top for the same reason; this one is the one that recurses.
+        self.pending = Pending::None;
+        // A count may be written inside the wait, as vim writes it (`d2w`).
+        if let Key::Char(c) = key {
+            if first.is_none() && c.is_ascii_digit() && (c != '0' || self.alias_count.is_some()) {
+                // ⚠️ **Its own count, not the one before the operator**
+                // (2026-09-18). `2d3w` is six words in vim, which is the two
+                // multiplied — written into the same field it would have been
+                // 23. [`Editor::settle_alias_count`] is where they meet.
+                let n = self.alias_count.unwrap_or(0);
+                self.alias_count = Some(
+                    n.saturating_mul(10)
+                        .saturating_add(c.to_digit(10).unwrap_or(0) as usize)
+                        .min(1_000_000),
+                );
+                self.pending = Pending::VimOperator { op, first };
+                return;
+            }
+        }
+        let Key::Char(c) = key else {
+            // Anything that is not a character — Esc among them — lets go of
+            // the operator without pressing anything.
+            self.count = None;
+            self.alias_count = None;
+            return;
+        };
+        // **The operator doubled is the line**: `dd`, `yy`, `cc`. `x` here is
+        // this editor's 「select this line」, which extends downwards when it
+        // is given a count — so `3dd` is three lines.
+        if first.is_none() && c == op {
+            let line = yumete_cjk::keymap::VimMotion {
+                keys: "{n}x",
+                linewise: false,
+                wants: false,
+                whole: true,
+                till: false,
+                back: false,
+            };
+            return self.play_vim_motion(op, line, "{n}x");
+        }
+        // A motion still owed a character (`df,`) keeps what it has and takes
+        // this one as the answer.
+        if let Some(motion) = first
+            .map(|f| f.to_string())
+            .and_then(|f| yumete_cjk::keymap::vim_motion(&f))
+        {
+            if motion.wants {
+                let keys = motion.keys.replace('%', &c.to_string());
+                return self.play_vim_motion(op, motion, &keys);
+            }
+        }
+        let mut typed = String::new();
+        if let Some(f) = first {
+            typed.push(f);
+        }
+        typed.push(c);
+        match yumete_cjk::keymap::vim_motion(&typed) {
+            Some(motion) if motion.wants => {
+                // `f` and `i` are not finished: they are owed a character.
+                self.pending = Pending::VimOperator { op, first: Some(c) };
+            }
+            Some(motion) => {
+                let keys = motion.keys.to_string();
+                self.play_vim_motion(op, motion, &keys);
+            }
+            None if yumete_cjk::keymap::vim_motion_ahead(&typed) => {
+                self.pending = Pending::VimOperator { op, first: Some(c) };
+            }
+            // Not a motion at all. vim beeps; this says which key was not one,
+            // because a key that does nothing and says nothing is the thing
+            // this editor is most careful never to be.
+            None => {
+                self.count = None;
+                self.alias_count = None;
+                self.status = say!("keys.not-a-motion", typed);
+            }
+        }
+    }
+
+    /// Play 延伸模式 ＋ the motion, and then **do** the action.
+    ///
+    /// ⚠️ **The action is not played as a key** (2026-09-18). Twice over: `X`
+    /// under this very preset is vim's own 「cut the character before」, so a
+    /// line-wise operator that pressed `X` to reach the line's bounds cut one
+    /// character instead; and `y` is now an operator itself, so `yy` pressed
+    /// its own `y` and sat down to wait again. What the keys are for is the
+    /// *motion* — the editor already has one of those for every one vim has.
+    /// The action is three lines of code and cannot be misread.
+    fn play_vim_motion(&mut self, op: char, motion: yumete_cjk::keymap::VimMotion, keys: &str) {
+        // A text object is already the selection; everything else is walked
+        // over with 延伸模式 on, so that a count adds up.
+        self.settle_alias_count();
+        match motion.whole {
+            true => self.play_keys(keys),
+            false => self.play_keys(&format!("v{keys}")),
+        }
+        // **`t` is `f` one short** — this editor has no 「till」 of its own
+        // (the `t` letter is the table group), and inside an operator's wait
+        // there is nothing else `t` could mean.
+        if motion.till {
+            let rope = self.current_buffer().rope().clone();
+            // ⚠️ The head moves, the anchor stays — `set_cursor` would take
+            // the anchor with it and leave a selection one character long.
+            self.cursor = match motion.back {
+                false => crate::motion::prev_grapheme(&rope, self.cursor),
+                true => crate::motion::next_grapheme(&rope, self.cursor),
+            };
+        }
+        if motion.linewise {
+            self.extend_to_line_bounds();
+        }
+        self.extend = false;
+        self.snapshot();
+        match op {
+            // vim's `d` and `c` fill the unnamed register — `dd` then `p` puts
+            // the line back — so they are this editor's cutting pair.
+            'd' => self.cut_selection_to_register(),
+            'c' => {
+                self.cut_selection_to_register();
+                self.enter_insert();
+            }
+            // **`y` leaves the cursor at the head of what it took** — vim's
+            // rule, and the reason `yyp` puts the copy directly under the line
+            // rather than one line further down: selecting a line here leaves
+            // the cursor on the next one, and paste goes *after* the cursor.
+            // vim's `>>`／`<<` are operators too, and this is the whole of
+            // what they add: `>j` indents both lines, `>ap` a paragraph.
+            '>' => self.indent(true),
+            '<' => self.indent(false),
+            _ => {
+                let head = self.span().0;
+                self.yank();
+                self.set_cursor(head);
+                self.anchor = head;
+            }
+        }
+    }
+
     /// **What the right-hand side of a binding says to do** (#429).
     ///
     /// Three things, tried in this order:
@@ -566,6 +728,11 @@ impl Editor {
                     Key::Char('r') => self.pending = Pending::SurroundFrom,
                     _ => {}
                 }
+                return;
+            }
+            // **A vim operator, waiting for its motion** (#429, 2026-09-18).
+            Pending::VimOperator { op, first } => {
+                self.vim_operator_key(op, first, key);
                 return;
             }
             Pending::None => {}
@@ -953,6 +1120,17 @@ impl Editor {
             // had a key lost one; `A-d`/`A-c` are gone, because after the swap
             // they are `d`/`c` spelt longer.
             Key::Char('x') => self.repeat(count, |e| e.select_line()),
+            // **`d`, `c`, `y` are operators under the vim preset** (#429,
+            // 2026-09-18): they wait for a motion. With something already
+            // selected they act at once, which is what vim's visual mode does
+            // — and it is also what makes `v3wd` go on working for a hand that
+            // learnt this editor's own way round.
+            Key::Char(op @ ('d' | 'c' | 'y' | '>' | '<'))
+                if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend =>
+            {
+                self.pending = Pending::VimOperator { op, first: None };
+                self.count = operator_count;
+            }
             Key::Char('d') | Key::Char('D') | Key::Char('c') | Key::Char('C') => {
                 self.snapshot();
                 // A count deletes that many graphemes when there is nothing
@@ -1104,6 +1282,12 @@ impl Editor {
             // is why it is an action and not a line in the preset's table: a
             // translation into `h` would walk over the break and join two
             // lines, and could not carry `3X` to the cut.
+            // **vim's redo is `C-r`** (#428, 2026-09-18): here it is `U`, and
+            // a vim hand pressing `C-r` got a line of prose pointing at it.
+            // Under the preset it simply redoes.
+            Key::Ctrl('r') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.repeat(count, |e| e.redo());
+            }
             Key::Char('X') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                 self.snapshot();
                 self.cut_before_cursor(count);

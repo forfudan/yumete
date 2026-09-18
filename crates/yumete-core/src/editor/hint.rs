@@ -152,6 +152,16 @@ impl Editor {
                     .operator_count
                     .map(|n| Hint::Says(say!("hint.count-pending", n)));
             }
+            // **A vim operator is waiting** (#429): one line rather than a
+            // panel, because what it is waiting for is the whole vocabulary of
+            // motions and the reader knows them — what they need to be told is
+            // that the editor is still holding the `d`.
+            Pending::VimOperator { op, first } => {
+                return Some(Hint::Says(match first {
+                    None => say!("hint.vim-operator", op),
+                    Some(f) => say!("hint.vim-operator-more", op, f),
+                }));
+            }
             Pending::Space => (
                 say!("hint.space.title"),
                 Self::SPACE_KEYS

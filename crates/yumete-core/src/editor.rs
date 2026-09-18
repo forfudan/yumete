@@ -156,6 +156,18 @@ enum Pending {
     Register,
     /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
     Match,
+    /// **A vim operator waiting for its motion** — `d`, `c`, `y` under the vim
+    /// preset (#429, 2026-09-18).
+    ///
+    /// `op` is the letter that was pressed; `first` is the key that arrived
+    /// after it, when one has — the start of a two-key motion (`g` before
+    /// `gg`) or a motion still owed a character (`f` before `f,`). No motion
+    /// is longer than two keys, which is why one character is the whole of
+    /// what has to be remembered.
+    VimOperator {
+        op: char,
+        first: Option<char>,
+    },
     /// `mi` / `ma` awaiting the delimiter naming the pair.
     MatchPair {
         around: bool,
@@ -235,6 +247,9 @@ impl Pending {
             | Pending::Mark
             | Pending::Recall
             | Pending::Hop { .. }
+            // A vim operator is waiting for a *motion*, which is keys — the
+            // character `f` asks for is read by the motion itself.
+            | Pending::VimOperator { .. }
             | Pending::Conflict => false,
         }
     }
