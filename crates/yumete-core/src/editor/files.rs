@@ -372,6 +372,28 @@ impl Editor {
         self.status = self.current_buffer().display_name().to_string();
         // The buffer list and the outline are both about *this* file.
         self.refresh_sidebar();
+        self.mark_visited();
+    }
+
+    /// **Remember that this is the file being written now** — the head of the
+    /// list `空格 f` offers.
+    ///
+    /// Newest first, and one entry per file: coming back to a chapter moves it
+    /// up rather than adding it again. Bounded, because a long afternoon would
+    /// otherwise grow it without end and only the first handful is ever read.
+    pub(super) fn mark_visited(&mut self) {
+        const KEPT: usize = 32;
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            return;
+        };
+        self.visited.retain(|seen| seen != &path);
+        self.visited.insert(0, path);
+        self.visited.truncate(KEPT);
+    }
+
+    /// The files this session has been in, newest first.
+    pub(super) fn visited(&self) -> &[PathBuf] {
+        &self.visited
     }
 
     /// The active buffer — or, while the other half of a split is being drawn,
@@ -481,6 +503,7 @@ impl Editor {
             }
         }
         self.add_buffer(buffer);
+        self.mark_visited();
         self.table_on_open();
         // **開文件就順手認一遍這本書自己的詞** (#448). Nothing happens here —
         // the scan is three hundred milliseconds of counting and it belongs on

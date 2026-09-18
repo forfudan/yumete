@@ -1767,6 +1767,21 @@ impl Config {
             }
         }
 
+        // **A misspelt action name would be played as keys** (#429). The
+        // right-hand side of a binding is 「an action's name, a `:command`, or
+        // keys」, and keys are the fallback — so `delete_slection` would press
+        // d, e, l, e, t, e… into the document. Nothing bound to a key is
+        // spelled with an underscore, so an underscore means a name was meant,
+        // and an unknown one is said out loud here rather than typed into a
+        // chapter.
+        for (key, bound) in &raw.keys.normal {
+            if bound.contains('_') && yumete_cjk::actions::action(bound).is_none() {
+                problems.push(format!(
+                    "[keys.normal] {key} = \"{bound}\" 不是動作名——`:keymap actions` 列出全部"
+                ));
+            }
+        }
+
         if let Some(word) = raw.editor.tab_inserts.as_deref() {
             if !matches!(word, "spaces" | "tab") {
                 problems.push(format!("[editor] tab_inserts = \"{word}\" 只能是 spaces 或 tab"));

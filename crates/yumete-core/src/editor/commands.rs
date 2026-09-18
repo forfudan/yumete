@@ -475,6 +475,28 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            // **What a key may be bound to** (#429): the name to write, what
+            // it does, and which key does it today. The third column is the
+            // one a reader coming from a preset needs — 「`x` is
+            // `select_line`? then that is what I am rebinding」.
+            Command::ListActions => {
+                let mut listing = String::new();
+                listing.push_str(&say!("keys.actions-head"));
+                listing.push_str("\n\n| 名字 | 做什麽 | 現在是哪個鍵 |\n| --- | --- | --- |\n");
+                for action in yumete_cjk::actions::ALL {
+                    let now = match action.how {
+                        yumete_cjk::actions::How::Keys(keys) => yumete_cjk::actions::spell(keys),
+                        yumete_cjk::actions::How::Command(line) => format!(":{line}"),
+                    };
+                    listing.push_str(&format!(
+                        "| `{}` | {} | `{now}` |\n",
+                        action.name,
+                        crate::messages::say(action.help, &[]),
+                    ));
+                }
+                self.show_listing(listing, say!("keys.actions-title"));
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetSyntax(name) => {
                 match name {
                     Some(name) => match crate::syntax::Syntax::parse(&name) {
@@ -811,6 +833,33 @@ impl Editor {
             }
             Command::OpenReplace(scope) => {
                 self.open_search_in(scope, true);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SidebarSide(side, ask) => {
+                use crate::command::SidebarAsk;
+                match ask {
+                    SidebarAsk::Off => self.close_panel(side),
+                    // Bare: away if it is there, and if it is not, back to
+                    // whatever that side last held — the file tree when it has
+                    // held nothing yet.
+                    SidebarAsk::Toggle => match self.panel(side).is_some() {
+                        true => self.close_panel(side),
+                        false => {
+                            let view = self.side_view(side);
+                            self.open_side_showing(side, view);
+                        }
+                    },
+                    // Naming a panel says which side it is to be on as well as
+                    // that it is to show — 字典 and 詳情 have only the first
+                    // half, being worked out afresh under whichever slot owns
+                    // them.
+                    SidebarAsk::Show(panel) => {
+                        self.set_side(panel, side);
+                        if let Some(view) = Editor::view_of(panel) {
+                            self.open_side_showing(side, view);
+                        }
+                    }
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowSidebarAt(side, which) => {

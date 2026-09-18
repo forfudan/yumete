@@ -9,12 +9,10 @@
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui::text::Span;
-use ratatui::widgets::{Block, BorderType, Borders, Clear};
 use ratatui::Frame;
 use yumete_config::Config;
 
-use crate::{put_text, vertical};
+use crate::put_text;
 
 /// What a panel holds. Two shapes, because there are two things to say: a
 /// paragraph to read, or a list of keys to glance down.
@@ -208,29 +206,16 @@ pub fn draw(
         false => low,
     };
     let rect = Rect::new(x, y, width, height);
-    frame.render_widget(Clear, rect);
-    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
-    // renderer skips whatever a wide glyph covers — so a border written into
-    // the second of them is stored and then never emitted, and the panel opens
-    // with its whole left wall missing (#286). Blank the glyph; the wall gets
-    // a cell.
-    vertical::clear_wide_left_edge(frame.buffer_mut(), rect);
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(match config.panel.rounded {
-                true => BorderType::Rounded,
-                false => BorderType::Plain,
-            })
-            // `rule()`, the rung every other ring on the screen is drawn at.
-            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
-            .title(Span::styled(
-                panel.title.clone(),
-                Style::default().fg(ink.gold()).bg(ink.paper()),
-            ))
-            .style(Style::default().bg(ink.paper())),
-        rect,
-    );
+    crate::chrome::draw(frame, rect, &crate::chrome::Ring {
+        rounded: config.panel.rounded,
+        // `rule()`, the rung every other ring on the screen is drawn at.
+        border: Style::default().fg(ink.rule()).bg(ink.paper()),
+        ground: Style::default().bg(ink.paper()),
+        title: Some((
+            panel.title.clone(),
+            Style::default().fg(ink.gold()).bg(ink.paper()),
+        )),
+    });
     let ground = Style::default().bg(ink.paper());
     let limit = rect.x + width - 1;
     let buf = frame.buffer_mut();

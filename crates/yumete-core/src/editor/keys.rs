@@ -331,6 +331,41 @@ impl Editor {
     ///
     /// A count typed before the alias goes to the first key that acts, not to
     /// a leading `;`: `2x` is `;` then `2D`, and `3dd` is `3x` then `d`.
+    /// **What the right-hand side of a binding says to do** (#429).
+    ///
+    /// Three things, tried in this order:
+    ///
+    /// 1. `:something` — that command line, exactly as it would be typed.
+    /// 2. An **action's name** (`delete_selection`). Names are what a reader
+    ///    should write: `x = "delete_selection"` goes on meaning that after
+    ///    the day the editor's own `d` moves somewhere else, and it says what
+    ///    it does without the reader knowing which key does it today.
+    /// 3. Anything else is **keys**, played as though typed — layer one
+    ///    (#428), which is what the vim preset is made of.
+    ///
+    /// ⚠️ **A name wins over keys that spell it.** `search` is an action; it
+    /// is also six letters somebody could in principle want pressed one after
+    /// another. Nobody wants that, and the ambiguity is worth less than the
+    /// names being writable bare. A misspelt name is caught when the config is
+    /// read (an underscore means a name was meant), so it cannot quietly type
+    /// itself into a chapter.
+    fn run_binding(&mut self, bound: &str) {
+        if let Some(line) = bound.strip_prefix(':') {
+            let _ = self.execute(&format!(":{line}"));
+            return;
+        }
+        if let Some(action) = yumete_cjk::actions::action(bound) {
+            match action.how {
+                yumete_cjk::actions::How::Keys(keys) => return self.play_keys(keys),
+                yumete_cjk::actions::How::Command(line) => {
+                    let _ = self.execute(&format!(":{line}"));
+                    return;
+                }
+            }
+        }
+        self.play_keys(bound)
+    }
+
     fn play_keys(&mut self, keys: &str) {
         self.expanding_alias = true;
         let mut count = self.count.take();
@@ -548,7 +583,7 @@ impl Editor {
                     Some(keys) if held.chars().count() == 1 && keys.chars().count() == 1 => {
                         Key::Char(keys.chars().next().unwrap())
                     }
-                    Some(keys) => return self.play_keys(&keys),
+                    Some(bound) => return self.run_binding(&bound),
                     None => {
                         held.pop();
                         if held.is_empty() {
@@ -1313,8 +1348,12 @@ impl Editor {
     /// The keys `Space` opens, and what each of them is for — the list the
     /// which-key overlay draws, so what is offered and what happens cannot
     /// drift apart.
+    // ⚠️ **`空格 e` is gone** (2026-09-18): 「我覺得空格 e 和空格 f 重了，我覺得
+    // 留空格 f 就够了」. The file *sidebar* is still there — `:sidebar-left`
+    // opens it, and `:sidebar-left files` says so exactly — but a key on this
+    // menu is the scarcest thing the editor has, and the picker is what
+    // 「open a file」 means now.
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
-        ('e', "hint.goto.file-sidebar"),
         ('o', "hint.goto.outline"),
         ('f', "hint.goto.open-file"),
         ('b', "hint.goto.switch-buffer"),
@@ -1564,7 +1603,6 @@ impl Editor {
     fn handle_space(&mut self, key: Key) {
         match key {
             Key::Char('s') => self.cycle_region(),
-            Key::Char('e') => self.show_sidebar(crate::sidebar::View::Explorer),
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
             // 定義 (#215): the 拆分表 on the character under the cursor. The

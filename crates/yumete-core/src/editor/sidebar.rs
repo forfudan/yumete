@@ -242,6 +242,54 @@ impl Editor {
         }
     }
 
+    /// **Open `side` showing `view`** — `show_sidebar`'s second half, without
+    /// the toggle: `:sidebar-left outline` says which side, so the side is not
+    /// the configured one and 「already showing」 is not a reason to close it.
+    pub(super) fn open_side_showing(
+        &mut self,
+        side: crate::sidebar::Side,
+        view: crate::sidebar::View,
+    ) {
+        match self.panel_mut(side) {
+            Some(panel) => {
+                panel.show(view);
+                self.panel_focus = Some((side, crate::sidebar::Layer::Top));
+                self.refresh_sidebar();
+            }
+            None => {
+                let root = self.project_root();
+                let mut sidebar = crate::sidebar::Sidebar::new(&root);
+                sidebar.show(view);
+                if let Some(path) = self.current_buffer().path() {
+                    if let Ok(full) = std::fs::canonicalize(path) {
+                        sidebar.reveal(&full);
+                    }
+                }
+                self.panels[side as usize] = Some(sidebar);
+                self.panel_focus = Some((side, crate::sidebar::Layer::Top));
+                self.refresh_sidebar();
+            }
+        }
+    }
+
+    /// Which view a bare `:sidebar-left` opens: the first one that side owns,
+    /// and the file tree when it owns none — the same answer the key gives.
+    pub(super) fn side_view(&self, side: crate::sidebar::Side) -> crate::sidebar::View {
+        crate::sidebar::View::ALL
+            .into_iter()
+            .find(|&view| self.side_for(view) == side)
+            .unwrap_or(crate::sidebar::View::Explorer)
+    }
+
+    /// The view a panel's name stands for, when a slot can hold it. 字典 and
+    /// 詳情 are worked out afresh every frame in the bottom layer and have
+    /// none, so naming one of those only says which side it is to appear on.
+    pub(super) fn view_of(panel: crate::sidebar::Panel) -> Option<crate::sidebar::View> {
+        crate::sidebar::View::ALL
+            .into_iter()
+            .find(|&view| crate::sidebar::Panel::from(view) == panel)
+    }
+
     /// Put that slot's resident panel away, and the keys back in the text if
     /// they were in it.
     pub(super) fn close_panel(&mut self, side: crate::sidebar::Side) {
@@ -283,7 +331,7 @@ impl Editor {
             },
             // **`:` opens the command line from in here too.** It used to be
             // swallowed, so a reader with the keys in a panel had no way to
-            // run a command at all — and `:sidebar-show-left` is a command
+            // run a command at all — and `:panel-left` is a command
             // *about* the panel you are standing in, which nobody could have
             // reached. The focus stays where it is while the line is typed, so
             // 「this one」 still means this one.
@@ -939,22 +987,134 @@ impl Editor {
         }
     }
 
+    /// **What the picker is standing on, to be shown beside the list** — the
+    /// head of the file, the head of the buffer, or the lines around a row
+    /// (2026-09-17: 「左側是文件窗口，右側是預覽」).
+    ///
+    /// `rows` lines at most, and the answer is kept until the highlight moves
+    /// off it: without that, holding `j` down would read a file per keystroke.
+    pub fn picker_preview(&self, rows: usize) -> Option<(String, Vec<String>)> {
+        let item = self.picker.as_ref()?.chosen()?;
+        let head = |text: &str| -> Vec<String> {
+            text.lines().take(rows).map(|l| l.replace('\t', "    ")).collect()
+        };
+        match item {
+            crate::picker::Item::File(path) => {
+                let full = match &self.listing_root {
+                    Some(root) => root.join(&path),
+                    None => PathBuf::from(&path),
+                };
+                // Already open? Then the buffer is the truer answer: it holds
+                // what has been typed and not saved.
+                if let Some(open) = self.buffers.iter().find(|b| b.path() == Some(full.as_path())) {
+                    return Some((path, head(&open.text())));
+                }
+                let mut cached = self.preview.borrow_mut();
+                if cached.as_ref().is_none_or(|(at, _)| *at != full) {
+                    // A directory, a 14 MB 碼表, a binary: read the head and
+                    // nothing more, and say nothing rather than guess.
+                    let text = std::fs::read_to_string(&full).ok()?;
+                    *cached = Some((full.clone(), head(&text)));
+                }
+                cached.as_ref().map(|(_, lines)| (path, lines.clone()))
+            }
+            crate::picker::Item::Buffer(i, name) => {
+                Some((name, head(&self.buffers.get(i)?.text())))
+            }
+            crate::picker::Item::Row(line, name) => {
+                let rope = self.current_buffer().rope();
+                let lines = (line..(line + rows).min(rope.len_lines()))
+                    .map(|n| rope.line(n).to_string().trim_end().to_string())
+                    .collect();
+                Some((name, lines))
+            }
+            // A clipboard entry is already the whole of what it is.
+            crate::picker::Item::Paste(_, _) => None,
+        }
+    }
+
+    /// Open whatever the picker is standing on — from either layer.
+    fn choose_from_picker(&mut self) {
+        let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
+        self.close_picker();
+        match chosen {
+            Some(crate::picker::Item::File(path)) => {
+                let full = match &self.listing_root {
+                    Some(root) => root.join(&path),
+                    None => PathBuf::from(&path),
+                };
+                if let Err(err) = self.open_file(&full) {
+                    self.status = say!("buffer.cannot-open", path, err);
+                }
+            }
+            Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
+            // The picker belongs to whichever key opened it, so choosing from
+            // it lands the way that key lands.
+            Some(crate::picker::Item::Row(line, _)) => {
+                let preview = self.definition_preview;
+                self.land_on_row(line, preview)
+            }
+            Some(crate::picker::Item::Paste(Some(which), _)) => self.paste_from_menu(which),
+            // The system clipboard is the front end's to read.
+            Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
+            None => self.status = say!("picker.nothing-matched"),
+        }
+    }
+
     /// Open a picker over the files of the project (`Space f`).
+    ///
+    /// **Two orders, one list** (2026-09-18). What is gathered is
+    /// 「写的东西在前面」: the prose — `.md`, `.txt`, `.typ` and the rest of
+    /// [`PROSE`] — comes first in path order, which for a novel is chapter
+    /// order, and everything else (the build files, the code, the
+    /// `Cargo.lock`) follows. What is *offered* is then that list with the
+    /// files this session has been in lifted to the top
+    /// ([`Editor::visited`]), because the one being written is what 「open a
+    /// file」 most often means. Both are tie-breakers: once anything is typed,
+    /// the match decides.
     pub(super) fn open_file_picker(&mut self) {
         let root = self.project_root();
-        let mut items = Vec::new();
+        let mut prose = Vec::new();
+        let mut rest = Vec::new();
         walk(&root, &mut 0, &mut |path| {
-            if items.len() < PICKER_LIMIT {
-                let shown = path.strip_prefix(&root).unwrap_or(path);
-                items.push(crate::picker::Item::File(shown.display().to_string()));
+            if prose.len() + rest.len() >= PICKER_LIMIT {
+                return;
+            }
+            let shown = path.strip_prefix(&root).unwrap_or(path).display().to_string();
+            let is_prose = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| PROSE.contains(&&*e.to_lowercase()));
+            match is_prose {
+                true => prose.push((path.to_path_buf(), shown)),
+                false => rest.push((path.to_path_buf(), shown)),
             }
         });
-        if items.is_empty() {
+        prose.append(&mut rest);
+        if prose.is_empty() {
             self.status = say!("picker.no-files-here");
             return;
         }
+        // Newest first, so the head of `visited` is worth the most. The step is
+        // small beside a match's own score (a run of two adjacent letters is
+        // worth 800), which is what keeps this a tie-breaker.
+        let bonus = prose
+            .iter()
+            .map(|(full, _)| {
+                self.visited()
+                    .iter()
+                    .position(|seen| seen == full)
+                    .map_or(0, |n| (VISITED_BONUS - n as i64 * 20).max(20))
+            })
+            .collect();
+        let items = prose
+            .into_iter()
+            .map(|(_, shown)| crate::picker::Item::File(shown))
+            .collect();
         self.listing_root = Some(root);
-        self.picker = Some(crate::picker::Picker::new(&say!("picker.files"), items));
+        let mut picker = crate::picker::Picker::new(&say!("picker.files"), items);
+        picker.prefer(bonus);
+        self.picker = Some(picker);
         self.mode = Mode::Picker;
     }
 
@@ -987,55 +1147,42 @@ impl Editor {
             self.mode = Mode::Normal;
             return;
         };
+        // **The list layer** (2026-09-17): `Esc` moves the keys out of the
+        // query and into the list, where `jk` walk it and `/` goes back to
+        // typing; `Esc` there closes the picker, as it always did.
+        if !picker.typing() {
+            match key {
+                Key::Char('j') | Key::Down | Key::Tab | Key::Ctrl('n') => picker.step(true),
+                Key::Char('k') | Key::Up | Key::BackTab | Key::Ctrl('p') => picker.step(false),
+                Key::Char('g') => picker.go(false),
+                Key::Char('G') => picker.go(true),
+                Key::PageDown => picker.page(true),
+                Key::PageUp => picker.page(false),
+                // Back to typing. `/` because that is 「look for something」
+                // everywhere else here; `i` because this is the layer a
+                // reader of this editor expects to type from.
+                Key::Char('/') | Key::Char('i') => picker.type_here(true),
+                Key::Enter => self.choose_from_picker(),
+                Key::Esc | Key::Char('q') => self.close_picker(),
+                _ => {}
+            }
+            return;
+        }
         match key {
-            Key::Esc => self.close_picker(),
-            // Backspace past the start of the query closes it, the way it
-            // leaves the `:` line: the query is the only thing to go back over.
+            Key::Esc => picker.type_here(false),
+            // Backspace past the start of the query hands the keys back to the
+            // list rather than closing the picker: `/` is how they got here,
+            // and going back over the query should land where `/` was pressed.
             Key::Backspace => {
                 if !picker.backspace() {
-                    self.close_picker();
+                    picker.type_here(false);
                 }
             }
             Key::Down | Key::Tab | Key::Ctrl('n') => picker.step(true),
             Key::Up | Key::BackTab | Key::Ctrl('p') => picker.step(false),
-            Key::PageDown => {
-                for _ in 0..10 {
-                    picker.step(true);
-                }
-            }
-            Key::PageUp => {
-                for _ in 0..10 {
-                    picker.step(false);
-                }
-            }
-            Key::Enter => {
-                let chosen = picker.chosen();
-                self.close_picker();
-                match chosen {
-                    Some(crate::picker::Item::File(path)) => {
-                        let full = match &self.listing_root {
-                            Some(root) => root.join(&path),
-                            None => PathBuf::from(&path),
-                        };
-                        if let Err(err) = self.open_file(&full) {
-                            self.status = say!("buffer.cannot-open", path, err);
-                        }
-                    }
-                    Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
-                    // The picker belongs to whichever key opened it, so
-                    // choosing from it lands the way that key lands.
-                    Some(crate::picker::Item::Row(line, _)) => {
-                        let preview = self.definition_preview;
-                        self.land_on_row(line, preview)
-                    }
-                    Some(crate::picker::Item::Paste(Some(which), _)) => {
-                        self.paste_from_menu(which)
-                    }
-                    // The system clipboard is the front end's to read.
-                    Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
-                    None => self.status = say!("picker.nothing-matched"),
-                }
-            }
+            Key::PageDown => picker.page(true),
+            Key::PageUp => picker.page(false),
+            Key::Enter => self.choose_from_picker(),
             Key::Char(c) => picker.push(c),
             // A query is typed text, and typed text is edited in the middle.
             Key::Delete => picker.delete(),
