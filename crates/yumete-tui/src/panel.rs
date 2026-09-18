@@ -172,14 +172,15 @@ pub fn draw(
             // 縱，金墨。所以這一支不給 `chrome` 標題，框上没有名字。
             let mut zong: Vec<String> = vec![panel.title.chars().take(tall).collect()];
             gold = 1;
-            // 標題後空一縱；有章節行就接着畫它（灰），再空一縱。
-            zong.push(String::new());
+            // 章節行緊貼標題（作者 2026-09-18：「標題和章節行之間不需要空
+            // 行」）——它們是同一件事的兩半，名字與它寫在哪兒，金與灰已經把
+            // 兩者分開了。空的那一縱在**它們和正文之間**，只此一道。
             if let Some(lede) = &panel.lede {
                 let rows = yumete_core::zong::zong_rows(lede, tall);
                 quiet = zong.len()..zong.len() + rows.len();
                 zong.extend(rows);
-                zong.push(String::new());
             }
+            zong.push(String::new());
             zong.extend(yumete_core::zong::zong_rows(&indented(text), tall));
             // **裝不下的是「縱」，不是「行」**（2026-09-18）。橫排那一段截斷
             // （下面的 `cap`）數的是行，竪排這裏一行是一個字，照它辦就變成
