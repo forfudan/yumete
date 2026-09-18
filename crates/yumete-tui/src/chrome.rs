@@ -66,13 +66,37 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
 /// Two answers, and the difference is whether the reader is still writing:
 /// something to glance at keeps out of the caret's way, and something that has
 /// taken the keys stands in the middle, where it cannot be missed.
+/// **How much of the page a floating box may take** (作者 2026-09-18 定).
+///
+/// 橫排 two thirds wide and one third tall; 竪排 the transpose. Two numbers,
+/// and each of them answers a different question:
+///
+/// - **The short side protects the caret.** A box one third tall stands in
+///   the top third or the bottom third, and the caret is in neither — which is
+///   what the old 「half and half」 rule was really buying. Once the height
+///   does that job the width is free to be chosen for reading.
+/// - **The long side is the measure.** Two thirds of a 118-column page is 39
+///   漢字 to a line, which is what prose wants; the whole width would be 59,
+///   past what an eye reads without losing its place, and it would take those
+///   rows away from the manuscript **whole** rather than by halves.
+///
+/// 竪排 turns both round, and for the same reason: there a wide box cuts the
+/// tops off many 縱 at once (作者: 「這樣不會打破行文」).
+pub fn room(area: Rect, vertical: bool) -> (u16, u16) {
+    match vertical {
+        false => (area.width * 2 / 3, area.height / 3),
+        true => (area.width / 3, area.height * 2 / 3),
+    }
+}
+
 pub enum Anchor {
     /// **The corner the caret is not in.** A fixed corner is right half the
     /// time and covers what is being worked on the other half. One rule for
     /// both layouts, because in both of them the caret has a column.
     ///
-    /// `bottom` is the row the floats stack up from — the top of the footer.
-    Caret { at: (u16, u16), bottom: u16 },
+    /// `bottom` is the row the floats stack up from — the top of the footer;
+    /// `vertical` picks which way [`room`] is turned.
+    Caret { at: (u16, u16), bottom: u16, vertical: bool },
     /// The middle of the page: the picker and the question, both of which hold
     /// every key while they are open.
     Centre,
@@ -80,11 +104,10 @@ pub enum Anchor {
 
 /// Fit a box `want` cells big into `area`, or `None` when there is no room.
 ///
-/// ⚠️ **A caret-anchored box may take a quarter of the page and no more**
-/// (2026-09-17: 「面板不應該超過頁面的四分之一」) — half the width and half the
-/// height, so that whichever corner it takes, the caret's own corner is
-/// outside it. A centred one has the keys, so the page behind it is not being
-/// read and the cap does not apply.
+/// ⚠️ **A caret-anchored box is held to [`room`]** — 2026-09-17 「面板不應該
+/// 超過頁面的四分之一」, refined 2026-09-18 to two thirds by one third, which
+/// is two ninths and reads better. A centred one has the keys, so the page
+/// behind it is not being read and the cap does not apply.
 pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
     let (width, height) = want;
     if width < 8 || width > area.width || height > area.height {
@@ -97,7 +120,12 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             width,
             height,
         )),
-        Anchor::Caret { at, bottom } => {
+        Anchor::Caret { at, bottom, vertical } => {
+            // The caller has already measured itself against its own cap —
+            // prose against `room`, a menu against half the page — so this
+            // only refuses what cannot stand between the page's top and the
+            // footer at all.
+            let _ = vertical;
             if height > area.height / 2 + 1 || bottom < area.y + height {
                 return None;
             }
