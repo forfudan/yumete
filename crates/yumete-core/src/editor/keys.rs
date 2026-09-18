@@ -390,7 +390,11 @@ impl Editor {
                 linewise: false,
                 wants: false,
                 whole: true,
-                till: false,
+                // ⚠️ **`cc` keeps the line, `dd` takes it** — vim's rule, and
+                // the difference is one character: the line's own newline.
+                // Without this, `cc` cut the break as well and what was typed
+                // next landed on the front of the line below.
+                till: op == 'c',
                 back: false,
             };
             return self.play_vim_motion(op, line, "{n}x");
@@ -447,6 +451,12 @@ impl Editor {
         // A text object is already the selection; everything else is walked
         // over with 延伸模式 on, so that a count adds up.
         self.settle_alias_count();
+        // ⚠️ **vim has no selection when an operator starts** (2026-09-18).
+        // Here a motion *is* a selection, so the `w` that put the cursor where
+        // it is left the word selected behind it — and `wD` then cut from the
+        // word's start rather than from the cursor, which is the whole line.
+        // Collapsing first is what makes the operator mean what vim means.
+        self.anchor = self.cursor;
         match motion.whole {
             true => self.play_keys(keys),
             false => self.play_keys(&format!("v{keys}")),
@@ -1100,6 +1110,23 @@ impl Editor {
             // Helix's own behaviour, and the reason it looks broken to a
             // reader who has just pressed `v`: the very next motion grows the
             // selection again. So it says which of the two happened.
+            // **vim repeats a find with `;` and `,`** (#428, 2026-09-18) —
+            // here that is `A-.`, which no vim hand will ever press. `,` is
+            // the same search the other way round.
+            Key::Char(c @ (';' | ','))
+                if self.key_preset == yumete_cjk::KeyPreset::Vim && self.last_find.is_some() =>
+            {
+                if let Some((kind, ch)) = self.last_find {
+                    let kind = match c {
+                        ',' => match kind {
+                            FindKind::Forward => FindKind::Backward,
+                            FindKind::Backward => FindKind::Forward,
+                        },
+                        _ => kind,
+                    };
+                    self.repeat(count, |e| e.find_char(kind, ch));
+                }
+            }
             Key::Char(';') => {
                 self.anchor = self.cursor;
                 if self.extend {
