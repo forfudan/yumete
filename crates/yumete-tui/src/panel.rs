@@ -179,33 +179,13 @@ pub fn draw(
         })
         .min(area.width as usize) as u16;
     let height = (deep + 2) as u16;
-    // It may take half the page and no more, and it must leave the page
-    // something: at a very small window there is nowhere to put a panel, and
-    // covering the manuscript with one is worse than not drawing it.
-    if height > area.height / 2 + 1 || bottom < area.y + height || width < 8 {
-        return None;
-    }
-
-    // **The corner the caret is not in.** A fixed corner is right half the
-    // time and covers what you are working on the other half. One rule for
-    // both layouts, because in both of them the caret has a column.
-    let far = area.x + area.width.saturating_sub(width);
-    let x = match caret.0 >= area.x + area.width / 2 {
-        true => area.x,
-        false => far,
-    };
-    // Along the bottom, unless the caret is standing in the rows the panel
-    // would take — then the top, which is the corner diagonally opposite.
-    // Asked as 「would this cover the line you are on」 rather than 「is the
-    // caret low on the page」: the panel only has to move when it is actually
-    // in the way, and a panel that jumps to the top the moment you pass the
-    // middle of the page is a panel that moves for no reason.
-    let low = bottom - height;
-    let y = match caret.1 >= low && caret.1 < bottom {
-        true => area.y,
-        false => low,
-    };
-    let rect = Rect::new(x, y, width, height);
+    // Where it stands, and whether there is room at all — one rule, in
+    // `chrome`, shared with everything else that floats (2026-09-18).
+    let rect = crate::chrome::place(
+        area,
+        (width, height),
+        crate::chrome::Anchor::Caret { at: caret, bottom },
+    )?;
     crate::chrome::draw(frame, rect, &crate::chrome::Ring {
         rounded: config.panel.rounded,
         // `rule()`, the rung every other ring on the screen is drawn at.
