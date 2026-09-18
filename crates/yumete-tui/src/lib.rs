@@ -4376,6 +4376,7 @@ fn draw_which_key(
         title,
         body: panel::Body::Keys(keys.into_iter().map(|(k, what)| (k.to_string(), what)).collect()),
         tag: None,
+        vertical_text: false,
     })
 }
 
@@ -4417,6 +4418,7 @@ fn draw_note(
             title: say!("wiki.title"),
             body: panel::Body::Prose(said),
             tag: Some(say!("wiki.open-it")),
+            vertical_text: false,
         });
     }
     if editor.detail().is_none() {
@@ -4430,6 +4432,8 @@ fn draw_note(
             title: view.name.clone(),
             body: panel::Body::Prose(view.as_prose()),
             tag: None,
+            // The one body that turns with the page.
+            vertical_text: vertical,
         });
     }
     if !editor.detail_visible() || editor.detail_shows_a_row() {
@@ -4448,6 +4452,7 @@ fn draw_note(
             Some(&(_, Some(at))) => Some(say!("detail.on-line", at + 1)),
             _ => None,
         },
+        vertical_text: false,
     })
 }
 
@@ -15460,6 +15465,7 @@ fn squeezed(text: &str) -> String {
                     title: "王高甫".into(),
                     body: panel::Body::Prose(long.clone()),
                     tag: None,
+                    vertical_text: false,
                 });
             })
             .unwrap();

@@ -121,12 +121,15 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             height,
         )),
         Anchor::Caret { at, bottom, vertical } => {
-            // The caller has already measured itself against its own cap —
-            // prose against `room`, a menu against half the page — so this
-            // only refuses what cannot stand between the page's top and the
-            // footer at all.
+            // ⚠️ **The policy caps belong to the caller, this only asks
+            // whether it physically fits** (2026-09-18). A 竪書 note is two
+            // thirds of the page *tall* by design — half-page refusal here
+            // threw it away and nothing was drawn at all. What protects the
+            // caret is that one axis always separates them: 橫排 the box is a
+            // third tall and stands in the third the caret is not in; 竪排 it
+            // is a third wide and stands in the third the caret is not in.
             let _ = vertical;
-            if height > area.height / 2 + 1 || bottom < area.y + height {
+            if bottom < area.y + height {
                 return None;
             }
             let far = area.x + area.width.saturating_sub(width);
