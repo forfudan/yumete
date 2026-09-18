@@ -1585,6 +1585,13 @@ pub struct Editor {
     key_preset: yumete_cjk::KeyPreset,
     /// The keys typed so far of an alias that may still be completed (#428).
     alias_held: String,
+    /// **The digits typed *inside* a held sequence** (2026-09-18).
+    ///
+    /// vim writes `d10w`, and those digits are not part of the alias's name —
+    /// they are a count, and they arrive after the operator rather than before
+    /// it. Kept apart from [`Editor::count`] so that both can be written at
+    /// once: `2d3w` is six words, the way vim multiplies them.
+    alias_count: Option<usize>,
     /// Whether a key alias is being played out — so one cannot call itself,
     /// and so a macro records the key that was pressed rather than the key
     /// *and* everything it stands for.
@@ -2350,6 +2357,7 @@ impl Editor {
             user_aliases: HashMap::new(),
             key_preset: yumete_cjk::KeyPreset::Helix,
             alias_held: String::new(),
+            alias_count: None,
             expanding_alias: false,
             segmenter: Box::new(CategorySegmenter),
             reader: Box::new(NoReader),
