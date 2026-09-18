@@ -189,14 +189,20 @@ pub fn draw(
     crate::chrome::draw(frame, rect, &crate::chrome::Ring {
         rounded: config.panel.rounded,
         // `rule()`, the rung every other ring on the screen is drawn at.
-        border: Style::default().fg(ink.rule()).bg(ink.paper()),
-        ground: Style::default().bg(ink.paper()),
+        border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
+        ground: Style::default().bg(crate::chrome::panel_ground(ink)),
         title: Some((
             panel.title.clone(),
-            Style::default().fg(ink.gold()).bg(ink.paper()),
+            Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
         )),
     });
-    let ground = Style::default().bg(ink.paper());
+    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
+    // already painted the panel; text that carried its own copy of that colour
+    // dragged a patch of the *old* one behind every line the day the panel's
+    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
+    // whatever is under it.
+    let ground = Style::default();
     let limit = rect.x + width - 1;
     let buf = frame.buffer_mut();
     match &panel.body {

@@ -121,3 +121,14 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
         }
     }
 }
+
+/// **The ground everything that floats stands on** — 第 85 檔 (2026-09-18).
+///
+/// One function rather than a constant spelled at each call, because the
+/// mistake this exists to prevent is *half* a panel changing: the ring was
+/// moved off the paper's colour first and the rows inside it were not, so every
+/// line of the `:` menu dragged a patch of the old colour behind it. The ring
+/// and its contents read this.
+pub fn panel_ground(ink: crate::theme::Palette) -> ratatui::style::Color {
+    ink.at(yumete_config::rung::FLOAT)
+}
