@@ -4644,10 +4644,23 @@ fn the_padding_goes_away_when_the_page_is_the_file() {
     ed.execute("render basic").unwrap();
     assert!(!ed.drawn_on_line(0).is_empty());
 
-    // Down a 縱 every character takes one cell, so display width squares
-    // nothing up.
+    // **竪排 squares a table up too, since 2026-09-19** — counted in slots
+    // rather than cells (`mdtable::Measure`). It used to be barred there,
+    // and rightly so while a table stood on end was nonsense: the rows were
+    // wrapped and the `|` were loose pipes down a column. Now a row is one 縱
+    // and the walls turn with it, so the grid wants squaring up exactly as
+    // the flat one does — and 甲 (one slot) against 一二三 (three) is ragged
+    // without it, though in *cells* the two are 2 and 6.
     ed.set_layout(Layout::Vertical);
-    assert!(ed.drawn_on_line(0).is_empty());
+    assert!(!ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
+    // …and it is the **slot** count that decides. What that buys is the only
+    // thing worth asserting: every row of a turned table is the same depth,
+    // so the bands line up across the 縱.
+    let depth = |line: usize| {
+        ed.line_text(line).unwrap_or_default().trim_end().chars().count()
+            + ed.drawn_on_line(line).iter().map(|(_, text)| text.chars().count()).sum::<usize>()
+    };
+    assert_eq!(depth(0), depth(2), "甲 row {:?} vs 一二三 row {:?}", ed.drawn_on_line(0), ed.drawn_on_line(2));
 
     // Neither is a candidate: `has_candidate` answers only for what the
     // writer typed, and the padding is derived.

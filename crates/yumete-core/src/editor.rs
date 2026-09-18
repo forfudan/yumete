@@ -722,6 +722,10 @@ struct PadKey {
     /// and its kin change the separator without touching a byte of the file,
     /// and a table squared up on commas is not squared up on tabs.
     wall: crate::mdtable::Wall,
+    /// **Cells or 縱 slots** (2026-09-19). `:layout` changes the unit the
+    /// padding is counted in without touching a byte of the file, and a table
+    /// squared up in cells is ragged when it is stood on end.
+    measure: crate::mdtable::Measure,
 }
 
 impl PadKey {
@@ -740,6 +744,7 @@ impl PadKey {
             && self.ruby == other.ruby
             && self.syntax == other.syntax
             && self.folds == other.folds
+            && self.measure == other.measure
     }
 }
 
