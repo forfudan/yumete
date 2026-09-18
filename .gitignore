@@ -21,3 +21,6 @@
 # 配方在 scripts/make_words.py 與 scripts/make_jinghua.py。
 crates/yumete-cjk/src/common_words.txt
 crates/yumete-ime/jinghua/
+
+# subagent 的臨時 worktree（`isolation: worktree`），不進倉
+.claude/worktrees/
