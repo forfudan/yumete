@@ -1202,13 +1202,21 @@ pub fn draw(
             // one — and none of the layers below, every one of which describes
             // characters the file actually holds.
             if let Some(kind) = row.ink {
+                // ⚠️ **Virtual text takes the block's ground, not the page's**
+                // (作者 2026-09-19: 「表格隔行的底色沒有正確繪製」). A table's
+                // rows are banded, and what squares a row up is *padding* —
+                // virtual text. Painting it on the page's own ground cut every
+                // stripe off where its cell's writing ended, so the band read
+                // as a smear behind the words rather than as a row. The ink is
+                // this branch's business; the ground below it is not.
+                let under = crate::block_style(markup.block(zong.line), ink).unwrap_or(ink.page());
                 let style = match kind {
                     // 金 and bold, the same as across the page: 這不是正文.
                     yumete_core::drawn::Ink::Fold => {
-                        ink.page().fg(ink.gold()).add_modifier(Modifier::BOLD)
+                        under.fg(ink.gold()).add_modifier(Modifier::BOLD)
                     }
-                    yumete_core::drawn::Ink::Note => ink.page().fg(ink.marker()),
-                    _ => ink.page().fg(ink.quiet()),
+                    yumete_core::drawn::Ink::Note => under.fg(ink.marker()),
+                    _ => under.fg(ink.quiet()),
                 };
                 put_slot_right(buf, x, y, &symbol, style);
                 continue;
