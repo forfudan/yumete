@@ -4374,6 +4374,7 @@ fn draw_which_key(
     let vertical = editor.layout() == WritingLayout::Vertical;
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         title,
+        lede: None,
         body: panel::Body::Keys(keys.into_iter().map(|(k, what)| (k.to_string(), what)).collect()),
         tag: None,
         vertical_text: false,
@@ -4416,6 +4417,7 @@ fn draw_note(
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: say!("wiki.title"),
+            lede: None,
             body: panel::Body::Prose(said),
             tag: Some(say!("wiki.open-it")),
             vertical_text: false,
@@ -4430,7 +4432,10 @@ fn draw_note(
         // wants the entry, and the line cost a row of it.
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: view.name.clone(),
-            body: panel::Body::Prose(view.as_prose()),
+            // 章節行「辭典 › 真境」不是詞條說的話，是它寫在哪兒——面板把它
+            // 畫在名字下面，灰的，和正文隔一行（作者 2026-09-18）。
+            lede: view.lede(),
+            body: panel::Body::Prose(view.body_prose()),
             tag: None,
             // The one body that turns with the page.
             vertical_text: vertical,
@@ -4446,6 +4451,7 @@ fn draw_note(
     }
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         title: detail.title,
+        lede: None,
         body: panel::Body::Prose(body),
         // Where the note is written, so `gd` has somewhere named to go.
         tag: match detail.links.first() {
@@ -15463,6 +15469,7 @@ fn squeezed(text: &str) -> String {
             .draw(|frame| {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
                     title: "王高甫".into(),
+                    lede: None,
                     body: panel::Body::Prose(long.clone()),
                     tag: None,
                     vertical_text: false,

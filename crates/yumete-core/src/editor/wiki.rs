@@ -174,6 +174,33 @@ pub struct WikiView {
 }
 
 impl WikiView {
+    /// **The 章節 line** — 「辭典 › 真境」 — when the view is one entry
+    /// (作者 2026-09-18: 「章節那一行能不能用灰一些的顏色」).
+    ///
+    /// It is not part of what the entry *says*: it is where the entry was
+    /// written down. So the panel draws it quietly, under the name and above
+    /// the body, rather than as the body's first paragraph. Several entries of
+    /// one name keep their breadcrumbs inline — each one belongs to its own
+    /// entry, and there is no single line to lift out.
+    pub fn lede(&self) -> Option<String> {
+        match self.parts.as_slice() {
+            [one] if !one.trail.is_empty() => Some(one.trail.join(" › ")),
+            _ => None,
+        }
+    }
+
+    /// The entry without its 章節 line — what [`Self::lede`] lifted out.
+    pub fn body_prose(&self) -> String {
+        match self.lede() {
+            Some(lede) => self
+                .as_prose()
+                .strip_prefix(&lede)
+                .map(|rest| rest.trim_start_matches('\n').to_string())
+                .unwrap_or_else(|| self.as_prose()),
+            None => self.as_prose(),
+        }
+    }
+
     /// The whole view as prose, for the floating panel: one entry after
     /// another, a rule between, and the global ones under 「全局」.
     pub fn as_prose(&self) -> String {

@@ -1256,6 +1256,33 @@ fn zong_span(breaks: &[usize], total: usize, index: usize) -> (usize, usize) {
     (first, last.max(first))
 }
 
+/// **A short piece of prose, cut into 縱** — for the things that are set
+/// vertically but are not the manuscript: the 百科 float, and whatever joins it.
+///
+/// One entry point rather than 「wrap it horizontally and then chop the rows up
+/// by hand」, which is what the panel did first and which is wrong twice over
+/// (2026-09-18): the horizontal wrapper's budget is **cells** while a 縱's
+/// length is **字**, so a row of halfwidth digits comes back deeper than the box
+/// it was measured for; and a hand-chop afterwards knows nothing of 禁則, so a
+/// 「，」 ends up at the head of the next 縱. Both are what this function's
+/// caller — [`zong_breaks`] — already gets right for the page.
+///
+/// Blank paragraphs are dropped: on the page they are the space between two
+/// paragraphs, and in a ring they are a column of nothing.
+pub fn zong_rows(text: &str, zong_len: usize) -> Vec<String> {
+    let rope = Rope::from_str(text);
+    let grid = Grid::plain(zong_len, Dialects::NONE);
+    let from = Anchor { line: 0, index_in_line: 0 };
+    // A cap, not a guess: past a few thousand 縱 nothing can be read anyway,
+    // and the caller cuts to what its box holds long before this.
+    zongs_from(&rope, from, grid, 4096)
+        .into_iter()
+        .map(|z| rope.slice(z.start..z.end).to_string())
+        .map(|z| z.trim_end_matches('\n').to_string())
+        .filter(|z| !z.trim().is_empty())
+        .collect()
+}
+
 /// How many 縱 the logical `line` wraps into (always at least one, so an empty
 /// paragraph still occupies a column).
 pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
