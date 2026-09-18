@@ -564,8 +564,28 @@ impl Editor {
     /// squared up is the one editing their own documentation. That is why the
     /// question is the *level* and not [`Editor::table`] — the level is the
     /// file's, and holds in the paragraph between two tables.
+    ///
+    /// **竪排 squares tables up too, since 2026-09-19.** It used to be barred
+    /// here because a table stood on end was nonsense anyway — the rows were
+    /// wrapped and its `|` were loose pipes down a column. Now a row is one 縱
+    /// (`zong::lay_out`) and the walls turn with it, so the grid is the page's
+    /// own grid a quarter turn round, and it wants squaring up exactly as the
+    /// horizontal one does — counted in slots rather than cells
+    /// ([`crate::mdtable::Measure`]).
     pub(super) fn table_padding_on(&self) -> bool {
-        self.layout == Layout::Horizontal && self.table_level != TableLevel::Off
+        self.table_level != TableLevel::Off
+    }
+
+    /// Whether a table view may **open by itself** under the cursor.
+    ///
+    /// Not the same question as [`Self::table_padding_on`], and 2026-09-19 is
+    /// where they parted: 竪排 squares a table up now, but a table there is
+    /// **read-only** by design (作者: 「進入表格後還是只讀狀態，必須 tt 才能
+    /// 編輯」) — the view is the thing that takes the keys, and a turned grid
+    /// is not a grid the caret edits in place. `t t` still opens one, and
+    /// turns the page flat to do it.
+    pub(super) fn table_view_opens_itself(&self) -> bool {
+        self.layout == Layout::Horizontal && self.table_padding_on()
     }
 
     /// `t w` — fold the over-wide cells away, or give them back (#283).
@@ -1004,6 +1024,10 @@ impl Editor {
             return Vec::new();
         };
         let buffer = self.current_buffer();
+        let measure = match self.layout() {
+            crate::zong::Layout::Vertical => crate::mdtable::Measure::Slots,
+            _ => crate::mdtable::Measure::Cells,
+        };
         let key = |first, last| PadKey {
             buffer: buffer.id(),
             revision: buffer.revision(),
@@ -1019,6 +1043,7 @@ impl Editor {
             syntax: buffer.syntax(),
             folds: self.cells_fold_here(),
             wall,
+            measure,
         };
         // **The memo answers before the region is worked out.** Finding where
         // the table starts and ends is a walk to both ends of it, and this is
@@ -1105,6 +1130,10 @@ impl Editor {
             &region.aligns,
             &marks,
             &shown,
+            // **The unit is the page's own** (2026-09-19): 竪排 stands every
+            // grapheme in a slot, so a table padded in cells comes out ragged
+            // there — see [`crate::mdtable::Measure`].
+            measure,
         );
         let answer = runs.get(line - region.first).cloned().unwrap_or_default();
         *self.pad_cache.borrow_mut() = Some((key, PadWork { rows, marks, cols, runs }));

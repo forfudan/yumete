@@ -624,7 +624,7 @@ impl Editor {
         // per-keystroke budget to keep and the table may be below the fold:
         // the reader who opens a document at a table wants it drawn as one
         // before they touch anything.
-        if self.table.is_none() && self.table_padding_on() && self.syntax() == crate::syntax::Syntax::Markdown {
+        if self.table.is_none() && self.table_view_opens_itself() && self.syntax() == crate::syntax::Syntax::Markdown {
             if let Some(first) = self.first_md_table_line() {
                 let header = self.line_text(first).unwrap_or_default();
                 self.table = Some(TableView {

@@ -231,7 +231,7 @@ impl Editor {
     /// places: a mode that forty movement functions have to switch on is a
     /// mode that one of them will leave off.
     pub(super) fn find_the_table_here(&mut self) {
-        if self.table.is_some() || !self.table_padding_on() {
+        if self.table.is_some() || !self.table_view_opens_itself() {
             return;
         }
         // **Not while the table is being typed.** The grid refuses a `|` in a

@@ -1067,7 +1067,7 @@ pub fn slack(
     let mut out = Vec::new();
     for ((start, end), (from, to)) in boxes(line).into_iter().zip(cells(line)) {
         let end = end.min(chars.len());
-        let mut over = visible_width(&chars, (start, end), hidden).saturating_sub(room);
+        let mut over = visible_width(&chars, (start, end), hidden, Measure::Cells).saturating_sub(room);
         // Spans of padding this cell could give up, nearest the pipe first,
         // each keeping the one space (or the one dash) that has to stay.
         let mut spare = vec![(to + 1, end), (start + 1, from)];
@@ -1110,6 +1110,7 @@ pub fn padding(
     aligns: &[Align],
     marks: &[Vec<(usize, usize)>],
     shown: &[Vec<(usize, usize)>],
+    measure: Measure,
 ) -> Vec<Vec<(usize, String)>> {
     let chars: Vec<Vec<char>> = rows
         .iter()
@@ -1146,7 +1147,7 @@ pub fn padding(
                         .sum()
                 })
                 .unwrap_or(0);
-            widths.push(visible_width(&chars[i], (start, end), &rows[i].1) + lead + trail + drawn);
+            widths.push(visible_width(&chars[i], (start, end), &rows[i].1, measure) + lead + trail + drawn);
         }
         room.push(widths);
     }
@@ -1186,7 +1187,7 @@ pub fn padding(
                                 .sum()
                         })
                         .unwrap_or(0);
-                    visible_width(&chars[i], (start, end), hidden) + lead + trail + drawn
+                    visible_width(&chars[i], (start, end), hidden, measure) + lead + trail + drawn
                 })
                 .collect(),
         })
@@ -1285,7 +1286,37 @@ fn push_run(runs: &mut Vec<(usize, String)>, at: usize, text: String) {
 /// with. Per *character* it disagreed with the page over anything the two
 /// count differently: a tab, a control character or a lone combining mark is
 /// nought here and one cell there, and the table stood one cell out for good.
-fn visible_width(chars: &[char], (start, end): (usize, usize), hidden: &[(usize, usize)]) -> usize {
+/// **How a cell is measured: in cells, or in 縱 slots** (2026-09-19).
+///
+/// 橫排 counts the cells a glyph covers — a 漢字 is two. 竪排 stands every
+/// grapheme in a slot of its own, so there a 漢字 is **one** and so is a space.
+/// The padding this module draws has to be counted in the same unit the page
+/// lays out in, or the columns of a turned table come out ragged: six cells
+/// holds three 漢字 (three slots) or two 漢字 and two spaces (four slots), and
+/// a table padded in cells stacks those two against each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Measure {
+    /// 橫排: the cells a glyph covers.
+    Cells,
+    /// 竪排: one slot per grapheme.
+    Slots,
+}
+
+impl Measure {
+    fn of(self, g: &str) -> usize {
+        match self {
+            Measure::Cells => yumete_cjk::grapheme_width(g),
+            Measure::Slots => 1,
+        }
+    }
+}
+
+fn visible_width(
+    chars: &[char],
+    (start, end): (usize, usize),
+    hidden: &[(usize, usize)],
+    measure: Measure,
+) -> usize {
     let end = end.min(chars.len());
     let start = start.min(end);
     let text: String = chars[start..end].iter().collect();
@@ -1293,7 +1324,7 @@ fn visible_width(chars: &[char], (start, end): (usize, usize), hidden: &[(usize,
     let mut width = 0;
     for g in yumete_cjk::graphemes(&text) {
         if !hidden.iter().any(|&(a, b)| (a..b).contains(&at)) {
-            width += yumete_cjk::grapheme_width(g);
+            width += measure.of(g);
         }
         at += g.chars().count();
     }
@@ -1636,7 +1667,7 @@ mod tests {
             })
             .collect();
         let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
-        padding(&with, Wall::Pipe, rule, &aligns_of(&with, rule), &[], &[])
+        padding(&with, Wall::Pipe, rule, &aligns_of(&with, rule), &[], &[], Measure::Cells)
             .iter()
             .enumerate()
             .map(|(i, runs)| drawn(&rows[i], with[i].1.as_slice(), runs))
@@ -1710,7 +1741,7 @@ mod tests {
             None => (&with, &marks),
             Some((_, w, m)) => (w, m),
         };
-        padding(rows_in, Wall::Pipe, rule, &aligns_of(rows_in, rule), marks_in, &told)
+        padding(rows_in, Wall::Pipe, rule, &aligns_of(rows_in, rule), marks_in, &told, Measure::Cells)
             .iter()
             .enumerate()
             .map(|(i, runs)| {
@@ -1838,7 +1869,7 @@ mod tests {
         let with: Vec<(String, Vec<(usize, usize)>)> =
             lines(text).into_iter().map(|l| (l, Vec::new())).collect();
         assert!(
-            padding(&with, Wall::Pipe, Some(1), &aligns_of(&with, Some(1)), &[], &[]).iter().all(|r| r.is_empty()),
+            padding(&with, Wall::Pipe, Some(1), &aligns_of(&with, Some(1)), &[], &[], Measure::Cells).iter().all(|r| r.is_empty()),
             "nothing to draw, so nothing is drawn"
         );
     }
