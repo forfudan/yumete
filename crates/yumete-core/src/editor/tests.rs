@@ -14240,6 +14240,66 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **The keys that did something *else* here** (#428, 2026-09-18) — worse
+/// than doing nothing, because the hand does not stop to check.
+///
+/// ⚠️ Not an attempt to be vim: the two editors disagree about what a motion
+/// *is*, and 「按下去會改錯字」 is the only thing worth translating.
+#[test]
+fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let text = |ed: &Editor| ed.current_buffer().text();
+
+    // ⚠️ `J` is **not** translated: here it is half a page down in both
+    // presets, and joining is `gJ` (作者 2026-09-18).
+    let mut ed = vim("一\n二\n三\n");
+    press(&mut ed, "J");
+    assert_eq!(text(&ed), "一\n二\n三\n", "J does not join");
+    // …it paged, so come back before asking `gJ` to join anything.
+    press(&mut ed, "gggJ");
+    assert_eq!(text(&ed), "一二\n三\n", "gJ does");
+
+    // `D` and `C` take the rest of the line, not the selection.
+    //
+    // ⚠️ **Where the rest of the line begins is this editor's answer, not
+    // vim's** (作者 2026-09-18: 「vim w 是跳到詞頭，這個我們肯定没辦法實現」).
+    // `w` here walks the segmenter and leaves the cursor on the space, so
+    // `wD` takes the space with it; vim would keep it. The operator is
+    // translated, the motion underneath it stays ours.
+    let mut ed = vim("alpha beta\n二\n");
+    press(&mut ed, "wD");
+    assert_eq!(text(&ed), "alpha\n二\n", "D is d$");
+    let mut ed = vim("alpha beta\n二\n");
+    press(&mut ed, "wCX");
+    assert_eq!(text(&ed), "alphaX\n二\n", "C is c$");
+
+    // `S` changes the line and **keeps** it; `dd` takes it away.
+    let mut ed = vim("一\n二\n");
+    press(&mut ed, "SX");
+    assert_eq!(text(&ed), "X\n二\n", "S clears the line, leaving it");
+    let mut ed = vim("一\n二\n");
+    press(&mut ed, "dd");
+    assert_eq!(text(&ed), "二\n", "dd takes the line with it");
+
+    // `Y` is the line, not the selection.
+    let mut ed = vim("一\n二\n");
+    press(&mut ed, "Yp");
+    assert_eq!(text(&ed), "一\n一\n二\n", "Y is yy");
+
+    // `;` repeats the last find, `,` turns it round. In vim's hands these are
+    // pressed a dozen times a minute; here they were `A-.` and nothing.
+    let mut ed = vim("a.b.c.d\n");
+    press(&mut ed, "f.;");
+    assert_eq!(ed.cursor, 3, "the second dot");
+    press(&mut ed, ",");
+    assert_eq!(ed.cursor, 1, "and back to the first");
+}
+
 /// **The five a vim hand reaches for without thinking** (#428, 2026-09-18):
 /// `C-r`, `t`／`T`, `>>`／`<<`, and `*`.
 #[test]
