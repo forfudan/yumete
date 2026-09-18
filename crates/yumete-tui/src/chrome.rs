@@ -60,3 +60,64 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     block.render(rect, frame.buffer_mut());
     inner
 }
+
+/// **Where a floating thing stands** (2026-09-18).
+///
+/// Two answers, and the difference is whether the reader is still writing:
+/// something to glance at keeps out of the caret's way, and something that has
+/// taken the keys stands in the middle, where it cannot be missed.
+pub enum Anchor {
+    /// **The corner the caret is not in.** A fixed corner is right half the
+    /// time and covers what is being worked on the other half. One rule for
+    /// both layouts, because in both of them the caret has a column.
+    ///
+    /// `bottom` is the row the floats stack up from — the top of the footer.
+    Caret { at: (u16, u16), bottom: u16 },
+    /// The middle of the page: the picker and the question, both of which hold
+    /// every key while they are open.
+    Centre,
+}
+
+/// Fit a box `want` cells big into `area`, or `None` when there is no room.
+///
+/// ⚠️ **A caret-anchored box may take a quarter of the page and no more**
+/// (2026-09-17: 「面板不應該超過頁面的四分之一」) — half the width and half the
+/// height, so that whichever corner it takes, the caret's own corner is
+/// outside it. A centred one has the keys, so the page behind it is not being
+/// read and the cap does not apply.
+pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
+    let (width, height) = want;
+    if width < 8 || width > area.width || height > area.height {
+        return None;
+    }
+    match anchor {
+        Anchor::Centre => Some(Rect::new(
+            area.x + (area.width.saturating_sub(width)) / 2,
+            area.y + (area.height.saturating_sub(height)) / 2,
+            width,
+            height,
+        )),
+        Anchor::Caret { at, bottom } => {
+            if height > area.height / 2 + 1 || bottom < area.y + height {
+                return None;
+            }
+            let far = area.x + area.width.saturating_sub(width);
+            let x = match at.0 >= area.x + area.width / 2 {
+                true => area.x,
+                false => far,
+            };
+            // Along the bottom, unless the caret is standing in the rows the
+            // box would take — then the top, which is the corner diagonally
+            // opposite. Asked as 「would this cover the line you are on」
+            // rather than 「is the caret low on the page」: it only has to move
+            // when it is actually in the way, and one that jumps to the top
+            // the moment you pass the middle of the page moves for no reason.
+            let low = bottom - height;
+            let y = match at.1 >= low && at.1 < bottom {
+                true => area.y,
+                false => low,
+            };
+            Some(Rect::new(x, y, width, height))
+        }
+    }
+}

@@ -3439,15 +3439,32 @@ fn draw(
     // **The page's rectangle, not the frame's**: a menu drawn from the frame
     // covers the sidebar, which is a list the reader may be in the middle of
     // using.
-    panels.extend(draw_which_key(
-        frame, editor, config, text_area, footer.y, (cursor_x, cursor_y),
-    ));
-    // The footnote or comment the cursor is standing on, in the same panel
-    // (#294). Drawn after the which-key so a half-pressed sequence — which the
-    // reader is in the middle of — wins the corner if both want it.
-    panels.extend(draw_note(
-        frame, editor, config, text_area, footer.y, (cursor_x, cursor_y),
-    ));
+    // ⚠️ **One float at a time, and this is the order** (2026-09-18):
+    //
+    //   a `:` menu  >  the picker  >  a half-pressed sequence  >  a note
+    //
+    // Each of them wants the same corner, and each of them means 「the reader
+    // is doing *this* right now」 — so the one they are furthest into wins and
+    // the others are not drawn at all. 作者 2026-09-18, looking at a 百科
+    // entry and the `:` menu crowding one screen: 「一次只會出現一個面板，那麽
+    // 輸入命令的時候百科窗口自然就會消失」.
+    //
+    // It used to be four unconditional calls, later ones painting over
+    // earlier ones — and the comment here claimed the opposite of what the
+    // code did (the note was drawn *after* the which-key, so the note won).
+    let taken = !panels.is_empty() || picker_caret.is_some();
+    let keys_panel = match taken {
+        true => None,
+        false => draw_which_key(frame, editor, config, text_area, footer.y, (cursor_x, cursor_y)),
+    };
+    // The footnote, the comment, or the 百科 entry the cursor is standing on
+    // (#294, #287) — the quietest of the four, and the first to give way.
+    let note_panel = match taken || keys_panel.is_some() {
+        true => None,
+        false => draw_note(frame, editor, config, text_area, footer.y, (cursor_x, cursor_y)),
+    };
+    panels.extend(keys_panel);
+    panels.extend(note_panel);
     // `bare` draws no panel — the candidate is already in the sentence and the
     // code is under the caret. Unless there is no sentence to draw it into:
     // see `page_can_hold_a_candidate`.
@@ -3624,12 +3641,10 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     if width < 12 || height + 2 > area.height {
         return;
     }
-    let panel = Rect::new(
-        area.x + (area.width - width) / 2,
-        area.y + (area.height - height) / 2,
-        width,
-        height,
-    );
+    let Some(panel) = crate::chrome::place(area, (width, height), crate::chrome::Anchor::Centre)
+    else {
+        return;
+    };
     crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         rounded: config.panel.rounded,
         border: Style::default().fg(ink.rule()).bg(ink.paper()),
@@ -6066,12 +6081,7 @@ fn draw_picker(
     // terminal is a keyhole.
     let rows = ((area.height / 2).max(10) + 3).min(area.height).max(4);
     let wide = (area.width * 4 / 5).clamp(24, 120).min(area.width.saturating_sub(2));
-    let box_ = Rect::new(
-        area.x + (area.width.saturating_sub(wide)) / 2,
-        area.y + (area.height.saturating_sub(rows)) / 2,
-        wide,
-        rows,
-    );
+    let box_ = crate::chrome::place(area, (wide, rows), crate::chrome::Anchor::Centre)?;
     // Two fifths for the names, the rest for the preview — and a window too
     // narrow for both gives the whole of itself to the names.
     let names = match box_.width >= 56 {
@@ -15396,6 +15406,44 @@ fn squeezed(text: &str) -> String {
         // matches no file, and the panel is still a panel, with the reason
         // written in it.
         assert!(text.contains(&yumete_core::say!("picker.nothing-matched")), "{text}");
+    }
+
+    /// **One float at a time** (2026-09-18) — a `:` menu beats a half-pressed
+    /// sequence, which beats the note the cursor is standing on.
+    ///
+    /// 作者, looking at a 百科 entry and the `:` menu crowding one screen:
+    /// 「一次只會出現一個面板，那麽輸入命令的時候百科窗口自然就會消失」.
+    #[test]
+    fn only_one_thing_floats_over_the_page_at_a_time() {
+        let config = Config::default();
+        // ⚠️ **Wide rings only.** The HUD beside the caret is a ring too —
+        // two cells of what has been typed so far — and it is not a panel;
+        // counting it made 「one float」 read as two.
+        let rings = |editor: &Editor| {
+            let buffer = render_with(editor, &config, &no_ime(), 80, 24);
+            (0..buffer.area.height)
+                .filter(|&y| {
+                    let corner = (0..buffer.area.width)
+                        .any(|x| matches!(buffer[(x, y)].symbol(), "╭" | "┌"));
+                    let wide = (0..buffer.area.width)
+                        .filter(|&x| buffer[(x, y)].symbol() == "─")
+                        .count()
+                        >= 10;
+                    corner && wide
+                })
+                .count()
+        };
+
+        // A half-pressed `空格` draws its key table…
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(' '));
+        assert_eq!(rings(&editor), 1, "the key table, and nothing else");
+
+        // …and a `:` line draws the command menu instead of it. Two rings
+        // would be two things wanting the same corner.
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(':'));
+        assert_eq!(rings(&editor), 1, "the command menu, alone");
     }
 
     /// **The picker's query composes; its list does not** (2026-09-17).
