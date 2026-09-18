@@ -797,6 +797,15 @@ pub mod rung {
     pub const SELECTION: u16 = 6300; // 第 63 檔
     /// The page — **第 90 檔**, not the end of the ladder.
     pub const PAPER: u16 = 9000; // 第 90 檔
+    /// **第 85 檔 — what floats over the page** (作者 2026-09-18 定).
+    ///
+    /// A panel used to be drawn on the paper's own colour, with a rule around
+    /// it as the only thing saying where it began: 「我感覺他和正文還是有些混在
+    /// 一起」. A second ring was tried and cost four cells of content each way;
+    /// this costs none. Five rungs off the paper is enough to read as a sheet
+    /// lifted off the page, and — being a rung, not a colour — it turns round
+    /// by itself on a light theme, where 85 is darker than the paper.
+    pub const FLOAT: u16 = 8500; // 第 85 檔
     /// **第 100 檔** — as far into the theme's own colour as the ladder goes.
     ///
     /// The one strip that is not on the page: the status line. On a dark theme

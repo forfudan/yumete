@@ -3647,14 +3647,20 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     };
     crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         rounded: config.panel.rounded,
-        border: Style::default().fg(ink.rule()).bg(ink.paper()),
-        ground: Style::default().bg(ink.paper()),
+        border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
+        ground: Style::default().bg(crate::chrome::panel_ground(ink)),
         title: Some((
             asked.title.clone(),
-            Style::default().fg(ink.gold()).bg(ink.paper()),
+            Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
         )),
     });
-    let ground = Style::default().bg(ink.paper());
+    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
+    // already painted the panel; text that carried its own copy of that colour
+    // dragged a patch of the *old* one behind every line the day the panel's
+    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
+    // whatever is under it.
+    let ground = Style::default();
     let limit = panel.x + width - 1;
     let buf = frame.buffer_mut();
     let mut y = panel.y + 1;
@@ -3986,18 +3992,24 @@ fn draw_list(
     // same kind of thing should not look like two different programs.
     crate::chrome::draw(frame, menu, &crate::chrome::Ring {
         rounded,
-        border: Style::default().fg(ink.rule()).bg(ink.paper()),
-        ground: Style::default().bg(ink.paper()),
+        border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
+        ground: Style::default().bg(crate::chrome::panel_ground(ink)),
         title: Some((
             title.to_string(),
-            Style::default().fg(ink.gold()).bg(ink.paper()),
+            Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
         )),
     });
 
-    let ground = Style::default().bg(ink.paper());
+    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
+    // already painted the panel; text that carried its own copy of that colour
+    // dragged a patch of the *old* one behind every line the day the panel's
+    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
+    // whatever is under it.
+    let ground = Style::default();
     let text = ground.fg(ink.text());
     let quiet = ground.fg(ink.quiet());
-    let on = Style::default().bg(ink.text()).fg(ink.paper());
+    let on = Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink));
 
     let buf = frame.buffer_mut();
     for slot in 0..visible {
@@ -4322,8 +4334,8 @@ fn draw_hud_panel(
         // The same ring at the same rung as every other panel on the screen:
         // what separates a panel from the page is its rule and its 金墨, not a
         // lighter ground.
-        border: Style::default().fg(ink.rule()).bg(ink.paper()),
-        ground: Style::default().bg(ink.paper()),
+        border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
+        ground: Style::default().bg(crate::chrome::panel_ground(ink)),
         // No name: it is one line of what you just typed, and a title over it
         // would be taller than the thing it names.
         title: None,
@@ -6089,7 +6101,13 @@ fn draw_picker(
         false => box_.width,
     };
     let left = Rect::new(box_.x, box_.y, names, rows);
-    let ground = Style::default().bg(ink.paper());
+    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
+    // already painted the panel; text that carried its own copy of that colour
+    // dragged a patch of the *old* one behind every line the day the panel's
+    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
+    // whatever is under it.
+    let ground = Style::default();
     crate::chrome::draw(frame, left, &crate::chrome::Ring {
         rounded: config.panel.rounded,
         border: ground.fg(ink.rule()),
@@ -6102,7 +6120,7 @@ fn draw_picker(
     let first = at
         .saturating_sub(deep.saturating_sub(1))
         .min(items.len().saturating_sub(deep.min(items.len())));
-    let on = Style::default().bg(ink.text()).fg(ink.paper());
+    let on = Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink));
     let limit = left.x + names - 1;
     {
         let buf = frame.buffer_mut();
@@ -6232,7 +6250,15 @@ fn draw_preview(
     ink: crate::theme::Palette,
     area: Rect,
 ) {
-    let ground = Style::default().bg(ink.at(yumete_config::rung::CHROME));
+    // The same ground as the list beside it: two panes of one panel must not
+    // be two colours (2026-09-18).
+    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
+    // already painted the panel; text that carried its own copy of that colour
+    // dragged a patch of the *old* one behind every line the day the panel's
+    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
+    // whatever is under it.
+    let ground = Style::default();
     // **The ring is drawn even when there is nothing to put in it** — a query
     // that matches no file left the writing showing through the shape the
     // preview had been occupying a keystroke ago, which reads as a panel that
