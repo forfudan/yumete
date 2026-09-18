@@ -257,6 +257,16 @@ impl Editor {
     ///
     /// Empty when nothing is pending, which is most of the time.
     pub fn typed_so_far(&self) -> String {
+        // **The vim operator is spelled out, not named** (#429): what was
+        // typed is `d`, or `dg` on the way to `dgg`, and the HUD's whole job
+        // is to hand those characters back.
+        if let Pending::VimOperator { op, first } = self.pending {
+            let mut word = String::from(op);
+            if let Some(f) = first {
+                word.push(f);
+            }
+            return word;
+        }
         let word = match self.pending {
             Pending::None => "",
             Pending::Goto => "g",
@@ -281,6 +291,8 @@ impl Editor {
             // Nothing was typed to get here — the command opened it, and the
             // status line is already carrying the whole question.
             Pending::Confirm => "",
+            // Answered above, where its own characters are.
+            Pending::VimOperator { .. } => "",
         };
         // **In the order it was typed.** Inside a sequence the number comes
         // *after* the prefix — `g3` is on its way to `g3d` — and outside one it

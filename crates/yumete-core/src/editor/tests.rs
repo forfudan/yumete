@@ -14172,6 +14172,117 @@ fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
     assert_eq!(at(&ed).0, 0, "and back");
 }
 
+/// **The operator waits for a motion** (#429, 2026-09-18) — which is what
+/// makes `d$`, `de`, `dG`, `df,` and `di(` possible at all. A translation
+/// table could spell `dw` and `dd`; it could not spell a grammar.
+#[test]
+fn a_vim_operator_waits_for_any_motion_the_editor_has() {
+    let vim = || {
+        let mut ed = typed("alpha, beta gamma\nsecond line\nthird (inside) line\n");
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let text = |ed: &Editor| ed.current_buffer().text();
+
+    let mut ed = vim();
+    press(&mut ed, "d$");
+    assert_eq!(text(&ed), "\nsecond line\nthird (inside) line\n", "to the end of the line");
+
+    let mut ed = vim();
+    press(&mut ed, "de");
+    assert_eq!(text(&ed), ", beta gamma\nsecond line\nthird (inside) line\n", "a word");
+
+    // A motion that is told a character.
+    let mut ed = vim();
+    press(&mut ed, "df,");
+    assert_eq!(text(&ed), " beta gamma\nsecond line\nthird (inside) line\n", "up to the comma");
+
+    // Line-wise: `dj` takes both lines whole, as vim does.
+    let mut ed = vim();
+    press(&mut ed, "dj");
+    assert_eq!(text(&ed), "third (inside) line\n", "this line and the next");
+
+    // …and to the end of the file.
+    let mut ed = vim();
+    press(&mut ed, "jdG");
+    assert_eq!(text(&ed), "alpha, beta gamma\n", "from here to the last line");
+
+    // A text object.
+    let mut ed = vim();
+    press(&mut ed, "jjwwdi(");
+    assert_eq!(text(&ed), "alpha, beta gamma\nsecond line\nthird () line\n", "inside the pair");
+
+    // **The register is filled**, because vim's `d` fills it — and `y` leaves
+    // the cursor at the head of what it took, so `yyp` puts the copy directly
+    // under the line rather than one line further down.
+    let mut ed = vim();
+    press(&mut ed, "ddp");
+    assert_eq!(text(&ed), "second line\nalpha, beta gamma\nthird (inside) line\n");
+    let mut ed = vim();
+    press(&mut ed, "yyp");
+    assert_eq!(
+        text(&ed),
+        "alpha, beta gamma\nalpha, beta gamma\nsecond line\nthird (inside) line\n"
+    );
+
+    // A key that is not a motion says so rather than doing something else.
+    let mut ed = vim();
+    ed.on_key(Key::Char('d'));
+    ed.on_key(Key::Char('z'));
+    assert_eq!(text(&ed), "alpha, beta gamma\nsecond line\nthird (inside) line\n");
+    assert!(ed.status().contains('z'), "{}", ed.status());
+
+    // With something already selected the operator acts at once — vim's
+    // visual mode, and this editor's own way round.
+    let mut ed = vim();
+    press(&mut ed, "v3ld");
+    assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
+}
+
+/// **The five a vim hand reaches for without thinking** (#428, 2026-09-18):
+/// `C-r`, `t`／`T`, `>>`／`<<`, and `*`.
+#[test]
+fn the_vim_preset_answers_the_keys_a_vim_hand_expects() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let text = |ed: &Editor| ed.current_buffer().text();
+
+    // `C-r` is vim's redo; here the key is `U`, and a vim hand pressing `C-r`
+    // used to get a line of prose pointing at it.
+    let mut ed = vim("一\n二\n三\n");
+    press(&mut ed, "ddu");
+    assert_eq!(text(&ed), "一\n二\n三\n", "u put it back");
+    ed.on_key(Key::Ctrl('r'));
+    assert_eq!(text(&ed), "二\n三\n", "C-r takes it away again");
+
+    // `t` is `f` one short. This editor has no till of its own — `t` is the
+    // table group — but inside an operator's wait nothing else `t` could be.
+    let mut ed = vim("alpha, beta\n");
+    press(&mut ed, "dt,");
+    assert_eq!(text(&ed), ", beta\n", "up to but not including the comma");
+    let mut ed = vim("alpha, beta\n");
+    press(&mut ed, "df,");
+    assert_eq!(text(&ed), " beta\n", "…where `f` takes the comma too");
+
+    // `>>` and `<<` are operators as well, so `>j` indents both lines.
+    let mut ed = vim("一\n二\n三\n");
+    press(&mut ed, ">>");
+    assert!(text(&ed).starts_with("    一"), "{:?}", text(&ed));
+    let mut ed = vim("一\n二\n三\n");
+    press(&mut ed, ">j");
+    assert!(text(&ed).starts_with("    一\n    二"), "{:?}", text(&ed));
+
+    // `*` is 「this word, elsewhere」, which is `g/` here.
+    let mut ed = vim("甲乙 丙丁\n甲乙 戊\n");
+    press(&mut ed, "*");
+    assert!(!ed.status().is_empty(), "it looked: {}", ed.status());
+}
+
 /// **A count, written where vim writes it** (2026-09-18, #428).
 ///
 /// Three places: before the operator (`3dw`), after it (`d3w`), and both at
