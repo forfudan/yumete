@@ -138,10 +138,18 @@ pub fn draw(
             //
             // 折行交給正文自己的折行器（禁則在裏面），寬度按「一縱幾個字」給，
             // 一個漢字兩格，所以乘二。
+            //
+            // ⚠️ **折行器的預算是格，一縱的長度是字**（2026-09-18 撞到）。半角
+            // 字一格一個，所以 52 格裝得下 28 個字——`tall` 是 26，那一縱就比框
+            // 深兩行。詞條裏有「500」「>」這種就會發生。折完再按字數硬切一次。
             let mut zong: Vec<String> = text
                 .split('\n')
                 .filter(|para| !para.trim().is_empty())
                 .flat_map(|para| wrap(para, tall * 2))
+                .flat_map(|z| {
+                    let chars: Vec<char> = z.chars().collect();
+                    chars.chunks(tall).map(|c| c.iter().collect::<String>()).collect::<Vec<_>>()
+                })
                 .filter(|z| !z.is_empty())
                 .collect();
             // **標題是自己的一縱，排在最右**（作者 2026-09-18 定，三個辦法裏
@@ -149,6 +157,19 @@ pub fn draw(
             // 縱，金墨。所以這一支不給 `chrome` 標題，框上没有名字。
             let name: String = panel.title.chars().take(tall).collect();
             zong.insert(0, name);
+            // **裝不下的是「縱」，不是「行」**（2026-09-18）。橫排那一段截斷
+            // （下面的 `cap`）數的是行，竪排這裏一行是一個字，照它辦就變成
+            // 「把最左那一縱整根換成……，框高等於縱的條數」——高度塌掉、正文
+            // 無聲少一截。所以竪排自己在這裏截：框最寬只有
+            // `chrome::room` 的三分之一，換算成幾縱，多的砍掉，末縱畫「…」。
+            let box_w = (room_w as usize).max(24).min(area.width as usize);
+            let fits = box_w.saturating_sub(2 + pad * 2) / 2;
+            if fits > 0 && zong.len() > fits {
+                zong.truncate(fits);
+                if let Some(last) = zong.last_mut() {
+                    *last = "…".to_string();
+                }
+            }
             let deep = zong.iter().map(|z| z.chars().count()).max().unwrap_or(1).max(1);
             let across = zong.len().max(1);
             (across * 2, deep, zong, 1usize, 0usize, across * 2)
@@ -212,8 +233,13 @@ pub fn draw(
     // 「the panel is unreliable」 rather than as 「there is no room」. A cut body
     // says what it can and ends in an ellipsis; the tag on the bottom border
     // still says where to read the rest.
+    //
+    // ⚠️ **竪書不走這一段**，它在上面自己截過了：這裏的 `count` 對竪書是「一縱
+    // 幾個字」而 `lines` 是一條條的縱，兩者不是同一個維度，照這裏辦會把最左那
+    // 一縱換成「…」並且把框高壓成縱的條數。
     let cap = room_h.saturating_sub(2).max(1) as usize;
     let (count, lines) = match &panel.body {
+        Body::Prose(_) if panel.vertical_text => (count, lines),
         Body::Prose(_) if count > cap && cap > 0 => {
             let mut kept: Vec<String> = lines.into_iter().take(cap).collect();
             if let Some(last) = kept.last_mut() {
@@ -312,4 +338,77 @@ pub fn draw(
         put_text(buf, x, rect.y + height - 1, limit, tag, ground.fg(ink.quiet()));
     }
     Some(rect)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    /// Draw one 竪書 panel on a `w × h` page and hand back its rectangle and
+    /// what was written.
+    fn zong(text: &str, w: u16, h: u16) -> (Rect, ratatui::buffer::Buffer) {
+        let config = Config::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, w, h);
+                got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                    title: "天門真境".into(),
+                    body: Body::Prose(text.into()),
+                    vertical_text: true,
+                    tag: None,
+                });
+            })
+            .unwrap();
+        (got.expect("the panel is drawn"), terminal.backend().buffer().clone())
+    }
+
+    /// 2026-09-18: a long entry came out **half the height it should be** and
+    /// silently missing its tail. Two faults, one symptom: the row-counting cap
+    /// written for 橫排 was reading 竪書's 「how many 字 to a 縱」 as 「how many
+    /// rows」 — so it replaced the leftmost 縱 with an ellipsis and then made the
+    /// box as deep as the *number of 縱*; and the wrapper's budget is cells
+    /// while a 縱's length is 字, so 「500」 and 「>」 pushed a 縱 two 字 past the
+    /// room and tripped the cap in the first place.
+    #[test]
+    fn a_long_vertical_entry_fills_its_height_and_says_it_was_cut() {
+        // Halfwidth digits on purpose: that is what made a 縱 longer than the
+        // room in 字 while still fitting it in cells.
+        let entry = "天門真境辭典 > 真境。\n\
+                     面積大約 500 平方千米，山地湖南到皖河，地理中心位於返塵亭南。\n\
+                     在籍居民二十萬三千人四百人，第一、第三產業發達。\n\
+                     大量居民在得稅低，高福利，高遺產稅。直屬年分紅：有工作的人權重高。\n\
+                     返塵亭——迎客居：一裏，再往後還有一段，看它會不會被砍掉。\n\
+                     山門之外另有客舍三十間，逢法會則不敷用，須往迎客居暫住。\n\
+                     歷任駐守皆出自乾元字輩，掌宗座下領宗內主事者兼領之。\n\
+                     水路自皖河北上，陸路過返塵亭，二者皆須驗牒方得入境。";
+        let (rect, buffer) = zong(entry, 70, 45);
+
+        // 竪排 the room is two thirds of the page tall, and a full entry uses
+        // all of it: 45 × 2/3 = 30.
+        assert_eq!(rect.height, 30, "the box is {} rows deep", rect.height);
+        // No 縱 may be deeper than the room — that was the wrapper's cell/字
+        // confusion, and it is what tripped the cap.
+        assert!(rect.height <= 45 * 2 / 3);
+
+        // What did not fit says so, in the vertical ellipsis, at the far left.
+        let text: String = (0..rect.height)
+            .flat_map(|y| (0..rect.width).map(move |x| (x, y)))
+            .map(|(x, y)| buffer[(rect.x + x, rect.y + y)].symbol().to_string())
+            .collect();
+        assert!(text.contains('︙'), "the cut is marked: {text:?}");
+        // And the title is still its own 縱, in the box rather than on the ring.
+        assert!(text.contains('天') && text.contains('境'), "{text:?}");
+    }
+
+    /// A short entry keeps the box short — the height follows the deepest 縱,
+    /// it is not padded out to the room.
+    #[test]
+    fn a_short_vertical_entry_does_not_grow_a_box_it_does_not_need() {
+        let (rect, _) = zong("短。", 70, 45);
+        assert!(rect.height <= 6, "the box is {} rows deep", rect.height);
+    }
 }
