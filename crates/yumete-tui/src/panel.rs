@@ -131,10 +131,25 @@ pub fn draw(
         // 量法轉置——能放多高就一縱多少字，需要幾縱就多寬（一個漢字兩格）。
         Body::Prose(text) if panel.vertical_text => {
             let tall = (room_h as usize).saturating_sub(2).max(1);
+            // **段落之間不空一縱，改成首行縮進兩格**（作者 2026-09-18 定）。
+            // 竪排的書就是這麽分段的：空一縱在一頁紙上是一整條白，在一個只有
+            // 十來縱的小框裏更是把兩段推得老遠；縮進兩個字佔的是那一縱自己的
+            // 頭上，一格都不多要。
+            //
             // 折行交給正文自己的折行器（禁則在裏面），寬度按「一縱幾個字」給，
-            // 一個漢字兩格，所以乘二。
-            let zong = wrap(text, tall * 2);
-            let zong: Vec<String> = zong.into_iter().filter(|z| !z.is_empty()).collect();
+            // 一個漢字兩格，所以乘二。縮進用兩個全角空格寫在段首，折行器就當它
+            // 是兩個字，第二縱起自然頂格。
+            let mut zong: Vec<String> = text
+                .split('\n')
+                .filter(|para| !para.trim().is_empty())
+                .flat_map(|para| wrap(&format!("　　{para}"), tall * 2))
+                .filter(|z| !z.is_empty())
+                .collect();
+            // **標題是自己的一縱，排在最右**（作者 2026-09-18 定，三個辦法裏
+            // 的丙）。竪排的書就是這麽做的：標題不貼在框邊上，它本身就是第一
+            // 縱，金墨。所以這一支不給 `chrome` 標題，框上没有名字。
+            let name: String = panel.title.chars().take(tall).collect();
+            zong.insert(0, name);
             let deep = zong.iter().map(|z| z.chars().count()).max().unwrap_or(1).max(1);
             let across = zong.len().max(1);
             (across * 2, deep, zong, 1usize, 0usize, across * 2)
@@ -233,10 +248,16 @@ pub fn draw(
         // `rule()`, the rung every other ring on the screen is drawn at.
         border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
         ground: Style::default().bg(crate::chrome::panel_ground(ink)),
-        title: Some((
-            panel.title.clone(),
-            Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
-        )),
+        // Vertical prose carries its name as its first 縱 (below), so the
+        // ring is left bare — a name in both places would be the same word
+        // twice, two cells apart.
+        title: match panel.vertical_text && prose {
+            true => None,
+            false => Some((
+                panel.title.clone(),
+                Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
+            )),
+        },
     });
     // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
@@ -255,13 +276,17 @@ pub fn draw(
                     Some(x) if x > rect.x => x,
                     _ => break,
                 };
+                let ink_of = match n {
+                    0 => ink.gold(),
+                    _ => ink.text(),
+                };
                 for (i, ch) in zong.chars().enumerate() {
                     let y = rect.y + 1 + i as u16;
                     if y + 1 >= rect.y + height {
                         break;
                     }
                     let shown = yumete_cjk::vertical::vertical_form(ch).unwrap_or(ch);
-                    put_text(buf, x, y, x + 2, &shown.to_string(), ground.fg(ink.text()));
+                    put_text(buf, x, y, x + 2, &shown.to_string(), ground.fg(ink_of));
                 }
             }
         }
