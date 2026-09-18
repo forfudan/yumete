@@ -51,6 +51,137 @@ pub struct Panel {
     pub tag: Option<String>,
 }
 
+/// Whether `line` is a row of a markdown table.
+fn is_table_row(line: &str) -> bool {
+    let line = line.trim();
+    line.starts_with('|') && line.len() > 1
+}
+
+/// Whether `line` is a table's `| --- | --- |` rule rather than data.
+fn is_table_rule(line: &str) -> bool {
+    is_table_row(line)
+        && line
+            .trim()
+            .trim_matches('|')
+            .split('|')
+            .all(|cell| {
+                let cell = cell.trim();
+                !cell.is_empty() && cell.chars().all(|c| matches!(c, '-' | ':'))
+            })
+}
+
+/// **A table, turned ninety degrees clockwise** (作者 2026-09-18 定).
+///
+/// 竪排 reads down and stacks 縱 leftwards, and a grid is read *across* — the
+/// one thing a vertical page cannot do. So the grid is turned instead of being
+/// spelled out as the `|` and `-` it is written with, which is what it used to
+/// come out as: a 縱 of loose pipes and dashes for every row of the table.
+///
+/// Clockwise is the direction that keeps the reading order: the table's first
+/// row becomes the **rightmost 縱**, read downward, and its cells run down in
+/// the order the columns were written. The walls turn with it — a `|` between
+/// two columns is a horizontal rule between two bands, and the rule under the
+/// header is a vertical one to the left of the first 縱.
+///
+/// Editing is not this function's business: 竪排 locks a table read-only and
+/// `t t` opens the editable view (which turns the page horizontal), so the
+/// caret never has to stand inside a grid that has been turned.
+fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
+    let rows: Vec<Vec<String>> = block
+        .iter()
+        .filter(|line| !is_table_rule(line))
+        .map(|line| {
+            line.trim()
+                .trim_matches('|')
+                .split('|')
+                .map(|cell| cell.trim().to_string())
+                .collect()
+        })
+        .collect();
+    let columns = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    if rows.is_empty() || columns == 0 {
+        return Vec::new();
+    }
+    // How deep one cell is drawn. Every cell gets the same depth so the bands
+    // line up across the 縱 — that alignment *is* the grid — and a cell too
+    // long for it is cut with a 「…」 rather than made to fit (作者: 「超過就
+    // 截斷，畫『…』」; the whole entry is a `t t` away).
+    let band = (tall + 1) / columns;
+    let deep = band.saturating_sub(1).max(1).min(
+        rows.iter()
+            .flat_map(|r| r.iter().map(|c| c.chars().count()))
+            .max()
+            .unwrap_or(1)
+            .max(1),
+    );
+    let cell = |text: &str| -> String {
+        let mut out: String = text.chars().take(deep).collect();
+        if text.chars().count() > deep {
+            out.pop();
+            out.push('…');
+        }
+        // Padded to the band so the next one starts where its neighbours do.
+        while out.chars().count() < deep {
+            out.push(' ');
+        }
+        out
+    };
+    let one = |row: &Vec<String>| -> String {
+        (0..columns)
+            .map(|c| cell(row.get(c).map(String::as_str).unwrap_or("")))
+            .collect::<Vec<_>>()
+            .join("─")
+    };
+    let mut zong: Vec<String> = Vec::with_capacity(rows.len() + 1);
+    zong.push(one(&rows[0]));
+    if rows.len() > 1 {
+        // The rule under the header, turned: a wall down the left of the
+        // first 縱, crossed where the bands meet it.
+        let tallest = deep * columns + columns.saturating_sub(1);
+        zong.push(
+            (0..tallest)
+                .map(|i| match (i + 1) % (deep + 1) == 0 {
+                    true => '┼',
+                    false => '│',
+                })
+                .collect(),
+        );
+    }
+    zong.extend(rows[1..].iter().map(one));
+    zong
+}
+
+/// One entry, cut into 縱: its paragraphs wrapped, its tables turned.
+///
+/// The two are measured differently — prose by [`yumete_core::zong::zong_rows`]
+/// and a grid by [`table_zong`] — so the entry is walked block by block rather
+/// than handed to one wrapper whole.
+fn entry_zong(text: &str, tall: usize, indent: &dyn Fn(&str) -> String) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut at = 0;
+    while at < lines.len() {
+        match is_table_row(lines[at]) {
+            true => {
+                let from = at;
+                while at < lines.len() && is_table_row(lines[at]) {
+                    at += 1;
+                }
+                out.extend(table_zong(&lines[from..at], tall));
+            }
+            false => {
+                let from = at;
+                while at < lines.len() && !is_table_row(lines[at]) {
+                    at += 1;
+                }
+                let prose = lines[from..at].join("\n");
+                out.extend(yumete_core::zong::zong_rows(&indent(&prose), tall));
+            }
+        }
+    }
+    out
+}
+
 /// Wrap `text` to `width` cells, by the rules the page itself wraps by.
 ///
 /// The manuscript's own wrapper (`yumete_core::wrap`), not a loop over
@@ -181,7 +312,7 @@ pub fn draw(
                 zong.extend(rows);
             }
             zong.push(String::new());
-            zong.extend(yumete_core::zong::zong_rows(&indented(text), tall));
+            zong.extend(entry_zong(text, tall, &indented));
             // **裝不下的是「縱」，不是「行」**（2026-09-18）。橫排那一段截斷
             // （下面的 `cap`）數的是行，竪排這裏一行是一個字，照它辦就變成
             // 「把最左那一縱整根換成……，框高等於縱的條數」——高度塌掉、正文
@@ -355,7 +486,15 @@ pub fn draw(
                         break;
                     }
                     let shown = yumete_cjk::vertical::vertical_form(ch).unwrap_or(ch);
-                    put_text(buf, x, y, x + 2, &shown.to_string(), ground.fg(ink_of(n)));
+                    // ⚠️ **A turned table's rules have to reach across the
+                    // gap** (2026-09-18). A 縱 is two cells wide and 「─」 is
+                    // one, so a band rule came out as a dotted line with a
+                    // hole between every 縱. Written twice, it joins up.
+                    let shown = match shown {
+                        '─' | '┼' => format!("{shown}─"),
+                        _ => shown.to_string(),
+                    };
+                    put_text(buf, x, y, x + 2, &shown, ground.fg(ink_of(n)));
                 }
             }
         }
