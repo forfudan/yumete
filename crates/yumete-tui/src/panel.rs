@@ -30,6 +30,15 @@ pub enum Body {
 pub struct Panel {
     pub title: String,
     pub body: Body,
+    /// **Whether the prose inside runs down the page** (作者 2026-09-18:
+    /// 「只有百科才需要縱書，其他的都保持橫排」).
+    ///
+    /// Not the same question as the panel's *shape*, which follows the page
+    /// for everything that floats: a key table in a 竪排 page is still a table
+    /// of keys and is read across, while a 百科 entry is prose and a horizontal
+    /// paragraph in the middle of a vertical page is a change of gear the eye
+    /// has to make for no reason.
+    pub vertical_text: bool,
     /// 「第 11 行」 — where the thing being shown is written. Right-aligned on
     /// the bottom border, out of the reading path.
     pub tag: Option<String>,
@@ -118,6 +127,18 @@ pub fn draw(
     // `lines` is the prose, already wrapped; a key list draws itself from
     // `panel.body` and needs only its `count`.
     let (inner, count, lines, columns, key_w, one) = match &panel.body {
+        // **竪書的正文**（作者 2026-09-18）：一縱是一列，字往下走，縱往左排。
+        // 量法轉置——能放多高就一縱多少字，需要幾縱就多寬（一個漢字兩格）。
+        Body::Prose(text) if panel.vertical_text => {
+            let tall = (room_h as usize).saturating_sub(2).max(1);
+            // 折行交給正文自己的折行器（禁則在裏面），寬度按「一縱幾個字」給，
+            // 一個漢字兩格，所以乘二。
+            let zong = wrap(text, tall * 2);
+            let zong: Vec<String> = zong.into_iter().filter(|z| !z.is_empty()).collect();
+            let deep = zong.iter().map(|z| z.chars().count()).max().unwrap_or(1).max(1);
+            let across = zong.len().max(1);
+            (across * 2, deep, zong, 1usize, 0usize, across * 2)
+        }
         Body::Prose(text) => {
             // **As wide as `chrome::room` allows** (2026-09-18). What keeps
             // the caret uncovered is the *height* — a third of the page stands
@@ -227,6 +248,23 @@ pub fn draw(
     let limit = rect.x + width - 1;
     let buf = frame.buffer_mut();
     match &panel.body {
+        // 竪書：第一縱貼右邊，往左排；每個字取它的竪排字形。
+        Body::Prose(_) if panel.vertical_text => {
+            for (n, zong) in lines.iter().enumerate() {
+                let x = match (rect.x + width).checked_sub(2 + 1 + n as u16 * 2) {
+                    Some(x) if x > rect.x => x,
+                    _ => break,
+                };
+                for (i, ch) in zong.chars().enumerate() {
+                    let y = rect.y + 1 + i as u16;
+                    if y + 1 >= rect.y + height {
+                        break;
+                    }
+                    let shown = yumete_cjk::vertical::vertical_form(ch).unwrap_or(ch);
+                    put_text(buf, x, y, x + 2, &shown.to_string(), ground.fg(ink.text()));
+                }
+            }
+        }
         Body::Prose(_) => {
             for (i, line) in lines.iter().enumerate() {
                 let x = rect.x + 1 + pad as u16;
