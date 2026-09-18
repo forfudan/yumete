@@ -151,6 +151,161 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
     zong
 }
 
+/// **A table, drawn as a table** — the 橫排 float's half (作者 2026-09-19:
+/// 「橫排的浮窗也渲染一下吧，然後讓他不要 wrap，如果有必要可以省略」).
+///
+/// A grid wrapped like prose is not a grid: the tail of every row lands under
+/// the head of the next one and the columns are gone, which is what the panel
+/// used to show. So a table is laid out at the width it is given and **never
+/// wrapped** — what does not fit is cut, and the cut is said out loud with a
+/// 「…」, cell by cell and then column by column.
+fn table_rows(block: &[&str], budget: usize) -> Vec<String> {
+    let rows: Vec<Vec<String>> = block
+        .iter()
+        .filter(|line| !is_table_rule(line))
+        .map(|line| {
+            line.trim()
+                .trim_matches('|')
+                .split('|')
+                .map(|cell| cell.trim().to_string())
+                .collect()
+        })
+        .collect();
+    let columns = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    if rows.is_empty() || columns == 0 {
+        return Vec::new();
+    }
+    fn cell_of(row: &[String], c: usize) -> &str {
+        row.get(c).map(String::as_str).unwrap_or("")
+    }
+    let mut wide: Vec<usize> = (0..columns)
+        .map(|c| {
+            rows.iter()
+                .map(|r| yumete_cjk::str_width(cell_of(r, c)))
+                .max()
+                .unwrap_or(1)
+                .max(1)
+        })
+        .collect();
+    // Three cells to a wall (「 │ 」). Narrow the widest column one cell at a
+    // time — the widest is the one with room to give — and when every column
+    // is down to its floor and it still does not fit, drop the last column and
+    // say so with a 「…」 in its place.
+    let walls = |n: usize| n.saturating_sub(1) * 3;
+    let floor = 4usize;
+    while wide.iter().sum::<usize>() + walls(wide.len()) > budget && wide.len() > 1 {
+        let widest = wide.iter().copied().max().unwrap_or(0);
+        match widest > floor {
+            true => {
+                let at = wide.iter().position(|&w| w == widest).unwrap_or(0);
+                wide[at] -= 1;
+            }
+            false => {
+                wide.pop();
+            }
+        }
+    }
+    let cut = wide.len() < columns;
+    let fit = |text: &str, room: usize| -> String {
+        let mut out = String::new();
+        let mut used = 0;
+        for g in text.chars() {
+            let w = yumete_cjk::str_width(&g.to_string());
+            if used + w > room.saturating_sub(usize::from(yumete_cjk::str_width(text) > room)) {
+                break;
+            }
+            out.push(g);
+            used += w;
+        }
+        if yumete_cjk::str_width(text) > room {
+            out.push('…');
+            used += 1;
+        }
+        while used < room {
+            out.push(' ');
+            used += 1;
+        }
+        out
+    };
+    let one = |row: &Vec<String>| -> String {
+        let mut line = (0..wide.len())
+            .map(|c| fit(cell_of(row, c), wide[c]))
+            .collect::<Vec<_>>()
+            .join(" │ ");
+        if cut {
+            line.push_str(" …");
+        }
+        line
+    };
+    let mut out: Vec<String> = Vec::with_capacity(rows.len() + 1);
+    out.push(one(&rows[0]));
+    if rows.len() > 1 {
+        out.push(
+            wide.iter()
+                .map(|w| "─".repeat(*w))
+                .collect::<Vec<_>>()
+                .join("─┼─"),
+        );
+    }
+    out.extend(rows[1..].iter().map(one));
+    out
+}
+
+/// How wide a table wants to be, before anything is cut.
+fn table_width(block: &[&str]) -> usize {
+    let rows: Vec<Vec<String>> = block
+        .iter()
+        .filter(|line| !is_table_rule(line))
+        .map(|line| {
+            line.trim()
+                .trim_matches('|')
+                .split('|')
+                .map(|cell| cell.trim().to_string())
+                .collect()
+        })
+        .collect();
+    let columns = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    (0..columns)
+        .map(|c| {
+            rows.iter()
+                .map(|r| yumete_cjk::str_width(r.get(c).map(String::as_str).unwrap_or("")))
+                .max()
+                .unwrap_or(1)
+                .max(1)
+        })
+        .sum::<usize>()
+        + columns.saturating_sub(1) * 3
+}
+
+/// Walk an entry block by block: `table` gets the tables, `prose` the rest.
+fn by_block<T>(
+    text: &str,
+    table: &dyn Fn(&[&str]) -> Vec<T>,
+    prose: &dyn Fn(&str) -> Vec<T>,
+) -> Vec<T> {
+    let mut out: Vec<T> = Vec::new();
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut at = 0;
+    while at < lines.len() {
+        let from = at;
+        match is_table_row(lines[at]) {
+            true => {
+                while at < lines.len() && is_table_row(lines[at]) {
+                    at += 1;
+                }
+                out.extend(table(&lines[from..at]));
+            }
+            false => {
+                while at < lines.len() && !is_table_row(lines[at]) {
+                    at += 1;
+                }
+                out.extend(prose(&lines[from..at].join("\n")));
+            }
+        }
+    }
+    out
+}
+
 /// One entry, cut into 縱: its paragraphs wrapped, its tables turned.
 ///
 /// The two are measured differently — prose by [`yumete_core::zong::zong_rows`]
@@ -355,13 +510,38 @@ pub fn draw(
             // 章節行在最上面，灰的，底下空一行；正文每段縮進一格。橫排的標題
             // 畫在框線上（它本來就在那兒），所以這裏没有「標題後空一行」——框
             // 線已經是那一道界。
-            let shown = match &panel.lede {
+            let body = match &panel.lede {
                 Some(lede) => format!("{lede}\n\n{}", indented(text)),
                 None => indented(text),
             };
-            let longest = shown.split('\n').map(yumete_cjk::str_width).max().unwrap_or(0);
+            // How wide the entry wants to be: its longest paragraph, or the
+            // width a table needs — whichever asks for more, clamped to the
+            // room. A table is never wrapped (below), so its width is a real
+            // demand and not a preference.
+            let longest = by_block(
+                &body,
+                &|block| vec![table_width(block)],
+                &|prose| prose.split('\n').map(yumete_cjk::str_width).collect(),
+            )
+            .into_iter()
+            .max()
+            .unwrap_or(0);
             let inner = longest.min(want).max(1);
-            let lines = wrap(&shown, inner);
+            let lines = by_block(
+                &body,
+                &|block| table_rows(block, inner),
+                &|prose| {
+                    let mut rows = wrap(prose, inner);
+                    // `wrap` drops the blank row a block ends with — right at
+                    // the foot of a panel, wrong between two blocks, where it
+                    // is the air the writer put there (the one under the 章節
+                    // line, for instance).
+                    if prose.ends_with('\n') {
+                        rows.push(String::new());
+                    }
+                    rows
+                },
+            );
             if let Some(lede) = &panel.lede {
                 quiet = 0..wrap(lede, inner).len();
             }
