@@ -123,11 +123,52 @@ impl Editor {
     /// horizontal page, which draws the reading above the row, asks
     /// [`Self::hidden_on_line`], which is this plus the ruby tags.
     pub fn markup_hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        if !self.wysiwyg() {
+        let mut hidden = match self.wysiwyg() {
+            false => Vec::new(),
+            true => {
+                let spans = self.markup_line_in(line, self.block_of(line));
+                crate::markdown::hidden(&spans, self.selected_columns(line))
+            }
+        };
+        hidden.extend(self.table_cushions_off_the_page(line));
+        hidden.sort_by_key(|&(from, _)| from);
+        hidden
+    }
+
+    /// **The space either side of a `|`, off a 竪排 page** (作者 2026-09-19:
+    /// 「表格的單元格寬度有問題，不夠 compact」).
+    ///
+    /// A cell is written `| 級別 |` and those two spaces are worth having
+    /// 橫排: they cost one 漢字 of width between two columns and they are what
+    /// keeps the text off the wall. Stood on end they cost a **row each**, and
+    /// a four-column table spends eight rows of the page on nothing at all —
+    /// with the wall itself broken into dashes where they fall, which is what
+    /// 「標題欄的分割綫沒有對齊」 was.
+    ///
+    /// The `|` stays: it is the character the band rule is drawn from. Only
+    /// its cushions go, and only where the page is turned — 橫排 keeps them,
+    /// and hiding them there is the table view's own business (`t f`).
+    fn table_cushions_off_the_page(&self, line: usize) -> Vec<(usize, usize)> {
+        if self.layout() != crate::zong::Layout::Vertical || !self.table_padding_on() {
             return Vec::new();
         }
-        let spans = self.markup_line_in(line, self.block_of(line));
-        crate::markdown::hidden(&spans, self.selected_columns(line))
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
+        if !crate::mdtable::is_row(&text) {
+            return Vec::new();
+        }
+        let chars: Vec<char> = text.chars().collect();
+        let mut off = Vec::new();
+        for at in crate::mdtable::pipes_from(&text, false) {
+            if at > 0 && chars.get(at - 1) == Some(&' ') {
+                off.push((at - 1, at));
+            }
+            if chars.get(at + 1) == Some(&' ') {
+                off.push((at + 1, at + 2));
+            }
+        }
+        off
     }
 
     /// Whether `line` is left off the page altogether (Feature #159).
