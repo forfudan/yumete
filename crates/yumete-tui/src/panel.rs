@@ -80,9 +80,24 @@ pub fn draw(
     area: Rect,
     bottom: u16,
     caret: (u16, u16),
+    vertical: bool,
     panel: &Panel,
 ) -> Option<Rect> {
     let ink = crate::theme::Palette::of(config);
+    // How much of the page this may take — two thirds by one third 橫排, the
+    // transpose 竪排 (`chrome::room`).
+    //
+    // ⚠️ **Prose only.** The 2/3 × 1/3 shape is an argument about *reading*:
+    // a measure the eye can take in, and rows of the manuscript covered by
+    // halves rather than whole. A key table is not read that way — it is
+    // scanned once — and a third of a 24-row terminal is seven rows, which
+    // the `空格` menu does not fit into at all: it simply stopped being drawn.
+    // Menus keep the older rule (half the page, as many columns as fit).
+    let prose = matches!(panel.body, Body::Prose(_));
+    let (room_w, room_h) = match prose {
+        true => crate::chrome::room(area, vertical),
+        false => (area.width, area.height / 2 + 1),
+    };
     let title_w = yumete_cjk::str_width(&panel.title);
     let tag_w = panel.tag.as_deref().map(yumete_cjk::str_width).unwrap_or(0);
     // The ring costs two cells across and two rows down; the bottom edge has
@@ -104,14 +119,20 @@ pub fn draw(
     // `panel.body` and needs only its `count`.
     let (inner, count, lines, columns, key_w, one) = match &panel.body {
         Body::Prose(text) => {
-            // **A quarter of the page at most: half the width and half the
-            // height** (2026-09-17). Then whichever corner the panel takes,
-            // the caret's own corner is outside it — 「光標在任何位置，面板都
-            // 一定在它對面的屏幕裏」 — and the page keeps the other half of
-            // both. It used to be allowed two thirds of the width, which could
-            // reach across the middle and cover the caret it had moved to
-            // avoid.
-            let want = widest.saturating_sub(2).min(((area.width as usize) / 2).max(24));
+            // **As wide as `chrome::room` allows** (2026-09-18). What keeps
+            // the caret uncovered is the *height* — a third of the page stands
+            // in the top third or the bottom third and the caret is in
+            // neither — so the width is free to be the reading measure
+            // instead: two thirds of a 118-column page is 39 漢字 to the line.
+            // ⚠️ **The ring and the padding come out of the budget first**
+            // (2026-09-18). Wrapping at the room's full width and then
+            // clamping the *box* to it left every line two cells too long,
+            // and `put_text` stops at the border — so the last 漢字 of each
+            // row was eaten: 「執掌法會加冠之」 and no 「禮。」. The bug is
+            // older than the 2/3 rule; a half-width panel hid it by rarely
+            // reaching the cap.
+            let budget = (room_w as usize).saturating_sub(2 + pad * 2);
+            let want = widest.saturating_sub(2).min(budget.max(8));
             let longest = text.split('\n').map(yumete_cjk::str_width).max().unwrap_or(0);
             let inner = longest.min(want).max(1);
             let lines = wrap(text, inner);
@@ -156,7 +177,7 @@ pub fn draw(
     // 「the panel is unreliable」 rather than as 「there is no room」. A cut body
     // says what it can and ends in an ellipsis; the tag on the bottom border
     // still says where to read the rest.
-    let cap = (area.height / 2 + 1).saturating_sub(2) as usize;
+    let cap = room_h.saturating_sub(2).max(1) as usize;
     let (count, lines) = match &panel.body {
         Body::Prose(_) if count > cap && cap > 0 => {
             let mut kept: Vec<String> = lines.into_iter().take(cap).collect();
@@ -172,9 +193,9 @@ pub fn draw(
         .max(title_w + 4)
         .max(tag_w + 4)
         .min(match &panel.body {
-            // Prose keeps to half the width (above); a key menu has its own
-            // rule about how many columns it may spread into.
-            Body::Prose(_) => (area.width as usize / 2).max(24),
+            // Prose keeps to the room (above); a key menu has its own rule
+            // about how many columns it may spread into.
+            Body::Prose(_) => (room_w as usize).max(24),
             Body::Keys(_) => area.width as usize,
         })
         .min(area.width as usize) as u16;
@@ -184,7 +205,7 @@ pub fn draw(
     let rect = crate::chrome::place(
         area,
         (width, height),
-        crate::chrome::Anchor::Caret { at: caret, bottom },
+        crate::chrome::Anchor::Caret { at: caret, bottom, vertical },
     )?;
     crate::chrome::draw(frame, rect, &crate::chrome::Ring {
         rounded: config.panel.rounded,

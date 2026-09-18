@@ -4371,7 +4371,8 @@ fn draw_which_key(
     caret: (u16, u16),
 ) -> Option<Rect> {
     let (title, keys) = editor.pending_menu()?;
-    panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+    let vertical = editor.layout() == WritingLayout::Vertical;
+    panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         title,
         body: panel::Body::Keys(keys.into_iter().map(|(k, what)| (k.to_string(), what)).collect()),
         tag: None,
@@ -4393,6 +4394,7 @@ fn draw_note(
     bottom: u16,
     caret: (u16, u16),
 ) -> Option<Rect> {
+    let vertical = editor.layout() == WritingLayout::Vertical;
     // **A wiki name floats the same way** (#287) — when nothing the writer
     // typed answers first, and when the sidebar's 百科 page is not already
     // showing it: one place at a time.
@@ -4411,7 +4413,7 @@ fn draw_note(
             Some(Source::Again { .. }) => say!("wiki.again", &include.named),
             Some(Source::TooMany { .. }) => say!("wiki.too-many", &include.named),
         };
-        return panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: say!("wiki.title"),
             body: panel::Body::Prose(said),
             tag: Some(say!("wiki.open-it")),
@@ -4419,14 +4421,15 @@ fn draw_note(
     }
     if editor.detail().is_none() {
         let view = editor.wiki_floating()?;
-        let tag = view.parts.first().map(|p| {
-            let file = p.source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            format!("{file}:{}", p.line + 1)
-        });
-        return panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+        // ⚠️ **No 「wiki.md:3」 along the bottom** (作者 2026-09-18: 「我不覺得
+        // 百科面板的下方有任何必要顯示百科詞條所在的文件名」). Which file an
+        // entry was written in is the *writer of the wiki*'s business, and
+        // `gd` goes there without being told; a reader glancing at a name
+        // wants the entry, and the line cost a row of it.
+        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: view.name.clone(),
             body: panel::Body::Prose(view.as_prose()),
-            tag,
+            tag: None,
         });
     }
     if !editor.detail_visible() || editor.detail_shows_a_row() {
@@ -4437,7 +4440,7 @@ fn draw_note(
     if body.is_empty() {
         return None;
     }
-    panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+    panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         title: detail.title,
         body: panel::Body::Prose(body),
         // Where the note is written, so `gd` has somewhere named to go.
@@ -15432,6 +15435,45 @@ fn squeezed(text: &str) -> String {
         // matches no file, and the panel is still a panel, with the reason
         // written in it.
         assert!(text.contains(&yumete_core::say!("picker.nothing-matched")), "{text}");
+    }
+
+    /// **A long note keeps every character it draws** (2026-09-18).
+    ///
+    /// The body used to be wrapped to the room's full width and the box then
+    /// clamped to it, so each row was two cells too long and `put_text` stopped
+    /// at the border: 「執掌法會加冠之」 with no 「禮。」. One 漢字 eaten per
+    /// row, silently, and only on entries long enough to reach the cap.
+    #[test]
+    fn a_note_wide_enough_to_be_capped_loses_no_character() {
+        let config = Config::default();
+        let long: String = "王高甫是天門宗乾元字輩弟子，掌宗座下領宗內主事，執掌法會加冠之禮。"
+            .chars()
+            .cycle()
+            .take(200)
+            .collect();
+        let area = Rect::new(0, 0, 100, 30);
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        crate::theme::settle(&config, None);
+        terminal
+            .draw(|frame| {
+                panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
+                    title: "王高甫".into(),
+                    body: panel::Body::Prose(long.clone()),
+                    tag: None,
+                });
+            })
+            .unwrap();
+        let drawn = buffer_to_text(terminal.backend().buffer());
+        // Every character of the source is on the screen, in order, once the
+        // rows are joined — nothing fell off the right-hand edge.
+        let joined: String = drawn.chars().filter(|c| !c.is_whitespace() && *c != '│').collect();
+        let mut at = 0usize;
+        let hay: Vec<char> = joined.chars().collect();
+        for want in long.chars().take(60) {
+            let found = hay[at..].iter().position(|&c| c == want);
+            assert!(found.is_some(), "「{want}」 was eaten: {drawn}");
+            at += found.unwrap() + 1;
+        }
     }
 
     /// **One float at a time** (2026-09-18) — a `:` menu beats a half-pressed
