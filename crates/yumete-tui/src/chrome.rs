@@ -54,7 +54,12 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
         .border_style(ring.border)
         .style(ring.ground);
     if let Some((text, style)) = &ring.title {
-        block = block.title(Span::styled(text.clone(), *style));
+        // **One cell in from the corner** (作者 2026-09-18: 「能不能往右移一格
+        // 半角，這樣就能對齊」). The ring's contents start one cell past the
+        // wall; a title written hard against the corner sits a cell to their
+        // left, and the two left edges being nearly-but-not-quite the same is
+        // worse than either alignment on its own.
+        block = block.title(Span::styled(format!(" {text}"), *style));
     }
     let inner = block.inner(rect);
     block.render(rect, frame.buffer_mut());
