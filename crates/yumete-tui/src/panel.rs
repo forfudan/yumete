@@ -102,19 +102,38 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
     if rows.is_empty() || columns == 0 {
         return Vec::new();
     }
-    // How deep one cell is drawn. Every cell gets the same depth so the bands
-    // line up across the 縱 — that alignment *is* the grid — and a cell too
-    // long for it is cut with a 「…」 rather than made to fit (作者: 「超過就
-    // 截斷，畫『…』」; the whole entry is a `t t` away).
-    let band = (tall + 1) / columns;
-    let deep = band.saturating_sub(1).max(1).min(
-        rows.iter()
-            .flat_map(|r| r.iter().map(|c| c.chars().count()))
-            .max()
-            .unwrap_or(1)
-            .max(1),
-    );
-    let cell = |text: &str| -> String {
+    // **Each band gets the depth it needs, and only a band that cannot have it
+    // is cut** (作者 2026-09-19: 「空間夠就渲染全部，不夠再摺疊，儘量保證撐滿
+    // 整個高度」).
+    //
+    // The first cut of this divided the height evenly by the number of columns,
+    // which folded a short column away while the box below it stood empty. What
+    // it should ask is the question every fair share asks: **is there a depth
+    // `k` such that no band needs more than it gets?** Raise `k` until the
+    // bands that fit under it, plus the ones capped at it, fill the room — the
+    // deep ones are cut and the shallow ones are left whole.
+    let want: Vec<usize> = (0..columns)
+        .map(|c| {
+            rows.iter()
+                .map(|r| r.get(c).map(|cell| cell.chars().count()).unwrap_or(0))
+                .max()
+                .unwrap_or(1)
+                .max(1)
+        })
+        .collect();
+    let rules = columns.saturating_sub(1);
+    let room = tall.saturating_sub(rules).max(columns);
+    let cap = match want.iter().sum::<usize>() <= room {
+        // Room for all of it: nothing is cut, and the box is as deep as the
+        // table really is rather than as deep as the page allows.
+        true => usize::MAX,
+        false => (1..=want.iter().copied().max().unwrap_or(1))
+            .take_while(|k| want.iter().map(|w| (*w).min(*k)).sum::<usize>() <= room)
+            .last()
+            .unwrap_or(1),
+    };
+    let deep: Vec<usize> = want.iter().map(|w| (*w).min(cap)).collect();
+    let cell = |text: &str, deep: usize| -> String {
         let mut out: String = text.chars().take(deep).collect();
         if text.chars().count() > deep {
             out.pop();
@@ -128,7 +147,7 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
     };
     let one = |row: &Vec<String>| -> String {
         (0..columns)
-            .map(|c| cell(row.get(c).map(String::as_str).unwrap_or("")))
+            .map(|c| cell(row.get(c).map(String::as_str).unwrap_or(""), deep[c]))
             .collect::<Vec<_>>()
             .join("─")
     };
@@ -137,10 +156,20 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
     if rows.len() > 1 {
         // The rule under the header, turned: a wall down the left of the
         // first 縱, crossed where the bands meet it.
-        let tallest = deep * columns + columns.saturating_sub(1);
+        let tallest = deep.iter().sum::<usize>() + columns.saturating_sub(1);
+        // The crossings stand where the bands meet the wall.
+        let mut at = 0usize;
+        let crossings: Vec<usize> = deep
+            .iter()
+            .take(columns.saturating_sub(1))
+            .map(|d| {
+                at += d + 1;
+                at - 1
+            })
+            .collect();
         zong.push(
             (0..tallest)
-                .map(|i| match (i + 1) % (deep + 1) == 0 {
+                .map(|i| match crossings.contains(&i) {
                     true => '┼',
                     false => '│',
                 })
