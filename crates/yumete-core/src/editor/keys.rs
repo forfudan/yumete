@@ -369,15 +369,45 @@ impl Editor {
     fn play_keys(&mut self, keys: &str) {
         self.expanding_alias = true;
         let mut count = self.count.take();
-        for c in keys.chars() {
-            if c != ';' {
+        // **`{n}` says where the count goes** (2026-09-18). Without it the
+        // count lands on the first key that acts, which is right for
+        // `dd` → `xd` and wrong for `dw`: there the count belongs to the `w`
+        // that is *extending* the selection, not to the `v` that opened it.
+        let placed = keys.contains("{n}");
+        let spelled: Vec<char> = keys.chars().collect();
+        let mut at = 0;
+        while at < spelled.len() {
+            if spelled[at] == '{' && spelled.get(at + 1) == Some(&'n') && spelled.get(at + 2) == Some(&'}')
+            {
+                if let Some(n) = count.take() {
+                    self.count = Some(n);
+                }
+                at += 3;
+                continue;
+            }
+            let c = spelled[at];
+            if !placed && c != ';' {
                 if let Some(n) = count.take() {
                     self.count = Some(n);
                 }
             }
             self.on_key(Key::Char(c));
+            at += 1;
         }
         self.expanding_alias = false;
+    }
+
+    /// **The count a sequence was written with**, from before it and from
+    /// inside it (2026-09-18).
+    ///
+    /// vim multiplies the two — `2d3w` is six words — and one of them is
+    /// almost always absent, so this is the whole of that rule.
+    fn settle_alias_count(&mut self) {
+        let inside = self.alias_count.take();
+        self.count = match (self.count.take(), inside) {
+            (Some(before), Some(after)) => Some(before.saturating_mul(after)),
+            (before, after) => before.or(after),
+        };
     }
 
     fn on_normal_key(&mut self, key: Key) {
@@ -561,15 +591,51 @@ impl Editor {
             let typed = match key {
                 // A digit inside a count is the count's, not an alias — `10`
                 // must not fire a `0`.
-                Key::Char(c) if !(c.is_ascii_digit() && self.count.is_some()) => Some(c),
+                //
+                // ⚠️ **Unless a sequence is being held** (2026-09-18): in
+                // `2d3w` the `3` arrives with a count already under way, and
+                // dropping it here handed the held `d` back with the *first*
+                // count on it — two characters deleted where vim deletes six
+                // words. Inside a held sequence the digit is answered below.
+                Key::Char(c)
+                    if !(c.is_ascii_digit()
+                        && self.count.is_some()
+                        && self.alias_held.is_empty()) =>
+                {
+                    Some(c)
+                }
                 _ => None,
             };
             if key == Key::Esc && !self.alias_held.is_empty() {
                 self.alias_held.clear();
+                self.alias_count = None;
                 return;
             }
             let mut held = std::mem::take(&mut self.alias_held);
             if let Some(c) = typed {
+                // **A digit inside a held sequence is a count** (2026-09-18):
+                // vim writes `d10w`, and `d1` is not the name of anything. An
+                // alias whose own name has a digit in it still wins, because
+                // that is asked first.
+                let named = |held: &str, c: char| {
+                    let mut longer = held.to_string();
+                    longer.push(c);
+                    self.key_aliases.keys().any(|k| k.starts_with(&longer))
+                };
+                if !held.is_empty()
+                    && c.is_ascii_digit()
+                    && !named(&held, c)
+                    && (c != '0' || self.alias_count.is_some())
+                {
+                    let n = self.alias_count.unwrap_or(0);
+                    self.alias_count = Some(
+                        n.saturating_mul(10)
+                            .saturating_add(c.to_digit(10).unwrap_or(0) as usize)
+                            .min(1_000_000),
+                    );
+                    self.alias_held = held;
+                    return;
+                }
                 held.push(c);
                 let longer = self
                     .key_aliases
@@ -581,11 +647,18 @@ impl Editor {
                 }
                 match self.key_aliases.get(&held).cloned() {
                     Some(keys) if held.chars().count() == 1 && keys.chars().count() == 1 => {
+                        self.settle_alias_count();
                         Key::Char(keys.chars().next().unwrap())
                     }
-                    Some(bound) => return self.run_binding(&bound),
+                    Some(bound) => {
+                        self.settle_alias_count();
+                        return self.run_binding(&bound);
+                    }
                     None => {
                         held.pop();
+                        // What was held is pressed for real, and the digits
+                        // typed after it belong to whatever follows them.
+                        self.settle_alias_count();
                         if held.is_empty() {
                             key
                         } else {
@@ -596,6 +669,7 @@ impl Editor {
                 }
             } else {
                 if !held.is_empty() {
+                    self.settle_alias_count();
                     self.play_keys(&held);
                 }
                 key

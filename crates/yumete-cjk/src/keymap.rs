@@ -43,15 +43,21 @@ impl KeyPreset {
             // word; vim's `x` after `w` cuts the one character under the
             // cursor.
             KeyPreset::Vim => &[
-                ("x", ";D"),
+                ("x", ";{n}D"),
                 ("s", ";c"),
                 ("V", "x"),
-                ("dd", "xd"),
-                ("yy", "xy"),
-                ("cc", "xc"),
-                ("dw", "wd"),
-                ("cw", "ec"),
-                ("yw", "wy"),
+                ("dd", "{n}xd"),
+                ("yy", "{n}xy"),
+                ("cc", "{n}xc"),
+                // ⚠️ **The word ones go through 延伸模式** (2026-09-18).
+                // `3dw` in vim is three words; `3w` here is the *third* word,
+                // because a motion is a selection and each step replaces the
+                // last. `v` makes the steps add up, and the action closes it.
+                // `{n}` puts the count on the `w` that is doing the extending
+                // rather than on the `v` that opens it.
+                ("dw", "v{n}wd"),
+                ("cw", "v{n}ec"),
+                ("yw", "v{n}wy"),
                 ("^", "gs"),
                 ("$", "gl"),
                 ("0", "gh"),

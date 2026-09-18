@@ -14172,6 +14172,52 @@ fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
     assert_eq!(at(&ed).0, 0, "and back");
 }
 
+/// **A count, written where vim writes it** (2026-09-18, #428).
+///
+/// Three places: before the operator (`3dw`), after it (`d3w`), and both at
+/// once (`2d3w`, which vim multiplies). ⚠️ The word ones are the reason
+/// `{n}` exists: `3w` here is the *third* word, not three words, so the
+/// expansion extends the selection and the count has to land on the `w`
+/// rather than on the `v` that opens it.
+#[test]
+fn a_count_goes_before_a_vim_sequence_inside_it_or_both() {
+    let vim = || {
+        let mut ed = typed("one two three four five six seven eight\n");
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let text = |ed: &Editor| ed.current_buffer().text();
+
+    let mut ed = vim();
+    press(&mut ed, "dw");
+    assert_eq!(text(&ed), "two three four five six seven eight\n", "one word");
+
+    let mut ed = vim();
+    press(&mut ed, "3dw");
+    assert_eq!(text(&ed), "four five six seven eight\n", "three, counted first");
+
+    let mut ed = vim();
+    press(&mut ed, "d3w");
+    assert_eq!(text(&ed), "four five six seven eight\n", "three, counted after `d`");
+
+    let mut ed = vim();
+    press(&mut ed, "2d3w");
+    assert_eq!(text(&ed), "seven eight\n", "six: vim multiplies the two");
+
+    // A count written inside a sequence that turns out not to be one goes to
+    // whatever follows it, rather than to the keys that were held.
+    let mut ed = vim();
+    press(&mut ed, "10w");
+    assert_eq!(text(&ed), "one two three four five six seven eight\n", "`w` only moves");
+
+    // …and line-wise counts, which were already right, stay right.
+    let mut ed = typed("一\n二\n三\n四\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg3dd");
+    assert_eq!(ed.current_buffer().text(), "四\n", "three lines");
+}
+
 /// The vim preset: what a vim hand types does what it means (#428).
 #[test]
 fn the_vim_preset_translates_what_a_vim_hand_types() {
