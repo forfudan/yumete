@@ -29,6 +29,13 @@ pub enum Body {
 /// said quietly at the far end of its bottom edge.
 pub struct Panel {
     pub title: String,
+    /// **The 章節 line**, drawn quietly between the name and the body, with a
+    /// blank line (竪排: a blank 縱) under it (作者 2026-09-18).
+    ///
+    /// 「辭典 › 真境」 is where the entry was written down, not part of what it
+    /// says — gold is the name, `quiet()` is the address, and the body is
+    /// ordinary ink. `None` for everything that has no such line.
+    pub lede: Option<String>,
     pub body: Body,
     /// **Whether the prose inside runs down the page** (作者 2026-09-18:
     /// 「只有百科才需要縱書，其他的都保持橫排」).
@@ -124,6 +131,23 @@ pub fn draw(
         Body::Prose(_) => 1,
         Body::Keys(_) => 0,
     };
+    // **Which of the lines are not the body** (作者 2026-09-18). Three inks,
+    // and the order is the same in both layouts: the name in 金, the 章節 line
+    // quietly under it, then the entry. Counted rather than marked on each line
+    // because they are always at the front — `gold` of them, then `quiet` of
+    // them after the blank that separates the two.
+    let mut gold = 0usize;
+    let mut quiet: std::ops::Range<usize> = 0..0;
+    // 段落的縮進：一格（作者 2026-09-18：「所有的段落不用空行，但是加一格縮
+    // 進」。兩格試過，太重）。一個全角空格，橫竪一樣——竪排它就是那一縱頭上的
+    // 一個空位。
+    let indented = |text: &str| -> String {
+        text.split('\n')
+            .filter(|para| !para.trim().is_empty())
+            .map(|para| format!("　{para}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     // `lines` is the prose, already wrapped; a key list draws itself from
     // `panel.body` and needs only its `count`.
     let (inner, count, lines, columns, key_w, one) = match &panel.body {
@@ -131,43 +155,50 @@ pub fn draw(
         // 量法轉置——能放多高就一縱多少字，需要幾縱就多寬（一個漢字兩格）。
         Body::Prose(text) if panel.vertical_text => {
             let tall = (room_h as usize).saturating_sub(2).max(1);
-            // **段落之間什麽都不加**（作者 2026-09-18 定：「縮進不好看，不要
-            // 縮進了，也不需要空行，就用最 compact 的狀態」）。空縱與首行縮進
-            // 都試過：一個把兩段推得老遠，一個在十來縱的小框裏看着就是斷了。
-            // 分段本來就有一縱的邊界在，框小的時候那已經夠了。
+            // **段落之間不空縱，改用一格縮進**（作者 2026-09-18 定）。空一縱在
+            // 只有十來縱的小框裏把兩段推得老遠；兩格縮進太重。標題與章節行後面
+            // 各空一縱，那是另一回事——那兩縱不是正文，空白就是它們與正文的界。
             //
-            // 折行交給正文自己的折行器（禁則在裏面），寬度按「一縱幾個字」給，
-            // 一個漢字兩格，所以乘二。
+            // 折行交給**頁面自己的竪排折行器**（`yumete_core::zong`）。
             //
-            // ⚠️ **折行器的預算是格，一縱的長度是字**（2026-09-18 撞到）。半角
-            // 字一格一個，所以 52 格裝得下 28 個字——`tall` 是 26，那一縱就比框
-            // 深兩行。詞條裏有「500」「>」這種就會發生。折完再按字數硬切一次。
-            let mut zong: Vec<String> = text
-                .split('\n')
-                .filter(|para| !para.trim().is_empty())
-                .flat_map(|para| wrap(para, tall * 2))
-                .flat_map(|z| {
-                    let chars: Vec<char> = z.chars().collect();
-                    chars.chunks(tall).map(|c| c.iter().collect::<String>()).collect::<Vec<_>>()
-                })
-                .filter(|z| !z.is_empty())
-                .collect();
+            // ⚠️ **不要拿橫排那一支來折竪書**（2026-09-18 撞到兩次）。橫排的
+            // 預算是**格**，而一縱的長度是**字**：半角字一格一個，所以 52 格
+            // 裝得下 28 個字，比 26 深的那一縱把框撐破（詞條裏有「500」「>」
+            // 這種就會發生）。折完按字數硬切一刀更糟——那一刀不認禁則，於是
+            // 「，」被切到了下一縱的頭上。`zong` 這一支本來就是按字算的，禁則
+            // 也在裏面，頁面上的竪排走的就是它。
             // **標題是自己的一縱，排在最右**（作者 2026-09-18 定，三個辦法裏
             // 的丙）。竪排的書就是這麽做的：標題不貼在框邊上，它本身就是第一
             // 縱，金墨。所以這一支不給 `chrome` 標題，框上没有名字。
-            let name: String = panel.title.chars().take(tall).collect();
-            zong.insert(0, name);
+            let mut zong: Vec<String> = vec![panel.title.chars().take(tall).collect()];
+            gold = 1;
+            // 標題後空一縱；有章節行就接着畫它（灰），再空一縱。
+            zong.push(String::new());
+            if let Some(lede) = &panel.lede {
+                let rows = yumete_core::zong::zong_rows(lede, tall);
+                quiet = zong.len()..zong.len() + rows.len();
+                zong.extend(rows);
+                zong.push(String::new());
+            }
+            zong.extend(yumete_core::zong::zong_rows(&indented(text), tall));
             // **裝不下的是「縱」，不是「行」**（2026-09-18）。橫排那一段截斷
             // （下面的 `cap`）數的是行，竪排這裏一行是一個字，照它辦就變成
             // 「把最左那一縱整根換成……，框高等於縱的條數」——高度塌掉、正文
             // 無聲少一截。所以竪排自己在這裏截：框最寬只有
-            // `chrome::room` 的三分之一，換算成幾縱，多的砍掉，末縱畫「…」。
+            // `chrome::room` 的三分之一，換算成幾縱，多的砍掉。
+            //
+            // ⚠️ **「…」接在末縱的腳下，不自己占一縱**（作者 2026-09-18：「最後
+            // 的省略號後面有個空行」）。自己占一縱的話那一縱只有一個字，底下
+            // 一大片白——讀起來就是「這裏空了一行」，而它要說的是「話還没完」。
             let box_w = (room_w as usize).max(24).min(area.width as usize);
             let fits = box_w.saturating_sub(2 + pad * 2) / 2;
             if fits > 0 && zong.len() > fits {
                 zong.truncate(fits);
                 if let Some(last) = zong.last_mut() {
-                    *last = "…".to_string();
+                    while last.chars().count() >= tall {
+                        last.pop();
+                    }
+                    last.push('…');
                 }
             }
             let deep = zong.iter().map(|z| z.chars().count()).max().unwrap_or(1).max(1);
@@ -189,9 +220,19 @@ pub fn draw(
             // reaching the cap.
             let budget = (room_w as usize).saturating_sub(2 + pad * 2);
             let want = widest.saturating_sub(2).min(budget.max(8));
-            let longest = text.split('\n').map(yumete_cjk::str_width).max().unwrap_or(0);
+            // 章節行在最上面，灰的，底下空一行；正文每段縮進一格。橫排的標題
+            // 畫在框線上（它本來就在那兒），所以這裏没有「標題後空一行」——框
+            // 線已經是那一道界。
+            let shown = match &panel.lede {
+                Some(lede) => format!("{lede}\n\n{}", indented(text)),
+                None => indented(text),
+            };
+            let longest = shown.split('\n').map(yumete_cjk::str_width).max().unwrap_or(0);
             let inner = longest.min(want).max(1);
-            let lines = wrap(text, inner);
+            let lines = wrap(&shown, inner);
+            if let Some(lede) = &panel.lede {
+                quiet = 0..wrap(lede, inner).len();
+            }
             // Shrink to the longest line actually drawn: wrapping a 40-cell
             // note at 60 leaves twenty cells of ring around nothing.
             let inner = lines.iter().map(|l| yumete_cjk::str_width(l)).max().unwrap_or(1).max(1);
@@ -291,6 +332,12 @@ pub fn draw(
     // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
     // whatever is under it.
     let ground = Style::default();
+    // 三色，一條規矩，橫竪通用：名字是金，章節行是灰，其餘是墨。
+    let ink_of = |n: usize| match n {
+        _ if n < gold => ink.gold(),
+        _ if quiet.contains(&n) => ink.quiet(),
+        _ => ink.text(),
+    };
     let limit = rect.x + width - 1;
     let buf = frame.buffer_mut();
     match &panel.body {
@@ -301,24 +348,20 @@ pub fn draw(
                     Some(x) if x > rect.x => x,
                     _ => break,
                 };
-                let ink_of = match n {
-                    0 => ink.gold(),
-                    _ => ink.text(),
-                };
                 for (i, ch) in zong.chars().enumerate() {
                     let y = rect.y + 1 + i as u16;
                     if y + 1 >= rect.y + height {
                         break;
                     }
                     let shown = yumete_cjk::vertical::vertical_form(ch).unwrap_or(ch);
-                    put_text(buf, x, y, x + 2, &shown.to_string(), ground.fg(ink_of));
+                    put_text(buf, x, y, x + 2, &shown.to_string(), ground.fg(ink_of(n)));
                 }
             }
         }
         Body::Prose(_) => {
             for (i, line) in lines.iter().enumerate() {
                 let x = rect.x + 1 + pad as u16;
-                put_text(buf, x, rect.y + 1 + i as u16, limit, line, ground.fg(ink.text()));
+                put_text(buf, x, rect.y + 1 + i as u16, limit, line, ground.fg(ink_of(i)));
             }
         }
         Body::Keys(keys) => {
@@ -357,6 +400,7 @@ mod tests {
                 let area = Rect::new(0, 0, w, h);
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
                     title: "天門真境".into(),
+                    lede: None,
                     body: Body::Prose(text.into()),
                     vertical_text: true,
                     tag: None,
@@ -400,6 +444,25 @@ mod tests {
             .map(|(x, y)| buffer[(rect.x + x, rect.y + y)].symbol().to_string())
             .collect();
         assert!(text.contains('︙'), "the cut is marked: {text:?}");
+
+        // 禁則, down the column: no 縱 may open with a mark that closes
+        // something. Hand-chopping the horizontal wrapper's rows put 「，」 at
+        // the head of a 縱, which is the one thing a typesetter never does.
+        let head: String = (0..rect.width)
+            .map(|x| buffer[(rect.x + x, rect.y + 1)].symbol().to_string())
+            .collect();
+        for mark in ['︐', '︑', '︒', '︓', '﹂', '︶'] {
+            assert!(!head.contains(mark), "{mark} opens a 縱: {head:?}");
+        }
+
+        // And the 「…」 hangs off the foot of the last 縱 rather than standing
+        // in one of its own with a column of white under it.
+        let ellipsis_row = (0..rect.height)
+            .find(|&y| {
+                (0..rect.width).any(|x| buffer[(rect.x + x, rect.y + y)].symbol() == "︙")
+            })
+            .expect("the ellipsis is drawn");
+        assert!(ellipsis_row > 1, "the 「…」 is a column of its own: row {ellipsis_row}");
         // And the title is still its own 縱, in the box rather than on the ring.
         assert!(text.contains('天') && text.contains('境'), "{text:?}");
     }
