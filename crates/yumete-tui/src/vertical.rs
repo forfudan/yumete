@@ -1155,6 +1155,21 @@ pub fn draw(
                 .chars()
                 .map(|c| yumete_cjk::control_picture(c).unwrap_or(c))
                 .collect();
+            // **A table's walls turn with it** (作者 2026-09-19). A row is one
+            // 縱 (the core refuses to wrap one), so the grid is the page's own
+            // grid turned a quarter turn — and the walls have to turn too or
+            // the reader is handed a column of loose pipes. A `|` between two
+            // columns is a band **across** the 縱, two cells wide so it reaches
+            // the next one; the `---` under the header is a wall **down** it.
+            let symbol = match editor.line_is_table_row(zong.line) {
+                true => match symbol.as_str() {
+                    "|" => "──".to_string(),
+                    "-" => "│".to_string(),
+                    "+" => "┼".to_string(),
+                    _ => symbol,
+                },
+                false => symbol,
+            };
             if symbol.is_empty() {
                 // A paragraph's opening squares are empty slots, and what goes
                 // in them is the same question the horizontal page answers:
