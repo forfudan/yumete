@@ -1236,16 +1236,27 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
 fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> Laid {
     LAID_OUT.with(|n| n.set(n.get() + 1));
     let slots = line_grid_in(rope, line, grid, hidden);
-    let chars: Vec<char> = line_text(rope, line).chars().collect();
+    let text = line_text(rope, line);
+    let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
-    let breaks = zong_breaks(
-        &chars,
-        &slots,
-        grid.zong_len.max(1),
-        &groups,
-        hidden,
-        grid.sentences,
-    );
+    // **A table row is one 縱, however long** (作者 2026-09-19: 「你保證竪排
+    // 模式表格也是非 wrap 的」).
+    //
+    // Turning a grid a quarter turn is the whole of what 竪排 does to a table
+    // — a row becomes a 縱, a column becomes a band down it, and every
+    // character still stands where its own character stood. **Wrapping breaks
+    // exactly that**: the tail of a row lands in a 縱 of its own, beside the
+    // next row, and the grid is gone. The cells are already squared up by the
+    // padding `mdtable` puts in, so a row is as deep as the table is wide and
+    // that is the honest size of it.
+    //
+    // ⚠️ The length is the whole row, not `usize::MAX`: the breaker asks
+    // `at + zong_len >= total`, and that overflows.
+    let zong_len = match crate::mdtable::is_row(&text) {
+        true => slots.len().max(1),
+        false => grid.zong_len.max(1),
+    };
+    let breaks = zong_breaks(&chars, &slots, zong_len, &groups, hidden, grid.sentences);
     (std::rc::Rc::new(slots), std::rc::Rc::new(breaks))
 }
 

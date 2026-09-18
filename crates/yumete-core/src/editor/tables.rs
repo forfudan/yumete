@@ -844,6 +844,18 @@ impl Editor {
         rows.get(line).copied().unwrap_or(false) || rows.get(line + 1).copied().unwrap_or(false)
     }
 
+    /// **Whether `line` is a row of a `|` table** — asked by the 竪排 renderer,
+    /// which turns the grid a quarter turn (作者 2026-09-19).
+    ///
+    /// The turn is the whole of it: a row is one 縱 (`zong::lay_out` refuses to
+    /// wrap one), so a column becomes a band down that 縱 and every character
+    /// still stands for itself. What the renderer needs this for is the walls —
+    /// a `|` between two columns is a band **across** the 縱, and the `---`
+    /// under the header is a wall **down** it.
+    pub fn line_is_table_row(&self, line: usize) -> bool {
+        self.line_text(line).is_some_and(|l| crate::mdtable::is_row(&l))
+    }
+
     /// Whether the cursor's own line is a row of a `|` table.
     pub(super) fn md_row_at_cursor(&self) -> bool {
         let rope = self.current_buffer().rope();
