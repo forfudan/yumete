@@ -75,8 +75,10 @@ finally being one thing.
   of that line: green added, blue changed, and a thin 朱 edge where lines were
   cut out — a deletion has no line of its own to colour. `:view-diff off`.
 
-- **`:view-code`——圍欄裏的代碼按它自己的語法上色**，tree-sitter，七種語言。
-  `.py` 整個檔也上色，Tab 打的是空格。
+- **`:view-code`——圍欄裏的代碼按它自己的語法上色**，tree-sitter，**九種語言**：
+  Python、JavaScript、JSON、YAML、TOML、HTML、CSS，以及 **Rust 與 Go**（2026-09-19
+  添的，有人拿它寫這兩種）。`.py` `.rs` `.go` 這些檔整個也上色，Tab 打的是空格。
+  兩種語法一共 1.28 MB（13.41 → 14.69 MB），量過纔加。
 
 - **讓開。** Normal 模式下系統輸入法自己退開，回 Insert 再回來——用的是輸入法自己的
   掛起協議（0.2 毫秒），不是切換輸入源（那條路三次壞一次）。
