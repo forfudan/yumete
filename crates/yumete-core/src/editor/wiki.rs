@@ -61,10 +61,7 @@ impl Editor {
     /// Whether `path` is one of the files the wiki was read from — a save of
     /// any of them reads the whole graph again.
     pub(super) fn is_wiki_file(&self, path: &Path) -> bool {
-        let same = |a: &Path| {
-            std::fs::canonicalize(a).ok() == std::fs::canonicalize(path).ok() || a == path
-        };
-        self.wiki.files().into_iter().any(same)
+        self.wiki.came_from(path)
             || (path.file_name().is_some_and(|n| n == WIKI_MD)
                 && path.parent().is_some_and(|d| d.file_name().is_some_and(|n| n == ".yumete")))
     }
@@ -153,36 +150,42 @@ impl Editor {
 
 /// One entry, laid out to be read (#287, §5.8.5): the breadcrumb, then its
 /// body with its own sub-headings re-levelled so the entry reads as `#`.
+///
+/// ⚠️ **It borrows the entry rather than copying it** (2026-09-19). This is
+/// built **every frame the cursor stands on a name**, and an entry may be a
+/// chapter in its own right: copying every line of it cost 10 ms a frame at
+/// 5000 lines and 30 ms at 20000, measured — the editor going sticky while you
+/// read. Nothing here outlives the frame it is drawn in.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WikiPart {
+pub struct WikiPart<'a> {
     /// From the global wiki rather than this book's.
     pub global: bool,
     /// The headings above it, outermost first.
-    pub trail: Vec<String>,
-    pub lines: Vec<WikiLine>,
+    pub trail: &'a [String],
+    pub lines: Vec<WikiLine<'a>>,
     /// Where the heading is written.
-    pub source: PathBuf,
+    pub source: &'a Path,
     pub line: usize,
 }
 
 /// A line of an entry's body.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WikiLine {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WikiLine<'a> {
     /// A sub-heading, at its depth **within the entry** (2 is the first level
     /// under the entry itself).
-    Heading(usize, String),
-    Text(String),
+    Heading(usize, &'a str),
+    Text(&'a str),
 }
 
 /// Every entry of the name the cursor is standing on.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WikiView {
+pub struct WikiView<'a> {
     pub name: String,
     /// Book first, then global; `(depth, order)` within each.
-    pub parts: Vec<WikiPart>,
+    pub parts: Vec<WikiPart<'a>>,
 }
 
-impl WikiView {
+impl WikiView<'_> {
     /// **The 章節 line** — 「辭典 › 真境」 — when the view is one entry
     /// (作者 2026-09-18: 「章節那一行能不能用灰一些的顏色」).
     ///
@@ -198,42 +201,68 @@ impl WikiView {
         }
     }
 
-    /// The entry without its 章節 line — what [`Self::lede`] lifted out.
-    pub fn body_prose(&self) -> String {
+    /// The entry without its 章節 line — what [`Self::lede`] lifted out —
+    /// and **no more of it than a panel could draw**.
+    ///
+    /// ⚠️ `upto` is not a preference, it is what keeps this off the critical
+    /// path (2026-09-19). A float is at most a third of the page deep, so
+    /// `upto` lines is already more of the entry than it can use; and since
+    /// every line kept is at least one row (or one 縱) drawn, a cut here can
+    /// never take away a line the panel would have shown. The panel's own
+    /// 「…」 still says it was cut, because it still has more than it can fit.
+    /// Without it the whole entry was built **and then wrapped** every frame.
+    pub fn body_prose(&self, upto: usize) -> String {
         match self.lede() {
             Some(lede) => self
-                .as_prose()
+                .prose(upto)
                 .strip_prefix(&lede)
                 .map(|rest| rest.trim_start_matches('\n').to_string())
-                .unwrap_or_else(|| self.as_prose()),
-            None => self.as_prose(),
+                .unwrap_or_else(|| self.prose(upto)),
+            None => self.prose(upto),
         }
     }
 
-    /// The whole view as prose, for the floating panel: one entry after
-    /// another, a rule between, and the global ones under 「全局」.
+    /// The whole view as prose: one entry after another, a rule between, and
+    /// the global ones under 「全局」.
     pub fn as_prose(&self) -> String {
-        let mut out: Vec<String> = Vec::new();
+        self.prose(usize::MAX)
+    }
+
+    /// …with at most `upto` lines of **body** (the furniture is never cut).
+    fn prose(&self, upto: usize) -> String {
+        let mut out: Vec<std::borrow::Cow<'_, str>> = Vec::new();
         let mixed = self.parts.iter().any(|p| p.global) && self.parts.iter().any(|p| !p.global);
         let mut global_said = false;
-        for (i, part) in self.parts.iter().enumerate() {
+        // Blank lines are not counted: the panel drops empty paragraphs, so
+        // they cost no row and cutting on them would shorten what is shown.
+        let mut kept = 0usize;
+        'parts: for (i, part) in self.parts.iter().enumerate() {
             if i > 0 {
-                out.push(String::new());
+                out.push("".into());
             }
             if mixed && part.global && !global_said {
-                out.push(format!("── {} ──", say!("wiki.global")));
+                out.push(format!("── {} ──", say!("wiki.global")).into());
                 global_said = true;
             } else if i > 0 {
-                out.push("──".to_string());
+                out.push("──".into());
             }
             if !part.trail.is_empty() {
-                out.push(part.trail.join(" › "));
+                out.push(part.trail.join(" › ").into());
             }
             for line in &part.lines {
-                out.push(match line {
-                    WikiLine::Heading(depth, title) => format!("{} {title}", "#".repeat(*depth)),
-                    WikiLine::Text(text) => text.clone(),
-                });
+                if kept >= upto {
+                    break 'parts;
+                }
+                match line {
+                    WikiLine::Heading(depth, title) => {
+                        out.push(format!("{} {title}", "#".repeat(*depth)).into());
+                        kept += 1;
+                    }
+                    WikiLine::Text(text) => {
+                        out.push((*text).into());
+                        kept += usize::from(!text.trim().is_empty());
+                    }
+                }
             }
         }
         out.join("\n")
@@ -259,7 +288,7 @@ impl Editor {
     /// name was merged in — so 中國人 inside 中國人民 is not asked about. A
     /// one-character entry is never answered here: it could not be marked,
     /// and a panel over every 墨 in a novel would be a panel over the novel.
-    pub fn wiki_here(&self) -> Option<WikiView> {
+    pub fn wiki_here(&self) -> Option<WikiView<'_>> {
         if self.wiki.by_name.is_empty() || self.mode == Mode::Insert {
             return None;
         }
@@ -288,17 +317,17 @@ impl Editor {
                         let trimmed = text.trim_start();
                         let depth = trimmed.chars().take_while(|&c| c == '#').count();
                         if depth > entry.depth && trimmed[depth..].starts_with(' ') {
-                            WikiLine::Heading(depth - entry.depth + 1, trimmed[depth..].trim().to_string())
+                            WikiLine::Heading(depth - entry.depth + 1, trimmed[depth..].trim())
                         } else {
-                            WikiLine::Text(text.clone())
+                            WikiLine::Text(text.as_str())
                         }
                     })
                     .collect();
                 WikiPart {
                     global: entry.global,
-                    trail: entry.ancestors.clone(),
+                    trail: entry.ancestors.as_slice(),
                     lines,
-                    source: entry.source.clone(),
+                    source: entry.source.as_path(),
                     line: entry.line,
                 }
             })
@@ -309,7 +338,7 @@ impl Editor {
     /// The entry for the **floating** panel — only while nothing the writer
     /// typed answers first (a row, a footnote, a comment), and only while the
     /// sidebar's 百科 page is not open: one place at a time.
-    pub fn wiki_floating(&self) -> Option<WikiView> {
+    pub fn wiki_floating(&self) -> Option<WikiView<'_>> {
         if self.wiki_include_here().is_some() {
             return None;
         }
@@ -322,13 +351,14 @@ impl Editor {
     /// `gd` on a wiki name: open the file the entry is written in, on its
     /// heading.
     pub(super) fn follow_wiki(&mut self) -> bool {
-        let Some(view) = self.wiki_here() else {
+        // Taken out of the view before anything moves: the view borrows the
+        // wiki, and opening a file is what re-reads it.
+        let Some((path, line)) = self
+            .wiki_here()
+            .and_then(|view| view.parts.first().map(|p| (p.source.to_path_buf(), p.line)))
+        else {
             return false;
         };
-        let Some(part) = view.parts.first() else {
-            return false;
-        };
-        let (path, line) = (part.source.clone(), part.line);
         self.remember_jump();
         if self.open_file(&path).is_ok() {
             self.goto_line(line + 1);

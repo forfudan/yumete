@@ -2407,6 +2407,37 @@ much of a real chapter ends up marked, and which terminals draw `4:4`.
 **large** in total, and it divides cleanly: parts 1–2 are one sitting and
 already make `w` walk the names, which is worth having on its own.
 
+#### 5.8.10 一條詞條有多長，面板就付多少錢——修掉（2026-09-19）
+
+⚠️ **每一幀都做的事，代價要按「最壞的那本書」算，不是按「我自己那本」。** 詞條是
+Markdown 的一節，寫得下一整章；而 `wiki_here()` 在光標停在名字上時**每一幀**跑一趟。
+量過（release，`--shot` 同一幀比有没有停在名字上）：
+
+| 詞條 | 修之前 | 修之後 |
+| --- | --- | --- |
+| 5000 行 | ＋10 ms／幀 | 量不出來 |
+| 20000 行 | ＋30 ms／幀 | 量不出來 |
+| 20000 行，`:wiki panel` 側欄 | ＋20 ms／幀 | 量不出來 |
+
+三處，各是一種「把整條詞條走一遍」：
+
+1. **`WikiView` 把每一行 clone 一份**。改成借用（`WikiLine<'a>` 拿 `&'a str`，
+   `trail` 拿 `&[String]`，`source` 拿 `&Path`）——它活不過這一幀，本來就不需要自己的
+   副本。一條詞條 n 行從 n 次分配變成一次。
+2. **浮框把整條詞條拼成一個 String，面板再把它整個折行**，然後纔按框高截掉。現在
+   `body_prose(upto)`：`upto` 由調用方按「這一頁最多畫得下幾行」給（`height.max(width)`）。
+   **這不是偏好，是把它趕出關鍵路徑。** 安全性在於：留下的每一行至少畫出一行（或一縱），
+   所以這一刀切不掉面板本來畫得出的東西；而面板拿到的仍然比它畫得下的多，所以那個
+   「…」照舊出現。
+3. **側欄那一頁走到頁腳之後還在走**。`line()` 拒絕往下畫了，可循環照樣把剩下兩萬行
+   逐行折成 row range 再扔掉。加一句 `if y >= bottom { return; }`。
+
+外加 `is_wiki_file`：它每幀對**每個** wiki 文件 `canonicalize` 兩次（閉包裏連
+`canonicalize(path)` 自己都重算），六十個 include ≈ 2.8 ms／幀。現在載入時算一次存住
+（`Wiki::canonical`），問的時候先比字面、再比規範化。
+⚠️ 順帶修掉一個假相等：`canonicalize(a).ok() == canonicalize(b).ok()` 在兩邊都失敗時是
+`None == None` ＝ **真**，於是「還没存的新文件」和「已經被删掉的 wiki」算成同一個文件。
+
 ---
 
 ## 5.1 Helix keybindings & IME hotkeys

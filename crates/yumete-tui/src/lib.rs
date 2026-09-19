@@ -4542,7 +4542,12 @@ fn draw_note(
             // 畫在名字下面，灰的，和正文隔一行（作者 2026-09-18）。
             lede: view.lede(),
             entry: true,
-            body: panel::Body::Prose(view.body_prose()),
+            // **No more of the entry than this page could draw** — a float is
+            // a third of the page, so a row (or a 縱) per line is already a
+            // generous bound, and the panel cuts it to its own room from
+            // there. An entry can be a chapter: building and wrapping the
+            // whole of it, every frame, was 30 ms a frame at 20000 lines.
+            body: panel::Body::Prose(view.body_prose(area.height.max(area.width) as usize)),
             tag: None,
             // The one body that turns with the page.
             vertical_text: vertical,
@@ -5859,11 +5864,19 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
             .lines
             .iter()
             .map(|body| match body {
-                WikiLine::Heading(_, title) => title.as_str(),
-                WikiLine::Text(t) => t.as_str(),
+                WikiLine::Heading(_, title) => *title,
+                WikiLine::Text(t) => *t,
             })
             .collect();
         while at < part.lines.len() {
+            // ⚠️ **Stop at the foot of the page** (2026-09-19). `line` refuses
+            // to draw past it, but the walk went on to the end of the entry
+            // regardless — wrapping every one of its lines into row ranges it
+            // then threw away. On a 20000-line entry that was 20 ms a frame,
+            // all of it for rows nobody could see.
+            if y >= bottom {
+                return;
+            }
             let table = matches!(&part.lines[at], WikiLine::Text(t) if panel::is_table_row(t));
             if !table {
                 match &part.lines[at] {

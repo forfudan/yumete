@@ -78,6 +78,11 @@ pub struct Wiki {
     /// Every entry of each name, book before global, then `(depth, order)`.
     pub by_name: HashMap<String, Vec<usize>>,
     pub sources: Vec<Source>,
+    /// [`Self::files`], canonicalised — worked out **once, here**, because
+    /// [`Self::came_from`] is asked every frame (2026-09-19). It used to
+    /// canonicalise both sides of every comparison on the spot: two syscalls
+    /// per wiki file per frame, ≈2.8 ms a frame on a book with sixty includes.
+    canonical: Vec<PathBuf>,
 }
 
 impl Wiki {
@@ -131,7 +136,22 @@ impl Wiki {
         for list in wiki.by_name.values_mut() {
             list.sort_by_key(|&i| (entries[i].global, entries[i].depth, i));
         }
+        wiki.canonical =
+            wiki.files().iter().filter_map(|p| std::fs::canonicalize(p).ok()).collect();
         wiki
+    }
+
+    /// Whether `path` is one of the files this was read from — **the same
+    /// file**, however it is spelled (`./x` and an absolute path are one).
+    ///
+    /// ⚠️ Both sides have to canonicalise for the canonical answer to count.
+    /// Comparing `canonicalize(a).ok() == canonicalize(b).ok()` calls two
+    /// missing files equal — `None == None` — so an unsaved buffer and a wiki
+    /// that had since been deleted read as the same file.
+    pub fn came_from(&self, path: &Path) -> bool {
+        self.files().iter().any(|&p| p == path)
+            || std::fs::canonicalize(path)
+                .is_ok_and(|real| self.canonical.iter().any(|p| *p == real))
     }
 
     /// Every file the wiki was read from — a save of any of them reloads it.
