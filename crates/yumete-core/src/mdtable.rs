@@ -944,7 +944,18 @@ pub fn measured_window(
     let page = page.max(1);
     let a = top.max(first).min(last);
     let b = top.saturating_add(page).min(last).max(a);
-    if (a..=b).contains(&line) {
+    // ⚠️ **A window holding one row is no window** (2026-09-19). When the table
+    // sits *below* `top + page` — a chapter of prose above it, and in 竪排 the
+    // screenful is counted in 縱 while `top` is a line — this clips to
+    // `[first, first]`, and the one row it holds is the header. The header was
+    // then squared up **against itself** while every row under it was squared
+    // up against the others: 「表頭和表身對不上」, and only on a table far down
+    // a long file, which is why it survived every short fixture.
+    //
+    // A single row is a legitimate answer only when the table really is one
+    // row. Otherwise fall through and re-centre on the line being asked about,
+    // which is what every other row already gets.
+    if (a..=b).contains(&line) && (a < b || first == last) {
         return (a, b);
     }
     let line = line.clamp(first, last);
