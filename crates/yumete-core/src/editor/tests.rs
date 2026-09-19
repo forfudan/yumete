@@ -14580,6 +14580,36 @@ fn a_note_nobody_closed_stops_at_its_own_line() {
     assert_eq!(out, "甲\n乙\n", "{out:?}");
 }
 
+/// 2026-09-19：**改動條要跟着編輯走。** 從前比的是磁碟上那一份，於是在一段上面
+/// 插一行，記號還釘在磁碟那一份的行號上——下面那一段的竪綫看着就是「不見了」。
+/// 現在比的是緩衝區（helix 也是），記號跟着打字挪。
+#[test]
+fn the_change_bar_follows_the_buffer_not_the_disk() {
+    let base = "一\n二\n三\n";
+    // 改過第二行：記號在第 2 行（0 起算是 1）。
+    let now = "一\n改過的二\n三\n";
+    let changes = crate::vcs::Changes::against(base, now, 3).expect("git diff --no-index");
+    assert_eq!(changes.at(1), Some(crate::vcs::Change::Changed), "{changes:?}");
+    assert_eq!(changes.at(0), None);
+
+    // 在最上面插一行之後，那一段整個往下挪了一行，記號跟着挪。
+    let now = "我\n一\n改過的二\n三\n";
+    let changes = crate::vcs::Changes::against(base, now, 4).expect("git diff --no-index");
+    assert_eq!(changes.at(0), Some(crate::vcs::Change::Added), "新插的那一行是新添");
+    assert_eq!(changes.at(2), Some(crate::vcs::Change::Changed), "改過的那一段跟着挪了");
+    assert_eq!(changes.at(1), None, "没動過的那一行還是没動過");
+}
+
+/// ⚠️ **換行符不算改動。** 倉裏開着 `core.autocrlf` 的時候 `HEAD` 裏存的是
+/// CRLF 而緩衝區是 LF，逐字節比會說每一行都改過——helix 就是這麽把整篇文章標成
+/// 紫色的（作者 2026-09-19 拿他自己的稿子撞到）。兩邊都把行尾的 `\r` 去掉。
+#[test]
+fn a_line_ending_is_not_a_change() {
+    let changes = crate::vcs::Changes::against("一\r\n二\r\n三\r\n", "一\n二\n三\n", 3)
+        .expect("git diff --no-index");
+    assert!(changes.is_empty(), "{changes:?}");
+}
+
 /// 2026-09-19：**兩個挨在一起的反引號不是一對空代碼段。** 從前它們是，於是
 /// ``` ``%%`` ``` 裏的 `%%` 落在代碼段外面、開了一條註釋，而這一支把註釋底下
 /// 的段落整個從導出的檔裏刪掉——屏幕上還在，交出去的没了。

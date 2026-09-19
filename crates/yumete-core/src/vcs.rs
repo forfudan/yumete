@@ -73,6 +73,58 @@ impl Changes {
         self.runs.is_empty()
     }
 
+    /// **`HEAD` 裏那一份的正文**，拿來跟緩衝區比（作者 2026-09-19）。
+    ///
+    /// 從前比的是**磁碟上那一份**，於是緩衝區裏剛打的行根本不在那次比較裏：在
+    /// 一段上面插一行，記號還釘在原來的行號上，看着就是「下面那一段的竪綫不見
+    /// 了」。helix 比的是緩衝區，這裏跟它一樣。
+    ///
+    /// ⚠️ **兩邊都把行尾的 `\r` 去掉**。倉裏開着 `core.autocrlf` 的時候，`HEAD`
+    /// 裏存的是 CRLF 而緩衝區是 LF——逐字節比會說**每一行都改過**，整篇亮起來。
+    /// 這正是 helix 在同一個檔案上掉進去的坑（`git diff` 自己不會，因為它兩邊都
+    /// 過一遍 git 的換行轉換；`--no-index` 不過）。
+    pub fn head_text(path: &Path) -> Option<String> {
+        let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        let name = path.file_name()?;
+        let mut arg = std::ffi::OsString::from("HEAD:./");
+        arg.push(name);
+        let out = std::process::Command::new("git")
+            .args(["--no-optional-locks", "show"])
+            .arg(&arg)
+            .current_dir(dir)
+            .output()
+            .ok()?;
+        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    /// `HEAD` 那一份與**這一份正文**的逐行差。
+    ///
+    /// `base` 是 [`Changes::head_text`] 取來的那一份（按 buffer 存住，不必每次
+    /// 重取）；`text` 是緩衝區現在的樣子。
+    pub fn against(base: &str, text: &str, lines: usize) -> Option<Changes> {
+        let strip = |s: &str| {
+            s.split('\n').map(|l| l.trim_end_matches('\r')).collect::<Vec<_>>().join("\n")
+        };
+        let dir = std::env::temp_dir().join(format!("yumete-vcs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).ok()?;
+        let (a, b) = (dir.join("head"), dir.join("now"));
+        std::fs::write(&a, strip(base)).ok()?;
+        std::fs::write(&b, strip(text)).ok()?;
+        let out = std::process::Command::new("git")
+            .args(["--no-optional-locks", "diff", "--no-color", "--no-ext-diff", "-U0", "--no-index", "--"])
+            .arg(&a)
+            .arg(&b)
+            .output()
+            .ok();
+        let _ = std::fs::remove_dir_all(&dir);
+        let out = out?;
+        // ⚠️ `--no-index` 退出碼 **1 ＝ 兩邊不一樣**，不是錯。只有 2 以上纔是。
+        if out.status.code().is_some_and(|c| c > 1) {
+            return None;
+        }
+        Some(Changes::from_diff(&String::from_utf8_lossy(&out.stdout), lines))
+    }
+
     /// 喊一次 `git`，把 `path` 跟 `HEAD` 那一份比出來。
     ///
     /// `lines` 是這個檔案現在有幾行，只用來認「剪口在檔尾」那一種。

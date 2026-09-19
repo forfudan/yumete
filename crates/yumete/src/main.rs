@@ -474,6 +474,10 @@ fn main() -> ExitCode {
         let _ = editor.execute(":tutor");
     }
     if let Some((width, height)) = shot {
+        // **一幀也要算一次改動條。** 互動的循環是停手 300 毫秒纔算，離屏出圖没有
+        // 那個循環——不補這一句，`--keys` 打進去的改動在圖上永遠看不見，而所有
+        // 的驗證都是看圖。
+        editor.vcs_tick();
         // **Say what this picture cannot show.** `--keys` presses into the core
         // (`press` calls `editor.on_key`), and the IME lives one crate up in
         // the front end: composing, the candidate panel, and every `:yume`

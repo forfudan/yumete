@@ -631,6 +631,27 @@ impl Editor {
         changes.at(line)
     }
 
+    /// **停手多久纔去重算改動條**（作者 2026-09-19 定：300 毫秒）。
+    ///
+    /// 按鍵一來就重新等——循環是 `recv_timeout(這個時長)`，所以它實際上是「停手
+    /// 300 毫秒」，打字的時候一個子進程都不生。
+    pub const VCS_IDLE: std::time::Duration = std::time::Duration::from_millis(300);
+
+    /// 還欠一次重算嗎？欠就回「等這麽久」，循環拿它當這一輪的期限。
+    pub fn vcs_due_in(&self) -> Option<std::time::Duration> {
+        if !self.diff_gutter {
+            return None;
+        }
+        let buffer = self.current_buffer();
+        let asked = self.vcs_asked.get(&buffer.id()).copied();
+        (asked != Some(buffer.revision())).then_some(Self::VCS_IDLE)
+    }
+
+    /// 鐘響了：把欠的那一次算掉。
+    pub fn vcs_tick(&mut self) {
+        self.refresh_vcs(false);
+    }
+
     /// 重算現在這個 buffer 的 git 逐行差。
     ///
     /// `force` ＝ 「不管快取記的是哪個 revision，重來一次」：`:view-diff on` 與
@@ -647,11 +668,34 @@ impl Editor {
             self.vcs.remove(&id);
             return;
         };
-        if !force && self.vcs.get(&id).is_some_and(|(at, _)| *at == revision) {
+        if !force && self.vcs_asked.get(&id) == Some(&revision) {
             return;
         }
         let lines = buffer.line_count();
-        match crate::vcs::Changes::read(&path, lines) {
+        self.vcs_asked.insert(id, revision);
+        // **跟緩衝區比，不跟磁碟比**（作者 2026-09-19：在一段上面插一行，下面那
+        // 一段的竪綫就没了——記號釘在磁碟那一份的行號上，而緩衝區已經挪過了）。
+        // `HEAD` 裏那一份按 buffer 存住：它只在存檔、換檔、`git` 那邊動過的時候
+        // 纔會變，而**每一次停手**都要重比一遍。
+        let base = match (force, self.vcs_base.get(&id)) {
+            (false, Some(base)) => Some(base.clone()),
+            _ => {
+                let base = crate::vcs::Changes::head_text(&path);
+                match &base {
+                    Some(text) => {
+                        self.vcs_base.insert(id, text.clone());
+                    }
+                    None => {
+                        self.vcs_base.remove(&id);
+                    }
+                }
+                base
+            }
+        };
+        let text = base.and_then(|base| {
+            crate::vcs::Changes::against(&base, &self.current_buffer().text(), lines)
+        });
+        match text {
             Some(changes) => {
                 self.vcs.insert(id, (revision, changes));
             }

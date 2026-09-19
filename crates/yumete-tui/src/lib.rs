@@ -870,7 +870,18 @@ pub fn run(
             // had (#383): the last few seconds of typing used to be written
             // only by the *next* keystroke, and pausing to think meant there
             // was no next keystroke.
-            None => match editor.autosave_due_in() {
+            //
+            // **The 改動條 owes one too** (2026-09-19). It is compared against
+            // the *buffer* now, so it has to be worked out again after an edit
+            // — and 「after」 is 「when the typing stops」: any key restarts this
+            // wait, so a 300 ms deadline is a debounce with no clock of its own
+            // to keep. Whichever deadline is nearer wins; both ticks are asked
+            // on the way round and each is a no-op unless it is really owed.
+            None => match [editor.autosave_due_in(), editor.vcs_due_in()]
+                .into_iter()
+                .flatten()
+                .min()
+            {
                 None => match events.recv() {
                     Ok(outcome) => outcome,
                     // The reader is gone, which is the terminal saying it is done.
@@ -879,6 +890,7 @@ pub fn run(
                 Some(wait) => match events.recv_timeout(wait) {
                     Ok(outcome) => outcome,
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        editor.vcs_tick();
                         editor.autosave_tick();
                         // One frame is redrawn on the way round — the loop
                         // draws at its head — and exactly one, because writing
@@ -3167,6 +3179,18 @@ const CUT_ABOVE: &str = "▔";
 /// 剪口在檔尾：下面沒有行了，線畫在最後一行的腳下（`▁`，U+2581）。
 const CUT_BELOW: &str = "▁";
 
+/// 改動條本身的字形：`▍`（U+258D，左五八分塊）。
+///
+/// **畫一個字，不塗滿一格**（作者 2026-09-19，對着 helix 看出來的：「我們的這個
+/// 底色竪綫爲什麽比 helix 的粗？它的更細而且和正文中間還有一些距離」）。helix
+/// 畫的就是這個字（`helix-view/src/gutter.rs:125`），用前景色——字形只占格子的
+/// 八分之五又靠左，所以右邊自己留出一條縫，離正文遠一點。塗滿底色的那一版又粗
+/// 又貼着字。
+///
+/// ⚠️ 和剪口同一個毛病：整個方塊區是 East Asian Ambiguous，CJK 字體下占兩格。
+/// 量出兩格就退回塗滿底色——那一版寬窄是對的，只是粗。
+const CHANGE_BAR: &str = "▍";
+
 /// 剪口畫成哪個字符。
 ///
 /// ⚠️ **U+2580–U+259F 整個方塊區都是 East Asian Ambiguous**，在 CJK 字體的終端
@@ -3202,10 +3226,18 @@ fn diff_mark(editor: &Editor, row: &wrap::Row) -> Option<yumete_core::vcs::Chang
 fn diff_cell(change: yumete_core::vcs::Change, ink: crate::theme::Palette, band: Style) -> Span<'static> {
     use crate::theme::Accent;
     use yumete_core::vcs::Change;
+    // `▍` 一格畫得下纔畫它；畫不下就退回塗滿（見 `CHANGE_BAR`）。
+    let bar = |accent: Accent| -> Span<'static> {
+        let colour = ink.vcs(accent);
+        match yumete_cjk::char_width(CHANGE_BAR.chars().next().unwrap_or(' ')) == 1 {
+            true => Span::styled(CHANGE_BAR, band.fg(colour)),
+            false => Span::styled(" ", Style::default().bg(colour)),
+        }
+    };
     match change {
         // 綠＝新添、藍＝改過，和 `:diff` 那張單子、和 git 自己一個意思。
-        Change::Added => Span::styled(" ", Style::default().bg(ink.vcs(Accent::Green))),
-        Change::Changed => Span::styled(" ", Style::default().bg(ink.vcs(Accent::Azure))),
+        Change::Added => bar(Accent::Green),
+        Change::Changed => bar(Accent::Azure),
         Change::CutAbove | Change::CutBelow => {
             let narrow = yumete_cjk::char_width(CUT_ABOVE.chars().next().unwrap_or(' ')) == 1
                 && yumete_cjk::char_width(CUT_BELOW.chars().next().unwrap_or(' ')) == 1;
@@ -10658,22 +10690,28 @@ fn squeezed(text: &str) -> String {
         let ink = ink(&config);
         let bar = bar_column(&editor, &config);
         let page = ink.page().bg;
-        assert_eq!(buffer[(bar, 0)].style().bg, page, "第 1 行没動過");
+        // **一個字，不是一塊底色**（作者 2026-09-19，對着 helix：「它的更細而且
+        // 和正文中間還有一些距離」）。`▍` 只占格子的八分之五又靠左，右邊那條縫
+        // 是字形自己留的。所以驗的是**墨**和**那個字**，底色一路是紙。
+        assert_eq!(buffer[(bar, 0)].symbol(), " ", "第 1 行没動過");
+        assert_eq!(buffer[(bar, 1)].symbol(), super::CHANGE_BAR, "第 2 行是新添的");
         assert_eq!(
-            buffer[(bar, 1)].style().bg,
+            buffer[(bar, 1)].style().fg,
             Some(ink.vcs(crate::theme::Accent::Green)),
-            "第 2 行是新添的"
+            "新添是綠的"
         );
+        assert_eq!(buffer[(bar, 2)].symbol(), super::CHANGE_BAR, "第 3 行改過");
         assert_eq!(
-            buffer[(bar, 2)].style().bg,
+            buffer[(bar, 2)].style().fg,
             Some(ink.vcs(crate::theme::Accent::Azure)),
-            "第 3 行改過"
+            "改過是藍的"
         );
-        assert_eq!(buffer[(bar, 3)].style().bg, page, "第 4 行没動過");
+        assert_eq!(buffer[(bar, 3)].symbol(), " ", "第 4 行没動過");
+        assert_eq!(buffer[(bar, 1)].style().bg, page, "底色一路是紙");
         // ⚠️ **號碼一個都没丟，正文一欄都没挪。** 這一條佔的是本來就空着的那
         // 一格（`GUTTER_AIR`），所以版心不動——功能落地那天頁面重排是這個設計
         // 從一開始要躲開的事。
-        assert_eq!(row_text(&buffer, 1).trim_end(), "2  二");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "2 ▍二");
     }
 
     #[test]
@@ -10734,8 +10772,10 @@ fn squeezed(text: &str) -> String {
         let page = ink.page().bg;
         // 第 1 段折成四列，四列都是它。
         for y in 0..4 {
-            assert_eq!(buffer[(bar, y)].style().bg, changed, "折出來的第 {y} 列");
+            assert_eq!(buffer[(bar, y)].symbol(), super::CHANGE_BAR, "折出來的第 {y} 列");
+            assert_eq!(buffer[(bar, y)].style().fg, changed, "折出來的第 {y} 列");
         }
+        assert_eq!(buffer[(bar, 4)].symbol(), " ", "下一段不是它");
         assert_eq!(buffer[(bar, 4)].style().bg, page, "下一段不是它");
 
         // 剪口反過來：同一段折成四列，綫只畫在段首那一列。
