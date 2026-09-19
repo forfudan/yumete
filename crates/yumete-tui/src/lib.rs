@@ -3459,7 +3459,15 @@ fn draw(
     };
     // The footnote, the comment, or the 百科 entry the cursor is standing on
     // (#294, #287) — the quietest of the four, and the first to give way.
-    let note_panel = match taken || keys_panel.is_some() {
+    //
+    // ⚠️ **It gives way to the *sequence*, not to the panel that drew**
+    // (2026-09-19, caught in review). `panel::draw` answers `None` both for
+    // 「there was nothing to show」 and for 「it did not fit」, and on a small
+    // terminal the key table does not fit — so a half-pressed `空格` dropped
+    // its menu **and put a 百科 entry there instead**. What the reader is in
+    // the middle of is the question, and `pending_menu` is the one that
+    // answers it.
+    let note_panel = match taken || editor.pending_menu().is_some() {
         true => None,
         false => draw_note(frame, editor, config, text_area, footer.y, (cursor_x, cursor_y)),
     };
