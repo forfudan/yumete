@@ -371,8 +371,14 @@ impl Editor {
             // Inside a fence nothing is markup, so nothing comes off.
             let spans = self.markup_line_in(line, block);
             off.extend(crate::markdown::hidden(&spans, self.selected_columns(line)));
-            off.sort_unstable();
         }
+        // ⚠️ **The measure and the page must hide the same characters.** This
+        // is the measure's list and `markup_hidden_on_line` is the page's, and
+        // 竪排's table slack has to be in both: hidden from the page alone, the
+        // padding would be worked out for characters nobody draws and every
+        // band would come out a few rows deep of nothing.
+        off.extend(self.table_slack_off_the_page(line));
+        off.sort_unstable();
         off
     }
 
