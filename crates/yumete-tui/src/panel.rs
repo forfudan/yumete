@@ -36,6 +36,14 @@ pub struct Panel {
     /// says — gold is the name, `quiet()` is the address, and the body is
     /// ordinary ink. `None` for everything that has no such line.
     pub lede: Option<String>,
+    /// **Whether the body is an entry rather than a note** (2026-09-19).
+    ///
+    /// A 百科 entry is several paragraphs and is set like a page of a book:
+    /// each one opens with a 全角 space. A footnote, a `%%註釋%%`, `:write`'s
+    /// check and the `[yumete]` line are each one short paragraph *about*
+    /// something, and an indent on them is a stray space at the head of the
+    /// panel — which is what #287 quietly gave all four of them.
+    pub entry: bool,
     pub body: Body,
     /// **Whether the prose inside runs down the page** (作者 2026-09-18:
     /// 「只有百科才需要縱書，其他的都保持橫排」).
@@ -238,17 +246,28 @@ fn table_rows(block: &[&str], budget: usize) -> Vec<String> {
     let fit = |text: &str, room: usize| -> String {
         let mut out = String::new();
         let mut used = 0;
+        // ⚠️ **「…」 is East Asian *Ambiguous*** — one cell for most readers
+        // and **two** under `ambiguous_width = "wide"`, which is what a CJK
+        // reader on a CJK font sets. Charged as one, every cut cell ran two
+        // cells long and pushed the last column off the panel. Ask the width
+        // table, the way `mdtable::FOLD_MARK`'s own note says to.
+        let mark = yumete_cjk::str_width("…");
+        let over = yumete_cjk::str_width(text) > room;
+        let budget = match over {
+            true => room.saturating_sub(mark),
+            false => room,
+        };
         for g in text.chars() {
             let w = yumete_cjk::str_width(&g.to_string());
-            if used + w > room.saturating_sub(usize::from(yumete_cjk::str_width(text) > room)) {
+            if used + w > budget {
                 break;
             }
             out.push(g);
             used += w;
         }
-        if yumete_cjk::str_width(text) > room {
+        if over {
             out.push('…');
-            used += 1;
+            used += mark;
         }
         while used < room {
             out.push(' ');
@@ -459,7 +478,13 @@ pub fn draw(
     let indented = |text: &str| -> String {
         text.split('\n')
             .filter(|para| !para.trim().is_empty())
-            .map(|para| format!("　{para}"))
+            .map(|para| match panel.entry && !para.trim_start().starts_with('─') {
+                // ⚠️ Not the 「──」 that divides two entries of one name: that
+                // is the panel's own furniture, and an indent on it reads as a
+                // paragraph that begins with a rule.
+                true => format!("　{para}"),
+                false => para.to_string(),
+            })
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -624,8 +649,21 @@ pub fn draw(
         Body::Prose(_) if panel.vertical_text => (count, lines),
         Body::Prose(_) if count > cap && cap > 0 => {
             let mut kept: Vec<String> = lines.into_iter().take(cap).collect();
-            if let Some(last) = kept.last_mut() {
-                *last = "…".to_string();
+            // ⚠️ **Never the only row.** On a short page `cap` is 1, and
+            // replacing that one row left a panel whose whole content was
+            // 「…」 — a ring around an ellipsis, which says nothing at all.
+            // Hang the mark off the end of the last row instead.
+            match kept.len() {
+                0 | 1 => {
+                    if let Some(last) = kept.last_mut() {
+                        last.push('…');
+                    }
+                }
+                _ => {
+                    if let Some(last) = kept.last_mut() {
+                        *last = "…".to_string();
+                    }
+                }
             }
             (kept.len(), kept)
         }
@@ -750,6 +788,7 @@ mod tests {
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
                     title: "天門真境".into(),
                     lede: None,
+                    entry: true,
                     body: Body::Prose(text.into()),
                     vertical_text: true,
                     tag: None,

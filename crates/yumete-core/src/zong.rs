@@ -106,6 +106,14 @@ pub struct Grid<'a> {
     /// Which whole lines are not on the page (Feature #159) — by the same
     /// argument: one rule for folding a blank line, and both layouts ask it.
     folded: &'a dyn Fn(usize) -> bool,
+    /// **Whether `line` is drawn as a row of a turned table** (2026-09-19).
+    ///
+    /// Handed in rather than worked out here, for the same reason `hidden` is:
+    /// the answer needs the page's layout, the table level and whether the line
+    /// is inside a fence, and a second copy of that reasoning would be a second
+    /// answer. A row that is drawn turned does not wrap — a 縱 *is* the row —
+    /// and at 源碼, or inside a fence, no row is.
+    table: &'a dyn Fn(usize) -> bool,
     /// The paragraph shown as the file has it: no indent, and its blank line
     /// back. `usize::MAX` for none.
     pub open_line: usize,
@@ -150,6 +158,7 @@ const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
 
 /// A page with every line on it.
 const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
+const NOTHING_TURNED: &dyn Fn(usize) -> bool = &|_| false;
 
 /// A page holding nothing but the file's own characters.
 const NOTHING_DRAWN: &dyn Fn(usize) -> Vec<crate::drawn::Run> = &|_| Vec::new();
@@ -172,6 +181,11 @@ impl<'a> Grid<'a> {
     }
 
     /// The same grid, told which lines are off the page.
+    /// Which lines are drawn as rows of a turned table — see the field.
+    pub fn with_turned_tables(self, table: &'a dyn Fn(usize) -> bool) -> Grid<'a> {
+        Grid { table, ..self }
+    }
+
     pub fn with_folds(self, folded: &'a dyn Fn(usize) -> bool) -> Grid<'a> {
         Grid { folded, ..self }
     }
@@ -205,6 +219,7 @@ impl<'a> Grid<'a> {
             tatechuyoko: false,
             hidden: NOTHING_HIDDEN,
             folded: NOTHING_FOLDED,
+            table: NOTHING_TURNED,
             indent: 0,
             open_line: usize::MAX,
             drawn: NOTHING_DRAWN,
@@ -1252,7 +1267,7 @@ fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> L
     //
     // ⚠️ The length is the whole row, not `usize::MAX`: the breaker asks
     // `at + zong_len >= total`, and that overflows.
-    let zong_len = match crate::mdtable::is_row(&text) {
+    let zong_len = match (grid.table)(line) {
         true => slots.len().max(1),
         false => grid.zong_len.max(1),
     };
@@ -1788,6 +1803,7 @@ mod tests {
         tatechuyoko: false,
         hidden: NOTHING_HIDDEN,
         folded: NOTHING_FOLDED,
+        table: NOTHING_TURNED,
         drawn: NOTHING_DRAWN,
         indent: 0,
         open_line: usize::MAX,

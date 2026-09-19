@@ -378,7 +378,8 @@ impl Editor {
             let hidden = |line: usize| self.markup_hidden_on_line(line);
             let folded = |line: usize| self.line_is_folded(line);
             let drawn = |line: usize| self.drawn_runs_on_line(line);
-            let grid = self.grid_with(&hidden, &folded, &drawn);
+            let turned = |line: usize| self.line_is_table_row(line);
+            let grid = self.grid_with(&hidden, &folded, &drawn, &turned);
             let rope = self.current_buffer().rope();
             let goal = if continuing {
                 self.goal_slot

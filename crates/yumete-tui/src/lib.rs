@@ -4375,6 +4375,7 @@ fn draw_which_key(
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         title,
         lede: None,
+        entry: false,
         body: panel::Body::Keys(keys.into_iter().map(|(k, what)| (k.to_string(), what)).collect()),
         tag: None,
         vertical_text: false,
@@ -4418,6 +4419,7 @@ fn draw_note(
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: say!("wiki.title"),
             lede: None,
+            entry: false,
             body: panel::Body::Prose(said),
             tag: Some(say!("wiki.open-it")),
             vertical_text: false,
@@ -4435,6 +4437,7 @@ fn draw_note(
             // 章節行「辭典 › 真境」不是詞條說的話，是它寫在哪兒——面板把它
             // 畫在名字下面，灰的，和正文隔一行（作者 2026-09-18）。
             lede: view.lede(),
+            entry: true,
             body: panel::Body::Prose(view.body_prose()),
             tag: None,
             // The one body that turns with the page.
@@ -4452,6 +4455,7 @@ fn draw_note(
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         title: detail.title,
         lede: None,
+        entry: false,
         body: panel::Body::Prose(body),
         // Where the note is written, so `gd` has somewhere named to go.
         tag: match detail.links.first() {
@@ -14426,7 +14430,6 @@ fn squeezed(text: &str) -> String {
         let ink = ink(&config);
         assert_eq!(buffer[(2, 1)].style().fg, Some(ink.gold()), "the header is 金");
         assert_ne!(buffer[(2, 3)].style().fg, Some(ink.gold()), "a body row is not");
-        let head = buffer[(0, 3)].style().bg;
         // **And the ground stops where the table does** (#460): a table is a
         // shape *on* the page with a width of its own, not a block *of* the
         // page taking the window's.
@@ -15470,6 +15473,7 @@ fn squeezed(text: &str) -> String {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
                     title: "王高甫".into(),
                     lede: None,
+                    entry: false,
                     body: panel::Body::Prose(long.clone()),
                     tag: None,
                     vertical_text: false,

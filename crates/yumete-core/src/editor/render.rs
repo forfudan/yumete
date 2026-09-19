@@ -934,7 +934,7 @@ impl Editor {
     /// for rather than the line inspected. A `|` table lives inside prose, so
     /// there the line has to open with one and must not be inside a fence —
     /// a table quoted in a code block is writing *about* a table.
-    fn wall_here(&self, line: usize) -> Option<crate::mdtable::Wall> {
+    pub(super) fn wall_here(&self, line: usize) -> Option<crate::mdtable::Wall> {
         if let Some(crate::editor::Separator::Delimiter(c)) =
             self.table.as_ref().map(|view| view.separator)
         {

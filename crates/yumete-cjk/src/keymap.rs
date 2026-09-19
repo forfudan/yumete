@@ -44,7 +44,13 @@ impl KeyPreset {
             // cursor.
             KeyPreset::Vim => &[
                 ("x", ";{n}D"),
-                ("s", ";c"),
+                // ⚠️ **`s` cannot be 「collapse, then `c`」 any more**
+                // (2026-09-19). It was written before #429 made `c` an
+                // operator: now `;c` collapses and then *waits for a motion*,
+                // so a hand typing `shello` got no substitution and an opened
+                // line from the `o`. vim's `s` is 「cut this character and
+                // start typing」, which is what `x` does plus `i`.
+                ("s", ";{n}Di"),
                 ("V", "x"),
                 // ⚠️ **`dd` `dw` `cw` `yy` `cc` `yw` are not in this table
                 // any more** (#429, 2026-09-18). They were six lines of a
@@ -150,7 +156,12 @@ pub const VIM_MOTIONS: &[(&str, VimMotion)] = &[
     ("k", line("{n}k")),
     ("G", line("{n}G")),
     ("gg", line("{n}gg")),
-    ("ge", line("ge")),
+    // ⚠️ **`ge` is not among them** (2026-09-19). vim's `ge` is 「the end of
+    // the previous word」 — a short backward step — while this editor's `ge`
+    // goes to the end of the **file**, so `dge` deleted the whole document
+    // where vim would have taken back half a word. A motion that means two
+    // wildly different things is worse under an operator than no motion at
+    // all: `d` + an unknown key does nothing and says so.
     ("}", m("{n}}")),
     ("{", m("{n}{")),
     ("H", m("{n}H")),

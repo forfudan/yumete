@@ -418,25 +418,38 @@ mod tests {
         assert_eq!(wiki.unmarkable(), ["墨"]);
         assert!(!wiki.words().any(|w| w == "墨"));
     }
-#[test]
-fn repro_second_level() {
-    let dir = std::env::temp_dir().join("yumete-wiki-repro");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join("書/.yumete")).unwrap();
-    std::fs::create_dir_all(dir.join("書/辭典")).unwrap();
-    std::fs::write(
-        dir.join("書/.yumete/wiki.md"),
-        "# 辭典\n<!-- [yumete] ../辭典/天門真境辭典.md -->\n",
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join("書/辭典/天門真境辭典.md"),
-        "# 天門真境辭典\n\n## 天門\n山口。\n\n## 真境\n境界。\n\n### 內境\n更深。\n",
-    )
-    .unwrap();
-    let wiki = crate::wiki::Wiki::load(Some(&dir.join("書/.yumete/wiki.md")), None);
-    println!("sources: {:#?}", wiki.sources);
-    println!("names: {:?}", wiki.entries.iter().map(|e| (&e.name, e.depth, &e.ancestors)).collect::<Vec<_>>());
-    std::fs::remove_dir_all(&dir).ok();
-}
+    /// **An entry three levels down an included file still knows its name.**
+    ///
+    /// The include is written in the book's own `wiki.md` and points out of the
+    /// `.yumete` directory; the file it names has its own `#` title, so the
+    /// entries under it sit at depth 2 and 3. This began as a scratch test that
+    /// printed what it found and asserted nothing — which is a test that passes
+    /// whatever happens (tidied 2026-09-19).
+    #[test]
+    fn an_entry_under_a_sub_heading_of_an_included_file_is_found() {
+        let dir = std::env::temp_dir().join("yumete-wiki-an-entry-under-a-sub-heading");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("書/.yumete")).unwrap();
+        std::fs::create_dir_all(dir.join("書/辭典")).unwrap();
+        std::fs::write(
+            dir.join("書/.yumete/wiki.md"),
+            "# 辭典\n<!-- [yumete] ../辭典/天門真境辭典.md -->\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("書/辭典/天門真境辭典.md"),
+            "# 天門真境辭典\n\n## 天門\n山口。\n\n## 真境\n境界。\n\n### 內境\n更深。\n",
+        )
+        .unwrap();
+        let wiki = crate::wiki::Wiki::load(Some(&dir.join("書/.yumete/wiki.md")), None);
+        let found: Vec<(&str, usize)> =
+            wiki.entries.iter().map(|e| (e.name.as_str(), e.depth)).collect();
+        assert!(found.contains(&("天門", 2)), "{found:?}");
+        assert!(found.contains(&("真境", 2)), "{found:?}");
+        assert!(found.contains(&("內境", 3)), "the third level too: {found:?}");
+        let deepest = wiki.entries.iter().find(|e| e.name == "內境").expect("內境");
+        assert_eq!(deepest.ancestors.last().map(String::as_str), Some("真境"), "{:?}", deepest.ancestors);
+        assert!(deepest.source.ends_with("天門真境辭典.md"), "{:?}", deepest.source);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

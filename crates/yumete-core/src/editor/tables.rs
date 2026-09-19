@@ -853,7 +853,26 @@ impl Editor {
     /// a `|` between two columns is a band **across** the 縱, and the `---`
     /// under the header is a wall **down** it.
     pub fn line_is_table_row(&self, line: usize) -> bool {
-        self.line_text(line).is_some_and(|l| crate::mdtable::is_row(&l))
+        // ⚠️ **Three questions, not one** (2026-09-19). 「Does this line open
+        // with a `|`」 is `mdtable::is_row`, and on its own it turned tables
+        // that are not being drawn as tables at all:
+        //
+        // - **源碼** (`:render off`, `:table off`) promises the file as it
+        //   stands, and there the core stops padding and stops hiding the
+        //   cushions — but the renderer went on drawing `──` and `│`, so the
+        //   one mode whose whole job is honesty showed characters the file
+        //   does not hold.
+        // - **Inside a fence** a table is an *example* of a table; `is_row` is
+        //   fence-blind, and `wall_here` is not.
+        //
+        // So the question is the one the padding itself asks: is this line
+        // being squared up as a row right now. Everything downstream — the
+        // turned glyphs, the slack that comes off the page, and 「a row is one
+        // 縱」 — follows this one answer.
+        self.layout() == crate::zong::Layout::Vertical
+            && self.table_padding_on()
+            && self.wall_here(line).is_some()
+            && self.line_text(line).is_some_and(|l| crate::mdtable::is_row(&l))
     }
 
     /// Whether `line` is a table's `| --- |` rule row — the one that becomes
