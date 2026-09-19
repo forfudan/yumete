@@ -1555,10 +1555,17 @@ impl Editor {
                 return last - first;
             }
         }
+        // **A count says how many lines end up as one** (作者 2026-09-19),
+        // which is vim's rule: `3J` welds three lines, and that is two joins.
+        // The two ways of writing it used to disagree by one — `g3J` counted
+        // joins and `4gJ` counted lines — while the manual promised both meant
+        // the same thing. Counting lines is the half that matches vim and the
+        // half that matches 「選了幾行就併幾行」 above.
         self.sequence_span()
             .map(|(n, _)| n)
             .or_else(|| self.operator_count.take())
-            .unwrap_or(1)
+            .unwrap_or(2)
+            .saturating_sub(1)
             .max(1)
     }
 
