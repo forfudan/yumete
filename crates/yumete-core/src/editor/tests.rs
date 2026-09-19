@@ -706,7 +706,8 @@ fn a_packed_page_still_says_where_a_paragraph_begins() {
     let nothing = |_: usize| Vec::new();
     let never = |_: usize| false;
     let bare = |_: usize| Vec::new();
-    let grid = ed.grid_with(&nothing, &never, &bare);
+    let never_turned = |_: usize| false;
+    let grid = ed.grid_with(&nothing, &never, &bare, &never_turned);
     assert_eq!(grid.indent, 2);
     assert!(!grid.readings, "…while the reading column still goes");
 }
@@ -739,10 +740,11 @@ fn the_blank_line_an_indent_replaces_comes_off_the_page() {
     let hidden = |line: usize| ed.markup_hidden_on_line(line);
     let folded = |line: usize| ed.line_is_folded(line);
     let drawn = |line: usize| ed.drawn_runs_on_line(line);
+    let never_turned = |_: usize| false;
     assert!(!crate::zong::folded(
         ed.current_buffer().rope(),
         8,
-        ed.grid_with(&hidden, &folded, &drawn)
+        ed.grid_with(&hidden, &folded, &drawn, &never_turned)
     ));
     // And never the line the cursor is on, or you could not type into it.
     ed.execute(":2").unwrap();
@@ -765,7 +767,8 @@ fn no_margin_lays_out_no_reading_but_still_reads_the_markup() {
         let nothing = |_: usize| Vec::new();
         let never = |_: usize| false;
         let bare = |_: usize| Vec::new();
-        let grid = ed.grid_with(&nothing, &never, &bare);
+        let never_turned = |_: usize| false;
+        let grid = ed.grid_with(&nothing, &never, &bare, &never_turned);
         crate::zong::line_slots_in(text, grid, &[])
     };
     assert!(slots(&ed).iter().any(|s| s.ruby.is_some()), "a reading down the margin");
@@ -2132,7 +2135,7 @@ impl Segmenter for Counting {
 #[test]
 fn punctuation_is_never_a_word_to_paint() {
     let line = "`w`（按詞移動）、`f`";
-    let mut ed = typed(line);
+    let ed = typed(line);
     let chars: Vec<char> = line.chars().collect();
     for &(a, b) in &ed.segment_line(0) {
         let word: String = chars[a..b].iter().collect();
@@ -3350,7 +3353,8 @@ fn both_layouts_ask_the_same_page() {
             let hidden = |line: usize| ed.markup_hidden_on_line(line);
             let folded = |line: usize| ed.line_is_folded(line);
             let drawn = |line: usize| ed.drawn_runs_on_line(line);
-            let grid = ed.grid_with(&hidden, &folded, &drawn);
+            let never_turned = |_: usize| false;
+            let grid = ed.grid_with(&hidden, &folded, &drawn, &never_turned);
             for line in 0..rope.len_lines() {
                 assert_eq!(
                     crate::zong::folded(rope, line, grid),
@@ -8555,7 +8559,7 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
 #[test]
 fn a_lone_carriage_return_does_not_start_a_line() {
     let mut ed = Editor::new();
-    ed.current_buffer_mut().replace(0..0, "CR\rhere\nsecond\n");
+    ed.current_buffer_mut().replace(0..0, "CR\rhere\nsecond\n").unwrap();
     assert_eq!(
         ed.current_buffer().line_count(),
         3,
@@ -8568,12 +8572,12 @@ fn a_lone_carriage_return_does_not_start_a_line() {
 
     // The other five that came with the feature are characters too.
     let mut ed = Editor::new();
-    ed.current_buffer_mut().replace(0..0, "a\u{b}b\u{c}c\u{85}d\u{2028}e\u{2029}f\n");
+    ed.current_buffer_mut().replace(0..0, "a\u{b}b\u{c}c\u{85}d\u{2028}e\u{2029}f\n").unwrap();
     assert_eq!(ed.current_buffer().line_count(), 2, "one line, and the end");
 
     // ⚠️ CRLF still ends a line — that is ropey's core, not the feature.
     let mut ed = Editor::new();
-    ed.current_buffer_mut().replace(0..0, "one\r\ntwo\r\n");
+    ed.current_buffer_mut().replace(0..0, "one\r\ntwo\r\n").unwrap();
     assert_eq!(ed.current_buffer().line_count(), 3);
     let first: String = ed.current_buffer().rope().line(0).chars().collect();
     assert_eq!(first, "one\r\n", "and the pair is the break, not two");
@@ -14511,6 +14515,27 @@ fn a_note_over_several_lines_leaves_the_export() {
     let out = crate::markdown::strip_comments("甲<!-- 一\n二\n三 -->乙\n\n<!--\n整段\n-->\n丙\n```\n<!-- 留着\n```\n");
     // The note's own lines go; the lines it began and ended on keep their break.
     assert_eq!(out, "甲\n乙\n\n丙\n```\n<!-- 留着\n```\n");
+}
+
+/// 2026-09-19: **a note nobody closed took the rest of the book with it.** The
+/// carry-across is right for a real multi-line note and catastrophic for a
+/// `<!--` the writer left open mid-thought: `:export html` handed over the
+/// paragraph above it and stopped, while the page on screen still showed the
+/// whole chapter. `comment`'s own rule is 「an unclosed one runs to the end of
+/// the line」, and now the stripper falls back to it.
+#[test]
+fn a_note_nobody_closed_stops_at_its_own_line() {
+    let out = crate::markdown::strip_comments("第一段。\n\n<!-- 待改\n\n第二段。\n第三段。\n");
+    assert_eq!(out, "第一段。\n\n\n第二段。\n第三段。\n", "{out:?}");
+
+    // The same for `%%`, and for a note opened on a line that also has writing
+    // on it: what stands before the mark is kept, the mark's own line goes.
+    let out = crate::markdown::strip_comments("甲%% 待改\n乙\n");
+    assert_eq!(out, "甲\n乙\n", "{out:?}");
+
+    // …and a note that *is* closed still takes its own lines with it.
+    let out = crate::markdown::strip_comments("甲\n<!-- 一\n二 -->\n乙\n");
+    assert_eq!(out, "甲\n乙\n", "{out:?}");
 }
 
 /// 作品百科, first part (#287): the wiki's names walk as one word, `:wiki`

@@ -263,8 +263,10 @@ pub fn char_at(
     let hidden = |line: usize| editor.markup_hidden_on_line(line);
     let folded = |line: usize| editor.line_is_folded(line);
     let drawn = |line: usize| editor.drawn_runs_on_line(line);
+    // 「這一行是不是一條轉過來的表格行」——渲染、折行、藏字三處同一個答案。
+    let turned = |line: usize| editor.line_is_table_row(line);
     let grid = editor
-        .grid_with(&hidden, &folded, &drawn)
+        .grid_with(&hidden, &folded, &drawn, &turned)
         .with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
     // The same page the drawing laid out, 着重號 and all: a click lands on the
@@ -772,8 +774,10 @@ pub fn draw(
     let hidden = |line: usize| editor.markup_hidden_on_line(line);
     let folded = |line: usize| editor.line_is_folded(line);
     let drawn = |line: usize| editor.drawn_runs_on_line(line);
+    // 「這一行是不是一條轉過來的表格行」——渲染、折行、藏字三處同一個答案。
+    let turned = |line: usize| editor.line_is_table_row(line);
     let grid = editor
-        .grid_with(&hidden, &folded, &drawn)
+        .grid_with(&hidden, &folded, &drawn, &turned)
         .with_zong_len(metrics.zong_len);
     // A pane that is only being read has no cursor: the page is laid out
     // around the place it was left at, and the hit is what it marks.
@@ -1174,8 +1178,12 @@ pub fn draw(
                     // wall with a blank cell beside it.
                     ("|", true) => "┼─".to_string(),
                     ("|", false) => "──".to_string(),
-                    ("-", _) => "│".to_string(),
-                    ("+", _) => "┼".to_string(),
+                    // ⚠️ **Only the rule row's own `-` is a wall.** A `-` or
+                    // a `+` inside a cell is writing — `UTF-8` came out as
+                    // `U T F │ 8` and `C++` as `C ┼ ┼`, and each false glyph
+                    // shifted its band, so three 縱 ruled at three depths.
+                    ("-", true) => "│".to_string(),
+                    ("+", true) => "┼".to_string(),
                     _ => symbol,
                 },
                 false => symbol,

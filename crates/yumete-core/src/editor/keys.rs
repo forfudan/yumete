@@ -47,7 +47,14 @@ impl Editor {
         // Normal mode with nothing pending; it ends when it is back there.
         // A key describes one move, and「was that a jump?」is about *this* one.
         self.jumped = false;
-        let watching = !self.repeating_edit;
+        // ⚠️ **An expansion is not a command of its own** (2026-09-19). Every
+        // key `play_keys` replays arrives here in Normal mode with nothing
+        // pending, so it cleared the record and then wrote itself into it: `.`
+        // after the vim preset's `x` pressed `D`, which the alias layer read
+        // again as 「cut to end of line」 — `x.` took the whole line. What `.`
+        // has to remember is the key the reader pressed, and that one was
+        // recorded before the expansion began.
+        let watching = !self.repeating_edit && !self.expanding_alias;
         if watching {
             // A count is part of the command it prefixes, not a command: `3>`
             // is one change and `.` has to repeat all three levels of it.
@@ -461,6 +468,24 @@ impl Editor {
             true => self.play_keys(keys),
             false => self.play_keys(&format!("v{keys}")),
         }
+        // ⚠️ **A motion that found nothing is not a motion** (2026-09-19,
+        // caught in review). The action used to run whatever happened, and an
+        // empty selection cuts the character under the cursor — so `df,` on a
+        // line with no comma said 「這一行上没有「,」」 **and deleted a
+        // character anyway**, and so did `d0` at column 1, `di(` outside a
+        // pair, `ciw` where there is no word object. The refusal has to reach
+        // the edit, not just the status line: these are exactly the keys the
+        // preset exists to make safe.
+        //
+        // ⚠️ **Asked here, before `till` and `linewise` move the ends.** Those
+        // two shrink and grow a selection that the motion really did make:
+        // `cc` on a one-character line ends collapsed because `till` pulled
+        // the newline back out of it, and it still means 「this line」.
+        if self.anchor == self.cursor {
+            self.count = None;
+            self.alias_count = None;
+            return;
+        }
         // **`t` is `f` one short** — this editor has no 「till」 of its own
         // (the `t` letter is the table group), and inside an operator's wait
         // there is nothing else `t` could mean.
@@ -477,6 +502,14 @@ impl Editor {
             self.extend_to_line_bounds();
         }
         self.extend = false;
+        // ⚠️ **A motion that found nothing is not a motion** (2026-09-19,
+        // caught in review). The action used to run whatever happened, and an
+        // empty selection cuts the character under the cursor — so `df,` on a
+        // line with no comma said 「這一行上沒有「,」」 **and deleted a
+        // character anyway**, and so did `d0` at column 1, `di(` outside a
+        // pair, `ciw` where there is no word object. The refusal has to reach
+        // the edit, not just the status line: these are exactly the keys the
+        // preset exists to make safe.
         self.snapshot();
         match op {
             // vim's `d` and `c` fill the unnamed register — `dd` then `p` puts
@@ -539,6 +572,14 @@ impl Editor {
     }
 
     fn play_keys(&mut self, keys: &str) {
+        // ⚠️ **Saved and restored, not set and cleared** (2026-09-19). An
+        // operator inside an expansion replays its motion through this same
+        // function, and the inner call's `= false` on the way out re-armed the
+        // alias layer for the **rest of the outer string**: the trailing key of
+        // `Q = "dwQ"` was expanded again and the stack went with it — an abort,
+        // which takes unsaved buffers with it. Two keys, one written `ddx` and
+        // one `wwx`, ended in two different meanings of `x`.
+        let outer = self.expanding_alias;
         self.expanding_alias = true;
         let mut count = self.count.take();
         // **`{n}` says where the count goes** (2026-09-18). Without it the
@@ -566,7 +607,7 @@ impl Editor {
             self.on_key(Key::Char(c));
             at += 1;
         }
-        self.expanding_alias = false;
+        self.expanding_alias = outer;
     }
 
     /// **The count a sequence was written with**, from before it and from
@@ -1113,8 +1154,15 @@ impl Editor {
             // **vim repeats a find with `;` and `,`** (#428, 2026-09-18) —
             // here that is `A-.`, which no vim hand will ever press. `,` is
             // the same search the other way round.
+            // ⚠️ **…but not while an alias is being played** (2026-09-19).
+            // The preset writes `;` into its own expansions to mean 「collapse
+            // first」 (`x` is `;{n}D`), and once a find had happened that `;`
+            // repeated the find instead — so after `f,` the preset's `x` cut
+            // everything the `f` had selected rather than one character.
             Key::Char(c @ (';' | ','))
-                if self.key_preset == yumete_cjk::KeyPreset::Vim && self.last_find.is_some() =>
+                if self.key_preset == yumete_cjk::KeyPreset::Vim
+                    && self.last_find.is_some()
+                    && !self.expanding_alias =>
             {
                 if let Some((kind, ch)) = self.last_find {
                     let kind = match c {

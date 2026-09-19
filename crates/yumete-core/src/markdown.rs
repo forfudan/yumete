@@ -899,7 +899,20 @@ pub fn strip_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut open: Option<&'static str> = None;
     let mut fence: Option<char> = None;
+    // ⚠️ **A note that is never closed may not eat the rest of the book**
+    // (2026-09-19). A comment carries across lines by design, so a `<!--` with
+    // no `-->` swallowed every line after it — and silently: `:export html` on
+    // a chapter with one unfinished note handed the publisher the first
+    // paragraph and nothing else, while the page on screen still showed the
+    // whole thing. [`comment`]'s own rule is that an unclosed one runs to the
+    // end of **its line**, so that is what this falls back to: remember where
+    // the next line begins, and if the file ends with the note still open,
+    // wind back to there and copy the rest through untouched.
+    let mut resume: Option<(usize, usize)> = None;
+    let mut offset = 0usize;
     for line in text.split_inclusive('\n') {
+        let here = offset;
+        offset += line.len();
         let body = line.trim_end_matches(['\n', '\r']);
         let ending = &line[body.len()..];
         let trimmed = body.trim_start();
@@ -947,11 +960,23 @@ pub fn strip_comments(text: &str) -> String {
             kept.push(chars[at]);
             at += 1;
         }
-        if kept.trim().is_empty() && !body.trim().is_empty() {
-            continue;
+        let dropped = kept.trim().is_empty() && !body.trim().is_empty();
+        if !dropped {
+            out.push_str(&kept);
+            out.push_str(ending);
         }
-        out.push_str(&kept);
-        out.push_str(ending);
+        // The line the note opened on is the last one that is honestly gone;
+        // everything after it is what gets wound back.
+        if open.is_some() && resume.is_none() {
+            resume = Some((out.len(), here + line.len()));
+        }
+        if open.is_none() {
+            resume = None;
+        }
+    }
+    if let (Some(_), Some((len, from))) = (open, resume) {
+        out.truncate(len);
+        out.push_str(&text[from.min(text.len())..]);
     }
     out
 }

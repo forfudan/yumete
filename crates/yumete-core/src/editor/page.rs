@@ -82,6 +82,7 @@ impl Editor {
         hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
         folded: &'a dyn Fn(usize) -> bool,
         drawn: &'a dyn Fn(usize) -> Vec<crate::drawn::Run>,
+        turned: &'a dyn Fn(usize) -> bool,
     ) -> Grid<'a> {
         // Through `ruby()` and `hanging_punctuation()`, not the fields: a page
         // packed tight lays out neither, and a grid that disagreed with what is
@@ -114,6 +115,7 @@ impl Editor {
             .with_readings(self.margin.shown())
             .with_sentences(self.sentences)
             .with_drawn(drawn)
+            .with_turned_tables(turned)
     }
 
     /// The markup that is off the page on `line`, as columns within it.
@@ -161,15 +163,12 @@ impl Editor {
     /// reason: its dashes were counted in cells too, and the wall is re-filled
     /// to the band's depth by the same padding as everything else.
     pub(super) fn table_slack_off_the_page(&self, line: usize) -> Vec<(usize, usize)> {
-        if self.layout() != crate::zong::Layout::Vertical || !self.table_padding_on() {
+        if !self.line_is_table_row(line) {
             return Vec::new();
         }
         let Some(text) = self.line_text(line) else {
             return Vec::new();
         };
-        if !crate::mdtable::is_row(&text) {
-            return Vec::new();
-        }
         let chars: Vec<char> = text.trim_end_matches(['\n', '\r']).chars().collect();
         let ruled = crate::mdtable::rule_of(&text).is_some();
         let mut off = Vec::new();
@@ -423,7 +422,8 @@ impl Editor {
         let hidden = |line: usize| self.markup_hidden_on_line(line);
         let folded = |line: usize| self.line_is_folded(line);
         let drawn = |line: usize| self.drawn_runs_on_line(line);
-        let grid = self.grid_with(&hidden, &folded, &drawn);
+        let turned = |line: usize| self.line_is_table_row(line);
+        let grid = self.grid_with(&hidden, &folded, &drawn, &turned);
         zong::position(self.current_buffer().rope(), self.caret(), grid)
     }
 

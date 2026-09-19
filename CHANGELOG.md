@@ -7,6 +7,120 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## 0.2.0 · 未發佈 · Unreleased
+
+一本書寫到一半會缺什麼，這一版就補什麼：**書自己的百科**、**竪排裏的表格**、
+**一整套 vim 鍵位**，以及把螢幕上所有浮框收成同一個東西。
+
+What a half-written book turns out to need: **a wiki of its own**, **tables on a
+vertical page**, **a whole vim keymap**, and every floating panel on the screen
+finally being one thing.
+
+### 新的 · New
+
+- **作品百科（#287）。** `.yumete/wiki.md` 裏寫下人名、地名、門派——一行 `## 名字`
+  加底下幾段——編輯器就把這些名字交給分詞器，**在正文裏標出來**（金墨，或者一條
+  點線加一塊底色，`:wiki hide|color|line`）；`:wiki edit` 開那個檔，`:wiki panel` 開側欄那頁，`:wiki reload` 重讀。光標停在名字上，詞條就浮在旁邊；
+  `gd` 直接跳到寫它的那一行去改。側欄的百科頁和浮框**同一時刻只出現一個**。
+  一份 `wiki.md` 可以 `include` 別的檔，所以一個系列共用一套設定是一句話的事。
+
+  A wiki for the book you are writing. Names in `.yumete/wiki.md` are handed to
+  the segmenter and marked in the prose; standing on one floats its entry beside
+  the caret, `gd` opens the file it is written in, and the sidebar's 百科 page
+  and the float never both appear at once.
+
+- **竪排的表格轉九十度（只讀）。** 從前一張 markdown 表在竪排頁面上就是一縱縱散落
+  的 `|` 和 `-`。現在它**順時針轉九十度**：表的第一行成了最右那一縱往下讀，列成了
+  橫着的帶，牆與交叉跟着轉。要改它就把光標放上去按 `t t`——表格視圖會把頁面翻成
+  橫排來編輯。百科浮框裏的表格同樣轉，裝不下就截斷畫「…」。
+
+  A markdown table on a vertical page is turned a quarter turn clockwise and
+  locked read-only; `t t` opens the editable view, which turns the page flat.
+
+- **vim 鍵位預設（#428、#429）。** `[keys] preset = "vim"`，或者當場 `:keymap vim`。
+  它是**翻譯**，不是第二套編輯器：只翻那些「按下去會改錯字」的鍵。`d c y > <` 是真
+  的操作符，等一個動作（`dw de d$ dG df, dt, di( >>`）；計數寫在哪兒都行
+  （`3dw`、`d3w`、`2d3w` 是六個詞）；`x s D C Y S % * ; , ZZ ZQ C-r` 都在。
+  ⚠️ **`J`／`K` 仍然是半頁翻動**，合併行是 `gJ`——這一條是作者定的，不隨 vim。
+
+  `[keys.normal]` 自己也長大了：右邊可以是一串鍵、一個**動作的名字**
+  （`x = "delete_selection"`，`:keymap actions` 列出全部 80 個），或者一條 `:命令`。
+
+- **`空格 f` 挑選器重做。** 居中的大面板，左邊列表右邊預覽；一進去就在列表層，
+  `jk` 走、`/` 纔開始搜；行首是檔名、後面灰色的路徑；命中的字母金色；最近開過的
+  排前面，散文排在代碼前面。
+
+- **`:view-code`——圍欄裏的代碼按它自己的語法上色**，tree-sitter，七種語言。
+  `.py` 整個檔也上色，Tab 打的是空格。
+
+- **讓開。** Normal 模式下系統輸入法自己退開，回 Insert 再回來——用的是輸入法自己的
+  掛起協議（0.2 毫秒），不是切換輸入源（那條路三次壞一次）。
+
+- **`:view-margin never|dense|loose|always`** 取代 `:view-dense`；
+  **`:sidebar-left`／`:sidebar-right`** 開關側欄，**`:panel-left`／`:panel-right`**
+  管面板擺哪邊。
+
+- **五對十色**：橙、粉、青、黃、綠入列，朱又是紅的了。
+
+- **`gJ` 合併的是選區，`g3J` 終於會數數**；`gj`／`gk` 走文件的行（和 helix 一致），
+  竪排下 `gh gj gk gl` 跟着 `hjkl` 一起轉。
+
+- **一條註釋蓋住幾行，就是這幾行的註釋**（#288）——畫出來、描邊、導出都照這個算。
+
+- 零碎：不帶檔名開 `yumete` 是一張白紙，`-c` 接着上次；`:open` 不帶參數就是挑選器；
+  命令列從頭到尾是 ASCII；竪書的行號兩個一格；Linux 自己找得到截圖工具。
+
+### 鍵位變了 · Keys that changed
+
+- **`空格 e` 刪了**，鍵位省下來。開關側欄用 `:sidebar-left`／`:sidebar-right`。
+- 竪排下 `gh gj gk gl` 跟着頁面轉，和 `hjkl` 一致。
+
+### 浮框 · The floating panels
+
+從前螢幕上有八個地方各畫各的框：浮框、鍵表、命令選單、問句、挑選器和它的預覽、
+候選欄的兩個。現在是**同一個**（`chrome`），於是規矩也只有一份：
+
+- **同一時刻只畫一個**，先後是 `:` 選單 ＞ 挑選器 ＞ 半按下的鍵 ＞ 註釋／詞條。
+  輸入命令的時候百科窗口自然就消失了。
+- **多大**：橫排寬不超過 2/3、高不超過 1/3；竪排轉置（寬 1/3、高 2/3），這樣不打破
+  行文。站在光標不在的那個角。
+- **底色離紙五檔**（第 85 檔），框裏的文字**不再自帶底色**——下面是什麼顏色就是什麼。
+- 名字往右挪一格，和框裏的內容左邊對齊。
+
+### 修好的 · Fixed
+
+- **`:export html`／`:export typst` 從前會把一條没閉合的 `<!--` 底下的整篇稿子吞掉**，
+  一聲不吭——屏幕上還是整章，交出去的只有那一段之前的幾行。跨行是註釋本來的規矩，而
+  「没人閉合」那一種現在退回它自己那一行為止。
+- **vim 預設裏 `.` 重複的是展開出來的最後一個鍵**，而且那個鍵又被當成別名展開了一次：
+  `x.` 吃掉整行，`dd.` 只刪一個字。現在 `.` 記的是**你按的那個鍵**。
+- **`f` 之後再按 `x`，剪掉的是 `f` 選中的一整段**（`x` 自己的展開裏那個 `;` 被當成
+  「重複查找」了）。别名展開裏的 `;` 現在一律是「收起選區」。
+- **一條自引用的 `[keys.normal]`（`Q = "dwQ"`）會讓編輯器崩掉**——不是報錯，是 abort，
+  没存的東西跟着走。
+- **`s` 從前什麽也不改**：它寫作 `;c`，而 `c` 後來成了操作符，於是按 `shello` 得到的是
+  一個空行。
+- **`dge` 刪掉整個文件**（vim 的 `ge` 是「上一個詞的詞尾」，這裏的 `ge` 是「文件末尾」）。
+- **竪排下 `:render off`／`:table off` 照樣把表格的 `|` 畫成框線**——那個模式的全部承諾
+  就是原樣顯示文件。圍欄裏當例子寫的表格同樣被轉。
+- 竪排表格裏，格子內的 `-` 和 `+` 被畫成了框線（`UTF-8` → `U T F │ 8`）。
+- 浮框在矮終端上只剩一個「…」；截斷標記按一格算寬，而 `ambiguous_width = "wide"` 下它是
+  兩格，於是每個被截的格子都長出兩格、最後一欄被擠出框外。
+- 腳註、`%%註釋%%`、`:write` 的確認框都跟着百科長出了一個全角空格的縮進。
+- 動作找不到東西時，操作符照樣剪掉一個字（`df,` 在没有逗號的行上說「這一行上没有
+  「,」」，然後刪掉一個字；`d0` 在第一列、`di(` 在括號外、`ciw` 都一樣）。
+
+- 挑選器從前一按 `jk` 就在狀態列裏打字，`Esc` 直接退出編輯器。
+- 浮框折行時**每行末尾的一個漢字被吃掉**（「執掌法會加冠之」，沒有「禮。」）——
+  折行的預算沒有先扣掉框線和留白。這個錯比 2/3 那條規矩還老。
+- 竪排下一張已經對齊過的表格，表頭和表身對不上，而且光標一動就變：表格按「屏幕上
+  那幾行」量寬，而竪排「一屏幾行」被當成了終端的高度——竪排一行是一縱、橫着排開，
+  一屏的行數是擺得下幾縱。
+- 竪排表格的隔行底色在每格文字寫完的地方就斷掉：補空是虛字，而虛字從前一律畫在
+  頁面底色上，不接下面那一層。
+- `2d3w` 從前刪 23 個詞（兩個計數被拼在了一起，不是相乘）。
+- `yyp` 從前貼低一行；`wD` 從前刪掉整行。
+
 ## 0.1.0 · 2026-09-15
 
 頭一版。底下幾節裏寫着「變了」的，說的是**做的過程中變的**——前面沒有上一版
