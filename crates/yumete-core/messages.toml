@@ -8098,6 +8098,20 @@ zhs = "百科记号：关"
 en = "wiki marks: off"
 
 [[message]]
+# :wiki 報告裏的一節標題：這些詞條的名字在打開的這一章裏出現了，可是没有標出來——分詞器把它切開了（「有身體」敗給「這裏有／身體」），或者名字裏有空格、拉丁字母，根本成不了一個詞
+key = "wiki.missed"
+zht = "在這一章裏出現了，可是標不出來的"
+zhs = "在这一章里出现了，可是标不出来的"
+en = "in this chapter but not marked"
+
+[[message]]
+# :wiki 報告裏：上面那一節的一行——名字，以及它出現在哪幾行
+key = "wiki.missed-at"
+zht = "{0}：第 {1} 行"
+zhs = "{0}：第 {1} 行"
+en = "{0}: line {1}"
+
+[[message]]
 # :wiki 報告裏：引到的檔不存在
 key = "wiki.missing"
 zht = "{0}：沒有這個檔"

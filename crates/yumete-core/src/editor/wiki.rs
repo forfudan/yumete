@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::wiki::{Source, Wiki, WIKI_MD};
+use std::collections::BTreeMap;
 
 impl Editor {
     /// Read this book's wiki and the global one again, and put their names
@@ -142,6 +143,25 @@ impl Editor {
             out.push_str(&format!("\n## {}\n\n", say!("wiki.unmarkable")));
             for name in unmarkable {
                 out.push_str(&format!("- {name}\n"));
+            }
+        }
+        let missed = self.wiki_missed_here();
+        if !missed.is_empty() {
+            out.push_str(&format!("\n## {}\n\n", say!("wiki.missed")));
+            for (name, lines) in missed {
+                // The first few; a name the chapter is about is on every page,
+                // and the point is 「it is not marked」, not a concordance.
+                let where_ = lines
+                    .iter()
+                    .take(5)
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join("、");
+                let where_ = match lines.len() > 5 {
+                    true => format!("{where_}…"),
+                    false => where_,
+                };
+                out.push_str(&format!("- {}\n", say!("wiki.missed-at", name, where_)));
             }
         }
         self.show_listing(out, say!("wiki.title"));
@@ -387,11 +407,16 @@ impl Editor {
     /// frame costs a hash lookup per word on the drawn rows and nothing walks
     /// the document. A one-character entry is never marked.
     pub fn wiki_marks_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        if !self.wiki_marks_visible() {
-            return Vec::new();
+        match self.wiki_marks_visible() {
+            true => self.wiki_names_on_line(line),
+            false => Vec::new(),
         }
-        let block = self.block_of(line);
-        if block.is_literal() || matches!(block, crate::markdown::Block::Comment { .. }) {
+    }
+
+    /// Where the names are, whether or not the marks are being drawn — so that
+    /// `:wiki` can say what it could not mark even with `:wiki hide` on.
+    fn wiki_names_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if self.line_is_literal(line) {
             return Vec::new();
         }
         let chars = crate::zong::line_chars(self.current_buffer().rope(), line);
@@ -404,6 +429,96 @@ impl Editor {
                 }
             })
             .collect()
+    }
+
+    /// A fence or a comment — where a name is quoted rather than used.
+    fn line_is_literal(&self, line: usize) -> bool {
+        let block = self.block_of(line);
+        block.is_literal() || matches!(block, crate::markdown::Block::Comment { .. })
+    }
+
+    /// **The names this chapter has and does not show** (2026-09-19).
+    ///
+    /// A name joins the segmenter and the mark goes where the segmenter *cut*,
+    /// which is the right rule — 中國人 inside 中國人民 is not the name — and
+    /// also means a name can be in the wiki, be right there in the sentence,
+    /// and never light up: 「有身體」 loses to 這裏有／身體, and a name with a
+    /// space or a Latin letter is not one token at all. That used to happen
+    /// **in silence**: the entry was written, nothing appeared, and `:wiki`
+    /// reported nothing wrong. Now it is asked the only way it can be answered
+    /// honestly — **by looking, not by predicting**: every name is searched for
+    /// in the chapter that is open, and an occurrence carrying no mark is
+    /// named with the lines it is on. Only this file, because only this file is
+    /// known; the heading says so.
+    fn wiki_missed_here(&self) -> Vec<(String, Vec<usize>)> {
+        // ⚠️ **Only a chapter.** A listing has no path, and `:wiki` twice in a
+        // row would otherwise read its own report back — 「有身體：第 12 行」
+        // says nothing about the book. The wiki itself is out for the same
+        // reason: every entry begins `## 名字`, so it would report all of them.
+        let Some(here) = self.current_buffer().path().map(Path::to_path_buf) else {
+            return Vec::new();
+        };
+        if self.is_wiki_file(&here) {
+            return Vec::new();
+        }
+        // Grouped by first character so that most lines cost one scan of their
+        // own characters and no search at all.
+        let mut by_first: HashMap<char, Vec<&str>> = HashMap::new();
+        for name in self.wiki.by_name.keys() {
+            let mut cs = name.chars();
+            match (cs.next(), cs.next()) {
+                // One-character names are reported already, as never-markable.
+                (Some(first), Some(_)) => by_first.entry(first).or_default().push(name),
+                _ => {}
+            }
+        }
+        if by_first.is_empty() {
+            return Vec::new();
+        }
+        let rope = self.current_buffer().rope();
+        let mut missed: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+        for line in 0..rope.len_lines() {
+            if self.line_is_literal(line) {
+                continue;
+            }
+            let chars = crate::zong::line_chars(rope, line);
+            if !chars.iter().any(|c| by_first.contains_key(c)) {
+                continue;
+            }
+            // **Every hit first, and only then the segmenter** — cutting a line
+            // into words is the expensive half, and a first character in common
+            // (人, 有) is not a hit. On a chapter where the names really are
+            // everywhere this saves nothing; on a real one it skips most lines.
+            let mut hits: Vec<(usize, &str)> = Vec::new();
+            for (at, c) in chars.iter().enumerate() {
+                let Some(names) = by_first.get(c) else { continue };
+                for name in names {
+                    let long = name.chars().count();
+                    if at + long <= chars.len()
+                        && chars[at..at + long].iter().collect::<String>() == **name
+                    {
+                        hits.push((at, name));
+                    }
+                }
+            }
+            if hits.is_empty() {
+                continue;
+            }
+            let marked = self.wiki_names_on_line(line);
+            for (at, name) in hits {
+                let long = name.chars().count();
+                if marked.iter().any(|&(a, b)| a == at && b == at + long) {
+                    continue;
+                }
+                // Six is one more than the report prints: enough to say 「and
+                // more」 without keeping a concordance of a name on every page.
+                let seen = missed.entry(name).or_default();
+                if seen.len() < 6 {
+                    seen.push(line + 1);
+                }
+            }
+        }
+        missed.into_iter().map(|(name, lines)| (name.to_string(), lines)).collect()
     }
 }
 

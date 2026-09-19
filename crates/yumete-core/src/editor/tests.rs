@@ -14783,6 +14783,50 @@ fn a_long_wiki_entry_is_only_read_as_far_as_the_panel_can_draw() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:wiki` says which names this chapter does not show** (2026-09-19).
+///
+/// A name is marked where the segmenter *cut*, which is the right rule and
+/// also means a name can be in the wiki, be right there in the sentence, and
+/// never light up — 「有身體」 loses to 這裏有／身體. That was silent: the entry
+/// was written, nothing happened, and the report said all was well.
+#[test]
+fn the_wiki_report_names_what_this_chapter_could_not_mark() {
+    let dir = std::env::temp_dir().join(format!("yumete-wiki-missed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    // 「A 計劃」 has a space and a Latin letter, so it can never be one token —
+    // the kind of name that cannot be marked whatever the dictionary says.
+    std::fs::write(
+        dir.join(".yumete/wiki.md"),
+        "## A 計劃\n一個怪名字。\n## 落霞鎮\n小鎮。\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("第一章.md"), "他到落霞鎮。\nA 計劃還在。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.reload_project_words();
+    assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)], "落霞鎮 is marked");
+    assert!(ed.wiki_marks_on_line(1).is_empty(), "A 計劃 is not");
+
+    ed.execute(":wiki").unwrap();
+    let report = ed.current_buffer().text();
+    assert!(report.contains("A 計劃：第 2 行"), "{report}");
+    assert!(!report.contains("落霞鎮"), "a name that marks is not a complaint: {report}");
+
+    // ⚠️ And the report is never about itself: `:wiki` twice in a row used to
+    // read the first report back and complain about the line numbers it had
+    // just printed. A listing is not a chapter, so the chapter's own section is
+    // simply not in it…
+    ed.execute(":wiki").unwrap();
+    let again = ed.current_buffer().text();
+    assert!(!again.contains("A 計劃"), "the report read itself back: {again}");
+    // …and it is there again the moment there is a chapter to be about.
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.execute(":wiki").unwrap();
+    assert_eq!(ed.current_buffer().text(), report);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// 作品百科, third part (#287): the names are marked where the segmenter cut
 /// them, in three modes, and never inside a fence.
 #[test]
