@@ -14580,6 +14580,29 @@ fn a_note_nobody_closed_stops_at_its_own_line() {
     assert_eq!(out, "甲\n乙\n", "{out:?}");
 }
 
+/// 2026-09-19：**`w` 是一個文本對象**。`mi w`／`ma w` 是 helix 的寫法，vim 的
+/// `ciw` `diw` `daw` 走的是同一扇門——從前這裏只認括號，於是 vim 手指最熟的那一
+/// 組按下去什麽也不發生（更糟：剪掉光標底下那一個字就進了插入）。
+#[test]
+fn a_word_is_a_text_object_for_both_spellings() {
+    let vim = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(vim("alpha beta\n", "diw"), " beta\n", "詞本身");
+    assert_eq!(vim("alpha beta\n", "daw"), "beta\n", "連它後面那一段空白");
+    // ⚠️ 本編輯器的 `w` 連着邊界一起取，走完光標停在**空格**上——`wdiw` 因此是
+    // 最順手的一按，而它在 vim 裏刪的是那一串空白。
+    assert_eq!(vim("alpha beta\n", "wdiw"), "alphabeta\n", "空白也是一個詞");
+    assert_eq!(vim("alpha beta gamma\n", "wdaw"), "alpha gamma\n", "空白 ＋ 下一個詞");
+    // ⚠️ 一個字的選區和「没動」都是 `anchor == cursor`，所以對象自己說有没有
+    // 命中——不然 `wdiw` 會被「動作找不到東西」那道閘拒掉。
+    assert_eq!(vim("alpha\n", "di("), "alpha\n", "外面没有括號就什麽都不做");
+}
+
 /// 2026-09-19：**改動條要跟着編輯走。** 從前比的是磁碟上那一份，於是在一段上面
 /// 插一行，記號還釘在磁碟那一份的行號上——下面那一段的竪綫看着就是「不見了」。
 /// 現在比的是緩衝區（helix 也是），記號跟着打字挪。

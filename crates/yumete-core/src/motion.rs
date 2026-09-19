@@ -274,7 +274,7 @@ pub enum Grain {
     Coarse,
 }
 
-fn line_words(rope: &Rope, line: usize, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
+pub fn line_words(rope: &Rope, line: usize, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
     let start = rope.line_to_char(line);
     let text = line_text(rope, line);
     let ranges = match grain {
