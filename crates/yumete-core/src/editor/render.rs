@@ -780,6 +780,14 @@ impl Editor {
         let open = self.folds_open_at(line);
         let mut out = self.cell_tails_against(line, markup, open);
         out.extend(self.cell_slack_against(line, markup, open));
+        // ⚠️ **What a turned table keeps off the page is kept off motion too**
+        // (2026-09-19, caught in review). This is the third list — the measure
+        // has one, the page has one, and this one is what #379 built so that
+        // 「a step the reader cannot see is not a step」. Without it the caret
+        // walked the cushions and the file's own alignment spaces in a 竪排
+        // table: six presses of `j`, six file positions, and the caret sat on
+        // the same slot the whole time.
+        out.extend(self.table_slack_off_the_page(line));
         out.sort_unstable();
         out
     }

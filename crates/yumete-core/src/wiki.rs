@@ -56,6 +56,13 @@ pub enum Source {
     Read { path: PathBuf, entries: usize },
     /// Named by a directive and not there.
     Missing { path: PathBuf },
+    /// There, and unreadable — no permission, or not UTF-8. ⚠️ **Not the same
+    /// as missing** (2026-09-19, caught in review): `read_to_string` folds
+    /// ENOENT, EACCES and invalid UTF-8 into one `Err`, so a `wiki.md` in
+    /// GB18030 — plausible for this audience — was reported as 「there is no
+    /// such file」 about a file plainly sitting there. This is the feature's
+    /// error channel; it has to name what really happened.
+    Unreadable { path: PathBuf, why: String },
     /// Outside the book, absolute, or through a link that leaves it.
     Refused { named: String, from: PathBuf },
     /// Already read once; the second directive is ignored.
@@ -177,9 +184,17 @@ impl Reader {
             self.sources.push(Source::Again { path: path.to_path_buf() });
             return;
         }
-        let Ok(text) = std::fs::read_to_string(path) else {
-            self.sources.push(Source::Missing { path: path.to_path_buf() });
-            return;
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(why) if why.kind() == std::io::ErrorKind::NotFound => {
+                self.sources.push(Source::Missing { path: path.to_path_buf() });
+                return;
+            }
+            Err(why) => {
+                self.sources
+                    .push(Source::Unreadable { path: path.to_path_buf(), why: why.to_string() });
+                return;
+            }
         };
         self.sources.push(Source::Read { path: path.to_path_buf(), entries: 0 });
         let lines: Vec<&str> = text.lines().collect();

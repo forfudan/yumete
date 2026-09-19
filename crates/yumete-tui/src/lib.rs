@@ -4418,6 +4418,7 @@ fn draw_note(
         let said = match &include.state {
             Some(Source::Read { entries, .. }) => say!("wiki.read", &include.named, entries),
             Some(Source::Missing { .. }) | None => say!("wiki.missing", &include.named),
+            Some(Source::Unreadable { why, .. }) => say!("wiki.unreadable", &include.named, why),
             Some(Source::Refused { from, .. }) => {
                 say!("wiki.refused", &include.named, from.display())
             }
