@@ -14553,6 +14553,18 @@ fn a_note_nobody_closed_stops_at_its_own_line() {
     assert_eq!(out, "甲\n乙\n", "{out:?}");
 }
 
+/// 2026-09-19：**兩個挨在一起的反引號不是一對空代碼段。** 從前它們是，於是
+/// ``` ``%%`` ``` 裏的 `%%` 落在代碼段外面、開了一條註釋，而這一支把註釋底下
+/// 的段落整個從導出的檔裏刪掉——屏幕上還在，交出去的没了。
+#[test]
+fn a_code_span_in_double_backticks_is_not_a_note() {
+    let out = crate::markdown::strip_comments("甲 ``%%`` 乙\n丙\n丁\n");
+    assert_eq!(out, "甲 ``%%`` 乙\n丙\n丁\n", "{out:?}");
+    // 反引號裏的 `<!--` 同樣不是註釋。
+    let out = crate::markdown::strip_comments("甲 ``<!--`` 乙\n丙\n");
+    assert_eq!(out, "甲 ``<!--`` 乙\n丙\n", "{out:?}");
+}
+
 /// 作品百科, first part (#287): the wiki's names walk as one word, `:wiki`
 /// says what was read, and saving a wiki file reads it again.
 #[test]
