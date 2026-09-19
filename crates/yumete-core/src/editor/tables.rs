@@ -856,6 +856,12 @@ impl Editor {
         self.line_text(line).is_some_and(|l| crate::mdtable::is_row(&l))
     }
 
+    /// Whether `line` is a table's `| --- |` rule row — the one that becomes
+    /// the wall when the grid is turned (2026-09-19).
+    pub fn line_is_table_rule(&self, line: usize) -> bool {
+        self.line_text(line).is_some_and(|l| crate::mdtable::rule_of(&l).is_some())
+    }
+
     /// Whether the cursor's own line is a row of a `|` table.
     pub(super) fn md_row_at_cursor(&self) -> bool {
         let rope = self.current_buffer().rope();
