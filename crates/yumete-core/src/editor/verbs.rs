@@ -117,35 +117,10 @@ impl Editor {
     /// typed. Between Latin words the space is kept.
     /// `gK` — join this line onto the one **above** it.
     ///
-    /// helix has `J` and nothing for the other direction, and 「把這一行接到上
-    /// 一行去」 is the commoner wish in prose: a line that broke where it should
-    /// not is mended from where you are standing, not from the line before it.
-    ///
-    /// ⚠️ **The two directions are one edit, asked from two places.** This
-    /// stands on the line above and calls [`Self::join_lines`]; it decides
-    /// nothing of its own. The seam is the whole difficulty — a space between
-    /// Latin words, **none** between 漢字, and the indentation of the second
-    /// line swallowed — and a second copy of that rule is a second place for it
-    /// to be wrong. `gK` is `gJ` from one line up, and the count repeats it the
-    /// same way.
-    pub(super) fn join_with_above(&mut self) {
-        if self.refuse_readonly() {
-            return;
-        }
-        let rope = self.current_buffer().rope();
-        let (start, _) = self.selection();
-        let line = rope.char_to_line(start);
-        if line == 0 {
-            self.status = say!("edit.no-line-above");
-            return;
-        }
-        // Stand on the line above and do the ordinary join: one implementation,
-        // so the seam rule (a space between Latin words, none between 漢字) can
-        // only ever be decided once.
-        let above = rope.line_to_char(line - 1);
-        self.set_cursor(above);
-        self.join_lines();
-    }
+    // **`gK` 沒有自己的函數了**（2026-09-19）。它從前是「站到上一行去，然後
+    // 照常合併」，重複的時候一次比一次高，於是合出了選區之外。現在 `handle_goto`
+    // 的 `K` 那一支自己先上去一行，再把 `join_lines` 重複該重複的次數——合併的
+    // 接縫規矩（拉丁詞之間一個空格、漢字之間不留）始終只有這一處。
 
     pub(super) fn join_lines(&mut self) {
         if self.refuse_readonly() {
