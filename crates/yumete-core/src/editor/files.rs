@@ -679,6 +679,16 @@ impl Editor {
         if self.open_wiki_include() {
             return;
         }
+        // **And so does a 百科 name** (作者 2026-09-19: 「wiki 詞條 gf 跳轉定義
+        // 文件失效了」). `gd` has always opened the file an entry is written in
+        // — but 「open the file this names」 is exactly what `gf` is for, and a
+        // name on the page names one. Standing on 王高甫 and pressing `gf` used
+        // to answer 「這一行沒寫文件名」, which is true of the line and false of
+        // the word under the cursor. `gd` is unchanged; this is the same door
+        // with the other handle.
+        if self.follow_wiki() {
+            return;
+        }
         let rope = self.current_buffer().rope();
         let line = rope.line(rope.char_to_line(self.cursor)).to_string();
         let text = line.trim();

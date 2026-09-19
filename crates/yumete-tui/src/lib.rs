@@ -5693,7 +5693,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
         Side::Left => area.x + area.width - 1,
         Side::Right => area.x,
     };
-    let (from, to) = match side {
+    let (from_x, to) = match side {
         Side::Left => (area.x + 1, rule),
         Side::Right => (area.x + 2, area.x + area.width),
     };
@@ -5709,9 +5709,9 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
         }
     }
     let bottom = area.y + area.height;
-    let width = to.saturating_sub(from).max(1) as usize;
+    let width = to.saturating_sub(from_x).max(1) as usize;
     let Some(view) = editor.wiki_here() else {
-        put_text(buf, from, area.y, to, &say!("wiki.panel-empty"), quiet);
+        put_text(buf, from_x, area.y, to, &say!("wiki.panel-empty"), quiet);
         return;
     };
     let mut y = area.y;
@@ -5722,7 +5722,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
                 return;
             }
             let row: String = chars[a.min(chars.len())..b.min(chars.len())].iter().collect();
-            put_text(buf, from, *y, to, &row, style);
+            put_text(buf, from_x, *y, to, &row, style);
             *y += 1;
         }
     };
@@ -5745,12 +5745,44 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
             line(buf, &mut y, &part.trail.join(" › "), quiet);
         }
         y += 1;
-        for body in &part.lines {
-            match body {
-                WikiLine::Heading(depth, title) => {
-                    line(buf, &mut y, &format!("{} {title}", "#".repeat(*depth)), head)
+        // **A table is drawn as a table here too** (作者 2026-09-19: 「百科在
+        // panel 中的渲染，表格 wrap 了」). Wrapped like prose a grid stops being
+        // one — the tail of every row lands under the head of the next — which
+        // is what the float was taught first (`panel::table_rows`): lay it out
+        // at the width there is, never wrap it, and cut what will not fit.
+        let mut at = 0;
+        let rows: Vec<&str> = part
+            .lines
+            .iter()
+            .map(|body| match body {
+                WikiLine::Heading(_, title) => title.as_str(),
+                WikiLine::Text(t) => t.as_str(),
+            })
+            .collect();
+        while at < part.lines.len() {
+            let table = matches!(&part.lines[at], WikiLine::Text(t) if panel::is_table_row(t));
+            if !table {
+                match &part.lines[at] {
+                    WikiLine::Heading(depth, title) => {
+                        line(buf, &mut y, &format!("{} {title}", "#".repeat(*depth)), head)
+                    }
+                    WikiLine::Text(t) => line(buf, &mut y, t, text),
                 }
-                WikiLine::Text(t) => line(buf, &mut y, t, text),
+                at += 1;
+                continue;
+            }
+            let from = at;
+            while at < part.lines.len()
+                && matches!(&part.lines[at], WikiLine::Text(t) if panel::is_table_row(t))
+            {
+                at += 1;
+            }
+            for row in panel::table_rows(&rows[from..at], width) {
+                if y >= bottom {
+                    return;
+                }
+                put_text(buf, from_x, y, to, &row, text);
+                y += 1;
             }
         }
     }
