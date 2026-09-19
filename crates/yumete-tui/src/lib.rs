@@ -3152,6 +3152,69 @@ fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) ->
     }
 }
 
+/// 剪口的上緣：`▔`（U+2594，八分之一上塊）。
+///
+/// **刪掉的行沒有自己的一行可以塗**——它是兩行之間的一道縫。所以這一種不鋪滿
+/// 一格，只在缺口下面那一行的頭上畫一條細線：位置說的是「剪口在這兒」，鋪滿
+/// 一格說的會是「這一行沒了」，而那一行好端端地在那裏。helix 也是把它記在下面
+/// 那一行（`hunk.after.start`，純刪的 after 是個空區間），這裏跟它一樣。
+///
+/// ⚠️ **順帶一個好處：形狀也分得開。** 另外兩種是鋪滿的一格，這一種是一條邊。
+/// 百個男人裏有八個分不出紅綠，而「綠／藍／朱」這一組只有靠形狀纔不必單靠顏色
+/// 說話——`theme.rs` 的 `word_hue` 為同一件事寫過同一條理由。
+const CUT_ABOVE: &str = "▔";
+
+/// 剪口在檔尾：下面沒有行了，線畫在最後一行的腳下（`▁`，U+2581）。
+const CUT_BELOW: &str = "▁";
+
+/// 剪口畫成哪個字符。
+///
+/// ⚠️ **U+2580–U+259F 整個方塊區都是 East Asian Ambiguous**，在 CJK 字體的終端
+/// 上一個方塊佔**兩格**——而這一格只有一格寬，多出來的那一格會把整行往右推。所以
+/// 量一量再畫，量出兩格就退回 ASCII：`-` 正是 git 自己給刪掉那一行的記號，`_` 是
+/// 它落在腳下的樣子，兩個都是一格，任何字體都一樣。
+///
+/// `narrow` 由呼叫方量（`yumete_cjk::char_width`，答案是啓動時問終端問來的），
+/// 分開是為了這一支能單獨測——那個寬度是個行程全局，測試裏翻它會弄紅鄰居。
+fn cut_glyph(above: bool, narrow: bool) -> &'static str {
+    match (above, narrow) {
+        (true, true) => CUT_ABOVE,
+        (false, true) => CUT_BELOW,
+        (true, false) => "-",
+        (false, false) => "_",
+    }
+}
+
+/// 這一列的改動條要不要畫，畫哪一種。
+///
+/// 剪口**只畫在段首那一列**：它說的是「這一段和上一段之間剪掉了東西」，而折行
+/// 折出來的每一列並不是一段的開頭。新添與改過反過來，**整段每一列都畫**——那纔
+/// 成其為一「條」，也纔是「改動條」這個名字的意思。
+fn diff_mark(editor: &Editor, row: &wrap::Row) -> Option<yumete_core::vcs::Change> {
+    let change = editor.vcs_mark(row.line)?;
+    (row.starts_line() || !change.is_cut()).then_some(change)
+}
+
+/// 改動條那一格：新添與改過是**底色**，剪口是一條邊。
+///
+/// `band` 是這一格本來的底（頁面，或者 `:view-numbers-fill` 的那一條）——剪口
+/// 借它，因為那一條線是畫**在**紙上的，不是一塊自己的地。
+fn diff_cell(change: yumete_core::vcs::Change, ink: crate::theme::Palette, band: Style) -> Span<'static> {
+    use crate::theme::Accent;
+    use yumete_core::vcs::Change;
+    match change {
+        // 綠＝新添、藍＝改過，和 `:diff` 那張單子、和 git 自己一個意思。
+        Change::Added => Span::styled(" ", Style::default().bg(ink.vcs(Accent::Green))),
+        Change::Changed => Span::styled(" ", Style::default().bg(ink.vcs(Accent::Azure))),
+        Change::CutAbove | Change::CutBelow => {
+            let narrow = yumete_cjk::char_width(CUT_ABOVE.chars().next().unwrap_or(' ')) == 1
+                && yumete_cjk::char_width(CUT_BELOW.chars().next().unwrap_or(' ')) == 1;
+            let glyph = cut_glyph(change == Change::CutAbove, narrow);
+            Span::styled(glyph, band.fg(ink.mark()))
+        }
+    }
+}
+
 /// Where each part of the window goes.
 ///
 /// **Worked out in one place**, because three parts of this program need the
@@ -6720,7 +6783,17 @@ fn draw_horizontal(
                 true => band.fg(ink.mark()).add_modifier(Modifier::BOLD),
                 false => band.fg(ink.furniture()),
             };
-            spans.push(Span::styled(label, band));
+            // **改動條**（#55／#298）：行號後面那兩格空氣，末一格——貼着正文的
+            // 那一格——歸 git。`GUTTER_AIR` 從一開始就是為它留的，所以這件事落
+            // 地的那一天版心一欄都不用挪。
+            match diff_mark(editor, &row) {
+                None => spans.push(Span::styled(label, band)),
+                Some(change) => {
+                    let air: String = label.chars().take(gutter - 1).collect();
+                    spans.push(Span::styled(air, band));
+                    spans.push(diff_cell(change, ink, band));
+                }
+            }
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
         // marked — and the blank line it replaces costs a whole row.
@@ -10554,6 +10627,277 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cursor_line(), 0);
         assert_eq!(editor.zong_position().slot, 1);
+    }
+
+    // ---- 改動條（#55／#298）------------------------------------------------
+
+    /// 把一份 `git diff -U0` 的輸出直接安進編輯器，不去問 git。
+    fn with_diff(editor: &mut Editor, diff: &str) {
+        let lines = editor.current_buffer().line_count();
+        editor.set_diff_gutter(true);
+        editor.set_vcs(yumete_core::vcs::Changes::from_diff(diff, lines));
+    }
+
+    /// 改動條那一格在第幾欄：行號後面兩格空氣的**末一格**，貼着正文。
+    fn bar_column(editor: &Editor, config: &Config) -> u16 {
+        let gutter = gutter_width(
+            editor.current_buffer().line_count(),
+            config.editor.line_numbers,
+        );
+        gutter as u16 - 1
+    }
+
+    #[test]
+    fn the_change_bar_colours_the_cell_between_the_number_and_the_writing() {
+        // 第 2 行新添、第 3 行改過，第 1、4 行没動過。
+        let mut editor = editor_with("一\n二\n三\n四");
+        with_diff(&mut editor, "@@ -1,0 +2,1 @@\n@@ -3 +3 @@\n");
+        let config = Config::default();
+        let buffer = render(&editor, &config, 20, 8);
+
+        let ink = ink(&config);
+        let bar = bar_column(&editor, &config);
+        let page = ink.page().bg;
+        assert_eq!(buffer[(bar, 0)].style().bg, page, "第 1 行没動過");
+        assert_eq!(
+            buffer[(bar, 1)].style().bg,
+            Some(ink.vcs(crate::theme::Accent::Green)),
+            "第 2 行是新添的"
+        );
+        assert_eq!(
+            buffer[(bar, 2)].style().bg,
+            Some(ink.vcs(crate::theme::Accent::Azure)),
+            "第 3 行改過"
+        );
+        assert_eq!(buffer[(bar, 3)].style().bg, page, "第 4 行没動過");
+        // ⚠️ **號碼一個都没丟，正文一欄都没挪。** 這一條佔的是本來就空着的那
+        // 一格（`GUTTER_AIR`），所以版心不動——功能落地那天頁面重排是這個設計
+        // 從一開始要躲開的事。
+        assert_eq!(row_text(&buffer, 1).trim_end(), "2  二");
+    }
+
+    #[test]
+    fn a_deletion_is_an_edge_on_the_line_under_the_gap_not_a_filled_cell() {
+        // 舊檔的第 3 行整個没了：`+2,0` 的 2 是缺口**上面**那一行。
+        let mut editor = editor_with("一\n二\n三\n四");
+        with_diff(&mut editor, "@@ -3,1 +2,0 @@\n");
+        let config = Config::default();
+        let buffer = render(&editor, &config, 20, 8);
+
+        let ink = ink(&config);
+        let bar = bar_column(&editor, &config);
+        assert_eq!(at(&buffer, bar, 2), "▔", "剪口畫在缺口下面那一行的頭上");
+        assert_eq!(at(&buffer, bar, 1), " ", "缺口上面那一行自己没動過");
+        // 一條邊，不是一格底色：那一行還在，塗滿會説成「這一行没了」。
+        assert_eq!(buffer[(bar, 2)].style().bg, ink.page().bg);
+        assert_eq!(buffer[(bar, 2)].style().fg, Some(ink.mark()));
+    }
+
+    #[test]
+    fn the_cut_falls_back_to_ascii_where_a_block_would_take_two_cells() {
+        // U+2580–U+259F 整塊是 East Asian Ambiguous：CJK 字體的終端把它畫成兩
+        // 格，而這一格只有一格寬——多出來的那一格會把整行推歪。
+        assert_eq!(cut_glyph(true, true), "▔");
+        assert_eq!(cut_glyph(false, true), "▁");
+        assert_eq!(cut_glyph(true, false), "-");
+        assert_eq!(cut_glyph(false, false), "_");
+        for glyph in [cut_glyph(true, false), cut_glyph(false, false)] {
+            assert!(glyph.is_ascii(), "退路要是任何字體都只佔一格的東西：{glyph}");
+        }
+    }
+
+    #[test]
+    fn a_deletion_at_the_foot_is_an_edge_under_the_last_line() {
+        let mut editor = editor_with("一\n二\n三\n四");
+        with_diff(&mut editor, "@@ -5,2 +4,0 @@\n");
+        let config = Config::default();
+        let buffer = render(&editor, &config, 20, 8);
+
+        let bar = bar_column(&editor, &config);
+        assert_eq!(at(&buffer, bar, 3), "▁", "下面没有行了，綫畫在最後一行腳下");
+    }
+
+    #[test]
+    fn a_wrapped_paragraph_carries_the_bar_the_whole_way_down() {
+        // 一段折成好幾行，改動條是「條」——整段每一列都有。剪口反過來只在段首
+        // 那一列：折行折出來的每一列並不是一段的開頭。
+        let mut editor = editor_with("甲乙丙丁戊己庚辛壬癸子丑寅卯\n二\n三");
+        let config = Config::default();
+        let gutter = gutter_width(3, config.editor.line_numbers);
+        editor.set_wrap_width(12usize.saturating_sub(gutter));
+        with_diff(&mut editor, "@@ -1 +1 @@\n");
+        let buffer = render(&editor, &config, 12, 8);
+
+        let ink = ink(&config);
+        let bar = bar_column(&editor, &config);
+        let changed = Some(ink.vcs(crate::theme::Accent::Azure));
+        let page = ink.page().bg;
+        // 第 1 段折成四列，四列都是它。
+        for y in 0..4 {
+            assert_eq!(buffer[(bar, y)].style().bg, changed, "折出來的第 {y} 列");
+        }
+        assert_eq!(buffer[(bar, 4)].style().bg, page, "下一段不是它");
+
+        // 剪口反過來：同一段折成四列，綫只畫在段首那一列。
+        let mut editor = editor_with("甲乙丙丁戊己庚辛壬癸子丑寅卯\n二\n三");
+        editor.set_wrap_width(12usize.saturating_sub(gutter));
+        with_diff(&mut editor, "@@ -1,1 +0,0 @@\n");
+        let buffer = render(&editor, &config, 12, 8);
+        let rows: Vec<String> = (0..5).map(|y| at(&buffer, bar, y)).collect();
+        assert_eq!(rows[0], "▔");
+        assert_eq!(rows.iter().filter(|s| *s == "▔").count(), 1, "{rows:?}");
+    }
+
+    #[test]
+    fn the_change_bar_draws_nothing_until_it_is_asked_for() {
+        // 出廠的 `Editor` 是關着的——開它的是配置與 `:view-diff`。關着的時候
+        // 連一個子進程都不許生，更不許在紙上留一筆。
+        let mut editor = editor_with("一\n二");
+        assert!(!editor.diff_gutter());
+        editor.set_vcs(yumete_core::vcs::Changes::from_diff("@@ -1,0 +1,2 @@\n", 2));
+        let config = Config::default();
+        let buffer = render(&editor, &config, 20, 6);
+
+        let bar = bar_column(&editor, &config);
+        let page = ink(&config).page().bg;
+        assert_eq!(buffer[(bar, 0)].style().bg, page);
+        assert_eq!(buffer[(bar, 1)].style().bg, page);
+    }
+
+    #[test]
+    fn the_change_bar_goes_with_the_numbers() {
+        // 它是行號那一條的一部分：`line_numbers = "none"` 連 gutter 都没有，
+        // 那一格也就不在了——兩邊同一條規矩，竪排見下。
+        let mut editor = editor_with("一\n二");
+        with_diff(&mut editor, "@@ -1,0 +1,2 @@\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        let buffer = render(&editor, &config, 20, 6);
+
+        let ink = ink(&config);
+        assert_eq!(gutter_width(2, LineNumbers::None), 0);
+        assert_ne!(
+            buffer[(0, 0)].style().bg,
+            Some(ink.vcs(crate::theme::Accent::Green)),
+            "没有 gutter 就没有那一格，正文一欄都不讓"
+        );
+    }
+
+    #[test]
+    fn the_change_bar_turns_ninety_degrees_into_a_row_of_its_own() {
+        // 竪排：號碼帶底下自己多一列，貼着縱頭。**不是塗在號碼底下**——竪排的
+        // 號碼坐在正文自己那兩格上，底下一上色，灰數字就壓在一塊 3:1 的綠上。
+        let mut editor = editor_with("春江\n潮水");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        with_diff(&mut editor, "@@ -1,0 +2,1 @@\n");
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+
+        let ink = ink(&config);
+        let numbers = vertical::number_rows(LineNumbers::Absolute, 2);
+        // 號碼一列，改動條一列。
+        let lane = numbers;
+        let green = Some(ink.vcs(crate::theme::Accent::Green));
+        // 縱從右往左排：第 1 段在最右，第 2 段挨着它。
+        assert_eq!(buffer[(26, lane)].style().bg, green, "第 2 段的左格");
+        assert_eq!(buffer[(27, lane)].style().bg, green, "第 2 段的右格");
+        assert_ne!(buffer[(28, lane)].style().bg, green, "第 1 段没動過");
+        // 號碼還在它自己那一列上，一個都没被壓住。
+        assert_eq!(at(&buffer, 27, numbers - 1), "2");
+        assert_eq!(at(&buffer, 29, numbers - 1), "1");
+        // …正文從改動條那一列的下面開始。
+        assert_eq!(at(&buffer, 26, lane + 1), "潮");
+    }
+
+    #[test]
+    fn a_deletion_in_the_vertical_page_is_the_right_half_of_the_slot() {
+        // 竪排從右往左讀，上一段在它**右邊**，那道縫就在那一側：兩格裏只上右
+        // 邊那一格，半格的寬度本身説了「這不是一整段，是一道邊」。
+        let mut editor = editor_with("春江\n潮水");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        with_diff(&mut editor, "@@ -2,1 +1,0 @@\n");
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+
+        let ink = ink(&config);
+        let lane = vertical::number_rows(LineNumbers::Absolute, 2);
+        assert_eq!(buffer[(27, lane)].style().bg, Some(ink.mark()), "右半格");
+        assert_ne!(buffer[(26, lane)].style().bg, Some(ink.mark()), "左半格不上");
+    }
+
+    #[test]
+    fn the_vertical_change_bar_costs_its_row_only_when_it_is_on() {
+        let mut editor = editor_with("春江\n潮水");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let look = vertical::Look::of(&editor);
+        let off = vertical::Metrics::new(&config, 12, 2, look);
+        editor.set_diff_gutter(true);
+        let look = vertical::Look::of(&editor);
+        let on = vertical::Metrics::new(&config, 12, 2, look);
+
+        assert_eq!(off.diff_row, 0);
+        assert_eq!(on.diff_row, 1);
+        assert_eq!(on.head_rows, off.head_rows + 1);
+        assert_eq!(on.zong_len, off.zong_len - 1, "一列的代價是縱短一個字");
+
+        // 行號關掉，那一列也跟着没有——它是行號那一條的一部分。
+        config.editor.line_numbers = LineNumbers::None;
+        let look = vertical::Look::of(&editor);
+        assert_eq!(vertical::Metrics::new(&config, 12, 2, look).diff_row, 0);
+    }
+
+    /// **一隻秒錶，不是一條測試**（#55）——它對時間一句斷言都不下，只把錶上的
+    /// 數印出來。
+    ///
+    /// ```text
+    /// cargo test -p yumete-tui --release the_cost_of_the_change_bar \
+    ///     -- --ignored --nocapture
+    /// ```
+    ///
+    /// 兩件事分開量，因為它們答的是兩個問題：**一趟 `git`** 是開檔與存檔各付
+    /// 一次的（這一條的全部代價都在這裏），**一幀**是每一次擊鍵都付的（這一條
+    /// 在那裏必須是零）。
+    #[test]
+    #[ignore]
+    fn the_cost_of_the_change_bar() {
+        use std::time::Instant;
+        let config = Config::default();
+        let (w, h) = (120u16, 50u16);
+        let file = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/development.md");
+
+        let mut editor = Editor::new();
+        editor.set_diff_gutter(true);
+        editor.open_file(file).expect("the roadmap");
+        let lines = editor.current_buffer().line_count();
+
+        let mut spent = Vec::new();
+        for _ in 0..20 {
+            let began = Instant::now();
+            editor.refresh_vcs(true);
+            spent.push(began.elapsed().as_micros());
+        }
+        spent.sort_unstable();
+        println!(
+            "一趟 git（{lines} 行）  中位 {:.1} ms   最快 {:.1}  最慢 {:.1}",
+            spent[spent.len() / 2] as f64 / 1000.0,
+            spent[0] as f64 / 1000.0,
+            spent[spent.len() - 1] as f64 / 1000.0,
+        );
+
+        let ime = no_ime();
+        let frame = |editor: &Editor| -> f64 {
+            let _ = render_with(editor, &config, &ime, w, h);
+            let began = Instant::now();
+            for _ in 0..50 {
+                let _ = render_with(editor, &config, &ime, w, h);
+            }
+            began.elapsed().as_micros() as f64 / 50.0 / 1000.0
+        };
+        let on = frame(&editor);
+        editor.set_diff_gutter(false);
+        let off = frame(&editor);
+        println!("一幀：開 {on:.2} ms，關 {off:.2} ms，差 {:.2} ms", on - off);
     }
 
     #[test]

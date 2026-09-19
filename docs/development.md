@@ -527,7 +527,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96／#116／#162); code in a fence, seven grammars, `:view-code` (#420, 2026-09-17) | Done |
 | 53 | Coding LSP (Rust/Python/…) | lsp | P5 | reuse helix-lsp | Planned |
 | 54 | Diagnostics / code actions | lsp | P5 |  | Planned |
-| 55 | Git gutter / blame | vcs | P3 | 那條豎線的第二個來源（#298）；blame 另算 | Planned |
+| 55 | Git gutter / blame | vcs | P3 | 改動條的第一個來源（#298 ③）落地；blame 另算 [^55] | Done |
 | 56 | Splits / multiple windows | tui | P5 | #176 split work areas | Done |
 | 57 | Debugging (DAP) | dap | P6 | far future | Planned |
 | 58 | Plugin runtime (scripting) | plugin | P6 | Lua/WASM — and, with it, a terminal, a git UI, tree-sitter [^58] | Dropped |
@@ -770,7 +770,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 295 | **一存之下檔案翻了幾倍，先問一句** | core+tui | P2 | 又翻倍、又多 256 KB 纔問；`:write` 一處 [^295] | Done |
 | 296 | **`editor.rs` 拆成模組** | core | P2 | 一萬行測試先出去，再按主題逐段搬 [^296] | Done |
 | 297 | **格狀面板在大表上以秒計，而那與折行無關** | core+tui | P3 | `100j` 0.67 秒、一幀 13 ms，摺起折行一模一樣 [^297] | Proposed |
-| 298 | **行號與正文之間立一條豎線，並讓它說哪幾行動過** | tui | P2 | 一豎兼作改動標記；比磁碟或比 git（#55）[^298] | Proposed |
+| 298 | **行號與正文之間立一條豎線，並讓它說哪幾行動過** | tui | P2 | ①③ 落地（`:view-diff`，比 git）；② 比磁碟還沒有 [^298] | Partly |
 | 299 | **提示行浮動化，四種面板收成一個** | tui | P2 | 面板收成共用件；提示行拿掉，併進命令行 [^299] | Fixed 2026-09-13 |
 | 300 | **可診斷性：一次失敗要自己說清楚** | core+tui | P3 | 診斷落在失敗路徑與按需查詢，不進熱路徑 [^300] | Proposed |
 | 301 | **`/` 分大小寫，而 helix 不分** | core | P3 | smart case：全小寫就不分，帶大寫纔分 [^301] | Done |
@@ -5982,6 +5982,61 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     the editor's own process; there is no Chinese-prose language server to
     hook, and an optional one would be the same rules written twice
 
+[^55]: **2026-09-19 落地**：`:view-diff`，出廠開着（`[editor] diff_gutter`）。
+    行號後面那兩格空氣的末一格——`GUTTER_AIR` 從一開始就是為它留的——用底色說這
+    一行是**新添**（綠）還是**改過**（藍）；**刪掉**的那一種不塗那一格，只在缺
+    口下面那一行的頭上畫一條 `▔`（朱）。四件要記的事：
+
+    **一 喊 `git`，不引 git 庫。** `git2` 底下是 libgit2 的 C 代碼，`gix` 是幾
+    十個 crate，而這裏要的東西是**一串 `@@ -a,b +c,d @@`**。同 §6442「不要為它
+    引一條網絡供應鏈」那一條的理由。喊 `git` 還有一個庫給不了的好處：使用者的
+    `.gitattributes`、`core.autocrlf`、子模組、worktree、`GIT_DIR`，全是 git
+    自己的答案，抄一份只會抄出第二種答案。命令是
+    `git --no-optional-locks diff --no-color --no-ext-diff -U0 HEAD -- <檔>`，
+    `current_dir` 設在那個檔自己的目錄（編輯器同時開兩個倉裏的檔是常事）。
+    退出碼不是 0 就是「沒話說」——不在倉裏、倉裏還沒有第一個提交、機器上沒有
+    git，三種都不是錯，畫面上都是一筆都不畫。
+
+    **二 一趟都不許落在畫面那條路上。** 只在**開檔、存檔、`:view-diff on`**
+    三個時刻算，答案按 buffer 存着，連着算它時那個 revision——revision 沒動就不
+    再喊第二次。量過（`the_cost_of_the_change_bar`，release，`development.md`
+    11,246 行）：**一趟 git 4.3 ms**（清白的 `manual.md` 271 KB 是 7.8 ms，
+    `lib.rs` 那種一萬六千行的是 11.3 ms，不在倉裏是 4.1 ms），**一幀開與關的
+    差是 0.00 ms**（畫的時候只是在一張按起點排好的區間表上二分一次）。
+
+    **三 跟 `HEAD` 比，不是跟索引比**，helix 也是。問的是「這一章這次坐下來動
+    了哪裏」，而 `git add` 過的段落照樣是這次動過的。
+    ⚠️ **算的是磁碟上那一份**，所以還沒存的改動要到下一次 `:w` 纔進來。買到的
+    是「一鍵一個子行程」永遠不會發生；buffer 與磁碟之間的逐行差是 #298 的第二
+    步，`crate::vcs::Changes::from_diff` 就是它進來的門。
+
+    **四 刪掉的那一種為什麼是一條邊。** 它沒有自己的一行可以塗——那是兩行之間
+    的一道縫。塗滿一格會說成「這一行沒了」，而那一行好端端地在那裏。helix 把它
+    記在缺口**下面**那一行（純刪的 `after` 是個空區間）並畫 `▔`，這裏跟它一樣；
+    剪在檔尾時改畫 `▁` 在最後一行腳下。**順帶把顏色那一關也過了**：另外兩種是
+    鋪滿的一格，這一種是一條邊，所以形狀本身就分得開——百個男人裏有八個分不出
+    紅綠，而綠／藍／朱這一組不必單靠顏色說話（同 `theme.rs` 的 `word_hue`）。
+    ⚠️ **U+2580–U+259F 整個方塊區都是 East Asian Ambiguous**，CJK 字體的終端把
+    一個方塊畫成**兩格**，而這一格只有一格寬——多出來的那一格會把整行往右推。
+    所以畫之前量一量（`yumete_cjk::char_width`，答案是啓動時問終端問來的），量出
+    兩格就退回 ASCII 的 `-` 與 `_`：`-` 正是 git 自己給刪掉那一行的記號，兩個都
+    是任何字體下都只佔一格。`cut_glyph` 把那個判斷收成一支純函數，因為那個寬度
+    是行程全局，測試裏翻它會弄紅鄰居。
+
+    ⚠️ **竪排是「號碼帶底下自己多一列」，不是塗在號碼底下。** 塗在號碼底下試
+    過：竪排的號碼**坐在正文自己那兩格上**，底下一上色，灰色的數字就壓在一塊
+    3:1 的綠上，朱色那一行的號碼乾脆變成朱底朱字。#298 當初說的也正是「號碼帶
+    **旁邊**的一條橫帶」。剪口在那裏是**右半格**——竪排從右往左讀，上一段在它
+    右邊。一列的代價是每縱少一個字，只在開着的時候付。
+
+    **兩邊同一條規矩：改動條住在行號那一條裏。** `line_numbers = "none"` 橫排
+    連 gutter 都沒有，竪排連號碼帶都沒有，那一格也就不在——這樣 `:view-diff`
+    永遠不會為了一個標記去動版心。出廠**開着**：它佔的那一格本來就是空的，沒
+    話說的時候一筆都不畫，而一個要自己去找纔知道存在的東西等於沒有。顏色走
+    `Ink::vcs`（`tinted(accent, 3.0)`），比 `short_wash` 的 1.5 響，理由還是面
+    積——一欄寬是全頁最小的一塊有顏色的地方，3:1 也正是 WCAG 給非文字元素定的
+    那個數。
+
 [^58]: Lua/WASM. **Dropped, 2026-09-03**: both 0.2.0 reviews said the same thing
     — 「every editor grows one and it becomes the product」. Also declined with
     it: an embedded terminal pane, a git UI (lazygit is one `:!` away), and
@@ -7966,6 +8021,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     配置（`diagnostics` / `spacer` / `line-numbers` / `diff` 那幾格）讀一遍，看它到底把
     改動畫在哪一格、用什麼字符，別照一份記憶裏的印象做。**我們現在是數字＋一個空格**
     （`gutter_width`，`lib.rs:2121`），helix 看着是兩格。
+
+    **2026-09-19：①③ 落地，② 還開着。** `:view-diff`，出廠開着，跟 git 的
+    `HEAD` 比——做法、代價、竪排怎麼轉、刪掉的那一種為什麼是一條邊而不是一格底
+    色，全在 [^55]。**兩個沒定的都定了**：顏色與線型**不是兩個軸**，它們一起說
+    同一件事——綠＝新添、藍＝改過各是鋪滿的一格，朱＝剪口是一條邊，形狀與顏色
+    同時分，所以分不出紅綠的人也讀得出；開關叫 `:view-diff`，而它**跟着
+    `line_numbers` 一起關**，因為那一格本來就是行號那一條的一部分，這樣它永遠
+    不會為了一個標記去動版心。
+    **剩下的 ②**（跟磁碟上那一份比）已經有門：`vcs::Changes::from_diff` 收的就
+    是 unified diff，`Editor::set_vcs` 把它安進去。真正要定的還是那句老話——什
+    麼時候算。同時開兩個來源仍然畫不出，那時纔需要第二個軸。
 
 [^299]: 2026-09-08：「目前底部我们有一行状态栏，上面还有一个信息栏（提示栏）。
     但我发现消息栏即使空的也会占据一行，但背景色和正文一样。这样的问题一是常常浪费了一行，

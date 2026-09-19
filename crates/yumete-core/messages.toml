@@ -2483,6 +2483,14 @@ en = "code colours: code in a fence, coloured by its own grammar"
 find = "代碼 代码 高亮 語法 语法 上色 圍欄 围栏 highlight syntax fence tree-sitter"
 
 [[message]]
+# : 命令選單裏 diff 那一項的說明（view 組）
+key = "cmd.view.diff"
+zht = "改動條：行號旁邊那一格用底色說哪幾行跟 git 那一份不一樣"
+zhs = "改动条：行号旁边那一格用底色说哪几行跟 git 那一份不一样"
+en = "change bar: the cell beside the line number says which lines differ from git"
+find = "改動 改动 版本 差異 差异 git vcs gutter"
+
+[[message]]
 # : 命令選單裏 focus 那一項的說明（view 組）
 key = "cmd.view.focus"
 zht = "焦點：正在寫的那一段留在紙上，其餘的退後一級"
@@ -5577,6 +5585,28 @@ key = "layout.code-on"
 zht = "代碼上色：開（認得 css html javascript json python toml yaml）"
 zhs = "代码上色：开（认得 css html javascript json python toml yaml）"
 en = "code colours: on (css html javascript json python toml yaml)"
+
+[[message]]
+# :view-diff on，可是這個文件不在 git 倉里，或者倉里还没有第一个提交——
+# 开了什么都不画，当场说出来，别让人以为是坏了
+key = "layout.diff-gutter-not-in-git"
+zht = "改動條：開（這個檔案 git 管不着，一筆都不會畫）"
+zhs = "改动条：开（这个文件 git 管不着，一笔都不会画）"
+en = "change bar: on (git has nothing to say about this file, so nothing is drawn)"
+
+[[message]]
+# :view-diff off
+key = "layout.diff-gutter-off"
+zht = "改動條：關"
+zhs = "改动条：关"
+en = "change bar: off"
+
+[[message]]
+# :view-diff on——行號旁邊那一格開始用底色說 git 的改動
+key = "layout.diff-gutter-on"
+zht = "改動條：開（綠＝新添，藍＝改過，朱的細線＝那裏剪掉了）"
+zhs = "改动条：开（绿＝新添，蓝＝改过，朱的细线＝那里剪掉了）"
+en = "change bar: on (green added, blue changed, a thin 朱 edge where lines were cut)"
 
 [[message]]
 # :indent full — 縮進畫出來，段間的空行也收起

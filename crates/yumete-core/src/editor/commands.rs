@@ -123,6 +123,8 @@ impl Editor {
                 self.current_buffer_mut()
                     .save_as(target, force)
                     .map_err(EditorError::Io)?;
+                // 改了名就是換了一份磁碟上的東西，改動條要重問一次（#55）。
+                self.refresh_vcs(true);
                 self.status = say!("buffer.saved", self.current_buffer().display_name());
                 Ok(CommandOutcome::Continue)
             }
@@ -319,6 +321,19 @@ impl Editor {
                 self.status = match self.number_fill {
                     true => say!("layout.line-numbers-on-a-band"),
                     false => say!("layout.line-numbers-on-the-page"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetDiffGutter(on) => {
+                self.set_diff_gutter(on.unwrap_or(!self.diff_gutter));
+                self.status = match self.diff_gutter {
+                    // 開了卻什麼都沒有的情形太容易被當成「壞了」：這個檔不在
+                    // git 倉裏，或者倉裏還沒有第一個提交，當場說出來。
+                    true => match self.vcs.contains_key(&self.current_buffer().id()) {
+                        true => say!("layout.diff-gutter-on"),
+                        false => say!("layout.diff-gutter-not-in-git"),
+                    },
+                    false => say!("layout.diff-gutter-off"),
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -1243,6 +1258,9 @@ impl Editor {
         // holds is what the writer committed to disk that day (Feature #244).
         let word_list = matches!(saved, Ok(Wrote::Saved)) && self.note_word_list_saved();
         if matches!(saved, Ok(Wrote::Saved)) {
+            // 改動條：存檔是喊 git 的三個時刻之一（#55）。`force`，因為變的是
+            // **磁碟上那一份**而 revision 沒動——存檔不是一次編輯。
+            self.refresh_vcs(true);
             self.note_progress();
             // **A save is when new prose exists** (#448), so it is when 自動認詞
             // is worth asking about again — the front end still holds it to

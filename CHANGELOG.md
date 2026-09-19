@@ -50,6 +50,17 @@ finally being one thing.
   `jk` 走、`/` 纔開始搜；行首是檔名、後面灰色的路徑；命中的字母金色；最近開過的
   排前面，散文排在代碼前面。
 
+- **改動條（#55／#298）。** 行號和正文之間本來就空着的那一格，現在用底色說這一行
+  跟 git 裏的那一份比起來怎麼樣：**綠＝新添、藍＝改過**；**刪掉**的那一種不塗滿
+  一格，只在缺口下面那一行的頭上畫一條朱色細綫——那一行還在，是它上面少了東西。
+  竪排時號碼帶底下自己多一列，剪口改畫在右半格。出廠開着，`:view-diff off` 關掉；
+  不在 git 裏、沒動過、機器上沒有 git，都是一筆不畫。算在開檔與存檔那一刻（一趟
+  4–11 毫秒），打字的時候一個子行程都不生。
+
+  The blank cell between the line number and the writing now says what git thinks
+  of that line: green added, blue changed, and a thin 朱 edge where lines were
+  cut out — a deletion has no line of its own to colour. `:view-diff off`.
+
 - **`:view-code`——圍欄裏的代碼按它自己的語法上色**，tree-sitter，七種語言。
   `.py` 整個檔也上色，Tab 打的是空格。
 

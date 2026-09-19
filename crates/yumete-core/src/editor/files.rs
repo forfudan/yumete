@@ -505,6 +505,8 @@ impl Editor {
         self.add_buffer(buffer);
         self.mark_visited();
         self.table_on_open();
+        // 改動條：開檔是喊 git 的三個時刻之一（#55）。關着的話這一句是個空操作。
+        self.refresh_vcs(true);
         // **開文件就順手認一遍這本書自己的詞** (#448). Nothing happens here —
         // the scan is three hundred milliseconds of counting and it belongs on
         // a thread — so this only leaves the request where the front end will
