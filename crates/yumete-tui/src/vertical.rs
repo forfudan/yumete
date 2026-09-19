@@ -1161,15 +1161,32 @@ pub fn draw(
             // the reader is handed a column of loose pipes. A `|` between two
             // columns is a band **across** the 縱, two cells wide so it reaches
             // the next one; the `---` under the header is a wall **down** it.
+            //
+            // ⚠️ **The crossings are the rule row's own pipes** (作者
+            // 2026-09-19: 「爲什麽沒有用十字交叉來表達綫的穿插？」). Turned,
+            // the `---` row *is* the wall and the `|` in it are exactly the
+            // places a band rule runs into it — so those, and only those, are
+            // `┼`. Elsewhere a `|` is a band and a `-` is wall.
             let symbol = match editor.line_is_table_row(zong.line) {
-                true => match symbol.as_str() {
-                    "|" => "──".to_string(),
-                    "-" => "│".to_string(),
-                    "+" => "┼".to_string(),
+                true => match (symbol.as_str(), editor.line_is_table_rule(zong.line)) {
+                    // Two cells: the cross, and the rule carrying on to the
+                    // 縱 on its right — otherwise the band stops dead at the
+                    // wall with a blank cell beside it.
+                    ("|", true) => "┼─".to_string(),
+                    ("|", false) => "──".to_string(),
+                    ("-", _) => "│".to_string(),
+                    ("+", _) => "┼".to_string(),
                     _ => symbol,
                 },
                 false => symbol,
             };
+            // **A wall stands at the head of its 縱, not against the next
+            // one.** A 縱 is two cells and these glyphs are one, and
+            // `put_slot_right` hangs a narrow glyph on the right — which put
+            // the wall hard against the column to its right instead of down
+            // the middle of its own. The 百科 float has always drawn its own
+            // grid from the left edge, and that is the one that reads right.
+            let boxy = matches!(symbol.as_str(), "│" | "┼");
             if symbol.is_empty() {
                 // A paragraph's opening squares are empty slots, and what goes
                 // in them is the same question the horizontal page answers:
@@ -1218,7 +1235,10 @@ pub fn draw(
                     yumete_core::drawn::Ink::Note => under.fg(ink.marker()),
                     _ => under.fg(ink.quiet()),
                 };
-                put_slot_right(buf, x, y, &symbol, style);
+                match boxy {
+                    true => put_slot(buf, x, y, &symbol, style),
+                    false => put_slot_right(buf, x, y, &symbol, style),
+                }
                 continue;
             }
 
@@ -1354,7 +1374,10 @@ pub fn draw(
 
             // Hung right, so half-width characters line up as one edge running
             // down the 縱 beside the 漢字 rather than drifting to its left.
-            put_slot_right(buf, x, y, &symbol, style);
+            match boxy {
+                true => put_slot(buf, x, y, &symbol, style),
+                false => put_slot_right(buf, x, y, &symbol, style),
+            }
         }
     }
 
