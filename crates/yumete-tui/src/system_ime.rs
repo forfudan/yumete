@@ -50,8 +50,10 @@
 //! back to the terminal, untouched. It does **not** switch the input source, it
 //! does **not** touch 中/英 (so a writer who was in ABC comes back to ABC), and
 //! it records **which application asked**, so a terminal going quiet does not
-//! mute the browser. All three platforms have it: a distributed notification on
-//! macOS, a registered window message on Windows.
+//! mute the browser. Two of the three platforms can be told: a distributed
+//! notification on macOS, a registered window message on Windows. **Linux
+//! cannot** — the fcitx5 addon has no 模態掛起 upstream yet, so there is no
+//! signal to send and this module does nothing there (see `backend` below).
 //!
 //! **The first version of this module switched the input source instead**
 //! (`TISSelectInputSource`, the way `im-select` does for vim) on the theory
