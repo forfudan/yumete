@@ -31,12 +31,22 @@ impl Editor {
 
     /// Select inside (`mi`) or around (`ma`) the pair named by `c`.
     pub(super) fn select_pair(&mut self, c: char, around: bool) {
+        // **`w` 是一個對象，不是一對括號**（2026-09-19）。helix 的 `mi w`／`ma w`
+        // 是這麽寫的，而 vim 的 `ciw` `diw` `daw` 走的是同一扇門——`i`／`a` 那兩
+        // 個動作播的就是 `mi%`／`ma%`（`keymap.rs` 的 `object`）。從前這裏只認
+        // 括號，於是 vim 手指最熟的那一組按下去**什麽也不發生**：`ciw` 剪掉光標
+        // 底下那一個字就進了插入，比不動還糟。
+        if c == 'w' {
+            return self.select_word_object(around);
+        }
         let rope = self.current_buffer().rope();
         let Some((open, close)) = pair_of(c) else {
+            self.object_missed = true;
             return;
         };
         let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
             self.status = say!("edit.no-pair-around", open, close);
+            self.object_missed = true;
             return;
         };
         // `end` is the closing bracket's own index. The head goes on the last
@@ -47,6 +57,78 @@ impl Editor {
         } else {
             (start + 1, end.saturating_sub(1))
         };
+        self.anchor = a;
+        self.cursor = b.max(a);
+    }
+
+    /// 光標底下那個**詞**（`mi w`／`ma w`，以及 vim 的 `ciw`／`daw`）。
+    ///
+    /// `around` ＝ vim 的 `aw`：詞本身，再加它後面那一段空白；後面没有空白就取
+    /// 它前面的，這是 vim 自己的規矩，也是 `daw` 讀起來「整個詞連着那道縫一起
+    /// 没了」的原因。
+    ///
+    /// ⚠️ 用的是走 `w`／`e` 的那一份分詞（`motion::line_words`，粗粒度），**不是**
+    /// `segment_line`——那一支只交漢字，標點與拉丁文一個都不交，而 `ciw` 最常
+    /// 按在一個拉丁詞上（`delete_selection` 這種）。
+    fn select_word_object(&mut self, around: bool) {
+        let rope = self.current_buffer().rope().clone();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let start = rope.line_to_char(line);
+        let words = crate::motion::line_words(
+            &rope,
+            line,
+            crate::motion::Grain::Coarse,
+            self.segmenter.as_ref(),
+        );
+        let here = words.iter().find(|&&(a, b)| (a..b).contains(&self.cursor)).copied();
+        let Some((from, to)) = here.or_else(|| {
+            // **停在空白上的時候，那一串空白就是「詞」**——vim 的規矩，而這裏
+            // 特別要緊：`w` 走完光標正停在詞後面那個空格上（本編輯器的 `w` 連
+            // 着邊界一起取），於是 `wdiw` 是最順手的一按。`aw` 在空白上再連下
+            // 一個詞，也是 vim 的。
+            let line_end = start + crate::zong::line_chars(&rope, line).len();
+            if self.cursor >= line_end || !rope.char(self.cursor).is_whitespace() {
+                return None;
+            }
+            let mut a = self.cursor;
+            while a > start && rope.char(a - 1).is_whitespace() {
+                a -= 1;
+            }
+            let mut b = self.cursor;
+            while b < line_end && rope.char(b).is_whitespace() {
+                b += 1;
+            }
+            if around {
+                if let Some(&(_, end)) = words.iter().find(|&&(s, _)| s >= b) {
+                    b = end;
+                }
+            }
+            Some((a, b))
+        }) else {
+            self.status = say!("edit.no-word-here");
+            self.object_missed = true;
+            return;
+        };
+        // 空白那一支已經把 `around` 算進去了，下面那一段只管詞本身。
+        let around = around && here.is_some();
+        let (mut a, mut b) = (from, to.saturating_sub(1).max(from));
+        if around {
+            let line_end = start + crate::zong::line_chars(&rope, line).len();
+            let mut at = to;
+            while at < line_end && rope.char(at).is_whitespace() {
+                at += 1;
+            }
+            match at > to {
+                // 後面有空白：連它一起。
+                true => b = at.saturating_sub(1),
+                // 没有就取前面那一段——`daw` 在一行的末尾也該把那道縫帶走。
+                false => {
+                    while a > start && rope.char(a - 1).is_whitespace() {
+                        a -= 1;
+                    }
+                }
+            }
+        }
         self.anchor = a;
         self.cursor = b.max(a);
     }

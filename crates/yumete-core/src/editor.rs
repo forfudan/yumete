@@ -1741,6 +1741,12 @@ pub struct Editor {
     /// 「没話說」，那一條會被刪掉——於是它永遠看着像没問過，空閒的鐘就每 300
     /// 毫秒喊一次 git，喊到天亮。
     vcs_asked: HashMap<u64, u64>,
+    /// 剛纔那個**文本對象**沒找到東西（`mi(` 外面沒有括號、`miw` 不在一個詞上）。
+    ///
+    /// ⚠️ 一個字的選區和「沒動」在數據上**一模一樣**（`anchor == cursor` 兩者都
+    /// 成立），所以操作符不能靠比較位置來判斷對象有沒有命中——`wdiw`（光標停在
+    /// 一個空格上）就是這麽被拒掉的。對象自己說。
+    object_missed: bool,
     /// What is drawn in a paragraph's opening squares, if anything.
     indent_hint: crate::zong::IndentHint,
     /// The character `IndentHint::Symbol` draws there.
@@ -2429,6 +2435,7 @@ impl Editor {
             vcs: HashMap::new(),
             vcs_base: HashMap::new(),
             vcs_asked: HashMap::new(),
+            object_missed: false,
             indent_hint: crate::zong::IndentHint::default(),
             indent_symbol: "↵".to_string(),
             count: None,

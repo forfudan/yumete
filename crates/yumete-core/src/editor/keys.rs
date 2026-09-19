@@ -464,6 +464,7 @@ impl Editor {
         // word's start rather than from the cursor, which is the whole line.
         // Collapsing first is what makes the operator mean what vim means.
         self.anchor = self.cursor;
+        self.object_missed = false;
         match motion.whole {
             true => self.play_keys(keys),
             false => self.play_keys(&format!("v{keys}")),
@@ -481,7 +482,14 @@ impl Editor {
         // two shrink and grow a selection that the motion really did make:
         // `cc` on a one-character line ends collapsed because `till` pulled
         // the newline back out of it, and it still means 「this line」.
-        if self.anchor == self.cursor {
+        //
+        // ⚠️ **文本對象自己說有没有命中**，不能比位置：一個字的選區
+        // （`wdiw`，光標停在一個空格上）和「没動」都是 `anchor == cursor`。
+        let missed = match motion.whole {
+            true => self.object_missed,
+            false => self.anchor == self.cursor,
+        };
+        if missed {
             self.count = None;
             self.alias_count = None;
             return;
