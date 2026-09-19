@@ -1977,6 +1977,18 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     ed.goto_line(3);
     press(&mut ed, "g2K");
     assert_eq!(ed.current_buffer().text(), "一\n二三\n四\n五\n", "{}", ed.current_buffer().text());
+
+    // ⚠️ **`gK` on a selection stays inside it, plus the line over it**
+    // (2026-09-19, caught in review). Repeating 「join with the line above」
+    // asks where the selection starts *now*, and after the first join that is
+    // one line higher — so `gK` on three picked lines welded two nobody had
+    // picked and left the picked ones alone. Three lines and the one above
+    // them make four, which is three joins.
+    let mut ed = typed(five);
+    ed.goto_line(3);
+    press(&mut ed, "xxx");
+    press(&mut ed, "gK");
+    assert_eq!(ed.current_buffer().text(), "一\n二三四五\n", "{}", ed.current_buffer().text());
 }
 
 #[test]

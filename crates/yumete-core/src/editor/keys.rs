@@ -1618,9 +1618,33 @@ impl Editor {
                 return self.repeat_writing(count, |e| e.join_lines());
             }
             // …and the other direction, which helix does not have (#485).
+            //
+            // ⚠️ **Step up once, then join downwards** (2026-09-19, caught in
+            // review). Repeating `join_with_above` walked *out* of what was
+            // selected: each call asks where the selection starts now, and
+            // after the first join that is one line higher — so `gK` on three
+            // selected lines welded two lines nobody had picked and left the
+            // selected ones alone. The line above and the selection is the
+            // whole of what `gK` may touch.
             Key::Char('K') => {
-                let count = self.join_count();
-                return self.repeat_writing(count, |e| e.join_with_above());
+                let rope = self.current_buffer().rope();
+                let (start, end) = self.selection();
+                // **A selection joins to the line above it**, so there is one
+                // more seam to close than `gJ` has: three lines picked and the
+                // one over them make four, which is three joins.
+                let spans = end > start
+                    && rope.char_to_line(start)
+                        < rope.char_to_line((end - 1).min(rope.len_chars().saturating_sub(1)));
+                let count = self.join_count() + usize::from(spans);
+                let rope = self.current_buffer().rope();
+                let line = rope.char_to_line(self.selection().0);
+                if line == 0 {
+                    self.status = say!("edit.no-line-above");
+                    return;
+                }
+                let above = rope.line_to_char(line - 1);
+                self.set_cursor(above);
+                return self.repeat_writing(count, |e| e.join_lines());
             }
             // **`gj` and `gk` walk lines of the file, as helix's do** — `j`
             // and `k` walk the rows on the screen, and in a manuscript a line
