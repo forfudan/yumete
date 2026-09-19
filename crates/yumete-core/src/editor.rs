@@ -1732,6 +1732,15 @@ pub struct Editor {
     /// 前挪一格，而快取要跟着那一本書走。revision 是「還用不用再喊一次 git」的
     /// 全部判準——存了兩次中間一個字沒改，第二次就不再喊。
     vcs: HashMap<u64, (u64, crate::vcs::Changes)>,
+    /// `HEAD` 裏那一份的正文，按 buffer 存着。取它要一個子進程，而它只在存檔、
+    /// 換檔、或者 git 那邊動過的時候纔變——**每一次停手**都重取一遍就白花了。
+    vcs_base: HashMap<u64, String>,
+    /// 上一次**問過** git 的時候，這個 buffer 是哪個 revision。
+    ///
+    /// ⚠️ 不能拿 `vcs` 裏有没有答案當「問過了」：不在 git 倉裏的檔問出來是
+    /// 「没話說」，那一條會被刪掉——於是它永遠看着像没問過，空閒的鐘就每 300
+    /// 毫秒喊一次 git，喊到天亮。
+    vcs_asked: HashMap<u64, u64>,
     /// What is drawn in a paragraph's opening squares, if anything.
     indent_hint: crate::zong::IndentHint,
     /// The character `IndentHint::Symbol` draws there.
@@ -2418,6 +2427,8 @@ impl Editor {
             number_fill: false,
             diff_gutter: false,
             vcs: HashMap::new(),
+            vcs_base: HashMap::new(),
+            vcs_asked: HashMap::new(),
             indent_hint: crate::zong::IndentHint::default(),
             indent_symbol: "↵".to_string(),
             count: None,
