@@ -3396,13 +3396,6 @@ zhs = "这已经是第一行，上面没有可以并的"
 en = "this is the first line; there is nothing above it to join"
 
 [[message]]
-# mi w／ma w（以及 vim 的 ciw daw），光標没有停在一個詞上
-key = "edit.no-word-here"
-zht = "這裏不是一個詞"
-zhs = "这里不是一个词"
-en = "no word here"
-
-[[message]]
 # mi/ma 之類，光標外面沒有那一對符號
 key = "edit.no-pair-around"
 zht = "外面沒有 {0}{1}"
@@ -3415,6 +3408,13 @@ key = "edit.no-pair-to-delete"
 zht = "外面沒有成對的符號"
 zhs = "外面没有成对的符号"
 en = "no pair around this"
+
+[[message]]
+# mi w／ma w（以及 vim 的 ciw daw），光標没有停在一個詞上
+key = "edit.no-word-here"
+zht = "這裏不是一個詞"
+zhs = "这里不是一个词"
+en = "no word here"
 
 [[message]]
 # 複製到系統剪貼簿，但沒選中東西

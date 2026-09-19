@@ -368,6 +368,12 @@ compact」「表頭沒對齊」）。兩種空白，竪排一種也養不起：�
 畫出來就是作者那張圖：表頭與表身錯開，而同一頁上一張短表好好的。只有「長文件 ＋ 表格在
 下面」纔撞得到，所以每一個短夾具都是綠的。
 
+⚠️ **`messages.toml` 的順序測試在 `--test messages` 裏，不在 `--lib` 裏**（2026-09-19
+被 CI 抓到）。那張表是**編譯期嵌進去**的，所以只改 `.toml` 而不碰 `.rs`，本地跑
+`cargo test -p yumete-core --lib` 一個字都看不見它；更要命的是連 `--workspace` 都給過
+綠——測試二進制没重編，用的還是嵌着舊表的那一份。CI 從乾淨的樹編，當場紅。
+**動過 `messages.toml` 就單獨跑一次 `cargo test -p yumete-core --test messages`。**
+
 ⚠️ **`--shot` 復現不了這一族**：`set_page_top` 只有交互循環纔叫，離屏出圖裏 `page_top`
 恆爲 0，窗口永遠從頭蓋到尾。要驗就寫測試，自己 `set_page` ＋ `set_page_top`
 （`a_vertical_table_is_measured_against_the_zong_on_the_screen`）。
