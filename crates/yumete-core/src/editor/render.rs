@@ -996,14 +996,23 @@ impl Editor {
         // either punctuation, because「他们本质上都是分隔符」. The alignments
         // travel with the region rather than with the rows, so a table scrolled
         // past its own rule row keeps them.
+        // ⚠️ **「一屏幾行」竪排要問別的數** (作者 2026-09-19: 「整個表格都在
+        // 可視範圍內哦」). The window is `[page_top, page_top + a screenful]`
+        // *in lines*, and 橫排 a screenful of lines is the terminal's height.
+        // 竪排 a line is a 縱 and the 縱 run **across** the page, so a screenful
+        // is how many of them fit side by side — `page_columns`. Measured by
+        // the height instead, a table forty lines down the file fell clean
+        // outside the window with every row of it plainly on the screen: only
+        // the header got measured, so only the header got padded, and it stood
+        // beside a body squared up to nothing. Scroll until the table reached
+        // the right edge and it snapped into line — which is exactly what the
+        // window sliding over it looks like.
+        let screenful = match self.layout {
+            Layout::Vertical => self.page_columns,
+            _ => self.page_lines,
+        };
         let (first, last) =
-            crate::mdtable::measured_window(
-                region.first,
-                region.last,
-                line,
-                self.page_top,
-                self.page_lines,
-            );
+            crate::mdtable::measured_window(region.first, region.last, line, self.page_top, screenful);
         region.first = first;
         region.last = last;
         Some(region)

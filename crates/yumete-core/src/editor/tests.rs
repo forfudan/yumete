@@ -4631,6 +4631,39 @@ fn a_quoted_table_is_not_padded() {
     }
 }
 
+/// 2026-09-19: a table forty lines down a 竪排 page was squared up against a
+/// window measured in **rows**, and a screenful of 縱 is not a screenful of
+/// rows — the 縱 run across the page, so there are far more lines on a 竪排
+/// screen than it is tall. The whole table was on the screen and all but its
+/// header fell outside the window, so only the header was padded and it stood
+/// beside a body squared up to nothing (作者: 「表頭還是計算錯誤沒對齊…光標繼續
+/// 往下，表格到了頁面右側的時候又突然對齊了」).
+#[test]
+fn a_vertical_table_is_measured_against_the_zong_on_the_screen() {
+    let mut text = String::new();
+    for i in 0..40 {
+        text.push_str(&format!("第{i}段閒話，把表格推到頁面左邊去。\n"));
+    }
+    let table = "|甲|乙|\n|---|---|\n|一二三|四|\n|五|六七八|\n";
+    text.push_str(table);
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text(&text));
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+    ed.set_layout(Layout::Vertical);
+    // A page 24 rows tall with 60 縱 across it: the table's rows are lines
+    // 40–43, well past the 24 the height would allow and well inside the 60
+    // the page really shows.
+    ed.set_page(24, 60);
+    ed.set_page_top(0);
+
+    let depth = |line: usize| {
+        ed.line_text(line).unwrap_or_default().trim_end().chars().count()
+            + ed.drawn_on_line(line).iter().map(|(_, text)| text.chars().count()).sum::<usize>()
+    };
+    assert_eq!(depth(40), depth(42), "header {:?} vs row {:?}", ed.drawn_on_line(40), ed.drawn_on_line(42));
+    assert_eq!(depth(42), depth(43), "the rows agree with each other too");
+}
+
 /// #212: the two settings that mean "draw me the file".
 #[test]
 fn the_padding_goes_away_when_the_page_is_the_file() {
