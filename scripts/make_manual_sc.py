@@ -54,21 +54,6 @@ HEAD = (
 # 簡體版裏是對的，當成漏網會天天誤報。
 TRAD_ONLY = "裏爲説麽録"
 
-# 字形轉完了，詞還沒有。**opencc 換的是字，不是詞**，而簡體那一側的規矩是
-# 大陸用語（2026-09-08 定，見 `development.md`）：`背景`／`行程`／`預設` 這幾個
-# 在大陸是 `后台`／`进程`／`默认`。從前這幾處是在生成出來的檔上**手工改的**，
-# 於是誰重跑一次生成器，手工那幾處就沒了——2026-09-19 差一點就是這麼丟的。
-#
-# ⚠️ **整詞替換，不是單字**。`預設` 有兩個意思：`鍵位預設` 是 preset，留着；
-# `預設鍵` 是 default，要換。所以這張表寫的是詞，不是字。
-# ⚠️ `縦` 是日文的字（`縦中横`），opencc 不動它，而簡體只有 `纵`。
-AFTER = [
-    ("縦", "纵"),
-    ("背景进程", "后台进程"),
-    ("行程", "进程"),
-    ("预设键", "默认键"),
-]
-
 
 def main() -> int:
     text = SRC.read_text(encoding="utf-8")
@@ -110,10 +95,7 @@ def main() -> int:
     for kept, piece in parts:
         out.append(piece if kept else next(it))
 
-    body = "".join(out)
-    for was, now in AFTER:
-        body = body.replace(was, now)
-    OUT.write_text(HEAD + body, encoding="utf-8")
+    OUT.write_text(HEAD + "".join(out), encoding="utf-8")
 
     body = "".join(p for kept, p in zip([k for k, _ in parts], out) if not kept)
     stray = sorted({c for c in body if c in TRAD_ONLY})

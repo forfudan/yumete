@@ -867,7 +867,7 @@ yume 的数据里有两样东西，它们该有不同的待遇。
 - **Windows**：`%APPDATA%\Yume\data\compiled\`、`%APPDATA%\Yume\`，以及 `.exe`
   旁边的 `Resources\`。
 - **Linux**：`$XDG_DATA_HOME/yume/data/compiled/`、`$XDG_DATA_HOME/yume/`，`$YUME_DATADIR`，
-  以及 `$XDG_DATA_DIRS` 里每一个的 `yume/`（没有设这个变量就照标准的预设看
+  以及 `$XDG_DATA_DIRS` 里每一个的 `yume/`（没有设这个变量就照标准的默认值看
   `/usr/local/share` 与 `/usr/share`——装给全机器的那一份就在那里）。
 
 装了 yume 的 macOS 上因此不用配置任何东西：`:yume-scheme` 直接就有那五个方案。（在
@@ -1819,7 +1819,7 @@ macOS 上走的是 Text Input Sources，`im-select` 用的同一套；Linux 上�
 光标按 `←` 就来回跨过的界，而每跨一次就要跟系统输入法说一次话（见上面「系统那个输入法
 也要让开」）。整条线一个答案。
 
-**要打中文名的档案，`:open` 不给路径直接回车**——开的是选择器，在那里打中文筛，有补
+**要打中文名的文件，`:open` 不给路径直接回车**——开的是选择器，在那里打中文筛，有补
 全、打不错、还看得见有哪些档。`::` 按**做什么**找命令，`/` 找词，这三处才是中文真正要
 打的地方。再不济，命令行照样贴得进来。
 
