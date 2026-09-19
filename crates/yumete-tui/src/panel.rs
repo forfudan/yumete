@@ -11,6 +11,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::Frame;
 use yumete_config::Config;
+use yumete_core::say;
 
 use crate::put_text;
 
@@ -186,6 +187,31 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
     }
     zong.extend(rows[1..].iter().map(one));
     zong
+}
+
+/// `text` cut to `cells` wide, with a 「…」 where it was cut and nothing added
+/// when it was not.
+///
+/// ⚠️ **「…」 is East Asian *Ambiguous*** — one cell for most readers and **two**
+/// under `ambiguous_width = "wide"`, which is what a CJK reader on a CJK font
+/// sets. Charged as one, every cut ran a cell long. Ask the width table.
+fn clip(text: &str, cells: usize) -> String {
+    if yumete_cjk::str_width(text) <= cells {
+        return text.to_string();
+    }
+    let budget = cells.saturating_sub(yumete_cjk::str_width("…"));
+    let mut out = String::new();
+    let mut used = 0;
+    for g in yumete_cjk::graphemes(text) {
+        let w = yumete_cjk::grapheme_width(g).max(1);
+        if used + w > budget {
+            break;
+        }
+        out.push_str(g);
+        used += w;
+    }
+    out.push('…');
+    out
 }
 
 /// **A table, drawn as a table** — the 橫排 float's half (作者 2026-09-19:
@@ -617,15 +643,42 @@ pub fn draw(
             // **Half the page and no more.** A menu is a thing you glance at
             // beside your writing; one that fills the window has stopped
             // being a menu.
-            let room = (area.height.saturating_sub(2) / 2).max(1) as usize;
-            let columns = if keys.len() > room { 2 } else { 1 };
+            let half = (area.height.saturating_sub(2) / 2).max(1) as usize;
+            // ⚠️ **…and never deeper than the page can actually place**
+            // (2026-09-19, caught in review). `chrome::place` refuses a box
+            // taller than the rows between the top of the page and the footer,
+            // and a refusal is drawn as *nothing at all*: on a short terminal
+            // a half-pressed `空格` showed no menu, which reads as 「the key
+            // did nothing」 rather than as 「there is no room」. The key table
+            // had no height cap of its own — two columns was all it knew.
+            let tall = bottom.saturating_sub(area.y).min(area.height);
+            let deep_max = half.min((tall.saturating_sub(2) as usize).max(1));
+            // Too deep is answered by going **wider** first: as many columns
+            // as the depth asks for. A short wide menu is still a menu, and a
+            // key whose meaning is cut short still tells the reader which key
+            // it is — dropping the row entirely does not.
+            //
+            // A column may be squeezed down to a key, the gap, and four 漢字
+            // of meaning; under that the table stops being readable and the
+            // answer is 「there is more」 instead of another column. The cap is
+            // read off that floor rather than off the longest row, because one
+            // long line — 「寫作進度：今天寫了多少，離目標還有多少」 — would
+            // otherwise hold the whole menu to a single column and cut *keys*
+            // to keep a sentence whole.
+            let least = key_w + 2 + 8;
+            let most = ((widest + 2) / (least + 2)).max(1);
+            let columns = keys.len().div_ceil(deep_max).clamp(1, most);
             // Each column gets its share, and what does not fit is cut
             // *inside* the column rather than beyond the border — where it
             // used to be dropped silently, leaving keys with no meanings.
             let one = one.min(widest.saturating_sub((columns - 1) * 2) / columns.max(1));
+            // Only when the width has run out too does the menu say 「there is
+            // more」 — in the last cell, rather than ending as if that were all
+            // the keys there are.
+            let shown = keys.len().min(columns * deep_max);
             (
                 one * columns + (columns - 1) * 2,
-                keys.len(),
+                shown,
                 Vec::new(),
                 columns,
                 key_w,
@@ -752,12 +805,38 @@ pub fn draw(
             }
         }
         Body::Keys(keys) => {
-            for (i, (key, what)) in keys.iter().enumerate() {
+            // `count` is what fits, which is not always all of them (above).
+            let left = keys.len() - count;
+            for (i, (key, what)) in keys.iter().take(count).enumerate() {
                 let (column, row) = (i / deep, i % deep);
                 let x = rect.x + 1 + (column * (one + 2)) as u16;
                 let y = rect.y + 1 + row as u16;
-                put_text(buf, x, y, limit, key, ground.fg(ink.gold()));
-                put_text(buf, x + key_w as u16 + 2, y, limit, what, ground.fg(ink.text()));
+                // The last cell counts what did not fit rather than letting the
+                // table end as though those were all the keys there are.
+                //
+                // ⚠️ **Never the only cell**, the same law the prose cap keeps
+                // above: on a page with one row to spare, a menu whose whole
+                // content is 「還有 17 個」 has told the reader nothing they can
+                // act on. Then the 「…」 hangs off the one key it could draw.
+                let last = left > 0 && i + 1 == count && count > 1;
+                let (key, what) = match (last, left > 0 && count == 1) {
+                    (true, _) => ("…".to_string(), say!("menu.more", left)),
+                    (_, true) => (key.clone(), format!("{what} …")),
+                    _ => (key.clone(), what.clone()),
+                };
+                let said = match last {
+                    true => ink.quiet(),
+                    false => ink.text(),
+                };
+                // ⚠️ **A column is cut at its own edge, not at the ring**
+                // (2026-09-19). `limit` is the box, so a meaning longer than
+                // its column was written straight across the column beside it
+                // — which only showed once a menu could have more than two.
+                let edge = (x + one as u16).min(limit);
+                let at = x + key_w as u16 + 2;
+                put_text(buf, x, y, edge, &key, ground.fg(ink.gold()));
+                let room = one.saturating_sub(key_w + 2);
+                put_text(buf, at, y, edge, &clip(&what, room), ground.fg(said));
             }
         }
     }
@@ -861,5 +940,65 @@ mod tests {
     fn a_short_vertical_entry_does_not_grow_a_box_it_does_not_need() {
         let (rect, _) = zong("短。", 70, 45);
         assert!(rect.height <= 6, "the box is {} rows deep", rect.height);
+    }
+
+    /// Draw the key table a half-pressed prefix puts up, on a `w × h` page.
+    fn menu(keys: usize, w: u16, h: u16) -> (Option<Rect>, ratatui::buffer::Buffer) {
+        let config = Config::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                let body = (0..keys)
+                    .map(|n| (format!("k{n}"), format!("第{n}個動作")))
+                    .collect::<Vec<_>>();
+                got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, (0, 0), false, &Panel {
+                    title: "空格".into(),
+                    lede: None,
+                    entry: false,
+                    body: Body::Keys(body),
+                    vertical_text: false,
+                    tag: None,
+                });
+            })
+            .unwrap();
+        (got, terminal.backend().buffer().clone())
+    }
+
+    fn written(rect: Rect, buffer: &ratatui::buffer::Buffer) -> String {
+        (0..rect.height)
+            .flat_map(|y| (0..rect.width).map(move |x| (x, y)))
+            .map(|(x, y)| buffer[(rect.x + x, rect.y + y)].symbol().to_string())
+            .collect()
+    }
+
+    /// 2026-09-19, caught in review: on a short terminal the `空格` menu drew
+    /// **nothing**. The key table had no height cap of its own — one column or
+    /// two — so its box came out taller than the page, `chrome::place` refused
+    /// it, and `draw` answered `None`, which the caller could not tell from
+    /// 「there was nothing to show」. A menu that does not fit goes wider, and
+    /// says in its last cell how many keys it could not draw.
+    #[test]
+    fn a_menu_too_tall_for_the_page_goes_wider_and_says_what_it_cut() {
+        let (rect, buffer) = menu(24, 60, 12);
+        let rect = rect.expect("the menu is drawn at all");
+        assert!(rect.height <= 12 && rect.y + rect.height <= 12, "{rect:?}");
+        let text = written(rect, &buffer);
+        assert!(text.contains('…'), "the cut is not marked: {text:?}");
+        // Wider, not just shorter: the keys that did fit are in more than one
+        // column, and the first of them is still there.
+        assert!(rect.width > 20, "one thin column: {rect:?}");
+        assert!(text.contains("k0"), "{text:?}");
+    }
+
+    /// …and on a page with room it is the whole table, with nothing cut and no
+    /// mark to say so.
+    #[test]
+    fn a_menu_that_fits_is_drawn_whole() {
+        let (rect, buffer) = menu(24, 120, 40);
+        let rect = rect.expect("the menu is drawn");
+        let text = written(rect, &buffer);
+        assert!(text.contains("k23"), "the last key is missing: {text:?}");
+        assert!(!text.contains('…'), "nothing was cut, yet it says so: {text:?}");
     }
 }
