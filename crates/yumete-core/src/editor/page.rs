@@ -590,6 +590,79 @@ impl Editor {
         self.number_fill = on;
     }
 
+    // ---- 改動條（#55／#298）------------------------------------------------
+
+    /// 行號旁邊那一格說不說 git 的改動。
+    pub fn diff_gutter(&self) -> bool {
+        self.diff_gutter
+    }
+
+    /// 開關改動條。**開的那一下順手算一次**——不然要等到下一次存檔纔看得見，
+    /// 而使用者剛剛按的就是「我現在要看」。
+    pub fn set_diff_gutter(&mut self, on: bool) {
+        self.diff_gutter = on;
+        match on {
+            true => self.refresh_vcs(true),
+            // 關了就丟掉：留着一份誰也不看的答案，只會在下次開的時候答出舊事。
+            false => self.vcs.clear(),
+        }
+    }
+
+    /// 把一份算好的逐行差直接安進來，不去問 git。
+    ///
+    /// 渲染的測試走這一扇門——它們要的是「這一行是新添的」，不是一個真的 git
+    /// 倉。#298 的第二步（跟**磁碟上那一份**比）將來也從這裏進。
+    pub fn set_vcs(&mut self, changes: crate::vcs::Changes) {
+        let buffer = self.current_buffer();
+        let (id, revision) = (buffer.id(), buffer.revision());
+        self.vcs.insert(id, (revision, changes));
+    }
+
+    /// 第 `line` 行（0 起算）跟 git 那一份比起來是什麼來歷。
+    ///
+    /// ⚠️ **這一句只查快取，一個子行程都不會生**——它一幀要被問幾十次。真正去
+    /// 喊 `git` 的是 [`Editor::refresh_vcs`]，而它只在開檔、存檔、`:view-diff on`
+    /// 那三個時刻跑。
+    pub fn vcs_mark(&self, line: usize) -> Option<crate::vcs::Change> {
+        if !self.diff_gutter {
+            return None;
+        }
+        let (_, changes) = self.vcs.get(&self.current_buffer().id())?;
+        changes.at(line)
+    }
+
+    /// 重算現在這個 buffer 的 git 逐行差。
+    ///
+    /// `force` ＝ 「不管快取記的是哪個 revision，重來一次」：`:view-diff on` 與
+    /// 存檔要的是這個，因為**磁碟上那一份變了而 revision 沒變**（存檔不是一次
+    /// 編輯）。平時 revision 對得上就直接回來，一個子行程都不生。
+    pub fn refresh_vcs(&mut self, force: bool) {
+        if !self.diff_gutter {
+            return;
+        }
+        let buffer = self.current_buffer();
+        let (id, revision) = (buffer.id(), buffer.revision());
+        let Some(path) = buffer.path().map(|p| p.to_path_buf()) else {
+            // 無名的 buffer（`:grep` 的結果、剛開的空頁）沒有磁碟上那一份可比。
+            self.vcs.remove(&id);
+            return;
+        };
+        if !force && self.vcs.get(&id).is_some_and(|(at, _)| *at == revision) {
+            return;
+        }
+        let lines = buffer.line_count();
+        match crate::vcs::Changes::read(&path, lines) {
+            Some(changes) => {
+                self.vcs.insert(id, (revision, changes));
+            }
+            // 不在 git 倉裏、倉裏還沒有第一個提交、機器上沒有 git——三種都是
+            // 「沒話說」，不是錯。畫面上是什麼都不畫。
+            None => {
+                self.vcs.remove(&id);
+            }
+        }
+    }
+
     /// Take a pending `:shot`, if one is waiting for a frame.
     pub fn take_screenshot_request(&mut self) -> Option<ShotJob> {
         self.screenshot_request.take()

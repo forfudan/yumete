@@ -870,6 +870,21 @@ impl Palette {
         self.tinted(self.accent_colour(accent), 1.5)
     }
 
+    /// 改動條那一格的底色——行號旁邊一欄寬的那一條（#55／#298）。
+    ///
+    /// ⚠️ **比 [`Self::short_wash`] 還響，理由還是面積。** 一段 `:::` 的底色
+    /// 攤在二十行上，1.08–1.12 就夠了；`==標記==` 是幾個字，1.5；這一條是
+    /// **一欄寬**，全頁最小的一塊有顏色的地方，而且它旁邊永遠是行號那一片灰。
+    /// 3:1 是「一欄寬的東西還認得出是綠是藍」的下限，也就是 WCAG 給非文字元素
+    /// 定的那個數——這一格正是一個非文字元素。
+    ///
+    /// 走 [`Self::tinted`] 而不是直接拿 `accent()` 當底色：原色那一檔是**給字
+    /// 用的**，鋪成底色在亮暗兩個心情下響度差得遠，而 `tinted` 只動明度、把飽
+    /// 和度夾在同一條帶子裏，亮頁往下走、暗頁往上走，兩邊一樣重。
+    pub fn vcs(self, accent: Accent) -> Color {
+        self.tinted(self.accent_colour(accent), 3.0)
+    }
+
     /// The paper, as a colour — the ground everything else is measured against.
     fn page_colour(self) -> Color {
         Color::Rgb(self.ladder.paper.0, self.ladder.paper.1, self.ladder.paper.2)

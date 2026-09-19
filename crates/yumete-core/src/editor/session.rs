@@ -194,6 +194,8 @@ impl Editor {
         // a new document, and `md_cache`, `fold_cache` and `key_index` all
         // described the old one. It also puts the warning latch back.
         self.forget_the_document();
+        // 磁碟上那一份換了人——改動條記的是跟它比出來的，也得重問（#55）。
+        self.refresh_vcs(true);
     }
 
     /// Notice a file that changed underneath, if `:reload-auto on` (Feature

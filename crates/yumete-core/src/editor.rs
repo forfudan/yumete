@@ -1724,6 +1724,14 @@ pub struct Editor {
     live_pane: usize,
     /// Whether the line-number band carries a ground of its own.
     number_fill: bool,
+    /// 改動條：行號旁邊那一格說不說「這一行跟 git 那一份不一樣」（#55／#298）。
+    diff_gutter: bool,
+    /// 每個 buffer 一份 git 逐行差，連着**算它的時候那個 revision**。
+    ///
+    /// 鍵是 buffer 的 id 而不是它在清單裏的位置：`:bd` 關掉一個，後面每一個都往
+    /// 前挪一格，而快取要跟着那一本書走。revision 是「還用不用再喊一次 git」的
+    /// 全部判準——存了兩次中間一個字沒改，第二次就不再喊。
+    vcs: HashMap<u64, (u64, crate::vcs::Changes)>,
     /// What is drawn in a paragraph's opening squares, if anything.
     indent_hint: crate::zong::IndentHint,
     /// The character `IndentHint::Symbol` draws there.
@@ -2408,6 +2416,8 @@ impl Editor {
             other: None,
             live_pane: 0,
             number_fill: false,
+            diff_gutter: false,
+            vcs: HashMap::new(),
             indent_hint: crate::zong::IndentHint::default(),
             indent_symbol: "↵".to_string(),
             count: None,

@@ -102,8 +102,18 @@ pub struct Metrics {
     pub zong_len: usize,
     /// Cells from the left edge of one 縱 to the left edge of the next.
     pub pitch: u16,
-    /// Rows reserved above the text for paragraph numbers.
+    /// Rows reserved above the text for paragraph numbers **and the 改動條**.
     pub head_rows: u16,
+    /// 改動條佔的那一列：`1` 或 `0`（#55／#298）。
+    ///
+    /// 它在號碼帶的**最底下**，貼着正文——橫排那一格（行號後面、緊挨正文的那
+    /// 一格）轉過九十度就是這裏。
+    ///
+    /// ⚠️ **自己一列，不是塗在號碼那幾列的底下。** 塗在號碼底下試過：竪排的
+    /// 號碼**坐在正文自己的那兩格上**，底下一上色，灰色的數字就壓在一塊 3:1 的
+    /// 綠上，而朱色那一行的號碼乾脆變成朱底朱字。#298 當初說的也正是「號碼帶
+    /// **旁邊**的一條橫帶」。一列的代價是縱短一個字，而且只在開着的時候付。
+    pub diff_row: u16,
     /// Cells between one 縱 and the next, from the config.
     pub gap: u16,
     /// Whether readings are being laid out at all.
@@ -148,14 +158,22 @@ impl Metrics {
             gap,
             margin,
             bands,
+            diff,
         } = look;
-        let head_rows = number_rows(config.editor.line_numbers, total_lines);
+        let numbers = number_rows(config.editor.line_numbers, total_lines);
+        // 改動條跟着行號走：號碼帶沒有，那一條也沒有。兩邊同一條規矩——橫排那
+        // 一格本來就是行號後面那兩格空氣裏的一格，`:view-numbers none` 一關，
+        // 整個 gutter 都不在了。
+        let diff_row = u16::from(diff && numbers > 0);
+        let head_rows = numbers + diff_row;
         // …and never taller than the page it sits on. A novel of ten thousand
         // paragraphs spends five rows on numbers, and on a seven-row page the
         // writing was then laid out *below* the page — over the command row and
         // the status line, which are drawn after it and painted the numbers
         // out. The page showed its numbers and none of its text.
         let head_rows = head_rows.min(height.saturating_sub(1));
+        // 矮到連號碼都擺不下的頁面上，這一列跟着一起沒有。
+        let diff_row = diff_row.min(head_rows);
         // Bands are equal by construction: the page is divided, not packed, so
         // the second band can never be a row shorter than the first.
         let bands = bands.clamp(1, 4);
@@ -180,6 +198,7 @@ impl Metrics {
             zong_len,
             pitch: SLOT_WIDTH + gap,
             head_rows,
+            diff_row,
             gap,
             ruby,
             hanging,
@@ -566,6 +585,8 @@ pub struct Look {
     pub margin: yumete_cjk::Margin,
     /// How many bands the page is divided into (段組).
     pub bands: usize,
+    /// 改動條開着沒有（`:view-diff`）——它在號碼帶底下自己佔一列。
+    pub diff: bool,
 }
 
 impl Look {
@@ -580,6 +601,7 @@ impl Look {
             gap: editor.zong_gap(),
             margin: editor.margin(),
             bands: editor.bands(),
+            diff: editor.diff_gutter(),
         }
     }
 }
@@ -1045,9 +1067,43 @@ pub fn draw(
                 (false, true) => style.fg(band_ink.furniture()),
                 (false, false) => style.fg(band_ink.at(yumete_config::rung::RULE)),
             };
-            // Above its own band, not above the page.
+            // Above its own band, not above the page — and **above the 改動條's
+            // own row**, which is the bottom of the header and not the numbers'
+            // to write in.
             let band_top = text_top.saturating_sub(metrics.head_rows);
-            put_number(buf, x, band_top, metrics.head_rows, n, style);
+            let rows = metrics.head_rows - metrics.diff_row;
+            put_number(buf, x, band_top, rows, n, style);
+        }
+
+        // **改動條，轉過九十度**（#55／#298）。橫排那一條是行號後面、貼着正文
+        // 的一格；這裏是號碼帶最底下、貼着 縱 頭的那一列（[`Metrics::diff_row`]
+        // 說了為什麼它自己佔一列，而不是塗在號碼底下）。
+        //
+        // ⚠️ **剪口在這裏是「右半格」，不是一條上緣。** 橫排的剪口畫在一格的
+        // 頭上（`CUT_ABOVE`），因為上一行在它上面；竪排從右往左讀，上一段在它
+        // **右邊**，所以那一道縫在這一縱的右側——兩格裏只上右邊那一格，半格的
+        // 寬度本身就說了「這不是一整段，是一道邊」。
+        if metrics.diff_row > 0 {
+            if let Some(change) = editor.vcs_mark(zong.line) {
+                // 剪口只畫在段首那一縱：它說的是這一段和上一段之間的事。折行
+                // 折出來的每一縱都不是段首。
+                if zong.starts_line() || !change.is_cut() {
+                    use yumete_core::vcs::Change;
+                    let y = text_top.saturating_sub(1);
+                    let (from, ground) = match change {
+                        Change::Added => (x, band_ink.vcs(crate::theme::Accent::Green)),
+                        Change::Changed => (x, band_ink.vcs(crate::theme::Accent::Azure)),
+                        // 檔尾那一種在竪排沒有「下面」，同樣落在右側——它已經是
+                        // 這一頁**最左**那一縱，位置自己說得清。
+                        _ => (x + SLOT_WIDTH - 1, band_ink.mark()),
+                    };
+                    for cell_x in from..x + SLOT_WIDTH {
+                        if let Some(c) = buf.cell_mut((cell_x, y)) {
+                            c.set_symbol(" ").set_bg(ground);
+                        }
+                    }
+                }
+            }
         }
 
         let line_start = rope.line_to_char(zong.line);

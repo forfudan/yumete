@@ -92,6 +92,17 @@ pub struct EditorConfig {
     /// Off, and the same in both layouts: 縱書 painted its number band and
     /// 橫排 did not, which is one editor with two answers to one question.
     pub line_number_fill: bool,
+    /// 行號旁邊那一格說不說版本庫裏的改動（`:view-diff`，#55／#298）。
+    ///
+    /// **出廠開着**，跟這個編輯器裏別的「出廠關着」不一樣。那些關着的——注音、
+    /// markup、拆分——畫的是**正文上面**的東西，出廠開着就等於替讀者決定了稿子
+    /// 該怎麼看。這一格是**傢俱**，而且那一格本來就是空的（`GUTTER_AIR` 早就把
+    /// 它留出來了），所以開着不佔版心、不挪一個字；沒進版本庫、沒動過、機器上
+    /// 沒有那個程序——三種情形都是一筆都不畫。一個要自己去找纔知道存在的東西，
+    /// 等於沒有。
+    ///
+    /// 代價是開檔與存檔各多一個子行程；量過，見 `docs/development.md`。
+    pub diff_gutter: bool,
     /// The shell line `:shot` runs to photograph the screen.
     ///
     /// A command rather than a built-in: what「截圖」 means is the window
@@ -357,6 +368,7 @@ impl Default for EditorConfig {
             scrolloff: 3,
             wheel_step: 3,
             line_number_fill: false,
+            diff_gutter: true,
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             indent_symbol: "↵".to_string(),
@@ -2354,6 +2366,7 @@ struct RawEditor {
     scrolloff: Option<usize>,
     wheel_step: Option<usize>,
     line_number_fill: Option<bool>,
+    diff_gutter: Option<bool>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
     indent_symbol: Option<String>,
@@ -2470,6 +2483,9 @@ impl RawConfig {
         }
         if other.editor.line_number_fill.is_some() {
             self.editor.line_number_fill = other.editor.line_number_fill;
+        }
+        if other.editor.diff_gutter.is_some() {
+            self.editor.diff_gutter = other.editor.diff_gutter;
         }
         if other.editor.screenshot.is_some() {
             self.editor.screenshot = other.editor.screenshot.clone();
@@ -2703,6 +2719,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.line_number_fill {
             config.editor.line_number_fill = on;
+        }
+        if let Some(on) = self.editor.diff_gutter {
+            config.editor.diff_gutter = on;
         }
         if let Some(line) = self.editor.screenshot {
             config.editor.screenshot = line;

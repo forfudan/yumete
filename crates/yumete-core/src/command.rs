@@ -278,6 +278,8 @@ pub enum Command {
     /// `:view-numbers-fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
+    /// `:view-diff` — 行號旁邊那一格說不說 git 的改動（#55）。`None` 是輪替。
+    SetDiffGutter(Option<bool>),
     /// `:shot` — a picture of the page, drawn by the editor itself (#189).
     Screenshot { shot: Shot, force: bool },
     /// `:theme` — which theme, and whether it is dark, light or the
@@ -3173,6 +3175,20 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetNumberFill(p.arg(0).map(|w| w == "on")))),
     },
     Entry {
+        // 跟 `:view-numbers-fill` 排在一起：兩個說的都是行號那一帶（#55）。
+        // 名字裏沒有 git——那一格將來也會說「跟磁碟上那一份比」（#298 第二步），
+        // 而那時要換的是**來源**，不是這個開關。
+        name: "view-diff",
+        aliases: &[],
+        help: "cmd.view.diff",
+        needs: &[],
+        params: &[Param::Words {
+            of: SWITCH,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetDiffGutter(switched(p)?))),
+    },
+    Entry {
         name: "view-typewriter",
         aliases: &[],
         help: "cmd.view.typewriter",
@@ -5504,7 +5520,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +13");
+        assert_eq!(row("", "view-"), ":view- +14");
         assert_eq!(row("", "check-"), ":check- +4");
         // …and one command under a stem is still a stem: `markdown-` names a
         // group whether or not it has grown a second one yet.

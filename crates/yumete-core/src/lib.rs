@@ -48,6 +48,7 @@ pub mod syntax;
 pub mod text_store;
 pub mod tutor;
 pub mod usage;
+pub mod vcs;
 pub mod wiki;
 pub mod words;
 pub mod wrap;
