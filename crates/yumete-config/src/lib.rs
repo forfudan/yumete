@@ -1834,17 +1834,16 @@ impl Config {
             }
         }
 
-        // **A misspelt action name would be played as keys** (#429). The
-        // right-hand side of a binding is 「an action's name, a `:command`, or
-        // keys」, and keys are the fallback — so `delete_slection` would press
-        // d, e, l, e, t, e… into the document. Nothing bound to a key is
-        // spelled with an underscore, so an underscore means a name was meant,
-        // and an unknown one is said out loud here rather than typed into a
-        // chapter.
+        // **A misspelt action name would be played as keys** (#429), so it is
+        // said out loud here — and **not installed** (see `into`, which drops
+        // it on this same test). Saying it was not enough on its own: the
+        // warning scrolled past on the status line and the binding went in, so
+        // the key still typed `delete_slection` into a chapter, one letter at
+        // a time (2026-09-19, caught in review).
         for (key, bound) in &raw.keys.normal {
-            if bound.contains('_') && yumete_cjk::actions::action(bound).is_none() {
+            if yumete_cjk::actions::misspelt(bound) {
                 problems.push(format!(
-                    "[keys.normal] {key} = \"{bound}\" 不是動作名——`:keymap actions` 列出全部"
+                    "[keys.normal] {key} = \"{bound}\" 不是動作名，這一條没裝上——`:keymap actions` 列出全部"
                 ));
             }
         }
@@ -2993,7 +2992,12 @@ impl RawConfig {
             config.export.page = page;
         }
         for (k, v) in self.keys.normal {
-            if !k.is_empty() && !v.is_empty() {
+            // ⚠️ **A name that is not one is left out**, not installed with a
+            // warning beside it: the fallback for a right-hand side is *keys*,
+            // and the keys a misspelt name spells are its own letters going
+            // into the manuscript. `check` names it; this is what makes the
+            // naming worth anything.
+            if !k.is_empty() && !v.is_empty() && !yumete_cjk::actions::misspelt(&v) {
                 config.keys.normal.insert(k, v);
             }
         }
@@ -3264,6 +3268,33 @@ mod tests {
         assert_eq!(c.keys.normal.get("J").map(String::as_str), Some("gJ"));
         // …and so may the left (#428).
         assert_eq!(c.keys.normal.get("toolong").map(String::as_str), Some("x"));
+    }
+
+    /// **A misspelt action name is left out, not installed with a warning**
+    /// (2026-09-19, caught in review). The fallback for a right-hand side is
+    /// *keys*, so `delete_slection` went in and pressed itself — d, e, l, e,
+    /// t, e… into the chapter — while the warning scrolled past on the status
+    /// line. The two had to be one test, or one of them would keep no teeth.
+    #[test]
+    fn a_misspelt_action_name_is_not_installed() {
+        let c = Config::from_toml(
+            r#"
+            [keys.normal]
+            "x" = "delete_slection"
+            "y" = "delete_selection"
+            "z" = "gJ"
+            "Z" = ":write_all"
+            "#,
+        );
+        assert_eq!(c.keys.normal.get("x"), None, "the typo was installed anyway");
+        assert_eq!(c.keys.normal.get("y").map(String::as_str), Some("delete_selection"));
+        assert_eq!(c.keys.normal.get("z").map(String::as_str), Some("gJ"));
+        // A `:command` is not a name, so an underscore in one is not a typo.
+        assert_eq!(c.keys.normal.get("Z").map(String::as_str), Some(":write_all"));
+        assert!(yumete_cjk::actions::misspelt("delete_slection"));
+        assert!(!yumete_cjk::actions::misspelt("delete_selection"));
+        assert!(!yumete_cjk::actions::misspelt("gJ"));
+        assert!(!yumete_cjk::actions::misspelt(":write_all"));
     }
 
     #[test]

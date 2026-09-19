@@ -475,6 +475,18 @@ x  = "delete_selection"   # 動作名
 名字贏；寫錯的名字在讀配置時就說出來（右邊帶下劃線却不認得＝本來想寫名字），不會悄悄打
 進文章裏。
 
+⚠️ **「說出來」不等於「擋住」**（2026-09-19 審出來的）。那句警告是印了，**綁定照樣裝上**，
+於是按下去還是把 `delete_slection` 一個字母一個字母打進稿子——這條規矩寫在註釋裏整整一天，
+代碼裏只有一半。判準現在只有一份：`yumete_cjk::actions::misspelt`，`check` 拿它報話、`into`
+拿它丟掉那一條，兩邊不可能再走岔。`:命令` 不算名字（`:write_all` 裏的下劃綫不是筆誤）。
+
+⚠️ **和弦要真按下去。** 一串鍵是字符串，而和弦没有自己的字母，所以表裏寫的就是那個控制
+字節（`"\u{1b}"` 是 Esc，`"\u{f}"` 是 `C-o`）。播的時候一律發 `Key::Char`，編輯器對控制字節
+什麽也不答——於是 `jump_backward`／`collapse_selection`／`increment`／`decrement` 四條
+**列得出、綁得上、按下去死的**。`keys.rs` 的 `pressed()` 現在把它們翻成 `Key::Esc`／
+`Key::Ctrl`，與 `actions::spell()` 那一頭對稱。順帶：`jump_backward` 原先寫的是 `\u{11}`
+（`C-q`，編輯器根本没這個鍵），應該是 `\u{f}`。
+
 ---
 
 ## 5. Feature table & phasing
