@@ -645,11 +645,11 @@ pub fn spans(line: &str) -> Vec<Span> {
         }
         // Code next: inside a code span nothing else is markup.
         if chars[at] == '`' {
-            if let Some(close) = find(&chars, at + 1, |c| c == '`') {
-                mark(&mut out, at, at + 1, Kind::Marker, construct);
-                mark(&mut out, at + 1, close, Kind::Code, construct);
-                mark(&mut out, close, close + 1, Kind::Marker, construct);
-                at = close + 1;
+            if let Some((open, close, end)) = code_span(&chars, at) {
+                mark(&mut out, at, at + open, Kind::Marker, construct);
+                mark(&mut out, at + open, close, Kind::Code, construct);
+                mark(&mut out, close, end, Kind::Marker, construct);
+                at = end;
                 construct += 1;
                 continue;
             }
@@ -874,8 +874,8 @@ pub fn comment_left_open(line: &str) -> Option<&'static str> {
             continue;
         }
         if chars[at] == '`' {
-            if let Some(close) = find(&chars, at + 1, |c| c == '`') {
-                at = close + 1;
+            if let Some((_, _, end)) = code_span(&chars, at) {
+                at = end;
                 continue;
             }
         }
@@ -951,9 +951,9 @@ pub fn strip_comments(text: &str) -> String {
                 continue;
             }
             if chars[at] == '`' {
-                if let Some(close) = find(&chars, at + 1, |c| c == '`') {
-                    kept.extend(&chars[at..=close]);
-                    at = close + 1;
+                if let Some((_, _, end)) = code_span(&chars, at) {
+                    kept.extend(&chars[at..end]);
+                    at = end;
                     continue;
                 }
             }
@@ -985,6 +985,41 @@ pub fn strip_comments(text: &str) -> String {
 fn run(chars: &[char], from: usize, text: &str) -> Option<usize> {
     let want: Vec<char> = text.chars().collect();
     (from..chars.len().saturating_sub(want.len() - 1)).find(|&i| chars[i..].starts_with(&want))
+}
+
+/// **An inline code span, counted in backticks** (2026-09-19).
+///
+/// CommonMark's rule: a run of *n* backticks opens a code span, and only a run
+/// of **exactly n** closes it. Everything here used to take 「the next backtick」
+/// instead, which is right for `` `code` `` and wrong the moment two of them
+/// stand together: ```` ``%%`` ```` was read as an *empty* code span made of the
+/// first two backticks, and the scan came back out standing on the `%%` — which
+/// then opened a comment and greyed the rest of the file. 作者 2026-09-19:
+/// 「markdown 中的百分號會把後面的所有文字變成註釋」. The same shape did it in
+/// this project's own manual (`docs/manual.md:394`, a line of quoted markup),
+/// and the exporter — which strips comments — **dropped those paragraphs from
+/// the exported file**.
+///
+/// Returns `(how many backticks opened it, where the closing run starts, where
+/// it ends)`.
+fn code_span(chars: &[char], at: usize) -> Option<(usize, usize, usize)> {
+    let open = chars[at..].iter().take_while(|&&c| c == '`').count();
+    if open == 0 {
+        return None;
+    }
+    let mut i = at + open;
+    while i < chars.len() {
+        if chars[i] != '`' {
+            i += 1;
+            continue;
+        }
+        let run = chars[i..].iter().take_while(|&&c| c == '`').count();
+        if run == open {
+            return Some((open, i, i + run));
+        }
+        i += run;
+    }
+    None
 }
 
 /// The first index at or after `from` whose character satisfies `f`.
@@ -1245,6 +1280,24 @@ mod tests {
     #[test]
     fn code_masks_the_markup_inside_it() {
         assert_eq!(shape("`**not bold**`"), ".CCCCCCCCCCCC.");
+    }
+
+    /// 2026-09-19：**一個代碼段由幾個反引號開，就要幾個反引號關**。從前這裏
+    /// 取的是「下一個反引號」，所以兩個挨在一起的反引號被當成一對空代碼段，
+    /// 掃描回到 `%%` 上——於是它開了一條註釋，後面半本書變灰，導出的時候那
+    /// 幾段**整個不見**。作者 2026-09-19 報的就是這個，而這個檔自己的手冊
+    /// （`docs/manual.md:394`，引用各種標記的那一行）正是這個形狀。
+    ///
+    /// ⚠️ 上面那一條只用了單反引號，所以它永遠是綠的。
+    #[test]
+    fn a_code_span_closes_on_as_many_backticks_as_opened_it() {
+        assert_eq!(shape("``%%``"), "..CC..", "兩個開，兩個關");
+        assert_eq!(shape("`` `裏面` ``"), "..CCCCCC..", "裏面那一個反引號是內容");
+        assert_eq!(shape("``%%`` 後面"), "..CC..   ", "後面是正文，不是註釋");
+        // 單個的照舊。
+        assert_eq!(shape("`%%`"), ".CC.");
+        // 反引號之外的 `%%` 照舊開註釋（那是本來的功能，`.` 是記號、`%` 是註釋）。
+        assert_eq!(shape("%%註釋%%"), "..%%..");
     }
 
     #[test]
@@ -1537,13 +1590,14 @@ pub mod typst {
                     continue;
                 }
             }
-            // `` `code` ``.
+            // `` `code` ``. Counted in backticks — see `super::code_span`;
+            // without that ``` ``//`` ``` opened a Typst comment.
             if chars[at] == '`' {
-                if let Some(close) = (at + 1..chars.len()).find(|&i| chars[i] == '`') {
-                    push(&mut out, at, at + 1, Kind::Marker, construct);
-                    push(&mut out, at + 1, close, Kind::Code, construct);
-                    push(&mut out, close, close + 1, Kind::Marker, construct);
-                    at = close + 1;
+                if let Some((open, close, end)) = super::code_span(&chars, at) {
+                    push(&mut out, at, at + open, Kind::Marker, construct);
+                    push(&mut out, at + open, close, Kind::Code, construct);
+                    push(&mut out, close, end, Kind::Marker, construct);
+                    at = end;
                     construct += 1;
                     continue;
                 }
