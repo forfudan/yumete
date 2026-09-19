@@ -8124,6 +8124,13 @@ zhs = "{0}：引得太深或太多了（至多 8 层、64 个文件），不读"
 en = "{0}: too deep or too many files (8 levels, 64 files at most), not read"
 
 [[message]]
+# :wiki 報告裏：檔在，可是讀不了（權限、或者不是 UTF-8）
+key = "wiki.unreadable"
+zht = "{0}：讀不了（{1}）"
+zhs = "{0}：读不了（{1}）"
+en = "{0}: cannot be read ({1})"
+
+[[message]]
 # :wiki 報告裏：只有一個字的詞條，進不了分詞、在正文裏標不出來
 key = "wiki.unmarkable"
 zht = "只有一個字、正文裏標不出來的詞條"

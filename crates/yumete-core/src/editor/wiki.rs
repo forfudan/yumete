@@ -28,8 +28,16 @@ impl Editor {
         let mut dir = Some(from.as_path());
         while let Some(d) = dir {
             let there = d.join(".yumete");
-            if there.join(WIKI_MD).is_file() || there.join("wiki.txt").is_file() {
+            // ⚠️ **Whichever spelling is really there** (2026-09-19, caught in
+            // review). This looked for both and then always answered `wiki.md`
+            // — so on a book whose wiki is `wiki.txt`, `:wiki edit` opened an
+            // **empty** `wiki.md`, and the first save made the loader prefer
+            // that one: the writer's entries went dark in one keystroke.
+            if there.join(WIKI_MD).is_file() {
                 return there.join(WIKI_MD);
+            }
+            if there.join("wiki.txt").is_file() {
+                return there.join("wiki.txt");
             }
             dir = d.parent();
         }
@@ -125,6 +133,7 @@ impl Editor {
             let line = match source {
                 Source::Read { path, entries } => say!("wiki.read", shown(path), entries),
                 Source::Missing { path } => say!("wiki.missing", shown(path)),
+                Source::Unreadable { path, why } => say!("wiki.unreadable", shown(path), why),
                 Source::Refused { named, from } => say!("wiki.refused", named, shown(from)),
                 Source::Again { path } => say!("wiki.again", shown(path)),
                 Source::TooMany { named } => say!("wiki.too-many", named),
@@ -410,6 +419,7 @@ impl Editor {
         let state = self.wiki.sources.iter().find(|source| match source {
             crate::wiki::Source::Read { path: p, .. } => same(p),
             crate::wiki::Source::Missing { path: p } => same(p) || p == &path,
+            crate::wiki::Source::Unreadable { path: p, .. } => same(p) || p == &path,
             crate::wiki::Source::Again { path: p } => same(p) || p == &path,
             crate::wiki::Source::Refused { named: n, .. } => *n == named,
             crate::wiki::Source::TooMany { named: n } => *n == named,
