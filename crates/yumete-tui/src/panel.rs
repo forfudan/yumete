@@ -60,7 +60,7 @@ pub struct Panel {
 }
 
 /// Whether `line` is a row of a markdown table.
-fn is_table_row(line: &str) -> bool {
+pub(crate) fn is_table_row(line: &str) -> bool {
     let line = line.trim();
     line.starts_with('|') && line.len() > 1
 }
@@ -196,7 +196,7 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
 /// used to show. So a table is laid out at the width it is given and **never
 /// wrapped** — what does not fit is cut, and the cut is said out loud with a
 /// 「…」, cell by cell and then column by column.
-fn table_rows(block: &[&str], budget: usize) -> Vec<String> {
+pub(crate) fn table_rows(block: &[&str], budget: usize) -> Vec<String> {
     let rows: Vec<Vec<String>> = block
         .iter()
         .filter(|line| !is_table_rule(line))
