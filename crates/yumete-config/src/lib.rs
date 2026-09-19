@@ -101,7 +101,7 @@ pub struct EditorConfig {
     /// 沒有那個程序——三種情形都是一筆都不畫。一個要自己去找纔知道存在的東西，
     /// 等於沒有。
     ///
-    /// 代價是開檔與存檔各多一個子行程；量過，見 `docs/development.md`。
+    /// 代價是開檔與存檔各多一個子進程；量過，見 `docs/development.md`。
     pub diff_gutter: bool,
     /// The shell line `:shot` runs to photograph the screen.
     ///

@@ -419,7 +419,7 @@ fn main() -> ExitCode {
     }
     editor.set_number_fill(config.editor.line_number_fill);
     // 改動條。**這一句自己會算一次**，所以它落在開檔之後也不要緊——反過來，
-    // 設定關着的時候開檔那一趟一個子行程都不會生（#55）。
+    // 設定關着的時候開檔那一趟一個子進程都不會生（#55）。
     editor.set_diff_gutter(config.editor.diff_gutter);
     if let Some(hint) = yumete_core::zong::IndentHint::parse(&config.editor.indent_hint) {
         editor.set_indent_hint(hint, Some(config.editor.indent_symbol.clone()));

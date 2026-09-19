@@ -620,7 +620,7 @@ impl Editor {
 
     /// 第 `line` 行（0 起算）跟 git 那一份比起來是什麼來歷。
     ///
-    /// ⚠️ **這一句只查快取，一個子行程都不會生**——它一幀要被問幾十次。真正去
+    /// ⚠️ **這一句只查快取，一個子進程都不會生**——它一幀要被問幾十次。真正去
     /// 喊 `git` 的是 [`Editor::refresh_vcs`]，而它只在開檔、存檔、`:view-diff on`
     /// 那三個時刻跑。
     pub fn vcs_mark(&self, line: usize) -> Option<crate::vcs::Change> {
@@ -635,7 +635,7 @@ impl Editor {
     ///
     /// `force` ＝ 「不管快取記的是哪個 revision，重來一次」：`:view-diff on` 與
     /// 存檔要的是這個，因為**磁碟上那一份變了而 revision 沒變**（存檔不是一次
-    /// 編輯）。平時 revision 對得上就直接回來，一個子行程都不生。
+    /// 編輯）。平時 revision 對得上就直接回來，一個子進程都不生。
     pub fn refresh_vcs(&mut self, force: bool) {
         if !self.diff_gutter {
             return;
