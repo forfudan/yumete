@@ -60,22 +60,26 @@ pub enum Token {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     Css,
+    Go,
     Html,
     JavaScript,
     Json,
     Python,
+    Rust,
     Toml,
     Yaml,
 }
 
 impl Language {
     /// Every language, for `:view-code`'s report and the tests.
-    pub const ALL: [Language; 7] = [
+    pub const ALL: [Language; 9] = [
         Language::Css,
+        Language::Go,
         Language::Html,
         Language::JavaScript,
         Language::Json,
         Language::Python,
+        Language::Rust,
         Language::Toml,
         Language::Yaml,
     ];
@@ -93,10 +97,12 @@ impl Language {
             .to_ascii_lowercase();
         Some(match word.as_str() {
             "css" => Language::Css,
+            "go" | "golang" => Language::Go,
             "html" | "htm" | "xhtml" => Language::Html,
             "javascript" | "js" | "mjs" | "cjs" | "jsx" | "node" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
             "python" | "py" | "python3" | "py3" => Language::Python,
+            "rust" | "rs" => Language::Rust,
             "toml" => Language::Toml,
             "yaml" | "yml" => Language::Yaml,
             _ => return None,
@@ -108,10 +114,12 @@ impl Language {
     pub fn from_extension(extension: &str) -> Option<Language> {
         Some(match extension {
             "css" => Language::Css,
+            "go" => Language::Go,
             "html" | "htm" | "xhtml" => Language::Html,
             "js" | "mjs" | "cjs" | "jsx" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
             "py" | "pyw" => Language::Python,
+            "rs" => Language::Rust,
             "toml" => Language::Toml,
             "yaml" | "yml" => Language::Yaml,
             _ => return None,
@@ -122,10 +130,12 @@ impl Language {
     pub fn name(self) -> &'static str {
         match self {
             Language::Css => "css",
+            Language::Go => "go",
             Language::Html => "html",
             Language::JavaScript => "javascript",
             Language::Json => "json",
             Language::Python => "python",
+            Language::Rust => "rust",
             Language::Toml => "toml",
             Language::Yaml => "yaml",
         }
@@ -134,10 +144,12 @@ impl Language {
     fn grammar(self) -> tree_sitter::Language {
         match self {
             Language::Css => tree_sitter_css::LANGUAGE.into(),
+            Language::Go => tree_sitter_go::LANGUAGE.into(),
             Language::Html => tree_sitter_html::LANGUAGE.into(),
             Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
             Language::Json => tree_sitter_json::LANGUAGE.into(),
             Language::Python => tree_sitter_python::LANGUAGE.into(),
+            Language::Rust => tree_sitter_rust::LANGUAGE.into(),
             Language::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
             Language::Yaml => tree_sitter_yaml::LANGUAGE.into(),
         }
@@ -146,10 +158,12 @@ impl Language {
     fn highlights(self) -> &'static str {
         match self {
             Language::Css => tree_sitter_css::HIGHLIGHTS_QUERY,
+            Language::Go => tree_sitter_go::HIGHLIGHTS_QUERY,
             Language::Html => tree_sitter_html::HIGHLIGHTS_QUERY,
             Language::JavaScript => tree_sitter_javascript::HIGHLIGHT_QUERY,
             Language::Json => tree_sitter_json::HIGHLIGHTS_QUERY,
             Language::Python => tree_sitter_python::HIGHLIGHTS_QUERY,
+            Language::Rust => tree_sitter_rust::HIGHLIGHTS_QUERY,
             Language::Toml => tree_sitter_toml_ng::HIGHLIGHTS_QUERY,
             Language::Yaml => tree_sitter_yaml::HIGHLIGHTS_QUERY,
         }
@@ -159,8 +173,8 @@ impl Language {
     /// per process: a query is parsed from its source text, and that is not
     /// something to do per frame.
     fn query(self) -> Option<&'static (Query, Vec<Paint>)> {
-        static CELLS: [OnceLock<Option<(Query, Vec<Paint>)>>; 7] =
-            [const { OnceLock::new() }; 7];
+        static CELLS: [OnceLock<Option<(Query, Vec<Paint>)>>; 9] =
+            [const { OnceLock::new() }; 9];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -341,7 +355,12 @@ mod tests {
             ("yml", Some(Language::Yaml)),
             ("jsonc", Some(Language::Json)),
             ("htm", Some(Language::Html)),
-            ("rust", None),
+            // 2026-09-19 加的兩種（朋友寫 go 和 rust）。`rust` 從前正是這裏
+            // 「這個 build 認不出來」的例子——現在換成一種真的認不出來的。
+            ("rust", Some(Language::Rust)),
+            ("rs", Some(Language::Rust)),
+            ("golang", Some(Language::Go)),
+            ("haskell", None),
             ("", None),
         ] {
             assert_eq!(Language::from_info(info), want, "{info:?}");

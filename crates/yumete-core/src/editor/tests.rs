@@ -14170,14 +14170,16 @@ fn a_reference_in_a_fence_is_offered_nothing() {
 fn a_fence_is_coloured_by_its_own_grammar_and_nothing_else_is() {
     use crate::code::Token;
     use crate::markdown::Kind;
-    let ed = markdown("```python\ndef f():\n```\n\n```rust\nfn f() {}\n```\n\ndef 不是代碼");
+    // ⚠️ `rust` 2026-09-19 起是**認得**的（朋友寫 go 和 rust），所以這裏換一種
+    // 真的没帶的語法來說「不認得就不塗」。
+    let ed = markdown("```python\ndef f():\n```\n\n```haskell\nf = id\n```\n\ndef 不是代碼");
     let tokens = |ed: &Editor, line: usize| -> Vec<Kind> {
         ed.markup_line_in(line, ed.block_of(line)).iter().map(|s| s.kind).collect()
     };
     assert_eq!(tokens(&ed, 1).first(), Some(&Kind::Token(Token::Keyword)));
     assert!(tokens(&ed, 0).is_empty(), "the opening fence is Markdown's");
     assert!(tokens(&ed, 2).is_empty(), "so is the closing one");
-    assert!(tokens(&ed, 5).is_empty(), "rust is not shipped");
+    assert!(tokens(&ed, 5).is_empty(), "haskell is not shipped");
     assert!(tokens(&ed, 8).iter().all(|k| !matches!(k, Kind::Token(_))), "prose is never parsed");
 
     let mut ed = ed;

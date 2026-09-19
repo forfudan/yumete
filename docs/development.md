@@ -5013,6 +5013,35 @@ the same review wanted and did not get:
   讀它的 hunk 頭就夠。⚠️ 絕不能上每一幀的關鍵路徑：開檔與存檔時算一次，按緩衝區的
   revision 存住。竪排那一條號碼帶要另外想。**medium**
 
+- **LSP（作者 2026-09-19 轉述朋友的話：「yumete 太好了，如果能編程就更好」，
+  他寫 go 和 rust）。定在 0.3.0 的主綫。**
+
+  ⚠️ **這件事在 yumete 裏不必從零開始**，手上的零件對得上：
+
+  | 要的 | 現成的 |
+  | --- | --- |
+  | 收回話而不卡住 | 事件循環已經是多路的：讀鍵盤的綫程往一個 `mpsc` 送，主循環 `recv_timeout` 等它（`spawn_reader`）。再開一條綫程往**同一個通道**送一種新事件即可——**不要 async，不要 tokio** |
+  | 診斷放哪 | 行號前面那一格（helix 的 `diagnostics` 欄，寬 1，畫一個 `●`）。我們那一格現在是空的 |
+  | 清單 | `:check-usage` 那一族：`path:line:` 的緩衝區，`gf` 跳得過去 |
+  | 跳轉 | `gd` 已經跟着腳註、鏈接、百科詞條走，多一個去處而已；`C-o` 回來 |
+  | 懸停 | 浮框（`panel.rs`）已經會折行、會竪排、會截斷 |
+  | 補全 | 輸入法那個補全面板 |
+
+  依賴只要 `serde_json`。JSON-RPC 的 framing 是 `Content-Length` 一行加一個 JSON
+  體，幾十行。**不引 `tower-lsp`**——那是寫服務端的。
+
+  **分四步，每一步自己就有用**：① 診斷（`initialize` → `didOpen`／`didChange` →
+  `publishDiagnostics`）；② `gd` 走 `textDocument/definition`；③ 懸停進浮框；
+  ④ 補全進現有面板。
+
+  配置照 helix 的形狀：`[lsp.rust] command = "rust-analyzer"`，**只在真打開了那
+  種文件時纔啓動**（開小說的時候一個子進程都不生）。
+
+  ⚠️ 三個坑先記下：LSP 的位置是 **UTF-16 code unit**，而這裏是 char index——中文
+  與 emoji 上不換算就錯位；`didChange` 先走全量同步，增量以後再說；服務器崩了要能
+  自己重啓，**而且不許把編輯器拖下水**。
+  **large**
+
 - **`:search` 與 `:replace` 也要模糊匹配（fzf 那一路），做成一個開關。** 挑選器
   （`空格 f`）已經有一套 fzf 式的打分——子序列匹配、連續命中加分、詞頭加分、最近開過的
   排前面——而高級搜索那一頁走的是正則。寫小說的人記得「差不多是這幾個字」卻記不得原句，

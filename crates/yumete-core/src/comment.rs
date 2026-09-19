@@ -44,7 +44,10 @@ pub fn marks(syntax: Syntax) -> Marks {
                 Language::Python | Language::Toml | Language::Yaml => {
                     Marks { line: Some("#"), block: None }
                 }
-                Language::JavaScript => Marks { line: Some("//"), block: Some(("/*", "*/")) },
+                // C 那一族的兩種註釋：`//` 與 `/* */`。
+                Language::JavaScript | Language::Go | Language::Rust => {
+                    Marks { line: Some("//"), block: Some(("/*", "*/")) }
+                }
                 Language::Css => Marks { line: None, block: Some(("/*", "*/")) },
                 Language::Html => Marks { line: None, block: Some(("<!--", "-->")) },
                 // JSON has no comment at all.

@@ -290,7 +290,12 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
 // ⚠️ `[^` and `[[` are **characters typed into the page**, not keys pressed in
 // Normal: they open a completion panel in Insert (#418 二、三), and `[` is also
 // a real leader (`[c`), so without this the two would be read as one.
-const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "[]", "[^", "[["];
+// ⚠️ `go` is a **fence tag**, not a key (2026-09-19, when the Go grammar was
+// added): the language table prints ```` ```go ```` beside `rust` and `py`, and
+// `g` really is a leader — so without this the manual teaching Go reads as the
+// `g` menu offering `o`. The other two-letter tags (`py`, `js`, `rs`, `js`) are
+// safe only because their first letter is not a leader; this one is not.
+const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[^", "[["];
 
 /// Sequences the documents print **in order to say the editor has not got them**.
 ///
