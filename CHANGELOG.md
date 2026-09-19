@@ -7,14 +7,15 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## 0.2.0 · 未發佈 · Unreleased
+## 0.2.0 · 2026-09-19
 
 一本書寫到一半會缺什麼，這一版就補什麼：**書自己的百科**、**竪排裏的表格**、
-**一整套 vim 鍵位**，以及把螢幕上所有浮框收成同一個東西。
+**一整套 vim 鍵位**、**行號旁邊的 git 改動條**，以及把螢幕上所有浮框收成同一個
+東西。
 
 What a half-written book turns out to need: **a wiki of its own**, **tables on a
-vertical page**, **a whole vim keymap**, and every floating panel on the screen
-finally being one thing.
+vertical page**, **a whole vim keymap**, **git's changes beside the line
+numbers**, and every floating panel on the screen finally being one thing.
 
 ### 新的 · New
 

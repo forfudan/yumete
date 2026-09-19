@@ -17,10 +17,11 @@ the reasoning, and the feature roadmap.
 
 ## Status
 
-A working editor, used daily by its author, and not finished. **v0.1.0 is not
-tagged yet**: build it from source for now (below), and the release will bring
-`brew install forfudan/tap/yumete`. What is done, planned and dropped is
-tracked feature by feature in [`docs/development.md`](docs/development.md) §5.
+A working editor, used daily by its author, and not finished. **v0.2.0** is the
+current release; build it from source for now (below) — `brew install
+forfudan/tap/yumete` is still to come. What is done, planned and dropped is
+tracked feature by feature in [`docs/development.md`](docs/development.md) §5,
+and what each release changed is in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it does
 
@@ -139,6 +140,15 @@ as well as the ASCII pairs.
 
 ⚠️ **There is no `t` / `T`.** That letter is the table mode's, all of it.
 
+Coming from vim, `:keymap vim` (or `[keys] preset = "vim"`) translates the keys
+that would *destroy text* if pressed out of habit: `d c y > <` become operators
+that wait for a motion (`dw`, `d3w`, `d$`, `df,`, `di(`, `ciw`), counts may be
+written anywhere (`3dw`, `d3w`, `2d3w`), and `x s D C Y S % * ; , ZZ` mean what
+vim means. It is a translation, not a second editor — the motions underneath
+stay this editor's, and the manual lists key by key what it costs a helix hand.
+`[keys.normal]` also binds any key to a **named action** (`x =
+"delete_selection"`) or to a `:command`.
+
 Twenty-odd commands is past the point where they can be guessed, so `:` on its
 own lists them in aligned columns with a line each, narrowing as you type; `::`
 searches those descriptions **in Chinese** when you have forgotten the name. A
@@ -159,6 +169,20 @@ and an **outline** built from Markdown headings or Typst's own (following
 search panel (`空格 /`) finds a name across the whole project and `:replace`
 renames it everywhere — **nothing touches disk until `:write-all`**. `空格 w`
 splits the work area in two.
+
+### A wiki for the book you are writing
+
+`.yumete/wiki.md` holds what a long novel cannot keep in one head: a heading per
+name — a person, a place, a sect — and a few lines under it. Those names are
+handed to the **segmenter**, so they are one word to `w` and `b`, and they are
+**marked in the prose** (gold, or a dotted line and a quiet ground: `:wiki
+hide|color|line`). Stand on one and its entry floats beside the caret; `gd` or
+`gf` opens the file it is written in, at its heading. `:wiki panel` puts the
+entry in the sidebar instead — the float and the panel are never both up.
+
+One wiki can `include` others, so a series shares a dictionary, and `:wiki`
+reports every file it reached for and what each one gave — a wiki that quietly
+ignores half of itself would be worse than one that fails.
 
 ### Reading your own manuscript back
 
@@ -206,6 +230,12 @@ aligned by East-Asian display width — the thing every other formatter gets
 wrong for Chinese — and every table on the page is squared up on screen without
 touching the file.
 
+On a **vertical** page a table is turned a quarter turn clockwise — the header
+row becomes the rightmost 縱, a column becomes a band down it, the walls turn
+with it — and locked read-only, because a grid is read *across* and that is the
+one thing 縱書 cannot do. `t t` opens the editable view, which turns the page
+flat while you are in it.
+
 ### Not losing work
 
 While a document has unsaved changes a copy is kept beside it
@@ -219,7 +249,19 @@ refuses the edit at the rope, not at the keybinding.
 
 ### The rest of it
 
-One binary — about 8 MB, no runtime, no plugins to install; `--timing` breaks a
+The cell between the line number and the writing says what **git** thinks of
+each line: green for added, blue for changed, a thin red edge where lines were
+cut out. It is compared against `HEAD` and worked out 300 ms after you stop
+typing, so it follows the buffer rather than the file on disk, and it costs no
+`git` at all while the keys are moving. Fenced code is coloured by its own
+grammar (tree-sitter, nine languages including Rust and Go), and a `.rs`, `.go`
+or `.py` file is coloured from top to bottom.
+
+On macOS the system input method **steps aside** while Normal mode holds the
+keys, and comes back for Insert — `h j k l` are commands there, and an input
+method that does not know it eats them.
+
+One binary — about 15 MB, no runtime, no plugins to install; `--timing` breaks a
 launch down phase by phase and it comes to 20–35 ms here, with the language data
 read after the first frame rather than before it. (A build on a machine that has
 宇浩 installed is larger: it carries that machine's full 碼表 instead of the cut
