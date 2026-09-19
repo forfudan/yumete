@@ -4683,6 +4683,33 @@ fn a_vertical_table_is_measured_against_the_zong_on_the_screen() {
     assert_eq!(depth(42), depth(43), "the rows agree with each other too");
 }
 
+/// 2026-09-19，同一族的第二個：**窗口塌成一行**。`measured_window` 的第一支算的是
+/// `[top, top + 一屏]`，而表格在 `top + 一屏` **下面**的時候，那一段與表格的交集只剩
+/// `first` 一行——偏偏被問到的就是 `first`（表頭）那一行，於是它被拿自己量了一遍、
+/// 自己跟自己對齊，而它下面每一行都是跟彼此對齊的。畫出來就是「表頭和表身對不上」。
+#[test]
+fn a_table_below_the_window_is_not_measured_against_itself_alone() {
+    let mut text = String::new();
+    for i in 0..40 {
+        text.push_str(&format!("第{i}段閒話。\n"));
+    }
+    text.push_str("|甲|乙|\n|---|---|\n|一二三|四|\n|五|六七八|\n");
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text(&text));
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+    ed.set_layout(Layout::Vertical);
+    // 一屏 30 縱，表格在第 40 行起——`0 + 30` 夠不到它。
+    ed.set_page(24, 30);
+    ed.set_page_top(0);
+
+    let depth = |line: usize| {
+        ed.line_text(line).unwrap_or_default().trim_end().chars().count()
+            + ed.drawn_on_line(line).iter().map(|(_, text)| text.chars().count()).sum::<usize>()
+    };
+    assert_eq!(depth(40), depth(42), "表頭 {:?} 對表身 {:?}", ed.drawn_on_line(40), ed.drawn_on_line(42));
+    assert_eq!(depth(42), depth(43));
+}
+
 /// #212: the two settings that mean "draw me the file".
 #[test]
 fn the_padding_goes_away_when_the_page_is_the_file() {
