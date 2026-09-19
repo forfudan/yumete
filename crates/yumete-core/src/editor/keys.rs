@@ -612,7 +612,7 @@ impl Editor {
                     self.count = Some(n);
                 }
             }
-            self.on_key(Key::Char(c));
+            self.on_key(pressed(c));
             at += 1;
         }
         self.expanding_alias = outer;
@@ -2048,5 +2048,22 @@ impl Editor {
             Key::Char('P') => self.clipboard_paste(false),
             _ => {}
         }
+    }
+}
+
+/// **The key a played character stands for** — the other half of
+/// [`yumete_cjk::actions::spell`], which prints these for `:keymap`.
+///
+/// A key sequence is written as a string (`"gJ"`, `"dw"`), and a chord has no
+/// letter of its own, so the table spells it as the control byte it is:
+/// `"\u{f}"` is `C-o`, `"\u{1b}"` is Esc. Played as `Key::Char`, those reached
+/// the editor as nothing at all — which is why four named actions
+/// (`jump_backward`, `collapse_selection`, `increment`, `decrement`) were
+/// listed by `:keymap actions`, bindable, and **dead** until 2026-09-19.
+fn pressed(c: char) -> Key {
+    match c {
+        '\u{1b}' => Key::Esc,
+        c if (c as u32) < 32 => Key::Ctrl((b'a' + c as u8 - 1) as char),
+        c => Key::Char(c),
     }
 }

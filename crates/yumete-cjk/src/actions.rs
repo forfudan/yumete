@@ -63,6 +63,22 @@ pub fn action(name: &str) -> Option<&'static Action> {
     ALL.iter().find(|a| a.name == name)
 }
 
+/// **A right-hand side that meant an action and misspelt it** (#429).
+///
+/// Keys are the fallback, so `x = "delete_slection"` would be *pressed* —
+/// d, e, l, e, t, e… straight into the manuscript. Nothing the editor binds to
+/// a key is spelled with an underscore, so an underscore means a name was
+/// meant, and an unknown one is a typo rather than a key sequence.
+///
+/// ⚠️ **One function, because two answers would drift.** The config says this
+/// out loud when it is read and **drops the binding** on the same test; they
+/// were two copies of the condition until 2026-09-19, and only one of them had
+/// teeth — the warning was printed and the binding installed anyway.
+/// A `:command` is not a name and never a typo of one.
+pub fn misspelt(bound: &str) -> bool {
+    !bound.starts_with(':') && bound.contains('_') && action(bound).is_none()
+}
+
 const fn keys(name: &'static str, help: &'static str, k: &'static str) -> Action {
     Action { name, help, how: How::Keys(k) }
 }
@@ -101,7 +117,7 @@ pub const ALL: &[Action] = &[
     keys("goto_next_paragraph", "action.goto-next-paragraph", "gj"),
     keys("half_page_down", "action.half-page-down", "J"),
     keys("half_page_up", "action.half-page-up", "K"),
-    keys("jump_backward", "action.jump-backward", "\u{11}"),
+    keys("jump_backward", "action.jump-backward", "\u{f}"),
     // ---- Selecting ------------------------------------------------------
     keys("extend_mode", "action.extend-mode", "v"),
     keys("select_line", "action.select-line", "x"),

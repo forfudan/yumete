@@ -10514,6 +10514,34 @@ fn a_binding_takes_an_action_name_or_a_command_or_keys() {
     }
 }
 
+/// **An action whose key is a chord is carried out, not dropped** (2026-09-19,
+/// caught in review). A chord has no letter of its own, so the table spells it
+/// as the control byte it is (`"\u{1b}"` is Esc, `"\u{1}"` is `C-a`) — and the
+/// player sent every character as `Key::Char`, which the editor answers with
+/// nothing. Four named actions were listed by `:keymap actions`, bindable, and
+/// dead: binding a key to `increment` simply did nothing.
+#[test]
+fn an_action_bound_to_a_chord_is_really_pressed() {
+    let mut ed = typed("第 7 章");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("q".to_string(), "increment".to_string());
+    aliases.insert("Q".to_string(), "decrement".to_string());
+    aliases.insert("z".to_string(), "collapse_selection".to_string());
+    ed.set_key_aliases(aliases);
+
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.current_buffer().text(), "第 8 章", "increment did nothing");
+    ed.on_key(Key::Char('Q'));
+    ed.on_key(Key::Char('Q'));
+    assert_eq!(ed.current_buffer().text(), "第 6 章", "decrement did nothing");
+
+    // …and the one that is Esc rather than a `C-` chord.
+    ed.on_key(Key::Char('x'));
+    assert!(ed.span().1 > ed.span().0, "x selected nothing to collapse");
+    ed.on_key(Key::Char('z'));
+    assert_eq!(ed.span().0, ed.span().1, "collapse_selection did nothing");
+}
+
 #[test]
 fn an_unbound_key_says_what_this_editor_calls_it() {
     // The first minute in any editor is spent pressing exactly these, and
