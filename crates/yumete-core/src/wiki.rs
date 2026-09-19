@@ -83,13 +83,25 @@ impl Wiki {
             let Some(path) = found(root) else { continue };
             // Includes stay under the directory holding `.yumete/` — or, for
             // the global wiki, the directory it is kept in.
+            // ⚠️ **Canonicalise the wiki's own path first** (2026-09-19,
+            // caught in review). The bound is 「the directory holding
+            // `.yumete/`」, taken as two parents up — and when the book was
+            // opened by a *relative* path (`yumete ch.md`, which is how one is
+            // usually opened) that is the empty path, `canonicalize("")` fails,
+            // and `Path::starts_with("")` is true of everything. The same file
+            // opened by an absolute path refused an include pointing out of the
+            // book; opened by a relative one it read it. One of those two
+            // answers had to be wrong, and it was the permissive one.
+            //
+            // An empty bound now **refuses everything** rather than admitting
+            // it: a sandbox that cannot say where its wall is has no wall.
+            let here = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
             let bound = match is_global {
-                false => path.parent().and_then(Path::parent),
-                true => path.parent(),
+                false => here.parent().and_then(Path::parent),
+                true => here.parent(),
             }
             .map(Path::to_path_buf)
             .unwrap_or_default();
-            let bound = std::fs::canonicalize(&bound).unwrap_or(bound);
             let mut reader = Reader { bound, seen: HashSet::new(), sources: Vec::new(), lines: Vec::new() };
             reader.read(&path, 0);
             let before = wiki.entries.len();
@@ -204,7 +216,7 @@ impl Reader {
                 }
             },
         };
-        if !resolved.starts_with(&self.bound) {
+        if self.bound.as_os_str().is_empty() || !resolved.starts_with(&self.bound) {
             self.sources.push(refused());
             return;
         }

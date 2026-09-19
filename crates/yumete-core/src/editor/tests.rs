@@ -1954,15 +1954,18 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     press(&mut ed, "gJ");
     assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n", "選三行合成一行");
 
+    // **數字說的是「幾行併成一行」**（作者 2026-09-19 定），vi 的規矩：`3J`
+    // 把三行焊成一行，也就是兩次併。從前兩種寫法差一個——`g3J` 數併的次數，
+    // `4gJ` 數行——而手冊說它們是同一件事。
     // 二、`g3J`——本編輯器定的順序（命令＋選擇＋動作）。
     let mut ed = typed(five);
     press(&mut ed, "g3J");
-    assert_eq!(ed.current_buffer().text(), "一二三四\n五\n");
+    assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n");
 
-    // 三、`4gJ`——vi 的順序，數字在命令前面。
+    // 三、`4gJ`——vi 的順序，數字在命令前面。同樣是「四行併成一行」。
     let mut ed = typed(five);
     press(&mut ed, "4gJ");
-    assert_eq!(ed.current_buffer().text(), "一二三四五\n");
+    assert_eq!(ed.current_buffer().text(), "一二三四\n五\n");
 
     // 不給數字也不選：還是「和下一行合併」。
     let mut ed = typed(five);
@@ -1973,7 +1976,7 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     let mut ed = typed(five);
     ed.goto_line(3);
     press(&mut ed, "g2K");
-    assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n", "{}", ed.current_buffer().text());
+    assert_eq!(ed.current_buffer().text(), "一\n二三\n四\n五\n", "{}", ed.current_buffer().text());
 }
 
 #[test]
