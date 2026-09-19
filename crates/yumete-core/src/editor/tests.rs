@@ -14754,6 +14754,35 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A long entry costs what the panel draws, not what the entry is**
+/// (2026-09-19). `wiki_here` runs every frame the cursor stands on a name, and
+/// an entry may be a chapter: building the whole of it — and handing the whole
+/// of it to a panel that then wraps it all and keeps a dozen rows — was 10 ms a
+/// frame at 5000 lines and 30 ms at 20000, measured.
+#[test]
+fn a_long_wiki_entry_is_only_read_as_far_as_the_panel_can_draw() {
+    let dir = std::env::temp_dir().join(format!("yumete-wiki-long-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    let body: String = (0..5000).map(|i| format!("第{i}句。\n")).collect();
+    std::fs::write(dir.join(".yumete/wiki.md"), format!("# 地理\n## 真境\n{body}")).unwrap();
+    std::fs::write(dir.join("第一章.md"), "真境在那裏。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.reload_project_words();
+
+    let view = ed.wiki_floating().expect("standing on 真境");
+    let some = view.body_prose(30);
+    assert_eq!(some.lines().count(), 30, "asked for 30 lines of it");
+    assert!(some.starts_with("第0句。"), "from the top: {:?}", &some[..12.min(some.len())]);
+    assert!(!some.contains("第30句。"), "and no further");
+    // The whole of it is still there for anything that really wants it — and
+    // the cap is a cap, not a floor: a short entry is not padded out to it.
+    assert_eq!(view.as_prose().lines().count(), 5001, "地理 › 真境 and 5000 lines");
+    assert_eq!(view.body_prose(30_000).lines().count(), 5000);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// 作品百科, third part (#287): the names are marked where the segmenter cut
 /// them, in three modes, and never inside a fence.
 #[test]
