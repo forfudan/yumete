@@ -130,25 +130,37 @@ impl Editor {
                 crate::markdown::hidden(&spans, self.selected_columns(line))
             }
         };
-        hidden.extend(self.table_cushions_off_the_page(line));
+        hidden.extend(self.table_slack_off_the_page(line));
         hidden.sort_by_key(|&(from, _)| from);
         hidden
     }
 
-    /// **The space either side of a `|`, off a 竪排 page** (作者 2026-09-19:
-    /// 「表格的單元格寬度有問題，不夠 compact」).
+    /// **A table cell's own padding, off a 竪排 page** (作者 2026-09-19:
+    /// 「表格的單元格寬度有問題，不夠 compact」／「表頭沒對齊」).
     ///
-    /// A cell is written `| 級別 |` and those two spaces are worth having
-    /// 橫排: they cost one 漢字 of width between two columns and they are what
-    /// keeps the text off the wall. Stood on end they cost a **row each**, and
-    /// a four-column table spends eight rows of the page on nothing at all —
-    /// with the wall itself broken into dashes where they fall, which is what
-    /// 「標題欄的分割綫沒有對齊」 was.
+    /// Two kinds of space live between a wall and the writing, and 竪排 can
+    /// afford neither:
     ///
-    /// The `|` stays: it is the character the band rule is drawn from. Only
-    /// its cushions go, and only where the page is turned — 橫排 keeps them,
-    /// and hiding them there is the table view's own business (`t f`).
-    fn table_cushions_off_the_page(&self, line: usize) -> Vec<(usize, usize)> {
+    /// - **The cushions** a cell is written with (`| 級別 |`). 橫排 they cost
+    ///   one 漢字 of width and keep the text off the wall; stood on end they
+    ///   cost a **row each**, and a four-column table spends eight rows of the
+    ///   page on nothing.
+    /// - **The padding the file itself carries.** A table squared up in the
+    ///   file — which is what this editor writes — has runs of spaces inside
+    ///   its cells, and those were measured in **cells**. A 縱 counts 字: six
+    ///   spaces after 「級別」 are six rows, while the 「總監察」 under it has
+    ///   four, so the bands drift apart and the header ends up beside the
+    ///   wrong one. That is 「表頭沒對齊」, and it only shows on a file that
+    ///   has been squared up — a hand-typed table looks fine.
+    ///
+    /// What replaces both is the padding this page works out for itself, in
+    /// slots ([`crate::mdtable::Measure`]). The `|` stays: it is the character
+    /// the band rule is drawn from.
+    ///
+    /// The rule row keeps **one** dash (and its `:` markers) for the same
+    /// reason: its dashes were counted in cells too, and the wall is re-filled
+    /// to the band's depth by the same padding as everything else.
+    pub(super) fn table_slack_off_the_page(&self, line: usize) -> Vec<(usize, usize)> {
         if self.layout() != crate::zong::Layout::Vertical || !self.table_padding_on() {
             return Vec::new();
         }
@@ -158,18 +170,34 @@ impl Editor {
         if !crate::mdtable::is_row(&text) {
             return Vec::new();
         }
-        let chars: Vec<char> = text.chars().collect();
+        let chars: Vec<char> = text.trim_end_matches(['\n', '\r']).chars().collect();
+        let ruled = crate::mdtable::rule_of(&text).is_some();
         let mut off = Vec::new();
-        for at in crate::mdtable::pipes_from(&text, false) {
-            if at > 0 && chars.get(at - 1) == Some(&' ') {
-                off.push((at - 1, at));
+        for ((start, end), (from, to)) in
+            crate::mdtable::boxes(&text).into_iter().zip(crate::mdtable::cells(&text))
+        {
+            let end = end.min(chars.len());
+            let (from, to) = (from.min(end), to.min(end));
+            if start < from {
+                off.push((start, from));
             }
-            if chars.get(at + 1) == Some(&' ') {
-                off.push((at + 1, at + 2));
+            if to < end {
+                off.push((to, end));
+            }
+            if ruled && to > from {
+                // 「:---:」 keeps its markers and one dash; the rest is ours to
+                // re-fill, at the depth the band really is.
+                let lead = from + usize::from(chars.get(from) == Some(&':'));
+                let trail = to - usize::from(to > from && chars.get(to - 1) == Some(&':'));
+                if lead + 1 < trail {
+                    off.push((lead + 1, trail));
+                }
             }
         }
+        off.sort_unstable();
         off
     }
+
 
     /// Whether `line` is left off the page altogether (Feature #159).
     ///
