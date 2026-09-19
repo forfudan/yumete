@@ -297,6 +297,56 @@ pub struct EditorConfig {
     pub sidebar_width: usize,
 }
 
+/// **The screenshot command this machine can actually run** (2026-09-19).
+///
+/// macOS has one program and always has it. On Linux 「screenshot」 is
+/// Wayland's, X11's, or the desktop's own, and which of those is installed
+/// cannot be known when the binary is built — so the list is walked at start-up
+/// and the first one that is on `PATH` wins. The manual has promised this
+/// since the feature was written; until today the code said 「no screenshot
+/// command on this platform」 on every Linux there is.
+///
+/// ⚠️ **`${YUMETE_SHOT:?}` and not `:-`**: none of these programs can put a
+/// picture on the clipboard, so `:shot` with no path has to **fail and say so**
+/// rather than look as though it copied one. `sh` prints the name and exits
+/// non-zero, which is exactly the report wanted.
+///
+/// ⚠️ **The whole screen, not the window.** X11 needs `xdotool` to be told
+/// where a window is and Wayland will not say at all; `:shot html` is the way
+/// to get exactly one page.
+fn screenshot_command() -> String {
+    if cfg!(target_os = "macos") {
+        return "b=$(osascript -e 'tell application \"System Events\" to tell                      (first application process whose frontmost is true) to get                      {position, size} of front window' | tr -d ' ') &&                      screencapture -x -o -R\"$b\" \"${YUMETE_SHOT:--c}\""
+            .to_string();
+    }
+    if !cfg!(target_os = "linux") {
+        return String::new();
+    }
+    const TOOLS: &[(&str, &str)] = &[
+        // Wayland
+        ("grim", "grim \"${YUMETE_SHOT:?}\""),
+        // X11
+        ("maim", "maim \"${YUMETE_SHOT:?}\""),
+        ("scrot", "scrot -o \"${YUMETE_SHOT:?}\""),
+        ("import", "import -window root \"${YUMETE_SHOT:?}\""),
+        // the desktops' own
+        ("gnome-screenshot", "gnome-screenshot -f \"${YUMETE_SHOT:?}\""),
+        ("spectacle", "spectacle -b -n -o \"${YUMETE_SHOT:?}\""),
+    ];
+    first_installed(TOOLS).unwrap_or_default()
+}
+
+/// The command of the first `(program, command)` pair whose program is on
+/// `PATH` — split out so the list can be tested on a machine that has none of
+/// them (this one is a Mac).
+fn first_installed(tools: &[(&str, &str)]) -> Option<String> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    tools
+        .iter()
+        .find(|(name, _)| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()))
+        .map(|(_, command)| command.to_string())
+}
+
 impl Default for EditorConfig {
     fn default() -> Self {
         EditorConfig {
@@ -307,11 +357,7 @@ impl Default for EditorConfig {
             scrolloff: 3,
             wheel_step: 3,
             line_number_fill: false,
-            screenshot: match cfg!(target_os = "macos") {
-                true => "b=$(osascript -e 'tell application \"System Events\" to tell                      (first application process whose frontmost is true) to get                      {position, size} of front window' | tr -d ' ') &&                      screencapture -x -o -R\"$b\" \"${YUMETE_SHOT:--c}\""
-                    .to_string(),
-                false => String::new(),
-            },
+            screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
@@ -3442,5 +3488,39 @@ mod tests {
             "~notyou/tables",
             "only the writer's own `~` is a home; `~user` is somebody else's"
         );
+    }
+}
+
+#[cfg(test)]
+mod screenshot_tests {
+    /// 2026-09-19: the manual promised this probe since the feature was
+    /// written and the code never had it — on Linux `:shot` answered 「no
+    /// screenshot command on this platform」 whatever was installed.
+    #[test]
+    fn the_first_program_that_is_installed_wins() {
+        let dir = std::env::temp_dir().join(format!("yumete-shot-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let was = std::env::var_os("PATH");
+        // ⚠️ The whole test holds the process's `PATH`, so it may not run
+        // beside another that reads it — this crate's tests are one binary and
+        // nothing else here touches the environment.
+        std::env::set_var("PATH", &dir);
+
+        let tools = [("no-such-thing-a", "A"), ("no-such-thing-b", "B")];
+        assert_eq!(super::first_installed(&tools), None, "none of them is installed");
+
+        std::fs::write(dir.join("no-such-thing-b"), "").unwrap();
+        assert_eq!(super::first_installed(&tools).as_deref(), Some("B"), "the one that is");
+
+        // …and the order is the list's, not the directory's.
+        std::fs::write(dir.join("no-such-thing-a"), "").unwrap();
+        assert_eq!(super::first_installed(&tools).as_deref(), Some("A"), "first in the list");
+
+        match was {
+            Some(path) => std::env::set_var("PATH", path),
+            None => std::env::remove_var("PATH"),
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
