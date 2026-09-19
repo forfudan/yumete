@@ -18,8 +18,9 @@ the reasoning, and the feature roadmap.
 ## Status
 
 A working editor, used daily by its author, and not finished. **v0.2.0** is the
-current release; build it from source for now (below) — `brew install
-forfudan/tap/yumete` is still to come. What is done, planned and dropped is
+current release: `brew install forfudan/tap/yumete`, or a tarball from the
+[releases page](https://github.com/forfudan/yumete/releases), or build it from
+source (below). What is done, planned and dropped is
 tracked feature by feature in [`docs/development.md`](docs/development.md) §5,
 and what each release changed is in [CHANGELOG.md](CHANGELOG.md).
 

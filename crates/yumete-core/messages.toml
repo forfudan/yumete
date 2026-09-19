@@ -5940,6 +5940,13 @@ en = "inline note: type inside the brackets"
 # ── menu ──────────────────────────────────────────────────────────────
 
 [[message]]
+# 半按着的前綴鍵（`空格`、`g`…）畫出來的鍵表，在這個終端上高與寬都排不下時，最後一格說還剩幾個沒畫
+key = "menu.more"
+zht = "還有 {0} 個"
+zhs = "还有 {0} 个"
+en = "{0} more"
+
+[[message]]
 # 貼上選單的標題
 key = "menu.paste.title"
 zht = "粘貼：取過的東西"
