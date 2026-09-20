@@ -389,6 +389,29 @@ pub enum Motion {
     WordBack(Grain),
     /// `f` / `F` — to a character, **on this line only**.
     Find { forward: bool, target: char },
+    /// `gg` — the first character of the buffer.
+    FileStart,
+    /// `ge` — the last.
+    FileEnd,
+    /// `gh` — the first column of this line.
+    LineStart,
+    /// `gl` — its last character (not the newline).
+    LineEnd,
+    /// `gs` — the first thing on it that is not blank.
+    LineFirstNonBlank,
+}
+
+impl Span {
+    /// Where the motion ended up — the caret reading of a span.
+    ///
+    /// ⚠️ **`Missed` has no head.** The one thing a verb may not do with a
+    /// motion that found nothing is act as though it landed somewhere.
+    pub fn head(self) -> Option<usize> {
+        match self {
+            Span::Over { head, .. } => Some(head),
+            Span::Missed => None,
+        }
+    }
 }
 
 /// **`f` / `F`, as a span** (B1) — the character on this line, and nothing

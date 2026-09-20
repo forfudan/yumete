@@ -1586,13 +1586,26 @@ impl Editor {
         if matches!(key, Key::Char('g') | Key::Char('e')) {
             self.remember_jump();
         }
-        let rope = self.current_buffer().rope();
-        let pos = match key {
-            Key::Char('g') => motion::buffer_start(rope, self.cursor),
-            Key::Char('e') => motion::buffer_end(rope, self.cursor),
-            Key::Char('h') => motion::line_start(rope, self.cursor),
-            Key::Char('l') => motion::line_last(rope, self.cursor),
-            Key::Char('s') => motion::line_first_non_blank(rope, self.cursor),
+        // **Five of these are motions now** (B1, 2026-09-20) — named, so the
+        // vim grammar can ask for the same five without anybody replaying `g`
+        // and then a letter. The consumer is unchanged: a goto **collapses**
+        // (`move_head`), which is exactly the reading `jump_to` wraps.
+        let go = |e: &mut Self, what: motion::Motion| {
+            let span = e.run_motion(what);
+            e.jump_to(span);
+        };
+        match key {
+            Key::Char('g') => return go(self, motion::Motion::FileStart),
+            Key::Char('e') => return go(self, motion::Motion::FileEnd),
+            Key::Char('h') => return go(self, motion::Motion::LineStart),
+            Key::Char('l') => return go(self, motion::Motion::LineEnd),
+            Key::Char('s') => return go(self, motion::Motion::LineFirstNonBlank),
+            _ => {}
+        }
+        // What is left here either edits (`gJ`, `gK`) or goes somewhere that is
+        // not a motion of the page (a file, a definition, the other pane), so
+        // every arm answers for itself.
+        match key {
             // Joining lines, which vi also spells `gJ`.
             // Joining two lines of a grid makes one row with twice the fields
             // — the one thing table mode promises cannot happen. It went
@@ -1692,9 +1705,8 @@ impl Editor {
                 self.definition_preview = true;
                 return self.search_the_page();
             }
-            _ => return,
-        };
-        self.move_head(pos);
+            _ => {}
+        }
     }
 
     /// The keys `Space` opens, and what each of them is for — the list the
