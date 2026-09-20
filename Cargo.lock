@@ -1045,6 +1045,7 @@ dependencies = [
  "regex",
  "ropey",
  "serde",
+ "serde_json",
  "streaming-iterator",
  "toml",
  "tree-sitter",

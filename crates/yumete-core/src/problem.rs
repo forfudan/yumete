@@ -52,16 +52,45 @@ impl Severity {
 /// One thing a server said about one place.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem {
-    /// Where it starts, in **characters** — never LSP's UTF-16 units. The
-    /// front end converts on the way in; nothing downstream should ever see
-    /// the other coordinate system. ⚠️ Getting this wrong puts every mark in a
-    /// Chinese file in the wrong column, and silently.
+    /// Which line, 0 起算 — the one number both sides count the same way.
     pub line: usize,
-    pub column: usize,
+    /// Where it starts **in UTF-16 code units**, exactly as the server said
+    /// it.
+    ///
+    /// ⚠️ **The name is the whole point.** LSP counts in UTF-16, which for
+    /// ASCII agrees with bytes and with characters — so a field called
+    /// `column` would be right in every English test and wrong down the whole
+    /// length of a Chinese line, silently. Turning it into a character offset
+    /// needs **that line's text** ([`char_column`]), and the text is exactly
+    /// what a complaint about an unopened file does not come with. So it is
+    /// carried as what it is, and converted where there is something to
+    /// convert it against.
+    pub utf16_column: usize,
     pub severity: Severity,
     pub message: String,
     /// Which server said it (`rust-analyzer`, `gopls`), when it says.
     pub source: Option<String>,
+}
+
+/// **A UTF-16 offset into `line`, as a character offset.**
+///
+/// This is the one place the two coordinate systems meet, and it needs the
+/// text because that is the only thing that knows which characters are wide:
+/// every character outside the Basic Multilingual Plane — 𝄞, an emoji, a rare
+/// 漢字 like 𠀀 — counts as **two** in UTF-16 and one here.
+///
+/// A number past the end of the line comes back as the end of the line: a
+/// server counting against a version of the file we have already changed is an
+/// everyday event, not an error.
+pub fn char_column(line: &str, utf16: usize) -> usize {
+    let mut seen = 0;
+    for (chars, c) in line.chars().enumerate() {
+        if seen >= utf16 {
+            return chars;
+        }
+        seen += c.len_utf16();
+    }
+    line.chars().count()
 }
 
 /// Every server's complaints, by the file they are about.
@@ -77,7 +106,7 @@ impl Problems {
     /// about a file each time it arrives; merging would leave a fixed error on
     /// the page for as long as the session lasted.
     pub fn set(&mut self, path: PathBuf, mut said: Vec<Problem>) {
-        said.sort_by_key(|p| (p.line, p.column));
+        said.sort_by_key(|p| (p.line, p.utf16_column));
         match said.is_empty() {
             true => {
                 self.by_file.remove(&path);
@@ -124,7 +153,7 @@ mod tests {
     use super::*;
 
     fn at(line: usize, severity: Severity) -> Problem {
-        Problem { line, column: 0, severity, message: "…".into(), source: None }
+        Problem { line, utf16_column: 0, severity, message: "…".into(), source: None }
     }
 
     #[test]
@@ -151,6 +180,23 @@ mod tests {
         assert_eq!(all.files().len(), 0);
     }
 
+    /// ⚠️ **UTF-16 is not characters**, and the difference only shows on
+    /// exactly the text this editor is for.
+    #[test]
+    fn a_utf16_offset_becomes_a_character_offset_against_the_line() {
+        // 漢字 are one UTF-16 unit each (BMP), so these agree…
+        assert_eq!(char_column("第一章：開始", 3), 3);
+        // …but a character outside the BMP is two units, and after it every
+        // number is one out. 𠀀 is U+20000.
+        assert_eq!(char_column("𠀀甲乙", 0), 0);
+        assert_eq!(char_column("𠀀甲乙", 2), 1, "the 甲 is the second character");
+        assert_eq!(char_column("𠀀甲乙", 3), 2);
+        // Plain English is the case where the bug hides.
+        assert_eq!(char_column("let x = 1;", 4), 4);
+        // Past the end is the end: the server counted against an older file.
+        assert_eq!(char_column("ab", 99), 2);
+    }
+
     #[test]
     fn complaints_come_back_in_reading_order() {
         let mut all = Problems::default();
@@ -158,12 +204,12 @@ mod tests {
         all.set(
             file.clone(),
             vec![
-                Problem { line: 9, column: 2, ..at(9, Severity::Warn) },
-                Problem { line: 1, column: 7, ..at(1, Severity::Warn) },
-                Problem { line: 1, column: 2, ..at(1, Severity::Warn) },
+                Problem { line: 9, utf16_column: 2, ..at(9, Severity::Warn) },
+                Problem { line: 1, utf16_column: 7, ..at(1, Severity::Warn) },
+                Problem { line: 1, utf16_column: 2, ..at(1, Severity::Warn) },
             ],
         );
-        let places: Vec<(usize, usize)> = all.of(&file).iter().map(|p| (p.line, p.column)).collect();
+        let places: Vec<(usize, usize)> = all.of(&file).iter().map(|p| (p.line, p.utf16_column)).collect();
         assert_eq!(places, [(1, 2), (1, 7), (9, 2)]);
     }
 }
