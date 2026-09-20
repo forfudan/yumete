@@ -348,12 +348,20 @@ impl Editor {
         };
         // Owned, because the listing that comes out of this is written back
         // into the editor the list was read from.
+        // ⚠️ **Short paths, or the listing is unreadable.** A server names
+        // files absolutely, and an absolute path in a temporary directory is
+        // ninety characters that wrap onto a second line — measured
+        // 2026-09-20, drawing the thing: four complaints filled a page and not
+        // one of them could be read at a glance. `gf` still finds them because
+        // [`Self::show_listing_under`] tells it which root they are under.
+        let root = self.project_root();
         let all: Vec<(String, usize, String, String)> = self
             .problems_listed()
             .into_iter()
             .map(|(path, said)| {
+                let short = path.strip_prefix(&root).unwrap_or(path);
                 (
-                    path.display().to_string(),
+                    short.display().to_string(),
                     said.line + 1,
                     loud(said.severity),
                     said.message.replace('\n', " "),
@@ -373,7 +381,7 @@ impl Editor {
             listing.push_str(&say!("problem.one", path, line, loud, message));
             listing.push('\n');
         }
-        self.show_listing(listing, say!("problem.results"));
+        self.show_listing_under(listing, say!("problem.results"), root);
         self.status = match n > LISTING_LIMIT {
             true => say!("problem.too-many", LISTING_LIMIT),
             false => say!("problem.found", n),
@@ -443,6 +451,18 @@ impl Editor {
     /// directory the file it was run on lives in.
     pub(super) fn show_listing(&mut self, listing: String, name: String) {
         self.show_listing_as(listing, name, None)
+    }
+
+    /// The same, for a listing whose paths are relative to **the project**
+    /// rather than to the file the reader was looking at.
+    ///
+    /// Every other listing is about one manuscript, so 「the directory that
+    /// file is in」 is the right root. `:check-code` is about a whole crate,
+    /// and a server names files three directories away — so the root is the
+    /// project's, and `gf` has to be told that or it looks in the wrong place.
+    pub(super) fn show_listing_under(&mut self, listing: String, name: String, root: PathBuf) {
+        self.show_listing_as(listing, name, None);
+        self.listing_root = Some(root);
     }
 
     /// The same, with a syntax of its own (#499).
