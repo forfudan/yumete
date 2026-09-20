@@ -1113,6 +1113,24 @@ pub fn draw(
         // written `a \| b` was cut in two: a band drawn through the middle of
         // it, and the rest of the row shifted off its bands.
         let walls = editor.table_walls_on_line(zong.line);
+        // **A block's ground is a rectangle, and it is laid before the
+        // writing** (2026-09-20). It used to be painted with each slot, and a
+        // slot exists only where there is writing — so a `::: tip` lost a step
+        // off its side wherever a 縱 was shorter than its neighbour, and a
+        // half-width glyph (hung right) left the other cell of its own 縱 bare.
+        // Horizontally the ground runs to the window's edge on every row of the
+        // block; turned, it runs to the foot of the page. The glyphs carry the
+        // same ground themselves, so drawing over this changes nothing.
+        if let Some(ground) = crate::block_style(markup.block(zong.line), ink) {
+            let foot = (text_top + metrics.zong_len as u16).min(area.y + area.height);
+            for y in text_top..foot {
+                for at in [x, x + 1] {
+                    if let Some(cell) = buf.cell_mut((at, y)) {
+                        cell.set_style(ground);
+                    }
+                }
+            }
+        }
         // Rows, not graphemes: a 縦中横 pair is one row holding two characters, a
         // ruby group is however many rows its reading needs, and the punctuation
         // is already rotated.

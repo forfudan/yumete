@@ -16196,6 +16196,58 @@ fn squeezed(text: &str) -> String {
         assert_eq!(centred, shoot("---"), "and the bands are the same depth");
     }
 
+    /// **A block's ground is a rectangle, not a staircase** (2026-09-20).
+    ///
+    /// The ground is painted with each slot, and a slot exists only where there
+    /// is writing — so a `::: tip` whose 縱 are of different lengths came out
+    /// with a step cut off its side. Horizontally the ground runs to the
+    /// window's edge on every row of the block; turned, it runs to the foot.
+    #[test]
+    fn a_callout_ground_is_a_rectangle_on_the_turned_page() {
+        // The cursor is left on the paragraph above: standing in the block
+        // it paints its own cell and that row would be two cells short.
+        let mut editor = editor_with("前面一段話。\n\n::: tip\n短。\n這一行長一些，字數不同。\n:::\n");
+        editor.execute(":layout vertical").unwrap();
+        let config = Config::default();
+        let ime = ImeSession::empty(Scheme::LINGMING);
+        let html = frame_to_html(&mut editor, &config, &ime, 30, 12);
+        let ink = crate::theme::Palette::of(&config);
+        let ground = block_style(
+            yumete_core::markdown::Block::Container(yumete_core::markdown::Callout::Tip),
+            ink,
+        )
+            .and_then(|s| s.bg)
+            .expect("a tip has a ground");
+        let hex = match ground {
+            ratatui::style::Color::Rgb(r, g, b) => format!("background:#{r:02X}{g:02X}{b:02X}"),
+            other => panic!("the ground is not an rgb colour: {other:?}"),
+        };
+        // How many cells of each row carry it.
+        let wide: Vec<usize> = html
+            .lines()
+            .map(|row| {
+                let mut n = 0;
+                let mut rest = row;
+                while let Some(at) = rest.find(&hex) {
+                    rest = &rest[at + hex.len()..];
+                    let (open, close) = (rest.find('>'), rest.find("</span>"));
+                    if let (Some(open), Some(close)) = (open, close) {
+                        // Cells, not characters: a 漢字 is one character
+                        // and two cells of ground.
+                        n += yumete_cjk::str_width(&rest[open + 1..close]);
+                    }
+                }
+                n
+            })
+            .filter(|&n| n > 0)
+            .collect();
+        assert!(wide.len() >= 4, "the block covers several rows: {wide:?}");
+        assert!(
+            wide.iter().all(|&n| n == wide[0]),
+            "every row of the block is the same width: {wide:?}"
+        );
+    }
+
     /// The three states (#290), and the two switches that reach them.
     ///
     /// **ABC and 關 are not the same state**, although the keyboard behaves
