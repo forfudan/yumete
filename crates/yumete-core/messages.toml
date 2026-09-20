@@ -6628,6 +6628,13 @@ zhs = "Enter 开找"
 en = "Enter to look"
 
 [[message]]
+# 搜索：模糊那一格——打的幾個字按順序出現、而且挨得近就算命中（`crate::nearby`）
+key = "search.fuzzy"
+zht = "模糊"
+zhs = "模糊"
+en = "loose"
+
+[[message]]
 # 限定一欄搜到第一處
 key = "search.hit-in-column"
 zht = "第 {0} 欄：第 1/{1} 處"

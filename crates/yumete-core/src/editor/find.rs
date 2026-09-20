@@ -48,6 +48,15 @@ impl Editor {
         // reader saying 「just looking」, and leaving the row up would leave
         // `r` and `R` live on a panel nobody meant to change anything with.
         self.search.replacing = replacing;
+        // ⚠️ **模糊 comes off when the panel starts changing things** (作者
+        // 2026-09-20). A loose match covers characters nobody typed, so
+        // 「replace them all」 would hand the manuscript a range the writer
+        // cannot predict. The switch is not even in the form while replacing
+        // (`Field::step`), and leaving the *flag* on would have made the list
+        // loose while the switch that says so was out of sight.
+        if replacing {
+            self.search.fuzzy = false;
+        }
         self.open_search();
     }
 
@@ -187,16 +196,29 @@ impl Editor {
             return;
         }
         let pattern = self.search_pattern();
-        let re = match regex::Regex::new(&pattern) {
-            Ok(re) => re,
-            Err(_) => {
-                // ⚠️ The hits stay, and are drawn quiet. Typing a regular
-                // expression walks through `[`, `(` and every other unfinished
-                // state; emptying the list on each of them flickers, and a
-                // blank list would say 「nothing found」, which is not true.
-                self.search.broken = true;
-                return;
-            }
+        let look = match self.search.fuzzy {
+            true => Look::Nearby {
+                needle: self.search.query.chars().collect(),
+                fold: match self.search.case {
+                    Case::Insensitive => true,
+                    Case::Sensitive => false,
+                    // The rule the page's own `/` follows: a capital is how
+                    // you ask for case to matter.
+                    Case::Smart => !self.search.query.chars().any(char::is_uppercase),
+                },
+            },
+            false => match regex::Regex::new(&pattern) {
+                Ok(re) => Look::Pattern(re),
+                Err(_) => {
+                    // ⚠️ The hits stay, and are drawn quiet. Typing a regular
+                    // expression walks through `[`, `(` and every other
+                    // unfinished state; emptying the list on each of them
+                    // flickers, and a blank list would say 「nothing found」,
+                    // which is not true.
+                    self.search.broken = true;
+                    return;
+                }
+            },
         };
         self.search.hits.clear();
         self.search.total = 0;
@@ -207,7 +229,16 @@ impl Editor {
         // One 「what am I looking for」 with two ways in: the highlight and
         // `n`/`N` are the same search, which is what [^415]记 `:grep` 不寫
         // `last_search` 為缺口的那條理由.
-        self.last_search = pattern;
+        // ⚠️ **模糊 does not hand the page a pattern it cannot keep.** `n`/`N`
+        // and `:s` run a regular expression, and there is no regular
+        // expression for 「these characters, nearly in a row」 — so what they
+        // are left with is the query *itself*, exactly. The panel lists the
+        // near misses; the page walks the exact ones, which are a subset of
+        // them, and neither is lying about the other.
+        self.last_search = match self.search.fuzzy {
+            true => regex::escape(&self.search.query),
+            false => pattern,
+        };
         let root = self.search_root();
         // ⚠️ **Compared as absolute paths.** A buffer opened as `a.md` and the
         // same file coming out of the walk as `/…/卷一/a.md` are one file, and
@@ -235,11 +266,9 @@ impl Editor {
         let mut at = 0usize;
         for line in 0..rope.len_lines() {
             let text: String = rope.line(line).chars().collect();
-            for (nth, m) in re.find_iter(&text).enumerate() {
+            for (nth, (start, stop)) in look.spans(&text).into_iter().enumerate() {
                 total += 1;
                 if hits.len() < MOST {
-                    let start = text[..m.start()].chars().count();
-                    let stop = text[..m.end()].chars().count();
                     hits.push(excerpt(mine.clone(), &text, at, start, stop, line, nth));
                 }
             }
@@ -278,11 +307,9 @@ impl Editor {
                 let shown = path.strip_prefix(&root).unwrap_or(&path).to_path_buf();
                 let mut at = 0usize;
                 for (line, text) in text.split_inclusive('\n').enumerate() {
-                    for (nth, m) in re.find_iter(text).enumerate() {
+                    for (nth, (start, stop)) in look.spans(text).into_iter().enumerate() {
                         total += 1;
                         if hits.len() < MOST {
-                            let start = text[..m.start()].chars().count();
-                            let stop = text[..m.end()].chars().count();
                             hits.push(excerpt(
                                 Some(shown.clone()),
                                 text,
@@ -434,13 +461,16 @@ impl Editor {
             // where a reader tries the space bar. Anywhere else in the form
             // 空格 is still the menu key it is everywhere else.
             Key::Char(' ')
-                if matches!(self.search.field, Field::Regex | Field::Case | Field::Whole) =>
+                if matches!(
+                    self.search.field,
+                    Field::Regex | Field::Case | Field::Whole | Field::Fuzzy
+                ) =>
             {
                 self.flip_switch()
             }
             Key::Enter => match self.search.field {
                 Field::Query | Field::Replace => self.mode = Mode::Field,
-                Field::Regex | Field::Case | Field::Whole => self.flip_switch(),
+                Field::Regex | Field::Case | Field::Whole | Field::Fuzzy => self.flip_switch(),
                 Field::Results => self.go_to_hit(),
             },
             // **`r` and `R` change things**, and only while the replace row
@@ -529,9 +559,20 @@ impl Editor {
     /// Flip whichever switch the keys are on, and search again.
     fn flip_switch(&mut self) {
         match self.search.field {
-            Field::Regex => self.search.regex = !self.search.regex,
+            // ⚠️ **正則／完整匹配 and 模糊 are alternatives, so asking for one
+            // puts the other down** rather than leaving a tick that does
+            // nothing. They are drawn quiet while 模糊 is on, and a dimmed
+            // switch that still flips would be saying two things at once.
+            Field::Regex => {
+                self.search.regex = !self.search.regex;
+                self.search.fuzzy &= !self.search.regex;
+            }
             Field::Case => self.search.case = self.search.case.next(),
-            Field::Whole => self.search.whole = !self.search.whole,
+            Field::Whole => {
+                self.search.whole = !self.search.whole;
+                self.search.fuzzy &= !self.search.whole;
+            }
+            Field::Fuzzy => self.search.fuzzy = !self.search.fuzzy,
             _ => return,
         }
         self.run_search();
@@ -804,5 +845,34 @@ fn excerpt(
         end: line_at + stop,
         mark: lead + (start - from)..lead + (stop - from),
         excerpt,
+    }
+}
+
+/// **What the panel is looking for** — a pattern, or 「nearly these characters」.
+///
+/// One type because the two passes over the prose (the buffer in memory, then
+/// the files on the disk) must ask the same question; they were two copies of
+/// a `find_iter` loop, and a second way to search would have made them two
+/// copies of a `match`.
+enum Look {
+    /// A regular expression, flags and all (`search_pattern`).
+    Pattern(Regex),
+    /// The 模糊 switch: [`crate::nearby`], which counts in characters.
+    Nearby { needle: Vec<char>, fold: bool },
+}
+
+impl Look {
+    /// Where it is found in one line, as **character** ranges within it.
+    fn spans(&self, text: &str) -> Vec<(usize, usize)> {
+        match self {
+            Look::Pattern(re) => re
+                .find_iter(text)
+                .map(|m| (text[..m.start()].chars().count(), text[..m.end()].chars().count()))
+                .collect(),
+            Look::Nearby { needle, fold } => {
+                let hay: Vec<char> = text.chars().collect();
+                crate::nearby::spans(&hay, needle, *fold)
+            }
+        }
     }
 }

@@ -225,6 +225,7 @@ fn main() -> ExitCode {
     );
     editor.set_autosave(config.editor.autosave);
     editor.set_smart_case(config.editor.smart_case);
+    editor.set_fuzzy_search(config.editor.fuzzy_search);
     editor.set_wheel_step(config.editor.wheel_step);
     // Which side each panel lives on (#293). A name or a word nobody knows is
     // skipped rather than guessed at — a typo here moves the whole page.

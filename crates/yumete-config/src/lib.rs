@@ -258,6 +258,14 @@ pub struct EditorConfig {
     /// names and initialisms, and typing the capital is how you ask for those
     /// to be matched exactly. `(?-i)` says it for one pattern.
     pub smart_case: bool,
+    /// **The 模糊 switch's starting position** in the search panel.
+    ///
+    /// 「差不多是這幾個字」 rather than a pattern (`yumete_core::nearby`). Off
+    /// out of the box: a search that finds more than you asked for has to be
+    /// asked for. The switch is on the panel, and this only says where it
+    /// starts — ⚠️ and never while the panel is replacing, where a loose range
+    /// would be replacing characters nobody typed.
+    pub fuzzy_search: bool,
     /// Whether the command line sits below the status line (#302).
     ///
     /// It costs one row of the window always — set vertically that is one 字
@@ -401,6 +409,7 @@ impl Default for EditorConfig {
             char_info: true,
             command_line: true,
             smart_case: true,
+            fuzzy_search: false,
             margin: Margin::Dense,
             paper_ticks: 0,
             tabs: Tabs::default(),
@@ -2403,6 +2412,7 @@ struct RawEditor {
     char_info: Option<bool>,
     command_line: Option<bool>,
     smart_case: Option<bool>,
+    fuzzy_search: Option<bool>,
     margin: Option<String>,
     tab_inserts: Option<String>,
     paper_ticks: Option<usize>,
@@ -2578,6 +2588,9 @@ impl RawConfig {
         }
         if other.editor.command_line.is_some() {
             self.editor.command_line = other.editor.command_line;
+        }
+        if other.editor.fuzzy_search.is_some() {
+            self.editor.fuzzy_search = other.editor.fuzzy_search;
         }
         if other.editor.smart_case.is_some() {
             self.editor.smart_case = other.editor.smart_case;
@@ -2819,6 +2832,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.command_line {
             config.editor.command_line = on;
+        }
+        if let Some(on) = self.editor.fuzzy_search {
+            config.editor.fuzzy_search = on;
         }
         if let Some(on) = self.editor.smart_case {
             config.editor.smart_case = on;
