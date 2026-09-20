@@ -469,7 +469,16 @@ impl Editor {
     /// The one implementation of both: `yanks` says whether the text taken out
     /// goes into the register on its way.
     fn cut_selection(&mut self, yanks: bool) {
-        let (start, end) = self.selection();
+        self.cut_range(self.selection(), yanks)
+    }
+
+    /// **The knife** — and since B2 (2026-09-20) it is handed the range rather
+    /// than reading the selection itself.
+    ///
+    /// That one parameter is the whole of what a second grammar needed: vim's
+    /// `dw` has no selection to read, only the span its motion just returned.
+    /// One knife, two grammars; `cut_selection` is helix passing its own.
+    fn cut_range(&mut self, (start, end): (usize, usize), yanks: bool) {
         if end > start {
             // Deleting yanks, as it does in Helix: `d` then `p` moves text.
             if self.cell_refuses_cut(start..end).is_some() {
@@ -656,14 +665,49 @@ impl Editor {
         }
     }
 
+    /// **Do `op` to `span`** — the one door every verb goes through (B2,
+    /// 2026-09-20).
+    ///
+    /// helix hands it the selection; vim (B3) will hand it whatever its motion
+    /// returned, without either of them knowing the other exists. ⚠️ A
+    /// [`motion::Span::Missed`] does **nothing** — not 「operate on an empty
+    /// range」, which is how a failed motion used to eat one character.
+    pub(super) fn apply(&mut self, op: motion::Operator, span: motion::Span) {
+        let motion::Span::Over { anchor, head } = span else { return };
+        // ⚠️ **A span is in the caret's coordinates, a range is not** — and the
+        // difference is one grapheme. `Span::Over { head }` names a cell the
+        // caret lands *on*; what a verb takes runs one grapheme past it,
+        // because the cursor's own grapheme is inside the selection in this
+        // editor (see `selection`). Passing the span through unchanged left
+        // the last character of every `d` behind — `f。d` and the 。 again,
+        // which is the bug `selection` exists to prevent.
+        //
+        // A span may also run either way (`b` selects backwards); a range does
+        // not.
+        let (start, last) = (anchor.min(head), anchor.max(head));
+        let range = (start, motion::next_grapheme(self.current_buffer().rope(), last));
+        match op {
+            motion::Operator::Delete => self.cut_range(range, false),
+            motion::Operator::Cut => self.cut_range(range, true),
+            motion::Operator::Change { cut } => {
+                self.cut_range(range, cut);
+                self.enter_insert();
+            }
+            motion::Operator::Yank => self.yank_range(range),
+        }
+    }
+
+    /// Copy a range into the register and say how much (`y`).
+    pub(super) fn yank_range(&mut self, (start, end): (usize, usize)) {
+        let text = self.current_buffer().rope().slice(start..end).to_string();
+        self.store(text);
+        self.status = say!("edit.yanked-characters", end - start);
+    }
+
     pub(super) fn yank(&mut self) {
         // No special case for a collapsed selection any more: there is no such
         // thing — the cursor's own grapheme is always in it.
-        let (start, end) = self.selection();
-        let text = self.current_buffer().rope().slice(start..end).to_string();
-        let n = end - start;
-        self.store(text);
-        self.status = say!("edit.yanked-characters", n);
+        self.yank_range(self.selection())
     }
 
     /// Paste the register after (`p`) or before (`P`) the selection, and select
