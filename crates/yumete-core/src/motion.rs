@@ -366,6 +366,29 @@ pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter)
     Span::Missed
 }
 
+/// **`e`, as a span** (B1) — and it sets **both** ends.
+///
+/// ⚠️ `select_to` would leave the anchor where the caret was, so standing on a
+/// word's last character gave 「that character ＋ the next word」, the
+/// punctuation between them riding along. The editor has set both ends since
+/// #304; this is that, as a value.
+///
+/// The grain is the caller's: the editor passes [`Grain::Coarse`] for `e`, so
+/// it runs to the next 標點 — `w` takes a word, `e` takes a clause.
+pub fn word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
+    let (anchor, head) = next_word_end(rope, pos, grain, seg);
+    Span::Over { anchor, head }
+}
+
+/// **`b`, as a span** (B1) — backwards, so the anchor is where the caret was
+/// and the head is behind it.
+///
+/// A span whose `head` is before its `anchor` is a backwards selection, which
+/// is what this editor has always made of `b`: it selects what it crosses.
+pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
+    Span::Over { anchor: pos, head: prev_word_start(rope, pos, grain, seg) }
+}
+
 /// The end (last character) of the next word after `pos` (`e` / `E`).
 pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> (usize, usize) {
     for line in line_of(rope, pos)..rope.len_lines() {

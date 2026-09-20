@@ -510,6 +510,24 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// **Take what a motion asked for** — the selection-first reading of a
+    /// [`motion::Span`], and the only one helix needs (B1, 2026-09-20).
+    ///
+    /// This is the half of the grammar layer that belongs to the editor: a
+    /// span says *where*, and this says what a selection-first editor does
+    /// with it — set both ends, clamp to what the page really draws, and leave
+    /// the anchor alone while extending. vim's reading (take one end, move the
+    /// caret, paint nothing) is the other consumer, and it is B3's.
+    ///
+    /// ⚠️ [`motion::Span::Missed`] does nothing at all — **not** a collapse.
+    /// A verb must be able to tell 「nothing there」 from 「a span of one」.
+    pub(super) fn take_span(&mut self, span: motion::Span) {
+        match span {
+            motion::Span::Over { anchor, head } => self.select_span(anchor, head),
+            motion::Span::Missed => {}
+        }
+    }
+
     /// Move the head to `pos`, selecting from the old position (unless already
     /// extending). Used by word and find motions that select what they cross.
     pub(super) fn select_to(&mut self, pos: usize) {
@@ -586,21 +604,10 @@ impl Editor {
         };
         // **The rule itself lives in `motion`** (B1, 2026-09-20): a motion is a
         // value now, so the one written here can be read by a second grammar
-        // without being replayed as keys. What this function keeps is what only
-        // an editor knows — the table's hidden columns, and whether the
-        // selection is being extended.
-        let (anchor, cursor) =
-            match motion::word_forward(rope, from, grain, self.segmenter.as_ref()) {
-                motion::Span::Over { anchor, head } => (anchor, head),
-                // Nothing further in the buffer.
-                motion::Span::Missed => return,
-            };
-        let cursor = self.past_what_a_table_keeps_off(cursor, cursor > self.cursor);
-        if !self.extend {
-            self.anchor = anchor;
-        }
-        self.cursor = cursor;
-        self.refresh_goal_column();
+        // without being replayed as keys. What is left here is the question
+        // only an editor can answer — which dictionary, and at what grain.
+        let span = motion::word_forward(rope, from, grain, self.segmenter.as_ref());
+        self.take_span(span);
     }
 
     /// Set the cursor, always collapsing the selection, and refresh the goal
