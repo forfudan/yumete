@@ -510,6 +510,28 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// **Run a motion and say where it reaches** (B1, 2026-09-20).
+    ///
+    /// The one place a [`motion::Motion`] becomes a [`motion::Span`]. It reads
+    /// the editor because a motion needs what only the editor holds — which
+    /// dictionary is loaded, and where the caret is — and it writes nothing:
+    /// what to *do* with the span is the grammar's, and today there is one
+    /// grammar ([`Self::take_span`]).
+    pub(super) fn run_motion(&self, what: motion::Motion) -> motion::Span {
+        let rope = self.current_buffer().rope();
+        let seg = self.segmenter.as_ref();
+        match what {
+            motion::Motion::WordForward(grain) => {
+                motion::word_forward(rope, self.cursor, grain, seg)
+            }
+            motion::Motion::WordEnd(grain) => motion::word_end(rope, self.cursor, grain, seg),
+            motion::Motion::WordBack(grain) => motion::word_back(rope, self.cursor, grain, seg),
+            motion::Motion::Find { forward, target } => {
+                motion::find_char(rope, self.cursor, forward, target)
+            }
+        }
+    }
+
     /// **Take what a motion asked for** — the selection-first reading of a
     /// [`motion::Span`], and the only one helix needs (B1, 2026-09-20).
     ///
@@ -596,17 +618,15 @@ impl Editor {
     /// this word cannot advance, `w` takes the next one instead — which is also
     /// what vi's `w` does.
     pub(super) fn select_word_forward(&mut self, big: bool) {
-        let rope = self.current_buffer().rope();
-        let from = self.cursor;
-        let grain = match big {
-            true => motion::Grain::Big,
-            false => self.word_grain(),
-        };
         // **The rule itself lives in `motion`** (B1, 2026-09-20): a motion is a
         // value now, so the one written here can be read by a second grammar
         // without being replayed as keys. What is left here is the question
         // only an editor can answer — which dictionary, and at what grain.
-        let span = motion::word_forward(rope, from, grain, self.segmenter.as_ref());
+        let grain = match big {
+            true => motion::Grain::Big,
+            false => self.word_grain(),
+        };
+        let span = self.run_motion(motion::Motion::WordForward(grain));
         self.take_span(span);
     }
 
