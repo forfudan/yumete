@@ -354,16 +354,36 @@ pub enum Span {
 /// `[pos, next_word_start)`. That is the whole of why the two feel different,
 /// and why a translation table could never say it.
 pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
-    let next = next_word_start(rope, from, grain, seg);
-    let head = prev_grapheme(rope, next);
+    unit_forward(rope, from, |r, p| next_word_start(r, p, grain, seg))
+}
+
+/// **The forward rule itself**, over whatever unit `next` counts (B1).
+///
+/// ⚠️ **It was written three times** — for words, for paragraphs (`}`) and for
+/// sentences (`L`) — three copies of the same nine lines. They are one rule,
+/// and [`word_forward`]'s doc comment is where it is spelled out: *a forward
+/// motion never hands back a span of just the cell you are already on.*
+///
+/// `next` is 「where does the unit after `p` begin」; everything else here is
+/// the rule.
+pub fn unit_forward(rope: &Rope, from: usize, next: impl Fn(&Rope, usize) -> usize) -> Span {
+    let bound = next(rope, from);
+    let head = prev_grapheme(rope, bound);
     if head > from {
         return Span::Over { anchor: from, head };
     }
-    if next > from {
-        let after = next_word_start(rope, next, grain, seg);
-        return Span::Over { anchor: next, head: prev_grapheme(rope, after).max(next) };
+    if bound > from {
+        let after = next(rope, bound);
+        return Span::Over { anchor: bound, head: prev_grapheme(rope, after).max(bound) };
     }
     Span::Missed
+}
+
+/// The same, backwards: the span from where the caret is to where the unit
+/// behind it begins. Never `Missed` — at the top of the buffer it collapses,
+/// which is what `b` and `{` have always done there.
+pub fn unit_back(rope: &Rope, from: usize, prev: impl Fn(&Rope, usize) -> usize) -> Span {
+    Span::Over { anchor: from, head: prev(rope, from) }
 }
 
 /// **A motion, as a value** — the second half of the grammar layer (B1,
@@ -399,6 +419,10 @@ pub enum Motion {
     LineEnd,
     /// `gs` — the first thing on it that is not blank.
     LineFirstNonBlank,
+    /// `}` / `{` — a paragraph, which in a manuscript is a line of the file.
+    Paragraph { forward: bool },
+    /// `L` / `H` — a sentence: 。！？ and the closing mark after one.
+    Sentence { forward: bool },
 }
 
 impl Span {
@@ -459,7 +483,7 @@ pub fn word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> S
 /// A span whose `head` is before its `anchor` is a backwards selection, which
 /// is what this editor has always made of `b`: it selects what it crosses.
 pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
-    Span::Over { anchor: pos, head: prev_word_start(rope, pos, grain, seg) }
+    unit_back(rope, pos, |r, p| prev_word_start(r, p, grain, seg))
 }
 
 /// The end (last character) of the next word after `pos` (`e` / `E`).

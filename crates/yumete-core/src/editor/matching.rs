@@ -495,9 +495,9 @@ impl Editor {
 
     /// Put **both** ends where a motion says, unless it is extending.
     ///
-    /// [`Self::select_to`] leaves the anchor where the caret was, which is
-    /// right for a motion that means 「take everything from here to there」 and
-    /// wrong for one that knows what it is taking. `e` is the second kind: the
+    /// A motion that means 「take everything from here to there」 leaves the
+    /// anchor where the caret was — that is a span whose `anchor` is the old
+    /// position. One that knows what it is taking sets both ends itself. `e` is the second kind: the
     /// word it lands on begins somewhere, and beginning the selection at the
     /// old caret instead dragged the previous word's last character — and the
     /// punctuation between them — along with it (#304).
@@ -541,6 +541,20 @@ impl Editor {
             motion::Motion::LineFirstNonBlank => {
                 at(motion::line_first_non_blank(rope, self.cursor))
             }
+            // **Paragraphs and sentences keep the same forward rule as words**
+            // (B1): it was written three times before this, once per unit.
+            motion::Motion::Paragraph { forward: true } => {
+                motion::unit_forward(rope, self.cursor, motion::next_paragraph)
+            }
+            motion::Motion::Paragraph { forward: false } => {
+                motion::unit_back(rope, self.cursor, motion::prev_paragraph)
+            }
+            motion::Motion::Sentence { forward: true } => {
+                motion::unit_forward(rope, self.cursor, motion::next_sentence)
+            }
+            motion::Motion::Sentence { forward: false } => {
+                motion::unit_back(rope, self.cursor, motion::prev_sentence)
+            }
         }
     }
 
@@ -574,63 +588,7 @@ impl Editor {
         }
     }
 
-    /// Move the head to `pos`, selecting from the old position (unless already
-    /// extending). Used by word and find motions that select what they cross.
-    pub(super) fn select_to(&mut self, pos: usize) {
-        // A landing place the grid does not draw is not a landing place — the
-        // same rule `move_horizontal` keeps, and the word motions need it too:
-        // `w` at the end of a cell used to park the caret inside the seam,
-        // where nothing on the screen moved (2026-09-12).
-        let pos = self.past_what_a_table_keeps_off(pos, pos > self.cursor);
-        let old = self.cursor;
-        self.cursor = pos;
-        if !self.extend {
-            self.anchor = old;
-        }
-        self.refresh_goal_column();
-    }
 
-    /// Select from here up to — but not including — `pos`.
-    ///
-    /// The rule `w` already follows, and the one every forward motion that
-    /// lands on *the start of the next thing* has to follow: the character that
-    /// begins the next sentence belongs to the next sentence. Selecting through
-    /// it means `)d` deletes this sentence and the first character of the one
-    /// after it — a corruption a proofreader would not notice until the page
-    /// was set.
-    ///
-    /// Take the unit the caret is in, and **the next one when it is already at
-    /// the end of this one** — the shape `w` has had since it was written
-    /// ([`Self::select_word_forward`]), given to the units that also want to be
-    /// pressed twice in a row.
-    ///
-    /// `next` says where the following unit begins. ⚠️ Without the second
-    /// branch a repeated press does nothing at all: standing **on** the 。 that
-    /// ends a sentence, the next one begins one grapheme away, so the selection
-    /// cannot advance and the old `select_up_to` collapsed in place. `)` had
-    /// that from the day it was written and nobody noticed, because nobody
-    /// presses `)` twice; `L` invites it, and it stuck at the first 。 for ever
-    /// (2026-09-12, #404).
-    pub(super) fn select_unit_forward(&mut self, next: fn(&Rope, usize) -> usize) {
-        let rope = self.current_buffer().rope();
-        let from = self.cursor;
-        let bound = next(rope, from);
-        let head = motion::prev_grapheme(rope, bound);
-        let (anchor, cursor) = if head > from {
-            (from, head)
-        } else if bound > from {
-            let after = next(rope, bound);
-            (bound, motion::prev_grapheme(rope, after).max(bound))
-        } else {
-            return;
-        };
-        let cursor = self.past_what_a_table_keeps_off(cursor, cursor > self.cursor);
-        if !self.extend {
-            self.anchor = anchor;
-        }
-        self.cursor = cursor;
-        self.refresh_goal_column();
-    }
 
     /// Step forward one word, selecting it (`w` / `W`).
     ///
