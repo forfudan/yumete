@@ -131,6 +131,8 @@ pub enum Command {
     /// `:check-usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
     CheckUsage,
+    /// `:check-names` — a 百科 name written one homophone out.
+    CheckNames,
     /// `:check-punct` — half-width marks in Chinese text, `...` for ……, and
     /// the 「 nothing closes (Feature #238).
     CheckPunct,
@@ -228,8 +230,11 @@ pub enum Command {
     SetMeter(Option<bool>),
     /// `:view-punct [on|off]` — the mark that is wrong, named on the page beside it.
     SetNote(Option<bool>),
-    /// `:view-code [on|off]` — fenced code in its own grammar's colours (#420).
-    SetCode(Option<bool>),
+    /// `:view-code [on|off|toggle]` — fenced code in its own grammar's colours
+    /// (#420). **Three answers, not two**: `None` is the bare word, which
+    /// reports rather than setting anything (2026-09-20); `Some(None)` is
+    /// `toggle`; `Some(Some(b))` is `on`／`off`.
+    SetCode(Option<Option<bool>>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
     /// `:search` — open the search panel (#419).
@@ -2483,6 +2488,14 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::CheckUsage)),
     },
     Entry {
+        name: "check-names",
+        aliases: &[],
+        help: "cmd.check.names",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::CheckNames)),
+    },
+    Entry {
         name: "check-charset",
         aliases: &[],
         help: "cmd.check.charset",
@@ -3234,15 +3247,25 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetNote(switched(p)?))),
     },
     Entry {
+        // The bare word **reports** — the shape `:view-hud` and `:render`
+        // have. With a switch there are only two states, so a third spelling
+        // of `on` is worth less than 「which am I on, and why is this block
+        // not coloured」 (2026-09-20).
         name: "view-code",
         aliases: &[],
         help: "cmd.view.code",
         needs: &[],
         params: &[Param::Words {
             of: SWITCH,
-            default: Some("on"),
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetCode(switched(p)?))),
+        build: Some(|p| {
+            Ok(Command::SetCode(match p.arg(0) {
+                None => None,
+                Some("toggle") => Some(None),
+                Some(word) => Some(Some(word == "on")),
+            }))
+        }),
     },
     Entry {
         // The bare word reports, the same shape `:render` has: with three
@@ -5521,7 +5544,7 @@ mod tests {
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
         assert_eq!(row("", "view-"), ":view- +14");
-        assert_eq!(row("", "check-"), ":check- +4");
+        assert_eq!(row("", "check-"), ":check- +5");
         // …and one command under a stem is still a stem: `markdown-` names a
         // group whether or not it has grown a second one yet.
         assert_eq!(row("", "markdown-"), ":markdown- +1");

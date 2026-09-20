@@ -21,7 +21,20 @@ const LONGEST: usize = 5_000;
 
 /// Enough parsed fences to cover several open chapters without growing for as
 /// long as the session runs.
+///
+/// ⚠️ **Counted in lines as well as in entries** ([`HELD`]). This cache was
+/// designed for *fences* — a snippet in a manuscript, a dozen lines — and 256
+/// of those is nothing. Then whole code files started coming through the same
+/// door (#420), where one entry can be five thousand lines of spans; 256 of
+/// **those** is not a cache, it is a leak with a lid on it.
 const KEPT: usize = 256;
+
+/// …and the lines those entries may add up to, whichever fills first.
+///
+/// A line's runs are a `Vec<Span>` — a handful of spans at 32 bytes each — so
+/// fifty thousand lines is some ten megabytes, and it holds ten of the biggest
+/// files the cap above ([`LONGEST`]) lets in.
+const HELD: usize = 50_000;
 
 /// One fence: the line that opens it, the line that closes it if anything
 /// does, and the language its info string names.
@@ -43,6 +56,8 @@ pub(super) struct CodeCache {
     by_open: HashMap<usize, Lines>,
     /// Every revision's answers, by what the fence says.
     by_text: HashMap<u64, Lines>,
+    /// How many lines of spans `by_text` is holding.
+    held: usize,
 }
 
 impl Editor {
@@ -92,6 +107,36 @@ impl Editor {
         body.get(line).cloned().unwrap_or_default()
     }
 
+    /// **How long the code under the cursor is, when that is why it has no
+    /// colours** — `(lines, the cap)`, and `None` when nothing is wrong.
+    ///
+    /// ⚠️ The cap exists (parsing runs on every edit, so a pasted data file
+    /// would be re-parsed per keystroke), but a cap that says nothing reads as
+    /// a broken feature: 「顏色到這裏就沒了」. `:view-code` asks this, so the
+    /// question 「why is this not coloured」 has an answer where a reader would
+    /// look for it.
+    pub(super) fn code_too_long_here(&self) -> Option<(usize, usize)> {
+        if !self.code_colours {
+            return None;
+        }
+        let line = self.cursor_line();
+        let rope = self.current_buffer().rope();
+        let long = |n: usize| (n > LONGEST).then_some((n, LONGEST));
+        // A file that is code from top to bottom is one body, with no fence
+        // lines around it.
+        if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
+            return long(rope.len_lines());
+        }
+        let fences = self.fences();
+        let at = fences.partition_point(|f| f.open < line);
+        let fence = at.checked_sub(1).map(|i| fences[i])?;
+        if fence.close.is_some_and(|close| line >= close) || fence.language.is_none() {
+            return None;
+        }
+        let end = fence.close.unwrap_or(rope.len_lines());
+        long(end.saturating_sub(fence.open + 1))
+    }
+
     /// The parsed runs of `range`, from this revision's cache (under `key`),
     /// the content cache, or the parser — in that order.
     fn parsed(&self, key: usize, range: std::ops::Range<usize>, language: Language) -> Lines {
@@ -120,9 +165,11 @@ impl Editor {
                     true => vec![Vec::new(); lines.len()],
                     false => crate::code::highlight(language, &lines),
                 });
-                if cache.by_text.len() >= KEPT {
+                if cache.by_text.len() >= KEPT || cache.held >= HELD {
                     cache.by_text.clear();
+                    cache.held = 0;
                 }
+                cache.held += body.len();
                 cache.by_text.insert(text, body.clone());
                 body
             }

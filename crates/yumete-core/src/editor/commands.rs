@@ -379,6 +379,10 @@ impl Editor {
                 self.check_usage();
                 Ok(CommandOutcome::Continue)
             }
+            Command::CheckNames => {
+                self.check_names();
+                Ok(CommandOutcome::Continue)
+            }
             Command::Progress => {
                 self.progress_report();
                 Ok(CommandOutcome::Continue)
@@ -835,11 +839,31 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetCode(want) => {
-                self.code_colours = want.unwrap_or(!self.code_colours);
+                // The bare word **reports**, the shape `:view-hud` has: with a
+                // switch, 「which am I on」 is a better use of the word than a
+                // second spelling of `on` — and it is where a reader asks why
+                // a block has no colours (below).
+                match want {
+                    None => {}
+                    Some(None) => self.code_colours = !self.code_colours,
+                    Some(Some(want)) => self.code_colours = want,
+                }
+                let known = crate::code::Language::ALL
+                    .iter()
+                    .map(|l| l.name())
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 self.status = match self.code_colours {
-                    true => say!("layout.code-on"),
+                    true => say!("layout.code-on", known),
                     false => say!("layout.code-off"),
                 };
+                // ⚠️ **A cap that says nothing reads as a broken feature.** A
+                // block past it keeps one colour, and 「the colours stop here」
+                // is what the reader sees; this is the one place that answers.
+                if let Some((lines, most)) = self.code_too_long_here() {
+                    self.status =
+                        format!("{} — {}", self.status, say!("layout.code-too-long", lines, most));
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::OpenSearch(scope) => {

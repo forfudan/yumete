@@ -248,6 +248,79 @@ impl Editor {
         };
     }
 
+    /// `:check-names` — a 百科 name written one homophone out (2026-09-20).
+    ///
+    /// **The other half of [`Self::check_usage`].** That one settles 裏 against
+    /// 裡, and it works because both spellings are in a list. A proper name is
+    /// in nobody's list — 返塵亭 is this book's — so the one place it came out
+    /// 返塵停 is invisible to every checker there is. The book's 百科 *does*
+    /// know the name, and the reading table knows that 亭 and 停 are one sound,
+    /// which is what tells a typo from a different word (see [`crate::names`]).
+    pub(super) fn check_names(&mut self) {
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        let names: Vec<String> = self.wiki.by_name.keys().cloned().collect();
+        if names.is_empty() {
+            self.status = say!("check.names-no-wiki");
+            return;
+        }
+        // ⚠️ **No reading table, no answer.** Without it this would be
+        // 「one character different」, which in Chinese is most of the
+        // vocabulary; a page of noise is worse than the silence it replaces.
+        if !self.reader.available() {
+            self.status = say!("check.names-no-readings");
+            return;
+        }
+        // One lookup per character, not per comparison: the same handful of
+        // characters is asked about all the way down a chapter.
+        let sounds: std::cell::RefCell<std::collections::HashMap<char, Option<String>>> =
+            Default::default();
+        let alike = |a: char, b: char| {
+            let say = |c: char| {
+                sounds
+                    .borrow_mut()
+                    .entry(c)
+                    .or_insert_with(|| {
+                        self.reader.read(&c.to_string()).and_then(|r| r.first().cloned())
+                    })
+                    .clone()
+            };
+            match (say(a), say(b)) {
+                (Some(a), Some(b)) => a == b,
+                _ => false,
+            }
+        };
+        let text = self.current_buffer().rope().to_string();
+        let slips = crate::names::check(&text, &names, alike);
+        if slips.is_empty() {
+            self.status = say!("check.names-clean", name);
+            return;
+        }
+        let n = slips.len();
+        let mut listing = String::new();
+        for slip in slips.iter().take(LISTING_LIMIT) {
+            listing.push_str(&say!(
+                "check.names-slip",
+                name,
+                slip.line + 1,
+                slip.written,
+                slip.name,
+                slip.wrong,
+                slip.right
+            ));
+            listing.push('\n');
+        }
+        self.show_listing(listing, say!("check.names-results", name));
+        self.status = match n > LISTING_LIMIT {
+            true => say!("check.names-too-many", LISTING_LIMIT),
+            false => say!("check.names-found", n),
+        };
+    }
+
     /// `:word-habit` — the words this manuscript leans on (Feature #242).
     ///
     /// **Sorting a word count says 的.** Every manuscript in the language gives

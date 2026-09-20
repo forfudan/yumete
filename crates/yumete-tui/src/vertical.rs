@@ -1107,6 +1107,12 @@ pub fn draw(
         }
 
         let line_start = rope.line_to_char(zong.line);
+        // ⚠️ **Which `|` is a wall, worked out once for the 縱** (2026-09-20).
+        // The glyph swap below used to fire on *any* pipe in a table row, and
+        // Markdown's one escape is `\|` — a pipe the cell holds. So a cell
+        // written `a \| b` was cut in two: a band drawn through the middle of
+        // it, and the rest of the row shifted off its bands.
+        let walls = editor.table_walls_on_line(zong.line);
         // Rows, not graphemes: a 縦中横 pair is one row holding two characters, a
         // ruby group is however many rows its reading needs, and the punctuation
         // is already rotated.
@@ -1227,7 +1233,12 @@ pub fn draw(
             // the `---` row *is* the wall and the `|` in it are exactly the
             // places a band rule runs into it — so those, and only those, are
             // `┼`. Elsewhere a `|` is a band and a `-` is wall.
-            let symbol = match editor.line_is_table_row(zong.line) {
+            // ⚠️ **A slot spans the characters hidden with it**, so the wall
+            // is looked for in `start..end` rather than at `start`: the
+            // cushion in front of a `|` is off the page, and the slot that
+            // draws the pipe begins at the cushion.
+            let is_wall = walls.iter().any(|&w| w >= row.start && w < row.end.max(row.start + 1));
+            let symbol = match editor.line_is_table_row(zong.line) && (symbol != "|" || is_wall) {
                 true => match (symbol.as_str(), editor.line_is_table_rule(zong.line)) {
                     // Two cells: the cross, and the rule carrying on to the
                     // 縱 on its right — otherwise the band stops dead at the

@@ -16153,6 +16153,28 @@ fn squeezed(text: &str) -> String {
         assert_eq!(shot.lines().count(), 8, "one line per row: {shot}");
     }
 
+    /// **`\|` is a pipe the cell holds, not a wall** (2026-09-20).
+    ///
+    /// Turned, a wall becomes a band **across** the 縱 — and the glyph swap
+    /// used to fire on every `|` in a table row, so a cell written `a \| b`
+    /// was cut in two by a rule that is not in the file.
+    #[test]
+    fn an_escaped_pipe_is_not_a_wall_on_the_turned_page() {
+        let mut editor = editor_with("| 甲 | 乙 |\n| --- | --- |\n| a \\| b | 丙 |\n");
+        editor.execute(":layout vertical").unwrap();
+        let config = Config::default();
+        let ime = ImeSession::empty(Scheme::LINGMING);
+        let shot = frame_to_text(&mut editor, &config, &ime, 44, 14);
+        // The cell keeps both characters, and no band is drawn between them…
+        let rows: Vec<&str> = shot.lines().collect();
+        let at = |c: char| rows.iter().position(|r| r.contains(c));
+        let (back, pipe) = (at('\\').expect(shot.as_str()), at('|').expect(shot.as_str()));
+        assert_eq!(pipe, back + 1, "the escaped pipe follows its backslash: {shot}");
+        // …while the real walls are still bands, one per row of the table.
+        assert!(shot.contains("┼"), "the rule row still crosses: {shot}");
+        assert!(shot.matches("──").count() >= 2, "the bands are drawn: {shot}");
+    }
+
     /// The three states (#290), and the two switches that reach them.
     ///
     /// **ABC and 關 are not the same state**, although the keyboard behaves
