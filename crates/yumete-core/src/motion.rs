@@ -307,6 +307,65 @@ pub fn next_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmente
     rope.len_chars()
 }
 
+/// **What a motion asks the page for** — the first of the grammar layer
+/// (B1, 2026-09-20).
+///
+/// A motion used to *move the caret itself*, which is why 「the same motion」
+/// could not be shared between a selection-first grammar (helix: the motion
+/// makes a selection, a verb eats it) and a caret-first one (vim: a verb
+/// waits, the motion hands it a range). Made a **value**, one motion serves
+/// both — and the difference between the two editors shrinks to who reads
+/// which part of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Span {
+    /// The span a motion covers, both ends inclusive of `head`.
+    Over { anchor: usize, head: usize },
+    /// The motion found nothing. ⚠️ **Not an empty span**: a verb must be able
+    /// to tell 「nothing there」 from 「a span of one」 and do nothing at all —
+    /// that distinction is what `wdiw` at the end of a buffer turned on.
+    Missed,
+}
+
+/// **`w`, as a span** — the rule helix's word motion has always followed,
+/// lifted out of the editor so that both grammars can read it (B1).
+///
+/// The rule, and it is subtler than 「select to the next word's start」:
+///
+/// > **A `w` never hands back a span of just the cell you are already on.**
+/// > If 「to the next word's start」 would do that, it takes the *next* word
+/// > instead.
+///
+/// One rule, two surfaces, and the difference is that **Chinese has no
+/// spaces** (measured 2026-09-20):
+///
+/// | 文 | 光標在 | `w` 選到 |
+/// | --- | --- | --- |
+/// | `alpha beta` | `a`（詞首） | `alpha␣` —— 本詞連同後面的空隙 |
+/// | `alpha beta` | 第二個 `a`（詞的最後一個字） | `a␣` —— 仍是本詞詞尾 |
+/// | `alpha beta` | 空隙 | `beta␣` —— **下一個詞** |
+/// | `今天天氣` | 今（詞首） | `今天` |
+/// | `今天天氣` | 天（詞的最後一個字） | `天氣` —— **下一個詞** |
+///
+/// 西文裏「再選就只剩自己這一格」發生在空隙上；中文没有空隙，所以它發生在詞的
+/// 最後一個字上。同一條規則。
+///
+/// ⚠️ **vim does not use this.** Its `w` is the bare primitive
+/// ([`next_word_start`]): the caret goes there, and `dw` operates on
+/// `[pos, next_word_start)`. That is the whole of why the two feel different,
+/// and why a translation table could never say it.
+pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
+    let next = next_word_start(rope, from, grain, seg);
+    let head = prev_grapheme(rope, next);
+    if head > from {
+        return Span::Over { anchor: from, head };
+    }
+    if next > from {
+        let after = next_word_start(rope, next, grain, seg);
+        return Span::Over { anchor: next, head: prev_grapheme(rope, after).max(next) };
+    }
+    Span::Missed
+}
+
 /// The end (last character) of the next word after `pos` (`e` / `E`).
 pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> (usize, usize) {
     for line in line_of(rope, pos)..rope.len_lines() {
@@ -368,6 +427,18 @@ mod tests {
     /// segmenter that records how much it was handed. Segmenting the whole
     /// buffer for one `w` is what made holding the key run on for seconds after
     /// it was released.
+    /// A stand-in dictionary that cuts every two characters — enough to say
+    /// 今天｜天氣｜很好, which `CategorySegmenter` cannot: it cuts by category,
+    /// and every 漢字 is its own category run.
+    struct TwoByTwo;
+
+    impl Segmenter for TwoByTwo {
+        fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+            let n = s.chars().count();
+            (0..n).step_by(2).map(|i| (i, (i + 2).min(n))).collect()
+        }
+    }
+
     #[derive(Default)]
     struct Counting(std::cell::Cell<usize>);
 
@@ -400,6 +471,63 @@ mod tests {
         let seg = Counting::default();
         prev_word_start(&r, r.len_chars() - 1, Grain::Word, &seg);
         assert!(seg.0.get() <= 24, "read {} going back", seg.0.get());
+    }
+
+    /// **The rule `w` has always followed, written down at last** (B1,
+    /// 2026-09-20). Derived by measuring the editor key by key, then found to
+    /// be exactly what the code said — which is why it is pinned here before
+    /// a second grammar starts reading it.
+    ///
+    /// > A `w` never hands back a span of just the cell you are already on.
+    /// > If 「to the next word's start」 would do that, it takes the next word.
+    #[test]
+    fn w_never_selects_only_the_cell_you_are_on() {
+        let seg = CategorySegmenter;
+        let over = |r: &Rope, at: usize, grain| match word_forward(r, at, grain, &seg) {
+            Span::Over { anchor, head } => r.slice(anchor..=head).to_string(),
+            Span::Missed => "—".to_string(),
+        };
+
+        // 西文：詞首與詞中都選到本詞詞尾（連同後面那個空格）…
+        let r = rope("alpha beta gamma");
+        assert_eq!(over(&r, 0, Grain::Coarse), "alpha ");
+        assert_eq!(over(&r, 2, Grain::Coarse), "pha ");
+        // …詞的最後一個字也還是本詞，因爲空格還在前頭…
+        assert_eq!(over(&r, 4, Grain::Coarse), "a ");
+        // …而站在那個空格上，「到下一個詞首」只剩自己這一格，於是取下一個詞。
+        assert_eq!(over(&r, 5, Grain::Coarse), "beta ");
+
+        // 中文没有空格，所以那個分界落在**詞的最後一個字**上。
+        // ⚠️ 用一個「兩字一詞」的替身詞典：`CategorySegmenter` 按字類切，
+        // 中文在它眼裏一個字就是一個詞，那樣測不出詞的邊界這回事。
+        let two = TwoByTwo;
+        let over2 = |r: &Rope, at: usize| match word_forward(r, at, Grain::Word, &two) {
+            Span::Over { anchor, head } => r.slice(anchor..=head).to_string(),
+            Span::Missed => "—".to_string(),
+        };
+        let r = rope("今天天氣很好");
+        assert_eq!(over2(&r, 0), "今天");
+        assert_eq!(over2(&r, 1), "天氣", "站在 今天 的末字，取下一個詞");
+
+        // 到了緩衝區的盡頭是 `Missed`，不是一個空的 span —— 動詞要分得出
+        // 「没東西」和「一格」，那正是 `wdiw` 當初栽的地方。
+        assert_eq!(word_forward(&r, r.len_chars(), Grain::Word, &two), Span::Missed);
+    }
+
+    /// vim's `w` is the **bare primitive**, and that is the whole difference:
+    /// the caret goes to the next word's start, and `dw` operates on
+    /// `[pos, next_word_start)`. Standing in a gap, vim takes the gap; helix
+    /// takes the next word (above).
+    #[test]
+    fn vims_w_is_the_primitive_helix_wraps() {
+        let seg = CategorySegmenter;
+        let r = rope("alpha beta gamma");
+        // 詞首：兩者算出同一段 —— helix 選 [0,5]，vim 刪 [0,6)，都是 `alpha `。
+        assert_eq!(next_word_start(&r, 0, Grain::Coarse, &seg), 6);
+        assert_eq!(word_forward(&r, 0, Grain::Coarse, &seg), Span::Over { anchor: 0, head: 5 });
+        // 空隙上：vim 只拿那一格，helix 取下一個詞。分歧就這一處。
+        assert_eq!(next_word_start(&r, 5, Grain::Coarse, &seg), 6);
+        assert_eq!(word_forward(&r, 5, Grain::Coarse, &seg), Span::Over { anchor: 6, head: 10 });
     }
 
     #[test]
