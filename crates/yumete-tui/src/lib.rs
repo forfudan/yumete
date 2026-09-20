@@ -16,6 +16,7 @@ pub mod theme;
 pub mod vertical;
 pub mod ambiguous;
 pub mod backend;
+pub mod server;
 pub mod system_ime;
 pub mod typed_ahead;
 
@@ -463,6 +464,10 @@ pub fn run(
         std::sync::mpsc::channel::<(Vec<yumete_core::discover::Found>, usize)>();
     let mut detecting = false;
     let mut detected: Option<(String, std::time::Instant)> = None;
+    // **語言服務器**（#53／#54）: nothing is started until a file of a language
+    // that has one is really opened, and everything it says arrives through
+    // `collect` below without anything here ever waiting on it.
+    let mut servers = crate::server::Servers::default();
 
     let result = loop {
         // **Extend is a mode as far as the cursor is concerned** (2026-09-12).
@@ -847,6 +852,14 @@ pub fn run(
             detecting = false;
             install_detected(editor, &found);
         }
+        // **語言服務器**（#53／#54）: start what this file needs, tell it what
+        // changed, and take whatever has come back. Both halves are
+        // non-blocking; what is not here yet lands on the next turn round.
+        servers.follow(editor, &config);
+        servers.collect(editor);
+        if let Some(word) = servers.says.take() {
+            editor.set_status(word);
+        }
         if editor.reload_auto() && inbox.is_empty() {
             match events.recv_timeout(DISK_POLL) {
                 Ok(Ok(event)) => inbox.push_back(event),
@@ -877,7 +890,7 @@ pub fn run(
             // wait, so a 300 ms deadline is a debounce with no clock of its own
             // to keep. Whichever deadline is nearer wins; both ticks are asked
             // on the way round and each is a no-op unless it is really owed.
-            None => match [editor.autosave_due_in(), editor.vcs_due_in()]
+            None => match [editor.autosave_due_in(), editor.vcs_due_in(), servers.due_in()]
                 .into_iter()
                 .flatten()
                 .min()
@@ -1338,6 +1351,10 @@ pub fn run(
         let _ = running.child.wait();
     }
     forget_the_server();
+    // **語言服務器也不活過這一場**（#53／#54）：`shutdown`／`exit` 先說，說不動
+    // 就殺掉——這一步跑在終端交還回去的路上，留一個孩子在後面握着管道，下一次
+    // 跑起來的 yumete 會撞上它。
+    servers.stop();
 
     let _ = execute!(
         stdout(),

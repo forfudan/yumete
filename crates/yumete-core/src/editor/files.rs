@@ -141,7 +141,11 @@ impl Editor {
     /// for a `.git`, and settles for the directory the file itself is in. Only
     /// a session with no named file left in it falls back to the working
     /// directory.
-    pub(crate) fn project_root(&self) -> PathBuf {
+    ///
+    /// **Public because a language server needs it.** A server is started
+    /// *in* the project (#53／#54) — asked to analyse a crate from anywhere
+    /// else it finds no `Cargo.toml` and answers about nothing, silently.
+    pub fn project_root(&self) -> PathBuf {
         let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         self.project_root_from(&here)
     }

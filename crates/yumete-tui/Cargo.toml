@@ -15,5 +15,11 @@ yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
 
+# Only the tests read JSON here: what this crate *sends* is built by
+# `yumete_core::lsp` out of literals, and the tests check that what came out
+# really is the message it claims to be.
+[dev-dependencies]
+serde_json = "1"
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

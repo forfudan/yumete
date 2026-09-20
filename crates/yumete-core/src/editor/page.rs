@@ -742,6 +742,11 @@ impl Editor {
         self.problems.count()
     }
 
+    /// 忘掉一個檔的話——服務器死了，它說過的就不再算數。
+    pub fn forget_problems(&mut self, path: &std::path::Path) {
+        self.problems.forget(path);
+    }
+
     /// 全部的話，按檔名、行、列排好，給 `:check-code` 那張單子。
     pub fn problems_listed(&self) -> Vec<(&std::path::Path, &crate::problem::Problem)> {
         self.problems
