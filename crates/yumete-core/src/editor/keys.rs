@@ -1015,13 +1015,13 @@ impl Editor {
             // give 「that character ＋ the next word」 — the punctuation between
             // them riding along in both directions.
             Key::Char('e') => self.repeat(count, |e| {
-                let (from, to) = motion::next_word_end(
+                let span = motion::word_end(
                     e.current_buffer().rope(),
                     e.cursor,
                     motion::Grain::Coarse,
                     e.segmenter.as_ref(),
                 );
-                e.select_span(from, to);
+                e.take_span(span);
             }),
             // **`b` is `e`'s partner, not `w`'s** (#304). helix's tutor teaches
             // 「to select the word under cursor, combine `e` and `b`」, and the
@@ -1036,13 +1036,13 @@ impl Editor {
             // forward. `C-w` in Insert still deletes a *word* — it says why in
             // its own doc, and deleting a clause there would be brutal.
             Key::Char('b') => self.repeat(count, |e| {
-                let p = motion::prev_word_start(
+                let span = motion::word_back(
                     e.current_buffer().rope(),
                     e.cursor,
                     motion::Grain::Coarse,
                     e.segmenter.as_ref(),
                 );
-                e.select_to(p);
+                e.take_span(span);
             }),
             // A paragraph is a logical line here, and with soft wrap on `j`
             // and `k` move by visual row — so these are the keys that move by
