@@ -274,13 +274,34 @@ pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
     found.retain(|f| !(f.3 == Token::String && named.contains(&(f.0, f.1))));
     found.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
 
+    // ⚠️ **A window over the captures, not a pass over them** (2026-09-20).
+    // This used to walk the whole of `found` for every line and skip what did
+    // not overlap — O(lines × captures), and a capture per few bytes means
+    // both grow together: measured 600 lines 10 ms, 2400 lines 20 ms, **4800
+    // lines 60 ms**, which is where 「the colours just stop」 came from (the
+    // 5000-line cap in `fences.rs` was the bandage).
+    //
+    // `found` is sorted by where a capture starts and the lines are walked in
+    // order, so one index is enough: everything that can open on this line has
+    // start < `to`, and what is finished (end ≤ `from`) comes out. `live`
+    // keeps `found`'s order, which **is** the painting order.
+    let mut next = 0usize;
+    let mut live: Vec<(usize, usize, Token)> = Vec::new();
     for (n, line) in lines.iter().enumerate() {
         let from = starts[n];
         let to = from + line.len();
+        while next < found.len() && found[next].0 < to {
+            let (start, end, _, token) = found[next];
+            if end > from {
+                live.push((start, end, token));
+            }
+            next += 1;
+        }
+        live.retain(|&(_, end, _)| end > from);
         // One token per byte of this line, painted in the order above.
         let mut paint: Vec<Token> = vec![Token::Plain; line.len()];
-        for &(start, end, _, token) in &found {
-            if end <= from || start >= to {
+        for &(start, end, token) in &live {
+            if start >= to {
                 continue;
             }
             for slot in &mut paint[start.max(from) - from..end.min(to) - from] {

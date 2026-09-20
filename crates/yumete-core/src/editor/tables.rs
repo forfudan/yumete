@@ -901,6 +901,21 @@ impl Editor {
     }
 
     /// The text of one line, or `None` past the end of the file.
+    /// **Which columns of `line` hold a wall** — a `|` that really separates
+    /// two cells, never the `\|` a cell holds as text.
+    ///
+    /// Asked by the 竪排 page, which turns a wall into a band **across** the
+    /// 縱 and so has to know which pipes those are. It used to swap the glyph
+    /// on every pipe in a table row, and cut `a \| b` in two (2026-09-20).
+    pub fn table_walls_on_line(&self, line: usize) -> Vec<usize> {
+        if !self.line_is_table_row(line) {
+            return Vec::new();
+        }
+        self.line_text(line)
+            .map(|text| crate::mdtable::Wall::Pipe.at(&text))
+            .unwrap_or_default()
+    }
+
     pub(super) fn line_text(&self, line: usize) -> Option<String> {
         let rope = self.current_buffer().rope();
         (line < rope.len_lines()).then(|| rope.line(line).to_string())

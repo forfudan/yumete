@@ -14288,6 +14288,41 @@ fn a_fence_is_coloured_by_its_own_grammar_and_nothing_else_is() {
     assert!(tokens(&ed, 1).is_empty(), ":view-code off");
 }
 
+/// **A block too long to colour says so when asked** (2026-09-20).
+///
+/// Parsing runs on every edit, so a pasted data file has a cap — but a cap
+/// that says nothing reads as a broken feature (「顏色到這裏就沒了」).
+/// The bare `:view-code` reports, and that is where the answer lives.
+#[test]
+fn a_block_past_the_cap_keeps_one_colour_and_view_code_says_why() {
+    use crate::markdown::Kind;
+    let long: String = (0..5_100).map(|i| format!("x{i} = {i}\n")).collect();
+    let mut ed = typed(&format!("# 註\n{long}"));
+    ed.execute(":syntax python").unwrap();
+    let tokens = |ed: &Editor, line: usize| -> Vec<Kind> {
+        ed.markup_line_in(line, ed.block_of(line)).iter().map(|s| s.kind).collect()
+    };
+    assert!(tokens(&ed, 0).is_empty(), "past the cap nothing is coloured");
+
+    ed.execute(":view-code").unwrap();
+    let said = ed.status().to_string();
+    assert!(said.contains("5101") || said.contains("5102"), "how long it is: {said}");
+    assert!(said.contains("5000"), "and what the cap is: {said}");
+    // ⚠️ The bare word **reports**; it does not turn anything on or off.
+    assert!(ed.code_colours(), "a report is not a switch");
+    ed.execute(":view-code off").unwrap();
+    assert!(!ed.code_colours());
+    ed.execute(":view-code").unwrap();
+    assert!(!ed.code_colours(), "still off, and still a report");
+
+    // A short one says nothing about length, and is coloured.
+    let mut ed = typed("x = 1\n");
+    ed.execute(":syntax python").unwrap();
+    ed.execute(":view-code on").unwrap();
+    assert!(!ed.status().contains("5000"), "{}", ed.status());
+    assert!(!tokens(&ed, 0).is_empty());
+}
+
 /// A file that is code is one fence from top to bottom, and has no markup:
 /// `# 註` in Python is a comment, not a heading (#420).
 #[test]
@@ -14900,6 +14935,59 @@ fn the_wiki_report_names_what_this_chapter_could_not_mark() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:check-names`: the one place a name came out a homophone** (2026-09-20).
+///
+/// `:check-usage` settles 裏 against 裡 because both spellings are in a list.
+/// A proper name is in nobody's list — so this asks the book's own 百科, and
+/// the reading table, which is what tells a typo from a different word.
+#[test]
+fn check_names_finds_a_wiki_name_written_one_homophone_out() {
+    /// 亭/停 are `ting`, 路 is `lu` — the two characters this test turns on.
+    struct Sounds;
+    impl yumete_cjk::Reader for Sounds {
+        fn read(&self, word: &str) -> Option<Vec<String>> {
+            let one = |c: char| match c {
+                '亭' | '停' => Some("ting"),
+                '塵' => Some("chen"),
+                '返' => Some("fan"),
+                '路' => Some("lu"),
+                _ => None,
+            };
+            word.chars().map(|c| one(c).map(str::to_string)).collect()
+        }
+        fn available(&self) -> bool {
+            true
+        }
+    }
+
+    let dir = std::env::temp_dir().join(format!("yumete-check-names-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(dir.join(".yumete/wiki.md"), "## 返塵亭\n一座亭子。\n").unwrap();
+    std::fs::write(
+        dir.join("第一章.md"),
+        "他到返塵亭。\n那天在返塵停等了很久。\n後來走上返塵路。\n",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.reload_project_words();
+
+    // ⚠️ **Without readings it says so and reports nothing** — 「one character
+    // different」 in Chinese is most of the vocabulary.
+    ed.execute(":check-names").unwrap();
+    assert!(ed.status().contains("讀音") || ed.status().contains("读音"), "{}", ed.status());
+
+    ed.set_reader(Box::new(Sounds));
+    ed.execute(":check-names").unwrap();
+    let listing = ed.current_buffer().text();
+    assert!(listing.contains("返塵停"), "the homophone is found: {listing}");
+    assert!(listing.contains("返塵亭"), "and what the wiki has: {listing}");
+    assert_eq!(listing.lines().count(), 1, "返塵路 is a different word: {listing}");
+    assert!(listing.contains(":2:"), "with the line it is on: {listing}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// 作品百科, third part (#287): the names are marked where the segmenter cut
 /// them, in three modes, and never inside a fence.
 #[test]
@@ -14983,3 +15071,4 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("二.md")));
     std::fs::remove_dir_all(&dir).ok();
 }
+

@@ -876,6 +876,55 @@ zhs = "{0} 个以上（只列了前 {0} 个）——gf 跳到那一行"
 en = "{0}+ characters in no standard (first {0} listed) — gf goes to the line"
 
 [[message]]
+# :check-names 查完，稿子裏每一處專名都寫對了
+key = "check.names-clean"
+zht = "{0}：專名都寫對了"
+zhs = "{0}：专名都写对了"
+en = "{0}: every name spelled as the wiki has it"
+
+[[message]]
+# :check-names 查出了寫錯一個字的專名
+key = "check.names-found"
+zht = "{0} 處專名寫錯了一個字——gf 跳到那一行"
+zhs = "{0} 处专名写错了一个字——gf 跳到那一行"
+en = "{0} name(s) one character out — gf goes to the line"
+
+[[message]]
+# :check-names 要讀音表纔分得出「同音寫錯」和「本來就是别的詞」，而它没裝
+key = "check.names-no-readings"
+zht = "查不到讀音：没有讀音表就分不出「同音寫錯」和「本來就是别的詞」（`:yume-scheme` 載一次）"
+zhs = "查不到读音：没有读音表就分不出「同音写错」和「本来就是别的词」（`:yume-scheme` 载一次）"
+en = "no readings: without them a name one character out is indistinguishable from another word"
+
+[[message]]
+# :check-names 這本書還没有百科，没有名字可比
+key = "check.names-no-wiki"
+zht = "這本書還没有百科——:wiki edit 起個頭，專名纔查得了"
+zhs = "这本书还没有百科——:wiki edit 起个头，专名才查得了"
+en = "this book has no wiki yet — :wiki edit starts one, and then names can be checked"
+
+[[message]]
+# :check-names 的緩衝區標題
+key = "check.names-results"
+zht = "{0} 的專名"
+zhs = "{0} 的专名"
+en = "names in {0}"
+
+[[message]]
+# :check-names 查出來的一處：這裏寫的、百科裏的名字、以及差的那一個字
+key = "check.names-slip"
+zht = "{0}:{1}: 這裏是「{2}」，百科裏是「{3}」（{4} → {5}，同音）"
+zhs = "{0}:{1}: 这里是「{2}」，百科里是「{3}」（{4} → {5}，同音）"
+en = "{0}:{1}: 「{2}」 here, 「{3}」 in the wiki ({4} → {5}, same sound)"
+
+[[message]]
+# :check-names 查出來的太多，只列了前面那些
+key = "check.names-too-many"
+zht = "太多了，只列前 {0} 處"
+zhs = "太多了，只列前 {0} 处"
+en = "too many; the first {0} are listed"
+
+[[message]]
 # :check-punct 查完，標點沒有問題
 key = "check.punct-clean"
 zht = "{0}：標點沒有問題"
@@ -1062,6 +1111,14 @@ zht = "列出這份文件裏的合併衝突"
 zhs = "列出这份文件里的合并冲突"
 en = "list the merge conflicts in this file"
 find = "衝突 冲突 合併 合并 merge conflict conflicts git"
+
+[[message]]
+# :check-names 在命令表裏的說明
+key = "cmd.check.names"
+zht = "查專名：稿子裏把百科的名字寫錯了一個同音字的地方（返塵亭寫成返塵停）"
+zhs = "查专名：稿子里把百科的名字写错了一个同音字的地方（返尘亭写成返尘停）"
+en = "check names: a wiki name written with one homophone out of place"
+find = "專名 专名 人名 地名 百科 別字 别字 同音 校對 校对 names typo homophone"
 
 [[message]]
 # : 命令選單裏 punct 那一項的說明（check 組）
@@ -5587,11 +5644,18 @@ zhs = "代码上色：关（围栏里的代码一种颜色）"
 en = "code colours: off (a fence is one colour)"
 
 [[message]]
-# :view-code on — 圍欄裏的代碼按語法上色；認得的語言列出來
+# :view-code on — 圍欄裏的代碼按語法上色；{0} 是認得的語言，從 Language::ALL 現數的
 key = "layout.code-on"
-zht = "代碼上色：開（認得 css html javascript json python toml yaml）"
-zhs = "代码上色：开（认得 css html javascript json python toml yaml）"
-en = "code colours: on (css html javascript json python toml yaml)"
+zht = "代碼上色：開（認得 {0}）"
+zhs = "代码上色：开（认得 {0}）"
+en = "code colours: on (knows {0})"
+
+[[message]]
+# :view-code 報告裏：光標所在這一段代碼太長，超過上限所以只畫一種顏色
+key = "layout.code-too-long"
+zht = "這一段 {0} 行，超過 {1} 行就只畫一種顏色"
+zhs = "这一段 {0} 行，超过 {1} 行就只画一种颜色"
+en = "this block is {0} lines; past {1} it keeps a single colour"
 
 [[message]]
 # :view-diff on，可是這個文件不在 git 倉里，或者倉里还没有第一个提交——
