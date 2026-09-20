@@ -205,3 +205,23 @@ mod tests {
         assert!(check("墨。\n", &names(&["墨"]), alike).is_empty());
     }
 }
+
+#[cfg(test)]
+mod bench {
+    #[test]
+    #[ignore = "a stopwatch, not a test"]
+    fn the_cost_of_checking_a_chapter() {
+        let names: Vec<String> = (0..200).map(|i| format!("返塵亭{i}")).collect();
+        let line = "他到返塵亭，天色已晚，山門之外另有客舍三十間，逢法會則不敷用。\n";
+        let text: String = line.repeat(20_000);
+        let at = std::time::Instant::now();
+        let found = super::check(&text, &names, |a, b| a == '停' && b == '亭');
+        println!(
+            "{} 行、{} 個名字：{:?}，{} 處",
+            20_000,
+            names.len(),
+            at.elapsed(),
+            found.len()
+        );
+    }
+}
