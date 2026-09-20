@@ -37,6 +37,7 @@ pub mod messages;
 pub mod mdtable;
 pub mod meter;
 pub mod motion;
+pub mod vim;
 pub mod picker;
 pub mod progress;
 pub mod punct;

@@ -14496,17 +14496,16 @@ fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
 
     // `D` and `C` take the rest of the line, not the selection.
     //
-    // ⚠️ **Where the rest of the line begins is this editor's answer, not
-    // vim's** (作者 2026-09-18: 「vim w 是跳到詞頭，這個我們肯定没辦法實現」).
-    // `w` here walks the segmenter and leaves the cursor on the space, so
-    // `wD` takes the space with it; vim would keep it. The operator is
-    // translated, the motion underneath it stays ours.
+    // ⚠️ **這一條 2026-09-20 改了，因爲那件「辦不到」的事辦到了**（B3）。
+    // 原註寫着：作者 2026-09-18「vim w 是跳到詞頭，這個我們肯定没辦法實現」，
+    // 所以從前 `w` 把光標留在空格上，`wD` 連空格一起帶走。現在 vim 預設的 `w`
+    // 是 vim 自己的——落在詞頭——於是 `wD` 留下那個空格，和真 vim 一樣。
     let mut ed = vim("alpha beta\n二\n");
     press(&mut ed, "wD");
-    assert_eq!(text(&ed), "alpha\n二\n", "D is d$");
+    assert_eq!(text(&ed), "alpha \n二\n", "D is d$，而 w 停在詞頭");
     let mut ed = vim("alpha beta\n二\n");
     press(&mut ed, "wCX");
-    assert_eq!(text(&ed), "alphaX\n二\n", "C is c$");
+    assert_eq!(text(&ed), "alpha X\n二\n", "C is c$");
 
     // `S` changes the line and **keeps** it; `dd` takes it away.
     let mut ed = vim("一\n二\n");
@@ -14732,10 +14731,14 @@ fn a_word_is_a_text_object_for_both_spellings() {
     };
     assert_eq!(vim("alpha beta\n", "diw"), " beta\n", "詞本身");
     assert_eq!(vim("alpha beta\n", "daw"), "beta\n", "連它後面那一段空白");
-    // ⚠️ 本編輯器的 `w` 連着邊界一起取，走完光標停在**空格**上——`wdiw` 因此是
-    // 最順手的一按，而它在 vim 裏刪的是那一串空白。
-    assert_eq!(vim("alpha beta\n", "wdiw"), "alphabeta\n", "空白也是一個詞");
-    assert_eq!(vim("alpha beta gamma\n", "wdaw"), "alpha gamma\n", "空白 ＋ 下一個詞");
+    // ⚠️ **這一條 2026-09-20 改了，因爲語義改對了**（B3）。從前 vim 預設借的是
+    // 本編輯器的 `w`，它連着邊界一起取、走完停在**空格**上，於是 `wdiw` 刪的是
+    // 那一串空白。現在 vim 的 `w` 是它自己的：落在 `beta` 的頭上，`wdiw` 刪的
+    // 就是 `beta`——真 vim 按下去也是這個結果。
+    assert_eq!(vim("alpha beta\n", "wdiw"), "alpha \n", "落在詞上，刪那個詞");
+    assert_eq!(vim("alpha beta gamma\n", "wdaw"), "alpha gamma\n", "連它後面的空白");
+    // 空白本身仍然是一個對象——光標**真的停在空白上**的時候。
+    assert_eq!(vim("alpha beta\n", "llllldiw"), "alphabeta\n", "空白也是一個詞");
     // ⚠️ 一個字的選區和「没動」都是 `anchor == cursor`，所以對象自己說有没有
     // 命中——不然 `wdiw` 會被「動作找不到東西」那道閘拒掉。
     assert_eq!(vim("alpha\n", "di("), "alpha\n", "外面没有括號就什麽都不做");
@@ -15072,3 +15075,59 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+
+/// **vim 一致性語料** — 判準抄自 vim 自己的文檔（`:h word-motions`、`:h cw`）。
+#[test]
+fn vim_conformance() {
+    let case = |text: &str, keys: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    let cursor = |text: &str, keys: &str| -> usize {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.cursor()
+    };
+    let mut bad: Vec<String> = Vec::new();
+    let mut check = |what: &str, got: String, want: &str| {
+        if got != want {
+            bad.push(format!("{what}\n     得到 {got:?}\n     應是 {want:?}"));
+        }
+    };
+
+    // ① w 落在下一個詞的頭上（朋友第 2 條）
+    let at = cursor("alpha beta gamma\n", "w");
+    check("① w 落點（應是 beta 的 b）", at.to_string(), "6");
+    // ② dw 在行末不跨行（朋友第 3 條，:h word-motions）
+    check("② dw 行末", case("alpha beta\n  indented\n", "wdw"), "alpha \n  indented\n");
+    // ③ cw 當 ce 用（:h cw）
+    check("③ cw 不吃空白", case("alpha beta\n", "cwX"), "X beta\n");
+    // ④ dw 從詞中間只刪後半截
+    check("④ dw 詞中", case("alpha beta\n", "lldw"), "albeta\n");
+    // ⑤ dd 帶走換行，cc 留着
+    check("⑤ dd", case("one\ntwo\n", "dd"), "two\n");
+    check("⑤ cc", case("one\ntwo\n", "ccX"), "X\ntwo\n");
+    // ⑥ x 一個字，3x 三個
+    check("⑥ x", case("abcdef\n", "x"), "bcdef\n");
+    check("⑥ 3x", case("abcdef\n", "3x"), "def\n");
+    // ⑦ 行與文件
+    check("⑦ d$", case("alpha beta\n", "lld$"), "al\n");
+    check("⑦ d0", case("alpha beta\n", "lld0"), "pha beta\n");
+    check("⑦ dG", case("one\ntwo\nthree\n", "jdG"), "one\n");
+    // ⑧ f 含落點，t 停在前一格
+    check("⑧ df,", case("a,b,c\n", "df,"), "b,c\n");
+    check("⑧ dt,", case("a,b,c\n", "dt,"), ",b,c\n");
+    // ⑨ 文本對象
+    check("⑨ diw", case("alpha beta\n", "diw"), " beta\n");
+    check("⑨ daw", case("alpha beta\n", "daw"), "beta\n");
+    check("⑨ di(", case("say (hi) now\n", "wdi("), "say () now\n");
+    // ⑩ V 之後 j 擴選（朋友第 4 條）
+    check("⑩ Vjd", case("one\ntwo\nthree\n", "Vjd"), "three\n");
+
+    assert!(bad.is_empty(), "vim 語料紅了 {} 條：\n  {}", bad.len(), bad.join("\n  "));
+}

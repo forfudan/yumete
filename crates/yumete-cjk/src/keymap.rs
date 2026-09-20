@@ -51,7 +51,6 @@ impl KeyPreset {
                 // line from the `o`. vim's `s` is 「cut this character and
                 // start typing」, which is what `x` does plus `i`.
                 ("s", ";{n}Di"),
-                ("V", "x"),
                 // ⚠️ **`dd` `dw` `cw` `yy` `cc` `yw` are not in this table
                 // any more** (#429, 2026-09-18). They were six lines of a
                 // grammar that has hundreds, and a table cannot spell the rest

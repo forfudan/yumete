@@ -545,17 +545,49 @@ impl Editor {
     /// what to *do* with the span is the grammar's, and today there is one
     /// grammar ([`Self::take_span`]).
     pub(super) fn run_motion(&self, what: motion::Motion) -> motion::Span {
+        self.read_motion(what, motion::Reading::Selection)
+    }
+
+    /// The same, saying **which reading** is wanted (B3, 2026-09-20).
+    ///
+    /// 「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞；helix 把兩個 `w` 合一了」
+    /// — so the two grammars ask the same motion two different questions, and
+    /// this is where the question is put. [`motion::Reading::Caret`] answers
+    /// with the **primitive**: where the caret lands, collapsed, no rule of
+    /// helix's wrapped around it.
+    pub(super) fn read_motion(&self, what: motion::Motion, how: motion::Reading) -> motion::Span {
         let rope = self.current_buffer().rope();
         let seg = self.segmenter.as_ref();
         let at = |p: usize| motion::Span::Over { anchor: p, head: p };
+        let caret = how == motion::Reading::Caret;
         match what {
+            // ⚠️ **The one place the two readings really part company.**
+            // helix's `w` is the primitive plus 「never just the cell you are
+            // on」; vim's is the primitive itself.
+            motion::Motion::WordForward(grain) if caret => {
+                at(motion::next_word_start(rope, self.cursor, grain, seg))
+            }
+            motion::Motion::WordEnd(grain) if caret => {
+                at(motion::next_word_end(rope, self.cursor, grain, seg).1)
+            }
+            motion::Motion::WordBack(grain) if caret => {
+                at(motion::prev_word_start(rope, self.cursor, grain, seg))
+            }
+            motion::Motion::Paragraph { forward } if caret => match forward {
+                true => at(motion::next_paragraph(rope, self.cursor)),
+                false => at(motion::prev_paragraph(rope, self.cursor)),
+            },
+            motion::Motion::Sentence { forward } if caret => match forward {
+                true => at(motion::next_sentence(rope, self.cursor)),
+                false => at(motion::prev_sentence(rope, self.cursor)),
+            },
             motion::Motion::WordForward(grain) => {
                 motion::word_forward(rope, self.cursor, grain, seg)
             }
             motion::Motion::WordEnd(grain) => motion::word_end(rope, self.cursor, grain, seg),
             motion::Motion::WordBack(grain) => motion::word_back(rope, self.cursor, grain, seg),
-            motion::Motion::Find { forward, target } => {
-                motion::find_char(rope, self.cursor, forward, target)
+            motion::Motion::Find { forward, target, till } => {
+                motion::find_char(rope, self.cursor, forward, target, till)
             }
             // **The gotos collapse**, so they say so in the span: both ends at
             // the target. A goto is not a selection — 「take me there」, not
@@ -581,6 +613,15 @@ impl Editor {
             }
             motion::Motion::Sentence { forward: false } => {
                 motion::unit_back(rope, self.cursor, motion::prev_sentence)
+            }
+            motion::Motion::Line { down } => {
+                let line = rope.char_to_line(self.cursor);
+                let last = rope.len_lines().saturating_sub(1);
+                let want = match down {
+                    true => (line + 1).min(last),
+                    false => line.saturating_sub(1),
+                };
+                at(rope.line_to_char(want))
             }
             motion::Motion::Object { what: motion::Object::Word, around } => {
                 self.word_object_span(around)

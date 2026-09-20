@@ -698,16 +698,13 @@ impl Editor {
     }
 
     /// Copy a range into the register and say how much (`y`).
+    ///
+    /// ⚠️ No special case for a collapsed selection: there is no such thing —
+    /// the cursor's own grapheme is always inside one.
     pub(super) fn yank_range(&mut self, (start, end): (usize, usize)) {
         let text = self.current_buffer().rope().slice(start..end).to_string();
         self.store(text);
         self.status = say!("edit.yanked-characters", end - start);
-    }
-
-    pub(super) fn yank(&mut self) {
-        // No special case for a collapsed selection any more: there is no such
-        // thing — the cursor's own grapheme is always in it.
-        self.yank_range(self.selection())
     }
 
     /// Paste the register after (`p`) or before (`P`) the selection, and select
