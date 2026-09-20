@@ -36,29 +36,59 @@ impl Editor {
         // 個動作播的就是 `mi%`／`ma%`（`keymap.rs` 的 `object`）。從前這裏只認
         // 括號，於是 vim 手指最熟的那一組按下去**什麽也不發生**：`ciw` 剪掉光標
         // 底下那一個字就進了插入，比不動還糟。
-        if c == 'w' {
-            return self.select_word_object(around);
-        }
-        let rope = self.current_buffer().rope();
-        let Some((open, close)) = pair_of(c) else {
-            self.object_missed = true;
-            return;
+        // **An object is a motion now** (B1, 2026-09-20). What stays here is
+        // what only the editor can do: name the pair the key stands for, and
+        // say the sentence when there is nothing to take.
+        let what = match c {
+            'w' => motion::Object::Word,
+            c => match pair_of(c) {
+                Some((open, close)) => motion::Object::Pair { open, close },
+                None => {
+                    self.object_missed = true;
+                    return;
+                }
+            },
         };
-        let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
-            self.status = say!("edit.no-pair-around", open, close);
+        let span = self.run_motion(motion::Motion::Object { what, around });
+        if span == motion::Span::Missed {
+            self.status = match what {
+                motion::Object::Word => say!("edit.no-word-here"),
+                motion::Object::Pair { open, close } => say!("edit.no-pair-around", open, close),
+            };
             self.object_missed = true;
             return;
+        }
+        self.take_object(span);
+    }
+
+    /// **Take both ends exactly as the object named them** (B1).
+    ///
+    /// The third reading of a span, and the narrowest: an object knows what it
+    /// is taking, so neither end is negotiable — no extend, and no clamping to
+    /// what the page draws. ⚠️ Objects have never respected extend mode; that
+    /// is preserved here rather than decided, because 「`mi(` while extending」
+    /// is a question nobody has asked yet.
+    pub(super) fn take_object(&mut self, span: motion::Span) {
+        if let motion::Span::Over { anchor, head } = span {
+            self.anchor = anchor;
+            self.cursor = head.max(anchor);
+        }
+    }
+
+    /// The span a pair of delimiters encloses, `around` taking the marks too.
+    fn pair_span(&self, open: char, close: char, around: bool) -> motion::Span {
+        let rope = self.current_buffer().rope();
+        let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
+            return motion::Span::Missed;
         };
         // `end` is the closing bracket's own index. The head goes on the last
         // character the selection covers, not one past it — the cursor's
         // grapheme is inside the selection.
-        let (a, b) = if around {
-            (start, end)
-        } else {
-            (start + 1, end.saturating_sub(1))
+        let (anchor, head) = match around {
+            true => (start, end),
+            false => (start + 1, end.saturating_sub(1)),
         };
-        self.anchor = a;
-        self.cursor = b.max(a);
+        motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
     /// 光標底下那個**詞**（`mi w`／`ma w`，以及 vim 的 `ciw`／`daw`）。
@@ -70,7 +100,7 @@ impl Editor {
     /// ⚠️ 用的是走 `w`／`e` 的那一份分詞（`motion::line_words`，粗粒度），**不是**
     /// `segment_line`——那一支只交漢字，標點與拉丁文一個都不交，而 `ciw` 最常
     /// 按在一個拉丁詞上（`delete_selection` 這種）。
-    fn select_word_object(&mut self, around: bool) {
+    fn word_object_span(&self, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope().clone();
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
         let start = rope.line_to_char(line);
@@ -105,9 +135,7 @@ impl Editor {
             }
             Some((a, b))
         }) else {
-            self.status = say!("edit.no-word-here");
-            self.object_missed = true;
-            return;
+            return motion::Span::Missed;
         };
         // 空白那一支已經把 `around` 算進去了，下面那一段只管詞本身。
         let around = around && here.is_some();
@@ -129,8 +157,7 @@ impl Editor {
                 }
             }
         }
-        self.anchor = a;
-        self.cursor = b.max(a);
+        motion::Span::Over { anchor: a, head: b.max(a) }
     }
 
     /// Wrap the selection in the pair named by `c` (`ms`).
@@ -555,6 +582,13 @@ impl Editor {
             motion::Motion::Sentence { forward: false } => {
                 motion::unit_back(rope, self.cursor, motion::prev_sentence)
             }
+            motion::Motion::Object { what: motion::Object::Word, around } => {
+                self.word_object_span(around)
+            }
+            motion::Motion::Object {
+                what: motion::Object::Pair { open, close },
+                around,
+            } => self.pair_span(open, close, around),
         }
     }
 

@@ -423,6 +423,22 @@ pub enum Motion {
     Paragraph { forward: bool },
     /// `L` / `H` — a sentence: 。！？ and the closing mark after one.
     Sentence { forward: bool },
+    /// `mi w`, `ma (` — and vim's `ciw`, `di(`, which press the same door.
+    ///
+    /// ⚠️ **An object knows both its ends**, which is why it is not two
+    /// motions: `i(` is not 「forward to `)`」, it is 「the thing this caret is
+    /// inside of」, and from anywhere in it the answer is the same.
+    Object { what: Object, around: bool },
+}
+
+/// What a text object names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Object {
+    /// A word — or, standing on blanks, that run of blanks (vim's rule, and
+    /// the one that makes `wdiw` the handiest press in this editor).
+    Word,
+    /// A pair of delimiters, already resolved to its two characters.
+    Pair { open: char, close: char },
 }
 
 impl Span {
