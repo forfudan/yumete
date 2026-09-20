@@ -1215,7 +1215,13 @@ pub fn padding(
     }
     // **No narrower than its own alignment marker**, where there is one to
     // write — see [`Wall::ruled`].
-    if wall.ruled() {
+    //
+    // ⚠️ **Only where the rule row is written out as characters** (2026-09-20).
+    // 竪排 draws that row as the wall running down the 縱 — one glyph, and the
+    // `:` are off the page entirely — so there is nothing for this floor to
+    // protect, and it was making every band in a `:-:` table **three slots
+    // deep** where a `---` table's is one. `Measure::Slots` is that page.
+    if wall.ruled() && measure == Measure::Cells {
         for (c, width) in target.iter_mut().enumerate() {
             *width = (*width).max(aligns.get(c).copied().unwrap_or_default().min() + 2);
         }

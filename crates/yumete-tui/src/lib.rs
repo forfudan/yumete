@@ -16175,6 +16175,27 @@ fn squeezed(text: &str) -> String {
         assert!(shot.matches("──").count() >= 2, "the bands are drawn: {shot}");
     }
 
+    /// **`:-:` turns into the same wall `---` does** (2026-09-20).
+    ///
+    /// The alignment markers are written on the rule row, and turned, that row
+    /// *is* the wall down the 縱 — so they have nowhere to go and are hidden.
+    /// Two things were keeping them on the page: the slack list kept the `:`,
+    /// and `padding`'s 「no column narrower than its own alignment marker」
+    /// floor is about characters on a line, which 竪排 does not write.
+    #[test]
+    fn a_centred_column_turns_like_any_other() {
+        let shoot = |rule: &str| {
+            let mut editor = editor_with(&format!("| 甲 | 乙 |\n| {rule} | {rule} |\n| 一 | 二 |\n"));
+            editor.execute(":layout vertical").unwrap();
+            let config = Config::default();
+            let ime = ImeSession::empty(Scheme::LINGMING);
+            frame_to_text(&mut editor, &config, &ime, 34, 9)
+        };
+        let centred = shoot(":-:");
+        assert!(!centred.contains(':'), "the markers are off the page: {centred}");
+        assert_eq!(centred, shoot("---"), "and the bands are the same depth");
+    }
+
     /// The three states (#290), and the two switches that reach them.
     ///
     /// **ABC and 關 are not the same state**, although the keyboard behaves

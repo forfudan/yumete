@@ -184,12 +184,22 @@ impl Editor {
                 off.push((to, end));
             }
             if ruled && to > from {
-                // 「:---:」 keeps its markers and one dash; the rest is ours to
-                // re-fill, at the depth the band really is.
-                let lead = from + usize::from(chars.get(from) == Some(&':'));
-                let trail = to - usize::from(to > from && chars.get(to - 1) == Some(&':'));
-                if lead + 1 < trail {
-                    off.push((lead + 1, trail));
+                // **One dash, and nothing else** — the alignment markers go
+                // with the rest (2026-09-20). They used to be kept, on the
+                // reasoning that they say something the file says; turned, they
+                // do not. The rule row *is* the wall running down the 縱, and
+                // `:` has no wall glyph, so a `:-:` came out as two stray
+                // colons with the wall between them — and because that cell
+                // then kept three characters where `---` keeps one, **every
+                // band in the table went three slots deep** to match it.
+                // Alignment is not drawn on the turned page in any case: the
+                // cells are bands, and a band has no left or right.
+                let keep = (from..to).find(|&i| chars.get(i) == Some(&'-')).unwrap_or(from);
+                if from < keep {
+                    off.push((from, keep));
+                }
+                if keep + 1 < to {
+                    off.push((keep + 1, to));
                 }
             }
         }
