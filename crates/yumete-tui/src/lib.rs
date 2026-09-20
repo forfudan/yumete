@@ -3270,19 +3270,26 @@ fn diff_cell(change: yumete_core::vcs::Change, ink: crate::theme::Palette, band:
 /// 為同一件事寫過同一條理由：百個男人裏有八個分不出紅綠，而這一格只有一格寬，
 /// 單靠顏色說話等於對他們什麼都没說。
 ///
-/// `narrow` 由呼叫方量——U+25CF／U+25B2／U+25C6／U+00B7 四個都是 East Asian
-/// Ambiguous，CJK 字體的終端上佔**兩格**，多出來的那一格會把整行推歪。量出兩格
-/// 就退回 ASCII：`x` `!` `i` `.` 四個字任何字體下都是一格。
+/// ⚠️ **這四個字是量過的，不是挑好看的**（2026-09-21）。第一版是 `●▲◆·`，
+/// 一看圖就是「紅圈圈是個半圓？」。在 CJK 等寬字體（LXGW 文楷 Mono GB）裏量：
+/// **一格 7.5px，而 `●`／`▲`／`◆` 都是 15.00px ——整整兩格**，`•`／`·`／`!`／`i`
+/// 纔是 7.50px。兩格的字擠進一格，終端不是裁掉半邊就是把整行推開一格，而這一欄
+/// 存在的全部理由就是**不動版心**。
+///
+/// 所以形狀讓位給寬度：`•` 錯、`!` 警告、`i` 說明、`·` 建議。
+///
+/// `narrow` 仍然由呼叫方量：`•` 與 `·` 是 East Asian **Ambiguous**，終端自己說
+/// 它算幾格（`yumete_cjk::char_width`，啓動時問來的）；說兩格就退回 `*` 和 `.`，
+/// 這兩個是 ASCII，任何字體下都是一格。`!` 與 `i` 本來就是 ASCII，無論哪一路
+/// 都是它們自己。
 fn problem_glyph(severity: yumete_core::problem::Severity, narrow: bool) -> &'static str {
     use yumete_core::problem::Severity;
     match (severity, narrow) {
-        (Severity::Error, true) => "●",
-        (Severity::Warn, true) => "▲",
-        (Severity::Note, true) => "◆",
+        (Severity::Error, true) => "•",
+        (Severity::Error, false) => "*",
+        (Severity::Warn, _) => "!",
+        (Severity::Note, _) => "i",
         (Severity::Hint, true) => "·",
-        (Severity::Error, false) => "x",
-        (Severity::Warn, false) => "!",
-        (Severity::Note, false) => "i",
         (Severity::Hint, false) => ".",
     }
 }
@@ -3298,7 +3305,7 @@ fn problem_cell(
 ) -> Span<'static> {
     use crate::theme::Accent;
     use yumete_core::problem::Severity;
-    let narrow = ["●", "▲", "◆", "·"]
+    let narrow = ["•", "·"]
         .iter()
         .all(|g| yumete_cjk::char_width(g.chars().next().unwrap_or(' ')) == 1);
     let colour = match severity {
@@ -10889,8 +10896,8 @@ fn squeezed(text: &str) -> String {
         let ink = ink(&config);
         let cell = problem_column(&editor, &config);
         assert_eq!(at(&buffer, cell, 0), " ", "第 1 行没話說");
-        assert_eq!(at(&buffer, cell, 1), "●", "第 2 行有個錯");
-        assert_eq!(at(&buffer, cell, 2), "▲", "第 3 行是個警告");
+        assert_eq!(at(&buffer, cell, 1), "•", "第 2 行有個錯");
+        assert_eq!(at(&buffer, cell, 2), "!", "第 3 行是個警告");
         // ⚠️ **四檔四個形狀。** 顏色只是第二條線索——一欄寬的一格，紅綠分不出的
         // 人就只剩形狀可讀。
         assert_eq!(
@@ -10901,7 +10908,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(buffer[(cell, 1)].style().bg, ink.page().bg, "底色一路是紙");
         // ⚠️ **號碼一個都没丟，正文一欄都没挪**：這一格佔的是本來就空着的那兩格
         // 裏的頭一格，改動條佔末一格，兩件事一起落地版心還是不動。
-        assert_eq!(row_text(&buffer, 1).trim_end(), "2● 二");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "2• 二");
         assert_eq!(row_text(&buffer, 0).trim_end(), "1  一", "没話說的那一行照舊");
     }
 
@@ -10915,29 +10922,41 @@ fn squeezed(text: &str) -> String {
         let buffer = render(&editor, &config, 20, 8);
 
         // 同一行上兩件事，各佔各的一格，誰也不蓋誰。
-        assert_eq!(at(&buffer, problem_column(&editor, &config), 1), "●");
+        assert_eq!(at(&buffer, problem_column(&editor, &config), 1), "•");
         assert_eq!(at(&buffer, bar_column(&editor, &config), 1), super::CHANGE_BAR);
-        assert_eq!(row_text(&buffer, 1).trim_end(), "2●▍二");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "2•▍二");
     }
 
+    /// ⚠️ **這四個字是量過的**（2026-09-21）。第一版 `●▲◆·` 畫出來，一眼就是
+    /// 「紅圈圈是個半圓？」——在 CJK 等寬字體裏量，一格 7.5px，而 `●▲◆`
+    /// 都是 **15.00px，整整兩格**；`•·!i` 纔是 7.50px。兩格的字擠進一格，不是被
+    /// 裁掉半邊就是把整行推開，而這一欄存在的全部理由就是不動版心。
     #[test]
-    fn the_four_severities_fall_back_to_four_ascii_characters() {
+    fn the_four_severities_are_four_shapes_and_every_one_of_them_is_one_cell() {
         use yumete_core::problem::Severity;
-        // U+25CF／U+25B2／U+25C6／U+00B7 四個都是 East Asian Ambiguous：CJK 字體
-        // 的終端把它們畫成兩格，多出來的那一格會把整行推歪。
         let four = [Severity::Error, Severity::Warn, Severity::Note, Severity::Hint];
         let ascii: Vec<&str> = four.iter().map(|s| problem_glyph(*s, false)).collect();
-        assert_eq!(ascii, ["x", "!", "i", "."]);
+        assert_eq!(ascii, ["*", "!", "i", "."]);
         for glyph in &ascii {
             assert!(glyph.is_ascii(), "退路要是任何字體都只佔一格的東西：{glyph}");
         }
         // 四檔四個形狀，兩條路上都不許重樣——重了就只剩顏色說話。
         let wide: Vec<&str> = four.iter().map(|s| problem_glyph(*s, true)).collect();
+        assert_eq!(wide, ["•", "!", "i", "·"]);
         for shapes in [&ascii, &wide] {
             let mut seen = shapes.to_vec();
             seen.sort_unstable();
             seen.dedup();
             assert_eq!(seen.len(), 4, "四檔要四個形狀：{shapes:?}");
+        }
+        // ⚠️ **一個方塊字都不許進來。** U+2580–U+25FF 那一整片（`●▲◆` 都在裏面）
+        // 在 CJK 字體下是兩格，而這裏只有一格。
+        for glyph in wide.iter().chain(ascii.iter()) {
+            let c = glyph.chars().next().unwrap();
+            assert!(
+                !('\u{2580}'..='\u{25FF}').contains(&c),
+                "方塊區的字在 CJK 字體裏是兩格：{glyph}"
+            );
         }
     }
 
