@@ -1010,10 +1010,10 @@ impl Editor {
             // very nearly what `w` does; left coarse it runs to the next
             // punctuation instead — `w` takes a word, `e` takes a clause.
             //
-            // And it sets **both** ends: `select_to` leaves the anchor where
-            // the caret was, so standing on a word's last character used to
-            // give 「that character ＋ the next word」 — the punctuation between
-            // them riding along in both directions.
+            // And it sets **both** ends: a span anchored at the old caret
+            // would give, from a word's last character, 「that character ＋ the
+            // next word」 — the punctuation between them riding along in both
+            // directions.
             Key::Char('e') => self.repeat(count, |e| {
                 let span = e.run_motion(motion::Motion::WordEnd(motion::Grain::Coarse));
                 e.take_span(span);
@@ -1037,12 +1037,13 @@ impl Editor {
             // A paragraph is a logical line here, and with soft wrap on `j`
             // and `k` move by visual row — so these are the keys that move by
             // what a writer calls a paragraph, and nothing else does.
-            Key::Char('}') => {
-                self.repeat(count, |e| e.select_unit_forward(motion::next_paragraph))
-            }
+            Key::Char('}') => self.repeat(count, |e| {
+                let span = e.run_motion(motion::Motion::Paragraph { forward: true });
+                e.take_span(span);
+            }),
             Key::Char('{') => self.repeat(count, |e| {
-                let p = motion::prev_paragraph(e.current_buffer().rope(), e.cursor);
-                e.select_to(p);
+                let span = e.run_motion(motion::Motion::Paragraph { forward: false });
+                e.take_span(span);
             }),
             // 。！？ and the closing mark that follows one. The unit a person
             // proofreads in, and the one the manual already teaches by telling you
@@ -1063,12 +1064,13 @@ impl Editor {
             // ⚠️ `H`/`L` used to be whole-page paging. Nothing was lost: `C-f`,
             // `C-b`, `PageUp` and `PageDown` all still do it, and the pair a
             // reader actually wears out is the *half* page on `J`/`K`.
-            Key::Char('L') => {
-                self.repeat(count, |e| e.select_unit_forward(motion::next_sentence))
-            }
+            Key::Char('L') => self.repeat(count, |e| {
+                let span = e.run_motion(motion::Motion::Sentence { forward: true });
+                e.take_span(span);
+            }),
             Key::Char('H') => self.repeat(count, |e| {
-                let p = motion::prev_sentence(e.current_buffer().rope(), e.cursor);
-                e.select_to(p);
+                let span = e.run_motion(motion::Motion::Sentence { forward: false });
+                e.take_span(span);
             }),
             // A mark is where you meant to come *back* to; the jump list is
             // where you came *from*. `M`/`'` rather than vi's `m`/`'`, because
