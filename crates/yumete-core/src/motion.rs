@@ -431,6 +431,26 @@ pub enum Motion {
     Object { what: Object, around: bool },
 }
 
+/// **What a verb does to a span** — the other half of the grammar layer
+/// (B2, 2026-09-20).
+///
+/// A verb used to read the selection itself, which is why a second grammar
+/// could not reach it: vim's `dw` has no selection to read, it has a range the
+/// motion just handed over. Made a value, the verb takes the range from
+/// whoever has one — helix passes its selection, vim (B3) passes the span its
+/// motion returned — and **there is one knife** either way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Operator {
+    /// `d` — take it out; the register gets it, as it does in helix.
+    Delete,
+    /// `D` — take it out **deliberately**, into the register.
+    Cut,
+    /// `c` / `C` — take it out and start typing in its place.
+    Change { cut: bool },
+    /// `y` — copy it, change nothing.
+    Yank,
+}
+
 /// What a text object names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Object {

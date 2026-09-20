@@ -1204,16 +1204,25 @@ impl Editor {
                 if self.span().0 == self.span().1 && count > 1 {
                     self.extend_by_graphemes(count);
                 }
-                match key {
-                    Key::Char('D') | Key::Char('C') => self.cut_selection_to_register(),
-                    _ => self.delete_selection(),
-                }
-                if matches!(key, Key::Char('c') | Key::Char('C')) {
-                    self.enter_insert();
-                }
+                // **Through the one door** (B2, 2026-09-20): helix hands the
+                // verb its own selection, vim will hand it a motion's span,
+                // and neither knows the other exists.
+                let cut = matches!(key, Key::Char('D') | Key::Char('C'));
+                let op = match matches!(key, Key::Char('c') | Key::Char('C')) {
+                    true => motion::Operator::Change { cut },
+                    false => match cut {
+                        true => motion::Operator::Cut,
+                        false => motion::Operator::Delete,
+                    },
+                };
+                let (anchor, head) = self.span();
+                self.apply(op, motion::Span::Over { anchor, head });
             }
             // Yank / paste (Helix `y` / `p` / `P`).
-            Key::Char('y') => self.yank(),
+            Key::Char('y') => {
+                let (anchor, head) = self.span();
+                self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });
+            }
             Key::Char('p') => self.repeat_writing(count, |e| e.paste(true)),
             Key::Char('P') => self.repeat_writing(count, |e| e.paste(false)),
             // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).
