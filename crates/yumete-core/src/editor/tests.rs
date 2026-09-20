@@ -8473,6 +8473,79 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().case, Case::Smart, "round again");
 }
 
+/// **模糊: 「差不多是這幾個字」** — 作者 2026-09-19: 「寫小説的人記得差不多是
+/// 這幾個字卻記不得原句」. The panel's other setting is a regular expression,
+/// which answers a different question (a *shape*); this one is a fourth
+/// switch, and it stands in place of 正則 and 完整匹配 rather than beside them.
+#[test]
+fn the_loose_switch_finds_a_half_remembered_phrase() {
+    use crate::search_panel::Field;
+    let mut ed = typed("他輕輕地説了一句。\n他説。\n走了很久，天亮纔聽見有人説話。\n");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    type_keys(&mut ed, " /");
+    type_keys(&mut ed, "他説");
+    assert_eq!(ed.search().total, 1, "as a string, only the exact one");
+
+    // Down out of the box and on to the fourth switch: 正則, 大小寫, 完整匹配,
+    // 模糊.
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Down);
+    assert_eq!(ed.search().field, Field::Fuzzy);
+    ed.on_key(Key::Char(' '));
+    assert!(ed.search().fuzzy);
+
+    // 他輕輕地説 as well as 他説 — and **not** the third line, where the two
+    // characters are a sentence apart: that is the window, and without it this
+    // switch would answer 「every line」.
+    assert_eq!(ed.search().total, 2);
+    assert_eq!(ed.search().hits[0].line, 0);
+    assert_eq!(ed.search().hits[1].line, 1);
+
+    // ⚠️ The page is left a pattern it can keep: `n` walks the **exact** ones,
+    // which are a subset of the list, rather than a regex that cannot say
+    // 「nearly」.
+    assert_eq!(ed.last_search(), "他説");
+
+    // Asking for 正則 puts 模糊 down — they are alternatives, and a dimmed
+    // switch that still flipped would say two things at once.
+    ed.on_key(Key::Char('k'));
+    ed.on_key(Key::Char('k'));
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.search().field, Field::Regex);
+    ed.on_key(Key::Char(' '));
+    assert!(ed.search().regex);
+    assert!(!ed.search().fuzzy, "正則 and 模糊 are not both on");
+}
+
+/// **模糊 is for finding, never for replacing** (作者 2026-09-20). A loose
+/// match covers characters nobody typed, so 「replace them all」 would hand the
+/// manuscript a range the writer cannot predict.
+#[test]
+fn the_loose_switch_is_not_there_when_the_panel_replaces() {
+    use crate::search_panel::Field;
+    let mut ed = typed("他輕輕地説了一句。\n");
+    type_keys(&mut ed, " /");
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Char(' '));
+    assert!(ed.search().fuzzy);
+
+    ed.execute(":replace").unwrap();
+    assert!(ed.search().replacing);
+    assert!(!ed.search().fuzzy, "it comes off when the panel starts changing things");
+    // …and the cell is not in the form at all, so `Tab` cannot reach it.
+    let mut field = Field::Query;
+    for _ in 0..Field::ALL.len() + 1 {
+        field = field.step(false, true);
+        assert_ne!(field, Field::Fuzzy);
+    }
+}
+
 /// `空格 /` fills the box with something worth pressing Enter on — #419.
 #[test]
 fn the_box_opens_holding_the_last_pattern_or_what_is_marked() {

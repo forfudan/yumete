@@ -91,6 +91,8 @@ pub enum Field {
     Case,
     /// 完整匹配 — ASCII `\b` on both ends.
     Whole,
+    /// 模糊 — 「差不多是這幾個字」 (`crate::nearby`).
+    Fuzzy,
     /// The list of what was found. Not a cell to type in; `Tab` reaches it so
     /// that walking the form ends up where the answers are.
     Results,
@@ -98,12 +100,13 @@ pub enum Field {
 
 impl Field {
     /// Every cell, in `Tab`'s order.
-    pub const ALL: [Field; 6] = [
+    pub const ALL: [Field; 7] = [
         Field::Query,
         Field::Replace,
         Field::Regex,
         Field::Case,
         Field::Whole,
+        Field::Fuzzy,
         Field::Results,
     ];
 
@@ -113,11 +116,21 @@ impl Field {
     }
 
     /// The next cell in that direction, wrapping — skipping the replace row
-    /// while the panel is only looking.
+    /// while the panel is only looking, and the 模糊 switch while it is
+    /// replacing.
+    ///
+    /// ⚠️ **模糊 and replacing never show together** (作者 2026-09-20). A loose
+    /// match covers characters nobody typed, so 「replace them all」 would hand
+    /// the manuscript to a range the writer cannot predict. 模糊 is for
+    /// finding; when it has found the place, `Esc` and change it there.
     pub fn step(self, back: bool, replacing: bool) -> Field {
         let cells: Vec<Field> = Field::ALL
             .into_iter()
-            .filter(|f| replacing || *f != Field::Replace)
+            .filter(|f| match f {
+                Field::Replace => replacing,
+                Field::Fuzzy => !replacing,
+                _ => true,
+            })
             .collect();
         let at = cells.iter().position(|&f| f == self).unwrap_or(0);
         let n = cells.len();
@@ -225,6 +238,12 @@ pub struct Search {
     /// boundary there — so it only ever bites on the Western words in a
     /// manuscript. Said in the manual rather than hidden.
     pub whole: bool,
+    /// 「差不多是這幾個字」 — [`crate::nearby`] instead of a pattern.
+    ///
+    /// ⚠️ **It stands in place of 正則 and 完整匹配**, which are about a
+    /// pattern and are drawn quiet while this is on; 大小寫 still applies.
+    /// Never on while the panel is replacing (see [`Field::step`]).
+    pub fuzzy: bool,
     /// What was found, at most [`MOST`] of them.
     pub hits: Vec<Hit>,
     /// How many there are altogether, however many are listed.

@@ -6069,8 +6069,16 @@ fn draw_search(
     // left, 完整匹配 pushed to the right edge — and in a narrow panel the
     // second one simply did not appear, because there was no room for it at
     // the right and nowhere else for it to go. Three rows, always all three.
+    // ⚠️ **模糊 stands in place of the two pattern switches**, and says so by
+    // drawing them quiet: 正則 is a *shape* and 完整匹配 is a word boundary,
+    // and neither means anything when the question is 「差不多是這幾個字」.
+    // 大小寫 still applies, so it is not dimmed.
+    let pattern_cell = |field: Field| match find.fuzzy {
+        true => quiet,
+        false => cell(field),
+    };
     let y = y + 1;
-    put_text(buf, left, y, to, &format!("{} {}", tick(find.regex), say!("search.regex")), cell(Field::Regex));
+    put_text(buf, left, y, to, &format!("{} {}", tick(find.regex), say!("search.regex")), pattern_cell(Field::Regex));
     let y = y + 1;
     // Spelled out rather than asked of `Case`, so the tags sit where the
     // messages test can see them: it reads `say!` calls, and a tag returned
@@ -6083,7 +6091,17 @@ fn draw_search(
     let case = format!("{}  {}", say!("search.case"), which);
     put_text(buf, left, y, to, &case, cell(Field::Case));
     let y = y + 1;
-    put_text(buf, left, y, to, &format!("{} {}", tick(find.whole), say!("search.whole")), cell(Field::Whole));
+    put_text(buf, left, y, to, &format!("{} {}", tick(find.whole), say!("search.whole")), pattern_cell(Field::Whole));
+    // **模糊 is not offered while replacing** — a loose range covers characters
+    // nobody typed, and replacing those is not a thing to offer (`Field::step`).
+    let y = match find.replacing {
+        true => y,
+        false => {
+            let y = y + 1;
+            put_text(buf, left, y, to, &format!("{} {}", tick(find.fuzzy), say!("search.fuzzy")), cell(Field::Fuzzy));
+            y
+        }
+    };
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.

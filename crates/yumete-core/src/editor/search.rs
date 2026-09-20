@@ -52,6 +52,14 @@ impl Editor {
         }
     }
 
+    /// Where the panel's 模糊 switch starts — `[editor] fuzzy_search`.
+    ///
+    /// Only the starting position: the switch itself is on the panel, and
+    /// `:replace` puts it down whatever this says.
+    pub fn set_fuzzy_search(&mut self, on: bool) {
+        self.search.fuzzy = on;
+    }
+
     /// Turn smart case off (or back on) — `[editor] smart_case`.
     pub fn set_smart_case(&mut self, on: bool) {
         self.smart_case = on;
