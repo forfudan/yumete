@@ -717,6 +717,40 @@ impl Editor {
         }
     }
 
+    // ---- 語言服務器說的話（#53／#54）---------------------------------------
+
+    /// 收下一個服務器對一個檔說的全部話。
+    ///
+    /// ⚠️ **整份換掉，不是添上去**——理由寫在 [`crate::problem::Problems::set`]。
+    /// 行與列進來的時候已經是**字符**，不是 LSP 的 UTF-16：換算是前端在收報那
+    /// 一刻做的，這道門裏面不該再見到另一套坐標。
+    pub fn set_problems(&mut self, path: std::path::PathBuf, said: Vec<crate::problem::Problem>) {
+        self.problems.set(path, said);
+    }
+
+    /// 第 `line` 行（0 起算）上最響的那一句話，給行號旁邊那一格。
+    ///
+    /// ⚠️ 和 [`Self::vcs_mark`] 一樣，**這一句只查手上這份，一個進程都不生**：
+    /// 它一幀要被問幾十次。
+    pub fn problem_on_line(&self, line: usize) -> Option<crate::problem::Severity> {
+        let path = self.current_buffer().path()?;
+        self.problems.worst_on(path, line)
+    }
+
+    /// 服務器一共說了幾句——`:check-code` 拿它分「乾淨」和「還没人說過話」。
+    pub fn problem_count(&self) -> usize {
+        self.problems.count()
+    }
+
+    /// 全部的話，按檔名、行、列排好，給 `:check-code` 那張單子。
+    pub fn problems_listed(&self) -> Vec<(&std::path::Path, &crate::problem::Problem)> {
+        self.problems
+            .files()
+            .into_iter()
+            .flat_map(|(path, _)| self.problems.of(path).iter().map(move |said| (path, said)))
+            .collect()
+    }
+
     /// Take a pending `:shot`, if one is waiting for a frame.
     pub fn take_screenshot_request(&mut self) -> Option<ShotJob> {
         self.screenshot_request.take()

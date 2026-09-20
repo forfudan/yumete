@@ -15178,3 +15178,54 @@ fn vim_conformance() {
 
     assert!(bad.is_empty(), "vim 語料紅了 {} 條：\n  {}", bad.len(), bad.join("\n  "));
 }
+
+/// `:check-code` — 語言服務器說過的話，排成一張 `gf` 走得動的單子（#53／#54）。
+///
+/// ⚠️ **列的是每一個檔，不是手上這一個。** 一個服務器看的是整個 crate，報回來
+/// 的多半是還没打開的那幾個檔——只列當前緩衝區，等於把「翻頁翻不到的那些錯」藏
+/// 起來，而那正是這張單子唯一的用處。
+#[test]
+fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
+    use crate::problem::{Problem, Severity};
+    let said = |line: usize, severity: Severity, message: &str| Problem {
+        line,
+        column: 0,
+        severity,
+        message: message.to_string(),
+        source: Some("rust-analyzer".into()),
+    };
+    let mut ed = Editor::new();
+
+    // 一句話都没有的時候，說的是「還没人說過話」——不是「乾淨」。這一步裏還分
+    // 不出這兩件事（服務器根本没接上），所以只敢說前一句。
+    ed.execute(":check-code").unwrap();
+    assert!(ed.status().contains("還没") || ed.status().contains("还没"), "{}", ed.status());
+
+    ed.set_problems(
+        std::path::PathBuf::from("src/zoo.rs"),
+        vec![said(8, Severity::Warn, "unused variable")],
+    );
+    ed.set_problems(
+        std::path::PathBuf::from("src/app.rs"),
+        vec![
+            said(4, Severity::Error, "cannot find value `x`"),
+            said(1, Severity::Note, "…and here"),
+        ],
+    );
+    ed.execute(":check-code").unwrap();
+    let listing = ed.current_buffer().text();
+    let lines: Vec<&str> = listing.lines().collect();
+    assert_eq!(lines.len(), 3, "兩個檔三句話：{listing}");
+    // 按檔名、再按行排好——單子是拿來一行一行往下走的。
+    assert!(lines[0].starts_with("src/app.rs:2:"), "{}", lines[0]);
+    assert!(lines[1].starts_with("src/app.rs:5:"), "{}", lines[1]);
+    assert!(lines[2].starts_with("src/zoo.rs:9:"), "{}", lines[2]);
+    assert!(lines[1].contains("cannot find value"), "{}", lines[1]);
+
+    // 服務器改口說某個檔乾淨了，那個檔就整個離開單子。
+    ed.set_problems(std::path::PathBuf::from("src/app.rs"), Vec::new());
+    ed.execute(":check-code").unwrap();
+    let listing = ed.current_buffer().text();
+    assert_eq!(listing.lines().count(), 1, "只剩 zoo：{listing}");
+    assert!(listing.contains("src/zoo.rs:9:"), "{listing}");
+}

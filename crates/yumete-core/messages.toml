@@ -1105,6 +1105,14 @@ en = "check 字集: characters no current standard carries — the ones a typese
 find = "字集 生僻 罕用 缺字 豆腐塊 豆腐块 通用規範 通用规范 造字 charset rare glyph"
 
 [[message]]
+# :check-code 在命令表裏的說明
+key = "cmd.check.code"
+zht = "語言服務器說過的全部問題，排成一張 gf 跳得了的單子"
+zhs = "语言服务器说过的全部问题，排成一张 gf 跳得了的单子"
+en = "everything the language servers have complained about, as a listing gf can walk"
+find = "診斷 诊断 錯誤 错误 警告 編譯 编译 語言服務器 语言服务器 lsp diagnostics error warning"
+
+[[message]]
 # : 命令選單裏 merge 那一項的說明（check 組）
 key = "cmd.check.merge"
 zht = "列出這份文件裏的合併衝突"
@@ -6279,6 +6287,72 @@ key = "preview.typst-starting"
 zht = "預覽：tinymist 起來中……"
 zhs = "预览：tinymist 起来中……"
 en = "preview: tinymist starting…"
+
+
+# ── problem ──────────────────────────────────────────
+
+[[message]]
+# 語言服務器說的一句話有多響：最響的那一檔
+key = "problem.error"
+zht = "錯誤"
+zhs = "错误"
+en = "error"
+
+[[message]]
+# :check-code 列完了，一共幾處
+key = "problem.found"
+zht = "{0} 處——gf 跳到那一行"
+zhs = "{0} 处——gf 跳到那一行"
+en = "{0} problem(s) — gf goes to the line"
+
+[[message]]
+# 最輕的那一檔：「你也許想知道」
+key = "problem.hint"
+zht = "建議"
+zhs = "建议"
+en = "hint"
+
+[[message]]
+# :check-code 但還没有任何服務器說過話
+key = "problem.none"
+zht = "還没有語言服務器報過問題"
+zhs = "还没有语言服务器报过问题"
+en = "no language server has reported anything"
+
+[[message]]
+# 中間那兩檔之一：服務器順帶說的一句話
+key = "problem.note"
+zht = "說明"
+zhs = "说明"
+en = "note"
+
+[[message]]
+# :check-code 的單子上一行：哪個檔、第幾行、多響、說了什麼
+key = "problem.one"
+zht = "{0}:{1}: {2} {3}"
+zhs = "{0}:{1}: {2} {3}"
+en = "{0}:{1}: {2} {3}"
+
+[[message]]
+# :check-code 的緩衝區標題
+key = "problem.results"
+zht = "語言服務器說的"
+zhs = "语言服务器说的"
+en = "what the language servers said"
+
+[[message]]
+# :check-code 的單子太長，只列了前面那些
+key = "problem.too-many"
+zht = "太多了，只列前 {0} 處"
+zhs = "太多了，只列前 {0} 处"
+en = "too many; the first {0} are listed"
+
+[[message]]
+# 中間那兩檔之一：不至於錯，但值得看一眼
+key = "problem.warn"
+zht = "警告"
+zhs = "警告"
+en = "warning"
 
 
 # ── progress ──────────────────────────────────────────────────────────

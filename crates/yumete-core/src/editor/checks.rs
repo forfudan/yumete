@@ -321,6 +321,65 @@ impl Editor {
         };
     }
 
+    /// `:check-code` — everything the language servers have said (#53／#54).
+    ///
+    /// **The sixth member of a family of five**, and it earns the shape without
+    /// doing any of the work: the other five walk the document and find things
+    /// out, this one only writes down what somebody else already said. What
+    /// makes it belong here is the *answer* — a `path:line:` listing `gf`
+    /// walks, which is the shape every answer in this editor has.
+    ///
+    /// ⚠️ **Every file, not this one.** A server watches a crate and complains
+    /// about files nobody has opened; a listing that showed only the current
+    /// buffer would hide exactly the errors a person cannot see by scrolling.
+    pub(super) fn list_problems(&mut self) {
+        // ⚠️ **響度的名字在這裏寫成四個字面量**，不在 [`crate::problem`] 裏——
+        // 那個模組是純數據，而「哪一則文案」是說話這一層的事。文案自檢也只認得
+        // `say!` 底下的字面量：寫成一支 `fn tag()` 的話，四則文案在它眼裏是没有
+        // 人說過的死條目。
+        let loud = |severity: crate::problem::Severity| {
+            use crate::problem::Severity;
+            match severity {
+                Severity::Error => say!("problem.error"),
+                Severity::Warn => say!("problem.warn"),
+                Severity::Note => say!("problem.note"),
+                Severity::Hint => say!("problem.hint"),
+            }
+        };
+        // Owned, because the listing that comes out of this is written back
+        // into the editor the list was read from.
+        let all: Vec<(String, usize, String, String)> = self
+            .problems_listed()
+            .into_iter()
+            .map(|(path, said)| {
+                (
+                    path.display().to_string(),
+                    said.line + 1,
+                    loud(said.severity),
+                    said.message.replace('\n', " "),
+                )
+            })
+            .collect();
+        let n = all.len();
+        if n == 0 {
+            // ⚠️ 「乾淨」和「根本没人說過話」是兩回事，而在第一步裏它們長得一
+            // 模一樣：這裏只敢說後一句。等服務器真接上了（L2），開着服務器而一
+            // 句話都没有纔說得出「乾淨」。
+            self.status = say!("problem.none");
+            return;
+        }
+        let mut listing = String::new();
+        for (path, line, loud, message) in all.iter().take(LISTING_LIMIT) {
+            listing.push_str(&say!("problem.one", path, line, loud, message));
+            listing.push('\n');
+        }
+        self.show_listing(listing, say!("problem.results"));
+        self.status = match n > LISTING_LIMIT {
+            true => say!("problem.too-many", LISTING_LIMIT),
+            false => say!("problem.found", n),
+        };
+    }
+
     /// `:word-habit` — the words this manuscript leans on (Feature #242).
     ///
     /// **Sorting a word count says 的.** Every manuscript in the language gives
