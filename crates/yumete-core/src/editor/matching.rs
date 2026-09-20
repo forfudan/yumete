@@ -584,17 +584,17 @@ impl Editor {
             true => motion::Grain::Big,
             false => self.word_grain(),
         };
-        let next = motion::next_word_start(rope, from, grain, self.segmenter.as_ref());
-        let head = motion::prev_grapheme(rope, next);
-        let (anchor, cursor) = if head > from {
-            (from, head)
-        } else if next > from {
-            let after = motion::next_word_start(rope, next, grain, self.segmenter.as_ref());
-            (next, motion::prev_grapheme(rope, after).max(next))
-        } else {
-            // Nothing further in the buffer.
-            return;
-        };
+        // **The rule itself lives in `motion`** (B1, 2026-09-20): a motion is a
+        // value now, so the one written here can be read by a second grammar
+        // without being replayed as keys. What this function keeps is what only
+        // an editor knows — the table's hidden columns, and whether the
+        // selection is being extended.
+        let (anchor, cursor) =
+            match motion::word_forward(rope, from, grain, self.segmenter.as_ref()) {
+                motion::Span::Over { anchor, head } => (anchor, head),
+                // Nothing further in the buffer.
+                motion::Span::Missed => return,
+            };
         let cursor = self.past_what_a_table_keeps_off(cursor, cursor > self.cursor);
         if !self.extend {
             self.anchor = anchor;
