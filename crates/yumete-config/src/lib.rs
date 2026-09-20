@@ -1666,6 +1666,43 @@ pub struct Config {
     /// What each language can be told to run, by verb: `preview`, `format`, and
     /// whatever else a reader names.
     pub language: HashMap<String, HashMap<String, Runner>>,
+    /// **Which program answers for a language** (#53／#54) — 語言名 → 服務器。
+    ///
+    /// `[lsp.rust] command = "rust-analyzer"`. Two are filled in for you
+    /// ([`factory_servers`]); naming one here replaces it, and
+    /// `command = ""` turns it off.
+    pub lsp: HashMap<String, Server>,
+}
+
+/// The program that answers for one language, and how it is started.
+///
+/// ⚠️ **No shell, and no placeholders.** A language server is started once and
+/// told everything over its own pipe — nothing about a file name reaches the
+/// command line — so the whole class of quoting questions [`Runner`] has to
+/// answer does not arise here. `args` is a list because that is what it is;
+/// splitting a string would put those questions back.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Server {
+    /// The program. **Empty means 「not this language」**, which is how a
+    /// reader turns off one of the two that come filled in.
+    pub command: String,
+    pub args: Vec<String>,
+}
+
+/// The servers that come filled in — 2026-09-19 定的兩種，go 和 rust。
+///
+/// ⚠️ **Filled in is not started.** Nothing is spawned until a file of that
+/// language is really opened, and if the program is not on the machine the
+/// editor says so once and carries on — an editor that refused to open a
+/// `.rs` because a tool is missing would be worse than one with no servers at
+/// all.
+pub fn factory_servers() -> HashMap<String, Server> {
+    ["rust", "rust-analyzer", "go", "gopls"]
+        .chunks(2)
+        .map(|pair| {
+            (pair[0].to_string(), Server { command: pair[1].to_string(), args: Vec::new() })
+        })
+        .collect()
 }
 
 /// **Which side each panel lives on** — Feature #293.
@@ -2327,6 +2364,17 @@ struct RawConfig {
     export: RawExport,
     #[serde(default)]
     language: HashMap<String, HashMap<String, RawRunner>>,
+    #[serde(default)]
+    lsp: HashMap<String, RawServer>,
+}
+
+/// One language server, as it is written in the file.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RawServer {
+    command: String,
+    #[serde(default)]
+    args: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -2336,7 +2384,7 @@ struct RawExport {
 }
 
 /// One command a language declares, as it is written in the file.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 struct RawRunner {
     run: String,
@@ -2624,6 +2672,22 @@ impl RawConfig {
         for (name, language) in &other.syntax {
             self.syntax.insert(name.clone(), language.clone());
         }
+        // ⚠️ **Entry by entry here too, and `language` was missing it**
+        // (2026-09-20): a project's `[language.…]` and `[lsp.…]` were read,
+        // checked, and then dropped on the floor by this merge, so a project
+        // could only ever restate the global config — which is exactly what
+        // the comment above says it should not have to do.
+        for (name, verbs) in &other.language {
+            self.language.entry(name.clone()).or_default().extend(
+                verbs.iter().map(|(verb, raw)| (verb.clone(), raw.clone())),
+            );
+        }
+        for (name, server) in &other.lsp {
+            self.lsp.insert(name.clone(), RawServer {
+                command: server.command.clone(),
+                args: server.args.clone(),
+            });
+        }
         // Same rule for the panels: a project may move one without restating
         // the other four.
         for (name, side) in &other.sidebar {
@@ -2891,6 +2955,14 @@ impl RawConfig {
             }
             config.language.entry(language).or_default().extend(here);
         }
+        // **The two that come filled in, then whatever the file says.** A
+        // named language replaces the built-in one outright rather than
+        // merging into it: half of somebody else's command line and half of
+        // yours is not a command anybody wrote.
+        config.lsp = factory_servers();
+        for (language, raw) in self.lsp {
+            config.lsp.insert(language, Server { command: raw.command, args: raw.args });
+        }
         if let Some(scheme) = self.ime.scheme {
             config.ime.scheme = scheme;
         }
@@ -3130,6 +3202,35 @@ mod runner_tests {
         let typst = config.language.get("typst").expect("typst");
         assert_eq!(typst["preview"].kind, RunKind::Server);
         assert_eq!(config.language["markdown"]["format"].kind, RunKind::Once);
+    }
+
+    /// `[lsp.<語言>]` — 哪個程序替這種文件說話（#53／#54）。
+    #[test]
+    fn a_language_server_is_named_by_its_language() {
+        // 兩個現成的，一個字都不用寫。
+        let bare = Config::from_toml("");
+        assert_eq!(bare.lsp["rust"].command, "rust-analyzer");
+        assert_eq!(bare.lsp["go"].command, "gopls");
+
+        let config = Config::from_toml(
+            "[lsp.rust]
+command = \"rust-analyzer\"
+args = [\"--log-file\", \"/tmp/ra.log\"]
+             [lsp.python]
+command = \"pyright-langserver\"
+args = [\"--stdio\"]
+",
+        );
+        assert_eq!(config.lsp["rust"].args, ["--log-file", "/tmp/ra.log"]);
+        assert_eq!(config.lsp["python"].command, "pyright-langserver");
+        // …and the one nobody mentioned is still there.
+        assert_eq!(config.lsp["go"].command, "gopls");
+
+        // ⚠️ **空的命令是「這種語言不要服務器」**，不是「用默認那個」。
+        let off = Config::from_toml("[lsp.rust]
+command = \"\"
+");
+        assert!(off.lsp["rust"].command.is_empty(), "關掉了");
     }
 
 }

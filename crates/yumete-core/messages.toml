@@ -5975,6 +5975,30 @@ zhs = "没有找到相符的命令——换一个说法，或者退格回到 `:`
 en = "no command answers that — say it another way, or backspace to `:`"
 
 
+# ── lsp ──────────────────────────────────────────────
+
+[[message]]
+# 語言服務器起不來（機器上沒裝）——只說一次
+key = "lsp.cannot-start"
+zht = "{0} 起不來（{1}）——檔照常開，只是沒人查錯"
+zhs = "{0} 起不来（{1}）——档照常开，只是没人查错"
+en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
+
+[[message]]
+# 語言服務器起來一下就沒了（裝得不完整）
+key = "lsp.never-started"
+zht = "{0} 的語言服務器起來就沒了——這臺機器上它可能沒裝好（此後不再試）"
+zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装好（此后不再试）"
+en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
+
+[[message]]
+# 語言服務器死了
+key = "lsp.stopped"
+zht = "{0} 的語言服務器停了——它說過的都不再算數，下一個檔會重新起一個"
+zhs = "{0} 的语言服务器停了——它说过的都不再算数，下一个档会重新起一个"
+en = "the {0} language server stopped — what it said no longer counts, and the next file starts a new one"
+
+
 # ── macro ─────────────────────────────────────────────────────────────
 
 [[message]]
