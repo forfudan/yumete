@@ -5289,6 +5289,9 @@ Markdown 表格只有一個轉義，`\|`——一條屬於格子的豎綫。橫�
 判準與索引都在 `crate::names`，它**不認識 `Reader`**——同不同音是調用方傳進來的一個閉包，
 所以那一層可以拿兩個字的假表單測，不必裝碼表。
 
+量過：兩萬行、兩百個名字 **80 ms**（`the_cost_of_checking_a_chapter`，release，`--ignored`），
+和 `:wiki` 那一節的掃描同一量級。它是命令，不在幀上。
+
 ## 6. Phase-by-phase deliverables
 
 > **Current status.** The Cargo workspace is initialized with
