@@ -407,8 +407,12 @@ pub enum Motion {
     WordEnd(Grain),
     /// `b` / `B` — backwards to the start of the run behind.
     WordBack(Grain),
-    /// `f` / `F` — to a character, **on this line only**.
-    Find { forward: bool, target: char },
+    /// `f` / `F` / `t` / `T` — to a character, **on this line only**.
+    ///
+    /// `till` is vim's `t`: the same search, stopping one short of what it
+    /// found. helix has no such key (`t` opens the table group), so this field
+    /// is only ever set by the vim grammar.
+    Find { forward: bool, target: char, till: bool },
     /// `gg` — the first character of the buffer.
     FileStart,
     /// `ge` — the last.
@@ -423,6 +427,13 @@ pub enum Motion {
     Paragraph { forward: bool },
     /// `L` / `H` — a sentence: 。！？ and the closing mark after one.
     Sentence { forward: bool },
+    /// `j` / `k` — **a line of the file**, which is what vim counts.
+    ///
+    /// ⚠️ Only ever asked for by an operator (`dj`), and only linewise, so it
+    /// answers with the *start* of that line: which column the caret would
+    /// keep is the screen's question, and a verb that takes whole lines never
+    /// asks it. The keys themselves still walk the screen's rows.
+    Line { down: bool },
     /// `mi w`, `ma (` — and vim's `ciw`, `di(`, which press the same door.
     ///
     /// ⚠️ **An object knows both its ends**, which is why it is not two
@@ -449,6 +460,27 @@ pub enum Operator {
     Change { cut: bool },
     /// `y` — copy it, change nothing.
     Yank,
+}
+
+/// **Which reading of a motion is wanted** (B3, 2026-09-20).
+///
+/// 作者 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。helix 就是
+/// 將跳轉和選擇兩個 `w` 合一了。」 That is this enum: one motion, and the two
+/// things an editor can ask of it.
+///
+/// | | `Caret` | `Selection` |
+/// | --- | --- | --- |
+/// | `w` on `alpha beta` | the `b` —— the primitive | `alpha␣` —— the word and its gap |
+/// | `gg` | the first character | the same, collapsed |
+///
+/// They coincide wherever a motion is *only* a goto, and part company wherever
+/// helix wraps the primitive in a rule of its own ([`word_forward`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reading {
+    /// What helix asks: the span to select, rule and all.
+    Selection,
+    /// What vim asks: where the caret lands, and nothing painted.
+    Caret,
 }
 
 /// What a text object names.
@@ -480,7 +512,7 @@ impl Span {
 /// ⚠️ **A line, not the buffer**: `f` that ran on would be a search, and this
 /// editor has one (`/`). Not found is [`Span::Missed`] — the editor says so on
 /// the status line, which is its business and not this function's.
-pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char) -> Span {
+pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char, till: bool) -> Span {
     let line = line_of(rope, pos);
     let line_start = rope.line_to_char(line);
     let mut text = rope.line(line).to_string();
@@ -493,10 +525,16 @@ pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char) -> Span {
         true => (col + 1..chars.len()).find(|&i| chars[i] == target),
         false => (0..col.min(chars.len())).rev().find(|&i| chars[i] == target),
     };
-    match found {
-        Some(at) => Span::Over { anchor: pos, head: line_start + at },
-        None => Span::Missed,
-    }
+    let Some(at) = found else { return Span::Missed };
+    let head = line_start + at;
+    // ⚠️ **`t` stops one short, and one short is a *grapheme*** — pulling the
+    // index back by one would cut a 漢字 in half.
+    let head = match (till, forward) {
+        (false, _) => head,
+        (true, true) => prev_grapheme(rope, head),
+        (true, false) => next_grapheme(rope, head),
+    };
+    Span::Over { anchor: pos, head }
 }
 
 /// **`e`, as a span** (B1) — and it sets **both** ends.
@@ -676,12 +714,17 @@ mod tests {
     fn find_stays_on_its_line() {
         let r = rope("alpha, beta\ngamma, delta");
         // Forward to the comma on this line.
-        assert_eq!(find_char(&r, 0, true, ','), Span::Over { anchor: 0, head: 5 });
+        assert_eq!(find_char(&r, 0, true, ',', false), Span::Over { anchor: 0, head: 5 });
         // The comma on the *next* line is not this line's business.
-        assert_eq!(find_char(&r, 7, true, ','), Span::Missed);
+        assert_eq!(find_char(&r, 7, true, ',', false), Span::Missed);
         // Backwards, and never onto the character the caret is already on.
-        assert_eq!(find_char(&r, 8, false, ','), Span::Over { anchor: 8, head: 5 });
-        assert_eq!(find_char(&r, 5, false, ','), Span::Missed);
+        assert_eq!(find_char(&r, 8, false, ',', false), Span::Over { anchor: 8, head: 5 });
+        assert_eq!(find_char(&r, 5, false, ',', false), Span::Missed);
+        // `t` is `f` one short — a **grapheme** short, not an index short.
+        assert_eq!(find_char(&r, 0, true, ',', true), Span::Over { anchor: 0, head: 4 });
+        let r = rope("他說，她笑");
+        assert_eq!(find_char(&r, 0, true, '，', false), Span::Over { anchor: 0, head: 2 });
+        assert_eq!(find_char(&r, 0, true, '，', true), Span::Over { anchor: 0, head: 1 });
     }
 
     /// vim's `w` is the **bare primitive**, and that is the whole difference:

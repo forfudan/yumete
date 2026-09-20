@@ -139,7 +139,9 @@ impl Editor {
         // handed it without anybody replaying the key — while 「there is no
         // such character on this line」 stays here, where the status line is.
         let forward = kind == FindKind::Forward;
-        let span = self.run_motion(crate::motion::Motion::Find { forward, target });
+        // helix has no 「till」 — `t` is the table group here.
+        let span =
+            self.run_motion(crate::motion::Motion::Find { forward, target, till: false });
         if span == crate::motion::Span::Missed {
             self.status = say!("find.no-such-character-on-this-line", target);
             return;

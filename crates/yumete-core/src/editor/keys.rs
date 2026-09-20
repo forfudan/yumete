@@ -357,20 +357,15 @@ impl Editor {
     /// register — `dd` then `p` puts the line back — so it is this editor's
     /// `D` (剪切), not its `d` (刪除，不動寄存器).
     fn vim_operator_key(&mut self, op: char, first: Option<char>, key: Key) {
-        // ⚠️ **Let go of the wait before doing anything** (2026-09-18). The
-        // keys this plays go back through `on_normal_key`, which reads
-        // `pending` first — so an operator still holding the wait answers its
-        // own `v` and `w` as though they were the motion, plays the motion
-        // again, and the stack goes. Every other `Pending` arm clears itself
-        // at the top for the same reason; this one is the one that recurses.
+        // ⚠️ **Let go of the wait before doing anything** (2026-09-18): what
+        // runs below reads `pending`, and an operator still holding the wait
+        // answers its own motion as though it were the next key.
         self.pending = Pending::None;
         // A count may be written inside the wait, as vim writes it (`d2w`).
         if let Key::Char(c) = key {
             if first.is_none() && c.is_ascii_digit() && (c != '0' || self.alias_count.is_some()) {
-                // ⚠️ **Its own count, not the one before the operator**
-                // (2026-09-18). `2d3w` is six words in vim, which is the two
-                // multiplied — written into the same field it would have been
-                // 23. [`Editor::settle_alias_count`] is where they meet.
+                // ⚠️ **Its own count, not the one before the operator**: `2d3w`
+                // is six words in vim, which is the two multiplied.
                 let n = self.alias_count.unwrap_or(0);
                 self.alias_count = Some(
                     n.saturating_mul(10)
@@ -388,33 +383,15 @@ impl Editor {
             self.alias_count = None;
             return;
         };
-        // **The operator doubled is the line**: `dd`, `yy`, `cc`. `x` here is
-        // this editor's 「select this line」, which extends downwards when it
-        // is given a count — so `3dd` is three lines.
+        let grain = self.word_grain();
+        // **The operator doubled is the line**: `dd`, `yy`, `cc`.
         if first.is_none() && c == op {
-            let line = yumete_cjk::keymap::VimMotion {
-                keys: "{n}x",
-                linewise: false,
-                wants: false,
-                whole: true,
-                // ⚠️ **`cc` keeps the line, `dd` takes it** — vim's rule, and
-                // the difference is one character: the line's own newline.
-                // Without this, `cc` cut the break as well and what was typed
-                // next landed on the front of the line below.
-                till: op == 'c',
-                back: false,
-            };
-            return self.play_vim_motion(op, line, "{n}x");
+            return self.run_vim_line(op);
         }
-        // A motion still owed a character (`df,`) keeps what it has and takes
-        // this one as the answer.
-        if let Some(motion) = first
-            .map(|f| f.to_string())
-            .and_then(|f| yumete_cjk::keymap::vim_motion(&f))
-        {
-            if motion.wants {
-                let keys = motion.keys.replace('%', &c.to_string());
-                return self.play_vim_motion(op, motion, &keys);
+        // A motion still owed a character (`df,`, `di(`) takes this one.
+        if let Some(f) = first {
+            if let Some(step) = crate::vim::step_for(&f.to_string(), grain, Some(c)) {
+                return self.run_vim_step(op, step);
             }
         }
         let mut typed = String::new();
@@ -422,16 +399,13 @@ impl Editor {
             typed.push(f);
         }
         typed.push(c);
-        match yumete_cjk::keymap::vim_motion(&typed) {
-            Some(motion) if motion.wants => {
-                // `f` and `i` are not finished: they are owed a character.
+        match crate::vim::step_for(&typed, grain, None) {
+            // `f` and `i` are not finished: they are owed a character.
+            Some(step) if step.asks => {
                 self.pending = Pending::VimOperator { op, first: Some(c) };
             }
-            Some(motion) => {
-                let keys = motion.keys.to_string();
-                self.play_vim_motion(op, motion, &keys);
-            }
-            None if yumete_cjk::keymap::vim_motion_ahead(&typed) => {
+            Some(step) => self.run_vim_step(op, step),
+            None if crate::vim::more_ahead(&typed) => {
                 self.pending = Pending::VimOperator { op, first: Some(c) };
             }
             // Not a motion at all. vim beeps; this says which key was not one,
@@ -445,99 +419,181 @@ impl Editor {
         }
     }
 
-    /// Play 延伸模式 ＋ the motion, and then **do** the action.
-    ///
-    /// ⚠️ **The action is not played as a key** (2026-09-18). Twice over: `X`
-    /// under this very preset is vim's own 「cut the character before」, so a
-    /// line-wise operator that pressed `X` to reach the line's bounds cut one
-    /// character instead; and `y` is now an operator itself, so `yy` pressed
-    /// its own `y` and sat down to wait again. What the keys are for is the
-    /// *motion* — the editor already has one of those for every one vim has.
-    /// The action is three lines of code and cannot be misread.
-    fn play_vim_motion(&mut self, op: char, motion: yumete_cjk::keymap::VimMotion, keys: &str) {
-        // A text object is already the selection; everything else is walked
-        // over with 延伸模式 on, so that a count adds up.
+    /// **`dd`, `cc`, `yy`** — the operator doubled, which in vim is 「this
+    /// line」 and with a count 「this line and the next n−1」.
+    fn run_vim_line(&mut self, op: char) {
         self.settle_alias_count();
-        // ⚠️ **vim has no selection when an operator starts** (2026-09-18).
-        // Here a motion *is* a selection, so the `w` that put the cursor where
-        // it is left the word selected behind it — and `wD` then cut from the
-        // word's start rather than from the cursor, which is the whole line.
-        // Collapsing first is what makes the operator mean what vim means.
-        self.anchor = self.cursor;
-        self.object_missed = false;
-        match motion.whole {
-            true => self.play_keys(keys),
-            false => self.play_keys(&format!("v{keys}")),
-        }
-        // ⚠️ **A motion that found nothing is not a motion** (2026-09-19,
-        // caught in review). The action used to run whatever happened, and an
-        // empty selection cuts the character under the cursor — so `df,` on a
-        // line with no comma said 「這一行上没有「,」」 **and deleted a
-        // character anyway**, and so did `d0` at column 1, `di(` outside a
-        // pair, `ciw` where there is no word object. The refusal has to reach
-        // the edit, not just the status line: these are exactly the keys the
-        // preset exists to make safe.
-        //
-        // ⚠️ **Asked here, before `till` and `linewise` move the ends.** Those
-        // two shrink and grow a selection that the motion really did make:
-        // `cc` on a one-character line ends collapsed because `till` pulled
-        // the newline back out of it, and it still means 「this line」.
-        //
-        // ⚠️ **文本對象自己說有没有命中**，不能比位置：一個字的選區
-        // （`wdiw`，光標停在一個空格上）和「没動」都是 `anchor == cursor`。
-        let missed = match motion.whole {
-            true => self.object_missed,
-            false => self.anchor == self.cursor,
+        let n = self.count.take().unwrap_or(1).max(1);
+        let rope = self.current_buffer().rope();
+        let first = rope.char_to_line(self.cursor);
+        let last = (first + n - 1).min(rope.len_lines().saturating_sub(1));
+        let span = self.line_span(first, last, op == 'c');
+        self.do_vim(op, span);
+    }
+
+    /// The span whole lines cover. `keep_break` is `cc`'s rule: **`cc` keeps
+    /// the line's own newline and `dd` takes it** — without that, what is
+    /// typed next lands on the front of the line below.
+    fn line_span(&self, first: usize, last: usize, keep_break: bool) -> motion::Span {
+        let rope = self.current_buffer().rope();
+        let anchor = rope.line_to_char(first);
+        let end = rope.line_to_char((last + 1).min(rope.len_lines()));
+        let head = match keep_break {
+            // `cc` stops at the line's last real character…
+            true => motion::line_last(rope, rope.line_to_char(last)),
+            // …and `dd` takes the newline, which is the character before the
+            // next line begins.
+            false => motion::prev_grapheme(rope, end),
         };
-        if missed {
+        motion::Span::Over { anchor, head: head.max(anchor) }
+    }
+
+    /// **Operator ＋ motion, vim's way** (B3, 2026-09-20).
+    ///
+    /// The translation table is gone: nothing is replayed as keys. The motion
+    /// is asked for its **caret** reading — where vim would put the cursor —
+    /// and the verb then takes everything between here and there, with the
+    /// motion's own class ([`crate::vim::Reach`]) deciding whether 「there」 is
+    /// inside what it takes. That one word, `exclusive`, is what a table of
+    /// keys could never say.
+    fn run_vim_step(&mut self, op: char, step: crate::vim::Step) {
+        self.settle_alias_count();
+        let n = self.count.take().unwrap_or(1).max(1);
+        let start = self.cursor;
+        // ⚠️ **`cw` is `ce`** — vim's own special case (`:h cw`): 「When the
+        // cursor is in a word, `cw` does not include the white space after a
+        // word, it only changes up to the end of the word.」 A translation
+        // table cannot say this; it is not a key, it is a rule about a pair.
+        let step = match (op, step.motion) {
+            ('c', motion::Motion::WordForward(grain))
+                if !self.char_at_cursor().is_some_and(char::is_whitespace) =>
+            {
+                crate::vim::Step {
+                    motion: motion::Motion::WordEnd(grain),
+                    reach: crate::vim::Reach::Inclusive,
+                    asks: false,
+                }
+            }
+            _ => step,
+        };
+        // **An object is already both ends**; everything else is walked to.
+        if step.reach == crate::vim::Reach::Object {
+            let span = self.read_motion(step.motion, motion::Reading::Caret);
+            if span == motion::Span::Missed {
+                // ⚠️ **The refusal has to reach the edit, not just the status
+                // line**: an empty selection cuts the character under the
+                // cursor, so `di(` outside a pair used to say 「没有這一對」
+                // *and delete a character anyway*.
+                self.status = match step.motion {
+                    motion::Motion::Object { what: motion::Object::Word, .. } => {
+                        say!("edit.no-word-here")
+                    }
+                    motion::Motion::Object {
+                        what: motion::Object::Pair { open, close },
+                        ..
+                    } => say!("edit.no-pair-around", open, close),
+                    _ => return,
+                };
+                self.count = None;
+                self.alias_count = None;
+                return;
+            }
+            return self.do_vim(op, span);
+        }
+        // Walk the motion `n` times to find where vim would have left the
+        // caret. ⚠️ **A motion that stops moving has ended**, and one that
+        // misses at all takes nothing — `df,` with no comma on the line used
+        // to say so *and delete a character anyway*.
+        let mut target = None;
+        // Where the caret stood before the last hop, for the line rule below.
+        let mut before = start;
+        for i in 0..n {
+            let span = self.read_motion(step.motion, motion::Reading::Caret);
+            let Some(head) = span.head() else { break };
+            // ⚠️ **The first hop counts even if it does not move.** `t,` with
+            // the caret already one short of the comma lands where it stands,
+            // and `dt,` still takes that character — stopping here made `dt,`
+            // do nothing at all.
+            if i > 0 && head == self.cursor {
+                break;
+            }
+            before = self.cursor;
+            self.cursor = head;
+            target = Some(head);
+        }
+        let landed = target;
+        self.cursor = start;
+        let Some(target) = landed else {
             self.count = None;
             self.alias_count = None;
             return;
-        }
-        // **`t` is `f` one short** — this editor has no 「till」 of its own
-        // (the `t` letter is the table group), and inside an operator's wait
-        // there is nothing else `t` could mean.
-        if motion.till {
-            let rope = self.current_buffer().rope().clone();
-            // ⚠️ The head moves, the anchor stays — `set_cursor` would take
-            // the anchor with it and leave a selection one character long.
-            self.cursor = match motion.back {
-                false => crate::motion::prev_grapheme(&rope, self.cursor),
-                true => crate::motion::next_grapheme(&rope, self.cursor),
-            };
-        }
-        if motion.linewise {
-            self.extend_to_line_bounds();
-        }
-        self.extend = false;
-        // ⚠️ **A motion that found nothing is not a motion** (2026-09-19,
-        // caught in review). The action used to run whatever happened, and an
-        // empty selection cuts the character under the cursor — so `df,` on a
-        // line with no comma said 「這一行上沒有「,」」 **and deleted a
-        // character anyway**, and so did `d0` at column 1, `di(` outside a
-        // pair, `ciw` where there is no word object. The refusal has to reach
-        // the edit, not just the status line: these are exactly the keys the
-        // preset exists to make safe.
+        };
+        let rope = self.current_buffer().rope();
+        let span = match step.reach {
+            crate::vim::Reach::Linewise => {
+                let (a, b) = (rope.char_to_line(start), rope.char_to_line(target));
+                return self.do_vim_lines(op, a.min(b), a.max(b));
+            }
+            // ⚠️ **Backwards takes the target and leaves the caret's own
+            // character**, whichever class the motion is: that is what `db`
+            // and `dF,` do in vim.
+            _ if target < start => motion::Span::Over {
+                anchor: target,
+                head: motion::prev_grapheme(rope, start),
+            },
+            crate::vim::Reach::Inclusive => motion::Span::Over { anchor: start, head: target },
+            // `w` is exclusive: 「up to the next word」, not 「including its
+            // first character」.
+            //
+            // ⚠️ **And it does not cross a line end** — vim's second special
+            // case (`:h word-motions`): 「When the last word moved over is at
+            // the end of a line, the end of that word becomes the end of the
+            // operated text, not the first word in the next line.」 Without
+            // it, `dw` on the last word of a line took the newline **and the
+            // next line's indent** with it, which is text the hand never saw
+            // itself select.
+            _ => {
+                let end = match rope.char_to_line(target) > rope.char_to_line(before) {
+                    true => motion::line_end(rope, before),
+                    false => target,
+                };
+                motion::Span::Over {
+                    anchor: start,
+                    head: motion::prev_grapheme(rope, end).max(start),
+                }
+            }
+        };
+        self.do_vim(op, span);
+    }
+
+    /// Whole lines, for a linewise motion (`dj`, `dG`).
+    fn do_vim_lines(&mut self, op: char, first: usize, last: usize) {
+        let span = self.line_span(first, last, op == 'c');
+        self.do_vim(op, span);
+    }
+
+    /// Do the verb, and say what the old `play_vim_motion` said about each.
+    fn do_vim(&mut self, op: char, span: motion::Span) {
         self.snapshot();
         match op {
-            // vim's `d` and `c` fill the unnamed register — `dd` then `p` puts
-            // the line back — so they are this editor's cutting pair.
-            'd' => self.cut_selection_to_register(),
-            'c' => {
-                self.cut_selection_to_register();
-                self.enter_insert();
+            // vim's `d` and `c` fill the unnamed register.
+            'd' => self.apply(motion::Operator::Cut, span),
+            'c' => self.apply(motion::Operator::Change { cut: true }, span),
+            // `>` and `<` want the selection, because indenting is a
+            // line-shaped edit the editor already knows how to do.
+            '>' | '<' => {
+                self.take_object(span);
+                self.extend_to_line_bounds();
+                self.indent(op == '>');
             }
             // **`y` leaves the cursor at the head of what it took** — vim's
-            // rule, and the reason `yyp` puts the copy directly under the line
-            // rather than one line further down: selecting a line here leaves
-            // the cursor on the next one, and paste goes *after* the cursor.
-            // vim's `>>`／`<<` are operators too, and this is the whole of
-            // what they add: `>j` indents both lines, `>ap` a paragraph.
-            '>' => self.indent(true),
-            '<' => self.indent(false),
+            // rule, and why `yyp` puts the copy directly under the line.
             _ => {
-                let head = self.span().0;
-                self.yank();
+                let head = match span {
+                    motion::Span::Over { anchor, head } => anchor.min(head),
+                    motion::Span::Missed => return,
+                };
+                self.apply(motion::Operator::Yank, span);
                 self.set_cursor(head);
                 self.anchor = head;
             }
@@ -1003,6 +1059,28 @@ impl Editor {
                 let pos = motion::line_last(self.current_buffer().rope(), self.cursor);
                 self.move_head(pos);
             }
+            // **A standalone motion, read vim's way** (B3, 2026-09-20).
+            //
+            // 作者 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。
+            // helix 就是將跳轉和選擇兩個 `w` 合一了。」 So under the vim preset
+            // a bare motion asks for the **caret** reading: it goes to the
+            // primitive — the next word's first character — and paints
+            // nothing. Extend mode still extends, because `jump_to` moves the
+            // head and leaves the anchor where it is: that is vim's visual
+            // mode, for free.
+            Key::Char(c @ ('w' | 'W' | 'b' | 'B' | 'e' | 'E' | '{' | '}' | 'H' | 'L'))
+                if self.key_preset == yumete_cjk::KeyPreset::Vim
+                    && !self.expanding_alias
+                    && crate::vim::step_for(&c.to_string(), self.word_grain(), None).is_some() =>
+            {
+                let grain = self.word_grain();
+                let step = crate::vim::step_for(&c.to_string(), grain, None)
+                    .expect("the guard just asked");
+                self.repeat(count, |e| {
+                    let span = e.read_motion(step.motion, motion::Reading::Caret);
+                    e.jump_to(span);
+                });
+            }
             // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
             Key::Char('w') => self.repeat(count, |e| e.select_word_forward(false)),
             // **`e` is coarse whatever the dictionary says** (#304). Chinese
@@ -1116,7 +1194,20 @@ impl Editor {
                 self.operator_count = operator_count;
             }
             // Select (extend) mode and collapse (Helix `v` / `;`).
-            Key::Char('v') => self.extend = !self.extend,
+            // **vim's `V` is linewise visual**, not 「select this line」
+            // (B3, 2026-09-20): the selection grows by *lines* as the caret
+            // moves, and a verb takes those lines entire. The old translation
+            // (`V` → `x`) could take three lines only if told `3V`; a vim hand
+            // types `Vjj`.
+            Key::Char('V') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.select_line();
+                self.extend = true;
+                self.vim_lines = true;
+            }
+            Key::Char('v') => {
+                self.extend = !self.extend;
+                self.vim_lines = false;
+            }
             // Esc is every modal editor's way out. It leaves select mode and
             // collapses the selection — and, when the page is showing you
             // something in the other work area, it dismisses that first: a
@@ -1207,6 +1298,12 @@ impl Editor {
                 // **Through the one door** (B2, 2026-09-20): helix hands the
                 // verb its own selection, vim will hand it a motion's span,
                 // and neither knows the other exists.
+                // **`V` means whole lines**, however far along one the caret
+                // stopped (B3).
+                if self.vim_lines {
+                    self.extend_to_line_bounds();
+                    self.vim_lines = false;
+                }
                 let cut = matches!(key, Key::Char('D') | Key::Char('C'));
                 let op = match matches!(key, Key::Char('c') | Key::Char('C')) {
                     true => motion::Operator::Change { cut },
@@ -1220,6 +1317,10 @@ impl Editor {
             }
             // Yank / paste (Helix `y` / `p` / `P`).
             Key::Char('y') => {
+                if self.vim_lines {
+                    self.extend_to_line_bounds();
+                    self.vim_lines = false;
+                }
                 let (anchor, head) = self.span();
                 self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });
             }

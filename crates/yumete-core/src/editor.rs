@@ -1564,6 +1564,14 @@ pub struct Editor {
     operator_count: Option<usize>,
     /// Whether motions extend the selection (Helix select mode, toggled by `v`).
     extend: bool,
+    /// **vim's `V`** — extend mode that means *whole lines* (B3, 2026-09-20).
+    ///
+    /// vim's linewise visual: the selection grows by lines however far along
+    /// one the caret is, and a verb takes those lines entire. `V` used to be
+    /// translated to this editor's 「select this line」, which cannot grow:
+    /// `3V` took three lines and `Vjj` took one, and a vim hand types the
+    /// second.
+    vim_lines: bool,
     /// The unnamed register, and the named ones (Helix `"a`).
     ///
     /// Named registers are what let a second yank happen without losing the
@@ -2384,6 +2392,7 @@ impl Editor {
             confirming: None,
             operator_count: None,
             extend: false,
+            vim_lines: false,
             register: String::new(),
             registers: HashMap::new(),
             yanks: Vec::new(),
@@ -3184,6 +3193,11 @@ const PAIRS: &[(char, char)] = &[
 
 /// The pair a delimiter names — either half selects the whole pair, so `mi「`
 /// and `mi」` mean the same thing.
+/// The pair a character names, for the vim grammar's objects.
+pub(crate) fn pair_for(c: char) -> Option<(char, char)> {
+    pair_of(c)
+}
+
 fn pair_of(c: char) -> Option<(char, char)> {
     PAIRS
         .iter()
