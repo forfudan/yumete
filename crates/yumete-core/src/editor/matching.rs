@@ -520,6 +520,7 @@ impl Editor {
     pub(super) fn run_motion(&self, what: motion::Motion) -> motion::Span {
         let rope = self.current_buffer().rope();
         let seg = self.segmenter.as_ref();
+        let at = |p: usize| motion::Span::Over { anchor: p, head: p };
         match what {
             motion::Motion::WordForward(grain) => {
                 motion::word_forward(rope, self.cursor, grain, seg)
@@ -529,6 +530,29 @@ impl Editor {
             motion::Motion::Find { forward, target } => {
                 motion::find_char(rope, self.cursor, forward, target)
             }
+            // **The gotos collapse**, so they say so in the span: both ends at
+            // the target. A goto is not a selection — 「take me there」, not
+            // 「take everything between」 — and that is the same reading vim
+            // gives *every* standalone motion (B3).
+            motion::Motion::FileStart => at(motion::buffer_start(rope, self.cursor)),
+            motion::Motion::FileEnd => at(motion::buffer_end(rope, self.cursor)),
+            motion::Motion::LineStart => at(motion::line_start(rope, self.cursor)),
+            motion::Motion::LineEnd => at(motion::line_last(rope, self.cursor)),
+            motion::Motion::LineFirstNonBlank => {
+                at(motion::line_first_non_blank(rope, self.cursor))
+            }
+        }
+    }
+
+    /// **Go where a span ends, taking nothing** — the caret reading (B1).
+    ///
+    /// helix has had both readings all along without naming them: `w` takes
+    /// what it crosses ([`Self::take_span`]) and `gg` just goes. What B3 adds
+    /// is not a second machine — it is **choosing this one** for every
+    /// standalone motion, which is what vim does.
+    pub(super) fn jump_to(&mut self, span: motion::Span) {
+        if let Some(head) = span.head() {
+            self.move_head(head);
         }
     }
 
