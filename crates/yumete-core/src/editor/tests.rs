@@ -15189,7 +15189,7 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
     use crate::problem::{Problem, Severity};
     let said = |line: usize, severity: Severity, message: &str| Problem {
         line,
-        column: 0,
+        utf16_column: 0,
         severity,
         message: message.to_string(),
         source: Some("rust-analyzer".into()),

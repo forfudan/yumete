@@ -10854,7 +10854,7 @@ fn squeezed(text: &str) -> String {
     fn said(line: usize, severity: yumete_core::problem::Severity) -> yumete_core::problem::Problem {
         yumete_core::problem::Problem {
             line,
-            column: 0,
+            utf16_column: 0,
             severity,
             message: "說不通".into(),
             source: Some("rust-analyzer".into()),

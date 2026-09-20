@@ -33,6 +33,7 @@ pub mod export;
 pub mod input;
 pub mod markdown;
 pub mod lookfor;
+pub mod lsp;
 pub mod messages;
 pub mod mdtable;
 pub mod meter;
