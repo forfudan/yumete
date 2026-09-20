@@ -1749,6 +1749,12 @@ pub struct Editor {
     /// 「没話說」，那一條會被刪掉——於是它永遠看着像没問過，空閒的鐘就每 300
     /// 毫秒喊一次 git，喊到天亮。
     vcs_asked: HashMap<u64, u64>,
+    /// 語言服務器說了什麽不對（#53／#54），按**路徑**存。
+    ///
+    /// ⚠️ **鍵是路徑，不是 buffer id。** 服務器說的是一個檔，而它說的時候那個檔
+    /// 不一定開着——rust-analyzer 看一個 crate，報回來的多半是你還没打開的那幾
+    /// 個檔。路徑收得下這些，buffer id 收不下。
+    problems: crate::problem::Problems,
     /// 剛纔那個**文本對象**沒找到東西（`mi(` 外面沒有括號、`miw` 不在一個詞上）。
     ///
     /// ⚠️ 一個字的選區和「沒動」在數據上**一模一樣**（`anchor == cursor` 兩者都
@@ -2444,6 +2450,7 @@ impl Editor {
             vcs: HashMap::new(),
             vcs_base: HashMap::new(),
             vcs_asked: HashMap::new(),
+            problems: crate::problem::Problems::default(),
             object_missed: false,
             indent_hint: crate::zong::IndentHint::default(),
             indent_symbol: "↵".to_string(),

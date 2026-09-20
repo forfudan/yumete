@@ -383,6 +383,10 @@ impl Editor {
                 self.check_names();
                 Ok(CommandOutcome::Continue)
             }
+            Command::CheckCode => {
+                self.list_problems();
+                Ok(CommandOutcome::Continue)
+            }
             Command::Progress => {
                 self.progress_report();
                 Ok(CommandOutcome::Continue)

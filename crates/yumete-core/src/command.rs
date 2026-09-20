@@ -133,6 +133,9 @@ pub enum Command {
     CheckUsage,
     /// `:check-names` — a 百科 name written one homophone out.
     CheckNames,
+    /// `:check-code` — everything the language servers have complained about
+    /// (#53／#54), as a `path:line:` listing `gf` can walk.
+    CheckCode,
     /// `:check-punct` — half-width marks in Chinese text, `...` for ……, and
     /// the 「 nothing closes (Feature #238).
     CheckPunct,
@@ -2494,6 +2497,17 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::CheckNames)),
+    },
+    Entry {
+        name: "check-code",
+        // ⚠️ **別名會在 `:` 選單上自己佔一行。** `diagnostics` 當過別名，那張
+        // 「一眼掃得完」的表當場從 54 漲到 55，一條滾出了窗口（#369）。要讓
+        // vim／helix 那個詞找得到，靠 `find` 裏的關鍵詞就夠了，不花一行。
+        aliases: &[],
+        help: "cmd.check.code",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::CheckCode)),
     },
     Entry {
         name: "check-charset",
@@ -5544,7 +5558,7 @@ mod tests {
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
         assert_eq!(row("", "view-"), ":view- +14");
-        assert_eq!(row("", "check-"), ":check- +5");
+        assert_eq!(row("", "check-"), ":check- +6");
         // …and one command under a stem is still a stem: `markdown-` names a
         // group whether or not it has grown a second one yet.
         assert_eq!(row("", "markdown-"), ":markdown- +1");

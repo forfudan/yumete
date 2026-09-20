@@ -3247,6 +3247,54 @@ fn diff_cell(change: yumete_core::vcs::Change, ink: crate::theme::Palette, band:
     }
 }
 
+/// 語言服務器那一句話畫成哪個字（#53／#54）。
+///
+/// ⚠️ **四檔四個形狀，不是四個顏色。** `theme.rs` 的 `word_hue` 和上面那個剪口
+/// 為同一件事寫過同一條理由：百個男人裏有八個分不出紅綠，而這一格只有一格寬，
+/// 單靠顏色說話等於對他們什麼都没說。
+///
+/// `narrow` 由呼叫方量——U+25CF／U+25B2／U+25C6／U+00B7 四個都是 East Asian
+/// Ambiguous，CJK 字體的終端上佔**兩格**，多出來的那一格會把整行推歪。量出兩格
+/// 就退回 ASCII：`x` `!` `i` `.` 四個字任何字體下都是一格。
+fn problem_glyph(severity: yumete_core::problem::Severity, narrow: bool) -> &'static str {
+    use yumete_core::problem::Severity;
+    match (severity, narrow) {
+        (Severity::Error, true) => "●",
+        (Severity::Warn, true) => "▲",
+        (Severity::Note, true) => "◆",
+        (Severity::Hint, true) => "·",
+        (Severity::Error, false) => "x",
+        (Severity::Warn, false) => "!",
+        (Severity::Note, false) => "i",
+        (Severity::Hint, false) => ".",
+    }
+}
+
+/// 語言服務器那一格：一個字，底色是它本來那張紙。
+///
+/// 和改動條一樣走 [`crate::theme::Palette::vcs`]——那一檔（3:1）正是「一欄寬的
+/// 非文字元素還認得出是什麼顏色」的下限，而這一格與它一樣寬、就在它旁邊。
+fn problem_cell(
+    severity: yumete_core::problem::Severity,
+    ink: crate::theme::Palette,
+    band: Style,
+) -> Span<'static> {
+    use crate::theme::Accent;
+    use yumete_core::problem::Severity;
+    let narrow = ["●", "▲", "◆", "·"]
+        .iter()
+        .all(|g| yumete_cjk::char_width(g.chars().next().unwrap_or(' ')) == 1);
+    let colour = match severity {
+        // 朱——「這裏不對」，全書就這一個顏色說這句話。
+        Severity::Error => ink.vcs(Accent::Mark),
+        Severity::Warn => ink.vcs(Accent::Amber),
+        Severity::Note => ink.vcs(Accent::Azure),
+        // 最輕的那一檔和行號同色：它在那兒，但不搶眼睛。
+        Severity::Hint => ink.furniture(),
+    };
+    Span::styled(problem_glyph(severity, narrow), band.fg(colour))
+}
+
 /// Where each part of the window goes.
 ///
 /// **Worked out in one place**, because three parts of this program need the
@@ -6846,16 +6894,25 @@ fn draw_horizontal(
                 true => band.fg(ink.mark()).add_modifier(Modifier::BOLD),
                 false => band.fg(ink.furniture()),
             };
-            // **改動條**（#55／#298）：行號後面那兩格空氣，末一格——貼着正文的
-            // 那一格——歸 git。`GUTTER_AIR` 從一開始就是為它留的，所以這件事落
-            // 地的那一天版心一欄都不用挪。
+            // **行號後面那兩格空氣，一格一件事**：貼着正文的那一格歸 git
+            // （改動條，#55／#298），它前面那一格歸語言服務器（#53／#54）。
+            // `GUTTER_AIR` 從一開始就是為這兩件事留的，所以兩件都落地了版心還是
+            // 一欄都不用挪——**一個功能上線那天頁面重排**，是這個設計從第一天起
+            // 要躲開的事。
+            //
+            // ⚠️ helix 把診斷放在行號**左邊**，那要多一欄。這裏放右邊是因為左邊
+            // 那一欄得從正文身上要，而那一欄正文在中文裏是一個整字。
+            let head: String = label.chars().take(gutter - GUTTER_AIR).collect();
+            spans.push(Span::styled(head, band));
+            // 診斷只畫在段首那一列：它說的是「這一行」，而折行折出來的每一列並
+            // 不是一行的開頭（同 `diff_mark` 裏剪口那一條理由）。
+            match row.starts_line().then(|| editor.problem_on_line(row.line)).flatten() {
+                None => spans.push(Span::styled(" ", band)),
+                Some(severity) => spans.push(problem_cell(severity, ink, band)),
+            }
             match diff_mark(editor, &row) {
-                None => spans.push(Span::styled(label, band)),
-                Some(change) => {
-                    let air: String = label.chars().take(gutter - 1).collect();
-                    spans.push(Span::styled(air, band));
-                    spans.push(diff_cell(change, ink, band));
-                }
+                None => spans.push(Span::styled(" ", band)),
+                Some(change) => spans.push(diff_cell(change, ink, band)),
             }
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
@@ -10772,6 +10829,98 @@ fn squeezed(text: &str) -> String {
         assert_eq!(cut_glyph(false, false), "_");
         for glyph in [cut_glyph(true, false), cut_glyph(false, false)] {
             assert!(glyph.is_ascii(), "退路要是任何字體都只佔一格的東西：{glyph}");
+        }
+    }
+
+    // ---- 語言服務器那一格（#53／#54）---------------------------------------
+
+    /// 診斷那一格在第幾欄：行號後面兩格空氣的**頭一格**，改動條前面那一格。
+    fn problem_column(editor: &Editor, config: &Config) -> u16 {
+        bar_column(editor, config) - 1
+    }
+
+    /// 開一個真的有路徑的檔——診斷是按**路徑**存的（服務器說的是一個檔），
+    /// 而 `editor_with` 造出來的是一本無名的草稿。
+    fn editor_on_disk(name: &str, text: &str) -> (Editor, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("yumete-problem-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, text).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&path).unwrap();
+        (editor, path)
+    }
+
+    fn said(line: usize, severity: yumete_core::problem::Severity) -> yumete_core::problem::Problem {
+        yumete_core::problem::Problem {
+            line,
+            column: 0,
+            severity,
+            message: "說不通".into(),
+            source: Some("rust-analyzer".into()),
+        }
+    }
+
+    #[test]
+    fn a_servers_complaint_takes_the_cell_before_the_change_bar_and_moves_nothing() {
+        use yumete_core::problem::Severity;
+        let (mut editor, path) = editor_on_disk("a.rs", "一\n二\n三\n四\n");
+        editor.set_problems(path, vec![said(1, Severity::Error), said(2, Severity::Warn)]);
+        let config = Config::default();
+        let buffer = render(&editor, &config, 20, 8);
+
+        let ink = ink(&config);
+        let cell = problem_column(&editor, &config);
+        assert_eq!(at(&buffer, cell, 0), " ", "第 1 行没話說");
+        assert_eq!(at(&buffer, cell, 1), "●", "第 2 行有個錯");
+        assert_eq!(at(&buffer, cell, 2), "▲", "第 3 行是個警告");
+        // ⚠️ **四檔四個形狀。** 顏色只是第二條線索——一欄寬的一格，紅綠分不出的
+        // 人就只剩形狀可讀。
+        assert_eq!(
+            buffer[(cell, 1)].style().fg,
+            Some(ink.vcs(crate::theme::Accent::Mark)),
+            "錯是朱的"
+        );
+        assert_eq!(buffer[(cell, 1)].style().bg, ink.page().bg, "底色一路是紙");
+        // ⚠️ **號碼一個都没丟，正文一欄都没挪**：這一格佔的是本來就空着的那兩格
+        // 裏的頭一格，改動條佔末一格，兩件事一起落地版心還是不動。
+        assert_eq!(row_text(&buffer, 1).trim_end(), "2● 二");
+        assert_eq!(row_text(&buffer, 0).trim_end(), "1  一", "没話說的那一行照舊");
+    }
+
+    #[test]
+    fn a_complaint_and_a_change_sit_in_their_own_cells() {
+        use yumete_core::problem::Severity;
+        let (mut editor, path) = editor_on_disk("b.rs", "一\n二\n三\n四\n");
+        editor.set_problems(path, vec![said(1, Severity::Error)]);
+        with_diff(&mut editor, "@@ -1,0 +2,1 @@\n");
+        let config = Config::default();
+        let buffer = render(&editor, &config, 20, 8);
+
+        // 同一行上兩件事，各佔各的一格，誰也不蓋誰。
+        assert_eq!(at(&buffer, problem_column(&editor, &config), 1), "●");
+        assert_eq!(at(&buffer, bar_column(&editor, &config), 1), super::CHANGE_BAR);
+        assert_eq!(row_text(&buffer, 1).trim_end(), "2●▍二");
+    }
+
+    #[test]
+    fn the_four_severities_fall_back_to_four_ascii_characters() {
+        use yumete_core::problem::Severity;
+        // U+25CF／U+25B2／U+25C6／U+00B7 四個都是 East Asian Ambiguous：CJK 字體
+        // 的終端把它們畫成兩格，多出來的那一格會把整行推歪。
+        let four = [Severity::Error, Severity::Warn, Severity::Note, Severity::Hint];
+        let ascii: Vec<&str> = four.iter().map(|s| problem_glyph(*s, false)).collect();
+        assert_eq!(ascii, ["x", "!", "i", "."]);
+        for glyph in &ascii {
+            assert!(glyph.is_ascii(), "退路要是任何字體都只佔一格的東西：{glyph}");
+        }
+        // 四檔四個形狀，兩條路上都不許重樣——重了就只剩顏色說話。
+        let wide: Vec<&str> = four.iter().map(|s| problem_glyph(*s, true)).collect();
+        for shapes in [&ascii, &wide] {
+            let mut seen = shapes.to_vec();
+            seen.sort_unstable();
+            seen.dedup();
+            assert_eq!(seen.len(), 4, "四檔要四個形狀：{shapes:?}");
         }
     }
 

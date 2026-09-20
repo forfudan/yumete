@@ -39,6 +39,7 @@ pub mod meter;
 pub mod motion;
 pub mod vim;
 pub mod picker;
+pub mod problem;
 pub mod progress;
 pub mod punct;
 pub mod ruby;
