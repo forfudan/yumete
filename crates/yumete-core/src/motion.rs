@@ -366,6 +366,56 @@ pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter)
     Span::Missed
 }
 
+/// **A motion, as a value** — the second half of the grammar layer (B1,
+/// 2026-09-20).
+///
+/// A key no longer *does* a motion; it names one. What a motion covers is
+/// [`Span`], and who reads which part of that span is the grammar's business:
+/// helix takes the whole of it as a selection, vim (B3) takes one end as a
+/// caret target or hands the whole of it to a waiting verb.
+///
+/// ⚠️ **The grain rides along.** `w` and `W` are the same motion at two
+/// grains — the dictionary's word, or a run between blanks — and `e`／`b` are
+/// deliberately [`Grain::Coarse`] in this editor (「`w` takes a word, `e`
+/// takes a clause」, #304). A key that spells out its grain is a key the
+/// keymap can rebind without the editor knowing which key it was.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Motion {
+    /// `w` / `W` — see [`word_forward`].
+    WordForward(Grain),
+    /// `e` / `E` — the end of the run ahead, both ends set.
+    WordEnd(Grain),
+    /// `b` / `B` — backwards to the start of the run behind.
+    WordBack(Grain),
+    /// `f` / `F` — to a character, **on this line only**.
+    Find { forward: bool, target: char },
+}
+
+/// **`f` / `F`, as a span** (B1) — the character on this line, and nothing
+/// off it.
+///
+/// ⚠️ **A line, not the buffer**: `f` that ran on would be a search, and this
+/// editor has one (`/`). Not found is [`Span::Missed`] — the editor says so on
+/// the status line, which is its business and not this function's.
+pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char) -> Span {
+    let line = line_of(rope, pos);
+    let line_start = rope.line_to_char(line);
+    let mut text = rope.line(line).to_string();
+    while text.ends_with('\n') || text.ends_with('\r') {
+        text.pop();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let col = pos - line_start;
+    let found = match forward {
+        true => (col + 1..chars.len()).find(|&i| chars[i] == target),
+        false => (0..col.min(chars.len())).rev().find(|&i| chars[i] == target),
+    };
+    match found {
+        Some(at) => Span::Over { anchor: pos, head: line_start + at },
+        None => Span::Missed,
+    }
+}
+
 /// **`e`, as a span** (B1) — and it sets **both** ends.
 ///
 /// ⚠️ `select_to` would leave the anchor where the caret was, so standing on a
@@ -535,6 +585,20 @@ mod tests {
         // 到了緩衝區的盡頭是 `Missed`，不是一個空的 span —— 動詞要分得出
         // 「没東西」和「一格」，那正是 `wdiw` 當初栽的地方。
         assert_eq!(word_forward(&r, r.len_chars(), Grain::Word, &two), Span::Missed);
+    }
+
+    /// `f` stays on its line, and 「not there」 is `Missed` — the editor turns
+    /// that into a sentence, this only reports it.
+    #[test]
+    fn find_stays_on_its_line() {
+        let r = rope("alpha, beta\ngamma, delta");
+        // Forward to the comma on this line.
+        assert_eq!(find_char(&r, 0, true, ','), Span::Over { anchor: 0, head: 5 });
+        // The comma on the *next* line is not this line's business.
+        assert_eq!(find_char(&r, 7, true, ','), Span::Missed);
+        // Backwards, and never onto the character the caret is already on.
+        assert_eq!(find_char(&r, 8, false, ','), Span::Over { anchor: 8, head: 5 });
+        assert_eq!(find_char(&r, 5, false, ','), Span::Missed);
     }
 
     /// vim's `w` is the **bare primitive**, and that is the whole difference:

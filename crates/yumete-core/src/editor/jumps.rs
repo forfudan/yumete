@@ -134,40 +134,16 @@ impl Editor {
     /// Find `target` on the current line (`f`/`t`/`F`/`T`), moving the head and
     /// selecting the jumped-over range (unless already extending).
     pub(super) fn find_char(&mut self, kind: FindKind, target: char) {
-        let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor);
-        let line_start = rope.line_to_char(line);
-        let col = self.cursor - line_start;
-
-        let mut text = rope.line(line).to_string();
-        if text.ends_with('\n') {
-            text.pop();
-            if text.ends_with('\r') {
-                text.pop();
-            }
-        }
-        let chars: Vec<char> = text.chars().collect();
-
+        // **The searching is a motion, the saying is the editor's** (B1,
+        // 2026-09-20). What `f` covers is a value now — so an operator can be
+        // handed it without anybody replaying the key — while 「there is no
+        // such character on this line」 stays here, where the status line is.
         let forward = kind == FindKind::Forward;
-        let found = if forward {
-            (col + 1..chars.len()).find(|&i| chars[i] == target)
-        } else {
-            (0..col).rev().find(|&i| chars[i] == target)
-        };
-
-        let Some(idx) = found else {
+        let span = self.run_motion(crate::motion::Motion::Find { forward, target });
+        if span == crate::motion::Span::Missed {
             self.status = say!("find.no-such-character-on-this-line", target);
             return;
-        };
-        let head = match kind {
-            FindKind::Forward | FindKind::Backward => line_start + idx,
-        };
-
-        let old = self.cursor;
-        self.cursor = head;
-        if !self.extend {
-            self.anchor = old;
         }
-        self.refresh_goal_column();
+        self.take_span(span);
     }
 }

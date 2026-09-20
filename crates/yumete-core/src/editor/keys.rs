@@ -1015,12 +1015,7 @@ impl Editor {
             // give 「that character ＋ the next word」 — the punctuation between
             // them riding along in both directions.
             Key::Char('e') => self.repeat(count, |e| {
-                let span = motion::word_end(
-                    e.current_buffer().rope(),
-                    e.cursor,
-                    motion::Grain::Coarse,
-                    e.segmenter.as_ref(),
-                );
+                let span = e.run_motion(motion::Motion::WordEnd(motion::Grain::Coarse));
                 e.take_span(span);
             }),
             // **`b` is `e`'s partner, not `w`'s** (#304). helix's tutor teaches
@@ -1036,12 +1031,7 @@ impl Editor {
             // forward. `C-w` in Insert still deletes a *word* — it says why in
             // its own doc, and deleting a clause there would be brutal.
             Key::Char('b') => self.repeat(count, |e| {
-                let span = motion::word_back(
-                    e.current_buffer().rope(),
-                    e.cursor,
-                    motion::Grain::Coarse,
-                    e.segmenter.as_ref(),
-                );
+                let span = e.run_motion(motion::Motion::WordBack(motion::Grain::Coarse));
                 e.take_span(span);
             }),
             // A paragraph is a logical line here, and with soft wrap on `j`
@@ -1090,22 +1080,12 @@ impl Editor {
             Key::Char('[') => self.pending = Pending::Hop { forward: false },
             Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),
             Key::Char('E') => self.repeat(count, |e| {
-                let (from, to) = motion::next_word_end(
-                    e.current_buffer().rope(),
-                    e.cursor,
-                    motion::Grain::Big,
-                    e.segmenter.as_ref(),
-                );
-                e.select_span(from, to);
+                let span = e.run_motion(motion::Motion::WordEnd(motion::Grain::Big));
+                e.take_span(span);
             }),
             Key::Char('B') => self.repeat(count, |e| {
-                let p = motion::prev_word_start(
-                    e.current_buffer().rope(),
-                    e.cursor,
-                    motion::Grain::Big,
-                    e.segmenter.as_ref(),
-                );
-                e.select_to(p);
+                let span = e.run_motion(motion::Motion::WordBack(motion::Grain::Big));
+                e.take_span(span);
             }),
             Key::Char('g') => {
                 self.pending = Pending::Goto;
