@@ -1059,6 +1059,19 @@ impl Editor {
                 let pos = motion::line_last(self.current_buffer().rope(), self.cursor);
                 self.move_head(pos);
             }
+            // **`Enter`, `+` and `-`** — vim's three ways of saying 「the next
+            // line, where its writing begins」 (B4, 2026-09-20). `Enter` is
+            // unbound in Normal here, and `+`／`-` are in the preset's table;
+            // this is the one that cannot be spelled there, because the table
+            // holds characters.
+            Key::Enter if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.repeat(count, |e| {
+                    let down = e.run_motion(motion::Motion::Line { down: true });
+                    e.jump_to(down);
+                    let home = e.run_motion(motion::Motion::LineFirstNonBlank);
+                    e.jump_to(home);
+                });
+            }
             // **A standalone motion, read vim's way** (B3, 2026-09-20).
             //
             // 作者 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。
@@ -2167,6 +2180,10 @@ impl Editor {
 fn pressed(c: char) -> Key {
     match c {
         '\u{1b}' => Key::Esc,
+        // ⚠️ **Enter before the control-byte rule**: `\n` is 0x0A, which that
+        // rule would read as `C-j`. A keymap that wants Enter writes `\n`, and
+        // it means the key a hand presses.
+        '\n' | '\r' => Key::Enter,
         c if (c as u32) < 32 => Key::Ctrl((b'a' + c as u8 - 1) as char),
         c => Key::Char(c),
     }

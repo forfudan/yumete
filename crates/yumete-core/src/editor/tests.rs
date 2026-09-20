@@ -14717,6 +14717,53 @@ fn a_note_nobody_closed_stops_at_its_own_line() {
     assert_eq!(out, "甲\n乙\n", "{out:?}");
 }
 
+/// **前綴綁得動，而且一直綁得動**（B4，2026-09-20）。
+///
+/// 朋友 2026-09-20：「我的 vim prefix 鍵是分號，yumete 是空格……我實際上會用
+/// space/backspace 當 h/l 用。」兩件都不用改代碼——右邊寫成**鍵**就行，`;` 綁成
+/// 一個空格，空格綁成 `l`。動作表裏那句「前綴不給綁」說的是不能綁到*動作名*上
+/// （綁了就把整組吃掉），綁成鍵從來都通。**没人知道就等於没有**，所以釘一條。
+#[test]
+fn a_prefix_can_be_rebound_because_the_right_hand_side_is_keys() {
+    let mut ed = typed("alpha beta\n");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert(";".to_string(), " ".to_string());
+    aliases.insert(" ".to_string(), "l".to_string());
+    ed.set_key_aliases(aliases);
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+
+    // 空格當 `l` 用：一步一個字。
+    ed.on_key(Key::Char(' '));
+    assert_eq!(ed.cursor(), 1, "空格右移一格");
+    ed.on_key(Key::Char(' '));
+    assert_eq!(ed.cursor(), 2);
+
+    // …而 `;` 開的是那個菜單：它在等第二個鍵，所以下一個 `f` 是「打開文件」而
+    // 不是「找字符」。
+    ed.on_key(Key::Char(';'));
+    assert!(ed.pending_menu().is_some(), "; 開出了空格菜單");
+}
+
+/// **`Enter`、`+`、`-`：下一行，從它的字開始**（B4，2026-09-20，朋友第 1 條）。
+#[test]
+fn enter_and_plus_go_to_the_next_lines_first_word() {
+    let mut ed = typed("alpha\n    indented\nthird\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    let line_col = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    ed.on_key(Key::Enter);
+    assert_eq!(line_col(&ed), (1, 4), "縮進之後的第一個字");
+    press(&mut ed, "-");
+    assert_eq!(line_col(&ed), (0, 0));
+    press(&mut ed, "+");
+    assert_eq!(line_col(&ed), (1, 4), "`+` 是同一個動作");
+}
+
 /// 2026-09-19：**`w` 是一個文本對象**。`mi w`／`ma w` 是 helix 的寫法，vim 的
 /// `ciw` `diw` `daw` 走的是同一扇門——從前這裏只認括號，於是 vim 手指最熟的那一
 /// 組按下去什麽也不發生（更糟：剪掉光標底下那一個字就進了插入）。

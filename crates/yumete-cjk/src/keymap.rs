@@ -57,6 +57,12 @@ impl KeyPreset {
                 // — `d$`, `de`, `dG`, `df,`, `di(`. `d`, `c` and `y` are
                 // operators now ([`VIM_MOTIONS`]), and all six fall out of the
                 // general rule.
+                // **The three that mean 「next line, where its writing
+                // begins」** (B4, 2026-09-20). `Enter` is the same motion and
+                // cannot be spelled in this table — it has a key arm of its
+                // own — but `+` and `-` are characters and belong here.
+                ("+", "jgs"),
+                ("-", "kgs"),
                 ("^", "gs"),
                 ("$", "gl"),
                 ("0", "gh"),
