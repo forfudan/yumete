@@ -404,9 +404,9 @@ impl Editor {
         self.hanging
     }
 
-    /// Whether half-width pairs share a slot (縦中横).
-    pub fn set_tatechuyoko(&mut self, on: bool) {
-        self.tatechuyoko = on;
+    /// How many half-width characters share a slot (縦中横); `0` for none.
+    pub fn set_tatechuyoko(&mut self, at_most: usize) {
+        self.tatechuyoko = at_most.min(crate::zong::TATECHUYOKO_MAX);
     }
 
     /// Which ruby dialects are being laid out **on the page as it is drawn**.

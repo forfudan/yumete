@@ -6128,7 +6128,7 @@ line up as a single edge running down beside the 漢字, rather than drifting to
 the left of the column.
 
 **縦中横 is available and off.** The 縱 model was "one grapheme, one slot";
-making it "one **slot**, which is usually one grapheme but may be a pair of
+making it "one **slot**, which is usually one grapheme but may be a run of
 half-width alphanumerics" was a change in exactly one function, `slot_offsets`,
 because every other question the module answers — how long is a 縱, which slot
 is the cursor in, where does a 縱 wrap, what does the renderer draw — is already
@@ -6137,8 +6137,10 @@ sideways, `yume` reads as `yu` over `me`, two syllables that are not in the
 word. A two-digit year is the case that earns it, which is why the machinery
 stayed.
 
-Two characters is the hard limit either way: a slot is two cells and a
-half-width character is one, so `1985` packs as `19` over `85` and no further.
+⚠️ **Two was the hard limit until 2026-09-21, and is not any more.** A slot is
+two cells and a half-width character is one, so a longer group has to come out
+of somewhere — and what it comes out of is the 行間, which is where print puts
+it too. The setting is a count now (`tatechuyoko = 0｜2…8`). See §12.
 
 Two bugs this uncovered, both of the same shape — a setting known to one half of
 the system and not the other:
@@ -12164,3 +12166,71 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     收拾便宜，而且撤銷整趟有個難看的邊角：替換完又手改過的檔，那一步撤下去撤的是使用者
     自己後來的編輯。安全網仍是老三樣：先看見、不落盤、`:write-all` 纔算數。
 
+
+---
+
+## 12. 縦中横：一格裝幾個半角字（2026-09-21）
+
+「yumete 的 vertical 模式能否把單詞和數字合併到一起? 感覺在少量英文術語或數字的場景
+下有點用」——竪排的 `23456` 一位一行，堆得很長。接着的框法是「對於比較短的單詞和數
+字，把他們直接 inline 顯示，撐大縱距似乎也是可行的。這個是不是也是縱中橫的一種？」
+**是**，而且撐大縱距正是印刷的做法。
+
+### 12.1 查到的排版慣例
+
+- **JIS X 4051 §4.8 的縦中横「主要用在兩位數的數字上」**（W3C《日本語組版処理の要件》
+  轉述：「usually applied to two-digit numbers... JIS X 4051, sec. 4.8」）。兩個半角
+  字 ＝ 2 × 0.5em ＝ 一個字寬，**正好是一縱的寬度**，所以兩位數不動格子分毫。
+- **自動縦中横的上限是四位**：CSS Writing Modes 3 把它寫成
+  `text-combine-upright: digits <integer [2,4]>`（省略時算 2），InDesign 的「自動縦
+  中横設定 · 組数字」也只給 2／3／4。
+- **三位以上比一格寬，印刷把它壓回一格**：CSS 的規矩是「if the combined text is wider
+  than 1em, the user agent must fit the contents within 1em」。壓不動的時候它就探進
+  行間——這是 3～4 位縦中横在版面上看得見的代價，也是排版界不往上加的原因。
+- **更長的拉丁串，印刷是整串轉 90°躺着排**（JLREQ：「Rotated 90 degrees clockwise.
+  This is usually applied to English words or sentences」）。
+
+出處：<https://www.w3.org/TR/jlreq/>、
+<https://developer.mozilla.org/en-US/docs/Web/CSS/text-combine-upright>、
+InDesign《CJK 文字の書式設定》。
+
+### 12.2 終端只有一條路
+
+終端**轉不了字形**，也**壓不了字**——一格一個字形，寬度是字體給的。所以印刷的兩條
+退路（壓回一格、轉 90°）都不能用，剩下的只有第三條：**讓那一串探進行間**，並讓那一
+縱自己把多出來的格子買下來。這跟「帶注音的縱自己買下右邊那一列」是同一個機制
+（`Margin::Dense`，只有真用得上的那一縱纔付錢），所以 `place` 從「走位」改成「走位時
+多知道一個數」就夠了。
+
+三件事因此定下來：
+
+- **`tatechuyoko` 從 `bool` 變成一個數**（`0` 關，`2`–`8`，越界夾住，`1` 讀作關）。
+  舊拼法 `true`／`false` **不留別名**：「開着」說不出一格裝幾個。但那一行仍然解析得
+  出來，只是被拒收並當場報一句——否則整個配置檔都會因為這一行而載不進來，而同一個檔
+  裏别的設定跟這件事毫無關係。
+- **上限 8**，比排版界的 4 寬。理由是我們的代價曲線跟印刷不同：印刷壓字，越壓越糊；
+  終端探進行間，探多遠就是多遠。八個半角字 ＝ 四個字寬，探出去三個字，再多那一串就
+  等於自己占掉旁邊一整縱，所以停在這裏。出廠仍是 `0`：兩個字擠一格時 `yume` 讀成
+  `yu`／`me`，這個理由一點沒變。
+- **整串一起裝，裝不下就整串都不裝**（本來就是這樣，只是現在更要緊）：半格半格地填
+  會把 `1997` 讀成 `19` 和 `97` 兩個數。
+
+### 12.3 落在哪幾處
+
+| 在哪 | 改了什麼 |
+| --- | --- |
+| `yumete-cjk/src/vertical.rs` | `TATECHUYOKO_CLASSIC`／`TATECHUYOKO_MAX` 兩個常量，連同上面那些出處 |
+| `zong.rs: slot_offsets` | `bool` → 一個數；`slot_cells`／`zong_overhang` 兩支新的純函數 |
+| `zong.rs: render_page` | 純文本那一頁按同一個公式留位，`--preview --vertical` 與終端不會分家 |
+| `vertical.rs: place`／`layout_page` | 兩縱之間 ＝ `max(gap, 注音格 + 右邊那一縱探出來的格子)`；`Placed` 多帶一個 `overhang` |
+| `vertical.rs: put_slot_wide` | 一格一個字形地畫，靠右挂——整串寫進一個 cell 會把整行推歪 |
+| `vertical.rs` 光標 | Normal 的方塊蓋住整串，不是只蓋最後兩格 |
+| `char_at` | 探出去的那幾格算它自己的，點得中 |
+
+⚠️ **注音那一列不跟它共用**：兩縱之間取的是 `max(gap, 注音 + 探出)`，注音是**加**上
+去的而不是跟它擠同一格——那一格屬於它注的那個字，讓數字落上去就是兩樣東西互相蓋掉。
+跟 `gap` 之間纔是取大的：`gap` 是空氣，印刷也正是讓它站在行間裏。
+
+⚠️ **格是畫面上的單位，光標不是**：光標仍然一個字一個字地走，`1997` 那一格上按四下
+`j` 走過四個數字。這是原本就有的行為（兩位數時也一樣），只是四位的時候看得更清楚，
+所以 Normal 的方塊改成蓋住整串——蓋住最後兩格會讓人以為 `1997` 是兩行。
