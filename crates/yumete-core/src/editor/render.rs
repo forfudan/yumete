@@ -586,8 +586,8 @@ impl Editor {
     ///
     /// Not the same question as [`Self::table_padding_on`], and 2026-09-19 is
     /// where they parted: 竪排 squares a table up now, but a table there is
-    /// **read-only** by design (作者: 「進入表格後還是只讀狀態，必須 tt 才能
-    /// 編輯」) — the view is the thing that takes the keys, and a turned grid
+    /// **read-only** by design (「進入表格後還是只讀狀態，必須 tt 才能編輯」)
+    /// — the view is the thing that takes the keys, and a turned grid
     /// is not a grid the caret edits in place. `t t` still opens one, and
     /// turns the page flat to do it.
     pub(super) fn table_view_opens_itself(&self) -> bool {
@@ -1004,7 +1004,7 @@ impl Editor {
         // either punctuation, because「他们本质上都是分隔符」. The alignments
         // travel with the region rather than with the rows, so a table scrolled
         // past its own rule row keeps them.
-        // ⚠️ **「一屏幾行」竪排要問別的數** (作者 2026-09-19: 「整個表格都在
+        // ⚠️ **「一屏幾行」竪排要問別的數** (2026-09-19: 「整個表格都在
         // 可視範圍內哦」). The window is `[page_top, page_top + a screenful]`
         // *in lines*, and 橫排 a screenful of lines is the terminal's height.
         // 竪排 a line is a 縱 and the 縱 run **across** the page, so a screenful

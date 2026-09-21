@@ -16,7 +16,7 @@
 //!   `:h exclusive`, `:h inclusive`. That one word is the whole of what the
 //!   translation table could not say.
 //!
-//! ⚠️ **The same key can be two motions.** 作者 2026-09-20: 「vim 的 `w` 獨立
+//! ⚠️ **The same key can be two motions.** 2026-09-20: 「vim 的 `w` 獨立
 //! 的時候是跳轉，在命令中是選詞。」 Standalone, `w` asks
 //! [`crate::motion::Reading::Caret`]; under an operator it also asks for the
 //! caret's target and the operator then takes everything up to it, *excluding*

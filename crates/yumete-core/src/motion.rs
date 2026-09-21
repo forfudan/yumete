@@ -464,7 +464,7 @@ pub enum Operator {
 
 /// **Which reading of a motion is wanted** (B3, 2026-09-20).
 ///
-/// 作者 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。helix 就是
+/// 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。helix 就是
 /// 將跳轉和選擇兩個 `w` 合一了。」 That is this enum: one motion, and the two
 /// things an editor can ask of it.
 ///

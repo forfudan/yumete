@@ -845,7 +845,7 @@ impl Editor {
     }
 
     /// **Whether `line` is a row of a `|` table** — asked by the 竪排 renderer,
-    /// which turns the grid a quarter turn (作者 2026-09-19).
+    /// which turns the grid a quarter turn (2026-09-19).
     ///
     /// The turn is the whole of it: a row is one 縱 (`zong::lay_out` refuses to
     /// wrap one), so a column becomes a band down that 縱 and every character

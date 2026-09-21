@@ -1074,7 +1074,7 @@ impl Editor {
             }
             // **A standalone motion, read vim's way** (B3, 2026-09-20).
             //
-            // 作者 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。
+            // 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。
             // helix 就是將跳轉和選擇兩個 `w` 合一了。」 So under the vim preset
             // a bare motion asks for the **caret** reading: it goes to the
             // primitive — the next word's first character — and paints
@@ -1668,7 +1668,7 @@ impl Editor {
                 return last - first;
             }
         }
-        // **A count says how many lines end up as one** (作者 2026-09-19),
+        // **A count says how many lines end up as one** (2026-09-19),
         // which is vim's rule: `3J` welds three lines, and that is two joins.
         // The two ways of writing it used to disagree by one — `g3J` counted
         // joins and `4gJ` counted lines — while the manual promised both meant

@@ -74,7 +74,7 @@ impl KeyPreset {
                 // jumps to the matching bracket), `D` and `C` cut the
                 // selection (vim takes the rest of the line).
                 //
-                // ⚠️ **`J` is deliberately not among them** (作者 2026-09-18):
+                // ⚠️ **`J` is deliberately not among them** (2026-09-18):
                 // 「J 合併行我們和 helix 也不一樣，我覺得這個應該保持 gJ」.
                 // `J`／`K` are half a page here — the most-pressed pair in a
                 // novel, and not worth a chord — and joining is `gJ` in both

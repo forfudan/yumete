@@ -207,7 +207,7 @@ pub struct WikiView<'a> {
 
 impl WikiView<'_> {
     /// **The 章節 line** — 「辭典 › 真境」 — when the view is one entry
-    /// (作者 2026-09-18: 「章節那一行能不能用灰一些的顏色」).
+    /// (2026-09-18: 「章節那一行能不能用灰一些的顏色」).
     ///
     /// It is not part of what the entry *says*: it is where the entry was
     /// written down. So the panel draws it quietly, under the name and above

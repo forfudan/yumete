@@ -685,7 +685,7 @@ impl Editor {
         if self.open_wiki_include() {
             return;
         }
-        // **And so does a 百科 name** (作者 2026-09-19: 「wiki 詞條 gf 跳轉定義
+        // **And so does a 百科 name** (2026-09-19: 「wiki 詞條 gf 跳轉定義
         // 文件失效了」). `gd` has always opened the file an entry is written in
         // — but 「open the file this names」 is exactly what `gf` is for, and a
         // name on the page names one. Standing on 王高甫 and pressing `gf` used

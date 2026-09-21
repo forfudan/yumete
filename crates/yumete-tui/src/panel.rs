@@ -31,7 +31,7 @@ pub enum Body {
 pub struct Panel {
     pub title: String,
     /// **The 章節 line**, drawn quietly between the name and the body, with a
-    /// blank line (竪排: a blank 縱) under it (作者 2026-09-18).
+    /// blank line (竪排: a blank 縱) under it (2026-09-18).
     ///
     /// 「辭典 › 真境」 is where the entry was written down, not part of what it
     /// says — gold is the name, `quiet()` is the address, and the body is
@@ -46,7 +46,7 @@ pub struct Panel {
     /// panel — which is what #287 quietly gave all four of them.
     pub entry: bool,
     pub body: Body,
-    /// **Whether the prose inside runs down the page** (作者 2026-09-18:
+    /// **Whether the prose inside runs down the page** (2026-09-18:
     /// 「只有百科才需要縱書，其他的都保持橫排」).
     ///
     /// Not the same question as the panel's *shape*, which follows the page
@@ -79,7 +79,7 @@ fn is_table_rule(line: &str) -> bool {
             })
 }
 
-/// **A table, turned ninety degrees clockwise** (作者 2026-09-18 定).
+/// **A table, turned ninety degrees clockwise** (2026-09-18 定).
 ///
 /// 竪排 reads down and stacks 縱 leftwards, and a grid is read *across* — the
 /// one thing a vertical page cannot do. So the grid is turned instead of being
@@ -112,7 +112,7 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
         return Vec::new();
     }
     // **Each band gets the depth it needs, and only a band that cannot have it
-    // is cut** (作者 2026-09-19: 「空間夠就渲染全部，不夠再摺疊，儘量保證撐滿
+    // is cut** (2026-09-19: 「空間夠就渲染全部，不夠再摺疊，儘量保證撐滿
     // 整個高度」).
     //
     // The first cut of this divided the height evenly by the number of columns,
@@ -214,7 +214,7 @@ fn clip(text: &str, cells: usize) -> String {
     out
 }
 
-/// **A table, drawn as a table** — the 橫排 float's half (作者 2026-09-19:
+/// **A table, drawn as a table** — the 橫排 float's half (2026-09-19:
 /// 「橫排的浮窗也渲染一下吧，然後讓他不要 wrap，如果有必要可以省略」).
 ///
 /// A grid wrapped like prose is not a grid: the tail of every row lands under
@@ -491,14 +491,14 @@ pub fn draw(
         Body::Prose(_) => 1,
         Body::Keys(_) => 0,
     };
-    // **Which of the lines are not the body** (作者 2026-09-18). Three inks,
+    // **Which of the lines are not the body** (2026-09-18). Three inks,
     // and the order is the same in both layouts: the name in 金, the 章節 line
     // quietly under it, then the entry. Counted rather than marked on each line
     // because they are always at the front — `gold` of them, then `quiet` of
     // them after the blank that separates the two.
     let mut gold = 0usize;
     let mut quiet: std::ops::Range<usize> = 0..0;
-    // 段落的縮進：一格（作者 2026-09-18：「所有的段落不用空行，但是加一格縮
+    // 段落的縮進：一格（2026-09-18：「所有的段落不用空行，但是加一格縮
     // 進」。兩格試過，太重）。一個全角空格，橫竪一樣——竪排它就是那一縱頭上的
     // 一個空位。
     let indented = |text: &str| -> String {
@@ -517,11 +517,11 @@ pub fn draw(
     // `lines` is the prose, already wrapped; a key list draws itself from
     // `panel.body` and needs only its `count`.
     let (inner, count, lines, columns, key_w, one) = match &panel.body {
-        // **竪書的正文**（作者 2026-09-18）：一縱是一列，字往下走，縱往左排。
+        // **竪書的正文**（2026-09-18）：一縱是一列，字往下走，縱往左排。
         // 量法轉置——能放多高就一縱多少字，需要幾縱就多寬（一個漢字兩格）。
         Body::Prose(text) if panel.vertical_text => {
             let tall = (room_h as usize).saturating_sub(2).max(1);
-            // **段落之間不空縱，改用一格縮進**（作者 2026-09-18 定）。空一縱在
+            // **段落之間不空縱，改用一格縮進**（2026-09-18 定）。空一縱在
             // 只有十來縱的小框裏把兩段推得老遠；兩格縮進太重。標題與章節行後面
             // 各空一縱，那是另一回事——那兩縱不是正文，空白就是它們與正文的界。
             //
@@ -533,12 +533,12 @@ pub fn draw(
             // 這種就會發生）。折完按字數硬切一刀更糟——那一刀不認禁則，於是
             // 「，」被切到了下一縱的頭上。`zong` 這一支本來就是按字算的，禁則
             // 也在裏面，頁面上的竪排走的就是它。
-            // **標題是自己的一縱，排在最右**（作者 2026-09-18 定，三個辦法裏
+            // **標題是自己的一縱，排在最右**（2026-09-18 定，三個辦法裏
             // 的丙）。竪排的書就是這麽做的：標題不貼在框邊上，它本身就是第一
             // 縱，金墨。所以這一支不給 `chrome` 標題，框上没有名字。
             let mut zong: Vec<String> = vec![panel.title.chars().take(tall).collect()];
             gold = 1;
-            // 章節行緊貼標題（作者 2026-09-18：「標題和章節行之間不需要空
+            // 章節行緊貼標題（2026-09-18：「標題和章節行之間不需要空
             // 行」）——它們是同一件事的兩半，名字與它寫在哪兒，金與灰已經把
             // 兩者分開了。空的那一縱在**它們和正文之間**，只此一道。
             if let Some(lede) = &panel.lede {
@@ -554,7 +554,7 @@ pub fn draw(
             // 無聲少一截。所以竪排自己在這裏截：框最寬只有
             // `chrome::room` 的三分之一，換算成幾縱，多的砍掉。
             //
-            // ⚠️ **「…」接在末縱的腳下，不自己占一縱**（作者 2026-09-18：「最後
+            // ⚠️ **「…」接在末縱的腳下，不自己占一縱**（2026-09-18：「最後
             // 的省略號後面有個空行」）。自己占一縱的話那一縱只有一個字，底下
             // 一大片白——讀起來就是「這裏空了一行」，而它要說的是「話還没完」。
             let box_w = (room_w as usize).max(24).min(area.width as usize);
@@ -757,7 +757,7 @@ pub fn draw(
             )),
         },
     });
-    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // ⚠️ **The body sets no ground of its own** (2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
     // already painted the panel; text that carried its own copy of that colour
     // dragged a patch of the *old* one behind every line the day the panel's

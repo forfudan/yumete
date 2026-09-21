@@ -1239,15 +1239,15 @@ pub fn draw(
                 .chars()
                 .map(|c| yumete_cjk::control_picture(c).unwrap_or(c))
                 .collect();
-            // **A table's walls turn with it** (作者 2026-09-19). A row is one
+            // **A table's walls turn with it** (2026-09-19). A row is one
             // 縱 (the core refuses to wrap one), so the grid is the page's own
             // grid turned a quarter turn — and the walls have to turn too or
             // the reader is handed a column of loose pipes. A `|` between two
             // columns is a band **across** the 縱, two cells wide so it reaches
             // the next one; the `---` under the header is a wall **down** it.
             //
-            // ⚠️ **The crossings are the rule row's own pipes** (作者
-            // 2026-09-19: 「爲什麽沒有用十字交叉來表達綫的穿插？」). Turned,
+            // ⚠️ **The crossings are the rule row's own pipes**
+            // (2026-09-19: 「爲什麽沒有用十字交叉來表達綫的穿插？」). Turned,
             // the `---` row *is* the wall and the `|` in it are exactly the
             // places a band rule runs into it — so those, and only those, are
             // `┼`. Elsewhere a `|` is a band and a `-` is wall.
@@ -1313,7 +1313,7 @@ pub fn draw(
             // characters the file actually holds.
             if let Some(kind) = row.ink {
                 // ⚠️ **Virtual text takes the block's ground, not the page's**
-                // (作者 2026-09-19: 「表格隔行的底色沒有正確繪製」). A table's
+                // (2026-09-19: 「表格隔行的底色沒有正確繪製」). A table's
                 // rows are banded, and what squares a row up is *padding* —
                 // virtual text. Painting it on the page's own ground cut every
                 // stripe off where its cell's writing ended, so the band read

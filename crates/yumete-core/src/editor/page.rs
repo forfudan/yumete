@@ -137,7 +137,7 @@ impl Editor {
         hidden
     }
 
-    /// **A table cell's own padding, off a 竪排 page** (作者 2026-09-19:
+    /// **A table cell's own padding, off a 竪排 page** (2026-09-19:
     /// 「表格的單元格寬度有問題，不夠 compact」／「表頭沒對齊」).
     ///
     /// Two kinds of space live between a wall and the writing, and 竪排 can
@@ -641,7 +641,7 @@ impl Editor {
         changes.at(line)
     }
 
-    /// **停手多久纔去重算改動條**（作者 2026-09-19 定：300 毫秒）。
+    /// **停手多久纔去重算改動條**（2026-09-19 定：300 毫秒）。
     ///
     /// 按鍵一來就重新等——循環是 `recv_timeout(這個時長)`，所以它實際上是「停手
     /// 300 毫秒」，打字的時候一個子進程都不生。
@@ -683,7 +683,7 @@ impl Editor {
         }
         let lines = buffer.line_count();
         self.vcs_asked.insert(id, revision);
-        // **跟緩衝區比，不跟磁碟比**（作者 2026-09-19：在一段上面插一行，下面那
+        // **跟緩衝區比，不跟磁碟比**（2026-09-19：在一段上面插一行，下面那
         // 一段的竪綫就没了——記號釘在磁碟那一份的行號上，而緩衝區已經挪過了）。
         // `HEAD` 裏那一份按 buffer 存住：它只在存檔、換檔、`git` 那邊動過的時候
         // 纔會變，而**每一次停手**都要重比一遍。
