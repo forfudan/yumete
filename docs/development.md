@@ -6132,10 +6132,10 @@ making it "one **slot**, which is usually one grapheme but may be a run of
 half-width alphanumerics" was a change in exactly one function, `slot_offsets`,
 because every other question the module answers — how long is a 縱, which slot
 is the cursor in, where does a 縱 wrap, what does the renderer draw — is already
-expressed in those offsets. It is `[editor] tatechuyoko`, default off: turned
-sideways, `yume` reads as `yu` over `me`, two syllables that are not in the
-word. A two-digit year is the case that earns it, which is why the machinery
-stayed.
+expressed in those offsets. It is `[editor] tatechuyoko`, and it was default
+off: turned sideways, `yume` reads as `yu` over `me`, two syllables that are
+not in the word. A two-digit year is the case that earns it, which is why the
+machinery stayed — and 2026-09-21 it became the factory setting at `4`.
 
 ⚠️ **Two was the hard limit until 2026-09-21, and is not any more.** A slot is
 two cells and a half-width character is one, so a longer group has to come out
@@ -12204,7 +12204,9 @@ InDesign《CJK 文字の書式設定》。
 
 三件事因此定下來：
 
-- **`tatechuyoko` 從 `bool` 變成一個數**（`0` 關，`2`–`8`，越界夾住，`1` 讀作關）。
+- **`tatechuyoko` 從 `bool` 變成一個數**（`0` 關，`2`–`8`，越界夾住，`1` 讀作關），
+  **出廠從「關」改成 `4`**（2026-09-21 定：「我覺得可以改成 4，因為四位數很常見」——
+  年份與章節號是中文稿子裏半角字最常出現的兩種，而 `4` 也正是印刷給自己定的上限）。
   舊拼法 `true`／`false` **不留別名**：「開着」說不出一格裝幾個。但那一行仍然解析得
   出來，只是被拒收並當場報一句——否則整個配置檔都會因為這一行而載不進來，而同一個檔
   裏别的設定跟這件事毫無關係。
