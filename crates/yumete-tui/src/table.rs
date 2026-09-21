@@ -207,9 +207,11 @@ pub fn char_at(
     if rows == 0 || mouse.row < area.y {
         return None;
     }
+    // 表格視圖没有診斷那一欄：一張 CSV 不會有語言服務器。
     let gutter = crate::gutter_width(
         bottom.saturating_sub(editor.table_row_base()) + 1,
         config.editor.line_numbers,
+        false,
     ) as u16;
     // The same numbers `draw` measured with, the caret's own cell included:
     // that cell is drawn whole whatever the cap says, so a hit test that did
@@ -407,7 +409,8 @@ pub fn draw(
     // window is bounded (`Editor::hold_the_pane`), so inside it every number
     // — the gutter's, the status line's, `t20g`'s — means the same thing.
     let base = editor.table_row_base();
-    let gutter = gutter_width(bottom_row.saturating_sub(base) + 1, config.editor.line_numbers) as u16;
+    let gutter =
+        gutter_width(bottom_row.saturating_sub(base) + 1, config.editor.line_numbers, false) as u16;
     let room = area.width.saturating_sub(gutter) as usize;
     let widths = widths(
         editor,

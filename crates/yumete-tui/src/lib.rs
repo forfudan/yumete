@@ -266,7 +266,7 @@ fn frame_to(
         let metrics = vertical::Metrics::new(config, page.height, lines, look);
         editor.set_page(page.height as usize, metrics.capacity(page.width));
     } else {
-        let gutter = gutter_width(lines, config.editor.line_numbers);
+        let gutter = gutter_width(lines, config.editor.line_numbers, writes_code(editor));
         editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
         editor.set_page(page.height as usize, page.width.max(1) as usize);
     }
@@ -616,7 +616,7 @@ pub fn run(
                 // The width paragraphs soft-wrap at depends on the gutter as
                 // well; `j` and `k` walk those rows, so it too is settled
                 // before the keys that use it.
-                let gutter = gutter_width(lines, config.editor.line_numbers);
+                let gutter = gutter_width(lines, config.editor.line_numbers, writes_code(editor));
                 editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
                 editor.set_page(page.height as usize, page.width.max(1) as usize);
             }
@@ -3153,11 +3153,38 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
 /// character's margin, and the numbers crowded the text.
 const GUTTER_AIR: usize = 2;
 
-/// The width of the line-number gutter for a given mode (digits + the air).
-fn gutter_width(total_lines: usize, mode: LineNumbers) -> usize {
+/// 語言服務器那一欄：記號一格，再一格空氣（#53／#54）。
+///
+/// **次序照 helix**（`helix-view/src/editor.rs:100`，25.07.1 的出廠值是
+/// `[Diagnostics, Spacer, LineNumbers, Spacer, Diff]`）——診斷在**最左**，號碼在
+/// 它右邊。2026-09-21 對着那一段源碼定的。
+///
+/// ⚠️ **只有代碼檔纔有這一欄。** 小説不會有語言服務器，而這兩格是從正文身上要
+/// 的——中文裏兩格是一個整字。判準是這個緩衝區的語法是不是 `Code`，不是「服務
+/// 器起來了沒有」：後者會讓版心隨一個子進程的生死伸縮。
+const PROBLEM_GUTTER: usize = 2;
+
+/// 這個緩衝區有沒有那一欄。
+fn writes_code(editor: &Editor) -> bool {
+    matches!(
+        editor.current_buffer().syntax(),
+        yumete_core::syntax::Syntax::Code(_)
+    )
+}
+
+/// The width of the line-number gutter for a given mode (digits + the air),
+/// plus the diagnostics column when this buffer is code.
+fn gutter_width(total_lines: usize, mode: LineNumbers, code: bool) -> usize {
     match mode {
         LineNumbers::None => 0,
-        _ => total_lines.max(1).to_string().len() + GUTTER_AIR,
+        _ => {
+            total_lines.max(1).to_string().len()
+                + GUTTER_AIR
+                + match code {
+                    true => PROBLEM_GUTTER,
+                    false => 0,
+                }
+        }
     }
 }
 
@@ -3264,40 +3291,31 @@ fn diff_cell(change: yumete_core::vcs::Change, ink: crate::theme::Palette, band:
     }
 }
 
-/// 語言服務器那一句話畫成哪個字（#53／#54）。
+/// 語言服務器那一格：**朱是一塊鋪滿的顏色，另外三檔是淡底加一個字**。
 ///
-/// ⚠️ **四檔四個形狀，不是四個顏色。** `theme.rs` 的 `word_hue` 和上面那個剪口
-/// 為同一件事寫過同一條理由：百個男人裏有八個分不出紅綠，而這一格只有一格寬，
-/// 單靠顏色說話等於對他們什麼都没說。
+/// 2026-09-21，走了四輪纔到這裏：「符號可以不要，只要鋪滿就好，其他幾個顏色可
+/// 以不要太突出，但紅色可以突出」→ 畫出來 →「另外三檔確實看不清了……除了紅色的
+/// 都有符號和底色。」
 ///
-/// ⚠️ **這四個字是量過的，不是挑好看的**（2026-09-21）。第一版是 `●▲◆·`，
-/// 一看圖就是「紅圈圈是個半圓？」。在 CJK 等寬字體（LXGW 文楷 Mono GB）裏量：
-/// **一格 7.5px，而 `●`／`▲`／`◆` 都是 15.00px ——整整兩格**，`•`／`·`／`!`／`i`
-/// 纔是 7.50px。兩格的字擠進一格，終端不是裁掉半邊就是把整行推開一格，而這一欄
-/// 存在的全部理由就是**不動版心**。
+/// 落下來的形狀正好各司其職：
 ///
-/// 所以形狀讓位給寬度：`•` 錯、`!` 警告、`i` 說明、`·` 建議。
+/// - **錯**是一塊原色的朱，**不寫字**——它要的是一眼看見，而一塊滿的顏色比任何
+///   字都響。朱在這本書裏只說一句話：「這裏不對」。
+/// - **警告／說明／建議**是很淡的底（1.5:1）加一個字（`!`／`i`／`·`）。底太淡，
+///   光靠它認不出是哪一檔，字把這件事補上；而字又讓它們**不必**畫響——安靜正是
+///   這三檔要的。
 ///
-/// `narrow` 仍然由呼叫方量：`•` 與 `·` 是 East Asian **Ambiguous**，終端自己說
-/// 它算幾格（`yumete_cjk::char_width`，啓動時問來的）；說兩格就退回 `*` 和 `.`，
-/// 這兩個是 ASCII，任何字體下都是一格。`!` 與 `i` 本來就是 ASCII，無論哪一路
-/// 都是它們自己。
-fn problem_glyph(severity: yumete_core::problem::Severity, narrow: bool) -> &'static str {
-    use yumete_core::problem::Severity;
-    match (severity, narrow) {
-        (Severity::Error, true) => "•",
-        (Severity::Error, false) => "*",
-        (Severity::Warn, _) => "!",
-        (Severity::Note, _) => "i",
-        (Severity::Hint, true) => "·",
-        (Severity::Hint, false) => ".",
-    }
-}
-
-/// 語言服務器那一格：一個字，底色是它本來那張紙。
+/// ⚠️ **響度分兩級，而那是不靠顏色的那條線索。** 百個男人裏有八個分不出紅綠
+/// （`theme.rs` 的 `word_hue` 和剪口那一格爲同一件事寫過同一條理由）。分不出
+/// 色相的人照樣分得出「一塊滿的亮顏色」和「一個字」，也就照樣看得見哪一行是錯。
+/// 所以「朱最響、另外三檔都不許升上來」是**要求**，不是風格，釘了測試。
 ///
-/// 和改動條一樣走 [`crate::theme::Palette::vcs`]——那一檔（3:1）正是「一欄寬的
-/// 非文字元素還認得出是什麼顏色」的下限，而這一格與它一樣寬、就在它旁邊。
+/// ⚠️ **為什麼錯那一檔不能也畫個記號。** 在 CJK 等寬字體（LXGW 文楷 Mono GB）裏
+/// 量過：一格 7.5px，而 `●`／`⬤`／`■`／`▮`／`◉` **全是 15px，整整兩格**；一格寬
+/// 的只有 `•` `·` `@` `#` `0` `O` `o` `Q` `*`，**沒有一個是大的實心圓**。
+/// helix 四檔都寫 `●` 只換顏色（`helix-view/src/gutter.rs:80`），它在拉丁字體裏
+/// 剛好一格又大又圓——**那個辦法在中文字體下不存在**。鋪滿繞開了整件事：一格就
+/// 是一格，不可能溢出，也不可能被裁掉半邊。
 fn problem_cell(
     severity: yumete_core::problem::Severity,
     ink: crate::theme::Palette,
@@ -3305,18 +3323,36 @@ fn problem_cell(
 ) -> Span<'static> {
     use crate::theme::Accent;
     use yumete_core::problem::Severity;
-    let narrow = ["•", "·"]
-        .iter()
-        .all(|g| yumete_cjk::char_width(g.chars().next().unwrap_or(' ')) == 1);
-    let colour = match severity {
-        // 朱——「這裏不對」，全書就這一個顏色說這句話。
-        Severity::Error => ink.vcs(Accent::Mark),
-        Severity::Warn => ink.vcs(Accent::Amber),
-        Severity::Note => ink.vcs(Accent::Azure),
-        // 最輕的那一檔和行號同色：它在那兒，但不搶眼睛。
-        Severity::Hint => ink.furniture(),
+    // `·` 是 East Asian **Ambiguous**：終端自己說它算幾格（啓動時問來的），說兩
+    // 格就退回 `.`——ASCII，任何字體下都是一格。`!` 與 `i` 本來就是 ASCII。
+    let narrow = yumete_cjk::char_width('·') == 1;
+    let (ground, glyph, ink_of) = match severity {
+        // 朱——一塊滿的顏色，上面什麽都不寫。
+        Severity::Error => (ink.mark(), " ", None),
+        Severity::Warn => (ink.short_wash(Accent::Amber), "!", Some(ink.amber())),
+        Severity::Note => (ink.short_wash(Accent::Azure), "i", Some(ink.azure())),
+        // 最輕的那一檔不借品色：一塊最安靜的地，字和行號同色。四個品色都用掉了
+        // 而它是「你也許想知道」——給它一個顏色，就等於說它和警告一樣要緊。
+        Severity::Hint => (
+            ink.at(yumete_config::rung::HEAD),
+            match narrow {
+                true => "·",
+                false => ".",
+            },
+            Some(ink.furniture()),
+        ),
     };
-    Span::styled(problem_glyph(severity, narrow), band.fg(colour))
+    // `band` 是這一格本來那張紙（或者 `:view-numbers-fill` 的那一條）——這裏整格
+    // 都塗掉了，所以它只剩下不被用到。
+    let _ = band;
+    let style = Style::default().bg(ground);
+    Span::styled(
+        glyph,
+        match ink_of {
+            Some(colour) => style.fg(colour),
+            None => style,
+        },
+    )
 }
 
 /// Where each part of the window goes.
@@ -5079,7 +5115,8 @@ fn text_at(
     match editor.layout() {
         WritingLayout::Horizontal => {
             let buffer = editor.current_buffer();
-            let gutter = gutter_width(buffer.line_count(), config.editor.line_numbers);
+            let gutter =
+                gutter_width(buffer.line_count(), config.editor.line_numbers, writes_code(editor));
             let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
             let hide = |line: usize| editor.hidden_on_line(line);
             // The same measure the page was drawn with — the indent changes
@@ -6652,7 +6689,11 @@ fn draw_horizontal(
     let total_lines = buffer.line_count();
     let height = text_area.height as usize;
     let mode = config.editor.line_numbers;
-    let gutter = gutter_width(total_lines, mode);
+    let problem_gutter = match writes_code(editor) && mode != LineNumbers::None {
+        true => PROBLEM_GUTTER,
+        false => 0,
+    };
+    let gutter = gutter_width(total_lines, mode, writes_code(editor));
     let rope = buffer.rope();
     // The half that is only being read is drawn a rung back, all of it — that
     // is how you can see which half the keys are in without looking for the
@@ -6898,10 +6939,12 @@ fn draw_horizontal(
             // A continuation row carries no number: the number belongs to the
             // paragraph, and repeating it down a wrapped paragraph would read as
             // several paragraphs of the same number.
+            // 診斷那一欄（若有）在最左，號碼那一條從它右邊開始。
+            let numbers = gutter - problem_gutter;
             let label = if row.starts_line() {
-                gutter_text(row.line, cursor_line, gutter, mode)
+                gutter_text(row.line, cursor_line, numbers, mode)
             } else {
-                " ".repeat(gutter)
+                " ".repeat(numbers)
             };
             // A rung, not `DIM`: several terminals ignore DIM outright, and a
             // line number that is the same colour as the writing is worse than
@@ -6918,22 +6961,22 @@ fn draw_horizontal(
                 true => band.fg(ink.mark()).add_modifier(Modifier::BOLD),
                 false => band.fg(ink.furniture()),
             };
-            // **行號後面那兩格空氣，一格一件事**：貼着正文的那一格歸 git
-            // （改動條，#55／#298），它前面那一格歸語言服務器（#53／#54）。
-            // `GUTTER_AIR` 從一開始就是為這兩件事留的，所以兩件都落地了版心還是
-            // 一欄都不用挪——**一個功能上線那天頁面重排**，是這個設計從第一天起
-            // 要躲開的事。
+            // **helix 的五欄，照它的次序**（`helix-view/src/editor.rs:100`）：
+            // 診斷、空、號碼、空、改動條。頭尾兩欄各一格，中間兩格空氣就是
+            // `GUTTER_AIR` 本來留着的——所以散文稿一格都没多。
             //
-            // ⚠️ helix 把診斷放在行號**左邊**，那要多一欄。這裏放右邊是因為左邊
-            // 那一欄得從正文身上要，而那一欄正文在中文裏是一個整字。
-            let head: String = label.chars().take(gutter - GUTTER_AIR).collect();
-            spans.push(Span::styled(head, band));
             // 診斷只畫在段首那一列：它說的是「這一行」，而折行折出來的每一列並
             // 不是一行的開頭（同 `diff_mark` 裏剪口那一條理由）。
-            match row.starts_line().then(|| editor.problem_on_line(row.line)).flatten() {
-                None => spans.push(Span::styled(" ", band)),
-                Some(severity) => spans.push(problem_cell(severity, ink, band)),
+            if problem_gutter > 0 {
+                match row.starts_line().then(|| editor.problem_on_line(row.line)).flatten() {
+                    None => spans.push(Span::styled(" ", band)),
+                    Some(severity) => spans.push(problem_cell(severity, ink, band)),
+                }
+                spans.push(Span::styled(" ", band));
             }
+            let head: String = label.chars().take(numbers - GUTTER_AIR + 1).collect();
+            spans.push(Span::styled(head, band));
+            // 貼着正文的那一格歸 git（改動條，#55／#298）。
             match diff_mark(editor, &row) {
                 None => spans.push(Span::styled(" ", band)),
                 Some(change) => spans.push(diff_cell(change, ink, band)),
@@ -9167,6 +9210,7 @@ fn squeezed(text: &str) -> String {
         let gutter = gutter_width(
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
+            writes_code(editor),
         );
         editor.set_wrap_width((w as usize).saturating_sub(gutter));
         render(editor, config, w, h)
@@ -10782,11 +10826,12 @@ fn squeezed(text: &str) -> String {
         editor.set_vcs(yumete_core::vcs::Changes::from_diff(diff, lines));
     }
 
-    /// 改動條那一格在第幾欄：行號後面兩格空氣的**末一格**，貼着正文。
+    /// 改動條那一格在第幾欄：整條號碼帶的**末一格**，貼着正文。
     fn bar_column(editor: &Editor, config: &Config) -> u16 {
         let gutter = gutter_width(
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
+            writes_code(editor),
         );
         gutter as u16 - 1
     }
@@ -10858,9 +10903,10 @@ fn squeezed(text: &str) -> String {
 
     // ---- 語言服務器那一格（#53／#54）---------------------------------------
 
-    /// 診斷那一格在第幾欄：行號後面兩格空氣的**頭一格**，改動條前面那一格。
-    fn problem_column(editor: &Editor, config: &Config) -> u16 {
-        bar_column(editor, config) - 1
+    /// 診斷那一格在第幾欄：**最左**，號碼前面——helix 的次序
+    /// （`helix-view/src/editor.rs:100`）。
+    fn problem_column(_editor: &Editor, _config: &Config) -> u16 {
+        0
     }
 
     /// 開一個真的有路徑的檔——診斷是按**路徑**存的（服務器說的是一個檔），
@@ -10885,8 +10931,11 @@ fn squeezed(text: &str) -> String {
         }
     }
 
+    /// 次序照 helix：**診斷｜空｜號碼｜空｜改動條**
+    /// （`helix-view/src/editor.rs:100`，25.07.1 的出廠值）。2026-09-21 對着那
+    /// 一段源碼定的。
     #[test]
-    fn a_servers_complaint_takes_the_cell_before_the_change_bar_and_moves_nothing() {
+    fn a_servers_complaint_takes_the_leftmost_column_the_way_helix_orders_them() {
         use yumete_core::problem::Severity;
         let (mut editor, path) = editor_on_disk("a.rs", "一\n二\n三\n四\n");
         editor.set_problems(path, vec![said(1, Severity::Error), said(2, Severity::Warn)]);
@@ -10895,21 +10944,38 @@ fn squeezed(text: &str) -> String {
 
         let ink = ink(&config);
         let cell = problem_column(&editor, &config);
-        assert_eq!(at(&buffer, cell, 0), " ", "第 1 行没話說");
-        assert_eq!(at(&buffer, cell, 1), "•", "第 2 行有個錯");
-        assert_eq!(at(&buffer, cell, 2), "!", "第 3 行是個警告");
-        // ⚠️ **四檔四個形狀。** 顏色只是第二條線索——一欄寬的一格，紅綠分不出的
-        // 人就只剩形狀可讀。
+        assert_eq!(cell, 0, "診斷在最左");
+        assert_eq!(buffer[(cell, 0)].style().bg, ink.page().bg, "第 1 行没話說");
+        assert_eq!(buffer[(cell, 1)].style().bg, Some(ink.mark()), "第 2 行有個錯：朱");
         assert_eq!(
-            buffer[(cell, 1)].style().fg,
-            Some(ink.vcs(crate::theme::Accent::Mark)),
-            "錯是朱的"
+            buffer[(cell, 2)].style().bg,
+            Some(ink.short_wash(crate::theme::Accent::Amber)),
+            "第 3 行是個警告：淡琥珀"
         );
-        assert_eq!(buffer[(cell, 1)].style().bg, ink.page().bg, "底色一路是紙");
-        // ⚠️ **號碼一個都没丟，正文一欄都没挪**：這一格佔的是本來就空着的那兩格
-        // 裏的頭一格，改動條佔末一格，兩件事一起落地版心還是不動。
-        assert_eq!(row_text(&buffer, 1).trim_end(), "2• 二");
-        assert_eq!(row_text(&buffer, 0).trim_end(), "1  一", "没話說的那一行照舊");
+        // ⚠️ **錯那一格不寫字，另外三檔寫**（2026-09-21）：朱靠一塊滿的
+        // 顏色說話，而淡底太淡，光靠它認不出是哪一檔。
+        assert_eq!(at(&buffer, cell, 1), " ", "朱是一塊滿的顏色");
+        assert_eq!(at(&buffer, cell, 2), "!", "警告有個字");
+        // 診斷和號碼中間有一格空氣，那也是 helix 的（`Spacer`）。
+        assert_eq!(row_text(&buffer, 1).trim_end(), "  2  二");
+        assert_eq!(row_text(&buffer, 0).trim_end(), "  1  一", "没話說的那一行照舊");
+    }
+
+    /// ⚠️ **散文稿一格都不多花。** 那兩欄是從正文身上要的，而中文裏兩格是一個
+    /// 整字——一本小説永遠不會有語言服務器，卻要為它讓出一個字的版心，是不划算
+    /// 的。判準是緩衝區的語法，不是「服務器起來了没有」：後者會讓版心隨一個子
+    /// 進程的生死伸縮。
+    #[test]
+    fn a_manuscript_does_not_pay_for_a_column_it_can_never_use() {
+        let (prose, _) = editor_on_disk("第一章.md", "一\n二\n三\n四\n");
+        let (code, _) = editor_on_disk("c.rs", "一\n二\n三\n四\n");
+        let mode = LineNumbers::Absolute;
+        assert_eq!(gutter_width(4, mode, writes_code(&prose)), 3, "號碼 ＋ 兩格空氣");
+        assert_eq!(gutter_width(4, mode, writes_code(&code)), 5, "再加診斷那一欄");
+
+        let config = Config::default();
+        let buffer = render(&prose, &config, 20, 8);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "1  一");
     }
 
     #[test]
@@ -10922,41 +10988,58 @@ fn squeezed(text: &str) -> String {
         let buffer = render(&editor, &config, 20, 8);
 
         // 同一行上兩件事，各佔各的一格，誰也不蓋誰。
-        assert_eq!(at(&buffer, problem_column(&editor, &config), 1), "•");
+        let ink = ink(&config);
+        assert_eq!(
+            buffer[(problem_column(&editor, &config), 1)].style().bg,
+            Some(ink.mark()),
+            "診斷是一塊朱"
+        );
         assert_eq!(at(&buffer, bar_column(&editor, &config), 1), super::CHANGE_BAR);
-        assert_eq!(row_text(&buffer, 1).trim_end(), "2•▍二");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "  2 ▍二");
     }
 
-    /// ⚠️ **這四個字是量過的**（2026-09-21）。第一版 `●▲◆·` 畫出來，一眼就是
-    /// 「紅圈圈是個半圓？」——在 CJK 等寬字體裏量，一格 7.5px，而 `●▲◆`
-    /// 都是 **15.00px，整整兩格**；`•·!i` 纔是 7.50px。兩格的字擠進一格，不是被
-    /// 裁掉半邊就是把整行推開，而這一欄存在的全部理由就是不動版心。
+    /// ⚠️ **四檔分兩級，而那是唯一還在的第二條線索**（2026-09-21）。字形没了
+    /// 之後（2026-09-21：「符號可以不要，只要鋪滿就好」），分得出四檔的只剩顏色——而
+    /// 百個男人裏有八個分不出紅綠。所以朱是**原色**那一檔，另外三個是 1.5:1 的
+    /// 淡底：分不出顏色的人照樣分得出「亮的一塊」和「淡的一塊」，也就照樣看得見
+    /// 哪一行是錯。這個明暗差是要求，不是風格。
     #[test]
-    fn the_four_severities_are_four_shapes_and_every_one_of_them_is_one_cell() {
+    fn the_error_block_is_louder_than_the_other_three() {
         use yumete_core::problem::Severity;
-        let four = [Severity::Error, Severity::Warn, Severity::Note, Severity::Hint];
-        let ascii: Vec<&str> = four.iter().map(|s| problem_glyph(*s, false)).collect();
-        assert_eq!(ascii, ["*", "!", "i", "."]);
-        for glyph in &ascii {
-            assert!(glyph.is_ascii(), "退路要是任何字體都只佔一格的東西：{glyph}");
-        }
-        // 四檔四個形狀，兩條路上都不許重樣——重了就只剩顏色說話。
-        let wide: Vec<&str> = four.iter().map(|s| problem_glyph(*s, true)).collect();
-        assert_eq!(wide, ["•", "!", "i", "·"]);
-        for shapes in [&ascii, &wide] {
-            let mut seen = shapes.to_vec();
-            seen.sort_unstable();
-            seen.dedup();
-            assert_eq!(seen.len(), 4, "四檔要四個形狀：{shapes:?}");
-        }
-        // ⚠️ **一個方塊字都不許進來。** U+2580–U+25FF 那一整片（`●▲◆` 都在裏面）
-        // 在 CJK 字體下是兩格，而這裏只有一格。
-        for glyph in wide.iter().chain(ascii.iter()) {
-            let c = glyph.chars().next().unwrap();
+        let config = Config::default();
+        let ink = ink(&config);
+        let ground = |s: Severity| match super::problem_cell(s, ink, Style::default()).style.bg {
+            Some(ratatui::style::Color::Rgb(r, g, b)) => (r, g, b),
+            other => panic!("一塊鋪滿的顏色，不是 {other:?}"),
+        };
+        let paper = match ink.page().bg {
+            Some(ratatui::style::Color::Rgb(r, g, b)) => (r, g, b),
+            other => panic!("{other:?}"),
+        };
+        let away = |c: (u8, u8, u8)| {
+            let d = |a: u8, b: u8| f64::from(a).max(f64::from(b)) - f64::from(a).min(f64::from(b));
+            d(c.0, paper.0) + d(c.1, paper.1) + d(c.2, paper.2)
+        };
+        let error = away(ground(Severity::Error));
+        for quiet in [Severity::Warn, Severity::Note, Severity::Hint] {
             assert!(
-                !('\u{2580}'..='\u{25FF}').contains(&c),
-                "方塊區的字在 CJK 字體裏是兩格：{glyph}"
+                away(ground(quiet)) < error,
+                "{quiet:?} 不許和朱一樣響：{:?} vs {:?}",
+                ground(quiet),
+                ground(Severity::Error)
             );
+        }
+        // …而每一格都是一塊真的顏色，不是紙——四檔都要看得見。
+        for any in [Severity::Error, Severity::Warn, Severity::Note, Severity::Hint] {
+            assert_ne!(ground(any), paper, "{any:?} 畫在紙上等於没畫");
+        }
+        // ⚠️ **安靜的三檔靠字認，朱靠顏色認。** 2026-09-21：「另外三檔確實看不
+        // 清了……除了紅色的都有符號和底色。」底淡到分不出是哪一檔的時候，
+        // 字是唯一還說得出話的東西。
+        let glyph = |s: Severity| super::problem_cell(s, ink, Style::default()).content.to_string();
+        assert_eq!(glyph(Severity::Error), " ", "朱不寫字");
+        for quiet in [Severity::Warn, Severity::Note, Severity::Hint] {
+            assert_ne!(glyph(quiet), " ", "{quiet:?} 要有個字");
         }
     }
 
@@ -10977,7 +11060,7 @@ fn squeezed(text: &str) -> String {
         // 那一列：折行折出來的每一列並不是一段的開頭。
         let mut editor = editor_with("甲乙丙丁戊己庚辛壬癸子丑寅卯\n二\n三");
         let config = Config::default();
-        let gutter = gutter_width(3, config.editor.line_numbers);
+        let gutter = gutter_width(3, config.editor.line_numbers, writes_code(&editor));
         editor.set_wrap_width(12usize.saturating_sub(gutter));
         with_diff(&mut editor, "@@ -1 +1 @@\n");
         let buffer = render(&editor, &config, 12, 8);
@@ -11031,7 +11114,8 @@ fn squeezed(text: &str) -> String {
         let buffer = render(&editor, &config, 20, 6);
 
         let ink = ink(&config);
-        assert_eq!(gutter_width(2, LineNumbers::None), 0);
+        assert_eq!(gutter_width(2, LineNumbers::None, false), 0);
+        assert_eq!(gutter_width(2, LineNumbers::None, true), 0, "没有號碼帶就什麼都没有");
         assert_ne!(
             buffer[(0, 0)].style().bg,
             Some(ink.vcs(crate::theme::Accent::Green)),
@@ -12398,7 +12482,8 @@ fn squeezed(text: &str) -> String {
         // on moves the ruler over rather than eating twenty columns of text.
         config.editor.line_numbers = LineNumbers::Absolute;
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
-        let gutter = gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute);
+        let gutter =
+            gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute, false);
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
     }
 
@@ -16776,7 +16861,7 @@ fn squeezed(text: &str) -> String {
         let mut config = wrap_config();
         config.editor.line_numbers = LineNumbers::Absolute;
         let buf = render_wrapped(&mut editor, &config, 12, 5);
-        let gutter = gutter_width(1, LineNumbers::Absolute);
+        let gutter = gutter_width(1, LineNumbers::Absolute, false);
         let first = row_text(&buf, 0);
         assert!(first.starts_with(&gutter_text(0, 0, gutter, LineNumbers::Absolute)));
         // The second row of the same paragraph is numberless: the number names
