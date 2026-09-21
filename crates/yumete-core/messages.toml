@@ -4897,6 +4897,13 @@ zhs = "空格"
 en = "Space"
 
 [[message]]
+# 空格菜單裏那一行：問語言服務器這是什麽
+key = "hint.space.what-is-this"
+zht = "這是什麽（問服務器）"
+zhs = "这是什么（问服务器）"
+en = "what is this? (ask the server)"
+
+[[message]]
 # 表格提示：加一欄
 key = "hint.table.add-column"
 zht = "加一欄（右／左）"
@@ -5999,6 +6006,13 @@ zhs = "问问这个写在哪……"
 en = "asking where this is written…"
 
 [[message]]
+# 空格 k 問出去了，還沒回話
+key = "lsp.asking-what"
+zht = "問問這是什麽……"
+zhs = "问问这是什么……"
+en = "asking what this is…"
+
+[[message]]
 # 語言服務器起不來（機器上沒裝）——只說一次
 key = "lsp.cannot-start"
 zht = "{0} 起不來（{1}）——檔照常開，只是沒人查錯"
@@ -6013,6 +6027,13 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
+# 空格 k 按在稿子上——那裏沒有語言服務器
+key = "lsp.not-code"
+zht = "這不是程序文件，沒有服務器可問"
+zhs = "这不是程序文件，没有服务器可问"
+en = "not a program file — no server to ask"
+
+[[message]]
 # gd 問完了，服務器說不出它寫在哪
 key = "lsp.nowhere"
 zht = "服務器說不出這個寫在哪"
@@ -6025,6 +6046,13 @@ key = "lsp.reading"
 zht = "{0} 正在讀這個項目……第一次要等一會"
 zhs = "{0} 正在读这个项目……第一次要等一会"
 en = "{0} is reading the project… the first time takes a moment"
+
+[[message]]
+# 服務器對光標下那個東西無話可說
+key = "lsp.speechless"
+zht = "服務器對這個沒什麽可說的"
+zhs = "服务器对这个没什么可说的"
+en = "the server has nothing to say about this"
 
 [[message]]
 # 語言服務器死了
@@ -6042,6 +6070,13 @@ en = "{0} line {1} (C-o comes back)"
 
 
 # ── macro ─────────────────────────────────────────────────────────────
+
+[[message]]
+# hover 浮窗的標題
+key = "lsp.what-is-this"
+zht = "這是什麽"
+zhs = "这是什么"
+en = "what is this"
 
 [[message]]
 # 還沒錄過巨集就按了播放

@@ -220,6 +220,83 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     assert_eq!(still, 0, "存了之後錯誤要跟着没（90 秒）");
 }
 
+/// **`空格 k` 真的問得出「這是什麽」**（#53 ③，2026-09-21）。
+///
+/// ⚠️ **回答的形狀是那個程序的事。** rust-analyzer 送的是 `MarkupContent`，
+/// 裏面是一段 Markdown：一個 ```rust 圍欄裝着簽名，一條 `---`，然後文檔註釋。
+/// 假服務器只會送這個測試教它送的東西。
+#[test]
+#[ignore = "needs rust-analyzer on the machine, and takes seconds"]
+fn rust_analyzer_says_what_a_function_is() {
+    if which("rust-analyzer").is_none() {
+        eprintln!("no rust-analyzer on this machine — nothing to check");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("yumete-hover-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"asking\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/main.rs"),
+        "/// 數一數有幾個字。\nfn counted(text: &str) -> usize {\n    text.chars().count()\n}\n\nfn main() {\n    println!(\"{}\", counted(\"那年冬天\"));\n}\n",
+    )
+    .unwrap();
+
+    let mut editor = yumete_core::editor::Editor::new();
+    editor.open_file(dir.join("src/main.rs")).unwrap();
+    let config = yumete_config::Config {
+        lsp: yumete_config::factory_servers(),
+        ..Default::default()
+    };
+    let mut servers = yumete_tui::server::Servers::default();
+
+    // 光標走到那一次調用上（第 6 行，0 起算）。
+    editor.execute(":7").unwrap();
+    let standing_on = |editor: &yumete_core::editor::Editor| -> String {
+        let rope = editor.current_buffer().rope();
+        let at = editor.cursor();
+        rope.slice(at..(at + 7).min(rope.len_chars())).to_string()
+    };
+    for _ in 0..60 {
+        if standing_on(&editor).starts_with("counted") {
+            break;
+        }
+        editor.on_key(yumete_core::input::Key::Char('l'));
+    }
+    assert!(standing_on(&editor).starts_with("counted"), "光標站在 counted 上");
+
+    // ⚠️ **問不到就再問一次。** 服務器要先把整個項目讀完纔答得出來，而在那之前
+    // 它答的是「無話可說」——這一份沒有錯誤，所以也沒有診斷可以拿來當「讀完了」
+    // 的信號。真用起來也是這樣：讀者按一下沒出來，就再按一下。
+    let gave_up = Instant::now() + Duration::from_secs(90);
+    while Instant::now() < gave_up && editor.hover_here().is_none() {
+        editor.on_key(yumete_core::input::Key::Char(' '));
+        editor.on_key(yumete_core::input::Key::Char('k'));
+        for _ in 0..10 {
+            servers.follow(&editor, &config);
+            servers.ask_what(&mut editor, &config);
+            servers.collect(&mut editor);
+            if editor.hover_here().is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+    let told = editor.hover_here().map(str::to_string);
+    servers.stop();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let told = told.expect("服務器說了點什麽（30 秒）");
+    assert!(told.contains("counted"), "說的是這個函數：{told:?}");
+    assert!(told.contains("usize"), "簽名在裏面：{told:?}");
+    assert!(!told.contains("```"), "圍欄換成了行內代碼：{told:?}");
+    assert!(told.contains("數一數有幾個字"), "文檔註釋也在：{told:?}");
+}
+
 /// The program, if it is on the PATH.
 fn which(program: &str) -> Option<PathBuf> {
     std::env::var_os("PATH")?

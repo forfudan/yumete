@@ -58,6 +58,20 @@ pub struct Panel {
     /// 「第 11 行」 — where the thing being shown is written. Right-aligned on
     /// the bottom border, out of the reading path.
     pub tag: Option<String>,
+    /// **Whether the body is Markdown and should be set as Markdown**
+    /// (#53 ③, 2026-09-21).
+    ///
+    /// A language server's hover answer *is* Markdown — that is what the
+    /// protocol says it sends — and this editor already knows how to set
+    /// Markdown: `**bold**` bold with its asterisks set back, `` `code` `` in
+    /// the literal's ink, a heading in 金. 2026-09-21 問：「它為什麼不能渲染
+    /// markdown 呢？我覺得完全可以呀。」 So it does, through the same
+    /// [`crate::markup_style`] the page itself uses — one look, one answer to
+    /// 「what does `**` mean here」.
+    ///
+    /// Off for everything that is prose about the text rather than a document:
+    /// a footnote that happens to contain an asterisk is not emphasis.
+    pub marked: bool,
 }
 
 /// Whether `line` is a row of a markdown table.
@@ -801,7 +815,34 @@ pub fn draw(
         Body::Prose(_) => {
             for (i, line) in lines.iter().enumerate() {
                 let x = rect.x + 1 + pad as u16;
-                put_text(buf, x, rect.y + 1 + i as u16, limit, line, ground.fg(ink_of(i)));
+                let y = rect.y + 1 + i as u16;
+                let plain = ground.fg(ink_of(i));
+                // ⚠️ **Only the body, and only when it says it is Markdown.**
+                // The 章節 line and the title above it are the panel's own
+                // furniture and are set in their own inks (`ink_of`); running
+                // them through the markup would let an asterisk in a file name
+                // change the colour of the rest of the line.
+                if !panel.marked || i < gold || quiet.contains(&i) {
+                    put_text(buf, x, y, limit, line, plain);
+                    continue;
+                }
+                let mut at = x;
+                let mut from = 0usize;
+                let chars: Vec<char> = line.chars().collect();
+                for span in yumete_core::markdown::spans(line) {
+                    let before: String = chars[from.min(chars.len())..span.start.min(chars.len())]
+                        .iter()
+                        .collect();
+                    at = put_text(buf, at, y, limit, &before, plain);
+                    let run: String = chars[span.start.min(chars.len())..span.end.min(chars.len())]
+                        .iter()
+                        .collect();
+                    let style = crate::markup_style(span.kind, ink).patch(plain);
+                    at = put_text(buf, at, y, limit, &run, style);
+                    from = span.end;
+                }
+                let rest: String = chars[from.min(chars.len())..].iter().collect();
+                put_text(buf, at, y, limit, &rest, plain);
             }
         }
         Body::Keys(keys) => {
@@ -871,6 +912,7 @@ mod tests {
                     body: Body::Prose(text.into()),
                     vertical_text: true,
                     tag: None,
+                    marked: false,
                 });
             })
             .unwrap();
@@ -959,6 +1001,7 @@ mod tests {
                     body: Body::Keys(body),
                     vertical_text: false,
                     tag: None,
+                    marked: false,
                 });
             })
             .unwrap();

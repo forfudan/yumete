@@ -101,7 +101,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["plaintext","markdown"]}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -147,6 +147,16 @@ pub fn did_change(path: &Path, version: i64, text: &str) -> String {
 pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/definition","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `textDocument/hover` — 「這是什麽？」 (#53 ③).
+///
+/// The column is UTF-16, like every position on this wire.
+pub fn hover(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/hover","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
         uri = json_string(&uri_of(path)),
     )
 }
@@ -218,7 +228,14 @@ pub enum Notice {
     /// for what, so the id comes back untouched — but the *shape* of the
     /// answer is this crate's business, and a `serde_json::Value` crossing the
     /// boundary would make it everybody's.
-    Answer { id: i64, places: Vec<Place> },
+    /// ⚠️ **Both readings, because the reader cannot know which was asked.**
+    /// An answer carries an id and no method — nothing else in it says whether
+    /// it came back from `definition` or from `hover`. Only the front end knows
+    /// what it sent that id for, so both readings are offered and it takes the
+    /// one it is waiting for: a definition fills `places` and leaves `told`
+    /// empty; a hover does the opposite; a server that answered `null` fills
+    /// neither, which is 「nothing to say」 in both languages.
+    Answer { id: i64, places: Vec<Place>, told: Option<String> },
     /// Anything else: progress, logs, an answer nobody is waiting for.
     Nothing,
 }
@@ -240,7 +257,11 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
         // A request from the server: it has both a method *and* an id.
         (Some(_), Some(id)) => Notice::Asked { id },
         // An answer to something we sent: an id and no method.
-        (None, Some(id)) => Notice::Answer { id, places: places(value.get("result")) },
+        (None, Some(id)) => Notice::Answer {
+            id,
+            places: places(value.get("result")),
+            told: told(value.get("result")),
+        },
         _ => Notice::Nothing,
     }
 }
@@ -274,6 +295,100 @@ fn places(result: Option<&serde_json::Value>) -> Vec<Place> {
         Some(serde_json::Value::Array(many)) => many.iter().filter_map(one).collect(),
         Some(value) => one(value).into_iter().collect(),
     }
+}
+
+/// What a `textDocument/hover` answer says, as plain text (#53 ③).
+///
+/// ⚠️ **Three shapes again, and one of them is deprecated but still sent.**
+/// `contents` is a `MarkupContent` (`{kind, value}`), a `MarkedString` (a bare
+/// string, or `{language, value}`), or an array of `MarkedString`.
+///
+/// The value is Markdown, **and it stays Markdown** — this editor sets
+/// Markdown for a living, and the float draws it with the same inks the page
+/// does (2026-09-21 問：「它為什麼不能渲染 markdown 呢？我覺得完全可以呀。」).
+/// Only the block shapes a one-paragraph float cannot hold are rewritten, and
+/// each is rewritten into the Markdown that *means the same thing inline*:
+/// a fenced block becomes one `` `code` `` span a line, and a `---` rule
+/// becomes the blank line it was standing in for.
+fn told(result: Option<&serde_json::Value>) -> Option<String> {
+    fn one(value: &serde_json::Value) -> Option<String> {
+        match value {
+            serde_json::Value::String(text) => Some(text.clone()),
+            // Both `MarkupContent` and the old `{language, value}` keep the
+            // text under `value`.
+            _ => Some(value.get("value")?.as_str()?.to_string()),
+        }
+    }
+    let contents = result?.get("contents")?;
+    let raw = match contents {
+        serde_json::Value::Array(many) => {
+            let parts: Vec<String> = many.iter().filter_map(one).collect();
+            match parts.is_empty() {
+                true => return None,
+                false => parts.join("\n\n"),
+            }
+        }
+        value => one(value)?,
+    };
+    let flat = inline(&raw);
+    match flat.is_empty() {
+        true => None,
+        false => Some(flat),
+    }
+}
+
+/// A hover answer's Markdown, in the shapes a one-paragraph float can set.
+/// See [`told`].
+fn inline(raw: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut fenced = false;
+    for line in raw.lines() {
+        let bare = line.trim_end();
+        let start = bare.trim_start();
+        if start.starts_with("```") || start.starts_with("~~~") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            // **The signature, and it is the most useful line in the answer.**
+            // Backticks rather than a fence because the float sets *inline*
+            // markup — and `` `fn counted(text: &str) -> usize` `` is the same
+            // code in the same ink, in a shape this editor already draws.
+            // ⚠️ A backtick inside the code would close the span early; a line
+            // holding one is left bare rather than set wrong.
+            out.push(match bare.contains('`') || bare.trim().is_empty() {
+                true => bare.to_string(),
+                false => format!("`{}`", bare.trim_end()),
+            });
+            continue;
+        }
+        match start {
+            // A horizontal rule is how rust-analyzer separates the signature
+            // from the documentation. One blank line says the same thing.
+            "---" | "***" | "___" => out.push(String::new()),
+            _ => out.push(bare.to_string()),
+        }
+    }
+    let out: Vec<&str> = out.iter().map(String::as_str).collect();
+    // Runs of blank lines collapse, and the ends are trimmed: the fences and
+    // rules that were dropped leave holes behind them.
+    let mut text = String::new();
+    let mut blank = true;
+    for line in out {
+        if line.is_empty() {
+            blank = true;
+            continue;
+        }
+        if !text.is_empty() {
+            text.push('\n');
+            if blank {
+                text.push('\n');
+            }
+        }
+        text.push_str(line);
+        blank = false;
+    }
+    text
 }
 
 /// The empty answer to a request we do not really implement.
@@ -492,7 +607,7 @@ mod tests {
         // dropped here as 「nobody's business」; now `gd` has business.
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":7,"result":{}}"#, 1),
-            Notice::Answer { id: 7, places: Vec::new() }
+            Notice::Answer { id: 7, places: Vec::new(), told: None }
         );
         // A *request* from the server has a method as well as an id, and must
         // be answered or the server may wait on it forever.
@@ -539,6 +654,59 @@ mod tests {
         // 說不出來的時候是 `null`，不是錯。
         assert_eq!(here(r#"{"id":2,"result":null}"#), []);
         assert_eq!(here(r#"{"id":2,"result":[]}"#), []);
+    }
+
+    /// **hover 的三種回答，以及 Markdown 是怎麽留下來的**（#53 ③）。
+    ///
+    /// `contents` 可以是 `MarkupContent`、一個裸字串、`{language, value}`，
+    /// 或者它們的一串。圍欄變成**行內代碼**——浮窗畫的是行內標記，而簽名是整條
+    /// 回答裏最有用的一行，要留住它的墨色。
+    #[test]
+    fn a_hover_answers_in_several_shapes_and_stays_markdown() {
+        let said = |m: &str| match read(m, 1) {
+            Notice::Answer { told, .. } => told,
+            other => panic!("是一條回答：{other:?}"),
+        };
+
+        // rust-analyzer 送的這一種：MarkupContent，裏面是 Markdown。
+        let ra = r#"{"id":3,"result":{"contents":{"kind":"markdown","value":"```rust\nfn counted(text: &str) -> usize\n```\n\n---\n\n**數**一數有幾個字。"}}}"#;
+        assert_eq!(
+            said(ra).as_deref(),
+            Some("`fn counted(text: &str) -> usize`\n\n**數**一數有幾個字。"),
+            "⚠️ 圍欄變行內代碼，`---` 變一個空行，`**粗**` 原樣留着讓編輯器自己畫"
+        );
+
+        // 裸字串，以及舊的 {language, value}。
+        assert_eq!(said(r#"{"id":3,"result":{"contents":"一句話"}}"#).as_deref(), Some("一句話"));
+        assert_eq!(
+            said(r#"{"id":3,"result":{"contents":{"language":"rust","value":"usize"}}}"#).as_deref(),
+            Some("usize")
+        );
+
+        // 一串。
+        assert_eq!(
+            said(r#"{"id":3,"result":{"contents":["甲","乙"]}}"#).as_deref(),
+            Some("甲\n\n乙")
+        );
+
+        // 無話可說是 `null`，不是錯——空的也算無話可說。
+        assert_eq!(said(r#"{"id":3,"result":null}"#), None);
+        assert_eq!(said(r#"{"id":3,"result":{"contents":{"kind":"markdown","value":""}}}"#), None);
+
+        // ⚠️ **問定義的答案不會被讀成 hover，反過來也一樣。**
+        let where_ = r#"{"id":2,"result":{"uri":"file:///a.rs","range":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}}"#;
+        assert_eq!(said(where_), None, "定義的答案裏沒有 contents");
+        match read(ra, 1) {
+            Notice::Answer { places, .. } => assert!(places.is_empty(), "hover 裏沒有地方"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// 圍欄裏本來就有反引號的那一行不加引號——加了就把那一段提前關掉了。
+    #[test]
+    fn a_backtick_inside_a_fence_is_left_alone() {
+        let raw = "```rust\nlet x = `y`;\nfn f()\n```";
+        assert_eq!(inline(raw), "let x = `y`;\n`fn f()`");
     }
 
     /// ⚠️ 這個編輯器自己的測試檔就叫「第一章.md」。A URI that does not escape
