@@ -48,8 +48,8 @@ impl Editor {
         // reader saying 「just looking」, and leaving the row up would leave
         // `r` and `R` live on a panel nobody meant to change anything with.
         self.search.replacing = replacing;
-        // ⚠️ **模糊 comes off when the panel starts changing things** (作者
-        // 2026-09-20). A loose match covers characters nobody typed, so
+        // ⚠️ **模糊 comes off when the panel starts changing things**
+        // (2026-09-20). A loose match covers characters nobody typed, so
         // 「replace them all」 would hand the manuscript a range the writer
         // cannot predict. The switch is not even in the form while replacing
         // (`Field::step`), and leaving the *flag* on would have made the list

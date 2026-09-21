@@ -54,7 +54,7 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
         .border_style(ring.border)
         .style(ring.ground);
     if let Some((text, style)) = &ring.title {
-        // **One cell in from the corner** (作者 2026-09-18: 「能不能往右移一格
+        // **One cell in from the corner** (2026-09-18: 「能不能往右移一格
         // 半角，這樣就能對齊」). The ring's contents start one cell past the
         // wall; a title written hard against the corner sits a cell to their
         // left, and the two left edges being nearly-but-not-quite the same is
@@ -71,7 +71,7 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
 /// Two answers, and the difference is whether the reader is still writing:
 /// something to glance at keeps out of the caret's way, and something that has
 /// taken the keys stands in the middle, where it cannot be missed.
-/// **How much of the page a floating box may take** (作者 2026-09-18 定).
+/// **How much of the page a floating box may take** (2026-09-18 定).
 ///
 /// 橫排 two thirds wide and one third tall; 竪排 the transpose. Two numbers,
 /// and each of them answers a different question:
@@ -86,7 +86,7 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
 ///   rows away from the manuscript **whole** rather than by halves.
 ///
 /// 竪排 turns both round, and for the same reason: there a wide box cuts the
-/// tops off many 縱 at once (作者: 「這樣不會打破行文」).
+/// tops off many 縱 at once (「這樣不會打破行文」).
 pub fn room(area: Rect, vertical: bool) -> (u16, u16) {
     match vertical {
         false => (area.width * 2 / 3, area.height / 3),

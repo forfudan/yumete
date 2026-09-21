@@ -864,7 +864,7 @@ pub mod rung {
     pub const SELECTION: u16 = 6300; // 第 63 檔
     /// The page — **第 90 檔**, not the end of the ladder.
     pub const PAPER: u16 = 9000; // 第 90 檔
-    /// **第 85 檔 — what floats over the page** (作者 2026-09-18 定).
+    /// **第 85 檔 — what floats over the page** (2026-09-18 定).
     ///
     /// A panel used to be drawn on the paper's own colour, with a rule around
     /// it as the only thing saying where it began: 「我感覺他和正文還是有些混在

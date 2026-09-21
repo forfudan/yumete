@@ -119,7 +119,7 @@ impl Field {
     /// while the panel is only looking, and the 模糊 switch while it is
     /// replacing.
     ///
-    /// ⚠️ **模糊 and replacing never show together** (作者 2026-09-20). A loose
+    /// ⚠️ **模糊 and replacing never show together** (2026-09-20). A loose
     /// match covers characters nobody typed, so 「replace them all」 would hand
     /// the manuscript to a range the writer cannot predict. 模糊 is for
     /// finding; when it has found the place, `Esc` and change it there.

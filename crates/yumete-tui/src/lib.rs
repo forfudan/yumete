@@ -3225,7 +3225,7 @@ const CUT_BELOW: &str = "▁";
 
 /// 改動條本身的字形：`▍`（U+258D，左五八分塊）。
 ///
-/// **畫一個字，不塗滿一格**（作者 2026-09-19，對着 helix 看出來的：「我們的這個
+/// **畫一個字，不塗滿一格**（2026-09-19，對着 helix 看出來的：「我們的這個
 /// 底色竪綫爲什麽比 helix 的粗？它的更細而且和正文中間還有一些距離」）。helix
 /// 畫的就是這個字（`helix-view/src/gutter.rs:125`），用前景色——字形只占格子的
 /// 八分之五又靠左，所以右邊自己留出一條縫，離正文遠一點。塗滿底色的那一版又粗
@@ -3648,7 +3648,7 @@ fn draw(
     //
     // Each of them wants the same corner, and each of them means 「the reader
     // is doing *this* right now」 — so the one they are furthest into wins and
-    // the others are not drawn at all. 作者 2026-09-18, looking at a 百科
+    // the others are not drawn at all. 2026-09-18, looking at a 百科
     // entry and the `:` menu crowding one screen: 「一次只會出現一個面板，那麽
     // 輸入命令的時候百科窗口自然就會消失」.
     //
@@ -3865,7 +3865,7 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
             Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
         )),
     });
-    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // ⚠️ **The body sets no ground of its own** (2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
     // already painted the panel; text that carried its own copy of that colour
     // dragged a patch of the *old* one behind every line the day the panel's
@@ -4211,7 +4211,7 @@ fn draw_list(
         )),
     });
 
-    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // ⚠️ **The body sets no ground of its own** (2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
     // already painted the panel; text that carried its own copy of that colour
     // dragged a patch of the *old* one behind every line the day the panel's
@@ -4639,7 +4639,7 @@ fn draw_note(
     }
     if editor.detail().is_none() {
         let view = editor.wiki_floating()?;
-        // ⚠️ **No 「wiki.md:3」 along the bottom** (作者 2026-09-18: 「我不覺得
+        // ⚠️ **No 「wiki.md:3」 along the bottom** (2026-09-18: 「我不覺得
         // 百科面板的下方有任何必要顯示百科詞條所在的文件名」). Which file an
         // entry was written in is the *writer of the wiki*'s business, and
         // `gd` goes there without being told; a reader glancing at a name
@@ -4647,7 +4647,7 @@ fn draw_note(
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: view.name.clone(),
             // 章節行「辭典 › 真境」不是詞條說的話，是它寫在哪兒——面板把它
-            // 畫在名字下面，灰的，和正文隔一行（作者 2026-09-18）。
+            // 畫在名字下面，灰的，和正文隔一行（2026-09-18）。
             lede: view.lede(),
             entry: true,
             // **No more of the entry than this page could draw** — a float is
@@ -5963,7 +5963,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
             line(buf, &mut y, &part.trail.join(" › "), quiet);
         }
         y += 1;
-        // **A table is drawn as a table here too** (作者 2026-09-19: 「百科在
+        // **A table is drawn as a table here too** (2026-09-19: 「百科在
         // panel 中的渲染，表格 wrap 了」). Wrapped like prose a grid stops being
         // one — the tail of every row lands under the head of the next — which
         // is what the float was taught first (`panel::table_rows`): lay it out
@@ -6395,7 +6395,7 @@ fn draw_picker(
         false => box_.width,
     };
     let left = Rect::new(box_.x, box_.y, names, rows);
-    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // ⚠️ **The body sets no ground of its own** (2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
     // already painted the panel; text that carried its own copy of that colour
     // dragged a patch of the *old* one behind every line the day the panel's
@@ -6546,7 +6546,7 @@ fn draw_preview(
 ) {
     // The same ground as the list beside it: two panes of one panel must not
     // be two colours (2026-09-18).
-    // ⚠️ **The body sets no ground of its own** (作者 2026-09-18: 「命令行文字
+    // ⚠️ **The body sets no ground of its own** (2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
     // already painted the panel; text that carried its own copy of that colour
     // dragged a patch of the *old* one behind every line the day the panel's
@@ -10847,7 +10847,7 @@ fn squeezed(text: &str) -> String {
         let ink = ink(&config);
         let bar = bar_column(&editor, &config);
         let page = ink.page().bg;
-        // **一個字，不是一塊底色**（作者 2026-09-19，對着 helix：「它的更細而且
+        // **一個字，不是一塊底色**（2026-09-19，對着 helix：「它的更細而且
         // 和正文中間還有一些距離」）。`▍` 只占格子的八分之五又靠左，右邊那條縫
         // 是字形自己留的。所以驗的是**墨**和**那個字**，底色一路是紙。
         assert_eq!(buffer[(bar, 0)].symbol(), " ", "第 1 行没動過");
@@ -16222,7 +16222,7 @@ fn squeezed(text: &str) -> String {
     /// **One float at a time** (2026-09-18) — a `:` menu beats a half-pressed
     /// sequence, which beats the note the cursor is standing on.
     ///
-    /// 作者, looking at a 百科 entry and the `:` menu crowding one screen:
+    /// 2026-09-18, with a 百科 entry and the `:` menu crowding one screen:
     /// 「一次只會出現一個面板，那麽輸入命令的時候百科窗口自然就會消失」.
     #[test]
     fn only_one_thing_floats_over_the_page_at_a_time() {

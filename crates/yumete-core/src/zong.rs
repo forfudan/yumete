@@ -1254,7 +1254,7 @@ fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> L
     let text = line_text(rope, line);
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
-    // **A table row is one 縱, however long** (作者 2026-09-19: 「你保證竪排
+    // **A table row is one 縱, however long** (2026-09-19: 「你保證竪排
     // 模式表格也是非 wrap 的」).
     //
     // Turning a grid a quarter turn is the whole of what 竪排 does to a table

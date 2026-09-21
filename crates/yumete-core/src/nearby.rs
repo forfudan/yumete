@@ -1,5 +1,5 @@
 //! **Nearly these characters, nearly in a row** — the search panel's 模糊
-//! switch (作者 2026-09-19: 「寫小説的人記得『差不多是這幾個字』卻記不得原
+//! switch (2026-09-19: 「寫小説的人記得『差不多是這幾個字』卻記不得原
 //! 句」).
 //!
 //! The panel's other setting is a regular expression, which answers a

@@ -1954,7 +1954,7 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     press(&mut ed, "gJ");
     assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n", "選三行合成一行");
 
-    // **數字說的是「幾行併成一行」**（作者 2026-09-19 定），vi 的規矩：`3J`
+    // **數字說的是「幾行併成一行」**（2026-09-19 定），vi 的規矩：`3J`
     // 把三行焊成一行，也就是兩次併。從前兩種寫法差一個——`g3J` 數併的次數，
     // `4gJ` 數行——而手冊說它們是同一件事。
     // 二、`g3J`——本編輯器定的順序（命令＋選擇＋動作）。
@@ -4655,8 +4655,8 @@ fn a_quoted_table_is_not_padded() {
 /// rows — the 縱 run across the page, so there are far more lines on a 竪排
 /// screen than it is tall. The whole table was on the screen and all but its
 /// header fell outside the window, so only the header was padded and it stood
-/// beside a body squared up to nothing (作者: 「表頭還是計算錯誤沒對齊…光標繼續
-/// 往下，表格到了頁面右側的時候又突然對齊了」).
+/// beside a body squared up to nothing (「表頭還是計算錯誤沒對齊…光標繼續往下，
+/// 表格到了頁面右側的時候又突然對齊了」).
 #[test]
 fn a_vertical_table_is_measured_against_the_zong_on_the_screen() {
     let mut text = String::new();
@@ -8473,7 +8473,7 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().case, Case::Smart, "round again");
 }
 
-/// **模糊: 「差不多是這幾個字」** — 作者 2026-09-19: 「寫小説的人記得差不多是
+/// **模糊: 「差不多是這幾個字」** — 2026-09-19: 「寫小説的人記得差不多是
 /// 這幾個字卻記不得原句」. The panel's other setting is a regular expression,
 /// which answers a different question (a *shape*); this one is a fourth
 /// switch, and it stands in place of 正則 and 完整匹配 rather than beside them.
@@ -8520,7 +8520,7 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
     assert!(!ed.search().fuzzy, "正則 and 模糊 are not both on");
 }
 
-/// **模糊 is for finding, never for replacing** (作者 2026-09-20). A loose
+/// **模糊 is for finding, never for replacing** (2026-09-20). A loose
 /// match covers characters nobody typed, so 「replace them all」 would hand the
 /// manuscript a range the writer cannot predict.
 #[test]
@@ -14486,7 +14486,7 @@ fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
     let text = |ed: &Editor| ed.current_buffer().text();
 
     // ⚠️ `J` is **not** translated: here it is half a page down in both
-    // presets, and joining is `gJ` (作者 2026-09-18).
+    // presets, and joining is `gJ` (2026-09-18).
     let mut ed = vim("一\n二\n三\n");
     press(&mut ed, "J");
     assert_eq!(text(&ed), "一\n二\n三\n", "J does not join");
@@ -14497,7 +14497,7 @@ fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
     // `D` and `C` take the rest of the line, not the selection.
     //
     // ⚠️ **這一條 2026-09-20 改了，因爲那件「辦不到」的事辦到了**（B3）。
-    // 原註寫着：作者 2026-09-18「vim w 是跳到詞頭，這個我們肯定没辦法實現」，
+    // 原註寫着：2026-09-18「vim w 是跳到詞頭，這個我們肯定没辦法實現」，
     // 所以從前 `w` 把光標留在空格上，`wD` 連空格一起帶走。現在 vim 預設的 `w`
     // 是 vim 自己的——落在詞頭——於是 `wD` 留下那個空格，和真 vim 一樣。
     let mut ed = vim("alpha beta\n二\n");
@@ -14813,7 +14813,7 @@ fn the_change_bar_follows_the_buffer_not_the_disk() {
 
 /// ⚠️ **換行符不算改動。** 倉裏開着 `core.autocrlf` 的時候 `HEAD` 裏存的是
 /// CRLF 而緩衝區是 LF，逐字節比會說每一行都改過——helix 就是這麽把整篇文章標成
-/// 紫色的（作者 2026-09-19 拿他自己的稿子撞到）。兩邊都把行尾的 `\r` 去掉。
+/// 紫色的（2026-09-19 拿他自己的稿子撞到）。兩邊都把行尾的 `\r` 去掉。
 #[test]
 fn a_line_ending_is_not_a_change() {
     let changes = crate::vcs::Changes::against("一\r\n二\r\n三\r\n", "一\n二\n三\n", 3)

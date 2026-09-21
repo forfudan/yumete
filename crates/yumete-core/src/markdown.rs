@@ -994,7 +994,7 @@ fn run(chars: &[char], from: usize, text: &str) -> Option<usize> {
 /// instead, which is right for `` `code` `` and wrong the moment two of them
 /// stand together: ```` ``%%`` ```` was read as an *empty* code span made of the
 /// first two backticks, and the scan came back out standing on the `%%` — which
-/// then opened a comment and greyed the rest of the file. 作者 2026-09-19:
+/// then opened a comment and greyed the rest of the file. 2026-09-19:
 /// 「markdown 中的百分號會把後面的所有文字變成註釋」. The same shape did it in
 /// this project's own manual (`docs/manual.md:394`, a line of quoted markup),
 /// and the exporter — which strips comments — **dropped those paragraphs from
@@ -1285,7 +1285,7 @@ mod tests {
     /// 2026-09-19：**一個代碼段由幾個反引號開，就要幾個反引號關**。從前這裏
     /// 取的是「下一個反引號」，所以兩個挨在一起的反引號被當成一對空代碼段，
     /// 掃描回到 `%%` 上——於是它開了一條註釋，後面半本書變灰，導出的時候那
-    /// 幾段**整個不見**。作者 2026-09-19 報的就是這個，而這個檔自己的手冊
+    /// 幾段**整個不見**。2026-09-19 報的就是這個，而這個檔自己的手冊
     /// （`docs/manual.md:394`，引用各種標記的那一行）正是這個形狀。
     ///
     /// ⚠️ 上面那一條只用了單反引號，所以它永遠是綠的。
