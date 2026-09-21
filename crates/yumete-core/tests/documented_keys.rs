@@ -268,7 +268,28 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
             "空格" => '空',
             one => one.chars().next().filter(|_| one.chars().count() == 1)?,
         };
-        return Some((lead, key.to_string()));
+        // ⚠️ **Two levels, since the table group moved** (2026-09-21).
+        // `空格 t/` is three presses — the 空 menu's `t`, then the table
+        // menu's `/` — and `空格 t2-10/` puts a column range between them.
+        // Asking only about the first key would stop checking the forty keys
+        // the table group has, so when the first key is itself a leader the
+        // question moves down a level.
+        //
+        // ⚠️ **A count stops the descent.** `空格 t1,5,9s` names three columns
+        // and the menu spells that key `1s`, not `s` — pressing a bare `s`
+        // there really does nothing, which is what `t s` is doing in
+        // [`DISOWNED_KEYS`]. So a spelling with arithmetic in it is checked
+        // one level up only: this table's vocabulary is keys, not columns.
+        let mut key = key.chars();
+        let first = key.next()?;
+        let rest: String = key.collect();
+        let arithmetic = rest.starts_with(|c: char| c.is_ascii_digit());
+        if lead == '空' && !arithmetic && Editor::keys_after(first).is_some() {
+            if let Some(deeper) = rest.chars().next() {
+                return Some((first, deeper.to_string()));
+            }
+        }
+        return Some((lead, first.to_string()));
     }
     // Both halves ASCII: `空格` on its own is two 漢字 and one key, and read
     // as a pair it asks the 空 menu for 「格」.

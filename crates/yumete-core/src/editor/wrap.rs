@@ -273,6 +273,8 @@ impl Editor {
             Pending::Space => "␣",
             Pending::Find(FindKind::Forward) => "f",
             Pending::Find(FindKind::Backward) => "F",
+            Pending::Find(FindKind::Till) => "t",
+            Pending::Find(FindKind::TillBack) => "T",
             Pending::Replace => "r",
             Pending::ReplaceAll => "R",
             Pending::Register => "\"",

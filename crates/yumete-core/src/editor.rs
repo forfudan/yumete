@@ -265,6 +265,30 @@ impl Pending {
 enum FindKind {
     Forward,
     Backward,
+    /// `t` — the same search, stopping one short of what it found.
+    Till,
+    /// `T` — backwards, stopping one short.
+    TillBack,
+}
+
+impl FindKind {
+    fn forward(self) -> bool {
+        matches!(self, FindKind::Forward | FindKind::Till)
+    }
+
+    fn till(self) -> bool {
+        matches!(self, FindKind::Till | FindKind::TillBack)
+    }
+
+    /// The other direction, keeping the 「till」 half — what `,` asks for.
+    fn flipped(self) -> FindKind {
+        match self {
+            FindKind::Forward => FindKind::Backward,
+            FindKind::Backward => FindKind::Forward,
+            FindKind::Till => FindKind::TillBack,
+            FindKind::TillBack => FindKind::Till,
+        }
+    }
 }
 
 /// How many hits `:grep` gathers before it stops looking.

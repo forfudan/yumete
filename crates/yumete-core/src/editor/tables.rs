@@ -3006,8 +3006,14 @@ impl Editor {
         // when the grid was the default way to stand in a table; but the cell
         // is not what a writer mostly wants — the characters in it are — so
         // the default became 按字 and `Tab` was wanted for the thing every
-        // spreadsheet means by it. `T` is the table group's own capital, free
-        // since `t`/`T` were retired as till-keys.
+        // spreadsheet means by it.
+        //
+        // ⚠️ **`T` stays a grid key even though `t`／`T` went back to being
+        // till** (2026-09-21): it and `Tab` are the grid's two documented
+        // exceptions, and till-searching backwards inside a grid is not a
+        // thing anybody does. The table *group* is `空格 t` here as
+        // everywhere — a grid changes what two keys mean, not what the
+        // editor is.
         if key == Key::Char('T') {
             let grain = match self.table.as_ref().map(|v| v.grain) {
                 Some(Grain::Char) => Grain::Cell,

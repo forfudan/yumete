@@ -138,10 +138,19 @@ impl Editor {
         // 2026-09-20). What `f` covers is a value now — so an operator can be
         // handed it without anybody replaying the key — while 「there is no
         // such character on this line」 stays here, where the status line is.
-        let forward = kind == FindKind::Forward;
-        // helix has no 「till」 — `t` is the table group here.
-        let span =
-            self.run_motion(crate::motion::Motion::Find { forward, target, till: false });
+        // ⚠️ **`t`／`T` are till again** (2026-09-21). They were retired when
+        // `t` became the table group, on the reasoning that a verb-last editor
+        // puts till 「one keystroke away from find and no more」. Two things
+        // changed: the vim preset puts the verb *first* (`dt,`), and helix's
+        // own `t` is `find_till_char` (`keymap/default.rs:14`) — so the key
+        // was costing both hands their muscle memory to save one keystroke in
+        // the one group that could afford to be a keystroke longer. The table
+        // group is `空格 t` now.
+        let span = self.run_motion(crate::motion::Motion::Find {
+            forward: kind.forward(),
+            target,
+            till: kind.till(),
+        });
         if span == crate::motion::Span::Missed {
             self.status = say!("find.no-such-character-on-this-line", target);
             return;

@@ -75,7 +75,7 @@ fn four_punctuations_one_table() {
     ];
     for (name, text) in said {
         let mut ed = typed(text);
-        press(&mut ed, "tf");
+        press(&mut ed, " tf");
         let at = last_wall_column(&ed, 3);
         assert_eq!(at[0], at[1], "{name}: {at:?}");
         assert_eq!(at[1], at[2], "{name}: {at:?}");
@@ -90,14 +90,14 @@ fn the_levels_mean_the_same_thing_whatever_the_punctuation() {
     for text in ["ch,錐\nlongcode,蜘\nbk,裘\n", "|ch|錐|\n|longcode|蜘|\n|bk|裘|\n"] {
         let mut ed = typed(text);
 
-        press(&mut ed, "to");
+        press(&mut ed, " to");
         assert!(
             (0..3).all(|l| ed.drawn_on_line(l).is_empty()),
             "源碼 draws the file as it is written: {:?}",
             (0..3).map(|l| ed.drawn_on_line(l)).collect::<Vec<_>>()
         );
 
-        for level in ["tb", "tf"] {
+        for level in [" tb", " tf"] {
             press(&mut ed, level);
             let at = last_wall_column(&ed, 3);
             assert_eq!(at[0], at[1], "{level} squares it up: {at:?}");
@@ -112,7 +112,7 @@ fn the_levels_mean_the_same_thing_whatever_the_punctuation() {
 #[test]
 fn only_the_pipe_is_written_with_a_space_off_it() {
     let mut ed = typed("ab,cd\nef,gh\n");
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     assert!(
         ed.drawn_on_line(0).is_empty(),
         "every cell is already the column's width: {:?}",
@@ -120,7 +120,7 @@ fn only_the_pipe_is_written_with_a_space_off_it() {
     );
 
     let mut ed = typed("|ab|cd|\n|ef|gh|\n");
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     assert!(
         !ed.drawn_on_line(0).is_empty(),
         "and a pipe table still gets its spaces"
@@ -175,7 +175,7 @@ fn a_table_is_measured_over_what_is_on_the_page() {
 /// 模式都是按字走的不是按格走的」. A comment cannot fail; this can.
 #[test]
 fn the_levels_leave_hjkl_alone() {
-    for level in ["to", "tb", "tf", "tt"] {
+    for level in [" to", " tb", " tf", " tt"] {
         let mut ed = typed("ch\t錐\nbkd\t蜘\n");
         press(&mut ed, level);
         let mut walk = vec![ed.cursor()];
@@ -202,7 +202,7 @@ fn the_caret_steps_over_what_a_table_keeps_off_the_page() {
     let mut ed = typed(&text);
     ed.execute(":syntax markdown").unwrap();
     ed.execute("4").unwrap();
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     let hidden = ed.cell_hidden_on_line(3);
     assert!(!hidden.is_empty(), "the file's padding is off the page: {hidden:?}");
     let (from, upto) = hidden[0];

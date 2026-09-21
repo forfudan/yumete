@@ -98,14 +98,14 @@ fn a_tab_a_table_has_taken_over_is_a_separator_and_not_a_stop() {
     ed.on_key(Key::Char('g'));
 
     // 源碼: no table has taken anything over, so a tab is a tab.
-    for c in "to".chars() {
+    for c in " to".chars() {
         ed.on_key(Key::Char(c));
     }
     assert_eq!(tabs(&ed), 1, "源碼 draws the file as it is written: {}", ed.status());
 
     // 基本 and 全 both read it as a table, and in both the separator is the
     // table's punctuation — one cell, like a pipe.
-    for level in ["tb", "tf"] {
+    for level in [" tb", " tf"] {
         for c in level.chars() {
             ed.on_key(Key::Char(c));
         }
@@ -126,7 +126,7 @@ fn a_pipe_and_a_comma_are_walls_by_the_very_same_door() {
     let mut ed = typed("a,bb,c\nlonger,b,cc\n");
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
-    for c in "tf".chars() {
+    for c in " tf".chars() {
         ed.on_key(Key::Char(c));
     }
     let walls: Vec<usize> = ed.grid_on_line(0).into_iter().map(|(at, _)| at).collect();
