@@ -1200,24 +1200,24 @@ impl Editor {
             }
             // Helix's Space menu: the things that are not motions.
             Key::Char(' ') => self.pending = Pending::Space,
-            // In-line character search (Helix `f`/`F`).
+            // In-line character search — **all four of vi's**, `f` `F` `t` `T`.
             //
-            // **`t` and `T` are gone**, and `t` is the table group in every
-            // mode. One letter meant two unrelated things depending on whether
-            // the cursor happened to be inside a `|` table, which is the kind
-            // of inconsistency a reader cannot hold in their head — and vi's
-            // `t` was never reachable here anyway: this editor puts the verb
-            // last (`t，d`, not `dt，`), so till was one keystroke away from
-            // find and no more.
-            Key::Char('f') | Key::Char('F') => {
+            // ⚠️ **`t`／`T` were the table group until 2026-09-21**, retired as
+            // till-keys on the reasoning that a verb-last editor puts till
+            // 「one keystroke away from find and no more」. Two things undid
+            // that: the vim preset puts the verb **first** (`dt,`), and
+            // **helix's own `t` is `find_till_char`**
+            // (`helix-term/src/keymap/default.rs:14`) — so one key was costing
+            // *both* hands their muscle memory to save one keystroke in the
+            // one group that can afford to be a keystroke longer. 「表格操作
+            // 並不是特別頻繁。」 The table group is `空格 t` now.
+            Key::Char('f') | Key::Char('F') | Key::Char('t') | Key::Char('T') => {
                 self.pending = Pending::Find(match key {
                     Key::Char('f') => FindKind::Forward,
-                    _ => FindKind::Backward,
+                    Key::Char('F') => FindKind::Backward,
+                    Key::Char('t') => FindKind::Till,
+                    _ => FindKind::TillBack,
                 });
-                self.operator_count = operator_count;
-            }
-            Key::Char('t') => {
-                self.pending = Pending::Table;
                 self.operator_count = operator_count;
             }
             // Select (extend) mode and collapse (Helix `v` / `;`).
@@ -1274,10 +1274,7 @@ impl Editor {
             {
                 if let Some((kind, ch)) = self.last_find {
                     let kind = match c {
-                        ',' => match kind {
-                            FindKind::Forward => FindKind::Backward,
-                            FindKind::Backward => FindKind::Forward,
-                        },
+                        ',' => kind.flipped(),
                         _ => kind,
                     };
                     self.repeat(count, |e| e.find_char(kind, ch));
@@ -1882,6 +1879,11 @@ impl Editor {
         // editor for novels a conflict is far the rarer of the two. `m` is
         // merge, and the two letters do not compete for the same word.
         ('m', "hint.conflict.title"),
+        // ⚠️ **The table group moved here** (2026-09-21) so that `t`／`T` could
+        // go back to being vi's till-keys — helix spells them that way too
+        // (`keymap/default.rs:14`). One slot of this menu buys a whole group,
+        // which is the best trade a slot here can make.
+        ('t', "hint.space.table"),
     ];
 
     /// What `g` may be finished with.
@@ -2126,6 +2128,8 @@ impl Editor {
             // and because a merge conflict is a thing that happens to a file
             // a few times a year — not a motion a writer's fingers know.
             Key::Char('m') => self.pending = Pending::Conflict,
+            // 表格組（2026-09-21 從 `t` 搬來，讓 `t`／`T` 回去當 till）。
+            Key::Char('t') => self.pending = Pending::Table,
             Key::Char('c') => self.toggle_comment(crate::comment::Prefer::Line),
             Key::Char('C') => self.toggle_comment(crate::comment::Prefer::Block),
             Key::Char('f') => self.open_file_picker(),

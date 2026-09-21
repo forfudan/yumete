@@ -833,7 +833,25 @@ impl Editor {
             self.edit_keys.clear();
             return;
         }
-        self.snapshot();
+        // ⚠️ **上屏不自己開一個撤銷點——它加入正在進行的那一次插入。**
+        //
+        // 2026-09-21 收到的話：「yume on 的時候，undo 是每字回撤的。我還是習慣按
+        // 『一次編輯』爲單位回撤。」量出來的其實是**每次上屏各自成段**：一段
+        // ASCII 只記一個點（進 Insert 時記的那一個，打字本身不再記），而每一次
+        // 上屏都在這裏補一刀。
+        //
+        // 兩家上游都是「從 insert 到 normal 算一次」：helix 把插入期間的改動攢
+        // 着，離開 Insert 時並成一條（`helix-term/src/ui/editor.rs`：「Store a
+        // history state if not in insert mode. This also takes care of
+        // committing changes when leaving insert mode.」）；vim 的一個 undo
+        // block 也是一次 Insert。中文是**打出來的**，一句話要上屏七八次——按上屏
+        // 分段等於把一句話切成八次撤銷，而那一句在寫的人心裏是一次編輯。
+        //
+        // ⚠️ **Normal 模式下還是要記。** 那時没有正在進行的插入可加入，不記就等
+        // 於這段字進了文件卻回不去。
+        if self.mode != Mode::Insert {
+            self.snapshot();
+        }
         self.insert_recording.push_str(text);
         self.insert_str(text);
     }

@@ -614,8 +614,9 @@ fn t_still_works_when_the_grid_is_read_by_character() {
     ed.goto_line(3);
     assert!(ed.enter_table(), "{}", ed.status());
     ed.on_key(Key::Tab);
+    ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('t'));
-    assert!(ed.pending_menu().is_some(), "t opened nothing in the char grain");
+    assert!(ed.pending_menu().is_some(), "空格 t opened nothing in the char grain");
 }
 
 #[test]
@@ -3119,9 +3120,9 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     ed.open_file(&csv).unwrap();
     assert!(ed.execute(":table").is_ok());
     press(&mut ed, "T"); // #356: 這一條測的是格
-    press(&mut ed, "ty");
+    press(&mut ed, " ty");
     press(&mut ed, "ll");
-    press(&mut ed, "tp");
+    press(&mut ed, " tp");
     assert_eq!(
         ed.current_buffer().text(),
         "字,讀音,字\n永,ㄩㄥˇ,永\n\n之,ㄓ,之\n",
@@ -3135,7 +3136,7 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     // before anything is written, so there is nothing to undo.
     let before = ed.current_buffer().text();
     ed.store("部\n水\n\n長, 久\n".to_string());
-    press(&mut ed, "tp");
+    press(&mut ed, " tp");
     assert_eq!(ed.current_buffer().text(), before, "nothing was written");
     let (row, column) = (ed.status.find('4'), ed.status.find('3'));
     assert!(
@@ -3159,7 +3160,7 @@ fn a_cell_pasted_into_a_pipe_table_keeps_its_backslashes() {
     press(&mut ed, "T"); // #356: 這一條測的是格
     press(&mut ed, "l");
     ed.store("註\nC:\\ 與 |\n".to_string());
-    press(&mut ed, "tp");
+    press(&mut ed, " tp");
     // Written escaped…
     assert!(
         ed.current_buffer().text().contains(r"C:\\ 與 \|"),
@@ -3759,36 +3760,36 @@ fn a_dash_spans_and_a_comma_pairs() {
     assert!(ed.enter_table(), "{}", ed.status());
 
     // What has been typed reads back as what was typed, joint and all.
-    press(&mut ed, "t2-3");
+    press(&mut ed, " t2-3");
     assert_eq!(ed.typed_so_far(), "t2-3");
     ed.on_key(Key::Esc);
-    press(&mut ed, "t1,3");
+    press(&mut ed, " t1,3");
     assert_eq!(ed.typed_so_far(), "t1,3");
     ed.on_key(Key::Esc);
     // A span has exactly two ends; a list goes on as long as commas do.
-    press(&mut ed, "t1,3,2");
+    press(&mut ed, " t1,3,2");
     assert_eq!(ed.typed_so_far(), "t1,3,2");
     ed.on_key(Key::Esc);
-    press(&mut ed, "t1-3");
+    press(&mut ed, " t1-3");
     ed.on_key(Key::Char('-'));
     assert_eq!(ed.typed_so_far(), "", "a second dash is not part of a span");
     ed.on_key(Key::Esc);
     // The joint alone is not a zero: `t2-` reads back as `t2-`.
-    press(&mut ed, "t2-");
+    press(&mut ed, " t2-");
     assert_eq!(ed.typed_so_far(), "t2-");
     ed.on_key(Key::Esc);
 
     // `t3,2g` — row 3, column 2. Two numbers, two kinds of thing.
-    press(&mut ed, "t3,2g");
+    press(&mut ed, " t3,2g");
     assert_eq!(ed.cursor_line(), 2, "{}", ed.status());
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "{}", ed.status());
     // One number is the row, in the column you are already in.
-    press(&mut ed, "t5g");
+    press(&mut ed, " t5g");
     assert_eq!(ed.cursor_line(), 4, "{}", ed.status());
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "{}", ed.status());
     // And the dash is not the pair: it says so rather than guessing.
     let where_it_was = ed.cursor_line();
-    press(&mut ed, "t2-3g");
+    press(&mut ed, " t2-3g");
     assert_eq!(ed.cursor_line(), where_it_was, "{}", ed.status());
     assert!(ed.status().contains("t20,20g"), "{}", ed.status());
 }
@@ -3816,13 +3817,13 @@ fn a_row_number_outside_the_table_is_clamped_into_it() {
     ed.goto_line(7);
     assert!(ed.enter_table(), "{}", ed.status());
     // The table's rows are lines 7 and 8; `t1g` is the first of them.
-    press(&mut ed, "t1g");
+    press(&mut ed, " t1g");
     assert_eq!(ed.cursor_line(), 6, "the table's first row: {}", ed.status());
     // And a number past the end is its last row, not the file's.
-    press(&mut ed, "t99g");
+    press(&mut ed, " t99g");
     assert_eq!(ed.cursor_line(), 7, "the table's last row: {}", ed.status());
     // A number the table does have is still that line, gutter and all.
-    press(&mut ed, "t8g");
+    press(&mut ed, " t8g");
     assert_eq!(ed.cursor_line(), 7, "{}", ed.status());
 }
 
@@ -3849,14 +3850,14 @@ fn a_sort_names_the_column_it_sorts_by() {
 
     // A bare `t s` does nothing at all, and says what to type instead.
     let before = ed.current_buffer().text();
-    press(&mut ed, "ts");
+    press(&mut ed, " ts");
     assert_eq!(ed.current_buffer().text(), before, "nothing was sorted");
     assert!(ed.status().contains("t0s"), "{}", ed.status());
 
     // `t1,5,9s` — several columns at once, all ascending. Here the table
     // has two, so it is 事 first and 年 inside it: 丙 U+4E19, 乙 U+4E59,
     // 甲 U+7532.
-    press(&mut ed, "t2,1s");
+    press(&mut ed, " t2,1s");
     assert_eq!(years(&ed), ["1900", "200", "19"], "{}", ed.status());
     // **Both columns are named.** A sort by two columns that reported only
     // the first would hide the tiebreaker that decided every row where the
@@ -3866,13 +3867,13 @@ fn a_sort_names_the_column_it_sorts_by() {
     assert!(ed.status().contains('年'), "{}", ed.status());
     // One column keeps the long sentence, which is where the comparison
     // rule is written down.
-    press(&mut ed, "t1s");
+    press(&mut ed, " t1s");
     assert!(ed.status().contains('年'), "{}", ed.status());
     assert!(!ed.status().contains('事'), "{}", ed.status());
 
     // A column that is not there is said, not ignored — the same rule the
     // sort has always followed, now that `/` follows it too.
-    press(&mut ed, "t9/");
+    press(&mut ed, " t9/");
     assert!(ed.status().contains('9'), "{}", ed.status());
     assert!(!ed.status().is_empty());
 }
@@ -4003,7 +4004,7 @@ fn a_component_leads_to_its_own_row() {
     // 「誰用了它」 is `t?`: 相 and 目 both use 目.
     ed.goto_line(4);
     press(&mut ed, "0");
-    press(&mut ed, "t?");
+    press(&mut ed, " t?");
     assert_eq!(ed.peeked_line(), Some(1), "相 uses 目");
     assert!(ed.status().contains("1/2"), "{}", ed.status());
 
@@ -4360,7 +4361,7 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     // would count two matches on one line. A column search differs from a
     // row search in its *direction* and in nothing else.
     let standing = ed.cursor();
-    press(&mut ed, "t?");
+    press(&mut ed, " t?");
     assert_eq!(ed.peeked_line(), Some(1), "木 itself, the first of them");
     assert_eq!(ed.cursor(), standing, "…and you did not go anywhere");
     assert!(ed.status().contains("1/5"), "{}", ed.status());
@@ -4401,7 +4402,7 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     ed.on_key(Key::Tab);
     ed.execute("5").unwrap();
     assert_eq!(ed.cell_text(4, 0), "目");
-    press(&mut ed, "t?");
+    press(&mut ed, " t?");
     assert!(ed.status().contains("1/2"), "目 is used twice: {}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -4977,7 +4978,7 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
 #[test]
 fn the_markdown_grid_keys_say_so_on_a_locked_file() {
     let mut ed = typed("| 甲 | 乙 |\n| --- | --- |\n| 一 | 二 |\n");
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     ed.goto_line(3);
     assert!(ed.execute("readonly on").is_ok());
     let before = ed.current_buffer().text();
@@ -5285,7 +5286,7 @@ fn clearing_a_cell_does_not_spend_the_register_but_cutting_one_does() {
     // `d`：清掉「甲」，剪貼板上那個「三十」原封不動。
     let mut ed = typed(table);
     ed.goto_line(3);
-    press(&mut ed, "tbT");
+    press(&mut ed, " tbT");
     press(&mut ed, "l");
     press(&mut ed, "y"); // 三十 進寄存器
     press(&mut ed, "h");
@@ -5296,7 +5297,7 @@ fn clearing_a_cell_does_not_spend_the_register_but_cutting_one_does() {
     // `D`：同樣清掉，但這一格進了寄存器。
     let mut ed = typed(table);
     ed.goto_line(3);
-    press(&mut ed, "tbT");
+    press(&mut ed, " tbT");
     press(&mut ed, "l");
     press(&mut ed, "y");
     press(&mut ed, "h");
@@ -5321,7 +5322,7 @@ fn with_two_md_tables() -> Editor {
 fn t_w_folds_a_cell_too_wide_to_scan_and_gives_it_back() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     // Row 9's 備註 is 25 characters — 50 cells — so its tail comes off.
     let folded = ed.hidden_on_line(8);
     assert!(!folded.is_empty(), "the wide cell is folded: {folded:?}");
@@ -5348,9 +5349,9 @@ fn t_w_folds_a_cell_too_wide_to_scan_and_gives_it_back() {
     );
 
     // `t w` gives the whole cell back — the reader who came to *read* it.
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(ed.hidden_on_line(8).is_empty(), "nothing off the page now");
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(!ed.hidden_on_line(8).is_empty(), "and folded again");
 }
 
@@ -5374,7 +5375,7 @@ fn a_table_squared_up_in_the_file_is_still_folded_to_the_cap() {
     let file: Vec<usize> = square.iter().map(|l| yumete_cjk::str_width(l)).collect();
     let mut ed = typed(&format!("{}\n", square.join("\n")));
     ed.goto_line(3);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
 
     assert!(
         !ed.hidden_on_line(0).is_empty(),
@@ -5404,16 +5405,16 @@ fn a_table_squared_up_in_the_file_is_still_folded_to_the_cap() {
 fn 基本_folds_nothing_unasked_and_folds_when_asked() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tb");
+    press(&mut ed, " tb");
     assert!(ed.hidden_on_line(8).is_empty(), "基本 hides nothing unasked");
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert_eq!(ed.table_level(), TableLevel::Basic, "and stays 基本");
     assert!(
         !ed.hidden_on_line(8).is_empty(),
         "asked, it folds without raising the level: {}",
         ed.status()
     );
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(ed.hidden_on_line(8).is_empty(), "and gives it back: {}", ed.status());
 }
 
@@ -5425,8 +5426,8 @@ fn 基本_folds_nothing_unasked_and_folds_when_asked() {
 fn 源碼_has_no_squared_up_column_to_fold_and_says_so() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "to");
-    press(&mut ed, "tw");
+    press(&mut ed, " to");
+    press(&mut ed, " tw");
     assert_eq!(ed.table_level(), TableLevel::Off, "and stays 源碼");
     assert!(ed.hidden_on_line(8).is_empty(), "nothing folded");
     assert!(ed.status().contains("tb"), "it points at the keys: {}", ed.status());
@@ -5439,13 +5440,13 @@ fn 源碼_has_no_squared_up_column_to_fold_and_says_so() {
 fn the_answer_t_w_gave_travels_between_the_levels() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     assert!(!ed.hidden_on_line(8).is_empty(), "全 folds to begin with");
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(ed.hidden_on_line(8).is_empty(), "and `t w` opens it: {}", ed.status());
-    press(&mut ed, "tb");
+    press(&mut ed, " tb");
     assert!(ed.hidden_on_line(8).is_empty(), "基本 does not fold it back");
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     assert!(ed.hidden_on_line(8).is_empty(), "nor does walking back up to 全");
 }
 
@@ -5460,17 +5461,17 @@ fn the_answer_t_w_gave_travels_between_the_levels() {
 fn t_w_is_answered_in_the_pane_which_is_not_below_全() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
     assert!(ed.cell_folds(), "the grid folds to its cap to begin with");
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(!ed.cell_folds(), "and `t w` is heard: {}", ed.status());
     assert!(
         !ed.status().contains("tb"),
         "no refusal in a window that squares its own columns up: {}",
         ed.status()
     );
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(ed.cell_folds(), "and back again: {}", ed.status());
 }
 
@@ -5498,7 +5499,7 @@ fn the_window_holds_the_table_it_was_opened_on() {
 ",
     );
     ed.goto_line(6);
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     let (first, last) = ed.table_row_span().expect("a table under the cursor");
     assert_eq!((first, last), (5, 7), "rows are lines 6, 7 and 8");
     assert_eq!(ed.table_row_base(), first, "the window counts from its first row");
@@ -5513,22 +5514,22 @@ fn the_window_holds_the_table_it_was_opened_on() {
     assert_eq!(ed.cursor_line(), last, "{}", ed.status());
     assert_eq!(ed.table_row_number(), 3);
     // `t<n>g` counts the same rows the gutter draws.
-    press(&mut ed, "t1g");
+    press(&mut ed, " t1g");
     assert_eq!(ed.cursor_line(), first, "{}", ed.status());
-    press(&mut ed, "t2g");
+    press(&mut ed, " t2g");
     assert_eq!(ed.cursor_line(), first + 1, "{}", ed.status());
-    press(&mut ed, "t99g");
+    press(&mut ed, " t99g");
     assert_eq!(ed.cursor_line(), last, "past the end is the last row");
 
     // `t ]` is the way to the next table, and it is never held.
-    press(&mut ed, "t]");
+    press(&mut ed, " t]");
     assert!(ed.cursor_line() > last, "into the next table: {}", ed.status());
-    press(&mut ed, "t[");
+    press(&mut ed, " t[");
     assert!(ed.cursor_line() <= last, "and back: {}", ed.status());
 
     // And the way out is a key that says so: `t q` gives the window back
     // and `gg` is the file's again.
-    press(&mut ed, "tq");
+    press(&mut ed, " tq");
     press(&mut ed, "gg");
     assert_eq!(ed.cursor_line(), 0, "{}", ed.status());
 }
@@ -5543,29 +5544,29 @@ fn the_window_holds_the_table_it_was_opened_on() {
 fn t_w_and_t_a_are_two_toggles_over_one_axis() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert!(ed.cell_folds() && !ed.cell_wrap(), "the grid opens folded");
     // 折行 takes over from 摺起. **The cap still bites** — 折行 *is* 摺起
     // plus 「and draw the rest underneath」, which is why the prose page,
     // where the second half cannot be drawn, still folds.
-    press(&mut ed, "ta");
+    press(&mut ed, " ta");
     assert!(ed.cell_wrap(), "{}", ed.status());
     assert!(ed.cell_folds(), "the cap is what 折行 wraps at: {}", ed.status());
     // …and `t w` takes it back off — to 攤平, not to 摺起
     // (2026-09-08). Both keys name a way of *not* showing a cell whole, so
     // the way back from either of them is the whole cell; answering 折行
     // with 摺起 handed the reader the one state they had not named.
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(!ed.cell_folds() && !ed.cell_wrap(), "攤平: {}", ed.status());
     // Each is still a toggle of its own: from 攤平 it folds, and again
     // from 摺起 it opens back out.
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(ed.cell_folds() && !ed.cell_wrap(), "摺起: {}", ed.status());
-    press(&mut ed, "tw");
+    press(&mut ed, " tw");
     assert!(!ed.cell_folds() && !ed.cell_wrap(), "攤平: {}", ed.status());
-    press(&mut ed, "ta");
+    press(&mut ed, " ta");
     assert!(ed.cell_wrap(), "{}", ed.status());
-    press(&mut ed, "ta");
+    press(&mut ed, " ta");
     assert!(!ed.cell_wrap() && !ed.cell_folds(), "攤平 again: {}", ed.status());
 }
 
@@ -5575,8 +5576,8 @@ fn t_w_and_t_a_are_two_toggles_over_one_axis() {
 fn t_a_says_where_it_works_and_still_remembers() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tf");
-    press(&mut ed, "ta");
+    press(&mut ed, " tf");
+    press(&mut ed, " ta");
     assert!(ed.status().contains("tt"), "it points at the window: {}", ed.status());
     assert!(ed.cell_wrap(), "and the switch is set: {}", ed.status());
     // In prose the cap still bites — 折行 is 摺起 plus a second half that
@@ -5598,7 +5599,7 @@ fn t_a_says_where_it_works_and_still_remembers() {
 fn a_folded_cell_opens_to_be_typed_in_and_not_to_be_walked_over() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     assert!(!ed.hidden_on_line(8).is_empty());
     // Into the 備註 cell — the last one on the row.
     while ed.cell_position().map(|(_, c)| c) != Some(1) {
@@ -5627,7 +5628,7 @@ fn a_folded_cell_opens_to_be_typed_in_and_not_to_be_walked_over() {
 fn a_cell_being_typed_in_juts_out_rather_than_widening_its_column() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     while ed.cell_position().map(|(_, c)| c) != Some(1) {
         ed.on_key(Key::Char('l'));
     }
@@ -5649,12 +5650,12 @@ fn a_cell_being_typed_in_juts_out_rather_than_widening_its_column() {
 fn t_i_reads_a_markdown_row_by_the_columns_of_its_own_table() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     // **Asked for** (#495). It opened by itself until 2026-09-15; on a page of
     // prose the fifth of the width it takes rewraps the paragraphs around the
     // table, so now only `tt` opens it unasked. This test is about `t i`
     // reaching the *row* panel in Markdown at all, which is unchanged.
-    press(&mut ed, "ti");
+    press(&mut ed, " ti");
     assert!(ed.detail_visible(), "the panel opens where it is asked for");
     let panel = ed.detail().expect("a row of a Markdown table answers");
     let names: Vec<String> = panel.rows.iter().map(|(n, _)| n.clone()).collect();
@@ -5697,7 +5698,7 @@ fn with_a_narrow_and_a_wide_table() -> Editor {
 fn the_second_table_is_measured_by_its_own_width() {
     let mut ed = with_a_narrow_and_a_wide_table();
     ed.goto_line(11);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
 
     // The panel: five fields, not the first table's two.
     let panel = ed.detail().expect("a row of the wide table answers");
@@ -5709,9 +5710,9 @@ fn the_second_table_is_measured_by_its_own_width() {
     // refusal named the wrong width, which is the shape of the bug that is
     // hardest to disbelieve: a wrong answer with a number on it.
     press(&mut ed, "T");
-    press(&mut ed, "t5/");
+    press(&mut ed, " t5/");
     assert!(!ed.status().contains("沒有"), "column five is there: {}", ed.status());
-    press(&mut ed, "t6/");
+    press(&mut ed, " t6/");
     assert!(ed.status().contains('5'), "five columns, not two: {}", ed.status());
 
     // `:table-check` reads the table the cursor is in — not the file, in
@@ -5731,7 +5732,7 @@ fn the_second_table_is_measured_by_its_own_width() {
 fn a_block_table_reads_by_its_own_numbered_columns() {
     let mut ed = typed("一段話。\n\n木\tmu\t一\n林\tlin\t二\n森\tsen\t三\n");
     ed.goto_line(4);
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     let panel = ed.detail().expect("a row of a block table answers");
     assert_eq!(panel.rows.len(), 3, "{:?}", panel.rows);
     assert_eq!(panel.rows[1].1.as_deref(), Some("lin"), "{:?}", panel.rows);
@@ -5743,10 +5744,10 @@ fn a_block_table_reads_by_its_own_numbered_columns() {
 fn a_column_is_named_by_the_table_the_cursor_is_in() {
     let mut ed = with_two_md_tables();
     ed.goto_line(3);
-    press(&mut ed, "tfty");
+    press(&mut ed, " tf ty");
     assert!(ed.status().contains("姓名"), "{}", ed.status());
     ed.goto_line(9);
-    press(&mut ed, "ty");
+    press(&mut ed, " ty");
     assert!(ed.status().contains("地名"), "{}", ed.status());
 }
 
@@ -5763,7 +5764,7 @@ fn a_pipe_table_is_a_grid_wherever_it_is() {
     // `t f` is the tidy-up, said out loud: the columns line up on the
     // terminal, which is what a Markdown table is supposed to look like.
     // (`t t` is 「read this as a grid」 now — one letter, one meaning.)
-    press(&mut ed, "tF");
+    press(&mut ed, " tF");
     assert_eq!(
         ed.current_buffer().text(),
         "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
@@ -5845,7 +5846,7 @@ fn a_column_of_han_lines_up_by_width_not_by_character_count() {
     let mut ed = typed("| a | 甲 |\n| --- | --- |\n| bbbb | 乙丙 |\n");
     ed.goto_line(1);
     assert!(ed.enter_table());
-    press(&mut ed, "tF");
+    press(&mut ed, " tF");
     let widths: Vec<usize> = ed
         .current_buffer()
         .text()
@@ -5872,22 +5873,22 @@ fn t_adds_and_drops_rows_and_columns() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
     // A new row below this one, and the cursor goes to it.
-    press(&mut ed, "tr");
+    press(&mut ed, " tr");
     assert_eq!(ed.current_buffer().line_count(), 8);
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4));
-    press(&mut ed, "td");
+    press(&mut ed, " td");
     assert_eq!(
         ed.current_buffer().text(),
         "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
     );
     // A new column to the right — of every row, and of the rule.
-    press(&mut ed, "tc");
+    press(&mut ed, " tc");
     assert_eq!(
         ed.current_buffer().text(),
         "前文\n| 字 |   | 讀音 |\n| -- | - | ---- |\n| 木 |   | mu   |\n| 目 |   | mu   |\n後文\n"
     );
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "the cursor lands in it");
-    press(&mut ed, "tD");
+    press(&mut ed, " tD");
     assert_eq!(
         ed.current_buffer().text(),
         "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
@@ -5901,7 +5902,7 @@ fn the_header_is_not_a_row_anyone_may_delete() {
     ed.goto_line(2);
     ed.enter_table();
     let before = ed.current_buffer().text();
-    press(&mut ed, "td");
+    press(&mut ed, " td");
     assert_eq!(ed.current_buffer().text(), before);
     assert!(ed.status().contains("標題行"), "{}", ed.status());
 }
@@ -5910,13 +5911,13 @@ fn the_header_is_not_a_row_anyone_may_delete() {
 fn t_moves_a_row_and_a_column_with_the_cursor_on_it() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    press(&mut ed, "tj");
+    press(&mut ed, " tj");
     assert_eq!(
         ed.current_buffer().text(),
         "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 目 | mu   |\n| 木 | mu   |\n後文\n"
     );
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "the cursor went with it");
-    press(&mut ed, "tl");
+    press(&mut ed, " tl");
     assert_eq!(
         ed.current_buffer().text(),
         "前文\n| 讀音 | 字 |\n| ---- | -- |\n| mu   | 目 |\n| mu   | 木 |\n後文\n"
@@ -6020,7 +6021,7 @@ fn a_table_nobody_squared_up_is_not_squared_up_by_editing_it() {
 
     // And `t F` is the door that does square it up, which is why declining
     // above costs nothing.
-    press(&mut ed, "tF");
+    press(&mut ed, " tF");
     assert_eq!(ed.line_text(3).as_deref(), Some("| 薔薇 | mu   |\n"));
 }
 
@@ -6031,7 +6032,7 @@ fn one_undo_takes_back_one_edit_and_its_reflow() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
     let before = ed.current_buffer().text();
-    press(&mut ed, "tc");
+    press(&mut ed, " tc");
     assert_ne!(ed.current_buffer().text(), before);
     press(&mut ed, "u");
     assert_eq!(ed.current_buffer().text(), before);
@@ -6111,10 +6112,10 @@ fn the_rule_row_is_drawn_not_written() {
     }
     // …and a structural key on it means the header it belongs to.
     ed.goto_line(3);
-    press(&mut ed, "td");
+    press(&mut ed, " td");
     assert_eq!(ed.current_buffer().text(), before);
     assert!(ed.status().contains("標題行"), "{}", ed.status());
-    press(&mut ed, "tr");
+    press(&mut ed, " tr");
     assert_eq!(ed.current_buffer().line_count(), 8, "a row was opened");
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3));
 }
@@ -6124,7 +6125,7 @@ fn the_table_mode_does_not_follow_the_cursor_out_of_the_table() {
     let mut ed = with_md_table();
     // 表格操作, so the page is still the manuscript's to set — `t t` turns
     // it horizontal on purpose (#275).
-    press(&mut ed, "tb");
+    press(&mut ed, " tb");
     ed.goto_line(6);
     // `o` in the prose below opens a line, not a row.
     press(&mut ed, "o");
@@ -6234,7 +6235,7 @@ fn t_s_puts_the_rows_in_order_by_this_column() {
     let mut ed = typed("| 年 | 事 |\n| --- | --- |\n| 1900 | 丙 |\n| 19 | 甲 |\n| 200 | 乙 |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "t0s");
+    press(&mut ed, " t0s");
     let text = ed.current_buffer().text();
     let years: Vec<&str> = text
         .lines()
@@ -6243,7 +6244,7 @@ fn t_s_puts_the_rows_in_order_by_this_column() {
         .map(str::trim)
         .collect();
     assert_eq!(years, ["19", "200", "1900"], "numbers compare as numbers");
-    press(&mut ed, "t0S");
+    press(&mut ed, " t0S");
     let text = ed.current_buffer().text();
     let years: Vec<&str> = text
         .lines()
@@ -6286,16 +6287,16 @@ fn a_delimited_grid_can_lose_and_move_a_row() {
     ed.open_file(&csv).unwrap();
     let rows = ed.current_buffer().line_count();
     ed.goto_line(2);
-    press(&mut ed, "td");
+    press(&mut ed, " td");
     assert_eq!(ed.current_buffer().line_count(), rows - 1, "{}", ed.status());
     // The header is not a row anyone may delete.
     ed.goto_line(1);
-    press(&mut ed, "td");
+    press(&mut ed, " td");
     assert_eq!(ed.current_buffer().line_count(), rows - 1);
     assert!(ed.status().contains("標題行"), "{}", ed.status());
     // Nor may a row be moved above it.
     ed.goto_line(2);
-    press(&mut ed, "tk");
+    press(&mut ed, " tk");
     assert!(ed.status().contains("到頭"), "{}", ed.status());
     // …and one undo takes any of it back.
     press(&mut ed, "u");
@@ -6622,7 +6623,7 @@ fn a_quoted_table_stays_a_quotation_even_when_walked_into() {
     assert!(ed.md_region().is_none(), "a quotation is not a table");
     // The structural keys are the ones that used to rewrite it. `t` here
     // is vi's till-motion again, and `o` opens an ordinary line.
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
     assert!(
         ed.current_buffer().text().contains("|字|讀音|"),
@@ -6631,7 +6632,7 @@ fn a_quoted_table_stays_a_quotation_even_when_walked_into() {
     // …and back in the real table the keys work.
     ed.goto_line(1);
     assert!(ed.md_region().is_some());
-    press(&mut ed, "tr");
+    press(&mut ed, " tr");
     assert_ne!(ed.current_buffer().text(), before);
 }
 
@@ -6762,11 +6763,11 @@ fn a_whole_column_can_be_taken_and_put_back() {
     press(&mut ed, "T"); // #356: 這一條測的是格
     ed.goto_line(4);
     press(&mut ed, "l");
-    press(&mut ed, "ty");
+    press(&mut ed, " ty");
     assert!(ed.status().contains("音"), "{}", ed.status());
     // Put it down the other column: one cell to a line, header included.
     press(&mut ed, "h");
-    press(&mut ed, "tp");
+    press(&mut ed, " tp");
     assert_eq!(
         ed.current_buffer().text(),
         "| 音 | 音 |\n| -- | -- |\n| mu | mu |\n| mo | mo |\n",
@@ -6948,7 +6949,7 @@ fn a_table_with_no_declared_scope_searches_all_of_it() {
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     ed.goto_line(2);
-    press(&mut ed, "t?");
+    press(&mut ed, " t?");
     assert_eq!(ed.peeked_line(), Some(1), "{}", ed.status());
     assert!(ed.status().contains("未指定"), "and it says so: {}", ed.status());
     assert!(ed.status().contains("1/2"), "{}", ed.status());
@@ -6970,7 +6971,7 @@ fn a_pipe_table_is_drawn_as_a_grid_only_when_that_is_the_key_pressed() {
     // grid's, and a 縱書 manuscript is still 縱書.
     let mut ed = with_md_table();
     ed.set_layout(Layout::Vertical);
-    press(&mut ed, "tb");
+    press(&mut ed, " tb");
     assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
     assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
     assert!(!ed.table().unwrap().takes_the_pane(), "three lines, not the pane");
@@ -6978,7 +6979,7 @@ fn a_pipe_table_is_drawn_as_a_grid_only_when_that_is_the_key_pressed() {
     // `t a` — 現在的 tt 模式: 「照舊把整頁轉橫」, because a grid is read
     // across. It is still three lines of a chapter, so it does not take
     // the window.
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     assert!(ed.grid_is_drawn(), "{}", ed.status());
     assert!(ed.table().unwrap().in_prose(), "still inside the document");
     assert_eq!(ed.layout(), Layout::Horizontal, "{}", ed.status());
@@ -6987,23 +6988,23 @@ fn a_pipe_table_is_drawn_as_a_grid_only_when_that_is_the_key_pressed() {
     // `t t` — the whole window, and `t q` gives it back to whichever
     // surface it took it from (2026-09-05): 「退到 markdown 文件中，且回到
     // 此前的表格模式」.
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
-    press(&mut ed, "tq");
+    press(&mut ed, " tq");
     assert!(ed.grid_is_drawn(), "{}", ed.status());
     assert!(ed.table().unwrap().in_prose(), "back on t a, not in prose");
 
     // And any of them switches straight into any other — `t n` is a
     // surface, not the way out — which is what gives the page back.
-    press(&mut ed, "tb");
+    press(&mut ed, " tb");
     assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
     assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
 
     // `t q` is refused outside the full-screen grid, and `t o` is the one
     // way back to prose.
-    press(&mut ed, "tq");
+    press(&mut ed, " tq");
     assert!(ed.table().is_some(), "t q is the window's key: {}", ed.status());
-    press(&mut ed, "to");
+    press(&mut ed, " to");
     assert!(ed.table().is_none(), "{}", ed.status());
 }
 
@@ -7012,7 +7013,7 @@ fn a_pipe_table_is_drawn_as_a_grid_only_when_that_is_the_key_pressed() {
 fn the_grid_never_stands_on_the_header_it_draws() {
     let mut ed = with_md_table();
     ed.goto_line(2); // 「| 字 | 讀音 |」, the header itself
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert_eq!(ed.cursor_line(), 3, "the first row, not the heading: {}", ed.status());
 
     // And `k` there stops: above it is a line the grid draws out of the
@@ -7023,7 +7024,7 @@ fn the_grid_never_stands_on_the_header_it_draws() {
 
     // 表格操作 keeps the header on the page, so there it is a line like any
     // other and `k` walks onto it.
-    press(&mut ed, "tb");
+    press(&mut ed, " tb");
     press(&mut ed, "k");
     assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
 }
@@ -7035,7 +7036,7 @@ fn the_grid_never_stands_on_the_header_it_draws() {
 fn typing_table_again_does_not_demote_the_level_it_is_already_in() {
     let mut ed = with_md_table();
     ed.goto_line(3);
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     let before = (ed.table_level(), ed.table.as_ref().map(|v| v.pane));
     ed.execute(":table").unwrap();
     assert_eq!(
@@ -7056,7 +7057,7 @@ fn typing_table_again_does_not_demote_the_level_it_is_already_in() {
 fn a_table_with_no_rows_yet_does_not_call_its_rule_a_row() {
     let mut ed = typed("前文\n| 字 | 讀音 |\n| --- | --- |\n後文\n");
     ed.goto_line(2);
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert!(ed.table().is_some(), "{}", ed.status());
     assert_eq!(ed.table_row_span(), None, "the rule is drawn, not written");
     assert!(!ed.grid_has_the_pane(), "and there is nothing to give a window to");
@@ -7069,11 +7070,11 @@ fn the_next_table_is_drawn_with_its_own_columns() {
         "| 名字 | 出場 |\n| --- | --- |\n| 阿寧 | 三 |\n\n             | 甲 | 乙 | 丙 | 丁 |\n| --- | --- | --- | --- |\n| 一 | 二 | 三 | 四 |\n",
     );
     ed.goto_line(3);
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert_eq!(ed.table_column_count(), 2, "{}", ed.status());
     assert!(!ed.row_is_ragged(2), "two cells, two columns");
 
-    press(&mut ed, "t]");
+    press(&mut ed, " t]");
     assert_eq!(ed.cursor_line(), 6, "the row, not the header: {}", ed.status());
     assert_eq!(ed.table_column_count(), 4, "the schema still says two");
     assert!(!ed.row_is_ragged(6), "four cells is not ragged in a four-column table");
@@ -7089,7 +7090,7 @@ fn the_next_table_is_drawn_with_its_own_columns() {
 #[test]
 fn the_window_comes_back_when_the_cursor_walks_out_of_the_grid() {
     let mut ed = with_md_table();
-    press(&mut ed, "tt");
+    press(&mut ed, " tt");
     assert!(ed.grid_has_the_pane(), "{}", ed.status());
 
     // 後文 — the paragraph under the table, which no grid can draw.
@@ -7107,7 +7108,7 @@ fn only_the_drawn_mode_draws_the_grid() {
     // 「完全画成表格」 — and only there. 表格操作 keeps 「markdown/csv 的语法
     // 标记」 on the page, which is the whole difference between the two.
     let mut ed = with_md_table();
-    press(&mut ed, "tb");
+    press(&mut ed, " tb");
     assert!(ed.grid_on_line(1).is_empty(), "the pipes stay pipes");
     // **The ruler is not part of the drawing** (#379). It used to be — it came
     // through `grid_walls`, which answers only at 全 — and the numbers are
@@ -7121,7 +7122,7 @@ fn only_the_drawn_mode_draws_the_grid() {
         ed.status()
     );
 
-    press(&mut ed, "tf");
+    press(&mut ed, " tf");
     let head: Vec<char> = ed.grid_on_line(1).into_iter().map(|(_, g)| g).collect();
     assert_eq!(head, vec!['┆', '┆', '┆'], "| 字 | 讀音 |");
     // The rule row is not a row — it is the line under the head, and every
@@ -7180,7 +7181,7 @@ fn the_level_hands_the_keys_over_without_a_key_being_pressed() {
 
     // …and `t o` is still a real off switch: walking back in does not
     // build it again, because the level is what was put down.
-    press(&mut ed, "to");
+    press(&mut ed, " to");
     assert_eq!(ed.table_level(), TableLevel::Off);
     press(&mut ed, "kj");
     assert!(!ed.table_row_at(2), "`t o` stays off: {}", ed.status());
@@ -7607,7 +7608,7 @@ fn every_far_jump_leaves_a_way_back() {
     press(&mut ed, "T"); // by cell
     press(&mut ed, "l"); // 相's 拆分
     let was = ed.cursor();
-    press(&mut ed, "t?");
+    press(&mut ed, " t?");
     assert_eq!(ed.cursor(), was, "a peek does not move you");
     ed.execute("table-jump 木").unwrap();
     assert_eq!(ed.cursor_line(), 2, "木's own row: {}", ed.status());
@@ -11102,7 +11103,7 @@ fn aligning_a_table_measures_what_the_terminal_draws() {
     let mut ed = typed("| 字 | 拆分 | 說明 |\n| --- | --- | --- |\n| 木 | 木 | 樹 |\n| 相 | ⿰木目 | 看 |\n| a | bb | ccc |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "tF");
+    press(&mut ed, " tF");
     let text = ed.current_buffer().text();
     let widths: Vec<usize> = text
         .lines()
@@ -12321,9 +12322,9 @@ fn putting_a_column_into_a_block_stops_at_the_blank_line() {
     ed.execute(":1").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, "T"); // #356: 這一條測的是格
-    press(&mut ed, "ty");
+    press(&mut ed, " ty");
     press(&mut ed, "l");
-    press(&mut ed, "tp");
+    press(&mut ed, " tp");
     assert_eq!(ed.cell_text(0, 1), "木");
     assert_eq!(ed.cell_text(2, 1), "田");
     assert_eq!(
@@ -12496,7 +12497,7 @@ fn the_keys_a_block_does_not_answer_say_which_ones_it_does() {
     let mut ed = typed("木,AA\n目,BB\n田,CC\n");
     ed.execute(":1").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "td");
+    press(&mut ed, " td");
     assert!(ed.status().contains("y p"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
 }
@@ -15202,6 +15203,56 @@ fn vim_conformance() {
     check("⑫ dap 首段", case("aa\nbb\n\ncc\n", "dap"), "cc\n");
 
     assert!(bad.is_empty(), "vim 語料紅了 {} 條：\n  {}", bad.len(), bad.join("\n  "));
+}
+
+/// **一次插入是一次撤銷，上屏也算在裏面**（2026-09-21）。
+///
+/// 2026-09-21 轉來的話：「yume on 的時候，undo 是每字回撤的。我還是習慣按『一次
+/// 編輯』爲單位回撤。」量出來的是**每次上屏各自成段**——一段 ASCII 只記一個點
+/// （進 Insert 時記的那一個，打字本身不再記），而每一次上屏都補一刀。
+///
+/// ⚠️ **兩家上游都是「從 insert 到 normal 算一次」**：helix 把插入期間的改動攢
+/// 着、離開 Insert 時並成一條（`helix-term/src/ui/editor.rs` 上的註釋原話：
+/// 「Store a history state if not in insert mode. This also takes care of
+/// committing changes when leaving insert mode.」）；vim 的一個 undo block 同樣
+/// 是一次 Insert。而中文是**打出來的**——一句話要上屏七八次，按上屏分段等於把一
+/// 句話切成八次撤銷，而那一句在寫的人心裏是一次編輯。
+#[test]
+fn one_insert_is_one_undo_however_many_times_the_ime_committed() {
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    ed.insert_committed("那年冬天");
+    ed.insert_committed("，雪下得很大");
+    ed.insert_committed("。");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "那年冬天，雪下得很大。");
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "", "三次上屏是一次編輯");
+
+    // 上屏和敲鍵混着打，也還是一次。
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    ed.insert_committed("第");
+    for c in "1".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.insert_committed("章");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "第1章");
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "");
+
+    // ⚠️ **兩次插入還是兩次撤銷**——合的是一次插入裏的上屏，不是所有的插入。
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    ed.insert_committed("上");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('a'));
+    ed.insert_committed("下");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "上下");
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "上", "第二次插入自己一段");
 }
 
 /// **`mi p`／`ma p` — 段落，helix 也有這一個**（B5，2026-09-21）。

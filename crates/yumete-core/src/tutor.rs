@@ -20,7 +20,7 @@
 /// Written as a manuscript rather than as a reference: each section is a
 /// paragraph to read and a line to do something to, in the order a writer meets
 /// them. The reader is expected to break it — that is the point of a copy.
-pub const LESSON: &str = r#"# 宇喆課
+pub const LESSON: &str = r#"# 宇夢小課堂
 
 這是一份**你自己的檔案**。你在這裏做的每一件事都改的是它，不是別的稿子。
 想從頭來過：`:tutor` 再開一份新的。

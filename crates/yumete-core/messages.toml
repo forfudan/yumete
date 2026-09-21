@@ -4883,6 +4883,13 @@ zhs = "改这里的注音"
 en = "edit the reading here"
 
 [[message]]
+# 空格 t：表格那一組（2026-09-21 從 `t` 搬來）
+key = "hint.space.table"
+zht = "表格那一組"
+zhs = "表格那一组"
+en = "the table group"
+
+[[message]]
 # 空格組提示的標題
 key = "hint.space.title"
 zht = "空格"

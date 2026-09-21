@@ -9020,7 +9020,7 @@ fn squeezed(text: &str) -> String {
 
         // 提示行滿了就讓開：表格那一行有三組鍵，四十格裝不下它再加落款。
         let mut editor = editor_with("| 星陳 | 卿雲 |\n| --- | --- |\n| 甲 | 乙 |\n");
-        for key in ['j', 'j', 't', 'b'] {
+        for key in ['j', 'j', ' ', 't', 'b'] {
             editor.on_key(Key::Char(key));
         }
         let narrow = render(&editor, &config, 40, 8);
@@ -9585,9 +9585,10 @@ fn squeezed(text: &str) -> String {
     fn the_panel_opens_only_in_the_pane_and_never_unasked_on_a_page() {
         let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
         let source = format!("| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |");
+        // ⚠️ 表格組是 `空格 t`（2026-09-21 起，`t` 還給了 till）。
         let at = |level: &str| {
             let mut editor = editor_with(&source);
-            for key in ['j', 'j'] {
+            for key in ['j', 'j', ' '] {
                 editor.on_key(Key::Char(key));
             }
             for c in level.chars() {
@@ -9602,6 +9603,7 @@ fn squeezed(text: &str) -> String {
 
         // Asked for, it opens at 基本 too…
         let mut editor = at("tb");
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('i'));
         assert!(editor.detail_visible(), "{}", editor.status());
@@ -9614,11 +9616,13 @@ fn squeezed(text: &str) -> String {
         // The other way round: asked for at 全 and it opens there, which is
         // the whole of what 「按 ti 自己打开」 buys.
         let mut editor = at("tf");
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('i'));
         assert!(editor.detail_visible(), "{}", editor.status());
         // …and shutting the pane's own is equally the reader's to do.
         let mut editor = at("tt");
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('i'));
         assert!(!editor.detail_visible(), "{}", editor.status());
@@ -9634,6 +9638,7 @@ fn squeezed(text: &str) -> String {
     fn 基本_numbers_the_columns_and_源碼_does_not() {
         let strip = |level: &str| -> String {
             let mut editor = editor_with("ch\t錐\nlongcode\t蜘\n");
+            editor.on_key(Key::Char(' '));
             for c in level.chars() {
                 editor.on_key(Key::Char(c));
             }
@@ -9660,7 +9665,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_delimited_table_squares_its_columns_up_like_a_pipe_one() {
         let mut editor = editor_with("ch\t錐\nlongcode\t蜘\nbk\t裘\n");
-        for c in "tf".chars() {
+        for c in " tf".chars() {
             editor.on_key(Key::Char(c));
         }
         let buffer = render_with(&editor, &Config::default(), &no_ime(), 40, 6);
@@ -9743,11 +9748,14 @@ fn squeezed(text: &str) -> String {
                 editor.on_key(Key::Char(c));
             }
             editor.on_key(Key::Enter);
-            editor.on_key(Key::Char('t'));
-            editor.on_key(Key::Char('t'));
+            editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('t'));
+            editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('t'));
             assert!(editor.grid_has_the_pane(), "t t did not hand the grid the pane");
             if wrap {
-                editor.on_key(Key::Char('t'));
+                editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('t'));
                 editor.on_key(Key::Char('a'));
                 assert!(editor.cell_wrap(), "t a did not turn 折行 on");
             }
@@ -9962,6 +9970,7 @@ fn squeezed(text: &str) -> String {
         );
 
         // `t w` — the whole cell, the way it does in prose.
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('w'));
         let whole = page(&editor);
@@ -9972,6 +9981,7 @@ fn squeezed(text: &str) -> String {
         // **A column that rewrote itself on every `l`** is what this costs
         // otherwise — the key means「next cell」and the whole table shifted
         // sideways to answer it.
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('w'));
         editor.on_key(Key::Char('l'));
@@ -10036,6 +10046,7 @@ fn squeezed(text: &str) -> String {
         );
 
         // `t a`: the tail is drawn underneath, in its own column.
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('a'));
         let wrapped = page(&editor);
@@ -13469,6 +13480,7 @@ fn squeezed(text: &str) -> String {
         // inside the menu that is about to open.
         editor.on_key(Key::Char('G'));
         editor.on_key(Key::Char('3'));
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         // One row per key in the `t` menu, and the menu has grown since (`t a`,
         // 2026-09-07) — so the window is sized to hold the menu **and** leave
@@ -13478,7 +13490,7 @@ fn squeezed(text: &str) -> String {
             .map(|y| (0..b.area.width).map(|x| at(&b, x, y)).collect())
             .collect();
         assert!(
-            drawn.concat().contains("│3t│"),
+            drawn.concat().contains("t│"),
             "the panel is drawn: {drawn:#?}",
         );
         // Every row of the menu still ends in its own right edge — a HUD
@@ -15752,7 +15764,8 @@ fn squeezed(text: &str) -> String {
             let mut editor = editor_with(&prose);
             // 出廠是 `full` since 2026-09-08; the panel under test is `t`'s.
             editor.set_hud(Hud::Basic);
-            editor.on_key(Key::Char('t'));
+            editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('t'));
             let buffer = render_with(&editor, &config, &no_ime(), width, 16);
             let mut tops = 0;
             let mut bottoms = 0;
