@@ -40,6 +40,30 @@ pub const DEFAULT_ZONG_LENGTH: usize = 32;
 /// something in its margin still buys that cell for itself — see `place`.
 pub const DEFAULT_ZONG_GAP: usize = 0;
 
+/// How many half-width characters a 縦中横 group holds at the classic setting.
+///
+/// Two, and it is the number every account of the form gives: JIS X 4051 §4.8
+/// is 「usually applied to two-digit numbers」 (W3C, *Requirements for Japanese
+/// Text Layout*), and two half-width characters are exactly one 字 — 2 × 0.5em
+/// across, which is the column's own width, so the group sits in the grid
+/// without disturbing a thing.
+pub const TATECHUYOKO_CLASSIC: usize = 2;
+
+/// The largest 縦中横 group yumete will set, in half-width characters.
+///
+/// **Print stops at four**: CSS Writing Modes 3 writes the automatic form as
+/// `text-combine-upright: digits <integer [2,4]>`, InDesign's 自動縦中横設定
+/// offers 組数字 2／3／4, and past two the group is wider than the column and
+/// has to be squeezed back into it — 「if the combined text is wider than 1em,
+/// the user agent must fit the contents within 1em」. A terminal cannot squeeze
+/// a glyph, so yumete does the other thing print does with a group that will not
+/// fit: it lets it **stick out into the 行間**, and the 縱 buys those cells for
+/// itself the way a 縱 with a reading buys its lane. That is what carries the
+/// limit past four, and what ends it at eight — a group of eight is four 字
+/// across, so three whole 字 of it hang in the gap and the next 縱 is pushed a
+/// column and a half away (2026-09-21).
+pub const TATECHUYOKO_MAX: usize = 8;
+
 /// Whether each 縱 — or each row, across — keeps the narrow lane beside it for
 /// what is written *about* the text: readings, hung 句讀, 着重號, 平仄 and the
 /// 稿紙 ticks (`:view-margin`, 2026-09-16).

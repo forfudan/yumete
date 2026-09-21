@@ -148,13 +148,13 @@ fn a_note_follows_the_line_as_it_is_written() {
 /// 「纵和字是相等的……如果有可能不相等，那就也加一下字」——會，所以狀態欄兩個都報。
 #[test]
 fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
-    // ⚠️ **兩個，不是四個**：`TATECHUYOKO` 是 2，長過它的一串數字照日文書的辦法
-    // 一個一格豎着排（`1997` 擠成 `19`／`97` 讀起來是兩個數）。
+    // ⚠️ **設定是一個數，不是開關**：`tatechuyoko = 2` 只擠兩個，長過它的一串
+    // 數字照日文書的辦法一個一格豎着排（`1997` 擠成 `19`／`97` 讀起來是兩個數）。
     let mut ed = typed("26年的冬天\n");
     ed.execute(":layout vertical").unwrap();
 
     // 縦中横關着：一個字一格，兩個數一路相等。
-    ed.set_tatechuyoko(false);
+    ed.set_tatechuyoko(0);
     for _ in 0..2 {
         ed.on_key(Key::Char('j'));
     }
@@ -167,10 +167,53 @@ fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
     );
 
     // 開着：`26` 佔一格，所以「年」這個第三個字只在第二格上。
-    ed.set_tatechuyoko(true);
+    ed.set_tatechuyoko(2);
     let at = ed.zong_position();
     assert_eq!(ed.cursor_column(), 2, "還是第三個字");
     assert_eq!(at.slot_in_line, 1, "可是只走了一格：{at:?}");
+}
+
+/// 一串長過兩個的半角字：**一格，不是一疊**（2026-09-21）。
+///
+/// 「yumete 的 vertical 模式能否把單詞和數字合併到一起?」——`tatechuyoko = 4`
+/// 之下 `1997` 是一行四格寬，多出來的兩格從行間借；`12345` 五個字超了那個數，
+/// 退回一個一格。格與字分家分得更開，狀態欄照樣兩個都報。
+#[test]
+fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
+    // 兩個的設定裝不下四個數：一個一格，四下纔走到「年」。
+    let mut ed = typed("1997年\n");
+    ed.execute(":layout vertical").unwrap();
+    ed.set_tatechuyoko(2);
+    for _ in 0..4 {
+        ed.on_key(Key::Char('j'));
+    }
+    assert_eq!(ed.cursor(), 4, "1／9／9／7 各一格");
+    assert_eq!(ed.zong_position().slot_in_line, 4);
+
+    // 四個的設定：`1997` 是**一格**——四個數走過去，格數一個都沒動；「年」纔是
+    // 第二格。光標仍然一個字一個字地走（格是畫面上的單位，不是光標的）。
+    let mut ed = typed("1997年\n");
+    ed.execute(":layout vertical").unwrap();
+    ed.set_tatechuyoko(4);
+    for step in 1..=3 {
+        ed.on_key(Key::Char('j'));
+        let at = ed.zong_position();
+        assert_eq!(ed.cursor(), step, "第 {step} 個字");
+        assert_eq!(at.slot_in_line, 0, "還在那一格裏：{at:?}");
+    }
+    ed.on_key(Key::Char('j'));
+    let at = ed.zong_position();
+    assert_eq!(ed.cursor(), 4, "「年」");
+    assert_eq!(at.slot_in_line, 1, "第二格：{at:?}");
+
+    // 五個超過了那個數，於是**整串都不擠**——半格半格地填會讀成兩個數。
+    let mut ed = typed("12345年\n");
+    ed.execute(":layout vertical").unwrap();
+    ed.set_tatechuyoko(4);
+    for step in 1..=5 {
+        ed.on_key(Key::Char('j'));
+        assert_eq!(ed.zong_position().slot_in_line, step, "一個數一格");
+    }
 }
 
 /// The point of #210: **one page**. A candidate the renderer alone knew
