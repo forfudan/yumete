@@ -1863,6 +1863,7 @@ impl Editor {
         ('p', "hint.goto.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
         ('d', "hint.goto.dictionary"),
+        ('k', "hint.space.what-is-this"),
         ('r', "hint.space.ruby"),
         // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
         // 快捷鍵太不方便」. The chord stays; this is the same thing with the
@@ -2121,6 +2122,13 @@ impl Editor {
             // typed at leisure — so it is worth a key, and worth a second one.
             // The levels, `auto` and `format` stay `:ruby` commands: those are
             // said once a document, not once a word.
+            // **`空格 k`：這是什麽？**（#53 ③，2026-09-21）helix 的 hover 也是這
+            // 一個鍵。只在代碼檔上問得出去；稿子上按到就照實說一句，而不是無聲。
+            Key::Char('k') => {
+                if !self.ask_what_this_is() {
+                    self.set_status(say!("lsp.not-code"));
+                }
+            }
             Key::Char('r') => self.enter_ruby_mode(),
             Key::Char('"') => self.open_paste_picker(),
             // 衝突 (#249): the three keys that end one. Under `空格` rather

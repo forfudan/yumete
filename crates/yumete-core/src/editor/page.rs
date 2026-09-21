@@ -857,6 +857,62 @@ impl Editor {
         self.status = say!("lsp.nowhere");
     }
 
+    // ---- `空格 k` 問服務器這是什麽（#53 ③）--------------------------------
+
+    /// **把「這是什麽」問出去**，問得出就回 `true`（2026-09-21）。
+    ///
+    /// 與 `gd` 同一個形狀，同一條理由：只在代碼檔上問，問完不等。鍵位是
+    /// `空格 k`，helix 的 hover 也是這一個。
+    pub(super) fn ask_what_this_is(&mut self) -> bool {
+        let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
+            return false;
+        };
+        self.hover_query = Some((path, line, utf16));
+        self.status = say!("lsp.asking-what");
+        true
+    }
+
+    /// 光標此刻在哪個代碼檔的哪一行哪一列（**列是 UTF-16 碼元**）。
+    ///
+    /// `gd` 與 hover 問的是同一個位置，答案的算法也只該有一份。
+    fn where_the_cursor_is_in_code(&self) -> Option<(std::path::PathBuf, usize, usize)> {
+        if !self.writes_code() {
+            return None;
+        }
+        let path = self.current_buffer().path()?.to_path_buf();
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let text = rope.line(line).to_string();
+        let chars = self.cursor - rope.line_to_char(line);
+        Some((path, line, crate::problem::utf16_column(&text, chars)))
+    }
+
+    /// `空格 k` 問出去的那一句，給前端發（下一趟循環取走）。
+    pub fn take_hover_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.hover_query.take()
+    }
+
+    /// **答案回來了：浮出來**（#53 ③）。
+    ///
+    /// ⚠️ **記下問的時候光標在哪**：這一則是**問出來的**，所以光標一走它就該
+    /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
+    pub fn show_hover(&mut self, told: String) {
+        self.hovered = Some((self.cursor, told));
+        self.status = String::new();
+    }
+
+    /// 服務器對這個東西無話可說。
+    pub fn no_hover(&mut self) {
+        self.hovered = None;
+        self.status = say!("lsp.speechless");
+    }
+
+    /// 這會兒該不該畫那一則說明——光標還在問的地方纔算。
+    pub fn hover_here(&self) -> Option<&str> {
+        let (asked_at, told) = self.hovered.as_ref()?;
+        (*asked_at == self.cursor).then_some(told.as_str())
+    }
+
     /// 忘掉一個檔的話——服務器死了，它說過的就不再算數。
     pub fn forget_problems(&mut self, path: &std::path::Path) {
         self.problems.forget(path);

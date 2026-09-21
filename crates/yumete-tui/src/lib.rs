@@ -858,6 +858,7 @@ pub fn run(
         servers.follow(editor, &config);
         // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
         servers.ask(editor, &config);
+        servers.ask_what(editor, &config);
         servers.collect(editor);
         if let Some(word) = servers.says.take() {
             editor.set_status(word);
@@ -4583,6 +4584,7 @@ fn draw_which_key(
         entry: false,
         body: panel::Body::Keys(keys.into_iter().map(|(k, what)| (k.to_string(), what)).collect()),
         tag: None,
+        marked: false,
         vertical_text: false,
     })
 }
@@ -4613,6 +4615,21 @@ fn draw_note(
     // 百科 name and a compiler error do not appear on the same page — one is a
     // manuscript, the other is code — so the order here settles a case that
     // barely arises, and settles it for the file you are actually in.
+    // **「這是什麽」浮在最前**（#53 ③）。It was *asked for*, and the diagnostic
+    // under it was not: a float that answered a question the reader did not
+    // just ask, over the one they did, would be the editor arguing.
+    if let Some(told) = editor.hover_here() {
+        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            title: say!("lsp.what-is-this"),
+            lede: None,
+            entry: false,
+            body: panel::Body::Prose(told.to_string()),
+            tag: None,
+            vertical_text: vertical,
+            // 服務器送來的就是 Markdown，照 Markdown 畫（2026-09-21）。
+            marked: true,
+        });
+    }
     if let Some((severity, said)) = editor.problem_here() {
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
@@ -4630,6 +4647,7 @@ fn draw_note(
             // part of the first line of each.
             body: panel::Body::Prose(said.join("\n\n")),
             tag: Some(say!("problem.whole-list")),
+            marked: false,
             vertical_text: vertical,
         });
     }
@@ -4658,6 +4676,7 @@ fn draw_note(
             entry: false,
             body: panel::Body::Prose(said),
             tag: Some(say!("wiki.open-it")),
+            marked: false,
             vertical_text: false,
         });
     }
@@ -4681,6 +4700,7 @@ fn draw_note(
             // whole of it, every frame, was 30 ms a frame at 20000 lines.
             body: panel::Body::Prose(view.body_prose(area.height.max(area.width) as usize)),
             tag: None,
+            marked: false,
             // The one body that turns with the page.
             vertical_text: vertical,
         });
@@ -4704,6 +4724,7 @@ fn draw_note(
             _ => None,
         },
         vertical_text: false,
+        marked: false,
     })
 }
 
@@ -5256,7 +5277,7 @@ fn tab_at(
 /// The markup itself is *shown* and set back; what it marks is set forward.
 /// Nothing is hidden, because the file is the manuscript — the page says what
 /// is in it, and says which part of that is scaffolding.
-fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -> Style {
+pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -> Style {
     use yumete_core::markdown::Kind;
     // **Weight for prose, 品色 for what is not prose** (#449).
     //
@@ -16261,6 +16282,7 @@ fn squeezed(text: &str) -> String {
                     entry: false,
                     body: panel::Body::Prose(long.clone()),
                     tag: None,
+                    marked: false,
                     vertical_text: false,
                 });
             })

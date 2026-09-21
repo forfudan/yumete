@@ -95,6 +95,13 @@ struct Server {
     next_ask: i64,
     /// **Which id was `gd`**, so its answer is told apart from every other.
     asked_where: Option<i64>,
+    /// The id of the 「what is this?」 now out, if one is (#53 ③).
+    ///
+    /// ⚠️ **Its own slot, not a second use of `asked_where`.** Both questions
+    /// are about the same spot and can be asked one after the other, and an
+    /// answer carries only an id — one slot would make a hover answer look
+    /// like a definition that had somehow lost its place.
+    asked_what: Option<i64>,
 }
 
 /// Every server, and the one rule about when to talk to them.
@@ -286,6 +293,25 @@ impl Servers {
         server.waiting = true;
     }
 
+    /// **Send the 「what is this?」 question** (`空格 k`, #53 ③).
+    ///
+    /// The same shape as [`Self::ask`], and for the same reasons — a request
+    /// wants an answer, and only this side knows which id it sent for what.
+    pub fn ask_what(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        let Some((path, line, column)) = editor.take_hover_query() else { return };
+        let Some(language) = Self::language_of(editor) else { return };
+        let Some(server) = self.running.get_mut(language) else {
+            editor.no_hover();
+            let _ = config;
+            return;
+        };
+        let id = server.next_ask;
+        server.next_ask += 1;
+        server.asked_what = Some(id);
+        server.say(lsp::hover(id, &path, line, column));
+        server.waiting = true;
+    }
+
     /// Take everything the servers have said and give it to the editor.
     ///
     /// **Never waits.** What has arrived, arrives; what has not will be here
@@ -319,8 +345,17 @@ impl Servers {
                     Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(id)),
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
-                    Ok(Notice::Answer { id, places }) => {
-                        if server.asked_where == Some(id) {
+                    Ok(Notice::Answer { id, places, told }) => {
+                        // **「這是什麽」的答案**（#53 ③）。
+                        if server.asked_what == Some(id) {
+                            server.asked_what = None;
+                            server.waiting = false;
+                            anything = true;
+                            match told {
+                                Some(text) => editor.show_hover(text),
+                                None => editor.no_hover(),
+                            }
+                        } else if server.asked_where == Some(id) {
                             server.asked_where = None;
                             server.waiting = false;
                             anything = true;
@@ -524,6 +559,7 @@ fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Serv
         waiting: true,
         next_ask: FIRST_ASK,
         asked_where: None,
+        asked_what: None,
     };
     server.say_now(lsp::initialize(HELLO, &editor.project_root()));
     Ok(server)
@@ -559,6 +595,7 @@ mod tests {
                     waiting: false,
                     next_ask: FIRST_ASK,
                     asked_where: None,
+                    asked_what: None,
                 },
             );
             (servers, heard, tell)

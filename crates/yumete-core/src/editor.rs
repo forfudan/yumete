@@ -1749,6 +1749,13 @@ pub struct Editor {
     ///
     /// ⚠️ **列是 UTF-16 碼元**，因爲那是問出去的那一頭要的單位。
     definition_query: Option<(PathBuf, usize, usize)>,
+    /// **`空格 k` 問出去的那一句**（#53 ③，2026-09-21）——同上一個形狀。
+    hover_query: Option<(PathBuf, usize, usize)>,
+    /// **服務器對光標下那個東西說的話，和問它時光標在哪**（#53 ③）。
+    ///
+    /// ⚠️ 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
+    /// 冒出來的診斷不是這一種——那一種是文件的事實，走到哪都還在。
+    hovered: Option<(usize, String)>,
     /// The character the 字典 panel is about, and the answer if one has come.
     ///
     /// Three states, because three things can be true. `None`: nobody has
@@ -2481,6 +2488,8 @@ impl Editor {
             screenshot_request: None,
             dictionary_query: None,
             definition_query: None,
+            hover_query: None,
+            hovered: None,
             dictionary: None,
             other: None,
             live_pane: 0,
