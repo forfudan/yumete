@@ -126,6 +126,13 @@ pub struct Buffer {
     /// What lets an answer *about the whole document* — which line is inside a
     /// code fence, say — be worked out once per edit instead of once per frame.
     revision: u64,
+    /// **How many times the text has been written to disk.**
+    ///
+    /// A language server that runs a real compiler only re-runs it when the
+    /// file is saved (`textDocument/didSave`), so「改完了、存了、紅線還在」
+    /// unless the save itself is told. A revision cannot stand in for it:
+    /// undo makes one too, and a save makes none.
+    saves: u64,
     /// **Where the last change was, and how much longer it made the text**
     /// (#366) — `None` when the whole rope was replaced.
     ///
@@ -241,6 +248,7 @@ impl Buffer {
             ending: "\n",
             history: History::default(),
             revision: 0,
+            saves: 0,
             edit: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
@@ -278,6 +286,7 @@ impl Buffer {
             ending: "\n",
             history: History::default(),
             revision: 0,
+            saves: 0,
             edit: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
@@ -339,6 +348,7 @@ impl Buffer {
             marked,
             history: History::default(),
             revision: 0,
+            saves: 0,
             edit: None,
             pending_draft,
             pending_swap,
@@ -511,6 +521,11 @@ impl Buffer {
     /// from the whole document.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// How many times this buffer has been written to disk. See the field.
+    pub fn saves(&self) -> u64 {
+        self.saves
     }
 
     /// Where the last change was, and how much longer it made the text —
@@ -782,6 +797,7 @@ impl Buffer {
         self.seen = stamp_of(&path);
         self.read_as = Some(digest(&self.rope.to_string()));
         self.modified = false;
+        self.saves += 1;
         // The document *is* the recovery copy now — but only ours goes; a draft
         // the writer has not looked at yet still holds text this file does not.
         self.clear_swap();

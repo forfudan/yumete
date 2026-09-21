@@ -62,6 +62,13 @@ const LOOK_IN: std::time::Duration = std::time::Duration::from_millis(120);
 /// The `id` of the `initialize` request. One per server, and always this.
 const HELLO: i64 = 1;
 
+/// Where the ids for everything else start.
+///
+/// ⚠️ **Not 1, and not shared with the handshake.** An answer is matched by
+/// its id and nothing else, so two requests must never wear the same one —
+/// and [`HELLO`] is the one id whose meaning is fixed.
+const FIRST_ASK: i64 = 2;
+
 /// One running server.
 struct Server {
     /// ⚠️ **`None` in a test, and only there.** Everything interesting about
@@ -84,6 +91,10 @@ struct Server {
     version: i64,
     /// Whether an answer is still owed — what [`Servers::due_in`] reads.
     waiting: bool,
+    /// The next id to put on a request.
+    next_ask: i64,
+    /// **Which id was `gd`**, so its answer is told apart from every other.
+    asked_where: Option<i64>,
 }
 
 /// Every server, and the one rule about when to talk to them.
@@ -95,6 +106,14 @@ pub struct Servers {
     /// The buffer revision each open file was last sent at, so a file is not
     /// re-sent for a keystroke that changed nothing.
     sent: HashMap<PathBuf, u64>,
+    /// **How many times each open file had been saved when we last said so.**
+    ///
+    /// A save is news the text alone does not carry: rust-analyzer answers out
+    /// of two mouths, its own analysis (which follows every keystroke) and
+    /// `cargo check` (which runs on `didSave` and nothing else). 2026-09-21
+    /// 報的「我把錯的行刪了，錯誤信息還在」就是第二張嘴從來沒被叫醒——刪掉的
+    /// 那一行的 `(rustc)` 診斷一直是上一次 check 的舊帳。
+    saved: HashMap<PathBuf, u64>,
     /// When the current buffer last changed, for the settle above.
     touched: Option<std::time::Instant>,
     /// **Which files have been told to a server but never answered about.**
@@ -121,6 +140,7 @@ impl Default for Servers {
             running: HashMap::new(),
             failed: HashSet::new(),
             sent: HashMap::new(),
+            saved: HashMap::new(),
             touched: None,
             waiting_on: HashSet::new(),
             settle: SETTLE,
@@ -190,7 +210,16 @@ impl Servers {
         let Some(server) = self.running.get_mut(language) else { return };
         let revision = editor.current_buffer().revision();
         let known = self.sent.get(&path).copied();
+        let saves = editor.current_buffer().saves();
         if known == Some(revision) {
+            // The text is as told. **A save still has to be told**, and told
+            // *after* the text it saved — so it waits here, one turn behind
+            // the `didChange` above, rather than racing it.
+            if self.saved.get(&path).copied() != Some(saves) {
+                self.saved.insert(path.clone(), saves);
+                server.say(lsp::did_save(&path));
+                server.waiting = true;
+            }
             return;
         }
         // **Wait for the typing to stop.** `touched` is reset by every change,
@@ -214,6 +243,9 @@ impl Servers {
         let message = match server.open.contains(&path) {
             false => {
                 server.open.insert(path.clone());
+                // Opened, not saved by us — so the first save the reader makes
+                // is the first one that counts.
+                self.saved.insert(path.clone(), saves);
                 lsp::did_open(&path, language, server.version, &text)
             }
             true => lsp::did_change(&path, server.version, &text),
@@ -226,6 +258,32 @@ impl Servers {
             self.says = Some(say!("lsp.reading", named.command));
         }
         self.sent.insert(path, revision);
+    }
+
+    /// **Send the `gd` question, if the editor has one waiting** (#53 ②).
+    ///
+    /// Separate from [`Self::follow`] because it is a *request*: it wants an
+    /// answer, and the answer has to be told from every other one the server
+    /// sends. The id is remembered here; [`Self::collect`] matches on it.
+    ///
+    /// ⚠️ **The file has to have been sent first.** A server asked about a
+    /// position in a document it has never been told about answers `null` —
+    /// which reads exactly like 「this is written nowhere」. `follow` runs
+    /// first on the same turn, so by the time this asks, `didOpen` is out.
+    pub fn ask(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        let Some((path, line, column)) = editor.take_definition_query() else { return };
+        let Some(language) = Self::language_of(editor) else { return };
+        let Some(server) = self.running.get_mut(language) else {
+            // 服務器没起來，就照實說——而不是讓那句「問問這個寫在哪」一直掛着。
+            editor.no_definition();
+            let _ = config;
+            return;
+        };
+        let id = server.next_ask;
+        server.next_ask += 1;
+        server.asked_where = Some(id);
+        server.say(lsp::definition(id, &path, line, column));
+        server.waiting = true;
     }
 
     /// Take everything the servers have said and give it to the editor.
@@ -259,6 +317,25 @@ impl Servers {
                     }
                     // ⚠️ An unanswered request can stall a server for good.
                     Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(id)),
+                    // **The answer to `gd`** — anything else with an id is an
+                    // answer nobody is waiting for any more.
+                    Ok(Notice::Answer { id, places }) => {
+                        if server.asked_where == Some(id) {
+                            server.asked_where = None;
+                            server.waiting = false;
+                            anything = true;
+                            match places.first() {
+                                // ⚠️ **The first one, and only the first.**
+                                // A definition can have several answers (a
+                                // trait and its impls), and a caret can only
+                                // be in one of them; a picker over the rest is
+                                // its own feature, not this one's half-done
+                                // corner.
+                                Some(place) => editor.go_to_definition(place),
+                                None => editor.no_definition(),
+                            }
+                        }
+                    }
                     Ok(Notice::Nothing) => {}
                     Err(TryRecvError::Empty) => break,
                     // The reader thread is gone, which means the pipe closed,
@@ -299,6 +376,7 @@ impl Servers {
             editor.forget_problems(&path);
         }
         self.sent.clear();
+        self.saved.clear();
         self.says = Some(match ran {
             // A crash after it was working is not 「this machine has no
             // rust-analyzer」: the next file starts a fresh one, which is the
@@ -354,6 +432,7 @@ impl Server {
     /// Say something now, handshake or not — `initialized` itself, and the
     /// goodbye.
     fn say_now(&self, message: String) {
+        trace(">>", &message);
         // A closed channel is a dead server, which `collect` will notice on
         // its own round; there is nothing useful to do here.
         let _ = self.to.send(message);
@@ -416,6 +495,7 @@ fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Serv
                 Ok(n) => buf.extend_from_slice(&chunk[..n]),
             }
             while let Some(message) = lsp::take_frame(&mut buf) {
+                trace("<<", &message);
                 if incoming.send(lsp::read(&message, HELLO)).is_err() {
                     return;
                 }
@@ -442,6 +522,8 @@ fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Serv
         open: HashSet::new(),
         version: 0,
         waiting: true,
+        next_ask: FIRST_ASK,
+        asked_where: None,
     };
     server.say_now(lsp::initialize(HELLO, &editor.project_root()));
     Ok(server)
@@ -475,6 +557,8 @@ mod tests {
                     open: HashSet::new(),
                     version: 0,
                     waiting: false,
+                    next_ask: FIRST_ASK,
+                    asked_where: None,
                 },
             );
             (servers, heard, tell)
@@ -662,5 +746,19 @@ mod tests {
         tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), None);
+    }
+}
+
+/// **The whole conversation, when `YUMETE_LSP_TRACE` names a file.**
+///
+/// A language server bug looks exactly like a bug here, and the only thing
+/// that tells them apart is the bytes that crossed. Off unless asked for: the
+/// file grows by the size of the document on every keystroke.
+pub(crate) fn trace(way: &str, message: &str) {
+    let Some(path) = std::env::var_os("YUMETE_LSP_TRACE") else { return };
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let short: String = message.chars().take(400).collect();
+        let _ = writeln!(file, "{way} {short}");
     }
 }

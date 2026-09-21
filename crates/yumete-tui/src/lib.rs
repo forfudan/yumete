@@ -856,6 +856,8 @@ pub fn run(
         // changed, and take whatever has come back. Both halves are
         // non-blocking; what is not here yet lands on the next turn round.
         servers.follow(editor, &config);
+        // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
+        servers.ask(editor, &config);
         servers.collect(editor);
         if let Some(word) = servers.says.take() {
             editor.set_status(word);

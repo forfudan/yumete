@@ -776,6 +776,62 @@ impl Editor {
         Some((loudest, body))
     }
 
+    // ---- `gd` 問服務器（#53 ②）---------------------------------------------
+
+    /// **把「這個東西寫在哪」問出去**，問得出就回 `true`（2026-09-21）。
+    ///
+    /// 只在**代碼檔**上問：一份 `.md` 裏的「定義」是腳注、鏈接和百科名，那三種
+    /// `gd` 自己答得了，而一份 `.rs` 裏一個都不會有。
+    ///
+    /// ⚠️ **問完不等**。編輯器是一條線程，答案下一趟循環纔回得來——所以這裏只
+    /// 把問題放下，光標過一會兒纔跳。helix 也是這樣（它的請求同樣是異步的）。
+    pub(super) fn ask_where_this_is_written(&mut self) -> bool {
+        if !matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
+            return false;
+        }
+        let Some(path) = self.current_buffer().path().map(std::path::Path::to_path_buf) else {
+            return false;
+        };
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let text = rope.line(line).to_string();
+        // ⚠️ 問出去的列是 **UTF-16 碼元**，不是字符數。
+        let chars = self.cursor - rope.line_to_char(line);
+        self.definition_query = Some((path, line, crate::problem::utf16_column(&text, chars)));
+        self.status = say!("lsp.asking");
+        true
+    }
+
+    /// `gd` 問出去的那一句，給前端發（下一趟循環取走）。
+    pub fn take_definition_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.definition_query.take()
+    }
+
+    /// **答案回來了：去那兒**（#53 ②）。
+    ///
+    /// ⚠️ **列是 UTF-16 的，而這一頭數字符**——換算要那一行的正文，所以它在這裏
+    /// 做，在檔已經打開之後。
+    pub fn go_to_definition(&mut self, place: &crate::lsp::Place) {
+        self.remember_jump();
+        if self.current_buffer().path() != Some(place.path.as_path()) {
+            if let Err(err) = self.open_file(&place.path) {
+                self.status = say!("buffer.cannot-open", place.path.display(), err);
+                return;
+            }
+        }
+        let rope = self.current_buffer().rope();
+        let line = place.line.min(crate::motion::last_line(rope));
+        let text = rope.line(line).to_string();
+        let at = rope.line_to_char(line) + crate::problem::char_column(&text, place.utf16_column);
+        self.set_cursor(at.min(rope.len_chars()));
+        self.status = say!("lsp.went", self.current_buffer().display_name(), line + 1);
+    }
+
+    /// 服務器說不出這個東西寫在哪。
+    pub fn no_definition(&mut self) {
+        self.status = say!("lsp.nowhere");
+    }
+
     /// 忘掉一個檔的話——服務器死了，它說過的就不再算數。
     pub fn forget_problems(&mut self, path: &std::path::Path) {
         self.problems.forget(path);

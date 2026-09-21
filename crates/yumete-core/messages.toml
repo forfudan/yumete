@@ -5985,6 +5985,13 @@ en = "no command answers that — say it another way, or backspace to `:`"
 # ── lsp ──────────────────────────────────────────────
 
 [[message]]
+# gd 問出去了，還沒回話
+key = "lsp.asking"
+zht = "問問這個寫在哪……"
+zhs = "问问这个写在哪……"
+en = "asking where this is written…"
+
+[[message]]
 # 語言服務器起不來（機器上沒裝）——只說一次
 key = "lsp.cannot-start"
 zht = "{0} 起不來（{1}）——檔照常開，只是沒人查錯"
@@ -5999,6 +6006,13 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
+# gd 問完了，服務器說不出它寫在哪
+key = "lsp.nowhere"
+zht = "服務器說不出這個寫在哪"
+zhs = "服务器说不出这个写在哪"
+en = "the server does not know where this is written"
+
+[[message]]
 # 語言服務器刚起來，還在讀整個項目（只說這一次）
 key = "lsp.reading"
 zht = "{0} 正在讀這個項目……第一次要等一會"
@@ -6011,6 +6025,13 @@ key = "lsp.stopped"
 zht = "{0} 的語言服務器停了——它說過的都不再算數，下一個檔會重新起一個"
 zhs = "{0} 的语言服务器停了——它说过的都不再算数，下一个档会重新起一个"
 en = "the {0} language server stopped — what it said no longer counts, and the next file starts a new one"
+
+[[message]]
+# gd 跳到了定義那一行
+key = "lsp.went"
+zht = "{0} 第 {1} 行（C-o 回來）"
+zhs = "{0} 第 {1} 行（C-o 回来）"
+en = "{0} line {1} (C-o comes back)"
 
 
 # ── macro ─────────────────────────────────────────────────────────────

@@ -93,6 +93,14 @@ pub fn char_column(line: &str, utf16: usize) -> usize {
     line.chars().count()
 }
 
+/// **A character offset into `line`, as a UTF-16 offset** — the other way.
+///
+/// What [`char_column`] undoes. Asking a server about a position means saying
+/// it in the server's units, and the cursor is in characters.
+pub fn utf16_column(line: &str, chars: usize) -> usize {
+    line.chars().take(chars).map(char::len_utf16).sum()
+}
+
 /// Every server's complaints, by the file they are about.
 #[derive(Debug, Default)]
 pub struct Problems {
@@ -195,6 +203,20 @@ mod tests {
         assert_eq!(char_column("let x = 1;", 4), 4);
         // Past the end is the end: the server counted against an older file.
         assert_eq!(char_column("ab", 99), 2);
+    }
+
+    /// ⚠️ 兩個方向要對得上，否則問出去的位置和畫回來的位置差一截。
+    #[test]
+    fn the_two_coordinate_systems_are_each_others_undoing() {
+        for line in ["let x = 1;", "第一章：開始", "𠀀甲乙", "a𠀀b"] {
+            for chars in 0..=line.chars().count() {
+                assert_eq!(
+                    char_column(line, utf16_column(line, chars)),
+                    chars,
+                    "{line:?} 的第 {chars} 個字"
+                );
+            }
+        }
     }
 
     #[test]
