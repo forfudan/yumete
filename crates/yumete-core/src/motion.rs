@@ -427,6 +427,18 @@ pub enum Motion {
     Paragraph { forward: bool },
     /// `L` / `H` — a sentence: 。！？ and the closing mark after one.
     Sentence { forward: bool },
+    /// `h` / `l` — **one character, and never off this line** (B5,
+    /// 2026-09-21).
+    ///
+    /// The keys themselves walk the page; this is the reading an operator
+    /// wants, and it exists because `dl`、`d3l`、`yl`、`c2h` are everyday vim
+    /// and a table of motions without `h`/`l` simply drops them on the floor.
+    ///
+    /// ⚠️ **Stopping at the line's ends is the whole of it.** vim's `l` will
+    /// not carry the caret onto the next line, so `dl` on the last character
+    /// takes that character and not the newline — which is the difference
+    /// between 「delete a letter」 and 「weld two lines together」.
+    Char { forward: bool },
     /// `j` / `k` — **a line of the file**, which is what vim counts.
     ///
     /// ⚠️ Only ever asked for by an operator (`dj`), and only linewise, so it
@@ -491,6 +503,14 @@ pub enum Object {
     Word,
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
+    /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
+    ///
+    /// ⚠️ **Whole lines, not a run of characters**, which is what makes it an
+    /// object and not two `}` motions: from anywhere inside a paragraph the
+    /// answer is the same block. `ap` takes the blank lines under it as well
+    /// — vim's rule, and the one that makes `dap` remove a paragraph rather
+    /// than leave a hole where it was.
+    Paragraph,
 }
 
 impl Span {

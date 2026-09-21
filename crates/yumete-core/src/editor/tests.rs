@@ -15176,7 +15176,64 @@ fn vim_conformance() {
     // ⑩ V 之後 j 擴選（朋友第 4 條）
     check("⑩ Vjd", case("one\ntwo\nthree\n", "Vjd"), "three\n");
 
+    // ⑪ `h`／`l` 也是動作（B5，2026-09-21）。少了它們，`dl`、`d3l`、`yl`、`c2h`
+    //    這些每天都按的鍵全部落在地上——動作表裏没有，操作符就等不到東西。
+    check("⑪ dl", case("abc\n", "dl"), "bc\n");
+    check("⑪ d3l", case("abcdef\n", "d3l"), "def\n");
+    check("⑪ dh", case("abc\n", "lldh"), "ac\n");
+    check("⑪ c2l", case("abcdef\n", "c2lX"), "Xcdef\n");
+    // ⚠️ **前後不對稱，而那是 vim 自己的規矩。** `l` 停在行末的最後一格上還是
+    // 要取走那一格（`dl` 就是 `x`），`h` 停在第 0 欄卻什麽都不做——向後的區間
+    // 是「從目標到光標自己那一格」，目標没動就成了「取走我後面那一格」，而後面
+    // 什麽都没有。
+    check("⑪ dl 在行末不吃換行", case("ab\ncd\n", "ldl"), "a\ncd\n");
+    check("⑪ dh 在行首什麽都不做", case("ab\ncd\n", "dh"), "ab\ncd\n");
+
+    // ⑫ 段落對象（B5，2026-09-21）。⚠️ **一段是幾「行」不是幾個字**：第一版把
+    //    它當普通區間交給刀子，`dip` 取走了那幾行的正文卻把換行留下，原地多出
+    //    兩個空行。現在它走 `dd`／`cc` 那條路——`d` 帶走末尾那個換行，`c` 留着。
+    let para = "aa\n\nbb\ncc\n\ndd\n";
+    check("⑫ dip", case(para, "jjdip"), "aa\n\n\ndd\n");
+    check("⑫ dap 連下面的空行一起", case(para, "jjdap"), "aa\n\ndd\n");
+    check("⑫ cip 留着行", case(para, "jjcipX"), "aa\n\nX\n\ndd\n");
+    // 光標停在空行上，那一段就是那幾個空行——vim 自己的規矩。
+    check("⑫ dip 在空行上", case("aa\n\n\nbb\n", "jdip"), "aa\nbb\n");
+    // 開頭那一段没有上面的空行可借，就取下面的。
+    check("⑫ dap 首段", case("aa\nbb\n\ncc\n", "dap"), "cc\n");
+
     assert!(bad.is_empty(), "vim 語料紅了 {} 條：\n  {}", bad.len(), bad.join("\n  "));
+}
+
+/// **`mi p`／`ma p` — 段落，helix 也有這一個**（B5，2026-09-21）。
+///
+/// helix 的 `commands.rs:6314` 把 `p` 交給 `textobject_paragraph`，所以這不是
+/// 給 vim 開的後門，是本來就該有的一格。而在稿子裏它比 `miw` 還順手：一「段」
+/// 是寫稿的人搬來搬去的單位，一個詞是他們回頭改的單位。
+#[test]
+fn a_paragraph_is_a_text_object_in_both_presets() {
+    let para = "第一段。\n\n第二段上。\n第二段下。\n\n第三段。\n";
+    // helix：先選，再動刀。
+    let mut ed = typed(para);
+    press(&mut ed, "gg");
+    press(&mut ed, "jj");
+    press(&mut ed, "mip");
+    let (a, b) = ed.selection();
+    assert_eq!(
+        ed.current_buffer().rope().slice(a..b).to_string(),
+        // ⚠️ **末尾那個換行在裏面**，helix 也是（`textobject.rs`：anchor 與
+        // head 都是行首）。少了它，`d` 會取走正文卻把空行留下。
+        "第二段上。\n第二段下。\n",
+        "選中整段，連末尾那個換行"
+    );
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "第一段。\n\n\n第三段。\n");
+
+    // ⚠️ **空行上也答得出**：那一段就是那幾個空行，所以 `mip` 在段與段之間按
+    // 下去收得掉多餘的空當，而不是說「這裏没有段落」。
+    let mut ed = typed("甲\n\n\n\n乙\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "jmipd");
+    assert_eq!(ed.current_buffer().text(), "甲\n乙\n");
 }
 
 /// `:check-code` — 語言服務器說過的話，排成一張 `gf` 走得動的單子（#53／#54）。

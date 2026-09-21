@@ -498,6 +498,20 @@ impl Editor {
                 self.alias_count = None;
                 return;
             }
+            // ⚠️ **A paragraph is a run of lines, so it goes down the lines
+            // path** (B5, 2026-09-21). Routed through `do_vim` instead, `dip`
+            // took the lines' *text* and left their newlines behind — two
+            // empty lines where a paragraph had been. The lines path already
+            // knows the two rules this needs: `d` swallows the last break,
+            // `c` keeps it (the `dd`／`cc` pair).
+            if matches!(step.motion, motion::Motion::Object { what: motion::Object::Paragraph, .. })
+            {
+                if let motion::Span::Over { anchor, head } = span {
+                    let rope = self.current_buffer().rope();
+                    let (a, b) = (rope.char_to_line(anchor), rope.char_to_line(head));
+                    return self.do_vim_lines(op, a.min(b), a.max(b));
+                }
+            }
             return self.do_vim(op, span);
         }
         // Walk the motion `n` times to find where vim would have left the
