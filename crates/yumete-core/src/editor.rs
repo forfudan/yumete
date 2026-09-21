@@ -2015,8 +2015,9 @@ pub struct Editor {
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
     ruby_target: Option<RubyTarget>,
-    /// Whether half-width pairs share a slot in vertical layout (縦中横).
-    tatechuyoko: bool,
+    /// How many half-width characters share a slot in vertical layout (縦中横);
+    /// `0` for none.
+    tatechuyoko: usize,
     /// Whether 句讀 hang in the margin (標點旁置).
     hanging: bool,
     /// The paper `:export html` writes its print stylesheet for. Not a screen
@@ -2529,7 +2530,7 @@ impl Editor {
             ruby_target: None,
             completion: None,
             reference: None,
-            tatechuyoko: false,
+            tatechuyoko: 0,
             hanging: false,
             paper: crate::export::Paper::A5,
             viewing: Cell::new(None),

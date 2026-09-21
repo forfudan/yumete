@@ -10812,7 +10812,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn digits_are_set_tatechuyoko_when_asked() {
         let mut editor = editor_with("第12章");
-        editor.set_tatechuyoko(true);
+        editor.set_tatechuyoko(2);
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
@@ -10820,6 +10820,28 @@ fn squeezed(text: &str) -> String {
         assert_eq!(at(&buffer, 18, 0), "第");
         assert_eq!(at(&buffer, 18, 1), "12");
         assert_eq!(at(&buffer, 18, 2), "章");
+    }
+
+    /// A group longer than the 字 is still **one row**, and hangs out of its
+    /// own 縱 into the 行間 (2026-09-21: 「對於比較短的單詞和數字，把他們直接
+    /// inline 顯示，撐大縱距似乎也是可行的」).
+    #[test]
+    fn a_long_tatechuyoko_group_hangs_into_the_gap() {
+        let mut editor = editor_with("第1997章\n甲乙");
+        editor.set_tatechuyoko(4);
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // One row of four cells, hung by its **right** edge against the 縱's
+        // own, so the group's tail lines up with the 漢字 over it.
+        assert_eq!(at(&buffer, 18, 0), "第");
+        let group: Vec<String> = (16..20).map(|x| at(&buffer, x, 1)).collect();
+        assert_eq!(group, ["1", "9", "9", "7"]);
+        assert_eq!(at(&buffer, 18, 2), "章");
+
+        // And the 縱 beside it stands two cells further off: the page bought
+        // those cells for the group, the way it buys a reading its lane.
+        assert_eq!(at(&buffer, 14, 0), "甲");
     }
 
     #[test]
