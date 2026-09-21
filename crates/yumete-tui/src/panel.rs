@@ -837,7 +837,10 @@ pub fn draw(
                     let run: String = chars[span.start.min(chars.len())..span.end.min(chars.len())]
                         .iter()
                         .collect();
-                    let style = crate::markup_style(span.kind, ink).patch(plain);
+                    // ⚠️ **`a.patch(b)` 是 b 蓋 a。** 底色和行的基本墨色在
+                    // 前，標記的墨色蓋在上面——反過來寫，浮窗裏的 `**` 和
+                    // `` ` `` 就一個顏色都不變（2026-09-22 出圖纔看見）。
+                    let style = plain.patch(crate::markup_style(span.kind, ink));
                     at = put_text(buf, at, y, limit, &run, style);
                     from = span.end;
                 }
