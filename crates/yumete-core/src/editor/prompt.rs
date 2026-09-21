@@ -15,7 +15,7 @@ impl Editor {
             self.reference = None;
         }
         let continuing_zong = std::mem::take(&mut self.zong_motion);
-        if self.layout == Layout::Vertical {
+        if self.layout() == Layout::Vertical {
             match key {
                 Key::Left => return self.move_zong_from(true, continuing_zong),
                 Key::Right => return self.move_zong_from(false, continuing_zong),

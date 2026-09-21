@@ -591,7 +591,7 @@ impl Editor {
     /// is not a grid the caret edits in place. `t t` still opens one, and
     /// turns the page flat to do it.
     pub(super) fn table_view_opens_itself(&self) -> bool {
-        self.layout == Layout::Horizontal && self.table_padding_on()
+        self.layout() == Layout::Horizontal && self.table_padding_on()
     }
 
     /// `t w` — fold the over-wide cells away, or give them back (#283).
@@ -1015,7 +1015,7 @@ impl Editor {
         // beside a body squared up to nothing. Scroll until the table reached
         // the right edge and it snapped into line — which is exactly what the
         // window sliding over it looks like.
-        let screenful = match self.layout {
+        let screenful = match self.layout() {
             Layout::Vertical => self.page_columns,
             _ => self.page_lines,
         };

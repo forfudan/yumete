@@ -15393,3 +15393,30 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
     assert_eq!(listing.lines().count(), 1, "只剩 zoo：{listing}");
     assert!(listing.contains("src/zoo.rs:9:"), "{listing}");
 }
+
+/// **程序文件一律橫排，而那不動讀者的設定**（2026-09-21 定）。
+///
+/// 縮進與對齊是那門語言語法的一部分，竪排把它們全毀了；行號、診斷那一欄也都
+/// 建立在「一行一列」上。所以 `.rs` 畫成橫的——但小說那一份的竪排照舊留着，
+/// 開一眼代碼再回去，稿子還是竪的。
+#[test]
+fn a_program_file_is_drawn_across_and_the_manuscript_keeps_its_vertical() {
+    use crate::zong::Layout;
+    let mut ed = Editor::new();
+    ed.set_layout(Layout::Vertical);
+    assert_eq!(ed.layout(), Layout::Vertical, "稿子是竪的");
+
+    ed.set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Rust));
+    assert!(ed.writes_code());
+    assert_eq!(ed.layout(), Layout::Horizontal, "程序畫成橫的");
+    assert_eq!(ed.layout_wanted(), Layout::Vertical, "設定一個字没動");
+
+    // `:vertical` 在程序文件上是**說一句**，不是偷偷把設定關掉。
+    ed.execute(":layout vertical").unwrap();
+    assert_eq!(ed.status(), say!("layout.code-is-horizontal"));
+    assert_eq!(ed.layout_wanted(), Layout::Vertical, "說完了設定還在");
+
+    // 回到稿子——竪排還在。
+    ed.set_syntax(crate::syntax::Syntax::Markdown);
+    assert_eq!(ed.layout(), Layout::Vertical, "回來還是竪的");
+}

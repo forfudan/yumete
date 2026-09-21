@@ -1000,7 +1000,7 @@ impl Editor {
         // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
         // meaning: `j` still reads onward down the 縱, and `h` still steps left,
         // which is now the next 縱 rather than the next line.
-        if self.layout == Layout::Vertical {
+        if self.layout() == Layout::Vertical {
             // The count applies here too — `10j` is exactly the key a 縱 of
             // thirty-two characters is long for. These arms used to return
             // before `repeat` could see it.
@@ -1708,7 +1708,7 @@ impl Editor {
         // on a 縱書 page the line runs down the 縱 and the lines stack
         // leftward, so running along is `k`／`j` and crossing is `h`／`l` —
         // `h`, leftward, being onward, as it is for `h` alone.
-        let key = match (self.layout == Layout::Vertical, key) {
+        let key = match (self.layout() == Layout::Vertical, key) {
             (true, Key::Char('h')) => Key::Char('j'),
             (true, Key::Char('l')) => Key::Char('k'),
             (true, Key::Char('j') | Key::Down) => Key::Char('l'),

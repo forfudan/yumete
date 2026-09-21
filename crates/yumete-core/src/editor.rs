@@ -2155,8 +2155,13 @@ pub struct Editor {
     /// Drawing it means taking the tags off the page, and that is replacing,
     /// which 中階 does not do.
     ruby_drawn: bool,
-    /// Whether text is laid out horizontally or vertically (Feature #61).
-    layout: Layout,
+    /// **Which way the reader asked for the text to run** (Feature #61).
+    ///
+    /// ⚠️ **Not necessarily how it is drawn.** A program file is always drawn
+    /// across (`Editor::layout`), and this is what the page goes back to when
+    /// one is closed — 2026-09-21 定：「见到程序文件，强制不允许开启竖排模式」，
+    /// 而那不能反過來把讀者正在寫的小說也扳平。
+    layout_wanted: Layout,
     /// How many graphemes fit in one 縱. The renderer lowers this when the
     /// terminal is too short to draw a full 縱.
     zong_length: usize,
@@ -2562,7 +2567,7 @@ impl Editor {
             candidate: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             ruby_drawn: true,
-            layout: Layout::default(),
+            layout_wanted: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
             goal_slot: 0,
             zong_motion: false,

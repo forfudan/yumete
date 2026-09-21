@@ -112,7 +112,7 @@ impl Editor {
     pub fn set_measure(&mut self, measure: Option<usize>) {
         self.measure = measure.map(|m| m.clamp(crate::wrap::MIN_WRAP_WIDTH, 400));
         if let Some(m) = self.measure {
-            if self.layout == Layout::Vertical {
+            if self.layout() == Layout::Vertical {
                 self.set_zong_length(m);
             }
         }
@@ -125,7 +125,7 @@ impl Editor {
     /// The width horizontal motion should wrap at, or `None` when the buffer is
     /// drawn as unwrapped logical lines.
     pub fn wrap_width(&self) -> Option<usize> {
-        if self.soft_wrap && self.layout == Layout::Horizontal {
+        if self.soft_wrap && self.layout() == Layout::Horizontal {
             self.wrap_width
         } else {
             None

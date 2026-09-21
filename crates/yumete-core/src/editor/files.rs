@@ -964,7 +964,7 @@ impl Editor {
             },
         };
         let style = crate::export::Style {
-            vertical: self.layout == Layout::Vertical,
+            vertical: self.layout() == Layout::Vertical,
             hanging: self.hanging,
             zong_len: self.zong_length,
             dialects: self.ruby,

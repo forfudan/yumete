@@ -428,7 +428,15 @@ fn main() -> ExitCode {
     // …and the book's own words on top of whichever of the three it was. The
     // name on every page is the one word no dictionary has.
     editor.reload_project_words();
-    editor.set_status(opening_said.unwrap_or_default());
+    // ⚠️ **`-v` on a program file is not an error, and not silent either.**
+    // The setting is kept — the next buffer may well be a manuscript — but the
+    // page in front of the reader is across, and a flag that appears to do
+    // nothing is worse than one that says why (2026-09-21).
+    if force_layout == Some(Layout::Vertical) && editor.writes_code() {
+        editor.set_status(yumete_core::say!("layout.code-is-horizontal"));
+    } else {
+        editor.set_status(opening_said.unwrap_or_default());
+    }
     mark("分詞", &mut marks);
     if timing {
         let mut last = std::time::Duration::default();
