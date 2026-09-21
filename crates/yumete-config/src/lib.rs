@@ -208,10 +208,16 @@ pub struct EditorConfig {
     /// what a manuscript slips on over a year.
     pub usage_groups: Vec<String>,
     /// **How many half-width characters share one slot in vertical layout**
-    /// (縦中横). `0` (the default) is one letter to a row, hung right;
+    /// (縦中横). `0` is one letter to a row, hung right;
     /// [`TATECHUYOKO_CLASSIC`] is what fits the grid, and up to
     /// [`TATECHUYOKO_MAX`] hangs out into the 行間. Anything above that is
     /// clamped, and `1` is no group at all and reads as `0`.
+    ///
+    /// **Four out of the box** (2026-09-21 定：「我覺得可以改成 4，因為四位數很
+    /// 常見」). Four is the top of the range print allows itself — CSS is
+    /// `digits <integer [2,4]>`, InDesign's 組數字 is 2／3／4 — and it is the
+    /// one that covers the year and the chapter number, which is what a page of
+    /// Chinese prose actually has half-width characters *for*.
     pub tatechuyoko: usize,
     /// Whether code in a fence is coloured by its own grammar (#420). On by
     /// default; `:view-code` toggles.
@@ -402,7 +408,7 @@ impl Default for EditorConfig {
             show_ruby: false,
             ruby_dialects: Vec::new(),
             usage_groups: Vec::new(),
-            tatechuyoko: 0,
+            tatechuyoko: 4,
             code_highlight: true,
             hanging_punctuation: false,
             soft_wrap: true,
@@ -3624,7 +3630,7 @@ mod tests {
     /// hang further into the 行間 than the 行間 is wide.
     #[test]
     fn tatechuyoko_is_a_count_and_it_is_clamped() {
-        assert_eq!(Config::from_toml("").editor.tatechuyoko, 0, "出廠關着");
+        assert_eq!(Config::from_toml("").editor.tatechuyoko, 4, "出廠裝得下一個年份");
         let of = |n: &str| {
             Config::from_toml(&format!("[editor]\ntatechuyoko = {n}\n"))
                 .editor
@@ -3639,7 +3645,7 @@ mod tests {
         // The old spelling is refused rather than read as two — and the rest
         // of the file still loads, which is why the `bool` is parsed at all.
         let stale = Config::from_toml("[editor]\ntatechuyoko = true\nzong_gap = 2\n");
-        assert_eq!(stale.editor.tatechuyoko, 0);
+        assert_eq!(stale.editor.tatechuyoko, 4, "那一行不算數，出廠值原封不動");
         assert_eq!(stale.editor.zong_gap, 2, "同一個檔裏別的設定照樣進來");
     }
 
