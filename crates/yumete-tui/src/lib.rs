@@ -266,7 +266,7 @@ fn frame_to(
         let metrics = vertical::Metrics::new(config, page.height, lines, look);
         editor.set_page(page.height as usize, metrics.capacity(page.width));
     } else {
-        let gutter = gutter_width(lines, config.editor.line_numbers, writes_code(editor));
+        let gutter = gutter_width(lines, config.editor.line_numbers, editor.writes_code());
         editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
         editor.set_page(page.height as usize, page.width.max(1) as usize);
     }
@@ -616,7 +616,7 @@ pub fn run(
                 // The width paragraphs soft-wrap at depends on the gutter as
                 // well; `j` and `k` walk those rows, so it too is settled
                 // before the keys that use it.
-                let gutter = gutter_width(lines, config.editor.line_numbers, writes_code(editor));
+                let gutter = gutter_width(lines, config.editor.line_numbers, editor.writes_code());
                 editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
                 editor.set_page(page.height as usize, page.width.max(1) as usize);
             }
@@ -3166,14 +3166,6 @@ const GUTTER_AIR: usize = 2;
 /// 器起來了沒有」：後者會讓版心隨一個子進程的生死伸縮。
 const PROBLEM_GUTTER: usize = 2;
 
-/// 這個緩衝區有沒有那一欄。
-fn writes_code(editor: &Editor) -> bool {
-    matches!(
-        editor.current_buffer().syntax(),
-        yumete_core::syntax::Syntax::Code(_)
-    )
-}
-
 /// The width of the line-number gutter for a given mode (digits + the air),
 /// plus the diagnostics column when this buffer is code.
 fn gutter_width(total_lines: usize, mode: LineNumbers, code: bool) -> usize {
@@ -5148,7 +5140,7 @@ fn text_at(
         WritingLayout::Horizontal => {
             let buffer = editor.current_buffer();
             let gutter =
-                gutter_width(buffer.line_count(), config.editor.line_numbers, writes_code(editor));
+                gutter_width(buffer.line_count(), config.editor.line_numbers, editor.writes_code());
             let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
             let hide = |line: usize| editor.hidden_on_line(line);
             // The same measure the page was drawn with — the indent changes
@@ -6721,11 +6713,11 @@ fn draw_horizontal(
     let total_lines = buffer.line_count();
     let height = text_area.height as usize;
     let mode = config.editor.line_numbers;
-    let problem_gutter = match writes_code(editor) && mode != LineNumbers::None {
+    let problem_gutter = match editor.writes_code() && mode != LineNumbers::None {
         true => PROBLEM_GUTTER,
         false => 0,
     };
-    let gutter = gutter_width(total_lines, mode, writes_code(editor));
+    let gutter = gutter_width(total_lines, mode, editor.writes_code());
     let rope = buffer.rope();
     // The half that is only being read is drawn a rung back, all of it — that
     // is how you can see which half the keys are in without looking for the
@@ -9242,7 +9234,7 @@ fn squeezed(text: &str) -> String {
         let gutter = gutter_width(
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
-            writes_code(editor),
+            editor.writes_code(),
         );
         editor.set_wrap_width((w as usize).saturating_sub(gutter));
         render(editor, config, w, h)
@@ -10874,7 +10866,7 @@ fn squeezed(text: &str) -> String {
         let gutter = gutter_width(
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
-            writes_code(editor),
+            editor.writes_code(),
         );
         gutter as u16 - 1
     }
@@ -11013,8 +11005,8 @@ fn squeezed(text: &str) -> String {
         let (prose, _) = editor_on_disk("第一章.md", "一\n二\n三\n四\n");
         let (code, _) = editor_on_disk("c.rs", "一\n二\n三\n四\n");
         let mode = LineNumbers::Absolute;
-        assert_eq!(gutter_width(4, mode, writes_code(&prose)), 3, "號碼 ＋ 兩格空氣");
-        assert_eq!(gutter_width(4, mode, writes_code(&code)), 5, "再加診斷那一欄");
+        assert_eq!(gutter_width(4, mode, prose.writes_code()), 3, "號碼 ＋ 兩格空氣");
+        assert_eq!(gutter_width(4, mode, code.writes_code()), 5, "再加診斷那一欄");
 
         let config = Config::default();
         let buffer = render(&prose, &config, 20, 8);
@@ -11103,7 +11095,7 @@ fn squeezed(text: &str) -> String {
         // 那一列：折行折出來的每一列並不是一段的開頭。
         let mut editor = editor_with("甲乙丙丁戊己庚辛壬癸子丑寅卯\n二\n三");
         let config = Config::default();
-        let gutter = gutter_width(3, config.editor.line_numbers, writes_code(&editor));
+        let gutter = gutter_width(3, config.editor.line_numbers, editor.writes_code());
         editor.set_wrap_width(12usize.saturating_sub(gutter));
         with_diff(&mut editor, "@@ -1 +1 @@\n");
         let buffer = render(&editor, &config, 12, 8);

@@ -481,7 +481,7 @@ impl Editor {
         if self.grid_is_drawn() {
             self.turn_for_table();
         } else if let Some(back) = self.turned_for_table.take() {
-            self.layout = back;
+            self.layout_wanted = back;
             self.zong_motion = false;
         }
         let stayed = was == want && !gave_the_window_back;
@@ -522,7 +522,7 @@ impl Editor {
         if self.grid_is_drawn() {
             self.turn_for_table();
         } else if let Some(back) = self.turned_for_table.take() {
-            self.layout = back;
+            self.layout_wanted = back;
             self.zong_motion = false;
         }
         self.status = match want {
@@ -558,7 +558,7 @@ impl Editor {
     pub(super) fn leave_table_quietly(&mut self) {
         self.table = None;
         if let Some(back) = self.turned_for_table.take() {
-            self.layout = back;
+            self.layout_wanted = back;
             self.zong_motion = false;
         }
     }
@@ -767,11 +767,11 @@ impl Editor {
         if !self.grid_is_drawn() {
             return false;
         }
-        if self.layout != Layout::Vertical {
+        if self.layout() != Layout::Vertical {
             return false;
         }
-        self.turned_for_table = Some(self.layout);
-        self.layout = Layout::Horizontal;
+        self.turned_for_table = Some(self.layout_wanted);
+        self.layout_wanted = Layout::Horizontal;
         self.zong_motion = false;
         true
     }
@@ -2936,7 +2936,7 @@ impl Editor {
     /// run, a ragged row is passed over rather than landed in, and a Markdown
     /// table stops at its last row instead of paging out into the prose.
     fn move_cell_page(&mut self, count: usize, down: bool, fraction: f64) {
-        let page = match self.layout {
+        let page = match self.layout() {
             // Laid out vertically a row of the table is a 縱, so the page is
             // as many 縱 as fit across.
             Layout::Vertical => self.page_columns,

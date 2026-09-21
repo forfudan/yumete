@@ -5652,6 +5652,13 @@ zhs = "段组：一段（整页一纵到底）"
 en = "bands: one — a 縱 runs the whole page"
 
 [[message]]
+# :vertical／-v 碰上一份程序文件——縮進是那門語言的語法，竪排讀不了
+key = "layout.code-is-horizontal"
+zht = "程序文件一律橫排；小說那一份的竪排照舊留着"
+zhs = "程序文件一律横排；小说那一份的竖排照旧留着"
+en = "a program file is always laid out across; your manuscript keeps its 縱書"
+
+[[message]]
 # :view-code off — 圍欄裏的代碼回到一種顏色
 key = "layout.code-off"
 zht = "代碼上色：關（圍欄裏的代碼一種顏色）"

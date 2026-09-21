@@ -9,9 +9,34 @@ use super::*;
 impl Editor {
     // ---- Layout (Feature #61) ---------------------------------------------
 
-    /// The current layout.
+    /// **Which way the text on the screen actually runs.**
+    ///
+    /// Not always what was asked for: **a program file is always drawn
+    /// across**. Indentation and alignment are part of that language's
+    /// grammar, the gutter and the diagnostics column are built on 「one line,
+    /// one row」, and no writing tradition anywhere sets a program in 縱書 —
+    /// 2026-09-21 定：「见到程序文件，强制不允许开启竖排模式」。
+    ///
+    /// ⚠️ **The refusal is per buffer, not a setting that gets switched off.**
+    /// 竪排 is 「I want to write this way」; a `.rs` is 「this one cannot be read
+    /// that way」, and the second must not quietly answer the first. Open a
+    /// program file in the middle of a novel and the novel is still 竪排 when
+    /// you come back to it — [`Self::layout_wanted`] is what was asked for.
     pub fn layout(&self) -> Layout {
-        self.layout
+        match self.writes_code() {
+            true => Layout::Horizontal,
+            false => self.layout_wanted,
+        }
+    }
+
+    /// Which way the reader asked for. See [`Self::layout`].
+    pub fn layout_wanted(&self) -> Layout {
+        self.layout_wanted
+    }
+
+    /// Whether the buffer on the screen is a program rather than a manuscript.
+    pub fn writes_code(&self) -> bool {
+        matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_))
     }
 
     /// Switch the layout.
@@ -29,14 +54,14 @@ impl Editor {
         if layout == Layout::Vertical && self.grid_is_drawn() {
             return;
         }
-        self.layout = layout;
+        self.layout_wanted = layout;
         self.zong_motion = false;
     }
 
     /// Switch to the other layout, returning the new one.
     pub fn toggle_layout(&mut self) -> Layout {
-        self.set_layout(self.layout.toggled());
-        self.layout
+        self.set_layout(self.layout().toggled());
+        self.layout()
     }
 
     /// How many graphemes fit in one 縱.
@@ -890,7 +915,7 @@ impl Editor {
     /// screen, so the cursor travels with the page — which in a modal editor is
     /// where you wanted to be anyway.
     pub fn scroll(&mut self, amount: usize, back: bool) {
-        let vertical = self.layout == Layout::Vertical;
+        let vertical = self.layout() == Layout::Vertical;
         // **A flick does not leave 全窗表格 either** — it is a window onto one
         // table, and the wheel is a movement like any other (see
         // [`Self::hold_the_pane`], which cannot see this one: scrolling comes

@@ -227,10 +227,19 @@ impl Editor {
                 // and it says which key gets you out.
                 let wants_vertical = match direction {
                     Some(l) => l == Layout::Vertical,
-                    None => self.layout == Layout::Horizontal,
+                    None => self.layout() == Layout::Horizontal,
                 };
                 if self.grid_is_drawn() && wants_vertical {
                     self.status = say!("table.vertical-not-allowed");
+                    return Ok(CommandOutcome::Continue);
+                }
+                // **程序文件不竪排**（2026-09-21）。Refused here rather than in
+                // `set_layout`, because the setting itself is not the problem:
+                // the reader may well be 竪排 in the novel in the next buffer,
+                // and switching it off for them would be answering a question
+                // nobody asked. See `Editor::layout`.
+                if self.writes_code() && wants_vertical {
+                    self.status = say!("layout.code-is-horizontal");
                     return Ok(CommandOutcome::Continue);
                 }
                 let layout = match direction {
@@ -1028,7 +1037,7 @@ impl Editor {
                 // 「長段落跑出右邊」 named a right edge this page does not
                 // have, and left the reader looking for a change that had not
                 // been made.
-                if self.layout == Layout::Vertical {
+                if self.layout() == Layout::Vertical {
                     self.status = say!("wrap.vertical-has-no-wrap");
                     return Ok(CommandOutcome::Continue);
                 }

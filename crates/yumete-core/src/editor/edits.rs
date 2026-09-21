@@ -511,7 +511,7 @@ impl Editor {
     /// vertically. Both are "onward through the text", which is what the key
     /// means.
     pub(super) fn move_page(&mut self, count: usize, back: bool, fraction: f64) {
-        let vertical = self.layout == Layout::Vertical;
+        let vertical = self.layout() == Layout::Vertical;
         let page = if vertical {
             self.page_columns
         } else {

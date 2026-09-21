@@ -90,7 +90,7 @@ impl Editor {
                 // 在 insert 模式下就看不出来了」. So it is refused rather than
                 // drawn badly, and refused **out loud** — asking for a mark and
                 // getting a different one silently is worse than being told.
-                if mark == yumete_cjk::WordMark::Line && self.layout == Layout::Vertical {
+                if mark == yumete_cjk::WordMark::Line && self.layout() == Layout::Vertical {
                     self.show_segmentation = false;
                     self.status = say!("word.mark-line-not-vertical");
                     return Ok(CommandOutcome::Continue);
@@ -590,7 +590,7 @@ impl Editor {
     /// Whether the editor is in the state `need` asks for.
     pub(super) fn meets(&self, need: command::Need) -> bool {
         match need {
-            command::Need::Vertical => self.layout == Layout::Vertical,
+            command::Need::Vertical => self.layout() == Layout::Vertical,
             command::Need::Margin => self.margin.shown(),
             command::Need::Table => self.table_here(),
             command::Need::Scheme => self.ime_available,

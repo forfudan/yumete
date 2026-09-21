@@ -177,7 +177,7 @@ impl Editor {
             ),
             Pending::Goto => (
                 say!("hint.goto.title"),
-                Self::said(match self.layout == crate::zong::Layout::Vertical {
+                Self::said(match self.layout() == crate::zong::Layout::Vertical {
                     true => Self::GOTO_KEYS_VERTICAL.iter().copied(),
                     false => Self::GOTO_KEYS.iter().copied(),
                 }),
