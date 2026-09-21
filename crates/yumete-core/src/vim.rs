@@ -75,6 +75,11 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("0", _) => step(Motion::LineStart, Reach::Exclusive),
         ("^", _) => step(Motion::LineFirstNonBlank, Reach::Exclusive),
         // ---- Down the page -----------------------------------------------
+        // ⚠️ **`h` and `l` are exclusive**, which is what makes `dl` take the
+        // one character under the caret and not two: the motion lands on the
+        // next cell and exclusive leaves that cell alone.
+        ("l", _) | (" ", _) => step(Motion::Char { forward: true }, Reach::Exclusive),
+        ("h", _) => step(Motion::Char { forward: false }, Reach::Exclusive),
         ("j", _) => step(Motion::Line { down: true }, Reach::Linewise),
         ("k", _) => step(Motion::Line { down: false }, Reach::Linewise),
         ("G", _) => step(Motion::FileEnd, Reach::Linewise),
@@ -118,6 +123,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
 fn object(c: char, around: bool) -> Option<Motion> {
     let what = match c {
         'w' | 'W' => crate::motion::Object::Word,
+        'p' => crate::motion::Object::Paragraph,
         c => {
             let (open, close) = crate::editor::pair_for(c)?;
             crate::motion::Object::Pair { open, close }

@@ -41,6 +41,10 @@ impl Editor {
         // say the sentence when there is nothing to take.
         let what = match c {
             'w' => motion::Object::Word,
+            // helix has this one too (`mi p`, `commands.rs:6314`), and in a
+            // manuscript it is the handier of the two: a 段 is the unit a
+            // writer moves around, a word is the unit they fix.
+            'p' => motion::Object::Paragraph,
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
                 None => {
@@ -54,6 +58,8 @@ impl Editor {
             self.status = match what {
                 motion::Object::Word => say!("edit.no-word-here"),
                 motion::Object::Pair { open, close } => say!("edit.no-pair-around", open, close),
+                // 一段永遠在：光標停在空行上，那一段就是那幾個空行。
+                motion::Object::Paragraph => say!("edit.no-word-here"),
             };
             self.object_missed = true;
             return;
@@ -89,6 +95,58 @@ impl Editor {
             false => (start + 1, end.saturating_sub(1)),
         };
         motion::Span::Over { anchor, head: head.max(anchor) }
+    }
+
+    /// 光標底下那個**段落**（vim 的 `dip`／`dap`，B5 2026-09-21）。
+    ///
+    /// 一段是「上下都被空行夾着的那幾行」，而光標停在空行上時，那一段**就是
+    /// 那幾個空行**——vim 自己的規矩，也是 `dap` 在段與段之間按下去能把多餘的
+    /// 空行收掉的原因。
+    ///
+    /// `around` ＝ `ap`：再加它**下面**那一段空行；下面没有就取上面的。
+    /// ⚠️ 少了這一條，`dap` 會在原地留下一個洞——段落走了，夾着它的兩個空行併
+    /// 成一個更大的空當，而 `dap` 讀起來應該是「這一段整個不見了」。
+    ///
+    /// ⚠️ **整行，不是一段字符**——區間從頭一行的行首一直到末一行的**換行**，
+    /// 那個換行**在裏面**。helix 也是這樣（`textobject.rs` 末尾兩行：`anchor`
+    /// 與 `head` 都是 `line_to_char`，也就是行首到行首），而它是對的：少了那個
+    /// 換行，`mip` 之後按 `d` 會取走那幾行的正文卻把空行留下，原地多出一個洞。
+    fn paragraph_span(&self, around: bool) -> motion::Span {
+        let rope = self.current_buffer().rope();
+        let here = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let last = motion::last_line(rope);
+        let blank = |line: usize| rope.line(line).to_string().trim().is_empty();
+        let same = blank(here);
+        // 往兩頭走，走到「不是同一種行」爲止。
+        let mut first = here;
+        while first > 0 && blank(first - 1) == same {
+            first -= 1;
+        }
+        let mut end = here;
+        while end < last && blank(end + 1) == same {
+            end += 1;
+        }
+        if around {
+            // 下面那一段異類；没有就換上面那一段。
+            let mut after = end;
+            while after < last && blank(after + 1) != same {
+                after += 1;
+            }
+            match after > end {
+                true => end = after,
+                false => {
+                    while first > 0 && blank(first - 1) != same {
+                        first -= 1;
+                    }
+                }
+            }
+        }
+        // 末一行的換行本身；没有換行（檔尾没有空行結尾）就退到最後一個字。
+        let tail = match end < last {
+            true => rope.line_to_char(end + 1).saturating_sub(1),
+            false => motion::line_last(rope, rope.line_to_char(end)),
+        };
+        motion::Span::Over { anchor: rope.line_to_char(first), head: tail }
     }
 
     /// 光標底下那個**詞**（`mi w`／`ma w`，以及 vim 的 `ciw`／`daw`）。
@@ -614,6 +672,31 @@ impl Editor {
             motion::Motion::Sentence { forward: false } => {
                 motion::unit_back(rope, self.cursor, motion::prev_sentence)
             }
+            // **One character, and never off this line** — vim's `h`/`l`
+            // under an operator. The clamp is the point: `l` on a line's last
+            // character answers with that character, not with the newline.
+            motion::Motion::Char { forward } => {
+                let here = self.cursor;
+                match forward {
+                    // ⚠️ **Forward may stand still and still count.** `l` on a
+                    // line's last character cannot move, but `dl` there is
+                    // `x` and must take that character — the verb's range is
+                    // 「from here, one grapheme past the head」, so a head that
+                    // did not move is exactly one character.
+                    true => at(motion::next_grapheme(rope, here).min(motion::line_last(rope, here))),
+                    // …⚠️ **and backward may not.** A backward span runs from
+                    // the target up to the caret's own character, so a target
+                    // that did not move would be 「take the character behind
+                    // me」 when there is nothing behind: `dh` in column 0 must
+                    // do nothing, the way vim's fails.
+                    false => match motion::prev_grapheme(rope, here) {
+                        back if back >= here || back < motion::line_start(rope, here) => {
+                            motion::Span::Missed
+                        }
+                        back => at(back),
+                    },
+                }
+            }
             motion::Motion::Line { down } => {
                 let line = rope.char_to_line(self.cursor);
                 let last = rope.len_lines().saturating_sub(1);
@@ -630,6 +713,9 @@ impl Editor {
                 what: motion::Object::Pair { open, close },
                 around,
             } => self.pair_span(open, close, around),
+            motion::Motion::Object { what: motion::Object::Paragraph, around } => {
+                self.paragraph_span(around)
+            }
         }
     }
 
