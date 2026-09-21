@@ -305,10 +305,13 @@ pub fn char_at(
     // Which band the row fell in, then which 縱 of it the column fell in — or,
     // failing that, the nearest one to its right, since a click in a gap means
     // the 縱 beside it.
+    // A 縱 holding a long 縦中横 group reaches `overhang` cells past its own
+    // left edge, and those cells are its own — the page bought them for it.
+    let left = |p: &Placed| p.x.saturating_sub(p.overhang);
     let placed = page
         .iter()
-        .filter(|p| mouse.column >= p.x && mouse.row >= p.top)
-        .min_by_key(|p| (mouse.row - p.top, mouse.column - p.x))?;
+        .filter(|p| mouse.column >= left(p) && mouse.row >= p.top)
+        .min_by_key(|p| (mouse.row - p.top, mouse.column - left(p)))?;
     let slot = (mouse.row - placed.top) as usize;
     let start = buffer.rope().line_to_char(placed.zong.line);
     match placed.slots.get(slot) {
@@ -327,6 +330,13 @@ pub struct Placed {
     pub x: u16,
     /// The row its first slot is drawn on — which band it landed in.
     pub top: u16,
+    /// **How many cells this 縱 hangs past its own left edge** — what a 縦中横
+    /// group longer than a 字 costs, from [`zong::zong_overhang`].
+    ///
+    /// Carried for the same reason `margin_cells` is: the page paid for these
+    /// cells when it placed the 縱 to the left, and a click that lands in them
+    /// landed on *this* 縱.
+    pub overhang: u16,
     /// How many cells this 縱 bought to its right, from [`Metrics::ruby_cell`].
     ///
     /// **Carried rather than re-derived.** The renderer has to know whether the
@@ -485,6 +495,12 @@ fn layout_page(
     // widens the margin for all of them.
     let mut metrics = *metrics;
     metrics.ruby_width = ruby_width_of(&slots);
+    // What a long 縦中横 group hangs into the 行間, per 縱 — nothing at all
+    // unless a group is wider than the 字 it stands in.
+    let overhangs: Vec<u16> = slots
+        .iter()
+        .map(|rows| zong::zong_overhang(rows) as u16)
+        .collect();
     // Each band is laid out as its own short page: filled right to left, and
     // when it runs out of width the next one starts again at the right edge.
     // Which is all 段組 is — the reading order is the sequence, and the bands
@@ -492,7 +508,8 @@ fn layout_page(
     let mut spots: Vec<(u16, u16)> = Vec::new();
     for band in 0..metrics.bands {
         let top = area.y + band as u16 * metrics.band_height + metrics.head_rows;
-        let xs = place(&metrics, area, &margins[spots.len().min(margins.len())..]);
+        let from = spots.len().min(margins.len());
+        let xs = place(&metrics, area, &margins[from..], &overhangs[from..]);
         if xs.is_empty() {
             break;
         }
@@ -504,12 +521,14 @@ fn layout_page(
         .into_iter()
         .zip(slots)
         .zip(margins)
+        .zip(overhangs)
         .zip(spots)
-        .map(|(((zong, slots), margin), (x, top))| Placed {
+        .map(|((((zong, slots), margin), overhang), (x, top))| Placed {
             zong,
             slots,
             x,
             top,
+            overhang,
             margin_cells: metrics.ruby_cell(margin),
         })
         .collect()
@@ -519,20 +538,33 @@ fn layout_page(
 ///
 /// Positions are walked rather than computed, because a 縱's width is no longer
 /// the same for all of them: with the gap set to zero, one carrying a reading
-/// takes a cell more than one that does not.
-fn place(metrics: &Metrics, area: Rect, margins: &[Margin]) -> Vec<u16> {
+/// takes a cell more than one that does not, and one holding a long 縦中横
+/// group hangs past its own left edge.
+fn place(metrics: &Metrics, area: Rect, margins: &[Margin], overhangs: &[u16]) -> Vec<u16> {
+    let hang = |i: usize| overhangs.get(i).copied().unwrap_or(0);
     let mut xs: Vec<u16> = Vec::with_capacity(margins.len());
-    for &margin in margins {
+    for (i, &margin) in margins.iter().enumerate() {
         // A reading sits in the cell to the *right* of its own 縱, while the gap
         // sits *between* two — and they are the same cell. So one column apart
         // costs whichever is larger, and the rightmost 縱 pays for a reading
         // alone, since it has no neighbour to borrow the cell from.
+        //
+        // A long 縦中横 group in the 縱 to the **right** hangs into that same
+        // space, and is **added** to the reading rather than sharing it: the
+        // reading's cell belongs to the character it is written against, and a
+        // digit landing on it would rub out one or the other. Against the gap
+        // it is the larger that wins — the gap is air, and print lets the group
+        // stand in the 行間.
         let ruby = metrics.ruby_cell(margin);
         let x = match xs.last() {
             None => (area.x + area.width).checked_sub(SLOT_WIDTH + ruby),
-            Some(&previous) => previous.checked_sub(SLOT_WIDTH + metrics.gap.max(ruby)),
+            Some(&previous) => {
+                previous.checked_sub(SLOT_WIDTH + metrics.gap.max(ruby + hang(i - 1)))
+            }
         };
-        let Some(x) = x.filter(|&x| x >= area.x) else {
+        // Its own hang goes past its left edge, so that has to be on the page
+        // too — otherwise the leftmost 縱 would draw its group off the margin.
+        let Some(x) = x.filter(|&x| x >= area.x + hang(i)) else {
             break;
         };
         xs.push(x);
@@ -670,6 +702,35 @@ fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) 
     }
     if let Some(cell) = buf.cell_mut((x + 1, y)) {
         cell.set_symbol(symbol).set_style(style);
+    }
+}
+
+/// Paint a slot body of any width, hung against the 縱's **right** edge.
+///
+/// A 縦中横 group of three or more half-width characters is one row and wider
+/// than the 縱 it stands in, so it is drawn from the 縱's right edge *leftward*,
+/// into the cells the page bought for it when it placed the neighbour (see
+/// [`zong::zong_overhang`]). Hung right for the same reason a lone letter is:
+/// the group's last character lands on the 縱's own edge, so a column of them
+/// still reads as one edge running down beside the 漢字.
+///
+/// ⚠️ **Cell by cell, not one symbol into one cell.** To the renderer a cell
+/// holds one grapheme and the cells a wide glyph covers are skipped — writing
+/// `1997` into the cell at `x` would make the row four cells too long and walk
+/// everything after it off its 縱.
+fn put_slot_wide(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) {
+    let cells = str_width(symbol) as u16;
+    if cells <= SLOT_WIDTH {
+        return put_slot_right(buf, x, y, symbol, style);
+    }
+    let Some(mut at) = (x + SLOT_WIDTH).checked_sub(cells) else {
+        return;
+    };
+    for g in graphemes(symbol) {
+        if let Some(cell) = buf.cell_mut((at, y)) {
+            cell.set_symbol(g).set_style(style);
+        }
+        at += str_width(g).max(1) as u16;
     }
 }
 
@@ -1330,7 +1391,7 @@ pub fn draw(
                 };
                 match boxy {
                     true => put_slot(buf, x, y, &symbol, style),
-                    false => put_slot_right(buf, x, y, &symbol, style),
+                    false => put_slot_wide(buf, x, y, &symbol, style),
                 }
                 continue;
             }
@@ -1466,10 +1527,12 @@ pub fn draw(
             }
 
             // Hung right, so half-width characters line up as one edge running
-            // down the 縱 beside the 漢字 rather than drifting to its left.
+            // down the 縱 beside the 漢字 rather than drifting to its left — and
+            // a 縦中横 group too long for the 字 hangs out to the left from
+            // there, into the cells the page bought it.
             match boxy {
                 true => put_slot(buf, x, y, &symbol, style),
-                false => put_slot_right(buf, x, y, &symbol, style),
+                false => put_slot_wide(buf, x, y, &symbol, style),
             }
         }
     }
@@ -1511,6 +1574,24 @@ pub fn draw(
         }
     }
     if cursor_column < visible && editor.mode() != Mode::Insert {
+        // **A long 縦中横 group is one slot and the block covers all of it**
+        // (2026-09-21). The cursor stands on the group, not on its last two
+        // digits, and a block over `97` alone would say `1997` is two rows.
+        // The cells are already drawn and every one of them holds a character,
+        // so the style is patched over them rather than re-put.
+        let cells = at_cursor
+            .and_then(|p| p.slots.get(cursor_pos.slot))
+            .map_or(SLOT_WIDTH, |row| zong::slot_cells(&row.text) as u16);
+        if cells > SLOT_WIDTH {
+            let block = Style::default().add_modifier(Modifier::REVERSED);
+            let from = (cursor_x + SLOT_WIDTH).saturating_sub(cells);
+            for at in from..cursor_x + SLOT_WIDTH {
+                if let Some(cell) = buf.cell_mut((at, cursor_y)) {
+                    cell.set_style(block);
+                }
+            }
+            return (cursor_x, caret_y);
+        }
         // Normal: a solid block over the whole two-cell slot, keeping whatever
         // is under it — and keeping *where* it is. A half-width character hangs
         // against the slot's right edge, so reading only the left cell would

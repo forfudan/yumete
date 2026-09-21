@@ -33,7 +33,9 @@ use yumete_cjk::{grapheme_width, graphemes};
 // The layout choice and the typographic defaults are CJK typesetting facts, not
 // editor state, so they live in `yumete-cjk` and are re-exported here where the
 // rest of the core reaches for them.
-pub use yumete_cjk::vertical::{Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
+pub use yumete_cjk::vertical::{
+    Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, TATECHUYOKO_CLASSIC, TATECHUYOKO_MAX,
+};
 
 /// How a buffer is gridded into 縱.
 ///
@@ -118,13 +120,20 @@ pub struct Grid<'a> {
     /// back. `usize::MAX` for none.
     pub open_line: usize,
 
-    /// Whether a pair of half-width characters shares one slot (縦中横).
+    /// **How many half-width characters share one slot** (縦中横) — `0` for
+    /// none, and never more than [`TATECHUYOKO_MAX`].
     ///
-    /// Off by default. Turned sideways a pair reads as a syllable — `yume` set
+    /// Zero by default. Turned sideways a pair reads as a syllable — `yume` set
     /// as `yu` over `me` invites the eye to read two of them — and one character
     /// to a row, hung right, is what a reader of vertical text expects. It stays
     /// available because a two-digit year genuinely does read better packed.
-    pub tatechuyoko: bool,
+    ///
+    /// **A count, not a switch** (2026-09-21: 「對於比較短的單詞和數字，把他們
+    /// 直接 inline 顯示，撐大縱距似乎也是可行的」). Two is what fits the grid;
+    /// a longer group is set in one row all the same and hangs out into the
+    /// 行間, which is what print does with a three- or four-digit one. See
+    /// [`TATECHUYOKO_MAX`] for where it stops and why.
+    pub tatechuyoko: usize,
     /// How many empty squares open a paragraph (首行縮進).
     ///
     /// A Chinese paragraph is marked by an indent of two 字, not by a blank
@@ -216,7 +225,7 @@ impl<'a> Grid<'a> {
             readings: true,
             hanging: false,
             sentences: false,
-            tatechuyoko: false,
+            tatechuyoko: 0,
             hidden: NOTHING_HIDDEN,
             folded: NOTHING_FOLDED,
             table: NOTHING_TURNED,
@@ -267,11 +276,11 @@ impl<'a> Grid<'a> {
         }
     }
 
-    /// The same grid, packing half-width pairs into one slot.
-
-    pub fn with_tatechuyoko(self, on: bool) -> Grid<'a> {
+    /// The same grid, packing runs of up to `at_most` half-width characters
+    /// into one slot. `0` packs nothing; more than [`TATECHUYOKO_MAX`] is that.
+    pub fn with_tatechuyoko(self, at_most: usize) -> Grid<'a> {
         Grid {
-            tatechuyoko: on,
+            tatechuyoko: at_most.min(TATECHUYOKO_MAX),
             ..self
         }
     }
@@ -369,14 +378,6 @@ fn line_text(rope: &Rope, line: usize) -> String {
     }
     text
 }
-
-/// The longest run of half-width characters that will be set 縦中横 — turned a
-/// quarter turn and packed sideways into a single slot.
-///
-/// Two, because a slot is two cells and each half-width character takes one.
-/// This is what makes 「第<b>12</b>章」 read as a number rather than a stack of
-/// loose digits, and it is why the vertical layout can show a year at all.
-const TATECHUYOKO: usize = 2;
 
 /// One row of a 縱: what it draws, and which characters it stands for.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -976,15 +977,20 @@ fn rotate(body: &str) -> String {
 
 /// The char offset of every **slot** boundary in `text`, including the end.
 ///
-/// A slot is one row of a 縱. Usually it holds one grapheme, but a short run of
-/// half-width characters is packed into one slot 縦中横-style — see
-/// [`TATECHUYOKO`]. Everything else in this module is defined in terms of these
-/// offsets, so packing here is what makes the cursor, the wrap length, motion
-/// and the renderer all agree that `12` is one row.
+/// A slot is one row of a 縱. Usually it holds one grapheme, but a run of up to
+/// `at_most` half-width characters is packed into one slot 縦中横-style — see
+/// [`TATECHUYOKO_MAX`]. Everything else in this module is defined in terms of
+/// these offsets, so packing here is what makes the cursor, the wrap length,
+/// motion and the renderer all agree that `12` is one row.
+///
+/// ⚠️ **A packed slot is one row, not one square.** Two half-width characters
+/// are exactly the 縱's own width; a longer group is still one row and is then
+/// *wider* than the 縱, which the renderer pays for out of the 行間. So a slot's
+/// width is [`slot_cells`], never two.
 ///
 /// The result always has at least one element, so `offsets.len() - 1` is the
 /// slot count and `offsets[i]` is where slot `i` begins.
-fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
+fn slot_offsets(text: &str, at_most: usize) -> Vec<usize> {
     let all: Vec<&str> = graphemes(text).collect();
     let mut offsets = Vec::with_capacity(all.len() + 1);
     let mut chars = 0usize;
@@ -994,8 +1000,14 @@ fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
     // numbers and short Latin, and packing a comma in beside a letter would
     // only look like a mistake.
     let narrow = |g: &str| grapheme_width(g) == 1 && g.chars().all(char::is_alphanumeric);
+    // One character is no group: 「pack a run of one」 is what the page already
+    // does, so anything under two is off.
+    let at_most = match at_most >= TATECHUYOKO_CLASSIC {
+        true => at_most.min(TATECHUYOKO_MAX),
+        false => 0,
+    };
     while i < all.len() {
-        if !tatechuyoko || !narrow(all[i]) {
+        if at_most == 0 || !narrow(all[i]) {
             offsets.push(chars);
             chars += all[i].chars().count();
             i += 1;
@@ -1003,13 +1015,15 @@ fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
         }
         // **The whole run, or none of it.** Filling one slot and spilling the
         // rest turned 「1997」 into 「19」 and 「97」 stacked — two numbers, read
-        // as two numbers. A run that will not fit is set the way a Japanese
-        // book sets a long number in a 縱: one digit to a slot, straight up.
+        // as two numbers. A run longer than the setting allows is set the way a
+        // Japanese book sets a long number in a 縱: one digit to a slot,
+        // straight up — which is what print falls back to when it cannot rotate
+        // the run, and a terminal can never rotate one.
         let mut run = i;
         while run < all.len() && narrow(all[run]) {
             run += 1;
         }
-        let pack = run - i <= TATECHUYOKO;
+        let pack = run - i <= at_most;
         offsets.push(chars);
         for g in &all[i..run] {
             if !pack && chars > offsets[offsets.len() - 1] {
@@ -1686,8 +1700,8 @@ pub fn zong_index(zongs: &[Zong], pos: usize) -> usize {
 /// Takes the one setting it uses rather than a whole [`Grid`]: it used to take
 /// the page and read only `tatechuyoko` from it, which is API that contradicts
 /// the value it is handed — the same thing `line_slots` was renamed for.
-pub fn slot_text(text: &str, tatechuyoko: bool) -> Vec<String> {
-    let offsets = slot_offsets(text, tatechuyoko);
+pub fn slot_text(text: &str, at_most: usize) -> Vec<String> {
+    let offsets = slot_offsets(text, at_most);
     let chars: Vec<char> = text.chars().collect();
     offsets
         .windows(2)
@@ -1701,8 +1715,36 @@ pub fn slot_text(text: &str, tatechuyoko: bool) -> Vec<String> {
         .collect()
 }
 
-/// How many cells one slot of a 縱 occupies.
-const SLOT_CELLS: usize = 2;
+/// How many cells a 縱 is wide: a full-width character, and the grid is built
+/// on it.
+pub const SLOT_CELLS: usize = 2;
+
+/// How many cells one slot **draws in**, which is [`SLOT_CELLS`] for everything
+/// but a long 縦中横 group.
+///
+/// A group of three or four half-width characters is one row and three or four
+/// cells across, so it hangs out of its own 縱 — see [`zong_overhang`], which is
+/// what the page pays for it. Asked of the drawn body rather than of the
+/// characters behind it: the body is what is on the screen, and 句讀 have
+/// already been rotated into it.
+pub fn slot_cells(text: &str) -> usize {
+    yumete_cjk::str_width(text).max(SLOT_CELLS)
+}
+
+/// How far the widest slot of `slots` hangs past its own 縱, in cells.
+///
+/// **The 縱 buys them for itself**, exactly as a 縱 carrying a reading buys the
+/// lane beside it: the cells come out of the 行間, and only the 縱 that has a
+/// long group in it pays. Both pages ask this — the terminal in `place`, the
+/// plain-text one in [`render_page`] — so the two cannot disagree about where a
+/// column stands.
+pub fn zong_overhang(slots: &[Slot]) -> usize {
+    slots
+        .iter()
+        .map(|s| slot_cells(&s.text) - SLOT_CELLS)
+        .max()
+        .unwrap_or(0)
+}
 
 /// Render the whole buffer as a plain-text vertical page: a grid of lines,
 /// each holding one slot from every 縱, with the 縱 running right to left.
@@ -1722,7 +1764,7 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
     // Every 縱's slots, top to bottom; the page is then read across.
     // Each 縱 contributes its bodies and, beside them, its readings — the same
     // two columns the terminal draws.
-    let columns: Vec<(Vec<String>, Vec<Option<char>>)> = zongs
+    let columns: Vec<(Vec<String>, Vec<Option<char>>, usize)> = zongs
         .iter()
         .map(|z| {
             let rows = zong_slots(rope, z, grid);
@@ -1730,6 +1772,7 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
                 rows.iter().map(|s| s.text.clone()).collect(),
                 // A hung mark shares the margin with a reading and wins it.
                 rows.iter().map(|s| s.mark.or(s.ruby)).collect(),
+                zong_overhang(&rows),
             )
         })
         .collect();
@@ -1739,20 +1782,36 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
     // margin, and with the gap set to zero it sits flush against its neighbour.
     let margins: Vec<usize> = columns
         .iter()
-        .map(|(_, margin)| usize::from(margin.iter().any(Option::is_some)))
+        .map(|(_, margin, _)| usize::from(margin.iter().any(Option::is_some)))
         .collect();
+    // What a long 縦中横 group hangs into the 行間, per 縱 — the same number the
+    // terminal's `place` walks with. 縱 `i` hangs to its **left**, which is the
+    // space between it and 縱 `i + 1`, so that space is what has to be widened.
+    let overhang: Vec<usize> = columns.iter().map(|&(_, _, over)| over).collect();
+    // The leftmost 縱 has no neighbour to take the cells from, so the page
+    // itself opens that far in. Every row, or the rows would not line up.
+    let lead = overhang.last().copied().unwrap_or(0);
 
     (0..rows)
         .map(|row| {
-            let mut line = String::new();
+            let mut line = " ".repeat(lead);
             // 縱 0 is the rightmost, so the page is written in reverse order.
-            for (i, (bodies, margin)) in columns.iter().enumerate().rev() {
+            for (i, (bodies, margin, _)) in columns.iter().enumerate().rev() {
                 match bodies.get(row) {
                     // Pad a short grapheme out to the full slot so the columns
                     // stay aligned. An *empty* body — a mark-only row, or a row
                     // of a ruby group's padding — is two cells of nothing, not
                     // one; padding it to one walked the rest of the row left.
                     Some(g) => {
+                        // A long 縦中横 group is wider than the 縱 and is hung
+                        // by its **right** edge, so it takes back the cells
+                        // reserved for it just before this 縱 was written.
+                        // They are blank by construction: the region below is
+                        // sized to hold the reading *and* the overhang, and the
+                        // reading is written against its own 縱's edge.
+                        for _ in SLOT_CELLS..yumete_cjk::str_width(g) {
+                            line.pop();
+                        }
                         line.push_str(g);
                         for _ in yumete_cjk::str_width(g)..SLOT_CELLS {
                             line.push(' ');
@@ -1763,8 +1822,11 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
                 // The margin sits to the *right* of its base — after it in the
                 // written line — and it *is* the gap rather than sitting beside
                 // one: two 縱 are `max(gap, margin)` apart, which is how the
-                // terminal places them.
-                let region = gap.max(margins[i]);
+                // terminal places them. A neighbour hanging into the same space
+                // is added to the reading rather than shared with it: the
+                // reading's cell belongs to the character it is written over.
+                let hang = i.checked_sub(1).map_or(0, |left| overhang[left]);
+                let region = gap.max(margins[i] + hang);
                 for cell in 0..region {
                     let glyph = margin.get(row).copied().flatten();
                     match (cell, glyph) {
@@ -1800,7 +1862,7 @@ mod tests {
         readings: true,
         hanging: false,
         sentences: false,
-        tatechuyoko: false,
+        tatechuyoko: 0,
         hidden: NOTHING_HIDDEN,
         folded: NOTHING_FOLDED,
         table: NOTHING_TURNED,
@@ -1815,9 +1877,15 @@ mod tests {
         ..G
     };
 
-    /// Half-width pairs packed, for the 縦中横 tests.
+    /// Half-width pairs packed at the classic setting, for the 縦中横 tests.
     const PACKED: Grid = Grid {
-        tatechuyoko: true,
+        tatechuyoko: TATECHUYOKO_CLASSIC,
+        ..G
+    };
+
+    /// Packed as far as yumete will go, where a group hangs into the 行間.
+    const PACKED_LONG: Grid = Grid {
+        tatechuyoko: TATECHUYOKO_MAX,
         ..G
     };
 
@@ -2249,6 +2317,39 @@ mod tests {
         assert_eq!(render_page(&rope("上下\n"), G, 1), vec!["上", "下"]);
     }
 
+    /// A 縦中横 group wider than the 字 is one row, and the page opens the
+    /// 行間 for it rather than letting it land on the 縱 beside it
+    /// (2026-09-21).
+    #[test]
+    fn render_page_opens_the_gap_for_a_long_group() {
+        let r = rope("第1997章\n甲乙");
+        let page = render_page(&r, PACKED_LONG, 0);
+        // 甲乙 is the second paragraph, so it stands to the **left**, and it
+        // stands two cells further off than a bare 字 would: those two cells
+        // are what `1997` hangs into.
+        assert_eq!(
+            page,
+            vec![
+                "甲  第".to_string(),
+                "乙1997".to_string(),
+                "    章".to_string(),
+            ]
+        );
+        // The overhang is the whole of the difference: with the group packed
+        // two at a time there is nothing to hang and the columns are flush.
+        assert_eq!(
+            render_page(&r, PACKED, 0),
+            vec![
+                "甲第".to_string(),
+                "乙1".to_string(),
+                "  9".to_string(),
+                "  9".to_string(),
+                "  7".to_string(),
+                "  章".to_string(),
+            ]
+        );
+    }
+
     #[test]
     fn render_page_rotates_punctuation() {
         let r = rope("「甲」。");
@@ -2396,7 +2497,7 @@ mod tests {
         let r = rope("第12章");
         let zongs = layout(&r, PACKED);
         assert_eq!(zongs[0].slots, 3, "第 / 12 / 章");
-        assert_eq!(slot_text("第12章", true), ["第", "12", "章"]);
+        assert_eq!(slot_text("第12章", TATECHUYOKO_CLASSIC), ["第", "12", "章"]);
 
         // The cursor agrees: the character after the pair is slot 2, not 3.
         assert_eq!(position(&r, 1, PACKED).slot, 1, "on the 1");
@@ -2408,8 +2509,10 @@ mod tests {
     fn packing_is_off_by_default() {
         // One letter to a row: turned sideways a pair reads as a syllable that
         // is not there.
-        assert_eq!(slot_text("yume", false), ["y", "u", "m", "e"]);
-        assert_eq!(slot_text("第12章", false), ["第", "1", "2", "章"]);
+        assert_eq!(slot_text("yume", 0), ["y", "u", "m", "e"]);
+        assert_eq!(slot_text("第12章", 0), ["第", "1", "2", "章"]);
+        // One is no group either: a lone letter already has its own row.
+        assert_eq!(slot_text("第12章", 1), ["第", "1", "2", "章"]);
     }
 
     #[test]
@@ -2418,12 +2521,19 @@ mod tests {
         // into 「20」 over 「26」 — two numbers, and read as two numbers. A run
         // that will not fit is set the way a Japanese book sets a long number
         // in a 縱: one character to a slot, straight up.
-        assert_eq!(slot_text("2026年", true), ["2", "0", "2", "6", "年"]);
-        assert_eq!(slot_text("abcde", true), ["a", "b", "c", "d", "e"]);
+        let two = TATECHUYOKO_CLASSIC;
+        assert_eq!(slot_text("2026年", two), ["2", "0", "2", "6", "年"]);
+        assert_eq!(slot_text("abcde", two), ["a", "b", "c", "d", "e"]);
         // A run that *does* fit still packs, which is the whole point: 第12章
         // reads as a number rather than a stack of loose digits.
-        assert_eq!(slot_text("第12章", true), ["第", "12", "章"]);
-        assert_eq!(slot_text("第7章", true), ["第", "7", "章"]);
+        assert_eq!(slot_text("第12章", two), ["第", "12", "章"]);
+        assert_eq!(slot_text("第7章", two), ["第", "7", "章"]);
+        // ⚠️ **The limit is a count of characters, not of 字.** Raise it and
+        // the very same run is one row — 「2026」 four cells across, hanging
+        // out of a 縱 two cells wide.
+        assert_eq!(slot_text("2026年", 4), ["2026", "年"]);
+        assert_eq!(slot_text("abcde", 4), ["a", "b", "c", "d", "e"]);
+        assert_eq!(slot_text("abcde", 5), ["abcde"]);
     }
 
     /// A 句讀 mark stops being a row of its own and hangs beside the character
@@ -2747,7 +2857,13 @@ mod tests {
             Grid { hanging: true, ..RUBY },
             Grid {
                 hanging: true,
-                tatechuyoko: true,
+                tatechuyoko: TATECHUYOKO_CLASSIC,
+                indent: 2,
+                ..RUBY
+            },
+            Grid {
+                hanging: true,
+                tatechuyoko: TATECHUYOKO_MAX,
                 indent: 2,
                 ..RUBY
             },

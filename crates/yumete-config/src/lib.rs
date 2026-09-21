@@ -20,7 +20,10 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-pub use yumete_cjk::{KeyPreset, Layout, Margin, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
+pub use yumete_cjk::{
+    KeyPreset, Layout, Margin, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, TATECHUYOKO_CLASSIC,
+    TATECHUYOKO_MAX,
+};
 
 /// How line numbers are displayed in the gutter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -204,9 +207,12 @@ pub struct EditorConfig {
     /// because a novel's own names are in nobody's 異體字表 and are exactly
     /// what a manuscript slips on over a year.
     pub usage_groups: Vec<String>,
-    /// Whether a pair of half-width characters shares one slot in vertical
-    /// layout (縦中横). Off by default: one letter to a row, hung right.
-    pub tatechuyoko: bool,
+    /// **How many half-width characters share one slot in vertical layout**
+    /// (縦中横). `0` (the default) is one letter to a row, hung right;
+    /// [`TATECHUYOKO_CLASSIC`] is what fits the grid, and up to
+    /// [`TATECHUYOKO_MAX`] hangs out into the 行間. Anything above that is
+    /// clamped, and `1` is no group at all and reads as `0`.
+    pub tatechuyoko: usize,
     /// Whether code in a fence is coloured by its own grammar (#420). On by
     /// default; `:view-code` toggles.
     pub code_highlight: bool,
@@ -396,7 +402,7 @@ impl Default for EditorConfig {
             show_ruby: false,
             ruby_dialects: Vec::new(),
             usage_groups: Vec::new(),
-            tatechuyoko: false,
+            tatechuyoko: 0,
             code_highlight: true,
             hanging_punctuation: false,
             soft_wrap: true,
@@ -1881,6 +1887,17 @@ impl Config {
             );
         }
 
+        // …and a setting that changed **shape** is said out loud too.
+        // `tatechuyoko` was a switch until 2026-09-21 and is a count now, and
+        // the old value is not taken: 「on」 no longer says how many half-width
+        // characters share the slot, and guessing two for it would quietly make
+        // that decision for a reader who asked for a longer group.
+        if let Some(RawTatechuyoko::Switch(on)) = raw.editor.tatechuyoko {
+            problems.push(format!(
+                "tatechuyoko = {on} 現在要寫成一個數——一格裝幾個半角字，{TATECHUYOKO_CLASSIC} 是老辦法，最多 {TATECHUYOKO_MAX}，0 是關"
+            ));
+        }
+
         // The three 上屏方式 are yume's, and the list is short enough to check
         // here — a misspelt one is otherwise a setting that silently does
         // nothing, which is the failure this whole function exists to end.
@@ -2377,6 +2394,21 @@ pub fn local_config_path(start: &Path) -> Option<PathBuf> {
 
 // ---- Raw (as-parsed) config with per-field merge -------------------------
 
+/// `[editor] tatechuyoko`, as the file spells it.
+///
+/// **Two shapes, one of them refused** (2026-09-21). It was a `bool` and is a
+/// count now, and a `bool` is still *parsed* so that a config still holding the
+/// old spelling loses that one line rather than failing to parse at all —
+/// every other setting in the file has nothing to do with this one. The old
+/// value is then dropped and named; it is not read as two, because 「on」 never
+/// said how many.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(untagged)]
+enum RawTatechuyoko {
+    Count(usize),
+    Switch(bool),
+}
+
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 struct RawConfig {
@@ -2501,7 +2533,7 @@ struct RawEditor {
     show_ruby: Option<bool>,
     ruby_dialects: Option<Vec<String>>,
     usage_groups: Option<Vec<String>>,
-    tatechuyoko: Option<bool>,
+    tatechuyoko: Option<RawTatechuyoko>,
     code_highlight: Option<bool>,
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
@@ -2923,8 +2955,11 @@ impl RawConfig {
         if let Some(groups) = self.editor.usage_groups {
             config.editor.usage_groups = groups;
         }
-        if let Some(on) = self.editor.tatechuyoko {
-            config.editor.tatechuyoko = on;
+        if let Some(RawTatechuyoko::Count(at_most)) = self.editor.tatechuyoko {
+            config.editor.tatechuyoko = match at_most >= TATECHUYOKO_CLASSIC {
+                true => at_most.min(TATECHUYOKO_MAX),
+                false => 0,
+            };
         }
         if let Some(on) = self.editor.code_highlight {
             config.editor.code_highlight = on;
@@ -3582,6 +3617,30 @@ mod tests {
         assert_eq!(c.editor.layout, Layout::Horizontal);
         assert_eq!(c.editor.zong_length, 64);
         assert_eq!(c.editor.zong_gap, 4);
+    }
+
+    /// 縦中横 is a count now (2026-09-21), and the count is clamped at both
+    /// ends: one is no group, and past [`TATECHUYOKO_MAX`] the group would
+    /// hang further into the 行間 than the 行間 is wide.
+    #[test]
+    fn tatechuyoko_is_a_count_and_it_is_clamped() {
+        assert_eq!(Config::from_toml("").editor.tatechuyoko, 0, "出廠關着");
+        let of = |n: &str| {
+            Config::from_toml(&format!("[editor]\ntatechuyoko = {n}\n"))
+                .editor
+                .tatechuyoko
+        };
+        assert_eq!(of("0"), 0);
+        assert_eq!(of("1"), 0, "一個字本來就有自己的一行");
+        assert_eq!(of("2"), TATECHUYOKO_CLASSIC);
+        assert_eq!(of("4"), 4);
+        assert_eq!(of("99"), TATECHUYOKO_MAX);
+
+        // The old spelling is refused rather than read as two — and the rest
+        // of the file still loads, which is why the `bool` is parsed at all.
+        let stale = Config::from_toml("[editor]\ntatechuyoko = true\nzong_gap = 2\n");
+        assert_eq!(stale.editor.tatechuyoko, 0);
+        assert_eq!(stale.editor.zong_gap, 2, "同一個檔裏別的設定照樣進來");
     }
 
     #[test]
