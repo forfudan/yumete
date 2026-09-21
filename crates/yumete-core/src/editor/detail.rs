@@ -230,6 +230,13 @@ impl Editor {
             if self.follow_wiki() {
                 return;
             }
+            // **代碼檔上，這個問題歸語言服務器**（#53 ②，2026-09-21）。前面那
+            // 三種——腳注、鏈接、百科名——是稿子裏的「定義」，而一份 `.rs` 裏一
+            // 個都不會有；`gd` 問的還是同一句話（「這個東西寫在哪」），只是這一
+            // 次答得出來的是別人。
+            if self.ask_where_this_is_written() {
+                return;
+            }
             // ⚠️ **And on ordinary writing it does nothing** (#454). It used to
             // fall through here too — a whole-document search for whatever the
             // cursor happened to be on — so `gd` in the middle of a paragraph

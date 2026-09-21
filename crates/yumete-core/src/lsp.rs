@@ -92,10 +92,16 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// deliberately thin: this step wants `publishDiagnostics` and nothing else,
 /// and a server told we can render markdown hovers will spend work making
 /// them.
+///
+/// ⚠️ **`synchronization.didSave` is not a nicety.** A server that runs a real
+/// compiler (rust-analyzer's `cargo check`) only re-runs it when the file is
+/// saved, and a client that never claims to send saves is never sent one.
+/// Without this line, an error stays on the screen after the line that caused
+/// it is deleted — 「我把錯的行刪了，錯誤信息還在」（2026-09-21）。
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -133,6 +139,36 @@ pub fn did_change(path: &Path, version: i64, text: &str) -> String {
     )
 }
 
+/// `textDocument/definition` — 「where is this thing written?」 (#53 ②).
+///
+/// ⚠️ **The column is in UTF-16 code units**, like every position on this
+/// wire. [`crate::problem::utf16_column`] turns a character offset into one,
+/// and it needs the line's text to do it.
+pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/definition","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `textDocument/didSave` — 「這一份落盤了」。
+///
+/// ⚠️ **This is what re-runs the compiler.** rust-analyzer's own analysis
+/// follows every `didChange`, but its `cargo check` — where 「cannot find
+/// value ... in this scope」 comes from, the ones marked `(rustc)` — waits for
+/// a save. No save, no new answer, and the old one stays on a line that is not
+/// there any more.
+///
+/// The text is not sent: the server already has it from [`did_change`], and a
+/// server that wants it back says so in `save.includeText`, which nothing here
+/// claims.
+pub fn did_save(path: &Path) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didSave","params":{{"textDocument":{{"uri":{uri}}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
 /// `textDocument/didClose` — stop watching this one.
 pub fn did_close(path: &Path) -> String {
     format!(
@@ -153,6 +189,16 @@ pub fn exit() -> String {
 
 // ---- What we hear ---------------------------------------------------------
 
+/// One place a server pointed at — a file and a position in it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Place {
+    pub path: PathBuf,
+    pub line: usize,
+    /// ⚠️ In **UTF-16 code units**, as it arrived; see
+    /// [`crate::problem::Problem::utf16_column`].
+    pub utf16_column: usize,
+}
+
 /// What a message from the server turned out to be.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Notice {
@@ -166,6 +212,13 @@ pub enum Notice {
     /// stall a server** — `rust-analyzer` waits on its own registration — so
     /// the id comes back out to be answered with an empty result.
     Asked { id: i64 },
+    /// **The answer to something we asked**, with the id that says which.
+    ///
+    /// ⚠️ **Typed, not raw JSON.** Only the front end knows which id it sent
+    /// for what, so the id comes back untouched — but the *shape* of the
+    /// answer is this crate's business, and a `serde_json::Value` crossing the
+    /// boundary would make it everybody's.
+    Answer { id: i64, places: Vec<Place> },
     /// Anything else: progress, logs, an answer nobody is waiting for.
     Nothing,
 }
@@ -186,7 +239,40 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
         (Some("textDocument/publishDiagnostics"), _) => said(&value),
         // A request from the server: it has both a method *and* an id.
         (Some(_), Some(id)) => Notice::Asked { id },
+        // An answer to something we sent: an id and no method.
+        (None, Some(id)) => Notice::Answer { id, places: places(value.get("result")) },
         _ => Notice::Nothing,
+    }
+}
+
+/// The places in a `textDocument/definition` answer.
+///
+/// ⚠️ **Three shapes, all of them legal.** The specification lets a server
+/// answer with one `Location`, an array of them, or an array of
+/// `LocationLink` (which spells the range `targetSelectionRange` instead) —
+/// and servers really do differ: `rust-analyzer` sends `LocationLink`, others
+/// send a bare `Location`. Reading only one shape works until the day somebody
+/// uses the other server.
+fn places(result: Option<&serde_json::Value>) -> Vec<Place> {
+    let one = |value: &serde_json::Value| -> Option<Place> {
+        // `LocationLink` names the file `targetUri` and the spot
+        // `targetSelectionRange`; `Location` calls them `uri` and `range`.
+        let uri = value.get("uri").or_else(|| value.get("targetUri"))?.as_str()?;
+        let range = value
+            .get("range")
+            .or_else(|| value.get("targetSelectionRange"))
+            .or_else(|| value.get("targetRange"))?;
+        let at = range.get("start")?;
+        Some(Place {
+            path: path_of(uri)?,
+            line: at.get("line")?.as_u64()? as usize,
+            utf16_column: at.get("character").and_then(|c| c.as_u64()).unwrap_or(0) as usize,
+        })
+    };
+    match result {
+        None | Some(serde_json::Value::Null) => Vec::new(),
+        Some(serde_json::Value::Array(many)) => many.iter().filter_map(one).collect(),
+        Some(value) => one(value).into_iter().collect(),
     }
 }
 
@@ -401,8 +487,13 @@ mod tests {
     #[test]
     fn the_answer_to_initialize_is_the_handshake_and_a_server_request_is_not() {
         assert_eq!(read(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, 1), Notice::Ready);
-        // Somebody else's answer is nobody's business.
-        assert_eq!(read(r#"{"jsonrpc":"2.0","id":7,"result":{}}"#, 1), Notice::Nothing);
+        // ⚠️ **Every other answer comes back with its id** (#53 ②), because
+        // only the front end knows which id it sent for what. It used to be
+        // dropped here as 「nobody's business」; now `gd` has business.
+        assert_eq!(
+            read(r#"{"jsonrpc":"2.0","id":7,"result":{}}"#, 1),
+            Notice::Answer { id: 7, places: Vec::new() }
+        );
         // A *request* from the server has a method as well as an id, and must
         // be answered or the server may wait on it forever.
         assert_eq!(
@@ -418,6 +509,36 @@ mod tests {
         assert_eq!(read("not json at all", 1), Notice::Nothing);
         assert_eq!(read("", 1), Notice::Nothing);
         assert_eq!(read("[]", 1), Notice::Nothing);
+    }
+
+    /// **三種回答都合法，而服務器真的不一樣**（#53 ②）。
+    ///
+    /// 規範允許一個 `Location`、一串 `Location`、或者一串 `LocationLink`（它把
+    /// 範圍叫 `targetSelectionRange`）。`rust-analyzer` 送的是第三種——只認一
+    /// 種，能用到換服務器那天爲止。
+    #[test]
+    fn a_definition_answers_in_three_shapes_and_all_of_them_are_read() {
+        let here = |m: &str| match read(m, 1) {
+            Notice::Answer { places, .. } => places,
+            other => panic!("是一條回答：{other:?}"),
+        };
+        let want = Place { path: PathBuf::from("/a.rs"), line: 3, utf16_column: 7 };
+
+        // 一個 Location。
+        let one = r#"{"id":2,"result":{"uri":"file:///a.rs","range":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}}"#;
+        assert_eq!(here(one), [want.clone()]);
+
+        // 一串 Location。
+        let many = r#"{"id":2,"result":[{"uri":"file:///a.rs","range":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}]}"#;
+        assert_eq!(here(many), [want.clone()]);
+
+        // 一串 LocationLink——rust-analyzer 送的這一種。
+        let links = r#"{"id":2,"result":[{"targetUri":"file:///a.rs","targetRange":{"start":{"line":1,"character":0},"end":{"line":9,"character":1}},"targetSelectionRange":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}]}"#;
+        assert_eq!(here(links), [want], "⚠️ 取的是 targetSelectionRange，不是整段");
+
+        // 說不出來的時候是 `null`，不是錯。
+        assert_eq!(here(r#"{"id":2,"result":null}"#), []);
+        assert_eq!(here(r#"{"id":2,"result":[]}"#), []);
     }
 
     /// ⚠️ 這個編輯器自己的測試檔就叫「第一章.md」。A URI that does not escape

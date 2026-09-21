@@ -1741,6 +1741,14 @@ pub struct Editor {
     screenshot_request: Option<ShotJob>,
     /// A character whose 字料 the front end has not looked up yet (#215).
     dictionary_query: Option<char>,
+    /// **`gd` 在代碼檔上問出去的那一句**（#53 ②，2026-09-21）——檔、行、列。
+    ///
+    /// 和字典那一問同一個形狀（#215）：編輯器不握有答案，服務器纔有，而只有前端
+    /// 跟服務器說得上話。所以問題停在這裏，前端下一趟循環取走、發出去，答案回來
+    /// 時叫 [`Editor::go_to_definition`]。
+    ///
+    /// ⚠️ **列是 UTF-16 碼元**，因爲那是問出去的那一頭要的單位。
+    definition_query: Option<(PathBuf, usize, usize)>,
     /// The character the 字典 panel is about, and the answer if one has come.
     ///
     /// Three states, because three things can be true. `None`: nobody has
@@ -2466,6 +2474,7 @@ impl Editor {
             definition_preview: false,
             screenshot_request: None,
             dictionary_query: None,
+            definition_query: None,
             dictionary: None,
             other: None,
             live_pane: 0,
