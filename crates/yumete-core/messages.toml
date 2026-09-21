@@ -5999,6 +5999,13 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
+# 語言服務器刚起來，還在讀整個項目（只說這一次）
+key = "lsp.reading"
+zht = "{0} 正在讀這個項目……第一次要等一會"
+zhs = "{0} 正在读这个项目……第一次要等一会"
+en = "{0} is reading the project… the first time takes a moment"
+
+[[message]]
 # 語言服務器死了
 key = "lsp.stopped"
 zht = "{0} 的語言服務器停了——它說過的都不再算數，下一個檔會重新起一個"
@@ -6384,6 +6391,13 @@ key = "problem.warn"
 zht = "警告"
 zhs = "警告"
 en = "warning"
+
+[[message]]
+# 診斷浮框脚下那一行：怎麽看全部
+key = "problem.whole-list"
+zht = ":check-code 看全部"
+zhs = ":check-code 看全部"
+en = ":check-code lists them all"
 
 
 # ── progress ──────────────────────────────────────────────────────────

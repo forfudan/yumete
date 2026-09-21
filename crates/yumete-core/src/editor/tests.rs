@@ -15287,6 +15287,62 @@ fn a_paragraph_is_a_text_object_in_both_presets() {
     assert_eq!(ed.current_buffer().text(), "甲\n乙\n");
 }
 
+/// **光標這一行上，服務器說的話**（2026-09-21）。
+///
+/// 2026-09-21：「如何查看 error 和 warning 的 message？比如這一行是紅的，我該怎
+/// 麽知道它是什麽錯？」號碼旁邊那一格只說得出有多響，說不出是什麽——這一支是浮
+/// 框要畫的那一條。
+#[test]
+fn the_line_the_cursor_is_on_says_what_the_server_said() {
+    use crate::problem::{Problem, Severity};
+    let said = |line: usize, severity: Severity, message: &str, who: Option<&str>| Problem {
+        line,
+        utf16_column: 0,
+        severity,
+        message: message.to_string(),
+        source: who.map(str::to_string),
+    };
+    let dir = std::env::temp_dir().join(format!("yumete-here-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("a.rs");
+    std::fs::write(&path, "one
+two
+three
+").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    ed.set_problems(
+        path,
+        vec![
+            said(1, Severity::Hint, "有個 count 長得像", Some("rust-analyzer")),
+            said(1, Severity::Error, "找不到 conut", Some("rustc")),
+            said(2, Severity::Warn, "没人用過", None),
+        ],
+    );
+
+    // 第 1 行（0 起算）没話說。
+    press(&mut ed, "gg");
+    assert_eq!(ed.problem_here(), None);
+
+    // 第 2 行有兩句——⚠️ **最響的先說**，另一句跟在下面。只給前一句等於把最有用
+    // 的那半截藏起來。
+    press(&mut ed, "j");
+    let (severity, body) = ed.problem_here().expect("這一行有話");
+    assert_eq!(severity, Severity::Error, "兩句裏最響的那一檔");
+    assert_eq!(
+        body,
+        ["找不到 conut（rustc）", "有個 count 長得像（rust-analyzer）"],
+        "誰說的寫在括號裏——同一行上 rustc 和 clippy 各說一句時，那是唯一的線索"
+    );
+
+    // 没說是誰說的，就不寫那個括號。
+    press(&mut ed, "j");
+    let (severity, body) = ed.problem_here().expect("這一行也有");
+    assert_eq!(severity, Severity::Warn);
+    assert_eq!(body, ["没人用過"]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `:check-code` — 語言服務器說過的話，排成一張 `gf` 走得動的單子（#53／#54）。
 ///
 /// ⚠️ **列的是每一個檔，不是手上這一個。** 一個服務器看的是整個 crate，報回來

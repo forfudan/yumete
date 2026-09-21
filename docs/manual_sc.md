@@ -2204,20 +2204,19 @@ dictionary = "left"    # 字典叠在文件树下面，只占一列
 15 像素——**整整两格**，挤进一格不是被裁半边就是把整行推开。helix 画的正是 `●`，它在拉
 丁字体里刚好一格；中文字体下没有这个字。）
 
+**想知道是什么错，把光标移到那一行去。** 话就浮在旁边：标题是响度，正文是服务器说的话，
+括号里是谁说的（同一行上 `rustc` 和 `clippy` 各说一句时，那是唯一分得出来的线索）。一行
+有好几句时最响的排最前。
+
 **`:check-code`** 把所有的话排成一张单子（`path:行:` 的形状，`gf` 跳过去），连你还没
 打开的那些文件一起——一个服务器看的是整个项目，而翻页翻不到的那些错正是这张单子的用处。
 
-**要不要装、装哪个**，是你的事。rust 和 go 两个是填好的，机器上没有那个程序就说一声、
-文件照常打开，只是没人替你查错。别的语言自己写一行：
+**第一次要等。** 服务器得先把整个项目读一遍，小项目一两秒，大项目十几秒；这段时间状态栏
+写着「rust-analyzer 正在读这个项目……第一次要等一会」。**只说这一次**——之后的重算是毫秒
+级的，一直闪反而是噪音。
 
-```toml
-[lsp.python]
-command = "pyright-langserver"
-args = ["--stdio"]
-
-[lsp.rust]
-command = ""      # 空的＝这种文件不要服务器
-```
+**要不要装、装哪个**，是你的事。**rust、go、python 三种是填好的**，机器上没有那个程序就
+说一声、文件照常打开，只是没人替你查错。别的语言自己写一行（见「配置」那一章）。
 
 **稿子不起服务器。** Markdown 和 Typst 在外面也有语言服务器，可这个编辑器本身就是写稿
 子的工具，替你的小说再请一位顾问不是谁要的东西。
@@ -4173,13 +4172,32 @@ zhuyin = { run = "pandoc {file} -o {dir}/{name}.docx" }   # :run zhuyin
 得多——语言服务器起来一次，剩下的话都走它自己那条管道，文件名根本不上命令行：
 
 ```toml
-[lsp.python]
-command = "pyright-langserver"
-args = ["--stdio"]
-
 [lsp.rust]
-command = ""      # 空的＝这种文件不要服务器（rust 和 go 出厂是填好的）
+command = "rust-analyzer"
+
+[lsp.go]
+command = ""      # 空的＝这种文件不要服务器
 ```
+
+**一种语言可以写好几个候选，用机器上第一个装了的**：
+
+```toml
+[[lsp.python]]
+command = "ty"
+args = ["server"]
+
+[[lsp.python]]
+command = "ruff"
+args = ["server"]
+```
+
+⚠️ **为什么是一串「表」而不是一串名字**：每个候选的参数都不一样（`ruff server`、`ty
+server`，而 `jedi-language-server` 不带参数）。helix 的 `languages.toml` 是同样的形状，
+同样的理由。
+
+**出厂填好的三种**：rust（`rust-analyzer`）、go（`gopls`）、python（`ty` → `ruff` →
+`pylsp` → `jedi-language-server`，第一个装了的赢）。前两种各只有一个显然的答案，python
+没有——所以它是一串，而不是替你在五个里猜一个。
 
 **项目自己的 `.yumete/config.toml` 也可以定**，因为安全不靠「谁能写」，靠**怎么跑**：
 不经过 shell（所以 `;` `&&` `$( )` 只是普通字符，不是语法），占位符**整个当成一个参数**
