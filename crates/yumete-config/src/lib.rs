@@ -1666,12 +1666,29 @@ pub struct Config {
     /// What each language can be told to run, by verb: `preview`, `format`, and
     /// whatever else a reader names.
     pub language: HashMap<String, HashMap<String, Runner>>,
-    /// **Which program answers for a language** (#53／#54) — 語言名 → 服務器。
+    /// **Which program answers for a language** (#53／#54) — 語言名 → 候選。
     ///
-    /// `[lsp.rust] command = "rust-analyzer"`. Two are filled in for you
-    /// ([`factory_servers`]); naming one here replaces it, and
-    /// `command = ""` turns it off.
-    pub lsp: HashMap<String, Server>,
+    /// `[lsp.rust] command = "rust-analyzer"` for one, or an array of tables
+    /// for several, of which **the first one installed wins**:
+    ///
+    /// ```toml
+    /// [[lsp.python]]
+    /// command = "ty"
+    /// args = ["server"]
+    /// [[lsp.python]]
+    /// command = "ruff"
+    /// args = ["server"]
+    /// ```
+    ///
+    /// ⚠️ **A list of names would not do** — each candidate has its own
+    /// arguments (`ruff server`, `ty server`, but `jedi-language-server` takes
+    /// none), which is why it is a list of *tables*. helix's `languages.toml`
+    /// has the same shape for the same reason: it names five servers for
+    /// python and defines each one's command separately.
+    ///
+    /// Some are filled in for you ([`factory_servers`]); naming a language
+    /// here replaces its whole list, and `command = ""` turns it off.
+    pub lsp: HashMap<String, Vec<Server>>,
 }
 
 /// The program that answers for one language, and how it is started.
@@ -1696,13 +1713,30 @@ pub struct Server {
 /// editor says so once and carries on — an editor that refused to open a
 /// `.rs` because a tool is missing would be worse than one with no servers at
 /// all.
-pub fn factory_servers() -> HashMap<String, Server> {
-    ["rust", "rust-analyzer", "go", "gopls"]
-        .chunks(2)
-        .map(|pair| {
-            (pair[0].to_string(), Server { command: pair[1].to_string(), args: Vec::new() })
-        })
-        .collect()
+pub fn factory_servers() -> HashMap<String, Vec<Server>> {
+    let one = |command: &str, args: &[&str]| Server {
+        command: command.to_string(),
+        args: args.iter().map(|a| a.to_string()).collect(),
+    };
+    HashMap::from([
+        // rust-analyzer 跟着 rustup 走，gopls 是 go 官方的——**各只有一個顯然的
+        // 答案**，所以這兩種填一個就够。
+        ("rust".to_string(), vec![one("rust-analyzer", &[])]),
+        ("go".to_string(), vec![one("gopls", &[])]),
+        // ⚠️ **python 没有那個顯然的答案**，所以它是一串。helix 給 python 列了
+        // 五個（`languages.toml`：`["ty", "ruff", "jedi", "pylsp", "zuban"]`），
+        // 而且每一個的命令都不一樣。填一個等於替人在五個裏猜一個，猜錯了他每次
+        // 打開 `.py` 都吃一句「起不來」。
+        (
+            "python".to_string(),
+            vec![
+                one("ty", &["server"]),
+                one("ruff", &["server"]),
+                one("pylsp", &[]),
+                one("jedi-language-server", &[]),
+            ],
+        ),
+    ])
 }
 
 /// **Which side each panel lives on** — Feature #293.
@@ -2365,16 +2399,38 @@ struct RawConfig {
     #[serde(default)]
     language: HashMap<String, HashMap<String, RawRunner>>,
     #[serde(default)]
-    lsp: HashMap<String, RawServer>,
+    lsp: HashMap<String, RawServers>,
 }
 
 /// One language server, as it is written in the file.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 struct RawServer {
     command: String,
     #[serde(default)]
     args: Vec<String>,
+}
+
+/// What `[lsp.<語言>]` may be: one server, or a list of candidates.
+///
+/// ⚠️ **Both spellings, on purpose.** One server is the common case and
+/// `[lsp.rust] command = "rust-analyzer"` is how anybody would write it; a
+/// language with no obvious answer needs the list. Forcing the list on
+/// everybody would make the common case noisier for the rare one's sake.
+#[derive(Deserialize, Clone)]
+#[serde(untagged)]
+enum RawServers {
+    One(RawServer),
+    Any(Vec<RawServer>),
+}
+
+impl RawServers {
+    fn into_list(self) -> Vec<RawServer> {
+        match self {
+            RawServers::One(server) => vec![server],
+            RawServers::Any(servers) => servers,
+        }
+    }
 }
 
 #[derive(Deserialize, Default)]
@@ -2682,11 +2738,8 @@ impl RawConfig {
                 verbs.iter().map(|(verb, raw)| (verb.clone(), raw.clone())),
             );
         }
-        for (name, server) in &other.lsp {
-            self.lsp.insert(name.clone(), RawServer {
-                command: server.command.clone(),
-                args: server.args.clone(),
-            });
+        for (name, servers) in &other.lsp {
+            self.lsp.insert(name.clone(), servers.clone());
         }
         // Same rule for the panels: a project may move one without restating
         // the other four.
@@ -2961,7 +3014,12 @@ impl RawConfig {
         // yours is not a command anybody wrote.
         config.lsp = factory_servers();
         for (language, raw) in self.lsp {
-            config.lsp.insert(language, Server { command: raw.command, args: raw.args });
+            let named: Vec<Server> = raw
+                .into_list()
+                .into_iter()
+                .map(|one| Server { command: one.command, args: one.args })
+                .collect();
+            config.lsp.insert(language, named);
         }
         if let Some(scheme) = self.ime.scheme {
             config.ime.scheme = scheme;
@@ -3207,30 +3265,50 @@ mod runner_tests {
     /// `[lsp.<語言>]` — 哪個程序替這種文件說話（#53／#54）。
     #[test]
     fn a_language_server_is_named_by_its_language() {
-        // 兩個現成的，一個字都不用寫。
+        // 三種現成的，一個字都不用寫。
         let bare = Config::from_toml("");
-        assert_eq!(bare.lsp["rust"].command, "rust-analyzer");
-        assert_eq!(bare.lsp["go"].command, "gopls");
+        let named = |c: &Config, lang: &str| -> Vec<String> {
+            c.lsp[lang].iter().map(|s| s.command.clone()).collect()
+        };
+        assert_eq!(named(&bare, "rust"), ["rust-analyzer"]);
+        assert_eq!(named(&bare, "go"), ["gopls"]);
+        // ⚠️ **python 是一串**：它没有那個顯然的答案（helix 列了五個），填一個
+        // 等於替人在五個裏猜一個。
+        assert_eq!(named(&bare, "python"), ["ty", "ruff", "pylsp", "jedi-language-server"]);
+        assert_eq!(bare.lsp["python"][0].args, ["server"], "每個候選帶自己的參數");
+        assert!(bare.lsp["python"][3].args.is_empty(), "jedi 不帶參數");
 
+        // 一個的寫法。
         let config = Config::from_toml(
             "[lsp.rust]
 command = \"rust-analyzer\"
 args = [\"--log-file\", \"/tmp/ra.log\"]
-             [lsp.python]
-command = \"pyright-langserver\"
-args = [\"--stdio\"]
 ",
         );
-        assert_eq!(config.lsp["rust"].args, ["--log-file", "/tmp/ra.log"]);
-        assert_eq!(config.lsp["python"].command, "pyright-langserver");
-        // …and the one nobody mentioned is still there.
-        assert_eq!(config.lsp["go"].command, "gopls");
+        assert_eq!(config.lsp["rust"][0].args, ["--log-file", "/tmp/ra.log"]);
+        // …and the ones nobody mentioned are still there.
+        assert_eq!(named(&config, "go"), ["gopls"]);
+
+        // ⚠️ **一串的寫法，而且一串「表」**——每個候選的參數不一樣，所以一串名字
+        // 表達不了（`ruff server`、`ty server`，而 `jedi-language-server` 不帶）。
+        let several = Config::from_toml(
+            "[[lsp.python]]
+command = \"basedpyright-langserver\"
+args = [\"--stdio\"]
+
+[[lsp.python]]
+command = \"pylsp\"
+",
+        );
+        assert_eq!(named(&several, "python"), ["basedpyright-langserver", "pylsp"]);
+        assert_eq!(several.lsp["python"][0].args, ["--stdio"]);
+        assert!(several.lsp["python"][1].args.is_empty());
 
         // ⚠️ **空的命令是「這種語言不要服務器」**，不是「用默認那個」。
         let off = Config::from_toml("[lsp.rust]
 command = \"\"
 ");
-        assert!(off.lsp["rust"].command.is_empty(), "關掉了");
+        assert!(off.lsp["rust"][0].command.is_empty(), "關掉了");
     }
 
 }

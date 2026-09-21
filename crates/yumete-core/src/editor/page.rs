@@ -742,6 +742,40 @@ impl Editor {
         self.problems.count()
     }
 
+    /// **光標這一行上，服務器說的話**——浮框要畫的那一條（2026-09-21）。
+    ///
+    /// 2026-09-21：「如何查看 error 和 warning 的 message？比如這一行是紅的，我
+    /// 該怎麽知道它是什麽錯？」號碼旁邊那一格只說得出**有多響**，說不出是什麽。
+    ///
+    /// ⚠️ **一行可能有好幾句，最響的那一句先說**，後面的跟在它下面——`conut` 那
+    /// 一行 rust-analyzer 同時說「找不到這個函數」和「有個 `count` 長得像」，而
+    /// 只給前一句等於把最有用的那半截藏起來。
+    ///
+    /// 交出來的是「標題、正文」：標題是響度（錯誤／警告／說明／建議），正文是話
+    /// 本身。畫成什麽樣是前端的事。
+    pub fn problem_here(&self) -> Option<(crate::problem::Severity, Vec<String>)> {
+        let path = self.current_buffer().path()?;
+        let line = self.cursor_line();
+        let mut said: Vec<&crate::problem::Problem> =
+            self.problems.of(path).iter().filter(|p| p.line == line).collect();
+        if said.is_empty() {
+            return None;
+        }
+        // 最響的在前；一樣響的按原來的次序（服務器自己排過）。
+        said.sort_by(|a, b| b.severity.cmp(&a.severity));
+        let loudest = said[0].severity;
+        let body = said
+            .iter()
+            .map(|p| match &p.source {
+                // 誰說的，寫在話後面的括號裏——同一行上 rustc 和 clippy 各說一句
+                // 的時候，那是唯一分得出來的線索。
+                Some(who) => format!("{}（{who}）", p.message.replace('\n', " ")),
+                None => p.message.replace('\n', " "),
+            })
+            .collect();
+        Some((loudest, body))
+    }
+
     /// 忘掉一個檔的話——服務器死了，它說過的就不再算數。
     pub fn forget_problems(&mut self, path: &std::path::Path) {
         self.problems.forget(path);

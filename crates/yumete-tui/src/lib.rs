@@ -4609,6 +4609,36 @@ fn draw_note(
     caret: (u16, u16),
 ) -> Option<Rect> {
     let vertical = editor.layout() == WritingLayout::Vertical;
+    // **What the language server said about this line** (#53／#54,
+    // 2026-09-21): 「如何查看 error 和 warning 的 message？比如這一行是紅的，我
+    // 該怎麽知道它是什麽錯？」 The cell beside the number says how loud, and
+    // nothing else; this says what.
+    //
+    // **First in the queue, and that is not a contest.** 2026-09-21：「寫代碼的
+    // 時候才需要 lsp 錯誤，寫普通文章才需要查字典。這兩個場景是很少耦合的。」 A
+    // 百科 name and a compiler error do not appear on the same page — one is a
+    // manuscript, the other is code — so the order here settles a case that
+    // barely arises, and settles it for the file you are actually in.
+    if let Some((severity, said)) = editor.problem_here() {
+        use yumete_core::problem::Severity;
+        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            title: match severity {
+                Severity::Error => say!("problem.error"),
+                Severity::Warn => say!("problem.warn"),
+                Severity::Note => say!("problem.note"),
+                Severity::Hint => say!("problem.hint"),
+            },
+            lede: None,
+            entry: false,
+            // ⚠️ **An empty line between them, not a bullet.** Two complaints
+            // on one line are two sentences, and a compiler's sentences are
+            // long enough to wrap — a marker in front of each would be read as
+            // part of the first line of each.
+            body: panel::Body::Prose(said.join("\n\n")),
+            tag: Some(say!("problem.whole-list")),
+            vertical_text: vertical,
+        });
+    }
     // **A wiki name floats the same way** (#287) — when nothing the writer
     // typed answers first, and when the sidebar's 百科 page is not already
     // showing it: one place at a time.

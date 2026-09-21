@@ -97,6 +97,17 @@ pub struct Servers {
     sent: HashMap<PathBuf, u64>,
     /// When the current buffer last changed, for the settle above.
     touched: Option<std::time::Instant>,
+    /// **Which files have been told to a server but never answered about.**
+    ///
+    /// That gap is the cold start: `rust-analyzer` reads the whole crate
+    /// before it says anything, which on a real project is ten or twenty
+    /// seconds of an editor that looks broken. 2026-09-21：「在等的這段時間能
+    /// 不能在狀態欄出現個提示？」
+    ///
+    /// ⚠️ **Only until the first answer**, and per file. After that a re-read
+    /// is milliseconds, and a line that flickered 「分析中」 on every keystroke
+    /// would be noise where a status line is the scarcest thing on the page.
+    waiting_on: HashSet<PathBuf>,
     /// How long that settle is. A field rather than the constant so a test can
     /// take it to zero instead of sleeping.
     settle: std::time::Duration,
@@ -111,6 +122,7 @@ impl Default for Servers {
             failed: HashSet::new(),
             sent: HashMap::new(),
             touched: None,
+            waiting_on: HashSet::new(),
             settle: SETTLE,
             says: None,
         }
@@ -118,15 +130,25 @@ impl Default for Servers {
 }
 
 impl Servers {
-    /// **What this language's server is called**, or `None` for 「no server」.
+    /// **Which program answers for this language**, or `None` for 「none」.
     ///
-    /// An empty command is a reader turning one of the built-in two off, which
-    /// is why it is not simply a missing entry.
+    /// A language may name several candidates and **the first one installed
+    /// wins** — python has no single obvious answer (helix lists five), so
+    /// filling one in would be guessing on the reader's behalf and making them
+    /// pay for the guess every time they open a `.py`.
+    ///
+    /// ⚠️ **An empty command is 「not this language」**, which is how a reader
+    /// turns off one of the ones that come filled in — so it is not the same
+    /// as a missing entry.
     fn named<'a>(
         config: &'a yumete_config::Config,
         language: &str,
     ) -> Option<&'a yumete_config::Server> {
-        config.lsp.get(language).filter(|s| !s.command.is_empty())
+        config
+            .lsp
+            .get(language)?
+            .iter()
+            .find(|s| !s.command.is_empty() && on_the_path(&s.command))
     }
 
     /// The language a buffer is, as LSP spells it — `None` for prose.
@@ -198,6 +220,11 @@ impl Servers {
         };
         server.say(message);
         server.waiting = true;
+        // 第一次告訴它這個檔，就開始等；答過一次之後不再說（見 `waiting_on`）。
+        if known.is_none() {
+            self.waiting_on.insert(path.clone());
+            self.says = Some(say!("lsp.reading", named.command));
+        }
         self.sent.insert(path, revision);
     }
 
@@ -208,6 +235,9 @@ impl Servers {
     pub fn collect(&mut self, editor: &mut Editor) -> bool {
         let mut anything = false;
         let mut gone: Vec<String> = Vec::new();
+        // 借出來給下面那個迴圈用——它同時要借 `self.running`。
+        let mut answered = std::mem::take(&mut self.waiting_on);
+        let mut said_so = false;
         for (language, server) in self.running.iter_mut() {
             loop {
                 match server.from.try_recv() {
@@ -219,6 +249,10 @@ impl Servers {
                         }
                     }
                     Ok(Notice::Said { path, said }) => {
+                        // 第一次回話——冷啓動結束了。
+                        if answered.remove(&path) {
+                            said_so = true;
+                        }
                         editor.set_problems(path, said);
                         server.waiting = false;
                         anything = true;
@@ -241,6 +275,11 @@ impl Servers {
             if ended && !gone.contains(language) {
                 gone.push(language.clone());
             }
+        }
+        self.waiting_on = answered;
+        // 等完了就把那句話收走——留着它會蓋住下一句真要說的話。
+        if said_so && self.waiting_on.is_empty() {
+            self.says = Some(String::new());
         }
         for language in gone {
             self.lost(&language, editor);
@@ -319,6 +358,24 @@ impl Server {
         // its own round; there is nothing useful to do here.
         let _ = self.to.send(message);
     }
+}
+
+/// **Is this program on the machine?**
+///
+/// Asked before spawning rather than after, because a language with several
+/// candidates has to skip the ones that are not installed — and a failed
+/// `spawn` is indistinguishable from a program that started and died, which is
+/// a different thing with a different answer ([`Servers::lost`]).
+///
+/// ⚠️ An absolute path is asked about directly; anything else is looked for on
+/// `PATH`, the way a shell would.
+fn on_the_path(command: &str) -> bool {
+    let named = Path::new(command);
+    if named.is_absolute() || command.contains(std::path::MAIN_SEPARATOR) {
+        return named.is_file();
+    }
+    let Some(path) = std::env::var_os("PATH") else { return false };
+    std::env::split_paths(&path).any(|dir| dir.join(command).is_file())
 }
 
 /// Start one server and get its threads going.
@@ -520,16 +577,54 @@ mod tests {
         assert_eq!(answer["id"], 7, "⚠️ 不答，服務器可能就在那兒等着");
     }
 
-    /// A reader turning one of the two built-in servers off.
+    /// A reader turning one of the built-in servers off.
     #[test]
     fn an_empty_command_means_no_server_for_that_language() {
         let mut lsp = yumete_config::factory_servers();
-        lsp.insert("rust".into(), yumete_config::Server::default());
+        lsp.insert("rust".into(), vec![yumete_config::Server::default()]);
         let config = yumete_config::Config { lsp, ..Default::default() };
         let (editor, _path) = editor_on("d.rs", "fn main() {}\n");
         let mut servers = Servers::default();
         servers.follow(&editor, &config);
         assert!(servers.running.is_empty(), "關掉了就不起");
+    }
+
+    /// **一串候選，用 PATH 上第一個裝了的**（2026-09-21）。
+    ///
+    /// ⚠️ **一串名字表達不了**：helix 給 python 列的五個各有各的參數
+    /// （`ruff server`、`ty server`，而 `jedi-language-server` 不帶參數），所以
+    /// 這是一串**表**，不是一串字符串。
+    #[test]
+    fn the_first_candidate_that_is_installed_is_the_one_that_answers() {
+        let here = std::env::current_exe().expect("這個測試自己");
+        let me = here.to_string_lossy().into_owned();
+        let one = |command: &str| yumete_config::Server {
+            command: command.to_string(),
+            args: Vec::new(),
+        };
+        let config = yumete_config::Config {
+            lsp: std::collections::HashMap::from([(
+                "rust".to_string(),
+                // 前兩個機器上没有，第三個是這個測試自己的執行檔——一定在。
+                vec![one("nothing-called-this-exists"), one("nor-this-one"), one(&me)],
+            )]),
+            ..Default::default()
+        };
+        assert_eq!(
+            Servers::named(&config, "rust").map(|s| s.command.as_str()),
+            Some(me.as_str()),
+            "跳過没裝的，停在第一個裝了的"
+        );
+
+        // 一個都没裝，就當這種語言没有服務器——而不是硬起一個起不來的。
+        let none = yumete_config::Config {
+            lsp: std::collections::HashMap::from([(
+                "rust".to_string(),
+                vec![one("nothing-called-this-exists")],
+            )]),
+            ..Default::default()
+        };
+        assert!(Servers::named(&none, "rust").is_none());
     }
 
     /// ⚠️ **One that never got up is written off** — 2026-09-20, found against
