@@ -533,6 +533,11 @@ pub fn run(
         // this: the preedit, the candidate panel and the lone-Shift tap light
         // up together with it, and now so does this.
         let yume_has_the_keys = ime.available() && ime.engaged();
+        // **Normal 下按過 Esc 而它没別的事可做**：把挂起再說一遍（2026-09-22）。
+        // 抹掉信念，下面那一句自己會重發——它本來就是冪等的。
+        if editor.take_say_it_again() {
+            system_ime.say_it_again();
+        }
         system_ime.want(!composes_here(editor) || yume_has_the_keys);
         let shown = (editor.mode(), editor.is_extending());
         if last_mode != Some(shown) {
@@ -1138,7 +1143,7 @@ pub fn run(
                             match runner.argv(&file).and_then(|argv| {
                                 argv.split_first().map(|(p, a)| (p.clone(), a.to_vec()))
                             }) {
-                                Some((program, args)) => match Job::server(&program, &args) {
+                                Some((program, args)) => match Job::server(&program, &args, &path) {
                                     Ok(started) => {
                                         editor.set_status(say!("preview.starting", program));
                                         job = Some(started);
@@ -1186,6 +1191,18 @@ pub fn run(
                                 editor.set_status(say!("preview.nothing-to-preview"))
                             }
                         }
+                    }
+                }
+                // **關掉那個檔案，預覽也跟着停**（2026-09-22）。判準是「這個檔案
+                // 不再開着」，不是「不在眼前」——切走多半還會切回來，而起一次要
+                // 幾秒。
+                if job.as_ref().is_some_and(|running| !editor.holds_file(&running.file)) {
+                    if let Some(mut running) = job.take() {
+                        let _ = running.child.kill();
+                        let _ = running.child.wait();
+                        forget_the_server();
+                        editor.set_preview_at(None);
+                        editor.set_status(say!("preview.stopped", running.what));
                     }
                 }
                 if let Some(running) = job.as_ref() {
@@ -2132,6 +2149,16 @@ struct Job {
     child: std::process::Child,
     /// The address it printed, once it has printed one.
     said: std::sync::mpsc::Receiver<String>,
+    /// **The file it is previewing** (2026-09-22), so that closing that file
+    /// stops it.
+    ///
+    /// 2026-09-22 提的：「我覺得 tinymist 有可能開很多預覽而我們完全意識不
+    /// 到。」同一次會話裏攢不起來——起一個新的先殺掉舊的，這裏只有一個位子——
+    /// 但**關掉那個檔案之後它照樣活着**，而屏幕上再没有任何東西提起它。
+    ///
+    /// ⚠️ **切走不停。** 去隔壁一章改一句話再切回來是常事，而預覽服務器起一次
+    /// 要幾秒；停的判準是「這個檔案不再開着」，不是「不在眼前」。
+    file: std::path::PathBuf,
 }
 
 /// Where the pid of a running typesetter is written.
@@ -2254,6 +2281,7 @@ impl Job {
                 "--no-open".to_string(),
                 path.display().to_string(),
             ],
+            path,
         )
     }
 
@@ -2263,7 +2291,7 @@ impl Job {
     /// `yumete_config::Runner::argv`. A server declared in a project's config
     /// is therefore a program with arguments, never a line somebody can hide a
     /// second command in.
-    fn server(program: &str, args: &[String]) -> Result<Job, String> {
+    fn server(program: &str, args: &[String], file: &std::path::Path) -> Result<Job, String> {
         let mut child = std::process::Command::new(program)
             .args(args)
             .stdout(std::process::Stdio::null())
@@ -2275,15 +2303,9 @@ impl Job {
         if let Some(log) = child.stderr.take() {
             std::thread::spawn(move || {
                 use std::io::BufRead;
-                for line in std::io::BufReader::new(log).lines().map_while(Result::ok) {
-                    // It says a good deal; one line of it is the address, and
-                    // that is the whole of what a writer wants back.
-                    if let Some(at) = line.find("http://") {
-                        let url: String =
-                            line[at..].chars().take_while(|c| !c.is_whitespace()).collect();
-                        let _ = send.send(url);
-                        return;
-                    }
+                let lines = std::io::BufReader::new(log).lines().map_while(Result::ok);
+                if let Some(url) = server_address(lines) {
+                    let _ = send.send(url);
                 }
             });
         }
@@ -2291,8 +2313,49 @@ impl Job {
             what: Box::leak(program.to_string().into_boxed_str()),
             child,
             said,
+            file: file.to_path_buf(),
         })
     }
+}
+
+/// **Which of the addresses a preview server prints is the page** (2026-09-22).
+///
+/// 報的時候是：「我現在預覽 typst，瀏覽器打開之後是空的。」量出來的原因是
+/// `tinymist preview` 開**兩個**端口，而先印出來的那個不是頁面：
+///
+/// ```text
+/// preview server listening on http://127.0.0.1:23626
+/// Control panel server listening on: 127.0.0.1:23626
+/// preview server listening on http://127.0.0.1:23625
+/// Data plane server listening on: 127.0.0.1:23625
+/// Static file server listening on: 127.0.0.1:23625
+/// ```
+///
+/// `curl` 過兩個：**23626 對 `GET /` 什麽都不回**，23625 回的纔是
+/// `<!doctype html>`。從前取第一個 `http://` 就收工，於是瀏覽器打開的是控制面
+/// 板——一張空白頁，而且看起來像「預覽壞了」。
+///
+/// 判準用**它自己說的那句話**（「端着靜態文件的那一個」），不用「第二個」：次序
+/// 是那個程序的實現細節，說法是它的接口。⚠️ 那一行**自己不帶 `http://`**，它寫
+/// 的是 `… listening on: 127.0.0.1:23625`，所以地址是拼出來的。
+///
+/// 認不出來就退回第一個地址——那是舊行為，對別的預覽服務器（`:view-preview` 是
+/// 每個語言自己配的）總比什麽都不開強。
+fn server_address(lines: impl Iterator<Item = String>) -> Option<String> {
+    let mut first: Option<String> = None;
+    for line in lines {
+        if let Some(rest) = line.split("Static file server listening on:").nth(1) {
+            let at = rest.trim();
+            if !at.is_empty() {
+                return Some(format!("http://{at}"));
+            }
+        }
+        if let Some(at) = line.find("http://") {
+            let url: String = line[at..].chars().take_while(|c| !c.is_whitespace()).collect();
+            first.get_or_insert(url);
+        }
+    }
+    first
 }
 
 /// Run what a language declares for this verb (Feature #197).
@@ -2747,7 +2810,11 @@ fn where_report(ime: &ImeSession) -> String {
         // missing.
         let here: Vec<&str> = manifest
             .iter()
-            .filter(|rel| found.dir.join(rel).is_file())
+            // ⚠️ **同一條規矩問兩處**：找得到的與報得出的必須是同一批文件，
+            // 否則這張單子會說「沒有」而輸入法明明讀到了（見 `data_paths_in`）。
+            .filter(|rel| {
+                yumete_ime::data_paths_in(&found.dir, rel).iter().any(|p| p.is_file())
+            })
             .filter_map(|rel| std::path::Path::new(rel).file_name().and_then(|n| n.to_str()))
             .collect();
         let said = match here.len() {
@@ -4680,7 +4747,23 @@ fn draw_note(
             marked: true,
         });
     }
-    if let Some((severity, said)) = editor.problem_here() {
+    // ⚠️ **插入模式下不畫**（2026-09-22 報的：「每打幾個字母就出 warning 的浮
+    // 窗，這個比自動補全提示都快，導致我一直都先收到的是 warning」）。
+    //
+    // **正在打的那一行本來就是壞的**——報它沒有意義，而它一報就搶在補全前頭。
+    // 三家的做法量過：
+    //
+    // | | 插入模式下的診斷 |
+    // | --- | --- |
+    // | Neovim | **默認不更新**（`vim.diagnostic` 的 `update_in_insert` 出廠 `false`），離開插入模式纔刷 |
+    // | VSCode | 消息**從不自動彈**：只有波浪綫與邊欄格子，要看消息得懸停或按 `F8` |
+    // | helix | 畫，但畫在**視口右上角**（`ui/editor.rs:838`），不蓋在正在打的字上 |
+    //
+    // 這一頭原本三樣都佔了：貼着光標畫、插入模式也畫、每次停頓就刷。去掉中間那
+    // 一條最省——行號左邊那一格照舊亮着（那是「這裏有問題」，不打斷），退出插入
+    // 模式，浮窗自己回來。
+    let writing = editor.mode() == Mode::Insert;
+    if let Some((severity, said)) = editor.problem_here().filter(|_| !writing) {
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: match severity {
@@ -7214,6 +7297,9 @@ fn draw_horizontal(
         let run_style = |kind: yumete_core::drawn::Ink| match kind {
             yumete_core::drawn::Ink::Fold => ground.fg(ink.gold()).add_modifier(Modifier::BOLD),
             yumete_core::drawn::Ink::Note => ground.fg(ink.marker()),
+            // 與源碼形態的 `[^1]` 同一個墨色（`Kind::Footnote`），所以開不開
+            // `:render` 看着是同一件東西，只是換了個寫法。
+            yumete_core::drawn::Ink::Footnote => ground.fg(ink.mark()),
             // A tab is the one drawn thing with nothing written in it: what
             // shows it is the ground (#374).
             yumete_core::drawn::Ink::Tab => ground.bg(ink.at(yumete_config::rung::BAND)),
@@ -11106,6 +11192,64 @@ fn squeezed(text: &str) -> String {
         assert_eq!(row_text(&buffer, 0).trim_end(), "1  一");
     }
 
+    /// **插入模式下不畫那個浮窗，格子照舊亮着**（2026-09-22 報的）。
+    ///
+    /// 「每打幾個字母就出 warning 的浮窗，這個比自動補全提示都快，導致我一直都
+    /// 先收到的是 warning」。正在打的那一行本來就是壞的，報它沒有意義，而它一報
+    /// 就搶在補全前頭。Neovim 的 `update_in_insert` 出廠就是 `false`。
+    /// **預覽開的是端着頁面的那個端口**（2026-09-22 報的：「瀏覽器打開之後是
+    /// 空的」）。
+    ///
+    /// ⚠️ **日誌是真的**——2026-09-22 拿 tinymist 0.13（`--no-open`）跑出來的原
+    /// 文，只刪掉了中間幾十行不相干的。自己編一份日誌來測，測的是自己的想像。
+    #[test]
+    fn the_preview_address_is_the_one_that_serves_the_page() {
+        let real = "[INFO  tinymist_project::watch] NotifyActor: start watching files...
+[INFO  tinymist_preview] Previewer: editor actor spawned
+[INFO  tinymist::tool::preview::http] preview server listening on http://127.0.0.1:23626
+[INFO  tinymist::tool::preview] Control panel server listening on: 127.0.0.1:23626
+[INFO  tinymist::tool::preview::http] preview server listening on http://127.0.0.1:23625
+[INFO  tinymist::tool::preview] Data plane server listening on: 127.0.0.1:23625
+[INFO  tinymist::tool::preview] Static file server listening on: 127.0.0.1:23625";
+        assert_eq!(
+            super::server_address(real.lines().map(str::to_string)).as_deref(),
+            Some("http://127.0.0.1:23625"),
+            "⚠️ 不是先印出來的 23626——那是控制面板，對 GET / 什麽都不回"
+        );
+
+        // 別的服務器不說這句話，那就還是第一個地址（舊行為）。
+        let other = "serving on http://127.0.0.1:8080\nready";
+        assert_eq!(
+            super::server_address(other.lines().map(str::to_string)).as_deref(),
+            Some("http://127.0.0.1:8080")
+        );
+        assert_eq!(super::server_address(std::iter::empty()), None, "一個字都没說");
+    }
+
+    #[test]
+    fn the_complaint_does_not_float_while_you_are_typing() {
+        use yumete_core::problem::Severity;
+        let (mut editor, path) = editor_on_disk("c.rs", "一\n二\n三\n四\n");
+        editor.set_problems(path, vec![said(1, Severity::Error)]);
+        editor.execute(":2").unwrap();
+        let config = Config::default();
+
+        let says = |buffer: &ratatui::buffer::Buffer| -> bool {
+            (0..buffer.area.height).any(|y| row_text(buffer, y).contains(&say!("problem.error")))
+        };
+        assert!(says(&render(&editor, &config, 40, 10)), "Normal 模式下浮窗在");
+
+        editor.on_key(yumete_core::input::Key::Char('i'));
+        let buffer = render(&editor, &config, 40, 10);
+        assert!(!says(&buffer), "插入模式下不畫");
+        // ⚠️ 但那一格還亮着——「這裏有問題」不打斷，只是不彈框。
+        assert_eq!(
+            buffer[(problem_column(&editor, &config), 1)].style().bg,
+            Some(ink(&config).mark()),
+            "行號左邊那一格照舊"
+        );
+    }
+
     #[test]
     fn a_complaint_and_a_change_sit_in_their_own_cells() {
         use yumete_core::problem::Severity;
@@ -14012,6 +14156,30 @@ fn squeezed(text: &str) -> String {
         editor.set_ruby(yumete_core::ruby::Dialects::only(
             yumete_core::ruby::Dialect::Html,
         ));
+        // ⚠️ **光標在哪一組裏，哪一組就露出源碼**（2026-09-22，同 `**粗**` 的規
+        // 矩）。這一族測的是**排版**——注音落在哪一格、哪一行買下上面那一行——
+        // 而光標默認停在第 0 個字上，一篇以 `<ruby>` 開頭的稿子於是永遠在畫源
+        // 碼。把它挪到第一個不在任何一組裏的字上，測的纔是要測的東西。
+        let rope = editor.current_buffer().rope();
+        let groups: Vec<(usize, usize)> = (0..rope.len_lines())
+            .flat_map(|line| {
+                let head = rope.line_to_char(line);
+                editor
+                    .readings_on_line(line)
+                    .into_iter()
+                    .map(move |g| (head + g.start, head + g.end))
+            })
+            .collect();
+        let inside = move |at: usize| groups.iter().any(|&(a, b)| at >= a && at < b);
+        if inside(editor.cursor()) {
+            // 行尾——⚠️ 一步一步 `l` 走不行：從第一組走出來，正好踏進第二組。
+            editor.on_key(yumete_core::input::Key::Char('g'));
+            editor.on_key(yumete_core::input::Key::Char('l'));
+        }
+        assert!(
+            !inside(editor.cursor()),
+            "這一族測的是排版，光標得站在所有注音組外面"
+        );
         render_wrapped(editor, config, w, h)
     }
 

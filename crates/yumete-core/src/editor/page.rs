@@ -887,6 +887,11 @@ impl Editor {
         Some((path, line, crate::problem::utf16_column(&text, chars)))
     }
 
+    /// **Normal 下按過 Esc 而它没別的事可做**——前端該把輸入法的挂起再說一遍。
+    pub fn take_say_it_again(&mut self) -> bool {
+        std::mem::take(&mut self.say_it_again)
+    }
+
     /// `空格 k` 問出去的那一句，給前端發（下一趟循環取走）。
     pub fn take_hover_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         self.hover_query.take()

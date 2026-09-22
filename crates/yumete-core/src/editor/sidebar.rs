@@ -1013,8 +1013,14 @@ impl Editor {
                 if cached.as_ref().is_none_or(|(at, _)| *at != full) {
                     // A directory, a 14 MB 碼表, a binary: read the head and
                     // nothing more, and say nothing rather than guess.
-                    let text = std::fs::read_to_string(&full).ok()?;
-                    *cached = Some((full.clone(), head(&text)));
+                    //
+                    // ⚠️ **真的只讀頭上那幾行。** 這裏從前是
+                    // `fs::read_to_string`——整個文件進內存，然後纔切掉
+                    // 99.99%。2026-09-22 報的就是這個：「picker 如果用 jk 快速
+                    // 過文件，會出現到某個文件的時候突然卡死十幾二十秒」，而走
+                    // 過的那一個是十幾兆的碼表。上面那句註釋一直寫着「read the
+                    // head and nothing more」，代碼卻没做到。
+                    *cached = Some((full.clone(), head_of_file(&full, rows)?));
                 }
                 cached.as_ref().map(|(_, lines)| (path, lines.clone()))
             }
@@ -1375,4 +1381,32 @@ impl Editor {
         let pos = motion::line_first_non_blank(rope, at);
         self.move_head(pos);
     }
+}
+
+/// **The first `rows` lines of a file, and not one byte more** (2026-09-22).
+///
+/// The picker walks files as fast as `j` repeats, and it previews whatever it
+/// is standing on. Reading the whole file to show twenty lines of it made one
+/// keystroke cost as much as opening the file — which on a 14 MB 碼表 is the
+/// 「突然卡死十幾二十秒」 that was reported.
+///
+/// ⚠️ **`lines()` stops where it is told**, so a huge file costs the head and
+/// the buffering, not its length. `None` for what cannot be read as text at
+/// all — a directory, a binary — which is what the caller shows nothing for.
+///
+/// ⚠️ **Invalid UTF-8 ends the preview, it does not fail it.** A `.ytab` that
+/// is text for the first megabyte and binary after is still worth showing the
+/// head of, and `read_to_string` would have refused the whole file.
+fn head_of_file(path: &Path, rows: usize) -> Option<Vec<String>> {
+    use std::io::BufRead;
+    let file = std::fs::File::open(path).ok()?;
+    let mut out = Vec::with_capacity(rows.min(64));
+    for line in std::io::BufReader::new(file).lines().take(rows) {
+        match line {
+            Ok(line) => out.push(line.replace('\t', "    ")),
+            // 讀到這裏爲止——前面那些照樣是正文。
+            Err(_) => break,
+        }
+    }
+    Some(out)
 }

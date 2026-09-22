@@ -341,9 +341,23 @@ impl Editor {
         // markup comes off the page whatever `:render` says — leaving the tags
         // on would be showing the same reading twice. This is what the 縱書
         // page has always done; the horizontal one now does it too.
+        //
+        // ⚠️ **光標在裏面的那一組要露出源碼**，和 `**粗**` 同一條規矩
+        // （[`crate::markdown::hidden`]：選區碰到的構造整個展開，近端含、遠端
+        // 不含）。2026-09-22 報的：一行上只有一個 ruby 詞的時候，從上一行 `j`
+        // 走下來，光標落在**第一個看得見的字**上——那是 `<ruby>` 後面的
+        // `immerhin`，而不是行首——於是 `i` 打進去的字跑進了標籤裏面。⚠️ **兩種
+        // 情形畫出來一模一樣**（都是 `甲immerhin`），所以看不出來：從 `3gg` 過去
+        // 是對的，從 `j` 走下來是錯的。露出源碼，位置就說得清了。
+        let caret = self.selected_columns(line);
+        let inside = |g: &crate::ruby::Ruby| match caret {
+            Some((from, to)) => to.max(from + 1) > g.start && from <= g.end,
+            None => false,
+        };
         let mut off: Vec<(usize, usize)> = self
             .readings_on_line(line)
             .into_iter()
+            .filter(|g| !inside(g))
             .flat_map(|g| [(g.start, g.base.0), (g.base.1, g.end)])
             .filter(|(a, b)| b > a)
             .collect();
@@ -371,6 +385,15 @@ impl Editor {
             // Inside a fence nothing is markup, so nothing comes off.
             let spans = self.markup_line_in(line, block);
             off.extend(crate::markdown::hidden(&spans, self.selected_columns(line)));
+            // **註號整段下頁**，`⁽¹⁾` 在 [`Self::footnote_marks_on_line`] 那頭
+            // 原地補上。整段而不是只藏方括號：`[^1]` 去掉括號剩一個 `1`，貼在詞
+            // 尾就和正文的數字分不開了。
+            off.extend(
+                self.footnote_spans(line)
+                    .into_iter()
+                    .filter(|(start, end, _)| !Self::caret_within(caret, *start, *end))
+                    .map(|(start, end, _)| (start, end)),
+            );
         }
         // ⚠️ **The measure and the page must hide the same characters.** This
         // is the measure's list and `markup_hidden_on_line` is the page's, and
@@ -472,7 +495,70 @@ impl Editor {
         runs.extend(self.tab_stops_on_line(line));
         runs.extend(self.fold_marks_on_line(line));
         runs.extend(self.notes_on_line(line));
+        runs.extend(self.footnote_marks_on_line(line));
         crate::drawn::compose(runs)
+    }
+
+    /// **`[^1]` 畫成 `⁽¹⁾`**（2026-09-22）。
+    ///
+    /// 源碼在 [`Self::markup_off_line`] 那頭藏起來，這裏在原地畫一個印刷體的
+    /// 註號——和表格摺疊畫那個 `>` 是同一條路（藏掉一段、原地立一個記號）。
+    ///
+    /// ⚠️ **只有純數字的註號換得了。** 上標數字 Unicode 齊全，上標字母不齊
+    /// （`ᵠ` 有、`ᵡ` 沒有），所以 `[^note]` 這種**原樣留着**——畫不出來就別畫，
+    /// 半套字形比源碼更難認。
+    fn footnote_marks_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
+        if !self.wysiwyg() {
+            return Vec::new();
+        }
+        let caret = self.selected_columns(line);
+        self.footnote_spans(line)
+            .into_iter()
+            .filter(|(start, end, _)| !Self::caret_within(caret, *start, *end))
+            .map(|(start, _, mark)| crate::drawn::Run::new(start, mark, crate::drawn::Ink::Footnote))
+            .collect()
+    }
+
+    /// 這一行上每個畫得出來的註號：起、訖、以及畫成什麽。
+    ///
+    /// 一處算，兩處用——[`Self::markup_off_line`] 拿它決定藏哪一段，
+    /// [`Self::footnote_marks_on_line`] 拿它決定原地畫什麽。兩邊要是各算各的，
+    /// 就會出現「藏了沒畫」或者「畫了沒藏」。
+    fn footnote_spans(&self, line: usize) -> Vec<(usize, usize, String)> {
+        const HIGH: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        let text: Vec<char> = rope.line(line).chars().collect();
+        let block = self.block_of(line);
+        self.markup_line_in(line, block)
+            .into_iter()
+            .filter(|s| s.kind == crate::markdown::Kind::Footnote)
+            .filter_map(|s| {
+                // `[^` … `]`，末尾可能還跟一個 `:`（那是註文自己那一行）。
+                let inner: String = text
+                    .get(s.start..s.end)?
+                    .iter()
+                    .skip(2)
+                    .take_while(|&&c| c != ']')
+                    .collect();
+                let mark: Option<String> = inner
+                    .chars()
+                    .map(|c| c.to_digit(10).map(|d| HIGH[d as usize]))
+                    .collect();
+                Some((s.start, s.end, format!("⁽{}⁾", mark?)))
+            })
+            .collect()
+    }
+
+    /// 光標（或選區）碰不碰得到 `start..end`——與 [`crate::markdown::hidden`]
+    /// 同一條規矩：近端含、遠端不含，所以剛走出去的那一步不會讓它閃一下。
+    fn caret_within(caret: Option<(usize, usize)>, start: usize, end: usize) -> bool {
+        match caret {
+            Some((from, to)) => to.max(from + 1) > start && from <= end,
+            None => false,
+        }
     }
 
     /// The same page as one answer per anchor — what the wrap, the caret and

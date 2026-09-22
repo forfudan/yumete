@@ -46,6 +46,20 @@ pub enum Ink {
     /// Never at the same anchor as the padding beside it: this one stands at
     /// the first character it hides, and the padding at the end of the cell.
     Fold,
+    /// **A footnote's mark, set the way print sets one** (2026-09-22).
+    ///
+    /// `[^1]` is four characters of source in the middle of a sentence; print
+    /// has written it as a small raised number for four hundred years. The
+    /// source comes off the page (it is markup, and the caret standing in it
+    /// shows it again, same as `**`) and this stands in its place: `⁽¹⁾`.
+    ///
+    /// ⚠️ **Measured, not guessed** — in 霞鶩文楷等寬 at 15px one cell is
+    /// 7.50px and `⁽ ⁾ ⁰¹²³⁴⁵⁶⁷⁸⁹` are 7.50 each, so the mark is exactly three
+    /// cells. `⁅ ⁆`（superscript-looking brackets）are 9.03 — **not a whole
+    /// number of cells** — and `〔〕［］` are two cells each; either would push
+    /// the rest of the line out of the grid, which is the mistake `●` made in
+    /// the diagnostics column.
+    Footnote,
     /// The editor saying something *about* the text beside it: a mark that
     /// should have been full-width, an ellipsis written with three dots.
     ///

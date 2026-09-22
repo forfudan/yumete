@@ -624,6 +624,18 @@ impl Editor {
         // per-keystroke budget to keep and the table may be below the fold:
         // the reader who opens a document at a table wants it drawn as one
         // before they touch anything.
+        // **一份 `.csv` 打開就是表格**（2026-09-22 定：「從 picker 打開的 csv
+        // 不是自動進入高級表格編輯模式，是不是直接進入比較好？」）。
+        //
+        // ⚠️ **判準是「這個文件是 csv」，不是「從哪兒打開的」**：`.csv` 没有第二
+        // 種讀法，它就是一張表——從 picker、從命令行、從 `:open` 進來都一樣。而
+        // `.md` 裏的表格只是正文的一部分，所以那一種永遠不自動。
+        //
+        // 上面那扇門（schema 旁置）已經給過全窗表格；這一扇管的是**没有 schema
+        // 的 `.csv`**，它從前只是把列對齊，人還得自己按一次 `空格 t t`。
+        if self.table.is_none() && problems.is_empty() && self.names_itself_a_grid(&path) {
+            self.enter_table();
+        }
         if self.table.is_none() && self.table_view_opens_itself() && self.syntax() == crate::syntax::Syntax::Markdown {
             if let Some(first) = self.first_md_table_line() {
                 let header = self.line_text(first).unwrap_or_default();
@@ -639,6 +651,19 @@ impl Editor {
                 });
             }
         }
+    }
+
+    /// **這個文件的名字自己說了它是一張表**（`.csv`／`.tsv`／`.tab`）。
+    ///
+    /// 同一張單子在 [`Self::delimited_text_file`] 裏擋着「猜」那一扇門——名字說
+    /// 了的不必猜——這裏拿它開「直接進表格」那一扇。一處算，兩處用。
+    fn names_itself_a_grid(&self, path: &Path) -> bool {
+        let extension = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        matches!(extension.as_str(), "csv" | "tsv" | "tab")
     }
 
     /// Which mark cuts this plain-text file into columns, if one plainly does

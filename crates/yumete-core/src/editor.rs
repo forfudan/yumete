@@ -1766,6 +1766,15 @@ pub struct Editor {
     ///
     /// ⚠️ **列是 UTF-16 碼元**，因爲那是問出去的那一頭要的單位。
     definition_query: Option<(PathBuf, usize, usize)>,
+    /// **Normal 模式下按過 Esc，要前端把挂起信號再發一遍**（2026-09-22）。
+    ///
+    /// 在別的窗口用系統輸入法打完字切回來，輸入法還開着、鍵被吞掉——前端那頭記着
+    /// 「已經挂起了」而事實上没有（見 `yumete_tui::system_ime`）。信念會漂，所以
+    /// 給人留一條重新聲明的路：Normal 模式下再按一次 Esc。
+    ///
+    /// ⚠️ **只在 Esc 没有別的事可做的時候。** Esc 先收窗口、先收選區；那幾件都
+    /// 不是這一件，而一個鍵一次只該做一件事。
+    say_it_again: bool,
     /// **`空格 k` 問出去的那一句**（#53 ③，2026-09-21）——同上一個形狀。
     hover_query: Option<(PathBuf, usize, usize)>,
     /// **`C-n` 問出去的那一句**（#53 ④，2026-09-21）——同上一個形狀。
@@ -1938,6 +1947,12 @@ pub struct Editor {
     shell_request: Option<Shell>,
     /// The 字形 table waiting for opencc to come back (Feature #241).
     convert_patch: Option<crate::convert::Side>,
+    /// **要換的是哪一段**（2026-09-22）——`None` 是整本書。
+    ///
+    /// `:convert` 換整本；`` ` `` 那一組換**選區**。opencc 是另一個進程，答案
+    /// 下一趟循環纔回得來，所以「換哪兒」得跟着問題一起放下——等答案回來的時候，
+    /// 選區早就不在了（換完光標要落在換出來的字上）。
+    convert_range: Option<std::ops::Range<usize>>,
     /// The grid this file is being read as, when a schema says it is a table.
     ///
     /// A view, never a copy: the text stays the truth, and this only says how
@@ -2525,6 +2540,7 @@ impl Editor {
             screenshot_request: None,
             dictionary_query: None,
             definition_query: None,
+            say_it_again: false,
             hover_query: None,
             hovered: None,
             completion_query: None,
@@ -2569,6 +2585,7 @@ impl Editor {
             preview_at: None,
             shell_request: None,
             convert_patch: None,
+            convert_range: None,
             table: None,
             open_notice: None,
             table_level: TableLevel::default(),

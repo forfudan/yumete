@@ -1318,6 +1318,36 @@ impl ImeSession {
 
 /// Resolve one manifest entry's relative path (`charsets/common.ycs`) against
 /// the search path, first directory wins.
+/// **Where one manifest file could be, inside one data directory** — in the
+/// order they are tried (2026-09-22).
+///
+/// The manifest names its files with a `data/` in front (`data/symbols.ytab`,
+/// `data/charsets/tonggui.ycs`), which is the layout of 宇浩's own source tree
+/// and of the macOS bundle. ⚠️ **The Linux installer lays them flat**: `yuman`
+/// puts `symbols.ytab`, `lang.ywtb`, `pinyin.yflb` and a `charsets/` directory
+/// straight into `~/.local/share/yume/`. Same files, one level up.
+///
+/// 2026-09-22 報的就是這個：那個目錄裏**明明有文件**，而 `:yume-where` 一路寫着
+/// 「（沒有）」——找的是 `~/.local/share/yume/data/symbols.ytab`，那一份不在。
+///
+/// So the `data/` in front is tried first (nothing that works today changes)
+/// and then stripped. ⚠️ **Only the leading `data/`**: `data/charsets/x.ycs`
+/// becomes `charsets/x.ycs`, which is exactly where the flat layout keeps it.
+pub fn data_paths_in(dir: &Path, relative: &str) -> Vec<PathBuf> {
+    let joined = |rel: &str| {
+        let mut path = dir.to_path_buf();
+        // Manifest paths always use forward slashes, whatever the host.
+        for part in rel.split('/') {
+            path.push(part);
+        }
+        path
+    };
+    match relative.strip_prefix("data/") {
+        Some(flat) => vec![joined(relative), joined(flat)],
+        None => vec![joined(relative)],
+    }
+}
+
 fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
     // **An absolute name is already the answer.** A 自定義方案's tables are not
     // in the manifest and not under any data directory — they sit in the slot
@@ -1328,12 +1358,7 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
         return named.is_file().then(|| named.to_path_buf());
     }
     for dir in dirs {
-        let mut path = dir.clone();
-        // Manifest paths always use forward slashes, whatever the host.
-        for part in relative.split('/') {
-            path.push(part);
-        }
-        if path.is_file() {
+        if let Some(path) = data_paths_in(dir, relative).into_iter().find(|p| p.is_file()) {
             return Some(path);
         }
     }
