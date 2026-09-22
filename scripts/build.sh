@@ -95,7 +95,19 @@ install_ime_data() {
   fi
   yume_root="$(cd "$yume_root" && pwd)"
   if [[ ! -f "$yume_root/data/ling.txt" ]]; then
-    echo "==> IME data: skipped (no source tables in $yume_root/data — run the yume data pipeline first)"
+    # ⚠️ **不是每個人都跑得了那條流水綫。** 源表在一個私有倉裏，所以「去跑一下
+    # pipeline」對倉外的人是一條死路（2026-09-22 就這麽卡住過一個人）。出廠自帶
+    # 的那幾張表是公開的，說出來比不說強。
+    echo "==> IME data: skipped (no source tables in $yume_root/data)"
+    echo "    那幾張源表在一個私有倉裏。只想要出廠自帶的表的話，編譯前設一個目錄："
+    echo "      export YUMETE_BUILTIN_DIR=\$HOME/yumete-data"
+    echo "      mkdir -p \$YUMETE_BUILTIN_DIR/schemes \$YUMETE_BUILTIN_DIR/data"
+    echo "      base=https://github.com/forfudan/yume-release/releases/download/yumete-data"
+    echo "      curl -fsSL -o \$YUMETE_BUILTIN_DIR/schemes/lingming_essential.ytab \$base/lingming_essential.ytab"
+    echo "      curl -fsSL -o \$YUMETE_BUILTIN_DIR/data/symbols.ytab              \$base/symbols.ytab"
+    echo "      curl -fsSL -o \$YUMETE_BUILTIN_DIR/data/common_words.txt          \$base/common_words.txt"
+    echo "      curl -fsSL -o \$YUMETE_BUILTIN_DIR/VERSION                        \$base/VERSION"
+    echo "    那幾張會被烤進二進制，和發布包裏的是同一份。"
     return 0
   fi
 

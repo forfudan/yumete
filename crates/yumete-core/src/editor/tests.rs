@@ -4362,7 +4362,11 @@ fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
     .unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
-    assert!(ed.status().is_empty(), "{}", ed.status());
+    // ⚠️ **不抱怨那份 schema**——它寫的是別的文件。狀態欄現在說的是「表格畫好
+    // 了」（`.csv` 打開就進表格，2026-09-22），那是另一件事。
+    for complaint in ["TOML", "no columns", "not a column"] {
+        assert!(!ed.status().contains(complaint), "{}", ed.status());
+    }
     assert!(ed.enter_table());
     assert!(ed.status().contains("照首行"), "{}", ed.status());
 
@@ -7979,7 +7983,9 @@ fn a_file_with_no_schema_is_read_by_its_own_header() {
 
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
-    assert!(ed.table().is_none(), "not until asked");
+    // ⚠️ **一份 `.csv` 打開就是表格**（2026-09-22 定）。從前這裏要按一次
+    // `空格 t t`——`.csv` 没有第二種讀法，那一按是白按的。
+    assert!(ed.table().is_some(), "打開就在表格裏了");
 
     assert!(ed.enter_table(), "the header row is enough");
     let view = ed.table().unwrap();
@@ -15495,4 +15501,123 @@ fn a_footnote_inside_a_table_cell_still_answers() {
     // 同一行上不壓着記號的地方，照舊是那一行的事（#283 不變）。
     ed.set_cursor(line + 2);
     assert!(ed.detail_shows_a_row() || ed.detail().is_none(), "格子裏別處還是行");
+}
+
+/// **光標在 ruby 裏，源碼要露出來**（2026-09-22 報的）。
+///
+/// 一行上只有一個 ruby 詞，從上一行 `j` 走下來——光標落在**第一個看得見的字**
+/// 上，而標籤是藏起來的，所以那不是行首而是 `<ruby>` 後面。⚠️ **兩種情形畫出來
+/// 一模一樣**，於是 `i` 打進去的字悄悄跑進了標籤裏。露出源碼，位置就說得清了；
+/// 這也正是 `**粗**` 的規矩（[`crate::markdown::hidden`]）。
+#[test]
+fn the_caret_inside_a_reading_shows_its_source() {
+    let mut ed = typed("前面\n<ruby>immerhin<rt>這是一個單詞</rt></ruby>\n");
+    // `:ruby full` 同時做兩件事：認得讀音，並且把它排出來。
+    ed.execute(":ruby full").unwrap();
+
+    // 光標不在那一行：標籤藏起來，注音排在旁邊。
+    ed.goto_line(1);
+    assert!(
+        !ed.hidden_on_line(1).is_empty(),
+        "別的行上，那一組的標籤是藏着的"
+    );
+
+    // 光標走到那一行：整組露出來。
+    ed.goto_line(2);
+    assert_eq!(
+        ed.hidden_on_line(1),
+        Vec::new(),
+        "光標在裏面的那一組，源碼要看得見"
+    );
+}
+
+/// **`[^1]` 在 render full 下畫成 `⁽¹⁾`**（2026-09-22 提的：源碼形態「不好看，
+/// 像源代碼」）。
+///
+/// 量過纔選的字形：霞鶩文楷等寬裏一格 7.50px，`⁽ ⁾` 與上標數字各 7.50，所以整個
+/// 註號正好三格；`⁅ ⁆` 是 9.03（不成格），`〔〕［］` 是兩格——都會把整行推歪。
+#[test]
+fn a_footnote_mark_is_set_the_way_print_sets_one() {
+    let mut ed = typed("冷[^1]，書[^12]。\n[^1]: 註。\n名[^note]。\n");
+    ed.execute(":render full").unwrap();
+    ed.goto_line(3); // 光標不在前兩行的任何一個註號上
+
+    let drawn = |ed: &Editor, line: usize| -> Vec<(usize, String)> { ed.drawn_on_line(line) };
+    assert_eq!(
+        drawn(&ed, 0),
+        vec![(1, "⁽¹⁾".to_string()), (7, "⁽¹²⁾".to_string())],
+        "一行上兩個，各畫在自己那一段的頭上"
+    );
+    assert!(!ed.hidden_on_line(0).is_empty(), "源碼那幾個字符下了頁面");
+    // 註文那一行連 `:` 一起換掉，剩下的空格把它和正文隔開。
+    assert_eq!(drawn(&ed, 1), vec![(0, "⁽¹⁾".to_string())]);
+
+    // ⚠️ 上標字母 Unicode 不齊，畫不出來的原樣留着。
+    assert_eq!(drawn(&ed, 2), Vec::new(), "[^note] 不換");
+    assert_eq!(ed.hidden_on_line(2), Vec::new(), "也不藏");
+
+    // 光標壓上去，源碼回來——和 `**粗**` 一樣。
+    ed.goto_line(1);
+    ed.on_key(Key::Char('l')); // 「冷」之後就是那個 `[`
+    assert_eq!(drawn(&ed, 0), vec![(7, "⁽¹²⁾".to_string())], "只露出光標那一個");
+}
+
+/// **Normal 下再按一次 Esc，是「把輸入法的挂起再說一遍」**（2026-09-22 報的：
+/// 在別的窗口用系統輸入法打完字切回來，輸入法還開着，鍵被吞掉）。
+///
+/// ⚠️ **只在 Esc 没有別的事可做的時候。** 它先收窗口、先收選區；那幾件都不是這
+/// 一件，而一個鍵一次只該做一件事。
+#[test]
+fn a_second_escape_says_the_suspension_again() {
+    let mut ed = typed("那年冬天很冷。\n");
+    ed.goto_line(1);
+    assert!(!ed.take_say_it_again(), "什麽都没按，就什麽都不必說");
+
+    // 有選區的那一下：Esc 收選區，不說。
+    ed.on_key(Key::Char('v'));
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Esc);
+    assert!(!ed.take_say_it_again(), "那一下 Esc 是收選區");
+
+    // 再按一次：没別的事了。
+    ed.on_key(Key::Esc);
+    assert!(ed.take_say_it_again(), "這一下纔是");
+    assert!(!ed.take_say_it_again(), "取走就没了，不會每一幀都重發");
+}
+
+/// **`` `s `` 只換選中的那一段**（2026-09-22 提的：「需要一個對於選區進行繁簡
+/// 替換的快捷鍵」）。
+///
+/// ⚠️ **收在 `` ` `` 底下**：那一組本來就是「把選區裏的字換一種寫法」
+/// （`` `l `` 轉小寫、`` `u `` 轉大寫），簡繁與大小寫是同一類事。
+/// ⚠️ **`` `w ``／`` `h `` 而不是 `` `tw ``／`` `hk ``**：後者裏 `` `t `` 既是
+/// 完整命令又是 `` `tw `` 的前綴，只能靠超時去猜。
+#[test]
+fn the_backtick_group_converts_only_what_is_picked() {
+    use crate::editor::How;
+    if crate::convert::opencc().is_none() {
+        return; // 機器上没裝 opencc，這一條没什麽可驗的
+    }
+    let mut ed = typed("他說內人在裏面。\n第二行不動。\n");
+    ed.goto_line(1);
+    // 選中第一行（`v` 開始，`gl` 到行尾）。
+    ed.on_key(Key::Char('v'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('`'));
+    ed.on_key(Key::Char('s'));
+
+    let asked = ed.take_shell_request().expect("opencc 要跑一趟");
+    match asked.how {
+        // ⚠️ 送出去的**只有選區**，不是整本書。
+        How::Convert(text) => assert_eq!(text, "他說內人在裏面。", "只送選中的那一段"),
+        other => panic!("{other:?}"),
+    }
+
+    ed.provide_conversion("他说内人在里面。");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "他说内人在里面。\n第二行不動。\n",
+        "第二行一個字都没動"
+    );
 }

@@ -1645,8 +1645,8 @@ en = "simplified"
 [[message]]
 # : 命令選單裏 t 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
 key = "cmd.convert.t"
-zht = "opencc 繁體，港臺字形（說 爲 內 吳 裏 髮 臺）"
-zhs = "opencc 繁体，港台字形（說 爲 內 吳 裏 髮 臺）"
+zht = "opencc 繁體字形（說 爲 內 吳 裏 髮 臺）"
+zhs = "opencc 繁体字形（說 爲 內 吳 裏 髮 臺）"
 en = "OpenCC's plain 繁體"
 
 [[message]]
@@ -3153,6 +3153,13 @@ zhs = "换好了：{0} 个字换了样"
 en = "converted: {0} characters changed"
 
 [[message]]
+# `` ` `` 那一組換完選區，{0} 是換了幾個字
+key = "convert.done-here"
+zht = "換了 {0} 個字（u 撤回）"
+zhs = "换了 {0} 个字（u 撤回）"
+en = "{0} characters changed (u to undo)"
+
+[[message]]
 # :convert 的說明頁最後一行，解釋 force 是什麼
 key = "convert.force-means"
 zht = "加 force ＝ 連詞一起換（内存 → 記憶體）。字數會變，也回不來，所以要自己寫出來。"
@@ -3207,6 +3214,13 @@ key = "convert.nothing-came-back"
 zht = "opencc 什麼都沒交回來，沒有動你的字"
 zhs = "opencc 什么都没交回来，没有动你的字"
 en = "opencc returned nothing; your text is untouched"
+
+[[message]]
+# `` ` `` 那一組按下去的時候什麽都没選上
+key = "convert.nothing-picked"
+zht = "這裏没有字可換"
+zhs = "这里没有字可换"
+en = "nothing here to change"
 
 [[message]]
 # :convert 的說明頁裏，opencc 裝在哪
@@ -4286,6 +4300,55 @@ key = "hint.case.title"
 zht = "字形"
 zhs = "字形"
 en = "letter case"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-c"
+zht = "簡→大陸繁"
+zhs = "简→大陆繁"
+en = "simplified → mainland 繁"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-g"
+zht = "簡→古籍繁"
+zhs = "简→古籍繁"
+en = "simplified → 古籍 繁"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-hk"
+zht = "簡→香港繁"
+zhs = "简→香港繁"
+en = "simplified → Hong Kong 繁"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-jp"
+zht = "簡→日文新字體"
+zhs = "简→日文新字体"
+en = "simplified → Japanese shinjitai"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-s"
+zht = "繁→簡"
+zhs = "繁→简"
+en = "traditional → simplified"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-t"
+zht = "簡→繁"
+zhs = "简→繁"
+en = "simplified → traditional"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-tw"
+zht = "簡→臺灣繁"
+zhs = "简→台湾繁"
+en = "simplified → Taiwan 繁"
 
 [[message]]
 # ` 組：轉大寫
@@ -8814,12 +8877,11 @@ zhs = "装在可执行文件的 prefix 里（brew install yume-data）"
 en = "installed into the binary's prefix (brew install yume-data)"
 
 [[message]]
-# `:yume-where`：宇浩輸入法自己裝的
+# `:yume-where`：系統安裝的宇夢輸入法自帶數據
 key = "yume.where.from.yume"
-zht = "宇浩輸入法自己裝的"
-zhs = "宇浩输入法自己装的"
-en = "where the 宇浩 input method itself keeps its data"
-
+zht = "系統安裝的宇夢輸入法自帶數據"
+zhs = "系统安装的宇梦输入法自带数据"
+en = "data kept by the installed Yume"
 [[message]]
 # `:yume-where`：碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。
 key = "yume.where.head"

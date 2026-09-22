@@ -50,7 +50,14 @@ impl Editor {
                 // The way out of 通規 happens here rather than in the child:
                 // opencc's configs cannot read those 字形, so what it is handed
                 // has to be 字形 it knows.
-                let mut text = self.current_buffer().rope().to_string();
+                // ⚠️ **换哪一段，在這裏就定下來。** 整本是 `None`；`` ` `` 那一
+                // 組先把選區放進 `convert_range`，這裏照它取字。
+                let whole = self.convert_range.is_none();
+                let mut text = match &self.convert_range {
+                    Some(range) => self.current_buffer().rope().slice(range.clone()).to_string(),
+                    None => self.current_buffer().rope().to_string(),
+                };
+                let _ = whole;
                 if let Some(side) = plan.unpatch {
                     text = convert::unrespell(&text, side);
                 }
@@ -130,6 +137,32 @@ impl Editor {
         self.status = say!("convert.pick-two");
     }
 
+    /// **`` ` `` 那一組：把選區換一種寫法**（2026-09-22 提的）。
+    ///
+    /// `:convert` 換的是整本書；這個換選區。⚠️ **收在 `` ` `` 底下而不是另起一個
+    /// 前綴**：那一組本來就是「把選區裏的字換一種寫法」（`` `l `` 轉小寫、
+    /// `` `u `` 轉大寫），簡繁與大小寫是同一類事，多一個前綴就多一份要記的東西。
+    ///
+    /// ⚠️ **一鍵一檔，第二個字母各不相同**：`` `w ``／`` `h `` 而不是
+    /// `` `tw ``／`` `hk ``——後者裏 `` `t `` 既是完整命令又是 `` `tw `` 的前綴，
+    /// 只能靠超時去猜，而那正是 vim 裏最招人煩的一類行為。
+    ///
+    /// 没有選區就換光標底下那一個字，同 [`Self::map_selection`]。
+    pub(super) fn convert_selection(&mut self, from: crate::convert::Side, to: crate::convert::Side) {
+        let (start, end) = self.selection();
+        let end = match end == start {
+            true => crate::motion::right(self.current_buffer().rope(), start).max(start + 1),
+            false => end,
+        };
+        let end = end.min(self.current_buffer().char_count());
+        if start >= end {
+            self.status = say!("convert.nothing-picked");
+            return;
+        }
+        self.convert_range = Some(start..end);
+        self.convert(crate::command::ConvertAsk::Run { from, to, force: false });
+    }
+
     /// What opencc said, patched and put in the buffer.
     pub fn provide_conversion(&mut self, output: &str) {
         let patched = match self.convert_patch.take() {
@@ -139,10 +172,41 @@ impl Editor {
         // opencc answers an empty file with an empty file and exit 0, so
         // 「nothing came back」 is only a finding when something went in.
         if patched.is_empty() && self.current_buffer().char_count() > 0 {
+            self.convert_range = None;
             self.status = say!("convert.nothing-came-back");
             return;
         }
-        self.rewrite_with_conversion(&patched);
+        match self.convert_range.take() {
+            Some(range) => self.rewrite_range_with_conversion(range, &patched),
+            None => self.rewrite_with_conversion(&patched),
+        }
+    }
+
+    /// **換掉選區那一段**（2026-09-22），其餘一個字不動。
+    ///
+    /// 與整本那一支同一條規矩：一次 `snapshot`，所以 `u` 一下全回來——反着換
+    /// **不是**回頭路（`s2tw` 再 `tw2s`，「頭髮」回不去）。
+    fn rewrite_range_with_conversion(&mut self, range: std::ops::Range<usize>, text: &str) {
+        let long = self.current_buffer().char_count();
+        let range = range.start.min(long)..range.end.min(long);
+        if range.is_empty() {
+            return;
+        }
+        let before = self.current_buffer().rope().slice(range.clone()).to_string();
+        if before == text {
+            self.status = say!("convert.not-a-character");
+            return;
+        }
+        self.snapshot();
+        let done = self
+            .without_cell_guard(|e| e.current_buffer_mut().replace(range.clone(), text));
+        if !self.applied(done) {
+            return;
+        }
+        // 換完站在換出來的那一段頭上，選區收起來——那一段已經不是原來那些字了。
+        self.set_cursor(range.start.min(self.current_buffer().char_count()));
+        self.anchor = self.cursor;
+        self.status = say!("convert.done-here", text.chars().count());
     }
 
     /// Put a converted manuscript in place of the one that was there.

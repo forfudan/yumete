@@ -877,6 +877,24 @@ impl Editor {
 
     /// Which open buffer a write to `target` would land in, if any.
     ///
+    /// **Is this file open in any buffer?** (2026-09-22)
+    ///
+    /// Asked by the front end about the file a preview server is serving: a
+    /// preview of a chapter nobody has open any more is a program holding a
+    /// port and a few hundred megabytes for a document that is not on the
+    /// screen. Same identity rule as [`Self::buffer_holding`] — a hard link is
+    /// one file under two names.
+    pub fn holds_file(&self, path: &Path) -> bool {
+        // ⚠️ **便宜的那一問先答。** 這是前端**每按一鍵**都要問的（預覽開着的時
+        // 候），而 `buffer_holding` 每個緩衝區要 `canonicalize` 一次——一次系統
+        // 調用。拼寫一模一樣就是它，不必問磁碟；只有拼寫對不上纔值得去問「是不
+        // 是同一個檔的另一個名字」，而那一步只在快要殺掉服務器之前跑一次。
+        if self.buffers.iter().any(|b| b.path() == Some(path)) {
+            return true;
+        }
+        self.buffer_holding(path).is_some()
+    }
+
     /// **Identity, not spelling** — see [`crate::buffer::write_target`]. Every
     /// writer that is handed a path by the reader asks this before it writes:
     /// a file that is open in this editor may only be replaced by the buffer

@@ -842,6 +842,16 @@ impl Editor {
                     Key::Char('l') => self.map_selection(|c| c.to_lowercase().collect()),
                     Key::Char('u') => self.map_selection(|c| c.to_uppercase().collect()),
                     Key::Char('`') => self.map_selection(switch_case),
+                    // **簡繁也是「把選區裏的字換一種寫法」**（2026-09-22）。
+                    // 一鍵一檔，第二個字母各不相同——`tw`／`hk` 拼全了，`` `t ``
+                    // 就既是命令又是前綴，只能靠超時猜。
+                    Key::Char('s') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::S),
+                    Key::Char('t') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::T),
+                    Key::Char('w') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Tw),
+                    Key::Char('h') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Hk),
+                    Key::Char('c') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::C),
+                    Key::Char('g') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::G),
+                    Key::Char('j') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Jp),
                     _ => {}
                 }
                 return;
@@ -1252,8 +1262,15 @@ impl Editor {
                     self.close_split();
                     return;
                 }
+                // **Esc 没有別的事可做的時候，就是「把輸入法的挂起再說一
+                // 遍」**（2026-09-22）。收窗口、收選區都輪不到這一件；而收不收得
+                // 到選區，看的是它本來收不收得起來。
+                let idle = !self.extend && self.anchor == self.cursor;
                 self.extend = false;
                 self.anchor = self.cursor;
+                if idle {
+                    self.say_it_again = true;
+                }
             }
             // `;` collapses the selection but leaves select mode standing —
             // Helix's own behaviour, and the reason it looks broken to a
@@ -1940,6 +1957,13 @@ impl Editor {
         ("l", "hint.case.lower"),
         ("u", "hint.case.upper"),
         ("`", "hint.case.switch"),
+        ("s", "hint.case.to-s"),
+        ("t", "hint.case.to-t"),
+        ("w", "hint.case.to-tw"),
+        ("h", "hint.case.to-hk"),
+        ("c", "hint.case.to-c"),
+        ("g", "hint.case.to-g"),
+        ("j", "hint.case.to-jp"),
         ("", "hint.vi.backtick"),
     ];
 

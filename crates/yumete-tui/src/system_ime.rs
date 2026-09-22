@@ -186,6 +186,26 @@ SystemIme { policy, focused: true, suspended: false }
         }
     }
 
+    /// **說一遍不算數的時候，再說一遍**（2026-09-22 報的）。
+    ///
+    /// 報的情形：在別的窗口用系統輸入法打了字，切回 yumete（Normal 模式），輸入
+    /// 法還開着，於是鍵被吞掉。
+    ///
+    /// 根子在 [`Self::suspended`] 是一個**信念**：想要鍵而且還没挂起，纔發信號。
+    /// 輸入法在別處自己恢復了，這一頭卻還記着「已經挂着了」——於是它再也不說第二
+    /// 次。⚠️ **同一族的坑源碼裏記着**（見本檔開頭：開機那一次的挂起被丟掉，
+    /// yumete 就此相信自己挂着了）。
+    ///
+    /// 信念會漂，就得有一條重新聲明的路。抹掉信念就夠了：下一輪 [`Self::want`]
+    /// 自己會把信號重發一次，而它本來就是冪等的。
+    ///
+    /// ⚠️ **不做成「焦點回來自動重發」**——那條保險絲的反面（焦點離開自動解挂）
+    /// 試過、撤了，代價是一天幾十次。由人按一下，該重發的時候纔重發。
+    pub fn say_it_again(&mut self) {
+        log(|| "-> say it again".to_string());
+        self.suspended = false;
+    }
+
     /// Give the keys back. Safe to call when nothing was asked for.
     pub fn release(&mut self) {
         if self.suspended {
