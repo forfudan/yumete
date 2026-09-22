@@ -6086,13 +6086,6 @@ en = "{0} line {1} (C-o comes back)"
 # ── macro ─────────────────────────────────────────────────────────────
 
 [[message]]
-# 補全單子底下：第幾條／一共幾條（單子露不全的時候）
-key = "lsp.which-of-them"
-zht = "第 {0} 條，共 {1} 條 · Tab 就這條"
-zhs = "第 {0} 条，共 {1} 条 · Tab 就这条"
-en = "{0} of {1} · Tab takes it"
-
-[[message]]
 # 補全單子的標題
 key = "lsp.what-comes-next"
 zht = "接下來"
@@ -6105,6 +6098,13 @@ key = "lsp.what-is-this"
 zht = "這是什麽"
 zhs = "这是什么"
 en = "what is this"
+
+[[message]]
+# 補全單子底下：第幾條／一共幾條（單子露不全的時候）
+key = "lsp.which-of-them"
+zht = "第 {0} 條，共 {1} 條 · Tab 就這條"
+zhs = "第 {0} 条，共 {1} 条 · Tab 就这条"
+en = "{0} of {1} · Tab takes it"
 
 [[message]]
 # 還沒錄過巨集就按了播放

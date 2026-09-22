@@ -15463,3 +15463,36 @@ fn a_program_file_is_drawn_across_and_the_manuscript_keeps_its_vertical() {
     ed.set_syntax(crate::syntax::Syntax::Markdown);
     assert_eq!(ed.layout(), Layout::Vertical, "回來還是竪的");
 }
+
+/// **站在一格表格裏的腳注上，浮窗照樣要出來**（2026-09-22 報的）。
+///
+/// 兩條規矩夾出來的一個洞：`detail()` 在表格行裏無條件先給**行**，而行在散文頁上
+/// 又不主動打開（#495）——於是站在 `[^1]` 上什麽都没有，狀態欄卻還寫着「腳注」。
+/// 光標**壓着**的那一個比它待的那一行精確，所以註先。
+#[test]
+fn a_footnote_inside_a_table_cell_still_answers() {
+    let mut ed = typed(
+        "| 號 | 說明 |\n| --- | --- |\n| 37 | 摺得起來 [^37] |\n\n那年很冷[^37]。\n\n[^37]: 二十章只是牆。\n",
+    );
+
+    // 第 3 行（1 起算）那一格裏的 `[^37]` 上。
+    let rope = ed.current_buffer().rope();
+    let line = rope.line_to_char(2);
+    // ⚠️ `find` 給的是**字節**偏移，而光標數的是字符——前面有漢字，兩者不等。
+    let text3 = rope.line(2).to_string();
+    let bytes = text3.find("[^37]").expect("那一格裏有這個記號");
+    let at = line + text3[..bytes].chars().count();
+    ed.set_cursor(at);
+
+    let panel = ed.detail().expect("站在註上就該答得出來");
+    assert!(panel.title.contains("37"), "答的是那條註，不是那一行：{}", panel.title);
+    assert!(
+        !ed.detail_shows_a_row(),
+        "⚠️ 這兩句要同一個次序——不然註贏了卻仍被當成「這是一行」，照樣被擋住"
+    );
+    assert!(ed.detail_visible(), "而且是自己浮出來的，不用按 t i");
+
+    // 同一行上不壓着記號的地方，照舊是那一行的事（#283 不變）。
+    ed.set_cursor(line + 2);
+    assert!(ed.detail_shows_a_row() || ed.detail().is_none(), "格子裏別處還是行");
+}
