@@ -7,6 +7,85 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## 0.3.0 · 未發布
+
+這一版是**寫程序的那一半**：編輯器接上了語言服務器，紅綫、跳定義、說明、補全四件
+一齊到位。另一頭，竪排長進了一點——年份與章節號不再一位一行，而程序文件一律橫排。
+
+This one is the half that writes programs: a language server behind the editor,
+with diagnostics, go-to-definition, hover and completion. On the other side,
+vertical layout learned to set a four-digit year in one slot — and program files
+are now always laid out across.
+
+### 新的 · New
+
+- **語言服務器（#53／#54）。** 打開一個 `.rs`、`.go`、`.py`，yumete 在背後起一個語言
+  服務器，四件事跟着來：
+
+  | | 鍵 | 做什麽 |
+  | --- | --- | --- |
+  | ① 診斷 | 自己出來 | 行號左邊一格：朱鋪滿是錯，另外三檔淡底加 `!` `i` `·`。光標移到那一行，話就浮在旁邊；`:check-code` 排成一張 `gf` 跳得了的單子 |
+  | ② 跳定義 | `gd` | 站在名字上按，去它寫着的那一行，跨檔也行，`C-o` 回來 |
+  | ③ 這是什麽 | `空格 k` | 簽名、類型、文檔註釋浮在旁邊。**服務器送的是 Markdown，就照 Markdown 畫**——粗的是粗的，代碼是代碼的墨色 |
+  | ④ 補全 | 打字自己出來，或 `C-n` | 單欄九行跟着選中項滾，`Tab` 就這一條，`Esc` 收起來 |
+
+  **rust、go、python 三種是填好的**（python 按 PATH 挑：`ty`／`ruff`／`pylsp`／
+  `jedi`，先裝哪個用哪個）。機器上没有那個程序就說一聲、檔照常打開。別的語言寫一行
+  `[lsp.<語言>]`。
+  ⚠️ **稿子不起服務器**：Markdown 與 Typst 在外面也有語言服務器，可這個編輯器本身
+  就是寫稿子的工具。
+  ⚠️ **補全和輸入法不打架**：編碼串還在輸入法手裏的時候，編輯器不知道你在打字——
+  空格與 `2390` 一直是輸入法的；一個詞上屏了纔輪到問服務器。所以中文註釋裏也補得出來。
+
+  A language server behind `.rs`, `.go` and `.py`: diagnostics in the gutter and
+  floating beside the caret, `gd`, `空格 k` for hover (drawn *as Markdown*), and
+  completion that comes up as you type. Three languages come filled in; the
+  candidate list and the IME's own never contend, because a code in composition
+  has not reached the buffer yet.
+
+- **縱中橫是一個數了，出廠裝四個。** `[editor] tatechuyoko = 4`：一格裏最多擠幾個
+  連着的半角字母或數字。`1997`、`2026`、`CPU`、`第12章` 各成一行，不再一位一格往下
+  堆。**整串一起裝，裝不下就整串都不裝**——半格半格地填會把 `1997` 讀成兩個數。
+  三位以上那一串比格子寬，多出來的幾格從**行間**借：只有真有長串的那一縱纔付這個錢。
+  排版界的上限是 4（CSS `text-combine-upright: digits <integer [2,4]>`、InDesign 的
+  組數字 2／3／4），yumete 讓到 8。
+  ⚠️ **破壞性改動**：`tatechuyoko = true` 不再接受——「開着」說不出一格裝幾個。那一行
+  會被拒收並當場報一句，同一個檔裏別的設定照常載入。
+
+### 鍵位變了 · Keys that changed
+
+- **`t`／`T` 還給 vi 的 till**（`tx` 走到 `x` 前面一格）。表格那一組整個搬到
+  **`空格 t`** 底下：`空格 t t` 表格視圖、`空格 t n` 表格模式、`空格 t i` 詳情……
+  一個槽位買一整組，是這個菜單能做的最划算的交易。
+- **`空格 k`** 新的：問服務器「這是什麽」。（`K` 不動，還是上半頁。）
+- **`C-n`** 在插入模式裏叫補全單子；單子開着的時候 `Tab` 是「就這一條」，没開還是
+  原來那件事（引用補全）。
+- **`h`／`l` 進了動作表**，所以 `dh`、`2dl`、`ch` 都對了；**段落成了文本對象**，
+  `dip`、`dap`、`cip`、`yap`、helix 的 `mi p` 一併有了。
+
+### 變了 · Changed
+
+- **一次插入是一次撤銷，上屏算在裏面。** 從前開着輸入法時 `u` 是**一個詞一個詞**地
+  回撤——一句中文要上屏七八次，於是一句話被切成八次撤銷。現在從進 Insert 到回 Normal
+  算一次，跟 vim 和 helix 一樣。
+- **程序文件一律橫排。** 縮進與對齊是那門語言語法的一部分，竪過來就没有了；行號、
+  改動條、診斷那一欄也都建立在「一行一列」上。`:layout vertical` 與 `-v` 碰上 `.rs`
+  只回一句話。⚠️ **這是對那一份檔說的，不是把你的設定關掉**：稿子開着竪排，中間去看
+  一眼代碼，回來稿子還是竪的。
+
+### 修好的 · Fixed
+
+- **刪掉出錯的那一行，紅色不跟着走。**（2026-09-21 報的）根子是從來没發過
+  `textDocument/didSave`：rust-analyzer 說的話分兩路來，它自己的分析每次改動都重算，
+  而 `cargo check`（「cannot find value…」那一種）**只在存盤時重跑**。不告訴它存了盤，
+  那一路自開機第一次之後再没跑過——屏幕上那句話是上一次 check 的舊帳。
+- **診斷那一格不再是半個圓。** `●▲◆` 在 CJK 等寬字體裏是**兩格寬**（量過：一格
+  7.5 像素，它們 15 像素），擠進一格不是被裁半邊就是把整行推開。現在朱是鋪滿一格
+  不畫字，另外三檔淡底加 `!` `i` `·`——一百個男人裏有八個分不出紅綠，鋪滿加字符他們
+  分得出。
+- **起來就死的語言服務器不再每一趟循環重起一次**；答過話的那一個死了纔重起。
+- **小終端上按 `空格` 不再什麽都不出**：鍵表按放得下的高度分欄，末一格說還有幾個。
+
 ## 0.2.0 · 2026-09-19
 
 一本書寫到一半會缺什麼，這一版就補什麼：**書自己的百科**、**竪排裏的表格**、
