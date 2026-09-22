@@ -57,10 +57,17 @@ impl Editor {
         // in the *paragraph*, which is why the note panel still answers there
         // — and wrong in the row, the more so since a cell wide enough to be
         // folded away is one this panel is now the way to read whole.
-        match self.in_a_table_row() {
-            true => self.row_detail().or_else(|| self.note_detail()),
-            false => self.note_detail(),
-        }
+        //
+        // ⚠️ **站在註上比在行裏精確，所以註先。**（2026-09-22 報的：`[^37]` 在
+        // 一格表格裏，浮窗什麽都不出，而狀態欄照樣寫着「腳注」。）兩條規矩夾出
+        // 一個洞：這裏無條件先給行，而行在散文頁上又**不主動打開**（#495），於是
+        // 兩樣都没有。`note_detail` 只在光標**正壓着** `[^n]` 或 `%%註%%` 的時候
+        // 纔答得出東西——那是讀者指着的那一個，而「這一格屬於某一行」只是它待的
+        // 地方。#283 要的「行裏按 `t i` 給行」照舊：讓開的只有光標壓着註的那幾格。
+        self.note_detail().or_else(|| match self.in_a_table_row() {
+            true => self.row_detail(),
+            false => None,
+        })
     }
 
     /// Whether the panel is about to show a **row** rather than a note.
@@ -72,7 +79,9 @@ impl Editor {
     /// of twenty-eight. What decides is what the panel *holds* — a row is a
     /// tall thing wherever it is written.
     pub fn detail_shows_a_row(&self) -> bool {
-        self.in_a_table_row() && self.row_detail().is_some()
+        // 與 [`Self::detail`] 同一個次序，否則這兩句會各說各話：註贏了卻仍被
+        // 當成「這是一行」，於是那一條「散文頁上的行不主動打開」把註也擋住。
+        self.note_detail().is_none() && self.in_a_table_row() && self.row_detail().is_some()
     }
 
     /// Whether the cursor is standing in a row a table panel can read.
