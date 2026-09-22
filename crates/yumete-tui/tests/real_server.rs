@@ -389,6 +389,77 @@ fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
     );
 }
 
+/// **打着字，單子自己出來**（#53 ④ 的自動那一半，2026-09-21）。
+///
+/// ⚠️ **這一條驗的是次序。** 補全的問題必須排在 `didChange` 後面——服務器手上要
+/// 是上一版正文，它答的就是「上一個字母之前那個詞後面能接什麽」。這裏不按
+/// `C-n`，只是打字，然後讓事件循環自己轉。
+#[test]
+#[ignore = "needs rust-analyzer on the machine, and takes seconds"]
+fn typing_alone_brings_the_list_up() {
+    if which("rust-analyzer").is_none() {
+        eprintln!("no rust-analyzer on this machine — nothing to check");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("yumete-auto-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"auto\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/main.rs"),
+        "fn counted(text: &str) -> usize {\n    text.chars().count()\n}\n\nfn main() {\n    let n = \n}\n",
+    )
+    .unwrap();
+
+    let mut editor = yumete_core::editor::Editor::new();
+    editor.open_file(dir.join("src/main.rs")).unwrap();
+    let config = yumete_config::Config {
+        lsp: yumete_config::factory_servers(),
+        ..Default::default()
+    };
+    let mut servers = yumete_tui::server::Servers::default();
+
+    editor.execute(":6").unwrap();
+    editor.on_key(yumete_core::input::Key::Char('A'));
+
+    // 打 `coun`，一個字母一個字母地打，中間讓循環轉——**不按 C-n**。
+    let gave_up = Instant::now() + Duration::from_secs(120);
+    let mut typed = false;
+    while Instant::now() < gave_up && editor.offers_here().is_none() {
+        if !typed {
+            for c in "coun".chars() {
+                editor.on_key(yumete_core::input::Key::Char(c));
+            }
+            typed = true;
+        }
+        servers.follow(&editor, &config);
+        servers.ask_next(&mut editor, &config);
+        servers.collect(&mut editor);
+        std::thread::sleep(Duration::from_millis(100));
+        // 服務器還在讀項目的時候答的是空的；那就再打一輪（退一個字母再補上）。
+        if editor.offers_here().is_none() && Instant::now().elapsed().as_secs() % 3 == 0 {
+            typed = false;
+            editor.on_key(yumete_core::input::Key::Backspace);
+        }
+    }
+    let offered: Vec<String> = editor
+        .offers_here()
+        .map(|(items, _)| items.iter().map(|o| o.label.clone()).collect())
+        .unwrap_or_default();
+    servers.stop();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(!offered.is_empty(), "光是打字就把單子帶出來了（120 秒）");
+    assert!(
+        offered.iter().any(|label| label.starts_with("counted")),
+        "而且是這一份裏的函數：{offered:?}"
+    );
+}
+
 /// The program, if it is on the PATH.
 fn which(program: &str) -> Option<PathBuf> {
     std::env::var_os("PATH")?

@@ -314,8 +314,21 @@ impl Servers {
         server.waiting = true;
     }
 
-    /// **Send the 「what comes next?」 question** (`C-n`, #53 ④).
+    /// **Send the 「what comes next?」 question** (`C-n` and every letter typed,
+    /// #53 ④).
+    ///
+    /// ⚠️ **Not until the server has the text this is a question about.** The
+    /// `didChange` that carries the letter just typed waits out the settle
+    /// (300 ms), and a `completion` sent before it arrives is answered against
+    /// the *previous* version of the file — which is a list of the things that
+    /// could follow the word as it was one keystroke ago. So the question is
+    /// **left standing** rather than taken, and goes out on the turn after the
+    /// text does. This is the same ordering `didSave` needs, for the same
+    /// reason, and it is the whole of what makes the automatic half work.
     pub fn ask_next(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        if !self.told_the_latest(editor) {
+            return;
+        }
         let Some((path, line, column)) = editor.take_completion_query() else { return };
         let Some(language) = Self::language_of(editor) else { return };
         let Some(server) = self.running.get_mut(language) else {
@@ -328,6 +341,12 @@ impl Servers {
         server.asked_next = Some(id);
         server.say(lsp::completion(id, &path, line, column));
         server.waiting = true;
+    }
+
+    /// **Does the server hold the text the buffer holds?** See [`Self::ask_next`].
+    fn told_the_latest(&self, editor: &Editor) -> bool {
+        let Some(path) = editor.current_buffer().path() else { return false };
+        self.sent.get(path) == Some(&editor.current_buffer().revision())
     }
 
     /// Take everything the servers have said and give it to the editor.

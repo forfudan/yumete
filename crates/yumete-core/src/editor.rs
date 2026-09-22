@@ -1770,6 +1770,22 @@ pub struct Editor {
     hover_query: Option<(PathBuf, usize, usize)>,
     /// **`C-n` 問出去的那一句**（#53 ④，2026-09-21）——同上一個形狀。
     completion_query: Option<(PathBuf, usize, usize)>,
+    /// **Where the caret was when that question was asked** (#53 ④).
+    ///
+    /// ⚠️ **The answer is about that spot, not about wherever the caret is by
+    /// the time it comes back.** A list that arrived after two more letters
+    /// were typed is a list of what could follow the word as it was — showing
+    /// it would offer `counted` after `counting`. Kept separate from the query
+    /// because the query is *taken* by the front end and this has to outlive
+    /// it until the answer lands.
+    completion_at: Option<usize>,
+    /// **Whether that question was asked by hand** (`C-n`) rather than by the
+    /// letter just typed (#53 ④).
+    ///
+    /// ⚠️ **What it decides is whether silence is reported.** 「這裏接不下什麽」
+    /// is the answer to a question somebody asked; said after every pause in
+    /// typing it is a status line that flickers all day and is never read.
+    completion_by_hand: bool,
     /// **服務器提的那些候選，和問它時光標在哪**（#53 ④）。
     offering: Option<Offering>,
     /// **服務器對光標下那個東西說的話，和問它時光標在哪**（#53 ③）。
@@ -2512,6 +2528,8 @@ impl Editor {
             hover_query: None,
             hovered: None,
             completion_query: None,
+            completion_at: None,
+            completion_by_hand: false,
             offering: None,
             dictionary: None,
             other: None,
