@@ -6034,6 +6034,13 @@ zhs = "这不是程序文件，没有服务器可问"
 en = "not a program file — no server to ask"
 
 [[message]]
+# 服務器提不出任何候選
+key = "lsp.nothing-to-offer"
+zht = "這裏接不下什麽"
+zhs = "这里接不下什么"
+en = "nothing fits here"
+
+[[message]]
 # gd 問完了，服務器說不出它寫在哪
 key = "lsp.nowhere"
 zht = "服務器說不出這個寫在哪"
@@ -6062,6 +6069,13 @@ zhs = "{0} 的语言服务器停了——它说过的都不再算数，下一个
 en = "the {0} language server stopped — what it said no longer counts, and the next file starts a new one"
 
 [[message]]
+# 補全單子底下那一句：怎麽用
+key = "lsp.take-it"
+zht = "Tab 就這條 · C-n/C-p 換"
+zhs = "Tab 就这条 · C-n/C-p 换"
+en = "Tab takes it · C-n/C-p to move"
+
+[[message]]
 # gd 跳到了定義那一行
 key = "lsp.went"
 zht = "{0} 第 {1} 行（C-o 回來）"
@@ -6070,6 +6084,13 @@ en = "{0} line {1} (C-o comes back)"
 
 
 # ── macro ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 補全單子的標題
+key = "lsp.what-comes-next"
+zht = "接下來"
+zhs = "接下来"
+en = "what comes next"
 
 [[message]]
 # hover 浮窗的標題

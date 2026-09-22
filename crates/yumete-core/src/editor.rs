@@ -1542,6 +1542,23 @@ const SWAP_BACKLOG_INTERVAL: std::time::Duration = std::time::Duration::from_mil
 /// on — they alt-tabbed away, ran a script, and came back to see whether the
 /// page caught up. The cheap path is one `stat`.
 const DISK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+/// **What the server says could come next, and where it was asked** (#53 ④).
+///
+/// ⚠️ **The caret's place is part of the answer.** 「什麽接得下去」 is a
+/// question about one spot in one file, and the moment the caret leaves that
+/// spot the answer is about somewhere else. Keeping the list alive across a
+/// move would offer `count` where `count` cannot go.
+#[derive(Debug, Clone)]
+pub(crate) struct Offering {
+    /// Where the caret was when this was asked.
+    pub(crate) at: usize,
+    /// What the server offered, in the server's own order (it ranks them).
+    pub(crate) items: Vec<crate::lsp::Offer>,
+    /// Which one is picked — always a real index, because an empty list is
+    /// 「no offering」 and is never stored.
+    pub(crate) picked: usize,
+}
+
 
 /// The editor: a non-empty list of open buffers and the index of the active one.
 pub struct Editor {
@@ -1751,6 +1768,10 @@ pub struct Editor {
     definition_query: Option<(PathBuf, usize, usize)>,
     /// **`空格 k` 問出去的那一句**（#53 ③，2026-09-21）——同上一個形狀。
     hover_query: Option<(PathBuf, usize, usize)>,
+    /// **`C-n` 問出去的那一句**（#53 ④，2026-09-21）——同上一個形狀。
+    completion_query: Option<(PathBuf, usize, usize)>,
+    /// **服務器提的那些候選，和問它時光標在哪**（#53 ④）。
+    offering: Option<Offering>,
     /// **服務器對光標下那個東西說的話，和問它時光標在哪**（#53 ③）。
     ///
     /// ⚠️ 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
@@ -2490,6 +2511,8 @@ impl Editor {
             definition_query: None,
             hover_query: None,
             hovered: None,
+            completion_query: None,
+            offering: None,
             dictionary: None,
             other: None,
             live_pane: 0,

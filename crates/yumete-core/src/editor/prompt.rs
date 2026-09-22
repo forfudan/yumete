@@ -8,6 +8,49 @@ use super::*;
 
 impl Editor {
     pub(super) fn on_insert_key(&mut self, key: Key) {
+        // **服務器提的那張單子，開着的時候先歸它**（#53 ④）。
+        //
+        // ⚠️ **`Tab` 在這裏本來就有主人**（引用補全，#418）：單子開着 `Tab` 是
+        // 「就這一條」，没開纔是原來那件事。這是浮出來的單子的通則——它在，它
+        // 收鍵；它不在，什麽都没變。
+        //
+        // ⚠️ **IME 開着的時候這裏一個鍵都收不到**：編碼串還在 IME 手裏，根本
+        // 不進這個函數。2026-09-21 定的模型：「只有當文字上屏才算字符落到屏幕
+        // 上」——所以候選欄與這張單子不會同時收同一個鍵，空格與 `2390` 一直是
+        // IME 的。
+        if self.offers_here().is_some() {
+            match key {
+                Key::Tab => {
+                    if self.take_the_offer() {
+                        return;
+                    }
+                }
+                Key::Ctrl('n') | Key::Down => {
+                    if self.pick_offer(true) {
+                        return;
+                    }
+                }
+                Key::Ctrl('p') | Key::Up => {
+                    if self.pick_offer(false) {
+                        return;
+                    }
+                }
+                Key::Esc => {
+                    if self.drop_the_offering() {
+                        return;
+                    }
+                }
+                // 別的鍵照舊：打字就該打進去，而打完這張單子就過期了（它記着
+                // 問的時候光標在哪）。
+                _ => {}
+            }
+        } else if matches!(key, Key::Ctrl('n')) {
+            // **叫它出來。** 稿子裏没有服務器可問，那就什麽都不做——`C-n` 在
+            // 這個編輯器裏還没有別的意思，無聲勝過一句用不上的抱怨。
+            if self.ask_what_comes_next() {
+                return;
+            }
+        }
         // Anything but Tab abandons the reference being walked, so the next Tab
         // starts from what is actually in the buffer — the same rule the
         // command line's completion follows (#418).

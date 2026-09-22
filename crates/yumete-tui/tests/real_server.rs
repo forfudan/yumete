@@ -297,6 +297,98 @@ fn rust_analyzer_says_what_a_function_is() {
     assert!(told.contains("數一數有幾個字"), "文檔註釋也在：{told:?}");
 }
 
+/// **`C-n` 真的問得出「接下來能打什麽」，而且打進去的是對的那個字串**
+/// （#53 ④，2026-09-21）。
+///
+/// ⚠️ **這一條是拿來驗兩件只有真服務器能驗的事：**
+/// ① `snippetSupport: false` 真的讓 rust-analyzer 送 `counted` 而不是
+///    `counted(${1:text})`——認了 snippet 又不會展開，那六個字符會進使用者的檔；
+/// ② `textEdit.range` 蓋掉的正是已經打出來的那幾個字母。
+#[test]
+#[ignore = "needs rust-analyzer on the machine, and takes seconds"]
+fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
+    if which("rust-analyzer").is_none() {
+        eprintln!("no rust-analyzer on this machine — nothing to check");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("yumete-next-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"next\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    // `coun` 打了一半，等着補成 `counted`。
+    std::fs::write(
+        dir.join("src/main.rs"),
+        "fn counted(text: &str) -> usize {\n    text.chars().count()\n}\n\nfn main() {\n    let n = coun\n}\n",
+    )
+    .unwrap();
+
+    let mut editor = yumete_core::editor::Editor::new();
+    editor.open_file(dir.join("src/main.rs")).unwrap();
+    let config = yumete_config::Config {
+        lsp: yumete_config::factory_servers(),
+        ..Default::default()
+    };
+    let mut servers = yumete_tui::server::Servers::default();
+
+    // 第 6 行（1 起算）的行尾，插入模式——`coun` 剛打完的樣子。
+    editor.execute(":6").unwrap();
+    editor.on_key(yumete_core::input::Key::Char('A'));
+    assert_eq!(editor.mode(), yumete_core::input::Mode::Insert);
+
+    let gave_up = Instant::now() + Duration::from_secs(120);
+    while Instant::now() < gave_up && editor.offers_here().is_none() {
+        editor.on_key(yumete_core::input::Key::Ctrl('n'));
+        for _ in 0..10 {
+            servers.follow(&editor, &config);
+            servers.ask_next(&mut editor, &config);
+            servers.collect(&mut editor);
+            if editor.offers_here().is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+    let offered: Vec<String> = editor
+        .offers_here()
+        .map(|(items, _)| items.iter().map(|o| o.label.clone()).collect())
+        .unwrap_or_default();
+    assert!(!offered.is_empty(), "服務器提了點什麽（120 秒）");
+    assert!(
+        offered.iter().any(|label| label.starts_with("counted")),
+        "自己寫的那個函數在單子上：{offered:?}"
+    );
+
+    // 走到 `counted` 那一條上，按 Tab。
+    for _ in 0..offered.len() {
+        let picked = editor
+            .offers_here()
+            .map(|(items, at)| items[at].label.clone())
+            .unwrap_or_default();
+        if picked.starts_with("counted") {
+            break;
+        }
+        editor.on_key(yumete_core::input::Key::Ctrl('n'));
+    }
+    editor.on_key(yumete_core::input::Key::Tab);
+
+    let line = {
+        let rope = editor.current_buffer().rope();
+        rope.line(5).to_string()
+    };
+    servers.stop();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        line.trim_end(),
+        "    let n = counted",
+        "⚠️ 打進去的是乾淨的名字：没有 snippet 的 `${{1:…}}`，也没有把 `coun` 留在前面"
+    );
+}
+
 /// The program, if it is on the PATH.
 fn which(program: &str) -> Option<PathBuf> {
     std::env::var_os("PATH")?

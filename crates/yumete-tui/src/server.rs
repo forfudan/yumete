@@ -95,6 +95,8 @@ struct Server {
     next_ask: i64,
     /// **Which id was `gd`**, so its answer is told apart from every other.
     asked_where: Option<i64>,
+    /// The id of the 「what comes next?」 now out, if one is (#53 ④).
+    asked_next: Option<i64>,
     /// The id of the 「what is this?」 now out, if one is (#53 ③).
     ///
     /// ⚠️ **Its own slot, not a second use of `asked_where`.** Both questions
@@ -312,6 +314,22 @@ impl Servers {
         server.waiting = true;
     }
 
+    /// **Send the 「what comes next?」 question** (`C-n`, #53 ④).
+    pub fn ask_next(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        let Some((path, line, column)) = editor.take_completion_query() else { return };
+        let Some(language) = Self::language_of(editor) else { return };
+        let Some(server) = self.running.get_mut(language) else {
+            editor.no_offers();
+            let _ = config;
+            return;
+        };
+        let id = server.next_ask;
+        server.next_ask += 1;
+        server.asked_next = Some(id);
+        server.say(lsp::completion(id, &path, line, column));
+        server.waiting = true;
+    }
+
     /// Take everything the servers have said and give it to the editor.
     ///
     /// **Never waits.** What has arrived, arrives; what has not will be here
@@ -345,7 +363,14 @@ impl Servers {
                     Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(id)),
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
-                    Ok(Notice::Answer { id, places, told }) => {
+                    Ok(Notice::Answer { id, places, told, offers }) => {
+                        // **「接下來能打什麽」的答案**（#53 ④）。
+                        if server.asked_next == Some(id) {
+                            server.asked_next = None;
+                            server.waiting = false;
+                            anything = true;
+                            editor.show_offers(offers);
+                        } else
                         // **「這是什麽」的答案**（#53 ③）。
                         if server.asked_what == Some(id) {
                             server.asked_what = None;
@@ -560,6 +585,7 @@ fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Serv
         next_ask: FIRST_ASK,
         asked_where: None,
         asked_what: None,
+        asked_next: None,
     };
     server.say_now(lsp::initialize(HELLO, &editor.project_root()));
     Ok(server)
@@ -596,6 +622,7 @@ mod tests {
                     next_ask: FIRST_ASK,
                     asked_where: None,
                     asked_what: None,
+                    asked_next: None,
                 },
             );
             (servers, heard, tell)
