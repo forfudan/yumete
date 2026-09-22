@@ -93,6 +93,14 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// and a server told we can render markdown hovers will spend work making
 /// them.
 ///
+/// ⚠️ **`completionItem.snippetSupport` is claimed `false` on purpose**
+/// (#53 ④). A snippet is not text — it is `counted(${1:text})`, a form with
+/// holes in it, and an editor that does not fill the holes has to put those
+/// six characters into the reader's file. Saying so is what makes
+/// `rust-analyzer` send `counted` instead, which is exactly what this step can
+/// insert. ⚠️ **Claiming it and then not expanding is the bug**, and it is a
+/// quiet one: it only shows up on functions.
+///
 /// ⚠️ **`synchronization.didSave` is not a nicety.** A server that runs a real
 /// compiler (rust-analyzer's `cargo check`) only re-runs it when the file is
 /// saved, and a client that never claims to send saves is never sent one.
@@ -101,7 +109,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["plaintext","markdown"]}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["plaintext","markdown"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -157,6 +165,14 @@ pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> Str
 pub fn hover(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/hover","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `textDocument/completion` — 「接下來能打什麽？」 (#53 ④).
+pub fn completion(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/completion","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
         uri = json_string(&uri_of(path)),
     )
 }
@@ -235,9 +251,42 @@ pub enum Notice {
     /// one it is waiting for: a definition fills `places` and leaves `told`
     /// empty; a hover does the opposite; a server that answered `null` fills
     /// neither, which is 「nothing to say」 in both languages.
-    Answer { id: i64, places: Vec<Place>, told: Option<String> },
+    Answer { id: i64, places: Vec<Place>, told: Option<String>, offers: Vec<Offer> },
     /// Anything else: progress, logs, an answer nobody is waiting for.
     Nothing,
+}
+
+/// **One thing the server says could come next** (#53 ④).
+///
+/// ⚠️ **`label` is what is shown and `insert` is what is typed, and they are
+/// not the same string.** A method comes back labelled `count()` and inserted
+/// as `count`; a field of a struct is labelled `text: &str` and inserted as
+/// `text`. Showing the insert text makes the list useless to read; inserting
+/// the label puts the type annotation into the file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Offer {
+    /// What the list shows.
+    pub label: String,
+    /// What goes into the file.
+    pub insert: String,
+    /// 「method」「field」「keyword」… — the server's own number, kept as a
+    /// number because the names are this crate's business only when they are
+    /// drawn. `0` for an item that did not say.
+    pub kind: i64,
+    /// The type, the signature, the module it comes from — one short line the
+    /// server offers *about* the item. `None` when it offered none.
+    pub detail: Option<String>,
+    /// **How much of what is already typed this replaces**, in UTF-16 code
+    /// units on the line the caret is on.
+    ///
+    /// ⚠️ **The server decides this, not the editor.** `self.co` completing to
+    /// `count` replaces `co` — three characters back from the caret, or two,
+    /// or none, depending on what the server thinks the word is. Guessing it
+    /// with the editor's own idea of a word is right for `co` and wrong for
+    /// `a.b`, `#[der`, `'lifet` and every language whose words are not this
+    /// language's words. `None` when the server sent no edit range, and then
+    /// the caller replaces nothing.
+    pub replacing: Option<(usize, usize)>,
 }
 
 /// Read one message.
@@ -261,6 +310,7 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             id,
             places: places(value.get("result")),
             told: told(value.get("result")),
+            offers: offers(value.get("result")),
         },
         _ => Notice::Nothing,
     }
@@ -389,6 +439,63 @@ fn inline(raw: &str) -> String {
         blank = false;
     }
     text
+}
+
+/// What a `textDocument/completion` answer offers (#53 ④).
+///
+/// ⚠️ **Two shapes**: a bare array of items, or a `CompletionList` with them
+/// under `items` (and an `isIncomplete` this step does not use — it means
+/// 「ask again as they type」, which is a refinement of *when* to ask).
+///
+/// The list is taken in the order the server sent it. ⚠️ **Not sorted here**:
+/// a server ranks its own offers (`sortText` is what it ranks them by, and it
+/// is not always the label), and an editor that re-sorted would be overruling
+/// the one party that knows the language.
+fn offers(result: Option<&serde_json::Value>) -> Vec<Offer> {
+    let items = match result {
+        None | Some(serde_json::Value::Null) => return Vec::new(),
+        Some(serde_json::Value::Array(many)) => many.clone(),
+        Some(value) => match value.get("items").and_then(|i| i.as_array()) {
+            Some(items) => items.clone(),
+            None => return Vec::new(),
+        },
+    };
+    items.iter().filter_map(one_offer).collect()
+}
+
+/// One `CompletionItem`. See [`offers`].
+fn one_offer(item: &serde_json::Value) -> Option<Offer> {
+    let label = item.get("label")?.as_str()?.to_string();
+    // `textEdit` is both what to type and what to replace; `insertText` is
+    // only what to type; the label is the fallback the specification names.
+    let edit = item
+        .get("textEdit")
+        .and_then(|e| e.get("newText").and_then(|t| t.as_str()).map(|text| (e, text)));
+    let insert = match (edit, item.get("insertText").and_then(|t| t.as_str())) {
+        (Some((_, text)), _) => text.to_string(),
+        (None, Some(text)) => text.to_string(),
+        (None, None) => label.clone(),
+    };
+    let replacing = edit.and_then(|(e, _)| {
+        // A `TextEdit` has `range`; an `InsertReplaceEdit` has `insert` and
+        // `replace` instead, and **replace is the one that means 「the word
+        // that is there now」**.
+        let range = e.get("range").or_else(|| e.get("replace")).or_else(|| e.get("insert"))?;
+        let from = range.get("start")?.get("character")?.as_u64()? as usize;
+        let to = range.get("end")?.get("character")?.as_u64()? as usize;
+        Some((from, to))
+    });
+    Some(Offer {
+        label,
+        insert,
+        kind: item.get("kind").and_then(|k| k.as_i64()).unwrap_or(0),
+        detail: item
+            .get("detail")
+            .and_then(|d| d.as_str())
+            .map(|d| d.replace('\n', " ").trim().to_string())
+            .filter(|d| !d.is_empty()),
+        replacing,
+    })
 }
 
 /// The empty answer to a request we do not really implement.
@@ -607,7 +714,7 @@ mod tests {
         // dropped here as 「nobody's business」; now `gd` has business.
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":7,"result":{}}"#, 1),
-            Notice::Answer { id: 7, places: Vec::new(), told: None }
+            Notice::Answer { id: 7, places: Vec::new(), told: None, offers: Vec::new() }
         );
         // A *request* from the server has a method as well as an id, and must
         // be answered or the server may wait on it forever.
@@ -707,6 +814,49 @@ mod tests {
     fn a_backtick_inside_a_fence_is_left_alone() {
         let raw = "```rust\nlet x = `y`;\nfn f()\n```";
         assert_eq!(inline(raw), "let x = `y`;\n`fn f()`");
+    }
+
+    /// **補全的兩種回答，以及「顯示的」與「打進去的」不是同一個字串**（#53 ④）。
+    #[test]
+    fn a_completion_answers_in_two_shapes_and_label_is_not_insert() {
+        let offered = |m: &str| match read(m, 1) {
+            Notice::Answer { offers, .. } => offers,
+            other => panic!("是一條回答：{other:?}"),
+        };
+
+        // 裸的一串。
+        let bare = r#"{"id":4,"result":[{"label":"count()","insertText":"count","kind":2,"detail":"fn() -> usize"}]}"#;
+        let got = offered(bare);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].label, "count()", "單子上看見的");
+        assert_eq!(got[0].insert, "count", "⚠️ 真打進檔案的是這個");
+        assert_eq!(got[0].kind, 2);
+        assert_eq!(got[0].detail.as_deref(), Some("fn() -> usize"));
+        assert_eq!(got[0].replacing, None, "没給範圍就什麽都不替換");
+
+        // CompletionList，帶 textEdit——rust-analyzer 送的這一種。
+        let list = r#"{"id":4,"result":{"isIncomplete":false,"items":[{"label":"counted","kind":3,"textEdit":{"newText":"counted","range":{"start":{"line":6,"character":17},"end":{"line":6,"character":19}}}}]}}"#;
+        let got = offered(list);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].insert, "counted");
+        assert_eq!(got[0].replacing, Some((17, 19)), "⚠️ 替換掉已經打出來的那兩個碼元");
+
+        // InsertReplaceEdit：要的是 replace 那一段（「現在那個詞」）。
+        let both = r#"{"id":4,"result":[{"label":"x","textEdit":{"newText":"x","insert":{"start":{"line":0,"character":4},"end":{"line":0,"character":5}},"replace":{"start":{"line":0,"character":4},"end":{"line":0,"character":9}}}}]}"#;
+        assert_eq!(offered(both)[0].replacing, Some((4, 9)), "replace，不是 insert");
+
+        // 没東西可提是 `null` 或空的，不是錯。
+        assert!(offered(r#"{"id":4,"result":null}"#).is_empty());
+        assert!(offered(r#"{"id":4,"result":{"items":[]}}"#).is_empty());
+
+        // ⚠️ 三種回答互不誤讀。
+        assert!(offered(r#"{"id":3,"result":{"contents":"一句話"}}"#).is_empty(), "hover 裏没有候選");
+        match read(bare, 1) {
+            Notice::Answer { places, told, .. } => {
+                assert!(places.is_empty() && told.is_none(), "補全裏没有地方也没有說明")
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     /// ⚠️ 這個編輯器自己的測試檔就叫「第一章.md」。A URI that does not escape

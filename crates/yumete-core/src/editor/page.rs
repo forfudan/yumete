@@ -913,6 +913,105 @@ impl Editor {
         (*asked_at == self.cursor).then_some(told.as_str())
     }
 
+    // ---- `C-n` 問服務器接下來能打什麽（#53 ④）------------------------------
+
+    /// **把「接下來能打什麽」問出去**，問得出就回 `true`（2026-09-21）。
+    pub(super) fn ask_what_comes_next(&mut self) -> bool {
+        let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
+            return false;
+        };
+        self.completion_query = Some((path, line, utf16));
+        true
+    }
+
+    /// `C-n` 問出去的那一句，給前端發（下一趟循環取走）。
+    pub fn take_completion_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.completion_query.take()
+    }
+
+    /// **答案回來了：把單子擺出來**（#53 ④）。
+    pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>) {
+        match items.is_empty() {
+            true => self.no_offers(),
+            false => {
+                self.offering = Some(Offering { at: self.cursor, items, picked: 0 });
+                self.status = String::new();
+            }
+        }
+    }
+
+    /// 服務器提不出什麽。
+    pub fn no_offers(&mut self) {
+        self.offering = None;
+        self.status = say!("lsp.nothing-to-offer");
+    }
+
+    /// 這會兒該不該畫那張單子——光標還在問的地方纔算。
+    pub fn offers_here(&self) -> Option<(&[crate::lsp::Offer], usize)> {
+        let offering = self.offering.as_ref()?;
+        (offering.at == self.cursor).then(|| (offering.items.as_slice(), offering.picked))
+    }
+
+    /// 單子上下走一格。**首尾相接**——一張十幾條的單子，從頭回到尾比按住鍵往回
+    /// 翻快，而且没有「按到頭了」這種無聲的失敗。
+    pub(super) fn pick_offer(&mut self, forward: bool) -> bool {
+        let Some(offering) = self.offering.as_mut() else { return false };
+        if offering.at != self.cursor || offering.items.is_empty() {
+            return false;
+        }
+        let last = offering.items.len() - 1;
+        offering.picked = match (forward, offering.picked) {
+            (true, at) if at == last => 0,
+            (true, at) => at + 1,
+            (false, 0) => last,
+            (false, at) => at - 1,
+        };
+        true
+    }
+
+    /// 把單子收了，什麽也不打。
+    pub(super) fn drop_the_offering(&mut self) -> bool {
+        self.offering.take().is_some()
+    }
+
+    /// **選中的那一條真打進去**（#53 ④），打了回 `true`。
+    ///
+    /// ⚠️ **替換多少是服務器說的**，不是這一頭猜的：`self.co` 補成 `count` 要
+    /// 蓋掉 `co` 那兩個字符，而哪兩個字符算「已經打出來的那個詞」，只有認得這門
+    /// 語言的那一頭知道（見 [`crate::lsp::Offer::replacing`]）。服務器没說就
+    /// 什麽都不蓋，只在光標處插入。
+    pub(super) fn take_the_offer(&mut self) -> bool {
+        let Some(offering) = self.offering.take() else { return false };
+        if offering.at != self.cursor {
+            return false;
+        }
+        let Some(item) = offering.items.get(offering.picked).cloned() else { return false };
+        let rope = self.current_buffer().rope();
+        let long = rope.len_chars();
+        let line = rope.char_to_line(self.cursor.min(long));
+        let head = rope.line_to_char(line);
+        let text = rope.line(line).to_string();
+        let (start, end) = match item.replacing {
+            // ⚠️ 服務器說的是 **UTF-16 碼元**，這一頭數字符。
+            Some((from, to)) => (
+                head + crate::problem::char_column(&text, from),
+                head + crate::problem::char_column(&text, to),
+            ),
+            None => (self.cursor, self.cursor),
+        };
+        // 打進去算**一次**編輯——`u` 一下把整個詞撤掉，而不是一個字母一個字母地
+        // 撤（同 2026-09-21 定下的「一次插入是一次撤銷」）。
+        if self.mode != Mode::Insert {
+            self.snapshot();
+        }
+        let end = end.max(start).min(long);
+        if !self.overwrite(start, end, &item.insert) {
+            return false;
+        }
+        self.set_cursor(start + item.insert.chars().count());
+        true
+    }
+
     /// 忘掉一個檔的話——服務器死了，它說過的就不再算數。
     pub fn forget_problems(&mut self, path: &std::path::Path) {
         self.problems.forget(path);

@@ -859,6 +859,7 @@ pub fn run(
         // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
         servers.ask(editor, &config);
         servers.ask_what(editor, &config);
+        servers.ask_next(editor, &config);
         servers.collect(editor);
         if let Some(word) = servers.says.take() {
             editor.set_status(word);
@@ -4615,6 +4616,38 @@ fn draw_note(
     // 百科 name and a compiler error do not appear on the same page — one is a
     // manuscript, the other is code — so the order here settles a case that
     // barely arises, and settles it for the file you are actually in.
+    // **服務器提的那張單子浮在最最前**（#53 ④）。It is a list being *walked* —
+    // the caret is in it, `C-n` moves inside it, `Tab` takes one — and a float
+    // that covered the thing the hand is on would be the worst of the three.
+    if let Some((items, picked)) = editor.offers_here() {
+        // ⚠️ **`Body::Keys` 的兩欄正是這張單子要的形狀**：左邊是打得進去的那個
+        // 名字，右邊是服務器說的那一句（類型、簽名）。不用新造一種身體。
+        let rows: Vec<(String, String)> = items
+            .iter()
+            .enumerate()
+            .map(|(i, offer)| {
+                // 選中的那一條在名字前頭帶一個記號——終端裏一整行反白會把兩欄
+                // 的對齊也一起反掉，而一個記號在哪一行是一眼的事。
+                let mark = match i == picked {
+                    true => "› ",
+                    false => "  ",
+                };
+                (
+                    format!("{mark}{}", offer.label),
+                    offer.detail.clone().unwrap_or_default(),
+                )
+            })
+            .collect();
+        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            title: say!("lsp.what-comes-next"),
+            lede: None,
+            entry: false,
+            body: panel::Body::Keys(rows),
+            tag: Some(say!("lsp.take-it")),
+            vertical_text: false,
+            marked: false,
+        });
+    }
     // **「這是什麽」浮在最前**（#53 ③）。It was *asked for*, and the diagnostic
     // under it was not: a float that answered a question the reader did not
     // just ask, over the one they did, would be the editor arguing.
