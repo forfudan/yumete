@@ -916,12 +916,41 @@ impl Editor {
     // ---- `C-n` 問服務器接下來能打什麽（#53 ④）------------------------------
 
     /// **把「接下來能打什麽」問出去**，問得出就回 `true`（2026-09-21）。
-    pub(super) fn ask_what_comes_next(&mut self) -> bool {
+    pub(super) fn ask_what_comes_next(&mut self, by_hand: bool) -> bool {
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return false;
         };
         self.completion_query = Some((path, line, utf16));
+        self.completion_at = Some(self.cursor);
+        self.completion_by_hand = by_hand;
         true
+    }
+
+    /// **字落到頁面上了，要不要順手問一句**（#53 ④，自動那一半）。
+    ///
+    /// 2026-09-21 定下的模型：**「只有當文字上屏才算字符落到屏幕上」觸發自動補
+    /// 全**。編碼串還在 IME 手裏的時候這裏一次都不會被叫到——那些鍵根本不進編輯
+    /// 器——所以候選欄與補全單子永遠不會同時收同一個鍵。
+    ///
+    /// ⚠️ **只在詞的中間問。** 剛打完的是空格、括號、分號，那就是一個詞結束了，
+    /// 這時候彈一張單子是打斷而不是幫忙；順手把上一張也收掉。`.` 與 `:` 例外——
+    /// 它們正是「接下來能打什麽」最有用的兩個位置（`self.`、`std::`）。
+    ///
+    /// ⚠️ **問題只是放下，什麽時候發是前端的事**：服務器得先收到這一份的新正文，
+    /// 否則它答的是上一版（見 `Servers::ask_next`）。
+    pub(super) fn maybe_ask_what_comes_next(&mut self, just_typed: &str) {
+        if !self.writes_code() || self.mode != Mode::Insert {
+            return;
+        }
+        let Some(last) = just_typed.chars().last() else { return };
+        let asks = last.is_alphanumeric() || last == '_' || last == '.' || last == ':';
+        if !asks {
+            self.offering = None;
+            self.completion_query = None;
+            self.completion_at = None;
+            return;
+        }
+        self.ask_what_comes_next(false);
     }
 
     /// `C-n` 問出去的那一句，給前端發（下一趟循環取走）。
@@ -931,6 +960,12 @@ impl Editor {
 
     /// **答案回來了：把單子擺出來**（#53 ④）。
     pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>) {
+        // ⚠️ **這張單子是關於問的時候那個位置的。** 問完又打了兩個字母，回來的
+        // 是「當時那個詞後面能接什麽」——擺出來就是在答一個過期的問題。
+        let asked_at = self.completion_at.take();
+        if asked_at.is_some_and(|at| at != self.cursor) {
+            return;
+        }
         match items.is_empty() {
             true => self.no_offers(),
             false => {
@@ -940,10 +975,13 @@ impl Editor {
         }
     }
 
-    /// 服務器提不出什麽。
+    /// 服務器提不出什麽——**只有按過鍵問的那一次纔說出來**（見
+    /// `completion_by_hand`）。
     pub fn no_offers(&mut self) {
         self.offering = None;
-        self.status = say!("lsp.nothing-to-offer");
+        if self.completion_by_hand {
+            self.status = say!("lsp.nothing-to-offer");
+        }
     }
 
     /// 這會兒該不該畫那張單子——光標還在問的地方纔算。

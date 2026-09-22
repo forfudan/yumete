@@ -47,7 +47,7 @@ impl Editor {
         } else if matches!(key, Key::Ctrl('n')) {
             // **叫它出來。** 稿子裏没有服務器可問，那就什麽都不做——`C-n` 在
             // 這個編輯器裏還没有別的意思，無聲勝過一句用不上的抱怨。
-            if self.ask_what_comes_next() {
+            if self.ask_what_comes_next(true) {
                 return;
             }
         }
@@ -213,7 +213,9 @@ impl Editor {
             Key::Char(c) => {
                 self.insert_recording.push(c);
                 let mut buf = [0u8; 4];
-                self.insert_str(c.encode_utf8(&mut buf));
+                let one = c.encode_utf8(&mut buf).to_string();
+                self.insert_str(&one);
+                self.maybe_ask_what_comes_next(&one);
             }
             // **Tab types what the editor was told to, and Shift-Tab the
             // other one** — spaces out of the box, as VS Code and Zed do, so a

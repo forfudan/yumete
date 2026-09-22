@@ -854,5 +854,6 @@ impl Editor {
         }
         self.insert_recording.push_str(text);
         self.insert_str(text);
+        self.maybe_ask_what_comes_next(text);
     }
 }
