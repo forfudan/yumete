@@ -4620,12 +4620,24 @@ fn draw_note(
     // the caret is in it, `C-n` moves inside it, `Tab` takes one — and a float
     // that covered the thing the hand is on would be the worst of the three.
     if let Some((items, picked)) = editor.offers_here() {
-        // ⚠️ **`Body::Keys` 的兩欄正是這張單子要的形狀**：左邊是打得進去的那個
-        // 名字，右邊是服務器說的那一句（類型、簽名）。不用新造一種身體。
-        let rows: Vec<(String, String)> = items
+        // ⚠️ **只畫一小扇窗，不是整張單子**（2026-09-22 出圖纔看見）。
+        // `Body::Keys` 是 `空格` 那張鍵表的形狀——它裝不下就往**寬**裏長，於是
+        // rust-analyzer 提的六十二條鋪成了三欄、佔掉半個屏幕。補全單子不是鍵
+        // 表：它是一列**走着看**的東西，VSCode、helix、vim 一律單欄十行上下，
+        // 選到哪兒滾到哪兒。
+        const SHOWN: usize = 9;
+        let from = match items.len() <= SHOWN {
+            true => 0,
+            // 選中的那一條留在窗子中間偏上；到頭了就貼着頭尾，不留空行。
+            false => picked.saturating_sub(SHOWN / 2).min(items.len() - SHOWN),
+        };
+        let window = &items[from..(from + SHOWN).min(items.len())];
+        let rows: Vec<(String, String)> = window
             .iter()
             .enumerate()
-            .map(|(i, offer)| {
+            .map(|(n, offer)| {
+                let i = from + n;
+                let offer = offer;
                 // 選中的那一條在名字前頭帶一個記號——終端裏一整行反白會把兩欄
                 // 的對齊也一起反掉，而一個記號在哪一行是一眼的事。
                 let mark = match i == picked {
@@ -4643,7 +4655,12 @@ fn draw_note(
             lede: None,
             entry: false,
             body: panel::Body::Keys(rows),
-            tag: Some(say!("lsp.take-it")),
+            // 第幾條、一共幾條——單子只露一小截的時候，這是唯一說得出「還有」的
+            // 地方，而「怎麽用」那一句在第一次之後就不必再讀了。
+            tag: Some(match items.len() > SHOWN {
+                true => say!("lsp.which-of-them", picked + 1, items.len()),
+                false => say!("lsp.take-it"),
+            }),
             vertical_text: false,
             marked: false,
         });
