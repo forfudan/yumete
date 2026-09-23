@@ -275,6 +275,15 @@ fn frame_to(
     // and a picture is how this repo reviews anything that touches the front
     // end.
     settle_inline_candidate(editor, ime);
+    // …and 字典 gets its answer, the same way the loop answers it (see `run`).
+    // ⚠️ **Leaving this out made `空格 d` and `空格 D` unphotographable**: the
+    // panel came out saying 「查着……」 for ever, which reads exactly like a
+    // broken feature — and a picture is how this repo reviews the front end.
+    // 2026-09-23 審出來的。
+    if let Some(ch) = editor.take_dictionary_query() {
+        let found = ime.glosses(ch);
+        editor.set_dictionary(ch, found);
+    }
     terminal
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
         .expect("draw one frame");
@@ -4791,8 +4800,14 @@ fn draw_note(
             Some(fields) if !fields.is_empty() => {
                 fields.iter().map(|(n, v)| (n.clone(), v.clone())).collect()
             }
-            // 查過了，表裏没有這個字。
-            Some(_) => vec![(say!("ui.not-in-the-table"), String::new())],
+            // 查過了，表裏没有這個字——除非根本還沒載表。
+            Some(_) => vec![(
+                match editor.ime_available() {
+                    true => say!("ui.not-in-the-table"),
+                    false => say!("ui.no-table-yet"),
+                },
+                String::new(),
+            )],
             // 問出去了，答案還没回來——前端下一趟循環纔去查。
             None => vec![(say!("ui.looking-it-up"), String::new())],
         };
@@ -5875,7 +5890,13 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
         if sidebar.view() == View::Search {
             want = SEARCH_WIDTH.max(config.editor.sidebar_width);
         }
-        want = want.max(if sidebar.wide() {
+        want = want.max(if sidebar.wide() && sidebar.view() == View::Wiki {
+            // **百科沒有「最長的那一行」**——它是一段文章，`rows()` 是空的，於是
+            // `w` 按下去寬度一格不動（2026-09-23 審出來的：提示行寫着它管用）。
+            // 一篇文章要的本來也不是「讀得下最長的標題」，是讀得舒服，所以寬就
+            // 是半扇窗，與別的視圖的上限同一個數。
+            (total as usize / 2).max(config.editor.sidebar_width)
+        } else if sidebar.wide() {
             // One column of padding on the left, the rule on the right, and
             // the two the outline indents its rows by.
             let longest = sidebar
@@ -6079,7 +6100,6 @@ fn draw_sidebar(
 /// place. The name in 金, the breadcrumb set back, sub-headings in 金 at the
 /// depth they have *within* the entry, and the global entries under 「全局」.
 fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
-    use yumete_core::editor::WikiLine;
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
     let text = ground.fg(ink.text());
@@ -6115,21 +6135,61 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
     // ⚠️ **`y` 是**這一條**裏的第幾行，不是屏幕的第幾行**（2026-09-22 加滾動時
     // 改的）。屏幕那一行是 `area.y + y - scroll`——`scroll` 之前的照走不畫，這樣
     // 折行、表格、分隔綫的計算一個字都不用動，而 `j` 真的翻得動了。
-    let scroll = editor.wiki_scroll_now().0;
     let deep = bottom.saturating_sub(area.y) as usize;
+    let mut scroll = editor.wiki_scroll_now().0;
+    let mut rows: Vec<(usize, String, Style)> = Vec::new();
+    // **走一趟，順手把底在哪帶回來**（2026-09-23 審出來的）。走完了就說明這一條
+    // 的最後一行已經在眼前——這時候纔夾得出 `scroll` 的上限，而且正是需要夾的
+    // 那一刻；沒走完就說明下面還有，本來也不用夾。`G` 存的是 `usize::MAX`，所以
+    // 它走的是整條（一條兩萬行的詞條走一趟是二十毫秒，一次 `G` 一趟，不是一幀
+    // 一趟）。
+    let total = walk_wiki(&view, width, scroll, deep, &mut rows, head, quiet, text);
+    if let Some(total) = total {
+        let last = total.saturating_sub(deep);
+        if scroll > last {
+            scroll = last;
+            rows.clear();
+            walk_wiki(&view, width, scroll, deep, &mut rows, head, quiet, text);
+        }
+    }
+    editor.set_wiki_scroll(scroll);
+    for (y, row, style) in rows {
+        put_text(buf, from_x, area.y + (y - scroll) as u16, to, &row, style);
+    }
+}
+
+/// **百科那一條攤成屏幕行**，把落在 `[scroll, scroll + deep)` 裏的收進 `rows`。
+///
+/// 回 `Some(總行數)` 當這一條走完了——也就是底已經在眼前；回 `None` 當它在夠了
+/// 一頁的地方停下，那時候下面還有，總數既不知道也用不着。上限與畫的那一趟同一
+/// 個，所以數一遍不比畫一遍貴。
+#[allow(clippy::too_many_arguments)]
+fn walk_wiki(
+    view: &yumete_core::editor::WikiView<'_>,
+    width: usize,
+    scroll: usize,
+    deep: usize,
+    rows: &mut Vec<(usize, String, Style)>,
+    head: Style,
+    quiet: Style,
+    text: Style,
+) -> Option<usize> {
+    use yumete_core::editor::WikiLine;
+    let stop = scroll.saturating_add(deep);
     let mut y = 0usize;
-    let line = |buf: &mut ratatui::buffer::Buffer, y: &mut usize, s: &str, style: Style| {
+    let line = |rows: &mut Vec<(usize, String, Style)>, y: &mut usize, s: &str, style: Style| {
         let chars: Vec<char> = s.chars().collect();
         for (a, b) in yumete_core::wrap::line_rows(s, width) {
-            if *y >= scroll + deep {
-                return;
+            if *y >= stop {
+                return false;
             }
             if *y >= scroll {
                 let row: String = chars[a.min(chars.len())..b.min(chars.len())].iter().collect();
-                put_text(buf, from_x, area.y + (*y - scroll) as u16, to, &row, style);
+                rows.push((*y, row, style));
             }
             *y += 1;
         }
+        true
     };
     let mixed = view.parts.iter().any(|p| p.global) && view.parts.iter().any(|p| !p.global);
     let mut global_said = false;
@@ -6143,11 +6203,15 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
                 }
                 false => "──".to_string(),
             };
-            line(buf, &mut y, &mark, head);
+            if !line(rows, &mut y, &mark, head) {
+                return None;
+            }
         }
-        line(buf, &mut y, &view.name, head);
-        if !part.trail.is_empty() {
-            line(buf, &mut y, &part.trail.join(" › "), quiet);
+        if !line(rows, &mut y, &view.name, head) {
+            return None;
+        }
+        if !part.trail.is_empty() && !line(rows, &mut y, &part.trail.join(" › "), quiet) {
+            return None;
         }
         y += 1;
         // **A table is drawn as a table here too** (2026-09-19: 「百科在
@@ -6156,30 +6220,31 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
         // is what the float was taught first (`panel::table_rows`): lay it out
         // at the width there is, never wrap it, and cut what will not fit.
         let mut at = 0;
-        let rows: Vec<&str> = part
+        let body: Vec<&str> = part
             .lines
             .iter()
-            .map(|body| match body {
+            .map(|one| match one {
                 WikiLine::Heading(_, title) => *title,
                 WikiLine::Text(t) => *t,
             })
             .collect();
         while at < part.lines.len() {
-            // ⚠️ **Stop at the foot of the page** (2026-09-19). `line` refuses
-            // to draw past it, but the walk went on to the end of the entry
-            // regardless — wrapping every one of its lines into row ranges it
-            // then threw away. On a 20000-line entry that was 20 ms a frame,
-            // all of it for rows nobody could see.
-            if y >= scroll + deep {
-                return;
+            // ⚠️ **Stop at the foot of the page** (2026-09-19). Walking on to
+            // the end of the entry wrapped every one of its lines into row
+            // ranges it then threw away — 20 ms a frame on a 20000-line entry.
+            if y >= stop {
+                return None;
             }
             let table = matches!(&part.lines[at], WikiLine::Text(t) if panel::is_table_row(t));
             if !table {
-                match &part.lines[at] {
+                let drawn = match &part.lines[at] {
                     WikiLine::Heading(depth, title) => {
-                        line(buf, &mut y, &format!("{} {title}", "#".repeat(*depth)), head)
+                        line(rows, &mut y, &format!("{} {title}", "#".repeat(*depth)), head)
                     }
-                    WikiLine::Text(t) => line(buf, &mut y, t, text),
+                    WikiLine::Text(t) => line(rows, &mut y, t, text),
+                };
+                if !drawn {
+                    return None;
                 }
                 at += 1;
                 continue;
@@ -6190,18 +6255,19 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
             {
                 at += 1;
             }
-            for row in panel::table_rows(&rows[from..at], width) {
-                if y >= scroll + deep {
-                    return;
+            for row in panel::table_rows(&body[from..at], width) {
+                if y >= stop {
+                    return None;
                 }
                 // 表格的行也照同一條規矩：`scroll` 之前的照走不畫。
                 if y >= scroll {
-                    put_text(buf, from_x, area.y + (y - scroll) as u16, to, &row, text);
+                    rows.push((y, row, text));
                 }
                 y += 1;
             }
         }
     }
+    Some(y)
 }
 
 /// **The search panel** — Feature #419.
@@ -11161,9 +11227,12 @@ fn squeezed(text: &str) -> String {
 
     /// 診斷那一格在第幾欄：**最左**，號碼前面——helix 的次序
     /// （`helix-view/src/editor.rs:100`）。
-    fn problem_column(_editor: &Editor, _config: &Config) -> u16 {
-        0
-    }
+    ///
+    /// ⚠️ **這是期望值，不是算出來的。** 從前它寫成一支 `fn(&Editor, &Config)`，
+    /// 兩個參數一個都不看、全樹也沒有同名的生產代碼，而測試裏那句
+    /// `assert_eq!(cell, 0, "診斷在最左")` 於是是 `assert_eq!(0, 0)`
+    /// （2026-09-23 審出來的）。真正驗「在最左」的是下面拿它去索引畫面那幾句。
+    const PROBLEM_COLUMN: u16 = 0;
 
     /// 開一個真的有路徑的檔——診斷是按**路徑**存的（服務器說的是一個檔），
     /// 而 `editor_with` 造出來的是一本無名的草稿。
@@ -11199,8 +11268,7 @@ fn squeezed(text: &str) -> String {
         let buffer = render(&editor, &config, 20, 8);
 
         let ink = ink(&config);
-        let cell = problem_column(&editor, &config);
-        assert_eq!(cell, 0, "診斷在最左");
+        let cell = PROBLEM_COLUMN;
         assert_eq!(buffer[(cell, 0)].style().bg, ink.page().bg, "第 1 行没話說");
         assert_eq!(buffer[(cell, 1)].style().bg, Some(ink.mark()), "第 2 行有個錯：朱");
         assert_eq!(
@@ -11286,7 +11354,7 @@ fn squeezed(text: &str) -> String {
         assert!(!says(&buffer), "插入模式下不畫");
         // ⚠️ 但那一格還亮着——「這裏有問題」不打斷，只是不彈框。
         assert_eq!(
-            buffer[(problem_column(&editor, &config), 1)].style().bg,
+            buffer[(PROBLEM_COLUMN, 1)].style().bg,
             Some(ink(&config).mark()),
             "行號左邊那一格照舊"
         );
@@ -11304,7 +11372,7 @@ fn squeezed(text: &str) -> String {
         // 同一行上兩件事，各佔各的一格，誰也不蓋誰。
         let ink = ink(&config);
         assert_eq!(
-            buffer[(problem_column(&editor, &config), 1)].style().bg,
+            buffer[(PROBLEM_COLUMN, 1)].style().bg,
             Some(ink.mark()),
             "診斷是一塊朱"
         );
@@ -11354,6 +11422,21 @@ fn squeezed(text: &str) -> String {
         assert_eq!(glyph(Severity::Error), " ", "朱不寫字");
         for quiet in [Severity::Warn, Severity::Note, Severity::Hint] {
             assert_ne!(glyph(quiet), " ", "{quiet:?} 要有個字");
+            // 一格，不管終端把 `·` 算幾格——那個退路（`.`）就是為這件事寫的。
+            assert_eq!(yumete_cjk::str_width(&glyph(quiet)), 1, "{quiet:?} 只許佔一格");
+        }
+        // ⚠️ **四檔要兩兩分得開，這條從前沒人管。** 2026-09-23 審出來的：把
+        // `Note` 與 `Hint` 改成和 `Warn` 逐字相同，`-p yumete-tui` 274 條全綠
+        // ——而這一節的整個立論正是「三檔彼此認得出」。
+        let all = [Severity::Error, Severity::Warn, Severity::Note, Severity::Hint];
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert_ne!(
+                    (ground(*a), glyph(*a)),
+                    (ground(*b), glyph(*b)),
+                    "{a:?} 和 {b:?} 畫得一模一樣"
+                );
+            }
         }
     }
 

@@ -985,8 +985,13 @@ impl Editor {
     pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>) {
         // ⚠️ **這張單子是關於問的時候那個位置的。** 問完又打了兩個字母，回來的
         // 是「當時那個詞後面能接什麽」——擺出來就是在答一個過期的問題。
-        let asked_at = self.completion_at.take();
-        if asked_at.is_some_and(|at| at != self.cursor) {
+        // ⚠️ **`!=`，不是 `is_some_and`。** `None` 在這裏不是「不知道問的時候在
+        // 哪」，而是**那個問題已經作廢了**——打了個空格或分號，
+        // `maybe_ask_what_comes_next` 把三格一起清掉了。用 `is_some_and` 寫，
+        // `None` 會當成「對得上」放行：單子擺出來，錨在**新**光標上，而
+        // `Tab` 拿的是服務器按**舊**正文算的 `replacing` 範圍——砍掉的是別的字。
+        // 2026-09-23 審出來的，是這一輪最重的一條：它改的是正文。
+        if self.completion_at.take() != Some(self.cursor) {
             return;
         }
         match items.is_empty() {

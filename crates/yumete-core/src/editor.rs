@@ -2325,7 +2325,13 @@ pub struct Editor {
     ///
     /// 記着光標在哪，是因為光標一走詞條就換了——換了還停在第七行，讀的是另一條
     /// 的中間。
-    wiki_scroll: (usize, usize),
+    /// ⚠️ **`Cell`，因為底在哪只有前端知道。** 一條詞條有多少**屏幕**行，要把
+    /// 它按邊欄的寬度折一遍纔數得出來（表格還不折），而折是畫的時候做的事。
+    /// 所以畫完那一趟順手把夾好的值寫回來——`G` 也是這麽落地的（存進去
+    /// `usize::MAX`，前端走到底、算出總數、寫回真正的那個數）。
+    /// 2026-09-23 審出來的：從前拿**源碼行數**去夾，長條目的後三分之二到不了，
+    /// 短條目按住 `j` 能把整頁滾成空白。
+    wiki_scroll: std::cell::Cell<(usize, usize)>,
     /// What an unnamed file's markup is taken to be, from the project's config.
     default_syntax: Option<crate::syntax::Syntax>,
     /// Which markup a file is in, by extension or by exact name.
@@ -2708,7 +2714,7 @@ impl Editor {
             ],
             dictionary_anchor: None,
             transient_scroll: 0,
-            wiki_scroll: (0, usize::MAX),
+            wiki_scroll: std::cell::Cell::new((0, usize::MAX)),
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             listing_root: None,

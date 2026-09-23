@@ -8160,6 +8160,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
 #[test]
 fn a_character_the_table_has_nothing_for_says_so() {
     let mut ed = typed("那年冬天");
+    ed.set_ime_available(true);
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('D'));
     ed.take_dictionary_query();
@@ -8167,6 +8168,19 @@ fn a_character_the_table_has_nothing_for_says_so() {
     let rows = ed.transient_rows(crate::sidebar::Side::Right);
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!(rows[1].name, say!("ui.not-in-the-table"));
+}
+
+/// ……而「根本還沒載表」是第三種，出廠正是這一種（`[yume] start = false`）。
+/// 從前它也說「拆分表裏沒有這個字」——剛裝好的人問哪個字都得到這句假話。
+#[test]
+fn with_no_table_loaded_the_panel_says_that_rather_than_blaming_the_character() {
+    let mut ed = typed("那年冬天");
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('D'));
+    ed.take_dictionary_query();
+    ed.set_dictionary('那', Vec::new());
+    let rows = ed.transient_rows(crate::sidebar::Side::Right);
+    assert_eq!(rows[1].name, say!("ui.no-table-yet"), "{rows:?}");
 }
 
 /// The answer to last frame's question must not overwrite this frame's.
@@ -15658,21 +15672,65 @@ fn ctrl_g_starts_a_new_undo_and_swallows_the_u_after_it() {
 #[test]
 fn space_shift_s_closes_both_sidebars() {
     use crate::sidebar::Side;
-    let dir = std::env::temp_dir().join(format!("yumete-closeall-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
     let mut ed = typed("那年冬天");
-    ed.open_sidebar_at(&dir);
-    press(&mut ed, " o"); // 大綱開在另一邊
-    assert!(
-        Side::BOTH.into_iter().any(|s| ed.panel(s).is_some()),
-        "先得有東西可收"
-    );
+    // ⚠️ **兩邊各開一個，`any` 不算數**（2026-09-23 審出來的）：從前這裏開的
+    // 檔案樹與大綱**同在左邊**，後一個把前一個頂掉了，前置條件又寫的是 `any`
+    // ——`空格 S` 就算只收左邊，這一條照樣綠。出廠 `sides` 前四格全是左，右邊
+    // 那一個是字典。
+    press(&mut ed, " o"); // 大綱：左
+    press(&mut ed, " D"); // 字典：右
+    for side in Side::BOTH {
+        assert!(
+            ed.panel(side).is_some() || ed.transient(side).is_some(),
+            "{side:?} 先得有東西可收"
+        );
+    }
 
     press(&mut ed, " S");
     for side in Side::BOTH {
         assert!(ed.panel(side).is_none(), "{side:?} 收了");
+        assert!(ed.transient(side).is_none(), "{side:?} 上面那一層也收了");
     }
     assert!(ed.panel_focus().is_none(), "鍵回到正文");
+}
+
+/// **作廢了的補全答案不許擺出來**（2026-09-23 審出來的）。
+///
+/// 打了 `coun`、問題發出去了，服務器還没回話的時候打一個空格——
+/// `maybe_ask_what_comes_next` 把那個問題清掉（一個詞結束了）。答案隨後到，
+/// ⚠️ **從前它照樣擺出來**：守衛寫的是 `is_some_and`，而問題作廢時
+/// `completion_at` 已經是 `None`，`None.is_some_and(..)` 是 `false`——放行。
+///
+/// 擺出來還不只是多一張單子：單子錨在**新**光標上，而 `Tab` 拿的是服務器按
+/// **舊**正文算出來的替換範圍，砍掉的是別的字。
+#[test]
+fn an_answer_to_a_question_that_was_dropped_is_not_shown() {
+    use crate::lsp::Offer;
+    // ⚠️ 要一個**真的路徑**：問服務器問的是「哪個檔的哪一行哪一列」。
+    let dir = std::env::temp_dir().join(format!("yumete-drop-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let rs = dir.join("a.rs");
+    std::fs::write(&rs, "fn main() {\n}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&rs).unwrap();
+    ed.goto_line(2);
+    ed.on_key(Key::Char('i'));
+    for c in "coun".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.take_completion_query().is_some(), "問出去了");
+
+    // 空格：一個詞結束了，那個問題作廢。
+    ed.on_key(Key::Char(' '));
+
+    ed.show_offers(vec![Offer {
+        label: "counted".into(),
+        insert: "counted".into(),
+        kind: 3,
+        detail: None,
+        replacing: Some((0, 4)),
+    }]);
+    assert!(ed.offers_here().is_none(), "作廢的答案不擺出來");
     std::fs::remove_dir_all(&dir).ok();
 }

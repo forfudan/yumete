@@ -22,8 +22,14 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 /// A throwaway crate with one deliberate mistake in it.
-fn a_broken_crate() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("yumete-ra-{}", std::process::id()));
+///
+/// ⚠️ **`whose` is not decoration.** Two tests call this, and the path used to
+/// be the same for both (`yumete-ra-<pid>`) while the first thing it does is
+/// `remove_dir_all` — so running them together, which is what the command at
+/// the top of this file does, had one pull the file out from under the other:
+/// 「這個文件在外面被改過了」. 2026-09-23 審出來的。
+fn a_broken_crate(whose: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("yumete-ra-{whose}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
@@ -43,7 +49,7 @@ fn rust_analyzer_really_answers() {
         eprintln!("no rust-analyzer on this machine — nothing to check");
         return;
     }
-    let dir = a_broken_crate();
+    let dir = a_broken_crate("answers");
     // ⚠️ **The project root is worked out from the open file**, and the server
     // is started in it — so the editor has to be looking at the file inside
     // the crate, not at the crate from outside.
@@ -114,14 +120,10 @@ fn rust_analyzer_says_where_a_function_is_written() {
     };
     let mut servers = yumete_tui::server::Servers::default();
 
-    // 先等它讀完項目——問一個它還不認識的檔，答的是「哪兒都没有」。
-    let gave_up = Instant::now() + Duration::from_secs(90);
-    while Instant::now() < gave_up && editor.problem_count() == 0 {
-        servers.follow(&editor, &config);
-        servers.collect(&mut editor);
-        std::thread::sleep(Duration::from_millis(200));
-    }
-
+    // ⚠️ **這裏沒有「讀完了」的信號可等。** 從前這一段寫成「等到有診斷為止」，
+    // 而這一份是編得過的——一條診斷都不會有，於是它每一趟都燒滿九十秒，那句
+    // 「先等它讀完項目」描述的是一條不存在的規則（2026-09-23 審出來的）。真正
+    // 頂用的是下面那個「問不到就再問一次」的圈。
     // 光標走到那一次**調用**上（第 6 行，0 起算）：`println!("{}", counted(…)`。
     // 一直按 `l` 直到真站在 `counted` 上，而不是數空格——數出來的那個數字錯了，
     // 測試就在測別的東西。
@@ -177,7 +179,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
         eprintln!("no rust-analyzer on this machine — nothing to check");
         return;
     }
-    let dir = a_broken_crate();
+    let dir = a_broken_crate("saved");
     let mut editor = yumete_core::editor::Editor::new();
     editor.open_file(dir.join("src/main.rs")).unwrap();
     let config = yumete_config::Config {
@@ -290,7 +292,7 @@ fn rust_analyzer_says_what_a_function_is() {
     servers.stop();
     let _ = std::fs::remove_dir_all(&dir);
 
-    let told = told.expect("服務器說了點什麽（30 秒）");
+    let told = told.expect("服務器說了點什麽（90 秒）");
     assert!(told.contains("counted"), "說的是這個函數：{told:?}");
     assert!(told.contains("usize"), "簽名在裏面：{told:?}");
     assert!(!told.contains("```"), "圍欄換成了行內代碼：{told:?}");
@@ -427,11 +429,18 @@ fn typing_alone_brings_the_list_up() {
     editor.on_key(yumete_core::input::Key::Char('A'));
 
     // 打 `coun`，一個字母一個字母地打，中間讓循環轉——**不按 C-n**。
+    const WORD: &str = "coun";
     let gave_up = Instant::now() + Duration::from_secs(120);
     let mut typed = false;
+    // ⚠️ **`Instant::now().elapsed()` 恆為零。** 從前那句重打的條件寫的是
+    // `Instant::now().elapsed().as_secs() % 3 == 0`——從這一納秒到現在，永遠是
+    // 0，於是**每一輪**都重打一次整個 `coun` 而只退一個字母，正文成了
+    // `coucoucoucou…coun`（2026-09-23 插探針印出來的）。這條測試說的是「只打
+    // 四個字母」，而那個情形一次都沒跑到。
+    let mut retried = Instant::now();
     while Instant::now() < gave_up && editor.offers_here().is_none() {
         if !typed {
-            for c in "coun".chars() {
+            for c in WORD.chars() {
                 editor.on_key(yumete_core::input::Key::Char(c));
             }
             typed = true;
@@ -440,19 +449,25 @@ fn typing_alone_brings_the_list_up() {
         servers.ask_next(&mut editor, &config);
         servers.collect(&mut editor);
         std::thread::sleep(Duration::from_millis(100));
-        // 服務器還在讀項目的時候答的是空的；那就再打一輪（退一個字母再補上）。
-        if editor.offers_here().is_none() && Instant::now().elapsed().as_secs() % 3 == 0 {
+        // 服務器還在讀項目的時候答的是空的；那就整段退掉重打一次，三秒一輪。
+        if editor.offers_here().is_none() && retried.elapsed() >= Duration::from_secs(3) {
+            retried = Instant::now();
+            for _ in 0..WORD.chars().count() {
+                editor.on_key(yumete_core::input::Key::Backspace);
+            }
             typed = false;
-            editor.on_key(yumete_core::input::Key::Backspace);
         }
     }
     let offered: Vec<String> = editor
         .offers_here()
         .map(|(items, _)| items.iter().map(|o| o.label.clone()).collect())
         .unwrap_or_default();
+    // 問的是哪一行——重打累積成一長串的時候，這一句是唯一看得出來的地方。
+    let line = editor.current_buffer().rope().line(5).to_string();
     servers.stop();
     let _ = std::fs::remove_dir_all(&dir);
 
+    assert_eq!(line.trim_end(), "    let n = coun", "打進去的就是四個字母");
     assert!(!offered.is_empty(), "光是打字就把單子帶出來了（120 秒）");
     assert!(
         offered.iter().any(|label| label.starts_with("counted")),

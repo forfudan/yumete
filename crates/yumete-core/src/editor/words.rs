@@ -622,6 +622,13 @@ impl Editor {
         self.ime_available = available;
     }
 
+    /// Whether a 碼表 is loaded. **「表裏沒有這個字」和「根本沒有表」是兩個
+    /// answer**，出廠 `[yume] start = false`，所以剛裝好的人問哪個字都會得到
+    /// 前一句——而那是假話（2026-09-23 審出來的）。
+    pub fn ime_available(&self) -> bool {
+        self.ime_available
+    }
+
     /// What is drawn in a paragraph's opening squares.
     pub fn indent_hint(&self) -> crate::zong::IndentHint {
         self.indent_hint

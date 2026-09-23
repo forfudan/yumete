@@ -89,7 +89,15 @@ struct Server {
     open: HashSet<PathBuf>,
     /// The version number `didChange` counts up.
     version: i64,
-    /// Whether an answer is still owed — what [`Servers::due_in`] reads.
+    /// **Whether a fresh round of diagnostics is still owed.**
+    ///
+    /// ⚠️ **Only diagnostics.** A request's answer is owed as long as its id
+    /// is in one of the three slots below — that is what [`Server::owed`]
+    /// reads. Putting both in this one flag is what made `gd` wait for the
+    /// next keypress: diagnostics arrive unasked, all the time, and the first
+    /// one to land after the question cleared the flag, so [`Servers::due_in`]
+    /// said 「nothing outstanding」 and the loop went back to blocking while
+    /// the answer sat in the channel. 2026-09-23 審出來的。
     waiting: bool,
     /// The next id to put on a request.
     next_ask: i64,
@@ -280,19 +288,29 @@ impl Servers {
     /// which reads exactly like 「this is written nowhere」. `follow` runs
     /// first on the same turn, so by the time this asks, `didOpen` is out.
     pub fn ask(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let Some((path, line, column)) = editor.take_definition_query() else { return };
+        let _ = config;
         let Some(language) = Self::language_of(editor) else { return };
-        let Some(server) = self.running.get_mut(language) else {
-            // 服務器没起來，就照實說——而不是讓那句「問問這個寫在哪」一直掛着。
-            editor.no_definition();
-            let _ = config;
+        if !self.running.contains_key(language) {
+            // 服務器没起來，就照實說——而不是讓那句問話一直掛着。
+            if editor.take_definition_query().is_some() {
+                editor.no_definition();
+            }
             return;
-        };
+        }
+        // ⚠️ **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
+        // settle（300 毫秒）時 `follow` 一個字都還沒發出去，這時候問，服務器
+        // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
+        // 「哪兒都沒寫」。所以問題**留着不取**，下一輪正文發出去了再問，同
+        // [`Self::ask_next`] 一個道理。2026-09-23 補。
+        if !self.told_the_latest(editor) {
+            return;
+        }
+        let Some((path, line, column)) = editor.take_definition_query() else { return };
+        let Some(server) = self.running.get_mut(language) else { return };
         let id = server.next_ask;
         server.next_ask += 1;
         server.asked_where = Some(id);
         server.say(lsp::definition(id, &path, line, column));
-        server.waiting = true;
     }
 
     /// **Send the 「what is this?」 question** (`空格 k`, #53 ③).
@@ -300,18 +318,29 @@ impl Servers {
     /// The same shape as [`Self::ask`], and for the same reasons — a request
     /// wants an answer, and only this side knows which id it sent for what.
     pub fn ask_what(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let Some((path, line, column)) = editor.take_hover_query() else { return };
+        let _ = config;
         let Some(language) = Self::language_of(editor) else { return };
-        let Some(server) = self.running.get_mut(language) else {
-            editor.no_hover();
-            let _ = config;
+        if !self.running.contains_key(language) {
+            // 服務器没起來，就照實說——而不是讓那句問話一直掛着。
+            if editor.take_hover_query().is_some() {
+                editor.no_hover();
+            }
             return;
-        };
+        }
+        // ⚠️ **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
+        // settle（300 毫秒）時 `follow` 一個字都還沒發出去，這時候問，服務器
+        // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
+        // 「哪兒都沒寫」。所以問題**留着不取**，下一輪正文發出去了再問，同
+        // [`Self::ask_next`] 一個道理。2026-09-23 補。
+        if !self.told_the_latest(editor) {
+            return;
+        }
+        let Some((path, line, column)) = editor.take_hover_query() else { return };
+        let Some(server) = self.running.get_mut(language) else { return };
         let id = server.next_ask;
         server.next_ask += 1;
         server.asked_what = Some(id);
         server.say(lsp::hover(id, &path, line, column));
-        server.waiting = true;
     }
 
     /// **Send the 「what comes next?」 question** (`C-n` and every letter typed,
@@ -326,21 +355,23 @@ impl Servers {
     /// text does. This is the same ordering `didSave` needs, for the same
     /// reason, and it is the whole of what makes the automatic half work.
     pub fn ask_next(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        let _ = config;
+        let Some(language) = Self::language_of(editor) else { return };
+        if !self.running.contains_key(language) {
+            if editor.take_completion_query().is_some() {
+                editor.no_offers();
+            }
+            return;
+        }
         if !self.told_the_latest(editor) {
             return;
         }
         let Some((path, line, column)) = editor.take_completion_query() else { return };
-        let Some(language) = Self::language_of(editor) else { return };
-        let Some(server) = self.running.get_mut(language) else {
-            editor.no_offers();
-            let _ = config;
-            return;
-        };
+        let Some(server) = self.running.get_mut(language) else { return };
         let id = server.next_ask;
         server.next_ask += 1;
         server.asked_next = Some(id);
         server.say(lsp::completion(id, &path, line, column));
-        server.waiting = true;
     }
 
     /// **Does the server hold the text the buffer holds?** See [`Self::ask_next`].
@@ -386,14 +417,12 @@ impl Servers {
                         // **「接下來能打什麽」的答案**（#53 ④）。
                         if server.asked_next == Some(id) {
                             server.asked_next = None;
-                            server.waiting = false;
                             anything = true;
                             editor.show_offers(offers);
                         } else
                         // **「這是什麽」的答案**（#53 ③）。
                         if server.asked_what == Some(id) {
                             server.asked_what = None;
-                            server.waiting = false;
                             anything = true;
                             match told {
                                 Some(text) => editor.show_hover(text),
@@ -401,7 +430,6 @@ impl Servers {
                             }
                         } else if server.asked_where == Some(id) {
                             server.asked_where = None;
-                            server.waiting = false;
                             anything = true;
                             match places.first() {
                                 // ⚠️ **The first one, and only the first.**
@@ -474,10 +502,24 @@ impl Servers {
             }
         });
     }
+}
 
+impl Server {
+    /// **Is this server owing anything?** — diagnostics, or an answer to one
+    /// of the three questions. See [`Server::waiting`].
+    fn owed(&self) -> bool {
+        self.waiting
+            || !self.ready
+            || self.asked_where.is_some()
+            || self.asked_what.is_some()
+            || self.asked_next.is_some()
+    }
+}
+
+impl Servers {
     /// How long the event loop may sleep, or `None` to block.
     pub fn due_in(&self) -> Option<std::time::Duration> {
-        let waiting = self.running.values().any(|s| s.waiting || !s.ready);
+        let waiting = self.running.values().any(Server::owed);
         let settling = self.touched.is_some();
         (waiting || settling).then_some(LOOK_IN)
     }
@@ -829,6 +871,19 @@ mod tests {
         tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), None);
+    }
+
+    /// 2026-09-23 審出來的：診斷是**不請自來**的，一秒好幾條。從前它落地就
+    /// 把「還欠着」那一格抹掉，於是 `gd` 的答案還在管子裏，事件迴圈已經回去
+    /// 阻塞在鍵盤上了——答案要等下一次按鍵纔畫出來。
+    #[test]
+    fn a_question_still_out_keeps_the_loop_awake_when_a_diagnostic_lands() {
+        let (mut servers, _heard, tell) = Servers::pretend("rust");
+        let (mut editor, path) = editor_on("e.rs", "fn main() {}\n");
+        servers.running.get_mut("rust").unwrap().asked_where = Some(FIRST_ASK);
+        tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(servers.due_in(), Some(LOOK_IN), "問出去的還沒答，就不許睡死");
     }
 }
 

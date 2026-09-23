@@ -4331,9 +4331,9 @@ en = "simplified → Hong Kong 繁"
 [[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-jp"
-zht = "簡→日文新字體"
-zhs = "简→日文新字体"
-en = "simplified → Japanese shinjitai"
+zht = "繁→日文新字體"
+zhs = "繁→日文新字体"
+en = "traditional → Japanese shinjitai"
 
 [[message]]
 # `` 那一組：換一種寫法
@@ -8313,6 +8313,13 @@ key = "ui.no-screenshot-command"
 zht = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條，或用 `:shot html`"
 zhs = "这个平台上没有截图命令——`[editor] screenshot` 写一条，或用 `:shot html`"
 en = "no screenshot command here — write one at `[editor] screenshot`, or `:shot html`"
+
+[[message]]
+# 字典欄：碼表根本沒載，所以答不出來——和「表裏沒有這個字」是兩件事
+key = "ui.no-table-yet"
+zht = "碼表沒載——`:yume-scheme` 載一次"
+zhs = "码表没载——`:yume-scheme` 载一次"
+en = "no 碼表 loaded yet — `:yume-scheme` loads one"
 
 [[message]]
 # 字典欄：拆分表裏沒有這個字

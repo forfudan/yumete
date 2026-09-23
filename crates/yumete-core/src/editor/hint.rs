@@ -88,8 +88,10 @@ impl Editor {
                 Some(crate::sidebar::View::Wiki) => say!("hint.sidebar.scroll"),
                 _ => say!("hint.sidebar.move"),
             };
+            // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，
+            // 另外四個管用卻沒人知道（2026-09-23 審出來的）。
             return Hint::Keys(say!("hint.sidebar"), vec![
-                    ("j k", walking),
+                    ("j k J K g G", walking),
                     ("Tab", say!("hint.sidebar.other-view")),
                     ("w", say!("hint.sidebar.width")),
                     ("C-w／空格 s", say!("hint.sidebar.back-to-text")),
