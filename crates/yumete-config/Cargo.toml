@@ -9,4 +9,10 @@ version.workspace = true
 [dependencies]
 serde = {version = "1", features = ["derive"]}
 toml = "0.8"
+# **零成本的一個依賴**：`toml 0.8` 的 `default = ["parse","display"]` 兩個 feature
+# 都是 `dep:toml_edit`，所以它**已經在編了**，只是沒有名字（`Cargo.lock` 裏躺着
+# 0.22.27）。寫出它的名字換來的是「改一項設定而不動使用者寫的註釋」——`toml` 本身
+# 不導出註釋，一趟 round-trip 會把一份手寫的配置抹平成機器寫的。
+# 準入的理由同 `serde_json`（#53）與 `libc`：it was already in the lock file.
+toml_edit = "0.22"
 yumete-cjk = {path = "../yumete-cjk"}

@@ -1033,6 +1033,7 @@ version = "0.2.0"
 dependencies = [
  "serde",
  "toml",
+ "toml_edit",
  "yumete-cjk",
 ]
 
