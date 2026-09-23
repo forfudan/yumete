@@ -136,6 +136,11 @@ impl Editor {
                 self.reload(force)?;
                 Ok(CommandOutcome::Continue)
             }
+            Command::ReloadConfig => {
+                // 核心只記一筆；重讀那件事歸前端（它知道配置檔在哪）。
+                self.config_reload = true;
+                Ok(CommandOutcome::Continue)
+            }
             Command::ReloadAuto(on) => {
                 match on {
                     Some(on) => {

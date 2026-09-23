@@ -2053,6 +2053,13 @@ en = "re-read by itself when the file changes outside — a warning, not a re-re
 find = "重載 重载 自動重讀 自动重读 auto watch"
 
 [[message]]
+# : 命令選單裏 reload 的賓語 config
+key = "cmd.reload.config"
+zht = "改完 config.toml，不必重啓"
+zhs = "改完 config.toml，不必重启"
+en = "after editing config.toml, without restarting"
+
+[[message]]
 # : 命令選單裏 basic 那一項的說明（render 組）
 key = "cmd.render.basic"
 zht = "基本：著色，一個字都不藏（默認）"
@@ -3081,6 +3088,19 @@ zhs = "本文件章节"
 en = "a heading in this file"
 
 # ── convert ───────────────────────────────────────────────────────────
+
+[[message]]
+# :config-reload 讀到的設定檔有毛病
+key = "config.reload-said"
+zht = "設定重讀了，但有話說：{0}"
+zhs = "设置重读了，但有话说：{0}"
+en = "settings reloaded, with something to say: {0}"
+[[message]]
+# :config-reload 做完了
+key = "config.reloaded"
+zht = "設定重讀了"
+zhs = "设置重读了"
+en = "settings reloaded"
 
 [[message]]
 # ]c／[c 跳到了第 {0} 行的衝突
@@ -9003,6 +9023,7 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
 
 
 

@@ -352,6 +352,8 @@ pub enum Command {
     /// `:reload-auto on|off` — re-read a **clean** buffer by itself when the
     /// file changes on disk. `None` asks which it is (Feature #214).
     ReloadAuto(Option<bool>),
+    /// **把配置檔重讀一遍，推進來** —— 改完 `config.toml` 不必重啓（2026-09-23）。
+    ReloadConfig,
     /// `:readonly on|off` — lock this buffer against editing. `None` asks
     /// (Feature #213).
     SetReadonly(Option<bool>),
@@ -2159,6 +2161,11 @@ const SIDES: &[Word] = &[
     Word { name: "g", help: "cmd.convert.g", needs: &[] },
 ];
 
+/// `:reload` 的賓語。沒有賓語就是「這個檔」——那是它本來的意思。
+const RELOAD_WHAT: &[Word] = &[
+    Word { name: "config", help: "cmd.reload.config", needs: &[] },
+];
+
 /// The word that says 「yes, the whole file, I mean it」.
 const FORCE: &[Word] = &[
     Word { name: "force", help: "cmd.convert.force", needs: &[] },
@@ -2408,8 +2415,19 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.reload",
         needs: &[],
-        params: &[],
-        build: Some(|p| Ok(Command::Reload { force: p.force })),
+        // ⚠️ **`config` 掛在這裏而不是自成一條命令**（2026-09-23）。
+        // `:` 那張菜單在 24 行的窗口下裝得下 54 格，而命令已經 54 條——加任何一
+        // 個頂級名字都會把它擠出一屏（`the_command_menu_spreads_across_a_wide_
+        // window` 當場紅給我看：「all 55 of them: 54 slots」）。**命令名和鍵位
+        // 一樣有預算**，而「把設定再讀一遍」本來就是「把文件再讀一遍」的同一句
+        // 話換個賓語。
+        params: &[Param::Words { of: RELOAD_WHAT, default: None }],
+        build: Some(|p| {
+            Ok(match p.arg(0) {
+                Some("config") => Command::ReloadConfig,
+                _ => Command::Reload { force: p.force },
+            })
+        }),
     },
     Entry {
         name: "reload-auto",

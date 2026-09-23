@@ -17,6 +17,7 @@ pub mod vertical;
 pub mod ambiguous;
 pub mod backend;
 pub mod server;
+pub mod settings;
 pub mod system_ime;
 pub mod typed_ahead;
 
@@ -353,7 +354,7 @@ fn buffer_to_text(buffer: &ratatui::buffer::Buffer) -> String {
 
 pub fn run(
     editor: &mut Editor,
-    config: &Config,
+    config: &mut Config,
     ime: &mut ImeSession,
     mut deferred: Option<Deferred>,
 ) -> io::Result<()> {
@@ -1252,6 +1253,29 @@ pub fn run(
                             running.push(&here, &text, version);
                         }
                     }
+                }
+                // **`:config-reload`：重讀設定檔，推一遍**（2026-09-23 定：
+                // 「下次啓動生效或者一個應用（重載）設置命令來生效」）。
+                //
+                // ⚠️ **同一支 `apply`，啓動叫的那一支。** 換一份 `Config` 只讓
+                // 前端**畫**得不一樣（配色、邊欄寬、行號那一族是每一幀直接讀它
+                // 的）；推進 `Editor` 的那一批要再推一遍，而那正是把它抽出來的
+                // 理由——否則這裏要把一百多行再抄一遍，抄漏的那一項就是一個
+                // 「重載之後悄悄退回舊值」的洞。
+                //
+                // ⚠️ **`layout` 傳 `None`**：`-v` 是這一趟啓動的答案，重載說了
+                // 不算——這時候配置說什麼就是什麼。
+                if editor.take_config_reload() {
+                    let (fresh, said) = Config::load_reporting();
+                    settings::apply(&fresh, editor, None);
+                    settings::apply_ime(&fresh, ime);
+                    *config = fresh;
+                    // 主題是進程級的一格，要重新問一次，否則配色改了畫面不動。
+                    crate::theme::settle(config, None);
+                    editor.set_status(match said.is_empty() {
+                        true => say!("config.reloaded"),
+                        false => say!("config.reload-said", said.join(&say!("label.comma"))),
+                    });
                 }
                 if let Some(tag) = editor.take_scheme_request() {
                     // `:yume on` / `:yume abc` / `:yume off` **is** an answer
