@@ -6577,8 +6577,21 @@ fn draw_search(
         // Named outright: say the name, which is what the reader typed.
         yumete_core::search_panel::Where::Named(path) => path.display().to_string(),
     };
-    let title = format!("{}  {place}", say!("label.panel.search"));
-    put_text(buf, left, area.y, to, &title, head);
+    // **標題那一行就是「哪裏找」那一格**（2026-09-23 報的）。它畫在查詢框之上，
+    // 所以 `k` 從框裏往上走第一個碰到的是它，`i` 進去改，Enter 落地。
+    // ⚠️ 正在打字的時候畫的是**框裏的字**，不是算出來的名字：那一刻它是一個
+    // 輸入框，不是一句說明。
+    let naming = find.field == Field::Scope;
+    let shown = match naming && (editor.mode() == yumete_core::input::Mode::Field) {
+        true => find.scope_text.clone(),
+        false => place,
+    };
+    let title = format!("{}  {shown}", say!("label.panel.search"));
+    let title_style = match naming && keys_here {
+        true => on,
+        false => head,
+    };
+    put_text(buf, left, area.y, to, &title, title_style);
     // **The count, and nothing when nothing was asked.** `0 處` and 「not
     // asked yet」 are two different findings (#419).
     let (tally, style) = match (find.broken, find.stale, find.asked()) {
@@ -6645,6 +6658,21 @@ fn draw_search(
         y += 1;
         draw_box(buf, Field::Replace, &find.replace, y);
     }
+    // 範圍那一格的光標——它畫在標題行上，不走 `draw_box`（那一支畫的是整行鋪底
+    // 的框，而標題行還要放右上角那個計數）。⚠️ 擺在閉包**用完之後**：那個閉包
+    // 借着 `caret`。
+    if typing && find.field == Field::Scope {
+        let at = left
+            + yumete_cjk::str_width(&say!("label.panel.search")) as u16
+            + 2
+            + yumete_cjk::str_width(&find.scope_text) as u16;
+        if at < to {
+            if let Some(c) = buf.cell_mut((at, area.y)) {
+                c.set_symbol("▏").set_style(on.fg(ink.gold()));
+            }
+            caret = Some(Position { x: at, y: area.y });
+        }
+    }
     // The two rules that close the boxes. Drawn after them, because the row
     // below the last box is only known once it is known whether there are two.
     let wide = to.saturating_sub(left) as usize;
@@ -6670,9 +6698,6 @@ fn draw_search(
         true => quiet,
         false => cell(field),
     };
-    let y = y + 1;
-    put_text(buf, left, y, to, &format!("{} {}", tick(find.regex), say!("search.regex")), pattern_cell(Field::Regex));
-    let y = y + 1;
     // Spelled out rather than asked of `Case`, so the tags sit where the
     // messages test can see them: it reads `say!` calls, and a tag returned
     // from a `match` is a tag nobody can find (`messages.rs::said`).
@@ -6681,20 +6706,56 @@ fn draw_search(
         yumete_core::search_panel::Case::Sensitive => say!("search.case.sensitive"),
         yumete_core::search_panel::Case::Insensitive => say!("search.case.insensitive"),
     };
-    let case = format!("{}  {}", say!("search.case"), which);
-    put_text(buf, left, y, to, &case, cell(Field::Case));
-    let y = y + 1;
-    put_text(buf, left, y, to, &format!("{} {}", tick(find.whole), say!("search.whole")), pattern_cell(Field::Whole));
-    // **模糊 is not offered while replacing** — a loose range covers characters
-    // nobody typed, and replacing those is not a thing to offer (`Field::step`).
-    let y = match find.replacing {
-        true => y,
-        false => {
-            let y = y + 1;
-            put_text(buf, left, y, to, &format!("{} {}", tick(find.fuzzy), say!("search.fuzzy")), cell(Field::Fuzzy));
-            y
-        }
+    // **大小寫 wears the same brackets as the ticks** (2026-09-23 報的：
+    // 「`[智能] 大小寫` 更好。因為這樣用戶就知道這裏是可以空格切換的（和其他選項
+    // 一樣都是 `[ ]` 在前）。否則不知道這裏可以做什麽」)。它是三態，所以括號裏
+    // 裝的是狀態的名字而不是一個叉——可它**在同一欄開頭**，於是四行讀成同一族。
+    //
+    // ⚠️ **標籤對齊到同一欄，而那一欄是量出來的。** 三個狀態不一樣寬（智能 4 格、
+    // 不敏感 6 格，英文是 smart／match／ignore），寫死一個數就會在某一種語言下
+    // 參差。取最寬的那一個。
+    let states = [
+        say!("search.case.smart"),
+        say!("search.case.sensitive"),
+        say!("search.case.insensitive"),
+    ];
+    let widest = states
+        .iter()
+        .map(|w| yumete_cjk::str_width(w) + 2)
+        .chain(std::iter::once(3))
+        .max()
+        .unwrap_or(3);
+    let pad = |box_text: &str| {
+        let gap = widest.saturating_sub(yumete_cjk::str_width(box_text)) + 1;
+        format!("{box_text}{}", " ".repeat(gap))
     };
+    let y = y + 1;
+    put_text(
+        buf,
+        left,
+        y,
+        to,
+        &format!("{}{}", pad(&format!("[{which}]")), say!("search.case")),
+        cell(Field::Case),
+    );
+    let y = y + 1;
+    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.regex)), say!("search.regex")), pattern_cell(Field::Regex));
+    let y = y + 1;
+    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.whole)), say!("search.whole")), pattern_cell(Field::Whole));
+    // **模糊 照畫，替換開着的時候畫灰**（2026-09-23 定：「自動關掉畫灰」）。
+    // ⚠️ 從前它整行不畫，於是勾一下替換，底下的每一行都往上跳一格——而「跳」
+    // 是這個面板最不該有的東西：讀者的眼睛正落在某一行上。走還是跳過它
+    // （`Field::step`），只是位子留着。
+    let y = y + 1;
+    let fuzzy_cell = match find.replacing {
+        true => quiet,
+        false => cell(Field::Fuzzy),
+    };
+    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.fuzzy)), say!("search.fuzzy")), fuzzy_cell);
+    // **替換是個開關**（2026-09-23 報的）：`:search` 進來的人想改一個詞，不必退
+    // 出去重按 `:replace`。
+    let y = y + 1;
+    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.replacing)), say!("search.replacing")), cell(Field::Replacing));
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
