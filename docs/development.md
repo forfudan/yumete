@@ -12779,3 +12779,599 @@ InDesign《CJK 文字の書式設定》。
 ⚠️ **格是畫面上的單位，光標不是**：光標仍然一個字一個字地走，`1997` 那一格上按四下
 `j` 走過四個數字。這是原本就有的行為（兩位數時也一樣），只是四位的時候看得更清楚，
 所以 Normal 的方塊改成蓋住整串——蓋住最後兩格會讓人以為 `1997` 是兩行。
+
+---
+
+## 13. 把 yumete 搬進瀏覽器：先量一輪（2026-09-22）
+
+2026-09-22 問：「現在 yume.shurufa.app 是一個在綫編輯器（輸入體驗），代碼在 yume 的
+web 部分。我在想，現在我們既然有了 yumete，那麽能不能用什麽框架把它和 LXGW WenKai
+字體直接嵌入到網頁中？這樣就能在瀏覽器中使用 yumete 了。這個難度大嗎？」——指示是
+**只寫文檔，不編程**。
+
+這一節只回答「難不難」，而回答的辦法是**去量**：試着把每一個 crate 編到
+`wasm32-unknown-unknown` 上看它報幾個錯、錯在哪；數磁碟調用有幾處；拿 headless Chrome
+量字體的字寬；開包量 woff2 的體積。**下面每一個數字後面都有 §13.10 裏的一條命令。**
+探測的產物一件都沒留在倉裏（探測時改過的三個檔已經原樣還回去，`git status` 乾淨）。
+
+⚠️ **這不是 §10 那個問題。** §10（Direction change: from a terminal editor to web /
+Tauri）問的是「**放棄終端**，拿 CodeMirror 6 在網頁上重寫一個」，寫那一節的時候
+`yumete-core` 只有 rope／selection／motion／history。今天 `crates/` 底下是 **74,482 行
+正文 ＋ 35,047 行測試**，`:` 命令 **214** 條，竪排、縦中横、表格、注音、拆分、大綱、
+LSP、詞典、IME 全在裏面。所以現在問的是相反的一件事：**把已經長成這樣的這一個原樣搬
+過去**。§10 留着當記錄（本文件開頭那條 blockquote 已經說它過期了），它的結論不管這
+一節。
+
+### 13.0 一句話的答案
+
+**編譯這一關比預想的近，運行期那一關比預想的遠。**
+
+真正編不過的只有兩族：**tree-sitter**（十個 crate，全是 C，缺 libc 頭文件）和
+**crossterm**（九個錯，全是終端系統調用）。把這兩樣拿掉之後，`yumete-core` 這個
+50,106 行的 crate **只剩一個編譯錯**——`wrap.rs:668` 的 `pub const NO_WRAP: usize =
+1 << 40;` 在 32 位 `usize` 上溢出（E0080）。改成 `1 << 30` 就整個編過，一個警告。
+`yumete-cjk`、`yumete-config` 原樣就編得過，一個字都不用改。
+
+難的是**編過之後**：`std::fs` 在 `wasm32-unknown-unknown` 上**照樣編得過**——標準庫給
+了一整套樁子——只是每一次調用在運行期都回 `Unsupported`。**編譯器不會替這件事報一個
+錯**，所以它不是「改十個錯」的活，是「把 115 處磁碟調用一處一處改道」的活。這一項
+自己就佔整件事的一半以上。
+
+| 項 | 編譯這一關 | 運行這一關 | 量級 |
+| --- | --- | --- | --- |
+| tree-sitter | ✗ 十個 crate 掛在 `'stdlib.h' file not found` | — | 一天（關掉）／一週（wasi-sdk） |
+| 文件系統 | ✓ 全部編得過 | ✗ 每一次都回 `Unsupported`，115 處 | **一個月** |
+| 子進程 | ✓ 編得過 | ✗ `Command::spawn` 直接失敗 | 一週（老實承認沒有） |
+| 終端繪製 | ✗ crossterm 九個錯 | — | 一到兩週 |
+| 字體 | — | ✓ 量過，成立 | 一天 |
+| 輸入法 | ✓（`yume-core` 已經有 wasm 版在跑） | 要把「按路徑讀」換成「按字節喂」 | 一週 |
+
+---
+
+### 13.1 tree-sitter：九個語法包全是 C，而 wasm 這邊沒有 libc 頭文件
+
+`crates/yumete-core/Cargo.toml` 依賴 `tree-sitter` 加九個語法包（css／go／html／
+javascript／json／python／rust／toml-ng／yaml）。往 `wasm32-unknown-unknown` 上編，
+**十個 crate 的 build script 全掛**，而且掛在同一行上：
+
+```
+cargo:warning=src/tree_sitter/parser.h:10:10: fatal error: 'stdlib.h' file not found
+error occurred in cc-rs: … "clang" … "--target=wasm32-unknown-unknown" … "-c" "src/parser.c"
+```
+
+不是 tree-sitter 的問題，是**`wasm32-unknown-unknown` 沒有 C sysroot**：`cc-rs` 照樣
+去叫 clang，clang 照樣接受那個 target，可是 `#include <stdlib.h>` 沒有地方去找。
+
+**三條路：**
+
+| 路 | 做法 | 代價 |
+| --- | --- | --- |
+| **甲：關掉** | `code.rs` 整個放進一個 cargo feature，wasm 構建不開 | 一天。代碼塊不上色，別的一點不動 |
+| **乙：wasi-sdk** | 裝 wasi-sdk，`CC_wasm32_unknown_unknown` 指向它的 clang ＋ `--sysroot` | 構建機多一件東西；語法包本身按 C 編進 wasm，能跑。但這一步從來沒在這臺機器上試過（機器上沒有 wasi-sdk），**只是「別人這麼做」，不是量出來的** |
+| **丙：官方 tree-sitter 的 wasm 構建** | `web-tree-sitter`（tree-sitter 自己的 JS 包）＋ 每個語法一份 `.wasm` | **走不通**——那一套是給 **JS** 用的，語法是運行時 `Language.load()` 進去的；`yumete-core` 要的是 Rust 這一側的 `tree_sitter::Language`。真要接，等於在 wasm 裏再套一層 wasm 運行時 |
+
+**關掉少什麽：** `code.rs` 的公開面**只有三樣**——`Language`、`Token`、
+`highlight(language, &[String]) -> Vec<Vec<Span>>`（429 行的檔，`pub fn` 一共 4 個）。
+`code.rs` 之外叫它的地方只有四處：
+
+| 在哪 | 幹什麽 |
+| --- | --- |
+| `editor/fences.rs:166` | Markdown 手稿裏 ```` ``` ```` 圍起來那一段按它自己的語法上色 |
+| `yumete-tui/src/lib.rs:6671` | 打開一個 `.py`／`.rs`／`.json` 時整個檔上色 |
+| `syntax.rs:68`／`:102` | 由 info string 或擴展名認出這是哪一種語言 |
+| `editor/commands.rs:864` | `:view-code` 報「這個 build 認得哪幾種語言」 |
+
+所以關掉的後果是**只少一件事：代碼變成一種顏色**。手稿一個字都不受影響——這個編輯器
+從來不把正文交給 tree-sitter（`code.rs` 開頭那段註釋寫得很清楚：markdown 的標記是
+行局部的、按段落存快取，一個要看整篇的 parser 會跟它打架）。標題、**粗體**、注音、
+表格、竪排、大綱、拼寫檢查，全是自己的 `markdown.rs`／`mdtable.rs`，沒有一處經過
+tree-sitter。
+
+⚠️ **順帶：這也是包體上最大的一塊白撿。** `Cargo.toml` 那段註釋記着七個語法
+1.34 MB（release + LTO 量的），現在是九個。網頁上那是實打實要下載的字節。
+
+**建議：第一步走甲。** 上色是這件事裏最不急的一格，而 wasi-sdk 是一個構建鏈的決定，
+不該跟「能不能搬」綁在一起。真要上色，乙那條路等第一步跑起來再單獨評估。
+
+---
+
+### 13.2 文件系統：115 處，而編譯器一處都不會提醒
+
+⚠️ **最要緊的一句：`std::fs` 在 `wasm32-unknown-unknown` 上編得過。** 標準庫給的是
+一整套樁子，`fs::read_to_string` 回的是 `Err(Unsupported)`，不是編譯錯。所以
+「`cargo check` 綠了」在這一項上**什麽都不證明**——`yumete-config` 帶着
+`fs::read_to_string`、`env::var("HOME")`、`config_dir()` 全套，第一次就編過了。
+
+全樹（不算測試）**115 處**磁碟調用，散在 **24 個檔**裏：
+
+| 檔 | 處 | 是什麽 | 換成什麽 |
+| --- | --- | --- | --- |
+| `yumete-core/src/buffer.rs` | **30** | 開檔、存檔、原子寫、swap、stamp、權限 | 見下 |
+| `yumete-core/src/editor/session.rs` | 10 | 會話、草稿、崩潰恢復（`:302/306/308/321/376/397/401/443/482/564`） | OPFS 或 IndexedDB |
+| `yumete-core/src/editor/find.rs` | 9 | `canonicalize` 求「這兩個路徑是不是同一個檔」 | 字符串規範化（沒有符號連結可言） |
+| `yumete-tui/src/lib.rs` | 9 | 前端這一側的讀寫（`:193, 2171–2243`） | 同上 |
+| `yumete-core/src/wiki.rs` | 7 | `.yumete/wiki.md` 與它遞迴 include 的那幾份 | 只讀就夠 |
+| `yumete-core/src/editor/tables.rs` | 7 | `.yumete/tables/*.csv`（拆分表、自定義表） | 只讀就夠 |
+| `yumete-ime/src/lib.rs` | 7 | 掃 `schemes/*.toml`、按路徑載入碼表 | 見 §13.6 |
+| `yumete-core/src/editor/words.rs` | 5 | 詞習慣詞庫的讀與寫 | IndexedDB |
+| `yumete-core/src/vcs.rs` | 4 | 落兩個臨時檔再喊 `git diff` | 見 §13.3 |
+| `yumete-core/src/editor/files.rs` | 4 | 進度台賬（`:168` 讀、`:184` 建目錄）、`canonicalize`（`:485/487`） | IndexedDB |
+| `yumete-core/src/editor/sidebar.rs` | 3 | 邊欄那棵樹 | 見下 |
+| `yumete-config/src/lib.rs` | 2 | 全局 `config.toml`（`:1851`）與項目 `.yumete/config.toml`（`:1860`） | localStorage 或 OPFS |
+| `yumete-core/src/table.rs` | 2 | `.yumete/tables/` 掃目錄（`:502`）、讀檔（`:512`） | 只讀 |
+| `yumete-core/src/diag.rs` | 2 | `yumete.log` 追加寫（`:102/104`） | `console.log` |
+| 其餘 10 個檔 | 各 1–2 | `editor.rs:1502`、`editor/render.rs:1644`、`editor/commands.rs:1128`、`editor/help.rs:26`、`editor/wiki.rs:108/563`、`editor/complete.rs:235/243`、`yumete/src/main.rs:246`、`yumete-tui/src/system_ime.rs:128` | 逐處看 |
+
+另有**兩處目錄遍歷**走 ripgrep 的 walker（`sidebar.rs:581`、`editor.rs:1418` 的
+`ignore::WalkBuilder`）——它讀 `.gitignore`、跟符號連結、問 inode，**在瀏覽器裏一項都
+沒有**。邊欄那棵樹和 `:search` 跨檔案那一路都靠它。
+
+再有 **88 處** `env::var`／`env::current_dir`／`env::temp_dir`，和 **36 處**
+`SystemTime::now`／`Instant::now`。時鐘沒問題（wasm 有）；環境變量全是空的，於是
+`config_dir()`、`data_search_dirs()` 這一族要整個換一個來源。
+
+#### 為什麽 `buffer.rs` 是最硬的一塊
+
+那 30 處不是三十次 `fs::read`。**存檔走的是「寫暫存檔 → `fsync` → `rename` 蓋過去」**
+（`write_bytes_with_model`，`buffer.rs:1316–1377`），而且沿路問了四件瀏覽器答不上來的
+事：
+
+| 在哪 | 問的是什麽 | 瀏覽器裏 |
+| --- | --- | --- |
+| `buffer.rs:21 stamp_of` | 檔的大小與 mtime——「它在我背後改過沒有」 | OPFS 的 `File` 有 `size`／`lastModified`，答得上 |
+| `buffer.rs:1247 file_identity` | inode／NTFS file id——「這兩個路徑是不是同一個檔」 | **答不上**。沒有硬連結，也沒有 inode |
+| `buffer.rs:1222 write_target` | `canonicalize` 跟穿符號連結再寫 | **不存在**，可以整個去掉 |
+| `buffer.rs:1355` | 原來那個檔的權限，寫回去要保住 | **不存在**，可以整個去掉 |
+| `buffer.rs:1372` | 開目錄 `fsync`，讓 rename 真的落盤 | OPFS 自己保證，可以去掉 |
+
+**去掉三件、換掉兩件**，聽起來不多。真正貴的是下一句：
+
+⚠️ **OPFS 的可寫句柄在主線程上是異步的，而 `Buffer::save()` 是同步的
+`io::Result<()>`。** 同步那一版（`createSyncAccessHandle`）**只在 Web Worker 裏**拿得
+到。所以擺在面前的是兩種形狀，選哪一種決定了這一項是一週還是一個月：
+
+- **甲：整個編輯器跑在 Web Worker 裏**，主線程只收鍵盤、畫格子。`buffer.rs` 一行不
+  用改函數簽名——`createSyncAccessHandle` 就是同步的 `read`／`write`／`truncate`，
+  正好對得上 `fs::File`。**這是唯一能讓那 115 處保持同步的辦法**，而且順帶把「打字
+  不卡」也解決了（編輯器不在主線程上）。
+- **乙：主線程 ＋ 異步**，於是 `save()`／`open()`／`reread()`／`write_swap()` 全要
+  變成 `async fn`，而它們的呼叫者（`editor/session.rs`、`editor/files.rs`、
+  `editor/commands.rs`、`yumete-tui/src/lib.rs`）也跟着變。這是**傳染**，不是改五個
+  函數。
+
+**建議走甲。** 它把一個「改一百多處簽名」的問題變成「寫一層 300 行的 shim」的問題。
+
+| 要存的東西 | 現在在哪 | 瀏覽器裏放哪 |
+| --- | --- | --- |
+| 手稿本身 | 任意路徑 | **OPFS**（一棵真的目錄樹，Worker 裏同步讀寫）；另給一顆按鈕走 File System Access API 認使用者本機的目錄（Chromium 限定） |
+| `config.toml`（全局） | `$XDG_CONFIG_HOME/yumete/` | localStorage 一個鍵就夠（3 KB 級） |
+| `.yumete/`（項目） | 手稿旁邊 | OPFS 裏那棵樹的同一個位置，原樣 |
+| 會話／草稿／崩潰恢復 | `$XDG_DATA_HOME/yumete/sessions`、`drafts` | OPFS。⚠️ 它本來就是「崩了還在」的東西，放 localStorage 會被容量上限咬 |
+| 詞習慣詞庫、進度台賬 | 同上 | IndexedDB（本來就是「一張表」，不是一個檔） |
+| `yumete.log` | `$XDG_DATA_HOME/yumete/yumete.log` | `console.log`，別落盤 |
+| IME 的碼表 | `~/.local/share/yumete/{data,schemes}/` | `fetch()` ＋ Cache API，見 §13.6 |
+
+---
+
+### 13.3 子進程：一個都沒有，要老實說出來
+
+`Command::spawn` 在 wasm 裏編得過、跑起來直接失敗。全樹喊外部程序的地方數得完，而且
+**核心與傳輸分得很乾淨**——這是好消息，下面逐條說。
+
+| 沒了誰 | 少了什麽 | 在／不在 | 替代 |
+| --- | --- | --- | --- |
+| **rust-analyzer 一族**（`yumete-tui/src/server.rs:541`） | `gd` 跳定義、`空格 k` 問這是什麽、`C-n` 補全、行號旁那一格診斷（§5.12 整族） | ✗ | **有路**：`lsp.rs`（899 行）**一句 `Command::spawn` 都沒有**——它只造 JSON 字符串、只解 JSON 字符串（`frame`／`take_frame`／`initialize`／`definition`／`hover`／`completion`／`read`）；全檔唯一一處 `std::process` 是 `lsp.rs:113` 的 `process::id()`，填 `initialize` 那個 `processId` 欄位而已。跑子進程的是 `server.rs`（847 行）。把 `server.rs` 換成一個 WebSocket 到遠端的語言服務器，`lsp.rs` 一個字不改 |
+| **opencc**（`convert.rs`） | `:convert s`／`t`／`tw`／`hk`／`jp` 簡繁互轉 | ✗ | opencc 有 wasm 構建（`opencc-js`），可以接；或者只留 `:convert c`／`g` 那兩檔——那兩檔的 `glyphs_c.txt`／`glyphs_g.txt`（各 3.2 KB）**本來就是編進二進制的數據**，不喊 opencc |
+| **git**（`vcs.rs:91/113/142`） | 行號旁的改動條 `▍`、剪口 `▔`／`▁` | ✗ | **有路**：`Changes::from_diff(diff, lines)` 是純函數，喂它一串 `@@ -a,b +c,d @@` 就行。前端拿 isomorphic-git 或者乾脆關掉。⚠️ `vcs.rs:108–119` 那一支落兩個臨時檔再喊 `git diff --no-index`，那一支在瀏覽器裏整個沒有 |
+| **tinymist／typst**（`yumete-tui/src/lib.rs:2267`，`RunKind::Server`） | `:view-preview` 開預覽服務器 | ✗ | typst 有 wasm 版，但那是另一個項目。第一版直說「這裏沒有」 |
+| **`:pipe`／`:table-pipe`／`!`**（`lib.rs:2095 shell_command`） | 把選區交給一條命令，拿答案換回來 | ✗ | 沒有替代。瀏覽器裏沒有 shell，這是設計 |
+| **`open`／`xdg-open`**（`lib.rs:2398 show`） | `gx` 打開光標下那個連結 | ✓ | `window.open()`，一行 |
+| **`pbpaste` 一族**（`lib.rs:2419 read_clipboard`） | 貼板**讀** | ✓ | `navigator.clipboard.readText()`——瀏覽器這一頭反而**比終端好**（終端幾乎都拒 OSC 52 的讀，`lib.rs` 那段註釋寫着理由） |
+| **`:shot`** | 叫系統截圖程序 | ✗ | 不需要：瀏覽器裏截圖是瀏覽器的事 |
+| **`date +%z`**（`progress.rs:255`） | 本機時區偏移 | ✓ | `new Date().getTimezoneOffset()` |
+| **`ps`**（`lib.rs:2220`） | 認出跑着的那個服務器叫什麽 | ✗ | 跟着服務器一起沒有 |
+
+⚠️ **核心其實已經替這件事做好了準備。** `Editor` 從來不自己跑子進程——它把要求留在
+那裏，讓前端來取：`take_preview_request`、`take_open_request`、`take_shell_request`、
+`take_clipboard_request`、`take_screenshot_request`、`take_scheme_request`、
+`take_chaifen_request`、`take_theme_request`、`take_fill_request`、
+`take_words_request`、`take_detect_request` ——**十一支**。`main.rs:525–552` 那一段
+（`--shot` 對着這十一支逐條報「這一幀裏它沒人接」）就是現成的模板：網頁那一版要做的
+不是刪功能，是**在同一個位置回一句「這裏沒有」**，而那句話該由前端說。
+
+---
+
+### 13.4 終端怎麽畫：`frame_to_html` 已經在倉裏了
+
+**最出乎意料的一格。** 這件事已經做過一半，只是做的時候是爲了別的目的。
+
+`yumete-tui/src/lib.rs:229` 有一支 **`frame_to_html`**：它拿 ratatui 的
+`TestBackend`（純內存的一張格子，沒有終端）畫一幀，然後 `buffer_to_html`
+（`lib.rs:4782`）把每一個 cell 連着它的前景色、背景色、粗體、下劃綫、反白，吐成一個
+自帶樣式的 `<pre>`——**每一段「看上去一樣」的連續 cell 合成一個 `<span>`**，不然一頁
+中文就是三千個 span。這一支是給 `--shot --html` 用的（出圖評審），可它正好就是網頁版
+要的那一層。
+
+量了一下一幀有多大（`docs/manual.md` 前 400 行，release 二進制）：
+
+| 版面 | 純文本 | HTML |
+| --- | --- | --- |
+| 100×30 | 2,064 字節 | **21,183 字節** |
+| 160×48 | 3,941 字節 | **42,137 字節** |
+
+HTML 是文本的十倍。**一鍵換一次 innerHTML 是夠的**（一秒十幾鍵，幾百 KB/s），
+一秒六十幀就不是了。所以真做的時候該照 crossterm 的老辦法**只寫變了的那幾個 cell**
+——ratatui 的 `Backend` trait 本來就是「給你一串 `(x, y, &Cell)`」的形狀，`draw` 之後
+它已經替你算好了差。
+
+#### 幾條路
+
+| 路 | 做法 | 代價 |
+| --- | --- | --- |
+| **甲：DOM 網格（推薦）** | 自己實現一個 `ratatui::backend::Backend`，`draw_content` 把 cell 寫進一張 `<span>` 的網格；`frame_to_html` 那套上色邏輯直接抄過來 | 最小。**上色、反白、下劃綫的語義已經寫過一遍了**。麻煩在光標與滾動要自己畫 |
+| **乙：xterm.js** | 把 ratatui 的輸出當 ANSI 序列喂給 xterm.js | 看着最現成，其實最繞：等於**在瀏覽器裏再造一個終端**，然後把剛剛好不容易擺脫的那一族問題（模糊寬度、鍵盤協議、OSC 52）原樣請回來。§10.1 記過的四條——裸 Shift 收不到、哪個回退字體上場不由這一頭決定、候選面板只能拿方框字符畫、一條鍵流三個消費者——**xterm.js 一條都沒解決** |
+| **丙：canvas** | 自己畫字形 | 最快，也最貴：選中、無障礙、瀏覽器自帶的查找全要自己做。等甲量出來真的慢了再說 |
+
+**建議甲。** 乙那條路唯一的好處是「現成」，而它把這件事最大的動機給丟了。
+
+#### crossterm：九個錯，全在終端邊界上
+
+`cargo check --target wasm32-unknown-unknown -p yumete-tui` 的錯全部來自
+crossterm 0.28.1，一共九個：
+
+```
+E0425 cannot find function `enable_raw_mode` / `disable_raw_mode` / `size` / `window_size` in module `sys`
+E0432 unresolved import `sys::position` / `sys::supports_keyboard_enhancement`
+E0425 cannot find value `source` in this scope
+E0046 not all trait items implemented, missing: `eval`        (EventFilter)
+E0308 mismatched types                                        (is_raw_mode_enabled)
+```
+
+一條都不是邏輯，全是「這個平臺沒有 tty」。而 **ratatui 自己編得過**：
+`ratatui = { version = "0.29", default-features = false, features =
+["unstable-backend-writer"] }` 在 `wasm32-unknown-unknown` 上一次過。
+
+⚠️ **但 `underline-color` 這個 feature 不行。** ratatui 0.29 的 `Cargo.toml` 裏寫的是
+`underline-color = ["dep:crossterm"]`（不帶 `?`），所以它**無條件把 crossterm 拉回
+來**，一加就是那九個錯。而 `Style::underline_color` 這個欄位是
+`#[cfg(feature = "underline-color")]` 的，倉裏有三處在用：
+
+- `yumete-tui/src/backend.rs:49` — 分詞那道點綫（#287），那一支本來就是繞過 crossterm
+  backend 直接寫 stdout 的，網頁版整支不要
+- `yumete-tui/src/lib.rs:7438` — `.underline_color(ink.word_rule())`，分詞分隔符（#501）
+- `yumete-tui/src/lib.rs:4814` — `buffer_to_html` 把它畫成 `text-decoration-color`
+
+網頁上劃一條有顏色的綫是 CSS 一句話的事，所以這一格要自己補一個「線的顏色」進 cell，
+不能靠 ratatui 那個 feature。**43 處 `crossterm` 引用**散在 6 個檔裏
+（`lib.rs` 29、`backend.rs` 6、`ambiguous.rs` 4、`theme.rs` 2、`vertical.rs` 1、
+`table.rs` 1）——那就是要改的面。
+
+#### ⚠️ CJK 寬度：在瀏覽器裏成立，但有一顆地雷
+
+這個編輯器整個建立在「一個漢字兩格」上。**在 LXGW WenKai Mono GB 裏這條假設是精確
+成立的**，而且不是「差不多」：直接讀字體的 `hmtx` 表，`unitsPerEm = 1000`，46,830 個
+字形裏被 cmap 指到的那些**只有三種步進寬度**——
+
+| 步進 | 幾個字形 | 是什麽 |
+| --- | --- | --- |
+| **1000**（＝ 2 格） | 44,558 | 漢字、假名、諺文、全形標點、製表符、方塊、`●▲◆`、`→`、`①` |
+| **500**（＝ 1 格） | 1,887 | ASCII、Latin-1、希臘、`•`、`·`、彎引號 `“”` |
+| 0 | 65 | 組合符號 |
+
+**沒有第四種。** 這正是一個等寬 CJK 字體該有的樣子，也是把終端那張格子搬進瀏覽器的
+前提。headless Chrome 153 量出來的也一樣：15px 下一格 7.500px，`漢` 15.000px，整整
+兩格。
+
+⚠️ **可是瀏覽器會自己動手。** Chrome 現在默認做 **CJK 標點擠壓**
+（`text-spacing-trim`），量出來是這樣：
+
+| 量的東西 | 默認 | 關掉 OpenType 特性 | `text-spacing-trim: space-all` |
+| --- | --- | --- | --- |
+| `，` ×200 | **1.005 格/字** | 1.005 | **2.000** |
+| `。` ×200 | **1.005 格/字** | 1.005 | **2.000** |
+| `「漢」` ×50 | **1.673 格/字** | 1.673 | **2.000** |
+| `漢，` ×100 | 2.000 | 2.000 | 2.000 |
+| 一行真的中文散文（見下） | **48 格** | — | **50 格** |
+
+**這不是字體的事**——`font-feature-settings` 全關掉一點用都沒有，字體的 `hmtx` 裏
+`，` 明明是 1000 單位。是瀏覽器自己在兩個相鄰的 CJK 標點之間收一格。而
+量的那一行是 `說明寫着：「效果一致就行，不求逐字相同」，於是……` —— `：「` 一處、
+`」，` 一處，一行就被收掉兩格。這種句子在這個倉自己的文檔裏一抓一把。
+**擠一格，這一行後面每一個字都錯位。**
+
+**解法是一句 CSS：`text-spacing-trim: space-all`。** 量出來三種情形全部回到 2.000。
+⚠️ 但這一條**只在 Chrome 153 上量過**；Safari 與 Firefox 現在多半兩樣都沒有（既不擠，
+也不認這個屬性），要各量一遍纔算數——**驗的辦法就是 §13.10 那一頁三個並排的 `<span>`，
+換個瀏覽器再開一次。**
+
+⚠️ **另一顆：`🈚️` 帶變體選擇符的時候是 19.000px ＝ 2.533 格。** 不帶 VS16 的
+`🈚`（U+1F21A）是規規矩矩的 2.000 格——帶了 VS16 就掉進 emoji 字體去了。空碼那一格
+在碼表數據裏寫的正是帶 VS16 的那一個（見兩台機器那份記事本裏「🈚️ 是兩個 `char`」
+那一條）。網頁版**一定要在字體棧裏把 emoji 那一支擋掉**，或者畫的時候剝掉 VS16。
+
+⚠️ **還有一條舊帳在這裏會變好。** §5.12「那一欄」記過：改動條 `▍` 與剪口 `▔`／`▁`
+在這個字體裏是兩格，而終端說一格——那道「問終端模糊寬度算幾格」的閘信的是
+終端說的話。**在瀏覽器裏這個問題消失了**：字體的 `hmtx` 就是唯一的答案，量得到，不用
+問任何人。`●▲◆` 那三個也一樣（同一節的第一條），量出來確實是 15.000px 兩格。
+
+---
+
+### 13.5 字體：霞鶩文楷等寬 GB 嵌得進，但一定要 subset
+
+`LXGWWenKaiMonoGB-Regular.ttf` 在本機是 **25,847,688 字節（24.6 MiB）**。
+
+| 做法 | 字節 | 覆蓋 |
+| --- | --- | --- |
+| 原檔 TTF | 25,847,688 | 全部 46,510 個碼位 |
+| **整份轉 woff2** | **8,010,736**（7.6 MiB） | 全部 |
+| subset：ASCII ＋ 標點 ＋ 製表 ＋ 方塊 ＋ 幾何 ＋ 全形 | **41,532**（40.6 KiB） | 一個漢字都沒有 |
+| ＋ CJK 基本區 U+4E00–9FFF | 4,864,544（4.6 MiB） | 20,992 字 |
+| ＋ 擴展A U+3400–4DBF | 6,472,392（6.2 MiB） | ＋6,592 字 |
+| 8,105 個漢字（＝通規那個量級） | **1,822,668**（1.7 MiB） | — |
+| `docs/manual.md` 用到的那 1,522 個字符 | **366,540**（358 KiB） | 一份真文檔的實際用字 |
+
+**要，一定要 subset。** 7.6 MiB 一份字體，開一次網頁就下一次，是不能接受的。
+
+**建議照 Google Fonts 的辦法切塊：** 一份 `@font-face` 拆成幾十份，每份帶自己的
+`unicode-range`，瀏覽器只下用得到的那幾塊。那 40.6 KiB 的 ASCII ＋ 界面符號那一份
+**必須是第一塊**——界面（狀態欄、行號、邊框、命令行）在它到齊那一刻就能畫對，漢字那
+幾塊慢一點沒關係。
+
+字體本身的覆蓋（讀 cmap 數出來的）：
+
+| 區 | 有 / 全 |
+| --- | --- |
+| CJK 基本區 U+4E00–9FFF | **20,992 / 20,992** |
+| 擴展A U+3400–4DBF | **6,592 / 6,592** |
+| 擴展B U+20000–2A6DF | 1,693 / 42,720 |
+| 兼容漢字 U+F900–FAFF | 368 / 512 |
+| CJK 符號標點 U+3000–303F | 60 / 64 |
+| 全形 U+FF00–FFEF | 225 / 240 |
+| 製表 U+2500–257F | **128 / 128** |
+| 方塊元素 U+2580–259F | **32 / 32** |
+| 幾何圖形 U+25A0–25FF | 41 / 96 |
+| 注音 U+3100–312F | 43 / 48 |
+| 假名 U+3040–30FF | 189 / 192 |
+| 諺文音節 U+AC00–D7AF | 11,172 / 11,184 |
+
+⚠️ **擴展B 只有 1,693 個。** 界面要畫的那幾樣（製表、方塊）是滿的，可生僻字這一頭
+本來就是靠回退字體補的——終端上是終端在補，網頁上要**自己把回退字體寫進
+`font-family` 那一串**，而且回退進去那個字**未必是兩格**（見上面 `🈚️` 那一條）。
+⚠️ 一個字體棧裏的第二順位字體是不是等寬，**這件事沒有量過**，真做的時候要量。
+
+---
+
+### 13.6 輸入法：`yume-core` 已經在瀏覽器裏跑着了，接得上
+
+這一項比想象的輕，因為**一半已經做完了**：
+
+- `yume/crates/yume-wasm` 就是 `yume-core` 的 wasm-bindgen 殼，`frontends/web/pkg/`
+  裏那顆 **`yume_wasm_bg.wasm` 是 378,456 字節**——整個引擎，不到 370 KiB。
+- 它導出的是**按字節喂**的門：`load_table_binary(&[u8])`、`load_reading_table`、
+  `load_weights_binary`、`load_lexicon_binary`、`load_annotations_binary`、
+  `load_charset_binary`、`load_data_file(kind, data, aux, slot)`，加上
+  `input`／`space`／`enter`／`backspace`／`select_in_page`／`page_candidates`／
+  `page_comments` 那一整套按鍵與候選面。
+- 而 `yume-core` 這一側**四個載入器都已經有 `_bytes` 的那一版**
+  （`code_table.rs:769`、`unigram_table.rs:506`、`lexicon.rs:369`、
+  `fluency_table.rs:1540`），旁邊那個按路徑的 `load_binary(&str)` 只是另一扇門。
+
+所以 `yumete-ime`（2,228 行正文）要改的**就是那 7 處磁碟調用**：
+
+| 在哪 | 現在 | 換成 |
+| --- | --- | --- |
+| `lib.rs:276/293` | `read_dir(dir/"schemes")` ＋ `read_to_string` 掃方案 toml | 一張 `fetch` 回來的清單 |
+| `lib.rs:533` | `from_table_file(path)` | 收 `&[u8]` |
+| `lib.rs:1627 load_data_file` | `find_file(dirs, …)` → `table.load_binary(p)` | `load_binary_bytes(&bytes)`，bytes 從 `fetch` 來 |
+| `lib.rs:1695/1706` | `fs::read` 讀拆分表與字根表 | 同上（這兩支**本來就是先讀成字節再 `from_binary`**，改動最小） |
+| `lib.rs:1773` | 同族 | 同上 |
+
+⚠️ **`yumete-ime/build.rs` 那一套反而是現成的優勢。** 它在編譯期就把靈明碼表
+（`schemes/ling.ytab`）和符號表 `include_bytes!` 進二進制了（`BUILTIN_TABLE`／
+`BUILTIN_SYMBOLS`，找不到就退回 0.25 MB 的靈明精華版）。**一個「打開就能打字、什麽都
+不用下載」的 demo，這條路已經通了**——代價是 wasm 包會脹那麽多。
+
+數據要下多少，看 `yume/frontends/web/index.html:1009` 那張 `FILES` 表（靈明這一路）：
+
+| 檔 | 字節 |
+| --- | --- |
+| `ling.ytab` | 4,899,476 |
+| `chaifen.ydiv` | 4,239,876 |
+| `pinyin.yflb` | 5,362,701 |
+| `pinyin.ywtb` | 3,435,291 |
+| `zigen_ling.yzg` | 1,433 |
+| 三份 `charsets/*.ycs` | 小 |
+| 合計 | **約 18 MB** |
+
+加上字體那 1.7 MiB 與 wasm 本體，第一次打開是 20 MB 級。**Cache API 存一次，第二次
+就沒有了**——yume 的網頁版現在就是這麽活的。
+
+⚠️ **`yumete-ime` 依賴的是 `../../../yume/crates/yume-core` 這條相對路徑**，不是
+crates.io。網頁版要不要跟 yume 那邊共用同一顆 wasm（一個 `yume_wasm` 給兩邊用），還是
+`yumete` 自己編一顆把 `yume-core` 靜態鏈進去——**後者簡單得多**（純 Rust，不用跨 wasm
+邊界傳字節），建議後者。
+
+⚠️ **這一項還有一半沒量：合成事件。** 瀏覽器自己也有輸入法，`compositionstart`／
+`compositionupdate` 那一族會跟 yumete 自己的 IME 搶同一串按鍵。yume 的網頁版是在
+`<textarea>` 上解決的；yumete 這邊是一張自己畫的格子，**那一族事件在自繪網格上怎麽
+走，這份文檔沒有量。**
+
+---
+
+### 13.7 能做到什麽：一張在／不在的表
+
+假定走下面 §13.9 的第一步（tree-sitter 關掉、OPFS＋Worker、自繪 DOM 網格）：
+
+| 功能 | 在 | 說明 |
+| --- | --- | --- |
+| 模態編輯、動作、算子、寄存器、撤銷 | ✓ | 純核心，一行不用改 |
+| 軟換行、竪排、縦中横、注音 | ✓ | 同上。竪排在網頁上反而更容易畫 |
+| Markdown 所見即所得、表格視圖 | ✓ | 同上 |
+| 大綱邊欄 | ✓ | 單檔的部分。**跨檔案那棵樹要 OPFS 遍歷代替 `ignore::WalkBuilder`** |
+| 開檔、存檔、多 buffer、分屏 | ✓ | 走 OPFS |
+| 打開本機真實文件 | 半 | File System Access API，**只有 Chromium**。Safari／Firefox 只能導入導出 |
+| 崩潰恢復、自動存草稿、會話 | ✓ | 走 OPFS。瀏覽器關掉標籤頁也還在 |
+| 查找、替換、跨檔案搜索 | ✓ | `regex` 是純 Rust。跨檔案的遍歷要換 |
+| 宇浩／冰雪 IME、候選面板、拆分注解 | ✓ | §13.6 |
+| 簡繁轉換 `:convert c` / `g` | ✓ | 那兩檔的字形表是編進二進制的數據 |
+| 簡繁轉換 `:convert s` / `t` / `tw` / `hk` / `jp` | ✗ | 要 opencc。可以接 `opencc-js` |
+| 代碼上色 | ✗ | tree-sitter。手稿的上色**不受影響** |
+| LSP：`gd`／`空格 k`／`C-n`／診斷 | ✗ | 除非接一個遠端服務器（`lsp.rs` 已經是純的） |
+| 改動條 `▍`／剪口 | ✗ | 要 git。`from_diff` 是純函數，前端喂得進來 |
+| `:view-preview`（tinymist） | ✗ | 要子進程 |
+| `:pipe`／`!`／`:table-pipe` | ✗ | 沒有 shell |
+| `gx` 打開連結 | ✓ | `window.open()` |
+| 貼板讀 | ✓ | **比終端好**：終端幾乎都拒 OSC 52 的讀 |
+| `:shot` | — | 瀏覽器自己會截圖 |
+| 一個漢字兩格 | ✓ | 量過，見 §13.4。⚠️ 要 `text-spacing-trim: space-all` |
+
+---
+
+### 13.8 要花多少，以及這個估計是怎麽來的
+
+**⚠️ 底下每一格都標了「憑什麽」。憑感覺的那幾格寫了「沒量過」。**
+
+| 項 | 量級 | 憑什麽 |
+| --- | --- | --- |
+| **tree-sitter 關掉** | **一天** | `code.rs` 429 行，公開面 3 樣，外面只有 4 個呼叫點（`fences.rs:166`、`lib.rs:6671`、`syntax.rs:68/102`、`commands.rs:864`）。等於加一個 feature、改五個檔 |
+| tree-sitter 用 wasi-sdk 編進去 | 一週 | **沒量過**——機器上沒有 wasi-sdk，只知道 10 個 crate 都掛在同一個缺頭文件上。是構建鏈的活，不是代碼的活 |
+| **文件系統（Worker ＋ OPFS shim）** | **一個月** | 115 處非測試調用、24 個檔；`buffer.rs` 一個檔 30 處，而且那 30 處是「暫存檔 → fsync → rename」一整套語義，裏面四件事（inode、canonicalize、權限、目錄 fsync）在 OPFS 上不存在。走 Worker 能保住同步簽名，於是這一個月是**寫一層 shim ＋ 逐處驗**，不是改一百多個函數簽名 |
+| 文件系統（主線程 ＋ 異步） | 兩到三個月 | `async` 會從 `save`／`open`／`reread`／`write_swap` 一路傳染到 `editor/session.rs`（10 處）、`editor/files.rs`（4 處）、`editor/commands.rs` 和 `yumete-tui/src/lib.rs`（9 處）。**這個數字是推的，沒有真改過** |
+| **子進程：老實承認沒有** | **一週** | 核心已經是「留下請求、前端來取」的形狀，十一支 `take_*_request` 齊活，`main.rs:525–552` 就是現成模板。改的是前端那一側各回一句話 |
+| 子進程：接遠端 LSP | 兩週 | `lsp.rs` 899 行**全是純函數**（造 JSON、解 JSON），`server.rs` 847 行纔是子進程。換掉的是後者。⚠️ 遠端服務器本身（誰跑、跑在哪、怎麽鑑權）不在這個數字裏 |
+| **終端繪製：自寫 DOM backend** | **一到兩週** | `frame_to_html`／`buffer_to_html`（`lib.rs:229`／`:4782`）已經把「一個 cell 變成一段帶色的 HTML」寫完了。crossterm 九個錯全在 tty 邊界；43 處 `crossterm` 引用散在 6 個檔。ratatui 本體量過，`default-features = false` 一次就編過。剩下的真活是**鍵盤事件那一側**與光標 |
+| 終端繪製：xterm.js | 一週，但不建議 | 看着省事，代價是把 §10.1 那四條全請回來 |
+| **字體** | **一天** | 量完了：subset 一條 `pyftsubset` 命令，切塊是一段 `@font-face`。40.6 KiB 那一份界面字體 ＋ 1.7 MiB 漢字，數字在 §13.5 |
+| **輸入法** | **一週** | `yumete-ime` 2,228 行正文，只有 7 處磁碟調用；`yume-core` 四個載入器**都已經有 `_bytes` 版**；`yume_wasm_bg.wasm` 378 KB 已經在跑。⚠️ **合成事件那一半沒量**，可能翻倍 |
+| **合計（第一版）** | **兩個月上下** | 上面帶粗體那幾格相加 |
+| 只做一個**只讀**的演示（打得開、翻得動、不能存） | **兩週** | 去掉文件系統那一個月裏的寫那一半，`Buffer::from_text` 已經在（`buffer.rs:277`），一份手稿 `include_bytes!` 進去就行 |
+
+---
+
+### 13.9 建議怎麽走
+
+**第一步（兩週，值不值得繼續就看它）：一頁「打不開檔、也存不了檔」的 yumete。**
+
+一份手稿編進二進制，跑在 Web Worker 裏，畫在自寫的 DOM 網格上，字體是那份 40.6 KiB
+＋ 一塊漢字的 subset，tree-sitter 關掉，IME 用 `BUILTIN_TABLE` 那份編進去的靈明。
+**一個磁碟調用都不碰，一個子進程都不碰。**
+
+要動的就四樣：① `wrap.rs:668` 那個 `1 << 40`；② `code.rs` 加一個 feature；
+③ 一個 `Backend` 實現（照 `buffer_to_html` 抄）；④ 一個 `keydown` → `editor.on_key`
+的橋。
+
+**停在這裏看什麽：**
+
+1. **打字跟不跟得上手。** 一鍵重畫一幀，`buffer_to_html` 那 21 KB 的形狀夠不夠快。
+2. **格子對不對得齊。** `text-spacing-trim: space-all` 在 Chrome 之外成不成立；
+   回退字體進來的那個生僻字是不是還兩格。
+3. **鍵盤搶不搶得贏。** 瀏覽器自己的輸入法、`Ctrl`／`Cmd` 那一族快捷鍵、
+   `Tab` 焦點——**這三件現在一件都沒量過**，而它們能單獨否掉整件事。
+
+這三格裏但凡有一格黃，後面那一個月的文件系統活就先別動。
+
+**第二步（一個月）：Worker ＋ OPFS。** 一層同步 shim 頂住 `buffer.rs` 那 30 處，
+`canonicalize`／inode／權限／目錄 fsync 四件當場去掉。做完就有一個真能寫東西的編輯器。
+
+**第三步（一週）：老實承認沒有的那幾樣。** 十一支 `take_*_request` 各回一句話，
+`:convert s` 接 `opencc-js`，`gx` 接 `window.open`，貼板接 `navigator.clipboard`。
+
+**第四步以後**再談：遠端 LSP、isomorphic-git 的改動條、tree-sitter 走 wasi-sdk。
+
+⚠️ **一句要先講清楚的：這一條路和 §10 那一條不能同時走。** §10 的方向是「CodeMirror
+接管 buffer／selection／undo」，這一節的方向是「`yumete-core` 原樣過去」。兩個方向對
+同一件事給的是兩份答案，選一個。**量出來的東西支持這一節這一條**：核心一個編譯錯就
+過了，`frame_to_html` 已經在倉裏，IME 的 wasm 也已經在跑——而 §10 那條路要把 50,106
+行核心裏的大半重寫一遍。
+
+---
+
+### 13.10 量法：每一個數字對着哪一條命令
+
+⚠️ **工具鏈先說一句：這臺機器上 `which rustc` 指到的是 Homebrew 那一份（1.98.0），
+而 `wasm32-unknown-unknown` 裝在 rustup 那一份（1.93.1）底下。** 拿 Homebrew 那份編
+wasm 會得到 `error[E0463]: can't find crate for 'core'` ——看着像「target 沒裝」，其實
+是**編譯器拿錯了**。下面每一條都是 `PATH=~/.cargo/bin:$PATH` 跑的。
+
+```bash
+# 工具鏈
+rustup target list --installed          # wasm32-unknown-unknown 在
+~/.cargo/bin/rustc --version            # 1.93.1；/opt/homebrew/bin/rustc 是 1.98.0，沒有 wasm std
+
+# 編譯這一關（每一條都單獨跑，別並行搶 target 鎖）
+export PATH=~/.cargo/bin:$PATH
+export CARGO_TARGET_DIR=/tmp/wasmtarget          # 別污染本地 target/
+cargo check --target wasm32-unknown-unknown -p yumete-cjk      # 過
+cargo check --target wasm32-unknown-unknown -p yumete-config   # 過（帶着 fs:: 和 env::var 一起過的）
+cargo check --target wasm32-unknown-unknown -p yumete-core --keep-going 2>&1 \
+  | grep -E '^error' | sort | uniq -c              # 10 條，全是 tree-sitter 那一族
+cargo check --target wasm32-unknown-unknown -p yumete-tui 2>&1 \
+  | grep -E '^error' | sort | uniq -c              # crossterm 九個
+```
+
+**「拿掉 tree-sitter 之後只剩一個錯」是這麽量的**（改完已還原）：
+`yumete-core/Cargo.toml` 刪掉那十行依賴，`code.rs` 把 `grammar()`／`highlights()`／
+`query()`／`highlight()` 換成一個返回空 `Span` 的樁，再 `cargo check`——得到
+`error[E0080]: attempt to shift left by 40_i32 --> crates/yumete-core/src/wrap.rs:668`
+一條。把 `1 << 40` 改成 `1 << 30` 再跑，`Finished`，一個 unused import 警告。
+
+**ratatui 單獨量**（scratch 裏一個空 crate，只依賴 ratatui）：
+
+```toml
+ratatui = { version = "0.29", default-features = false, features = ["unstable-backend-writer"] }   # 過
+ratatui = { version = "0.29", default-features = false, features = ["underline-color"] }           # crossterm 九個錯
+```
+
+**數磁碟調用**（跳過 `tests.rs` 與每個檔裏 `mod tests {` 以下）：
+
+```bash
+grep -rn 'fs::\|File::\|OpenOptions' --include='*.rs' crates    # 連測試 308；剔掉測試 115
+grep -rn 'process::Command' --include='*.rs' crates
+grep -rn 'ignore::' --include='*.rs' crates                     # 兩處 WalkBuilder
+```
+
+**字體的字寬，讀字體表**（`fontTools`，比問瀏覽器可靠）：
+
+```python
+from fontTools.ttLib import TTFont
+f = TTFont("~/Library/Fonts/LXGWWenKaiMonoGB-Regular.ttf", lazy=True)
+upem, cmap, hmtx = f["head"].unitsPerEm, f.getBestCmap(), f["hmtx"]     # 1000
+from collections import Counter
+Counter(hmtx[g][0] for g in cmap.values()).most_common()    # [(1000, 44558), (500, 1887), (0, 65)]
+```
+
+**字體的字寬，問瀏覽器**（同 §5.12「那一欄」那一輪的辦法，Chrome 153.0.8010.53）：一個
+`font-size: 15px` 的 `<span>`，把一個字符重複 200 遍量 `getBoundingClientRect().width`
+再除以 200（除一次纔不會被設備像素捨入吃掉小數），然後
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless --disable-gpu --dump-dom --virtual-time-budget=4000 file://…/widthprobe.html
+```
+
+同一頁上並排放三個 `<span>`——默認、`font-feature-settings` 全關、
+`text-spacing-trim: space-all`——就量出了 §13.4 那張擠壓表。**換個瀏覽器把同一頁再開
+一次，就是驗 `space-all` 的辦法。**
+
+**woff2 的體積**：
+
+```bash
+pyftsubset LXGWWenKaiMonoGB-Regular.ttf --unicodes="U+0000-00FF,U+2000-206F,U+2190-21FF,\
+U+2500-257F,U+25A0-25FF,U+3000-303F,U+FF00-FFEF" --flavor=woff2 \
+  --layout-features='' --no-hinting --desubroutinize -o sub_ascii.woff2      # 41,532
+fonttools ttLib.woff2 compress -o full.woff2 LXGWWenKaiMonoGB-Regular.ttf    # 8,010,736
+```
+
+`--text-file=` 那幾行（`manual.md` 的 1,522 個字符 → 366,540；8,105 個漢字 →
+1,822,668）是同一支命令換一個字表。
+
+**一幀有多大**：
+
+```bash
+target/release/yumete --shot=100x30      docs/manual.md | wc -c     #  2,064
+target/release/yumete --shot=100x30 --html docs/manual.md | wc -c   # 21,183
+```
+
+**代碼有多少**：`wc -l` 對 `crates/**/*.rs`，把 `tests.rs` 與每個檔裏 `mod tests {`
+以下的行單獨計——74,482 行正文 ＋ 35,047 行測試。`:` 命令 214 條是
+`grep -c '^        name: "' crates/yumete-core/src/command.rs`。
