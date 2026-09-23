@@ -6507,6 +6507,82 @@ hover 與字典**共用邊欄的同一個位置**，也共用那一格設定：�
 一處畫（`sidebar_rule`），五個面板共用（大綱／檔案樹、百科、搜索、字典、詳情），
 `the_rule_says_which_sidebar_has_the_keys` 釘着「兩欄兩條線，粗的是拿着鍵的那一條」。
 
+## 5.12.22 預覽跟着按鍵走：正文從 websocket 推過去，不存盤（2026-09-23）
+
+報的是：「vscode 的 tinymist 預覽，每次按鍵他都會刷新一下（而且似乎是增量編譯，所以反應
+很快）。我們是不是也可以做到？也就是回到 normal 狀態的時候也能觸發一下刷新？」
+
+**做得到，而且不必回到 Normal，也不必存盤。**
+
+### 它是怎麼做到的：第二個端口不是廢的
+
+`tinymist preview` 開兩個端口。§5.12.15 那一輪只查清了「哪一個是頁面」（23625），把另一個
+（23626）當成「對 `GET /` 什麼都不回的控制面板」放過了。**它不是拿來 GET 的，它是一個
+websocket**，而編輯器在上面說話：
+
+| event | 作用 |
+| --- | --- |
+| `updateMemoryFiles` | `{"files":{"<絕對路徑>":"<全文>"}}`——把緩衝區推進排版器的 VFS，蓋過磁盤，觸發增量重編 |
+| `changeCursorPosition` | 預覽滾到光標那一頁 |
+| `syncMemoryFiles`／`removeMemoryFiles` | 全量同步／撤掉 |
+
+源碼在 `crates/typst-preview/src/actor/editor.rs`（`enum ControlPlaneMessage`），CLI 那一支
+把每一幀當 JSON 解（`crates/tinymist-cli/src/cmd/preview.rs`）。**VS Code 走的就是這條，不是
+存盤。**
+
+### 量過的，不是讀出來的
+
+在本機那一份 tinymist（build 2025-07-25）上，把一份**故意編不過**的正文從 socket 推進去，
+而磁盤上那一份是好的：
+
+```text
+error: unknown variable: undefined_xyz_from_yumete
+4 │ #undefined_xyz_from_yumete()
+compilation failed with 1 warnings in 68µs
+```
+
+它編的是推進去的那一份。**磁盤一個字節沒動。**
+
+### 這一頭怎麼寫的
+
+⚠️ **沒有 websocket crate。** 一個只發不收的客戶端要的是握手與掩碼，此外什麼都不要——它
+**可以不驗 `Sec-WebSocket-Accept`**（101 就是答案），而那是這條線上唯一會要 sha1 的東西。
+所以 `yumete-core/src/preview.rs` 一百五十行，新依賴零個，同 #53 那一輪的規矩。
+
+- **線是純函數**（`preview.rs`）：握手文本、`accepted`、掩碼幀、兩則 JSON。八條測試，
+  一個套接字都不生。⚠️ **三種長度形式裏第三種纔是功能**：一章正文一開頭就過了 126，一本
+  書過了 64 KiB，所以 64 位那一支不是邊角。
+- **套接字在前端**（`lib.rs` 的 `Job`）：`server_addresses` 一趟把兩個地址都撈出來，撈到
+  控制面板就撥號、握手、留着。
+- **推的判準是 revision 變了沒有**，一次按鍵一條；節流交給服務器自己的 `refresh_style`。
+  輸入法組字期間不推——編碼串還在輸入法手裏，正文沒變。
+
+⚠️ **推的是眼前那個緩衝區，不是被預覽的那個檔。** 一本書是一份主文件 `include` 幾十章，
+而寫的人整天待在**章**裏；只推主文件等於這個功能對長篇一次都不生效。實測：在 `chapter.typ`
+裏打錯一個字（不存盤），tinymist 重編**主文件**並報出那一行，100 µs。範圍卡在「被預覽那個
+檔的目錄底下」，免得把隔壁項目的檔塞進這個排版器的 VFS。
+
+⚠️ **絕對路徑，否則一聲不吭地丟掉。** `yumete s.typ` 開出來的緩衝區路徑是 `s.typ`，而排版
+器按絕對路徑認檔——推三十條，服務器一條都不認，**兩邊看起來都健康**。2026-09-23 踩到，而
+`preview.rs` 的註釋當時就寫着這一條。所以 `Job` 存一份 `named`（`canonicalize` 過的）。
+
+⚠️ **控制面板的連接斷掉，預覽就退出。** 獨立的 `tinymist preview` 把它讀成「編輯器走了」
+（日誌：`failed to receive message` → `graceful shutdown signal received`）。這正是想要的
+——預覽的生死跟着 job——但**套接字必須一直握着**，不能一條消息開一次。
+
+⚠️ **沒人再讀那個套接字，所以沒人可以卡在它上面。** 服務器會回話（編譯狀態、大綱、滾動
+請求），緩衝區一滿就把**它**卡死，同語言服務器 stderr 那一課。現在是一條只讀不看的線程。
+
+**`YUMETE_PREVIEW_TRACE` 指一個檔，就把撥號與每一次推記下來**——同 `YUMETE_LSP_TRACE`：
+預覽沒動和預覽沒被告知看起來一模一樣，分得出它們的只有「消息出沒出門」。
+
+### 順帶結掉的一條：灰屏不是壞了，是慢
+
+同日問的「tinymist preview 結果一片灰，正常嗎」。量下來：那本書 **3048 頁，一趟編譯 48 秒**
+（`typst compile` 計時）。頁面（1.7 MB HTML）是加載了的，灰的是「還沒有文檔可畫」。
+作者確認：「是因為它第一次 compile 用了大量時間，等幾分鐘就好了。」**不是缺陷，是體量**——
+而上面這條讓第一次之後的每一次都是增量。
+
 ## 5.13 LSP L2：真的把一個服務器跑起來（2026-09-20）
 
 L1 把診斷畫上了頁面，餵它的是一份假數據。L2 換成真的。

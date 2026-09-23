@@ -1215,14 +1215,42 @@ pub fn run(
                         editor.set_status(say!("preview.stopped", running.what));
                     }
                 }
-                if let Some(running) = job.as_ref() {
-                    if let Ok(url) = running.said.try_recv() {
-                        show(&url);
-                        // Remembered, not just said: a line on the status bar
-                        // is gone by the next keystroke, and the address is
-                        // what a writer comes back to ask for.
-                        editor.set_preview_at(Some(url.clone()));
-                        editor.set_status(say!("preview.running", url));
+                if let Some(running) = job.as_mut() {
+                    if let Ok(said) = running.said.try_recv() {
+                        if let Some(url) = said.page {
+                            show(&url);
+                            // Remembered, not just said: a line on the status
+                            // bar is gone by the next keystroke, and the
+                            // address is what a writer comes back to ask for.
+                            editor.set_preview_at(Some(url.clone()));
+                            editor.set_status(say!("preview.running", url));
+                        }
+                        // **這一下之後，正文就不必存盤也看得見了**
+                        // （2026-09-23 報的）。見 `Job::listen_in`。
+                        if let Some(at) = said.control {
+                            running.listen_in(&at);
+                        }
+                    }
+                    // **正文一變就推過去**，節流交給服務器自己的 `refresh_style`
+                    // ——它每收一條就重編一次，而重編是增量的（量過：68 µs）。
+                    //
+                    // ⚠️ **推的是眼前這一個緩衝區，不一定是被預覽的那一個。** 一
+                    // 本書是一份主文件 `include` 幾十章，而寫的人整天待在**章**裏
+                    // ——只推主文件就等於這個功能對長篇一次都不生效。`updateMemory
+                    // Files` 認的是路徑，主文件也好一章也好都收得下。
+                    //
+                    // ⚠️ **但只推這本書裏的檔**：判準是它在被預覽那個檔的目錄底下。
+                    // 開着預覽去改隔壁項目的一個 `.md`，把它塞進這個排版器的虛擬
+                    // 檔案系統裏是沒有道理的。
+                    let buffer = editor.current_buffer();
+                    if let Some(path) = buffer.path() {
+                        let book = running.named.parent().map(std::path::Path::to_path_buf);
+                        let here = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+                        if book.is_some_and(|root| here.starts_with(root)) {
+                            let version = (buffer.id(), buffer.revision());
+                            let text = buffer.rope().to_string();
+                            running.push(&here, &text, version);
+                        }
                     }
                 }
                 if let Some(tag) = editor.take_scheme_request() {
@@ -2157,8 +2185,8 @@ fn shellexpand(path: &str) -> String {
 struct Job {
     what: &'static str,
     child: std::process::Child,
-    /// The address it printed, once it has printed one.
-    said: std::sync::mpsc::Receiver<String>,
+    /// The addresses it printed, once it has printed them.
+    said: std::sync::mpsc::Receiver<Addresses>,
     /// **The file it is previewing** (2026-09-22), so that closing that file
     /// stops it.
     ///
@@ -2169,6 +2197,31 @@ struct Job {
     /// ⚠️ **切走不停。** 去隔壁一章改一句話再切回來是常事，而預覽服務器起一次
     /// 要幾秒；停的判準是「這個檔案不再開着」，不是「不在眼前」。
     file: std::path::PathBuf,
+    /// **The socket the buffer goes down** — see [`yumete_core::preview`].
+    ///
+    /// `None` until the server has printed its control address and the dial
+    /// has succeeded, and `None` again for ever if it failed: a preview that
+    /// only redraws on save is the old behaviour, which is worth keeping when
+    /// the new one cannot be had.
+    ///
+    /// ⚠️ **Closing this kills the preview.** The standalone `tinymist
+    /// preview` treats the control socket going away as 「the editor left」 and
+    /// shuts down (its log: `failed to receive message` → `graceful shutdown
+    /// signal received`). That is the behaviour we want — the preview's life
+    /// is the job's — but it means the socket must be held, not opened per
+    /// message.
+    control: Option<std::net::TcpStream>,
+    /// Which revision of which buffer was last pushed, so that a page that has
+    /// not changed costs nothing.
+    pushed: Option<(u64, u64)>,
+    /// **[`Job::file`], made absolute** — the name the typesetter knows it by.
+    ///
+    /// ⚠️ **A relative path names nothing in its world.** `yumete s.typ` opens
+    /// a buffer whose path is `s.typ`, and `updateMemoryFiles` carrying that
+    /// name is read, matched against nothing, and dropped without a word — the
+    /// pushes go out, the preview never moves, and both sides look healthy.
+    /// 2026-09-23 踩到，而 `preview.rs` 的註釋當時就寫着這一條。
+    named: std::path::PathBuf,
 }
 
 /// Where the pid of a running typesetter is written.
@@ -2314,9 +2367,7 @@ impl Job {
             std::thread::spawn(move || {
                 use std::io::BufRead;
                 let lines = std::io::BufReader::new(log).lines().map_while(Result::ok);
-                if let Some(url) = server_address(lines) {
-                    let _ = send.send(url);
-                }
+                let _ = send.send(server_addresses(lines));
             });
         }
         Ok(Job {
@@ -2324,8 +2375,115 @@ impl Job {
             child,
             said,
             file: file.to_path_buf(),
+            control: None,
+            pushed: None,
+            named: std::fs::canonicalize(file).unwrap_or_else(|_| {
+                std::env::current_dir().unwrap_or_default().join(file)
+            }),
         })
     }
+
+    /// **Dial the control plane**, once its address is known.
+    ///
+    /// Best effort: a preview server that has no control plane — every one but
+    /// tinymist, today — simply never gets a socket, and the feature is absent
+    /// rather than broken.
+    fn listen_in(&mut self, at: &str) {
+        use std::io::{Read, Write};
+        trace(&format!("dial {at}"));
+        let Ok(mut socket) = std::net::TcpStream::connect(at) else {
+            trace("  cannot connect");
+            return;
+        };
+        // The handshake is written and the answer read before anything else
+        // goes down the wire: a frame sent to a server that has not upgraded
+        // is read as HTTP and the connection is dropped.
+        let key = yumete_core::preview::key(a_number());
+        if socket.write_all(yumete_core::preview::handshake(at, &key).as_bytes()).is_err() {
+            return;
+        }
+        let mut head = [0u8; 1024];
+        let Ok(n) = socket.read(&mut head) else { return };
+        let head = String::from_utf8_lossy(&head[..n]).to_string();
+        if !yumete_core::preview::accepted(&head) {
+            trace(&format!("  refused: {:?}", head.lines().next()));
+            return;
+        }
+        trace("  upgraded");
+        // ⚠️ **Nobody reads this socket again, so nobody may block on it.**
+        // The server talks back — compile status, the outline, a scroll
+        // request — and a socket whose buffer fills would wedge *it*, which is
+        // the same lesson the language server's stderr taught (`server.rs`).
+        // Non-blocking plus a drainer thread would be the full answer; for now
+        // the writes are what matter and the reads are thrown away by a thread
+        // that ends when the socket closes.
+        if let Ok(sink) = socket.try_clone() {
+            std::thread::spawn(move || {
+                let mut sink = sink;
+                let mut bin = [0u8; 8192];
+                while matches!(sink.read(&mut bin), Ok(n) if n > 0) {}
+            });
+        }
+        self.control = Some(socket);
+    }
+
+    /// **Hand the typesetter what the buffer says now**, without saving it.
+    ///
+    /// Silent when there is no socket, when the text has not moved, or when
+    /// the write fails — a preview is a convenience, and none of its failures
+    /// are worth a line on a status bar that the writing needs.
+    fn push(&mut self, path: &std::path::Path, text: &str, version: (u64, u64)) {
+        use std::io::Write;
+        if self.pushed == Some(version) {
+            return;
+        }
+        let Some(socket) = self.control.as_mut() else {
+            trace("push: no socket");
+            return;
+        };
+        let said = yumete_core::preview::update_memory_files(path, text);
+        let frame = yumete_core::preview::frame(&said, mask());
+        trace(&format!("push {} bytes of {}", frame.len(), path.display()));
+        match socket.write_all(&frame) {
+            Ok(()) => self.pushed = Some(version),
+            // The preview is gone, or going. Drop the socket rather than
+            // trying again every keystroke for the rest of the session.
+            Err(_) => self.control = None,
+        }
+    }
+}
+
+/// **What crossed the control plane, when `YUMETE_PREVIEW_TRACE` names a file.**
+///
+/// The same bargain [`crate::server::trace`] makes for the language server: a
+/// preview that does not redraw looks exactly like a preview that was never
+/// told, and the only thing that tells them apart is whether the message went
+/// out. Off unless asked for.
+fn trace(what: &str) {
+    let Some(path) = std::env::var_os("YUMETE_PREVIEW_TRACE") else { return };
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{what}");
+    }
+}
+
+/// Four bytes that vary — all a websocket mask has to be on a loopback socket
+/// we opened ourselves. See [`yumete_core::preview::frame`].
+fn mask() -> [u8; 4] {
+    (a_number() as u32).to_ne_bytes()
+}
+
+/// Something different every time, without a `rand` dependency: the clock, and
+/// the address of a fresh allocation for the case where two calls land in the
+/// same nanosecond.
+fn a_number() -> u128 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+    let here = Box::into_raw(Box::new(0u8));
+    // Safety: the pointer came from `Box::into_raw` one line above and has not
+    // been used for anything but its own value.
+    unsafe { drop(Box::from_raw(here)) };
+    now ^ (here as u128).rotate_left(64)
 }
 
 /// **Which of the addresses a preview server prints is the page** (2026-09-22).
@@ -2351,13 +2509,40 @@ impl Job {
 ///
 /// 認不出來就退回第一個地址——那是舊行為，對別的預覽服務器（`:view-preview` 是
 /// 每個語言自己配的）總比什麽都不開強。
-fn server_address(lines: impl Iterator<Item = String>) -> Option<String> {
+/// **Both of the addresses a preview server prints**, from one pass.
+///
+/// The page is what the browser opens. The control plane is a **websocket the
+/// editor talks on** — see [`yumete_core::preview`] — and the two are found
+/// together because they are printed together, by the same program, in the
+/// same handful of lines.
+///
+/// ⚠️ **The control line comes first.** In the log above it is line two and the
+/// static file server is line five, so one pass that remembers the control
+/// address and stops at the page address gets both. Stopping matters: the
+/// iterator is a live pipe, and reading it to the end would mean reading until
+/// the typesetter exits.
+#[derive(Default)]
+struct Addresses {
+    /// `http://…` — what the browser is pointed at.
+    page: Option<String>,
+    /// `127.0.0.1:…` — host and port, no scheme: it is dialled, not fetched.
+    control: Option<String>,
+}
+
+fn server_addresses(lines: impl Iterator<Item = String>) -> Addresses {
     let mut first: Option<String> = None;
+    let mut control: Option<String> = None;
     for line in lines {
+        if let Some(rest) = line.split("Control panel server listening on:").nth(1) {
+            let at = rest.trim();
+            if !at.is_empty() {
+                control = Some(at.to_string());
+            }
+        }
         if let Some(rest) = line.split("Static file server listening on:").nth(1) {
             let at = rest.trim();
             if !at.is_empty() {
-                return Some(format!("http://{at}"));
+                return Addresses { page: Some(format!("http://{at}")), control };
             }
         }
         if let Some(at) = line.find("http://") {
@@ -2365,7 +2550,7 @@ fn server_address(lines: impl Iterator<Item = String>) -> Option<String> {
             first.get_or_insert(url);
         }
     }
-    first
+    Addresses { page: first, control }
 }
 
 /// Run what a language declares for this verb (Feature #197).
@@ -11361,7 +11546,7 @@ fn squeezed(text: &str) -> String {
 [INFO  tinymist::tool::preview] Data plane server listening on: 127.0.0.1:23625
 [INFO  tinymist::tool::preview] Static file server listening on: 127.0.0.1:23625";
         assert_eq!(
-            super::server_address(real.lines().map(str::to_string)).as_deref(),
+            super::server_addresses(real.lines().map(str::to_string)).page.as_deref(),
             Some("http://127.0.0.1:23625"),
             "⚠️ 不是先印出來的 23626——那是控制面板，對 GET / 什麽都不回"
         );
@@ -11369,10 +11554,23 @@ fn squeezed(text: &str) -> String {
         // 別的服務器不說這句話，那就還是第一個地址（舊行為）。
         let other = "serving on http://127.0.0.1:8080\nready";
         assert_eq!(
-            super::server_address(other.lines().map(str::to_string)).as_deref(),
+            super::server_addresses(other.lines().map(str::to_string)).page.as_deref(),
             Some("http://127.0.0.1:8080")
         );
-        assert_eq!(super::server_address(std::iter::empty()), None, "一個字都没說");
+        assert_eq!(super::server_addresses(std::iter::empty()).page, None, "一個字都没說");
+
+        // **同一趟也要認出控制面板那一個**（2026-09-23）：頁面給瀏覽器，控制面
+        // 板是編輯器自己去連的 websocket，正文從那裏推過去而不必存盤。
+        let both = super::server_addresses(real.lines().map(str::to_string));
+        assert_eq!(both.page.as_deref(), Some("http://127.0.0.1:23625"));
+        assert_eq!(
+            both.control.as_deref(),
+            Some("127.0.0.1:23626"),
+            "⚠️ 主機加端口，不帶 scheme——它是撥號用的，不是拿去 GET 的"
+        );
+        // 不說那句話的服務器沒有控制面板，那就沒有，功能缺席而不是壞掉。
+        let plain = super::server_addresses(other.lines().map(str::to_string));
+        assert_eq!(plain.control, None);
     }
 
     #[test]

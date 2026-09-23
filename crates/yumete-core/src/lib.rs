@@ -40,6 +40,7 @@ pub mod meter;
 pub mod motion;
 pub mod vim;
 pub mod picker;
+pub mod preview;
 pub mod problem;
 pub mod progress;
 pub mod punct;
