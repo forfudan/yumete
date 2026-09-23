@@ -118,3 +118,88 @@ fn every_range_is_a_range() {
         }
     }
 }
+
+// ── 出廠值那一欄 ────────────────────────────────────────────────────────
+//
+// `Setting::factory` 是**抄來的**字面量（面板要說「你沒設，出廠是這個」），所以
+// 它一定會漂——除非有人盯着。下面兩條就是盯着的那兩隻眼睛，而且**都不寫一行
+// per-key 的代碼**：表長到八十七項的那天，它們照樣管用。
+
+/// **出廠態 —— 讀一份什麽都沒說的配置。**
+///
+/// ⚠️ **不是 `Config::default()`。** 那一個的 `lsp` 是空的，而 `into_config` 會替
+/// 沒寫 `[lsp.*]` 的配置填上出廠的三個語言服務器（`factory_servers`）。面板眼裏的
+/// 「出廠」是後者：一份空配置跑出來的樣子。
+fn nothing_said() -> yumete_config::Config {
+    yumete_config::Config::from_toml("")
+}
+
+/// 一項設定拼成一行 toml。
+fn one(setting: &yumete_config::settings_ui::Setting, value: &str) -> String {
+    format!("[{}]\n{} = {}\n", setting.table, setting.key, value)
+}
+
+/// **把整張表的出廠值拼成一份配置讀回來，必須就是出廠設定。**
+///
+/// 抄錯一個數當場紅。
+#[test]
+fn every_factory_value_really_is_the_factory_value() {
+    use yumete_config::settings_ui::SETTINGS;
+    use yumete_config::Config;
+    for setting in SETTINGS {
+        let built = Config::from_toml(&one(setting, setting.factory));
+        assert_eq!(
+            built,
+            nothing_said(),
+            "{} 的出廠值寫的是 {}，而那不是出廠設定",
+            setting.path(),
+            setting.factory
+        );
+    }
+}
+
+/// **再逐項餵一個不是出廠的值，必須真的改出點什麽來。**
+///
+/// ⚠️ **這一條纔是硬的**，上面那條單獨立不住：`RawConfig` 是
+/// `#[serde(deny_unknown_fields)]`，而 `Config::from_toml` 讀不進去就
+/// `unwrap_or_default()`——**鍵名打錯一個字母，整份被默默丟掉，於是「等於出廠
+/// 設定」照樣成立**，上面那條全綠。這一條問的是反面：既然改了，就該有東西動。
+#[test]
+fn a_value_that_is_not_the_factory_one_actually_lands() {
+    use yumete_config::settings_ui::{Kind, SETTINGS};
+    use yumete_config::Config;
+    for setting in SETTINGS {
+        // 一個**一定不是**出廠的值，從 `Kind` 推出來——不手寫。
+        let other = match setting.kind {
+            Kind::Tick => match setting.factory {
+                "true" => "false".to_string(),
+                _ => "true".to_string(),
+            },
+            Kind::Count { low, high, .. } => {
+                let now: usize = setting.factory.parse().unwrap_or(low);
+                match now == low {
+                    true => high.to_string(),
+                    false => low.to_string(),
+                }
+            }
+            Kind::Pick(choices) => {
+                let now = setting.factory.trim_matches('"');
+                let other = choices
+                    .iter()
+                    .map(|c| c.word)
+                    .find(|w| *w != now)
+                    .unwrap_or_else(|| panic!("{} 的選項全同名", setting.path()));
+                format!("\"{other}\"")
+            }
+            // 一段自己打的字沒有「另一個值」可推——跳過，那一族靠上面那條。
+            Kind::Text => continue,
+        };
+        assert_ne!(
+            Config::from_toml(&one(setting, &other)),
+            nothing_said(),
+            "{} 設成 {other} 之後什麽都沒變——鍵名打錯了？（打錯的話整份配置被丟掉，\
+             而丟掉之後正好等於出廠設定，所以另一條測試是綠的）",
+            setting.path()
+        );
+    }
+}
