@@ -80,6 +80,12 @@ impl Where {
 /// In screen order, which is also `Tab`'s order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Field {
+    /// **哪裏找** —— 和 `:search` 的參數同一套：空着是本文件，別的都當路徑。
+    ///
+    /// 2026-09-23 報的：「比如用戶如果 `:search` 當前文件，但是又突然想查詢整個
+    /// 文件夾，他就可以 Esc → k → i → `.`」。所以它排在查詢框**之上**——`k` 從
+    /// 查詢框往上走，第一個碰到的就是它。
+    Scope,
     /// The pattern.
     #[default]
     Query,
@@ -93,6 +99,12 @@ pub enum Field {
     Whole,
     /// 模糊 — 「差不多是這幾個字」 (`crate::nearby`).
     Fuzzy,
+    /// **替換 —— 勾上就長出替換行**（2026-09-23 報的）。
+    ///
+    /// 從前只有 `:replace` 開得出替換行，於是 `:search` 進來的人想改一個詞，得
+    /// 退出去重按一個命令。它是個開關而不是另一扇面板：面板是同一扇，勾上說的
+    /// 是「這些我要改」，不是「剛纔找到的不算了」。
+    Replacing,
     /// The list of what was found. Not a cell to type in; `Tab` reaches it so
     /// that walking the form ends up where the answers are.
     Results,
@@ -100,19 +112,26 @@ pub enum Field {
 
 impl Field {
     /// Every cell, in `Tab`'s order.
-    pub const ALL: [Field; 7] = [
+    /// ⚠️ **這個次序就是畫出來的次序**（`draw_search`）。走的和看的不是一回事
+    /// 的時候，`Tab` 會在一張看不見的表上跳，而那是沒人能學會的。
+    ///
+    /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
+    /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`／`[ ]` 自然照這個讀法。
+    pub const ALL: [Field; 9] = [
+        Field::Scope,
         Field::Query,
         Field::Replace,
-        Field::Regex,
         Field::Case,
+        Field::Regex,
         Field::Whole,
         Field::Fuzzy,
+        Field::Replacing,
         Field::Results,
     ];
 
     /// Whether this cell is typed into (so `i` and the IME belong here).
     pub fn takes_text(self) -> bool {
-        matches!(self, Field::Query | Field::Replace)
+        matches!(self, Field::Scope | Field::Query | Field::Replace)
     }
 
     /// The next cell in that direction, wrapping — skipping the replace row
@@ -128,6 +147,8 @@ impl Field {
             .into_iter()
             .filter(|f| match f {
                 Field::Replace => replacing,
+                // ⚠️ **跳過，但那一行照畫**（2026-09-23 定：「自動關掉畫灰」）。
+                // 從前它整行不畫，於是勾一下替換，底下的行全往上跳一格。
                 Field::Fuzzy => !replacing,
                 _ => true,
             })
@@ -212,6 +233,11 @@ pub struct Search {
     pub replacing: bool,
     /// Where to look.
     pub scope: Where,
+    /// **那一格裏寫着的字** —— [`Field::Scope`] 的正文。
+    ///
+    /// 與 [`Self::scope`] 分開存，因為它們不是同一個東西：這是**打了一半的**，
+    /// 那是**已經在找的**。Enter 纔把這個變成那個（`Editor::take_scope`）。
+    pub scope_text: String,
     /// The files whose hits are folded away.
     pub folded: std::collections::BTreeSet<std::path::PathBuf>,
     /// What the paths in [`Hit::file`] are relative to, so opening one can
@@ -360,6 +386,7 @@ impl Search {
     /// Whichever box the keys are in.
     fn box_here(&mut self) -> &mut String {
         match self.field {
+            Field::Scope => &mut self.scope_text,
             Field::Replace => &mut self.replace,
             _ => &mut self.query,
         }
@@ -398,6 +425,7 @@ impl Search {
     /// What is in the box the keys are in.
     pub fn typed(&self) -> &str {
         match self.field {
+            Field::Scope => &self.scope_text,
             Field::Replace => &self.replace,
             _ => &self.query,
         }

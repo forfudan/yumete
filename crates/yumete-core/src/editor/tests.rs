@@ -8154,6 +8154,56 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(ed.transient(right), None, "and gone the moment the cursor left");
 }
 
+/// **搜索面板那四件**（2026-09-23 作者提的）。
+///
+/// 一張測試管四條，因為它們是同一條路上的四步：開面板、走格子、改範圍、勾替換。
+#[test]
+fn the_search_panel_walks_the_way_it_is_drawn() {
+    use crate::search_panel::{Field, Where};
+    let mut ed = typed("那年冬天很冷，冷得出奇。");
+    ed.open_search();
+    assert_eq!(ed.search_for_test().field, Field::Query, "開在查詢框上");
+
+    // ① 範圍那一格在查詢框**之上**——`Esc` 出框、`k` 一下就到。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.search_for_test().field, Field::Scope, "k 上去就是範圍");
+    assert_eq!(ed.search_for_test().scope_text, "", "本文件寫成空的");
+    // `i` 進去打一個 `.`，Enter 落地——和 `:search .` 一個意思。
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('.'));
+    ed.on_key(Key::Enter);
+    assert_eq!(
+        ed.search_for_test().scope,
+        Where::Named(".".into()),
+        "和 :search 的參數完全一致"
+    );
+
+    // ③ 大小寫排在開關的頭一個。
+    ed.search_for_test().field = Field::Query;
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search_for_test().field, Field::Case, "查詢框下面是大小寫");
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search_for_test().field, Field::Regex);
+
+    // ④ 替換是個開關，而且勾上就把模糊放下。
+    ed.search_for_test().fuzzy = true;
+    ed.search_for_test().field = Field::Replacing;
+    ed.on_key(Key::Char(' '));
+    assert!(ed.search_for_test().replacing, "空格勾上了");
+    assert!(!ed.search_for_test().fuzzy, "⚠️ 模糊自動關掉——鬆的範圍不許拿去替換");
+
+    // ② 到了結果列表的頂上再按 `k`，出得去。
+    ed.search_for_test().field = Field::Results;
+    ed.search_for_test().selected = 0;
+    ed.on_key(Key::Char('k'));
+    assert_ne!(
+        ed.search_for_test().field,
+        Field::Results,
+        "⚠️ 從前 step(false) 在第 0 條上飽和，列表是進得去出不來的地方"
+    );
+}
+
 /// **一條在別的檔裏的命中，不許拿眼前這個緩衝區去讀**（2026-09-23 報的崩潰）。
 ///
 /// 在倉裏 `ye` 空開（scratch 只有一行），`:search .` 搜整個文件夾，Esc 之後按
@@ -8560,8 +8610,10 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.mode(), Mode::Normal, "Esc leaves the box, not the panel");
     // `j` walks the form's cells with the keys in the panel; `Tab` is the
     // slot's own key and walks its views (2026-09-17).
-    ed.on_key(Key::Char('j'));
-    assert_eq!(ed.search().field, Field::Regex);
+    // ⚠️ 走到那一格，不是按一下——2026-09-23 查詢框下面先碰到的是大小寫。
+    while ed.search().field != Field::Regex {
+        ed.on_key(Key::Char('j'));
+    }
     ed.on_key(Key::Char(' '));
     assert!(ed.search().regex);
     assert!(ed.search().total > 0, "as a pattern it matches every character");
@@ -8577,9 +8629,9 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
 
     // 大小寫 is three ways round, not a tick.
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('j'));
-    ed.on_key(Key::Char('j'));
-    assert_eq!(ed.search().field, Field::Case);
+    while ed.search().field != Field::Case {
+        ed.on_key(Key::Char('j'));
+    }
     assert_eq!(ed.search().case, Case::Smart);
     ed.on_key(Key::Enter);
     assert_eq!(ed.search().case, Case::Sensitive);
@@ -8603,13 +8655,11 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
     type_keys(&mut ed, "他説");
     assert_eq!(ed.search().total, 1, "as a string, only the exact one");
 
-    // Down out of the box and on to the fourth switch: 正則, 大小寫, 完整匹配,
-    // 模糊.
-    ed.on_key(Key::Down);
-    ed.on_key(Key::Down);
-    ed.on_key(Key::Down);
-    ed.on_key(Key::Down);
-    assert_eq!(ed.search().field, Field::Fuzzy);
+    // Down out of the box and on to 模糊. ⚠️ 走到那一格，不是數幾下——開關的
+    // 次序 2026-09-23 換過（大小寫排頭），而且上下各多了一格。
+    while ed.search().field != Field::Fuzzy {
+        ed.on_key(Key::Down);
+    }
     ed.on_key(Key::Char(' '));
     assert!(ed.search().fuzzy);
 
@@ -8627,10 +8677,11 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
 
     // Asking for 正則 puts 模糊 down — they are alternatives, and a dimmed
     // switch that still flipped would say two things at once.
-    ed.on_key(Key::Char('k'));
-    ed.on_key(Key::Char('k'));
-    ed.on_key(Key::Char('k'));
-    assert_eq!(ed.search().field, Field::Regex);
+    // ⚠️ **走到那一格，不是按幾下。** 從前這裏數了三下 `k`；2026-09-23 面板上頭
+    // 多了一格「哪裏找」、開關組末尾多了一格「替換」，三下就落在別處了。
+    while ed.search().field != Field::Regex {
+        ed.on_key(Key::Char('k'));
+    }
     ed.on_key(Key::Char(' '));
     assert!(ed.search().regex);
     assert!(!ed.search().fuzzy, "正則 and 模糊 are not both on");
@@ -8925,10 +8976,10 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     assert_eq!(ed.search().total, 4);
 
     ed.on_key(Key::Esc);
-    for _ in 0..4 {
+    // ⚠️ 同上：走到列表，不是按四下。
+    while ed.search().field != Field::Results {
         ed.on_key(Key::Char('j'));
     }
-    assert_eq!(ed.search().field, Field::Results);
 
     // **One hit** — standing on a hit, not on the file above it.
     ed.on_key(Key::Char('j'));

@@ -84,6 +84,9 @@ impl Editor {
             (false, true) => self.last_search.clone(),
         };
         self.search.ask(seed);
+        // **那一格裏先寫着此刻的範圍**，這樣 `k` 上去 `i` 進去，改的是看得見的
+        // 那一份，而不是一個空框（2026-09-23）。
+        self.search.scope_text = self.scope_as_typed();
         self.show_sidebar(crate::sidebar::View::Search);
         // The form is entered where a reader would start typing.
         self.mode = Mode::Field;
@@ -354,6 +357,14 @@ impl Editor {
             // Changing the pattern is the commonest thing anybody does in a
             // search, and handing the keys away would mean coming back for
             // every letter. 「Previous」 has no key here: `Esc` out and `N`.
+            Key::Enter if self.search.field == Field::Scope => {
+                // **範圍是「按了纔算」**：打一半的路徑每敲一個字母就去掃一遍盤，
+                // 是這個面板從一開始就躲開的事（`Where::live`）。落地之後把鍵交
+                // 回面板——沒有人改完範圍還想接着改範圍。
+                self.search.all_selected = false;
+                self.mode = Mode::Normal;
+                self.take_scope();
+            }
             Key::Enter => {
                 self.search.all_selected = false;
                 // **Across files, `Enter` is 「go and look」**; in this one it
@@ -367,11 +378,15 @@ impl Editor {
             }
             Key::Char(ch) => {
                 self.search.type_char(ch);
-                self.run_search();
+                if self.search.field != Field::Scope {
+                    self.run_search();
+                }
             }
             Key::Backspace => {
                 self.search.backspace();
-                self.run_search();
+                if self.search.field != Field::Scope {
+                    self.run_search();
+                }
             }
             Key::Left => {
                 let to = self.search.caret.saturating_sub(1);
@@ -454,6 +469,13 @@ impl Editor {
                 _ => self.search.field = self.search.field.step(false, self.search.replacing),
             },
             Key::Char('k') | Key::Up => match self.search.field {
+                // ⚠️ **到頂了就出去**（2026-09-23 報的：「我一旦將光標移動到了下面
+                // 文件的區域，就沒辦法使用 k 向上移動到選項和輸入框了」）。從前
+                // `step(false)` 在第 0 條上飽和，於是列表是個進得去出不來的地
+                // 方——`Tab` 走得出去，可沒人會想到去按它。
+                Field::Results if self.search.selected == 0 => {
+                    self.search.field = self.search.field.step(true, self.search.replacing);
+                }
                 Field::Results => self.search.step(false),
                 _ => self.search.field = self.search.field.step(true, self.search.replacing),
             },
@@ -468,9 +490,11 @@ impl Editor {
             {
                 self.flip_switch()
             }
+            Key::Char(' ') if self.search.field == Field::Replacing => self.flip_replacing(),
             Key::Enter => match self.search.field {
-                Field::Query | Field::Replace => self.mode = Mode::Field,
+                Field::Scope | Field::Query | Field::Replace => self.mode = Mode::Field,
                 Field::Regex | Field::Case | Field::Whole | Field::Fuzzy => self.flip_switch(),
+                Field::Replacing => self.flip_replacing(),
                 Field::Results => self.go_to_hit(),
             },
             // **`r` and `R` change things**, and only while the replace row
@@ -601,6 +625,56 @@ impl Editor {
             _ => return,
         }
         self.run_search();
+    }
+
+    /// **勾上「替換」就長出替換行**（2026-09-23 報的）。
+    ///
+    /// ⚠️ **和 模糊 互斥，而勾這一個的時候把那一個關掉、畫灰**（作者定：「我傾向
+    /// 自動關掉畫灰」）。理由是原來那一條：鬆的匹配蓋住讀者沒打的字，「把它們全
+    /// 換掉」交出去的範圍他預測不了。和 `flip_switch` 裏 正則／完整匹配 壓掉 模糊
+    /// 是同一個寫法——**要一個就把打架的那個放下**，而不是留一個按了不算數的勾。
+    ///
+    /// ⚠️ **關掉替換不會自動把 模糊 打開**：它本來就是關着的那一個，替下去再彈
+    /// 回來是替讀者做了他沒說過的決定。
+    fn flip_replacing(&mut self) {
+        self.search.replacing = !self.search.replacing;
+        if self.search.replacing {
+            self.search.fuzzy = false;
+            self.search.replace.clear();
+        }
+        // 走到一個此刻不存在的格子上就沒地方站了——替換行剛沒，焦點若在它身上。
+        if !self.search.replacing && self.search.field == Field::Replace {
+            self.search.field = Field::Query;
+        }
+        self.run_search();
+    }
+
+    /// **此刻的範圍，寫成 `:search` 後面那個詞。**
+    ///
+    /// ⚠️ 三個用命令開的範圍（`-cd`／`-wd`／`-gd`）**沒有**對應的 `:search` 參
+    /// 數，所以寫的是它們算出來的那個目錄——那是誠實的，而且改得動。
+    fn scope_as_typed(&self) -> String {
+        use crate::search_panel::Where;
+        match &self.search.scope {
+            Where::Buffer => String::new(),
+            Where::Named(path) => path.display().to_string(),
+            other => self
+                .search_root_of(other)
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+        }
+    }
+
+    /// **把那一格裏寫着的路徑變成真的範圍** —— 和 `:search` 的參數完全一致：
+    /// 空着是本文件，別的都當路徑（`Where::Named`）。
+    fn take_scope(&mut self) {
+        let typed = self.search.scope_text.trim().to_string();
+        self.search.scope = match typed.is_empty() {
+            true => crate::search_panel::Where::Buffer,
+            false => crate::search_panel::Where::Named(typed.into()),
+        };
+        // 換了地方，上一次的答案就不是這個問題的答案了。
+        self.search_now();
     }
 
     // ---- Changing what was found (#419 三) --------------------------------

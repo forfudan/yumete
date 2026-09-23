@@ -7113,6 +7113,12 @@ zhs = "一处都没换"
 en = "nothing changed"
 
 [[message]]
+# 搜索面板那個開關：勾上就長出替換行
+key = "search.replacing"
+zht = "替換"
+zhs = "替换"
+en = "replace"
+[[message]]
 # 搜索：在哪裏找——這個檔
 key = "search.where.buffer"
 zht = "本文件"
@@ -8997,6 +9003,7 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
 
 
 
