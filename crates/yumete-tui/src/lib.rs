@@ -42,7 +42,7 @@ use yumete_config::{Config, LineNumbers};
 use yumete_cjk::{Segmenter, WordMark};
 use yumete_core::command::Engagement;
 use yumete_core::editor::Hud;
-use yumete_core::sidebar::{Layer, Panel, Side, Transient, View};
+use yumete_core::sidebar::{Panel, Side, Transient, View};
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
@@ -3591,30 +3591,25 @@ fn draw(
     };
     let mut panel_caret: Option<Position> = None;
     for side in Side::BOTH {
-        for (layer, rect) in Layer::BOTH
-            .into_iter()
-            .zip(slot_layers(editor, side, slots[side as usize]))
-        {
-            if rect.width == 0 || rect.height == 0 {
-                continue;
+        let rect = slots[side as usize];
+        if rect.width == 0 || rect.height == 0 {
+            continue;
+        }
+        // ⚠️ **一個邊欄一個面板**（2026-09-22：臨時層廢除）。光標放上去的那一種
+        // 在的時候**頂掉**常駐的那一個——而常駐那一個原封不動地留着，所以它一走
+        // 就自己回來了，這裏什麽都不用記。
+        match editor.transient(side) {
+            Some(Transient::Detail) => table::draw_detail(frame, editor, config, side, rect),
+            // 字典與 hover 同一張單子、同一個位置，只是標題與上色不同。
+            Some(kind @ (Transient::Dictionary | Transient::Hover)) => {
+                draw_dictionary(frame, editor, config, side, rect, kind)
             }
-            match layer {
-                Layer::Top => {
-                    // A panel with a box in it has a caret, and the candidate
-                    // panel has to stand under **that** one — see `draw_search`.
-                    if let Some(at) = draw_sidebar(frame, editor, config, side, rect) {
-                        panel_caret = Some(at);
-                    }
+            // A panel with a box in it has a caret, and the candidate panel
+            // has to stand under **that** one — see `draw_search`.
+            None => {
+                if let Some(at) = draw_sidebar(frame, editor, config, side, rect) {
+                    panel_caret = Some(at);
                 }
-                Layer::Bottom => match editor.transient(side) {
-                    Some(Transient::Detail) => {
-                        table::draw_detail(frame, editor, config, side, rect)
-                    }
-                    Some(Transient::Dictionary) => {
-                        draw_dictionary(frame, editor, config, side, rect)
-                    }
-                    None => {}
-                },
             }
         }
     }
@@ -4735,7 +4730,9 @@ fn draw_note(
     // **「這是什麽」浮在最前**（#53 ③）。It was *asked for*, and the diagnostic
     // under it was not: a float that answered a question the reader did not
     // just ask, over the one they did, would be the editor arguing.
-    if let Some(told) = editor.hover_here() {
+    // ⚠️ **只有 `空格 k` 問的那一次纔浮**：`空格 K` 的答案在邊欄裏，兩個地方同時
+    // 畫着同一段話是 2026-09-22 出圖纔看見的。
+    if let Some(told) = editor.hover_afloat() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: say!("lsp.what-is-this"),
             lede: None,
@@ -4782,6 +4779,32 @@ fn draw_note(
             tag: Some(say!("problem.whole-list")),
             marked: false,
             vertical_text: vertical,
+        });
+    }
+    // **`空格 d` 問的那個字，浮在旁邊**（2026-09-22 定）。
+    //
+    // ⚠️ **排在百科前面。** 2026-09-21 定的次序是「一個字同時有 wiki 和 dict，
+    // 顯示 wiki；只有用了 `空格 d` 的時候纔顯示字典」——而這一則**只在按過那個
+    // 鍵之後才存在**，所以它在這裏就等於「按過鍵」。不按，它根本不在。
+    if let Some((ch, answer)) = editor.dictionary_afloat() {
+        let rows: Vec<(String, String)> = match answer {
+            Some(fields) if !fields.is_empty() => {
+                fields.iter().map(|(n, v)| (n.clone(), v.clone())).collect()
+            }
+            // 查過了，表裏没有這個字。
+            Some(_) => vec![(say!("ui.not-in-the-table"), String::new())],
+            // 問出去了，答案還没回來——前端下一趟循環纔去查。
+            None => vec![(say!("ui.looking-it-up"), String::new())],
+        };
+        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            title: ch.to_string(),
+            lede: None,
+            entry: false,
+            body: panel::Body::Keys(rows),
+            // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。
+            tag: Some(say!("ui.dictionary-in-the-sidebar")),
+            vertical_text: false,
+            marked: false,
         });
     }
     // **A wiki name floats the same way** (#287) — when nothing the writer
@@ -5883,6 +5906,14 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
                 .map(|row| yumete_cjk::str_width(&row.name) + 3)
                 .max()
                 .unwrap_or(0),
+            // 服務器那段話一行可以很長，但邊欄不該爲它撐到半個屏幕：要多寬按
+            // 頭幾行算，再由下面那個 `min(total/2)` 封頂。
+            Transient::Hover => editor
+                .transient_rows(side)
+                .iter()
+                .map(|row| yumete_cjk::str_width(&row.name) + 2)
+                .max()
+                .unwrap_or(0),
             Transient::Detail => editor.detail_width().unwrap_or(config.editor.detail_width),
         };
         want = want.max(asked).min(total as usize / 2).max(12);
@@ -5908,35 +5939,6 @@ const SEARCH_WIDTH: usize = 32;
 /// Wide enough for a heading and a 拆分 sequence side by side, and no
 /// narrower: below this the grid is what the window is for.
 const DETAIL_WIDTH: u16 = 30;
-
-/// **How one slot divides between its two layers** — Feature #293.
-///
-/// The bottom takes what it needs and no more than half; the top keeps the
-/// rest. With nothing resident above it the bottom takes the slot whole, which
-/// is how the detail panel keeps the shape it has always had.
-///
-/// Asked by the drawing and by the mouse, so it is worked out here rather than
-/// twice.
-fn slot_layers(editor: &Editor, side: Side, slot: Rect) -> [Rect; 2] {
-    let none = Rect::new(slot.x, slot.y, 0, 0);
-    let top = editor.panel(side).is_some();
-    let bottom = editor.transient(side).is_some();
-    match (top, bottom) {
-        (false, false) => [none, none],
-        (true, false) => [slot, none],
-        (false, true) => [none, slot],
-        (true, true) => {
-            // What the bottom would like: its fields, a title and a blank row.
-            // Half the slot at most — the top is what a reader opened.
-            let want = (editor.transient_len(side) as u16 + 2).min(slot.height / 2);
-            let up = slot.height - want;
-            [
-                Rect::new(slot.x, slot.y, slot.width, up),
-                Rect::new(slot.x, slot.y + up, slot.width, want),
-            ]
-        }
-    }
-}
 
 /// The file sidebar, in the columns taken off the left of the page.
 ///
@@ -5973,7 +5975,7 @@ fn draw_sidebar(
     // half of the screen the keys are going to is never in doubt.
     // Focused, it is ink and paper changing places — the most robust 「這裏」
     // a terminal has, and it costs no colour and survives a light/dark flip.
-    let on = match editor.panel_focus() == Some((side, Layer::Top)) {
+    let on = match editor.panel_focus() == Some(side) {
         true => Style::default().bg(ink.text()).fg(ink.paper()),
         false => Style::default().bg(ink.selection()).fg(ink.text()),
     };
@@ -6110,15 +6112,22 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
         put_text(buf, from_x, area.y, to, &say!("wiki.panel-empty"), quiet);
         return;
     };
-    let mut y = area.y;
-    let line = |buf: &mut ratatui::buffer::Buffer, y: &mut u16, s: &str, style: Style| {
+    // ⚠️ **`y` 是**這一條**裏的第幾行，不是屏幕的第幾行**（2026-09-22 加滾動時
+    // 改的）。屏幕那一行是 `area.y + y - scroll`——`scroll` 之前的照走不畫，這樣
+    // 折行、表格、分隔綫的計算一個字都不用動，而 `j` 真的翻得動了。
+    let scroll = editor.wiki_scroll_now().0;
+    let deep = bottom.saturating_sub(area.y) as usize;
+    let mut y = 0usize;
+    let line = |buf: &mut ratatui::buffer::Buffer, y: &mut usize, s: &str, style: Style| {
         let chars: Vec<char> = s.chars().collect();
         for (a, b) in yumete_core::wrap::line_rows(s, width) {
-            if *y >= bottom {
+            if *y >= scroll + deep {
                 return;
             }
-            let row: String = chars[a.min(chars.len())..b.min(chars.len())].iter().collect();
-            put_text(buf, from_x, *y, to, &row, style);
+            if *y >= scroll {
+                let row: String = chars[a.min(chars.len())..b.min(chars.len())].iter().collect();
+                put_text(buf, from_x, area.y + (*y - scroll) as u16, to, &row, style);
+            }
             *y += 1;
         }
     };
@@ -6161,7 +6170,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
             // regardless — wrapping every one of its lines into row ranges it
             // then threw away. On a 20000-line entry that was 20 ms a frame,
             // all of it for rows nobody could see.
-            if y >= bottom {
+            if y >= scroll + deep {
                 return;
             }
             let table = matches!(&part.lines[at], WikiLine::Text(t) if panel::is_table_row(t));
@@ -6182,10 +6191,13 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
                 at += 1;
             }
             for row in panel::table_rows(&rows[from..at], width) {
-                if y >= bottom {
+                if y >= scroll + deep {
                     return;
                 }
-                put_text(buf, from_x, y, to, &row, text);
+                // 表格的行也照同一條規矩：`scroll` 之前的照走不畫。
+                if y >= scroll {
+                    put_text(buf, from_x, area.y + (y - scroll) as u16, to, &row, text);
+                }
                 y += 1;
             }
         }
@@ -6227,7 +6239,7 @@ fn draw_search(
     // **page's** (第 90 檔), the one place in the interface where writing is
     // typed, and a rule above and below closes it (#447).
     let field = ink.ground(yumete_config::rung::PAPER).fg(ink.text());
-    let keys_here = editor.panel_focus() == Some((side, Layer::Top));
+    let keys_here = editor.panel_focus() == Some(side);
     // Whichever cell the keys are on is inked; the rest are quiet — the same
     // 「這裏」 the tree marks its row with, and it costs no colour.
     let on = Style::default().bg(ink.text()).fg(ink.paper());
@@ -6451,7 +6463,14 @@ fn draw_search(
 /// columns already, and a narrow slot has no cells to spend on decorating
 /// them. Nothing is highlighted either — nothing here is chosen, only read —
 /// so what says the keys are in it is the title, inked.
-fn draw_dictionary(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
+fn draw_dictionary(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    side: Side,
+    area: Rect,
+    kind: Transient,
+) {
     if area.width < 3 || area.height == 0 {
         return;
     }
@@ -6484,12 +6503,15 @@ fn draw_dictionary(frame: &mut Frame, editor: &Editor, config: &Config, side: Si
     }
 
     let rows = editor.transient_rows(side);
-    let focused = editor.panel_focus() == Some((side, Layer::Bottom));
+    let focused = editor.panel_focus() == Some(side);
     let title = match focused {
         true => Style::default().bg(ink.text()).fg(ink.paper()),
         false => quiet,
     };
-    let name = yumete_core::messages::say(Panel::Dictionary.tag(), &[]);
+    let name = match kind {
+        Transient::Hover => say!("lsp.what-is-this"),
+        _ => yumete_core::messages::say(Panel::Dictionary.tag(), &[]),
+    };
     put_text(buf, from + 1, area.y, to, &name, title);
     let visible = (area.height as usize).saturating_sub(1);
     let first = editor
@@ -6498,7 +6520,27 @@ fn draw_dictionary(frame: &mut Frame, editor: &Editor, config: &Config, side: Si
     for slot in 0..visible.min(rows.len().saturating_sub(first)) {
         let row = &rows[first + slot];
         let style = if row.is_dir { head } else { text };
-        put_text(buf, from + 1, area.y + 1 + slot as u16, to, &row.name, style);
+        let y = area.y + 1 + slot as u16;
+        // ⚠️ **服務器送的是 Markdown，邊欄裏也照 Markdown 畫**——和浮窗裏那一份
+        // 一個字不差（2026-09-22）。走的是正文用的那一支墨色表。
+        if kind != Transient::Hover {
+            put_text(buf, from + 1, y, to, &row.name, style);
+            continue;
+        }
+        let mut at = from + 1;
+        let mut was = 0usize;
+        let chars: Vec<char> = row.name.chars().collect();
+        for span in yumete_core::markdown::spans(&row.name) {
+            let before: String =
+                chars[was.min(chars.len())..span.start.min(chars.len())].iter().collect();
+            at = put_text(buf, at, y, to, &before, style);
+            let run: String =
+                chars[span.start.min(chars.len())..span.end.min(chars.len())].iter().collect();
+            at = put_text(buf, at, y, to, &run, style.patch(markup_style(span.kind, ink)));
+            was = span.end;
+        }
+        let rest: String = chars[was.min(chars.len())..].iter().collect();
+        put_text(buf, at, y, to, &rest, style);
     }
 }
 

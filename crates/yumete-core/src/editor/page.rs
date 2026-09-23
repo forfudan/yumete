@@ -863,10 +863,17 @@ impl Editor {
     ///
     /// 與 `gd` 同一個形狀，同一條理由：只在代碼檔上問，問完不等。鍵位是
     /// `空格 k`，helix 的 hover 也是這一個。
-    pub(super) fn ask_what_this_is(&mut self) -> bool {
+    pub(super) fn ask_what_this_is(&mut self, afloat: bool) -> bool {
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return false;
         };
+        // 再按一次同一個鍵就收起來（同 `空格 d`）。
+        if self.hover_afloat == afloat && self.hover_here().is_some() {
+            self.hovered = None;
+            self.refresh_sidebar();
+            return true;
+        }
+        self.hover_afloat = afloat;
         self.hover_query = Some((path, line, utf16));
         self.status = say!("lsp.asking-what");
         true
@@ -904,6 +911,7 @@ impl Editor {
     pub fn show_hover(&mut self, told: String) {
         self.hovered = Some((self.cursor, told));
         self.status = String::new();
+        self.refresh_sidebar();
     }
 
     /// 服務器對這個東西無話可說。
@@ -916,6 +924,16 @@ impl Editor {
     pub fn hover_here(&self) -> Option<&str> {
         let (asked_at, told) = self.hovered.as_ref()?;
         (*asked_at == self.cursor).then_some(told.as_str())
+    }
+
+    /// 那一則說明該不該**浮**在光標旁邊（`空格 k` 問的那一次）。
+    pub fn hover_afloat(&self) -> Option<&str> {
+        self.hover_afloat.then(|| self.hover_here()).flatten()
+    }
+
+    /// 那一則說明該不該畫在**邊欄**裏（`空格 K` 問的那一次）。
+    pub fn hover_in_the_sidebar(&self) -> Option<&str> {
+        (!self.hover_afloat).then(|| self.hover_here()).flatten()
     }
 
     // ---- `C-n` 問服務器接下來能打什麽（#53 ④）------------------------------

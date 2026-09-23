@@ -27,9 +27,9 @@ impl Editor {
         if let Some(keys) = self.pending_keys() {
             return keys;
         }
-        // The bottom layer of a slot: nothing to walk into and nothing to put
-        // away, so the row says the two keys it does have (#293).
-        if let Some((side, crate::sidebar::Layer::Bottom)) = self.panel_focus() {
+        // 光標放上去的那一種：没什麽可走進去、也没什麽要收起來，所以這一行只說
+        // 它真有的那兩個鍵（#293）。
+        if let Some(side) = self.panel_focus() {
             if let Some(kind) = self.transient(side) {
                 // Named for what it is holding: 字典 and 詳情 are two panels
                 // with the same two keys, and the row that says only 「keys」
@@ -37,7 +37,7 @@ impl Editor {
                 let what = crate::messages::say(crate::sidebar::Panel::from(kind).tag(), &[]);
                 return Hint::Keys(what, vec![
                         ("j k", say!("hint.sidebar.move")),
-                        ("C-w", say!("hint.sidebar.back-to-text")),
+                        ("C-w／空格 s", say!("hint.sidebar.back-to-text")),
                     ]);
             }
         }
@@ -61,8 +61,10 @@ impl Editor {
         }
         // The search panel is a form, not a list: none of the tree's keys
         // mean anything in it (#419).
-        if let Some((side, crate::sidebar::Layer::Top)) = self.panel_focus() {
-            if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
+        if let Some(side) = self.panel_focus() {
+            if self.transient(side).is_none()
+                && self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search)
+            {
                 let mut keys = vec![
                     ("i", say!("hint.search.type")),
                     ("Tab", say!("hint.search.next-cell")),
@@ -73,16 +75,24 @@ impl Editor {
                 if self.search().replacing {
                     keys.push(("r R", say!("hint.search.replace")));
                 }
-                keys.push(("C-w", say!("hint.sidebar.back-to-text")));
+                keys.push(("C-w／空格 s", say!("hint.sidebar.back-to-text")));
                 keys.push(("q", say!("hint.close")));
                 return Hint::Keys(say!("label.panel.search"), keys);
             }
         }
-        if self.sidebar_focused() {
+        if let Some(side) = self.panel_focus() {
+            // **百科是一段文章，`j`／`k` 滾它**（2026-09-22 報的：那一頁翻不動）。
+            // 別的視圖是行的列表，`j` 走下一行——同一個鍵兩件事，所以這一行得說
+            // 對是哪一件。
+            let walking = match self.panel(side).map(|p| p.view()) {
+                Some(crate::sidebar::View::Wiki) => say!("hint.sidebar.scroll"),
+                _ => say!("hint.sidebar.move"),
+            };
             return Hint::Keys(say!("hint.sidebar"), vec![
+                    ("j k", walking),
                     ("Tab", say!("hint.sidebar.other-view")),
                     ("w", say!("hint.sidebar.width")),
-                    ("C-w", say!("hint.sidebar.back-to-text")),
+                    ("C-w／空格 s", say!("hint.sidebar.back-to-text")),
                     ("q", say!("hint.close")),
                 ]);
         }
@@ -145,6 +155,8 @@ impl Editor {
     /// manual, and the editor is sitting there knowing the answer.
     fn pending_keys(&self) -> Option<Hint> {
         let keys = match self.pending {
+            // 撤銷已經斷了，剩下那個 `u` 吞不吞都行——没什麽要提示的。
+            Pending::UndoBreak => return None,
             Pending::None => {
                 // A count on its own is a sequence too — `3` is waiting for the
                 // motion it multiplies.

@@ -54,53 +54,46 @@ impl Side {
     }
 }
 
-/// Which layer of a slot — Feature #293.
+/// **What is in a slot right now** — one panel, never two (2026-09-22 定：
+/// 「臨時面板直接廢除，以後只有左右邊欄」)。
 ///
-/// A slot is two panels stacked, and the difference between them is where
-/// their content comes from:
+/// 從前這裏是兩層（`Layer::Top`／`Bottom`）：常駐的一層在上、光標算出來的一層在
+/// 下，同時畫兩個。取消它的理由是**用起來幾乎不會兩個一起看**，而代價一直在付：
+/// 三個正交的問題（誰決定它消失、畫在哪、收不收鍵）被那兩層絞成一團，逐個東西定
+/// 規矩，記不住。
 ///
-/// - the **top** is resident. It is put there by a key, it stays until `q`,
-///   and it holds state of its own (which view, where the highlight is, what
-///   is folded).
-/// - the **bottom** is transient and **holds nothing at all**: it is worked
-///   out afresh every frame from where the cursor is standing. When it stops
-///   being true it is simply not drawn, and the top is untouched.
+/// 現在的模型一句話：**邊欄是容器，面板是內容。** 容器只由人開由人關，空了就空
+/// 着；內容一次一個。
 ///
-/// ⚠️ **That is the whole reason for stacking them.** The alternative was one
-/// panel per slot whose content changed — and then putting the 字典 up over a
-/// table row means remembering what the slot held a moment ago and restoring
-/// it afterwards. Two layers, and there is nothing to remember.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Layer {
-    /// The resident panel: a list, put there by a key.
-    #[default]
-    Top,
-    /// Worked out from the cursor, every frame.
-    Bottom,
-}
-
-impl Layer {
-    /// Both, in screen order.
-    pub const BOTH: [Layer; 2] = [Layer::Top, Layer::Bottom];
-}
-
-/// What the bottom of a slot is showing, if anything — Feature #293.
+/// ⚠️ **「臨時」只剩一個屬性**：光標放上去的那幾種（[`Transient`]）在它成立的時候
+/// **頂掉**常駐的那一個，不成立了就自己下去——而常駐那一個**一直存着没動過**，所以
+/// 「有前任還給前任，没有就空着」是白拿的，不必記什麼。
+/// **A panel the cursor puts there**, if any — Feature #293.
 ///
-/// One of these is *derived*, never stored: see [`Layer::Bottom`].
+/// 這幾種**不存狀態**：每一幀從光標在哪算出來，不成立就不畫。它們頂掉常駐那一個，
+/// 而常駐那一個原封不動地留着（見上面那一段）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transient {
     /// What the cursor is standing in, field by field — Feature #296.
     Detail,
     /// What the 拆分表 knows about one character — Feature #215.
     Dictionary,
+    /// **What the language server says this name is** (`空格 K`, #53 ③).
+    ///
+    /// ⚠️ **Shares 字典's slot on purpose.** Both answer 「光標底下這個東西是什
+    /// 麽」—— one about a 字, one about a name —— and they can never both want
+    /// the slot: 2026-09-21 定的那條，「寫代碼的時候才需要 lsp 錯誤，寫普通文章
+    /// 才需要查字典。這兩個場景是很少耦合的」。A setting of its own would be a
+    /// knob nobody ever turns.
+    Hover,
 }
 
 impl Transient {
     /// **Whether `C-w` stops here** — Feature #293.
     ///
-    /// A transient panel is put up by the cursor, so one that takes the keys
-    /// is one the cursor cannot move while you are reading: it would freeze on
-    /// whatever it was showing when you walked in.
+    /// A panel the cursor puts up is one the cursor cannot move while you are
+    /// reading it: it would freeze on whatever it was showing when you walked
+    /// in. So only the ones worth freezing for take the keys.
     ///
     /// [`Transient::Detail`] therefore does not. It has no need to: it already
     /// scrolls itself to the field the cursor is in, which is a better answer
@@ -110,7 +103,8 @@ impl Transient {
     pub fn takes_keys(self) -> bool {
         match self {
             Transient::Detail => false,
-            Transient::Dictionary => true,
+            // 服務器說的話可以有十幾行——讀得到底纔算數。
+            Transient::Dictionary | Transient::Hover => true,
         }
     }
 }
@@ -205,7 +199,8 @@ impl From<View> for Panel {
 impl From<Transient> for Panel {
     fn from(kind: Transient) -> Panel {
         match kind {
-            Transient::Dictionary => Panel::Dictionary,
+            // hover 與字典共用同一個位置，所以也共用那一格設定。
+            Transient::Dictionary | Transient::Hover => Panel::Dictionary,
             Transient::Detail => Panel::Detail,
         }
     }

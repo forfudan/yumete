@@ -920,13 +920,9 @@ impl Editor {
                 // would move a panel the reader is not looking at.
                 let which = match which {
                     Some(panel) => Some(panel),
-                    None => self.panel_focus().and_then(|(at, layer)| match layer {
-                        crate::sidebar::Layer::Top => {
-                            self.panel(at).map(|p| crate::sidebar::Panel::from(p.view()))
-                        }
-                        crate::sidebar::Layer::Bottom => {
-                            self.transient(at).map(crate::sidebar::Panel::from)
-                        }
+                    None => self.panel_focus().and_then(|at| match self.transient(at) {
+                        Some(kind) => Some(crate::sidebar::Panel::from(kind)),
+                        None => self.panel(at).map(|p| crate::sidebar::Panel::from(p.view())),
                     }),
                 };
                 let Some(panel) = which else {

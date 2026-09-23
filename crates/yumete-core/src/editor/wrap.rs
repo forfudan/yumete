@@ -268,7 +268,8 @@ impl Editor {
             return word;
         }
         let word = match self.pending {
-            Pending::None => "",
+            // 撤銷已經斷了，光標旁邊那個牌子没什麽好報的。
+            Pending::UndoBreak | Pending::None => "",
             Pending::Goto => "g",
             Pending::Space => "␣",
             Pending::Find(FindKind::Forward) => "f",

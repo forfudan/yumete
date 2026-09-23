@@ -8,6 +8,15 @@ use super::*;
 
 impl Editor {
     pub(super) fn on_insert_key(&mut self, key: Key) {
+        // ⚠️ **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
+        // `C-g` 後面那個 `u` 得在這裏吞——放在那邊是吞不到的（2026-09-23 測出來
+        // 的：稿子裏留下了一個游離的「u」）。
+        if self.pending == Pending::UndoBreak {
+            self.pending = Pending::None;
+            if key == Key::Char('u') {
+                return;
+            }
+        }
         // **服務器提的那張單子，開着的時候先歸它**（#53 ④）。
         //
         // ⚠️ **`Tab` 在這裏本來就有主人**（引用補全，#418）：單子開着 `Tab` 是
@@ -209,6 +218,15 @@ impl Editor {
             Key::End | Key::Ctrl('e') => {
                 let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
                 self.set_cursor(pos);
+            }
+            // **`C-g`（vim 的 `C-g u`）：從這裏起算一次新的撤銷**（2026-09-23）。
+            //
+            // 「一次插入是一次撤銷」是 2026-09-21 定的（見 §5.12.3），而它欠一個
+            // 逃生口：一段寫得很長的時候，想主動切一刀。這就是那一刀。
+            Key::Ctrl('g') => {
+                self.snapshot();
+                self.pending = Pending::UndoBreak;
+                self.set_status(say!("edit.undo-break"));
             }
             Key::Char(c) => {
                 self.insert_recording.push(c);
