@@ -526,6 +526,17 @@ impl Editor {
     ///
     /// `None` unless the keys are actually in the list: the row belongs to
     /// whatever has them, and a panel nobody is standing in has no claim on it.
+    #[cfg(test)]
+    pub(crate) fn hit_in_context_for_test(&self) -> Option<String> {
+        self.hit_in_context()
+    }
+
+    /// 測試要擺一條命中進去——`search` 本身不是公開的。
+    #[cfg(test)]
+    pub(crate) fn search_for_test(&mut self) -> &mut crate::search_panel::Search {
+        &mut self.search
+    }
+
     pub(super) fn hit_in_context(&self) -> Option<String> {
         if self.search.field != Field::Results || self.search.broken {
             return None;
@@ -538,9 +549,22 @@ impl Editor {
             return None;
         }
         let hit = self.search.here()?;
+        // ⚠️ **命中不一定在眼前這個緩衝區裏，而這裏問的是眼前這一個。**
+        // `:search .` 搜的是整個文件夾，命中帶着自己的檔（`Hit::file`）；拿一條
+        // 第 6496 行的命中去問一份**只有一行**的 scratch，ropey 當場 panic
+        // ——2026-09-23 報的：在倉裏 `ye` 空開、`:search .`、Esc、按 `j` 走到結果
+        // 列表上，一進去就崩。
+        //
+        // ⚠️ **行號也要夾。** 就算命中真在這一份裏，搜索是那一刻跑的，而之後
+        // 刪掉幾段就能讓行號指到文件外面去。
+        let rope = self.current_buffer().rope();
+        if hit.file.is_some() || hit.line >= rope.len_lines() {
+            // 別的檔（或者已經對不上了）：搜索當時抓下來的那一小段就是答案，
+            // 而它本來就是為了「一欄放得下」裁過的。
+            return Some(say!("search.in-context", hit.line + 1, hit.excerpt.clone()));
+        }
         // As many characters as a window is wide, centred on the match — far
         // more than the column can hold, which is the whole point.
-        let rope = self.current_buffer().rope();
         let line: String = rope.line(hit.line).chars().filter(|c| *c != '\n').collect();
         let chars: Vec<char> = line.chars().collect();
         let at = hit.at.saturating_sub(rope.line_to_char(hit.line));

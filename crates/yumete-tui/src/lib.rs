@@ -3963,6 +3963,19 @@ fn draw(
     if editor.picker().is_some() {
         // `draw_picker` put the caret in its query, which is the prompt while a
         // picker is open.
+    } else if let Some(at) = panel_caret {
+        // **A box inside a panel is where the keys are, so it is where the
+        // cursor goes** (2026-09-23 報的：高級搜索裏打字，光標在邊欄的框裏，而
+        // 正文上也有一個，系統輸入法的候選面板跟着**那一個**跑)。
+        //
+        // ⚠️ **這一格是給系統輸入法的，不是給眼睛的。** 我們自己的候選面板早就
+        // 站對了位置（下面那個 `panel_caret` 分支），可 macOS 的輸入法看的是
+        // 終端的硬件光標——它停在正文第一行，於是候選框畫在正文上，而 preedit
+        // 的拼音串也被終端畫進了正文的格子裏。
+        //
+        // `panel_caret` 只在 `Mode::Field` 有值，`prompt_label()` 只在命令行與
+        // 搜索行有值，兩者互斥，所以次序無關。
+        frame.set_cursor_position(at);
     } else if let Some(prefix) = editor.prompt_label() {
         // Measured in cells, not characters: a Chinese search pattern is twice
         // as wide as it is long — and up to the **caret**, not to the end of

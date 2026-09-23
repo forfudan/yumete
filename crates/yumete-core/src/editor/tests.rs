@@ -8154,6 +8154,58 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(ed.transient(right), None, "and gone the moment the cursor left");
 }
 
+/// **一條在別的檔裏的命中，不許拿眼前這個緩衝區去讀**（2026-09-23 報的崩潰）。
+///
+/// 在倉裏 `ye` 空開（scratch 只有一行），`:search .` 搜整個文件夾，Esc 之後按
+/// `j` 走進結果列表——`hit_in_context` 拿第 6496 行去問那一行的 rope，ropey 當場
+/// panic：`Attempt to index past end of Rope: line index 6495, Rope line length 1`。
+#[test]
+fn a_hit_in_another_file_is_read_from_its_own_excerpt_not_from_this_buffer() {
+    use crate::search_panel::{Field, Hit};
+    // 眼前是一份只有一行的草稿，命中在別的檔的第 6496 行。
+    let mut ed = typed("");
+    ed.open_search();
+    ed.on_key(Key::Esc);
+    let far = Hit {
+        file: Some(std::path::PathBuf::from("crates/yumete-core/messages.toml")),
+        line: 6495,
+        at: 0,
+        end: 3,
+        excerpt: "預覽伺服器起來中".to_string(),
+        mark: 0..3,
+        nth: 0,
+    };
+    ed.search_for_test().hits = vec![far];
+    ed.search_for_test().total = 1;
+    ed.search_for_test().field = Field::Results;
+    // 走到那一條上——第 0 行是檔名，第 1 行纔是命中。
+    ed.search_for_test().selected = 1;
+
+    // ⚠️ 從前這一句就是崩潰點。
+    let said = ed.hit_in_context_for_test().expect("說得出這一條");
+    assert!(said.contains("6496"), "行號照它自己那一份算：{said}");
+    assert!(said.contains("預覽伺服器起來中"), "正文取自命中自己抓下的那一段：{said}");
+
+    // …而本檔的命中照舊從活的正文裏取寬一些的上下文。
+    let mut here = typed("那年冬天，天很冷，風從北面來。");
+    here.open_search();
+    here.on_key(Key::Esc);
+    here.search_for_test().hits = vec![Hit {
+        file: None,
+        line: 0,
+        at: 5,
+        end: 7,
+        excerpt: "天很冷".to_string(),
+        mark: 0..3,
+        nth: 0,
+    }];
+    here.search_for_test().total = 1;
+    here.search_for_test().field = Field::Results;
+    here.search_for_test().selected = 0;
+    let said = here.hit_in_context_for_test().expect("說得出這一條");
+    assert!(said.contains("風從北面來"), "活的正文給的是整行的上下文：{said}");
+}
+
 /// 「查不到」and「還沒問」are different findings.
 #[test]
 fn a_character_the_table_has_nothing_for_says_so() {
