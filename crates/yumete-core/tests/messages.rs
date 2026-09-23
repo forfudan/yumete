@@ -171,6 +171,16 @@ fn said() -> BTreeMap<String, String> {
         // declared as the second half of a pair — `('c', "…")` in `SPACE_KEYS`,
         // and `("g", "…")` in the eight tables that now sit beside it.
         tags.extend(literals(&text, "help:"));
+        // **那張設置表的名字與說明也是標籤**（`yumete-config/src/settings_ui.rs`）。
+        // ⚠️ 它們是**結構體字段**，不經過 `say!`——面板畫的時候纔翻譯。所以這張網
+        // 不多開這兩個口子的話，一張三十個標籤的表可以一條條目都沒有而全樹皆綠，
+        // 而面板上會逐行寫着 `set.editor.zong-length` 這樣的東西。
+        tags.extend(literals(&text, "label:"));
+        tags.extend(literals(&text, "hint:"));
+        // `Kind::Count { zero: Some("set.zero.off") }` —— `0` 另有意思時說的
+        // 那一句。開口寫足 `zero: Some(` 而不是光一個 `Some(`：後者會把全樹每一個
+        // `Some("…")` 都掃進來，而那裏面躺着檔名、擴展名、命令名。
+        tags.extend(literals(&text, "zero: Some("));
         tags.extend(literals(&text, "', "));
         tags.extend(literals(&text, "\", "));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {

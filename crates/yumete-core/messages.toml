@@ -7198,6 +7198,310 @@ zhs = "一句一纵——文件没有动，:view-sentence off 回去"
 en = "one 句 to a column — the file is untouched; :view-sentence off goes back"
 
 
+# ── 設置面板 ─────────────────────────────────────────────────────────
+
+[[message]]
+# 設置：段組
+key = "set.editor.bands"
+zht = "段組"
+zhs = "段组"
+en = "bands"
+
+[[message]]
+# 設置：段組——一句話
+key = "set.editor.bands.hint"
+zht = "竪排的頁面橫着分成幾條，每一條各自從右往左排"
+zhs = "竖排的页面横着分成几条，每一条各自从右往左排"
+en = "how many bands a set-down page is cut into across"
+
+[[message]]
+# 設置：標點旁置
+key = "set.editor.hanging-punctuation"
+zht = "標點旁置"
+zhs = "标点旁置"
+en = "hanging punctuation"
+
+[[message]]
+# 設置：標點旁置——一句話
+key = "set.editor.hanging-punctuation.hint"
+zht = "。，、？！：；「」 掛在邊欄上，不佔正文那一格"
+zhs = "。，、？！：；「」 挂在边栏上，不占正文那一格"
+en = "。，、？！：；「」 hang in the margin instead of taking a cell"
+
+[[message]]
+# 設置：首行縮進
+key = "set.editor.indent"
+zht = "首行縮進"
+zhs = "首行缩进"
+en = "indent"
+
+[[message]]
+# 設置：首行縮進——一句話
+key = "set.editor.indent.hint"
+zht = "每段開頭空幾格。中文的慣例是 2"
+zhs = "每段开头空几格。中文的惯例是 2"
+en = "cells at the head of a paragraph; the Chinese convention is 2"
+
+[[message]]
+# 設置：排版方向
+key = "set.editor.layout"
+zht = "排版方向"
+zhs = "排版方向"
+en = "layout"
+
+[[message]]
+# 設置：排版方向——一句話
+key = "set.editor.layout.hint"
+zht = "整頁的字是橫着走還是竪着走"
+zhs = "整页的字是横着走还是竖着走"
+en = "whether the page runs across or down"
+
+[[message]]
+# 設置：邊欄
+key = "set.editor.margin"
+zht = "邊欄"
+zhs = "边栏"
+en = "margin"
+
+[[message]]
+# 設置：邊欄——一句話
+key = "set.editor.margin.hint"
+zht = "什麽時候留出那條放行號和標記的窄邊"
+zhs = "什么时候留出那条放行号和标记的窄边"
+en = "when to keep the narrow lane that carries numbers and marks"
+
+[[message]]
+# 設置：正文寬度
+key = "set.editor.measure"
+zht = "正文寬度"
+zhs = "正文宽度"
+en = "measure"
+
+[[message]]
+# 設置：正文寬度——一句話
+key = "set.editor.measure.hint"
+zht = "真的寫到這麽寬：行在這裏折，右邊是邊距"
+zhs = "真的写到这么宽：行在这里折，右边是边距"
+en = "the line really breaks here; what is right of it is margin"
+
+[[message]]
+# 設置：稿紙刻度
+key = "set.editor.paper-ticks"
+zht = "稿紙刻度"
+zhs = "稿纸刻度"
+en = "paper ticks"
+
+[[message]]
+# 設置：稿紙刻度——一句話
+key = "set.editor.paper-ticks.hint"
+zht = "竪排時每幾個字在邊欄點一個淡刻度，像真的稿紙"
+zhs = "竖排时每几个字在边栏点一个淡刻度，像真的稿纸"
+en = "a faint tick in the margin every so many cells, the way squared paper has"
+
+[[message]]
+# 設置：想寫多長
+key = "set.editor.ruler"
+zht = "想寫多長"
+zhs = "想写多长"
+en = "ruler"
+
+[[message]]
+# 設置：想寫多長——一句話
+key = "set.editor.ruler.hint"
+zht = "只是一條綫：超過這一欄的字變色，行照舊不折"
+zhs = "只是一条线：超过这一栏的字变色，行照旧不折"
+en = "a line, not a break: what runs past it changes colour"
+
+[[message]]
+# 設置：長行折回來
+key = "set.editor.soft-wrap"
+zht = "長行折回來"
+zhs = "长行折回来"
+en = "soft wrap"
+
+[[message]]
+# 設置：長行折回來——一句話
+key = "set.editor.soft-wrap.hint"
+zht = "橫排時長段落折到下一行；關掉則跑出右邊看不見"
+zhs = "横排时长段落折到下一行；关掉则跑出右边看不见"
+en = "long lines fold when set across; off, they run past the right edge"
+
+[[message]]
+# 設置：縱中橫
+key = "set.editor.tatechuyoko"
+zht = "縱中橫"
+zhs = "纵中横"
+en = "tatechuyoko"
+
+[[message]]
+# 設置：縱中橫——一句話
+key = "set.editor.tatechuyoko.hint"
+zht = "竪排時一格裏橫着塞幾個半角字，年份和頁碼就不會一位一行"
+zhs = "竖排时一格里横着塞几个半角字，年份和页码就不会一位一行"
+en = "half-width characters set across inside one cell, so a year is not one digit to a row"
+
+[[message]]
+# 設置：縱間距
+key = "set.editor.zong-gap"
+zht = "縱間距"
+zhs = "纵间距"
+en = "column gap"
+
+[[message]]
+# 設置：縱間距——一句話
+key = "set.editor.zong-gap.hint"
+zht = "縱與縱之間空幾個半角格。每一縱都有，跟有沒有東西無關"
+zhs = "纵与纵之间空几个半角格。每一纵都有，跟有没有东西无关"
+en = "half-width cells between one column and the next"
+
+[[message]]
+# 設置：每縱字數
+key = "set.editor.zong-length"
+zht = "每縱字數"
+zhs = "每纵字数"
+en = "column length"
+
+[[message]]
+# 設置：每縱字數——一句話
+key = "set.editor.zong-length.hint"
+zht = "竪排時一縱寫幾個字。散文舒服的上限在 32 字前後"
+zhs = "竖排时一纵写几个字。散文舒服的上限在 32 字前后"
+en = "characters to a column when set down; prose reads well up to about 32"
+
+[[message]]
+# 設置面板：組——配色
+key = "set.group.colours"
+zht = "配色"
+zhs = "配色"
+en = "colours"
+
+[[message]]
+# 設置面板：組——编辑
+key = "set.group.editing"
+zht = "編輯"
+zhs = "编辑"
+en = "editing"
+
+[[message]]
+# 設置面板：組——文件
+key = "set.group.files"
+zht = "文件"
+zhs = "文件"
+en = "files"
+
+[[message]]
+# 設置面板：組——输入法
+key = "set.group.ime"
+zht = "輸入法"
+zhs = "输入法"
+en = "input"
+
+[[message]]
+# 設置面板：組——界面
+key = "set.group.interface"
+zht = "界面"
+zhs = "界面"
+en = "interface"
+
+[[message]]
+# 設置面板：組——键盘
+key = "set.group.keys"
+zht = "鍵盤"
+zhs = "键盘"
+en = "keys"
+
+[[message]]
+# 設置面板：組——版面
+key = "set.group.layout"
+zht = "版面"
+zhs = "版面"
+en = "layout"
+
+[[message]]
+# 設置面板：組——標記
+key = "set.group.marks"
+zht = "標記"
+zhs = "标记"
+en = "marks"
+
+[[message]]
+# 設置：排版方向——橫排
+key = "set.layout.horizontal"
+zht = "橫排"
+zhs = "横排"
+en = "across"
+
+[[message]]
+# 設置：排版方向——竪排
+key = "set.layout.vertical"
+zht = "竪排"
+zhs = "竖排"
+en = "down"
+
+[[message]]
+# 設置：邊欄——总是
+key = "set.margin.always"
+zht = "總是"
+zhs = "总是"
+en = "always"
+
+[[message]]
+# 設置：邊欄——挤的时候
+key = "set.margin.dense"
+zht = "擠的時候"
+zhs = "挤的时候"
+en = "when dense"
+
+[[message]]
+# 設置：邊欄——松的时候
+key = "set.margin.loose"
+zht = "鬆的時候"
+zhs = "松的时候"
+en = "when loose"
+
+[[message]]
+# 設置：邊欄——从不
+key = "set.margin.never"
+zht = "從不"
+zhs = "从不"
+en = "never"
+
+[[message]]
+# 設置：0 的意思——窗口有多高就多長
+key = "set.zero.as-tall-as-the-window"
+zht = "0 ＝ 窗口能給多長就多長"
+zhs = "0 = 窗口能给多长就多长"
+en = "0 = as tall as the window"
+
+[[message]]
+# 設置：0 的意思——窗口有多寬就多寬
+key = "set.zero.as-wide-as-the-window"
+zht = "0 ＝ 用窗口的寬度"
+zhs = "0 = 用窗口的宽度"
+en = "0 = as wide as the window"
+
+[[message]]
+# 設置：0 的意思——不縮進
+key = "set.zero.no-indent"
+zht = "0 ＝ 不縮進"
+zhs = "0 = 不缩进"
+en = "0 = no indent"
+
+[[message]]
+# 設置：0 的意思——不畫那條線
+key = "set.zero.no-ruler"
+zht = "0 ＝ 不畫"
+zhs = "0 = 不画"
+en = "0 = no ruler"
+
+[[message]]
+# 設置：0 的意思——關
+key = "set.zero.off"
+zht = "0 ＝ 關"
+zhs = "0 = 关"
+en = "0 = off"
+
+
 # ── shell ─────────────────────────────────────────────────────────────
 
 [[message]]

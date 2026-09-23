@@ -45,31 +45,38 @@ pub enum Group {
     Keys,
 }
 
-impl Group {
-    /// 畫出來的次序。
-    pub const ALL: [Group; 8] = [
-        Group::Layout,
-        Group::Marks,
-        Group::Interface,
-        Group::Colours,
-        Group::Ime,
-        Group::Editing,
-        Group::Files,
-        Group::Keys,
-    ];
+/// 一組，和它的名字。
+///
+/// ⚠️ **名字寫成一個 `label:` 字段，不是一支 `match`。** 兩個理由，第二個是硬的：
+/// ① 次序與名字在同一張表上，加一組不會只加一半；② `messages.rs` 那張「每個標籤
+/// 都有條目」的網是**讀源碼**找的，而它看得見 `label:`，看不見 `match` 的返回值
+/// ——寫成 `match` 的話，八個組名可以一條條目都沒有而全樹皆綠，面板上逐行寫着
+/// `set.group.layout`。
+pub struct Named {
+    pub group: Group,
+    pub label: &'static str,
+}
 
+/// **八組，畫出來的次序。**
+pub const GROUPS: &[Named] = &[
+    Named { group: Group::Layout, label: "set.group.layout" },
+    Named { group: Group::Marks, label: "set.group.marks" },
+    Named { group: Group::Interface, label: "set.group.interface" },
+    Named { group: Group::Colours, label: "set.group.colours" },
+    Named { group: Group::Ime, label: "set.group.ime" },
+    Named { group: Group::Editing, label: "set.group.editing" },
+    Named { group: Group::Files, label: "set.group.files" },
+    Named { group: Group::Keys, label: "set.group.keys" },
+];
+
+impl Group {
     /// 這一組的名字，給 `say!` 用。
     pub fn label(self) -> &'static str {
-        match self {
-            Group::Layout => "set.group.layout",
-            Group::Marks => "set.group.marks",
-            Group::Interface => "set.group.interface",
-            Group::Colours => "set.group.colours",
-            Group::Ime => "set.group.ime",
-            Group::Editing => "set.group.editing",
-            Group::Files => "set.group.files",
-            Group::Keys => "set.group.keys",
-        }
+        GROUPS
+            .iter()
+            .find(|n| n.group == self)
+            .map(|n| n.label)
+            .unwrap_or("set.group.layout")
     }
 }
 
