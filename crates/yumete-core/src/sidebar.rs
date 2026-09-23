@@ -89,22 +89,29 @@ pub enum Transient {
 }
 
 impl Transient {
-    /// **Whether `C-w` stops here** — Feature #293.
+    /// **Whether `C-w` stops here** — Feature #293。
     ///
-    /// A panel the cursor puts up is one the cursor cannot move while you are
-    /// reading it: it would freeze on whatever it was showing when you walked
-    /// in. So only the ones worth freezing for take the keys.
+    /// 一律停。2026-09-22 定的規矩只有一條：**浮窗不收鍵，邊欄裏的收**——而
+    /// [`Transient`] 描述的就是「擺在邊欄裏的那一個」，所以三個都收。
     ///
-    /// [`Transient::Detail`] therefore does not. It has no need to: it already
-    /// scrolls itself to the field the cursor is in, which is a better answer
-    /// than a scrollbar — walk along the row and the panel follows. What
-    /// *will* take the keys is a panel with nothing on the page to walk: 字典
-    /// lists a character's readings and there is no cursor inside it.
+    /// ⚠️ 從前這裏是逐個東西定的（`Detail => false`），理由是詳情欄自己會跟着
+    /// 光標滾、不必走。理由沒錯，可它是**多記一條例外**：新規矩買的正是「不必
+    /// 逐個記」，留一個例外等於沒換（2026-09-23 審出來的，`development.md`
+    /// §5.12.16 那張「從前／現在」表早就這麽寫了）。走得動不妨礙跟着滾——`C-w`
+    /// 進去之前它照舊跟着光標。
+    /// 這個 [`Panel`] 擺在邊欄裏的時候是哪一種臨時面板，沒有就是 `None`。
+    pub fn of(panel: Panel) -> Option<Transient> {
+        match panel {
+            Panel::Dictionary => Some(Transient::Dictionary),
+            Panel::Detail => Some(Transient::Detail),
+            _ => None,
+        }
+    }
+
     pub fn takes_keys(self) -> bool {
         match self {
-            Transient::Detail => false,
-            // 服務器說的話可以有十幾行——讀得到底纔算數。
-            Transient::Dictionary | Transient::Hover => true,
+            // 服務器說的話可以有十幾行，一份 28 欄的拆分表行更長——讀得到底纔算數。
+            Transient::Detail | Transient::Dictionary | Transient::Hover => true,
         }
     }
 }
@@ -112,9 +119,9 @@ impl Transient {
 /// **Every panel a slot can hold** — Feature #293.
 ///
 /// One name per thing that can be put in a slot, and the only question it
-/// answers is *which side is it on*. The three resident ones are also a
-/// [`View`] (they share a slot and `Tab` walks between them); the two
-/// transient ones are also a [`Transient`]. This enum is neither of those: it
+/// answers is *which side is it on*. The resident ones are also a [`View`]
+/// (they share a slot and `Tab` walks between them); the transient ones are
+/// also a [`Transient`]. This enum is neither of those: it
 /// is the address a setting writes to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Panel {
@@ -214,8 +221,8 @@ impl From<Transient> for Panel {
 ///
 /// **Every view here is resident**, and that is now a fact about the layer
 /// rather than about the view: what is put up by the cursor and taken down
-/// again lives in [`Layer::Bottom`] and is a [`Transient`], not a `View`. 字典
-/// used to be the exception in this enum and is one of those now.
+/// again is a [`Transient`], not a `View`. 字典 used to be the exception in
+/// this enum and is one of those now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum View {
     /// The files on disk, as a tree.

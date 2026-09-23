@@ -934,9 +934,11 @@ pub fn draw_detail(
         Side::Left => area.x + area.width - 1,
         Side::Right => area.x,
     };
+    // 有焦點的那一欄畫粗的那一條——見 `crate::sidebar_rule`。
+    let (wall, wall_ink) = crate::sidebar_rule(editor, ink, ground, side);
     for y in area.y..area.y + area.height {
         if let Some(cell) = buf.cell_mut((rule, y)) {
-            cell.set_symbol("│").set_style(name);
+            cell.set_symbol(wall).set_style(wall_ink);
         }
     }
 

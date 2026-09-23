@@ -45,8 +45,7 @@ fn a_broken_crate(whose: &str) -> PathBuf {
 #[test]
 #[ignore = "needs rust-analyzer on the machine, and takes seconds"]
 fn rust_analyzer_really_answers() {
-    if which("rust-analyzer").is_none() {
-        eprintln!("no rust-analyzer on this machine — nothing to check");
+    if no_tool("rust-analyzer") {
         return;
     }
     let dir = a_broken_crate("answers");
@@ -93,8 +92,7 @@ fn rust_analyzer_really_answers() {
 #[test]
 #[ignore = "needs rust-analyzer on the machine, and takes seconds"]
 fn rust_analyzer_says_where_a_function_is_written() {
-    if which("rust-analyzer").is_none() {
-        eprintln!("no rust-analyzer on this machine — nothing to check");
+    if no_tool("rust-analyzer") {
         return;
     }
     let dir = std::env::temp_dir().join(format!("yumete-gd-{}", std::process::id()));
@@ -124,6 +122,7 @@ fn rust_analyzer_says_where_a_function_is_written() {
     // 而這一份是編得過的——一條診斷都不會有，於是它每一趟都燒滿九十秒，那句
     // 「先等它讀完項目」描述的是一條不存在的規則（2026-09-23 審出來的）。真正
     // 頂用的是下面那個「問不到就再問一次」的圈。
+    //
     // 光標走到那一次**調用**上（第 6 行，0 起算）：`println!("{}", counted(…)`。
     // 一直按 `l` 直到真站在 `counted` 上，而不是數空格——數出來的那個數字錯了，
     // 測試就在測別的東西。
@@ -175,8 +174,7 @@ fn rust_analyzer_says_where_a_function_is_written() {
 #[test]
 #[ignore = "needs rust-analyzer on the machine, and takes seconds"]
 fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
-    if which("rust-analyzer").is_none() {
-        eprintln!("no rust-analyzer on this machine — nothing to check");
+    if no_tool("rust-analyzer") {
         return;
     }
     let dir = a_broken_crate("saved");
@@ -210,7 +208,11 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     );
     editor.execute(":w").unwrap();
 
-    let gave_up = Instant::now() + Duration::from_secs(90);
+    // ⚠️ **三分鐘，不是九十秒。** 存盤之後收回那條話要等 `cargo check` 跑完，
+    // 而冷快取下那一趟本身就是九十秒往上——2026-09-23 在一臺乾淨機器上實測
+    // 紅過一次（`left: 1, right: 0`），重跑（快取熱了）就綠。那不是協議的
+    // 預算，是編譯的預算，所以這個數要按後者給。
+    let gave_up = Instant::now() + Duration::from_secs(180);
     while Instant::now() < gave_up && editor.problem_count() > 0 {
         servers.follow(&editor, &config);
         servers.collect(&mut editor);
@@ -219,7 +221,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     let still = editor.problem_count();
     servers.stop();
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(still, 0, "存了之後錯誤要跟着没（90 秒）");
+    assert_eq!(still, 0, "存了之後錯誤要跟着没（180 秒）");
 }
 
 /// **`空格 k` 真的問得出「這是什麽」**（#53 ③，2026-09-21）。
@@ -230,8 +232,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
 #[test]
 #[ignore = "needs rust-analyzer on the machine, and takes seconds"]
 fn rust_analyzer_says_what_a_function_is() {
-    if which("rust-analyzer").is_none() {
-        eprintln!("no rust-analyzer on this machine — nothing to check");
+    if no_tool("rust-analyzer") {
         return;
     }
     let dir = std::env::temp_dir().join(format!("yumete-hover-{}", std::process::id()));
@@ -309,8 +310,7 @@ fn rust_analyzer_says_what_a_function_is() {
 #[test]
 #[ignore = "needs rust-analyzer on the machine, and takes seconds"]
 fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
-    if which("rust-analyzer").is_none() {
-        eprintln!("no rust-analyzer on this machine — nothing to check");
+    if no_tool("rust-analyzer") {
         return;
     }
     let dir = std::env::temp_dir().join(format!("yumete-next-{}", std::process::id()));
@@ -399,8 +399,7 @@ fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
 #[test]
 #[ignore = "needs rust-analyzer on the machine, and takes seconds"]
 fn typing_alone_brings_the_list_up() {
-    if which("rust-analyzer").is_none() {
-        eprintln!("no rust-analyzer on this machine — nothing to check");
+    if no_tool("rust-analyzer") {
         return;
     }
     let dir = std::env::temp_dir().join(format!("yumete-auto-{}", std::process::id()));
@@ -473,6 +472,23 @@ fn typing_alone_brings_the_list_up() {
         offered.iter().any(|label| label.starts_with("counted")),
         "而且是這一份裏的函數：{offered:?}"
     );
+}
+
+/// **沒裝那個程序，這一族就綠着退出**——而那是最貴的一種綠：唯一能驗協議的網，
+/// 在一臺沒有工具鏈的機器上報的是「過了」。
+///
+/// 所以留一個開關：`YUMETE_LSP_TESTS=1` 的時候，找不到工具就**紅**。CI 或者
+/// 真要驗協議的那一趟帶上它，平常照舊跳過。2026-09-23 加的。
+fn no_tool(program: &str) -> bool {
+    if which(program).is_some() {
+        return false;
+    }
+    assert!(
+        std::env::var_os("YUMETE_LSP_TESTS").is_none(),
+        "YUMETE_LSP_TESTS 開着，而這臺機器上沒有 {program}——協議這一網沒有張開"
+    );
+    eprintln!("no {program} on this machine — nothing to check");
+    true
 }
 
 /// The program, if it is on the PATH.

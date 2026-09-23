@@ -29,6 +29,15 @@ impl Editor {
         }
     }
 
+    /// **光標在第幾行的第幾個字**——`wrap::Measure` 拿它問一件事：這一行的行末
+    /// 要不要一格給它站（[`crate::wrap::line_rows_for_caret`]）。
+    pub fn caret_in_line(&self) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let at = self.cursor.min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        (line, at - rope.line_to_char(line))
+    }
+
     /// Which way the reader asked for. See [`Self::layout`].
     pub fn layout_wanted(&self) -> Layout {
         self.layout_wanted
@@ -911,6 +920,13 @@ impl Editor {
     pub fn show_hover(&mut self, told: String) {
         self.hovered = Some((self.cursor, told));
         self.status = String::new();
+        // **`空格 K` 開的那一份，鍵跟過去**——與 `空格 D` 逐字同形
+        // （2026-09-23 補）。送進邊欄要的就是「讀得完」，而讀得完得走得動；
+        // 浮窗那一份一個鍵都不收，那是浮窗的通則。答案回來纔交，問出去還沒回
+        // 來的時候交了，讀者看着一扇空面板而正文不聽鍵。
+        if !self.hover_afloat {
+            self.panel_focus = Some(self.side_of(crate::sidebar::Panel::Dictionary));
+        }
         self.refresh_sidebar();
     }
 

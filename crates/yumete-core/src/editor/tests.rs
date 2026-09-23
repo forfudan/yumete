@@ -643,8 +643,8 @@ fn a_capital_s_sorts_a_delimited_file_downwards() {
     };
     // By code point, which is what the sort promises for anything that is
     // not a number: 丙 U+4E19, 乙 U+4E59, 甲 U+7532.
-    assert_eq!(sorted("up.csv", "t0s"), "字,序\n丙,3\n乙,2\n甲,1\n");
-    assert_eq!(sorted("down.csv", "t0S"), "字,序\n甲,1\n乙,2\n丙,3\n");
+    assert_eq!(sorted("up.csv", " t0s"), "字,序\n丙,3\n乙,2\n甲,1\n");
+    assert_eq!(sorted("down.csv", " t0S"), "字,序\n甲,1\n乙,2\n丙,3\n");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -3705,8 +3705,8 @@ fn a_grid_sorts_by_the_columns_it_is_told() {
     after.sort();
     assert_eq!(before, after);
 
-    // `t3S` is the same thing from the keyboard.
-    for key in "t3S".chars() {
+    // `空格 t 3S` is the same thing from the keyboard.
+    for key in " t3S".chars() {
         ed.on_key(Key::Char(key));
     }
     assert_eq!(rows(&ed), ["甲,A,10", "乙,B,9", "丙,B,2", "丁,A,1"], "{}", ed.status());
@@ -3714,7 +3714,7 @@ fn a_grid_sorts_by_the_columns_it_is_told() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// A sort names every column first and acts last: `t1a2d8as`.
+/// A sort names every column first and acts last: `空格 t 1a2d8as`.
 ///
 /// 「我認為正確的語法應該是 t1a2d8as 表示 對第一列升序，第二列降序，第八列升
 /// 序，最後的 s 發出動作指令。原来的设计用的是 t1s2S8s 这样的命令，这个会在
@@ -3737,8 +3737,8 @@ fn a_sort_names_its_columns_before_it_acts() {
     };
 
     // Nothing has happened yet, and the half-typed command reads back as
-    // what was typed — `t1a2d`, a column at a time.
-    for key in "t2a3d".chars() {
+    // what was typed — `1a2d`, a column at a time.
+    for key in " t2a3d".chars() {
         ed.on_key(Key::Char(key));
     }
     assert_eq!(ed.typed_so_far(), "t2a3d", "{}", ed.status());
@@ -3750,33 +3750,33 @@ fn a_sort_names_its_columns_before_it_acts() {
     assert_eq!(rows(&ed), ["甲,A,10", "丁,A,1", "乙,B,9", "丙,B,2"], "{}", ed.status());
 
     // One column keeps the old short spelling, direction in the verb.
-    for key in "t1S".chars() {
+    for key in " t1S".chars() {
         ed.on_key(Key::Char(key));
     }
     assert_eq!(rows(&ed), ["甲,A,10", "乙,B,9", "丙,B,2", "丁,A,1"], "{}", ed.status());
 
     // Both spellings at once: the last column takes its direction from the
     // verb, the ones before it from their own letter.
-    for key in "t2a3S".chars() {
+    for key in " t2a3S".chars() {
         ed.on_key(Key::Char(key));
     }
     assert_eq!(rows(&ed), ["甲,A,10", "丁,A,1", "乙,B,9", "丙,B,2"], "{}", ed.status());
 
-    // **`d` is only a direction after a plain column number.** `t d` is
+    // **`d` is only a direction after a plain column number.** `空格 t d` is
     // still 「delete this row」 and a span is still a span.
     ed.goto_line(2);
-    for key in "td".chars() {
+    for key in " td".chars() {
         ed.on_key(Key::Char(key));
     }
     assert_eq!(rows(&ed), ["丁,A,1", "乙,B,9", "丙,B,2"], "a row went: {}", ed.status());
 
     // A sort abandoned half-way leaves no columns behind for the next one.
-    for key in "t1a2d".chars() {
+    for key in " t1a2d".chars() {
         ed.on_key(Key::Char(key));
     }
     ed.on_key(Key::Esc);
     assert_eq!(ed.typed_so_far(), "");
-    for key in "t3a".chars() {
+    for key in " t3a".chars() {
         ed.on_key(Key::Char(key));
     }
     assert_eq!(ed.typed_so_far(), "t3a", "only this one");
@@ -5029,7 +5029,7 @@ fn the_markdown_grid_keys_say_so_on_a_locked_file() {
     ed.goto_line(3);
     assert!(ed.execute("readonly on").is_ok());
     let before = ed.current_buffer().text();
-    for keys in ["tr", "td", "tR", "tc", "tD"] {
+    for keys in [" tr", " td", " tR", " tc", " tD"] {
         press(&mut ed, keys);
         assert_eq!(
             ed.current_buffer().text(),
@@ -5977,7 +5977,7 @@ fn alignment_is_a_keystroke_and_shows_in_the_source() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
     press(&mut ed, "T"); // #356: 這一條測的是格
-    press(&mut ed, "lt>");
+    press(&mut ed, "l t>");
     assert!(
         ed.current_buffer().text().contains("| ---: |"),
         "{}",
@@ -8019,16 +8019,14 @@ fn a_table_with_no_schema_gets_one_written_beside_it() {
     assert!(ed.table().unwrap().from.as_os_str().is_empty(), "nobody's schema yet");
 
     // 「第一行是資料」 (#217), and then 「說出來」 (#218).
-    ed.on_key(Key::Char('t'));
-    ed.on_key(Key::Char('H'));
-    ed.on_key(Key::Char('t'));
-    ed.on_key(Key::Char('e'));
+    press(&mut ed, " tH");
+    press(&mut ed, " te");
 
     let written = dir.join(".yumete").join("tables").join("codes.toml");
     let text = std::fs::read_to_string(&written).expect("a schema was written beside the data");
     assert!(text.contains("file = \"codes.txt\""), "{text}");
     assert!(text.contains("delimiter = \"\\t\""), "the tab is escaped, not typed: {text}");
-    assert!(text.contains("header = false"), "what t H just said: {text}");
+    assert!(text.contains("header = false"), "what 空格 t H just said: {text}");
     assert_eq!(text.matches("[[table.column]]").count(), 2, "{text}");
 
     // It is open in the other half, and the keys did not go with it.
@@ -15516,8 +15514,16 @@ fn a_footnote_inside_a_table_cell_still_answers() {
     assert!(ed.detail_visible(), "而且是自己浮出來的，不用按 t i");
 
     // 同一行上不壓着記號的地方，照舊是那一行的事（#283 不變）。
+    // ⚠️ **兩句都要說死。** 從前這裏寫的是 `detail_shows_a_row() || detail()
+    // .is_none()`——第二個析取項是「什麽面板都沒有」，於是 `detail()` 在這一行
+    // 上全面回 `None` 的回歸照樣過（2026-09-23 審出來的，同「文本不含 nowhere」
+    // 是一族）。寫死之後看清楚了：散文頁上的行**不主動打開**（#495），所以這裏
+    // 本來就没有面板，要按 `空格 t i` 纔有——而那時候給的確實是「這一行」。
     ed.set_cursor(line + 2);
-    assert!(ed.detail_shows_a_row() || ed.detail().is_none(), "格子裏別處還是行");
+    assert!(!ed.detail_visible(), "散文頁上的行不自己浮出來");
+    press(&mut ed, " ti");
+    let panel = ed.detail().expect("按過 空格 t i 就有了");
+    assert!(ed.detail_shows_a_row(), "而且是那一行，不是那條註：{}", panel.title);
 }
 
 /// **光標在 ruby 裏，源碼要露出來**（2026-09-22 報的）。

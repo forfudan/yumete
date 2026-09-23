@@ -471,6 +471,17 @@ impl Editor {
             .collect()
     }
 
+    /// **Every open buffer's path**, for whoever has to know when one closed.
+    ///
+    /// The language server does: it keeps analysing a file it was told about
+    /// and keeps pushing diagnostics for it, and `Problems` are kept by path —
+    /// so `:check-code` goes on listing a file that was closed an hour ago.
+    /// `textDocument/didClose` is what ends that, and this is how the front
+    /// end works out which one to send it for. 2026-09-23 補。
+    pub fn buffer_paths(&self) -> Vec<PathBuf> {
+        self.buffers.iter().filter_map(|b| b.path().map(Path::to_path_buf)).collect()
+    }
+
     /// Show the `index`th buffer, for a front end that can point at one.
     pub fn show_buffer_at(&mut self, index: usize) {
         self.show_buffer(index);

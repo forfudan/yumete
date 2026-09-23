@@ -870,6 +870,7 @@ pub fn run(
         // changed, and take whatever has come back. Both halves are
         // non-blocking; what is not here yet lands on the next turn round.
         servers.follow(editor, &config);
+        servers.forget_closed_files(editor);
         // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
         servers.ask(editor, &config);
         servers.ask_what(editor, &config);
@@ -3154,7 +3155,7 @@ fn ime_handle(
         KeyCode::Tab if composing => match ime.panel_is_full() {
             true => {
                 if let Some(ch) = ime.inline_candidate().chars().next() {
-                    editor.look_up(ch, false);
+                    let _ = editor.look_up(ch, false);
                 }
             }
             false => {
@@ -4747,7 +4748,9 @@ fn draw_note(
             lede: None,
             entry: false,
             body: panel::Body::Prose(told.to_string()),
-            tag: None,
+            // 讀不完就去邊欄——與字典那一份逐字同形（2026-09-23 補：從前這裏是
+            // `None`，而服務器說的話可以有十幾行，浮窗又不收鍵）。
+            tag: Some(say!("ui.hover-in-the-sidebar")),
             vertical_text: vertical,
             // 服務器送來的就是 Markdown，照 Markdown 畫（2026-09-21）。
             marked: true,
@@ -5350,7 +5353,8 @@ fn text_at(
                 .with_unwrapped(&flat)
                 .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
         .with_edit(editor.current_buffer().edit())
-                .with_open_line(editor.open_line());
+                .with_open_line(editor.open_line())
+        .with_caret(Some(editor.caret_in_line()));
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
             // would land a click one row low for every reading above it.
@@ -6017,6 +6021,7 @@ fn draw_sidebar(
         Side::Left => (area.x, rule),
         Side::Right => (area.x + 1, area.x + area.width),
     };
+    let (wall, wall_ink) = sidebar_rule(editor, ink, ground, side);
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
         for x in from..to {
@@ -6025,7 +6030,7 @@ fn draw_sidebar(
             }
         }
         if let Some(cell) = buf.cell_mut((rule, y)) {
-            cell.set_symbol("│").set_style(quiet);
+            cell.set_symbol(wall).set_style(wall_ink);
         }
     }
 
@@ -6096,6 +6101,29 @@ fn draw_sidebar(
     None
 }
 
+/// **邊欄那一條分隔線，以及它說的第二件事：鍵在不在這一欄裏。**
+///
+/// 2026-09-23 報的：「我開了左右兩個邊欄之後，空格 s 切換，但是我不知道目前焦點
+/// 在哪個裏面。」狀態欄那一行（「邊欄　j k …」）說得出來，可它離面板有半屏遠。
+///
+/// ⚠️ **形狀和顏色各說一遍。** 有焦點的那一條是 `┃`（粗）＋金，沒焦點的是 `│`
+/// ＋灰——百個男人裏有八個分不出紅綠（同診斷那一格的理由），粗細他們分得出。
+///
+/// ⚠️ **`┃` 與 `│` 同在 box-drawing 那一塊**（U+2500–257F），終端按 ambiguous
+/// 算，寬度與現在畫的那一個一模一樣。Block Elements（`▏▌█`）在中文字體裏是
+/// **兩格**，不能拿來當這條線——那是 `cut_glyph` 的 ASCII 退路存在的同一個理由。
+fn sidebar_rule(
+    editor: &Editor,
+    ink: crate::theme::Palette,
+    ground: Style,
+    side: Side,
+) -> (&'static str, Style) {
+    match editor.panel_focus() == Some(side) {
+        true => ("┃", ground.fg(ink.gold()).add_modifier(Modifier::BOLD)),
+        false => ("│", ground.fg(ink.quiet())),
+    }
+}
+
 /// **The sidebar's 百科 page** (#287): the entry the cursor is on, kept in
 /// place. The name in 金, the breadcrumb set back, sub-headings in 金 at the
 /// depth they have *within* the entry, and the global entries under 「全局」.
@@ -6115,6 +6143,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
         Side::Left => (area.x + 1, rule),
         Side::Right => (area.x + 2, area.x + area.width),
     };
+    let (wall, wall_ink) = sidebar_rule(editor, ink, ground, side);
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
         for x in area.x..area.x + area.width {
@@ -6123,7 +6152,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
             }
         }
         if let Some(cell) = buf.cell_mut((rule, y)) {
-            cell.set_symbol("│").set_style(quiet);
+            cell.set_symbol(wall).set_style(wall_ink);
         }
     }
     let bottom = area.y + area.height;
@@ -6324,6 +6353,7 @@ fn draw_search(
         Side::Left => (area.x, rule),
         Side::Right => (area.x + 1, area.x + area.width),
     };
+    let (wall, wall_ink) = sidebar_rule(editor, ink, ground, side);
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
         for x in from..to {
@@ -6332,7 +6362,7 @@ fn draw_search(
             }
         }
         if let Some(c) = buf.cell_mut((rule, y)) {
-            c.set_symbol("│").set_style(quiet);
+            c.set_symbol(wall).set_style(wall_ink);
         }
     }
     let left = from + 1;
@@ -6556,6 +6586,7 @@ fn draw_dictionary(
         Side::Left => (area.x, rule),
         Side::Right => (area.x + 1, area.x + area.width),
     };
+    let (wall, wall_ink) = sidebar_rule(editor, ink, ground, side);
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
         for x in from..to {
@@ -6564,7 +6595,7 @@ fn draw_dictionary(
             }
         }
         if let Some(cell) = buf.cell_mut((rule, y)) {
-            cell.set_symbol("│").set_style(quiet);
+            cell.set_symbol(wall).set_style(wall_ink);
         }
     }
 
@@ -7015,7 +7046,8 @@ fn draw_horizontal(
         .with_unwrapped(&flat)
         .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
         .with_edit(editor.current_buffer().edit())
-        .with_open_line(editor.open_line());
+        .with_open_line(editor.open_line())
+        .with_caret(Some(editor.caret_in_line()));
 
     // A pane that is only being read has no cursor: it is drawn from the
     // place it was left at, and *that* is what the page is scrolled around.
@@ -8004,7 +8036,7 @@ fn draw_status(
     // the row below for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
     let status = if editor.sidebar_focused() && !command_row {
-        say!("ui.sidebar-mode", Editor::sidebar_keys())
+        say!("ui.sidebar-mode", editor.sidebar_keys())
     } else if let (false, Some((_, text))) = (command_row, editor.prompt()) {
         let prefix = editor.prompt_label().unwrap_or_default();
         // The composition in progress belongs at the caret, so a search reads as
@@ -10150,7 +10182,7 @@ fn squeezed(text: &str) -> String {
         // Both surfaces the mark is drawn on: the prose page, which folds
         // against the columns it squares up once `t w` asks it to, and the
         // pane, which draws its own grid and caps it unasked.
-        for keys in [vec!['j', 'j', 't', 'b', 't', 'w'], vec!['j', 'j', 't', 't']] {
+        for keys in [vec!['j', 'j', ' ', 't', 'b', ' ', 't', 'w'], vec!['j', 'j', ' ', 't', 't']] {
             let mut editor = editor_with(&source);
             for key in keys.iter().copied() {
                 editor.on_key(Key::Char(key));
@@ -10205,7 +10237,7 @@ fn squeezed(text: &str) -> String {
         // `t i`, because a table on a page of prose does not open the panel
         // by itself any more (#495) — what is under test here is its *shape*
         // once it is open.
-        for key in ['4', 'j', 't', 'f', 't', 'i'] {
+        for key in ['4', 'j', ' ', 't', 'f', ' ', 't', 'i'] {
             editor.on_key(Key::Char(key));
         }
         let config = Config::default();
@@ -10233,7 +10265,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&format!(
             "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |"
         ));
-        for key in ['j', 'j', 't', 't'] {
+        for key in ['j', 'j', ' ', 't', 't'] {
             editor.on_key(Key::Char(key));
         }
         editor.on_key(Key::Char('T')); // #356: 這一條測的是格
@@ -10309,7 +10341,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&format!(
             "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |\n| 長安 | 短 |"
         ));
-        for key in ['j', 'j', 't', 't'] {
+        for key in ['j', 'j', ' ', 't', 't'] {
             editor.on_key(Key::Char(key));
         }
         let config = Config::default();
@@ -10373,7 +10405,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&format!(
             "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |"
         ));
-        for key in ['j', 'j', 't', 't'] {
+        for key in ['j', 'j', ' ', 't', 't'] {
             editor.on_key(Key::Char(key));
         }
         let config = Config::default();
@@ -11224,6 +11256,13 @@ fn squeezed(text: &str) -> String {
     }
 
     // ---- 語言服務器那一格（#53／#54）---------------------------------------
+
+    /// **邊欄那一條線，粗的細的都算。** 粗細說的是焦點在不在這一欄裏
+    /// （2026-09-23 加的，見 [`super::sidebar_rule`]），而下面這幾條測試問的
+    /// 是「線在第幾欄」——那件事與焦點無關。
+    fn is_rule(cell: &str) -> bool {
+        cell == "│" || cell == "┃"
+    }
 
     /// 診斷那一格在第幾欄：**最左**，號碼前面——helix 的次序
     /// （`helix-view/src/editor.rs:100`）。
@@ -12426,7 +12465,8 @@ fn squeezed(text: &str) -> String {
         let buffer = render_with(&editor, &Config::default(), &ime, 60, 8);
         // The panel is the bottom layer of the right slot now (#293), so what
         // is being read here is the part past the rule down its left edge.
-        let panel = |y: u16| match row_text(&buffer, y).split_once('│') {
+        // ⚠️ 鍵在字典裏，所以那條線是粗的——`split_once` 要認得它。
+        let panel = |y: u16| match row_text(&buffer, y).split_once(['│', '┃']) {
             Some((_, panel)) => panel.to_string(),
             None => String::new(),
         };
@@ -12933,13 +12973,13 @@ fn squeezed(text: &str) -> String {
 
         // Narrow, the name is cut where the rule is.
         let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
-        assert_eq!(at(&buffer, 19, 0), "│", "the rule at the set width");
+        assert!(is_rule(&at(&buffer, 19, 0)), "the rule at the set width");
 
         // `w` opens it out far enough to read the whole name, rule included.
         editor.on_key(Key::Char('w'));
         let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
         let rule = (0..80u16)
-            .find(|&x| at(&buffer, x, 0) == "│")
+            .find(|&x| is_rule(&at(&buffer, x, 0)))
             .expect("a rule somewhere");
         assert!(rule > 19, "wider than the setting: {rule}");
         // A wide glyph covers two cells and only the first carries it, so the
@@ -12956,7 +12996,7 @@ fn squeezed(text: &str) -> String {
         // …and back.
         editor.on_key(Key::Char('w'));
         let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
-        assert_eq!(at(&buffer, 19, 0), "│");
+        assert!(is_rule(&at(&buffer, 19, 0)));
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -15715,7 +15755,7 @@ fn squeezed(text: &str) -> String {
         assert!(text.contains("卷一"), "the tree: {text:?}");
         assert!(text.contains("notes.md"), "{text:?}");
         // A rule at its right edge, and the page begins after it — not under it.
-        assert_eq!(at(&buffer, 19, 3), "│");
+        assert!(is_rule(&at(&buffer, 19, 3)));
         assert_eq!(at(&buffer, 20, 0), "那", "the text moved over, not under");
 
         std::fs::remove_dir_all(&dir).ok();
@@ -15969,6 +16009,31 @@ fn squeezed(text: &str) -> String {
                 }
             }
         }
+    }
+
+    /// **哪一欄拿着鍵，線自己說**（2026-09-23 提的：「空格 s 切換，但是我不知道
+    /// 目前焦點在哪個裏面」）。
+    #[test]
+    fn the_rule_says_which_sidebar_has_the_keys() {
+        let config = Config::default();
+        let mut editor = editor_with("那年冬天");
+        // 左大綱、右字典——出廠 `sides` 把這兩個分在兩邊。
+        for key in " o D".chars() {
+            editor.on_key(Key::Char(key));
+        }
+        let buffer = render(&editor, &config, 80, 10);
+        let walls: Vec<String> =
+            (0..80).filter(|&x| matches!(at(&buffer, x, 1).as_str(), "│" | "┃")).map(|x| at(&buffer, x, 1)).collect();
+        assert_eq!(walls.len(), 2, "兩欄兩條線：{walls:?}");
+        assert_eq!(walls, ["│", "┃"], "鍵在右邊那一欄，所以粗的是右邊那一條");
+
+        // `C-w` 走一圈回到正文，兩條都細。
+        editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Ctrl('w'));
+        let buffer = render(&editor, &config, 80, 10);
+        let walls: Vec<String> =
+            (0..80).filter(|&x| matches!(at(&buffer, x, 1).as_str(), "│" | "┃")).map(|x| at(&buffer, x, 1)).collect();
+        assert_eq!(walls, ["│", "│"], "鍵在正文裏，誰都不粗");
     }
 
     /// Draw the `:` menu at a real size, for looking at.

@@ -347,7 +347,8 @@ impl Editor {
                 .with_unwrapped(&flat)
                 .with_version(self.current_buffer().id(), self.current_buffer().revision())
                 .with_edit(self.current_buffer().edit())
-                .with_open_line(self.open_line());
+                .with_open_line(self.open_line())
+                .with_caret(Some(self.caret_in_line()));
             crate::wrap::column_of(rope, self.cursor, m)
         };
         self.goal_column = column;
@@ -519,7 +520,8 @@ impl Editor {
                 .with_unwrapped(&flat)
                 .with_version(self.current_buffer().id(), self.current_buffer().revision())
                 .with_edit(self.current_buffer().edit())
-                .with_open_line(self.open_line());
+                .with_open_line(self.open_line())
+                .with_caret(Some(self.caret_in_line()));
             if up {
                 crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
             } else {
