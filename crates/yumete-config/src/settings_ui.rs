@@ -121,6 +121,15 @@ pub struct Setting {
     pub label: &'static str,
     /// 一句話說它幹什麽。
     pub hint: &'static str,
+    /// **出廠是什麽，照 toml 的寫法**：`0`、`true`、`"horizontal"`。
+    ///
+    /// 面板要說「這一項你沒設，出廠是這個」，而那句話得有個地方來。⚠️ 它是一個
+    /// **抄來的**字面量，所以一定會漂——除非有人盯着。盯着的是
+    /// `tests/settings_ui.rs` 那兩條：把整張表的 `factory` 拼成一份 toml 讀回來，
+    /// 必須和 `Config::default()` 逐位元組相同；再逐項餵一個**不是**出廠的值，
+    /// 必須真的改出點什麽來（不然就是鍵名打錯了，而
+    /// `#[serde(deny_unknown_fields)]` 會把整份默默丟掉，兩條都綠）。
+    pub factory: &'static str,
 }
 
 impl Setting {
@@ -155,6 +164,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Pick(LAYOUT_WAYS),
         label: "set.editor.layout",
         hint: "set.editor.layout.hint",
+        factory: r#""horizontal""#,
     },
     Setting {
         table: "editor",
@@ -164,6 +174,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 64, zero: Some("set.zero.as-tall-as-the-window") },
         label: "set.editor.zong-length",
         hint: "set.editor.zong-length.hint",
+        factory: "0",
     },
     Setting {
         table: "editor",
@@ -172,6 +183,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 4, zero: None },
         label: "set.editor.zong-gap",
         hint: "set.editor.zong-gap.hint",
+        factory: "0",
     },
     Setting {
         table: "editor",
@@ -180,6 +192,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 1, high: 4, zero: None },
         label: "set.editor.bands",
         hint: "set.editor.bands.hint",
+        factory: "1",
     },
     Setting {
         table: "editor",
@@ -188,6 +201,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 8, zero: Some("set.zero.no-indent") },
         label: "set.editor.indent",
         hint: "set.editor.indent.hint",
+        factory: "0",
     },
     Setting {
         table: "editor",
@@ -196,6 +210,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 400, zero: Some("set.zero.as-wide-as-the-window") },
         label: "set.editor.measure",
         hint: "set.editor.measure.hint",
+        factory: "0",
     },
     Setting {
         table: "editor",
@@ -204,6 +219,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 400, zero: Some("set.zero.no-ruler") },
         label: "set.editor.ruler",
         hint: "set.editor.ruler.hint",
+        factory: "0",
     },
     Setting {
         table: "editor",
@@ -212,6 +228,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Tick,
         label: "set.editor.soft-wrap",
         hint: "set.editor.soft-wrap.hint",
+        factory: "true",
     },
     Setting {
         table: "editor",
@@ -220,6 +237,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Tick,
         label: "set.editor.hanging-punctuation",
         hint: "set.editor.hanging-punctuation.hint",
+        factory: "false",
     },
     Setting {
         table: "editor",
@@ -228,6 +246,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Pick(MARGIN_WAYS),
         label: "set.editor.margin",
         hint: "set.editor.margin.hint",
+        factory: r#""dense""#,
     },
     Setting {
         table: "editor",
@@ -237,6 +256,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 8, zero: Some("set.zero.off") },
         label: "set.editor.tatechuyoko",
         hint: "set.editor.tatechuyoko.hint",
+        factory: "4",
     },
     Setting {
         table: "editor",
@@ -245,6 +265,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 64, zero: Some("set.zero.off") },
         label: "set.editor.paper-ticks",
         hint: "set.editor.paper-ticks.hint",
+        factory: "0",
     },
 ];
 
