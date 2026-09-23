@@ -544,6 +544,18 @@ fn main() -> ExitCode {
         if editor.take_screenshot_request().is_some() {
             unheard.push(":shot".into());
         }
+        // 語言服務器是循環裏的一個進程，一幀畫不出它來。2026-09-23 補：這兩個
+        // 從前不在名單上，於是 `空格 k` 拍出來永遠是「問問這是什麽……」，看着
+        // 像功能壞了。字典不在這裏——它是 `frame_to` 自己答得了的。
+        if editor.take_hover_query().is_some() {
+            unheard.push("空格 k / 空格 K".into());
+        }
+        if editor.take_definition_query().is_some() {
+            unheard.push("gd".into());
+        }
+        if editor.take_completion_query().is_some() {
+            unheard.push("C-n".into());
+        }
         if !unheard.is_empty() {
             eprintln!(
                 "yumete: --shot draws one frame and never enters the editor's loop, so {} did nothing here.",

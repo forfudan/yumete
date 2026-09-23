@@ -1211,7 +1211,18 @@ impl Editor {
                 // column padded as though it were not there comes out one
                 // cell narrow on every row that folds, which is every row the
                 // cap bites.
-                (measured, tails.iter().map(|&(at, _)| (at, width)).collect())
+                let mut mark: Vec<(usize, usize)> =
+                    tails.iter().map(|&(at, _)| (at, width)).collect();
+                // **⁽¹⁾ 同理，而且更明顯：三格。** 源碼那四個字 `[^1]` 藏了，
+                // 算寬的時候當零；可畫上去的註號佔三格，於是帶註的那一行整整
+                // 頂出去三格，格線歪掉（2026-09-23 審出來的）。
+                mark.extend(
+                    self.footnote_marks_on_line(i)
+                        .into_iter()
+                        .map(|run| (run.column, yumete_cjk::str_width(&run.text))),
+                );
+                mark.sort_unstable();
+                (measured, mark)
             });
             // What the page really hides, which is the same list on every row
             // but the one being typed in — see [`Self::measured_on_line`].

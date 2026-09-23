@@ -577,41 +577,61 @@ impl Editor {
     /// 與別的視圖同一套鍵：`j`／`k` 一行，`J`／`K` 半頁，`g`／`G` 兩頭；`q` 與
     /// `C-w` 照舊由 [`Self::panel_key_in_common`] 接。
     fn scroll_wiki(&mut self, key: Key) {
-        let deep = self.wiki_rows();
         let page = Self::PAGE_IN_A_LIST;
         let (at, _) = self.wiki_scroll_now();
         let moved = match key {
-            Key::Char('j') | Key::Down => at + 1,
+            Key::Char('j') | Key::Down => at.saturating_add(1),
             Key::Char('k') | Key::Up => at.saturating_sub(1),
-            Key::Char('J') | Key::PageDown => at + page,
+            Key::Char('J') | Key::PageDown => at.saturating_add(page),
             Key::Char('K') | Key::PageUp => at.saturating_sub(page),
             Key::Char('g') | Key::Home => 0,
-            Key::Char('G') | Key::End => deep,
-            other => return self.on_sidebar_key_in_common(other),
+            // ⚠️ **`G` 不在這裏算底在哪**——這一頭數不出來（見
+            // [`Editor::wiki_scroll`]）。存一個到不了的數，畫的那一趟走到底、
+            // 算出總數、把真正的那個數夾回來。
+            Key::Char('G') | Key::End => usize::MAX,
+            other => return self.on_sidebar_key_after_the_list(other),
         };
-        // ⚠️ **最後一行之後不許再滾**，否則按住 `j` 會把整頁滾成空白。
-        self.wiki_scroll = (moved.min(deep.saturating_sub(1)), self.cursor);
+        self.wiki_scroll.set((moved, self.cursor));
     }
 
     /// 百科那一條此刻讀到第幾行——光標換了詞條就從頭算。
     pub fn wiki_scroll_now(&self) -> (usize, usize) {
-        match self.wiki_scroll.1 == self.cursor {
-            true => self.wiki_scroll,
+        let held = self.wiki_scroll.get();
+        match held.1 == self.cursor {
+            true => held,
             false => (0, self.cursor),
         }
     }
 
-    /// 那一條有多少行（不折行，前端自己折）——`G` 要知道底在哪。
-    fn wiki_rows(&self) -> usize {
-        self.wiki_here()
-            .map(|view| view.parts.iter().map(|p| p.lines.len() + 2).sum())
-            .unwrap_or(0)
+    /// **前端畫完那一趟，把夾好的那個數寫回來**——它是唯一折得出屏幕行的一頭。
+    pub fn set_wiki_scroll(&self, at: usize) {
+        self.wiki_scroll.set((at, self.cursor));
     }
 
-    /// 邊欄裏那幾個到處都一樣的鍵，一處接。
-    fn on_sidebar_key_in_common(&mut self, key: Key) {
-        if let Some(side) = self.panel_focus() {
-            self.panel_key_in_common(key, side);
+    /// **不管這一頁是單子還是文章，這幾個鍵都算數**（2026-09-23 審出來的：提示
+    /// 行在百科那一頁上照樣寫着 `Tab 換視圖`／`w 寬窄`，而那兩個鍵在那裏什麽都
+    /// 不做——「拿走鍵的那一半有義務」）。
+    fn on_sidebar_key_after_the_list(&mut self, key: Key) {
+        let Some(side) = self.panel_focus() else { return };
+        match key {
+            Key::Char('R') => self.refresh_sidebar(),
+            Key::Char('w') => {
+                let Some(sidebar) = self.panel_mut(side) else { return };
+                let wide = sidebar.toggle_width();
+                self.status = match wide {
+                    true => say!("sidebar.wide"),
+                    false => say!("sidebar.narrow"),
+                };
+            }
+            Key::Tab => {
+                self.cycle_view(side, false);
+            }
+            Key::BackTab => {
+                self.cycle_view(side, true);
+            }
+            other => {
+                self.panel_key_in_common(other, side);
+            }
         }
     }
 
@@ -815,7 +835,10 @@ impl Editor {
         if fields.is_empty() {
             rows.push(Row {
                 path: PathBuf::new(),
-                name: say!("ui.not-in-the-table"),
+                name: match self.ime_available() {
+                    true => say!("ui.not-in-the-table"),
+                    false => say!("ui.no-table-yet"),
+                },
                 depth: 0,
                 is_dir: false,
                 expanded: false,
@@ -1013,21 +1036,6 @@ impl Editor {
             // …and the ends, spelled as they are in the text.
             Key::Char('g') | Key::Home => sidebar.go_to_end(false),
             Key::Char('G') | Key::End => sidebar.go_to_end(true),
-            // The views are built when they are opened, not on every key, so
-            // `R` is how a writer who has just added a file or a chapter says
-            // to look again.
-            Key::Char('R') => self.refresh_sidebar(),
-            // A chapter's whole name does not fit in a column narrow enough to
-            // be worth keeping open, so `w` trades the columns for the name
-            // and back.
-            Key::Char('w') => {
-                let wide = sidebar.toggle_width();
-                self.status = if wide {
-                    say!("sidebar.wide")
-                } else {
-                    say!("sidebar.narrow")
-                };
-            }
             Key::Char('h') | Key::Left => sidebar.collapse(),
             Key::Char('l') | Key::Right | Key::Enter => {
                 let chosen = sidebar.activate();
@@ -1062,12 +1070,6 @@ impl Editor {
                     None => {}
                 }
             }
-            // **Tab walks the views that live in *this* slot.** Which ones
-            // those are is a setting, so the question belongs to the editor
-            // rather than to the panel — with the outline moved across, this
-            // slot walks two and the other one walks one (#293).
-            Key::Tab => return self.cycle_view(side, false),
-            Key::BackTab => return self.cycle_view(side, true),
             // **`Esc` does nothing here** (#293). It is everyone's 「get me
             // out」 key, so it is tempting — but a panel with a field in it
             // spends `Esc` on leaving Insert, and one press too many would
@@ -1076,9 +1078,18 @@ impl Editor {
             // region and leaves it up. Both live in `panel_key_in_common`,
             // with `:` and `Space`, because every panel owes the reader the
             // same ones.
-            other => {
-                self.panel_key_in_common(other, side);
-            }
+            // …and everything that is the same whether this page is a list or
+            // an article: `R`, `w`, `Tab`／`S-Tab`, then `q`／`C-w`／`:`／空格.
+            // **Tab walks the views that live in *this* slot.** Which ones
+            // those are is a setting, so the question belongs to the editor
+            // rather than to the panel — with the outline moved across, this
+            // slot walks two and the other one walks one (#293). A chapter's
+            // whole name does not fit in a column narrow enough to be worth
+            // keeping open, so `w` trades the columns for the name and back;
+            // the views are built when they are opened, not on every key, so
+            // `R` is how a writer who has just added a chapter says to look
+            // again.
+            other => self.on_sidebar_key_after_the_list(other),
         }
     }
 

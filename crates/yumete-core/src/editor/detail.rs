@@ -506,9 +506,12 @@ impl Editor {
                 .unwrap_or_default()
         };
         // Titled by the row's key, since that is what a person calls the row.
+        // ⚠️ **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
+        // 攤成整扇窗的時候，行號欄寫 1、狀態欄寫「行 1」，而這裏從前寫 2——
+        // 同一行三個數字兩種口徑。`table_row_base` 就是那兩處用的那一個。
         let title = match &schema.key {
             Some(key) => value(key),
-            None => format!("{}", line + 1),
+            None => format!("{}", line.saturating_sub(self.table_row_base()) + 1),
         };
         // The field the cursor is in is shown even when it is empty: that it
         // *is* empty is the answer to "what is in this cell".

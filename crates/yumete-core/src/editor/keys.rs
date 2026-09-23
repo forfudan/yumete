@@ -851,7 +851,10 @@ impl Editor {
                     Key::Char('h') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Hk),
                     Key::Char('c') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::C),
                     Key::Char('g') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::G),
-                    Key::Char('j') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Jp),
+                    // ⚠️ **這一個從繁體起步，另外六個從簡體。** opencc 只有
+                    // `t2jp`／`jp2t` 兩條日文路，沒有 `s2jp`——寫 `S` 的那一版
+                    // 按下去什麽都不會發生（2026-09-23 審出來的）。
+                    Key::Char('j') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::Jp),
                     _ => {}
                 }
                 return;
