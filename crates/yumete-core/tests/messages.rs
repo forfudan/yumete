@@ -90,7 +90,15 @@ fn speakers() -> Vec<String> {
 fn source(relative: &str) -> String {
     let text = std::fs::read_to_string(root().join(relative))
         .unwrap_or_else(|e| panic!("{relative}: {e}"));
-    let text = match text.find("\n#[cfg(test)]") {
+    // ⚠️ **末尾那個測試模組，不是任何一個 `#[cfg(test)]`。** 從前的判準是第一個
+    // `#[cfg(test)]`，於是一個只給測試用的小函數擺在檔案中間，就把它**後面所有的
+    // `say!` 從這張網裏抹掉了**——測試轉而報「messages.toml 裏有四則沒人說」，
+    // 而那四則明明在下面兩百行處說着。2026-09-23 踩到。
+    //
+    // ⚠️ **模組的名字不限**：`yumete-config` 有兩個（`runner_tests` 與 `tests`），
+    // 而釘死 `mod tests` 會把前一個整段當成生產代碼掃進來，於是 `r.argv("x.md")`
+    // 裏那個 `x.md` 被讀成一個沒有條目的標籤。
+    let text = match text.find("\n#[cfg(test)]\nmod ") {
         Some(at) => &text[..at],
         None => &text[..],
     };

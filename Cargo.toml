@@ -24,3 +24,12 @@ opt-level = 3
 # as a column of `__mh_execute_header`. Dropping only the debug info keeps the
 # names — nothing about the generated code changes.
 strip = "debuginfo"
+
+# **改一行等三分鐘，是調試信息的錢**（2026-09-23 量的）。默認的 `debug = true`
+# 給每個符號生成完整 DWARF，一個一萬七千行的 crate 每次重編＋重鏈都要付一遍。
+#
+# `line-tables-only` 留下回溯要的那一半——`yumete.log` 裏的 `file:line` 一行不
+# 少（#300 那條「崩潰報告要讀得懂」照舊成立），丟掉的是在 lldb 裏看變量的能力，
+# 而這個項目從來不那樣調試。
+[profile.dev]
+debug = "line-tables-only"
