@@ -903,6 +903,11 @@ impl Editor {
         Some((path, line, crate::problem::utf16_column(&text, chars)))
     }
 
+    /// **有人按過 `:config-reload`** —— 前端去重讀配置檔並推一遍。
+    pub fn take_config_reload(&mut self) -> bool {
+        std::mem::take(&mut self.config_reload)
+    }
+
     /// **Normal 下按過 Esc 而它没別的事可做**——前端該把輸入法的挂起再說一遍。
     pub fn take_say_it_again(&mut self) -> bool {
         std::mem::take(&mut self.say_it_again)

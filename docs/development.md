@@ -13559,3 +13559,51 @@ target/release/yumete --shot=100x30 --html docs/manual.md | wc -c   # 21,183
 **代碼有多少**：`wc -l` 對 `crates/**/*.rs`，把 `tests.rs` 與每個檔裏 `mod tests {`
 以下的行單獨計——74,482 行正文 ＋ 35,047 行測試。`:` 命令 214 條是
 `grep -c '^        name: "' crates/yumete-core/src/command.rs`。
+
+## 5.12.23 配置推一遍，抽成一支；`:reload config`（2026-09-23）
+
+作者定的：「下次啓動生效或者一個應用（重載）設置命令來生效。」那扇設置面板要存完盤
+**當場生效**，就得有一條「把配置推進編輯器」的路——而那條路從前只存在於 `main.rs`
+啓動那一段裏，攤成一百多行 `editor.set_…`。
+
+**抽成 `yumete_tui::settings::apply(config, editor, layout)`。** 啓動叫一次，
+`:reload config` 叫一次，將來面板存完盤再叫一次——**同一支**，所以不會出現「啓動時認
+這個設定、重載時忘了它」。
+
+⚠️ **只放冪等的。** 恢復會話、開檔、造輸入法、認 `--flag` 留在 `main.rs`：它們一趟只
+能做一次。判準是「叫兩遍和叫一遍一樣」。
+
+⚠️ **`[ime] scheme` 不在重載裏。** 換一張碼表要讀幾十兆，那是一件看得見的事
+（`:yume-scheme` 自己報進度），不是一次重載順手做的。
+
+### 這條命令**沒有**自己的名字，而那是量出來的
+
+第一版寫的是頂級的 `:config-reload`。`the_command_menu_spreads_across_a_wide_window`
+當場紅：
+
+```text
+all 55 of them: 54 slots
+```
+
+`:` 那張菜單在 24 行的窗口下裝得下 **6 欄 × 9 行 ＝ 54 格**，而命令已經 **54 條**——
+**餘量是 0，不是文檔裏估的 4**。所以它掛在 `:reload` 底下：`:reload` 重讀這個檔，
+`:reload config` 重讀設定。**命令名和鍵位一樣有預算**，而「把設定再讀一遍」本來就是
+「把文件再讀一遍」同一句話換個賓語。
+
+⚠️ **下一條頂級命令（那扇設置面板要的 `:settings`）必須先騰出一格，或者讓那張菜單
+裝得下第 55 條。** 這是眼下最近的一堵牆。
+
+### 順帶量出來的一件事：一個打錯的鍵名會扔掉整份配置
+
+`RawConfig` 是 `#[serde(deny_unknown_fields)]`。實測（本機，2026-09-23）：
+
+```toml
+[editor]
+line_numbers = "absolute"
+nosuchkey = 42
+soft_wrap = true
+```
+
+stderr 上報一行 `unknown field 'nosuchkey', expected one of …`，而**同一個檔裏那兩條
+對的設定一條都沒生效**——整份本地配置被丟掉了。這就是設置面板「存盤時把不認得的鍵
+清掉」那條要求的由來：留着它，那個檔是廢的。

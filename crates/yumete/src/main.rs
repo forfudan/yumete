@@ -141,7 +141,7 @@ fn main() -> ExitCode {
     };
 
     // Load global + per-project config and apply the keymap.
-    let (config, config_problems) = yumete_config::Config::load_reporting();
+    let (mut config, config_problems) = yumete_config::Config::load_reporting();
     // Where the reader says the 宇浩 data is, before anything asks. Set once
     // here rather than passed down, because the places that build an IME
     // session are several and none of them carries a config.
@@ -173,33 +173,10 @@ fn main() -> ExitCode {
     {
         yumete_core::messages::set_language(language);
     }
-    editor.set_key_aliases(config.keys.normal.clone());
-    editor.set_key_preset(config.keys.preset);
-    // Layout (Feature #61): the config sets it, a flag overrides for one run,
-    // and `:layout` switches it live.
-    editor.set_layout(force_layout.unwrap_or(config.editor.layout));
-    if config.editor.indent > 0 {
-        editor.set_indent(config.editor.indent);
-    }
-    if config.editor.bands > 1 {
-        editor.set_bands(config.editor.bands);
-    }
-    if config.editor.zong_length > 0 {
-        editor.set_zong_length(config.editor.zong_length);
-    }
-    // The measure a project writes to, if it has said one; `:view-wrap n` is the
-    // same setting for one session.
-    if config.editor.measure > 0 {
-        editor.set_measure(Some(config.editor.measure));
-    }
-    editor.set_paper(config.export.page.0, config.export.page.1);
-    editor.set_indent_width(config.editor.indent_width);
-    editor.set_tab_spaces(config.editor.tab_spaces);
-    editor.set_tab_stop(config.editor.tab_width);
-    editor.set_tatechuyoko(config.editor.tatechuyoko);
-    editor.set_code_colours(config.editor.code_highlight);
-    editor.set_hanging_punctuation(config.editor.hanging_punctuation);
-    editor.set_soft_wrap(config.editor.soft_wrap);
+    // **每一項設定推一遍，一處**（`yumete_tui::settings::apply`）。從前這裏攤着
+    // 一百多行 `editor.set_…`；抽出去是因為 `:config-reload` 要叫同一支——否則
+    // 「啓動時認這個設定、重載時忘了它」是遲早的事。
+    yumete_tui::settings::apply(&config, &mut editor, force_layout);
     // `--syntax` outranks the config and the extension both: it is this run's
     // answer about these files, and there is nothing further to guess from.
     let named_syntax = force_syntax
@@ -212,31 +189,6 @@ fn main() -> ExitCode {
     editor.set_default_syntax(
         named_syntax.or_else(|| yumete_core::syntax::Syntax::parse(&config.editor.syntax)),
     );
-    // …and what it says about particular extensions or names.
-    editor.set_syntax_by_name(
-        config
-            .syntax
-            .by_name
-            .iter()
-            .filter_map(|(name, language)| {
-                yumete_core::syntax::Syntax::parse(language).map(|s| (name.clone(), s))
-            })
-            .collect(),
-    );
-    editor.set_autosave(config.editor.autosave);
-    editor.set_smart_case(config.editor.smart_case);
-    editor.set_fuzzy_search(config.editor.fuzzy_search);
-    editor.set_wheel_step(config.editor.wheel_step);
-    // Which side each panel lives on (#293). A name or a word nobody knows is
-    // skipped rather than guessed at — a typo here moves the whole page.
-    for (name, side) in &config.sidebar.side {
-        if let (Some(panel), Some(side)) = (
-            yumete_core::sidebar::Panel::parse(name),
-            yumete_core::sidebar::Side::parse(side),
-        ) {
-            editor.set_side(panel, side);
-        }
-    }
     // Somewhere for a buffer with no file to keep its recovery copy. Only the
     // front end knows where the data directory is.
     // Where `:word-list global` writes, and where a reader's own dictionary is
@@ -255,7 +207,6 @@ fn main() -> ExitCode {
     if let Ok(here) = std::env::current_dir() {
         editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
     }
-    editor.set_margin(config.editor.margin);
     // Before the files, so the files come up locked rather than being locked a
     // moment after they are on screen.
     if readonly {
@@ -312,7 +263,6 @@ fn main() -> ExitCode {
     }
     // The reader's own 用字 groups (#233) — a novel's names, which no built-in
     // 異體字表 can hold.
-    editor.set_usage_groups(config.editor.usage_groups.clone());
 
 
     // The built-in Yume IME (Feature #27): load the configured scheme's tables
@@ -350,7 +300,6 @@ fn main() -> ExitCode {
     }
     mark("方案", &mut marks);
     let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or_else(Scheme::first);
-    editor.set_chaifen(config.editor.show_chaifen);
     let page_size = config.panel.page_size;
     let chaifen = config.editor.show_chaifen;
     let start_scheme = config.ime.start;
@@ -412,19 +361,6 @@ fn main() -> ExitCode {
     // …and the readings, for `:ruby-auto`. Same source, different question:
     // the segmenter asks where a word ends, the reader asks how it is read.
     editor.set_reader(Box::new(ime.reader()));
-    editor.set_word_level(config.editor.word_level);
-    editor.set_segmentation_visible(config.editor.show_segmentation);
-    editor.set_word_mark(config.editor.word_mark);
-    if let Some(rules) = yumete_core::table::Rules::parse(&config.editor.table_rules) {
-        editor.set_table_rules(rules);
-    }
-    editor.set_number_fill(config.editor.line_number_fill);
-    // 改動條。**這一句自己會算一次**，所以它落在開檔之後也不要緊——反過來，
-    // 設定關着的時候開檔那一趟一個子進程都不會生（#55）。
-    editor.set_diff_gutter(config.editor.diff_gutter);
-    if let Some(hint) = yumete_core::zong::IndentHint::parse(&config.editor.indent_hint) {
-        editor.set_indent_hint(hint, Some(config.editor.indent_symbol.clone()));
-    }
     // …and the book's own words on top of whichever of the three it was. The
     // name on every page is the one word no dictionary has.
     editor.reload_project_words();
@@ -607,7 +543,7 @@ fn main() -> ExitCode {
     // instead of watching a backtrace scroll through an alternate screen that
     // is being torn down under it.
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        yumete_tui::run(&mut editor, &config, &mut ime, deferred)
+        yumete_tui::run(&mut editor, &mut config, &mut ime, deferred)
     }));
     let outcome = match outcome {
         Ok(outcome) => outcome,
