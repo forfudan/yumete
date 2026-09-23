@@ -8106,14 +8106,16 @@ fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
 /// when it comes, is laid out in columns.
 #[test]
 fn the_dictionary_asks_about_the_character_under_the_cursor() {
-    use crate::sidebar::{Layer, Side, Transient};
+    // ⚠️ **`空格 D`，大寫。** 2026-09-22 定：小寫的 `空格 d` 只浮一個窗、邊欄一點
+    // 都不動；進邊欄、鍵跟過去的是大寫那一個。這一條測的一直是後者。
+    use crate::sidebar::{Side, Transient};
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('d'));
+    ed.on_key(Key::Char('D'));
 
     let right = Side::Right;
     assert_eq!(ed.transient(right), Some(Transient::Dictionary));
-    assert_eq!(ed.panel_focus(), Some((right, Layer::Bottom)), "the keys go along");
+    assert_eq!(ed.panel_focus(), Some(right), "the keys go along");
     assert!(ed.panel(Side::Left).is_none(), "and nothing was opened on the left");
     assert_eq!(ed.take_dictionary_query(), Some('那'));
     assert_eq!(ed.take_dictionary_query(), None, "asked once, answered once");
@@ -8159,7 +8161,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
 fn a_character_the_table_has_nothing_for_says_so() {
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('d'));
+    ed.on_key(Key::Char('D'));
     ed.take_dictionary_query();
     ed.set_dictionary('那', Vec::new());
     let rows = ed.transient_rows(crate::sidebar::Side::Right);
@@ -8176,7 +8178,7 @@ fn a_character_the_table_has_nothing_for_says_so() {
 fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('d'));
+    ed.on_key(Key::Char('D'));
     ed.take_dictionary_query();
     ed.look_up('年', true);
     ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
@@ -8450,7 +8452,7 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
 #[test]
 fn the_search_panel_looks_through_the_buffer_as_you_type() {
     use crate::search_panel::{Case, Field};
-    use crate::sidebar::{Layer, Side, View};
+    use crate::sidebar::{Side, View};
     let mut ed = typed("霜降於石階。\n那一年的霜來得早。\n無。\n");
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
@@ -8459,7 +8461,7 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     type_keys(&mut ed, " /");
     assert_eq!(ed.panel(Side::Left).map(|p| p.view()), Some(View::Search));
     assert_eq!(ed.mode(), Mode::Field);
-    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Top)));
+    assert_eq!(ed.panel_focus(), Some(Side::Left));
 
     // Typing searches; the count is the real one and the excerpts are a few
     // characters either side, not the whole paragraph.
@@ -8906,7 +8908,7 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
 /// **Which side each panel lives on is a setting, one per panel** — #293.
 #[test]
 fn the_panels_go_where_the_settings_put_them() {
-    use crate::sidebar::{Layer, Panel, Side, Transient, View};
+    use crate::sidebar::{Panel, Side, Transient, View};
     let dir = std::env::temp_dir().join(format!("yumete-sides-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -8923,7 +8925,7 @@ fn the_panels_go_where_the_settings_put_them() {
     ed.set_side(Panel::Files, Side::Left);
     assert!(ed.panel(Side::Left).is_some(), "and it came along");
     assert!(ed.panel(Side::Right).is_none());
-    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Top)), "keys too");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "keys too");
 
     // **`Tab` walks the views that share this slot, and only those.** With the
     // outline moved across, the left column holds two and walks between them.
@@ -8947,17 +8949,18 @@ fn the_panels_go_where_the_settings_put_them() {
     ed.open_sidebar_at(&dir);
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('d'));
+    // ⚠️ 大寫：進邊欄的是 `空格 D`（2026-09-22）。
+    ed.on_key(Key::Char('D'));
     assert_eq!(ed.transient(Side::Left), Some(Transient::Dictionary));
     assert_eq!(ed.transient(Side::Right), None);
     assert!(ed.panel(Side::Left).is_some(), "the tree above it is untouched");
 
     // Three seats in one column, walked in screen order: top, bottom, text.
-    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Bottom)));
+    assert_eq!(ed.panel_focus(), Some(Side::Left));
     ed.on_key(Key::Ctrl('w'));
     assert_eq!(ed.panel_focus(), None, "the writing");
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Top)), "round to the tree");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "round to the tree");
 
     // A word nobody knows keeps the default rather than picking a side.
     assert_eq!(Side::parse("right"), Some(Side::Right));
@@ -8985,7 +8988,7 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     // **Esc is not a door.** A panel with a field in it spends Esc on leaving
     // Insert, so one press too many must not put the panel away.
     ed.on_key(Key::Esc);
-    assert_eq!(ed.panel_focus(), Some((Side::Left, crate::sidebar::Layer::Top)), "Esc did nothing at all");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "Esc did nothing at all");
 
     // With one panel and one work area the ring is two long, and C-w walks it
     // both ways round.
@@ -8993,7 +8996,7 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     assert_eq!(ed.panel_focus(), None, "C-w handed the keys to the writing");
     assert!(ed.panel(Side::Left).is_some(), "and left the panel up");
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.panel_focus(), Some((Side::Left, crate::sidebar::Layer::Top)), "and round again");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "and round again");
 
     // `q` is the other door: this slot goes away and the keys come back.
     ed.on_key(Key::Char('q'));
@@ -9017,7 +9020,7 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     assert_eq!(ed.panel_focus(), None, "the other half is a region too");
     assert_ne!(ed.live_pane(), first, "and C-w went to it");
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.panel_focus(), Some((Side::Left, crate::sidebar::Layer::Top)), "then round to the panel");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "then round to the panel");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -15620,4 +15623,56 @@ fn the_backtick_group_converts_only_what_is_picked() {
         "他说内人在里面。\n第二行不動。\n",
         "第二行一個字都没動"
     );
+}
+
+/// **`C-g` 主動切一刀撤銷**（2026-09-23，補上 §5.12.3 欠的那個逃生口）。
+///
+/// 「一次插入是一次撤銷」省了中文寫作者的事，代價是一段寫得很長的時候没法主動
+/// 斷。vim 的正統拼法是 `C-g u`；helix 的 `C-s` 抄不了——終端裏那是 XOFF。
+///
+/// ⚠️ **`C-g` 就斷，跟着的 `u` 吞掉**：不吞的話，vim 手打完 `C-g u` 會在稿子裏
+/// 留下一個游離的「u」。
+#[test]
+fn ctrl_g_starts_a_new_undo_and_swallows_the_u_after_it() {
+    let mut ed = typed("");
+    ed.on_key(Key::Char('i'));
+    for c in "前面一段".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Ctrl('g'));
+    ed.on_key(Key::Char('u')); // vim 的拼法，這個 `u` 不該進稿子
+    for c in "後面一段".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "前面一段後面一段", "那個 u 没進來");
+
+    // 一次 `u` 只撤掉後面那一段——刀切在 `C-g` 上。
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "前面一段", "斷開處之後的那一段");
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "", "再一次纔回到空的");
+}
+
+/// **`空格 S` 兩個邊欄一起收**（2026-09-21 提的）。
+#[test]
+fn space_shift_s_closes_both_sidebars() {
+    use crate::sidebar::Side;
+    let dir = std::env::temp_dir().join(format!("yumete-closeall-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut ed = typed("那年冬天");
+    ed.open_sidebar_at(&dir);
+    press(&mut ed, " o"); // 大綱開在另一邊
+    assert!(
+        Side::BOTH.into_iter().any(|s| ed.panel(s).is_some()),
+        "先得有東西可收"
+    );
+
+    press(&mut ed, " S");
+    for side in Side::BOTH {
+        assert!(ed.panel(side).is_none(), "{side:?} 收了");
+    }
+    assert!(ed.panel_focus().is_none(), "鍵回到正文");
+    std::fs::remove_dir_all(&dir).ok();
 }

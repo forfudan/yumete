@@ -154,6 +154,16 @@ enum Pending {
     Replace,
     /// `"` awaiting the letter naming a register.
     Register,
+    /// **`C-g` 剛按下，撤銷已經斷了**——等着把跟在後面那個 `u` 吞掉（2026-09-23）。
+    ///
+    /// vim 的正統拼法是 `C-g u`（`:h i_CTRL-G_u`，字面意思「斷開 undo 序列」），
+    /// 而這裏 `C-g` 底下没有第二件事，那個 `u` 是純儀式。**兩種都收**：斷在
+    /// `C-g` 上，`u` 來了就吞掉、不來就算了——⚠️ 不吞的話，vim 手打完 `C-g u`
+    /// 會在稿子裏留下一個游離的「u」。
+    ///
+    /// ⚠️ **helix 那個拼法抄不了**：它用 `C-s`，而終端裏 `C-s` 是 XOFF，按下去
+    /// 屏幕會凍住（除非 `stty -ixon`）。
+    UndoBreak,
     /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
     Match,
     /// **A vim operator waiting for its motion** — `d`, `c`, `y` under the vim
@@ -236,8 +246,10 @@ impl Pending {
             | Pending::Surround
             | Pending::SurroundFrom
             | Pending::SurroundTo(_) => true,
-            // `y`/`n`/`a`/`q`/`l` name what to do, not what to write.
-            Pending::Confirm | Pending::ReplaceAll | Pending::None
+            // `y`/`n`/`a`/`q`/`l` name what to do, not what to write；
+            // `C-g` 後面那個 `u` 也不是要寫進去的字。
+            Pending::UndoBreak
+            | Pending::Confirm | Pending::ReplaceAll | Pending::None
             | Pending::Goto
             | Pending::Space
             | Pending::Register
@@ -1802,6 +1814,11 @@ pub struct Editor {
     /// ⚠️ 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
     /// 冒出來的診斷不是這一種——那一種是文件的事實，走到哪都還在。
     hovered: Option<(usize, String)>,
+    /// **這一次的 hover 是浮窗，還是邊欄裏的一頁**（2026-09-22）。
+    ///
+    /// 與 `dictionary_afloat` 同一條規矩：`空格 k` 浮窗、`空格 K` 進邊欄，同一
+    /// 份答案兩個地方。
+    hover_afloat: bool,
     /// The character the 字典 panel is about, and the answer if one has come.
     ///
     /// Three states, because three things can be true. `None`: nobody has
@@ -1810,6 +1827,12 @@ pub struct Editor {
     /// and the 拆分表 has nothing for it, which the panel has to say out loud
     /// rather than draw as an empty box.
     dictionary: Option<(char, Option<Vec<(String, String)>>)>,
+    /// **這一次的字典是浮窗，還是邊欄裏的一頁**（2026-09-22 定）。
+    ///
+    /// `空格 d` 開浮窗，**一點都不碰邊欄**；`空格 D` 纔在邊欄裏開。兩個鍵問的是
+    /// 同一件事、答案同一份，差的只是畫在哪兒——所以這裏是一格布爾，不是兩套狀
+    /// 態。⚠️ 大寫是「同一件事的更大版本」，與 `空格 c`／`空格 C` 同一條規矩。
+    dictionary_afloat: bool,
     /// The other work area, when the page is split (Feature #176).
     other: Option<Pane>,
     /// Which half of the screen holds the keys — **screen order**, so
@@ -2277,7 +2300,7 @@ pub struct Editor {
     /// setting instead of returning `Left` nothing else here changes.
     panels: [Option<crate::sidebar::Sidebar>; 2],
     /// Which slot **and which layer** the keys are going to, if any.
-    panel_focus: Option<(crate::sidebar::Side, crate::sidebar::Layer)>,
+    panel_focus: Option<crate::sidebar::Side>,
     /// **Which slot each panel lives in**, indexed by
     /// [`crate::sidebar::Panel`] (#293).
     ///
@@ -2293,6 +2316,16 @@ pub struct Editor {
     /// How far the bottom layer is scrolled — the only state a transient panel
     /// has, and it has it because reading a long answer is the point.
     transient_scroll: usize,
+    /// **百科那一頁讀到哪了**，以及讀的是站在哪個字上的那一條（2026-09-22 報的：
+    /// 「無法用 j/k/J/K 向上下翻動」）。
+    ///
+    /// ⚠️ **百科是一段文章，不是一張單子。** 邊欄裏別的視圖都是行的列表，`j` 走
+    /// 下一行；這一個沒有行可走，要的是**滾動**。從前它連 rows 都不產生
+    /// （`View::Wiki => return`），於是 `j` 落在 `sidebar.step()` 上什麼都沒發生。
+    ///
+    /// 記着光標在哪，是因為光標一走詞條就換了——換了還停在第七行，讀的是另一條
+    /// 的中間。
+    wiki_scroll: (usize, usize),
     /// What an unnamed file's markup is taken to be, from the project's config.
     default_syntax: Option<crate::syntax::Syntax>,
     /// Which markup a file is in, by extension or by exact name.
@@ -2543,11 +2576,13 @@ impl Editor {
             say_it_again: false,
             hover_query: None,
             hovered: None,
+            hover_afloat: true,
             completion_query: None,
             completion_at: None,
             completion_by_hand: false,
             offering: None,
             dictionary: None,
+            dictionary_afloat: false,
             other: None,
             live_pane: 0,
             number_fill: false,
@@ -2673,6 +2708,7 @@ impl Editor {
             ],
             dictionary_anchor: None,
             transient_scroll: 0,
+            wiki_scroll: (0, usize::MAX),
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             listing_root: None,

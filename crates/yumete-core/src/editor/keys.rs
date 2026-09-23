@@ -874,6 +874,8 @@ impl Editor {
                 self.vim_operator_key(op, first, key);
                 return;
             }
+            // 撤銷斷點只在插入模式裏按，走到 Normal 這一支就是它已經過期了。
+            Pending::UndoBreak => self.pending = Pending::None,
             Pending::None => {}
         }
 
@@ -1635,6 +1637,11 @@ impl Editor {
             // the thing, on the 空格 menu with the other 「do something to
             // this line」 keys, so this says where rather than binding a chord.
             Key::Ctrl('c') => return Some(say!("hint.helix.comment")),
+            // helix 4.2 教的「刪／改**不進剪貼板**」。這裏没有這一對，而且不打算
+            // 有——剪貼板是**一個**寄存器，想不動它就指名另一個（`"a d`），那是
+            // 同一件事的通用辦法（2026-09-23 補，文檔 §「tutor 教了而我們没有」
+            // 那張表上最後兩格）。
+            Key::Alt('d') | Key::Alt('c') => return Some(say!("hint.helix.black-hole")),
             _ => return None,
         };
         Some(match c {
@@ -1880,12 +1887,15 @@ impl Editor {
         ('p', "hint.goto.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
         ('d', "hint.goto.dictionary"),
+        ('D', "hint.space.dictionary-panel"),
         ('k', "hint.space.what-is-this"),
+        ('K', "hint.space.what-is-this-panel"),
         ('r', "hint.space.ruby"),
         // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
         // 快捷鍵太不方便」. The chord stays; this is the same thing with the
         // hand already on the space bar.
         ('s', "hint.space.next-region"),
+        ('S', "hint.space.close-all"),
         ('w', "hint.goto.other-pane"),
         ('W', "hint.goto.only-this-pane"),
         ('q', "hint.goto.close-this-pane"),
@@ -2133,12 +2143,27 @@ impl Editor {
     fn handle_space(&mut self, key: Key) {
         match key {
             Key::Char('s') => self.cycle_region(),
+            // **`空格 S`：兩個邊欄一起收**（2026-09-21 提的）。開了三個視圖之後
+            // 想把版心整個要回來，逐個 `q` 要走過去按兩次；這一下說的是「都收
+            // 了」。⚠️ 大寫是「同一件事的更大版本」，與 `空格 w`／`空格 W` 同一
+            // 條規矩。
+            Key::Char('S') => self.close_all_sidebars(),
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
             // 定義 (#215): the 拆分表 on the character under the cursor. The
             // table detail panel this key used to open is a table key, and now
             // lives in the table group as `t i`.
+            // **`空格 d` 只開浮窗**（2026-09-22 定）：看一眼那個字，邊欄一點都
+            // 不動。⚠️ 再按一次收起來。
             Key::Char('d') => match self.char_at_cursor() {
+                Some(ch) => {
+                    self.look_up_afloat(ch);
+                }
+                None => self.set_status(say!("ui.nothing-to-look-up")),
+            },
+            // **`空格 D` 在邊欄裏開**——同一份答案，鍵跟過去，讀得完長的那些。
+            // 大寫是「同一件事的更大版本」，同 `空格 c`／`空格 C`。
+            Key::Char('D') => match self.char_at_cursor() {
                 Some(ch) => self.look_up(ch, true),
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },
@@ -2148,8 +2173,15 @@ impl Editor {
             // said once a document, not once a word.
             // **`空格 k`：這是什麽？**（#53 ③，2026-09-21）helix 的 hover 也是這
             // 一個鍵。只在代碼檔上問得出去；稿子上按到就照實說一句，而不是無聲。
+            // `空格 k` 浮窗、`空格 K` 進邊欄——與字典那一對同一條規矩
+            // （2026-09-22）。
             Key::Char('k') => {
-                if !self.ask_what_this_is() {
+                if !self.ask_what_this_is(true) {
+                    self.set_status(say!("lsp.not-code"));
+                }
+            }
+            Key::Char('K') => {
+                if !self.ask_what_this_is(false) {
                     self.set_status(say!("lsp.not-code"));
                 }
             }

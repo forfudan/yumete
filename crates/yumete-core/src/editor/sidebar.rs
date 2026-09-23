@@ -27,7 +27,7 @@ impl Editor {
     /// next restart. A slot that was busy hands what it held back to the slot
     /// this one just left, so nothing is silently closed.
     pub fn set_side(&mut self, panel: crate::sidebar::Panel, side: crate::sidebar::Side) {
-        use crate::sidebar::{Layer, View};
+        use crate::sidebar::View;
         let was = self.side_of(panel);
         self.sides[panel as usize] = side;
         if was == side {
@@ -38,18 +38,16 @@ impl Editor {
         match View::ALL.into_iter().find(|&v| crate::sidebar::Panel::from(v) == panel) {
             Some(view) if self.showing(view) == Some(was) => {
                 let moving = self.panels[was as usize].take();
-                let focused = self.panel_focus == Some((was, Layer::Top));
+                let focused = self.panel_focus == Some(was);
                 let displaced = self.panels[side as usize].take();
                 self.panels[side as usize] = moving;
                 self.panels[was as usize] = displaced;
                 if focused {
-                    self.panel_focus = Some((side, Layer::Top));
+                    self.panel_focus = Some(side);
                 }
             }
             Some(_) => {}
-            None if self.panel_focus == Some((was, Layer::Bottom)) => {
-                self.panel_focus = Some((side, Layer::Bottom));
-            }
+            None if self.panel_focus == Some(was) => self.panel_focus = Some(side),
             None => {}
         }
         self.refresh_sidebar();
@@ -111,8 +109,14 @@ impl Editor {
     /// remembered it, and nobody put it back.
     pub fn transient(&self, side: crate::sidebar::Side) -> Option<crate::sidebar::Transient> {
         use crate::sidebar::{Panel, Transient};
-        if self.side_of(Panel::Dictionary) == side && self.dictionary_live() {
+        // ⚠️ **浮窗那一次不上邊欄。** `空格 d` 只是看一眼，邊欄的樣子一點都不
+        // 該變（2026-09-22 定：邊欄是容器，只由人開由人關）。
+        if self.side_of(Panel::Dictionary) == side && !self.dictionary_afloat && self.dictionary_live() {
             return Some(Transient::Dictionary);
+        }
+        // `空格 K` 問的那一次——與字典共用同一個位置（見 `Transient::Hover`）。
+        if self.side_of(Panel::Dictionary) == side && self.hover_in_the_sidebar().is_some() {
+            return Some(Transient::Hover);
         }
         if self.side_of(Panel::Detail) == side && self.detail_is_a_panel() {
             return Some(Transient::Detail);
@@ -134,11 +138,7 @@ impl Editor {
         if self.dictionary.is_none() {
             return false;
         }
-        let reading = self.panel_focus
-            == Some((
-                self.side_of(crate::sidebar::Panel::Dictionary),
-                crate::sidebar::Layer::Bottom,
-            ));
+        let reading = self.panel_focus == Some(self.side_of(crate::sidebar::Panel::Dictionary));
         reading || self.dictionary_anchor == Some(self.cursor)
     }
 
@@ -146,6 +146,7 @@ impl Editor {
     pub fn transient_rows(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::Row> {
         match self.transient(side) {
             Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows(),
+            Some(crate::sidebar::Transient::Hover) => self.hover_rows(),
             _ => Vec::new(),
         }
     }
@@ -164,11 +165,9 @@ impl Editor {
     }
 
     /// Whether that layer of that slot has anything in it to look at.
-    pub fn layer_showing(&self, side: crate::sidebar::Side, layer: crate::sidebar::Layer) -> bool {
-        match layer {
-            crate::sidebar::Layer::Top => self.panel(side).is_some(),
-            crate::sidebar::Layer::Bottom => self.transient(side).is_some(),
-        }
+    /// **這個邊欄裏此刻有没有東西**（2026-09-22：一個邊欄一個面板）。
+    pub fn slot_showing(&self, side: crate::sidebar::Side) -> bool {
+        self.transient(side).is_some() || self.panel(side).is_some()
     }
 
     /// Whether that layer is a place the keys can be — a seat on `C-w`'s ring.
@@ -176,12 +175,14 @@ impl Editor {
     /// Not the same question as [`Editor::layer_showing`]: a panel can be
     /// worth reading and still be no place to stand
     /// ([`crate::sidebar::Transient::takes_keys`]).
-    fn layer_takes_keys(&self, side: crate::sidebar::Side, layer: crate::sidebar::Layer) -> bool {
-        match layer {
-            crate::sidebar::Layer::Top => self.panel(side).is_some(),
-            crate::sidebar::Layer::Bottom => {
-                self.transient(side).is_some_and(|kind| kind.takes_keys())
-            }
+    /// **鍵進不進得去這個邊欄。**
+    ///
+    /// 光標放上去的那幾種，只有值得凍住光標的纔收鍵（見 `Transient::takes_keys`）；
+    /// 常駐的一律收。
+    fn slot_takes_keys(&self, side: crate::sidebar::Side) -> bool {
+        match self.transient(side) {
+            Some(kind) => kind.takes_keys(),
+            None => self.panel(side).is_some(),
         }
     }
 
@@ -192,9 +193,9 @@ impl Editor {
     /// one. That second half is what lets the bottom layer be derived: it
     /// vanishes when the cursor moves off, and the keys fall back to the text
     /// without anybody having to put them there.
-    pub fn panel_focus(&self) -> Option<(crate::sidebar::Side, crate::sidebar::Layer)> {
-        let (side, layer) = self.panel_focus?;
-        self.layer_showing(side, layer).then_some((side, layer))
+    pub fn panel_focus(&self) -> Option<crate::sidebar::Side> {
+        let side = self.panel_focus?;
+        self.slot_showing(side).then_some(side)
     }
 
 
@@ -220,11 +221,12 @@ impl Editor {
     ///   and take the keys. The key means "show me the outline", not "toggle
     ///   the panel".
     pub(super) fn show_sidebar(&mut self, view: crate::sidebar::View) {
-        use crate::sidebar::Layer;
         if let Some(side) = self.showing(view) {
-            match self.panel_focus() == Some((side, Layer::Top)) {
+            // ⚠️ **只有常駐那一個在眼前的時候，同一個鍵纔是「收起來」。** 光標把
+            // 字典頂上來的那一刻，`空格 o` 說的是「把大綱還給我」，不是「關掉」。
+            match self.panel_focus() == Some(side) && self.transient(side).is_none() {
                 true => self.close_panel(side),
-                false => self.focus_layer(side, Layer::Top),
+                false => self.focus_slot(side),
             }
             return;
         }
@@ -232,7 +234,7 @@ impl Editor {
         match self.panel_mut(side) {
             Some(panel) => {
                 panel.show(view);
-                self.panel_focus = Some((side, Layer::Top));
+                self.panel_focus = Some(side);
                 self.refresh_sidebar();
             }
             None => {
@@ -253,7 +255,7 @@ impl Editor {
         match self.panel_mut(side) {
             Some(panel) => {
                 panel.show(view);
-                self.panel_focus = Some((side, crate::sidebar::Layer::Top));
+                self.panel_focus = Some(side);
                 self.refresh_sidebar();
             }
             None => {
@@ -266,7 +268,7 @@ impl Editor {
                     }
                 }
                 self.panels[side as usize] = Some(sidebar);
-                self.panel_focus = Some((side, crate::sidebar::Layer::Top));
+                self.panel_focus = Some(side);
                 self.refresh_sidebar();
             }
         }
@@ -294,16 +296,33 @@ impl Editor {
     /// they were in it.
     pub(super) fn close_panel(&mut self, side: crate::sidebar::Side) {
         self.panels[side as usize] = None;
-        if self.panel_focus.is_some_and(|(at, layer)| {
-            at == side && layer == crate::sidebar::Layer::Top
-        }) {
+        if self.panel_focus == Some(side) && !self.slot_showing(side) {
             self.panel_focus = None;
         }
     }
 
+    /// **兩個邊欄一起收**（`空格 S`，2026-09-21 提的）。
+    ///
+    /// 逐個 `q` 要先走進去，兩個邊欄就是四步。這一下把版心整個要回來。
+    ///
+    /// ⚠️ **光標放上去的那幾種不必收**：它們不存狀態，常駐的一没，它們自己就没
+    /// 了依附（字典與 hover 例外——那兩個是按鍵問出來的，所以一併收掉）。
+    pub(super) fn close_all_sidebars(&mut self) {
+        for side in crate::sidebar::Side::BOTH {
+            self.panels[side as usize] = None;
+        }
+        self.dictionary = None;
+        self.dictionary_anchor = None;
+        self.hovered = None;
+        self.show_detail = Some(false);
+        self.panel_focus = None;
+        self.status = say!("ui.sidebars-closed");
+        self.refresh_sidebar();
+    }
+
     /// **The keys every panel answers, wherever it sits.**
     ///
-    /// ⚠️ 左欄、右欄、下層的臨時面板是**同一個組件擺在不同位置**，所以這一組鍵
+    /// ⚠️ 左欄、右欄、光標放上去的那幾種是**同一個組件擺在不同位置**，所以這一組鍵
     /// 必須是同一份。分成三份各自維護的代價已經付過一次：常駐面板和搜索面板都
     /// 有 `q`，臨時層漏了，於是 `空格 d` 打開的字典**關不掉**——`q`、`Esc`、`j`
     /// 全被那一句 `_ => {}` 吃掉，唯一的出路是 `C-w` 再移動光標，兩步，而且提示
@@ -317,17 +336,14 @@ impl Editor {
     /// a field in it spends `Esc` on leaving Insert, and one press too many
     /// would then put the panel away. `q` is the door, and the hint row says
     /// so in every panel.
-    pub(super) fn panel_key_in_common(
-        &mut self,
-        key: Key,
-        side: crate::sidebar::Side,
-        layer: crate::sidebar::Layer,
-    ) -> bool {
+    pub(super) fn panel_key_in_common(&mut self, key: Key, side: crate::sidebar::Side) -> bool {
         match key {
             Key::Ctrl('w') => self.cycle_region(),
-            Key::Char('q') => match layer {
-                crate::sidebar::Layer::Top => self.close_panel(side),
-                crate::sidebar::Layer::Bottom => self.close_transient(side),
+            // ⚠️ **`q` 關的是眼前那一個**：光標把字典頂上來的時候關字典，常駐那
+            // 一個原封不動地在底下等着——「有前任還給前任」。
+            Key::Char('q') => match self.transient(side).is_some() {
+                true => self.close_transient(side),
+                false => self.close_panel(side),
             },
             // **`:` opens the command line from in here too.** It used to be
             // swallowed, so a reader with the keys in a panel had no way to
@@ -366,28 +382,27 @@ impl Editor {
                 self.dictionary_query = None;
                 self.dictionary_anchor = None;
             }
+            Some(crate::sidebar::Transient::Hover) => self.hovered = None,
             Some(crate::sidebar::Transient::Detail) => self.show_detail = Some(false),
             None => return,
         }
-        // The keys go back to the writing, not to the panel above: the reader
-        // asked to be rid of this, and landing them somewhere they did not ask
-        // for is the same surprise one layer up.
-        if self.panel_focus == Some((side, crate::sidebar::Layer::Bottom)) {
+        // 鍵回到正文，不回到底下那個常駐面板：讀者說的是「我不要這個」，把鍵
+        // 丟到一個他没點過的地方是同一種意外。
+        if self.panel_focus == Some(side) && !self.slot_showing(side) {
             self.panel_focus = None;
         }
     }
 
-    /// Give that layer the keys, if it is a place they can be.
-    pub(super) fn focus_layer(&mut self, side: crate::sidebar::Side, layer: crate::sidebar::Layer) {
-        if !self.layer_takes_keys(side, layer) {
+    /// Give that sidebar the keys, if it is a place they can be.
+    pub(super) fn focus_slot(&mut self, side: crate::sidebar::Side) {
+        if !self.slot_takes_keys(side) {
             return;
         }
-        // A list keeps its own place; a transient panel is a fresh thing every
-        // time it is walked into, so it is read from the top.
-        if self.panel_focus != Some((side, layer)) && layer == crate::sidebar::Layer::Bottom {
+        // 常駐的單子記得自己讀到哪；光標放上去的那幾種每次都是新的，從頭讀。
+        if self.panel_focus != Some(side) && self.transient(side).is_some() {
             self.transient_scroll = 0;
         }
-        self.panel_focus = Some((side, layer));
+        self.panel_focus = Some(side);
         self.refresh_sidebar();
     }
 
@@ -419,7 +434,7 @@ impl Editor {
             Key::Char('g') | Key::Home => self.transient_scroll = 0,
             Key::Char('G') | Key::End => self.transient_scroll = last,
             other => {
-                self.panel_key_in_common(other, side, crate::sidebar::Layer::Bottom);
+                self.panel_key_in_common(other, side);
             }
         }
     }
@@ -437,15 +452,14 @@ impl Editor {
     /// swallowing it, and a writer with the file tree up would then have no
     /// one key left that splits the page.
     pub(super) fn cycle_region(&mut self) {
-        use crate::sidebar::{Layer, Side};
-        // `None` is the writing; the ones before it are the left slot's two
-        // layers, the ones after it the right slot's, all in screen order.
-        let seats = |ed: &Self, side: Side| -> Vec<Option<(Side, Layer)>> {
-            Layer::BOTH
-                .into_iter()
-                .filter(|&layer| ed.layer_takes_keys(side, layer))
-                .map(|layer| Some((side, layer)))
-                .collect()
+        use crate::sidebar::Side;
+        // `None` 是正文；它前面那些是左欄，後面那些是右欄，按屏幕次序。
+        // ⚠️ **一個邊欄只有一個座位**（2026-09-22：臨時層廢除）——從前是兩個。
+        let seats = |ed: &Self, side: Side| -> Vec<Option<Side>> {
+            match ed.slot_takes_keys(side) {
+                true => vec![Some(side)],
+                false => Vec::new(),
+            }
         };
         let mut ring = seats(self, Side::Left);
         let panes = 1 + usize::from(self.other_pane().is_some());
@@ -464,7 +478,7 @@ impl Editor {
         }
         let next = (here + 1) % ring.len();
         match ring[next] {
-            Some((side, layer)) => self.focus_layer(side, layer),
+            Some(side) => self.focus_slot(side),
             None => {
                 self.panel_focus = None;
                 // Which half — the ring's index minus the left slot's seats.
@@ -494,7 +508,7 @@ impl Editor {
         }
         let side = self.side_for(view);
         self.panels[side as usize] = Some(sidebar);
-        self.panel_focus = Some((side, crate::sidebar::Layer::Top));
+        self.panel_focus = Some(side);
         self.refresh_sidebar();
     }
 
@@ -555,6 +569,49 @@ impl Editor {
         };
         if let Some(panel) = self.panel_mut(side) {
             panel.set_rows(rows);
+        }
+    }
+
+    /// **百科那一頁的滾動**（2026-09-22）。
+    ///
+    /// 與別的視圖同一套鍵：`j`／`k` 一行，`J`／`K` 半頁，`g`／`G` 兩頭；`q` 與
+    /// `C-w` 照舊由 [`Self::panel_key_in_common`] 接。
+    fn scroll_wiki(&mut self, key: Key) {
+        let deep = self.wiki_rows();
+        let page = Self::PAGE_IN_A_LIST;
+        let (at, _) = self.wiki_scroll_now();
+        let moved = match key {
+            Key::Char('j') | Key::Down => at + 1,
+            Key::Char('k') | Key::Up => at.saturating_sub(1),
+            Key::Char('J') | Key::PageDown => at + page,
+            Key::Char('K') | Key::PageUp => at.saturating_sub(page),
+            Key::Char('g') | Key::Home => 0,
+            Key::Char('G') | Key::End => deep,
+            other => return self.on_sidebar_key_in_common(other),
+        };
+        // ⚠️ **最後一行之後不許再滾**，否則按住 `j` 會把整頁滾成空白。
+        self.wiki_scroll = (moved.min(deep.saturating_sub(1)), self.cursor);
+    }
+
+    /// 百科那一條此刻讀到第幾行——光標換了詞條就從頭算。
+    pub fn wiki_scroll_now(&self) -> (usize, usize) {
+        match self.wiki_scroll.1 == self.cursor {
+            true => self.wiki_scroll,
+            false => (0, self.cursor),
+        }
+    }
+
+    /// 那一條有多少行（不折行，前端自己折）——`G` 要知道底在哪。
+    fn wiki_rows(&self) -> usize {
+        self.wiki_here()
+            .map(|view| view.parts.iter().map(|p| p.lines.len() + 2).sum())
+            .unwrap_or(0)
+    }
+
+    /// 邊欄裏那幾個到處都一樣的鍵，一處接。
+    fn on_sidebar_key_in_common(&mut self, key: Key) {
+        if let Some(side) = self.panel_focus() {
+            self.panel_key_in_common(key, side);
         }
     }
 
@@ -720,6 +777,25 @@ impl Editor {
     /// answer. `is_dir` is what the sidebar draws headings with; the flat views
     /// already spend the tree's fields on what they have instead of what a tree
     /// has, and this is that.
+    /// 服務器說的那段話，一行一行擺進邊欄（#53 ③）。
+    ///
+    /// ⚠️ **原樣的 Markdown**，和浮窗裏那一份一個字不差——邊欄畫它的時候走的是
+    /// 同一支行內標記渲染。
+    fn hover_rows(&self) -> Vec<crate::sidebar::Row> {
+        let Some(told) = self.hover_in_the_sidebar() else {
+            return Vec::new();
+        };
+        told.lines()
+            .map(|line| crate::sidebar::Row {
+                path: PathBuf::new(),
+                name: line.to_string(),
+                depth: 0,
+                is_dir: false,
+                expanded: false,
+            })
+            .collect()
+    }
+
     fn dictionary_rows(&self) -> Vec<crate::sidebar::Row> {
         use crate::sidebar::Row;
         let heading = |name: String| Row {
@@ -777,6 +853,33 @@ impl Editor {
     /// the answer arrives on the next pass through the loop, one frame later,
     /// which is not long enough for a reader to see the gap.
     pub fn look_up(&mut self, ch: char, focus: bool) {
+        self.dictionary_afloat = false;
+        self.look_up_at(ch, focus);
+    }
+
+    /// **`空格 d`：只浮一個窗**（2026-09-22 定）。
+    ///
+    /// 同一個問題、同一份答案，畫在光標旁邊而不是邊欄裏——而且**一點都不碰邊
+    /// 欄**：邊欄是容器，只由人開由人關，看一眼字不該讓工作區變樣。
+    ///
+    /// 浮窗不收鍵（那是浮窗的通則），所以答案長了讀不完——那時候按 `空格 D`，
+    /// 同一份答案進邊欄，鍵也跟過去。
+    ///
+    /// 回 `false` 表示這一下是**關掉**（再按一次收起來）。
+    pub fn look_up_afloat(&mut self, ch: char) -> bool {
+        // 再按一次 `空格 d` 就收起來（2026-09-21 定）。
+        if self.dictionary_afloat && self.dictionary_live() {
+            self.dictionary = None;
+            self.dictionary_anchor = None;
+            return false;
+        }
+        self.dictionary_afloat = true;
+        self.look_up_at(ch, false);
+        true
+    }
+
+    /// 兩個問法共用的那一半。
+    fn look_up_at(&mut self, ch: char, focus: bool) {
         self.dictionary_query = Some(ch);
         // Asked, unanswered: what is showing until the answer arrives is the
         // character alone, which is not the same panel as 「查不到」.
@@ -791,10 +894,7 @@ impl Editor {
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
-        self.panel_focus = focus.then_some((
-            self.side_of(crate::sidebar::Panel::Dictionary),
-            crate::sidebar::Layer::Bottom,
-        ));
+        self.panel_focus = focus.then(|| self.side_of(crate::sidebar::Panel::Dictionary));
         self.refresh_sidebar();
     }
 
@@ -817,6 +917,14 @@ impl Editor {
     }
 
     /// The character the 字典 panel is about, and the answer if one has come.
+    /// **這一則字典該不該浮在光標旁邊**——`空格 d` 問的那一次，而且光標還在
+    /// 那個字上。
+    pub fn dictionary_afloat(&self) -> Option<(char, Option<&[(String, String)]>)> {
+        (self.dictionary_afloat && self.dictionary_live())
+            .then(|| self.dictionary())
+            .flatten()
+    }
+
     pub fn dictionary(&self) -> Option<(char, Option<&[(String, String)]>)> {
         self.dictionary
             .as_ref()
@@ -866,11 +974,12 @@ impl Editor {
                 _ => {}
             }
         }
-        let Some((side, layer)) = self.panel_focus() else {
+        let Some(side) = self.panel_focus() else {
             self.panel_focus = None;
             return;
         };
-        if layer == crate::sidebar::Layer::Bottom {
+        // 光標放上去的那一個在眼前，鍵就歸它——常駐那一個在底下等着，不收鍵。
+        if self.transient(side).is_some() {
             return self.on_transient_key(key, side);
         }
         if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
@@ -879,6 +988,11 @@ impl Editor {
         let Some(sidebar) = self.panel_mut(side) else {
             return;
         };
+        // **百科是一段文章，要滾不要走**（2026-09-22）。邊欄裏別的視圖都是行的
+        // 列表，這一個不是——`j` 在它身上從前什麼都不做。
+        if sidebar.view() == crate::sidebar::View::Wiki {
+            return self.scroll_wiki(key);
+        }
         match key {
             Key::Char('j') | Key::Down => sidebar.step(true),
             Key::Char('k') | Key::Up => sidebar.step(false),
@@ -963,7 +1077,7 @@ impl Editor {
             // with `:` and `Space`, because every panel owes the reader the
             // same ones.
             other => {
-                self.panel_key_in_common(other, side, layer);
+                self.panel_key_in_common(other, side);
             }
         }
     }
@@ -983,6 +1097,7 @@ impl Editor {
                 self.detail().map(|d| d.rows.len()).unwrap_or(0)
             }
             Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows().len(),
+            Some(crate::sidebar::Transient::Hover) => self.hover_rows().len(),
             None => 0,
         }
     }

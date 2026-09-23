@@ -517,7 +517,7 @@ impl Editor {
             // one's — see `panel_key_in_common`. Tried last, so this panel's
             // own `Space` (flip the switch the keys are on) still wins.
             other => {
-                self.panel_key_in_common(other, side, crate::sidebar::Layer::Top);
+                self.panel_key_in_common(other, side);
             }
         }
     }
@@ -530,8 +530,9 @@ impl Editor {
         if self.search.field != Field::Results || self.search.broken {
             return None;
         }
-        let (side, layer) = self.panel_focus()?;
-        if layer != crate::sidebar::Layer::Top
+        let side = self.panel_focus()?;
+        // 光標把別的東西頂上來的時候，鍵雖然在這個邊欄裏，眼前那一個卻不是搜索。
+        if self.transient(side).is_some()
             || self.panel(side).map(|p| p.view()) != Some(crate::sidebar::View::Search)
         {
             return None;

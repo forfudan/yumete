@@ -3552,6 +3552,12 @@ zhs = "已经是最早的了"
 en = "already at the oldest change"
 
 [[message]]
+# 插入模式按 C-g：主動切一刀撤銷
+key = "edit.undo-break"
+zht = "從這裏起算一次新的撤銷"
+zhs = "从这里起算一次新的撤销"
+en = "a new undo starts here"
+[[message]]
 # y 取了一段字
 key = "edit.yanked-characters"
 zht = "取了 {0} 個字"
@@ -4645,6 +4651,12 @@ zhs = "这个词还在哪里：这边找／那边看"
 en = "where else this word is: / here, ? in the other area"
 
 [[message]]
+# 按了 helix 的 A-d／A-c（刪改不進剪貼板）——這裏用寄存器說同一件事
+key = "hint.helix.black-hole"
+zht = "不想動剪貼板就指名另一個寄存器，例如 a：先按引號、再按 a、再刪"
+zhs = "不想动剪贴板就指名另一个寄存器，例如 a：先按引号、再按 a、再删"
+en = "to keep the clipboard, name a register first (quote, a, then delete)"
+[[message]]
 # Normal 模式按 ~ 或 A-`（Helix 的大小寫鍵，這裏收進了 ` 組）
 key = "hint.helix.case-keys"
 zht = "大小寫在 ` 組裏：`l 小寫、`u 大寫、`` 互換"
@@ -4904,11 +4916,25 @@ zhs = "换视图"
 en = "other view"
 
 [[message]]
+# 百科那一頁是文章不是單子：j/k 滾動
+key = "hint.sidebar.scroll"
+zht = "滾動"
+zhs = "滚动"
+en = "scroll"
+
+[[message]]
 # 邊欄提示：寬窄
 key = "hint.sidebar.width"
 zht = "寬窄"
 zhs = "宽窄"
 en = "wide / narrow"
+
+[[message]]
+# 空格菜單：兩個邊欄一起收
+key = "hint.space.close-all"
+zht = "兩個邊欄一起收"
+zhs = "两个边栏一起收"
+en = "close both sidebars"
 
 [[message]]
 # 空格 C：塊注釋（沒有塊注釋的格式退到行注釋）
@@ -4923,6 +4949,13 @@ key = "hint.space.comment-line"
 zht = "行注釋"
 zhs = "行注释"
 en = "comment out, by the line"
+
+[[message]]
+# 空格菜單裏那一行：把字典開進邊欄（浮窗是小寫的 d）
+key = "hint.space.dictionary-panel"
+zht = "字典開進邊欄（讀得完長的）"
+zhs = "字典开进边栏（读得完长的）"
+en = "the dictionary in the sidebar (room to read)"
 
 [[message]]
 # 空格選單裏的 s：換到下一個區域（正文、側欄、另一個窗格）
@@ -4965,6 +4998,13 @@ key = "hint.space.what-is-this"
 zht = "這是什麽（問服務器）"
 zhs = "这是什么（问服务器）"
 en = "what is this? (ask the server)"
+
+[[message]]
+# 空格菜單：把服務器那段話開進邊欄（浮窗是小寫的 k）
+key = "hint.space.what-is-this-panel"
+zht = "同上，開進邊欄（長的讀得完）"
+zhs = "同上，开进边栏（长的读得完）"
+en = "the same, in the sidebar (room to read)"
 
 [[message]]
 # 表格提示：加一欄
@@ -8212,6 +8252,13 @@ zhs = "详情栏宽 {0}"
 en = "the detail panel is {0} wide"
 
 [[message]]
+# 字典浮窗底下那一句：讀不完就去邊欄
+key = "ui.dictionary-in-the-sidebar"
+zht = "空格 D 進邊欄"
+zhs = "空格 D 进边栏"
+en = "Space D for the sidebar"
+
+[[message]]
 # 界面語言現在是哪一種（`:language`）
 key = "ui.language-now"
 zht = "界面語言：{0}"
@@ -8245,6 +8292,13 @@ key = "ui.lookfor-take"
 zht = "{0}　⇥ 寫回 `:` 那一行：{1}"
 zhs = "{0}　⇥ 写回 `:` 那一行：{1}"
 en = "{0}   ⇥ writes {1} back onto the `:` line"
+
+[[message]]
+# 字典浮窗按不動鍵，長的去邊欄讀
+key = "ui.looking-it-up"
+zht = "查着……"
+zhs = "查着……"
+en = "looking it up…"
 
 [[message]]
 # 命令面板裏那一條的前提沒開
@@ -8379,6 +8433,12 @@ zht = "-- 邊欄 --  {0}"
 zhs = "-- 边栏 --  {0}"
 en = "-- SIDEBAR --  {0}"
 
+[[message]]
+# 空格 S 收完之後說一句
+key = "ui.sidebars-closed"
+zht = "邊欄都收了"
+zhs = "边栏都收了"
+en = "sidebars closed"
 [[message]]
 # 提示行右端那一小行落款：編輯器自己的名字
 key = "ui.signature"
@@ -8930,3 +8990,6 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
+
+
