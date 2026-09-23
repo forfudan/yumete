@@ -4425,9 +4425,10 @@ fn draw_list(
         widths
     };
     //
-    // **The shape is two caps and nothing else** (2026-09-10): eight
-    // rows, or half the window when that is shorter; and as many columns as
-    // the width holds, up to six. The entries fill it downwards and then
+    // **The shape is two caps and nothing else** (2026-09-10): as deep as
+    // the whole list needs, or **two thirds of the window** when that is
+    // shorter (2026-09-23; it was half until the list outgrew it); and as
+    // many columns as the width holds, up to six. The entries fill it downwards and then
     // across, so nine commands on eight rows are eight and one.
     //
     // It used to be worked out from the number of entries — the fewest columns
@@ -4436,7 +4437,20 @@ fn draw_list(
     // next. Two caps say the same thing about every list, which is what makes
     // a place on the page worth learning.
     let (mut widths, deep) = if columns {
-        let half = ((area.height / 2) as usize).saturating_sub(3); // footer, rings
+        // **Two thirds of the window, footer and rings included** —— 半扇
+        // 窗是 2026-09-10 定的，而 24 行的窗口下那是 9 行 × 6 欄 ＝ 54 格，
+        // 命令已經 55 條。放寬到三分之二（2026-09-23 定）：
+        //
+        // | 窗口高 | 單子 | 容量 | 正文還剩 |
+        // | --- | --- | --- | --- |
+        // | 12 | 5 | 30 | 4 |
+        // | 24 | **13** | **78** | 8 |
+        // | 36 | 21 | 126 | 12 |
+        //
+        // ⚠️ **那個 3 不許拿掉**（想過）：框綫兩道加頁腳一行是真佔地方的，
+        // 面板高 ＝ 行數 ＋ 3。拿掉它等於讓面板高過說好的那個比例，而矮窗口
+        // 上「還剩幾行正文」正是這條規矩在守的東西。要更寬就動比例，別動它。
+        let half = (area.height as usize * 2 / 3).saturating_sub(3);
         // **How many columns the width holds**, measured off the widest entry
         // the whole list has rather than off the ones left after typing — a
         // column is only as wide as its own longest row, so this is the
@@ -4454,6 +4468,13 @@ fn draw_list(
         // six blank rows under `:t`'s four commands would be a panel drawn
         // around nothing.
         let deep = deep.min(items.len().max(1));
+        // …and never taller than the page will actually take. The cap above
+        // is a taste rule; this one is arithmetic, and it is load-bearing:
+        // the panel is `deep + 3` rows, and one row too many does not clip —
+        // the guard below returns `None` and **nothing is drawn at all**.
+        let deep = deep.min((area.height.min(bottom.saturating_sub(area.y)) as usize)
+            .saturating_sub(3))
+            .max(1);
         (lay(deep, 0), deep)
     } else {
         // A picker is paths — hundreds of them, and no arrangement shows them
@@ -16155,13 +16176,13 @@ fn squeezed(text: &str) -> String {
             text.contains(&format!("1/{total}")),
             "how much more there is"
         );
-        // The menu is a handful of rows, not the screen: **half the window is
-        // the ceiling**, footer and rings included (#372).
+        // The menu is a handful of rows, not the screen: **two thirds of the
+        // window is the ceiling**, footer and rings included (#372).
         let (rows, _) = menu_shape(&buffer);
         assert!(!rows.is_empty(), "a menu was drawn");
         assert!(
-            rows.len() + 3 <= 24 / 2,
-            "half of a 24-row window, and the menu took {}",
+            rows.len() + 3 <= 24 * 2 / 3,
+            "two thirds of a 24-row window, and the menu took {}",
             rows.len()
         );
 
@@ -16191,8 +16212,9 @@ fn squeezed(text: &str) -> String {
     }
 
     /// **The shape is two caps, and a taller window does not change them**
-    /// (2026-09-10). Eight rows, or half the window when that is
-    /// shorter; and as many columns as the width holds, up to six.
+    /// (2026-09-10). As deep as the whole list needs, or two thirds of the
+    /// window when that is shorter; and as many columns as the width holds,
+    /// up to six.
     ///
     /// It used to grow: the fewest columns that showed every entry, worked out
     /// from how many there were. So the menu was three columns of eighteen at
@@ -16222,11 +16244,11 @@ fn squeezed(text: &str) -> String {
         );
         assert!(buffer_text(&tall).contains(&format!("1/{total}")));
 
-        // …until half the window is less than that, which is where it stops:
-        // on twelve rows, ten and a footer would leave nothing of the page the
-        // menu is *for*.
+        // …until two thirds of the window is less than that, which is where
+        // it stops: on twelve rows, ten and a footer would leave nothing of
+        // the page the menu is *for*.
         let squat = render_with(&editor, &config, &no_ime(), 160, 12);
-        assert!(menu_shape(&squat).0.len() < deep.len(), "half of twelve");
+        assert!(menu_shape(&squat).0.len() < deep.len(), "two thirds of twelve");
 
         // **Typing narrows the panel without moving its rows**, which is what
         // measuring the shape off the whole list buys.
@@ -16245,15 +16267,15 @@ fn squeezed(text: &str) -> String {
     fn the_command_menu_leaves_a_short_window_something_to_look_at() {
         // The eight-row floor keeps a menu worth opening on a small window,
         // but on a twelve-row terminal eight rows and a footer is nine of the
-        // twelve — the page it is a menu *for* would be gone. Half is where
-        // the floor stops.
+        // twelve — the page it is a menu *for* would be gone. Two thirds is
+        // where the floor stops: five rows of commands, four of the page.
         let config = Config::default();
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
         let buffer = render_with(&editor, &config, &no_ime(), 120, 12);
         let (rows, _) = menu_shape(&buffer);
         assert!(!rows.is_empty(), "a menu at all");
-        assert!(rows.len() <= 5, "at most half the window, footer and all: {rows:?}");
+        assert!(rows.len() <= 5, "at most two thirds, footer and all: {rows:?}");
     }
 
     /// A real 碼表 in each table mode, for looking at (#374).
@@ -16374,7 +16396,7 @@ fn squeezed(text: &str) -> String {
         // a window this short — half of it, footer and rings included.
         let (rows, columns) = menu_shape(&buffer);
         assert!(
-            rows.len() <= 24 / 2 - 3,
+            rows.len() <= 24 * 2 / 3 - 3,
             "a menu is glanced at, not read: {rows:?}"
         );
         assert!(columns.len() >= 3, "several columns: {columns:?}");
