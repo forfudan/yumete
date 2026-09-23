@@ -42,12 +42,18 @@ use yumete_core::editor::Editor;
 use yumete_core::say;
 use yumete_core::lsp::{self, Notice};
 
-/// How long after the last keystroke a changed file is sent (milliseconds).
+/// How long after a change a changed file is sent (milliseconds).
 ///
 /// The same 300 ms the 改動條 waits (`Editor::VCS_IDLE`), and for the same
-/// reason: any key restarts the wait, so this is 「停手 300 毫秒」 rather than a
-/// clock of its own. Sending on every keystroke would have `rust-analyzer`
-/// re-analysing a crate per character.
+/// reason: sending on every keystroke would have `rust-analyzer` re-analysing
+/// a crate per character.
+///
+/// ⚠️ **這是節流，不是防抖。** 計時從「發現正文變了」那一刻起算，按鍵不重置它
+/// （全樹寫 `touched` 的只有清和設兩處）——所以連續打字是**每 300 毫秒發一次，
+/// 發在詞的中間**，不是「停手 300 毫秒」。註釋從前寫的是後者
+/// （2026-09-23 審出來的）。這樣更好而不是更差：補全那一半正是靠打字中間發出去
+/// 的那一條 `didChange` 纔問得出東西；真正的語言服務器客戶端多半連節流都沒有，
+/// 每一次改動都發。
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(300);
 
 /// How often the loop looks in while an answer is owed.
@@ -61,6 +67,14 @@ const LOOK_IN: std::time::Duration = std::time::Duration::from_millis(120);
 
 /// The `id` of the `initialize` request. One per server, and always this.
 const HELLO: i64 = 1;
+
+/// The `id` of the `shutdown` request, and always this.
+///
+/// ⚠️ **Not [`FIRST_ASK`].** It used to be a literal `2`, which is the id the
+/// first `gd`／hover／completion of the session wears — 「two requests must
+/// never wear the same one」, and this one broke it (2026-09-23 審出來的).
+/// Nobody reads the answer at exit, so it never showed; the rule is the point.
+const GOODBYE: i64 = 0;
 
 /// Where the ids for everything else start.
 ///
@@ -131,6 +145,14 @@ pub struct Servers {
     /// 報的「我把錯的行刪了，錯誤信息還在」就是第二張嘴從來沒被叫醒——刪掉的
     /// 那一行的 `(rustc)` 診斷一直是上一次 check 的舊帳。
     saved: HashMap<PathBuf, u64>,
+    /// **Which server each file was told to.**
+    ///
+    /// ⚠️ `sent`／`saved`／`waiting_on` 是全局的，而 `running` 是按語言分的——
+    /// 少了這一格，rust-analyzer 一崩就會把 `.go` 的診斷也從頁面上抹掉，把
+    /// gopls 的 `sent` 也清空（於是下一趟白發一條 `didSave`，讓它整跑一次
+    /// 檢查），而 `waiting_on` 裏那個死掉的服務器的路徑永遠清不掉——「分析中」
+    /// 這一整場就再也收不回去了。2026-09-23 審出來的。
+    whose: HashMap<PathBuf, &'static str>,
     /// When the current buffer last changed, for the settle above.
     touched: Option<std::time::Instant>,
     /// **Which files have been told to a server but never answered about.**
@@ -158,6 +180,7 @@ impl Default for Servers {
             failed: HashSet::new(),
             sent: HashMap::new(),
             saved: HashMap::new(),
+            whose: HashMap::new(),
             touched: None,
             waiting_on: HashSet::new(),
             settle: SETTLE,
@@ -274,7 +297,38 @@ impl Servers {
             self.waiting_on.insert(path.clone());
             self.says = Some(say!("lsp.reading", named.command));
         }
+        self.whose.insert(path.clone(), language);
         self.sent.insert(path, revision);
+    }
+
+    /// **A file that is not open any more is not our business any more.**
+    ///
+    /// ⚠️ 從前 `lsp::did_close` 全樹一處都没調用（2026-09-23 審出來的）。關掉
+    /// 一個檔，服務器照舊分析它、照舊推它的診斷，而 `Problems` 是按路徑存
+    /// 的——`:check-code` 會一直列着一個早就關掉的檔。
+    ///
+    /// 走在 [`Self::follow`] 之後：那一支剛把當前這個檔說出去，這一支再看還有
+    /// 誰不在了。
+    pub fn forget_closed_files(&mut self, editor: &mut Editor) {
+        let open: HashSet<PathBuf> = editor.buffer_paths().into_iter().collect();
+        let gone: Vec<PathBuf> = self
+            .whose
+            .keys()
+            .filter(|path| !open.contains(*path))
+            .cloned()
+            .collect();
+        for path in gone {
+            if let Some(language) = self.whose.remove(&path) {
+                if let Some(server) = self.running.get_mut(language) {
+                    server.open.remove(&path);
+                    server.say(lsp::did_close(&path));
+                }
+            }
+            editor.forget_problems(&path);
+            self.sent.remove(&path);
+            self.saved.remove(&path);
+            self.waiting_on.remove(&path);
+        }
     }
 
     /// **Send the `gd` question, if the editor has one waiting** (#53 ②).
@@ -479,11 +533,22 @@ impl Servers {
     /// would stay until the session ended.
     fn lost(&mut self, language: &str, editor: &mut Editor) {
         let ran = self.running.remove(language).is_some_and(|s| s.ready);
-        for path in self.sent.keys().cloned().collect::<Vec<_>>() {
-            editor.forget_problems(&path);
+        // **只忘這一個服務器說過的那些檔**（見 [`Servers::whose`]）。
+        let its: Vec<PathBuf> = self
+            .whose
+            .iter()
+            .filter(|(_, &lang)| lang == language)
+            .map(|(path, _)| path.clone())
+            .collect();
+        for path in &its {
+            editor.forget_problems(path);
+            self.sent.remove(path);
+            self.saved.remove(path);
+            self.whose.remove(path);
+            // 它不會再答了，所以那句「分析中」也不該再等它。
+            self.waiting_on.remove(path);
         }
-        self.sent.clear();
-        self.saved.clear();
+        // （那句「分析中」不必單獨收——下面這一句無論如何都要蓋上去。）
         self.says = Some(match ran {
             // A crash after it was working is not 「this machine has no
             // rust-analyzer」: the next file starts a fresh one, which is the
@@ -527,8 +592,13 @@ impl Servers {
     /// Say goodbye to every server. Called when the editor is leaving.
     pub fn stop(&mut self) {
         for server in self.running.values_mut() {
-            server.say_now(lsp::shutdown(2));
+            server.say_now(lsp::shutdown(GOODBYE));
             server.say_now(lsp::exit());
+            // ⚠️ **這兩句多半來不及出門。** `say_now` 只是塞進 channel，而下面
+            // 立刻就 `kill`——中間沒有任何同步，writer 綫程搶不過。留着它們是
+            // 因為一條走得出去的路比沒有好（關得慢的終端就走得出去），但**不要
+            // 讀成「先禮後兵」**：實際發生的幾乎一律是兵。2026-09-23 記。
+            //
             // A server that will not go is killed: this runs while the
             // terminal is being handed back, and a lingering child would hold
             // the pipe open behind it.

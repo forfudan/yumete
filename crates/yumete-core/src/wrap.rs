@@ -78,6 +78,12 @@ pub struct Measure<'a> {
     /// here it is a file, because this is the line whose structure is being
     /// changed and there must be no doubt about what is in it.
     open: Option<usize>,
+    /// **Where the caret is** — `(line, 那一行裏第幾個字符)`，`None` 表示沒人
+    /// 在這一頁上打字（導出、面板、預覽都是這一種）。
+    ///
+    /// 只回答一個問題：這一行的行末要不要一格給光標站。見
+    /// [`line_rows_for_caret`]。
+    caret: Option<(usize, usize)>,
     /// **Text on the page that the file has no bytes for** — the inverse of
     /// `hidden`, as `(column within the line, what is drawn there)`.
     ///
@@ -152,6 +158,7 @@ impl<'a> Measure<'a> {
             folded: NOTHING_FOLDED,
             indent: 0,
             open: None,
+            caret: None,
             drawn: NOTHING_DRAWN,
             typed: NOTHING_DRAWN,
             unwrapped: NOTHING_FOLDED,
@@ -168,6 +175,7 @@ impl<'a> Measure<'a> {
             folded: NOTHING_FOLDED,
             indent: 0,
             open: None,
+            caret: None,
             drawn: NOTHING_DRAWN,
             typed: NOTHING_DRAWN,
             unwrapped: NOTHING_FOLDED,
@@ -176,9 +184,30 @@ impl<'a> Measure<'a> {
         }
     }
 
+    /// **Does the caret stand past the last character of `line`?** — the one
+    /// question [`Measure::caret`] is asked.
+    fn caret_ends(self, rope: &Rope, line: usize) -> bool {
+        let Some((at, column)) = self.caret else { return false };
+        if at != line || line >= rope.len_lines() {
+            return false;
+        }
+        // 行尾那個換行符不算字；一行只有一個換行符的時候，長度就是零。
+        let row = rope.line(line);
+        let len = row.len_chars()
+            - usize::from(row.len_chars() > 0 && row.char(row.len_chars() - 1) == '\n')
+            - usize::from(row.len_chars() > 1 && row.char(row.len_chars().saturating_sub(2)) == '\r');
+        column >= len
+    }
+
     /// The same measure, with `line` shown as the file has it.
     pub fn with_open_line(self, line: Option<usize>) -> Measure<'a> {
         Measure { open: line, ..self }
+    }
+
+    /// **Where the caret is** — `(line, 那一行裏第幾個字符)`. See
+    /// [`Measure::caret`].
+    pub fn with_caret(self, at: Option<(usize, usize)>) -> Measure<'a> {
+        Measure { caret: at, ..self }
     }
 
     /// The same measure, with `folded` naming the lines that are not drawn.
@@ -496,6 +525,27 @@ pub fn line_rows_drawing(
     indent: usize,
     drawn: &[(usize, String)],
 ) -> Vec<(usize, usize)> {
+    line_rows_for_caret(text, width, hidden, indent, drawn, false)
+}
+
+/// [`line_rows_drawing`], plus **whether the caret is standing at the end of
+/// this line** and so needs a cell that the last row has not got.
+///
+/// ⚠️ **這一格從前是無條件開的**，理由是「一段正好填滿最後一行，段末的光標
+/// 就沒地方站」。理由對，可它一天到晚都在付：**一段話正好排滿一行，屏幕上就
+/// 憑空多一個空行**，讀起來是分了段——寫小說最常見的排版事故，2026-09-23 報的。
+/// 而且它不只坑編輯器：面板、導出、預覽都走這一支，那裏根本沒有光標。
+///
+/// 所以現在按 vi 的辦法：**光標到了纔開**。Normal 模式下光標落在字上，行末那一
+/// 格沒人要；Insert 模式打到行尾，它就長出來——這也正是 vim 在 `wrap` 下的樣子。
+pub fn line_rows_for_caret(
+    text: &str,
+    width: usize,
+    hidden: &[(usize, usize)],
+    indent: usize,
+    drawn: &[(usize, String)],
+    room_at_end: bool,
+) -> Vec<(usize, usize)> {
     let width = width.max(1);
     let indent = if crate::zong::opens_a_paragraph(text) {
         indent.min(width.saturating_sub(1))
@@ -555,9 +605,9 @@ pub fn line_rows_drawing(
     last_width += tail;
     // A paragraph that exactly fills its last row leaves the end-of-paragraph
     // caret nowhere to stand: the column after the last glyph is off the row.
-    // Open one more, empty, row for it — which is also where the reader expects
-    // the next character to appear.
-    if last_width >= width - if rows.len() == 1 { indent } else { 0 } {
+    // Open one more, empty, row for it — **and only for it**: see this
+    // function's own note on why it is not opened unasked.
+    if room_at_end && last_width >= width - if rows.len() == 1 { indent } else { 0 } {
         rows.push((cuts[widths.len()], cuts[widths.len()]));
     }
     rows
@@ -766,6 +816,11 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     // paragraph wraps differently while a candidate stands in the middle of it.
     let drawn = m.drawn_on(line);
     drawn.hash(&mut hasher);
+    // …and whether this line's last row owes the caret a cell — see
+    // [`line_rows_for_caret`]. It moves when the caret does, so it is in the
+    // key; it is true on at most one line, so at most one line is remade.
+    let room = m.caret_ends(rope, line);
+    room.hash(&mut hasher);
     let hash = hasher.finish();
     if let Some(rows) = remembered(hash, m.width) {
         return rows;
@@ -774,7 +829,11 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     // there is nothing else on the row to move: a hidden run or a drawn one
     // has coordinates of its own that an edit shifts too, and getting that
     // wrong would put the caret in a column the page does not have.
-    if hidden.is_empty() && drawn.is_empty() {
+    // ⚠️ **不走這條路的時候：行末那一格開着。** `LAST` 是按
+    // `(buffer, line, width, revision)` 存的，裏面沒有「光標在不在行末」——存
+    // 一份帶着那一格的進去，光標一走它就成了假的。那一行只有一行，重排一次不
+    // 值得為它擴鍵。
+    if hidden.is_empty() && drawn.is_empty() && !room {
         if let Some(rows) = carried_on(rope, line, m) {
             remember(hash, m.width, &rows);
             keep_last(m, line, &rows);
@@ -782,15 +841,18 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
         }
     }
     WRAPPED.with(|n| n.set(n.get() + 1));
-    let rows = line_rows_drawing(
+    let rows = line_rows_for_caret(
         &line_text(rope, line),
         m.width,
         &hidden,
         m.indent_on(line),
         &drawn,
+        room,
     );
     remember(hash, m.width, &rows);
-    keep_last(m, line, &rows);
+    if !room {
+        keep_last(m, line, &rows);
+    }
     rows
 }
 
@@ -1421,13 +1483,15 @@ mod tests {
     fn a_paragraph_that_exactly_fills_a_row_opens_one_more_for_the_caret() {
         // Four 漢字 in eight cells leave the caret no column to stand in on
         // that row — the ninth cell is off the row — so it gets the next one.
-        let rows = line_rows("春夏秋冬", 8);
-        assert_eq!(rows, vec![(0, 4), (4, 4)]);
+        assert_eq!(line_rows_for_caret("春夏秋冬", 8, &[], 0, &[], true), vec![(0, 4), (4, 4)]);
+        // ⚠️ **而光標不在那裏的時候，那一格不許開**（2026-09-23）：一段話正好
+        // 排滿一行，屏幕上就會憑空多一個空行，讀起來是分了段。
+        assert_eq!(line_rows("春夏秋冬", 8), vec![(0, 4)], "没人要就別開");
         // A row that does not fill the width needs no such thing.
         assert_eq!(line_rows("春夏秋", 8), vec![(0, 3)]);
 
         let rope = Rope::from_str("春夏秋冬");
-        let p = position(&rope, 4, Measure::plain(8));
+        let p = position(&rope, 4, Measure::plain(8).with_caret(Some((0, 4))));
         assert_eq!((p.index_in_line, p.column), (1, 0));
     }
 
@@ -1436,12 +1500,17 @@ mod tests {
         // か + combining dakuten is one grapheme two cells wide; counted as two
         // characters it would report a column that has no glyph in it.
         let text = "か\u{3099}か\u{3099}か\u{3099}か\u{3099}";
-        assert_eq!(line_rows(text, 8), vec![(0, 8), (8, 8)]);
+        assert_eq!(line_rows(text, 8), vec![(0, 8)]);
+        assert_eq!(
+            line_rows_for_caret(text, 8, &[], 0, &[], true),
+            vec![(0, 8), (8, 8)],
+            "光標在行末的時候纔多一行"
+        );
         let rope = Rope::from_str(text);
         assert_eq!(position(&rope, 6, Measure::plain(8)).column, 6);
         // And `k` never lands between a base and its mark.
         assert_eq!(
-            prev_row(&rope, 8, Measure::plain(8), 2),
+            prev_row(&rope, 8, Measure::plain(8).with_caret(Some((0, 8))), 2),
             2,
             "the cursor landed inside a grapheme cluster"
         );
@@ -1467,7 +1536,9 @@ mod tests {
     #[test]
     fn a_page_is_built_from_an_anchor_not_from_the_top() {
         let rope = Rope::from_str("春夏秋冬春夏秋冬\nabc\n");
-        let rows = rows_from(&rope, Anchor::default(), Measure::plain(8), 10);
+        // 光標站在第一段末尾，所以那一段有為它開的第三行。
+        let m = Measure::plain(8).with_caret(Some((0, 8)));
+        let rows = rows_from(&rope, Anchor::default(), m, 10);
         // Two rows of text, the caret's row after them, "abc", and the empty
         // line the trailing newline opens.
         assert_eq!(rows.len(), 5);
@@ -1487,12 +1558,10 @@ mod tests {
         };
         // Three rows in the first paragraph (two of text, one for the caret),
         // one for "abc", then the second row of the last paragraph.
-        assert_eq!(
-            distance(&rope, Anchor::default(), far, Measure::plain(8), 20),
-            Some(5)
-        );
-        assert_eq!(retreat(&rope, far, Measure::plain(8), 5), Anchor::default());
-        assert_eq!(advance(&rope, Anchor::default(), Measure::plain(8), 5), far);
+        let m = Measure::plain(8).with_caret(Some((0, 8)));
+        assert_eq!(distance(&rope, Anchor::default(), far, m, 20), Some(5));
+        assert_eq!(retreat(&rope, far, m, 5), Anchor::default());
+        assert_eq!(advance(&rope, Anchor::default(), m, 5), far);
     }
 
     #[test]
@@ -1522,9 +1591,14 @@ mod tests {
         // Column 8 is past the end of a full row; the caret clamps to the last
         // character of that row rather than sliding onto the next one.
         assert_eq!(char_at_column(&rope, 0, 0, Measure::plain(8), 99), 3);
-        assert_eq!(char_at_column(&rope, 0, 1, Measure::plain(8), 99), 7);
-        // The row opened for the caret is where the end of the paragraph is.
-        assert_eq!(char_at_column(&rope, 0, 2, Measure::plain(8), 99), 8);
+        // 末一行照舊「可以停在最後一個字後面一格」——那是段末，每一段都一樣
+        // （`線 = e`）。從前這裏寫的是 7，而那是**多出來的那一行**造成的假象：
+        // 有它在，第 1 行就不是末一行（2026-09-23 把那一行改成光標到了纔開）。
+        assert_eq!(char_at_column(&rope, 0, 1, Measure::plain(8), 99), 8);
+        // 光標真在段末的時候，它自己那一行在第 2 行上。
+        let m = Measure::plain(8).with_caret(Some((0, 8)));
+        assert_eq!(char_at_column(&rope, 0, 1, m, 99), 7, "中間的行停在最後一個字上");
+        assert_eq!(char_at_column(&rope, 0, 2, m, 99), 8);
     }
 
     #[test]
@@ -1560,7 +1634,11 @@ mod tests {
         // Nothing to stand before, so it stands after — on the last row, whose
         // width it fills, which is what opens the row the caret needs.
         assert_eq!(drawn_rows("春夏秋", 8, &[]), vec![(0, 3)]);
-        assert_eq!(drawn_rows("春夏秋", 8, &[(3, "候")]), vec![(0, 3), (3, 3)]);
+        let drawn = [(3usize, "候".to_string())];
+        assert_eq!(
+            line_rows_for_caret("春夏秋", 8, &[], 0, &drawn, true),
+            vec![(0, 3), (3, 3)]
+        );
     }
 
     #[test]

@@ -37,6 +37,16 @@ impl Editor {
                 }
             }
         }
+        // **一份已經不作數的字典答案，這裏丟掉**（2026-09-23 審出來的）。
+        //
+        // ⚠️ **在派鍵之前，不是之後。** `dictionary_live()` 問的是「焦點在不在
+        // 字典那一側」——`Layer` 還在的時候那等於「在不在下層」，沒了之後同一側
+        // 的常駐面板拿到鍵也是這個值。於是：`空格 D` 開字典、`C-w` 出來、光標一
+        // 走（字典從畫面上下去了，可 `self.dictionary` 還是 `Some`）、
+        // `:wiki panel`、再 `C-w` 進去——焦點一落到右邊，那份**過期的字典就重新
+        // 蓋住百科**，而且把鍵接走。掃在派鍵之前，`C-w` 那一下焦點還沒挪過去，
+        // 掃得掉；掃在之後就正好掃不掉。
+        self.forget_a_dictionary_nobody_is_reading();
         // The sidebar takes Normal-mode keys while it has the focus; every
         // other mode is about the text and goes to the text.
         if self.sidebar_focused() && self.mode == Mode::Normal && self.pending == Pending::None {
@@ -1414,12 +1424,7 @@ impl Editor {
             // typed, so the key is a shortcut and not a second mechanism —
             // and so a reader who presses it by accident can see what it was
             // about to do and press Esc.
-            Key::Char('!') => {
-                self.mode = Mode::Command;
-                self.command_line = "pipe ".to_string();
-                self.command_caret = self.command_line.chars().count();
-                self.completion = None;
-            }
+            Key::Char('!') => self.open_the_command_line("pipe "),
             Key::Char('/') => {
                 self.mode = Mode::Search;
                 self.search_forward = true;
@@ -1450,11 +1455,7 @@ impl Editor {
             }
             Key::Char('n') => self.repeat(count, |e| e.repeat_search(e.search_forward)),
             Key::Char('N') => self.repeat(count, |e| e.repeat_search(!e.search_forward)),
-            Key::Char(':') => {
-                self.mode = Mode::Command;
-                self.command_line.clear();
-                self.command_caret = self.command_line.chars().count();
-            }
+            Key::Char(':') => self.open_the_command_line(""),
             // Match mode (Helix `m`): matching bracket, textobjects, surround.
             Key::Char('m') => self.pending = Pending::Match,
             // Overwrite every character of the selection with the next key.
@@ -2092,6 +2093,18 @@ impl Editor {
             .collect()
     }
 
+    /// 「`空格 t` 後面可以按這些」——**從那幾張真表生出來**。
+    ///
+    /// ⚠️ 從前這是三則手抄的文案（`hint.table.after-t`／`block-keys`／
+    /// `csv-keys`）。抄的那一份與真表對不上五處：少了 `b`／`w`／`F`，多了一個
+    /// 根本不存在的 `n`，`1s 1S` 抄成了 `s S`——而「光按 `t s` 什麽都不會發生」
+    /// 正是 `documented_keys.rs` 的 `DISOWNED_KEYS` 記着的那一條
+    /// （2026-09-23 審出來的）。按錯鍵的人看見的就這一行，它不能是另一份說法。
+    pub(super) fn table_keys_say(inside: Option<Bounds>) -> String {
+        let keys: Vec<&str> = Self::table_keys(inside).into_iter().map(|(k, _)| k).collect();
+        say!("hint.table.after-t", keys.join(" "))
+    }
+
     /// The keys `t` offers, given what the cursor is standing in.
     pub(super) fn table_keys(inside: Option<Bounds>) -> Vec<(&'static str, &'static str)> {
         let mut keys = Self::TABLE_KEYS.to_vec();
@@ -2134,12 +2147,23 @@ impl Editor {
             'm' => spell(Self::MATCH_KEYS),
             '`' => spell(Self::CASE_KEYS),
             ']' | '[' => spell(Self::HOP_KEYS),
-            't' => [None, Some(Bounds::Block), Some(Bounds::Md), Some(Bounds::WholeFile)]
-                .into_iter()
-                .flat_map(|inside| spell(&Self::table_keys(inside)))
-                .collect(),
+            // ⚠️ **`t` 不在這張表上了。** 2026-09-21 表格組搬到了 `空格 t`，而
+            // 這裏一直還答得出表格鍵——於是教程裏那幾行舊拼法（`t r`、`t1s`）
+            // 逐條「驗過」，全綠（2026-09-23 審出來的）。`t` 現在只是 vi 的
+            // till：一個吃任何字符的鍵，和 `f`／`r`／`"` 一樣，沒有單子。
             _ => return None,
         })
+    }
+
+    /// **開命令行**——`:`、`!`、`空格 ?` 都走這一支。
+    ///
+    /// ⚠️ 從前是三份抄的，而且抄漏了一行：`:` 不清 `completion`，另外兩個清
+    /// （2026-09-23 審出來的）。同一件事兩種收尾，正是這個倉在防的那一族。
+    fn open_the_command_line(&mut self, line: &str) {
+        self.mode = Mode::Command;
+        self.command_line = line.to_string();
+        self.command_caret = self.command_line.chars().count();
+        self.completion = None;
     }
 
     /// Run one key of a `Space` sequence.
@@ -2167,7 +2191,9 @@ impl Editor {
             // **`空格 D` 在邊欄裏開**——同一份答案，鍵跟過去，讀得完長的那些。
             // 大寫是「同一件事的更大版本」，同 `空格 c`／`空格 C`。
             Key::Char('D') => match self.char_at_cursor() {
-                Some(ch) => self.look_up(ch, true),
+                Some(ch) => {
+                    self.look_up(ch, true);
+                }
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },
             // 旁注 (§5.2.3 ②). A page carries one or two, and a reading is
@@ -2205,12 +2231,8 @@ impl Editor {
             // gone: what to look for is typed in the panel's own box, which
             // arrives with the last pattern in it, selected.
             Key::Char('/') => self.open_search(),
-            Key::Char('?') => {
-                self.mode = Mode::Command;
-                self.command_line.clear();
-                self.command_caret = self.command_line.chars().count();
-                self.completion = None;
-            }
+            // 空的命令行畫的就是命令一覽，所以這一格和 `:` 是同一扇門。
+            Key::Char('?') => self.open_the_command_line(""),
             // 工作區 (Feature #176): one key, three meanings that are the same
             // meaning — 「另一個工作區」. Nothing open: open one, showing this
             // same place. Open: hand it the keys. `W`:收掉，留下你站着的這半。

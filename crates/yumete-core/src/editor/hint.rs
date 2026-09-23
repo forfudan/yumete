@@ -138,7 +138,8 @@ impl Editor {
                 // *does*: the grain you are not in.
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
                 Hint::Keys(say!("label.table"), vec![
-                    ("t", say!("hint.table.menu")),
+                    // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
+                    ("空格 t", say!("hint.table.menu")),
                     ("T", match grain {
                         Grain::Cell => say!("hint.table.by-character-instead"),
                         Grain::Char => say!("hint.table.by-cell-instead"),

@@ -47,7 +47,16 @@ impl Editor {
                 }
             }
             Some(_) => {}
-            None if self.panel_focus == Some(was) => self.panel_focus = Some(side),
+            // ⚠️ **只有這一格自己正拿着鍵的時候，鍵纔跟過去。** 從前的條件是
+            // 「焦點在 `was` 那一側」——`Layer` 在的時候那等於「在下層」，沒了
+            // 之後它也可能是**那一側的常駐面板**。於是
+            // `:panel-dictionary left` 會把鍵從右邊的百科裏拽走
+            // （2026-09-23 審出來的）。
+            None if self.panel_focus == Some(was)
+                && self.transient(was) == crate::sidebar::Transient::of(panel) =>
+            {
+                self.panel_focus = Some(side)
+            }
             None => {}
         }
         self.refresh_sidebar();
@@ -134,6 +143,17 @@ impl Editor {
     /// asks whether the layer is showing, which asks this, which would ask it
     /// again. The stored field is the right one anyway — the question is
     /// 「were the keys put here」, not 「is there something here to look at」.
+    /// 光標走開了、鍵也不在它身上，那一份答案就不再作數——**當場丟掉**，而不是
+    /// 留着等下一次焦點落到這一側時復活。見 `on_key` 開頭那一段。
+    pub(super) fn forget_a_dictionary_nobody_is_reading(&mut self) {
+        if self.dictionary.is_none() || self.dictionary_live() {
+            return;
+        }
+        self.dictionary = None;
+        self.dictionary_query = None;
+        self.dictionary_anchor = None;
+    }
+
     fn dictionary_live(&self) -> bool {
         if self.dictionary.is_none() {
             return false;
@@ -170,15 +190,14 @@ impl Editor {
         self.transient(side).is_some() || self.panel(side).is_some()
     }
 
-    /// Whether that layer is a place the keys can be — a seat on `C-w`'s ring.
+    /// **鍵進不進得去這個邊欄**——`C-w` 那個環上有没有這一格的座位。
     ///
-    /// Not the same question as [`Editor::layer_showing`]: a panel can be
-    /// worth reading and still be no place to stand
-    /// ([`crate::sidebar::Transient::takes_keys`]).
-    /// **鍵進不進得去這個邊欄。**
-    ///
-    /// 光標放上去的那幾種，只有值得凍住光標的纔收鍵（見 `Transient::takes_keys`）；
-    /// 常駐的一律收。
+    /// ⚠️ **必須與 [`Editor::slot_showing`] 同進退。** 焦點停不停得住看的是
+    /// `slot_showing`，而環上有没有座位看的是這一支；兩者只要分歧，就會出現
+    /// 「焦點在這一格，而環上找不到它」——`cycle_region` 那一句
+    /// `let Some(here) = here else { return }` 直接返回，`C-w` **一聲不吭地
+    /// 失效**（2026-09-23 審出來的，那時 `Transient::Detail` 是唯一的分歧點）。
+    /// 現在三種臨時面板一律收鍵，兩支問的是同一件事。
     fn slot_takes_keys(&self, side: crate::sidebar::Side) -> bool {
         match self.transient(side) {
             Some(kind) => kind.takes_keys(),
@@ -206,7 +225,7 @@ impl Editor {
             .find(|&side| self.panel(side).is_some_and(|p| p.view() == view))
     }
 
-    /// What `Space e` and `Space o` do — one rule for both, so neither is the
+    /// What `Space f` and `Space o` do — one rule for both, so neither is the
     /// odd one out.
     ///
     /// A key that names a view answers three different intentions depending on
@@ -356,8 +375,8 @@ impl Editor {
                 self.command_line.clear();
                 self.command_caret = 0;
             }
-            // Space still opens the menu, so `Space e` closes the sidebar from
-            // inside it exactly as it opened it.
+            // Space still opens the menu, so the key that opened the sidebar
+            // closes it again from inside it.
             Key::Char(' ') => self.pending = Pending::Space,
             _ => return false,
         }
@@ -386,8 +405,11 @@ impl Editor {
             Some(crate::sidebar::Transient::Detail) => self.show_detail = Some(false),
             None => return,
         }
-        // 鍵回到正文，不回到底下那個常駐面板：讀者說的是「我不要這個」，把鍵
-        // 丟到一個他没點過的地方是同一種意外。
+        // **有前任還給前任，没有就回正文。** 讀者說的是「我不要眼前這一個」，
+        // 而這一格底下要是還站着常駐的那一個，鍵留在這一格並不意外——他本來就
+        // 是在這一欄裏。空了纔回正文。
+        // ⚠️ 註釋從前寫的是「不回到底下那個常駐面板」，而代碼一直是這樣
+        // （2026-09-23 對出來的）。
         if self.panel_focus == Some(side) && !self.slot_showing(side) {
             self.panel_focus = None;
         }
@@ -875,9 +897,23 @@ impl Editor {
     /// has it. So the character is parked here and the panel is opened empty;
     /// the answer arrives on the next pass through the loop, one frame later,
     /// which is not long enough for a reader to see the gap.
-    pub fn look_up(&mut self, ch: char, focus: bool) {
+    pub fn look_up(&mut self, ch: char, focus: bool) -> bool {
+        // 再按一次 `空格 D` 就收起來——與 `空格 d`、`空格 k`／`空格 K` 同一條
+        // 規矩（2026-09-23 補：從前只有浮窗那一半有 toggle）。
+        // ⚠️ **同一個字再問一次纔算「收起來」。** `Tab` 選候選也走這一支，
+        // 問的是另一個字——那是換一份答案，不是關窗。
+        let same = self.dictionary.as_ref().is_some_and(|(at, _)| *at == ch);
+        if same && !self.dictionary_afloat && self.dictionary_live() {
+            self.dictionary = None;
+            self.dictionary_query = None;
+            self.dictionary_anchor = None;
+            self.panel_focus = None;
+            self.refresh_sidebar();
+            return false;
+        }
         self.dictionary_afloat = false;
         self.look_up_at(ch, focus);
+        true
     }
 
     /// **`空格 d`：只浮一個窗**（2026-09-22 定）。
@@ -917,7 +953,13 @@ impl Editor {
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
-        self.panel_focus = focus.then(|| self.side_of(crate::sidebar::Panel::Dictionary));
+        // ⚠️ **問的時候不交鍵，就把鍵留在原地**——別清成 `None`。從前寫的是
+        // `focus.then(..)`，於是從檔案樹裏按 `空格 d`（那條路是通的：面板裏的
+        // 空格照樣開選單）會把鍵從樹裏悄悄拿走，而 `空格 d` 的說明寫着「一點都
+        // 不碰邊欄」（2026-09-23 審出來的）。
+        if focus {
+            self.panel_focus = Some(self.side_of(crate::sidebar::Panel::Dictionary));
+        }
         self.refresh_sidebar();
     }
 
@@ -964,8 +1006,19 @@ impl Editor {
     ///
     /// A pane that takes the keys has to say how to give them back, in the
     /// place a reader already looks for what is going on.
-    pub fn sidebar_keys() -> String {
-        say!("hint.sidebar.keys")
+    ///
+    /// ⚠️ **百科那一頁是一段文章**，沒有行可以 `l` 進去、也沒有行可以 `h` 收
+    /// 起，`R` 重讀的是一張單子而不是一條詞條——這一行從前照樣寫着那三個鍵
+    /// （2026-09-23 審出來的：「拿走鍵的那一半有義務」說清楚）。
+    pub fn sidebar_keys(&self) -> String {
+        let article = self
+            .panel_focus()
+            .and_then(|side| self.panel(side))
+            .is_some_and(|p| p.view() == crate::sidebar::View::Wiki);
+        match article {
+            true => say!("hint.sidebar.keys-wiki"),
+            false => say!("hint.sidebar.keys"),
+        }
     }
 
     /// How many rows `J`/`K` move in a list — a screenful of a sidebar, near

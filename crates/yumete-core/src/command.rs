@@ -2271,6 +2271,11 @@ const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "files", help: "label.panel.files", needs: &[] },
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
+    // ⚠️ **`search` 開得出來，從前卻不在這張表上**（2026-09-23 審出來的）。
+    // `named_panel` 走的是 `Panel::parse`，而 `Panel::ALL` 有七個——於是
+    // `:sidebar-left search` 真的執行得了，命令選單卻從不列這個名字，而那條
+    // 說明寫着「寫名字就開在那一格」。以 `Panel::ALL` 為準。
+    Word { name: "search", help: "label.panel.search", needs: &[] },
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "detail", help: "label.panel.detail", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
@@ -2286,6 +2291,7 @@ const SIDEBAR_SIDES: &[Word] = &[
     Word { name: "files", help: "label.panel.files", needs: &[] },
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
+    Word { name: "search", help: "label.panel.search", needs: &[] },
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "detail", help: "label.panel.detail", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
@@ -4354,8 +4360,9 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                     // written, and 「冰雪」 is what the reader knows. Typing it
                     // needs 中文 on the command line, which a Shift tap gives.
                     .filter(|w| {
-                        w.name.starts_with(typed)
-                            || note_for(param, w).is_some_and(|n| n.contains(typed))
+                        (w.name.starts_with(typed)
+                            || note_for(param, w).is_some_and(|n| n.contains(typed)))
+                            && word_fits(&words, w)
                     })
                     .map(|w| Choice {
                         name: w.name,
@@ -4505,6 +4512,34 @@ pub fn needs_of(line: &str) -> &'static [Need] {
 
 /// What may follow the words already on the line, or `None` if they name
 /// nothing.
+/// **這個詞在這一行上作不作數。**
+///
+/// 一張靜態的詞表答的是「這一格收哪些詞」，而 `:convert` 的第二格收哪些詞
+/// **取決於第一格**：opencc 裝着 `t2jp.json` 與 `jp2t.json`，**沒有
+/// `s2jp.json`**（2026-09-23 在本機 opencc 1.4.2 的 config 目錄裏數過）。於是
+/// `:convert s` 的菜單從前列着一個它自己會拒絕的 `jp`——正是 §5.2.2 記着的那條
+/// 「幫助提供了一個命令不收的參數」。
+///
+/// 判準從 [`crate::convert::destinations`] 來，而那一支是從 `plan` 算出來的：
+/// **菜單與命令永遠說同一句話**，不是第二份手抄的表。
+fn word_fits(words: &[(usize, &str)], w: &Word) -> bool {
+    let Some((_, head)) = words.first() else { return true };
+    if entry_named(head).map(|e| e.name) != Some("convert") || words.len() != 2 {
+        return true;
+    }
+    // ⚠️ **第一個詞可能是簡寫。** 菜單自己印的就是簡寫（`:con h ` ＝
+    // `:convert hk `），所以這裏也得照 `shortest` 那條規矩按前綴認一次，
+    // 認不出唯一的一個就全放行。
+    let Some((_, said)) = words.get(1) else { return true };
+    let Some(from) = Side::parse(said).or_else(|| {
+        let mut hit = Side::ALL.into_iter().filter(|s| s.word().starts_with(said));
+        hit.next().filter(|_| hit.next().is_none())
+    }) else {
+        return true;
+    };
+    crate::convert::destinations(from).iter().any(|(to, _)| to.word() == w.name)
+}
+
 fn walk(words: &[(usize, &str)]) -> Option<&'static Param> {
     let (_, head) = words.first()?;
     let entry = entry_named(head)?;

@@ -2673,8 +2673,8 @@ en = "a dotted underline across, a ground down a 縱"
 [[message]]
 # : 命令選單裏 panel 那一項的說明（wiki 組）
 key = "cmd.wikis.panel"
-zht = "把詞條固定在側欄——開着的時候不再浮出來"
-zhs = "把词条固定在侧栏——开着的时候不再浮出来"
+zht = "把詞條固定在邊欄——開着的時候不再浮出來"
+zhs = "把词条固定在边栏——开着的时候不再浮出来"
 en = "keep the entry in the sidebar — while it is open it no longer floats"
 
 [[message]]
@@ -4902,6 +4902,13 @@ zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换
 en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w next region · q close"
 
 [[message]]
+# 邊欄底下那一行按鍵說明：百科那一頁是一段文章，沒有行可以進、可以收
+key = "hint.sidebar.keys-wiki"
+zht = "j k 滾動 · J K 半頁 · g G 兩端 · Tab 換視圖 · w 寬窄 · C-w 去下一區 · q 關"
+zhs = "j k 滚动 · J K 半页 · g G 两端 · Tab 换视图 · w 宽窄 · C-w 去下一区 · q 关"
+en = "j k scroll · J K half a page · g G ends · Tab view · w width · C-w next region · q close"
+
+[[message]]
 # 提示：上下移動
 key = "hint.sidebar.move"
 zht = "上下"
@@ -4958,10 +4965,10 @@ zhs = "字典开进边栏（读得完长的）"
 en = "the dictionary in the sidebar (room to read)"
 
 [[message]]
-# 空格選單裏的 s：換到下一個區域（正文、側欄、另一個窗格）
+# 空格選單裏的 s：換到下一個區域（正文、邊欄、另一個工作區）
 key = "hint.space.next-region"
-zht = "換到下一個區域（正文／側欄／另一個窗格），同 C-w"
-zhs = "换到下一个区域（正文／侧栏／另一个窗格），同 C-w"
+zht = "換到下一個區域（正文／邊欄／另一個工作區），同 C-w"
+zhs = "换到下一个区域（正文／边栏／另一个工作区），同 C-w"
 en = "the next region — the writing, a panel, the other pane (also C-w)"
 
 [[message]]
@@ -5021,11 +5028,11 @@ zhs = "加一行（下／上）"
 en = "add a row (below / above)"
 
 [[message]]
-# t 之後認得哪些鍵
+# 空格 t 之後認得哪些鍵——單子是從 keys.rs 那幾張真表生出來的
 key = "hint.table.after-t"
-zht = "t 後面：o n a t q i / ? g f s S r R c C d D j k h l y p < = > ] ["
-zhs = "t 后面：o n a t q i / ? g f s S r R c C d D j k h l y p < = > ] ["
-en = "after t: o n a t q i / ? g f s S r R c C d D j k h l y p < = > ] ["
+zht = "空格 t 後面：{0}"
+zhs = "空格 t 后面：{0}"
+en = "after 空格 t: {0}"
 
 [[message]]
 # 表格提示：這欄靠左／居中／靠右
@@ -5042,13 +5049,6 @@ zhs = "回到正文"
 en = "back to prose"
 
 [[message]]
-# 表格提示：文中的表格區塊，t 後面只有這幾個
-key = "hint.table.block-keys"
-zht = "t 後面（文中的表格區塊）：/ ? g y p"
-zhs = "t 后面（文中的表格区块）：/ ? g y p"
-en = "after t, in a table block: / ? g y p"
-
-[[message]]
 # 表格提示：改按格
 key = "hint.table.by-cell-instead"
 zht = "按格移動"
@@ -5061,13 +5061,6 @@ key = "hint.table.by-character-instead"
 zht = "按字移動"
 zhs = "按字移动"
 en = "move by character"
-
-[[message]]
-# 非 | 表格裏 t 之後可以按的鍵
-key = "hint.table.csv-keys"
-zht = "t 後面（這種表格）：/ ? g i s S r R d j k y p"
-zhs = "t 后面（这种表格）：/ ? g i s S r R d j k y p"
-en = "after t, in this kind of table: / ? g i s S r R d j k y p"
 
 [[message]]
 # 表格提示：刪這一行
@@ -5114,8 +5107,8 @@ en = "over-wide cells: fold the tail away / lay it back out"
 [[message]]
 # 表格提示：去某一格
 key = "hint.table.go-to-cell"
-zht = "去某一格（t20,20g）"
-zhs = "去某一格（t20,20g）"
+zht = "去某一格（空格 t 20,20g）"
+zhs = "去某一格（空格 t 20,20g）"
 en = "go to a cell (t20,20g)"
 
 [[message]]
@@ -5142,7 +5135,7 @@ en = "line it up again"
 [[message]]
 # 表格提示：按 t 開的那張選單（其餘的表格鍵都在裏面）
 key = "hint.table.menu"
-zht = "表格菜單"
+zht = "表格選單"
 zhs = "表格菜单"
 en = "the table menu"
 
@@ -5177,8 +5170,8 @@ en = "the next table / the one before"
 [[message]]
 # 表格提示：游標不在任何一張表裏，底下那些鍵沒有東西可動
 key = "hint.table.not-in-a-table"
-zht = "光標不在表格裏 —— t ] 走到下一張"
-zhs = "光标不在表格里 —— t ] 走到下一张"
+zht = "光標不在表格裏 —— 空格 t ] 走到下一張"
+zhs = "光标不在表格里 —— 空格 t ] 走到下一张"
 en = "the cursor is not in a table — t ] walks to the next one"
 
 [[message]]
@@ -5205,22 +5198,22 @@ en = "this table's schema"
 [[message]]
 # 表格提示：一欄一欄找
 key = "hint.table.search-columns"
-zht = "一欄一欄找：這邊找／那邊看（t2-10?）"
-zhs = "一栏一栏找：这边找／那边看（t2-10?）"
+zht = "一欄一欄找：這邊找／那邊看（空格 t 2-10?）"
+zhs = "一栏一栏找：这边找／那边看（空格 t 2-10?）"
 en = "search down the columns: / here, ? in the other area (t2-10?)"
 
 [[message]]
 # 表格提示：照這欄順排／倒排
 key = "hint.table.sort-by-column"
-zht = "照這欄順排／倒排（t1s；t1a2d8as 排幾欄）"
-zhs = "照这栏顺排／倒排（t1s；t1a2d8as 排几栏）"
+zht = "照這欄順排／倒排（空格 t 1s；1a2d8as 排幾欄）"
+zhs = "照这栏顺排／倒排（空格 t 1s；1a2d8as 排几栏）"
 en = "sort by this column, up / down (t1s; t1a2d8as for several)"
 
 [[message]]
 # t 組提示的標題
 key = "hint.table.title"
-zht = "t 表格"
-zhs = "t 表格"
+zht = "空格 t 表格"
+zhs = "空格 t 表格"
 en = "t table"
 
 [[message]]
@@ -5303,9 +5296,9 @@ en = "q replays a macro (Q records one)"
 [[message]]
 # Normal 模式按 \（別的編輯器的 leader 鍵，這裏是空格）
 key = "hint.vi.backslash"
-zht = "空格是菜單鍵：空格 f 開文件、空格 b 換緩衝區、空格 d 詳情"
-zhs = "空格是菜单键：空格 f 开文件、空格 b 换缓冲区、空格 d 详情"
-en = "Space is the menu key: Space f opens a file, Space b switches buffer, Space d the detail pane"
+zht = "空格是選單鍵：空格 f 開文件、空格 b 換緩衝區、空格 d 查這個字"
+zhs = "空格是菜单键：空格 f 开文件、空格 b 换缓冲区、空格 d 查这个字"
+en = "Space is the menu key: Space f opens a file, Space b switches buffer, Space d looks a character up"
 
 [[message]]
 # ` 組的末行（vi 的 ` 是記號鍵，這裏是 M 和 '）
@@ -5652,7 +5645,7 @@ zhs = "寻找"
 en = "search"
 
 [[message]]
-# 側欄的百科頁，放進句子裏說的名字
+# 邊欄的百科頁，放進句子裏說的名字
 key = "label.panel.wiki"
 zht = "百科"
 zhs = "百科"
@@ -5793,7 +5786,7 @@ en = "this block is {0} lines; past {1} it keeps a single colour"
 # :view-diff on，可是這個文件不在 git 倉里，或者倉里还没有第一个提交——
 # 开了什么都不画，当场说出来，别让人以为是坏了
 key = "layout.diff-gutter-not-in-git"
-zht = "改動條：開（這個檔案 git 管不着，一筆都不會畫）"
+zht = "改動條：開（這個文件 git 管不着，一筆都不會畫）"
 zhs = "改动条：开（这个文件 git 管不着，一笔都不会画）"
 en = "change bar: on (git has nothing to say about this file, so nothing is drawn)"
 
@@ -8259,6 +8252,13 @@ zhs = "空格 D 进边栏"
 en = "Space D for the sidebar"
 
 [[message]]
+# hover 浮窗底下那一句：讀不完就去邊欄（服務器說的話可以有十幾行）
+key = "ui.hover-in-the-sidebar"
+zht = "空格 K 進邊欄"
+zhs = "空格 K 进边栏"
+en = "Space K for the sidebar"
+
+[[message]]
 # 界面語言現在是哪一種（`:language`）
 key = "ui.language-now"
 zht = "界面語言：{0}"
@@ -8551,7 +8551,7 @@ zhs = "{0}——## 开始一个词条，# 是分组；<!-- [yumete] 人物.md --
 en = "{0} — ## starts an entry, # a group; <!-- [yumete] 人物.md --> pulls in another file"
 
 [[message]]
-# 側欄的百科頁：光標不在詞條名上
+# 邊欄的百科頁：光標不在詞條名上
 key = "wiki.panel-empty"
 zht = "光標停在一個詞條名上，這裏就是它的內容"
 zhs = "光标停在一个词条名上，这里就是它的内容"

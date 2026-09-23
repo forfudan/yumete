@@ -3069,15 +3069,6 @@ impl Editor {
         // drawn as a grid: `hjkl`, the operators and the selection all mean
         // what they mean everywhere else. Only Enter still knows about cells.
         if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
-            // …except `t`. Reading by character is how you get *inside* a
-            // cell, and the lesson itself asks the reader to press `Tab` and
-            // then `t/` — 「找哪些字的拆分裏用了光標下這個字」. When `Enter`
-            // did that job it worked in both grains; the key that replaced it
-            // has to as well. `f` is still there for a find-till.
-            if key == Key::Char('t') {
-                self.pending = Pending::Table;
-                return true;
-            }
             return false;
         }
         match key {
@@ -3140,7 +3131,11 @@ impl Editor {
             // must go on being refused rather than quietly clearing one cell.
             Key::Char('d') if self.anchor == self.cursor => self.clear_cell(false),
             Key::Char('D') if self.anchor == self.cursor => self.clear_cell(true),
-            Key::Char('t') => self.pending = Pending::Table,
+            // ⚠️ **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
+            // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
+            // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
+            // 意思」。這兩處（按字、按格各一）是那次搬家漏下的，留着它等於錢
+            // 花了東西沒拿到。
             // `o` in a grid means a new row, and on the header row the new row
             // has to go under the rule rather than between it and its names.
             Key::Char('o') if self.md_region().is_some() => self.md_new_row(true),
@@ -3676,7 +3671,7 @@ impl Editor {
                 Key::Char('y') => self.yank_column(),
                 Key::Char('p') => self.put_column(),
                 Key::Esc => {}
-                _ => self.status = say!("hint.table.block-keys"),
+                _ => self.status = Self::table_keys_say(Some(Bounds::Block)),
             }
             return;
         }
@@ -3759,7 +3754,7 @@ impl Editor {
                 // status line.
                 Key::Char('e') => self.open_schema(),
                 Key::Esc => {}
-                _ => self.status = say!("hint.table.csv-keys"),
+                _ => self.status = Self::table_keys_say(Some(Bounds::WholeFile)),
             }
             return;
         }
@@ -3802,7 +3797,10 @@ impl Editor {
                 };
             }
             Key::Esc => {}
-            _ => self.status = say!("hint.table.after-t"),
+            _ => {
+                let inside = self.md_region().is_some().then_some(Bounds::Md);
+                self.status = Self::table_keys_say(inside);
+            }
         }
     }
 
