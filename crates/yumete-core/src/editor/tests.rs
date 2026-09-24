@@ -8683,6 +8683,97 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().case, Case::Smart, "round again");
 }
 
+/// **兩種範圍下 `Enter` 是同一個鍵**（2026-09-25 報的：「搜索本文件和文件夹的
+/// 时候的行为不一致，需要統一……否则你这就是无端设置特例了」）。
+///
+/// ⚠️ **從前本文件那一種是「下一處」、鍵留在框裏，而那個行為一條測試都沒盯着**
+/// ——所以改掉它的時候什麼都沒紅。這一條就是為它補的。
+#[test]
+fn enter_hands_the_keys_to_the_results_whichever_scope_it_is() {
+    use crate::search_panel::{Field, Row};
+    let mut ed = typed("霜降於石階。\n那一年的霜來得早。\n霜花結在窗上。");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('G'));
+    ed.open_search();
+    ed.on_key(Key::Char('霜'));
+    assert_eq!(ed.mode(), Mode::Field, "開出來鍵在框裏");
+    assert_eq!(ed.search().total, 3, "本文件是邊打邊搜的");
+
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.mode(), Mode::Normal, "Enter 把鍵交出來，不必再 Esc");
+    assert_eq!(ed.search().field, Field::Results);
+    // **第一處，不是光標最近的那一處**——和搜文件夾落在哪裏是同一句話。
+    assert!(matches!(ed.search().row(), Some(Row::Hit(0))), "{:?}", ed.search().row());
+
+    // 「下一處」沒有丟，它成了結果列表裏的 `j`。
+    ed.on_key(Key::Char('j'));
+    assert!(matches!(ed.search().row(), Some(Row::Hit(1))));
+    ed.on_key(Key::Char('k'));
+    assert!(matches!(ed.search().row(), Some(Row::Hit(0))));
+
+    // 一處都沒有就別交鍵：接下來要做的是改詞，空列表不是站的地方。
+    let mut ed = typed("那年冬天很冷。");
+    ed.open_search();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.mode(), Mode::Field, "找不到，鍵留在框裏");
+}
+
+/// **`/` 回搜索框換一個詞，`hl` 在框裏挪光標，`i` 從光標處插**（2026-09-25 定）。
+#[test]
+fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
+    use crate::search_panel::Field;
+    let mut ed = typed("那年冬天很冷，冷得出奇。");
+    ed.open_search();
+    for c in "冬天".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().field, Field::Results, "鍵落到結果上了");
+
+    // ① `/` 不管站在哪一格，都回搜索框，而且整條選着。
+    ed.on_key(Key::Char('/'));
+    assert_eq!(ed.mode(), Mode::Field);
+    assert_eq!(ed.search().field, Field::Query);
+    assert!(ed.search().all_selected, "整條選着——打字就換一個詞");
+    ed.on_key(Key::Char('霜'));
+    assert_eq!(ed.search().query, "霜", "打字替掉了整條");
+
+    // ② `hl` 在框裏挪光標，不再走格子。
+    ed.on_key(Key::Esc);
+    for c in "降石".chars() {
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char(c));
+        ed.on_key(Key::Esc);
+    }
+    assert_eq!(ed.search().query, "霜降石");
+    let end = ed.search().caret;
+    assert_eq!(end, 3, "光標出廠在末尾");
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.search().caret, 2);
+    assert_eq!(ed.search().field, Field::Query, "⚠️ 走的是字，不是格子");
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.search().caret, 3);
+    assert_eq!(ed.search().field, Field::Query);
+
+    // ③ `i` 從光標那裏插，不跳末尾。
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('大'));
+    assert_eq!(ed.search().query, "霜大降石", "插在光標那裏");
+
+    // ④ 走到別的格子，光標跟着挪到那一格的末尾——一個 caret 伺候所有的框。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.search().field, Field::Scope);
+    assert_eq!(
+        ed.search().caret,
+        ed.search().scope_text.chars().count(),
+        "⚠️ 不挪的話，塊光標會停在一個空框的第四格上"
+    );
+}
+
 /// **模糊: 「差不多是這幾個字」** — 2026-09-19: 「寫小説的人記得差不多是
 /// 這幾個字卻記不得原句」. The panel's other setting is a regular expression,
 /// which answers a different question (a *shape*); this one is a fourth

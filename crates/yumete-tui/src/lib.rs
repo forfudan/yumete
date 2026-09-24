@@ -6791,6 +6791,21 @@ fn draw_search(
     let head = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
     let quiet = ground.fg(ink.quiet());
     let wrong = ground.fg(ink.mark());
+    // **三檔底色，只鋪在打得了字的那一段上**（2026-09-24 定，原話：「三档：没被
+    // 选择的时候是中间色，被选择了是现在的白色，insert 是全黑……白色、黑色、中间
+    // 色应该只对可以输入的部分起效，也就是不包括前面的提示文字」）。
+    //
+    // 量出來的（墨香，`--shot --html`）：面板 81 檔 `#2B2C2E` 亮度 43.9，框
+    // 90 檔 `#181A1D` 亮度 25.8，100 檔 `#03060A` 亮度 5.7。
+    //
+    // ⚠️ **從前「沒被選中」和「正在打字」是同一個顏色**（都是 90 檔 ＝ 紙），
+    // 所以那三格看着一個樣，讀者分不出自己在不在插入模式——報上來就是這一句。
+    // 要動的不是中間那一檔（90 已經正好是「介於面板底與黑之間」），是**打字那
+    // 一檔**：它得走到梯子的盡頭去。
+    //
+    // ⚠️ **不寫死黑色，走第 100 檔。** 梯子是 墨 → 紙 → 更主題色，淺色主題下
+    // 第 100 檔是更淺的那一頭——「再離面板遠一步」是一個意思，不是兩個。
+    let sunk = Style::default().bg(ink.sunken()).fg(ink.text());
     // **A field is a hole in the panel, not another part of its face.** The
     // panel's own ground is 第 81 檔 and the box used to be painted with it, so
     // an empty 尋找 box was a blank strip of panel with a caret somewhere in it
@@ -6844,18 +6859,16 @@ fn draw_search(
     // ⚠️ 正在打字的時候畫的是**框裏的字**，不是算出來的名字：那一刻它是一個
     // 輸入框，不是一句說明。
     let naming = find.field == Field::Scope;
-    let shown = match naming && (editor.mode() == yumete_core::input::Mode::Field) {
+    let typing = editor.mode() == yumete_core::input::Mode::Field;
+    let shown = match naming && typing {
         true => find.scope_text.clone(),
         false => place,
     };
-    let title = format!("{}  {shown}", say!("label.panel.search"));
-    let title_style = match naming && keys_here {
-        true => on,
-        false => head,
-    };
-    put_text(buf, left, area.y, to, &title, title_style);
     // **The count, and nothing when nothing was asked.** `0 處` and 「not
     // asked yet」 are two different findings (#419).
+    //
+    // ⚠️ **算在標題之前**：「哪裏找」那一格現在鋪底色，而底色不許鋪到這個數目
+    // 上面去，所以要先知道它有多寬。
     let (tally, style) = match (find.broken, find.stale, find.asked()) {
         (true, _, _) => (say!("search.bad-pattern"), wrong),
         (_, true, true) => (say!("search.enter-to-look"), head),
@@ -6863,6 +6876,42 @@ fn draw_search(
         (false, _, true) if find.total == 0 => (say!("search.none"), quiet),
         (false, _, true) => (say!("search.hits", find.total), quiet),
     };
+    let counted = match tally.is_empty() {
+        true => 0,
+        false => yumete_cjk::str_width(&tally) as u16 + 2,
+    };
+    let title_to = to.saturating_sub(counted);
+    // ⚠️ 那一格的光標在這裏就畫好，可 `caret` 還沒宣告（它歸底下那個閉包借着），
+    // 所以先接在這裏，等閉包用完再合進去。
+    let mut scope_caret: Option<Position> = None;
+    // **面板的名字不進那一格**（2026-09-24 報的：「不应该把「寻找」包含进去」）。
+    // 從前整行連標題一起反白，於是「尋找」看着也像是被選中了——而它是這扇面板的
+    // 名字，不是一格能打字的地方。名字、格子的名字、格子，三段各歸各的底色。
+    let name = say!("label.panel.search");
+    put_text(buf, left, area.y, title_to, &name, head);
+    let scope_at = left + yumete_cjk::str_width(&name) as u16 + 2;
+    let scope_tag = say!("search.label.scope");
+    put_text(buf, scope_at, area.y, title_to, &scope_tag, quiet);
+    let scope_box = scope_at + yumete_cjk::str_width(&scope_tag) as u16;
+    if scope_box < title_to {
+        let room = (title_to - scope_box) as usize;
+        let shown = crate::elide(&shown, room);
+        let pad = room.saturating_sub(yumete_cjk::str_width(&shown));
+        let filled = format!("{shown}{}", " ".repeat(pad));
+        // 和底下兩個框同一套：全選整條反白，打字全黑，鍵在這一格就中間那一檔
+        // 加一個塊光標（2026-09-25）。
+        let style = match (naming && keys_here && find.all_selected, naming && typing) {
+            (_, true) => sunk,
+            (true, _) => on,
+            (false, _) => field,
+        };
+        put_text(buf, scope_box, area.y, title_to, &filled, style);
+        if naming && keys_here && !find.all_selected {
+            scope_caret = box_in(
+                buf, scope_box, area.y, title_to, &shown, find.caret, typing, ink, sunk,
+            );
+        }
+    }
     if !tally.is_empty() {
         let w = yumete_cjk::str_width(&tally) as u16;
         put_text(buf, to.saturating_sub(w + 1), area.y, to, &tally, style);
@@ -6870,11 +6919,17 @@ fn draw_search(
 
     // The boxes. A caret where the keys are, and the whole of one inked when
     // it arrived selected — `空格 /` leaves it that way so one key does both.
-    let typing = editor.mode() == yumete_core::input::Mode::Field;
-    let room = to.saturating_sub(left + 2) as usize;
     let mut y = area.y + 2;
     let mut caret: Option<Position> = None;
-    let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, what: &str, y: u16| {
+    let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, tag: &str, what: &str, y: u16| {
+        // **名字在格子外面**（2026-09-24 定）：三檔底色說的是「這裏打得了字」，
+        // 而名字不是打得了字的地方，所以它留在面板自己的底色上。
+        put_text(buf, left, y, to, tag, quiet);
+        let box_at = left + yumete_cjk::str_width(tag) as u16;
+        if box_at >= to {
+            return;
+        }
+        let room = (to - box_at) as usize;
         let shown: String = match what.chars().count() > room {
             true => what.chars().skip(what.chars().count() - room).collect(),
             false => what.to_string(),
@@ -6884,57 +6939,38 @@ fn draw_search(
         // here」.** While it is being typed into, the caret says where you
         // are — and a box drawn the same way whether or not `空格 /` had
         // selected its contents would hide what that selection is for.
+        //
+        // ⚠️ **鍵在這一格，底色照舊是中間那一檔**（2026-09-25 定，原話：「應該是
+        // 這一個光標所在的字是反白的，也就是説和正文normal時光標所在的那個字一樣
+        // 的模式。然後背景依舊是中間灰色」）。從前整條反白，於是那一格看着像被
+        // 選中了一整段，而框裏其實站着一個光標——`hl` 挪的就是它。
         let style = match (find.all_selected && here && !shown.is_empty(), typing && here) {
             (true, _) => on,
-            (false, true) => field,
-            (false, false) => match keys_here && here {
-                true => on,
-                false => field,
-            },
+            (false, true) => sunk,
+            (false, false) => field,
         };
         // **The whole row is painted, not just the characters.** A box with
         // one word in it and no ground behind it does not read as a box —
         // there is nothing to say where you may type or how much room there
         // is. Padded to the panel's width so the field has edges.
-        let wide = to.saturating_sub(left) as usize;
-        let used = yumete_cjk::str_width(&shown) + 1;
-        let filled = format!(" {shown}{}", " ".repeat(wide.saturating_sub(used)));
-        put_text(buf, left, y, to, &filled, style);
-        if typing && here && !find.all_selected {
-            let at = left + 1 + yumete_cjk::str_width(&shown) as u16;
-            if at < to {
-                if let Some(c) = buf.cell_mut((at, y)) {
-                    // On the **field's** ground, not the panel's: a caret cell
-                    // painted with the head style punched a panel-coloured
-                    // hole in the box it is standing in.
-                    c.set_symbol("▏").set_style(field.fg(ink.gold()));
-                }
-                caret = Some(Position { x: at, y });
-            }
+        let used = yumete_cjk::str_width(&shown);
+        let filled = format!("{shown}{}", " ".repeat(room.saturating_sub(used)));
+        put_text(buf, box_at, y, to, &filled, style);
+        if here && !find.all_selected {
+            caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink, sunk);
         }
     };
-    draw_box(buf, Field::Query, &find.query, y);
+    draw_box(buf, Field::Query, &say!("search.label.query"), &find.query, y);
     // **The replace row is only there when it is meant to be** — `:search` is
     // for looking, `:replace` for changing, and `r`/`R` are live only here.
     if find.replacing {
         y += 1;
-        draw_box(buf, Field::Replace, &find.replace, y);
+        draw_box(buf, Field::Replace, &say!("search.label.replace"), &find.replace, y);
     }
     // 範圍那一格的光標——它畫在標題行上，不走 `draw_box`（那一支畫的是整行鋪底
     // 的框，而標題行還要放右上角那個計數）。⚠️ 擺在閉包**用完之後**：那個閉包
     // 借着 `caret`。
-    if typing && find.field == Field::Scope {
-        let at = left
-            + yumete_cjk::str_width(&say!("label.panel.search")) as u16
-            + 2
-            + yumete_cjk::str_width(&find.scope_text) as u16;
-        if at < to {
-            if let Some(c) = buf.cell_mut((at, area.y)) {
-                c.set_symbol("▏").set_style(on.fg(ink.gold()));
-            }
-            caret = Some(Position { x: at, y: area.y });
-        }
-    }
+    caret = caret.or(scope_caret);
     // The two rules that close the boxes. Drawn after them, because the row
     // below the last box is only known once it is known whether there are two.
     let wide = to.saturating_sub(left) as usize;
@@ -9328,6 +9364,71 @@ fn draw_command(
     }
 }
 
+/// **The cursor inside one of the search panel's boxes** — #419, 2026-09-25.
+///
+/// Two shapes, and which one it is says what pressing a letter would do:
+///
+/// | | shape | pressing a letter |
+/// | --- | --- | --- |
+/// | Normal, keys on this box | **the character reversed**, as on the page | a command |
+/// | typing | a thin bar, on the sunken ground | that letter, here |
+///
+/// Asked for 2026-09-25: 「這一個光標所在的字是反白的，也就是説和正文normal時
+/// 光標所在的那個字一樣的模式」. The block is what makes `h`／`l` mean anything
+/// in a box — a bar between two characters is a place to insert, a block is a
+/// place you are standing.
+///
+/// ⚠️ **The caret may sit one past the last character**, which is the append
+/// position and where a box opens. The block is then drawn on the blank cell
+/// after the text: it is still a cell of the box, so it still reads as 「here」.
+///
+/// Returns where the terminal's own cursor should go, which is only while
+/// typing — a block drawn by the page does not want a second cursor on it.
+#[allow(clippy::too_many_arguments)]
+fn box_in(
+    buf: &mut ratatui::buffer::Buffer,
+    box_at: u16,
+    y: u16,
+    to: u16,
+    shown: &str,
+    caret: usize,
+    typing: bool,
+    ink: crate::theme::Palette,
+    sunk: Style,
+) -> Option<Position> {
+    // Where that character starts, in cells: everything before it, measured.
+    // ⚠️ **Cells, not characters** — 一個漢字佔兩格, and a cursor placed by
+    // character count lands half a word to the left on a line of prose.
+    let before: String = shown.chars().take(caret).collect();
+    let at = box_at + yumete_cjk::str_width(&before) as u16;
+    if at >= to {
+        return None;
+    }
+    if typing {
+        if let Some(c) = buf.cell_mut((at, y)) {
+            // On the **field's** ground, not the panel's: a caret cell painted
+            // with the head style punched a panel-coloured hole in the box it
+            // is standing in.
+            c.set_symbol("▏").set_style(sunk.fg(ink.gold()));
+        }
+        return Some(Position { x: at, y });
+    }
+    // The block: the character as it stands, ink and ground swapped. A 漢字
+    // covers two cells and the second one carries no symbol, so both are
+    // painted or the block comes out half-width.
+    let under = shown.chars().nth(caret);
+    let wide = under.map(yumete_cjk::char_width).unwrap_or(1) as u16;
+    let block = Style::default().bg(ink.text()).fg(ink.paper());
+    for step in 0..wide.max(1) {
+        if let Some(c) = buf.cell_mut((at + step, y)) {
+            c.set_style(block);
+        }
+    }
+    None
+}
+
+/// **As much of a line as the row can hold, centred on one word** — #419.
+
 /// **As much of a line as the row can hold, centred on one word** — #419.
 ///
 /// Three pieces: what comes before the match, the match, and what comes
@@ -10089,12 +10190,77 @@ fn squeezed(text: &str) -> String {
         assert!(row(1).contains("──"), "框上要有線：{:?}", row(1));
         assert!(row(3).contains("──"), "框下要有線：{:?}", row(3));
 
-        // 框裏的底色不是面板的底色。空框沒有字，所以**只有底色說得出它在那裏**。
+        // **三檔底色，只鋪在打得了字的那一段上**（2026-09-24 報的：「这一块的
+        // 颜色不好，我老是搞错」）。從前「正在打字」和「鍵不在這一格」都是紙那
+        // 一檔，於是三格看着一個樣。
+        //
+        // ⚠️ **按字符找那一格，別按列號猜。** 邊欄開在哪一側、窗口分幾份，都不
+        // 是這條測試要管的事；它要管的只有「名字之後那一段是什麼顏色」。
         let ink = crate::theme::Palette::of(&config);
-        let inside = buf.cell((10, 2)).expect("框裏").style().bg;
-        let panel = buf.cell((10, 4)).expect("面板上的別處").style().bg;
-        assert_ne!(inside, panel, "框與面板同色，等於沒有框");
-        assert_eq!(inside, Some(ink.ground(yumete_config::rung::PAPER).bg.unwrap()));
+        let chrome = ink.ground(yumete_config::rung::CHROME).bg;
+        let tag = say!("search.label.query");
+        let lead = tag.chars().next().expect("名字不是空的");
+        let column = |buf: &ratatui::buffer::Buffer, y: u16, ch: char| -> u16 {
+            (0..60)
+                .find(|x| buf.cell((*x, y)).is_some_and(|c| c.symbol().starts_with(ch)))
+                .unwrap_or_else(|| panic!("第 {y} 行上找得到 {ch}"))
+        };
+        let label_at = column(&buf, 2, lead);
+        let box_at = label_at + yumete_cjk::str_width(&tag) as u16;
+        // 名字那幾格留在面板的底色上——三檔說的是「這裏打得了字」。
+        assert_eq!(
+            buf.cell((label_at, 2)).expect("名字那一段").style().bg,
+            chrome,
+            "「{tag}」不該跟着框一起變色"
+        );
+        // ① 正在打字：梯子的盡頭，第 100 檔。
+        assert_eq!(
+            buf.cell((box_at, 2)).expect("框裏").style().bg,
+            Some(ink.sunken()),
+            "打字的時候是最深那一檔"
+        );
+        assert_ne!(chrome, Some(ink.sunken()), "框與面板同色，等於沒有框");
+
+        // ② `Esc` 出框：底色照舊是中間那一檔，**只有光標壓住的那個字反白**
+        // （2026-09-25 定，原話：「應該是這一個光標所在的字是反白的……然後背景
+        // 依舊是中間灰色。用戶這樣就能用hl在搜索欄中移動光標」）。
+        ed.on_key(Key::Esc);
+        // 框裏有字纔看得出「只反白一個」——空框的光標壓着的是那個空格。
+        ed.on_key(Key::Char('i'));
+        for c in "冬天".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        let (buf, _) = render_caret(&ed, &config, 60, 16);
+        let paper = ink.ground(yumete_config::rung::PAPER).bg;
+        let reversed = |buf: &ratatui::buffer::Buffer, x: u16| {
+            buf.cell((x, 2)).expect("框裏").style().bg == Some(ink.text())
+        };
+        // 光標在末尾（「冬天」佔四格），壓着的是第五格那個空位。
+        assert!(reversed(&buf, box_at + 4), "光標那一格反白");
+        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, paper, "⚠️ 整條不再反白");
+        assert_eq!(buf.cell((box_at + 2, 2)).expect("天").style().bg, paper);
+
+        // `h` 挪一格，反白跟着走——這就是 `hl` 在框裏挪光標的樣子。
+        ed.on_key(Key::Char('h'));
+        let (buf, _) = render_caret(&ed, &config, 60, 16);
+        assert!(reversed(&buf, box_at + 2), "退到「天」上");
+        assert!(!reversed(&buf, box_at + 4), "原來那一格讓出來了");
+        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, paper, "隔壁那個字沒跟着反");
+        // ⚠️ **全角字的第二格在這裏永遠是 `Reset`，別去斷言它。** ratatui 的
+        // `Buffer::diff` 跳過寬字形的後半格（那一格的 symbol 是空的），所以它
+        // 根本沒送到 `TestBackend` 的緩衝區裏——`put_text` 明明寫過的「冬」的
+        // 第二格，量出來也是 `Reset`。真終端上寬字自己就蓋滿兩列。
+        // 2026-09-25 為這一條紅過一次。
+
+        // ③ 走到結果上：這一格打得了字，可鍵不在這裏——中間那一檔。
+        ed.on_key(Key::Char('j'));
+        let (buf, _) = render_caret(&ed, &config, 60, 16);
+        assert_eq!(
+            buf.cell((box_at, 2)).expect("框裏").style().bg,
+            ink.ground(yumete_config::rung::PAPER).bg,
+            "鍵不在這一格：中間那一檔"
+        );
     }
 
     /// **走進搜索結果時，命令行要把前後文鋪滿整行，命中那個詞反白**（#419）。
