@@ -523,7 +523,21 @@ impl Panel {
             };
             let changes: Vec<(String, Change)> =
                 sheet.edits.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            let (fresh, mut spoke) = rewrite(&sheet.text, &changes, &known)?;
+            // ⚠️ **照磁碟上此刻那一份改，不是照開面板那一刻那一份。**
+            //
+            // `sheet.text` 是開面板時讀的。面板開着的這段時間裏那個檔可能被外面
+            // 改了——另一個 yumete、另一臺機器上同步下來的、`git checkout` ——而
+            // 拿舊正文改完整份寫回去，**會把人家改的別的鍵一起頂掉**。改的那幾項
+            // 是「鍵 → 新值」，套在哪一份正文上都成立，所以重讀一次就沒有這件事。
+            //
+            // ⚠️ 讀不到就用手上這一份（檔剛被刪掉／權限沒了）：那時 `write_atomically`
+            // 自己會報，不必在這裏先攔一道。
+            let now = std::fs::read_to_string(&path).unwrap_or_else(|_| sheet.text.clone());
+            let moved = now != sheet.text;
+            let (fresh, mut spoke) = rewrite(&now, &changes, &known)?;
+            if moved {
+                said.changed_underneath.push(path.display().to_string());
+            }
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
             }
@@ -532,6 +546,7 @@ impl Panel {
             sheet.declared = declared_in(&sheet.text);
             sheet.edits.clear();
             said.commented_out.append(&mut spoke.commented_out);
+            said.changed_underneath.append(&mut spoke.changed_underneath);
         }
         self.said = Some(said.clone());
         Ok(said)
@@ -789,6 +804,34 @@ mod tests {
             .filter(|n| n != "config.toml")
             .collect();
         assert!(litter.is_empty(), "留了垃圾：{litter:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **面板開着的時候檔被外面改了，`:w` 不許把人家改的頂掉。**
+    ///
+    /// ⚠️ 拿開面板那一刻的正文改完整份寫回去，別人改的**別的鍵**就沒了。改的那
+    /// 幾項是「鍵 → 新值」，套在哪一份正文上都成立，所以存盤前重讀一次。
+    #[test]
+    fn saving_keeps_what_somebody_else_changed_meanwhile() {
+        let dir = std::env::temp_dir().join(format!("yumete-set-2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[editor]\nindent = 4\n").unwrap();
+
+        let mut p = Panel::open(Some(path.clone()), None);
+        p.pane = Pane::Settings;
+        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.press();
+
+        // 面板開着的這段時間裏，外面動了**別的**鍵。
+        std::fs::write(&path, "[editor]\nindent = 4\nsoft_wrap = false\n").unwrap();
+
+        let said = p.save().expect("存得下去");
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(after.contains("bands = 2"), "我改的那一項落地了：\n{after}");
+        assert!(after.contains("soft_wrap = false"), "人家改的那一項沒被頂掉：\n{after}");
+        assert_eq!(said.changed_underneath.len(), 1, "而且說了一句：{said:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
