@@ -1278,8 +1278,19 @@ pub fn run(
                         let here = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
                         if book.is_some_and(|root| here.starts_with(root)) {
                             let version = (buffer.id(), buffer.revision());
-                            let text = buffer.rope().to_string();
-                            running.push(&here, &text, version);
+                            // ⚠️ **問在造字串之前。** `rope().to_string()` 把整
+                            // 份稿子複製一遍，而九成九的幀正文沒動——從前那一句
+                            // 無條件跑，一章三百 KB 就是每一幀三百 KB。
+                            if running.wants(version) {
+                                let text = buffer.rope().to_string();
+                                running.push(&here, &text, version);
+                            }
+                            // 光標也告訴它，預覽就跟着走（`preview::change_cursor`）。
+                            let rope = buffer.rope();
+                            let at = editor.cursor().min(rope.len_chars());
+                            let line = rope.char_to_line(at);
+                            let character = at - rope.line_to_char(line);
+                            running.look_at(&here, (buffer.id(), line, character));
                         }
                     }
                 }
@@ -2266,6 +2277,15 @@ struct Job {
     /// is the job's — but it means the socket must be held, not opened per
     /// message.
     control: Option<std::net::TcpStream>,
+    /// **控制面在哪** —— 記着它纔接得回來。
+    ///
+    /// ⚠️ 從前只有那個 socket：一斷就**這一場都沒有了**，而排版器還好好地跑着，
+    /// 於是預覽從某一刻起悄悄不再跟着按鍵走，沒有任何跡象。2026-09-24 補。
+    control_at: Option<String>,
+    /// 下一次可以重撥的時刻 —— 斷了不許每一幀撥一次。
+    redial: Option<std::time::Instant>,
+    /// 上一次告訴排版器的光標位置（緩衝區、行、字）。
+    caret: Option<(u64, usize, usize)>,
     /// Which revision of which buffer was last pushed, so that a page that has
     /// not changed costs nothing.
     pushed: Option<(u64, u64)>,
@@ -2431,6 +2451,9 @@ impl Job {
             said,
             file: file.to_path_buf(),
             control: None,
+            control_at: None,
+            redial: None,
+            caret: None,
             pushed: None,
             named: std::fs::canonicalize(file).unwrap_or_else(|_| {
                 std::env::current_dir().unwrap_or_default().join(file)
@@ -2446,6 +2469,7 @@ impl Job {
     fn listen_in(&mut self, at: &str) {
         use std::io::{Read, Write};
         trace(&format!("dial {at}"));
+        self.control_at = Some(at.to_string());
         let Ok(mut socket) = std::net::TcpStream::connect(at) else {
             trace("  cannot connect");
             return;
@@ -2487,9 +2511,54 @@ impl Job {
     /// Silent when there is no socket, when the text has not moved, or when
     /// the write fails — a preview is a convenience, and none of its failures
     /// are worth a line on a status bar that the writing needs.
+    /// **這一版要不要推？**
+    ///
+    /// ⚠️ **問在把整份正文變成字串之前。** 從前這一句在 `push` 裏面，而呼叫方
+    /// 每一幀先 `rope().to_string()` 再問——一章三百 KB 的稿子，**每一幀複製一
+    /// 遍**，而九成九的幀正文根本沒動。2026-09-24 看出來的。
+    fn wants(&self, version: (u64, u64)) -> bool {
+        if self.pushed == Some(version) {
+            return false;
+        }
+        self.control.is_some() || self.can_redial()
+    }
+
+    /// 斷了之後，這一刻可不可以再撥一次。
+    fn can_redial(&self) -> bool {
+        self.control_at.is_some()
+            && self.redial.is_some_and(|when| std::time::Instant::now() >= when)
+    }
+
+    /// 斷了就接回來 —— 接上了回 `true`。
+    ///
+    /// ⚠️ **兩秒一次，不是每一幀一次。** 排版器真的關掉之後，每按一個鍵撥一次
+    /// TCP 是打字時看得見的頓。
+    fn redial(&mut self) -> bool {
+        if self.control.is_some() {
+            return true;
+        }
+        if !self.can_redial() {
+            return false;
+        }
+        let Some(at) = self.control_at.clone() else { return false };
+        self.redial = Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+        trace("redial");
+        self.listen_in(&at);
+        // 接回來了就當沒推過：那一頭的虛擬檔案系統是新的。
+        if self.control.is_some() {
+            self.pushed = None;
+            self.caret = None;
+        }
+        self.control.is_some()
+    }
+
     fn push(&mut self, path: &std::path::Path, text: &str, version: (u64, u64)) {
         use std::io::Write;
         if self.pushed == Some(version) {
+            return;
+        }
+        if !self.redial() {
+            trace("push: no socket");
             return;
         }
         let Some(socket) = self.control.as_mut() else {
@@ -2501,9 +2570,39 @@ impl Job {
         trace(&format!("push {} bytes of {}", frame.len(), path.display()));
         match socket.write_all(&frame) {
             Ok(()) => self.pushed = Some(version),
-            // The preview is gone, or going. Drop the socket rather than
-            // trying again every keystroke for the rest of the session.
-            Err(_) => self.control = None,
+            // 排版器走了，或者正在走。放掉這個 socket——但**記着地址**，過兩秒
+            // 再撥一次：它可能只是重啓了一下。
+            Err(_) => {
+                self.control = None;
+                self.redial = Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+            }
+        }
+    }
+
+    /// **光標在這裏** —— 預覽跟着走。
+    ///
+    /// ⚠️ **這一支 2026-09-23 就寫好了（`preview::change_cursor`，連測試帶文檔），
+    /// 而一次都沒有人叫它**——「開這條 socket 的理由」寫在那支函數的文檔裏，卻是
+    /// 死代碼。2026-09-24 接上。
+    ///
+    /// 光標不動就不說：一幀一條的話那是每秒幾十次無謂的往返。
+    fn look_at(&mut self, path: &std::path::Path, where_to: (u64, usize, usize)) {
+        use std::io::Write;
+        if self.caret == Some(where_to) || self.control.is_none() {
+            return;
+        }
+        let (_, line, character) = where_to;
+        let said = yumete_core::preview::change_cursor(path, line, character);
+        let frame = yumete_core::preview::frame(&said, mask());
+        if let Some(socket) = self.control.as_mut() {
+            match socket.write_all(&frame) {
+                Ok(()) => self.caret = Some(where_to),
+                Err(_) => {
+                    self.control = None;
+                    self.redial =
+                        Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+                }
+            }
         }
     }
 }
@@ -9438,6 +9537,80 @@ fn draw_panel_rows(
     frame.render_widget(Paragraph::new(lines).style(ground), inner);
 }
 
+#[cfg(test)]
+mod preview_wire {
+    use super::*;
+
+    /// 一個什麽都不做的 `Job`，只為了問它那幾個判斷。
+    fn idle() -> Job {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        Job {
+            what: "test",
+            child: std::process::Command::new("true").spawn().expect("`true` 跑得起來"),
+            said: rx,
+            file: std::path::PathBuf::from("/nowhere/a.typ"),
+            named: std::path::PathBuf::from("/nowhere/a.typ"),
+            control: None,
+            control_at: None,
+            redial: None,
+            caret: None,
+            pushed: None,
+        }
+    }
+
+    /// **沒有 socket 也沒有地址，就不要把整份稿子變成字串。**
+    ///
+    /// ⚠️ 這一條守的是一個看不見的開銷：`rope().to_string()` 從前無條件跑在
+    /// `wants` 之前，一章三百 KB 的稿子**每一幀複製一遍**，而九成九的幀正文沒動。
+    /// 判準是「問得出要不要推」，而不是「推的時候發現不用推」。
+    #[test]
+    fn nothing_to_push_into_costs_nothing() {
+        let job = idle();
+        assert!(!job.wants((1, 1)), "沒有 socket 也沒有地址");
+    }
+
+    /// 同一版不推第二遍；換了一版纔推。
+    #[test]
+    fn the_same_revision_is_not_pushed_twice() {
+        let mut job = idle();
+        // 裝作接上了：有地址、而且已經可以撥。
+        job.control_at = Some("127.0.0.1:1".to_string());
+        job.redial = Some(std::time::Instant::now());
+        assert!(job.wants((1, 7)), "沒推過");
+        job.pushed = Some((1, 7));
+        assert!(!job.wants((1, 7)), "推過了");
+        assert!(job.wants((1, 8)), "改了一個字");
+        assert!(job.wants((2, 7)), "換了一個緩衝區");
+    }
+
+    /// **斷了之後兩秒纔撥一次，不是每一幀撥一次。**
+    ///
+    /// ⚠️ 每按一個鍵撥一次 TCP，在排版器真的關掉之後是打字時看得見的頓。
+    #[test]
+    fn a_dropped_socket_is_redialled_on_a_clock_not_every_frame() {
+        let mut job = idle();
+        job.control_at = Some("127.0.0.1:1".to_string());
+        job.redial = Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+        assert!(!job.can_redial(), "還沒到點");
+        assert!(!job.wants((1, 1)), "沒到點就別造字串");
+        job.redial = Some(std::time::Instant::now());
+        assert!(job.can_redial(), "到點了");
+    }
+
+    /// 地址記着纔接得回來 —— 沒記地址的時候撥不了。
+    #[test]
+    fn without_an_address_there_is_nothing_to_redial() {
+        let mut job = idle();
+        job.redial = Some(std::time::Instant::now());
+        assert!(!job.can_redial());
+    }
+}
+
+// ⚠️ **測試模組一律擺在檔尾。** `messages.rs` 那張「每個標籤都有條目」的網把源碼
+// 切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，它後面**所有的
+// `say!` 都從網裏消失**，於是測試轉而報「messages.toml 裏有一堆沒人說」。那一條
+// 就寫在 `messages.rs::source` 的註釋裏，而 2026-09-24 我把 `preview_wire` 擺在了
+// 兩千六百行處，當場重演了一遍。
 #[cfg(test)]
 mod tests {
 /// 把一行畫出來的字裏「寬字後面那個空格」擠掉，好照字面對句子（#497）。
