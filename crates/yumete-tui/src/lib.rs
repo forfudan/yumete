@@ -4413,7 +4413,7 @@ const LOOKFOR_WIDTH: u16 = 78;
 /// By display width, not by `char`s — a Chinese sentence half-cut by a `char`
 /// count overruns the panel it was measured for. The mark is one cell, so what
 /// is kept is one cell less.
-fn elide(line: &str, width: usize) -> String {
+pub(crate) fn elide(line: &str, width: usize) -> String {
     if yumete_cjk::str_width(line) <= width {
         return line.to_string();
     }

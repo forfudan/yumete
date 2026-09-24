@@ -7216,6 +7216,34 @@ zhs = "存不下去：{0}"
 en = "cannot save: {0}"
 
 [[message]]
+# 設置：歧义宽度
+key = "set.editor.ambiguous-width"
+zht = "歧義寬度"
+zhs = "歧义宽度"
+en = "ambiguous width"
+
+[[message]]
+# 設置：歧义宽度——一句話
+key = "set.editor.ambiguous-width.hint"
+zht = "「東亞歧義寬度」那些字符佔一格還是兩格。畫歪了就改這裏"
+zhs = "「东亚歧义宽度」那些字符占一格还是两格。画歪了就改这里"
+en = "ambiguous width"
+
+[[message]]
+# 設置：抢救副本
+key = "set.editor.autosave"
+zht = "搶救副本"
+zhs = "抢救副本"
+en = "autosave"
+
+[[message]]
+# 設置：抢救副本——一句話
+key = "set.editor.autosave.hint"
+zht = "没保存的時候在文件旁邊留一份副本，崩了還能撈回來"
+zhs = "没保存的时候在文件旁边留一份副本，崩了还能捞回来"
+en = "autosave"
+
+[[message]]
 # 設置：段組
 key = "set.editor.bands"
 zht = "段組"
@@ -7228,6 +7256,90 @@ key = "set.editor.bands.hint"
 zht = "竪排的頁面橫着分成幾條，每一條各自從右往左排"
 zhs = "竖排的页面横着分成几条，每一条各自从右往左排"
 en = "how many bands a set-down page is cut into across"
+
+[[message]]
+# 設置：字的码位
+key = "set.editor.char-info"
+zht = "字的碼位"
+zhs = "字的码位"
+en = "char info"
+
+[[message]]
+# 設置：字的码位——一句話
+key = "set.editor.char-info.hint"
+zht = "狀態欄右端説出光標下那個字的 Unicode 碼位和區塊名"
+zhs = "状态栏右端说出光标下那个字的 Unicode 码位和区块名"
+en = "char info"
+
+[[message]]
+# 設置：代码上色
+key = "set.editor.code-highlight"
+zht = "代碼上色"
+zhs = "代码上色"
+en = "code highlight"
+
+[[message]]
+# 設置：代码上色——一句話
+key = "set.editor.code-highlight.hint"
+zht = "圍欄裏的代碼按它自己的語法上色（九種語言）；關掉則整塊一種紫"
+zhs = "围栏里的代码按它自己的语法上色（九种语言）；关掉则整块一种紫"
+en = "code highlight"
+
+[[message]]
+# 設置：命令行那一行
+key = "set.editor.command-line"
+zht = "命令行那一行"
+zhs = "命令行那一行"
+en = "command line"
+
+[[message]]
+# 設置：命令行那一行——一句話
+key = "set.editor.command-line.hint"
+zht = "狀態欄底下再加一行：打命令、剛纔怎麽了、現在能按什麽"
+zhs = "状态栏底下再加一行：打命令、刚才怎么了、现在能按什么"
+en = "command line"
+
+[[message]]
+# 設置：详情栏宽度
+key = "set.editor.detail-width"
+zht = "詳情欄寬度"
+zhs = "详情栏宽度"
+en = "detail width"
+
+[[message]]
+# 設置：详情栏宽度——一句話
+key = "set.editor.detail-width.hint"
+zht = "表格詳情那一欄多寬"
+zhs = "表格详情那一栏多宽"
+en = "detail width"
+
+[[message]]
+# 設置：改动条
+key = "set.editor.diff-gutter"
+zht = "改動條"
+zhs = "改动条"
+en = "diff gutter"
+
+[[message]]
+# 設置：改动条——一句話
+key = "set.editor.diff-gutter.hint"
+zht = "行號旁邊那一格用底色説哪幾行跟 git 裏的不一樣"
+zhs = "行号旁边那一格用底色说哪几行跟 git 里的不一样"
+en = "diff gutter"
+
+[[message]]
+# 設置：模糊搜索出厂开着
+key = "set.editor.fuzzy-search"
+zht = "模糊搜索出廠開着"
+zhs = "模糊搜索出厂开着"
+en = "fuzzy search"
+
+[[message]]
+# 設置：模糊搜索出厂开着——一句話
+key = "set.editor.fuzzy-search.hint"
+zht = "搜索面板那個「模糊」開關一開始是開是關"
+zhs = "搜索面板那个「模糊」开关一开始是开是关"
+en = "fuzzy search"
 
 [[message]]
 # 設置：標點旁置
@@ -7251,11 +7363,81 @@ zhs = "首行缩进"
 en = "indent"
 
 [[message]]
+# 設置：段首记号
+key = "set.editor.indent-hint"
+zht = "段首記號"
+zhs = "段首记号"
+en = "indent hint"
+
+[[message]]
+# 設置：段首记号——一句話
+key = "set.editor.indent-hint.hint"
+zht = "竪排時段落開頭畫一個記號，長段落裏找得到分段在哪"
+zhs = "竖排时段落开头画一个记号，长段落里找得到分段在哪"
+en = "indent hint"
+
+[[message]]
+# 設置：段首那个符号
+key = "set.editor.indent-symbol"
+zht = "段首那個符號"
+zhs = "段首那个符号"
+en = "indent symbol"
+
+[[message]]
+# 設置：段首那个符号——一句話
+key = "set.editor.indent-symbol.hint"
+zht = "段首記號畫成什麽字。段首記號設成「畫符號」時才用得上"
+zhs = "段首记号画成什么字。段首记号设成「画符号」时才用得上"
+en = "indent symbol"
+
+[[message]]
+# 設置：缩进几列
+key = "set.editor.indent-width"
+zht = "縮進幾列"
+zhs = "缩进几列"
+en = "indent width"
+
+[[message]]
+# 設置：缩进几列——一句話
+key = "set.editor.indent-width.hint"
+zht = "`>` 加、`<` 減的列數，也是 Tab 打出來的空格數"
+zhs = "`>` 加、`<` 减的列数，也是 Tab 打出来的空格数"
+en = "indent width"
+
+[[message]]
 # 設置：首行縮進——一句話
 key = "set.editor.indent.hint"
 zht = "每段開頭空幾格。中文的慣例是 2"
 zhs = "每段开头空几格。中文的惯例是 2"
 en = "cells at the head of a paragraph; the Chinese convention is 2"
+
+[[message]]
+# 設置：界面语言
+key = "set.editor.language"
+zht = "界面語言"
+zhs = "界面语言"
+en = "language"
+
+[[message]]
+# 設置：切中英的键
+key = "set.editor.language-key"
+zht = "切中英的鍵"
+zhs = "切中英的键"
+en = "language key"
+
+[[message]]
+# 設置：切中英的键——一句話
+key = "set.editor.language-key.hint"
+zht = "報不出單獨 Shift 的終端上，用這個鍵切中文／ABC"
+zhs = "报不出单独 Shift 的终端上，用这个键切中文／ABC"
+en = "language key"
+
+[[message]]
+# 設置：界面语言——一句話
+key = "set.editor.language.hint"
+zht = "編輯器自己説話用哪種語言。和文件内容無關"
+zhs = "编辑器自己说话用哪种语言。和文件内容无关"
+en = "language"
 
 [[message]]
 # 設置：排版方向
@@ -7270,6 +7452,34 @@ key = "set.editor.layout.hint"
 zht = "整頁的字是橫着走還是竪着走"
 zhs = "整页的字是横着走还是竖着走"
 en = "whether the page runs across or down"
+
+[[message]]
+# 設置：行号铺底
+key = "set.editor.line-number-fill"
+zht = "行號鋪底"
+zhs = "行号铺底"
+en = "line number fill"
+
+[[message]]
+# 設置：行号铺底——一句話
+key = "set.editor.line-number-fill.hint"
+zht = "行號那一格用淡底色鋪滿，而不是隻寫一個數"
+zhs = "行号那一格用淡底色铺满，而不是只写一个数"
+en = "line number fill"
+
+[[message]]
+# 設置：行号
+key = "set.editor.line-numbers"
+zht = "行號"
+zhs = "行号"
+en = "line numbers"
+
+[[message]]
+# 設置：行号——一句話
+key = "set.editor.line-numbers.hint"
+zht = "左邊那一欄畫第幾行。相對行號數的是「離光標幾行」，跳行時好按"
+zhs = "左边那一栏画第几行。相对行号数的是「离光标几行」，跳行时好按"
+en = "line numbers"
 
 [[message]]
 # 設置：邊欄
@@ -7328,6 +7538,104 @@ zhs = "只是一条线：超过这一栏的字变色，行照旧不折"
 en = "a line, not a break: what runs past it changes colour"
 
 [[message]]
+# 設置：光标边距
+key = "set.editor.scrolloff"
+zht = "光標邊距"
+zhs = "光标边距"
+en = "scrolloff"
+
+[[message]]
+# 設置：光标边距——一句話
+key = "set.editor.scrolloff.hint"
+zht = "光標周圍至少留幾行（竪排是幾縱）不讓它貼到邊上"
+zhs = "光标周围至少留几行（竖排是几纵）不让它贴到边上"
+en = "scrolloff"
+
+[[message]]
+# 設置：接着上次
+key = "set.editor.session"
+zht = "接着上次"
+zhs = "接着上次"
+en = "session"
+
+[[message]]
+# 設置：接着上次——一句話
+key = "set.editor.session.hint"
+zht = "不帶文件名啓動時：開空白文檔，還是接着上次那些文件"
+zhs = "不带文件名启动时：开空白文档，还是接着上次那些文件"
+en = "session"
+
+[[message]]
+# 設置：候选旁的拆分
+key = "set.editor.show-chaifen"
+zht = "候選旁的拆分"
+zhs = "候选旁的拆分"
+en = "show chaifen"
+
+[[message]]
+# 設置：候选旁的拆分——一句話
+key = "set.editor.show-chaifen.hint"
+zht = "打字時在候選字旁邊寫出它的拆分"
+zhs = "打字时在候选字旁边写出它的拆分"
+en = "show chaifen"
+
+[[message]]
+# 設置：排出注音
+key = "set.editor.show-ruby"
+zht = "排出注音"
+zhs = "排出注音"
+en = "show ruby"
+
+[[message]]
+# 設置：排出注音——一句話
+key = "set.editor.show-ruby.hint"
+zht = "把注音排在字的旁邊。默認關：文件裏是什麽，畫面上就是什麽"
+zhs = "把注音排在字的旁边。默认关：文件里是什么，画面上就是什么"
+en = "show ruby"
+
+[[message]]
+# 設置：词语着色
+key = "set.editor.show-segmentation"
+zht = "詞語着色"
+zhs = "词语着色"
+en = "show segmentation"
+
+[[message]]
+# 設置：词语着色——一句話
+key = "set.editor.show-segmentation.hint"
+zht = "按詞給正文上色，一眼看得出編輯器把哪幾個字當成一個詞"
+zhs = "按词给正文上色，一眼看得出编辑器把哪几个字当成一个词"
+en = "show segmentation"
+
+[[message]]
+# 設置：边栏宽度
+key = "set.editor.sidebar-width"
+zht = "邊欄寬度"
+zhs = "边栏宽度"
+en = "sidebar width"
+
+[[message]]
+# 設置：边栏宽度——一句話
+key = "set.editor.sidebar-width.hint"
+zht = "文件樹那一欄多寬"
+zhs = "文件树那一栏多宽"
+en = "sidebar width"
+
+[[message]]
+# 設置：智能大小写
+key = "set.editor.smart-case"
+zht = "智能大小寫"
+zhs = "智能大小写"
+en = "smart case"
+
+[[message]]
+# 設置：智能大小写——一句話
+key = "set.editor.smart-case.hint"
+zht = "搜索時：模式裏没有大寫就不分大小寫，有一個大寫就分"
+zhs = "搜索时：模式里没有大写就不分大小写，有一个大写就分"
+en = "smart case"
+
+[[message]]
 # 設置：長行折回來
 key = "set.editor.soft-wrap"
 zht = "長行折回來"
@@ -7342,6 +7650,62 @@ zhs = "横排时长段落折到下一行；关掉则跑出右边看不见"
 en = "long lines fold when set across; off, they run past the right edge"
 
 [[message]]
+# 設置：Tab 打什么
+key = "set.editor.tab-inserts"
+zht = "Tab 打什麽"
+zhs = "Tab 打什么"
+en = "tab inserts"
+
+[[message]]
+# 設置：Tab 打什么——一句話
+key = "set.editor.tab-inserts.hint"
+zht = "插入模式按 Tab 打出來的是什麽。Shift-Tab 打另一種"
+zhs = "插入模式按 Tab 打出来的是什么。Shift-Tab 打另一种"
+en = "tab inserts"
+
+[[message]]
+# 設置：TAB 有多宽
+key = "set.editor.tab-width"
+zht = "TAB 有多寬"
+zhs = "TAB 有多宽"
+en = "tab width"
+
+[[message]]
+# 設置：TAB 有多宽——一句話
+key = "set.editor.tab-width.hint"
+zht = "一個 TAB 推進到幾的倍數。碼表就是靠它對齊的"
+zhs = "一个 TAB 推进到几的倍数。码表就是靠它对齐的"
+en = "tab width"
+
+[[message]]
+# 設置：表格的栏线
+key = "set.editor.table-rules"
+zht = "表格的欄線"
+zhs = "表格的栏线"
+en = "table rules"
+
+[[message]]
+# 設置：表格的栏线——一句話
+key = "set.editor.table-rules.hint"
+zht = "表格裏那些竪線畫成什麽樣"
+zhs = "表格里那些竖线画成什么样"
+en = "table rules"
+
+[[message]]
+# 設置：上方分页条
+key = "set.editor.tabs"
+zht = "上方分頁條"
+zhs = "上方分页条"
+en = "tabs"
+
+[[message]]
+# 設置：上方分页条——一句話
+key = "set.editor.tabs.hint"
+zht = "頂上那條列着打開了哪些文件的横條"
+zhs = "顶上那条列着打开了哪些文件的横条"
+en = "tabs"
+
+[[message]]
 # 設置：縱中橫
 key = "set.editor.tatechuyoko"
 zht = "縱中橫"
@@ -7354,6 +7718,48 @@ key = "set.editor.tatechuyoko.hint"
 zht = "竪排時一格裏橫着塞幾個半角字，年份和頁碼就不會一位一行"
 zhs = "竖排时一格里横着塞几个半角字，年份和页码就不会一位一行"
 en = "half-width characters set across inside one cell, so a year is not one digit to a row"
+
+[[message]]
+# 設置：滚轮一格
+key = "set.editor.wheel-step"
+zht = "滚輪一格"
+zhs = "滚轮一格"
+en = "wheel step"
+
+[[message]]
+# 設置：滚轮一格——一句話
+key = "set.editor.wheel-step.hint"
+zht = "滚輪撥一下走幾行。1 就是終端自己那一格"
+zhs = "滚轮拨一下走几行。1 就是终端自己那一格"
+en = "wheel step"
+
+[[message]]
+# 設置：分词松紧
+key = "set.editor.word-level"
+zht = "分詞鬆緊"
+zhs = "分词松紧"
+en = "word level"
+
+[[message]]
+# 設置：分词松紧——一句話
+key = "set.editor.word-level.hint"
+zht = "多容易把幾個字併成一個詞。嚴：只認没爭議的；松：詞典説是就是"
+zhs = "多容易把几个字并成一个词。严：只认没争议的；松：词典说是就是"
+en = "word level"
+
+[[message]]
+# 設置：词怎么画
+key = "set.editor.word-mark"
+zht = "詞怎麽畫"
+zhs = "词怎么画"
+en = "word mark"
+
+[[message]]
+# 設置：词怎么画——一句話
+key = "set.editor.word-mark.hint"
+zht = "詞語着色用哪一種畫法"
+zhs = "词语着色用哪一种画法"
+en = "word mark"
 
 [[message]]
 # 設置：縱間距
@@ -7447,6 +7853,48 @@ zhs = "这一组还没填——先在 config.toml 里写"
 en = "not filled in yet — write it in config.toml for now"
 
 [[message]]
+# 設置：输入方案
+key = "set.ime.scheme"
+zht = "輸入方案"
+zhs = "输入方案"
+en = "scheme"
+
+[[message]]
+# 設置：输入方案——一句話
+key = "set.ime.scheme.hint"
+zht = "用哪一張碼表。只有靈明自帶，其餘要先裝"
+zhs = "用哪一张码表。只有灵明自带，其余要先装"
+en = "scheme"
+
+[[message]]
+# 設置：启动就载入码表
+key = "set.ime.start"
+zht = "啓動就載入碼表"
+zhs = "启动就载入码表"
+en = "start"
+
+[[message]]
+# 設置：启动就载入码表——一句話
+key = "set.ime.start.hint"
+zht = "默認不載入——語言模型照常載入（分詞要它），碼表等你第一次打字"
+zhs = "默认不载入——语言模型照常载入（分词要它），码表等你第一次打字"
+en = "start"
+
+[[message]]
+# 設置：让开系统输入法
+key = "set.ime.system"
+zht = "讓開系統輸入法"
+zhs = "让开系统输入法"
+en = "system"
+
+[[message]]
+# 設置：让开系统输入法——一句話
+key = "set.ime.system.hint"
+zht = "Normal 模態下請系統輸入法讓開，免得按鍵被它喫掉"
+zhs = "Normal 模态下请系统输入法让开，免得按键被它吃掉"
+en = "system"
+
+[[message]]
 # 設置面板：底下那一行鍵
 key = "set.keys"
 zht = "hl 換欄  jk 上下  空格 切換  i 改  d 撤掉這一層  Tab 換存到哪一份  :w 存  q 走"
@@ -7538,11 +7986,347 @@ zhs = "没有改动"
 en = "nothing changed"
 
 [[message]]
+# 設置：候选怎么画
+key = "set.panel.display"
+zht = "候選怎麽畫"
+zhs = "候选怎么画"
+en = "display"
+
+[[message]]
+# 設置：候选怎么画——一句話
+key = "set.panel.display.hint"
+zht = "打字時候選是畫成一個框，還是直接在行内預覽"
+zhs = "打字时候选是画成一个框，还是直接在行内预览"
+en = "display"
+
+[[message]]
+# 設置：候选的序号
+key = "set.panel.markers"
+zht = "候選的序號"
+zhs = "候选的序号"
+en = "markers"
+
+[[message]]
+# 設置：候选的序号——一句話
+key = "set.panel.markers.hint"
+zht = "候選前面那九個序號畫成什麽字"
+zhs = "候选前面那九个序号画成什么字"
+en = "markers"
+
+[[message]]
+# 設置：候选一页几条
+key = "set.panel.page-size"
+zht = "候選一頁幾條"
+zhs = "候选一页几条"
+en = "page size"
+
+[[message]]
+# 設置：候选一页几条——一句話
+key = "set.panel.page-size.hint"
+zht = "候選框一頁列幾個字"
+zhs = "候选框一页列几个字"
+en = "page size"
+
+[[message]]
+# 設置：面板圆角
+key = "set.panel.rounded"
+zht = "面板圓角"
+zhs = "面板圆角"
+en = "rounded"
+
+[[message]]
+# 設置：面板圆角——一句話
+key = "set.panel.rounded.hint"
+zht = "面板的四個角是圓的還是方的"
+zhs = "面板的四个角是圆的还是方的"
+en = "rounded"
+
+[[message]]
 # 設置面板：底下那一行——還沒選中哪一項
 key = "set.pick-a-group"
 zht = "l 或空格 進到右邊那一欄"
 zhs = "l 或空格 进到右边那一栏"
 en = "l or space goes into the settings"
+
+[[message]]
+# 設置：歧义宽度——问终端
+key = "set.pick.ambiguous-width.auto"
+zht = "問終端"
+zhs = "问终端"
+en = "ambiguous width.auto"
+
+[[message]]
+# 設置：歧义宽度——一格
+key = "set.pick.ambiguous-width.narrow"
+zht = "一格"
+zhs = "一格"
+en = "ambiguous width.narrow"
+
+[[message]]
+# 設置：歧义宽度——两格
+key = "set.pick.ambiguous-width.wide"
+zht = "兩格"
+zhs = "两格"
+en = "ambiguous width.wide"
+
+[[message]]
+# 設置：候选怎么画——行内预览
+key = "set.pick.display.bare"
+zht = "行内預覽"
+zhs = "行内预览"
+en = "display.bare"
+
+[[message]]
+# 設置：候选怎么画——候选框
+key = "set.pick.display.full"
+zht = "候選框"
+zhs = "候选框"
+en = "display.full"
+
+[[message]]
+# 設置：纸面——自己画纸
+key = "set.pick.ground.paint"
+zht = "自己畫紙"
+zhs = "自己画纸"
+en = "ground.paint"
+
+[[message]]
+# 設置：纸面——还给终端
+key = "set.pick.ground.terminal"
+zht = "還給終端"
+zhs = "还给终端"
+en = "ground.terminal"
+
+[[message]]
+# 設置：段首记号——换颜色
+key = "set.pick.indent-hint.color"
+zht = "換顔色"
+zhs = "换颜色"
+en = "indent hint.color"
+
+[[message]]
+# 設置：段首记号——不画
+key = "set.pick.indent-hint.none"
+zht = "不畫"
+zhs = "不画"
+en = "indent hint.none"
+
+[[message]]
+# 設置：段首记号——画符号
+key = "set.pick.indent-hint.symbol"
+zht = "畫符號"
+zhs = "画符号"
+en = "indent hint.symbol"
+
+[[message]]
+# 設置：界面语言——English
+key = "set.pick.language.en"
+zht = "English"
+zhs = "English"
+en = "language.en"
+
+[[message]]
+# 設置：界面语言——繁体
+key = "set.pick.language.zh"
+zht = "繁體"
+zhs = "繁体"
+en = "language.zh"
+
+[[message]]
+# 設置：界面语言——简体
+key = "set.pick.language.zhs"
+zht = "簡體"
+zhs = "简体"
+en = "language.zhs"
+
+[[message]]
+# 設置：行号——绝对
+key = "set.pick.line-numbers.absolute"
+zht = "絕對"
+zhs = "绝对"
+en = "line numbers.absolute"
+
+[[message]]
+# 設置：行号——不画
+key = "set.pick.line-numbers.none"
+zht = "不畫"
+zhs = "不画"
+en = "line numbers.none"
+
+[[message]]
+# 設置：行号——相对
+key = "set.pick.line-numbers.relative"
+zht = "相對"
+zhs = "相对"
+en = "line numbers.relative"
+
+[[message]]
+# 設置：深色浅色——问终端
+key = "set.pick.mode.auto"
+zht = "問終端"
+zhs = "问终端"
+en = "mode.auto"
+
+[[message]]
+# 設置：深色浅色——深色
+key = "set.pick.mode.dark"
+zht = "深色"
+zhs = "深色"
+en = "mode.dark"
+
+[[message]]
+# 設置：深色浅色——浅色
+key = "set.pick.mode.light"
+zht = "淺色"
+zhs = "浅色"
+en = "mode.light"
+
+[[message]]
+# 設置：状态栏的底——往墨抬一阶
+key = "set.pick.status-bar.raised"
+zht = "往墨抬一階"
+zhs = "往墨抬一阶"
+en = "status bar.raised"
+
+[[message]]
+# 設置：状态栏的底——比纸更沉
+key = "set.pick.status-bar.sunken"
+zht = "比紙更沉"
+zhs = "比纸更沉"
+en = "status bar.sunken"
+
+[[message]]
+# 設置：让开系统输入法——自动
+key = "set.pick.system.auto"
+zht = "自動"
+zhs = "自动"
+en = "system.auto"
+
+[[message]]
+# 設置：让开系统输入法——不管它
+key = "set.pick.system.keep"
+zht = "不管它"
+zhs = "不管它"
+en = "system.keep"
+
+[[message]]
+# 設置：Tab 打什么——空格
+key = "set.pick.tab-inserts.spaces"
+zht = "空格"
+zhs = "空格"
+en = "tab inserts.spaces"
+
+[[message]]
+# 設置：Tab 打什么——制表符
+key = "set.pick.tab-inserts.tab"
+zht = "製表符"
+zhs = "制表符"
+en = "tab inserts.tab"
+
+[[message]]
+# 設置：表格的栏线——靠颜色分
+key = "set.pick.table-rules.color"
+zht = "靠顔色分"
+zhs = "靠颜色分"
+en = "table rules.color"
+
+[[message]]
+# 設置：表格的栏线——只有实线
+key = "set.pick.table-rules.line"
+zht = "只有實線"
+zhs = "只有实线"
+en = "table rules.line"
+
+[[message]]
+# 設置：表格的栏线——实线加虚线
+key = "set.pick.table-rules.line-dash"
+zht = "實線加虚線"
+zhs = "实线加虚线"
+en = "table rules.line dash"
+
+[[message]]
+# 設置：表格的栏线——实线加双线
+key = "set.pick.table-rules.line-double"
+zht = "實線加雙線"
+zhs = "实线加双线"
+en = "table rules.line double"
+
+[[message]]
+# 設置：表格的栏线——不画
+key = "set.pick.table-rules.off"
+zht = "不畫"
+zhs = "不画"
+en = "table rules.off"
+
+[[message]]
+# 設置：上方分页条——总是画
+key = "set.pick.tabs.always"
+zht = "總是畫"
+zhs = "总是画"
+en = "tabs.always"
+
+[[message]]
+# 設置：上方分页条——有两个才画
+key = "set.pick.tabs.auto"
+zht = "有兩個才畫"
+zhs = "有两个才画"
+en = "tabs.auto"
+
+[[message]]
+# 設置：上方分页条——不画
+key = "set.pick.tabs.never"
+zht = "不畫"
+zhs = "不画"
+en = "tabs.never"
+
+[[message]]
+# 設置：分词松紧——适中
+key = "set.pick.word-level.balanced"
+zht = "適中"
+zhs = "适中"
+en = "word level.balanced"
+
+[[message]]
+# 設置：分词松紧——松
+key = "set.pick.word-level.full"
+zht = "松"
+zhs = "松"
+en = "word level.full"
+
+[[message]]
+# 設置：分词松紧——严
+key = "set.pick.word-level.strict"
+zht = "嚴"
+zhs = "严"
+en = "word level.strict"
+
+[[message]]
+# 設置：词怎么画——换颜色
+key = "set.pick.word-mark.color"
+zht = "換顔色"
+zhs = "换颜色"
+en = "word mark.color"
+
+[[message]]
+# 設置：词怎么画——换明度
+key = "set.pick.word-mark.ink"
+zht = "換明度"
+zhs = "换明度"
+en = "word mark.ink"
+
+[[message]]
+# 設置：词怎么画——画下线
+key = "set.pick.word-mark.line"
+zht = "畫下線"
+zhs = "画下线"
+en = "word mark.line"
+
+[[message]]
+# 設置：词怎么画——铺淡色
+key = "set.pick.word-mark.tint"
+zht = "鋪淡色"
+zhs = "铺淡色"
+en = "word mark.tint"
 
 [[message]]
 # 設置面板：存好了（{0} ＝ 檔名）
@@ -7564,6 +8348,76 @@ key = "set.shadowed"
 zht = "⚠️ 本項目蓋着這一項——改的是全局，眼前這個值不會動"
 zhs = "⚠️ 本项目盖着这一项——改的是全局，眼前这个值不会动"
 en = "⚠️ the project covers this one — you are editing global, so the value here will not move"
+
+[[message]]
+# 設置：代码坐底色
+key = "set.theme.fill"
+zht = "代碼坐底色"
+zhs = "代码坐底色"
+en = "fill"
+
+[[message]]
+# 設置：代码坐底色——一句話
+key = "set.theme.fill.hint"
+zht = "代碼塊和引用要不要坐在一塊淡底色上"
+zhs = "代码块和引用要不要坐在一块淡底色上"
+en = "fill"
+
+[[message]]
+# 設置：纸面
+key = "set.theme.ground"
+zht = "紙面"
+zhs = "纸面"
+en = "ground"
+
+[[message]]
+# 設置：纸面——一句話
+key = "set.theme.ground.hint"
+zht = "編輯器自己畫出紙的底色，還是把底色還給終端（終端設了透明就用這個）"
+zhs = "编辑器自己画出纸的底色，还是把底色还给终端（终端设了透明就用这个）"
+en = "ground"
+
+[[message]]
+# 設置：深色浅色
+key = "set.theme.mode"
+zht = "深色淺色"
+zhs = "深色浅色"
+en = "mode"
+
+[[message]]
+# 設置：深色浅色——一句話
+key = "set.theme.mode.hint"
+zht = "用深色那一套還是淺色那一套。「問終端」是去問終端底色是什麽"
+zhs = "用深色那一套还是浅色那一套。「问终端」是去问终端底色是什么"
+en = "mode"
+
+[[message]]
+# 設置：主题
+key = "set.theme.name"
+zht = "主題"
+zhs = "主题"
+en = "name"
+
+[[message]]
+# 設置：主题——一句話
+key = "set.theme.name.hint"
+zht = "用哪一套墨。十個内置主題，寫名字就行（「墨香」和 moxiang 一樣）"
+zhs = "用哪一套墨。十个内置主题，写名字就行（「墨香」和 moxiang 一样）"
+en = "name"
+
+[[message]]
+# 設置：状态栏的底
+key = "set.theme.status-bar"
+zht = "狀態欄的底"
+zhs = "状态栏的底"
+en = "status bar"
+
+[[message]]
+# 設置：状态栏的底——一句話
+key = "set.theme.status-bar.hint"
+zht = "底下那兩行比紙更沉，還是往墨的方向抬一階"
+zhs = "底下那两行比纸更沉，还是往墨的方向抬一阶"
+en = "status bar"
 
 [[message]]
 # 設置面板：標題

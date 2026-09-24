@@ -327,6 +327,11 @@ pub fn draw(
             // 動過的那些亮一點：一頁十二行裏哪三行是自己設的，要一眼看得出。
             (false, _) => ground.fg(ink.azure()),
         };
+        // ⚠️ **切了要看得出來。** `put_text` 到了邊界就停，一聲不吭——「候選的序號」
+        // 那九個圈字正好比值欄寬一格，畫出來是 `㊀㊁㊂㊃㊄㊅㊆㊇`，看着像設定裏
+        // 只有八個。省略號說出「後面還有」。2026-09-24 拍圖看出來的。
+        let room = col.value_ends().saturating_sub(col.value) as usize;
+        let value = crate::elide(&value, room);
         put_text(buf, col.value, y, col.value_ends(), &value, value_style);
         if here && panel.typing.is_some() {
             let at = col.value + yumete_cjk::str_width(&value).saturating_sub(1) as u16;
