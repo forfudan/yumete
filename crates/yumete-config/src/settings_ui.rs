@@ -155,10 +155,96 @@ const MARGIN_WAYS: &[Choice] = &[
     Choice { word: "always", label: "set.margin.always" },
 ];
 
+const EDITOR_LINE_NUMBERS_WAYS: &[Choice] = &[
+    Choice { word: "absolute", label: "set.pick.line-numbers.absolute" },
+    Choice { word: "relative", label: "set.pick.line-numbers.relative" },
+    Choice { word: "none", label: "set.pick.line-numbers.none" },
+];
+
+const EDITOR_WORD_LEVEL_WAYS: &[Choice] = &[
+    Choice { word: "strict", label: "set.pick.word-level.strict" },
+    Choice { word: "balanced", label: "set.pick.word-level.balanced" },
+    Choice { word: "full", label: "set.pick.word-level.full" },
+];
+
+const EDITOR_WORD_MARK_WAYS: &[Choice] = &[
+    Choice { word: "color", label: "set.pick.word-mark.color" },
+    Choice { word: "ink", label: "set.pick.word-mark.ink" },
+    Choice { word: "tint", label: "set.pick.word-mark.tint" },
+    Choice { word: "line", label: "set.pick.word-mark.line" },
+];
+
+const EDITOR_INDENT_HINT_WAYS: &[Choice] = &[
+    Choice { word: "none", label: "set.pick.indent-hint.none" },
+    Choice { word: "symbol", label: "set.pick.indent-hint.symbol" },
+    Choice { word: "color", label: "set.pick.indent-hint.color" },
+];
+
+const EDITOR_TABLE_RULES_WAYS: &[Choice] = &[
+    Choice { word: "line dash", label: "set.pick.table-rules.line-dash" },
+    Choice { word: "line", label: "set.pick.table-rules.line" },
+    Choice { word: "line double", label: "set.pick.table-rules.line-double" },
+    Choice { word: "color", label: "set.pick.table-rules.color" },
+    Choice { word: "off", label: "set.pick.table-rules.off" },
+];
+
+const EDITOR_TABS_WAYS: &[Choice] = &[
+    Choice { word: "auto", label: "set.pick.tabs.auto" },
+    Choice { word: "always", label: "set.pick.tabs.always" },
+    Choice { word: "never", label: "set.pick.tabs.never" },
+];
+
+const PANEL_DISPLAY_WAYS: &[Choice] = &[
+    Choice { word: "full", label: "set.pick.display.full" },
+    Choice { word: "bare", label: "set.pick.display.bare" },
+];
+
+const THEME_MODE_WAYS: &[Choice] = &[
+    Choice { word: "auto", label: "set.pick.mode.auto" },
+    Choice { word: "dark", label: "set.pick.mode.dark" },
+    Choice { word: "light", label: "set.pick.mode.light" },
+];
+
+const THEME_GROUND_WAYS: &[Choice] = &[
+    Choice { word: "paint", label: "set.pick.ground.paint" },
+    Choice { word: "terminal", label: "set.pick.ground.terminal" },
+];
+
+const THEME_STATUS_BAR_WAYS: &[Choice] = &[
+    Choice { word: "sunken", label: "set.pick.status-bar.sunken" },
+    Choice { word: "raised", label: "set.pick.status-bar.raised" },
+];
+
+/// ⚠️ **兩個詞，沒有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
+/// 字一律讀成 `auto`。所以這裏不許多寫一個「看着像」的選項——面板上切過去、檔裏
+/// 寫下去，而編輯器當它是 `auto`。2026-09-24 那條「改一項要真的改得動」逮到的。
+const IME_SYSTEM_WAYS: &[Choice] = &[
+    Choice { word: "auto", label: "set.pick.system.auto" },
+    Choice { word: "keep", label: "set.pick.system.keep" },
+];
+
+const EDITOR_TAB_INSERTS_WAYS: &[Choice] = &[
+    Choice { word: "spaces", label: "set.pick.tab-inserts.spaces" },
+    Choice { word: "tab", label: "set.pick.tab-inserts.tab" },
+];
+
+const EDITOR_LANGUAGE_WAYS: &[Choice] = &[
+    Choice { word: "zh", label: "set.pick.language.zh" },
+    Choice { word: "zhs", label: "set.pick.language.zhs" },
+    Choice { word: "en", label: "set.pick.language.en" },
+];
+
+const EDITOR_AMBIGUOUS_WIDTH_WAYS: &[Choice] = &[
+    Choice { word: "auto", label: "set.pick.ambiguous-width.auto" },
+    Choice { word: "wide", label: "set.pick.ambiguous-width.wide" },
+    Choice { word: "narrow", label: "set.pick.ambiguous-width.narrow" },
+];
+
 /// **整張表。**
 ///
-/// ⚠️ 眼下只有「版面」一組是滿的——其餘七組在 [`LATER`] 裏掛着，一組一組填。
-/// 那張一致性測試讀的是這兩張表的**並集**，所以漏一項照樣紅。
+/// ⚠️ **八組都有東西了**（2026-09-24）。[`LATER`] 裏剩下的是二十四個色位（收在
+/// 二級入口，見那張表自己的註釋）和幾項要新控件纔畫得出來的（列表、路徑）。
+/// 那張一致性測試讀的是三張表的**並集**，所以漏一項照樣紅。
 pub const SETTINGS: &[Setting] = &[
     // ---- 版面 ----------------------------------------------------------
     Setting {
@@ -275,6 +361,375 @@ pub const SETTINGS: &[Setting] = &[
         hint: "set.editor.paper-ticks.hint",
         factory: "0",
     },
+    Setting {
+        table: "editor",
+        key: "line_numbers",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_LINE_NUMBERS_WAYS),
+        label: "set.editor.line-numbers",
+        hint: "set.editor.line-numbers.hint",
+        factory: r#""absolute""#,
+    },
+    Setting {
+        table: "editor",
+        key: "line_number_fill",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.line-number-fill",
+        hint: "set.editor.line-number-fill.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
+        key: "diff_gutter",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.diff-gutter",
+        hint: "set.editor.diff-gutter.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "show_segmentation",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.show-segmentation",
+        hint: "set.editor.show-segmentation.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "word_level",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_WORD_LEVEL_WAYS),
+        label: "set.editor.word-level",
+        hint: "set.editor.word-level.hint",
+        factory: r#""balanced""#,
+    },
+    Setting {
+        table: "editor",
+        key: "word_mark",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_WORD_MARK_WAYS),
+        label: "set.editor.word-mark",
+        hint: "set.editor.word-mark.hint",
+        factory: r#""color""#,
+    },
+    Setting {
+        table: "editor",
+        key: "code_highlight",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.code-highlight",
+        hint: "set.editor.code-highlight.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "show_ruby",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.show-ruby",
+        hint: "set.editor.show-ruby.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
+        key: "show_chaifen",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.show-chaifen",
+        hint: "set.editor.show-chaifen.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
+        key: "indent_hint",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_INDENT_HINT_WAYS),
+        label: "set.editor.indent-hint",
+        hint: "set.editor.indent-hint.hint",
+        factory: r#""none""#,
+    },
+    Setting {
+        table: "editor",
+        key: "indent_symbol",
+        group: Group::Marks,
+        kind: Kind::Text,
+        label: "set.editor.indent-symbol",
+        hint: "set.editor.indent-symbol.hint",
+        factory: r#""↵""#,
+    },
+    Setting {
+        table: "editor",
+        key: "table_rules",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_TABLE_RULES_WAYS),
+        label: "set.editor.table-rules",
+        hint: "set.editor.table-rules.hint",
+        factory: r#""line dash""#,
+    },
+    Setting {
+        table: "editor",
+        key: "char_info",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.char-info",
+        hint: "set.editor.char-info.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "scrolloff",
+        group: Group::Interface,
+        kind: Kind::Count { low: 0, high: 20, zero: None },
+        label: "set.editor.scrolloff",
+        hint: "set.editor.scrolloff.hint",
+        factory: "3",
+    },
+    Setting {
+        table: "editor",
+        key: "wheel_step",
+        group: Group::Interface,
+        kind: Kind::Count { low: 1, high: 10, zero: None },
+        label: "set.editor.wheel-step",
+        hint: "set.editor.wheel-step.hint",
+        factory: "3",
+    },
+    Setting {
+        table: "editor",
+        key: "sidebar_width",
+        group: Group::Interface,
+        kind: Kind::Count { low: 12, high: 60, zero: None },
+        label: "set.editor.sidebar-width",
+        hint: "set.editor.sidebar-width.hint",
+        factory: "24",
+    },
+    Setting {
+        table: "editor",
+        key: "detail_width",
+        group: Group::Interface,
+        kind: Kind::Count { low: 12, high: 80, zero: None },
+        label: "set.editor.detail-width",
+        hint: "set.editor.detail-width.hint",
+        factory: "30",
+    },
+    Setting {
+        table: "editor",
+        key: "tabs",
+        group: Group::Interface,
+        kind: Kind::Pick(EDITOR_TABS_WAYS),
+        label: "set.editor.tabs",
+        hint: "set.editor.tabs.hint",
+        factory: r#""auto""#,
+    },
+    Setting {
+        table: "editor",
+        key: "command_line",
+        group: Group::Interface,
+        kind: Kind::Tick,
+        label: "set.editor.command-line",
+        hint: "set.editor.command-line.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "panel",
+        key: "display",
+        group: Group::Interface,
+        kind: Kind::Pick(PANEL_DISPLAY_WAYS),
+        label: "set.panel.display",
+        hint: "set.panel.display.hint",
+        factory: r#""full""#,
+    },
+    Setting {
+        table: "panel",
+        key: "page_size",
+        group: Group::Interface,
+        kind: Kind::Count { low: 1, high: 9, zero: None },
+        label: "set.panel.page-size",
+        hint: "set.panel.page-size.hint",
+        factory: "6",
+    },
+    Setting {
+        table: "panel",
+        key: "markers",
+        group: Group::Interface,
+        kind: Kind::Text,
+        label: "set.panel.markers",
+        hint: "set.panel.markers.hint",
+        factory: r#""㊀㊁㊂㊃㊄㊅㊆㊇㊈""#,
+    },
+    Setting {
+        table: "panel",
+        key: "rounded",
+        group: Group::Interface,
+        kind: Kind::Tick,
+        label: "set.panel.rounded",
+        hint: "set.panel.rounded.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "theme",
+        key: "name",
+        group: Group::Colours,
+        kind: Kind::Text,
+        label: "set.theme.name",
+        hint: "set.theme.name.hint",
+        factory: r#""ink""#,
+    },
+    Setting {
+        table: "theme",
+        key: "mode",
+        group: Group::Colours,
+        kind: Kind::Pick(THEME_MODE_WAYS),
+        label: "set.theme.mode",
+        hint: "set.theme.mode.hint",
+        factory: r#""auto""#,
+    },
+    Setting {
+        table: "theme",
+        key: "ground",
+        group: Group::Colours,
+        kind: Kind::Pick(THEME_GROUND_WAYS),
+        label: "set.theme.ground",
+        hint: "set.theme.ground.hint",
+        factory: r#""paint""#,
+    },
+    Setting {
+        table: "theme",
+        key: "status_bar",
+        group: Group::Colours,
+        kind: Kind::Pick(THEME_STATUS_BAR_WAYS),
+        label: "set.theme.status-bar",
+        hint: "set.theme.status-bar.hint",
+        factory: r#""sunken""#,
+    },
+    Setting {
+        table: "theme",
+        key: "fill",
+        group: Group::Colours,
+        kind: Kind::Tick,
+        label: "set.theme.fill",
+        hint: "set.theme.fill.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "ime",
+        key: "scheme",
+        group: Group::Ime,
+        kind: Kind::Text,
+        label: "set.ime.scheme",
+        hint: "set.ime.scheme.hint",
+        factory: r#""lingming""#,
+    },
+    Setting {
+        table: "ime",
+        key: "start",
+        group: Group::Ime,
+        kind: Kind::Tick,
+        label: "set.ime.start",
+        hint: "set.ime.start.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "ime",
+        key: "system",
+        group: Group::Ime,
+        kind: Kind::Pick(IME_SYSTEM_WAYS),
+        label: "set.ime.system",
+        hint: "set.ime.system.hint",
+        factory: r#""auto""#,
+    },
+    Setting {
+        table: "editor",
+        key: "indent_width",
+        group: Group::Editing,
+        kind: Kind::Count { low: 1, high: 16, zero: None },
+        label: "set.editor.indent-width",
+        hint: "set.editor.indent-width.hint",
+        factory: "4",
+    },
+    Setting {
+        table: "editor",
+        key: "tab_width",
+        group: Group::Editing,
+        kind: Kind::Count { low: 1, high: 16, zero: None },
+        label: "set.editor.tab-width",
+        hint: "set.editor.tab-width.hint",
+        factory: "8",
+    },
+    Setting {
+        table: "editor",
+        key: "tab_inserts",
+        group: Group::Editing,
+        kind: Kind::Pick(EDITOR_TAB_INSERTS_WAYS),
+        label: "set.editor.tab-inserts",
+        hint: "set.editor.tab-inserts.hint",
+        factory: r#""spaces""#,
+    },
+    Setting {
+        table: "editor",
+        key: "autosave",
+        group: Group::Editing,
+        kind: Kind::Tick,
+        label: "set.editor.autosave",
+        hint: "set.editor.autosave.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "smart_case",
+        group: Group::Editing,
+        kind: Kind::Tick,
+        label: "set.editor.smart-case",
+        hint: "set.editor.smart-case.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "fuzzy_search",
+        group: Group::Editing,
+        kind: Kind::Tick,
+        label: "set.editor.fuzzy-search",
+        hint: "set.editor.fuzzy-search.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
+        key: "session",
+        group: Group::Editing,
+        kind: Kind::Tick,
+        label: "set.editor.session",
+        hint: "set.editor.session.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
+        key: "language",
+        group: Group::Files,
+        kind: Kind::Pick(EDITOR_LANGUAGE_WAYS),
+        label: "set.editor.language",
+        hint: "set.editor.language.hint",
+        factory: r#""zh""#,
+    },
+    Setting {
+        table: "editor",
+        key: "ambiguous_width",
+        group: Group::Files,
+        kind: Kind::Pick(EDITOR_AMBIGUOUS_WIDTH_WAYS),
+        label: "set.editor.ambiguous-width",
+        hint: "set.editor.ambiguous-width.hint",
+        factory: r#""auto""#,
+    },
+    Setting {
+        table: "editor",
+        key: "language_key",
+        group: Group::Files,
+        kind: Kind::Text,
+        label: "set.editor.language-key",
+        hint: "set.editor.language-key.hint",
+        factory: r#""C-^""#,
+    },
 ];
 
 /// **還沒填進 [`SETTINGS`] 的那些。**
@@ -282,43 +737,9 @@ pub const SETTINGS: &[Setting] = &[
 /// 一組一組填，這張表跟着縮短。⚠️ **它不是「不做」的名單**——那一張是
 /// [`NOT_IN_THE_PANEL`]，兩者的區別是「還沒輪到」與「有理由不進去」。
 pub const LATER: &[&str] = &[
-    "editor.tab_width",
-    "editor.indent_width",
-    "editor.line_numbers",
-    "editor.scrolloff",
-    "editor.wheel_step",
-    "editor.line_number_fill",
-    "editor.diff_gutter",
-    "editor.indent_hint",
-    "editor.indent_symbol",
-    "editor.table_rules",
-    "editor.language_key",
-    "editor.show_segmentation",
-    "editor.word_level",
-    "editor.word_mark",
-    "editor.session",
-    "editor.language",
-    "editor.show_chaifen",
-    "editor.show_ruby",
     "editor.ruby_dialects",
     "editor.usage_groups",
-    "editor.code_highlight",
-    "editor.autosave",
-    "editor.ambiguous_width",
-    "editor.detail_width",
-    "editor.sidebar_width",
-    "editor.tabs",
     "editor.syntax",
-    "editor.char_info",
-    "editor.command_line",
-    "editor.smart_case",
-    "editor.fuzzy_search",
-    "editor.tab_inserts",
-    "theme.name",
-    "theme.mode",
-    "theme.ground",
-    "theme.status_bar",
-    "theme.fill",
     // ⚠️ **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**
     // `ThemeConfig` 自己的註釋寫着「A theme is a few numbers, not a table of
     // colours」，十個內置主題已經覆蓋；而 TUI 裏沒有取色器，只有 `#RRGGBB` 文本
@@ -347,16 +768,9 @@ pub const LATER: &[&str] = &[
     "theme.cyan_light",
     "theme.lime",
     "theme.lime_light",
-    "panel.display",
-    "panel.page_size",
-    "panel.markers",
-    "panel.rounded",
     "panel.ink",
     "panel.paper",
-    "ime.scheme",
-    "ime.start",
     "ime.commit",
-    "ime.system",
     "ime.data_dirs",
     "export.page",
     "keys.preset",
