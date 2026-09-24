@@ -203,3 +203,82 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
         );
     }
 }
+
+/// **面板停得到的每一個值，編輯器都得原樣收下。**
+///
+/// ⚠️ **這一條是「面板顯示的值不是編輯器用的值」那一族的網。** `into_config` 有幾
+/// 處的域是**斷的**——`zong_length` 是「0，或者 4 到 64」，`tatechuyoko` 是「0，或者
+/// 2 到 8」。把 `low` 寫成 0，面板就停得到 1／2／3，寫進檔裏而編輯器按 4 排版，**編譯
+/// 照過、別的測試照綠**。2026-09-24 審出來的，兩項都中。
+///
+/// 判準不用反射也說得出來：**域裏相鄰的兩個值，讀回來的 `Config` 必須不同**。
+/// 一樣就說明其中一個被鉗掉了——它不在域裏，而面板讓人停在了那裏。
+#[test]
+fn every_value_the_panel_can_set_is_its_own() {
+    use yumete_config::settings_ui::{Kind, SETTINGS};
+    use yumete_config::Config;
+    for setting in SETTINGS {
+        let Kind::Count { low, high, zero } = setting.kind else { continue };
+        // 域：`low..=high`，再加上 0 —— **只有 `low > 0` 的時候**。
+        //
+        // ⚠️ **`zero` 有兩種意思，這裏要分開。** `zong_length` 的 0 在域**外面**
+        // 另成一檔（域是 4..64）；`indent` 的 0 就在域裏（0..8），`zero` 只是替
+        // 它取了個名字（「不縮進」）。判準是 `low`：大於 0 纔說明 0 是另一檔。
+        let mut domain: Vec<usize> = Vec::new();
+        if zero.is_some() && low > 0 {
+            domain.push(0);
+        }
+        domain.extend(low..=high);
+        for pair in domain.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            assert_ne!(
+                Config::from_toml(&one(setting, &a.to_string())),
+                Config::from_toml(&one(setting, &b.to_string())),
+                "{} 設成 {a} 和設成 {b} 讀回來一模一樣——其中一個被 into_config 鉗掉了，\
+                 而面板讓人停在那裏（域是斷的？`low` 該是最小的**非零**值）",
+                setting.path()
+            );
+        }
+    }
+}
+
+/// **出廠值那一欄要是一個讀得出來的 toml 值，而且類型對得上。**
+///
+/// ⚠️ **上面那兩條堵不住引號。** `Pick` 的 `factory` 少寫一對引號（`horizontal`
+/// 而不是 `"horizontal"`）→ toml 解析失敗 → `from_toml` 走 `unwrap_or_default()`
+/// → **和空配置逐位元組相同** → 第一條綠；第二條自己拼 `format!("\"{other}\"")`，
+/// 永遠帶引號 → 也綠。而面板會拿 `horizontal` 去和 `written()` 出來的
+/// `"horizontal"` 比，`settle` 從此判不出「轉回原值」。2026-09-24 審出來的。
+#[test]
+fn every_factory_value_parses_as_the_kind_it_says_it_is() {
+    use yumete_config::settings_ui::{Kind, SETTINGS};
+    for setting in SETTINGS {
+        let one = format!("v = {}\n", setting.factory);
+        let read: toml::Value = toml::from_str(&one)
+            .unwrap_or_else(|e| panic!("{} 的出廠值 {} 讀不出來：{e}", setting.path(), setting.factory));
+        let v = read.get("v").expect("v");
+        let fits = match setting.kind {
+            Kind::Tick => v.is_bool(),
+            Kind::Count { .. } => v.is_integer(),
+            Kind::Pick(_) | Kind::Text => v.is_str(),
+        };
+        assert!(
+            fits,
+            "{} 說自己是 {:?}，而出廠值 {} 讀出來是 {}",
+            setting.path(),
+            setting.kind,
+            setting.factory,
+            v.type_str()
+        );
+        // 幾選一的出廠值還得真的在那張選項單子上。
+        if let Kind::Pick(choices) = setting.kind {
+            let word = v.as_str().unwrap_or_default();
+            assert!(
+                choices.iter().any(|c| c.word == word),
+                "{} 的出廠值 {word:?} 不在選項裏：{:?}",
+                setting.path(),
+                choices.iter().map(|c| c.word).collect::<Vec<_>>()
+            );
+        }
+    }
+}

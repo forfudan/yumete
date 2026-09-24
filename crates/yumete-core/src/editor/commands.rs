@@ -106,7 +106,18 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Write(path) => {
+                // **設置面板開着的時候，`:w` 說的是它。** 不分這一下，面板上按
+                // 存盤會把眼前那一章寫一遍——看起來像沒反應，而動的是別的東西。
+                if self.settings_open {
+                    self.settings_save = true;
+                    return Ok(CommandOutcome::Continue);
+                }
                 self.write_current(path.as_deref())?;
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Settings => {
+                // 核心只記一筆；那扇面板歸前端（它讀得到設置表）。
+                self.settings_request = true;
                 Ok(CommandOutcome::Continue)
             }
             Command::SaveAs { path, force } => {
@@ -126,6 +137,12 @@ impl Editor {
                 // 改了名就是換了一份磁碟上的東西，改動條要重問一次（#55）。
                 self.refresh_vcs(true);
                 self.status = say!("buffer.saved", self.current_buffer().display_name());
+                Ok(CommandOutcome::Continue)
+            }
+            // `:w!` 與 `:up` 同 `:w`：面板開着的時候它們說的也是面板。⚠️ 不接的
+            // 話，在設置頁上打 `:w!` 會**存眼前那一章**——看起來像設定存下去了。
+            Command::WriteForce(_) | Command::Update if self.settings_open => {
+                self.settings_save = true;
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteForce(path) => {
@@ -189,6 +206,15 @@ impl Editor {
                         )
                     }
                 }
+                Ok(CommandOutcome::Continue)
+            }
+            // ⚠️ **面板開着時 `:q` 關的是面板，不是編輯器。** 一個人在設置頁上
+            // 按 `:q`，想關的永遠是眼前這一扇；把整個編輯器帶走是不可逆的。
+            // ⚠️ **`:qa` 和 `:q` 走同一條。** 不接的話它會把整個編輯器帶走，而
+            // 面板攢的改動一聲不吭全丟——`Quit` 那一條的注釋寫着「不可逆」，而
+            // `:qa` 正好從旁邊繞過去。關掉這一扇之後再按一次 `:qa` 纔是離開。
+            Command::Quit { force } | Command::QuitAll { force } if self.settings_open => {
+                self.settings_close = Some(force);
                 Ok(CommandOutcome::Continue)
             }
             Command::Quit { force } => self.quit(force),
@@ -286,6 +312,20 @@ impl Editor {
                 self.format_ruby(dialect);
                 Ok(CommandOutcome::Continue)
             }
+            // `:wq` 在面板上是「存了再關」，兩張條子一起放。
+            Command::WriteQuit(_) if self.settings_open => {
+                self.settings_save = true;
+                self.settings_close = Some(false);
+                Ok(CommandOutcome::Continue)
+            }
+            // ⚠️ **`:x` 也要接住。** 它本來是 `write_then_quit`——面板開着的時候
+            // 那一支會存眼前那一章、**再把整個編輯器關掉**，而按的人以為自己只是
+            // 關了一扇設置頁。存了再關，同 `:wq`。
+            Command::Exit(_) if self.settings_open => {
+                self.settings_save = true;
+                self.settings_close = Some(false);
+                Ok(CommandOutcome::Continue)
+            }
             Command::WriteQuit(path) => self.write_then_quit(path, false),
             // `:x` and `:xit`: the same, and the save is skipped when nothing
             // was changed. A path is an instruction, so it is always written.
@@ -297,6 +337,12 @@ impl Editor {
                 }
                 self.write_current(None)?;
                 Ok(CommandOutcome::Continue)
+            }
+            // ⚠️ **`:wa` 也要存面板。** 「全都存」而設定一個字節沒落盤，狀態行
+            // 還報存成功——同 `:w` 那條的理由逐字相同。緩衝區照舊存。
+            Command::WriteAll if self.settings_open => {
+                self.settings_save = true;
+                self.write_all()
             }
             Command::WriteAll => self.write_all(),
             Command::Search { pattern, by } => {

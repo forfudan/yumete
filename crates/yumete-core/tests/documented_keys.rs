@@ -316,7 +316,10 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
 // `g` really is a leader — so without this the manual teaching Go reads as the
 // `g` menu offering `o`. The other two-letter tags (`py`, `js`, `rs`, `js`) are
 // safe only because their first letter is not a leader; this one is not.
-const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[^", "[["];
+// ⚠️ `[ ]` 與 `[x]` 是**一個沒勾上／勾上了的方框的畫像**，不是按鍵——搜索面板與
+// 設置面板（#421）滿頁都是它。`[]` 本來就在這張單子上，而中間那一格空白讓它讀成
+// 「`[` 選單裏的 `]`」，於是同一個東西的兩種寫法一個過一個不過（2026-09-24）。
+const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[["];
 
 /// Sequences the documents print **in order to say the editor has not got them**.
 ///

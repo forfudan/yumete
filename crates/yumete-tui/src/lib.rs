@@ -18,6 +18,7 @@ pub mod ambiguous;
 pub mod backend;
 pub mod server;
 pub mod settings;
+pub mod settings_page;
 pub mod system_ime;
 pub mod typed_ahead;
 
@@ -216,8 +217,9 @@ pub fn frame_to_text(
     ime: &ImeSession,
     width: u16,
     height: u16,
+    /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, false)
+    frame_to(editor, config, ime, width, height, false, settings)
 }
 
 /// The same frame **with its colours**, as one self-contained HTML `<pre>`.
@@ -233,8 +235,9 @@ pub fn frame_to_html(
     ime: &ImeSession,
     width: u16,
     height: u16,
+    /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, true)
+    frame_to(editor, config, ime, width, height, true, settings)
 }
 
 fn frame_to(
@@ -244,6 +247,7 @@ fn frame_to(
     width: u16,
     height: u16,
     html: bool,
+    settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
     // **The mood, before the first cell is painted.** `run` settles this and
     // the shot did not, so every picture came out in the theme's default mood
@@ -285,8 +289,22 @@ fn frame_to(
         let found = ime.glosses(ch);
         editor.set_dictionary(ch, found);
     }
+    // …和那扇設置面板。⚠️ **不接這一句，`--shot --keys=':settings\\n'` 拍到的是
+    // 正文**——面板住在主循環裏，而這一支不是主循環。看起來像 `:settings` 沒做，
+    // 而這個倉審前端就是靠拍照（字典那一格 2026-09-23 剛因為同一個缺口被審出來）。
+    // ⚠️ 呼叫方沒給就自己開一扇：`--keys` 那條路把它交過來（那一頭走得動面板），
+    // 而別的呼叫方只按了 `:settings` 就直接畫。不接這一句，`--shot` 拍到的是正文
+    // ——看起來像 `:settings` 沒做，而這個倉審前端就是靠拍照。
+    let mine = editor.take_settings_request().then(|| {
+        editor.set_settings_open(true);
+        yumete_config::panel::Panel::open(
+            Some(yumete_config::config_dir().join("config.toml")),
+            std::env::current_dir().ok().map(|cwd| yumete_config::panel::local_sheet_path(&cwd)),
+        )
+    });
+    let settings = settings.or(mine.as_ref());
     terminal
-        .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
+        .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
         .expect("draw one frame");
     let buffer = terminal.backend().buffer();
     match html {
@@ -321,7 +339,7 @@ fn build_footer() -> Option<String> {
 /// The build stamp goes **under** the frame, not in it: a picture of the page
 /// has to stay a picture of the page, and a reviewer counting columns must not
 /// find a column that the editor never drew.
-fn buffer_to_text(buffer: &ratatui::buffer::Buffer) -> String {
+pub(crate) fn buffer_to_text(buffer: &ratatui::buffer::Buffer) -> String {
     let mut out = String::new();
     for y in 0..buffer.area.height {
         let mut row = String::new();
@@ -426,6 +444,11 @@ pub fn run(
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
     let mut job: Option<Job> = None;
+    // **那扇設置面板**（`:settings`），開着的時候鍵歸它。它住在前端而不是核心，
+    // 因為它讀 `yumete_config::settings_ui` 那張表，而核心不依賴 `yumete-config`。
+    let mut settings: Option<yumete_config::panel::Panel> = None;
+    // 有沒存的東西時按 `q`，第一下只說一句；再按一下纔真的走。
+    let mut leaving_unsaved = false;
     if let Some(said) = adopt_an_orphan() {
         editor.set_status(said);
     }
@@ -681,7 +704,9 @@ pub fn run(
             // expensive before it stopped (#359).
             diag::beat(diag::Stage::Drawing, last_frame.as_millis() as u64);
             let began = std::time::Instant::now();
-            let completed = match terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
+            let completed = match terminal
+                .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.as_ref()))
+            {
                 Ok(completed) => completed,
                 Err(err) => break Err(err),
             };
@@ -985,6 +1010,41 @@ pub fn run(
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
+                // **設置面板開着：鍵歸它，`:` 除外。**
+                //
+                // ⚠️ `:` 要交給編輯器去開命令行——`:w` 與 `:q` 就是在那條行上打
+                // 的，而核心認得「面板開着」，於是那兩條說的是面板而不是緩衝區。
+                // 命令行開着的時候當然也歸編輯器，否則打不完那條命令。
+                if let Some(page) = settings.as_mut() {
+                    let typing_a_command = editor.mode() == yumete_core::input::Mode::Command;
+                    let opening_one = !typing_a_command
+                        && matches!(map_key(code, mods), Some(Key::Char(':')));
+                    if !typing_a_command && !opening_one {
+                        if let Some(k) = map_key(code, mods) {
+                            let dirty_before = page.dirty();
+                            if !crate::settings_page::press(page, k) {
+                                // ⚠️ **有改動沒存就不許一下走掉**：面板上攢的東西
+                                // 一個鍵都沒落到磁碟上，走了就是全丟。第一下說一
+                                // 句，第二下纔算數。
+                                match dirty_before && !leaving_unsaved {
+                                    true => {
+                                        leaving_unsaved = true;
+                                        editor.set_status(say!("set.leaving-unsaved"));
+                                    }
+                                    false => {
+                                        settings = None;
+                                        leaving_unsaved = false;
+                                        editor.set_settings_open(false);
+                                        editor.set_status(String::new());
+                                    }
+                                }
+                            } else {
+                                leaving_unsaved = false;
+                            }
+                        }
+                        continue;
+                    }
+                }
                 // The stand-in for a Shift this terminal cannot report (#339).
                 // It asks yume the same question the tap does, so a rebound
                 // Shift is rebound here too; outside a place that composes
@@ -1277,6 +1337,64 @@ pub fn run(
                         false => say!("config.reload-said", said.join(&say!("label.comma"))),
                     });
                 }
+                // ---- 那扇設置面板（`:settings`）----------------------------
+                // ⚠️ **已經開着就什麽都不做。** 無條件重開會把攢着沒存的改動
+                // 一聲不吭地丟掉——而 `q` 與 `:q` 都有兩段式的閘，這條路沒有。
+                // 2026-09-24 審出來的。
+                if editor.take_settings_request() && settings.is_none() {
+                    let global = yumete_config::config_dir().join("config.toml");
+                    let local = std::env::current_dir()
+                        .ok()
+                        .map(|cwd| yumete_config::panel::local_sheet_path(&cwd));
+                    settings = Some(yumete_config::panel::Panel::open(Some(global), local));
+                    leaving_unsaved = false;
+                    editor.set_settings_open(true);
+                    editor.set_status(String::new());
+                }
+                if editor.take_settings_save() {
+                    if let Some(page) = settings.as_mut() {
+                        let where_to = page
+                            .sheet()
+                            .path
+                            .clone()
+                            .map(|p| crate::settings_page::shorten(&p))
+                            .unwrap_or_default();
+                        let said = match page.dirty() {
+                            false => Ok(None),
+                            true => page.save().map(Some),
+                        };
+                        editor.set_status(match said {
+                            Ok(None) => say!("set.nothing-to-save"),
+                            Ok(Some(spoke)) if spoke.commented_out.is_empty() => {
+                                say!("set.saved", where_to)
+                            }
+                            Ok(Some(spoke)) => say!(
+                                "set.saved-said",
+                                where_to,
+                                spoke.commented_out.join(&say!("label.comma"))
+                            ),
+                            Err(why) => say!("set.cannot-save", why),
+                        });
+                        leaving_unsaved = false;
+                    }
+                }
+                if let Some(force) = editor.take_settings_close() {
+                    // ⚠️ **`:q` 走的是和 `q` 同一道閘。** 不走的話，鍵盤上按 `q`
+                    // 要兩下而命令行上打 `:q` 一下就走——同一件事兩種規矩，而且
+                    // 寬的那一種會把攢了半天的改動一聲不吭地丟掉。
+                    let dirty = settings.as_ref().is_some_and(|p| p.dirty());
+                    match dirty && !leaving_unsaved && !force {
+                        true => {
+                            leaving_unsaved = true;
+                            editor.set_status(say!("set.leaving-unsaved"));
+                        }
+                        false => {
+                            settings = None;
+                            leaving_unsaved = false;
+                            editor.set_settings_open(false);
+                        }
+                    }
+                }
                 if let Some(tag) = editor.take_scheme_request() {
                     // `:yume on` / `:yume abc` / `:yume off` **is** an answer
                     // about the language, typed on the command line that
@@ -1297,7 +1415,7 @@ pub fn run(
                     if loading_the_table(&tag, ime) {
                         editor.set_status(say!("ime.loading"));
                         if let Err(err) =
-                            terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport))
+                            terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport, None))
                         {
                             break Err(err);
                         }
@@ -3782,6 +3900,8 @@ fn draw(
     config: &Config,
     ime: &ImeSession,
     viewport: &mut Seats,
+    // 那扇設置面板開着的話，它蓋在正文上（底下兩行留着）。
+    settings: Option<&yumete_config::panel::Panel>,
 ) {
     let area = frame.area();
     // **Two rows for a table's columns, and only once its own head has gone**
@@ -4061,6 +4181,17 @@ fn draw(
             WritingLayout::Vertical => {
                 vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y)
             }
+        }
+    }
+    // **設置面板整頁一扇**（2026-09-24）：蓋住正文與兩個邊欄，**不蓋底下兩行**。
+    // 狀態行與命令行留着，因為 `:w` 與 `:q` 就是在那條命令行上打的——面板自己再
+    // 長一條命令行出來是第二套規矩。
+    if let Some(page) = settings {
+        let room = Rect { height: status_area.y.saturating_sub(area.y).max(1), ..area };
+        match settings_page::draw(frame, page, config, room) {
+            Some(at) => frame.set_cursor_position(at),
+            // 不在打字就別把硬件光標留在正文裏：那是輸入法候選框跟着走的東西。
+            None => frame.set_cursor_position(Position { x: room.x, y: room.y }),
         }
     }
     // Last, and over everything: the editor is stopped behind it (#295).
@@ -9791,7 +9922,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
+            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, None))
             .unwrap();
         terminal.backend().buffer().clone()
     }
@@ -9866,7 +9997,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport))
+            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().ok();
         (terminal.backend().buffer().clone(), at)
@@ -9888,7 +10019,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport))
+            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().ok();
         (terminal.backend().buffer().clone(), at)
@@ -11004,7 +11135,7 @@ fn squeezed(text: &str) -> String {
         let mut seats = Seats::default();
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats))
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats, None))
             .unwrap();
         let click = |x: u16| {
             let mouse = ratatui::crossterm::event::MouseEvent {
@@ -11057,7 +11188,7 @@ fn squeezed(text: &str) -> String {
         let mut seats = Seats::default();
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats))
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats, None))
             .unwrap();
 
         let click = |x: u16| {
@@ -13980,7 +14111,7 @@ fn squeezed(text: &str) -> String {
         // Draw once so the viewport is settled the way a click will read it.
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats))
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats, None))
             .unwrap();
         let buffer = terminal.backend().buffer().clone();
 
@@ -15079,7 +15210,7 @@ fn squeezed(text: &str) -> String {
     ) -> Option<Position> {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, editor, config, &no_ime(), viewport))
+            .draw(|frame| draw(frame, editor, config, &no_ime(), viewport, None))
             .unwrap();
         terminal.get_cursor_position().ok()
     }
@@ -15800,7 +15931,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(40, 6)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().unwrap();
         // 那年冬 is six cells; the four asterisks took their columns with them.
@@ -17220,7 +17351,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天，雪下得早。\n山路斷了。\n");
         let config = Config::default();
         let ime = ImeSession::empty(Scheme::LINGMING);
-        let shot = frame_to_text(&mut editor, &config, &ime, 40, 8);
+        let shot = frame_to_text(&mut editor, &config, &ime, 40, 8, None);
         // The writing is in it, one 漢字 to two cells and no space between two
         // of them — the blank a wide glyph owns is not part of the picture.
         assert!(shot.contains("那年冬天，雪下得早。"), "{shot}");
@@ -17241,7 +17372,7 @@ fn squeezed(text: &str) -> String {
         editor.execute(":layout vertical").unwrap();
         let config = Config::default();
         let ime = ImeSession::empty(Scheme::LINGMING);
-        let shot = frame_to_text(&mut editor, &config, &ime, 44, 14);
+        let shot = frame_to_text(&mut editor, &config, &ime, 44, 14, None);
         // The cell keeps both characters, and no band is drawn between them…
         let rows: Vec<&str> = shot.lines().collect();
         let at = |c: char| rows.iter().position(|r| r.contains(c));
@@ -17266,7 +17397,7 @@ fn squeezed(text: &str) -> String {
             editor.execute(":layout vertical").unwrap();
             let config = Config::default();
             let ime = ImeSession::empty(Scheme::LINGMING);
-            frame_to_text(&mut editor, &config, &ime, 34, 9)
+            frame_to_text(&mut editor, &config, &ime, 34, 9, None)
         };
         let centred = shoot(":-:");
         assert!(!centred.contains(':'), "the markers are off the page: {centred}");
@@ -17287,7 +17418,7 @@ fn squeezed(text: &str) -> String {
         editor.execute(":layout vertical").unwrap();
         let config = Config::default();
         let ime = ImeSession::empty(Scheme::LINGMING);
-        let html = frame_to_html(&mut editor, &config, &ime, 30, 12);
+        let html = frame_to_html(&mut editor, &config, &ime, 30, 12, None);
         let ink = crate::theme::Palette::of(&config);
         let ground = block_style(
             yumete_core::markdown::Block::Container(yumete_core::markdown::Callout::Tip),
@@ -17704,7 +17835,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(8, 5)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().unwrap();
         assert_eq!((at.x, at.y), (0, 1));
@@ -17768,7 +17899,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(16, 4)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().unwrap();
         assert!(at.y < 3, "the caret stays on the page, was at row {}", at.y);

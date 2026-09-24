@@ -445,6 +445,14 @@ pub enum Command {
     ListBuffers,
     /// `:help [節]` — the keys and the commands, in a buffer.
     Help(Option<String>),
+    /// `:settings` —— 整頁那一扇設置面板（2026-09-23 作者提）。
+    ///
+    /// > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道
+    /// > 他們都是幹啥的。
+    ///
+    /// ⚠️ **不收參數。** 進去哪一組是用走的，不是用打的——一個命令記得住的是它
+    /// 自己的名字，記不住八個組名。
+    Settings,
     /// `:tutor` — a lesson, written into a file of the reader's own.
     Tutor,
     /// `:toc [n]` — list the headings, or go to the nth.
@@ -3903,6 +3911,14 @@ pub const COMMANDS: &[Entry] = &[
                 _ => MarkdownBit::InlineNote,
             }))
         }),
+    },
+    Entry {
+        name: "settings",
+        aliases: &["set"],
+        help: "cmd.commands.settings",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Settings)),
     },
     Entry {
         name: "tutor",

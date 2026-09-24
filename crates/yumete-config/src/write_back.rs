@@ -136,7 +136,19 @@ pub fn rewrite(
             };
             t.remove(&key);
             said.commented_out.push(format!("{table}.{key}"));
-            // 掛在這張表的尾巴上，所以它留在它本來那一節裏。
+            // ⚠️ **掛在表頭那一行的後綴上**，所以它畫出來是在 `[editor]` **下面
+            // 一行**，而不是原來那個位置。留在本節裏就夠了——挪一行註釋掉的字比
+            // 「為了位置精確而動別人的行」便宜。
+            //
+            // ⚠️ 連帶一件事：它會擠在上一行註釋和它注的那一行中間。實測
+            // （2026-09-24）：
+            //
+            // ```toml
+            // [editor]
+            // # nosuchkey = 42    # yumete does not know this name
+            // # 竪排
+            // layout = "vertical"
+            // ```
             let decor = t.decor_mut();
             let had = decor.suffix().and_then(|s| s.as_str()).unwrap_or("").to_string();
             decor.set_suffix(format!("{had}\n# {line}    # {STRANGER}"));

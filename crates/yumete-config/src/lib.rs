@@ -15,6 +15,7 @@
 // ⚠️ **兩支模組聲明擺在這裏，別擺在 `rung` 那一段之前。** `rung` 頂上那一大段
 // `///` 是**它的**文檔（紙與墨的階梯），中間插一行 `pub mod` 就把那段註釋搶過去，
 // 而編譯照過、測試照綠——文檔掛在誰身上是看不見的。
+pub mod panel;
 pub mod settings_ui;
 pub mod write_back;
 
