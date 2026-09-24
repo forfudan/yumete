@@ -6802,10 +6802,6 @@ fn draw_search(
     // Whichever cell the keys are on is inked; the rest are quiet — the same
     // 「這裏」 the tree marks its row with, and it costs no colour.
     let on = Style::default().bg(ink.text()).fg(ink.paper());
-    let cell = |field: Field| match keys_here && find.field == field {
-        true => on,
-        false => text,
-    };
 
     frame.render_widget(Clear, area);
     vertical::clear_wide_left_edge(frame.buffer_mut(), area);
@@ -6960,9 +6956,11 @@ fn draw_search(
     // drawing them quiet: 正則 is a *shape* and 完整匹配 is a word boundary,
     // and neither means anything when the question is 「差不多是這幾個字」.
     // 大小寫 still applies, so it is not dimmed.
-    let pattern_cell = |field: Field| match find.fuzzy {
+    // ⚠️ **開關那幾行不再認「鍵在不在這一格上」**（2026-09-24）：光標走不上去，
+    // 按 `1`–`5`。所以它們只有「亮着」和「畫灰」兩種樣子。
+    let pattern_cell = match find.fuzzy {
         true => quiet,
-        false => cell(field),
+        false => text,
     };
     // Spelled out rather than asked of `Case`, so the tags sit where the
     // messages test can see them: it reads `say!` calls, and a tag returned
@@ -6995,19 +6993,29 @@ fn draw_search(
         let gap = widest.saturating_sub(yumete_cjk::str_width(box_text)) + 1;
         format!("{box_text}{}", " ".repeat(gap))
     };
+    // **每一行末尾寫着按哪個號**（2026-09-24 定，原話：「在这一行后面显示这个
+    // 字母快捷键」，後來選了數字）。號就是**行的次序**，一到五從上往下數，所以
+    // 讀者數行就行，不用記一張表。畫在右端，五個號自成一欄。
+    //
+    // ⚠️ **窄到放不下就不畫號**，和落款那一行同一個規矩：一個擠在字上的號比沒有
+    // 號更難看懂。
+    let shortcut = ground.fg(ink.gold());
+    let switch = |buf: &mut ratatui::buffer::Buffer, y: u16, box_text: &str, label: &str, nth: usize, style: Style| {
+        let line = format!("{}{label}", pad(box_text));
+        put_text(buf, left, y, to, &line, style);
+        let key = nth.to_string();
+        let wide = yumete_cjk::str_width(&key) as u16;
+        let used = left + yumete_cjk::str_width(&line) as u16;
+        if to > wide && used + 1 <= to - wide {
+            put_text(buf, to - wide, y, to, &key, shortcut);
+        }
+    };
     let y = y + 1;
-    put_text(
-        buf,
-        left,
-        y,
-        to,
-        &format!("{}{}", pad(&format!("[{which}]")), say!("search.case")),
-        cell(Field::Case),
-    );
+    switch(buf, y, &format!("[{which}]"), &say!("search.case"), 1, text);
     let y = y + 1;
-    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.regex)), say!("search.regex")), pattern_cell(Field::Regex));
+    switch(buf, y, tick(find.regex), &say!("search.regex"), 2, pattern_cell);
     let y = y + 1;
-    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.whole)), say!("search.whole")), pattern_cell(Field::Whole));
+    switch(buf, y, tick(find.whole), &say!("search.whole"), 3, pattern_cell);
     // **模糊 照畫，替換開着的時候畫灰**（2026-09-23 定：「自動關掉畫灰」）。
     // ⚠️ 從前它整行不畫，於是勾一下替換，底下的每一行都往上跳一格——而「跳」
     // 是這個面板最不該有的東西：讀者的眼睛正落在某一行上。走還是跳過它
@@ -7015,13 +7023,13 @@ fn draw_search(
     let y = y + 1;
     let fuzzy_cell = match find.replacing {
         true => quiet,
-        false => cell(Field::Fuzzy),
+        false => text,
     };
-    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.fuzzy)), say!("search.fuzzy")), fuzzy_cell);
+    switch(buf, y, tick(find.fuzzy), &say!("search.fuzzy"), 4, fuzzy_cell);
     // **替換是個開關**（2026-09-23 報的）：`:search` 進來的人想改一個詞，不必退
     // 出去重按 `:replace`。
     let y = y + 1;
-    put_text(buf, left, y, to, &format!("{}{}", pad(tick(find.replacing)), say!("search.replacing")), cell(Field::Replacing));
+    switch(buf, y, tick(find.replacing), &say!("search.replacing"), 5, text);
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
@@ -9253,6 +9261,26 @@ fn draw_command(
     match editor.hint() {
         Hint::Quiet => {}
         Hint::Says(text) => put(&text, news, &mut x),
+        // **The hit the keys are standing on, given the whole row** (#419).
+        //
+        // Asked for 2026-09-24 as 「能不能塞满整个命令行（可以盖掉「宇夢编辑器」），
+        // 如果还不够再加 ...」: the panel is a column, and a column of a novel
+        // holds a few characters either side — not enough to tell one 「霜」
+        // from another. The row is as wide as the window, so it is where the
+        // sentence goes. The signature at the right end yields on its own
+        // (it wants two clear cells), so nothing has to be moved aside.
+        //
+        // The line number is furniture; the match is reversed out of the
+        // prose, which is the one thing a long stretch of context needs — a
+        // reader who cannot find the word in it is reading for nothing.
+        Hint::Around { head, text, mark } => {
+            put(&head, what, &mut x);
+            let room = right.saturating_sub(x) as usize;
+            let (before, hit, after) = fit_around(&text, mark, room);
+            put(&before, news, &mut x);
+            put(&hit, news.add_modifier(Modifier::REVERSED), &mut x);
+            put(&after, news, &mut x);
+        }
         // **The panel has this now.** A row holds four keys and `空格` has
         // fourteen, so a half-pressed sequence is drawn as a list you can read
         // down; the row keeps what it was always for — what just happened.
@@ -9298,6 +9326,95 @@ fn draw_command(
             page.fg(ink.furniture()),
         );
     }
+}
+
+/// **As much of a line as the row can hold, centred on one word** — #419.
+///
+/// Three pieces: what comes before the match, the match, and what comes
+/// after — so the row can pick the match out however it draws. `…` is added
+/// to whichever end was cut, and only to that end: the mark is what the
+/// reader is looking for, so it is the last thing to go.
+///
+/// ⚠️ **The text may already carry a `…` of its own** (a hit in another file
+/// was cut when the search ran). It is an ordinary character here, so a cut
+/// that reaches it drops it and puts one back — the two never stack up.
+fn fit_around(
+    text: &str,
+    mark: std::ops::Range<usize>,
+    room: usize,
+) -> (String, String, String) {
+    let chars: Vec<char> = text.chars().collect();
+    let start = mark.start.min(chars.len());
+    let end = mark.end.clamp(start, chars.len());
+    let width = |cs: &[char]| cs.iter().copied().map(yumete_cjk::char_width).sum::<usize>();
+    if room == 0 {
+        return (String::new(), String::new(), String::new());
+    }
+    // It all fits: leave it alone. `…` is the mark of a cut, and nothing was
+    // cut — a row that shows the whole line should not claim otherwise.
+    if width(&chars) <= room {
+        return (
+            chars[..start].iter().collect(),
+            chars[start..end].iter().collect(),
+            chars[end..].iter().collect(),
+        );
+    }
+    // ⚠️ **The ellipses are part of the budget from the first line.** Counting
+    // them only while growing let a match exactly `room − 1` wide come out one
+    // cell too wide with a `…` at each end, and the end of the row is where
+    // the one that says 「there is more」 would be lost.
+    let cut = |lo: usize, hi: usize| usize::from(lo > 0) + usize::from(hi < chars.len());
+    // The match alone is wider than the row (`.*` matches a whole paragraph).
+    // Its head, and a `…` to say the rest of *it* is missing.
+    if width(&chars[start..end]) + cut(start, end) > room {
+        let mut hit = String::new();
+        let mut used = 0;
+        for &c in &chars[start..end] {
+            let w = yumete_cjk::char_width(c);
+            if used + w + 1 > room {
+                break;
+            }
+            hit.push(c);
+            used += w;
+        }
+        return (String::new(), hit, "…".to_string());
+    }
+    // Grow one character each way per round, so the word ends up in the
+    // middle of what is shown rather than at one edge of it.
+    let (mut lo, mut hi) = (start, end);
+    let mut used = width(&chars[lo..hi]);
+    loop {
+        let mut moved = false;
+        if lo > 0 {
+            let w = yumete_cjk::char_width(chars[lo - 1]);
+            if used + w + cut(lo - 1, hi) <= room {
+                lo -= 1;
+                used += w;
+                moved = true;
+            }
+        }
+        if hi < chars.len() {
+            let w = yumete_cjk::char_width(chars[hi]);
+            if used + w + cut(lo, hi + 1) <= room {
+                hi += 1;
+                used += w;
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    let mut before = String::new();
+    if lo > 0 {
+        before.push('…');
+    }
+    before.extend(&chars[lo..start]);
+    let mut after: String = chars[end..hi].iter().collect();
+    if hi < chars.len() {
+        after.push('…');
+    }
+    (before, chars[start..end].iter().collect(), after)
 }
 
 /// Where the cursor is, in the terms the layout is read in.
@@ -13721,10 +13838,10 @@ fn squeezed(text: &str) -> String {
             "the whole name is readable: {name:?}"
         );
 
-        // …and back.
+        // …再按一次收回去，回到 1/3。
         editor.on_key(Key::Char('w'));
         let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
-        assert!(is_rule(&at(&buffer, 19, 0)));
+        assert!(is_rule(&at(&buffer, 25, 0)), "back to a third");
 
         std::fs::remove_dir_all(&dir).ok();
     }

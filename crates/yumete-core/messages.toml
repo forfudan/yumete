@@ -4867,6 +4867,13 @@ zhs = "全部换掉"
 en = "change them all"
 
 [[message]]
+# 提示：搜索面板——跨檔那一種，Enter 是「開找」，找完鍵落在結果上
+key = "hint.search.go-look"
+zht = "開找"
+zhs = "开找"
+en = "search"
+
+[[message]]
 # 提示：搜索面板——下一格
 key = "hint.search.next-cell"
 zht = "下一格"
@@ -4893,6 +4900,13 @@ key = "hint.search.replace"
 zht = "換這一處／全部換"
 zhs = "换这一处／全部换"
 en = "change this one / all"
+
+[[message]]
+# 提示：搜索面板——五個開關按編號開關
+key = "hint.search.switches"
+zht = "開關"
+zhs = "开关"
+en = "switches"
 
 [[message]]
 # 提示：搜索面板——進框打字
@@ -7068,11 +7082,11 @@ zhs = "{0} 处"
 en = "{0} hits"
 
 [[message]]
-# 搜索：命令行那一行，高亮那一條的前後文
+# 搜索：命令行那一行，高亮那一條的行號（前後文跟在後面，由前端按窗口寬度裁）
 key = "search.in-context"
-zht = "{0} · {1}"
-zhs = "{0} · {1}"
-en = "{0} · {1}"
+zht = "{0} · "
+zhs = "{0} · "
+en = "{0} · "
 
 [[message]]
 # 搜索：那一處已經不在那裏了（檔案後來被改過）

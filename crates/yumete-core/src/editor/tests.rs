@@ -8179,19 +8179,21 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
         "和 :search 的參數完全一致"
     );
 
-    // ③ 大小寫排在開關的頭一個。
+    // ③ **`j` 從查詢框一步到結果**——五行開關走不上去（2026-09-24 定，原話：
+    // 「避免用户要从他们上面经过浪费 jk」）。
     ed.search_for_test().field = Field::Query;
     ed.on_key(Key::Char('j'));
-    assert_eq!(ed.search_for_test().field, Field::Case, "查詢框下面是大小寫");
-    ed.on_key(Key::Char('j'));
-    assert_eq!(ed.search_for_test().field, Field::Regex);
+    assert_eq!(ed.search_for_test().field, Field::Results, "跳過五行開關");
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.search_for_test().field, Field::Query, "回來也跳過");
 
-    // ④ 替換是個開關，而且勾上就把模糊放下。
+    // ④ 替換是第五個開關，按 `5` 勾；勾上就把模糊放下。
     ed.search_for_test().fuzzy = true;
-    ed.search_for_test().field = Field::Replacing;
-    ed.on_key(Key::Char(' '));
-    assert!(ed.search_for_test().replacing, "空格勾上了");
+    ed.on_key(Key::Char('5'));
+    assert!(ed.search_for_test().replacing, "5 勾上了");
     assert!(!ed.search_for_test().fuzzy, "⚠️ 模糊自動關掉——鬆的範圍不許拿去替換");
+    ed.on_key(Key::Char('5'));
+    assert!(!ed.search_for_test().replacing, "再按一下撤回");
 
     // ② 到了結果列表的頂上再按 `k`，出得去。
     ed.search_for_test().field = Field::Results;
@@ -8254,6 +8256,54 @@ fn a_hit_in_another_file_is_read_from_its_own_excerpt_not_from_this_buffer() {
     here.search_for_test().selected = 0;
     let said = here.hit_in_context_for_test().expect("說得出這一條");
     assert!(said.contains("風從北面來"), "活的正文給的是整行的上下文：{said}");
+}
+
+/// **命中在前後文裏的位置要說得準**——命令行拿它反白（2026-09-24 定）。
+///
+/// 兩條路各算各的偏移：本檔那一條從活的正文裏現摘，別的檔那一條用搜索當時抓下
+/// 的那一小段。兩條都要指到同幾個字上，否則反白會落在旁邊的詞上——比不反白更糟。
+#[test]
+fn the_context_line_says_which_characters_are_the_match() {
+    use crate::search_panel::{Field, Hit};
+    // ① 本檔：從活的正文裏現摘。
+    let mut here = typed("那年冬天，天很冷，風從北面來。");
+    here.open_search();
+    here.on_key(Key::Esc);
+    here.search_for_test().hits = vec![Hit {
+        file: None,
+        line: 0,
+        at: 5,
+        end: 8,
+        excerpt: "天很冷".to_string(),
+        mark: 0..3,
+        nth: 0,
+    }];
+    here.search_for_test().total = 1;
+    here.search_for_test().field = Field::Results;
+    here.search_for_test().selected = 0;
+    let (text, mark) = here.hit_mark_for_test().expect("說得出這一條");
+    let lit: String = text.chars().skip(mark.start).take(mark.end - mark.start).collect();
+    assert_eq!(lit, "天很冷", "反白落在別處：{text:?} {mark:?}");
+
+    // ② 別的檔：命中自己那一段，省略號也佔一個字。
+    let mut far = typed("");
+    far.open_search();
+    far.on_key(Key::Esc);
+    far.search_for_test().hits = vec![Hit {
+        file: Some(std::path::PathBuf::from("ch01.md")),
+        line: 99,
+        at: 0,
+        end: 2,
+        excerpt: "…那年冬天…".to_string(),
+        mark: 3..5,
+        nth: 0,
+    }];
+    far.search_for_test().total = 1;
+    far.search_for_test().field = Field::Results;
+    far.search_for_test().selected = 1;
+    let (text, mark) = far.hit_mark_for_test().expect("說得出這一條");
+    let lit: String = text.chars().skip(mark.start).take(mark.end - mark.start).collect();
+    assert_eq!(lit, "冬天", "反白落在別處：{text:?} {mark:?}");
 }
 
 /// 「查不到」and「還沒問」are different findings.
@@ -8565,7 +8615,7 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
 /// The search panel: a box, three switches, and what they found — #419 一.
 #[test]
 fn the_search_panel_looks_through_the_buffer_as_you_type() {
-    use crate::search_panel::{Case, Field};
+    use crate::search_panel::Case;
     use crate::sidebar::{Side, View};
     let mut ed = typed("霜降於石階。\n那一年的霜來得早。\n無。\n");
     ed.on_key(Key::Char('g'));
@@ -8608,13 +8658,8 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().total, 0, "a literal dot is not in the text");
     ed.on_key(Key::Esc);
     assert_eq!(ed.mode(), Mode::Normal, "Esc leaves the box, not the panel");
-    // `j` walks the form's cells with the keys in the panel; `Tab` is the
-    // slot's own key and walks its views (2026-09-17).
-    // ⚠️ 走到那一格，不是按一下——2026-09-23 查詢框下面先碰到的是大小寫。
-    while ed.search().field != Field::Regex {
-        ed.on_key(Key::Char('j'));
-    }
-    ed.on_key(Key::Char(' '));
+    // 正則是第二個開關——`2`，不必走過去（2026-09-24）。
+    ed.on_key(Key::Char('2'));
     assert!(ed.search().regex);
     assert!(ed.search().total > 0, "as a pattern it matches every character");
 
@@ -8627,17 +8672,14 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert!(ed.search().broken);
     assert_eq!(ed.search().hits.len(), found, "the last good answer is still there");
 
-    // 大小寫 is three ways round, not a tick.
+    // 大小寫 is three ways round, not a tick — the first switch, `1`.
     ed.on_key(Key::Esc);
-    while ed.search().field != Field::Case {
-        ed.on_key(Key::Char('j'));
-    }
     assert_eq!(ed.search().case, Case::Smart);
-    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('1'));
     assert_eq!(ed.search().case, Case::Sensitive);
-    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('1'));
     assert_eq!(ed.search().case, Case::Insensitive);
-    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('1'));
     assert_eq!(ed.search().case, Case::Smart, "round again");
 }
 
@@ -8647,7 +8689,6 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
 /// switch, and it stands in place of 正則 and 完整匹配 rather than beside them.
 #[test]
 fn the_loose_switch_finds_a_half_remembered_phrase() {
-    use crate::search_panel::Field;
     let mut ed = typed("他輕輕地説了一句。\n他説。\n走了很久，天亮纔聽見有人説話。\n");
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
@@ -8655,12 +8696,9 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
     type_keys(&mut ed, "他説");
     assert_eq!(ed.search().total, 1, "as a string, only the exact one");
 
-    // Down out of the box and on to 模糊. ⚠️ 走到那一格，不是數幾下——開關的
-    // 次序 2026-09-23 換過（大小寫排頭），而且上下各多了一格。
-    while ed.search().field != Field::Fuzzy {
-        ed.on_key(Key::Down);
-    }
-    ed.on_key(Key::Char(' '));
+    // 模糊是第四個開關。⚠️ 光標走不上去（2026-09-24）——`Esc` 出框，按 `4`。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('4'));
     assert!(ed.search().fuzzy);
 
     // 他輕輕地説 as well as 他説 — and **not** the third line, where the two
@@ -8677,12 +8715,7 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
 
     // Asking for 正則 puts 模糊 down — they are alternatives, and a dimmed
     // switch that still flipped would say two things at once.
-    // ⚠️ **走到那一格，不是按幾下。** 從前這裏數了三下 `k`；2026-09-23 面板上頭
-    // 多了一格「哪裏找」、開關組末尾多了一格「替換」，三下就落在別處了。
-    while ed.search().field != Field::Regex {
-        ed.on_key(Key::Char('k'));
-    }
-    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('2'));
     assert!(ed.search().regex);
     assert!(!ed.search().fuzzy, "正則 and 模糊 are not both on");
 }
@@ -8695,11 +8728,8 @@ fn the_loose_switch_is_not_there_when_the_panel_replaces() {
     use crate::search_panel::Field;
     let mut ed = typed("他輕輕地説了一句。\n");
     type_keys(&mut ed, " /");
-    ed.on_key(Key::Down);
-    ed.on_key(Key::Down);
-    ed.on_key(Key::Down);
-    ed.on_key(Key::Down);
-    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('4'));
     assert!(ed.search().fuzzy);
 
     ed.execute(":replace").unwrap();
@@ -8975,14 +9005,14 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.search().total, 4);
 
-    ed.on_key(Key::Esc);
-    // ⚠️ 同上：走到列表，不是按四下。
-    while ed.search().field != Field::Results {
-        ed.on_key(Key::Char('j'));
-    }
+    // **跨檔的 `Enter` 是「開找」，找完就把鍵交出去**（2026-09-24 定，原話：
+    // 「输入结束按Enter后显示搜索结果的时候，是不是可以直接进入 normal 模式？
+    // 这样不需要额外esc一下」）。落點是**第一條命中**，不是它上面那一行檔名——
+    // 提示行對一行檔名無話可說，停在那裏看着像沒答。
+    assert_eq!(ed.mode(), Mode::Normal, "不必再 Esc 一下");
+    assert_eq!(ed.search().field, Field::Results);
 
     // **One hit** — standing on a hit, not on the file above it.
-    ed.on_key(Key::Char('j'));
     assert!(matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))));
     ed.on_key(Key::Char('r'));
     assert_eq!(ed.search().total, 3, "{}", ed.status());

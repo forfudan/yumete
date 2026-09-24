@@ -500,6 +500,21 @@ pub enum Hint {
     Quiet,
     /// Something just happened.
     Says(String),
+    /// **A stretch of prose with one word in it to be picked out** (#419).
+    ///
+    /// The search hit the keys are standing on. `head` is 「1027 · 」, already
+    /// said in the reader's language; `text` is as much of that line as the
+    /// editor kept, **untrimmed**; `mark` counts characters into `text` and
+    /// says which of them are the match.
+    ///
+    /// Three pieces rather than one string because the fitting is the front
+    /// end's: how many of those characters the row can hold is a question
+    /// about the window, and picking the word out needs to survive the cut.
+    Around {
+        head: String,
+        text: String,
+        mark: std::ops::Range<usize>,
+    },
     /// A named set of keys: what this is, then each key and what it does.
     ///
     /// The *keys* are `&'static str` — `hjkl` is `hjkl` in any language — and

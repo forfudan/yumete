@@ -42,12 +42,26 @@ impl Editor {
             }
         }
         // **In the box, before anything about the panel around it** (#419):
-        // the keys are in a field, and the one that is not obvious is that
-        // `Enter` walks the hits without giving them back.
+        // the keys are in a field, and the one that is not obvious is what
+        // `Enter` does with them.
+        //
+        // ⚠️ **`Enter` is two different keys and the row has to say which**
+        // (2026-09-24). Searching this file, it is 「the next place」 and the
+        // keys stay in the box; searching a folder, it is 「go and look」 and
+        // the keys land in the results.
+        //
+        // ⚠️ **This row used to say 「Tab 下一格」 in both states, and `Tab`
+        // does not do that in either** (2026-09-24 審出來的). In the box it
+        // falls through to nothing; in the panel it walks the slot's views.
+        // The next cell is `↓`.
         if self.mode == Mode::Field {
+            let enter = match self.search().scope.live() {
+                true => say!("hint.search.next-hit"),
+                false => say!("hint.search.go-look"),
+            };
             return Hint::Keys(say!("label.panel.search"), vec![
-                    ("Enter", say!("hint.search.next-hit")),
-                    ("Tab", say!("hint.search.next-cell")),
+                    ("Enter", enter),
+                    ("↑ ↓", say!("hint.search.next-cell")),
                     ("Esc", say!("hint.search.out-of-the-box")),
                 ]);
         }
@@ -56,8 +70,8 @@ impl Editor {
         // excerpt there is a few characters; this row is the width of the
         // window. It displaces the panel's keys, and that is the right trade
         // while a reader is choosing which hit to go to.
-        if let Some(line) = self.hit_in_context() {
-            return Hint::Says(line);
+        if let Some((line, text, mark)) = self.hit_in_context() {
+            return Hint::Around { head: say!("search.in-context", line), text, mark };
         }
         // The search panel is a form, not a list: none of the tree's keys
         // mean anything in it (#419).
@@ -67,7 +81,9 @@ impl Editor {
             {
                 let mut keys = vec![
                     ("i", say!("hint.search.type")),
-                    ("Tab", say!("hint.search.next-cell")),
+                    // The five switches are pressed by number and walked past
+                    // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
+                    ("1–5", say!("hint.search.switches")),
                     ("Enter", say!("hint.search.use-it")),
                 ];
                 // Only when they do something: `r`/`R` are live on the
