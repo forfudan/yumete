@@ -6302,42 +6302,82 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// it landed on, and by the tab bar working out where it starts. A remembered
 /// number would be a frame out of date, and a click would open the wrong file.
 ///
-/// Wide, it is as wide as its longest row, so the point of opening it out —
-/// reading a whole chapter name — actually happens; but never past half the
-/// window, because the writing is what the window is for.
+/// **一條比例規矩**（2026-09-24 作者定）：
+///
+/// | | 寬度 |
+/// | --- | --- |
+/// | 出廠 | 窗口的 **1/3** |
+/// | 按 `w` 攤開，而且**只有這一個邊欄** | 窗口的 **1/2** |
+/// | 按 `w` 攤開，而兩個邊欄都開着 | **沒有反應**——正文已經只剩 1/3 了 |
+/// | 1/3 裝不下這扇面板要的，而只有這一個邊欄 | **直接給 1/2**（等於自動攤開） |
+///
+/// ⚠️ **從前是一個寫死的數（`sidebar_width`，出廠 24），不跟窗口走。** 於是 30 欄
+/// 的終端裏邊欄佔 29 欄，**正文只剩 2 欄**——一個漢字。而同一個程序的 `空格` 菜單
+/// 在同樣尺寸下會優雅地收成「… 還有 19 個」。2026-09-24 審出來的。
+///
+/// ⚠️ **比例規矩自己就自洽，不需要「太窄就收起來」那種補丁**（作者當場指出來的：
+/// 兩個邊欄各 1/3，正文**永遠**是 1/3，「正文不足 1/3」這個條件根本不存在）。
+/// 窄窗口下它按比例縮，不會塌。
+///
+/// ⚠️ **`editor.sidebar_width` 從此是下限，不是寬度。** 它還在，是因為一個人可以
+/// 說「我的大綱至少要這麽寬」；但它不再蓋過窗口的比例。
 fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> u16 {
+    // **這一扇是不是唯一開着的那一扇** —— `w` 攤不攤得開、1/3 不夠時給不給 1/2，
+    // 都看它。⚠️ 問的是**兩側**，不是這一側：規矩說的是「只有一個邊欄」。
+    let alone = Side::BOTH
+        .iter()
+        .filter(|s| editor.panel(**s).is_some() || editor.transient(**s).is_some())
+        .count()
+        <= 1;
+    let third = (total as usize / 3).max(1);
+    let half = (total as usize / 2).max(1);
+    // 攤開能到多寬：只有這一扇就是半扇窗，兩扇都開着就還是 1/3（`w` 沒有反應）。
+    let roomy = match alone {
+        true => half,
+        false => third,
+    };
+    // **底：那扇面板最少要多寬，但封在 `roomy` 裏。**
+    //
+    // ⚠️ **不封住的話，窗口變窄邊欄反而變寬。** 從前是「1/3 不夠下限就給 1/2」，
+    // 於是 72 欄給 24（＝1/3），71 欄給 **35**（＝1/2）——窄了一欄，邊欄寬了十一欄。
+    // 作者 2026-09-24 當場看出來：「90 到 72 到 60 的時候，是從 30-24-30，有個跳動
+    // ……我覺得從 72 開始應當保持在 24，直到窗口小於 48 的時候繼續下降。」
+    //
+    // `min(roomy)` 正好接得上：48 欄時 1/2 恰好是 24，所以 72→48 穩在下限、48 以下
+    // 跟着 1/2 走，**全程單調**。
+    //
+    // | 窗口 | 120 | 90 | 72 | 71 | 60 | 48 | 47 | 30 |
+    // | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+    // | 舊 | 40 | 30 | 24 | **35** | **30** | 24 | 23 | 15 |
+    // | 新 | 40 | 30 | 24 | 24 | 24 | 24 | 23 | 15 |
+    let floor = |least: usize| least.min(roomy);
     // **The two layers share one width**, the wider one's — a slot is one
     // column down the side of the page, not two of different widths with a
     // ragged edge between them.
     let mut want = 0usize;
     if let Some(sidebar) = editor.panel(side) {
-        // **The search panel asks for more**, because it is a form: a box,
-        // three switches (大小寫 is three ways, not a tick) and the hits. At
-        // the tree's width the excerpt is five characters (#419).
-        if sidebar.view() == View::Search {
-            want = SEARCH_WIDTH.max(config.editor.sidebar_width);
-        }
-        want = want.max(if sidebar.wide() && sidebar.view() == View::Wiki {
-            // **百科沒有「最長的那一行」**——它是一段文章，`rows()` 是空的，於是
-            // `w` 按下去寬度一格不動（2026-09-23 審出來的：提示行寫着它管用）。
-            // 一篇文章要的本來也不是「讀得下最長的標題」，是讀得舒服，所以寬就
-            // 是半扇窗，與別的視圖的上限同一個數。
-            (total as usize / 2).max(config.editor.sidebar_width)
-        } else if sidebar.wide() {
-            // One column of padding on the left, the rule on the right, and
-            // the two the outline indents its rows by.
-            let longest = sidebar
+        // **這扇面板最少要多寬。** 搜索面板是一張要打字的表單（一個框、五個開關、
+        // 命中那一列），樹的寬度下摘要只剩五個字（#419）。
+        let least = match sidebar.view() {
+            View::Search => SEARCH_WIDTH,
+            _ => config.editor.sidebar_width,
+        };
+        let least = floor(least);
+        want = match sidebar.wide() {
+            // **攤開**：百科沒有「最長的那一行」（它是一段文章，`rows()` 是空的，
+            // 2026-09-23 審出來的：提示行寫着 `w` 管用而寬度一格不動），所以它直接
+            // 要 `roomy`；別的視圖要「讀得下最長的那一行」，封頂也是 `roomy`。
+            true if sidebar.view() == View::Wiki => roomy,
+            true => sidebar
                 .rows()
                 .iter()
                 .map(|row| yumete_cjk::str_width(&row.name) + 4)
                 .max()
-                .unwrap_or(0);
-            longest
-                .max(config.editor.sidebar_width)
-                .min(total as usize / 2)
-        } else {
-            config.editor.sidebar_width
-        });
+                .unwrap_or(0)
+                .clamp(third.max(least), roomy),
+            // **沒攤開**：窗口的 1/3，但不低於這扇面板要的那個底。
+            false => third.max(least),
+        };
     }
     // **A transient panel does not open on a page too narrow to spare it.**
     // `split_detail` used to refuse below 30 columns, and the reason holds:
@@ -6364,7 +6404,8 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
                 .unwrap_or(0),
             Transient::Detail => editor.detail_width().unwrap_or(config.editor.detail_width),
         };
-        want = want.max(asked).min(total as usize / 2).max(12);
+        // transient（字典／hover／詳情）要多寬按內容算，封頂同樣是 `roomy`。
+        want = want.max(asked).min(roomy).max(floor(12));
     }
     // A slot narrower than three cells cannot be drawn — and the drawing used
     // to *return* at that width, leaving the rectangle it had been given
@@ -9937,6 +9978,72 @@ fn squeezed(text: &str) -> String {
         let panel = buf.cell((10, 4)).expect("面板上的別處").style().bg;
         assert_ne!(inside, panel, "框與面板同色，等於沒有框");
         assert_eq!(inside, Some(ink.ground(yumete_config::rung::PAPER).bg.unwrap()));
+    }
+
+    /// **走進搜索結果時，命令行要把前後文鋪滿整行，命中那個詞反白**（#419）。
+    ///
+    /// 2026-09-24 原話：「高级搜索 jk 移动到搜索结果的时候，命令行会显示更多的
+    /// 前后文。不过这一行其实没有塞满。你能不能看看能不能塞满整个命令行（可以
+    /// 盖掉「宇夢编辑器」），如果还不够再加 ...。然后命令行中能不能对这个搜索
+    /// 的词反向高亮？」
+    ///
+    /// 從前那一行只有半行：跨檔命中身上只帶了前後各 12 個字。
+    #[test]
+    fn the_command_row_fills_up_with_the_hit_in_context() {
+        use yumete_core::search_panel::Field;
+        // 一行長到任何窗口都塞不下，命中在正中間。
+        let long: String = "甲乙丙丁戊己庚辛壬癸".repeat(20);
+        let mut ed = editor_with(&format!("{long}霜{long}"));
+        // ⚠️ `空格 /` 開出來鍵就在框裏，不必再按 `i`——按了打進去的是字母 i。
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('/'));
+        ed.on_key(Key::Char('霜'));
+        ed.on_key(Key::Enter);
+        ed.on_key(Key::Esc);
+        for _ in 0..12 {
+            if ed.search().field == Field::Results {
+                break;
+            }
+            ed.on_key(Key::Char('j'));
+        }
+        assert_eq!(ed.search().field, Field::Results, "走不進結果列表");
+        assert!(!ed.search().hits.is_empty(), "一條命中都沒有");
+
+        let (w, h) = (120, 12);
+        let (buf, _) = render_caret(&ed, &Config::default(), w, h);
+        let row: String = (0..w)
+            .filter_map(|x| buf.cell((x, h - 1)).map(|c| c.symbol().to_string()))
+            .collect();
+        let used = yumete_cjk::str_width(row.trim_end());
+        assert!(used >= (w as usize) - 4, "命令行只鋪了 {used} 欄：{row:?}");
+        assert!(row.contains('…'), "兩頭裁過就要有省略號：{row:?}");
+
+        // 反白的那一格（或兩格，全角字佔兩格）就是命中本身。
+        let lit: String = (0..w)
+            .filter(|x| {
+                buf.cell((*x, h - 1))
+                    .is_some_and(|c| c.style().add_modifier.contains(Modifier::REVERSED))
+            })
+            .filter_map(|x| buf.cell((x, h - 1)).map(|c| c.symbol().to_string()))
+            .collect();
+        assert_eq!(lit.trim(), "霜", "反白的不是命中：{lit:?}");
+    }
+
+    /// 整段放得下就不裁，也就不該長出省略號。
+    #[test]
+    fn a_line_that_fits_keeps_both_its_ends() {
+        let (before, hit, after) = super::fit_around("那年冬天很冷", 3..4, 40);
+        assert_eq!((before.as_str(), hit.as_str(), after.as_str()), ("那年冬", "天", "很冷"));
+    }
+
+    /// 命中本身比一整行還寬（`.*` 能匹配整段）：留它的頭，尾巴一個省略號。
+    #[test]
+    fn a_match_wider_than_the_row_keeps_its_head() {
+        let long = "甲乙丙丁戊己庚辛壬癸".repeat(4);
+        let (before, hit, after) = super::fit_around(&long, 0..40, 11);
+        assert_eq!(before, "");
+        assert_eq!(hit, "甲乙丙丁戊", "十欄裝得下五個全角字，末一欄留給省略號");
+        assert_eq!(after, "…");
     }
 
     /// `:yume-where` names every layer, in order, with what it holds.
@@ -13531,6 +13638,52 @@ fn squeezed(text: &str) -> String {
         assert_eq!(buffer[(20, 0)].style().bg, tint, "the number was kept");
     }
 
+    /// **窗口越窄，邊欄不許越寬。**
+    ///
+    /// ⚠️ 這是**拖窗口的時候**纔看得見的東西，一張靜態截圖測不出來：從前
+    /// 「1/3 不夠下限就給 1/2」，於是 72 欄給 24、**71 欄給 35**——把終端拖窄一欄，
+    /// 邊欄猛地寬了十一欄、正文跟着塌一截。作者 2026-09-24 拖出來的：「90 到 72 到
+    /// 60 的時候，是從 30-24-30，有個跳動，不夠平滑。」
+    ///
+    /// 現在是一個夾子（`clamp(1/3, 下限, 1/2)`），三段行為都從它出來：72 以上按
+    /// 1/3，72→48 穩在下限，48 以下跟着 1/2 降——而 48 欄時 1/2 恰好等於下限，所以
+    /// 接得上。
+    #[test]
+    fn a_narrower_window_never_gives_the_sidebar_more() {
+        let mut editor = editor_with("那年冬天");
+        let config = Config::default();
+        // ⚠️ **拿文件樹，不拿 `:toc`。** 一個沒有標題的草稿上 `:toc` 根本不開面板
+        // （它會說「沒找到標題」），於是這條測試量到零個檔位——而那不是「單調」，
+        // 是「什麽都沒量」。下面那句 `said.len() > 100` 就是為這件事留的。
+        let dir = std::env::temp_dir().join(format!("yumete-mono-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("一.md"), "# 一\n").unwrap();
+        editor.open_sidebar_at(&dir);
+        // ⚠️ **從窄往寬走。** 反過來（`.rev()`，從寬往窄）配上「不許變大」的斷言
+        // 就是把方向寫反了——那時先量到的是**寬窗口**，而寬窗口的邊欄本來就該更
+        // 大。第一次跑就報 `(140,46) → (137,45)　窄了反而寬了`，而那一串數字恰恰
+        // 證明公式是對的。2026-09-24 自己踩的。
+        let mut before = 0u16;
+        let mut said = Vec::new();
+        for width in 20..=140u16 {
+            let buffer = render_with(&editor, &config, &no_ime(), width, 10);
+            let Some(rule) = (0..width).find(|&x| is_rule(&at(&buffer, x, 0))) else {
+                continue;
+            };
+            said.push((width, rule + 1));
+            assert!(
+                rule + 1 >= before,
+                "{width} 欄的邊欄是 {}，而更**窄**的窗口給到 {before}——窄了反而寬了。\n\
+                 逐檔：{said:?}",
+                rule + 1
+            );
+            before = rule + 1;
+        }
+        assert!(said.len() > 100, "量到的檔位太少：{}", said.len());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn the_sidebar_opens_out_to_the_length_of_its_longest_name() {
         let mut editor = editor_with("那年冬天");
@@ -13542,9 +13695,13 @@ fn squeezed(text: &str) -> String {
         std::fs::write(dir.join("天門真境之傳家寶扇.md"), "# 一\n").unwrap();
         editor.open_sidebar_at(&dir);
 
-        // Narrow, the name is cut where the rule is.
+        // 沒攤開的時候是**窗口的 1/3**（80 ÷ 3 ＝ 26），名字切在那條綫上。
+        //
+        // ⚠️ **這一句從前斷言的是 `sidebar_width` 本身**（20），而 2026-09-24 之後
+        // 那一格是**下限**不是寬度：1/3 夠得着下限就按 1/3 走。這條測試真正守的是
+        // 下半句——`w` 攤得開到讀得下整個名字——上半句只是鋪墊，跟着新契約改。
         let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
-        assert!(is_rule(&at(&buffer, 19, 0)), "the rule at the set width");
+        assert!(is_rule(&at(&buffer, 25, 0)), "the rule at a third of the window");
 
         // `w` opens it out far enough to read the whole name, rule included.
         editor.on_key(Key::Char('w'));
