@@ -54,6 +54,41 @@ fn every_key() -> BTreeSet<String> {
     out
 }
 
+/// **那六張表就是 `RawConfig` 裏所有結構體形狀的表** —— 再加一張，這條紅。
+///
+/// ⚠️ [`every_key`] 走的是一張**手抄**的表名單子，而那個模組的文檔自己寫着「一張
+/// 手抄的字段名單正是這條測試要防的東西」。手抄的表名單子是同一件事，只是矮了一層：
+/// 加一個 `RawFoo` 進 `RawConfig` 而忘了加進那張單子，它底下每一個鍵都沒人管，而
+/// 「每個設定都有着落」那條照樣綠。2026-09-24 審出來的。
+///
+/// ⚠️ **鍵集開放的表不算**（`syntax`／`sidebar`／`language`／`lsp`，都是
+/// `HashMap`）：它們的鍵是擴展名、面板名、語言名——任意的，數不出一張名單來，所以
+/// 「每個鍵都有着落」對它們沒有意義。`NOT_IN_THE_PANEL` 的判準二說的就是這一族。
+#[test]
+fn the_six_tables_are_every_table_that_has_a_shape() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"),
+    )
+    .expect("yumete-config/src/lib.rs");
+    let start = source.find("\nstruct RawConfig {").expect("struct RawConfig");
+    let end = source[start..].find("\n}").map(|n| start + n).unwrap_or(source.len());
+    let shaped: Vec<String> = source[start..end]
+        .lines()
+        .filter_map(|line| {
+            let (name, ty) = line.trim().trim_end_matches(',').split_once(": ")?;
+            // `RawEditor` 有形狀；`HashMap<…>` 沒有。
+            ty.starts_with("Raw").then(|| name.to_string())
+        })
+        .collect();
+    assert!(shaped.len() >= 5, "一個帶形狀的表都沒讀出來——`RawConfig` 的寫法變了？");
+    let walked = ["editor", "theme", "panel", "ime", "keys", "export"];
+    let missed: Vec<&String> = shaped.iter().filter(|t| !walked.contains(&t.as_str())).collect();
+    assert!(
+        missed.is_empty(),
+        "`RawConfig` 多了帶形狀的表而 `every_key` 沒走它：{missed:?}\n         走它（把表名加進 `every_key`），那張表底下的每個鍵纔算有人管。"
+    );
+}
+
 #[test]
 fn every_setting_names_a_key_that_exists() {
     let real = every_key();
@@ -182,14 +217,24 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
                     false => low.to_string(),
                 }
             }
+            // ⚠️ **每一個詞都要試，不是只試第一個。** 從前是 `find(|w| *w != now)`
+            // ——取排在最前面的那個非出廠詞，於是十六組幾選一裏**四十六個詞只有
+            // 十六個被試過**。而這條測試逮到的那一次（`ime.system` 寫了兩個不存在
+            // 的詞）純屬運氣：壞詞正好排第二。排第三就逃掉了。
+            // 2026-09-24 審出來的。
             Kind::Pick(choices) => {
                 let now = setting.factory.trim_matches('"');
-                let other = choices
-                    .iter()
-                    .map(|c| c.word)
-                    .find(|w| *w != now)
-                    .unwrap_or_else(|| panic!("{} 的選項全同名", setting.path()));
-                format!("\"{other}\"")
+                for choice in choices.iter().filter(|c| c.word != now) {
+                    assert_ne!(
+                        Config::from_toml(&one(setting, &format!("\"{}\"", choice.word))),
+                        nothing_said(),
+                        "{} 設成 {:?} 之後什麽都沒變——那個詞 `into_config` 不認得，\
+                         而面板照樣讓人選、照樣寫進 toml",
+                        setting.path(),
+                        choice.word
+                    );
+                }
+                continue;
             }
             // 一段自己打的字沒有「另一個值」可推——跳過，那一族靠上面那條。
             Kind::Text => continue,

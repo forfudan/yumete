@@ -722,6 +722,25 @@ fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Serv
     Ok(server)
 }
 
+
+/// **The whole conversation, when `YUMETE_LSP_TRACE` names a file.**
+///
+/// A language server bug looks exactly like a bug here, and the only thing
+/// that tells them apart is the bytes that crossed. Off unless asked for: the
+/// file grows by the size of the document on every keystroke.
+pub(crate) fn trace(way: &str, message: &str) {
+    let Some(path) = std::env::var_os("YUMETE_LSP_TRACE") else { return };
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let short: String = message.chars().take(400).collect();
+        let _ = writeln!(file, "{way} {short}");
+    }
+}
+
+// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
+// 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
+// 全綠。這一支從前擺在中間，後面壓着 15 行（2026-09-24 審出來的）。
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -954,19 +973,5 @@ mod tests {
         tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), Some(LOOK_IN), "問出去的還沒答，就不許睡死");
-    }
-}
-
-/// **The whole conversation, when `YUMETE_LSP_TRACE` names a file.**
-///
-/// A language server bug looks exactly like a bug here, and the only thing
-/// that tells them apart is the bytes that crossed. Off unless asked for: the
-/// file grows by the size of the document on every keystroke.
-pub(crate) fn trace(way: &str, message: &str) {
-    let Some(path) = std::env::var_os("YUMETE_LSP_TRACE") else { return };
-    use std::io::Write;
-    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-        let short: String = message.chars().take(400).collect();
-        let _ = writeln!(file, "{way} {short}");
     }
 }

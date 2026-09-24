@@ -625,6 +625,233 @@ pub fn prev_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmente
     }
 }
 
+
+// ---- Paragraphs and sentences (Feature #143) -----------------------------
+
+/// Whether a line holds nothing but blanks.
+fn blank(rope: &Rope, line: usize) -> bool {
+    line_text(rope, line).trim().is_empty()
+}
+
+/// The start of the next paragraph.
+///
+/// **A paragraph is a logical line**, which is not a definition this module
+/// invents: it is the one the rest of the editor already works in — `wrap.rs`
+/// calls a logical line a paragraph, the segmentation cache is keyed by one,
+/// and a Chinese manuscript is written with one paragraph to a line and no
+/// blank line between them.
+///
+/// That is also why the motion is needed at all. With soft wrap on, `j` and `k`
+/// move by *visual row*, and a paragraph is twenty of them — so the key that
+/// used to mean "the next paragraph" no longer does, and nothing replaced it.
+/// Blank lines are skipped: they separate sections, and no one wants to stop
+/// on one.
+pub fn next_paragraph(rope: &Rope, pos: usize) -> usize {
+    let last = last_line(rope);
+    let mut line = line_of(rope, pos);
+    while line < last {
+        line += 1;
+        if !blank(rope, line) {
+            return rope.line_to_char(line);
+        }
+    }
+    // No next paragraph: the end of the writing, which is where `}` means to
+    // go and where the next paragraph would be written.
+    document_end(rope)
+}
+
+/// One past the last character of the last line — where writing continues.
+fn document_end(rope: &Rope) -> usize {
+    line_end(rope, rope.line_to_char(last_line(rope)))
+}
+
+/// The start of this paragraph, or of the one before it when already there.
+///
+/// The same two-step rule `(` follows for a sentence, and what makes `{` usable
+/// for backing up: the first press takes you to the top of what you are in.
+pub fn prev_paragraph(rope: &Rope, pos: usize) -> usize {
+    let mut line = line_of(rope, pos);
+    let start = rope.line_to_char(line);
+    if pos > start && !blank(rope, line) {
+        return start;
+    }
+    while line > 0 {
+        line -= 1;
+        if !blank(rope, line) {
+            return rope.line_to_char(line);
+        }
+    }
+    0
+}
+
+/// Whether the character at `i` closes a sentence.
+///
+/// The Chinese marks, and a full stop only when a space or a line end follows
+/// it — otherwise every `3.14` and every `Mr.` in a manuscript would be the end
+/// of a sentence.
+fn ends_sentence(chars: &[char], i: usize) -> bool {
+    match chars[i] {
+        '。' | '！' | '？' | '．' | '…' | '!' | '?' => true,
+        '.' => chars.get(i + 1).is_none_or(|c| c.is_whitespace()),
+        _ => false,
+    }
+}
+
+/// Whether the character closes something and so belongs to the sentence that
+/// just ended: 「這樣。」 ends after the 」, not before it.
+fn closes_a_quote(c: char) -> bool {
+    matches!(
+        c,
+        '」' | '』' | '）' | '》' | '〉' | '】' | '〕' | '｝' | '”' | '’' | '"' | '\'' | ')' | ']' | '}'
+    )
+}
+
+/// Where every sentence of a line begins.
+///
+/// `pub(crate)` because `:view-sentence` (Feature #237) lays a 縱書 page out one 句
+/// to a 縱, and the boundaries it breaks at have to be the same ones `(` and `)`
+/// jump between — two answers would mean the cursor walks to a place the page
+/// does not break at.
+pub(crate) fn sentence_starts(chars: &[char]) -> Vec<usize> {
+    let mut starts = vec![chars
+        .iter()
+        .position(|c| !c.is_whitespace())
+        .unwrap_or(0)];
+    let mut i = 0;
+    while i < chars.len() {
+        if ends_sentence(chars, i) {
+            let mut j = i + 1;
+            while j < chars.len() && (closes_a_quote(chars[j]) || ends_sentence(chars, j)) {
+                j += 1;
+            }
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j < chars.len() && Some(&j) != starts.last() {
+                starts.push(j);
+            }
+            i = j.max(i + 1);
+        } else {
+            i += 1;
+        }
+    }
+    starts
+}
+
+/// The start of the next sentence, crossing into the next paragraph if this
+/// one has no more.
+pub fn next_sentence(rope: &Rope, pos: usize) -> usize {
+    let last = last_line(rope);
+    let mut line = line_of(rope, pos);
+    let mut from = Some(pos - rope.line_to_char(line));
+    loop {
+        let chars: Vec<char> = line_text(rope, line).chars().collect();
+        let start = rope.line_to_char(line);
+        let after = from.unwrap_or(0);
+        if let Some(&at) = sentence_starts(&chars)
+            .iter()
+            .find(|&&at| at > after || from.is_none())
+        {
+            return start + at;
+        }
+        if line >= last {
+            return document_end(rope);
+        }
+        line += 1;
+        from = None;
+        if blank(rope, line) {
+            from = Some(0);
+        }
+    }
+}
+
+/// The start of this sentence, or of the one before it when already there.
+pub fn prev_sentence(rope: &Rope, pos: usize) -> usize {
+    let mut line = line_of(rope, pos);
+    let mut here = Some(pos - rope.line_to_char(line));
+    loop {
+        let chars: Vec<char> = line_text(rope, line).chars().collect();
+        let start = rope.line_to_char(line);
+        let starts = sentence_starts(&chars);
+        let before = match here {
+            Some(col) => starts.iter().rev().find(|&&at| at < col).copied(),
+            None => starts.last().copied(),
+        };
+        if let Some(at) = before {
+            return start + at;
+        }
+        if line == 0 {
+            return 0;
+        }
+        line -= 1;
+        here = blank(rope, line).then_some(0);
+    }
+}
+
+#[cfg(test)]
+mod paragraph_and_sentence_tests {
+    use super::*;
+
+    #[test]
+    fn a_paragraph_is_a_logical_line() {
+        // One paragraph to a line and no blank line between them — how a
+        // Chinese manuscript is written, and the case `}` exists for: with
+        // soft wrap on, `j` moves one of this paragraph's twenty rows.
+        let rope = Rope::from_str("第一段很長很長。\n第二段。\n\n第三段。\n");
+        assert_eq!(next_paragraph(&rope, 0), 9, "the next line");
+        assert_eq!(next_paragraph(&rope, 9), 15, "blank lines are skipped");
+        assert_eq!(
+            next_paragraph(&rope, 15),
+            19,
+            "and the last one goes to the end of the writing"
+        );
+        // Backwards: first to the top of this paragraph, then out of it.
+        assert_eq!(prev_paragraph(&rope, 12), 9);
+        assert_eq!(prev_paragraph(&rope, 9), 0);
+        assert_eq!(prev_paragraph(&rope, 0), 0);
+    }
+
+    #[test]
+    fn a_sentence_ends_after_its_closing_mark() {
+        // 「這樣。」 ends after the 」, not before it — which is the whole
+        // reason a sentence motion cannot just search for 。.
+        let text = "他說：「不。」她走了。第三句。\n";
+        let rope = Rope::from_str(text);
+        let starts: Vec<usize> = {
+            let chars: Vec<char> = text.trim_end().chars().collect();
+            sentence_starts(&chars)
+        };
+        assert_eq!(starts, vec![0, 7, 11]);
+        assert_eq!(next_sentence(&rope, 0), 7);
+        assert_eq!(next_sentence(&rope, 7), 11);
+        assert_eq!(prev_sentence(&rope, 9), 7);
+        assert_eq!(prev_sentence(&rope, 7), 0);
+    }
+
+    #[test]
+    fn a_full_stop_inside_a_number_is_not_a_sentence() {
+        let chars: Vec<char> = "圓周率是 3.14 而已。下一句".chars().collect();
+        assert_eq!(sentence_starts(&chars), vec![0, 13]);
+    }
+
+    #[test]
+    fn a_sentence_motion_crosses_into_the_next_paragraph() {
+        let rope = Rope::from_str("只有一句。\n下一段的第一句。\n");
+        assert_eq!(next_sentence(&rope, 0), 6, "the next paragraph's first");
+        assert_eq!(prev_sentence(&rope, 6), 0);
+    }
+
+    #[test]
+    fn an_ellipsis_run_is_one_ending() {
+        let chars: Vec<char> = "他不說話……她也是。".chars().collect();
+        assert_eq!(sentence_starts(&chars), vec![0, 6]);
+    }
+}
+
+// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
+// 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
+// 全綠。這一支從前擺在中間，後面壓着 223 行（2026-09-24 審出來的）。
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -867,227 +1094,5 @@ mod tests {
         // one run of letters either way, and the caret on the space before it
         // takes the space with it.
         assert_eq!(next_word_end(&r, 3, Grain::Coarse, &seg), (3, 5));
-    }
-}
-
-// ---- Paragraphs and sentences (Feature #143) -----------------------------
-
-/// Whether a line holds nothing but blanks.
-fn blank(rope: &Rope, line: usize) -> bool {
-    line_text(rope, line).trim().is_empty()
-}
-
-/// The start of the next paragraph.
-///
-/// **A paragraph is a logical line**, which is not a definition this module
-/// invents: it is the one the rest of the editor already works in — `wrap.rs`
-/// calls a logical line a paragraph, the segmentation cache is keyed by one,
-/// and a Chinese manuscript is written with one paragraph to a line and no
-/// blank line between them.
-///
-/// That is also why the motion is needed at all. With soft wrap on, `j` and `k`
-/// move by *visual row*, and a paragraph is twenty of them — so the key that
-/// used to mean "the next paragraph" no longer does, and nothing replaced it.
-/// Blank lines are skipped: they separate sections, and no one wants to stop
-/// on one.
-pub fn next_paragraph(rope: &Rope, pos: usize) -> usize {
-    let last = last_line(rope);
-    let mut line = line_of(rope, pos);
-    while line < last {
-        line += 1;
-        if !blank(rope, line) {
-            return rope.line_to_char(line);
-        }
-    }
-    // No next paragraph: the end of the writing, which is where `}` means to
-    // go and where the next paragraph would be written.
-    document_end(rope)
-}
-
-/// One past the last character of the last line — where writing continues.
-fn document_end(rope: &Rope) -> usize {
-    line_end(rope, rope.line_to_char(last_line(rope)))
-}
-
-/// The start of this paragraph, or of the one before it when already there.
-///
-/// The same two-step rule `(` follows for a sentence, and what makes `{` usable
-/// for backing up: the first press takes you to the top of what you are in.
-pub fn prev_paragraph(rope: &Rope, pos: usize) -> usize {
-    let mut line = line_of(rope, pos);
-    let start = rope.line_to_char(line);
-    if pos > start && !blank(rope, line) {
-        return start;
-    }
-    while line > 0 {
-        line -= 1;
-        if !blank(rope, line) {
-            return rope.line_to_char(line);
-        }
-    }
-    0
-}
-
-/// Whether the character at `i` closes a sentence.
-///
-/// The Chinese marks, and a full stop only when a space or a line end follows
-/// it — otherwise every `3.14` and every `Mr.` in a manuscript would be the end
-/// of a sentence.
-fn ends_sentence(chars: &[char], i: usize) -> bool {
-    match chars[i] {
-        '。' | '！' | '？' | '．' | '…' | '!' | '?' => true,
-        '.' => chars.get(i + 1).is_none_or(|c| c.is_whitespace()),
-        _ => false,
-    }
-}
-
-/// Whether the character closes something and so belongs to the sentence that
-/// just ended: 「這樣。」 ends after the 」, not before it.
-fn closes_a_quote(c: char) -> bool {
-    matches!(
-        c,
-        '」' | '』' | '）' | '》' | '〉' | '】' | '〕' | '｝' | '”' | '’' | '"' | '\'' | ')' | ']' | '}'
-    )
-}
-
-/// Where every sentence of a line begins.
-///
-/// `pub(crate)` because `:view-sentence` (Feature #237) lays a 縱書 page out one 句
-/// to a 縱, and the boundaries it breaks at have to be the same ones `(` and `)`
-/// jump between — two answers would mean the cursor walks to a place the page
-/// does not break at.
-pub(crate) fn sentence_starts(chars: &[char]) -> Vec<usize> {
-    let mut starts = vec![chars
-        .iter()
-        .position(|c| !c.is_whitespace())
-        .unwrap_or(0)];
-    let mut i = 0;
-    while i < chars.len() {
-        if ends_sentence(chars, i) {
-            let mut j = i + 1;
-            while j < chars.len() && (closes_a_quote(chars[j]) || ends_sentence(chars, j)) {
-                j += 1;
-            }
-            while j < chars.len() && chars[j].is_whitespace() {
-                j += 1;
-            }
-            if j < chars.len() && Some(&j) != starts.last() {
-                starts.push(j);
-            }
-            i = j.max(i + 1);
-        } else {
-            i += 1;
-        }
-    }
-    starts
-}
-
-/// The start of the next sentence, crossing into the next paragraph if this
-/// one has no more.
-pub fn next_sentence(rope: &Rope, pos: usize) -> usize {
-    let last = last_line(rope);
-    let mut line = line_of(rope, pos);
-    let mut from = Some(pos - rope.line_to_char(line));
-    loop {
-        let chars: Vec<char> = line_text(rope, line).chars().collect();
-        let start = rope.line_to_char(line);
-        let after = from.unwrap_or(0);
-        if let Some(&at) = sentence_starts(&chars)
-            .iter()
-            .find(|&&at| at > after || from.is_none())
-        {
-            return start + at;
-        }
-        if line >= last {
-            return document_end(rope);
-        }
-        line += 1;
-        from = None;
-        if blank(rope, line) {
-            from = Some(0);
-        }
-    }
-}
-
-/// The start of this sentence, or of the one before it when already there.
-pub fn prev_sentence(rope: &Rope, pos: usize) -> usize {
-    let mut line = line_of(rope, pos);
-    let mut here = Some(pos - rope.line_to_char(line));
-    loop {
-        let chars: Vec<char> = line_text(rope, line).chars().collect();
-        let start = rope.line_to_char(line);
-        let starts = sentence_starts(&chars);
-        let before = match here {
-            Some(col) => starts.iter().rev().find(|&&at| at < col).copied(),
-            None => starts.last().copied(),
-        };
-        if let Some(at) = before {
-            return start + at;
-        }
-        if line == 0 {
-            return 0;
-        }
-        line -= 1;
-        here = blank(rope, line).then_some(0);
-    }
-}
-
-#[cfg(test)]
-mod paragraph_and_sentence_tests {
-    use super::*;
-
-    #[test]
-    fn a_paragraph_is_a_logical_line() {
-        // One paragraph to a line and no blank line between them — how a
-        // Chinese manuscript is written, and the case `}` exists for: with
-        // soft wrap on, `j` moves one of this paragraph's twenty rows.
-        let rope = Rope::from_str("第一段很長很長。\n第二段。\n\n第三段。\n");
-        assert_eq!(next_paragraph(&rope, 0), 9, "the next line");
-        assert_eq!(next_paragraph(&rope, 9), 15, "blank lines are skipped");
-        assert_eq!(
-            next_paragraph(&rope, 15),
-            19,
-            "and the last one goes to the end of the writing"
-        );
-        // Backwards: first to the top of this paragraph, then out of it.
-        assert_eq!(prev_paragraph(&rope, 12), 9);
-        assert_eq!(prev_paragraph(&rope, 9), 0);
-        assert_eq!(prev_paragraph(&rope, 0), 0);
-    }
-
-    #[test]
-    fn a_sentence_ends_after_its_closing_mark() {
-        // 「這樣。」 ends after the 」, not before it — which is the whole
-        // reason a sentence motion cannot just search for 。.
-        let text = "他說：「不。」她走了。第三句。\n";
-        let rope = Rope::from_str(text);
-        let starts: Vec<usize> = {
-            let chars: Vec<char> = text.trim_end().chars().collect();
-            sentence_starts(&chars)
-        };
-        assert_eq!(starts, vec![0, 7, 11]);
-        assert_eq!(next_sentence(&rope, 0), 7);
-        assert_eq!(next_sentence(&rope, 7), 11);
-        assert_eq!(prev_sentence(&rope, 9), 7);
-        assert_eq!(prev_sentence(&rope, 7), 0);
-    }
-
-    #[test]
-    fn a_full_stop_inside_a_number_is_not_a_sentence() {
-        let chars: Vec<char> = "圓周率是 3.14 而已。下一句".chars().collect();
-        assert_eq!(sentence_starts(&chars), vec![0, 13]);
-    }
-
-    #[test]
-    fn a_sentence_motion_crosses_into_the_next_paragraph() {
-        let rope = Rope::from_str("只有一句。\n下一段的第一句。\n");
-        assert_eq!(next_sentence(&rope, 0), 6, "the next paragraph's first");
-        assert_eq!(prev_sentence(&rope, 6), 0);
-    }
-
-    #[test]
-    fn an_ellipsis_run_is_one_ending() {
-        let chars: Vec<char> = "他不說話……她也是。".chars().collect();
-        assert_eq!(sentence_starts(&chars), vec![0, 6]);
     }
 }

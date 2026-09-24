@@ -105,6 +105,30 @@ impl Editor {
     /// at the point of use: 正則 off escapes the whole thing, 完整匹配 wraps it
     /// in `\b`, and 大小寫 puts the flag on the front. The engine sees one
     /// pattern and the panel is the only place that knows why.
+    /// **換成什麽** —— 和 [`Self::search_pattern`] 同一條規矩的另一半。
+    ///
+    /// ⚠️ **正則關着的時候，右邊也要照字面。** 左邊一直是照規矩辦的（`regex::
+    /// escape`），而右邊從前**無條件走展開**——於是「正則」那一格明明沒勾，
+    /// `US$100` 裏的 `$100` 還是被讀成第 100 個捕獲組（空的），換出來只剩 `US`。
+    ///
+    /// | 查 | 換成 | 從前得到 |
+    /// | --- | --- | --- |
+    /// | `一百元` | `US$100` | `US` |
+    /// | `甲` | `$x^2$` | `^2$` |
+    /// | `甲` | `價$x元` | `價元` |
+    ///
+    /// ⚠️ **這不是小事**：`R` 是「每個檔每一處」，而寫 Typst 的人滿篇 `$…$`
+    /// （那是數學），寫稿的人滿篇錢號。橫跨整本書靜靜刪字，而畫面上那一格寫着
+    /// 「[ ] 正則」。2026-09-24 審出來的，實測。
+    ///
+    /// `$$` 是 `regex` 那一頭「一個真的錢號」的寫法，所以照字面就是把 `$` 加倍。
+    fn replacement(&self) -> String {
+        match self.search.regex {
+            true => self.search.replace.clone(),
+            false => self.search.replace.replace('$', "$$"),
+        }
+    }
+
     fn search_pattern(&self) -> String {
         let mut body = match self.search.regex {
             true => self.search.query.clone(),
@@ -591,7 +615,25 @@ impl Editor {
         // more than the column can hold, which is the whole point.
         let line: String = rope.line(hit.line).chars().filter(|c| *c != '\n').collect();
         let chars: Vec<char> = line.chars().collect();
-        let at = hit.at.saturating_sub(rope.line_to_char(hit.line));
+        // ⚠️ **偏移也要夾，不只是行號。** 上面那一句夾的是 `hit.line`，而
+        // `hit.at` 是**搜索那一刻**的全文字符偏移——之後在命中上面刪掉一段，行號
+        // 還落在文件裏而偏移已經不在這一行裏了。兩頭各壞一種：
+        //
+        // | `hit.at` 在哪 | 從前 |
+        // | --- | --- |
+        // | 這一行**之後** | `from > to`，切片反着來，**當場 panic** |
+        // | 這一行**之前** | `saturating_sub` 歸零，不崩，**摘出來的是錯的一段** |
+        //
+        // 實測（2026-09-24 審出來的）：`空格 /` 搜本檔、Esc `j` 進結果、`C-w` 回
+        // 正文、在命中上面 `dd`、`C-w` `j` 走回結果——回去那一幀就崩
+        // （`range start index 67 out of range for slice of length 8`）。
+        //
+        // 對不上就走**上面那條退路**：搜索當時抓下的那一小段。它本來就是為這件事
+        // 存的，而一個「差不多對」的摘要比一個錯的摘要還難發現。
+        let head = rope.line_to_char(hit.line);
+        let Some(at) = hit.at.checked_sub(head).filter(|at| *at <= chars.len()) else {
+            return Some(say!("search.in-context", hit.line + 1, hit.excerpt.clone()));
+        };
         let from = at.saturating_sub(WIDE_AROUND);
         let to = (at + WIDE_AROUND).min(chars.len());
         let mut text = String::new();
@@ -692,7 +734,7 @@ impl Editor {
             return;
         };
         let Some(re) = self.search_regex() else { return };
-        let with = self.search.replace.clone();
+        let with = self.replacement();
         match self.buffer_of(&hit) {
             Some(index) => {
                 let done = self.with_buffer(index, |ed| ed.swap_one(&re, &with, hit.line, hit.nth));
@@ -712,7 +754,7 @@ impl Editor {
     /// file**.
     fn replace_file(&mut self, rel: Option<&Path>) -> usize {
         let Some(re) = self.search_regex() else { return 0 };
-        let with = self.search.replace.clone();
+        let with = self.replacement();
         let Some(index) = self.buffer_for(rel) else {
             return 0;
         };

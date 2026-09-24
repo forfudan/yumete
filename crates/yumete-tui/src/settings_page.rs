@@ -337,8 +337,16 @@ pub fn draw(
     // 再丟不下就整條不畫——標題不許被吃掉。2026-09-24 審出來的。
     let title_ends = area.x + 1 + yumete_cjk::str_width(&say!("set.title")) as u16 + 2;
     let short = format!("[{}]", said(panel.into.layer().label()));
+    // ⚠️ **「改了還沒存」是最後纔丟的那一個。** 從前這裏只有兩檔——完整那一行，
+    // 或者光一個 `[全局]`——於是 74 欄以下**改了東西沒有任何提示**，而那正是這一
+    // 行存在的理由。中間插一檔：徽章 ＋ `[全局]`，路徑先丟。2026-09-24 審出來的。
+    let badge = match panel.dirty() {
+        true => format!("{}  {short}", say!("set.unsaved")),
+        false => short.clone(),
+    };
     let line = match right.saturating_sub(title_ends) as usize {
         room if room >= yumete_cjk::str_width(&dirty) + 1 => Some(dirty),
+        room if room >= yumete_cjk::str_width(&badge) + 1 => Some(badge),
         room if room >= yumete_cjk::str_width(&short) + 1 => Some(short),
         _ => None,
     };

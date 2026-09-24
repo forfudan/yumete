@@ -3957,8 +3957,8 @@ en = "go to line 30"
 [[message]]
 # 常用幫助：前進／後退半頁
 key = "help.common.half-page"
-zht = "前進／後退半頁；L H 是整頁"
-zhs = "前进／后退半页；L H 是整页"
+zht = "前進／後退半頁；整頁是 C-f／C-b"
+zhs = "前进／后退半页；整页是 C-f／C-b"
 en = "half a page forward/back; L and H are whole pages"
 
 [[message]]
@@ -7463,7 +7463,7 @@ en = "line number fill"
 [[message]]
 # 設置：行号铺底——一句話
 key = "set.editor.line-number-fill.hint"
-zht = "行號那一格用淡底色鋪滿，而不是隻寫一個數"
+zht = "行號那一格用淡底色鋪滿，而不是只寫一個數"
 zhs = "行号那一格用淡底色铺满，而不是只写一个数"
 en = "line number fill"
 
@@ -7890,7 +7890,7 @@ en = "system"
 [[message]]
 # 設置：让开系统输入法——一句話
 key = "set.ime.system.hint"
-zht = "Normal 模態下請系統輸入法讓開，免得按鍵被它喫掉"
+zht = "Normal 模態下請系統輸入法讓開，免得按鍵被它吃掉"
 zhs = "Normal 模态下请系统输入法让开，免得按键被它吃掉"
 en = "system"
 
@@ -7900,6 +7900,20 @@ key = "set.keys"
 zht = "hl 換欄  jk 上下  空格 切換  i 改  d 撤掉這一層  Tab 換存到哪一份  :w 存  q 走"
 zhs = "hl 换栏  jk 上下  空格 切换  i 改  d 撤掉这一层  Tab 换存到哪一份  :w 存  q 走"
 en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  q leave"
+
+[[message]]
+# 設置：鍵位那一套
+key = "set.keys.preset"
+zht = "鍵位那一套"
+zhs = "键位那一套"
+en = "key preset"
+
+[[message]]
+# 設置：鍵位那一套——一句話
+key = "set.keys.preset.hint"
+zht = "整套鍵位照 helix 還是照 vim 的習慣"
+zhs = "整套键位照 helix 还是照 vim 的习惯"
+en = "whether the keys follow helix or vim"
 
 [[message]]
 # 設置面板：這一項從出廠那一層來
@@ -8180,6 +8194,20 @@ key = "set.pick.mode.light"
 zht = "淺色"
 zhs = "浅色"
 en = "mode.light"
+
+[[message]]
+# 設置：鍵位那一套——helix
+key = "set.pick.preset.helix"
+zht = "helix"
+zhs = "helix"
+en = "helix"
+
+[[message]]
+# 設置：鍵位那一套——vim
+key = "set.pick.preset.vim"
+zht = "vim"
+zhs = "vim"
+en = "vim"
 
 [[message]]
 # 設置：状态栏的底——往墨抬一阶

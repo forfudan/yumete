@@ -568,6 +568,13 @@ impl Panel {
 /// 指着舊的那個 inode——新內容落了盤，而沒有人找得到它。
 fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     use std::io::Write;
+    // ⚠️ **穿過鏈接，不是蓋在它上面。** 同 `yumete-core` 存稿子那一支
+    // （`buffer.rs:1324`，那裏的註釋寫着同一句）。`~/.config/yumete/config.toml`
+    // 常常是一條指向 dotfiles 的軟鏈（chezmoi／stow／yadm），而 `rename` 換的是
+    // **目録項**——不穿過去的話，存一次就把那條鏈接換成一個普通檔，dotfiles 裏
+    // 那一份從此原封不動地被甩掉，而 `git status` 裏什麽都看不見。
+    // 2026-09-24 審出來的，實測。
+    let path = &std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let dir = path.parent().unwrap_or(std::path::Path::new("."));
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -575,6 +582,16 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
         .unwrap_or(0);
     let tmp = dir.join(format!(".yumete-set-{}-{}", std::process::id(), nanos));
     let written = (|| -> std::io::Result<()> {
+        // ⚠️ **只讀的檔就不動它。** 同 `buffer.rs:1337`：`rename` 換的是目録項，
+        // 檔自己的權限攔不住——`chmod 444 config.toml` 是有人說「這份別動」。
+        if let Ok(from) = std::fs::metadata(path) {
+            if from.permissions().readonly() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "read-only",
+                ));
+            }
+        }
         let mut file = std::fs::File::create(&tmp)?;
         // 原來那份檔的權限，留着：`File::create` 吃 umask，於是一份 0600 的配置
         // 存一次就成了 0644。
@@ -873,15 +890,40 @@ mod tests {
 
     /// **空的那一組進不去。**
     ///
-    /// ⚠️ 七組還沒填，`l` 進去會停在一張空表上，而那一刻 `j`／`k`／空格全部沒有
-    /// 反應——看起來像面板卡住了。
+    /// ⚠️ `l` 進去會停在一張空表上，而那一刻 `j`／`k`／空格全部沒有反應——看起來
+    /// 像面板卡住了。
+    ///
+    /// ⚠️ **這一條不許挑「碰巧空着的那一組」。** 從前它挑的是鍵盤組（那時那一組
+    /// 還沒填），2026-09-24 那一組填上之後測試當場紅——而它守的規矩一個字沒變，
+    /// 變的只是「哪一組是空的」。八組現在都有東西（3～14 項），所以造一個：把
+    /// 下標指到 `GROUPS` 外面去，`rows()` 回空，走的是同一條路。
     #[test]
     fn a_group_with_nothing_in_it_cannot_be_walked_into() {
         let mut p = panel("", "");
-        p.group = GROUPS.iter().position(|n| n.group == crate::settings_ui::Group::Keys).unwrap();
-        assert!(p.rows().is_empty(), "鍵盤那一組還沒填");
+        p.group = GROUPS.len();
+        assert!(p.rows().is_empty(), "指到單子外面，那一組什麽都沒有");
         p.across(true);
         assert_eq!(p.pane, Pane::Groups, "進不去");
+    }
+
+    /// **八組都有東西** —— 上面那一條不再有現成的空組可挑，而這一條說出為什麽。
+    ///
+    /// ⚠️ 順帶守一件事：一組空着的話，面板上那一格點進去是一張白表，而讀者不知道
+    /// 是「沒有這一類設定」還是「壞了」。要麽填，要麽別列。
+    #[test]
+    fn no_group_is_empty() {
+        let p = panel("", "");
+        let empty: Vec<&str> = GROUPS
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                let mut q = p.clone();
+                q.group = *i;
+                q.rows().is_empty()
+            })
+            .map(|(_, n)| n.label)
+            .collect();
+        assert!(empty.is_empty(), "這幾組是空的：{empty:?}");
     }
 
     /// 換組之後光標從頭數起 —— 不然停在一個不存在的行號上。

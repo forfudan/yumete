@@ -1123,404 +1123,6 @@ pub fn footnote_numbers(text: &str) -> Vec<usize> {
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Every path that ends a table resets its row counter (#467).
-    ///
-    /// The counter used to be cleared on two of the eleven returns that end a
-    /// table, so a second table separated from the first by anything other
-    /// than a blank line went on counting: its header came out as a body row
-    /// and the banding was inverted for the rest of the table. No file in the
-    /// repository triggered it, which is exactly why it wanted a test.
-    #[test]
-    fn a_second_table_starts_counting_from_its_own_header() {
-        let nths = |between: &str| -> Vec<usize> {
-            let mut scan = BlockScanner::new();
-            let mut out = Vec::new();
-            let doc = format!("| 甲 | 乙 |\n| --- | --- |\n{between}\n| 丙 | 丁 |\n| 戊 | 己 |");
-            for line in doc.lines() {
-                if let Block::Table { nth, .. } = scan.feed(line, line.len()) {
-                    out.push(nth);
-                }
-            }
-            out
-        };
-        // ⚠️ A lone ``` **opens** a fence and swallows what follows, so the
-        // fence case is a fence: opened and closed.
-        for between in ["", "## 標題", ":::", "```\n```", "> 注", "- 注", "---", "[^1]: 註"] {
-            assert_eq!(
-                nths(between),
-                vec![0, 1, 0, 1],
-                "a {between:?} between two tables must end the first"
-            );
-        }
-        // …and a `|` row that is *not* a break does not restart it.
-        let mut scan = BlockScanner::new();
-        let doc = "| 甲 |\n| --- |\n| 丙 |\n| 丁 |";
-        let got: Vec<usize> = doc
-            .lines()
-            .filter_map(|l| match scan.feed(l, l.len()) {
-                Block::Table { nth, .. } => Some(nth),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(got, vec![0, 1, 2, 3]);
-    }
-
-    /// A quote, a fence and a table inside a `:::` are still themselves (#468).
-    ///
-    /// Everything inside a container used to come back as `Container`, which
-    /// was harmless while every block wore the same grey band and wrong the
-    /// moment they stopped: a fence draws no ground of its own now, so it
-    /// punched a page-coloured hole through the callout, and a quote lost its
-    /// colour entirely.
-    #[test]
-    fn a_block_inside_a_callout_is_still_that_block() {
-        let mut scan = BlockScanner::new();
-        let doc = "::: note\n> 引\n```\nx\n```\n| 甲 |\n| --- |\n散文\n:::";
-        let got: Vec<Block> = doc.lines().map(|l| scan.feed(l, l.len())).collect();
-        assert!(matches!(got[1], Block::Quote { inside: Some(Callout::Note) }), "{:?}", got[1]);
-        assert!(matches!(got[2], Block::Code { inside: Some(Callout::Note) }), "{:?}", got[2]);
-        assert!(matches!(got[4], Block::Code { inside: Some(Callout::Note) }), "{:?}", got[4]);
-        assert!(
-            matches!(got[5], Block::Table { nth: 0, inside: Some(Callout::Note) }),
-            "{:?}",
-            got[5]
-        );
-        // The prose between them is the callout's, and so is the closing line.
-        assert!(matches!(got[7], Block::Container(Callout::Note)));
-        assert!(matches!(got[8], Block::Container(Callout::Note)));
-        // Outside one, the same three carry no callout.
-        let mut scan = BlockScanner::new();
-        for line in ["> 引", "```", "```", "| 甲 |"] {
-            match scan.feed(line, line.len()) {
-                Block::Quote { inside } | Block::Code { inside } | Block::Table { inside, .. } => {
-                    assert_eq!(inside, None, "{line:?}")
-                }
-                other => panic!("{line:?} came back as {other:?}"),
-            }
-        }
-    }
-
-    /// The kind covering each character, for reading a line's shape at a glance.
-    /// Later spans win, which is how a heading's title also shows its emphasis.
-    fn shape(line: &str) -> String {
-        let n = line.chars().count();
-        let mut out = vec![' '; n];
-        for span in spans(line) {
-            let mark = match span.kind {
-                Kind::Strong => 'B',
-                Kind::Emphasis => 'I',
-                Kind::Code => 'C',
-                Kind::Strike => 'S',
-                Kind::Heading => 'H',
-                Kind::Link => 'L',
-                Kind::Highlight => 'M',
-                Kind::Footnote => 'F',
-                Kind::WikiLink => 'W',
-                Kind::Comment => '%',
-                Kind::Code2 => '#',
-                Kind::Marker | Kind::HeadingMark => '.',
-                // Neither `spans` makes these — they are `diff::spans`'.
-                Kind::Gone => '-',
-                Kind::Added => '+',
-                // Only a fence's grammar makes these (`code::highlight`).
-                Kind::Token(_) => '~',
-            };
-            for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
-                *slot = mark;
-            }
-        }
-        out.into_iter().collect()
-    }
-
-    #[test]
-    fn the_markers_stay_and_the_text_between_them_is_set() {
-        assert_eq!(shape("那**年**天"), " ..B.. ");
-        assert_eq!(shape("那*年*天"), " .I. ");
-        assert_eq!(shape("那`碼`天"), " .C. ");
-        assert_eq!(shape("那~~年~~天"), " ..S.. ");
-    }
-
-    #[test]
-    fn a_heading_is_the_line_and_its_hashes_are_markup() {
-        assert_eq!(shape("## 第一章"), "..HHHH");
-        // And emphasis inside the title still shows.
-        assert_eq!(shape("# **甲**"), ".H..B..");
-        // Six is the deepest; seven hashes is just a line of hashes.
-        assert_eq!(shape("####### 甲"), " ".repeat(9));
-        // A run of hashes with no title is an empty heading — markup, and
-        // nothing else. It contributes nothing to the outline either.
-        assert_eq!(shape("###"), "...");
-    }
-
-    #[test]
-    fn emphasis_between_two_漢字_works_here_even_though_commonmark_argues() {
-        // The whole reason this is not `pulldown-cmark`.
-        assert_eq!(shape("中**文**中"), " ..B.. ");
-        assert_eq!(shape("「**甲**」"), " ..B.. ");
-    }
-
-    #[test]
-    fn an_underscore_inside_a_word_is_part_of_the_word() {
-        assert_eq!(shape("snake_case_name"), " ".repeat(15));
-        // At a word boundary it still emphasises.
-        assert_eq!(shape("那 _年_ 天"), "  .I.  ");
-    }
-
-    #[test]
-    fn an_unclosed_or_empty_delimiter_is_just_a_character() {
-        assert_eq!(shape("那**年"), " ".repeat(4));
-        assert_eq!(shape("那 ** 年"), " ".repeat(6));
-        assert_eq!(shape("2 * 3 * 4"), " ".repeat(9));
-    }
-
-    #[test]
-    fn code_masks_the_markup_inside_it() {
-        assert_eq!(shape("`**not bold**`"), ".CCCCCCCCCCCC.");
-    }
-
-    /// 2026-09-19：**一個代碼段由幾個反引號開，就要幾個反引號關**。從前這裏
-    /// 取的是「下一個反引號」，所以兩個挨在一起的反引號被當成一對空代碼段，
-    /// 掃描回到 `%%` 上——於是它開了一條註釋，後面半本書變灰，導出的時候那
-    /// 幾段**整個不見**。2026-09-19 報的就是這個，而這個檔自己的手冊
-    /// （`docs/manual.md:394`，引用各種標記的那一行）正是這個形狀。
-    ///
-    /// ⚠️ 上面那一條只用了單反引號，所以它永遠是綠的。
-    #[test]
-    fn a_code_span_closes_on_as_many_backticks_as_opened_it() {
-        assert_eq!(shape("``%%``"), "..CC..", "兩個開，兩個關");
-        assert_eq!(shape("`` `裏面` ``"), "..CCCCCC..", "裏面那一個反引號是內容");
-        assert_eq!(shape("``%%`` 後面"), "..CC..   ", "後面是正文，不是註釋");
-        // 單個的照舊。
-        assert_eq!(shape("`%%`"), ".CC.");
-        // 反引號之外的 `%%` 照舊開註釋（那是本來的功能，`.` 是記號、`%` 是註釋）。
-        assert_eq!(shape("%%註釋%%"), "..%%..");
-    }
-
-    #[test]
-    fn a_link_shows_its_text_and_sets_its_target_back() {
-        assert_eq!(shape("見[附錄](a.md)"), " .LL.......");
-    }
-
-    #[test]
-    fn a_link_says_where_it_goes_from_anywhere_inside_it() {
-        let line = "見[附錄](a.md)";
-        // The text, the brackets, and the target 所見即所得 hides — all of it
-        // is the link, because standing on the half you cannot see is not
-        // something a reader can be asked to do.
-        for at in 1..line.chars().count() {
-            let link = link_at(line, at).unwrap_or_else(|| panic!("nothing at {at}"));
-            assert_eq!(link.target, "a.md");
-            assert!(!link.wiki);
-        }
-        // And the 見 before it is prose.
-        assert_eq!(link_at(line, 0), None);
-    }
-
-    #[test]
-    fn what_a_link_names_is_read_off_the_way_it_was_written() {
-        let target = |line: &str| link_at(line, 3).map(|l| (l.target, l.anchor, l.wiki));
-        // A bar means an alias, and the destination is the other half.
-        assert_eq!(
-            target("見[[第三章|那一夜]]"),
-            Some(("第三章".into(), None, true))
-        );
-        // A place *within* a page, and a place within this one.
-        assert_eq!(
-            target("見[[第三章#雪]]"),
-            Some(("第三章".into(), Some("雪".into()), true))
-        );
-        assert_eq!(target("見[雪](#雪)"), Some((String::new(), Some("雪".into()), false)));
-        // A title is written for a reader, not for whatever opens the link;
-        // and angle brackets are how a destination with a space in it is
-        // written, which is the only way that one works at all.
-        assert_eq!(
-            target("見[附錄](a.md \"說明\")"),
-            Some(("a.md".into(), None, false))
-        );
-        assert_eq!(
-            target("見[附錄](<第 三 章.md>)"),
-            Some(("第 三 章.md".into(), None, false))
-        );
-        // A footnote is not a link, and neither is the emphasis beside one.
-        assert_eq!(target("見[^1]。"), None);
-        assert_eq!(target("那**年**天"), None);
-    }
-
-    #[test]
-    fn a_link_inside_a_heading_is_still_a_link() {
-        // The heading's span covers the whole line, so whichever span is
-        // consulted last has to be the one that decides.
-        assert_eq!(
-            link_at("# 見[附錄](a.md)", 5).map(|l| l.target),
-            Some("a.md".into())
-        );
-    }
-
-    #[test]
-    fn the_extended_syntax_a_manuscript_actually_uses() {
-        // A highlighter pen.
-        assert_eq!(shape("那==年==天"), " ..M.. ");
-        // A footnote's number, and the line that answers it.
-        assert_eq!(shape("見[^1]。"), " FFFF ");
-        assert_eq!(shape("[^1]: 出自《詩》"), "FFFFF      ");
-        // A reference to somewhere else in the same manuscript, and the alias
-        // that says what to call it here.
-        assert_eq!(shape("見[[第三章]]"), " ..WWW..");
-        assert_eq!(shape("見[[第三章|那一夜]]"), " ......WWW..");
-        // A note to oneself: not part of the book, and not part of the markup
-        // inside it either.
-        assert_eq!(shape("寫到這裏 %%**這句再想想**%%"), "     ..%%%%%%%%%..");
-        assert_eq!(shape("甲<!-- 待查 -->乙"), " ....%%%%... ");
-    }
-
-    #[test]
-    fn an_unclosed_comment_still_reads_as_one() {
-        // A half-typed note is still a note; treating it as prose would set the
-        // rest of the line back to ordinary weight mid-word.
-        assert_eq!(shape("寫到這裏 %%再想想"), "     ..%%%");
-    }
-
-    /// The blocks of a whole document, as one letter each.
-    fn walk(text: &str) -> String {
-        let mut scanner = BlockScanner::new();
-        text.lines()
-            .map(|line| match scanner.feed(line, line.chars().count()) {
-                Block::Prose => '.',
-                Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
-                Block::Quote { .. } => '>',
-                Block::Item { task: None } => '-',
-                Block::Item { task: Some(false) } => 'o',
-                Block::Item { task: Some(true) } => 'x',
-                Block::Rule => '_',
-                Block::Code { .. } => '`',
-                Block::FrontMatter => 'y',
-                Block::Container(_) => ':',
-                Block::Table { .. } => '|',
-                Block::FootnoteDef => 'F',
-                Block::Comment { .. } => '%',
-                // The scanner never says this — a conflict is laid over its
-                // answer by the editor, which is the only thing that can know
-                // whether a `<<<<<<<` ever closes.
-                Block::Conflict(_) => '!',
-            })
-            .collect()
-    }
-
-    #[test]
-    fn blocks_are_read_in_order_because_they_are_not_line_local() {
-        // A fence three paragraphs up decides what this line is.
-        assert_eq!(walk("那年\n```\n**not bold**\n```\n冬天"), ".```.");
-        // `:::` runs until it is closed.
-        assert_eq!(walk("::: warning 小心\n這一段\n:::\n之後"), ":::.");
-        // Front matter only at the very top; a `---` between paragraphs is a
-        // scene break, not the start of metadata.
-        assert_eq!(walk("---\ntitle: 甲\n---\n那年\n---\n冬天"), "yyy._.");
-        // …and a manuscript that *opens* with a scene break keeps its first
-        // paragraph, rather than having it swallowed as metadata.
-        assert_eq!(walk("---\n那年冬天\n---\n又一年"), "y._.");
-    }
-
-    #[test]
-    fn containers_nest_and_only_the_fence_that_opened_a_block_closes_it() {
-        // An inner `::: tip` must not end the `::: warning` it sits in, or the
-        // text inside both loses its ground and the text after both gains one.
-        assert_eq!(
-            walk("::: warning 小心\n甲\n::: tip\n乙\n:::\n丙\n:::\n丁"),
-            ":::::::."
-        );
-        // `~~~` does not close a ``` block: everything in it is code.
-        assert_eq!(walk("```\n甲\n~~~\n乙\n```\n丙"), "`````.");
-    }
-
-    #[test]
-    fn the_blocks_prose_is_made_of() {
-        assert_eq!(walk("# 第一章\n### 三"), "13");
-        assert_eq!(walk("> 昨夜星辰\n> 昨夜風"), ">>");
-        assert_eq!(walk("- 阿寧\n1. 第一場\n- [ ] 待寫\n- [x] 寫完"), "--ox");
-        assert_eq!(walk("| 甲 | 乙 |\n| -- | -- |"), "||");
-        assert_eq!(walk("[^1]: 出自《詩》"), "F");
-        // A rule is a scene break; three of anything on its own line.
-        assert_eq!(walk("***\n___\n- - -"), "___");
-    }
-
-    /// What a line looks like with its markup taken off, the cursor at `at`.
-    fn rendered(line: &str, at: Option<usize>) -> String {
-        let hide = hidden(&spans(line), at.map(|i| (i, i)));
-        line.chars()
-            .enumerate()
-            .filter(|(i, _)| !hide.iter().any(|&(a, b)| *i >= a && *i < b))
-            .map(|(_, c)| c)
-            .collect()
-    }
-
-    #[test]
-    fn the_markup_comes_off_except_where_the_cursor_is() {
-        let line = "那**年**冬**天**";
-        // Nowhere near it: all of it comes off.
-        assert_eq!(rendered(line, None), "那年冬天");
-        // In the first construct: that one is whole, the other still off.
-        assert_eq!(rendered(line, Some(4)), "那**年**冬天");
-        // Approaching its markup from either side opens it too — which is what
-        // keeps the cursor from ever being inside text that is not on screen.
-        assert_eq!(rendered(line, Some(1)), "那**年**冬天");
-        assert_eq!(rendered(line, Some(6)), "那**年**冬天");
-        // And the second construct opens on its own.
-        assert_eq!(rendered(line, Some(9)), "那年冬**天**");
-    }
-
-    #[test]
-    fn everything_a_selection_touches_is_shown_whole() {
-        let line = "那**年**冬**天**";
-        let hide = |from, to| {
-            let h = hidden(&spans(line), Some((from, to)));
-            line.chars()
-                .enumerate()
-                .filter(|(i, _)| !h.iter().any(|&(a, b)| *i >= a && *i < b))
-                .map(|(_, c)| c)
-                .collect::<String>()
-        };
-        // A selection running across both constructs shows both — a highlight
-        // that covered fewer characters than `d` takes would be the screen
-        // lying about what an edit does.
-        assert_eq!(hide(3, 10), "那**年**冬**天**");
-        // One that reaches only the first shows only the first.
-        assert_eq!(hide(0, 4), "那**年**冬天");
-        // And one that stops exactly where a construct begins has not reached
-        // it: `to` is the far edge, and it is exclusive.
-        assert_eq!(hide(0, 1), "那年冬天");
-    }
-
-    #[test]
-    fn a_headings_hashes_stay_because_nothing_else_says_the_level() {
-        // A terminal cannot make a heading bigger; the hashes are the level.
-        assert_eq!(rendered("## 第一章", None), "## 第一章");
-        assert_eq!(rendered("### **甲**", None), "### 甲");
-    }
-
-    #[test]
-    fn every_kind_of_markup_comes_off() {
-        assert_eq!(rendered("那`碼`天", None), "那碼天");
-        assert_eq!(rendered("那==年==天", None), "那年天");
-        assert_eq!(rendered("見[附錄](a.md)", None), "見附錄");
-        assert_eq!(rendered("見[[第三章|那一夜]]", None), "見那一夜");
-        assert_eq!(rendered("寫到這裏 %%再想想%%", None), "寫到這裏 再想想");
-        // The note's own text stays: a note you cannot see is a note you will
-        // not act on. Only its fence comes off.
-        assert_eq!(rendered("甲<!-- 待查 -->乙", None), "甲 待查 乙");
-        // A footnote's number is what the reader reads, so it stays whole.
-        assert_eq!(rendered("見[^1]。", None), "見[^1]。");
-    }
-
-    #[test]
-    fn ordinary_prose_carries_no_spans() {
-        assert!(spans("那年冬天，雪下得早。").is_empty());
-        assert!(spans("").is_empty());
-    }
-}
 
 /// Typst's inline markup, in the shape the rest of this module works in.
 ///
@@ -1963,5 +1565,408 @@ mod list_tests {
         ] {
             assert_eq!(opening(line), None, "{line:?}");
         }
+    }
+}
+
+// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
+// 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
+// 全綠。這一支從前擺在中間，後面壓着 445 行（2026-09-24 審出來的）。
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every path that ends a table resets its row counter (#467).
+    ///
+    /// The counter used to be cleared on two of the eleven returns that end a
+    /// table, so a second table separated from the first by anything other
+    /// than a blank line went on counting: its header came out as a body row
+    /// and the banding was inverted for the rest of the table. No file in the
+    /// repository triggered it, which is exactly why it wanted a test.
+    #[test]
+    fn a_second_table_starts_counting_from_its_own_header() {
+        let nths = |between: &str| -> Vec<usize> {
+            let mut scan = BlockScanner::new();
+            let mut out = Vec::new();
+            let doc = format!("| 甲 | 乙 |\n| --- | --- |\n{between}\n| 丙 | 丁 |\n| 戊 | 己 |");
+            for line in doc.lines() {
+                if let Block::Table { nth, .. } = scan.feed(line, line.len()) {
+                    out.push(nth);
+                }
+            }
+            out
+        };
+        // ⚠️ A lone ``` **opens** a fence and swallows what follows, so the
+        // fence case is a fence: opened and closed.
+        for between in ["", "## 標題", ":::", "```\n```", "> 注", "- 注", "---", "[^1]: 註"] {
+            assert_eq!(
+                nths(between),
+                vec![0, 1, 0, 1],
+                "a {between:?} between two tables must end the first"
+            );
+        }
+        // …and a `|` row that is *not* a break does not restart it.
+        let mut scan = BlockScanner::new();
+        let doc = "| 甲 |\n| --- |\n| 丙 |\n| 丁 |";
+        let got: Vec<usize> = doc
+            .lines()
+            .filter_map(|l| match scan.feed(l, l.len()) {
+                Block::Table { nth, .. } => Some(nth),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(got, vec![0, 1, 2, 3]);
+    }
+
+    /// A quote, a fence and a table inside a `:::` are still themselves (#468).
+    ///
+    /// Everything inside a container used to come back as `Container`, which
+    /// was harmless while every block wore the same grey band and wrong the
+    /// moment they stopped: a fence draws no ground of its own now, so it
+    /// punched a page-coloured hole through the callout, and a quote lost its
+    /// colour entirely.
+    #[test]
+    fn a_block_inside_a_callout_is_still_that_block() {
+        let mut scan = BlockScanner::new();
+        let doc = "::: note\n> 引\n```\nx\n```\n| 甲 |\n| --- |\n散文\n:::";
+        let got: Vec<Block> = doc.lines().map(|l| scan.feed(l, l.len())).collect();
+        assert!(matches!(got[1], Block::Quote { inside: Some(Callout::Note) }), "{:?}", got[1]);
+        assert!(matches!(got[2], Block::Code { inside: Some(Callout::Note) }), "{:?}", got[2]);
+        assert!(matches!(got[4], Block::Code { inside: Some(Callout::Note) }), "{:?}", got[4]);
+        assert!(
+            matches!(got[5], Block::Table { nth: 0, inside: Some(Callout::Note) }),
+            "{:?}",
+            got[5]
+        );
+        // The prose between them is the callout's, and so is the closing line.
+        assert!(matches!(got[7], Block::Container(Callout::Note)));
+        assert!(matches!(got[8], Block::Container(Callout::Note)));
+        // Outside one, the same three carry no callout.
+        let mut scan = BlockScanner::new();
+        for line in ["> 引", "```", "```", "| 甲 |"] {
+            match scan.feed(line, line.len()) {
+                Block::Quote { inside } | Block::Code { inside } | Block::Table { inside, .. } => {
+                    assert_eq!(inside, None, "{line:?}")
+                }
+                other => panic!("{line:?} came back as {other:?}"),
+            }
+        }
+    }
+
+    /// The kind covering each character, for reading a line's shape at a glance.
+    /// Later spans win, which is how a heading's title also shows its emphasis.
+    fn shape(line: &str) -> String {
+        let n = line.chars().count();
+        let mut out = vec![' '; n];
+        for span in spans(line) {
+            let mark = match span.kind {
+                Kind::Strong => 'B',
+                Kind::Emphasis => 'I',
+                Kind::Code => 'C',
+                Kind::Strike => 'S',
+                Kind::Heading => 'H',
+                Kind::Link => 'L',
+                Kind::Highlight => 'M',
+                Kind::Footnote => 'F',
+                Kind::WikiLink => 'W',
+                Kind::Comment => '%',
+                Kind::Code2 => '#',
+                Kind::Marker | Kind::HeadingMark => '.',
+                // Neither `spans` makes these — they are `diff::spans`'.
+                Kind::Gone => '-',
+                Kind::Added => '+',
+                // Only a fence's grammar makes these (`code::highlight`).
+                Kind::Token(_) => '~',
+            };
+            for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
+                *slot = mark;
+            }
+        }
+        out.into_iter().collect()
+    }
+
+    #[test]
+    fn the_markers_stay_and_the_text_between_them_is_set() {
+        assert_eq!(shape("那**年**天"), " ..B.. ");
+        assert_eq!(shape("那*年*天"), " .I. ");
+        assert_eq!(shape("那`碼`天"), " .C. ");
+        assert_eq!(shape("那~~年~~天"), " ..S.. ");
+    }
+
+    #[test]
+    fn a_heading_is_the_line_and_its_hashes_are_markup() {
+        assert_eq!(shape("## 第一章"), "..HHHH");
+        // And emphasis inside the title still shows.
+        assert_eq!(shape("# **甲**"), ".H..B..");
+        // Six is the deepest; seven hashes is just a line of hashes.
+        assert_eq!(shape("####### 甲"), " ".repeat(9));
+        // A run of hashes with no title is an empty heading — markup, and
+        // nothing else. It contributes nothing to the outline either.
+        assert_eq!(shape("###"), "...");
+    }
+
+    #[test]
+    fn emphasis_between_two_漢字_works_here_even_though_commonmark_argues() {
+        // The whole reason this is not `pulldown-cmark`.
+        assert_eq!(shape("中**文**中"), " ..B.. ");
+        assert_eq!(shape("「**甲**」"), " ..B.. ");
+    }
+
+    #[test]
+    fn an_underscore_inside_a_word_is_part_of_the_word() {
+        assert_eq!(shape("snake_case_name"), " ".repeat(15));
+        // At a word boundary it still emphasises.
+        assert_eq!(shape("那 _年_ 天"), "  .I.  ");
+    }
+
+    #[test]
+    fn an_unclosed_or_empty_delimiter_is_just_a_character() {
+        assert_eq!(shape("那**年"), " ".repeat(4));
+        assert_eq!(shape("那 ** 年"), " ".repeat(6));
+        assert_eq!(shape("2 * 3 * 4"), " ".repeat(9));
+    }
+
+    #[test]
+    fn code_masks_the_markup_inside_it() {
+        assert_eq!(shape("`**not bold**`"), ".CCCCCCCCCCCC.");
+    }
+
+    /// 2026-09-19：**一個代碼段由幾個反引號開，就要幾個反引號關**。從前這裏
+    /// 取的是「下一個反引號」，所以兩個挨在一起的反引號被當成一對空代碼段，
+    /// 掃描回到 `%%` 上——於是它開了一條註釋，後面半本書變灰，導出的時候那
+    /// 幾段**整個不見**。2026-09-19 報的就是這個，而這個檔自己的手冊
+    /// （`docs/manual.md:394`，引用各種標記的那一行）正是這個形狀。
+    ///
+    /// ⚠️ 上面那一條只用了單反引號，所以它永遠是綠的。
+    #[test]
+    fn a_code_span_closes_on_as_many_backticks_as_opened_it() {
+        assert_eq!(shape("``%%``"), "..CC..", "兩個開，兩個關");
+        assert_eq!(shape("`` `裏面` ``"), "..CCCCCC..", "裏面那一個反引號是內容");
+        assert_eq!(shape("``%%`` 後面"), "..CC..   ", "後面是正文，不是註釋");
+        // 單個的照舊。
+        assert_eq!(shape("`%%`"), ".CC.");
+        // 反引號之外的 `%%` 照舊開註釋（那是本來的功能，`.` 是記號、`%` 是註釋）。
+        assert_eq!(shape("%%註釋%%"), "..%%..");
+    }
+
+    #[test]
+    fn a_link_shows_its_text_and_sets_its_target_back() {
+        assert_eq!(shape("見[附錄](a.md)"), " .LL.......");
+    }
+
+    #[test]
+    fn a_link_says_where_it_goes_from_anywhere_inside_it() {
+        let line = "見[附錄](a.md)";
+        // The text, the brackets, and the target 所見即所得 hides — all of it
+        // is the link, because standing on the half you cannot see is not
+        // something a reader can be asked to do.
+        for at in 1..line.chars().count() {
+            let link = link_at(line, at).unwrap_or_else(|| panic!("nothing at {at}"));
+            assert_eq!(link.target, "a.md");
+            assert!(!link.wiki);
+        }
+        // And the 見 before it is prose.
+        assert_eq!(link_at(line, 0), None);
+    }
+
+    #[test]
+    fn what_a_link_names_is_read_off_the_way_it_was_written() {
+        let target = |line: &str| link_at(line, 3).map(|l| (l.target, l.anchor, l.wiki));
+        // A bar means an alias, and the destination is the other half.
+        assert_eq!(
+            target("見[[第三章|那一夜]]"),
+            Some(("第三章".into(), None, true))
+        );
+        // A place *within* a page, and a place within this one.
+        assert_eq!(
+            target("見[[第三章#雪]]"),
+            Some(("第三章".into(), Some("雪".into()), true))
+        );
+        assert_eq!(target("見[雪](#雪)"), Some((String::new(), Some("雪".into()), false)));
+        // A title is written for a reader, not for whatever opens the link;
+        // and angle brackets are how a destination with a space in it is
+        // written, which is the only way that one works at all.
+        assert_eq!(
+            target("見[附錄](a.md \"說明\")"),
+            Some(("a.md".into(), None, false))
+        );
+        assert_eq!(
+            target("見[附錄](<第 三 章.md>)"),
+            Some(("第 三 章.md".into(), None, false))
+        );
+        // A footnote is not a link, and neither is the emphasis beside one.
+        assert_eq!(target("見[^1]。"), None);
+        assert_eq!(target("那**年**天"), None);
+    }
+
+    #[test]
+    fn a_link_inside_a_heading_is_still_a_link() {
+        // The heading's span covers the whole line, so whichever span is
+        // consulted last has to be the one that decides.
+        assert_eq!(
+            link_at("# 見[附錄](a.md)", 5).map(|l| l.target),
+            Some("a.md".into())
+        );
+    }
+
+    #[test]
+    fn the_extended_syntax_a_manuscript_actually_uses() {
+        // A highlighter pen.
+        assert_eq!(shape("那==年==天"), " ..M.. ");
+        // A footnote's number, and the line that answers it.
+        assert_eq!(shape("見[^1]。"), " FFFF ");
+        assert_eq!(shape("[^1]: 出自《詩》"), "FFFFF      ");
+        // A reference to somewhere else in the same manuscript, and the alias
+        // that says what to call it here.
+        assert_eq!(shape("見[[第三章]]"), " ..WWW..");
+        assert_eq!(shape("見[[第三章|那一夜]]"), " ......WWW..");
+        // A note to oneself: not part of the book, and not part of the markup
+        // inside it either.
+        assert_eq!(shape("寫到這裏 %%**這句再想想**%%"), "     ..%%%%%%%%%..");
+        assert_eq!(shape("甲<!-- 待查 -->乙"), " ....%%%%... ");
+    }
+
+    #[test]
+    fn an_unclosed_comment_still_reads_as_one() {
+        // A half-typed note is still a note; treating it as prose would set the
+        // rest of the line back to ordinary weight mid-word.
+        assert_eq!(shape("寫到這裏 %%再想想"), "     ..%%%");
+    }
+
+    /// The blocks of a whole document, as one letter each.
+    fn walk(text: &str) -> String {
+        let mut scanner = BlockScanner::new();
+        text.lines()
+            .map(|line| match scanner.feed(line, line.chars().count()) {
+                Block::Prose => '.',
+                Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
+                Block::Quote { .. } => '>',
+                Block::Item { task: None } => '-',
+                Block::Item { task: Some(false) } => 'o',
+                Block::Item { task: Some(true) } => 'x',
+                Block::Rule => '_',
+                Block::Code { .. } => '`',
+                Block::FrontMatter => 'y',
+                Block::Container(_) => ':',
+                Block::Table { .. } => '|',
+                Block::FootnoteDef => 'F',
+                Block::Comment { .. } => '%',
+                // The scanner never says this — a conflict is laid over its
+                // answer by the editor, which is the only thing that can know
+                // whether a `<<<<<<<` ever closes.
+                Block::Conflict(_) => '!',
+            })
+            .collect()
+    }
+
+    #[test]
+    fn blocks_are_read_in_order_because_they_are_not_line_local() {
+        // A fence three paragraphs up decides what this line is.
+        assert_eq!(walk("那年\n```\n**not bold**\n```\n冬天"), ".```.");
+        // `:::` runs until it is closed.
+        assert_eq!(walk("::: warning 小心\n這一段\n:::\n之後"), ":::.");
+        // Front matter only at the very top; a `---` between paragraphs is a
+        // scene break, not the start of metadata.
+        assert_eq!(walk("---\ntitle: 甲\n---\n那年\n---\n冬天"), "yyy._.");
+        // …and a manuscript that *opens* with a scene break keeps its first
+        // paragraph, rather than having it swallowed as metadata.
+        assert_eq!(walk("---\n那年冬天\n---\n又一年"), "y._.");
+    }
+
+    #[test]
+    fn containers_nest_and_only_the_fence_that_opened_a_block_closes_it() {
+        // An inner `::: tip` must not end the `::: warning` it sits in, or the
+        // text inside both loses its ground and the text after both gains one.
+        assert_eq!(
+            walk("::: warning 小心\n甲\n::: tip\n乙\n:::\n丙\n:::\n丁"),
+            ":::::::."
+        );
+        // `~~~` does not close a ``` block: everything in it is code.
+        assert_eq!(walk("```\n甲\n~~~\n乙\n```\n丙"), "`````.");
+    }
+
+    #[test]
+    fn the_blocks_prose_is_made_of() {
+        assert_eq!(walk("# 第一章\n### 三"), "13");
+        assert_eq!(walk("> 昨夜星辰\n> 昨夜風"), ">>");
+        assert_eq!(walk("- 阿寧\n1. 第一場\n- [ ] 待寫\n- [x] 寫完"), "--ox");
+        assert_eq!(walk("| 甲 | 乙 |\n| -- | -- |"), "||");
+        assert_eq!(walk("[^1]: 出自《詩》"), "F");
+        // A rule is a scene break; three of anything on its own line.
+        assert_eq!(walk("***\n___\n- - -"), "___");
+    }
+
+    /// What a line looks like with its markup taken off, the cursor at `at`.
+    fn rendered(line: &str, at: Option<usize>) -> String {
+        let hide = hidden(&spans(line), at.map(|i| (i, i)));
+        line.chars()
+            .enumerate()
+            .filter(|(i, _)| !hide.iter().any(|&(a, b)| *i >= a && *i < b))
+            .map(|(_, c)| c)
+            .collect()
+    }
+
+    #[test]
+    fn the_markup_comes_off_except_where_the_cursor_is() {
+        let line = "那**年**冬**天**";
+        // Nowhere near it: all of it comes off.
+        assert_eq!(rendered(line, None), "那年冬天");
+        // In the first construct: that one is whole, the other still off.
+        assert_eq!(rendered(line, Some(4)), "那**年**冬天");
+        // Approaching its markup from either side opens it too — which is what
+        // keeps the cursor from ever being inside text that is not on screen.
+        assert_eq!(rendered(line, Some(1)), "那**年**冬天");
+        assert_eq!(rendered(line, Some(6)), "那**年**冬天");
+        // And the second construct opens on its own.
+        assert_eq!(rendered(line, Some(9)), "那年冬**天**");
+    }
+
+    #[test]
+    fn everything_a_selection_touches_is_shown_whole() {
+        let line = "那**年**冬**天**";
+        let hide = |from, to| {
+            let h = hidden(&spans(line), Some((from, to)));
+            line.chars()
+                .enumerate()
+                .filter(|(i, _)| !h.iter().any(|&(a, b)| *i >= a && *i < b))
+                .map(|(_, c)| c)
+                .collect::<String>()
+        };
+        // A selection running across both constructs shows both — a highlight
+        // that covered fewer characters than `d` takes would be the screen
+        // lying about what an edit does.
+        assert_eq!(hide(3, 10), "那**年**冬**天**");
+        // One that reaches only the first shows only the first.
+        assert_eq!(hide(0, 4), "那**年**冬天");
+        // And one that stops exactly where a construct begins has not reached
+        // it: `to` is the far edge, and it is exclusive.
+        assert_eq!(hide(0, 1), "那年冬天");
+    }
+
+    #[test]
+    fn a_headings_hashes_stay_because_nothing_else_says_the_level() {
+        // A terminal cannot make a heading bigger; the hashes are the level.
+        assert_eq!(rendered("## 第一章", None), "## 第一章");
+        assert_eq!(rendered("### **甲**", None), "### 甲");
+    }
+
+    #[test]
+    fn every_kind_of_markup_comes_off() {
+        assert_eq!(rendered("那`碼`天", None), "那碼天");
+        assert_eq!(rendered("那==年==天", None), "那年天");
+        assert_eq!(rendered("見[附錄](a.md)", None), "見附錄");
+        assert_eq!(rendered("見[[第三章|那一夜]]", None), "見那一夜");
+        assert_eq!(rendered("寫到這裏 %%再想想%%", None), "寫到這裏 再想想");
+        // The note's own text stays: a note you cannot see is a note you will
+        // not act on. Only its fence comes off.
+        assert_eq!(rendered("甲<!-- 待查 -->乙", None), "甲 待查 乙");
+        // A footnote's number is what the reader reads, so it stays whole.
+        assert_eq!(rendered("見[^1]。", None), "見[^1]。");
+    }
+
+    #[test]
+    fn ordinary_prose_carries_no_spans() {
+        assert!(spans("那年冬天，雪下得早。").is_empty());
+        assert!(spans("").is_empty());
     }
 }
