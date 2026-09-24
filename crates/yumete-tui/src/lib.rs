@@ -446,9 +446,9 @@ pub fn run(
     let mut job: Option<Job> = None;
     // **那扇設置面板**（`:settings`），開着的時候鍵歸它。它住在前端而不是核心，
     // 因為它讀 `yumete_config::settings_ui` 那張表，而核心不依賴 `yumete-config`。
-    let mut settings: Option<yumete_config::panel::Panel> = None;
-    // 有沒存的東西時按 `q`，第一下只說一句；再按一下纔真的走。
-    let mut leaving_unsaved = false;
+    // ⚠️ 開、收鍵、存、關那一整圈在 `settings_page::Seat` 裏，**`--keys` 走的是
+    // 同一支**：兩份抄本 2026-09-24 當天就分岔過一次。
+    let mut settings = crate::settings_page::Seat::default();
     if let Some(said) = adopt_an_orphan() {
         editor.set_status(said);
     }
@@ -705,7 +705,7 @@ pub fn run(
             diag::beat(diag::Stage::Drawing, last_frame.as_millis() as u64);
             let began = std::time::Instant::now();
             let completed = match terminal
-                .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.as_ref()))
+                .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
             {
                 Ok(completed) => completed,
                 Err(err) => break Err(err),
@@ -1010,40 +1010,9 @@ pub fn run(
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
-                // **設置面板開着：鍵歸它，`:` 除外。**
-                //
-                // ⚠️ `:` 要交給編輯器去開命令行——`:w` 與 `:q` 就是在那條行上打
-                // 的，而核心認得「面板開着」，於是那兩條說的是面板而不是緩衝區。
-                // 命令行開着的時候當然也歸編輯器，否則打不完那條命令。
-                if let Some(page) = settings.as_mut() {
-                    let typing_a_command = editor.mode() == yumete_core::input::Mode::Command;
-                    let opening_one = !typing_a_command
-                        && matches!(map_key(code, mods), Some(Key::Char(':')));
-                    if !typing_a_command && !opening_one {
-                        if let Some(k) = map_key(code, mods) {
-                            let dirty_before = page.dirty();
-                            if !crate::settings_page::press(page, k) {
-                                // ⚠️ **有改動沒存就不許一下走掉**：面板上攢的東西
-                                // 一個鍵都沒落到磁碟上，走了就是全丟。第一下說一
-                                // 句，第二下纔算數。
-                                match dirty_before && !leaving_unsaved {
-                                    true => {
-                                        leaving_unsaved = true;
-                                        editor.set_status(say!("set.leaving-unsaved"));
-                                    }
-                                    false => {
-                                        settings = None;
-                                        leaving_unsaved = false;
-                                        editor.set_settings_open(false);
-                                        editor.set_status(String::new());
-                                    }
-                                }
-                            } else {
-                                leaving_unsaved = false;
-                            }
-                        }
-                        continue;
-                    }
+                // 設置面板開着：鍵歸它（`:` 除外——那是命令行）。
+                if settings.took(editor, map_key(code, mods)) {
+                    continue;
                 }
                 // The stand-in for a Shift this terminal cannot report (#339).
                 // It asks yume the same question the tap does, so a rebound
@@ -1337,64 +1306,8 @@ pub fn run(
                         false => say!("config.reload-said", said.join(&say!("label.comma"))),
                     });
                 }
-                // ---- 那扇設置面板（`:settings`）----------------------------
-                // ⚠️ **已經開着就什麽都不做。** 無條件重開會把攢着沒存的改動
-                // 一聲不吭地丟掉——而 `q` 與 `:q` 都有兩段式的閘，這條路沒有。
-                // 2026-09-24 審出來的。
-                if editor.take_settings_request() && settings.is_none() {
-                    let global = yumete_config::config_dir().join("config.toml");
-                    let local = std::env::current_dir()
-                        .ok()
-                        .map(|cwd| yumete_config::panel::local_sheet_path(&cwd));
-                    settings = Some(yumete_config::panel::Panel::open(Some(global), local));
-                    leaving_unsaved = false;
-                    editor.set_settings_open(true);
-                    editor.set_status(String::new());
-                }
-                if editor.take_settings_save() {
-                    if let Some(page) = settings.as_mut() {
-                        let where_to = page
-                            .sheet()
-                            .path
-                            .clone()
-                            .map(|p| crate::settings_page::shorten(&p))
-                            .unwrap_or_default();
-                        let said = match page.dirty() {
-                            false => Ok(None),
-                            true => page.save().map(Some),
-                        };
-                        editor.set_status(match said {
-                            Ok(None) => say!("set.nothing-to-save"),
-                            Ok(Some(spoke)) if spoke.commented_out.is_empty() => {
-                                say!("set.saved", where_to)
-                            }
-                            Ok(Some(spoke)) => say!(
-                                "set.saved-said",
-                                where_to,
-                                spoke.commented_out.join(&say!("label.comma"))
-                            ),
-                            Err(why) => say!("set.cannot-save", why),
-                        });
-                        leaving_unsaved = false;
-                    }
-                }
-                if let Some(force) = editor.take_settings_close() {
-                    // ⚠️ **`:q` 走的是和 `q` 同一道閘。** 不走的話，鍵盤上按 `q`
-                    // 要兩下而命令行上打 `:q` 一下就走——同一件事兩種規矩，而且
-                    // 寬的那一種會把攢了半天的改動一聲不吭地丟掉。
-                    let dirty = settings.as_ref().is_some_and(|p| p.dirty());
-                    match dirty && !leaving_unsaved && !force {
-                        true => {
-                            leaving_unsaved = true;
-                            editor.set_status(say!("set.leaving-unsaved"));
-                        }
-                        false => {
-                            settings = None;
-                            leaving_unsaved = false;
-                            editor.set_settings_open(false);
-                        }
-                    }
-                }
+                // 那扇設置面板（`:settings`）：開、存、關。
+                settings.settle(editor);
                 if let Some(tag) = editor.take_scheme_request() {
                     // `:yume on` / `:yume abc` / `:yume off` **is** an answer
                     // about the language, typed on the command line that

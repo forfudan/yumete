@@ -8336,6 +8336,13 @@ zhs = "设置存进 {0}——:reload config 让它生效，或者下次启动"
 en = "settings written to {0} — :reload config applies them, or the next start"
 
 [[message]]
+# 設置面板：存好了，而這期間那個檔被外面改過（{0} 檔名）
+key = "set.saved-moved"
+zht = "設置存進 {0}。⚠️ 這期間它被外面改過——改的那幾項落在了新的那一份上，眼前這頁可能是舊的，:settings 重開一次"
+zhs = "设置存进 {0}。⚠️ 这期间它被外面改过——改的那几项落在了新的那一份上，眼前这页可能是旧的，:settings 重开一次"
+en = "written to {0}. ⚠️ it changed underneath meanwhile — the edits landed on the new one, and this page may be stale; reopen with :settings"
+
+[[message]]
 # 設置面板：存好了，而有幾個鍵被註釋掉了（{0} 檔名，{1} 鍵）
 key = "set.saved-said"
 zht = "設置存進 {0}。有幾個名字 yumete 不認得，註釋掉了（沒刪）：{1}"

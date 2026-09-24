@@ -26,6 +26,7 @@ use yumete_config::panel::{Layer, Pane, Panel};
 use yumete_config::settings_ui::{Kind, Setting, GROUPS};
 use yumete_config::Config;
 use yumete_core::input::Key;
+use yumete_core::Editor;
 use yumete_core::say;
 
 /// **`say!`，但標籤是個變量。**
@@ -143,6 +144,120 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         _ => {}
     }
     true
+}
+
+
+/// **那扇面板在前端的一個座位** —— 開、收鍵、存、關，一整圈。
+///
+/// ⚠️ **這一支存在的理由是「別寫兩遍」。** 主循環（`run`）與 `--keys`
+/// （`yumete/src/main.rs` 的 `press`）都要走同一套，而 2026-09-24 那兩份各抄一遍
+/// 之後**當天就分岔了**：`--keys` 那一份漏了「有改動不許一下走」的閘，又把存盤
+/// 的錯 `let _ =` 吞掉。兩份代碼一個行為，第三次分岔只是時間問題。
+///
+/// 連帶一件好處：面板最要緊的那條安全行為（走之前先問一句）**拍得到照片了**——
+/// 從前它只在主循環裏，而這個倉審前端就是靠拍照。
+#[derive(Default)]
+pub struct Seat {
+    /// 開着的那一扇；`None` ＝ 沒開。
+    pub panel: Option<Panel>,
+    /// 有改動沒存時按過一次「走」——再按一次纔算數。
+    warned: bool,
+}
+
+impl Seat {
+    /// **這一鍵歸面板嗎？** 歸就收下並回 `true`（呼叫方 `continue`）。
+    ///
+    /// ⚠️ **`:` 不歸。** 它交給編輯器去開命令行，`:w`／`:q` 就是在那條行上打的
+    /// （核心認得 `settings_open`，於是那幾條說的是面板）。命令行已經開着的時候
+    /// 當然也不歸，否則那條命令打不完。
+    pub fn took(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {
+        let Some(page) = self.panel.as_mut() else { return false };
+        if editor.mode() == yumete_core::input::Mode::Command {
+            return false;
+        }
+        if key == Some(Key::Char(':')) {
+            return false;
+        }
+        // ⚠️ **認不出的鍵也算收下了**：面板開着的時候一個 F13 不該掉進正文。
+        let Some(key) = key else { return true };
+        let dirty = page.dirty();
+        match press(page, key) {
+            true => self.warned = false,
+            // ⚠️ **有改動沒存就不許一下走掉**：面板上攢的東西一個鍵都沒落到磁碟
+            // 上，走了就是全丟。第一下說一句，第二下纔算數。
+            false => self.leave(editor, dirty),
+        }
+        true
+    }
+
+    /// 核心那幾張條子：開過 `:settings` 沒有、按過 `:w` 沒有、按過 `:q` 沒有。
+    pub fn settle(&mut self, editor: &mut Editor) {
+        // ⚠️ **已經開着就什麽都不做。** 無條件重開會把攢着沒存的改動一聲不吭地
+        // 丟掉，而 `q` 與 `:q` 都有兩段式的閘。
+        if editor.take_settings_request() && self.panel.is_none() {
+            let local = std::env::current_dir()
+                .ok()
+                .map(|cwd| yumete_config::panel::local_sheet_path(&cwd));
+            self.panel = Some(Panel::open(
+                Some(yumete_config::config_dir().join("config.toml")),
+                local,
+            ));
+            self.warned = false;
+            editor.set_settings_open(true);
+            editor.set_status(String::new());
+        }
+        if editor.take_settings_save() {
+            if let Some(page) = self.panel.as_mut() {
+                let named = page
+                    .sheet()
+                    .path
+                    .clone()
+                    .map(|p| shorten(&p))
+                    .unwrap_or_default();
+                let said = match page.dirty() {
+                    false => Ok(None),
+                    true => page.save().map(Some),
+                };
+                editor.set_status(match said {
+                    Ok(None) => say!("set.nothing-to-save"),
+                    // 這期間那個檔被外面改過 —— 說一句，那比「有幾個鍵註釋掉了」
+                    // 要緊：眼前這一頁的值可能已經不是檔裏寫的了。
+                    Ok(Some(spoke)) if !spoke.changed_underneath.is_empty() => {
+                        say!("set.saved-moved", named)
+                    }
+                    Ok(Some(spoke)) if spoke.commented_out.is_empty() => say!("set.saved", named),
+                    Ok(Some(spoke)) => say!(
+                        "set.saved-said",
+                        named,
+                        spoke.commented_out.join(&say!("label.comma"))
+                    ),
+                    Err(why) => say!("set.cannot-save", why),
+                });
+                self.warned = false;
+            }
+        }
+        // `force` ＝ 打了 `!`（`:q!`），那時不問「有改動沒存」。
+        if let Some(force) = editor.take_settings_close() {
+            let dirty = self.panel.as_ref().is_some_and(|p| p.dirty()) && !force;
+            self.leave(editor, dirty);
+        }
+    }
+
+    /// 走 —— 有沒存的東西就先說一句，第二下纔真的走。
+    fn leave(&mut self, editor: &mut Editor, dirty: bool) {
+        match dirty && !self.warned {
+            true => {
+                self.warned = true;
+                editor.set_status(say!("set.leaving-unsaved"));
+            }
+            false => {
+                self.panel = None;
+                self.warned = false;
+                editor.set_settings_open(false);
+                editor.set_status(String::new());
+            }
+        }
+    }
 }
 
 /// 一個值畫成什麽樣。

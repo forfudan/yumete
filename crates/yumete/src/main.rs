@@ -598,8 +598,7 @@ fn main() -> ExitCode {
 /// `--shot --keys=':settings\nljj '` 拍到的永遠是面板剛開的樣子——而這個倉審前端
 /// 就是靠拍照，一扇按不動的面板等於一扇沒法審的面板。回來的是那扇面板（要畫它）。
 fn press(editor: &mut Editor, keys: &str) -> Option<yumete_config::panel::Panel> {
-    let mut settings: Option<yumete_config::panel::Panel> = None;
-    let mut leaving_unsaved = false;
+    let mut settings = yumete_tui::settings_page::Seat::default();
     let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
         let key = match c {
@@ -696,50 +695,15 @@ fn press(editor: &mut Editor, keys: &str) -> Option<yumete_config::panel::Panel>
             }
         }
         // 面板開着：鍵歸它（`:` 除外——那是命令行，`:w`／`:q` 在那上面打）。
-        if let Some(page) = settings.as_mut() {
-            let in_command = editor.mode() == yumete_core::input::Mode::Command;
-            if !in_command && key != Key::Char(':') {
-                // 和主循環同一道閘：有改動沒存，第一下只記一筆，第二下纔真的走。
-                let dirty = page.dirty();
-                if !yumete_tui::settings_page::press(page, key) {
-                    match dirty && !leaving_unsaved {
-                        true => leaving_unsaved = true,
-                        false => {
-                            settings = None;
-                            leaving_unsaved = false;
-                            editor.set_settings_open(false);
-                        }
-                    }
-                } else {
-                    leaving_unsaved = false;
-                }
-                continue;
-            }
+        // ⚠️ **和主循環同一支** `Seat`，不是抄一遍：抄本當天就分岔過（那一份漏了
+        // 「有改動不許一下走」的閘，又把存盤的錯 `let _ =` 吞掉）。
+        if settings.took(editor, Some(key)) {
+            continue;
         }
         editor.on_key(key);
-        if editor.take_settings_request() && settings.is_none() {
-            editor.set_settings_open(true);
-            settings = Some(yumete_config::panel::Panel::open(
-                Some(yumete_config::config_dir().join("config.toml")),
-                std::env::current_dir().ok().map(|cwd| yumete_config::panel::local_sheet_path(&cwd)),
-            ));
-        }
-        if editor.take_settings_save() {
-            if let Some(page) = settings.as_mut() {
-                // ⚠️ **存不下去要說出來。** 從前是 `let _ =`，於是
-                // `--shot --keys=':settings\n…:w\n'` 在存盤失敗時拍到的畫面和成
-                // 功時**逐像素相同**——而這個倉審前端就是靠拍照。
-                if let Err(why) = page.save() {
-                    eprintln!("yumete: --keys: :w: {why}");
-                }
-            }
-        }
-        if editor.take_settings_close().is_some() {
-            settings = None;
-            editor.set_settings_open(false);
-        }
+        settings.settle(editor);
     }
-    settings
+    settings.panel
 }
 
 /// `WIDTHxHEIGHT`, for `--shot`. Anything unreadable is the default page.
