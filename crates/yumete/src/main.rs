@@ -411,8 +411,9 @@ fn main() -> ExitCode {
     // editor — carries the build under it, so a shot in a bug report says what
     // it is a picture of.
     yumete_tui::set_build(VERSION);
+    let mut settings_page = None;
     if let Some(pressed) = &keys {
-        press(&mut editor, pressed);
+        settings_page = press(&mut editor, pressed);
     }
     // Asked for on the command line, and run the same way `:tutor` runs it.
     if tutor {
@@ -506,8 +507,22 @@ fn main() -> ExitCode {
         }
         // The layout the flags asked for, before the picture is taken.
         let picture = match shot_html {
-            true => yumete_tui::frame_to_html(&mut editor, &config, &ime, width, height),
-            false => yumete_tui::frame_to_text(&mut editor, &config, &ime, width, height),
+            true => yumete_tui::frame_to_html(
+                &mut editor,
+                &config,
+                &ime,
+                width,
+                height,
+                settings_page.as_ref(),
+            ),
+            false => yumete_tui::frame_to_text(
+                &mut editor,
+                &config,
+                &ime,
+                width,
+                height,
+                settings_page.as_ref(),
+            ),
         };
         print!("{picture}");
         return ExitCode::SUCCESS;
@@ -578,7 +593,13 @@ fn main() -> ExitCode {
 /// 漢字, which arrive here the way the IME hands them over: while `r` is armed
 /// a run of them is gathered and **committed**, because a commit is a string
 /// and the difference from a key is the whole of what `r` does with it.
-fn press(editor: &mut Editor, keys: &str) {
+///
+/// ⚠️ **`:settings` 之後的鍵歸那扇面板**，和主循環一樣。不接這一下，
+/// `--shot --keys=':settings\nljj '` 拍到的永遠是面板剛開的樣子——而這個倉審前端
+/// 就是靠拍照，一扇按不動的面板等於一扇沒法審的面板。回來的是那扇面板（要畫它）。
+fn press(editor: &mut Editor, keys: &str) -> Option<yumete_config::panel::Panel> {
+    let mut settings: Option<yumete_config::panel::Panel> = None;
+    let mut leaving_unsaved = false;
     let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
         let key = match c {
@@ -674,8 +695,51 @@ fn press(editor: &mut Editor, keys: &str) {
                 continue;
             }
         }
+        // 面板開着：鍵歸它（`:` 除外——那是命令行，`:w`／`:q` 在那上面打）。
+        if let Some(page) = settings.as_mut() {
+            let in_command = editor.mode() == yumete_core::input::Mode::Command;
+            if !in_command && key != Key::Char(':') {
+                // 和主循環同一道閘：有改動沒存，第一下只記一筆，第二下纔真的走。
+                let dirty = page.dirty();
+                if !yumete_tui::settings_page::press(page, key) {
+                    match dirty && !leaving_unsaved {
+                        true => leaving_unsaved = true,
+                        false => {
+                            settings = None;
+                            leaving_unsaved = false;
+                            editor.set_settings_open(false);
+                        }
+                    }
+                } else {
+                    leaving_unsaved = false;
+                }
+                continue;
+            }
+        }
         editor.on_key(key);
+        if editor.take_settings_request() && settings.is_none() {
+            editor.set_settings_open(true);
+            settings = Some(yumete_config::panel::Panel::open(
+                Some(yumete_config::config_dir().join("config.toml")),
+                std::env::current_dir().ok().map(|cwd| yumete_config::panel::local_sheet_path(&cwd)),
+            ));
+        }
+        if editor.take_settings_save() {
+            if let Some(page) = settings.as_mut() {
+                // ⚠️ **存不下去要說出來。** 從前是 `let _ =`，於是
+                // `--shot --keys=':settings\n…:w\n'` 在存盤失敗時拍到的畫面和成
+                // 功時**逐像素相同**——而這個倉審前端就是靠拍照。
+                if let Err(why) = page.save() {
+                    eprintln!("yumete: --keys: :w: {why}");
+                }
+            }
+        }
+        if editor.take_settings_close().is_some() {
+            settings = None;
+            editor.set_settings_open(false);
+        }
     }
+    settings
 }
 
 /// `WIDTHxHEIGHT`, for `--shot`. Anything unreadable is the default page.

@@ -1417,6 +1417,14 @@ en = "search the folder yumete opened in"
 find = "搜索 工作區 工作区 wd"
 
 [[message]]
+# : 命令選單裏 settings 那一項的說明（commands 組）
+key = "cmd.commands.settings"
+zht = "整頁一扇設置：每一項有名字有説明，改完 :w 存盤"
+zhs = "整页一扇设置：每一项有名字有说明，改完 :w 存盘"
+en = "a full page of settings, each with a name and a note; :w saves"
+find = "設置 设置 配置 選項 选项 偏好 首選項 首选项 settings preferences config options"
+
+[[message]]
 # : 命令選單裏 sh 那一項的說明（commands 組）
 key = "cmd.commands.sh"
 zht = "跑一條命令，輸出收進一個緩衝區"
@@ -7201,6 +7209,13 @@ en = "one 句 to a column — the file is untouched; :view-sentence off goes bac
 # ── 設置面板 ─────────────────────────────────────────────────────────
 
 [[message]]
+# 設置面板：存不下去（{0} ＝ 為什麽）
+key = "set.cannot-save"
+zht = "存不下去：{0}"
+zhs = "存不下去：{0}"
+en = "cannot save: {0}"
+
+[[message]]
 # 設置：段組
 key = "set.editor.bands"
 zht = "段組"
@@ -7425,6 +7440,41 @@ zhs = "标记"
 en = "marks"
 
 [[message]]
+# 設置面板：這一組還沒填
+key = "set.group.not-yet"
+zht = "這一組還沒填——先在 config.toml 裏寫"
+zhs = "这一组还没填——先在 config.toml 里写"
+en = "not filled in yet — write it in config.toml for now"
+
+[[message]]
+# 設置面板：底下那一行鍵
+key = "set.keys"
+zht = "hl 換欄  jk 上下  空格 切換  i 改  d 撤掉這一層  Tab 換存到哪一份  :w 存  q 走"
+zhs = "hl 换栏  jk 上下  空格 切换  i 改  d 撤掉这一层  Tab 换存到哪一份  :w 存  q 走"
+en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  q leave"
+
+[[message]]
+# 設置面板：這一項從出廠那一層來
+key = "set.layer.factory"
+zht = "出廠"
+zhs = "出厂"
+en = "factory"
+
+[[message]]
+# 設置面板：從全局配置來
+key = "set.layer.global"
+zht = "全局"
+zhs = "全局"
+en = "global"
+
+[[message]]
+# 設置面板：從本項目的配置來
+key = "set.layer.local"
+zht = "本項目"
+zhs = "本项目"
+en = "project"
+
+[[message]]
 # 設置：排版方向——橫排
 key = "set.layout.horizontal"
 zht = "橫排"
@@ -7437,6 +7487,13 @@ key = "set.layout.vertical"
 zht = "竪排"
 zhs = "竖排"
 en = "down"
+
+[[message]]
+# 設置面板：走的時候還有沒存的
+key = "set.leaving-unsaved"
+zht = "有改動沒存——:w 存，再按一次 q 不存就走"
+zhs = "有改动没存——:w 存，再按一次 q 不存就走"
+en = "unsaved changes — :w saves; q again leaves without saving"
 
 [[message]]
 # 設置：邊欄——总是
@@ -7465,6 +7522,62 @@ key = "set.margin.never"
 zht = "從不"
 zhs = "从不"
 en = "never"
+
+[[message]]
+# 設置面板：這一層還沒有那個檔（存盤時建）
+key = "set.no-file"
+zht = "還沒有，存盤時建"
+zhs = "还没有，存盘时建"
+en = "not there yet; saving makes it"
+
+[[message]]
+# 設置面板：沒有改動
+key = "set.nothing-to-save"
+zht = "沒有改動"
+zhs = "没有改动"
+en = "nothing changed"
+
+[[message]]
+# 設置面板：底下那一行——還沒選中哪一項
+key = "set.pick-a-group"
+zht = "l 或空格 進到右邊那一欄"
+zhs = "l 或空格 进到右边那一栏"
+en = "l or space goes into the settings"
+
+[[message]]
+# 設置面板：存好了（{0} ＝ 檔名）
+key = "set.saved"
+zht = "設置存進 {0}——:reload config 讓它生效，或者下次啓動"
+zhs = "设置存进 {0}——:reload config 让它生效，或者下次启动"
+en = "settings written to {0} — :reload config applies them, or the next start"
+
+[[message]]
+# 設置面板：存好了，而有幾個鍵被註釋掉了（{0} 檔名，{1} 鍵）
+key = "set.saved-said"
+zht = "設置存進 {0}。有幾個名字 yumete 不認得，註釋掉了（沒刪）：{1}"
+zhs = "设置存进 {0}。有几个名字 yumete 不认得，注释掉了（没删）：{1}"
+en = "written to {0}. Names yumete does not know were commented out, not deleted: {1}"
+
+[[message]]
+# 設置面板：改的那一層被上面蓋着，眼前那個值不會動
+key = "set.shadowed"
+zht = "⚠️ 本項目蓋着這一項——改的是全局，眼前這個值不會動"
+zhs = "⚠️ 本项目盖着这一项——改的是全局，眼前这个值不会动"
+en = "⚠️ the project covers this one — you are editing global, so the value here will not move"
+
+[[message]]
+# 設置面板：標題
+key = "set.title"
+zht = "設置"
+zhs = "设置"
+en = "settings"
+
+[[message]]
+# 設置面板：改了還沒存
+key = "set.unsaved"
+zht = "改了還沒存"
+zhs = "改了还没存"
+en = "unsaved"
 
 [[message]]
 # 設置：0 的意思——窗口有多高就多長

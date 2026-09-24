@@ -908,6 +908,36 @@ impl Editor {
         std::mem::take(&mut self.config_reload)
     }
 
+    /// **有人按過 `:settings`** —— 前端去開那扇面板。
+    pub fn take_settings_request(&mut self) -> bool {
+        std::mem::take(&mut self.settings_request)
+    }
+
+    /// 前端進出那扇面板時說一聲。
+    ///
+    /// ⚠️ **核心要知道它開着**，因為 `:w` 與 `:q` 在那時說的是面板，不是緩衝區。
+    /// 不說的話，設置面板上按 `:w` 會把眼前那一章存一遍——看起來像沒反應，其實
+    /// 動的是別的東西。
+    pub fn set_settings_open(&mut self, on: bool) {
+        self.settings_open = on;
+        if !on {
+            self.settings_save = false;
+            self.settings_close = None;
+        }
+    }
+
+    /// 面板開着時按過 `:w`。
+    pub fn take_settings_save(&mut self) -> bool {
+        std::mem::take(&mut self.settings_save)
+    }
+
+    /// 面板開着時按過 `:q` —— `Some(force)`。
+    ///
+    /// `force` ＝ 打了 `!`（`:q!`／`:x!`），那時不問「有改動沒存」。
+    pub fn take_settings_close(&mut self) -> Option<bool> {
+        self.settings_close.take()
+    }
+
     /// **Normal 下按過 Esc 而它没別的事可做**——前端該把輸入法的挂起再說一遍。
     pub fn take_say_it_again(&mut self) -> bool {
         std::mem::take(&mut self.say_it_again)

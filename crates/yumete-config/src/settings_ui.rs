@@ -1,4 +1,4 @@
-//! **每一項設定，說成一行** —— 那扇設置面板讀的就是這張表（2026-09-23）。
+//! **每一項設定，說成一行** —— 那扇設置面板（#421）讀的就是這張表（2026-09-23）。
 //!
 //! 作者提的：
 //!
@@ -94,8 +94,12 @@ pub enum Kind {
     Tick,
     /// 一個數，**鉗在這個範圍裏**——範圍抄 `into_config`，那一支纔是真在鉗的。
     ///
-    /// `low` 是允許的最小值；⚠️ 有幾項的 `0` 是「不說」而不是零（`zong_length`
-    /// 的 0 是「窗口有多高就多長」），那種寫 `low: 0` 而在 `zero` 裏說明。
+    /// ⚠️ **`zero` 不是 `None` 的時候，`low` 是「最小的**非零**值」**，而真正的
+    /// 域是「0，或者 `low` 到 `high`」——中間沒有別的。`zong_length` 是「0，或者
+    /// 4 到 64」，`tatechuyoko` 是「0，或者 2 到 8」。把 `low` 寫成 0 的話面板停
+    /// 得到域外的數，寫進檔裏而 `into_config` 當場鉗掉——**面板顯示的值不是編輯器
+    /// 用的值**。`tests/settings_ui.rs` 那條
+    /// `every_value_the_panel_can_set_is_its_own` 盯着這件事。
     Count {
         low: usize,
         high: usize,
@@ -170,8 +174,11 @@ pub const SETTINGS: &[Setting] = &[
         table: "editor",
         key: "zong_length",
         group: Group::Layout,
-        // 4..64 照 `into_config`；0 是「窗口有多高就多長」，不鉗上去。
-        kind: Kind::Count { low: 0, high: 64, zero: Some("set.zero.as-tall-as-the-window") },
+        // ⚠️ **`low` 是「最小的非零值」，不是「最小值」。** `into_config` 寫的是
+        // `if length == 0 {0} else {length.clamp(4,64)}`——真正的域是「0，或者
+        // 4 到 64」，中間那三個數不存在。寫 `low: 0` 的時候面板停得到 1／2／3，
+        // 寫進檔裏而編輯器按 4 排版。2026-09-24 審出來的。
+        kind: Kind::Count { low: 4, high: 64, zero: Some("set.zero.as-tall-as-the-window") },
         label: "set.editor.zong-length",
         hint: "set.editor.zong-length.hint",
         factory: "0",
@@ -252,8 +259,9 @@ pub const SETTINGS: &[Setting] = &[
         table: "editor",
         key: "tatechuyoko",
         group: Group::Layout,
-        // 一格裝幾個半角字。`TATECHUYOKO_MAX` 是 8，0 是關。
-        kind: Kind::Count { low: 0, high: 8, zero: Some("set.zero.off") },
+        // 一格裝幾個半角字：**0（關），或者 2 到 8**。`into_config` 把 1 當成 0
+        // （`at_most >= TATECHUYOKO_CLASSIC`），所以 `low` 是 2 而不是 0。
+        kind: Kind::Count { low: 2, high: 8, zero: Some("set.zero.off") },
         label: "set.editor.tatechuyoko",
         hint: "set.editor.tatechuyoko.hint",
         factory: "4",

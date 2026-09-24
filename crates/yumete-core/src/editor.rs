@@ -1792,6 +1792,20 @@ pub struct Editor {
     /// 核心不知道配置檔在哪，也不該知道：那是 XDG 的事，歸前端。核心只記「有人
     /// 要求了」，同十一支 `take_*_request` 一個形狀。
     config_reload: bool,
+    /// **`:settings` 按過了** —— 前端下一趟取走並開那扇面板。
+    ///
+    /// ⚠️ **那扇面板的狀態不在核心裏**（它讀 `yumete_config::settings_ui` 那張表，
+    /// 而核心不依賴 `yumete-config`），所以這裏只是一張條子。
+    settings_request: bool,
+    /// 那扇面板此刻開着 —— 前端進出時說一聲。
+    ///
+    /// 核心要知道，是因為 `:w` 與 `:q` 在它開着的時候說的是**它**：面板上按 `:w`
+    /// 想存的是設定，不是眼前這個緩衝區。
+    settings_open: bool,
+    /// 面板開着時按過 `:w`。
+    settings_save: bool,
+    /// 面板開着時按過 `:q` —— `Some(force)`，`force` 是打了 `!`（不管沒存的）。
+    settings_close: Option<bool>,
     /// **`空格 k` 問出去的那一句**（#53 ③，2026-09-21）——同上一個形狀。
     hover_query: Option<(PathBuf, usize, usize)>,
     /// **`C-n` 問出去的那一句**（#53 ④，2026-09-21）——同上一個形狀。
@@ -2586,6 +2600,10 @@ impl Editor {
             definition_query: None,
             say_it_again: false,
             config_reload: false,
+            settings_request: false,
+            settings_open: false,
+            settings_save: false,
+            settings_close: None,
             hover_query: None,
             hovered: None,
             hover_afloat: true,
