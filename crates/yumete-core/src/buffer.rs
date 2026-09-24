@@ -1356,7 +1356,31 @@ fn write_bytes_with_model(
             .ok()
             .or_else(|| like.and_then(|p| fs::metadata(p).ok()));
         if let Some(from) = model {
-            let _ = file.set_permissions(from.permissions());
+            let mut how = from.permissions();
+            // ⚠️ **抄權限，但不抄「只讀」。** 抄過去的話，一份 0444 的稿子會讓它
+            // 的搶救副本也成 0444——而**下一輪**寫那份副本時上面那道只讀閘就攔住
+            // 自己，`PermissionDenied`，此後這一場的每一次 autosave 都失敗。那句
+            // 提示只說一次（`swap_warned`），全屏編輯器裏下一個按鍵就蓋掉了，於是
+            // 幾個鐘頭裏只有最初五秒那一幀是保過的。
+            //
+            // 只讀的稿子照樣打得開、`:readonly off` 照樣寫得動（寫的時候另有一道
+            // 閘問人），而副本是**我們自己**的東西，沒有理由跟着只讀。
+            // 2026-09-24 審出來的。
+            // ⚠️ **只補「自己」那一位，不許用 `set_readonly(false)`。** 那一支在
+            // Unix 上是 `mode |= 0o222`——**把寫權限一併給了組和其他人**：一份
+            // 0o600 的日記，它的搶救副本會是 0o622。
+            // `a_recovery_copy_is_as_private_as_the_manuscript` 當場逮到
+            // （2026-09-24，那條測試就是為這件事寫的）。clippy 也有一條
+            // `permissions_set_readonly_false` 說同一件事。
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                how.set_mode(how.mode() | 0o200);
+            }
+            #[cfg(not(unix))]
+            #[allow(clippy::permissions_set_readonly_false)]
+            how.set_readonly(false);
+            let _ = file.set_permissions(how);
         }
         write(&mut file)?;
         file.flush()?;

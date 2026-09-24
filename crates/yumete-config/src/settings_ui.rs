@@ -218,6 +218,11 @@ const THEME_STATUS_BAR_WAYS: &[Choice] = &[
 /// ⚠️ **兩個詞，沒有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
 /// 字一律讀成 `auto`。所以這裏不許多寫一個「看着像」的選項——面板上切過去、檔裏
 /// 寫下去，而編輯器當它是 `auto`。2026-09-24 那條「改一項要真的改得動」逮到的。
+const KEYS_PRESET_WAYS: &[Choice] = &[
+    Choice { word: "helix", label: "set.pick.preset.helix" },
+    Choice { word: "vim", label: "set.pick.preset.vim" },
+];
+
 const IME_SYSTEM_WAYS: &[Choice] = &[
     Choice { word: "auto", label: "set.pick.system.auto" },
     Choice { word: "keep", label: "set.pick.system.keep" },
@@ -670,7 +675,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting {
         table: "editor",
         key: "autosave",
-        group: Group::Editing,
+        group: Group::Files,
         kind: Kind::Tick,
         label: "set.editor.autosave",
         hint: "set.editor.autosave.hint",
@@ -697,7 +702,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting {
         table: "editor",
         key: "session",
-        group: Group::Editing,
+        group: Group::Files,
         kind: Kind::Tick,
         label: "set.editor.session",
         hint: "set.editor.session.hint",
@@ -706,7 +711,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting {
         table: "editor",
         key: "language",
-        group: Group::Files,
+        group: Group::Interface,
         kind: Kind::Pick(EDITOR_LANGUAGE_WAYS),
         label: "set.editor.language",
         hint: "set.editor.language.hint",
@@ -715,7 +720,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting {
         table: "editor",
         key: "ambiguous_width",
-        group: Group::Files,
+        group: Group::Layout,
         kind: Kind::Pick(EDITOR_AMBIGUOUS_WIDTH_WAYS),
         label: "set.editor.ambiguous-width",
         hint: "set.editor.ambiguous-width.hint",
@@ -724,11 +729,20 @@ pub const SETTINGS: &[Setting] = &[
     Setting {
         table: "editor",
         key: "language_key",
-        group: Group::Files,
+        group: Group::Keys,
         kind: Kind::Text,
         label: "set.editor.language-key",
         hint: "set.editor.language-key.hint",
         factory: r#""C-^""#,
+    },
+    Setting {
+        table: "keys",
+        key: "preset",
+        group: Group::Keys,
+        kind: Kind::Pick(KEYS_PRESET_WAYS),
+        label: "set.keys.preset",
+        hint: "set.keys.preset.hint",
+        factory: r#""helix""#,
     },
 ];
 
@@ -773,7 +787,6 @@ pub const LATER: &[&str] = &[
     "ime.commit",
     "ime.data_dirs",
     "export.page",
-    "keys.preset",
 ];
 
 /// **有理由不進面板的那幾個。**

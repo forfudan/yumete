@@ -848,12 +848,12 @@ KEYS (Normal mode, Helix-style):
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:search-gd` results)
-    Space     menu: e sidebar, o outline, f files, b buffers, / search,
+    Space     menu: o outline, f files, b buffers, / search, ? commands,
               d 字典 (how the character under the cursor is written), y copy,
               r 旁注 (edit the reading here)
     C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
-    {{ }}       previous / next paragraph — here a paragraph is a logical line
+    {{ }}     previous / next paragraph — here a paragraph is a logical line
     M a  ' a  name this place / go back to it, across files
     C-o C-i   the jump list: back to where a jump came from, and forward
     f F       find a character, forward / backward; A-. repeats it

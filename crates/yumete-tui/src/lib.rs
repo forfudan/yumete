@@ -262,6 +262,28 @@ fn frame_to(
     // not of the page: without the wrap width a paragraph runs off the right
     // edge and the shot shows a book with no second line in it. The 縱 length
     // is the same question asked the other way round.
+    // …and 字典 gets its answer, the same way the loop answers it (see `run`).
+    // ⚠️ **Leaving this out made `空格 d` and `空格 D` unphotographable**: the
+    // panel came out saying 「查着……」 for ever, which reads exactly like a
+    // broken feature — and a picture is how this repo reviews the front end.
+    // 2026-09-23 審出來的。
+    //
+    // ⚠️ **而且要在量這一頁**之前**答。** 側欄有多寬是按字典**已經查到的那幾行**
+    // 算的（`sidebar_columns`），答在後面，這一支就用「空字典」的寬度算折行、用
+    // 「滿字典」的寬度畫——**每一個續行開頭少掉一截字，畫面上毫無痕跡**：
+    //
+    // ```text
+    // 3  0二三四五六七八九十1二三四五六七八九十2二三四五六七八九十┃ 字典
+    //    三四五六七八九十5二三四五六七八九十6二三四五六七八九十7二┃   ← 「3二」沒了
+    // ```
+    //
+    // 真的編輯器裏不會：那邊字典是**上一輪**答的，量和畫用的是同一個寬度。只有
+    // 這一支是一幀一趟。而這個倉審前端就是靠拍照，一張會吞字的照片比沒有照片壞。
+    // 2026-09-24 審出來的。
+    if let Some(ch) = editor.take_dictionary_query() {
+        let found = ime.glosses(ch);
+        editor.set_dictionary(ch, found);
+    }
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
     let page = areas.panes[editor.live_pane().min(1)];
     let lines = editor.current_buffer().line_count();
@@ -280,15 +302,6 @@ fn frame_to(
     // and a picture is how this repo reviews anything that touches the front
     // end.
     settle_inline_candidate(editor, ime);
-    // …and 字典 gets its answer, the same way the loop answers it (see `run`).
-    // ⚠️ **Leaving this out made `空格 d` and `空格 D` unphotographable**: the
-    // panel came out saying 「查着……」 for ever, which reads exactly like a
-    // broken feature — and a picture is how this repo reviews the front end.
-    // 2026-09-23 審出來的。
-    if let Some(ch) = editor.take_dictionary_query() {
-        let found = ime.glosses(ch);
-        editor.set_dictionary(ch, found);
-    }
     // …和那扇設置面板。⚠️ **不接這一句，`--shot --keys=':settings\\n'` 拍到的是
     // 正文**——面板住在主循環裏，而這一支不是主循環。看起來像 `:settings` 沒做，
     // 而這個倉審前端就是靠拍照（字典那一格 2026-09-23 剛因為同一個缺口被審出來）。
@@ -2787,10 +2800,34 @@ fn run_program(program: &str, args: &[String], input: Option<&str>) -> io::Resul
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()?;
-    if let (Some(text), Some(mut pipe)) = (input, child.stdin.take()) {
-        io::Write::write_all(&mut pipe, text.as_bytes())?;
-    }
+    // ⚠️ **餵料要在另一條線程上** —— 同 [`run_capturing`]，同一個理由，而這一支
+    // 從前是直接 `write_all` 再 `wait_with_output`：子進程的 stdout 管道一滿
+    // （macOS 64 KB）它就不再讀 stdin，兩邊一起等。**屏幕凍住、`:w` 敲不進去、
+    // 只能 `kill -9`，而 `kill -9` 跳過 panic 鉤子，一份搶救副本都不寫。**
+    //
+    // 那一支 2026-09 為此加了喂料線程（實測 `:!cat` 掛在 ~150 KB、`:convert` 3.1
+    // MB），**這一支沒跟上**——它走的是 `[language.<語言>]` 的 `kind = "filter"`
+    // ＋ `:format`。同一個檔裏兩支孿生函數，一支修了一支沒有。2026-09-24 審出來的。
+    let feeder = match (input, child.stdin.take()) {
+        (Some(text), Some(mut pipe)) => {
+            let text = text.to_string();
+            // 寫完**並且關掉**——還等着更多輸入的過濾器不會回答。`pipe` 在閉包
+            // 末尾被丟掉，那一下就是關。
+            Some(std::thread::spawn(move || io::Write::write_all(&mut pipe, text.as_bytes())))
+        }
+        _ => None,
+    };
     let out = child.wait_with_output()?;
+    if let Some(feeder) = feeder {
+        // 過濾器可以提前不讀了（`head -1` 就是），隨之而來的 broken pipe 不是寫
+        // 的那一頭的錯——這一趟成沒成，看退出碼。
+        match feeder.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) if err.kind() == io::ErrorKind::BrokenPipe => {}
+            Ok(Err(err)) => return Err(err),
+            Err(_) => return Err(io::Error::other("the writer did not finish")),
+        }
+    }
     Ok(Ran {
         ok: out.status.success(),
         said: String::from_utf8_lossy(&out.stdout).into_owned(),

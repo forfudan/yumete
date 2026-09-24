@@ -517,159 +517,6 @@ impl Segmenter for DictionarySegmenter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// **The bundled dictionary reads the script this editor is written in.**
-    ///
-    /// It was simplified-only, so `w` stepped one character at a time through
-    /// every 繁體 manuscript — including the editor's own lesson, whose example
-    /// sentence exists to show the feature working. The sentence below is that
-    /// line, verbatim from `tutor.rs`.
-    #[test]
-    fn word_motions_find_words_in_traditional_prose() {
-        // The list is a build input, not a tracked file (`build.rs`), so a
-        // machine that has never installed 宇浩 has none — and「every word is
-        // one 漢字」is the right answer there, not a failure.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
-        let seg = DictionarySegmenter::builtin(0);
-        let line = "他抬頭看了看那片天，雪還在下，山路已經看不見了。";
-        // The ranges are in characters, the way every motion in the editor
-        // counts them.
-        let chars: Vec<char> = line.chars().collect();
-        let words: Vec<String> = seg
-            .segment(line)
-            .into_iter()
-            .map(|(a, b)| chars[a..b].iter().collect())
-            .collect();
-        for word in ["抬頭", "已經"] {
-            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
-        }
-    }
-
-    /// The traditional forms are an addition, not a replacement: a writer with a
-    /// simplified manuscript keeps every word they had.
-    #[test]
-    fn the_simplified_words_are_still_there() {
-        // The list is a build input, not a tracked file (`build.rs`), so a
-        // machine that has never installed 宇浩 has none — and「every word is
-        // one 漢字」is the right answer there, not a failure.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
-        let seg = DictionarySegmenter::builtin(0);
-        let line = "他抬头看了看那片天，雪还在下，山路已经看不见了。";
-        // The ranges are in characters, the way every motion in the editor
-        // counts them.
-        let chars: Vec<char> = line.chars().collect();
-        let words: Vec<String> = seg
-            .segment(line)
-            .into_iter()
-            .map(|(a, b)| chars[a..b].iter().collect())
-            .collect();
-        for word in ["抬头", "已经"] {
-            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
-        }
-    }
-
-
-    #[test]
-    fn category_segmenter_matches_word_ranges() {
-        let seg = CategorySegmenter;
-        // Same behaviour as word_ranges: latin run, punctuation, CJK singles.
-        assert_eq!(
-            seg.segment("hello, 世界 rust"),
-            vec![(0, 5), (5, 6), (7, 8), (8, 9), (10, 14)]
-        );
-    }
-
-    #[test]
-    fn dictionary_joins_known_words() {
-        // 世界 and 中文 are words; 界中 is not, so it splits between them.
-        let seg =
-            DictionarySegmenter::new([("世界".to_string(), 100), ("中文".to_string(), 100)], 1);
-        // "世界中文" → 世界 | 中文
-        assert_eq!(seg.segment("世界中文"), vec![(0, 2), (2, 4)]);
-    }
-
-    #[test]
-    fn dictionary_respects_weights_at_a_fork() {
-        // Overlapping words AB and BC compete over "ABC"; the heavier pairing
-        // plus the leftover single character should win.
-        // 甲乙 heavy → 甲乙 | 丙 ; 乙丙 heavy → 甲 | 乙丙.
-        let heavy_left =
-            DictionarySegmenter::new([("甲乙".to_string(), 1000), ("乙丙".to_string(), 1)], 1);
-        assert_eq!(heavy_left.segment("甲乙丙"), vec![(0, 2), (2, 3)]);
-
-        let heavy_right =
-            DictionarySegmenter::new([("甲乙".to_string(), 1), ("乙丙".to_string(), 1000)], 1);
-        assert_eq!(heavy_right.segment("甲乙丙"), vec![(0, 1), (1, 3)]);
-    }
-
-    #[test]
-    fn threshold_keeps_rare_words_split() {
-        // 世界 exists but is below the threshold, so it stays split into singles.
-        let seg = DictionarySegmenter::new([("世界".to_string(), 5)], 100);
-        assert_eq!(seg.segment("世界"), vec![(0, 1), (1, 2)]);
-    }
-
-    /// #349. A dictionary decides where a *word* ends inside a run of 漢字 and
-    /// nothing else: everything outside such a run is cut the same way by every
-    /// segmenter here, because they all walk the line through one function.
-    #[test]
-    fn every_segmenter_cuts_the_same_way_outside_a_run_of_han() {
-        let line = "冬天 abc123，山路。「好」\t二〇二五年";
-        let chars: Vec<char> = line.chars().collect();
-        let outside = |ranges: Vec<(usize, usize)>| -> Vec<(usize, usize)> {
-            ranges
-                .into_iter()
-                .filter(|&(a, _)| !crate::is_han(chars[a]))
-                .collect()
-        };
-        let plain = CategorySegmenter.segment(line);
-        for other in [
-            DictionarySegmenter::builtin(0).segment(line),
-            DictionarySegmenter::new([("山路".to_string(), 900)], 1).segment(line),
-        ] {
-            assert_eq!(outside(other), outside(plain.clone()));
-        }
-    }
-
-    #[test]
-    fn mixes_cjk_words_with_latin_and_punctuation() {
-        let seg = DictionarySegmenter::new([("世界".to_string(), 100)], 1);
-        // "hi 世界!" → "hi", 世界, "!"
-        assert_eq!(seg.segment("hi 世界!"), vec![(0, 2), (3, 5), (5, 6)]);
-    }
-
-    #[test]
-    fn from_text_parses_word_weight_lines() {
-        let seg = DictionarySegmenter::from_text("# comment\n世界\t100\n中文 50\n", 1);
-        assert_eq!(seg.word_count(), 2);
-        assert_eq!(seg.segment("世界中文"), vec![(0, 2), (2, 4)]);
-    }
-
-    #[test]
-    fn builtin_dictionary_segments_common_prose() {
-        // The list is a build input, not a tracked file (`build.rs`), so a
-        // machine that has never installed 宇浩 has none — and「every word is
-        // one 漢字」is the right answer there, not a failure.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
-        let seg = DictionarySegmenter::builtin(0);
-        assert!(seg.word_count() > 100);
-        // 你好 and 世界 are both in the bundled list.
-        assert_eq!(seg.segment("你好世界"), vec![(0, 2), (2, 4)]);
-        // Two words in a row cut apart. ⚠️ Pick a pair the corpus does *not*
-        // also list as one four-character entry — 「我们今天」 is such an entry
-        // (7,395), so the maximum-probability path joins it, correctly.
-        assert_eq!(seg.segment("冬天早晨"), vec![(0, 2), (2, 4)]);
-    }
-}
 
 /// A segmenter with a project's own words layered over it — Feature #144.
 ///
@@ -925,5 +772,163 @@ impl Segmenter for Memo {
 
     fn source(&self) -> WordSource {
         self.inner.source()
+    }
+}
+
+// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
+// 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
+// 全綠。這一支從前擺在中間，後面壓着 258 行（2026-09-24 審出來的）。
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The bundled dictionary reads the script this editor is written in.**
+    ///
+    /// It was simplified-only, so `w` stepped one character at a time through
+    /// every 繁體 manuscript — including the editor's own lesson, whose example
+    /// sentence exists to show the feature working. The sentence below is that
+    /// line, verbatim from `tutor.rs`.
+    #[test]
+    fn word_motions_find_words_in_traditional_prose() {
+        // The list is a build input, not a tracked file (`build.rs`), so a
+        // machine that has never installed 宇浩 has none — and「every word is
+        // one 漢字」is the right answer there, not a failure.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
+        let seg = DictionarySegmenter::builtin(0);
+        let line = "他抬頭看了看那片天，雪還在下，山路已經看不見了。";
+        // The ranges are in characters, the way every motion in the editor
+        // counts them.
+        let chars: Vec<char> = line.chars().collect();
+        let words: Vec<String> = seg
+            .segment(line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        for word in ["抬頭", "已經"] {
+            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
+        }
+    }
+
+    /// The traditional forms are an addition, not a replacement: a writer with a
+    /// simplified manuscript keeps every word they had.
+    #[test]
+    fn the_simplified_words_are_still_there() {
+        // The list is a build input, not a tracked file (`build.rs`), so a
+        // machine that has never installed 宇浩 has none — and「every word is
+        // one 漢字」is the right answer there, not a failure.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
+        let seg = DictionarySegmenter::builtin(0);
+        let line = "他抬头看了看那片天，雪还在下，山路已经看不见了。";
+        // The ranges are in characters, the way every motion in the editor
+        // counts them.
+        let chars: Vec<char> = line.chars().collect();
+        let words: Vec<String> = seg
+            .segment(line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        for word in ["抬头", "已经"] {
+            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
+        }
+    }
+
+
+    #[test]
+    fn category_segmenter_matches_word_ranges() {
+        let seg = CategorySegmenter;
+        // Same behaviour as word_ranges: latin run, punctuation, CJK singles.
+        assert_eq!(
+            seg.segment("hello, 世界 rust"),
+            vec![(0, 5), (5, 6), (7, 8), (8, 9), (10, 14)]
+        );
+    }
+
+    #[test]
+    fn dictionary_joins_known_words() {
+        // 世界 and 中文 are words; 界中 is not, so it splits between them.
+        let seg =
+            DictionarySegmenter::new([("世界".to_string(), 100), ("中文".to_string(), 100)], 1);
+        // "世界中文" → 世界 | 中文
+        assert_eq!(seg.segment("世界中文"), vec![(0, 2), (2, 4)]);
+    }
+
+    #[test]
+    fn dictionary_respects_weights_at_a_fork() {
+        // Overlapping words AB and BC compete over "ABC"; the heavier pairing
+        // plus the leftover single character should win.
+        // 甲乙 heavy → 甲乙 | 丙 ; 乙丙 heavy → 甲 | 乙丙.
+        let heavy_left =
+            DictionarySegmenter::new([("甲乙".to_string(), 1000), ("乙丙".to_string(), 1)], 1);
+        assert_eq!(heavy_left.segment("甲乙丙"), vec![(0, 2), (2, 3)]);
+
+        let heavy_right =
+            DictionarySegmenter::new([("甲乙".to_string(), 1), ("乙丙".to_string(), 1000)], 1);
+        assert_eq!(heavy_right.segment("甲乙丙"), vec![(0, 1), (1, 3)]);
+    }
+
+    #[test]
+    fn threshold_keeps_rare_words_split() {
+        // 世界 exists but is below the threshold, so it stays split into singles.
+        let seg = DictionarySegmenter::new([("世界".to_string(), 5)], 100);
+        assert_eq!(seg.segment("世界"), vec![(0, 1), (1, 2)]);
+    }
+
+    /// #349. A dictionary decides where a *word* ends inside a run of 漢字 and
+    /// nothing else: everything outside such a run is cut the same way by every
+    /// segmenter here, because they all walk the line through one function.
+    #[test]
+    fn every_segmenter_cuts_the_same_way_outside_a_run_of_han() {
+        let line = "冬天 abc123，山路。「好」\t二〇二五年";
+        let chars: Vec<char> = line.chars().collect();
+        let outside = |ranges: Vec<(usize, usize)>| -> Vec<(usize, usize)> {
+            ranges
+                .into_iter()
+                .filter(|&(a, _)| !crate::is_han(chars[a]))
+                .collect()
+        };
+        let plain = CategorySegmenter.segment(line);
+        for other in [
+            DictionarySegmenter::builtin(0).segment(line),
+            DictionarySegmenter::new([("山路".to_string(), 900)], 1).segment(line),
+        ] {
+            assert_eq!(outside(other), outside(plain.clone()));
+        }
+    }
+
+    #[test]
+    fn mixes_cjk_words_with_latin_and_punctuation() {
+        let seg = DictionarySegmenter::new([("世界".to_string(), 100)], 1);
+        // "hi 世界!" → "hi", 世界, "!"
+        assert_eq!(seg.segment("hi 世界!"), vec![(0, 2), (3, 5), (5, 6)]);
+    }
+
+    #[test]
+    fn from_text_parses_word_weight_lines() {
+        let seg = DictionarySegmenter::from_text("# comment\n世界\t100\n中文 50\n", 1);
+        assert_eq!(seg.word_count(), 2);
+        assert_eq!(seg.segment("世界中文"), vec![(0, 2), (2, 4)]);
+    }
+
+    #[test]
+    fn builtin_dictionary_segments_common_prose() {
+        // The list is a build input, not a tracked file (`build.rs`), so a
+        // machine that has never installed 宇浩 has none — and「every word is
+        // one 漢字」is the right answer there, not a failure.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
+        let seg = DictionarySegmenter::builtin(0);
+        assert!(seg.word_count() > 100);
+        // 你好 and 世界 are both in the bundled list.
+        assert_eq!(seg.segment("你好世界"), vec![(0, 2), (2, 4)]);
+        // Two words in a row cut apart. ⚠️ Pick a pair the corpus does *not*
+        // also list as one four-character entry — 「我们今天」 is such an entry
+        // (7,395), so the maximum-probability path joins it, correctly.
+        assert_eq!(seg.segment("冬天早晨"), vec![(0, 2), (2, 4)]);
     }
 }

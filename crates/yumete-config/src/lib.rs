@@ -1867,18 +1867,41 @@ impl Config {
                 if let Ok(text) = fs::read_to_string(&local) {
                     match toml::from_str::<RawConfig>(&text) {
                         Ok(mut parsed) => {
-                            // **`screenshot` is the one setting that runs
-                            // through a shell**, and a `.yumete/` directory
-                            // travels with a manuscript — cloned, unzipped,
-                            // handed over by a collaborator. Everything else a
-                            // project may declare runs *without* a shell, with
-                            // whole-argument placeholders; this one cannot, so
-                            // a project does not get to set it. Said out loud
-                            // rather than dropped, or a writer whose own line
-                            // stopped working would never learn why.
+                            // **`screenshot` runs through a shell**, and a
+                            // `.yumete/` directory travels with a manuscript —
+                            // cloned, unzipped, handed over by a collaborator.
+                            // So a project does not get to set it. Said out
+                            // loud rather than dropped, or a writer whose own
+                            // line stopped working would never learn why.
                             if parsed.editor.screenshot.take().is_some() {
                                 problems.push(format!(
-                                    "{}：screenshot 只認全域設定——它是唯一經過 shell 的一條",
+                                    "{}：screenshot 只認全域設定——它經過 shell",
+                                    local.display()
+                                ));
+                            }
+                            // ⚠️ **鍵位表也只認全域，而這一條是 2026-09-24 審出
+                            // 來的一個真洞。** 上面那條註釋從前寫着「screenshot
+                            // 是**唯一**經過 shell 的一條」，而那個推理不成立：
+                            // `[keys.normal]` 右邊是一串按鍵，**串裏可以放一整行
+                            // 命令行**。實測——本地配置寫
+                            //
+                            // ```toml
+                            // [keys.normal]
+                            // "zz" = ":w\n"
+                            // ```
+                            //
+                            // 按一下 `zz`，狀態欄真的報「存了 s.md」。換成
+                            // `":!<任意命令>\n"` 走的就是 `$SHELL -c`：**不必敲
+                            // 任何命令，一個普通按鍵就夠**，而那個 `.yumete/` 是
+                            // 跟着別人的稿子進來的。
+                            //
+                            // 作者 2026-09-24 定「鍵位表只認全局」：鍵位是**個人
+                            // 習慣**，不是項目屬性——`[lsp.*]` 與 `[language.*]`
+                            // 照舊寫得動（那兩樣真的是項目屬性，同 rust-toolchain）。
+                            if !parsed.keys.normal.is_empty() {
+                                parsed.keys.normal.clear();
+                                problems.push(format!(
+                                    "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
                                     local.display()
                                 ));
                             }

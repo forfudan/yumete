@@ -140,6 +140,25 @@ pub fn rewrite(
                 Some(v) => format!("{key} ={}", v.to_string().trim_end()),
                 None => continue,
             };
+            // ⚠️ **每一行都要那個 `#`，不是只有第一行。** 值可以跨行——多行數組、
+            // `"""…"""` ——而只註釋掉頭一行，後面幾行就**裸着留在檔裏**，整份
+            // toml 從此讀不進去。實測（2026-09-24 審出來的）：
+            //
+            // ```toml
+            // [editor]
+            // # nosuchkey = [
+            //   "a",
+            //   "b",
+            // ]    # yumete does not know this name
+            // ```
+            //
+            // 「Expected '=' after a key」——而這扇面板存在的**全部理由**就是
+            // 「一個打錯的鍵名不該讓整份配置作廢」。它親手造出了那件事。
+            let line = line
+                .lines()
+                .map(|one| format!("# {one}"))
+                .collect::<Vec<_>>()
+                .join("\n");
             t.remove(&key);
             said.commented_out.push(format!("{table}.{key}"));
             // ⚠️ **掛在表頭那一行的後綴上**，所以它畫出來是在 `[editor]` **下面
@@ -157,7 +176,7 @@ pub fn rewrite(
             // ```
             let decor = t.decor_mut();
             let had = decor.suffix().and_then(|s| s.as_str()).unwrap_or("").to_string();
-            decor.set_suffix(format!("{had}\n# {line}    # {STRANGER}"));
+            decor.set_suffix(format!("{had}\n{line}    # {STRANGER}"));
         }
     }
 
