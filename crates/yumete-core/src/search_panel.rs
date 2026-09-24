@@ -474,6 +474,19 @@ impl Search {
         self.caret = to.min(self.typed().chars().count());
     }
 
+    /// **Walk to another cell, and park the cursor at the end of it.**
+    ///
+    /// ⚠️ **One caret serves every box**, so walking off 搜 (caret at 3) on to
+    /// an empty 換 would leave the block cursor sitting three cells past the
+    /// end of a box with nothing in it. The caret is the *current* box's, and
+    /// changing which box that is has to move it (2026-09-25, when `h`/`l`
+    /// started meaning 「走字」 and the caret became something a reader can see).
+    pub fn stand_on(&mut self, field: Field) {
+        self.field = field;
+        self.all_selected = false;
+        self.caret = self.typed().chars().count();
+    }
+
     /// Put a pattern in the box with the whole of it selected — `空格 /`.
     pub fn ask(&mut self, query: String) {
         self.caret = query.chars().count();

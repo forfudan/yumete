@@ -353,21 +353,6 @@ impl Editor {
         self.search.total = total;
     }
 
-    /// Rerun the search and go to the first hit at or after the cursor.
-    fn search_again(&mut self) {
-        self.run_search();
-        if self.search.hits.is_empty() {
-            return;
-        }
-        let at = self.cursor;
-        self.search.selected = self
-            .search
-            .hits
-            .iter()
-            .position(|h| h.at >= at)
-            .unwrap_or(0);
-    }
-
     /// One key while a field of the search panel has them (`Mode::Field`).
     pub(super) fn on_field_key(&mut self, key: Key) {
         match key {
@@ -383,41 +368,41 @@ impl Editor {
                 self.mode = Mode::Normal;
                 self.take_scope();
             }
+            // **`Enter` 開找，然後把鍵交到結果上——兩種範圍一個樣**（2026-09-25
+            // 定，原話：「搜索本文件和文件夹的时候的行为不一致，需要統一……请改成
+            // 搜索文件夹那样，enter跳到第一个匹配，jk移动。否则你这就是无端设置
+            // 特例了」）。
+            //
+            // ⚠️ **從前本文件那一種是「下一處」，鍵留在框裏。** 理由是「本文件邊
+            // 打邊搜，所以 Enter 沒有『去找』可做」——可那隻說明了 Enter 不必**再
+            // 找一遍**，沒說明它為什麼要變成另一個鍵。一個鍵在兩種範圍下做兩件
+            // 事，是讀者每次都要先想一下自己在哪一種裏面。
+            //
+            // 「下一處」沒有丟：鍵落在結果上之後 `j`／`k` 就是走下一處、上一處，
+            // 而那比 Enter 多說了一件事——**它看得見自己要去哪裏**。
             Key::Enter => {
                 self.search.all_selected = false;
-                // **Across files, `Enter` is 「go and look」**; in this one it
-                // is 「the next place」, because the looking already happened
-                // as you typed.
-                //
-                // ⚠️ **And 「go and look」 hands the keys back** (2026-09-24,
-                // 原話：「输入结束按Enter后显示搜索结果的时候，是不是可以直接进入
-                // normal 模式？这样不需要额外esc一下」，落點是結果列表). The
-                // two are one act: a search across a book is run once and then
-                // read, so the box has no more to say. 「The next place」 is
-                // the other kind — pressed over and over — and keeps them.
+                // 邊打邊搜的那一種，名單已經是新的；另一種到這一下纔去跑。
                 if !self.search.scope.live() {
                     self.search_now();
-                    // Nothing found: stay in the box. The next thing anybody
-                    // does is change the pattern, and an empty list is not a
-                    // place to stand.
-                    if !self.search.hits.is_empty() {
-                        self.mode = Mode::Normal;
-                        self.search.field = Field::Results;
-                        // **On the first hit, not on the first row.** Across
-                        // files row 0 is a file's name, and the command row
-                        // has nothing to say about a file — landing there
-                        // would look like the panel had not answered.
-                        self.search.selected = self
-                            .search
-                            .rows()
-                            .iter()
-                            .position(|r| matches!(r, crate::search_panel::Row::Hit(_)))
-                            .unwrap_or(0);
-                    }
-                    return;
                 }
-                self.repeat_search(true);
-                self.search_again();
+                // Nothing found: stay in the box. The next thing anybody does
+                // is change the pattern, and an empty list is not a place to
+                // stand.
+                if !self.search.hits.is_empty() {
+                    self.mode = Mode::Normal;
+                    self.search.field = Field::Results;
+                    // **On the first hit, not on the first row.** Across
+                    // files row 0 is a file's name, and the command row has
+                    // nothing to say about a file — landing there would look
+                    // like the panel had not answered.
+                    self.search.selected = self
+                        .search
+                        .rows()
+                        .iter()
+                        .position(|r| matches!(r, crate::search_panel::Row::Hit(_)))
+                        .unwrap_or(0);
+                }
             }
             Key::Char(ch) => {
                 self.search.type_char(ch);
@@ -492,24 +477,39 @@ impl Editor {
             // the form's own cells are `hjkl` (below) and `↑`／`↓`.
             Key::Tab => return self.cycle_view(side, false),
             Key::BackTab => return self.cycle_view(side, true),
-            // `hjkl` walk the form in Normal, as a form should; in the list
-            // `j`/`k` walk the hits instead, because that is what is there.
-            // In the list, `h`/`l` fold a file away and open it again — the
-            // same 「less of this / more of this」 the tree and the outline
-            // mean by them. Elsewhere in the form they walk the cells.
+            // **`hl` 橫着走字，`jk` 竪着走格**（2026-09-25 定，原話：「這一個光標
+            // 所在的字是反白的……用戶這樣就能用hl在搜索欄中移動光標」）。和正文
+            // 一個感覺：框裏站着一個塊光標，`h`／`l` 挪它，`i` 就從它那裏插。
+            //
+            // ⚠️ **格子之間從此只有 `jk`**（作者定：「行，格子只用 jk」）。從前
+            // `hl` 和 `jk` 走的是同一串格子，那時框裏沒有光標可挪，`hl` 也就沒有
+            // 別的事可做。
+            //
+            // 結果列表是例外：那裏 `h`／`l` 是摺起／打開一個檔，和文件樹、大綱說的
+            // 「少一點／多一點」是同一件事；到頂了 `h` 出去，免得困在列表裏。
             Key::Char('h') | Key::Left if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
-                    self.search.field = self.search.field.step(true, self.search.replacing);
+                    let back = self.search.field.step(true, self.search.replacing);
+                    self.search.stand_on(back);
                 }
             }
             Key::Char('l') | Key::Right if self.search.field == Field::Results => {
                 self.search.fold(false);
             }
-            Key::Char('l') | Key::Right => self.search.field = self.search.field.step(false, self.search.replacing),
-            Key::Char('h') | Key::Left => self.search.field = self.search.field.step(true, self.search.replacing),
+            Key::Char('h') | Key::Left => {
+                let to = self.search.caret.saturating_sub(1);
+                self.search.move_caret(to);
+            }
+            Key::Char('l') | Key::Right => {
+                let to = self.search.caret + 1;
+                self.search.move_caret(to);
+            }
             Key::Char('j') | Key::Down => match self.search.field {
                 Field::Results => self.search.step(true),
-                _ => self.search.field = self.search.field.step(false, self.search.replacing),
+                _ => {
+                    let next = self.search.field.step(false, self.search.replacing);
+                    self.search.stand_on(next);
+                }
             },
             Key::Char('k') | Key::Up => match self.search.field {
                 // ⚠️ **到頂了就出去**（2026-09-23 報的：「我一旦將光標移動到了下面
@@ -517,10 +517,14 @@ impl Editor {
                 // `step(false)` 在第 0 條上飽和，於是列表是個進得去出不來的地
                 // 方——`Tab` 走得出去，可沒人會想到去按它。
                 Field::Results if self.search.selected == 0 => {
-                    self.search.field = self.search.field.step(true, self.search.replacing);
+                    let back = self.search.field.step(true, self.search.replacing);
+                    self.search.stand_on(back);
                 }
                 Field::Results => self.search.step(false),
-                _ => self.search.field = self.search.field.step(true, self.search.replacing),
+                _ => {
+                    let back = self.search.field.step(true, self.search.replacing);
+                    self.search.stand_on(back);
+                }
             },
             // **The five switches are numbered, top to bottom** (2026-09-24,
             // 原話：「中间五行选项，在normal状态下不是移动上去按空格，而是直接
@@ -571,13 +575,29 @@ impl Editor {
             }
             // **`F5` runs it again**, for a scope that does not run itself.
             Key::Char('F') if !self.search.scope.live() => self.search_now(),
+            // **`/` 回搜索框，整條選中**（2026-09-25 定，原話：「在搜索的normal
+            // mode 加一个 / 快捷键，直接跳到搜索栏并且进入 insert 模式。这样修改
+            // 搜索的内容就很方便」）。和 `空格 /` 開面板時一模一樣：詞在框裏、
+            // 整條選着，打字就是換一個詞，要接着改就先按 ← 或者改用 `i`。
+            //
+            // ⚠️ **它和 `i` 不同的地方是「不管現在站在哪一格」**：站在換框上、
+            // 站在結果上，`/` 都回到搜索框；`i` 只在當前那一格打不了字的時候纔
+            // 挪窩。改搜索詞是這扇面板裏最常做的事，它值一個自己的鍵。
+            Key::Char('/') => {
+                let asking = self.search.query.clone();
+                self.search.ask(asking);
+                self.mode = Mode::Field;
+            }
             // `i` opens a box — this one if the keys are on one, the query
             // otherwise. The key that means 「type here」 everywhere else.
             Key::Char('i') => {
+                // ⚠️ **從光標那裏插，不再跳到末尾**（2026-09-25 定）。`hl` 挪了
+                // 半天光標，一按 `i` 又回末尾，那就是挪了白挪。光標出廠就在末尾，
+                // 所以不挪的人感覺一點沒變。
                 if !self.search.field.takes_text() {
                     self.search.field = Field::Query;
+                    self.search.caret = self.search.typed().chars().count();
                 }
-                self.search.caret = self.search.typed().chars().count();
                 self.mode = Mode::Field;
             }
             Key::Char('g') | Key::Home if self.search.field == Field::Results => {

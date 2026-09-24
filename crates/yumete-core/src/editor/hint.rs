@@ -45,22 +45,17 @@ impl Editor {
         // the keys are in a field, and the one that is not obvious is what
         // `Enter` does with them.
         //
-        // ⚠️ **`Enter` is two different keys and the row has to say which**
-        // (2026-09-24). Searching this file, it is 「the next place」 and the
-        // keys stay in the box; searching a folder, it is 「go and look」 and
-        // the keys land in the results.
+        // ⚠️ **`Enter` 兩種範圍下說同一句** (2026-09-25 定)。從前本文件那一種是
+        // 「下一處」、鍵留在框裏，跨檔那一種是「開找」、鍵落到結果上——一個鍵兩個
+        // 意思，這一行只好分開說。現在兩種都是「去看結果」。
         //
         // ⚠️ **This row used to say 「Tab 下一格」 in both states, and `Tab`
         // does not do that in either** (2026-09-24 審出來的). In the box it
         // falls through to nothing; in the panel it walks the slot's views.
         // The next cell is `↓`.
         if self.mode == Mode::Field {
-            let enter = match self.search().scope.live() {
-                true => say!("hint.search.next-hit"),
-                false => say!("hint.search.go-look"),
-            };
             return Hint::Keys(say!("label.panel.search"), vec![
-                    ("Enter", enter),
+                    ("Enter", say!("hint.search.go-look")),
                     ("↑ ↓", say!("hint.search.next-cell")),
                     ("Esc", say!("hint.search.out-of-the-box")),
                 ]);
@@ -80,7 +75,7 @@ impl Editor {
                 && self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search)
             {
                 let mut keys = vec![
-                    ("i", say!("hint.search.type")),
+                    ("/", say!("hint.search.new-word")),
                     // The five switches are pressed by number and walked past
                     // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
                     ("1–5", say!("hint.search.switches")),

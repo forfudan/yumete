@@ -4867,11 +4867,18 @@ zhs = "全部换掉"
 en = "change them all"
 
 [[message]]
-# 提示：搜索面板——跨檔那一種，Enter 是「開找」，找完鍵落在結果上
+# 提示：搜索面板——Enter 去看結果（兩種範圍同一句，2026-09-25 統一）
 key = "hint.search.go-look"
-zht = "開找"
-zhs = "开找"
-en = "search"
+zht = "看結果"
+zhs = "看结果"
+en = "results"
+
+[[message]]
+# 提示：搜索面板——`/` 回搜索框換一個詞（整條選中）
+key = "hint.search.new-word"
+zht = "換個詞"
+zhs = "换个词"
+en = "new word"
 
 [[message]]
 # 提示：搜索面板——下一格
@@ -4879,13 +4886,6 @@ key = "hint.search.next-cell"
 zht = "下一格"
 zhs = "下一格"
 en = "next cell"
-
-[[message]]
-# 提示：搜索面板——下一處（鍵留在框裏）
-key = "hint.search.next-hit"
-zht = "下一處"
-zhs = "下一处"
-en = "next hit"
 
 [[message]]
 # 提示：搜索面板——出框
@@ -4907,13 +4907,6 @@ key = "hint.search.switches"
 zht = "開關"
 zhs = "开关"
 en = "switches"
-
-[[message]]
-# 提示：搜索面板——進框打字
-key = "hint.search.type"
-zht = "打要找的字"
-zhs = "打要找的字"
-en = "type"
 
 [[message]]
 # 提示：搜索面板——這一格做什麼
@@ -5682,8 +5675,8 @@ en = "the outline"
 [[message]]
 # 標籤：搜索面板
 key = "label.panel.search"
-zht = "尋找"
-zhs = "寻找"
+zht = "高級搜索"
+zhs = "高级搜索"
 en = "search"
 
 [[message]]
@@ -7087,6 +7080,27 @@ key = "search.in-context"
 zht = "{0} · "
 zhs = "{0} · "
 en = "{0} · "
+
+[[message]]
+# 搜索面板：查詢框的名字
+key = "search.label.query"
+zht = "搜: "
+zhs = "搜: "
+en = "Se: "
+
+[[message]]
+# 搜索面板：替換框的名字
+key = "search.label.replace"
+zht = "換: "
+zhs = "换: "
+en = "Re: "
+
+[[message]]
+# 搜索面板：「哪裏找」那一格的名字，畫在標題後面
+key = "search.label.scope"
+zht = "位置: "
+zhs = "位置: "
+en = "in: "
 
 [[message]]
 # 搜索：那一處已經不在那裏了（檔案後來被改過）
