@@ -129,14 +129,42 @@ impl Field {
         Field::Results,
     ];
 
+    /// **The five switches, top to bottom as they are drawn** — #419.
+    ///
+    /// They are pressed by number (`1`–`5`) and the cursor never stops on
+    /// them, so this order is the whole of what the numbers mean. It is the
+    /// screen's order, so a reader counts rows rather than learning a list.
+    ///
+    /// ⚠️ **All five are always drawn**, 模糊 included — it goes quiet while
+    /// 替換 is ticked rather than disappearing, so the numbers below it do not
+    /// shift under the reader's eye.
+    pub const SWITCHES: [Field; 5] = [
+        Field::Case,
+        Field::Regex,
+        Field::Whole,
+        Field::Fuzzy,
+        Field::Replacing,
+    ];
+
+    /// A tick or a state rather than something to type in or a list to walk.
+    pub fn is_switch(self) -> bool {
+        Field::SWITCHES.contains(&self)
+    }
+
     /// Whether this cell is typed into (so `i` and the IME belong here).
     pub fn takes_text(self) -> bool {
         matches!(self, Field::Scope | Field::Query | Field::Replace)
     }
 
-    /// The next cell in that direction, wrapping — skipping the replace row
-    /// while the panel is only looking, and the 模糊 switch while it is
-    /// replacing.
+    /// The next cell in that direction, wrapping — **the boxes and the list,
+    /// never a switch**, and the replace box only while the panel is replacing.
+    ///
+    /// ⚠️ **The five switches are walked past, not walked into** (2026-09-24,
+    /// 原話：「中间五行选项，在normal状态下不是移动上去按空格，而是直接通过一个
+    /// 字母来选择……这样的话，我们就可以通过 jk 在结果和搜索框之間移動（跳过五行
+    /// 设置），避免用户要从他们上面经过浪费 jk」). They are pressed by number;
+    /// what the cursor walks is 範圍 → 找什麼 →（換成什麼）→ 結果, which is the
+    /// path anybody actually takes through this form.
     ///
     /// ⚠️ **模糊 and replacing never show together** (2026-09-20). A loose
     /// match covers characters nobody typed, so 「replace them all」 would hand
@@ -147,9 +175,7 @@ impl Field {
             .into_iter()
             .filter(|f| match f {
                 Field::Replace => replacing,
-                // ⚠️ **跳過，但那一行照畫**（2026-09-23 定：「自動關掉畫灰」）。
-                // 從前它整行不畫，於是勾一下替換，底下的行全往上跳一格。
-                Field::Fuzzy => !replacing,
+                f if f.is_switch() => false,
                 _ => true,
             })
             .collect();
@@ -199,7 +225,18 @@ pub struct Hit {
 pub const MOST: usize = 500;
 
 /// How many characters of context an excerpt carries on each side.
-pub const AROUND: usize = 12;
+///
+/// **Cut for the command row, not for the panel column.** The column is
+/// thirty-odd cells wide and clips whatever will not fit; the row under the
+/// text is the width of the window, and it is the row a reader is actually
+/// reading while `j k` walks the hits. Sixty each way fills a 250-column
+/// terminal, which is wider than anybody's.
+///
+/// ⚠️ **A hit in another file has nothing else to offer.** The buffer is not
+/// open, so this excerpt — taken when the search ran — is the only context
+/// that row will ever have. Hence the number is set by the row, and the
+/// column is left to clip.
+pub const AROUND: usize = 60;
 
 /// A row of the results, as drawn — Feature #419.
 ///

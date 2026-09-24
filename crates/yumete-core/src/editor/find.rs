@@ -7,12 +7,6 @@ use super::*;
 use crate::search_panel::{Case, Field, Hit, Where, AROUND, MOST};
 use std::path::{Path, PathBuf};
 
-/// How much of the line the command row shows around the highlighted hit.
-///
-/// The panel is a column; this row is the window. Thirty-odd characters each
-/// way is a sentence, which is what tells one 「霜」 from another.
-const WIDE_AROUND: usize = 36;
-
 impl Editor {
     /// The search panel, for the front end to draw.
     pub fn search(&self) -> &crate::search_panel::Search {
@@ -394,8 +388,33 @@ impl Editor {
                 // **Across files, `Enter` is 「go and look」**; in this one it
                 // is 「the next place」, because the looking already happened
                 // as you typed.
+                //
+                // ⚠️ **And 「go and look」 hands the keys back** (2026-09-24,
+                // 原話：「输入结束按Enter后显示搜索结果的时候，是不是可以直接进入
+                // normal 模式？这样不需要额外esc一下」，落點是結果列表). The
+                // two are one act: a search across a book is run once and then
+                // read, so the box has no more to say. 「The next place」 is
+                // the other kind — pressed over and over — and keeps them.
                 if !self.search.scope.live() {
-                    return self.search_now();
+                    self.search_now();
+                    // Nothing found: stay in the box. The next thing anybody
+                    // does is change the pattern, and an empty list is not a
+                    // place to stand.
+                    if !self.search.hits.is_empty() {
+                        self.mode = Mode::Normal;
+                        self.search.field = Field::Results;
+                        // **On the first hit, not on the first row.** Across
+                        // files row 0 is a file's name, and the command row
+                        // has nothing to say about a file — landing there
+                        // would look like the panel had not answered.
+                        self.search.selected = self
+                            .search
+                            .rows()
+                            .iter()
+                            .position(|r| matches!(r, crate::search_panel::Row::Hit(_)))
+                            .unwrap_or(0);
+                    }
+                    return;
                 }
                 self.repeat_search(true);
                 self.search_again();
@@ -503,23 +522,29 @@ impl Editor {
                 Field::Results => self.search.step(false),
                 _ => self.search.field = self.search.field.step(true, self.search.replacing),
             },
-            // **On a switch, 空格 flips it** — a switch is the one control
-            // where a reader tries the space bar. Anywhere else in the form
-            // 空格 is still the menu key it is everywhere else.
-            Key::Char(' ')
-                if matches!(
-                    self.search.field,
-                    Field::Regex | Field::Case | Field::Whole | Field::Fuzzy
-                ) =>
-            {
-                self.flip_switch()
+            // **The five switches are numbered, top to bottom** (2026-09-24,
+            // 原話：「中间五行选项，在normal状态下不是移动上去按空格，而是直接
+            // 通过一个字母来选择（在这一行后面显示这个字母快捷键）」). The
+            // number is drawn at the end of its row, so the panel says what to
+            // press rather than asking anybody to remember it.
+            //
+            // ⚠️ **模糊 while 替換 is ticked does nothing**, as it did before:
+            // the row is drawn quiet, and a quiet row that still flipped would
+            // be saying two things at once. `flip_switch` guards it.
+            Key::Char(ch) if ch.is_ascii_digit() && ch != '0' => {
+                let nth = ch as usize - '1' as usize;
+                if let Some(&which) = Field::SWITCHES.get(nth) {
+                    if !(self.search.replacing && which == Field::Fuzzy) {
+                        self.flip_switch(which);
+                    }
+                }
             }
-            Key::Char(' ') if self.search.field == Field::Replacing => self.flip_replacing(),
             Key::Enter => match self.search.field {
                 Field::Scope | Field::Query | Field::Replace => self.mode = Mode::Field,
-                Field::Regex | Field::Case | Field::Whole | Field::Fuzzy => self.flip_switch(),
-                Field::Replacing => self.flip_replacing(),
                 Field::Results => self.go_to_hit(),
+                // 走不到的格子——開關只認 `1`–`5`。
+                other if other.is_switch() => self.flip_switch(other),
+                _ => {}
             },
             // **`r` and `R` change things**, and only while the replace row
             // is showing — `:search` is for looking, `:replace` for changing,
@@ -576,7 +601,13 @@ impl Editor {
     /// whatever has them, and a panel nobody is standing in has no claim on it.
     #[cfg(test)]
     pub(crate) fn hit_in_context_for_test(&self) -> Option<String> {
-        self.hit_in_context()
+        self.hit_in_context().map(|(line, text, _)| format!("{line} {text}"))
+    }
+
+    /// 測試要看反白落在哪幾個字上。
+    #[cfg(test)]
+    pub(crate) fn hit_mark_for_test(&self) -> Option<(String, std::ops::Range<usize>)> {
+        self.hit_in_context().map(|(_, text, mark)| (text, mark))
     }
 
     /// 測試要擺一條命中進去——`search` 本身不是公開的。
@@ -585,7 +616,15 @@ impl Editor {
         &mut self.search
     }
 
-    pub(super) fn hit_in_context(&self) -> Option<String> {
+    /// The highlighted hit, its line number, and where the match sits in it.
+    ///
+    /// **The text comes back untrimmed and the row does the fitting.** How
+    /// much of it fits is a question about the window, and the window is the
+    /// front end's to know; what the editor knows is which characters are
+    /// around the match and which ones *are* the match. The range counts
+    /// characters into the text handed back, so the row can pick the word out
+    /// however it likes.
+    pub(super) fn hit_in_context(&self) -> Option<(usize, String, std::ops::Range<usize>)> {
         if self.search.field != Field::Results || self.search.broken {
             return None;
         }
@@ -609,7 +648,7 @@ impl Editor {
         if hit.file.is_some() || hit.line >= rope.len_lines() {
             // 別的檔（或者已經對不上了）：搜索當時抓下來的那一小段就是答案，
             // 而它本來就是為了「一欄放得下」裁過的。
-            return Some(say!("search.in-context", hit.line + 1, hit.excerpt.clone()));
+            return Some((hit.line + 1, hit.excerpt.clone(), hit.mark.clone()));
         }
         // As many characters as a window is wide, centred on the match — far
         // more than the column can hold, which is the whole point.
@@ -632,24 +671,34 @@ impl Editor {
         // 存的，而一個「差不多對」的摘要比一個錯的摘要還難發現。
         let head = rope.line_to_char(hit.line);
         let Some(at) = hit.at.checked_sub(head).filter(|at| *at <= chars.len()) else {
-            return Some(say!("search.in-context", hit.line + 1, hit.excerpt.clone()));
+            return Some((hit.line + 1, hit.excerpt.clone(), hit.mark.clone()));
         };
-        let from = at.saturating_sub(WIDE_AROUND);
-        let to = (at + WIDE_AROUND).min(chars.len());
+        let from = at.saturating_sub(AROUND);
+        let to = (at + AROUND).min(chars.len());
         let mut text = String::new();
         if from > 0 {
             text.push('…');
         }
+        // 前面那個省略號也佔一個字，反白從它之後數起。
+        let lead = text.chars().count();
         text.extend(&chars[from..to]);
         if to < chars.len() {
             text.push('…');
         }
-        Some(say!("search.in-context", hit.line + 1, text))
+        // ⚠️ **命中本身可能比摘出來的這一段還長**（一條 `.*` 規則能匹配整行），
+        // 所以尾巴要夾在摘出來的這一段裏，不能照 `hit.end` 直接算。
+        let long = (hit.end - hit.at).min(to - at.min(to));
+        let mark = lead + (at - from)..lead + (at - from) + long;
+        Some((hit.line + 1, text, mark))
     }
 
-    /// Flip whichever switch the keys are on, and search again.
-    fn flip_switch(&mut self) {
-        match self.search.field {
+    /// Flip one of the five switches, and search again.
+    ///
+    /// **Which one is an argument**, not 「wherever the keys are」: since
+    /// 2026-09-24 the cursor does not stop on a switch at all — `1`–`5` press
+    /// them and `j k` walk past them.
+    fn flip_switch(&mut self, which: Field) {
+        match which {
             // ⚠️ **正則／完整匹配 and 模糊 are alternatives, so asking for one
             // puts the other down** rather than leaving a tick that does
             // nothing. They are drawn quiet while 模糊 is on, and a dimmed
@@ -664,6 +713,7 @@ impl Editor {
                 self.search.fuzzy &= !self.search.whole;
             }
             Field::Fuzzy => self.search.fuzzy = !self.search.fuzzy,
+            Field::Replacing => return self.flip_replacing(),
             _ => return,
         }
         self.run_search();
