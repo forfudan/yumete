@@ -11927,6 +11927,43 @@ fn search_moves_the_cursor_to_the_match_and_wraps() {
     assert_eq!(ed.current_buffer().text(), " two one");
 }
 
+/// **`N` 往回走，而不是把自己又找一遍**（2026-09-24 報的：「N 向上搜索這個快捷鍵
+/// 無效」）。
+///
+/// ⚠️ **匹配只有一個字的時候它一直是好的，所以這個洞躲了很久。** 一次搜索落地之後
+/// 光標停在匹配的**最後一個字**上（開頭在 `anchor`），而 `search_backward` 找的是
+/// 「開頭在這之前的最後一處」——匹配兩個字以上，當前這一處的開頭就在光標之前，於是
+/// 它找回了自己，光標紋絲不動。中文搜的多半是兩個字以上。
+///
+/// ⚠️ **`n_and_shift_n_cost_the_same` 看不見它**：原地不動也是一樣快。
+#[test]
+fn shift_n_walks_back_even_when_the_match_is_more_than_one_character() {
+    let mut ed = typed("朱宇浩。甲乙丙。朱宇浩。丁戊己。朱宇浩。");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('/'));
+    for c in "朱宇浩".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.selection(), (8, 11), "往下找到第二處");
+    ed.on_key(Key::Char('N'));
+    assert_eq!(ed.selection(), (0, 3), "N 回到第一處");
+    ed.on_key(Key::Char('N'));
+    assert_eq!(ed.selection(), (16, 19), "再一下繞到最後一處");
+
+    // 單個字那一種從前就是對的——別為了修上面那條把它改壞。
+    let mut ed = typed("甲。乙。甲。丙。甲。");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Char('甲'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.selection(), (4, 5));
+    ed.on_key(Key::Char('N'));
+    assert_eq!(ed.selection(), (0, 1));
+}
+
 /// `N` walks backwards, and lands where the full sweep used to (#319).
 ///
 /// The old answer is the oracle: it was correct, and only correct — one
