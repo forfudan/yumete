@@ -115,10 +115,18 @@ impl Editor {
         // this search is concerned.
         let within = self.search_rows();
         let scoped = within != (0..rope.len_lines());
+        // ⚠️ **往回找要從這一處的開頭數起，不是從光標數起**（2026-09-24 報的：
+        // 「N 向上搜索這個快捷鍵無效」）。一次搜索落地之後光標停在匹配的**最後
+        // 一個字**上，開頭在 `anchor`；而 `search_backward` 找的是「開頭在
+        // `from` 之前的最後一處」，拿光標去問，當前這一處的開頭就在光標之前，
+        // 於是它把自己又找了一遍，光標紋絲不動。
+        //
+        // ⚠️ **匹配只有一個字的時候它是好的**——那時光標就在開頭上。中文搜的多
+        // 半是兩個字以上，英文搜一個字母的多，所以這個洞躲了很久。
         let found = if forward {
             search_forward(rope, &re, (self.cursor + 1).min(len), within)
         } else {
-            search_backward(rope, &re, self.cursor, within)
+            search_backward(rope, &re, self.anchor.min(self.cursor), within)
         };
 
         match found {
