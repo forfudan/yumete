@@ -13,7 +13,7 @@ resolver = "2"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/forfudan/yumete"
-version = "0.2.0"
+version = "0.3.0"
 
 [profile.release]
 codegen-units = 1
