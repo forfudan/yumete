@@ -356,55 +356,17 @@ impl Editor {
     /// One key while a field of the search panel has them (`Mode::Field`).
     pub(super) fn on_field_key(&mut self, key: Key) {
         match key {
-            // **`Enter` is 「next」, and the keys stay in the box** (#419).
-            // Changing the pattern is the commonest thing anybody does in a
-            // search, and handing the keys away would mean coming back for
-            // every letter. 「Previous」 has no key here: `Esc` out and `N`.
-            Key::Enter if self.search.field == Field::Scope => {
-                // **範圍是「按了纔算」**：打一半的路徑每敲一個字母就去掃一遍盤，
-                // 是這個面板從一開始就躲開的事（`Where::live`）。落地之後把鍵交
-                // 回面板——沒有人改完範圍還想接着改範圍。
-                self.search.all_selected = false;
-                self.mode = Mode::Normal;
-                self.take_scope();
-            }
-            // **`Enter` 開找，然後把鍵交到結果上——兩種範圍一個樣**（2026-09-25
-            // 定，原話：「搜索本文件和文件夹的时候的行为不一致，需要統一……请改成
-            // 搜索文件夹那样，enter跳到第一个匹配，jk移动。否则你这就是无端设置
-            // 特例了」）。
+            // **`Enter` 只做一件事：跑一遍搜索**（2026-09-25 定，原話：「按下
+            // Enter「只」触发搜索。他不更改光标位置，不更改状态……这样的好处是在
+            // 搜的到/搜不到东西的时候，enter的行为都是一样的」）。
             //
-            // ⚠️ **從前本文件那一種是「下一處」，鍵留在框裏。** 理由是「本文件邊
-            // 打邊搜，所以 Enter 沒有『去找』可做」——可那隻說明了 Enter 不必**再
-            // 找一遍**，沒說明它為什麼要變成另一個鍵。一個鍵在兩種範圍下做兩件
-            // 事，是讀者每次都要先想一下自己在哪一種裏面。
-            //
-            // 「下一處」沒有丟：鍵落在結果上之後 `j`／`k` 就是走下一處、上一處，
-            // 而那比 Enter 多說了一件事——**它看得見自己要去哪裏**。
+            // ⚠️ **它從前還兼着「把鍵交到第一條結果上」**（同一天早些時候定的），
+            // 而那讓它在找得到和找不到的時候做兩件不同的事——正是這一條想去掉的
+            // 分岔。去結果現在是 `Esc` 然後 `j`，兩個已經學過的鍵。
             Key::Enter => {
                 self.search.all_selected = false;
-                // 邊打邊搜的那一種，名單已經是新的；另一種到這一下纔去跑。
-                if !self.search.scope.live() {
-                    self.search_now();
-                }
-                // Nothing found: stay in the box. The next thing anybody does
-                // is change the pattern, and an empty list is not a place to
-                // stand.
-                if !self.search.hits.is_empty() {
-                    self.mode = Mode::Normal;
-                    self.search.field = Field::Results;
-                    // **On the first hit, not on the first row.** Across
-                    // files row 0 is a file's name, and the command row has
-                    // nothing to say about a file — landing there would look
-                    // like the panel had not answered.
-                    self.search.selected = self
-                        .search
-                        .rows()
-                        .iter()
-                        .position(|r| matches!(r, crate::search_panel::Row::Hit(_)))
-                        .unwrap_or(0);
-                }
-            }
-            Key::Char(ch) => {
+                self.look_again();
+            }            Key::Char(ch) => {
                 self.search.type_char(ch);
                 if self.search.field != Field::Scope {
                     self.run_search();
@@ -442,8 +404,18 @@ impl Editor {
             // where a form's next field is anyway.
             Key::Down => self.leave_field(false),
             Key::Up => self.leave_field(true),
-            // Out of the box, into the panel's own Normal.
-            Key::Esc => self.mode = Mode::Normal,
+            // **`Esc` 出框，打的字留着**（2026-09-25 報的：「按下Esc，输入的东西
+            // 就还原了。这个不是「退回到normal」，而是放弃编辑」）。
+            //
+            // ⚠️ **從前也沒有真的還原**——`scope_text` 一直在，是**畫**的時候只在
+            // 打字態纔顯示它，出框就退回按真實範圍算出來的名字，看着像還原了。
+            // 所以修法是讓它**落地**（作者定：「算，离开格子就落地」），這樣屏幕上
+            // 寫着什麼就是什麼。
+            Key::Esc => {
+                self.search.all_selected = false;
+                self.mode = Mode::Normal;
+                self.land_the_scope();
+            }
             _ => {}
         }
     }
@@ -461,6 +433,8 @@ impl Editor {
     /// press `i` between them would make `Tab` the wrong key for the commonest
     /// thing anybody does in this panel.
     fn leave_field(&mut self, back: bool) {
+        // 離開「位置」那一格，不管走的是哪一條路，都落地。
+        self.land_the_scope();
         self.search.field = self.search.field.step(back, self.search.replacing);
         self.search.all_selected = false;
         match self.search.field.takes_text() {
@@ -575,17 +549,18 @@ impl Editor {
             }
             // **`F5` runs it again**, for a scope that does not run itself.
             Key::Char('F') if !self.search.scope.live() => self.search_now(),
-            // **`/` 回搜索框，整條選中**（2026-09-25 定，原話：「在搜索的normal
-            // mode 加一个 / 快捷键，直接跳到搜索栏并且进入 insert 模式。这样修改
-            // 搜索的内容就很方便」）。和 `空格 /` 開面板時一模一樣：詞在框裏、
-            // 整條選着，打字就是換一個詞，要接着改就先按 ← 或者改用 `i`。
+            // **`/` 回搜索框：進 insert、光標放末尾、框裏的字留着**。
+            //
+            // ⚠️ **和選擇器（`空格 f`／`空格 b`／`:wiki`）那一扇裏的 `/` 一個
+            // 樣**——2026-09-25 作者報的就是這一條：「用户在相似的界面按同样的
+            // 快捷键，他的行为应该是一致的」。它原先是「整條選中」（`ask`），於是
+            // 整格白底、看不見光標，看着既不像插入模式也不像光標在末尾。
             //
             // ⚠️ **它和 `i` 不同的地方是「不管現在站在哪一格」**：站在換框上、
             // 站在結果上，`/` 都回到搜索框；`i` 只在當前那一格打不了字的時候纔
-            // 挪窩。改搜索詞是這扇面板裏最常做的事，它值一個自己的鍵。
+            // 挪窩，而且是**從光標處**插。改搜索詞是這扇面板裏最常做的事。
             Key::Char('/') => {
-                let asking = self.search.query.clone();
-                self.search.ask(asking);
+                self.search.stand_on(Field::Query);
                 self.mode = Mode::Field;
             }
             // `i` opens a box — this one if the keys are on one, the query
@@ -779,12 +754,54 @@ impl Editor {
 
     /// **把那一格裏寫着的路徑變成真的範圍** —— 和 `:search` 的參數完全一致：
     /// 空着是本文件，別的都當路徑（`Where::Named`）。
+    /// **離開「位置」那一格就把它打的那個路徑落地**（2026-09-25 定）。
+    ///
+    /// 不在那一格上就什麼都不做，所以三條出口（`Esc`、`Enter`、`↑`／`↓`）可以
+    /// 一律叫它一次，不必各自先問一句「我是不是站在位置上」。
+    fn land_the_scope(&mut self) {
+        if self.search.field == Field::Scope {
+            self.take_scope();
+        }
+    }
+
+    /// **跑一遍，該walk盤的就walk盤**——`Enter` 的全部作用。
+    ///
+    /// 邊打邊搜的那一種（本文件）名單已經是新的，可還是照跑：`Enter` 在兩種範圍
+    /// 下要做同一件事，而「這一種其實不必跑」是一句只有寫代碼的人纔知道的話。
+    fn look_again(&mut self) {
+        match self.search.field == Field::Scope {
+            // 位置那一格：落地本身就帶一次搜索。
+            true => self.take_scope(),
+            false => match self.search.scope.live() {
+                true => self.run_search(),
+                false => self.search_now(),
+            },
+        }
+    }
+
     fn take_scope(&mut self) {
         let typed = self.search.scope_text.trim().to_string();
-        self.search.scope = match typed.is_empty() {
+        let scope = match typed.is_empty() {
             true => crate::search_panel::Where::Buffer,
-            false => crate::search_panel::Where::Named(typed.into()),
+            false => crate::search_panel::Where::Named(typed.clone().into()),
         };
+        // **屏幕上寫着什麼就是什麼**：說了一個不存在的文件夾，那一格照樣寫着它，
+        // 而狀態欄當場說它不在。
+        //
+        // ⚠️ **不許悄悄退回「只搜這個文件」。** `search_now` 拿不到根就只掃眼前
+        // 這個緩衝區，交出一張**看着像真的**短清單——那是這扇面板從一開始就躲開
+        // 的事（`open_search_in` 開頭那一段說的是同一件）。
+        let nowhere = !matches!(scope, crate::search_panel::Where::Buffer)
+            && self.search_root_of(&scope).is_none();
+        self.search.scope = scope;
+        if nowhere {
+            self.search.hits.clear();
+            self.search.total = 0;
+            self.search.selected = 0;
+            self.search.stale = false;
+            self.status = say!("search.no-such-folder", typed);
+            return;
+        }
         // 換了地方，上一次的答案就不是這個問題的答案了。
         self.search_now();
     }

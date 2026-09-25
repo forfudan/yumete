@@ -499,6 +499,9 @@ pub enum Command {
     /// `:git-diff [提交]` — the same, against what git has (2026-09-25).
     /// `None` is `HEAD`.
     GitDiff(Option<String>),
+    /// `:clipboard` — the 選擇器 over everything that could be pasted, which
+    /// `空格 "` also opens (2026-09-25).
+    PasteMenu,
     /// `:export html|typst [path]`, and `:export!` over a file that is
     /// already there — write the manuscript out for a typesetter.
     Export {
@@ -3931,6 +3934,17 @@ pub const COMMANDS: &[Entry] = &[
                 Some(_) => Some(p.number(0)?),
             }))
         }),
+    },
+    Entry {
+        // **裸的那個開粘貼菜單**（2026-09-25，作者提），和 `:wiki`、`:buffer`
+        // 同形：一個命令自己的意思就是有用的那一個，後面不必再跟一個詞。
+        // `空格 "` 是同一扇。
+        name: "clipboard",
+        aliases: &[],
+        help: "cmd.commands.clipboard",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::PasteMenu)),
     },
     Entry {
         name: "clipboard-yank",

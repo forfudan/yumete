@@ -1169,6 +1169,14 @@ en = "the open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
 
 [[message]]
+# 命令：:clipboard —— 粘貼菜單（空格 " 是同一扇）
+key = "cmd.commands.clipboard"
+zht = "粘貼菜單：剪貼簿和取過的那幾段，挑一個貼（空格 引號 也是）"
+zhs = "粘贴菜单：剪贴板和取过的那几段，挑一个贴（空格 引号 也是）"
+en = "the paste menu: the clipboard and what was yanked, pick one"
+find = "粘貼 粘贴 剪貼簿 剪贴板 寄存器 register clipboard paste yank"
+
+[[message]]
 # : 命令選單裏 convert 那一條
 key = "cmd.commands.convert"
 zht = "簡繁轉換：交給 opencc 跑，:convert 看能走哪幾條路"
@@ -4900,9 +4908,9 @@ en = "change them all"
 [[message]]
 # 提示：搜索面板——Enter 去看結果（兩種範圍同一句，2026-09-25 統一）
 key = "hint.search.go-look"
-zht = "看結果"
-zhs = "看结果"
-en = "results"
+zht = "搜一遍"
+zhs = "搜一遍"
+en = "search"
 
 [[message]]
 # 提示：搜索面板——`/` 回搜索框換一個詞（整條選中）
