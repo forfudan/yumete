@@ -4080,7 +4080,13 @@ fn draw(
     panels.extend(draw_reference_menu(frame, editor, config, area, footer));
     // Where the picker put its caret, so the candidate panel can stand under
     // the query instead of over the page the list is already covering.
-    let picker = draw_picker(frame, editor, config, ime, area);
+    //
+    // ⚠️ **選擇器也不許蓋頁腳**——和候選框那一條是同一個（#387），可 2026-09-24
+    // 審出來的時候只有候選框跟上了。窗口高 14 的時候它的下邊框正壓在狀態行上，
+    // 畫出來是 `-- PIC╰────────╯ Latin`。這一行寫死在頁腳之上，往後改成什麼形狀
+    // 都不會再壓過去。
+    let room = Rect { height: status_area.y.saturating_sub(area.y).max(1), ..area };
+    let picker = draw_picker(frame, editor, config, ime, room);
     let picker_caret = picker.map(|(caret, _)| caret);
     panels.extend(picker.and_then(|(_, list)| list));
     // One panel for every half-pressed sequence, `空格` included — it used to
@@ -6579,7 +6585,11 @@ fn draw_sidebar(
             // Handled above: they fill no rows.
             View::Search | View::Wiki => row.name.clone(),
         };
-        put_text(buf, from + 1, y, to, &line, style);
+        // ⚠️ **裁到頭要有省略號**（2026-09-24 審出來的）。`put_text` 到 `to` 就
+        // 停，於是一個長標題是**悄悄**斷在那裏——而「斷了」和「本來就這麼長」是
+        // 兩件事，讀者得看得出是哪一件。搜索結果那邊早就是這麼畫的（`elide`）。
+        let room = to.saturating_sub(from + 1) as usize;
+        put_text(buf, from + 1, y, to, &elide(&line, room), style);
     }
     // Only the search panel has a caret to report.
     None
