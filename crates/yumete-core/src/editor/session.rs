@@ -571,23 +571,58 @@ impl Editor {
                 return;
             }
         };
+        let against = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string());
+        self.show_word_diff(&old, &against);
+    }
+
+    /// `:git-diff [提交]` — **這一份跟 git 裏那一份，逐詞**（2026-09-25）。
+    ///
+    /// 原話：「除了 :diff，也需要一個命令來直觀顯示 git diff。」和 `:diff` 是同
+    /// 一支比較、同一種報告，只換了「跟誰比」：磁碟上那一份 → `git show
+    /// <提交>:<檔>`。不帶參數就是 `HEAD`。
+    ///
+    /// **比的是編輯器裏這一份，含還沒存的**（作者定）：問的是「我這次坐下來改了
+    /// 什麼」，而手上還熱的那幾筆也是這次改的。所以它和 `git diff` 命令行給的
+    /// 結果不一定逐字相同——那是有意的。
+    ///
+    /// ⚠️ **粒度是詞，不是行。** 一個中文段落就是一行，行級 diff 把整段塗紅再塗
+    /// 綠，說的是真話卻沒有用（`crate::diff` 開頭那一段）。
+    pub(super) fn git_diff_against(&mut self, commit: Option<&str>) {
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            self.status = say!("diff.no-file");
+            return;
+        };
+        let commit = commit.map(str::trim).filter(|c| !c.is_empty()).unwrap_or("HEAD");
+        let old = match crate::vcs::Changes::text_at(&path, commit) {
+            Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
+            // git 自己那一句話就是答案：「不在倉裏」和「這個檔還沒提交過」是兩件
+            // 事，而編一句概括它們的話會把兩件都說不準。
+            Err(why) => {
+                self.status = say!("diff.git-said", commit, why);
+                return;
+            }
+        };
+        self.show_word_diff(&old, commit);
+    }
+
+    /// 兩份正文，逐詞比出來，畫成那一份報告。`against` 是「跟誰比」的名字。
+    fn show_word_diff(&mut self, old: &str, against: &str) {
         let new = self.current_buffer().rope().to_string();
         // The editor's segmenter, handed one line at a time — which is how its
         // own cache is keyed, so most of these lines are already answered.
         let segment = |line: &str| self.segmenter.segment(line);
         let (a, b) = (
-            crate::diff::tokens(&old, &segment),
+            crate::diff::tokens(old, &segment),
             crate::diff::tokens(&new, &segment),
         );
         let Some(ops) = crate::diff::script(&a, &b) else {
-            self.status = say!("diff.too-far", path.display());
+            self.status = say!("diff.too-far", against);
             return;
         };
         let changes = crate::diff::line_changes(&ops);
-        let against = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.display().to_string());
         if changes.is_empty() {
             self.status = say!("diff.same", against);
             return;

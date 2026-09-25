@@ -1217,6 +1217,14 @@ en = "format this file the way the config says ([language.markdown] format = …
 find = "格式化 排版 整理 formatter prettier"
 
 [[message]]
+# 命令：:git-diff —— 跟 git 裏那一份比，逐詞
+key = "cmd.commands.git-diff"
+zht = "跟 git 裏那一份比，逐詞：不寫提交就是 HEAD"
+zhs = "跟 git 里那一份比，逐词：不写提交就是 HEAD"
+en = "against what git has, word by word: HEAD unless a commit is named"
+find = "git diff 差異 差异 提交 改動 改动 版本"
+
+[[message]]
 # : 命令選單裏 goto 那一項的說明（commands 組）
 key = "cmd.commands.goto"
 zht = "跳到某一行（`:42` 就夠了）"
@@ -3435,6 +3443,13 @@ key = "diff.changed"
 zht = "{0} 行和《{1}》不一樣——gf 跳過去"
 zhs = "{0} 行和《{1}》不一样——gf 跳过去"
 en = "{0} line(s) differ from 《{1}》 — gf goes there"
+
+[[message]]
+# :git-diff 問不出答案：git 自己那一句話照搬
+key = "diff.git-said"
+zht = "git 那邊沒有 {0} 的這一份：{1}"
+zhs = "git 那边没有 {0} 的这一份：{1}"
+en = "git has no copy at {0}: {1}"
 
 [[message]]
 # :diff 結果裏的一行：行號加上標了改動的那一行
