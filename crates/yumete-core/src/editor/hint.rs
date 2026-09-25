@@ -81,6 +81,11 @@ impl Editor {
                     ("1–5", say!("hint.search.switches")),
                     ("Enter", say!("hint.search.use-it")),
                 ];
+                // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
+                // 都不管用，而這一行擠不下說了也用不上的東西。
+                if self.search().field.takes_text() {
+                    keys.insert(1, ("d c a", say!("hint.search.edit-in-place")));
+                }
                 // Only when they do something: `r`/`R` are live on the
                 // replacing panel and nowhere else.
                 if self.search().replacing {

@@ -8789,6 +8789,77 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     );
 }
 
+/// **框裏的 Normal 也編輯得了**（2026-09-25 報的：「normal模式的时候没办法用一些
+/// 按键，比如 d 删除光标选区……用户必须移到最后，i进入insertmode，然后从后向前
+/// 删除」）。
+///
+/// 鍵全是正文裏同名同義的那幾個，一個都沒新發明。⚠️ **`gh`／`gl` 和 `w b e` 沒有
+/// 搬進來**：它們是為一長行散文準備的，而這是個兩三個字的框；`A`／`I` 本來就把
+/// 行首行尾這兩個去處帶上了。
+#[test]
+fn the_box_deletes_and_changes_where_the_cursor_stands() {
+    use crate::search_panel::Field;
+    let mut ed = typed("那年冬天很冷。");
+    ed.open_search();
+    for c in "冬天很冷".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+
+    // `hhh` 退到「天」上，`d` 刪它——正文裏 `d` 刪選區，框裏光標壓着誰就是誰。
+    for _ in 0..3 {
+        ed.on_key(Key::Char('h'));
+    }
+    assert_eq!(ed.search().caret, 1);
+    ed.on_key(Key::Char('d'));
+    assert_eq!(ed.search().query, "冬很冷");
+    // ⚠️ **刪完照樣邊改邊搜**：本文件那一種不必按 Enter。
+    assert_eq!(ed.search().total, 0, "「冬很冷」不在正文裏");
+
+    // `c` ＝ **刪了再插**，不是「不刪只插」：光標壓着「很」，它先沒。
+    ed.on_key(Key::Char('c'));
+    assert_eq!(ed.mode(), Mode::Field);
+    ed.on_key(Key::Char('天'));
+    assert_eq!(ed.search().query, "冬天冷");
+    assert_eq!(ed.search().caret, 2);
+
+    // `D` 刪到行尾；光標停在哪就從哪開始。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('D'));
+    assert_eq!(ed.search().query, "冬天");
+
+    // 三個入口：`a` 光標後、`I` 行首、`A` 行尾。
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Char('a'));
+    assert_eq!(ed.mode(), Mode::Field);
+    ed.on_key(Key::Char('冷'));
+    assert_eq!(ed.search().query, "冬天冷", "插在光標**後面**");
+    // ⚠️ 光標停在末尾的時候 `D` 無事可刪——那裏沒有東西。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('D'));
+    assert_eq!(ed.search().query, "冬天冷", "末尾按 D 什麼都不動");
+    ed.on_key(Key::Char('I'));
+    ed.on_key(Key::Char('下'));
+    assert_eq!(ed.search().query, "下冬天冷");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Char('了'));
+    assert_eq!(ed.search().query, "下冬天冷了");
+
+    // ⚠️ **站在結果上，這幾個鍵一個都不許動框。**
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Results);
+    let was = ed.search().query.clone();
+    for k in ['d', 'D', 'c', 'C', 'a', 'I', 'A'] {
+        ed.on_key(Key::Char(k));
+    }
+    assert_eq!(ed.search().query, was, "結果那一格上它們什麼都不是");
+}
+
 /// **模糊: 「差不多是這幾個字」** — 2026-09-19: 「寫小説的人記得差不多是
 /// 這幾個字卻記不得原句」. The panel's other setting is a regular expression,
 /// which answers a different question (a *shape*); this one is a fourth

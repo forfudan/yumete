@@ -572,6 +572,50 @@ impl Editor {
             }
             // `i` opens a box — this one if the keys are on one, the query
             // otherwise. The key that means 「type here」 everywhere else.
+            // **框裏的 Normal 也編輯得了**（2026-09-25 報的：「normal模式的时候没
+            // 办法用一些按键，比如 d 删除光标选区……用户必须移到最后，i进入
+            // insertmode，然后从后向前删除」）。
+            //
+            // ⚠️ **鍵全是正文裏同名同義的那幾個，一個都沒新發明**：`d` 在正文裏
+            // 刪選區，框裏光標壓着一個字，那就是那一個；`c` 刪了進插入；
+            // `a`／`I`／`A` 是正文的三個入口。
+            //
+            // ⚠️ **`gh`／`gl` 和 `w b e` 沒有搬進來**——它們是為一長行散文準備的，
+            // 而這是個兩三個字的框；`A`／`I` 本來就把行首行尾這兩個去處帶上了。
+            // 再說 `g` 在結果那一格已經是「到第一條」，在框裏當引導鍵要多引一套
+            // 待決狀態。
+            Key::Char('d') if self.search.field.takes_text() => {
+                self.search.delete_here();
+                self.after_editing_the_box();
+            }
+            Key::Char('D') if self.search.field.takes_text() => {
+                self.search.delete_to_end();
+                self.after_editing_the_box();
+            }
+            Key::Char('c') if self.search.field.takes_text() => {
+                self.search.delete_here();
+                self.after_editing_the_box();
+                self.mode = Mode::Field;
+            }
+            Key::Char('C') if self.search.field.takes_text() => {
+                self.search.delete_to_end();
+                self.after_editing_the_box();
+                self.mode = Mode::Field;
+            }
+            Key::Char('a') if self.search.field.takes_text() => {
+                let to = self.search.caret + 1;
+                self.search.move_caret(to);
+                self.mode = Mode::Field;
+            }
+            Key::Char('I') if self.search.field.takes_text() => {
+                self.search.move_caret(0);
+                self.mode = Mode::Field;
+            }
+            Key::Char('A') if self.search.field.takes_text() => {
+                let end = self.search.typed().chars().count();
+                self.search.move_caret(end);
+                self.mode = Mode::Field;
+            }
             Key::Char('i') => {
                 // ⚠️ **從光標那裏插，不再跳到末尾**（2026-09-25 定）。`hl` 挪了
                 // 半天光標，一按 `i` 又回末尾，那就是挪了白挪。光標出廠就在末尾，
@@ -761,6 +805,16 @@ impl Editor {
 
     /// **把那一格裏寫着的路徑變成真的範圍** —— 和 `:search` 的參數完全一致：
     /// 空着是本文件，別的都當路徑（`Where::Named`）。
+    /// **框裏改完一個字之後**：邊打邊搜的那一格照樣邊改邊搜。
+    ///
+    /// 和 `on_field_key` 裏打字那一支同一條規矩——「位置」那一格是按了纔算，別的
+    /// 兩格改一個字就重找一遍。
+    fn after_editing_the_box(&mut self) {
+        if self.search.field != Field::Scope {
+            self.run_search();
+        }
+    }
+
     /// **離開「位置」那一格就把它打的那個路徑落地**（2026-09-25 定）。
     ///
     /// 不在那一格上就什麼都不做，所以三條出口（`Esc`、`Enter`、`↑`／`↓`）可以

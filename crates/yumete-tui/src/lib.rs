@@ -6938,9 +6938,7 @@ fn draw_search(
         };
         put_text(buf, scope_box, area.y, title_to, &filled, style);
         if naming && keys_here && !find.all_selected {
-            scope_caret = box_in(
-                buf, scope_box, area.y, title_to, &shown, find.caret, typing, ink, sunk,
-            );
+            scope_caret = box_in(buf, scope_box, area.y, title_to, &shown, find.caret, typing, ink);
         }
     }
     if !tally.is_empty() {
@@ -6988,7 +6986,7 @@ fn draw_search(
         let filled = format!("{shown}{}", " ".repeat(room.saturating_sub(used)));
         put_text(buf, box_at, y, to, &filled, style);
         if here && !find.all_selected {
-            caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink, sunk);
+            caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink);
         }
     };
     draw_box(buf, Field::Query, &say!("search.label.query"), &find.query, y);
@@ -9454,7 +9452,6 @@ fn box_in(
     caret: usize,
     typing: bool,
     ink: crate::theme::Palette,
-    sunk: Style,
 ) -> Option<Position> {
     // Where that character starts, in cells: everything before it, measured.
     // ⚠️ **Cells, not characters** — 一個漢字佔兩格, and a cursor placed by
@@ -9465,12 +9462,13 @@ fn box_in(
         return None;
     }
     if typing {
-        if let Some(c) = buf.cell_mut((at, y)) {
-            // On the **field's** ground, not the panel's: a caret cell painted
-            // with the head style punched a panel-coloured hole in the box it
-            // is standing in.
-            c.set_symbol("▏").set_style(sunk.fg(ink.gold()));
-        }
+        // ⚠️ **不畫那根豎槓，交給終端自己的光標**（2026-09-25 抓到的）。從前這裏
+        // `set_symbol("▏")`，而那是**蓋掉那一格原來的字**——光標停在末尾時看不出
+        // 來（末尾本來就是空格），可 `I`、`c` 能把它停在字中間，於是「冬雪很冷」
+        // 畫成了「冬雪▏ 冷」，「很」被吃了。
+        //
+        // 下面那一句本來就把硬件光標放在這裏了，而命令行那條路（`:` 提示）也從來
+        // 只放光標、不畫槓。一個位置一種說法就夠。
         return Some(Position { x: at, y });
     }
     // The block: the character as it stands, ink and ground swapped. A 漢字
