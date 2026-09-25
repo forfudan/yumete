@@ -6898,12 +6898,21 @@ fn draw_search(
         let shown = crate::elide(&shown, room);
         let pad = room.saturating_sub(yumete_cjk::str_width(&shown));
         let filled = format!("{shown}{}", " ".repeat(pad));
-        // 和底下兩個框同一套：全選整條反白，打字全黑，鍵在這一格就中間那一檔
-        // 加一個塊光標（2026-09-25）。
+        // **這一格不鋪底色**（2026-09-25 報的：「我觉得这个normal状态下搜索位置的
+        // 灰色可以不要了，因为有 ：告诉用户这里可以搜索」）。
+        //
+        // ⚠️ **底下那兩個框照舊鋪**，而這不是隨手的例外：**「位置」永遠不會是空的**
+        // （不是「本文件」就是一個路徑），而 `搜:`／`換:` 常常是空的——空框沒有字，
+        // **只有底色說得出它在那裏**（#447 原話：「不然还是不知道这里有个可以输入
+        // 的地方」）。這一格既然一直有字，那一格底色就只是在跟標題和右上角那個
+        // 計數搶地方。
+        //
+        // 另外三檔照舊：打字全黑、整條選中反白、鍵在這一格畫一個塊光標——說「這裏
+        // 打得了字」的活兒交給它們，不必底色也說一遍。
         let style = match (naming && keys_here && find.all_selected, naming && typing) {
             (_, true) => sunk,
             (true, _) => on,
-            (false, _) => field,
+            (false, _) => text,
         };
         put_text(buf, scope_box, area.y, title_to, &filled, style);
         if naming && keys_here && !find.all_selected {
