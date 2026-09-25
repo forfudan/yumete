@@ -15181,7 +15181,7 @@ fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
         .collect();
     assert!(words.iter().any(|w| w == "落霞鎮"), "{words:?}");
 
-    ed.execute(":wiki").unwrap();
+    ed.execute(":wiki-where").unwrap();
     let report = ed.current_buffer().text();
     assert!(report.contains("地理.md") && report.contains('1'), "{report}");
 
@@ -15191,6 +15191,66 @@ fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
     ed.execute(":w").unwrap();
     ed.open_file(&dir.join("第一章.md")).unwrap();
     assert!(ed.wiki.by_name.contains_key("雁門關"), "{:?}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`:wiki <詞條名>` 挑一條，挑完釘在眼前，光標一動就鬆開**（2026-09-25）。
+///
+/// 原話：「wiki 命令系列中可以有个专门的命令用来查某个词条……而且可以考虑用
+/// fuzzy，防止用户打错了字或者顺序错了，比如 朱宇浩 打成了 朱浩宇」。
+#[test]
+fn a_named_entry_opens_a_picker_and_stays_put_until_the_cursor_moves() {
+    let dir = std::env::temp_dir().join(format!("yumete-wiki-find-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(
+        dir.join(".yumete/wiki.md"),
+        "# 設定
+
+## 朱宇浩
+宇浩輸入法的作者。
+
+## 天門真境
+極北的一座山。
+",
+    )
+    .unwrap();
+    std::fs::write(dir.join("第一章.md"), "那年冬天很冷。
+").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("第一章.md")).unwrap();
+    // ⚠️ 開檔不讀百科（存一個百科檔纔會重讀），測試裏要自己叫一次。
+    ed.reload_project_words();
+
+    // ① 名字打反了照樣找得到——這一條就是那個請求本身。
+    ed.execute(":wiki 朱浩宇").unwrap();
+    assert_eq!(ed.mode(), Mode::Picker, "彈的是一扇面板：{}", ed.status());
+    let picker = ed.picker().expect("面板開着");
+    assert!(picker.typing(), "鍵落在查詢裏，命令行上打了一半的心境接着走");
+    assert_eq!(
+        picker.chosen().as_ref().map(|i| i.label()),
+        Some("朱宇浩"),
+        "顛倒的名字挑中了那一條"
+    );
+    // 行裏是「詞條名 ＋ 正文開頭」，而那一小段只畫不比。
+    assert_eq!(picker.chosen().as_ref().map(|i| i.blurb().to_string()),
+        Some("宇浩輸入法的作者。".to_string()));
+
+    // ② `Enter` 關面板、釘住那一條。
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.mode(), Mode::Normal, "面板關了，鍵回正文");
+    assert!(ed.picker().is_none());
+    let view = ed.wiki_here().expect("釘住的那一條在眼前");
+    assert_eq!(view.name, "朱宇浩");
+
+    // ③ 光標一動就鬆開——眼前這一行裏一個詞條都沒有，所以什麼都不剩。
+    ed.on_key(Key::Char('l'));
+    assert!(ed.wiki_here().is_none(), "光標走了，釘住的那一條跟着走");
+
+    // ④ 百科裏沒有的名字，明說。
+    ed.execute(":wiki 沒有這一條").unwrap();
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.status(), say!("picker.nothing-matched"), "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -15225,11 +15285,11 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
         "### under ## reads as ## under the entry"
     );
 
-    ed.execute(":wiki panel").unwrap();
+    ed.execute(":wiki-panel").unwrap();
     assert!(ed.wiki_here().is_some());
     assert!(ed.wiki_floating().is_none(), "the sidebar page has it: it does not float too");
 
-    ed.execute(":wiki panel").unwrap();
+    ed.execute(":wiki-panel").unwrap();
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('d'));
@@ -15292,7 +15352,7 @@ fn the_wiki_report_names_what_this_chapter_could_not_mark() {
     assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)], "落霞鎮 is marked");
     assert!(ed.wiki_marks_on_line(1).is_empty(), "A 計劃 is not");
 
-    ed.execute(":wiki").unwrap();
+    ed.execute(":wiki-where").unwrap();
     let report = ed.current_buffer().text();
     assert!(report.contains("A 計劃：第 2 行"), "{report}");
     assert!(!report.contains("落霞鎮"), "a name that marks is not a complaint: {report}");
@@ -15301,12 +15361,12 @@ fn the_wiki_report_names_what_this_chapter_could_not_mark() {
     // read the first report back and complain about the line numbers it had
     // just printed. A listing is not a chapter, so the chapter's own section is
     // simply not in it…
-    ed.execute(":wiki").unwrap();
+    ed.execute(":wiki-where").unwrap();
     let again = ed.current_buffer().text();
     assert!(!again.contains("A 計劃"), "the report read itself back: {again}");
     // …and it is there again the moment there is a chapter to be about.
     ed.open_file(&dir.join("第一章.md")).unwrap();
-    ed.execute(":wiki").unwrap();
+    ed.execute(":wiki-where").unwrap();
     assert_eq!(ed.current_buffer().text(), report);
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -15380,13 +15440,13 @@ fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
     assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)], "落霞鎮, and 墨 is one character");
     assert!(ed.wiki_marks_on_line(2).is_empty(), "a name quoted in a fence is code");
 
-    ed.execute(":wiki hide").unwrap();
+    ed.execute(":wiki-mark off").unwrap();
     assert!(!ed.wiki_marks_visible());
     assert!(ed.wiki_marks_on_line(0).is_empty());
-    ed.execute(":wiki color").unwrap();
+    ed.execute(":wiki-mark color").unwrap();
     assert_eq!(ed.wiki_mark(), crate::wiki::Mark::Color);
     assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)]);
-    ed.execute(":wiki line").unwrap();
+    ed.execute(":wiki-mark line").unwrap();
     assert_eq!(ed.wiki_mark(), crate::wiki::Mark::Line);
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -15395,14 +15455,14 @@ fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
 #[test]
 fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     let mut ed = Editor::new();
-    ed.execute(":wiki panel").unwrap();
+    ed.execute(":wiki-panel").unwrap();
     assert!(ed.panel_focus().is_none(), "the keys stayed in the writing");
     ed.on_key(Key::Ctrl('w'));
     assert!(ed.panel_focus().is_some(), "C-w walks into the panel");
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('s'));
     assert!(ed.panel_focus().is_none(), "空格 s walks back out");
-    ed.execute(":wiki panel").unwrap();
+    ed.execute(":wiki-panel").unwrap();
     assert!(ed.showing(crate::sidebar::View::Wiki).is_none(), "and again puts it away");
 }
 

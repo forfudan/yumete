@@ -2,6 +2,7 @@
 //! is read, what its names do to the segmenter, and `:wiki`.
 
 use super::*;
+use crate::command::WikiCommand;
 use crate::wiki::{Source, Wiki, WIKI_MD};
 use std::collections::BTreeMap;
 
@@ -19,7 +20,7 @@ impl Editor {
 
     /// This book's `.yumete/wiki.md`, found the way `words.txt` is — up from
     /// the file being edited — whether or not it is there yet.
-    fn book_wiki_path(&self) -> PathBuf {
+    pub(super) fn book_wiki_path(&self) -> PathBuf {
         let from = self
             .current_buffer()
             .path()
@@ -67,38 +68,47 @@ impl Editor {
                 && path.parent().is_some_and(|d| d.file_name().is_some_and(|n| n == ".yumete")))
     }
 
-    /// `:wiki`, `:wiki edit`, `:wiki global`, `:wiki reload`.
-    pub(super) fn wiki_command(&mut self, what: Option<&str>) -> Result<CommandOutcome, EditorError> {
+    /// 百科那一族命令 —— **一件一個**（2026-09-25 改，見 [`WikiCommand`]）。
+    pub(super) fn wiki_command(&mut self, what: WikiCommand) -> Result<CommandOutcome, EditorError> {
         match what {
-            Some("edit") => {
+            WikiCommand::Edit => {
                 let path = self.book_wiki_path();
                 self.open_wiki_file(&path)?;
             }
-            // **The keys stay in the writing** (2026-09-17). Every other view
-            // is a list to walk; this page is drawn from where the cursor is,
-            // so putting the keys in it would freeze what it shows.
-            Some("panel") => self.show_wiki_panel(),
-            Some("hide") => {
-                self.wiki_mark = crate::wiki::Mark::Off;
-                self.status = say!("wiki.marks-off");
-            }
-            Some("color") => {
-                self.wiki_mark = crate::wiki::Mark::Color;
-                self.status = say!("wiki.marks-color");
-            }
-            Some("line") => {
-                self.wiki_mark = crate::wiki::Mark::Line;
-                self.status = say!("wiki.marks-line");
-            }
-            Some("global") => match self.global_wiki_path() {
+            WikiCommand::Global => match self.global_wiki_path() {
                 Some(path) => self.open_wiki_file(&path)?,
                 None => self.status = say!("word.no-data-directory"),
             },
-            Some(_) => {
+            // **The keys stay in the writing** (2026-09-17). Every other view
+            // is a list to walk; this page is drawn from where the cursor is,
+            // so putting the keys in it would freeze what it shows.
+            WikiCommand::Panel(want) => self.show_wiki_panel(want),
+            WikiCommand::Mark(how) => match how {
+                Some(mark) => {
+                    self.wiki_mark = mark;
+                    // 逐個寫出來，不走 `match` 回一個 tag：文案網讀的是 `say!`
+                    // 的字面量，從 match 裏回出來的 tag 它一個都看不見。
+                    self.status = match mark {
+                        crate::wiki::Mark::Off => say!("wiki.marks-off"),
+                        crate::wiki::Mark::Color => say!("wiki.marks-color"),
+                        crate::wiki::Mark::Line => say!("wiki.marks-line"),
+                    };
+                }
+                // 不帶參數：說現在是哪一種。三態的東西，「切換」說不清要切到哪。
+                None => {
+                    self.status = match self.wiki_mark {
+                        crate::wiki::Mark::Off => say!("wiki.marks-off"),
+                        crate::wiki::Mark::Color => say!("wiki.marks-color"),
+                        crate::wiki::Mark::Line => say!("wiki.marks-line"),
+                    }
+                }
+            },
+            WikiCommand::Reload => {
                 self.reload_project_words();
                 self.status = say!("wiki.reloaded", self.wiki.entries.len(), self.wiki.files().len());
             }
-            None => self.wiki_report(),
+            WikiCommand::Report => self.wiki_report(),
+            WikiCommand::Find(name) => self.open_wiki_picker(&name),
         }
         Ok(CommandOutcome::Continue)
     }
@@ -197,6 +207,15 @@ pub enum WikiLine<'a> {
     Text(&'a str),
 }
 
+impl WikiLine<'_> {
+    /// What it says, with nothing about how it is drawn.
+    pub fn text(&self) -> &str {
+        match self {
+            WikiLine::Heading(_, text) | WikiLine::Text(text) => text,
+        }
+    }
+}
+
 /// Every entry of the name the cursor is standing on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WikiView<'a> {
@@ -292,13 +311,18 @@ impl WikiView<'_> {
 impl Editor {
     /// `:wiki panel` — put the 百科 page up (or take it down), and leave the
     /// keys where they are.
-    fn show_wiki_panel(&mut self) {
-        match self.showing(crate::sidebar::View::Wiki) {
-            Some(side) => self.close_panel(side),
-            None => {
+    /// `:wiki-panel [on|off]` — `None` 切換，和 `:word-show` 同一套。
+    fn show_wiki_panel(&mut self, want: Option<bool>) {
+        let open = self.showing(crate::sidebar::View::Wiki);
+        let want = want.unwrap_or(open.is_none());
+        match (want, open) {
+            (false, Some(side)) => self.close_panel(side),
+            (true, None) => {
                 self.show_sidebar(crate::sidebar::View::Wiki);
                 self.panel_focus = None;
             }
+            // 已經是要的樣子了：什麼都不做，也不報錯。
+            _ => {}
         }
     }
 
@@ -309,6 +333,14 @@ impl Editor {
     /// one-character entry is never answered here: it could not be marked,
     /// and a panel over every 墨 in a novel would be a panel over the novel.
     pub fn wiki_here(&self) -> Option<WikiView<'_>> {
+        // **釘住的那一條先說話**（2026-09-25）。`:wiki <詞條名>` 挑完一條之後，
+        // 眼前這一條是人**指名要看的**，而光標底下那一個只是碰巧站在那裏——
+        // 指名的那一個大。光標一動它就沒了（`forget_a_pinned_entry`）。
+        if let Some((name, at)) = &self.wiki_pinned {
+            if *at == self.cursor {
+                return self.wiki_view_of(name);
+            }
+        }
         if self.wiki.by_name.is_empty() || self.mode == Mode::Insert {
             return None;
         }
@@ -325,7 +357,17 @@ impl Editor {
             return None;
         }
         let name: String = chars[a..b.min(chars.len())].iter().collect();
-        let found = self.wiki.by_name.get(&name)?;
+        self.wiki_view_of(&name)
+    }
+
+    /// **One name's entries, as a page.** The lookup every way in shares:
+    /// the word under the cursor, and the one somebody named (`:wiki 朱宇浩`).
+    ///
+    /// Several entries can carry one name — this book's and the global one's —
+    /// and they come back as several `parts` of one view, book first.
+    pub(super) fn wiki_view_of(&self, name: &str) -> Option<WikiView<'_>> {
+        let found = self.wiki.by_name.get(name)?;
+        let name = name.to_string();
         let parts = found
             .iter()
             .map(|&i| {
@@ -353,6 +395,28 @@ impl Editor {
             })
             .collect();
         Some(WikiView { name, parts })
+    }
+
+    /// **釘住一條詞條**，直到光標離開這個字。
+    pub(super) fn pin_wiki_entry(&mut self, name: String) {
+        match self.wiki.by_name.contains_key(&name) {
+            true => {
+                self.wiki_pinned = Some((name, self.cursor));
+                // 側欄的百科頁開着就畫在那裏，沒開就浮窗——兩條路都走 `wiki_here`，
+                // 所以這裏什麼都不必選，釘上就是了。
+            }
+            false => self.status = say!("wiki.no-such-entry", name),
+        }
+    }
+
+    /// 光標一走，釘住的那一條當場鬆開——和字典那一份同一條規矩（#293）。
+    ///
+    /// ⚠️ **當場丟掉，不是「留着等光標回來」**：回到同一個字上再把它變出來，
+    /// 是一個沒人按過的按鍵做了一件事。
+    pub(super) fn forget_a_pinned_entry(&mut self) {
+        if self.wiki_pinned.as_ref().is_some_and(|(_, at)| *at != self.cursor) {
+            self.wiki_pinned = None;
+        }
     }
 
     /// The entry for the **floating** panel — only while nothing the writer

@@ -1215,6 +1215,20 @@ impl Editor {
             }
             // A clipboard entry is already the whole of what it is.
             crate::picker::Item::Paste(_, _) => None,
+            // **The entry itself, beside the list of names** (2026-09-25).
+            // The preview a picker already has is exactly the 「選中的條目浮窗
+            // 顯示」 the request asked for — no second mechanism.
+            crate::picker::Item::Wiki(name, _) => {
+                let view = self.wiki_view_of(&name)?;
+                let lines = view
+                    .parts
+                    .iter()
+                    .flat_map(|part| part.lines.iter().map(|l| l.text().to_string()))
+                    .filter(|l| !l.trim().is_empty())
+                    .take(rows)
+                    .collect();
+                Some((view.name.clone(), lines))
+            }
         }
     }
 
@@ -1242,11 +1256,56 @@ impl Editor {
             Some(crate::picker::Item::Paste(Some(which), _)) => self.paste_from_menu(which),
             // The system clipboard is the front end's to read.
             Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
+            // **釘住它**，直到光標一動（2026-09-25）。面板關掉，鍵回正文——
+            // 「直到光標移動」本來就要求鍵已經不在面板裏了。
+            Some(crate::picker::Item::Wiki(name, _)) => self.pin_wiki_entry(name),
             None => self.status = say!("picker.nothing-matched"),
         }
     }
 
+    /// **`:wiki <詞條名>` —— 一扇挑詞條的面板**（2026-09-25）。
+    ///
+    /// 原話：「先彈出類似「找命令」面板一樣的面板，詞條+部分內容（用 ... 省略）
+    /// 然後tab和shift + Tab 上下移動。選中的條目浮窗顯示或者右邊欄顯示（如果右
+    /// 邊欄開着），按下enter 之后固定浮窗和面板直到光標移動。」
+    ///
+    /// 四件事這扇面板本來就有：`Tab`／`S-Tab` 在兩層裏都走、右邊那半是預覽、
+    /// 打字就篩、`Enter` 挑中。要新做的只有「釘住」和**打開時鍵就在查詢裏**——
+    /// 名字是命令行上打的，人還在打字的那個心境裏。
+    pub(super) fn open_wiki_picker(&mut self, name: &str) {
+        if self.wiki.by_name.is_empty() {
+            self.status = say!("wiki.none", self.book_wiki_path().display());
+            return;
+        }
+        // 一個名字一行——同名的幾條（這本書的、全局的）是同一頁的幾節，不是
+        // 幾行（`wiki_view_of`）。`BTreeMap` 進來的時候就是排好的。
+        let items = self
+            .wiki
+            .by_name
+            .iter()
+            .map(|(name, found)| {
+                let blurb = found
+                    .first()
+                    .and_then(|&i| self.wiki.entries.get(i))
+                    .and_then(|e| e.body.iter().find(|l| !l.trim().is_empty()))
+                    .map(|l| blurb_of(l.trim()))
+                    .unwrap_or_default();
+                crate::picker::Item::Wiki(name.clone(), blurb)
+            })
+            .collect();
+        let mut picker = crate::picker::Picker::new(&say!("picker.wiki"), items);
+        // 命令行上打了名字就接着打——鍵落在查詢裏，不是落在單子上。
+        picker.type_here(true);
+        for c in name.chars() {
+            picker.push(c);
+        }
+        self.picker = Some(picker);
+        self.mode = Mode::Picker;
+    }
+
     /// Open a picker over the files of the project (`Space f`).
+    //
+    // (`blurb_of` 在檔尾，和別的自由函數放在一起。)
     ///
     /// **Two orders, one list** (2026-09-18). What is gathered is
     /// 「写的东西在前面」: the prose — `.md`, `.txt`, `.typ` and the rest of
@@ -1588,4 +1647,17 @@ fn head_of_file(path: &Path, rows: usize) -> Option<Vec<String>> {
         }
     }
     Some(out)
+}
+
+/// **一條詞條說的頭一句，裁到一行放得下**——挑詞條那扇面板每一行的後半截。
+///
+/// 原話：「詞條+部分內容（用 ... 省略）」。裁的是**字**不是字節，而且只在這裏
+/// 裁一次：名字有多長、窗口有多寬是前端的事，這裏給的是「一句話的量」。
+fn blurb_of(line: &str) -> String {
+    const BLURB: usize = 40;
+    let mut out: String = line.chars().take(BLURB).collect();
+    if line.chars().count() > BLURB {
+        out.push('…');
+    }
+    out
 }
