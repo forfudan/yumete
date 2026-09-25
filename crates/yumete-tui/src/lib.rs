@@ -7106,6 +7106,16 @@ fn draw_search(
         return caret;
     }
     let rows = find.rows();
+    // **行號那一欄，按真的用得上的寬度**（2026-09-25 報的：「这里空白幾格太浪费
+    // 了」）。從前寫死五格，於是一份三百行的稿子也讓出五格來擺一個「7」。
+    // ⚠️ **一次量遍整張單子**，不是逐行算：幾個檔的命中混在一起，欄要對得齊，
+    // 摘出來的正文纔會從同一欄起。
+    let numbered = find
+        .hits
+        .iter()
+        .map(|h| (h.line + 1).to_string().chars().count())
+        .max()
+        .unwrap_or(1);
     let first = find
         .selected
         .saturating_sub(room.saturating_sub(1))
@@ -7135,12 +7145,16 @@ fn draw_search(
             ),
             yumete_core::search_panel::Row::Hit(at) => {
                 let hit = &find.hits[*at];
-                // Indented under its file when there is one to be under.
-                let pad = match hit.file.is_some() {
-                    true => "  ",
-                    false => "",
-                };
-                (format!("{pad}{:>5}  {}", hit.line + 1, hit.excerpt), text)
+                // ⚠️ **不縮進**（2026-09-25 定）。從前跨檔的命中往裏縮兩格，說的
+                // 是「我在那個檔底下」——可檔名那一行自己就帶着 `▾`／`▸`、又是
+                // 金色粗體，縮進是第三重說法。原話：「因为颜色的区别就知道什么是
+                // 文件什么是具体的搜索结果。这里空白幾格太浪费了」。
+                //
+                // 順帶把本檔與跨檔那兩種畫法合成了一種——從前只有跨檔那一種縮。
+                (
+                    format!("{:>numbered$}  {}", hit.line + 1, hit.excerpt),
+                    text,
+                )
             }
         };
         let style = match (find.broken, inked) {
