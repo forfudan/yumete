@@ -4232,15 +4232,28 @@ fn draw(
             }
         }
     }
-    // **設置面板整頁一扇**（2026-09-24）：蓋住正文與兩個邊欄，**不蓋底下兩行**。
-    // 狀態行與命令行留着，因為 `:w` 與 `:q` 就是在那條命令行上打的——面板自己再
-    // 長一條命令行出來是第二套規矩。
+    // **設置面板鋪滿整個窗口**（2026-09-25 報的：「设置界面是独占的全屏，所以是
+    // 不是可以把下方的状态栏和命令栏覆盖掉？」）。
+    //
+    // ⚠️ **狀態行在這一頁上是一句假話**：它報的是 `development.md 行 262`——一個
+    // 此刻沒人在看的緩衝區。蓋掉。
+    //
+    // ⚠️ **命令行不是「又一條狀態行」，它就是這一頁的頁腳**。作者一句話說中了：
+    // 「本来命令行就是不说话的时候显示快捷键提示，说话的时候显示命令」——所以這
+    // 一頁的鍵位行落在那一行上不是補丁，是同一條規矩。於是它自己那兩行（說明、
+    // 鍵位）正好接手原來狀態行與命令行的位子，一行不浪費，頁面高度也不會因為冒
+    // 出一句話就整頁跳。
     if let Some(page) = settings {
-        let room = Rect { height: status_area.y.saturating_sub(area.y).max(1), ..area };
-        match settings_page::draw(frame, page, config, room) {
+        match settings_page::draw(frame, page, config, area) {
             Some(at) => frame.set_cursor_position(at),
             // 不在打字就別把硬件光標留在正文裏：那是輸入法候選框跟着走的東西。
-            None => frame.set_cursor_position(Position { x: room.x, y: room.y }),
+            None => frame.set_cursor_position(Position { x: area.x, y: area.y }),
+        }
+        // **有話說的時候纔蓋回來**：`:w` 打在這一行上，「存了」也說在這一行上。
+        // 沒話說的時候那一行是這一頁的鍵位行。
+        let talking = editor.prompt().is_some() || !editor.status().is_empty();
+        if talking && command_area.height == 1 {
+            draw_command(frame, editor, config, ime, command_area);
         }
     }
     // Last, and over everything: the editor is stopped behind it (#295).

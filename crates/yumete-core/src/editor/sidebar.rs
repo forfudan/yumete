@@ -512,6 +512,61 @@ impl Editor {
         }
     }
 
+    /// **`空格 1`–`空格 4`：一下跳到某一區**（2026-09-25 作者提）。
+    ///
+    /// 原話：「空格 快捷键可以用 1234567890 这些数字来切换到某个工作区和侧栏……
+    /// 比如 1 正文主要工作区，2 正文第二工作区，3 左边栏 4 右边栏」。從前換區只有
+    /// `C-w`／`空格 s` 輪轉，四個區最多按三下；一個數字一下到位。tmux 的 `prefix
+    /// 0-9`、瀏覽器的 `Cmd+1..9` 都是這個，人人都會。
+    ///
+    /// ⚠️ **不在的區就開出來**（作者定：「开出来并跳过去」）——和 `空格 w` 一個
+    /// 規矩：一個鍵一個意思，「讓我去那裏」。
+    ///
+    /// ⚠️ **5–0 給 buffer 那一半沒有做**，等標籤欄帶上號再說。編號不穩又看不見的
+    /// 鍵比沒有這個鍵更糟：一本小說一百多個檔，「第 7 個」按最近用過排每過幾分鐘
+    /// 換一個檔，按打開順序排則關掉一個後面全部重編。瀏覽器能成，是因為號碼**畫在
+    /// 標籤上**。
+    pub(super) fn go_to_region(&mut self, nth: u32) {
+        use crate::sidebar::Side;
+        match nth {
+            1 | 2 => {
+                let want = usize::from(nth == 2);
+                // 沒有第二個工作區就開一個，開在站着的地方（`open_split` 的話）。
+                if want == 1 && self.other_pane().is_none() {
+                    let at = self.cursor;
+                    let caption = self.current_buffer().display_name().to_string();
+                    self.open_split(at, None, caption);
+                }
+                self.panel_focus = None;
+                // 和 `cycle_region` 裏那一句同一個算法，別各算各的。
+                if self.other_pane().is_some() && self.live_pane().min(1) != want {
+                    self.switch_pane();
+                }
+            }
+            3 | 4 => {
+                let side = match nth {
+                    3 => Side::Left,
+                    _ => Side::Right,
+                };
+                if !self.slot_takes_keys(side) {
+                    // **開那一側的頭一扇**。哪幾扇屬於哪一側是配得動的
+                    // （`Editor::sides`），所以這裏問的是配置而不是寫死左邊＝文件樹。
+                    // ⚠️ 只認 `View::ALL`：字典和詳情是光標帶出來的，開不了。
+                    let Some(&view) = crate::sidebar::View::ALL
+                        .iter()
+                        .find(|&&v| self.side_of(crate::sidebar::Panel::from(v)) == side)
+                    else {
+                        self.status = say!("region.nothing-lives-there");
+                        return;
+                    };
+                    self.show_sidebar(view);
+                }
+                self.focus_slot(side);
+            }
+            _ => {}
+        }
+    }
+
     /// Show the file tree rooted at `root` and give it the keys.
     pub fn open_sidebar_at(&mut self, root: &Path) {
         self.open_sidebar_showing(root, crate::sidebar::View::Explorer);
