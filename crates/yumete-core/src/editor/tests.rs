@@ -8178,9 +8178,8 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
         Where::Named(".".into()),
         "和 :search 的參數完全一致"
     );
-    // ⚠️ **`Enter` 只跑搜索，鍵留在框裏**（2026-09-25）——要走格子得先 `Esc`。
-    assert_eq!(ed.mode(), Mode::Field);
-    ed.on_key(Key::Esc);
+    // ⚠️ **`Enter` 跑一遍搜索，然後把鍵交回面板**（2026-09-25）。
+    assert_eq!(ed.mode(), Mode::Normal);
     // `Esc` 出框也落地，而且落的是同一個地方。
     assert_eq!(ed.search_for_test().scope, Where::Named(".".into()));
 
@@ -8703,25 +8702,26 @@ fn enter_only_runs_the_search_and_changes_nothing_else() {
     assert_eq!(ed.search().total, 3, "本文件是邊打邊搜的");
 
     ed.on_key(Key::Enter);
-    assert_eq!(ed.mode(), Mode::Field, "鍵留在框裏");
-    assert_eq!(ed.search().field, Field::Query, "焦點也沒動");
+    // **跑完把鍵交回面板**（2026-09-25 補的），可**落在哪一格不動**。
+    assert_eq!(ed.mode(), Mode::Normal, "「打完了，去找」是一句完整的話");
+    assert_eq!(ed.search().field, Field::Query, "焦點沒動——去結果是接着按 j");
     assert_eq!(ed.search().total, 3);
 
     // **找不到的時候一模一樣**——這就是這條規矩買來的東西。
-    for _ in 0..1 {
-        ed.on_key(Key::Backspace);
-    }
+    // ⚠️ 上一下 `Enter` 已經把鍵交回面板了，要改詞得先 `/` 回框裏。
+    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Backspace);
     ed.on_key(Key::Char('甲'));
     assert_eq!(ed.search().total, 0);
     ed.on_key(Key::Enter);
-    assert_eq!(ed.mode(), Mode::Field, "找不到，Enter 照樣什麼都不改");
+    assert_eq!(ed.mode(), Mode::Normal, "找不到，Enter 也是同一句話");
     assert_eq!(ed.search().field, Field::Query);
 
-    // 去結果是 `Esc` 然後 `j`，兩個已經學過的鍵。
+    // 去結果就是接着按 `j`。
+    ed.on_key(Key::Char('/'));
     ed.on_key(Key::Backspace);
     ed.on_key(Key::Char('霜'));
-    ed.on_key(Key::Esc);
-    assert_eq!(ed.mode(), Mode::Normal);
+    ed.on_key(Key::Enter);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results);
 }
@@ -8736,7 +8736,6 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
         ed.on_key(Key::Char(c));
     }
     ed.on_key(Key::Enter);
-    ed.on_key(Key::Esc);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results, "鍵落到結果上了");
 
@@ -9112,9 +9111,8 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.search().total, 4);
 
-    // **`Enter` 只跑搜索**（2026-09-25 定），去結果是 `Esc` 然後 `j`。
-    assert_eq!(ed.mode(), Mode::Field, "鍵留在框裏");
-    ed.on_key(Key::Esc);
+    // **`Enter` 跑一遍搜索並把鍵交回面板**（2026-09-25），去結果接着按 `j`。
+    assert_eq!(ed.mode(), Mode::Normal);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results);
 

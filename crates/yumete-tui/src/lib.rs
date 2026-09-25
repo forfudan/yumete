@@ -4180,6 +4180,11 @@ fn draw(
             + yumete_cjk::str_width(&editor.prompt_before_caret())
             + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(prompt_area.x + col as u16, prompt_area.y));
+    } else if settings.is_some() {
+        // **設置頁蓋住了正文，所以正文的光標不算數**（2026-09-25 報的：「为什么
+        // 「设置」左侧有个光标呢？」）。這一支什麼都不做，於是這一幀沒人設光標，
+        // ratatui 就把它藏起來（`Terminal::draw` 裏 `None => hide_cursor()`）。
+        // 打字的時候由下面那一段設回來。
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
         // Vertically the terminal's cursor is shown only in Insert, where it is
         // the caret; in Normal the block is painted into the page and a second,
@@ -4244,10 +4249,12 @@ fn draw(
     // 鍵位）正好接手原來狀態行與命令行的位子，一行不浪費，頁面高度也不會因為冒
     // 出一句話就整頁跳。
     if let Some(page) = settings {
-        match settings_page::draw(frame, page, config, area) {
-            Some(at) => frame.set_cursor_position(at),
-            // 不在打字就別把硬件光標留在正文裏：那是輸入法候選框跟着走的東西。
-            None => frame.set_cursor_position(Position { x: area.x, y: area.y }),
+        // ⚠️ **不在打字就一個字都別設**，光標自己會藏起來。從前這裏把它停在窗口
+        // 左上角——理由是「別留在正文裏」（系統輸入法的候選框跟着硬件光標跑），
+        // 可那一格正好在「設置」左邊，看着像頁面上多了一根豎槓。**藏起來纔是那個
+        // 理由要的東西**；上面那一支負責讓正文不去設它。
+        if let Some(at) = settings_page::draw(frame, page, config, area) {
+            frame.set_cursor_position(at);
         }
         // **有話說的時候纔蓋回來**：`:w` 打在這一行上，「存了」也說在這一行上。
         // 沒話說的時候那一行是這一頁的鍵位行。
@@ -6819,13 +6826,15 @@ fn draw_search(
     // ⚠️ **不寫死黑色，走第 100 檔。** 梯子是 墨 → 紙 → 更主題色，淺色主題下
     // 第 100 檔是更淺的那一頭——「再離面板遠一步」是一個意思，不是兩個。
     let sunk = Style::default().bg(ink.sunken()).fg(ink.text());
-    // **A field is a hole in the panel, not another part of its face.** The
-    // panel's own ground is 第 81 檔 and the box used to be painted with it, so
-    // an empty 尋找 box was a blank strip of panel with a caret somewhere in it
-    // — 「不然还是不知道这里有个可以输入的地方」. The ground of a field is the
-    // **page's** (第 90 檔), the one place in the interface where writing is
-    // typed, and a rule above and below closes it (#447).
-    let field = ink.ground(yumete_config::rung::PAPER).fg(ink.text());
+    // **那三格都不鋪底色了**（2026-09-25 報的：「这个底色还在哦，没有移除」）。
+    //
+    // #447 當初給框鋪一層紙色，是因為「空的尋找框只是一條面板色的帶子，上面浮着
+    // 一個光標」——「不然还是不知道这里有个可以输入的地方」。那時候**框前面還沒有
+    // 名字**。現在每一格前面都寫着 `位置:`／`搜:`／`換:`，上下又有兩道橫線把它們
+    // 圈在一起，底色是第三重說法。去掉。
+    //
+    // 剩下三檔照舊，而且它們說的是**狀態**不是「這裏能打字」：打字全黑、整條選中
+    // 反白、鍵在這一格畫一個塊光標。
     let keys_here = editor.panel_focus() == Some(side);
     // Whichever cell the keys are on is inked; the rest are quiet — the same
     // 「這裏」 the tree marks its row with, and it costs no colour.
@@ -6969,7 +6978,7 @@ fn draw_search(
         let style = match (find.all_selected && here && !shown.is_empty(), typing && here) {
             (true, _) => on,
             (false, true) => sunk,
-            (false, false) => field,
+            (false, false) => text,
         };
         // **The whole row is painted, not just the characters.** A box with
         // one word in it and no ground behind it does not read as a box —
@@ -10269,34 +10278,36 @@ fn squeezed(text: &str) -> String {
         }
         ed.on_key(Key::Esc);
         let (buf, _) = render_caret(&ed, &config, 60, 16);
-        let paper = ink.ground(yumete_config::rung::PAPER).bg;
+        // ⚠️ **框不再墊一層紙色了**（2026-09-25）：名字＋上下兩道線已經說明了
+        // 那裏能打字，底色是第三重。所以「沒被反白的那幾格」量的是**面板底**。
+        let plain = chrome;
         let reversed = |buf: &ratatui::buffer::Buffer, x: u16| {
             buf.cell((x, 2)).expect("框裏").style().bg == Some(ink.text())
         };
         // 光標在末尾（「冬天」佔四格），壓着的是第五格那個空位。
         assert!(reversed(&buf, box_at + 4), "光標那一格反白");
-        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, paper, "⚠️ 整條不再反白");
-        assert_eq!(buf.cell((box_at + 2, 2)).expect("天").style().bg, paper);
+        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, plain, "⚠️ 整條不再反白");
+        assert_eq!(buf.cell((box_at + 2, 2)).expect("天").style().bg, plain);
 
         // `h` 挪一格，反白跟着走——這就是 `hl` 在框裏挪光標的樣子。
         ed.on_key(Key::Char('h'));
         let (buf, _) = render_caret(&ed, &config, 60, 16);
         assert!(reversed(&buf, box_at + 2), "退到「天」上");
         assert!(!reversed(&buf, box_at + 4), "原來那一格讓出來了");
-        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, paper, "隔壁那個字沒跟着反");
+        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, plain, "隔壁那個字沒跟着反");
         // ⚠️ **全角字的第二格在這裏永遠是 `Reset`，別去斷言它。** ratatui 的
         // `Buffer::diff` 跳過寬字形的後半格（那一格的 symbol 是空的），所以它
         // 根本沒送到 `TestBackend` 的緩衝區裏——`put_text` 明明寫過的「冬」的
         // 第二格，量出來也是 `Reset`。真終端上寬字自己就蓋滿兩列。
         // 2026-09-25 為這一條紅過一次。
 
-        // ③ 走到結果上：這一格打得了字，可鍵不在這裏——中間那一檔。
+        // ③ 走到結果上：鍵不在這一格，那一行就整條是面板底——什麽都不加。
         ed.on_key(Key::Char('j'));
         let (buf, _) = render_caret(&ed, &config, 60, 16);
         assert_eq!(
             buf.cell((box_at, 2)).expect("框裏").style().bg,
-            ink.ground(yumete_config::rung::PAPER).bg,
-            "鍵不在這一格：中間那一檔"
+            plain,
+            "鍵不在這一格：面板底，一層都不鋪"
         );
     }
 
@@ -10364,6 +10375,53 @@ fn squeezed(text: &str) -> String {
         assert_eq!(before, "");
         assert_eq!(hit, "甲乙丙丁戊", "十欄裝得下五個全角字，末一欄留給省略號");
         assert_eq!(after, "…");
+    }
+
+    /// **設置頁鋪滿整個窗口，而且不在那裏留一根光標**（2026-09-25 報的：
+    /// 「为什么「设置」左侧有个光标呢？」）。
+    ///
+    /// ⚠️ **量的是「我們有沒有去設它」，不是「終端有沒有畫它」**：`TestBackend`
+    /// 的那個 `cursor: bool` 沒有公開的讀法。可 ratatui 的合同就在那裏——
+    /// `Terminal::draw` 收到 `None` 就 `hide_cursor()`（`terminal.rs:401`），
+    /// 所以「這一幀沒人設過」就是「這一幀它是藏着的」。**先把它擺到一個古怪的
+    /// 地方**，畫完還在那裏，就說明沒人動過它。
+    #[test]
+    fn the_settings_page_covers_the_footer_and_parks_no_cursor() {
+        let ed = editor_with("那年冬天。\n");
+        let config = Config::default();
+        let page = yumete_config::panel::Panel::open(None, None);
+        let (w, h) = (70u16, 16u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.set_cursor_position(Position::new(9, 9)).unwrap();
+        let mut viewport = Seats::default();
+        terminal
+            .draw(|frame| draw(frame, &ed, &config, &no_ime(), &mut viewport, Some(&page)))
+            .unwrap();
+        assert_eq!(
+            terminal.get_cursor_position().unwrap(),
+            Position::new(9, 9),
+            "沒在打字，誰都不該去設那根光標"
+        );
+
+        // **鋪滿整個窗口**：最後兩行是這一頁自己的頁腳，不是正文的狀態行——
+        // 狀態行報的是一個此刻沒人在看的緩衝區，那是一句假話。
+        let buf = terminal.backend().buffer().clone();
+        let row = |y: u16| -> String {
+            (0..w).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()
+        };
+        let last = row(h - 1);
+        assert!(!last.contains("NORMAL"), "狀態行不該露出來：{last:?}");
+        assert!(
+            !last.contains(&editor_name()),
+            "正文的檔名不該露出來：{last:?}"
+        );
+        // 這一頁自己的鍵位行在最後那一行上——命令行閒着的時候畫的就是鍵位提示。
+        assert!(last.contains("hl") || row(h - 2).contains("hl"), "{last:?}");
+    }
+
+    /// 那份測試文檔叫什麼——`editor_with` 開的是一個沒有名字的草稿。
+    fn editor_name() -> String {
+        Editor::new().current_buffer().display_name().to_string()
     }
 
     /// `:yume-where` names every layer, in order, with what it holds.
