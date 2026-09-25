@@ -124,9 +124,15 @@ impl Editor {
     }
 
     fn search_pattern(&self) -> String {
-        let mut body = match self.search.regex {
-            true => self.search.query.clone(),
-            false => regex::escape(&self.search.query),
+        let mut body = match (self.search.regex, self.search.glyphs) {
+            // ⚠️ **正則開着的時候不折疊字形。** 把每個字改寫成 `[...]` 會把 `.`、
+            // `*`、`[` 一起吃掉——那是毀掉使用者寫的式子。兩個開關因此互斥，面板
+            // 上正則開着時 簡繁異字形 畫灰（2026-09-25）。
+            (true, _) => self.search.query.clone(),
+            // **「天門」找得到「天门」**：每個字換成它的字形集（`crate::glyphs`）。
+            // 這一支自己就轉義，所以不必再 `escape` 一遍。
+            (false, true) => crate::glyphs::widen(&self.search.query),
+            (false, false) => regex::escape(&self.search.query),
         };
         // ⚠️ **`\b` is nothing between 漢字.** There is no word boundary
         // there, so this only ever bites on the Western words in a manuscript
@@ -534,6 +540,13 @@ impl Editor {
             // **`r` and `R` change things**, and only while the replace row
             // is showing — `:search` is for looking, `:replace` for changing,
             // and the panel says which it is.
+            // ⚠️ **站錯地方要出聲**（2026-09-25 報的：「替换模式下如何替换？快捷鍵
+            // 是什麼？」）。`r` 換的是「這一處」，所以它要有一個「這一處」——可
+            // 從前站在框上按它是**靜悄悄什麼都不發生**，而一個按了沒反應的鍵，
+            // 讀者只會以為自己記錯了鍵。
+            Key::Char('r') if self.search.replacing && self.search.field != Field::Results => {
+                self.status = say!("search.stand-on-a-hit");
+            }
             Key::Char('r') if self.search.replacing && self.search.field == Field::Results => {
                 match self.search.row() {
                     Some(crate::search_panel::Row::File { path, .. }) => {
@@ -754,6 +767,10 @@ impl Editor {
                 self.search.fuzzy &= !self.search.regex;
             }
             Field::Case => self.search.case = self.search.case.next(),
+            // 正則開着的時候這一個不起作用，也就翻不動——畫灰的鍵按下去該什麼都
+            // 不發生，不然它是在說兩句相反的話。
+            Field::Glyphs if !self.search.regex => self.search.glyphs = !self.search.glyphs,
+            Field::Glyphs => return,
             Field::Whole => {
                 self.search.whole = !self.search.whole;
                 self.search.fuzzy &= !self.search.whole;

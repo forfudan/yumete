@@ -89,6 +89,11 @@ pub enum Field {
     /// The pattern.
     #[default]
     Query,
+    /// **簡繁異字形**——「天門」找得到「天门」（2026-09-25）。
+    ///
+    /// 排在 大小寫 底下，因為它和大小寫是同一種東西：**兩個字面不同的寫法算不算
+    /// 同一個**。出廠開着。
+    Glyphs,
     /// 正則 on or off.
     Regex,
     /// What to put in its place — only there when the panel is replacing.
@@ -117,11 +122,12 @@ impl Field {
     ///
     /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
     /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`／`[ ]` 自然照這個讀法。
-    pub const ALL: [Field; 9] = [
+    pub const ALL: [Field; 10] = [
         Field::Scope,
         Field::Query,
         Field::Replace,
         Field::Case,
+        Field::Glyphs,
         Field::Regex,
         Field::Whole,
         Field::Fuzzy,
@@ -138,8 +144,9 @@ impl Field {
     /// ⚠️ **All five are always drawn**, 模糊 included — it goes quiet while
     /// 替換 is ticked rather than disappearing, so the numbers below it do not
     /// shift under the reader's eye.
-    pub const SWITCHES: [Field; 5] = [
+    pub const SWITCHES: [Field; 6] = [
         Field::Case,
+        Field::Glyphs,
         Field::Regex,
         Field::Whole,
         Field::Fuzzy,
@@ -293,6 +300,14 @@ pub struct Search {
     pub all_selected: bool,
     /// Which cell has the keys.
     pub field: Field,
+    /// **簡繁異字形**：「天門」找得到「天门」（2026-09-25，見 [`crate::glyphs`]）。
+    ///
+    /// ⚠️ **出廠開着**，所以 `Search` 要走 [`Search::new`] 而不是 `default()`——
+    /// `derive(Default)` 給不出「這一項是 true」。`default()` 留給測試。
+    ///
+    /// ⚠️ **和 正則 互斥**：把每個字改寫成 `[...]` 會把使用者寫的式子吃掉，所以
+    /// 正則開着時它畫灰、也不起作用（`Editor::search_pattern`）。
+    pub glyphs: bool,
     /// Read the pattern as a regular expression.
     pub regex: bool,
     /// How much case matters.
@@ -324,6 +339,13 @@ pub struct Search {
 }
 
 impl Search {
+    /// 出廠的樣子——**簡繁異字形開着**，別的照 `default()`。
+    ///
+    /// 只多說一項，往後加字段不會漏；手寫一整個 `Default` 纔會。
+    pub fn new() -> Search {
+        Search { glyphs: true, ..Search::default() }
+    }
+
     /// Whether anything has been asked for yet.
     ///
     /// ⚠️ Not the same as 「found nothing」: an empty box has not been asked,

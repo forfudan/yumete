@@ -30,6 +30,7 @@ pub mod discover;
 pub mod drawn;
 pub mod editor;
 pub mod export;
+pub mod glyphs;
 pub mod input;
 pub mod markdown;
 pub mod lookfor;
