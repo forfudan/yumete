@@ -366,6 +366,13 @@ impl Editor {
             Key::Enter => {
                 self.search.all_selected = false;
                 self.look_again();
+                // **打完了，去找——然後把鍵交回面板**（2026-09-25 補的：「enter键
+                // 除了触发搜索，还是最好能回到 normal mode」）。它因此讀成一句
+                // 完整的話，而不是「跑一遍，然後你還在框裏」。
+                //
+                // ⚠️ **落在哪一格不動。** 找得到找不到都一樣，這正是這個鍵要的
+                // 那份一致；去結果是接着按 `j`。
+                self.mode = Mode::Normal;
             }            Key::Char(ch) => {
                 self.search.type_char(ch);
                 if self.search.field != Field::Scope {
