@@ -4964,9 +4964,9 @@ en = "switches"
 [[message]]
 # 提示：搜索面板——這一格做什麼
 key = "hint.search.use-it"
-zht = "翻開關／去那一處"
-zhs = "翻开关／去那一处"
-en = "flip it, or go there"
+zht = "搜索／跳轉"
+zhs = "搜索／跳转"
+en = "search, or go there"
 
 [[message]]
 # 提示欄：邊欄
@@ -7135,11 +7135,11 @@ zhs = "模糊"
 en = "loose"
 
 [[message]]
-# 搜索面板：簡繁異字形那個開關的名字
+# 搜索面板：簡繁異體字形混合那個開關的名字
 key = "search.glyphs"
-zht = "簡繁異字形"
-zhs = "简繁异字形"
-en = "any 簡/繁 writing"
+zht = "匹配簡繁異體"
+zhs = "匹配简繁异体"
+en = "match simp/trad chars"
 
 [[message]]
 # 限定一欄搜到第一處
@@ -7234,6 +7234,13 @@ key = "search.none"
 zht = "無結果"
 zhs = "无结果"
 en = "none"
+
+[[message]]
+# 搜索面板：拼音那個開關的名字
+key = "search.pinyin"
+zht = "拼音"
+zhs = "拼音"
+en = "pinyin"
 
 [[message]]
 # 搜索：正則那一格

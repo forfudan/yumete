@@ -94,6 +94,12 @@ pub enum Field {
     /// 排在 大小寫 底下，因為它和大小寫是同一種東西：**兩個字面不同的寫法算不算
     /// 同一個**。出廠開着。
     Glyphs,
+    /// **拼音**——`tianmen` 找得到「天門」「天门」（2026-09-25）。
+    ///
+    /// 排在 簡繁異體 底下，同一族：**字面不同的寫法算不算同一個**。出廠開着，
+    /// 而它只在查詢全是 ASCII 字母的時候纔真的跑（[`crate::pinyin::as_query`]），
+    /// 所以搜 `hello` 一點不受它影響。
+    Pinyin,
     /// 正則 on or off.
     Regex,
     /// What to put in its place — only there when the panel is replacing.
@@ -122,12 +128,13 @@ impl Field {
     ///
     /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
     /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`／`[ ]` 自然照這個讀法。
-    pub const ALL: [Field; 10] = [
+    pub const ALL: [Field; 11] = [
         Field::Scope,
         Field::Query,
         Field::Replace,
         Field::Case,
         Field::Glyphs,
+        Field::Pinyin,
         Field::Regex,
         Field::Whole,
         Field::Fuzzy,
@@ -135,18 +142,19 @@ impl Field {
         Field::Results,
     ];
 
-    /// **The five switches, top to bottom as they are drawn** — #419.
+    /// **The switches, top to bottom as they are drawn** — #419.
     ///
-    /// They are pressed by number (`1`–`5`) and the cursor never stops on
+    /// They are pressed by number (`1`–`7`) and the cursor never stops on
     /// them, so this order is the whole of what the numbers mean. It is the
     /// screen's order, so a reader counts rows rather than learning a list.
     ///
-    /// ⚠️ **All five are always drawn**, 模糊 included — it goes quiet while
+    /// ⚠️ **Every one is always drawn**, 模糊 included — it goes quiet while
     /// 替換 is ticked rather than disappearing, so the numbers below it do not
     /// shift under the reader's eye.
-    pub const SWITCHES: [Field; 6] = [
+    pub const SWITCHES: [Field; 7] = [
         Field::Case,
         Field::Glyphs,
+        Field::Pinyin,
         Field::Regex,
         Field::Whole,
         Field::Fuzzy,
@@ -293,6 +301,19 @@ pub struct Search {
     /// 「press Enter」 for, so that a stale list is never mistaken for the
     /// answer to what is in the box now.
     pub stale: bool,
+    /// **哪一版正文跑出來的這張名單**——`(當前緩衝區的號, 所有緩衝區的改動次數
+    /// 之和)`，沒跑過就是 `None`（2026-09-25 報的：「我如果修改了buffer，然後回到
+    /// 搜索，按enter，搜索結果沒有刷新」）。
+    ///
+    /// 對不上就是過期，`Editor::search_is_stale` 由它算出來。⚠️ **不存「過期」這
+    /// 個結論，存的是那一版的指紋**：結論要有人在正文改完的那一刻去改它，而改正文
+    /// 的路有幾十條，漏一條就是一張看着新鮮的舊名單。
+    ///
+    /// 和數之和當指紋成立，是因為**改動次數只增不減**：兩次改動抵消不掉。
+    /// 當前緩衝區的號也要記——本文件那一檔換了檔案，名單說的就是別人的事了。
+    /// ⚠️ **搜文件夾也要看所有緩衝區**：開着的檔是從內存讀的，不是從磁盤
+    /// （見 `search_now` 裏「An open file is read from its buffer」那一段）。
+    pub looked_at: Option<(u64, u64)>,
     /// Where the caret is in it, in characters.
     pub caret: usize,
     /// Whether the whole query is selected — what `空格 /` leaves behind, so
@@ -308,6 +329,8 @@ pub struct Search {
     /// ⚠️ **和 正則 互斥**：把每個字改寫成 `[...]` 會把使用者寫的式子吃掉，所以
     /// 正則開着時它畫灰、也不起作用（`Editor::search_pattern`）。
     pub glyphs: bool,
+    /// **拼音**：`tianmen` 找得到「天門」。出廠開着，見 [`Field::Pinyin`]。
+    pub pinyin: bool,
     /// Read the pattern as a regular expression.
     pub regex: bool,
     /// How much case matters.
@@ -343,7 +366,7 @@ impl Search {
     ///
     /// 只多說一項，往後加字段不會漏；手寫一整個 `Default` 纔會。
     pub fn new() -> Search {
-        Search { glyphs: true, ..Search::default() }
+        Search { glyphs: true, pinyin: true, ..Search::default() }
     }
 
     /// Whether anything has been asked for yet.

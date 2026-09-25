@@ -13,6 +13,24 @@ impl Editor {
         &self.search
     }
 
+    /// **這一刻的正文指紋**，見 [`Search::looked_at`]。
+    fn search_mark(&self) -> (u64, u64) {
+        let edits = self.buffers.iter().map(|b| b.revision()).fold(0, u64::wrapping_add);
+        (self.current_buffer().id(), edits)
+    }
+
+    /// **手上這張名單答的還是不是眼前這個問題。**
+    ///
+    /// 兩件事各答一半：`Search::stale` 是「框裏的詞改了、而這個範圍不邊打邊搜」，
+    /// `looked_at` 是「跑完之後正文又動過」。前者存着，因為改框的路只有一條；後者
+    /// 算出來，因為改正文的路有幾十條。
+    ///
+    /// 面板拿它畫那句「按 Enter 重新查找」，`Enter` 拿它決定先跑還是直接去。
+    pub fn search_is_stale(&self) -> bool {
+        self.search.stale
+            || self.search.looked_at.is_some_and(|mark| mark != self.search_mark())
+    }
+
     /// The pattern `n` and `N` are walking — the panel writes it too (#419).
     pub fn last_search(&self) -> &str {
         &self.last_search
@@ -220,11 +238,18 @@ impl Editor {
             self.search.hits.clear();
             self.search.total = 0;
             self.search.selected = 0;
+            self.search.looked_at = None;
             return;
         }
         let pattern = self.search_pattern();
-        let look = match self.search.fuzzy {
-            true => Look::Nearby {
+        // **拼音只在查詢全是 ASCII 字母的時候纔跑**，所以開着它不影響搜英文。
+        // ⚠️ 正則開着也照跑：它自己走一趟，不往正則裏塞東西（不像簡繁異體）。
+        let said = match self.search.pinyin {
+            true => crate::pinyin::as_query(&self.search.query),
+            false => None,
+        };
+        let how = match self.search.fuzzy {
+            true => How::Nearby {
                 needle: self.search.query.chars().collect(),
                 fold: match self.search.case {
                     Case::Insensitive => true,
@@ -235,7 +260,7 @@ impl Editor {
                 },
             },
             false => match regex::Regex::new(&pattern) {
-                Ok(re) => Look::Pattern(re),
+                Ok(re) => How::Pattern(re),
                 Err(_) => {
                     // ⚠️ The hits stay, and are drawn quiet. Typing a regular
                     // expression walks through `[`, `(` and every other
@@ -247,6 +272,7 @@ impl Editor {
                 }
             },
         };
+        let look = Look { how, said };
         self.search.hits.clear();
         self.search.total = 0;
         self.search.selected = 0;
@@ -357,6 +383,7 @@ impl Editor {
         }
         self.search.hits = hits;
         self.search.total = total;
+        self.search.looked_at = Some(self.search_mark());
     }
 
     /// One key while a field of the search panel has them (`Mode::Field`).
@@ -530,13 +557,24 @@ impl Editor {
                     }
                 }
             }
-            Key::Enter => match self.search.field {
-                Field::Scope | Field::Query | Field::Replace => self.mode = Mode::Field,
-                Field::Results => self.go_to_hit(),
-                // 走不到的格子——開關只認 `1`–`5`。
-                other if other.is_switch() => self.flip_switch(other),
-                _ => {}
-            },
+            // **`Enter` 就是「再跑一遍」**（2026-09-25 定，原話：「enter 在非結果
+            // 位置（包括查詢框上）都是觸發重搜。如果 enter 在結果上，那麼在文檔
+            // 更新之後，確實應該先觸發一次重搜再跳」）。
+            //
+            // 起因是「改完正文回到面板按 `Enter`，名單還是舊的」：那時 `Enter` 在
+            // 框上只是「進編輯」，在開關上是「翻一下」，沒有一個格子是重跑。
+            //
+            // ⚠️ **結果那一格上，過期了先跑、不跳**。屏幕上此刻寫着「按 Enter
+            // 重新查找」，那 `Enter` 就照它說的做；而且正文動過之後，那一處的行號
+            // 與位置都已經不準，跳過去多半落在別的字上。跑完名單是新的，再按一次
+            // 纔去。
+            //
+            // ⚠️ **進編輯不缺入口**：`i` `a` `I` `A` `c` 和 `/` 六個；開關也不缺，
+            // `1`–`7` 和空格都翻得動。騰出 `Enter` 沒有讓誰沒路走。
+            Key::Enter if self.search.field == Field::Results && !self.search_is_stale() => {
+                self.go_to_hit();
+            }
+            Key::Enter => self.look_again(),
             // **`r` and `R` change things**, and only while the replace row
             // is showing — `:search` is for looking, `:replace` for changing,
             // and the panel says which it is.
@@ -751,10 +789,10 @@ impl Editor {
         Some((hit.line + 1, text, mark))
     }
 
-    /// Flip one of the five switches, and search again.
+    /// Flip one of the switches, and search again.
     ///
     /// **Which one is an argument**, not 「wherever the keys are」: since
-    /// 2026-09-24 the cursor does not stop on a switch at all — `1`–`5` press
+    /// 2026-09-24 the cursor does not stop on a switch at all — `1`–`7` press
     /// them and `j k` walk past them.
     fn flip_switch(&mut self, which: Field) {
         match which {
@@ -771,6 +809,9 @@ impl Editor {
             // 不發生，不然它是在說兩句相反的話。
             Field::Glyphs if !self.search.regex => self.search.glyphs = !self.search.glyphs,
             Field::Glyphs => return,
+            // 拼音那一路自己走一趟，不經過正則，所以正則開着它照樣管用——
+            // 不像簡繁異體，那一個是往正則裏塞 `[…]`。
+            Field::Pinyin => self.search.pinyin = !self.search.pinyin,
             Field::Whole => {
                 self.search.whole = !self.search.whole;
                 self.search.fuzzy &= !self.search.whole;
@@ -877,6 +918,7 @@ impl Editor {
             self.search.total = 0;
             self.search.selected = 0;
             self.search.stale = false;
+            self.search.looked_at = None;
             self.status = say!("search.no-such-folder", typed);
             return;
         }
@@ -1160,7 +1202,19 @@ fn excerpt(
 /// the files on the disk) must ask the same question; they were two copies of
 /// a `find_iter` loop, and a second way to search would have made them two
 /// copies of a `match`.
-enum Look {
+struct Look {
+    /// 字面那一路：一個正則，或者「差不多是這幾個字」。
+    how: How,
+    /// **拼音那一路**，`None` ＝ 不跑（開關關着，或者查詢不全是字母）。
+    ///
+    /// ⚠️ **它是加出來的，不是替掉的**（2026-09-25 作者定：「兩種命中合並」）。
+    /// 搜 `hello` 的人要的是文稿裏那個 `hello`，而搜 `tianmen` 的人要的是「天門」
+    /// ——兩種都給，讀者自己認得出哪一條是他要的。
+    said: Option<Vec<char>>,
+}
+
+/// 字面那一路怎麼問。
+enum How {
     /// A regular expression, flags and all (`search_pattern`).
     Pattern(Regex),
     /// The 模糊 switch: [`crate::nearby`], which counts in characters.
@@ -1169,16 +1223,28 @@ enum Look {
 
 impl Look {
     /// Where it is found in one line, as **character** ranges within it.
+    ///
+    /// ⚠️ **兩路合並之後要排序去重**：`excerpt` 按這個次序編號（`nth`），而讀者
+    /// 看見的是一行一行往下走的單子。同一段被兩路都配上，只算一條。
     fn spans(&self, text: &str) -> Vec<(usize, usize)> {
-        match self {
-            Look::Pattern(re) => re
+        let mut out = match &self.how {
+            How::Pattern(re) => re
                 .find_iter(text)
                 .map(|m| (text[..m.start()].chars().count(), text[..m.end()].chars().count()))
                 .collect(),
-            Look::Nearby { needle, fold } => {
+            How::Nearby { needle, fold } => {
                 let hay: Vec<char> = text.chars().collect();
                 crate::nearby::spans(&hay, needle, *fold)
             }
+        };
+        if let Some(said) = &self.said {
+            let also = crate::pinyin::spans(text, said);
+            if !also.is_empty() {
+                out.extend(also);
+                out.sort_unstable();
+                out.dedup();
+            }
         }
+        out
     }
 }

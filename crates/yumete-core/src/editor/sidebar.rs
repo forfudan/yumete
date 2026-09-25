@@ -293,6 +293,24 @@ impl Editor {
         }
     }
 
+    /// **`Tab` 在這一欄裏走的那幾個視圖，按它走的次序**（2026-09-25 作者提：
+    /// 「底部……可以在上面写上 tab 的循环顺序，比如『Tab 文件 > 缓冲区 > 大纲 >
+    /// 搜索』」）。
+    ///
+    /// ⚠️ **算出來的，不是寫死的**：哪個視圖歸哪一欄是使用者配得動的
+    /// （`side_for`），底邊上那一行要說的就是他這一台此刻的真話。少於兩個的時候
+    /// 回空——`Tab` 那時什麼都不做，寫一行「Tab 文件」是在許一個不存在的諾。
+    pub fn views_on(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::View> {
+        let mine: Vec<crate::sidebar::View> = crate::sidebar::View::ALL
+            .into_iter()
+            .filter(|&view| self.side_for(view) == side)
+            .collect();
+        match mine.len() < 2 {
+            true => Vec::new(),
+            false => mine,
+        }
+    }
+
     /// Which view a bare `:sidebar-left` opens: the first one that side owns,
     /// and the file tree when it owns none — the same answer the key gives.
     pub(super) fn side_view(&self, side: crate::sidebar::Side) -> crate::sidebar::View {
