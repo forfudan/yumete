@@ -459,6 +459,29 @@ impl Search {
         self.caret -= 1;
     }
 
+    /// **刪掉光標壓着的那一個字**——框裏的 `d`（2026-09-25）。
+    ///
+    /// 光標停在末尾（沒壓着字）就什麼都不做：那裏沒有東西可刪，而「往回刪一個」
+    /// 是 `Backspace` 說的另一件事。
+    pub fn delete_here(&mut self) {
+        if self.take_selection() {
+            return;
+        }
+        let from = self.byte_at(self.caret);
+        let to = self.byte_at(self.caret + 1);
+        if from == to {
+            return;
+        }
+        self.box_here().replace_range(from..to, "");
+    }
+
+    /// **從光標刪到行尾**——框裏的 `D`。
+    pub fn delete_to_end(&mut self) {
+        self.all_selected = false;
+        let from = self.byte_at(self.caret);
+        self.box_here().truncate(from);
+    }
+
     /// What is in the box the keys are in.
     pub fn typed(&self) -> &str {
         match self.field {

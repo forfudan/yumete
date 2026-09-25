@@ -4906,6 +4906,13 @@ zhs = "全部换掉"
 en = "change them all"
 
 [[message]]
+# 提示：搜索面板——框裏就地刪改（d D c C a I A）
+key = "hint.search.edit-in-place"
+zht = "刪／改／追加"
+zhs = "删／改／追加"
+en = "delete / change / append"
+
+[[message]]
 # 提示：搜索面板——Enter 去看結果（兩種範圍同一句，2026-09-25 統一）
 key = "hint.search.go-look"
 zht = "搜一遍"
@@ -7210,8 +7217,8 @@ en = "no such folder: {0}"
 [[message]]
 # 搜索：一處都沒有
 key = "search.none"
-zht = "沒有"
-zhs = "没有"
+zht = "無結果"
+zhs = "无结果"
 en = "none"
 
 [[message]]
