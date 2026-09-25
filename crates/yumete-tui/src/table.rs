@@ -918,34 +918,14 @@ pub fn draw_detail(
     let missing = ground.fg(ink.mark());
 
     frame.render_widget(Clear, area);
-    let right = area.x + area.width;
+    // **兩堵牆與底色，和常駐面板同一支**，這樣一欄不管怎麼分，讀起來都是一欄
+    // （#293）；有焦點時兩邊都是塗滿的金——見 `crate::sidebar_walls`。
+    let walls = crate::sidebar_walls(frame, editor, ink, ground, side, area);
+    let (right, area) = (walls.to, walls.area);
     let buf = frame.buffer_mut();
-    for y in area.y..area.y + area.height {
-        for x in area.x..right {
-            if let Some(cell) = buf.cell_mut((x, y)) {
-                cell.set_symbol(" ").set_style(ground);
-            }
-        }
-    }
-    // **A rule down the edge that faces the writing**, the same one the
-    // resident panel draws, so a slot reads as one column however it is
-    // divided (#293).
-    let rule = match side {
-        Side::Left => area.x + area.width - 1,
-        Side::Right => area.x,
-    };
-    // 有焦點的那一欄畫粗的那一條——見 `crate::sidebar_rule`。
-    let (wall, wall_ink) = crate::sidebar_rule(editor, ink, ground, side);
-    for y in area.y..area.y + area.height {
-        if let Some(cell) = buf.cell_mut((rule, y)) {
-            cell.set_symbol(wall).set_style(wall_ink);
-        }
-    }
-
-    let (left, right) = match side {
-        Side::Left => (area.x + 2, rule),
-        Side::Right => (area.x + 2, right),
-    };
+    // 兩邊都是「離窗口邊 2 格」：左邊那一堵牆在 `area.x`，右邊那一堵在對面，
+    // 而牆與字之間留一格空氣。
+    let left = area.x + 2;
     put_text(buf, left, area.y, right, &detail.title, title);
     let mut y = area.y + 2;
     // The 部件 list first, because it is what the panel is *read for* — and it
