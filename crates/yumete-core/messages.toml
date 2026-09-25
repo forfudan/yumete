@@ -5053,6 +5053,34 @@ zhs = "从系统剪贴板贴在前面"
 en = "paste before, from the system clipboard"
 
 [[message]]
+# 空格菜單：跳到左邊欄（沒開就開那一側的頭一扇）
+key = "hint.space.region-left"
+zht = "去左邊欄（沒有就開）"
+zhs = "去左边栏（没有就开）"
+en = "the left sidebar (opened if there is none)"
+
+[[message]]
+# 空格菜單：跳到正文主工作區
+key = "hint.space.region-one"
+zht = "去正文"
+zhs = "去正文"
+en = "the writing"
+
+[[message]]
+# 空格菜單：跳到右邊欄
+key = "hint.space.region-right"
+zht = "去右邊欄（沒有就開）"
+zhs = "去右边栏（没有就开）"
+en = "the right sidebar (opened if there is none)"
+
+[[message]]
+# 空格菜單：跳到第二工作區（沒開就開一個）
+key = "hint.space.region-two"
+zht = "去第二工作區（沒有就開）"
+zhs = "去第二工作区（没有就开）"
+en = "the other work area (opened if there is none)"
+
+[[message]]
 # 空格組：改這個字的注音（`:ruby` 那一支，二級鍵）
 key = "hint.space.ruby"
 zht = "改這裏的注音"
@@ -6831,6 +6859,13 @@ en = "no drafts"
 
 
 # ── register ──────────────────────────────────────────────────────────
+
+[[message]]
+# 空格 3／4：那一側一扇面板都不歸它
+key = "region.nothing-lives-there"
+zht = "這一側沒有哪一扇面板歸它——`:sidebar-left` 可以挪一扇過去"
+zhs = "这一侧没有哪一扇面板归它——`:sidebar-left` 可以挪一扇过去"
+en = "no panel lives on that side — :sidebar-left moves one there"
 
 [[message]]
 # 指名的暫存器是空的

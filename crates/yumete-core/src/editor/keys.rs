@@ -1900,6 +1900,13 @@ impl Editor {
         // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
         // 快捷鍵太不方便」. The chord stays; this is the same thing with the
         // hand already on the space bar.
+        // **一下跳到某一區**（2026-09-25 作者提）——`空格 s` 是輪轉，這幾個是
+        // 點名。數字在這張菜單上本來一個都沒占，所以 1–4 不是四個零散的決定，
+        // 是一整塊乾淨的地址空間。
+        ('1', "hint.space.region-one"),
+        ('2', "hint.space.region-two"),
+        ('3', "hint.space.region-left"),
+        ('4', "hint.space.region-right"),
         ('s', "hint.space.next-region"),
         ('S', "hint.space.close-all"),
         ('w', "hint.goto.other-pane"),
@@ -2171,6 +2178,9 @@ impl Editor {
     /// Run one key of a `Space` sequence.
     fn handle_space(&mut self, key: Key) {
         match key {
+            Key::Char(n @ '1'..='4') => {
+                self.go_to_region(n.to_digit(10).unwrap_or(0));
+            }
             Key::Char('s') => self.cycle_region(),
             // **`空格 S`：兩個邊欄一起收**（2026-09-21 提的）。開了三個視圖之後
             // 想把版心整個要回來，逐個 `q` 要走過去按兩次；這一下說的是「都收
