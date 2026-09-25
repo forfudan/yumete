@@ -84,17 +84,39 @@ impl Changes {
     /// 這正是 helix 在同一個檔案上掉進去的坑（`git diff` 自己不會，因為它兩邊都
     /// 過一遍 git 的換行轉換；`--no-index` 不過）。
     pub fn head_text(path: &Path) -> Option<String> {
+        Changes::text_at(path, "HEAD").ok()
+    }
+
+    /// **同一件事，可以問別的提交**——`:git-diff HEAD~3`、`:git-diff v1.0`。
+    ///
+    /// `Err` 帶着 git 自己那一句話，因為問不出答案有好幾種原因（不在倉裏、這個
+    /// 檔還沒提交過、沒有那個提交、機器上沒有 git），而它們要的處置各不相同。
+    /// 「什麼都不畫」的那一條路（行號旁的改動條）把它丟掉就是；**開口問的那一條
+    /// 路（`:git-diff`）要把它說出來**。
+    ///
+    /// ⚠️ **`<提交>:./<檔名>` 那個 `./`** 讓 git 拿**當前目錄**去解析路徑，於是
+    /// 呼叫方不必先算出倉根在哪。`current_dir` 是檔案自己那一層——編輯器開着兩個
+    /// 倉裏的檔是常事，呼叫者的 cwd 說了不算。
+    pub fn text_at(path: &Path, commit: &str) -> Result<String, String> {
         let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
-        let name = path.file_name()?;
-        let mut arg = std::ffi::OsString::from("HEAD:./");
+        let Some(name) = path.file_name() else {
+            return Err(path.display().to_string());
+        };
+        let mut arg = std::ffi::OsString::from(commit);
+        arg.push(":./");
         arg.push(name);
         let out = std::process::Command::new("git")
             .args(["--no-optional-locks", "show"])
             .arg(&arg)
             .current_dir(dir)
             .output()
-            .ok()?;
-        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+            .map_err(|e| e.to_string())?;
+        match out.status.success() {
+            true => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
+            // git 的抱怨自己就是最好的說明（「exists on disk, but not in
+            // 'HEAD'」「not a git repository」），照搬，別另編一句。
+            false => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+        }
     }
 
     /// `HEAD` 那一份與**這一份正文**的逐行差。

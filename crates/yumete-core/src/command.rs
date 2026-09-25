@@ -465,6 +465,9 @@ pub enum Command {
     /// `:diff [path]` — what changed, by 詞, against the file on disk or
     /// against another draft (Feature #235).
     Diff(Option<String>),
+    /// `:git-diff [提交]` — the same, against what git has (2026-09-25).
+    /// `None` is `HEAD`.
+    GitDiff(Option<String>),
     /// `:export html|typst [path]`, and `:export!` over a file that is
     /// already there — write the manuscript out for a typesetter.
     Export {
@@ -3957,6 +3960,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Path],
         build: Some(|p| Ok(Command::Diff(p.arg(0).map(|s| s.to_string())))),
+    },
+    Entry {
+        name: "git-diff",
+        aliases: &[],
+        help: "cmd.commands.git-diff",
+        needs: &[],
+        params: &[Param::Free("<提交>")],
+        build: Some(|p| Ok(Command::GitDiff(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
         name: "toc",

@@ -490,6 +490,10 @@ impl Editor {
                 self.diff_against(against.as_deref());
                 Ok(CommandOutcome::Continue)
             }
+            Command::GitDiff(commit) => {
+                self.git_diff_against(commit.as_deref());
+                Ok(CommandOutcome::Continue)
+            }
             Command::Outline(nth) => {
                 let headings = self.outline();
                 if headings.is_empty() {
