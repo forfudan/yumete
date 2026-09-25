@@ -7077,10 +7077,18 @@ fn draw_search(
     };
     let y = y + 1;
     switch(buf, y, &format!("[{which}]"), &say!("search.case"), 1, text);
+    // **簡繁異字形**（2026-09-25）：和大小寫是同一種東西——兩個字面不同的寫法算
+    // 不算同一個——所以緊挨着它。⚠️ 正則開着時它不起作用，畫灰。
     let y = y + 1;
-    switch(buf, y, tick(find.regex), &say!("search.regex"), 2, pattern_cell);
+    let glyph_cell = match find.regex {
+        true => quiet,
+        false => text,
+    };
+    switch(buf, y, tick(find.glyphs), &say!("search.glyphs"), 2, glyph_cell);
     let y = y + 1;
-    switch(buf, y, tick(find.whole), &say!("search.whole"), 3, pattern_cell);
+    switch(buf, y, tick(find.regex), &say!("search.regex"), 3, pattern_cell);
+    let y = y + 1;
+    switch(buf, y, tick(find.whole), &say!("search.whole"), 4, pattern_cell);
     // **模糊 照畫，替換開着的時候畫灰**（2026-09-23 定：「自動關掉畫灰」）。
     // ⚠️ 從前它整行不畫，於是勾一下替換，底下的每一行都往上跳一格——而「跳」
     // 是這個面板最不該有的東西：讀者的眼睛正落在某一行上。走還是跳過它
@@ -7090,11 +7098,11 @@ fn draw_search(
         true => quiet,
         false => text,
     };
-    switch(buf, y, tick(find.fuzzy), &say!("search.fuzzy"), 4, fuzzy_cell);
+    switch(buf, y, tick(find.fuzzy), &say!("search.fuzzy"), 5, fuzzy_cell);
     // **替換是個開關**（2026-09-23 報的）：`:search` 進來的人想改一個詞，不必退
     // 出去重按 `:replace`。
     let y = y + 1;
-    switch(buf, y, tick(find.replacing), &say!("search.replacing"), 5, text);
+    switch(buf, y, tick(find.replacing), &say!("search.replacing"), 6, text);
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.

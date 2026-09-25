@@ -54,10 +54,18 @@ impl Editor {
         // falls through to nothing; in the panel it walks the slot's views.
         // The next cell is `↓`.
         if self.mode == Mode::Field {
+            // **換字那兩個鍵在框裏按不了，所以框裏那一行要指路**（2026-09-25
+            // 報的：「替换模式下如何替换？快捷鍵是什麼？如何全部替换？」）。
+            // 從前 `r R` 只在鍵已經回到面板之後纔出現在提示行上，而人還在框裏
+            // 打「換成什麼」的時候，正是他要問這句話的時候。
+            let out = match self.search().replacing {
+                true => say!("hint.search.out-then-replace"),
+                false => say!("hint.search.out-of-the-box"),
+            };
             return Hint::Keys(say!("label.panel.search"), vec![
                     ("Enter", say!("hint.search.go-look")),
                     ("↑ ↓", say!("hint.search.next-cell")),
-                    ("Esc", say!("hint.search.out-of-the-box")),
+                    ("Esc", out),
                 ]);
         }
         // **Walking the hits: the row says what is around this one** (#419).
@@ -78,7 +86,7 @@ impl Editor {
                     ("/", say!("hint.search.new-word")),
                     // The five switches are pressed by number and walked past
                     // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
-                    ("1–5", say!("hint.search.switches")),
+                    ("1–6", say!("hint.search.switches")),
                     ("Enter", say!("hint.search.use-it")),
                 ];
                 // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個

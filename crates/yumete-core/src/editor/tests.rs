@@ -8191,12 +8191,13 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     ed.on_key(Key::Char('k'));
     assert_eq!(ed.search_for_test().field, Field::Query, "回來也跳過");
 
-    // ④ 替換是第五個開關，按 `5` 勾；勾上就把模糊放下。
+    // ④ 替換是第六個開關，按 `6` 勾；勾上就把模糊放下。
+    // ⚠️ 2026-09-25 加了「簡繁異字形」之後，它後面那幾個號碼都順移了一位。
     ed.search_for_test().fuzzy = true;
-    ed.on_key(Key::Char('5'));
-    assert!(ed.search_for_test().replacing, "5 勾上了");
+    ed.on_key(Key::Char('6'));
+    assert!(ed.search_for_test().replacing, "6 勾上了");
     assert!(!ed.search_for_test().fuzzy, "⚠️ 模糊自動關掉——鬆的範圍不許拿去替換");
-    ed.on_key(Key::Char('5'));
+    ed.on_key(Key::Char('6'));
     assert!(!ed.search_for_test().replacing, "再按一下撤回");
 
     // ② 到了結果列表的頂上再按 `k`，出得去。
@@ -8662,8 +8663,8 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().total, 0, "a literal dot is not in the text");
     ed.on_key(Key::Esc);
     assert_eq!(ed.mode(), Mode::Normal, "Esc leaves the box, not the panel");
-    // 正則是第二個開關——`2`，不必走過去（2026-09-24）。
-    ed.on_key(Key::Char('2'));
+    // 正則是第三個開關——`3`，不必走過去（2026-09-24 定，2026-09-25 順移）。
+    ed.on_key(Key::Char('3'));
     assert!(ed.search().regex);
     assert!(ed.search().total > 0, "as a pattern it matches every character");
 
@@ -8860,6 +8861,51 @@ fn the_box_deletes_and_changes_where_the_cursor_stands() {
     assert_eq!(ed.search().query, was, "結果那一格上它們什麼都不是");
 }
 
+/// **簡繁異字形：「天門」找得到「天门」**（2026-09-25 作者提）。
+///
+/// 表與那個**有意的不對稱**在 [`crate::glyphs`]；這一條盯的是它真的接到了面板上。
+#[test]
+fn a_query_in_one_script_finds_the_other_writing() {
+    use crate::search_panel::Field;
+    let mut ed = typed("天門真境的雪。\n天门真境的雪。\n他的頭髮白了。\n他的头发白了。\n");
+    ed.open_search();
+    for c in "天門".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert_eq!(ed.search().total, 2, "繁簡兩行都找得到");
+
+    // ⚠️ **含混的放寬，精確的不放。** `class(發)` 是「發发」，不含「髮」：
+    // 所以搜「發」中的是第 4 行的「头发」，**不是**第 3 行的「頭髮」。
+    for _ in 0..2 {
+        ed.on_key(Key::Backspace);
+    }
+    ed.on_key(Key::Char('發'));
+    assert_eq!(ed.search().total, 1, "只有一處");
+    assert_eq!(ed.search().hits[0].line, 3, "中的是「头发」那一行，不是「頭髮」");
+    ed.on_key(Key::Backspace);
+    for c in "头发".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert_eq!(ed.search().total, 2, "「头发」是含混的那一個，兩邊都中");
+
+    // 出廠開着，按 `2` 關掉就只剩本來的寫法。
+    assert!(ed.search().glyphs, "出廠開着");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('2'));
+    assert!(!ed.search().glyphs);
+    assert_eq!(ed.search().total, 1, "關掉之後只有「头发」那一行");
+
+    // ⚠️ **和正則互斥**：正則開着的時候它不起作用，也翻不動。
+    ed.on_key(Key::Char('2'));
+    assert!(ed.search().glyphs);
+    ed.on_key(Key::Char('3'));
+    assert!(ed.search().regex);
+    ed.on_key(Key::Char('2'));
+    assert!(ed.search().glyphs, "正則開着，這一個翻不動——畫灰的鍵按了不該有事");
+    assert_eq!(ed.search().total, 1, "正則那一路照字面走，不折疊字形");
+    assert_eq!(ed.search().field, Field::Query, "按號碼不挪焦點");
+}
+
 /// **模糊: 「差不多是這幾個字」** — 2026-09-19: 「寫小説的人記得差不多是
 /// 這幾個字卻記不得原句」. The panel's other setting is a regular expression,
 /// which answers a different question (a *shape*); this one is a fourth
@@ -8873,9 +8919,9 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
     type_keys(&mut ed, "他説");
     assert_eq!(ed.search().total, 1, "as a string, only the exact one");
 
-    // 模糊是第四個開關。⚠️ 光標走不上去（2026-09-24）——`Esc` 出框，按 `4`。
+    // 模糊是第五個開關。⚠️ 光標走不上去（2026-09-24）——`Esc` 出框，按 `5`。
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('4'));
+    ed.on_key(Key::Char('5'));
     assert!(ed.search().fuzzy);
 
     // 他輕輕地説 as well as 他説 — and **not** the third line, where the two
@@ -8892,7 +8938,7 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
 
     // Asking for 正則 puts 模糊 down — they are alternatives, and a dimmed
     // switch that still flipped would say two things at once.
-    ed.on_key(Key::Char('2'));
+    ed.on_key(Key::Char('3'));
     assert!(ed.search().regex);
     assert!(!ed.search().fuzzy, "正則 and 模糊 are not both on");
 }
@@ -8906,7 +8952,7 @@ fn the_loose_switch_is_not_there_when_the_panel_replaces() {
     let mut ed = typed("他輕輕地説了一句。\n");
     type_keys(&mut ed, " /");
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('4'));
+    ed.on_key(Key::Char('5'));
     assert!(ed.search().fuzzy);
 
     ed.execute(":replace").unwrap();

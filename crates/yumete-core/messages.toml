@@ -4941,6 +4941,13 @@ zhs = "出框"
 en = "leave the box"
 
 [[message]]
+# 提示：替換模式下，框裏那一行的 Esc 指路
+key = "hint.search.out-then-replace"
+zht = "出框：j 到命中上 r 換這一處，R 全部換"
+zhs = "出框：j 到命中上 r 换这一处，R 全部换"
+en = "out: j to a hit then r changes it, R changes them all"
+
+[[message]]
 # 提示：搜索面板——換這一處／全部換
 key = "hint.search.replace"
 zht = "換這一處／全部換"
@@ -7128,6 +7135,13 @@ zhs = "模糊"
 en = "loose"
 
 [[message]]
+# 搜索面板：簡繁異字形那個開關的名字
+key = "search.glyphs"
+zht = "簡繁異字形"
+zhs = "简繁异字形"
+en = "any 簡/繁 writing"
+
+[[message]]
 # 限定一欄搜到第一處
 key = "search.hit-in-column"
 zht = "第 {0} 欄：第 1/{1} 處"
@@ -7262,6 +7276,13 @@ key = "search.replacing"
 zht = "替換"
 zhs = "替换"
 en = "replace"
+[[message]]
+# 在框上按 r：換這一處要先站到一處上
+key = "search.stand-on-a-hit"
+zht = "r 換的是「這一處」——先 j 走到一條命中上；R 是全部換"
+zhs = "r 换的是「这一处」——先 j 走到一条命中上；R 是全部换"
+en = "r changes one hit — walk to one with j first; R changes them all"
+
 [[message]]
 # 搜索：在哪裏找——這個檔
 key = "search.where.buffer"

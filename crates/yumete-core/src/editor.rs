@@ -2751,7 +2751,7 @@ impl Editor {
             // 檔案／緩衝區／大綱 on the left — 「what is there, and where am
             // I in it」; 字典／詳情 on the right — 「what is this thing I am
             // standing on」. Two questions, two columns.
-            search: crate::search_panel::Search::default(),
+            search: crate::search_panel::Search::new(),
             sides: [
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,
