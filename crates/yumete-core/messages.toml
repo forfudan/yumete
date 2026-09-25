@@ -5756,8 +5756,8 @@ en = "the outline"
 [[message]]
 # 標籤：搜索面板
 key = "label.panel.search"
-zht = "高級搜索"
-zhs = "高级搜索"
+zht = "搜索"
+zhs = "搜索"
 en = "search"
 
 [[message]]
