@@ -8191,13 +8191,13 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     ed.on_key(Key::Char('k'));
     assert_eq!(ed.search_for_test().field, Field::Query, "回來也跳過");
 
-    // ④ 替換是第六個開關，按 `6` 勾；勾上就把模糊放下。
-    // ⚠️ 2026-09-25 加了「簡繁異字形」之後，它後面那幾個號碼都順移了一位。
+    // ④ 替換是第七個開關，按 `7` 勾；勾上就把模糊放下。
+    // ⚠️ 2026-09-25 加了「簡繁異體」和「拼音」之後，它後面那幾個號碼順移了兩位。
     ed.search_for_test().fuzzy = true;
-    ed.on_key(Key::Char('6'));
-    assert!(ed.search_for_test().replacing, "6 勾上了");
+    ed.on_key(Key::Char('7'));
+    assert!(ed.search_for_test().replacing, "7 勾上了");
     assert!(!ed.search_for_test().fuzzy, "⚠️ 模糊自動關掉——鬆的範圍不許拿去替換");
-    ed.on_key(Key::Char('6'));
+    ed.on_key(Key::Char('7'));
     assert!(!ed.search_for_test().replacing, "再按一下撤回");
 
     // ② 到了結果列表的頂上再按 `k`，出得去。
@@ -8663,8 +8663,8 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().total, 0, "a literal dot is not in the text");
     ed.on_key(Key::Esc);
     assert_eq!(ed.mode(), Mode::Normal, "Esc leaves the box, not the panel");
-    // 正則是第三個開關——`3`，不必走過去（2026-09-24 定，2026-09-25 順移）。
-    ed.on_key(Key::Char('3'));
+    // 正則是第四個開關——`4`，不必走過去（2026-09-24 定，2026-09-25 順移兩位）。
+    ed.on_key(Key::Char('4'));
     assert!(ed.search().regex);
     assert!(ed.search().total > 0, "as a pattern it matches every character");
 
@@ -8898,11 +8898,52 @@ fn a_query_in_one_script_finds_the_other_writing() {
     // ⚠️ **和正則互斥**：正則開着的時候它不起作用，也翻不動。
     ed.on_key(Key::Char('2'));
     assert!(ed.search().glyphs);
-    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Char('4'));
     assert!(ed.search().regex);
     ed.on_key(Key::Char('2'));
     assert!(ed.search().glyphs, "正則開着，這一個翻不動——畫灰的鍵按了不該有事");
     assert_eq!(ed.search().total, 1, "正則那一路照字面走，不折疊字形");
+    assert_eq!(ed.search().field, Field::Query, "按號碼不挪焦點");
+}
+
+/// **拼音搜索：`tianmen` 找得到「天門」「天门」**（2026-09-25 作者提）。
+///
+/// 原話：「tianmen也可以搜到「天门」「天門」」。**只認全拼**（作者同日定）：`tm`
+/// 和 `tianm` 都不算。
+#[test]
+fn letters_find_the_characters_they_are_read_as() {
+    use crate::search_panel::Field;
+    let mut ed = typed("那年天門下起了大雪。\n山那邊是天门。\n路上遇見一個人。\n");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    type_keys(&mut ed, " /");
+    for c in "tianmen".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.search().pinyin, "出廠開着");
+    assert_eq!(ed.search().total, 2, "簡繁兩種寫法念的是同一個音，都中");
+
+    // ⚠️ **只認全拼**：半個音節不算。`tianm` 的 `m` 湊不成一個音節。
+    ed.on_key(Key::Backspace);
+    ed.on_key(Key::Backspace);
+    assert_eq!(ed.search().total, 0, "「tianm」的 m 湊不成音節，不算");
+
+    // ⚠️ **而 `tian` 是算的**——它本身就是一整個音節，中的是兩個「天」。
+    // 「只認全拼」說的是「每個字吃掉一整個音節」，不是「必須把詞打完」。
+    ed.on_key(Key::Backspace);
+    assert_eq!(ed.search().total, 2, "兩個「天」");
+
+    // 按 `3` 關掉，拼音那一路就不跑了。
+    let mut ed = typed("那年天門下起了大雪。\n");
+    type_keys(&mut ed, " /");
+    for c in "tianmen".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert_eq!(ed.search().total, 1);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('3'));
+    assert!(!ed.search().pinyin);
+    assert_eq!(ed.search().total, 0, "關掉就只剩字面那一路，而文稿裏沒有這七個字母");
     assert_eq!(ed.search().field, Field::Query, "按號碼不挪焦點");
 }
 
@@ -8919,9 +8960,9 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
     type_keys(&mut ed, "他説");
     assert_eq!(ed.search().total, 1, "as a string, only the exact one");
 
-    // 模糊是第五個開關。⚠️ 光標走不上去（2026-09-24）——`Esc` 出框，按 `5`。
+    // 模糊是第六個開關。⚠️ 光標走不上去（2026-09-24）——`Esc` 出框，按 `6`。
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('5'));
+    ed.on_key(Key::Char('6'));
     assert!(ed.search().fuzzy);
 
     // 他輕輕地説 as well as 他説 — and **not** the third line, where the two
@@ -8938,7 +8979,7 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
 
     // Asking for 正則 puts 模糊 down — they are alternatives, and a dimmed
     // switch that still flipped would say two things at once.
-    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Char('4'));
     assert!(ed.search().regex);
     assert!(!ed.search().fuzzy, "正則 and 模糊 are not both on");
 }
@@ -8952,7 +8993,7 @@ fn the_loose_switch_is_not_there_when_the_panel_replaces() {
     let mut ed = typed("他輕輕地説了一句。\n");
     type_keys(&mut ed, " /");
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('5'));
+    ed.on_key(Key::Char('6'));
     assert!(ed.search().fuzzy);
 
     ed.execute(":replace").unwrap();

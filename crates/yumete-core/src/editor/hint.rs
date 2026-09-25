@@ -86,7 +86,7 @@ impl Editor {
                     ("/", say!("hint.search.new-word")),
                     // The five switches are pressed by number and walked past
                     // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
-                    ("1–6", say!("hint.search.switches")),
+                    ("1–7", say!("hint.search.switches")),
                     ("Enter", say!("hint.search.use-it")),
                 ];
                 // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
