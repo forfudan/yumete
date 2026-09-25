@@ -250,16 +250,6 @@ impl View {
         View::Wiki,
     ];
 
-    /// Its name, for the sidebar's header.
-    pub fn title(self) -> &'static str {
-        match self {
-            View::Explorer => "文件",
-            View::Buffers => "緩衝區",
-            View::Outline => "大綱",
-            View::Search => "尋找",
-            View::Wiki => "百科",
-        }
-    }
 }
 
 /// What choosing a row does.
@@ -431,17 +421,21 @@ impl Sidebar {
 
     /// The sidebar's header: the view's name, and for the tree the directory it
     /// is rooted at.
-    pub fn title(&self) -> String {
+    /// **這一格的主語**，接在框畫的標題後面——文件樹接的是它扎根的那個目錄
+    /// （「文件樹  yumete」）。別的視圖沒有主語，回空。
+    ///
+    /// ⚠️ **名字不在這裏**（2026-09-26 定，原話：「我希望你让这些面板都一致，不要
+    /// 搞特殊化」）：五扇面板的標題一律由 `sidebar_shell` 畫，源頭是 `Panel::tag()`
+    /// 那一張表。從前這裏另有一張寫死的繁體短名表，於是同一扇面板有兩個名字，而
+    /// 英文界面上這一行照樣是中文。
+    pub fn subject(&self) -> String {
         match self.view {
-            View::Explorer => {
-                let root = self
-                    .root
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| self.root.display().to_string());
-                format!("{}  {root}", self.view.title())
-            }
-            view => view.title().to_string(),
+            View::Explorer => self
+                .root
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| self.root.display().to_string()),
+            _ => String::new(),
         }
     }
 
@@ -703,7 +697,8 @@ mod tests {
         sidebar.show(View::Outline);
         sidebar.show(View::Explorer);
         assert_eq!(sidebar.selected(), 1, "the tree is where it was left");
-        assert!(sidebar.title().contains("文件"));
+        // 標題歸容器畫（`sidebar_shell`）；這一格自己只交出主語——根目錄名。
+        assert_eq!(sidebar.subject(), dir.file_name().unwrap().to_string_lossy());
 
         std::fs::remove_dir_all(&dir).ok();
     }
