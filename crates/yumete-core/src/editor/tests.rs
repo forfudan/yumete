@@ -8178,6 +8178,11 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
         Where::Named(".".into()),
         "和 :search 的參數完全一致"
     );
+    // ⚠️ **`Enter` 只跑搜索，鍵留在框裏**（2026-09-25）——要走格子得先 `Esc`。
+    assert_eq!(ed.mode(), Mode::Field);
+    ed.on_key(Key::Esc);
+    // `Esc` 出框也落地，而且落的是同一個地方。
+    assert_eq!(ed.search_for_test().scope, Where::Named(".".into()));
 
     // ③ **`j` 從查詢框一步到結果**——五行開關走不上去（2026-09-24 定，原話：
     // 「避免用户要从他们上面经过浪费 jk」）。
@@ -8683,40 +8688,42 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().case, Case::Smart, "round again");
 }
 
-/// **兩種範圍下 `Enter` 是同一個鍵**（2026-09-25 報的：「搜索本文件和文件夹的
-/// 时候的行为不一致，需要統一……否则你这就是无端设置特例了」）。
+/// **`Enter` 只做一件事：跑一遍搜索**（2026-09-25 定，原話：「按下Enter「只」触发
+/// 搜索。他不更改光标位置，不更改状态……这样的好处是在搜的到/搜不到东西的时候，
+/// enter的行为都是一样的」）。
 ///
-/// ⚠️ **從前本文件那一種是「下一處」、鍵留在框裏，而那個行為一條測試都沒盯着**
-/// ——所以改掉它的時候什麼都沒紅。這一條就是為它補的。
+/// ⚠️ **同一天早些時候它還兼着「把鍵交到第一條結果上」**——而那讓它在找得到和找
+/// 不到的時候做兩件不同的事，正是這一條要去掉的分岔。
 #[test]
-fn enter_hands_the_keys_to_the_results_whichever_scope_it_is() {
-    use crate::search_panel::{Field, Row};
+fn enter_only_runs_the_search_and_changes_nothing_else() {
+    use crate::search_panel::Field;
     let mut ed = typed("霜降於石階。\n那一年的霜來得早。\n霜花結在窗上。");
-    ed.on_key(Key::Char('g'));
-    ed.on_key(Key::Char('G'));
     ed.open_search();
     ed.on_key(Key::Char('霜'));
-    assert_eq!(ed.mode(), Mode::Field, "開出來鍵在框裏");
     assert_eq!(ed.search().total, 3, "本文件是邊打邊搜的");
 
     ed.on_key(Key::Enter);
-    assert_eq!(ed.mode(), Mode::Normal, "Enter 把鍵交出來，不必再 Esc");
-    assert_eq!(ed.search().field, Field::Results);
-    // **第一處，不是光標最近的那一處**——和搜文件夾落在哪裏是同一句話。
-    assert!(matches!(ed.search().row(), Some(Row::Hit(0))), "{:?}", ed.search().row());
+    assert_eq!(ed.mode(), Mode::Field, "鍵留在框裏");
+    assert_eq!(ed.search().field, Field::Query, "焦點也沒動");
+    assert_eq!(ed.search().total, 3);
 
-    // 「下一處」沒有丟，它成了結果列表裏的 `j`。
-    ed.on_key(Key::Char('j'));
-    assert!(matches!(ed.search().row(), Some(Row::Hit(1))));
-    ed.on_key(Key::Char('k'));
-    assert!(matches!(ed.search().row(), Some(Row::Hit(0))));
-
-    // 一處都沒有就別交鍵：接下來要做的是改詞，空列表不是站的地方。
-    let mut ed = typed("那年冬天很冷。");
-    ed.open_search();
-    ed.on_key(Key::Char('霜'));
+    // **找不到的時候一模一樣**——這就是這條規矩買來的東西。
+    for _ in 0..1 {
+        ed.on_key(Key::Backspace);
+    }
+    ed.on_key(Key::Char('甲'));
+    assert_eq!(ed.search().total, 0);
     ed.on_key(Key::Enter);
-    assert_eq!(ed.mode(), Mode::Field, "找不到，鍵留在框裏");
+    assert_eq!(ed.mode(), Mode::Field, "找不到，Enter 照樣什麼都不改");
+    assert_eq!(ed.search().field, Field::Query);
+
+    // 去結果是 `Esc` 然後 `j`，兩個已經學過的鍵。
+    ed.on_key(Key::Backspace);
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Normal);
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Results);
 }
 
 /// **`/` 回搜索框換一個詞，`hl` 在框裏挪光標，`i` 從光標處插**（2026-09-25 定）。
@@ -8729,15 +8736,24 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
         ed.on_key(Key::Char(c));
     }
     ed.on_key(Key::Enter);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results, "鍵落到結果上了");
 
-    // ① `/` 不管站在哪一格，都回搜索框，而且整條選着。
+    // ① **`/` 不管站在哪一格，都回搜索框：進 insert、光標末尾、字留着。**
+    // ⚠️ 和選擇器（`空格 f`／`:wiki`）那一扇裏的 `/` 一個樣——2026-09-25 作者
+    // 報的就是這一條不一致。它原先是「整條選中」，打一個字就把詞吃掉了。
     ed.on_key(Key::Char('/'));
     assert_eq!(ed.mode(), Mode::Field);
     assert_eq!(ed.search().field, Field::Query);
-    assert!(ed.search().all_selected, "整條選着——打字就換一個詞");
+    assert!(!ed.search().all_selected, "不選中——打字是接着打，不是替掉");
+    assert_eq!(ed.search().caret, ed.search().query.chars().count(), "光標在末尾");
+    ed.on_key(Key::Char('夜'));
+    assert_eq!(ed.search().query, "冬天夜", "接在後面");
+    for _ in 0..3 {
+        ed.on_key(Key::Backspace);
+    }
     ed.on_key(Key::Char('霜'));
-    assert_eq!(ed.search().query, "霜", "打字替掉了整條");
 
     // ② `hl` 在框裏挪光標，不再走格子。
     ed.on_key(Key::Esc);
@@ -9096,14 +9112,17 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.search().total, 4);
 
-    // **跨檔的 `Enter` 是「開找」，找完就把鍵交出去**（2026-09-24 定，原話：
-    // 「输入结束按Enter后显示搜索结果的时候，是不是可以直接进入 normal 模式？
-    // 这样不需要额外esc一下」）。落點是**第一條命中**，不是它上面那一行檔名——
-    // 提示行對一行檔名無話可說，停在那裏看着像沒答。
-    assert_eq!(ed.mode(), Mode::Normal, "不必再 Esc 一下");
+    // **`Enter` 只跑搜索**（2026-09-25 定），去結果是 `Esc` 然後 `j`。
+    assert_eq!(ed.mode(), Mode::Field, "鍵留在框裏");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results);
 
     // **One hit** — standing on a hit, not on the file above it.
+    // 跨檔的第 0 行是檔名，`j` 一下纔站到命中上。
+    if !matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))) {
+        ed.on_key(Key::Char('j'));
+    }
     assert!(matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))));
     ed.on_key(Key::Char('r'));
     assert_eq!(ed.search().total, 3, "{}", ed.status());

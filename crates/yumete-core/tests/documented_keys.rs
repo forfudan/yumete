@@ -169,7 +169,9 @@ const DISOWNED: &[&str] = &[
     // as the tables of the day they were made, and they are names now only in
     // the sense that `:view-wrap` begins with one.
     ":view",
-    ":clipboard",
+    // ⚠️ `:clipboard` 也回來了（2026-09-25）：拍平的時候它是個空殼父命令，
+    // 現在它自己有意思了——**粘貼菜單**，`空格 "` 開的那一扇。和上面
+    // `:clipboard-yank` 那一條同一回事，所以它不在這張單子上。
     ":buffers",
     ":ls",
     ":bd",
