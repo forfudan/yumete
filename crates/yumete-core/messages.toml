@@ -899,9 +899,9 @@ en = "no readings: without them a name one character out is indistinguishable fr
 [[message]]
 # :check-names 這本書還没有百科，没有名字可比
 key = "check.names-no-wiki"
-zht = "這本書還没有百科——:wiki edit 起個頭，專名纔查得了"
-zhs = "这本书还没有百科——:wiki edit 起个头，专名才查得了"
-en = "this book has no wiki yet — :wiki edit starts one, and then names can be checked"
+zht = "這本書還没有百科——:wiki-edit 起個頭，專名纔查得了"
+zhs = "这本书还没有百科——:wiki-edit 起个头，专名才查得了"
+en = "this book has no wiki yet — :wiki-edit starts one, and then names can be checked"
 
 [[message]]
 # :check-names 的緩衝區標題
@@ -1547,10 +1547,26 @@ find = "滾輪 滚轮 鼠標 鼠标 捲動 滚动 scroll mouse"
 [[message]]
 # : 命令選單裏 wiki 那一項的說明
 key = "cmd.commands.wiki"
-zht = "作品百科：這本書自己的詞條——讀了哪些檔、各幾條、哪些標不出來"
-zhs = "作品百科：这本书自己的词条——读了哪些文件、各几条、哪些标不出来"
-en = "the book's wiki: which files were read, how many entries each, what cannot be marked"
+zht = "查一個詞條：打名字，打錯了、順序反了也找得到"
+zhs = "查一个词条：打名字，打错了、顺序反了也找得到"
+en = "look an entry up by name — misspelt or out of order still finds it"
 find = "百科 詞條 词条 設定 设定 人物 地名 wiki encyclopedia"
+
+[[message]]
+# 命令：:wiki-mark —— 正文裏怎麼給詞條名做記號
+key = "cmd.commands.wiki-mark"
+zht = "正文裏怎麼給詞條名做記號：金色、下劃線，或者不做"
+zhs = "正文里怎么给词条名做记号：金色、下划线，或者不做"
+en = "how a wiki name is marked in the prose: 金, an underline, or not at all"
+find = "百科 詞條 词条 記號 记号 標記 标记 wiki mark"
+
+[[message]]
+# 命令：:wiki-where —— 百科這一族的錯誤通道
+key = "cmd.commands.wiki-where"
+zht = "百科到哪裏找的：讀了哪些檔、各幾條、哪些標不出來"
+zhs = "百科到哪里找的：读了哪些文件、各几条、哪些标不出来"
+en = "where the wiki looked: which files were read, how many entries each, what cannot be marked"
+find = "百科 詞條 词条 在哪 找不到 wiki where"
 
 [[message]]
 # : 命令選單裏 word 那一項的說明（commands 組）
@@ -2680,18 +2696,18 @@ zhs = "打开全局的 wiki.md——整个系列共用的设定"
 en = "open the global wiki.md — what a whole series shares"
 
 [[message]]
-# : 命令選單裏 hide 那一項的說明（wiki 組）
-key = "cmd.wikis.hide"
-zht = "正文裏不給詞條名做記號"
-zhs = "正文里不给词条名做记号"
-en = "stop marking wiki names in the prose"
-
-[[message]]
 # : 命令選單裏 line 那一項的說明（wiki 組）
 key = "cmd.wikis.line"
 zht = "橫排虛線下劃線，竪排底色"
 zhs = "横排虚线下划线，竖排底色"
 en = "a dotted underline across, a ground down a 縱"
+
+[[message]]
+# : 命令選單裏 hide 那一項的說明（wiki 組）
+key = "cmd.wikis.off"
+zht = "正文裏不給詞條名做記號"
+zhs = "正文里不给词条名做记号"
+en = "stop marking wiki names in the prose"
 
 [[message]]
 # : 命令選單裏 panel 那一項的說明（wiki 組）
@@ -6501,6 +6517,13 @@ en = "paste"
 # ── preview ───────────────────────────────────────────────────────────
 
 [[message]]
+# 挑詞條那扇面板的標題
+key = "picker.wiki"
+zht = "詞條"
+zhs = "词条"
+en = "entries"
+
+[[message]]
 # :view-preview 做不出那一頁
 key = "preview.failed"
 zht = "預覽：{0}"
@@ -9863,21 +9886,21 @@ zhs = "全局"
 en = "global"
 
 [[message]]
-# :wiki color
+# :wiki-mark color
 key = "wiki.marks-color"
 zht = "百科記號：金色字"
 zhs = "百科记号：金色字"
 en = "wiki marks: 金 ink"
 
 [[message]]
-# :wiki line
+# :wiki-mark line
 key = "wiki.marks-line"
 zht = "百科記號：橫排虛線下劃線，竪排底色"
 zhs = "百科记号：横排虚线下划线，竖排底色"
 en = "wiki marks: a dotted underline across, a ground down a 縱"
 
 [[message]]
-# :wiki hide
+# :wiki-mark off
 key = "wiki.marks-off"
 zht = "百科記號：關"
 zhs = "百科记号：关"
@@ -9905,11 +9928,18 @@ zhs = "{0}：没有这个文件"
 en = "{0}: no such file"
 
 [[message]]
+# :wiki 指名的那一條，百科裏沒有
+key = "wiki.no-such-entry"
+zht = "百科裏沒有「{0}」這一條"
+zhs = "百科里没有「{0}」这一条"
+en = "the wiki has no entry called {0}"
+
+[[message]]
 # :wiki 報告裏：這本書還沒有百科
 key = "wiki.none"
-zht = "這本書還沒有百科——:wiki edit 會建 {0}"
-zhs = "这本书还没有百科——:wiki edit 会建 {0}"
-en = "this book has no wiki yet — :wiki edit makes {0}"
+zht = "這本書還沒有百科——:wiki-edit 會建 {0}"
+zhs = "这本书还没有百科——:wiki-edit 会建 {0}"
+en = "this book has no wiki yet — :wiki-edit makes {0}"
 
 [[message]]
 # 引用那一行的面板底邊：怎麽打開它
@@ -9919,7 +9949,7 @@ zhs = "gf 打开"
 en = "gf opens it"
 
 [[message]]
-# :wiki edit 打開了一個空的百科
+# :wiki-edit 打開了一個空的百科
 key = "wiki.opened-empty"
 zht = "{0}——## 開始一個詞條，# 是分組；<!-- [yumete] 人物.md --> 引另一個檔"
 zhs = "{0}——## 开始一个词条，# 是分组；<!-- [yumete] 人物.md --> 引另一个文件"
@@ -9947,7 +9977,7 @@ zhs = "{0}（在 {1} 里引的）：不在这本书里，不读"
 en = "{0} (named in {1}): outside the book, not read"
 
 [[message]]
-# 百科重讀了（:wiki reload，或存了一個百科檔）
+# 百科重讀了（:wiki-reload，或存了一個百科檔）
 key = "wiki.reloaded"
 zht = "百科：{0} 條，來自 {1} 個檔"
 zhs = "百科：{0} 条，来自 {1} 个文件"

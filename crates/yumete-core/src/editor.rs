@@ -2347,6 +2347,16 @@ pub struct Editor {
     /// Where the cursor was when the 字典 was asked, so the answer can go when
     /// the cursor leaves without anybody having to take it away (#293).
     dictionary_anchor: Option<usize>,
+    /// **一條釘住的詞條，和釘它的時候光標在哪**（2026-09-25）。
+    ///
+    /// `:wiki <詞條名>` 挑完一條之後，那一條停在眼前——側欄裏或者浮窗裏——**直到
+    /// 光標一動**（原話：「按下enter 之后固定浮窗和面板直到光标移动」）。和字典
+    /// 那一份同一個辦法（[`Editor::dictionary_anchor`]）：記下當時的光標，走開了
+    /// 就當場丟掉。
+    ///
+    /// 存的是**名字**不是序號：百科隨時可能重讀（存一個百科檔就重讀），序號會過
+    /// 期，而名字是這個功能自己的鍵（`Wiki::by_name`）。
+    wiki_pinned: Option<(String, usize)>,
     /// How far the bottom layer is scrolled — the only state a transient panel
     /// has, and it has it because reading a long answer is the point.
     transient_scroll: usize,
@@ -2752,6 +2762,7 @@ impl Editor {
                 crate::sidebar::Side::Right,
             ],
             dictionary_anchor: None,
+            wiki_pinned: None,
             transient_scroll: 0,
             wiki_scroll: std::cell::Cell::new((0, usize::MAX)),
             default_syntax: None,

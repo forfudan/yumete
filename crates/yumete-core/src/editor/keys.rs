@@ -47,6 +47,8 @@ impl Editor {
         // 蓋住百科**，而且把鍵接走。掃在派鍵之前，`C-w` 那一下焦點還沒挪過去，
         // 掃得掉；掃在之後就正好掃不掉。
         self.forget_a_dictionary_nobody_is_reading();
+        // 同上，釘住的那一條詞條也是：光標一動就鬆開（2026-09-25）。
+        self.forget_a_pinned_entry();
         // The sidebar takes Normal-mode keys while it has the focus; every
         // other mode is about the text and goes to the text.
         if self.sidebar_focused() && self.mode == Mode::Normal && self.pending == Pending::None {

@@ -23,6 +23,17 @@ pub enum Item {
     /// shown for it. `None` is the system clipboard, which only the front end
     /// can read.
     Paste(Option<usize>, String),
+    /// **A wiki entry, by name** — `:wiki 朱宇浩` (2026-09-25).
+    ///
+    /// The second string is the **blurb**: the head of what the entry says, so
+    /// a list of names is a list you can read. ⚠️ **It is drawn and never
+    /// matched** — typing 「冬天」 should find the entry *called* 冬天, not
+    /// every entry that mentions winter.
+    ///
+    /// The name, not an index: the wiki is re-read whenever one of its files
+    /// is saved, and an index would go stale between opening this list and
+    /// choosing from it. The name is the feature's own key (`Wiki::by_name`).
+    Wiki(String, String),
 }
 
 impl Item {
@@ -31,6 +42,16 @@ impl Item {
         match self {
             Item::File(path) => path,
             Item::Buffer(_, name) | Item::Row(_, name) | Item::Paste(_, name) => name,
+            Item::Wiki(name, _) => name,
+        }
+    }
+
+    /// **What is drawn after the label and never matched.** Empty for
+    /// everything but a wiki entry, whose row is 「名字　它說的頭一句…」.
+    pub fn blurb(&self) -> &str {
+        match self {
+            Item::Wiki(_, blurb) => blurb,
+            _ => "",
         }
     }
 }
@@ -317,21 +338,18 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
     if needle.is_empty() {
         return Some((0, Vec::new()));
     }
-    let mut at = 0usize;
-    let mut end = 0usize;
-    for &want in &needle {
-        let found = (at..haystack.len()).find(|&i| haystack[i] == want)?;
-        at = found + 1;
-        end = found;
-    }
-    let mut positions = Vec::with_capacity(needle.len());
-    let mut upto = end as isize;
-    for &want in needle.iter().rev() {
-        let found = (0..=upto).rev().find(|&i| haystack[i as usize] == want)?;
-        positions.push(found as usize);
-        upto = found - 1;
-    }
-    positions.reverse();
+    // **In order first, and if that fails, the same letters in any order**
+    // (2026-09-25). 原話：「我覺得改變順序應該很常見的，比如 a red apple 和 a
+    // apple red 的相近程度其實很高」，而在此之前一個顛倒的查詢不是排在後面，是
+    // **整條被篩掉、根本不出現**。
+    //
+    // ⚠️ **兩檔之間差着 [`IN_ORDER`] 分**，所以順序對的永遠在上面，顛倒的墊在
+    // 底下——放寬不會把本來就對的那一批攪亂。門檻沒有：詞條、檔名這些單子本來就
+    // 不長（作者定：「寧可多列」）。
+    let (positions, in_order) = match forwards(&haystack, &needle) {
+        Some(found) => (found, true),
+        None => (anyhow(&haystack, &needle)?, false),
+    };
     // Where the name itself begins: everything before the last separator is
     // the folders, which are not what was typed at.
     let name_at = haystack
@@ -358,7 +376,60 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
         }
     }
     // A short label containing the query is a better answer than a long one.
-    Some((score * 100 - haystack.len() as i64, positions))
+    let score = score * 100 - haystack.len() as i64;
+    Some((score + if in_order { IN_ORDER } else { 0 }, positions))
+}
+
+/// How much better an in-order match is than the same letters jumbled.
+///
+/// Bigger than any score a single label can earn: the longest name worth
+/// matching is a few dozen characters, each worth at most 15 before the ×100,
+/// so a few tens of thousands covers it with room to spare. The point is that
+/// the two kinds never interleave — 「順序對的」 is a category, not a nudge.
+const IN_ORDER: i64 = 1_000_000;
+
+/// Every needle character, **in order**, earliest and then tightest.
+///
+/// Two passes, and the second is backwards — the same shape [`crate::nearby`]
+/// uses, for the same reason. A forward walk alone takes the *first* place
+/// each character fits: 「他説」 in 「他。他説」 would be marked from the first
+/// 他, and the reader sees a range with a full stop in the middle of it.
+fn forwards(haystack: &[char], needle: &[char]) -> Option<Vec<usize>> {
+    let mut at = 0usize;
+    let mut end = 0usize;
+    for &want in needle {
+        let found = (at..haystack.len()).find(|&i| haystack[i] == want)?;
+        at = found + 1;
+        end = found;
+    }
+    let mut positions = Vec::with_capacity(needle.len());
+    let mut upto = end as isize;
+    for &want in needle.iter().rev() {
+        let found = (0..=upto).rev().find(|&i| haystack[i as usize] == want)?;
+        positions.push(found as usize);
+        upto = found - 1;
+    }
+    positions.reverse();
+    Some(positions)
+}
+
+/// **Every needle character is in there somewhere, order be damned** — 朱浩宇
+/// finding 朱宇浩 (2026-09-25).
+///
+/// One haystack character per needle character (so 「朱朱」 needs two 朱), each
+/// taken as early as it can be. The positions come back **sorted**, because
+/// they are about to be drawn: a highlight has to run left to right whatever
+/// order the query was typed in.
+fn anyhow(haystack: &[char], needle: &[char]) -> Option<Vec<usize>> {
+    let mut taken = vec![false; haystack.len()];
+    let mut positions = Vec::with_capacity(needle.len());
+    for &want in needle {
+        let found = (0..haystack.len()).find(|&i| !taken[i] && haystack[i] == want)?;
+        taken[found] = true;
+        positions.push(found);
+    }
+    positions.sort_unstable();
+    Some(positions)
 }
 
 #[cfg(test)]
@@ -486,5 +557,51 @@ mod tests {
             picker.chosen(),
             Some(Item::File("卷二/驚蟄.md".to_string()))
         );
+    }
+
+    /// **順序反了也找得到，而順序對的排在前面**（2026-09-25 定）。
+    ///
+    /// 原話：「我覺得改變順序應該很常見的，比如 a red apple 和 a apple red 的
+    /// 相近程度其實很高」。從前顛倒的查詢不是排在後面，是**整條篩掉**。
+    #[test]
+    fn letters_out_of_order_still_match_and_rank_below_the_ones_in_order() {
+        let mut picker = files(&["朱宇浩.md"]);
+        for c in "朱浩宇".chars() {
+            picker.push(c);
+        }
+        assert_eq!(picker.matches().len(), 1, "顛倒的名字也找得到");
+
+        // 兩條都有這幾個字，只有一條的次序對——對的那條在上面。
+        let mut picker = files(&["朱宇浩.md", "朱浩宇.md"]);
+        for c in "朱浩宇".chars() {
+            picker.push(c);
+        }
+        let order: Vec<&str> = picker.matches().iter().map(|i| i.label()).collect();
+        assert_eq!(order, ["朱浩宇.md", "朱宇浩.md"], "順序對的先出");
+
+        // ⚠️ **缺一個字就不算**——放寬的是次序，不是「有幾個算幾個」。
+        let mut picker = files(&["朱宇浩.md"]);
+        for c in "朱浩甲".chars() {
+            picker.push(c);
+        }
+        // ⚠️ `total()` 是「一共幾條」，不是「配上幾條」——問的是 `matches()`。
+        assert_eq!(picker.matches().len(), 0, "甲 不在裏面");
+    }
+
+    /// 詞條那一行後半截只畫不比：打「冬天」找的是**叫**冬天的那一條。
+    #[test]
+    fn a_wiki_blurb_is_drawn_and_never_matched() {
+        let mut picker = Picker::new(
+            "詞條",
+            vec![
+                Item::Wiki("阿寧".into(), "女主角，冬天住在石階盡頭".into()),
+                Item::Wiki("冬天".into(), "一年裏最冷的那一段".into()),
+            ],
+        );
+        for c in "冬天".chars() {
+            picker.push(c);
+        }
+        let order: Vec<&str> = picker.matches().iter().map(|i| i.label()).collect();
+        assert_eq!(order, ["冬天"], "阿寧 的正文裏有「冬天」，可它不叫冬天");
     }
 }

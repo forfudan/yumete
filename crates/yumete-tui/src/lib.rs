@@ -7224,9 +7224,11 @@ fn draw_picker(
     // The name, and **which of its characters the query is standing on** — the
     // one thing that says why a name with scattered letters is on the list at
     // all (2026-09-18).
-    let items: Vec<(String, Vec<usize>)> = matches
+    // ⚠️ **第三格是那一小段正文，只畫不比**（2026-09-25，詞條面板）：打「冬天」
+    // 找的是**叫**冬天的那一條，不是每一條提到冬天的。
+    let items: Vec<(String, Vec<usize>, String)> = matches
         .iter()
-        .map(|i| (i.label().to_string(), picker.hits(i.label())))
+        .map(|i| (i.label().to_string(), picker.hits(i.label()), i.blurb().to_string()))
         .collect();
     // The code being composed shows in the query, where a `/` search shows it
     // too: the reader has to see 「di3」 turn into 「第」 before choosing.
@@ -7366,6 +7368,19 @@ fn draw_picker(
                 // The folders, without the separator the name was split on.
                 for n in 0..name_at - 1 {
                     if !ink_at(Some(n), chars[n], &mut x, true) {
+                        break;
+                    }
+                }
+            }
+            // **那一小段正文，跟在名字後面，不著色**（2026-09-25）。和上面那一段
+            // 「檔名之後的文件夾」佔同一個位子，理由也同一條：名字先畫，後面那半
+            // 截是讀者可以不看的，所以裁也裁在它身上。
+            if !item.2.is_empty() {
+                for ch in "  ".chars() {
+                    ink_at(None, ch, &mut x, true);
+                }
+                for ch in item.2.chars() {
+                    if !ink_at(None, ch, &mut x, true) {
                         break;
                     }
                 }

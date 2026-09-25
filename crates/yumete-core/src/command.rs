@@ -38,6 +38,37 @@ pub enum Engagement {
     Off,
 }
 
+/// 作品百科 (#287) 的每一件事 —— **一件一個命令**。
+///
+/// ⚠️ **從前它們是 `:wiki` 的參數**，而它們是動作不是取值（2026-09-25 定，原話：
+/// 「他們都是函數不是參數，所以應該用hyphen連結，比如 wiki-reload, wiki-panel
+/// on/off, wiki-edit」）。參數那個位子空出來給真正的參數：**詞條名**。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WikiCommand {
+    /// `:wiki` — which files were read, how many entries each, what could not
+    /// be marked. **The feature's error channel.**
+    Report,
+    /// `:wiki <詞條名>` — **look an entry up by name** (2026-09-25).
+    ///
+    /// ⚠️ **The name is an argument, and the settings are their own commands.**
+    /// `:wiki edit` used to mean 「open the file」 and anything else meant
+    /// 「reload」 — so `:wiki 朱宇浩` quietly re-read the wiki instead of
+    /// answering. 原話：「他們都是函數不是參數，所以應該用hyphen連結」.
+    Find(String),
+    /// `:wiki-edit` — open this book's `.yumete/wiki.md`, existing or not.
+    Edit,
+    /// `:wiki-global` — open the global one, what a whole series shares.
+    Global,
+    /// `:wiki-panel [on|off]` — keep the entry in the sidebar rather than
+    /// letting it float. `None` flips it.
+    Panel(Option<bool>),
+    /// `:wiki-mark line|color|off` — how a wiki name is marked in the prose.
+    /// `None` says which it is now.
+    Mark(Option<crate::wiki::Mark>),
+    /// `:wiki-reload` — read the wiki and every file it includes again.
+    Reload,
+}
+
 /// What `:word` was asked about — 分詞邊界, from every side.
 ///
 /// **One subject, one command.** Where a word ends is decided by a dictionary,
@@ -186,8 +217,8 @@ pub enum Command {
     /// begins**, which is one subject and used to be several commands
     /// (`:segment` coloured the boundaries, `:words` weighed them).
     Word(WordCommand),
-    /// `:wiki [edit|global|reload]` — 作品百科 (#287). Bare, the report.
-    Wiki(Option<String>),
+    /// 作品百科 (#287) — the report, one entry, or one of the settings.
+    Wiki(WikiCommand),
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
@@ -2123,15 +2154,16 @@ const WORD_LISTS: &[Word] = &[
     },
 ];
 
-/// What `:wiki` takes.
-const WIKI_WORDS: &[Word] = &[
-    Word { name: "edit", help: "cmd.wikis.edit", needs: &[] },
-    Word { name: "global", help: "cmd.wikis.global", needs: &[] },
-    Word { name: "panel", help: "cmd.wikis.panel", needs: &[] },
-    Word { name: "line", help: "cmd.wikis.line", needs: &[] },
+/// What `:wiki-mark` takes — **how** a wiki name is marked in the prose.
+///
+/// ⚠️ **These are the only wiki words left, because they are the only ones
+/// that were ever values** (2026-09-25). `edit`, `panel` and `reload` are
+/// things to *do*, and they are now `:wiki-edit`, `:wiki-panel`, `:wiki-reload`.
+/// `hide` became `off`, so it reads as one family with `:wiki-panel on|off`.
+const WIKI_MARKS: &[Word] = &[
     Word { name: "color", help: "cmd.wikis.color", needs: &[] },
-    Word { name: "hide", help: "cmd.wikis.hide", needs: &[] },
-    Word { name: "reload", help: "cmd.wikis.reload", needs: &[] },
+    Word { name: "line", help: "cmd.wikis.line", needs: &[] },
+    Word { name: "off", help: "cmd.wikis.off", needs: &[] },
 ];
 
 const WORD_LEVELS: &[Word] = &[
@@ -2721,8 +2753,77 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.wiki",
         needs: &[],
-        params: &[Param::Words { of: WIKI_WORDS, default: None }],
-        build: Some(|p| Ok(Command::Wiki(p.arg(0).map(str::to_string)))),
+        // ⚠️ **自由文本，不是一張詞表**：這裏收的是詞條名，而詞條名是這本書自己
+        // 的話（「朱宇浩」「天門真境」），沒有哪張表列得完。
+        params: &[Param::Free("<詞條名>")],
+        build: Some(|p| {
+            // **不帶名字也開那扇面板，空着查**（2026-09-25 定）：`:wiki` 就是
+            // 「翻百科」，天天用的是這個。那一份報告挑走了，叫 `:wiki-where`。
+            Ok(Command::Wiki(WikiCommand::Find(
+                p.arg(0).unwrap_or_default().to_string(),
+            )))
+        }),
+    },
+    Entry {
+        name: "wiki-edit",
+        aliases: &[],
+        help: "cmd.wikis.edit",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Wiki(WikiCommand::Edit))),
+    },
+    Entry {
+        name: "wiki-global",
+        aliases: &[],
+        help: "cmd.wikis.global",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Wiki(WikiCommand::Global))),
+    },
+    Entry {
+        name: "wiki-panel",
+        aliases: &[],
+        help: "cmd.wikis.panel",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| {
+            Ok(Command::Wiki(WikiCommand::Panel(match p.arg(0) {
+                None => None,
+                Some("on") => Some(true),
+                _ => Some(false),
+            })))
+        }),
+    },
+    Entry {
+        name: "wiki-mark",
+        aliases: &[],
+        help: "cmd.commands.wiki-mark",
+        needs: &[],
+        params: &[Param::Words { of: WIKI_MARKS, default: None }],
+        build: Some(|p| {
+            Ok(Command::Wiki(WikiCommand::Mark(match p.arg(0) {
+                None => None,
+                Some("line") => Some(crate::wiki::Mark::Line),
+                Some("off") => Some(crate::wiki::Mark::Off),
+                _ => Some(crate::wiki::Mark::Color),
+            })))
+        }),
+    },
+    Entry {
+        name: "wiki-where",
+        aliases: &[],
+        help: "cmd.commands.wiki-where",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Wiki(WikiCommand::Report))),
+    },
+    Entry {
+        name: "wiki-reload",
+        aliases: &[],
+        help: "cmd.wikis.reload",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Wiki(WikiCommand::Reload))),
     },
     Entry {
         name: "word-list",
