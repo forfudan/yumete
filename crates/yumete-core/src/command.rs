@@ -304,7 +304,6 @@ pub enum Command {
     /// `:table-detail [on|off]` — the panel; `None` toggles.
     ShowDetail(Option<bool>),
     /// `:table-detail 40` — how wide it is.
-    SetDetailWidth(usize),
     /// `:table-sort 1 a 2 d` — put the rows in order by these columns, in this
     /// order. Empty sorts by the column the cursor is in.
     SortTable(Vec<(usize, bool)>),
@@ -3810,13 +3809,15 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.detail",
         needs: &[Need::Table],
-        params: &[Param::WordsOr { of: ON_OFF, default: None, or: "<寬>" }],
+        // ⚠️ **`<寬>` 那個參數沒了**（2026-09-26）：寬度歸側欄，面板說不上話
+        // （作者原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
+        // 要寬要窄按 `w`，三檔。
+        params: &[Param::Words { of: ON_OFF, default: None }],
         build: Some(|p| {
             Ok(match p.arg(0) {
-                None => Command::ShowDetail(None),
-                Some("on") => Command::ShowDetail(Some(true)),
                 Some("off") => Command::ShowDetail(Some(false)),
-                _ => Command::SetDetailWidth(p.number(0)?),
+                Some("on") => Command::ShowDetail(Some(true)),
+                _ => Command::ShowDetail(None),
             })
         }),
     },

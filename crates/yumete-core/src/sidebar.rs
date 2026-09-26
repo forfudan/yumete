@@ -8,7 +8,8 @@
 //!
 //! It costs columns, which in a terminal is the one thing there is never enough
 //! of — and set vertically it costs them by threes, because that is what a 縱 is
-//! wide. So it is off by default, its width is a setting, and opening it is one
+//! wide. So it is off by default, its width is the slot's business (see
+//! [`Width`]), and opening it is one
 //! keystroke.
 
 use std::collections::BTreeSet;
@@ -252,6 +253,66 @@ impl View {
 
 }
 
+/// **一個側欄有多寬**，四檔（2026-09-26 作者定）。
+///
+/// 原話：「所有侧栏第一次打开的时候，不管是什么面板，都默认是窄，然后 w 循环切换
+/// ……基准为 窄1/4, 中1/3, 宽1/2」，當天又加了一檔：「窄、中、绰、宽 1/4 - 1/3 -
+/// 2/5 - 1/2」。⚠️ **2/5 填的是最大那個坑**：160 欄下 1/3 到 1/2 是 53 → 80，隔着
+/// 27 欄；插進 64 之後兩段分別是 +11 和 +16。四檔在任何窗口下都真的不同，相鄰之差
+/// 最小 4 欄（60 欄窗口）。
+///
+/// ⚠️ **檔位的名字就寫分數**（同日定）。「綽」和「寬」是近義詞，狀態欄寫着
+/// 「邊欄：綽」的時候讀者看不出它比「寬」窄還是寬——他得記。分數自己排序，不用學
+/// 詞，而且直接說出會得到什麼；往後加第五檔也不必再造一個字。
+///
+/// ⚠️ **寬度是側欄的屬性，不是面板的屬性**（作者原話）：「面板自身不能改变侧栏的
+/// 宽度，它只是借用了侧栏这个容器」。所以這個檔位記在**那一側**上，換視圖不變、
+/// 關掉再開也不變——你把左欄調寬是因為你的屏幕寬，不是因為你在看文件樹。
+///
+/// ⚠️ **檔位是意圖，寬度是結果。** 兩欄都開而窗口又小的時候，靠後那幾檔會被「正文
+/// 保底」咬成一樣寬；那時檔位照走，窗口一拉大它就真的寬了。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Width {
+    /// 窗口的 1/4。出廠就是它。
+    #[default]
+    Quarter,
+    /// 窗口的 1/3。
+    Third,
+    /// 窗口的 2/5。
+    Twofifths,
+    /// 窗口的 1/2。
+    Half,
+}
+
+impl Width {
+    /// 四檔，從窄到寬——`w` 按這個次序走，到頭回到最窄。
+    pub const ALL: [Width; 4] = [Width::Quarter, Width::Third, Width::Twofifths, Width::Half];
+
+    /// `w` 按一下走一格。
+    pub fn next(self) -> Width {
+        let at = Width::ALL.iter().position(|&w| w == self).unwrap_or(0);
+        Width::ALL[(at + 1) % Width::ALL.len()]
+    }
+
+    /// 這一檔佔窗口的幾分之幾。
+    ///
+    /// ⚠️ **整數算，不用浮點**：一個寬度算出來差一格，畫面上就是一條縫。
+    pub fn of(self, total: usize) -> usize {
+        let (num, den) = self.fraction();
+        total * num / den
+    }
+
+    /// 那個分數，也是它的名字。
+    pub fn fraction(self) -> (usize, usize) {
+        match self {
+            Width::Quarter => (1, 4),
+            Width::Third => (1, 3),
+            Width::Twofifths => (2, 5),
+            Width::Half => (1, 2),
+        }
+    }
+}
+
 /// What choosing a row does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Chosen {
@@ -329,13 +390,6 @@ pub struct Sidebar {
     /// from the document every time the sidebar is looked at, and a fold that
     /// did not survive that would never be seen folded.
     folded: BTreeSet<(PathBuf, usize)>,
-    /// Whether it is opened out wide enough to read a whole title.
-    ///
-    /// The ordinary width is a setting, and it is narrow on purpose — columns
-    /// are what a terminal has least of. But a chapter called 「天門真境之傳家
-    /// 寶扇」 does not fit in it, and cutting the name off is exactly what an
-    /// outline must not do. So the width is a toggle, not a compromise.
-    wide: bool,
 }
 
 /// How many entries one directory contributes before the tree gives up on it.
@@ -355,21 +409,9 @@ impl Sidebar {
             view: View::Explorer,
             kept: [0; View::ALL.len()],
             folded: BTreeSet::new(),
-            wide: false,
         };
         sidebar.rebuild();
         sidebar
-    }
-
-    /// Whether it is opened out to read whole titles.
-    pub fn wide(&self) -> bool {
-        self.wide
-    }
-
-    /// Open it out, or fold it back.
-    pub fn toggle_width(&mut self) -> bool {
-        self.wide = !self.wide;
-        self.wide
     }
 
     /// Which view is showing.

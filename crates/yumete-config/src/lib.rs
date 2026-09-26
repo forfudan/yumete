@@ -244,9 +244,6 @@ pub struct EditorConfig {
     /// drawn (Feature #81, #193). `"auto"` by default, which asks the terminal;
     /// `"wide"` and `"narrow"` say so outright.
     pub ambiguous_width: Ambiguity,
-    /// How wide the detail panel is, in cells (Feature #187). Clamped to
-    /// something readable, and never more than half the window.
-    pub detail_width: usize,
     /// The measure a horizontal page is written to, in cells; `0` for none
     /// (Feature #101).
     ///
@@ -327,12 +324,6 @@ pub struct EditorConfig {
     pub syntax: String,
     /// When the tab bar is drawn (Feature #95).
     pub tabs: Tabs,
-    /// How many columns the file sidebar takes when it is open (Feature #94).
-    ///
-    /// It costs columns, and set vertically it costs them by threes — a 縱 is
-    /// two cells and a gap — so twenty-four is eight 縱 of page. Narrow enough
-    /// to be worth the trade, wide enough for `卷二/驚蟄.md`.
-    pub sidebar_width: usize,
 }
 
 /// **The screenshot command this machine can actually run** (2026-09-19).
@@ -421,7 +412,6 @@ impl Default for EditorConfig {
             soft_wrap: true,
             autosave: true,
             ambiguous_width: Ambiguity::default(),
-            detail_width: 30,
             syntax: String::new(),
             ruler: 0,
             measure: 0,
@@ -432,7 +422,6 @@ impl Default for EditorConfig {
             margin: Margin::Dense,
             paper_ticks: 0,
             tabs: Tabs::default(),
-            sidebar_width: 24,
         }
     }
 }
@@ -2575,8 +2564,6 @@ struct RawEditor {
     soft_wrap: Option<bool>,
     autosave: Option<bool>,
     ambiguous_width: Option<String>,
-    detail_width: Option<usize>,
-    sidebar_width: Option<usize>,
     tabs: Option<String>,
     syntax: Option<String>,
     ruler: Option<usize>,
@@ -2739,9 +2726,6 @@ impl RawConfig {
         }
         if other.editor.ambiguous_width.is_some() {
             self.editor.ambiguous_width = other.editor.ambiguous_width.clone();
-        }
-        if other.editor.sidebar_width.is_some() {
-            self.editor.sidebar_width = other.editor.sidebar_width;
         }
         if other.editor.tabs.is_some() {
             self.editor.tabs = other.editor.tabs.clone();
@@ -3045,12 +3029,6 @@ impl RawConfig {
             if let Some(parsed) = Tabs::parse(&tabs) {
                 config.editor.tabs = parsed;
             }
-        }
-        if let Some(width) = self.editor.detail_width {
-            config.editor.detail_width = width.clamp(12, 80);
-        }
-        if let Some(width) = self.editor.sidebar_width {
-            config.editor.sidebar_width = width.clamp(12, 60);
         }
         if let Some(width) = self.editor.ambiguous_width {
             // An unknown value keeps the default rather than picking one: a

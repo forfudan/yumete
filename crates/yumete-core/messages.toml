@@ -7441,20 +7441,6 @@ zhs = "状态栏底下再加一行：打命令、刚才怎么了、现在能按�
 en = "command line"
 
 [[message]]
-# 設置：详情栏宽度
-key = "set.editor.detail-width"
-zht = "詳情欄寬度"
-zhs = "详情栏宽度"
-en = "detail width"
-
-[[message]]
-# 設置：详情栏宽度——一句話
-key = "set.editor.detail-width.hint"
-zht = "表格詳情那一欄多寬"
-zhs = "表格详情那一栏多宽"
-en = "detail width"
-
-[[message]]
 # 設置：改动条
 key = "set.editor.diff-gutter"
 zht = "改動條"
@@ -7747,20 +7733,6 @@ key = "set.editor.show-segmentation.hint"
 zht = "按詞給正文上色，一眼看得出編輯器把哪幾個字當成一個詞"
 zhs = "按词给正文上色，一眼看得出编辑器把哪几个字当成一个词"
 en = "show segmentation"
-
-[[message]]
-# 設置：边栏宽度
-key = "set.editor.sidebar-width"
-zht = "邊欄寬度"
-zhs = "边栏宽度"
-en = "sidebar width"
-
-[[message]]
-# 設置：边栏宽度——一句話
-key = "set.editor.sidebar-width.hint"
-zht = "文件樹那一欄多寬"
-zhs = "文件树那一栏多宽"
-en = "sidebar width"
 
 [[message]]
 # 設置：智能大小写
@@ -8748,13 +8720,6 @@ zhs = "{0}移到{1}"
 en = "{0} is on {1} now"
 
 [[message]]
-# 邊欄切成窄的
-key = "sidebar.narrow"
-zht = "邊欄：窄"
-zhs = "边栏：窄"
-en = "sidebar: narrow"
-
-[[message]]
 # 邊欄：這一邊只有這一格，Tab 沒地方去
 key = "sidebar.only-view-on-this-side"
 zht = "這一邊只有這一格"
@@ -8769,14 +8734,11 @@ zhs = "先进到一格里，或者写出名字：files buffers outline dictionar
 en = "step into a panel first, or name one: files buffers outline dictionary detail"
 
 [[message]]
-# 邊欄切成寬的
-key = "sidebar.wide"
-zht = "邊欄：寬（讀得下整條標題）"
-zhs = "边栏：宽（读得下整条标题）"
-en = "sidebar: wide, for a whole heading"
-
-
-# ── substitute ────────────────────────────────────────────────────────
+# 邊欄換了一檔寬度——名字就是那個分數（1/4、1/3、2/5、1/2）
+key = "sidebar.width"
+zht = "邊欄：{0}/{1}"
+zhs = "边栏：{0}/{1}"
+en = "sidebar: {0}/{1}"
 
 [[message]]
 # :s …c 走完之後的結語
@@ -9709,13 +9671,6 @@ key = "ui.detail-panel-on"
 zht = "詳情欄：開"
 zhs = "详情栏：开"
 en = "detail panel: on"
-
-[[message]]
-# 詳情欄設了寬度
-key = "ui.detail-panel-width"
-zht = "詳情欄寬 {0}"
-zhs = "详情栏宽 {0}"
-en = "the detail panel is {0} wide"
 
 [[message]]
 # 字典浮窗底下那一句：讀不完就去邊欄

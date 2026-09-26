@@ -462,6 +462,11 @@ impl Editor {
     }
 
 
+    /// **這一側此刻是哪一檔寬度**，給前端算版面用。
+    pub fn width_of(&self, side: crate::sidebar::Side) -> crate::sidebar::Width {
+        self.width[side as usize]
+    }
+
     /// **這一刻站在第幾區。** 編號就是 `空格 1`–`4` 那四個號。
     pub(super) fn which_region(&self) -> u32 {
         use crate::sidebar::Side;
@@ -747,13 +752,15 @@ impl Editor {
         let Some(side) = self.panel_focus() else { return };
         match key {
             Key::Char('R') => self.refresh_sidebar(),
+            // **`w` 走一格：窄 → 中 → 寬 → 窄**（2026-09-26 作者定）。
+            //
+            // ⚠️ **不問這一格裏裝的是什麼**：寬度歸側欄，面板只是借它。所以字典、
+            // 懸停、表格詳情按 `w` 一樣管用——從前它們根本不認這個鍵。
             Key::Char('w') => {
-                let Some(sidebar) = self.panel_mut(side) else { return };
-                let wide = sidebar.toggle_width();
-                self.status = match wide {
-                    true => say!("sidebar.wide"),
-                    false => say!("sidebar.narrow"),
-                };
+                let step = self.width[side as usize].next();
+                self.width[side as usize] = step;
+                let (num, den) = step.fraction();
+                self.status = say!("sidebar.width", num, den);
             }
             Key::Tab => {
                 self.cycle_view(side, false);
