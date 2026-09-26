@@ -1767,7 +1767,6 @@ pub struct Editor {
     wheel_step: usize,
     /// The detail panel's width, when the reader has said one (Feature #187).
     /// `None` follows the config.
-    detail_width: Option<usize>,
     /// Whether a row of column numbers is drawn above the header.
     ///
     /// **The keys need it.** `t3/`, `t20,20g`, `t1a2d8as` all name a column by
@@ -2335,6 +2334,11 @@ pub struct Editor {
     panels: [Option<crate::sidebar::Sidebar>; 2],
     /// Which slot **and which layer** the keys are going to, if any.
     panel_focus: Option<crate::sidebar::Side>,
+    /// **每一側多寬**，三檔（2026-09-26）。記在這裏而不是記在 `Sidebar` 上，因為
+    /// 寬度是**那一格**的屬性：換視圖不變，關掉再開也不變（作者定：「两个侧栏虽然
+    /// 关闭，但是还是会记住上次的宽度状态」）。常駐層（字典、懸停、詳情）借的是
+    /// 同一格，所以也吃這一檔——一個格子一套規矩。
+    width: [crate::sidebar::Width; 2],
     /// **Which slot each panel lives in**, indexed by
     /// [`crate::sidebar::Panel`] (#293).
     ///
@@ -2614,7 +2618,6 @@ impl Editor {
             words_request: false,
             table_rules: crate::table::Rules::default(),
             table_numbers: true,
-            detail_width: None,
             typewriter: false,
             focus: false,
             wheel_step: 3,
@@ -2747,6 +2750,7 @@ impl Editor {
             picker: None,
             preview: RefCell::new(None),
             panels: [None, None],
+            width: [crate::sidebar::Width::default(); 2],
             panel_focus: None,
             // 檔案／緩衝區／大綱 on the left — 「what is there, and where am
             // I in it」; 字典／詳情 on the right — 「what is this thing I am
@@ -2924,10 +2928,6 @@ impl Editor {
         self.wheel_step = step.max(1);
     }
 
-    /// How wide the detail panel should be, when it has been said.
-    pub fn detail_width(&self) -> Option<usize> {
-        self.detail_width
-    }
 
     /// Whether the row of column numbers is drawn.
     pub fn table_numbers(&self) -> bool {
