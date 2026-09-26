@@ -611,7 +611,10 @@ pub fn spans(line: &str) -> Vec<Span> {
     // the rest of the line is still scanned for emphasis inside the title.
     let mut from = 0;
     let hashes = chars.iter().take_while(|&&c| c == '#').count();
-    if hashes > 0 && hashes <= 6 && matches!(chars.get(hashes), Some(' ') | None) {
+    // ⚠️ **井號後面要有一個空白**，CommonMark §4.2——`#128` 是一段話，不是標題。
+    // Tab 也算（2026-09-26 補上，和大綱那一支對齊：從前這裏只認空格，而大綱那邊
+    // 連空白都不要求，於是同一行在正文裏不畫成標題、卻出現在大綱上）。
+    if hashes > 0 && hashes <= 6 && matches!(chars.get(hashes), Some(' ' | '\t') | None) {
         out.push(Span {
             start: 0,
             end: hashes,

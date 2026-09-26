@@ -462,6 +462,9 @@ impl Editor {
     }
 
 
+    /// 大綱最多縮幾級。第四級起和第三級對齊——見 `outline_rows`。
+    const INDENT_STOPS: usize = 2;
+
     /// **這一側此刻是哪一檔寬度**，給前端算版面用。
     pub fn width_of(&self, side: crate::sidebar::Side) -> crate::sidebar::Width {
         self.width[side as usize]
@@ -825,9 +828,14 @@ impl Editor {
             }
             rows.push(crate::sidebar::Row {
                 path: heading.path.clone(),
+                // **每級兩格，縮到第三級封頂**（2026-09-26 作者定）。
+                //
+                // ⚠️ **深處的層級靠編號自己說**：`5.8.11` 一看就比 `5.8` 深一層，
+                // 不必再花欄位重說一遍。development.md 有到五級，不封頂的話那一條
+                // 縮 8 欄——24 欄的邊欄只剩 14 欄給標題，而邊欄存在就是為了給標題。
                 name: format!(
                     "{}{}",
-                    "  ".repeat(heading.level.saturating_sub(1)),
+                    "  ".repeat(heading.level.saturating_sub(1).min(Self::INDENT_STOPS)),
                     heading.title
                 ),
                 depth: heading.line,
