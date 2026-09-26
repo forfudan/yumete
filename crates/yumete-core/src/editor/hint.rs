@@ -37,7 +37,7 @@ impl Editor {
                 let what = crate::messages::say(crate::sidebar::Panel::from(kind).tag(), &[]);
                 return Hint::Keys(what, vec![
                         ("j k", say!("hint.sidebar.move")),
-                        ("C-w／空格 s", say!("hint.sidebar.back-to-text")),
+                        ("C-w／空格 w", say!("hint.sidebar.back-to-text")),
                     ]);
             }
         }
@@ -99,7 +99,7 @@ impl Editor {
                 if self.search().replacing {
                     keys.push(("r R", say!("hint.search.replace")));
                 }
-                keys.push(("C-w／空格 s", say!("hint.sidebar.back-to-text")));
+                keys.push(("C-w／空格 w", say!("hint.sidebar.back-to-text")));
                 keys.push(("q", say!("hint.close")));
                 return Hint::Keys(say!("label.panel.search"), keys);
             }
@@ -118,7 +118,7 @@ impl Editor {
                     ("j k J K g G", walking),
                     ("Tab", say!("hint.sidebar.other-view")),
                     ("w", say!("hint.sidebar.width")),
-                    ("C-w／空格 s", say!("hint.sidebar.back-to-text")),
+                    ("C-w／空格 w", say!("hint.sidebar.back-to-text")),
                     ("q", say!("hint.close")),
                 ]);
         }

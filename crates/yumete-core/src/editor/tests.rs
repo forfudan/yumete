@@ -8607,9 +8607,9 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     assert!(!ed.sidebar_focused(), "the keys went back to the text");
     assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "but the tree stays up");
 
-    // The keys are with the text now, so `空格 s` walks back into the tree;
+    // The keys are with the text now, so `空格 w` walks back into the tree;
     // `q` in the panel is the door out.
-    type_keys(&mut ed, " s");
+    type_keys(&mut ed, " w");
     assert!(ed.sidebar_focused());
     ed.on_key(Key::Char('q'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "q closes it");
@@ -9414,24 +9414,31 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     assert!(ed.panel(Side::Left).is_none());
     assert_eq!(ed.panel_focus(), None);
 
-    // Nothing open but the writing: one region, and C-w has nowhere to go.
-    // **`空格 w` is the key that splits the page**, and it still does.
+    // Nothing open but the writing: one region, and neither key has anywhere
+    // to go. ⚠️ **`空格 w` 不再開第二工作區**（2026-09-26）：它走的是**開着的**
+    // 區域，開一個是 `空格 2`（點名）或 `空格 W`（全開）。「去哪裏」和「開出來」
+    // 從此是兩個動作。
     ed.on_key(Key::Ctrl('w'));
     assert!(ed.other_pane().is_none(), "C-w does not open a work area");
     type_keys(&mut ed, " w");
-    assert!(ed.other_pane().is_some(), "空格 w still does");
+    assert!(ed.other_pane().is_none(), "空格 w 也不開——它只走開着的");
+    type_keys(&mut ed, " 2");
+    assert!(ed.other_pane().is_some(), "點名那一個纔開");
 
-    // Two halves of the writing and a panel: three regions, and C-w walks all
-    // three in screen order.
+    // Two halves of the writing and a panel: three regions, and `w` walks all
+    // three **in the order the numbers name** — 工作區一、二、左欄。
     ed.open_sidebar_at(&dir);
-    ed.on_key(Key::Ctrl('w'));
+    type_keys(&mut ed, " 1");
     assert_eq!(ed.panel_focus(), None);
-    let first = ed.live_pane();
+    assert_eq!(ed.live_pane(), 0);
     ed.on_key(Key::Ctrl('w'));
     assert_eq!(ed.panel_focus(), None, "the other half is a region too");
-    assert_ne!(ed.live_pane(), first, "and C-w went to it");
+    assert_eq!(ed.live_pane(), 1, "工作區二");
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "then round to the panel");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "then the left panel");
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), None, "round again");
+    assert_eq!(ed.live_pane(), 0, "回到工作區一");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -15635,8 +15642,8 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     ed.on_key(Key::Ctrl('w'));
     assert!(ed.panel_focus().is_some(), "C-w walks into the panel");
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('s'));
-    assert!(ed.panel_focus().is_none(), "空格 s walks back out");
+    ed.on_key(Key::Char('w'));
+    assert!(ed.panel_focus().is_none(), "空格 w walks back out");
     ed.execute(":wiki-panel").unwrap();
     assert!(ed.showing(crate::sidebar::View::Wiki).is_none(), "and again puts it away");
 }
@@ -16170,9 +16177,12 @@ fn ctrl_g_starts_a_new_undo_and_swallows_the_u_after_it() {
     assert_eq!(ed.current_buffer().text(), "", "再一次纔回到空的");
 }
 
-/// **`空格 S` 兩個邊欄一起收**（2026-09-21 提的）。
+/// **`空格 Q`：只留一個工作區，別的全收**（2026-09-26 作者定）。
+///
+/// ⚠️ **2026-09-21 這一條是 `空格 S`「兩個邊欄一起收」**，而 `空格 Q` 收的更寬
+/// ——邊欄加上另一個工作區。「區域」這個名詞一立，「收拾乾淨」就只有一個意思。
 #[test]
-fn space_shift_s_closes_both_sidebars() {
+fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     use crate::sidebar::Side;
     let mut ed = typed("那年冬天");
     // ⚠️ **兩邊各開一個，`any` 不算數**（2026-09-23 審出來的）：從前這裏開的
@@ -16188,11 +16198,16 @@ fn space_shift_s_closes_both_sidebars() {
         );
     }
 
-    press(&mut ed, " S");
+    // 再開一個工作區——`空格 Q` 連它一起收。
+    press(&mut ed, " 2");
+    assert!(ed.other_pane().is_some(), "第二工作區先得有");
+
+    press(&mut ed, " Q");
     for side in Side::BOTH {
         assert!(ed.panel(side).is_none(), "{side:?} 收了");
         assert!(ed.transient(side).is_none(), "{side:?} 上面那一層也收了");
     }
+    assert!(ed.other_pane().is_none(), "另一個工作區也收了");
     assert!(ed.panel_focus().is_none(), "鍵回到正文");
 }
 

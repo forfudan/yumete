@@ -585,7 +585,11 @@ impl Editor {
             goal_slot: self.goal_slot,
             extend: self.extend,
             highlight: None,
-            caption: String::new(),
+            // **離開的那一半帶着自己的名字走**（2026-09-26）。分隔線上寫的是**正
+            // 在讀**的那一半叫什麼（站着的那一半由狀態行說），所以一換過去，剛纔
+            // 那一半就成了要具名的那一個。從前這裏是空字串，於是 `空格 2` 換過去
+            // 之後分隔線上什麼都沒有——而它本來是有字的。
+            caption: self.current_buffer().display_name().to_string(),
         };
         // The place is clamped rather than trusted: the other pane may have
         // been edited while this one was not looking — and the file it names
