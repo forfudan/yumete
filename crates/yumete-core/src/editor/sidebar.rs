@@ -194,7 +194,7 @@ impl Editor {
     ///
     /// ⚠️ **必須與 [`Editor::slot_showing`] 同進退。** 焦點停不停得住看的是
     /// `slot_showing`，而環上有没有座位看的是這一支；兩者只要分歧，就會出現
-    /// 「焦點在這一格，而環上找不到它」——`cycle_region` 那一句
+    /// 「焦點在這一格，而環上找不到它」——`next_region` 那一句
     /// `let Some(here) = here else { return }` 直接返回，`C-w` **一聲不吭地
     /// 失效**（2026-09-23 審出來的，那時 `Transient::Detail` 是唯一的分歧點）。
     /// 現在三種臨時面板一律收鍵，兩支問的是同一件事。
@@ -338,24 +338,6 @@ impl Editor {
         }
     }
 
-    /// **兩個邊欄一起收**（`空格 S`，2026-09-21 提的）。
-    ///
-    /// 逐個 `q` 要先走進去，兩個邊欄就是四步。這一下把版心整個要回來。
-    ///
-    /// ⚠️ **光標放上去的那幾種不必收**：它們不存狀態，常駐的一没，它們自己就没
-    /// 了依附（字典與 hover 例外——那兩個是按鍵問出來的，所以一併收掉）。
-    pub(super) fn close_all_sidebars(&mut self) {
-        for side in crate::sidebar::Side::BOTH {
-            self.panels[side as usize] = None;
-        }
-        self.dictionary = None;
-        self.dictionary_anchor = None;
-        self.hovered = None;
-        self.show_detail = Some(false);
-        self.panel_focus = None;
-        self.status = say!("ui.sidebars-closed");
-        self.refresh_sidebar();
-    }
 
     /// **The keys every panel answers, wherever it sits.**
     ///
@@ -375,7 +357,7 @@ impl Editor {
     /// so in every panel.
     pub(super) fn panel_key_in_common(&mut self, key: Key, side: crate::sidebar::Side) -> bool {
         match key {
-            Key::Ctrl('w') => self.cycle_region(),
+            Key::Ctrl('w') => self.next_region(),
             // ⚠️ **`q` 關的是眼前那一個**：光標把字典頂上來的時候關字典，常駐那
             // 一個原封不動地在底下等着——「有前任還給前任」。
             Key::Char('q') => match self.transient(side).is_some() {
@@ -479,55 +461,110 @@ impl Editor {
         }
     }
 
-    /// **`C-w`: hand the keys to the next region** — Feature #293.
-    ///
-    /// Left panel, the writing, the other work area, right panel, and round
-    /// again, skipping whatever is not open. One key, one meaning: 「the next
-    /// place the keys can be」. It used to mean two things in two places — the
-    /// other pane from the text, back to the text from the panel — and a
-    /// second panel is what made that untenable.
-    ///
-    /// ⚠️ **Not the same key as `空格 w`**, which stays 工作區 and nothing
-    /// else: 「nothing open → open one」 is a thing this cannot do without
-    /// swallowing it, and a writer with the file tree up would then have no
-    /// one key left that splits the page.
-    pub(super) fn cycle_region(&mut self) {
+
+    /// **這一刻站在第幾區。** 編號就是 `空格 1`–`4` 那四個號。
+    pub(super) fn which_region(&self) -> u32 {
         use crate::sidebar::Side;
-        // `None` 是正文；它前面那些是左欄，後面那些是右欄，按屏幕次序。
-        // ⚠️ **一個邊欄只有一個座位**（2026-09-22：臨時層廢除）——從前是兩個。
-        let seats = |ed: &Self, side: Side| -> Vec<Option<Side>> {
-            match ed.slot_takes_keys(side) {
-                true => vec![Some(side)],
-                false => Vec::new(),
-            }
-        };
-        let mut ring = seats(self, Side::Left);
-        let panes = 1 + usize::from(self.other_pane().is_some());
-        let writing = ring.len();
-        ring.extend(std::iter::repeat_n(None, panes));
-        ring.extend(seats(self, Side::Right));
-        let here = match self.panel_focus() {
-            Some(seat) => ring.iter().position(|&r| r == Some(seat)),
-            // The live half of the writing: its place in the ring is after
-            // whatever the left slot took.
-            None => Some(writing + self.live_pane().min(1)),
-        };
-        let Some(here) = here else { return };
-        if ring.len() < 2 {
+        match self.panel_focus() {
+            Some(Side::Left) => 3,
+            Some(Side::Right) => 4,
+            None => 1 + self.live_pane().min(1) as u32,
+        }
+    }
+
+    /// **那一區此刻在不在屏幕上。** 第一工作區永遠在。
+    pub(super) fn region_open(&self, nth: u32) -> bool {
+        use crate::sidebar::Side;
+        match nth {
+            1 => true,
+            2 => self.other_pane().is_some(),
+            3 => self.slot_takes_keys(Side::Left),
+            4 => self.slot_takes_keys(Side::Right),
+            _ => false,
+        }
+    }
+
+    /// **`空格 w`／`C-w`：去下一個開着的區**（2026-09-26 作者定）。
+    ///
+    /// 原話：「可不可以把工作区和侧边栏统一成一个概念「区域」以简化思维模型……保留
+    /// space+w（切换到下个**可视**区域，按照第一工作区、第二工作区、左边栏、右边栏
+    /// 这样的顺序）」。
+    ///
+    /// ⚠️ **走的次序就是 `空格 1`–`4` 那四個號**，不是屏幕上從左到右的次序。這樣
+    /// 兩個鍵只有一套坐標：號碼是地址，`w` 是走一步，學會一個就學會另一個。從前
+    /// 這一支按屏幕排（左欄 → 正文 → 右欄），和號碼各說各的。
+    ///
+    /// ⚠️ **只走開着的**：不在的區不會被順手開出來——那是 `空格 1`–`4` 和 `空格 W`
+    /// 的事。「下一個」說的是眼前這幾個裏的下一個。
+    pub(super) fn next_region(&mut self) {
+        let open: Vec<u32> = (1..=4).filter(|&n| self.region_open(n)).collect();
+        if open.len() < 2 {
             return;
         }
-        let next = (here + 1) % ring.len();
-        match ring[next] {
-            Some(side) => self.focus_slot(side),
-            None => {
-                self.panel_focus = None;
-                // Which half — the ring's index minus the left slot's seats.
-                let want = next - writing;
-                if panes > 1 && want != self.live_pane().min(1) {
-                    self.switch_pane();
-                }
+        let here = self.which_region();
+        let at = open.iter().position(|&n| n == here).unwrap_or(0);
+        self.go_to_region(open[(at + 1) % open.len()]);
+    }
+
+    /// **`空格 W`：四個區全開**（2026-09-26 作者定）。
+    ///
+    /// ⚠️ **窄窗口照開，不攔**（作者定）。比例布局本來就不會塌，而 `空格 Q` 一下
+    /// 就收回來了；多一道閘就多一條「為什麼按了沒反應」要解釋。
+    ///
+    /// ⚠️ **鍵留在原地**：這一下說的是「把它們擺出來」，不是「帶我去哪裏」。
+    pub(super) fn open_every_region(&mut self) {
+        let was = self.which_region();
+        for nth in 2..=4 {
+            if !self.region_open(nth) {
+                self.go_to_region(nth);
             }
         }
+        self.go_to_region(was);
+        self.status = say!("region.all-open");
+    }
+
+    /// **`空格 q`：關掉站着的這一區**（2026-09-26 作者定）。
+    ///
+    /// 邊欄就是關掉它自己——和在邊欄裏按 `q` 同一件事（作者定：「对于侧栏来说，q
+    /// 和 space+q 是一个意思」）。工作區是關掉這一半、鍵跟到另一半去。
+    ///
+    /// ⚠️ **只剩一個區就出聲，別靜悄悄**（作者定：「什么都不做，出一声」）。關掉
+    /// 最後一個工作區等於退出編輯器，而 `空格 q` 比 `:q` 好按得多——誤觸的代價是
+    /// 丟稿子。
+    pub(super) fn close_this_region(&mut self) {
+        if let Some(side) = self.panel_focus() {
+            return self.close_panel(side);
+        }
+        if self.other_pane().is_none() {
+            self.status = say!("region.only-one-left");
+            return;
+        }
+        if self.switch_pane() {
+            self.close_split();
+            self.status = say!("pane.closed");
+        }
+    }
+
+    /// **`空格 Q`：只留一個工作區**（2026-09-26 作者定）。
+    ///
+    /// 原話：「只保留一个工作区，优先保留光标所在的，回退到第一工作区」。所以站在
+    /// 第二工作區上按它，留下的是第二個；站在邊欄裏按它，留下第一個。
+    pub(super) fn close_other_regions(&mut self) {
+        // 站在邊欄裏就退回工作區——留哪一個由「此刻在哪一個」決定，而邊欄不是。
+        if self.panel_focus().is_some() {
+            self.go_to_region(1);
+        }
+        for side in crate::sidebar::Side::BOTH {
+            self.panels[side as usize] = None;
+        }
+        self.dictionary = None;
+        self.dictionary_anchor = None;
+        self.hovered = None;
+        self.show_detail = Some(false);
+        self.panel_focus = None;
+        self.close_split();
+        self.refresh_sidebar();
+        self.status = say!("region.only-this-one");
     }
 
     /// **`空格 1`–`空格 4`：一下跳到某一區**（2026-09-25 作者提）。
@@ -556,7 +593,7 @@ impl Editor {
                     self.open_split(at, None, caption);
                 }
                 self.panel_focus = None;
-                // 和 `cycle_region` 裏那一句同一個算法，別各算各的。
+                // 和 `which_region` 裏那一句同一個算法，別各算各的。
                 if self.other_pane().is_some() && self.live_pane().min(1) != want {
                     self.switch_pane();
                 }

@@ -16258,10 +16258,14 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
 
-        // The split opens where you are standing: on 乙.
+        // The split opens where you are standing: on 乙。⚠️ **開它的是 `空格 2`
+        // 而不是 `空格 w`**（2026-09-26）：`w` 走的是開着的區，點名的那一個纔開。
         editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('2'));
         assert!(editor.other_pane().is_some(), "the page is split");
+        // ⚠️ **點名是「開出來**並跳過去**」**，所以要回第一半再往下走。
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('1'));
 
         // …and then the live half goes back to 甲, leaving the other half
         // looking at a file that is no longer the current one.
@@ -16318,8 +16322,14 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// **第二工作區：一張紙上兩個地方**。
+    ///
+    /// ⚠️ **2026-09-26 這條測試改了名**：從前叫「…without going there」，因為那時
+    /// `空格 w` 是「開出來、人不過去」。現在四個區是一套坐標，`空格 1`–`4` 一律
+    /// 「開出來**並跳過去**」，回去是 `空格 1`——兩個鍵，而換來的是一個說得清的
+    /// 模型。程序自己開一半而不挪鍵（`:diff`、預覽）走的是別的門。
     #[test]
-    fn the_other_work_area_shows_a_place_without_going_there() {
+    fn the_other_work_area_is_a_second_place_on_the_same_page() {
         // 「誰用了卵」 is a question about two places at once, and the answer
         // used to be a jump: you were taken to one of them and could no longer
         // see the other. The second work area answers it as it was asked.
@@ -16331,11 +16341,12 @@ fn squeezed(text: &str) -> String {
         let buffer = render(&editor, &config, 40, 9);
         assert_eq!(row_text(&buffer, 0).trim_end(), "第一行");
 
-        // 空格 w opens the other one, showing the same place; the divider
-        // carries its caption.
+        // 空格 2 opens the other one, showing the same place; the divider
+        // carries its caption.（2026-09-26 起開區是點名，`w` 只走開着的。）
         editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('2'));
         assert!(editor.other_pane().is_some());
+        assert_eq!(editor.live_pane(), 1, "點名就過去了");
         let buffer = render(&editor, &config, 40, 9);
         let rows: Vec<String> = (0..9).map(|y| row_text(&buffer, y).trim_end().to_string()).collect();
         let divider = rows.iter().position(|r| r.starts_with('─')).expect("a rule between them");
@@ -16345,14 +16356,18 @@ fn squeezed(text: &str) -> String {
         assert_eq!(rows[0], "第一行");
         assert_eq!(rows[divider + 1], "第一行");
 
-        // 空格 w again hands it the keys — and the halves stay where they are.
+        // `空格 w` 走一步，兩半都留着——它換的是鍵，不是版面。
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('w'));
-        assert_eq!(editor.live_pane(), 1, "the keys are in the second half");
-
-        // 空格 W keeps the half you are standing in.
+        assert_eq!(editor.live_pane(), 0, "走回第一半");
+        assert!(editor.other_pane().is_some(), "兩半都還在");
         editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('W'));
+        editor.on_key(Key::Char('w'));
+        assert_eq!(editor.live_pane(), 1, "再走一步回到第二半");
+
+        // 空格 Q keeps the half you are standing in.
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('Q'));
         assert!(editor.other_pane().is_none());
         assert_eq!(editor.live_pane(), 0);
         let buffer = render(&editor, &config, 40, 9);
@@ -17417,8 +17432,11 @@ fn squeezed(text: &str) -> String {
             "兩欄各兩堵牆，鍵在右邊那一欄，所以右邊那兩堵是金的"
         );
 
-        // `C-w` 走一圈回到正文，四堵都是細線。
-        editor.on_key(Key::Ctrl('w'));
+        // `C-w` 回正文，四堵都是細線。
+        //
+        // ⚠️ **一下就到，不是兩下**（2026-09-26）：開着的是 ①正文 ③左欄 ④右欄，
+        // 而 `C-w` 走的是**號碼的次序**——④ 的下一個是 ①。從前它按屏幕排（左欄
+        // → 正文 → 右欄），從右欄要走兩下。
         editor.on_key(Key::Ctrl('w'));
         let buffer = render(&editor, &config, 80, 10);
         assert_eq!(walls(&buffer), [false; 4], "鍵在正文裏，誰都不金");

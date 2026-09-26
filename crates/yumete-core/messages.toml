@@ -4552,9 +4552,9 @@ en = "show the note (or write one)"
 [[message]]
 # g 組：全項目搜索
 key = "hint.goto.advanced-search"
-zht = "高級搜索"
-zhs = "高级搜索"
-en = "advanced search"
+zht = "搜索面板"
+zhs = "搜索面板"
+en = "the search panel"
 
 [[message]]
 # g 組：命令一覽
@@ -4576,13 +4576,6 @@ key = "hint.goto.by-file-line-vertical"
 zht = "下／上一段（文件裏的一行，往左是往後）"
 zhs = "下／上一段（文件里的一行，往左是往后）"
 en = "next / previous line of the file — leftward is onward"
-
-[[message]]
-# g 組：關掉這一個工作區
-key = "hint.goto.close-this-pane"
-zht = "關掉這一個工作區，到另一個去"
-zhs = "关掉这一个工作区，到另一个去"
-en = "close this work area and go to the other"
 
 [[message]]
 # g 組：複製到系統剪貼簿
@@ -4641,13 +4634,6 @@ zhs = "下一个／上一个打开的文件"
 en = "the next / previous open file"
 
 [[message]]
-# g 組：只留這一個工作區
-key = "hint.goto.only-this-pane"
-zht = "只留這一個工作區"
-zhs = "只留这一个工作区"
-en = "keep only this work area"
-
-[[message]]
 # g 組：開啟檔案
 key = "hint.goto.open-file"
 zht = "打開文件"
@@ -4660,13 +4646,6 @@ key = "hint.goto.open-this-file"
 zht = "打開這個文件"
 zhs = "打开这个文件"
 en = "open this file"
-
-[[message]]
-# g 組：另一個工作區
-key = "hint.goto.other-pane"
-zht = "另一個工作區：再按一次過去"
-zhs = "另一个工作区：再按一次过去"
-en = "the other work area: press it again to go there"
 
 [[message]]
 # g 組：大綱
@@ -5025,11 +5004,18 @@ zhs = "宽窄"
 en = "wide / narrow"
 
 [[message]]
-# 空格菜單：兩個邊欄一起收
-key = "hint.space.close-all"
-zht = "兩個邊欄一起收"
-zhs = "两个边栏一起收"
-en = "close both sidebars"
+# 提示：空格菜單——四個區域全開
+key = "hint.space.all-regions"
+zht = "四個區域全開"
+zhs = "四个区域全开"
+en = "open every region"
+
+[[message]]
+# 提示：空格菜單——關掉站着的這一區
+key = "hint.space.close-this-region"
+zht = "關掉站着的這一區"
+zhs = "关掉站着的这一区"
+en = "close the region you are in"
 
 [[message]]
 # 空格 C：塊注釋（沒有塊注釋的格式退到行注釋）
@@ -5055,9 +5041,16 @@ en = "the dictionary in the sidebar (room to read)"
 [[message]]
 # 空格選單裏的 s：換到下一個區域（正文、邊欄、另一個工作區）
 key = "hint.space.next-region"
-zht = "換到下一個區域（正文／邊欄／另一個工作區），同 C-w"
-zhs = "换到下一个区域（正文／边栏／另一个工作区），同 C-w"
-en = "the next region — the writing, a panel, the other pane (also C-w)"
+zht = "去下一個區域：工作區一 → 二 → 左欄 → 右欄，同 C-w"
+zhs = "去下一个区域：工作区一 → 二 → 左栏 → 右栏，同 C-w"
+en = "the next region: work area 1, 2, left, right — same as C-w"
+
+[[message]]
+# 提示：空格菜單——只留一個工作區
+key = "hint.space.only-this-region"
+zht = "只留一個工作區，別的全收"
+zhs = "只留一个工作区，别的全收"
+en = "keep one work area, close the rest"
 
 [[message]]
 # 空格組：從系統剪貼簿貼在前面
@@ -6467,23 +6460,6 @@ zhs = "那一半的文件已经关掉了"
 en = "the file that half was showing is closed"
 
 [[message]]
-# 收掉另一半，只剩一個工作區
-key = "pane.only-one-left"
-zht = "只剩這一個工作區了"
-zhs = "只剩这一个工作区了"
-en = "one work area again"
-
-[[message]]
-# 分出另一個工作區
-key = "pane.opened"
-zht = "另一個工作區：空格 w 過去，空格 W 收掉"
-zhs = "另一个工作区：空格 w 过去，空格 W 收掉"
-en = "the other work area: Space w goes there, Space W closes it"
-
-
-# ── panel ─────────────────────────────────────────────────────────────
-
-[[message]]
 # 候選面板的名字：行內預覽
 key = "panel.name.bare"
 zht = "行內預覽"
@@ -6875,11 +6851,32 @@ en = "no drafts"
 # ── register ──────────────────────────────────────────────────────────
 
 [[message]]
+# 四個區域都擺出來了
+key = "region.all-open"
+zht = "四個區域都開着了"
+zhs = "四个区域都开着了"
+en = "all four regions are open"
+
+[[message]]
 # 空格 3／4：那一側一扇面板都不歸它
 key = "region.nothing-lives-there"
 zht = "這一側沒有哪一扇面板歸它——`:sidebar-left` 可以挪一扇過去"
 zhs = "这一侧没有哪一扇面板归它——`:sidebar-left` 可以挪一扇过去"
 en = "no panel lives on that side — :sidebar-left moves one there"
+
+[[message]]
+# 只剩一個區域，關不動了
+key = "region.only-one-left"
+zht = "就剩這一個區域了——要離開編輯器是 :q"
+zhs = "就剩这一个区域了——要离开编辑器是 :q"
+en = "this is the only region left — :q leaves the editor"
+
+[[message]]
+# 別的區域都收了
+key = "region.only-this-one"
+zht = "別的區域都收了"
+zhs = "别的区域都收了"
+en = "every other region is closed"
 
 [[message]]
 # 指名的暫存器是空的
@@ -9916,12 +9913,6 @@ zht = "-- 邊欄 --  {0}"
 zhs = "-- 边栏 --  {0}"
 en = "-- SIDEBAR --  {0}"
 
-[[message]]
-# 空格 S 收完之後說一句
-key = "ui.sidebars-closed"
-zht = "邊欄都收了"
-zhs = "边栏都收了"
-en = "sidebars closed"
 [[message]]
 # 提示行右端那一小行落款：編輯器自己的名字
 key = "ui.signature"

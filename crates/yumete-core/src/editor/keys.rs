@@ -1477,7 +1477,7 @@ impl Editor {
             // The next region — the panels and the work areas, in the order
             // they sit on the screen. vi spells window motions `C-w`, and this
             // is the one it spells `C-w w` (#293).
-            Key::Ctrl('w') => self.cycle_region(),
+            Key::Ctrl('w') => self.next_region(),
             // …and the keys a keyboard already has for it. `C-f`/`C-b` are
             // vi's; these are the ones a reader who has never used vi presses,
             // and they used to do nothing at all.
@@ -1900,18 +1900,24 @@ impl Editor {
         // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
         // 快捷鍵太不方便」. The chord stays; this is the same thing with the
         // hand already on the space bar.
-        // **一下跳到某一區**（2026-09-25 作者提）——`空格 s` 是輪轉，這幾個是
+        // **一下跳到某一區**（2026-09-25 作者提）——`空格 w` 是走一步，這幾個是
         // 點名。數字在這張菜單上本來一個都沒占，所以 1–4 不是四個零散的決定，
         // 是一整塊乾淨的地址空間。
         ('1', "hint.space.region-one"),
         ('2', "hint.space.region-two"),
         ('3', "hint.space.region-left"),
         ('4', "hint.space.region-right"),
-        ('s', "hint.space.next-region"),
-        ('S', "hint.space.close-all"),
-        ('w', "hint.goto.other-pane"),
-        ('W', "hint.goto.only-this-pane"),
-        ('q', "hint.goto.close-this-pane"),
+        // **一個名詞、四個動詞**（2026-09-26 作者定，原話：「可不可以把工作区和
+        // 侧边栏统一成一个概念「区域」以简化思维模型」）。從前這裏躺着兩套詞彙說
+        // 同一件事：`w`／`W`／`q` 只看得見工作區，`s`／`S` 只看得見邊欄，而
+        // `1`–`4` 兩個都看得見——三套坐標系。
+        //
+        // ⚠️ **`空格 s`／`空格 S` 沒了**，被 `w` 和 `Q` 吸收。`C-w` 留着：它是
+        // helix／vim 那一路的和弦，不占菜單位置。
+        ('w', "hint.space.next-region"),
+        ('W', "hint.space.all-regions"),
+        ('q', "hint.space.close-this-region"),
+        ('Q', "hint.space.only-this-region"),
         ('"', "menu.paste.title"),
         ('c', "hint.space.comment-line"),
         ('C', "hint.space.comment-block"),
@@ -2181,12 +2187,7 @@ impl Editor {
             Key::Char(n @ '1'..='4') => {
                 self.go_to_region(n.to_digit(10).unwrap_or(0));
             }
-            Key::Char('s') => self.cycle_region(),
-            // **`空格 S`：兩個邊欄一起收**（2026-09-21 提的）。開了三個視圖之後
-            // 想把版心整個要回來，逐個 `q` 要走過去按兩次；這一下說的是「都收
-            // 了」。⚠️ 大寫是「同一件事的更大版本」，與 `空格 w`／`空格 W` 同一
-            // 條規矩。
-            Key::Char('S') => self.close_all_sidebars(),
+
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
             // 定義 (#215): the 拆分表 on the character under the cursor. The
@@ -2248,37 +2249,12 @@ impl Editor {
             // 工作區 (Feature #176): one key, three meanings that are the same
             // meaning — 「另一個工作區」. Nothing open: open one, showing this
             // same place. Open: hand it the keys. `W`:收掉，留下你站着的這半。
-            Key::Char('w') => match self.other.is_some() {
-                false => {
-                    let at = self.cursor;
-                    self.open_split(at, None, self.current_buffer().display_name().to_string());
-                    self.status = say!("pane.opened");
-                }
-                true => {
-                    self.switch_pane();
-                }
-            },
-            // Two ways out, because there are two things you might mean, and
-            // both are one keystroke:
-            //
-            // `W` — 只留我這一半. This is the common one: you looked at the
-            // preview and are done with it, or you decided to work in it and
-            // want the window back. vi spells it `C-w o`(nly), and 空格 o is
-            // the outline here, so the capital of the pane's own letter says
-            // it instead.
-            Key::Char('W') => {
-                if self.close_split() {
-                    self.status = say!("pane.only-one-left");
-                }
-            }
-            // `q` — 關掉我這一半，鍵跟着到另一半. vi's `C-w q`, and the same
-            // word: 「這一半我不要了」.
-            Key::Char('q') => {
-                if self.switch_pane() {
-                    self.close_split();
-                    self.status = say!("pane.closed");
-                }
-            }
+            // **四個動詞，一個名詞**（2026-09-26 作者定）。`w` 走一步、`W` 全開、
+            // `q` 關這個、`Q` 只留一個工作區；`1`–`4` 是同一套坐標下的點名。
+            Key::Char('w') => self.next_region(),
+            Key::Char('W') => self.open_every_region(),
+            Key::Char('q') => self.close_this_region(),
+            Key::Char('Q') => self.close_other_regions(),
             Key::Char('y') => self.copy_to_clipboard(),
             Key::Char('p') => self.clipboard_paste(true),
             Key::Char('P') => self.clipboard_paste(false),
