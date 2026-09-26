@@ -6393,7 +6393,13 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
             // **攤開**：百科沒有「最長的那一行」（它是一段文章，`rows()` 是空的，
             // 2026-09-23 審出來的：提示行寫着 `w` 管用而寬度一格不動），所以它直接
             // 要 `roomy`；別的視圖要「讀得下最長的那一行」，封頂也是 `roomy`。
-            true if sidebar.view() == View::Wiki => roomy,
+            //
+            // ⚠️ **搜索是同一個病，2026-09-26 纔發現**（作者報的：「搜索侧栏按 w
+            // 变宽后，再按就没办法变窄了」）。它的命中住在 `Search::hits` 裏，
+            // `refresh_sidebar` 對這一格是 `View::Search => return`——`rows()` 一條
+            // 都沒有。於是 `clamp(0, …)` 落在下限上，**攤開和不攤開一樣寬**，`w`
+            // 兩個方向都是空炮。看着就像「寬了收不回來」。
+            true if matches!(sidebar.view(), View::Wiki | View::Search) => roomy,
             true => sidebar
                 .rows()
                 .iter()
@@ -7407,6 +7413,57 @@ fn draw_dictionary(
 }
 
 /// The `Space f` / `Space b` picker.
+/// **把整屏往紙的方向推一截**，好讓浮在上面的那扇窗跳出來。
+///
+/// ⚠️ **後期處理，不是重畫一遍。** 「淡」是每一個格子的事——正文、邊欄、狀態行、
+/// 行號、診斷那一格、選中的底色——而它們散在十幾支繪製函數裏，各自問 `Palette`
+/// 要顏色。要它們都知道「此刻有一扇窗浮着」，等於把一個旗標穿過整棵樹；而顏色都
+/// 已經落在緩衝區裏了，往紙色混一截是一趟平掃。
+///
+/// ⚠️ **只動 `Color::Rgb`。** `Reset` 與調色板序號混不了——混了也不知道混向哪裏，
+/// 因為那時顏色是終端說了算。原樣留着：一個沒退後的格子比一個算錯的顏色好。
+const STAND_BACK: u16 = 62;
+
+fn stand_back(frame: &mut Frame, ink: crate::theme::Palette, area: Rect) {
+    // **往紙色靠**，不往梯子中央靠。2026-09-26 兩種都畫出來比過：
+    //
+    // | 靠 | 背後那一片變成 | 讀起來 |
+    // | --- | --- | --- |
+    // | 紙色 `#181A1D` | `#17191C` | 底色原樣，只有墨變淡 |
+    // | 第 40 檔 `#575756` | `#575756` | 整片收成一塊平灰 |
+    //
+    // ⚠️ **「退後」是墨的事，不是紙的事。** 中央那一檔把**底色也拉亮了**，於是那
+    // 一片反倒比原先顯眼，回過頭來跟浮着的那扇窗搶注意力。靠紙色只動墨：紙還是
+    // 那張紙，字退到紙裏去。作者當場的話：「靠纸色的话后方背景不会变，只是墨色
+    // 变淡」。
+    //
+    // ⚠️ **亮色主題下這條要重量一次。** 那裏「紙」是白的，靠過去就是把字洗白——
+    // 到那時再看是換成中央那一檔，還是按主題分兩個去處。現在不預先分，因為沒量過。
+    let Color::Rgb(pr, pg, pb) = ink.paper() else { return };
+    let toward = |c: Color| match c {
+        Color::Rgb(r, g, b) => {
+            let mix = |from: u8, to: u8| {
+                (from as u16 * (100 - STAND_BACK) / 100 + to as u16 * STAND_BACK / 100) as u8
+            };
+            Color::Rgb(mix(r, pr), mix(g, pg), mix(b, pb))
+        }
+        other => other,
+    };
+    let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in area.x..area.x + area.width {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                let was = cell.style();
+                let style = Style::default()
+                    .fg(toward(was.fg.unwrap_or(ink.text())))
+                    .bg(toward(was.bg.unwrap_or(ink.paper())))
+                    .add_modifier(was.add_modifier);
+                cell.set_style(style);
+            }
+        }
+    }
+}
+
 fn draw_picker(
     frame: &mut Frame,
     editor: &Editor,
@@ -7416,6 +7473,10 @@ fn draw_picker(
 ) -> Option<(Position, Option<Rect>)> {
     let picker = editor.picker()?;
     let ink = crate::theme::Palette::of(config);
+    // **這扇窗一開，底下那一整屏往後退一步**（2026-09-26 作者提：「picker 窗口出
+    // 现的时候，正文区域可以变淡一些，从而突出 picker 窗口」）。它是獨佔的：開着
+    // 的時候每一個鍵都歸它，而一屏同樣清晰的字沒說出這件事。
+    stand_back(frame, ink, area);
     let matches = picker.matches();
     // The name, and **which of its characters the query is standing on** — the
     // one thing that says why a name with scattered letters is on the list at
@@ -7469,8 +7530,14 @@ fn draw_picker(
     // 「面板可以再大一些，比如高度是 max(10, 一半行數)」) — which is what every
     // picker worth copying does: a list eight rows deep in an eighty-row
     // terminal is a keyhole.
-    let rows = ((area.height / 2).max(10) + 3).min(area.height).max(4);
-    let wide = (area.width * 4 / 5).clamp(24, 120).min(area.width.saturating_sub(2));
+    // **窗口的 3/4 高、4/5 寬**（2026-09-26 作者定，原話：「现在高度不超过屏幕
+    // 1/2，我觉得可以增加到3/4……宽度可以达到3/4或者4/5」）。挑一個檔名是這扇面板
+    // 唯一的事，而一半的高度在 40 行的終端上只列得出十幾條。
+    // ⚠️ **寬度那個上限從 120 提到 160**：4/5 在 160 欄的終端上是 128，從前被那個
+    // 上限砍成 120，看着像「沒到 4/5」。上限本身留着——超寬顯示器上一條 200 欄的
+    // 名字要眼睛橫着掃一趟。
+    let rows = ((area.height * 3 / 4).max(10) + 3).min(area.height).max(4);
+    let wide = (area.width * 4 / 5).clamp(24, 160).min(area.width.saturating_sub(2));
     let box_ = crate::chrome::place(area, (wide, rows), crate::chrome::Anchor::Centre)?;
     // Two fifths for the names, the rest for the preview — and a window too
     // narrow for both gives the whole of itself to the names.
@@ -17088,9 +17155,10 @@ fn squeezed(text: &str) -> String {
         let text = page_text(&buffer);
         assert!(text.contains("緩衝區"), "{text:?}");
         assert!(!text.contains("打開文件"), "the menu is gone: {text:?}");
-        // And it is a box in the middle of the page, not the page: half the
-        // window and three rows of furniture (2026-09-18 — it was eight rows
-        // and a keyhole).
+        // And it is a box in the middle of the page, not the page: **three
+        // quarters** of the window and three rows of furniture（2026-09-26 作者
+        // 定：「现在高度不超过屏幕1/2，我觉得可以增加到3/4」；2026-09-18 之前是
+        // 八行加一個鑰匙孔）。
         //
         // ⚠️ **Counted off the ring, not off the ground.** This asked for a
         // hard-coded `Rgb(0x26, 0x2a, 0x27)` and got it nowhere — the palette
@@ -17104,8 +17172,8 @@ fn squeezed(text: &str) -> String {
             })
             .count();
         assert!(
-            (10..=24 / 2 + 3).contains(&drawn),
-            "half the page and its rings, and never fewer than ten rows: {drawn}"
+            (10..=24 * 3 / 4 + 3).contains(&drawn),
+            "窗口的四分之三加上框，而且不少於十行：{drawn}"
         );
     }
 

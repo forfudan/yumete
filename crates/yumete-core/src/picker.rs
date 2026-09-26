@@ -346,9 +346,34 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
     // ⚠️ **兩檔之間差着 [`IN_ORDER`] 分**，所以順序對的永遠在上面，顛倒的墊在
     // 底下——放寬不會把本來就對的那一批攪亂。門檻沒有：詞條、檔名這些單子本來就
     // 不長（作者定：「寧可多列」）。
-    let (positions, in_order) = match forwards(&haystack, &needle) {
+    // **簡繁異體照樣算同一個字**（2026-09-26 作者提：「中文搜索的匹配繁简体和匹配
+    // 拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。和高級搜索那一扇用
+    // 的是同一張表。
+    //
+    // ⚠️ **放寬的是查詢那一邊，不是名字那一邊**，而這個方向就是那張表值錢的地方：
+    // `class(发) = 发發髮`，所以打「头发」找得到「頭髮」；`class(發) = 發发`，所以
+    // 打「發」不會誤中「髮」（見 [`crate::glyphs`]）。反過來折就把這個性質毀了。
+    let same = |want: char, have: char| {
+        want == have || crate::glyphs::shapes(want).contains(have)
+    };
+    let (positions, in_order) = match forwards(&haystack, &needle, same) {
         Some(found) => (found, true),
-        None => (anyhow(&haystack, &needle)?, false),
+        None => match anyhow(&haystack, &needle, same) {
+            Some(found) => (found, false),
+            // **字面找不着，就問它念作什麽**（2026-09-26 作者提）。`tianmen` 找得
+            // 到「天門」。
+            //
+            // ⚠️ **只認全拼，和高級搜索一條規矩**（作者定：「Option 2 更符合目前
+            // 的设计哲学——不一下子提供太多东西直到真有人要」）。所以 `tm` 不中。
+            //
+            // ⚠️ **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串
+            // 讀音，而讀者打 `md` 十有八九在找 `.md`。字面接得住就不必問讀音。
+            None => {
+                let said = crate::pinyin::as_query(query)?;
+                let (from, to) = *crate::pinyin::spans(label, &said).first()?;
+                ((from..to).collect(), true)
+            }
+        },
     };
     // Where the name itself begins: everything before the last separator is
     // the folders, which are not what was typed at.
@@ -394,18 +419,22 @@ const IN_ORDER: i64 = 1_000_000;
 /// uses, for the same reason. A forward walk alone takes the *first* place
 /// each character fits: 「他説」 in 「他。他説」 would be marked from the first
 /// 他, and the reader sees a range with a full stop in the middle of it.
-fn forwards(haystack: &[char], needle: &[char]) -> Option<Vec<usize>> {
+fn forwards(
+    haystack: &[char],
+    needle: &[char],
+    same: impl Fn(char, char) -> bool,
+) -> Option<Vec<usize>> {
     let mut at = 0usize;
     let mut end = 0usize;
     for &want in needle {
-        let found = (at..haystack.len()).find(|&i| haystack[i] == want)?;
+        let found = (at..haystack.len()).find(|&i| same(want, haystack[i]))?;
         at = found + 1;
         end = found;
     }
     let mut positions = Vec::with_capacity(needle.len());
     let mut upto = end as isize;
     for &want in needle.iter().rev() {
-        let found = (0..=upto).rev().find(|&i| haystack[i as usize] == want)?;
+        let found = (0..=upto).rev().find(|&i| same(want, haystack[i as usize]))?;
         positions.push(found as usize);
         upto = found - 1;
     }
@@ -420,11 +449,15 @@ fn forwards(haystack: &[char], needle: &[char]) -> Option<Vec<usize>> {
 /// taken as early as it can be. The positions come back **sorted**, because
 /// they are about to be drawn: a highlight has to run left to right whatever
 /// order the query was typed in.
-fn anyhow(haystack: &[char], needle: &[char]) -> Option<Vec<usize>> {
+fn anyhow(
+    haystack: &[char],
+    needle: &[char],
+    same: impl Fn(char, char) -> bool,
+) -> Option<Vec<usize>> {
     let mut taken = vec![false; haystack.len()];
     let mut positions = Vec::with_capacity(needle.len());
     for &want in needle {
-        let found = (0..haystack.len()).find(|&i| !taken[i] && haystack[i] == want)?;
+        let found = (0..haystack.len()).find(|&i| !taken[i] && same(want, haystack[i]))?;
         taken[found] = true;
         positions.push(found);
     }
@@ -461,6 +494,48 @@ mod tests {
             Some(Item::File("卷二/ch63.md".to_string())),
             "the run should win"
         );
+    }
+
+    /// **簡繁異體在這扇窗裏也算同一個字**（2026-09-26 作者提：「中文搜索的匹配繁
+    /// 简体和匹配拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。
+    #[test]
+    fn the_two_ways_of_writing_a_character_find_one_file() {
+        let mut picker = files(&["卷一/天門真境.md", "卷二/別的.md"]);
+        for c in "天门".chars() {
+            picker.push(c);
+        }
+        assert_eq!(picker.chosen(), Some(Item::File("卷一/天門真境.md".to_string())));
+
+        // ⚠️ **放寬的是查詢那一邊**：`发` 含混，兩邊都中；`發` 說得清，不碰「髮」。
+        let mut picker = files(&["頭髮.md", "發現.md"]);
+        picker.push('發');
+        assert_eq!(picker.matches().len(), 1, "「發」不該誤中「髮」");
+        assert_eq!(picker.chosen(), Some(Item::File("發現.md".to_string())));
+    }
+
+    /// **拼音也找得到**（同日）。⚠️ **只認全拼**，和高級搜索一條規矩。
+    #[test]
+    fn the_letters_a_name_is_read_as_find_it_too() {
+        let mut picker = files(&["卷一/天門真境.md", "notes.md"]);
+        for c in "tianmen".chars() {
+            picker.push(c);
+        }
+        assert_eq!(picker.chosen(), Some(Item::File("卷一/天門真境.md".to_string())));
+        assert_eq!(picker.matches().len(), 1);
+
+        // 首字母那一路不算——作者 2026-09-26 定，同高級搜索。
+        let mut picker = files(&["卷一/天門真境.md"]);
+        for c in "tm".chars() {
+            picker.push(c);
+        }
+        assert!(picker.matches().is_empty(), "只認全拼，`tm` 不算");
+
+        // ⚠️ **字面先來**：`md` 是一串讀音，可讀者打它十有八九在找 `.md`。
+        let mut picker = files(&["notes.md", "馬達.txt"]);
+        for c in "md".chars() {
+            picker.push(c);
+        }
+        assert_eq!(picker.chosen(), Some(Item::File("notes.md".to_string())));
     }
 
     #[test]

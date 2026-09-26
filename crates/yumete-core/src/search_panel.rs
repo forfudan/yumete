@@ -64,6 +64,22 @@ pub enum Where {
 }
 
 impl Where {
+    /// **下一個範圍**——`0` 在面板裏按一下走一格（2026-09-26 作者提：「如何在搜索
+    /// 侧栏切换 github directory, working directory, present directory？现在位置
+    /// 只能输入路径」）。
+    ///
+    /// 本文件 → 本文件夾 → 工作目錄 → git 項目 → 回到本文件。⚠️ **指名道姓那一種
+    /// 不在圈裏**：它是使用者自己打的一個路徑，輪到它就回本文件——一個「下一個」
+    /// 走不到、也走不出的值不該卡在環上。
+    pub fn next(&self) -> Where {
+        match self {
+            Where::Buffer => Where::Folder,
+            Where::Folder => Where::Workspace,
+            Where::Workspace => Where::Project,
+            Where::Project | Where::Named(_) => Where::Buffer,
+        }
+    }
+
     /// Whether this is searched again on every keystroke.
     ///
     /// ⚠️ **Only the buffer is.** Everything else walks the disk, and a

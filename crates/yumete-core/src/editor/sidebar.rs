@@ -706,7 +706,7 @@ impl Editor {
     /// **不管這一頁是單子還是文章，這幾個鍵都算數**（2026-09-23 審出來的：提示
     /// 行在百科那一頁上照樣寫着 `Tab 換視圖`／`w 寬窄`，而那兩個鍵在那裏什麽都
     /// 不做——「拿走鍵的那一半有義務」）。
-    fn on_sidebar_key_after_the_list(&mut self, key: Key) {
+    pub(super) fn on_sidebar_key_after_the_list(&mut self, key: Key) {
         let Some(side) = self.panel_focus() else { return };
         match key {
             Key::Char('R') => self.refresh_sidebar(),
