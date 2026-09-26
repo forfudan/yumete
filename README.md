@@ -5,10 +5,10 @@
 tailored first for **writing (novels), not coding**. It installs under both
 names: `yumete`, and `ye` for the one you actually type.
 
-宇夢編輯器是一款符合漢字文化圈用户習慣的終端文本編輯器，提拱類Helix和vim鍵位支持。
+宇夢編輯器是一款符合漢字文化圈用户習慣的終端文本編輯器，提供類Helix和vim鍵位支持。
 它以**中文詞語**爲單位移動光標，支持竪排編輯、繁簡轉換、拼音搜索等常用功能，
 並内置[宇夢輸入系統核心引擎](https://shurufa.app/docs/yume.html)，
-允許你真接調用本地儲存的方案碼表進行TUI界面輸入。
+允許你直接調用本地儲存的方案碼表進行TUI界面輸入。
 它爲中文文章的閲讀和寫作提供了極大的便利。
 
 ```bash
