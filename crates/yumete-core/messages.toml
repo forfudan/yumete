@@ -5665,8 +5665,8 @@ en = "Write a name on the right of `[keys.normal]`: `x = 「delete_selection」`
 [[message]]
 # :keymap actions 那個緩衝區的名字
 key = "keys.actions-title"
-zht = "能綁的動作"
-zhs = "能绑的动作"
+zht = "能綁定的動作"
+zhs = "能绑定的动作"
 en = "actions"
 
 [[message]]
@@ -5719,53 +5719,53 @@ zhs = "开"
 en = "on"
 
 [[message]]
-# 命令：把緩衝區那一格挪到這一邊
+# 標籤：緩衝區
 key = "label.panel.buffers"
-zht = "緩衝區"
-zhs = "缓冲区"
-en = "the open files"
+zht = "緩衝"
+zhs = "缓冲"
+en = "Buffers"
 
 [[message]]
-# 命令：把表格詳情挪到這一邊
+# 標籤：表格
 key = "label.panel.detail"
-zht = "表格詳情"
-zhs = "表格详情"
-en = "the table detail"
+zht = "表格"
+zhs = "表格"
+en = "Table detail"
 
 [[message]]
-# 命令：把字典挪到這一邊
+# 標籤：字典
 key = "label.panel.dictionary"
 zht = "字典"
 zhs = "字典"
-en = "the dictionary"
+en = "Dictionary"
 
 [[message]]
-# 命令：把檔案樹挪到這一邊
+# 標籤：文件
 key = "label.panel.files"
-zht = "文件樹"
-zhs = "文件树"
-en = "the file tree"
+zht = "文件"
+zhs = "文件"
+en = "Files"
 
 [[message]]
-# 命令：把大綱挪到這一邊
+# 標籤：大綱
 key = "label.panel.outline"
 zht = "大綱"
 zhs = "大纲"
-en = "the outline"
+en = "Outline"
 
 [[message]]
 # 標籤：搜索面板
 key = "label.panel.search"
 zht = "搜索"
 zhs = "搜索"
-en = "search"
+en = "Search"
 
 [[message]]
 # 邊欄的百科頁，放進句子裏說的名字
 key = "label.panel.wiki"
 zht = "百科"
 zhs = "百科"
-en = "wiki"
+en = "Wiki"
 
 [[message]]
 # 標籤：右邊
@@ -7238,8 +7238,8 @@ en = "none"
 [[message]]
 # 搜索面板：拼音那個開關的名字
 key = "search.pinyin"
-zht = "拼音"
-zhs = "拼音"
+zht = "匹配拼音"
+zhs = "匹配拼音"
 en = "pinyin"
 
 [[message]]
