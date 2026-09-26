@@ -1,9 +1,19 @@
-# yumete · 宇夢終端編輯器
+# yumete · 宇夢編輯器
 
 **yumete** = **Yume** + **TE** (Text Editor / Terminal Editor) — a lightweight,
 **Helix-like**, **CJK-aware** terminal text editor with a **built-in Yume IME**,
 tailored first for **writing (novels), not coding**. It installs under both
 names: `yumete`, and `ye` for the one you actually type.
+
+宇夢編輯器是一款符合漢字文化圈用户習慣的終端文本編輯器，提拱類Helix和vim鍵位支持。
+它以**中文詞語**爲單位移動光標，支持竪排編輯、繁簡轉換、拼音搜索等常用功能，
+並内置[宇夢輸入系統核心引擎](https://shurufa.app/docs/yume.html)，
+允許你真接調用本地儲存的方案碼表進行TUI界面輸入。
+它爲中文文章的閲讀和寫作提供了極大的便利。
+
+```bash
+brew install forfudan/tap/yumete
+```
 
 **[docs/manual.md](docs/manual.md)**（繁體, and [简体](docs/manual_sc.md)）is
 the user manual — what the keys and commands do, how vertical layout works, and
@@ -17,7 +27,7 @@ the reasoning, and the feature roadmap.
 
 ## Status
 
-A working editor, used daily by its author, and not finished. **v0.2.0** is the
+A working editor, used daily by its author, and not finished. **v0.3.0** is the
 current release: `brew install forfudan/tap/yumete`, or a tarball from the
 [releases page](https://github.com/forfudan/yumete/releases), or build it from
 source (below). What is done, planned and dropped is
