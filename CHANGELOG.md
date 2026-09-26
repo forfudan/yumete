@@ -7,18 +7,21 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## 0.3.0 · 未發布
+## 0.3.0 · 2026-09-26
 
-這一版兩頭都長：一頭是**寫程序的那一半**——編輯器接上了語言服務器，紅綫、跳定義、
-說明、補全四件一齊到位；另一頭是**找東西**——高級搜索長成了一扇真正的面板，會折簡繁
-異體、認得拼音，改完正文按一下 `Enter` 就重跑。順帶有了一整頁的 `:settings`，竪排的
-年份與章節號不再一位一行，而程序文件一律橫排。
+這一版三頭都長。**寫程序的那一半**：編輯器接上了語言服務器，紅綫、跳定義、說明、補全
+四件一齊到位。**找東西**：搜索長成了一扇真正的面板，會折簡繁異體、認得拼音，改完正文
+按一下 `Enter` 就重跑。**版面**：工作區和邊欄合成了一個名詞「區域」，四個區、四個動詞、
+四檔寬度，而邊欄從此圍成一圈框。順帶有了一整頁的 `:settings`，竪排的年份與章節號不再
+一位一行，而程序文件一律橫排。
 
-Two halves. One writes programs: a language server behind the editor, with
-diagnostics, go-to-definition, hover and completion. The other finds things: the
-search panel now folds 簡/繁 variants, reads pinyin, and re-runs on `Enter` after
-you have edited the prose. There is also a full-page `:settings`, a four-digit
-year in one vertical slot, and program files always laid out across.
+Three directions. Writing programs: a language server behind the editor, with
+diagnostics, go-to-definition, hover and completion. Finding things: the search
+panel now folds 簡/繁 variants, reads pinyin, and re-runs on `Enter` after you
+have edited the prose. The layout: work areas and sidebars are one idea now —
+four regions, four verbs, four widths — and a sidebar is drawn as a frame. There
+is also a full-page `:settings`, a four-digit year in one vertical slot, and
+program files always laid out across.
 
 ### 新的 · New
 
@@ -67,7 +70,7 @@ year in one vertical slot, and program files always laid out across.
 - **一份 `.csv` 打開就是表格。** 它没有第二種讀法，所以全窗表格直接開着，不用再按
   `空格 t t`（`.tsv`／`.tab` 同理）。`.md` 裏的表格不這樣——那只是正文的一部分。
 
-- **搜「天門」找得到「天门」。** 高級搜索多一個開關「匹配簡繁異體」，**出廠開着**。一個字
+- **搜「天門」找得到「天门」。** 搜索面板多一個開關「匹配簡繁異體」，**出廠開着**。一個字
   展開成它在通規簡體、通規繁體、古籍繁體、臺灣繁體、香港繁體、opencc 繁體裏的各種寫法。
   ⚠️ **含混的那個字放寬，精確的那個字保持精確**：`头发` 找得到「頭髮」和「頭發」，而
   `發` **不會**誤中「髮」——「发」是兩個字共用的簡體，「發」自己說得清。這也是搜索可以
@@ -102,10 +105,26 @@ year in one vertical slot, and program files always laid out across.
 - **`h`／`l` 進了動作表**，所以 `dh`、`2dl`、`ch` 都對了；**段落成了文本對象**，
   `dip`、`dap`、`cip`、`yap`、helix 的 `mi p` 一併有了。
 
+- ⚠️ **破壞性改動：工作區和邊欄合成了一個名詞「區域」。** 一共四個——①正文 ②第二
+  工作區 ③左邊欄 ④右邊欄——四個動詞管它們：
+
+  | 鍵 | |
+  | --- | --- |
+  | `空格 1`–`4` | **點名**去那一區，没開的開出來 |
+  | `空格 w`／`C-w` | **走一步**：去下一個**開着的**區，按 ①②③④ 的次序 |
+  | `空格 W` | **全開**：四個區域都擺出來 |
+  | `空格 q` | **關掉站着的這一區**（在邊欄裏和 `q` 同一件事） |
+  | `空格 Q` | **只留一個工作區**：優先留光標所在的 |
+
+  **`空格 s` 和 `空格 S` 沒了**（被 `w` 和 `Q` 吸收），`空格 w` 也**不再開**第二工作區
+  ——它只走開着的，開一個是 `空格 2` 或 `空格 W`。
+  **理由**：從前 `w`／`W`／`q` 只看得見工作區，`s`／`S` 只看得見邊欄，而 `1`–`4` 兩個都
+  看得見——三套坐標系說同一件事。
+
 - **`空格 1`–`4` 點名去某一區**：`1` 正文、`2` 第二個窗格、`3` 左邊欄、`4` 右邊欄。
   没開的就開出來再過去。`C-w` 是「下一個」，這四個是「就這一個」。
 
-- **高級搜索那扇面板，鍵整過一遍。** `/` 回搜索框（和選擇器那一扇裏的 `/` 一個樣）、
+- **搜索那扇面板，鍵整過一遍。** `/` 回搜索框（和選擇器那一扇裏的 `/` 一個樣）、
   `j k` 竪着走格、`h l` 橫着在框裏挪光標（框裏站着一個塊光標，和正文 Normal 一樣）、
   `d D c C a I A` 就地編輯、`1`–`7` 翻那七個開關、`r`／`R` 換這一處／全部換。
   **`Enter` 一律是「再找一遍」**——只有站在結果上而名單没過期的時候纔是「去那一處」。
@@ -236,7 +255,7 @@ year in one vertical slot, and program files always laid out across.
 
 - **`gd` 的答案不用再等你按一下鍵。** 也不再按服務器手上那一版舊正文去數行列號。
 
-- **高級搜索那一扇面板，四件**（2026-09-23 提的）：
+- **搜索那一扇面板，四件**（2026-09-23 提的）：
   **①「哪裏找」成了一個框**——`Esc` 出框、`k` 一下就到它，`i` 進去打一個路徑、Enter 落地，
   和 `:search` 後面那個參數完全一致。`:search` 開着卻想搜整個文件夾，不用退出去重開。
   **② 結果列表回得去了**——走到第一條上再按 `k` 就出來，從前那是個進得去出不來的地方。
@@ -267,11 +286,11 @@ year in one vertical slot, and program files always laid out across.
   見。放寬成**三分之二**：24 行的窗口現在是 **13 行 × 6 欄 ＝ 78 格**，正文還剩 8 行；
   12 行的終端是 5 行，和從前一樣。（2026-09-23 提的。）
 
-- **高級搜索走到別的檔的命中上，不再崩潰。** 空開一個 yumete（草稿只有一行）、`:search .`
+- **搜索面板走到別的檔的命中上，不再崩潰。** 空開一個 yumete（草稿只有一行）、`:search .`
   搜整個文件夾、按 `j` 走進結果——命令行那一句「這一條長什麽樣」拿命中的行號去問**眼前**
   那個緩衝區，而命中在別的檔的第六千多行，當場崩。現在別的檔取它自己抓下的那一段。
 
-- **高級搜索打字時，系統輸入法的候選框畫在正文上。** 鍵在邊欄的框裏，而報給終端的光標還
+- **搜索面板打字時，系統輸入法的候選框畫在正文上。** 鍵在邊欄的框裏，而報給終端的光標還
   留在正文第一行——macOS 的輸入法跟着硬件光標走，於是候選框和拼音串都跑到正文上去了。
 
 - **兩個邊欄都開着的時候，看得出鍵在哪一欄了。** 拿着鍵的那一欄，分隔線是粗的、金色
