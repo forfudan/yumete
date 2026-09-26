@@ -253,17 +253,17 @@ impl View {
 
 }
 
-/// **一個側欄有多寬**，四檔（2026-09-26 作者定）。
+/// **一個側欄有多寬**，四檔，分母都是十（2026-09-26 作者定）。
 ///
-/// 原話：「所有侧栏第一次打开的时候，不管是什么面板，都默认是窄，然后 w 循环切换
-/// ……基准为 窄1/4, 中1/3, 宽1/2」，當天又加了一檔：「窄、中、绰、宽 1/4 - 1/3 -
-/// 2/5 - 1/2」。⚠️ **2/5 填的是最大那個坑**：160 欄下 1/3 到 1/2 是 53 → 80，隔着
-/// 27 欄；插進 64 之後兩段分別是 +11 和 +16。四檔在任何窗口下都真的不同，相鄰之差
-/// 最小 4 欄（60 欄窗口）。
+/// `2/10 → 3/10 → 4/10 → 5/10`，`w` 按一下走一格，到頭回到 2/10。**出廠 3/10**。
 ///
-/// ⚠️ **檔位的名字就寫分數**（同日定）。「綽」和「寬」是近義詞，狀態欄寫着
+/// ⚠️ **同一個分母，次序纔一眼看得出來。** 這一檔的名字就是那個分數，寫在狀態欄
+/// 上；`3/10 → 4/10` 是升一格，而 `3/10 → 2/5` 要心算。作者原話：「2/10, 3/10,
+/// 4/10, 5/10 比较好一些……这样感觉调节的范围更加广一些(20%-50%)」。
+///
+/// ⚠️ **名字不寫「窄／中／綽／寬」**（同日定）。「綽」和「寬」是近義詞，狀態欄寫着
 /// 「邊欄：綽」的時候讀者看不出它比「寬」窄還是寬——他得記。分數自己排序，不用學
-/// 詞，而且直接說出會得到什麼；往後加第五檔也不必再造一個字。
+/// 詞，而且直接說出會得到什麼；往後加一檔改一個數組就行。
 ///
 /// ⚠️ **寬度是側欄的屬性，不是面板的屬性**（作者原話）：「面板自身不能改变侧栏的
 /// 宽度，它只是借用了侧栏这个容器」。所以這個檔位記在**那一側**上，換視圖不變、
@@ -271,45 +271,38 @@ impl View {
 ///
 /// ⚠️ **檔位是意圖，寬度是結果。** 兩欄都開而窗口又小的時候，靠後那幾檔會被「正文
 /// 保底」咬成一樣寬；那時檔位照走，窗口一拉大它就真的寬了。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Width {
-    /// 窗口的 1/4。出廠就是它。
-    #[default]
-    Quarter,
-    /// 窗口的 1/3。
-    Third,
-    /// 窗口的 2/5。
-    Twofifths,
-    /// 窗口的 1/2。
-    Half,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Width(u8);
+
+impl Default for Width {
+    fn default() -> Width {
+        Width(3)
+    }
 }
 
 impl Width {
-    /// 四檔，從窄到寬——`w` 按這個次序走，到頭回到最窄。
-    pub const ALL: [Width; 4] = [Width::Quarter, Width::Third, Width::Twofifths, Width::Half];
+    /// 分母。四個檔位共用它，所以它們的名字排得成一列。
+    pub const DEN: usize = 10;
 
-    /// `w` 按一下走一格。
+    /// 四個分子，從窄到寬——`w` 按這個次序走。加一檔就是往這裏加一個數。
+    pub const STEPS: [u8; 4] = [2, 3, 4, 5];
+
+    /// `w` 按一下走一格，到頭回到最窄。
     pub fn next(self) -> Width {
-        let at = Width::ALL.iter().position(|&w| w == self).unwrap_or(0);
-        Width::ALL[(at + 1) % Width::ALL.len()]
+        let at = Width::STEPS.iter().position(|&n| n == self.0).unwrap_or(0);
+        Width(Width::STEPS[(at + 1) % Width::STEPS.len()])
     }
 
-    /// 這一檔佔窗口的幾分之幾。
+    /// 這一檔佔窗口幾欄。
     ///
     /// ⚠️ **整數算，不用浮點**：一個寬度算出來差一格，畫面上就是一條縫。
     pub fn of(self, total: usize) -> usize {
-        let (num, den) = self.fraction();
-        total * num / den
+        total * self.0 as usize / Width::DEN
     }
 
     /// 那個分數，也是它的名字。
     pub fn fraction(self) -> (usize, usize) {
-        match self {
-            Width::Quarter => (1, 4),
-            Width::Third => (1, 3),
-            Width::Twofifths => (2, 5),
-            Width::Half => (1, 2),
-        }
+        (self.0 as usize, Width::DEN)
     }
 }
 
