@@ -3712,7 +3712,13 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search",
-        aliases: &[],
+        // **`:s` 開這扇面板**（2026-09-26 作者定）。`s` 在 vi 裏是 substitute，而
+        // 這扇面板正是 substitute 的大號——找與換在同一張表上。
+        // ⚠️ **`:s/找/換/` 還是 vi 那一行，不受影響**：`parse_substitution` 在命令
+        // 表之前就攔下了帶分隔符的那一種，而它明說「光禿禿的 `:s` 是別的命令」
+        // （那支函數開頭那段註釋）。所以兩者分得清：帶斜杠是一次性替換，不帶是
+        // 開面板。
+        aliases: &["s"],
         help: "cmd.commands.search",
         needs: &[],
         params: &[Param::Path],
@@ -4269,6 +4275,12 @@ fn moved_to(word: &str) -> Option<String> {
     if found.is_empty() {
         found = under(|name, word| name.starts_with(word));
     }
+    // ⚠️ **同一個去處只說一遍**（2026-09-26 報的：`:s` 答的是
+    // 「你要的是 `:convert s` `:convert s`」）。`:convert` 的兩個位置參數用的是
+    // 同一張詞表（`SIDES`，「從哪一種轉到哪一種」），於是 `s` 在同一條命令上命中
+    // 兩次。⚠️ **去重要在數數之前**：底下那個「超過三個就別猜了」數的是**幾個去
+    // 處**，不是幾次命中。
+    found.dedup();
     if found.is_empty() || found.len() > 3 {
         return None;
     }
@@ -5929,7 +5941,12 @@ mod tests {
 
         // An ambiguous prefix names nothing rather than guessing.
         assert_eq!(parse(":re"), Err(CommandError::Unknown("re".into())));
-        assert_eq!(parse(":s"), Err(CommandError::Unknown("s".into())));
+        // ⚠️ **`s` 從歧義變成了一個聲明過的簡寫**（2026-09-26 作者定）：光禿禿的
+        // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`／`set`／`shot`… 中間，
+        // 哪個都不算——而聲明出來的簡寫壓過前綴規則，同 `w` 之於 `write`。
+        assert_eq!(parse(":s"), Ok(Command::OpenSearch(crate::search_panel::Where::Buffer)));
+        // 帶分隔符的那一種還是 vi 的一次性替換，兩條路分得清。
+        assert!(matches!(parse(":s/天/X/"), Ok(Command::Substitute { .. })));
 
         // And what the menu shows is worked out from the table it is showing,
         // so a new command that collides lengthens it in the same edit.

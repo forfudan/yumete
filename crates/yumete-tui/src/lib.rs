@@ -7196,12 +7196,28 @@ fn draw_search(
         let gap = widest.saturating_sub(yumete_cjk::str_width(box_text)) + 1;
         format!("{box_text}{}", " ".repeat(gap))
     };
-    // **每一行末尾寫着按哪個號**（2026-09-24 定，原話：「在这一行后面显示这个
-    // 字母快捷键」，後來選了數字）。號就是**行的次序**，從上往下數，所以讀者數
-    // 行就行，不用記一張表。畫在右端，那幾個號自成一欄。
+    // **每一行寫着按哪個號**（2026-09-24 定，原話：「在这一行后面显示这个字母
+    // 快捷键」，後來選了數字）。號就是**行的次序**，從上往下數，所以讀者數行就
+    // 行，不用記一張表。
     //
-    // ⚠️ **窄到放不下就不畫號**，和落款那一行同一個規矩：一個擠在字上的號比沒有
-    // 號更難看懂。
+    // ⚠️ **號自成第三欄，緊跟最長那個名字，不貼右邊界**（2026-09-26 報的：「这
+    // 里的数字能不能更靠近前面的文字一些，不要右边靠到边界上，可以对齐成第三
+    // 列」）。貼着右邊界的時候，號與它說明的那一行之間隔着一大片空白——邊欄一
+    // 寬，那片空白跟着寬，眼睛得橫着跑一趟纔對得上是哪一行。
+    //
+    // ⚠️ **那一欄是量出來的**，同前面兩欄：七個名字裏「匹配簡繁異體」最長，而換
+    // 一種語言最長的就是另一個。
+    let names = [
+        say!("search.case"),
+        say!("search.glyphs"),
+        say!("search.pinyin"),
+        say!("search.regex"),
+        say!("search.whole"),
+        say!("search.fuzzy"),
+        say!("search.replacing"),
+    ];
+    let longest = names.iter().map(|n| yumete_cjk::str_width(n)).max().unwrap_or(0);
+    let nth_at = left + (widest + 1 + longest + 2) as u16;
     let shortcut = ground.fg(ink.gold());
     let bottom = area.y + area.height;
     let switch = |buf: &mut ratatui::buffer::Buffer, y: u16, box_text: &str, label: &str, nth: usize, style: Style| {
@@ -7214,10 +7230,10 @@ fn draw_search(
         let line = format!("{}{label}", pad(box_text));
         put_text(buf, left, y, to, &line, style);
         let key = nth.to_string();
-        let wide = yumete_cjk::str_width(&key) as u16;
-        let used = left + yumete_cjk::str_width(&line) as u16;
-        if to > wide && used + 1 <= to - wide {
-            put_text(buf, to - wide, y, to, &key, shortcut);
+        // ⚠️ **窄到那一欄出了界就不畫號**，和落款那一行同一個規矩：一個擠在字上
+        // 的號比沒有號更難看懂。
+        if nth_at + yumete_cjk::str_width(&key) as u16 <= to {
+            put_text(buf, nth_at, y, to, &key, shortcut);
         }
     };
     let y = y + 1;
