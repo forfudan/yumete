@@ -549,6 +549,21 @@ impl Editor {
             // ⚠️ **模糊 while 替換 is ticked does nothing**, as it did before:
             // the row is drawn quiet, and a quiet row that still flipped would
             // be saying two things at once. `flip_switch` guards it.
+            // **`0` 換一個範圍**（2026-09-26 作者提）：本文件 → 本文件夾 →
+            // 工作目錄 → git 項目 → 回到本文件。
+            //
+            // ⚠️ **和那七個開關同一族的鍵**：它們是 `1`–`7`，這一個是 `0`，都不必
+            // 先把光標走上去。「位置」本來也走得上去（`jk`），可走上去只為按一下
+            // 是浪費——那正是開關改成按號碼的理由。
+            //
+            // ⚠️ **同時把那一格的文字也寫成新範圍的路徑**：離開那一格會落地
+            // （`land_the_scope`），而落地讀的是文字。不寫就等於按完又被彈回去。
+            Key::Char('0') => {
+                self.search.scope = self.search.scope.next();
+                self.search.scope_text = self.scope_as_typed();
+                self.search.caret = self.search.scope_text.chars().count();
+                self.look_again();
+            }
             Key::Char(ch) if ch.is_ascii_digit() && ch != '0' => {
                 let nth = ch as usize - '1' as usize;
                 if let Some(&which) = Field::SWITCHES.get(nth) {
@@ -683,11 +698,18 @@ impl Editor {
             Key::Char('G') | Key::End if self.search.field == Field::Results => {
                 self.search.selected = self.search.hits.len().saturating_sub(1)
             }
-            // `C-w` `q` `:` and a bare `Space` are every panel's, not this
-            // one's — see `panel_key_in_common`. Tried last, so this panel's
-            // own `Space` (flip the switch the keys are on) still wins.
+            // `C-w` `q` `:` 和光禿禿的 `Space` 是每一扇面板都有的，不是這一扇
+            // 的——見 `panel_key_in_common`。最後纔試，所以這一扇自己的鍵先贏。
+            //
+            // ⚠️ **接不住就往邊欄那一層再遞一手**（2026-09-26 報的：「搜索侧栏按
+            // w 变宽后，再按就没办法变窄了」）。從前這裏把回報值丟掉，於是 `w`
+            // 「寬窄」和 `R`「重讀」在這一扇裏是**啞的**——而狀態欄那一行照樣寫着
+            // 「`w` 寬窄」。一個寫在屏幕上、按下去沒反應的鍵，讀者只會以為自己記
+            // 錯了（同 §5.12.39 那一族）。
             other => {
-                self.panel_key_in_common(other, side);
+                if !self.panel_key_in_common(other, side) {
+                    self.on_sidebar_key_after_the_list(other);
+                }
             }
         }
     }
@@ -899,6 +921,15 @@ impl Editor {
     }
 
     fn take_scope(&mut self) {
+        // ⚠️ **沒動過那一格就別重新解釋它**（2026-09-26）。`scope_as_typed` 把
+        // 「本文件夾」這種範圍攤成一個真路徑寫進框裏，而落地會把路徑讀成
+        // `Named`——於是按一下 `0`、走開，那一格就從「本文件夾」變成一長串路徑。
+        // 兩者搜的是同一批檔案，可屏幕上說的不是同一件事。
+        if self.search.scope_text == self.scope_as_typed()
+            && !matches!(self.search.scope, crate::search_panel::Where::Named(_))
+        {
+            return self.search_now();
+        }
         let typed = self.search.scope_text.trim().to_string();
         let scope = match typed.is_empty() {
             true => crate::search_panel::Where::Buffer,
