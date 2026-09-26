@@ -13711,7 +13711,11 @@ fn squeezed(text: &str) -> String {
         ]);
 
         let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
-        let buffer = render_with(&editor, &Config::default(), &ime, 60, 8);
+        // ⚠️ **100 欄，不是 60**（2026-09-26）：寬度從此只看檔位，面板說不上話，
+        // 而 60 欄的 3/10 是 18 欄——裝不下「拆分　刀二阝」，`刀二阝` 會被截掉。
+        // 這條測的是**兩個值對不對得齊**，不是「窄了會不會截」，所以給它一個放得
+        // 下的窗口。真要窄，讀者按 `w`。
+        let buffer = render_with(&editor, &Config::default(), &ime, 100, 8);
         // The panel is the bottom layer of the right slot now (#293), so what
         // is being read here is the part past the rule down its left edge.
         // ⚠️ 鍵在字典裏，所以那一堵牆是**塗滿的金**——字面上是個空格，
@@ -14253,7 +14257,7 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **`w` 走四檔：1/4 → 1/3 → 2/5 → 1/2**（2026-09-26 作者定）。
+    /// **`w` 走四檔：2/10 → 3/10 → 4/10 → 5/10**（2026-09-26 作者定）。
     ///
     /// ⚠️ **2026-09-26 之前這條測的是「攤開到剛好讀得下最長那一條」**，而那正是
     /// `w` 十次有九次沒反應的原因：最長那一行通常比下限短，clamp 就落回下限。現在
@@ -14268,8 +14272,8 @@ fn squeezed(text: &str) -> String {
         std::fs::write(dir.join("天門真境之傳家寶扇.md"), "# 一\n").unwrap();
         editor.open_sidebar_at(&dir);
 
-        // 80 欄窗口：1/4 ＝ 20、1/3 ＝ 26、2/5 ＝ 32、1/2 ＝ 40。裏面那一堵牆畫在
-        // 最後一欄上，所以它的座標是寬度減一。
+        // 80 欄窗口：2/10 ＝ 16、3/10 ＝ 24、4/10 ＝ 32、5/10 ＝ 40。裏面那一堵牆
+        // 畫在最後一欄上，所以它的座標是寬度減一。
         let inner = |editor: &Editor| -> u16 {
             let buffer = render_with(editor, &config, &no_ime(), 80, 12);
             (0..80u16)
@@ -14277,14 +14281,14 @@ fn squeezed(text: &str) -> String {
                 .next_back()
                 .expect("a rule somewhere")
         };
-        assert_eq!(inner(&editor), 19, "出廠 1/4");
-        for want in [25, 31, 39, 19] {
+        assert_eq!(inner(&editor), 23, "出廠 3/10");
+        for want in [31, 39, 15, 23] {
             editor.on_key(Key::Char('w'));
             assert_eq!(inner(&editor), want, "下一檔");
         }
 
-        // 攤到 1/2（40 欄）讀得下整個名字——這是四檔存在的理由。
-        for _ in 0..3 {
+        // 攤到 5/10（40 欄）讀得下整個名字——這是四檔存在的理由。
+        for _ in 0..2 {
             editor.on_key(Key::Char('w'));
         }
         let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
@@ -17066,9 +17070,9 @@ fn squeezed(text: &str) -> String {
         assert!(text.contains("卷一"), "the tree: {text:?}");
         assert!(text.contains("notes.md"), "{text:?}");
         // A rule at its right edge, and the page begins after it — not under it.
-        // 60 欄窗口，出廠 1/4 ＝ 15 欄，裏面那一堵在第 14 欄上。
-        assert!(is_rule(&buffer, 14, 3));
-        assert_eq!(at(&buffer, 15, 0), "那", "the text moved over, not under");
+        // 60 欄窗口，出廠 3/10 ＝ 18 欄，裏面那一堵在第 17 欄上。
+        assert!(is_rule(&buffer, 17, 3));
+        assert_eq!(at(&buffer, 18, 0), "那", "the text moved over, not under");
 
         std::fs::remove_dir_all(&dir).ok();
     }
