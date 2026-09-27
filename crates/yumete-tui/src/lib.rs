@@ -9211,7 +9211,11 @@ fn draw_horizontal(
     // ⚠️ **和 helix 有意不同**：它在頭**兩個**字素上各放一個 overlay，西文剛好，
     // 中文就是拿兩格蓋掉四格、那一行當場縮短。見 `editor/labels.rs` 的開頭。
     if !label_cells.is_empty() {
-        let mark = ink.page().fg(ink.paper()).bg(ink.mark()).add_modifier(Modifier::BOLD);
+        // ⚠️ **金，不是朱**（2026-09-28 定）。金是這個倉裏「編輯器在說話」的顏色
+        // ——鍵位行、模式詞、檔名都是它——而標籤正是編輯器在說話。朱是**搜索命中**
+        // 的顏色，兩件事共用一個色，一屏六十個標籤下去就分不出哪個是命中、哪個是
+        // 落腳點。
+        let mark = ink.page().fg(ink.paper()).bg(ink.gold()).add_modifier(Modifier::BOLD);
         let buf = frame.buffer_mut();
         for (x, y, label) in label_cells {
             // **兩個字母正好兩格**，也就是一個漢字的寬度——所以蓋掉的就是那一個
