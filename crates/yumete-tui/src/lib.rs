@@ -5623,7 +5623,25 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
         s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
     };
     let ground = hex(buffer[(0, buffer.area.height.saturating_sub(1))].style().bg, "#111111");
-    let mut out = format!("<pre class=\"yumete-shot\" style=\"background:{ground}\">");
+    // ⚠️ **The font is part of the picture, not the page's business**
+    // (2026-09-28). This `<pre>` used to declare none and take whatever the
+    // embedding page had — and on a general-purpose monospace stack a 漢字 and
+    // a fullwidth `ａ` are **not** twice a Latin letter, so every column in the
+    // shot comes apart. Alignment is what these pictures are taken to show: a
+    // table's walls, a label sitting on the character it names, the 縱 of a
+    // vertical page. A shot that cannot be trusted on alignment is worse than
+    // no shot, because it is read as a bug in the editor.
+    //
+    // 原話（2026-09-28，而且不是第一次）：「都说了多少遍了，截图用 wenkai mono」。
+    //
+    // A stack, not one name: the first two are the CJK monospaces that hold the
+    // 2:1 ratio, and the tail is there so a machine with neither still gets
+    // *a* monospace rather than the body font.
+    let mut out = format!(
+        "<pre class=\"yumete-shot\" style=\"background:{ground};\
+         font-family:'LXGW WenKai Mono GB','Sarasa Mono SC','Noto Sans Mono CJK SC',\
+         ui-monospace,monospace\">"
+    );
     for y in 0..buffer.area.height {
         let mut x = 0;
         while x < buffer.area.width {
@@ -17043,6 +17061,31 @@ fn squeezed(text: &str) -> String {
             Some('雪'),
             "s 那一個站在「雪下得早」的頭上"
         );
+    }
+
+    /// **一張圖自己說得出該用什麼字體。**
+    ///
+    /// `--shot --html` 從前一個字體都不聲明，全靠嵌它的那一頁——而在普通的等寬字
+    /// 體上，一個漢字和一個全角 `ａ` **不是**兩個拉丁字母那麼寬，於是圖上每一列都
+    /// 錯開。而對不對得齊正是這些圖要給人看的東西：表格的牆、標籤站在它那個字上、
+    /// 竪排的縱。⚠️ 一張在對齊上不可信的圖比沒有圖壞，因為它會被讀成編輯器的毛病
+    /// ——2026-09-28 的 `gw` 全角標籤就這麼被讀錯過一次。
+    #[test]
+    fn a_picture_carries_the_font_that_keeps_its_columns() {
+        let mut editor = editor_with("那年冬天。\n");
+        let html = frame_to_html(
+            &mut editor,
+            &Config::default(),
+            &ImeSession::empty(Scheme::LINGMING),
+            20,
+            4,
+            None,
+        );
+        let head = html.lines().next().unwrap_or_default();
+        assert!(head.contains("font-family"), "沒有聲明字體：{head}");
+        assert!(head.contains("LXGW WenKai Mono"), "不是文楷等寬：{head}");
+        // 一條退路都沒有的話，別的機器上會掉到正文字體去。
+        assert!(head.contains("monospace"), "沒有兜底的等寬：{head}");
     }
 
     #[test]
