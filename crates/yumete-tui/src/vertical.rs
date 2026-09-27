@@ -1550,10 +1550,9 @@ pub fn draw(
 
     // **`gw` 的標籤，蓋在它那個字所在的那一格上**（#406）。
     //
-    // ⚠️ **一個縱正好兩格，所以兩種標籤都填得滿**：兩個字母並排就是縱中橫（同行號
-    // 那一套，`put_number` 兩個數字一格），一個字母用全角。橫排那一頭是同一條規矩
-    // ——**標籤和它蓋住的那個字素一樣寬**——只是那裏量的是字素的格數，這裏一個縱
-    // 本來就是兩格。
+    // ⚠️ **一個縱正好兩格，而一個標籤永遠是兩個字母**，所以並排填滿——就是縱中橫，
+    // 同行號那一套（`put_number` 兩個數字一格）。橫排那一頭是同一件事：兩個字母的
+    // 寬度正好是一個漢字。
     if editor.jumping() {
         let mark = ink.page().fg(ink.paper()).bg(ink.mark()).add_modifier(Modifier::BOLD);
         for (at, label) in editor.jump_labels() {
@@ -1572,14 +1571,7 @@ pub fn draw(
             if y >= area.y + area.height {
                 continue;
             }
-            let shown: String = match yumete_cjk::str_width(label) {
-                1 => label
-                    .chars()
-                    .map(|c| char::from_u32(c as u32 - 'a' as u32 + 0xFF41).unwrap_or(c))
-                    .collect(),
-                _ => label.to_string(),
-            };
-            put_slot_wide(buf, placed.x, y, &shown, mark);
+            put_slot_wide(buf, placed.x, y, label, mark);
         }
     }
 
