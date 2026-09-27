@@ -17016,10 +17016,20 @@ fn squeezed(text: &str) -> String {
         let config = vertical_config();
         let ime = no_ime();
 
+        let plain = frame_to_text(&mut editor, &config, &ime, 30, 16, None);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('w'));
         let shot = frame_to_text(&mut editor, &config, &ime, 30, 16, None);
         assert!(editor.jumping(), "竪排下也亮得起來：\n{shot}");
+        // ⚠️ **版面一格沒動**，同橫排那一條：標籤是寫進那個縱自己那兩格的，所以
+        // 每一行還是原來那麼寬。
+        for (now, was) in shot.lines().zip(plain.lines()) {
+            assert_eq!(
+                yumete_cjk::str_width(now),
+                yumete_cjk::str_width(was),
+                "這一行寬了：{was:?} → {now:?}"
+            );
+        }
         // 全角的字母——半角的話一個縱裏會空半格。
         assert!(shot.contains('ａ'), "第一個標籤是全角的 ａ：\n{shot}");
         assert!(shot.contains('ｓ'), "第二個也在：\n{shot}");
