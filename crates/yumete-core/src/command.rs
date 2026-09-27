@@ -399,13 +399,20 @@ pub enum Command {
     /// `:yume-commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
-    /// `:yume-panel full|bare` — 候選面板: the bordered list, or the first
-    /// candidate drawn into the sentence. `None` asks which one is in force.
+    /// `:yume-panel full|off` — 候選面板畫不畫（yume 管它叫「空空如也」）。
+    /// `None` asks which one is in force.
     ///
     /// Independent of [`Command::YumeCommit`]: **when** a word lands on the
     /// page and **where** you read the candidate are two questions, and the
     /// nine combinations are all sensible (Feature #211).
     YumePanel(Option<String>),
+    /// `:yume-preedit header|code|top` — 正在打的那一段寫在面板第一列，還是寫
+    /// 進正文；寫進正文的時候寫編碼還是寫首選。`None` 是問現在是哪一檔。
+    ///
+    /// **和 [`Command::YumePanel`] 各管各的**（2026-09-27 定，原話：「你搞错了
+    /// layout 和 inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面
+    /// 板 ＋ 正文裏站着首選」這個組合按不出來。
+    YumePreedit(Option<String>),
     /// `:theme-fill [on|off]` — whether a 品色 run also gets a ground.
     ///
     /// Off: the backtick and the `>` are drawn already, so the run's extent is
@@ -475,7 +482,7 @@ pub enum Command {
     ListBuffers,
     /// `:help [節]` — the keys and the commands, in a buffer.
     Help(Option<String>),
-    /// `:settings` —— 整頁那一扇設置面板（2026-09-23 作者提）。
+    /// `:settings` —— 整頁那一扇設置面板（2026-09-23 提的）。
     ///
     /// > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道
     /// > 他們都是幹啥的。
@@ -1741,8 +1748,27 @@ const PANELS: &[Word] = &[
         needs: &[],
     },
     Word {
-        name: "bare",
-        help: "cmd.panels.bare",
+        name: "off",
+        help: "cmd.panels.off",
+        needs: &[],
+    },
+];
+
+/// 正在打的那一段寫在哪、寫什麼——`:yume-preedit` 的三個詞（2026-09-27）。
+const PREEDITS: &[Word] = &[
+    Word {
+        name: "header",
+        help: "cmd.preedits.header",
+        needs: &[],
+    },
+    Word {
+        name: "code",
+        help: "cmd.preedits.code",
+        needs: &[],
+    },
+    Word {
+        name: "top",
+        help: "cmd.preedits.top",
         needs: &[],
     },
 ];
@@ -2756,7 +2782,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.wiki",
         needs: &[],
         // ⚠️ **自由文本，不是一張詞表**：這裏收的是詞條名，而詞條名是這本書自己
-        // 的話（「朱宇浩」「天門真境」），沒有哪張表列得完。
+        // 的話（「朱宇浩」「洞庭湖」），沒有哪張表列得完。
         params: &[Param::Free("<詞條名>")],
         build: Some(|p| {
             // **不帶名字也開那扇面板，空着查**（2026-09-25 定）：`:wiki` 就是
@@ -3149,6 +3175,14 @@ pub const COMMANDS: &[Entry] = &[
             // drawn or not.
             Ok(Command::YumePanel(p.arg(0).map(|w| w.to_string())))
         }),
+    },
+    Entry {
+        name: "yume-preedit",
+        aliases: &[],
+        help: "cmd.yume.preedit",
+        needs: &[Need::Scheme],
+        params: &[Param::Words { of: PREEDITS, default: None }],
+        build: Some(|p| Ok(Command::YumePreedit(p.arg(0).map(|w| w.to_string())))),
     },
     Entry {
         name: "yume-menu-size",
@@ -3711,7 +3745,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search",
-        // **`:s` 開這扇面板**（2026-09-26 作者定）。`s` 在 vi 裏是 substitute，而
+        // **`:s` 開這扇面板**（2026-09-26 定的）。`s` 在 vi 裏是 substitute，而
         // 這扇面板正是 substitute 的大號——找與換在同一張表上。
         // ⚠️ **`:s/找/換/` 還是 vi 那一行，不受影響**：`parse_substitution` 在命令
         // 表之前就攔下了帶分隔符的那一種，而它明說「光禿禿的 `:s` 是別的命令」
@@ -3810,7 +3844,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.table.detail",
         needs: &[Need::Table],
         // ⚠️ **`<寬>` 那個參數沒了**（2026-09-26）：寬度歸側欄，面板說不上話
-        // （作者原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
+        // （原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
         // 要寬要窄按 `w`，三檔。
         params: &[Param::Words { of: ON_OFF, default: None }],
         build: Some(|p| {
@@ -3943,7 +3977,7 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // **裸的那個開粘貼菜單**（2026-09-25，作者提），和 `:wiki`、`:buffer`
+        // **裸的那個開粘貼菜單**（2026-09-25 提的），和 `:wiki`、`:buffer`
         // 同形：一個命令自己的意思就是有用的那一個，後面不必再跟一個詞。
         // `空格 "` 是同一扇。
         name: "clipboard",
@@ -5307,13 +5341,28 @@ mod tests {
         // #211: 候選面板 is the other axis, and it parses by prefix too.
         assert_eq!(parse(":yume-panel"), Ok(Command::YumePanel(None)));
         assert_eq!(
-            parse(":yume-panel bare"),
-            Ok(Command::YumePanel(Some("bare".into())))
+            parse(":yume-panel off"),
+            Ok(Command::YumePanel(Some("off".into())))
         );
+        // ⚠️ `:yume-p` 從 2026-09-27 起兩頭都認（`yume-panel`／`yume-preedit`），
+        // 所以最短的寫法多了一個字母。前綴規矩沒變：認兩個就是誰都不認。
         assert_eq!(
-            parse(":yume-p f"),
+            parse(":yume-pa f"),
             Ok(Command::YumePanel(Some("full".into())))
         );
+        // 2026-09-27 分出來的那一格：面板畫不畫，和正在打的那一段寫在哪，兩件事。
+        assert_eq!(parse(":yume-preedit"), Ok(Command::YumePreedit(None)));
+        assert_eq!(
+            parse(":yume-pr t"),
+            Ok(Command::YumePreedit(Some("top".into())))
+        );
+        assert!(matches!(
+            parse(":yume-preedit inline"),
+            Err(CommandError::InvalidArgument {
+                command: "yume-preedit",
+                ..
+            })
+        ));
         assert!(matches!(
             parse(":yume-panel invisible"),
             Err(CommandError::InvalidArgument {
@@ -5942,7 +5991,7 @@ mod tests {
 
         // An ambiguous prefix names nothing rather than guessing.
         assert_eq!(parse(":re"), Err(CommandError::Unknown("re".into())));
-        // ⚠️ **`s` 從歧義變成了一個聲明過的簡寫**（2026-09-26 作者定）：光禿禿的
+        // ⚠️ **`s` 從歧義變成了一個聲明過的簡寫**（2026-09-26 定的）：光禿禿的
         // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`／`set`／`shot`… 中間，
         // 哪個都不算——而聲明出來的簡寫壓過前綴規則，同 `w` 之於 `write`。
         assert_eq!(parse(":s"), Ok(Command::OpenSearch(crate::search_panel::Where::Buffer)));

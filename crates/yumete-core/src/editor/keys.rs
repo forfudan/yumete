@@ -52,6 +52,12 @@ impl Editor {
         // The sidebar takes Normal-mode keys while it has the focus; every
         // other mode is about the text and goes to the text.
         if self.sidebar_focused() && self.mode == Mode::Normal && self.pending == Pending::None {
+            // ⚠️ **上一句話這裏散掉**，同 `on_normal_key` 開頭那一句（2026-09-27
+            // 報的：「邊欄：4/10 的消息一直都在。我就算在边栏中换行他也在，我根本
+            // 看不到任何快捷键提示」）。從前這一支在清之前就回去了，於是側欄裏設
+            // 的任何一句話都賴着不走——而命令行那一格被它佔着，按鍵提示就沒地方
+            // 畫。話是說給上一個按鍵的，下一個按鍵一到它就該散。
+            self.status.clear();
             self.on_sidebar_key(key);
             return KeyOutcome::Continue;
         }
@@ -1900,14 +1906,14 @@ impl Editor {
         // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
         // 快捷鍵太不方便」. The chord stays; this is the same thing with the
         // hand already on the space bar.
-        // **一下跳到某一區**（2026-09-25 作者提）——`空格 w` 是走一步，這幾個是
+        // **一下跳到某一區**（2026-09-25 提的）——`空格 w` 是走一步，這幾個是
         // 點名。數字在這張菜單上本來一個都沒占，所以 1–4 不是四個零散的決定，
         // 是一整塊乾淨的地址空間。
         ('1', "hint.space.region-one"),
         ('2', "hint.space.region-two"),
         ('3', "hint.space.region-left"),
         ('4', "hint.space.region-right"),
-        // **一個名詞、四個動詞**（2026-09-26 作者定，原話：「可不可以把工作区和
+        // **一個名詞、四個動詞**（2026-09-26 定的，原話：「可不可以把工作区和
         // 侧边栏统一成一个概念「区域」以简化思维模型」）。從前這裏躺着兩套詞彙說
         // 同一件事：`w`／`W`／`q` 只看得見工作區，`s`／`S` 只看得見邊欄，而
         // `1`–`4` 兩個都看得見——三套坐標系。
@@ -2249,7 +2255,7 @@ impl Editor {
             // 工作區 (Feature #176): one key, three meanings that are the same
             // meaning — 「另一個工作區」. Nothing open: open one, showing this
             // same place. Open: hand it the keys. `W`:收掉，留下你站着的這半。
-            // **四個動詞，一個名詞**（2026-09-26 作者定）。`w` 走一步、`W` 全開、
+            // **四個動詞，一個名詞**（2026-09-26 定的）。`w` 走一步、`W` 全開、
             // `q` 關這個、`Q` 只留一個工作區；`1`–`4` 是同一套坐標下的點名。
             Key::Char('w') => self.next_region(),
             Key::Char('W') => self.open_every_region(),

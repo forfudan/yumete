@@ -1703,6 +1703,7 @@ impl From<&Config> for Skin {
 /// rightmost column, and the candidates run **right to left** after it, each in
 /// its own column with its selection digit on top. Reading order therefore
 /// matches the text it is about to be committed into.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_candidate_panel(
     frame: &mut Frame,
     ime: &ImeSession,
@@ -1710,14 +1711,18 @@ pub fn draw_candidate_panel(
     area: Rect,
     cursor_x: u16,
     cursor_y: u16,
+    show_code: bool,
 ) {
     let skin = Skin::from(config);
     let candidates = ime.page_candidates();
     // A code with no candidates still gets a panel — with nothing but the code
     // in it. In 形碼 a dead code is the ordinary way to mistype, the code lives
-    // only in this panel (there is no inline preedit), and a panel that vanishes
-    // leaves the writer nothing to see and nothing to know to backspace.
-    if candidates.is_empty() && ime.display_buffer().is_empty() {
+    // only in this panel, and a panel that vanishes leaves the writer nothing
+    // to see and nothing to know to backspace.
+    //
+    // ⚠️ **除非編碼這一幀寫進了正文**（2026-09-27）：那時它有地方待，而一個只裝
+    // 着一列碼、沒有一個候選的框是白遮一片稿子。
+    if candidates.is_empty() && (!show_code || ime.display_buffer().is_empty()) {
         return;
     }
     let highlight = ime.highlight();
@@ -1732,7 +1737,11 @@ pub fn draw_candidate_panel(
     // of half-width letters goes two to a row (縦中横), the way a year does in
     // 縱書. `Dyu_Do_Ne` set one letter to a row is nine rows of nothing, and
     // with 拆分 on it made the panel taller than the page it was covering.
-    let header = packed(&ime.display_buffer());
+    // 編碼那一列：內嵌的時候不畫，那一段已經在正文裏了（2026-09-27）。
+    let header = match show_code {
+        true => packed(&ime.display_buffer()),
+        false => Vec::new(),
+    };
     // Each column is the number, a blank row, then the candidate. The gap is
     // what stops the number reading as the first character of the word.
     // Column 0 is the header; the candidates run leftward from column 1, the

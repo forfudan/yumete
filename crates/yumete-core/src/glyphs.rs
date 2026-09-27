@@ -1,7 +1,7 @@
-//! **同一個字的各種字形**，給搜索用（2026-09-25 作者提）。
+//! **同一個字的各種字形**，給搜索用（2026-09-25 提的）。
 //!
-//! 原話：「在中文状态下，模糊查询其实可以应用到繁简体……比如「天門」可以搜到
-//! 「天门」」。
+//! 原話：「在中文状态下，模糊查询其实可以应用到繁简体……比如「書齋」可以搜到
+//! 「书斋」」。
 //!
 //! ## 為什麼這裏可以用一張字表，而 `:convert` 不可以
 //!
@@ -16,7 +16,7 @@
 //!
 //! `scripts/make_glyph_sets.py` 從 opencc 的 `TSCharacters`／`TWVariants`／
 //! `HKVariants` 加上倉裏那兩張 GujiCC 表（`glyphs_c.txt`／`glyphs_g.txt`）生成。
-//! 辦法是作者定的：以 **opencc 的繁體字形**為鍵分行，把各標準的字形並進來，再把
+//! 辦法是定下的：以 **opencc 的繁體字形**為鍵分行，把各標準的字形並進來，再把
 //! 鍵自己也並進去；**然後每個字取它出現過的所有行的並集**。
 //!
 //! ⚠️ **那個並集是不對稱的，而這個不對稱正是對的**：
@@ -67,7 +67,7 @@ pub fn shapes(ch: char) -> &'static str {
 
 /// **把一串要照字面找的字改寫成正則**，每個字換成它的字形集。
 ///
-/// 「天門」→ `[天][門门]`。沒有別的寫法的字原樣轉義過去，所以這一支對純西文的
+/// 「書齋」→ `[天][門门]`。沒有別的寫法的字原樣轉義過去，所以這一支對純西文的
 /// 查詢什麼都不做。
 ///
 /// ⚠️ **只給「照字面」那一條路用。** 正則開着的時候，把每個字改寫成 `[...]` 會把
@@ -95,15 +95,15 @@ pub fn widen(text: &str) -> String {
 mod tests {
     use super::*;
 
-    /// **作者舉的那個例子**：「天門」搜得到「天门」。
+    /// **當初舉的那個例子**：「書齋」搜得到「书斋」。
     #[test]
     fn a_traditional_query_finds_the_simplified_writing() {
-        let re = regex::Regex::new(&widen("天門")).unwrap();
-        assert!(re.is_match("天门"), "{}", widen("天門"));
-        assert!(re.is_match("天門"));
+        let re = regex::Regex::new(&widen("書齋")).unwrap();
+        assert!(re.is_match("书斋"), "{}", widen("書齋"));
+        assert!(re.is_match("書齋"));
         // 反過來也要成。
-        let re = regex::Regex::new(&widen("天门")).unwrap();
-        assert!(re.is_match("天門"));
+        let re = regex::Regex::new(&widen("书斋")).unwrap();
+        assert!(re.is_match("書齋"));
     }
 
     /// ⚠️ **不對稱是有意的**：含混的那個放寬，精確的那個保持精確。

@@ -596,27 +596,29 @@ pub struct PanelConfig {
     pub page_size: usize,
     /// Whether the panel's ring is rounded.
     pub rounded: bool,
-    /// Whether the panel is drawn at all, or the candidate goes in the text
-    /// (Feature #211).
+    /// Whether the panel is drawn at all (Feature #211).
     pub display: PanelDisplay,
+    /// Where the composition in progress is shown, and what it says.
+    pub preedit: Preedit,
 }
 
-/// How the input method offers its candidates: a panel, or the page itself.
+/// **候選面板畫不畫**——yume 管這一格叫「空空如也」。
 ///
-/// 空空如也. yume's own front end already has a full candidate panel, and the
-/// surface a novel is written on does not need a second one hanging off the
-/// caret — most keystrokes take the first candidate, and a list of nine to
-/// choose it from is nine rows of the manuscript covered up to say what the
-/// writer already knew. `Bare` draws the candidate **in the sentence** instead
-/// and keeps the code under the caret; `Tab` still summons the panel for the
-/// one word that needs it.
+/// yume 自己的前端已經有一個完整的候選面板，而寫小說的那一頁不需要光標邊上再掛一
+/// 個：多數按鍵取的是首選，為了選它而攤開九行候選，遮掉的是九行稿子，說的是寫的人
+/// 本來就知道的事。所以關得掉，而 `Tab` 照舊能把面板為某一個詞叫出來。
+///
+/// ⚠️ **這一格只管面板在不在，不管正在打的那一段寫在哪。** 那是
+/// [`Preedit`] 的事，兩件事各走各的（2026-09-27 定，原話：「你搞错了 layout 和
+/// inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面板 ＋ 正在打的那
+/// 一段寫進正文」這個組合按不出來。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PanelDisplay {
-    /// The bordered list beside the caret — what yumete has always drawn.
+    /// 光標邊上那個帶框的候選列表。
     #[default]
     Full,
-    /// Nothing but the first candidate, drawn into the text where it will land.
-    Bare,
+    /// 不畫。`Tab` 還能把它為這一個詞叫出來。
+    Off,
 }
 
 impl PanelDisplay {
@@ -625,7 +627,7 @@ impl PanelDisplay {
     pub fn tag(self) -> &'static str {
         match self {
             PanelDisplay::Full => "full",
-            PanelDisplay::Bare => "bare",
+            PanelDisplay::Off => "off",
         }
     }
 
@@ -633,9 +635,56 @@ impl PanelDisplay {
     pub fn parse(word: &str) -> Option<PanelDisplay> {
         match word {
             "full" => Some(PanelDisplay::Full),
-            "bare" => Some(PanelDisplay::Bare),
+            "off" => Some(PanelDisplay::Off),
             _ => None,
         }
+    }
+}
+
+/// **正在打的那一段寫在哪、寫什麼**——yume 管這一格叫「內嵌輸入欄」。
+///
+/// 2026-09-27 定，原話：「inline-preedit: 候选面板的 header（編碼栏）不显示，而是
+/// 直接在编辑区显示。分为两种，一种是显示編碼，一种是显示首个候选。」
+///
+/// 所以這一格有三檔，而不是一個布爾：不內嵌、內嵌寫編碼、內嵌寫首選。
+///
+/// ⚠️ **內嵌寫首選的時候，編碼哪兒都不顯示。** 這是這一檔的本意：正文裏站着的就是
+/// 要上屏的那幾個字，看的人讀的是句子，不是碼。要看碼就選 [`Preedit::Code`]。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Preedit {
+    /// 不內嵌：編碼畫在面板第一列；面板關着的時候畫在光標下那一格浮窗裏。
+    #[default]
+    Header,
+    /// 內嵌，寫的是**編碼**。面板不再畫編碼那一列。
+    Code,
+    /// 內嵌，寫的是**首選**——確切說是高亮那一個，所以移動高亮就是在改正文裏的字。
+    Top,
+}
+
+impl Preedit {
+    /// The name this is written with, in the config file and on the command
+    /// line — one word, both places.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Preedit::Header => "header",
+            Preedit::Code => "code",
+            Preedit::Top => "top",
+        }
+    }
+
+    /// Read a name, or `None` — an unknown word is a typo, not a fourth mode.
+    pub fn parse(word: &str) -> Option<Preedit> {
+        match word {
+            "header" => Some(Preedit::Header),
+            "code" => Some(Preedit::Code),
+            "top" => Some(Preedit::Top),
+            _ => None,
+        }
+    }
+
+    /// Whether the code is drawn as the panel's own column.
+    pub fn in_the_panel(self) -> bool {
+        self == Preedit::Header
     }
 }
 
@@ -650,6 +699,7 @@ impl Default for PanelConfig {
             page_size: 6,
             rounded: true,
             display: PanelDisplay::Full,
+            preedit: Preedit::default(),
         }
     }
 }
@@ -1884,7 +1934,7 @@ impl Config {
                             // 任何命令，一個普通按鍵就夠**，而那個 `.yumete/` 是
                             // 跟着別人的稿子進來的。
                             //
-                            // 作者 2026-09-24 定「鍵位表只認全局」：鍵位是**個人
+                            // 2026-09-24 定「鍵位表只認全局」：鍵位是**個人
                             // 習慣**，不是項目屬性——`[lsp.*]` 與 `[language.*]`
                             // 照舊寫得動（那兩樣真的是項目屬性，同 rust-toolchain）。
                             if !parsed.keys.normal.is_empty() {
@@ -2524,6 +2574,7 @@ struct RawPanel {
     page_size: Option<usize>,
     rounded: Option<bool>,
     display: Option<String>,
+    preedit: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -2814,7 +2865,10 @@ impl RawConfig {
             self.panel.rounded = other.panel.rounded;
         }
         if other.panel.display.is_some() {
-            self.panel.display = other.panel.display;
+            self.panel.display = other.panel.display.clone();
+        }
+        if other.panel.preedit.is_some() {
+            self.panel.preedit = other.panel.preedit.clone();
         }
         if other.export.page.is_some() {
             self.export.page = other.export.page;
@@ -3182,6 +3236,9 @@ impl RawConfig {
         // take the panel away.
         if let Some(display) = self.panel.display.as_deref().and_then(PanelDisplay::parse) {
             config.panel.display = display;
+        }
+        if let Some(preedit) = self.panel.preedit.as_deref().and_then(Preedit::parse) {
+            config.panel.preedit = preedit;
         }
         if let Some(page) = self.export.page.as_deref().and_then(parse_page) {
             config.export.page = page;
@@ -3557,17 +3614,34 @@ mod tests {
         assert_eq!(c.editor.word_level, yumete_cjk::WordLevel::Balanced);
     }
 
-    /// #211: `bare` is a setting, not only a command — a writer who wants the
-    /// page to itself wants it from the first keystroke of every session.
+    /// #211: 面板關不關是設置，不只是命令——想把整頁留給自己的人，是從每一節
+    /// 的第一個按鍵起就想要。
     #[test]
     fn the_panel_can_be_asked_to_get_out_of_the_way() {
         assert_eq!(PanelConfig::default().display, PanelDisplay::Full);
-        let c = Config::from_toml("[panel]\ndisplay = \"bare\"\n");
-        assert_eq!(c.panel.display, PanelDisplay::Bare);
+        let c = Config::from_toml("[panel]\ndisplay = \"off\"\n");
+        assert_eq!(c.panel.display, PanelDisplay::Off);
         // A typo is a typo, not a third mode: the panel stays.
         let c = Config::from_toml("[panel]\ndisplay = \"invisible\"\n");
         assert_eq!(c.panel.display, PanelDisplay::Full);
-        assert_eq!(PanelDisplay::Bare.tag(), "bare");
+        assert_eq!(PanelDisplay::Off.tag(), "off");
+    }
+
+    /// **面板在不在，和正在打的那一段寫在哪，是兩件事**（2026-09-27 定）。四個
+    /// 組合都要按得出來，從前只有兩個。
+    #[test]
+    fn where_the_composition_shows_is_its_own_setting() {
+        assert_eq!(PanelConfig::default().preedit, Preedit::Header);
+        let c = Config::from_toml("[panel]\ndisplay = \"full\"\npreedit = \"top\"\n");
+        assert_eq!(c.panel.display, PanelDisplay::Full, "面板照畫");
+        assert_eq!(c.panel.preedit, Preedit::Top, "而正在打的那一段寫進正文");
+        // 從前的 `display = "bare"` 是這兩格一起：面板不畫，正文裏是首選。
+        let c = Config::from_toml("[panel]\ndisplay = \"off\"\npreedit = \"top\"\n");
+        assert_eq!((c.panel.display, c.panel.preedit), (PanelDisplay::Off, Preedit::Top));
+        // 打錯的字留着默認，同上面那一條。
+        let c = Config::from_toml("[panel]\npreedit = \"inline\"\n");
+        assert_eq!(c.panel.preedit, Preedit::Header);
+        assert_eq!(Preedit::Code.tag(), "code");
     }
 
     #[test]

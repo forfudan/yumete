@@ -1,12 +1,12 @@
-//! **用拼音找漢字**，給搜索用（2026-09-25 作者提）。
+//! **用拼音找漢字**，給搜索用（2026-09-25 提的）。
 //!
-//! 原話：「在中文状态下，模糊查询其实可以应用到繁简体、拼音的范畴。比如「天門」
-//! 可以搜到「天门」，tianmen也可以搜到「天门」「天門」」。
+//! 原話：「在中文状态下，模糊查询其实可以应用到繁简体、拼音的范畴。比如「書齋」
+//! 可以搜到「书斋」，shuzhai也可以搜到「书斋」「書齋」」。
 //!
-//! ## 只認全拼（作者 2026-09-25 定）
+//! ## 只認全拼（2026-09-25 定）
 //!
-//! 每一個字要吃掉**一整個音節**。`tianmen` 找得到「天門」，`tm` 和 `tianm` 找不
-//! 到。首字母那一路噪音太大——`tm` 在一本書裏是幾百處，而讀者要的是那一處。
+//! 每一個字要吃掉**一整個音節**。`shuzhai` 找得到「書齋」，`sz` 和 `shuzh` 找不
+//! 到。首字母那一路噪音太大——`sz` 在一本書裏是幾百處，而讀者要的是那一處。
 //!
 //! ## 為什麼這一路不能是正則
 //!
@@ -58,7 +58,7 @@ pub fn readings(ch: char) -> impl Iterator<Item = &'static str> {
 
 /// **查詢能不能當拼音用**：非空、不太長、全是 ASCII 字母。
 ///
-/// ⚠️ **大小寫在這裏收掉**，回的是小寫那一份——表裏是小寫，而讀者打 `TianMen`
+/// ⚠️ **大小寫在這裏收掉**，回的是小寫那一份——表裏是小寫，而讀者打 `ShuZhai`
 /// 的時候心裏想的不是「這是另一個查詢」。
 pub fn as_query(text: &str) -> Option<Vec<char>> {
     let text = text.trim();
@@ -134,18 +134,18 @@ mod tests {
 
     #[test]
     fn a_whole_syllable_each_and_nothing_less() {
-        let text = "那年天門下起了大雪";
-        assert_eq!(spans(text, &as_query("tianmen").unwrap()), [(2, 4)]);
-        // 只認全拼：首字母和半個音節都不算（作者 2026-09-25 定）。
-        assert!(spans(text, &as_query("tm").unwrap()).is_empty());
-        assert!(spans(text, &as_query("tianm").unwrap()).is_empty());
+        let text = "那年書齋下起了大雪";
+        assert_eq!(spans(text, &as_query("shuzhai").unwrap()), [(2, 4)]);
+        // 只認全拼：首字母和半個音節都不算（2026-09-25 定）。
+        assert!(spans(text, &as_query("sz").unwrap()).is_empty());
+        assert!(spans(text, &as_query("shuzh").unwrap()).is_empty());
     }
 
     #[test]
     fn simplified_and_traditional_both_answer_to_the_same_letters() {
         // 拼音這一路自己就跨簡繁——兩邊念的是同一個音。
-        assert_eq!(spans("天门", &as_query("tianmen").unwrap()), [(0, 2)]);
-        assert_eq!(spans("天門", &as_query("tianmen").unwrap()), [(0, 2)]);
+        assert_eq!(spans("书斋", &as_query("shuzhai").unwrap()), [(0, 2)]);
+        assert_eq!(spans("書齋", &as_query("shuzhai").unwrap()), [(0, 2)]);
     }
 
     #[test]
@@ -157,23 +157,23 @@ mod tests {
 
     #[test]
     fn found_twice_is_listed_twice_and_they_do_not_overlap() {
-        let text = "天門，天門";
-        assert_eq!(spans(text, &as_query("tianmen").unwrap()), [(0, 2), (3, 5)]);
+        let text = "書齋，書齋";
+        assert_eq!(spans(text, &as_query("shuzhai").unwrap()), [(0, 2), (3, 5)]);
     }
 
     #[test]
     fn letters_in_the_prose_are_not_read_as_readings() {
-        // 「tian」這四個字母自己不是一個字，拼音這一路配不上它——字面那一路會。
-        assert!(spans("tianmen", &as_query("tianmen").unwrap()).is_empty());
+        // 「shuzhai」這七個字母自己不是漢字，拼音這一路配不上它——字面那一路會。
+        assert!(spans("shuzhai", &as_query("shuzhai").unwrap()).is_empty());
     }
 
     #[test]
     fn a_query_that_is_not_letters_is_not_a_pinyin_query() {
         assert!(as_query("").is_none());
         assert!(as_query("  ").is_none());
-        assert!(as_query("天門").is_none());
-        assert!(as_query("tian men").is_none());
+        assert!(as_query("書齋").is_none());
+        assert!(as_query("shu zhai").is_none());
         assert!(as_query(&"a".repeat(LONGEST + 1)).is_none());
-        assert_eq!(as_query(" TianMen ").unwrap().iter().collect::<String>(), "tianmen");
+        assert_eq!(as_query(" ShuZhai ").unwrap().iter().collect::<String>(), "shuzhai");
     }
 }

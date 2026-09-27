@@ -314,6 +314,8 @@ fn main() -> ExitCode {
     // 候選面板 (Feature #211) — the other axis, and a plain value: `full` is a
     // real answer, not「ask the scheme」.
     let panel = config.panel.display;
+    // 正在打的那一段寫在哪——面板畫不畫之外的另一格（2026-09-27）。
+    let preedit = config.panel.preedit;
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let load = move |ime: &mut ImeSession| -> String {
@@ -329,6 +331,7 @@ fn main() -> ExitCode {
         // wholesale with one built from the installed tables.
         ime.set_commit_strategy(commit);
         ime.set_panel_display(panel);
+        ime.set_preedit(preedit);
         said
     };
     // A preview prints and exits: there is no frame to be after, so it is read

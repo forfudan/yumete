@@ -33,7 +33,7 @@ pub struct Panel {
     /// **The 章節 line**, drawn quietly between the name and the body, with a
     /// blank line (竪排: a blank 縱) under it (2026-09-18).
     ///
-    /// 「辭典 › 真境」 is where the entry was written down, not part of what it
+    /// 「辭典 › 君山」 is where the entry was written down, not part of what it
     /// says — gold is the name, `quiet()` is the address, and the body is
     /// ordinary ink. `None` for everything that has no such line.
     pub lede: Option<String>,
@@ -596,7 +596,7 @@ pub fn draw(
             // (2026-09-18). Wrapping at the room's full width and then
             // clamping the *box* to it left every line two cells too long,
             // and `put_text` stops at the border — so the last 漢字 of each
-            // row was eaten: 「執掌法會加冠之」 and no 「禮。」. The bug is
+            // row was eaten: 「百廢具興」 and no 「。」. The bug is
             // older than the 2/3 rule; a half-width panel hid it by rarely
             // reaching the cap.
             let budget = (room_w as usize).saturating_sub(2 + pad * 2);
@@ -909,7 +909,7 @@ mod tests {
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
-                    title: "天門真境".into(),
+                    title: "洞庭湖".into(),
                     lede: None,
                     entry: true,
                     body: Body::Prose(text.into()),
@@ -933,14 +933,14 @@ mod tests {
     fn a_long_vertical_entry_fills_its_height_and_says_it_was_cut() {
         // Halfwidth digits on purpose: that is what made a 縱 longer than the
         // room in 字 while still fitting it in cells.
-        let entry = "天門真境辭典 > 真境。\n\
-                     面積大約 500 平方千米，山地湖南到皖河，地理中心位於返塵亭南。\n\
-                     在籍居民二十萬三千人四百人，第一、第三產業發達。\n\
-                     大量居民在得稅低，高福利，高遺產稅。直屬年分紅：有工作的人權重高。\n\
-                     返塵亭——迎客居：一裏，再往後還有一段，看它會不會被砍掉。\n\
-                     山門之外另有客舍三十間，逢法會則不敷用，須往迎客居暫住。\n\
-                     歷任駐守皆出自乾元字輩，掌宗座下領宗內主事者兼領之。\n\
-                     水路自皖河北上，陸路過返塵亭，二者皆須驗牒方得入境。";
+        let entry = "洞庭湖辭典 > 岳陽樓。\n\
+                     湖面約 2579 平方千米，北納長江，南接湘資沅澧四水。\n\
+                     慶曆四年春，滕子京謫守巴陵郡。越明年，政通人和，百廢具興。\n\
+                     乃重修岳陽樓，增其舊制，刻唐賢今人詩賦於其上，屬予作文以記之。\n\
+                     予觀夫巴陵勝狀，在洞庭一湖——銜遠山，吞長江，浩浩湯湯，橫無際涯。\n\
+                     至若春和景明，波瀾不驚，上下天光，一碧萬頃，沙鷗翔集，錦鱗游泳。\n\
+                     登斯樓也，則有心曠神怡，寵辱偕忘，把酒臨風，其喜洋洋者矣。\n\
+                     先天下之憂而憂，後天下之樂而樂——噫，微斯人，吾誰與歸。";
         let (rect, buffer) = zong(entry, 70, 45);
 
         // 竪排 the room is two thirds of the page tall, and a full entry uses
@@ -976,7 +976,7 @@ mod tests {
             .expect("the ellipsis is drawn");
         assert!(ellipsis_row > 1, "the 「…」 is a column of its own: row {ellipsis_row}");
         // And the title is still its own 縱, in the box rather than on the ring.
-        assert!(text.contains('天') && text.contains('境'), "{text:?}");
+        assert!(text.contains('洞') && text.contains('典'), "{text:?}");
     }
 
     /// A short entry keeps the box short — the height follows the deepest 縱,

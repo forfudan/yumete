@@ -222,6 +222,46 @@ impl Editor {
         self.status = message;
     }
 
+    /// **一句說完就該走的話**——幾秒之後自己從命令行上下去。
+    ///
+    /// 2026-09-27 定，原話：「有些不是特别重要的消息可以有个参数「显示时间」，
+    /// 比如几秒，过了这个时间就会从命令行消失。比如那个宽度 1/4。这样不遮挡按键
+    /// 提示。」
+    ///
+    /// 誰該用它：**確認一下剛纔那個按鍵做了什麼**的那一類。邊欄寬了一檔、換了
+    /// 一個區——按的人自己看得見結果，那句話只是個回聲。錯誤、問句、以及「這件事
+    /// 沒做成」不許用：那幾種要一直站在那裏，等人讀到。
+    pub(crate) fn murmur(&mut self, message: String) {
+        self.status_fades = Some((std::time::Instant::now() + Self::MURMUR, message.clone()));
+        self.status = message;
+    }
+
+    /// 一句話站多久。
+    const MURMUR: std::time::Duration = std::time::Duration::from_secs(3);
+
+    /// 還有多久輪到它走。`None` ＝ 沒有欠着的。
+    pub fn status_due_in(&self) -> Option<std::time::Duration> {
+        let (at, _) = self.status_fades.as_ref()?;
+        Some(at.saturating_duration_since(std::time::Instant::now()))
+    }
+
+    /// 鐘響了：那句話真還在的話，把它拿下去。
+    ///
+    /// ⚠️ **比對過內容纔動手。** 這三秒裏狀態行可能已經被別的事寫過了，而那一句
+    /// 不是這個鐘管的。
+    pub fn status_tick(&mut self) {
+        let Some((at, said)) = self.status_fades.as_ref() else {
+            return;
+        };
+        if std::time::Instant::now() < *at {
+            return;
+        }
+        if self.status == *said {
+            self.status.clear();
+        }
+        self.status_fades = None;
+    }
+
     /// What opening a file had to say, if it had to say anything (#380).
     ///
     /// Taken, not read: the front end clears the status on its way out of

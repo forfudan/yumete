@@ -252,8 +252,8 @@ impl Editor {
     ///
     /// **The other half of [`Self::check_usage`].** That one settles 裏 against
     /// 裡, and it works because both spellings are in a list. A proper name is
-    /// in nobody's list — 返塵亭 is this book's — so the one place it came out
-    /// 返塵停 is invisible to every checker there is. The book's 百科 *does*
+    /// in nobody's list — 醉翁亭 is this book's — so the one place it came out
+    /// 醉翁停 is invisible to every checker there is. The book's 百科 *does*
     /// know the name, and the reading table knows that 亭 and 停 are one sound,
     /// which is what tells a typo from a different word (see [`crate::names`]).
     pub(super) fn check_names(&mut self) {

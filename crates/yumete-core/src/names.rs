@@ -2,15 +2,15 @@
 //!
 //! [`crate::usage`] answers 「which spelling did this manuscript settle on」 and
 //! it works because both spellings are in a list somebody wrote down. A proper
-//! name is not in anybody's list: 返塵亭 is this book's, and the one place it
-//! came out 返塵停 is a typo no dictionary and no 異體字表 can find. The book's
+//! name is not in anybody's list: 醉翁亭 is this book's, and the one place it
+//! came out 醉翁停 is a typo no dictionary and no 異體字表 can find. The book's
 //! 百科 does know the name, though — that is what it is for — so the question
 //! can be asked of it.
 //!
 //! ## Why a shared reading is required
 //!
-//! 「one character different」 is not a finding in Chinese: 返塵亭 is one
-//! character from 返塵路, and a novel is full of those. What makes a slip a
+//! 「one character different」 is not a finding in Chinese: 醉翁亭 is one
+//! character from 醉翁路, and a novel is full of those. What makes a slip a
 //! slip is that it is the *same sound* — an IME took the wrong candidate, or a
 //! hand wrote the homophone. 亭 and 停 are both `ting`; 塵 and 尘 are both
 //! `chen`. So this asks the reading table, and where there is no reading table
@@ -145,6 +145,7 @@ mod tests {
     fn alike(a: char, b: char) -> bool {
         let sound = |c: char| match c {
             '亭' | '停' => "ting",
+            '醉' | '罪' => "zui",
             '塵' | '尘' => "chen",
             '明' | '名' => "ming",
             '路' => "lu",
@@ -163,10 +164,10 @@ mod tests {
 
     #[test]
     fn a_homophone_one_character_out_is_found() {
-        let found = check("他到返塵停。\n", &names(&["返塵亭"]), alike);
+        let found = check("他到醉翁停。\n", &names(&["醉翁亭"]), alike);
         assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found[0].written, "返塵停");
-        assert_eq!(found[0].name, "返塵亭");
+        assert_eq!(found[0].written, "醉翁停");
+        assert_eq!(found[0].name, "醉翁亭");
         assert_eq!((found[0].wrong, found[0].right), ('停', '亭'));
         assert_eq!((found[0].line, found[0].column), (0, 2));
     }
@@ -175,12 +176,12 @@ mod tests {
     /// novel is one character from a dozen ordinary words.
     #[test]
     fn one_character_out_but_a_different_sound_is_not_a_slip() {
-        assert!(check("他到返塵路。\n", &names(&["返塵亭"]), alike).is_empty());
+        assert!(check("他到醉翁路。\n", &names(&["醉翁亭"]), alike).is_empty());
     }
 
     #[test]
     fn the_name_written_right_is_never_a_slip() {
-        assert!(check("他到返塵亭。\n", &names(&["返塵亭"]), alike).is_empty());
+        assert!(check("他到醉翁亭。\n", &names(&["醉翁亭"]), alike).is_empty());
         // …and neither is a second name that is itself one character away.
         assert!(check("李明和李朋。\n", &names(&["李明", "李朋"]), alike).is_empty());
     }
@@ -189,15 +190,15 @@ mod tests {
     /// included — which is why there are two indexes and not one.
     #[test]
     fn the_wrong_character_may_be_the_first_one() {
-        assert!(check("尘塵亭。\n", &names(&["返塵亭"]), alike).is_empty(), "尘 and 返 are not one sound");
-        let found = check("塵塵亭。\n", &names(&["返塵亭"]), |a, b| a == '塵' && b == '返');
+        assert!(check("尘翁亭。\n", &names(&["醉翁亭"]), alike).is_empty(), "尘 and 醉 are not one sound");
+        let found = check("罪翁亭。\n", &names(&["醉翁亭"]), alike);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].column, 0);
     }
 
     #[test]
     fn two_characters_out_is_a_different_word() {
-        assert!(check("他到尘塵停。\n", &names(&["返塵亭"]), alike).is_empty());
+        assert!(check("他到尘塵停。\n", &names(&["醉翁亭"]), alike).is_empty());
     }
 
     #[test]
@@ -211,8 +212,8 @@ mod bench {
     #[test]
     #[ignore = "a stopwatch, not a test"]
     fn the_cost_of_checking_a_chapter() {
-        let names: Vec<String> = (0..200).map(|i| format!("返塵亭{i}")).collect();
-        let line = "他到返塵亭，天色已晚，山門之外另有客舍三十間，逢法會則不敷用。\n";
+        let names: Vec<String> = (0..200).map(|i| format!("醉翁亭{i}")).collect();
+        let line = "他到醉翁亭，天色已晚，山門之外另有客舍三十間，逢法會則不敷用。\n";
         let text: String = line.repeat(20_000);
         let at = std::time::Instant::now();
         let found = super::check(&text, &names, |a, b| a == '停' && b == '亭');

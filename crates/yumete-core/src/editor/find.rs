@@ -147,7 +147,7 @@ impl Editor {
             // `*`、`[` 一起吃掉——那是毀掉使用者寫的式子。兩個開關因此互斥，面板
             // 上正則開着時 簡繁異字形 畫灰（2026-09-25）。
             (true, _) => self.search.query.clone(),
-            // **「天門」找得到「天门」**：每個字換成它的字形集（`crate::glyphs`）。
+            // **「書齋」找得到「书斋」**：每個字換成它的字形集（`crate::glyphs`）。
             // 這一支自己就轉義，所以不必再 `escape` 一遍。
             (false, true) => crate::glyphs::widen(&self.search.query),
             (false, false) => regex::escape(&self.search.query),
@@ -242,37 +242,14 @@ impl Editor {
             return;
         }
         let pattern = self.search_pattern();
-        // **拼音只在查詢全是 ASCII 字母的時候纔跑**，所以開着它不影響搜英文。
-        // ⚠️ 正則開着也照跑：它自己走一趟，不往正則裏塞東西（不像簡繁異體）。
-        let said = match self.search.pinyin {
-            true => crate::pinyin::as_query(&self.search.query),
-            false => None,
+        let Some(look) = self.looker() else {
+            // ⚠️ The hits stay, and are drawn quiet. Typing a regular
+            // expression walks through `[`, `(` and every other unfinished
+            // state; emptying the list on each of them flickers, and a blank
+            // list would say 「nothing found」, which is not true.
+            self.search.broken = true;
+            return;
         };
-        let how = match self.search.fuzzy {
-            true => How::Nearby {
-                needle: self.search.query.chars().collect(),
-                fold: match self.search.case {
-                    Case::Insensitive => true,
-                    Case::Sensitive => false,
-                    // The rule the page's own `/` follows: a capital is how
-                    // you ask for case to matter.
-                    Case::Smart => !self.search.query.chars().any(char::is_uppercase),
-                },
-            },
-            false => match regex::Regex::new(&pattern) {
-                Ok(re) => How::Pattern(re),
-                Err(_) => {
-                    // ⚠️ The hits stay, and are drawn quiet. Typing a regular
-                    // expression walks through `[`, `(` and every other
-                    // unfinished state; emptying the list on each of them
-                    // flickers, and a blank list would say 「nothing found」,
-                    // which is not true.
-                    self.search.broken = true;
-                    return;
-                }
-            },
-        };
-        let look = Look { how, said };
         self.search.hits.clear();
         self.search.total = 0;
         self.search.selected = 0;
@@ -449,9 +426,14 @@ impl Editor {
             //
             // ⚠️ **從前也沒有真的還原**——`scope_text` 一直在，是**畫**的時候只在
             // 打字態纔顯示它，出框就退回按真實範圍算出來的名字，看着像還原了。
-            // 所以修法是讓它**落地**（作者定：「算，离开格子就落地」），這樣屏幕上
+            // 所以修法是讓它**落地**（定的，原話：「算，离开格子就落地」），這樣屏幕上
             // 寫着什麼就是什麼。
             Key::Esc => {
+                // 已經在 Normal 了，這一下 `Esc` 沒有別的事可做——那就是「把輸入
+                // 法的挂起再說一遍」，同正文與邊欄那兩處（2026-09-27）。
+                if self.mode == Mode::Normal {
+                    self.say_it_again = true;
+                }
                 self.search.all_selected = false;
                 self.mode = Mode::Normal;
                 self.land_the_scope();
@@ -495,7 +477,7 @@ impl Editor {
             // 所在的字是反白的……用戶這樣就能用hl在搜索欄中移動光標」）。和正文
             // 一個感覺：框裏站着一個塊光標，`h`／`l` 挪它，`i` 就從它那裏插。
             //
-            // ⚠️ **格子之間從此只有 `jk`**（作者定：「行，格子只用 jk」）。從前
+            // ⚠️ **格子之間從此只有 `jk`**（定的，原話：「行，格子只用 jk」）。從前
             // `hl` 和 `jk` 走的是同一串格子，那時框裏沒有光標可挪，`hl` 也就沒有
             // 別的事可做。
             //
@@ -519,7 +501,12 @@ impl Editor {
                 self.search.move_caret(to);
             }
             Key::Char('j') | Key::Down => match self.search.field {
-                Field::Results => self.search.step(true),
+                // **走一步就看一眼**（2026-09-27）：正文跳到那一處、選區蓋上去，
+                // 而鍵留在這裏。見 [`Self::show_hit`]。
+                Field::Results => {
+                    self.search.step(true);
+                    self.show_hit();
+                }
                 _ => {
                     let next = self.search.field.step(false, self.search.replacing);
                     self.search.stand_on(next);
@@ -534,7 +521,10 @@ impl Editor {
                     let back = self.search.field.step(true, self.search.replacing);
                     self.search.stand_on(back);
                 }
-                Field::Results => self.search.step(false),
+                Field::Results => {
+                    self.search.step(false);
+                    self.show_hit();
+                }
                 _ => {
                     let back = self.search.field.step(true, self.search.replacing);
                     self.search.stand_on(back);
@@ -549,7 +539,7 @@ impl Editor {
             // ⚠️ **模糊 while 替換 is ticked does nothing**, as it did before:
             // the row is drawn quiet, and a quiet row that still flipped would
             // be saying two things at once. `flip_switch` guards it.
-            // **`0` 換一個範圍**（2026-09-26 作者提）：本文件 → 本文件夾 →
+            // **`0` 換一個範圍**（2026-09-26 提的）：本文件 → 本文件夾 →
             // 工作目錄 → git 項目 → 回到本文件。
             //
             // ⚠️ **和那七個開關同一族的鍵**：它們是 `1`–`7`，這一個是 `0`，都不必
@@ -612,6 +602,16 @@ impl Editor {
             // ⚠️ **Only 「all of them」 asks first.** One hit and one file are
             // changes a reader is looking straight at; every file in a book is
             // not, and that is the one where a slip costs an afternoon.
+            // **`u` 撤回剛纔那一次替換**（2026-09-27 定）。
+            //
+            // 換完鍵還在面板裏，而撤回的是正文——所以這個鍵得在這裏接住，否則讀
+            // 者要先 `C-w` 出去、按 `u`、再走回來，而那一路上他站在名單的哪一條
+            // 早就忘了。換完再看一眼那一行，覺得不對就按 `u`：這纔是「預覽」該有
+            // 的樣子。
+            Key::Char('u') if self.search.replacing => {
+                self.undo();
+                self.after_replacing_undone();
+            }
             Key::Char('R') if self.search.replacing => {
                 self.status = say!("search.replace-all-sure", self.search.total);
                 // ⚠️ **`ReplaceAll`, not `Confirm`.** The latter is `:s …c`'s
@@ -625,7 +625,7 @@ impl Editor {
             // **`/` 回搜索框：進 insert、光標放末尾、框裏的字留着**。
             //
             // ⚠️ **和選擇器（`空格 f`／`空格 b`／`:wiki`）那一扇裏的 `/` 一個
-            // 樣**——2026-09-25 作者報的就是這一條：「用户在相似的界面按同样的
+            // 樣**——2026-09-25 報的就是這一條：「用户在相似的界面按同样的
             // 快捷键，他的行为应该是一致的」。它原先是「整條選中」（`ask`），於是
             // 整格白底、看不見光標，看着既不像插入模式也不像光標在末尾。
             //
@@ -714,101 +714,10 @@ impl Editor {
         }
     }
 
-    /// **The highlighted hit, with room to read it** — the command row (#419).
-    ///
-    /// `None` unless the keys are actually in the list: the row belongs to
-    /// whatever has them, and a panel nobody is standing in has no claim on it.
-    #[cfg(test)]
-    pub(crate) fn hit_in_context_for_test(&self) -> Option<String> {
-        self.hit_in_context().map(|(line, text, _)| format!("{line} {text}"))
-    }
-
-    /// 測試要看反白落在哪幾個字上。
-    #[cfg(test)]
-    pub(crate) fn hit_mark_for_test(&self) -> Option<(String, std::ops::Range<usize>)> {
-        self.hit_in_context().map(|(_, text, mark)| (text, mark))
-    }
-
     /// 測試要擺一條命中進去——`search` 本身不是公開的。
     #[cfg(test)]
     pub(crate) fn search_for_test(&mut self) -> &mut crate::search_panel::Search {
         &mut self.search
-    }
-
-    /// The highlighted hit, its line number, and where the match sits in it.
-    ///
-    /// **The text comes back untrimmed and the row does the fitting.** How
-    /// much of it fits is a question about the window, and the window is the
-    /// front end's to know; what the editor knows is which characters are
-    /// around the match and which ones *are* the match. The range counts
-    /// characters into the text handed back, so the row can pick the word out
-    /// however it likes.
-    pub(super) fn hit_in_context(&self) -> Option<(usize, String, std::ops::Range<usize>)> {
-        if self.search.field != Field::Results || self.search.broken {
-            return None;
-        }
-        let side = self.panel_focus()?;
-        // 光標把別的東西頂上來的時候，鍵雖然在這個邊欄裏，眼前那一個卻不是搜索。
-        if self.transient(side).is_some()
-            || self.panel(side).map(|p| p.view()) != Some(crate::sidebar::View::Search)
-        {
-            return None;
-        }
-        let hit = self.search.here()?;
-        // ⚠️ **命中不一定在眼前這個緩衝區裏，而這裏問的是眼前這一個。**
-        // `:search .` 搜的是整個文件夾，命中帶着自己的檔（`Hit::file`）；拿一條
-        // 第 6496 行的命中去問一份**只有一行**的 scratch，ropey 當場 panic
-        // ——2026-09-23 報的：在倉裏 `ye` 空開、`:search .`、Esc、按 `j` 走到結果
-        // 列表上，一進去就崩。
-        //
-        // ⚠️ **行號也要夾。** 就算命中真在這一份裏，搜索是那一刻跑的，而之後
-        // 刪掉幾段就能讓行號指到文件外面去。
-        let rope = self.current_buffer().rope();
-        if hit.file.is_some() || hit.line >= rope.len_lines() {
-            // 別的檔（或者已經對不上了）：搜索當時抓下來的那一小段就是答案，
-            // 而它本來就是為了「一欄放得下」裁過的。
-            return Some((hit.line + 1, hit.excerpt.clone(), hit.mark.clone()));
-        }
-        // As many characters as a window is wide, centred on the match — far
-        // more than the column can hold, which is the whole point.
-        let line: String = rope.line(hit.line).chars().filter(|c| *c != '\n').collect();
-        let chars: Vec<char> = line.chars().collect();
-        // ⚠️ **偏移也要夾，不只是行號。** 上面那一句夾的是 `hit.line`，而
-        // `hit.at` 是**搜索那一刻**的全文字符偏移——之後在命中上面刪掉一段，行號
-        // 還落在文件裏而偏移已經不在這一行裏了。兩頭各壞一種：
-        //
-        // | `hit.at` 在哪 | 從前 |
-        // | --- | --- |
-        // | 這一行**之後** | `from > to`，切片反着來，**當場 panic** |
-        // | 這一行**之前** | `saturating_sub` 歸零，不崩，**摘出來的是錯的一段** |
-        //
-        // 實測（2026-09-24 審出來的）：`空格 /` 搜本檔、Esc `j` 進結果、`C-w` 回
-        // 正文、在命中上面 `dd`、`C-w` `j` 走回結果——回去那一幀就崩
-        // （`range start index 67 out of range for slice of length 8`）。
-        //
-        // 對不上就走**上面那條退路**：搜索當時抓下的那一小段。它本來就是為這件事
-        // 存的，而一個「差不多對」的摘要比一個錯的摘要還難發現。
-        let head = rope.line_to_char(hit.line);
-        let Some(at) = hit.at.checked_sub(head).filter(|at| *at <= chars.len()) else {
-            return Some((hit.line + 1, hit.excerpt.clone(), hit.mark.clone()));
-        };
-        let from = at.saturating_sub(AROUND);
-        let to = (at + AROUND).min(chars.len());
-        let mut text = String::new();
-        if from > 0 {
-            text.push('…');
-        }
-        // 前面那個省略號也佔一個字，反白從它之後數起。
-        let lead = text.chars().count();
-        text.extend(&chars[from..to]);
-        if to < chars.len() {
-            text.push('…');
-        }
-        // ⚠️ **命中本身可能比摘出來的這一段還長**（一條 `.*` 規則能匹配整行），
-        // 所以尾巴要夾在摘出來的這一段裏，不能照 `hit.end` 直接算。
-        let long = (hit.end - hit.at).min(to - at.min(to));
-        let mark = lead + (at - from)..lead + (at - from) + long;
-        Some((hit.line + 1, text, mark))
     }
 
     /// Flip one of the switches, and search again.
@@ -847,7 +756,7 @@ impl Editor {
 
     /// **勾上「替換」就長出替換行**（2026-09-23 報的）。
     ///
-    /// ⚠️ **和 模糊 互斥，而勾這一個的時候把那一個關掉、畫灰**（作者定：「我傾向
+    /// ⚠️ **和 模糊 互斥，而勾這一個的時候把那一個關掉、畫灰**（定的，原話：「我傾向
     /// 自動關掉畫灰」）。理由是原來那一條：鬆的匹配蓋住讀者沒打的字，「把它們全
     /// 換掉」交出去的範圍他預測不了。和 `flip_switch` 裏 正則／完整匹配 壓掉 模糊
     /// 是同一個寫法——**要一個就把打架的那個放下**，而不是留一個按了不算數的勾。
@@ -971,11 +880,12 @@ impl Editor {
         let Some(hit) = self.search.here().cloned() else {
             return;
         };
-        let Some(re) = self.search_regex() else { return };
+        let Some(look) = self.looker() else { return };
         let with = self.replacement();
         match self.buffer_of(&hit) {
             Some(index) => {
-                let done = self.with_buffer(index, |ed| ed.swap_one(&re, &with, hit.line, hit.nth));
+                let done =
+                    self.with_buffer(index, |ed| ed.swap_one(&look, &with, hit.line, hit.nth));
                 match done {
                     true => self.after_replacing(1),
                     // The line has fewer matches than it had when it was read:
@@ -991,12 +901,12 @@ impl Editor {
     /// `r` on a file header, and each step of `R`: change **every hit in one
     /// file**.
     fn replace_file(&mut self, rel: Option<&Path>) -> usize {
-        let Some(re) = self.search_regex() else { return 0 };
+        let Some(look) = self.looker() else { return 0 };
         let with = self.replacement();
         let Some(index) = self.buffer_for(rel) else {
             return 0;
         };
-        self.with_buffer(index, |ed| ed.swap_all(&re, &with))
+        self.with_buffer(index, |ed| ed.swap_all(&look, &with))
     }
 
     /// `R`: change every hit there is, once the reader has said yes.
@@ -1020,40 +930,48 @@ impl Editor {
     /// than by the offsets the hit carries: those were counted when the file
     /// was read, and the first change in a file moves every one after it.
     /// `false` when the line no longer holds that many matches.
-    fn swap_one(&mut self, re: &regex::Regex, with: &str, line: usize, nth: usize) -> bool {
+    fn swap_one(&mut self, look: &Look, with: &str, line: usize, nth: usize) -> bool {
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
             return false;
         }
         let text: String = rope.line(line).chars().collect();
-        // `captures_iter` rather than `find_iter`, so `$1` in the replacement
-        // works the way it does in `:s`.
-        let Some(caps) = re.captures_iter(&text).nth(nth) else {
+        let cuts = byte_cuts(&text);
+        let Some(&(a, b)) = look.spans(&text).get(nth) else {
             return false;
         };
-        let Some(m) = caps.get(0) else { return false };
+        let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
+            return false;
+        };
+        let grown = look.expand(&text[b0..b1], with);
         let at = rope.line_to_char(line);
-        let from = at + text[..m.start()].chars().count();
-        let to = at + text[..m.end()].chars().count();
-        let mut grown = String::new();
-        caps.expand(with, &mut grown);
         let mut rebuilt = rope.to_string();
-        let (b0, b1) = (rope.char_to_byte(from), rope.char_to_byte(to));
-        rebuilt.replace_range(b0..b1, &grown);
+        let here = rope.char_to_byte(at);
+        rebuilt.replace_range(here + b0..here + b1, &grown);
         self.write_whole(rebuilt)
     }
 
     /// Change **every match** in the buffer being worked on; how many.
-    fn swap_all(&mut self, re: &regex::Regex, with: &str) -> usize {
+    fn swap_all(&mut self, look: &Look, with: &str) -> usize {
         let rope = self.current_buffer().rope();
         let text = rope.to_string();
-        let count = re.find_iter(&text).count();
-        if count == 0 {
+        let spans = look.spans(&text);
+        if spans.is_empty() {
             return 0;
         }
-        let rebuilt = re.replace_all(&text, with).into_owned();
+        let cuts = byte_cuts(&text);
+        // **從後往前換。** 換上去的那一段和換下來的那一段不一樣長，從前往後走會
+        // 把後面每一處的位置都推着走；倒着走，還沒動到的那幾處位置一格不變。
+        let mut rebuilt = text.clone();
+        for &(a, b) in spans.iter().rev() {
+            let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
+                continue;
+            };
+            let grown = look.expand(&text[b0..b1], with);
+            rebuilt.replace_range(b0..b1, &grown);
+        }
         match self.write_whole(rebuilt) {
-            true => count,
+            true => spans.len(),
             false => 0,
         }
     }
@@ -1116,8 +1034,37 @@ impl Editor {
     }
 
     /// The pattern the panel is running, compiled — `None` if it will not.
-    fn search_regex(&self) -> Option<regex::Regex> {
-        regex::Regex::new(&self.search_pattern()).ok()
+    /// **這一問怎麼問**——找的時候問一次，換的時候拿同一支再問一次。
+    ///
+    /// ⚠️ **從前換那一步自己編一個正則**（`Regex::new(&self.search_pattern())`），
+    /// 於是**拼音和 模糊 找到的那幾處換不了**：`search_pattern` 只折字形，不折讀
+    /// 音也不管「差不多」，`sifuqi` 當正則在「伺服器」那一行一個字都配不上，`r`
+    /// 按下去只報一句「那一處已經不在那裏了」——看着像文稿被人改過，其實是兩邊問
+    /// 的不是同一個問題（2026-09-27 報的：「我还是不知道搜索面板中 replace 该怎么
+    /// 做」）。
+    ///
+    /// `None` ＝ 式子寫壞了。
+    fn looker(&self) -> Option<Look> {
+        // **拼音只在查詢全是 ASCII 字母的時候纔跑**，所以開着它不影響搜英文。
+        // ⚠️ 正則開着也照跑：它自己走一趟，不往正則裏塞東西（不像簡繁異體）。
+        let said = match self.search.pinyin {
+            true => crate::pinyin::as_query(&self.search.query),
+            false => None,
+        };
+        let how = match self.search.fuzzy {
+            true => How::Nearby {
+                needle: self.search.query.chars().collect(),
+                fold: match self.search.case {
+                    Case::Insensitive => true,
+                    Case::Sensitive => false,
+                    // The rule the page's own `/` follows: a capital is how
+                    // you ask for case to matter.
+                    Case::Smart => !self.search.query.chars().any(char::is_uppercase),
+                },
+            },
+            false => How::Pattern(regex::Regex::new(&self.search_pattern()).ok()?),
+        };
+        Some(Look { how, said })
     }
 
     /// Look again and say how it went. The offsets are all stale now.
@@ -1135,6 +1082,16 @@ impl Editor {
         };
     }
 
+    /// 撤回一次替換之後，名單要跟着回來——被換掉的那幾處又在了。
+    fn after_replacing_undone(&mut self) {
+        let where_ = self.search.selected;
+        match self.search.scope.live() {
+            true => self.run_search(),
+            false => self.search_now(),
+        }
+        self.search.selected = where_.min(self.search.rows().len().saturating_sub(1));
+    }
+
     /// `Enter` on a row: fold a file, or go to a hit and hand the keys back.
     fn go_to_hit(&mut self) {
         // On a file header, `Enter` is what `h`/`l` are: open or shut.
@@ -1143,10 +1100,31 @@ impl Editor {
             let _ = path;
             return;
         }
-        let Some(hit) = self.search.here().cloned() else {
-            return;
-        };
         self.remember_jump();
+        if self.show_hit() {
+            // **`Enter` 就是「我留在這兒」**——鍵交給正文。走到這一處是 `jk` 早就
+            // 做過的事（[`Self::show_hit`]），這個鍵只多做這一件。
+            //
+            // 順帶把那一份釘住：它不再是「路過看一眼」的那一份，下一次預覽不許
+            // 把它收走。
+            self.search_preview = None;
+            self.panel_focus = None;
+        }
+    }
+
+    /// **走到這一處，鍵留在面板裏**——`jk` 每走一步都做這件事（2026-09-27 定，
+    /// 原話：「在搜索栏结果列表中移动的时候，编辑区应当也跳转到对应的行……用户也
+    /// 不需要按 enter 就能预览到」）。
+    ///
+    /// 開檔、滾過去、把選區蓋在那一處上。和 [`Self::go_to_hit`] 只差最後那一下
+    /// ——交不交鍵。從前兩件事焊在 `Enter` 上，於是「我只想看一眼要不要換」必須
+    /// 先離開面板，看完再走回來。
+    ///
+    /// 回 `false` ＝ 站着的那一行不是一處命中（檔頭，或者名單空着）。
+    fn show_hit(&mut self) -> bool {
+        let Some(hit) = self.search.here().cloned() else {
+            return false;
+        };
         // ⚠️ **A hit carries a file name even when it is in the file being
         // written** (it has to, or the tree could not group it), so 「another
         // file」 is a question about the path, not about whether there is one.
@@ -1167,9 +1145,17 @@ impl Editor {
                 Some(root) => root.join(&rel),
                 None => rel,
             };
+            // **開之前先問它本來開着沒有**：本來就開着的那一份不是我們開的，走
+            // 開的時候不許收走。
+            let was_open = self.buffer_showing(&full).is_some();
             if let Err(err) = self.open_file(&full) {
                 self.status = say!("buffer.cannot-open", full.display(), err);
-                return;
+                return false;
+            }
+            let now = self.current_buffer().id();
+            self.let_go_of_the_search_preview(now);
+            if !was_open {
+                self.search_preview = Some(now);
             }
         }
         let rope = self.current_buffer().rope();
@@ -1190,7 +1176,7 @@ impl Editor {
         self.cursor = motion::prev_grapheme(self.current_buffer().rope(), end.max(at)).max(at);
         self.extend = false;
         self.refresh_goal_column();
-        self.panel_focus = None;
+        true
     }
 }
 
@@ -1238,8 +1224,8 @@ struct Look {
     how: How,
     /// **拼音那一路**，`None` ＝ 不跑（開關關着，或者查詢不全是字母）。
     ///
-    /// ⚠️ **它是加出來的，不是替掉的**（2026-09-25 作者定：「兩種命中合並」）。
-    /// 搜 `hello` 的人要的是文稿裏那個 `hello`，而搜 `tianmen` 的人要的是「天門」
+    /// ⚠️ **它是加出來的，不是替掉的**（2026-09-25 定的，原話：「兩種命中合並」）。
+    /// 搜 `hello` 的人要的是文稿裏那個 `hello`，而搜 `shuzhai` 的人要的是「書齋」
     /// ——兩種都給，讀者自己認得出哪一條是他要的。
     said: Option<Vec<char>>,
 }
@@ -1253,6 +1239,25 @@ enum How {
 }
 
 impl Look {
+    /// **換上去的那一段**，`matched` 是換下來的那一段。
+    ///
+    /// ⚠️ **`$1` 只有正則那一路認得。** 拼音和 模糊 沒有分組可以展開，那兩路換
+    /// 的就是字面——而讀者在那兩種模式下也寫不出一個有分組的式子。
+    fn expand(&self, matched: &str, with: &str) -> String {
+        let How::Pattern(re) = &self.how else {
+            return with.to_string();
+        };
+        match re.captures(matched) {
+            Some(caps) if caps.get(0).is_some_and(|m| m.start() == 0 && m.end() == matched.len()) => {
+                let mut out = String::new();
+                caps.expand(with, &mut out);
+                out
+            }
+            // 這一處是拼音那一路配上的（`spans` 把兩路合並了），正則配不上它。
+            _ => with.to_string(),
+        }
+    }
+
     /// Where it is found in one line, as **character** ranges within it.
     ///
     /// ⚠️ **兩路合並之後要排序去重**：`excerpt` 按這個次序編號（`nth`），而讀者
@@ -1278,4 +1283,11 @@ impl Look {
         }
         out
     }
+}
+
+/// 每一個字在一串文字裏的字節位置，末尾多一格（第 `n` 個字 ＝ `cuts[n]..cuts[n+1]`）。
+///
+/// 一次算好，省得每換一處都從頭數一遍——一本書裏幾百處，逐處數就是平方。
+fn byte_cuts(text: &str) -> Vec<usize> {
+    text.char_indices().map(|(i, _)| i).chain(std::iter::once(text.len())).collect()
 }
