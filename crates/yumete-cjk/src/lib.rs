@@ -44,7 +44,8 @@ pub mod width;
 pub mod word;
 
 pub use grapheme::{
-    grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, prev_grapheme_boundary,
+    cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme,
+    prev_grapheme_boundary,
 };
 pub use keymap::KeyPreset;
 pub use reading::{split_charset, NoReader, Reader, CHARSET_TAGS};

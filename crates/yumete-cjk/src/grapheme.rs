@@ -50,6 +50,36 @@ pub fn prev_grapheme_boundary(s: &str, byte: usize) -> usize {
         .unwrap_or(0)
 }
 
+/// **How many cells each `char` of a run takes**, a cluster's width recorded on
+/// its **first** `char` and `0` on the rest.
+///
+/// The third way to ask about width, for the places whose *structure* is
+/// per-`char` — a style for every character of a row, a screen column for every
+/// character of a line — while the *width* is a question only a whole cluster
+/// can answer. The other two: [`crate::str_width`] for「how wide is this run」,
+/// [`graphemes`] for「walk it and draw it」.
+///
+/// ⚠️ **Not [`crate::char_width`] in a loop** (#422). `⚠️` is `U+26A0` plus
+/// VS16: the first is one cell on its own, the variation selector is nothing on
+/// its own, and together they are an emoji two cells wide. Summing per `char`
+/// gives 1 and every column after it on that row is off by one.
+///
+/// `char_width` stays right for what it says: **one** character's own width —
+/// a box-drawing glyph the terminal was asked about, a lone constant.
+pub fn cells_per_char(chars: &[char]) -> Vec<usize> {
+    // One allocation for the run, because grapheme segmentation reads `&str`.
+    // Measured against the alternative of re-deriving cluster boundaries from
+    // the `char`s: that is re-implementing UAX #29, and this is a row of text.
+    let text: String = chars.iter().collect();
+    let mut out = Vec::with_capacity(chars.len());
+    for g in graphemes(&text) {
+        out.push(crate::grapheme_width(g));
+        out.extend(std::iter::repeat_n(0, g.chars().count() - 1));
+    }
+    debug_assert_eq!(out.len(), chars.len(), "one answer per char");
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,5 +126,23 @@ mod tests {
         assert_eq!(prev_grapheme_boundary(s, s.len()), 3);
         // Going left from the start of "中" lands at 0.
         assert_eq!(prev_grapheme_boundary(s, 3), 0);
+    }
+
+    /// 一個字簇的寬度記在它第一個 `char` 上，後面記 0——加起來就等於整串的寬度。
+    #[test]
+    fn a_cluster_puts_all_its_cells_on_its_first_char() {
+        let chars: Vec<char> = "a中⚠\u{fe0f}e\u{0301}".chars().collect();
+        //                      a  中   ⚠  VS16  e  ́
+        assert_eq!(cells_per_char(&chars), vec![1, 2, 2, 0, 1, 0]);
+        let text: String = chars.iter().collect();
+        assert_eq!(
+            cells_per_char(&chars).iter().sum::<usize>(),
+            crate::str_width(&text),
+            "加起來要和整串一樣寬"
+        );
+        // ⚠️ 逐字加是錯的那個答案，這一條把差別本身寫下來——#422 就是這一格。
+        let by_char: usize = chars.iter().copied().map(crate::char_width).sum();
+        assert_ne!(by_char, crate::str_width(&text), "逐字加少一格");
+        assert_eq!(cells_per_char(&[]), Vec::<usize>::new());
     }
 }

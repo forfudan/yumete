@@ -5243,38 +5243,53 @@ fn fit_around(
     mark: std::ops::Range<usize>,
     room: usize,
 ) -> (String, String, String) {
-    let chars: Vec<char> = text.chars().collect();
-    let start = mark.start.min(chars.len());
-    let end = mark.end.clamp(start, chars.len());
-    let width = |cs: &[char]| cs.iter().copied().map(yumete_cjk::char_width).sum::<usize>();
+    // ⚠️ **字簇，不是 `char`**（#422，2026-09-27）。`⚠️` 是兩個 `char`（U+26A0 ＋
+    // VS16）：逐字加是 1，而終端給 2。兩個後果都量到過——交回來的東西比 `room` 寬
+    // 一格（結果行頂穿面板的右牆），以及**切點落在 `⚠` 和 VS16 之間**，剩下
+    // `"…\u{fe0f}中間…"`：一個沒人要的 VS16，和別處一個光禿禿的 `⚠`。
+    //
+    // 命中的範圍 `mark` 是按 `char` 數的（搜索那一頭就是那麽算的），所以先把它摺到
+    // 它所在的字簇上——落在字簇中間的下標歸那個字簇，因為字簇是不可分的最小單位。
+    let gs: Vec<&str> = yumete_cjk::graphemes(text).collect();
+    let mut char_at: Vec<usize> = Vec::with_capacity(gs.len() + 1);
+    let mut seen = 0usize;
+    for g in &gs {
+        char_at.push(seen);
+        seen += g.chars().count();
+    }
+    char_at.push(seen);
+    let fold = |c: usize| char_at.partition_point(|&x| x <= c).saturating_sub(1).min(gs.len());
+    let start = fold(mark.start);
+    let end = fold(mark.end).max(start);
+    let width = |cs: &[&str]| cs.iter().copied().map(yumete_cjk::grapheme_width).sum::<usize>();
     if room == 0 {
         return (String::new(), String::new(), String::new());
     }
     // It all fits: leave it alone. `…` is the mark of a cut, and nothing was
     // cut — a row that shows the whole line should not claim otherwise.
-    if width(&chars) <= room {
+    if width(&gs) <= room {
         return (
-            chars[..start].iter().collect(),
-            chars[start..end].iter().collect(),
-            chars[end..].iter().collect(),
+            gs[..start].concat(),
+            gs[start..end].concat(),
+            gs[end..].concat(),
         );
     }
     // ⚠️ **The ellipses are part of the budget from the first line.** Counting
     // them only while growing let a match exactly `room − 1` wide come out one
     // cell too wide with a `…` at each end, and the end of the row is where
     // the one that says 「there is more」 would be lost.
-    let cut = |lo: usize, hi: usize| usize::from(lo > 0) + usize::from(hi < chars.len());
+    let cut = |lo: usize, hi: usize| usize::from(lo > 0) + usize::from(hi < gs.len());
     // The match alone is wider than the row (`.*` matches a whole paragraph).
     // Its head, and a `…` to say the rest of *it* is missing.
-    if width(&chars[start..end]) + cut(start, end) > room {
+    if width(&gs[start..end]) + cut(start, end) > room {
         let mut hit = String::new();
         let mut used = 0;
-        for &c in &chars[start..end] {
-            let w = yumete_cjk::char_width(c);
+        for g in &gs[start..end] {
+            let w = yumete_cjk::grapheme_width(g);
             if used + w + 1 > room {
                 break;
             }
-            hit.push(c);
+            hit.push_str(g);
             used += w;
         }
         return (String::new(), hit, "…".to_string());
@@ -5282,19 +5297,19 @@ fn fit_around(
     // Grow one character each way per round, so the word ends up in the
     // middle of what is shown rather than at one edge of it.
     let (mut lo, mut hi) = (start, end);
-    let mut used = width(&chars[lo..hi]);
+    let mut used = width(&gs[lo..hi]);
     loop {
         let mut moved = false;
         if lo > 0 {
-            let w = yumete_cjk::char_width(chars[lo - 1]);
+            let w = yumete_cjk::grapheme_width(gs[lo - 1]);
             if used + w + cut(lo - 1, hi) <= room {
                 lo -= 1;
                 used += w;
                 moved = true;
             }
         }
-        if hi < chars.len() {
-            let w = yumete_cjk::char_width(chars[hi]);
+        if hi < gs.len() {
+            let w = yumete_cjk::grapheme_width(gs[hi]);
             if used + w + cut(lo, hi + 1) <= room {
                 hi += 1;
                 used += w;
@@ -5309,12 +5324,12 @@ fn fit_around(
     if lo > 0 {
         before.push('…');
     }
-    before.extend(&chars[lo..start]);
-    let mut after: String = chars[end..hi].iter().collect();
-    if hi < chars.len() {
+    before.push_str(&gs[lo..start].concat());
+    let mut after: String = gs[end..hi].concat();
+    if hi < gs.len() {
         after.push('…');
     }
-    (before, chars[start..end].iter().collect(), after)
+    (before, gs[start..end].concat(), after)
 }
 
 /// The panel for a footnote or a `%%註釋%%` — what the cursor is standing on.
@@ -6053,8 +6068,13 @@ fn text_at(
                     .map(|(_, text)| yumete_cjk::str_width(text))
                     .sum()
             };
-            for at in row.start..row.end {
-                let c = buffer.rope().char(at);
+            // ⚠️ **這一趟按 `char` 走，而寬度是字簇的**（#422）：走的是檔裏的字符
+            // 位置（點到哪就回答哪一個 `char`），可「這個位置佔幾格」只有整個字簇答
+            // 得出來。`cells_per_char` 把字簇的格數記在它第一個 `char` 上。一行的
+            // 字符取一次——這是點擊那條路，不是每一幀。
+            let text: Vec<char> = (row.start..row.end).map(|at| buffer.rope().char(at)).collect();
+            let cells = yumete_cjk::cells_per_char(&text);
+            for (k, at) in (row.start..row.end).enumerate() {
                 let g = drawn_width(at - line_start);
                 if goal < column + g {
                     return Some(at);
@@ -6066,7 +6086,7 @@ fn text_at(
                 if off {
                     continue;
                 }
-                let w = yumete_cjk::char_width(c);
+                let w = cells[k];
                 if goal < column + w {
                     return Some(at);
                 }
@@ -7621,8 +7641,11 @@ fn preview_lines(
     let mut used = 0usize;
     for (piece, which) in pieces {
         let mut run = String::new();
-        for c in piece.chars() {
-            let w = yumete_cjk::char_width(c);
+        // ⚠️ **字簇，不是 `char`**（#422）：折在 `⚠` 和 VS16 中間，上一行留一個一格
+        // 寬的 `⚠`、下一行開頭是一個沒人要的 VS16——而「換後」那一塊正是要一眼看清
+        // 換了什麼的地方。
+        for g in yumete_cjk::graphemes(&piece) {
+            let w = yumete_cjk::grapheme_width(g);
             if used + w > wide {
                 if !run.is_empty() {
                     rows.last_mut().expect("一行總是有的").push((run.clone(), which));
@@ -7631,7 +7654,7 @@ fn preview_lines(
                 rows.push(Vec::new());
                 used = 0;
             }
-            run.push(c);
+            run.push_str(g);
             used += w;
         }
         if !run.is_empty() {
@@ -7893,40 +7916,55 @@ fn draw_picker(
             // Character by character, so the ones the query found can be 金 —
             // and on the inked row they stay the inked row's own two colours,
             // where a third would read as a mistake.
-            let chars: Vec<char> = item.0.chars().collect();
-            let name_at = chars
+            // ⚠️ **一格一格地畫的是字簇，不是 `char`**（#422）：一個 `char` 一畫，
+            // `⚠️` 的 VS16 就自己佔一格，而 `⚠` 只拿到一格——名字後面整條往前挪。
+            // 命中 `item.1` 記的還是 `char` 下標（搜索那一頭那麽算），所以一個字簇
+            // 問的是「我這幾個 `char` 裏有沒有命中的」。
+            let clusters: Vec<(usize, &str)> = {
+                let mut out = Vec::new();
+                let mut n = 0usize;
+                for g in yumete_cjk::graphemes(item.0.as_str()) {
+                    out.push((n, g));
+                    n += g.chars().count();
+                }
+                out
+            };
+            let name_at = clusters
                 .iter()
-                .rposition(|&c| c == '/' || c == '\\')
+                .rposition(|&(_, g)| g == "/" || g == "\\")
                 .map_or(0, |i| i + 1);
             let mut x = left.x + 1;
-            let mut ink_at = |n: Option<usize>, ch: char, x: &mut u16, quiet: bool| {
-                let w = yumete_cjk::char_width(ch) as u16;
+            let mut ink_at = |at: Option<usize>, g: &str, x: &mut u16, quiet: bool| {
+                let w = yumete_cjk::grapheme_width(g) as u16;
                 if *x + w > limit {
                     return false;
                 }
-                let hit = n.is_some_and(|n| item.1.contains(&n));
+                let hit = at.is_some_and(|i| {
+                    let (n, g) = clusters[i];
+                    (n..n + g.chars().count()).any(|k| item.1.contains(&k))
+                });
                 let this = match (hit, picked, quiet) {
                     (true, false, _) => ground.fg(ink.gold()),
                     (true, true, _) => on.add_modifier(Modifier::BOLD),
                     (false, false, true) => ground.fg(ink.quiet()),
                     (false, _, _) => style,
                 };
-                put_text(buf, *x, y, limit, &ch.to_string(), this);
+                put_text(buf, *x, y, limit, g, this);
                 *x += w;
                 true
             };
-            for n in name_at..chars.len() {
-                if !ink_at(Some(n), chars[n], &mut x, false) {
+            for i in name_at..clusters.len() {
+                if !ink_at(Some(i), clusters[i].1, &mut x, false) {
                     break;
                 }
             }
             if name_at > 0 {
-                for ch in "  ".chars() {
-                    ink_at(None, ch, &mut x, true);
+                for g in ["  "] {
+                    ink_at(None, g, &mut x, true);
                 }
                 // The folders, without the separator the name was split on.
-                for n in 0..name_at - 1 {
-                    if !ink_at(Some(n), chars[n], &mut x, true) {
+                for i in 0..name_at - 1 {
+                    if !ink_at(Some(i), clusters[i].1, &mut x, true) {
                         break;
                     }
                 }
@@ -7935,11 +7973,11 @@ fn draw_picker(
             // 「檔名之後的文件夾」佔同一個位子，理由也同一條：名字先畫，後面那半
             // 截是讀者可以不看的，所以裁也裁在它身上。
             if !item.2.is_empty() {
-                for ch in "  ".chars() {
-                    ink_at(None, ch, &mut x, true);
+                for g in ["  "] {
+                    ink_at(None, g, &mut x, true);
                 }
-                for ch in item.2.chars() {
-                    if !ink_at(None, ch, &mut x, true) {
+                for g in yumete_cjk::graphemes(item.2.as_str()) {
+                    if !ink_at(None, g, &mut x, true) {
                         break;
                     }
                 }
@@ -8107,10 +8145,12 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
     for span in line.spans {
         let span_style = span.style;
         let mut text = String::new();
-        for ch in span.content.chars() {
-            let end = column + yumete_cjk::char_width(ch);
+        // ⚠️ **字簇，不是 `char`**（#422）。橫向捲動是按格數切的，而 `⚠️` 的兩個
+        // `char` 逐個算是一格——切點會落在它們中間，半個字簇留在頁面上。
+        for g in yumete_cjk::graphemes(span.content.as_ref()) {
+            let end = column + yumete_cjk::grapheme_width(g);
             if end <= gutter || column >= cut {
-                text.push(ch);
+                text.push_str(g);
             } else if column < gutter {
                 // A character straddling the gutter's edge: only the part of it
                 // that is furniture survives.
@@ -8823,12 +8863,16 @@ fn draw_horizontal(
         // says this row has run past the length the writer wants a sentence to
         // be, which is what somebody breaking long ones by hand is looking for.
         if ruler > 0 {
+            // ⚠️ **一個 `char` 一個樣式，而寬度是字簇的**（#422）：`cells_per_char`
+            // 把字簇的格數記在它第一個 `char` 上，後面那幾個記 0。逐字加的話，一行
+            // 上每有一個 `⚠️`，尺子就往後挪一格。
+            let cells = yumete_cjk::cells_per_char(&chars);
             let mut column = 0;
-            for (i, ch) in chars.iter().enumerate() {
+            for i in 0..chars.len() {
                 if column >= ruler {
                     styles[i] = styles[i].bg(ink.at(yumete_config::rung::BAND));
                 }
-                column += yumete_cjk::char_width(*ch);
+                column += cells[i];
             }
         }
 
@@ -9564,11 +9608,16 @@ fn drawn_columns(drawn: Drawn, lead: usize) -> Vec<usize> {
             .map(|(_, text)| yumete_cjk::str_width(text))
             .sum()
     };
-    for (i, &c) in chars.iter().enumerate() {
+    // ⚠️ **字簇的格數記在它第一個 `char` 上**（#422）：這張表是按 `char` 索引的
+    // ——注音畫在它自己那個字的頭上、列號畫在它自己那一欄的頭上——而「幾格」只有
+    // 整個字簇答得出來。逐字加的話，一行上有一個 `⚠️`，它後面每一個注音都往左錯
+    // 一格。
+    let cells = yumete_cjk::cells_per_char(&chars);
+    for i in 0..chars.len() {
         at += drawn_before(i);
         column.push(at);
         if shown[i] {
-            at += yumete_cjk::char_width(c);
+            at += cells[i];
         }
     }
     at += drawn_before(chars.len());
@@ -10062,8 +10111,21 @@ fn box_in(
     // The block: the character as it stands, ink and ground swapped. A 漢字
     // covers two cells and the second one carries no symbol, so both are
     // painted or the block comes out half-width.
-    let under = shown.chars().nth(caret);
-    let wide = under.map(yumete_cjk::char_width).unwrap_or(1) as u16;
+    //
+    // ⚠️ **What it stands on is a cluster, not a `char`** (#422). `caret` counts
+    // `char`s, so the cluster it is standing on is the one whose own `char`s
+    // reach it — for `⚠️` that is two cells, and `char_width` of the first
+    // `char` alone says one, leaving the right half of the emoji un-inverted.
+    let mut wide = 1u16;
+    let mut seen = 0usize;
+    for g in yumete_cjk::graphemes(shown) {
+        let n = g.chars().count();
+        if caret < seen + n {
+            wide = yumete_cjk::grapheme_width(g) as u16;
+            break;
+        }
+        seen += n;
+    }
     let block = Style::default().bg(ink.text()).fg(ink.paper());
     for step in 0..wide.max(1) {
         if let Some(c) = buf.cell_mut((at + step, y)) {
@@ -11328,11 +11390,11 @@ fn squeezed(text: &str) -> String {
         // *second* pipe — counted in screen cells, not in bytes.
         let mut walls = Vec::new();
         let mut at = 0u16;
-        for c in row.chars() {
-            if c == '|' {
+        for g in yumete_cjk::graphemes(&row) {
+            if g == "|" {
                 walls.push(at);
             }
-            at += yumete_cjk::char_width(c) as u16;
+            at += yumete_cjk::grapheme_width(g) as u16;
         }
         assert!(walls.len() >= 2, "the row has its walls: {row:?}");
         assert_eq!(
@@ -12024,7 +12086,10 @@ fn squeezed(text: &str) -> String {
         let at = text
             .find(needle)
             .unwrap_or_else(|| panic!("{needle:?} is on the page: {text:?}"));
-        text[..at].chars().map(|c| yumete_cjk::char_width(c) as u16).sum()
+        // ⚠️ **`str_width`，不是逐字加**（#422）：`⚠️` 是兩個 `char`，逐字加算
+        // 出來一格而終端給兩格，於是斷言瞄的欄號比它要說的那個字少一格。這是量
+        // 「一段有多寬」，而那正是 `str_width` 回答的問題。
+        yumete_cjk::str_width(&text[..at]) as u16
     }
 
     /// The same, for the **last** time `needle` appears.
@@ -12032,7 +12097,7 @@ fn squeezed(text: &str) -> String {
         let at = text
             .rfind(needle)
             .unwrap_or_else(|| panic!("{needle:?} is on the page: {text:?}"));
-        text[..at].chars().map(|c| yumete_cjk::char_width(c) as u16).sum()
+        yumete_cjk::str_width(&text[..at]) as u16
     }
 
     /// Feature #210: text on the page the file has no bytes for.
@@ -16733,6 +16798,25 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// **一個 `⚠️` 站在前面，注音照樣落在它自己那個字頭上**（#422）。
+    ///
+    /// `drawn_columns` 是「這個字在第幾格」的唯一答案——注音、列號、一切畫在行**上
+    /// 面**的東西都問它。它按 `char` 建表（一個字一個欄號），而寬度從前是逐字加的：
+    /// `⚠️` 兩個 `char` 加出來一格，於是它後面每一個注音都往左錯一格。
+    #[test]
+    fn a_reading_keeps_its_column_after_a_two_char_glyph() {
+        let mut editor = editor_with("⚠️<ruby>韋<rt>wéi</rt></ruby>字。");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render_with_ruby(&mut editor, &config, 40, 8);
+
+        assert_eq!(row_text(&buffer, 1).trim_end(), "⚠️韋字。", "正文");
+        // ⚠️ 佔兩格，所以 韋 從第 2 格起，它的注音也從第 2 格起——和上面那一條
+        // 「那韋字。」完全同一個算法，只是把 那 換成了一個兩個 `char` 的字簇。
+        let reading = row_text(&buffer, 0);
+        assert_eq!(reading.trim_end(), "  wéi", "逐字加會少一格：{reading:?}");
+    }
+
     #[test]
     fn two_readings_in_a_row_both_get_drawn() {
         // 注音 is wider than the 字 it reads, so the second reading wanted to
@@ -19434,6 +19518,108 @@ fn squeezed(text: &str) -> String {
         let at = at.expect("打字的時候要有光標");
         assert!(at.x < left, "打字時：x={} 該在 {left} 左邊\n{}", at.x, buffer_text(&buf));
         assert!(at.y > 0, "而且在框那一行上，不是左上角：{at:?}");
+    }
+
+    /// **一個字簇佔幾格，不是逐字加得出來的**（#422，2026-09-26 診斷）。
+    ///
+    /// `⚠️` 是兩個 `char`（U+26A0 ＋ VS16）：`⚠` 單獨一格，跟上 VS16 就成了 emoji
+    /// 呈現、兩格。`char_width` 一次只看一個字，看不見這件事，於是逐字加出來是
+    /// **1**，而 `str_width` 與真終端都說 **2**。
+    ///
+    /// ⚠️ **這一條一直沒人報，是因為寫 `⚠️` 後面永遠跟一個空格**——蓋住的是空格。
+    #[test]
+    fn a_glyph_made_of_two_chars_takes_both_of_the_cells_it_is_drawn_in() {
+        let mut editor = editor_with("⚠️後\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.command_line = false;
+        let buffer = render(&editor, &config, 20, 6);
+        // ⚠️ **這一條現在是綠的，留着是釘子。** 普通的橫排正文是把整行交給 ratatui
+        // 畫的，而它自己按字簇的寬度推進——所以這條路本來就對。錯的是**我們自己算
+        // 欄號**的那些地方（見下一條）。哪天有人把這一行改成逐字畫，這裏會說話。
+        assert_eq!(at(&buffer, 0, 0), "⚠️", "第一格是它");
+        // ⚠️ **第二格讀不出東西**：`TestBackend` 裏寬字的第二格永遠是空的，所以
+        // 驗的是**第三格**——後面那個字有沒有被推到它該在的地方。
+        assert_eq!(
+            at(&buffer, 2, 0),
+            "後",
+            "逐字加把 ⚠️ 算成一格，後面整行往前挪了一格：{:?}",
+            (0..6).map(|x| at(&buffer, x, 0)).collect::<Vec<_>>()
+        );
+    }
+
+    /// **同一件事，在表格視圖裏看得見**（#422）。
+    ///
+    /// 列寬是拿 `str_width` 算的（`⚠️` ＝ 2），畫是逐字畫的（＝ 1），於是含 `⚠️`
+    /// 那一行的分隔線比別行往左錯一格。這一條驗的不是某個具體欄號，是**每一行的
+    /// 分隔線在同一欄**——量和畫給的是不是同一個答案。
+    #[test]
+    fn every_row_of_a_grid_puts_its_wall_in_the_same_column() {
+        let mut editor = Editor::new();
+        editor
+            .current_buffer_mut()
+            .insert(0, "名稱XX\t說明\n⚠️\t有警告\nXX\t有警告\n甲\t有警告\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.command_line = false;
+        assert!(editor.enter_table(), "{}", editor.status());
+        let buffer = render(&editor, &config, 40, 10);
+        let rows: Vec<String> = (0..buffer.area.height)
+            .map(|y| (0..buffer.area.width).map(|x| at(&buffer, x, y)).collect())
+            .collect();
+        // ⚠️ **按格子數，不按字串的 char 下標**：寬字的第二格是空字串，拼起來之後
+        // 下標和欄號就不是一回事了（第一版這麼寫，量出來三行都是 0）。
+        let wall = |y: u16| -> Vec<u16> {
+            (0..buffer.area.width).filter(|&x| at(&buffer, x, y) == "┆").collect()
+        };
+        let body: Vec<u16> = (0..buffer.area.height)
+            .filter(|&y| (0..buffer.area.width).any(|x| at(&buffer, x, y) == "有"))
+            .collect();
+        assert!(body.len() >= 3, "三行都要在畫面上：\n{}", rows.join("\n"));
+        let walls: Vec<Vec<u16>> = body.iter().map(|&y| wall(y)).collect();
+        assert!(
+            walls.windows(2).all(|w| w[0] == w[1]),
+            "含 ⚠️ 那一行的牆錯位了 {walls:?}：\n{}",
+            rows.join("\n")
+        );
+    }
+
+    /// **截一行給搜索結果，不許超格，也不許從一個字簇中間切開**（#422）。
+    ///
+    /// `fit_around` 逐 `char` 累加 `char_width`，而 `⚠️` 是兩個 `char`：`⚠` 算
+    /// 一格、VS16 算零格，加起來 1，真終端給 2。兩個後果——① 交回來的東西比 `room`
+    /// 寬，結果行會頂穿面板的右牆；② 長度正好卡在中間的時候，切點落在 `⚠` 和 VS16
+    /// 之間，剩下一個光禿禿的 `⚠`（一格、另一個字形）和一個沒人要的 VS16。
+    #[test]
+    fn a_row_cut_to_fit_never_overruns_and_never_splits_a_glyph() {
+        let text = "前面⚠️中間⚠️後面的字還有很多很多";
+        let chars: Vec<char> = text.chars().collect();
+        // 「中間」那兩個字，按 char 數。
+        let start = text.chars().take_while(|&c| c != '中').count();
+        let mark = start..start + 2;
+        assert_eq!(chars[mark.clone()].iter().collect::<String>(), "中間", "靶子對");
+
+        for room in 1..=yumete_cjk::str_width(text) + 2 {
+            let (before, lit, after) = fit_around(text, mark.clone(), room);
+            let whole = format!("{before}{lit}{after}");
+            assert!(
+                yumete_cjk::str_width(&whole) <= room,
+                "room={room} 交回 {} 格：{whole:?}",
+                yumete_cjk::str_width(&whole)
+            );
+            // 不許出現孤零零的 VS16，也不許出現後面沒跟 VS16 的 ⚠。
+            for piece in [&before, &lit, &after] {
+                assert!(
+                    !piece.starts_with('\u{fe0f}'),
+                    "room={room}：一段以 VS16 開頭，字簇被切開了 {piece:?}"
+                );
+            }
+            let kept: String = whole.chars().filter(|&c| c == '⚠' || c == '\u{fe0f}').collect();
+            assert!(
+                kept.chars().count() % 2 == 0,
+                "room={room}：⚠ 和 VS16 的個數對不上 {whole:?}"
+            );
+        }
     }
 
 }

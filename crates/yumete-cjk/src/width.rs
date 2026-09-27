@@ -46,10 +46,29 @@ pub fn ambiguous_is_wide() -> bool {
     AMBIGUOUS_IS_WIDE.load(Ordering::Relaxed)
 }
 
-/// The number of terminal cells `c` occupies: `0` for combining/zero-width
-/// characters and control characters, `2` for wide (most CJK) and fullwidth
-/// characters, `1` otherwise. East-Asian Ambiguous characters follow
-/// [`ambiguous_is_wide`].
+/// The number of terminal cells `c` occupies **on its own**: `0` for
+/// combining/zero-width characters and control characters, `2` for wide (most
+/// CJK) and fullwidth characters, `1` otherwise. East-Asian Ambiguous
+/// characters follow [`ambiguous_is_wide`].
+///
+/// ⚠️ **Never in a loop over a run of text** (#422, 2026-09-27). 「How wide is
+/// this character」 and 「how wide is this piece of writing」 are different
+/// questions, and adding the first one up does not answer the second: `⚠️` is
+/// `U+26A0` plus VS16 — one cell and nothing, added up **1**, while the
+/// terminal draws an emoji **2** cells wide. Summing per `char` put every
+/// column after it on that row one cell out, and cut search results between the
+/// two halves of the cluster, leaving a stray variation selector on the page.
+///
+/// Three questions, three calls:
+///
+/// | asking | call |
+/// | --- | --- |
+/// | how wide is this run | [`str_width`] |
+/// | walk it and draw it | [`crate::graphemes`] ＋ [`grapheme_width`] |
+/// | how wide is each `char` of it (per-`char` styles, per-`char` columns) | [`crate::cells_per_char`] |
+///
+/// What is left for this one is what it says: **one** character's own width —
+/// a box-drawing glyph the terminal was asked about, a constant, an assertion.
 pub fn char_width(c: char) -> usize {
     if ambiguous_is_wide() {
         UnicodeWidthChar::width_cjk(c).unwrap_or(0)
