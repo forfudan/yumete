@@ -311,10 +311,15 @@ pub fn char_at(
                 // writing stopped.
                 None => span.1,
             };
+            // ⚠️ **格數是字簇的，位置是 `char` 的**（#422）。走的是檔裏的字符位置
+            // （點到哪就回答哪一個 `char`），而「這個位置佔幾格」只有整個字簇答得
+            // 出來：`cells_per_char` 把字簇的格數記在它第一個 `char` 上。逐字加的
+            // 話，一格裏有一個 `⚠️`，它後面點哪裏都偏一個字。
+            let text: Vec<char> = (from..to).map(|at| rope.char(start + at)).collect();
+            let cells = yumete_cjk::cells_per_char(&text);
             let mut column = 0;
-            for at in from..to {
-                let c = rope.char(start + at);
-                let cw = yumete_cjk::char_width(c);
+            for (k, at) in (from..to).enumerate() {
+                let cw = cells[k];
                 if want < column + cw {
                     return Some(start + at);
                 }

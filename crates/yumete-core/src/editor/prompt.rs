@@ -249,10 +249,14 @@ impl Editor {
                         let rope = self.current_buffer().rope();
                         let start = rope.line_to_char(rope.char_to_line(self.cursor));
                         // A TAB already on the line lands on its own stop.
-                        let column = rope.slice(start..self.cursor).chars().fold(0, |col, c| {
-                            match c {
-                                '\t' => col + self.tab_stop - col % self.tab_stop,
-                                c => col + yumete_cjk::width::char_width(c),
+                        // ⚠️ **字簇，不是 `char`**（#422）：`⚠️` 是兩個 `char`，逐字
+                        // 加算一格而終端給兩格，於是對齊到這一欄的縮進會少一格。Tab
+                        // 要單獨認，它的寬度是「到下一個制表位」，不是字形的寬度。
+                        let ahead: String = rope.slice(start..self.cursor).chars().collect();
+                        let column = yumete_cjk::graphemes(&ahead).fold(0, |col, g| {
+                            match g {
+                                "\t" => col + self.tab_stop - col % self.tab_stop,
+                                g => col + yumete_cjk::grapheme_width(g),
                             }
                         });
                         let width = self.indent_width;
