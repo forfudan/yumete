@@ -1,6 +1,6 @@
 //! **每一項設定，說成一行** —— 那扇設置面板（#421）讀的就是這張表（2026-09-23）。
 //!
-//! 作者提的：
+//! 原話：
 //!
 //! > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道他們
 //! > 都是幹啥的，也不需要查詢到底有哪些 key 可以用。
@@ -196,7 +196,13 @@ const EDITOR_TABS_WAYS: &[Choice] = &[
 
 const PANEL_DISPLAY_WAYS: &[Choice] = &[
     Choice { word: "full", label: "set.pick.display.full" },
-    Choice { word: "bare", label: "set.pick.display.bare" },
+    Choice { word: "off", label: "set.pick.display.off" },
+];
+
+const PANEL_PREEDIT_WAYS: &[Choice] = &[
+    Choice { word: "header", label: "set.pick.preedit.header" },
+    Choice { word: "code", label: "set.pick.preedit.code" },
+    Choice { word: "top", label: "set.pick.preedit.top" },
 ];
 
 const THEME_MODE_WAYS: &[Choice] = &[
@@ -527,6 +533,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "set.panel.display",
         hint: "set.panel.display.hint",
         factory: r#""full""#,
+    },
+    Setting {
+        table: "panel",
+        key: "preedit",
+        group: Group::Interface,
+        kind: Kind::Pick(PANEL_PREEDIT_WAYS),
+        label: "set.panel.preedit",
+        hint: "set.panel.preedit.hint",
+        factory: r#""header""#,
     },
     Setting {
         table: "panel",

@@ -500,21 +500,6 @@ pub enum Hint {
     Quiet,
     /// Something just happened.
     Says(String),
-    /// **A stretch of prose with one word in it to be picked out** (#419).
-    ///
-    /// The search hit the keys are standing on. `head` is 「1027 · 」, already
-    /// said in the reader's language; `text` is as much of that line as the
-    /// editor kept, **untrimmed**; `mark` counts characters into `text` and
-    /// says which of them are the match.
-    ///
-    /// Three pieces rather than one string because the fitting is the front
-    /// end's: how many of those characters the row can hold is a question
-    /// about the window, and picking the word out needs to survive the cut.
-    Around {
-        head: String,
-        text: String,
-        mark: std::ops::Range<usize>,
-    },
     /// A named set of keys: what this is, then each key and what it does.
     ///
     /// The *keys* are `&'static str` — `hjkl` is `hjkl` in any language — and
@@ -2335,7 +2320,7 @@ pub struct Editor {
     /// Which slot **and which layer** the keys are going to, if any.
     panel_focus: Option<crate::sidebar::Side>,
     /// **每一側多寬**，三檔（2026-09-26）。記在這裏而不是記在 `Sidebar` 上，因為
-    /// 寬度是**那一格**的屬性：換視圖不變，關掉再開也不變（作者定：「两个侧栏虽然
+    /// 寬度是**那一格**的屬性：換視圖不變，關掉再開也不變（定的，原話：「两个侧栏虽然
     /// 关闭，但是还是会记住上次的宽度状态」）。常駐層（字典、懸停、詳情）借的是
     /// 同一格，所以也吃這一檔——一個格子一套規矩。
     width: [crate::sidebar::Width; 2],
@@ -2348,6 +2333,21 @@ pub struct Editor {
     sides: [crate::sidebar::Side; crate::sidebar::Panel::ALL.len()],
     /// The search panel's form and what it found (#419).
     search: crate::search_panel::Search,
+    /// **為「看一眼」開出來的那一份緩衝**，記的是它的號（2026-09-27）。
+    ///
+    /// 在結果名單裏 `jk` 走一步，正文就跳到那一處——跨檔的時候得先把檔開出來。
+    /// 走完一本書會開出幾十份，所以同一時間只留一份：走到下一處，上一處那一份
+    /// 就還回去（`let_go_of_the_search_preview`）。`Enter` 把它釘住。
+    search_preview: Option<u64>,
+    /// **一句幾秒之後自己走掉的話**：什麼時候走，和走的是哪一句。
+    ///
+    /// 2026-09-27 定，原話：「有些不是特别重要的消息可以有个参数「显示时间」，
+    /// 比如几秒，过了这个时间就会从命令行消失。比如那个宽度 1/4。这样不遮挡按键
+    /// 提示。」
+    ///
+    /// ⚠️ **連那句話一起記下來**，不只記一個時刻：狀態行到處都在被直接賦值，
+    /// 只記時刻的話，鐘一響就會把後來那一句不相干的話也抹掉。
+    status_fades: Option<(std::time::Instant, String)>,
     /// Where the cursor was when the 字典 was asked, so the answer can go when
     /// the cursor leaves without anybody having to take it away (#293).
     dictionary_anchor: Option<usize>,
@@ -2756,6 +2756,8 @@ impl Editor {
             // I in it」; 字典／詳情 on the right — 「what is this thing I am
             // standing on」. Two questions, two columns.
             search: crate::search_panel::Search::new(),
+            search_preview: None,
+            status_fades: None,
             sides: [
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,

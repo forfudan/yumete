@@ -8058,13 +8058,13 @@ fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
     let dir = std::env::temp_dir().join(format!("yumete-inc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("ch01.txt"), "== 傳家寶扇\n那年冬天。\n").unwrap();
-    std::fs::write(dir.join("ch02.txt"), "== 天門攬勝\n又一年。\n").unwrap();
+    std::fs::write(dir.join("ch01.txt"), "== 舊硯臺\n那年冬天。\n").unwrap();
+    std::fs::write(dir.join("ch02.txt"), "== 山中曲\n又一年。\n").unwrap();
     // A chapter with no heading of its own has only its file name.
     std::fs::write(dir.join("ch03.txt"), "雪一直下到開春。\n").unwrap();
     std::fs::write(
         dir.join("book.typ"),
-        "#import \"template.typ\": ruby\n= 天門真境\n#include \"ch01.txt\"\n\
+        "#import \"template.typ\": ruby\n= 洞庭湖\n#include \"ch01.txt\"\n\
          #include \"ch02.txt\"\n#include \"ch03.txt\"\n",
     )
     .unwrap();
@@ -8078,7 +8078,7 @@ fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
     let rows = ed.panel(crate::sidebar::Side::Left).unwrap().rows().to_vec();
     assert_eq!(
         rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
-        vec!["天門真境", "  傳家寶扇", "  天門攬勝", "  ch03.txt"],
+        vec!["洞庭湖", "  舊硯臺", "  山中曲", "  ch03.txt"],
         "chapter names, indented by their own level; `#import` is not one"
     );
     // Each one knows the file and the line it is written on.
@@ -8154,7 +8154,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(ed.transient(right), None, "and gone the moment the cursor left");
 }
 
-/// **搜索面板那四件**（2026-09-23 作者提的）。
+/// **搜索面板那四件**（2026-09-23 提的）。
 ///
 /// 一張測試管四條，因為它們是同一條路上的四步：開面板、走格子、改範圍、勾替換。
 #[test]
@@ -8209,106 +8209,6 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
         Field::Results,
         "⚠️ 從前 step(false) 在第 0 條上飽和，列表是進得去出不來的地方"
     );
-}
-
-/// **一條在別的檔裏的命中，不許拿眼前這個緩衝區去讀**（2026-09-23 報的崩潰）。
-///
-/// 在倉裏 `ye` 空開（scratch 只有一行），`:search .` 搜整個文件夾，Esc 之後按
-/// `j` 走進結果列表——`hit_in_context` 拿第 6496 行去問那一行的 rope，ropey 當場
-/// panic：`Attempt to index past end of Rope: line index 6495, Rope line length 1`。
-#[test]
-fn a_hit_in_another_file_is_read_from_its_own_excerpt_not_from_this_buffer() {
-    use crate::search_panel::{Field, Hit};
-    // 眼前是一份只有一行的草稿，命中在別的檔的第 6496 行。
-    let mut ed = typed("");
-    ed.open_search();
-    ed.on_key(Key::Esc);
-    let far = Hit {
-        file: Some(std::path::PathBuf::from("crates/yumete-core/messages.toml")),
-        line: 6495,
-        at: 0,
-        end: 3,
-        excerpt: "預覽伺服器起來中".to_string(),
-        mark: 0..3,
-        nth: 0,
-    };
-    ed.search_for_test().hits = vec![far];
-    ed.search_for_test().total = 1;
-    ed.search_for_test().field = Field::Results;
-    // 走到那一條上——第 0 行是檔名，第 1 行纔是命中。
-    ed.search_for_test().selected = 1;
-
-    // ⚠️ 從前這一句就是崩潰點。
-    let said = ed.hit_in_context_for_test().expect("說得出這一條");
-    assert!(said.contains("6496"), "行號照它自己那一份算：{said}");
-    assert!(said.contains("預覽伺服器起來中"), "正文取自命中自己抓下的那一段：{said}");
-
-    // …而本檔的命中照舊從活的正文裏取寬一些的上下文。
-    let mut here = typed("那年冬天，天很冷，風從北面來。");
-    here.open_search();
-    here.on_key(Key::Esc);
-    here.search_for_test().hits = vec![Hit {
-        file: None,
-        line: 0,
-        at: 5,
-        end: 7,
-        excerpt: "天很冷".to_string(),
-        mark: 0..3,
-        nth: 0,
-    }];
-    here.search_for_test().total = 1;
-    here.search_for_test().field = Field::Results;
-    here.search_for_test().selected = 0;
-    let said = here.hit_in_context_for_test().expect("說得出這一條");
-    assert!(said.contains("風從北面來"), "活的正文給的是整行的上下文：{said}");
-}
-
-/// **命中在前後文裏的位置要說得準**——命令行拿它反白（2026-09-24 定）。
-///
-/// 兩條路各算各的偏移：本檔那一條從活的正文裏現摘，別的檔那一條用搜索當時抓下
-/// 的那一小段。兩條都要指到同幾個字上，否則反白會落在旁邊的詞上——比不反白更糟。
-#[test]
-fn the_context_line_says_which_characters_are_the_match() {
-    use crate::search_panel::{Field, Hit};
-    // ① 本檔：從活的正文裏現摘。
-    let mut here = typed("那年冬天，天很冷，風從北面來。");
-    here.open_search();
-    here.on_key(Key::Esc);
-    here.search_for_test().hits = vec![Hit {
-        file: None,
-        line: 0,
-        at: 5,
-        end: 8,
-        excerpt: "天很冷".to_string(),
-        mark: 0..3,
-        nth: 0,
-    }];
-    here.search_for_test().total = 1;
-    here.search_for_test().field = Field::Results;
-    here.search_for_test().selected = 0;
-    let (text, mark) = here.hit_mark_for_test().expect("說得出這一條");
-    let lit: String = text.chars().skip(mark.start).take(mark.end - mark.start).collect();
-    assert_eq!(lit, "天很冷", "反白落在別處：{text:?} {mark:?}");
-
-    // ② 別的檔：命中自己那一段，省略號也佔一個字。
-    let mut far = typed("");
-    far.open_search();
-    far.on_key(Key::Esc);
-    far.search_for_test().hits = vec![Hit {
-        file: Some(std::path::PathBuf::from("ch01.md")),
-        line: 99,
-        at: 0,
-        end: 2,
-        excerpt: "…那年冬天…".to_string(),
-        mark: 3..5,
-        nth: 0,
-    }];
-    far.search_for_test().total = 1;
-    far.search_for_test().field = Field::Results;
-    far.search_for_test().selected = 1;
-    let (text, mark) = far.hit_mark_for_test().expect("說得出這一條");
-    let lit: String = text.chars().skip(mark.start).take(mark.end - mark.start).collect();
-    assert_eq!(lit, "冬天", "反白落在別處：{text:?} {mark:?}");
 }
 
 /// 「查不到」and「還沒問」are different findings.
@@ -8741,7 +8641,7 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     assert_eq!(ed.search().field, Field::Results, "鍵落到結果上了");
 
     // ① **`/` 不管站在哪一格，都回搜索框：進 insert、光標末尾、字留着。**
-    // ⚠️ 和選擇器（`空格 f`／`:wiki`）那一扇裏的 `/` 一個樣——2026-09-25 作者
+    // ⚠️ 和選擇器（`空格 f`／`:wiki`）那一扇裏的 `/` 一個樣——2026-09-25 
     // 報的就是這一條不一致。它原先是「整條選中」，打一個字就把詞吃掉了。
     ed.on_key(Key::Char('/'));
     assert_eq!(ed.mode(), Mode::Field);
@@ -8861,15 +8761,15 @@ fn the_box_deletes_and_changes_where_the_cursor_stands() {
     assert_eq!(ed.search().query, was, "結果那一格上它們什麼都不是");
 }
 
-/// **簡繁異字形：「天門」找得到「天门」**（2026-09-25 作者提）。
+/// **簡繁異字形：「書齋」找得到「书斋」**（2026-09-25 提的）。
 ///
 /// 表與那個**有意的不對稱**在 [`crate::glyphs`]；這一條盯的是它真的接到了面板上。
 #[test]
 fn a_query_in_one_script_finds_the_other_writing() {
     use crate::search_panel::Field;
-    let mut ed = typed("天門真境的雪。\n天门真境的雪。\n他的頭髮白了。\n他的头发白了。\n");
+    let mut ed = typed("書齋的雪。\n书斋杂记的雪。\n他的頭髮白了。\n他的头发白了。\n");
     ed.open_search();
-    for c in "天門".chars() {
+    for c in "書齋".chars() {
         ed.on_key(Key::Char(c));
     }
     assert_eq!(ed.search().total, 2, "繁簡兩行都找得到");
@@ -8906,37 +8806,38 @@ fn a_query_in_one_script_finds_the_other_writing() {
     assert_eq!(ed.search().field, Field::Query, "按號碼不挪焦點");
 }
 
-/// **拼音搜索：`tianmen` 找得到「天門」「天门」**（2026-09-25 作者提）。
+/// **拼音搜索：`shuzhai` 找得到「書齋」「书斋」**（2026-09-25 提的）。
 ///
-/// 原話：「tianmen也可以搜到「天门」「天門」」。**只認全拼**（作者同日定）：`tm`
-/// 和 `tianm` 都不算。
+/// 原話：「shuzhai也可以搜到「书斋」「書齋」」。**只認全拼**（同日定的）：`sz`
+/// 和 `shuzh` 都不算。
 #[test]
 fn letters_find_the_characters_they_are_read_as() {
     use crate::search_panel::Field;
-    let mut ed = typed("那年天門下起了大雪。\n山那邊是天门。\n路上遇見一個人。\n");
+    let mut ed = typed("那年書齋下起了大雪。\n山那邊是书斋。\n路上遇見一個人。\n");
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
     type_keys(&mut ed, " /");
-    for c in "tianmen".chars() {
+    for c in "shuzhai".chars() {
         ed.on_key(Key::Char(c));
     }
     assert!(ed.search().pinyin, "出廠開着");
     assert_eq!(ed.search().total, 2, "簡繁兩種寫法念的是同一個音，都中");
 
-    // ⚠️ **只認全拼**：半個音節不算。`tianm` 的 `m` 湊不成一個音節。
+    // ⚠️ **只認全拼**：半個音節不算。`shuzh` 的 `zh` 湊不成一個音節。
     ed.on_key(Key::Backspace);
     ed.on_key(Key::Backspace);
-    assert_eq!(ed.search().total, 0, "「tianm」的 m 湊不成音節，不算");
+    assert_eq!(ed.search().total, 0, "「shuzh」的 zh 湊不成音節，不算");
 
-    // ⚠️ **而 `tian` 是算的**——它本身就是一整個音節，中的是兩個「天」。
+    // ⚠️ **而 `shu` 是算的**——它本身就是一整個音節，中的是兩個「書」。
     // 「只認全拼」說的是「每個字吃掉一整個音節」，不是「必須把詞打完」。
     ed.on_key(Key::Backspace);
-    assert_eq!(ed.search().total, 2, "兩個「天」");
+    ed.on_key(Key::Backspace);
+    assert_eq!(ed.search().total, 2, "兩個「書」");
 
     // 按 `3` 關掉，拼音那一路就不跑了。
-    let mut ed = typed("那年天門下起了大雪。\n");
+    let mut ed = typed("那年書齋下起了大雪。\n");
     type_keys(&mut ed, " /");
-    for c in "tianmen".chars() {
+    for c in "shuzhai".chars() {
         ed.on_key(Key::Char(c));
     }
     assert_eq!(ed.search().total, 1);
@@ -9314,6 +9215,50 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     ed.execute(":search").unwrap();
     assert!(!ed.search().replacing);
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **拼音找到的那一處，也得換得掉**（2026-09-27 報的：「我还是不知道搜索面板中
+/// replace 该怎么做」）。
+///
+/// 找是一回事，換是另一回事，而從前這兩邊問的不是同一個問題：找走
+/// `Look`（字面 ＋ 拼音兩路合並），換卻自己編一個正則。於是 `sifuqi` 在「伺服器」
+/// 那一行一個字都配不上，`r` 按下去只報一句「那一處已經不在那裏了」——看着像文稿
+/// 被人改過。
+#[test]
+fn a_hit_found_by_its_sound_can_be_replaced() {
+    use crate::search_panel::Field;
+    let mut ed = typed("這是伺服器。\n再說一遍：伺服器。\n");
+    ed.execute(":replace").unwrap();
+    assert!(ed.search().replacing);
+    assert!(ed.search().pinyin, "拼音那一格出廠就開着");
+    for c in "sifuqi".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Down);
+    assert_eq!(ed.search().field, Field::Replace);
+    for c in "服務器".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 2, "唸出來就找得到");
+
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Results);
+    while !matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))) {
+        ed.on_key(Key::Char('j'));
+    }
+    ed.on_key(Key::Char('r'));
+    assert_eq!(
+        ed.current_buffer().text(),
+        "這是服務器。\n再說一遍：伺服器。\n",
+        "{}",
+        ed.status()
+    );
+
+    // `R` 是全部，先問一句。
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.current_buffer().text(), "這是服務器。\n再說一遍：服務器。\n");
 }
 
 /// **Which side each panel lives on is a setting, one per panel** — #293.
@@ -15392,7 +15337,7 @@ fn a_named_entry_opens_a_picker_and_stays_put_until_the_cursor_moves() {
 ## 朱宇浩
 宇浩輸入法的作者。
 
-## 天門真境
+## 洞庭湖
 極北的一座山。
 ",
     )
@@ -15491,20 +15436,20 @@ fn a_long_wiki_entry_is_only_read_as_far_as_the_panel_can_draw() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     let body: String = (0..5000).map(|i| format!("第{i}句。\n")).collect();
-    std::fs::write(dir.join(".yumete/wiki.md"), format!("# 地理\n## 真境\n{body}")).unwrap();
-    std::fs::write(dir.join("第一章.md"), "真境在那裏。\n").unwrap();
+    std::fs::write(dir.join(".yumete/wiki.md"), format!("# 地理\n## 君山\n{body}")).unwrap();
+    std::fs::write(dir.join("第一章.md"), "君山在那裏。\n").unwrap();
     let mut ed = Editor::new();
     ed.open_file(&dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
-    let view = ed.wiki_floating().expect("standing on 真境");
+    let view = ed.wiki_floating().expect("standing on 君山");
     let some = view.body_prose(30);
     assert_eq!(some.lines().count(), 30, "asked for 30 lines of it");
     assert!(some.starts_with("第0句。"), "from the top: {:?}", &some[..12.min(some.len())]);
     assert!(!some.contains("第30句。"), "and no further");
     // The whole of it is still there for anything that really wants it — and
     // the cap is a cap, not a floor: a short entry is not padded out to it.
-    assert_eq!(view.as_prose().lines().count(), 5001, "地理 › 真境 and 5000 lines");
+    assert_eq!(view.as_prose().lines().count(), 5001, "地理 › 君山 and 5000 lines");
     assert_eq!(view.body_prose(30_000).lines().count(), 5000);
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -15581,10 +15526,10 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
     let dir = std::env::temp_dir().join(format!("yumete-check-names-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
-    std::fs::write(dir.join(".yumete/wiki.md"), "## 返塵亭\n一座亭子。\n").unwrap();
+    std::fs::write(dir.join(".yumete/wiki.md"), "## 醉翁亭\n一座亭子。\n").unwrap();
     std::fs::write(
         dir.join("第一章.md"),
-        "他到返塵亭。\n那天在返塵停等了很久。\n後來走上返塵路。\n",
+        "他到醉翁亭。\n那天在醉翁停等了很久。\n後來走上醉翁路。\n",
     )
     .unwrap();
     let mut ed = Editor::new();
@@ -15599,9 +15544,9 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
     ed.set_reader(Box::new(Sounds));
     ed.execute(":check-names").unwrap();
     let listing = ed.current_buffer().text();
-    assert!(listing.contains("返塵停"), "the homophone is found: {listing}");
-    assert!(listing.contains("返塵亭"), "and what the wiki has: {listing}");
-    assert_eq!(listing.lines().count(), 1, "返塵路 is a different word: {listing}");
+    assert!(listing.contains("醉翁停"), "the homophone is found: {listing}");
+    assert!(listing.contains("醉翁亭"), "and what the wiki has: {listing}");
+    assert_eq!(listing.lines().count(), 1, "醉翁路 is a different word: {listing}");
     assert!(listing.contains(":2:"), "with the line it is on: {listing}");
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -16177,7 +16122,7 @@ fn ctrl_g_starts_a_new_undo_and_swallows_the_u_after_it() {
     assert_eq!(ed.current_buffer().text(), "", "再一次纔回到空的");
 }
 
-/// **`空格 Q`：只留一個工作區，別的全收**（2026-09-26 作者定）。
+/// **`空格 Q`：只留一個工作區，別的全收**（2026-09-26 定的）。
 ///
 /// ⚠️ **2026-09-21 這一條是 `空格 S`「兩個邊欄一起收」**，而 `空格 Q` 收的更寬
 /// ——邊欄加上另一個工作區。「區域」這個名詞一立，「收拾乾淨」就只有一個意思。

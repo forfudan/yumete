@@ -493,12 +493,7 @@ impl Editor {
         // one file means two undo histories, two dirty flags, and two claims on
         // one recovery copy — a way to lose work, not a way to open a file.
         let path = path.as_ref();
-        let same = std::fs::canonicalize(path).ok();
-        if let Some(i) = self.buffers.iter().position(|b| match (b.path(), &same) {
-            (Some(open), Some(want)) => std::fs::canonicalize(open).ok().as_ref() == Some(want),
-            (Some(open), None) => open == path,
-            _ => false,
-        }) {
+        if let Some(i) = self.buffer_showing(path) {
             self.show_buffer(i);
             return Ok(());
         }
@@ -528,6 +523,51 @@ impl Editor {
         // find it, and the front end decides how often it is worth honouring.
         self.ask_for_detection();
         Ok(())
+    }
+
+    /// **這個文件開着沒有**，按真實路徑比，不按拼法。
+    pub(super) fn buffer_showing(&self, path: &Path) -> Option<usize> {
+        let same = std::fs::canonicalize(path).ok();
+        self.buffers.iter().position(|b| match (b.path(), &same) {
+            (Some(open), Some(want)) => std::fs::canonicalize(open).ok().as_ref() == Some(want),
+            (Some(open), None) => open == path,
+            _ => false,
+        })
+    }
+
+    /// **把搜索面板為「看一眼」開出來的那一份還回去。**
+    ///
+    /// 2026-09-27 定，原話：「真打开，但标成预览」。在結果名單裏 `jk` 走一遍一本
+    /// 書，走一步開一份，走完緩衝區列表就滿了——所以同一時間只留一份，走到下一處
+    /// 就把上一處那一份收走。`Enter` 把它釘住（`search_preview` 清空），從此它就
+    /// 是一份普通的緩衝。
+    ///
+    /// ⚠️ **改過的不收。** 那是人幹的活，不許無聲無息地關掉；它就此不再是預覽。
+    /// `keep` 是剛剛開出來的那一份，同一份就什麼都不做。
+    pub(super) fn let_go_of_the_search_preview(&mut self, keep: u64) {
+        let Some(id) = self.search_preview else { return };
+        if id == keep || self.buffers.len() <= 1 {
+            return;
+        }
+        let Some(i) = self.buffer_with(id) else {
+            self.search_preview = None;
+            return;
+        };
+        if i == self.current || self.buffers[i].is_modified() {
+            self.search_preview = None;
+            return;
+        }
+        self.buffers[i].clear_swap();
+        self.buffers.remove(i);
+        if self.current > i {
+            self.current -= 1;
+        }
+        // A pane naming a buffer that is gone is not a pane.
+        if self.other.as_ref().is_some_and(|pane| pane.buffer == id) {
+            self.other = None;
+            self.live_pane = 0;
+        }
+        self.search_preview = None;
     }
 
     /// Open a file this one *pulls in* — a `#include`d chapter.
@@ -699,7 +739,7 @@ impl Editor {
         // **And so does a 百科 name** (2026-09-19: 「wiki 詞條 gf 跳轉定義
         // 文件失效了」). `gd` has always opened the file an entry is written in
         // — but 「open the file this names」 is exactly what `gf` is for, and a
-        // name on the page names one. Standing on 王高甫 and pressing `gf` used
+        // name on the page names one. Standing on 滕子京 and pressing `gf` used
         // to answer 「這一行沒寫文件名」, which is true of the line and false of
         // the word under the cursor. `gd` is unchanged; this is the same door
         // with the other handle.

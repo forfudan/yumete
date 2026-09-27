@@ -64,7 +64,7 @@ pub enum Where {
 }
 
 impl Where {
-    /// **下一個範圍**——`0` 在面板裏按一下走一格（2026-09-26 作者提：「如何在搜索
+    /// **下一個範圍**——`0` 在面板裏按一下走一格（2026-09-26 原話：「如何在搜索
     /// 侧栏切换 github directory, working directory, present directory？现在位置
     /// 只能输入路径」）。
     ///
@@ -105,12 +105,12 @@ pub enum Field {
     /// The pattern.
     #[default]
     Query,
-    /// **簡繁異字形**——「天門」找得到「天门」（2026-09-25）。
+    /// **簡繁異字形**——「書齋」找得到「书斋」（2026-09-25）。
     ///
     /// 排在 大小寫 底下，因為它和大小寫是同一種東西：**兩個字面不同的寫法算不算
     /// 同一個**。出廠開着。
     Glyphs,
-    /// **拼音**——`tianmen` 找得到「天門」「天门」（2026-09-25）。
+    /// **拼音**——`shuzhai` 找得到「書齋」「书斋」（2026-09-25）。
     ///
     /// 排在 簡繁異體 底下，同一族：**字面不同的寫法算不算同一個**。出廠開着，
     /// 而它只在查詢全是 ASCII 字母的時候纔真的跑（[`crate::pinyin::as_query`]），
@@ -337,7 +337,7 @@ pub struct Search {
     pub all_selected: bool,
     /// Which cell has the keys.
     pub field: Field,
-    /// **簡繁異字形**：「天門」找得到「天门」（2026-09-25，見 [`crate::glyphs`]）。
+    /// **簡繁異字形**：「書齋」找得到「书斋」（2026-09-25，見 [`crate::glyphs`]）。
     ///
     /// ⚠️ **出廠開着**，所以 `Search` 要走 [`Search::new`] 而不是 `default()`——
     /// `derive(Default)` 給不出「這一項是 true」。`default()` 留給測試。
@@ -345,7 +345,7 @@ pub struct Search {
     /// ⚠️ **和 正則 互斥**：把每個字改寫成 `[...]` 會把使用者寫的式子吃掉，所以
     /// 正則開着時它畫灰、也不起作用（`Editor::search_pattern`）。
     pub glyphs: bool,
-    /// **拼音**：`tianmen` 找得到「天門」。出廠開着，見 [`Field::Pinyin`]。
+    /// **拼音**：`shuzhai` 找得到「書齋」。出廠開着，見 [`Field::Pinyin`]。
     pub pinyin: bool,
     /// Read the pattern as a regular expression.
     pub regex: bool,

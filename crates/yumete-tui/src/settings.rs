@@ -104,4 +104,5 @@ pub fn apply(config: &Config, editor: &mut Editor, layout: Option<yumete_core::z
 pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
     ime.set_page_size(config.panel.page_size);
     ime.set_panel_display(config.panel.display);
+    ime.set_preedit(config.panel.preedit);
 }

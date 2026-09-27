@@ -25,7 +25,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-# **字體**（2026-09-26 作者定：「用 wenkai GB 來渲染這個卡片以及截圖中的文字」）。
+# **字體**（2026-09-26 定的，原話：「用 wenkai GB 來渲染這個卡片以及截圖中的文字」）。
 #
 # ⚠️ **截圖那一塊必須是中文剛好兩倍寬的等寬體**，否則每一行的格子對不齊——終端畫面
 # 是按「一個漢字兩格」排的，字體不守這條，畫面就散。量過（Chrome，100px）：
@@ -149,7 +149,7 @@ def cells(ch, nxt=""):
 
     ⚠️ **2026-09-26 這一條漏了兩次。** 第一次是整條沒想到；第二次是自檢只查了
     「超出」沒查「不足」，於是短一格的行靜悄悄地過——畫出來就是那一行的金框往前
-    縮了一格，而作者一眼看見了。**自檢要查兩頭。**
+    縮了一格，而一眼就被看出來了。**自檢要查兩頭。**
 
     ⚠️ **這支函數是在複述 yumete 的算法**（`yumete_cjk::char_width`），兩邊有可能
     走散。所以 `pin` 每一行都對一次總格數，對不上就當場喊出來——複述不可靠，自檢
@@ -165,7 +165,7 @@ def cells(ch, nxt=""):
 
 
 # 框綫字。**鎖進格子之後它們會斷成虛綫**——字形本身不占滿一格，而真終端會把它拉滿。
-# 2026-09-19 踩過一次：作者看圖說「可以不用虛綫的吧」，而編輯器畫的一直是實綫。
+# 2026-09-19 踩過一次：看圖的原話是「可以不用虛綫的吧」，而編輯器畫的一直是實綫。
 # 橫的往寬裏拉一點，竪的往高裏拉一截。
 ACROSS = "─━┄┅┈┉╌╍┬┴┼┭┮┯┰┱┲┵┶┷┸┹┺┻"
 DOWN = "│┃┆┇┊┋╎╏├┤┼╭╮╰╯┌┐└┘┝┞┟┠┡┢┥┦┧┨┩┪"
@@ -268,7 +268,7 @@ hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: 26px 0 }}
   <div class=foot><span>{html.escape(url)}</span><span>Apache-2.0</span></div>
 </div>
 <script>
-// **格子是權威，字形迁就格子**（2026-09-26 作者定）。每一格已經釘在
+// **格子是權威，字形迁就格子**（2026-09-26 定的）。每一格已經釘在
 // `left = 欄號 × 格寬` 上，所以誰也推不動誰；剩下的是**一格裝不下的字形**——
 // 讓它溢出去就會蓋住鄰居。量一量，寬了就橫向壓扁。
 //
@@ -325,12 +325,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("version", help="例如 0.3.0")
     ap.add_argument("--notes", help="本地的發布說明，不給就問 GitHub")
-    ap.add_argument("--out", help="出圖放哪，默認 release-card-<版本>.png")
+    ap.add_argument("--out", help="出圖放哪，默認 local/figures/release-card-<版本>.png")
     ap.add_argument("--repo", default="forfudan/yumete")
     ap.add_argument("--size", default="88x22", help="截那一幀畫面多大")
+    # ⚠️ **這一幀會被畫進卡片發出去，所以它只許出現手冊自己的內容。** 搜索面板
+    # 列的是**命中那幾行的原文**——換一個查詢就等於換一批會上圖的句子。
+    # **換默認之前把整幅掃一遍**（`--shot` 不帶 `--html` 就是純文本，grep 一下）。
     ap.add_argument(
         "--keys",
-        default=":search\\ntianmen\\e",
+        default=":search\\nbiaodian\\e",
         help="截圖前先按哪幾個鍵（`--shot` 的寫法）",
     )
     ap.add_argument("--file", default="docs/manual.md", help="截圖用哪個檔")
@@ -358,7 +361,11 @@ def main():
         print("⚠️ 這幾行寬度對不上，圖上會歪：" + "；".join(off), file=sys.stderr)
 
     url = f"https://github.com/{a.repo}/releases/tag/v{a.version}"
-    out = pathlib.Path(a.out or HERE / f"release-card-{a.version}.png")
+    # **生成物進 `local/`**（2026-09-26 定的）。那個目錄本來就是為這種東西留的
+    # ——`.gitignore` 裏一行 `/local/` 蓋住整棵樹，不必為每一種生成物再加一條規則，
+    # 倉根也不會攢下一堆圖。
+    out = pathlib.Path(a.out or HERE / "local" / "figures" / f"release-card-{a.version}.png")
+    out.parent.mkdir(parents=True, exist_ok=True)
     work = out.with_suffix(".html")
     work.write_text(page(a.version, render(notes), shot, url), encoding="utf-8")
 

@@ -480,23 +480,23 @@ mod tests {
         std::fs::create_dir_all(dir.join("書/辭典")).unwrap();
         std::fs::write(
             dir.join("書/.yumete/wiki.md"),
-            "# 辭典\n<!-- [yumete] ../辭典/天門真境辭典.md -->\n",
+            "# 辭典\n<!-- [yumete] ../辭典/洞庭湖辭典.md -->\n",
         )
         .unwrap();
         std::fs::write(
-            dir.join("書/辭典/天門真境辭典.md"),
-            "# 天門真境辭典\n\n## 天門\n山口。\n\n## 真境\n境界。\n\n### 內境\n更深。\n",
+            dir.join("書/辭典/洞庭湖辭典.md"),
+            "# 洞庭湖辭典\n\n## 書齋\n山口。\n\n## 君山\n境界。\n\n### 小島\n更深。\n",
         )
         .unwrap();
         let wiki = crate::wiki::Wiki::load(Some(&dir.join("書/.yumete/wiki.md")), None);
         let found: Vec<(&str, usize)> =
             wiki.entries.iter().map(|e| (e.name.as_str(), e.depth)).collect();
-        assert!(found.contains(&("天門", 2)), "{found:?}");
-        assert!(found.contains(&("真境", 2)), "{found:?}");
-        assert!(found.contains(&("內境", 3)), "the third level too: {found:?}");
-        let deepest = wiki.entries.iter().find(|e| e.name == "內境").expect("內境");
-        assert_eq!(deepest.ancestors.last().map(String::as_str), Some("真境"), "{:?}", deepest.ancestors);
-        assert!(deepest.source.ends_with("天門真境辭典.md"), "{:?}", deepest.source);
+        assert!(found.contains(&("書齋", 2)), "{found:?}");
+        assert!(found.contains(&("君山", 2)), "{found:?}");
+        assert!(found.contains(&("小島", 3)), "the third level too: {found:?}");
+        let deepest = wiki.entries.iter().find(|e| e.name == "小島").expect("小島");
+        assert_eq!(deepest.ancestors.last().map(String::as_str), Some("君山"), "{:?}", deepest.ancestors);
+        assert!(deepest.source.ends_with("洞庭湖辭典.md"), "{:?}", deepest.source);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

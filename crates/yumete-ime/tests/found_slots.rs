@@ -83,7 +83,7 @@ fn a_slot_yume_compiled_is_a_scheme_yumete_can_type() {
     // shows comes off the `Schema` the manifest built.
     assert_eq!(ime.scheme_name(), "試驗方案");
     ime.input('b');
-    assert_eq!(ime.inline_candidate(), "吧");
+    assert_eq!(ime.top_candidate(), "吧");
 
     // A second scan is ignored, the same way the factory list is.
     assert_eq!(yumete_ime::discover(&[PathBuf::from("/no/such/dir")]), 1);

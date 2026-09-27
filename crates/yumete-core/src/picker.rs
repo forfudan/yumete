@@ -345,8 +345,8 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
     //
     // ⚠️ **兩檔之間差着 [`IN_ORDER`] 分**，所以順序對的永遠在上面，顛倒的墊在
     // 底下——放寬不會把本來就對的那一批攪亂。門檻沒有：詞條、檔名這些單子本來就
-    // 不長（作者定：「寧可多列」）。
-    // **簡繁異體照樣算同一個字**（2026-09-26 作者提：「中文搜索的匹配繁简体和匹配
+    // 不長（定的，原話：「寧可多列」）。
+    // **簡繁異體照樣算同一個字**（2026-09-26 原話：「中文搜索的匹配繁简体和匹配
     // 拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。和高級搜索那一扇用
     // 的是同一張表。
     //
@@ -360,11 +360,11 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
         Some(found) => (found, true),
         None => match anyhow(&haystack, &needle, same) {
             Some(found) => (found, false),
-            // **字面找不着，就問它念作什麽**（2026-09-26 作者提）。`tianmen` 找得
-            // 到「天門」。
+            // **字面找不着，就問它念作什麽**（2026-09-26 提的）。`shuzhai` 找得
+            // 到「書齋」。
             //
-            // ⚠️ **只認全拼，和高級搜索一條規矩**（作者定：「Option 2 更符合目前
-            // 的设计哲学——不一下子提供太多东西直到真有人要」）。所以 `tm` 不中。
+            // ⚠️ **只認全拼，和高級搜索一條規矩**（定的，原話：「Option 2 更符合目前
+            // 的设计哲学——不一下子提供太多东西直到真有人要」）。所以 `sz` 不中。
             //
             // ⚠️ **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串
             // 讀音，而讀者打 `md` 十有八九在找 `.md`。字面接得住就不必問讀音。
@@ -496,15 +496,15 @@ mod tests {
         );
     }
 
-    /// **簡繁異體在這扇窗裏也算同一個字**（2026-09-26 作者提：「中文搜索的匹配繁
+    /// **簡繁異體在這扇窗裏也算同一個字**（2026-09-26 原話：「中文搜索的匹配繁
     /// 简体和匹配拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。
     #[test]
     fn the_two_ways_of_writing_a_character_find_one_file() {
-        let mut picker = files(&["卷一/天門真境.md", "卷二/別的.md"]);
-        for c in "天门".chars() {
+        let mut picker = files(&["卷一/岳陽樓記.md", "卷二/別的.md"]);
+        for c in "岳阳楼记".chars() {
             picker.push(c);
         }
-        assert_eq!(picker.chosen(), Some(Item::File("卷一/天門真境.md".to_string())));
+        assert_eq!(picker.chosen(), Some(Item::File("卷一/岳陽樓記.md".to_string())));
 
         // ⚠️ **放寬的是查詢那一邊**：`发` 含混，兩邊都中；`發` 說得清，不碰「髮」。
         let mut picker = files(&["頭髮.md", "發現.md"]);
@@ -516,19 +516,19 @@ mod tests {
     /// **拼音也找得到**（同日）。⚠️ **只認全拼**，和高級搜索一條規矩。
     #[test]
     fn the_letters_a_name_is_read_as_find_it_too() {
-        let mut picker = files(&["卷一/天門真境.md", "notes.md"]);
-        for c in "tianmen".chars() {
+        let mut picker = files(&["卷一/洞庭湖.md", "notes.md"]);
+        for c in "dongtinghu".chars() {
             picker.push(c);
         }
-        assert_eq!(picker.chosen(), Some(Item::File("卷一/天門真境.md".to_string())));
+        assert_eq!(picker.chosen(), Some(Item::File("卷一/洞庭湖.md".to_string())));
         assert_eq!(picker.matches().len(), 1);
 
-        // 首字母那一路不算——作者 2026-09-26 定，同高級搜索。
-        let mut picker = files(&["卷一/天門真境.md"]);
-        for c in "tm".chars() {
+        // 首字母那一路不算——2026-09-26 定，同高級搜索。
+        let mut picker = files(&["卷一/洞庭湖.md"]);
+        for c in "dth".chars() {
             picker.push(c);
         }
-        assert!(picker.matches().is_empty(), "只認全拼，`tm` 不算");
+        assert!(picker.matches().is_empty(), "只認全拼，`dth` 不算");
 
         // ⚠️ **字面先來**：`md` 是一串讀音，可讀者打它十有八九在找 `.md`。
         let mut picker = files(&["notes.md", "馬達.txt"]);

@@ -68,14 +68,11 @@ impl Editor {
                     ("Esc", out),
                 ]);
         }
-        // **Walking the hits: the row says what is around this one** (#419).
-        // The panel is a column and a line of a novel is a paragraph, so the
-        // excerpt there is a few characters; this row is the width of the
-        // window. It displaces the panel's keys, and that is the right trade
-        // while a reader is choosing which hit to go to.
-        if let Some((line, text, mark)) = self.hit_in_context() {
-            return Hint::Around { head: say!("search.in-context", line), text, mark };
-        }
+        // ⚠️ **這一行不再拿來預覽了**（2026-09-27 定，原話：「命令行现在不显示
+        // 预览了，所以可以空出来显示按键提示」）。從前站在一處命中上，這一行寫的
+        // 是那一處前後的句子——而預覽現在在正文裏：`jk` 走一步，正文就跳過去、選
+        // 區蓋上去（`Editor::show_hit`）。同一句話說兩遍，佔掉的正是讀者最需要看
+        // 見鍵位的那一刻。
         // The search panel is a form, not a list: none of the tree's keys
         // mean anything in it (#419).
         if let Some(side) = self.panel_focus() {
@@ -94,10 +91,17 @@ impl Editor {
                 if self.search().field.takes_text() {
                     keys.insert(1, ("d c a", say!("hint.search.edit-in-place")));
                 }
-                // Only when they do something: `r`/`R` are live on the
+                // Only when they do something: `r`/`R`/`u` are live on the
                 // replacing panel and nowhere else.
+                //
+                // ⚠️ **三個鍵分開寫**（2026-09-27）：`r` 站在一處命中上換那一處、
+                // 站在檔頭上換那一個檔的全部，`R` 換名單上的全部，`u` 撤回。合成
+                // 一句「換這一處／全部換」的時候，沒有一個讀者認得出哪個鍵做哪件
+                // 事——報上來就是「我完全一头雾水」。
                 if self.search().replacing {
-                    keys.push(("r R", say!("hint.search.replace")));
+                    keys.push(("r", say!("hint.search.replace-here")));
+                    keys.push(("R", say!("hint.search.replace-all")));
+                    keys.push(("u", say!("hint.search.undo")));
                 }
                 keys.push(("C-w／空格 w", say!("hint.sidebar.back-to-text")));
                 keys.push(("q", say!("hint.close")));

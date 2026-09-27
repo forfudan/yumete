@@ -49,7 +49,7 @@ use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
 use yumete_ime::{
-    CommitStrategy, DataFault, DataProblem, FuncKey, ImeSession, ModifierTap, PanelDisplay,
+    CommitStrategy, DataFault, DataProblem, FuncKey, ImeSession, ModifierTap, PanelDisplay, Preedit,
     Scheme,
 };
 
@@ -924,6 +924,7 @@ pub fn run(
                 Ok(Err(err)) => break Err(err),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     editor.disk_tick();
+                    editor.status_tick();
                     continue;
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break Ok(()),
@@ -948,7 +949,12 @@ pub fn run(
             // wait, so a 300 ms deadline is a debounce with no clock of its own
             // to keep. Whichever deadline is nearer wins; both ticks are asked
             // on the way round and each is a no-op unless it is really owed.
-            None => match [editor.autosave_due_in(), editor.vcs_due_in(), servers.due_in()]
+            None => match [
+                editor.autosave_due_in(),
+                editor.vcs_due_in(),
+                editor.status_due_in(),
+                servers.due_in(),
+            ]
                 .into_iter()
                 .flatten()
                 .min()
@@ -963,6 +969,7 @@ pub fn run(
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         editor.vcs_tick();
                         editor.autosave_tick();
+                        editor.status_tick();
                         // One frame is redrawn on the way round — the loop
                         // draws at its head — and exactly one, because writing
                         // the copy makes the draft no longer stale and the next
@@ -2950,6 +2957,21 @@ fn panel_method(ime: &mut ImeSession, mode: &str) -> String {
     say!("panel.set", panel_name(display))
 }
 
+/// `:yume-preedit header|code|top` —— 正在打的那一段寫在哪、寫什麼。
+///
+/// 2026-09-27 從 `:yume-panel` 裏分出來。原話：「你搞错了 layout 和
+/// inline-preedit」——面板畫不畫，和正在打的那一段寫在哪，是兩件事。
+fn preedit_method(ime: &mut ImeSession, mode: &str) -> String {
+    if mode.is_empty() {
+        return say!("preedit.set", preedit_name(ime.preedit()));
+    }
+    let Some(preedit) = Preedit::parse(mode) else {
+        return say!("preedit.no-such-preedit", mode);
+    };
+    ime.set_preedit(preedit);
+    say!("preedit.set", preedit_name(preedit))
+}
+
 /// `:yume-menu-size` — how many candidates a page holds.
 ///
 /// **A session property, not a config one.** It is read out of the session on
@@ -2985,7 +3007,16 @@ fn autocompletion(ime: &mut ImeSession, want: &str) -> String {
 fn panel_name(display: PanelDisplay) -> String {
     match display {
         PanelDisplay::Full => say!("panel.name.full"),
-        PanelDisplay::Bare => say!("panel.name.bare"),
+        PanelDisplay::Off => say!("panel.name.off"),
+    }
+}
+
+/// 正在打的那一段寫在哪，用讀的人看得懂的話說。
+fn preedit_name(preedit: Preedit) -> String {
+    match preedit {
+        Preedit::Header => say!("preedit.name.header"),
+        Preedit::Code => say!("preedit.name.code"),
+        Preedit::Top => say!("preedit.name.top"),
     }
 }
 
@@ -3040,7 +3071,7 @@ fn data_faults(ime: &ImeSession) -> String {
 /// **Not in a prompt.** A `/` search composes on the status line, which has no
 /// page to draw into; the panel comes up there whatever this setting says.
 fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
-    let want = inline_candidate(editor, ime);
+    let want = inline_preedit(editor, ime);
     // A page with no candidate on it pays nothing — and must not be marked
     // dirty by a `set_candidate` that changes nothing, since both layout memos are
     // keyed on the runs.
@@ -3054,17 +3085,21 @@ fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
     editor.set_candidate(vec![(editor.cursor_line(), editor.cursor_column(), want)]);
 }
 
-/// The text `bare` draws into the sentence, or empty when it draws nothing.
-fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
-    if ime.panel_is_full()
-        || !composes_here(editor)
+/// **要寫進正文的那一段**，或者空的（不內嵌，或者這一幀沒地方寫）。
+///
+/// ⚠️ **不問面板畫不畫**（2026-09-27 改）。面板照畫而正文裏站着首選，是一個合法
+/// 的組合——從前這裏拿 `panel_is_full()` 當閘，於是「有面板 ＋ 內嵌」按不出來。
+/// 寫不寫得下由頁面答（[`page_can_hold_a_candidate`]），寫什麼由會話答
+/// （`ImeSession::inline_preedit`）。
+fn inline_preedit(editor: &Editor, ime: &ImeSession) -> String {
+    if !composes_here(editor)
         || !page_can_hold_a_candidate(editor)
         || !ime.available()
         || !ime.is_composing()
     {
         return String::new();
     }
-    ime.inline_candidate()
+    ime.inline_preedit()
 }
 
 /// Whether what is on screen is a page that drawn text can be drawn into.
@@ -3250,6 +3285,11 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             PanelDisplay::Full => head,
             display => format!("{head} · {}", say!("scheme.panel-is", panel_name(display))),
         };
+        // 內嵌也只在不是出廠那一檔的時候纔報，理由同上：出廠的樣子不用告訴人。
+        let head = match ime.preedit() {
+            Preedit::Header => head,
+            preedit => format!("{head} · {}", say!("scheme.preedit-is", preedit_name(preedit))),
+        };
         // The one thing `:yume` could not say before #220: a file that is
         // installed and doing nothing. It goes last because it is rare, and it
         // goes here because this is the question it answers.
@@ -3265,6 +3305,9 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     if let Some(mode) = tag.strip_prefix("panel:") {
         return panel_method(ime, mode);
     }
+    if let Some(mode) = tag.strip_prefix("preedit:") {
+        return preedit_method(ime, mode);
+    }
     if let Some(n) = tag.strip_prefix("menu:") {
         return menu_size(ime, n);
     }
@@ -3278,6 +3321,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 table.set_page_size(ime.page_size());
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
+                table.set_preedit(ime.preedit());
                 let skipped = table.table_skipped();
                 *ime = table;
                 let loaded = say!("ime.table-loaded", path.display());
@@ -3314,6 +3358,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
+        full.set_preedit(ime.preedit());
         *ime = full;
         return say!("ime.scheme-from-system", ime.scheme_name());
     }
@@ -3326,6 +3371,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
+        full.set_preedit(ime.preedit());
         *ime = full;
         return say!("ime.builtin-lingming");
     }
@@ -3355,6 +3401,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             full.set_commit_strategy(ime.commit_override());
             full.set_annotations(ime.annotations_enabled());
             full.set_panel_display(ime.panel_display());
+            full.set_preedit(ime.preedit());
             let name = full.scheme_name().to_string();
             *ime = full;
             return say!("ime.scheme-now", name);
@@ -3530,7 +3577,7 @@ fn ime_handle(
         // undo ever bought.
         KeyCode::Tab if composing => match ime.panel_is_full() {
             true => {
-                if let Some(ch) = ime.inline_candidate().chars().next() {
+                if let Some(ch) = ime.top_candidate().chars().next() {
                     let _ = editor.look_up(ch, false);
                 }
             }
@@ -4130,9 +4177,8 @@ fn draw(
     };
     panels.extend(keys_panel);
     panels.extend(note_panel);
-    // `bare` draws no panel — the candidate is already in the sentence and the
-    // code is under the caret. Unless there is no sentence to draw it into:
-    // see `page_can_hold_a_candidate`.
+    // 面板關着就不畫——要看的東西在正文裏，或者在光標下那一格浮窗裏。除非根本沒
+    // 有正文可寫：見 `page_can_hold_a_candidate`。
     // A picker always gets the panel: its list is drawn over the page, so
     // there is no sentence left down there to put a bare candidate into.
     //
@@ -4238,10 +4284,16 @@ fn draw(
             height: status_area.y.saturating_sub(area.y).max(1),
             ..area
         };
+        // **編碼那一列畫不畫**：這一幀沒有把它寫進正文，纔輪到面板寫
+        // （2026-09-27）。問的是這一幀真寫了沒有，不是設置說什麼——命令行開着的
+        // 時候正文寫不下，那時編碼要回到面板上來。
+        let show_code = inline_preedit(editor, ime).is_empty();
         match editor.layout() {
-            WritingLayout::Horizontal => draw_candidate_panel(frame, ime, config, room, at_x, at_y),
+            WritingLayout::Horizontal => {
+                draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
+            }
             WritingLayout::Vertical => {
-                vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y)
+                vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
             }
         }
     }
@@ -4251,7 +4303,7 @@ fn draw(
     // ⚠️ **狀態行在這一頁上是一句假話**：它報的是 `development.md 行 262`——一個
     // 此刻沒人在看的緩衝區。蓋掉。
     //
-    // ⚠️ **命令行不是「又一條狀態行」，它就是這一頁的頁腳**。作者一句話說中了：
+    // ⚠️ **命令行不是「又一條狀態行」，它就是這一頁的頁腳**。一句話說中了：
     // 「本来命令行就是不说话的时候显示快捷键提示，说话的时候显示命令」——所以這
     // 一頁的鍵位行落在那一行上不是補丁，是同一條規矩。於是它自己那兩行（說明、
     // 鍵位）正好接手原來狀態行與命令行的位子，一行不浪費，頁面高度也不會因為冒
@@ -4797,9 +4849,15 @@ fn hud_line(editor: &Editor, ime: &ImeSession) -> String {
     if editor.prompt().is_some() {
         return String::new();
     }
-    if composes_here(editor) && ime.available() && ime.is_composing() && !ime.panel_is_full() {
-        // 空空如也 leaves the code nowhere else to be: the candidate is in the
-        // sentence, and what was typed to get it is not.
+    // **編碼沒有別的地方可待的時候，纔畫在這裏。** 面板關着而且沒有內嵌，就是那
+    // 個時候。內嵌寫編碼的人正文裏已經有一份，內嵌寫首選的人是自己要的「只看句
+    // 子，不看碼」（2026-09-27 定，同 yume 空空如也那一檔）。
+    if composes_here(editor)
+        && ime.available()
+        && ime.is_composing()
+        && !ime.panel_is_full()
+        && inline_preedit(editor, ime).is_empty()
+    {
         return ime.display_buffer();
     }
     match editor.mode() {
@@ -5314,7 +5372,7 @@ fn draw_note(
         // wants the entry, and the line cost a row of it.
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             title: view.name.clone(),
-            // 章節行「辭典 › 真境」不是詞條說的話，是它寫在哪兒——面板把它
+            // 章節行「辭典 › 君山」不是詞條說的話，是它寫在哪兒——面板把它
             // 畫在名字下面，灰的，和正文隔一行（2026-09-18）。
             lede: view.lede(),
             entry: true,
@@ -6330,7 +6388,7 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// it landed on, and by the tab bar working out where it starts. A remembered
 /// number would be a frame out of date, and a click would open the wrong file.
 ///
-/// **整條規矩就這三行**（2026-09-26 作者定）：
+/// **整條規矩就這三行**（2026-09-26 定的）：
 ///
 /// ```text
 /// 想要 = 窗口 × {窄 1/4, 中 1/3, 寬 1/2}     ← 檔位記在那一側上
@@ -6338,7 +6396,7 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// 兩側加起來超了就按比例一起縮
 /// ```
 ///
-/// ⚠️ **面板說不上話**（作者原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏
+/// ⚠️ **面板說不上話**（原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏
 /// 这个容器」）。所以沒有「這扇面板最少要多寬」，沒有「攤開到最長那一行」，字典
 /// 和表格詳情也不再自己量內容——**一個格子一套規矩，不管裏面裝的是什麼**。
 ///
@@ -6347,7 +6405,7 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// | 從前 | 為什麼沒了 |
 /// | --- | --- |
 /// | `editor.sidebar_width`（下限） | 下限正是三檔會撞在一起的原因 |
-/// | `editor.detail_width` | 那是「面板說寬度」，作者當天否掉的正是這條 |
+/// | `editor.detail_width` | 那是「面板說寬度」，當天否掉的正是這條 |
 /// | `SEARCH_WIDTH`（搜索要 32 欄） | 同上 |
 /// | 攤開＝「讀得下最長那一行」 | 最長那行通常比 1/3 短，於是 `w` 十次有九次沒反應 |
 /// | 常駐層按內容算寬、下限 12 | 同一個格子裏兩套規矩 |
@@ -6538,9 +6596,9 @@ fn draw_sidebar(
 /// | 左右 | 細的 `│` ＋灰 | 塗滿的金 |
 /// | 下 | `─` ＋兩個角 | 塗滿的金，寫着 `Tab` 的循環次序 |
 ///
-/// ⚠️ **只多花一行**（作者定：「只加底边，标题行当顶边」）。邊欄本來就窄，而頂上
+/// ⚠️ **只多花一行**（定的，原話：「只加底边，标题行当顶边」）。邊欄本來就窄，而頂上
 /// 那一行本來就有標題——讓它兼做上邊，四邊照樣閉合，文件列表少的是一行不是兩行。
-/// 底下那一行自己掙得回位子：它寫着 `Tab` 走的次序（作者同日提），從前那件事只有
+/// 底下那一行自己掙得回位子：它寫着 `Tab` 走的次序（同日提的），從前那件事只有
 /// 按下去纔知道。
 ///
 /// ⚠️ **有焦點時是塗滿的金，不是一根金線**（同日，原話：「這用金線還不夠粗，可以
@@ -6643,7 +6701,7 @@ pub(crate) fn sidebar_shell(
                         cell.set_symbol(" ").set_style(gold);
                     }
                 }
-                // **底邊上寫着 `Tab` 走的次序**（2026-09-25 作者提）。算出來的，
+                // **底邊上寫着 `Tab` 走的次序**（2026-09-25 提的）。算出來的，
                 // 不是寫死的：哪個視圖歸哪一欄使用者配得動。放不下就不寫——一行
                 // 擠成半句的字比沒有字更難懂（同開關那一欄的號碼）。
                 let names: Vec<String> = editor
@@ -6927,8 +6985,7 @@ fn draw_search(
     //
     // #447 當初給框鋪一層紙色，是因為「空的尋找框只是一條面板色的帶子，上面浮着
     // 一個光標」——「不然还是不知道这里有个可以输入的地方」。那時候**框前面還沒有
-    // 名字**。現在每一格前面都寫着 `位置:`／`搜:`／`換:`，上下又有兩道橫線把它們
-    // 圈在一起，底色是第三重說法。去掉。
+    // 名字**。現在每一格前面都寫着 `位置:`／`搜:`／`換:`，底色是第二重說法。去掉。
     //
     // 剩下三檔照舊，而且它們說的是**狀態**不是「這裏能打字」：打字全黑、整條選中
     // 反白、鍵在這一格畫一個塊光標。
@@ -7010,7 +7067,10 @@ fn draw_search(
 
     // The boxes. A caret where the keys are, and the whole of one inked when
     // it arrived selected — `空格 /` leaves it that way so one key does both.
-    let mut y = area.y + 2;
+    // ⚠️ **上下兩道橫線去掉了**（2026-09-27 定，原話：「这里的两条线没有什么用，
+    // 都删了，还能节约两行」）。邊欄本來就窄，而那兩行說的事標題行與標籤已經說
+    // 過了：上面那一道貼着標題行，下面那一道夾在格子和開關之間。
+    let mut y = area.y + 1;
     let mut caret: Option<Position> = None;
     // **三個標籤補齊到同一寬，格子纔對得齊**（2026-09-26）：「位置: 」比「搜: 」
     // 寬兩格。⚠️ **`換: ` 不在畫面上也算進來**，同開關那幾行的理由——勾一下替換，
@@ -7070,14 +7130,6 @@ fn draw_search(
         y += 1;
         draw_box(buf, Field::Replace, &say!("search.label.replace"), &find.replace, y);
     }
-    // The two rules that close the boxes. Drawn after them, because the row
-    // below the last box is only known once it is known whether there are two.
-    let wide = to.saturating_sub(left) as usize;
-    let edge = "─".repeat(wide);
-    put_text(buf, left, area.y + 1, to, &edge, quiet);
-    put_text(buf, left, y + 1, to, &edge, quiet);
-    y += 1;
-
     // The switches. 大小寫 is three ways, not a tick, so it says which one.
     let tick = |on: bool| match on {
         true => "[x]",
@@ -7360,7 +7412,7 @@ fn stand_back(frame: &mut Frame, ink: crate::theme::Palette, area: Rect) {
     //
     // ⚠️ **「退後」是墨的事，不是紙的事。** 中央那一檔把**底色也拉亮了**，於是那
     // 一片反倒比原先顯眼，回過頭來跟浮着的那扇窗搶注意力。靠紙色只動墨：紙還是
-    // 那張紙，字退到紙裏去。作者當場的話：「靠纸色的话后方背景不会变，只是墨色
+    // 那張紙，字退到紙裏去。當場的原話：「靠纸色的话后方背景不会变，只是墨色
     // 变淡」。
     //
     // ⚠️ **亮色主題下這條要重量一次。** 那裏「紙」是白的，靠過去就是把字洗白——
@@ -7399,7 +7451,7 @@ fn draw_picker(
 ) -> Option<(Position, Option<Rect>)> {
     let picker = editor.picker()?;
     let ink = crate::theme::Palette::of(config);
-    // **這扇窗一開，底下那一整屏往後退一步**（2026-09-26 作者提：「picker 窗口出
+    // **這扇窗一開，底下那一整屏往後退一步**（2026-09-26 原話：「picker 窗口出
     // 现的时候，正文区域可以变淡一些，从而突出 picker 窗口」）。它是獨佔的：開着
     // 的時候每一個鍵都歸它，而一屏同樣清晰的字沒說出這件事。
     stand_back(frame, ink, area);
@@ -7456,7 +7508,7 @@ fn draw_picker(
     // 「面板可以再大一些，比如高度是 max(10, 一半行數)」) — which is what every
     // picker worth copying does: a list eight rows deep in an eighty-row
     // terminal is a keyhole.
-    // **窗口的 3/4 高、4/5 寬**（2026-09-26 作者定，原話：「现在高度不超过屏幕
+    // **窗口的 3/4 高、4/5 寬**（2026-09-26 定的，原話：「现在高度不超过屏幕
     // 1/2，我觉得可以增加到3/4……宽度可以达到3/4或者4/5」）。挑一個檔名是這扇面板
     // 唯一的事，而一半的高度在 40 行的終端上只列得出十幾條。
     // ⚠️ **寬度那個上限從 120 提到 160**：4/5 在 160 欄的終端上是 128，從前被那個
@@ -9501,26 +9553,6 @@ fn draw_command(
     match editor.hint() {
         Hint::Quiet => {}
         Hint::Says(text) => put(&text, news, &mut x),
-        // **The hit the keys are standing on, given the whole row** (#419).
-        //
-        // Asked for 2026-09-24 as 「能不能塞满整个命令行（可以盖掉「宇夢编辑器」），
-        // 如果还不够再加 ...」: the panel is a column, and a column of a novel
-        // holds a few characters either side — not enough to tell one 「霜」
-        // from another. The row is as wide as the window, so it is where the
-        // sentence goes. The signature at the right end yields on its own
-        // (it wants two clear cells), so nothing has to be moved aside.
-        //
-        // The line number is furniture; the match is reversed out of the
-        // prose, which is the one thing a long stretch of context needs — a
-        // reader who cannot find the word in it is reading for nothing.
-        Hint::Around { head, text, mark } => {
-            put(&head, what, &mut x);
-            let room = right.saturating_sub(x) as usize;
-            let (before, hit, after) = fit_around(&text, mark, room);
-            put(&before, news, &mut x);
-            put(&hit, news.add_modifier(Modifier::REVERSED), &mut x);
-            put(&after, news, &mut x);
-        }
         // **The panel has this now.** A row holds four keys and `空格` has
         // fourteen, so a half-pressed sequence is drawn as a list you can read
         // down; the row keeps what it was always for — what just happened.
@@ -9631,96 +9663,6 @@ fn box_in(
     None
 }
 
-/// **As much of a line as the row can hold, centred on one word** — #419.
-
-/// **As much of a line as the row can hold, centred on one word** — #419.
-///
-/// Three pieces: what comes before the match, the match, and what comes
-/// after — so the row can pick the match out however it draws. `…` is added
-/// to whichever end was cut, and only to that end: the mark is what the
-/// reader is looking for, so it is the last thing to go.
-///
-/// ⚠️ **The text may already carry a `…` of its own** (a hit in another file
-/// was cut when the search ran). It is an ordinary character here, so a cut
-/// that reaches it drops it and puts one back — the two never stack up.
-fn fit_around(
-    text: &str,
-    mark: std::ops::Range<usize>,
-    room: usize,
-) -> (String, String, String) {
-    let chars: Vec<char> = text.chars().collect();
-    let start = mark.start.min(chars.len());
-    let end = mark.end.clamp(start, chars.len());
-    let width = |cs: &[char]| cs.iter().copied().map(yumete_cjk::char_width).sum::<usize>();
-    if room == 0 {
-        return (String::new(), String::new(), String::new());
-    }
-    // It all fits: leave it alone. `…` is the mark of a cut, and nothing was
-    // cut — a row that shows the whole line should not claim otherwise.
-    if width(&chars) <= room {
-        return (
-            chars[..start].iter().collect(),
-            chars[start..end].iter().collect(),
-            chars[end..].iter().collect(),
-        );
-    }
-    // ⚠️ **The ellipses are part of the budget from the first line.** Counting
-    // them only while growing let a match exactly `room − 1` wide come out one
-    // cell too wide with a `…` at each end, and the end of the row is where
-    // the one that says 「there is more」 would be lost.
-    let cut = |lo: usize, hi: usize| usize::from(lo > 0) + usize::from(hi < chars.len());
-    // The match alone is wider than the row (`.*` matches a whole paragraph).
-    // Its head, and a `…` to say the rest of *it* is missing.
-    if width(&chars[start..end]) + cut(start, end) > room {
-        let mut hit = String::new();
-        let mut used = 0;
-        for &c in &chars[start..end] {
-            let w = yumete_cjk::char_width(c);
-            if used + w + 1 > room {
-                break;
-            }
-            hit.push(c);
-            used += w;
-        }
-        return (String::new(), hit, "…".to_string());
-    }
-    // Grow one character each way per round, so the word ends up in the
-    // middle of what is shown rather than at one edge of it.
-    let (mut lo, mut hi) = (start, end);
-    let mut used = width(&chars[lo..hi]);
-    loop {
-        let mut moved = false;
-        if lo > 0 {
-            let w = yumete_cjk::char_width(chars[lo - 1]);
-            if used + w + cut(lo - 1, hi) <= room {
-                lo -= 1;
-                used += w;
-                moved = true;
-            }
-        }
-        if hi < chars.len() {
-            let w = yumete_cjk::char_width(chars[hi]);
-            if used + w + cut(lo, hi + 1) <= room {
-                hi += 1;
-                used += w;
-                moved = true;
-            }
-        }
-        if !moved {
-            break;
-        }
-    }
-    let mut before = String::new();
-    if lo > 0 {
-        before.push('…');
-    }
-    before.extend(&chars[lo..start]);
-    let mut after: String = chars[end..hi].iter().collect();
-    if hi < chars.len() {
-        after.push('…');
-    }
-    (before, chars[start..end].iter().collect(), after)
-}
 
 /// Where the cursor is, in the terms the layout is read in.
 ///
@@ -9854,6 +9796,7 @@ fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
 /// The first line is the preedit (raw / segmented code); the rows below are the
 /// current page's candidates as `n. 候選 下標`, with the highlighted one
 /// reversed. The panel is clamped to stay within `area`.
+#[allow(clippy::too_many_arguments)]
 fn draw_candidate_panel(
     frame: &mut Frame,
     ime: &ImeSession,
@@ -9861,6 +9804,7 @@ fn draw_candidate_panel(
     area: Rect,
     cursor_x: u16,
     cursor_y: u16,
+    show_code: bool,
 ) {
     let candidates = ime.page_candidates();
     let highlight = ime.highlight();
@@ -9879,9 +9823,13 @@ fn draw_candidate_panel(
     }
 
     // Build the content lines: preedit header, then the candidates.
-    let preedit = ime.display_buffer();
     let mut rows: Vec<String> = Vec::with_capacity(candidates.len() + 1);
-    rows.push(preedit);
+    if show_code {
+        rows.push(ime.display_buffer());
+    } else if candidates.is_empty() {
+        // 編碼在正文裏，這裏又沒有候選：一個空框沒有可說的。
+        return;
+    }
     for (i, cand) in candidates.iter().enumerate() {
         // The same markers the vertical panel uses: `[panel] markers` is one
         // setting, and a reader who set 圈碼 does not want ASCII digits back
@@ -10375,8 +10323,12 @@ fn squeezed(text: &str) -> String {
     ///
     /// 原話：「这里的输入框能不能画个上下框线什么的？不然还是不知道这里有个
     /// 可以输入的地方。」空的 尋找 框從前與面板同底色，只有一個光標浮在那裏，
-    /// 看不出是一格能打字的地方。現在框裏是**紙色**（第 90 檔，比面板的第 81 檔
-    /// 沉一階），上下各一道線把它封起來。
+    /// 看不出是一格能打字的地方。
+    ///
+    /// ⚠️ **上下那兩道線 2026-09-27 去掉了**（原話：「这里的两条线没有什么用，
+    /// 都删了，还能节约两行」）。說「這裏打得了字」的現在是名字（`位置:`／`搜:`／
+    /// `換:`）和三檔底色，線是第三重說法，而邊欄一共只有那麼多行。所以這一條盯
+    /// 的是**底色那一半**，以及三格緊挨着標題行排下來。
     #[test]
     fn the_search_box_is_drawn_as_a_box() {
         let mut ed = Editor::new();
@@ -10387,13 +10339,15 @@ fn squeezed(text: &str) -> String {
         let row = |y: u16| -> String {
             (0..60).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()
         };
-        // 標題、線、位置、框、線 —— 這個次序就是「這裏能打字」的全部說法。
-        // ⚠️ **「位置」2026-09-26 從標題那一行挪了下來**，所以框往下走了一格。
-        // 一格一個字符，全角字的第二格是空的，所以比的是第一個字。
+        // 標題、位置、搜 —— 這個次序就是「這裏能打字」的全部說法。
+        // ⚠️ **「位置」2026-09-26 從標題那一行挪了下來**；2026-09-27 上下那兩道
+        // 線去掉了，所以它緊貼着標題行。一格一個字符，全角字的第二格是空的，所
+        // 以比的是第一個字。
         let first = say!("label.panel.search").chars().next().unwrap();
         assert!(row(0).contains(first), "{:?}", row(0));
-        assert!(row(1).contains("──"), "框上要有線：{:?}", row(1));
-        assert!(row(4).contains("──"), "框下要有線：{:?}", row(4));
+        let scope = say!("search.label.scope").chars().next().unwrap();
+        assert!(row(1).contains(scope), "位置緊跟標題：{:?}", row(1));
+        assert!(!row(1).contains("──"), "那兩道線去掉了：{:?}", row(1));
 
         // **三檔底色，只鋪在打得了字的那一段上**（2026-09-24 報的：「这一块的
         // 颜色不好，我老是搞错」）。從前「正在打字」和「鍵不在這一格」都是紙那
@@ -10410,7 +10364,7 @@ fn squeezed(text: &str) -> String {
                 .find(|x| buf.cell((*x, y)).is_some_and(|c| c.symbol().starts_with(ch)))
                 .unwrap_or_else(|| panic!("第 {y} 行上找得到 {ch}"))
         };
-        let label_at = column(&buf, 3, lead);
+        let label_at = column(&buf, 2, lead);
         // ⚠️ **三個名字補齊到同一寬**（2026-09-26），所以框不是接在「搜: 」後面，
         // 而是接在最寬那一個（「位置: 」）後面——三格纔對得齊。
         let widest = [tag.clone(), say!("search.label.scope"), say!("search.label.replace")]
@@ -10421,13 +10375,13 @@ fn squeezed(text: &str) -> String {
         let box_at = label_at + widest as u16;
         // 名字那幾格留在面板的底色上——三檔說的是「這裏打得了字」。
         assert_eq!(
-            buf.cell((label_at, 3)).expect("名字那一段").style().bg,
+            buf.cell((label_at, 2)).expect("名字那一段").style().bg,
             chrome,
             "「{tag}」不該跟着框一起變色"
         );
         // ① 正在打字：梯子的盡頭，第 100 檔。
         assert_eq!(
-            buf.cell((box_at, 3)).expect("框裏").style().bg,
+            buf.cell((box_at, 2)).expect("框裏").style().bg,
             Some(ink.sunken()),
             "打字的時候是最深那一檔"
         );
@@ -10444,23 +10398,23 @@ fn squeezed(text: &str) -> String {
         }
         ed.on_key(Key::Esc);
         let (buf, _) = render_caret(&ed, &config, 60, 16);
-        // ⚠️ **框不再墊一層紙色了**（2026-09-25）：名字＋上下兩道線已經說明了
-        // 那裏能打字，底色是第三重。所以「沒被反白的那幾格」量的是**面板底**。
+        // ⚠️ **框不再墊一層紙色了**（2026-09-25）：名字已經說明了那裏能打字，
+        // 底色是第二重。所以「沒被反白的那幾格」量的是**面板底**。
         let plain = chrome;
         let reversed = |buf: &ratatui::buffer::Buffer, x: u16| {
-            buf.cell((x, 3)).expect("框裏").style().bg == Some(ink.text())
+            buf.cell((x, 2)).expect("框裏").style().bg == Some(ink.text())
         };
         // 光標在末尾（「冬天」佔四格），壓着的是第五格那個空位。
         assert!(reversed(&buf, box_at + 4), "光標那一格反白");
-        assert_eq!(buf.cell((box_at, 3)).expect("冬").style().bg, plain, "⚠️ 整條不再反白");
-        assert_eq!(buf.cell((box_at + 2, 3)).expect("天").style().bg, plain);
+        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, plain, "⚠️ 整條不再反白");
+        assert_eq!(buf.cell((box_at + 2, 2)).expect("天").style().bg, plain);
 
         // `h` 挪一格，反白跟着走——這就是 `hl` 在框裏挪光標的樣子。
         ed.on_key(Key::Char('h'));
         let (buf, _) = render_caret(&ed, &config, 60, 16);
         assert!(reversed(&buf, box_at + 2), "退到「天」上");
         assert!(!reversed(&buf, box_at + 4), "原來那一格讓出來了");
-        assert_eq!(buf.cell((box_at, 3)).expect("冬").style().bg, plain, "隔壁那個字沒跟着反");
+        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, plain, "隔壁那個字沒跟着反");
         // ⚠️ **全角字的第二格在這裏永遠是 `Reset`，別去斷言它。** ratatui 的
         // `Buffer::diff` 跳過寬字形的後半格（那一格的 symbol 是空的），所以它
         // 根本沒送到 `TestBackend` 的緩衝區裏——`put_text` 明明寫過的「冬」的
@@ -10471,76 +10425,10 @@ fn squeezed(text: &str) -> String {
         ed.on_key(Key::Char('j'));
         let (buf, _) = render_caret(&ed, &config, 60, 16);
         assert_eq!(
-            buf.cell((box_at, 3)).expect("框裏").style().bg,
+            buf.cell((box_at, 2)).expect("框裏").style().bg,
             plain,
             "鍵不在這一格：面板底，一層都不鋪"
         );
-    }
-
-    /// **走進搜索結果時，命令行要把前後文鋪滿整行，命中那個詞反白**（#419）。
-    ///
-    /// 2026-09-24 原話：「高级搜索 jk 移动到搜索结果的时候，命令行会显示更多的
-    /// 前后文。不过这一行其实没有塞满。你能不能看看能不能塞满整个命令行（可以
-    /// 盖掉「宇夢编辑器」），如果还不够再加 ...。然后命令行中能不能对这个搜索
-    /// 的词反向高亮？」
-    ///
-    /// 從前那一行只有半行：跨檔命中身上只帶了前後各 12 個字。
-    #[test]
-    fn the_command_row_fills_up_with_the_hit_in_context() {
-        use yumete_core::search_panel::Field;
-        // 一行長到任何窗口都塞不下，命中在正中間。
-        let long: String = "甲乙丙丁戊己庚辛壬癸".repeat(20);
-        let mut ed = editor_with(&format!("{long}霜{long}"));
-        // ⚠️ `空格 /` 開出來鍵就在框裏，不必再按 `i`——按了打進去的是字母 i。
-        ed.on_key(Key::Char(' '));
-        ed.on_key(Key::Char('/'));
-        ed.on_key(Key::Char('霜'));
-        ed.on_key(Key::Enter);
-        ed.on_key(Key::Esc);
-        for _ in 0..12 {
-            if ed.search().field == Field::Results {
-                break;
-            }
-            ed.on_key(Key::Char('j'));
-        }
-        assert_eq!(ed.search().field, Field::Results, "走不進結果列表");
-        assert!(!ed.search().hits.is_empty(), "一條命中都沒有");
-
-        let (w, h) = (120, 12);
-        let (buf, _) = render_caret(&ed, &Config::default(), w, h);
-        let row: String = (0..w)
-            .filter_map(|x| buf.cell((x, h - 1)).map(|c| c.symbol().to_string()))
-            .collect();
-        let used = yumete_cjk::str_width(row.trim_end());
-        assert!(used >= (w as usize) - 4, "命令行只鋪了 {used} 欄：{row:?}");
-        assert!(row.contains('…'), "兩頭裁過就要有省略號：{row:?}");
-
-        // 反白的那一格（或兩格，全角字佔兩格）就是命中本身。
-        let lit: String = (0..w)
-            .filter(|x| {
-                buf.cell((*x, h - 1))
-                    .is_some_and(|c| c.style().add_modifier.contains(Modifier::REVERSED))
-            })
-            .filter_map(|x| buf.cell((x, h - 1)).map(|c| c.symbol().to_string()))
-            .collect();
-        assert_eq!(lit.trim(), "霜", "反白的不是命中：{lit:?}");
-    }
-
-    /// 整段放得下就不裁，也就不該長出省略號。
-    #[test]
-    fn a_line_that_fits_keeps_both_its_ends() {
-        let (before, hit, after) = super::fit_around("那年冬天很冷", 3..4, 40);
-        assert_eq!((before.as_str(), hit.as_str(), after.as_str()), ("那年冬", "天", "很冷"));
-    }
-
-    /// 命中本身比一整行還寬（`.*` 能匹配整段）：留它的頭，尾巴一個省略號。
-    #[test]
-    fn a_match_wider_than_the_row_keeps_its_head() {
-        let long = "甲乙丙丁戊己庚辛壬癸".repeat(4);
-        let (before, hit, after) = super::fit_around(&long, 0..40, 11);
-        assert_eq!(before, "");
-        assert_eq!(hit, "甲乙丙丁戊", "十欄裝得下五個全角字，末一欄留給省略號");
-        assert_eq!(after, "…");
     }
 
     /// **設置頁鋪滿整個窗口，而且不在那裏留一根光標**（2026-09-25 報的：
@@ -13400,7 +13288,8 @@ fn squeezed(text: &str) -> String {
         // Out of the mode first: a second `;` *inside* it commits 「；」, which
         // is the `;;` exit and would leave nothing to draw.
         bare.escape();
-        bare.set_panel_display(PanelDisplay::Bare);
+        bare.set_panel_display(PanelDisplay::Off);
+        bare.set_preedit(Preedit::Top);
         bare.input(';');
         assert!(bare.panel_is_full(), "bare 也要出這個面板");
     }
@@ -13594,7 +13483,8 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
-        ime.set_panel_display(PanelDisplay::Bare);
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_preedit(Preedit::Top);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
 
@@ -13617,16 +13507,68 @@ fn squeezed(text: &str) -> String {
         // the caret is the one on the caret's own row. It used to be at the
         // far right of the row *below*, half a screen away, which is what
         // the reported screenshot was of.
-        assert_eq!(rows[0].trim_end(), "1  吧   ─ b", "{:?}", rows[0]);
+        assert_eq!(rows[0].trim_end(), "1  吧", "{:?}", rows[0]);
         // No panel: the second and third candidates are nowhere on the screen.
         assert!(
             !rows.iter().any(|r| r.contains('八') || r.contains('巴')),
             "{rows:#?}"
         );
-        // …and the code has somewhere to be — beside the caret, and on the
-        // status line's right edge.
-        assert_eq!(hud_line(&editor, &ime), "b");
-        assert!(rows.iter().any(|r| r.contains("─ b")), "{rows:#?}");
+        // ⚠️ **編碼哪兒都不顯示**（2026-09-27 改）。這一檔寫進正文的是首選，讀
+        // 的人讀的是句子；要看碼是另一檔（下面那一條）。
+        assert_eq!(hud_line(&editor, &ime), "");
+        assert!(!rows.iter().any(|r| r.contains("─ b")), "{rows:#?}");
+    }
+
+    /// **`preedit code`：正文裏站着的是碼**（2026-09-27）。
+    ///
+    /// 同一格設置的另一檔。盲打的人要的是「面板收起來，可我要看見自己打了什麼」，
+    /// 而從前這件事只能靠光標下那一格浮窗——它和「面板關着」焊在一起，選不了。
+    #[test]
+    fn the_code_can_be_the_thing_that_stands_in_the_text() {
+        let mut editor = Editor::new();
+        editor.set_hud(Hud::Basic);
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_preedit(Preedit::Code);
+        ime.input('b');
+        settle_inline_candidate(&mut editor, &ime);
+
+        assert_eq!(editor.current_buffer().text(), "", "文件裏一個字節都沒有");
+        assert_eq!(editor.drawn_on_line(0), vec![(0, "b".to_string())]);
+        // 正文裏有了，浮窗就不再寫一遍。
+        assert_eq!(hud_line(&editor, &ime), "");
+    }
+
+    /// **面板照畫，而正文裏站着首選**（2026-09-27 報的缺口）。
+    ///
+    /// 原話：「inline的时候，不显示候选项了」。從前 `bare` 把「面板不畫」和「正文
+    /// 裏寫首選」焊成一個詞，於是這個組合按不出來。
+    #[test]
+    fn the_panel_stays_up_while_the_first_candidate_stands_in_the_text() {
+        let mut editor = Editor::new();
+        editor.set_hud(Hud::Basic);
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_preedit(Preedit::Top);
+        ime.input('b');
+        settle_inline_candidate(&mut editor, &ime);
+
+        assert!(ime.panel_is_full(), "面板歸 :yume-panel 管，內嵌動不了它");
+        assert_eq!(editor.drawn_on_line(0), vec![(0, "吧".to_string())]);
+        assert!(!ime.panel_shows_the_code(), "碼在正文那一頭，面板不再寫一遍");
+
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &ime, 40, 12);
+        let page = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(page.contains('八') && page.contains('巴'), "候選要看得見：{page}");
     }
 
     /// #213: a locked buffer says so standing, not once.
@@ -13663,7 +13605,8 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
-        ime.set_panel_display(PanelDisplay::Bare);
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_preedit(Preedit::Top);
         ime.input('b');
         assert!(!ime.panel_is_full());
 
@@ -13674,10 +13617,10 @@ fn squeezed(text: &str) -> String {
             KeyModifiers::NONE
         ));
         assert!(ime.panel_is_full(), "the whole list, for this one word");
-        // …so nothing is drawn into the text while it is up: two surfaces
-        // saying the same thing is the thing this editor keeps taking apart.
+        // ⚠️ **正文裏那一個照舊站着**（2026-09-27 改）。`Tab` 動的是面板那一格，
+        // 內嵌是另一格——從前兩者焊在一起，所以召出面板等於把正文裏那個字收走。
         settle_inline_candidate(&mut editor, &ime);
-        assert!(!editor.has_candidate());
+        assert!(editor.has_candidate(), "Tab 管面板，管不着內嵌");
 
         // The word lands, and the panel goes with it.
         ime.space();
@@ -13743,7 +13686,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_panel_display(PanelDisplay::Bare);
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_preedit(Preedit::Top);
         ime.input('b');
 
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
@@ -13777,17 +13721,35 @@ fn squeezed(text: &str) -> String {
 ");
         let said = panel_method(&mut ime, "");
         assert!(said.contains("候選框"), "{said}");
-        let said = panel_method(&mut ime, "bare");
-        assert!(said.contains("行內預覽"), "{said}");
-        assert_eq!(ime.panel_display(), PanelDisplay::Bare);
+        let said = panel_method(&mut ime, "off");
+        assert!(said.contains("不畫"), "{said}");
+        assert_eq!(ime.panel_display(), PanelDisplay::Off);
         // …and `:yume` says so, because a page with no candidate list on it is
         // the thing a writer asks about.
         let said = switch_scheme(&mut ime, "?", &Config::default());
-        assert!(said.contains("面板 行內預覽"), "{said}");
+        assert!(said.contains("面板 不畫"), "{said}");
         // A word it cannot read names the two rather than picking one.
         let said = panel_method(&mut ime, "invisible");
-        assert!(said.contains("invisible") && said.contains("bare"), "{said}");
-        assert_eq!(ime.panel_display(), PanelDisplay::Bare, "unchanged");
+        assert!(said.contains("invisible") && said.contains("off"), "{said}");
+        assert_eq!(ime.panel_display(), PanelDisplay::Off, "unchanged");
+    }
+
+    /// **正在打的那一段那一格，也有設置、命令和問句**（2026-09-27）。
+    #[test]
+    fn the_preedit_says_where_it_is_writing() {
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        let said = preedit_method(&mut ime, "");
+        assert!(said.contains("面板第一列"), "{said}");
+        let said = preedit_method(&mut ime, "top");
+        assert!(said.contains("首選"), "{said}");
+        assert_eq!(ime.preedit(), Preedit::Top);
+        let said = switch_scheme(&mut ime, "?", &Config::default());
+        assert!(said.contains("正在打的那一段"), "{said}");
+        // 面板那一格沒被動過——這正是分成兩格的意思。
+        assert_eq!(ime.panel_display(), PanelDisplay::Full);
+        let said = preedit_method(&mut ime, "inline");
+        assert!(said.contains("inline") && said.contains("code"), "{said}");
+        assert_eq!(ime.preedit(), Preedit::Top, "unchanged");
     }
 
     /// #211: a `/` search composes on the status line, which has no page to
@@ -13799,7 +13761,8 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('/'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
-        ime.set_panel_display(PanelDisplay::Bare);
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_preedit(Preedit::Top);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
         assert!(!editor.has_candidate(), "nothing goes into the manuscript");
@@ -14215,7 +14178,7 @@ fn squeezed(text: &str) -> String {
     ///
     /// ⚠️ 這是**拖窗口的時候**纔看得見的東西，一張靜態截圖測不出來：從前
     /// 「1/3 不夠下限就給 1/2」，於是 72 欄給 24、**71 欄給 35**——把終端拖窄一欄，
-    /// 邊欄猛地寬了十一欄、正文跟着塌一截。作者 2026-09-24 拖出來的：「90 到 72 到
+    /// 邊欄猛地寬了十一欄、正文跟着塌一截。2026-09-24 拖出來的：「90 到 72 到
     /// 60 的時候，是從 30-24-30，有個跳動，不夠平滑。」
     ///
     /// 現在是一個夾子（`clamp(1/3, 下限, 1/2)`），三段行為都從它出來：72 以上按
@@ -14257,7 +14220,7 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **`w` 走四檔：2/10 → 3/10 → 4/10 → 5/10**（2026-09-26 作者定）。
+    /// **`w` 走四檔：2/10 → 3/10 → 4/10 → 5/10**（2026-09-26 定的）。
     ///
     /// ⚠️ **2026-09-26 之前這條測的是「攤開到剛好讀得下最長那一條」**，而那正是
     /// `w` 十次有九次沒反應的原因：最長那一行通常比下限短，clamp 就落回下限。現在
@@ -14269,7 +14232,7 @@ fn squeezed(text: &str) -> String {
         let dir = std::env::temp_dir().join(format!("yumete-wide-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("天門真境之傳家寶扇.md"), "# 一\n").unwrap();
+        std::fs::write(dir.join("洞庭湖之舊硯臺.md"), "# 一\n").unwrap();
         editor.open_sidebar_at(&dir);
 
         // 80 欄窗口：2/10 ＝ 16、3/10 ＝ 24、4/10 ＝ 32、5/10 ＝ 40。裏面那一堵牆
@@ -14297,7 +14260,7 @@ fn squeezed(text: &str) -> String {
             .map(|x| at(&buffer, x, 1))
             .collect::<String>()
             .replace(' ', "");
-        assert!(name.contains("天門真境之傳家寶扇"), "the whole name is readable: {name:?}");
+        assert!(name.contains("洞庭湖之舊硯臺"), "the whole name is readable: {name:?}");
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -17097,7 +17060,7 @@ fn squeezed(text: &str) -> String {
         assert!(text.contains("緩衝區"), "{text:?}");
         assert!(!text.contains("打開文件"), "the menu is gone: {text:?}");
         // And it is a box in the middle of the page, not the page: **three
-        // quarters** of the window and three rows of furniture（2026-09-26 作者
+        // quarters** of the window and three rows of furniture（2026-09-26 
         // 定：「现在高度不超过屏幕1/2，我觉得可以增加到3/4」；2026-09-18 之前是
         // 八行加一個鑰匙孔）。
         //
@@ -17333,7 +17296,7 @@ fn squeezed(text: &str) -> String {
     /// 目前焦點在哪個裏面」）。
     ///
     /// ⚠️ **2026-09-25 起說法變了**：從前是「粗的 `┃` 對細的 `│`」，現在是
-    /// 「**一圈塗滿的金**對一圈細線」（作者原話：「金线还不够粗，可以改成金色的
+    /// 「**一圈塗滿的金**對一圈細線」（原話：「金线还不够粗，可以改成金色的
     /// 底纹」）。所以這裏問的是**底色**，不是字形。
     #[test]
     fn the_rule_says_which_sidebar_has_the_keys() {
@@ -18001,12 +17964,12 @@ fn squeezed(text: &str) -> String {
     ///
     /// The body used to be wrapped to the room's full width and the box then
     /// clamped to it, so each row was two cells too long and `put_text` stopped
-    /// at the border: 「執掌法會加冠之」 with no 「禮。」. One 漢字 eaten per
+    /// at the border: 「百廢具興」 with no 「。」. One 漢字 eaten per
     /// row, silently, and only on entries long enough to reach the cap.
     #[test]
     fn a_note_wide_enough_to_be_capped_loses_no_character() {
         let config = Config::default();
-        let long: String = "王高甫是天門宗乾元字輩弟子，掌宗座下領宗內主事，執掌法會加冠之禮。"
+        let long: String = "慶曆四年春，滕子京謫守巴陵郡，越明年，政通人和，百廢具興。"
             .chars()
             .cycle()
             .take(200)
@@ -18017,7 +17980,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
-                    title: "王高甫".into(),
+                    title: "岳陽樓".into(),
                     lede: None,
                     entry: false,
                     body: panel::Body::Prose(long.clone()),

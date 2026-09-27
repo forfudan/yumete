@@ -639,6 +639,11 @@ impl Editor {
                 self.scheme_request = Some(format!("panel:{}", mode.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
             }
+            // 正在打的那一段寫在哪，同上（2026-09-27）。
+            Command::YumePreedit(mode) => {
+                self.scheme_request = Some(format!("preedit:{}", mode.unwrap_or_default()));
+                Ok(CommandOutcome::Continue)
+            }
             // 每頁幾條 and 輸入預測 ride the same channel as the two above, and
             // for the same reason: the session belongs to the front end.
             Command::YumeMenuSize(n) => {
