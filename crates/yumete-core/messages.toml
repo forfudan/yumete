@@ -1377,14 +1377,6 @@ en = "search and replace across the nearest git project"
 find = "替換 替换 項目 项目 全書 全书"
 
 [[message]]
-# 命令：在 yumete 打開的資料夾裏找了換
-key = "cmd.commands.replace-wd"
-zht = "在 yumete 打開的文件夾裏找了換"
-zhs = "在 yumete 打开的文件夹里找了换"
-en = "search and replace in the folder yumete opened in"
-find = "替換 替换 工作區 工作区"
-
-[[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
 key = "cmd.commands.ruby"
 zht = "改這裏的注音；`:ruby off|basic|full` 是排多少"
@@ -1423,14 +1415,6 @@ zht = "在最近的 git 項目裏找"
 zhs = "在最近的 git 项目里找"
 en = "search the nearest git project"
 find = "搜索 項目 项目 git 全書 全书 gd"
-
-[[message]]
-# 命令：搜 yumete 打開的資料夾
-key = "cmd.commands.search-wd"
-zht = "在 yumete 打開的文件夾裏找"
-zhs = "在 yumete 打开的文件夹里找"
-en = "search the folder yumete opened in"
-find = "搜索 工作區 工作区 wd"
 
 [[message]]
 # : 命令選單裏 settings 那一項的說明（commands 組）
@@ -2865,14 +2849,6 @@ zht = "挖詞，範圍是整個倉（帶 .git 的那一層）"
 zhs = "挖词，范围是整个仓（带 .git 的那一层）"
 en = "mine words across the whole repository"
 find = "新詞 新词 人名 地名 挖 倉 仓 項目 项目 discover repo git gd"
-
-[[message]]
-# : 命令選單裏 word-discover-wd 那一項的說明
-key = "cmd.word-topics.discover-wd"
-zht = "挖詞，範圍是 yumete 打開的那個目錄"
-zhs = "挖词，范围是 yumete 打开的那个目录"
-en = "mine words across the folder yumete was opened in"
-find = "新詞 新词 人名 地名 挖 工作區 工作区 目錄 目录 discover workspace wd"
 
 [[message]]
 # : 命令選單裏 habit 那一項的說明（word-topics 組）
@@ -7179,6 +7155,26 @@ en = "{0}'s table is not installed — put it in {1}, or a table of your own in 
 # ── search ────────────────────────────────────────────────────────────
 
 [[message]]
+# 空的位置框上那句灰字
+key = "search.ask.folder"
+zht = "打一個資料夾的路徑"
+zhs = "打一个资料夹的路径"
+en = "type a folder"
+
+[[message]]
+# 空的搜索框上那句灰字
+key = "search.ask.query"
+zht = "要找什麼"
+zhs = "要找什么"
+en = "what to find"
+
+[[message]]
+# 空的替換框上那句灰字
+key = "search.ask.replace"
+zht = "換成什麼"
+zhs = "换成什么"
+en = "replace with"
+[[message]]
 # 搜索：正則寫不通
 key = "search.bad-pattern"
 zht = "這串字當正則讀不通"
@@ -7335,6 +7331,12 @@ zhs = "拼音也找得到"
 en = "pinyin → 漢字"
 
 [[message]]
+# 搜索面板第八個開關：換上去的那一段跟不跟原文的大小寫
+key = "search.preserve-case"
+zht = "跟原文的大小寫"
+zhs = "跟原文的大小写"
+en = "preserve case"
+[[message]]
 # 搜索：正則那一格
 key = "search.regex"
 zht = "正則"
@@ -7390,6 +7392,13 @@ zht = "替換"
 zhs = "替换"
 en = "replace"
 [[message]]
+# 位置那一格是四選一，不是輸入框
+key = "search.scope-is-a-pick"
+zht = "位置是四選一：按 0 或者左右換一檔。要自己打一個資料夾，換到「指定資料夾…」那一檔"
+zhs = "位置是四选一：按 0 或者左右换一档。要自己打一个资料夹，换到「指定资料夹…」那一档"
+en = "the scope is a choice — press 0 or ← → to change it; pick 「a folder…」 to type one"
+
+[[message]]
 # 在框上按 r：換這一處要先站到一處上
 key = "search.stand-on-a-hit"
 zht = "r 只換光標停着的那一處。現在沒停在任何一處上，所以先按 j 走到一條命中上。要全部換就按 R。"
@@ -7430,18 +7439,17 @@ zhs = "本文件夹"
 en = "this folder"
 
 [[message]]
+# 位置那一格的第四檔：自己打一個資料夾
+key = "search.where.named"
+zht = "指定資料夾…"
+zhs = "指定资料夹…"
+en = "a folder…"
+[[message]]
 # 搜索：在哪裏找——git 項目
 key = "search.where.project"
 zht = "項目"
 zhs = "项目"
 en = "project"
-
-[[message]]
-# 搜索：在哪裏找——工作區
-key = "search.where.workspace"
-zht = "工作區"
-zhs = "工作区"
-en = "workspace"
 
 [[message]]
 # 搜索：完整匹配那一格

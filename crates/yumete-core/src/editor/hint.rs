@@ -123,7 +123,7 @@ impl Editor {
                 keys.push(("/", say!("hint.search.new-word")));
                 // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
                 // 都不管用，而這一行擠不下說了也用不上的東西。
-                if self.search().field.takes_text() {
+                if self.search().takes_text() {
                     keys.push(("d c a", say!("hint.search.edit-in-place")));
                 }
                 let title = match self.search().replacing {

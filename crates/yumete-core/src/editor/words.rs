@@ -398,13 +398,7 @@ impl Editor {
         match scope {
             Where::Buffer => None,
             Where::Folder => Some(self.here_folder()),
-            // ⚠️ **Never `None` on failure** (#475): `None` means 「this
-            // buffer」 here, so an unreadable working directory would have
-            // turned `:word-discover-wd` quietly into `:word-discover`.
-            Where::Workspace => Some(
-                std::env::current_dir().unwrap_or_else(|_| self.here_folder()),
-            ),
-            Where::Project => Some(self.project_root()),
+            Where::Project => Some(self.root()),
             Where::Named(path) => Some(path.clone()),
         }
     }

@@ -54,10 +54,12 @@ pub enum Where {
     Buffer,
     /// The folder this file is in, and everything under it — `-cd`.
     Folder,
-    /// The folder yumete was opened in — `-wd`.
-    Workspace,
-    /// The nearest git project, found by walking up — `-gd`. The useful one:
-    /// nobody has to count how many levels up it was.
+    /// **這一節坐在哪本書上**——開 yumete 的時候定一次的那個根（`-gd`）。
+    ///
+    /// ⚠️ **2026-09-27 和「工作區」合並了。** 從前是兩個：「工作區」是啓動
+    /// yumete 時 shell 所在的目錄，「項目」是從那裏往上找到的 `.git`／`.yumete`。
+    /// 兩個名字說不清區別，而多數時候它們是同一個地方。現在只有一個，見
+    /// `Editor::root`。
     Project,
     /// A folder named outright: `:search ../稿`.
     Named(std::path::PathBuf),
@@ -74,9 +76,12 @@ impl Where {
     pub fn next(&self) -> Where {
         match self {
             Where::Buffer => Where::Folder,
-            Where::Folder => Where::Workspace,
-            Where::Workspace => Where::Project,
-            Where::Project | Where::Named(_) => Where::Buffer,
+            Where::Folder => Where::Project,
+            // **第四檔是「指定資料夾…」**（2026-09-27 定）。從前它不在圈裏，於是
+            // 那一格唯一的用法是打字，而打字是看不出來的——三個試用的人裏有兩個
+            // 把這一格標成拦路，理由都是「我看不出它能填什麼，填錯了它也不說」。
+            Where::Project => Where::Named(std::path::PathBuf::new()),
+            Where::Named(_) => Where::Buffer,
         }
     }
 
@@ -126,6 +131,15 @@ pub enum Field {
     Whole,
     /// 模糊 — 「差不多是這幾個字」 (`crate::nearby`).
     Fuzzy,
+    /// **換上去的那一段跟不跟原文的大小寫**（2026-09-27 定）。
+    ///
+    /// 只在勾了 [`Field::Replacing`] 的時候出現，緊跟在它後面——它和那六個不是
+    /// 同一類東西：那六個說「怎麼算命中」，這一個說「換上去的怎麼寫」。
+    /// VS Code 也是這麼分的：`Aa`（大小寫算不算數）在**搜索**那一行，
+    /// `AB`（跟不跟原文）在**替換**那一行。
+    ///
+    /// 出廠關着，同 VS Code：打什麼就寫什麼，是不會讓人意外的那一檔。
+    PreserveCase,
     /// **替換 —— 勾上就長出替換行**（2026-09-23 報的）。
     ///
     /// 從前只有 `:replace` 開得出替換行，於是 `:search` 進來的人想改一個詞，得
@@ -144,7 +158,7 @@ impl Field {
     ///
     /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
     /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`／`[ ]` 自然照這個讀法。
-    pub const ALL: [Field; 11] = [
+    pub const ALL: [Field; 12] = [
         Field::Scope,
         Field::Query,
         Field::Replace,
@@ -155,6 +169,7 @@ impl Field {
         Field::Whole,
         Field::Fuzzy,
         Field::Replacing,
+        Field::PreserveCase,
         Field::Results,
     ];
 
@@ -167,7 +182,7 @@ impl Field {
     /// ⚠️ **Every one is always drawn**, 模糊 included — it goes quiet while
     /// 替換 is ticked rather than disappearing, so the numbers below it do not
     /// shift under the reader's eye.
-    pub const SWITCHES: [Field; 7] = [
+    pub const SWITCHES: [Field; 8] = [
         Field::Case,
         Field::Glyphs,
         Field::Pinyin,
@@ -175,6 +190,9 @@ impl Field {
         Field::Whole,
         Field::Fuzzy,
         Field::Replacing,
+        // ⚠️ **第八個只在替換那一檔畫得出來**，所以它排在最後：畫不出來的時候
+        // 上面七個的號碼一個都不動。
+        Field::PreserveCase,
     ];
 
     /// A tick or a state rather than something to type in or a list to walk.
@@ -182,7 +200,10 @@ impl Field {
         Field::SWITCHES.contains(&self)
     }
 
-    /// Whether this cell is typed into (so `i` and the IME belong here).
+    /// Whether this cell is typed into at all (so `i` and the IME belong here).
+    ///
+    /// ⚠️ **位置那一格是有條件的**，問 [`Search::takes_text`] 纔算數：它平常是
+    /// 一個四選一，只有選到「指定資料夾…」的時候纔打得了字。
     pub fn takes_text(self) -> bool {
         matches!(self, Field::Scope | Field::Query | Field::Replace)
     }
@@ -294,6 +315,8 @@ pub struct Search {
     pub query: String,
     /// What to put in its place.
     pub replace: String,
+    /// 換上去的那一段跟不跟原文的大小寫。見 [`Field::PreserveCase`]。
+    pub preserve_case: bool,
     /// Whether the replace row is showing — what `:replace` opens with.
     ///
     /// A row rather than a mode: the panel is the same panel, and turning it
@@ -559,6 +582,18 @@ impl Search {
     }
 
     /// What is in the box the keys are in.
+    /// **這一格現在打得了字嗎。**
+    ///
+    /// 「搜」和「換」永遠打得了。「位置」是個四選一（本文件／本文件夾／項目／
+    /// 指定資料夾…），只有選到最後那一檔纔打得了字——`0` 或者 `h`／`l` 換檔
+    /// （2026-09-27 定）。
+    pub fn takes_text(&self) -> bool {
+        match self.field {
+            Field::Scope => matches!(self.scope, Where::Named(_)),
+            other => other.takes_text(),
+        }
+    }
+
     pub fn typed(&self) -> &str {
         match self.field {
             Field::Scope => &self.scope_text,

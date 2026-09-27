@@ -257,7 +257,7 @@ impl Editor {
                 self.refresh_sidebar();
             }
             None => {
-                let root = self.project_root();
+                let root = self.root();
                 self.open_sidebar_showing(&root, view);
             }
         }
@@ -278,7 +278,7 @@ impl Editor {
                 self.refresh_sidebar();
             }
             None => {
-                let root = self.project_root();
+                let root = self.root();
                 let mut sidebar = crate::sidebar::Sidebar::new(&root);
                 sidebar.show(view);
                 if let Some(path) = self.current_buffer().path() {
@@ -1454,7 +1454,7 @@ impl Editor {
     /// file」 most often means. Both are tie-breakers: once anything is typed,
     /// the match decides.
     pub(super) fn open_file_picker(&mut self) {
-        let root = self.project_root();
+        let root = self.root();
         let mut prose = Vec::new();
         let mut rest = Vec::new();
         walk(&root, &mut 0, &mut |path| {
