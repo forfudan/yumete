@@ -284,6 +284,19 @@ fn frame_to(
         let found = ime.glosses(ch);
         editor.set_dictionary(ch, found);
     }
+    // …and the search that is owed, for the same reason and with the same
+    // ⚠️: **before the page is measured**, because the sidebar's width is
+    // computed from the rows it already has.
+    //
+    // The loop does this *after* a frame, deliberately: that frame is the one
+    // whose header says 「正在找…」, so the seconds spent walking a book are
+    // visible. A still picture has no second frame, so the interesting one is
+    // the one with the results in it — and without this line
+    // `--shot --keys=':s…'` on any scope but 本文件 photographs 「正在找…」 for
+    // ever, which reads exactly like a hung editor (2026-09-27).
+    if editor.take_owed_search() {
+        editor.run_owed_search();
+    }
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
     let page = areas.panes[editor.live_pane().min(1)];
     let lines = editor.current_buffer().line_count();
@@ -4572,6 +4585,33 @@ pub(crate) fn elide(line: &str, width: usize) -> String {
     kept
 }
 
+/// Cut `line` to `width` cells **from the left**, marking that something was cut.
+///
+/// The mirror of [`elide`], for text whose identity is at its **end**: a path.
+/// `crates/yumete-core/src/editor/find.rs` cut the usual way is
+/// `crates/yumete-core…`, and in a 項目 search five different files came out
+/// as five identical rows — the count beside each one was cut off too, so
+/// there was nothing at all to tell them apart (2026-09-27).
+pub(crate) fn elide_head(line: &str, width: usize) -> String {
+    if yumete_cjk::str_width(line) <= width {
+        return line.to_string();
+    }
+    let room = width.saturating_sub(1);
+    let mut kept: Vec<&str> = Vec::new();
+    let mut wide = 0;
+    for g in yumete_cjk::graphemes(line).collect::<Vec<_>>().into_iter().rev() {
+        let w = yumete_cjk::grapheme_width(g);
+        if wide + w > room {
+            break;
+        }
+        kept.push(g);
+        wide += w;
+    }
+    let mut out = String::from("…");
+    out.extend(kept.into_iter().rev());
+    out
+}
+
 /// Draw a compact list just above `bottom`, scrolled so `selected` is on it.
 ///
 /// One column, capped, with a footer naming where you are in the list and what
@@ -7445,14 +7485,23 @@ fn draw_search(
         let (line, plain) = match &rows[i] {
             // A file, with the mark the tree and the outline already use for
             // 「there is more under this」.
-            yumete_core::search_panel::Row::File { path, hits, folded } => (
-                format!(
-                    "{} {}  {hits}",
-                    if *folded { "▸" } else { "▾" },
-                    path.display()
-                ),
-                head,
-            ),
+            yumete_core::search_panel::Row::File { path, hits, folded } => {
+                // ⚠️ **The path is cut from the left, and the count is never
+                // cut at all** (2026-09-27). Drawn as one string and truncated
+                // the usual way, a 項目 search over this repo produced five
+                // rows all reading 「▾ crates/yumete-core」 — same mark, same
+                // text, no count — for five different files. What identifies
+                // a path is its tail, so that is the half that is kept, and
+                // the count is measured out of the room first.
+                let mark = if *folded { "▸" } else { "▾" };
+                let tally = format!("  {hits}");
+                let room = to.saturating_sub(left) as usize;
+                let for_path = room
+                    .saturating_sub(yumete_cjk::str_width(mark) + 1)
+                    .saturating_sub(yumete_cjk::str_width(&tally));
+                let shown = elide_head(&path.display().to_string(), for_path);
+                (format!("{mark} {shown}{tally}"), head)
+            }
             yumete_core::search_panel::Row::Hit(at) => {
                 let hit = &find.hits[*at];
                 // ⚠️ **不縮進**（2026-09-25 定）。從前跨檔的命中往裏縮兩格，說的
@@ -19180,6 +19229,76 @@ fn squeezed(text: &str) -> String {
         assert_eq!(rows[1], "春眠不覺曉春", "{rows:#?}");
         assert!(rows[2].contains('ㄔ'), "and the second row its reading: {rows:#?}");
         assert_eq!(rows[3], "眠不覺曉春", "{rows:#?}");
+    }
+
+    /// **A path is identified by its tail** (2026-09-27).
+    ///
+    /// In a 項目 search this repo produced five rows all reading
+    /// 「▾ crates/yumete-core」 — the same eighteen cells for five different
+    /// files, with the hit count cut off the end as well.
+    #[test]
+    fn a_path_too_long_for_the_row_keeps_the_end_that_names_it() {
+        let long = "crates/yumete-core/src/editor/find.rs";
+        // Short enough to fit: handed straight back, no mark.
+        assert_eq!(elide_head(long, 40), long);
+        // Cut: the file's own name survives, the leading directories do not.
+        let cut = elide_head(long, 18);
+        assert!(cut.ends_with("find.rs"), "{cut:?}");
+        assert!(cut.starts_with('…'), "and it says it was cut: {cut:?}");
+        assert_eq!(yumete_cjk::str_width(&cut), 18, "and it fills the room: {cut:?}");
+        // ⚠️ **By display width.** A 漢字 is two cells, so cutting by `char`
+        // count overruns the panel it was measured for — the same ⚠️ `elide`
+        // carries.
+        let wide = elide_head("稿/卷一/第三章.md", 10);
+        assert_eq!(yumete_cjk::str_width(&wide), 10, "{wide:?}");
+        assert!(wide.ends_with(".md"), "{wide:?}");
+        // Two different files under one long directory read differently.
+        let a = elide_head("crates/yumete-core/src/editor/find.rs", 18);
+        let b = elide_head("crates/yumete-core/src/editor/hint.rs", 18);
+        assert_ne!(a, b, "five identical rows is the bug this fixes");
+    }
+
+    /// **A photograph of a 項目 search has the results in it** (2026-09-27).
+    ///
+    /// The scan runs *after* a frame in the loop, on purpose: that frame is
+    /// the one whose header says 「正在找…」, so walking a book is visible
+    /// rather than looking like a freeze. A still picture has no second frame,
+    /// so without the same call here `--shot` photographed 「正在找…」 for
+    /// ever — and a picture is how this repo reviews the front end. The fourth
+    /// of this family, after 字典, the inline candidate and the settings page.
+    #[test]
+    fn a_photograph_of_a_search_over_files_has_the_results_in_it() {
+        let dir = std::env::temp_dir().join(format!("yumete-shot-find-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("一.md"), "那年冬天很冷。\n").unwrap();
+        std::fs::write(dir.join("二.md"), "冷得出奇。\n").unwrap();
+        let mut editor = Editor::new();
+        editor.set_root(&dir);
+        editor.open_file(&dir.join("一.md")).unwrap();
+
+        editor.execute(":search").unwrap();
+        // 位置那一格：本文件 → 本文件夾，然後回到搜索框打字。
+        editor.on_key(Key::Esc);
+        editor.on_key(Key::Char('k'));
+        editor.on_key(Key::Char('0'));
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('i'));
+        editor.on_key(Key::Char('冷'));
+        editor.on_key(Key::Enter);
+        assert!(editor.is_scanning(), "那一趟是欠着的——這正是要拍的那一刻");
+
+        let shot = frame_to_text(
+            &mut editor,
+            &Config::default(),
+            &ImeSession::empty(Scheme::LINGMING),
+            80,
+            20,
+            None,
+        );
+        assert!(!editor.is_scanning(), "拍完不該還欠着：{shot}");
+        assert!(shot.contains("二.md"), "另一個檔要在照片上：{shot}");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
 }

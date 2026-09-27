@@ -16270,3 +16270,38 @@ fn the_mode_word_says_which_surface_has_the_keys() {
         ed.on_key(Key::Esc);
     }
 }
+
+/// **鍵交回正文之後，那一行不再是空的**（2026-09-27）。
+///
+/// `Enter` 站在一處命中上，鍵落到正文、名單留在屏幕上——這是設計：要讀的是那一
+/// 句話在自己的上下文裏讀不讀得通。可從那一刻起鍵位行整行空白，眼前擺着十一處
+/// 命中，而沒有一個字說怎麼走它們、怎麼回去。手冊自己的規矩是：拿着鍵的那一半
+/// 有義務說出路。
+#[test]
+fn the_row_says_the_way_back_while_the_list_is_still_up() {
+    let mut ed = typed("那年冬天很冷。\n冷得出奇。\n那年的冷。");
+    // 沒有面板的正文：這一行本來就該是空的。
+    assert!(matches!(ed.hint(), Hint::Quiet), "沒開面板就沒話說");
+
+    ed.open_search();
+    for c in "冷".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    // 站在一處命中上按 Enter：鍵交回正文。
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Enter);
+    assert!(!ed.sidebar_focused(), "鍵在正文裏");
+
+    let Hint::Keys(_, keys) = ed.hint() else {
+        panic!("那一行又空了：{:?}", ed.hint());
+    };
+    let said: Vec<&str> = keys.iter().map(|(key, _)| *key).collect();
+    assert!(said.contains(&"n N"), "走命中的鍵要在：{said:?}");
+    assert!(
+        said.iter().any(|k| k.contains('w')),
+        "回名單的鍵要在：{said:?}"
+    );
+
+}
