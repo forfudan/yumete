@@ -4892,6 +4892,13 @@ zhs = "全部换掉"
 en = "change them all"
 
 [[message]]
+# 提示：鍵已經交回正文，而結果名單還開着——回名單
+key = "hint.search.back-to-the-list"
+zht = "回名單"
+zhs = "回名单"
+en = "back to the results"
+
+[[message]]
 # 提示：搜索面板——框裏就地刪改（d D c C a I A）
 key = "hint.search.edit-in-place"
 zht = "清空／重打／接着打"
@@ -4973,6 +4980,12 @@ zht = "找／跳過去"
 zhs = "找／跳过去"
 en = "search, or jump to it"
 
+[[message]]
+# 提示：鍵已經交回正文，而結果名單還開着——走下一處／上一處命中
+key = "hint.search.walk-the-hits"
+zht = "下一處／上一處"
+zhs = "下一处／上一处"
+en = "next hit / previous"
 [[message]]
 # 提示欄：邊欄
 key = "hint.sidebar"
@@ -10615,4 +10628,5 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
 

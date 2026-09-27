@@ -200,8 +200,35 @@ impl Editor {
                     ("Tab", say!("hint.table.next-cell")),
                 ])
             }
-            _ => Hint::Quiet,
+            _ => self.the_way_back_to_the_list(),
         }
+    }
+
+    /// **The panel is still open and the keys are in the text** — say how to
+    /// get back (2026-09-27).
+    ///
+    /// `Enter` on a result hands the keys to the page and leaves the list
+    /// standing there, which is the point: you read the sentence around the
+    /// hit in its own context. But the row below went **blank** at that
+    /// moment, so a list of eleven hits was on screen with nothing saying how
+    /// to walk them or how to get back into it — and the manual's own rule is
+    /// that the half holding the keys owes the reader the way out.
+    ///
+    /// Last of all the branches, so it only ever fills a row that would
+    /// otherwise be empty: a pending key, a footnote, a table cell all have
+    /// more to say from where the cursor is actually standing.
+    fn the_way_back_to_the_list(&self) -> Hint {
+        if self.mode != Mode::Normal || !self.search_panel_is_open() {
+            return Hint::Quiet;
+        }
+        let title = match self.search().replacing {
+            true => say!("label.panel.replace"),
+            false => say!("label.panel.search"),
+        };
+        Hint::Keys(title, vec![
+            ("n N", say!("hint.search.walk-the-hits")),
+            (back_to_text_key(), say!("hint.search.back-to-the-list")),
+        ])
     }
 
     /// The keys that would finish the sequence already begun.
