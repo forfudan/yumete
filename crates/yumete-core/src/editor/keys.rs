@@ -847,10 +847,13 @@ impl Editor {
             Pending::ReplaceAll => {
                 self.pending = Pending::None;
                 match key {
-                    Key::Char('y') | Key::Enter => self.replace_all_found(),
+                    Key::Char('y') | Key::Enter => self.replace_what_was_asked(),
                     // Anything else is no. A question about a hundred files
                     // answers 「no」 to a key nobody meant.
-                    _ => self.status = say!("search.replace-all-no"),
+                    _ => {
+                        self.forget_the_file_it_asked_about();
+                        self.status = say!("search.replace-all-no");
+                    }
                 }
                 return;
             }

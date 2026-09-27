@@ -1426,6 +1426,13 @@ pub(crate) fn book_root<'a>(open: impl Iterator<Item = &'a Path>, here: &Path) -
 /// **`skipped` is counted because it used to be silent** (#308): a chapter over
 /// [`GREP_MAX_BYTES`] was passed over and left out of 「searched N files」 as
 /// well, so the number looked right and the answer was short.
+/// **一趟走最多看幾個檔。**
+///
+/// 2026-09-27 報的：「位置」那一格是自由文本，隨手打一個 `/` 進去，編輯器就去
+/// 遍歷整塊磁盤——沒有進度、沒有上限、按不了取消，只能 `kill -9`。一本書幾百個
+/// 檔，一個項目幾千個；到了這個數還沒走完，走的就不是一本書了。
+const WALK_CEILING: usize = 20_000;
+
 fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
     let walker = ignore::WalkBuilder::new(root)
         .follow_links(false)
@@ -1442,9 +1449,16 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
                 || !matches!(&*entry.file_name().to_string_lossy(), "target" | "node_modules")
         })
         .build();
+    let mut seen = 0usize;
     for entry in walker.flatten() {
         if !entry.file_type().is_some_and(|t| t.is_file()) {
             continue;
+        }
+        // ⚠️ **走到頂就停。** 停下來交出走到的那些，比卡死強：交出來的是真的，
+        // 而卡死的時候屏幕上一個字都沒有。
+        seen += 1;
+        if seen > WALK_CEILING {
+            break;
         }
         let path = entry.path();
         // Not what this editor just wrote. `:export html` puts the book's own
@@ -2339,6 +2353,18 @@ pub struct Editor {
     /// 走完一本書會開出幾十份，所以同一時間只留一份：走到下一處，上一處那一份
     /// 就還回去（`let_go_of_the_search_preview`）。`Enter` 把它釘住。
     search_preview: Option<u64>,
+    /// **上一次替換動過哪幾份緩衝**，記的是它們的號（2026-09-27 審出來的）。
+    ///
+    /// `R` 一次能改好幾個檔，而 `u` 只撤回**當前那一份**——於是按一下 `u`，一個
+    /// 檔回去了、別的檔照舊改着，編輯器還說「已經到最早了」，接着 `:write-all`
+    /// 就把沒撤回的那幾個寫進磁盤。記下來，`u` 纔撤得回一整批。
+    replaced_in: Vec<u64>,
+    /// **那句「換不換」問的是哪一個檔**，`None` ＝ 問的是全部（2026-09-27）。
+    ///
+    /// 從前只有 `R` 會先問一句，而站在檔名那一行上按 `r` **一聲不吭就把整個檔
+    /// 換掉了**——三個試用的人都指出這一條：不確認的那個鍵，正是標籤最容易被截掉
+    /// 的那一個。現在兩個都問，而問句要說清楚問的是哪一個。
+    replace_this_file: Option<std::path::PathBuf>,
     /// **一句幾秒之後自己走掉的話**：什麼時候走，和走的是哪一句。
     ///
     /// 2026-09-27 定，原話：「有些不是特别重要的消息可以有个参数「显示时间」，
@@ -2757,6 +2783,8 @@ impl Editor {
             // standing on」. Two questions, two columns.
             search: crate::search_panel::Search::new(),
             search_preview: None,
+            replaced_in: Vec::new(),
+            replace_this_file: None,
             status_fades: None,
             sides: [
                 crate::sidebar::Side::Left,

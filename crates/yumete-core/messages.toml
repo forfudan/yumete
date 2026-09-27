@@ -1403,9 +1403,9 @@ find = "運行 运行 執行 执行 命令 build"
 [[message]]
 # 命令：開搜索面板
 key = "cmd.commands.search"
-zht = "高級搜索：面板裏打要找的字"
-zhs = "高级搜索：面板里打要找的字"
-en = "advanced search"
+zht = "搜索面板：跨檔找，能替換，認簡繁和拼音"
+zhs = "搜索面板：跨档找，能替换，认简繁和拼音"
+en = "the search panel — across files, with replace, 简/繁 and pinyin"
 find = "搜索 搜尋 搜寻 查找 尋找 寻找 grep find search 全文 面板"
 
 [[message]]
@@ -4918,58 +4918,64 @@ en = "change them all"
 [[message]]
 # 提示：搜索面板——框裏就地刪改（d D c C a I A）
 key = "hint.search.edit-in-place"
-zht = "刪／改／追加"
-zhs = "删／改／追加"
-en = "delete / change / append"
+zht = "清空／重打／接着打"
+zhs = "清空／重打／接着打"
+en = "clear / retype / append"
 
 [[message]]
 # 提示：搜索面板——Enter 去看結果（兩種範圍同一句，2026-09-25 統一）
 key = "hint.search.go-look"
-zht = "搜一遍"
-zhs = "搜一遍"
-en = "search"
+zht = "開始找"
+zhs = "开始找"
+en = "run the search"
 
 [[message]]
 # 提示：搜索面板——`/` 回搜索框換一個詞（整條選中）
 key = "hint.search.new-word"
-zht = "換個詞"
-zhs = "换个词"
-en = "new word"
+zht = "改搜的詞"
+zhs = "改搜的词"
+en = "edit the search"
 
 [[message]]
 # 提示：搜索面板——下一格
 key = "hint.search.next-cell"
-zht = "下一格"
-zhs = "下一格"
-en = "next cell"
+zht = "換一格"
+zhs = "换一格"
+en = "move between boxes"
 
 [[message]]
 # 提示：搜索面板——出框
 key = "hint.search.out-of-the-box"
-zht = "出框"
-zhs = "出框"
-en = "leave the box"
+zht = "回面板"
+zhs = "回面板"
+en = "back to the panel"
 
 [[message]]
 # 提示：替換模式下，框裏那一行的 Esc 指路
 key = "hint.search.out-then-replace"
-zht = "出框：j 到命中上 r 換這一處，R 全部換"
-zhs = "出框：j 到命中上 r 换这一处，R 全部换"
-en = "out: j to a hit then r changes it, R changes them all"
+zht = "回面板，然後 j 走到一處命中上按 r 換它；R 是全部換"
+zhs = "回面板，然后 j 走到一处命中上按 r 换它；R 是全部换"
+en = "back to the panel — then j to a match, r replaces it, R replaces all"
 
 [[message]]
 # 搜索面板的鍵位行：全部換
 key = "hint.search.replace-all"
 zht = "全部換"
 zhs = "全部换"
-en = "change them all"
+en = "replace all"
 
+[[message]]
+# 搜索面板的鍵位行：站在檔名那一行上，r 換整個檔
+key = "hint.search.replace-file"
+zht = "換整個檔"
+zhs = "换整个档"
+en = "replace every match in this file"
 [[message]]
 # 提示：搜索面板——換這一處／全部換
 key = "hint.search.replace-here"
-zht = "換這處（站在檔名上就是整個檔）"
-zhs = "换这处（站在档名上就是整个档）"
-en = "change this one (on a file name: that whole file)"
+zht = "換這一處"
+zhs = "换这一处"
+en = "replace this match"
 
 [[message]]
 # 提示：搜索面板——五個開關按編號開關
@@ -4981,15 +4987,15 @@ en = "switches"
 [[message]]
 # 搜索面板的鍵位行：撤回
 key = "hint.search.undo"
-zht = "撤回"
-zhs = "撤回"
-en = "undo"
+zht = "撤回上一次換"
+zhs = "撤回上一次换"
+en = "undo the last one"
 [[message]]
 # 提示：搜索面板——這一格做什麼
 key = "hint.search.use-it"
-zht = "搜索／跳轉"
-zhs = "搜索／跳转"
-en = "search, or go there"
+zht = "找／跳過去"
+zhs = "找／跳过去"
+en = "search, or jump to it"
 
 [[message]]
 # 提示欄：邊欄
@@ -5001,9 +5007,9 @@ en = "sidebar"
 [[message]]
 # 邊欄提示：回正文
 key = "hint.sidebar.back-to-text"
-zht = "去下一區"
-zhs = "去下一区"
-en = "next region"
+zht = "回正文"
+zhs = "回正文"
+en = "back to the text"
 
 [[message]]
 # 邊欄底下那一行按鍵說明
@@ -5790,6 +5796,12 @@ zht = "大綱"
 zhs = "大纲"
 en = "Outline"
 
+[[message]]
+# 勾上替換之後，面板的名字
+key = "label.panel.replace"
+zht = "搜索與替換"
+zhs = "搜索与替换"
+en = "Find & Replace"
 [[message]]
 # 標籤：搜索面板
 key = "label.panel.search"
@@ -7169,58 +7181,58 @@ en = "{0}'s table is not installed — put it in {1}, or a table of your own in 
 [[message]]
 # 搜索：正則寫不通
 key = "search.bad-pattern"
-zht = "正則寫不通"
-zhs = "正则写不通"
-en = "bad pattern"
+zht = "這串字當正則讀不通"
+zhs = "这串字当正则读不通"
+en = "not a valid regular expression"
 
 [[message]]
 # 搜索：大小寫那一格的名字
 key = "search.case"
-zht = "大小寫"
-zhs = "大小写"
+zht = "分大小寫"
+zhs = "分大小写"
 en = "case"
 
 [[message]]
 # 搜索：大小寫——不敏感
 key = "search.case.insensitive"
-zht = "不敏感"
-zhs = "不敏感"
-en = "ignore"
+zht = "不分"
+zhs = "不分"
+en = "any"
 
 [[message]]
 # 搜索：大小寫——敏感
 key = "search.case.sensitive"
-zht = "敏感"
-zhs = "敏感"
-en = "match"
+zht = "要分"
+zhs = "要分"
+en = "exact"
 
 [[message]]
 # 搜索：大小寫——智能（打大寫纔算數）
 key = "search.case.smart"
-zht = "智能"
-zhs = "智能"
+zht = "自動"
+zhs = "自动"
 en = "smart"
 
 [[message]]
 # 搜索：跨檔要按 Enter 纔去找
 key = "search.enter-to-look"
-zht = "Enter 開找"
-zhs = "Enter 开找"
-en = "Enter to look"
+zht = "按 Enter 開始找"
+zhs = "按 Enter 开始找"
+en = "press Enter to search"
 
 [[message]]
 # 搜索：模糊那一格——打的幾個字按順序出現、而且挨得近就算命中（`crate::nearby`）
 key = "search.fuzzy"
-zht = "模糊"
-zhs = "模糊"
-en = "loose"
+zht = "隔字也算"
+zhs = "隔字也算"
+en = "loose spacing"
 
 [[message]]
 # 搜索面板：簡繁異體字形混合那個開關的名字
 key = "search.glyphs"
-zht = "匹配簡繁異體"
-zhs = "匹配简繁异体"
-en = "match simp/trad chars"
+zht = "簡繁算一個"
+zhs = "简繁算一个"
+en = "简 = 繁"
 
 [[message]]
 # 限定一欄搜到第一處
@@ -7258,25 +7270,31 @@ zhs = "{0} 处"
 en = "{0} hits"
 
 [[message]]
+# 只找到一處。中文不分單複數，英文分——「1 hits」每搜一個獨一無二的詞就出現一次
+key = "search.hits-one"
+zht = "{0} 處"
+zhs = "{0} 处"
+en = "{0} hit"
+[[message]]
 # 搜索面板：查詢框的名字
 key = "search.label.query"
 zht = "搜: "
 zhs = "搜: "
-en = "Se: "
+en = "Find: "
 
 [[message]]
 # 搜索面板：替換框的名字
 key = "search.label.replace"
 zht = "換: "
 zhs = "换: "
-en = "Re: "
+en = "Repl: "
 
 [[message]]
 # 搜索面板：「哪裏找」那一格的名字，畫在標題後面
 key = "search.label.scope"
 zht = "位置: "
 zhs = "位置: "
-en = "in: "
+en = "In: "
 
 [[message]]
 # 搜索：那一處已經不在那裏了（檔案後來被改過）
@@ -7312,9 +7330,9 @@ en = "none"
 [[message]]
 # 搜索面板：拼音那個開關的名字
 key = "search.pinyin"
-zht = "匹配拼音"
-zhs = "匹配拼音"
-en = "pinyin"
+zht = "拼音也找得到"
+zhs = "拼音也找得到"
+en = "pinyin → 漢字"
 
 [[message]]
 # 搜索：正則那一格
@@ -7326,9 +7344,9 @@ en = "regex"
 [[message]]
 # 搜索：全部替換，答了不
 key = "search.replace-all-no"
-zht = "沒有動"
-zhs = "没有动"
-en = "nothing changed"
+zht = "沒有換，什麼都沒動"
+zhs = "没有换，什么都没动"
+en = "cancelled — nothing changed"
 
 [[message]]
 # 搜索：全部替換之前問一次
@@ -7338,18 +7356,32 @@ zhs = "把这 {0} 处全部换掉？"
 en = "change all {0}?"
 
 [[message]]
+# 全部換，而且不止一個檔
+key = "search.replace-all-sure-files"
+zht = "把 {1} 個檔裏的 {0} 處全部換掉？"
+zhs = "把 {1} 个档里的 {0} 处全部换掉？"
+en = "Replace all {0} matches, across {1} files?"
+
+[[message]]
+# 整個檔要不要全換，先問一句
+key = "search.replace-file-sure"
+zht = "把 {1} 裏的 {0} 處全部換掉？"
+zhs = "把 {1} 里的 {0} 处全部换掉？"
+en = "Replace all {0} matches in {1}?"
+
+[[message]]
 # 搜索：換掉了幾處
 key = "search.replaced"
-zht = "換掉 {0} 處（還沒寫盤，:write-all 纔寫）"
-zhs = "换掉 {0} 处（还没写盘，:write-all 才写）"
-en = "{0} changed — not written yet, `:write-all` does that"
+zht = "換掉 {0} 處。還沒存檔，按 :write-all 纔寫進去。"
+zhs = "换掉 {0} 处。还没存档，按 :write-all 才写进去。"
+en = "Replaced {0} matches. Nothing on disk yet — :write-all saves."
 
 [[message]]
 # 搜索：一處都沒換
 key = "search.replaced-none"
-zht = "一處都沒換"
-zhs = "一处都没换"
-en = "nothing changed"
+zht = "沒有可換的命中"
+zhs = "没有可换的命中"
+en = "no matches to replace"
 
 [[message]]
 # 搜索面板那個開關：勾上就長出替換行
@@ -7360,10 +7392,29 @@ en = "replace"
 [[message]]
 # 在框上按 r：換這一處要先站到一處上
 key = "search.stand-on-a-hit"
-zht = "r 換的是「這一處」——先 j 走到一條命中上；R 是全部換"
-zhs = "r 换的是「这一处」——先 j 走到一条命中上；R 是全部换"
-en = "r changes one hit — walk to one with j first; R changes them all"
+zht = "r 只換光標停着的那一處。現在沒停在任何一處上，所以先按 j 走到一條命中上。要全部換就按 R。"
+zhs = "r 只换光标停着的那一处。现在没停在任何一处上，所以先按 j 走到一条命中上。要全部换就按 R。"
+en = "r replaces the one match you are standing on. You are not on one — press j to walk to a match first. R replaces them all."
 
+[[message]]
+# 站在結果上按了改字的鍵
+key = "search.that-edits-the-box"
+zht = "這幾個鍵改的是搜索框裏的字。要去那一處改正文，按 Enter"
+zhs = "这几个键改的是搜索框里的字。要去那一处改正文，按 Enter"
+en = "those keys edit the search box — press Enter to go and edit the text there"
+[[message]]
+# 撤回了剛纔那一次替換
+key = "search.undone"
+zht = "撤回了剛纔那次替換"
+zhs = "撤回了刚才那次替换"
+en = "that replacement is undone"
+
+[[message]]
+# 撤回了剛纔那一次替換，動了好幾個檔
+key = "search.undone-files"
+zht = "撤回了剛纔那次替換，{0} 個檔都復原了"
+zhs = "撤回了刚才那次替换，{0} 个档都复原了"
+en = "that replacement is undone in all {0} files"
 [[message]]
 # 搜索：在哪裏找——這個檔
 key = "search.where.buffer"
@@ -7395,9 +7446,9 @@ en = "workspace"
 [[message]]
 # 搜索：完整匹配那一格
 key = "search.whole"
-zht = "完整匹配"
-zhs = "完整匹配"
-en = "whole word"
+zht = "整詞（西文）"
+zhs = "整词（西文）"
+en = "whole word (Latin)"
 
 [[message]]
 # 延伸模式下收回成一個字
@@ -10538,6 +10589,4 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
-
-
 

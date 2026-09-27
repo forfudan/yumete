@@ -4,6 +4,19 @@
 
 use super::*;
 
+/// **`C-w`／`空格 w` 這個鍵的名字，按界面語言寫。**
+///
+/// 2026-09-27 報的：英文界面上印着 `C-w／空格 w next region`——一個漢字和一個
+/// 全角斜槓。鍵位那一欄的型別是 `&'static str`（`hjkl` 在哪種語言裏都是
+/// `hjkl`），所以這裏逐語言各寫一個字面量，不去泄漏一份新的字串：這一行每一幀
+/// 都算一次。
+fn back_to_text_key() -> &'static str {
+    match crate::messages::language() {
+        crate::messages::Language::English => "C-w / Space w",
+        _ => "C-w／空格 w",
+    }
+}
+
 impl Editor {
     /// What the row below the status line should say when nothing is being
     /// typed into it.
@@ -37,7 +50,7 @@ impl Editor {
                 let what = crate::messages::say(crate::sidebar::Panel::from(kind).tag(), &[]);
                 return Hint::Keys(what, vec![
                         ("j k", say!("hint.sidebar.move")),
-                        ("C-w／空格 w", say!("hint.sidebar.back-to-text")),
+                        (back_to_text_key(), say!("hint.sidebar.back-to-text")),
                     ]);
             }
         }
@@ -79,33 +92,45 @@ impl Editor {
             if self.transient(side).is_none()
                 && self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search)
             {
-                let mut keys = vec![
-                    ("/", say!("hint.search.new-word")),
-                    // The five switches are pressed by number and walked past
-                    // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
-                    ("1–7", say!("hint.search.switches")),
-                    ("Enter", say!("hint.search.use-it")),
-                ];
-                // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
-                // 都不管用，而這一行擠不下說了也用不上的東西。
-                if self.search().field.takes_text() {
-                    keys.insert(1, ("d c a", say!("hint.search.edit-in-place")));
-                }
-                // Only when they do something: `r`/`R`/`u` are live on the
-                // replacing panel and nowhere else.
-                //
-                // ⚠️ **三個鍵分開寫**（2026-09-27）：`r` 站在一處命中上換那一處、
-                // 站在檔頭上換那一個檔的全部，`R` 換名單上的全部，`u` 撤回。合成
-                // 一句「換這一處／全部換」的時候，沒有一個讀者認得出哪個鍵做哪件
-                // 事——報上來就是「我完全一头雾水」。
+                // ⚠️ **這一行是硬砍的，所以次序就是重要性**（2026-09-27 三個試
+                // 用的人各自撞上）。從前排頭的是 `/` 和 `d c a`，而砍在尾巴上的
+                // 是 `u 撤回`——一個是最不常用的，一個是按錯之後唯一的退路。英文
+                // 界面下整行要 170 欄纔寫得完，所以尾巴一定會被砍掉。
+                let mut keys: Vec<(&'static str, String)> = Vec::new();
+                // **會改稿子的那三個排最前。** 它們只在替換那一檔活着，而它們是
+                // 這扇面板裏唯一沒有別處可學的鍵。
                 if self.search().replacing {
-                    keys.push(("r", say!("hint.search.replace-here")));
+                    // ⚠️ **`r` 說的是站着的這一行**：檔名那一行上它換整個檔，
+                    // 命中那一行上它換那一處。一句話寫兩種意思的時候（「換這處
+                    // （站在檔名上就是整個檔）」），這一行就長到把後面的 `q` 擠
+                    // 出畫面——而讀者站在哪一行，編輯器自己看得見。
+                    let here = match self.search().row() {
+                        Some(crate::search_panel::Row::File { .. }) => {
+                            say!("hint.search.replace-file")
+                        }
+                        _ => say!("hint.search.replace-here"),
+                    };
+                    keys.push(("r", here));
                     keys.push(("R", say!("hint.search.replace-all")));
                     keys.push(("u", say!("hint.search.undo")));
                 }
-                keys.push(("C-w／空格 w", say!("hint.sidebar.back-to-text")));
+                // The five switches are pressed by number and walked past
+                // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
+                keys.push(("1–7", say!("hint.search.switches")));
+                keys.push(("Enter", say!("hint.search.use-it")));
                 keys.push(("q", say!("hint.close")));
-                return Hint::Keys(say!("label.panel.search"), keys);
+                keys.push((back_to_text_key(), say!("hint.sidebar.back-to-text")));
+                keys.push(("/", say!("hint.search.new-word")));
+                // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
+                // 都不管用，而這一行擠不下說了也用不上的東西。
+                if self.search().field.takes_text() {
+                    keys.push(("d c a", say!("hint.search.edit-in-place")));
+                }
+                let title = match self.search().replacing {
+                    true => say!("label.panel.replace"),
+                    false => say!("label.panel.search"),
+                };
+                return Hint::Keys(title, keys);
             }
         }
         if let Some(side) = self.panel_focus() {
@@ -122,7 +147,7 @@ impl Editor {
                     ("j k J K g G", walking),
                     ("Tab", say!("hint.sidebar.other-view")),
                     ("w", say!("hint.sidebar.width")),
-                    ("C-w／空格 w", say!("hint.sidebar.back-to-text")),
+                    (back_to_text_key(), say!("hint.sidebar.back-to-text")),
                     ("q", say!("hint.close")),
                 ]);
         }

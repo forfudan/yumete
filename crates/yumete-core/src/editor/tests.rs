@@ -9189,11 +9189,20 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
 
     // **One file**, from its header row — the one with two hits under it, so
     // that 「a file」 and 「a hit」 cannot be mistaken for each other.
+    //
+    // ⚠️ **這一個也先問一句**（2026-09-27 改）：從前只有 `R` 問，而 `r` 站在檔名
+    // 那一行上一聲不吭就換掉整個檔——兩個鍵差一個 Shift，兩行差一個 `j`。
     ed.search_go_to_file_with(2);
     ed.on_key(Key::Char('r'));
+    assert_eq!(ed.search().total, 3, "還沒答應，一處都沒換：{}", ed.status());
+    ed.on_key(Key::Char('n'));
+    assert_eq!(ed.search().total, 3, "答了不換，就真的沒換");
+    ed.search_go_to_file_with(2);
+    ed.on_key(Key::Char('r'));
+    ed.on_key(Key::Char('y'));
     assert_eq!(ed.search().total, 1, "{}", ed.status());
 
-    // **All of them — and only this one asks first.**
+    // **All of them — and this one says how many.**
     ed.on_key(Key::Char('R'));
     assert_eq!(ed.status(), say!("search.replace-all-sure", 1));
     ed.on_key(Key::Char('n'));
