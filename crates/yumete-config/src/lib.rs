@@ -580,10 +580,20 @@ impl Default for ImeConfig {
 pub struct PanelConfig {
     /// The characters candidates are numbered with, in order.
     ///
-    /// Each has to be **two cells wide**, or the columns come apart: the
-    /// circled Chinese numerals ㊀㊁㊂ are, while the circled Arabic ①②③ are
-    /// East-Asian *ambiguous* and may be drawn either way. A value that is too
-    /// short simply runs out and the rest fall back to plain digits.
+    /// Each has to be **two cells wide**, or the columns come apart — measured
+    /// 2026-09-27 on the 竪書 panel: with `123` the number came out at column
+    /// 28 and the candidate under it at 33, five cells adrift, and the box's
+    /// right wall went ragged with it. The full-width digits `１２３` are two
+    /// cells, and so are the circled Chinese numerals ㊀㊁㊂; the circled
+    /// Arabic ①②③ are East-Asian *ambiguous* and may be drawn either way.
+    ///
+    /// **Factory is `１２３`** (2026-09-27). yume's desktop front end ships
+    /// plain numbers, and somebody arriving from it presses `2` and has to
+    /// work out that `㊁` is the one they meant. Full-width keeps the column
+    /// that a plain `2` would break.
+    ///
+    /// A value that is too short simply runs out and the rest fall back to
+    /// plain digits.
     pub markers: String,
     /// 墨 — the colour candidates are drawn in.
     pub ink: (u8, u8, u8),
@@ -692,7 +702,7 @@ impl Default for PanelConfig {
     fn default() -> Self {
         PanelConfig {
             // 帶圈中文數字, which are unambiguously wide.
-            markers: "㊀㊁㊂㊃㊄㊅㊆㊇㊈".to_string(),
+            markers: "１２３４５６７８９".to_string(),
             // Yume's 墨香, dark: warm ink on a deep ground.
             ink: (0xCF, 0xC6, 0xA9),
             paper: (0x26, 0x2A, 0x27),

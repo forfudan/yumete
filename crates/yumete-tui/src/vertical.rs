@@ -764,10 +764,13 @@ fn packed(text: &str) -> Vec<String> {
 
 /// The character candidate `i` is numbered with.
 ///
-/// Taken from the configured list — 帶圈中文數字 ㊀㊁㊂ by default. Circled
-/// *Chinese* numerals, not the circled Arabic ①②③: those are East-Asian
-/// *ambiguous* width, so a terminal may draw them one cell or two and the column
-/// would come apart. Past the end of the list a plain digit stands in.
+/// Taken from the configured list — **full-width digits `１２３` by default**
+/// (2026-09-27; 帶圈中文數字 ㊀㊁㊂ before that). Whatever is in the list has to
+/// be two cells wide or the column comes apart: a half-width `1` in a 縱 sits in
+/// the left cell and the candidate under it does not, five cells adrift by the
+/// time the panel is three wide. That also rules out the circled Arabic ①②③,
+/// which are East-Asian *ambiguous* and may be drawn either way.
+/// Past the end of the list a plain digit stands in.
 pub(crate) fn index_mark(markers: &str, i: usize) -> String {
     match markers.chars().nth(i) {
         Some(c) => c.to_string(),

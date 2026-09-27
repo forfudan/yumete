@@ -451,8 +451,8 @@ pub fn draw(
             (false, _) => ground.fg(ink.azure()),
         };
         // ⚠️ **切了要看得出來。** `put_text` 到了邊界就停，一聲不吭——「候選的序號」
-        // 那九個圈字正好比值欄寬一格，畫出來是 `㊀㊁㊂㊃㊄㊅㊆㊇`，看着像設定裏
-        // 只有八個。省略號說出「後面還有」。2026-09-24 拍圖看出來的。
+        // 那九個全角字正好比值欄寬一格，畫出來是 `１２３４５６７８`，看着像設定
+        // 裏只有八個。省略號說出「後面還有」。2026-09-24 拍圖看出來的。
         let room = col.value_ends().saturating_sub(col.value) as usize;
         let value = crate::elide(&value, room);
         put_text(buf, col.value, y, col.value_ends(), &value, value_style);
