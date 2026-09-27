@@ -797,6 +797,18 @@ impl Palette {
         self.washed_to(self.gold, 1.9, 4.5)
     }
 
+    /// **同屏別的那幾處命中**——比 [`Ink::wash`] 更淡的一層（2026-09-27 定，
+    /// 原話：「同屏幕別的命中的底色可以淡一些，防止混淆」）。
+    ///
+    /// 兩種標記各說一件事：站着的那一處說「按 `r` 它會變成這樣」，別的那幾處說
+    /// 「這裏也有一處」。同一個距離的話，眼睛分不出哪一處是自己站着的——而站在
+    /// 哪一處正是替換這件事唯一要緊的信息。
+    ///
+    /// 1.35:1，比 1.9 更靠近紙。同一個色相，所以它們讀起來仍是同一族。
+    pub fn faint_wash(self) -> Color {
+        self.washed_to(self.gold, 1.35, 4.5)
+    }
+
     /// The same wash, for any of the 品色 — what a `:::` block sits on (#459).
     ///
     /// ⚠️ **This is why the four callouts can differ by hue now and could not

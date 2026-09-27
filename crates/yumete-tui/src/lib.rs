@@ -5171,6 +5171,107 @@ fn draw_which_key(
     })
 }
 
+/// **As much of a line as the row can hold, centred on one word** — #419.
+///
+/// ⚠️ **2026-09-27 走過一趟又回來了。** 它本來是命令行畫前後文用的，而預覽挪進正文
+/// 之後那一行不再畫前後文，於是連它一起刪了。回來是因為**結果名單那一行也該圍着命
+/// 中截**：從前它從行首截，一行上兩處命中就出現兩條一模一樣的行，而站着的那一處常常
+/// 在截斷線外面看不見。同一件事，換了個地方。
+
+/// **As much of a line as the row can hold, centred on one word** — #419.
+///
+/// ⚠️ **2026-09-27 走過一趟又回來了。** 它本來是命令行畫前後文用的，而預覽挪進正文
+/// 之後那一行不再畫前後文，於是連它一起刪了。回來是因為**結果名單那一行也該圍着命
+/// 中截**：從前它從行首截，一行上兩處命中就出現兩條一模一樣的行，而站着的那一處常常
+/// 在截斷線外面看不見。同一件事，換了個地方。
+///
+/// Three pieces: what comes before the match, the match, and what comes
+/// after — so the row can pick the match out however it draws. `…` is added
+/// to whichever end was cut, and only to that end: the mark is what the
+/// reader is looking for, so it is the last thing to go.
+///
+/// ⚠️ **The text may already carry a `…` of its own** (a hit in another file
+/// was cut when the search ran). It is an ordinary character here, so a cut
+/// that reaches it drops it and puts one back — the two never stack up.
+fn fit_around(
+    text: &str,
+    mark: std::ops::Range<usize>,
+    room: usize,
+) -> (String, String, String) {
+    let chars: Vec<char> = text.chars().collect();
+    let start = mark.start.min(chars.len());
+    let end = mark.end.clamp(start, chars.len());
+    let width = |cs: &[char]| cs.iter().copied().map(yumete_cjk::char_width).sum::<usize>();
+    if room == 0 {
+        return (String::new(), String::new(), String::new());
+    }
+    // It all fits: leave it alone. `…` is the mark of a cut, and nothing was
+    // cut — a row that shows the whole line should not claim otherwise.
+    if width(&chars) <= room {
+        return (
+            chars[..start].iter().collect(),
+            chars[start..end].iter().collect(),
+            chars[end..].iter().collect(),
+        );
+    }
+    // ⚠️ **The ellipses are part of the budget from the first line.** Counting
+    // them only while growing let a match exactly `room − 1` wide come out one
+    // cell too wide with a `…` at each end, and the end of the row is where
+    // the one that says 「there is more」 would be lost.
+    let cut = |lo: usize, hi: usize| usize::from(lo > 0) + usize::from(hi < chars.len());
+    // The match alone is wider than the row (`.*` matches a whole paragraph).
+    // Its head, and a `…` to say the rest of *it* is missing.
+    if width(&chars[start..end]) + cut(start, end) > room {
+        let mut hit = String::new();
+        let mut used = 0;
+        for &c in &chars[start..end] {
+            let w = yumete_cjk::char_width(c);
+            if used + w + 1 > room {
+                break;
+            }
+            hit.push(c);
+            used += w;
+        }
+        return (String::new(), hit, "…".to_string());
+    }
+    // Grow one character each way per round, so the word ends up in the
+    // middle of what is shown rather than at one edge of it.
+    let (mut lo, mut hi) = (start, end);
+    let mut used = width(&chars[lo..hi]);
+    loop {
+        let mut moved = false;
+        if lo > 0 {
+            let w = yumete_cjk::char_width(chars[lo - 1]);
+            if used + w + cut(lo - 1, hi) <= room {
+                lo -= 1;
+                used += w;
+                moved = true;
+            }
+        }
+        if hi < chars.len() {
+            let w = yumete_cjk::char_width(chars[hi]);
+            if used + w + cut(lo, hi + 1) <= room {
+                hi += 1;
+                used += w;
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    let mut before = String::new();
+    if lo > 0 {
+        before.push('…');
+    }
+    before.extend(&chars[lo..start]);
+    let mut after: String = chars[end..hi].iter().collect();
+    if hi < chars.len() {
+        after.push('…');
+    }
+    (before, chars[start..end].iter().collect(), after)
+}
+
 /// The panel for a footnote or a `%%註釋%%` — what the cursor is standing on.
 ///
 /// It used to be a **full-width four-row strip** along the bottom of the page
@@ -7045,6 +7146,11 @@ fn draw_search(
         (_, true, true) => (say!("search.enter-to-look"), head),
         (false, _, false) => (String::new(), quiet),
         (false, _, true) if find.total == 0 => (say!("search.none"), quiet),
+        // **走到第幾處也寫在這裏**（2026-09-27 報的：「表頭只有 11 處，走到第幾
+        // 條不說」）。`4/11`，不寫「第」「共」——那一格在標題右邊，字越少越好。
+        (false, _, true) if find.nth_hit().is_some() => {
+            (say!("search.nth-hit", find.nth_hit().unwrap_or(1), find.total), quiet)
+        }
         // ⚠️ 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
         // （2026-09-27 報的）。兩則文案，中文那兩份寫得一模一樣。
         (false, _, true) if find.total == 1 => (say!("search.hits-one", 1), quiet),
@@ -7273,7 +7379,25 @@ fn draw_search(
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
     let top = y + 2;
-    let room = (area.y + area.height).saturating_sub(top) as usize;
+    let mut room = (area.y + area.height).saturating_sub(top) as usize;
+    if room == 0 {
+        return caret;
+    }
+    // **「換後」那一塊，在名單底下**（2026-09-27 定）。它先跟名單要行，所以要在
+    // 走名單之前算——名單有多少行，看它拿走幾行。
+    //
+    // ⚠️ **名單至少留三行。** 名單纔是主體；面板矮的時候先壓這一塊。
+    let after = editor.replace_preview().filter(|_| find.field == Field::Results);
+    let wide = to.saturating_sub(left) as usize;
+    let mut after_rows = 0usize;
+    if let Some((prose, mark, now)) = &after {
+        // 要幾行：上下文加換上去的那一段，按這一欄的寬度折出來的行數，外加一行
+        // 標題。上限是面板的三分之一。
+        let asked = 1 + preview_lines(prose, mark, now, wide).len();
+        let cap = ((area.height as usize) / 3).max(2);
+        after_rows = asked.min(cap).min(room.saturating_sub(3).max(0));
+    }
+    room = room.saturating_sub(after_rows);
     if room == 0 {
         return caret;
     }
@@ -7325,7 +7449,7 @@ fn draw_search(
                 //
                 // 順帶把本檔與跨檔那兩種畫法合成了一種——從前只有跨檔那一種縮。
                 (
-                    format!("{:>numbered$}  {}", hit.line + 1, hit.excerpt),
+                    format!("{:>numbered$}  ", hit.line + 1),
                     text,
                 )
             }
@@ -7336,8 +7460,130 @@ fn draw_search(
             (false, false) => plain,
         };
         put_text(buf, left, y, to, &line, style);
+        // **命中那一行圍着命中截，命中本身反白**（2026-09-27 報的：「一行上兩處
+        // 命中就出現兩條一模一樣的行，而你站着的那一處常常在截斷線外面」）。
+        //
+        // 從前這一行是把摘要接在行號後面一路畫過去，畫到面板右邊就硬截——摘要本
+        // 來是圍着命中摘的（`AROUND`），可**截的那一刀是從左邊數的**，於是摘要的
+        // 右半截掉哪兒算哪兒。現在把剩下的寬度交給 `fit_around`，它按顯示寬度往
+        // 兩邊長，命中落在中間。
+        if let yumete_core::search_panel::Row::Hit(at) = &rows[i] {
+            let hit = &find.hits[*at];
+            let mut x = left + yumete_cjk::str_width(&line) as u16;
+            let room = to.saturating_sub(x) as usize;
+            let (before, lit, after) = fit_around(&hit.excerpt, hit.mark.clone(), room);
+            let mut ink_it = |text: &str, style: Style, x: &mut u16| {
+                put_text(buf, *x, y, to, text, style);
+                *x += yumete_cjk::str_width(text) as u16;
+            };
+            ink_it(&before, style, &mut x);
+            // 整行反白的時候命中不能再反一次——反的反就是不反了。
+            let hot = match inked {
+                true => style,
+                false => style.add_modifier(Modifier::REVERSED),
+            };
+            ink_it(&lit, hot, &mut x);
+            ink_it(&after, style, &mut x);
+        }
+    }
+
+    // **「換後」那一塊**（2026-09-27 定）。名單底下自己一塊地方，畫的是「這一處
+    // 換完長什麼樣」：上下文只印一遍，變的那一段出現兩次——換下來的朱加刪除線，
+    // 換上去的綠。
+    //
+    // ⚠️ **不加橫線分隔。** 上下那兩道線今天剛拆掉，再加一道是走回頭路；整扇面
+    // 板只有這裏有朱和綠，它自己就分得出來。
+    //
+    // ⚠️ **刪除線不是所有終端都畫得出來**，所以朱那個顏色也得說一遍——同
+    // Markdown 的 `~~刪除線~~`（`Kind::Strike`），那裏的註釋寫的是同一件事。
+    if after_rows > 0 {
+        // ⚠️ `prose`，不叫 `text`——那個名字在這一支裏是正文那一檔的樣式。
+        if let Some((prose, mark, now)) = &after {
+            let head = area.y + area.height - after_rows as u16;
+            put_text(buf, left, head, to, &say!("search.after"), quiet);
+            let gone = ground.fg(ink.mark()).add_modifier(Modifier::CROSSED_OUT);
+            let come = ground.fg(ink.green());
+            for (slot, row) in preview_lines(prose, mark, now, wide)
+                .into_iter()
+                .take(after_rows.saturating_sub(1))
+                .enumerate()
+            {
+                let y = head + 1 + slot as u16;
+                let mut x = left;
+                for (part, which) in row {
+                    let style = match which {
+                        Part::Gone => gone,
+                        Part::Come => come,
+                        Part::Same => text,
+                    };
+                    put_text(buf, x, y, to, &part, style);
+                    x += yumete_cjk::str_width(&part) as u16;
+                }
+            }
+        }
     }
     caret
+}
+
+/// 「換後」那一塊裏，一小段字是什麼身份。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Part {
+    /// 上下文，兩邊一樣的那些字。
+    Same,
+    /// 換下來的那一段。
+    Gone,
+    /// 換上去的那一段。
+    Come,
+}
+
+/// **把「換後」那一塊折成幾行**，每行是若干小段，各帶身份。
+///
+/// 上下文只印一遍，變的那一段印兩次（先舊後新）——上下文兩邊一模一樣，印兩遍等
+/// 於把最稀缺的東西（窄面板的行數）花在重複上，而舊新挨着，眼睛直接對比。
+///
+/// 按**顯示寬度**折，漢字不許劈成兩半。
+fn preview_lines(
+    text: &str,
+    mark: &std::ops::Range<usize>,
+    now: &str,
+    wide: usize,
+) -> Vec<Vec<(String, Part)>> {
+    if wide == 0 {
+        return Vec::new();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let cut = |a: usize, b: usize| -> String {
+        chars[a.min(chars.len())..b.min(chars.len())].iter().collect()
+    };
+    let pieces = [
+        (cut(0, mark.start), Part::Same),
+        (cut(mark.start, mark.end), Part::Gone),
+        (now.to_string(), Part::Come),
+        (cut(mark.end, chars.len()), Part::Same),
+    ];
+    let mut rows: Vec<Vec<(String, Part)>> = vec![Vec::new()];
+    let mut used = 0usize;
+    for (piece, which) in pieces {
+        let mut run = String::new();
+        for c in piece.chars() {
+            let w = yumete_cjk::char_width(c);
+            if used + w > wide {
+                if !run.is_empty() {
+                    rows.last_mut().expect("一行總是有的").push((run.clone(), which));
+                    run.clear();
+                }
+                rows.push(Vec::new());
+                used = 0;
+            }
+            run.push(c);
+            used += w;
+        }
+        if !run.is_empty() {
+            rows.last_mut().expect("一行總是有的").push((run, which));
+        }
+    }
+    rows.retain(|row| !row.is_empty());
+    rows
 }
 
 /// **The 字典, in the bottom layer of a slot** — Feature #215, #293.
@@ -7984,6 +8230,13 @@ fn draw_horizontal(
     });
     let hit_line = hit.map(|(from, _)| rope.char_to_line(from.min(rope.len_chars())));
     let hit_style = Style::default().bg(ink.wash());
+    // **同屏別的那幾處命中，淡一層**（2026-09-27 定，原話：「同屏幕別的命中的
+    // 底色可以淡一些，防止混淆」）。兩層各說一件事：站着的那一處說「按 `r` 它
+    // 會變成這樣」，別的那幾處說「這裏也有一處」。
+    //
+    // ⚠️ **一幀問一次**：它要拿眼前這一份的真實路徑去比命中身上那個相對路徑。
+    let search_marks = editor.search_marks();
+    let faint_style = Style::default().bg(ink.faint_wash());
     // Asked of the editor, not of the range: the selection always covers the
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
     // one-character highlight and the word-tint overlay would never appear.
@@ -8664,6 +8917,18 @@ fn draw_horizontal(
                 ));
             }
             lines.push(scrolled(reading, gutter, left));
+        }
+
+        // **別的那幾處命中，墊在最底下一層**——站着的那一處畫在它之後，所以蓋
+        // 在它上面。兩層的次序就是它們的要緊程度（2026-09-27）。
+        for (from, to) in &search_marks {
+            if *to > row.start && *from < row.end {
+                let a = from.saturating_sub(row.start).min(chars.len());
+                let b = to.saturating_sub(row.start).min(chars.len());
+                for style in styles.iter_mut().take(b).skip(a) {
+                    *style = style.patch(faint_style);
+                }
+            }
         }
 
         // …and the hit itself, over everything else on the row.

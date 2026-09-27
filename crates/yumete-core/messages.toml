@@ -7155,6 +7155,12 @@ en = "{0}'s table is not installed — put it in {1}, or a table of your own in 
 # ── search ────────────────────────────────────────────────────────────
 
 [[message]]
+# 搜索面板底下那一塊：這一處換完長什麼樣
+key = "search.after"
+zht = "換後"
+zhs = "换后"
+en = "after"
+[[message]]
 # 空的位置框上那句灰字
 key = "search.ask.folder"
 zht = "打一個資料夾的路徑"
@@ -7323,6 +7329,12 @@ zht = "無結果"
 zhs = "无结果"
 en = "none"
 
+[[message]]
+# 搜索：走到第幾處，一共幾處
+key = "search.nth-hit"
+zht = "{0}/{1}"
+zhs = "{0}/{1}"
+en = "{0}/{1}"
 [[message]]
 # 搜索面板：拼音那個開關的名字
 key = "search.pinyin"
