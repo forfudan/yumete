@@ -33,3 +33,15 @@ strip = "debuginfo"
 # 而這個項目從來不那樣調試。
 [profile.dev]
 debug = "line-tables-only"
+
+# **`target/debug/deps` 裏兩百一十萬個檔，其中 99.3% 是 `.rcgu.o`**（2026-09-27
+# 量的）。macOS 上 dev 的 `split-debuginfo` 默認是 `unpacked`：調試信息留在每個
+# 代碼生成單元的目標檔裏，所以那些 `.o` **必須留着**，而檔名帶着每次編譯的哈希
+# ——每重編一次就新寫一套，舊的永遠不刪。dev 的 codegen-units 是 256，編幾百次
+# 就是幾百萬個。一個目錄裏兩百萬條，APFS 查一個名字都慢，於是每一次構建都在等
+# 磁盤（實測 rustc 停在 `UN`，不可中斷的磁盤等待，CPU 5%）。
+#
+# `packed` 讓 `dsymutil` 把調試信息收進一個 `.dSYM`，那些 `.o` 就不必留了。
+# ⚠️ **回溯照舊讀得懂**（#300）：`line-tables-only` 那一半原樣還在，只是換了個
+# 地方放。代價是每次鏈接多跑一趟 dsymutil。
+split-debuginfo = "packed"
