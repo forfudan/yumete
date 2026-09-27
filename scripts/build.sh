@@ -344,3 +344,6 @@ if [[ "$link_global" == "1" ]]; then
 else
   echo "==> global yumete: skipped (--no-link)"
 fi
+
+# 順帶說一句 target/ 有多大。只報告，不刪（scripts/target_size.sh 的註釋說了為什麼）。
+scripts/target_size.sh || true
