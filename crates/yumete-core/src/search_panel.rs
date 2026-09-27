@@ -460,6 +460,17 @@ impl Search {
         }
     }
 
+    /// **站着的是第幾處**，從 1 數起；沒站在命中上就是 `None`。
+    ///
+    /// 2026-09-27 報的：表頭只寫「11 處」，走到第幾條一個字都不說。跨檔的時候
+    /// 名單裏夾着檔名那幾行，所以數的是**命中**，不是行。
+    pub fn nth_hit(&self) -> Option<usize> {
+        match self.row()? {
+            Row::Hit(i) => Some(i + 1),
+            Row::File { .. } => None,
+        }
+    }
+
     /// Move the highlight, stopping at the ends.
     pub fn step(&mut self, down: bool) {
         let last = self.rows().len().saturating_sub(1);

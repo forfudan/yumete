@@ -31,6 +31,55 @@ impl Editor {
             || self.search.looked_at.is_some_and(|mark| mark != self.search_mark())
     }
 
+    /// **同屏別的那幾處命中**，`(起, 止)` 是全文字符偏移，不含站着的那一處。
+    ///
+    /// 2026-09-27 定，原話：「同屏幕別的命中的底色可以淡一些，防止混淆」。走到
+    /// 一處命中上，正文只把那一處標出來，而同一頁上還有幾處要換、換完剩幾處，
+    /// 屏幕上一個字都不說。
+    ///
+    /// 空的時候：面板沒開、名單過期了（正文改過，偏移不作數）、或者這些命中不
+    /// 在眼前這一份緩衝裏。
+    pub fn search_marks(&self) -> Vec<(usize, usize)> {
+        if self.search_is_stale() || !self.search_panel_is_open() {
+            return Vec::new();
+        }
+        // **命中身上的路徑是相對搜索的根的**，所以要拿眼前這一份的路徑去比同一
+        // 把尺。範圍是「本文件」的時候根是空的，那些命中身上也沒有路徑。
+        let mine = match &self.search.root {
+            None => None,
+            Some(root) => {
+                let under = self
+                    .current_buffer()
+                    .path()
+                    .and_then(|p| std::fs::canonicalize(p).ok())
+                    .zip(std::fs::canonicalize(root).ok())
+                    .and_then(|(full, root)| {
+                        full.strip_prefix(&root).ok().map(std::path::Path::to_path_buf)
+                    });
+                // 眼前這一份不在那個根底下，那些命中一處都不屬於它。
+                match under {
+                    Some(rel) => Some(rel),
+                    None => return Vec::new(),
+                }
+            }
+        };
+        let here = self.search.here().map(|h| (h.at, h.end));
+        self.search
+            .hits
+            .iter()
+            .filter(|h| h.file == mine)
+            .map(|h| (h.at, h.end))
+            .filter(|span| Some(*span) != here)
+            .collect()
+    }
+
+    /// 這一節有沒有一扇搜索面板開着。
+    pub(super) fn search_panel_is_open(&self) -> bool {
+        crate::sidebar::Side::BOTH.iter().any(|side| {
+            self.panel(*side).map(|p| p.view()) == Some(crate::sidebar::View::Search)
+        })
+    }
+
     /// The pattern `n` and `N` are walking — the panel writes it too (#419).
     pub fn last_search(&self) -> &str {
         &self.last_search
@@ -833,6 +882,113 @@ impl Editor {
     #[cfg(test)]
     pub(crate) fn search_for_test(&mut self) -> &mut crate::search_panel::Search {
         &mut self.search
+    }
+
+    /// The highlighted hit, its line number, and where the match sits in it.
+    ///
+    /// ⚠️ **2026-09-27 走過一趟又回來了**，同 `fit_around`。它本來是命令行畫前後文
+    /// 用的，而預覽挪進正文之後那一行改寫鍵位，於是連它一起刪了。回來是因為**「換後」
+    /// 那一塊要它**：那一塊畫的是「這一處換完長什麼樣」，而要畫得出來就得先有這一處
+    /// 前後的字。同一件事，換了個地方。
+    ///
+    /// **The text comes back untrimmed and the row does the fitting.** How
+    /// much of it fits is a question about the window, and the window is the
+    /// front end's to know; what the editor knows is which characters are
+    /// around the match and which ones *are* the match. The range counts
+    /// characters into the text handed back, so the row can pick the word out
+    /// however it likes.
+    fn hit_in_context(&self) -> Option<(usize, String, std::ops::Range<usize>)> {
+        if self.search.field != Field::Results || self.search.broken {
+            return None;
+        }
+        let side = self.panel_focus()?;
+        // 光標把別的東西頂上來的時候，鍵雖然在這個邊欄裏，眼前那一個卻不是搜索。
+        if self.transient(side).is_some()
+            || self.panel(side).map(|p| p.view()) != Some(crate::sidebar::View::Search)
+        {
+            return None;
+        }
+        let hit = self.search.here()?;
+        // ⚠️ **命中不一定在眼前這個緩衝區裏，而這裏問的是眼前這一個。**
+        // `:search .` 搜的是整個文件夾，命中帶着自己的檔（`Hit::file`）；拿一條
+        // 第 6496 行的命中去問一份**只有一行**的 scratch，ropey 當場 panic
+        // ——2026-09-23 報的：在倉裏 `ye` 空開、`:search .`、Esc、按 `j` 走到結果
+        // 列表上，一進去就崩。
+        //
+        // ⚠️ **行號也要夾。** 就算命中真在這一份裏，搜索是那一刻跑的，而之後
+        // 刪掉幾段就能讓行號指到文件外面去。
+        let rope = self.current_buffer().rope();
+        if hit.file.is_some() || hit.line >= rope.len_lines() {
+            // 別的檔（或者已經對不上了）：搜索當時抓下來的那一小段就是答案，
+            // 而它本來就是為了「一欄放得下」裁過的。
+            return Some((hit.line + 1, hit.excerpt.clone(), hit.mark.clone()));
+        }
+        // As many characters as a window is wide, centred on the match — far
+        // more than the column can hold, which is the whole point.
+        let line: String = rope.line(hit.line).chars().filter(|c| *c != '\n').collect();
+        let chars: Vec<char> = line.chars().collect();
+        // ⚠️ **偏移也要夾，不只是行號。** 上面那一句夾的是 `hit.line`，而
+        // `hit.at` 是**搜索那一刻**的全文字符偏移——之後在命中上面刪掉一段，行號
+        // 還落在文件裏而偏移已經不在這一行裏了。兩頭各壞一種：
+        //
+        // | `hit.at` 在哪 | 從前 |
+        // | --- | --- |
+        // | 這一行**之後** | `from > to`，切片反着來，**當場 panic** |
+        // | 這一行**之前** | `saturating_sub` 歸零，不崩，**摘出來的是錯的一段** |
+        //
+        // 實測（2026-09-24 審出來的）：`空格 /` 搜本檔、Esc `j` 進結果、`C-w` 回
+        // 正文、在命中上面 `dd`、`C-w` `j` 走回結果——回去那一幀就崩
+        // （`range start index 67 out of range for slice of length 8`）。
+        //
+        // 對不上就走**上面那條退路**：搜索當時抓下的那一小段。它本來就是為這件事
+        // 存的，而一個「差不多對」的摘要比一個錯的摘要還難發現。
+        let head = rope.line_to_char(hit.line);
+        let Some(at) = hit.at.checked_sub(head).filter(|at| *at <= chars.len()) else {
+            return Some((hit.line + 1, hit.excerpt.clone(), hit.mark.clone()));
+        };
+        let from = at.saturating_sub(AROUND);
+        let to = (at + AROUND).min(chars.len());
+        let mut text = String::new();
+        if from > 0 {
+            text.push('…');
+        }
+        // 前面那個省略號也佔一個字，反白從它之後數起。
+        let lead = text.chars().count();
+        text.extend(&chars[from..to]);
+        if to < chars.len() {
+            text.push('…');
+        }
+        // ⚠️ **命中本身可能比摘出來的這一段還長**（一條 `.*` 規則能匹配整行），
+        // 所以尾巴要夾在摘出來的這一段裏，不能照 `hit.end` 直接算。
+        let long = (hit.end - hit.at).min(to - at.min(to));
+        let mark = lead + (at - from)..lead + (at - from) + long;
+        Some((hit.line + 1, text, mark))
+    }
+
+    /// **「換後」那一塊要畫的三段**：這一處前後的文字、換下來的那一段在裏面的
+    /// 位置、以及換上去的那一段。
+    ///
+    /// 2026-09-27 定。面板那一欄窄，一行摘要放不下「從什麼變成什麼」，所以那件
+    /// 事挪到名單底下一塊自己的地方去說，而那裏放得下更多上下文。
+    ///
+    /// `None` 的時候：沒在替換、沒站在一處命中上、或者「換」那一格是空的——三個
+    /// 條件缺一，那幾行就還給名單。
+    ///
+    /// ⚠️ **換上去的那一段是算出來的，不是框裏那幾個字**：正則那一路的 `$1` 要
+    /// 展開，不然預覽寫的和 `r` 換出來的不是同一個東西。
+    pub fn replace_preview(&self) -> Option<(String, std::ops::Range<usize>, String)> {
+        if !self.search.replacing || self.search.replace.is_empty() {
+            return None;
+        }
+        let (_, text, mark) = self.hit_in_context()?;
+        let look = self.looker()?;
+        let was: String = text
+            .chars()
+            .skip(mark.start)
+            .take(mark.end.saturating_sub(mark.start))
+            .collect();
+        let now = look.expand(&was, &self.replacement());
+        Some((text, mark, now))
     }
 
     /// Flip one of the switches, and search again.
