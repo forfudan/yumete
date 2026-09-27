@@ -145,6 +145,39 @@ impl Editor {
     /// **Public because a language server needs it.** A server is started
     /// *in* the project (#53／#54) — asked to analyse a crate from anywhere
     /// else it finds no `Cargo.toml` and answers about nothing, silently.
+    /// **這一節坐在哪本書上。** 見 [`Editor::workspace_root`]。
+    ///
+    /// 文件樹的根、「項目」這個範圍、位置那一格裏的相對路徑，問的都是這一支——
+    /// 屏幕上那幾處說的必須是同一個地方，否則樹裏看得見的和搜得到的不是一批檔。
+    pub fn root(&self) -> PathBuf {
+        match &self.workspace_root {
+            Some(root) => root.clone(),
+            None => self.project_root(),
+        }
+    }
+
+    /// 開 yumete 的時候定一次。命令行給的是資料夾就是它，給的是一個檔就從那個
+    /// 檔往上找項目根，什麼都沒給就不設（退回 `project_root`）。
+    pub fn set_root(&mut self, at: &Path) {
+        let full = match at.is_absolute() {
+            true => at.to_path_buf(),
+            false => std::env::current_dir().unwrap_or_default().join(at),
+        };
+        let root = match full.is_dir() {
+            true => full,
+            false => {
+                let folder = full.parent().map(Path::to_path_buf).unwrap_or(full);
+                let found = self.project_root_from(&folder);
+                // 那個檔不在任何項目裏，那就它自己那一層。
+                match found.starts_with(&folder) || folder.starts_with(&found) {
+                    true => found,
+                    false => folder,
+                }
+            }
+        };
+        self.workspace_root = Some(std::fs::canonicalize(&root).unwrap_or(root));
+    }
+
     pub fn project_root(&self) -> PathBuf {
         let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         self.project_root_from(&here)

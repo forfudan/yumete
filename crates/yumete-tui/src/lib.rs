@@ -7014,9 +7014,13 @@ fn draw_search(
     let place = match &find.scope {
         yumete_core::search_panel::Where::Buffer => say!("search.where.buffer"),
         yumete_core::search_panel::Where::Folder => say!("search.where.folder"),
-        yumete_core::search_panel::Where::Workspace => say!("search.where.workspace"),
         yumete_core::search_panel::Where::Project => say!("search.where.project"),
-        // Named outright: say the name, which is what the reader typed.
+        // 指定資料夾：說使用者打的那個名字；還沒打就說這一檔本身叫什麼
+        // （2026-09-27）。空着的時候寫一個真的名字，那一格纔看得出是四選一裏
+        // 的一檔，而不是一個空盒子。
+        yumete_core::search_panel::Where::Named(path) if path.as_os_str().is_empty() => {
+            say!("search.where.named")
+        }
         yumete_core::search_panel::Where::Named(path) => path.display().to_string(),
     };
     // **標題那一行就是「哪裏找」那一格**（2026-09-23 報的）。它畫在查詢框之上，
@@ -7123,6 +7127,19 @@ fn draw_search(
         let used = yumete_cjk::str_width(&shown);
         let filled = format!("{shown}{}", " ".repeat(room.saturating_sub(used)));
         put_text(buf, box_at, y, to, &filled, style);
+        // **空框上寫一句灰的，說它要什麼**（2026-09-27 報的：「點進去『本文件』
+        // 就沒了，剩一個空格子，命令行一個字的提示都沒有」）。灰的纔讀得出那是
+        // 提示不是值——`shown` 有字的時候一個字都不畫。
+        if shown.is_empty() {
+            let asks = match which {
+                Field::Scope => say!("search.ask.folder"),
+                Field::Replace => say!("search.ask.replace"),
+                _ => say!("search.ask.query"),
+            };
+            // ⚠️ **只換字色，底色照舊是這一格的**：底色說的是「這裏打得了字」，
+            // 提示字拿走它就等於把那句話擦了（2026-09-27 測試攔下來的）。
+            put_text(buf, box_at, y, to, &asks, Style { fg: quiet.fg, ..style });
+        }
         if here && !find.all_selected {
             caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink);
         }
@@ -7244,6 +7261,14 @@ fn draw_search(
     // 出去重按 `:replace`。
     let y = y + 1;
     switch(buf, y, tick(find.replacing), &say!("search.replacing"), 7, text);
+    // **第八個只在勾了「替換」的時候出現**（2026-09-27 定）。它和上面那六個不是
+    // 同一類東西：那六個說「怎麼算命中」，這一個說「換上去的那一段怎麼寫」——
+    // VS Code 也是這麼分的，`Aa` 在搜索那一行，`AB` 在替換那一行。
+    let mut y = y;
+    if find.replacing {
+        y += 1;
+        switch(buf, y, tick(find.preserve_case), &say!("search.preserve-case"), 8, text);
+    }
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.

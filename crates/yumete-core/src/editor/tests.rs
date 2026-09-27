@@ -8169,8 +8169,16 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     ed.on_key(Key::Char('k'));
     assert_eq!(ed.search_for_test().field, Field::Scope, "k 上去就是範圍");
     assert_eq!(ed.search_for_test().scope_text, "", "本文件寫成空的");
-    // `i` 進去打一個 `.`，Enter 落地——和 `:search .` 一個意思。
+    // ⚠️ **位置那一格 2026-09-27 起是四選一**，`i` 在它上面沒有東西可改；
+    // `0`（或者左右）換檔，走到第四檔「指定資料夾…」纔打得了字，而那一下順手
+    // 把鍵交進框裏。本文件 → 本文件夾 → 項目 → 指定資料夾…
     ed.on_key(Key::Char('i'));
+    assert_eq!(ed.status(), say!("search.scope-is-a-pick"), "那一格不是輸入框");
+    for _ in 0..3 {
+        ed.on_key(Key::Char('0'));
+    }
+    assert!(matches!(ed.search_for_test().scope, Where::Named(_)), "走到第四檔");
+    assert_eq!(ed.mode(), Mode::Field, "選中「指定資料夾…」就能打字了");
     ed.on_key(Key::Char('.'));
     ed.on_key(Key::Enter);
     assert_eq!(
@@ -9011,7 +9019,11 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
 
     // A folder named outright — and one that is not there says so rather
     // than quietly searching this file alone.
-    ed.execute(":search ../卷一").unwrap();
+    //
+    // ⚠️ **相對路徑從根算起**（2026-09-27 改）：從前它從**當前緩衝的資料夾**算
+    // 起，所以同一個 `../卷一` 在不同的 buffer 裏指着不同的地方，而屏幕上看不出
+    // 來。現在根就是這本書，所以這個資料夾的名字就是 `卷一`。
+    ed.execute(":search 卷一").unwrap();
     assert!(matches!(ed.search().scope, Where::Named(_)));
     ed.on_key(Key::Enter);
     assert_eq!(ed.search().total, 5, "the same folder by another name");

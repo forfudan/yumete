@@ -2365,6 +2365,18 @@ pub struct Editor {
     /// 換掉了**——三個試用的人都指出這一條：不確認的那個鍵，正是標籤最容易被截掉
     /// 的那一個。現在兩個都問，而問句要說清楚問的是哪一個。
     replace_this_file: Option<std::path::PathBuf>,
+    /// **這一節坐在哪本書上**，開 yumete 的時候定一次，此後不動（2026-09-27 定）。
+    ///
+    /// 從前沒有這個東西：文件樹問 `project_root()`、「工作區」問 shell 的 cwd、
+    /// 「本文件夾」問**當前緩衝**的所在資料夾，而位置那一格裏的 `.` 也跟着當前
+    /// 緩衝走——於是換一個 buffer，`.` 就換了意思，而屏幕上看不出來。
+    ///
+    /// 三家的做法一致（VS Code 的 workspace、Helix 的 workspace root、
+    /// projectile 的 project root）：**一個根，開的時候定死，不跟當前文件走**。
+    /// 從別處打開一個檔只是多一個緩衝，不把根撐大。
+    ///
+    /// `None` ＝ 命令行沒說，那就退回 [`Self::project_root`]（從 cwd 往上找）。
+    workspace_root: Option<std::path::PathBuf>,
     /// **一句幾秒之後自己走掉的話**：什麼時候走，和走的是哪一句。
     ///
     /// 2026-09-27 定，原話：「有些不是特别重要的消息可以有个参数「显示时间」，
@@ -2785,6 +2797,7 @@ impl Editor {
             search_preview: None,
             replaced_in: Vec::new(),
             replace_this_file: None,
+            workspace_root: None,
             status_fades: None,
             sides: [
                 crate::sidebar::Side::Left,

@@ -190,12 +190,21 @@ impl Editor {
             // notes and its exports live under one tree, and 「this folder and
             // what is under it」 is the near thing a reader means.
             Where::Folder => Some(self.here_folder()),
-            Where::Workspace => std::env::current_dir().ok(),
-            Where::Project => Some(self.project_root()),
+            Where::Project => Some(self.root()),
+            // ⚠️ **相對路徑從根算起，不從當前緩衝算起**（2026-09-27 定）。
+            // 從前 `.` 是「當前緩衝的資料夾」，於是換一個 buffer 它就換了意思，
+            // 而屏幕上看不出來。
+            //
+            // ⚠️ **開頭一個 `/` 也當根算**，同 VS Code 的「包含文件」框：
+            // `/卷一` 是根底下的卷一，不是磁盤根底下的。要出根就寫 `~/…`——
+            // 從前填一個 `/` 進來，編輯器去遍歷整塊磁盤。
             Where::Named(path) => {
-                let full = match path.is_absolute() {
-                    true => path.clone(),
-                    false => self.here_folder().join(path),
+                let full = match path.strip_prefix("/") {
+                    Ok(inside) => self.root().join(inside),
+                    Err(_) => match path.is_absolute() {
+                        true => path.clone(),
+                        false => self.root().join(path),
+                    },
                 };
                 full.is_dir().then_some(full)
             }
@@ -475,6 +484,26 @@ impl Editor {
         }
     }
 
+    /// **換一個範圍**——`0`，或者在位置那一格上按左右（2026-09-27 定）。
+    ///
+    /// 本文件 → 本文件夾 → 項目 → 指定資料夾… → 回本文件。⚠️ **走到最後那一檔
+    /// 就把鍵交進框裏**：那一檔的意思就是「我要自己打一個資料夾」，選中了還要
+    /// 再按一下 `i` 是白按。
+    fn step_the_scope(&mut self) {
+        use crate::search_panel::Where;
+        self.search.scope = self.search.scope.next();
+        self.search.scope_text = self.scope_as_typed();
+        self.search.caret = self.search.scope_text.chars().count();
+        self.search.field = crate::search_panel::Field::Scope;
+        match self.search.scope {
+            Where::Named(_) => {
+                self.search.all_selected = false;
+                self.mode = Mode::Field;
+            }
+            _ => self.look_again(),
+        }
+    }
+
     /// A committed string from the IME lands in the field, not in the page.
     pub(super) fn type_into_field(&mut self, text: &str) {
         self.search.type_text(text);
@@ -492,7 +521,7 @@ impl Editor {
         self.land_the_scope();
         self.search.field = self.search.field.step(back, self.search.replacing);
         self.search.all_selected = false;
-        match self.search.field.takes_text() {
+        match self.search.takes_text() {
             true => self.search.caret = self.search.typed().chars().count(),
             false => self.mode = Mode::Normal,
         }
@@ -524,6 +553,15 @@ impl Editor {
             }
             Key::Char('l') | Key::Right if self.search.field == Field::Results => {
                 self.search.fold(false);
+            }
+            // **位置那一格是個四選一，所以 `hl` 在它上面是換檔**（2026-09-27
+            // 定）。那一格平常沒有字可以挪光標，`hl` 也就沒有別的事可做；而
+            // 「這一格能換」本來就該用左右來說。選到「指定資料夾…」纔打得了字，
+            // 那時 `hl` 又是挪光標。
+            Key::Char('h') | Key::Left | Key::Char('l') | Key::Right
+                if self.search.field == Field::Scope && !self.search.takes_text() =>
+            {
+                self.step_the_scope();
             }
             Key::Char('h') | Key::Left => {
                 let to = self.search.caret.saturating_sub(1);
@@ -581,11 +619,13 @@ impl Editor {
             //
             // ⚠️ **同時把那一格的文字也寫成新範圍的路徑**：離開那一格會落地
             // （`land_the_scope`），而落地讀的是文字。不寫就等於按完又被彈回去。
-            Key::Char('0') => {
-                self.search.scope = self.search.scope.next();
-                self.search.scope_text = self.scope_as_typed();
-                self.search.caret = self.search.scope_text.chars().count();
-                self.look_again();
+            Key::Char('0') => self.step_the_scope(),
+            // **站在一個換不動的格子上按了改字的鍵**（2026-09-27）：位置那一格
+            // 平常是四選一，`i`／`a`／`d` 在它上面沒有東西可改。
+            Key::Char('i' | 'a' | 'c' | 'I' | 'A' | 'd' | 'D' | 'C')
+                if self.search.field == Field::Scope && !self.search.takes_text() =>
+            {
+                self.status = say!("search.scope-is-a-pick");
             }
             Key::Char(ch) if ch.is_ascii_digit() && ch != '0' => {
                 let nth = ch as usize - '1' as usize;
@@ -716,34 +756,34 @@ impl Editor {
             // 而這是個兩三個字的框；`A`／`I` 本來就把行首行尾這兩個去處帶上了。
             // 再說 `g` 在結果那一格已經是「到第一條」，在框裏當引導鍵要多引一套
             // 待決狀態。
-            Key::Char('d') if self.search.field.takes_text() => {
+            Key::Char('d') if self.search.takes_text() => {
                 self.search.delete_here();
                 self.after_editing_the_box();
             }
-            Key::Char('D') if self.search.field.takes_text() => {
+            Key::Char('D') if self.search.takes_text() => {
                 self.search.delete_to_end();
                 self.after_editing_the_box();
             }
-            Key::Char('c') if self.search.field.takes_text() => {
+            Key::Char('c') if self.search.takes_text() => {
                 self.search.delete_here();
                 self.after_editing_the_box();
                 self.mode = Mode::Field;
             }
-            Key::Char('C') if self.search.field.takes_text() => {
+            Key::Char('C') if self.search.takes_text() => {
                 self.search.delete_to_end();
                 self.after_editing_the_box();
                 self.mode = Mode::Field;
             }
-            Key::Char('a') if self.search.field.takes_text() => {
+            Key::Char('a') if self.search.takes_text() => {
                 let to = self.search.caret + 1;
                 self.search.move_caret(to);
                 self.mode = Mode::Field;
             }
-            Key::Char('I') if self.search.field.takes_text() => {
+            Key::Char('I') if self.search.takes_text() => {
                 self.search.move_caret(0);
                 self.mode = Mode::Field;
             }
-            Key::Char('A') if self.search.field.takes_text() => {
+            Key::Char('A') if self.search.takes_text() => {
                 let end = self.search.typed().chars().count();
                 self.search.move_caret(end);
                 self.mode = Mode::Field;
@@ -761,7 +801,7 @@ impl Editor {
                 // ⚠️ **從光標那裏插，不再跳到末尾**（2026-09-25 定）。`hl` 挪了
                 // 半天光標，一按 `i` 又回末尾，那就是挪了白挪。光標出廠就在末尾，
                 // 所以不挪的人感覺一點沒變。
-                if !self.search.field.takes_text() {
+                if !self.search.takes_text() {
                     self.search.field = Field::Query;
                     self.search.caret = self.search.typed().chars().count();
                 }
@@ -824,6 +864,14 @@ impl Editor {
             }
             Field::Fuzzy => self.search.fuzzy = !self.search.fuzzy,
             Field::Replacing => return self.flip_replacing(),
+            // ⚠️ **只在替換那一檔畫得出來，所以也只在那時翻得動**：一個看不見
+            // 的開關按下去改了東西，下一次勾上替換的人不知道它從哪兒來的。
+            Field::PreserveCase if self.search.replacing => {
+                self.search.preserve_case = !self.search.preserve_case;
+                // 它不改「找到哪些」，所以不必重找。
+                return;
+            }
+            Field::PreserveCase => return,
             _ => return,
         }
         self.run_search();
@@ -1167,7 +1215,7 @@ impl Editor {
             },
             false => How::Pattern(regex::Regex::new(&self.search_pattern()).ok()?),
         };
-        Some(Look { how, said })
+        Some(Look { how, said, keep_case: self.search.preserve_case })
     }
 
     /// Look again and say how it went. The offsets are all stale now.
@@ -1353,6 +1401,8 @@ fn excerpt(
 struct Look {
     /// 字面那一路：一個正則，或者「差不多是這幾個字」。
     how: How,
+    /// 換上去的那一段要不要跟着原文的大小寫。見 [`Field::PreserveCase`]。
+    keep_case: bool,
     /// **拼音那一路**，`None` ＝ 不跑（開關關着，或者查詢不全是字母）。
     ///
     /// ⚠️ **它是加出來的，不是替掉的**（2026-09-25 定的，原話：「兩種命中合並」）。
@@ -1375,17 +1425,23 @@ impl Look {
     /// ⚠️ **`$1` 只有正則那一路認得。** 拼音和 模糊 沒有分組可以展開，那兩路換
     /// 的就是字面——而讀者在那兩種模式下也寫不出一個有分組的式子。
     fn expand(&self, matched: &str, with: &str) -> String {
-        let How::Pattern(re) = &self.how else {
-            return with.to_string();
-        };
-        match re.captures(matched) {
-            Some(caps) if caps.get(0).is_some_and(|m| m.start() == 0 && m.end() == matched.len()) => {
-                let mut out = String::new();
-                caps.expand(with, &mut out);
-                out
-            }
-            // 這一處是拼音那一路配上的（`spans` 把兩路合並了），正則配不上它。
+        let grown = match &self.how {
+            How::Pattern(re) => match re.captures(matched) {
+                Some(caps)
+                    if caps.get(0).is_some_and(|m| m.start() == 0 && m.end() == matched.len()) =>
+                {
+                    let mut out = String::new();
+                    caps.expand(with, &mut out);
+                    out
+                }
+                // 這一處是拼音那一路配上的（`spans` 把兩路合並了），正則配不上它。
+                _ => with.to_string(),
+            },
             _ => with.to_string(),
+        };
+        match self.keep_case {
+            true => follow_the_case_of(matched, &grown),
+            false => grown,
         }
     }
 
@@ -1421,4 +1477,32 @@ impl Look {
 /// 一次算好，省得每換一處都從頭數一遍——一本書裏幾百處，逐處數就是平方。
 fn byte_cuts(text: &str) -> Vec<usize> {
     text.char_indices().map(|(i, _)| i).chain(std::iter::once(text.len())).collect()
+}
+
+
+/// **換上去的那一段，跟着換下來的那一段寫**（2026-09-27 定）。
+///
+/// 三檔，同 VS Code 的 `AB`：原文**全大寫**就全大寫、**首字母大寫**就首字母大
+/// 寫、別的照打的寫。判的是換下來那一段，不是整行。
+///
+/// ⚠️ **沒有一個字母就原樣交回去。** 漢字沒有大小寫，所以中文那一路走到這裏
+/// 什麼都不做——這個開關對它是空的，而不是會出怪事。
+fn follow_the_case_of(was: &str, now: &str) -> String {
+    let letters: Vec<char> = was.chars().filter(|c| c.is_alphabetic()).collect();
+    if letters.is_empty() {
+        return now.to_string();
+    }
+    if letters.iter().all(|c| c.is_uppercase()) && letters.len() > 1 {
+        return now.to_uppercase();
+    }
+    if letters[0].is_uppercase() && letters.iter().skip(1).all(|c| !c.is_uppercase()) {
+        let mut out = String::new();
+        let mut chars = now.chars();
+        if let Some(head) = chars.next() {
+            out.extend(head.to_uppercase());
+        }
+        out.push_str(chars.as_str());
+        return out;
+    }
+    now.to_string()
 }

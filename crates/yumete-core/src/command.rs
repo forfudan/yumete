@@ -2926,18 +2926,6 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "word-discover-wd",
-        aliases: &[],
-        help: "cmd.word-topics.discover-wd",
-        needs: &[],
-        params: &[],
-        build: Some(|_| {
-            Ok(Command::Word(WordCommand::Discover(
-                crate::search_panel::Where::Workspace,
-            )))
-        }),
-    },
-    Entry {
         name: "word-habit",
         aliases: &[],
         help: "cmd.word-topics.habit",
@@ -3736,14 +3724,6 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Project))),
     },
     Entry {
-        name: "replace-wd",
-        aliases: &[],
-        help: "cmd.commands.replace-wd",
-        needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Workspace))),
-    },
-    Entry {
         name: "search",
         // **`:s` 開這扇面板**（2026-09-26 定的）。`s` 在 vi 裏是 substitute，而
         // 這扇面板正是 substitute 的大號——找與換在同一張表上。
@@ -3777,14 +3757,6 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Project))),
-    },
-    Entry {
-        name: "search-wd",
-        aliases: &[],
-        help: "cmd.commands.search-wd",
-        needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Workspace))),
     },
     Entry {
         name: "sidebar-left",
@@ -5253,7 +5225,6 @@ mod tests {
             (":word-discover", Where::Buffer),
             (":word-discover-cd", Where::Folder),
             (":word-discover-gd", Where::Project),
-            (":word-discover-wd", Where::Workspace),
         ] {
             assert_eq!(parse(line), Ok(Command::Word(WordCommand::Discover(want))), "{line}");
         }
@@ -5867,7 +5838,7 @@ mod tests {
         // …and a word shared by a whole family answers with the family (#452).
         assert_eq!(
             found("discover"),
-            ["word-discover", "word-discover-cd", "word-discover-gd", "word-discover-wd"]
+            ["word-discover", "word-discover-cd", "word-discover-gd"]
         );
         assert_eq!(found("close"), ["buffer-close"]);
         assert_eq!(found("footnote"), ["markdown-footnote"]);
