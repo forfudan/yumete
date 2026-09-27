@@ -9154,8 +9154,12 @@ fn draw_status(
     // The sidebar used to take the whole status line to list its keys. It has
     // the row below for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
-    let status = if editor.sidebar_focused() && !command_row {
-        say!("ui.sidebar-mode", editor.sidebar_keys())
+    // **The second half of the pair is the mode word**, and it is empty on
+    // every shape of this line but the last: the sidebar's own row starts with
+    // its keys, and an open prompt starts with `:` or 「搜索:」. Only the
+    // ordinary line begins with the mode, and only it gets the gold below.
+    let (status, mode) = if editor.sidebar_focused() && !command_row {
+        (say!("ui.sidebar-mode", editor.sidebar_keys()), String::new())
     } else if let (false, Some((_, text))) = (command_row, editor.prompt()) {
         let prefix = editor.prompt_label().unwrap_or_default();
         // The composition in progress belongs at the caret, so a search reads as
@@ -9243,8 +9247,18 @@ fn draw_status(
         // show every file — and the bar does carry the name of the one you are
         // in. So the name is the duplicate here and the fraction is the only
         // copy of what it says.
+        // ⚠️ **Not `-- NORMAL --`** (2026-09-27). Twelve cells for one word, on
+        // the one line where everything else gives way when the window narrows.
+        // Three letters and no dashes, painted in gold below — the dashes were
+        // vi's way of making it stand out, and a colour does that in one cell
+        // instead of eight. Five modes draw nothing at all: [`Mode::label`]
+        // says which, and why.
+        let mode = editor.mode_label().unwrap_or_default();
         let pieces: [(String, u8); 7] = [
-            (format!("-- {} --  ", editor.mode_label()), 0),
+            (match mode.is_empty() {
+                true => String::new(),
+                false => format!("{mode}  "),
+            }, 0),
             (ime_tag, 5),
             (buffer.display_name(), 4),
             (dirty.to_string(), 1),
@@ -9297,7 +9311,7 @@ fn draw_status(
             }
             give -= 1;
         };
-        line
+        (line, mode)
     };
 
     // What the 字 under the cursor *is*, pushed to the right edge so it never
@@ -9343,9 +9357,20 @@ fn draw_status(
     let used = yumete_cjk::str_width(&status);
     let room = (status_area.width as usize).saturating_sub(used);
     let gap = room.saturating_sub(yumete_cjk::str_width(tail));
+    // **The mode word is the only thing on this line that is not「where you
+    // are」** — the file, the position, the character readout all answer that,
+    // and this one answers「what will the next key do」. So it is the one thing
+    // painted differently: gold, bold, and first. The word is ASCII, so its
+    // byte length is its width and the cut is always on a boundary.
+    let cut = mode.len().min(status.len());
+    let (word, rest) = status.split_at(cut);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(drawable(&status).into_owned(), bar),
+            Span::styled(
+                drawable(word).into_owned(),
+                bar.fg(ink.gold()).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(drawable(rest).into_owned(), bar),
             Span::styled(drawable(&format!("{}{tail}", " ".repeat(gap))).into_owned(), bar),
         ]))
         .style(bar),
@@ -11102,7 +11127,7 @@ fn squeezed(text: &str) -> String {
         // The common case pays nothing and is handed straight back — borrowed,
         // not rebuilt, which is every line of every real page.
         assert!(matches!(
-            drawable("-- NORMAL --  file.txt"),
+            drawable("NOR  file.txt"),
             std::borrow::Cow::Borrowed(_)
         ));
     }
@@ -13487,12 +13512,16 @@ fn squeezed(text: &str) -> String {
 
         // Narrow: **the position outlives the file name**, and what is left is
         // whole — no `Ln 1, C`, no `long.c`.
-        let narrow = status(28);
+        // ⚠️ **Twenty, not twenty-eight** (2026-09-27): the mode word went from
+        // `-- NORMAL --  ` to `NOR  `, so the whole line is nine cells shorter
+        // and twenty-eight now holds everything. The subject is unchanged —
+        // this is the width at which something has to go.
+        let narrow = status(20);
         assert!(narrow.contains("行 1, 列 1"), "the position stays: {narrow:?}");
         assert!(!narrow.contains("long.csv"), "the name gave way: {narrow:?}");
-        assert!(narrow.contains("NORMAL"), "{narrow:?}");
+        assert!(narrow.contains("NOR"), "{narrow:?}");
         assert!(
-            yumete_cjk::str_width(&narrow) <= 28,
+            yumete_cjk::str_width(&narrow) <= 20,
             "and it fits: {narrow:?}"
         );
     }
@@ -13528,7 +13557,7 @@ fn squeezed(text: &str) -> String {
             // border is — and the command row under it is clear as well.
             let last = status_line(&buffer);
             assert!(
-                last.contains("NORMAL") || last.contains("INSERT"),
+                last.contains("NOR") || last.contains("INS"),
                 "{height} rows: the status line is gone: {last:?}"
             );
             let under = command_line(&buffer);
@@ -16748,7 +16777,7 @@ fn squeezed(text: &str) -> String {
             line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
             "the 字 is named at the right edge: {line:?}"
         );
-        assert!(line.starts_with("-- NORMAL --"), "and the left is untouched");
+        assert!(line.starts_with("NOR  "), "and the left is untouched");
 
         // Moving names a different one.
         editor.on_key(Key::Char('l'));
@@ -17300,7 +17329,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Ctrl('w'));
         let buffer = render(&editor, &config, 80, 12);
         let status = status_line(&buffer);
-        assert!(status.contains("NORMAL"), "{status:?}");
+        assert!(status.contains("NOR  "), "{status:?}");
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -18497,7 +18526,7 @@ fn squeezed(text: &str) -> String {
         assert!(shot.contains("那年冬天，雪下得早。"), "{shot}");
         assert!(shot.contains("山路斷了。"), "{shot}");
         // …and so is the status line, which is half of what a picture is for.
-        assert!(shot.contains("NORMAL"), "{shot}");
+        assert!(shot.contains("NOR  "), "{shot}");
         assert_eq!(shot.lines().count(), 8, "one line per row: {shot}");
     }
 

@@ -42,17 +42,30 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// A short label for the status line.
-    pub fn label(self) -> &'static str {
+    /// A short label for the status line — `None` when the row below already
+    /// says it (2026-09-27).
+    ///
+    /// **The five that draw nothing**: `:` writes `:` on the row below,
+    /// `/` writes 「搜索:」, the reading writes 「讀音:」, `::` writes `::`,
+    /// and the picker is a window covering the page. A mode word there is the
+    /// same sentence twice, and every cell on this line is contested — the
+    /// file name, the position and the character readout all give way in turn
+    /// when the window narrows (#394, #500).
+    ///
+    /// **The rest are three letters**, the way Helix writes them. Twelve cells
+    /// (`-- NORMAL --  `) said one word.
+    ///
+    /// ⚠️ **`PAN.` says where the keys are, not what they are.** Standing in
+    /// the results list and standing in the page both used to read `NORMAL`,
+    /// and `d` means「delete the search word」in one and「delete a line of the
+    /// novel」in the other. [`Editor::mode_label`] adds `PAN.NOR`; this one
+    /// answers for the field, which is only ever reached from a side panel.
+    pub fn label(self) -> Option<&'static str> {
         match self {
-            Mode::Normal => "NORMAL",
-            Mode::Insert => "INSERT",
-            Mode::Command => "COMMAND",
-            Mode::Search => "SEARCH",
-            Mode::Ruby => "RUBY",
-            Mode::Picker => "PICK",
-            Mode::Lookfor => "LOOKUP",
-            Mode::Field => "FIELD",
+            Mode::Normal => Some("NOR"),
+            Mode::Insert => Some("INS"),
+            Mode::Field => Some("PAN.INS"),
+            Mode::Command | Mode::Search | Mode::Ruby | Mode::Picker | Mode::Lookfor => None,
         }
     }
 

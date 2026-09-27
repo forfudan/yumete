@@ -16228,3 +16228,45 @@ fn an_answer_to_a_question_that_was_dropped_is_not_shown() {
     assert!(ed.offers_here().is_none(), "作廢的答案不擺出來");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **模式詞說的是「鍵在哪」，不只是「鍵是什麼」**（2026-09-27）。
+///
+/// 從前站在結果名單上和站在正文裏都寫 `NORMAL`，而那兩處按 `d` 的後果完全
+/// 不同：一個清搜索詞，一個刪稿子。原話：「我覺得可以 PAN.NOR 和 PAN.INS。
+/// 這樣能同時表示區域和狀態。」
+///
+/// 順帶測第二件：**下面那一行已經說了的，這一行不再說一遍**。`:` 那一行寫着
+/// `:`，`/` 那一行寫着「搜索:」——模式詞在那五種情況下是第二遍，而這條線上
+/// 每一格都要跟位置、檔名、字符讀數搶（#394、#500）。
+#[test]
+fn the_mode_word_says_which_surface_has_the_keys() {
+    let mut ed = typed("那年冬天很冷。");
+    assert_eq!(ed.mode_label().as_deref(), Some("NOR"), "正文裏");
+
+    ed.on_key(Key::Char('i'));
+    assert_eq!(ed.mode_label().as_deref(), Some("INS"));
+    ed.on_key(Key::Esc);
+
+    ed.on_key(Key::Char('v'));
+    assert_eq!(ed.mode_label().as_deref(), Some("SEL"), "選區在長");
+    ed.on_key(Key::Esc);
+
+    // 開面板，鍵落在查詢框裏。
+    ed.open_search();
+    assert_eq!(ed.mode(), Mode::Field);
+    assert_eq!(ed.mode_label().as_deref(), Some("PAN.INS"), "框裏在打字");
+
+    // `Esc` 出框，鍵還在面板裏——這一格從前寫的是 `NORMAL`。
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Normal, "模式真的是 Normal");
+    assert!(ed.sidebar_focused(), "而鍵在面板裏");
+    assert_eq!(ed.mode_label().as_deref(), Some("PAN.NOR"), "所以說 PAN.NOR");
+
+    // 五個不畫的：下面那一行已經寫着它們自己的名字了。
+    let mut ed = typed("那年冬天很冷。");
+    for key in [':', '/'] {
+        ed.on_key(Key::Char(key));
+        assert_eq!(ed.mode_label(), None, "{key} 那一行自己會說");
+        ed.on_key(Key::Esc);
+    }
+}

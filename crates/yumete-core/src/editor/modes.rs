@@ -21,13 +21,25 @@ impl Editor {
         self.pending.takes_a_character()
     }
 
-    /// A status-line label for the current mode, noting select (extend) mode.
-    pub fn mode_label(&self) -> String {
-        if self.extend && self.mode == Mode::Normal {
-            "NORMAL (sel)".to_string()
-        } else {
-            self.mode.label().to_string()
+    /// A status-line label for the current mode — `None` when the row below
+    /// already says it ([`Mode::label`]).
+    ///
+    /// Three questions in one word, in this order:
+    ///
+    /// 1. **Where do the keys go?** `PAN.` when a side panel has them. That is
+    ///    asked first because it is the one with teeth: `d` in the results
+    ///    list clears the search word, `d` in the page deletes a line of the
+    ///    novel, and both read `NORMAL` until 2026-09-27.
+    /// 2. **Is the selection being extended?** `SEL`, the way Helix writes it.
+    /// 3. **Otherwise the mode's own word** — three letters.
+    pub fn mode_label(&self) -> Option<String> {
+        if self.mode == Mode::Normal && self.sidebar_focused() {
+            return Some("PAN.NOR".to_string());
         }
+        if self.extend && self.mode == Mode::Normal {
+            return Some("SEL".to_string());
+        }
+        self.mode.label().map(str::to_string)
     }
 
     /// Whether select (extend) mode is active.
