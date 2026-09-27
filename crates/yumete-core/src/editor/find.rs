@@ -383,7 +383,33 @@ impl Editor {
                 // ⚠️ **落在哪一格不動。** 找得到找不到都一樣，這正是這個鍵要的
                 // 那份一致；去結果是接着按 `j`。
                 self.mode = Mode::Normal;
-            }            Key::Char(ch) => {
+            }
+            // **`Tab` 在框裏是「下一格」**（2026-09-27 三個試用的人都撞上這一
+            // 條）。從前它在框裏什麼都不做，於是打完「搜」的詞按一下 Tab 再打
+            // 「換」的詞，兩個詞連成了一個：`搜: 洞庭鄱陽`。而面板上方那一行
+            // 正寫着 `Tab 文件 > 緩衝 > 大綱 > 搜索`——一個寫在屏幕上、在這個
+            // 狀態下按了沒反應的鍵。
+            //
+            // ⚠️ **只在框裏。** 出了框 `Tab` 還是走邊欄那幾個視圖，那是它在每
+            // 一扇面板裏的老意思。
+            Key::Tab => {
+                let next = self.search.field.step(false, self.search.replacing);
+                self.search.stand_on(next);
+                // 走到名單上就不是打字了，鍵交回面板。
+                if self.search.field == Field::Results {
+                    self.mode = Mode::Normal;
+                    self.show_hit();
+                }
+            }
+            Key::BackTab => {
+                let back = self.search.field.step(true, self.search.replacing);
+                self.search.stand_on(back);
+                if self.search.field == Field::Results {
+                    self.mode = Mode::Normal;
+                    self.show_hit();
+                }
+            }
+            Key::Char(ch) => {
                 self.search.type_char(ch);
                 if self.search.field != Field::Scope {
                     self.run_search();
@@ -428,6 +454,13 @@ impl Editor {
             // 打字態纔顯示它，出框就退回按真實範圍算出來的名字，看着像還原了。
             // 所以修法是讓它**落地**（定的，原話：「算，离开格子就落地」），這樣屏幕上
             // 寫着什麼就是什麼。
+            // **`Esc` 在結果名單上是「退一步」**（2026-09-27 報的：「Esc — dead
+            // in the result list……The universal escape hatch is a no-op」）。
+            // vi 用戶最確定的那一個鍵，在這一格從前什麼都不做。退到搜索框上，
+            // 再按一次就沒有別的可退了，那時它是下面那一支。
+            Key::Esc if self.mode == Mode::Normal && self.search.field == Field::Results => {
+                self.search.stand_on(Field::Query);
+            }
             Key::Esc => {
                 // 已經在 Normal 了，這一下 `Esc` 沒有別的事可做——那就是「把輸入
                 // 法的挂起再說一遍」，同正文與邊欄那兩處（2026-09-27）。
@@ -486,7 +519,7 @@ impl Editor {
             Key::Char('h') | Key::Left if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
                     let back = self.search.field.step(true, self.search.replacing);
-                    self.search.stand_on(back);
+                    self.stand_on_and_look(back);
                 }
             }
             Key::Char('l') | Key::Right if self.search.field == Field::Results => {
@@ -509,7 +542,7 @@ impl Editor {
                 }
                 _ => {
                     let next = self.search.field.step(false, self.search.replacing);
-                    self.search.stand_on(next);
+                    self.stand_on_and_look(next);
                 }
             },
             Key::Char('k') | Key::Up => match self.search.field {
@@ -519,7 +552,7 @@ impl Editor {
                 // 方——`Tab` 走得出去，可沒人會想到去按它。
                 Field::Results if self.search.selected == 0 => {
                     let back = self.search.field.step(true, self.search.replacing);
-                    self.search.stand_on(back);
+                    self.stand_on_and_look(back);
                 }
                 Field::Results => {
                     self.search.step(false);
@@ -527,7 +560,7 @@ impl Editor {
                 }
                 _ => {
                     let back = self.search.field.step(true, self.search.replacing);
-                    self.search.stand_on(back);
+                    self.stand_on_and_look(back);
                 }
             },
             // **The five switches are numbered, top to bottom** (2026-09-24,
@@ -592,9 +625,15 @@ impl Editor {
             }
             Key::Char('r') if self.search.replacing && self.search.field == Field::Results => {
                 match self.search.row() {
-                    Some(crate::search_panel::Row::File { path, .. }) => {
-                        let done = self.replace_file(Some(&path));
-                        self.after_replacing(done);
+                    // ⚠️ **整個檔也要先問一句**（2026-09-27 三個試用的人都指出
+                    // 這一條）。從前只有 `R` 問，而 `r` 站在檔名那一行上一聲不吭
+                    // 就換掉整個檔——兩個鍵差一個 Shift，兩行差一個 `j`，而不問的
+                    // 那一個標籤最短、最容易被窄窗口截掉。
+                    Some(crate::search_panel::Row::File { path, hits, .. }) => {
+                        let name = path.display().to_string();
+                        self.status = say!("search.replace-file-sure", hits, name);
+                        self.replace_this_file = Some(path);
+                        self.pending = Pending::ReplaceAll;
                     }
                     _ => self.replace_hit(),
                 }
@@ -609,11 +648,38 @@ impl Editor {
             // 早就忘了。換完再看一眼那一行，覺得不對就按 `u`：這纔是「預覽」該有
             // 的樣子。
             Key::Char('u') if self.search.replacing => {
-                self.undo();
-                self.after_replacing_undone();
+                let batch = std::mem::take(&mut self.replaced_in);
+                let mut back = 0usize;
+                match batch.is_empty() {
+                    // 沒有記在案的那一批：撤回當前這一份，和從前一樣。
+                    true => self.undo(),
+                    // ⚠️ **一次 `R` 能動好幾個檔，而 `undo` 只管當前那一份。**
+                    // 逐份撤回，光標不動——`with_buffer` 只是借那一格站一下。
+                    false => {
+                        for id in batch {
+                            if let Some(i) = self.buffer_with(id) {
+                                self.with_buffer(i, |ed| ed.undo());
+                                back += 1;
+                            }
+                        }
+                    }
+                }
+                self.after_replacing_undone(back);
             }
             Key::Char('R') if self.search.replacing => {
-                self.status = say!("search.replace-all-sure", self.search.total);
+                // **問句要說清楚動的是幾個檔**（2026-09-27 報的）：工作區範圍下
+                // 那 8 處散在 4 個檔裏，而從前這句話和只改一個檔的時候一字不差。
+                let mut files: Vec<&Option<PathBuf>> = Vec::new();
+                for hit in &self.search.hits {
+                    if !files.contains(&&hit.file) {
+                        files.push(&hit.file);
+                    }
+                }
+                self.replace_this_file = None;
+                self.status = match files.len() {
+                    0 | 1 => say!("search.replace-all-sure", self.search.total),
+                    n => say!("search.replace-all-sure-files", self.search.total, n),
+                };
                 // ⚠️ **`ReplaceAll`, not `Confirm`.** The latter is `:s …c`'s
                 // per-match walker: with nothing to walk it clears itself on
                 // the next key, so the question was asked and the answer went
@@ -681,6 +747,15 @@ impl Editor {
                 let end = self.search.typed().chars().count();
                 self.search.move_caret(end);
                 self.mode = Mode::Field;
+            }
+            // ⚠️ **站在結果上按 `i`，從前靜悄悄跳回搜索框接着打字**
+            // （2026-09-27 兩個試用的人都撞上）：`server` 變成 `serverXX`、名單
+            // 變成「無結果」，而屏幕上一個字都沒說。vi 用戶站在一條命中上第一個
+            // 按的就是 `i`，他想的是「去那裏改」——那是 `Enter`。
+            Key::Char('i' | 'a' | 'c' | 'I' | 'A' | 'd' | 'D' | 'C')
+                if self.search.field == Field::Results =>
+            {
+                self.status = say!("search.that-edits-the-box");
             }
             Key::Char('i') => {
                 // ⚠️ **從光標那裏插，不再跳到末尾**（2026-09-25 定）。`hl` 挪了
@@ -886,6 +961,9 @@ impl Editor {
             Some(index) => {
                 let done =
                     self.with_buffer(index, |ed| ed.swap_one(&look, &with, hit.line, hit.nth));
+                if done {
+                    self.replaced_in = vec![self.buffers[index].id()];
+                }
                 match done {
                     true => self.after_replacing(1),
                     // The line has fewer matches than it had when it was read:
@@ -906,11 +984,36 @@ impl Editor {
         let Some(index) = self.buffer_for(rel) else {
             return 0;
         };
-        self.with_buffer(index, |ed| ed.swap_all(&look, &with))
+        let done = self.with_buffer(index, |ed| ed.swap_all(&look, &with));
+        if done > 0 {
+            let id = self.buffers[index].id();
+            if !self.replaced_in.contains(&id) {
+                self.replaced_in.push(id);
+            }
+        }
+        done
     }
 
     /// `R`: change every hit there is, once the reader has said yes.
+    /// 那句「換不換」得到的是別的鍵：問的那個檔忘掉。
+    pub(super) fn forget_the_file_it_asked_about(&mut self) {
+        self.replace_this_file = None;
+    }
+
+    /// 那句「換不換」得到了 `y`：換問的是哪一批。
+    pub(super) fn replace_what_was_asked(&mut self) {
+        match self.replace_this_file.take() {
+            Some(path) => {
+                self.replaced_in.clear();
+                let done = self.replace_file(Some(&path));
+                self.after_replacing(done);
+            }
+            None => self.replace_all_found(),
+        }
+    }
+
     pub(super) fn replace_all_found(&mut self) {
+        self.replaced_in.clear();
         let mut files: Vec<Option<PathBuf>> = Vec::new();
         for hit in &self.search.hits {
             if !files.contains(&hit.file) {
@@ -1082,14 +1185,33 @@ impl Editor {
         };
     }
 
+    /// **站到某一格上，站到的要是結果名單就順手看一眼。**
+    ///
+    /// 走進名單的那一下和在名單裏走的每一下是同一件事（2026-09-27）：光是
+    /// `jk` 那兩支加預覽的話，**第一條命中會是唯一看不見的那一條**——`j` 從
+    /// 「搜」那一格走進名單，站的就是它。
+    fn stand_on_and_look(&mut self, field: Field) {
+        self.search.stand_on(field);
+        if self.search.field == Field::Results {
+            self.show_hit();
+        }
+    }
+
     /// 撤回一次替換之後，名單要跟着回來——被換掉的那幾處又在了。
-    fn after_replacing_undone(&mut self) {
+    fn after_replacing_undone(&mut self, files: usize) {
         let where_ = self.search.selected;
         match self.search.scope.live() {
             true => self.run_search(),
             false => self.search_now(),
         }
         self.search.selected = where_.min(self.search.rows().len().saturating_sub(1));
+        // **撤回也要出聲。** `r` 說「換掉 1 處」、`R` 說「換掉 8 處」，而 `u` 從前
+        // 一個字都不說——剛按錯一次 `R` 的人最需要聽見的就是這一句
+        // （2026-09-27 審出來的）。
+        self.status = match files {
+            0 | 1 => say!("search.undone"),
+            n => say!("search.undone-files", n),
+        };
     }
 
     /// `Enter` on a row: fold a file, or go to a hit and hand the keys back.
@@ -1164,11 +1286,20 @@ impl Editor {
         // Those offsets were counted in the text as it was read; the buffer
         // just opened may have been edited since, and a stale offset would put
         // the cursor in the middle of a word somewhere else.
+        //
+        // ⚠️ **落在行首不算「指給人看」**（2026-09-27 審出來的）：一本二十章的
+        // 小說，每一章的第一處命中都只把光標放在那一行的開頭，那幾個字不反白，
+        // 看圖的人自己找。行號靠不住而**這一行的文字是現成的**——所以在這一行上
+        // 把同一個問題再問一遍，取第 `nth` 段，指到字上。問不出來纔退回行首。
         let (at, end) = match elsewhere {
             true => {
                 let line = hit.line.min(rope.len_lines().saturating_sub(1));
-                let at = rope.line_to_char(line);
-                (at, at)
+                let head = rope.line_to_char(line);
+                let text: String = rope.line(line).chars().collect();
+                match self.looker().and_then(|look| look.spans(&text).get(hit.nth).copied()) {
+                    Some((a, b)) => (head + a, head + b),
+                    None => (head, head),
+                }
             }
             false => (hit.at.min(len), hit.end.min(len)),
         };

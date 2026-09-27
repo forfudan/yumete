@@ -528,6 +528,21 @@ impl Search {
         if self.take_selection() {
             return;
         }
+        // ⚠️ **光標停在末尾那個空位上的時候，刪的是它前面那一個**
+        // （2026-09-27 兩個試用的人都報「`d` 按了什麼都不發生」）。框裏的光標走
+        // 得到文字後面那一格（打字要從那裏接着打），而 `Esc` 出來之後它多半就停
+        // 在那裏——於是「刪光標壓着的那一個」壓着的是空氣，鍵位行上明明寫着
+        // 「d 刪」。按的人想刪的是看得見的最後那個字。
+        if self.caret >= self.box_here().chars().count() {
+            let Some(back) = self.caret.checked_sub(1) else {
+                return;
+            };
+            let from = self.byte_at(back);
+            let to = self.byte_at(self.caret);
+            self.box_here().replace_range(from..to, "");
+            self.caret = back;
+            return;
+        }
         let from = self.byte_at(self.caret);
         let to = self.byte_at(self.caret + 1);
         if from == to {

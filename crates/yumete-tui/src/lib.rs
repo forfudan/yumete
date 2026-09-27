@@ -6996,7 +6996,12 @@ fn draw_search(
 
     frame.render_widget(Clear, area);
     vertical::clear_wide_left_edge(frame.buffer_mut(), area);
-    let name = yumete_core::messages::say(Panel::Search.tag(), &[]);
+    // **勾上「替換」之後，標題也要說出來**（2026-09-27 報的：`:replace` 開出來
+    // 的面板頂上仍舊只寫「搜索」，而它比搜索多一整行和三個會改稿子的鍵）。
+    let name = match find.replacing {
+        true => say!("label.panel.replace"),
+        false => yumete_core::messages::say(Panel::Search.tag(), &[]),
+    };
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
     let (from, to, area) = (shell.from, shell.to, shell.area);
     let buf = frame.buffer_mut();
@@ -7036,6 +7041,9 @@ fn draw_search(
         (_, true, true) => (say!("search.enter-to-look"), head),
         (false, _, false) => (String::new(), quiet),
         (false, _, true) if find.total == 0 => (say!("search.none"), quiet),
+        // ⚠️ 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
+        // （2026-09-27 報的）。兩則文案，中文那兩份寫得一模一樣。
+        (false, _, true) if find.total == 1 => (say!("search.hits-one", 1), quiet),
         (false, _, true) => (say!("search.hits", find.total), quiet),
     };
     // **標題那一行只有面板的名字和右上角那個計數**（2026-09-26 報的：「位置：「本
@@ -7184,24 +7192,12 @@ fn draw_search(
     // 快捷键」，後來選了數字）。號就是**行的次序**，從上往下數，所以讀者數行就
     // 行，不用記一張表。
     //
-    // ⚠️ **號自成第三欄，緊跟最長那個名字，不貼右邊界**（2026-09-26 報的：「这
-    // 里的数字能不能更靠近前面的文字一些，不要右边靠到边界上，可以对齐成第三
-    // 列」）。貼着右邊界的時候，號與它說明的那一行之間隔着一大片空白——邊欄一
-    // 寬，那片空白跟着寬，眼睛得橫着跑一趟纔對得上是哪一行。
+    // ⚠️ **號碼在最左邊**（2026-09-27 三個試用的人各自撞上同一件事）。
     //
-    // ⚠️ **那一欄是量出來的**，同前面兩欄：七個名字裏「匹配簡繁異體」最長，而換
-    // 一種語言最長的就是另一個。
-    let names = [
-        say!("search.case"),
-        say!("search.glyphs"),
-        say!("search.pinyin"),
-        say!("search.regex"),
-        say!("search.whole"),
-        say!("search.fuzzy"),
-        say!("search.replacing"),
-    ];
-    let longest = names.iter().map(|n| yumete_cjk::str_width(n)).max().unwrap_or(0);
-    let nth_at = left + (widest + 1 + longest + 2) as u16;
+    // 它 2026-09-26 挪到過名字後面自成一欄，理由是「不要右边靠到边界上」——可
+    // 那一欄還是量出來的，而英文界面的名字比中文長三成，於是**窄到 118 欄那一
+    // 列就整個出了界**：屏幕上只剩七行 `[ ] regex`，而鍵位行照樣寫着「1–7 開
+    // 關」。左邊那一欄不會出界，號碼與它說明的那一行也貼得最近。
     let shortcut = ground.fg(ink.gold());
     let bottom = area.y + area.height;
     let switch = |buf: &mut ratatui::buffer::Buffer, y: u16, box_text: &str, label: &str, nth: usize, style: Style| {
@@ -7211,14 +7207,9 @@ fn draw_search(
         if y >= bottom {
             return;
         }
+        put_text(buf, left, y, to, &nth.to_string(), shortcut);
         let line = format!("{}{label}", pad(box_text));
-        put_text(buf, left, y, to, &line, style);
-        let key = nth.to_string();
-        // ⚠️ **窄到那一欄出了界就不畫號**，和落款那一行同一個規矩：一個擠在字上
-        // 的號比沒有號更難看懂。
-        if nth_at + yumete_cjk::str_width(&key) as u16 <= to {
-            put_text(buf, nth_at, y, to, &key, shortcut);
-        }
+        put_text(buf, left + 2, y, to, &line, style);
     };
     let y = y + 1;
     switch(buf, y, &format!("[{which}]"), &say!("search.case"), 1, text);
