@@ -12332,7 +12332,12 @@ fn n_and_shift_n_cost_the_same() {
         }
     }
     let press = |key: char| -> Duration {
-        let mut ed = typed(&text);
+        // ⚠️ **不要拿 `typed` 搭這個台。** 它一個字一個字按進去，而這裏是一百二
+        // 十萬個字（兩萬行 × 三遍）——量出來六十三秒裏，被測的那幾十次 `n` 只佔
+        // 幾十毫秒，其餘全是搭台。整個 `--lib` 一千零七條測試本來 4.8 秒跑完，
+        // 就這一條把它拖到六十八（2026-09-27 量的）。
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, &text).expect("新緩衝寫得進去");
         ed.execute(":10000").unwrap();
         ed.on_key(Key::Char('/'));
         for c in "阿寧".chars() {

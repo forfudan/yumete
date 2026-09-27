@@ -26,6 +26,7 @@
 //! wants the tables from somewhere specific — an empty directory therefore
 //! forces the bundled 精華版, which is how the fallback is tested.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 fn main() {
@@ -145,15 +146,54 @@ fn date(secs: u64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// **Watch `path` if it is there, or the `yumete` directory it would sit in.**
+///
+/// ⚠️ **Never hand cargo a path that is not there, and never walk above our
+/// own directory.** Both mistakes make the build script rerun on **every**
+/// cargo command, and everything downstream of this crate rebuild with it.
+///
+/// Measured 2026-09-27, with
+/// `CARGO_LOG=cargo::core::compiler::fingerprint=info`:
+///
+/// * a `rerun-if-changed` on a **missing** file — cargo treats it as changed,
+///   every time. That was the original;
+/// * walking up to the nearest *existing* ancestor — which on macOS is
+///   `~/Library/Application Support`, a directory **every app on the machine
+///   writes into**. Cargo said it in one line:
+///   `stale: changed "/Users/ZHU/Library/Application Support"`. That was the
+///   first attempt at a fix, and it is no better.
+///
+/// Two `cargo test -p yumete-core --lib --no-run` in a row, nothing touched
+/// between them, were **33 seconds each** — both recompiling `yumete-cjk` and
+/// `yumete-core`. Every cargo command in the workspace paid it.
+///
+/// So: the file if it exists, else the `yumete` directory it belongs in (a
+/// file appearing changes its directory's mtime, which is the case that
+/// matters — `scripts/build.sh` installs the data *after* the first build),
+/// else nothing at all. ⚠️ **With neither, a later install needs
+/// `cargo clean -p {crate}`** — that is the honest price, and it is paid once
+/// by whoever installs data onto a machine that had none.
+fn watch(path: &Path) {
+    if path.exists() {
+        println!("cargo:rerun-if-changed={}", path.display());
+        return;
+    }
+    // `…/yumete/data/common_words.txt` → `…/yumete`. Never higher: one level
+    // up from there is a directory the whole machine writes into.
+    let ours = path.ancestors().find(|at| at.file_name() == Some(OsStr::new("yumete")));
+    if let Some(dir) = ours.filter(|dir| dir.is_dir()) {
+        println!("cargo:rerun-if-changed={}", dir.display());
+    }
+}
+
 /// Where the installed Yume data lives, in the order the editor itself looks.
-/// ⚠️ **Every candidate is watched, not just the one that answered.** Cargo
-/// treats a `rerun-if-changed` path that did not exist and now does as a
-/// change, and that is exactly the case that matters: `scripts/build.sh`
-/// builds the binary *before* it installs the data, so the first run embeds
-/// 靈明精華版 — and without this the second run would not rebuild
-/// `yumete-ime`, because nothing it watched had changed. The binary would keep
-/// saying 「出廠自帶 精華版」 on a machine with the full tables installed,
-/// until someone ran `cargo clean`.
+///
+/// ⚠️ **Every candidate is watched, not just the one that answered**: the data
+/// may be installed into any of them after this build, and then the next one
+/// has to see it — `scripts/build.sh` builds the binary *before* it installs
+/// the data, so the first run embeds 靈明精華版 and the second must notice the
+/// full tables. Otherwise the binary keeps saying 「出廠自帶 精華版」 on a
+/// machine that has them, until somebody runs `cargo clean`.
 fn find(file: &str) -> Option<PathBuf> {
     // Set, and it is the whole list: a release build that names a directory
     // means *that* directory, and silently reaching past it to whatever the
@@ -161,7 +201,7 @@ fn find(file: &str) -> Option<PathBuf> {
     // carrying a table nobody chose.
     if let Ok(dir) = std::env::var("YUMETE_BUILTIN_DIR") {
         let path = PathBuf::from(dir).join(file);
-        println!("cargo:rerun-if-changed={}", path.display());
+        watch(&path);
         return path.is_file().then_some(path);
     }
     let mut dirs: Vec<PathBuf> = Vec::new();
@@ -176,7 +216,7 @@ fn find(file: &str) -> Option<PathBuf> {
     }
     let mut found = None;
     for path in dirs.into_iter().map(|dir| dir.join(file)) {
-        println!("cargo:rerun-if-changed={}", path.display());
+        watch(&path);
         if found.is_none() && path.is_file() {
             found = Some(path);
         }
