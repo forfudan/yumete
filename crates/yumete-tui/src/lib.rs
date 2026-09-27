@@ -8489,8 +8489,7 @@ fn draw_horizontal(
     // **`gw` 的標籤畫在整頁畫完之後**（#406）：一行是一個 `Line` 推進 `lines`，
     // 而 `Paragraph` 是最後一次性渲染的——在循環裏往 buffer 上塗，會被它蓋掉。
     // 所以循環裏只記座標，收尾再蓋上去（同上面那條 measure 帶子的辦法）。
-    // `(x, y, 標籤, 它蓋住的那個字素有幾格)`
-    let mut label_cells: Vec<(u16, u16, String, usize)> = Vec::new();
+    let mut label_cells: Vec<(u16, u16, String)> = Vec::new();
     // **這一趟畫了哪一段**，交給核心去算 `gw` 的落腳點（#406）。畫的這一支是唯一
     // 知道的：`page_top` 只是一個行號，而一屏放得下幾個邏輯行要問 measure。
     let on_screen = rows_on_screen(editor, rope, measure, *viewport, height);
@@ -9195,10 +9194,7 @@ fn draw_horizontal(
                 if cell < gutter + left {
                     continue;
                 }
-                let room = chars
-                    .get(at - row.start)
-                    .map_or(1, |&c| yumete_cjk::char_width(c));
-                label_cells.push((text_area.x + (cell - left) as u16, y, label.to_string(), room));
+                label_cells.push((text_area.x + (cell - left) as u16, y, label.to_string()));
             }
         }
         lines.push(scrolled(Line::from(spans), gutter, left));
@@ -9217,21 +9213,12 @@ fn draw_horizontal(
     if !label_cells.is_empty() {
         let mark = ink.page().fg(ink.paper()).bg(ink.mark()).add_modifier(Modifier::BOLD);
         let buf = frame.buffer_mut();
-        for (x, y, label, room) in label_cells {
-            // ⚠️ **標籤要和它蓋住的那個字素一樣寬。** 一個字母是一格，蓋在一個兩格
-            // 的漢字上就留下一個洞（`a 年冬天`），而兩個字母那一檔是嚴絲合縫的
-            // （`aa年冬天`）——同一個功能兩種長相。全角字母正好兩格，而按的還是
-            // 同一個鍵。同候選編號那一條（2026-09-27 出廠改成全角數字）。
-            let wide = room == 2 && yumete_cjk::str_width(&label) == 1;
-            let shown: String = match wide {
-                false => label,
-                true => label
-                    .chars()
-                    .map(|c| char::from_u32(c as u32 - 'a' as u32 + 0xFF41).unwrap_or(c))
-                    .collect(),
-            };
-            for (n, g) in yumete_cjk::graphemes(&shown).enumerate() {
-                let at = x + n as u16 * if wide { 2 } else { 1 };
+        for (x, y, label) in label_cells {
+            // **兩個字母正好兩格**，也就是一個漢字的寬度——所以蓋掉的就是那一個
+            // 字，整行一格都沒挪。落腳點窄過兩格的（英文的 `a`）根本不給標籤，
+            // 見 `editor/labels.rs` 的 `LABEL`。
+            for (n, g) in yumete_cjk::graphemes(&label).enumerate() {
+                let at = x + n as u16;
                 if at >= text_area.x + text_area.width {
                     break;
                 }
@@ -16974,10 +16961,9 @@ fn squeezed(text: &str) -> String {
         assert!(editor.jumping(), "畫完就亮起來了");
         // **落腳點是 `e` 的單位**：「那年冬天」「雪下得早」是兩處，不是六個詞；
         // 標點自成一段，不給標籤。
-        // ⚠️ **全角的字母**：一個標籤和它蓋住的那個字素一樣寬，漢字兩格就用兩格的
-        // 字母——半角的話會留一個洞（`a 年冬天`），而按的還是同一個鍵。
-        assert_eq!(rows[0], "ａ年冬天，ｓ下得早。", "{rows:#?}");
-        assert_eq!(rows[1], "ｄ路斷了、ｆ在門口站了很久。", "{rows:#?}");
+        // **兩個字母正好一個漢字寬**，所以蓋掉的就是那一個字。
+        assert_eq!(rows[0], "aa年冬天，ab下得早。", "{rows:#?}");
+        assert_eq!(rows[1], "ac路斷了、ad在門口站了很久。", "{rows:#?}");
         // ⚠️ **版面一格都沒動**：一個漢字兩格、一個字母一格加上它讓出來的那一格，
         // 所以每一行還是原來那麼寬。推開的話後面的字全往右擠，而按 `gw` 之前眼睛
         // 已經鎖定了要去的地方。
@@ -16989,14 +16975,16 @@ fn squeezed(text: &str) -> String {
             );
         }
 
-        // 打下去就跳過去，而且 `C-o` 回得來。
-        editor.on_key(Key::Char('f'));
+        // 打下去就跳過去，而且 `C-o` 回得來。⚠️ **永遠兩鍵**，不看標籤有幾個字母。
+        editor.on_key(Key::Char('a'));
+        assert!(editor.jumping(), "只打了一半，標籤還在");
+        editor.on_key(Key::Char('d'));
         assert!(!editor.jumping(), "跳完標籤就收了");
         let at = editor.cursor();
         assert_eq!(
             editor.current_buffer().rope().chars_at(at).next(),
             Some('她'),
-            "f 那一個標籤站在「她」上"
+            "ad 那一個標籤站在「她」上"
         );
         editor.on_key(Key::Ctrl('o'));
         assert_eq!(editor.cursor(), 0, "C-o 回得來");
@@ -17012,6 +17000,8 @@ fn squeezed(text: &str) -> String {
         let config = Config::default();
         let ime = no_ime();
         let text = editor.current_buffer().text();
+        // ⚠️ 挑的都是**第一個字母就不可能是標籤**的鍵：標籤是 `aa`…`az`，所以
+        // `a` 之外的字母打下去當場落空。`d` 在正文裏是刪，正是不許漏過去的那一種。
         for key in [Key::Char('z'), Key::Esc, Key::Char('x'), Key::Char('d')] {
             editor.on_key(Key::Char('g'));
             editor.on_key(Key::Char('w'));
@@ -17048,18 +17038,18 @@ fn squeezed(text: &str) -> String {
                 "這一行寬了：{was:?} → {now:?}"
             );
         }
-        // 全角的字母——半角的話一個縱裏會空半格。
-        assert!(shot.contains('ａ'), "第一個標籤是全角的 ａ：\n{shot}");
-        assert!(shot.contains('ｓ'), "第二個也在：\n{shot}");
+        assert!(shot.contains("aa"), "第一個標籤在：\n{shot}");
+        assert!(shot.contains("ab"), "第二個也在：\n{shot}");
 
         // 打下去就跳過去。
-        editor.on_key(Key::Char('s'));
+        editor.on_key(Key::Char('a'));
+        editor.on_key(Key::Char('b'));
         assert!(!editor.jumping());
         let at = editor.cursor();
         assert_eq!(
             editor.current_buffer().rope().chars_at(at).next(),
             Some('雪'),
-            "s 那一個站在「雪下得早」的頭上"
+            "ab 那一個站在「雪下得早」的頭上"
         );
     }
 

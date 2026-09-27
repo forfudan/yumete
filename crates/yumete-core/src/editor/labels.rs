@@ -1,6 +1,7 @@
 //! **`gw` — 一眼跳到屏幕上任何地方**（#406）。
 //!
 //! 按 `gw`，屏幕上每個落腳點的頭一個字被兩個字母蓋住；打那兩個字母，光標飛過去。
+//! 永遠兩個字母、兩格，正好是一個漢字的寬度。
 //! vim 那邊叫 easymotion／leap／flash，helix 把它做進了核心。
 //!
 //! 三件定下來的事（2026-09-27）：
@@ -19,19 +20,16 @@
 //! 了，這一跳就白跳。⚠️ **代價是英文下會糊**：`was` 剩一個 `s`。中文不糊——一個漢字
 //! 正好兩格，標籤蓋掉的就是那一個字。
 //!
-//! # 和 helix 有意不同的兩處（2026-09-28 讀它的源碼對出來的）
+//! # 和 helix 有意不同的一處（2026-09-28 讀它的源碼對出來的）
 //!
-//! ⚠️ **一、蓋一個字素，不是兩個。** `helix-term/src/commands.rs` 的 `jump_to_label`
+//! ⚠️ **蓋一個字素，不是兩個。** `helix-term/src/commands.rs` 的 `jump_to_label`
 //! 在 `range.from()` 和 `next_grapheme_boundary(from)` 各放一個 overlay——兩個字母
 //! 蓋掉**兩個**字素。西文剛好（兩個字母蓋兩個字母），中文就是拿 2 格蓋掉 4 格，
 //! **那一行當場縮短兩格、整段重排**。我們蓋一個：一個漢字正好兩格。
 //!
-//! **二、標籤不是一律兩個字母。** helix 永遠讀兩鍵（`on_next_key` 套兩層）。落腳點
-//! 不到一個字母表那麼多的時候，第二鍵沒有分辨力，白按。所以這裏一屏之內要麼全是
-//! 一個字母、要麼全是兩個——打完第一個不會不知道還要不要打第二個。
-//!
-//! **抄過來的兩條**：落腳點上限是字母表長度的平方（多出來的畫不出來也按不到）；
-//! 跳之前先 `remember_jump()`，`C-o` 回得來（helix 的 `push_jump`）。
+//! **抄過來的三條**：**標籤固定兩個字母**（見 [`LABEL`]）；落腳點上限是字母表長度
+//! 的平方（多出來的畫不出來也按不到）；跳之前先 `remember_jump()`，`C-o` 回得來
+//! （helix 的 `push_jump`）。
 
 use super::*;
 
@@ -44,10 +42,31 @@ pub struct Jump {
     pub label: String,
 }
 
-/// 標籤用的字母，**home row 在前**。
+/// 標籤用的字母。
 ///
-/// 落腳點按檔裏的次序拿標籤，所以前面那幾個拿到的是手指不用挪的那幾個鍵。
-const ALPHABET: &[u8] = b"asdfghjklqwertyuiopzxcvbnm";
+/// **`a`–`z`，不是主鍵位行在前**（2026-09-28 定）。一度寫成
+/// `asdfghjklqwertyuiopzxcvbnm`——vim 那邊跳轉插件的排法，理由是前面那幾個落腳點拿
+/// 到的是手指不用挪的鍵。原話：「我觉得 a-z 好。」helix 的出廠也是 `('a'..='z')`
+/// （`helix-view/src/editor.rs`），它還把這一串做成了配置項。
+///
+/// 兩種都說得通，而 `a`–`z` 贏在**猜得到**：看見一屏標籤，心裏知道第幾個大概是哪
+/// 個字母；`a s d f g h j k l q` 要一個一個認。
+const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
+
+/// **一個標籤永遠是兩個字母，也就是兩格。**
+///
+/// 一度是「不到二十六個落腳點就用一個字母」，少按一鍵。2026-09-28 定為固定兩個，
+/// 原話：「我觉得就应该固定两个字母，因为很少情况能在 26 个落点内。」量一下就知道
+/// 他是對的：一屏四十行中文、每行三四個小句是一百四十個落腳點，一個字母那一檔只在
+/// 屏幕幾乎空着的時候出現。
+///
+/// ⚠️ **而更值錢的理由是肌肉記憶**：永遠兩個，手指學會「`gw` 加兩下」；有時一個的
+/// 話，每一次都得先**讀**標籤有幾個字母——為了在罕見情況下省一鍵，在每一次使用上
+/// 加一道認知。helix 也是固定兩鍵。
+///
+/// 塌掉的兩處一併刪了：全角標籤（兩個半角字母本來就正好兩格，一個縱、一個漢字都填
+/// 得滿），以及「先按一格數一遍再按兩格數一遍」那個兩趟。
+const LABEL: usize = 2;
 
 impl Editor {
     /// **這一頁畫了哪一段**（字符下標），前端每幀交過來一次。
@@ -58,8 +77,8 @@ impl Editor {
         self.page_span = (from.min(to), to);
     }
 
-    /// 屏幕上的落腳點，按檔裏的次序。`room` 是一個標籤要佔幾格。
-    fn jump_spots(&self, room: usize) -> Vec<usize> {
+    /// 屏幕上的落腳點，按檔裏的次序。
+    fn jump_spots(&self) -> Vec<usize> {
         let rope = self.current_buffer().rope();
         let (from, to) = self.page_span;
         let to = to.min(rope.len_chars());
@@ -78,17 +97,17 @@ impl Editor {
                 if !rope.slice(a..b).chars().any(char::is_alphanumeric) {
                     continue;
                 }
-                // ⚠️ **蓋不下就不標。** 標籤是蓋在那個單位頭上的，蓋過了頭就吃掉
-                // 它後面那個東西——英文的 `a` 只有一格，兩個字母蓋下去連它後面的
-                // 空格一起沒了，於是前後兩個詞黏在一起。helix 也跳過短詞（它的
-                // 說法是「two or more characters」），這裏按**格數**算，因為中文
-                // 一個字就有兩格：`a` 不標，而單獨一個「我」標得了。
+                // ⚠️ **兩格都蓋不下就不標。** 標籤是蓋在那個單位頭上的，蓋過了頭
+                // 就吃掉它後面那個東西——英文的 `a` 只有一格，兩個字母蓋下去連它
+                // 後面的空格一起沒了，於是前後兩個詞黏在一起。helix 也跳過短詞
+                // （它的說法是「two or more characters」），這裏按**格數**算，因為
+                // 中文一個字就有兩格：`a` 不標，而單獨一個「我」標得了。
                 let wide: usize = rope
                     .slice(a..b)
                     .chars()
                     .map(|c| yumete_cjk::char_width(c))
                     .sum();
-                if wide < room {
+                if wide < LABEL {
                     continue;
                 }
                 out.push(a);
@@ -124,15 +143,7 @@ impl Editor {
 
     /// 亮起標籤。
     pub fn run_owed_jump(&mut self) {
-        // ⚠️ **一個雞生蛋的小結**：標籤幾個字母，看落腳點有幾個；而蓋不下的單位
-        // 不算落腳點，所以得先知道標籤幾個字母。先按一個字母數一遍——數出來超過
-        // 一個字母表，就按兩格再數一遍。第二遍只會更少（門檻更高），所以不會來回
-        // 震盪。
-        let mut spots = self.jump_spots(1);
-        let wide = spots.len() > ALPHABET.len();
-        if wide {
-            spots = self.jump_spots(2);
-        }
+        let spots = self.jump_spots();
         if spots.is_empty() {
             self.status = say!("jump.nowhere");
             return;
@@ -144,10 +155,7 @@ impl Editor {
             .enumerate()
             .map(|(i, at)| Jump {
                 at,
-                label: match wide {
-                    false => letter(i).to_string(),
-                    true => format!("{}{}", letter(i / ALPHABET.len()), letter(i)),
-                },
+                label: format!("{}{}", letter(i / ALPHABET.len()), letter(i)),
             })
             .collect();
         self.jump_typed.clear();
