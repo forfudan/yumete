@@ -18698,7 +18698,10 @@ fn squeezed(text: &str) -> String {
         let config = Config::default();
         let ime = ImeSession::empty(Scheme::LINGMING);
         let html = frame_to_html(&mut editor, &config, &ime, 30, 12, None);
-        let ink = crate::theme::Palette::of(&config);
+        // `ink()`，不是 `Palette::of`：那一支會先 settle。這裏碰巧是在
+        // `frame_to_html` 之後問的所以答對了，而「碰巧順序對」正是 §5.12.58
+        // 那條測試紅了十七天的寫法。
+        let ink = ink(&config);
         let ground = block_style(
             yumete_core::markdown::Block::Container(yumete_core::markdown::Callout::Tip),
             ink,

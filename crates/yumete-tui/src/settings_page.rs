@@ -551,6 +551,10 @@ mod tests {
     /// **畫一頁，讀回來。** 用真的緩衝區，不是拿眼睛看註釋裏那張草圖。
     fn shot(panel: &Panel, width: u16, height: u16) -> String {
         let config = Config::default();
+        // **先 settle，再畫**——同 `render_with` 那一句（§5.12.58）。`Palette::of`
+        // 讀的是進程全局的明暗，沒人撥過它就停在 0（＝淺），而那和「有人定成淺」
+        // 分不出來。
+        crate::theme::settle(&config, None);
         let backend = ratatui::backend::TestBackend::new(width, height);
         let mut terminal = ratatui::Terminal::new(backend).expect("a terminal");
         terminal
