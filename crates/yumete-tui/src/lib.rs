@@ -604,26 +604,8 @@ pub fn run(
             // A block in Normal, a bar in Insert — the shape a modal editor is
             // read by. Only sent on a change, so the terminal is not asked to
             // reset its cursor on every keystroke.
-            // A bar in Insert — but laid out vertically the bar turns with the
-            // text, and an underscore is the only thin *horizontal* cursor a
-            // terminal offers. Elsewhere a block, which vertically is drawn into
-            // the page instead and the terminal's own cursor stays hidden.
             let vertical = editor.layout() == WritingLayout::Vertical;
-            let _ = execute!(
-                stdout(),
-                match (mode, vertical, extending) {
-                    (Mode::Insert, false, _) => SetCursorStyle::SteadyBar,
-                    (Mode::Insert, true, _) => SetCursorStyle::SteadyUnderScore,
-                    // `v` is on: every motion from here widens the selection,
-                    // and the caret says so before the status line's tail does.
-                    // **Steady, not blinking.** A blink is a second signal for
-                    // nothing — the writer is reading their own prose while
-                    // this is on, and a flashing caret is the wrong thing to
-                    // have on the page.
-                    (_, _, true) => SetCursorStyle::SteadyUnderScore,
-                    _ => SetCursorStyle::SteadyBlock,
-                }
-            );
+            let _ = execute!(stdout(), caret_shape(mode, vertical, extending));
 
             // Leaving the command line gives Insert its 中/英 back (#225) —
             // *its* state, not 中文 unconditionally. Forcing 中文 back on put
@@ -4258,6 +4240,18 @@ fn draw(
             + yumete_cjk::str_width(&editor.prompt_before_caret())
             + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(prompt_area.x + col as u16, prompt_area.y));
+    } else if editor.mode() == Mode::Field {
+        // **鍵在框裏，而框裏沒有光標可放**——`空格 /` 開出來那一下整條是選中的，
+        // `box_in` 於是不交位置回來（選中本身就是「這一整條在這裏」的說法）。
+        // 從前這一支會掉到下面去，把硬件光標放進**正文**：一根光標在稿子上閃，
+        // 而打的字進的是搜索框。
+        //
+        // ⚠️ **而那一格正是 macOS 系統輸入法跟着走的那一個**（見上面
+        // `panel_caret` 那一段）：候選框會畫到稿子上，preedit 的拼音串也一樣。
+        // 上面那一支 2026-09-23 修的就是這件事，這裏是它漏掉的那半格。
+        //
+        // 什麼都不做，於是這一幀沒人設光標，ratatui 自己把它藏起來——同設置頁
+        // 那一支。
     } else if settings.is_some() {
         // **設置頁蓋住了正文，所以正文的光標不算數**（2026-09-25 報的：「为什么
         // 「设置」左侧有个光标呢？」）。這一支什麼都不做，於是這一幀沒人設光標，
@@ -9989,6 +9983,54 @@ fn draw_command(
 /// Returns where the terminal's own cursor should go, which is only while
 /// typing — a block drawn by the page does not want a second cursor on it.
 #[allow(clippy::too_many_arguments)]
+/// **The shape of the terminal's own caret: a bar where you are typing, a
+/// block where you are pressing keys.**
+///
+/// One rule, two shapes. The question it asks is [`Mode::is_prompt`] —
+/// 「is this a line of its own to type into」 — which is the same predicate
+/// the IME, the language borrow and the composition end already ask (#351),
+/// so a seventh prompt added tomorrow is right without anybody remembering
+/// this function.
+///
+/// 2026-09-27 報的：「搜索框（包括侧边栏的搜索格子，`/` 的搜索行等），在 insert
+/// 状态输入东西的时候，光标不应该是方格而应该是竖线。否则会让用户感到奇怪，不统
+/// 一。」 Six places were a block while text was being typed into them: `/`,
+/// `:`, `::`, the reading row, the picker's query and the search panel's three
+/// boxes.
+///
+/// ⚠️ **A prompt is horizontal even on a 縱書 page**, so it does not take
+/// Insert's vertical answer. Insert draws *into the text*, and there the bar
+/// would turn with it — an underscore is the only thin **horizontal** cursor a
+/// terminal offers, so that is what a vertical page gets. The command row, the
+/// sidebar's boxes and the picker all run left to right whatever the page does.
+///
+/// ⚠️ **The box's own caret is this one.** `box_in` deliberately paints
+/// nothing while the keys are in a field — it places the hardware cursor and
+/// lets the terminal draw it (2026-09-25: a drawn `▏` covered the character it
+/// stood on). So the block a reader saw in the search box *was* this function's
+/// answer. Standing in a box in Normal is the other half and keeps its block:
+/// `box_in` paints that one, and the two shapes then say the same thing
+/// everywhere — **bar means the next key is a character, block means it is a
+/// command**.
+fn caret_shape(mode: Mode, vertical: bool, extending: bool) -> SetCursorStyle {
+    if mode.is_prompt() {
+        return SetCursorStyle::SteadyBar;
+    }
+    match (mode, vertical, extending) {
+        (Mode::Insert, false, _) => SetCursorStyle::SteadyBar,
+        (Mode::Insert, true, _) => SetCursorStyle::SteadyUnderScore,
+        // `v` is on: every motion from here widens the selection, and the caret
+        // says so before the status line's tail does.
+        // **Steady, not blinking.** A blink is a second signal for nothing —
+        // the writer is reading their own prose while this is on, and a
+        // flashing caret is the wrong thing to have on the page.
+        (_, _, true) => SetCursorStyle::SteadyUnderScore,
+        // Elsewhere a block, which vertically is drawn into the page instead
+        // and the terminal's own cursor stays hidden.
+        _ => SetCursorStyle::SteadyBlock,
+    }
+}
+
 fn box_in(
     buf: &mut ratatui::buffer::Buffer,
     box_at: u16,
@@ -19318,6 +19360,70 @@ fn squeezed(text: &str) -> String {
         assert!(!editor.is_scanning(), "拍完不該還欠着：{shot}");
         assert!(shot.contains("二.md"), "另一個檔要在照片上：{shot}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **豎線＝下一個鍵是字，方塊＝下一個鍵是命令**（2026-09-27 報的）。
+    ///
+    /// 六個輸入行從前都是方塊：`/`、`:`、`::`、注音、挑選器的查詢、搜索面板的
+    /// 三個框。原話：「否则会让用户感到奇怪，不统一。」
+    #[test]
+    fn the_caret_is_a_bar_wherever_a_key_is_a_character() {
+        use yumete_core::input::Mode;
+        // `SetCursorStyle` 沒有 `Debug`，而它 `Display` 出來的正是那串終端轉義，
+        // 三種形狀三個字符串——比記住 `\x1b[5 q` 是哪一個好讀。
+        let shape = |mode, vertical, extending| {
+            format!("{}", caret_shape(mode, vertical, extending))
+        };
+        let bar = format!("{}", SetCursorStyle::SteadyBar);
+        let under = format!("{}", SetCursorStyle::SteadyUnderScore);
+        let block = format!("{}", SetCursorStyle::SteadyBlock);
+        assert_ne!(bar, block, "三個形狀真的不一樣");
+        // 每一個自己佔一行打字的地方。
+        for mode in [Mode::Command, Mode::Search, Mode::Ruby, Mode::Picker, Mode::Lookfor, Mode::Field] {
+            assert!(mode.is_prompt(), "{mode:?} 該是一條輸入行");
+            assert_eq!(shape(mode, false, false), bar, "{mode:?}");
+            // ⚠️ **竪排下也是豎線**：提示行、邊欄的框、挑選器都是橫的，
+            // 頁面轉了它們不轉。
+            assert_eq!(shape(mode, true, false), bar, "{mode:?} 在竪排下");
+        }
+        // 正文裏那兩檔原樣不動。
+        assert_eq!(shape(Mode::Insert, false, false), bar);
+        assert_eq!(shape(Mode::Insert, true, false), under, "竪排的槓要橫着");
+        assert_eq!(shape(Mode::Normal, false, false), block);
+        assert_eq!(shape(Mode::Normal, false, true), under, "v 開着");
+    }
+
+    /// **鍵在框裏的時候，正文上不許有光標**（2026-09-27）。
+    ///
+    /// `空格 /` 開出來那一下框裏整條是選中的，於是框不交光標位置回來——而從前
+    /// 那一支會掉到「把光標放在正文」上去。一根光標在稿子上閃，打的字卻進搜索
+    /// 框；⚠️ 而 macOS 的系統輸入法跟着的正是那一格，候選框會畫到稿子上。
+    #[test]
+    fn the_manuscript_keeps_no_caret_while_the_keys_are_in_a_box() {
+        let mut editor = editor_with("那年冬天很冷。\n");
+        // `/冷⏎` 先記下這個詞，再 `:search` 開面板——那一下整條選中。
+        editor.on_key(Key::Char('/'));
+        editor.on_key(Key::Char('冷'));
+        editor.on_key(Key::Enter);
+        editor.execute(":search").unwrap();
+        assert_eq!(editor.mode(), yumete_core::input::Mode::Field, "鍵在框裏");
+
+        let config = Config::default();
+        let [left, _right] = sidebar_columns(&editor, 60);
+        // ⚠️ **驗的是「不在正文裏」，不是「藏起來了」**：`TestBackend` 沒有
+        // 「光標藏着」這個狀態可問，`get_cursor_position` 在藏起來的時候照樣
+        // 交回 `(0, 0)`。而 `(0, 0)` 本來就在邊欄那一側，所以這一句對兩種情形
+        // 說的是同一件事——而那件事正是要守的：鍵在框裏，稿子上就不許有光標。
+        let (buf, at) = render_caret(&editor, &config, 60, 12);
+        let at = at.expect("總有一個位置");
+        assert!(at.x < left, "整條選中：x={} 該在 {left} 左邊\n{}", at.x, buffer_text(&buf));
+
+        // 打一個字，選中沒了，光標就該落在框裏——還是不在正文。
+        editor.on_key(Key::Char('霜'));
+        let (buf, at) = render_caret(&editor, &config, 60, 12);
+        let at = at.expect("打字的時候要有光標");
+        assert!(at.x < left, "打字時：x={} 該在 {left} 左邊\n{}", at.x, buffer_text(&buf));
+        assert!(at.y > 0, "而且在框那一行上，不是左上角：{at:?}");
     }
 
 }
