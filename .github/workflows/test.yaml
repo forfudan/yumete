@@ -1,0 +1,95 @@
+name: Tests
+
+# **Run the tests on every push, not only on a release.**
+#
+# They already ran inside `release.yaml`, which is the one build where a red
+# test must not get past — but that is `on: release: published`, so between two
+# releases nothing checks anything. 2026-09-27 a test in `yumete-tui` turned out
+# to have been failing since 09-10: seventeen days in which the thing it checks
+# was not being checked (`docs/development.md` §5.12.58).
+#
+# ⚠️ **Two rows, and the second one is the point.** That particular test was
+# **green on Linux and red on macOS** — it read a process-global (the theme's
+# light/dark mood) before anything settled it, so which machine saw it red came
+# down to which thread ran first. One runner would have gone on saying green.
+# Both are free here: `forfudan/yumete` is public.
+#
+# ⚠️ **No 碼表 and no word list.** `release.yaml` fetches them because it is
+# packaging; a bare `cargo test` has never needed them, and pulling 36 MB per
+# run to prove that again is a cost with no answer attached.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: cargo test (${{ matrix.os }})
+    # **A pull request from a fork cannot read secrets**, and the sibling
+    # checkout below needs one — so such a PR would fail on the checkout and
+    # say nothing about the code. The push that follows a merge covers it.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    # Everything runs inside this repository's own checkout — see `release.yaml`
+    # for why there are two side by side.
+    defaults:
+      run:
+        working-directory: yumete
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: yumete
+
+      # The sibling. `yumete-ime` depends on `yume-core` by path
+      # (`../../../yume/crates/yume-core`), so a checkout of this repository
+      # alone does not build: `cargo metadata` fails before a single crate is
+      # compiled.
+      - name: Check that the sibling can be read
+        working-directory: .
+        run: |
+          set -euo pipefail
+          if [[ -z "${YUME_DEPLOY_KEY}" ]]; then
+            echo "!! no YUME_DEPLOY_KEY secret." >&2
+            echo "   forfudan/yume is private, so GITHUB_TOKEN cannot read it." >&2
+            echo "   Put a read-only deploy key for that repository in the" >&2
+            echo "   YUME_DEPLOY_KEY secret — the same one release.yaml uses." >&2
+            exit 1
+          fi
+        env:
+          YUME_DEPLOY_KEY: ${{ secrets.YUME_DEPLOY_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: forfudan/yume
+          path: yume
+          ssh-key: ${{ secrets.YUME_DEPLOY_KEY }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-${{ matrix.os }}
+          workspaces: yumete
+
+      # `--locked` so a stale `Cargo.lock` is a failure here rather than a
+      # surprise in `release.yaml`, which builds with it too.
+      #
+      # ⚠️ **`--no-fail-fast`**: the red rows come first in cargo's output and a
+      # run that stops at the first one hides how many there are — which is how
+      # 「only one test is red」 turned out to be twelve once already
+      # (「別再踩」 in ../CLAUDE.md).
+      - name: Test
+        run: cargo test --workspace --locked --no-fail-fast

@@ -15429,3 +15429,34 @@ ratatui 自己把它藏起來。
 ⚠️ **測試驗的是「不在正文裏」，不是「藏起來了」**：`TestBackend` 沒有「光標藏着」這個狀態
 可問，藏起來的時候 `get_cursor_position` 照樣交回 `(0, 0)`。而 `(0, 0)` 本來就在邊欄那一
 側，所以同一句斷言對兩種情形說的是同一件事——而那件事正是要守的那一件。
+
+## 5.12.61 測試從此每次 push 都跑（2026-09-27）
+
+`release.yaml` 裏本來就有一步 `cargo test --workspace`，註釋寫着「A release built from a
+tree that does not pass them is the one build where nobody would notice in time」——那句話
+是對的，可它掛在 `on: release: published` 上。**兩次發布之間，什麼都不檢查。** §5.12.58
+那條測試因此躺了十七天。
+
+新開一支 `.github/workflows/test.yaml`：`on: push` 與 `on: pull_request`，只跑
+`cargo test --workspace --locked --no-fail-fast`。
+
+### ⚠️ 兩行矩陣，而第二行纔是重點
+
+`ubuntu-latest` 與 `macos-14`。§5.12.58 那條測試**在 Linux 上是綠的**——09-26 發 0.3.0
+那一趟 CI 成功——而在這臺 mac 上是紅的：它在誰的機器上紅，取決於那一趟哪個線程先 settle
+那個全局。**一行矩陣會一直說綠。** 兩行都不要錢：`forfudan/yumete` 是公開倉。
+
+### 三件從 `release.yaml` 抄過來的，和一件沒抄的
+
+- **兩個倉並排 checkout**：`yumete-ime` 按路徑依賴 `yume-core`（`../../../yume`），只 check
+  out 這一個倉的話 `cargo metadata` 在編第一個 crate 之前就失敗。
+- **`YUME_DEPLOY_KEY`**：`forfudan/yume` 是私有的，`GITHUB_TOKEN` 讀不到它。缺了就用一句寫
+  明白的話停下，不要四十行之後才炸。
+- **`Swatinem/rust-cache`**，鍵按 runner 分開。
+- **沒抄的是碼表與詞表那一步。** `release.yaml` 抓它們是因為它在打包；裸的 `cargo test`
+  從來不需要，每趟拉 36 MB 去再證一次這件事，是一筆沒有答案的開銷。
+
+### ⚠️ 從 fork 來的 PR 直接跳過
+
+那種 PR 讀不到 secret，於是會停在 sibling 那一步，而那一句話與代碼無關。合併之後那一次
+push 照樣會跑。
