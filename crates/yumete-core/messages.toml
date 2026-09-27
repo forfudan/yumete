@@ -5687,12 +5687,6 @@ en = "{0} over-long rows skipped"
 # ── label ─────────────────────────────────────────────────────────────
 
 [[message]]
-# gw：竪排下還沒做
-key = "jump.not-vertical"
-zht = "跳轉標籤竪排下還沒有"
-zhs = "跳转标签竖排下还没有"
-en = "jump labels are not on the vertical page yet"
-[[message]]
 # gw：這一屏上沒有可以跳的地方
 key = "jump.nowhere"
 zht = "這一屏上沒有可以跳的地方"

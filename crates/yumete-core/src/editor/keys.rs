@@ -1974,6 +1974,7 @@ impl Editor {
         ("s", "hint.goto.first-non-blank"),
         ("f", "hint.goto.open-this-file"),
         ("x", "hint.goto.follow-link"),
+        ("w", "hint.goto.jump-labels"),
         ("n p", "hint.goto.next-or-previous-file"),
         ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),

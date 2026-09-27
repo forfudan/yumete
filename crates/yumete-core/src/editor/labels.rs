@@ -106,13 +106,6 @@ impl Editor {
     ///
     /// 同欠着那一趟搜索的辦法（`owed_search`），也同載入碼表那一處。
     pub(super) fn start_jump(&mut self) {
-        // ⚠️ **竪排下還沒有**，而且要說出來。不說的話它會掉到下面那句「這一屏上
-        // 沒有可以跳的地方」——屏幕上明明有，那句話就成了一個看起來像答案而答的
-        // 是另一件事的回答，正是 `gw` 這一鍵從前的毛病（#406 報的就是它）。
-        if self.layout() == crate::zong::Layout::Vertical {
-            self.status = say!("jump.not-vertical");
-            return;
-        }
         self.owed_jump = true;
     }
 
