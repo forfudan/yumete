@@ -8982,6 +8982,10 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     ed.on_key(Key::Char('霜'));
     assert!(ed.search().stale, "it is waiting to be told to look");
     ed.on_key(Key::Enter);
+    // ⚠️ **走磁盤那一趟 2026-09-27 起是欠着的**：`Enter` 只記一筆，前端畫完一幀
+    // 「正在找…」再回頭跑。沒有主循環的地方自己還（`settle_search`）。
+    assert!(ed.is_scanning(), "記下了，還沒跑");
+    ed.settle_search();
     assert!(!ed.search().stale);
 
     // Three: one here, two next door. **The file being written is searched
@@ -9121,6 +9125,7 @@ fn the_search_reads_the_ignore_file_and_roots_itself_in_the_book() {
     ed.execute(":search-gd").unwrap();
     ed.on_key(Key::Char('霜'));
     ed.on_key(Key::Enter);
+    ed.settle_search();
 
     let files: Vec<String> = ed
         .search()
@@ -9180,6 +9185,7 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
         ed.on_key(Key::Char(c));
     }
     ed.on_key(Key::Enter);
+    ed.settle_search();
     assert_eq!(ed.search().total, 4);
 
     // **`Enter` 跑一遍搜索並把鍵交回面板**（2026-09-25），去結果接着按 `j`。

@@ -726,6 +726,17 @@ pub fn run(
             last_frame = began.elapsed();
             painted = std::time::Instant::now();
             drawn = wants_picture.is_some().then(|| completed.buffer.clone());
+            // **欠着的那一趟搜索，畫完這一幀再跑**（2026-09-27 報的：掃描期間屏
+            // 幕完全靜止）。剛畫的那一幀表頭寫着「正在找…」，所以走一本書的那幾
+            // 秒裏，屏幕上說得出它在幹什麼。跑完 `continue` 回去再畫一幀，那一幀
+            // 上是結果。
+            //
+            // 同載入碼表那一處的辦法（`loading_the_table`）：先畫一幀說話，再做
+            // 那件慢事。
+            if editor.take_owed_search() {
+                editor.run_owed_search();
+                continue;
+            }
         }
         // …and the picture is of *this* frame, which is the one with no
         // command line across it.
@@ -7142,6 +7153,8 @@ fn draw_search(
     // ⚠️ **問編輯器，不是問面板**：正文改過之後名單就過期了，而那件事面板自己看
     // 不見（`Editor::search_is_stale`）。
     let (tally, style) = match (find.broken, editor.search_is_stale(), find.asked()) {
+        // **正在走磁盤**：這一幀畫完，主循環就回頭把那一趟跑掉（2026-09-27）。
+        _ if editor.is_scanning() => (say!("search.scanning"), head),
         (true, _, _) => (say!("search.bad-pattern"), wrong),
         (_, true, true) => (say!("search.enter-to-look"), head),
         (false, _, false) => (String::new(), quiet),
