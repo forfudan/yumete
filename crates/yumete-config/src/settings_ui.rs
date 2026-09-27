@@ -559,7 +559,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Text,
         label: "set.panel.markers",
         hint: "set.panel.markers.hint",
-        factory: r#""㊀㊁㊂㊃㊄㊅㊆㊇㊈""#,
+        factory: r#""１２３４５６７８９""#,
     },
     Setting {
         table: "panel",

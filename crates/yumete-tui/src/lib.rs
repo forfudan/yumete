@@ -13410,7 +13410,7 @@ fn squeezed(text: &str) -> String {
     }
 
     #[test]
-    fn candidates_are_numbered_with_circled_chinese_numerals() {
+    fn candidates_are_numbered_in_the_column_the_candidate_stands_in() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
@@ -13423,11 +13423,16 @@ fn squeezed(text: &str) -> String {
                 .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
                 .find(|&(x, y)| buffer[(x, y)].symbol() == needle)
         };
-        let (x1, y1) = find("㊀").expect("first candidate numbered ㊀");
-        assert_eq!(find("㊁").map(|(_, y)| y), Some(y1), "㊁ on the same row");
+        // ⚠️ **Full-width digits** (2026-09-27; 帶圈中文數字 ㊀㊁ before that).
+        // The shape of the character is not this test's subject — **the column
+        // is**: `x1` here is read back out under the candidate two rows down,
+        // which is the thing a half-width `1` breaks (it lands five cells to
+        // the left, and the panel's right wall goes ragged with it).
+        let (x1, y1) = find("１").expect("first candidate numbered １");
+        assert_eq!(find("２").map(|(_, y)| y), Some(y1), "２ on the same row");
         // A blank row separates the number from the candidate it labels.
         assert_eq!(at(&buffer, x1, y1 + 1), " ", "gap under the number");
-        assert_eq!(at(&buffer, x1, y1 + 2), "吧");
+        assert_eq!(at(&buffer, x1, y1 + 2), "吧", "and the number is over its own candidate");
     }
 
     #[test]
@@ -13557,7 +13562,7 @@ fn squeezed(text: &str) -> String {
 
         let text = buffer_text(&buffer);
         assert!(text.contains('壹'), "配置的編號字符沒用上: {text:?}");
-        assert!(!text.contains('㊀'), "還在用默認編號");
+        assert!(!text.contains('１'), "還在用默認編號");
         // The ground is the configured paper, and the ladder runs from it.
         assert!(
             (0..buffer.area.height).any(|y| {
@@ -13685,7 +13690,7 @@ fn squeezed(text: &str) -> String {
     ///
     /// 原話：「yume 的分号默认是快捷符号，他不是一个候选面板而是一个特殊面板，
     /// 是按字母、空格、分号等按键上屏的。」 Drawn through the ordinary candidate
-    /// path it came out as `㊀ ：「 ㊁ ～ …` — nine of twenty-seven, numbered,
+    /// path it came out as `１ ：「 ２ ～ …` — nine of twenty-seven, numbered,
     /// and every number a key that commits **something else**. The labels have
     /// to be the keys, and the whole table has to be on the panel.
     #[test]
@@ -14296,9 +14301,11 @@ fn squeezed(text: &str) -> String {
         let second = find("八");
         assert!(first.0 > second.0, "candidates must run right to left");
         assert_eq!(first.1, second.1, "candidates must share a row");
-        // Two rows up, past the gap, is the 帶圈中文數字 numbering it.
-        assert_eq!(at(&buffer, first.0, first.1 - 2), "㊀");
-        assert_eq!(at(&buffer, second.0, second.1 - 2), "㊁");
+        // Two rows up, past the gap, is the number — **and at the same column**,
+        // which is the whole reason the markers have to be two cells wide
+        // (2026-09-27: `123` put it five cells to the left).
+        assert_eq!(at(&buffer, first.0, first.1 - 2), "１");
+        assert_eq!(at(&buffer, second.0, second.1 - 2), "２");
     }
 
     #[test]
@@ -17933,9 +17940,9 @@ fn squeezed(text: &str) -> String {
         let config = vertical_config();
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 20);
 
-        // Numbered with 帶圈中文數字 — the vertical panel — and wearing 墨香.
+        // Numbered with the full-width digits — the vertical panel — and 墨香.
         let text = buffer_text(&buffer);
-        assert!(text.contains('㊀'), "vertical panel expected: {text:?}");
+        assert!(text.contains('１'), "vertical panel expected: {text:?}");
         let paper = Color::Rgb(0x26, 0x2a, 0x27);
         assert!(
             (0..buffer.area.height).any(|y| {

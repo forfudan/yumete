@@ -905,7 +905,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 393 | **文檔說 41 個命令，面板數出 47 個** | docs | P2 | 改成歷史陳述，不寫死會過期的數 [^393] | Fixed 2026-09-11 |
 | 394 | **極窄終端的狀態行硬截斷到半個字** | tui | P2 | 先擠間距，再整格讓位 [^394] | Fixed 2026-09-11 |
 | 395 | **孤立的 `\r` 被當成換行數進去** | core | P2 | 關掉 ropey 的 `unicode_lines`（helix 就是這樣）[^395] | Fixed 2026-09-13 |
-| 396 | **候選序號出廠是 ㊀㊁㊂，桌面版是數字** | config | P3 | 按「2」看到「㊁」 [^396] | Open |
+| 396 | **候選序號出廠是 ㊀㊁㊂，桌面版是數字** | config | P3 | 出廠改成全角數字 `１２３` [^396] | Fixed 2026-09-27 |
 | 397 | **空格選單那張表漏收兩項，一項文案不符** | docs | P3 | 補齊，並加一道反向的閘 [^397] | Fixed 2026-09-12 |
 | 398 | **NUL 在頁面上一點痕跡都沒有** | tui | P3 | 換成 Control Pictures，寬度不變 [^398] | Fixed 2026-09-12 |
 | 399 | **提示行把換粒度的鍵說成 `Tab`，而那是 `T`** | core | P3 | 照它按下去粒度不變 [^399] | Fixed 2026-09-12 |
@@ -7023,11 +7023,19 @@ a pair of values: the relationships between border, helper text and highlight
 stay right by construction, and the panel is the *same skin* as the GUI
 frontends' whenever the endpoints match.
 
-**The markers have to be full-width.** The circled Chinese numerals ㊀㊁㊂ are;
-the circled Arabic ①②③ are East-Asian *ambiguous*, so a terminal may draw them
-one cell or two and the columns come apart. A list that runs out falls back to
-plain digits rather than leaving candidates unnumbered, and an empty list is
-ignored for the same reason.
+**The markers have to be full-width.** Factory is the full-width digits
+`１２３４５６７８９` (2026-09-27; the circled Chinese numerals ㊀㊁㊂ before that,
+and they are full-width too). The circled Arabic ①②③ are East-Asian *ambiguous*,
+so a terminal may draw them one cell or two and the columns come apart. A list
+that runs out falls back to plain digits rather than leaving candidates
+unnumbered, and an empty list is ignored for the same reason.
+
+⚠️ **Half-width digits are not an option, and it is measurable.** A 縱 is two
+cells; `1` occupies the left one. Rendered with `markers = "123"` the number
+came out at column 28 with its own candidate at 33 — five cells adrift — and the
+panel's right wall went ragged. Full-width digits read as digits (which is the
+point: yume's desktop panel numbers with plain ones, and `2` should show a `２`)
+without giving that up.
 
 ### The prompt's guess (#72)
 
@@ -12045,6 +12053,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     「㊁」，第一次會愣一下；帶圈漢字數字還是雙寬，比數字多佔一倍欄寬。
     yumete 這邊可以用 `[panel] markers` 改（有測試蓋着），所以這不是缺功能，是**出廠
     預設與桌面版不一致**。改不改是一個決定，不是一個 bug。**small**
+    **2026-09-27 定了：出廠改成全角數字 `１２３４５６７８９`。**
+    ⚠️ **不是半角。** 半角數字在竪排下會錯位——量出來編號落在第 28 欄、它底下的候選在
+    第 33 欄，差五格，框的右牆也跟着歪（一個 `縱` 是兩格，半角字只佔左邊那一格）。全角
+    數字兩格寬，橫排竪排都對得齊，而按下「2」看見的就是「２」。所以省欄寬那一半拿不到，
+    拿到的是「按什麼看見什麼」那一半——而那纔是這一條報的事。
 
 [^397]: 2026-09-11 的六路審閱，上手那一路逐條核對出來的。`docs/manual.md:1495-1511`
     那張「空格選單」表漏收兩項：`P`（貼在前面）與 `c`（合併衝突）；`docs/manual.md:1505`
