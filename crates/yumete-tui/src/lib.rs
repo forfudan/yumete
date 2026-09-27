@@ -329,6 +329,18 @@ fn frame_to(
         )
     });
     let settings = settings.or(mine.as_ref());
+    // **欠着的那一次 `gw` 要先畫一幀纔算得出來**（#406）：落腳點只算屏幕上的，而
+    // 哪一段在屏幕上是畫的時候量的。主循環是「畫完 `continue` 再畫一幀」，這一支
+    // 沒有下一幀，所以自己先畫一幀丟掉。
+    if editor.take_owed_jump() {
+        terminal
+            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
+            .expect("one frame to measure the page by");
+        if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+            editor.set_page_span(a, b);
+        }
+        editor.run_owed_jump();
+    }
     terminal
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
         .expect("draw one frame");
@@ -651,6 +663,11 @@ pub fn run(
             // the screen, and this is the only place that knows which those
             // are. Last frame's, necessarily — it is settled while drawing.
             editor.set_page_top(viewport[editor.live_pane().min(1)].top.line);
+            // **…以及這一頁真畫了哪一段**（#406）：`gw` 的落腳點只算屏幕上的，而
+            // 「屏幕上」是畫的那一支上一幀量出來的。同上一句，上一幀的答案。
+            if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+                editor.set_page_span(a, b);
+            }
             if editor.layout() == WritingLayout::Vertical {
                 let look = vertical::Look::of(editor);
                 editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
@@ -730,6 +747,16 @@ pub fn run(
             // 那件慢事。
             if editor.take_owed_search() {
                 editor.run_owed_search();
+                continue;
+            }
+            // **欠着的那一次 `gw`，同一個辦法**（#406）：剛畫完的這一幀量出了這一頁
+            // 畫了哪一段，落腳點只算那一段裏的。跑完 `continue` 回去再畫一幀，那一
+            // 幀上是標籤。
+            if editor.take_owed_jump() {
+                if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+                editor.run_owed_jump();
                 continue;
             }
         }
@@ -1843,6 +1870,13 @@ struct Viewport {
     zong: Anchor,
     /// Where the grid is scrolled to, when the file is read as one.
     table: table::Viewport,
+    /// **上一幀真畫了哪一段**（字符下標），`gw` 的落腳點從這裏來（#406）。
+    ///
+    /// 只有畫的那一支知道——`page_top` 是一個行號，而軟折行之下一屏放得下幾個
+    /// 邏輯行要問 measure，那個 measure 是在 `draw_horizontal` 裏搭的。同
+    /// `set_page_top`：到核心那裏的是上一幀的答案，而按 `gw` 的那一刻上一幀就是
+    /// 眼前這一幀。
+    drawn_span: Option<(usize, usize)>,
 }
 
 /// Where each work area is scrolled to (Feature #176).
@@ -4097,6 +4131,7 @@ fn draw(
                     *rect,
                     &mut seat.top,
                     &mut seat.left,
+                    &mut seat.drawn_span,
                     peek,
                     // Only the pane the keys are in gets the bar, and only in
                     // the layout that reserved it.
@@ -8182,6 +8217,7 @@ fn draw_horizontal(
     text_area: Rect,
     viewport: &mut WrapAnchor,
     left: &mut usize,
+    span: &mut Option<(usize, usize)>,
     peek: Option<&yumete_core::editor::Pane>,
     head: Option<Rect>,
 ) -> (u16, u16) {
@@ -8432,7 +8468,18 @@ fn draw_horizontal(
     // What the bar at the top of the page will hold, taken from the first row
     // of the table this page shows (#379).
     let mut bar_lines: Option<(Option<Line<'static>>, Option<Line<'static>>)> = None;
-    for (_, row) in rows_on_screen(editor, rope, measure, *viewport, height) {
+    // **`gw` 的標籤畫在整頁畫完之後**（#406）：一行是一個 `Line` 推進 `lines`，
+    // 而 `Paragraph` 是最後一次性渲染的——在循環裏往 buffer 上塗，會被它蓋掉。
+    // 所以循環裏只記座標，收尾再蓋上去（同上面那條 measure 帶子的辦法）。
+    let mut label_cells: Vec<(u16, u16, String)> = Vec::new();
+    // **這一趟畫了哪一段**，交給核心去算 `gw` 的落腳點（#406）。畫的這一支是唯一
+    // 知道的：`page_top` 只是一個行號，而一屏放得下幾個邏輯行要問 measure。
+    let on_screen = rows_on_screen(editor, rope, measure, *viewport, height);
+    *span = match (on_screen.first(), on_screen.last()) {
+        (Some((_, a)), Some((_, b))) => Some((a.start, b.end)),
+        _ => None,
+    };
+    for (_, row) in on_screen {
         // Which palette this row is drawn off. Everything below asks `ink`, so
         // the whole of 焦點模式 is this one decision. The gutter goes with the
         // row: a line number is the row's own furniture, unlike the 縱書 number
@@ -9112,12 +9159,54 @@ fn draw_horizontal(
                 fill,
             ));
         }
+        if editor.jumping() {
+            // `drawn_columns` 是「這個字在第幾格」的唯一答案——注音、列號問的
+            // 都是它，標籤問的是同一件事，只是畫在行上而不是行上面。
+            let column = drawn_columns(drawn, gutter + indent);
+            let y = text_area.y + lines.len() as u16;
+            for (at, label) in editor.jump_labels() {
+                if at < row.start || at >= row.start + row_len {
+                    continue;
+                }
+                let Some(&cell) = column.get(at - row.start) else {
+                    continue;
+                };
+                // 捲到左邊去了、或者落在行號欄上，就不畫——`scrolled` 留着行號
+                // 欄、砍掉它後面 `left` 格。
+                if cell < gutter + left {
+                    continue;
+                }
+                label_cells.push((text_area.x + (cell - left) as u16, y, label.to_string()));
+            }
+        }
         lines.push(scrolled(Line::from(spans), gutter, left));
     }
     // `.style` paints the **whole area**, not only the rows there is writing
     // on: past the last line of a short file the page is still the page, and
     // 墨香's light page on a dark terminal made that half of the window black.
     frame.render_widget(Paragraph::new(lines).style(ink.page()), text_area);
+
+    // **標籤，蓋在那個字上。** 一個漢字兩格、兩個字母也兩格，所以蓋掉的正好是那
+    // 一個字，整行一格都沒挪——⚠️ 而那是這個功能成立的前提：按 `gw` 之前眼睛已經
+    // 鎖定了要去的地方，版面一動那個地方就跑了。
+    //
+    // ⚠️ **和 helix 有意不同**：它在頭**兩個**字素上各放一個 overlay，西文剛好，
+    // 中文就是拿兩格蓋掉四格、那一行當場縮短。見 `editor/labels.rs` 的開頭。
+    if !label_cells.is_empty() {
+        let mark = ink.page().fg(ink.paper()).bg(ink.mark()).add_modifier(Modifier::BOLD);
+        let buf = frame.buffer_mut();
+        for (x, y, label) in label_cells {
+            for (n, g) in yumete_cjk::graphemes(&label).enumerate() {
+                let at = x + n as u16;
+                if at >= text_area.x + text_area.width {
+                    break;
+                }
+                if let Some(cell) = buf.cell_mut((at, y)) {
+                    cell.set_symbol(g).set_style(mark);
+                }
+            }
+        }
+    }
 
     // **The bar, into its own region** (#379). The design, and the
     // reason this is buildable at all — 2026-09-11：「在顶部预留一个信息栏
@@ -16815,6 +16904,87 @@ fn squeezed(text: &str) -> String {
         // 「那韋字。」完全同一個算法，只是把 那 換成了一個兩個 `char` 的字簇。
         let reading = row_text(&buffer, 0);
         assert_eq!(reading.trim_end(), "  wéi", "逐字加會少一格：{reading:?}");
+    }
+
+    /// **`gw`：一眼跳到屏幕上任何地方**（#406）。
+    ///
+    /// 一條測試管一整條路，因為它們是同一條路上的幾步：畫一幀量出這一頁的範圍、
+    /// 落腳點落在 `e` 的單位上、標籤蓋住那個字而**不推開版面**、打下去跳過去。
+    #[test]
+    fn jump_labels_stand_on_the_page_without_moving_it() {
+        let mut editor = editor_with("那年冬天，雪下得早。\n山路斷了、她在門口站了很久。\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.command_line = false;
+
+        // ⚠️ **`frame_to_text`，不是 `render`**：標籤是**畫出來的那一幀**的性質，
+        // 落腳點只算屏幕上的，而哪一段在屏幕上是畫的時候量的。所以主循環是「畫完
+        // 一幀、把範圍取下來、跑掉欠着的那一次、再畫一幀」，而 `frame_to`（`--shot`
+        // 走的那一支）自己畫兩趟。`render` 每次新開一個 viewport，量出來的範圍留
+        // 不住，看不見標籤——那不是標籤的毛病。
+        let ime = no_ime();
+        let shot = |ed: &mut Editor| -> Vec<String> {
+            frame_to_text(ed, &config, &ime, 40, 8, None)
+                .lines()
+                .take(2)
+                .map(|r| r.trim_end().to_string())
+                .collect()
+        };
+        let plain = shot(&mut editor);
+        assert_eq!(plain[0], "那年冬天，雪下得早。", "先看清楚原文");
+
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('w'));
+        assert!(editor.owes_a_jump(), "按鍵只記一筆，等畫完那一幀");
+        let rows = shot(&mut editor);
+        assert!(editor.jumping(), "畫完就亮起來了");
+        // **落腳點是 `e` 的單位**：「那年冬天」「雪下得早」是兩處，不是六個詞；
+        // 標點自成一段，不給標籤。
+        assert_eq!(rows[0], "a 年冬天，s 下得早。", "{rows:#?}");
+        assert_eq!(rows[1], "d 路斷了、f 在門口站了很久。", "{rows:#?}");
+        // ⚠️ **版面一格都沒動**：一個漢字兩格、一個字母一格加上它讓出來的那一格，
+        // 所以每一行還是原來那麼寬。推開的話後面的字全往右擠，而按 `gw` 之前眼睛
+        // 已經鎖定了要去的地方。
+        for (now, was) in rows.iter().zip(&plain) {
+            assert_eq!(
+                yumete_cjk::str_width(now),
+                yumete_cjk::str_width(was),
+                "這一行的寬度變了：{was:?} → {now:?}"
+            );
+        }
+
+        // 打下去就跳過去，而且 `C-o` 回得來。
+        editor.on_key(Key::Char('f'));
+        assert!(!editor.jumping(), "跳完標籤就收了");
+        let at = editor.cursor();
+        assert_eq!(
+            editor.current_buffer().rope().chars_at(at).next(),
+            Some('她'),
+            "f 那一個標籤站在「她」上"
+        );
+        editor.on_key(Key::Ctrl('o'));
+        assert_eq!(editor.cursor(), 0, "C-o 回得來");
+    }
+
+    /// **不認得的鍵收掉標籤，而且吃掉它自己**（#406）。
+    ///
+    /// 「按錯一個鍵就跳到別處去」比「按錯一個鍵什麼都沒發生」壞得多——標籤亮着的
+    /// 時候整個鍵盤都是標籤，而打錯的那一下不該變成一條命令。
+    #[test]
+    fn a_key_that_is_not_a_label_only_takes_the_labels_away() {
+        let mut editor = editor_with("那年冬天，雪下得早。\n");
+        let config = Config::default();
+        let ime = no_ime();
+        let text = editor.current_buffer().text();
+        for key in [Key::Char('z'), Key::Esc, Key::Char('x'), Key::Char('d')] {
+            editor.on_key(Key::Char('g'));
+            editor.on_key(Key::Char('w'));
+            let _ = frame_to_text(&mut editor, &config, &ime, 40, 8, None);
+            assert!(editor.jumping(), "{key:?} 之前標籤是亮的");
+            editor.on_key(key);
+            assert!(!editor.jumping(), "{key:?} 之後收掉了");
+            assert_eq!(editor.current_buffer().text(), text, "{key:?} 動了正文");
+        }
     }
 
     #[test]

@@ -4627,6 +4627,12 @@ zhs = "去／看它指的地方"
 en = "go to / show what it points at"
 
 [[message]]
+# g 菜單：gw 亮起跳轉標籤
+key = "hint.goto.jump-labels"
+zht = "一眼跳到屏幕上任何地方"
+zhs = "一眼跳到屏幕上任何地方"
+en = "jump anywhere on the screen"
+[[message]]
 # g 組：行首／行尾
 key = "hint.goto.line-start-or-end"
 zht = "行首／行尾"
@@ -4688,13 +4694,6 @@ key = "hint.goto.title"
 zht = "g"
 zhs = "g"
 en = "g"
-
-[[message]]
-# g 組：這個詞還在哪裏
-key = "hint.goto.w-moved"
-zht = "在另一個工作區看是 gD 了——同一個鍵，大寫就是「不離開這裏」"
-zhs = "在另一个工作区看是 gD 了——同一个键，大写就是「不离开这里」"
-en = "showing it over there is gD now — the same key, capitalised, means 'without leaving'"
 
 [[message]]
 # 這一句是 g/ g? 的說明
@@ -5687,6 +5686,18 @@ en = "{0} over-long rows skipped"
 
 # ── label ─────────────────────────────────────────────────────────────
 
+[[message]]
+# gw：竪排下還沒做
+key = "jump.not-vertical"
+zht = "跳轉標籤竪排下還沒有"
+zhs = "跳转标签竖排下还没有"
+en = "jump labels are not on the vertical page yet"
+[[message]]
+# gw：這一屏上沒有可以跳的地方
+key = "jump.nowhere"
+zht = "這一屏上沒有可以跳的地方"
+zhs = "这一屏上没有可以跳的地方"
+en = "nowhere on this screen to jump to"
 [[message]]
 # :keymap actions 那張清單的開頭一段
 key = "keys.actions-head"
@@ -10628,5 +10639,8 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
+
+
 
 

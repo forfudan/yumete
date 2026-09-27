@@ -353,11 +353,13 @@ fn the_retired_keys_say_what_replaced_them() {
     ed.on_key(Key::Enter);
     assert!(ed.status().is_empty(), "{}", ed.status());
 
-    // `gw` moved to `gD` on the same day (#355), and the fingers that learned
-    // it are this project's own — so it says where it went rather than nothing.
+    // ⚠️ **`gw` 那一句 2026-09-28 拿掉了**（#406）。查定義 2026-09-09 從 `gw` 搬到
+    // `gD`（#355），`gw` 從那天起說一句「它搬家了」——而 helix 使用者按 `gw` 問的
+    // **本來就不是查定義**，那句話對他們來說是一個看起來像答案而答錯了問題的回答。
+    // 現在 `gw` 就是 helix 的 `gw`：跳轉標籤。搬家那句話留給真正搬了家的鍵。
     let mut ed = typed("那年冬天。\n");
     press(&mut ed, "gw");
-    assert!(ed.status().contains("gD"), "{}", ed.status());
+    assert!(!ed.status().contains("gD"), "gw 不再談查定義：{}", ed.status());
 }
 
 #[test]

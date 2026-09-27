@@ -2385,6 +2385,16 @@ pub struct Editor {
     ///
     /// 同一個辦法在載入碼表那裏用過（`lib.rs` 的 `loading_the_table`）。
     owed_search: bool,
+    /// **屏幕上的落腳點和它們的標籤**（`gw`，#406）——亮着的時候整個鍵盤都是標籤。
+    ///
+    /// ⚠️ 不是 `jumps`：那個是 `C-o`／`C-i` 走的跳轉表（#45），兩件事。
+    labels: Vec<labels::Jump>,
+    /// 標籤已經被打進去的那幾個字母。
+    jump_typed: String,
+    /// **欠着一次 `gw`**：按鍵記一筆，前端畫完一幀交了範圍再跑（見 `labels.rs`）。
+    owed_jump: bool,
+    /// **這一頁畫了哪一段**（字符下標），前端每幀交過來一次（`set_page_span`）。
+    page_span: (usize, usize),
     /// **一句幾秒之後自己走掉的話**：什麼時候走，和走的是哪一句。
     ///
     /// 2026-09-27 定，原話：「有些不是特别重要的消息可以有个参数「显示时间」，
@@ -2807,6 +2817,10 @@ impl Editor {
             replace_this_file: None,
             workspace_root: None,
             owed_search: false,
+            labels: Vec::new(),
+            jump_typed: String::new(),
+            owed_jump: false,
+            page_span: (0, 0),
             status_fades: None,
             sides: [
                 crate::sidebar::Side::Left,
@@ -3588,6 +3602,7 @@ mod find;
 mod hint;
 mod jumps;
 mod keys;
+mod labels;
 mod matching;
 mod memo;
 mod modes;

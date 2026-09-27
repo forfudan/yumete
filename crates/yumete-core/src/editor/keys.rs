@@ -19,6 +19,13 @@ impl Editor {
             self.answer_query(key);
             return KeyOutcome::Continue;
         }
+        // **標籤亮着的時候整個鍵盤都是標籤**（`gw`，#406）——在錄製之前，因為
+        // 那一兩下打的是屏幕上臨時發的號碼，回放的時候屏幕上不會是同一批號碼。
+        // 錄進去的等於一句永遠對不上的話。
+        if self.jumping() {
+            self.jump_key(key);
+            return KeyOutcome::Continue;
+        }
         // Recording happens here rather than in Normal mode's handler, so a
         // macro captures the text typed in Insert and the pattern typed at a
         // prompt too — a macro that can only move is not much of one.
@@ -1857,12 +1864,11 @@ impl Editor {
             // 「without leaving」.
             Key::Char('d') => return self.show_definition(false),
             Key::Char('D') => return self.show_definition(true),
-            // It was `gw` until 2026-09-09, and the fingers that learned it
-            // are this project's own.
-            Key::Char('w') => {
-                self.status = say!("hint.goto.w-moved");
-                return;
-            }
+            // **一眼跳到屏幕上任何地方**（#406，2026-09-28）。查定義是 `gd`／`gD`
+            // 了（2026-09-09 改的名），而 `gw` 從那天起只剩一句「它搬家了」——
+            // ⚠️ 一個 helix 使用者按 `gw` 收到的是那句話，**看起來像個答案而答的
+            // 是另一個問題**。現在它就是 helix 的那個 `gw`。
+            Key::Char('w') => return self.start_jump(),
             // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
             // or what the cursor is on — searched across the whole document.
             // `g/` is the sugar `/` has always wanted: search for *this*,
@@ -1950,6 +1956,7 @@ impl Editor {
         ("s", "hint.goto.first-non-blank"),
         ("f", "hint.goto.open-this-file"),
         ("x", "hint.goto.follow-link"),
+        ("w", "hint.goto.jump-labels"),
         ("n p", "hint.goto.next-or-previous-file"),
         ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),

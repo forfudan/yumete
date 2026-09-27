@@ -441,7 +441,7 @@ fn main() -> ExitCode {
     yumete_tui::set_build(VERSION);
     let mut settings_page = None;
     if let Some(pressed) = &keys {
-        settings_page = press(&mut editor, pressed);
+        settings_page = press(&mut editor, pressed, &config, &ime, shot);
     }
     // Asked for on the command line, and run the same way `:tutor` runs it.
     if tutor {
@@ -625,7 +625,13 @@ fn main() -> ExitCode {
 /// ⚠️ **`:settings` 之後的鍵歸那扇面板**，和主循環一樣。不接這一下，
 /// `--shot --keys=':settings\nljj '` 拍到的永遠是面板剛開的樣子——而這個倉審前端
 /// 就是靠拍照，一扇按不動的面板等於一扇沒法審的面板。回來的是那扇面板（要畫它）。
-fn press(editor: &mut Editor, keys: &str) -> Option<yumete_config::panel::Panel> {
+fn press(
+    editor: &mut Editor,
+    keys: &str,
+    config: &yumete_config::Config,
+    ime: &ImeSession,
+    shot: Option<(u16, u16)>,
+) -> Option<yumete_config::panel::Panel> {
     let mut settings = yumete_tui::settings_page::Seat::default();
     let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
@@ -730,6 +736,15 @@ fn press(editor: &mut Editor, keys: &str) -> Option<yumete_config::panel::Panel>
         }
         editor.on_key(key);
         settings.settle(editor);
+        // ⚠️ **`gw` 的標籤要等一幀纔算得出來**（#406）：落腳點只算屏幕上的，而哪一
+        // 段在屏幕上是**畫的時候**量的。一批鍵是一次餵完的，所以餵到欠着的那一刻
+        // 先畫一幀丟掉——不然 `--keys='gwf'` 裏那個 `f` 落到正文上當成別的鍵，而
+        // 這個倉審前端就是靠拍照。
+        if editor.owes_a_jump() {
+            if let Some((w, h)) = shot {
+                let _ = yumete_tui::frame_to_text(editor, config, ime, w, h, settings.panel.as_ref());
+            }
+        }
     }
     settings.panel
 }
