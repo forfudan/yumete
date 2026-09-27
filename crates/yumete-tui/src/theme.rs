@@ -107,10 +107,21 @@ pub fn set_dark(dark: bool) {
 /// from the config or the terminal.
 static CHOSEN_MOOD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// **Whether anybody has settled the mood yet** — the guard behind
+/// [`Palette::of`]'s test-only assertion.
+///
+/// `MOOD` starts at 0, which reads as「light」and is indistinguishable from a
+/// light mood somebody settled on purpose. That is what made §5.12.58 cost
+/// seventeen days: a test took its palette before its first frame, got the
+/// unsettled light one, and compared it against a frame drawn dark — no error,
+/// just two colours that did not match, and a failure message about grounds.
+static SETTLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Say the mood **and remember that it was asked for**, so nothing settles over
 /// it afterwards. What `:theme-mode` calls; `settle` is what start-up calls.
 pub fn choose_mood(dark: bool) {
     CHOSEN_MOOD.store(true, Ordering::Relaxed);
+    SETTLED.store(true, Ordering::Relaxed);
     set_dark(dark);
 }
 
@@ -134,6 +145,7 @@ pub fn settle(config: &Config, terminal_is_dark: Option<bool>) {
     if CHOSEN_MOOD.load(Ordering::Relaxed) {
         return;
     }
+    SETTLED.store(true, Ordering::Relaxed);
     ANSWERED.store(
         match terminal_is_dark {
             None => 0,
@@ -513,6 +525,25 @@ const RULE_BACK: u16 = 5000;
 impl Palette {
     /// The palette in force.
     pub fn of(config: &Config) -> Palette {
+        // ⚠️ **Asking for the palette before anybody settled the mood is a
+        // bug, and a silent one** (§5.12.58). `MOOD` starts at 0 — which reads
+        // as「light」 — so the answer looks perfectly ordinary and is simply
+        // the wrong theme. Every drawing path settles first (`run` at startup,
+        // `frame_to` per shot, the test helpers per frame); a caller that does
+        // not is asking a question it has not set up.
+        //
+        // Test builds only: in production `run` settles before the first frame
+        // and a panic here would be a crash where the old behaviour was a
+        // wrong colour. In a test it is the difference between seventeen days
+        // and one line.
+        #[cfg(test)]
+        assert!(
+            SETTLED.load(Ordering::Relaxed),
+            "Palette::of before the mood was settled — call the test's `ink()` \
+             helper (it settles), or `Palette::in_mood` to say which mood you \
+             mean. Reading the palette before the first frame gets the light \
+             one and the frame comes out dark. 見 development.md §5.12.58."
+        );
         Palette::of_theme(&in_force(config), dark())
     }
 

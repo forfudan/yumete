@@ -903,6 +903,10 @@ mod tests {
     /// what was written.
     fn zong(text: &str, w: u16, h: u16) -> (Rect, ratatui::buffer::Buffer) {
         let config = Config::default();
+        // **先 settle，再畫**——同 `render_with` 那一句（§5.12.58）。`Palette::of`
+        // 讀的是進程全局的明暗，沒人撥過它就停在 0（＝淺），而那和「有人定成淺」
+        // 分不出來。
+        crate::theme::settle(&config, None);
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut got = None;
         terminal
@@ -990,6 +994,10 @@ mod tests {
     /// Draw the key table a half-pressed prefix puts up, on a `w × h` page.
     fn menu(keys: usize, w: u16, h: u16) -> (Option<Rect>, ratatui::buffer::Buffer) {
         let config = Config::default();
+        // **先 settle，再畫**——同 `render_with` 那一句（§5.12.58）。`Palette::of`
+        // 讀的是進程全局的明暗，沒人撥過它就停在 0（＝淺），而那和「有人定成淺」
+        // 分不出來。
+        crate::theme::settle(&config, None);
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut got = None;
         terminal
