@@ -2377,6 +2377,14 @@ pub struct Editor {
     ///
     /// `None` ＝ 命令行沒說，那就退回 [`Self::project_root`]（從 cwd 往上找）。
     workspace_root: Option<std::path::PathBuf>,
+    /// **欠着一趟走磁盤的搜索**（2026-09-27 報的：「掃描期間表頭是完全靜止的」）。
+    ///
+    /// 走一遍一本書要幾百毫秒到幾秒，而它從前就在按鍵那一支裏跑完——屏幕在那段
+    /// 時間裏一動不動，按的人分不出它在幹活還是卡住了。所以按鍵只記一筆「欠着」，
+    /// **前端畫完一幀**（那一幀的表頭寫着「正在找…」）**再回頭把它跑掉**。
+    ///
+    /// 同一個辦法在載入碼表那裏用過（`lib.rs` 的 `loading_the_table`）。
+    owed_search: bool,
     /// **一句幾秒之後自己走掉的話**：什麼時候走，和走的是哪一句。
     ///
     /// 2026-09-27 定，原話：「有些不是特别重要的消息可以有个参数「显示时间」，
@@ -2798,6 +2806,7 @@ impl Editor {
             replaced_in: Vec::new(),
             replace_this_file: None,
             workspace_root: None,
+            owed_search: false,
             status_fades: None,
             sides: [
                 crate::sidebar::Side::Left,

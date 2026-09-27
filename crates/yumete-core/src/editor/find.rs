@@ -1103,8 +1103,36 @@ impl Editor {
             true => self.take_scope(),
             false => match self.search.scope.live() {
                 true => self.run_search(),
-                false => self.search_now(),
+                // ⚠️ **走磁盤那一趟不在這裏跑**（2026-09-27）：先記一筆，讓前端
+                // 畫完一幀「正在找…」再回頭跑。見 `Editor::owed_search`。
+                false => self.owed_search = true,
             },
+        }
+    }
+
+    /// 欠着的那一趟搜索還欠着嗎——問一次就算還了。
+    pub fn take_owed_search(&mut self) -> bool {
+        std::mem::take(&mut self.owed_search)
+    }
+
+    /// 欠着的那一趟，跑掉。
+    pub fn run_owed_search(&mut self) {
+        self.search_now();
+    }
+
+    /// 屏幕上要不要寫「正在找…」。
+    pub fn is_scanning(&self) -> bool {
+        self.owed_search
+    }
+
+    /// **欠着就當場還掉。** 給沒有主循環的那些呼叫方用——測試，以及任何一個
+    /// 「按完就要答案」的地方。
+    ///
+    /// ⚠️ 前端不要用這一支：它跑的就是那件慢事，而前端的辦法是先畫一幀說「正在
+    /// 找…」再跑（見 [`Editor::owed_search`]）。
+    pub fn settle_search(&mut self) {
+        if self.take_owed_search() {
+            self.run_owed_search();
         }
     }
 

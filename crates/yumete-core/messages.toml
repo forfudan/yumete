@@ -7404,6 +7404,12 @@ zht = "替換"
 zhs = "替换"
 en = "replace"
 [[message]]
+# 搜索：正在走磁盤
+key = "search.scanning"
+zht = "正在找…"
+zhs = "正在找…"
+en = "searching…"
+[[message]]
 # 位置那一格是四選一，不是輸入框
 key = "search.scope-is-a-pick"
 zht = "位置是四選一：按 0 或者左右換一檔。要自己打一個資料夾，換到「指定資料夾…」那一檔"
