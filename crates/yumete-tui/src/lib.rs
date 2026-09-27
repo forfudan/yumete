@@ -11089,7 +11089,23 @@ fn squeezed(text: &str) -> String {
     /// A vertical-layout config with the decorations off, so tests read the
     /// text grid itself.
     /// The palette a test's config resolves to.
+    /// The palette a rendered frame will actually be painted in.
+    ///
+    /// ⚠️ **Settles the mood first, exactly as every render helper does.**
+    /// `Palette::of` reads the global `MOOD`, and `render_with` sets it —
+    /// `settle(config, None)` with no terminal to ask means **dark**. A test
+    /// that took its palette *before* its first render therefore held the
+    /// light one and compared it against a dark frame, and the failure reads
+    /// as「the ground is wrong」rather than「you asked two different
+    /// questions」.
+    ///
+    /// `the_vertical_page_keeps_the_cell_to_the_table` was red this way from
+    /// 2026-09-10 to 2026-09-27 — seventeen days in which the thing it checks
+    /// (that a 縱書 table cell does not rub out a `==highlight==`) was not
+    /// being checked at all. Same family as `render_with`'s own ⚠️, one floor
+    /// up: the mood is a global, so everybody who reads it has to settle it.
     fn ink(config: &Config) -> crate::theme::Palette {
+        crate::theme::settle(config, None);
         crate::theme::Palette::of(config)
     }
 
@@ -15150,7 +15166,10 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Enter);
         assert_eq!(editor.cursor_line(), 1, "on the rule: {}", editor.status());
         let buffer = render_vertical(&mut editor, &config, 24, 14);
-        let (x, y) = find(&buffer, "-");
+        // ⚠️ **`┄`, not `-`** — 竪排下規則行那一縱畫的是 `├┄┄┄┼┄┄┄┤`，一個字符
+        // 換一個字形（`tf` 那一套）。找 `-` 在這一幀上一個都找不着，而這半條測試
+        // 從 2026-09-10 起就沒跑過，所以沒人撞見。
+        let (x, y) = find(&buffer, "┄");
         assert_ne!(buffer[(x, y)].bg, want, "the rule row is not a cell");
 
         // And out of the table, onto a paragraph that merely holds a `|`.
