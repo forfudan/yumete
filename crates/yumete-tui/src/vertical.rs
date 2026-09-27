@@ -836,6 +836,7 @@ pub fn draw(
     config: &Config,
     area: Rect,
     viewport: &mut Anchor,
+    span: &mut Option<(usize, usize)>,
     peek: Option<&yumete_core::editor::Pane>,
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
@@ -1537,6 +1538,48 @@ pub fn draw(
                 true => put_slot(buf, x, y, &symbol, style),
                 false => put_slot_wide(buf, x, y, &symbol, style),
             }
+        }
+    }
+
+    // **這一趟畫了哪一段**，交給核心去算 `gw` 的落腳點（#406）。同橫排那一支：
+    // 落腳點只算屏幕上的，而哪一段在屏幕上只有畫的這一方知道。
+    *span = match (page.first(), page.last()) {
+        (Some(a), Some(b)) => Some((a.zong.start, b.zong.end)),
+        _ => None,
+    };
+
+    // **`gw` 的標籤，蓋在它那個字所在的那一格上**（#406）。
+    //
+    // ⚠️ **一個縱正好兩格，所以兩種標籤都填得滿**：兩個字母並排就是縱中橫（同行號
+    // 那一套，`put_number` 兩個數字一格），一個字母用全角。橫排那一頭是同一條規矩
+    // ——**標籤和它蓋住的那個字素一樣寬**——只是那裏量的是字素的格數，這裏一個縱
+    // 本來就是兩格。
+    if editor.jumping() {
+        let mark = ink.page().fg(ink.paper()).bg(ink.mark()).add_modifier(Modifier::BOLD);
+        for (at, label) in editor.jump_labels() {
+            let Some(placed) = page.iter().find(|p| at >= p.zong.start && at < p.zong.end) else {
+                continue;
+            };
+            let line_start = rope.line_to_char(placed.zong.line);
+            let Some(slot) = placed
+                .slots
+                .iter()
+                .position(|r| line_start + r.start <= at && at < line_start + r.end.max(r.start + 1))
+            else {
+                continue;
+            };
+            let y = placed.top + slot as u16;
+            if y >= area.y + area.height {
+                continue;
+            }
+            let shown: String = match yumete_cjk::str_width(label) {
+                1 => label
+                    .chars()
+                    .map(|c| char::from_u32(c as u32 - 'a' as u32 + 0xFF41).unwrap_or(c))
+                    .collect(),
+                _ => label.to_string(),
+            };
+            put_slot_wide(buf, placed.x, y, &shown, mark);
         }
     }
 

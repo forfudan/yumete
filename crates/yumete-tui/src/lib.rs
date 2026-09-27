@@ -4139,7 +4139,7 @@ fn draw(
                 )
             }
             WritingLayout::Vertical => {
-                vertical::draw(frame, editor, config, *rect, &mut seat.zong, peek)
+                vertical::draw(frame, editor, config, *rect, &mut seat.zong, &mut seat.drawn_span, peek)
             }
         };
         if which == live {
@@ -17003,6 +17003,36 @@ fn squeezed(text: &str) -> String {
             assert!(!editor.jumping(), "{key:?} 之後收掉了");
             assert_eq!(editor.current_buffer().text(), text, "{key:?} 動了正文");
         }
+    }
+
+    /// **竪排下也有，而且一個縱正好裝得下一個標籤**（#406，2026-09-28）。
+    ///
+    /// 一個縱兩格：兩個字母並排就是縱中橫（同行號那一套），一個字母用全角。兩種都
+    /// 把那一格填滿，所以竪排這一頭不必為「留一個洞」再想一次辦法。
+    #[test]
+    fn jump_labels_fill_a_縱_on_the_vertical_page() {
+        let mut editor = editor_with("那年冬天，雪下得早。\n她伸手去碰，指尖一涼。\n");
+        editor.set_layout(WritingLayout::Vertical);
+        let config = vertical_config();
+        let ime = no_ime();
+
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('w'));
+        let shot = frame_to_text(&mut editor, &config, &ime, 30, 16, None);
+        assert!(editor.jumping(), "竪排下也亮得起來：\n{shot}");
+        // 全角的字母——半角的話一個縱裏會空半格。
+        assert!(shot.contains('ａ'), "第一個標籤是全角的 ａ：\n{shot}");
+        assert!(shot.contains('ｓ'), "第二個也在：\n{shot}");
+
+        // 打下去就跳過去。
+        editor.on_key(Key::Char('s'));
+        assert!(!editor.jumping());
+        let at = editor.cursor();
+        assert_eq!(
+            editor.current_buffer().rope().chars_at(at).next(),
+            Some('雪'),
+            "s 那一個站在「雪下得早」的頭上"
+        );
     }
 
     #[test]
