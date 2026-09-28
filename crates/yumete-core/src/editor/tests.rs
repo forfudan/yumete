@@ -17306,3 +17306,24 @@ fn a_full_pane_table_holds_one_cursor() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`di`／`da` 之後輸入法要開**（2026-09-28，收到的反饋第三條的另一半）。
+///
+/// 那一下之後要的是一個**字符**，而 Normal 模式下輸入法是關着的——ASCII 鍵盤打不出
+/// `di〖` 裏那個括號。⚠️ `df,` 那一種不開：它要的是一個分隔符，多半是 ASCII，開了輸入法
+/// 打一個逗號出來的是全角的。
+#[test]
+fn a_vim_object_prefix_opens_the_input_method_but_a_find_does_not() {
+    let waiting = |steps: &str| {
+        let mut ed = typed("他說（不要走）然後走了。\n");
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed.takes_a_character_for_test()
+    };
+    assert!(waiting("di"), "di 之後要一個字符");
+    assert!(waiting("da"), "da 也是");
+    assert!(waiting("ci"), "ci 也是");
+    assert!(!waiting("df"), "df 要的是分隔符，多半是 ASCII");
+    assert!(!waiting("d"), "光一個 d 在等動作，不是字符");
+}

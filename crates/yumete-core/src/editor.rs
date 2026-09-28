@@ -266,10 +266,19 @@ impl Pending {
             | Pending::Mark
             | Pending::Recall
             | Pending::Hop { .. }
-            // A vim operator is waiting for a *motion*, which is keys — the
-            // character `f` asks for is read by the motion itself.
-            | Pending::VimOperator { .. }
             | Pending::Conflict => false,
+            // **A vim operator is waiting for a *motion*, which is keys** — the
+            // character `f` asks for is read by the motion itself.
+            //
+            // ⚠️ **除了 `di`／`da` 這一種**（2026-09-28）。那一下之後要的**是一個字符**
+            // ——`di（`、`di「`——而 Normal 模式下輸入法是關着的，ASCII 鍵盤打不出全角括
+            // 號。使用者報的原話：「di( di[ 等等目前好像只支持半角字符」。族表
+            // （§5.15 三）已經讓常用的幾族隨手一個 ASCII 鍵就到，這一條補的是剩下那些
+            // 打得出來纔用得上的（`di〖`、`di『`）。
+            //
+            // ⚠️ **`f`／`t` 那一種不開**：`df,` 要的是一個分隔符，多半是 ASCII，而開了
+            // 輸入法之後打一個逗號出來的是全角的。同一個理由，反過來的結論。
+            Pending::VimOperator { first, .. } => matches!(first, Some('i' | 'a')),
         }
     }
 }
