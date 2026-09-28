@@ -521,7 +521,7 @@ impl Editor {
                 // cursor, so `di(` outside a pair used to say 「没有這一對」
                 // *and delete a character anyway*.
                 self.status = match step.motion {
-                    motion::Motion::Object { what: motion::Object::Word, .. } => {
+                    motion::Motion::Object { what: motion::Object::Word { .. }, .. } => {
                         say!("edit.no-word-here")
                     }
                     motion::Motion::Object {

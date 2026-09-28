@@ -110,7 +110,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         }
         // ---- Text objects, which are their own ends ------------------------
         ("i", None) | ("a", None) => asking(
-            Motion::Object { what: crate::motion::Object::Word, around: false },
+            Motion::Object { what: crate::motion::Object::Word { coarse: false }, around: false },
             Reach::Object,
         ),
         ("i", Some(c)) => step(object(c, false)?, Reach::Object),
@@ -122,7 +122,10 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
 /// `iw` / `i(` — the object a character names.
 fn object(c: char, around: bool) -> Option<Motion> {
     let what = match c {
-        'w' | 'W' => crate::motion::Object::Word,
+        // ⚠️ **`w` 和 `W` 分開了**（2026-09-28）：`iw` 走分詞器，`iW` 是 vim 那個
+        // 「一串非空白」。從前兩個折成同一個，於是 `diW` 和 `diw` 一模一樣。
+        'w' => crate::motion::Object::Word { coarse: false },
+        'W' => crate::motion::Object::Word { coarse: true },
         'p' => crate::motion::Object::Paragraph,
         c => {
             let (open, close) = crate::editor::pair_for(c)?;

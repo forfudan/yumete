@@ -16596,3 +16596,58 @@ fn every_selection_remembers_its_own_goal_column() {
     let cols: Vec<usize> = at.iter().map(|&a| column(&ed, a)).collect();
     assert_eq!(cols, vec![1, 4], "各自回到第二格和第五格：{cols:?}");
 }
+
+/// **`iw` 走分詞器**（2026-09-28 收到的反饋：「diw，删除光标所在词（目前的表现会忽略
+/// 中文分词器）」）。
+///
+/// 從前 `word_object_span` 寫死 `Grain::Coarse`，而 `w`／`b` 問的是 `word_grain()`——
+/// 同一個編輯器對「詞」有兩個答案。
+///
+/// ⚠️ **這一條要開 vim 預設纔驗得到 `diw`**：原生鍵位下 `d` 不是運算符，`diw` 是「刪一個
+/// 字、進插入、打一個 w」，三句斷言全都會假綠。原生那一邊的拼法是 `mi w`，下面一起驗。
+#[test]
+fn the_word_object_walks_the_segmenter_like_w_does() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+
+    // 分詞器認得的詞不止一個，否則這一條驗不出東西來。
+    let ed = vim("今天天氣很好。\n");
+    let words = ed.segment_line(0);
+    assert!(words.len() >= 2, "這一行要分得出好幾個詞：{words:?}");
+    let first = words[0].1;
+    assert!(first < 6, "第一個詞不該是整串漢字：{words:?}");
+
+    let mut ed = vim("今天天氣很好。\n");
+    press(&mut ed, "diw");
+    let left: String = "今天天氣很好。\n".chars().skip(first).collect();
+    assert_eq!(
+        ed.current_buffer().text(),
+        left,
+        "只去掉分詞器認的第一個詞：{:?}",
+        ed.current_buffer().text()
+    );
+
+    // ⚠️ `diW` 還是粗的：整串漢字一口氣沒了，只剩標點。粗粒度按字符類別切，所以句號
+    // 自成一類留了下來——那不是 vim「一串非空白」的完整意思，是這個倉
+    // `word_ranges_coarse` 的意思，而它正是 `iw` 從前唯一的答案。
+    let mut ed = vim("今天天氣很好。\n");
+    press(&mut ed, "diW");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "。\n",
+        "W 一律粗粒度：{:?}",
+        ed.current_buffer().text()
+    );
+
+    // 原生鍵位的拼法：`mi w` 同樣走分詞器。
+    let mut ed = typed("今天天氣很好。\n");
+    ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+    press(&mut ed, "gg");
+    press(&mut ed, "miw");
+    assert_eq!(ed.selection().1, first, "選中的是第一個詞：{:?}", ed.selection());
+}

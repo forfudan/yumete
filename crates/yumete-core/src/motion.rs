@@ -500,7 +500,14 @@ pub enum Reading {
 pub enum Object {
     /// A word — or, standing on blanks, that run of blanks (vim's rule, and
     /// the one that makes `wdiw` the handiest press in this editor).
-    Word,
+    ///
+    /// ⚠️ **`coarse` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`／`b` 同一個
+    /// 答案；`iW` 一律粗粒度，也就是 vim 的「一串非空白」。從前這裏沒有這一格，`iw` 寫
+    /// 死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w` 走三步。
+    /// 一個編輯器對「詞」只能有一個答案。
+    ///
+    /// ⚠️ 詞典關着的時候兩個一樣——`word_grain()` 那時本來就回 `Coarse`。
+    Word { coarse: bool },
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
     /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
