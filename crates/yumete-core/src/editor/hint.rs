@@ -287,7 +287,15 @@ impl Editor {
                 self.status.clone(),
                 Self::said(Self::REPLACE_ALL_KEYS.iter().copied()),
             ),
-            Pending::Register => (say!("hint.register.title"), vec![("a–z", say!("hint.register.which-one"))]),
+            // ⚠️ **`#` 也要寫上**（2026-09-28）。加了那個寄存器卻沒改這一行，於是屏幕
+            // 明明白白告訴讀者「只收 a–z」，而 `"#p` 其實是通的——按下去沒信心是對的。
+            Pending::Register => (
+                say!("hint.register.title"),
+                vec![
+                    ("a–z", say!("hint.register.which-one")),
+                    ("#", say!("hint.register.hash")),
+                ],
+            ),
             Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
             // `z` 那一層只有三個鍵，一張三行的小表比一句話好認。
             Pending::Aim => (
