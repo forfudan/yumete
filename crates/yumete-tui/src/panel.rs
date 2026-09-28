@@ -826,26 +826,43 @@ pub fn draw(
                     put_text(buf, x, y, limit, line, plain);
                     continue;
                 }
-                let mut at = x;
-                let mut from = 0usize;
+                // ⚠️ **逐格算樣式，不是順着往下切**（2026-09-28 修）。從前這裏是
+                // 「前一段、這一段、下一段」地往右走，記着一個 `from`；那假定了
+                // `spans` 交出來的東西**不重疊**，而它會重疊：`# **甲**` 交的是
+                // `Heading 1..7` 之後跟着 `Marker 2..4`，於是 `from` 已經是 7 而下一
+                // 段從 2 開始，`chars[7..2]` 當場 panic。一行帶行內標記的標題出現在
+                // 任何一個浮窗的正文裏就會中。
+                //
+                // 逐格算順帶把畫面也修對了：內層的標記蓋在外層上面，和正文那一端
+                // （`lib.rs` 的 `styles` 陣列）同一個辦法、同一個結果。
                 let chars: Vec<char> = line.chars().collect();
+                let mut styles = vec![plain; chars.len()];
                 for span in yumete_core::markdown::spans(line) {
-                    let before: String = chars[from.min(chars.len())..span.start.min(chars.len())]
-                        .iter()
-                        .collect();
-                    at = put_text(buf, at, y, limit, &before, plain);
-                    let run: String = chars[span.start.min(chars.len())..span.end.min(chars.len())]
-                        .iter()
-                        .collect();
                     // ⚠️ **`a.patch(b)` 是 b 蓋 a。** 底色和行的基本墨色在
                     // 前，標記的墨色蓋在上面——反過來寫，浮窗裏的 `**` 和
                     // `` ` `` 就一個顏色都不變（2026-09-22 出圖纔看見）。
-                    let style = plain.patch(crate::markup_style(span.kind, ink));
-                    at = put_text(buf, at, y, limit, &run, style);
-                    from = span.end;
+                    let over = crate::markup_style(span.kind, ink);
+                    let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
+                    for style in styles.iter_mut().take(hi).skip(lo) {
+                        *style = style.patch(over);
+                    }
                 }
-                let rest: String = chars[from.min(chars.len())..].iter().collect();
-                put_text(buf, at, y, limit, &rest, plain);
+                // 相鄰同樣式的併成一段再畫，省掉逐格一次 `put_text`。
+                let mut at = x;
+                let mut from = 0usize;
+                while from < chars.len() {
+                    let style = styles[from];
+                    let mut to = from + 1;
+                    while to < chars.len() && styles[to] == style {
+                        to += 1;
+                    }
+                    let run: String = chars[from..to].iter().collect();
+                    at = put_text(buf, at, y, limit, &run, style);
+                    from = to;
+                }
+                if chars.is_empty() {
+                    put_text(buf, at, y, limit, "", plain);
+                }
             }
         }
         Body::Keys(keys) => {
@@ -924,6 +941,42 @@ mod tests {
             })
             .unwrap();
         (got.expect("the panel is drawn"), terminal.backend().buffer().clone())
+    }
+
+    /// **一行帶行內標記的標題出現在浮窗正文裏，從前會當場崩**（2026-09-28）。
+    ///
+    /// `markdown::spans("# **甲**")` 交的是 `HeadingMark 0..1`／`Heading 1..7`／
+    /// `Marker 2..4`／`Strong 4..5`／`Marker 5..7`——**它會重疊**。從前這一段是順着往右
+    /// 切的（記一個 `from`，切 `chars[from..span.start]`），於是 `from` 已經走到 7 而下
+    /// 一段從 2 開始，`chars[7..2]` 是一個反向區間，Rust 當場 panic。
+    ///
+    /// ⚠️ 這一條要真的**畫**出來纔驗得到：崩在繪製那一步，不在解析那一步。
+    #[test]
+    fn a_heading_with_inline_marks_does_not_crash_the_panel() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let (w, h) = (40u16, 10u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, w, h);
+                draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                    title: "條目".into(),
+                    lede: None,
+                    // ⚠️ **不能是 `entry`**：那一檔會給每段加一個全角空格縮進
+                    // （`indented()`），於是 `#` 不在行首、不算標題，重疊也就不出現，
+                    // 這一條會假綠。
+                    entry: false,
+                    body: Body::Prose("# **甲**\n## 第一章 `碼`\n正文一行。".into()),
+                    vertical_text: false,
+                    tag: None,
+                    // ⚠️ 這一格是閘：關着的話整段標記都不畫，也就碰不到那個洞。
+                    marked: true,
+                });
+            })
+            .unwrap();
+        let text: String = terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect();
+        assert!(text.contains('甲'), "標題畫出來了，而且一路沒崩：{text:?}");
     }
 
     /// 2026-09-18: a long entry came out **half the height it should be** and
