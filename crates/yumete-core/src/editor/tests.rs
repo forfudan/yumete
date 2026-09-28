@@ -17109,3 +17109,51 @@ fn phase_three_turns_trims_and_aligns() {
     press(&mut ed, "u");
     assert_eq!(ed.current_buffer().text(), "甲 一\nabc 二\n");
 }
+
+/// **`"#p` 在第 N 段貼一個 N**（#405 Phase 3）——編號列表那個用例。
+///
+/// §5.13.1 說的就是它：一串列表項要編號，從前只能一行一行敲。
+#[test]
+fn the_hash_register_numbers_the_selections() {
+    let mut ed = typed("- 買菜\n- 倒垃圾\n- 寫第三章\n- 回信\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "CCC"); // 四行同一列各一個光標
+    press(&mut ed, "l"); // 挪到記號後面那一格
+    assert_eq!(ed.sel.len(), 4);
+    press(&mut ed, "\"#p");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "- 1買菜\n- 2倒垃圾\n- 3寫第三章\n- 4回信\n",
+        "{:?}",
+        ed.current_buffer().text()
+    );
+
+    // ⚠️ 一個撤銷點。
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "- 買菜\n- 倒垃圾\n- 寫第三章\n- 回信\n");
+
+    // ⚠️ **只有一段的時候它是「1」**，不是空的。
+    let mut ed = typed("甲\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "\"#p");
+    assert!(ed.current_buffer().text().contains('1'), "{:?}", ed.current_buffer().text());
+}
+
+/// `C-a`／`C-x` 也逐段各做各的（#405 Phase 3）。
+#[test]
+fn bumping_a_number_reaches_every_selection() {
+    let mut ed = typed("1. 甲\n1. 乙\n1. 丙\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "CC");
+    assert_eq!(ed.sel.len(), 3);
+    ed.on_key(Key::Ctrl('a'));
+    assert_eq!(
+        ed.current_buffer().text(),
+        "2. 甲\n2. 乙\n2. 丙\n",
+        "三行各加一：{:?}",
+        ed.current_buffer().text()
+    );
+    // 一個撤銷點。
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "1. 甲\n1. 乙\n1. 丙\n");
+}
