@@ -1492,6 +1492,15 @@ impl Editor {
         if !self.markup_visible() {
             return Vec::new();
         }
+        self.markup_runs(line)
+    }
+
+    /// 同上，**但不問標記畫不畫得出來**。
+    ///
+    /// ⚠️ `:markup off` 說的是「別上色」，不是「這份檔沒有標記」——後者是
+    /// `:syntax text`，而那一條在下面的 `match` 裏本來就交空。取文本物件（`mi m`）問的
+    /// 是檔裏有什麼，不是屏幕上畫了什麼，所以走這一支。
+    pub(super) fn markup_runs(&self, line: usize) -> Vec<crate::markdown::Span> {
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
             return Vec::new();

@@ -510,6 +510,20 @@ pub enum Object {
     Word { coarse: bool },
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
+    /// **`mi m`／`ma m` — 光標所在的那一段 Markdown 標記**（2026-09-28）。
+    ///
+    /// `**粗**`、`*斜*`、`~~刪~~`、`==標==`、`` `碼` ``、`[文字](地址)`、`[[雙鏈]]`、
+    /// `%%批注%%`、腳註。`i` 取裏面的文字，`a` 連標記一起。套着的時候取最裏面那一層。
+    ///
+    /// ⚠️ **一個鍵，不是一個標記一個鍵**（2026-09-28 定）。`**` `~~` `==` 是**兩個**
+    /// 字符，寫不進 `Object::Pair` 那張一對一的表；而且這一族有九種，一種一個鍵就把
+    /// `m` 那一層佔掉一半，而這個倉的規矩是「鍵位很貴」。`md`（去掉最裏面那一對括號）
+    /// 早就是同一個思路。
+    ///
+    /// ⚠️ **跟着語言走**：靠的是這個倉自己手寫的 Markdown 解析器（`crate::markdown`），
+    /// 不是 tree-sitter——tree-sitter 在這個倉裏只管代碼檔與代碼圍欄。`:syntax text`
+    /// 的檔交空，Typst 交 Typst 自己那一份。
+    Markup,
     /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
     ///
     /// ⚠️ **Whole lines, not a run of characters**, which is what makes it an

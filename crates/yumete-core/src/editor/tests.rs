@@ -16722,6 +16722,16 @@ fn a_bracket_key_reaches_its_whole_family() {
     let ed = vim("他說「不要走」然後走了。\n", "llldi[");
     assert_eq!(ed.current_buffer().text(), "他說「」然後走了。\n");
 
+    // ⚠️ 套在裏面那一層歸 `{`：『』是「」的內層，〖〗是【】的白身。
+    let ed = vim("他說『不要走』然後走了。\n", "llldi{");
+    assert_eq!(ed.current_buffer().text(), "他說『』然後走了。\n");
+    let ed = vim("他說〖不要走〗然後走了。\n", "llldi{");
+    assert_eq!(ed.current_buffer().text(), "他說〖〗然後走了。\n");
+
+    // 引號：`"` 管 " 與 “”，`'` 管 ' 與 ‘’。
+    let ed = vim("他說“不要走”然後走了。\n", "llldi\"");
+    assert_eq!(ed.current_buffer().text(), "他說“”然後走了。\n");
+
     // 方頭括號同一族。
     let ed = vim("他說【不要走】然後走了。\n", "llldi[");
     assert_eq!(ed.current_buffer().text(), "他說【】然後走了。\n");
@@ -16742,4 +16752,58 @@ fn a_bracket_key_reaches_its_whole_family() {
     // 外面那一對 `【】`。這是有意的——按哪個鍵就找哪一族，想「不管哪一對」用 `md`。
     let ed = vim("【他說（不要走）啊】\n", "lllllda[");
     assert_eq!(ed.current_buffer().text(), "\n", "（）不在 [ 這一族裏");
+}
+
+/// **`mi m`／`ma m`：光標所在的那一段 Markdown 標記**（2026-09-28 定，一個鍵管九種）。
+#[test]
+fn the_markup_object_takes_whatever_marks_the_cursor_is_in() {
+    let took = |text: &str, steps: &str| {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        for c in text.chars() {
+            ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+        }
+        ed.on_key(Key::Esc);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        let (from, to) = ed.selection();
+        let got: String = ed.current_buffer().rope().slice(from..to).chars().collect();
+        got
+    };
+
+    // **粗** ＝ 0* 1* 2粗 3* 4*；光標走到「粗」上。
+    assert_eq!(took("**粗**", "llmim"), "粗", "i 取裏面");
+    assert_eq!(took("**粗**", "llmam"), "**粗**", "a 連標記一起");
+
+    // 一個字符的標記與兩個字符的標記走同一句話。
+    assert_eq!(took("`碼`", "lmim"), "碼");
+    assert_eq!(took("~~刪~~", "llmim"), "刪");
+    assert_eq!(took("==標==", "llmim"), "標");
+    assert_eq!(took("*斜*", "lmim"), "斜");
+
+    // 鏈接：`i` 取看得見的文字，`a` 連地址一起。
+    assert_eq!(took("[文字](地址)", "lmim"), "文字");
+    assert_eq!(took("[文字](地址)", "lmam"), "[文字](地址)");
+    assert_eq!(took("[[雙鏈]]", "llmim"), "雙鏈");
+    assert_eq!(took("%%批注%%", "llmim"), "批注");
+
+    // ⚠️ **光標停在標記本身上也算**——它和裏面那段文字是同一個構造。
+    assert_eq!(took("**粗**", "mim"), "粗", "站在第一個星號上");
+
+    // ⚠️ **套不起來，因為解析器不套**（2026-09-28 量的）：``**粗的`碼`**`` 交出來的是
+    // 三段（開標記、正文、閉標記），中間那一段連反引號一起算成粗體的正文。所以站在
+    // 「碼」上按 `mi m` 拿到的是整段粗體的正文。這一條記的是**現狀**，不是想要的樣子
+    // ——解析器學會套的時候它會紅，那時改成「碼」。
+    assert_eq!(took("**粗的`碼`**", "lllllmim"), "粗的`碼`", "解析器不套，所以拿到整段");
+}
+
+/// ⚠️ **跟着語言走**：`:syntax text` 的檔裏一個標記都沒有。
+#[test]
+fn the_markup_object_is_bound_to_the_syntax() {
+    let mut ed = typed("**粗**");
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
+    press(&mut ed, "gg");
+    press(&mut ed, "llmim");
+    assert_eq!(ed.selection(), (2, 3), "什麼都沒選中，還是光標那一格");
+    assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
 }
