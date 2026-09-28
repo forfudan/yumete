@@ -72,6 +72,10 @@ impl Editor {
         // Normal mode with nothing pending; it ends when it is back there.
         // A key describes one move, and「was that a jump?」is about *this* one.
         self.jumped = false;
+        // ⚠️ **`z` 那一層的覆蓋也是一次性的。** 不清的話 `zt` 之後每一幀都把光標釘在頂
+        // 上，`j` 走一行整頁跟着挪一行——那是打字機模式，不是 `zt`。清掉之後視口停在
+        // 剛纔擺好的地方，因為下一幀 `page_inset` 回的是「光標舒舒服服在頁面上，別動」。
+        self.aim = None;
         // ⚠️ **An expansion is not a command of its own** (2026-09-19). Every
         // key `play_keys` replays arrives here in Normal mode with nothing
         // pending, so it cleared the record and then wrote itself into it: `.`
@@ -782,6 +786,17 @@ impl Editor {
                 }
                 return;
             }
+            // **`z` 那一層**（2026-09-28，helix 的 view mode 的那三個）。
+            Pending::Aim => {
+                self.pending = Pending::None;
+                match key {
+                    Key::Char('z') | Key::Char('c') => self.aim_the_page(crate::editor::Aim::Middle),
+                    Key::Char('t') => self.aim_the_page(crate::editor::Aim::Top),
+                    Key::Char('b') => self.aim_the_page(crate::editor::Aim::Bottom),
+                    _ => self.status = say!("page.aim-wants-ztb"),
+                }
+                return;
+            }
             Pending::Conflict => {
                 self.pending = Pending::None;
                 match key {
@@ -1240,6 +1255,9 @@ impl Editor {
             Key::Char('M') => self.pending = Pending::Mark,
             Key::Char('\'') => self.pending = Pending::Recall,
             // 「下一個這種東西」, which is where Helix keeps it too.
+            // **`z` 那一層**：把光標這一行挪到屏幕的頂／中／底（2026-09-28）。
+            // ⚠️ `zc` 也是居中，同 helix（它的 `zc` 是 align_view_center）。
+            Key::Char('z') => self.pending = Pending::Aim,
             Key::Char(']') => self.pending = Pending::Hop { forward: true },
             Key::Char('[') => self.pending = Pending::Hop { forward: false },
             Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),

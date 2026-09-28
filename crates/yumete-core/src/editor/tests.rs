@@ -17327,3 +17327,54 @@ fn a_vim_object_prefix_opens_the_input_method_but_a_find_does_not() {
     assert!(!waiting("df"), "df 要的是分隔符，多半是 ASCII");
     assert!(!waiting("d"), "光一個 d 在等動作，不是字符");
 }
+
+/// **`z` 那一層**（`zt`／`zz`／`zb`，2026-09-28）。
+///
+/// ⚠️ 這個編輯器沒有 viewport——視口住在 TUI 那一側，核心只回答「光標該坐在頁面第幾行」
+/// （`page_inset`）。所以 `z` 那一層是往那個答案上加一次性的覆蓋。
+#[test]
+fn the_z_layer_aims_at_a_row_the_next_frame_will_leave_alone() {
+    let (last, scrolloff) = (20usize, 3usize);
+    let mut ed = typed("甲\n乙\n丙\n");
+    // ⚠️ `typed()` 收尾按的是 `gg`，那是一次跳轉，而跳轉落中間。先按一個不是跳轉的鍵。
+    press(&mut ed, "l");
+
+    // 沒按 `z` 的時候：光標舒舒服服在頁面上，別動。
+    assert_eq!(ed.page_inset(Some(10), last, scrolloff), None);
+
+    // `zt` 瞄的是第 `scrolloff` 行，不是第 0 行。
+    press(&mut ed, "zt");
+    let row = ed.page_inset(Some(0), last, scrolloff).expect("有覆蓋");
+    assert_eq!(row, scrolloff, "zt");
+
+    // ⚠️ **這一條是整件事成不成立的關鍵。** 覆蓋是一次性的（下一個鍵清掉），視口是靠
+    // 下一幀 `page_inset` 回一句「別動」纔留在原地的。瞄第 0 行的話，下一幀那句
+    // `d < scrolloff` 立刻把它推開——按完 `zt` 隨便動一下，頁面自己往下跳三行。
+    press(&mut ed, "l");
+    assert_eq!(
+        ed.page_inset(Some(row), last, scrolloff),
+        None,
+        "下一幀不會把它推開"
+    );
+
+    // `zz` 中間，`zc` 也是（同 helix）。
+    press(&mut ed, "zz");
+    assert_eq!(ed.page_inset(Some(0), last, scrolloff), Some(last / 2));
+    press(&mut ed, "l");
+    press(&mut ed, "zc");
+    assert_eq!(ed.page_inset(Some(0), last, scrolloff), Some(last / 2));
+
+    // `zb` 往回留一截，理由同 `zt`。
+    press(&mut ed, "l");
+    press(&mut ed, "zb");
+    let row = ed.page_inset(Some(last), last, scrolloff).expect("有覆蓋");
+    assert_eq!(row, last - scrolloff, "zb");
+    press(&mut ed, "l");
+    assert_eq!(ed.page_inset(Some(row), last, scrolloff), None);
+
+    // `z` 後面按了別的：說一句，不動。
+    press(&mut ed, "l");
+    press(&mut ed, "zx");
+    assert_eq!(ed.page_inset(Some(10), last, scrolloff), None, "沒有覆蓋");
+    assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
+}

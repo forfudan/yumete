@@ -280,6 +280,7 @@ impl Editor {
             Pending::ReplaceAll => "R",
             Pending::Register => "\"",
             Pending::Match => "m",
+            Pending::Aim => "z",
             Pending::MatchPair { around: false } => "mi",
             Pending::MatchPair { around: true } => "ma",
             Pending::Surround => "ms",
