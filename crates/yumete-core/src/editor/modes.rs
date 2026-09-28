@@ -79,6 +79,12 @@ impl Editor {
     /// 前端問它是為了一件事：⚠️ **多選區下不畫內嵌的 preedit**（2026-09-28 定，原話：
     /// 「我觉得是不是 multiselection 的时候应当禁止 pre-edit 而是用候选面板。这样的话防止
     /// 一堆非确定的修改」）。
+    /// 只給測試：手上等的是不是一個字符（前端問的是 `Pending` 上同名的那一支）。
+    #[cfg(test)]
+    pub fn takes_a_character_for_test(&self) -> bool {
+        self.takes_a_character()
+    }
+
     pub fn has_many_selections(&self) -> bool {
         self.sel.is_plural()
     }
