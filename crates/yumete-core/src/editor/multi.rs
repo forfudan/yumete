@@ -219,7 +219,17 @@ impl super::Editor {
         let ranges: Vec<Range> = was.iter().copied().collect();
         for (nth, one) in ranges.iter().enumerate().rev() {
             let before = self.current_buffer().rope().len_chars();
-            self.sel = crate::selection::Selections::one(*one);
+            // ⚠️ **每一趟都先收進當下的文本裏**（2026-09-28 修）。從後往前做保住的是
+            // 下標**不被後面的編輯挪走**，保不住「前面那幾段本來就沒越界」——`%` 那個
+            // bug 就是這麽炸的：手上留着兩段舊的，第一刀把整檔刪光，第二段指着虛空，
+            // `apply` 裏的 `next_grapheme` 當場 panic。
+            //
+            // 這一句是安全網，不是修法：真正的修法是別讓越界的選區留下來（`%` 那一支
+            // 已經改成收成一段）。可是「編輯不許 panic」不能靠別人守規矩。
+            let mut one = *one;
+            one.anchor = one.anchor.min(before);
+            one.head = one.head.min(before);
+            self.sel = crate::selection::Selections::one(one);
             self.pending = pending.clone();
             self.count = count;
             self.pending_register = named;
@@ -240,7 +250,7 @@ impl super::Editor {
                     done.head = shift(done.head);
                 }
             }
-            if *one == primary {
+            if one == primary {
                 which = nth;
             }
             out.push(self.sel.primary());
