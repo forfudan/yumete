@@ -17307,13 +17307,15 @@ fn a_full_pane_table_holds_one_cursor() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`di`／`da` 之後輸入法要開**（2026-09-28，收到的反饋第三條的另一半）。
+/// **`di`／`da` 之後輸入法不開**（2026-09-29 撤回，前一天加的）。
 ///
-/// 那一下之後要的是一個**字符**，而 Normal 模式下輸入法是關着的——ASCII 鍵盤打不出
-/// `di〖` 裏那個括號。⚠️ `df,` 那一種不開：它要的是一個分隔符，多半是 ASCII，開了輸入法
-/// 打一個逗號出來的是全角的。
+/// 加它的理由是「`di（` 要的是一個全角括號」，而**它等的那一個鍵多半根本不是要寫進去
+/// 的字**：`diw` 的 `w` 是「詞」，`dip` 的 `p` 是「段」。開着輸入法的時候 `w` 被當成
+/// 碼上了屏，`diw` 往稿子裏插進一個「中」；關着的時候那一鍵被吃掉，`diw` 什麽也不做。
+///
+/// 全角括號不靠這一條：`pair_family` 讓 `di(` 自己就認得（）〔〕「」。
 #[test]
-fn a_vim_object_prefix_opens_the_input_method_but_a_find_does_not() {
+fn a_vim_operator_never_opens_the_input_method() {
     let waiting = |steps: &str| {
         let mut ed = typed("他說（不要走）然後走了。\n");
         ed.execute(":keymap vim").unwrap();
@@ -17321,11 +17323,19 @@ fn a_vim_object_prefix_opens_the_input_method_but_a_find_does_not() {
         press(&mut ed, steps);
         ed.takes_a_character_for_test()
     };
-    assert!(waiting("di"), "di 之後要一個字符");
-    assert!(waiting("da"), "da 也是");
-    assert!(waiting("ci"), "ci 也是");
+    assert!(!waiting("di"), "di 等的是「詞」「段」「句」這種名字，不是一個字");
+    assert!(!waiting("da"), "da 也是");
+    assert!(!waiting("ci"), "ci 也是");
     assert!(!waiting("df"), "df 要的是分隔符，多半是 ASCII");
     assert!(!waiting("d"), "光一個 d 在等動作，不是字符");
+
+    // 半角鍵就認得全角括號，所以那一族從頭到尾用不着輸入法。
+    let mut ed = typed("他說（不要走）然後走了。\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    // 他0 說1 （2 不3 要4 走5 ）6 —— 停在「要」上，括號裏面。
+    press(&mut ed, "4ldi(");
+    assert_eq!(ed.current_buffer().text(), "他說（）然後走了。\n", "半角鍵刪全角括號裏的話");
 }
 
 /// **`z` 那一層**（`zt`／`zz`／`zb`，2026-09-28）。
