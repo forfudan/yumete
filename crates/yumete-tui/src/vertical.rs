@@ -1553,6 +1553,7 @@ pub fn draw(
     // ⚠️ **一個縱正好兩格，而一個標籤永遠是兩個字母**，所以並排填滿——就是縱中橫，
     // 同行號那一套（`put_number` 兩個數字一格）。橫排那一頭是同一件事：兩個字母的
     // 寬度正好是一個漢字。
+    let mut labelled: Vec<(u16, u16)> = Vec::new();
     if editor.jumping() {
         // 金，同橫排那一頭——理由見 `lib.rs` 畫標籤那一段。
         let mark = ink.page().fg(ink.paper()).bg(ink.gold()).add_modifier(Modifier::BOLD);
@@ -1573,6 +1574,7 @@ pub fn draw(
                 continue;
             }
             put_slot_wide(buf, placed.x, y, label, mark);
+            labelled.push((placed.x, y));
         }
     }
 
@@ -1612,7 +1614,15 @@ pub fn draw(
             put_slot(buf, cursor_x, caret_y, "\u{3000}", Style::default());
         }
     }
-    if cursor_column < visible && editor.mode() != Mode::Insert {
+    // ⚠️ **光標不重畫已經有標籤的那一格**（#406，2026-09-28 報的：「竪排的 aa 為什麽
+    // 不是金色底色？」）。竪排的光標是**畫進頁面**的一塊反白（橫排那頭是終端自己的
+    // 硬件光標，碰不到這裏），而第一個落腳點常常正是光標站的那一格——`REVERSED`
+    // 把金底深字翻成了深底金字，於是滿屏標籤裏有一個長得不一樣。
+    //
+    // **所有標籤必須長得一樣**：不一樣的那一個會被讀成另一種東西。光標照畫，只是
+    // 讓開這一格——標籤亮着的那一瞬間，你正要離開光標所在的地方。
+    let under_a_label = labelled.contains(&(cursor_x, cursor_y));
+    if cursor_column < visible && editor.mode() != Mode::Insert && !under_a_label {
         // **A long 縦中横 group is one slot and the block covers all of it**
         // (2026-09-21). The cursor stands on the group, not on its last two
         // digits, and a block over `97` alone would say `1997` is two rows.

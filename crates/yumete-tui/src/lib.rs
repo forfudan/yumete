@@ -17045,6 +17045,28 @@ fn squeezed(text: &str) -> String {
         assert!(shot.contains("aa"), "第一個標籤在：\n{shot}");
         assert!(shot.contains("ab"), "第二個也在：\n{shot}");
 
+        // ⚠️ **每一個標籤都要長得一樣**（2026-09-28 報的：「竪排的 aa 為什麽不是金色
+        // 底色？」）。竪排的光標是畫進頁面的一塊反白，而第一個落腳點常常正是光標站
+        // 的那一格——它會把金底深字翻成深底金字，滿屏標籤裏就有一個是另一種東西。
+        let buffer = render_vertical(&mut editor, &config, 30, 16);
+        // 頁面那幾行裏所有拉丁字母的底色——全是標籤（正文是漢字），該只有一種。
+        // ⚠️ 只看頁面，不看狀態行：那裏的 `NOR`、`c.md` 也是拉丁字母。
+        let page_rows = buffer.area.height.saturating_sub(3);
+        let grounds: std::collections::BTreeSet<String> = (0..buffer.area.width)
+            .flat_map(|x| (0..page_rows).map(move |y| (x, y)))
+            .filter(|&(x, y)| at(&buffer, x, y).chars().all(|c| c.is_ascii_lowercase())
+                && !at(&buffer, x, y).is_empty())
+            // ⚠️ **整個 style，不只是 `bg`**：光標那一塊是 `Modifier::REVERSED`，
+            // 它不動存下來的底色，是畫的時候纔把前景背景對調——只比 `bg` 的話這條
+            // 測試照樣綠（試過）。
+            .map(|(x, y)| format!("{:?}", buffer[(x, y)].style()))
+            .collect();
+        assert_eq!(
+            grounds.len(),
+            1,
+            "標籤的樣式不止一種（光標底下那個被反白翻過去了）：{grounds:?}"
+        );
+
         // 打下去就跳過去。
         editor.on_key(Key::Char('a'));
         editor.on_key(Key::Char('b'));
