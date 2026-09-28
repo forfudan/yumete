@@ -13,9 +13,11 @@
 //! **Phase 1**（在做）讓它真的裝得下多段：[`Selections::normalize`] 那一套不變式、造出
 //! 第二段的鍵、移動與編輯作用在每一段上。
 //!
-//! ⚠️ **`goal_column` 已經搬進 [`Range`] 了**（2026-09-28，那個「真的需要各有一份」
-//! 的時候到了：N 個光標一起按 `j`，得各記各的目標列）。**`goal_slot`（竪排的那一半）、
-//! `zong_motion`、`extend`、`vim_lines` 還在 `Editor` 上**，只有一段的時候行為一樣，
+//! ⚠️ **`goal_column` 和 `goal_slot` 都搬進 [`Range`] 了**（2026-09-28，那個「真的需要
+//! 各有一份」的時候到了：N 個光標一起按 `j`／`h`，得各記各的目標）。兩個量兩格——一個是
+//! 橫排的顯示列，一個是竪排的槽位，共用一格的話換一次版面就會拿列當槽位用。
+//!
+//! **`zong_motion`、`extend`、`vim_lines` 還在 `Editor` 上**，只有一段的時候行為一樣，
 //! 等同一個理由出現再搬。
 
 /// 一段選區。**光標就是一段一個字素寬的選區**——這個倉早就是這麼想的
@@ -39,17 +41,22 @@ pub struct Range {
     /// ⚠️ **它進 `PartialEq`**，所以兩段兩端相同而目標列不同的選區不相等。`normalize`
     /// 靠值把主選區認回來，而排序不改值、合併會把合出來的那一段整個交回去，所以認得住。
     pub goal: Option<usize>,
+    /// **竪排那一半的同一件事**：`h`／`l` 跨縱的時候瞄準第幾格。
+    ///
+    /// ⚠️ **和 [`Range::goal`] 是兩個量，所以是兩格。** 一個是橫排的顯示列，一個是竪排
+    /// 的槽位；共用一格的話換一次版面就會拿列當槽位用。
+    pub goal_slot: Option<usize>,
 }
 
 impl Range {
     /// 一段塌在 `at` 上的選區——也就是一個光標。
     pub fn at(at: usize) -> Range {
-        Range { anchor: at, head: at, goal: None }
+        Range { anchor: at, head: at, goal: None, goal_slot: None }
     }
 
     /// 兩端給定的一段，目標列還不知道。
     pub fn new(anchor: usize, head: usize) -> Range {
-        Range { anchor, head, goal: None }
+        Range { anchor, head, goal: None, goal_slot: None }
     }
 
     /// 兩端按先後排好。⚠️ **方向是要留的信息**（`d` 之後光標落在哪、`;` 塌向哪一端都看
@@ -178,6 +185,16 @@ impl Selections {
         self.primary_mut().goal = goal;
     }
 
+    /// 主選區在竪排下瞄準的那一格。
+    pub fn goal_slot(&self) -> Option<usize> {
+        self.primary().goal_slot
+    }
+
+    /// 記下它。
+    pub fn set_goal_slot(&mut self, goal: Option<usize>) {
+        self.primary_mut().goal_slot = goal;
+    }
+
     /// 兩端一起放到 `at`——「塌成一個光標」。
     pub fn collapse_to(&mut self, at: usize) {
         *self.primary_mut() = Range::at(at);
@@ -268,10 +285,10 @@ impl Selections {
                     // **方向跟着先來的那一個。** 方向是要留的信息（`;` 塌向哪一端看它），
                     // 而先來的那一段是讀者先造出來的。
                     // 目標列也跟着先來的那一個，理由同方向：它是讀者先造出來的那一段。
-                    let goal = prev.goal;
+                    let (goal, goal_slot) = (prev.goal, prev.goal_slot);
                     *prev = match prev.anchor <= prev.head {
-                        true => Range { anchor: lo, head: hi, goal },
-                        false => Range { anchor: hi, head: lo, goal },
+                        true => Range { anchor: lo, head: hi, goal, goal_slot },
+                        false => Range { anchor: hi, head: lo, goal, goal_slot },
                     };
                 }
                 _ => out.push(one),

@@ -17434,3 +17434,22 @@ helix 的 `s`／`S`／`A-s` 一律把 primary 重置成 0（`selection.rs` 三�
 `(`／`)` 從前掛着 `hint.helix.cycle-selection`（「走一句用 H／L」），`&` 掛着
 `hint.vi.ampersand`。兩個鍵有主人了，兩句話跟着刪。⚠️ 一條老測試問的正是那句話，改成問新
 的（`the_phrasebook_answers_the_keys_we_spell_differently`）。
+
+
+## 5.25 竪排的目標格也搬進 `Range` 了（2026-09-28）
+
+`goal_slot` 是 `goal_column` 的竪排一半（`h`／`l` 跨縱的時候瞄準第幾格），和它同一個洞：
+在 `Editor` 上只有一個，於是 N 段一起按 `h` 會一起瞄準主選區那一格。
+
+⚠️ **兩個量兩格，不共用。** 一個是橫排的顯示列，一個是竪排的槽位；共用一格的話換一次版面
+就會拿列當槽位用。
+
+⚠️ **這一條驗過它抓不抓得住**：把那一格改回全局，兩段一起按 `h` 之後**併成了一段**
+（`[7]`，`len` 從 2 變 1）——它們瞄準了同一格，撞到一起了。
+
+⚠️ **驗的時候踩了一下自己的腳**：臨時加的那個假欄位是往 `editor.rs` 裏塞的，撤的時候
+`git checkout crates/yumete-core/src/editor.rs` 把**同一個檔裏還沒提交的真改動一起撤了**。
+下次驗護欄要麼改一個沒有別的改動的檔，要麼先 `git stash`。
+
+**還留在 `Editor` 上的**：`zong_motion`（一個 bool 管全部光標）、`extend`、`vim_lines`。
+只有一段的時候行為一樣，等同一個理由出現再搬。

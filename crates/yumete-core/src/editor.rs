@@ -55,7 +55,8 @@ pub struct Pane {
     /// `j`／`k` 瞄準的那一列。⚠️ **這一半收起來的時候只剩一段選區**（`cursor`／`anchor`
     /// 就是那一段），所以這裏存的是那一段的目標列，不是一組。
     goal_column: Option<usize>,
-    goal_slot: usize,
+    /// 竪排那一半的同一件事。見上。
+    goal_slot: Option<usize>,
     extend: bool,
     /// What to mark in it while it is only being read — a search hit, say.
     pub highlight: Option<(usize, usize)>,
@@ -2303,9 +2304,6 @@ pub struct Editor {
     /// How many graphemes fit in one 縱. The renderer lowers this when the
     /// terminal is too short to draw a full 縱.
     zong_length: usize,
-    /// Preserved slot for 縱-crossing motion (`h`/`l` in vertical layout), the
-    /// counterpart of `goal_column`.
-    goal_slot: usize,
     /// Whether the previous key was a 縱-crossing motion, so a run of them
     /// keeps one goal slot instead of resetting it at every short 縱.
     zong_motion: bool,
@@ -2810,7 +2808,6 @@ impl Editor {
             ruby_drawn: true,
             layout_wanted: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
-            goal_slot: 0,
             zong_motion: false,
             soft_wrap: true,
             wrap_width: None,
