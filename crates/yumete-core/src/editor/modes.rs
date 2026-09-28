@@ -74,6 +74,15 @@ impl Editor {
         )
     }
 
+    /// **手上有不止一段選區沒有。**
+    ///
+    /// 前端問它是為了一件事：⚠️ **多選區下不畫內嵌的 preedit**（2026-09-28 定，原話：
+    /// 「我觉得是不是 multiselection 的时候应当禁止 pre-edit 而是用候选面板。这样的话防止
+    /// 一堆非确定的修改」）。
+    pub fn has_many_selections(&self) -> bool {
+        self.sel.is_plural()
+    }
+
     /// **主選區以外的那幾段**，各自照 [`Self::selection`] 的辦法撐開一個字素
     /// （#405，2026-09-28）。
     ///
