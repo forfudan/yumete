@@ -4941,6 +4941,13 @@ zhs = "换一条（Shift-Tab 往回）"
 en = "next one (Shift-Tab goes back)"
 
 [[message]]
+# " 之後那張小表：# 這一格（選區序號，#405 Phase 3）
+key = "hint.register.hash"
+zht = "選區序號：第幾段就是幾"
+zhs = "选区序号：第几段就是几"
+en = "the selection's number: 1 for the first, 2 for the second"
+
+[[message]]
 # 暫存器組的標題
 key = "hint.register.title"
 zht = "暫存器"
