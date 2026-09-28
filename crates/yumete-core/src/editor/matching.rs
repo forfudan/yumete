@@ -40,7 +40,8 @@ impl Editor {
         // what only the editor can do: name the pair the key stands for, and
         // say the sentence when there is nothing to take.
         let what = match c {
-            'w' => motion::Object::Word,
+            'w' => motion::Object::Word { coarse: false },
+            'W' => motion::Object::Word { coarse: true },
             // helix has this one too (`mi p`, `commands.rs:6314`), and in a
             // manuscript it is the handier of the two: a 段 is the unit a
             // writer moves around, a word is the unit they fix.
@@ -56,7 +57,7 @@ impl Editor {
         let span = self.run_motion(motion::Motion::Object { what, around });
         if span == motion::Span::Missed {
             self.status = match what {
-                motion::Object::Word => say!("edit.no-word-here"),
+                motion::Object::Word { .. } => say!("edit.no-word-here"),
                 motion::Object::Pair { open, close } => say!("edit.no-pair-around", open, close),
                 // 一段永遠在：光標停在空行上，那一段就是那幾個空行。
                 motion::Object::Paragraph => say!("edit.no-word-here"),
@@ -155,19 +156,27 @@ impl Editor {
     /// 它前面的，這是 vim 自己的規矩，也是 `daw` 讀起來「整個詞連着那道縫一起
     /// 没了」的原因。
     ///
-    /// ⚠️ 用的是走 `w`／`e` 的那一份分詞（`motion::line_words`，粗粒度），**不是**
+    /// ⚠️ 用的是走 `w`／`e` 的那一份分詞（`motion::line_words`），**不是**
     /// `segment_line`——那一支只交漢字，標點與拉丁文一個都不交，而 `ciw` 最常
     /// 按在一個拉丁詞上（`delete_selection` 這種）。
-    fn word_object_span(&self, around: bool) -> motion::Span {
+    ///
+    /// ⚠️ **粒度跟着 `w` 走，不再寫死**（2026-09-28）。從前這裏是 `Grain::Coarse`，而
+    /// `w`／`b` 問的是 `word_grain()`——同一個編輯器對「詞」有兩個答案，於是
+    /// 「今天天氣很好」按 `diw` 刪掉六個字，按 `w` 卻走三步。使用者報的原話：「diw，删除
+    /// 光标所在词（目前的表现会忽略中文分词器）」。`coarse` 為真的是 `iW`，那個一律粗。
+    ///
+    /// ⚠️ **`aw` 在中文裏會退化成 `iw`**：它取的是「詞加它後面那段空白」，而中文詞之間
+    /// 沒有空白，於是 `daw` 和 `diw` 拿到同一段。這是 vim 那條規矩在中文裏的自然結果，
+    /// 不是這一支算錯了。
+    fn word_object_span(&self, around: bool, coarse: bool) -> motion::Span {
         let rope = self.current_buffer().rope().clone();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let start = rope.line_to_char(line);
-        let words = crate::motion::line_words(
-            &rope,
-            line,
-            crate::motion::Grain::Coarse,
-            self.segmenter.as_ref(),
-        );
+        let grain = match coarse {
+            true => crate::motion::Grain::Coarse,
+            false => self.word_grain(),
+        };
+        let words = crate::motion::line_words(&rope, line, grain, self.segmenter.as_ref());
         let here = words.iter().find(|&&(a, b)| (a..b).contains(&self.sel.head())).copied();
         let Some((from, to)) = here.or_else(|| {
             // **停在空白上的時候，那一串空白就是「詞」**——vim 的規矩，而這裏
@@ -721,8 +730,8 @@ impl Editor {
                 };
                 at(rope.line_to_char(want))
             }
-            motion::Motion::Object { what: motion::Object::Word, around } => {
-                self.word_object_span(around)
+            motion::Motion::Object { what: motion::Object::Word { coarse }, around } => {
+                self.word_object_span(around, coarse)
             }
             motion::Motion::Object {
                 what: motion::Object::Pair { open, close },
