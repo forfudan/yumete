@@ -3612,6 +3612,7 @@ mod labels;
 mod matching;
 mod memo;
 mod modes;
+mod multi;
 mod page;
 mod prompt;
 mod render;

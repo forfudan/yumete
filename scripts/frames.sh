@@ -52,6 +52,8 @@ scenes() {
 空格選單|80x20|\{space}
 幫助|100x30|:help\n
 注音|80x20|:open RUBY\n
+多選區|40x12|ggllCCC
+多選區-竪排|60x24|:layout vertical\nggjjCC
 折行-窄|40x16|
 折行-極窄|24x10|
 SCENES
