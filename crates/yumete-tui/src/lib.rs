@@ -7767,20 +7767,32 @@ fn draw_dictionary(
             put_text(buf, from + 1, y, to, &row.name, style);
             continue;
         }
+        // ⚠️ **逐格算樣式，不是順着往下切**（2026-09-28 修，同 `panel.rs` 那一處）。
+        // `spans` 交出來的是**嵌套**的：一行標題會先壓一條蓋住整行的 `Heading`，行內
+        // 的構造再壓上去。順着切的話 `was` 已經走到行尾而下一段從行中開始，
+        // `chars[尾..中]` 是反向區間，Rust 當場 panic——搜索結果裏出現一行帶行內標記
+        // 的標題就會中。逐格算順帶把內層蓋外層也畫對了。
+        let chars: Vec<char> = row.name.chars().collect();
+        let mut styles = vec![style; chars.len()];
+        for span in yumete_core::markdown::spans(&row.name) {
+            let over = markup_style(span.kind, ink);
+            let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
+            for one in styles.iter_mut().take(hi).skip(lo) {
+                *one = one.patch(over);
+            }
+        }
         let mut at = from + 1;
         let mut was = 0usize;
-        let chars: Vec<char> = row.name.chars().collect();
-        for span in yumete_core::markdown::spans(&row.name) {
-            let before: String =
-                chars[was.min(chars.len())..span.start.min(chars.len())].iter().collect();
-            at = put_text(buf, at, y, to, &before, style);
-            let run: String =
-                chars[span.start.min(chars.len())..span.end.min(chars.len())].iter().collect();
-            at = put_text(buf, at, y, to, &run, style.patch(markup_style(span.kind, ink)));
-            was = span.end;
+        while was < chars.len() {
+            let one = styles[was];
+            let mut end = was + 1;
+            while end < chars.len() && styles[end] == one {
+                end += 1;
+            }
+            let run: String = chars[was..end].iter().collect();
+            at = put_text(buf, at, y, to, &run, one);
+            was = end;
         }
-        let rest: String = chars[was.min(chars.len())..].iter().collect();
-        put_text(buf, at, y, to, &rest, style);
     }
 }
 

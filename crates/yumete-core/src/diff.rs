@@ -103,9 +103,9 @@ pub fn spans(line: &str) -> Vec<crate::markdown::Span> {
             continue;
         }
         // Opener, the run, closer — one construct, the way `**bold**` is one.
-        out.push(Span { start: at, end: text, kind: Kind::Marker, construct });
-        out.push(Span { start: text, end, kind, construct });
-        out.push(Span { start: end, end: end + 2, kind: Kind::Marker, construct });
+        out.push(Span { start: at, end: text, kind: Kind::Marker, construct, depth: 0 });
+        out.push(Span { start: text, end, kind, construct, depth: 0 });
+        out.push(Span { start: end, end: end + 2, kind: Kind::Marker, construct, depth: 0 });
         construct += 1;
         at = end + 2;
     }

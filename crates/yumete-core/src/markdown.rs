@@ -598,11 +598,37 @@ pub struct Span {
     /// `**` share one. It is what lets the markup of the construct the cursor
     /// is in be shown while every other construct's stays hidden.
     pub construct: usize,
+    /// **套了幾層**（2026-09-28）：頂層是 0，`**粗的 `碼`**` 裏那個 `` ` `` 是 1。
+    ///
+    /// 算得出來（包住它的有幾條），存下來是因為 `:export` 那一趟棧式遍歷有了它是十行、
+    /// 沒有就得每一步做區間比較。
+    pub depth: u8,
 }
 
-/// The marked-up runs of `line`, in order and non-overlapping.
+/// **這一行有哪些標記**，按起點排好，**外層排在內層前面**。
 ///
-/// Anything not covered is ordinary prose and gets no span.
+/// 沒被蓋到的就是普通正文，不交 span。
+///
+/// # ⚠️ 兩條不變式，下游全靠它們
+///
+/// 一、**任意兩條要麼不相交，要麼一條完全包含另一條**。不會出現半重疊。
+///
+/// 二、**按 `start` 排好；包住別人的那一條排在前面。** 於是
+/// 「蓋住某一格的最內層那一條」＝ 覆蓋它的裏面 `start` 最大的那一條
+/// （`max_by_key(start)`，`mi m` 就是這麼取的）。
+///
+/// ⚠️ **「不重疊」那句話 2026-09-28 之前就已經不成立了**，標題那一支先壓一條
+/// `Kind::Heading` 蓋住整行、行內的構造再壓上去。當時沒寫下約定，於是七個消費方各猜各
+/// 的，其中三個猜錯：`panel.rs` 那個順序寫字的循環會切出反向區間**當場崩**，`export.rs`
+/// 與 `detail.rs` 的 `.find()` 取到的是外層那一條（標題裏的腳註因此沒有詳情面板）。
+///
+/// # 嵌套
+///
+/// 一個構造配對成功之後，對它的**文字**那一段再掃一遍（[`DEPTH`] 層封頂）。所以
+/// ``**粗的`碼`**`` 裏的行內代碼認得出來，`[**粗**的](x)` 也是。
+///
+/// ⚠️ **行內代碼裏面不掃**：那是 CommonMark 的規矩，也是常識——`` `a*b*c` `` 裏的星號
+/// 是代碼的一部分。批注 `%%…%%` 同理，裏面的東西整個是寫的人自己的。
 pub fn spans(line: &str) -> Vec<Span> {
     let chars: Vec<char> = line.chars().collect();
     let mut out = Vec::new();
@@ -610,6 +636,7 @@ pub fn spans(line: &str) -> Vec<Span> {
     // A heading is the whole line, so it is decided before anything else and
     // the rest of the line is still scanned for emphasis inside the title.
     let mut from = 0;
+    let mut depth = 0u8;
     let hashes = chars.iter().take_while(|&&c| c == '#').count();
     // ⚠️ **井號後面要有一個空白**，CommonMark §4.2——`#128` 是一段話，不是標題。
     // Tab 也算（2026-09-26 補上，和大綱那一支對齊：從前這裏只認空格，而大綱那邊
@@ -620,6 +647,7 @@ pub fn spans(line: &str) -> Vec<Span> {
             end: hashes,
             kind: Kind::HeadingMark,
             construct: 0,
+            depth: 0,
         });
         from = hashes;
         // The title itself, under whatever emphasis it also carries.
@@ -629,54 +657,91 @@ pub fn spans(line: &str) -> Vec<Span> {
                 end: chars.len(),
                 kind: Kind::Heading,
                 construct: 0,
+                depth: 0,
             });
+            // 標題底下的東西都在它裏面，所以從第 1 層數起。
+            depth = 1;
         }
     }
     let mut construct = 1usize;
+    scan(&chars, from, chars.len(), depth, &mut construct, &mut out);
+    out
+}
 
+/// **套到第幾層為止。**
+///
+/// ⚠️ 不做通用的 delimiter stack（CommonMark §6.2 那一套兩趟加棧）。真會寫出來的形狀
+/// ——``**粗的`碼`**``、`[**粗**的](x)`、`==**重點**==`——兩層就夠，而三層是留給
+/// `**《書名》的`碼`**` 這種。再深的層數在一篇文章裏見不到，而每深一層就是整段重掃一遍。
+pub const DEPTH: u8 = 3;
+
+/// [`spans`] 的一趟：掃 `from..to`，交出來的 span 都在這個範圍裏。
+///
+/// ⚠️ **每一處算出來的 `end` 都要對着 `to` 驗一次。** 底下那些 `code_span`／`closing`
+/// ／`find` 找的是**整行**，遞歸進來的時候它們會越過 `to` 去找閉合符——``**a`b**c`` 裏
+/// 從 `a` 那一段往後找反引號，會找到 `to` 外面去。
+fn scan(
+    chars: &[char],
+    from: usize,
+    to: usize,
+    depth: u8,
+    construct: &mut usize,
+    out: &mut Vec<Span>,
+) {
     let mut at = from;
-    while at < chars.len() {
+    while at < to {
         // A comment is the writer talking to themselves — everything in it is
         // theirs, markup included — so it is taken before anything else.
-        if let Some((open, close, end)) = comment(&chars, at) {
-            mark(&mut out, at, at + open, Kind::Marker, construct);
-            mark(&mut out, at + open, end - close, Kind::Comment, construct);
-            mark(&mut out, end - close, end, Kind::Marker, construct);
+        if let Some((open, close, end)) = comment(chars, at).filter(|&(_, _, e)| e <= to) {
+            // ⚠️ **批注裏面不掃**：`%%…%%` 整個是寫的人對自己說的話，標記也是他的。
+            mark(out, at, at + open, Kind::Marker, *construct, depth);
+            mark(out, at + open, end - close, Kind::Comment, *construct, depth);
+            mark(out, end - close, end, Kind::Marker, *construct, depth);
             at = end;
-            construct += 1;
+            *construct += 1;
             continue;
         }
         // Code next: inside a code span nothing else is markup.
         if chars[at] == '`' {
-            if let Some((open, close, end)) = code_span(&chars, at) {
-                mark(&mut out, at, at + open, Kind::Marker, construct);
-                mark(&mut out, at + open, close, Kind::Code, construct);
-                mark(&mut out, close, end, Kind::Marker, construct);
+            if let Some((open, close, end)) = code_span(chars, at).filter(|&(_, _, e)| e <= to) {
+                // ⚠️ **行內代碼裏面不掃**，CommonMark 的規矩：`` `a*b*c` `` 裏的星號
+                // 是代碼的一部分。
+                mark(out, at, at + open, Kind::Marker, *construct, depth);
+                mark(out, at + open, close, Kind::Code, *construct, depth);
+                mark(out, close, end, Kind::Marker, *construct, depth);
                 at = end;
-                construct += 1;
+                *construct += 1;
                 continue;
             }
         }
-        if let Some(len) = fence(&chars, at) {
+        if let Some(len) = fence(chars, at) {
             let kind = match (chars[at], len) {
                 ('*', 2) | ('_', 2) => Kind::Strong,
                 ('~', 2) => Kind::Strike,
                 ('=', 2) => Kind::Highlight,
                 _ => Kind::Emphasis,
             };
-            if let Some(close) = closing(&chars, at + len, chars[at], len) {
-                mark(&mut out, at, at + len, Kind::Marker, construct);
-                mark(&mut out, at + len, close, kind, construct);
-                mark(&mut out, close, close + len, Kind::Marker, construct);
+            if let Some(close) = closing(chars, at + len, chars[at], len)
+                .filter(|&close| close + len <= to)
+            {
+                mark(out, at, at + len, Kind::Marker, *construct, depth);
+                mark(out, at + len, close, kind, *construct, depth);
+                let mine = *construct;
+                *construct += 1;
+                // **裏面再掃一遍**（2026-09-28）：``**粗的`碼`**``。前序——外層那一條
+                // 已經發出去了，閉標記留到遞歸之後發，於是整串仍然按起點排好。
+                if depth + 1 < DEPTH {
+                    scan(chars, at + len, close, depth + 1, construct, out);
+                }
+                mark(out, close, close + len, Kind::Marker, mine, depth);
                 at = close + len;
-                construct += 1;
                 continue;
             }
         }
         // `[[第三章]]`, `[[第三章|那一夜]]`, `[[第三章#雪]]` — a reference to
         // somewhere else in the same manuscript.
         if chars[at] == '[' && chars.get(at + 1) == Some(&'[') {
-            if let Some(close) = run(&chars, at + 2, "]]") {
+            if let Some(close) = run(chars, at + 2, "]]").filter(|&c| c + 2 <= to) {
                 // What is shown is the alias if there is one, else the target.
                 let body = at + 2..close;
                 let shown = chars[body.clone()]
@@ -684,34 +749,42 @@ pub fn spans(line: &str) -> Vec<Span> {
                     .position(|&c| c == '|')
                     .map(|i| at + 2 + i + 1..close)
                     .unwrap_or(body);
-                mark(&mut out, at, shown.start, Kind::Marker, construct);
-                mark(&mut out, shown.start, shown.end, Kind::WikiLink, construct);
-                mark(&mut out, shown.end, close + 2, Kind::Marker, construct);
+                // ⚠️ **雙鏈裏面不掃**：那是一個頁名（或者頁名加一個別名），不是正文。
+                mark(out, at, shown.start, Kind::Marker, *construct, depth);
+                mark(out, shown.start, shown.end, Kind::WikiLink, *construct, depth);
+                mark(out, shown.end, close + 2, Kind::Marker, *construct, depth);
                 at = close + 2;
-                construct += 1;
+                *construct += 1;
                 continue;
             }
         }
         // `[^1]`, and the `[^1]:` that opens the note itself.
         if chars[at] == '[' && chars.get(at + 1) == Some(&'^') {
-            if let Some(close) = find(&chars, at + 2, |c| c == ']') {
+            if let Some(close) = find(chars, at + 2, |c| c == ']') {
                 let end = close + 1 + usize::from(chars.get(close + 1) == Some(&':'));
-                mark(&mut out, at, end, Kind::Footnote, construct);
-                at = end;
-                construct += 1;
-                continue;
+                if end <= to {
+                    mark(out, at, end, Kind::Footnote, *construct, depth);
+                    at = end;
+                    *construct += 1;
+                    continue;
+                }
             }
         }
         // `[text](target)` — the text is what the reader reads.
         if chars[at] == '[' {
-            if let Some(close) = find(&chars, at + 1, |c| c == ']') {
+            if let Some(close) = find(chars, at + 1, |c| c == ']') {
                 if chars.get(close + 1) == Some(&'(') {
-                    if let Some(end) = find(&chars, close + 2, |c| c == ')') {
-                        mark(&mut out, at, at + 1, Kind::Marker, construct);
-                        mark(&mut out, at + 1, close, Kind::Link, construct);
-                        mark(&mut out, close, end + 1, Kind::Marker, construct);
+                    if let Some(end) = find(chars, close + 2, |c| c == ')').filter(|&e| e < to) {
+                        mark(out, at, at + 1, Kind::Marker, *construct, depth);
+                        mark(out, at + 1, close, Kind::Link, *construct, depth);
+                        let mine = *construct;
+                        *construct += 1;
+                        // 看得見的那幾個字也可以帶標記：`[**粗**的](x)`。
+                        if depth + 1 < DEPTH {
+                            scan(chars, at + 1, close, depth + 1, construct, out);
+                        }
+                        mark(out, close, end + 1, Kind::Marker, mine, depth);
                         at = end + 1;
-                        construct += 1;
                         continue;
                     }
                 }
@@ -719,7 +792,6 @@ pub fn spans(line: &str) -> Vec<Span> {
         }
         at += 1;
     }
-    out
 }
 
 /// Where a link points, and how it was written.
@@ -1031,13 +1103,21 @@ fn find(chars: &[char], from: usize, f: impl Fn(char) -> bool) -> Option<usize> 
 }
 
 /// Push a span, dropping empty ones.
-fn mark(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind, construct: usize) {
+fn mark(
+    out: &mut Vec<Span>,
+    start: usize,
+    end: usize,
+    kind: Kind,
+    construct: usize,
+    depth: u8,
+) {
     if end > start {
         out.push(Span {
             start,
             end,
             kind,
             construct,
+            depth,
         });
     }
 }
@@ -1351,6 +1431,7 @@ pub mod typst {
                 end,
                 kind,
                 construct,
+                depth: 0,
             });
         }
     }
@@ -1972,4 +2053,65 @@ mod tests {
         assert!(spans("那年冬天，雪下得早。").is_empty());
         assert!(spans("").is_empty());
     }
+
+    /// **標記套得起來了**（2026-09-28）。
+    ///
+    /// 從前 ``**粗的`碼`**`` 交出來的是三段，中間那一段連反引號一起算成粗體的正文。
+    #[test]
+    fn marks_nest_now() {
+        let inner = |line: &str, want: Kind| {
+            spans(line)
+                .into_iter()
+                .filter(|s| s.kind == want)
+                .map(|s| line.chars().skip(s.start).take(s.end - s.start).collect::<String>())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(inner("**粗的`碼`**", Kind::Code), vec!["碼"], "粗體裏的行內代碼");
+        assert_eq!(inner("**粗的`碼`**", Kind::Strong), vec!["粗的`碼`"], "外層照舊蓋着");
+        assert_eq!(inner("[**粗**的](x)", Kind::Strong), vec!["粗"], "鏈接文字裏的粗體");
+        assert_eq!(inner("==**重點**==", Kind::Strong), vec!["重點"], "標記裏的粗體");
+
+        // ⚠️ **行內代碼與批注裏面不掃。**
+        assert!(inner("`a*b*c`", Kind::Emphasis).is_empty(), "代碼裏的星號是代碼");
+        assert!(inner("%%批注 **粗**%%", Kind::Strong).is_empty(), "批注整個是寫的人的");
+
+        // ⚠️ **遞歸不許越過外層的閉合符**：``**a`b**c`` 裏那個反引號後面沒有配對的。
+        assert!(inner("**a`b**c", Kind::Code).is_empty(), "反引號不許找到外面去");
+    }
+
+    /// **兩條不變式**：按起點排好，任意兩條要麼不交要麼全含。
+    ///
+    /// 下游全靠它們——`mi m` 用「起點最靠後的那一條」當最內層，詳情面板同理，而兩個
+    /// 順序寫字的循環從前假定不重疊，切出反向區間當場崩。
+    #[test]
+    fn the_two_invariants_hold() {
+        let lines = [
+            "**粗的`碼`**",
+            "# **甲** `碼`",
+            "[**粗**的](x)",
+            "==**重點**==",
+            "普通一行，沒有標記。",
+            "# 見[^1]",
+            "**《書名》的`碼`**",
+            "%%批注%%和**粗**",
+            "[[雙鏈]]與*斜*",
+        ];
+        for line in lines {
+            let got = spans(line);
+            let mut prev = 0usize;
+            for one in &got {
+                assert!(one.start >= prev, "按起點排好：{line:?} {got:?}");
+                prev = one.start;
+            }
+            for a in &got {
+                for b in &got {
+                    let apart = a.end <= b.start || b.end <= a.start;
+                    let holds = (a.start <= b.start && b.end <= a.end)
+                        || (b.start <= a.start && a.end <= b.end);
+                    assert!(apart || holds, "要麼不交要麼全含：{line:?} {a:?} {b:?}");
+                }
+            }
+        }
+    }
+
 }

@@ -1465,7 +1465,7 @@ impl Editor {
         let length = text.chars().count();
         let construct = usize::MAX / 2;
         let Some(at) = close else {
-            return vec![Span { start: 0, end: length, kind: Kind::Comment, construct }];
+            return vec![Span { start: 0, end: length, kind: Kind::Comment, construct, depth: 0 }];
         };
         let closer = match text.chars().nth(at) {
             Some('%') => 2,
@@ -1474,9 +1474,9 @@ impl Editor {
         let after = (at + closer).min(length);
         let mut out = Vec::new();
         if at > 0 {
-            out.push(Span { start: 0, end: at, kind: Kind::Comment, construct });
+            out.push(Span { start: 0, end: at, kind: Kind::Comment, construct, depth: 0 });
         }
-        out.push(Span { start: at, end: after, kind: Kind::Marker, construct });
+        out.push(Span { start: at, end: after, kind: Kind::Marker, construct, depth: 0 });
         let rest: String = text.chars().skip(after).collect();
         out.extend(crate::markdown::spans(&rest).into_iter().map(|s| Span {
             start: s.start + after,
