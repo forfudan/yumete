@@ -337,6 +337,8 @@ fn span(start: usize, end: usize, token: Token) -> Span {
         start,
         end,
         kind: Kind::Token(token),
+        // 代碼裏沒有嵌套的標記，全在頂層。
+        depth: 0,
         // Every run its own construct: none of this is markup, so none of it
         // is ever hidden or opened together.
         construct: usize::MAX - start,

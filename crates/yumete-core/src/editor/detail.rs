@@ -158,9 +158,14 @@ impl Editor {
         // moved onto its opening mark expects the panel then, not one step
         // later.
         let runs = self.markup_line_in(line, block);
+        // ⚠️ **最裏面那一條，不是第一條**（2026-09-28）。`spans` 交出來的是嵌套的：
+        // `# 見[^1]` 交 `HeadingMark`／`Heading 1..6`／`Footnote 2..6`，而 `Heading`
+        // 排在前面。取第一條拿到的是標題那個構造，再去它裏面找腳註當然找不到——
+        // **標題裏的腳註從此沒有詳情面板**。不變式保證「起點最靠後的那一條」就是最內層。
         let construct = runs
             .iter()
-            .find(|s| within >= s.start && within < s.end)?
+            .filter(|s| within >= s.start && within < s.end)
+            .max_by_key(|s| s.start)?
             .construct;
         let span = runs.iter().find(|s| {
             s.construct == construct
