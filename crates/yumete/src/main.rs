@@ -441,7 +441,26 @@ fn main() -> ExitCode {
     yumete_tui::set_build(VERSION);
     let mut settings_page = None;
     if let Some(pressed) = &keys {
-        settings_page = press(&mut editor, pressed, &config, &ime, shot);
+        // ⚠️ **`\{ime}` 之後那幾個鍵走輸入法**（2026-09-28）。從前 `--keys` 一律直接叫
+        // `editor.on_key`，於是**離屏拍不到任何 preedit**——而輸入法是這個編輯器最不一樣
+        // 的那一塊，這個倉的審查方法又是截圖。共用記事本上記過同一個形狀的坑：離屏
+        // `--figure` 繞開控制器，於是「前端在把鍵交給引擎之前派掉的那幾個鍵」那一整族
+        // bug 一個都拍不到。
+        //
+        // ⚠️ **數據要先載進來。** `--shot` 下它本來是推遲到第一幀之後的（見
+        // `yumete_tui::Deferred`），而 `--keys` 跑在那之前。只有真的要用輸入法的時候纔
+        // 載，不然每一張圖都要多等那幾百毫秒。
+        if pressed.contains("\\{ime}") {
+            // ⚠️ **要的是碼表，不只是語言層。** `load` 那一支建的是
+            // `ImeSession::language_only`，只有在配置說「這一趟是寫漢字的」的時候纔往下
+            // 載碼表；不載的話 `input()` 只是把字母堆起來，空格一按原樣上屏（實測打
+            // `wo` 空格出來的就是 `wo`）。
+            let said = switch_scheme_at_startup(&mut ime, wanted, (page_size, chaifen));
+            if !said.is_empty() {
+                editor.set_status(said);
+            }
+        }
+        settings_page = press(&mut editor, pressed, &config, &mut ime, shot);
     }
     // Asked for on the command line, and run the same way `:tutor` runs it.
     if tutor {
@@ -629,10 +648,12 @@ fn press(
     editor: &mut Editor,
     keys: &str,
     config: &yumete_config::Config,
-    ime: &ImeSession,
+    ime: &mut ImeSession,
     shot: Option<(u16, u16)>,
 ) -> Option<yumete_config::panel::Panel> {
     let mut settings = yumete_tui::settings_page::Seat::default();
+    // **`\{ime}` 撥一下這一格**：往後那幾個鍵交給輸入法，再按一次撥回來。
+    let mut composing = false;
     let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
         let key = match c {
@@ -663,6 +684,20 @@ fn press(
                             break;
                         }
                         name.push(c);
+                    }
+                    // **`\{ime}` 撥一下「往後走不走輸入法」**（2026-09-28）。
+                    if name == "ime" {
+                        composing = !composing;
+                        // ⚠️ **撥開關的時候順手把它打開。** `:yume on` 走的是請求／回應
+                        // 那條路，而那條路要互動循環來服務——`--shot` 沒有循環，工具自己
+                        // 早就印過一句話說這件事。這裏直接撥會話上那兩格。
+                        if composing {
+                            ime.set_engaged(true);
+                            if !ime.is_chinese() {
+                                ime.toggle_language();
+                            }
+                        }
+                        continue;
                     }
                     // `\{alt-.}` for the Meta chords. helix's tutor leans on
                     // them — `Alt-s` `Alt-.` `Alt-,` `Alt-;` `Alt-\`` — and
@@ -732,6 +767,32 @@ fn press(
         // ⚠️ **和主循環同一支** `Seat`，不是抄一遍：抄本當天就分岔過（那一份漏了
         // 「有改動不許一下走」的閘，又把存盤的錯 `let _ =` 吞掉）。
         if settings.took(editor, Some(key)) {
+            continue;
+        }
+        // **走輸入法的那一段**（`\{ime}` 之間，2026-09-28）。這裏只認打字要用的那幾
+        // 個鍵——碼、空格、Enter、退格、選重數字、Esc。互動循環那一支比這個全得多
+        // （`yumete-tui` 的那一大段 `match code`），可是拍一張圖用不着那些。
+        if composing {
+            match key {
+                Key::Char(' ') => ime.space(),
+                Key::Enter => ime.enter(),
+                Key::Esc => ime.escape(),
+                Key::Backspace => {
+                    ime.backspace();
+                }
+                // 選重：那一位上真的有候選纔算，同互動那一支。
+                Key::Char(c @ '1'..='9')
+                    if ime.is_composing() && ime.page_has((c as u8 - b'0') as usize) =>
+                {
+                    ime.select_in_page((c as u8 - b'1') as usize);
+                }
+                Key::Char(c) => ime.input(c),
+                _ => {}
+            }
+            let committed = ime.take_committed();
+            if !committed.is_empty() {
+                editor.insert_committed(&committed);
+            }
             continue;
         }
         editor.on_key(key);
