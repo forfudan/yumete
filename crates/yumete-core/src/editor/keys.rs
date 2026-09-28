@@ -1356,6 +1356,15 @@ impl Editor {
             Key::Char('C') => self.copy_selection_on_row(true, count),
             Key::Alt('C') => self.copy_selection_on_row(false, count),
             Key::Char(',') => self.keep_primary_selection(),
+            // **`A-s` 把每一段選區按行切開**（helix 的 `split_selection_on_newline`）。
+            // ⚠️ 它是這一族裏唯一不用打正則的，所以不開提示行。
+            Key::Alt('s') => self.split_on_newline(),
+            // **正則那四個**（#405 Phase 2）。它們開的是**搜索那一扇**提示行，於是拼音、
+            // 簡繁、模糊、正則四個開關一起管用，中文也照打——helix 的 `s` 只認正則。
+            Key::Char('s') => self.open_sift(multi::Sift::Select),
+            Key::Char('S') => self.open_sift(multi::Sift::Split),
+            Key::Alt('k') => self.open_sift(multi::Sift::Keep),
+            Key::Alt('K') => self.open_sift(multi::Sift::Drop),
             // Selection + changes (Helix: `x` selects the line, `d` deletes the
             // selection, `c` changes it).
             //
@@ -1725,7 +1734,6 @@ impl Editor {
             // vi's 行首. It gets here only with no count under way — with one,
             // `0` is still the digit it looks like (`20l`).
             '0' => say!("hint.vi.zero"),
-            's' | 'S' => say!("hint.vi.s"),
             'Z' => say!("hint.vi.z-upper"),
             '@' => say!("hint.vi.at"),
             '&' => say!("hint.vi.ampersand"),

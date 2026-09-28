@@ -10,6 +10,37 @@
 use super::*;
 use crate::selection::Range;
 
+/// **正則那一族在等什麽**（#405 Phase 2）。
+///
+/// 四個鍵共用搜索那一扇提示行——於是**拼音、簡繁、模糊、正則四個開關一起白拿**，
+/// 搜「书斋」選得出「書齋」。helix 沒有這一件，它的 `s` 只認正則。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sift {
+    /// `s` — 在每一段選區**裏面**選出所有匹配。
+    Select,
+    /// `S` — 拿匹配當分隔符，把每一段切開。
+    Split,
+    /// `A-k` — 只留下匹配的那幾段。
+    Keep,
+    /// `A-K` — 去掉匹配的那幾段。
+    Drop,
+}
+
+impl Sift {
+    /// 提示行前面寫什麼。
+    ///
+    /// ⚠️ **寫字，不寫字母。** `s/` `S/` `k/` `K/` 那一套省三格，可是按下去之後屏幕上
+    /// 那一行說不出它要做什麼，而這四件事做完的樣子差得很遠（選出、切開、只留、去掉）。
+    pub fn prefix(self) -> &'static str {
+        match self {
+            Sift::Select => "選出/",
+            Sift::Split => "切開/",
+            Sift::Keep => "只留/",
+            Sift::Drop => "去掉/",
+        }
+    }
+}
+
 impl super::Editor {
     /// **往下／往上再加一個選區**（`C`／`A-C`）。
     ///
@@ -204,6 +235,132 @@ impl super::Editor {
         let merged = self.sel.rebuild(out, which);
         self.clamp_cursor();
         self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
+    /// **一段選區在屏幕上蓋住的是哪一截**（字符下標，左閉右開）。
+    ///
+    /// ⚠️ **`Range` 的 head 是包含在內的**（光標站的那個字素在選區裏，helix 的模型），
+    /// 而「切開」「選出」這一族算的是半開區間。兩套下標混在一起是這一族最容易錯的地
+    /// 方，所以進出各走一支。
+    pub(super) fn drawn(&self, one: Range) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let (from, to) = one.span();
+        (from, crate::motion::next_grapheme(rope, to))
+    }
+
+    /// 上一支的反面：半開區間變回一段選區。
+    pub(super) fn from_drawn(&self, from: usize, to: usize) -> Range {
+        let rope = self.current_buffer().rope();
+        let head = crate::motion::prev_grapheme(rope, to).max(from);
+        Range { anchor: from, head, goal: None }
+    }
+
+    /// **把每一段選區按行切開**（`A-s`，helix 的 `split_selection_on_newline`）。
+    ///
+    /// ⚠️ **一行選區不會被切成零段。** 選區只佔一行的時候這一支什麼都不改——那正是
+    /// 「按行切」在只有一行上的答案，不是失敗。
+    pub(super) fn split_on_newline(&mut self) {
+        let rope = self.current_buffer().rope().clone();
+        let mut out: Vec<Range> = Vec::new();
+        let mut which = 0;
+        let primary = self.sel.primary();
+        for one in self.sel.iter() {
+            if *one == primary {
+                which = out.len();
+            }
+            let (from, to) = self.drawn(*one);
+            let first = rope.char_to_line(from);
+            let last = rope.char_to_line(to.saturating_sub(1).max(from));
+            for line in first..=last {
+                let head = rope.line_to_char(line);
+                let a = head.max(from);
+                let b = (head + crate::zong::line_chars(&rope, line).len()).min(to);
+                if b > a {
+                    out.push(self.from_drawn(a, b));
+                }
+            }
+        }
+        if out.is_empty() {
+            self.status = say!("selection.nothing-to-split");
+            return;
+        }
+        let merged = self.sel.rebuild(out, which);
+        self.say_the_merge(merged);
+    }
+
+    /// 開那一扇提示行，並且記下 Enter 按下去要做哪一件。
+    pub(super) fn open_sift(&mut self, what: Sift) {
+        self.sift = Some(what);
+        self.command_line.clear();
+        self.command_caret = 0;
+        self.mode = crate::input::Mode::Search;
+    }
+
+    /// **正則那一族**（`s`／`S`／`A-k`／`A-K`，#405 Phase 2）。
+    ///
+    /// 匹配器是搜索那一支（[`Look`]），所以拼音、簡繁、模糊、正則四個開關一起管用。
+    ///
+    /// ⚠️ **主選區留在離原來那一段最近的地方。** helix 這三個命令一律把 primary 重置成
+    /// 0（`selection.rs` 三處都留着同一句 `// TODO: figure out a new primary index`），
+    /// 於是在第八十行選出二十處之後，屏幕當場跳回檔首。§5.13.11 的坑 6。
+    ///
+    /// ⚠️ **一個都不剩就什麽都不做**，並且說一句。把選區清空是沒有這個狀態的
+    /// （`Selections` 永遠至少一段），而靜靜地留在原地會讓人以為是鍵沒按上。
+    pub(super) fn sift(&mut self, what: Sift) {
+        let Some(look) = self.looker() else {
+            self.status = say!("selection.sift-needs-a-pattern");
+            return;
+        };
+        let rope = self.current_buffer().rope().clone();
+        let was = self.sel.primary().span().0;
+        let mut out: Vec<Range> = Vec::new();
+        for one in self.sel.iter() {
+            let (from, to) = self.drawn(*one);
+            let text: String = rope.slice(from..to).chars().collect();
+            let hits = look.spans(&text);
+            match what {
+                Sift::Select => {
+                    for (a, b) in hits {
+                        if b > a {
+                            out.push(self.from_drawn(from + a, from + b));
+                        }
+                    }
+                }
+                Sift::Split => {
+                    let mut cut = 0usize;
+                    for (a, b) in hits {
+                        if a > cut {
+                            out.push(self.from_drawn(from + cut, from + a));
+                        }
+                        cut = b.max(cut);
+                    }
+                    let len = text.chars().count();
+                    if cut < len {
+                        out.push(self.from_drawn(from + cut, to));
+                    }
+                }
+                Sift::Keep if !hits.is_empty() => out.push(*one),
+                Sift::Drop if hits.is_empty() => out.push(*one),
+                _ => {}
+            }
+        }
+        if out.is_empty() {
+            self.status = say!("selection.sift-found-nothing");
+            return;
+        }
+        // 離原來的主選區最近的那一段。
+        let which = out
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, r)| r.span().0.abs_diff(was))
+            .map(|(nth, _)| nth)
+            .unwrap_or(0);
+        let count = out.len();
+        let merged = self.sel.rebuild(out, which);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.status = say!("selection.sift-done", count.to_string());
         self.say_the_merge(merged);
     }
 

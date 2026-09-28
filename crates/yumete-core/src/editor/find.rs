@@ -1379,7 +1379,7 @@ impl Editor {
     /// 做」）。
     ///
     /// `None` ＝ 式子寫壞了。
-    fn looker(&self) -> Option<Look> {
+    pub(super) fn looker(&self) -> Option<Look> {
         // **拼音只在查詢全是 ASCII 字母的時候纔跑**，所以開着它不影響搜英文。
         // ⚠️ 正則開着也照跑：它自己走一趟，不往正則裏塞東西（不像簡繁異體）。
         let said = match self.search.pinyin {
@@ -1582,7 +1582,7 @@ fn excerpt(
 /// the files on the disk) must ask the same question; they were two copies of
 /// a `find_iter` loop, and a second way to search would have made them two
 /// copies of a `match`.
-struct Look {
+pub(super) struct Look {
     /// 字面那一路：一個正則，或者「差不多是這幾個字」。
     how: How,
     /// 換上去的那一段要不要跟着原文的大小寫。見 [`Field::PreserveCase`]。
@@ -1596,7 +1596,7 @@ struct Look {
 }
 
 /// 字面那一路怎麼問。
-enum How {
+pub(super) enum How {
     /// A regular expression, flags and all (`search_pattern`).
     Pattern(Regex),
     /// The 模糊 switch: [`crate::nearby`], which counts in characters.
@@ -1633,7 +1633,7 @@ impl Look {
     ///
     /// ⚠️ **兩路合並之後要排序去重**：`excerpt` 按這個次序編號（`nth`），而讀者
     /// 看見的是一行一行往下走的單子。同一段被兩路都配上，只算一條。
-    fn spans(&self, text: &str) -> Vec<(usize, usize)> {
+    pub(super) fn spans(&self, text: &str) -> Vec<(usize, usize)> {
         let mut out = match &self.how {
             How::Pattern(re) => re
                 .find_iter(text)

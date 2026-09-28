@@ -1607,6 +1607,12 @@ pub struct Editor {
     sel: crate::selection::Selections,
     /// **剛纔看的是哪一份稿子**（`ga`，2026-09-28）。緩衝區的 **id**，不是下標。
     last_file: Option<u64>,
+    /// **正則那一族在等什麽**（`s`／`S`／`A-k`／`A-K`，#405 Phase 2）。
+    ///
+    /// ⚠️ **它們借的是搜索那一扇提示行**（`Mode::Search`），所以拼音、簡繁、模糊、正則
+    /// 四個開關一起白拿，中文也照打——那一扇本來就開輸入法（`Mode::composes`）。這一格
+    /// 記的是「Enter 按下去要做哪一件」，`None` 就是普通的搜索。
+    sift: Option<crate::editor::multi::Sift>,
     /// The text being typed after `:` / `/` (without the leading punctuation).
     command_line: String,
     /// Where the caret is on the prompt, in characters from its start.
@@ -2635,6 +2641,7 @@ impl Editor {
             mode: Mode::Normal,
             sel: crate::selection::Selections::at(0),
             last_file: None,
+            sift: None,
             command_line: String::new(),
             command_caret: 0,
             lookfor_focus: 0,

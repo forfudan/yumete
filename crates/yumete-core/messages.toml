@@ -5540,13 +5540,6 @@ zhs = "上下行是 j k；段落是 { }"
 en = "j k move by line; { } by paragraph"
 
 [[message]]
-# Normal 模式按 s 或 S（Helix 的多光標鍵，這裏還沒有）
-key = "hint.vi.s"
-zht = "沒有多光標——見手冊「還沒有的」"
-zhs = "没有多光标——见手册「还没有的」"
-en = "no multiple cursors — see the manual, 「還沒有的」"
-
-[[message]]
 # Normal 模式按 Z（vi 的 ZZ，這裏沒有）
 key = "hint.vi.z-upper"
 zht = "保存是 :w，存了就走是 :wq"
@@ -7588,6 +7581,34 @@ key = "selection.no-room"
 zht = "那邊沒有一行到得了這一列"
 zhs = "那边没有一行到得了这一列"
 en = "no line that way reaches this column"
+
+[[message]]
+# 按 A-s 想按行切開，可是選區是空的
+key = "selection.nothing-to-split"
+zht = "沒有可切的"
+zhs = "没有可切的"
+en = "nothing to split"
+
+[[message]]
+# s／S／A-k／A-K 做完了，剩幾段
+key = "selection.sift-done"
+zht = "{0} 處"
+zhs = "{0} 处"
+en = "{0} selections"
+
+[[message]]
+# s／S／A-k／A-K 一段都沒剩下
+key = "selection.sift-found-nothing"
+zht = "一處都沒有，選區沒動"
+zhs = "一处都没有，选区没动"
+en = "nothing matched, the selections are unchanged"
+
+[[message]]
+# s／S／A-k／A-K 打完正則按 Enter，可是那一條規則編不出匹配器
+key = "selection.sift-needs-a-pattern"
+zht = "這條規則讀不懂"
+zhs = "这条规则读不懂"
+en = "that pattern does not parse"
 
 [[message]]
 # :view-sentence off——回到滿縱排

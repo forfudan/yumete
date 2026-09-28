@@ -142,8 +142,15 @@ impl Editor {
         match self.mode {
             Mode::Command => Some((":", &self.command_line)),
             Mode::Lookfor => Some(("::", &self.command_line)),
+            // ⚠️ **正則那一族借這一扇**（#405 Phase 2），所以前面寫的不一定是斜槓。
+            // 按下去之後屏幕上那一行要說得出它要做什麼：選出、切開、只留、去掉，四件事
+            // 做完的樣子差得很遠。
             Mode::Search => Some((
-                if self.search_forward { "/" } else { "?" },
+                match self.sift {
+                    Some(what) => what.prefix(),
+                    None if self.search_forward => "/",
+                    None => "?",
+                },
                 &self.command_line,
             )),
             Mode::Ruby => Some(("注", &self.command_line)),
