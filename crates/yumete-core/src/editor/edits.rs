@@ -703,6 +703,13 @@ impl Editor {
     /// The contents of the register a command should read from.
     pub(super) fn recall(&mut self) -> String {
         match self.take_register() {
+            // **`#` 是選區的序號**（#405 Phase 3，helix 也是這個名字）。它不是一個存東
+            // 西的格子，是一個問題的答案：「這是第幾段」。`"#p` 於是在第一段貼「1」、
+            // 第二段貼「2」——編號列表那個用例就是這麼解開的。
+            //
+            // ⚠️ **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
+            // 說得通的，而貼一個空字符串看起來像鍵沒按上。
+            Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
             Some(name) => self.registers.get(&name).cloned().unwrap_or_default(),
             None => self.register.clone(),
         }

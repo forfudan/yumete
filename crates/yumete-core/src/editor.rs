@@ -1613,6 +1613,14 @@ pub struct Editor {
     /// 四個開關一起白拿，中文也照打——那一扇本來就開輸入法（`Mode::composes`）。這一格
     /// 記的是「Enter 按下去要做哪一件」，`None` 就是普通的搜索。
     sift: Option<crate::editor::multi::Sift>,
+    /// **這一趟是第幾段選區**（`#` 寄存器，#405 Phase 3）。
+    ///
+    /// `edit_each` 逐段跑的時候填上，跑完清掉。`"#p` 於是在第一段貼「1」、第二段貼
+    /// 「2」——**編號列表那個用例就是這麼解開的**（§5.13.1）。
+    ///
+    /// ⚠️ **算的是文檔次序，不是執行次序。** `edit_each` 從後往前做，而讀者數的是從上
+    /// 往下第幾個。
+    edit_nth: Option<usize>,
     /// The text being typed after `:` / `/` (without the leading punctuation).
     command_line: String,
     /// Where the caret is on the prompt, in characters from its start.
@@ -2642,6 +2650,7 @@ impl Editor {
             sel: crate::selection::Selections::at(0),
             last_file: None,
             sift: None,
+            edit_nth: None,
             command_line: String::new(),
             command_caret: 0,
             lookfor_focus: 0,

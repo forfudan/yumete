@@ -153,10 +153,15 @@ impl super::Editor {
         // 每一段開跑之前擺回去，跑完之後留最後一段的那一份。
         let pending = self.pending.clone();
         let count = self.count;
+        // ⚠️ **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
+        // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
+        // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
+        let named = self.pending_register;
         for (nth, one) in was.iter().enumerate() {
             self.sel = crate::selection::Selections::one(*one);
             self.pending = pending.clone();
             self.count = count;
+            self.pending_register = named;
             what(self);
             if *one == primary {
                 which = nth;
@@ -202,6 +207,10 @@ impl super::Editor {
         let primary = was.primary();
         let pending = self.pending.clone();
         let count = self.count;
+        // ⚠️ **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
+        // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
+        // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
+        let named = self.pending_register;
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
         let ranges: Vec<Range> = was.iter().copied().collect();
@@ -210,7 +219,12 @@ impl super::Editor {
             self.sel = crate::selection::Selections::one(*one);
             self.pending = pending.clone();
             self.count = count;
+            self.pending_register = named;
+            // ⚠️ **文檔次序，不是執行次序**：這一趟從後往前跑，而讀者數的是從上往下
+            // 第幾個。`#` 寄存器讀它。
+            self.edit_nth = Some(nth);
             what(self);
+            self.edit_nth = None;
             let after = self.current_buffer().rope().len_chars();
             let moved = after as isize - before as isize;
             if moved != 0 {
@@ -577,7 +591,8 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         ) || matches!(
             key,
             Key::Char('i' | 'a' | 'I' | 'A' | 'o' | 'O' | 'c') | Key::Alt('c')
-        ),
+        // `C-a`／`C-x` 給每一段各加各的（#405 Phase 3）。
+        ) || matches!(key, Key::Ctrl('a') | Key::Ctrl('x')),
         _ => false,
     }
 }
