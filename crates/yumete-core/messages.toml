@@ -3830,6 +3830,13 @@ zhs = "没有记号「{0}」"
 en = "no mark '{0}'"
 
 [[message]]
+# 按了 g. 可是這一份稿子這一趟還沒改過
+key = "goto.nothing-changed-yet"
+zht = "這一份還沒改過"
+zhs = "这一份还没改过"
+en = "nothing has been changed here yet"
+
+[[message]]
 # 按標題序號跳，序號超出標題數
 key = "goto.only-n-headings"
 zht = "只有 {0} 條標題"
@@ -4639,6 +4646,13 @@ key = "hint.goto.jump-labels"
 zht = "一眼跳到屏幕上任何地方"
 zhs = "一眼跳到屏幕上任何地方"
 en = "jump anywhere on the screen"
+[[message]]
+# g 選單裏的 . ——回到這一份稿子最後改動的地方
+key = "hint.goto.last-change"
+zht = "回到最後改動的地方"
+zhs = "回到最后改动的地方"
+en = "back to the last change"
+
 [[message]]
 # g 組：行首／行尾
 key = "hint.goto.line-start-or-end"

@@ -16807,3 +16807,46 @@ fn the_markup_object_is_bound_to_the_syntax() {
     assert_eq!(ed.selection(), (2, 3), "什麼都沒選中，還是光標那一格");
     assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
 }
+
+/// **`g.` 回到這一份稿子最後改動的地方**（helix 的 `goto_last_modification`）。
+#[test]
+fn the_goto_dot_key_comes_back_to_the_last_change() {
+    let mut ed = typed("第一行\n第二行\n第三行\n第四行\n第五行\n");
+    press(&mut ed, "gg");
+    assert!(ed.status().is_empty() || !ed.status().contains("最後"));
+
+    // 在第三行改一個字。
+    ed.goto_line(3);
+    press(&mut ed, "ll");
+    press(&mut ed, "d");
+    let rope = ed.current_buffer().rope().clone();
+    let changed = rope.char_to_line(ed.sel.head());
+    assert_eq!(changed, 2, "改的是第三行");
+
+    // 走開，再按 `g.` 回來。
+    press(&mut ed, "gg");
+    let rope = ed.current_buffer().rope().clone();
+    assert_eq!(rope.char_to_line(ed.sel.head()), 0, "先走到檔首");
+    press(&mut ed, "g.");
+    let rope = ed.current_buffer().rope().clone();
+    assert_eq!(rope.char_to_line(ed.sel.head()), 2, "回到第三行");
+
+    // ⚠️ `C-o` 回得去，因為 `g.` 也記一格跳轉。
+    ed.on_key(Key::Ctrl('o'));
+    let rope = ed.current_buffer().rope().clone();
+    assert_eq!(rope.char_to_line(ed.sel.head()), 0, "C-o 退回檔首");
+}
+
+/// 還沒改過的稿子按 `g.`，說一句而不是跳到第 0 個字。
+#[test]
+fn the_goto_dot_key_says_so_when_nothing_has_changed() {
+    // ⚠️ `typed()` 自己就是打字打出來的，那已經算改過了——所以這一條要一個沒動過的。
+    let mut ed = Editor::new();
+    let _ = ed.current_buffer_mut().insert(0, "第一行\n第二行\n");
+    ed.current_buffer_mut().reset_last_edit_for_test();
+    ed.goto_line(2);
+    let before = ed.sel.head();
+    press(&mut ed, "g.");
+    assert_eq!(ed.sel.head(), before, "光標沒動");
+    assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
+}
