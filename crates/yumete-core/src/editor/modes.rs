@@ -74,6 +74,32 @@ impl Editor {
         )
     }
 
+    /// **主選區以外的那幾段**，各自照 [`Self::selection`] 的辦法撐開一個字素
+    /// （#405，2026-09-28）。
+    ///
+    /// ⚠️ **塌着的那些也要交出來。** 主選區塌着的時候有光標替它說話——橫排是終端自己
+    /// 那個，竪排是畫進頁面的反白方塊——而次選區沒有光標，它塌着的時候能被看見的只有
+    /// 它站的那一格底色。`C` 往下複製出來的那一串空光標全靠這個。
+    ///
+    /// 只有一段的時候回空，所以在沒有人造出第二段之前，畫面一格不動。
+    pub fn secondary_selections(&self) -> Vec<(usize, usize)> {
+        if !self.sel.is_plural() {
+            return Vec::new();
+        }
+        let rope = self.current_buffer().rope();
+        let insert = self.mode == Mode::Insert;
+        self.sel
+            .secondaries()
+            .map(|one| {
+                let (start, end) = one.span();
+                match insert {
+                    true => (start, end),
+                    false => (start, motion::next_grapheme(rope, end)),
+                }
+            })
+            .collect()
+    }
+
     /// The half-open range the cursor and anchor literally span, before the
     /// cursor's own grapheme is added. What motions and the caret work in.
     pub(super) fn span(&self) -> (usize, usize) {
