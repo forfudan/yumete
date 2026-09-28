@@ -3626,6 +3626,20 @@ zhs = "已经是最新的了"
 en = "already at the newest change"
 
 [[message]]
+# Insert 裏按了 C-r，可是接着按的不是一個寄存器名
+key = "edit.register-cancelled"
+zht = "沒插——C-r 後面要一個寄存器的名字，無名的是引號"
+zhs = "没插——C-r 后面要一个寄存器的名字，无名的是引号"
+en = "nothing inserted: C-r wants a register name, or a quote for the unnamed one"
+
+[[message]]
+# Insert 裏按 C-r 之後指名的那個寄存器是空的
+key = "edit.register-is-empty"
+zht = "那個寄存器是空的"
+zhs = "那个寄存器是空的"
+en = "that register is empty"
+
+[[message]]
 # 撤銷，已經到最早
 key = "edit.undo-at-oldest"
 zht = "已經是最早的了"
