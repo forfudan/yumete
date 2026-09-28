@@ -98,9 +98,12 @@ impl Editor {
             .then(|| (self.current_buffer().id(), self.sel.head()));
         let outcome = match self.mode {
             Mode::Normal => {
-                match multi::each_selection_key(&self.pending, key) {
-                    true => self.each_selection(|e| e.on_normal_key(key)),
-                    false => self.on_normal_key(key),
+                if multi::each_selection_key(&self.pending, key) {
+                    self.each_selection(|e| e.on_normal_key(key));
+                } else if multi::edits_every_selection(&self.pending, key) {
+                    self.edit_each(|e| e.on_normal_key(key));
+                } else {
+                    self.on_normal_key(key);
                 }
                 KeyOutcome::Continue
             }

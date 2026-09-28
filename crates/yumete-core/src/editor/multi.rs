@@ -138,6 +138,67 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
+    /// **逐段各編輯一次：從後往前做，只留一個撤銷點**（#405 Phase 1 第五步）。
+    ///
+    /// 和 [`Self::each_selection`] 是同一個形狀，多兩件事。
+    ///
+    /// ⚠️ **一、從後往前。** 一次編輯會把它後面所有的下標都挪掉，所以先做下標最大的那一
+    /// 段：輪到前面那幾段的時候，它們記着的下標還是對的。
+    ///
+    /// ⚠️ **二、已經算完的結果要跟着挪。** 從後往前保住的是**輸入**，不是輸出：做完第
+    /// 五段再去做第三段，第三段那一刀會把第四、第五段的新位置一起推走。所以每做完一段
+    /// 就量一次文本長度的差，把手上收着的那幾段各挪一次。
+    ///
+    /// ⚠️ **三、一個撤銷點。** `what` 自己會叫 `snapshot`，N 段就是 N 個撤銷點，按一次
+    /// `u` 只退回去一段。這裏先自己報一個點，然後開一個 undo group 把裏面那 N 次
+    /// `snapshot` 全堵掉（`buffer.rs` 的 `begin_undo_group`），做完再放開。
+    pub(super) fn edit_each(&mut self, what: impl Fn(&mut Self)) {
+        if !self.sel.is_plural() {
+            what(self);
+            return;
+        }
+        self.snapshot();
+        let grouping = self.current_buffer_mut().begin_undo_group();
+        let was = self.sel.clone();
+        let primary = was.primary();
+        let pending = self.pending.clone();
+        let count = self.count;
+        let mut out: Vec<Range> = Vec::with_capacity(was.len());
+        let mut which = 0;
+        let ranges: Vec<Range> = was.iter().copied().collect();
+        for (nth, one) in ranges.iter().enumerate().rev() {
+            let before = self.current_buffer().rope().len_chars();
+            self.sel = crate::selection::Selections::one(*one);
+            self.pending = pending.clone();
+            self.count = count;
+            what(self);
+            let after = self.current_buffer().rope().len_chars();
+            let moved = after as isize - before as isize;
+            if moved != 0 {
+                let top = after;
+                for done in out.iter_mut() {
+                    let shift = |at: usize| {
+                        ((at as isize + moved).max(0) as usize).min(top)
+                    };
+                    done.anchor = shift(done.anchor);
+                    done.head = shift(done.head);
+                }
+            }
+            if *one == primary {
+                which = nth;
+            }
+            out.push(self.sel.primary());
+        }
+        // 收的時候是從後往前收的，擺回去。⚠️ `which` 記的是**原來那一組**裏的下標，
+        // 反過來之後纔對得上。
+        out.reverse();
+        self.current_buffer_mut().end_undo_group(grouping);
+        let merged = self.sel.rebuild(out, which);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
     /// **只留主選區**（`,`）。
     pub(super) fn keep_primary_selection(&mut self) {
         match self.sel.keep_primary() {
@@ -205,6 +266,28 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
             matches!(key, crate::input::Key::Char('h' | 's' | 'l'))
         }
         super::Pending::None => moves_every_selection(key),
+        _ => false,
+    }
+}
+
+/// **哪些鍵要逐段各編輯一次**（#405 Phase 1 第五步）。
+///
+/// ⚠️ **`c`／`A-c` 不在裏面，而它們是編輯。** 它們刪完就進插入模式，而插入模式下 N 個
+/// 光標一起打字是另一件事（每按一鍵要在 N 處各寫一次，還要和輸入法的 preedit 對上）。
+/// 刪了那一半、打字只落在主選區上，是比「只作用在主選區」更難看懂的狀態。所以整個
+/// `c` 族先只動主選區，等插入模式那一步做完再收進來。
+///
+/// ⚠️ **`y` 也不在。** 複製不改文本，可是 N 段複製出來要在寄存器裏怎麽擺（helix 是各存
+/// 一格、貼的時候一段對一段）是寄存器那一族的事，不是這一步的。
+pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input::Key) -> bool {
+    use crate::input::Key;
+    match pending {
+        // `r` 補上的那一個字符：逐段各換各的。
+        super::Pending::Replace => true,
+        super::Pending::None => matches!(
+            key,
+            Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P') | Key::Char('>' | '<')
+        ),
         _ => false,
     }
 }

@@ -16456,3 +16456,57 @@ fn a_motion_moves_every_selection_not_just_the_primary() {
     press(&mut ed, "gg");
     assert_eq!(ed.sel.len(), 3, "gg 只動主選區，別的兩段留在原處");
 }
+
+/// **編輯逐段各做一次，而且只留一個撤銷點**（#405 Phase 1 第五步）。
+#[test]
+fn an_edit_runs_on_every_selection_and_undoes_as_one() {
+    let mut ed = typed("甲乙丙\n丁戊己\n庚辛壬\n");
+    press(&mut ed, "ggCC");
+    assert_eq!(ed.sel.len(), 3, "三行同一列各一段");
+
+    press(&mut ed, "d");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "乙丙\n戊己\n辛壬\n",
+        "三行的第一個字一起沒了"
+    );
+    assert_eq!(ed.sel.len(), 3, "三段都還在");
+
+    // ⚠️ **一次 `u` 全退回去。** N 段就是 N 次 snapshot，不堵住的話按一次只退一行。
+    press(&mut ed, "u");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "甲乙丙\n丁戊己\n庚辛壬\n",
+        "一個撤銷點"
+    );
+}
+
+/// ⚠️ **前面那一刀會把後面幾段的新位置推走**，所以從後往前做的時候收着的結果要跟着挪。
+///
+/// ⚠️ **這一條驗過它抓不抓得住**：把 `edit_each` 裏挪位那一段關掉，它報
+/// `[(0,0), (1,2), (3,0)]` —— 第二段歪了兩格，第三段整個跑到第四行去了。
+#[test]
+fn the_selections_after_an_edit_land_where_the_text_actually_is() {
+    let mut ed = typed("甲乙丙丁戊\n己庚辛壬癸\n子丑寅卯辰\n");
+    press(&mut ed, "ggCC");
+    // 各選各行的頭兩個字：`v` 撐開再 `l`。
+    press(&mut ed, "vl");
+    press(&mut ed, "d");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "丙丁戊\n辛壬癸\n寅卯辰\n",
+        "三行各去掉頭兩個字"
+    );
+
+    // 三段各落在各自那一行的行首，而不是被前面那一刀推歪。
+    let rope = ed.current_buffer().rope().clone();
+    let where_: Vec<(usize, usize)> = ed
+        .sel
+        .iter()
+        .map(|r| {
+            let line = rope.char_to_line(r.head);
+            (line, r.head - rope.line_to_char(line))
+        })
+        .collect();
+    assert_eq!(where_, vec![(0, 0), (1, 0), (2, 0)], "各在各行的行首");
+}
