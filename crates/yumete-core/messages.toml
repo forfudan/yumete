@@ -1,8 +1,8 @@
-# What the editor says — Feature #151.
+# What the edito()r ()says() — F()eatu()re ()#()()151.
 
 # One block per message, keyed by a **tag**: a short English name for the
-# condition that says it. The tag is what the code holds; the sentences under it
-# are free to be rewritten, and rewriting them here is how they change on the
+# condition that says it. The tag is what the code holds; the sentences under i（
+# are free to be rewritten, and ()rewriting them here is how they change on the
 # screen. That is the whole point of the file — the words move, the tag does
 # not.
 #
@@ -4850,11 +4850,25 @@ zhs = "收下"
 en = "keep it"
 
 [[message]]
+# ' 之後那張小表：一個標記記在哪（檔名 第幾行）
+key = "hint.mark.at"
+zht = "{0} 第 {1} 行"
+zhs = "{0} 第 {1} 行"
+en = "{0} line {1}"
+
+[[message]]
 # 記號組的提示：' 回到
 key = "hint.mark.go-back"
 zht = "' 回到"
 zhs = "' 回到"
 en = "' go back to"
+
+[[message]]
+# ' 之後那張小表：標記指着的那個稿子已經關了
+key = "hint.mark.gone"
+zht = "（那個稿子關了）"
+zhs = "（那个稿子关了）"
+en = "(that buffer is closed)"
 
 [[message]]
 # 記號組：叫什麼名字
@@ -4864,18 +4878,18 @@ zhs = "叫什么名字"
 en = "name it"
 
 [[message]]
+# ' 之後那張小表：一個位置都還沒記過（2026-09-29 作者寫的那一句）
+key = "hint.mark.none-yet"
+zht = "（無位置記錄）"
+zhs = "（无位置记录）"
+en = "(nothing marked yet)"
+
+[[message]]
 # 記號組的提示：M 記住這裏
 key = "hint.mark.set-here"
 zht = "M 記住這裏"
 zhs = "M 记住这里"
 en = "M mark this place"
-
-[[message]]
-# ` 之後那張小表：跳回哪一個標記
-key = "hint.mark.which-one"
-zht = "哪一個"
-zhs = "哪一个"
-en = "which one"
 
 [[message]]
 # m 組：連同
@@ -4950,9 +4964,9 @@ en = "next one (Shift-Tab goes back)"
 [[message]]
 # " 之後那張小表：# 那一行（選區序號，#405 Phase 3）
 key = "hint.register.hash"
-zht = "該選區之序號"
-zhs = "该选区之序号"
-en = "this selection's number"
+zht = "（該選區之序號）"
+zhs = "（该选区之序号）"
+en = "(this selection's number)"
 
 [[message]]
 # " 之後那張小表的標題（2026-09-29 作者定的名字）
