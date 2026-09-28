@@ -17,6 +17,19 @@ impl Editor {
                 return;
             }
         }
+        // `C-r` 在等寄存器的名字（2026-09-28）。⚠️ 和 `Pending::UndoBreak` 一樣，這一格
+        // 要在這裏吞：`Pending` 的分派只在 Normal 那一支跑。
+        if self.pending == Pending::Register {
+            self.pending = Pending::None;
+            match key {
+                // `"` 是無名的那一個，同 vi。
+                Key::Char('"') => self.insert_register(None),
+                Key::Char(name) => self.insert_register(Some(name)),
+                // 別的鍵當成「算了」，不往下走——不然 `C-r` 之後按 `Esc` 會退出插入。
+                _ => self.status = say!("edit.register-cancelled"),
+            }
+            return;
+        }
         // **服務器提的那張單子，開着的時候先歸它**（#53 ④）。
         //
         // ⚠️ **`Tab` 在這裏本來就有主人**（引用補全，#418）：單子開着 `Tab` 是
@@ -198,6 +211,12 @@ impl Editor {
             // back a 詞 the candidate list got wrong meant holding Backspace down.
             Key::Ctrl('w') => self.delete_word_before_cursor(),
             Key::Ctrl('u') => self.delete_to_line_start(),
+            // readline 的另一半（2026-09-28）。`C-u` 早就有了，一個只做了一半的對子
+            // 比兩個都沒有更難記。
+            Key::Ctrl('k') => self.delete_to_line_end(),
+            // **`C-r` 把一個寄存器插進來**，vi 的拼法。⚠️ 它在等一個字符——`"` 是無名
+            // 的那一個（同 vi），別的字母是具名的。
+            Key::Ctrl('r') => self.pending = Pending::Register,
             // Across the break, as in 常模 — outside a cell, where the two
             // arms above hold the arrows to the cell they are writing in.
             Key::Left => self.move_horizontal(motion::prev_grapheme),

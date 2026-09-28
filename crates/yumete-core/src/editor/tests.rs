@@ -16916,3 +16916,52 @@ fn the_sentence_object_takes_the_sentence_the_cursor_is_in() {
     assert_eq!(took("One two. Three four.", "mis"), "One two.");
     assert_eq!(took("One two. Three four.", "mas"), "One two. ");
 }
+
+/// **Insert 裏的 `C-r`（插寄存器）和 `C-k`（刪到行尾）**（2026-09-28，§5.17 第五條）。
+#[test]
+fn insert_can_paste_a_register_and_kill_to_the_line_end() {
+    // 先複製一個詞，再在別處插入模式裏把它放下來。
+    let mut ed = typed("阿寧\n他說：\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "vly"); // 複製「阿寧」
+    ed.goto_line(2);
+    press(&mut ed, "gl");
+    press(&mut ed, "a"); // 進插入，落在行尾
+    ed.on_key(Key::Ctrl('r'));
+    ed.on_key(Key::Char('"'));
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "阿寧\n他說：阿寧\n",
+        "{:?}",
+        ed.current_buffer().text()
+    );
+
+    // ⚠️ **一個撤銷點**，不是兩個——這正是這個鍵存在的理由。
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "阿寧\n他說：\n");
+
+    // `C-r` 後面按了別的鍵：什麼都不插，而且**不退出插入模式**。
+    let mut ed = typed("甲\n");
+    press(&mut ed, "ggi");
+    ed.on_key(Key::Ctrl('r'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Insert, "還在插入模式：{}", ed.status());
+    assert!(!ed.status().is_empty(), "要說一句");
+
+    // `C-k` 刪到行尾。
+    let mut ed = typed("那年冬天，雪下得早。\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "4li"); // 停在「，」上，進插入
+    ed.on_key(Key::Ctrl('k'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "那年冬天\n");
+
+    // 已經在行尾的時候什麼都不做——不吃那個換行。
+    let mut ed = typed("甲\n乙\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "a");
+    ed.on_key(Key::Ctrl('k'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "甲\n乙\n", "沒有把下一行拉上來");
+}

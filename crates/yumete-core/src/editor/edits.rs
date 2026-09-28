@@ -347,6 +347,49 @@ impl Editor {
     }
 
     /// Take back everything from the start of the line to the cursor (`C-u`).
+    /// **刪到行尾**（Insert 裏的 `C-k`，2026-09-28）。
+    ///
+    /// `C-u` 是它的另一半，早就有了。這一對在 readline 裏是一起的，而一個只做了一半的
+    /// 對子比兩個都沒有更難記。
+    ///
+    /// ⚠️ **不跨行**：光標已經在行尾的時候什麼都不做，不去吃那個換行。readline 的
+    /// `C-k` 在行尾也不吃下一行。
+    pub(super) fn delete_to_line_end(&mut self) {
+        let at = self.sel.head();
+        let rope = self.current_buffer().rope();
+        // ⚠️ **不是 `line_last`**：那一支回的是最後一個字自己的下標，用它當上界會把行
+        // 末那一個字留下。要的是這一行的**內容**有多長（不含換行）。
+        let line = rope.char_to_line(at);
+        let to = rope.line_to_char(line) + crate::zong::line_chars(rope, line).len();
+        if to <= at {
+            return;
+        }
+        self.snapshot();
+        if self.edit_remove(at..to) {
+            self.set_cursor(at);
+        }
+    }
+
+    /// **把一個寄存器的內容插進來**（Insert 裏的 `C-r`，2026-09-28）。
+    ///
+    /// ⚠️ **省掉的是一個撤銷點。** 從前寫到一半要放一個剛複製的人名，得 `Esc`、`p`、
+    /// 再 `i` 回來——而這個倉的規矩是「一次插入是一次撤銷」（§5.12.3），那一出一進
+    /// 白白多出一個撤銷點，一句話從此要按兩次 `u` 纔退得乾淨。
+    pub(super) fn insert_register(&mut self, name: Option<char>) {
+        let text = match name {
+            Some(name) => self.registers.get(&name).cloned().unwrap_or_default(),
+            None => self.register.clone(),
+        };
+        if text.is_empty() {
+            self.status = say!("edit.register-is-empty");
+            return;
+        }
+        let at = self.sel.head();
+        if self.edit_insert(at, &text) {
+            self.set_cursor(at + text.chars().count());
+        }
+    }
+
     pub(super) fn delete_to_line_start(&mut self) {
         let at = self.sel.head();
         let from = motion::line_start(self.current_buffer().rope(), at).max(self.insert_floor());
