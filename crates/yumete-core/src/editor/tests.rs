@@ -16965,3 +16965,99 @@ fn insert_can_paste_a_register_and_kill_to_the_line_end() {
     ed.on_key(Key::Esc);
     assert_eq!(ed.current_buffer().text(), "甲\n乙\n", "沒有把下一行拉上來");
 }
+
+/// **`A-s` 把每一段選區按行切開**（#405 Phase 2，helix 的
+/// `split_selection_on_newline`）。
+#[test]
+fn alt_s_splits_a_selection_into_one_per_line() {
+    let mut ed = typed("甲一\n乙二\n丙三\n丁四\n");
+    press(&mut ed, "gg");
+    // 選中頭三行：`x` 選一行，再按兩次往下延。
+    press(&mut ed, "xxx");
+    assert_eq!(ed.sel.len(), 1, "還是一段");
+
+    ed.on_key(Key::Alt('s'));
+    assert_eq!(ed.sel.len(), 3, "一行一段：{:?}", ed.sel.iter().collect::<Vec<_>>());
+
+    // 三段各在各行，而且各自蓋住那一行的正文。
+    let rope = ed.current_buffer().rope().clone();
+    let got: Vec<String> = ed
+        .sel
+        .iter()
+        .map(|r| {
+            let (a, b) = ed.drawn(*r);
+            rope.slice(a..b).chars().collect()
+        })
+        .collect();
+    assert_eq!(got, vec!["甲一", "乙二", "丙三"], "每一段就是那一行");
+
+    // ⚠️ 只佔一行的選區切完還是一段，不是零段。
+    let mut ed = typed("甲一\n乙二\n");
+    press(&mut ed, "ggx");
+    ed.on_key(Key::Alt('s'));
+    assert_eq!(ed.sel.len(), 1, "一行切不出第二段");
+}
+
+/// **正則那四個**（`s`／`S`／`A-k`／`A-K`，#405 Phase 2）。
+///
+/// ⚠️ 它們開的是**搜索那一扇**提示行，所以拼音、簡繁、模糊、正則四個開關一起管用，
+/// 中文也照打——helix 的 `s` 只認正則。
+#[test]
+fn the_regex_family_sifts_the_selections() {
+    let after = |steps: &str| {
+        let mut ed = typed("甲一 甲二 甲三\n乙一 乙二\n丙一 甲四\n");
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed
+    };
+
+    // `s` 在每一段選區裏選出所有匹配。全選之後找「甲」，四處。
+    // ⚠️ `press` 不認 `\n`，Enter 要自己按——它逐字元送 `Key::Char`。
+    let mut ed = after("%s甲");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), 4, "四個甲：{:?}", ed.status());
+
+    // `A-k` 只留下匹配的那幾段：按行切開之後，帶「甲」的有兩行。
+    let mut ed = after("%");
+    ed.on_key(Key::Alt('s'));
+    assert_eq!(ed.sel.len(), 3, "先切成三行");
+    ed.on_key(Key::Alt('k'));
+    for c in "甲".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), 2, "第一行和第三行有甲");
+
+    // `A-K` 反過來，只剩沒有「甲」的那一行。
+    let mut ed = after("%");
+    ed.on_key(Key::Alt('s'));
+    ed.on_key(Key::Alt('K'));
+    for c in "甲".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), 1, "只剩第二行");
+
+    // ⚠️ **一處都沒有的時候選區不動**，並且說一句——清空是沒有這個狀態的。
+    let mut ed = after("%");
+    let before = ed.sel.len();
+    press(&mut ed, "s戊");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), before, "沒動");
+    assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
+}
+
+/// ⚠️ **`Esc` 退出去要把那一格放掉**，不然下一次按 `/` 會做上一次那件事。
+#[test]
+fn leaving_the_sift_prompt_does_not_leave_the_key_armed() {
+    let mut ed = typed("甲一 甲二\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "%");
+    press(&mut ed, "s");
+    ed.on_key(Key::Esc);
+    // 現在按普通的搜索：它該是搜索，不該去篩選區。
+    let before = ed.sel.len();
+    press(&mut ed, "/甲");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), before, "那是一次搜索，不是一次篩選");
+}

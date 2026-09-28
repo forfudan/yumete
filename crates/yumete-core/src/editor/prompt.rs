@@ -502,7 +502,11 @@ impl Editor {
             self.history_at = None;
         }
         match key {
-            Key::Esc => self.close_prompt(),
+            // ⚠️ 退出去的時候也要把那一格放掉，不然下一次按 `/` 會做上一次那件事。
+            Key::Esc => {
+                self.sift = None;
+                self.close_prompt();
+            }
             // Tab takes the rest of the last pattern, so searching for the same
             // thing again is a keystroke rather than retyping it.
             Key::Tab => self.adopt_ghost(),
@@ -514,6 +518,11 @@ impl Editor {
                 remember_line(&mut self.search_history, &pattern);
                 if !pattern.is_empty() {
                     self.last_search = pattern;
+                }
+                // **正則那一族借這一扇**（#405 Phase 2）：同一條規則，做的是另一件事。
+                if let Some(what) = self.sift.take() {
+                    self.search.query = self.last_search.clone();
+                    return self.sift(what);
                 }
                 let forward = self.search_forward;
                 self.repeat_search(forward);
