@@ -6225,6 +6225,16 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
             Style::default().fg(ink.purple()),
             yumete_config::rung::BAND,
         ),
+        // **公式和代碼是同一種東西**：一個要逐字讀的字面。同一個紫，**但沒有那塊
+        // 底色**——一段公式常常佔半行，給它一塊底等於在正文裏開一個方塊；而代碼
+        // 是行內的一小截，那塊底正是它的邊界（2026-09-28）。
+        Kind::Math => Style::default().fg(ink.purple()),
+        // 一個交叉引用就是一條鏈接，指向這本書裏的別處。
+        Kind::Ref => Style::default()
+            .fg(ink.azure())
+            .add_modifier(Modifier::UNDERLINED),
+        // 標籤是被指的那一頭——它不是正文，是作者留給自己的一個錨。
+        Kind::Label => Style::default().fg(ink.furniture()),
         // CROSSED_OUT is not everywhere, so the rung carries it as well.
         Kind::Strike => Style::default()
             .fg(ink.furniture())

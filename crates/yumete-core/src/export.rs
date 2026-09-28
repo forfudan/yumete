@@ -302,6 +302,16 @@ fn marked(
         (Kind::Code, Dialect::Html) => format!("<code>{text}</code>"),
         (Kind::Strike, Dialect::Html) => format!("<s>{text}</s>"),
         (Kind::Highlight, Dialect::Html) => format!("<mark>{text}</mark>"),
+        // ⚠️ **公式原樣留着**（2026-09-28 修）。從前它借 `Kind::Code`，於是導出的
+        // Typst 裏是 `` `a + b` ``——一條反引號在 Typst 裏是原樣文本，公式就此不是公
+        // 式了。HTML 那一端也留着 `$…$`：瀏覽器自己不認，可是掛了 MathJax 的頁認，
+        // 而換成 `<code>` 是連掛了也認不出來。
+        (Kind::Math, _) => format!("${text}$"),
+        // 交叉引用在 Typst 裏原樣就對；HTML 沒有對應的東西，留着字面比丟掉好。
+        (Kind::Ref, _) => text.to_string(),
+        // 標籤是稿子的腳手架：Typst 要，書不要。
+        (Kind::Label, Dialect::Typst) => text.to_string(),
+        (Kind::Label, Dialect::Html) => String::new(),
         (Kind::Strong, Dialect::Typst) => format!("*{text}*"),
         (Kind::Emphasis, Dialect::Typst) => format!("_{text}_"),
         (Kind::Code, Dialect::Typst) => format!("`{text}`"),
@@ -534,6 +544,24 @@ mod tests {
             title: "第一章".to_string(),
             paper: Paper::A5,
         }
+    }
+
+    /// ⚠️ **導出永遠按 Markdown 解析源檔**（`export.rs` 那一句 `markdown::spans`），
+    /// 不看緩衝區的語法。所以 Typst 那幾個 `Kind`（`Math`／`Ref`／`Label`）到不了這裏。
+    ///
+    /// 這一條記的是**現狀**：2026-09-28 有一份調研說「`$math$` 借 `Kind::Code`，導致
+    /// 導出的時候變成反引號」，查下來**那條路走不通**——Markdown 的解析器根本不認
+    /// `$…$`，它就是一串普通字符，原樣導出去。真要讓 `:export` 讀得懂 Typst 源，是另一
+    /// 件事（要把語法傳進來）。
+    #[test]
+    fn export_reads_its_input_as_markdown_whatever_it_writes() {
+        let mut s = style();
+        s.vertical = false;
+        let out = export("$a + b$\n", Format::Typst, &s);
+        // 導出的是**轉義掉的字面美元號**：Markdown 源裏的 `$` 就是一個 `$`，而 Typst
+        // 那一端 `$` 開公式，所以寫出去要轉義。這是對的。
+        assert!(out.contains(r"\$a + b\$"), "{out}");
+        assert!(!out.contains("`a + b`"), "沒有變成反引號：{out}");
     }
 
     #[test]

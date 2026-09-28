@@ -425,10 +425,10 @@ fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
         .enumerate()
         .filter_map(|(line, raw)| {
             let raw = raw.trim_end_matches(['\n', '\r']);
-            if !raw.starts_with('=') {
-                return None;
-            }
-            let level = raw.chars().take_while(|&c| c == '=').count();
+            // ⚠️ **判準走 `heading_marks`，和着色那一支、大綱那一支同一份**
+            // （2026-09-28）。從前這裏既不要求 `=` 後面有空白也不封頂六級，於是同一行
+            // 在正文裏不畫成標題、卻出現在這張清單上。
+            let level = crate::markdown::heading_marks(raw, '=')?;
             let title = raw.trim_start_matches('=').trim();
             (!title.is_empty()).then(|| (line, level, title.to_string()))
         })

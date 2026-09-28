@@ -1580,23 +1580,13 @@ impl Editor {
             ) {
                 continue;
             }
-            let mark = trimmed.chars().next().filter(|&c| c == want);
-            let Some(mark) = mark else { continue };
-            let depth = trimmed.chars().take_while(|&c| c == mark).count();
-            let rest = &trimmed[depth..];
-            // ⚠️ **井號後面要有一個空白**（2026-09-26 報的：「比如 Issue #128，
-            // 如果 #128 手动换行了，那么 #128 会被认定为一个一级标题」）。
-            //
-            // 這不是歧義，是 CommonMark 早就判過的一條（§4.2 ATX headings：
-            // 「The opening sequence of #s must be followed by spaces or tabs,
-            // or by the end of line」）。⚠️ **Markdown 1.0 原版是寬鬆的**，`#foo`
-            // 算標題——那條規矩存在的理由正是 `#128`、`#!/bin/sh`、`#include` 這
-            // 一族。Typst 的 `=` 同樣要求後跟空白。
-            //
-            // 行尾那一種（光一個 `#`）底下那句 `title.is_empty()` 已經擋掉了。
-            if !rest.is_empty() && !rest.starts_with([' ', '\t']) {
+            // ⚠️ **判準走 `heading_marks`，三處同一份**（2026-09-28）。底下那一大段
+            // 說明搬進了那一支。這裏跟着多了一條：**七個井號不是標題**，CommonMark
+            // 封頂六級，而從前這裏不封頂。
+            let Some(depth) = crate::markdown::heading_marks(trimmed, want) else {
                 continue;
-            }
+            };
+            let rest = &trimmed[depth..];
             let title = rest.trim();
             // `##` with nothing after it is a rule, not a heading; and a `=`
             // run on its own is Typst's own heading marker only when titled.

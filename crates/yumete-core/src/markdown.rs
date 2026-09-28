@@ -36,6 +36,16 @@ pub enum Kind {
     Code,
     /// `~~struck~~`.
     Strike,
+    /// **`$a + b$`** — Typst 的數學（2026-09-28）。
+    ///
+    /// ⚠️ **從前它借 `Kind::Code`**，於是 `:export` 把公式導成 `` `a + b` ``——一條反引
+    /// 號在 Typst 裏是**原樣文本**，公式就此不是公式了。借用在屏幕上看不出來（兩者
+    /// 都該畫成一個要逐字讀的字面），是導出的時候壞的。
+    Math,
+    /// **`@定理一`** — Typst 的交叉引用（2026-09-28）。整串連 `@` 一起。
+    Ref,
+    /// **`<定理一>`** — Typst 的標籤，被 [`Kind::Ref`] 指的那一頭。整串連尖括號一起。
+    Label,
     /// The text of a heading line, after its hashes.
     Heading,
     /// The visible text of a `[link](target)`.
@@ -594,6 +604,35 @@ pub fn hidden(spans: &[Span], selected: Option<(usize, usize)>) -> Vec<(usize, u
         .collect()
 }
 
+/// **這一行是不是標題，是幾級。**
+///
+/// `mark` 是 `#`（Markdown）或者 `=`（Typst）。規矩一條：一到六個記號，後面跟着**空白**
+/// 或者行尾。
+///
+/// ⚠️ **後面那個空白是 CommonMark §4.2 明寫的**，不是我們加嚴的：`#128` 是一段話，
+/// 不是標題。Markdown 1.0 原版寬鬆，而那條規矩存在的理由正是 `#128`、`#!/bin/sh`、
+/// `#include` 這一族。Typst 的 `=` 同樣要求後跟空白。
+///
+/// ⚠️ **全角空格也算空白**——中文作者最常見的縮進寫法是 `= 　第一章`。
+///
+/// ⚠️ **標題本身空不空由呼叫方決定。** 大綱要求非空（光一個 `##` 是一條線，不是標題），
+/// 而着色那一支不要求。
+///
+/// ⚠️ **這一支存在的理由是樹裏本來有三份不一樣的判準**（2026-09-28 查出來的）：着色那一
+/// 份要求空白、大綱那一份要求空白但不封頂六級、`typst_headings` 兩樣都不要求。同一行在
+/// 正文裏不畫成標題、卻出現在大綱上。
+pub fn heading_marks(line: &str, mark: char) -> Option<usize> {
+    let level = line.chars().take_while(|&c| c == mark).count();
+    if level == 0 || level > 6 {
+        return None;
+    }
+    match line.chars().nth(level) {
+        None => Some(level),
+        Some(c) if c.is_whitespace() => Some(level),
+        Some(_) => None,
+    }
+}
+
 /// A run of one line, in char indices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
@@ -643,11 +682,8 @@ pub fn spans(line: &str) -> Vec<Span> {
     // the rest of the line is still scanned for emphasis inside the title.
     let mut from = 0;
     let mut depth = 0u8;
-    let hashes = chars.iter().take_while(|&&c| c == '#').count();
-    // ⚠️ **井號後面要有一個空白**，CommonMark §4.2——`#128` 是一段話，不是標題。
-    // Tab 也算（2026-09-26 補上，和大綱那一支對齊：從前這裏只認空格，而大綱那邊
-    // 連空白都不要求，於是同一行在正文裏不畫成標題、卻出現在大綱上）。
-    if hashes > 0 && hashes <= 6 && matches!(chars.get(hashes), Some(' ' | '\t') | None) {
+    // 判準在 [`heading_marks`]，三處共用一支。
+    if let Some(hashes) = heading_marks(line, '#') {
         out.push(Span {
             start: 0,
             end: hashes,
@@ -1319,13 +1355,8 @@ pub mod typst {
         let mut at = 0usize;
 
         // A heading is `=` through `======`, and the rest of the line is it.
-        let equals = chars.iter().take_while(|&&c| c == '=').count();
-        // ⚠️ **全角空格也算空白**（2026-09-28）。從前這裏只認 `' '`，於是
-        // `= 　第一章`（中文作者最常見的縮進寫法）整行不上色。
-        if equals > 0
-            && equals <= 6
-            && chars.get(equals).is_none_or(|c| c.is_whitespace())
-        {
+        // 判準在 `super::heading_marks`，三處共用一支。
+        if let Some(equals) = super::heading_marks(line, '=') {
             push(&mut out, 0, equals, Kind::HeadingMark, 0);
             push(&mut out, equals, chars.len(), Kind::Heading, 0);
             at = equals;
@@ -1387,8 +1418,33 @@ pub mod typst {
             if chars[at] == '$' {
                 if let Some(close) = (at + 1..chars.len()).find(|&i| chars[i] == '$') {
                     push(&mut out, at, at + 1, Kind::Marker, construct);
-                    push(&mut out, at + 1, close, Kind::Code, construct);
+                    push(&mut out, at + 1, close, Kind::Math, construct);
                     push(&mut out, close, close + 1, Kind::Marker, construct);
+                    at = close + 1;
+                    construct += 1;
+                    continue;
+                }
+            }
+            // **`@定理一`** — 交叉引用（2026-09-28）。⚠️ 一個孤零零的 `@` 不是引用。
+            if chars[at] == '@' {
+                let end = (at + 1..chars.len())
+                    .take_while(|&i| ref_name(chars[i]))
+                    .last()
+                    .map(|i| i + 1);
+                if let Some(end) = end {
+                    push(&mut out, at, end, Kind::Ref, construct);
+                    at = end;
+                    construct += 1;
+                    continue;
+                }
+            }
+            // **`<定理一>`** — 標籤，被 `@` 指的那一頭。
+            if chars[at] == '<' {
+                let close = (at + 1..chars.len())
+                    .find(|&i| chars[i] == '>')
+                    .filter(|&c| c > at + 1 && (at + 1..c).all(|i| ref_name(chars[i])));
+                if let Some(close) = close {
+                    push(&mut out, at, close + 1, Kind::Label, construct);
                     at = close + 1;
                     construct += 1;
                     continue;
@@ -1583,7 +1639,15 @@ pub mod typst {
         at.max(from)
     }
 
+    /// 一個引用名裏許不許出現這個字符。
+    ///
+    /// ⚠️ 收漢字：Typst 的標籤名可以是中文，而這個編輯器是給寫中文的人用的。
+    fn ref_name(c: char) -> bool {
+        c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ':')
+    }
+
     /// Where the run closing the delimiter opened at `from` is.
+    ///
     /// **Typst 官方那條「詞內不算分隔符」**（`typst-syntax/src/lexer.rs:628` 的
     /// `in_word`，2026-09-28 照抄）。
     ///
@@ -1655,6 +1719,9 @@ mod typst_tests {
                 // Neither `spans` makes these — they are `diff::spans`'.
                 Kind::Gone => '-',
                 Kind::Added => '+',
+                Kind::Math => '$',
+                Kind::Ref => '@',
+                Kind::Label => '<',
                 _ => '?',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
@@ -1681,6 +1748,20 @@ mod typst_tests {
             "     ",
             "that is Markdown's, not Typst's"
         );
+    }
+
+    /// **公式、交叉引用、標籤各有自己的 `Kind`**（2026-09-28）。
+    ///
+    /// ⚠️ 公式從前借 `Kind::Code`，`:export` 因此把 `$a + b$` 導成 `` `a + b` ``——
+    /// 一條反引號在 Typst 裏是原樣文本，公式就此不是公式了。
+    #[test]
+    fn maths_and_references_are_not_code() {
+        assert_eq!(shape("$a + b$"), ".$$$$$.");
+        assert_eq!(shape("見 @定理一 那一節"), "  @@@@    ");
+        assert_eq!(shape("定理 <定理一>"), "   <<<<<");
+        // 一個孤零零的 `@` 不是引用，帶空格的尖括號也不是標籤。
+        assert_eq!(shape("a @ b"), "     ");
+        assert_eq!(shape("1 < 2 > 3"), "         ");
     }
 
     /// **Typst 官方那條「詞內不算分隔符」**（`typst-syntax/src/lexer.rs:628` 的
@@ -1985,6 +2066,10 @@ mod tests {
                 Kind::Added => '+',
                 // Only a fence's grammar makes these (`code::highlight`).
                 Kind::Token(_) => '~',
+                // Typst 那一支的三個（2026-09-28）。
+                Kind::Math => '$',
+                Kind::Ref => '@',
+                Kind::Label => '<',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
                 *slot = mark;
