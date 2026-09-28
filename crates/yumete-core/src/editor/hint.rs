@@ -49,8 +49,8 @@ impl Editor {
                 // would leave a reader unsure which one has them.
                 let what = crate::messages::say(crate::sidebar::Panel::from(kind).tag(), &[]);
                 return Hint::Keys(what, vec![
-                        ("j k", say!("hint.sidebar.move")),
-                        (back_to_text_key(), say!("hint.sidebar.back-to-text")),
+                        ("j k".into(), say!("hint.sidebar.move")),
+                        (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
                     ]);
             }
         }
@@ -76,9 +76,9 @@ impl Editor {
                 false => say!("hint.search.out-of-the-box"),
             };
             return Hint::Keys(say!("label.panel.search"), vec![
-                    ("Enter", say!("hint.search.go-look")),
-                    ("↑ ↓", say!("hint.search.next-cell")),
-                    ("Esc", out),
+                    ("Enter".into(), say!("hint.search.go-look")),
+                    ("↑ ↓".into(), say!("hint.search.next-cell")),
+                    ("Esc".into(), out),
                 ]);
         }
         // ⚠️ **這一行不再拿來預覽了**（2026-09-27 定，原話：「命令行现在不显示
@@ -96,7 +96,7 @@ impl Editor {
                 // 用的人各自撞上）。從前排頭的是 `/` 和 `d c a`，而砍在尾巴上的
                 // 是 `u 撤回`——一個是最不常用的，一個是按錯之後唯一的退路。英文
                 // 界面下整行要 170 欄纔寫得完，所以尾巴一定會被砍掉。
-                let mut keys: Vec<(&'static str, String)> = Vec::new();
+                let mut keys: KeyRows = Vec::new();
                 // **會改稿子的那三個排最前。** 它們只在替換那一檔活着，而它們是
                 // 這扇面板裏唯一沒有別處可學的鍵。
                 if self.search().replacing {
@@ -110,21 +110,21 @@ impl Editor {
                         }
                         _ => say!("hint.search.replace-here"),
                     };
-                    keys.push(("r", here));
-                    keys.push(("R", say!("hint.search.replace-all")));
-                    keys.push(("u", say!("hint.search.undo")));
+                    keys.push(("r".into(), here));
+                    keys.push(("R".into(), say!("hint.search.replace-all")));
+                    keys.push(("u".into(), say!("hint.search.undo")));
                 }
                 // The five switches are pressed by number and walked past
                 // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
-                keys.push(("1–7", say!("hint.search.switches")));
-                keys.push(("Enter", say!("hint.search.use-it")));
-                keys.push(("q", say!("hint.close")));
-                keys.push((back_to_text_key(), say!("hint.sidebar.back-to-text")));
-                keys.push(("/", say!("hint.search.new-word")));
+                keys.push(("1–7".into(), say!("hint.search.switches")));
+                keys.push(("Enter".into(), say!("hint.search.use-it")));
+                keys.push(("q".into(), say!("hint.close")));
+                keys.push((back_to_text_key().into(), say!("hint.sidebar.back-to-text")));
+                keys.push(("/".into(), say!("hint.search.new-word")));
                 // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
                 // 都不管用，而這一行擠不下說了也用不上的東西。
                 if self.search().takes_text() {
-                    keys.push(("d c a", say!("hint.search.edit-in-place")));
+                    keys.push(("d c a".into(), say!("hint.search.edit-in-place")));
                 }
                 let title = match self.search().replacing {
                     true => say!("label.panel.replace"),
@@ -144,11 +144,11 @@ impl Editor {
             // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，
             // 另外四個管用卻沒人知道（2026-09-23 審出來的）。
             return Hint::Keys(say!("hint.sidebar"), vec![
-                    ("j k J K g G", walking),
-                    ("Tab", say!("hint.sidebar.other-view")),
-                    ("w", say!("hint.sidebar.width")),
-                    (back_to_text_key(), say!("hint.sidebar.back-to-text")),
-                    ("q", say!("hint.close")),
+                    ("j k J K g G".into(), walking),
+                    ("Tab".into(), say!("hint.sidebar.other-view")),
+                    ("w".into(), say!("hint.sidebar.width")),
+                    (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
+                    ("q".into(), say!("hint.close")),
                 ]);
         }
         // A reference standing half-typed, with the panel already open under
@@ -156,7 +156,7 @@ impl Editor {
         // in Insert, so nobody would try it unasked (#418).
         if self.reference_open() {
             return Hint::Keys(say!("hint.reference"), vec![
-                ("Tab", say!("hint.reference.pick")),
+                ("Tab".into(), say!("hint.reference.pick")),
             ]);
         }
         // Standing on a footnote reference, the key that shows the note is
@@ -164,16 +164,16 @@ impl Editor {
         // could not guess from the page.
         if self.mode == Mode::Normal && self.note_tag_at_cursor().is_some() {
             return Hint::Keys(say!("hint.footnote"), vec![
-                ("gd", say!("hint.footnote.show-or-write")),
+                ("gd".into(), say!("hint.footnote.show-or-write")),
             ]);
         }
         match self.mode {
             Mode::Ruby if self.ruby_target.is_some() => {
-                Hint::Keys(say!("hint.reading"), vec![("Enter", say!("hint.keep-it")), ("Esc", say!("hint.cancel"))])
+                Hint::Keys(say!("hint.reading"), vec![("Enter".into(), say!("hint.keep-it")), ("Esc".into(), say!("hint.cancel"))])
             }
             // The one key worth saying inside a cell — without it a person
             // types a value, presses Esc, walks right and types the next.
-            Mode::Insert if self.insert_bounds().is_some() => Hint::Keys(say!("hint.table.in-a-cell"), vec![("Tab", say!("hint.table.next-cell")), ("S-Tab", say!("hint.table.previous-cell"))]),
+            Mode::Insert if self.insert_bounds().is_some() => Hint::Keys(say!("hint.table.in-a-cell"), vec![("Tab".into(), say!("hint.table.next-cell")), ("S-Tab".into(), say!("hint.table.previous-cell"))]),
             Mode::Normal if self.table_here() => {
                 // Three keys, and every one of them is a key the reader could
                 // not have guessed: `t` opens the rest of the table's keys,
@@ -192,12 +192,12 @@ impl Editor {
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
                 Hint::Keys(say!("label.table"), vec![
                     // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
-                    ("空格 t", say!("hint.table.menu")),
-                    ("T", match grain {
+                    ("空格 t".into(), say!("hint.table.menu")),
+                    ("T".into(), match grain {
                         Grain::Cell => say!("hint.table.by-character-instead"),
                         Grain::Char => say!("hint.table.by-cell-instead"),
                     }),
-                    ("Tab", say!("hint.table.next-cell")),
+                    ("Tab".into(), say!("hint.table.next-cell")),
                 ])
             }
             _ => self.the_way_back_to_the_list(),
@@ -226,8 +226,8 @@ impl Editor {
             false => say!("label.panel.search"),
         };
         Hint::Keys(title, vec![
-            ("n N", say!("hint.search.walk-the-hits")),
-            (back_to_text_key(), say!("hint.search.back-to-the-list")),
+            ("n N".into(), say!("hint.search.walk-the-hits")),
+            (back_to_text_key().into(), say!("hint.search.back-to-the-list")),
         ])
     }
 
@@ -261,12 +261,12 @@ impl Editor {
                 say!("hint.space.title"),
                 Self::SPACE_KEYS
                     .iter()
+                    // ⚠️ These keys are `char`, and a `char` is not a
+                    // `&'static str`. This used to `Box::leak` one string per
+                    // key to make it into one; the key column is a `Cow` now,
+                    // so the owned string simply goes in.
                     .map(|(key, what)| {
-                        // Leaked once each, at most a dozen: the panel wants
-                        // `&'static str` keys like every other row here, and a
-                        // `char` is not one.
-                        let key: &'static str = Box::leak(key.to_string().into_boxed_str());
-                        (key, crate::messages::say(what, &[]))
+                        (key.to_string().into(), crate::messages::say(what, &[]))
                     })
                     .collect(),
             ),
@@ -277,8 +277,8 @@ impl Editor {
                     false => Self::GOTO_KEYS.iter().copied(),
                 }),
             ),
-            Pending::Find(_) => (say!("hint.find"), vec![("", say!("hint.type-a-character"))]),
-            Pending::Replace => (say!("hint.overwrite"), vec![("", say!("hint.type-a-character-to-overwrite"))]),
+            Pending::Find(_) => (say!("hint.find"), vec![("".into(), say!("hint.type-a-character"))]),
+            Pending::Replace => (say!("hint.overwrite"), vec![("".into(), say!("hint.type-a-character-to-overwrite"))]),
             Pending::Case => (say!("hint.case.title"), Self::said(Self::CASE_KEYS.iter().copied())),
             Pending::Confirm => {
                 (say!("hint.confirm.title"), Self::said(Self::CONFIRM_KEYS.iter().copied()))
@@ -287,15 +287,26 @@ impl Editor {
                 self.status.clone(),
                 Self::said(Self::REPLACE_ALL_KEYS.iter().copied()),
             ),
-            // ⚠️ **`#` 也要寫上**（2026-09-28）。加了那個寄存器卻沒改這一行，於是屏幕
-            // 明明白白告訴讀者「只收 a–z」，而 `"#p` 其實是通的——按下去沒信心是對的。
-            Pending::Register => (
-                say!("hint.register.title"),
-                vec![
-                    ("a–z", say!("hint.register.which-one")),
-                    ("#", say!("hint.register.hash")),
-                ],
-            ),
+            // **每一格裝着什麼，就畫什麼**（2026-09-29 定：「Helix這個好」）。
+            //
+            // 從前這張表寫的是說明——「a–z 哪一個」——而那句話回答不了任何人的問
+            // 題：a 是哪一個？哪一個什麼？helix 的答案是不解釋，直接把格子裏存着的
+            // 那段字印在右邊（`helix-view/src/info.rs:60`，寬 30），於是「a 是一個
+            // 存東西的格子」不必說，看一眼就知道了。**空的格子不列**，所以一個都
+            // 沒存過的時候這張表上只有 `#` 一行。
+            //
+            // ⚠️ `#` 不是格子，是問題的答案（見 `edits::recall`），所以它沒有內容
+            // 可印，只能寫一句說明，也只有它一行是說明。它排在最後。
+            Pending::Register => {
+                let mut named: Vec<(&char, &String)> = self.registers.iter().collect();
+                named.sort();
+                let mut rows: KeyRows = named
+                    .into_iter()
+                    .map(|(name, text)| (name.to_string().into(), Self::register_preview(text)))
+                    .collect();
+                rows.push(("#".into(), say!("hint.register.hash")));
+                (say!("hint.register.title"), rows)
+            }
             Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
             // `z` 那一層只有三個鍵，一張三行的小表比一句話好認。
             Pending::Aim => (
@@ -309,10 +320,10 @@ impl Editor {
                     .into_iter(),
                 ),
             ),
-            Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("", say!("hint.type-a-bracket-or-quote"))]),
-            Pending::Surround => (say!("hint.match.surround"), vec![("", say!("hint.type-a-bracket"))]),
-            Pending::SurroundFrom => (say!("hint.match.take-off"), vec![("", say!("hint.type-the-one-to-take-off"))]),
-            Pending::SurroundTo(_) => (say!("hint.change-to"), vec![("", say!("hint.type-the-one-to-change-to"))]),
+            Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("".into(), say!("hint.type-a-bracket-or-quote"))]),
+            Pending::Surround => (say!("hint.match.surround"), vec![("".into(), say!("hint.type-a-bracket"))]),
+            Pending::SurroundFrom => (say!("hint.match.take-off"), vec![("".into(), say!("hint.type-the-one-to-take-off"))]),
+            Pending::SurroundTo(_) => (say!("hint.change-to"), vec![("".into(), say!("hint.type-the-one-to-change-to"))]),
             Pending::Hop { forward } => (
                 match forward {
                     true => say!("hint.hop.next"),
@@ -324,8 +335,8 @@ impl Editor {
                 say!("hint.conflict.title"),
                 Self::said(Self::CONFLICT_KEYS.iter().copied()),
             ),
-            Pending::Mark => (say!("hint.mark.set-here"), vec![("a–z", say!("hint.mark.name-it"))]),
-            Pending::Recall => (say!("hint.mark.go-back"), vec![("a–z", say!("hint.register.which-one"))]),
+            Pending::Mark => (say!("hint.mark.set-here"), vec![("a–z".into(), say!("hint.mark.name-it"))]),
+            Pending::Recall => (say!("hint.mark.go-back"), vec![("a–z".into(), say!("hint.mark.which-one"))]),
             // **Which list is a question about the cursor, not the mode.** It
             // used to be `md_region().is_none()`, which is *also* true of a
             // Markdown table nobody has opened yet — so standing in one of
@@ -348,7 +359,38 @@ impl Editor {
     ///
     /// The same answer the command row has always had; it is a panel now because a
     /// row holds four of these and `空格` has fourteen.
-    pub fn pending_menu(&self) -> Option<(String, Vec<(&'static str, String)>)> {
+    /// **One line of what a register holds**, for the panel that lists them.
+    ///
+    /// A yank is whole paragraphs as often as it is a word, and the panel is a
+    /// thing you glance at beside your writing, so what goes in the right
+    /// column is a *sample*: every run of whitespace becomes one space, and
+    /// what is left is cut at twelve 漢字 with a `…` to say there is more.
+    ///
+    /// ⚠️ Cut by **grapheme**, not by `char`: `⚠️` is two `char` and one
+    /// two-cell glyph, and a cut between them leaves a stray VS16 in the box.
+    fn register_preview(text: &str) -> String {
+        const ROOM: usize = 24;
+        let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if yumete_cjk::str_width(&one_line) <= ROOM {
+            return one_line;
+        }
+        let mut out = String::new();
+        let mut wide = 0usize;
+        for g in yumete_cjk::graphemes(&one_line) {
+            let w = yumete_cjk::grapheme_width(g);
+            // The `…` is in the budget from the first cell, because the whole
+            // point of it is that it must fit.
+            if wide + w > ROOM - 1 {
+                break;
+            }
+            out.push_str(g);
+            wide += w;
+        }
+        out.push('…');
+        out
+    }
+
+    pub fn pending_menu(&self) -> Option<(String, KeyRows)> {
         match self.pending_keys()? {
             Hint::Keys(title, keys) => Some((title, keys)),
             _ => None,

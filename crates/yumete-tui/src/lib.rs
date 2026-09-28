@@ -10142,7 +10142,7 @@ fn draw_command(
             put("  ", what, &mut x);
             for (k, doing) in keys {
                 if !k.is_empty() {
-                    put(k, key, &mut x);
+                    put(&k, key, &mut x);
                     put(" ", what, &mut x);
                 }
                 put(&doing, what, &mut x);

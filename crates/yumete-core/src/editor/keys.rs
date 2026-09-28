@@ -2215,9 +2215,9 @@ impl Editor {
     /// A table of key names read out in the reader's language.
     pub(super) fn said(
         rows: impl IntoIterator<Item = (&'static str, &'static str)>,
-    ) -> Vec<(&'static str, String)> {
+    ) -> KeyRows {
         rows.into_iter()
-            .map(|(key, what)| (key, crate::messages::say(what, &[])))
+            .map(|(key, what)| (key.into(), crate::messages::say(what, &[])))
             .collect()
     }
 
