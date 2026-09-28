@@ -1339,16 +1339,18 @@ impl Editor {
             // Selection + changes (Helix: `x` selects the line, `d` deletes the
             // selection, `c` changes it).
             //
-            // ⚠️ **Small letter deletes, capital cuts** (#492) — and that is
-            // *not* what Helix does. There `d` yanks and `A-d` does not, which
-            // is its worst idea: 「d 作为剪切功能会污染
-            // register」. One clipboard, and the commonest key in the editor
-            // spends it, so every tidy-up between a copy and a paste throws
-            // the copy away. Here the pair is `d`/`D` and `c`/`C`, one rule
-            // for four keys: **the capital is the one that touches the
-            // register**. `D` and `C` were unbound in Helix, so nothing that
-            // had a key lost one; `A-d`/`A-c` are gone, because after the swap
-            // they are `d`/`c` spelt longer.
+            // ⚠️ **這一族 2026-09-28 翻過一次，現在是 helix 的那一條**（#405）。
+            //
+            // #492 當初把它定成「小寫刪、大寫剪」，原話是「d 作为剪切功能会污染
+            // register。这是我觉得 helix 最不好的地方」——剪貼板只有一個，而編輯器裏
+            // 按得最多的那個鍵會花掉它。依據之一是「helix 的 `C`／`D` 都空着」，而**那
+            // 句話錯了一半**：helix 的 `C` 是 `copy_selection_on_next_line`，佔着，
+            // 只有頂層的 `D` 是空的。多選區（#405）要的正是 `C`。
+            //
+            // 現在：`d`／`c` 進寄存器（同 helix），`A-d`／`A-c` 不進（同 helix），
+            // **`D` 是 `A-d` 的別名**——#492 那個需求（刪掉這段，別蓋掉我剛複製的）
+            // 保下來了，只是從最好按的鍵換成了第二好按的。`A-c` 沒有對應的別名，
+            // 因為 `C` 讓給了多選區。
             Key::Char('x') => self.repeat(count, |e| e.select_line()),
             // **`d`, `c`, `y` are operators under the vim preset** (#429,
             // 2026-09-18): they wait for a motion. With something already
@@ -1361,7 +1363,24 @@ impl Editor {
                 self.pending = Pending::VimOperator { op, first: None };
                 self.count = operator_count;
             }
-            Key::Char('d') | Key::Char('D') | Key::Char('c') | Key::Char('C') => {
+            // ⚠️ **2026-09-28 整族換成了 helix 的拼法**（#405 要 `C` 這個鍵）。從前是
+            // 「小寫刪、大寫剪」，四個鍵一條規矩；現在是 helix 的那一條：
+            //
+            // - `d` `c`：刪／改，**進寄存器**（helix 一樣）
+            // - `A-d` `A-c`：刪／改，**不進**（helix 一樣）
+            // - `D`：`A-d` 的別名。寫東西的人最常要的是「刪掉這段，別蓋掉我剛複製的」，
+            //   而那在 helix 裏要按 `A-d`。留一個好按的大寫鍵給它。
+            //
+            // `A-c` 沒有對應的別名，因為 `C` 讓給了「往下再加一個選區」。不對稱，
+            // 而「改寫而不進寄存器」遠不如「刪除而不進」常用。
+            Key::Char('d')
+            | Key::Char('c')
+            | Key::Alt('d')
+            | Key::Alt('c')
+            | Key::Char('D')
+                if !matches!(key, Key::Char('D'))
+                    || self.key_preset == yumete_cjk::KeyPreset::Vim =>
+            {
                 self.snapshot();
                 // A count deletes that many graphemes when there is nothing
                 // selected, the way `3x` does in vim; with a selection it is
@@ -1378,8 +1397,12 @@ impl Editor {
                     self.extend_to_line_bounds();
                     self.vim_lines = false;
                 }
-                let cut = matches!(key, Key::Char('D') | Key::Char('C'));
-                let op = match matches!(key, Key::Char('c') | Key::Char('C')) {
+                // ⚠️ **`D` 只有 vim 預設下走得到這裏**，而那一端它要進寄存器：那頭的
+                // `D` 被別名成 `d$`（`yumete-cjk/src/keymap.rs`），所以原生的 `D` 只在
+                // 別名展開裏出現，而 vim 的 `x` 展開成 `;{n}D`，vim 的 `x` 就是進寄存
+                // 器的。
+                let cut = !matches!(key, Key::Alt('d') | Key::Alt('c'));
+                let op = match matches!(key, Key::Char('c') | Key::Alt('c')) {
                     true => motion::Operator::Change { cut },
                     false => match cut {
                         true => motion::Operator::Cut,
@@ -1659,11 +1682,6 @@ impl Editor {
             // the thing, on the 空格 menu with the other 「do something to
             // this line」 keys, so this says where rather than binding a chord.
             Key::Ctrl('c') => return Some(say!("hint.helix.comment")),
-            // helix 4.2 教的「刪／改**不進剪貼板**」。這裏没有這一對，而且不打算
-            // 有——剪貼板是**一個**寄存器，想不動它就指名另一個（`"a d`），那是
-            // 同一件事的通用辦法（2026-09-23 補，文檔 §「tutor 教了而我們没有」
-            // 那張表上最後兩格）。
-            Key::Alt('d') | Key::Alt('c') => return Some(say!("hint.helix.black-hole")),
             _ => return None,
         };
         Some(match c {
@@ -1684,6 +1702,10 @@ impl Editor {
             // `H`/`L`, which is the other half of what a reader pressing `)`
             // wants.
             '(' | ')' => say!("hint.helix.cycle-selection"),
+            // helix 頂層的 `D` 是空的，這裏也空着（2026-09-28）。按它的人分兩種：
+            // vim 手要的是「刪到行尾」，helix 手要的是「刪了別動寄存器」，一句話說得
+            // 完兩件。⚠️ vim 預設下按不到這裏，那一端 `D` 是 `d$`。
+            'D' => say!("hint.helix.capital-d"),
             // No `` ` `` arm: it is a real binding now (the 字形 group), so the
             // fall-through never reaches here for it. `hint.vi.backtick` moved
             // into that group's menu, where vi's reader will see it anyway.

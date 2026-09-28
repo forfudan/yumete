@@ -4703,11 +4703,12 @@ zhs = "这个词还在哪里：这边找／那边看"
 en = "where else this word is: / here, ? in the other area"
 
 [[message]]
-# 按了 helix 的 A-d／A-c（刪改不進剪貼板）——這裏用寄存器說同一件事
-key = "hint.helix.black-hole"
-zht = "不想動剪貼板就指名另一個寄存器，例如 a：先按引號、再按 a、再刪"
-zhs = "不想动剪贴板就指名另一个寄存器，例如 a：先按引号、再按 a、再删"
-en = "to keep the clipboard, name a register first (quote, a, then delete)"
+# Normal 模式按 D（helix 頂層也空着；vim 手要 d$，helix 手要不進寄存器的刪）
+key = "hint.helix.capital-d"
+zht = "刪到行尾是 d 再 gl；刪了不動寄存器是 A-d"
+zhs = "删到行尾是 d 再 gl；删了不动寄存器是 A-d"
+en = "to end of line: d then gl — delete without the register: A-d"
+
 [[message]]
 # Normal 模式按 ~ 或 A-`（Helix 的大小寫鍵，這裏收進了 ` 組）
 key = "hint.helix.case-keys"

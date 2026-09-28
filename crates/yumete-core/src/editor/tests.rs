@@ -1796,26 +1796,30 @@ fn named_registers_keep_more_than_one_thing() {
 #[test]
 fn cutting_yanks_so_text_can_be_moved() {
     let mut ed = typed("甲乙丙");
-    press(&mut ed, "ggvD"); // cut 甲 — the capital is the one that yanks
+    press(&mut ed, "ggvd"); // cut 甲 — 小寫的那一個進寄存器（2026-09-28 翻過來了）
     assert_eq!(ed.current_buffer().text(), "乙丙");
     press(&mut ed, "glp"); // and put it at the end
     assert_eq!(ed.current_buffer().text(), "乙丙甲");
 }
 
+/// **`d`／`c` 進寄存器，`A-d`／`A-c` 不進**——逐鍵同 helix（2026-09-28，#405）。
+///
+/// #492 當初反過來定過一次（「小寫刪、大寫剪」），原話是「d 作为剪切功能会污染
+/// register。这是我觉得 helix 最不好的地方」。2026-09-28 翻回 helix 的拼法，原話：
+/// 「D 这个快捷键你先和 vim helix 保持一致，未来我们再考虑我们自己的一些设定。先保证
+/// 用户愿意使用 yumete。」多選區也正好要 `C` 這個鍵（helix 的
+/// `copy_selection_on_next_line`）。
 #[test]
-fn the_small_letters_delete_and_the_capitals_cut() {
-    // 「d 作为剪切功能会污染 register。这是我觉得 helix 最不好的地方」 (#492).
-    // The register holds one thing: yank a sentence, notice a stray 、 on the
-    // way to where it goes, and Helix's `d` would throw the sentence away to
-    // hold that one character. So here the commonest key is the safe one.
+fn the_small_letters_spend_the_register_and_the_alt_pair_does_not() {
+    // `d` 進寄存器，同 helix。
     let mut ed = typed("甲乙丙");
-    press(&mut ed, "ggy"); // 甲 into the register
-    press(&mut ed, "ld"); // 乙 out, register untouched
+    press(&mut ed, "ggy"); // 甲 進寄存器
+    press(&mut ed, "ld"); // 乙 出去，把 甲 頂掉了
     assert_eq!(ed.current_buffer().text(), "甲丙");
     press(&mut ed, "glp");
-    assert_eq!(ed.current_buffer().text(), "甲丙甲");
+    assert_eq!(ed.current_buffer().text(), "甲丙乙", "d 花掉了寄存器");
 
-    // `c` is the same delete and then Insert, again keeping the register.
+    // `c` 進寄存器，`A-c` 不進。
     let mut ed = typed("甲乙丙");
     press(&mut ed, "ggy");
     press(&mut ed, "lc");
@@ -1823,37 +1827,51 @@ fn the_small_letters_delete_and_the_capitals_cut() {
     ed.on_key(Key::Char('丁'));
     ed.on_key(Key::Esc);
     press(&mut ed, "glp");
-    assert_eq!(ed.current_buffer().text(), "甲丁丙甲");
+    assert_eq!(ed.current_buffer().text(), "甲丁丙乙", "c 花掉了寄存器");
 
-    // `C` cuts and then types, so what it took out is what comes back.
     let mut ed = typed("甲乙丙");
     press(&mut ed, "ggy");
-    press(&mut ed, "lC");
+    press(&mut ed, "l");
+    ed.on_key(Key::Alt('c'));
     assert_eq!(ed.mode(), Mode::Insert, "{}", ed.status());
     ed.on_key(Key::Char('丁'));
     ed.on_key(Key::Esc);
     press(&mut ed, "glp");
-    assert_eq!(ed.current_buffer().text(), "甲丁丙乙", "C spent the register");
+    assert_eq!(ed.current_buffer().text(), "甲丁丙甲", "A-c 沒動寄存器");
 
-    // A count reaches that many characters for all four.
+    // 數字對四個鍵都算數。
     let mut ed = typed("甲乙丙丁");
-    press(&mut ed, "gg2d");
+    press(&mut ed, "gg2");
+    ed.on_key(Key::Alt('d'));
     assert_eq!(ed.current_buffer().text(), "丙丁");
     let mut ed = typed("甲乙丙丁");
-    press(&mut ed, "gg2D");
+    press(&mut ed, "gg2d");
     assert_eq!(ed.current_buffer().text(), "丙丁");
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "丙丁甲乙");
 }
 
-/// Helix 的 `A-d`／`A-c` 已經沒有了（#492）——換完之後它們就是 `d`／`c` 的長寫法。
+/// helix 的 `A-d`／`A-c` 回來了（2026-09-28，#405），而 `D` 和 helix 一樣不綁。
 #[test]
-fn the_alt_pair_is_gone() {
+fn the_alt_pair_is_back_and_the_capital_d_stays_unbound() {
     let mut ed = typed("甲乙丙");
     press(&mut ed, "ggy");
     press(&mut ed, "l");
     ed.on_key(Key::Alt('d'));
-    assert_eq!(ed.current_buffer().text(), "甲乙丙", "什麼都沒發生");
+    assert_eq!(ed.current_buffer().text(), "甲丙", "A-d 刪掉了 乙");
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙甲", "而寄存器裏還是 甲");
+
+    // 原生鍵位下 `D` 空着，同 helix 頂層；按了只說一句話。
+    let mut ed = typed("甲乙丙");
+    press(&mut ed, "ggl");
+    press(&mut ed, "D");
+    assert_eq!(ed.current_buffer().text(), "甲乙丙", "什麼都沒動");
+    assert!(
+        ed.status().contains("A-d"),
+        "要指回 A-d：{:?}",
+        ed.status()
+    );
 }
 
 #[test]
@@ -7593,9 +7611,9 @@ fn what_was_cut_three_edits_ago_is_still_reachable() {
     // that paragraph go" had no answer.
     let mut ed = typed("甲一\n乙二\n丙三\n");
     ed.goto_line(1);
-    press(&mut ed, "xD");
+    press(&mut ed, "xd");
     ed.goto_line(1);
-    press(&mut ed, "xD");
+    press(&mut ed, "xd");
     assert_eq!(ed.current_buffer().text(), "丙三\n");
 
     // Both are still there, newest first, and the named ones after them.
