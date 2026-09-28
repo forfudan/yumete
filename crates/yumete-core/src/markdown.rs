@@ -692,6 +692,20 @@ fn scan(
     while at < to {
         // A comment is the writer talking to themselves — everything in it is
         // theirs, markup included — so it is taken before anything else.
+        // **`\*` 不是斜體的開頭**（2026-09-28）。反斜杠自己算標記，所見即所得把它藏
+        // 起來，剩下那個字符原樣是正文。
+        //
+        // ⚠️ **可轉義的只有 ASCII 標點**，CommonMark §2.4 的規矩，兩家實現也一樣：
+        // `\甲` 裏那個反斜杠是一個反斜杠，不是轉義。要是連漢字都能轉義，稿子裏每一個
+        // 反斜杠都會憑空消失。
+        if chars[at] == '\\' {
+            if chars.get(at + 1).is_some_and(|&c| escapable(c)) {
+                mark(out, at, at + 1, Kind::Marker, *construct, depth);
+                *construct += 1;
+                at += 2;
+                continue;
+            }
+        }
         if let Some((open, close, end)) = comment(chars, at).filter(|&(_, _, e)| e <= to) {
             // ⚠️ **批注裏面不掃**：`%%…%%` 整個是寫的人對自己說的話，標記也是他的。
             mark(out, at, at + open, Kind::Marker, *construct, depth);
@@ -912,8 +926,11 @@ fn closing(chars: &[char], from: usize, delimiter: char, len: usize) -> Option<u
     }
     let mut at = from;
     while at + len <= chars.len() {
+        // ⚠️ **轉義掉的那一個不算閉合**（2026-09-28）：`*斜\*體*` 的斜體到最後那個
+        // 星號纔收口，不是到中間那個。
         if chars[at..at + len].iter().all(|&c| c == delimiter)
             && chars.get(at.wrapping_sub(1)) != Some(&' ')
+            && !escaped(chars, at)
             && at > from
         {
             return Some(at);
@@ -921,6 +938,31 @@ fn closing(chars: &[char], from: usize, delimiter: char, len: usize) -> Option<u
         at += 1;
     }
     None
+}
+
+/// **CommonMark 認得的可轉義字符**：ASCII 標點，僅此而已（§2.4）。
+///
+/// ⚠️ 不收漢字也不收全角標點。收了的話稿子裏每一個反斜杠後面那個字都會被當成轉義，
+/// 而中文稿子裏的反斜杠多半就是一個反斜杠。
+fn escapable(c: char) -> bool {
+    c.is_ascii_punctuation()
+}
+
+/// `chars[at]` 是不是被前面那個反斜杠轉義掉了。
+///
+/// ⚠️ **反斜杠自己也能被轉義**（`\\*` 是一個反斜杠加一個真的星號），所以要往回數有幾
+/// 個連着的反斜杠：奇數個纔是轉義。
+fn escaped(chars: &[char], at: usize) -> bool {
+    if !escapable(chars[at]) {
+        return false;
+    }
+    let mut back = 0usize;
+    let mut i = at;
+    while i > 0 && chars[i - 1] == '\\' {
+        back += 1;
+        i -= 1;
+    }
+    back % 2 == 1
 }
 
 /// A comment opening at `at`: the lengths of its two markers and where it ends.
@@ -1129,6 +1171,9 @@ fn balanced(chars: &[char], from: usize, shut: char, to: usize) -> Option<usize>
     let open = chars[from];
     let mut deep = 0usize;
     for at in from..to.min(chars.len()) {
+        if escaped(chars, at) {
+            continue;
+        }
         if chars[at] == open {
             deep += 1;
         } else if chars[at] == shut {
@@ -2199,6 +2244,38 @@ mod tests {
         // 光標站在「粗」上（0[ 1* 2* 3粗）。
         let got = link_at(line, 3).expect("跟得到：{line}");
         assert_eq!(got.target, "地址");
+    }
+
+
+    /// **反斜杠轉義**（2026-09-28）。從前沒有，於是正文裏寫不出一個字面的星號。
+    ///
+    /// ⚠️ 這個倉自己的 `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
+    #[test]
+    fn a_backslash_escapes_the_mark_after_it() {
+        let kinds = |line: &str| spans(line).into_iter().map(|s| s.kind).collect::<Vec<_>>();
+
+        // 轉義掉的星號不開斜體，只剩兩個反斜杠各自是一個標記。
+        assert_eq!(kinds(r"\*不是斜體\*"), vec![Kind::Marker, Kind::Marker]);
+
+        // ⚠️ **中間那個轉義掉的不算閉合**：斜體一直到最後那個星號。
+        let body = spans(r"*斜\*體*")
+            .into_iter()
+            .find(|s| s.kind == Kind::Emphasis)
+            .map(|s| r"*斜\*體*".chars().skip(s.start).take(s.end - s.start).collect::<String>());
+        assert_eq!(body.as_deref(), Some(r"斜\*體"));
+
+        // ⚠️ **只有 ASCII 標點能被轉義。** 漢字前面那個反斜杠就是一個反斜杠。
+        assert!(spans(r"\甲不是轉義").is_empty(), "漢字不可轉義");
+
+        // 鏈接裏轉義掉的方括號不收口。
+        let text = spans(r"[文字\]還在](x)")
+            .into_iter()
+            .find(|s| s.kind == Kind::Link)
+            .map(|s| r"[文字\]還在](x)".chars().skip(s.start).take(s.end - s.start).collect::<String>());
+        assert_eq!(text.as_deref(), Some(r"文字\]還在"));
+
+        // 沒被轉義的照舊。
+        assert_eq!(kinds("*真斜體*"), vec![Kind::Marker, Kind::Emphasis, Kind::Marker]);
     }
 
 }
