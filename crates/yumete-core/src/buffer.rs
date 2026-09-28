@@ -147,6 +147,12 @@ pub struct Buffer {
     /// ones that swap the whole thing (a re-read, an undo, a redo), where
     /// nothing about the old answer can be trusted.
     edit: Option<(usize, isize)>,
+    /// **這一份稿子最後改在哪**（`g.`，2026-09-28）。字符下標，沒改過就是 `None`。
+    ///
+    /// ⚠️ **不是撤銷歷史裏那個 `cursor`。** 那一格記的是「報撤銷點的那一刻光標在哪」，
+    /// 也就是改**之前**；`g.` 要的是改**之後**落在哪。兩者在 `ciw` 這種先刪後寫的動作
+    /// 上差得很遠。
+    last_edit: Option<usize>,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -250,6 +256,7 @@ impl Buffer {
             revision: 0,
             saves: 0,
             edit: None,
+            last_edit: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -288,6 +295,7 @@ impl Buffer {
             revision: 0,
             saves: 0,
             edit: None,
+            last_edit: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -350,6 +358,7 @@ impl Buffer {
             revision: 0,
             saves: 0,
             edit: None,
+            last_edit: None,
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -534,6 +543,18 @@ impl Buffer {
         self.edit
     }
 
+    /// 這一份稿子最後改在哪（`g.`）。
+    pub fn last_edit(&self) -> Option<usize> {
+        self.last_edit
+    }
+
+    /// 只給測試：假裝這一份還沒改過。⚠️ 鋪固定裝置要往 rope 裏寫字，而那一下就把
+    /// 「最後改在哪」記上了，於是「還沒改過」這個狀態在測試裏造不出來。
+    #[cfg(test)]
+    pub fn reset_last_edit_for_test(&mut self) {
+        self.last_edit = None;
+    }
+
     /// Whether the buffer has unsaved modifications.
     pub fn is_modified(&self) -> bool {
         self.modified
@@ -568,6 +589,9 @@ impl Buffer {
         self.modified = true;
         self.revision += 1;
         self.edit = Some((char_idx, text.chars().count() as isize));
+        // **最後改動在哪**（`g.`，#405 之外，2026-09-28）。插入記的是**寫完之後的那一
+        // 頭**，和 vi 的 `'.` 一樣：剛打完一段話按 `g.` 回來，要回到的是話的末尾。
+        self.last_edit = Some(char_idx + text.chars().count());
         Ok(())
     }
 
@@ -586,6 +610,8 @@ impl Buffer {
         self.modified = true;
         self.revision += 1;
         self.edit = Some((at, -(taken as isize)));
+        // 刪掉的那一段沒有「末尾」可回，回到它原來的起點。
+        self.last_edit = Some(at);
         Ok(())
     }
 
@@ -609,6 +635,7 @@ impl Buffer {
         self.modified = true;
         self.revision += 1;
         self.edit = Some((start, text.chars().count() as isize - taken as isize));
+        self.last_edit = Some(start + text.chars().count());
         Ok(())
     }
 
