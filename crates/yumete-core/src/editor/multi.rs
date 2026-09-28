@@ -106,7 +106,7 @@ impl super::Editor {
                     {
                         // ⚠️ 複製件記下**它自己那一列**：它就是照這一列放下去的，
                         // 而接着按 `j` 要瞄準的正是這一列。
-                        into.push(Range { anchor, head, goal: Some(head_goal) });
+                        into.push(Range { anchor, head, goal: Some(head_goal), goal_slot: None });
                         placed += 1;
                     }
                 }
@@ -267,7 +267,7 @@ impl super::Editor {
     pub(super) fn from_drawn(&self, from: usize, to: usize) -> Range {
         let rope = self.current_buffer().rope();
         let head = crate::motion::prev_grapheme(rope, to).max(from);
-        Range { anchor: from, head, goal: None }
+        Range { anchor: from, head, goal: None, goal_slot: None }
     }
 
     /// **把每一段選區按行切開**（`A-s`，helix 的 `split_selection_on_newline`）。

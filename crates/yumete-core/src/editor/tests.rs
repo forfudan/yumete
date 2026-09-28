@@ -17194,3 +17194,35 @@ fn the_alt_parens_turn_what_the_selections_hold() {
     press(&mut ed, "u");
     assert_eq!(ed.current_buffer().text(), "甲\n乙乙\n丙丙丙\n");
 }
+
+/// **竪排下目標格也每一段各記一份**（2026-09-28，同 `goal_column`）。
+///
+/// 從前 `goal_slot` 在 `Editor` 上，於是 N 段一起按 `h` 會一起瞄準主選區那一格。
+#[test]
+fn every_selection_remembers_its_own_goal_slot_in_vertical() {
+    let mut ed = typed("甲乙丙丁戊\n己庚辛\n壬癸子丑寅\n");
+    ed.execute(":layout vertical").unwrap();
+    press(&mut ed, "gg");
+    // 兩段，各在第一縱的第二格和第五格。
+    ed.sel = crate::selection::Selections::one(crate::selection::Range::at(1));
+    ed.sel.push(crate::selection::Range::at(4));
+    assert_eq!(ed.sel.len(), 2);
+
+    let slot = |ed: &Editor, at: usize| {
+        let rope = ed.current_buffer().rope();
+        at - rope.line_to_char(rope.char_to_line(at))
+    };
+
+    // 跨到下一縱：中間那一縱只有三個字，第五格到不了。
+    press(&mut ed, "h");
+    let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
+    at.sort();
+    assert_eq!(ed.sel.len(), 2, "兩段還在：{at:?}");
+
+    // ⚠️ 再跨一縱：各自回到自己原來那一格。
+    press(&mut ed, "h");
+    let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
+    at.sort();
+    let slots: Vec<usize> = at.iter().map(|&a| slot(&ed, a)).collect();
+    assert_eq!(slots, vec![1, 4], "各自回到第二格和第五格：{slots:?}");
+}

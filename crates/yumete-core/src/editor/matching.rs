@@ -709,10 +709,14 @@ impl Editor {
             let turned = |line: usize| self.line_is_table_row(line);
             let grid = self.grid_with(&hidden, &folded, &drawn, &turned);
             let rope = self.current_buffer().rope();
-            let goal = if continuing {
-                self.goal_slot
-            } else {
-                zong::slot_of(rope, self.sel.head(), grid)
+            // ⚠️ **目標格每一段各記一份**（2026-09-28，同 `goal`）。從前它是 `Editor`
+            // 上的一個 `goal_slot`，於是竪排下 N 段一起按 `h` 會一起瞄準主選區那一格。
+            let goal = match continuing {
+                true => self
+                    .sel
+                    .goal_slot()
+                    .unwrap_or_else(|| zong::slot_of(rope, self.sel.head(), grid)),
+                false => zong::slot_of(rope, self.sel.head(), grid),
             };
             let pos = if left {
                 zong::next_zong(rope, self.sel.head(), grid, goal)
@@ -725,7 +729,7 @@ impl Editor {
         if !self.extend {
             self.sel.set_anchor(pos);
         }
-        self.goal_slot = goal;
+        self.sel.set_goal_slot(Some(goal));
         self.zong_motion = true;
     }
 

@@ -532,7 +532,7 @@ impl Editor {
             cursor: at.min(self.current_buffer().rope().len_chars()),
             anchor: at.min(self.current_buffer().rope().len_chars()),
             goal_column: None,
-            goal_slot: 0,
+            goal_slot: None,
             extend: false,
             highlight,
             caption,
@@ -582,7 +582,7 @@ impl Editor {
             cursor: self.sel.head(),
             anchor: self.sel.anchor(),
             goal_column: self.sel.goal(),
-            goal_slot: self.goal_slot,
+            goal_slot: self.sel.goal_slot(),
             extend: self.extend,
             highlight: None,
             // **離開的那一半帶着自己的名字走**（2026-09-26）。分隔線上寫的是**正
@@ -620,7 +620,7 @@ impl Editor {
         self.sel.set_head(pane.cursor);
         self.sel.set_anchor(pane.anchor);
         self.sel.set_goal(pane.goal_column);
-        self.goal_slot = pane.goal_slot;
+        self.sel.set_goal_slot(pane.goal_slot);
         self.extend = pane.extend;
         self.other = Some(here);
         self.live_pane = 1 - self.live_pane;
