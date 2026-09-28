@@ -531,7 +531,7 @@ impl Editor {
             buffer,
             cursor: at.min(self.current_buffer().rope().len_chars()),
             anchor: at.min(self.current_buffer().rope().len_chars()),
-            goal_column: 0,
+            goal_column: None,
             goal_slot: 0,
             extend: false,
             highlight,
@@ -581,7 +581,7 @@ impl Editor {
             buffer: self.current_buffer().id(),
             cursor: self.sel.head(),
             anchor: self.sel.anchor(),
-            goal_column: self.goal_column,
+            goal_column: self.sel.goal(),
             goal_slot: self.goal_slot,
             extend: self.extend,
             highlight: None,
@@ -619,7 +619,7 @@ impl Editor {
         pane.anchor = pane.anchor.min(len);
         self.sel.set_head(pane.cursor);
         self.sel.set_anchor(pane.anchor);
-        self.goal_column = pane.goal_column;
+        self.sel.set_goal(pane.goal_column);
         self.goal_slot = pane.goal_slot;
         self.extend = pane.extend;
         self.other = Some(here);

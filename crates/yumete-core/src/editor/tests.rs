@@ -16346,7 +16346,7 @@ fn the_secondary_selections_are_a_grapheme_wide_even_when_collapsed() {
     assert_eq!(secondary[0], (0, 1), "主選區是剛加進去的那一段，交出來的是原來那個");
 
     // 撐開的那一段照樣多一個字素。
-    ed.sel.push(crate::selection::Range { anchor: 2, head: 3 });
+    ed.sel.push(crate::selection::Range::new(2, 3));
     let mut secondary = ed.secondary_selections();
     secondary.sort();
     assert_eq!(secondary, vec![(0, 1), (6, 7)], "兩段次選區，各自寬一個字素");
@@ -16554,4 +16554,45 @@ fn the_change_key_reaches_every_selection() {
         "▸ 買菜\n▸ 倒垃圾\n▸ 寫第三章\n",
         "三行的記號一起換了"
     );
+}
+
+/// **目標列每一段各記一份**（#405，2026-09-28）。
+///
+/// 2026-09-28 之前它是 `Editor` 上的一個 `goal_column`，於是 N 段一起按 `j` 會一起瞄準
+/// 主選區那一列。這一條驗兩件事：兩段各在各的列上往下走；跨過一行短行之後，原來那一列
+/// 還記得住。
+#[test]
+fn every_selection_remembers_its_own_goal_column() {
+    // 甲乙丙丁戊 / 己庚辛 / 壬癸子丑寅 —— 中間那一行到得了第二格，到不了第五格。
+    // ⚠️ 中間那一行不能只有一個字：兩段會一起被壓到同一格，`normalize` 當場把它們併成
+    // 一段，於是要驗的那件事還沒開始就沒了。
+    let mut ed = typed("甲乙丙丁戊\n己庚辛\n壬癸子丑寅\n");
+    let rope = ed.current_buffer().rope().clone();
+    let column = |ed: &Editor, at: usize| {
+        let rope = ed.current_buffer().rope();
+        at - rope.line_to_char(rope.char_to_line(at))
+    };
+
+    // 兩段：第一行第二格、第一行第五格。⚠️ 直接裝，因為 `C` 造出來的兩段在同一列上，
+    // 同一列的話「共用一個目標列」和「各記一份」看起來一樣。
+    ed.sel = crate::selection::Selections::one(crate::selection::Range::at(1));
+    ed.sel.push(crate::selection::Range::at(4));
+    assert_eq!(ed.sel.len(), 2);
+
+    // 往下一行：一段落在第二格，一段落在第五格。
+    press(&mut ed, "j");
+    let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
+    at.sort();
+    let lines: Vec<usize> = at.iter().map(|&a| rope.char_to_line(a)).collect();
+    assert_eq!(lines, vec![1, 1], "兩段都到了第二行");
+    let cols: Vec<usize> = at.iter().map(|&a| column(&ed, a)).collect();
+    // 第二行到得了第二格，到不了第五格——後面那一段被壓到行尾。
+    assert_eq!(cols, vec![1, 3], "一段照走，一段被壓到行尾：{cols:?}");
+
+    // ⚠️ 要緊的是**再往下一行**：各自回到自己原來那一列。
+    press(&mut ed, "j");
+    let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
+    at.sort();
+    let cols: Vec<usize> = at.iter().map(|&a| column(&ed, a)).collect();
+    assert_eq!(cols, vec![1, 4], "各自回到第二格和第五格：{cols:?}");
 }

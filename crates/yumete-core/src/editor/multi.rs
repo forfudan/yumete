@@ -73,7 +73,9 @@ impl super::Editor {
                     if crate::wrap::column_of(rope, anchor, m) == anchor_goal
                         && crate::wrap::column_of(rope, head, m) == head_goal
                     {
-                        into.push(Range { anchor, head });
+                        // ⚠️ 複製件記下**它自己那一列**：它就是照這一列放下去的，
+                        // 而接着按 `j` 要瞄準的正是這一列。
+                        into.push(Range { anchor, head, goal: Some(head_goal) });
                         placed += 1;
                     }
                 }
@@ -102,11 +104,9 @@ impl super::Editor {
     /// ⚠️ **只給移動用，不給編輯用。** 編輯會挪動別的選區的下標，那要走 Phase 1 第五步
     /// 的 `edit_each`（從後往前做，一個撤銷點）。這一支假定 `what` 不改文本。
     ///
-    /// ⚠️ **`goal_column` 還是一個**（`editor.rs` 上的欄位，不在 `Range` 裏）。所以每一
-    /// 段跑之前先按它自己的位置重算一次，否則 N 段會一起瞄準主選區那一列。代價是**連按
-    /// `j` 跨過一行短行之後，目標列記不住了**——單段的時候記得住。真要修就是把
-    /// `goal_column` 搬進 `Range`（§5.13.9 說了「等它們真的需要各有一份的時候再搬」，
-    /// 這就是那個時候，只是不在這一步）。
+    /// ⚠️ **目標列不在這裏管。** 它跟着每一段自己走（`Range::goal`），所以連按 `j` 跨過
+    /// 一行短行之後，每一段記得住的還是它自己原來那一列。2026-09-28 之前它是 `Editor`
+    /// 上的一個 `goal_column`，那時 N 段會一起瞄準主選區那一列。
     pub(super) fn each_selection(&mut self, what: impl Fn(&mut Self)) {
         if !self.sel.is_plural() {
             what(self);
@@ -126,7 +126,6 @@ impl super::Editor {
             self.sel = crate::selection::Selections::one(*one);
             self.pending = pending.clone();
             self.count = count;
-            self.refresh_goal_column();
             what(self);
             if *one == primary {
                 which = nth;
@@ -134,7 +133,6 @@ impl super::Editor {
             out.push(self.sel.primary());
         }
         let merged = self.sel.rebuild(out, which);
-        self.refresh_goal_column();
         self.say_the_merge(merged);
     }
 

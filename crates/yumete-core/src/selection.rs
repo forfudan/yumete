@@ -13,9 +13,10 @@
 //! **Phase 1**（在做）讓它真的裝得下多段：[`Selections::normalize`] 那一套不變式、造出
 //! 第二段的鍵、移動與編輯作用在每一段上。
 //!
-//! ⚠️ **還沒有把 `goal_column`／`goal_slot`／`zong_motion`／`extend`／`vim_lines`
-//! 搬進 [`Range`]。** 只有一段的時候它們在 `Editor` 上還是在 `Range` 上行為完全一樣；
-//! 等它們真的需要各有一份（N 個光標一起按 `j`，得各記各的目標列）的時候再搬。
+//! ⚠️ **`goal_column` 已經搬進 [`Range`] 了**（2026-09-28，那個「真的需要各有一份」
+//! 的時候到了：N 個光標一起按 `j`，得各記各的目標列）。**`goal_slot`（竪排的那一半）、
+//! `zong_motion`、`extend`、`vim_lines` 還在 `Editor` 上**，只有一段的時候行為一樣，
+//! 等同一個理由出現再搬。
 
 /// 一段選區。**光標就是一段一個字素寬的選區**——這個倉早就是這麼想的
 /// （`editor/modes.rs` 的 `selection()`：「The grapheme the cursor sits on is *inside*
@@ -28,12 +29,27 @@ pub struct Range {
     pub anchor: usize,
     /// 撐開的時候**動**的那一端。
     pub head: usize,
+    /// **`j`／`k` 瞄準的那一列**，`None` 是「還不知道，用時現算」。
+    ///
+    /// ⚠️ **每一段各記一份，不是整個編輯器一份**（2026-09-28）。從前它是 `Editor` 上的
+    /// 一個 `goal_column`，只有一個光標的時候那和放在這裏一模一樣；N 段一起按 `j` 就不
+    /// 是了——N 段會一起瞄準主選區那一列。helix 也把它放在 `Range` 裏
+    /// （`old_visual_position`）。
+    ///
+    /// ⚠️ **它進 `PartialEq`**，所以兩段兩端相同而目標列不同的選區不相等。`normalize`
+    /// 靠值把主選區認回來，而排序不改值、合併會把合出來的那一段整個交回去，所以認得住。
+    pub goal: Option<usize>,
 }
 
 impl Range {
     /// 一段塌在 `at` 上的選區——也就是一個光標。
     pub fn at(at: usize) -> Range {
-        Range { anchor: at, head: at }
+        Range { anchor: at, head: at, goal: None }
+    }
+
+    /// 兩端給定的一段，目標列還不知道。
+    pub fn new(anchor: usize, head: usize) -> Range {
+        Range { anchor, head, goal: None }
     }
 
     /// 兩端按先後排好。⚠️ **方向是要留的信息**（`d` 之後光標落在哪、`;` 塌向哪一端都看
@@ -152,6 +168,16 @@ impl Selections {
         self.primary_mut().anchor = at;
     }
 
+    /// 主選區瞄準的那一列。
+    pub fn goal(&self) -> Option<usize> {
+        self.primary().goal
+    }
+
+    /// 記下主選區瞄準的那一列，`None` 是「忘掉，下次現算」。
+    pub fn set_goal(&mut self, goal: Option<usize>) {
+        self.primary_mut().goal = goal;
+    }
+
     /// 兩端一起放到 `at`——「塌成一個光標」。
     pub fn collapse_to(&mut self, at: usize) {
         *self.primary_mut() = Range::at(at);
@@ -224,9 +250,11 @@ impl Selections {
                     let hi = prev.span().1.max(one.span().1);
                     // **方向跟着先來的那一個。** 方向是要留的信息（`;` 塌向哪一端看它），
                     // 而先來的那一段是讀者先造出來的。
+                    // 目標列也跟着先來的那一個，理由同方向：它是讀者先造出來的那一段。
+                    let goal = prev.goal;
                     *prev = match prev.anchor <= prev.head {
-                        true => Range { anchor: lo, head: hi },
-                        false => Range { anchor: hi, head: lo },
+                        true => Range { anchor: lo, head: hi, goal },
+                        false => Range { anchor: hi, head: lo, goal },
                     };
                 }
                 _ => out.push(one),
@@ -260,7 +288,7 @@ mod tests {
     use super::*;
 
     fn at(a: usize, h: usize) -> Range {
-        Range { anchor: a, head: h }
+        Range::new(a, h)
     }
 
     /// **不變式：排好序、不重疊、至少一段。**
