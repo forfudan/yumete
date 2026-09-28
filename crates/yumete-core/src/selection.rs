@@ -5,18 +5,17 @@
 //! 以及一個**釘死在舊版上的 `unicode-width`**，而這個倉有一條規矩是「一個概念一處權威：
 //! 字素、寬度、分詞」，寬度那一處是 `yumete-cjk`。
 //!
-//! # 這是 Phase 0
+//! # 進度
 //!
-//! ⚠️ **現在永遠只裝一段。** 這一期的全部目的是「把單數包起來」，一個可見的變化都沒有——
-//! 驗收條件是 `scripts/frames.sh` 那二十幀逐字節不變。裝得下多段是 Phase 1 的事。
+//! **Phase 0**（做完了）把單數包起來：`Editor` 的 `cursor`／`anchor` 兩個欄位換成這裏一
+//! 個 `Selections`，行為一字不差——驗收條件是 `scripts/frames.sh` 那二十幀逐字節不變。
 //!
-//! 所以下面刻意**還沒有**：排序、合併重疊、`normalize`、偏移記帳。那些是有了第二段之後
-//! 纔有意義的東西，現在寫進來只是沒人跑得到的代碼。
+//! **Phase 1**（在做）讓它真的裝得下多段：[`Selections::normalize`] 那一套不變式、造出
+//! 第二段的鍵、移動與編輯作用在每一段上。
 //!
-//! ⚠️ **也刻意還沒有把 `goal_column`／`goal_slot`／`zong_motion`／`extend`／`vim_lines`
-//! 搬進 [`Range`]。** §5.13.9 原本把它們排在 Phase 0，但只有一段選區的時候，它們在
-//! `Editor` 上還是在 `Range` 上行為完全一樣——搬過來是純粹的攪動。等 Phase 1 真有第二段、
-//! 它們真的需要各有一份的時候再搬。
+//! ⚠️ **還沒有把 `goal_column`／`goal_slot`／`zong_motion`／`extend`／`vim_lines`
+//! 搬進 [`Range`]。** 只有一段的時候它們在 `Editor` 上還是在 `Range` 上行為完全一樣；
+//! 等它們真的需要各有一份（N 個光標一起按 `j`，得各記各的目標列）的時候再搬。
 
 /// 一段選區。**光標就是一段一個字素寬的選區**——這個倉早就是這麼想的
 /// （`editor/modes.rs` 的 `selection()`：「The grapheme the cursor sits on is *inside*
@@ -55,7 +54,8 @@ impl Range {
 /// 面板、頁面滾動跟誰、LSP 問哪一處。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selections {
-    /// ⚠️ **Phase 0：長度恆為 1。** 不變式（排序、不重疊、至少一段）等 Phase 1。
+    /// ⚠️ **永遠至少一段。** 沒有「沒有光標」這個狀態。排好序、互不重疊，由
+    /// [`Selections::normalize`] 保證。
     ranges: Vec<Range>,
     /// 主選區在 `ranges` 裏的下標。⚠️ 永遠 `< ranges.len()`。
     primary: usize,
@@ -134,5 +134,181 @@ impl Selections {
     pub fn flip(&mut self) {
         let it = self.primary_mut();
         std::mem::swap(&mut it.anchor, &mut it.head);
+    }
+
+    // ---- 複數 -----------------------------------------------------------
+
+    /// 加一段，然後**整理**（見 [`Selections::normalize`]）。回傳被併掉幾段。
+    ///
+    /// 新加的那一段成為主選區——`C` 往下複製的時候，讀者的注意力就在新長出來的那一個上。
+    pub fn push(&mut self, one: Range) -> usize {
+        self.ranges.push(one);
+        self.primary = self.ranges.len() - 1;
+        self.normalize()
+    }
+
+    /// 只留主選區（`,`）。回傳去掉了幾段。
+    pub fn keep_primary(&mut self) -> usize {
+        let gone = self.ranges.len() - 1;
+        let it = self.primary();
+        self.ranges.clear();
+        self.ranges.push(it);
+        self.primary = 0;
+        gone
+    }
+
+    /// 把每一段各自換一個樣子。⚠️ 換完會整理，所以**段數可能變少**。
+    pub fn map(&mut self, mut f: impl FnMut(Range) -> Range) -> usize {
+        for one in &mut self.ranges {
+            *one = f(*one);
+        }
+        self.normalize()
+    }
+
+    /// **排好序、併掉疊在一起的。** 回傳併掉了幾段。
+    ///
+    /// 照 helix 的 `normalize`（`helix-core/src/selection.rs:557`）：按起點排序、合併重疊、
+    /// 重新找到主選區的新下標。
+    ///
+    /// ⚠️ **兩段「相鄰」不算重疊。** 區間是左閉右開的，所以 `[0,5)` 和 `[5,9)` 各歸各的；
+    /// 而一個**塌着的**光標（零寬）和另一段的左邊界重合**算**重疊——這是 helix 專門為零寬
+    /// 加的一條（它的 `overlaps` 第一項就是 `from() == other.from()`），不然兩個光標停在
+    /// 同一個地方會變成兩個。
+    ///
+    /// ⚠️ **合併是靜默地少掉一段**，所以呼叫方拿到的這個回傳值是要說給讀者聽的
+    /// （2026-09-28 定：命令行 murmur 三秒）。helix 不說，而中文更常撞上——打一個字要按
+    /// 好幾下，相鄰的兩個光標很容易在中途撞到一起。
+    pub fn normalize(&mut self) -> usize {
+        if self.ranges.len() < 2 {
+            return 0;
+        }
+        let was = self.ranges.len();
+        // 主選區靠**位置**認回來，不靠下標——排序會把下標打亂。
+        let primary = self.primary();
+        let mut sorted: Vec<Range> = std::mem::take(&mut self.ranges);
+        sorted.sort_by_key(|r| r.span());
+        let mut out: Vec<Range> = Vec::with_capacity(sorted.len());
+        for one in sorted {
+            match out.last_mut() {
+                Some(prev) if overlaps(*prev, one) => {
+                    // 排過序了，所以 `prev` 的起點一定不在 `one` 後面——併起來就是
+                    // 「`prev` 的起點，到兩者較遠的那個終點」。
+                    let lo = prev.span().0;
+                    let hi = prev.span().1.max(one.span().1);
+                    // **方向跟着先來的那一個。** 方向是要留的信息（`;` 塌向哪一端看它），
+                    // 而先來的那一段是讀者先造出來的。
+                    *prev = match prev.anchor <= prev.head {
+                        true => Range { anchor: lo, head: hi },
+                        false => Range { anchor: hi, head: lo },
+                    };
+                }
+                _ => out.push(one),
+            }
+        }
+        // 主選區：原來那一段還在就用它，被併掉了就用蓋住它的那一段。
+        self.primary = out
+            .iter()
+            .position(|r| *r == primary)
+            .or_else(|| out.iter().position(|r| overlaps(*r, primary)))
+            .unwrap_or(0);
+        self.ranges = out;
+        was - self.ranges.len()
+    }
+}
+
+/// 兩段疊在一起沒有。
+///
+/// ⚠️ 第一項 `from == from` 是專門給**零寬**那一種的：`[5,5)` 和 `[5,9)` 算疊着，而
+/// `[0,5)` 和 `[5,9)` 不算。照搬「區間相交」的標準定義會在「光標剛好停在某段起點」時
+/// 行為不同（helix 的坑 2）。
+fn overlaps(a: Range, b: Range) -> bool {
+    let (a0, a1) = a.span();
+    let (b0, b1) = b.span();
+    a0 == b0 || (a1 > b0 && b1 > a0)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(a: usize, h: usize) -> Range {
+        Range { anchor: a, head: h }
+    }
+
+    /// **不變式：排好序、不重疊、至少一段。**
+    #[test]
+    fn normalize_sorts_and_merges_and_never_empties() {
+        let mut s = Selections::at(10);
+        s.push(at(0, 3));
+        s.push(at(20, 25));
+        assert_eq!(s.len(), 3);
+        // 排好序了——照加進去的次序是 10、0、20。
+        let spans: Vec<(usize, usize)> = s.iter().map(|r| r.span()).collect();
+        assert_eq!(spans, vec![(0, 3), (10, 10), (20, 25)], "按起點排好");
+
+        // 疊上去的那一段被併掉。
+        let merged = s.push(at(1, 12));
+        assert_eq!(merged, 2, "它同時蓋住了 [0,3) 和那個塌着的 10");
+        assert_eq!(s.len(), 2, "而 [20,25) 沒被蓋住，還在");
+        assert_eq!(s.primary().span(), (0, 12));
+
+        // 只留主選區之後還是至少一段。
+        s.push(at(30, 31));
+        assert_eq!(s.len(), 3);
+        assert_eq!(s.keep_primary(), 2, "去掉了兩段");
+        assert_eq!(s.len(), 1, "永遠至少一段");
+    }
+
+    /// ⚠️ **相鄰不算疊，而零寬碰到邊界算。**
+    ///
+    /// 區間是左閉右開的，所以 `[0,5)` 和 `[5,9)` 各歸各的——兩段挨着的整行選區不該被併成
+    /// 一段。而一個塌着的光標停在另一段的起點上**算**疊着（helix 專門為零寬加的一條），
+    /// 不然兩個光標停在同一個地方會變成兩個。
+    #[test]
+    fn touching_is_not_overlapping_but_a_caret_on_an_edge_is() {
+        let mut s = Selections::at(0);
+        s.map(|_| at(0, 5));
+        s.push(at(5, 9));
+        assert_eq!(s.len(), 2, "相鄰的兩段各歸各的");
+
+        let mut s = Selections::at(5);
+        s.push(at(5, 9));
+        assert_eq!(s.len(), 1, "塌在起點上的光標被併進去了");
+
+        let mut s = Selections::at(7);
+        s.push(at(7, 7));
+        assert_eq!(s.len(), 1, "同一個地方的兩個光標是一個");
+    }
+
+    /// **主選區不會在整理之後丟。**
+    ///
+    /// 排序會把下標打亂，所以它是靠位置認回來的；而被併掉的時候，認蓋住它的那一段。
+    #[test]
+    fn the_primary_survives_being_sorted_and_merged() {
+        let mut s = Selections::at(50);
+        s.push(at(10, 12));
+        s.push(at(30, 33));
+        // 最後加進去的是主選區。
+        assert_eq!(s.primary().span(), (30, 33));
+        s.map(|r| r);
+        assert_eq!(s.primary().span(), (30, 33), "整理過還是它");
+
+        // 一段大的把它蓋住——主選區跟着變成那一段。
+        s.push(at(0, 100));
+        assert_eq!(s.len(), 1);
+        assert_eq!(s.primary().span(), (0, 100), "被併掉就認蓋住它的那一段");
+    }
+
+    /// **方向是要留的信息。** 併起來的那一段，方向跟着先來的那一個。
+    #[test]
+    fn a_merged_range_keeps_the_direction_of_the_one_that_came_first() {
+        let mut s = Selections::at(0);
+        s.map(|_| at(9, 2)); // 反向：head 在前
+        s.push(at(5, 15));
+        assert_eq!(s.len(), 1);
+        let it = s.primary();
+        assert_eq!(it.span(), (2, 15));
+        assert!(it.head < it.anchor, "先來的那一段是反向的，併完還是：{it:?}");
     }
 }
