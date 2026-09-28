@@ -16883,3 +16883,36 @@ fn the_goto_a_key_goes_back_to_the_file_before_this_one() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`mi s` 取光標所在的那一句**（2026-09-28，§5.17 排第三的那一條）。
+///
+/// 這個編輯器是三家裏唯一把「句」立成單位的（`H`／`L` 按句走、`:view-sentence` 一句一縱、
+/// `:check-punct` 按句查），而「改寫這一句」從前做不到。
+#[test]
+fn the_sentence_object_takes_the_sentence_the_cursor_is_in() {
+    let took = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).chars().collect::<String>()
+    };
+
+    let line = "那年冬天，雪下得早。山路斷了。她站了很久。";
+    // 第一句：光標在行首。
+    assert_eq!(took(line, "mis"), "那年冬天，雪下得早。");
+    // 第二句：走到「山」上（前一句十個字）。
+    assert_eq!(took(line, "10lmis"), "山路斷了。");
+    // 句中任何一個字都取到同一句。
+    assert_eq!(took(line, "12lmis"), "山路斷了。");
+    // 最後一句。
+    assert_eq!(took(line, "16lmis"), "她站了很久。");
+
+    // ⚠️ **中文句子之間沒有空白，所以 `as` 和 `is` 拿到同一段**——vim 那條規矩在沒有
+    // 空白的文字裏的自然結果，不是算錯。
+    assert_eq!(took(line, "mas"), "那年冬天，雪下得早。");
+
+    // 西文那一側 `as` 真的多帶一個空格。
+    assert_eq!(took("One two. Three four.", "mis"), "One two.");
+    assert_eq!(took("One two. Three four.", "mas"), "One two. ");
+}

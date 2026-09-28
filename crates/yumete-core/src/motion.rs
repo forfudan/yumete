@@ -524,6 +524,16 @@ pub enum Object {
     /// 不是 tree-sitter——tree-sitter 在這個倉裏只管代碼檔與代碼圍欄。`:syntax text`
     /// 的檔交空，Typst 交 Typst 自己那一份。
     Markup,
+    /// **`mi s`／`ma s` — 光標所在的那一句**（2026-09-28）。
+    ///
+    /// ⚠️ **這一條是這個編輯器該有而 helix 和 vim 都不太有的**：句在這裏本來就是一個
+    /// 單位——`H`／`L` 按句走、`:view-sentence` 一句一縱、`:check-punct` 按句查——可是
+    /// 「改寫這一句」從前做不到，只能 `H` 再 `L` 再猜邊界。邊界走的是
+    /// [`sentence_starts`]，和那三處同一支：兩個答案就意味着光標停在版面不斷行的地方。
+    ///
+    /// ⚠️ **`as` 在中文裏會退化成 `is`**，同 `aw`：它多取句末那一段空白，而中文句子之間
+    /// 沒有空白。
+    Sentence,
     /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
     ///
     /// ⚠️ **Whole lines, not a run of characters**, which is what makes it an
