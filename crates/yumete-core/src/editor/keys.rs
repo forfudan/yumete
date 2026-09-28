@@ -1369,6 +1369,10 @@ impl Editor {
             // **`&` 把每一段的開頭對齊到同一列**（helix 的 `align_selections`）。
             // ⚠️ 算的是顯示寬度，一個漢字兩格。
             Key::Char('&') => self.align_selections(),
+            // **`A-(` `A-)` 輪轉的是裝在選區裏的字**，邊界不動（helix 的
+            // `rotate_selection_contents_*`）。上面那一對換的是「哪一段是主的」。
+            Key::Alt(')') => self.rotate_contents(true),
+            Key::Alt('(') => self.rotate_contents(false),
             Key::Char('s') => self.open_sift(multi::Sift::Select),
             Key::Char('S') => self.open_sift(multi::Sift::Split),
             Key::Alt('k') => self.open_sift(multi::Sift::Keep),

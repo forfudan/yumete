@@ -500,6 +500,61 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
+    /// **把每一段選區的文字輪轉一格**（`A-)` 往後、`A-(` 往前，helix 的
+    /// `rotate_selection_contents_*`）。
+    ///
+    /// ⚠️ **邊界不動，動的是裝在裏面的字。** `(`／`)` 是換「哪一段是主的」，這一對是
+    /// 把甲段的字搬到乙段去。表格裏換兩欄、對話裏換兩個人說的話，都是這一件。
+    ///
+    /// ⚠️ **各段長短不一，所以要從後往前換，並且把後面幾段跟着挪**——同
+    /// [`Self::edit_each`]。一個撤銷點。
+    pub(super) fn rotate_contents(&mut self, forward: bool) {
+        if !self.sel.is_plural() {
+            self.status = say!("selection.already-one");
+            return;
+        }
+        let rope = self.current_buffer().rope().clone();
+        let mut out: Vec<Range> = self.sel.iter().copied().collect();
+        let count = out.len();
+        let texts: Vec<String> = out
+            .iter()
+            .map(|one| {
+                let (a, b) = self.drawn(*one);
+                rope.slice(a..b).chars().collect()
+            })
+            .collect();
+        self.snapshot();
+        let grouping = self.current_buffer_mut().begin_undo_group();
+        for nth in (0..count).rev() {
+            // 往後輪：第 n 段拿的是第 n−1 段的字。
+            let from = match forward {
+                true => (nth + count - 1) % count,
+                false => (nth + 1) % count,
+            };
+            let text = &texts[from];
+            let (a, b) = self.drawn(out[nth]);
+            let was = b - a;
+            let now = text.chars().count();
+            if !self.edit_remove(a..b) || !self.edit_insert(a, text) {
+                break;
+            }
+            out[nth] = self.from_drawn(a, a + now);
+            let moved = now as isize - was as isize;
+            if moved != 0 {
+                for one in out.iter_mut().skip(nth + 1) {
+                    one.anchor = (one.anchor as isize + moved).max(0) as usize;
+                    one.head = (one.head as isize + moved).max(0) as usize;
+                }
+            }
+        }
+        self.current_buffer_mut().end_undo_group(grouping);
+        let which = self.sel.primary_index().min(out.len().saturating_sub(1));
+        let merged = self.sel.rebuild(out, which);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
     /// **只留主選區**（`,`）。
     pub(super) fn keep_primary_selection(&mut self) {
         match self.sel.keep_primary() {
