@@ -865,7 +865,7 @@ impl Editor {
         self.md_tables.borrow_mut().take();
         self.table_on_open();
         self.sel.set_anchor(0);
-        self.goal_column = 0;
+        self.sel.set_goal(None);
         self.mode = Mode::Normal;
         self.extend = false;
         self.pending = Pending::None;

@@ -351,7 +351,7 @@ impl Editor {
                 .with_caret(Some(self.caret_in_line()));
             crate::wrap::column_of(rope, self.sel.head(), m)
         };
-        self.goal_column = column;
+        self.sel.set_goal(Some(column));
     }
 
     /// `j`/`k` inside a grid, by cell rather than by screen column.
@@ -493,7 +493,7 @@ impl Editor {
         if self.step_grid_row(up) {
             return;
         }
-        let pos = {
+        let (pos, goal) = {
             let hide = |line: usize| self.hidden_on_line(line);
             let fold = |line: usize| self.line_is_folded(line);
             let rope = self.current_buffer().rope();
@@ -522,15 +522,28 @@ impl Editor {
                 .with_edit(self.current_buffer().edit())
                 .with_open_line(self.open_line())
                 .with_caret(Some(self.caret_in_line()));
-            if up {
-                crate::wrap::prev_row(rope, self.sel.head(), m, self.goal_column)
-            } else {
-                crate::wrap::next_row(rope, self.sel.head(), m, self.goal_column)
-            }
+            // ⚠️ **目標列現在在這一段自己身上**（#405）。沒記過就現算一次——新長出來
+            // 的選區、剛從別處跳過來的光標都會落到這一支上。
+            //
+            // ⚠️ **算完要記回去**：`j` 自己不叫 `refresh_goal_column`（那正是它保得住
+            // 目標列的原因），所以這裏不記的話，下一次 `j` 又從**已經被壓到行尾的**那
+            // 一列現算，連按兩下就再也回不到原來那一列了。
+            let goal = self.sel.goal();
+            let goal = goal.unwrap_or_else(|| crate::wrap::column_of(rope, self.sel.head(), m));
+            let pos = match up {
+                true => crate::wrap::prev_row(rope, self.sel.head(), m, goal),
+                false => crate::wrap::next_row(rope, self.sel.head(), m, goal),
+            };
+            (pos, goal)
         };
+        let remembered = self.sel.goal();
         self.sel.set_head(pos);
         if !self.extend {
             self.sel.set_anchor(pos);
+        }
+        // `set_head` 不動目標列，可是上面那一支可能是現算出來的——記回去。
+        if remembered.is_none() {
+            self.sel.set_goal(Some(goal));
         }
     }
 

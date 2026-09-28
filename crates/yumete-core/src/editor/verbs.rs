@@ -89,7 +89,7 @@ impl Editor {
         let last = motion::prev_grapheme(rope, rope.len_chars());
         self.sel.set_anchor(0);
         self.sel.set_head(last);
-        self.goal_column = 0;
+        self.sel.set_goal(None);
     }
 
     /// Grow the selection outward to whole lines (Helix `X`).

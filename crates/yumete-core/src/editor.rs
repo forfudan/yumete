@@ -52,7 +52,9 @@ pub struct Pane {
     pub buffer: u64,
     cursor: usize,
     anchor: usize,
-    goal_column: usize,
+    /// `j`／`k` 瞄準的那一列。⚠️ **這一半收起來的時候只剩一段選區**（`cursor`／`anchor`
+    /// 就是那一段），所以這裏存的是那一段的目標列，不是一組。
+    goal_column: Option<usize>,
     goal_slot: usize,
     extend: bool,
     /// What to mark in it while it is only being read — a search hit, say.
@@ -1603,8 +1605,6 @@ pub struct Editor {
     /// 從前直接讀寫那兩個欄位的三百多處，現在走 `self.sel.head()`／`set_head()` 那四支
     /// 門面，它們問的**永遠是主選區**。要作用在全部選區上的入口是 Phase 1 的事。
     sel: crate::selection::Selections,
-    /// Preserved visual column for vertical motion (`j` / `k`).
-    goal_column: usize,
     /// The text being typed after `:` / `/` (without the leading punctuation).
     command_line: String,
     /// Where the caret is on the prompt, in characters from its start.
@@ -2632,7 +2632,6 @@ impl Editor {
             current: 0,
             mode: Mode::Normal,
             sel: crate::selection::Selections::at(0),
-            goal_column: 0,
             command_line: String::new(),
             command_caret: 0,
             lookfor_focus: 0,
