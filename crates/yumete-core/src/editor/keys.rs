@@ -98,7 +98,10 @@ impl Editor {
             .then(|| (self.current_buffer().id(), self.sel.head()));
         let outcome = match self.mode {
             Mode::Normal => {
-                self.on_normal_key(key);
+                match multi::each_selection_key(&self.pending, key) {
+                    true => self.each_selection(|e| e.on_normal_key(key)),
+                    false => self.on_normal_key(key),
+                }
                 KeyOutcome::Continue
             }
             Mode::Insert => {

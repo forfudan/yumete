@@ -16412,3 +16412,47 @@ fn copying_says_so_when_there_is_no_room() {
     assert_eq!(ed.sel.len(), 1, "下面沒有一行夠長");
     assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
 }
+
+/// **移動作用在每一段上**（#405 Phase 1 第四步）。
+#[test]
+fn a_motion_moves_every_selection_not_just_the_primary() {
+    let mut ed = typed("甲乙丙丁\n戊己庚辛\n壬癸子丑\n");
+    press(&mut ed, "ggCC");
+    assert_eq!(ed.sel.len(), 3, "三行同一列各一段");
+
+    // `l` 三段各往右一格。
+    let before: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
+    press(&mut ed, "l");
+    let after: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
+    assert_eq!(ed.sel.len(), 3, "還是三段");
+    for (was, now) in before.iter().zip(&after) {
+        assert_eq!(*now, was + 1, "每一段都往右走了一格：{before:?} → {after:?}");
+    }
+
+    // `f` 等一個字符，逐段各找各的：三行的第四個字各不相同。
+    let mut ed = typed("甲乙丙丁\n戊己丙辛\n壬癸丙丑\n");
+    press(&mut ed, "ggCC");
+    press(&mut ed, "f丙");
+    let rope = ed.current_buffer().rope().clone();
+    let heads: Vec<(usize, usize)> = ed
+        .sel
+        .iter()
+        .map(|r| (rope.char_to_line(r.head), r.head - rope.line_to_char(rope.char_to_line(r.head))))
+        .collect();
+    assert_eq!(ed.sel.len(), 3, "三段都找到了自己那一行的 丙");
+    for (_, column) in &heads {
+        assert_eq!(*column, 2, "各在各行的第三格：{heads:?}");
+    }
+
+    // `gl` 到各自的行尾——三行一樣長，所以三段都在。
+    let mut ed = typed("甲乙丙丁\n戊己庚辛\n壬癸子丑\n");
+    press(&mut ed, "ggCC");
+    press(&mut ed, "gl");
+    assert_eq!(ed.sel.len(), 3, "三段各到各自的行尾");
+
+    // ⚠️ `gg` 不逐段做：三段一起去檔首會被併成一段，那不是使用者要的。
+    let mut ed = typed("甲乙丙丁\n戊己庚辛\n壬癸子丑\n");
+    press(&mut ed, "ggllCC");
+    press(&mut ed, "gg");
+    assert_eq!(ed.sel.len(), 3, "gg 只動主選區，別的兩段留在原處");
+}

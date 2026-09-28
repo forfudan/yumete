@@ -73,6 +73,23 @@ impl Selections {
         Selections { ranges: vec![Range::at(at)], primary: 0 }
     }
 
+    /// 一組只有這一段的選區。
+    pub fn one(one: Range) -> Selections {
+        Selections { ranges: vec![one], primary: 0 }
+    }
+
+    /// 從一串重新裝一組，`primary` 說哪一段是主的。⚠️ **裝完就整理**（排序、合併），
+    /// 回傳併掉了幾段。`ranges` 空着的話退回一段塌在 0 上的——沒有「沒有光標」這個狀態。
+    pub fn rebuild(&mut self, ranges: Vec<Range>, primary: usize) -> usize {
+        if ranges.is_empty() {
+            *self = Selections::at(0);
+            return 0;
+        }
+        self.primary = primary.min(ranges.len() - 1);
+        self.ranges = ranges;
+        self.normalize()
+    }
+
     /// 主選區。
     pub fn primary(&self) -> Range {
         self.ranges[self.primary]

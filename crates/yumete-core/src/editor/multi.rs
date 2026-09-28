@@ -93,6 +93,51 @@ impl super::Editor {
         }
     }
 
+    /// **把「作用在主選區上的一件事」逐段各做一次**（#405 Phase 1）。
+    ///
+    /// 辦法是把每一段輪流擺成唯一的那一段，跑一次 `what`，取回結果。⚠️ **這樣三百多處
+    /// 讀寫主選區的代碼一行都不用改**——它們本來就只管主選區，而這一支保證它們每次看見
+    /// 的都是一段真的、當下該管的選區。
+    ///
+    /// ⚠️ **只給移動用，不給編輯用。** 編輯會挪動別的選區的下標，那要走 Phase 1 第五步
+    /// 的 `edit_each`（從後往前做，一個撤銷點）。這一支假定 `what` 不改文本。
+    ///
+    /// ⚠️ **`goal_column` 還是一個**（`editor.rs` 上的欄位，不在 `Range` 裏）。所以每一
+    /// 段跑之前先按它自己的位置重算一次，否則 N 段會一起瞄準主選區那一列。代價是**連按
+    /// `j` 跨過一行短行之後，目標列記不住了**——單段的時候記得住。真要修就是把
+    /// `goal_column` 搬進 `Range`（§5.13.9 說了「等它們真的需要各有一份的時候再搬」，
+    /// 這就是那個時候，只是不在這一步）。
+    pub(super) fn each_selection(&mut self, what: impl Fn(&mut Self)) {
+        if !self.sel.is_plural() {
+            what(self);
+            return;
+        }
+        let was = self.sel.clone();
+        let primary = was.primary();
+        let mut out: Vec<Range> = Vec::with_capacity(was.len());
+        let mut which = 0;
+        // ⚠️ **一次性的那幾格要每一段都看得見。** 第一段跑完就把 `pending` 吃掉了
+        // （`f` 補上字符之後 `Pending::Find` 就沒了），後面幾段於是把那個字符當成一個
+        // 普通的鍵——`f丙` 只有第一段走得動，別的原地不動。`count` 同理（`3w`）。
+        // 每一段開跑之前擺回去，跑完之後留最後一段的那一份。
+        let pending = self.pending.clone();
+        let count = self.count;
+        for (nth, one) in was.iter().enumerate() {
+            self.sel = crate::selection::Selections::one(*one);
+            self.pending = pending.clone();
+            self.count = count;
+            self.refresh_goal_column();
+            what(self);
+            if *one == primary {
+                which = nth;
+            }
+            out.push(self.sel.primary());
+        }
+        let merged = self.sel.rebuild(out, which);
+        self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
     /// **只留主選區**（`,`）。
     pub(super) fn keep_primary_selection(&mut self) {
         match self.sel.keep_primary() {
@@ -111,5 +156,55 @@ impl super::Editor {
             let left = self.sel.len().to_string();
             self.murmur(say!("selection.merged", merged.to_string(), left));
         }
+    }
+}
+
+/// **哪些鍵要逐段各做一次**（#405 Phase 1 第四步）。
+///
+/// ⚠️ **這是一張明寫的表，不是規則。** 反過來寫（除了這幾個以外全都逐段做）試過在腦子裏
+/// 推一遍就知道不行：`:`、空格選單、`u`、`/`、面板那一族、進插入的那幾個，每一個都是
+/// 「整個編輯器做一次」的事，漏一個就是一次很難查的怪象。明寫的表漏掉一個鍵，症狀是那個
+/// 鍵只動主選區，看得見、好查。
+///
+/// ⚠️ **不收會改文本的鍵。** 編輯會挪動後面每一段的下標，那要走第五步的 `edit_each`
+/// （從後往前做，一個撤銷點）。
+///
+/// ⚠️ **不收要再等一個鍵的**（`f` `t` `g` `m` `[` `]` `空格` 這些前綴）：真正該逐段做的
+/// 是**補上那個字符的時候**，不是按下前綴的時候。那一半在 `answer_with_char` 與
+/// `handle_goto` 裏各包一次，見它們自己的註釋。
+fn moves_every_selection(key: crate::input::Key) -> bool {
+    use crate::input::Key;
+    matches!(
+        key,
+        Key::Char('h' | 'l' | 'j' | 'k')
+            | Key::Left
+            | Key::Right
+            | Key::Up
+            | Key::Down
+            | Key::Char('w' | 'b' | 'e' | 'W' | 'B' | 'E')
+            | Key::Char(';')
+            | Key::Alt(';')
+            | Key::Char('x' | 'X')
+    )
+}
+
+/// **這一鍵該不該逐段各做一次**——問的是鍵，也是**手上還等着什麽**。
+///
+/// ⚠️ **等着一個字符的時候，鍵本身說明不了問題。** 按 `f` 的那一下只是把 `Pending::Find`
+/// 立起來，真正的移動發生在補上那個字符的時候，而那個字符可以是任何字——包括 `x`，而 `x`
+/// 自己在上面那張表裏。所以先看 `pending`，再看鍵。
+pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Key) -> bool {
+    match pending {
+        // `f` `F` `t` `T` 補上的那一個字符：逐段各找各的。
+        super::Pending::Find(_) => true,
+        // ⚠️ **`g` 那一層只有幾個是移動。** `gf` 開檔、`gd` 看定義、`gw` 撒標籤，每一個
+        // 都是「整個編輯器做一次」。⚠️ `gg`／`ge` 也不逐段做：它們是「到檔首／檔尾」，
+        // N 段一起去同一個地方，`normalize` 會把它們併成一段——那不是使用者要的。
+        // 逐段做的是**行內**的那三個：到行首、到行首第一個字、到行尾。
+        super::Pending::Goto => {
+            matches!(key, crate::input::Key::Char('h' | 's' | 'l'))
+        }
+        super::Pending::None => moves_every_selection(key),
+        _ => false,
     }
 }
