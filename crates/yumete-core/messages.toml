@@ -3767,6 +3767,13 @@ zhs = "跳转表 {0}/{1}"
 en = "jump list {0}/{1}"
 
 [[message]]
+# 按了 ga 可是剛纔那一份已經關掉了
+key = "goto.last-file-was-closed"
+zht = "剛纔那一份已經關掉了"
+zhs = "刚才那一份已经关掉了"
+en = "that file has been closed"
+
+[[message]]
 # 標記所在的緩衝區已經關了
 key = "goto.mark-buffer-closed"
 zht = "「{0}」在的那個緩衝區已經關了"
@@ -3814,6 +3821,13 @@ key = "goto.no-headings"
 zht = "這個文件沒有標題"
 zhs = "这个文件没有标题"
 en = "no headings in this file"
+
+[[message]]
+# 按了 ga 可是這一趟還沒換過檔
+key = "goto.no-last-file"
+zht = "還沒看過別的稿子"
+zhs = "还没看过别的稿子"
+en = "no other file has been open yet"
 
 [[message]]
 # 跳轉表已經到最晚
@@ -4652,6 +4666,13 @@ key = "hint.goto.last-change"
 zht = "回到最後改動的地方"
 zhs = "回到最后改动的地方"
 en = "back to the last change"
+
+[[message]]
+# g 選單裏的 a ——切回剛纔看的那一份稿子
+key = "hint.goto.last-file"
+zht = "切回剛纔那一份"
+zhs = "切回刚才那一份"
+en = "back to the file before this one"
 
 [[message]]
 # g 組：行首／行尾

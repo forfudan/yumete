@@ -829,15 +829,22 @@ impl Editor {
         // to it returns to the same place.
         let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
+        // **剛纔看的是哪一份**（`ga`）。開一份新的也算換過，所以這裏和
+        // [`Editor::show_buffer`] 都要記——⚠️ 那一支只收「已經開着的」，開新檔走的是
+        // 這裏，兩條路都記上 `ga` 纔一直有答案。
+        let leaving = self.current_buffer().id();
         if self.buffers.len() == 1
             && self.buffers[0].path().is_none()
             && self.buffers[0].char_count() == 0
         {
+            // 被頂掉的那一份不存在了，回不去。
             self.buffers[0] = buffer;
             self.current = 0;
+            self.last_file = None;
         } else {
             self.buffers.push(buffer);
             self.current = self.buffers.len() - 1;
+            self.last_file = Some(leaving);
         }
         // What this file held when the session first saw it, so that a day
         // whose row is opened at four in the afternoon counts from the morning
