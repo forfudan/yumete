@@ -7255,7 +7255,7 @@ fn draw_search(
         yumete_core::search_panel::Where::Buffer => say!("search.where.buffer"),
         yumete_core::search_panel::Where::Folder => say!("search.where.folder"),
         yumete_core::search_panel::Where::Project => say!("search.where.project"),
-        // 指定資料夾：說使用者打的那個名字；還沒打就說這一檔本身叫什麼
+        // 指定文件夾：說使用者打的那個名字；還沒打就說這一檔本身叫什麼
         // （2026-09-27）。空着的時候寫一個真的名字，那一格纔看得出是四選一裏
         // 的一檔，而不是一個空盒子。
         yumete_core::search_panel::Where::Named(path) if path.as_os_str().is_empty() => {
@@ -7342,8 +7342,11 @@ fn draw_search(
         // 而名字不是打得了字的地方，所以它留在面板自己的底色上。
         let tag = format!("{tag}{}", " ".repeat(widest.saturating_sub(yumete_cjk::str_width(tag))));
         let tag = tag.as_str();
-        put_text(buf, left, y, to, tag, quiet);
-        let box_at = left + yumete_cjk::str_width(tag) as u16;
+        // **最左邊那兩欄歸號碼**（2026-09-29）：位置那一格畫 `0`，搜／換那兩格
+        // 空着。三個格子和底下七個開關於是對在同一欄上。
+        let tag_at = left + 2;
+        put_text(buf, tag_at, y, to, tag, quiet);
+        let box_at = tag_at + yumete_cjk::str_width(tag) as u16;
         if box_at >= to {
             return;
         }
@@ -7391,10 +7394,6 @@ fn draw_search(
             caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink);
         }
     };
-    // **位置排在搜索框之上**——`k` 從搜索框往上走，第一個碰到的就是它，而那正是
-    // `jk` 走的次序（`Field::step`）。
-    draw_box(buf, Field::Scope, &say!("search.label.scope"), &shown, y);
-    y += 1;
     draw_box(buf, Field::Query, &say!("search.label.query"), &find.query, y);
     // **The replace row is only there when it is meant to be** — `:search` is
     // for looking, `:replace` for changing, and `r`/`R` are live only here.
@@ -7402,6 +7401,15 @@ fn draw_search(
         y += 1;
         draw_box(buf, Field::Replace, &say!("search.label.replace"), &find.replace, y);
     }
+    // **位置畫在開關那一列的頭上，號碼是 `0`**（2026-09-29 定，原話：「直接把
+    // 『位置』一行搬到1-7的上方，前面加个0可以吗？」）。
+    //
+    // ⚠️ **起因是 `0` 在屏幕上一個字都沒有。** 它畫在最上面的時候讀起來是一個
+    // 標題，而它其實是四選一的一檔——和底下七個按號碼的開關是同一種東西。挪到
+    // 一起、號碼從 `0` 起，這一列就自己說明了自己，不必再在鍵位行上多寫一格。
+    y += 1;
+    draw_box(buf, Field::Scope, &say!("search.label.scope"), &shown, y);
+    put_text(buf, left, y, to, "0", ground.fg(ink.gold()));
     // The switches. 大小寫 is three ways, not a tick, so it says which one.
     let tick = |on: bool| match on {
         true => "[x]",
@@ -10980,15 +10988,19 @@ fn squeezed(text: &str) -> String {
         let row = |y: u16| -> String {
             (0..60).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()
         };
-        // 標題、位置、搜 —— 這個次序就是「這裏能打字」的全部說法。
+        // 標題、搜、位置 —— 這個次序就是「這裏能打字」的全部說法。
         // ⚠️ **「位置」2026-09-26 從標題那一行挪了下來**；2026-09-27 上下那兩道
-        // 線去掉了，所以它緊貼着標題行。一格一個字符，全角字的第二格是空的，所
-        // 以比的是第一個字。
+        // 線去掉了，所以「搜」緊貼着標題行；2026-09-29 位置又挪到了開關那一列的
+        // 頭上，號碼是 `0`。一格一個字符，全角字的第二格是空的，所以比的是第一
+        // 個字。
         let first = say!("label.panel.search").chars().next().unwrap();
         assert!(row(0).contains(first), "{:?}", row(0));
-        let scope = say!("search.label.scope").chars().next().unwrap();
-        assert!(row(1).contains(scope), "位置緊跟標題：{:?}", row(1));
+        let query = say!("search.label.query").chars().next().unwrap();
+        assert!(row(1).contains(query), "搜緊跟標題：{:?}", row(1));
         assert!(!row(1).contains("──"), "那兩道線去掉了：{:?}", row(1));
+        let scope = say!("search.label.scope").chars().next().unwrap();
+        assert!(row(2).contains(scope), "位置在搜底下：{:?}", row(2));
+        assert!(row(2).starts_with(" 0 "), "號碼是 0：{:?}", row(2));
 
         // **三檔底色，只鋪在打得了字的那一段上**（2026-09-24 報的：「这一块的
         // 颜色不好，我老是搞错」）。從前「正在打字」和「鍵不在這一格」都是紙那
@@ -11005,7 +11017,7 @@ fn squeezed(text: &str) -> String {
                 .find(|x| buf.cell((*x, y)).is_some_and(|c| c.symbol().starts_with(ch)))
                 .unwrap_or_else(|| panic!("第 {y} 行上找得到 {ch}"))
         };
-        let label_at = column(&buf, 2, lead);
+        let label_at = column(&buf, 1, lead);
         // ⚠️ **三個名字補齊到同一寬**（2026-09-26），所以框不是接在「搜: 」後面，
         // 而是接在最寬那一個（「位置: 」）後面——三格纔對得齊。
         let widest = [tag.clone(), say!("search.label.scope"), say!("search.label.replace")]
@@ -11016,13 +11028,13 @@ fn squeezed(text: &str) -> String {
         let box_at = label_at + widest as u16;
         // 名字那幾格留在面板的底色上——三檔說的是「這裏打得了字」。
         assert_eq!(
-            buf.cell((label_at, 2)).expect("名字那一段").style().bg,
+            buf.cell((label_at, 1)).expect("名字那一段").style().bg,
             chrome,
             "「{tag}」不該跟着框一起變色"
         );
         // ① 正在打字：梯子的盡頭，第 100 檔。
         assert_eq!(
-            buf.cell((box_at, 2)).expect("框裏").style().bg,
+            buf.cell((box_at, 1)).expect("框裏").style().bg,
             Some(ink.sunken()),
             "打字的時候是最深那一檔"
         );
@@ -11043,19 +11055,19 @@ fn squeezed(text: &str) -> String {
         // 底色是第二重。所以「沒被反白的那幾格」量的是**面板底**。
         let plain = chrome;
         let reversed = |buf: &ratatui::buffer::Buffer, x: u16| {
-            buf.cell((x, 2)).expect("框裏").style().bg == Some(ink.text())
+            buf.cell((x, 1)).expect("框裏").style().bg == Some(ink.text())
         };
         // 光標在末尾（「冬天」佔四格），壓着的是第五格那個空位。
         assert!(reversed(&buf, box_at + 4), "光標那一格反白");
-        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, plain, "⚠️ 整條不再反白");
-        assert_eq!(buf.cell((box_at + 2, 2)).expect("天").style().bg, plain);
+        assert_eq!(buf.cell((box_at, 1)).expect("冬").style().bg, plain, "⚠️ 整條不再反白");
+        assert_eq!(buf.cell((box_at + 2, 1)).expect("天").style().bg, plain);
 
         // `h` 挪一格，反白跟着走——這就是 `hl` 在框裏挪光標的樣子。
         ed.on_key(Key::Char('h'));
         let (buf, _) = render_caret(&ed, &config, 60, 16);
         assert!(reversed(&buf, box_at + 2), "退到「天」上");
         assert!(!reversed(&buf, box_at + 4), "原來那一格讓出來了");
-        assert_eq!(buf.cell((box_at, 2)).expect("冬").style().bg, plain, "隔壁那個字沒跟着反");
+        assert_eq!(buf.cell((box_at, 1)).expect("冬").style().bg, plain, "隔壁那個字沒跟着反");
         // ⚠️ **全角字的第二格在這裏永遠是 `Reset`，別去斷言它。** ratatui 的
         // `Buffer::diff` 跳過寬字形的後半格（那一格的 symbol 是空的），所以它
         // 根本沒送到 `TestBackend` 的緩衝區裏——`put_text` 明明寫過的「冬」的
@@ -11066,7 +11078,7 @@ fn squeezed(text: &str) -> String {
         ed.on_key(Key::Char('j'));
         let (buf, _) = render_caret(&ed, &config, 60, 16);
         assert_eq!(
-            buf.cell((box_at, 2)).expect("框裏").style().bg,
+            buf.cell((box_at, 1)).expect("框裏").style().bg,
             plain,
             "鍵不在這一格：面板底，一層都不鋪"
         );
@@ -11297,6 +11309,11 @@ fn squeezed(text: &str) -> String {
         w: u16,
         h: u16,
     ) -> (ratatui::buffer::Buffer, Option<Position>) {
+        // **明暗要先定下來**，同 `render_with` 那一行（見那裏的說明）。⚠️ 這一支
+        // 漏了它，於是用它的測試只有在**別的測試先定過**的時候纔綠——2026-09-29
+        // 動了搜索面板的排版，`the_search_box_is_drawn_as_a_box` 就穩定紅了，而
+        // 紅的地方是 `Palette::of`，一個字都沒提到排版。
+        crate::theme::settle(config, None);
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Seats::default();
         terminal
@@ -19775,11 +19792,11 @@ fn squeezed(text: &str) -> String {
         editor.open_file(&dir.join("一.md")).unwrap();
 
         editor.execute(":search").unwrap();
-        // 位置那一格：本文件 → 本文件夾，然後回到搜索框打字。
+        // 位置那一格：按 `0` 從本文件換到本文件夾（2026-09-29 起它畫在開關那一
+        // 列的頭上，`jk` 走不上去），然後回搜索框打字。
         editor.on_key(Key::Esc);
-        editor.on_key(Key::Char('k'));
         editor.on_key(Key::Char('0'));
-        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('k'));
         editor.on_key(Key::Char('i'));
         editor.on_key(Key::Char('冷'));
         editor.on_key(Key::Enter);

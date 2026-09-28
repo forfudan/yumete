@@ -241,7 +241,7 @@ impl Editor {
             Where::Folder => Some(self.here_folder()),
             Where::Project => Some(self.root()),
             // ⚠️ **相對路徑從根算起，不從當前緩衝算起**（2026-09-27 定）。
-            // 從前 `.` 是「當前緩衝的資料夾」，於是換一個 buffer 它就換了意思，
+            // 從前 `.` 是「當前緩衝的文件夾」，於是換一個 buffer 它就換了意思，
             // 而屏幕上看不出來。
             //
             // ⚠️ **開頭一個 `/` 也當根算**，同 VS Code 的「包含文件」框：
@@ -451,7 +451,7 @@ impl Editor {
             // ⚠️ **只在框裏。** 出了框 `Tab` 還是走邊欄那幾個視圖，那是它在每
             // 一扇面板裏的老意思。
             Key::Tab => {
-                let next = self.search.field.step(false, self.search.replacing);
+                let next = self.search.field.step(false, self.search.replacing, self.search.naming());
                 self.search.stand_on(next);
                 // 走到名單上就不是打字了，鍵交回面板。
                 if self.search.field == Field::Results {
@@ -460,7 +460,7 @@ impl Editor {
                 }
             }
             Key::BackTab => {
-                let back = self.search.field.step(true, self.search.replacing);
+                let back = self.search.field.step(true, self.search.replacing, self.search.naming());
                 self.search.stand_on(back);
                 if self.search.field == Field::Results {
                     self.mode = Mode::Normal;
@@ -535,9 +535,13 @@ impl Editor {
 
     /// **換一個範圍**——`0`，或者在位置那一格上按左右（2026-09-27 定）。
     ///
-    /// 本文件 → 本文件夾 → 項目 → 指定資料夾… → 回本文件。⚠️ **走到最後那一檔
-    /// 就把鍵交進框裏**：那一檔的意思就是「我要自己打一個資料夾」，選中了還要
-    /// 再按一下 `i` 是白按。
+    /// 本文件 → 本文件夾 → 項目 → 指定文件夾… → 回本文件。
+    ///
+    /// ⚠️ **最後那一檔不自己把鍵交進框裏**（2026-09-29 撤回，原本是交的）。原本
+    /// 的理由是「那一檔的意思就是『我要自己打一個文件夾』，選中了還要再按一下
+    /// `i` 是白按」。⚠️ **可 `0` 是一個輪盤**：按到那一檔就進了打字狀態，再按
+    /// `0` 打出來的是一個 `0`，輪盤就此卡死——使用者報的原話「後續的 0 都變成了
+    /// 文件夾的路徑」。一個鍵不能既是輪盤又是入口。要打路徑就在那一格上按 `i`。
     fn step_the_scope(&mut self) {
         use crate::search_panel::Where;
         self.search.scope = self.search.scope.next();
@@ -545,10 +549,7 @@ impl Editor {
         self.search.caret = self.search.scope_text.chars().count();
         self.search.field = crate::search_panel::Field::Scope;
         match self.search.scope {
-            Where::Named(_) => {
-                self.search.all_selected = false;
-                self.mode = Mode::Field;
-            }
+            Where::Named(_) => self.search.all_selected = false,
             _ => self.look_again(),
         }
     }
@@ -568,7 +569,7 @@ impl Editor {
     fn leave_field(&mut self, back: bool) {
         // 離開「位置」那一格，不管走的是哪一條路，都落地。
         self.land_the_scope();
-        self.search.field = self.search.field.step(back, self.search.replacing);
+        self.search.field = self.search.field.step(back, self.search.replacing, self.search.naming());
         self.search.all_selected = false;
         match self.search.takes_text() {
             true => self.search.caret = self.search.typed().chars().count(),
@@ -596,7 +597,7 @@ impl Editor {
             // 「少一點／多一點」是同一件事；到頂了 `h` 出去，免得困在列表裏。
             Key::Char('h') | Key::Left if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
-                    let back = self.search.field.step(true, self.search.replacing);
+                    let back = self.search.field.step(true, self.search.replacing, self.search.naming());
                     self.stand_on_and_look(back);
                 }
             }
@@ -605,7 +606,7 @@ impl Editor {
             }
             // **位置那一格是個四選一，所以 `hl` 在它上面是換檔**（2026-09-27
             // 定）。那一格平常沒有字可以挪光標，`hl` 也就沒有別的事可做；而
-            // 「這一格能換」本來就該用左右來說。選到「指定資料夾…」纔打得了字，
+            // 「這一格能換」本來就該用左右來說。選到「指定文件夾…」纔打得了字，
             // 那時 `hl` 又是挪光標。
             Key::Char('h') | Key::Left | Key::Char('l') | Key::Right
                 if self.search.field == Field::Scope && !self.search.takes_text() =>
@@ -628,7 +629,7 @@ impl Editor {
                     self.show_hit();
                 }
                 _ => {
-                    let next = self.search.field.step(false, self.search.replacing);
+                    let next = self.search.field.step(false, self.search.replacing, self.search.naming());
                     self.stand_on_and_look(next);
                 }
             },
@@ -638,7 +639,7 @@ impl Editor {
                 // `step(false)` 在第 0 條上飽和，於是列表是個進得去出不來的地
                 // 方——`Tab` 走得出去，可沒人會想到去按它。
                 Field::Results if self.search.selected == 0 => {
-                    let back = self.search.field.step(true, self.search.replacing);
+                    let back = self.search.field.step(true, self.search.replacing, self.search.naming());
                     self.stand_on_and_look(back);
                 }
                 Field::Results => {
@@ -646,7 +647,7 @@ impl Editor {
                     self.show_hit();
                 }
                 _ => {
-                    let back = self.search.field.step(true, self.search.replacing);
+                    let back = self.search.field.step(true, self.search.replacing, self.search.naming());
                     self.stand_on_and_look(back);
                 }
             },

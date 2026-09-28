@@ -77,7 +77,7 @@ impl Where {
         match self {
             Where::Buffer => Where::Folder,
             Where::Folder => Where::Project,
-            // **第四檔是「指定資料夾…」**（2026-09-27 定）。從前它不在圈裏，於是
+            // **第四檔是「指定文件夾…」**（2026-09-27 定）。從前它不在圈裏，於是
             // 那一格唯一的用法是打字，而打字是看不出來的——三個試用的人裏有兩個
             // 把這一格標成拦路，理由都是「我看不出它能填什麼，填錯了它也不說」。
             Where::Project => Where::Named(std::path::PathBuf::new()),
@@ -103,9 +103,9 @@ impl Where {
 pub enum Field {
     /// **哪裏找** —— 和 `:search` 的參數同一套：空着是本文件，別的都當路徑。
     ///
-    /// 2026-09-23 報的：「比如用戶如果 `:search` 當前文件，但是又突然想查詢整個
-    /// 文件夾，他就可以 Esc → k → i → `.`」。所以它排在查詢框**之上**——`k` 從
-    /// 查詢框往上走，第一個碰到的就是它。
+    /// ⚠️ **2026-09-29 從查詢框上面挪到了開關那一列的頭上**，號碼是 `0`。它本來
+    /// 就是四選一，`0` 換一檔，和底下那七個按號碼的開關是同一種東西；畫在上面
+    /// 的時候 `0` 這個鍵在屏幕上一個字都沒有，沒人找得到它。
     Scope,
     /// The pattern.
     #[default]
@@ -159,9 +159,12 @@ impl Field {
     /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
     /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`／`[ ]` 自然照這個讀法。
     pub const ALL: [Field; 12] = [
-        Field::Scope,
         Field::Query,
         Field::Replace,
+        // **位置排在開關那一列的頭上**（2026-09-29 定）。它是四選一，按 `0` 換一
+        // 檔——和底下那七個按號碼的開關是同一種東西，所以畫在一起，號碼從 `0`
+        // 起。從前它畫在最上面，於是 `0` 這個鍵在屏幕上一個字都沒有。
+        Field::Scope,
         Field::Case,
         Field::Glyphs,
         Field::Pinyin,
@@ -200,10 +203,23 @@ impl Field {
         Field::SWITCHES.contains(&self)
     }
 
+    /// **`jk` 走不上去的那幾格**——按號碼到，不是走過去。
+    ///
+    /// ⚠️ **位置那一格看它是哪一檔**（2026-09-29）。四選一的頭三檔沒有字可改，
+    /// 停上去沒有用處，`0` 換檔就夠了——它 2026-09-29 挪到開關那一列的頭上、號碼
+    /// 寫成 `0` 之後，和底下七個就是同一種東西。
+    ///
+    /// ⚠️ **第四檔「指定文件夾…」是個輸入框，一定要停。** 跳過去就沒法改那條路
+    /// 徑了，而 `0` 繞一圈回來會把打好的路徑清掉（`step_the_scope` 每走一檔都重
+    /// 寫 `scope_text`）。`naming` 就是問這一句，答案在 [`Search::takes_text`]。
+    pub fn walked_past(self, naming: bool) -> bool {
+        self.is_switch() || (self == Field::Scope && !naming)
+    }
+
     /// Whether this cell is typed into at all (so `i` and the IME belong here).
     ///
     /// ⚠️ **位置那一格是有條件的**，問 [`Search::takes_text`] 纔算數：它平常是
-    /// 一個四選一，只有選到「指定資料夾…」的時候纔打得了字。
+    /// 一個四選一，只有選到「指定文件夾…」的時候纔打得了字。
     pub fn takes_text(self) -> bool {
         matches!(self, Field::Scope | Field::Query | Field::Replace)
     }
@@ -222,21 +238,27 @@ impl Field {
     /// match covers characters nobody typed, so 「replace them all」 would hand
     /// the manuscript to a range the writer cannot predict. 模糊 is for
     /// finding; when it has found the place, `Esc` and change it there.
-    pub fn step(self, back: bool, replacing: bool) -> Field {
-        let cells: Vec<Field> = Field::ALL
-            .into_iter()
-            .filter(|f| match f {
-                Field::Replace => replacing,
-                f if f.is_switch() => false,
-                _ => true,
-            })
-            .collect();
-        let at = cells.iter().position(|&f| f == self).unwrap_or(0);
-        let n = cells.len();
-        cells[match back {
-            true => (at + n - 1) % n,
-            false => (at + 1) % n,
-        }]
+    /// ⚠️ **從一個走不上去的格子出發也要對**（2026-09-29 修）。按了 `0` 或者
+    /// `3`，鍵就落在那一格上了，而它不在可走的名單裏——從前是拿「名單第 0 格」
+    /// 頂替，於是按完 `0` 再按 `k` 跳到了名單最底下的結果。所以走的是**畫出來
+    /// 的那張全表**，一格一格往那個方向找，碰到第一個停得住的就停。
+    pub fn step(self, back: bool, replacing: bool, naming: bool) -> Field {
+        let stops = |f: Field| match f {
+            Field::Replace => replacing,
+            f => !f.walked_past(naming),
+        };
+        let n = Field::ALL.len();
+        let mut at = Field::ALL.iter().position(|&f| f == self).unwrap_or(0);
+        for _ in 0..n {
+            at = match back {
+                true => (at + n - 1) % n,
+                false => (at + 1) % n,
+            };
+            if stops(Field::ALL[at]) {
+                return Field::ALL[at];
+            }
+        }
+        self
     }
 }
 
@@ -596,13 +618,21 @@ impl Search {
     /// **這一格現在打得了字嗎。**
     ///
     /// 「搜」和「換」永遠打得了。「位置」是個四選一（本文件／本文件夾／項目／
-    /// 指定資料夾…），只有選到最後那一檔纔打得了字——`0` 或者 `h`／`l` 換檔
+    /// 指定文件夾…），只有選到最後那一檔纔打得了字——`0` 或者 `h`／`l` 換檔
     /// （2026-09-27 定）。
     pub fn takes_text(&self) -> bool {
         match self.field {
-            Field::Scope => matches!(self.scope, Where::Named(_)),
+            Field::Scope => self.naming(),
             other => other.takes_text(),
         }
+    }
+
+    /// **位置那一格現在是不是一個輸入框**——只問位置，不問鍵在哪一格。
+    ///
+    /// ⚠️ 和 [`Search::takes_text`] 不是一回事：那一支問的是**鍵所在的**那一格，
+    /// 站在查詢框上它一律回真。`jk` 要不要停在位置那一行，問的是這一支。
+    pub fn naming(&self) -> bool {
+        matches!(self.scope, Where::Named(_))
     }
 
     pub fn typed(&self) -> &str {

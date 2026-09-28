@@ -8184,21 +8184,28 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     ed.open_search();
     assert_eq!(ed.search_for_test().field, Field::Query, "開在查詢框上");
 
-    // ① 範圍那一格在查詢框**之上**——`Esc` 出框、`k` 一下就到。
+    // ① **範圍那一格按 `0` 到，`jk` 走不上去**（2026-09-29 起它畫在開關那一列
+    // 的頭上，號碼就是 `0`）。
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('k'));
-    assert_eq!(ed.search_for_test().field, Field::Scope, "k 上去就是範圍");
-    assert_eq!(ed.search_for_test().scope_text, "", "本文件寫成空的");
-    // ⚠️ **位置那一格 2026-09-27 起是四選一**，`i` 在它上面沒有東西可改；
-    // `0`（或者左右）換檔，走到第四檔「指定資料夾…」纔打得了字，而那一下順手
-    // 把鍵交進框裏。本文件 → 本文件夾 → 項目 → 指定資料夾…
-    ed.on_key(Key::Char('i'));
-    assert_eq!(ed.status(), say!("search.scope-is-a-pick"), "那一格不是輸入框");
-    for _ in 0..3 {
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search_for_test().field, Field::Results, "j 一步到結果，不停在範圍上");
+    ed.on_key(Key::Char('0'));
+    assert_eq!(ed.search_for_test().field, Field::Scope, "0 把鍵交到範圍那一格");
+    assert!(matches!(ed.search_for_test().scope, Where::Folder), "順帶換了一檔");
+    // ⚠️ **`0` 是一個輪盤，按到底再回本文件**（2026-09-29 報的：走到第四檔會自己
+    // 進打字狀態，於是「後續的 0 都變成了文件夾的路徑」）。
+    for _ in 0..4 {
+        ed.on_key(Key::Char('0'));
+    }
+    assert!(matches!(ed.search_for_test().scope, Where::Folder), "轉了一圈回到原處");
+    assert_eq!(ed.mode(), Mode::Normal, "輪盤從頭到尾不進打字狀態");
+    // 走到「指定文件夾…」那一檔，按 `i` 纔開始打路徑。
+    for _ in 0..2 {
         ed.on_key(Key::Char('0'));
     }
     assert!(matches!(ed.search_for_test().scope, Where::Named(_)), "走到第四檔");
-    assert_eq!(ed.mode(), Mode::Field, "選中「指定資料夾…」就能打字了");
+    ed.on_key(Key::Char('i'));
+    assert_eq!(ed.mode(), Mode::Field, "「指定文件夾…」那一檔打得了字");
     ed.on_key(Key::Char('.'));
     ed.on_key(Key::Enter);
     assert_eq!(
@@ -8211,11 +8218,21 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     // `Esc` 出框也落地，而且落的是同一個地方。
     assert_eq!(ed.search_for_test().scope, Where::Named(".".into()));
 
-    // ③ **`j` 從查詢框一步到結果**——五行開關走不上去（2026-09-24 定，原話：
-    // 「避免用户要从他们上面经过浪费 jk」）。
+    // ③ **這一刻位置那一格是個輸入框**（剛打了一條路徑進去），所以 `jk` 停在
+    // 它上面——跳過去那條路徑就再也改不了，而 `0` 繞一圈回來會把它清掉
+    // （2026-09-29 報的：「如果位置那里出现了输入框，就不能跳过，否则无法输入」）。
     ed.search_for_test().field = Field::Query;
     ed.on_key(Key::Char('j'));
-    assert_eq!(ed.search_for_test().field, Field::Results, "跳過五行開關");
+    assert_eq!(ed.search_for_test().field, Field::Scope, "打着路徑就要停");
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search_for_test().field, Field::Results, "再往下纔是結果");
+
+    // ③b **換回「本文件」，那一格沒有字可改，`jk` 就跳過它**——連同七行開關
+    // （2026-09-24 定，原話：「避免用户要从他们上面经过浪费 jk」）。
+    ed.search_for_test().scope = Where::Buffer;
+    ed.search_for_test().field = Field::Query;
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search_for_test().field, Field::Results, "跳過開關，也跳過位置");
     ed.on_key(Key::Char('k'));
     assert_eq!(ed.search_for_test().field, Field::Query, "回來也跳過");
 
@@ -8708,8 +8725,9 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     assert_eq!(ed.search().query, "霜大降石", "插在光標那裏");
 
     // ④ 走到別的格子，光標跟着挪到那一格的末尾——一個 caret 伺候所有的框。
+    // ⚠️ **位置那一格 `jk` 走不上去**（2026-09-29 起它和開關同一列），按 `0`。
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('k'));
+    ed.on_key(Key::Char('0'));
     assert_eq!(ed.search().field, Field::Scope);
     assert_eq!(
         ed.search().caret,
@@ -8931,7 +8949,7 @@ fn the_loose_switch_is_not_there_when_the_panel_replaces() {
     // …and the cell is not in the form at all, so `Tab` cannot reach it.
     let mut field = Field::Query;
     for _ in 0..Field::ALL.len() + 1 {
-        field = field.step(false, true);
+        field = field.step(false, true, false);
         assert_ne!(field, Field::Fuzzy);
     }
 }
@@ -9044,9 +9062,9 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     // A folder named outright — and one that is not there says so rather
     // than quietly searching this file alone.
     //
-    // ⚠️ **相對路徑從根算起**（2026-09-27 改）：從前它從**當前緩衝的資料夾**算
+    // ⚠️ **相對路徑從根算起**（2026-09-27 改）：從前它從**當前緩衝的文件夾**算
     // 起，所以同一個 `../卷一` 在不同的 buffer 裏指着不同的地方，而屏幕上看不出
-    // 來。現在根就是這本書，所以這個資料夾的名字就是 `卷一`。
+    // 來。現在根就是這本書，所以這個文件夾的名字就是 `卷一`。
     ed.execute(":search 卷一").unwrap();
     assert!(matches!(ed.search().scope, Where::Named(_)));
     ed.on_key(Key::Enter);
