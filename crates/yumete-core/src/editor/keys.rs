@@ -95,7 +95,7 @@ impl Editor {
             .table
             .as_ref()
             .is_some_and(|view| view.takes_the_pane())
-            .then(|| (self.current_buffer().id(), self.cursor));
+            .then(|| (self.current_buffer().id(), self.sel.head()));
         let outcome = match self.mode {
             Mode::Normal => {
                 self.on_normal_key(key);
@@ -287,7 +287,7 @@ impl Editor {
             return;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let Some(first) =
             self.with_md_tables(|rows| rows.iter().find(|&&(a, b)| line >= a && line <= b).map(|&(a, _)| a))
         else {
@@ -450,7 +450,7 @@ impl Editor {
         self.settle_alias_count();
         let n = self.count.take().unwrap_or(1).max(1);
         let rope = self.current_buffer().rope();
-        let first = rope.char_to_line(self.cursor);
+        let first = rope.char_to_line(self.sel.head());
         let last = (first + n - 1).min(rope.len_lines().saturating_sub(1));
         let span = self.line_span(first, last, op == 'c');
         self.do_vim(op, span);
@@ -484,7 +484,7 @@ impl Editor {
     fn run_vim_step(&mut self, op: char, step: crate::vim::Step) {
         self.settle_alias_count();
         let n = self.count.take().unwrap_or(1).max(1);
-        let start = self.cursor;
+        let start = self.sel.head();
         // ⚠️ **`cw` is `ce`** — vim's own special case (`:h cw`): 「When the
         // cursor is in a word, `cw` does not include the white space after a
         // word, it only changes up to the end of the word.」 A translation
@@ -553,15 +553,15 @@ impl Editor {
             // the caret already one short of the comma lands where it stands,
             // and `dt,` still takes that character — stopping here made `dt,`
             // do nothing at all.
-            if i > 0 && head == self.cursor {
+            if i > 0 && head == self.sel.head() {
                 break;
             }
-            before = self.cursor;
-            self.cursor = head;
+            before = self.sel.head();
+            self.sel.set_head(head);
             target = Some(head);
         }
         let landed = target;
-        self.cursor = start;
+        self.sel.set_head(start);
         let Some(target) = landed else {
             self.count = None;
             self.alias_count = None;
@@ -634,7 +634,7 @@ impl Editor {
                 };
                 self.apply(motion::Operator::Yank, span);
                 self.set_cursor(head);
-                self.anchor = head;
+                self.sel.set_anchor(head);
             }
         }
     }
@@ -1109,11 +1109,11 @@ impl Editor {
             Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_vertical(true)),
             Key::Char('j') | Key::Down => self.repeat(count, |e| e.move_vertical(false)),
             Key::Home => {
-                let pos = motion::line_start(self.current_buffer().rope(), self.cursor);
+                let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
                 self.move_head(pos);
             }
             Key::End => {
-                let pos = motion::line_last(self.current_buffer().rope(), self.cursor);
+                let pos = motion::line_last(self.current_buffer().rope(), self.sel.head());
                 self.move_head(pos);
             }
             // **`Enter`, `+` and `-`** — vim's three ways of saying 「the next
@@ -1298,9 +1298,9 @@ impl Editor {
                 // **Esc 没有別的事可做的時候，就是「把輸入法的挂起再說一
                 // 遍」**（2026-09-22）。收窗口、收選區都輪不到這一件；而收不收得
                 // 到選區，看的是它本來收不收得起來。
-                let idle = !self.extend && self.anchor == self.cursor;
+                let idle = !self.extend && self.sel.anchor() == self.sel.head();
                 self.extend = false;
-                self.anchor = self.cursor;
+                self.sel.set_anchor(self.sel.head());
                 if idle {
                     self.say_it_again = true;
                 }
@@ -1331,7 +1331,7 @@ impl Editor {
                 }
             }
             Key::Char(';') => {
-                self.anchor = self.cursor;
+                self.sel.set_anchor(self.sel.head());
                 if self.extend {
                     self.status = say!("selection.collapsed-in-extend");
                 }
@@ -1415,13 +1415,13 @@ impl Editor {
             }
             Key::Char('I') => {
                 self.snapshot();
-                let pos = motion::line_start(self.current_buffer().rope(), self.cursor);
+                let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
                 self.set_cursor(pos);
                 self.enter_insert();
             }
             Key::Char('A') => {
                 self.snapshot();
-                let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
+                let pos = motion::line_end(self.current_buffer().rope(), self.sel.head());
                 self.set_cursor(pos);
                 self.enter_insert();
             }
@@ -1571,7 +1571,7 @@ impl Editor {
                     true => self.goto_line(count),
                     false => {
                         let rope = self.current_buffer().rope();
-                        self.move_head(motion::buffer_end(rope, self.cursor));
+                        self.move_head(motion::buffer_end(rope, self.sel.head()));
                     }
                 }
             }

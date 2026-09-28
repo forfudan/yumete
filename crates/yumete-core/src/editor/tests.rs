@@ -5134,12 +5134,12 @@ fn readonly_says_which_way_it_is() {
 fn a_refused_delete_leaves_the_selection_where_it_was() {
     let mut ed = Editor::new();
     ed.add_buffer(crate::Buffer::from_text("一二三四五"));
-    ed.anchor = 1;
-    ed.cursor = 3;
+    ed.sel.set_anchor(1);
+    ed.sel.set_head(3);
     ed.current_buffer_mut().set_readonly(true);
     press(&mut ed, "d");
     assert_eq!(ed.current_buffer().text(), "一二三四五", "the text stayed");
-    assert_eq!((ed.anchor, ed.cursor), (1, 3), "so did the selection");
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (1, 3), "so did the selection");
     assert!(ed.status().contains("只讀"), "and it said so: {}", ed.status());
 }
 
@@ -13203,21 +13203,21 @@ fn stepping_sideways_crosses_the_line_break() {
     let mut ed = typed("甲乙\n丙丁\n");
     let line = |e: &Editor| {
         let rope = e.current_buffer().rope();
-        rope.char_to_line(e.cursor)
+        rope.char_to_line(e.sel.head())
     };
     assert_eq!(line(&ed), 0);
     for _ in 0..3 {
         ed.on_key(Key::Char('l'));
     }
     assert_eq!(line(&ed), 1, "three steps off a two-character line");
-    assert_eq!(ed.cursor, ed.current_buffer().rope().line_to_char(1));
+    assert_eq!(ed.sel.head(), ed.current_buffer().rope().line_to_char(1));
 
     ed.on_key(Key::Char('h'));
     assert_eq!(line(&ed), 0, "and back over the break");
     for _ in 0..3 {
         ed.on_key(Key::Char('h'));
     }
-    assert_eq!(ed.cursor, 0, "the top of the file is where it stops");
+    assert_eq!(ed.sel.head(), 0, "the top of the file is where it stops");
 }
 
 /// `t w` and `t a` are two switches over one axis, and **either of them,
@@ -13686,7 +13686,7 @@ fn a_huge_count_on_f_costs_one_look_when_the_character_is_not_there() {
     ed.open_file(&path).unwrap();
     let started = std::time::Instant::now();
     press(&mut ed, "1000000fZ");
-    assert_eq!(ed.cursor, 0, "there is no Z on the line");
+    assert_eq!(ed.sel.head(), 0, "there is no Z on the line");
     assert!(
         started.elapsed() < std::time::Duration::from_secs(2),
         "one look, not a million: {:?}",
@@ -13940,9 +13940,9 @@ fn write_all_that_stops_to_ask_stands_on_that_file_properly() {
     assert!(ed.query.is_some(), "the grown file asks before it is written");
     assert_eq!(ed.current, 1, "and the question is asked standing on it");
     assert!(
-        ed.cursor <= ed.current_buffer().char_count(),
+        ed.sel.head() <= ed.current_buffer().char_count(),
         "cursor {} is not in a document of {} characters",
-        ed.cursor,
+        ed.sel.head(),
         ed.current_buffer().char_count()
     );
 
@@ -13953,7 +13953,7 @@ fn write_all_that_stops_to_ask_stands_on_that_file_properly() {
 
     // The chapter that was left keeps its place for when the writer goes back.
     ed.show_buffer_at(0);
-    assert_eq!(ed.cursor, 300_000, "the chapter remembers where it was");
+    assert_eq!(ed.sel.head(), 300_000, "the chapter remembers where it was");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -14049,18 +14049,18 @@ fn walking_a_line_by_word_cuts_the_line_once() {
     // last character, or the space in front of the next word. Either way the
     // caret stops one short of a boundary the dictionary drew, and a memo that
     // is fast and wrong is the failure this test is really for.
-    let mut was = ed.cursor;
+    let mut was = ed.sel.head();
     for step in 1..=50 {
         press(&mut ed, "w");
-        assert!(ed.cursor > was, "step {step} did not move");
+        assert!(ed.sel.head() > was, "step {step} did not move");
         assert!(
             expected
                 .iter()
-                .any(|&(a, b)| a == ed.cursor + 1 || b == ed.cursor + 1),
+                .any(|&(a, b)| a == ed.sel.head() + 1 || b == ed.sel.head() + 1),
             "step {step} landed at {}, which is no boundary the dictionary drew",
-            ed.cursor
+            ed.sel.head()
         );
-        was = ed.cursor;
+        was = ed.sel.head();
     }
     // One for the paragraph, and at most one more for the empty line after it.
     assert!(
@@ -14102,13 +14102,13 @@ fn a_change_of_word_level_reaches_a_line_already_cut() {
 
     press(&mut ed, "gg");
     press(&mut ed, "w");
-    assert_eq!(ed.cursor, 1, "one character is one word at 平衡");
+    assert_eq!(ed.sel.head(), 1, "one character is one word at 平衡");
 
     ed.set_word_level(yumete_cjk::WordLevel::Full);
     press(&mut ed, "gg");
     press(&mut ed, "w");
     assert_eq!(
-        ed.cursor, 4,
+        ed.sel.head(), 4,
         "at 全 the whole line is one word, so `w` selects all of it"
     );
 }
@@ -14859,8 +14859,8 @@ fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
     let text = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳\n天地玄黃\n";
     let at = |ed: &Editor| {
         let rope = ed.current_buffer().rope();
-        let line = rope.char_to_line(ed.cursor);
-        (line, ed.cursor - rope.line_to_char(line))
+        let line = rope.char_to_line(ed.sel.head());
+        (line, ed.sel.head() - rope.line_to_char(line))
     };
     let mut ed = typed(text);
     ed.set_wrap_width(10); // five characters a row: line 0 is four rows
@@ -15011,9 +15011,9 @@ fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
     // pressed a dozen times a minute; here they were `A-.` and nothing.
     let mut ed = vim("a.b.c.d\n");
     press(&mut ed, "f.;");
-    assert_eq!(ed.cursor, 3, "the second dot");
+    assert_eq!(ed.sel.head(), 3, "the second dot");
     press(&mut ed, ",");
-    assert_eq!(ed.cursor, 1, "and back to the first");
+    assert_eq!(ed.sel.head(), 1, "and back to the first");
 }
 
 /// **The five a vim hand reaches for without thinking** (#428, 2026-09-18):
@@ -15128,9 +15128,9 @@ fn the_vim_preset_translates_what_a_vim_hand_types() {
 
     let mut ed = vim();
     press(&mut ed, "$");
-    assert_eq!(ed.cursor, 3, "$ is the end of the line");
+    assert_eq!(ed.sel.head(), 3, "$ is the end of the line");
     press(&mut ed, "0");
-    assert_eq!(ed.cursor, 0, "0 its start");
+    assert_eq!(ed.sel.head(), 0, "0 its start");
 
     // A held `d` that nothing completes is pressed for real, and `Esc` lets
     // go of it without pressing it.

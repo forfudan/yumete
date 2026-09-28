@@ -17,10 +17,10 @@ impl Editor {
             return;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let spot = match self.current_buffer().path() {
             Some(path) => Spot::InFile(path.to_path_buf(), line),
-            None => Spot::InBuffer(self.current_buffer().id(), self.cursor),
+            None => Spot::InBuffer(self.current_buffer().id(), self.sel.head()),
         };
         self.marks.insert(name, spot);
         self.status = say!("goto.mark-set", name, self.current_buffer().display_name(), line + 1);
@@ -76,7 +76,7 @@ impl Editor {
         // the thing that was looked for. Cleared on the next key, so it
         // describes the move that just happened and nothing after it.
         self.jumped = true;
-        let here = (self.current_buffer().id(), self.cursor);
+        let here = (self.current_buffer().id(), self.sel.head());
         // Walking away from a place already noted adds nothing.
         if self.jumps.last() == Some(&here) {
             return;
@@ -102,7 +102,7 @@ impl Editor {
             // Stepping back for the first time has to note where we are, or
             // `C-i` would have nowhere to return to.
             if self.jump_at == self.jumps.len() {
-                let here = (self.current_buffer().id(), self.cursor);
+                let here = (self.current_buffer().id(), self.sel.head());
                 if self.jumps.last() != Some(&here) {
                     self.jumps.push(here);
                 }

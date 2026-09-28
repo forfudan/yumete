@@ -1329,7 +1329,7 @@ impl Editor {
             return false;
         }
         self.clamp_cursor();
-        self.anchor = self.cursor;
+        self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
         true
     }
@@ -1535,8 +1535,8 @@ impl Editor {
             }
             false => (hit.at.min(len), hit.end.min(len)),
         };
-        self.anchor = at;
-        self.cursor = motion::prev_grapheme(self.current_buffer().rope(), end.max(at)).max(at);
+        self.sel.set_anchor(at);
+        self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end.max(at)).max(at));
         self.extend = false;
         self.refresh_goal_column();
         true

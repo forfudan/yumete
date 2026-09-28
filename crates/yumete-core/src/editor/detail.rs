@@ -303,10 +303,10 @@ impl Editor {
         let needle = match to > from {
             true => rope.slice(from..to.min(rope.len_chars())).to_string(),
             false => {
-                let line = rope.char_to_line(self.cursor);
+                let line = rope.char_to_line(self.sel.head());
                 let start = rope.line_to_char(line);
                 let chars = crate::zong::line_chars(rope, line);
-                let at = self.cursor - start;
+                let at = self.sel.head() - start;
                 let words = self.segment_line(line);
                 match words.iter().find(|&&(a, b)| at >= a && at < b) {
                     Some(&(a, b)) => chars[a..b.min(chars.len())].iter().collect(),
@@ -328,7 +328,7 @@ impl Editor {
         self.last_search = regex::escape(&needle);
         // The first one *after* where you are standing: the useful answer to
         // 「還在哪裏」 is the next place, not the first page of the book.
-        let here = self.cursor;
+        let here = self.sel.head();
         let at = spans
             .iter()
             .position(|&(from, _)| from > here)

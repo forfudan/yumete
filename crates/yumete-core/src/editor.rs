@@ -35,12 +35,16 @@ const DEFAULT_INDENT: usize = 2;
 
 /// The other work area: a buffer, a place in it, and what to look at there.
 ///
-/// **The editor has one cursor** (Feature #176). A split does not give it a
-/// second one: one pane holds the keys and this holds the place the *other*
+/// **A split does not give the editor a second set of selections** (Feature #176):
+/// one pane holds the keys and this holds the place the *other*
 /// pane was left at — written when it loses the keys, read when it gets them
 /// back. It is the same act `Buffer::cursor` performs when you leave a file,
 /// one level up, because two panes can hold one buffer and a buffer has room
 /// for one place.
+///
+/// ⚠️ **這一句從前寫的是「The editor has one cursor」**，而 2026-09-28 起不再是那樣了
+/// （#405，`crate::selection::Selections`）。它要說的其實一直是**分屏**那件事——有幾個
+/// 選區和有幾個工作區是兩回事，一個分屏仍舊只有一組選區。
 #[derive(Debug, Clone)]
 pub struct Pane {
     /// The buffer's **id**, never its index: closing a file shifts every
@@ -1591,8 +1595,14 @@ pub struct Editor {
     buffers: Vec<Buffer>,
     current: usize,
     mode: Mode,
-    /// Cursor position in the active buffer, as a character index.
-    cursor: usize,
+    /// **選區——複數的那一個**（#405，方案在 `docs/development.md §5.13`）。
+    ///
+    /// ⚠️ **Phase 0 裏它永遠只裝一段**，行為和從前的 `cursor`／`anchor` 兩個欄位一字不差
+    /// ——這一期的驗收條件就是「`scripts/frames.sh` 那二十幀逐字節不變」。
+    ///
+    /// 從前直接讀寫那兩個欄位的三百多處，現在走 `self.sel.head()`／`set_head()` 那四支
+    /// 門面，它們問的**永遠是主選區**。要作用在全部選區上的入口是 Phase 1 的事。
+    sel: crate::selection::Selections,
     /// Preserved visual column for vertical motion (`j` / `k`).
     goal_column: usize,
     /// The text being typed after `:` / `/` (without the leading punctuation).
@@ -1618,9 +1628,6 @@ pub struct Editor {
     history_at: Option<usize>,
     /// A transient message for the status line (errors, confirmations).
     status: String,
-    /// Selection anchor (char index). The selection spans `anchor..cursor` (in
-    /// either order); when it equals `cursor` the selection is just the cursor.
-    anchor: usize,
     /// A pending multi-key operator (goto `g…` or find `f`/`t`/`F`/`T`).
     pending: Pending,
     /// The `:s …c` walk `Pending::Confirm` is the keyboard half of.
@@ -2624,7 +2631,7 @@ impl Editor {
             buffers: vec![Buffer::scratch()],
             current: 0,
             mode: Mode::Normal,
-            cursor: 0,
+            sel: crate::selection::Selections::at(0),
             goal_column: 0,
             command_line: String::new(),
             command_caret: 0,
@@ -2633,7 +2640,6 @@ impl Editor {
             search_history: Vec::new(),
             history_at: None,
             status: String::new(),
-            anchor: 0,
             pending: Pending::None,
             confirming: None,
             operator_count: None,
@@ -2884,7 +2890,7 @@ impl Editor {
             self.status = why;
             return false;
         }
-        let at = self.cursor;
+        let at = self.sel.head();
         self.snapshot();
         let len = self.current_buffer().char_count();
         let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, text));

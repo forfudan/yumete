@@ -205,7 +205,7 @@ impl Editor {
         }
         // 換完站在換出來的那一段頭上，選區收起來——那一段已經不是原來那些字了。
         self.set_cursor(range.start.min(self.current_buffer().char_count()));
-        self.anchor = self.cursor;
+        self.sel.set_anchor(self.sel.head());
         self.status = say!("convert.done-here", text.chars().count());
     }
 

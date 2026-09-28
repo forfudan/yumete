@@ -124,9 +124,9 @@ impl Editor {
         // ⚠️ **匹配只有一個字的時候它是好的**——那時光標就在開頭上。中文搜的多
         // 半是兩個字以上，英文搜一個字母的多，所以這個洞躲了很久。
         let found = if forward {
-            search_forward(rope, &re, (self.cursor + 1).min(len), within)
+            search_forward(rope, &re, (self.sel.head() + 1).min(len), within)
         } else {
-            search_backward(rope, &re, self.anchor.min(self.cursor), within)
+            search_backward(rope, &re, self.sel.anchor().min(self.sel.head()), within)
         };
 
         match found {
@@ -139,8 +139,8 @@ impl Editor {
                 // covers the cursor's own grapheme.
                 let end = end.min(len);
                 let head = motion::prev_grapheme(rope, end).max(pos);
-                self.anchor = pos;
-                self.cursor = head;
+                self.sel.set_anchor(pos);
+                self.sel.set_head(head);
                 self.extend = false;
                 self.refresh_goal_column();
             }
@@ -248,7 +248,7 @@ impl Editor {
                 return;
             }
             self.clamp_cursor();
-            self.anchor = self.cursor;
+            self.sel.set_anchor(self.sel.head());
             self.refresh_goal_column();
         }
         self.status = say!("find.substitute-changed", count);
@@ -449,8 +449,8 @@ impl Editor {
                 let end = hit.end.min(rope.len_chars());
                 motion::prev_grapheme(rope, end).max(hit.start)
             };
-            self.anchor = hit.start;
-            self.cursor = head;
+            self.sel.set_anchor(hit.start);
+            self.sel.set_head(head);
             self.extend = false;
             self.refresh_goal_column();
             self.status = say!("substitute.confirm-this-one", hit.found, hit.text);
@@ -504,7 +504,7 @@ impl Editor {
         self.pending = Pending::None;
         self.confirming = None;
         self.clamp_cursor();
-        self.anchor = self.cursor;
+        self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
         self.status = match (why, walk.changed + walk.skipped) {
             (Some(why), _) => why,

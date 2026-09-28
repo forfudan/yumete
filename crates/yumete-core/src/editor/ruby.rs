@@ -53,7 +53,7 @@ impl Editor {
         // A standing selection is the region; without one it is the whole file,
         // which is the pass a manuscript is actually given. `u` takes all of it
         // back in one step either way.
-        let (from, to) = if self.anchor == self.cursor {
+        let (from, to) = if self.sel.anchor() == self.sel.head() {
             (0, self.current_buffer().char_count())
         } else {
             self.selection()
@@ -237,10 +237,10 @@ impl Editor {
     /// annotation off again. Over a selection, the reading typed here wraps it.
     pub(super) fn enter_ruby_mode(&mut self) {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor);
+        let line = rope.char_to_line(self.sel.head());
         let line_start = rope.line_to_char(line);
         let chars: Vec<char> = crate::zong::line_chars(rope, line);
-        let col = self.cursor - line_start;
+        let col = self.sel.head() - line_start;
 
         if let Some(group) = crate::ruby::group_at(&chars, col) {
             self.command_line = group.reading_text(&chars).iter().collect();
@@ -332,8 +332,8 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.anchor = span.0;
-        self.cursor = span.0;
+        self.sel.set_anchor(span.0);
+        self.sel.set_head(span.0);
         self.clamp_cursor();
         self.status = if reading.is_empty() {
             say!("ruby.removed")

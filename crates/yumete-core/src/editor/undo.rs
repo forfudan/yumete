@@ -64,7 +64,7 @@ impl Editor {
     /// The history lives on the [`Buffer`], not here: `u` must undo *this*
     /// file's last change, whatever was edited in between.
     pub(super) fn snapshot(&mut self) {
-        let at = self.cursor;
+        let at = self.sel.head();
         self.current_buffer_mut().snapshot(at);
     }
 
@@ -73,11 +73,11 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let at = self.cursor;
+        let at = self.sel.head();
         match self.current_buffer_mut().undo(at) {
             Some(cursor) => {
-                self.cursor = cursor;
-                self.anchor = cursor;
+                self.sel.set_head(cursor);
+                self.sel.set_anchor(cursor);
                 self.clamp_cursor();
             }
             None => self.status = say!("edit.undo-at-oldest"),
@@ -89,11 +89,11 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let at = self.cursor;
+        let at = self.sel.head();
         match self.current_buffer_mut().redo(at) {
             Some(cursor) => {
-                self.cursor = cursor;
-                self.anchor = cursor;
+                self.sel.set_head(cursor);
+                self.sel.set_anchor(cursor);
                 self.clamp_cursor();
             }
             None => self.status = say!("edit.redo-at-newest"),

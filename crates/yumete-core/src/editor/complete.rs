@@ -104,14 +104,14 @@ impl Editor {
             return None;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let start = rope.line_to_char(line);
         // **A bounded look back.** Neither a tag nor an anchor is long, and a
         // novel's paragraph is one line of some thousands of characters that
         // this would otherwise copy on every frame while the caret sits after
         // a `[`.
-        let from = start.max(self.cursor.saturating_sub(LOOK_BACK));
-        let before: Vec<char> = rope.slice(from..self.cursor).chars().collect();
+        let from = start.max(self.sel.head().saturating_sub(LOOK_BACK));
+        let before: Vec<char> = rope.slice(from..self.sel.head()).chars().collect();
         let (refers, typed) = trigger(&before)?;
         // A `[^` quoted in a fence is four characters of somebody's example.
         //
@@ -124,7 +124,7 @@ impl Editor {
         if self.block_of(line).is_literal() {
             return None;
         }
-        let at = self.cursor - typed.chars().count();
+        let at = self.sel.head() - typed.chars().count();
         let choices = match refers {
             Refers::Note => self.note_choices(&typed),
             Refers::Anchor => self.anchor_choices(&typed),
@@ -304,7 +304,7 @@ impl Editor {
     fn closes_with_n(&self, bracket: char, want: usize) -> String {
         let rope = self.current_buffer().rope();
         let there = rope
-            .chars_at(self.cursor.min(rope.len_chars()))
+            .chars_at(self.sel.head().min(rope.len_chars()))
             .take(want)
             .take_while(|c| *c == bracket)
             .count();
@@ -378,14 +378,14 @@ impl Editor {
         // What this pick replaces: the writer's own text the first time, the
         // previous pick every time after.
         let taking = walk.wrote.clone().unwrap_or_else(|| walk.typed.clone());
-        let upto = self.cursor;
+        let upto = self.sel.head();
         let done =
             self.without_cell_guard(|e| e.current_buffer_mut().replace(walk.at..upto, &text));
         if !self.applied(done) {
             return false;
         }
-        self.cursor = walk.at + text.chars().count();
-        self.anchor = self.cursor;
+        self.sel.set_head(walk.at + text.chars().count());
+        self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
         // `.` replays what the writer meant, which is the reference and not
         // the two letters they typed before Tab finished it. **Only when the

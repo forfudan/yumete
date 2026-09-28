@@ -88,7 +88,7 @@ impl Editor {
                 // into the cell next door — off the end of a row, into the
                 // first cell of the next.
                 Key::Left => {
-                    if self.cursor > start {
+                    if self.sel.head() > start {
                         self.move_horizontal(motion::left);
                     } else if self.step_cell(false, false) {
                         // Entered from the right, so the caret is at the far
@@ -100,7 +100,7 @@ impl Editor {
                     return;
                 }
                 Key::Right => {
-                    if self.cursor < end {
+                    if self.sel.head() < end {
                         self.move_horizontal(motion::right);
                     } else {
                         self.step_cell(true, false);
@@ -126,7 +126,7 @@ impl Editor {
                 Key::Char(c) => {
                     let mut buf = [0u8; 4];
                     let one = c.encode_utf8(&mut buf);
-                    if let Some(why) = self.cell_refuses_text_at(Some(self.cursor), one) {
+                    if let Some(why) = self.cell_refuses_text_at(Some(self.sel.head()), one) {
                         self.status = why;
                         return;
                     }
@@ -212,11 +212,11 @@ impl Editor {
             // has ever used a terminal prompt reaches for — the `:` line has
             // taken them all along, and Insert swallowed them.
             Key::Home | Key::Ctrl('a') => {
-                let pos = motion::line_start(self.current_buffer().rope(), self.cursor);
+                let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
                 self.set_cursor(pos);
             }
             Key::End | Key::Ctrl('e') => {
-                let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
+                let pos = motion::line_end(self.current_buffer().rope(), self.sel.head());
                 self.set_cursor(pos);
             }
             // **`C-g`（vim 的 `C-g u`）：從這裏起算一次新的撤銷**（2026-09-23）。
@@ -247,12 +247,12 @@ impl Editor {
                     // nothing would, which is what makes a column line up.
                     true => {
                         let rope = self.current_buffer().rope();
-                        let start = rope.line_to_char(rope.char_to_line(self.cursor));
+                        let start = rope.line_to_char(rope.char_to_line(self.sel.head()));
                         // A TAB already on the line lands on its own stop.
                         // ⚠️ **字簇，不是 `char`**（#422）：`⚠️` 是兩個 `char`，逐字
                         // 加算一格而終端給兩格，於是對齊到這一欄的縮進會少一格。Tab
                         // 要單獨認，它的寬度是「到下一個制表位」，不是字形的寬度。
-                        let ahead: String = rope.slice(start..self.cursor).chars().collect();
+                        let ahead: String = rope.slice(start..self.sel.head()).chars().collect();
                         let column = yumete_cjk::graphemes(&ahead).fold(0, |col, g| {
                             match g {
                                 "\t" => col + self.tab_stop - col % self.tab_stop,

@@ -42,11 +42,11 @@ impl Editor {
         // `100p` took a hundred presses of `u` to take back one keystroke.
         let mut group: Option<bool> = None;
         for _ in 0..n {
-            let (before, anchor) = (self.cursor, self.anchor);
+            let (before, anchor) = (self.sel.head(), self.sel.anchor());
             let revision = self.current_buffer().char_count();
             action(self);
-            if self.cursor == before
-                && self.anchor == anchor
+            if self.sel.head() == before
+                && self.sel.anchor() == anchor
                 && self.current_buffer().char_count() == revision
             {
                 break;
@@ -87,8 +87,8 @@ impl Editor {
         // On the last grapheme, not one past it: the selection now covers the
         // grapheme the cursor is on.
         let last = motion::prev_grapheme(rope, rope.len_chars());
-        self.anchor = 0;
-        self.cursor = last;
+        self.sel.set_anchor(0);
+        self.sel.set_head(last);
         self.goal_column = 0;
     }
 
@@ -105,8 +105,8 @@ impl Editor {
             rope.len_chars()
         };
         let tail = motion::prev_grapheme(rope, tail).max(head);
-        self.anchor = head;
-        self.cursor = tail;
+        self.sel.set_anchor(head);
+        self.sel.set_head(tail);
     }
 
     /// Join the line below onto this one (Helix `J`).
@@ -154,8 +154,8 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.cursor = end;
-        self.anchor = end;
+        self.sel.set_head(end);
+        self.sel.set_anchor(end);
         self.clamp_cursor();
     }
 
@@ -196,8 +196,8 @@ impl Editor {
         // selection covers the cursor's own grapheme, so a head at `end` would
         // put the *next* character inside the highlight — and the next edit
         // would take one more than the highlight showed.
-        self.anchor = start;
-        self.cursor = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
+        self.sel.set_anchor(start);
+        self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
     }
 
     /// Overwrite every character of the selection with `c` (Helix `r`).
@@ -238,8 +238,8 @@ impl Editor {
         // The selection is what it was: `r` writes over the text without moving
         // through it, so `r` then `l` steps one character, not two.
         let head = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
-        self.anchor = start;
-        self.cursor = head;
+        self.sel.set_anchor(start);
+        self.sel.set_head(head);
         self.clamp_cursor();
     }
 
@@ -280,8 +280,8 @@ impl Editor {
         // the reader looked at a word and now looks at the word that took its
         // place.
         let end = start + text.chars().count();
-        self.anchor = start;
-        self.cursor = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
+        self.sel.set_anchor(start);
+        self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
         self.clamp_cursor();
     }
 
@@ -290,7 +290,7 @@ impl Editor {
     /// Only the cursor moves; the selection is the same range. It is how you
     /// extend a selection from the other end without starting it again.
     pub(super) fn flip_selection(&mut self) {
-        std::mem::swap(&mut self.anchor, &mut self.cursor);
+        self.sel.flip();
         self.refresh_goal_column();
     }
 
@@ -316,8 +316,8 @@ impl Editor {
         if !self.overwrite(start, end.max(start), &text) {
             return;
         }
-        self.anchor = start;
-        self.cursor = start + text.chars().count();
+        self.sel.set_anchor(start);
+        self.sel.set_head(start + text.chars().count());
         self.clamp_cursor();
     }
     /// Indent (`>`) or unindent (`<`) every line the selection touches.
@@ -355,11 +355,11 @@ impl Editor {
             return;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor);
+        let line = rope.char_to_line(self.sel.head());
         let line_start = rope.line_to_char(line);
         let text = rope.line(line).to_string();
         let chars: Vec<char> = text.chars().collect();
-        let col = self.cursor - line_start;
+        let col = self.sel.head() - line_start;
 
         // The number under the cursor, else the next one along the line.
         let Some(mut start) = (col..chars.len())
@@ -407,8 +407,8 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.cursor = line_start + start;
-        self.anchor = self.cursor;
+        self.sel.set_head(line_start + start);
+        self.sel.set_anchor(self.sel.head());
         self.clamp_cursor();
     }
 }
