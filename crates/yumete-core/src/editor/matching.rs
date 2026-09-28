@@ -955,11 +955,15 @@ impl Editor {
     /// Clamp the cursor and anchor into the valid range of the active buffer.
     pub(super) fn clamp_cursor(&mut self) {
         let len = self.current_buffer().char_count();
-        if self.sel.head() > len {
-            self.sel.set_head(len);
-        }
-        if self.sel.anchor() > len {
-            self.sel.set_anchor(len);
-        }
+        // ⚠️ **每一段，不只是主選區**（2026-09-28 修，真機上崩出來的）。
+        //
+        // 撤銷只把主選區挪了回來（`undo` 那一支叫的是 `set_head`／`set_anchor`，那兩支
+        // 問的永遠是主選區），剩下幾段還指着已經不存在的位置。下一幀 `draw_horizontal`
+        // 拿它們去切 rope，`next_grapheme` 當場 panic，整個編輯器退出。
+        //
+        // 日誌裏那一條：`Char index out of bounds: char index 4, Rope char length 0`，
+        // 棧是 `motion::right` ← `next_grapheme` ← `secondary_selections` ←
+        // `draw_horizontal`。
+        self.sel.clamp(len);
     }
 }

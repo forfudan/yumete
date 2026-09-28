@@ -102,11 +102,17 @@ impl Editor {
             return Vec::new();
         }
         let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
         let insert = self.mode == Mode::Insert;
         self.sel
             .secondaries()
             .map(|one| {
+                // ⚠️ **畫面這一支永遠不許崩**（2026-09-28 修）。狀態那一頭已經在
+                // `clamp_cursor` 裏收過了，可是「繪製不許 panic」不能靠別人守規矩——
+                // 一個指得太遠的下標最壞是畫錯一格，而 `next_grapheme` 拿到它是整個
+                // 編輯器退出。日誌裏那一條就是這麼來的。
                 let (start, end) = one.span();
+                let (start, end) = (start.min(len), end.min(len));
                 match insert {
                     true => (start, end),
                     false => (start, motion::next_grapheme(rope, end)),

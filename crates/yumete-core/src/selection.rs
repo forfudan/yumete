@@ -155,6 +155,20 @@ impl Selections {
     // 這些呼叫點一個都不用改，它們本來就只該管主選區（比如狀態行上的「行 1, 列 1」）。
     // 要作用在**全部**選區上的那些（移動、編輯），Phase 1 會換成別的入口。
 
+    /// **把每一段都收進 `0..=len` 裏。**
+    ///
+    /// ⚠️ 文本縮短之後（撤銷、刪掉一大段、換一份稿子）不收的話，那幾段還指着已經不存在
+    /// 的位置，而畫面那一支拿它們去切 rope——2026-09-28 真機上就是這麼崩的。
+    ///
+    /// 收完整理一遍：兩段一起被壓到檔尾就是同一段了。
+    pub fn clamp(&mut self, len: usize) -> usize {
+        for one in &mut self.ranges {
+            one.anchor = one.anchor.min(len);
+            one.head = one.head.min(len);
+        }
+        self.normalize()
+    }
+
     /// 主選區的 head。
     pub fn head(&self) -> usize {
         self.primary().head

@@ -82,14 +82,27 @@ impl Editor {
     }
 
     /// Select the whole buffer (Helix `%`).
+    ///
+    /// ⚠️ **收成一段，不是把主選區撐大**（2026-09-28 修，真機上崩出來的）。
+    ///
+    /// `set_anchor`／`set_head` 問的永遠是主選區，所以從前 `CC` 之後按 `%`，手上是**三
+    /// 段**：一段蓋住全檔，兩段是舊的、躲在它裏面。接着按 `d`，`edit_each` 逐段做——第
+    /// 一段把整檔刪光，輪到第二段的時候它指着已經不存在的地方，`apply` 裏的
+    /// `next_grapheme` 當場 panic。
+    ///
+    /// 而且就算不崩，「全選」之後還剩三段也說不通：`%` 這個字的意思就是「這一份，一
+    /// 段」。helix 的 `select_all` 同樣是造一段新的，不是改舊的。
     pub(super) fn select_all(&mut self) {
         let rope = self.current_buffer().rope();
         // On the last grapheme, not one past it: the selection now covers the
         // grapheme the cursor is on.
         let last = motion::prev_grapheme(rope, rope.len_chars());
-        self.sel.set_anchor(0);
-        self.sel.set_head(last);
-        self.sel.set_goal(None);
+        self.sel = crate::selection::Selections::one(crate::selection::Range {
+            anchor: 0,
+            head: last,
+            goal: None,
+            goal_slot: None,
+        });
     }
 
     /// Grow the selection outward to whole lines (Helix `X`).

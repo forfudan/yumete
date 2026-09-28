@@ -17378,3 +17378,51 @@ fn the_z_layer_aims_at_a_row_the_next_frame_will_leave_alone() {
     assert_eq!(ed.page_inset(Some(10), last, scrolloff), None, "沒有覆蓋");
     assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
 }
+
+/// ⚠️ **撤銷之後每一段選區都要收回來，不只是主選區**（2026-09-28，真機上崩出來的）。
+///
+/// `undo` 叫的是 `set_head`／`set_anchor`，那兩支問的**永遠是主選區**，剩下幾段還指着
+/// 已經不存在的位置。下一幀 `draw_horizontal` 拿它們去切 rope，`next_grapheme` 當場
+/// panic，整個編輯器退出。日誌原文：
+///
+/// ```text
+/// Char index out of bounds: char index 4, Rope char length 0
+///   motion::right ← next_grapheme ← secondary_selections ← draw_horizontal
+/// ```
+#[test]
+fn undo_pulls_every_selection_back_inside_the_text() {
+    let mut ed = typed("- 買菜\n- 倒垃圾\n- 寫第三章\n- 回信\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "CCC");
+    press(&mut ed, "l");
+    assert_eq!(ed.sel.len(), 4);
+    press(&mut ed, "\"#p");
+    press(&mut ed, "u");
+
+    // 每一段都在文本裏面。
+    let len = ed.current_buffer().rope().len_chars();
+    for one in ed.sel.iter() {
+        assert!(one.anchor <= len && one.head <= len, "{one:?} 超出 {len}");
+    }
+    // ⚠️ **而且畫面那一支不許崩**——這纔是真機上炸的那一步。
+    for (a, b) in ed.secondary_selections() {
+        assert!(a <= len && b <= len, "({a},{b}) 超出 {len}");
+    }
+}
+
+/// ⚠️ **整份稿子被刪光也不許崩。** 日誌裏那一條的 rope 長度是 **0**。
+#[test]
+fn an_emptied_buffer_does_not_take_the_selections_out_of_bounds() {
+    let mut ed = typed("甲一\n乙二\n丙三\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "CC");
+    assert_eq!(ed.sel.len(), 3);
+    // 全選、刪光。
+    press(&mut ed, "%");
+    press(&mut ed, "d");
+    let len = ed.current_buffer().rope().len_chars();
+    for (a, b) in ed.secondary_selections() {
+        assert!(a <= len && b <= len, "({a},{b}) 超出 {len}");
+    }
+    assert!(ed.sel.iter().all(|r| r.head <= len && r.anchor <= len));
+}
