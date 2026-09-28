@@ -524,6 +524,9 @@ impl Editor {
                     motion::Motion::Object { what: motion::Object::Word { .. }, .. } => {
                         say!("edit.no-word-here")
                     }
+                    motion::Motion::Object { what: motion::Object::Markup, .. } => {
+                        say!("edit.no-markup-here")
+                    }
                     motion::Motion::Object {
                         what: motion::Object::Pair { open, close },
                         ..

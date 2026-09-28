@@ -3549,6 +3549,13 @@ zhs = "这已经是第一行，上面没有可以并的"
 en = "this is the first line; there is nothing above it to join"
 
 [[message]]
+# 按 mi m／ma m（di m／da m），可是光標不在任何一段標記裏
+key = "edit.no-markup-here"
+zht = "這裏沒有標記"
+zhs = "这里没有标记"
+en = "no markup here"
+
+[[message]]
 # mi/ma 之類，光標外面沒有那一對符號
 key = "edit.no-pair-around"
 zht = "外面沒有 {0}{1}"

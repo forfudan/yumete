@@ -46,6 +46,8 @@ impl Editor {
             // manuscript it is the handier of the two: a 段 is the unit a
             // writer moves around, a word is the unit they fix.
             'p' => motion::Object::Paragraph,
+            // `mi m`／`ma m`：光標所在的那一段 Markdown 標記（2026-09-28）。
+            'm' => motion::Object::Markup,
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
                 None => {
@@ -61,6 +63,7 @@ impl Editor {
                 motion::Object::Pair { open, close } => say!("edit.no-pair-around", open, close),
                 // 一段永遠在：光標停在空行上，那一段就是那幾個空行。
                 motion::Object::Paragraph => say!("edit.no-word-here"),
+                motion::Object::Markup => say!("edit.no-markup-here"),
             };
             self.object_missed = true;
             return;
@@ -103,6 +106,78 @@ impl Editor {
             true => (start, end),
             false => (start + 1, end.saturating_sub(1)),
         };
+        motion::Span::Over { anchor, head: head.max(anchor) }
+    }
+
+    /// **光標底下那一段 Markdown 標記**（`mi m`／`ma m`，2026-09-28）。
+    ///
+    /// `i` 取標記裏面的文字，`a` 連標記一起——`**粗**` 上按 `mi m` 選中「粗」，按
+    /// `ma m` 選中「**粗**」。
+    ///
+    /// ⚠️ **靠 `construct` 把一族綁起來**。解析器把一個構造拆成三段交出來（開標記、
+    /// 文字、閉標記），三段共用一個 `construct` 號。所以 `a` 那一半不必去數星號有幾個，
+    /// 取同號那幾段的兩個端點就行——`**` 兩個字符、`` ` `` 一個字符、`](地址)` 一長串，
+    /// 同一句話都說得下來。
+    ///
+    /// ⚠️ **眼下套不起來，因為解析器不套。** 量過（2026-09-28）：``**粗的`碼`**`` 交出
+    /// 來的是 `Marker`／`Strong`／`Marker` 三段，中間那一段連反引號一起算成粗體的正文，
+    /// 沒有內層的 `Code`。所以這裏「取起點最靠後的那一個」現在永遠只有一個候選。留着這
+    /// 一句是因為解析器哪天學會套的時候，這一支不必跟着改。
+    ///
+    /// ⚠️ **標記本身（`Kind::Marker`）不算一種**。光標停在星號上按 `mi m`，要的是它
+    /// 圍着的那段文字，不是那兩個星號——而星號的 `construct` 和文字是同一個，所以照樣
+    /// 找得到。
+    fn markup_object_span(&self, around: bool) -> motion::Span {
+        use crate::markdown::Kind;
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(head);
+        let start = rope.line_to_char(line);
+        let at = head - start;
+        let runs = self.markup_runs(line);
+        // 收哪幾種：**有一對標記裹着一段文字**的那些。標題不在裏面（它沒有閉標記，
+        // 整行就是它，而整行有 `x`），`Marker` 自己也不在（見上面那一條）。
+        let takes = |kind: Kind| {
+            matches!(
+                kind,
+                Kind::Strong
+                    | Kind::Emphasis
+                    | Kind::Code
+                    | Kind::Strike
+                    | Kind::Highlight
+                    | Kind::Link
+                    | Kind::WikiLink
+                    | Kind::Comment
+                    | Kind::Footnote
+            )
+        };
+        // 光標可能正停在標記上，那時 `Marker` 那一段才是包住它的——所以先找出包住光標
+        // 的**構造號**，再去那個構造裏取文字那一段。
+        let Some(construct) = runs
+            .iter()
+            .filter(|span| (span.start..span.end).contains(&at))
+            .filter(|span| runs.iter().any(|s| s.construct == span.construct && takes(s.kind)))
+            .max_by_key(|span| span.start)
+            .map(|span| span.construct)
+        else {
+            return motion::Span::Missed;
+        };
+        let group: Vec<&crate::markdown::Span> =
+            runs.iter().filter(|span| span.construct == construct).collect();
+        let (from, to) = match around {
+            true => (
+                group.iter().map(|span| span.start).min().unwrap_or(at),
+                group.iter().map(|span| span.end).max().unwrap_or(at),
+            ),
+            false => {
+                let text = group.iter().find(|span| takes(span.kind));
+                match text {
+                    Some(span) => (span.start, span.end),
+                    None => return motion::Span::Missed,
+                }
+            }
+        };
+        let (anchor, head) = (start + from, start + to.saturating_sub(1).max(from));
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
@@ -740,6 +815,9 @@ impl Editor {
             }
             motion::Motion::Object { what: motion::Object::Word { coarse }, around } => {
                 self.word_object_span(around, coarse)
+            }
+            motion::Motion::Object { what: motion::Object::Markup, around } => {
+                self.markup_object_span(around)
             }
             motion::Motion::Object {
                 what: motion::Object::Pair { open, close },

@@ -127,6 +127,8 @@ fn object(c: char, around: bool) -> Option<Motion> {
         'w' => crate::motion::Object::Word { coarse: false },
         'W' => crate::motion::Object::Word { coarse: true },
         'p' => crate::motion::Object::Paragraph,
+        // `dim`／`dam`：光標所在的那一段 Markdown 標記（2026-09-28）。
+        'm' => crate::motion::Object::Markup,
         c => {
             let (open, close) = crate::editor::pair_for(c)?;
             crate::motion::Object::Pair { open, close }
