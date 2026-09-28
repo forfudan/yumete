@@ -17530,3 +17530,66 @@ fn the_mark_panel_shows_where_each_one_points() {
     assert!(rows[0].1.ends_with("第 1 行"), "a 記的是第一行：{rows:?}");
     assert!(rows[1].1.ends_with("第 4 行"), "k 記的是第四行：{rows:?}");
 }
+
+/// **正文改過，側欄自己跟上，而且只重搜改過的那一份**（2026-09-29 定）。
+///
+/// 原話：「正文修改后，可以及时刷新侧栏重新搜索（只重新搜索**被修改的文件**以防止
+/// 不必要的搜索）……我們也不需要回側欄先得按一下 enter 刷新才能再按 enter 跳轉了。」
+#[test]
+fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
+    use crate::search_panel::Row;
+    let dir = a_little_book("searchfollows");
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":search-cd").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 3, "這一份一處，隔壁兩處");
+    assert!(!ed.search_is_stale());
+
+    // **偷偷改盤上的隔壁那一份。** 下面刷新之後它那兩處要原封不動——那就是
+    // 「只重搜了被改的那一份」的證據。整趟重搜會把它讀成三處。
+    std::fs::write(dir.join("卷一/b.md"), "霜霜霜\n").unwrap();
+
+    // 回正文，在這一份裏再打一個「霜」。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    press(&mut ed, "i霜");
+    ed.on_key(Key::Esc);
+    assert!(ed.search_is_stale(), "改完的這一刻，名單答的還是上一版");
+
+    // 畫下一幀之前前端問的就是這一句。
+    ed.refresh_the_edited_file();
+    assert!(!ed.search_is_stale(), "刷過了，不必再按 Enter");
+    assert_eq!(ed.search().total, 4, "這一份變成兩處，隔壁照舊兩處");
+    let files: Vec<String> = ed
+        .search()
+        .rows()
+        .iter()
+        .filter_map(|r| match r {
+            Row::File { path, hits, .. } => Some(format!("{} {hits}", path.display())),
+            Row::Hit(_) => None,
+        })
+        .collect();
+    assert_eq!(
+        files,
+        vec!["a.md 2".to_string(), "b.md 2".to_string()],
+        "⚠️ b.md 還是兩處——盤上明明改成了三處，說明沒去讀它"
+    );
+
+    // **按一次 Enter 就跳走**，不必先按一次刷新（原話那一句）。
+    ed.on_key(Key::Ctrl('w'));
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+    ed.search_for_test().selected = ed
+        .search()
+        .rows()
+        .iter()
+        .position(|r| matches!(r, Row::Hit(_)))
+        .expect("名單上有命中");
+    let was = ed.current_buffer().id();
+    ed.on_key(Key::Enter);
+    assert!(!ed.sidebar_focused() || ed.current_buffer().id() != was, "一下就走了");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

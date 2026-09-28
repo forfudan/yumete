@@ -13,10 +13,13 @@ impl Editor {
         &self.search
     }
 
-    /// **這一刻的正文指紋**，見 [`Search::looked_at`]。
-    fn search_mark(&self) -> (u64, u64) {
-        let edits = self.buffers.iter().map(|b| b.revision()).fold(0, u64::wrapping_add);
-        (self.current_buffer().id(), edits)
+    /// **這一刻的正文指紋**，見 [`crate::search_panel::Mark`]。
+    fn search_mark(&self) -> crate::search_panel::Mark {
+        crate::search_panel::Mark {
+            buffer: self.current_buffer().id(),
+            revision: self.current_buffer().revision(),
+            every: self.buffers.iter().map(|b| b.revision()).fold(0, u64::wrapping_add),
+        }
     }
 
     /// **手上這張名單答的還是不是眼前這個問題。**
@@ -289,6 +292,36 @@ impl Editor {
         self.search_now();
     }
 
+    /// **正在寫的那一份裏的命中**，連同它真正有幾處。
+    ///
+    /// `search_now` 的第一段，抽出來是因為「只重搜被改過的那一份」走的也是它
+    /// （[`Editor::rescan_the_open_one`]）。⚠️ **它從內存讀**：屏幕上是什麼就搜
+    /// 什麼，存沒存盤不算數。
+    ///
+    /// `room` 是還能往名單裏放幾處；超出的只數不放，所以第二個回值纔是真數。
+    fn scan_the_open_one(
+        &self,
+        look: &crate::editor::find::Look,
+        mine: &Option<std::path::PathBuf>,
+        room: usize,
+    ) -> (Vec<crate::search_panel::Hit>, usize) {
+        let rope = self.current_buffer().rope();
+        let mut hits = Vec::new();
+        let mut total = 0usize;
+        let mut at = 0usize;
+        for line in 0..rope.len_lines() {
+            let text: String = rope.line(line).chars().collect();
+            for (nth, (start, stop)) in look.spans(&text).into_iter().enumerate() {
+                total += 1;
+                if hits.len() < room {
+                    hits.push(excerpt(mine.clone(), &text, at, start, stop, line, nth));
+                }
+            }
+            at += text.chars().count();
+        }
+        (hits, total)
+    }
+
     /// Run it whatever the scope, walking the disk if that is what it takes.
     pub(super) fn search_now(&mut self) {
         self.search.broken = false;
@@ -346,22 +379,11 @@ impl Editor {
             ),
             _ => None,
         };
-        let mut hits = Vec::new();
-        let mut total = 0usize;
         // It comes first, and it comes from memory: what is on the screen is
         // what is searched, saved or not.
-        let rope = self.current_buffer().rope();
-        let mut at = 0usize;
-        for line in 0..rope.len_lines() {
-            let text: String = rope.line(line).chars().collect();
-            for (nth, (start, stop)) in look.spans(&text).into_iter().enumerate() {
-                total += 1;
-                if hits.len() < MOST {
-                    hits.push(excerpt(mine.clone(), &text, at, start, stop, line, nth));
-                }
-            }
-            at += text.chars().count();
-        }
+        let (mut hits, mut total) = self.scan_the_open_one(&look, &mine, MOST);
+        self.search.mine = hits.len();
+        self.search.mine_total = total;
         if let Some(root) = root {
             let mut files = Vec::new();
             crate::editor::walk(&root, &mut 0, &mut |path| files.push(path.to_path_buf()));
@@ -1134,7 +1156,80 @@ impl Editor {
     pub fn settle_search(&mut self) {
         if self.take_owed_search() {
             self.run_owed_search();
+            return;
         }
+        self.refresh_the_edited_file();
+    }
+
+    /// **正文改過之後，把改過的那一份重搜一遍**——只有那一份（2026-09-29 定）。
+    ///
+    /// 原話：「正文修改后，可以及时刷新侧栏重新搜索（只重新搜索**被修改的文件**
+    /// 以防止不必要的搜索）。這樣只要用戶在主工作區修改了什麼，側欄能夠及時反饋。
+    /// 我們也不需要回側欄先得按一下 enter 刷新才能再按 enter 跳轉了。」
+    ///
+    /// 每一幀畫之前問一次。⚠️ **不是每一幀都做事**：指紋對得上就立刻回來，而指紋
+    /// 是三個整數的比較。
+    ///
+    /// 走這條捷徑要三個條件都成立，否則照舊掛着「按 Enter 重新查找」：
+    ///
+    /// 1. **換的不是稿子**（`buffer` 沒變）。換一份稿子在寫，每一處命中身上的檔名
+    ///    都要重寫——那不是「重搜一份」，那是重搜。
+    /// 2. **動的只有正在寫的這一份**（`every` 的增量等於 `revision` 的增量）。
+    ///    別處也動了就交給整趟重搜，它知道怎麼把別人的那幾段也擺對。
+    /// 3. **名單沒有被 `MOST` 砍過。** 砍過就不知道後面漏了哪些，接不回去。
+    pub fn refresh_the_edited_file(&mut self) {
+        let Some(was) = self.search.looked_at else { return };
+        // `stale` 是「框裏的詞改了、而這個範圍不邊打邊搜」，那件事等 Enter。
+        if self.search.stale || !self.search_panel_is_open() {
+            return;
+        }
+        let now = self.search_mark();
+        if now == was {
+            return;
+        }
+        let only_the_open_one = now.buffer == was.buffer
+            && now.every.wrapping_sub(was.every) == now.revision.wrapping_sub(was.revision);
+        if !only_the_open_one {
+            return;
+        }
+        self.rescan_the_open_one();
+    }
+
+    /// 把名單開頭那一段——正在寫的那一份的命中——換成新的。
+    fn rescan_the_open_one(&mut self) {
+        let Some(look) = self.looker() else { return };
+        let mine = self.my_label();
+        let was = self.search.mine.min(self.search.hits.len());
+        let others = self.search.hits.len() - was;
+        let (fresh, total) = self.scan_the_open_one(&look, &mine, MOST.saturating_sub(others));
+        // 砍過就接不回去：後面漏了哪些沒人知道。整趟重跑，它自己會把數擺對。
+        if self.search.total > MOST || total + (self.search.total - self.search.mine_total) > MOST {
+            return self.search_now();
+        }
+        let grew = fresh.len() as isize - was as isize;
+        self.search.hits.splice(0..was, fresh);
+        self.search.total = self.search.total - self.search.mine_total + total;
+        self.search.mine = self.search.hits.len() - others;
+        self.search.mine_total = total;
+        // **站着的那一行跟着挪。** 站在別人那一段上的時候，前面長了幾行就往下挪
+        // 幾行——那一行說的還是同一處命中。站在自己這一段裏就只夾住，那幾處本來
+        // 就被剛纔那一筆改動挪動了。
+        let rows = self.search.rows().len();
+        self.search.selected = match self.search.selected >= was && grew != 0 {
+            true => self.search.selected.saturating_add_signed(grew),
+            false => self.search.selected,
+        }
+        .min(rows.saturating_sub(1));
+        self.search.looked_at = Some(self.search_mark());
+    }
+
+    /// **正在寫的那一份在名單上叫什麼**——相對搜索的根，沒有根就沒有名字。
+    fn my_label(&self) -> Option<std::path::PathBuf> {
+        let root = self.search.root.as_ref()?;
+        let here = self.current_buffer().path()?;
+        let here = std::fs::canonicalize(here).unwrap_or_else(|_| here.to_path_buf());
+        let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
+        Some(here.strip_prefix(&root).unwrap_or(&here).to_path_buf())
     }
 
     fn take_scope(&mut self) {

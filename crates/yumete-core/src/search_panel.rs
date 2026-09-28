@@ -262,6 +262,28 @@ impl Field {
     }
 }
 
+/// **這張名單是照着哪一版正文算出來的。**
+///
+/// 三個數各答一件事，合起來纔說得出「改的是誰」：
+///
+/// | | 變了說明 |
+/// | --- | --- |
+/// | `buffer` | 換了一份稿子在寫——每一處命中身上的檔名都要重寫 |
+/// | `revision` | 正在寫的這一份改過了 |
+/// | `every` | 某一份改過了，不一定是正在寫的這一份 |
+///
+/// ⚠️ **`every` 一個數不夠。** 它是所有緩衝的改動次數之和，看得出「有人動過」，
+/// 看不出動的是誰；而「只有正在寫的這一份動過」正是只重搜一份的前提。兩個數
+/// 一減就答得上來：`every` 的增量等於 `revision` 的增量，就是只有它動過。
+///
+/// 和數當指紋成立，是因為改動次數只增不減：兩次改動抵消不掉。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mark {
+    pub buffer: u64,
+    pub revision: u64,
+    pub every: u64,
+}
+
 /// One place the pattern was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hit {
@@ -374,7 +396,16 @@ pub struct Search {
     /// 當前緩衝區的號也要記——本文件那一檔換了檔案，名單說的就是別人的事了。
     /// ⚠️ **搜文件夾也要看所有緩衝區**：開着的檔是從內存讀的，不是從磁盤
     /// （見 `search_now` 裏「An open file is read from its buffer」那一段）。
-    pub looked_at: Option<(u64, u64)>,
+    pub looked_at: Option<Mark>,
+
+    /// **名單開頭有幾處是正在寫的那一份裏的。**
+    ///
+    /// `search_now` 先掃正在寫的那一份、再走磁盤，所以那一份的命中永遠是 `hits`
+    /// 開頭連續的一段。記下它有多長，只重搜那一份的時候就能把這一段換掉而不動
+    /// 後面（`Editor::rescan_the_open_one`）。
+    pub mine: usize,
+    /// 那一份裏一共有幾處——沒有被 [`MOST`] 砍過的真數，`total` 要拿它加減。
+    pub mine_total: usize,
     /// Where the caret is in it, in characters.
     pub caret: usize,
     /// Whether the whole query is selected — what `空格 /` leaves behind, so

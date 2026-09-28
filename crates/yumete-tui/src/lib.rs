@@ -297,6 +297,7 @@ fn frame_to(
     if editor.take_owed_search() {
         editor.run_owed_search();
     }
+    editor.refresh_the_edited_file();
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
     let page = areas.panes[editor.live_pane().min(1)];
     let lines = editor.current_buffer().line_count();
@@ -724,6 +725,11 @@ pub fn run(
         // What the last frame cost, and how long that buys the backlog.
         let floor = (last_frame * FRAME_SLACK).clamp(FRAME_FLOOR, FRAME_CEILING);
         if wants_picture.is_some() || !waiting || painted.elapsed() >= floor {
+            // **正文改過的話，把改過的那一份重搜一遍，就在畫之前**（2026-09-29
+            // 定）。⚠️ **不能放在畫完之後**：那樣這一幀畫的還是舊名單，讀者要等
+            // 到下一次按鍵纔看得見側欄跟上。指紋對得上它立刻回來，所以每一幀問
+            // 一次不花什麼。
+            editor.refresh_the_edited_file();
             // The detail is the last frame's cost in milliseconds: if the loop
             // stalls here, the stall line says whether drawing was already
             // expensive before it stopped (#359).
