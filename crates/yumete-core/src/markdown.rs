@@ -12,12 +12,18 @@
 //!   to take out of word motion, the segmentation overlay and search. Emphasis
 //!   in prose does not straddle a paragraph, so a paragraph is the right unit —
 //!   and one paragraph's answer can be cached against its own text.
-//! - **CommonMark's emphasis rules are wrong for 漢字.** They are built on the
-//!   left/right-flanking of *space-delimited* words; between two 漢字 they
-//!   misfire, and it is a long-standing complaint against every implementation.
-//!   Here a delimiter is a delimiter.
-//! - **It is flat.** No emphasis inside emphasis. On a page of prose the extra
-//!   fidelity buys nothing and costs predictability.
+//! - **CommonMark 的 flanking 規則這裏不做。** ⚠️ **2026-09-28 更正**：從前這一條寫的是
+//!   「CommonMark 的強調規則對漢字是錯的，兩個漢字之間它會失手」，**那句話說過頭了**。
+//!   實測 pulldown-cmark 與 comrak 的預設配置，`中**文**中` 兩家都出粗體——漢字在
+//!   flanking 眼裏是 `Lo`，和拉丁字母同一類。真正失手的是**強調內側貼着全角標點**：
+//!   `他說**「好」**。` 兩家都不認（兩家各有一個預設關着的 `cjk_friendly_emphasis`
+//!   擴展在修這個，同一份上游規範的移植）。
+//!
+//!   不做 flanking 的理由因此換一條：**這裏是編輯器不是 CommonMark 實現**，屏幕上的着
+//!   色要和寫的人按下去的鍵對得上，而 flanking 的判準要看左右兩個字符的類別——同一串
+//!   星號在句中和句末着色不同，讀者看不出規律。一個分隔符就是一個分隔符。
+//! - **套得起來，但只到三層**（2026-09-28）。一個構造配對成功之後對它的文字再掃一遍，
+//!   `**粗的`碼`**` 因此認得出來。不做通用的 delimiter stack。
 
 /// What a span of a line is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -907,8 +913,12 @@ fn fence(chars: &[char], at: usize) -> Option<usize> {
         return None;
     }
     if c == '_' {
+        // ⚠️ **漢字不算「詞內」**（2026-09-28 修）。這一條本來是保 `snake_case` 的：
+        // 拉丁詞中間的下劃線不是強調。可是 `is_alphanumeric()` 對漢字也回真，於是
+        // `這_是_重點` 一條 span 都不交——這是這一族裏唯一一個我們自己造出來的中文
+        // 問題。Typst 官方那條 `in_word` 也是明確把漢字、假名、諺文排除在外的。
         let before = at.checked_sub(1).and_then(|i| chars.get(i));
-        if before.is_some_and(|c| c.is_alphanumeric()) {
+        if before.is_some_and(|&c| c.is_alphanumeric() && !yumete_cjk::is_han(c)) {
             return None;
         }
     }
@@ -2276,6 +2286,23 @@ mod tests {
 
         // 沒被轉義的照舊。
         assert_eq!(kinds("*真斜體*"), vec![Kind::Marker, Kind::Emphasis, Kind::Marker]);
+    }
+
+
+    /// ⚠️ **`_` 的詞中保護不許把漢字也擋掉**（2026-09-28 修）。
+    ///
+    /// 那一條是保 `snake_case` 的，而 `is_alphanumeric()` 對漢字回真，於是
+    /// `這_是_重點` 一條 span 都不交。這是這一族裏唯一一個我們自己造出來的中文問題。
+    #[test]
+    fn an_underscore_between_han_still_emphasises() {
+        let kinds = |line: &str| spans(line).into_iter().map(|s| s.kind).collect::<Vec<_>>();
+        assert_eq!(
+            kinds("這_是_重點"),
+            vec![Kind::Marker, Kind::Emphasis, Kind::Marker],
+            "漢字之間的下劃線照樣是強調"
+        );
+        // 拉丁詞中間的照舊不是。
+        assert!(kinds("snake_case_here").is_empty(), "snake_case 還是要保住");
     }
 
 }
