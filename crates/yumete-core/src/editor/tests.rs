@@ -16651,3 +16651,95 @@ fn the_word_object_walks_the_segmenter_like_w_does() {
     press(&mut ed, "miw");
     assert_eq!(ed.selection().1, first, "選中的是第一個詞：{:?}", ed.selection());
 }
+
+/// **vim 預設下 `vi(` 選中括號裏那一段，不再進插入模式**（2026-09-28 收到的反饋）。
+///
+/// ⚠️ **原生鍵位不變，因為 helix 就是這樣**：它的 select 模式整份繼承 normal
+/// （`keymap/default.rs:342`），`i` 沒被蓋掉，所以 helix 按 `vi` 也是進插入。原生那一端
+/// 取物件的拼法是 `mi(`。
+#[test]
+fn the_vim_preset_takes_an_object_from_visual_mode() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+
+    // 光標要先站進括號裏——`vi(` 在括號外面本來就取不到東西，vim 也一樣。
+    // 他說（不要走）然後走了。 ＝ 0他 1說 2（ 3不 …
+    let mut ed = vim("他說（不要走）然後走了。\n");
+    press(&mut ed, "lll");
+    press(&mut ed, "v");
+    assert!(ed.is_extending(), "v 開了延伸模式");
+    press(&mut ed, "i（");
+    assert_eq!(ed.mode(), Mode::Normal, "沒有進插入模式：{}", ed.status());
+    let (from, to) = ed.selection();
+    let took: String = ed
+        .current_buffer()
+        .rope()
+        .slice(from..to)
+        .chars()
+        .collect();
+    assert_eq!(took, "不要走", "選中的是括號裏那一段：{took:?}");
+    assert!(ed.is_extending(), "還在可視模式裏，同 vim");
+
+    // `viw` 同樣走得通。
+    let mut ed = vim("hello world\n");
+    press(&mut ed, "v");
+    press(&mut ed, "iw");
+
+    assert_eq!(ed.mode(), Mode::Normal, "{}", ed.status());
+    let (from, to) = ed.selection();
+    let took: String = ed.current_buffer().rope().slice(from..to).chars().collect();
+    assert_eq!(took, "hello", "選中光標所在的詞：{took:?}");
+
+    // ⚠️ 原生鍵位那一端照舊進插入。
+    let mut ed = typed("他說（不要走）然後走了。\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "v");
+    press(&mut ed, "i");
+    assert_eq!(ed.mode(), Mode::Insert, "原生鍵位同 helix：{}", ed.status());
+}
+
+/// **一個括號鍵管一族括號**（2026-09-28 收到的反饋：「di( di[ 等等目前好像只支持半角字符，
+/// 能不能处理时不区分全半角，见到成对的括号都执行内部删除？」）。
+#[test]
+fn a_bracket_key_reaches_its_whole_family() {
+    let vim = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed
+    };
+
+    // 全角圓括號：按 ASCII 的 `(` 找得到。
+    let ed = vim("他說（不要走）然後走了。\n", "llldi(");
+    assert_eq!(ed.current_buffer().text(), "他說（）然後走了。\n");
+
+    // 方引號掛在 `[` 上（2026-09-28 定：「方引号应该是[]而不是＂」）。
+    let ed = vim("他說「不要走」然後走了。\n", "llldi[");
+    assert_eq!(ed.current_buffer().text(), "他說「」然後走了。\n");
+
+    // 方頭括號同一族。
+    let ed = vim("他說【不要走】然後走了。\n", "llldi[");
+    assert_eq!(ed.current_buffer().text(), "他說【】然後走了。\n");
+
+    // 書名號掛在 `<` 上。
+    let ed = vim("他讀《紅樓夢》很久了。\n", "llldi<");
+    assert_eq!(ed.current_buffer().text(), "他讀《》很久了。\n");
+
+    // ⚠️ **兩頭都認**：按全角的那一個，也找得到半角的。
+    let ed = vim("他說(不要走)然後走了。\n", "llldi（");
+    assert_eq!(ed.current_buffer().text(), "他說()然後走了。\n");
+
+    // ⚠️ **同一族套着的時候取最裏面那一對**，和 `md` 一致。
+    let ed = vim("【他說「不要走」啊】\n", "lllllda[");
+    assert_eq!(ed.current_buffer().text(), "【他說啊】\n", "拿掉的是裏面那一對");
+
+    // ⚠️ **不同族的不搶**：按 `[` 只在 `[` 那一族裏找，`（）` 不歸它，所以拿到的是
+    // 外面那一對 `【】`。這是有意的——按哪個鍵就找哪一族，想「不管哪一對」用 `md`。
+    let ed = vim("【他說（不要走）啊】\n", "lllllda[");
+    assert_eq!(ed.current_buffer().text(), "\n", "（）不在 [ 這一族裏");
+}

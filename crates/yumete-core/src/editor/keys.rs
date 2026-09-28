@@ -1441,6 +1441,21 @@ impl Editor {
             Key::Char('p') => self.repeat_writing(count, |e| e.paste(true)),
             Key::Char('P') => self.repeat_writing(count, |e| e.paste(false)),
             // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).
+            // **vim 預設下，可視模式裏的 `i`／`a` 是物件前綴**（2026-09-28 收到的反饋：
+            // 「vi* 进入选择/高亮模式（目前是因为 i 键的关系，进入了插入模式）」）。
+            //
+            // ⚠️ **只改 vim 那一端。** helix 的 select 模式是整份繼承 normal 的
+            // （`keymap/default.rs:342` 的 `select = normal.clone()`，`i` 沒有被蓋掉），
+            // 所以 helix 按 `vi` 也是進插入——原生鍵位現在的行為就是 helix 的行為，
+            // 原生那一端要取物件是 `mi(`。vim 的 `vi(` 纔是選中括號裏那一段。
+            //
+            // 代價是 vim 預設下不能再從可視模式按 `i` 進插入。vim 自己也不能：那一端
+            // 的 `i` 在可視模式裏就是物件前綴。要進插入先按 `v` 或 `Esc` 出來。
+            Key::Char(key @ ('i' | 'a'))
+                if self.extend && self.key_preset == yumete_cjk::KeyPreset::Vim =>
+            {
+                self.pending = Pending::MatchPair { around: key == 'a' };
+            }
             Key::Char('i') => {
                 self.snapshot();
                 let pos = self.selection().0;

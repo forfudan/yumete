@@ -83,9 +83,17 @@ impl Editor {
     }
 
     /// The span a pair of delimiters encloses, `around` taking the marks too.
-    fn pair_span(&self, open: char, close: char, around: bool) -> motion::Span {
+    fn pair_span(&self, open: char, _close: char, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope();
-        let Some((start, end)) = surrounding(rope, self.sel.head(), open, close) else {
+        // ⚠️ **一個鍵管一族括號**（2026-09-28）：按 `(` 找得到 `()` 也找得到 `（）`，
+        // 按 `[` 連 `【】`『』一起找。取**最裏面**那一對——`【他說（不）】` 裏光標在
+        // 「不」上按 `di[`，要的是 `（）` 還是 `【】`？答案跟 `md` 一致：最裏面那一對。
+        // 這張族表在 `editor.rs` 的 `FAMILIES`，理由記在那裏。
+        let Some((start, end)) = super::pair_family(open)
+            .into_iter()
+            .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
+            .max_by_key(|&(start, _)| start)
+        else {
             return motion::Span::Missed;
         };
         // `end` is the closing bracket's own index. The head goes on the last
