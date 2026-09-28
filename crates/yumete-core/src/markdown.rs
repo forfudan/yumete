@@ -1320,13 +1320,26 @@ pub mod typst {
 
         // A heading is `=` through `======`, and the rest of the line is it.
         let equals = chars.iter().take_while(|&&c| c == '=').count();
-        if equals > 0 && equals <= 6 && matches!(chars.get(equals), Some(' ') | None) {
+        // ⚠️ **全角空格也算空白**（2026-09-28）。從前這裏只認 `' '`，於是
+        // `= 　第一章`（中文作者最常見的縮進寫法）整行不上色。
+        if equals > 0
+            && equals <= 6
+            && chars.get(equals).is_none_or(|c| c.is_whitespace())
+        {
             push(&mut out, 0, equals, Kind::HeadingMark, 0);
             push(&mut out, equals, chars.len(), Kind::Heading, 0);
             at = equals;
         }
 
         while at < chars.len() {
+            // **`\*` 不是強調的開頭**（2026-09-28，同 Markdown 那一邊）。這個倉自己的
+            // `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
+            if chars[at] == '\\' && chars.get(at + 1).is_some_and(|&c| super::escapable(c)) {
+                push(&mut out, at, at + 1, Kind::Marker, construct);
+                construct += 1;
+                at += 2;
+                continue;
+            }
             // `// to the end of the line` is a note to oneself.
             if chars[at] == '/' && chars.get(at + 1) == Some(&'/') {
                 push(&mut out, at, chars.len(), Kind::Comment, construct);
@@ -1336,10 +1349,38 @@ pub mod typst {
             // instructions, not the writing. Shown, always — a writer needs to
             // see what produces the page.
             if chars[at] == '#' && chars.get(at + 1).is_some_and(|c| c.is_alphabetic()) {
-                let end = code_end(&chars, at + 1);
-                push(&mut out, at, end, Kind::Code2, construct);
-                at = end;
+                let (end, bodies) = code_parts(&chars, at + 1);
+                let mine = construct;
                 construct += 1;
+                // **方括號裏裝的是正文，不是代碼**（2026-09-28）。`#chapter[初雪]`、
+                // `#quote[…]`、`#figure(caption: [說明])` 是中文 Typst 稿裏最常見的三
+                // 種寫法，從前整塊畫成代碼色，等於把作者寫的字藏起來。
+                //
+                // ⚠️ **這是官方那套模式切換裏唯一值得學的一層**：Typst 的 `[]` 從 code
+                // 模式切回 markup 模式。再往裏（`#if x { [文字] }` 這種）只出現在模板檔
+                // 裏，不出現在正文裏，而模板整塊灰掉反而好讀。
+                //
+                // ⚠️ **代碼色只蓋代碼那兩截**（`#chapter[` 和 `]`），中間**不蓋**。
+                // 蓋了的話裏面的字還是灰的——正文沒有自己的 span，它就是「沒被蓋到的
+                // 那些格子」，所以要真的讓開，不能靠往上再壓一層。
+                let mut cut = at;
+                for (a, b) in bodies {
+                    push(&mut out, cut, a, Kind::Code2, mine);
+                    let body: String = chars[a..b].iter().collect();
+                    let inner = spans(&body);
+                    let top = inner.iter().map(|s| s.construct).max().unwrap_or(0);
+                    for mut one in inner {
+                        one.start += a;
+                        one.end += a;
+                        one.construct += construct;
+                        one.depth = 1;
+                        out.push(one);
+                    }
+                    construct += top + 1;
+                    cut = b;
+                }
+                push(&mut out, cut, end, Kind::Code2, mine);
+                at = end;
                 continue;
             }
             // `$maths$`.
@@ -1354,7 +1395,7 @@ pub mod typst {
                 }
             }
             // `*粗*` and `_斜_` — one delimiter, not two.
-            if matches!(chars[at], '*' | '_') {
+            if matches!(chars[at], '*' | '_') && !in_word(&chars, at) {
                 let kind = if chars[at] == '*' {
                     Kind::Strong
                 } else {
@@ -1469,6 +1510,38 @@ pub mod typst {
     /// takes the identifier and whatever brackets follow it, balanced — enough
     /// to set `#chapter[初雪]` and `#import "lib.typ": chapter` apart from the
     /// prose around them, which is all a page of writing asks of it.
+    /// [`code_end`]，外加**方括號裏那幾段**的範圍——那幾段是正文，要當標記再掃一遍。
+    ///
+    /// 只收最外面那一層（`[甲 [乙] 丙]` 收整段，裏面那一對交給遞歸）。
+    ///
+    /// ⚠️ **字符串字面量裏的方括號不算**：`#f("]")` 裏那個不是括號。這是報告裏說的
+    /// 「真要修就只修這一小步，別往上走」——完整的 Typst 表達式解析器換不來什麼。
+    fn code_parts(chars: &[char], from: usize) -> (usize, Vec<(usize, usize)>) {
+        let end = code_end(chars, from);
+        let mut bodies = Vec::new();
+        let (mut quoted, mut deep, mut opened) = (false, 0usize, 0usize);
+        for at in from..end.min(chars.len()) {
+            match chars[at] {
+                '"' => quoted = !quoted,
+                _ if quoted => {}
+                '[' => {
+                    if deep == 0 {
+                        opened = at;
+                    }
+                    deep += 1;
+                }
+                ']' if deep > 0 => {
+                    deep -= 1;
+                    if deep == 0 && at > opened + 1 {
+                        bodies.push((opened + 1, at));
+                    }
+                }
+                _ => {}
+            }
+        }
+        (end, bodies)
+    }
+
     fn code_end(chars: &[char], from: usize) -> usize {
         let mut at = from;
         while at < chars.len()
@@ -1511,11 +1584,42 @@ pub mod typst {
     }
 
     /// Where the run closing the delimiter opened at `from` is.
+    /// **Typst 官方那條「詞內不算分隔符」**（`typst-syntax/src/lexer.rs:628` 的
+    /// `in_word`，2026-09-28 照抄）。
+    ///
+    /// 一個 `*` 或 `_` 前後都貼着**西文**字母或數字的時候，它是那個詞的一部分，不是分隔
+    /// 符——`snake_case` 不該畫成斜體，`a*b*c` 不該畫成粗體。
+    ///
+    /// ⚠️ **漢字、假名、諺文明確排除在「詞內」之外**，這是官方自己寫的，不是我們加的。
+    /// 所以 `這*是*重點` 照樣是強調，而中文這一側一個字符都不用另立規矩。
+    fn in_word(chars: &[char], at: usize) -> bool {
+        let wordy = |c: Option<&char>| {
+            c.is_some_and(|&c| c.is_alphanumeric() && !cjk_script(c))
+        };
+        wordy(at.checked_sub(1).and_then(|i| chars.get(i))) && wordy(chars.get(at + 1))
+    }
+
+    /// 漢字、平假名、片假名、諺文。
+    ///
+    /// ⚠️ 自己數碼位，不拉 `unicode-script` 進來：這個倉只需要「是不是這四種」這一個
+    /// 問題，而那個 crate 帶着一整張 Script 表。漢字那一半走 `yumete_cjk::is_han`，
+    /// 「一個概念一處權威」。
+    fn cjk_script(c: char) -> bool {
+        yumete_cjk::is_han(c)
+            || matches!(c as u32,
+                0x3040..=0x30FF      // 平假名、片假名
+                | 0x31F0..=0x31FF    // 片假名語音擴展
+                | 0xFF66..=0xFF9D    // 半角片假名
+                | 0x1100..=0x11FF    // 諺文字母
+                | 0x3130..=0x318F    // 諺文兼容字母
+                | 0xAC00..=0xD7AF)   // 諺文音節
+    }
+
     fn closing(chars: &[char], from: usize, delimiter: char) -> Option<usize> {
-        if chars.get(from).is_none_or(|&c| c == ' ') {
-            return None;
-        }
-        (from + 1..chars.len()).find(|&i| chars[i] == delimiter && chars.get(i - 1) != Some(&' '))
+        // ⚠️ **空白那兩道閘去掉了**（2026-09-28）。從前是「開標記後面不許是空格、閉標記
+        // 前面不許是空格」，那是照 Markdown 抄的；Typst 沒有這條規矩，`* 文*` 在官方
+        // 那裏就是強調。判準換成官方唯一的那一條：[`in_word`]。
+        (from..chars.len()).find(|&i| chars[i] == delimiter && !in_word(chars, i))
     }
 
     fn push(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind, construct: usize) {
@@ -1579,12 +1683,38 @@ mod typst_tests {
         );
     }
 
+    /// **Typst 官方那條「詞內不算分隔符」**（`typst-syntax/src/lexer.rs:628` 的
+    /// `in_word`，2026-09-28 照抄）。
+    #[test]
+    fn a_delimiter_inside_a_latin_word_is_not_a_delimiter() {
+        // 從前這兩行被畫成斜體和粗體。
+        assert_eq!(shape("snake_case_here"), "               ");
+        assert_eq!(shape("a*b*c"), "     ");
+        // ⚠️ **中文那一側一個字符不變**：官方明確把漢字、假名、諺文排除在「詞內」外。
+        assert_eq!(shape("這*是*重點"), " .B.  ");
+        // Typst 沒有 Markdown 那條「開標記後面不許是空格」，`* 文*` 就是強調。
+        assert_eq!(shape("* 文*"), ".BB.");
+    }
+
+    /// **反斜杠轉義，以及全角空格開頭的標題**（2026-09-28）。
+    #[test]
+    fn a_backslash_escapes_and_a_fullwidth_space_still_opens_a_heading() {
+        assert_eq!(shape(r"\*不是強調\*"), ".     . ");
+        // ⚠️ 全角空格是中文作者最常見的縮進，從前它讓整行標題不上色。
+        assert_eq!(shape("= 　第一章"), ".HHHHH");
+        assert_eq!(shape("= 第一章"), ".HHHH");
+    }
+
     #[test]
     fn code_is_shown_because_it_is_what_produces_the_page() {
         // Not decoration around writing — the instructions that make it. A
         // writer has to see them, so they are never hidden, only set back.
-        assert_eq!(shape("#chapter[初雪]"), "############");
-        assert_eq!(shape("那年#emph[冬天]。"), "  ######### ");
+        //
+        // ⚠️ **方括號裏的那幾個字不是代碼**（2026-09-28）。`#chapter[初雪]` 裏「初雪」
+        // 是作者寫的字，從前整塊畫成代碼色，等於把它藏起來。現在代碼色只蓋
+        // `#chapter[` 和 `]` 兩截。這一條原先寫的是 `"############"`。
+        assert_eq!(shape("#chapter[初雪]"), "#########  #");
+        assert_eq!(shape("那年#emph[冬天]。"), "  ######  # ");
         // An import takes the rest of its line.
         assert_eq!(
             shape("#import \"lib.typ\": chapter"),
