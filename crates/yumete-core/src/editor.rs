@@ -522,10 +522,19 @@ pub enum Hint {
     Says(String),
     /// A named set of keys: what this is, then each key and what it does.
     ///
-    /// The *keys* are `&'static str` — `hjkl` is `hjkl` in any language — and
-    /// what they mean is a `String`, because it is said in the reader's.
-    Keys(String, Vec<(&'static str, String)>),
+    /// The *keys* are not said in any language — `hjkl` is `hjkl` everywhere —
+    /// so almost every one of them is a `&'static str`. What they mean is a
+    /// `String`, because it is said in the reader's.
+    ///
+    /// ⚠️ The key is a [`Cow`] rather than a plain `&'static str` because one
+    /// menu's keys are **read off the document**: the register panel lists the
+    /// letters that actually hold something, and which letters those are is
+    /// only known at the moment the panel is drawn.
+    Keys(String, KeyRows),
 }
+
+/// One menu's worth of rows: the key to press, and what it does or holds.
+pub type KeyRows = Vec<(std::borrow::Cow<'static, str>, String)>;
 
 /// A command line to run, and how the writer expects to watch it.
 ///

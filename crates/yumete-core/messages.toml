@@ -4871,6 +4871,13 @@ zhs = "M 记住这里"
 en = "M mark this place"
 
 [[message]]
+# ` 之後那張小表：跳回哪一個標記
+key = "hint.mark.which-one"
+zht = "哪一個"
+zhs = "哪一个"
+en = "which one"
+
+[[message]]
 # m 組：連同
 key = "hint.match.around"
 zht = "連同"
@@ -4941,25 +4948,19 @@ zhs = "换一条（Shift-Tab 往回）"
 en = "next one (Shift-Tab goes back)"
 
 [[message]]
-# " 之後那張小表：# 這一格（選區序號，#405 Phase 3）
+# " 之後那張小表：# 那一行（選區序號，#405 Phase 3）
 key = "hint.register.hash"
-zht = "選區序號：第幾段就是幾"
-zhs = "选区序号：第几段就是几"
-en = "the selection's number: 1 for the first, 2 for the second"
+zht = "該選區之序號"
+zhs = "该选区之序号"
+en = "this selection's number"
 
 [[message]]
-# 暫存器組的標題
+# " 之後那張小表的標題（2026-09-29 作者定的名字）
 key = "hint.register.title"
-zht = "暫存器"
-zhs = "暂存器"
-en = "register"
+zht = "寄存器·剪貼板"
+zhs = "寄存器·剪贴板"
+en = "registers"
 
-[[message]]
-# 暫存器組：哪一個
-key = "hint.register.which-one"
-zht = "哪一個"
-zhs = "哪一个"
-en = "which one"
 
 [[message]]
 # 提示：全部替換——不換

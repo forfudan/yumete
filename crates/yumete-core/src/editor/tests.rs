@@ -16317,7 +16317,7 @@ fn the_row_says_the_way_back_while_the_list_is_still_up() {
     let Hint::Keys(_, keys) = ed.hint() else {
         panic!("那一行又空了：{:?}", ed.hint());
     };
-    let said: Vec<&str> = keys.iter().map(|(key, _)| *key).collect();
+    let said: Vec<&str> = keys.iter().map(|(key, _)| key.as_ref()).collect();
     assert!(said.contains(&"n N"), "走命中的鍵要在：{said:?}");
     assert!(
         said.iter().any(|k| k.contains('w')),
@@ -17425,4 +17425,47 @@ fn an_emptied_buffer_does_not_take_the_selections_out_of_bounds() {
         assert!(a <= len && b <= len, "({a},{b}) 超出 {len}");
     }
     assert!(ed.sel.iter().all(|r| r.head <= len && r.anchor <= len));
+}
+
+/// **`"` 那張表列的是格子裏裝着什麼，不是「a–z 哪一個」**（2026-09-29 定，照
+/// helix：「Helix這個好」）。
+///
+/// 從前右邊那一列寫的是說明，而那句說明回答不了「a 是什麼」。現在存過東西的格
+/// 子各佔一行、右邊印它存着的那段字，空的不列，`#` 排在最後——它不是格子，所以
+/// 它是這張表上唯一一行說明。
+#[test]
+fn the_register_panel_shows_what_each_one_holds() {
+    let mut ed = typed("這一段是要複製到 a 裏去的，它有點長，長到面板放不下要截斷\n短的一段\n");
+    // 一個都沒存過：只有 `#` 那一行。
+    press(&mut ed, "\"");
+    let Hint::Keys(title, keys) = ed.hint() else {
+        panic!("按了 \" 那張表沒出來：{:?}", ed.hint())
+    };
+    assert_eq!(title, "寄存器·剪貼板");
+    assert_eq!(keys.len(), 1, "一個格子都沒存過，表上只該有 # ：{keys:?}");
+    assert_eq!(keys[0].0, "#");
+    assert_eq!(keys[0].1, "該選區之序號");
+    ed.on_key(Key::Esc);
+
+    // 整行存進 a，第二行存進 k。
+    press(&mut ed, "x\"ayjx\"ky\"");
+    let Hint::Keys(_, keys) = ed.hint() else {
+        panic!("按了 \" 那張表沒出來：{:?}", ed.hint())
+    };
+    let rows: Vec<(&str, &str)> =
+        keys.iter().map(|(k, what)| (k.as_ref(), what.as_str())).collect();
+    assert_eq!(rows.len(), 3, "a、k，然後 #：{rows:?}");
+    assert_eq!(rows[0].0, "a");
+    assert_eq!(rows[1].0, "k");
+    assert_eq!(rows[2], ("#", "該選區之序號"), "# 排在最後，而且是一句說明");
+    // 二十四格（十二個漢字）就截，截的那一頭補一個 `…`，`…` 自己也算在裏面。
+    assert_eq!(rows[0].1, "這一段是要複製到 a 裏去…");
+    assert!(
+        yumete_cjk::str_width(rows[0].1) <= 24,
+        "一行最多二十四格：{:?} 寬 {}",
+        rows[0].1,
+        yumete_cjk::str_width(rows[0].1)
+    );
+    // 放得下的原樣印出來，不補 `…`。
+    assert_eq!(rows[1].1, "短的一段");
 }
