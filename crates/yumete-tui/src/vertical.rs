@@ -1000,6 +1000,13 @@ pub fn draw(
     // underneath — a heading, a reading, a hung mark — at the moment the writer
     // was looking hardest at them.
     let sel_style = Style::default().bg(ink.selection());
+    // **次選區用同一塊底色**（#405，2026-09-28 定，理由與橫排同一條：灰梯子上沒有第三檔
+    // 可退）。竪排這邊主次分得更開一些——主選區的光標是畫進頁面的反白方塊，深底淺字，
+    // 和灰底不是一回事。只在自己這一半畫，`peek` 那一半沒有光標。
+    let secondary = match peek {
+        None => editor.secondary_selections(),
+        Some(_) => Vec::new(),
+    };
     // **The cell you are standing on** (#229), on the vertical page too. A `|`
     // table inside a 縱書 manuscript is edited where it lies — the page is not
     // turned for it (`turn_for_table`) — so this is the only surface that ever
@@ -1523,6 +1530,14 @@ pub fn draw(
             if let Some((from, to)) = cell {
                 if !highlighted && at < to && at + len > from {
                     style = style.patch(cell_style);
+                }
+            }
+
+            // 次選區墊在主選區之前。不變式保證不重疊，寫成這個次序是因為「主選區壓在
+            // 最上面」是這一族唯一不許被推翻的次序。
+            for &(from, to) in &secondary {
+                if at < to && at + len > from {
+                    style = style.patch(sel_style);
                 }
             }
 

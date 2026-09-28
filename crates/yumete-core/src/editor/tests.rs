@@ -16307,3 +16307,29 @@ fn the_row_says_the_way_back_while_the_list_is_still_up() {
     );
 
 }
+
+/// **次選區交出去的是撐開一個字素之後的範圍，而且塌着的那些也要交**（#405）。
+///
+/// 主選區塌着的時候有光標替它說話，次選區沒有——它塌着的時候能被看見的只有它站的那
+/// 一格底色。所以這一支不許像 `span()` 那樣回一個零寬的範圍，否則 `C` 複製出來的那一
+/// 串空光標在屏幕上一個都看不見。
+#[test]
+fn the_secondary_selections_are_a_grapheme_wide_even_when_collapsed() {
+    let mut ed = typed("那年冬天\n雪下得早");
+    assert!(
+        ed.secondary_selections().is_empty(),
+        "只有一段的時候什麽都不交，畫面才會一格不動"
+    );
+
+    // 第二段塌在第 6 個字上（第二行的「下」）。
+    ed.sel.push(crate::selection::Range::at(6));
+    let secondary = ed.secondary_selections();
+    assert_eq!(secondary.len(), 1, "兩段裏有一段不是主選區：{secondary:?}");
+    assert_eq!(secondary[0], (0, 1), "主選區是剛加進去的那一段，交出來的是原來那個");
+
+    // 撐開的那一段照樣多一個字素。
+    ed.sel.push(crate::selection::Range { anchor: 2, head: 3 });
+    let mut secondary = ed.secondary_selections();
+    secondary.sort();
+    assert_eq!(secondary, vec![(0, 1), (6, 7)], "兩段次選區，各自寬一個字素");
+}

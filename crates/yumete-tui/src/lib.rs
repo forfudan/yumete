@@ -8396,6 +8396,16 @@ fn draw_horizontal(
     };
     // A ground, and only a ground.
     let sel_style = Style::default().bg(ink.selection());
+    // **次選區用同一塊底色**（#405，2026-09-28 定）。灰梯子上沒有第三檔可退——量過十套
+    // 主題，淺色模式下選區（第 63 檔）到光標行（第 73 檔）之間一共只有 1.26:1，中間插
+    // 一檔兩邊各剩 1.13 上下，而兩塊平底色要分得開需要 1.24。主次的分別因此交給**光標**：
+    // 主選區帶着終端自己那個墨色光標，次選區沒有。
+    //
+    // 只在自己這一半畫：另一半是只讀的一眼（`peek`），它沒有光標。
+    let secondary = match peek {
+        None => editor.secondary_selections(),
+        Some(_) => Vec::new(),
+    };
     // **The cell you are standing on** (#229). Insert has always been confined
     // to it, and until now the only sign of that was the column name in the
     // status line — so a table you were editing looked exactly like a table you
@@ -8975,9 +8985,21 @@ fn draw_horizontal(
             }
         }
 
+        // 次選區墊在主選區之前。不變式保證它們不重疊，所以這個次序眼下看不出分別；
+        // 寫成這樣是因為「主選區壓在最上面」是這一族唯一不許被推翻的次序。
+        let reach = row.start + row_len + usize::from(row.ends_line);
+        for &(from, to) in &secondary {
+            if to > row.start && from < reach {
+                let a = from.saturating_sub(row.start).min(row_len);
+                let b = (to - row.start).min(row_len);
+                for style in styles.iter_mut().take(b).skip(a) {
+                    *style = style.patch(sel_style);
+                }
+            }
+        }
+
         // The selection's ground goes over everything, because it is the answer
         // to "what would an edit take" and nothing may obscure that.
-        let reach = row.start + row_len + usize::from(row.ends_line);
         let mut break_cell = "";
         if has_selection && sel_end > row.start && sel_start < reach {
             let a = sel_start.saturating_sub(row.start).min(row_len);

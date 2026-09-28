@@ -98,6 +98,16 @@ impl Selections {
         self.ranges.iter()
     }
 
+    /// 主選區以外的那幾段——畫面要把它們和主選區分開對待，所以單開一支。
+    pub fn secondaries(&self) -> impl Iterator<Item = &Range> {
+        let primary = self.primary;
+        self.ranges
+            .iter()
+            .enumerate()
+            .filter(move |(which, _)| *which != primary)
+            .map(|(_, one)| one)
+    }
+
     // ---- 主選區的兩端 ---------------------------------------------------
     //
     // 這四支是 Phase 0 的全部門面：從前直接讀寫 `editor.cursor` / `editor.anchor` 的那
