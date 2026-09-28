@@ -16510,3 +16510,48 @@ fn the_selections_after_an_edit_land_where_the_text_actually_is() {
         .collect();
     assert_eq!(where_, vec![(0, 0), (1, 0), (2, 0)], "各在各行的行首");
 }
+
+/// **插入模式下 N 個光標一起打字**（#405 Phase 1 第六步）——md 列表集體操作的那個用例。
+#[test]
+fn typing_in_insert_lands_at_every_selection() {
+    let mut ed = typed("- 買菜\n- 倒垃圾\n- 寫第三章\n");
+    press(&mut ed, "ggCC");
+    assert_eq!(ed.sel.len(), 3);
+
+    press(&mut ed, "i");
+    assert_eq!(ed.mode(), Mode::Insert, "{}", ed.status());
+    assert_eq!(ed.sel.len(), 3, "三段各進各的插入點");
+    for c in "☐ ".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "☐ - 買菜\n☐ - 倒垃圾\n☐ - 寫第三章\n",
+        "三行各多了一個記號"
+    );
+
+    // ⚠️ 一次插入是一次撤銷（§5.12.3），N 段也是一次。
+    press(&mut ed, "u");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "- 買菜\n- 倒垃圾\n- 寫第三章\n",
+        "一個撤銷點，不是每敲一鍵一個"
+    );
+}
+
+/// `c` 逐段各改各的，改完打的字也落在每一段上。
+#[test]
+fn the_change_key_reaches_every_selection() {
+    let mut ed = typed("- 買菜\n- 倒垃圾\n- 寫第三章\n");
+    press(&mut ed, "ggCC");
+    press(&mut ed, "c");
+    assert_eq!(ed.mode(), Mode::Insert, "{}", ed.status());
+    ed.on_key(Key::Char('▸'));
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "▸ 買菜\n▸ 倒垃圾\n▸ 寫第三章\n",
+        "三行的記號一起換了"
+    );
+}

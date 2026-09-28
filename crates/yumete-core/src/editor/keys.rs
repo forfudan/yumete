@@ -108,7 +108,12 @@ impl Editor {
                 KeyOutcome::Continue
             }
             Mode::Insert => {
-                self.on_insert_key(key);
+                // ⚠️ **補全單子開着的時候一次就夠**：那是一張浮在上面的單子，`Tab` 與
+                // `C-n` 歸它，不是往 N 處各寫一次。
+                match multi::types_at_every_selection(key) && self.offers_here().is_none() {
+                    true => self.edit_each_from(false, |e| e.on_insert_key(key)),
+                    false => self.on_insert_key(key),
+                }
                 KeyOutcome::Continue
             }
             Mode::Command => self.on_command_key(key),

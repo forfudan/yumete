@@ -153,11 +153,21 @@ impl super::Editor {
     /// `u` 只退回去一段。這裏先自己報一個點，然後開一個 undo group 把裏面那 N 次
     /// `snapshot` 全堵掉（`buffer.rs` 的 `begin_undo_group`），做完再放開。
     pub(super) fn edit_each(&mut self, what: impl Fn(&mut Self)) {
+        self.edit_each_from(true, what);
+    }
+
+    /// 同上，`point` 說要不要自己報一個撤銷點。
+    ///
+    /// ⚠️ **插入模式下不報。** 進插入的那一下已經報過一個了，而這個倉的規矩是「一次插入
+    /// 是一次撤銷」（§5.12.3）。每敲一鍵報一次，`u` 就只退一個字。
+    pub(super) fn edit_each_from(&mut self, point: bool, what: impl Fn(&mut Self)) {
         if !self.sel.is_plural() {
             what(self);
             return;
         }
-        self.snapshot();
+        if point {
+            self.snapshot();
+        }
         let grouping = self.current_buffer_mut().begin_undo_group();
         let was = self.sel.clone();
         let primary = was.primary();
@@ -272,13 +282,13 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
 
 /// **哪些鍵要逐段各編輯一次**（#405 Phase 1 第五步）。
 ///
-/// ⚠️ **`c`／`A-c` 不在裏面，而它們是編輯。** 它們刪完就進插入模式，而插入模式下 N 個
-/// 光標一起打字是另一件事（每按一鍵要在 N 處各寫一次，還要和輸入法的 preedit 對上）。
-/// 刪了那一半、打字只落在主選區上，是比「只作用在主選區」更難看懂的狀態。所以整個
-/// `c` 族先只動主選區，等插入模式那一步做完再收進來。
+/// ⚠️ **進插入模式的那幾個也在裏面**（`i` `a` `I` `A` `o` `O` `c` `A-c`）。它們有的不改
+/// 文本（`i` 只是把光標挪到選區開頭），走同一支不虧：文本沒動的時候那一趟挪位是零。收進
+/// 來的理由是它們要**逐段各進各的插入點**，然後插入模式那一支
+/// （[`types_at_every_selection`]）接着把每一個鍵送到 N 處。
 ///
-/// ⚠️ **`y` 也不在。** 複製不改文本，可是 N 段複製出來要在寄存器裏怎麽擺（helix 是各存
-/// 一格、貼的時候一段對一段）是寄存器那一族的事，不是這一步的。
+/// ⚠️ **`y` 不在。** 複製不改文本，可是 N 段複製出來在寄存器裏怎麽擺（helix 是各存一格、
+/// 貼的時候一段對一段）是寄存器那一族的事，不是這一步的。
 pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input::Key) -> bool {
     use crate::input::Key;
     match pending {
@@ -287,7 +297,29 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         super::Pending::None => matches!(
             key,
             Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P') | Key::Char('>' | '<')
+        ) || matches!(
+            key,
+            Key::Char('i' | 'a' | 'I' | 'A' | 'o' | 'O' | 'c') | Key::Alt('c')
         ),
         _ => false,
     }
+}
+
+/// **插入模式下，這一鍵要不要在每一段各做一次**（#405 Phase 1 第六步）。
+///
+/// 會在稿子上留下字的那幾個都要：打字、換行、退格、刪除、`Tab`。
+///
+/// ⚠️ **剩下的一次就夠**：`Esc` 是「離開插入模式」，補全單子那一族（`C-n`、`Tab` 在單子
+/// 開着的時候）是一張浮在上面的單子，`C-g u` 是撤銷斷點。這些都是整個編輯器做一次的事。
+///
+/// ⚠️ **輸入法的 preedit 不在這裏。** 中文碼串還在 IME 手裏的時候一個鍵都不進
+/// `on_insert_key`（`prompt.rs:26` 記着這個模型），上屏的那一下纔進來，那時它就是一串
+/// 字符，和打拉丁字母走同一條路。**N 個光標同時畫出自己的拼音串**是另一件事，排在
+/// Phase 4（§5.13.8 一）。
+pub(super) fn types_at_every_selection(key: crate::input::Key) -> bool {
+    use crate::input::Key;
+    matches!(
+        key,
+        Key::Char(_) | Key::Enter | Key::Backspace | Key::Delete | Key::Tab
+    )
 }
