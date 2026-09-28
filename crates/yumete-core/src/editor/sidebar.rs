@@ -159,7 +159,7 @@ impl Editor {
             return false;
         }
         let reading = self.panel_focus == Some(self.side_of(crate::sidebar::Panel::Dictionary));
-        reading || self.dictionary_anchor == Some(self.cursor)
+        reading || self.dictionary_anchor == Some(self.sel.head())
     }
 
     /// The rows of the bottom layer, when it is one that is drawn as a list.
@@ -596,7 +596,7 @@ impl Editor {
                 let want = usize::from(nth == 2);
                 // 沒有第二個工作區就開一個，開在站着的地方（`open_split` 的話）。
                 if want == 1 && self.other_pane().is_none() {
-                    let at = self.cursor;
+                    let at = self.sel.head();
                     let caption = self.current_buffer().display_name().to_string();
                     self.open_split(at, None, caption);
                 }
@@ -731,21 +731,21 @@ impl Editor {
             Key::Char('G') | Key::End => usize::MAX,
             other => return self.on_sidebar_key_after_the_list(other),
         };
-        self.wiki_scroll.set((moved, self.cursor));
+        self.wiki_scroll.set((moved, self.sel.head()));
     }
 
     /// 百科那一條此刻讀到第幾行——光標換了詞條就從頭算。
     pub fn wiki_scroll_now(&self) -> (usize, usize) {
         let held = self.wiki_scroll.get();
-        match held.1 == self.cursor {
+        match held.1 == self.sel.head() {
             true => held,
-            false => (0, self.cursor),
+            false => (0, self.sel.head()),
         }
     }
 
     /// **前端畫完那一趟，把夾好的那個數寫回來**——它是唯一折得出屏幕行的一頭。
     pub fn set_wiki_scroll(&self, at: usize) {
-        self.wiki_scroll.set((at, self.cursor));
+        self.wiki_scroll.set((at, self.sel.head()));
     }
 
     /// **不管這一頁是單子還是文章，這幾個鍵都算數**（2026-09-23 審出來的：提示
@@ -1085,7 +1085,7 @@ impl Editor {
         // it, which is the whole of why the bottom layer holds no state
         // (#293). Nothing is opened here either: the panel *is* the question,
         // and `transient()` will draw it because the question is live.
-        self.dictionary_anchor = Some(self.cursor);
+        self.dictionary_anchor = Some(self.sel.head());
         self.transient_scroll = 0;
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
@@ -1630,15 +1630,15 @@ impl Editor {
                 // cell came back short and the message only talked about the
                 // refusal.
                 self.delete_selection();
-                let at = self.cursor;
+                let at = self.sel.head();
                 if !self.edit_insert(at, text) {
                     return;
                 }
                 let rope = self.current_buffer().rope();
                 let end = at + text.chars().count();
                 let head = motion::prev_grapheme(rope, end).max(at);
-                self.anchor = at;
-                self.cursor = head;
+                self.sel.set_anchor(at);
+                self.sel.set_head(head);
                 self.refresh_goal_column();
             }
             // A prompt takes it as typing, minus the line breaks that would
@@ -1688,8 +1688,8 @@ impl Editor {
     pub fn point_at(&mut self, pos: usize) {
         let pos = pos.min(self.current_buffer().char_count());
         self.extend = false;
-        self.anchor = pos;
-        self.cursor = pos;
+        self.sel.set_anchor(pos);
+        self.sel.set_head(pos);
         self.refresh_goal_column();
         // **The mouse leaves a guessed block too** (#275). Walking out of one
         // with `j` drops it at the end of `on_key`; clicking out of one never
@@ -1702,7 +1702,7 @@ impl Editor {
 
     /// Drag the selection's head to char index `pos`, keeping its anchor.
     pub fn drag_to(&mut self, pos: usize) {
-        self.cursor = pos.min(self.current_buffer().char_count());
+        self.sel.set_head(pos.min(self.current_buffer().char_count()));
         self.refresh_goal_column();
     }
 

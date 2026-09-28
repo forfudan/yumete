@@ -199,12 +199,12 @@ impl Editor {
 
     /// Insert `text` at the cursor and advance past it.
     pub(super) fn insert_str(&mut self, text: &str) {
-        let at = self.cursor;
+        let at = self.sel.head();
         if !self.edit_insert(at, text) {
             return;
         }
-        self.cursor = at + text.chars().count();
-        self.anchor = self.cursor;
+        self.sel.set_head(at + text.chars().count());
+        self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
     }
 
@@ -230,7 +230,7 @@ impl Editor {
             return false;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let start = rope.line_to_char(line);
         let text = self.line_text(line).unwrap_or_default();
         let text = text.trim_end_matches(['\n', '\r']).to_string();
@@ -239,7 +239,7 @@ impl Editor {
         };
         // Inside the marker itself the Enter is splitting `- [` in half, and
         // that is a thing the writer typed on purpose.
-        if self.cursor < start + open.width {
+        if self.sel.head() < start + open.width {
             return false;
         }
         // A listing quoted in a fence is written out as it is; the markers in
@@ -266,8 +266,8 @@ impl Editor {
             if !self.applied(done) {
                 return false;
             }
-            self.cursor = start;
-            self.anchor = start;
+            self.sel.set_head(start);
+            self.sel.set_anchor(start);
             self.refresh_goal_column();
             return true;
         }
@@ -284,7 +284,7 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let end = motion::line_end(self.current_buffer().rope(), self.cursor);
+        let end = motion::line_end(self.current_buffer().rope(), self.sel.head());
         let row = self.blank_row();
         // **The file's own line ending** (#309), not a literal `\n`.
         let ending = self.current_buffer().ending();
@@ -293,8 +293,8 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.cursor = end + ending.chars().count();
-        self.anchor = self.cursor;
+        self.sel.set_head(end + ending.chars().count());
+        self.sel.set_anchor(self.sel.head());
         self.enter_insert();
     }
 
@@ -303,7 +303,7 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let start = motion::line_start(self.current_buffer().rope(), self.cursor);
+        let start = motion::line_start(self.current_buffer().rope(), self.sel.head());
         let row = self.blank_row();
         let ending = self.current_buffer().ending();
         let done = self
@@ -311,8 +311,8 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.cursor = start;
-        self.anchor = self.cursor;
+        self.sel.set_head(start);
+        self.sel.set_anchor(self.sel.head());
         self.enter_insert();
     }
 
@@ -322,7 +322,7 @@ impl Editor {
     /// for a language that does not put spaces between words, and `C-w` that
     /// deleted the whole paragraph would be worse than not having it.
     pub(super) fn delete_word_before_cursor(&mut self) {
-        let at = self.cursor;
+        let at = self.sel.head();
         let rope = self.current_buffer().rope();
         let mut from = motion::prev_word_start(rope, at, self.word_grain(), self.segmenter.as_ref());
         // At the start of a word, the word to take back is the one before it.
@@ -348,7 +348,7 @@ impl Editor {
 
     /// Take back everything from the start of the line to the cursor (`C-u`).
     pub(super) fn delete_to_line_start(&mut self) {
-        let at = self.cursor;
+        let at = self.sel.head();
         let from = motion::line_start(self.current_buffer().rope(), at).max(self.insert_floor());
         if from >= at {
             return;
@@ -395,8 +395,8 @@ impl Editor {
             rope.line_to_char(next_line)
         };
         let sel_end = motion::prev_grapheme(rope, sel_end).max(sel_start);
-        self.anchor = sel_start;
-        self.cursor = sel_end;
+        self.sel.set_anchor(sel_start);
+        self.sel.set_head(sel_end);
         self.refresh_goal_column();
     }
 
@@ -404,7 +404,7 @@ impl Editor {
     /// front of `d` or `c` names how much to take.
     pub(super) fn extend_by_graphemes(&mut self, n: usize) {
         let rope = self.current_buffer().rope();
-        let mut end = self.cursor;
+        let mut end = self.sel.head();
         // `n` graphemes counted from the cursor's own, which is already in the
         // selection, so the head moves `n - 1` further.
         for _ in 1..n {
@@ -414,8 +414,8 @@ impl Editor {
             }
             end = next;
         }
-        self.anchor = self.cursor;
-        self.cursor = end;
+        self.sel.set_anchor(self.sel.head());
+        self.sel.set_head(end);
     }
 
     /// Delete the current selection (`d`), **leaving the register alone**.
@@ -448,21 +448,21 @@ impl Editor {
     pub(super) fn cut_before_cursor(&mut self, count: usize) {
         let (start, last) = {
             let rope = self.current_buffer().rope();
-            let line_start = motion::line_start(rope, self.cursor);
-            let mut start = self.cursor;
+            let line_start = motion::line_start(rope, self.sel.head());
+            let mut start = self.sel.head();
             for _ in 0..count.max(1) {
                 if start <= line_start {
                     break;
                 }
                 start = motion::prev_grapheme(rope, start);
             }
-            (start, motion::prev_grapheme(rope, self.cursor))
+            (start, motion::prev_grapheme(rope, self.sel.head()))
         };
-        if start == self.cursor {
+        if start == self.sel.head() {
             return;
         }
-        self.anchor = start;
-        self.cursor = last;
+        self.sel.set_anchor(start);
+        self.sel.set_head(last);
         self.cut_selection_to_register();
     }
 
@@ -497,8 +497,8 @@ impl Editor {
                 return;
             }
         }
-        self.cursor = start;
-        self.anchor = start;
+        self.sel.set_head(start);
+        self.sel.set_anchor(start);
         self.extend = false;
         self.clamp_cursor();
         self.refresh_goal_column();
@@ -519,13 +519,13 @@ impl Editor {
         };
         let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
         for _ in 0..steps {
-            let before = self.cursor;
+            let before = self.sel.head();
             if vertical {
                 self.move_zong_from(!back, true);
             } else {
                 self.move_vertical(back);
             }
-            if self.cursor == before {
+            if self.sel.head() == before {
                 break;
             }
         }
@@ -567,11 +567,11 @@ impl Editor {
         // a macro that types a character and rubs it out has still worked.
         let clipped = count.min(Self::WRITING_MAX);
         for _ in 0..clipped {
-            let before = (self.current, self.cursor, self.anchor, self.current_buffer().revision());
+            let before = (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision());
             for &key in &keys {
                 self.on_key(key);
             }
-            if (self.current, self.cursor, self.anchor, self.current_buffer().revision()) == before {
+            if (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision()) == before {
                 break;
             }
         }
@@ -748,7 +748,7 @@ impl Editor {
             }
         } else if after {
             if start == end {
-                motion::right(self.current_buffer().rope(), self.cursor)
+                motion::right(self.current_buffer().rope(), self.sel.head())
             } else {
                 end
             }
@@ -762,31 +762,31 @@ impl Editor {
         // The pasted text becomes the selection, ending on its last grapheme.
         let rope = self.current_buffer().rope();
         let head = motion::prev_grapheme(rope, at + len).max(at);
-        self.anchor = at;
-        self.cursor = head;
+        self.sel.set_anchor(at);
+        self.sel.set_head(head);
         self.refresh_goal_column();
     }
 
     /// Delete the grapheme before the cursor (Insert-mode Backspace).
     pub(super) fn delete_before_cursor(&mut self) {
-        if self.cursor == 0 {
+        if self.sel.head() == 0 {
             return;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor);
+        let line = rope.char_to_line(self.sel.head());
         let line_start = rope.line_to_char(line);
-        let start = if self.cursor == line_start {
+        let start = if self.sel.head() == line_start {
             // At the start of a line: delete the preceding newline (join lines).
-            self.cursor - 1
+            self.sel.head() - 1
         } else {
-            motion::left(rope, self.cursor)
+            motion::left(rope, self.sel.head())
         };
-        let range = start..self.cursor;
+        let range = start..self.sel.head();
         if !self.edit_remove(range) {
             return;
         }
-        self.cursor = start;
-        self.anchor = self.cursor;
+        self.sel.set_head(start);
+        self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
     }
 
@@ -798,24 +798,24 @@ impl Editor {
     /// does at the start of one.
     pub(super) fn delete_at_cursor(&mut self) {
         let rope = self.current_buffer().rope();
-        if self.cursor >= rope.len_chars() {
+        if self.sel.head() >= rope.len_chars() {
             return;
         }
-        let line = rope.char_to_line(self.cursor);
+        let line = rope.char_to_line(self.sel.head());
         let line_end = rope.line_to_char(line) + rope.line(line).len_chars();
-        let end = match self.cursor + 1 >= line_end {
+        let end = match self.sel.head() + 1 >= line_end {
             // At the end of the line: the newline itself.
-            true => self.cursor + 1,
-            false => motion::right(rope, self.cursor),
+            true => self.sel.head() + 1,
+            false => motion::right(rope, self.sel.head()),
         };
         let end = end.min(rope.len_chars());
-        if end <= self.cursor {
+        if end <= self.sel.head() {
             return;
         }
-        if !self.edit_remove(self.cursor..end) {
+        if !self.edit_remove(self.sel.head()..end) {
             return;
         }
-        self.anchor = self.cursor;
+        self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
     }
 
@@ -827,7 +827,7 @@ impl Editor {
     pub(super) fn add_buffer(&mut self, buffer: Buffer) {
         // Remember where the buffer being left had its cursor, so coming back
         // to it returns to the same place.
-        let at = self.cursor;
+        let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
         if self.buffers.len() == 1
             && self.buffers[0].path().is_none()
@@ -855,7 +855,7 @@ impl Editor {
         // segmentation cache is keyed by line number, and these are the lines
         // of a different document now.
         self.segment_memo.forget();
-        self.cursor = 0;
+        self.sel.set_head(0);
         // Whether *this* buffer is a grid is asked again, the way `show_buffer`
         // asks it. Without this, `:table` and then `:!wc -l` left the shell
         // output being edited as a table: `o` opened `|  |  |` in it and `:s`
@@ -864,7 +864,7 @@ impl Editor {
         self.md_cache.borrow_mut().take();
         self.md_tables.borrow_mut().take();
         self.table_on_open();
-        self.anchor = 0;
+        self.sel.set_anchor(0);
         self.goal_column = 0;
         self.mode = Mode::Normal;
         self.extend = false;
@@ -923,8 +923,8 @@ impl Editor {
         // The same lines stay selected, so the key can be pressed twice and
         // the second press undoes the first — which is what a toggle is.
         let last = start + rebuilt.chars().count();
-        self.anchor = start;
-        self.cursor = crate::motion::prev_grapheme(self.current_buffer().rope(), last).max(start);
+        self.sel.set_anchor(start);
+        self.sel.set_head(crate::motion::prev_grapheme(self.current_buffer().rope(), last).max(start));
         self.refresh_goal_column();
     }
 }

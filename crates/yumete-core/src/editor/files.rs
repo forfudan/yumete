@@ -387,7 +387,7 @@ impl Editor {
         if index == self.current || index >= self.buffers.len() {
             return;
         }
-        let at = self.cursor;
+        let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
         self.current = index;
         let restored = self.current_buffer().saved_cursor();
@@ -480,14 +480,14 @@ impl Editor {
     /// Every immutable reader of the caret goes through this. The mutable ones
     /// read the field, because an override is only ever open during a draw.
     pub(super) fn caret(&self) -> usize {
-        self.viewing.get().map_or(self.cursor, |v| v.at)
+        self.viewing.get().map_or(self.sel.head(), |v| v.at)
     }
 
     /// The other end of the selection, by the same rule. A peeked pane has no
     /// selection of its own — what it marks is the hit it was opened to show —
     /// so both ends are its caret and [`Self::has_selection`] is false there.
     pub(super) fn mark(&self) -> usize {
-        self.viewing.get().map_or(self.anchor, |v| v.at)
+        self.viewing.get().map_or(self.sel.anchor(), |v| v.at)
     }
 
     /// The number of open buffers.
@@ -780,7 +780,7 @@ impl Editor {
             return;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.line(rope.char_to_line(self.cursor)).to_string();
+        let line = rope.line(rope.char_to_line(self.sel.head())).to_string();
         let text = line.trim();
 
         // `#import "ch01.typ": chapter` / `#include "ch01.typ"` — a main file
@@ -830,8 +830,8 @@ impl Editor {
     /// which is code and is read as code.
     pub(super) fn link_under_cursor(&self) -> Option<crate::markdown::Link> {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor);
-        let at = self.cursor - rope.line_to_char(line);
+        let line = rope.char_to_line(self.sel.head());
+        let at = self.sel.head() - rope.line_to_char(line);
         let text = rope.line(line).to_string();
         let text = text.trim_end_matches(['\n', '\r']);
         match self.current_buffer().syntax() {
@@ -1165,7 +1165,7 @@ impl Editor {
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let region = match self.md_row_in_a_fence() {
             true => None,
             false => crate::mdtable::region(|i| self.line_text(i), line),

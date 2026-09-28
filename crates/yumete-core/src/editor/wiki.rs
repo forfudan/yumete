@@ -337,7 +337,7 @@ impl Editor {
         // 眼前這一條是人**指名要看的**，而光標底下那一個只是碰巧站在那裏——
         // 指名的那一個大。光標一動它就沒了（`forget_a_pinned_entry`）。
         if let Some((name, at)) = &self.wiki_pinned {
-            if *at == self.cursor {
+            if *at == self.sel.head() {
                 return self.wiki_view_of(name);
             }
         }
@@ -350,7 +350,7 @@ impl Editor {
             return None;
         }
         let rope = self.current_buffer().rope();
-        let at = self.cursor - rope.line_to_char(line);
+        let at = self.sel.head() - rope.line_to_char(line);
         let chars = crate::zong::line_chars(rope, line);
         let &(a, b) = self.segment_line(line).iter().find(|&&(a, b)| at >= a && at < b)?;
         if b - a < 2 {
@@ -401,7 +401,7 @@ impl Editor {
     pub(super) fn pin_wiki_entry(&mut self, name: String) {
         match self.wiki.by_name.contains_key(&name) {
             true => {
-                self.wiki_pinned = Some((name, self.cursor));
+                self.wiki_pinned = Some((name, self.sel.head()));
                 // 側欄的百科頁開着就畫在那裏，沒開就浮窗——兩條路都走 `wiki_here`，
                 // 所以這裏什麼都不必選，釘上就是了。
             }
@@ -414,7 +414,7 @@ impl Editor {
     /// ⚠️ **當場丟掉，不是「留着等光標回來」**：回到同一個字上再把它變出來，
     /// 是一個沒人按過的按鍵做了一件事。
     pub(super) fn forget_a_pinned_entry(&mut self) {
-        if self.wiki_pinned.as_ref().is_some_and(|(_, at)| *at != self.cursor) {
+        if self.wiki_pinned.as_ref().is_some_and(|(_, at)| *at != self.sel.head()) {
             self.wiki_pinned = None;
         }
     }

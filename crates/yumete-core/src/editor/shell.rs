@@ -58,8 +58,8 @@ impl Editor {
         if !done {
             return;
         }
-        self.anchor = start;
-        self.cursor = (start + text.chars().count()).saturating_sub(1).max(start);
+        self.sel.set_anchor(start);
+        self.sel.set_head((start + text.chars().count()).saturating_sub(1).max(start));
         self.clamp_cursor();
         self.status = say!("edit.pipe-replaced-characters", text.chars().count());
     }
@@ -140,7 +140,7 @@ impl Editor {
                 let n = (1..).find(|n| !taken.contains(n)).unwrap_or(1);
                 let tag = format!("[^{n}]");
                 self.snapshot();
-                let at = self.cursor;
+                let at = self.sel.head();
                 if !self.edit_insert(at, &tag) {
                     return;
                 }
@@ -164,7 +164,7 @@ impl Editor {
                 self.mode = Mode::Insert;
             }
             MarkdownBit::InlineNote => {
-                let at = self.cursor;
+                let at = self.sel.head();
                 self.snapshot();
                 if !self.edit_insert(at, "^[]") {
                     return;

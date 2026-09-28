@@ -13,14 +13,14 @@ impl Editor {
     /// Link to the bracket matching the one under the cursor (`mm`).
     pub(super) fn goto_matching_bracket(&mut self) {
         let rope = self.current_buffer().rope();
-        if self.cursor >= rope.len_chars() {
+        if self.sel.head() >= rope.len_chars() {
             return;
         }
-        let here = rope.char(self.cursor);
+        let here = rope.char(self.sel.head());
         let target = if let Some(close) = closing_of(here) {
-            find_forward(rope, self.cursor, here, close)
+            find_forward(rope, self.sel.head(), here, close)
         } else if let Some(open) = opening_of(here) {
-            find_backward(rope, self.cursor, open, here)
+            find_backward(rope, self.sel.head(), open, here)
         } else {
             None
         };
@@ -76,15 +76,15 @@ impl Editor {
     /// is a question nobody has asked yet.
     pub(super) fn take_object(&mut self, span: motion::Span) {
         if let motion::Span::Over { anchor, head } = span {
-            self.anchor = anchor;
-            self.cursor = head.max(anchor);
+            self.sel.set_anchor(anchor);
+            self.sel.set_head(head.max(anchor));
         }
     }
 
     /// The span a pair of delimiters encloses, `around` taking the marks too.
     fn pair_span(&self, open: char, close: char, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope();
-        let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
+        let Some((start, end)) = surrounding(rope, self.sel.head(), open, close) else {
             return motion::Span::Missed;
         };
         // `end` is the closing bracket's own index. The head goes on the last
@@ -113,7 +113,7 @@ impl Editor {
     /// 換行，`mip` 之後按 `d` 會取走那幾行的正文卻把空行留下，原地多出一個洞。
     fn paragraph_span(&self, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope();
-        let here = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let here = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let last = motion::last_line(rope);
         let blank = |line: usize| rope.line(line).to_string().trim().is_empty();
         let same = blank(here);
@@ -160,7 +160,7 @@ impl Editor {
     /// 按在一個拉丁詞上（`delete_selection` 這種）。
     fn word_object_span(&self, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope().clone();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let start = rope.line_to_char(line);
         let words = crate::motion::line_words(
             &rope,
@@ -168,21 +168,21 @@ impl Editor {
             crate::motion::Grain::Coarse,
             self.segmenter.as_ref(),
         );
-        let here = words.iter().find(|&&(a, b)| (a..b).contains(&self.cursor)).copied();
+        let here = words.iter().find(|&&(a, b)| (a..b).contains(&self.sel.head())).copied();
         let Some((from, to)) = here.or_else(|| {
             // **停在空白上的時候，那一串空白就是「詞」**——vim 的規矩，而這裏
             // 特別要緊：`w` 走完光標正停在詞後面那個空格上（本編輯器的 `w` 連
             // 着邊界一起取），於是 `wdiw` 是最順手的一按。`aw` 在空白上再連下
             // 一個詞，也是 vim 的。
             let line_end = start + crate::zong::line_chars(&rope, line).len();
-            if self.cursor >= line_end || !rope.char(self.cursor).is_whitespace() {
+            if self.sel.head() >= line_end || !rope.char(self.sel.head()).is_whitespace() {
                 return None;
             }
-            let mut a = self.cursor;
+            let mut a = self.sel.head();
             while a > start && rope.char(a - 1).is_whitespace() {
                 a -= 1;
             }
-            let mut b = self.cursor;
+            let mut b = self.sel.head();
             while b < line_end && rope.char(b).is_whitespace() {
                 b += 1;
             }
@@ -239,12 +239,12 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.anchor = start;
+        self.sel.set_anchor(start);
         // The wrapped text plus its two marks runs `start ..= end + 1`, and the
         // head sits on the last grapheme of it — not one past. At `end + 2` the
         // character *after* the closing mark was inside the selection, so `ms(`
         // then `d` took one more than the highlight showed.
-        self.cursor = end + 1;
+        self.sel.set_head(end + 1);
         self.clamp_cursor();
     }
 
@@ -268,8 +268,8 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.cursor = self.cursor.saturating_sub(1);
-        self.anchor = self.cursor;
+        self.sel.set_head(self.sel.head().saturating_sub(1));
+        self.sel.set_anchor(self.sel.head());
         self.clamp_cursor();
     }
 
@@ -283,7 +283,7 @@ impl Editor {
             return;
         };
         let rope = self.current_buffer().rope();
-        let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
+        let Some((start, end)) = surrounding(rope, self.sel.head(), open, close) else {
             self.status = say!("edit.no-pair-around", open, close);
             return;
         };
@@ -349,7 +349,7 @@ impl Editor {
                 .with_edit(self.current_buffer().edit())
                 .with_open_line(self.open_line())
                 .with_caret(Some(self.caret_in_line()));
-            crate::wrap::column_of(rope, self.cursor, m)
+            crate::wrap::column_of(rope, self.sel.head(), m)
         };
         self.goal_column = column;
     }
@@ -384,8 +384,8 @@ impl Editor {
 
     /// Apply a horizontal motion, moving the head (extending if in select mode).
     pub(super) fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
-        let pos = motion(self.current_buffer().rope(), self.cursor);
-        let pos = self.past_what_a_table_keeps_off(pos, pos > self.cursor);
+        let pos = motion(self.current_buffer().rope(), self.sel.head());
+        let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head());
         self.move_head(pos);
     }
 
@@ -523,14 +523,14 @@ impl Editor {
                 .with_open_line(self.open_line())
                 .with_caret(Some(self.caret_in_line()));
             if up {
-                crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
+                crate::wrap::prev_row(rope, self.sel.head(), m, self.goal_column)
             } else {
-                crate::wrap::next_row(rope, self.cursor, m, self.goal_column)
+                crate::wrap::next_row(rope, self.sel.head(), m, self.goal_column)
             }
         };
-        self.cursor = pos;
+        self.sel.set_head(pos);
         if !self.extend {
-            self.anchor = pos;
+            self.sel.set_anchor(pos);
         }
     }
 
@@ -553,18 +553,18 @@ impl Editor {
             let goal = if continuing {
                 self.goal_slot
             } else {
-                zong::slot_of(rope, self.cursor, grid)
+                zong::slot_of(rope, self.sel.head(), grid)
             };
             let pos = if left {
-                zong::next_zong(rope, self.cursor, grid, goal)
+                zong::next_zong(rope, self.sel.head(), grid, goal)
             } else {
-                zong::prev_zong(rope, self.cursor, grid, goal)
+                zong::prev_zong(rope, self.sel.head(), grid, goal)
             };
             (goal, pos)
         };
-        self.cursor = pos;
+        self.sel.set_head(pos);
         if !self.extend {
-            self.anchor = pos;
+            self.sel.set_anchor(pos);
         }
         self.goal_slot = goal;
         self.zong_motion = true;
@@ -573,9 +573,9 @@ impl Editor {
     /// Move the selection head to `pos`; collapse the selection unless select
     /// (extend) mode is active. Refreshes the goal column.
     pub(super) fn move_head(&mut self, pos: usize) {
-        self.cursor = pos;
+        self.sel.set_head(pos);
         if !self.extend {
-            self.anchor = pos;
+            self.sel.set_anchor(pos);
         }
         self.refresh_goal_column();
     }
@@ -589,11 +589,11 @@ impl Editor {
     /// old caret instead dragged the previous word's last character — and the
     /// punctuation between them — along with it (#304).
     pub(super) fn select_span(&mut self, from: usize, to: usize) {
-        let to = self.past_what_a_table_keeps_off(to, to > self.cursor);
+        let to = self.past_what_a_table_keeps_off(to, to > self.sel.head());
         if !self.extend {
-            self.anchor = from;
+            self.sel.set_anchor(from);
         }
-        self.cursor = to;
+        self.sel.set_head(to);
         self.refresh_goal_column();
     }
 
@@ -625,60 +625,60 @@ impl Editor {
             // helix's `w` is the primitive plus 「never just the cell you are
             // on」; vim's is the primitive itself.
             motion::Motion::WordForward(grain) if caret => {
-                at(motion::next_word_start(rope, self.cursor, grain, seg))
+                at(motion::next_word_start(rope, self.sel.head(), grain, seg))
             }
             motion::Motion::WordEnd(grain) if caret => {
-                at(motion::next_word_end(rope, self.cursor, grain, seg).1)
+                at(motion::next_word_end(rope, self.sel.head(), grain, seg).1)
             }
             motion::Motion::WordBack(grain) if caret => {
-                at(motion::prev_word_start(rope, self.cursor, grain, seg))
+                at(motion::prev_word_start(rope, self.sel.head(), grain, seg))
             }
             motion::Motion::Paragraph { forward } if caret => match forward {
-                true => at(motion::next_paragraph(rope, self.cursor)),
-                false => at(motion::prev_paragraph(rope, self.cursor)),
+                true => at(motion::next_paragraph(rope, self.sel.head())),
+                false => at(motion::prev_paragraph(rope, self.sel.head())),
             },
             motion::Motion::Sentence { forward } if caret => match forward {
-                true => at(motion::next_sentence(rope, self.cursor)),
-                false => at(motion::prev_sentence(rope, self.cursor)),
+                true => at(motion::next_sentence(rope, self.sel.head())),
+                false => at(motion::prev_sentence(rope, self.sel.head())),
             },
             motion::Motion::WordForward(grain) => {
-                motion::word_forward(rope, self.cursor, grain, seg)
+                motion::word_forward(rope, self.sel.head(), grain, seg)
             }
-            motion::Motion::WordEnd(grain) => motion::word_end(rope, self.cursor, grain, seg),
-            motion::Motion::WordBack(grain) => motion::word_back(rope, self.cursor, grain, seg),
+            motion::Motion::WordEnd(grain) => motion::word_end(rope, self.sel.head(), grain, seg),
+            motion::Motion::WordBack(grain) => motion::word_back(rope, self.sel.head(), grain, seg),
             motion::Motion::Find { forward, target, till } => {
-                motion::find_char(rope, self.cursor, forward, target, till)
+                motion::find_char(rope, self.sel.head(), forward, target, till)
             }
             // **The gotos collapse**, so they say so in the span: both ends at
             // the target. A goto is not a selection — 「take me there」, not
             // 「take everything between」 — and that is the same reading vim
             // gives *every* standalone motion (B3).
-            motion::Motion::FileStart => at(motion::buffer_start(rope, self.cursor)),
-            motion::Motion::FileEnd => at(motion::buffer_end(rope, self.cursor)),
-            motion::Motion::LineStart => at(motion::line_start(rope, self.cursor)),
-            motion::Motion::LineEnd => at(motion::line_last(rope, self.cursor)),
+            motion::Motion::FileStart => at(motion::buffer_start(rope, self.sel.head())),
+            motion::Motion::FileEnd => at(motion::buffer_end(rope, self.sel.head())),
+            motion::Motion::LineStart => at(motion::line_start(rope, self.sel.head())),
+            motion::Motion::LineEnd => at(motion::line_last(rope, self.sel.head())),
             motion::Motion::LineFirstNonBlank => {
-                at(motion::line_first_non_blank(rope, self.cursor))
+                at(motion::line_first_non_blank(rope, self.sel.head()))
             }
             // **Paragraphs and sentences keep the same forward rule as words**
             // (B1): it was written three times before this, once per unit.
             motion::Motion::Paragraph { forward: true } => {
-                motion::unit_forward(rope, self.cursor, motion::next_paragraph)
+                motion::unit_forward(rope, self.sel.head(), motion::next_paragraph)
             }
             motion::Motion::Paragraph { forward: false } => {
-                motion::unit_back(rope, self.cursor, motion::prev_paragraph)
+                motion::unit_back(rope, self.sel.head(), motion::prev_paragraph)
             }
             motion::Motion::Sentence { forward: true } => {
-                motion::unit_forward(rope, self.cursor, motion::next_sentence)
+                motion::unit_forward(rope, self.sel.head(), motion::next_sentence)
             }
             motion::Motion::Sentence { forward: false } => {
-                motion::unit_back(rope, self.cursor, motion::prev_sentence)
+                motion::unit_back(rope, self.sel.head(), motion::prev_sentence)
             }
             // **One character, and never off this line** — vim's `h`/`l`
             // under an operator. The clamp is the point: `l` on a line's last
             // character answers with that character, not with the newline.
             motion::Motion::Char { forward } => {
-                let here = self.cursor;
+                let here = self.sel.head();
                 match forward {
                     // ⚠️ **Forward may stand still and still count.** `l` on a
                     // line's last character cannot move, but `dl` there is
@@ -700,7 +700,7 @@ impl Editor {
                 }
             }
             motion::Motion::Line { down } => {
-                let line = rope.char_to_line(self.cursor);
+                let line = rope.char_to_line(self.sel.head());
                 let last = rope.len_lines().saturating_sub(1);
                 let want = match down {
                     true => (line + 1).min(last),
@@ -778,19 +778,19 @@ impl Editor {
     /// Set the cursor, always collapsing the selection, and refresh the goal
     /// column. Used when entering Insert mode and after a search jump.
     pub(super) fn set_cursor(&mut self, pos: usize) {
-        self.cursor = pos;
-        self.anchor = pos;
+        self.sel.set_head(pos);
+        self.sel.set_anchor(pos);
         self.refresh_goal_column();
     }
 
     /// Clamp the cursor and anchor into the valid range of the active buffer.
     pub(super) fn clamp_cursor(&mut self) {
         let len = self.current_buffer().char_count();
-        if self.cursor > len {
-            self.cursor = len;
+        if self.sel.head() > len {
+            self.sel.set_head(len);
         }
-        if self.anchor > len {
-            self.anchor = len;
+        if self.sel.anchor() > len {
+            self.sel.set_anchor(len);
         }
     }
 }

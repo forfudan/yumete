@@ -33,7 +33,7 @@ impl Editor {
     /// 要不要一格給它站（[`crate::wrap::line_rows_for_caret`]）。
     pub fn caret_in_line(&self) -> (usize, usize) {
         let rope = self.current_buffer().rope();
-        let at = self.cursor.min(rope.len_chars());
+        let at = self.sel.head().min(rope.len_chars());
         let line = rope.char_to_line(at);
         (line, at - rope.line_to_char(line))
     }
@@ -579,8 +579,8 @@ impl Editor {
         };
         let here = Pane {
             buffer: self.current_buffer().id(),
-            cursor: self.cursor,
-            anchor: self.anchor,
+            cursor: self.sel.head(),
+            anchor: self.sel.anchor(),
             goal_column: self.goal_column,
             goal_slot: self.goal_slot,
             extend: self.extend,
@@ -601,7 +601,7 @@ impl Editor {
             // directly, the schema of a 拆分表 followed you into a chapter and
             // `o` wrote 「,,」 into your novel.
             Some(index) if index != self.current => {
-                let at = self.cursor;
+                let at = self.sel.head();
                 self.buffers[self.current].save_cursor(at);
                 self.current = index;
                 self.forget_the_document();
@@ -617,8 +617,8 @@ impl Editor {
         let len = self.current_buffer().rope().len_chars();
         pane.cursor = pane.cursor.min(len);
         pane.anchor = pane.anchor.min(len);
-        self.cursor = pane.cursor;
-        self.anchor = pane.anchor;
+        self.sel.set_head(pane.cursor);
+        self.sel.set_anchor(pane.anchor);
         self.goal_column = pane.goal_column;
         self.goal_slot = pane.goal_slot;
         self.extend = pane.extend;
@@ -831,10 +831,10 @@ impl Editor {
             return false;
         };
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let text = rope.line(line).to_string();
         // ⚠️ 問出去的列是 **UTF-16 碼元**，不是字符數。
-        let chars = self.cursor - rope.line_to_char(line);
+        let chars = self.sel.head() - rope.line_to_char(line);
         self.definition_query = Some((path, line, crate::problem::utf16_column(&text, chars)));
         self.status = say!("lsp.asking");
         true
@@ -901,9 +901,9 @@ impl Editor {
         }
         let path = self.current_buffer().path()?.to_path_buf();
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let text = rope.line(line).to_string();
-        let chars = self.cursor - rope.line_to_char(line);
+        let chars = self.sel.head() - rope.line_to_char(line);
         Some((path, line, crate::problem::utf16_column(&text, chars)))
     }
 
@@ -957,7 +957,7 @@ impl Editor {
     /// ⚠️ **記下問的時候光標在哪**：這一則是**問出來的**，所以光標一走它就該
     /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
     pub fn show_hover(&mut self, told: String) {
-        self.hovered = Some((self.cursor, told));
+        self.hovered = Some((self.sel.head(), told));
         self.status = String::new();
         // **`空格 K` 開的那一份，鍵跟過去**——與 `空格 D` 逐字同形
         // （2026-09-23 補）。送進邊欄要的就是「讀得完」，而讀得完得走得動；
@@ -978,7 +978,7 @@ impl Editor {
     /// 這會兒該不該畫那一則說明——光標還在問的地方纔算。
     pub fn hover_here(&self) -> Option<&str> {
         let (asked_at, told) = self.hovered.as_ref()?;
-        (*asked_at == self.cursor).then_some(told.as_str())
+        (*asked_at == self.sel.head()).then_some(told.as_str())
     }
 
     /// 那一則說明該不該**浮**在光標旁邊（`空格 k` 問的那一次）。
@@ -999,7 +999,7 @@ impl Editor {
             return false;
         };
         self.completion_query = Some((path, line, utf16));
-        self.completion_at = Some(self.cursor);
+        self.completion_at = Some(self.sel.head());
         self.completion_by_hand = by_hand;
         true
     }
@@ -1046,13 +1046,13 @@ impl Editor {
         // `None` 會當成「對得上」放行：單子擺出來，錨在**新**光標上，而
         // `Tab` 拿的是服務器按**舊**正文算的 `replacing` 範圍——砍掉的是別的字。
         // 2026-09-23 審出來的，是這一輪最重的一條：它改的是正文。
-        if self.completion_at.take() != Some(self.cursor) {
+        if self.completion_at.take() != Some(self.sel.head()) {
             return;
         }
         match items.is_empty() {
             true => self.no_offers(),
             false => {
-                self.offering = Some(Offering { at: self.cursor, items, picked: 0 });
+                self.offering = Some(Offering { at: self.sel.head(), items, picked: 0 });
                 self.status = String::new();
             }
         }
@@ -1070,14 +1070,14 @@ impl Editor {
     /// 這會兒該不該畫那張單子——光標還在問的地方纔算。
     pub fn offers_here(&self) -> Option<(&[crate::lsp::Offer], usize)> {
         let offering = self.offering.as_ref()?;
-        (offering.at == self.cursor).then(|| (offering.items.as_slice(), offering.picked))
+        (offering.at == self.sel.head()).then(|| (offering.items.as_slice(), offering.picked))
     }
 
     /// 單子上下走一格。**首尾相接**——一張十幾條的單子，從頭回到尾比按住鍵往回
     /// 翻快，而且没有「按到頭了」這種無聲的失敗。
     pub(super) fn pick_offer(&mut self, forward: bool) -> bool {
         let Some(offering) = self.offering.as_mut() else { return false };
-        if offering.at != self.cursor || offering.items.is_empty() {
+        if offering.at != self.sel.head() || offering.items.is_empty() {
             return false;
         }
         let last = offering.items.len() - 1;
@@ -1103,13 +1103,13 @@ impl Editor {
     /// 什麽都不蓋，只在光標處插入。
     pub(super) fn take_the_offer(&mut self) -> bool {
         let Some(offering) = self.offering.take() else { return false };
-        if offering.at != self.cursor {
+        if offering.at != self.sel.head() {
             return false;
         }
         let Some(item) = offering.items.get(offering.picked).cloned() else { return false };
         let rope = self.current_buffer().rope();
         let long = rope.len_chars();
-        let line = rope.char_to_line(self.cursor.min(long));
+        let line = rope.char_to_line(self.sel.head().min(long));
         let head = rope.line_to_char(line);
         let text = rope.line(line).to_string();
         let (start, end) = match item.replacing {
@@ -1118,7 +1118,7 @@ impl Editor {
                 head + crate::problem::char_column(&text, from),
                 head + crate::problem::char_column(&text, to),
             ),
-            None => (self.cursor, self.cursor),
+            None => (self.sel.head(), self.sel.head()),
         };
         // 打進去算**一次**編輯——`u` 一下把整個詞撤掉，而不是一個字母一個字母地
         // 撤（同 2026-09-21 定下的「一次插入是一次撤銷」）。
@@ -1203,7 +1203,7 @@ impl Editor {
             .then(|| self.table_row_span())
             .flatten();
         for _ in 0..amount.max(1) {
-            let before = self.cursor;
+            let before = self.sel.head();
             if vertical {
                 self.move_zong_from(!back, true);
             } else {
@@ -1211,11 +1211,11 @@ impl Editor {
             }
             if let Some((first, last)) = held {
                 if !(first..=last).contains(&self.cursor_line()) {
-                    self.cursor = before;
+                    self.sel.set_head(before);
                     break;
                 }
             }
-            if self.cursor == before {
+            if self.sel.head() == before {
                 break;
             }
         }

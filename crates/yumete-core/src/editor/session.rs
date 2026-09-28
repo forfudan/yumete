@@ -278,7 +278,7 @@ impl Editor {
         let Some(file) = self.session_file.clone() else {
             return;
         };
-        let here = self.cursor;
+        let here = self.sel.head();
         self.buffers[self.current].save_cursor(here);
         // The file you are in first, then the rest in order — and **capped**.
         // `:replace` opens every file it changes, so a rename across a book
@@ -335,7 +335,7 @@ impl Editor {
                 continue;
             }
             self.move_to_line(at);
-            self.buffers[self.current].save_cursor(self.cursor);
+            self.buffers[self.current].save_cursor(self.sel.head());
             first.get_or_insert(self.current);
             opened += 1;
         }

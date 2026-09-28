@@ -50,6 +50,7 @@ pub mod ruby;
 pub mod names;
 pub mod nearby;
 pub mod search_panel;
+pub mod selection;
 pub mod sidebar;
 pub mod table;
 pub mod syntax;

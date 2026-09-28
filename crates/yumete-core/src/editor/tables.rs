@@ -291,7 +291,7 @@ impl Editor {
     /// because the caller knows which door was being tried.
     fn enter_block_table(&mut self, pane: bool) -> bool {
         let rope = self.current_buffer().rope();
-        let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let at = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         // **The walk is the test.** Each candidate is tried by walking the
         // block out with it and asking whether what comes back is rectangular;
         // the first that answers yes is the separator. Guessing first and
@@ -1588,7 +1588,7 @@ impl Editor {
     /// Read the `|` table under the cursor as a grid, drawn the given way.
     fn enter_md_table_as(&mut self, pane: bool) -> bool {
         let rope = self.current_buffer().rope();
-        let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let at = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         self.enter_md_table_at(at, pane)
     }
 
@@ -1832,7 +1832,7 @@ impl Editor {
             return;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let region = match self.md_row_in_a_fence() {
             true => None,
             false => crate::mdtable::region(|i| self.line_text(i), line),
@@ -1926,8 +1926,8 @@ impl Editor {
         // Where the cursor is, in the terms that survive a reflow: which row,
         // which cell, and how far into that cell's text.
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
-        let within = self.cursor - rope.line_to_char(line);
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let within = self.sel.head() - rope.line_to_char(line);
         let cell = self.cell_position().map(|(_, c)| c).unwrap_or(0);
         let into = self
             .row_cells(line)
@@ -2047,7 +2047,7 @@ impl Editor {
             block.push(crate::mdtable::blank_row(columns));
         }
         let rope = self.current_buffer().rope();
-        let here = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let here = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let empty = |e: &Self, line: usize| {
             e.line_text(line)
                 .map(|t| t.trim().is_empty())
@@ -2969,9 +2969,9 @@ impl Editor {
         };
         let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
         for _ in 0..steps {
-            let before = self.cursor;
+            let before = self.sel.head();
             self.step_cell_row(down, false);
-            if self.cursor == before {
+            if self.sel.head() == before {
                 break;
             }
         }
@@ -3129,8 +3129,8 @@ impl Editor {
             // exactly on the delimiter.
             // …with a selection standing, `d` still means the selection: `x d`
             // must go on being refused rather than quietly clearing one cell.
-            Key::Char('d') if self.anchor == self.cursor => self.clear_cell(false),
-            Key::Char('D') if self.anchor == self.cursor => self.clear_cell(true),
+            Key::Char('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(false),
+            Key::Char('D') if self.sel.anchor() == self.sel.head() => self.clear_cell(true),
             // ⚠️ **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
             // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
             // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
@@ -3383,7 +3383,7 @@ impl Editor {
         }
         let (start, end, text) = {
             let rope = self.current_buffer().rope();
-            let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+            let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
             let last = motion::last_line(rope);
             let start = rope.line_to_char(line);
             let end = if line >= last {
@@ -3415,7 +3415,7 @@ impl Editor {
         let (line, last) = {
             let rope = self.current_buffer().rope();
             (
-                rope.char_to_line(self.cursor.min(rope.len_chars())),
+                rope.char_to_line(self.sel.head().min(rope.len_chars())),
                 motion::last_line(rope),
             )
         };
@@ -3976,7 +3976,7 @@ impl Editor {
     /// Take a copy of the whole row.
     fn yank_row(&mut self) {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let text = rope
             .line(line)
             .to_string()
@@ -4042,7 +4042,7 @@ impl Editor {
             }
             self.snapshot();
             let rope = self.current_buffer().rope();
-            let at = motion::line_end(rope, self.cursor);
+            let at = motion::line_end(rope, self.sel.head());
             let done =
                 self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &format!("\n{body}")));
             if !self.applied(done) {
@@ -4367,8 +4367,8 @@ impl Editor {
         }
         // The match itself becomes the selection, exactly as `/` leaves it —
         // on its last grapheme, not one past it.
-        self.anchor = from;
-        self.cursor = head;
+        self.sel.set_anchor(from);
+        self.sel.set_head(head);
         self.extend = false;
         self.refresh_goal_column();
         self.status = which;
