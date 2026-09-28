@@ -372,6 +372,26 @@ impl Editor {
         false
     }
 
+    /// **切回剛纔那一份**（`ga`，helix 的 `goto_last_accessed_file`）。
+    ///
+    /// ⚠️ **`gn`／`gp` 答不了這件事。** 它們按順序走一圈，而正文和筆記、這一章和上一章
+    /// 之間來回切是最常做的一件事——開着五個檔的時候 `gp` 未必回得到剛纔那一個。
+    ///
+    /// ⚠️ **只記 [`Self::show_buffer`] 那一條路。** 換面板（`switch_pane`）和關檔都是直接
+    /// 動 `current` 的，它們不算「看過」：前者兩半同時在屏幕上，後者那一份已經不在了。
+    pub fn goto_last_file(&mut self) {
+        let Some(id) = self.last_file else {
+            self.status = say!("goto.no-last-file");
+            return;
+        };
+        let Some(index) = self.buffer_with(id) else {
+            self.last_file = None;
+            self.status = say!("goto.last-file-was-closed");
+            return;
+        };
+        self.show_buffer(index);
+    }
+
     /// Show the previous buffer, wrapping (Helix `gp`, `:buffer-previous`).
     pub fn prev_buffer(&mut self) {
         if self.only_one_buffer() {
@@ -389,6 +409,10 @@ impl Editor {
         }
         let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
+        // **剛纔看的是哪一份**（`ga`，helix 的 `goto_last_accessed_file`，2026-09-28）。
+        // ⚠️ **記的是 id，不是下標**：關掉一個檔會把後面每一個的下標往前挪，記下標的話
+        // `ga` 會帶你去另一章。`Pane` 為同一個理由早就記 id 了。
+        self.last_file = Some(self.current_buffer().id());
         self.current = index;
         let restored = self.current_buffer().saved_cursor();
         self.set_cursor(restored);

@@ -1841,6 +1841,8 @@ impl Editor {
             Key::Char('s') => return go(self, motion::Motion::LineFirstNonBlank),
             // helix 的 `goto_last_modification`（`keymap/default.rs:88`）。
             Key::Char('.') => return self.goto_last_modification(),
+            // …以及 `goto_last_accessed_file`（同一張表 :84）。
+            Key::Char('a') => return self.goto_last_file(),
             _ => {}
         }
         // What is left here either edits (`gJ`, `gK`) or goes somewhere that is
@@ -2021,6 +2023,7 @@ impl Editor {
         ("/ ?", "hint.goto.word-elsewhere"),
         ("j k", "hint.goto.by-file-line"),
         (".", "hint.goto.last-change"),
+        ("a", "hint.goto.last-file"),
         ("J", "hint.join-with-line-below"),
         ("K", "hint.join-with-line-above"),
     ];
@@ -2040,6 +2043,7 @@ impl Editor {
         ("/ ?", "hint.goto.word-elsewhere"),
         ("h l", "hint.goto.by-file-line-vertical"),
         (".", "hint.goto.last-change"),
+        ("a", "hint.goto.last-file"),
         ("J", "hint.join-with-line-below"),
         ("K", "hint.join-with-line-above"),
     ];

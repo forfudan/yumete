@@ -1605,6 +1605,8 @@ pub struct Editor {
     /// 從前直接讀寫那兩個欄位的三百多處，現在走 `self.sel.head()`／`set_head()` 那四支
     /// 門面，它們問的**永遠是主選區**。要作用在全部選區上的入口是 Phase 1 的事。
     sel: crate::selection::Selections,
+    /// **剛纔看的是哪一份稿子**（`ga`，2026-09-28）。緩衝區的 **id**，不是下標。
+    last_file: Option<u64>,
     /// The text being typed after `:` / `/` (without the leading punctuation).
     command_line: String,
     /// Where the caret is on the prompt, in characters from its start.
@@ -2632,6 +2634,7 @@ impl Editor {
             current: 0,
             mode: Mode::Normal,
             sel: crate::selection::Selections::at(0),
+            last_file: None,
             command_line: String::new(),
             command_caret: 0,
             lookfor_focus: 0,

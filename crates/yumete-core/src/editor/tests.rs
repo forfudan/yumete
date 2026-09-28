@@ -16850,3 +16850,36 @@ fn the_goto_dot_key_says_so_when_nothing_has_changed() {
     assert_eq!(ed.sel.head(), before, "光標沒動");
     assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
 }
+
+/// **`ga` 切回剛纔那一份稿子**（helix 的 `goto_last_accessed_file`）。
+#[test]
+fn the_goto_a_key_goes_back_to_the_file_before_this_one() {
+    let dir = std::env::temp_dir().join(format!("yumete-ga-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let one = dir.join("一.md");
+    let two = dir.join("二.md");
+    let three = dir.join("三.md");
+    std::fs::write(&one, "第一份\n").unwrap();
+    std::fs::write(&two, "第二份\n").unwrap();
+    std::fs::write(&three, "第三份\n").unwrap();
+
+    let mut ed = Editor::new();
+    press(&mut ed, "ga");
+    assert!(!ed.status().is_empty(), "還沒換過檔，要說一句：{:?}", ed.status());
+
+    ed.open_file(&one).unwrap();
+    ed.open_file(&two).unwrap();
+    ed.open_file(&three).unwrap();
+    let here = ed.current_buffer().text();
+    assert_eq!(here, "第三份\n");
+
+    press(&mut ed, "ga");
+    assert_eq!(ed.current_buffer().text(), "第二份\n", "回到剛纔那一份");
+
+    // ⚠️ 再按一次是**又回來**，不是繼續往前翻——「剛纔那一份」現在是第三份。
+    press(&mut ed, "ga");
+    assert_eq!(ed.current_buffer().text(), "第三份\n", "ga 是來回切，不是往回走一圈");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
