@@ -17157,3 +17157,40 @@ fn bumping_a_number_reaches_every_selection() {
     press(&mut ed, "u");
     assert_eq!(ed.current_buffer().text(), "1. 甲\n1. 乙\n1. 丙\n");
 }
+
+/// **`A-(` `A-)` 輪轉的是裝在選區裏的字，邊界不動**（#405 Phase 3）。
+#[test]
+fn the_alt_parens_turn_what_the_selections_hold() {
+    let rotate = |alt: char| {
+        let mut ed = typed("甲\n乙乙\n丙丙丙\n");
+        press(&mut ed, "gg");
+        press(&mut ed, "%");
+        ed.on_key(Key::Alt('s'));
+        assert_eq!(ed.sel.len(), 3);
+        ed.on_key(Key::Alt(alt));
+        ed
+    };
+
+    // 往後：每一段拿上一段的字。
+    let ed = rotate(')');
+    assert_eq!(
+        ed.current_buffer().text(),
+        "丙丙丙\n甲\n乙乙\n",
+        "{:?}",
+        ed.current_buffer().text()
+    );
+
+    // 往前：反過來。
+    let mut ed = rotate('(');
+    assert_eq!(
+        ed.current_buffer().text(),
+        "乙乙\n丙丙丙\n甲\n",
+        "{:?}",
+        ed.current_buffer().text()
+    );
+
+    // ⚠️ 長短不一也對得上，而且一個撤銷點。
+    assert_eq!(ed.sel.len(), 3, "還是三段");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "甲\n乙乙\n丙丙丙\n");
+}
