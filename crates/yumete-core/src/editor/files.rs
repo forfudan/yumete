@@ -1096,6 +1096,8 @@ impl Editor {
             dialects: self.ruby,
             title: self.current_buffer().display_name(),
             paper: self.paper,
+            // ⚠️ **讀的是這一份稿子的語法**，不是要寫成的格式（2026-09-28）。
+            source: self.current_buffer().syntax(),
         };
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);

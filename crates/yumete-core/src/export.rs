@@ -129,6 +129,12 @@ pub struct Style {
     pub title: String,
     /// The paper a printed copy is set on.
     pub paper: Paper,
+    /// **源檔是什麼語法**（2026-09-28）。
+    ///
+    /// ⚠️ **這一格從前沒有，於是導出永遠按 Markdown 解析源檔**——一份 Typst 稿子裏的
+    /// `*粗*`、`$a+b$`、`@引用` 一個都認不出來，原樣（並且轉義）寫進導出的檔。
+    /// `Format` 說的是**寫成什麼**，這一格說的是**讀的是什麼**，兩件事。
+    pub source: crate::syntax::Syntax,
 }
 
 /// Write `text` out as `format`.
@@ -159,7 +165,12 @@ enum Block<'a> {
 /// yumete; a paragraph is a run of lines with no blank line in it. Consecutive
 /// lines are kept separate rather than joined, because in a Chinese manuscript
 /// a line break inside a paragraph is usually deliberate.
-fn blocks(text: &str) -> Vec<Block<'_>> {
+fn blocks(text: &str, source: crate::syntax::Syntax) -> Vec<Block<'_>> {
+    // 標題在 Markdown 裏是 `#`，在 Typst 裏是 `=`（2026-09-28）。
+    let mark = match source {
+        crate::syntax::Syntax::Typst => '=',
+        _ => '#',
+    };
     let mut out = Vec::new();
     let mut lines: Vec<&str> = Vec::new();
     let mut fence: Option<Vec<&str>> = None;
@@ -190,8 +201,8 @@ fn blocks(text: &str) -> Vec<Block<'_>> {
             }
             continue;
         }
-        let depth = trimmed.chars().take_while(|&c| c == '#').count();
-        if depth > 0 && trimmed[depth..].trim_start().len() < trimmed[depth..].len() {
+        let depth = crate::markdown::heading_marks(trimmed, mark).unwrap_or(0);
+        if depth > 0 && !trimmed[depth..].trim().is_empty() {
             if !lines.is_empty() {
                 out.push(Block::Paragraph(std::mem::take(&mut lines)));
             }
@@ -223,10 +234,18 @@ fn line_into(
     dialects: Dialects,
     dialect: Dialect,
     escape: fn(&str) -> String,
+    source: crate::syntax::Syntax,
 ) -> String {
     let chars: Vec<char> = line.chars().collect();
     let groups = ruby::groups(&chars, dialects);
-    let marks = crate::markdown::spans(line);
+    // ⚠️ **讀的是源檔的語法，不是要寫成的格式**（2026-09-28）。從前這裏寫死
+    // `markdown::spans`，於是一份 Typst 稿子導出去，`*粗*` 是四個字符、`$a+b$` 被
+    // 轉義成 `\$a + b\$`。
+    let marks = match source {
+        crate::syntax::Syntax::Typst => crate::markdown::typst::spans(line),
+        crate::syntax::Syntax::Text => Vec::new(),
+        _ => crate::markdown::spans(line),
+    };
     let mut out = String::with_capacity(line.len());
     let mut plain = String::new();
     let mut at = 0;
@@ -391,10 +410,10 @@ fn html(text: &str, style: &Style) -> String {
     out.push_str("</style>\n");
 
     let text = crate::markdown::strip_comments(text);
-    for block in blocks(&text) {
+    for block in blocks(&text, style.source) {
         match block {
             Block::Heading(depth, title) => {
-                let inner = line_into(title, style.dialects, Dialect::Html, escape_html);
+                let inner = line_into(title, style.dialects, Dialect::Html, escape_html, style.source);
                 out.push_str(&format!("<h{depth}>{inner}</h{depth}>\n"));
             }
             // The fence lines are markup, the rest is verbatim: `<pre>` keeps
@@ -412,7 +431,7 @@ fn html(text: &str, style: &Style) -> String {
             Block::Paragraph(lines) => {
                 let inner: Vec<String> = lines
                     .iter()
-                    .map(|l| line_into(l, style.dialects, Dialect::Html, escape_html))
+                    .map(|l| line_into(l, style.dialects, Dialect::Html, escape_html, style.source))
                     .collect();
                 out.push_str(&format!("<p>{}</p>\n", inner.join("<br>\n")));
             }
@@ -498,10 +517,10 @@ fn typst(text: &str, style: &Style) -> String {
     );
 
     let text = crate::markdown::strip_comments(text);
-    for block in blocks(&text) {
+    for block in blocks(&text, style.source) {
         match block {
             Block::Heading(depth, title) => {
-                let inner = line_into(title, style.dialects, Dialect::Typst, escape_typst);
+                let inner = line_into(title, style.dialects, Dialect::Typst, escape_typst, style.source);
                 out.push_str(&format!("{} {inner}\n\n", "=".repeat(depth)));
             }
             // **Straight through.** Typst spells a raw block with the same
@@ -521,6 +540,7 @@ fn typst(text: &str, style: &Style) -> String {
                         style.dialects,
                         Dialect::Typst,
                         escape_typst,
+                        style.source,
                     ));
                     out.push('\n');
                 }
@@ -543,25 +563,38 @@ mod tests {
             dialects: Dialects::only(Dialect::Html),
             title: "第一章".to_string(),
             paper: Paper::A5,
+            source: crate::syntax::Syntax::Markdown,
         }
     }
 
-    /// ⚠️ **導出永遠按 Markdown 解析源檔**（`export.rs` 那一句 `markdown::spans`），
-    /// 不看緩衝區的語法。所以 Typst 那幾個 `Kind`（`Math`／`Ref`／`Label`）到不了這裏。
+    /// **`Format` 說寫成什麼，`Style::source` 說讀的是什麼**（2026-09-28）。
     ///
-    /// 這一條記的是**現狀**：2026-09-28 有一份調研說「`$math$` 借 `Kind::Code`，導致
-    /// 導出的時候變成反引號」，查下來**那條路走不通**——Markdown 的解析器根本不認
-    /// `$…$`，它就是一串普通字符，原樣導出去。真要讓 `:export` 讀得懂 Typst 源，是另一
-    /// 件事（要把語法傳進來）。
+    /// ⚠️ 從前只有前一半，於是導出**永遠按 Markdown 解析源檔**：一份 Typst 稿子裏的
+    /// `*粗*` 是四個字符、`$a+b$` 被當成兩個字面美元號轉義掉。
     #[test]
-    fn export_reads_its_input_as_markdown_whatever_it_writes() {
-        let mut s = style();
-        s.vertical = false;
-        let out = export("$a + b$\n", Format::Typst, &s);
-        // 導出的是**轉義掉的字面美元號**：Markdown 源裏的 `$` 就是一個 `$`，而 Typst
-        // 那一端 `$` 開公式，所以寫出去要轉義。這是對的。
-        assert!(out.contains(r"\$a + b\$"), "{out}");
-        assert!(!out.contains("`a + b`"), "沒有變成反引號：{out}");
+    fn export_reads_the_source_syntax_not_the_output_format() {
+        // Markdown 源：`$` 就是一個 `$`，寫進 Typst 要轉義（Typst 那一端它開公式）。
+        let mut md = style();
+        md.vertical = false;
+        let out = export("$a + b$\n", Format::Typst, &md);
+        assert!(out.contains(r"\$a + b\$"), "Markdown 源裏它是字面：{out}");
+
+        // Typst 源：那是一條公式，原樣過去。
+        let mut ts = style();
+        ts.vertical = false;
+        ts.source = crate::syntax::Syntax::Typst;
+        let out = export("$a + b$\n", Format::Typst, &ts);
+        assert!(out.contains("$a + b$"), "公式原樣：{out}");
+
+        // ⚠️ Typst 源裏 `*粗*` 是強調，導成 HTML 要出 `<strong>`。
+        let out = export("*粗*\n", Format::Html, &ts);
+        assert!(out.contains("<strong>粗</strong>"), "{out}");
+
+        // ⚠️ 標題在 Typst 裏是 `=`，在 Markdown 裏不是。
+        let out = export("= 第一章\n", Format::Html, &ts);
+        assert!(out.contains("<h1"), "= 是標題：{out}");
+        let out = export("= 第一章\n", Format::Html, &md);
+        assert!(!out.contains("<h1"), "Markdown 源裏它是一行字：{out}");
     }
 
     #[test]
@@ -670,6 +703,7 @@ mod tests {
             dialects: Dialects::NONE,
             title: "t".to_string(),
             paper: Paper::A5,
+            source: crate::syntax::Syntax::Markdown,
         };
         let out = export("他**很好**，%%這裏要改%%不過還行。\n", Format::Html, &style);
         assert!(out.contains("<strong>很好</strong>"), "{out}");
@@ -693,6 +727,7 @@ mod tests {
             dialects: Dialects::NONE,
             title: "t".to_string(),
             paper: Paper::A5,
+            source: crate::syntax::Syntax::Markdown,
         };
         let out = export("一二三\n", Format::Html, &style);
         // `upright` sets every Latin letter on its own row — a pinyin reading
