@@ -1361,6 +1361,14 @@ impl Editor {
             Key::Alt('s') => self.split_on_newline(),
             // **正則那四個**（#405 Phase 2）。它們開的是**搜索那一扇**提示行，於是拼音、
             // 簡繁、模糊、正則四個開關一起管用，中文也照打——helix 的 `s` 只認正則。
+            // **`(` `)` 換主選區，`_` 去兩端空白**（#405 Phase 3）。⚠️ 前兩個一段都不
+            // 動，動的只是「哪一段是主的」——選了二十處要一處一處看過去靠的就是它。
+            Key::Char(')') => self.rotate_primary(true),
+            Key::Char('(') => self.rotate_primary(false),
+            Key::Char('_') => self.trim_selections(),
+            // **`&` 把每一段的開頭對齊到同一列**（helix 的 `align_selections`）。
+            // ⚠️ 算的是顯示寬度，一個漢字兩格。
+            Key::Char('&') => self.align_selections(),
             Key::Char('s') => self.open_sift(multi::Sift::Select),
             Key::Char('S') => self.open_sift(multi::Sift::Split),
             Key::Alt('k') => self.open_sift(multi::Sift::Keep),
@@ -1736,15 +1744,8 @@ impl Editor {
             '0' => say!("hint.vi.zero"),
             'Z' => say!("hint.vi.z-upper"),
             '@' => say!("hint.vi.at"),
-            '&' => say!("hint.vi.ampersand"),
-            '_' | '+' | '-' => say!("hint.vi.line-motions"),
+            '+' | '-' => say!("hint.vi.line-motions"),
             '\\' => say!("hint.vi.backslash"),
-            // Helix cycles the primary selection with these. They are **left
-            // unbound on purpose** — that is a multi-cursor key and #405 is
-            // 0.2.0 — and the sentence pair that used to sit here has moved to
-            // `H`/`L`, which is the other half of what a reader pressing `)`
-            // wants.
-            '(' | ')' => say!("hint.helix.cycle-selection"),
             // helix 頂層的 `D` 是空的，這裏也空着（2026-09-28）。按它的人分兩種：
             // vim 手要的是「刪到行尾」，helix 手要的是「刪了別動寄存器」，一句話說得
             // 完兩件。⚠️ vim 預設下按不到這裏，那一端 `D` 是 `d$`。

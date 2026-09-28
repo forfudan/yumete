@@ -200,6 +200,23 @@ impl Selections {
         self.normalize()
     }
 
+    /// 主選區是第幾段（從 0 數）。
+    pub fn primary_index(&self) -> usize {
+        self.primary
+    }
+
+    /// **換一段當主選區**，往後或者往前，到頭繞回去。⚠️ 一段都不動。
+    pub fn turn(&mut self, forward: bool) {
+        let count = self.ranges.len();
+        if count < 2 {
+            return;
+        }
+        self.primary = match forward {
+            true => (self.primary + 1) % count,
+            false => (self.primary + count - 1) % count,
+        };
+    }
+
     /// 只留主選區（`,`）。回傳去掉了幾段。
     pub fn keep_primary(&mut self) -> usize {
         let gone = self.ranges.len() - 1;
