@@ -77,7 +77,7 @@ pub enum WikiCommand {
 /// see, and nothing said they were the same question.
 // ⚠️ **Not `Copy` since #452.** The scope a 認詞 reads is [`Where`], which
 // carries a `PathBuf` in one of its arms — the same type `:search` uses, and
-// sharing it is the point: 「這一篇／這個資料夾／這個倉」 is one idea.
+// sharing it is the point: 「這一篇／這個文件夾／這個倉」 is one idea.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
@@ -101,7 +101,7 @@ pub enum WordCommand {
     /// to `.yumete/discovered_words.txt`, overwriting it.
     ///
     /// The same four scopes `:search` has, and for the same reason: 「這一篇／
-    /// 這個資料夾／這個倉／打開的那個目錄」 is one idea, and a reader who has
+    /// 這個文件夾／這個倉／打開的那個目錄」 is one idea, and a reader who has
     /// learnt it once should not have to learn it twice.
     Discover(crate::search_panel::Where),
     /// `:word-habit` — the words this manuscript leans on, by surprisal

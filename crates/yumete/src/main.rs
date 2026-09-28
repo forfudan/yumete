@@ -219,7 +219,7 @@ fn main() -> ExitCode {
     // applied afterwards would be silently refused, so which layout you got
     // would depend on the order you named your files in.
     // **這一節坐在哪本書上，這裏定一次**（2026-09-27 定）。命令行第一個路徑說
-    // 了算：資料夾就是它，一個檔就從那個檔往上找項目根。什麼都沒給就不設，退回
+    // 了算：文件夾就是它，一個檔就從那個檔往上找項目根。什麼都沒給就不設，退回
     // 從 cwd 往上找——也就是從前的樣子。
     //
     // 定了之後它不再動：從別處打開一個檔只是多一個緩衝，不把根撐大。文件樹、
@@ -235,7 +235,7 @@ fn main() -> ExitCode {
     for file in &files {
         // **`ye 稿/` 開的是那本書，不是一個檔**（2026-09-27）。從前它走到
         // `Buffer::open` 上報「不是一個檔案」，而「打開一本書」正是這個編輯器
-        // 最常做的事。資料夾只定根，不開緩衝——文件樹會把它攤開。
+        // 最常做的事。文件夾只定根，不開緩衝——文件樹會把它攤開。
         if std::path::Path::new(&yumete_config::expand_tilde(file)).is_dir() {
             continue;
         }

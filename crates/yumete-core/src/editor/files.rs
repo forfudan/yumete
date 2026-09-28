@@ -156,7 +156,7 @@ impl Editor {
         }
     }
 
-    /// 開 yumete 的時候定一次。命令行給的是資料夾就是它，給的是一個檔就從那個
+    /// 開 yumete 的時候定一次。命令行給的是文件夾就是它，給的是一個檔就從那個
     /// 檔往上找項目根，什麼都沒給就不設（退回 `project_root`）。
     pub fn set_root(&mut self, at: &Path) {
         let full = match at.is_absolute() {
