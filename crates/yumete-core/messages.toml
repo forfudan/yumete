@@ -7583,6 +7583,13 @@ zhs = "那边没有一行到得了这一列"
 en = "no line that way reaches this column"
 
 [[message]]
+# 在全窗表格裏想開多選區——格內光標只能有一個
+key = "selection.not-in-a-table"
+zht = "表格裏只能有一個光標"
+zhs = "表格里只能有一个光标"
+en = "a table view holds one cursor"
+
+[[message]]
 # 按 A-s 想按行切開，可是選區是空的
 key = "selection.nothing-to-split"
 zht = "沒有可切的"

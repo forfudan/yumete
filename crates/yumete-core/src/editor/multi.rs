@@ -53,6 +53,9 @@ impl super::Editor {
     /// ⚠️ **新長出來的那一段是主選區**：讀者的注意力就在剛長出來的那一個上，而且連按
     /// `C` 要沿着它繼續往下長。
     pub(super) fn copy_selection_on_row(&mut self, down: bool, count: usize) {
+        if !self.can_be_plural() {
+            return;
+        }
         let made = {
             let hide = |line: usize| self.hidden_on_line(line);
             let fold = |line: usize| self.line_is_folded(line);
@@ -275,6 +278,9 @@ impl super::Editor {
     /// ⚠️ **一行選區不會被切成零段。** 選區只佔一行的時候這一支什麼都不改——那正是
     /// 「按行切」在只有一行上的答案，不是失敗。
     pub(super) fn split_on_newline(&mut self) {
+        if !self.can_be_plural() {
+            return;
+        }
         let rope = self.current_buffer().rope().clone();
         let mut out: Vec<Range> = Vec::new();
         let mut which = 0;
@@ -303,8 +309,38 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
+    /// **這裏開得了多選區沒有。**
+    ///
+    /// ⚠️ **佔滿整扇窗的那種表格裏開不了**（§5.13.8 三，2026-09-28 落地）。
+    ///
+    /// 硬衝突只有一條，而且只在那一種裏：**橫向滾動的規矩是「把光標那一格整個留在屏幕
+    /// 上」**（`yumete-tui/src/table.rs`），兩個光標在不同列的時候這句話沒有答案。滿版
+    /// 的表格是 CSV、碼表那一類——整個檔就是一張表（`Bounds::WholeFile`）。
+    ///
+    /// ⚠️ **稿子裏的 `|` 表格不擋，量過。** §5.13.8 當時還列了第二條理由（格內光標是一
+    /// 個 `Option` 不是一個列表），可是那是**建模上的**不順，不是畫面上的壞：格子的底
+    /// 色跟着主選區走，和硬件光標、候選面板一樣，一屏上本來就只有一個。實測在稿子裏的
+    /// 表格上按 `C`，兩塊選區底色畫得好好的。而**批量改一整欄正是表格最常做的事**，把
+    /// 它一起擋掉是拿一條沒發生的毛病換一件真用得上的功能。
+    ///
+    /// ⚠️ 用「表格模式開着」當閘試過，太寬：開檔的時候編輯器會**自己猜**出一張表，於是
+    /// 稿子裏的表格一個都開不了多選區。
+    ///
+    /// 「這一欄每行一個光標」往後做成 `空格 t` 底下的一條命令，不讓通用的複製鍵去撞格子
+    /// 的邊界（§5.13.12b 五：現在不留鍵）。
+    fn can_be_plural(&mut self) -> bool {
+        if self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+            self.status = say!("selection.not-in-a-table");
+            return false;
+        }
+        true
+    }
+
     /// 開那一扇提示行，並且記下 Enter 按下去要做哪一件。
     pub(super) fn open_sift(&mut self, what: Sift) {
+        if !self.can_be_plural() {
+            return;
+        }
         self.sift = Some(what);
         self.command_line.clear();
         self.command_caret = 0;
@@ -322,6 +358,9 @@ impl super::Editor {
     /// ⚠️ **一個都不剩就什麽都不做**，並且說一句。把選區清空是沒有這個狀態的
     /// （`Selections` 永遠至少一段），而靜靜地留在原地會讓人以為是鍵沒按上。
     pub(super) fn sift(&mut self, what: Sift) {
+        if !self.can_be_plural() {
+            return;
+        }
         let Some(look) = self.looker() else {
             self.status = say!("selection.sift-needs-a-pattern");
             return;
