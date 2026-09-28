@@ -1336,6 +1336,12 @@ impl Editor {
                     self.status = say!("selection.collapsed-in-extend");
                 }
             }
+            // **多選區**（#405）：`C`／`A-C` 往下／往上再加一段，`,` 只留主選區。
+            // 三個都是 helix 的拼法。⚠️ vim 預設下 `C` 被別名成 `c$`，`,` 是「反向重複
+            // 剛纔那個 f」，所以那一端按不到這裏——多選區是原生鍵位的東西。
+            Key::Char('C') => self.copy_selection_on_row(true, count),
+            Key::Alt('C') => self.copy_selection_on_row(false, count),
+            Key::Char(',') => self.keep_primary_selection(),
             // Selection + changes (Helix: `x` selects the line, `d` deletes the
             // selection, `c` changes it).
             //

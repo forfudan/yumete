@@ -16351,3 +16351,64 @@ fn the_secondary_selections_are_a_grapheme_wide_even_when_collapsed() {
     secondary.sort();
     assert_eq!(secondary, vec![(0, 1), (6, 7)], "兩段次選區，各自寬一個字素");
 }
+
+/// **`C` 往下再加一個選區，`A-C` 往上，`,` 只留主選區**（#405，helix 的拼法）。
+#[test]
+fn the_capital_c_grows_a_second_selection_down_the_page() {
+    let mut ed = typed("- 買菜\n- 倒垃圾\n- 寫第三章\n");
+    press(&mut ed, "ggll"); // 停在第一行第三格（「買」）
+    assert_eq!(ed.sel.len(), 1);
+
+    press(&mut ed, "C");
+    assert_eq!(ed.sel.len(), 2, "第二行同一列長出一段");
+    press(&mut ed, "C");
+    assert_eq!(ed.sel.len(), 3, "第三行也是");
+
+    // 三段各在各行的同一列上。
+    let rope = ed.current_buffer().rope().clone();
+    let lines: Vec<usize> = {
+        let mut lines: Vec<usize> = ed.sel.iter().map(|r| rope.char_to_line(r.head)).collect();
+        lines.sort();
+        lines
+    };
+    assert_eq!(lines, vec![0, 1, 2], "一行一段");
+
+    // 主選區是最後長出來的那一個。
+    assert_eq!(rope.char_to_line(ed.sel.primary().head), 2);
+
+    // `,` 收回去。
+    press(&mut ed, ",");
+    assert_eq!(ed.sel.len(), 1, "只留主選區");
+    assert_eq!(rope.char_to_line(ed.sel.primary().head), 2, "留下的是主選區那一段");
+
+    // `A-C` 往上長。
+    ed.on_key(Key::Alt('C'));
+    assert_eq!(ed.sel.len(), 2, "往上也長得出來");
+}
+
+/// ⚠️ **太短的行跳過，不是把選區壓到行尾**（helix 的規矩）。
+///
+/// 一串長短不一的列表項，壓到行尾等於在每一行的不同位置放一個光標，那不是「同一列」。
+#[test]
+fn a_copied_selection_skips_a_line_that_is_too_short() {
+    let mut ed = typed("甲乙丙丁\n戊\n己庚辛壬\n");
+    press(&mut ed, "gglll"); // 第一行第四格（「丁」）
+    press(&mut ed, "C");
+    assert_eq!(ed.sel.len(), 2, "第二行只有一個字，跳過它");
+    let rope = ed.current_buffer().rope().clone();
+    assert_eq!(
+        rope.char_to_line(ed.sel.primary().head),
+        2,
+        "落在第三行，不是被壓到第二行的行尾"
+    );
+}
+
+/// 往下沒有一行到得了這一列的時候，說一句而不是靜靜地什麽都不做。
+#[test]
+fn copying_says_so_when_there_is_no_room() {
+    let mut ed = typed("甲乙丙丁\n戊\n");
+    press(&mut ed, "gglll");
+    press(&mut ed, "C");
+    assert_eq!(ed.sel.len(), 1, "下面沒有一行夠長");
+    assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
+}

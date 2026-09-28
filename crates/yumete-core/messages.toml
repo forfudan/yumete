@@ -7496,6 +7496,13 @@ zhs = "整词（西文）"
 en = "whole word (Latin)"
 
 [[message]]
+# 按 , 的時候本來就只有一段
+key = "selection.already-one"
+zht = "本來就只有一處選區"
+zhs = "本来就只有一处选区"
+en = "there is only one selection"
+
+[[message]]
 # 延伸模式下收回成一個字
 key = "selection.collapsed-in-extend"
 zht = "收回成一個字——v 還開着，一走又跟着長"
@@ -7504,6 +7511,27 @@ en = "collapsed to one character — v is still on, so the next move grows it ag
 
 
 # ── sentence ──────────────────────────────────────────────────────────
+
+[[message]]
+# 按 , 只留主選區，去掉了幾段
+key = "selection.kept-one"
+zht = "只留主選區，去掉 {0} 處"
+zhs = "只留主选区，去掉 {0} 处"
+en = "kept the primary, dropped {0}"
+
+[[message]]
+# 兩處選區靠到一起被併成一處——helix 是靜默的，這裏說一句（2026-09-28 定）
+key = "selection.merged"
+zht = "{0} 處併到一起了，還剩 {1} 處"
+zhs = "{0} 处并到一起了，还剩 {1} 处"
+en = "{0} selections merged, {1} left"
+
+[[message]]
+# 按 C／A-C 想再加一個選區，可是那個方向上沒有一行夠長
+key = "selection.no-room"
+zht = "那邊沒有一行到得了這一列"
+zhs = "那边没有一行到得了这一列"
+en = "no line that way reaches this column"
 
 [[message]]
 # :view-sentence off——回到滿縱排

@@ -9952,7 +9952,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `」`＋`e` 是 `他說` 而不是 `」他說`），`w` 兩列也全中。
     ## `b`：量過之後改了，而且是設計上的改（2026-09-11 晚）
 
-    先查了 helix 的 fork（`~/Programs/yuhao-ime/helix`）而不是憑印象：往回**只有
+    先查了 helix 的 fork（`~/Programs/helix`）而不是憑印象：往回**只有
     `b` 與 `B`**——`move_prev_word_end` 這個命令存在，但**默認沒有綁鍵**（`ge` 是
     `goto_last_line`）。`b` 的形狀我們本來就對：`helix-core/src/movement.rs:238` 的
     `word_move` 往回時把 range 擺成 `Range::new(head+1, head)` 再走，所以**選區含起點
@@ -15587,7 +15587,7 @@ helix 把標籤貼在**空白分隔的詞首**上。那是英文的樣子——�
 
 ### 和 helix 有意不同的兩處（讀它的源碼對出來的）
 
-`~/Programs/yuhao-ime/helix` 就在那兒，不用猜。
+`~/Programs/helix` 就在那兒，不用猜。
 
 ⚠️ **一、蓋一個字素，不是兩個。** `jump_to_label` 在 `range.from()` 和
 `next_grapheme_boundary(from)` 各放一個 overlay——兩個字母蓋掉**兩個**字素。西文剛好（兩
@@ -15726,7 +15726,7 @@ yumete 的实现方案。具体到每个细节。对于不确定的，优先通�
 **這一節只是方案，一行代碼都沒寫。** 要作者定的事集中在最後一節 §5.13.12。
 
 ⚠️ **引用的 helix 行號**一律寫倉內相對路徑，基準是 `079a789e8`（`25.07-984`）。倉當時在
-`yuhao-ime/helix`，作者說要搬出去，所以不寫絕對路徑。
+`~/Programs/helix`（2026-09-28 從 `yuhao-ime` 裏搬出來了，那個位置是誤克隆）。
 
 ### 5.13.0 一句話
 
