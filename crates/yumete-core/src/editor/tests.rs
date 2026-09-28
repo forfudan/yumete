@@ -2,7 +2,7 @@
 //!
 //! Lifted out of `editor.rs` whole on 2026-09-08: ten thousand lines, 34% of
 //! the file, and not one of them something you read while looking for how the
-//! editor works. It is still a child module of `editor`, so it sees the same
+//! editor works. It is still a child modu（）l（）e of `editor`, so it sees the same
 //! private fields it always did — the only thing that changed is which file
 //! the reader opens.
 //!
@@ -17444,7 +17444,7 @@ fn the_register_panel_shows_what_each_one_holds() {
     assert_eq!(title, "寄存器·剪貼板");
     assert_eq!(keys.len(), 1, "一個格子都沒存過，表上只該有 # ：{keys:?}");
     assert_eq!(keys[0].0, "#");
-    assert_eq!(keys[0].1, "該選區之序號");
+    assert_eq!(keys[0].1, "（該選區之序號）");
     ed.on_key(Key::Esc);
 
     // 整行存進 a，第二行存進 k。
@@ -17457,7 +17457,7 @@ fn the_register_panel_shows_what_each_one_holds() {
     assert_eq!(rows.len(), 3, "a、k，然後 #：{rows:?}");
     assert_eq!(rows[0].0, "a");
     assert_eq!(rows[1].0, "k");
-    assert_eq!(rows[2], ("#", "該選區之序號"), "# 排在最後，而且是一句說明");
+    assert_eq!(rows[2], ("#", "（該選區之序號）"), "# 排在最後，而且是一句說明");
     // 二十四格（十二個漢字）就截，截的那一頭補一個 `…`，`…` 自己也算在裏面。
     assert_eq!(rows[0].1, "這一段是要複製到 a 裏去…");
     assert!(
@@ -17468,4 +17468,37 @@ fn the_register_panel_shows_what_each_one_holds() {
     );
     // 放得下的原樣印出來，不補 `…`。
     assert_eq!(rows[1].1, "短的一段");
+}
+
+/// **`'` 那張表列的是哪幾個字母記過位置、分別在哪**（2026-09-29，同 `"` 那一張）。
+///
+/// `"` 和 `'` 共用 a–z 這一套名字，存的卻是兩樣東西：`"a` 裝一段話，`' a` 記一個
+/// 地方。所以這張表右邊印的是「檔名 第幾行」，不是文字。
+#[test]
+fn the_mark_panel_shows_where_each_one_points() {
+    let mut ed = typed("第一行\n第二行\n第三行\n第四行\n");
+    // 一個都沒記過：要畫得出一行來，不然按了 `'` 屏幕上什麽都不出。
+    press(&mut ed, "'");
+    let Hint::Keys(title, keys) = ed.hint() else {
+        panic!("按了 ' 那張表沒出來：{:?}", ed.hint())
+    };
+    assert_eq!(title, "' 回到");
+    assert_eq!(keys.len(), 1, "一個都沒記過也要有一行：{keys:?}");
+    assert_eq!(keys[0].0, "", "沒有鍵可按，所以左邊是空的");
+    assert_eq!(keys[0].1, "（無位置記錄）");
+    ed.on_key(Key::Esc);
+
+    // 第一行記成 a，第四行記成 k。
+    press(&mut ed, "Majjj");
+    press(&mut ed, "Mk'");
+    let Hint::Keys(_, keys) = ed.hint() else {
+        panic!("按了 ' 那張表沒出來：{:?}", ed.hint())
+    };
+    let rows: Vec<(&str, &str)> =
+        keys.iter().map(|(k, what)| (k.as_ref(), what.as_str())).collect();
+    assert_eq!(rows.len(), 2, "記過的那兩個，按字母排：{rows:?}");
+    assert_eq!(rows[0].0, "a");
+    assert_eq!(rows[1].0, "k");
+    assert!(rows[0].1.ends_with("第 1 行"), "a 記的是第一行：{rows:?}");
+    assert!(rows[1].1.ends_with("第 4 行"), "k 記的是第四行：{rows:?}");
 }

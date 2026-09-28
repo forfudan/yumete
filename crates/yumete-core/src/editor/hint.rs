@@ -336,7 +336,27 @@ impl Editor {
                 Self::said(Self::CONFLICT_KEYS.iter().copied()),
             ),
             Pending::Mark => (say!("hint.mark.set-here"), vec![("a–z".into(), say!("hint.mark.name-it"))]),
-            Pending::Recall => (say!("hint.mark.go-back"), vec![("a–z".into(), say!("hint.mark.which-one"))]),
+            // **哪幾個字母記過位置，分別記在哪**（2026-09-29，同 `"` 那一張）。
+            //
+            // 一個標記存的是位置而不是文字，所以右邊印的是「檔名 第幾行」。這一層
+            // 與 `"` 共用 a–z 這一套名字卻是兩本帳：`"a` 裝的是一段話，`' a` 記的
+            // 是一個地方。
+            //
+            // ⚠️ **一個都沒記過的時候也要畫出一行來。** 空的 `Body::Keys` 畫不出
+            // 框（`panel.rs` 直接回 `None`），而按了 `'` 屏幕上什麽都不出，讀起來
+            // 就是「這個鍵壞了」。
+            Pending::Recall => {
+                let mut named: Vec<(&char, &Spot)> = self.marks.iter().collect();
+                named.sort_by_key(|(name, _)| **name);
+                let rows: KeyRows = match named.is_empty() {
+                    true => vec![("".into(), say!("hint.mark.none-yet"))],
+                    false => named
+                        .into_iter()
+                        .map(|(name, spot)| (name.to_string().into(), self.mark_place(spot)))
+                        .collect(),
+                };
+                (say!("hint.mark.go-back"), rows)
+            }
             // **Which list is a question about the cursor, not the mode.** It
             // used to be `md_region().is_none()`, which is *also* true of a
             // Markdown table nobody has opened yet — so standing in one of
@@ -359,6 +379,32 @@ impl Editor {
     ///
     /// The same answer the command row has always had; it is a panel now because a
     /// row holds four of these and `空格` has fourteen.
+    /// **Where one mark points**, for the panel that lists them.
+    ///
+    /// A mark in a file knows its path and line without opening anything; one
+    /// in a scratch buffer has to ask the buffer, and the buffer may be gone
+    /// (`go_to_mark` says so too, in its own words).
+    fn mark_place(&self, spot: &Spot) -> String {
+        match spot {
+            Spot::InFile(path, line) => {
+                let name = path.file_name().map_or_else(
+                    || path.display().to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                );
+                say!("hint.mark.at", name, line + 1)
+            }
+            Spot::InBuffer(id, pos) => match self.buffer_with(*id) {
+                Some(i) => {
+                    let buffer = &self.buffers[i];
+                    let rope = buffer.rope();
+                    let line = rope.char_to_line((*pos).min(rope.len_chars()));
+                    say!("hint.mark.at", buffer.display_name(), line + 1)
+                }
+                None => say!("hint.mark.gone"),
+            },
+        }
+    }
+
     /// **One line of what a register holds**, for the panel that lists them.
     ///
     /// A yank is whole paragraphs as often as it is a word, and the panel is a
