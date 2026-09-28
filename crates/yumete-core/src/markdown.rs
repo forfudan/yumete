@@ -771,17 +771,26 @@ fn scan(
             }
         }
         // `[text](target)` — the text is what the reader reads.
-        if chars[at] == '[' {
-            if let Some(close) = find(chars, at + 1, |c| c == ']') {
+        //
+        // ⚠️ **`![圖](a.png)` 的那個驚嘆號也在構造裏**（2026-09-28）。從前它不在，於是
+        // 所見即所得把 `[` `](a.png)` 藏起來之後，行首孤零零留着一個 `!`。
+        let bang = chars[at] == '!' && chars.get(at + 1) == Some(&'[');
+        if chars[at] == '[' || bang {
+            let open = at + usize::from(bang);
+            // ⚠️ **兩頭都數括號**（2026-09-28）。從前是「往後找第一個 `]`／`)`」：
+            // `[甲[乙]丙](x)` 在第一個 `]` 上就斷了，整條鏈接不認；
+            // `[連結](…/中文_(消歧義))` 在裏面那個 `)` 上就收了口，末尾那個括號掉在正
+            // 文上。中文維基的地址裏帶括號是常事。
+            if let Some(close) = balanced(chars, open, ']', to) {
                 if chars.get(close + 1) == Some(&'(') {
-                    if let Some(end) = find(chars, close + 2, |c| c == ')').filter(|&e| e < to) {
-                        mark(out, at, at + 1, Kind::Marker, *construct, depth);
-                        mark(out, at + 1, close, Kind::Link, *construct, depth);
+                    if let Some(end) = balanced(chars, close + 1, ')', to) {
+                        mark(out, at, open + 1, Kind::Marker, *construct, depth);
+                        mark(out, open + 1, close, Kind::Link, *construct, depth);
                         let mine = *construct;
                         *construct += 1;
                         // 看得見的那幾個字也可以帶標記：`[**粗**的](x)`。
                         if depth + 1 < DEPTH {
-                            scan(chars, at + 1, close, depth + 1, construct, out);
+                            scan(chars, open + 1, close, depth + 1, construct, out);
                         }
                         mark(out, close, end + 1, Kind::Marker, mine, depth);
                         at = end + 1;
@@ -815,16 +824,22 @@ pub struct Link {
 /// included: a reader who cannot see the target cannot be asked to stand on it.
 pub fn link_at(line: &str, at: usize) -> Option<Link> {
     let all = spans(line);
-    // Which construct the cursor is in, and only if that construct is a link:
-    // the emphasis two words earlier shares the line, not the destination.
-    // Backwards, because a heading's span covers its whole line and the link
-    // inside it is marked afterwards — later spans win, as they do when the
-    // line is drawn.
-    let here = all.iter().rev().find(|s| (s.start..s.end).contains(&at))?;
+    // **蓋住光標的那些構造裏，最裏面那個「是鏈接」的。**
+    //
+    // ⚠️ **不能只看最裏面那一條**（2026-09-28）：`[**粗**的](x)` 裏光標站在「粗」上，
+    // 最裏面的是那個 `Strong`，它自己不是鏈接——只看它的話，文字是粗體的鏈接就跟不
+    // 了了。往外走一層就到了。
+    //
+    // ⚠️ 也不能只看最外面那一條：標題那一條蓋住整行，而標題本身不是鏈接。
     let construct = all
         .iter()
-        .any(|s| s.construct == here.construct && matches!(s.kind, Kind::Link | Kind::WikiLink))
-        .then_some(here.construct)?;
+        .filter(|s| (s.start..s.end).contains(&at))
+        .filter(|s| {
+            all.iter()
+                .any(|t| t.construct == s.construct && matches!(t.kind, Kind::Link | Kind::WikiLink))
+        })
+        .max_by_key(|s| s.start)?
+        .construct;
     let mine = || all.iter().filter(|s| s.construct == construct);
     let start = mine().map(|s| s.start).min()?;
     let end = mine().map(|s| s.end).max()?;
@@ -1100,6 +1115,30 @@ fn code_span(chars: &[char], at: usize) -> Option<(usize, usize, usize)> {
 /// The first index at or after `from` whose character satisfies `f`.
 fn find(chars: &[char], from: usize, f: impl Fn(char) -> bool) -> Option<usize> {
     (from..chars.len()).find(|&i| f(chars[i]))
+}
+
+/// **和 `chars[from]` 配對的那一個 `shut` 在哪**，中間的同類括號要數進去。
+///
+/// `from` 指着開括號本身。回的是閉括號自己的下標，`to` 之前找不到就回 `None`。
+///
+/// ⚠️ **為什麼不是「往後找第一個」**（2026-09-28）：`[連結](…/中文_(消歧義))` 的地址裏
+/// 有一對括號，找第一個 `)` 會在 `消歧義` 後面收口，末尾那個括號掉在正文上；
+/// `[甲[乙]丙](x)` 同理，在第一個 `]` 上就斷了，整條鏈接不認。中文維基的地址裏帶括號
+/// 是常事。
+fn balanced(chars: &[char], from: usize, shut: char, to: usize) -> Option<usize> {
+    let open = chars[from];
+    let mut deep = 0usize;
+    for at in from..to.min(chars.len()) {
+        if chars[at] == open {
+            deep += 1;
+        } else if chars[at] == shut {
+            deep -= 1;
+            if deep == 0 {
+                return Some(at);
+            }
+        }
+    }
+    None
 }
 
 /// Push a span, dropping empty ones.
@@ -2112,6 +2151,54 @@ mod tests {
                 }
             }
         }
+    }
+
+
+    /// **鏈接那三個洞**（2026-09-28）。
+    #[test]
+    fn a_link_holds_together_through_brackets_and_a_bang() {
+        let marker = |line: &str| {
+            spans(line)
+                .into_iter()
+                .filter(|s| s.kind == Kind::Marker)
+                .map(|s| line.chars().skip(s.start).take(s.end - s.start).collect::<String>())
+                .collect::<Vec<_>>()
+        };
+        let text = |line: &str| {
+            spans(line)
+                .into_iter()
+                .find(|s| s.kind == Kind::Link)
+                .map(|s| line.chars().skip(s.start).take(s.end - s.start).collect::<String>())
+        };
+
+        // ⚠️ 一、`!` 在構造裏——不然所見即所得會留一個孤零零的驚嘆號。
+        assert_eq!(marker("![圖](a.png)")[0], "![", "驚嘆號跟着開括號走");
+
+        // ⚠️ 二、地址裏的括號要數着走。中文維基的地址常帶括號。
+        let wiki = "[連結](https://x/中文_(消歧義))";
+        assert_eq!(marker(wiki).last().unwrap(), "](https://x/中文_(消歧義))");
+
+        // ⚠️ 三、看得見的那幾個字裏也可以有方括號。
+        assert_eq!(text("[甲[乙]丙](x)").as_deref(), Some("甲[乙]丙"));
+
+        // 一行兩條鏈接還是兩條，沒有被貪心地併成一條。
+        let two = spans("看 [甲](b) 和 [乙](c)");
+        let links: Vec<usize> = two.iter().filter(|s| s.kind == Kind::Link).map(|s| s.start).collect();
+        assert_eq!(links.len(), 2, "兩條各歸各的：{two:?}");
+
+        // 沒配對的不算鏈接。
+        assert!(spans("[沒配對(x)").is_empty());
+    }
+
+    /// ⚠️ **文字是粗體的鏈接照樣跟得了**（2026-09-28）。
+    ///
+    /// 最裏面那一條是 `Strong`，它自己不是鏈接；要往外走一層纔找得到。
+    #[test]
+    fn a_link_whose_text_is_bold_is_still_a_link() {
+        let line = "[**粗**的](地址)";
+        // 光標站在「粗」上（0[ 1* 2* 3粗）。
+        let got = link_at(line, 3).expect("跟得到：{line}");
+        assert_eq!(got.target, "地址");
     }
 
 }
