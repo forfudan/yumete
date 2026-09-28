@@ -17265,3 +17265,44 @@ fn the_editor_says_when_it_holds_many_selections() {
     press(&mut ed, ",");
     assert!(!ed.has_many_selections(), "收回去之後又是一段");
 }
+
+/// **佔滿整扇窗的那種表格裏不開多選區**（§5.13.8 三，2026-09-28 落地）。
+///
+/// 硬衝突只有一條：橫向滾動要「把光標那一格整個留在屏幕上」，兩個光標在不同列時無解。
+/// ⚠️ **稿子裏的 `|` 表格不擋**——那一條是建模上的不順，不是畫面上的壞，而批量改一整欄
+/// 正是表格最常做的事。
+#[test]
+fn a_full_pane_table_holds_one_cursor() {
+    let dir = std::env::temp_dir().join(format!("yumete-tblsel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // ⚠️ **要一個整檔就是一張表的檔**（`Bounds::WholeFile`）：Markdown 的 `|` 表格永遠
+    // 不滿版，`pane` 那一格只給 CSV、碼表這一類。
+    let file = dir.join("表.csv");
+    std::fs::write(&file, "名,說明,數\n甲,第一條,12\n乙,第二條,345\n丙,第三條,6\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    assert!(ed.enter_table(), "進得去");
+    assert!(
+        ed.table().is_some_and(|v| v.takes_the_pane()),
+        "而且是滿版那一種"
+    );
+
+    press(&mut ed, "C");
+    assert_eq!(ed.sel.len(), 1, "還是一個光標");
+    assert!(ed.status().contains("表格"), "要說一句：{:?}", ed.status());
+
+    ed.on_key(Key::Alt('s'));
+    assert_eq!(ed.sel.len(), 1, "按行切也不行");
+    ed.on_key(Key::Char('s'));
+    assert_eq!(ed.mode(), Mode::Normal, "提示行也不開：{}", ed.status());
+
+    // ⚠️ **稿子裏的 `|` 表格照開。**
+    let mut ed = typed("| 名 | 說明 |\n| --- | --- |\n| 甲 | 一 |\n| 乙 | 二 |\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "C");
+    assert_eq!(ed.sel.len(), 2, "稿子裏的表格照開：{:?}", ed.status());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
