@@ -46,6 +46,8 @@ impl Editor {
             // manuscript it is the handier of the two: a 段 is the unit a
             // writer moves around, a word is the unit they fix.
             'p' => motion::Object::Paragraph,
+            // `mi s`／`ma s`：光標所在的那一句（2026-09-28）。
+            's' => motion::Object::Sentence,
             // `mi m`／`ma m`：光標所在的那一段 Markdown 標記（2026-09-28）。
             'm' => motion::Object::Markup,
             c => match pair_of(c) {
@@ -64,6 +66,8 @@ impl Editor {
                 // 一段永遠在：光標停在空行上，那一段就是那幾個空行。
                 motion::Object::Paragraph => say!("edit.no-word-here"),
                 motion::Object::Markup => say!("edit.no-markup-here"),
+                // 一句永遠在，除非這一行是空的。
+                motion::Object::Sentence => say!("edit.no-word-here"),
             };
             self.object_missed = true;
             return;
@@ -178,6 +182,56 @@ impl Editor {
             }
         };
         let (anchor, head) = (start + from, start + to.saturating_sub(1).max(from));
+        motion::Span::Over { anchor, head: head.max(anchor) }
+    }
+
+    /// **光標所在的那一句**（`mi s`／`ma s`，vim 的 `cis`／`das`，2026-09-28）。
+    ///
+    /// ⚠️ **邊界走 `sentence_starts`**，和 `(`／`)`、`:view-sentence`、`:check-punct`
+    /// 同一支。兩個答案就意味着 `mi s` 選的那一段和版面斷行的地方對不上。
+    ///
+    /// ⚠️ **一句不跨行**：這個倉的解析是逐行的，`sentence_starts` 也是。一段話寫成一
+    /// 行（中文稿子的常態）的時候這沒有分別；硬折過行的稿子裏，`mi s` 取的是這一行裏
+    /// 的那一句。
+    fn sentence_object_span(&self, around: bool) -> motion::Span {
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(head);
+        let start = rope.line_to_char(line);
+        let chars = crate::zong::line_chars(rope, line);
+        if chars.is_empty() {
+            return motion::Span::Missed;
+        }
+        let at = (head - start).min(chars.len().saturating_sub(1));
+        let starts = motion::sentence_starts(&chars);
+        let Some(which) = starts.iter().rposition(|&s| s <= at) else {
+            return motion::Span::Missed;
+        };
+        let mut from = starts[which];
+        let to = starts.get(which + 1).copied().unwrap_or(chars.len());
+        let mut end = to;
+        match around {
+            // `as`：連句末那一段空白。⚠️ 中文句子之間沒有空白，所以這一支在中文裏和
+            // `is` 拿到同一段——vim 那條規矩在沒有空白的文字裏的自然結果，不是算錯。
+            // 後面沒有空白就取前面的，同 `aw`。
+            true => {
+                if end == to && to == from {
+                    return motion::Span::Missed;
+                }
+                if !(from..to).any(|i| chars[i].is_whitespace()) || to == chars.len() {
+                    while from > 0 && chars[from - 1].is_whitespace() {
+                        from -= 1;
+                    }
+                }
+            }
+            // `is`：句子本身，句末那一段空白不要。
+            false => {
+                while end > from && chars[end - 1].is_whitespace() {
+                    end -= 1;
+                }
+            }
+        }
+        let (anchor, head) = (start + from, start + end.saturating_sub(1).max(from));
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
@@ -818,6 +872,9 @@ impl Editor {
             }
             motion::Motion::Object { what: motion::Object::Markup, around } => {
                 self.markup_object_span(around)
+            }
+            motion::Motion::Object { what: motion::Object::Sentence, around } => {
+                self.sentence_object_span(around)
             }
             motion::Motion::Object {
                 what: motion::Object::Pair { open, close },
