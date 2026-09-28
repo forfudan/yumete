@@ -853,8 +853,16 @@ impl Editor {
         if self.mode != Mode::Insert {
             self.snapshot();
         }
-        self.insert_recording.push_str(text);
-        self.insert_str(text);
-        self.maybe_ask_what_comes_next(text);
+        // ⚠️ **上屏也要落在每一段選區上**（#405 Phase 4，2026-09-28）。
+        //
+        // 這一支是**前端直接叫的**，不走 `on_key`，所以 `edit_each` 那一層路由碰不到
+        // 它——實測四個光標打 `wo` 空格，「和」只落在最後一段上。中文是打出來的，多
+        // 選區下不能上屏纔是真的不能用。
+        let text = text.to_string();
+        self.edit_each(move |e| {
+            e.insert_recording.push_str(&text);
+            e.insert_str(&text);
+            e.maybe_ask_what_comes_next(&text);
+        });
     }
 }

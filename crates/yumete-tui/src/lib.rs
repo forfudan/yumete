@@ -3136,6 +3136,17 @@ fn inline_preedit(editor: &Editor, ime: &ImeSession) -> String {
         || !page_can_hold_a_candidate(editor)
         || !ime.available()
         || !ime.is_composing()
+        // ⚠️ **多選區下不畫**（#405，2026-09-28 定，原話：「multiselection 的时候应当
+        // 禁止 pre-edit 而是用候选面板。这样的话防止一堆非确定的修改」）。
+        //
+        // 兩條理由。一、**半成品乘以 N**：一屏幾十個光標同時長出一串還沒定下來的碼，
+        // 讀者分不出哪些是稿子哪些不是。二、**幽靈文本是進版面量度的**，N 處各長一串，
+        // 每按一鍵就要重排 N 次——那不是新開銷，是原有開銷乘以 N。
+        //
+        // 候選欄照畫，而它本來就只跟主選區（終端只有一個硬件光標，候選面板要貼着它
+        // 擺，§5.13.8 一）。所以多選區下「正在打什麼」由候選欄說，「會寫到哪裏」由那
+        // 幾塊選區底色說，兩件事各有各的地方。
+        || editor.has_many_selections()
     {
         return String::new();
     }

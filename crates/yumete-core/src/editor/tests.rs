@@ -17226,3 +17226,42 @@ fn every_selection_remembers_its_own_goal_slot_in_vertical() {
     let slots: Vec<usize> = at.iter().map(|&a| slot(&ed, a)).collect();
     assert_eq!(slots, vec![1, 4], "各自回到第二格和第五格：{slots:?}");
 }
+
+/// **輸入法上屏也落在每一段選區上**（#405 Phase 4，2026-09-28）。
+///
+/// ⚠️ `insert_committed` 是**前端直接叫的**，不走 `on_key`，所以 `edit_each` 那一層路由
+/// 碰不到它——實測四個光標打 `wo` 空格，「和」只落在最後一段上。中文是打出來的，多選區下
+/// 不能上屏纔是真的不能用。
+#[test]
+fn a_committed_phrase_lands_at_every_selection() {
+    let mut ed = typed("- 一\n- 二\n- 三\n- 四\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "CCC");
+    assert_eq!(ed.sel.len(), 4);
+    press(&mut ed, "i");
+    assert_eq!(ed.mode(), Mode::Insert);
+    ed.insert_committed("和");
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "和- 一\n和- 二\n和- 三\n和- 四\n",
+        "{:?}",
+        ed.current_buffer().text()
+    );
+
+    // ⚠️ 一次插入是一次撤銷，四段也是一次。
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "- 一\n- 二\n- 三\n- 四\n");
+}
+
+/// **多選區下不畫內嵌的 preedit**（2026-09-28 定）。核心這一側只負責答得出「有幾段」。
+#[test]
+fn the_editor_says_when_it_holds_many_selections() {
+    let mut ed = typed("甲\n乙\n");
+    press(&mut ed, "gg");
+    assert!(!ed.has_many_selections(), "一段");
+    press(&mut ed, "C");
+    assert!(ed.has_many_selections(), "兩段");
+    press(&mut ed, ",");
+    assert!(!ed.has_many_selections(), "收回去之後又是一段");
+}

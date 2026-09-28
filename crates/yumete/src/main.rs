@@ -773,21 +773,27 @@ fn press(
         // 個鍵——碼、空格、Enter、退格、選重數字、Esc。互動循環那一支比這個全得多
         // （`yumete-tui` 的那一大段 `match code`），可是拍一張圖用不着那些。
         if composing {
+            // ⚠️ **只有正在組字的時候那幾個鍵纔歸輸入法。** 不加這道閘的話 `Esc` 會被
+            // 輸入法吃掉（它以為你要放棄一串碼），於是 `\{ime}wo \e` 那個 `\e` 退不出
+            // 插入模式——實測下一個 `u` 當成字打進了稿子。互動那一支的判準也是這一條。
+            let mid = ime.is_composing();
             match key {
-                Key::Char(' ') => ime.space(),
-                Key::Enter => ime.enter(),
-                Key::Esc => ime.escape(),
-                Key::Backspace => {
+                Key::Char(' ') if mid => ime.space(),
+                Key::Enter if mid => ime.enter(),
+                Key::Esc if mid => ime.escape(),
+                Key::Backspace if mid => {
                     ime.backspace();
                 }
                 // 選重：那一位上真的有候選纔算，同互動那一支。
-                Key::Char(c @ '1'..='9')
-                    if ime.is_composing() && ime.page_has((c as u8 - b'0') as usize) =>
-                {
+                Key::Char(c @ '1'..='9') if mid && ime.page_has((c as u8 - b'0') as usize) => {
                     ime.select_in_page((c as u8 - b'1') as usize);
                 }
                 Key::Char(c) => ime.input(c),
-                _ => {}
+                // 不是打字的鍵，交回編輯器。
+                other => {
+                    editor.on_key(other);
+                    continue;
+                }
             }
             let committed = ime.take_committed();
             if !committed.is_empty() {
