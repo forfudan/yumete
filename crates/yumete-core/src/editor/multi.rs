@@ -364,6 +364,128 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
+    /// **換一個選區當主選區**（`)` 往後、`(` 往前，#405 Phase 3）。
+    ///
+    /// ⚠️ **一段都不動**，動的只是「哪一段是主的」。主選區是那些只能有一個的東西要挑
+    /// 的那一段：終端的硬件光標、跟着光標跑的候選面板、頁面滾動跟誰。選了二十處之後要
+    /// 一處一處看過去，靠的就是它。
+    pub(super) fn rotate_primary(&mut self, forward: bool) {
+        if !self.sel.is_plural() {
+            self.status = say!("selection.already-one");
+            return;
+        }
+        self.sel.turn(forward);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.status = say!(
+            "selection.which-one",
+            (self.sel.primary_index() + 1).to_string(),
+            self.sel.len().to_string()
+        );
+    }
+
+    /// **把每一段兩端的空白去掉**（`_`，helix 的 `trim_selections`）。
+    ///
+    /// ⚠️ **整段都是空白的那些會被丟掉。** `A-s` 按行切開之後空行就是這一種，而留着它們
+    /// 等於在空行上放一個光標——接着打字會在空行上寫東西。⚠️ 全丟光了就什麼都不做：
+    /// 選區不能為空。
+    pub(super) fn trim_selections(&mut self) {
+        let rope = self.current_buffer().rope().clone();
+        let mut out: Vec<Range> = Vec::new();
+        let was = self.sel.primary().span().0;
+        for one in self.sel.iter() {
+            let (mut a, mut b) = self.drawn(*one);
+            while a < b && rope.char(a).is_whitespace() {
+                a += 1;
+            }
+            while b > a && rope.char(b - 1).is_whitespace() {
+                b -= 1;
+            }
+            if b > a {
+                out.push(self.from_drawn(a, b));
+            }
+        }
+        if out.is_empty() {
+            self.status = say!("selection.all-blank");
+            return;
+        }
+        let which = out
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, r)| r.span().0.abs_diff(was))
+            .map(|(nth, _)| nth)
+            .unwrap_or(0);
+        let merged = self.sel.rebuild(out, which);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
+    /// **把每一段選區的開頭對齊到同一列**（`&`，helix 的 `align_selections`）。
+    ///
+    /// 在最靠右的那一段之前的每一段前面補空格，補到大家的開頭在同一格上。
+    ///
+    /// ⚠️ **算的是顯示寬度，不是字數。** 一個漢字兩格，所以「三個字」和「三個字母」
+    /// 對不齊——這一族在中文稿子裏用不對齊就等於沒用。
+    ///
+    /// ⚠️ **一行只認一段。** 同一行上有兩段的時候，補在前一段前面的空格會把後一段推
+    /// 走，「對齊」就成了一句沒有意義的話。helix 同樣只處理每行第一段。
+    ///
+    /// ⚠️ **從後往前插**，並且把已經處理過的那幾段跟着挪——同 [`Self::edit_each`]，
+    /// 理由也一樣。一個撤銷點。
+    pub(super) fn align_selections(&mut self) {
+        if !self.sel.is_plural() {
+            self.status = say!("selection.already-one");
+            return;
+        }
+        let rope = self.current_buffer().rope().clone();
+        let mut out: Vec<Range> = self.sel.iter().copied().collect();
+        let mut seen: Vec<usize> = Vec::new();
+        let mut want = 0usize;
+        // 每一段開頭在第幾格，以及要補幾格。
+        let mut pads: Vec<Option<usize>> = Vec::with_capacity(out.len());
+        for one in &out {
+            let from = self.drawn(*one).0;
+            let line = rope.char_to_line(from);
+            if seen.contains(&line) {
+                pads.push(None);
+                continue;
+            }
+            seen.push(line);
+            let head = rope.line_to_char(line);
+            let col = yumete_cjk::str_width(&rope.slice(head..from).to_string());
+            pads.push(Some(col));
+            want = want.max(col);
+        }
+        if pads.iter().flatten().all(|&col| col == want) {
+            self.status = say!("selection.already-aligned");
+            return;
+        }
+        self.snapshot();
+        let grouping = self.current_buffer_mut().begin_undo_group();
+        for nth in (0..out.len()).rev() {
+            let Some(col) = pads[nth] else { continue };
+            let pad = want - col;
+            if pad == 0 {
+                continue;
+            }
+            let from = self.drawn(out[nth]).0;
+            if self.edit_insert(from, &" ".repeat(pad)) {
+                // 這一段自己、以及下標比它大的那幾段，都往後挪。
+                for one in out.iter_mut().skip(nth) {
+                    one.anchor += pad;
+                    one.head += pad;
+                }
+            }
+        }
+        self.current_buffer_mut().end_undo_group(grouping);
+        let which = self.sel.primary_index().min(out.len() - 1);
+        let merged = self.sel.rebuild(out, which);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
     /// **只留主選區**（`,`）。
     pub(super) fn keep_primary_selection(&mut self) {
         match self.sel.keep_primary() {

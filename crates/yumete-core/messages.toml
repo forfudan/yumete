@@ -4780,13 +4780,6 @@ zhs = "注释掉是 空格 c，整段是 空格 C"
 en = "commenting out is Space c, a whole block Space C"
 
 [[message]]
-# Normal 模式按 ( 或 )（Helix 用它輪選區，這一版只有一個光標）
-key = "hint.helix.cycle-selection"
-zht = "輪選區要多光標，這一版只有一個；一句一句走是 H／L"
-zhs = "轮选区要多光标，这一版只有一个；一句一句走是 H／L"
-en = "cycling selections needs several cursors; this build has one — H/L walk sentences"
-
-[[message]]
 # ]／[ 的選單：下一處／上一處合併衝突
 key = "hint.hop.conflict"
 zht = "合併衝突"
@@ -5482,13 +5475,6 @@ key = "hint.type-the-one-to-take-off"
 zht = "打要去掉的那一種"
 zhs = "打要去掉的那一种"
 en = "type the one to take off"
-
-[[message]]
-# Normal 模式按 &（vi 的再替換一次，這裏沒有）
-key = "hint.vi.ampersand"
-zht = "再替換一次：把 :s 那一行叫回來（: 然後上鍵）"
-zhs = "再替换一次：把 :s 那一行叫回来（: 然后上键）"
-en = "to substitute again, call the :s line back (: then up)"
 
 [[message]]
 # Normal 模式按 @（vi 的重放鍵，這裏是 q；錄是 Q）
@@ -7545,6 +7531,20 @@ zhs = "整词（西文）"
 en = "whole word (Latin)"
 
 [[message]]
+# 按 _ 去兩端空白，可是每一段都是純空白
+key = "selection.all-blank"
+zht = "每一處都是空白，沒動"
+zhs = "每一处都是空白，没动"
+en = "every selection is blank, nothing changed"
+
+[[message]]
+# 按 & 想對齊，可是每一段的開頭本來就在同一格上
+key = "selection.already-aligned"
+zht = "本來就齊了"
+zhs = "本来就齐了"
+en = "already aligned"
+
+[[message]]
 # 按 , 的時候本來就只有一段
 key = "selection.already-one"
 zht = "本來就只有一處選區"
@@ -7609,6 +7609,13 @@ key = "selection.sift-needs-a-pattern"
 zht = "這條規則讀不懂"
 zhs = "这条规则读不懂"
 en = "that pattern does not parse"
+
+[[message]]
+# 按 ( 或 ) 換了主選區，說一句「第幾段，共幾段」
+key = "selection.which-one"
+zht = "第 {0} 處，共 {1} 處"
+zhs = "第 {0} 处，共 {1} 处"
+en = "selection {0} of {1}"
 
 [[message]]
 # :view-sentence off——回到滿縱排

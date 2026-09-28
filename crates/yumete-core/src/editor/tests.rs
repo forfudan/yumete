@@ -377,12 +377,12 @@ fn the_phrasebook_answers_the_keys_we_spell_differently() {
     assert!(ask(Key::Ctrl('r')).contains('U'), "{}", ask(Key::Ctrl('r')));
     // Helix spends two tutor lessons on `C-c`; ours is on the 空格 menu.
     assert!(ask(Key::Ctrl('c')).contains("空格 c"), "{}", ask(Key::Ctrl('c')));
-    // Helix cycles selections with `)` — that needs several cursors (#405).
-    // Walking a sentence at a time, which is the other half of what the
-    // reader wants, is `H`／`L`.
+    // ⚠️ **`(` 和 `)` 2026-09-28 有主人了**（#405 Phase 3：換一段當主選區）。從前它們
+    // 是未綁定鍵，這裏問的是那句「走一句用 H／L」的提示；現在按下去說的是「本來就只有
+    // 一處選區」。這一段原先在上面那個 `for` 裏。
     for key in ['(', ')'] {
         let said = ask(Key::Char(key));
-        assert!(said.contains('H') && said.contains('L'), "{key}: {said}");
+        assert!(said.contains('一'), "{key}: {said}");
     }
     // vi's 行首 — and it can speak, because `0` builds a count only when one
     // is already under way.
@@ -17060,4 +17060,52 @@ fn leaving_the_sift_prompt_does_not_leave_the_key_armed() {
     press(&mut ed, "/甲");
     ed.on_key(Key::Enter);
     assert_eq!(ed.sel.len(), before, "那是一次搜索，不是一次篩選");
+}
+
+/// **`(` `)` 換主選區，`_` 去兩端空白，`&` 對齊**（#405 Phase 3）。
+#[test]
+fn phase_three_turns_trims_and_aligns() {
+    // `(` `)` 一段都不動，動的只是哪一段是主的。
+    let mut ed = typed("甲一\n乙二\n丙三\n");
+    press(&mut ed, "ggCC");
+    assert_eq!(ed.sel.len(), 3);
+    let was = ed.sel.primary_index();
+    press(&mut ed, ")");
+    assert_eq!(ed.sel.len(), 3, "一段都沒動");
+    assert_ne!(ed.sel.primary_index(), was, "換了一段");
+    press(&mut ed, "(");
+    assert_eq!(ed.sel.primary_index(), was, "轉回來了");
+
+    // `_` 去兩端空白。按行切開之後每一段帶着行首的縮進。
+    let mut ed = typed("  甲一\n    乙二\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "%");
+    ed.on_key(Key::Alt('s'));
+    assert_eq!(ed.sel.len(), 2);
+    press(&mut ed, "_");
+    let rope = ed.current_buffer().rope().clone();
+    let got: Vec<String> = ed
+        .sel
+        .iter()
+        .map(|r| {
+            let (a, b) = ed.drawn(*r);
+            rope.slice(a..b).chars().collect()
+        })
+        .collect();
+    assert_eq!(got, vec!["甲一", "乙二"], "縮進去掉了：{got:?}");
+
+    // `&` 把兩段的開頭對齊。⚠️ 算的是**顯示寬度**：一個漢字兩格。
+    // 甲 一\nabc 二\n ＝ 0甲 1空 2一 3換行 4a 5b 6c 7空 8二 9換行
+    let mut ed = typed("甲 一\nabc 二\n");
+    press(&mut ed, "gg");
+    ed.sel = crate::selection::Selections::one(crate::selection::Range::at(2)); // 「一」
+    ed.sel.push(crate::selection::Range::at(8)); // 「二」
+    press(&mut ed, "&");
+    let text = ed.current_buffer().text();
+    // 「甲 」是三格，「abc 」是四格——補一個空格之後兩個都是四格。
+    assert_eq!(text, "甲  一\nabc 二\n", "{text:?}");
+
+    // ⚠️ 一個撤銷點。
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "甲 一\nabc 二\n");
 }
