@@ -4389,6 +4389,34 @@ en = "what you get: readings laid out, markup off the page"
 # ── hint ──────────────────────────────────────────────────────────────
 
 [[message]]
+# z 那一層：zb
+key = "hint.aim.bottom"
+zht = "底下"
+zhs = "底下"
+en = "bottom"
+
+[[message]]
+# z 那一層：zz
+key = "hint.aim.middle"
+zht = "中間"
+zhs = "中间"
+en = "middle"
+
+[[message]]
+# z 那一層的小表：標題
+key = "hint.aim.title"
+zht = "這一行挪到哪"
+zhs = "这一行挪到哪"
+en = "put this line where"
+
+[[message]]
+# z 那一層：zt
+key = "hint.aim.top"
+zht = "頂上"
+zhs = "顶上"
+en = "top"
+
+[[message]]
 # 提示：括號
 key = "hint.bracket"
 zht = "括號"
@@ -6530,6 +6558,34 @@ en = "wrote the note for {0} (C-o goes back)"
 
 
 # ── pane ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 按了 z 之後接的不是 z／t／b
+key = "page.aim-wants-ztb"
+zht = "z 後面要 z 中間、t 頂上、b 底下"
+zhs = "z 后面要 z 中间、t 顶上、b 底下"
+en = "z wants z for middle, t for top, b for bottom"
+
+[[message]]
+# 按 zb：挪到屏幕底下
+key = "page.aimed-bottom"
+zht = "這一行挪到底下"
+zhs = "这一行挪到底下"
+en = "this line to the bottom"
+
+[[message]]
+# 按 zz：挪到屏幕中間
+key = "page.aimed-middle"
+zht = "這一行挪到中間"
+zhs = "这一行挪到中间"
+en = "this line to the middle"
+
+[[message]]
+# 按 zt：把光標這一行挪到屏幕頂上
+key = "page.aimed-top"
+zht = "這一行挪到頂上"
+zhs = "这一行挪到顶上"
+en = "this line to the top"
 
 [[message]]
 # 關掉了那一半

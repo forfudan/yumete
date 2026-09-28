@@ -289,6 +289,18 @@ impl Editor {
             ),
             Pending::Register => (say!("hint.register.title"), vec![("a–z", say!("hint.register.which-one"))]),
             Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
+            // `z` 那一層只有三個鍵，一張三行的小表比一句話好認。
+            Pending::Aim => (
+                say!("hint.aim.title"),
+                Self::said(
+                    [
+                        ("z", "hint.aim.middle"),
+                        ("t", "hint.aim.top"),
+                        ("b", "hint.aim.bottom"),
+                    ]
+                    .into_iter(),
+                ),
+            ),
             Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("", say!("hint.type-a-bracket-or-quote"))]),
             Pending::Surround => (say!("hint.match.surround"), vec![("", say!("hint.type-a-bracket"))]),
             Pending::SurroundFrom => (say!("hint.match.take-off"), vec![("", say!("hint.type-the-one-to-take-off"))]),

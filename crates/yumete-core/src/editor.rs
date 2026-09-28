@@ -205,6 +205,8 @@ enum Pending {
     /// walks between things a document *has* on the brackets, and #249's
     /// `]c` is the first of them here.
     Hop { forward: bool },
+    /// **`z` 那一層在等哪一行**（`zz`／`zt`／`zb`，2026-09-28）。
+    Aim,
     /// `空格 m` — what to keep of the merge conflict under the cursor.
     Conflict,
     /// A `:s …c` is asking about one match — `y`/`n`/`a`/`q`/`l` (#415).
@@ -266,6 +268,8 @@ impl Pending {
             | Pending::Mark
             | Pending::Recall
             | Pending::Hop { .. }
+            // `z` 那一層等的是 `z`／`t`／`b`，不是一個要寫進去的字。
+            | Pending::Aim
             | Pending::Conflict => false,
             // **A vim operator is waiting for a *motion*, which is keys** — the
             // character `f` asks for is read by the motion itself.
@@ -1029,6 +1033,17 @@ impl Sequence {
         }
         out
     }
+}
+
+/// **`z` 那一層把光標放在哪一行**（`zz`／`zt`／`zb`，2026-09-28）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Aim {
+    /// `zt` — 頂上那一行。
+    Top,
+    /// `zz` — 中間。校對時按得最多的一個。
+    Middle,
+    /// `zb` — 底下那一行。
+    Bottom,
 }
 
 /// Where the table starts and stops (#261).
@@ -2013,6 +2028,19 @@ pub struct Editor {
     /// Whether the move that just happened was a **jump** — a search hit, a
     /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
     jumped: bool,
+    /// **`z` 那一層要把光標放在第幾行**（`zz`／`zt`／`zb`，2026-09-28）。
+    ///
+    /// ⚠️ **這個編輯器沒有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
+    /// 不是視圖——視圖自己滾了，下一幀光標要留在屏幕上的時候會被拉回去。視口住在 TUI
+    /// 那一側（`Seats`）。
+    ///
+    /// 所以 `zz` 不是「滾動」，是**往 [`Editor::page_inset`] 上加一次覆蓋**：那一支本來
+    /// 就在回答「光標該坐在頁面第幾行」（跳轉落中間、打字機模式居中都走它）。
+    ///
+    /// ⚠️ **一次性的，和 `jumped` 同一套**：按下去的時候立起來，下一個鍵按下去的時候
+    /// （`on_key` 開頭）放倒。中間那一幀已經畫過了，視口就停在那裏——再下一幀
+    /// `page_inset` 回 `None`（光標舒舒服服在頁面上），沒人會把它拉回去。
+    aim: Option<Aim>,
     /// A pending `:format` or `:run <name>`, waiting for the front end — the
     /// editor knows *what* was asked for and the front end knows how to run a
     /// program.
@@ -2759,6 +2787,7 @@ impl Editor {
             sequence: None,
             sort_keys: Vec::new(),
             jumped: false,
+            aim: None,
             language_run: None,
             preview_request: None,
             open_request: None,
@@ -2890,6 +2919,20 @@ impl Editor {
     /// A typesetter the front end should start or stop.
     /// Whether the move that just happened was a jump, so the page can centre
     /// what it landed on rather than nudge it in from an edge.
+    /// **`z` 那一層放在哪一行**。
+    ///
+    /// ⚠️ 屏幕上只有三個位置值得一個鍵：頂、中、底。helix 的 `z` 層還有 `zm`（橫向居
+    /// 中），而這個倉橫向滾動只在 `:view-wrap off` 下才動得起來，那時整段是一行——
+    /// 「橫向居中」在一行裏沒有意義。
+    pub fn aim_the_page(&mut self, aim: Aim) {
+        self.aim = Some(aim);
+        self.status = match aim {
+            Aim::Top => say!("page.aimed-top"),
+            Aim::Middle => say!("page.aimed-middle"),
+            Aim::Bottom => say!("page.aimed-bottom"),
+        };
+    }
+
     pub fn jumped(&self) -> bool {
         self.jumped
     }
@@ -2964,6 +3007,21 @@ impl Editor {
     /// page at all; `last` is the page's last row. `None` means 「leave the
     /// page where it is」.
     pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
+        // **`z` 那一層先說話**（2026-09-28）：讀者剛剛親口說了這一行要坐在哪。
+        //
+        // ⚠️ **`zt` 瞄的是第 `scrolloff` 行，不是第 0 行**，`zb` 同理往回留一截。
+        // 這一條不是「順便也留點餘地」，是**它停不停得住的唯一條件**：這個覆蓋是一次性
+        // 的（下一個鍵按下去就清掉），而視口是靠下一幀的 `page_inset` 回一句「別動」
+        // 纔留在原地的。瞄第 0 行的話，下一幀底下那一句 `d < scrolloff` 立刻把它推開
+        // ——按完 `zt` 隨便動一下，頁面自己往下跳三行。vim 的 `zt` 也是留 `scrolloff`
+        // 的，同一個理由。
+        if let Some(aim) = self.aim {
+            return Some(match aim {
+                Aim::Top => scrolloff,
+                Aim::Middle => last / 2,
+                Aim::Bottom => last.saturating_sub(scrolloff),
+            });
+        }
         // Typewriter: the row being written stays in the middle and the paper
         // moves under it. Every move is a jump, which is what that means.
         if self.typewriter || self.jumped {
