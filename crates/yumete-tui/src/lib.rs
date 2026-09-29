@@ -953,9 +953,23 @@ pub fn run(
         servers.ask(editor, &config);
         servers.ask_what(editor, &config);
         servers.ask_next(editor, &config);
-        servers.collect(editor);
+        let server_said_something = servers.collect(editor);
         if let Some(word) = servers.says.take() {
             editor.set_status(word);
+        }
+        // **服務器說了話就回頭再畫一幀**（2026-09-29 報的）。
+        //
+        // ⚠️ **這一輪的畫早就畫完了**：畫在上面（`Stage::Drawing`），問答在這
+        // 裏，順序是死的。答案落進編輯器的時候屏幕上是問之前那一幀，而答案一
+        // 落，`due_in()` 就說「沒什麽欠着的了」——底下那一句 `recv` 於是一直
+        // 等，等到下一次按鍵纔畫。症狀：`空格 k` 按下去定義不出來，隨手挪一下
+        // 光標再挪回來它纔出來（挪回來那一下正好把光標送回問的那一格）。
+        //
+        // `collect` 一直都回「這一輪有沒有東西來」，只是從前沒人接。
+        // ⚠️ 同一族 2026-09-23 修過一半（`server.rs` 的 `waiting` 那段註釋）：
+        // 那次修的是「循環醒不醒」，沒修「畫在問之前」。
+        if server_said_something {
+            continue;
         }
         if editor.reload_auto() && inbox.is_empty() {
             match events.recv_timeout(DISK_POLL) {

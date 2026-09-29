@@ -975,6 +975,26 @@ impl Editor {
         self.status = say!("lsp.speechless");
     }
 
+    /// **光標離開了問的那一格，那一則說明就作廢**（2026-09-29 報的）。
+    ///
+    /// ⚠️ 從前光標一走只是**不畫**，答案還留着——於是走回那一格它又冒出來了。
+    /// 原話：「走出之后回到这个字母，它是不是不应该出现了？」對的：那一則是問
+    /// 出來的，問題已經過去了。
+    ///
+    /// 同 [`Editor::forget_a_dictionary_nobody_is_reading`]，在派鍵**之前**掃：
+    /// 挪開光標的那一鍵掃的時候光標還沒挪，掃不掉；下一鍵纔掃得掉——而那正是
+    /// 「走回去」的那一鍵，所以它回不來。
+    pub(super) fn forget_a_hover_nobody_is_looking_at(&mut self) {
+        let Some((asked_at, _)) = self.hovered.as_ref() else { return };
+        // 送進邊欄的那一份（`空格 K`），鍵在它身上的時候光標本來就不動。
+        let reading = !self.hover_afloat
+            && self.panel_focus == Some(self.side_of(crate::sidebar::Panel::Dictionary));
+        if reading || *asked_at == self.sel.head() {
+            return;
+        }
+        self.hovered = None;
+    }
+
     /// 這會兒該不該畫那一則說明——光標還在問的地方纔算。
     pub fn hover_here(&self) -> Option<&str> {
         let (asked_at, told) = self.hovered.as_ref()?;
