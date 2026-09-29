@@ -134,6 +134,8 @@ pub struct Servers {
     running: HashMap<String, Server>,
     /// Languages that could not be started, so the editor says so once.
     failed: HashSet<String>,
+    /// **哪幾個語言已經說過「這臺機器上沒有」了**——一個語言只說一次。
+    told_about: HashSet<String>,
     /// The buffer revision each open file was last sent at, so a file is not
     /// re-sent for a keystroke that changed nothing.
     sent: HashMap<PathBuf, u64>,
@@ -178,6 +180,7 @@ impl Default for Servers {
         Servers {
             running: HashMap::new(),
             failed: HashSet::new(),
+            told_about: HashSet::new(),
             sent: HashMap::new(),
             saved: HashMap::new(),
             whose: HashMap::new(),
@@ -227,7 +230,22 @@ impl Servers {
     /// is. Called once a turn, after the keys have been handled.
     pub fn follow(&mut self, editor: &Editor, config: &yumete_config::Config) {
         let Some(language) = Self::language_of(editor) else { return };
-        let Some(named) = Self::named(config, language) else { return };
+        let Some(named) = Self::named(config, language) else {
+            // **打開的那一刻就說，別等人問**（2026-09-29 報的：「为什么不是在打开
+            // 文件的时候就检查 LSP 并且显示消息」）。從前這裏是默默 `return`，於是
+            // 讀者打開 `.py` 什麽都不知道，一直到按 `空格 k` 纔撞上。
+            //
+            // Warning: **每個語言只說一次**（作者定）。這是一件關於這臺機器的事實，
+            // 不是一個事件——一個項目裏切五個 `.py` 就罵五遍，會把狀態欄上別的話
+            // 全蓋掉。同 `lsp.cannot-start` 那一條的理由。
+            if self.told_about.insert(language.to_string()) {
+                self.says = Some(match config.lsp.get(language).filter(|v| !v.is_empty()) {
+                    Some(wanted) => say!("lsp.not-installed", Self::the_names(wanted)),
+                    None => say!("lsp.no-server-configured", language),
+                });
+            }
+            return;
+        };
         let Some(path) = editor.current_buffer().path().map(Path::to_path_buf) else {
             // An unsaved buffer has no URI, and a server answers about files.
             return;
@@ -367,6 +385,16 @@ impl Servers {
         server.say(lsp::definition(id, &path, line, column));
     }
 
+    /// 這個語言配了哪幾個候選，頓號隔開——找不到的時候要全說出來。
+    fn the_names(wanted: &[yumete_config::Server]) -> String {
+        wanted
+            .iter()
+            .map(|s| s.command.as_str())
+            .filter(|c| !c.is_empty())
+            .collect::<Vec<_>>()
+            .join("、")
+    }
+
     /// **為什麽這一問發不出去**，`None` ＝ 發得出去（2026-09-29）。
     ///
     /// 五種，一種一句話。判準就是啓動那條路上的五道閘（見 [`Servers::follow`]），
@@ -381,10 +409,13 @@ impl Servers {
         let Some(wanted) = config.lsp.get(language).filter(|v| !v.is_empty()) else {
             return Some(say!("lsp.no-server-configured", language));
         };
-        // 二、寫了，可這臺機器上一個都找不到。說出它找的是哪一個。
+        // 二、寫了，可這臺機器上一個都找不到。
+        //
+        // Warning: **把找過的全列出來**（2026-09-29 報的）。python 出廠配了四個
+        // 候選（`ty`／`ruff`／`pylsp`／`jedi-language-server`，抄的 helix），而
+        // 從前這句話只說第一個——讀者於是只會去裝 `ty`，其實裝哪一個都行。
         if Self::named(config, language).is_none() {
-            let named = wanted.iter().map(|s| s.command.as_str()).find(|c| !c.is_empty());
-            return Some(say!("lsp.not-installed", named.unwrap_or(language)));
+            return Some(say!("lsp.not-installed", Self::the_names(wanted)));
         }
         // 三、稿子還沒存盤——服務器答的是檔案，沒有路徑就沒得問。
         if editor.current_buffer().path().is_none() {
@@ -926,6 +957,33 @@ mod tests {
         // 五、起來了、也 ready 了：問得出去，不說話。
         let (ready, _heard, _tell) = Servers::pretend("rust");
         assert_eq!(ready.why_it_cannot_ask(&editor, &stocked, "rust"), None, "問得出去");
+    }
+
+    /// **打開程序文件的那一刻就說沒有，而且每個語言只說一次**（2026-09-29 報的：
+    /// 「为什么不是在打开文件的时候就检查 LSP 并且显示消息」）。
+    #[test]
+    fn opening_a_file_says_once_that_this_machine_has_no_server_for_it() {
+        // 出廠給 python 配了四個候選，而這臺跑測試的機器上多半一個都沒有。
+        let config =
+            yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+        let (editor, _path) = editor_on("d.py", "import decimal\n");
+        let mut servers = Servers::default();
+        servers.follow(&editor, &config);
+        let said = servers.says.take();
+        let Some(said) = said else {
+            // 這臺機器上真的裝了一個：那就該起得來，也就沒話說。
+            assert!(servers.running.contains_key("python"), "沒說話就得是起來了");
+            return;
+        };
+        // Warning: **四個全列出來**，不是只說第一個——讀者於是知道裝哪一個都行。
+        for command in ["ty", "ruff", "pylsp", "jedi-language-server"] {
+            assert!(said.contains(command), "要列全：{said:?} 少了 {command}");
+        }
+
+        // 每個語言只說一次：再開一份 `.py` 一個字都不說。
+        let (again, _path) = editor_on("e.py", "import json\n");
+        servers.follow(&again, &config);
+        assert!(servers.says.is_none(), "說過就不再說：{:?}", servers.says);
     }
 
     /// Warning: **Prose has no language server here.** Markdown has one in the
