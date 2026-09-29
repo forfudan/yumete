@@ -17826,3 +17826,45 @@ fn in_a_manuscript_those_two_keys_ask_the_wiki_instead() {
     assert!(ed.showing(View::Wiki).is_some(), "空格 K 一定把百科開進邊欄");
     assert!(!ed.sidebar_focused(), "鍵留在正文");
 }
+
+/// **關掉那一扇之後，`空格 k` 還浮得起來**（2026-09-29 報的）。
+///
+/// 原話：「我按 :docs，它打开了侧栏显示文檔，然后我 space 4 q 关闭侧栏，他就不再
+/// 显示浮窗了。」
+///
+/// Warning: **根子是一個看不見的面板把浮窗按住了。** 跟着光標走的那一問每三百毫秒
+/// 跑一次，每一次都把 `hover_afloat` 按成 `false`（答案是要進邊欄的）——而那一扇
+/// 已經關了，於是沒有地方畫，也浮不起來。
+#[test]
+fn closing_the_docs_panel_lets_the_float_come_back() {
+    use crate::sidebar::View;
+    let dir = std::env::temp_dir().join("yumete-docs-closed");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    ed.execute(":docs on").unwrap();
+    assert!(ed.showing(View::Docs).is_some(), "那一扇開出來了");
+
+    // 關掉它：`空格 4` 把鍵交過去，`q` 關。
+    press(&mut ed, " 4");
+    press(&mut ed, "q");
+    assert!(ed.showing(View::Docs).is_none(), "關掉了");
+    assert!(ed.docs_follow(), "開關沒動——那一扇再開它自己接着跟");
+
+    // Warning: **等它停穩**——光標剛動過的時候 `docs_owed` 本來就回 `None`
+    // （去抖那一道），不等的話這一條是假綠的。
+    std::thread::sleep(std::time::Duration::from_millis(320));
+    // Warning: **關着的時候不許再問**，不然每一問都把浮窗按下去。
+    assert_eq!(ed.docs_owed(), None, "沒有地方畫就不問");
+
+    // 於是 `空格 k` 浮得起來。
+    press(&mut ed, " k");
+    ed.show_hover("fn compile_the_table()".into());
+    assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "浮起來了");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

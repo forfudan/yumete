@@ -1055,7 +1055,16 @@ impl Editor {
     /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
     /// 清空，作者定的）。
     pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
-        if !self.docs_follow {
+        // Warning: **那一扇關掉了就不再問**（2026-09-29 報的：`:docs` 之後
+        // `空格 4 q` 關掉邊欄，浮窗就再也不出來了）。
+        //
+        // 跟着光標走的意思是「把那一扇一直填着」——沒有那一扇就沒有要填的地方。
+        // 而它從前照樣每三百毫秒問一次，每一次都把 `hover_afloat` 按成 `false`
+        // （答案是要進邊欄的），於是 `空格 k` 問來的那一份也浮不起來：一個看不
+        // 見的面板把浮窗按住了。
+        //
+        // 開關不動：那一扇再開出來它自己就接着跟。
+        if !self.docs_follow || self.showing(crate::sidebar::View::Docs).is_none() {
             return None;
         }
         let at = self.sel.head();
