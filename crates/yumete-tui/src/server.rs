@@ -136,7 +136,7 @@ pub struct Servers {
     failed: HashSet<String>,
     /// **哪幾個語言已經說過「這臺機器上沒有」了**——一個語言只說一次。
     told_about: HashSet<String>,
-    /// 每個起來了的服務器，那個可執行檔到底在哪——`:check-code` 頂上那一行要說。
+    /// 每個起來了的服務器，那個可執行檔到底在哪——`:diagnostics-all` 頂上那一行要說。
     found: HashMap<String, PathBuf>,
     /// The buffer revision each open file was last sent at, so a file is not
     /// re-sent for a keystroke that changed nothing.
@@ -271,7 +271,7 @@ impl Servers {
             let here = Self::look_from(editor);
             let Some(at) = found_here(&named.command, Some(&here)) else { return };
             // **用的是項目裏那一個就說一句**（2026-09-29 作者定）。⚠️ 不寫目錄
-            // ——狀態欄那一行很貴，完整路徑在 `:check-code` 頂上那一行。
+            // ——狀態欄那一行很貴，完整路徑在 `:diagnostics-all` 頂上那一行。
             let mine = !std::env::var_os("PATH")
                 .map(|path| {
                     std::env::split_paths(&path).any(|dir| dir.join(&named.command) == at)
@@ -280,7 +280,7 @@ impl Servers {
             match start(named, editor, &at) {
                 Ok(server) => {
                     self.running.insert(language.to_string(), server);
-                    // `:check-code` 頂上那一行：名字　路徑　狀態。路徑相對項目根，
+                    // `:diagnostics-all` 頂上那一行：名字　路徑　狀態。路徑相對項目根，
                     // 同那張單子上檔名的規矩——絕對路徑九十個字符，讀不了。
                     let root = editor.project_root();
                     let short = at.strip_prefix(&root).unwrap_or(&at);
@@ -363,7 +363,7 @@ impl Servers {
     ///
     /// Warning: 從前 `lsp::did_close` 全樹一處都没調用（2026-09-23 審出來的）。關掉
     /// 一個檔，服務器照舊分析它、照舊推它的診斷，而 `Problems` 是按路徑存
-    /// 的——`:check-code` 會一直列着一個早就關掉的檔。
+    /// 的——`:diagnostics-all` 會一直列着一個早就關掉的檔。
     ///
     /// 走在 [`Self::follow`] 之後：那一支剛把當前這個檔說出去，這一支再看還有
     /// 誰不在了。
@@ -655,7 +655,7 @@ impl Servers {
     fn lost(&mut self, language: &str, editor: &mut Editor) {
         let ran = self.running.remove(language).is_some_and(|s| s.ready);
         self.found.remove(language);
-        // 它不在聽了，`:check-code` 頂上那一行也不該再說它在。
+        // 它不在聽了，`:diagnostics-all` 頂上那一行也不該再說它在。
         editor.note_the_server(None);
         // **只忘這一個服務器說過的那些檔**（見 [`Servers::whose`]）。
         let its: Vec<PathBuf> = self

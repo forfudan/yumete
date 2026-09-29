@@ -775,7 +775,7 @@ impl Editor {
         self.problems.worst_on(path, line)
     }
 
-    /// 服務器一共說了幾句——`:check-code` 拿它分「乾淨」和「還没人說過話」。
+    /// 服務器一共說了幾句——`:diagnostics-all` 拿它分「乾淨」和「還没人說過話」。
     pub fn problem_count(&self) -> usize {
         self.problems.count()
     }
@@ -941,7 +941,10 @@ impl Editor {
     /// 兩種情形：即時那一檔開着（出廠就是），或者剛按過 `空格 i`。⚠️ 文檔那一
     /// 扇正浮着的時候一個字都不畫——兩個浮窗疊在一起是作者報的那一條。
     pub fn problem_afloat(&self) -> Option<(crate::problem::Severity, Vec<String>)> {
-        if self.hover_afloat().is_some() {
+        // Warning: **那一扇開着就不浮**（2026-09-29 報的：「浮窗不应该和边栏同时
+        // 出现」）。和文檔一條規矩：畫在哪只有一個答案，不會同一句話畫兩遍。
+        if self.hover_afloat().is_some() || self.showing(crate::sidebar::View::Problems).is_some()
+        {
             return None;
         }
         let asked = self.problem_asked == Some(self.sel.head());
@@ -1058,12 +1061,12 @@ impl Editor {
         std::mem::take(&mut self.say_it_again)
     }
 
-    /// 前端接上／丟掉一個語言服務器的時候說一聲，給 `:check-code` 頂上那一行。
+    /// 前端接上／丟掉一個語言服務器的時候說一聲，給 `:diagnostics-all` 頂上那一行。
     pub fn note_the_server(&mut self, line: Option<String>) {
         self.server_line = line;
     }
 
-    /// `:check-code` 頂上那一行，沒有服務器就是 `None`。
+    /// `:diagnostics-all` 頂上那一行，沒有服務器就是 `None`。
     pub(super) fn the_server_line(&self) -> Option<&str> {
         self.server_line.as_deref()
     }
@@ -1364,7 +1367,7 @@ impl Editor {
         self.problems.forget(path);
     }
 
-    /// 全部的話，按檔名、行、列排好，給 `:check-code` 那張單子。
+    /// 全部的話，按檔名、行、列排好，給 `:diagnostics-all` 那張單子。
     pub fn problems_listed(&self) -> Vec<(&std::path::Path, &crate::problem::Problem)> {
         self.problems
             .files()

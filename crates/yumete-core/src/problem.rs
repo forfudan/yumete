@@ -135,7 +135,7 @@ impl Problems {
         self.of(path).iter().filter(|p| p.line == line).map(|p| p.severity).max()
     }
 
-    /// Every file that has something to say, and how much — for `:check-code`
+    /// Every file that has something to say, and how much — for `:diagnostics-all`
     /// when the cursor is not in any of them.
     pub fn files(&self) -> Vec<(&Path, usize)> {
         let mut out: Vec<(&Path, usize)> =

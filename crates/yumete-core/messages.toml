@@ -391,7 +391,7 @@ en = "the next open file"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.next-region"
-zht = "下一個區域（正文／邊欄／另一個工作區）"
+zht = "下一個區域（主／副編輯區／邊欄）"
 zhs = "下一个区域（正文／边栏／另一个工作区）"
 en = "the next region"
 
@@ -1105,7 +1105,7 @@ en = "check 字集: characters no current standard carries — the ones a typese
 find = "字集 生僻 罕用 缺字 豆腐塊 豆腐块 通用規範 通用规范 造字 charset rare glyph"
 
 [[message]]
-# :check-code 在命令表裏的說明
+# :diagnostics-all 在命令表裏的說明
 key = "cmd.check.code"
 zht = "語言服務器說過的全部問題，排成一張 gf 跳得了的單子"
 zhs = "语言服务器说过的全部问题，排成一张 gf 跳得了的单子"
@@ -4201,8 +4201,8 @@ en = "undo / redo"
 [[message]]
 # 常用幫助：這個詞還在哪裏
 key = "help.common.word-elsewhere"
-zht = "這個詞還在哪裏：這邊找／另一個工作區看"
-zhs = "这个词还在哪里：这边找／另一个工作区看"
+zht = "這個詞還在哪裏：這邊找／副編輯區看"
+zhs = "这个词还在哪里：这边找／副编辑区看"
 en = "where else this word is: / here, ? in the other work area"
 
 [[message]]
@@ -5175,36 +5175,36 @@ en = "open every region"
 [[message]]
 # 空格選單：關掉左邊欄（1234 的上檔，2026-09-29）
 key = "hint.space.close-left"
-zht = "關掉左邊欄"
-zhs = "关掉左边栏"
+zht = "關閉左邊欄"
+zhs = "关闭左边栏"
 en = "close the left sidebar"
 
 [[message]]
 # 空格選單：關掉第一工作區
 key = "hint.space.close-one"
-zht = "關掉第一工作區"
-zhs = "关掉第一工作区"
-en = "close the first pane"
+zht = "關閉主編輯區"
+zhs = "关闭主编辑区"
+en = "close the main pane"
 
 [[message]]
 # 空格選單：關掉右邊欄
 key = "hint.space.close-right"
-zht = "關掉右邊欄"
-zhs = "关掉右边栏"
+zht = "關閉右邊欄"
+zhs = "关闭右边栏"
 en = "close the right sidebar"
 
 [[message]]
 # 提示：空格菜單——關掉站着的這一區
 key = "hint.space.close-this-region"
-zht = "關掉站着的這一區"
-zhs = "关掉站着的这一区"
-en = "close the region you are in"
+zht = "關閉當前區域"
+zhs = "关闭当前区域"
+en = "close this region"
 
 [[message]]
 # 空格選單：關掉第二工作區
 key = "hint.space.close-two"
-zht = "關掉第二工作區"
-zhs = "关掉第二工作区"
+zht = "關閉副編輯區"
+zhs = "关闭副编辑区"
 en = "close the second pane"
 
 [[message]]
@@ -5231,16 +5231,16 @@ en = "the dictionary in the sidebar (room to read)"
 [[message]]
 # 空格選單裏的 s：換到下一個區域（正文、邊欄、另一個工作區）
 key = "hint.space.next-region"
-zht = "前往下一個區域"
-zhs = "前往下一个区域"
-en = "the next region: work area 1, 2, left, right — same as C-w"
+zht = "下一個區域（主／副編輯區／邊欄）"
+zhs = "下一个区域（主／副编辑区／边栏）"
+en = "the next region (panes and sidebars)"
 
 [[message]]
 # 提示：空格菜單——只留一個工作區
 key = "hint.space.only-this-region"
-zht = "只留一個工作區，別的全收"
-zhs = "只留一个工作区，别的全收"
-en = "keep one work area, close the rest"
+zht = "只留這一個編輯區，別的全收"
+zhs = "只留这一个编辑区，别的全收"
+en = "keep this pane, put the rest away"
 
 [[message]]
 # 空格組：從系統剪貼簿貼在前面
@@ -5266,30 +5266,30 @@ en = "the diagnostics on this line (sidebar)"
 [[message]]
 # 空格菜單：跳到左邊欄（沒開就開那一側的頭一扇）
 key = "hint.space.region-left"
-zht = "去左邊欄（沒有就開）"
-zhs = "去左边栏（没有就开）"
-en = "the left sidebar (opened if there is none)"
+zht = "前往左邊欄"
+zhs = "前往左边栏"
+en = "the left sidebar"
 
 [[message]]
 # 空格菜單：跳到正文主工作區
 key = "hint.space.region-one"
-zht = "去正文"
-zhs = "去正文"
-en = "the writing"
+zht = "前往主編輯區"
+zhs = "前往主编辑区"
+en = "the main pane"
 
 [[message]]
 # 空格菜單：跳到右邊欄
 key = "hint.space.region-right"
-zht = "去右邊欄（沒有就開）"
-zhs = "去右边栏（没有就开）"
-en = "the right sidebar (opened if there is none)"
+zht = "前往右邊欄"
+zhs = "前往右边栏"
+en = "the right sidebar"
 
 [[message]]
 # 空格菜單：跳到第二工作區（沒開就開一個）
 key = "hint.space.region-two"
-zht = "去第二工作區（沒有就開）"
-zhs = "去第二工作区（没有就开）"
-en = "the other work area (opened if there is none)"
+zht = "前往副編輯區"
+zhs = "前往副编辑区"
+en = "the second pane"
 
 [[message]]
 # 空格組：改這個字的注音（`:ruby` 那一支，二級鍵）
@@ -6532,7 +6532,7 @@ zhs = "{0} 正在读这个项目……第一次要等一会"
 en = "{0} is reading the project… the first time takes a moment"
 
 [[message]]
-# :check-code 頂上那一行的狀態：起來了
+# :diagnostics-all 頂上那一行的狀態：起來了
 key = "lsp.ready"
 zht = "已就緒"
 zhs = "已就绪"
@@ -6591,7 +6591,7 @@ zhs = "接下来"
 en = "what comes next"
 
 [[message]]
-# :check-code 頂上那一行：名字　路徑　狀態
+# :diagnostics-all 頂上那一行：名字　路徑　狀態
 key = "lsp.where-it-is"
 zht = "{0}  {1}  {2}"
 zhs = "{0}  {1}  {2}"
@@ -6978,7 +6978,7 @@ zhs = "错误"
 en = "error"
 
 [[message]]
-# :check-code 列完了，一共幾處
+# :diagnostics-all 列完了，一共幾處
 key = "problem.found"
 zht = "{0} 處——gf 跳到那一行"
 zhs = "{0} 处——gf 跳到那一行"
@@ -6992,7 +6992,7 @@ zhs = "建议"
 en = "hint"
 
 [[message]]
-# :check-code 但還没有任何服務器說過話
+# :diagnostics-all 但還没有任何服務器說過話
 key = "problem.none"
 zht = "還没有語言服務器報過問題"
 zhs = "还没有语言服务器报过问题"
@@ -7013,21 +7013,21 @@ zhs = "说明"
 en = "note"
 
 [[message]]
-# :check-code 的單子上一行：哪個檔、第幾行、多響、說了什麼
+# :diagnostics-all 的單子上一行：哪個檔、第幾行、多響、說了什麼
 key = "problem.one"
 zht = "{0}:{1}: {2} {3}"
 zhs = "{0}:{1}: {2} {3}"
 en = "{0}:{1}: {2} {3}"
 
 [[message]]
-# :check-code 的緩衝區標題
+# :diagnostics-all 的緩衝區標題
 key = "problem.results"
 zht = "語言服務器說的"
 zhs = "语言服务器说的"
 en = "what the language servers said"
 
 [[message]]
-# :check-code 的單子太長，只列了前面那些
+# :diagnostics-all 的單子太長，只列了前面那些
 key = "problem.too-many"
 zht = "太多了，只列前 {0} 處"
 zhs = "太多了，只列前 {0} 处"
@@ -7043,9 +7043,9 @@ en = "warning"
 [[message]]
 # 診斷浮框脚下那一行：怎麽看全部
 key = "problem.whole-list"
-zht = ":check-code 看全部"
-zhs = ":check-code 看全部"
-en = ":check-code lists them all"
+zht = "␣I 進邊欄"
+zhs = "␣I 进边栏"
+en = "␣I opens the sidebar"
 
 
 # ── progress ──────────────────────────────────────────────────────────
