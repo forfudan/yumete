@@ -59,6 +59,28 @@ impl Editor {
         // `空格 k` 問來的那一則說明同理：光標走開就作廢，不許走回去又冒出來
         // （2026-09-29 報的）。
         self.forget_a_hover_nobody_is_looking_at();
+        // 跟着光標走的那一問，光標一動就重新等它停穩。
+        self.the_cursor_moved_under_the_docs();
+        // **浮着的那一則文檔收四個翻頁鍵**（2026-09-29 定，同 helix 的
+        // `ui/popup.rs`：那四個鍵滾浮窗，別的鍵一按就關）。
+        //
+        // ⚠️ **只有這四個**：浮窗一個鍵都不收本來是這裏的通則，而通則的理由是
+        // 「浮窗走不進去」——走不進去的東西讀不完長的。收這四個正是為了讀得完，
+        // 別的鍵照舊一個都不收（挪光標的那些照舊把它關掉）。
+        if self.mode == Mode::Normal && self.pending == Pending::None {
+            let by = match key {
+                Key::PageDown => Some(8),
+                Key::PageUp => Some(-8),
+                Key::Ctrl('d') => Some(4),
+                Key::Ctrl('u') => Some(-4),
+                _ => None,
+            };
+            if let Some(by) = by {
+                if self.scroll_the_hover(by) {
+                    return KeyOutcome::Continue;
+                }
+            }
+        }
         // The sidebar takes Normal-mode keys while it has the focus; every
         // other mode is about the text and goes to the text.
         if self.sidebar_focused() && self.mode == Mode::Normal && self.pending == Pending::None {
@@ -2338,8 +2360,10 @@ impl Editor {
                     self.set_status(say!("lsp.not-code"));
                 }
             }
+            // **`空格 K` 2026-09-29 起是一個開關**，不是「開進邊欄」：文檔跟不
+            // 跟着光標走。開進邊欄現在不必有自己的鍵——`空格 k` 看那一扇開沒開。
             Key::Char('K') => {
-                if !self.ask_what_this_is(false) {
+                if !self.follow_with_docs() {
                     self.set_status(say!("lsp.not-code"));
                 }
             }

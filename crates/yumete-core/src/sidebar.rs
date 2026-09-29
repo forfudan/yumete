@@ -140,11 +140,15 @@ pub enum Panel {
     Detail,
     /// The wiki entry the cursor is standing on (#287).
     Wiki,
+    /// **What the language server says the name under the cursor is**
+    /// （2026-09-29 定）。`Wiki` 的代碼版：一份稿子要麼有百科要麼有文檔，
+    /// 不會兩樣都有。
+    Docs,
 }
 
 impl Panel {
     /// Every one of them, in the order a setting file lists them.
-    pub const ALL: [Panel; 7] = [
+    pub const ALL: [Panel; 8] = [
         Panel::Files,
         Panel::Buffers,
         Panel::Outline,
@@ -152,6 +156,7 @@ impl Panel {
         Panel::Dictionary,
         Panel::Detail,
         Panel::Wiki,
+        Panel::Docs,
     ];
 
     /// Its name in the config file and on the command line.
@@ -164,6 +169,7 @@ impl Panel {
             Panel::Dictionary => "dictionary",
             Panel::Detail => "detail",
             Panel::Wiki => "wiki",
+            Panel::Docs => "docs",
         }
     }
 
@@ -188,6 +194,7 @@ impl Panel {
             Panel::Dictionary => "label.panel.dictionary",
             Panel::Detail => "label.panel.detail",
             Panel::Wiki => "label.panel.wiki",
+            Panel::Docs => "label.panel.docs",
         }
     }
 }
@@ -200,6 +207,7 @@ impl From<View> for Panel {
             View::Outline => Panel::Outline,
             View::Search => Panel::Search,
             View::Wiki => Panel::Wiki,
+            View::Docs => Panel::Docs,
         }
     }
 }
@@ -207,8 +215,12 @@ impl From<View> for Panel {
 impl From<Transient> for Panel {
     fn from(kind: Transient) -> Panel {
         match kind {
-            // hover 與字典共用同一個位置，所以也共用那一格設定。
-            Transient::Dictionary | Transient::Hover => Panel::Dictionary,
+            Transient::Dictionary => Panel::Dictionary,
+            // ⚠️ **hover 2026-09-29 起有自己的位置了。** 從前它和字典共用
+            // `Panel::Dictionary`，於是一份代碼稿子的右欄底下躺着的是「百科」
+            // ——作者報的原話：「就算是定义是空的，也是个空的定义面板而不是空
+            // 的百科面板」。
+            Transient::Hover => Panel::Docs,
             Transient::Detail => Panel::Detail,
         }
     }
@@ -239,16 +251,24 @@ pub enum View {
     /// open the floating panel does not show the entry too: one place at a
     /// time.
     Wiki,
+    /// **語言服務器怎麼說光標底下這個名字**（2026-09-29）。
+    ///
+    /// `Wiki` 的代碼版，同一個形狀：常駐、跟着光標、開着的時候浮窗就不畫。
+    /// ⚠️ **一處不同：百科是拉的，文檔是推的。** 百科每一幀現算（純函數），
+    /// 文檔要問服務器，一來一回，所以它多一道「光標停穩了纔問」的閘
+    /// （`Editor::docs_follow`）。
+    Docs,
 }
 
 impl View {
     /// Every view, in the order `Tab` walks them.
-    pub const ALL: [View; 5] = [
+    pub const ALL: [View; 6] = [
         View::Explorer,
         View::Buffers,
         View::Outline,
         View::Search,
         View::Wiki,
+        View::Docs,
     ];
 
 }
@@ -513,7 +533,7 @@ impl Sidebar {
             }
             // Never reached: the search panel has a store of its own and
             // never fills these rows (`refresh_panel`).
-            View::Search | View::Wiki => return None,
+            View::Search | View::Wiki | View::Docs => return None,
             View::Explorer => {}
         }
         if !row.is_dir {

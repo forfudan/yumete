@@ -17625,3 +17625,106 @@ fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`空格 K` 是一個開關：文檔跟不跟着光標走**（2026-09-29 定）。
+///
+/// 原話：「按下它后，光标移动到任何名字上，都會查询并且显示説明……对于『百科』这个
+/// 是默认开启的。对于『説明』我们可以默认关闭（因为问LSP可能比较耗时）。」
+#[test]
+fn space_shift_k_makes_the_docs_follow_the_cursor() {
+    use crate::sidebar::View;
+    let dir = std::env::temp_dir().join("yumete-docs-follow");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn compile_the_table() {}\nfn other() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    // 出廠關着，那一扇也沒開。
+    assert!(ed.showing(View::Docs).is_none(), "出廠不開");
+    assert_eq!(ed.docs_owed(), None, "關着就不問");
+
+    press(&mut ed, " K");
+    assert_eq!(ed.status(), "開啓及時文檔顯示");
+    assert!(ed.showing(View::Docs).is_some(), "跟着走就得有地方畫");
+    // ⚠️ **鍵不許跟過去**（報的原話：「用户希望焦点留在正文」）。
+    assert!(!ed.sidebar_focused(), "焦點留在正文");
+
+    // 光標停穩之前不問——按住 j 連走的時候一格都不問。
+    assert_eq!(ed.docs_owed(), None, "剛動過，等它停穩");
+    assert!(ed.docs_due_in().is_some(), "而且要給循環一個鬧鐘，不然它一睡不醒");
+
+    // ⚠️ 再按一下就關，那一扇留着（它是常駐的，不隨光標一開一關）。
+    press(&mut ed, " K");
+    assert_eq!(ed.status(), "關閉及時文檔顯示");
+    assert_eq!(ed.docs_owed(), None, "關了就不問");
+    assert!(ed.showing(View::Docs).is_some(), "面板不跟着關");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **文檔那一扇開着的時候，`空格 k` 不再浮一個**（2026-09-29 定）。
+///
+/// 原話：「如果右侧栏是打开的情况下，按 space k 就应该在侧栏中显示，而不是继续
+/// 弹窗显示。」兩個面在說同一件事，是這個編輯器一直在拆的東西。
+#[test]
+fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
+    let dir = std::env::temp_dir().join("yumete-docs-or-float");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    // 那一扇沒開：浮。
+    press(&mut ed, " k");
+    ed.show_hover("fn compile_the_table()".into());
+    assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "浮着");
+    assert_eq!(ed.hover_in_the_sidebar(), None);
+
+    // 開出那一扇再問：不浮了，畫進去。
+    ed.execute(":sidebar-right docs").unwrap();
+    press(&mut ed, " k");
+    ed.show_hover("fn compile_the_table()".into());
+    assert_eq!(ed.hover_afloat(), None, "那一扇開着就不浮");
+    assert_eq!(ed.hover_in_the_sidebar(), Some("fn compile_the_table()"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **浮着的那一則翻得動**——`PageUp`／`PageDown`／`C-u`／`C-d`（2026-09-29 定，
+/// 同 helix 的 `ui/popup.rs`）。
+#[test]
+fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
+    let dir = std::env::temp_dir().join("yumete-docs-paging");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+    press(&mut ed, " k");
+    ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect());
+    assert_eq!(ed.hover_scroll(), 0, "從頭讀");
+
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(ed.hover_scroll(), 4, "半頁");
+    ed.on_key(Key::PageDown);
+    assert_eq!(ed.hover_scroll(), 12, "一頁");
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(ed.hover_scroll(), 8);
+    ed.on_key(Key::PageUp);
+    assert_eq!(ed.hover_scroll(), 0, "翻回頂上，不翻進負數");
+    // ⚠️ **光標一個字都沒動**——那四個鍵歸浮窗，正文沒看見它們。
+    assert_eq!(ed.cursor_line(), 0, "翻的是浮窗，不是稿子");
+
+    // ⚠️ 別的鍵照舊不收：`l` 挪光標，浮窗跟着沒。
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.hover_afloat(), None, "挪了光標就沒了");
+    ed.on_key(Key::Ctrl('d'));
+    assert!(ed.cursor_line() > 0 || ed.hover_scroll() == 0, "浮窗沒了，C-d 還給稿子");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

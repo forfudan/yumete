@@ -46,6 +46,11 @@ pub struct Panel {
     /// panel — which is what #287 quietly gave all four of them.
     pub entry: bool,
     pub body: Body,
+    /// **散文從第幾行畫起**（2026-09-29）——浮窗翻頁用的，別處一律 0。
+    ///
+    /// ⚠️ 只管 `Body::Prose` 的橫排那一支。竪書那一支量的是「一縱幾個字」，
+    /// 不是行，翻頁在那裏是另一件事。
+    pub scroll: usize,
     /// **Whether the prose inside runs down the page** (2026-09-18:
     /// 「只有百科才需要縱書，其他的都保持橫排」).
     ///
@@ -715,7 +720,9 @@ pub fn draw(
     let (count, lines) = match &panel.body {
         Body::Prose(_) if panel.vertical_text => (count, lines),
         Body::Prose(_) if count > cap && cap > 0 => {
-            let mut kept: Vec<String> = lines.into_iter().take(cap).collect();
+            // 從第幾行起——翻過頁的話（`panel.scroll`），最多翻到「最後一屏」。
+            let from = panel.scroll.min(count.saturating_sub(cap));
+            let mut kept: Vec<String> = lines.into_iter().skip(from).take(cap).collect();
             // ⚠️ **Never the only row.** On a short page `cap` is 1, and
             // replacing that one row left a panel whose whole content was
             // 「…」 — a ring around an ellipsis, which says nothing at all.
@@ -930,6 +937,7 @@ mod tests {
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+            scroll: 0,
                     title: "洞庭湖".into(),
                     lede: None,
                     entry: true,
@@ -961,6 +969,7 @@ mod tests {
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
                 draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+            scroll: 0,
                     title: "條目".into(),
                     lede: None,
                     // ⚠️ **不能是 `entry`**：那一檔會給每段加一個全角空格縮進
@@ -1059,6 +1068,7 @@ mod tests {
                     .map(|n| (format!("k{n}"), format!("第{n}個動作")))
                     .collect::<Vec<_>>();
                 got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, (0, 0), false, &Panel {
+            scroll: 0,
                     title: "空格".into(),
                     lede: None,
                     entry: false,
