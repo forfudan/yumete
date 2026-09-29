@@ -953,9 +953,17 @@ pub fn run(
         servers.ask(editor, &config);
         servers.ask_what(editor, &config);
         servers.ask_next(editor, &config);
-        let server_said_something = servers.collect(editor);
+        let mut server_said_something = servers.collect(editor);
         if let Some(word) = servers.says.take() {
             editor.set_status(word);
+            // **這一句也要當場畫出來**（2026-09-29 報的：打開 `.py` 收不到那句
+            // 「找不到 ty、ruff…」，要按一下鍵纔冒出來）。
+            //
+            // Warning: **同一族的第三次了。** `follow`／`ask_*`／`collect` 全排在
+            // 畫之後，所以它們寫進狀態欄的任何一句都要等下一次按鍵。`collect`
+            // 那一半今天早上修過，而 `says` 是**另一條路**——它由 `follow` 寫，
+            // `collect` 回 `false` 的那些輪次照樣有話說。
+            server_said_something = true;
         }
         // **服務器說了話就回頭再畫一幀**（2026-09-29 報的）。
         //
