@@ -136,6 +136,8 @@ pub struct Servers {
     failed: HashSet<String>,
     /// **哪幾個語言已經說過「這臺機器上沒有」了**——一個語言只說一次。
     told_about: HashSet<String>,
+    /// 每個起來了的服務器，那個可執行檔到底在哪——`:check-code` 頂上那一行要說。
+    found: HashMap<String, PathBuf>,
     /// The buffer revision each open file was last sent at, so a file is not
     /// re-sent for a keystroke that changed nothing.
     sent: HashMap<PathBuf, u64>,
@@ -181,6 +183,7 @@ impl Default for Servers {
             running: HashMap::new(),
             failed: HashSet::new(),
             told_about: HashSet::new(),
+            found: HashMap::new(),
             sent: HashMap::new(),
             saved: HashMap::new(),
             whose: HashMap::new(),
@@ -206,12 +209,26 @@ impl Servers {
     fn named<'a>(
         config: &'a yumete_config::Config,
         language: &str,
+        from: Option<&Path>,
     ) -> Option<&'a yumete_config::Server> {
         config
             .lsp
             .get(language)?
             .iter()
-            .find(|s| !s.command.is_empty() && on_the_path(&s.command))
+            .find(|s| !s.command.is_empty() && on_the_path(&s.command, from))
+    }
+
+    /// **從哪個目錄開始往上爬**——被編輯的那個檔所在的地方。
+    ///
+    /// 沒有檔（還沒存盤）就從項目根起：那時服務器本來也起不來（見
+    /// [`Servers::why_it_cannot_ask`] 的第三條），但別的問話還要一個答案。
+    fn look_from(editor: &Editor) -> PathBuf {
+        editor
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| editor.project_root())
     }
 
     /// The language a buffer is, as LSP spells it — `None` for prose.
@@ -228,9 +245,9 @@ impl Servers {
 
     /// Start, open, and update — everything that depends on where the cursor
     /// is. Called once a turn, after the keys have been handled.
-    pub fn follow(&mut self, editor: &Editor, config: &yumete_config::Config) {
+    pub fn follow(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
         let Some(language) = Self::language_of(editor) else { return };
-        let Some(named) = Self::named(config, language) else {
+        let Some(named) = Self::named(config, language, Some(&Self::look_from(editor))) else {
             // **打開的那一刻就說，別等人問**（2026-09-29 報的：「为什么不是在打开
             // 文件的时候就检查 LSP 并且显示消息」）。從前這裏是默默 `return`，於是
             // 讀者打開 `.py` 什麽都不知道，一直到按 `空格 k` 纔撞上。
@@ -251,9 +268,32 @@ impl Servers {
             return;
         };
         if !self.running.contains_key(language) && !self.failed.contains(language) {
-            match start(named, editor) {
+            let here = Self::look_from(editor);
+            let Some(at) = found_here(&named.command, Some(&here)) else { return };
+            // **用的是項目裏那一個就說一句**（2026-09-29 作者定）。⚠️ 不寫目錄
+            // ——狀態欄那一行很貴，完整路徑在 `:check-code` 頂上那一行。
+            let mine = !std::env::var_os("PATH")
+                .map(|path| {
+                    std::env::split_paths(&path).any(|dir| dir.join(&named.command) == at)
+                })
+                .unwrap_or(false);
+            match start(named, editor, &at) {
                 Ok(server) => {
                     self.running.insert(language.to_string(), server);
+                    // `:check-code` 頂上那一行：名字　路徑　狀態。路徑相對項目根，
+                    // 同那張單子上檔名的規矩——絕對路徑九十個字符，讀不了。
+                    let root = editor.project_root();
+                    let short = at.strip_prefix(&root).unwrap_or(&at);
+                    editor.note_the_server(Some(say!(
+                        "lsp.where-it-is",
+                        named.command,
+                        short.display(),
+                        say!("lsp.ready")
+                    )));
+                    self.found.insert(language.to_string(), at);
+                    if mine {
+                        self.says = Some(say!("lsp.from-the-project", named.command));
+                    }
                 }
                 Err(why) => {
                     // Warning: **Said once, and never again.** A missing
@@ -414,7 +454,7 @@ impl Servers {
         // Warning: **把找過的全列出來**（2026-09-29 報的）。python 出廠配了四個
         // 候選（`ty`／`ruff`／`pylsp`／`jedi-language-server`，抄的 helix），而
         // 從前這句話只說第一個——讀者於是只會去裝 `ty`，其實裝哪一個都行。
-        if Self::named(config, language).is_none() {
+        if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
             return Some(say!("lsp.not-installed", Self::the_names(wanted)));
         }
         // 三、稿子還沒存盤——服務器答的是檔案，沒有路徑就沒得問。
@@ -614,6 +654,9 @@ impl Servers {
     /// would stay until the session ended.
     fn lost(&mut self, language: &str, editor: &mut Editor) {
         let ran = self.running.remove(language).is_some_and(|s| s.ready);
+        self.found.remove(language);
+        // 它不在聽了，`:check-code` 頂上那一行也不該再說它在。
+        editor.note_the_server(None);
         // **只忘這一個服務器說過的那些檔**（見 [`Servers::whose`]）。
         let its: Vec<PathBuf> = self
             .whose
@@ -718,20 +761,73 @@ impl Server {
 /// `spawn` is indistinguishable from a program that started and died, which is
 /// a different thing with a different answer ([`Servers::lost`]).
 ///
-/// Warning: An absolute path is asked about directly; anything else is looked for on
-/// `PATH`, the way a shell would.
-fn on_the_path(command: &str) -> bool {
+/// Warning: An absolute path is asked about directly; anything else is looked for
+/// **in the project first**, then on `PATH` — see [`found_here`].
+fn on_the_path(command: &str, from: Option<&Path>) -> bool {
+    found_here(command, from).is_some()
+}
+
+/// **項目自己帶的那幾個 `bin`**，按這個次序看（2026-09-29）。
+///
+/// 一個包管理器裝的工具躺在項目裏，不在 `PATH` 上——`pixi add python-lsp-server`
+/// 之後 `pylsp` 只有 `pixi run` 進得去。作者原話：「我们很多时候会使用包管理且装
+/// 在项目文件夹中。比如 pixi uv 还有 .env 这种文件夹。都值得搜索。」
+const BINS: &[&str] = &[".venv/bin", "venv/bin", "node_modules/.bin"];
+
+/// 這幾個底下還隔着一層（環境名／版本），所以要展開一級。
+const NESTED: &[&str] = &[".pixi/envs", ".direnv"];
+
+/// **這個命令在哪**——項目裏找得到就回它的絕對路徑，否則回 `PATH` 上那一個。
+///
+/// 從 `from`（被編輯的那個檔所在的目錄）起一級一級往上，每一級看 [`BINS`] 與
+/// [`NESTED`]；⚠️ **碰到 `.git` 就停**（含那一級），不然一路爬到 `/` 會翻進別人
+/// 的項目。都沒有纔看 `PATH`。
+///
+/// Warning: **helix 不做這件事。** 它只 `which`（`helix-lsp/src/client.rs:228`），
+/// 文檔明說「Binaries must be in `$PATH`」；vim 根本沒有內建 LSP。這一條是我們自
+/// 己加的，理由是包管理器把工具裝在項目裏已經是常態。代價是起服務器那一次多幾十
+/// 個 `stat`——只在啓動那一次，不是每一幀。
+///
+/// Warning: **項目裏的優先於 `PATH`**（2026-09-29 作者定）。項目裏那一個跟這個項
+/// 目的解釋器、依賴對得上，全局那一個不一定。
+fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
     let named = Path::new(command);
     if named.is_absolute() || command.contains(std::path::MAIN_SEPARATOR) {
-        return named.is_file();
+        return named.is_file().then(|| named.to_path_buf());
     }
-    let Some(path) = std::env::var_os("PATH") else { return false };
-    std::env::split_paths(&path).any(|dir| dir.join(command).is_file())
+    for step in from.into_iter().flat_map(|d| d.ancestors()) {
+        for bin in BINS {
+            let found = step.join(bin).join(command);
+            if found.is_file() {
+                return Some(found);
+            }
+        }
+        for under in NESTED {
+            let Ok(entries) = std::fs::read_dir(step.join(under)) else { continue };
+            // 同一個 `.pixi/envs` 底下可能有幾個環境，次序要穩，不然兩次啓動
+            // 挑到不同的那一個。
+            let mut names: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+            names.sort();
+            for env in names {
+                let found = env.join("bin").join(command);
+                if found.is_file() {
+                    return Some(found);
+                }
+            }
+        }
+        if step.join(".git").exists() {
+            break;
+        }
+    }
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path).map(|dir| dir.join(command)).find(|p| p.is_file())
 }
 
 /// Start one server and get its threads going.
-fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Server> {
-    let mut child = Command::new(&named.command)
+fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::Result<Server> {
+    // Warning: **起的是找到的那一個絕對路徑**，不是配置裏那個名字——不然 `Command`
+    // 自己又去問一遍 `PATH`，項目裏那一個白找了（2026-09-29）。
+    let mut child = Command::new(at)
         .args(&named.args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -883,18 +979,18 @@ mod tests {
         let (mut editor, _path) = editor_on("a.rs", "fn main() {}\n");
         let (mut servers, heard, _tell) = Servers::pretend("rust");
 
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didOpen");
         // Warning: **Nothing changed, so nothing is said.** Otherwise every turn of
         // the event loop — every cursor move — would re-send the file.
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         assert!(heard.try_recv().is_err(), "一個字沒改就不再說");
 
         editor.on_key(yumete_core::input::Key::Char('i'));
         editor.on_key(yumete_core::input::Key::Char('x'));
         // The first pass after a change starts the settle; the second sends.
-        servers.follow(&editor, &config);
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
+        servers.follow(&mut editor, &config);
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didChange");
     }
 
@@ -908,7 +1004,7 @@ mod tests {
         let none = yumete_config::Config::default();
         let stocked =
             yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
-        let (editor, _path) = editor_on("c.rs", "fn main() {}\n");
+        let (mut editor, _path) = editor_on("c.rs", "fn main() {}\n");
 
         // 一、設置裏這個語言根本沒寫服務器。
         let bare = Servers::default();
@@ -959,6 +1055,53 @@ mod tests {
         assert_eq!(ready.why_it_cannot_ask(&editor, &stocked, "rust"), None, "問得出去");
     }
 
+    /// **項目自己帶的那個可執行檔找得到，而且贏過 `PATH`**（2026-09-29 定）。
+    ///
+    /// 作者原話：「我们很多时候会使用包管理且装在项目文件夹中。比如 pixi uv 还有
+    /// .env 这种文件夹。都值得搜索。而且我们应该从文件所在或者项目所在的位置搜索，
+    /// 没有就想上提级直到出现合适的。不行就用 PATH 的。」
+    ///
+    /// Warning: **helix 不做這件事**（只 `which`，`helix-lsp/src/client.rs:228`），
+    /// vim 沒有內建 LSP。這一條是我們自己加的。
+    #[test]
+    fn a_server_that_lives_in_the_project_is_found_before_the_one_on_the_path() {
+        let dir = std::env::temp_dir().join(format!("yumete-bins-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // 一棵假的項目樹：根上有 `.git` 和 pixi 的環境，稿子埋在兩層底下。
+        let deep = dir.join("crates/one/src");
+        std::fs::create_dir_all(&deep).unwrap();
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        let bin = dir.join(".pixi/envs/default/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("pylsp"), "#!/bin/sh\n").unwrap();
+
+        // 從稿子那一層起往上爬，爬到根上找着。
+        let found = found_here("pylsp", Some(&deep)).expect("項目裏那一個");
+        assert_eq!(found, bin.join("pylsp"), "用的是項目裏那一個");
+
+        // `.venv/bin` 也認，而且它排在 `.pixi` 前面（同一級的次序寫死在 `BINS`）。
+        let venv = dir.join("crates/one/.venv/bin");
+        std::fs::create_dir_all(&venv).unwrap();
+        std::fs::write(venv.join("pylsp"), "#!/bin/sh\n").unwrap();
+        assert_eq!(
+            found_here("pylsp", Some(&deep)),
+            Some(venv.join("pylsp")),
+            "更近的那一級先答",
+        );
+
+        // Warning: **碰到 `.git` 就停。** 根的**上面**放一個，不許被找到——不然一路
+        // 爬到 `/` 會翻進別人的項目。
+        let above = dir.parent().unwrap().join(format!("yumete-above-{}", std::process::id()));
+        std::fs::create_dir_all(above.join("bin")).unwrap();
+        assert_eq!(found_here("no-such-tool-here-9x", Some(&deep)), None, "爬不出 .git");
+
+        // 找不到就回 `PATH` 上那一個：`sh` 哪臺機器都有。
+        assert!(found_here("sh", Some(&deep)).is_some(), "退回 PATH");
+
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&above);
+    }
+
     /// **打開程序文件的那一刻就說沒有，而且每個語言只說一次**（2026-09-29 報的：
     /// 「为什么不是在打开文件的时候就检查 LSP 并且显示消息」）。
     #[test]
@@ -966,9 +1109,9 @@ mod tests {
         // 出廠給 python 配了四個候選，而這臺跑測試的機器上多半一個都沒有。
         let config =
             yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
-        let (editor, _path) = editor_on("d.py", "import decimal\n");
+        let (mut editor, _path) = editor_on("d.py", "import decimal\n");
         let mut servers = Servers::default();
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         let said = servers.says.take();
         let Some(said) = said else {
             // 這臺機器上真的裝了一個：那就該起得來，也就沒話說。
@@ -981,8 +1124,8 @@ mod tests {
         }
 
         // 每個語言只說一次：再開一份 `.py` 一個字都不說。
-        let (again, _path) = editor_on("e.py", "import json\n");
-        servers.follow(&again, &config);
+        let (mut again, _path) = editor_on("e.py", "import json\n");
+        servers.follow(&mut again, &config);
         assert!(servers.says.is_none(), "說過就不再說：{:?}", servers.says);
     }
 
@@ -992,9 +1135,9 @@ mod tests {
     #[test]
     fn a_manuscript_starts_nothing() {
         let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
-        let (editor, _path) = editor_on("第一章.md", "那年冬天。\n");
+        let (mut editor, _path) = editor_on("第一章.md", "那年冬天。\n");
         let mut servers = Servers::default();
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         assert!(servers.running.is_empty(), "散文不起服務器");
         assert!(servers.says.is_none(), "也不說任何話");
     }
@@ -1004,7 +1147,7 @@ mod tests {
         let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
         let (mut editor, path) = editor_on("b.rs", "fn main() {}\n");
         let (mut servers, _heard, tell) = Servers::pretend("rust");
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
 
         tell.send(Notice::Said {
             path: path.clone(),
@@ -1050,9 +1193,9 @@ mod tests {
         let mut lsp = yumete_config::factory_servers();
         lsp.insert("rust".into(), vec![yumete_config::Server::default()]);
         let config = yumete_config::Config { lsp, ..Default::default() };
-        let (editor, _path) = editor_on("d.rs", "fn main() {}\n");
+        let (mut editor, _path) = editor_on("d.rs", "fn main() {}\n");
         let mut servers = Servers::default();
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         assert!(servers.running.is_empty(), "關掉了就不起");
     }
 
@@ -1078,7 +1221,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            Servers::named(&config, "rust").map(|s| s.command.as_str()),
+            Servers::named(&config, "rust", None).map(|s| s.command.as_str()),
             Some(me.as_str()),
             "跳過没裝的，停在第一個裝了的"
         );
@@ -1091,7 +1234,7 @@ mod tests {
             )]),
             ..Default::default()
         };
-        assert!(Servers::named(&none, "rust").is_none());
+        assert!(Servers::named(&none, "rust", None).is_none());
     }
 
     /// Warning: **One that never got up is written off** — 2026-09-20, found against
@@ -1112,7 +1255,7 @@ mod tests {
 
         // …and a later `follow` really does not start another one.
         let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         assert!(servers.running.is_empty());
     }
 

@@ -1000,6 +1000,16 @@ impl Editor {
         std::mem::take(&mut self.say_it_again)
     }
 
+    /// 前端接上／丟掉一個語言服務器的時候說一聲，給 `:check-code` 頂上那一行。
+    pub fn note_the_server(&mut self, line: Option<String>) {
+        self.server_line = line;
+    }
+
+    /// `:check-code` 頂上那一行，沒有服務器就是 `None`。
+    pub(super) fn the_server_line(&self) -> Option<&str> {
+        self.server_line.as_deref()
+    }
+
     /// **此刻有沒有一句問話等着發**——前端拿它決定要不要解釋為什麽發不出去。
     pub fn hover_query_is_pending(&self) -> bool {
         self.hover_query.is_some()

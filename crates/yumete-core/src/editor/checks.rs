@@ -368,6 +368,11 @@ impl Editor {
                 )
             })
             .collect();
+        // **哪個服務器在答，在哪**——頂上一行（2026-09-29 作者定）。
+        //
+        // Warning: 「乾淨」和「根本没人說過話」在這張單子上長得一模一樣，而這一行
+        // 正是分得開它們的那一句：有它就是有人在聽，沒有它就是沒人在聽。
+        let head = self.the_server_line().map(str::to_string);
         let n = all.len();
         if n == 0 {
             // Warning: 「乾淨」和「根本没人說過話」是兩回事，而在第一步裏它們長得一
@@ -377,6 +382,10 @@ impl Editor {
             return;
         }
         let mut listing = String::new();
+        if let Some(head) = &head {
+            listing.push_str(head);
+            listing.push('\n');
+        }
         for (path, line, loud, message) in all.iter().take(LISTING_LIMIT) {
             listing.push_str(&say!("problem.one", path, line, loud, message));
             listing.push('\n');

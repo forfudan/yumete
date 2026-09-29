@@ -931,6 +931,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P1 | 一 本檔、二 跨檔、三 替換全部落地 [^419] | Fixed 2026-09-13 |
 | 421 | **設置要有一扇面板，別讓人對着 toml 發呆** | config+tui | P1 | 八組五十三項全部落地；`LATER` 裏只剩色位與要新控件的幾項（§5.12.24） | Fixed 2026-09-24 |
 | 422 | **畫與量要按字簇走，不按字走** | tui+core | P2 | 十處逐字累加的循環改成字簇；新出口 `cells_per_char`（§5.12.47、§5.12.62） | Fixed 2026-09-27 |
+| 424 | **`:rules 80 100 120`：在指定的欄上畫竪線** | tui | P3 | 2026-09-29 提；現在只有表格自己畫的列號標尺，正文一條都沒有 [^424] | Proposed |
 | 423 | **代碼着色要走增量解析** | core | P2 | 現在超過五千行整份不染（`fences.rs` 的 `LONGEST`）；量過 955 KB 的 `lib.rs`：解析 58 ms ＋ 全文查詢 25 ms，每改一個字付一次 [^423] | Proposed |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
@@ -18130,3 +18131,70 @@ Warning: **因為它自帶一個。** 微軟的 Pylance 是 Python 擴展的一�
 
 Pylance 的許可證寫死了只許在微軟自己的產品裏跑，所以不能拿來用。裝得了的是 `ty`、`ruff`、
 `pylsp`、`jedi-language-server` 這幾個，裝完不必改設置——出廠那張名單是按順序找的。
+
+[^424]: **2026-09-29 提**（原話：「在给定的列显示一道竖线（底纹）。比如默认80. 用户也可以填
+    `:rules 80 100 120` 來繪製多條」）。從前沒記過，路線表和 todo 上一條都沒有。
+    要想的幾件：① 竪排下「第 80 欄」是哪一條——那一頭的單位是縱不是欄；② 畫成底紋還是一條
+    綫（作者說的是底紋）；③ 顏色歸主題，而那張梯子上最淡的一檔已經給了 `rule`（見 §3665 那
+    一段量過的對比度）；④ 出廠開不開，開的話預設 80 還是不畫。
+
+## 5.42 語言服務器從項目裏找（2026-09-29）
+
+原話：「我们很多时候会使用包管理且装在项目文件夹中。比如 pixi uv 还有 .env 这种文件夹。都值
+得搜索。而且我们应该从文件所在或者项目所在的位置搜索，没有就想上提级直到出现合适的。不行就
+用 PATH 的。」
+
+### 先看兩個參考實現做不做
+
+**都不做。**
+
+| | 怎麽找 | 出處 |
+| --- | --- | --- |
+| helix | 只 `which`，**只看 `$PATH`** | `helix-lsp/src/client.rs:228`；文檔 `book/src/languages.md:191`「Binaries must be in `$PATH`」 |
+| vim | **沒有內建 LSP**，只有 JSON-RPC 傳輸層 | `runtime/doc/channel.txt:1549`；命令交給 `execvp`（`src/os_unix.c:5321`） |
+
+Warning: **helix 的 `environment` 配置也救不了**：`which(cmd)` 在 `.envs()` **之前**跑，所以
+在那裏寫 `PATH` 不會改變命令解析。helix 的項目根（`find_lsp_workspace`）只用來當子進程的工作
+目錄和 `rootUri`，不參與找可執行檔。
+
+所以這一條是我們自己加的。
+
+### 搜索的次序
+
+從**被編輯的那個檔**所在目錄起，一級一級往上，每一級看：
+
+```
+.venv/bin   venv/bin   node_modules/.bin        （BINS，直接一層）
+.pixi/envs/*/bin   .direnv/*/bin                （NESTED，中間隔一層環境名）
+```
+
+Warning: **碰到 `.git` 就停**（含那一級）——不然一路爬到 `/` 會翻進別人的項目。都沒有纔看
+`PATH`。Warning: **`NESTED` 那一層要排序**：同一個 `.pixi/envs` 底下可能有幾個環境，不排的話
+兩次啓動挑到不同的那一個。
+
+**項目裏的優先於 `PATH`**（作者定）：項目裏那一個跟這個項目的解釋器、依賴對得上，全局那一個
+不一定。
+
+Warning: **起的是找到的那個絕對路徑**，不是配置裏那個名字——不然 `Command::new` 自己又去問一遍
+`PATH`，項目裏那一個白找了。
+
+### 用了項目裏那一個要說一句
+
+狀態欄：「語言服務器：本項目路徑中的 {0}」。Warning: **不寫目錄**——那一行很貴。完整路徑在
+`:check-code` 頂上那一行（名字　路徑　狀態），路徑相對項目根，同那張單子上檔名的規矩。
+
+Warning: **那一行順帶把兩件事分開了**：「乾淨」和「根本沒人說過話」在那張單子上長得一模一樣，
+而有沒有那一行就是有沒有人在聽。服務器死掉的時候那一行也要收（`lost()`）。
+
+### 一件量出來的事：ruff 不管 hover
+
+作者在 pixi 裏裝了 ruff 之後還是看不到文檔。把它當 LSP 跑起來問 `int`：
+
+```
+initialize 回的 capabilities：hoverProvider = true
+textDocument/hover 回的：     null
+```
+
+Warning: **它聲稱會 hover，可它的 hover 只解釋自己的規則碼**（`# noqa: E501` 那種），不解釋
+Python 符號——它是 linter，不是類型檢查器。⚠️ 所以「服務器起來了」和「問得出東西」是兩件事。
+真答得出的是 `pylsp`（同一趟量過，`int` 那一段 docstring 完整回來）。

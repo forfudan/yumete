@@ -6405,6 +6405,13 @@ zhs = "开启及时文档显示"
 en = "docs follow the cursor"
 
 [[message]]
+# 起服務器用的是項目自己帶的那一個，不是 PATH 上的（2026-09-29 作者寫的）
+key = "lsp.from-the-project"
+zht = "語言服務器：本項目路徑中的 {0}"
+zhs = "语言服务器：本项目路径中的 {0}"
+en = "language server: {0} from this project"
+
+[[message]]
 # 語言服務器起來一下就沒了（裝得不完整）
 key = "lsp.never-started"
 zht = "{0} 的語言服務器起來就沒了——這臺機器上它可能沒裝好（此後不再試）"
@@ -6452,6 +6459,13 @@ key = "lsp.reading"
 zht = "{0} 正在讀這個項目……第一次要等一會"
 zhs = "{0} 正在读这个项目……第一次要等一会"
 en = "{0} is reading the project… the first time takes a moment"
+
+[[message]]
+# :check-code 頂上那一行的狀態：起來了
+key = "lsp.ready"
+zht = "已就緒"
+zhs = "已就绪"
+en = "ready"
 
 [[message]]
 # 服務器對光標下那個東西無話可說
@@ -6504,6 +6518,13 @@ key = "lsp.what-comes-next"
 zht = "接下來"
 zhs = "接下来"
 en = "what comes next"
+
+[[message]]
+# :check-code 頂上那一行：名字　路徑　狀態
+key = "lsp.where-it-is"
+zht = "{0}  {1}  {2}"
+zhs = "{0}  {1}  {2}"
+en = "{0}  {1}  {2}"
 
 [[message]]
 # 補全單子底下：第幾條／一共幾條（單子露不全的時候）

@@ -63,7 +63,7 @@ fn rust_analyzer_really_answers() {
     let gave_up = Instant::now() + Duration::from_secs(90);
     let mut said = 0;
     while Instant::now() < gave_up {
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         servers.collect(&mut editor);
         said = editor.problem_count();
         if said > 0 {
@@ -150,7 +150,7 @@ fn rust_analyzer_says_where_a_function_is_written() {
     editor.on_key(yumete_core::input::Key::Char('d'));
     let gave_up = Instant::now() + Duration::from_secs(30);
     while Instant::now() < gave_up && editor.cursor_line() == called {
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         servers.ask(&mut editor, &config);
         servers.collect(&mut editor);
         std::thread::sleep(Duration::from_millis(100));
@@ -188,7 +188,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
 
     let gave_up = Instant::now() + Duration::from_secs(90);
     while Instant::now() < gave_up && editor.problem_count() == 0 {
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         servers.collect(&mut editor);
         std::thread::sleep(Duration::from_millis(200));
     }
@@ -214,7 +214,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     // 預算，是編譯的預算，所以這個數要按後者給。
     let gave_up = Instant::now() + Duration::from_secs(180);
     while Instant::now() < gave_up && editor.problem_count() > 0 {
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         servers.collect(&mut editor);
         std::thread::sleep(Duration::from_millis(200));
     }
@@ -280,7 +280,7 @@ fn rust_analyzer_says_what_a_function_is() {
         editor.on_key(yumete_core::input::Key::Char(' '));
         editor.on_key(yumete_core::input::Key::Char('k'));
         for _ in 0..10 {
-            servers.follow(&editor, &config);
+            servers.follow(&mut editor, &config);
             servers.ask_what(&mut editor, &config);
             servers.collect(&mut editor);
             if editor.hover_here().is_some() {
@@ -345,7 +345,7 @@ fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
     while Instant::now() < gave_up && editor.offers_here().is_none() {
         editor.on_key(yumete_core::input::Key::Ctrl('n'));
         for _ in 0..10 {
-            servers.follow(&editor, &config);
+            servers.follow(&mut editor, &config);
             servers.ask_next(&mut editor, &config);
             servers.collect(&mut editor);
             if editor.offers_here().is_some() {
@@ -444,7 +444,7 @@ fn typing_alone_brings_the_list_up() {
             }
             typed = true;
         }
-        servers.follow(&editor, &config);
+        servers.follow(&mut editor, &config);
         servers.ask_next(&mut editor, &config);
         servers.collect(&mut editor);
         std::thread::sleep(Duration::from_millis(100));
