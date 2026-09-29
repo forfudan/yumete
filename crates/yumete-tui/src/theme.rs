@@ -136,7 +136,7 @@ pub fn dark() -> bool {
 /// right question: a dark terminal on a light desktop wants a dark editor, and
 /// the reader who set it that way has already answered.
 pub fn settle(config: &Config, terminal_is_dark: Option<bool>) {
-    // ⚠️ **A mood somebody asked for out loud is not re-settled** (#470).
+    // Warning: **A mood somebody asked for out loud is not re-settled** (#470).
     // `frame_to` settles before every offscreen frame, which is right for the
     // ordinary case and wrong the moment `--keys=':theme-mode light'` has
     // already answered: the config's `mode` would be applied straight over the
@@ -198,7 +198,7 @@ pub fn terminal_answer() -> Option<bool> {
 /// Terminals that do not answer are left to the config's own fallback, and an
 /// unanswering one costs a tenth of a second at start-up.
 ///
-/// ⚠️ The reply is read **straight off the descriptor**, which takes whatever
+/// Warning: The reply is read **straight off the descriptor**, which takes whatever
 /// is in it — the terminal's answer *and anything the reader has already
 /// typed*. That used to be dropped, and it is the first tenth of a second of
 /// the session: `yumete 第三章.md` followed straight away by `iHELLO` left the
@@ -239,7 +239,7 @@ pub fn ask_the_terminal() -> Option<bool> {
             // SAFETY: one initialised `pollfd` describing a descriptor this
             // process owns, and a timeout in milliseconds.
             if unsafe { libc::poll(&mut watch, 1, left.as_millis() as libc::c_int) } <= 0 {
-                // ⚠️ **The common path, and the one that drops keystrokes.**
+                // Warning: **The common path, and the one that drops keystrokes.**
                 // A terminal that does not answer times out here, and
                 // everything read on the way — which is the reader typing —
                 // was thrown away with the buffer.
@@ -465,14 +465,14 @@ fn linear(v: u8) -> f64 {
 /// How much colour a 分詞 `color` mark carries, as CIELAB chroma distance
 /// (Δab), for an ink of this `lightness` (#510).
 ///
-/// ⚠️ **It depends on the ink, and it has to.** Equal measured chroma is not
+/// Warning: **It depends on the ink, and it has to.** Equal measured chroma is not
 /// equal *visibility*: the eye tells hues apart worse the darker they get, and
 /// a light page's ink sits at L\* 17 where 「light 模式下墨色都是黑色的」 —
 /// 10.8, which reads clearly against the dark page's L\* 83 ink, was invisible
 /// there. The two ends were picked by eye, a straight line
 /// between them.
 ///
-/// ⚠️ It is **not** that the dark ink has no room: the walk lowers red as well
+/// Warning: It is **not** that the dark ink has no room: the walk lowers red as well
 /// as raising blue, and red carries little luminance, so 19.5 on the light page
 /// costs 1.047:1 of brightness — against the 1.38:1 that made `ink` read as
 /// emphasis in the first place.
@@ -525,7 +525,7 @@ const RULE_BACK: u16 = 5000;
 impl Palette {
     /// The palette in force.
     pub fn of(config: &Config) -> Palette {
-        // ⚠️ **Asking for the palette before anybody settled the mood is a
+        // Warning: **Asking for the palette before anybody settled the mood is a
         // bug, and a silent one** (§5.12.58). `MOOD` starts at 0 — which reads
         // as「light」 — so the answer looks perfectly ordinary and is simply
         // the wrong theme. Every drawing path settles first (`run` at startup,
@@ -586,7 +586,7 @@ impl Palette {
     /// **`under`, marked `depth` rungs toward the ink** — the one way anything
     /// is laid over anything else (#488).
     ///
-    /// ⚠️ **A mark is a displacement, not a position.** A rung is an absolute
+    /// Warning: **A mark is a displacement, not a position.** A rung is an absolute
     /// place on the line from 墨 to 紙, so 第 86 檔 means 「four rungs off the
     /// paper」 *and only on the paper*: a table banded at 第 86 inside a `:::`
     /// kept the colour it would have had on the page, and read as a patch
@@ -608,7 +608,7 @@ impl Palette {
         };
         let (ir, ig, ib) = self.ladder.ink;
         let (pr, pg, pb) = self.ladder.paper;
-        // ⚠️ **Rounded, not truncated.** `Ladder::step` rounds half up, and a
+        // Warning: **Rounded, not truncated.** `Ladder::step` rounds half up, and a
         // mark that is one unit off it is a second colour for the same rung —
         // `over(paper, PAPER - WORD_TINT)` has to *be* `at(WORD_TINT)`, or the
         // claim that an ordinary page does not move is one unit false.
@@ -842,13 +842,13 @@ impl Palette {
 
     /// The same wash, for any of the 品色 — what a `:::` block sits on (#459).
     ///
-    /// ⚠️ **This is why the four callouts can differ by hue now and could not
+    /// Warning: **This is why the four callouts can differ by hue now and could not
     /// before.** They used to be four *greys* 1.4–2.4 ΔE apart, which is below
     /// the threshold at which two flat grounds can be told apart at all. A hue
     /// held at a fixed distance off the page is a different proposition: the
     /// distance does the work of 「這是一塊」 and the hue does the work of
     /// 「哪一塊」, and neither is asked to do the other's job.
-    /// ⚠️ **1.5:1, not [`Ink::wash`]'s 1.9** (#465). That number was set when
+    /// Warning: **1.5:1, not [`Ink::wash`]'s 1.9** (#465). That number was set when
     /// 朱 was the only wash on the page and it is right for a small one — a
     /// `==標記==` is a few characters and needs to be found. A callout is a
     /// paragraph of prose the reader is meant to *read*, four of them are now
@@ -859,7 +859,7 @@ impl Palette {
     /// stripe beside it is 1.09.
     pub fn washed(self, accent: Accent) -> Color {
         let colour = self.accent_colour(accent);
-        // ⚠️ **Close to the page, and closer on a light one** (#489).
+        // Warning: **Close to the page, and closer on a light one** (#489).
         //
         // This began at 1.5:1 both ways, which is a *field* of colour, not a
         // pane of glass over the paper: 「太濃了……髒的要死」, 「侵略性太强」.
@@ -877,7 +877,7 @@ impl Palette {
         // 「面積大，對比可以低」 sets the floor, and these are under it, which
         // is why they can be this quiet and still be seen.
         //
-        // ⚠️ **The saturation does not come down with them.** Lowering both is
+        // Warning: **The saturation does not come down with them.** Lowering both is
         // what made the first attempt grey: the colour has to stay itself and
         // only move toward the page. 「保證本色的狀態下讓他更淡。」
         let off_page = match luminance(self.page_colour()) < luminance(self.text()) {
@@ -902,7 +902,7 @@ impl Palette {
     /// A ground for a **short run** of one of the 品色 — a diff's changed
     /// word, not a callout's field (#499).
     ///
-    /// ⚠️ **Louder than [`Self::washed`], and that is not an inconsistency:
+    /// Warning: **Louder than [`Self::washed`], and that is not an inconsistency:
     /// a ground's loudness has to be set by its area.** 1.5:1 over a paragraph
     /// of prose was 「侵略性太强」 and became 1.08–1.12 for the callouts; the
     /// same 1.5 under two characters is barely a tint, and those two characters
@@ -915,7 +915,7 @@ impl Palette {
 
     /// 改動條那一格的底色——行號旁邊一欄寬的那一條（#55／#298）。
     ///
-    /// ⚠️ **比 [`Self::short_wash`] 還響，理由還是面積。** 一段 `:::` 的底色
+    /// Warning: **比 [`Self::short_wash`] 還響，理由還是面積。** 一段 `:::` 的底色
     /// 攤在二十行上，1.08–1.12 就夠了；`==標記==` 是幾個字，1.5；這一條是
     /// **一欄寬**，全頁最小的一塊有顏色的地方，而且它旁邊永遠是行號那一片灰。
     /// 3:1 是「一欄寬的東西還認得出是綠是藍」的下限，也就是 WCAG 給非文字元素
@@ -935,7 +935,7 @@ impl Palette {
 
     /// A ground of `accent`'s **hue**, set `off_page` away from the paper.
     ///
-    /// ⚠️ **Not a mix toward the paper** (#487). `washed_to` walks the straight
+    /// Warning: **Not a mix toward the paper** (#487). `washed_to` walks the straight
     /// line from the accent to the page, which works when the accent is on the
     /// far side of the page in luminance — a bright colour on a dark page — and
     /// falls apart the other way round. In the light mood the accents are
@@ -957,7 +957,7 @@ impl Palette {
         let paper = self.page_colour();
         let (hue, _, sat) = to_hsl(accent);
         let (page_hue, page_light, page_sat) = to_hsl(self.ladder.paper);
-        // ⚠️ **A tint the paper's own hue has to out-saturate the paper**
+        // Warning: **A tint the paper's own hue has to out-saturate the paper**
         // (#490). 墨香's light page is a warm cream at 45° and 46 saturation,
         // and 黃 sits at 39° — six degrees away, and *under* the paper in
         // saturation. So it did not read as yellow, it read as cream with the
@@ -968,7 +968,7 @@ impl Palette {
         // a colour of its own — so the floor is the page's saturation with a
         // margin, and every other accent keeps the band.
         //
-        // ⚠️ **And only when the page is a colour at all.** The dark page is a
+        // Warning: **And only when the page is a colour at all.** The dark page is a
         // near-neutral that happens to compute a hue (216°, at 9 saturation),
         // and 藍 lands 16° from it — so without this the dark mood lifted the
         // blue to 58 and the rule fired where there was nothing to collide
@@ -1038,7 +1038,7 @@ impl Palette {
     /// It is a rung and not a hue for the same reason [`Ink::word`] is: a word
     /// boundary is structure, not a mark somebody made.
     ///
-    /// ⚠️ **Not `ASIDE`**, which is where this began. That rung means 「not
+    /// Warning: **Not `ASIDE`**, which is where this began. That rung means 「not
     /// the prose」, and borrowing it made every second word on the page look
     /// demoted rather than merely bounded.
     pub fn word_ink(self) -> Color {
@@ -1047,7 +1047,7 @@ impl Palette {
 
     /// The third way: **a second hue at the ink's own brightness** (#501).
     ///
-    /// ⚠️ **One half is the plain ink; only the other takes a colour** (#507).
+    /// Warning: **One half is the plain ink; only the other takes a colour** (#507).
     /// It gave both halves a hue for a while — warm against cool — on the
     /// reasoning that blue against the near-grey ink reads as 「blue against
     /// white」. True, and the cost was that a page of prose had no plain ink
@@ -1055,7 +1055,7 @@ impl Palette {
     /// 色。」 So the pair is 第 0 檔 against one cool hue, and the page is still
     /// a page of ink.
     ///
-    /// ⚠️ **Lightness is held and only the hue moves** — the opposite of
+    /// Warning: **Lightness is held and only the hue moves** — the opposite of
     /// [`Self::tinted`], and for the mirror reason. `word_ink` steps a word
     /// *darker*, and on a page of prose a darker run reads as emphasis whether
     /// or not it was meant to: 「有些字亮有些字暗，亮的像强调」. Hue carries the
@@ -1063,13 +1063,13 @@ impl Palette {
     /// the ink's **measured** brightness, not given the ink's HSL lightness:
     /// HSL's L is `(max+min)/2` and knows nothing about the eye.
     ///
-    /// ⚠️ **The hue is the theme's 藍, never its 朱 or 綠.** About eight men in
+    /// Warning: **The hue is the theme's 藍, never its 朱 or 綠.** About eight men in
     /// a hundred cannot tell red from green, and this is the one mark on the
     /// page whose entire job is to be told apart. Blue against the page's own
     /// warm ink is a 藍↔黃 difference, which every common form of colour
     /// blindness leaves intact.
     ///
-    /// ⚠️ **Only where the writing is the plain ink.** The answer for a heading
+    /// Warning: **Only where the writing is the plain ink.** The answer for a heading
     /// or a link is `None`, and the renderers then leave that run alone.
     /// `word_ink` can step *any* colour back a rung and keep it 金 or 藍; a hue
     /// cannot — rotating a heading's 金 to 藍 does not mark a word boundary, it
@@ -1117,11 +1117,11 @@ impl Palette {
 
     /// The rule a `line` word mark draws — see [`RULE_BACK`] (#501).
     ///
-    /// ⚠️ **Not 35.** It began on FURNITURE — line numbers, an unlit tab — and
+    /// Warning: **Not 35.** It began on FURNITURE — line numbers, an unlit tab — and
     /// the answer was 「不够淡」. Markdown already spends the solid underline on
     /// a link, so this one has to be visibly the quieter of the two.
     ///
-    /// ⚠️ **And it is not drawn on a link at all.** Composing it over the
+    /// Warning: **And it is not drawn on a link at all.** Composing it over the
     /// link's own 藍 the way a table band composes over a callout was tried and
     /// measured `#002857`, which on a dark page is a black line: 「那个蓝色线，
     /// 深的看不出来了都」. So the rule that stands is the simple one — 「链接就

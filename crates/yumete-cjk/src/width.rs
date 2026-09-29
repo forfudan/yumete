@@ -51,9 +51,9 @@ pub fn ambiguous_is_wide() -> bool {
 /// CJK) and fullwidth characters, `1` otherwise. East-Asian Ambiguous
 /// characters follow [`ambiguous_is_wide`].
 ///
-/// ⚠️ **Never in a loop over a run of text** (#422, 2026-09-27). 「How wide is
+/// Warning: **Never in a loop over a run of text** (#422, 2026-09-27). 「How wide is
 /// this character」 and 「how wide is this piece of writing」 are different
-/// questions, and adding the first one up does not answer the second: `⚠️` is
+/// questions, and adding the first one up does not answer the second: `Warning: ` is
 /// `U+26A0` plus VS16 — one cell and nothing, added up **1**, while the
 /// terminal draws an emoji **2** cells wide. Summing per `char` put every
 /// column after it on that row one cell out, and cut search results between the

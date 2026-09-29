@@ -268,7 +268,7 @@ impl Editor {
             self.status = say!("check.names-no-wiki");
             return;
         }
-        // ⚠️ **No reading table, no answer.** Without it this would be
+        // Warning: **No reading table, no answer.** Without it this would be
         // 「one character different」, which in Chinese is most of the
         // vocabulary; a page of noise is worse than the silence it replaces.
         if !self.reader.available() {
@@ -329,11 +329,11 @@ impl Editor {
     /// makes it belong here is the *answer* — a `path:line:` listing `gf`
     /// walks, which is the shape every answer in this editor has.
     ///
-    /// ⚠️ **Every file, not this one.** A server watches a crate and complains
+    /// Warning: **Every file, not this one.** A server watches a crate and complains
     /// about files nobody has opened; a listing that showed only the current
     /// buffer would hide exactly the errors a person cannot see by scrolling.
     pub(super) fn list_problems(&mut self) {
-        // ⚠️ **響度的名字在這裏寫成四個字面量**，不在 [`crate::problem`] 裏——
+        // Warning: **響度的名字在這裏寫成四個字面量**，不在 [`crate::problem`] 裏——
         // 那個模組是純數據，而「哪一則文案」是說話這一層的事。文案自檢也只認得
         // `say!` 底下的字面量：寫成一支 `fn tag()` 的話，四則文案在它眼裏是没有
         // 人說過的死條目。
@@ -348,7 +348,7 @@ impl Editor {
         };
         // Owned, because the listing that comes out of this is written back
         // into the editor the list was read from.
-        // ⚠️ **Short paths, or the listing is unreadable.** A server names
+        // Warning: **Short paths, or the listing is unreadable.** A server names
         // files absolutely, and an absolute path in a temporary directory is
         // ninety characters that wrap onto a second line — measured
         // 2026-09-20, drawing the thing: four complaints filled a page and not
@@ -370,7 +370,7 @@ impl Editor {
             .collect();
         let n = all.len();
         if n == 0 {
-            // ⚠️ 「乾淨」和「根本没人說過話」是兩回事，而在第一步裏它們長得一
+            // Warning: 「乾淨」和「根本没人說過話」是兩回事，而在第一步裏它們長得一
             // 模一樣：這裏只敢說後一句。等服務器真接上了（L2），開着服務器而一
             // 句話都没有纔說得出「乾淨」。
             self.status = say!("problem.none");

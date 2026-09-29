@@ -79,7 +79,7 @@ impl Dialect {
     /// before #332 it was written the same both ways — which compiled in
     /// neither direction and read back cut in the wrong place.
     ///
-    /// ⚠️ **This is the string literal's escaping, not Typst's markup
+    /// Warning: **This is the string literal's escaping, not Typst's markup
     /// escaping.** Inside `"…"` a `*` is a star and `\*` is an error; outside,
     /// the reverse. `export.rs` had the markup one here, so a bold base came
     /// out as `#ruby("\*永和\*", …)` and the export did not compile.

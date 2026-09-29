@@ -14,7 +14,7 @@
 //!   a server that has stopped reading would freeze the page under the cursor;
 //! - **a reader thread**, which frames what comes back and hands over
 //!   [`Notice`]s;
-//! - **a stderr thread**, whose only job is to keep reading. ⚠️ Leaving stderr
+//! - **a stderr thread**, whose only job is to keep reading. Warning: Leaving stderr
 //!   unread wedges the server the moment its pipe fills — and `rust-analyzer`
 //!   is chatty. This is the failure that looks like 「it worked for a minute
 //!   and then stopped」.
@@ -28,7 +28,7 @@
 //! - [`Servers::collect`] on the way round: drain what came back into
 //!   [`yumete_core::editor::Editor::set_problems`].
 //!
-//! ⚠️ **Nothing here ever blocks.** `try_recv`, `try_wait`, and a channel for
+//! Warning: **Nothing here ever blocks.** `try_recv`, `try_wait`, and a channel for
 //! everything that could wait. An editor that stops because another program
 //! stopped is the one outcome not worth any number of diagnostics.
 
@@ -48,7 +48,7 @@ use yumete_core::lsp::{self, Notice};
 /// reason: sending on every keystroke would have `rust-analyzer` re-analysing
 /// a crate per character.
 ///
-/// ⚠️ **這是節流，不是防抖。** 計時從「發現正文變了」那一刻起算，按鍵不重置它
+/// Warning: **這是節流，不是防抖。** 計時從「發現正文變了」那一刻起算，按鍵不重置它
 /// （全樹寫 `touched` 的只有清和設兩處）——所以連續打字是**每 300 毫秒發一次，
 /// 發在詞的中間**，不是「停手 300 毫秒」。註釋從前寫的是後者
 /// （2026-09-23 審出來的）。這樣更好而不是更差：補全那一半正是靠打字中間發出去
@@ -58,7 +58,7 @@ const SETTLE: std::time::Duration = std::time::Duration::from_millis(300);
 
 /// How often the loop looks in while an answer is owed.
 ///
-/// ⚠️ **Only while one is owed.** The event loop blocks on the terminal, so
+/// Warning: **Only while one is owed.** The event loop blocks on the terminal, so
 /// something has to give it a deadline or a diagnostic that arrives while
 /// nobody is typing waits for the next keypress to be drawn. `due_in` returns
 /// `None` the moment nothing is outstanding, and an idle editor goes back to
@@ -70,7 +70,7 @@ const HELLO: i64 = 1;
 
 /// The `id` of the `shutdown` request, and always this.
 ///
-/// ⚠️ **Not [`FIRST_ASK`].** It used to be a literal `2`, which is the id the
+/// Warning: **Not [`FIRST_ASK`].** It used to be a literal `2`, which is the id the
 /// first `gd`／hover／completion of the session wears — 「two requests must
 /// never wear the same one」, and this one broke it (2026-09-23 審出來的).
 /// Nobody reads the answer at exit, so it never showed; the rule is the point.
@@ -78,14 +78,14 @@ const GOODBYE: i64 = 0;
 
 /// Where the ids for everything else start.
 ///
-/// ⚠️ **Not 1, and not shared with the handshake.** An answer is matched by
+/// Warning: **Not 1, and not shared with the handshake.** An answer is matched by
 /// its id and nothing else, so two requests must never wear the same one —
 /// and [`HELLO`] is the one id whose meaning is fixed.
 const FIRST_ASK: i64 = 2;
 
 /// One running server.
 struct Server {
-    /// ⚠️ **`None` in a test, and only there.** Everything interesting about
+    /// Warning: **`None` in a test, and only there.** Everything interesting about
     /// this module is the rule 「when is a file told about」, and that rule has
     /// nothing to do with a process — so the tests hand over a pair of plain
     /// channels and read what would have gone down the pipe. A test that
@@ -105,7 +105,7 @@ struct Server {
     version: i64,
     /// **Whether a fresh round of diagnostics is still owed.**
     ///
-    /// ⚠️ **Only diagnostics.** A request's answer is owed as long as its id
+    /// Warning: **Only diagnostics.** A request's answer is owed as long as its id
     /// is in one of the three slots below — that is what [`Server::owed`]
     /// reads. Putting both in this one flag is what made `gd` wait for the
     /// next keypress: diagnostics arrive unasked, all the time, and the first
@@ -121,7 +121,7 @@ struct Server {
     asked_next: Option<i64>,
     /// The id of the 「what is this?」 now out, if one is (#53 ③).
     ///
-    /// ⚠️ **Its own slot, not a second use of `asked_where`.** Both questions
+    /// Warning: **Its own slot, not a second use of `asked_where`.** Both questions
     /// are about the same spot and can be asked one after the other, and an
     /// answer carries only an id — one slot would make a hover answer look
     /// like a definition that had somehow lost its place.
@@ -147,7 +147,7 @@ pub struct Servers {
     saved: HashMap<PathBuf, u64>,
     /// **Which server each file was told to.**
     ///
-    /// ⚠️ `sent`／`saved`／`waiting_on` 是全局的，而 `running` 是按語言分的——
+    /// Warning: `sent`／`saved`／`waiting_on` 是全局的，而 `running` 是按語言分的——
     /// 少了這一格，rust-analyzer 一崩就會把 `.go` 的診斷也從頁面上抹掉，把
     /// gopls 的 `sent` 也清空（於是下一趟白發一條 `didSave`，讓它整跑一次
     /// 檢查），而 `waiting_on` 裏那個死掉的服務器的路徑永遠清不掉——「分析中」
@@ -162,7 +162,7 @@ pub struct Servers {
     /// seconds of an editor that looks broken. 2026-09-21：「在等的這段時間能
     /// 不能在狀態欄出現個提示？」
     ///
-    /// ⚠️ **Only until the first answer**, and per file. After that a re-read
+    /// Warning: **Only until the first answer**, and per file. After that a re-read
     /// is milliseconds, and a line that flickered 「分析中」 on every keystroke
     /// would be noise where a status line is the scarcest thing on the page.
     waiting_on: HashSet<PathBuf>,
@@ -197,7 +197,7 @@ impl Servers {
     /// filling one in would be guessing on the reader's behalf and making them
     /// pay for the guess every time they open a `.py`.
     ///
-    /// ⚠️ **An empty command is 「not this language」**, which is how a reader
+    /// Warning: **An empty command is 「not this language」**, which is how a reader
     /// turns off one of the ones that come filled in — so it is not the same
     /// as a missing entry.
     fn named<'a>(
@@ -213,7 +213,7 @@ impl Servers {
 
     /// The language a buffer is, as LSP spells it — `None` for prose.
     ///
-    /// ⚠️ **Only real code.** Markdown, Typst and 文本 have language servers in
+    /// Warning: **Only real code.** Markdown, Typst and 文本 have language servers in
     /// the world, but this editor *is* the tool for those, and starting a
     /// second opinion about a manuscript is not what anybody asked for.
     fn language_of(editor: &Editor) -> Option<&'static str> {
@@ -238,7 +238,7 @@ impl Servers {
                     self.running.insert(language.to_string(), server);
                 }
                 Err(why) => {
-                    // ⚠️ **Said once, and never again.** A missing
+                    // Warning: **Said once, and never again.** A missing
                     // `rust-analyzer` is a fact about the machine, not an
                     // event, and repeating it every keystroke would bury every
                     // other thing the status line has to say.
@@ -303,7 +303,7 @@ impl Servers {
 
     /// **A file that is not open any more is not our business any more.**
     ///
-    /// ⚠️ 從前 `lsp::did_close` 全樹一處都没調用（2026-09-23 審出來的）。關掉
+    /// Warning: 從前 `lsp::did_close` 全樹一處都没調用（2026-09-23 審出來的）。關掉
     /// 一個檔，服務器照舊分析它、照舊推它的診斷，而 `Problems` 是按路徑存
     /// 的——`:check-code` 會一直列着一個早就關掉的檔。
     ///
@@ -337,7 +337,7 @@ impl Servers {
     /// answer, and the answer has to be told from every other one the server
     /// sends. The id is remembered here; [`Self::collect`] matches on it.
     ///
-    /// ⚠️ **The file has to have been sent first.** A server asked about a
+    /// Warning: **The file has to have been sent first.** A server asked about a
     /// position in a document it has never been told about answers `null` —
     /// which reads exactly like 「this is written nowhere」. `follow` runs
     /// first on the same turn, so by the time this asks, `didOpen` is out.
@@ -351,7 +351,7 @@ impl Servers {
             }
             return;
         }
-        // ⚠️ **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
+        // Warning: **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
         // settle（300 毫秒）時 `follow` 一個字都還沒發出去，這時候問，服務器
         // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
         // 「哪兒都沒寫」。所以問題**留着不取**，下一輪正文發出去了再問，同
@@ -381,7 +381,7 @@ impl Servers {
             }
             return;
         }
-        // ⚠️ **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
+        // Warning: **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
         // settle（300 毫秒）時 `follow` 一個字都還沒發出去，這時候問，服務器
         // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
         // 「哪兒都沒寫」。所以問題**留着不取**，下一輪正文發出去了再問，同
@@ -410,7 +410,7 @@ impl Servers {
     /// **Send the 「what comes next?」 question** (`C-n` and every letter typed,
     /// #53 ④).
     ///
-    /// ⚠️ **Not until the server has the text this is a question about.** The
+    /// Warning: **Not until the server has the text this is a question about.** The
     /// `didChange` that carries the letter just typed waits out the settle
     /// (300 ms), and a `completion` sent before it arrives is answered against
     /// the *previous* version of the file — which is a list of the things that
@@ -473,7 +473,7 @@ impl Servers {
                         server.waiting = false;
                         anything = true;
                     }
-                    // ⚠️ An unanswered request can stall a server for good.
+                    // Warning: An unanswered request can stall a server for good.
                     Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(id)),
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
@@ -496,7 +496,7 @@ impl Servers {
                             server.asked_where = None;
                             anything = true;
                             match places.first() {
-                                // ⚠️ **The first one, and only the first.**
+                                // Warning: **The first one, and only the first.**
                                 // A definition can have several answers (a
                                 // trait and its impls), and a caret can only
                                 // be in one of them; a picker over the rest is
@@ -538,7 +538,7 @@ impl Servers {
 
     /// A server died. Forget what it said and say so — **once**.
     ///
-    /// ⚠️ **Its complaints go with it.** Leaving them on the page would show
+    /// Warning: **Its complaints go with it.** Leaving them on the page would show
     /// errors from a program that is no longer watching, and every one of them
     /// would stay until the session ended.
     fn lost(&mut self, language: &str, editor: &mut Editor) {
@@ -564,7 +564,7 @@ impl Servers {
             // rust-analyzer」: the next file starts a fresh one, which is the
             // whole of the 「restart without taking the editor down」 rule.
             true => say!("lsp.stopped", language),
-            // ⚠️ **One that never答上話 is written off**, or the editor spawns
+            // Warning: **One that never答上話 is written off**, or the editor spawns
             // one per turn of the loop, for ever. This machine 2026-09-20:
             // `~/.cargo/bin/rust-analyzer` is a rustup shim whose component is
             // not installed — it starts, prints one line to stderr and exits,
@@ -604,7 +604,7 @@ impl Servers {
         for server in self.running.values_mut() {
             server.say_now(lsp::shutdown(GOODBYE));
             server.say_now(lsp::exit());
-            // ⚠️ **這兩句多半來不及出門。** `say_now` 只是塞進 channel，而下面
+            // Warning: **這兩句多半來不及出門。** `say_now` 只是塞進 channel，而下面
             // 立刻就 `kill`——中間沒有任何同步，writer 綫程搶不過。留着它們是
             // 因為一條走得出去的路比沒有好（關得慢的終端就走得出去），但**不要
             // 讀成「先禮後兵」**：實際發生的幾乎一律是兵。2026-09-23 記。
@@ -647,7 +647,7 @@ impl Server {
 /// `spawn` is indistinguishable from a program that started and died, which is
 /// a different thing with a different answer ([`Servers::lost`]).
 ///
-/// ⚠️ An absolute path is asked about directly; anything else is looked for on
+/// Warning: An absolute path is asked about directly; anything else is looked for on
 /// `PATH`, the way a shell would.
 fn on_the_path(command: &str) -> bool {
     let named = Path::new(command);
@@ -665,7 +665,7 @@ fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Serv
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        // ⚠️ **The project root, not the editor's cwd.** A server asked to
+        // Warning: **The project root, not the editor's cwd.** A server asked to
         // analyse a crate from somewhere else finds no `Cargo.toml` and
         // answers about nothing at all, silently.
         .current_dir(editor.project_root())
@@ -704,7 +704,7 @@ fn start(named: &yumete_config::Server, editor: &Editor) -> std::io::Result<Serv
         }
     });
 
-    // ⚠️ **stderr must be read or the server wedges** when its pipe fills.
+    // Warning: **stderr must be read or the server wedges** when its pipe fills.
     // Nothing is done with it: a server's log is its own business, and the one
     // thing that matters is that somebody is emptying the bucket.
     if let Some(mut stderr) = child.stderr.take() {
@@ -747,7 +747,7 @@ pub(crate) fn trace(way: &str, message: &str) {
     }
 }
 
-// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
 // 全綠。這一支從前擺在中間，後面壓着 15 行（2026-09-24 審出來的）。
@@ -814,7 +814,7 @@ mod tests {
 
         servers.follow(&editor, &config);
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didOpen");
-        // ⚠️ **Nothing changed, so nothing is said.** Otherwise every turn of
+        // Warning: **Nothing changed, so nothing is said.** Otherwise every turn of
         // the event loop — every cursor move — would re-send the file.
         servers.follow(&editor, &config);
         assert!(heard.try_recv().is_err(), "一個字沒改就不再說");
@@ -827,7 +827,7 @@ mod tests {
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didChange");
     }
 
-    /// ⚠️ **Prose has no language server here.** Markdown has one in the
+    /// Warning: **Prose has no language server here.** Markdown has one in the
     /// world; this editor *is* the tool for a manuscript, and a second opinion
     /// about a chapter is not what anybody asked for.
     #[test]
@@ -862,7 +862,7 @@ mod tests {
         assert_eq!(editor.problem_on_line(0), Some(Severity::Error));
         assert_eq!(editor.problem_count(), 1);
 
-        // ⚠️ **A server that dies takes its complaints with it.** Leaving them
+        // Warning: **A server that dies takes its complaints with it.** Leaving them
         // would show errors from a program that is no longer looking, for as
         // long as the session lasted.
         drop(tell);
@@ -882,7 +882,7 @@ mod tests {
         servers.collect(&mut editor);
         let answer: serde_json::Value =
             serde_json::from_str(&heard.try_recv().expect("答了")).unwrap();
-        assert_eq!(answer["id"], 7, "⚠️ 不答，服務器可能就在那兒等着");
+        assert_eq!(answer["id"], 7, "Warning: 不答，服務器可能就在那兒等着");
     }
 
     /// A reader turning one of the built-in servers off.
@@ -899,7 +899,7 @@ mod tests {
 
     /// **一串候選，用 PATH 上第一個裝了的**（2026-09-21）。
     ///
-    /// ⚠️ **一串名字表達不了**：helix 給 python 列的五個各有各的參數
+    /// Warning: **一串名字表達不了**：helix 給 python 列的五個各有各的參數
     /// （`ruff server`、`ty server`，而 `jedi-language-server` 不帶參數），所以
     /// 這是一串**表**，不是一串字符串。
     #[test]
@@ -935,7 +935,7 @@ mod tests {
         assert!(Servers::named(&none, "rust").is_none());
     }
 
-    /// ⚠️ **One that never got up is written off** — 2026-09-20, found against
+    /// Warning: **One that never got up is written off** — 2026-09-20, found against
     /// a real `rust-analyzer`: `~/.cargo/bin/rust-analyzer` on this machine is
     /// a rustup shim whose component is not installed, so it starts, prints
     /// one line to stderr and exits. `spawn()` succeeds, `try_wait` says it is

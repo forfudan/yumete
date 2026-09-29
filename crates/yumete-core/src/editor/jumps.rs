@@ -95,12 +95,12 @@ impl Editor {
     /// Go back to where a jump came from (`C-o`), or forward again (`C-i`).
     /// **回到這一份稿子最後改動的地方**（`g.`，helix 的 `goto_last_modification`）。
     ///
-    /// ⚠️ **跳轉表答不了這個問題。** 那張表只在**遠距離移動**的時候記一格
+    /// Warning: **跳轉表答不了這個問題。** 那張表只在**遠距離移動**的時候記一格
     /// （[`Self::remember_jump`]），而「我剛纔改到哪」是寫東西的人一天問一百次的事：
     /// 翻回去查一個名字、看一眼前一章，然後要回到筆停下的地方。`C-o` 只在你「跳」過的
     /// 時候有答案，光是往上滾幾頁再想回來，它一格都沒記。
     ///
-    /// ⚠️ **每一份稿子各記各的**（欄位在 `Buffer` 上），所以換了檔再按 `g.`，回的是那
+    /// Warning: **每一份稿子各記各的**（欄位在 `Buffer` 上），所以換了檔再按 `g.`，回的是那
     /// 一份自己最後改的地方，不是上一份的。
     pub(super) fn goto_last_modification(&mut self) {
         let Some(at) = self.current_buffer().last_edit() else {
@@ -160,7 +160,7 @@ impl Editor {
         // 2026-09-20). What `f` covers is a value now — so an operator can be
         // handed it without anybody replaying the key — while 「there is no
         // such character on this line」 stays here, where the status line is.
-        // ⚠️ **`t`／`T` are till again** (2026-09-21). They were retired when
+        // Warning: **`t`／`T` are till again** (2026-09-21). They were retired when
         // `t` became the table group, on the reasoning that a verb-last editor
         // puts till 「one keystroke away from find and no more」. Two things
         // changed: the vim preset puts the verb *first* (`dt,`), and helix's

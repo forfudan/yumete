@@ -17,7 +17,7 @@
 #  1. **`.rcgu.o` 回來了沒有** —— 回來就是 `packed` 那一行被誰動了，或者有人拿
 #     別的 profile 在編。這一查兩頭都便宜：沒有就只掃三百來個檔，有就第一個
 #     就撞上。
-#  2. **整棵樹多大** —— 過了線就說一句。⚠️ 真的大起來的時候這一步本身就慢，而
+#  2. **整棵樹多大** —— 過了線就說一句。Warning: 真的大起來的時候這一步本身就慢，而
 #     那個慢正是它要報的那件事。
 #
 # 為什麼不定時刪：定時器可能正好在要構建之前把緩存清了，而全量重編只要一分多鐘、
@@ -38,7 +38,7 @@ BIG_GB=20
 
 stray="$(find target -name '*.rcgu.o' -print -quit 2>/dev/null || true)"
 if [ -n "${stray}" ]; then
-    echo "⚠️  target/ 裏有 .rcgu.o，說明 split-debuginfo 不是 packed 了："
+    echo "Warning: target/ 裏有 .rcgu.o，說明 split-debuginfo 不是 packed 了："
     echo "    ${stray}"
     echo "    看一眼 Cargo.toml 的 [profile.dev]，然後 cargo clean。"
 fi
@@ -48,6 +48,6 @@ gb="$(du -sk target 2>/dev/null | cut -f1)"
 gb=$(( gb / 1024 / 1024 ))
 echo "target/：${size}"
 if [ "${gb}" -ge "${BIG_GB}" ]; then
-    echo "⚠️  過 ${BIG_GB} G 了，該清一次——全量重編大約一分半："
+    echo "Warning: 過 ${BIG_GB} G 了，該清一次——全量重編大約一分半："
     echo "    cargo clean"
 fi

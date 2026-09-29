@@ -96,14 +96,14 @@ impl Editor {
             ("w b e", say!("help.common.word-motions")),
             ("3w 5j", say!("help.common.count-first")),
             ("g30g / 30G", say!("help.common.go-to-line")),
-            // ⚠️ **這一頁開頭寫着「每一節都是這個編輯器自己報上來的」，而下面
+            // Warning: **這一頁開頭寫着「每一節都是這個編輯器自己報上來的」，而下面
             // 這幾行是手抄的。** 2026-09-24 審出來四條錯的：`L H` 說成整頁（其實
             // 是上下一句，整頁是 `C-f`／`C-b`）、`gw`（沒綁，編輯器自己會說「是
             // gD 了」）、`) (`（沒綁，它自己會說「一句一句走是 H／L」）、`}} {{`
             // （是 `}` `{`——大括號當成 `format!` 的轉義寫了兩遍，而這裏不是格式
             // 串，於是屏幕上真就印出兩個）。
             //
-            // ⚠️ **`documented_keys` 那張網看不見這裏**：它只讀 `docs/manual.md`
+            // Warning: **`documented_keys` 那張網看不見這裏**：它只讀 `docs/manual.md`
             // 與教程，不讀這一頁。手抄的鍵表就是這麽爛掉的。
             ("gg ge", say!("help.common.start-end-of-file")),
             ("gh gl gs", say!("help.common.line-start-end")),
@@ -139,7 +139,7 @@ impl Editor {
         out.push_str(&format!("\n## {}\n\n", say!("help.common.space-title")));
         for (key, what) in Self::SPACE_KEYS {
             out.push_str(&format!(
-                "- `空格 {key}` — {}
+                "- `\u{2423}{key}` — {}
 ",
                 crate::messages::say(what, &[])
             ));

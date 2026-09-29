@@ -4,17 +4,19 @@
 
 use super::*;
 
-/// **`C-w`／`空格 w` 這個鍵的名字，按界面語言寫。**
+/// **走到下一區那個鍵的名字**：`\u{2423}w`。
 ///
-/// 2026-09-27 報的：英文界面上印着 `C-w／空格 w next region`——一個漢字和一個
-/// 全角斜槓。鍵位那一欄的型別是 `&'static str`（`hjkl` 在哪種語言裏都是
-/// `hjkl`），所以這裏逐語言各寫一個字面量，不去泄漏一份新的字串：這一行每一幀
-/// 都算一次。
+/// `\u{2423}`（OPEN BOX）就是空格鍵，一根橫綫兩端向上。2026-09-29 定，原話：
+/// 「不用显示 C-w……_ 其实是空格符号，就是短横+两端两个向上的竖线的符号。这样的
+/// 话节约空间而且用户也能理解。」
+///
+/// Warning: **`C-w` 不寫了。** 同一件事兩種按法，而鍵位那一行是硬砍的——兩種都寫
+/// 要十一格，寫一種只要三格，省下的八格後面還排着別的鍵。`C-w` 照樣管用。
+///
+/// Warning: **這一支從前分語言**（英文界面寫 `C-w / Space w`）。`\u{2423}` 在哪
+/// 種語言裏都是那個記號，所以不必分了。
 fn back_to_text_key() -> &'static str {
-    match crate::messages::language() {
-        crate::messages::Language::English => "C-w / Space w",
-        _ => "C-w／空格 w",
-    }
+    "\u{2423}w"
 }
 
 impl Editor {
@@ -50,6 +52,10 @@ impl Editor {
                 let what = crate::messages::say(crate::sidebar::Panel::from(kind).tag(), &[]);
                 return Hint::Keys(what, vec![
                         ("j k".into(), say!("hint.sidebar.move")),
+                        // Warning: **`w` 也要寫上**（2026-09-29 報的：「不仅没有提示
+                        // 而且 w 无效」）。兩件事一起壞的：這一行沒說它，而它
+                        // 本來也真的不管用（見 `on_transient_key`）。
+                        ("w".into(), say!("hint.sidebar.width")),
                         (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
                     ]);
             }
@@ -58,11 +64,11 @@ impl Editor {
         // the keys are in a field, and the one that is not obvious is what
         // `Enter` does with them.
         //
-        // ⚠️ **`Enter` 兩種範圍下說同一句** (2026-09-25 定)。從前本文件那一種是
+        // Warning: **`Enter` 兩種範圍下說同一句** (2026-09-25 定)。從前本文件那一種是
         // 「下一處」、鍵留在框裏，跨檔那一種是「開找」、鍵落到結果上——一個鍵兩個
         // 意思，這一行只好分開說。現在兩種都是「去看結果」。
         //
-        // ⚠️ **This row used to say 「Tab 下一格」 in both states, and `Tab`
+        // Warning: **This row used to say 「Tab 下一格」 in both states, and `Tab`
         // does not do that in either** (2026-09-24 審出來的). In the box it
         // falls through to nothing; in the panel it walks the slot's views.
         // The next cell is `↓`.
@@ -77,7 +83,7 @@ impl Editor {
                     ("Esc".into(), say!("hint.search.out-of-the-box")),
                 ]);
         }
-        // ⚠️ **這一行不再拿來預覽了**（2026-09-27 定，原話：「命令行现在不显示
+        // Warning: **這一行不再拿來預覽了**（2026-09-27 定，原話：「命令行现在不显示
         // 预览了，所以可以空出来显示按键提示」）。從前站在一處命中上，這一行寫的
         // 是那一處前後的句子——而預覽現在在正文裏：`jk` 走一步，正文就跳過去、選
         // 區蓋上去（`Editor::show_hit`）。同一句話說兩遍，佔掉的正是讀者最需要看
@@ -88,7 +94,7 @@ impl Editor {
             if self.transient(side).is_none()
                 && self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search)
             {
-                // ⚠️ **這一行是硬砍的，所以次序就是重要性**（2026-09-27 三個試
+                // Warning: **這一行是硬砍的，所以次序就是重要性**（2026-09-27 三個試
                 // 用的人各自撞上）。從前排頭的是 `/` 和 `d c a`，而砍在尾巴上的
                 // 是 `u 撤回`——一個是最不常用的，一個是按錯之後唯一的退路。英文
                 // 界面下整行要 170 欄纔寫得完，所以尾巴一定會被砍掉。
@@ -97,15 +103,15 @@ impl Editor {
                 // （2026-09-29 定，原話：「光标不在结果上，不应该显示『r ....』
                 // 的提示。因此如果用户按了 r，也不需要任何提示」，`R` 同）。
                 //
-                // ⚠️ 從前它們跟着「勾了替換」一起出現，於是站在搜索框上也寫着
+                // Warning: 從前它們跟着「勾了替換」一起出現，於是站在搜索框上也寫着
                 // `r 換這一處`——按下去只換來一句解釋為什麽沒反應。鍵不在那裏
                 // 的時候就別說它在。
                 //
-                // ⚠️ **`u 撤銷` 一個字都不寫**（同日定：「理論上用戶是知道 u 是
+                // Warning: **`u 撤銷` 一個字都不寫**（同日定：「理論上用戶是知道 u 是
                 // 撤銷的……這個功能應該是常駐功能」）。這一行是硬砍的，常駐的鍵
                 // 佔着一格就是把別的擠出畫面。
                 if self.search().replacing && self.search().field == crate::search_panel::Field::Results {
-                    // ⚠️ **`r` 說的是站着的這一行**：檔名那一行上它換整個檔，
+                    // Warning: **`r` 說的是站着的這一行**：檔名那一行上它換整個檔，
                     // 命中那一行上它換那一處。讀者站在哪一行，編輯器自己看得見。
                     match self.search().row() {
                         Some(crate::search_panel::Row::File { .. }) => {
@@ -196,7 +202,7 @@ impl Editor {
                 // this reader already has in the text, and `t` lists the
                 // ones that are not.
                 //
-                // ⚠️ **The grain is `T`'s own label, and nowhere else** (#496).
+                // Warning: **The grain is `T`'s own label, and nowhere else** (#496).
                 // The title said 「表格 · 字」 and the status line said 「· 字」
                 // again a row above, for a fact `T 按字移動` was already
                 // standing there stating — 「似乎不需要吧。因为挺明显的」. So the
@@ -205,7 +211,7 @@ impl Editor {
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
                 Hint::Keys(say!("label.table"), vec![
                     // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
-                    ("空格 t".into(), say!("hint.table.menu")),
+                    ("\u{2423}t".into(), say!("hint.table.menu")),
                     ("T".into(), match grain {
                         Grain::Cell => say!("hint.table.by-character-instead"),
                         Grain::Char => say!("hint.table.by-cell-instead"),
@@ -274,7 +280,7 @@ impl Editor {
                 say!("hint.space.title"),
                 Self::SPACE_KEYS
                     .iter()
-                    // ⚠️ These keys are `char`, and a `char` is not a
+                    // Warning: These keys are `char`, and a `char` is not a
                     // `&'static str`. This used to `Box::leak` one string per
                     // key to make it into one; the key column is a `Cow` now,
                     // so the owned string simply goes in.
@@ -308,7 +314,7 @@ impl Editor {
             // 存東西的格子」不必說，看一眼就知道了。**空的格子不列**，所以一個都
             // 沒存過的時候這張表上只有 `#` 一行。
             //
-            // ⚠️ `#` 不是格子，是問題的答案（見 `edits::recall`），所以它沒有內容
+            // Warning: `#` 不是格子，是問題的答案（見 `edits::recall`），所以它沒有內容
             // 可印，只能寫一句說明，也只有它一行是說明。它排在最後。
             Pending::Register => {
                 let mut named: Vec<(&char, &String)> = self.registers.iter().collect();
@@ -355,7 +361,7 @@ impl Editor {
             // 與 `"` 共用 a–z 這一套名字卻是兩本帳：`"a` 裝的是一段話，`' a` 記的
             // 是一個地方。
             //
-            // ⚠️ **一個都沒記過的時候也要畫出一行來。** 空的 `Body::Keys` 畫不出
+            // Warning: **一個都沒記過的時候也要畫出一行來。** 空的 `Body::Keys` 畫不出
             // 框（`panel.rs` 直接回 `None`），而按了 `'` 屏幕上什麽都不出，讀起來
             // 就是「這個鍵壞了」。
             Pending::Recall => {
@@ -425,7 +431,7 @@ impl Editor {
     /// column is a *sample*: every run of whitespace becomes one space, and
     /// what is left is cut at twelve 漢字 with a `…` to say there is more.
     ///
-    /// ⚠️ Cut by **grapheme**, not by `char`: `⚠️` is two `char` and one
+    /// Warning: Cut by **grapheme**, not by `char`: `Warning: ` is two `char` and one
     /// two-cell glyph, and a cut between them leaves a stray VS16 in the box.
     fn register_preview(text: &str) -> String {
         const ROOM: usize = 24;

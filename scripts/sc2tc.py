@@ -16,11 +16,11 @@
 3. 兩條這張表夠不着的：`裡→裏`（opencc 本來就吐 `裏`，所以表裏沒有）、
    `豎→竪`（手冊裏 68 比 2，用的是 `竪`）。
 
-# ⚠️ 只轉你新寫的句子，別整份往返
+# Warning: 只轉你新寫的句子，別整份往返
 
 **規矩（2026-09-14 定）**：`docs/manual.md` 是**正本**，簡體版由
 `make_manual_sc.py` 從它生成。這支腳本是**內部用的**——起草時把一小段簡體轉成繁體
-好貼回正本，僅此而已。⚠️ **不許拿它把 `manual_sc.md` 整份轉回 `manual.md`。**
+好貼回正本，僅此而已。Warning: **不許拿它把 `manual_sc.md` 整份轉回 `manual.md`。**
 
 拿整份手冊量過：`manual.md → opencc t2s → 這支` 之後，110,552 字裏有 **327 處
 對不回來**（0.3%）。不是這支腳本的毛病，是**簡體那一側本來就把它們併成了一個
@@ -74,7 +74,7 @@ def main() -> int:
     sys.stdout.write(out)
     seen = sorted({c for c in out if c in WATCH})
     if seen and sys.stderr.isatty():
-        print(f"\n⚠️ 這幾個字 opencc 是猜的，自己讀一遍：{' '.join(seen)}", file=sys.stderr)
+        print(f"\nWarning: 這幾個字 opencc 是猜的，自己讀一遍：{' '.join(seen)}", file=sys.stderr)
     return 0
 
 

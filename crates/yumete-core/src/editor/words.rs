@@ -82,7 +82,7 @@ impl Editor {
                 );
             }
             WordCommand::Mark(mark) => {
-                // ⚠️ **線 is not on offer on a 縱書 page** (#503). A terminal
+                // Warning: **線 is not on offer on a 縱書 page** (#503). A terminal
                 // gives one horizontal rule per cell — the underline — and in
                 // 縱書 the Insert caret is that rule (a bar turns with the text,
                 // so an underscore is the only thin *horizontal* cursor there
@@ -165,7 +165,7 @@ impl Editor {
     /// and two mechanisms would have disagreed the moment it did — which is
     /// #350's pattern and this repository's most-repeated bug.
     ///
-    /// ⚠️ **`e` does not ask.** It is coarse whatever this says: Chinese has no
+    /// Warning: **`e` does not ask.** It is coarse whatever this says: Chinese has no
     /// spaces, so an `e` that respected the dictionary would do very nearly
     /// what `w` does. Left coarse it runs to the next punctuation — `w` takes a
     /// word, `e` takes a clause.
@@ -272,7 +272,7 @@ impl Editor {
     /// reads it. The file is opened afterwards because this command exists to
     /// be *looked at*; 自動認詞 does the same work without saying a word.
     ///
-    /// ⚠️ **What autodetect found is cleared first and put back if this run
+    /// Warning: **What autodetect found is cleared first and put back if this run
     /// finds nothing.** The filter below asks the segmenter 「do you already
     /// join this?」 and autodetect's own answer is *in* that segmenter, so a
     /// second look with the first still installed finds nothing at all — while
@@ -282,14 +282,14 @@ impl Editor {
         &mut self,
         scope: &crate::search_panel::Where,
     ) -> Result<(), EditorError> {
-        // ⚠️ **Forget what autodetect found before looking again.** The filter
+        // Warning: **Forget what autodetect found before looking again.** The filter
         // below is 「the segmenter already joins this」, and autodetect's own
         // words are *in* that segmenter — so a second look, with the first
         // look's answer still installed, finds nothing at all and writes an
         // empty list. This command recomputes the whole answer anyway, so the
         // right move is to start from none of it.
         //
-        // ⚠️ …but **put them back if this look finds nothing** (#466). A scan
+        // Warning: …but **put them back if this look finds nothing** (#466). A scan
         // of a short file, of an ASCII file, or of a tree with no 漢字 in it
         // returns empty — and the writer, who asked a question, would have
         // watched every tinted word on the page go out while the status line
@@ -298,7 +298,7 @@ impl Editor {
         let had = self.take_detected_words();
         let mut text = String::new();
         let mut files = 0usize;
-        // ⚠️ **這一篇，除非你說了別的** (#452). It used to read the whole
+        // Warning: **這一篇，除非你說了別的** (#452). It used to read the whole
         // project every time, and a project is usually not a book: in 宇浩's
         // own repository 「宇夢」 never came out, because a few hundred 拆分表
         // drowned the chapter the writer was actually in — 「一堆拆分表形成杂
@@ -378,7 +378,7 @@ impl Editor {
         // page, and a scan nobody asked for must not take one (#367).
         self.open_file(&path).map_err(EditorError::Io)?;
         self.status = match total > keep {
-            // ⚠️ **Both outcomes name the file** (#479). Only the short one
+            // Warning: **Both outcomes name the file** (#479). Only the short one
             // did, so a wide scope that overflowed said how many it found and
             // never where it looked — and `-gd` in a tree with no `.git` in it
             // falls back to the nearest `.yumete`, which can be two levels up.
@@ -572,7 +572,7 @@ impl Editor {
 
     /// Whether the segmentation overlay (word background tint) is shown.
     pub fn segmentation_visible(&self) -> bool {
-        // ⚠️ **Never on a `:diff` listing** (#499). The tint alternates the ink
+        // Warning: **Never on a `:diff` listing** (#499). The tint alternates the ink
         // by word, and inside a changed run that puts *two* inks on one
         // coloured ground — the second measured 5.25:1 where the first was
         // 7.40. A changed run is one thing and has to read as one. The listing
@@ -699,7 +699,7 @@ impl Editor {
     /// ends, and 「好。」 does not. What is left is exactly the run of 漢字 the
     /// eye has to cut for itself.
     ///
-    /// ⚠️ **標點與拉丁文一個都不畫**（#446）。從前這道閘問的是
+    /// Warning: **標點與拉丁文一個都不畫**（#446）。從前這道閘問的是
     /// `char::is_alphanumeric`，而**拉丁字母也是 alphanumeric**——於是
     /// 「`` `w` ``（按詞移動）」裏那一組 `` `（ ``，因為前一個字符是字母 `w`
     /// 而不算邊界，**被當成一個詞塗了色**；反引號中間那個 `w` 兩邊都不是字母，
@@ -834,7 +834,7 @@ impl Editor {
             self.edit_keys.clear();
             return;
         }
-        // ⚠️ **上屏不自己開一個撤銷點——它加入正在進行的那一次插入。**
+        // Warning: **上屏不自己開一個撤銷點——它加入正在進行的那一次插入。**
         //
         // 2026-09-21 收到的話：「yume on 的時候，undo 是每字回撤的。我還是習慣按
         // 『一次編輯』爲單位回撤。」量出來的其實是**每次上屏各自成段**：一段
@@ -848,12 +848,12 @@ impl Editor {
         // block 也是一次 Insert。中文是**打出來的**，一句話要上屏七八次——按上屏
         // 分段等於把一句話切成八次撤銷，而那一句在寫的人心裏是一次編輯。
         //
-        // ⚠️ **Normal 模式下還是要記。** 那時没有正在進行的插入可加入，不記就等
+        // Warning: **Normal 模式下還是要記。** 那時没有正在進行的插入可加入，不記就等
         // 於這段字進了文件卻回不去。
         if self.mode != Mode::Insert {
             self.snapshot();
         }
-        // ⚠️ **上屏也要落在每一段選區上**（#405 Phase 4，2026-09-28）。
+        // Warning: **上屏也要落在每一段選區上**（#405 Phase 4，2026-09-28）。
         //
         // 這一支是**前端直接叫的**，不走 `on_key`，所以 `edit_each` 那一層路由碰不到
         // 它——實測四個光標打 `wo` 空格，「和」只落在最後一段上。中文是打出來的，多

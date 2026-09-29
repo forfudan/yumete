@@ -6,7 +6,7 @@
 **繁體那一份是正本。** 手冊只改 `docs/manual.md`，簡體版跑這支重生成；反過來改
 簡體版，下一次生成就沒了。
 
-⚠️ **只有這一個方向是安全的。** 反過來（簡 → 繁）走 opencc 的 `s2t` 會被它的詞組
+Warning: **只有這一個方向是安全的。** 反過來（簡 → 繁）走 opencc 的 `s2t` 會被它的詞組
 規則改壞正文：整份手冊往返量過，11 萬字裏有 327 處回不來（`表/錶`、`注/註`、
 `才/纔`、`台/臺`、`裏/里`），因為簡體那一側本來就把它們併成了一個字。所以簡體版是
 **生成物**，不是第二份正本。起草新句子用 `scripts/sc2tc.py`，一句一句轉。
@@ -20,7 +20,7 @@
 `:%s/裏/裡/n` 這個能跑的例子。簡體只有一個「里」，轉了就成了「为 里 着」標在「臺灣
 正體」底下，整句沒有意義。
 
-⚠️ 這種地方**在手冊裏自己標**，成對包起來：
+Warning: 這種地方**在手冊裏自己標**，成對包起來：
 
     | `tw` | <!-- verbatim -->臺灣正體——為 裡 著<!-- verbatim --> |
 
@@ -50,7 +50,7 @@ HEAD = (
 
 # 這幾個字形只出現在通規繁體裏（簡體寫 里 为 说 么 录）。轉完 verbatim 之外還剩下
 # 的就是漏網，停下來說。
-# ⚠️ 別把 `册 别 横 没 群` 放進來：通規繁體和簡體**本來就是同一個字形**，它們留在
+# Warning: 別把 `册 别 横 没 群` 放進來：通規繁體和簡體**本來就是同一個字形**，它們留在
 # 簡體版裏是對的，當成漏網會天天誤報。
 TRAD_ONLY = "裏爲説麽録"
 
@@ -70,7 +70,7 @@ def main() -> int:
 
     plain = [p for kept, p in parts if not kept]
     # 一次呼叫轉全部，段與段之間放一個記號：逐段呼叫 opencc 會慢上千倍。
-    # ⚠️ **不能用 NUL**——opencc 直接把它吃掉，十段回來變一段。純 ASCII 的記號它
+    # Warning: **不能用 NUL**——opencc 直接把它吃掉，十段回來變一段。純 ASCII 的記號它
     # 不動。段數對不上就停，那說明它連這個也動了。
     SPLIT = "@@YUMETE-SPLIT@@"
     if SPLIT in text:
@@ -102,7 +102,7 @@ def main() -> int:
     print(f"==> {OUT.relative_to(ROOT)}  ({OUT.stat().st_size:,} 位元組)")
     print(f"    verbatim 區塊 {sum(1 for k, _ in parts if k)} 個")
     if stray:
-        print(f"    ⚠️ verbatim 之外還剩繁體字形：{' '.join(stray)}", file=sys.stderr)
+        print(f"    Warning: verbatim 之外還剩繁體字形：{' '.join(stray)}", file=sys.stderr)
         return 1
     return 0
 

@@ -50,7 +50,7 @@ impl Editor {
                 // The way out of 通規 happens here rather than in the child:
                 // opencc's configs cannot read those 字形, so what it is handed
                 // has to be 字形 it knows.
-                // ⚠️ **换哪一段，在這裏就定下來。** 整本是 `None`；`` ` `` 那一
+                // Warning: **换哪一段，在這裏就定下來。** 整本是 `None`；`` ` `` 那一
                 // 組先把選區放進 `convert_range`，這裏照它取字。
                 let whole = self.convert_range.is_none();
                 let mut text = match &self.convert_range {
@@ -139,11 +139,11 @@ impl Editor {
 
     /// **`` ` `` 那一組：把選區換一種寫法**（2026-09-22 提的）。
     ///
-    /// `:convert` 換的是整本書；這個換選區。⚠️ **收在 `` ` `` 底下而不是另起一個
+    /// `:convert` 換的是整本書；這個換選區。Warning: **收在 `` ` `` 底下而不是另起一個
     /// 前綴**：那一組本來就是「把選區裏的字換一種寫法」（`` `l `` 轉小寫、
     /// `` `u `` 轉大寫），簡繁與大小寫是同一類事，多一個前綴就多一份要記的東西。
     ///
-    /// ⚠️ **一鍵一檔，第二個字母各不相同**：`` `w ``／`` `h `` 而不是
+    /// Warning: **一鍵一檔，第二個字母各不相同**：`` `w ``／`` `h `` 而不是
     /// `` `tw ``／`` `hk ``——後者裏 `` `t `` 既是完整命令又是 `` `tw `` 的前綴，
     /// 只能靠超時去猜，而那正是 vim 裏最招人煩的一類行為。
     ///

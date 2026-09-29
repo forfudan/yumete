@@ -59,7 +59,7 @@ impl<W: Write> Dotted<W> {
                 queue!(w, SetAttribute(attribute))?;
             }
         }
-        // ⚠️ **Both, in this order, and the first is not redundant.** A
+        // Warning: **Both, in this order, and the first is not redundant.** A
         // terminal that parses colon sub-parameters turns the solid line into
         // a dotted one; a terminal that does not drops the sequence it cannot
         // read and keeps the solid line it was already given. The worst case

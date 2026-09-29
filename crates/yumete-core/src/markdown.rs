@@ -12,7 +12,7 @@
 //!   to take out of word motion, the segmentation overlay and search. Emphasis
 //!   in prose does not straddle a paragraph, so a paragraph is the right unit —
 //!   and one paragraph's answer can be cached against its own text.
-//! - **CommonMark 的 flanking 規則這裏不做。** ⚠️ **2026-09-28 更正**：從前這一條寫的是
+//! - **CommonMark 的 flanking 規則這裏不做。** Warning: **2026-09-28 更正**：從前這一條寫的是
 //!   「CommonMark 的強調規則對漢字是錯的，兩個漢字之間它會失手」，**那句話說過頭了**。
 //!   實測 pulldown-cmark 與 comrak 的預設配置，`中**文**中` 兩家都出粗體——漢字在
 //!   flanking 眼裏是 `Lo`，和拉丁字母同一類。真正失手的是**強調內側貼着全角標點**：
@@ -38,7 +38,7 @@ pub enum Kind {
     Strike,
     /// **`$a + b$`** — Typst 的數學（2026-09-28）。
     ///
-    /// ⚠️ **從前它借 `Kind::Code`**，於是 `:export` 把公式導成 `` `a + b` ``——一條反引
+    /// Warning: **從前它借 `Kind::Code`**，於是 `:export` 把公式導成 `` `a + b` ``——一條反引
     /// 號在 Typst 裏是**原樣文本**，公式就此不是公式了。借用在屏幕上看不出來（兩者
     /// 都該畫成一個要逐字讀的字面），是導出的時候壞的。
     Math,
@@ -112,7 +112,7 @@ pub enum Block {
     /// Inside a ``` fence, or the fence line itself — and which `:::` container
     /// it is inside, if any.
     ///
-    /// ⚠️ **A block inside a callout is still that block** (#468). A fence in a
+    /// Warning: **A block inside a callout is still that block** (#468). A fence in a
     /// `::: details` used to come out as `Container`, which was harmless while
     /// every block wore the same grey band and wrong the moment they stopped:
     /// a fence draws no ground of its own now, so it punched a page-coloured
@@ -190,7 +190,7 @@ impl Callout {
     /// against: `info` `tip` `warning` `danger` `details`, plus the names its
     /// GitHub-flavoured alerts use — `note`, `important`, `caution` (#482).
     ///
-    /// ⚠️ **`caution` is the red one, not a warning.** GitHub gives
+    /// Warning: **`caution` is the red one, not a warning.** GitHub gives
     /// `[!CAUTION]` the red it gives nothing else, and VitePress's `danger` is
     /// the same block; reading `caution` as a warning made the severest of the
     /// five the second-severest here.
@@ -270,7 +270,7 @@ impl BlockScanner {
     pub fn feed(&mut self, prefix: &str, len: usize) -> Block {
         let at = self.line;
         self.line += 1;
-        // ⚠️ **The table counter is reset by default, and only the table arm
+        // Warning: **The table counter is reset by default, and only the table arm
         // puts it back** (#467). It used to be cleared on two of the eleven
         // paths that end a table — so a second table separated from the first
         // by a heading, a `:::`, a fence, a quote or a list item went on
@@ -609,16 +609,16 @@ pub fn hidden(spans: &[Span], selected: Option<(usize, usize)>) -> Vec<(usize, u
 /// `mark` 是 `#`（Markdown）或者 `=`（Typst）。規矩一條：一到六個記號，後面跟着**空白**
 /// 或者行尾。
 ///
-/// ⚠️ **後面那個空白是 CommonMark §4.2 明寫的**，不是我們加嚴的：`#128` 是一段話，
+/// Warning: **後面那個空白是 CommonMark §4.2 明寫的**，不是我們加嚴的：`#128` 是一段話，
 /// 不是標題。Markdown 1.0 原版寬鬆，而那條規矩存在的理由正是 `#128`、`#!/bin/sh`、
 /// `#include` 這一族。Typst 的 `=` 同樣要求後跟空白。
 ///
-/// ⚠️ **全角空格也算空白**——中文作者最常見的縮進寫法是 `= 　第一章`。
+/// Warning: **全角空格也算空白**——中文作者最常見的縮進寫法是 `= 　第一章`。
 ///
-/// ⚠️ **標題本身空不空由呼叫方決定。** 大綱要求非空（光一個 `##` 是一條線，不是標題），
+/// Warning: **標題本身空不空由呼叫方決定。** 大綱要求非空（光一個 `##` 是一條線，不是標題），
 /// 而着色那一支不要求。
 ///
-/// ⚠️ **這一支存在的理由是樹裏本來有三份不一樣的判準**（2026-09-28 查出來的）：着色那一
+/// Warning: **這一支存在的理由是樹裏本來有三份不一樣的判準**（2026-09-28 查出來的）：着色那一
 /// 份要求空白、大綱那一份要求空白但不封頂六級、`typst_headings` 兩樣都不要求。同一行在
 /// 正文裏不畫成標題、卻出現在大綱上。
 pub fn heading_marks(line: &str, mark: char) -> Option<usize> {
@@ -654,7 +654,7 @@ pub struct Span {
 ///
 /// 沒被蓋到的就是普通正文，不交 span。
 ///
-/// # ⚠️ 兩條不變式，下游全靠它們
+/// # Warning: 兩條不變式，下游全靠它們
 ///
 /// 一、**任意兩條要麼不相交，要麼一條完全包含另一條**。不會出現半重疊。
 ///
@@ -662,7 +662,7 @@ pub struct Span {
 /// 「蓋住某一格的最內層那一條」＝ 覆蓋它的裏面 `start` 最大的那一條
 /// （`max_by_key(start)`，`mi m` 就是這麼取的）。
 ///
-/// ⚠️ **「不重疊」那句話 2026-09-28 之前就已經不成立了**，標題那一支先壓一條
+/// Warning: **「不重疊」那句話 2026-09-28 之前就已經不成立了**，標題那一支先壓一條
 /// `Kind::Heading` 蓋住整行、行內的構造再壓上去。當時沒寫下約定，於是七個消費方各猜各
 /// 的，其中三個猜錯：`panel.rs` 那個順序寫字的循環會切出反向區間**當場崩**，`export.rs`
 /// 與 `detail.rs` 的 `.find()` 取到的是外層那一條（標題裏的腳註因此沒有詳情面板）。
@@ -672,7 +672,7 @@ pub struct Span {
 /// 一個構造配對成功之後，對它的**文字**那一段再掃一遍（[`DEPTH`] 層封頂）。所以
 /// ``**粗的`碼`**`` 裏的行內代碼認得出來，`[**粗**的](x)` 也是。
 ///
-/// ⚠️ **行內代碼裏面不掃**：那是 CommonMark 的規矩，也是常識——`` `a*b*c` `` 裏的星號
+/// Warning: **行內代碼裏面不掃**：那是 CommonMark 的規矩，也是常識——`` `a*b*c` `` 裏的星號
 /// 是代碼的一部分。批注 `%%…%%` 同理，裏面的東西整個是寫的人自己的。
 pub fn spans(line: &str) -> Vec<Span> {
     let chars: Vec<char> = line.chars().collect();
@@ -712,14 +712,14 @@ pub fn spans(line: &str) -> Vec<Span> {
 
 /// **套到第幾層為止。**
 ///
-/// ⚠️ 不做通用的 delimiter stack（CommonMark §6.2 那一套兩趟加棧）。真會寫出來的形狀
+/// Warning: 不做通用的 delimiter stack（CommonMark §6.2 那一套兩趟加棧）。真會寫出來的形狀
 /// ——``**粗的`碼`**``、`[**粗**的](x)`、`==**重點**==`——兩層就夠，而三層是留給
 /// `**《書名》的`碼`**` 這種。再深的層數在一篇文章裏見不到，而每深一層就是整段重掃一遍。
 pub const DEPTH: u8 = 3;
 
 /// [`spans`] 的一趟：掃 `from..to`，交出來的 span 都在這個範圍裏。
 ///
-/// ⚠️ **每一處算出來的 `end` 都要對着 `to` 驗一次。** 底下那些 `code_span`／`closing`
+/// Warning: **每一處算出來的 `end` 都要對着 `to` 驗一次。** 底下那些 `code_span`／`closing`
 /// ／`find` 找的是**整行**，遞歸進來的時候它們會越過 `to` 去找閉合符——``**a`b**c`` 裏
 /// 從 `a` 那一段往後找反引號，會找到 `to` 外面去。
 fn scan(
@@ -737,7 +737,7 @@ fn scan(
         // **`\*` 不是斜體的開頭**（2026-09-28）。反斜杠自己算標記，所見即所得把它藏
         // 起來，剩下那個字符原樣是正文。
         //
-        // ⚠️ **可轉義的只有 ASCII 標點**，CommonMark §2.4 的規矩，兩家實現也一樣：
+        // Warning: **可轉義的只有 ASCII 標點**，CommonMark §2.4 的規矩，兩家實現也一樣：
         // `\甲` 裏那個反斜杠是一個反斜杠，不是轉義。要是連漢字都能轉義，稿子裏每一個
         // 反斜杠都會憑空消失。
         if chars[at] == '\\' {
@@ -749,7 +749,7 @@ fn scan(
             }
         }
         if let Some((open, close, end)) = comment(chars, at).filter(|&(_, _, e)| e <= to) {
-            // ⚠️ **批注裏面不掃**：`%%…%%` 整個是寫的人對自己說的話，標記也是他的。
+            // Warning: **批注裏面不掃**：`%%…%%` 整個是寫的人對自己說的話，標記也是他的。
             mark(out, at, at + open, Kind::Marker, *construct, depth);
             mark(out, at + open, end - close, Kind::Comment, *construct, depth);
             mark(out, end - close, end, Kind::Marker, *construct, depth);
@@ -760,7 +760,7 @@ fn scan(
         // Code next: inside a code span nothing else is markup.
         if chars[at] == '`' {
             if let Some((open, close, end)) = code_span(chars, at).filter(|&(_, _, e)| e <= to) {
-                // ⚠️ **行內代碼裏面不掃**，CommonMark 的規矩：`` `a*b*c` `` 裏的星號
+                // Warning: **行內代碼裏面不掃**，CommonMark 的規矩：`` `a*b*c` `` 裏的星號
                 // 是代碼的一部分。
                 mark(out, at, at + open, Kind::Marker, *construct, depth);
                 mark(out, at + open, close, Kind::Code, *construct, depth);
@@ -805,7 +805,7 @@ fn scan(
                     .position(|&c| c == '|')
                     .map(|i| at + 2 + i + 1..close)
                     .unwrap_or(body);
-                // ⚠️ **雙鏈裏面不掃**：那是一個頁名（或者頁名加一個別名），不是正文。
+                // Warning: **雙鏈裏面不掃**：那是一個頁名（或者頁名加一個別名），不是正文。
                 mark(out, at, shown.start, Kind::Marker, *construct, depth);
                 mark(out, shown.start, shown.end, Kind::WikiLink, *construct, depth);
                 mark(out, shown.end, close + 2, Kind::Marker, *construct, depth);
@@ -828,12 +828,12 @@ fn scan(
         }
         // `[text](target)` — the text is what the reader reads.
         //
-        // ⚠️ **`![圖](a.png)` 的那個驚嘆號也在構造裏**（2026-09-28）。從前它不在，於是
+        // Warning: **`![圖](a.png)` 的那個驚嘆號也在構造裏**（2026-09-28）。從前它不在，於是
         // 所見即所得把 `[` `](a.png)` 藏起來之後，行首孤零零留着一個 `!`。
         let bang = chars[at] == '!' && chars.get(at + 1) == Some(&'[');
         if chars[at] == '[' || bang {
             let open = at + usize::from(bang);
-            // ⚠️ **兩頭都數括號**（2026-09-28）。從前是「往後找第一個 `]`／`)`」：
+            // Warning: **兩頭都數括號**（2026-09-28）。從前是「往後找第一個 `]`／`)`」：
             // `[甲[乙]丙](x)` 在第一個 `]` 上就斷了，整條鏈接不認；
             // `[連結](…/中文_(消歧義))` 在裏面那個 `)` 上就收了口，末尾那個括號掉在正
             // 文上。中文維基的地址裏帶括號是常事。
@@ -882,11 +882,11 @@ pub fn link_at(line: &str, at: usize) -> Option<Link> {
     let all = spans(line);
     // **蓋住光標的那些構造裏，最裏面那個「是鏈接」的。**
     //
-    // ⚠️ **不能只看最裏面那一條**（2026-09-28）：`[**粗**的](x)` 裏光標站在「粗」上，
+    // Warning: **不能只看最裏面那一條**（2026-09-28）：`[**粗**的](x)` 裏光標站在「粗」上，
     // 最裏面的是那個 `Strong`，它自己不是鏈接——只看它的話，文字是粗體的鏈接就跟不
     // 了了。往外走一層就到了。
     //
-    // ⚠️ 也不能只看最外面那一條：標題那一條蓋住整行，而標題本身不是鏈接。
+    // Warning: 也不能只看最外面那一條：標題那一條蓋住整行，而標題本身不是鏈接。
     let construct = all
         .iter()
         .filter(|s| (s.start..s.end).contains(&at))
@@ -949,7 +949,7 @@ fn fence(chars: &[char], at: usize) -> Option<usize> {
         return None;
     }
     if c == '_' {
-        // ⚠️ **漢字不算「詞內」**（2026-09-28 修）。這一條本來是保 `snake_case` 的：
+        // Warning: **漢字不算「詞內」**（2026-09-28 修）。這一條本來是保 `snake_case` 的：
         // 拉丁詞中間的下劃線不是強調。可是 `is_alphanumeric()` 對漢字也回真，於是
         // `這_是_重點` 一條 span 都不交——這是這一族裏唯一一個我們自己造出來的中文
         // 問題。Typst 官方那條 `in_word` 也是明確把漢字、假名、諺文排除在外的。
@@ -972,7 +972,7 @@ fn closing(chars: &[char], from: usize, delimiter: char, len: usize) -> Option<u
     }
     let mut at = from;
     while at + len <= chars.len() {
-        // ⚠️ **轉義掉的那一個不算閉合**（2026-09-28）：`*斜\*體*` 的斜體到最後那個
+        // Warning: **轉義掉的那一個不算閉合**（2026-09-28）：`*斜\*體*` 的斜體到最後那個
         // 星號纔收口，不是到中間那個。
         if chars[at..at + len].iter().all(|&c| c == delimiter)
             && chars.get(at.wrapping_sub(1)) != Some(&' ')
@@ -988,7 +988,7 @@ fn closing(chars: &[char], from: usize, delimiter: char, len: usize) -> Option<u
 
 /// **CommonMark 認得的可轉義字符**：ASCII 標點，僅此而已（§2.4）。
 ///
-/// ⚠️ 不收漢字也不收全角標點。收了的話稿子裏每一個反斜杠後面那個字都會被當成轉義，
+/// Warning: 不收漢字也不收全角標點。收了的話稿子裏每一個反斜杠後面那個字都會被當成轉義，
 /// 而中文稿子裏的反斜杠多半就是一個反斜杠。
 fn escapable(c: char) -> bool {
     c.is_ascii_punctuation()
@@ -996,7 +996,7 @@ fn escapable(c: char) -> bool {
 
 /// `chars[at]` 是不是被前面那個反斜杠轉義掉了。
 ///
-/// ⚠️ **反斜杠自己也能被轉義**（`\\*` 是一個反斜杠加一個真的星號），所以要往回數有幾
+/// Warning: **反斜杠自己也能被轉義**（`\\*` 是一個反斜杠加一個真的星號），所以要往回數有幾
 /// 個連着的反斜杠：奇數個纔是轉義。
 fn escaped(chars: &[char], at: usize) -> bool {
     if !escapable(chars[at]) {
@@ -1077,7 +1077,7 @@ pub fn strip_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut open: Option<&'static str> = None;
     let mut fence: Option<char> = None;
-    // ⚠️ **A note that is never closed may not eat the rest of the book**
+    // Warning: **A note that is never closed may not eat the rest of the book**
     // (2026-09-19). A comment carries across lines by design, so a `<!--` with
     // no `-->` swallowed every line after it — and silently: `:export html` on
     // a chapter with one unfinished note handed the publisher the first
@@ -1209,7 +1209,7 @@ fn find(chars: &[char], from: usize, f: impl Fn(char) -> bool) -> Option<usize> 
 ///
 /// `from` 指着開括號本身。回的是閉括號自己的下標，`to` 之前找不到就回 `None`。
 ///
-/// ⚠️ **為什麼不是「往後找第一個」**（2026-09-28）：`[連結](…/中文_(消歧義))` 的地址裏
+/// Warning: **為什麼不是「往後找第一個」**（2026-09-28）：`[連結](…/中文_(消歧義))` 的地址裏
 /// 有一對括號，找第一個 `)` 會在 `消歧義` 後面收口，末尾那個括號掉在正文上；
 /// `[甲[乙]丙](x)` 同理，在第一個 `]` 上就斷了，整條鏈接不認。中文維基的地址裏帶括號
 /// 是常事。
@@ -1387,11 +1387,11 @@ pub mod typst {
                 // `#quote[…]`、`#figure(caption: [說明])` 是中文 Typst 稿裏最常見的三
                 // 種寫法，從前整塊畫成代碼色，等於把作者寫的字藏起來。
                 //
-                // ⚠️ **這是官方那套模式切換裏唯一值得學的一層**：Typst 的 `[]` 從 code
+                // Warning: **這是官方那套模式切換裏唯一值得學的一層**：Typst 的 `[]` 從 code
                 // 模式切回 markup 模式。再往裏（`#if x { [文字] }` 這種）只出現在模板檔
                 // 裏，不出現在正文裏，而模板整塊灰掉反而好讀。
                 //
-                // ⚠️ **代碼色只蓋代碼那兩截**（`#chapter[` 和 `]`），中間**不蓋**。
+                // Warning: **代碼色只蓋代碼那兩截**（`#chapter[` 和 `]`），中間**不蓋**。
                 // 蓋了的話裏面的字還是灰的——正文沒有自己的 span，它就是「沒被蓋到的
                 // 那些格子」，所以要真的讓開，不能靠往上再壓一層。
                 let mut cut = at;
@@ -1425,7 +1425,7 @@ pub mod typst {
                     continue;
                 }
             }
-            // **`@定理一`** — 交叉引用（2026-09-28）。⚠️ 一個孤零零的 `@` 不是引用。
+            // **`@定理一`** — 交叉引用（2026-09-28）。Warning: 一個孤零零的 `@` 不是引用。
             if chars[at] == '@' {
                 let end = (at + 1..chars.len())
                     .take_while(|&i| ref_name(chars[i]))
@@ -1570,7 +1570,7 @@ pub mod typst {
     ///
     /// 只收最外面那一層（`[甲 [乙] 丙]` 收整段，裏面那一對交給遞歸）。
     ///
-    /// ⚠️ **字符串字面量裏的方括號不算**：`#f("]")` 裏那個不是括號。這是報告裏說的
+    /// Warning: **字符串字面量裏的方括號不算**：`#f("]")` 裏那個不是括號。這是報告裏說的
     /// 「真要修就只修這一小步，別往上走」——完整的 Typst 表達式解析器換不來什麼。
     fn code_parts(chars: &[char], from: usize) -> (usize, Vec<(usize, usize)>) {
         let end = code_end(chars, from);
@@ -1641,7 +1641,7 @@ pub mod typst {
 
     /// 一個引用名裏許不許出現這個字符。
     ///
-    /// ⚠️ 收漢字：Typst 的標籤名可以是中文，而這個編輯器是給寫中文的人用的。
+    /// Warning: 收漢字：Typst 的標籤名可以是中文，而這個編輯器是給寫中文的人用的。
     fn ref_name(c: char) -> bool {
         c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ':')
     }
@@ -1654,7 +1654,7 @@ pub mod typst {
     /// 一個 `*` 或 `_` 前後都貼着**西文**字母或數字的時候，它是那個詞的一部分，不是分隔
     /// 符——`snake_case` 不該畫成斜體，`a*b*c` 不該畫成粗體。
     ///
-    /// ⚠️ **漢字、假名、諺文明確排除在「詞內」之外**，這是官方自己寫的，不是我們加的。
+    /// Warning: **漢字、假名、諺文明確排除在「詞內」之外**，這是官方自己寫的，不是我們加的。
     /// 所以 `這*是*重點` 照樣是強調，而中文這一側一個字符都不用另立規矩。
     fn in_word(chars: &[char], at: usize) -> bool {
         let wordy = |c: Option<&char>| {
@@ -1665,7 +1665,7 @@ pub mod typst {
 
     /// 漢字、平假名、片假名、諺文。
     ///
-    /// ⚠️ 自己數碼位，不拉 `unicode-script` 進來：這個倉只需要「是不是這四種」這一個
+    /// Warning: 自己數碼位，不拉 `unicode-script` 進來：這個倉只需要「是不是這四種」這一個
     /// 問題，而那個 crate 帶着一整張 Script 表。漢字那一半走 `yumete_cjk::is_han`，
     /// 「一個概念一處權威」。
     fn cjk_script(c: char) -> bool {
@@ -1680,7 +1680,7 @@ pub mod typst {
     }
 
     fn closing(chars: &[char], from: usize, delimiter: char) -> Option<usize> {
-        // ⚠️ **空白那兩道閘去掉了**（2026-09-28）。從前是「開標記後面不許是空格、閉標記
+        // Warning: **空白那兩道閘去掉了**（2026-09-28）。從前是「開標記後面不許是空格、閉標記
         // 前面不許是空格」，那是照 Markdown 抄的；Typst 沒有這條規矩，`* 文*` 在官方
         // 那裏就是強調。判準換成官方唯一的那一條：[`in_word`]。
         (from..chars.len()).find(|&i| chars[i] == delimiter && !in_word(chars, i))
@@ -1752,7 +1752,7 @@ mod typst_tests {
 
     /// **公式、交叉引用、標籤各有自己的 `Kind`**（2026-09-28）。
     ///
-    /// ⚠️ 公式從前借 `Kind::Code`，`:export` 因此把 `$a + b$` 導成 `` `a + b` ``——
+    /// Warning: 公式從前借 `Kind::Code`，`:export` 因此把 `$a + b$` 導成 `` `a + b` ``——
     /// 一條反引號在 Typst 裏是原樣文本，公式就此不是公式了。
     #[test]
     fn maths_and_references_are_not_code() {
@@ -1771,7 +1771,7 @@ mod typst_tests {
         // 從前這兩行被畫成斜體和粗體。
         assert_eq!(shape("snake_case_here"), "               ");
         assert_eq!(shape("a*b*c"), "     ");
-        // ⚠️ **中文那一側一個字符不變**：官方明確把漢字、假名、諺文排除在「詞內」外。
+        // Warning: **中文那一側一個字符不變**：官方明確把漢字、假名、諺文排除在「詞內」外。
         assert_eq!(shape("這*是*重點"), " .B.  ");
         // Typst 沒有 Markdown 那條「開標記後面不許是空格」，`* 文*` 就是強調。
         assert_eq!(shape("* 文*"), ".BB.");
@@ -1781,7 +1781,7 @@ mod typst_tests {
     #[test]
     fn a_backslash_escapes_and_a_fullwidth_space_still_opens_a_heading() {
         assert_eq!(shape(r"\*不是強調\*"), ".     . ");
-        // ⚠️ 全角空格是中文作者最常見的縮進，從前它讓整行標題不上色。
+        // Warning: 全角空格是中文作者最常見的縮進，從前它讓整行標題不上色。
         assert_eq!(shape("= 　第一章"), ".HHHHH");
         assert_eq!(shape("= 第一章"), ".HHHH");
     }
@@ -1791,7 +1791,7 @@ mod typst_tests {
         // Not decoration around writing — the instructions that make it. A
         // writer has to see them, so they are never hidden, only set back.
         //
-        // ⚠️ **方括號裏的那幾個字不是代碼**（2026-09-28）。`#chapter[初雪]` 裏「初雪」
+        // Warning: **方括號裏的那幾個字不是代碼**（2026-09-28）。`#chapter[初雪]` 裏「初雪」
         // 是作者寫的字，從前整塊畫成代碼色，等於把它藏起來。現在代碼色只蓋
         // `#chapter[` 和 `]` 兩截。這一條原先寫的是 `"############"`。
         assert_eq!(shape("#chapter[初雪]"), "#########  #");
@@ -1957,7 +1957,7 @@ mod list_tests {
     }
 }
 
-// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
 // 全綠。這一支從前擺在中間，後面壓着 445 行（2026-09-24 審出來的）。
@@ -1985,7 +1985,7 @@ mod tests {
             }
             out
         };
-        // ⚠️ A lone ``` **opens** a fence and swallows what follows, so the
+        // Warning: A lone ``` **opens** a fence and swallows what follows, so the
         // fence case is a fence: opened and closed.
         for between in ["", "## 標題", ":::", "```\n```", "> 注", "- 注", "---", "[^1]: 註"] {
             assert_eq!(
@@ -2130,7 +2130,7 @@ mod tests {
     /// 幾段**整個不見**。2026-09-19 報的就是這個，而這個檔自己的手冊
     /// （`docs/manual.md:394`，引用各種標記的那一行）正是這個形狀。
     ///
-    /// ⚠️ 上面那一條只用了單反引號，所以它永遠是綠的。
+    /// Warning: 上面那一條只用了單反引號，所以它永遠是綠的。
     #[test]
     fn a_code_span_closes_on_as_many_backticks_as_opened_it() {
         assert_eq!(shape("``%%``"), "..CC..", "兩個開，兩個關");
@@ -2380,11 +2380,11 @@ mod tests {
         assert_eq!(inner("[**粗**的](x)", Kind::Strong), vec!["粗"], "鏈接文字裏的粗體");
         assert_eq!(inner("==**重點**==", Kind::Strong), vec!["重點"], "標記裏的粗體");
 
-        // ⚠️ **行內代碼與批注裏面不掃。**
+        // Warning: **行內代碼與批注裏面不掃。**
         assert!(inner("`a*b*c`", Kind::Emphasis).is_empty(), "代碼裏的星號是代碼");
         assert!(inner("%%批注 **粗**%%", Kind::Strong).is_empty(), "批注整個是寫的人的");
 
-        // ⚠️ **遞歸不許越過外層的閉合符**：``**a`b**c`` 裏那個反引號後面沒有配對的。
+        // Warning: **遞歸不許越過外層的閉合符**：``**a`b**c`` 裏那個反引號後面沒有配對的。
         assert!(inner("**a`b**c", Kind::Code).is_empty(), "反引號不許找到外面去");
     }
 
@@ -2441,14 +2441,14 @@ mod tests {
                 .map(|s| line.chars().skip(s.start).take(s.end - s.start).collect::<String>())
         };
 
-        // ⚠️ 一、`!` 在構造裏——不然所見即所得會留一個孤零零的驚嘆號。
+        // Warning: 一、`!` 在構造裏——不然所見即所得會留一個孤零零的驚嘆號。
         assert_eq!(marker("![圖](a.png)")[0], "![", "驚嘆號跟着開括號走");
 
-        // ⚠️ 二、地址裏的括號要數着走。中文維基的地址常帶括號。
+        // Warning: 二、地址裏的括號要數着走。中文維基的地址常帶括號。
         let wiki = "[連結](https://x/中文_(消歧義))";
         assert_eq!(marker(wiki).last().unwrap(), "](https://x/中文_(消歧義))");
 
-        // ⚠️ 三、看得見的那幾個字裏也可以有方括號。
+        // Warning: 三、看得見的那幾個字裏也可以有方括號。
         assert_eq!(text("[甲[乙]丙](x)").as_deref(), Some("甲[乙]丙"));
 
         // 一行兩條鏈接還是兩條，沒有被貪心地併成一條。
@@ -2460,7 +2460,7 @@ mod tests {
         assert!(spans("[沒配對(x)").is_empty());
     }
 
-    /// ⚠️ **文字是粗體的鏈接照樣跟得了**（2026-09-28）。
+    /// Warning: **文字是粗體的鏈接照樣跟得了**（2026-09-28）。
     ///
     /// 最裏面那一條是 `Strong`，它自己不是鏈接；要往外走一層纔找得到。
     #[test]
@@ -2474,7 +2474,7 @@ mod tests {
 
     /// **反斜杠轉義**（2026-09-28）。從前沒有，於是正文裏寫不出一個字面的星號。
     ///
-    /// ⚠️ 這個倉自己的 `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
+    /// Warning: 這個倉自己的 `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
     #[test]
     fn a_backslash_escapes_the_mark_after_it() {
         let kinds = |line: &str| spans(line).into_iter().map(|s| s.kind).collect::<Vec<_>>();
@@ -2482,14 +2482,14 @@ mod tests {
         // 轉義掉的星號不開斜體，只剩兩個反斜杠各自是一個標記。
         assert_eq!(kinds(r"\*不是斜體\*"), vec![Kind::Marker, Kind::Marker]);
 
-        // ⚠️ **中間那個轉義掉的不算閉合**：斜體一直到最後那個星號。
+        // Warning: **中間那個轉義掉的不算閉合**：斜體一直到最後那個星號。
         let body = spans(r"*斜\*體*")
             .into_iter()
             .find(|s| s.kind == Kind::Emphasis)
             .map(|s| r"*斜\*體*".chars().skip(s.start).take(s.end - s.start).collect::<String>());
         assert_eq!(body.as_deref(), Some(r"斜\*體"));
 
-        // ⚠️ **只有 ASCII 標點能被轉義。** 漢字前面那個反斜杠就是一個反斜杠。
+        // Warning: **只有 ASCII 標點能被轉義。** 漢字前面那個反斜杠就是一個反斜杠。
         assert!(spans(r"\甲不是轉義").is_empty(), "漢字不可轉義");
 
         // 鏈接裏轉義掉的方括號不收口。
@@ -2504,7 +2504,7 @@ mod tests {
     }
 
 
-    /// ⚠️ **`_` 的詞中保護不許把漢字也擋掉**（2026-09-28 修）。
+    /// Warning: **`_` 的詞中保護不許把漢字也擋掉**（2026-09-28 修）。
     ///
     /// 那一條是保 `snake_case` 的，而 `is_alphanumeric()` 對漢字回真，於是
     /// `這_是_重點` 一條 span 都不交。這是這一族裏唯一一個我們自己造出來的中文問題。

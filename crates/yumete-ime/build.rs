@@ -11,7 +11,7 @@
 //! **What stands in when it is not there.** 靈明精華版 —
 //! `schemes/lingming_essential.ytab`, 0.25 MB: every character in CJK 基本區
 //! and 擴展A plus the 字根區 and the seven 字集, all sources, the 簡碼 — but no
-//! 詞 (recipe and reasoning in `scripts/make_jinghua.py`). ⚠️ **It is not in
+//! 詞 (recipe and reasoning in `scripts/make_jinghua.py`). Warning: **It is not in
 //! this repository either**: pure data tables are a build input, never a
 //! tracked file. A release build downloads it from `forfudan/yume-release`
 //! (public, no token); `scripts/build.sh` installs the *full* table instead,
@@ -148,7 +148,7 @@ fn date(secs: u64) -> String {
 
 /// **Watch `path` if it is there, or the `yumete` directory it would sit in.**
 ///
-/// ⚠️ **Never hand cargo a path that is not there, and never walk above our
+/// Warning: **Never hand cargo a path that is not there, and never walk above our
 /// own directory.** Both mistakes make the build script rerun on **every**
 /// cargo command, and everything downstream of this crate rebuild with it.
 ///
@@ -170,7 +170,7 @@ fn date(secs: u64) -> String {
 /// So: the file if it exists, else the `yumete` directory it belongs in (a
 /// file appearing changes its directory's mtime, which is the case that
 /// matters — `scripts/build.sh` installs the data *after* the first build),
-/// else nothing at all. ⚠️ **With neither, a later install needs
+/// else nothing at all. Warning: **With neither, a later install needs
 /// `cargo clean -p {crate}`** — that is the honest price, and it is paid once
 /// by whoever installs data onto a machine that had none.
 fn watch(path: &Path) {
@@ -188,7 +188,7 @@ fn watch(path: &Path) {
 
 /// Where the installed Yume data lives, in the order the editor itself looks.
 ///
-/// ⚠️ **Every candidate is watched, not just the one that answered**: the data
+/// Warning: **Every candidate is watched, not just the one that answered**: the data
 /// may be installed into any of them after this build, and then the next one
 /// has to see it — `scripts/build.sh` builds the binary *before* it installs
 /// the data, so the first run embeds 靈明精華版 and the second must notice the

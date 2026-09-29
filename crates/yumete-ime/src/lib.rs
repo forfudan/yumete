@@ -1342,7 +1342,7 @@ impl ImeSession {
     /// [`Preedit::Header`] 不內嵌，[`Preedit::Code`] 寫編碼，[`Preedit::Top`] 寫
     /// 首選。
     ///
-    /// ⚠️ **與面板畫不畫無關。** 面板照畫而正文裏站着首選，是一個合法的組合，也正
+    /// Warning: **與面板畫不畫無關。** 面板照畫而正文裏站着首選，是一個合法的組合，也正
     /// 是 2026-09-27 報的那個缺口。
     pub fn inline_preedit(&self) -> String {
         if !self.is_composing() {
@@ -1370,7 +1370,7 @@ impl ImeSession {
 ///
 /// The manifest names its files with a `data/` in front (`data/symbols.ytab`,
 /// `data/charsets/tonggui.ycs`), which is the layout of 宇浩's own source tree
-/// and of the macOS bundle. ⚠️ **The Linux installer lays them flat**: `yuman`
+/// and of the macOS bundle. Warning: **The Linux installer lays them flat**: `yuman`
 /// puts `symbols.ytab`, `lang.ywtb`, `pinyin.yflb` and a `charsets/` directory
 /// straight into `~/.local/share/yume/`. Same files, one level up.
 ///
@@ -1378,7 +1378,7 @@ impl ImeSession {
 /// 「（沒有）」——找的是 `~/.local/share/yume/data/symbols.ytab`，那一份不在。
 ///
 /// So the `data/` in front is tried first (nothing that works today changes)
-/// and then stripped. ⚠️ **Only the leading `data/`**: `data/charsets/x.ycs`
+/// and then stripped. Warning: **Only the leading `data/`**: `data/charsets/x.ycs`
 /// becomes `charsets/x.ycs`, which is exactly where the flat layout keeps it.
 pub fn data_paths_in(dir: &Path, relative: &str) -> Vec<PathBuf> {
     let joined = |rel: &str| {
@@ -2104,7 +2104,7 @@ mod tests {
         assert!(s.is_chinese());
     }
 
-    /// ⚠️ This used to hedge — 「whether it can depends on the machine that
+    /// Warning: This used to hedge — 「whether it can depends on the machine that
     /// built this binary, and both answers are correct」 — and the hedge is
     /// back, on purpose and narrowed. The 碼表 is a **build input**, not a
     /// tracked file (`build.rs`): a release build downloads it, a developer's

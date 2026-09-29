@@ -24,7 +24,7 @@
 //! outline behind a `#` rule the file never used. Guessing wrong is worse than
 //! not guessing, because in 所見即所得 the guess decides what comes off the page.
 //!
-//! ⚠️ **The bar is evidence, not a majority.** One weak signal in two hundred
+//! Warning: **The bar is evidence, not a majority.** One weak signal in two hundred
 //! lines — a stray `**`, one `//` — is prose that happens to contain a
 //! character, not a declaration; [`ENOUGH`] says how much it takes.
 
@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(sniff("那年#emph[冬天]雪下得早。\n"), Syntax::Typst);
         // …and a hash with a space after it is a heading, whatever follows.
         assert_eq!(sniff("# 第一章 (一)\n"), Syntax::Markdown);
-        // ⚠️ The bracket has to touch the name. This line is Markdown — a
+        // Warning: The bracket has to touch the name. This line is Markdown — a
         // hash tag, then a link — and asking only whether a `[` turns up
         // later on the line called it Typst.
         assert_eq!(sniff("見 #註 的說明（[附錄](a.md)）\n"), Syntax::Text);

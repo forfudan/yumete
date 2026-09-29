@@ -8,13 +8,13 @@ name: Tests
 # to have been failing since 09-10: seventeen days in which the thing it checks
 # was not being checked (`docs/development.md` §5.12.58).
 #
-# ⚠️ **Two rows, and the second one is the point.** That particular test was
+# Warning: **Two rows, and the second one is the point.** That particular test was
 # **green on Linux and red on macOS** — it read a process-global (the theme's
 # light/dark mood) before anything settled it, so which machine saw it red came
 # down to which thread ran first. One runner would have gone on saying green.
 # Both are free here: `forfudan/yumete` is public.
 #
-# ⚠️ **No 碼表 and no word list.** `release.yaml` fetches them because it is
+# Warning: **No 碼表 and no word list.** `release.yaml` fetches them because it is
 # packaging; a bare `cargo test` has never needed them, and pulling 36 MB per
 # run to prove that again is a cost with no answer attached.
 on:
@@ -87,7 +87,7 @@ jobs:
       # `--locked` so a stale `Cargo.lock` is a failure here rather than a
       # surprise in `release.yaml`, which builds with it too.
       #
-      # ⚠️ **`--no-fail-fast`**: the red rows come first in cargo's output and a
+      # Warning: **`--no-fail-fast`**: the red rows come first in cargo's output and a
       # run that stops at the first one hides how many there are — which is how
       # 「only one test is red」 turned out to be twelve once already
       # (「別再踩」 in ../CLAUDE.md).

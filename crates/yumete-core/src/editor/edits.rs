@@ -245,7 +245,7 @@ impl Editor {
         // A listing quoted in a fence is written out as it is; the markers in
         // it are somebody's example.
         //
-        // ⚠️ **Asked last, and only of a line that already looks like an
+        // Warning: **Asked last, and only of a line that already looks like an
         // item.** `block_of` walks from the top of the file, and its cache is
         // keyed on the revision — which every Enter has just changed — so
         // asking it first made every line break in a Markdown buffer re-scan
@@ -253,7 +253,7 @@ impl Editor {
         // through `Key::Enter` stopped finishing at all. Down here it is paid
         // for by lists only, where one walk per item is a walk per paragraph.
         //
-        // ⚠️ `:render off` reports every line as prose, so under it a fenced
+        // Warning: `:render off` reports every line as prose, so under it a fenced
         // list does carry down — the same blind spot
         // [`Self::replacement_reshapes_the_grid`] has, and the same reason:
         // the scan is only kept warm while there is markup on the screen.
@@ -352,12 +352,12 @@ impl Editor {
     /// `C-u` 是它的另一半，早就有了。這一對在 readline 裏是一起的，而一個只做了一半的
     /// 對子比兩個都沒有更難記。
     ///
-    /// ⚠️ **不跨行**：光標已經在行尾的時候什麼都不做，不去吃那個換行。readline 的
+    /// Warning: **不跨行**：光標已經在行尾的時候什麼都不做，不去吃那個換行。readline 的
     /// `C-k` 在行尾也不吃下一行。
     pub(super) fn delete_to_line_end(&mut self) {
         let at = self.sel.head();
         let rope = self.current_buffer().rope();
-        // ⚠️ **不是 `line_last`**：那一支回的是最後一個字自己的下標，用它當上界會把行
+        // Warning: **不是 `line_last`**：那一支回的是最後一個字自己的下標，用它當上界會把行
         // 末那一個字留下。要的是這一行的**內容**有多長（不含換行）。
         let line = rope.char_to_line(at);
         let to = rope.line_to_char(line) + crate::zong::line_chars(rope, line).len();
@@ -372,7 +372,7 @@ impl Editor {
 
     /// **把一個寄存器的內容插進來**（Insert 裏的 `C-r`，2026-09-28）。
     ///
-    /// ⚠️ **省掉的是一個撤銷點。** 從前寫到一半要放一個剛複製的人名，得 `Esc`、`p`、
+    /// Warning: **省掉的是一個撤銷點。** 從前寫到一半要放一個剛複製的人名，得 `Esc`、`p`、
     /// 再 `i` 回來——而這個倉的規矩是「一次插入是一次撤銷」（§5.12.3），那一出一進
     /// 白白多出一個撤銷點，一句話從此要按兩次 `u` 纔退得乾淨。
     pub(super) fn insert_register(&mut self, name: Option<char>) {
@@ -466,7 +466,7 @@ impl Editor {
     /// A collapsed selection deletes the grapheme under the cursor. The caller
     /// takes the undo snapshot.
     ///
-    /// ⚠️ **Deleting is not copying** (#492). Helix's `d` yanks, and that is
+    /// Warning: **Deleting is not copying** (#492). Helix's `d` yanks, and that is
     /// its worst idea: 「d 作为剪切功能会污染 register」. The register
     /// is a clipboard of one, so under that rule every tidy-up between a copy
     /// and a paste silently throws the copy away — yank a paragraph, take out
@@ -707,7 +707,7 @@ impl Editor {
             // 西的格子，是一個問題的答案：「這是第幾段」。`"#p` 於是在第一段貼「1」、
             // 第二段貼「2」——編號列表那個用例就是這麼解開的。
             //
-            // ⚠️ **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
+            // Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
             // 說得通的，而貼一個空字符串看起來像鍵沒按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
             Some(name) => self.registers.get(&name).cloned().unwrap_or_default(),
@@ -719,12 +719,12 @@ impl Editor {
     /// 2026-09-20).
     ///
     /// helix hands it the selection; vim (B3) will hand it whatever its motion
-    /// returned, without either of them knowing the other exists. ⚠️ A
+    /// returned, without either of them knowing the other exists. Warning: A
     /// [`motion::Span::Missed`] does **nothing** — not 「operate on an empty
     /// range」, which is how a failed motion used to eat one character.
     pub(super) fn apply(&mut self, op: motion::Operator, span: motion::Span) {
         let motion::Span::Over { anchor, head } = span else { return };
-        // ⚠️ **A span is in the caret's coordinates, a range is not** — and the
+        // Warning: **A span is in the caret's coordinates, a range is not** — and the
         // difference is one grapheme. `Span::Over { head }` names a cell the
         // caret lands *on*; what a verb takes runs one grapheme past it,
         // because the cursor's own grapheme is inside the selection in this
@@ -749,7 +749,7 @@ impl Editor {
 
     /// Copy a range into the register and say how much (`y`).
     ///
-    /// ⚠️ No special case for a collapsed selection: there is no such thing —
+    /// Warning: No special case for a collapsed selection: there is no such thing —
     /// the cursor's own grapheme is always inside one.
     pub(super) fn yank_range(&mut self, (start, end): (usize, usize)) {
         let text = self.current_buffer().rope().slice(start..end).to_string();
@@ -880,7 +880,7 @@ impl Editor {
         let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
         // **剛纔看的是哪一份**（`ga`）。開一份新的也算換過，所以這裏和
-        // [`Editor::show_buffer`] 都要記——⚠️ 那一支只收「已經開着的」，開新檔走的是
+        // [`Editor::show_buffer`] 都要記——Warning: 那一支只收「已經開着的」，開新檔走的是
         // 這裏，兩條路都記上 `ga` 纔一直有答案。
         let leaving = self.current_buffer().id();
         if self.buffers.len() == 1

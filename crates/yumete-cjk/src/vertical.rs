@@ -31,7 +31,7 @@ pub const DEFAULT_ZONG_LENGTH: usize = 32;
 
 /// The default gap between two 縱, in half-width cells.
 ///
-/// ⚠️ **Zero, and it always was on the page.** This said 1 while `:view-dense`
+/// Warning: **Zero, and it always was on the page.** This said 1 while `:view-dense`
 /// was on out of the box and forced the gap to nothing, so the factory page
 /// never had one and the constant described a page nobody saw. When the gap
 /// stopped being one of `dense`'s five jobs (2026-09-16, [`Margin`]) the
@@ -210,7 +210,7 @@ pub fn hangs_in_the_margin(c: char) -> bool {
 /// assert_eq!(margin_form('《'), None);
 /// ```
 pub fn margin_form(c: char) -> Option<char> {
-    // ⚠️ `or_else`, not `or`: the argument of `or` is **evaluated either way**,
+    // Warning: `or_else`, not `or`: the argument of `or` is **evaluated either way**,
     // and the `return None` inside this match would then return it out of
     // `margin_form` for 。 and 、 — the two marks that had just been answered.
     narrow_form(c).or_else(|| Some(match c {

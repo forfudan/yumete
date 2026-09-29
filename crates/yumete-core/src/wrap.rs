@@ -531,7 +531,7 @@ pub fn line_rows_drawing(
 /// [`line_rows_drawing`], plus **whether the caret is standing at the end of
 /// this line** and so needs a cell that the last row has not got.
 ///
-/// ⚠️ **這一格從前是無條件開的**，理由是「一段正好填滿最後一行，段末的光標
+/// Warning: **這一格從前是無條件開的**，理由是「一段正好填滿最後一行，段末的光標
 /// 就沒地方站」。理由對，可它一天到晚都在付：**一段話正好排滿一行，屏幕上就
 /// 憑空多一個空行**，讀起來是分了段——寫小說最常見的排版事故，2026-09-23 報的。
 /// 而且它不只坑編輯器：面板、導出、預覽都走這一支，那裏根本沒有光標。
@@ -829,7 +829,7 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     // there is nothing else on the row to move: a hidden run or a drawn one
     // has coordinates of its own that an edit shifts too, and getting that
     // wrong would put the caret in a column the page does not have.
-    // ⚠️ **不走這條路的時候：行末那一格開着。** `LAST` 是按
+    // Warning: **不走這條路的時候：行末那一格開着。** `LAST` 是按
     // `(buffer, line, width, revision)` 存的，裏面沒有「光標在不在行末」——存
     // 一份帶着那一格的進去，光標一走它就成了假的。那一行只有一行，重排一次不
     // 值得為它擴鍵。
@@ -1484,7 +1484,7 @@ mod tests {
         // Four 漢字 in eight cells leave the caret no column to stand in on
         // that row — the ninth cell is off the row — so it gets the next one.
         assert_eq!(line_rows_for_caret("春夏秋冬", 8, &[], 0, &[], true), vec![(0, 4), (4, 4)]);
-        // ⚠️ **而光標不在那裏的時候，那一格不許開**（2026-09-23）：一段話正好
+        // Warning: **而光標不在那裏的時候，那一格不許開**（2026-09-23）：一段話正好
         // 排滿一行，屏幕上就會憑空多一個空行，讀起來是分了段。
         assert_eq!(line_rows("春夏秋冬", 8), vec![(0, 4)], "没人要就別開");
         // A row that does not fill the width needs no such thing.

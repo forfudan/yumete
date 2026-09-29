@@ -11,7 +11,7 @@
 //! 着重號 share: `○` 平, `●` 仄, and at the end of a 句 the hollow and solid
 //! **triangles** that mark a 韻腳.
 //!
-//! ## ⚠️ This is 今音平仄, and 入聲 is where it lies
+//! ## Warning: This is 今音平仄, and 入聲 is where it lies
 //!
 //! The tone class is read off 現代漢語 拼音, because that is the reading the
 //! data holds. 入聲 — the fourth class of 中古音, and 仄 in every classical

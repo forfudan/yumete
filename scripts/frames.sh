@@ -13,11 +13,11 @@
 #   scripts/frames.sh check   改之後：再拍一套，和底片逐字節比
 #   scripts/frames.sh list    這一套都拍了些什麼
 #
-# ⚠️ **底片不進 git**（放在 target/ 底下，`cargo clean` 會一起清掉）。進 git 的話，
+# Warning: **底片不進 git**（放在 target/ 底下，`cargo clean` 會一起清掉）。進 git 的話，
 # 每一次有意的界面改動都要重新生成一遍，而這個倉界面天天在動——那個維護成本買不到
 # 相應的東西。這一支的用法是「改之前 snap、改之後 check」，一次重構用一次。
 #
-# ⚠️ **拍的是 `--shot` 的文字幀，不是 `--html`。** 顏色歸主題管，而重構要問的是
+# Warning: **拍的是 `--shot` 的文字幀，不是 `--html`。** 顏色歸主題管，而重構要問的是
 # 「字還在不在原來那一格」。文字幀對這個問題最靈敏也最好讀——diff 出來一眼看得懂。
 set -euo pipefail
 
@@ -72,7 +72,7 @@ shoot() {
     local into=$1
     rm -rf "${into}"
     mkdir -p "${into}"
-    # ⚠️ **每一幀開一個乾淨的檔**。共用一個檔的話，前一幀 `--keys` 改過的東西會被
+    # Warning: **每一幀開一個乾淨的檔**。共用一個檔的話，前一幀 `--keys` 改過的東西會被
     # 下一幀看見，而「上一幀留下什麼」正是這一支要排除的變數。
     local work="${DIR}/work"
     while IFS='|' read -r name size keys; do
@@ -89,7 +89,7 @@ shoot() {
         pressed="${pressed//:open MANUAL\\n/}"
         "${BIN}" --shot="${size}" --keys="${pressed}" "${work}/文.md" \
             > "${into}/${name}.txt" 2>&1 || true
-        # ⚠️ **版本行要抹掉**：它每次構建都變（時間戳加 commit），留着的話這一支
+        # Warning: **版本行要抹掉**：它每次構建都變（時間戳加 commit），留着的話這一支
         # 永遠報「全都不一樣」。
         sed -i '' 's/^-- yumete .*/-- yumete （版本行抹掉了）/' "${into}/${name}.txt"
     done < <(scenes)
@@ -113,7 +113,7 @@ case "${1:-}" in
         if diff -rq "${GOLDEN}" "${SHOTS}" > /dev/null 2>&1; then
             printf '✅ %s 幀，逐字節一樣\n' "$(ls "${GOLDEN}" | wc -l | tr -d ' ')"
         else
-            printf '⚠️  這幾幀變了：\n\n'
+            printf 'Warning: 這幾幀變了：\n\n'
             diff -rq "${GOLDEN}" "${SHOTS}" 2>&1 | sed 's/^/    /'
             printf '\n逐幀看：diff %s/<名字>.txt %s/<名字>.txt\n' "${GOLDEN}" "${SHOTS}"
             exit 1

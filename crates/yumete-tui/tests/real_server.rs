@@ -11,7 +11,7 @@
 //! unanswered `client/registerCapability` — those are facts about another
 //! program, and the only place they can be found out is against that program.
 //!
-//! ⚠️ **`#[ignore]` on purpose.** It needs `rust-analyzer` on the machine and
+//! Warning: **`#[ignore]` on purpose.** It needs `rust-analyzer` on the machine and
 //! takes seconds, so it is not part of a normal run:
 //!
 //! ```text
@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 /// A throwaway crate with one deliberate mistake in it.
 ///
-/// ⚠️ **`whose` is not decoration.** Two tests call this, and the path used to
+/// Warning: **`whose` is not decoration.** Two tests call this, and the path used to
 /// be the same for both (`yumete-ra-<pid>`) while the first thing it does is
 /// `remove_dir_all` — so running them together, which is what the command at
 /// the top of this file does, had one pull the file out from under the other:
@@ -49,7 +49,7 @@ fn rust_analyzer_really_answers() {
         return;
     }
     let dir = a_broken_crate("answers");
-    // ⚠️ **The project root is worked out from the open file**, and the server
+    // Warning: **The project root is worked out from the open file**, and the server
     // is started in it — so the editor has to be looking at the file inside
     // the crate, not at the crate from outside.
     let mut editor = yumete_core::editor::Editor::new();
@@ -85,7 +85,7 @@ fn rust_analyzer_really_answers() {
 
 /// **`gd` really jumps** (#53 ②, 2026-09-21).
 ///
-/// ⚠️ **Only a live server can check this one.** The three answer shapes
+/// Warning: **Only a live server can check this one.** The three answer shapes
 /// (`Location`, `Location[]`, `LocationLink[]`) are a fact about the program
 /// on the other end — `rust-analyzer` sends the third — and a fake would only
 /// ever send back whatever this test wrote into it.
@@ -118,7 +118,7 @@ fn rust_analyzer_says_where_a_function_is_written() {
     };
     let mut servers = yumete_tui::server::Servers::default();
 
-    // ⚠️ **這裏沒有「讀完了」的信號可等。** 從前這一段寫成「等到有診斷為止」，
+    // Warning: **這裏沒有「讀完了」的信號可等。** 從前這一段寫成「等到有診斷為止」，
     // 而這一份是編得過的——一條診斷都不會有，於是它每一趟都燒滿九十秒，那句
     // 「先等它讀完項目」描述的是一條不存在的規則（2026-09-23 審出來的）。真正
     // 頂用的是下面那個「問不到就再問一次」的圈。
@@ -164,7 +164,7 @@ fn rust_analyzer_says_where_a_function_is_written() {
 /// **Deleting the bad line really takes the mark away** (2026-09-21 報的：
 /// 「我把之前的一個錯誤的行刪掉了，但是錯誤信息還在，這個行還是紅色的」)。
 ///
-/// ⚠️ **This one is about `didSave`, and only a live server shows it.**
+/// Warning: **This one is about `didSave`, and only a live server shows it.**
 /// rust-analyzer answers out of two mouths: its own analysis, which follows
 /// every `didChange`, and `cargo check`, which runs on `textDocument/didSave`
 /// and nothing else. 「cannot find value ... in this scope」 comes out of the
@@ -195,7 +195,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     assert!(editor.problem_count() > 0, "rust-analyzer 一句話都没說（90 秒）");
 
     // 刪掉出錯那一行（`:2` 是 1 起算的第 2 行；`x` 選整行、`d` 刪掉選區——
-    // ⚠️ 默認鍵位是 helix 的，`dd` 在這裏是刪兩個字符，不是刪一行）。
+    // Warning: 默認鍵位是 helix 的，`dd` 在這裏是刪兩個字符，不是刪一行）。
     editor.execute(":2").unwrap();
     editor.on_key(yumete_core::input::Key::Char('x'));
     editor.on_key(yumete_core::input::Key::Char('d'));
@@ -208,7 +208,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     );
     editor.execute(":w").unwrap();
 
-    // ⚠️ **三分鐘，不是九十秒。** 存盤之後收回那條話要等 `cargo check` 跑完，
+    // Warning: **三分鐘，不是九十秒。** 存盤之後收回那條話要等 `cargo check` 跑完，
     // 而冷快取下那一趟本身就是九十秒往上——2026-09-23 在一臺乾淨機器上實測
     // 紅過一次（`left: 1, right: 0`），重跑（快取熱了）就綠。那不是協議的
     // 預算，是編譯的預算，所以這個數要按後者給。
@@ -226,7 +226,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
 
 /// **`空格 k` 真的問得出「這是什麽」**（#53 ③，2026-09-21）。
 ///
-/// ⚠️ **回答的形狀是那個程序的事。** rust-analyzer 送的是 `MarkupContent`，
+/// Warning: **回答的形狀是那個程序的事。** rust-analyzer 送的是 `MarkupContent`，
 /// 裏面是一段 Markdown：一個 ```rust 圍欄裝着簽名，一條 `---`，然後文檔註釋。
 /// 假服務器只會送這個測試教它送的東西。
 #[test]
@@ -272,7 +272,7 @@ fn rust_analyzer_says_what_a_function_is() {
     }
     assert!(standing_on(&editor).starts_with("counted"), "光標站在 counted 上");
 
-    // ⚠️ **問不到就再問一次。** 服務器要先把整個項目讀完纔答得出來，而在那之前
+    // Warning: **問不到就再問一次。** 服務器要先把整個項目讀完纔答得出來，而在那之前
     // 它答的是「無話可說」——這一份沒有錯誤，所以也沒有診斷可以拿來當「讀完了」
     // 的信號。真用起來也是這樣：讀者按一下沒出來，就再按一下。
     let gave_up = Instant::now() + Duration::from_secs(90);
@@ -303,7 +303,7 @@ fn rust_analyzer_says_what_a_function_is() {
 /// **`C-n` 真的問得出「接下來能打什麽」，而且打進去的是對的那個字串**
 /// （#53 ④，2026-09-21）。
 ///
-/// ⚠️ **這一條是拿來驗兩件只有真服務器能驗的事：**
+/// Warning: **這一條是拿來驗兩件只有真服務器能驗的事：**
 /// ① `snippetSupport: false` 真的讓 rust-analyzer 送 `counted` 而不是
 ///    `counted(${1:text})`——認了 snippet 又不會展開，那六個字符會進使用者的檔；
 /// ② `textEdit.range` 蓋掉的正是已經打出來的那幾個字母。
@@ -387,13 +387,13 @@ fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
     assert_eq!(
         line.trim_end(),
         "    let n = counted",
-        "⚠️ 打進去的是乾淨的名字：没有 snippet 的 `${{1:…}}`，也没有把 `coun` 留在前面"
+        "Warning: 打進去的是乾淨的名字：没有 snippet 的 `${{1:…}}`，也没有把 `coun` 留在前面"
     );
 }
 
 /// **打着字，單子自己出來**（#53 ④ 的自動那一半，2026-09-21）。
 ///
-/// ⚠️ **這一條驗的是次序。** 補全的問題必須排在 `didChange` 後面——服務器手上要
+/// Warning: **這一條驗的是次序。** 補全的問題必須排在 `didChange` 後面——服務器手上要
 /// 是上一版正文，它答的就是「上一個字母之前那個詞後面能接什麽」。這裏不按
 /// `C-n`，只是打字，然後讓事件循環自己轉。
 #[test]
@@ -431,7 +431,7 @@ fn typing_alone_brings_the_list_up() {
     const WORD: &str = "coun";
     let gave_up = Instant::now() + Duration::from_secs(120);
     let mut typed = false;
-    // ⚠️ **`Instant::now().elapsed()` 恆為零。** 從前那句重打的條件寫的是
+    // Warning: **`Instant::now().elapsed()` 恆為零。** 從前那句重打的條件寫的是
     // `Instant::now().elapsed().as_secs() % 3 == 0`——從這一納秒到現在，永遠是
     // 0，於是**每一輪**都重打一次整個 `coun` 而只退一個字母，正文成了
     // `coucoucoucou…coun`（2026-09-23 插探針印出來的）。這條測試說的是「只打

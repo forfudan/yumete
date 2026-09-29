@@ -392,7 +392,7 @@ fn main() -> ExitCode {
     // …and the book's own words on top of whichever of the three it was. The
     // name on every page is the one word no dictionary has.
     editor.reload_project_words();
-    // ⚠️ **`-v` on a program file is not an error, and not silent either.**
+    // Warning: **`-v` on a program file is not an error, and not silent either.**
     // The setting is kept — the next buffer may well be a manuscript — but the
     // page in front of the reader is across, and a flag that appears to do
     // nothing is worse than one that says why (2026-09-21).
@@ -441,17 +441,17 @@ fn main() -> ExitCode {
     yumete_tui::set_build(VERSION);
     let mut settings_page = None;
     if let Some(pressed) = &keys {
-        // ⚠️ **`\{ime}` 之後那幾個鍵走輸入法**（2026-09-28）。從前 `--keys` 一律直接叫
+        // Warning: **`\{ime}` 之後那幾個鍵走輸入法**（2026-09-28）。從前 `--keys` 一律直接叫
         // `editor.on_key`，於是**離屏拍不到任何 preedit**——而輸入法是這個編輯器最不一樣
         // 的那一塊，這個倉的審查方法又是截圖。共用記事本上記過同一個形狀的坑：離屏
         // `--figure` 繞開控制器，於是「前端在把鍵交給引擎之前派掉的那幾個鍵」那一整族
         // bug 一個都拍不到。
         //
-        // ⚠️ **數據要先載進來。** `--shot` 下它本來是推遲到第一幀之後的（見
+        // Warning: **數據要先載進來。** `--shot` 下它本來是推遲到第一幀之後的（見
         // `yumete_tui::Deferred`），而 `--keys` 跑在那之前。只有真的要用輸入法的時候纔
         // 載，不然每一張圖都要多等那幾百毫秒。
         if pressed.contains("\\{ime}") {
-            // ⚠️ **要的是碼表，不只是語言層。** `load` 那一支建的是
+            // Warning: **要的是碼表，不只是語言層。** `load` 那一支建的是
             // `ImeSession::language_only`，只有在配置說「這一趟是寫漢字的」的時候纔往下
             // 載碼表；不載的話 `input()` 只是把字母堆起來，空格一按原樣上屏（實測打
             // `wo` 空格出來的就是 `wo`）。
@@ -488,7 +488,7 @@ fn main() -> ExitCode {
         // path picks up none of them. Naming the ones actually left is cheap
         // and does not go stale — a tenth added tomorrow shows up here the day
         // somebody uses it.
-        // ⚠️ **Two of them this path can honour, and should** (#470). The
+        // Warning: **Two of them this path can honour, and should** (#470). The
         // colours are globals settled before anything is drawn, not state the
         // loop owns — so `:theme`, `:theme-mode` and `:theme-fill` work here
         // exactly as they do in the editor, and a reviewer asking 「what does
@@ -641,7 +641,7 @@ fn main() -> ExitCode {
 /// a run of them is gathered and **committed**, because a commit is a string
 /// and the difference from a key is the whole of what `r` does with it.
 ///
-/// ⚠️ **`:settings` 之後的鍵歸那扇面板**，和主循環一樣。不接這一下，
+/// Warning: **`:settings` 之後的鍵歸那扇面板**，和主循環一樣。不接這一下，
 /// `--shot --keys=':settings\nljj '` 拍到的永遠是面板剛開的樣子——而這個倉審前端
 /// 就是靠拍照，一扇按不動的面板等於一扇沒法審的面板。回來的是那扇面板（要畫它）。
 fn press(
@@ -688,7 +688,7 @@ fn press(
                     // **`\{ime}` 撥一下「往後走不走輸入法」**（2026-09-28）。
                     if name == "ime" {
                         composing = !composing;
-                        // ⚠️ **撥開關的時候順手把它打開。** `:yume on` 走的是請求／回應
+                        // Warning: **撥開關的時候順手把它打開。** `:yume on` 走的是請求／回應
                         // 那條路，而那條路要互動循環來服務——`--shot` 沒有循環，工具自己
                         // 早就印過一句話說這件事。這裏直接撥會話上那兩格。
                         if composing {
@@ -764,7 +764,7 @@ fn press(
             }
         }
         // 面板開着：鍵歸它（`:` 除外——那是命令行，`:w`／`:q` 在那上面打）。
-        // ⚠️ **和主循環同一支** `Seat`，不是抄一遍：抄本當天就分岔過（那一份漏了
+        // Warning: **和主循環同一支** `Seat`，不是抄一遍：抄本當天就分岔過（那一份漏了
         // 「有改動不許一下走」的閘，又把存盤的錯 `let _ =` 吞掉）。
         if settings.took(editor, Some(key)) {
             continue;
@@ -773,7 +773,7 @@ fn press(
         // 個鍵——碼、空格、Enter、退格、選重數字、Esc。互動循環那一支比這個全得多
         // （`yumete-tui` 的那一大段 `match code`），可是拍一張圖用不着那些。
         if composing {
-            // ⚠️ **只有正在組字的時候那幾個鍵纔歸輸入法。** 不加這道閘的話 `Esc` 會被
+            // Warning: **只有正在組字的時候那幾個鍵纔歸輸入法。** 不加這道閘的話 `Esc` 會被
             // 輸入法吃掉（它以為你要放棄一串碼），於是 `\{ime}wo \e` 那個 `\e` 退不出
             // 插入模式——實測下一個 `u` 當成字打進了稿子。互動那一支的判準也是這一條。
             let mid = ime.is_composing();
@@ -803,7 +803,7 @@ fn press(
         }
         editor.on_key(key);
         settings.settle(editor);
-        // ⚠️ **`gw` 的標籤要等一幀纔算得出來**（#406）：落腳點只算屏幕上的，而哪一
+        // Warning: **`gw` 的標籤要等一幀纔算得出來**（#406）：落腳點只算屏幕上的，而哪一
         // 段在屏幕上是**畫的時候**量的。一批鍵是一次餵完的，所以餵到欠着的那一刻
         // 先畫一幀丟掉——不然 `--keys='gwf'` 裏那個 `f` 落到正文上當成別的鍵，而
         // 這個倉審前端就是靠拍照。
@@ -834,7 +834,7 @@ fn parse_size(text: &str) -> Result<(u16, u16), String> {
             "--shot wants a size like 100x30, not {text:?} (`x`, `X`, `*` or `,` between them)"
         ));
     };
-    // ⚠️ **Both ends are refused, and both used to get through.** Zero is not
+    // Warning: **Both ends are refused, and both used to get through.** Zero is not
     // a small terminal, it is no terminal: `--shot=100x0` panicked in the
     // renderer (`index outside of buffer: the area is Rect { width: 100,
     // height: 0 }`) and `--shot=0x30` subtracted past zero drawing a menu. And

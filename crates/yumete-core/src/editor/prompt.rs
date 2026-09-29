@@ -8,7 +8,7 @@ use super::*;
 
 impl Editor {
     pub(super) fn on_insert_key(&mut self, key: Key) {
-        // ⚠️ **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
+        // Warning: **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
         // `C-g` 後面那個 `u` 得在這裏吞——放在那邊是吞不到的（2026-09-23 測出來
         // 的：稿子裏留下了一個游離的「u」）。
         if self.pending == Pending::UndoBreak {
@@ -17,7 +17,7 @@ impl Editor {
                 return;
             }
         }
-        // `C-r` 在等寄存器的名字（2026-09-28）。⚠️ 和 `Pending::UndoBreak` 一樣，這一格
+        // `C-r` 在等寄存器的名字（2026-09-28）。Warning: 和 `Pending::UndoBreak` 一樣，這一格
         // 要在這裏吞：`Pending` 的分派只在 Normal 那一支跑。
         if self.pending == Pending::Register {
             self.pending = Pending::None;
@@ -32,11 +32,11 @@ impl Editor {
         }
         // **服務器提的那張單子，開着的時候先歸它**（#53 ④）。
         //
-        // ⚠️ **`Tab` 在這裏本來就有主人**（引用補全，#418）：單子開着 `Tab` 是
+        // Warning: **`Tab` 在這裏本來就有主人**（引用補全，#418）：單子開着 `Tab` 是
         // 「就這一條」，没開纔是原來那件事。這是浮出來的單子的通則——它在，它
         // 收鍵；它不在，什麽都没變。
         //
-        // ⚠️ **IME 開着的時候這裏一個鍵都收不到**：編碼串還在 IME 手裏，根本
+        // Warning: **IME 開着的時候這裏一個鍵都收不到**：編碼串還在 IME 手裏，根本
         // 不進這個函數。2026-09-21 定的模型：「只有當文字上屏才算字符落到屏幕
         // 上」——所以候選欄與這張單子不會同時收同一個鍵，空格與 `2390` 一直是
         // IME 的。
@@ -214,7 +214,7 @@ impl Editor {
             // readline 的另一半（2026-09-28）。`C-u` 早就有了，一個只做了一半的對子
             // 比兩個都沒有更難記。
             Key::Ctrl('k') => self.delete_to_line_end(),
-            // **`C-r` 把一個寄存器插進來**，vi 的拼法。⚠️ 它在等一個字符——`"` 是無名
+            // **`C-r` 把一個寄存器插進來**，vi 的拼法。Warning: 它在等一個字符——`"` 是無名
             // 的那一個（同 vi），別的字母是具名的。
             Key::Ctrl('r') => self.pending = Pending::Register,
             // Across the break, as in 常模 — outside a cell, where the two
@@ -268,7 +268,7 @@ impl Editor {
                         let rope = self.current_buffer().rope();
                         let start = rope.line_to_char(rope.char_to_line(self.sel.head()));
                         // A TAB already on the line lands on its own stop.
-                        // ⚠️ **字簇，不是 `char`**（#422）：`⚠️` 是兩個 `char`，逐字
+                        // Warning: **字簇，不是 `char`**（#422）：`Warning: ` 是兩個 `char`，逐字
                         // 加算一格而終端給兩格，於是對齊到這一欄的縮進會少一格。Tab
                         // 要單獨認，它的寬度是「到下一個制表位」，不是字形的寬度。
                         let ahead: String = rope.slice(start..self.sel.head()).chars().collect();
@@ -502,7 +502,7 @@ impl Editor {
             self.history_at = None;
         }
         match key {
-            // ⚠️ 退出去的時候也要把那一格放掉，不然下一次按 `/` 會做上一次那件事。
+            // Warning: 退出去的時候也要把那一格放掉，不然下一次按 `/` 會做上一次那件事。
             Key::Esc => {
                 self.sift = None;
                 self.close_prompt();

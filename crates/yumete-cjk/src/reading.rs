@@ -77,7 +77,7 @@ pub const CHARSET_TAGS: [char; 5] = ['簡', '繁', '古', '臺', '港'];
 /// The 字集 field split into the two questions it answers — `簡古臺-CJK-A`
 /// becomes `("簡古臺", "CJK-A")`.
 ///
-/// ⚠️ **Not `split('-')`.** A block name has hyphens of its own — `CJK-A`,
+/// Warning: **Not `split('-')`.** A block name has hyphens of its own — `CJK-A`,
 /// `CJK-B`, `假名擴展-A` — so the first `-` is the separator only when
 /// something precedes it, and a character in *no* 字集 has a field that is
 /// nothing but a block name. Splitting on the first `-` read `CJK-A` as the

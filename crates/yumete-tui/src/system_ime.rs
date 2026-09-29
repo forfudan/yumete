@@ -29,7 +29,7 @@
 //! answer in this file and not four. The row is the tag the status line stands
 //! (`standing_language_tag`), which is exactly `available && engaged`.
 //!
-//! ⚠️ **Both halves were got wrong once, and each cost an evening.** The first
+//! Warning: **Both halves were got wrong once, and each cost an evening.** The first
 //! version asked only `engaged`: `[ime] start` is `false` out of the box, so a
 //! fresh session is engaged with **no 碼表**, and the rule took the system's
 //! input method away from a writer whose yumete could not type 漢字 either —
@@ -71,7 +71,7 @@
 //! ```
 //!
 //! Two IMK input methods, the same failure rate, a random round, and **it fails
-//! with no editor and no terminal in the picture at all**. ⚠️ 蘋果全拼 passing
+//! with no editor and no terminal in the picture at all**. Warning: 蘋果全拼 passing
 //! that same test proves nothing — SCIM is built in and does not go through the
 //! IMK session protocol, which is why it was the control that pointed the
 //! finger at the wrong place for an hour.
@@ -91,7 +91,7 @@
 //! YumeIME binary, loading the Swift runtime to send one notification). Five
 //! suspend/resume pairs 0.3 s apart, every one of them exact.
 //!
-//! ⚠️ **yumete never needs `once`.** That third signal exists because helix has
+//! Warning: **yumete never needs `once`.** That third signal exists because helix has
 //! entries with no exit event — a `/` prompt accepted with Enter, an `r`/`f`/`t`
 //! waiting on one character — so the input method has to notice the commit and
 //! put itself back. yumete *is* the editor: `Mode::Search`, `Mode::Command` and
@@ -158,7 +158,7 @@ SystemIme { policy, focused: true, suspended: false }
 
     /// The terminal gained or lost the keyboard.
     ///
-    /// ⚠️ **A resume is not enough on its own.** [`Self::want`] runs on every
+    /// Warning: **A resume is not enough on its own.** [`Self::want`] runs on every
     /// turn of the main loop, so lifting the suspension when focus left and
     /// nothing more would have it re-asserted a millisecond later. Losing focus
     /// has to *stop the asking*, not answer it once.
@@ -193,13 +193,13 @@ SystemIme { policy, focused: true, suspended: false }
     ///
     /// 根子在 [`Self::suspended`] 是一個**信念**：想要鍵而且還没挂起，纔發信號。
     /// 輸入法在別處自己恢復了，這一頭卻還記着「已經挂着了」——於是它再也不說第二
-    /// 次。⚠️ **同一族的坑源碼裏記着**（見本檔開頭：開機那一次的挂起被丟掉，
+    /// 次。Warning: **同一族的坑源碼裏記着**（見本檔開頭：開機那一次的挂起被丟掉，
     /// yumete 就此相信自己挂着了）。
     ///
     /// 信念會漂，就得有一條重新聲明的路。抹掉信念就夠了：下一輪 [`Self::want`]
     /// 自己會把信號重發一次，而它本來就是冪等的。
     ///
-    /// ⚠️ **不做成「焦點回來自動重發」**——那條保險絲的反面（焦點離開自動解挂）
+    /// Warning: **不做成「焦點回來自動重發」**——那條保險絲的反面（焦點離開自動解挂）
     /// 試過、撤了，代價是一天幾十次。由人按一下，該重發的時候纔重發。
     pub fn say_it_again(&mut self) {
         log(|| "-> say it again".to_string());
@@ -228,7 +228,7 @@ impl Drop for SystemIme {
 /// signal through a 12 MB binary: 0.2 ms against 85 ms, and the editor's loop
 /// is not a place to spend 85 ms on a keystroke.
 ///
-/// ⚠️ **The two names read backwards from the two commands**, and that is
+/// Warning: **The two names read backwards from the two commands**, and that is
 /// upstream's own note: `yume-mode off` — 「讓輸入法走開」 — posts
 /// `modalSuspend.**on**`, because the name says which way the *suspension* is
 /// switched, not which way the input method is.

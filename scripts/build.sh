@@ -95,7 +95,7 @@ install_ime_data() {
   fi
   yume_root="$(cd "$yume_root" && pwd)"
   if [[ ! -f "$yume_root/data/ling.txt" ]]; then
-    # ⚠️ **不是每個人都跑得了那條流水綫。** 源表在一個私有倉裏，所以「去跑一下
+    # Warning: **不是每個人都跑得了那條流水綫。** 源表在一個私有倉裏，所以「去跑一下
     # pipeline」對倉外的人是一條死路（2026-09-22 就這麽卡住過一個人）。出廠自帶
     # 的那幾張表是公開的，說出來比不說強。
     echo "==> IME data: skipped (no source tables in $yume_root/data)"
@@ -208,12 +208,12 @@ install_ime_data() {
   # and nothing ever wrote one there, so every install ran on yume-core's five
   # compiled-in schemes and the whole of #169 was dead code in a shipped build.
   #
-  # ⚠️ **Only a scheme whose table this build actually compiled.** A menu line
+  # Warning: **Only a scheme whose table this build actually compiled.** A menu line
   # a writer can pick with no code table behind it is worse than a missing
   # line: switching to it leaves them with no candidates at all. So each copy
   # is gated on the `.ytab` that has just been written beside it.
   #
-  # ⚠️ 冰雪 (`snow-*.toml`) stays out until yumete compiles what it needs.
+  # Warning: 冰雪 (`snow-*.toml`) stays out until yumete compiles what it needs.
   # These files are not decoration — they carry `[[word]]`, `fixed`, `abbrev`,
   # `select_keys` and the 頂功 rules, so taking one changes how typing behaves.
   local from="$yume_root/frontends/schemes"
@@ -259,7 +259,7 @@ $(ls -1 "$schemes"/*.toml 2>/dev/null | wc -l | tr -d ' ') scheme(s) in $dest)"
 # so installing afterwards meant the first run of this script produced a binary
 # with neither, and only the *second* run picked them up.
 #
-# ⚠️ Which is why `install_ime_data` is **defined above this line**: bash binds
+# Warning: Which is why `install_ime_data` is **defined above this line**: bash binds
 # a function name when it reads the definition, not when the script starts, so
 # a call placed before it fails with `command not found` — and this call moved
 # up on 2026-09-14 while the definition stayed where it was.

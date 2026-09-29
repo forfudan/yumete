@@ -627,7 +627,7 @@ impl Editor {
         // **一份 `.csv` 打開就是表格**（2026-09-22 定：「從 picker 打開的 csv
         // 不是自動進入高級表格編輯模式，是不是直接進入比較好？」）。
         //
-        // ⚠️ **判準是「這個文件是 csv」，不是「從哪兒打開的」**：`.csv` 没有第二
+        // Warning: **判準是「這個文件是 csv」，不是「從哪兒打開的」**：`.csv` 没有第二
         // 種讀法，它就是一張表——從 picker、從命令行、從 `:open` 進來都一樣。而
         // `.md` 裏的表格只是正文的一部分，所以那一種永遠不自動。
         //
@@ -878,7 +878,7 @@ impl Editor {
     /// a `|` between two columns is a band **across** the 縱, and the `---`
     /// under the header is a wall **down** it.
     pub fn line_is_table_row(&self, line: usize) -> bool {
-        // ⚠️ **Three questions, not one** (2026-09-19). 「Does this line open
+        // Warning: **Three questions, not one** (2026-09-19). 「Does this line open
         // with a `|`」 is `mdtable::is_row`, and on its own it turned tables
         // that are not being drawn as tables at all:
         //
@@ -2327,7 +2327,7 @@ impl Editor {
         // one keystroke rewrote all 123,381 lines of a Windows-authored 拆分表
         // and nothing on the screen said so.
         //
-        // ⚠️ It is the buffer's **dominant** ending, not「有沒有出現過 CRLF」.
+        // Warning: It is the buffer's **dominant** ending, not「有沒有出現過 CRLF」.
         // The old test was `text.contains("\r\n")`, which made one stray CRLF
         // — a single line pasted from somewhere else — convert every other
         // line on the next sort: a 123,381-line diff for a change of order.
@@ -3033,7 +3033,7 @@ impl Editor {
         // the default became 按字 and `Tab` was wanted for the thing every
         // spreadsheet means by it.
         //
-        // ⚠️ **`T` stays a grid key even though `t`／`T` went back to being
+        // Warning: **`T` stays a grid key even though `t`／`T` went back to being
         // till** (2026-09-21): it and `Tab` are the grid's two documented
         // exceptions, and till-searching backwards inside a grid is not a
         // thing anybody does. The table *group* is `空格 t` here as
@@ -3131,7 +3131,7 @@ impl Editor {
             // must go on being refused rather than quietly clearing one cell.
             Key::Char('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(false),
             Key::Char('D') if self.sel.anchor() == self.sel.head() => self.clear_cell(true),
-            // ⚠️ **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
+            // Warning: **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
             // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
             // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
             // 意思」。這兩處（按字、按格各一）是那次搬家漏下的，留着它等於錢

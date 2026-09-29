@@ -13,7 +13,7 @@ impl Editor {
 
     /// Whether the panel opens **without being asked**, where the cursor is.
     ///
-    /// ⚠️ **A row on a prose page never opens it** (#495) — `to`, `tb` and
+    /// Warning: **A row on a prose page never opens it** (#495) — `to`, `tb` and
     /// `tf` alike. `tf` used to, on the reasoning that a level which folds
     /// cells away owes the reader a way to read one whole. True in `tt`, where
     /// the grid has the window; wrong on a page of prose, because the panel
@@ -58,7 +58,7 @@ impl Editor {
         // — and wrong in the row, the more so since a cell wide enough to be
         // folded away is one this panel is now the way to read whole.
         //
-        // ⚠️ **站在註上比在行裏精確，所以註先。**（2026-09-22 報的：`[^37]` 在
+        // Warning: **站在註上比在行裏精確，所以註先。**（2026-09-22 報的：`[^37]` 在
         // 一格表格裏，浮窗什麽都不出，而狀態欄照樣寫着「腳注」。）兩條規矩夾出
         // 一個洞：這裏無條件先給行，而行在散文頁上又**不主動打開**（#495），於是
         // 兩樣都没有。`note_detail` 只在光標**正壓着** `[^n]` 或 `%%註%%` 的時候
@@ -158,7 +158,7 @@ impl Editor {
         // moved onto its opening mark expects the panel then, not one step
         // later.
         let runs = self.markup_line_in(line, block);
-        // ⚠️ **最裏面那一條，不是第一條**（2026-09-28）。`spans` 交出來的是嵌套的：
+        // Warning: **最裏面那一條，不是第一條**（2026-09-28）。`spans` 交出來的是嵌套的：
         // `# 見[^1]` 交 `HeadingMark`／`Heading 1..6`／`Footnote 2..6`，而 `Heading`
         // 排在前面。取第一條拿到的是標題那個構造，再去它裏面找腳註當然找不到——
         // **標題裏的腳註從此沒有詳情面板**。不變式保證「起點最靠後的那一條」就是最內層。
@@ -211,7 +211,7 @@ impl Editor {
     /// search. A link, a `[[章節]]` and a `#錨點` are followed the same way —
     /// they are definitions too, and the ones a manuscript has most of.
     ///
-    /// ⚠️ **Standing on none of them it does nothing** (#454). It used to fall
+    /// Warning: **Standing on none of them it does nothing** (#454). It used to fall
     /// through to 「這個詞還在哪裏」, so `gd` in the middle of a paragraph
     /// scattered hits across the book and moved the caret. That question is
     /// still one key away and always was: `g/`.
@@ -230,7 +230,7 @@ impl Editor {
             // always followed them; `gd` asks the same question in the same
             // words, so it follows them as well.
             if self.link_under_cursor().is_some() {
-                // ⚠️ **`gD` on a link is `gd`** — say so rather than pretend.
+                // Warning: **`gD` on a link is `gd`** — say so rather than pretend.
                 // Everywhere else the capital means 「shown over there, and you
                 // do not move」, and `follow_link` has three destinations (a
                 // web page, another chapter, a heading in this file) of which
@@ -251,7 +251,7 @@ impl Editor {
             if self.ask_where_this_is_written() {
                 return;
             }
-            // ⚠️ **And on ordinary writing it does nothing** (#454). It used to
+            // Warning: **And on ordinary writing it does nothing** (#454). It used to
             // fall through here too — a whole-document search for whatever the
             // cursor happened to be on — so `gd` in the middle of a paragraph
             // scattered hits across the book and moved the caret.
@@ -280,7 +280,7 @@ impl Editor {
     /// page that does not exist is how one gets written, which is what every
     /// wiki-shaped editor does and what a writer typing `[^1]` means.
     ///
-    /// ⚠️ **`g` is the document's group and `t` is the table's** (2026-09-12).
+    /// Warning: **`g` is the document's group and `t` is the table's** (2026-09-12).
     /// This key used to mean something else inside a grid — 「which row has
     /// this in the key column」 — and a `[^1]` written into a table row then
     /// searched the grid instead of going to its note, which is the one thing
@@ -288,7 +288,7 @@ impl Editor {
     /// cursor happens to be standing in cannot be relied on; the table's own
     /// questions are asked with `t/`, `t?` and `:table-jump`.
     ///
-    /// ⚠️ **And that rule is the whole rule** (#454). A 拆分 cell holding 目
+    /// Warning: **And that rule is the whole rule** (#454). A 拆分 cell holding 目
     /// still *names* another row, and this key still refuses it: 「g 不管表格，
     /// 表格的我们以后再说」. `t?` is the one that asks it.
     pub(super) fn show_definition(&mut self, preview: bool) {
@@ -511,7 +511,7 @@ impl Editor {
                 .unwrap_or_default()
         };
         // Titled by the row's key, since that is what a person calls the row.
-        // ⚠️ **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
+        // Warning: **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
         // 攤成整扇窗的時候，行號欄寫 1、狀態欄寫「行 1」，而這裏從前寫 2——
         // 同一行三個數字兩種口徑。`table_row_base` 就是那兩處用的那一個。
         let title = match &schema.key {

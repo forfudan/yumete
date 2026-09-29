@@ -90,7 +90,7 @@ pub struct Grid<'a> {
     /// and its base centred against it — or the group is only the base, with
     /// its tags off the page (`:view-margin never`, 2026-09-16).
     ///
-    /// ⚠️ **Not the same question as `ruby`**, and the reason this is a second
+    /// Warning: **Not the same question as `ruby`**, and the reason this is a second
     /// field: turning the dialects off to hide the readings — which is what
     /// `:view-dense` did — left `<ruby>永<rt>ㄩㄥˇ</rt></ruby>` on the page as
     /// the source it is, tags and all. A page with no margin still reads the
@@ -628,7 +628,7 @@ fn push_plain(
                 // in document order and answered quietly with the wrong row
                 // when they were not.
                 if let Some((opened_at, _earlier)) = opening.take() {
-                    // ⚠️ **Its own square, not an empty one with the glyph in
+                    // Warning: **Its own square, not an empty one with the glyph in
                     // the margin** (#231): an opener that never reached a base
                     // — `（（` or `（。` — is still a mark, and a blank square
                     // in the middle of the column is the one thing 標點旁置
@@ -690,7 +690,7 @@ fn push_plain(
                     // with 冬 written between them: pulling it out would put
                     // 「 after the character it opens.
                     //
-                    // ⚠️ **…and only where both marks have a *true* narrow
+                    // Warning: **…and only where both marks have a *true* narrow
                     // form** (#230). 。 and 、 are the ones: half-em glyphs
                     // whose right half is blank, which is what a bracket nests
                     // into. ？ and ！ fill their em — clreq §6.3.2 separates
@@ -749,7 +749,7 @@ fn push_plain(
                     // **Anything else that finds the margin taken keeps its
                     // own square** — Feature #231.
                     //
-                    // ⚠️ It used to take a margin row with the text square
+                    // Warning: It used to take a margin row with the text square
                     // beside it **empty**, which is a hole in the middle of
                     // the column — and not a rare one: 秋「冬」」 makes two of
                     // them and 春（。）」 makes four, because a base already
@@ -983,7 +983,7 @@ fn rotate(body: &str) -> String {
 /// these offsets, so packing here is what makes the cursor, the wrap length,
 /// motion and the renderer all agree that `12` is one row.
 ///
-/// ⚠️ **A packed slot is one row, not one square.** Two half-width characters
+/// Warning: **A packed slot is one row, not one square.** Two half-width characters
 /// are exactly the 縱's own width; a longer group is still one row and is then
 /// *wider* than the 縱, which the renderer pays for out of the 行間. So a slot's
 /// width is [`slot_cells`], never two.
@@ -1279,7 +1279,7 @@ fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> L
     // padding `mdtable` puts in, so a row is as deep as the table is wide and
     // that is the honest size of it.
     //
-    // ⚠️ The length is the whole row, not `usize::MAX`: the breaker asks
+    // Warning: The length is the whole row, not `usize::MAX`: the breaker asks
     // `at + zong_len >= total`, and that overflows.
     let zong_len = match (grid.table)(line) {
         true => slots.len().max(1),
@@ -2528,7 +2528,7 @@ mod tests {
         // reads as a number rather than a stack of loose digits.
         assert_eq!(slot_text("第12章", two), ["第", "12", "章"]);
         assert_eq!(slot_text("第7章", two), ["第", "7", "章"]);
-        // ⚠️ **The limit is a count of characters, not of 字.** Raise it and
+        // Warning: **The limit is a count of characters, not of 字.** Raise it and
         // the very same run is one row — 「2026」 four cells across, hanging
         // out of a 縱 two cells wide.
         assert_eq!(slot_text("2026年", 4), ["2026", "年"]);
@@ -2979,7 +2979,7 @@ mod tests {
         let slots = line_slots_plain("春。夏、秋「冬」", grid);
         let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
         // 秋 carries nothing: the 「 after it waits for 冬, which it introduces.
-        // ⚠️ The closing 」 finds 冬's margin already taken, and **keeps a
+        // Warning: The closing 」 finds 冬's margin already taken, and **keeps a
         // square of its own** rather than a margin row with a blank square
         // beside it (#231) — a row is a row either way, and one of the two
         // leaves a hole in the column.
@@ -3074,7 +3074,7 @@ mod tests {
                 ("﹂".to_string(), Some('｣')),
             ]
         );
-        // ⚠️ An opener that never reached a base is still a mark.
+        // Warning: An opener that never reached a base is still a mark.
         assert_eq!(
             shape("（（春"),
             vec![("︵".to_string(), None), ("春".to_string(), Some('('))]
@@ -3117,7 +3117,7 @@ mod tests {
                 "{line}: no ASCII mark in a Chinese manuscript: {slots:?}"
             );
         }
-        // ⚠️ And one of them alone still hangs — that is where the space is
+        // Warning: And one of them alone still hangs — that is where the space is
         // saved, and a lone mark in a half-cell margin is what the ASCII twin
         // is *for*.
         let slots = line_slots_plain("春？夏", G.with_hanging(true));

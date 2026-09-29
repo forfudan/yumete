@@ -17,7 +17,7 @@ impl Editor {
     /// one row」, and no writing tradition anywhere sets a program in 縱書 —
     /// 2026-09-21 定：「见到程序文件，强制不允许开启竖排模式」。
     ///
-    /// ⚠️ **The refusal is per buffer, not a setting that gets switched off.**
+    /// Warning: **The refusal is per buffer, not a setting that gets switched off.**
     /// 竪排 is 「I want to write this way」; a `.rs` is 「this one cannot be read
     /// that way」, and the second must not quietly answer the first. Open a
     /// program file in the middle of a novel and the novel is still 竪排 when
@@ -668,7 +668,7 @@ impl Editor {
 
     /// 第 `line` 行（0 起算）跟 git 那一份比起來是什麼來歷。
     ///
-    /// ⚠️ **這一句只查快取，一個子進程都不會生**——它一幀要被問幾十次。真正去
+    /// Warning: **這一句只查快取，一個子進程都不會生**——它一幀要被問幾十次。真正去
     /// 喊 `git` 的是 [`Editor::refresh_vcs`]，而它只在開檔、存檔、`:view-diff on`
     /// 那三個時刻跑。
     pub fn vcs_mark(&self, line: usize) -> Option<crate::vcs::Change> {
@@ -759,7 +759,7 @@ impl Editor {
 
     /// 收下一個服務器對一個檔說的全部話。
     ///
-    /// ⚠️ **整份換掉，不是添上去**——理由寫在 [`crate::problem::Problems::set`]。
+    /// Warning: **整份換掉，不是添上去**——理由寫在 [`crate::problem::Problems::set`]。
     /// 行與列進來的時候已經是**字符**，不是 LSP 的 UTF-16：換算是前端在收報那
     /// 一刻做的，這道門裏面不該再見到另一套坐標。
     pub fn set_problems(&mut self, path: std::path::PathBuf, said: Vec<crate::problem::Problem>) {
@@ -768,7 +768,7 @@ impl Editor {
 
     /// 第 `line` 行（0 起算）上最響的那一句話，給行號旁邊那一格。
     ///
-    /// ⚠️ 和 [`Self::vcs_mark`] 一樣，**這一句只查手上這份，一個進程都不生**：
+    /// Warning: 和 [`Self::vcs_mark`] 一樣，**這一句只查手上這份，一個進程都不生**：
     /// 它一幀要被問幾十次。
     pub fn problem_on_line(&self, line: usize) -> Option<crate::problem::Severity> {
         let path = self.current_buffer().path()?;
@@ -785,7 +785,7 @@ impl Editor {
     /// 2026-09-21：「如何查看 error 和 warning 的 message？比如這一行是紅的，我
     /// 該怎麽知道它是什麽錯？」號碼旁邊那一格只說得出**有多響**，說不出是什麽。
     ///
-    /// ⚠️ **一行可能有好幾句，最響的那一句先說**，後面的跟在它下面——`conut` 那
+    /// Warning: **一行可能有好幾句，最響的那一句先說**，後面的跟在它下面——`conut` 那
     /// 一行 rust-analyzer 同時說「找不到這個函數」和「有個 `count` 長得像」，而
     /// 只給前一句等於把最有用的那半截藏起來。
     ///
@@ -821,7 +821,7 @@ impl Editor {
     /// 只在**代碼檔**上問：一份 `.md` 裏的「定義」是腳注、鏈接和百科名，那三種
     /// `gd` 自己答得了，而一份 `.rs` 裏一個都不會有。
     ///
-    /// ⚠️ **問完不等**。編輯器是一條線程，答案下一趟循環纔回得來——所以這裏只
+    /// Warning: **問完不等**。編輯器是一條線程，答案下一趟循環纔回得來——所以這裏只
     /// 把問題放下，光標過一會兒纔跳。helix 也是這樣（它的請求同樣是異步的）。
     pub(super) fn ask_where_this_is_written(&mut self) -> bool {
         if !matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
@@ -833,7 +833,7 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let text = rope.line(line).to_string();
-        // ⚠️ 問出去的列是 **UTF-16 碼元**，不是字符數。
+        // Warning: 問出去的列是 **UTF-16 碼元**，不是字符數。
         let chars = self.sel.head() - rope.line_to_char(line);
         self.definition_query = Some((path, line, crate::problem::utf16_column(&text, chars)));
         self.status = say!("lsp.asking");
@@ -847,7 +847,7 @@ impl Editor {
 
     /// **答案回來了：去那兒**（#53 ②）。
     ///
-    /// ⚠️ **列是 UTF-16 的，而這一頭數字符**——換算要那一行的正文，所以它在這裏
+    /// Warning: **列是 UTF-16 的，而這一頭數字符**——換算要那一行的正文，所以它在這裏
     /// 做，在檔已經打開之後。
     pub fn go_to_definition(&mut self, place: &crate::lsp::Place) {
         self.remember_jump();
@@ -877,6 +877,16 @@ impl Editor {
     /// 與 `gd` 同一個形狀，同一條理由：只在代碼檔上問，問完不等。鍵位是
     /// `空格 k`，helix 的 hover 也是這一個。
     pub(super) fn ask_what_this_is(&mut self, afloat: bool) -> bool {
+        // **散文那一份問的是百科，不是服務器**（2026-09-29 定，原話：「文本文件
+        // 会说 space k / K 这不是程序文件所以不能显示文档。这是不好的，它以就可以
+        // 显示百科」）。
+        //
+        // Warning: **這兩個鍵說的是「把光標底下這個東西講給我聽」**，而「這個東西是什
+        // 麽」看的是稿子：代碼裏是一個名字，散文裏是一個詞條。百科與文檔本來就是
+        // 一扇面板的兩種（`view_fits_the_file`），這兩個鍵也該是一個鍵的兩種。
+        if !self.writes_code() {
+            return self.show_the_wiki_here(afloat);
+        }
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return false;
         };
@@ -884,7 +894,7 @@ impl Editor {
         // 侧栏是打开的情况下，按 space k 就应该在侧栏中显示，而不是继续弹窗显
         // 示」）。兩個面在說同一件事，是這個編輯器一直在拆的東西。
         //
-        // ⚠️ `空格 K`（`afloat == false`）說的是**一定進邊欄**，所以它先把那一扇
+        // Warning: `空格 K`（`afloat == false`）說的是**一定進邊欄**，所以它先把那一扇
         // 開出來——鍵不交過去。
         if !afloat && self.showing(crate::sidebar::View::Docs).is_none() {
             let side = self.side_for(crate::sidebar::View::Docs);
@@ -907,11 +917,11 @@ impl Editor {
     /// **文檔跟不跟着光標走**——一個命令，不是一個鍵（2026-09-29 定）。
     ///
     /// 原話：「即时显示应该做成一个命令开关而不使用快捷键……这样的话即时显示和在
-    /// 哪里显示就分开了，不会混在一起。」⚠️ **兩件事**：`空格 k`／`空格 K` 說的是
+    /// 哪里显示就分开了，不会混在一起。」Warning: **兩件事**：`空格 k`／`空格 K` 說的是
     /// 「畫在哪」，這一個說的是「什麽時候問」。從前擠在一個鍵上，於是按 `空格 K`
     /// 的人不知道自己同時定了兩件事。
     ///
-    /// 開着的時候它就是百科的代碼版：面板常駐，內容跟着光標。⚠️ **差別在拉與推**
+    /// 開着的時候它就是百科的代碼版：面板常駐，內容跟着光標。Warning: **差別在拉與推**
     /// ——百科每一幀現算，文檔要問服務器，所以它多一道「光標停穩了纔問」的閘
     /// （[`Editor::docs_owed`]）。出廠**關**：問一次服務器不便宜。
     pub fn follow_with_docs(&mut self, on: bool) {
@@ -962,7 +972,7 @@ impl Editor {
 
     /// 前端進出那扇面板時說一聲。
     ///
-    /// ⚠️ **核心要知道它開着**，因為 `:w` 與 `:q` 在那時說的是面板，不是緩衝區。
+    /// Warning: **核心要知道它開着**，因為 `:w` 與 `:q` 在那時說的是面板，不是緩衝區。
     /// 不說的話，設置面板上按 `:w` 會把眼前那一章存一遍——看起來像沒反應，其實
     /// 動的是別的東西。
     pub fn set_settings_open(&mut self, on: bool) {
@@ -997,14 +1007,14 @@ impl Editor {
 
     /// **答案回來了：浮出來**（#53 ③）。
     ///
-    /// ⚠️ **記下問的時候光標在哪**：這一則是**問出來的**，所以光標一走它就該
+    /// Warning: **記下問的時候光標在哪**：這一則是**問出來的**，所以光標一走它就該
     /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
     pub fn show_hover(&mut self, told: String) {
         self.hovered = Some((self.sel.head(), told));
         self.hover_scroll = 0;
         self.status = String::new();
-        // ⚠️ **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
-        // 「送進邊欄要的就是讀得完，而讀得完得走得動」——⚠️ **可要走得動本來就有
+        // Warning: **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
+        // 「送進邊欄要的就是讀得完，而讀得完得走得動」——Warning: **可要走得動本來就有
         // `空格 4`**，和別的邊欄一個樣；而搶走鍵的代價是人正在寫字的時候光標被
         // 挪走了。作者報的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在
         // 正文」。
@@ -1013,7 +1023,7 @@ impl Editor {
 
     /// 服務器對這個東西無話可說。
     ///
-    /// ⚠️ **跟着光標走的時候不出聲**（2026-09-29）：那一問是編輯器自己發的，
+    /// Warning: **跟着光標走的時候不出聲**（2026-09-29）：那一問是編輯器自己發的，
     /// 報一句「服務器無話可說」等於每走到一個標點就罵一次。面板清空就是答覆。
     pub fn no_hover(&mut self) {
         self.hovered = None;
@@ -1026,7 +1036,7 @@ impl Editor {
     /// **跟着光標那一問，這一刻該不該發出去**（2026-09-29）。
     ///
     /// 前端每一輪問一次。三個條件：開關開着、光標停穩了、而且不是上一次問過的
-    /// 那一格。⚠️ **停穩纔問，是為了不閃**——按住 `j` 連走的時候一格都不問，面板
+    /// 那一格。Warning: **停穩纔問，是為了不閃**——按住 `j` 連走的時候一格都不問，面板
     /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
     /// 清空，作者定的）。
     pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
@@ -1060,7 +1070,7 @@ impl Editor {
 
     /// **翻那一扇浮窗**——`by` 行，負數往回（2026-09-29）。
     ///
-    /// 回 `true` ＝ 這一鍵歸浮窗，正文不必再看它一眼。⚠️ **只有浮着的那一份收
+    /// 回 `true` ＝ 這一鍵歸浮窗，正文不必再看它一眼。Warning: **只有浮着的那一份收
     /// 鍵**：進了邊欄的那一份走邊欄自己的 `jk`，而邊欄是走得進去的
     /// （`空格 4`）——浮窗不是。
     pub(super) fn scroll_the_hover(&mut self, by: isize) -> bool {
@@ -1073,7 +1083,7 @@ impl Editor {
 
     /// **還有多久該問那一句**，`None` ＝ 沒什麽等着（2026-09-29）。
     ///
-    /// ⚠️ **不給這個數，那一問永遠不會自己發出去。** 光標是按鍵挪的，那一下把
+    /// Warning: **不給這個數，那一問永遠不會自己發出去。** 光標是按鍵挪的，那一下把
     /// 循環叫醒了，可那時三百毫秒還沒到；循環接着睡，而睡着的循環不會再看一眼
     /// 鬧鐘——除非有人先告訴它鬧鐘幾點響。同 `autosave_due_in` 那一族。
     pub fn docs_due_in(&self) -> Option<std::time::Duration> {
@@ -1090,7 +1100,7 @@ impl Editor {
 
     /// **光標離開了問的那一格，那一則說明就作廢**（2026-09-29 報的）。
     ///
-    /// ⚠️ 從前光標一走只是**不畫**，答案還留着——於是走回那一格它又冒出來了。
+    /// Warning: 從前光標一走只是**不畫**，答案還留着——於是走回那一格它又冒出來了。
     /// 原話：「走出之后回到这个字母，它是不是不应该出现了？」對的：那一則是問
     /// 出來的，問題已經過去了。
     ///
@@ -1143,11 +1153,11 @@ impl Editor {
     /// 全**。編碼串還在 IME 手裏的時候這裏一次都不會被叫到——那些鍵根本不進編輯
     /// 器——所以候選欄與補全單子永遠不會同時收同一個鍵。
     ///
-    /// ⚠️ **只在詞的中間問。** 剛打完的是空格、括號、分號，那就是一個詞結束了，
+    /// Warning: **只在詞的中間問。** 剛打完的是空格、括號、分號，那就是一個詞結束了，
     /// 這時候彈一張單子是打斷而不是幫忙；順手把上一張也收掉。`.` 與 `:` 例外——
     /// 它們正是「接下來能打什麽」最有用的兩個位置（`self.`、`std::`）。
     ///
-    /// ⚠️ **問題只是放下，什麽時候發是前端的事**：服務器得先收到這一份的新正文，
+    /// Warning: **問題只是放下，什麽時候發是前端的事**：服務器得先收到這一份的新正文，
     /// 否則它答的是上一版（見 `Servers::ask_next`）。
     pub(super) fn maybe_ask_what_comes_next(&mut self, just_typed: &str) {
         if !self.writes_code() || self.mode != Mode::Insert {
@@ -1171,9 +1181,9 @@ impl Editor {
 
     /// **答案回來了：把單子擺出來**（#53 ④）。
     pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>) {
-        // ⚠️ **這張單子是關於問的時候那個位置的。** 問完又打了兩個字母，回來的
+        // Warning: **這張單子是關於問的時候那個位置的。** 問完又打了兩個字母，回來的
         // 是「當時那個詞後面能接什麽」——擺出來就是在答一個過期的問題。
-        // ⚠️ **`!=`，不是 `is_some_and`。** `None` 在這裏不是「不知道問的時候在
+        // Warning: **`!=`，不是 `is_some_and`。** `None` 在這裏不是「不知道問的時候在
         // 哪」，而是**那個問題已經作廢了**——打了個空格或分號，
         // `maybe_ask_what_comes_next` 把三格一起清掉了。用 `is_some_and` 寫，
         // `None` 會當成「對得上」放行：單子擺出來，錨在**新**光標上，而
@@ -1230,7 +1240,7 @@ impl Editor {
 
     /// **選中的那一條真打進去**（#53 ④），打了回 `true`。
     ///
-    /// ⚠️ **替換多少是服務器說的**，不是這一頭猜的：`self.co` 補成 `count` 要
+    /// Warning: **替換多少是服務器說的**，不是這一頭猜的：`self.co` 補成 `count` 要
     /// 蓋掉 `co` 那兩個字符，而哪兩個字符算「已經打出來的那個詞」，只有認得這門
     /// 語言的那一頭知道（見 [`crate::lsp::Offer::replacing`]）。服務器没說就
     /// 什麽都不蓋，只在光標處插入。
@@ -1246,7 +1256,7 @@ impl Editor {
         let head = rope.line_to_char(line);
         let text = rope.line(line).to_string();
         let (start, end) = match item.replacing {
-            // ⚠️ 服務器說的是 **UTF-16 碼元**，這一頭數字符。
+            // Warning: 服務器說的是 **UTF-16 碼元**，這一頭數字符。
             Some((from, to)) => (
                 head + crate::problem::char_column(&text, from),
                 head + crate::problem::char_column(&text, to),

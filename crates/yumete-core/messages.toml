@@ -1171,8 +1171,8 @@ find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp 
 [[message]]
 # 命令：:clipboard —— 粘貼菜單（空格 " 是同一扇）
 key = "cmd.commands.clipboard"
-zht = "粘貼菜單：剪貼簿和取過的那幾段，挑一個貼（空格 引號 也是）"
-zhs = "粘贴菜单：剪贴板和取过的那几段，挑一个贴（空格 引号 也是）"
+zht = "粘貼菜單：剪貼簿和取過的那幾段，挑一個貼（␣" 也是）"
+zhs = "粘贴菜单：剪贴板和取过的那几段，挑一个贴（␣" 也是）"
 en = "the paste menu: the clipboard and what was yanked, pick one"
 find = "粘貼 粘贴 剪貼簿 剪贴板 寄存器 register clipboard paste yank"
 
@@ -4811,8 +4811,8 @@ en = "letter case lives under `: `l lower, `u upper, `` switch"
 [[message]]
 # Normal 模式按 Ctrl-c（Helix 的注釋鍵，這裏在空格選單裏）
 key = "hint.helix.comment"
-zht = "注釋掉是 空格 c，整段是 空格 C"
-zhs = "注释掉是 空格 c，整段是 空格 C"
+zht = "注釋掉是 ␣c，整段是 ␣C"
+zhs = "注释掉是 ␣c，整段是 ␣C"
 en = "commenting out is Space c, a whole block Space C"
 
 [[message]]
@@ -5293,8 +5293,8 @@ en = "add a row (below / above)"
 [[message]]
 # 空格 t 之後認得哪些鍵——單子是從 keys.rs 那幾張真表生出來的
 key = "hint.table.after-t"
-zht = "空格 t 後面：{0}"
-zhs = "空格 t 后面：{0}"
+zht = "␣t 後面：{0}"
+zhs = "␣t 后面：{0}"
 en = "after 空格 t: {0}"
 
 [[message]]
@@ -5370,8 +5370,8 @@ en = "over-wide cells: fold the tail away / lay it back out"
 [[message]]
 # 表格提示：去某一格
 key = "hint.table.go-to-cell"
-zht = "去某一格（空格 t 20,20g）"
-zhs = "去某一格（空格 t 20,20g）"
+zht = "去某一格（␣t 20,20g）"
+zhs = "去某一格（␣t 20,20g）"
 en = "go to a cell (t20,20g)"
 
 [[message]]
@@ -5433,8 +5433,8 @@ en = "the next table / the one before"
 [[message]]
 # 表格提示：游標不在任何一張表裏，底下那些鍵沒有東西可動
 key = "hint.table.not-in-a-table"
-zht = "光標不在表格裏 —— 空格 t ] 走到下一張"
-zhs = "光标不在表格里 —— 空格 t ] 走到下一张"
+zht = "光標不在表格裏 —— ␣t ] 走到下一張"
+zhs = "光标不在表格里 —— ␣t ] 走到下一张"
 en = "the cursor is not in a table — t ] walks to the next one"
 
 [[message]]
@@ -5461,22 +5461,22 @@ en = "this table's schema"
 [[message]]
 # 表格提示：一欄一欄找
 key = "hint.table.search-columns"
-zht = "一欄一欄找：這邊找／那邊看（空格 t 2-10?）"
-zhs = "一栏一栏找：这边找／那边看（空格 t 2-10?）"
+zht = "一欄一欄找：這邊找／那邊看（␣t 2-10?）"
+zhs = "一栏一栏找：这边找／那边看（␣t 2-10?）"
 en = "search down the columns: / here, ? in the other area (t2-10?)"
 
 [[message]]
 # 表格提示：照這欄順排／倒排
 key = "hint.table.sort-by-column"
-zht = "照這欄順排／倒排（空格 t 1s；1a2d8as 排幾欄）"
-zhs = "照这栏顺排／倒排（空格 t 1s；1a2d8as 排几栏）"
+zht = "照這欄順排／倒排（␣t 1s；1a2d8as 排幾欄）"
+zhs = "照这栏顺排／倒排（␣t 1s；1a2d8as 排几栏）"
 en = "sort by this column, up / down (t1s; t1a2d8as for several)"
 
 [[message]]
 # t 組提示的標題
 key = "hint.table.title"
-zht = "空格 t 表格"
-zhs = "空格 t 表格"
+zht = "␣t 表格"
+zhs = "␣t 表格"
 en = "t table"
 
 [[message]]
@@ -5552,8 +5552,8 @@ en = "q replays a macro (Q records one)"
 [[message]]
 # Normal 模式按 \（別的編輯器的 leader 鍵，這裏是空格）
 key = "hint.vi.backslash"
-zht = "空格是選單鍵：空格 f 開文件、空格 b 換緩衝區、空格 d 查這個字"
-zhs = "空格是菜单键：空格 f 开文件、空格 b 换缓冲区、空格 d 查这个字"
+zht = "空格是選單鍵：␣f 開文件、␣b 換緩衝區、␣d 查這個字"
+zhs = "空格是菜单键：␣f 开文件、␣b 换缓冲区、␣d 查这个字"
 en = "Space is the menu key: Space f opens a file, Space b switches buffer, Space d looks a character up"
 
 [[message]]
@@ -6372,9 +6372,9 @@ en = "asking where this is written…"
 [[message]]
 # 空格 k 問出去了，還沒回話
 key = "lsp.asking-what"
-zht = "問問這是什麽……"
-zhs = "问问这是什么……"
-en = "asking what this is…"
+zht = "查詢文檔中……"
+zhs = "查询文档中……"
+en = "asking for the docs…"
 
 [[message]]
 # 語言服務器起不來（機器上沒裝）——只說一次
@@ -6597,8 +6597,8 @@ en = "this note points nowhere else"
 [[message]]
 # 寫下一條註，開在另一半
 key = "note.written-other-pane"
-zht = "寫下了 {0} 的註（空格 w 過去寫）"
-zhs = "写下了 {0} 的注（空格 w 过去写）"
+zht = "寫下了 {0} 的註（␣w 過去寫）"
+zhs = "写下了 {0} 的注（␣w 过去写）"
 en = "wrote the note for {0} (Space w to go and write it)"
 
 [[message]]
@@ -7116,8 +7116,8 @@ en = "register {0} is empty"
 [[message]]
 # 預設暫存器空着，還沒複製過
 key = "register.nothing-yanked"
-zht = "沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼板貼"
-zhs = "没有取过东西——先 y 复制，或者 空格 p 从系统剪贴板贴"
+zht = "沒有取過東西——先 y 複製，或者 ␣p 從系統剪貼板貼"
+zhs = "没有取过东西——先 y 复制，或者 ␣p 从系统剪贴板贴"
 en = "nothing has been yanked — y copies, or Space p pastes from the system clipboard"
 
 [[message]]
@@ -8389,8 +8389,8 @@ en = "system"
 [[message]]
 # 設置面板：底下那一行鍵
 key = "set.keys"
-zht = "hl 換欄  jk 上下  空格 切換  i 改  d 撤掉這一層  Tab 換存到哪一份  :w 存  q 走"
-zhs = "hl 换栏  jk 上下  空格 切换  i 改  d 撤掉这一层  Tab 换存到哪一份  :w 存  q 走"
+zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 換存到哪一份  :w 存  q 走"
+zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 换存到哪一份  :w 存  q 走"
 en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  q leave"
 
 [[message]]
@@ -8564,8 +8564,8 @@ en = "rounded"
 [[message]]
 # 設置面板：底下那一行——還沒選中哪一項
 key = "set.pick-a-group"
-zht = "l 或空格 進到右邊那一欄"
-zhs = "l 或空格 进到右边那一栏"
+zht = "l 或 ␣ 進到右邊那一欄"
+zhs = "l 或 ␣ 进到右边那一栏"
 en = "l or space goes into the settings"
 
 [[message]]
@@ -8893,9 +8893,9 @@ en = "settings written to {0} — :reload config applies them, or the next start
 [[message]]
 # 設置面板：存好了，而這期間那個檔被外面改過（{0} 檔名）
 key = "set.saved-moved"
-zht = "設置存進 {0}。⚠️ 這期間它被外面改過——改的那幾項落在了新的那一份上，眼前這頁可能是舊的，:settings 重開一次"
-zhs = "设置存进 {0}。⚠️ 这期间它被外面改过——改的那几项落在了新的那一份上，眼前这页可能是旧的，:settings 重开一次"
-en = "written to {0}. ⚠️ it changed underneath meanwhile — the edits landed on the new one, and this page may be stale; reopen with :settings"
+zht = "設置存進 {0}。Warning: 這期間它被外面改過——改的那幾項落在了新的那一份上，眼前這頁可能是舊的，:settings 重開一次"
+zhs = "设置存进 {0}。Warning: 这期间它被外面改过——改的那几项落在了新的那一份上，眼前这页可能是旧的，:settings 重开一次"
+en = "written to {0}. Warning: it changed underneath meanwhile — the edits landed on the new one, and this page may be stale; reopen with :settings"
 
 [[message]]
 # 設置面板：存好了，而有幾個鍵被註釋掉了（{0} 檔名，{1} 鍵）
@@ -8907,9 +8907,9 @@ en = "written to {0}. Names yumete does not know were commented out, not deleted
 [[message]]
 # 設置面板：改的那一層被上面蓋着，眼前那個值不會動
 key = "set.shadowed"
-zht = "⚠️ 本項目蓋着這一項——改的是全局，眼前這個值不會動"
-zhs = "⚠️ 本项目盖着这一项——改的是全局，眼前这个值不会动"
-en = "⚠️ the project covers this one — you are editing global, so the value here will not move"
+zht = "Warning: 本項目蓋着這一項——改的是全局，眼前這個值不會動"
+zhs = "Warning: 本项目盖着这一项——改的是全局，眼前这个值不会动"
+en = "Warning: the project covers this one — you are editing global, so the value here will not move"
 
 [[message]]
 # 設置：代码坐底色
@@ -9105,8 +9105,8 @@ en = "`!` is for the forms that write a file — nothing on the clipboard to ove
 [[message]]
 # 在另一半顯示某一行
 key = "show.row"
-zht = "第 {0} 行（空格 w 過去）"
-zhs = "第 {0} 行（空格 w 过去）"
+zht = "第 {0} 行（␣w 過去）"
+zhs = "第 {0} 行（␣w 过去）"
 en = "line {0} (Space w goes there)"
 
 [[message]]
@@ -9839,8 +9839,8 @@ en = "this table does not name a key column (the schema's key)"
 [[message]]
 # t e：schema 開在另一半了
 key = "table.schema-in-the-other-area"
-zht = "{0} 開在另一半——空格 w 過去改"
-zhs = "{0} 开在另一半——空格 w 过去改"
+zht = "{0} 開在另一半——␣w 過去改"
+zhs = "{0} 开在另一半——␣w 过去改"
 en = "{0} is open in the other area — 空格 w to go and edit it"
 
 [[message]]
@@ -10089,15 +10089,15 @@ en = "detail panel: on"
 [[message]]
 # 字典浮窗底下那一句：讀不完就去邊欄
 key = "ui.dictionary-in-the-sidebar"
-zht = "空格 D 進邊欄"
-zhs = "空格 D 进边栏"
+zht = "␣D 進邊欄"
+zhs = "␣D 进边栏"
 en = "Space D for the sidebar"
 
 [[message]]
 # hover 浮窗底下那一句：讀不完就去邊欄（服務器說的話可以有十幾行）
 key = "ui.hover-in-the-sidebar"
-zht = "空格 K 進邊欄"
-zhs = "空格 K 进边栏"
+zht = "␣K 進邊欄"
+zhs = "␣K 进边栏"
 en = "Space K for the sidebar"
 
 [[message]]

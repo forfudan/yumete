@@ -42,6 +42,6 @@ debug = "line-tables-only"
 # 磁盤（實測 rustc 停在 `UN`，不可中斷的磁盤等待，CPU 5%）。
 #
 # `packed` 讓 `dsymutil` 把調試信息收進一個 `.dSYM`，那些 `.o` 就不必留了。
-# ⚠️ **回溯照舊讀得懂**（#300）：`line-tables-only` 那一半原樣還在，只是換了個
+# Warning: **回溯照舊讀得懂**（#300）：`line-tables-only` 那一半原樣還在，只是換了個
 # 地方放。代價是每次鏈接多跑一趟 dsymutil。
 split-debuginfo = "packed"

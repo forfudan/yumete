@@ -3,7 +3,7 @@
 //! 造出第二段的是 `C`／`A-C`，收回去的是 `,`。語義照 helix
 //! （`helix-term/src/commands.rs` 的 `copy_selection_on_line`，基準 commit `079a789e8`），
 //! 但**「行」走的是這個倉自己的那一套**：`crate::wrap` 的視覺行，也就是 `j`／`k` 踩的那個
-//! 頁面。⚠️ 軟折行開着的時候，一個自然段是好幾行，而使用者看見的「下一行」是折出來的那
+//! 頁面。Warning: 軟折行開着的時候，一個自然段是好幾行，而使用者看見的「下一行」是折出來的那
 //! 一行，不是檔案裏的那一行。竪排同理（§5.13.8 二：「複製到視覺上的下一列」與橫排是同
 //! 一句話）。
 
@@ -29,7 +29,7 @@ pub enum Sift {
 impl Sift {
     /// 提示行前面寫什麼。
     ///
-    /// ⚠️ **寫字，不寫字母。** `s/` `S/` `k/` `K/` 那一套省三格，可是按下去之後屏幕上
+    /// Warning: **寫字，不寫字母。** `s/` `S/` `k/` `K/` 那一套省三格，可是按下去之後屏幕上
     /// 那一行說不出它要做什麼，而這四件事做完的樣子差得很遠（選出、切開、只留、去掉）。
     pub fn prefix(self) -> &'static str {
         match self {
@@ -47,10 +47,10 @@ impl super::Editor {
     /// 每一段各複製 `count` 份：兩端各自記住自己的**列**，然後一行一行往下走，走到哪一
     /// 行兩端的列都還在，就在那一行放一份。
     ///
-    /// ⚠️ **太短的行跳過，不是把選區壓到行尾**（helix 的規矩）。一串 md 列表項長短不一，
+    /// Warning: **太短的行跳過，不是把選區壓到行尾**（helix 的規矩）。一串 md 列表項長短不一，
     /// 壓到行尾等於在每一行的不同位置放一個光標，那不是「同一列」。
     ///
-    /// ⚠️ **新長出來的那一段是主選區**：讀者的注意力就在剛長出來的那一個上，而且連按
+    /// Warning: **新長出來的那一段是主選區**：讀者的注意力就在剛長出來的那一個上，而且連按
     /// `C` 要沿着它繼續往下長。
     pub(super) fn copy_selection_on_row(&mut self, down: bool, count: usize) {
         if !self.can_be_plural() {
@@ -78,7 +78,7 @@ impl super::Editor {
                 true => crate::wrap::next_row(rope, pos, m, goal),
                 false => crate::wrap::prev_row(rope, pos, m, goal),
             };
-            // ⚠️ **主選區那一段的複製件排在最後推**。`push` 把剛推進去的那一段當主選
+            // Warning: **主選區那一段的複製件排在最後推**。`push` 把剛推進去的那一段當主選
             // 區，而 `normalize` 是按**值**把主選區認回來的，所以「最後推的是誰」就決定
             // 了新的主選區是誰。helix 同樣把主選區交給它自己那一段的最後一個複製件
             // （`commands.rs:2156`），而不是交給頁面上最下面那一個。
@@ -97,7 +97,7 @@ impl super::Editor {
                 while placed < count {
                     let (next_anchor, next_head) =
                         (step(anchor, anchor_goal), step(head, head_goal));
-                    // 兩端都走不動了就是到頭了。⚠️ 判的是「有沒有動」而不是「在不在檔
+                    // 兩端都走不動了就是到頭了。Warning: 判的是「有沒有動」而不是「在不在檔
                     // 尾」：折行、摺疊、表格都會讓「還有沒有下一行」不等於「行號還夠」。
                     if next_anchor == anchor && next_head == head {
                         break;
@@ -107,7 +107,7 @@ impl super::Editor {
                     if crate::wrap::column_of(rope, anchor, m) == anchor_goal
                         && crate::wrap::column_of(rope, head, m) == head_goal
                     {
-                        // ⚠️ 複製件記下**它自己那一列**：它就是照這一列放下去的，
+                        // Warning: 複製件記下**它自己那一列**：它就是照這一列放下去的，
                         // 而接着按 `j` 要瞄準的正是這一列。
                         into.push(Range { anchor, head, goal: Some(head_goal), goal_slot: None });
                         placed += 1;
@@ -117,7 +117,7 @@ impl super::Editor {
             made.extend(mine);
             made
         };
-        // ⚠️ **這一支造出來的重疊不報。** 兩段相鄰的選區各往下複製一份，下面那一份必然
+        // Warning: **這一支造出來的重疊不報。** 兩段相鄰的選區各往下複製一份，下面那一份必然
         // 落在上面那一段原來的位置上，於是每按一次 `C` 都會併掉幾段——那是機制，不是意
         // 外。[`Self::say_the_merge`] 要說的是別的：移動或編輯把兩段撞到一起。
         let before = self.sel.len();
@@ -131,14 +131,14 @@ impl super::Editor {
 
     /// **把「作用在主選區上的一件事」逐段各做一次**（#405 Phase 1）。
     ///
-    /// 辦法是把每一段輪流擺成唯一的那一段，跑一次 `what`，取回結果。⚠️ **這樣三百多處
+    /// 辦法是把每一段輪流擺成唯一的那一段，跑一次 `what`，取回結果。Warning: **這樣三百多處
     /// 讀寫主選區的代碼一行都不用改**——它們本來就只管主選區，而這一支保證它們每次看見
     /// 的都是一段真的、當下該管的選區。
     ///
-    /// ⚠️ **只給移動用，不給編輯用。** 編輯會挪動別的選區的下標，那要走 Phase 1 第五步
+    /// Warning: **只給移動用，不給編輯用。** 編輯會挪動別的選區的下標，那要走 Phase 1 第五步
     /// 的 `edit_each`（從後往前做，一個撤銷點）。這一支假定 `what` 不改文本。
     ///
-    /// ⚠️ **目標列不在這裏管。** 它跟着每一段自己走（`Range::goal`），所以連按 `j` 跨過
+    /// Warning: **目標列不在這裏管。** 它跟着每一段自己走（`Range::goal`），所以連按 `j` 跨過
     /// 一行短行之後，每一段記得住的還是它自己原來那一列。2026-09-28 之前它是 `Editor`
     /// 上的一個 `goal_column`，那時 N 段會一起瞄準主選區那一列。
     pub(super) fn each_selection(&mut self, what: impl Fn(&mut Self)) {
@@ -150,13 +150,13 @@ impl super::Editor {
         let primary = was.primary();
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
-        // ⚠️ **一次性的那幾格要每一段都看得見。** 第一段跑完就把 `pending` 吃掉了
+        // Warning: **一次性的那幾格要每一段都看得見。** 第一段跑完就把 `pending` 吃掉了
         // （`f` 補上字符之後 `Pending::Find` 就沒了），後面幾段於是把那個字符當成一個
         // 普通的鍵——`f丙` 只有第一段走得動，別的原地不動。`count` 同理（`3w`）。
         // 每一段開跑之前擺回去，跑完之後留最後一段的那一份。
         let pending = self.pending.clone();
         let count = self.count;
-        // ⚠️ **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
+        // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
         let named = self.pending_register;
@@ -179,14 +179,14 @@ impl super::Editor {
     ///
     /// 和 [`Self::each_selection`] 是同一個形狀，多兩件事。
     ///
-    /// ⚠️ **一、從後往前。** 一次編輯會把它後面所有的下標都挪掉，所以先做下標最大的那一
+    /// Warning: **一、從後往前。** 一次編輯會把它後面所有的下標都挪掉，所以先做下標最大的那一
     /// 段：輪到前面那幾段的時候，它們記着的下標還是對的。
     ///
-    /// ⚠️ **二、已經算完的結果要跟着挪。** 從後往前保住的是**輸入**，不是輸出：做完第
+    /// Warning: **二、已經算完的結果要跟着挪。** 從後往前保住的是**輸入**，不是輸出：做完第
     /// 五段再去做第三段，第三段那一刀會把第四、第五段的新位置一起推走。所以每做完一段
     /// 就量一次文本長度的差，把手上收着的那幾段各挪一次。
     ///
-    /// ⚠️ **三、一個撤銷點。** `what` 自己會叫 `snapshot`，N 段就是 N 個撤銷點，按一次
+    /// Warning: **三、一個撤銷點。** `what` 自己會叫 `snapshot`，N 段就是 N 個撤銷點，按一次
     /// `u` 只退回去一段。這裏先自己報一個點，然後開一個 undo group 把裏面那 N 次
     /// `snapshot` 全堵掉（`buffer.rs` 的 `begin_undo_group`），做完再放開。
     pub(super) fn edit_each(&mut self, what: impl Fn(&mut Self)) {
@@ -195,7 +195,7 @@ impl super::Editor {
 
     /// 同上，`point` 說要不要自己報一個撤銷點。
     ///
-    /// ⚠️ **插入模式下不報。** 進插入的那一下已經報過一個了，而這個倉的規矩是「一次插入
+    /// Warning: **插入模式下不報。** 進插入的那一下已經報過一個了，而這個倉的規矩是「一次插入
     /// 是一次撤銷」（§5.12.3）。每敲一鍵報一次，`u` 就只退一個字。
     pub(super) fn edit_each_from(&mut self, point: bool, what: impl Fn(&mut Self)) {
         if !self.sel.is_plural() {
@@ -210,7 +210,7 @@ impl super::Editor {
         let primary = was.primary();
         let pending = self.pending.clone();
         let count = self.count;
-        // ⚠️ **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
+        // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
         let named = self.pending_register;
@@ -219,7 +219,7 @@ impl super::Editor {
         let ranges: Vec<Range> = was.iter().copied().collect();
         for (nth, one) in ranges.iter().enumerate().rev() {
             let before = self.current_buffer().rope().len_chars();
-            // ⚠️ **每一趟都先收進當下的文本裏**（2026-09-28 修）。從後往前做保住的是
+            // Warning: **每一趟都先收進當下的文本裏**（2026-09-28 修）。從後往前做保住的是
             // 下標**不被後面的編輯挪走**，保不住「前面那幾段本來就沒越界」——`%` 那個
             // bug 就是這麽炸的：手上留着兩段舊的，第一刀把整檔刪光，第二段指着虛空，
             // `apply` 裏的 `next_grapheme` 當場 panic。
@@ -233,7 +233,7 @@ impl super::Editor {
             self.pending = pending.clone();
             self.count = count;
             self.pending_register = named;
-            // ⚠️ **文檔次序，不是執行次序**：這一趟從後往前跑，而讀者數的是從上往下
+            // Warning: **文檔次序，不是執行次序**：這一趟從後往前跑，而讀者數的是從上往下
             // 第幾個。`#` 寄存器讀它。
             self.edit_nth = Some(nth);
             what(self);
@@ -255,7 +255,7 @@ impl super::Editor {
             }
             out.push(self.sel.primary());
         }
-        // 收的時候是從後往前收的，擺回去。⚠️ `which` 記的是**原來那一組**裏的下標，
+        // 收的時候是從後往前收的，擺回去。Warning: `which` 記的是**原來那一組**裏的下標，
         // 反過來之後纔對得上。
         out.reverse();
         self.current_buffer_mut().end_undo_group(grouping);
@@ -267,7 +267,7 @@ impl super::Editor {
 
     /// **一段選區在屏幕上蓋住的是哪一截**（字符下標，左閉右開）。
     ///
-    /// ⚠️ **`Range` 的 head 是包含在內的**（光標站的那個字素在選區裏，helix 的模型），
+    /// Warning: **`Range` 的 head 是包含在內的**（光標站的那個字素在選區裏，helix 的模型），
     /// 而「切開」「選出」這一族算的是半開區間。兩套下標混在一起是這一族最容易錯的地
     /// 方，所以進出各走一支。
     pub(super) fn drawn(&self, one: Range) -> (usize, usize) {
@@ -285,7 +285,7 @@ impl super::Editor {
 
     /// **把每一段選區按行切開**（`A-s`，helix 的 `split_selection_on_newline`）。
     ///
-    /// ⚠️ **一行選區不會被切成零段。** 選區只佔一行的時候這一支什麼都不改——那正是
+    /// Warning: **一行選區不會被切成零段。** 選區只佔一行的時候這一支什麼都不改——那正是
     /// 「按行切」在只有一行上的答案，不是失敗。
     pub(super) fn split_on_newline(&mut self) {
         if !self.can_be_plural() {
@@ -321,19 +321,19 @@ impl super::Editor {
 
     /// **這裏開得了多選區沒有。**
     ///
-    /// ⚠️ **佔滿整扇窗的那種表格裏開不了**（§5.13.8 三，2026-09-28 落地）。
+    /// Warning: **佔滿整扇窗的那種表格裏開不了**（§5.13.8 三，2026-09-28 落地）。
     ///
     /// 硬衝突只有一條，而且只在那一種裏：**橫向滾動的規矩是「把光標那一格整個留在屏幕
     /// 上」**（`yumete-tui/src/table.rs`），兩個光標在不同列的時候這句話沒有答案。滿版
     /// 的表格是 CSV、碼表那一類——整個檔就是一張表（`Bounds::WholeFile`）。
     ///
-    /// ⚠️ **稿子裏的 `|` 表格不擋，量過。** §5.13.8 當時還列了第二條理由（格內光標是一
+    /// Warning: **稿子裏的 `|` 表格不擋，量過。** §5.13.8 當時還列了第二條理由（格內光標是一
     /// 個 `Option` 不是一個列表），可是那是**建模上的**不順，不是畫面上的壞：格子的底
     /// 色跟着主選區走，和硬件光標、候選面板一樣，一屏上本來就只有一個。實測在稿子裏的
     /// 表格上按 `C`，兩塊選區底色畫得好好的。而**批量改一整欄正是表格最常做的事**，把
     /// 它一起擋掉是拿一條沒發生的毛病換一件真用得上的功能。
     ///
-    /// ⚠️ 用「表格模式開着」當閘試過，太寬：開檔的時候編輯器會**自己猜**出一張表，於是
+    /// Warning: 用「表格模式開着」當閘試過，太寬：開檔的時候編輯器會**自己猜**出一張表，於是
     /// 稿子裏的表格一個都開不了多選區。
     ///
     /// 「這一欄每行一個光標」往後做成 `空格 t` 底下的一條命令，不讓通用的複製鍵去撞格子
@@ -361,11 +361,11 @@ impl super::Editor {
     ///
     /// 匹配器是搜索那一支（[`Look`]），所以拼音、簡繁、模糊、正則四個開關一起管用。
     ///
-    /// ⚠️ **主選區留在離原來那一段最近的地方。** helix 這三個命令一律把 primary 重置成
+    /// Warning: **主選區留在離原來那一段最近的地方。** helix 這三個命令一律把 primary 重置成
     /// 0（`selection.rs` 三處都留着同一句 `// TODO: figure out a new primary index`），
     /// 於是在第八十行選出二十處之後，屏幕當場跳回檔首。§5.13.11 的坑 6。
     ///
-    /// ⚠️ **一個都不剩就什麽都不做**，並且說一句。把選區清空是沒有這個狀態的
+    /// Warning: **一個都不剩就什麽都不做**，並且說一句。把選區清空是沒有這個狀態的
     /// （`Selections` 永遠至少一段），而靜靜地留在原地會讓人以為是鍵沒按上。
     pub(super) fn sift(&mut self, what: Sift) {
         if !self.can_be_plural() {
@@ -429,7 +429,7 @@ impl super::Editor {
 
     /// **換一個選區當主選區**（`)` 往後、`(` 往前，#405 Phase 3）。
     ///
-    /// ⚠️ **一段都不動**，動的只是「哪一段是主的」。主選區是那些只能有一個的東西要挑
+    /// Warning: **一段都不動**，動的只是「哪一段是主的」。主選區是那些只能有一個的東西要挑
     /// 的那一段：終端的硬件光標、跟着光標跑的候選面板、頁面滾動跟誰。選了二十處之後要
     /// 一處一處看過去，靠的就是它。
     pub(super) fn rotate_primary(&mut self, forward: bool) {
@@ -449,8 +449,8 @@ impl super::Editor {
 
     /// **把每一段兩端的空白去掉**（`_`，helix 的 `trim_selections`）。
     ///
-    /// ⚠️ **整段都是空白的那些會被丟掉。** `A-s` 按行切開之後空行就是這一種，而留着它們
-    /// 等於在空行上放一個光標——接着打字會在空行上寫東西。⚠️ 全丟光了就什麼都不做：
+    /// Warning: **整段都是空白的那些會被丟掉。** `A-s` 按行切開之後空行就是這一種，而留着它們
+    /// 等於在空行上放一個光標——接着打字會在空行上寫東西。Warning: 全丟光了就什麼都不做：
     /// 選區不能為空。
     pub(super) fn trim_selections(&mut self) {
         let rope = self.current_buffer().rope().clone();
@@ -488,13 +488,13 @@ impl super::Editor {
     ///
     /// 在最靠右的那一段之前的每一段前面補空格，補到大家的開頭在同一格上。
     ///
-    /// ⚠️ **算的是顯示寬度，不是字數。** 一個漢字兩格，所以「三個字」和「三個字母」
+    /// Warning: **算的是顯示寬度，不是字數。** 一個漢字兩格，所以「三個字」和「三個字母」
     /// 對不齊——這一族在中文稿子裏用不對齊就等於沒用。
     ///
-    /// ⚠️ **一行只認一段。** 同一行上有兩段的時候，補在前一段前面的空格會把後一段推
+    /// Warning: **一行只認一段。** 同一行上有兩段的時候，補在前一段前面的空格會把後一段推
     /// 走，「對齊」就成了一句沒有意義的話。helix 同樣只處理每行第一段。
     ///
-    /// ⚠️ **從後往前插**，並且把已經處理過的那幾段跟着挪——同 [`Self::edit_each`]，
+    /// Warning: **從後往前插**，並且把已經處理過的那幾段跟着挪——同 [`Self::edit_each`]，
     /// 理由也一樣。一個撤銷點。
     pub(super) fn align_selections(&mut self) {
         if !self.sel.is_plural() {
@@ -552,10 +552,10 @@ impl super::Editor {
     /// **把每一段選區的文字輪轉一格**（`A-)` 往後、`A-(` 往前，helix 的
     /// `rotate_selection_contents_*`）。
     ///
-    /// ⚠️ **邊界不動，動的是裝在裏面的字。** `(`／`)` 是換「哪一段是主的」，這一對是
+    /// Warning: **邊界不動，動的是裝在裏面的字。** `(`／`)` 是換「哪一段是主的」，這一對是
     /// 把甲段的字搬到乙段去。表格裏換兩欄、對話裏換兩個人說的話，都是這一件。
     ///
-    /// ⚠️ **各段長短不一，所以要從後往前換，並且把後面幾段跟着挪**——同
+    /// Warning: **各段長短不一，所以要從後往前換，並且把後面幾段跟着挪**——同
     /// [`Self::edit_each`]。一個撤銷點。
     pub(super) fn rotate_contents(&mut self, forward: bool) {
         if !self.sel.is_plural() {
@@ -627,15 +627,15 @@ impl super::Editor {
 
 /// **哪些鍵要逐段各做一次**（#405 Phase 1 第四步）。
 ///
-/// ⚠️ **這是一張明寫的表，不是規則。** 反過來寫（除了這幾個以外全都逐段做）試過在腦子裏
+/// Warning: **這是一張明寫的表，不是規則。** 反過來寫（除了這幾個以外全都逐段做）試過在腦子裏
 /// 推一遍就知道不行：`:`、空格選單、`u`、`/`、面板那一族、進插入的那幾個，每一個都是
 /// 「整個編輯器做一次」的事，漏一個就是一次很難查的怪象。明寫的表漏掉一個鍵，症狀是那個
 /// 鍵只動主選區，看得見、好查。
 ///
-/// ⚠️ **不收會改文本的鍵。** 編輯會挪動後面每一段的下標，那要走第五步的 `edit_each`
+/// Warning: **不收會改文本的鍵。** 編輯會挪動後面每一段的下標，那要走第五步的 `edit_each`
 /// （從後往前做，一個撤銷點）。
 ///
-/// ⚠️ **不收要再等一個鍵的**（`f` `t` `g` `m` `[` `]` `空格` 這些前綴）：真正該逐段做的
+/// Warning: **不收要再等一個鍵的**（`f` `t` `g` `m` `[` `]` `空格` 這些前綴）：真正該逐段做的
 /// 是**補上那個字符的時候**，不是按下前綴的時候。那一半在 `answer_with_char` 與
 /// `handle_goto` 裏各包一次，見它們自己的註釋。
 fn moves_every_selection(key: crate::input::Key) -> bool {
@@ -656,15 +656,15 @@ fn moves_every_selection(key: crate::input::Key) -> bool {
 
 /// **這一鍵該不該逐段各做一次**——問的是鍵，也是**手上還等着什麽**。
 ///
-/// ⚠️ **等着一個字符的時候，鍵本身說明不了問題。** 按 `f` 的那一下只是把 `Pending::Find`
+/// Warning: **等着一個字符的時候，鍵本身說明不了問題。** 按 `f` 的那一下只是把 `Pending::Find`
 /// 立起來，真正的移動發生在補上那個字符的時候，而那個字符可以是任何字——包括 `x`，而 `x`
 /// 自己在上面那張表裏。所以先看 `pending`，再看鍵。
 pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Key) -> bool {
     match pending {
         // `f` `F` `t` `T` 補上的那一個字符：逐段各找各的。
         super::Pending::Find(_) => true,
-        // ⚠️ **`g` 那一層只有幾個是移動。** `gf` 開檔、`gd` 看定義、`gw` 撒標籤，每一個
-        // 都是「整個編輯器做一次」。⚠️ `gg`／`ge` 也不逐段做：它們是「到檔首／檔尾」，
+        // Warning: **`g` 那一層只有幾個是移動。** `gf` 開檔、`gd` 看定義、`gw` 撒標籤，每一個
+        // 都是「整個編輯器做一次」。Warning: `gg`／`ge` 也不逐段做：它們是「到檔首／檔尾」，
         // N 段一起去同一個地方，`normalize` 會把它們併成一段——那不是使用者要的。
         // 逐段做的是**行內**的那三個：到行首、到行首第一個字、到行尾。
         super::Pending::Goto => {
@@ -677,12 +677,12 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
 
 /// **哪些鍵要逐段各編輯一次**（#405 Phase 1 第五步）。
 ///
-/// ⚠️ **進插入模式的那幾個也在裏面**（`i` `a` `I` `A` `o` `O` `c` `A-c`）。它們有的不改
+/// Warning: **進插入模式的那幾個也在裏面**（`i` `a` `I` `A` `o` `O` `c` `A-c`）。它們有的不改
 /// 文本（`i` 只是把光標挪到選區開頭），走同一支不虧：文本沒動的時候那一趟挪位是零。收進
 /// 來的理由是它們要**逐段各進各的插入點**，然後插入模式那一支
 /// （[`types_at_every_selection`]）接着把每一個鍵送到 N 處。
 ///
-/// ⚠️ **`y` 不在。** 複製不改文本，可是 N 段複製出來在寄存器裏怎麽擺（helix 是各存一格、
+/// Warning: **`y` 不在。** 複製不改文本，可是 N 段複製出來在寄存器裏怎麽擺（helix 是各存一格、
 /// 貼的時候一段對一段）是寄存器那一族的事，不是這一步的。
 pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input::Key) -> bool {
     use crate::input::Key;
@@ -705,10 +705,10 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
 ///
 /// 會在稿子上留下字的那幾個都要：打字、換行、退格、刪除、`Tab`。
 ///
-/// ⚠️ **剩下的一次就夠**：`Esc` 是「離開插入模式」，補全單子那一族（`C-n`、`Tab` 在單子
+/// Warning: **剩下的一次就夠**：`Esc` 是「離開插入模式」，補全單子那一族（`C-n`、`Tab` 在單子
 /// 開着的時候）是一張浮在上面的單子，`C-g u` 是撤銷斷點。這些都是整個編輯器做一次的事。
 ///
-/// ⚠️ **輸入法的 preedit 不在這裏。** 中文碼串還在 IME 手裏的時候一個鍵都不進
+/// Warning: **輸入法的 preedit 不在這裏。** 中文碼串還在 IME 手裏的時候一個鍵都不進
 /// `on_insert_key`（`prompt.rs:26` 記着這個模型），上屏的那一下纔進來，那時它就是一串
 /// 字符，和打拉丁字母走同一條路。**N 個光標同時畫出自己的拼音串**是另一件事，排在
 /// Phase 4（§5.13.8 一）。

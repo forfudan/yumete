@@ -1,6 +1,6 @@
 //! 界面語言（#494）——`:language` 與 `yumete --lang=`。
 //!
-//! ⚠️ **自己一個檔，因為語言是個全局。** `messages::set_language` 寫的是一個
+//! Warning: **自己一個檔，因為語言是個全局。** `messages::set_language` 寫的是一個
 //! `AtomicU8`，而 cargo 在同一個測試二進制裏是多執行緒跑的：把它放進
 //! `editor/tests.rs` 會讓隔壁幾百條斷言繁體狀態行的測試隨機變紅。整合測試各自
 //! 一個行程，這裏改的只影響這個檔。
@@ -32,7 +32,7 @@ fn the_three_names_the_help_advertises_all_parse() {
     assert_eq!(Language::parse("xx"), None, "認不得的要說認不得");
 }
 
-/// ⚠️ **兩件事寫成一條，因為語言是全局。** 同一個測試二進制裏 cargo 是多執行緒
+/// Warning: **兩件事寫成一條，因為語言是全局。** 同一個測試二進制裏 cargo 是多執行緒
 /// 跑的，分成兩條就會互相踩——本來就是為了這個纔把整族搬進這個檔的，分條等於把
 /// 同樣的競態搬小一級。
 ///

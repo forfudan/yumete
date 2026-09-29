@@ -109,7 +109,7 @@ pub struct Metrics {
     /// 它在號碼帶的**最底下**，貼着正文——橫排那一格（行號後面、緊挨正文的那
     /// 一格）轉過九十度就是這裏。
     ///
-    /// ⚠️ **自己一列，不是塗在號碼那幾列的底下。** 塗在號碼底下試過：竪排的
+    /// Warning: **自己一列，不是塗在號碼那幾列的底下。** 塗在號碼底下試過：竪排的
     /// 號碼**坐在正文自己的那兩格上**，底下一上色，灰色的數字就壓在一塊 3:1 的
     /// 綠上，而朱色那一行的號碼乾脆變成朱底朱字。#298 當初說的也正是「號碼帶
     /// **旁邊**的一條橫帶」。一列的代價是縱短一個字，而且只在開着的時候付。
@@ -714,7 +714,7 @@ fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) 
 /// the group's last character lands on the 縱's own edge, so a column of them
 /// still reads as one edge running down beside the 漢字.
 ///
-/// ⚠️ **Cell by cell, not one symbol into one cell.** To the renderer a cell
+/// Warning: **Cell by cell, not one symbol into one cell.** To the renderer a cell
 /// holds one grapheme and the cells a wide glyph covers are skipped — writing
 /// `1997` into the cell at `x` would make the row four cells too long and walk
 /// everything after it off its 縱.
@@ -781,7 +781,7 @@ pub(crate) fn index_mark(markers: &str, i: usize) -> String {
 /// Draw a paragraph number above its 縱, two digits to a row (縦中横), so it
 /// reads as a number rather than a stack of loose digits.
 fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: Style) {
-    // ⚠️ **Two digits to a row — 縦中横, which is what a Japanese book does with
+    // Warning: **Two digits to a row — 縦中横, which is what a Japanese book does with
     // a number in a column** (#512). A 縱 is two cells wide and a digit is one,
     // so the pair costs nothing and a four-digit line number is two rows deep
     // instead of four. On an eighty-row terminal that is two rows of every
@@ -1122,7 +1122,7 @@ pub fn draw(
             // are a real rung. They used to be the terminal's own foreground on
             // a band at 1.04:1, which made the cursor's number the brightest
             // thing on a page of somebody's novel.
-            // ⚠️ **Every other 縱's number stands a rung back** (#512). Two
+            // Warning: **Every other 縱's number stands a rung back** (#512). Two
             // numbers now sit two cells apart with nothing between them, so
             // 「23」「24」 would read as 「2324」 — the very objection that kept
             // the numbers one digit to a row for so long. This is the answer
@@ -1151,7 +1151,7 @@ pub fn draw(
         // 的一格；這裏是號碼帶最底下、貼着 縱 頭的那一列（[`Metrics::diff_row`]
         // 說了為什麼它自己佔一列，而不是塗在號碼底下）。
         //
-        // ⚠️ **剪口在這裏是「右半格」，不是一條上緣。** 橫排的剪口畫在一格的
+        // Warning: **剪口在這裏是「右半格」，不是一條上緣。** 橫排的剪口畫在一格的
         // 頭上（`CUT_ABOVE`），因為上一行在它上面；竪排從右往左讀，上一段在它
         // **右邊**，所以那一道縫在這一縱的右側——兩格裏只上右邊那一格，半格的
         // 寬度本身就說了「這不是一整段，是一道邊」。
@@ -1179,7 +1179,7 @@ pub fn draw(
         }
 
         let line_start = rope.line_to_char(zong.line);
-        // ⚠️ **Which `|` is a wall, worked out once for the 縱** (2026-09-20).
+        // Warning: **Which `|` is a wall, worked out once for the 縱** (2026-09-20).
         // The glyph swap below used to fire on *any* pipe in a table row, and
         // Markdown's one escape is `\|` — a pipe the cell holds. So a cell
         // written `a \| b` was cut in two: a band drawn through the middle of
@@ -1318,12 +1318,12 @@ pub fn draw(
             // columns is a band **across** the 縱, two cells wide so it reaches
             // the next one; the `---` under the header is a wall **down** it.
             //
-            // ⚠️ **The crossings are the rule row's own pipes**
+            // Warning: **The crossings are the rule row's own pipes**
             // (2026-09-19: 「爲什麽沒有用十字交叉來表達綫的穿插？」). Turned,
             // the `---` row *is* the wall and the `|` in it are exactly the
             // places a band rule runs into it — so those, and only those, are
             // `┼`. Elsewhere a `|` is a band and a `-` is wall.
-            // ⚠️ **A slot spans the characters hidden with it**, so the wall
+            // Warning: **A slot spans the characters hidden with it**, so the wall
             // is looked for in `start..end` rather than at `start`: the
             // cushion in front of a `|` is off the page, and the slot that
             // draws the pipe begins at the cushion.
@@ -1335,7 +1335,7 @@ pub fn draw(
                     // wall with a blank cell beside it.
                     ("|", true) => "┼─".to_string(),
                     ("|", false) => "──".to_string(),
-                    // ⚠️ **Only the rule row's own `-` is a wall.** A `-` or
+                    // Warning: **Only the rule row's own `-` is a wall.** A `-` or
                     // a `+` inside a cell is writing — `UTF-8` came out as
                     // `U T F │ 8` and `C++` as `C ┼ ┼`, and each false glyph
                     // shifted its band, so three 縱 ruled at three depths.
@@ -1384,7 +1384,7 @@ pub fn draw(
             // one — and none of the layers below, every one of which describes
             // characters the file actually holds.
             if let Some(kind) = row.ink {
-                // ⚠️ **Virtual text takes the block's ground, not the page's**
+                // Warning: **Virtual text takes the block's ground, not the page's**
                 // (2026-09-19: 「表格隔行的底色沒有正確繪製」). A table's
                 // rows are banded, and what squares a row up is *padding* —
                 // virtual text. Painting it on the page's own ground cut every
@@ -1427,7 +1427,7 @@ pub fn draw(
                 style = style.patch(crate::markup_style(run.kind, ink));
             }
 
-            // ⚠️ **Not `&& !has_selection`** (#450, and again here for #457).
+            // Warning: **Not `&& !has_selection`** (#450, and again here for #457).
             // The horizontal page had the same gate and the same bug: every
             // paragraph on the screen went out the moment anything was
             // selected, and a motion *is* a selection here, so holding `w`
@@ -1472,14 +1472,14 @@ pub fn draw(
                 // alternation is strict per word, so an untinted word is always
                 // between two tinted ones and says exactly as much.
                 if let Some(word) = ranges.iter().position(|&(a, b)| column >= a && column < b) {
-                    // ⚠️ **線 does not alternate** (#501). Down a column an
+                    // Warning: **線 does not alternate** (#501). Down a column an
                     // underline is drawn under each *character*, so underlining
                     // every other word would give a run of ticks rather than a
                     // boundary. Marking only each word's **last** cell puts one
                     // short rule exactly where the word ends — which is the
                     // whole of what the mark is for, and it is then every word
                     // rather than every second one.
-                    // ⚠️ **線 draws nothing here** (#503). The rule would land
+                    // Warning: **線 draws nothing here** (#503). The rule would land
                     // on the cell's bottom edge, which in 縱書 is where the
                     // Insert caret is — a terminal has one horizontal rule per
                     // cell and the cursor has taken it. `:word-show line` on a
@@ -1565,7 +1565,7 @@ pub fn draw(
 
     // **`gw` 的標籤，蓋在它那個字所在的那一格上**（#406）。
     //
-    // ⚠️ **一個縱正好兩格，而一個標籤永遠是兩個字母**，所以並排填滿——就是縱中橫，
+    // Warning: **一個縱正好兩格，而一個標籤永遠是兩個字母**，所以並排填滿——就是縱中橫，
     // 同行號那一套（`put_number` 兩個數字一格）。橫排那一頭是同一件事：兩個字母的
     // 寬度正好是一個漢字。
     let mut labelled: Vec<(u16, u16)> = Vec::new();
@@ -1629,7 +1629,7 @@ pub fn draw(
             put_slot(buf, cursor_x, caret_y, "\u{3000}", Style::default());
         }
     }
-    // ⚠️ **光標不重畫已經有標籤的那一格**（#406，2026-09-28 報的：「竪排的 aa 為什麽
+    // Warning: **光標不重畫已經有標籤的那一格**（#406，2026-09-28 報的：「竪排的 aa 為什麽
     // 不是金色底色？」）。竪排的光標是**畫進頁面**的一塊反白（橫排那頭是終端自己的
     // 硬件光標，碰不到這裏），而第一個落腳點常常正是光標站的那一格——`REVERSED`
     // 把金底深字翻成了深底金字，於是滿屏標籤裏有一個長得不一樣。
@@ -1705,7 +1705,7 @@ impl Skin {
     /// pure paper — **the same scale the page uses**, so a rung can be named
     /// here by the same constant it is named by everywhere else.
     ///
-    /// ⚠️ It used to be its own 0–1000 while taking `rung::RULE` as an
+    /// Warning: It used to be its own 0–1000 while taking `rung::RULE` as an
     /// argument; the day the page's ladder was restretched to 0–10000 that
     /// argument became five times the scale and the mix overflowed.
     ///
@@ -1784,7 +1784,7 @@ pub fn draw_candidate_panel(
     // only in this panel, and a panel that vanishes leaves the writer nothing
     // to see and nothing to know to backspace.
     //
-    // ⚠️ **除非編碼這一幀寫進了正文**（2026-09-27）：那時它有地方待，而一個只裝
+    // Warning: **除非編碼這一幀寫進了正文**（2026-09-27）：那時它有地方待，而一個只裝
     // 着一列碼、沒有一個候選的框是白遮一片稿子。
     if candidates.is_empty() && (!show_code || ime.display_buffer().is_empty()) {
         return;

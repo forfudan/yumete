@@ -47,12 +47,12 @@ pub enum Layer {
 
 /// 一層，和它的名字。
 ///
-/// ⚠️ **寫成 `label:` 字段，不是一支 `match`** —— 同 [`crate::settings_ui::Named`]，
+/// Warning: **寫成 `label:` 字段，不是一支 `match`** —— 同 [`crate::settings_ui::Named`]，
 /// 同一個理由，而這一處 2026-09-24 就照着 `match` 寫過一遍、當場被
 /// `messages.rs` 那張網逮住（三則文案「沒人說」）。那張網讀源碼找 `label:`／
 /// `hint:`／`say!(`，**看不見 `match` 的返回值**。
 ///
-/// ⚠️ 更壞的不是紅，是它**紅得像另一件事**：那條 assert 說的是「a renamed or
+/// Warning: 更壞的不是紅，是它**紅得像另一件事**：那條 assert 說的是「a renamed or
 /// deleted tag」，照着做就把三則好好的文案刪了，面板第三欄從此逐行寫着
 /// `set.layer.factory`。
 pub struct LayerName {
@@ -116,7 +116,7 @@ pub enum Pane {
 pub struct Sheet {
     /// 檔的位置。
     ///
-    /// ⚠️ **本項目那一份多半還不存在，而路徑照樣給得出來** —— 面板頂上寫着
+    /// Warning: **本項目那一份多半還不存在，而路徑照樣給得出來** —— 面板頂上寫着
     /// 「還沒有這個文件——存盤時建」，那句話得兌現。給 `None` 的話 `save()` 會
     /// 回一句 `Local 那一層沒有檔`，一個**沒翻譯的 Rust Debug 字串**出現在界面
     /// 上，而改動還掛着。2026-09-24 審出來的。
@@ -129,7 +129,7 @@ pub struct Sheet {
     pub edits: BTreeMap<String, Change>,
     /// 檔裏此刻寫着的那些值，`表.鍵` → 照 toml 的寫法。
     ///
-    /// 從 [`text`](Self::text) 算出來的，開面板時算一次。⚠️ **不是每一幀重算**：
+    /// 從 [`text`](Self::text) 算出來的，開面板時算一次。Warning: **不是每一幀重算**：
     /// 一幀要問幾十次，而 toml 解析一次是幾十微秒——乘起來就是打字時看得見的頓。
     declared: BTreeMap<String, String>,
 }
@@ -166,7 +166,7 @@ impl Sheet {
 
 /// 一份 toml 裏寫着的每一項，`表.鍵` → 照它寫的那個樣子。
 ///
-/// ⚠️ **值取的是「寫出來的字」而不是解析出來的東西**：面板要照原樣顯示，而
+/// Warning: **值取的是「寫出來的字」而不是解析出來的東西**：面板要照原樣顯示，而
 /// `"dense"` 與 `dense` 在螢幕上是兩件事——前者是使用者打的，後者是他打錯的。
 fn declared_in(text: &str) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
@@ -189,7 +189,7 @@ fn written(change: &Change) -> String {
     match change {
         Change::Tick(on) => on.to_string(),
         Change::Count(n) => n.to_string(),
-        // ⚠️ **要轉義。** 對面 [`declared_in`] 讀的是 `toml_edit` 吐出來的字串，
+        // Warning: **要轉義。** 對面 [`declared_in`] 讀的是 `toml_edit` 吐出來的字串，
         // 那一頭轉義過；這一頭不轉，值裏帶一個 `"` 或 `\` 兩邊就永遠對不上，
         // `settle` 判不出「改回原值」，那一筆從此掛着「改了還沒存」。今天沒有
         // 一項是 `Kind::Text`，所以是死代碼——Text 那一行落地那天會咬。
@@ -230,7 +230,7 @@ pub struct Panel {
 
 /// **本項目那一份在哪** —— 找得到就是它，找不到就是「要建的話建在這裏」。
 ///
-/// ⚠️ **不回 `None`。** 面板明寫着「存盤時建」，而 `save()` 自己會
+/// Warning: **不回 `None`。** 面板明寫着「存盤時建」，而 `save()` 自己會
 /// `create_dir_all`；少了這一支，那句承諾就是空頭的。要建哪一個看得見：頂上那
 /// 一行寫的就是它。
 pub fn local_sheet_path(cwd: &std::path::Path) -> PathBuf {
@@ -313,7 +313,7 @@ impl Panel {
     /// **切着的那一份此刻替這一項出的是什麽** —— 檔裏寫着的，沒寫就是它**下面**
     /// 那幾層給的。
     ///
-    /// ⚠️ **看的是下面，不是「畫出來的那個值」。** 編輯全局而本項目蓋着它的時候，
+    /// Warning: **看的是下面，不是「畫出來的那個值」。** 編輯全局而本項目蓋着它的時候，
     /// 畫出來的是本項目那個值——拿它作比，「把全局設成和本項目一樣」就被判成「沒
     /// 改」，而那明明改變了**別的項目**裏的行為。全局底下只有出廠；本項目底下是
     /// 全局，再底下纔是出廠。
@@ -331,7 +331,7 @@ impl Panel {
 
     /// **切着的那一份此刻替這一項出的是什麽，連沒存的改動一起算。**
     ///
-    /// ⚠️ **按空格與 `i` 的起點是這個，不是畫出來的那個值。** 畫出來的是三層裏
+    /// Warning: **按空格與 `i` 的起點是這個，不是畫出來的那個值。** 畫出來的是三層裏
     /// **贏**的那一個；本項目蓋着全局的時候你編輯全局，起點要是全局自己那個值。
     /// 拿畫出來的值當起點，「空格」會從別人的值往下數——按一下 1 變 3。
     /// 2026-09-24 一條測試逮到的。
@@ -343,7 +343,7 @@ impl Panel {
 
     /// **切着的那一份被上面那一層蓋着嗎。**
     ///
-    /// ⚠️ 蓋着的時候改這一項，**螢幕上那一行不會動**（贏的還是上面那個），看起來
+    /// Warning: 蓋着的時候改這一項，**螢幕上那一行不會動**（贏的還是上面那個），看起來
     /// 像按了沒反應。所以底下那一行要說一句。
     pub fn shadowed(&self, setting: &Setting) -> bool {
         self.into == Which::Global && self.local.says(&setting.path()).is_some()
@@ -351,7 +351,7 @@ impl Panel {
 
     /// **攢一筆改動 —— 除非改完和不改一樣。**
     ///
-    /// ⚠️ 不問這一句，按空格轉一圈回到原來那個值**還算「改了」**：面板頂上寫着
+    /// Warning: 不問這一句，按空格轉一圈回到原來那個值**還算「改了」**：面板頂上寫着
     /// 「改了還沒存」，而 `:w` 會往檔裏寫一行跟原來一模一樣的東西。同一族的還有
     /// 「把一項設成和出廠一樣」——那一行寫進去純屬噪音。2026-09-24 拍圖看出來的。
     fn settle(&mut self, setting: &Setting, change: Change) {
@@ -390,7 +390,7 @@ impl Panel {
 
     /// `h` / `l`。
     ///
-    /// ⚠️ **空的那一組進不去**：七組還沒填，`l` 進去會停在一張空表上，而那一刻
+    /// Warning: **空的那一組進不去**：七組還沒填，`l` 進去會停在一張空表上，而那一刻
     /// `j`／`k`／空格全部沒有反應——看起來像面板卡住了。
     pub fn across(&mut self, right: bool) {
         self.typing = None;
@@ -411,13 +411,13 @@ impl Panel {
 
     /// 空格 —— 打勾翻面、幾選一走下一個、數字加一（到頂回到底）。
     ///
-    /// ⚠️ **一段自己打的字沒有「下一個」**，空格對它就是 `i`。
+    /// Warning: **一段自己打的字沒有「下一個」**，空格對它就是 `i`。
     pub fn press(&mut self) {
         let Some(setting) = self.here() else { return };
         let now = self.mine_now(setting);
         let next = match setting.kind {
             Kind::Tick => Change::Tick(now != "true"),
-            // ⚠️ **`0` 另算一檔，而 `low` 是「最小的非零值」。** `zong_length` 真
+            // Warning: **`0` 另算一檔，而 `low` 是「最小的非零值」。** `zong_length` 真
             // 正的域是「0，或者 4 到 64」（`into_config` 寫着
             // `if length == 0 {0} else {length.clamp(4,64)}`），`tatechuyoko` 是
             // 「0，或者 2 到 8」。從前 `low` 寫 0，於是面板停得到 1／2／3，寫進
@@ -425,7 +425,7 @@ impl Panel {
             // 怕的那一族。2026-09-24 審出來的。
             Kind::Count { low, high, zero } => {
                 let n: usize = now.parse().unwrap_or(low);
-                // ⚠️ **`0` 只在 `low > 0` 的時候是域外那一檔。** `indent` 的
+                // Warning: **`0` 只在 `low > 0` 的時候是域外那一檔。** `indent` 的
                 // `zero` 只是替域裏的 0 取了個名字（「不縮進」，域是 0..8）；
                 // 不分這一下，`indent` 在 0 上按空格會回到 `low` ＝ 0，那一格死住。
                 let apart = zero.is_some() && low > 0;
@@ -469,7 +469,7 @@ impl Panel {
                 // `0` 是域外那一檔的時候，它是合法的，不鉗到 `low`。
                 Ok(0) if zero.is_some() && low > 0 => Change::Count(0),
                 Ok(n) => Change::Count(n.clamp(low, high) as i64),
-                // ⚠️ **打了個不是數的東西就當沒改**，不寫一個 0 進去：使用者敲錯
+                // Warning: **打了個不是數的東西就當沒改**，不寫一個 0 進去：使用者敲錯
                 // 一個鍵而設定被撥成 0，比什麽都沒發生壞得多。
                 Err(_) => return,
             },
@@ -488,7 +488,7 @@ impl Panel {
         let Some(setting) = self.here() else { return };
         let path = setting.path();
         let sheet = self.sheet_mut();
-        // ⚠️ **問的是「檔裏寫了沒有」，不是「這一份此刻說什麽」。** 後者把還沒存
+        // Warning: **問的是「檔裏寫了沒有」，不是「這一份此刻說什麽」。** 後者把還沒存
         // 的改動也算進去，於是「改了一項，又按 `d` 反悔」會攢下一條刪一個根本不
         // 存在的鍵的指令——面板頂上從此寫着「改了還沒存」，而其實什麽都不用存。
         // 2026-09-24 拍圖看出來的。
@@ -523,14 +523,14 @@ impl Panel {
             };
             let changes: Vec<(String, Change)> =
                 sheet.edits.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            // ⚠️ **照磁碟上此刻那一份改，不是照開面板那一刻那一份。**
+            // Warning: **照磁碟上此刻那一份改，不是照開面板那一刻那一份。**
             //
             // `sheet.text` 是開面板時讀的。面板開着的這段時間裏那個檔可能被外面
             // 改了——另一個 yumete、另一臺機器上同步下來的、`git checkout` ——而
             // 拿舊正文改完整份寫回去，**會把人家改的別的鍵一起頂掉**。改的那幾項
             // 是「鍵 → 新值」，套在哪一份正文上都成立，所以重讀一次就沒有這件事。
             //
-            // ⚠️ 讀不到就用手上這一份（檔剛被刪掉／權限沒了）：那時 `write_atomically`
+            // Warning: 讀不到就用手上這一份（檔剛被刪掉／權限沒了）：那時 `write_atomically`
             // 自己會報，不必在這裏先攔一道。
             let now = std::fs::read_to_string(&path).unwrap_or_else(|_| sheet.text.clone());
             let moved = now != sheet.text;
@@ -559,16 +559,16 @@ impl Panel {
 /// （`buffer.rs::write_atomically`，那一頭不能借：核心不依賴這個 crate，反過來
 /// 更不行）。
 ///
-/// ⚠️ **直接 `fs::write` 有一個真的窗口**：它先把檔截成 0 再寫。寫到一半斷電、
+/// Warning: **直接 `fs::write` 有一個真的窗口**：它先把檔截成 0 再寫。寫到一半斷電、
 /// 磁碟滿、程序被殺——使用者的 `config.toml` 就剩半份，而那半份多半讀不通，於是
 /// **整份設定作廢**（`deny_unknown_fields` 之外的第二種全丟法）。一個人只是想
 /// 把縮進改成 2。
 ///
-/// ⚠️ **`rename` 換的是目録項，所以要連目録一起 `sync`**，否則斷電後目録可能還
+/// Warning: **`rename` 換的是目録項，所以要連目録一起 `sync`**，否則斷電後目録可能還
 /// 指着舊的那個 inode——新內容落了盤，而沒有人找得到它。
 fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     use std::io::Write;
-    // ⚠️ **穿過鏈接，不是蓋在它上面。** 同 `yumete-core` 存稿子那一支
+    // Warning: **穿過鏈接，不是蓋在它上面。** 同 `yumete-core` 存稿子那一支
     // （`buffer.rs:1324`，那裏的註釋寫着同一句）。`~/.config/yumete/config.toml`
     // 常常是一條指向 dotfiles 的軟鏈（chezmoi／stow／yadm），而 `rename` 換的是
     // **目録項**——不穿過去的話，存一次就把那條鏈接換成一個普通檔，dotfiles 裏
@@ -582,7 +582,7 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
         .unwrap_or(0);
     let tmp = dir.join(format!(".yumete-set-{}-{}", std::process::id(), nanos));
     let written = (|| -> std::io::Result<()> {
-        // ⚠️ **只讀的檔就不動它。** 同 `buffer.rs:1337`：`rename` 換的是目録項，
+        // Warning: **只讀的檔就不動它。** 同 `buffer.rs:1337`：`rename` 換的是目録項，
         // 檔自己的權限攔不住——`chmod 444 config.toml` 是有人說「這份別動」。
         if let Ok(from) = std::fs::metadata(path) {
             if from.permissions().readonly() {
@@ -617,7 +617,7 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
 
 /// yumete 認得這個鍵嗎 —— [`rewrite`] 拿它決定要不要註釋掉一行。
 ///
-/// ⚠️ **三張表的並集，不是只有 [`SETTINGS`]。** 只問畫在面板上的那些，會把
+/// Warning: **三張表的並集，不是只有 [`SETTINGS`]。** 只問畫在面板上的那些，會把
 /// `[editor] screenshot`（有理由不進面板）和七十多個還沒輪到的鍵在存盤那一下
 /// 全部註釋掉——使用者按了一下保存，配置被改了一半。
 fn known(table: &str, key: &str) -> bool {
@@ -717,7 +717,7 @@ mod tests {
 
     /// **改了一項又按 `d` 反悔，該乾乾淨淨**——不是攢一條刪一個不存在的鍵的指令。
     ///
-    /// ⚠️ 攢下來的話，面板頂上從此寫着「改了還沒存」而其實什麽都不用存，走的時候
+    /// Warning: 攢下來的話，面板頂上從此寫着「改了還沒存」而其實什麽都不用存，走的時候
     /// 還要多問一句「有改動沒存」。2026-09-24 拍圖看出來的。
     #[test]
     fn changing_a_row_and_then_dropping_it_leaves_nothing_behind() {
@@ -735,7 +735,7 @@ mod tests {
 
     /// **轉一圈回到原來那個值，就不算改過。**
     ///
-    /// ⚠️ 算的話，`:w` 會往檔裏寫一行跟原來一模一樣的東西，而面板頂上一直亮着
+    /// Warning: 算的話，`:w` 會往檔裏寫一行跟原來一模一樣的東西，而面板頂上一直亮着
     /// 「改了還沒存」。
     #[test]
     fn cycling_all_the_way_back_is_not_a_change() {
@@ -766,7 +766,7 @@ mod tests {
 
     /// **「把全局設成和本項目一樣」是一次真的改動**，不是「沒改」。
     ///
-    /// ⚠️ 判成沒改的話，一個想「以後每個項目都這樣」的人按了空格、看見值對了、
+    /// Warning: 判成沒改的話，一個想「以後每個項目都這樣」的人按了空格、看見值對了、
     /// `:w` 存了，而全局那個檔一個字沒動——換一個目録打開就打回原形。
     #[test]
     fn matching_what_the_project_says_still_changes_the_global_file() {
@@ -794,7 +794,7 @@ mod tests {
 
     /// **存盤是原子的**：換的是目録項，寫到一半的東西不會出現在那個路徑上。
     ///
-    /// ⚠️ 直接 `fs::write` 先把檔截成 0 再寫——斷電或被殺就剩半份，而半份 toml
+    /// Warning: 直接 `fs::write` 先把檔截成 0 再寫——斷電或被殺就剩半份，而半份 toml
     /// 多半讀不通，於是整份設定作廢。一個人只是想把縮進改成 2。
     #[test]
     fn saving_replaces_the_file_whole_and_leaves_no_litter() {
@@ -826,7 +826,7 @@ mod tests {
 
     /// **面板開着的時候檔被外面改了，`:w` 不許把人家改的頂掉。**
     ///
-    /// ⚠️ 拿開面板那一刻的正文改完整份寫回去，別人改的**別的鍵**就沒了。改的那
+    /// Warning: 拿開面板那一刻的正文改完整份寫回去，別人改的**別的鍵**就沒了。改的那
     /// 幾項是「鍵 → 新值」，套在哪一份正文上都成立，所以存盤前重讀一次。
     #[test]
     fn saving_keeps_what_somebody_else_changed_meanwhile() {
@@ -890,10 +890,10 @@ mod tests {
 
     /// **空的那一組進不去。**
     ///
-    /// ⚠️ `l` 進去會停在一張空表上，而那一刻 `j`／`k`／空格全部沒有反應——看起來
+    /// Warning: `l` 進去會停在一張空表上，而那一刻 `j`／`k`／空格全部沒有反應——看起來
     /// 像面板卡住了。
     ///
-    /// ⚠️ **這一條不許挑「碰巧空着的那一組」。** 從前它挑的是鍵盤組（那時那一組
+    /// Warning: **這一條不許挑「碰巧空着的那一組」。** 從前它挑的是鍵盤組（那時那一組
     /// 還沒填），2026-09-24 那一組填上之後測試當場紅——而它守的規矩一個字沒變，
     /// 變的只是「哪一組是空的」。八組現在都有東西（3～14 項），所以造一個：把
     /// 下標指到 `GROUPS` 外面去，`rows()` 回空，走的是同一條路。
@@ -908,7 +908,7 @@ mod tests {
 
     /// **八組都有東西** —— 上面那一條不再有現成的空組可挑，而這一條說出為什麽。
     ///
-    /// ⚠️ 順帶守一件事：一組空着的話，面板上那一格點進去是一張白表，而讀者不知道
+    /// Warning: 順帶守一件事：一組空着的話，面板上那一格點進去是一張白表，而讀者不知道
     /// 是「沒有這一類設定」還是「壞了」。要麽填，要麽別列。
     #[test]
     fn no_group_is_empty() {
@@ -939,7 +939,7 @@ mod tests {
 
     /// `known` 認的是**三張表的並集**。
     ///
-    /// ⚠️ 只認畫在面板上的那些，存盤那一下會把七十多個還沒輪到的鍵和
+    /// Warning: 只認畫在面板上的那些，存盤那一下會把七十多個還沒輪到的鍵和
     /// `screenshot` 一起註釋掉——按了一下保存，配置被改了一半。
     #[test]
     fn saving_does_not_comment_out_a_key_the_panel_has_not_got_to_yet() {

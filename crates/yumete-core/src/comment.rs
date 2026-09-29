@@ -28,7 +28,7 @@ pub struct Marks {
 
 /// What each format has.
 ///
-/// ⚠️ **Markdown has no line comment.** `<!-- -->` is the only form, so both
+/// Warning: **Markdown has no line comment.** `<!-- -->` is the only form, so both
 /// keys write it there — which is not the keys collapsing into one but the
 /// format having one answer. Typst is the one place the two differ.
 pub fn marks(syntax: Syntax) -> Marks {

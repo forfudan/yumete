@@ -109,7 +109,7 @@ pub enum Anchor {
 
 /// Fit a box `want` cells big into `area`, or `None` when there is no room.
 ///
-/// ⚠️ **A caret-anchored box is held to [`room`]** — 2026-09-17 「面板不應該
+/// Warning: **A caret-anchored box is held to [`room`]** — 2026-09-17 「面板不應該
 /// 超過頁面的四分之一」, refined 2026-09-18 to two thirds by one third, which
 /// is two ninths and reads better. A centred one has the keys, so the page
 /// behind it is not being read and the cap does not apply.
@@ -126,7 +126,7 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             height,
         )),
         Anchor::Caret { at, bottom, vertical } => {
-            // ⚠️ **The policy caps belong to the caller, this only asks
+            // Warning: **The policy caps belong to the caller, this only asks
             // whether it physically fits** (2026-09-18). A 竪書 note is two
             // thirds of the page *tall* by design — half-page refusal here
             // threw it away and nothing was drawn at all. What protects the

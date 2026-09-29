@@ -131,7 +131,7 @@ pub struct Style {
     pub paper: Paper,
     /// **源檔是什麼語法**（2026-09-28）。
     ///
-    /// ⚠️ **這一格從前沒有，於是導出永遠按 Markdown 解析源檔**——一份 Typst 稿子裏的
+    /// Warning: **這一格從前沒有，於是導出永遠按 Markdown 解析源檔**——一份 Typst 稿子裏的
     /// `*粗*`、`$a+b$`、`@引用` 一個都認不出來，原樣（並且轉義）寫進導出的檔。
     /// `Format` 說的是**寫成什麼**，這一格說的是**讀的是什麼**，兩件事。
     pub source: crate::syntax::Syntax,
@@ -238,7 +238,7 @@ fn line_into(
 ) -> String {
     let chars: Vec<char> = line.chars().collect();
     let groups = ruby::groups(&chars, dialects);
-    // ⚠️ **讀的是源檔的語法，不是要寫成的格式**（2026-09-28）。從前這裏寫死
+    // Warning: **讀的是源檔的語法，不是要寫成的格式**（2026-09-28）。從前這裏寫死
     // `markdown::spans`，於是一份 Typst 稿子導出去，`*粗*` 是四個字符、`$a+b$` 被
     // 轉義成 `\$a + b\$`。
     let marks = match source {
@@ -321,7 +321,7 @@ fn marked(
         (Kind::Code, Dialect::Html) => format!("<code>{text}</code>"),
         (Kind::Strike, Dialect::Html) => format!("<s>{text}</s>"),
         (Kind::Highlight, Dialect::Html) => format!("<mark>{text}</mark>"),
-        // ⚠️ **公式原樣留着**（2026-09-28 修）。從前它借 `Kind::Code`，於是導出的
+        // Warning: **公式原樣留着**（2026-09-28 修）。從前它借 `Kind::Code`，於是導出的
         // Typst 裏是 `` `a + b` ``——一條反引號在 Typst 裏是原樣文本，公式就此不是公
         // 式了。HTML 那一端也留着 `$…$`：瀏覽器自己不認，可是掛了 MathJax 的頁認，
         // 而換成 `<code>` 是連掛了也認不出來。
@@ -569,7 +569,7 @@ mod tests {
 
     /// **`Format` 說寫成什麼，`Style::source` 說讀的是什麼**（2026-09-28）。
     ///
-    /// ⚠️ 從前只有前一半，於是導出**永遠按 Markdown 解析源檔**：一份 Typst 稿子裏的
+    /// Warning: 從前只有前一半，於是導出**永遠按 Markdown 解析源檔**：一份 Typst 稿子裏的
     /// `*粗*` 是四個字符、`$a+b$` 被當成兩個字面美元號轉義掉。
     #[test]
     fn export_reads_the_source_syntax_not_the_output_format() {
@@ -586,11 +586,11 @@ mod tests {
         let out = export("$a + b$\n", Format::Typst, &ts);
         assert!(out.contains("$a + b$"), "公式原樣：{out}");
 
-        // ⚠️ Typst 源裏 `*粗*` 是強調，導成 HTML 要出 `<strong>`。
+        // Warning: Typst 源裏 `*粗*` 是強調，導成 HTML 要出 `<strong>`。
         let out = export("*粗*\n", Format::Html, &ts);
         assert!(out.contains("<strong>粗</strong>"), "{out}");
 
-        // ⚠️ 標題在 Typst 裏是 `=`，在 Markdown 裏不是。
+        // Warning: 標題在 Typst 裏是 `=`，在 Markdown 裏不是。
         let out = export("= 第一章\n", Format::Html, &ts);
         assert!(out.contains("<h1"), "= 是標題：{out}");
         let out = export("= 第一章\n", Format::Html, &md);

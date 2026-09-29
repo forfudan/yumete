@@ -34,7 +34,7 @@ delta，每換一版倉庫就再胖 3.8 MB），於是從前只在 `build.rs` �
 碼**——18.7 萬條，一放進來就是 3 MB，那就不是精華版了。代價寫明：沒有詞，整句輸
 入退成逐字。
 
-# ⚠️ 這裏不判簡碼
+# Warning: 這裏不判簡碼
 
 看起來該有一道「挑出簡碼」的閘，其實沒有，而且**不要加**。
 
@@ -44,7 +44,7 @@ yume 的 `scheme_info::is_simp` 是「這一條的碼短於該字最長碼」，
 照 `SchemeRule::LINGMING` 重寫取碼逐字核過：`全` 的 `nya`(人王) vs `jrya`(入王)、
 `呈` 的 `dya`(口王) vs `dlre`(口壬)、`角` 的 `bto`(用) vs `bpsu`(土)）。
 
-⚠️ **但「這個字分源」不是判準。** 一度照它排除，量出來會誤殺 62 條真簡碼——
+Warning: **但「這個字分源」不是判準。** 一度照它排除，量出來會誤殺 62 條真簡碼——
 `解`=bu、`级`=cu、`最`=hro、`底`=hgu、`处`=jvu、`房`=lha、`慢`=mho 全在裏面。
 「是最長碼的前綴」也不是判準：196 條真簡碼既不分源也不是前綴（`了`=a、`是`=i、
 `的`=e、`我`=o、`不`=u）。真正的判準是「**這個碼等不等於這個字某一個拆分源算出來
@@ -180,7 +180,7 @@ def main() -> int:
 
     head = [l for l in src if l.startswith("#")]
     OUT.mkdir(parents=True, exist_ok=True)
-    # ⚠️ 中間檔寫在系統暫存區，**不寫進 `jinghua/`**：那是被追蹤的目錄，而編譯
+    # Warning: 中間檔寫在系統暫存區，**不寫進 `jinghua/`**：那是被追蹤的目錄，而編譯
     # 一失敗就會在裏面留下三個沒人認得、也沒被 gitignore 的檔。
     with tempfile.TemporaryDirectory(prefix="jinghua-") as tmp:
         tmp = Path(tmp)
@@ -200,10 +200,10 @@ def main() -> int:
     # `build.rs` 的 `stamp()` 讀這一份，說的是「這份碼表多老」。源表的時間戳纔是
     # 答案 —— 裁的動作不改內容的新舊。
     #
-    # ⚠️ **UTC，不是本地時間。** 同一份源表在柏林和在上海跑，`localtime` 會給出
+    # Warning: **UTC，不是本地時間。** 同一份源表在柏林和在上海跑，`localtime` 會給出
     # 不同的日期（現行這個 20260912011555 是 01:15 CEST ＝ 前一天 23:15 UTC），
     # 於是換台機器重跑就多一行沒有意義的 diff，面板上同一份表還顯示兩個日期。
-    # ⚠️ 也不寫絕對路徑：那會把生成者的家目錄寫進倉庫。
+    # Warning: 也不寫絕對路徑：那會把生成者的家目錄寫進倉庫。
     when = time.gmtime(os.path.getmtime(data / "ling.txt"))
     (OUT / "VERSION").write_text(
         "# scripts/make_jinghua.py 生成，勿手改。\n"

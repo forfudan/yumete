@@ -66,7 +66,7 @@ const BREAK: &str = "⏎";
 /// Everything outside a pair is prose and gets no span, including the
 /// `yume.md:120:` the line opens with — it is a place, not a change.
 ///
-/// ⚠️ **Only reached through [`crate::syntax::Syntax::Diff`]**, which nothing
+/// Warning: **Only reached through [`crate::syntax::Syntax::Diff`]**, which nothing
 /// but the listing is given. A manuscript may perfectly well contain `[-`.
 pub fn spans(line: &str) -> Vec<crate::markdown::Span> {
     use crate::markdown::{Kind, Span};
@@ -461,7 +461,7 @@ mod spans_tests {
         assert!(kinds("a.md:12: 那年冬天。").is_empty());
     }
 
-    /// ⚠️ **沒有配對就什麼都不是。** 半個括號、空的一對、跨不到底的開頭，都照字面
+    /// Warning: **沒有配對就什麼都不是。** 半個括號、空的一對、跨不到底的開頭，都照字面
     /// 留着——畫錯比不畫壞：一段沒關上的紅底會一路吃到行尾。
     #[test]
     fn half_a_pair_is_just_characters() {

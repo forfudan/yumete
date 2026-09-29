@@ -23,7 +23,7 @@
 //!
 //! ## The one trap
 //!
-//! ⚠️ **LSP counts characters in UTF-16 code units.** Not bytes, not
+//! Warning: **LSP counts characters in UTF-16 code units.** Not bytes, not
 //! characters — the unit of a language nobody here writes in. For ASCII the
 //! three agree, which is exactly why it goes unnoticed until a Chinese comment
 //! or a `𝄞` puts every mark on a line in the wrong place. So nothing in this
@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 
 /// Wrap a JSON body in the header a language server reads.
 ///
-/// ⚠️ **The length is in bytes, not characters** — a message carrying a
+/// Warning: **The length is in bytes, not characters** — a message carrying a
 /// Chinese identifier is longer than it looks, and a server given the
 /// character count waits forever for the rest of a message that already
 /// arrived.
@@ -53,7 +53,7 @@ pub fn frame(body: &str) -> Vec<u8> {
 /// arrived, and half a message is the normal state of affairs. The caller reads
 /// more and asks again.
 ///
-/// ⚠️ **Other headers are allowed and must be skipped.** `Content-Type` is in
+/// Warning: **Other headers are allowed and must be skipped.** `Content-Type` is in
 /// the specification, and a reader that insisted the first header was the
 /// length would desynchronise on the first server that sends one — after which
 /// every later message is garbage, and the symptom is 「diagnostics stopped
@@ -93,15 +93,15 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// and a server told we can render markdown hovers will spend work making
 /// them.
 ///
-/// ⚠️ **`completionItem.snippetSupport` is claimed `false` on purpose**
+/// Warning: **`completionItem.snippetSupport` is claimed `false` on purpose**
 /// (#53 ④). A snippet is not text — it is `counted(${1:text})`, a form with
 /// holes in it, and an editor that does not fill the holes has to put those
 /// six characters into the reader's file. Saying so is what makes
 /// `rust-analyzer` send `counted` instead, which is exactly what this step can
-/// insert. ⚠️ **Claiming it and then not expanding is the bug**, and it is a
+/// insert. Warning: **Claiming it and then not expanding is the bug**, and it is a
 /// quiet one: it only shows up on functions.
 ///
-/// ⚠️ **`synchronization.didSave` is not a nicety.** A server that runs a real
+/// Warning: **`synchronization.didSave` is not a nicety.** A server that runs a real
 /// compiler (rust-analyzer's `cargo check`) only re-runs it when the file is
 /// saved, and a client that never claims to send saves is never sent one.
 /// Without this line, an error stays on the screen after the line that caused
@@ -116,7 +116,7 @@ pub fn initialize(id: i64, root: &Path) -> String {
 }
 
 /// The `initialized` notification — 「go ahead」, sent once the answer to
-/// [`initialize`] is in. ⚠️ A server that never gets it may never start work.
+/// [`initialize`] is in. Warning: A server that never gets it may never start work.
 pub fn initialized() -> String {
     r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#.to_string()
 }
@@ -133,7 +133,7 @@ pub fn did_open(path: &Path, language: &str, version: i64, text: &str) -> String
 
 /// `textDocument/didChange`, **whole file** (`TextDocumentSyncKind.Full`).
 ///
-/// ⚠️ **The whole file, on purpose.** Incremental sync is a second model of
+/// Warning: **The whole file, on purpose.** Incremental sync is a second model of
 /// what the document is, kept in step with this one by hand — and when it
 /// drifts the server answers about text nobody has, which looks exactly like a
 /// server bug. A megabyte of Rust is a millisecond of JSON; the moment that
@@ -149,7 +149,7 @@ pub fn did_change(path: &Path, version: i64, text: &str) -> String {
 
 /// `textDocument/definition` — 「where is this thing written?」 (#53 ②).
 ///
-/// ⚠️ **The column is in UTF-16 code units**, like every position on this
+/// Warning: **The column is in UTF-16 code units**, like every position on this
 /// wire. [`crate::problem::utf16_column`] turns a character offset into one,
 /// and it needs the line's text to do it.
 pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
@@ -179,7 +179,7 @@ pub fn completion(id: i64, path: &Path, line: usize, utf16_column: usize) -> Str
 
 /// `textDocument/didSave` — 「這一份落盤了」。
 ///
-/// ⚠️ **This is what re-runs the compiler.** rust-analyzer's own analysis
+/// Warning: **This is what re-runs the compiler.** rust-analyzer's own analysis
 /// follows every `didChange`, but its `cargo check` — where 「cannot find
 /// value ... in this scope」 comes from, the ones marked `(rustc)` — waits for
 /// a save. No save, no new answer, and the old one stays on a line that is not
@@ -220,7 +220,7 @@ pub fn exit() -> String {
 pub struct Place {
     pub path: PathBuf,
     pub line: usize,
-    /// ⚠️ In **UTF-16 code units**, as it arrived; see
+    /// Warning: In **UTF-16 code units**, as it arrived; see
     /// [`crate::problem::Problem::utf16_column`].
     pub utf16_column: usize,
 }
@@ -234,17 +234,17 @@ pub enum Notice {
     /// `textDocument/publishDiagnostics` — everything now true about one file.
     Said { path: PathBuf, said: Vec<Problem> },
     /// A request *from* the server that wants an answer (`window/workDoneProgress
-    /// /create`, `client/registerCapability`). ⚠️ **An unanswered request can
+    /// /create`, `client/registerCapability`). Warning: **An unanswered request can
     /// stall a server** — `rust-analyzer` waits on its own registration — so
     /// the id comes back out to be answered with an empty result.
     Asked { id: i64 },
     /// **The answer to something we asked**, with the id that says which.
     ///
-    /// ⚠️ **Typed, not raw JSON.** Only the front end knows which id it sent
+    /// Warning: **Typed, not raw JSON.** Only the front end knows which id it sent
     /// for what, so the id comes back untouched — but the *shape* of the
     /// answer is this crate's business, and a `serde_json::Value` crossing the
     /// boundary would make it everybody's.
-    /// ⚠️ **Both readings, because the reader cannot know which was asked.**
+    /// Warning: **Both readings, because the reader cannot know which was asked.**
     /// An answer carries an id and no method — nothing else in it says whether
     /// it came back from `definition` or from `hover`. Only the front end knows
     /// what it sent that id for, so both readings are offered and it takes the
@@ -258,7 +258,7 @@ pub enum Notice {
 
 /// **One thing the server says could come next** (#53 ④).
 ///
-/// ⚠️ **`label` is what is shown and `insert` is what is typed, and they are
+/// Warning: **`label` is what is shown and `insert` is what is typed, and they are
 /// not the same string.** A method comes back labelled `count()` and inserted
 /// as `count`; a field of a struct is labelled `text: &str` and inserted as
 /// `text`. Showing the insert text makes the list useless to read; inserting
@@ -279,7 +279,7 @@ pub struct Offer {
     /// **How much of what is already typed this replaces**, in UTF-16 code
     /// units on the line the caret is on.
     ///
-    /// ⚠️ **The server decides this, not the editor.** `self.co` completing to
+    /// Warning: **The server decides this, not the editor.** `self.co` completing to
     /// `count` replaces `co` — three characters back from the caret, or two,
     /// or none, depending on what the server thinks the word is. Guessing it
     /// with the editor's own idea of a word is right for `co` and wrong for
@@ -318,7 +318,7 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
 
 /// The places in a `textDocument/definition` answer.
 ///
-/// ⚠️ **Three shapes, all of them legal.** The specification lets a server
+/// Warning: **Three shapes, all of them legal.** The specification lets a server
 /// answer with one `Location`, an array of them, or an array of
 /// `LocationLink` (which spells the range `targetSelectionRange` instead) —
 /// and servers really do differ: `rust-analyzer` sends `LocationLink`, others
@@ -349,7 +349,7 @@ fn places(result: Option<&serde_json::Value>) -> Vec<Place> {
 
 /// What a `textDocument/hover` answer says, as plain text (#53 ③).
 ///
-/// ⚠️ **Three shapes again, and one of them is deprecated but still sent.**
+/// Warning: **Three shapes again, and one of them is deprecated but still sent.**
 /// `contents` is a `MarkupContent` (`{kind, value}`), a `MarkedString` (a bare
 /// string, or `{language, value}`), or an array of `MarkedString`.
 ///
@@ -404,7 +404,7 @@ fn inline(raw: &str) -> String {
             // Backticks rather than a fence because the float sets *inline*
             // markup — and `` `fn counted(text: &str) -> usize` `` is the same
             // code in the same ink, in a shape this editor already draws.
-            // ⚠️ A backtick inside the code would close the span early; a line
+            // Warning: A backtick inside the code would close the span early; a line
             // holding one is left bare rather than set wrong.
             out.push(match bare.contains('`') || bare.trim().is_empty() {
                 true => bare.to_string(),
@@ -443,11 +443,11 @@ fn inline(raw: &str) -> String {
 
 /// What a `textDocument/completion` answer offers (#53 ④).
 ///
-/// ⚠️ **Two shapes**: a bare array of items, or a `CompletionList` with them
+/// Warning: **Two shapes**: a bare array of items, or a `CompletionList` with them
 /// under `items` (and an `isIncomplete` this step does not use — it means
 /// 「ask again as they type」, which is a refinement of *when* to ask).
 ///
-/// The list is taken in the order the server sent it. ⚠️ **Not sorted here**:
+/// The list is taken in the order the server sent it. Warning: **Not sorted here**:
 /// a server ranks its own offers (`sortText` is what it ranks them by, and it
 /// is not always the label), and an editor that re-sorted would be overruling
 /// the one party that knows the language.
@@ -524,7 +524,7 @@ fn said(value: &serde_json::Value) -> Notice {
 fn one(entry: &serde_json::Value) -> Option<Problem> {
     let start = entry.get("range")?.get("start")?;
     let message = entry.get("message")?.as_str()?.trim().to_string();
-    // ⚠️ **A missing severity is not a hint, it is an error.** The
+    // Warning: **A missing severity is not a hint, it is an error.** The
     // specification says so (「If omitted it is up to the client to interpret
     // ... as error」), and guessing the other way hides the one kind of
     // complaint a person must see.
@@ -545,7 +545,7 @@ fn one(entry: &serde_json::Value) -> Option<Problem> {
 
 /// `file:///…` for a path.
 ///
-/// ⚠️ **Only the characters a URI may carry go through unescaped.** A path
+/// Warning: **Only the characters a URI may carry go through unescaped.** A path
 /// with a space or a 漢字 in it — and every manuscript in this editor's own
 /// tests has 漢字 in it — is rejected by a strict server, and the symptom is a
 /// file that simply never gets any diagnostics.
@@ -613,7 +613,7 @@ fn json_string(text: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            // ⚠️ The control characters must be escaped or the JSON is
+            // Warning: The control characters must be escaped or the JSON is
             // invalid — and a file with a stray `\u{1}` in it is a file the
             // server then never hears about.
             c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
@@ -634,7 +634,7 @@ mod tests {
         let framed = frame(body);
         let text = String::from_utf8(framed.clone()).unwrap();
         assert!(text.starts_with(&format!("Content-Length: {}\r\n\r\n", body.len())));
-        // ⚠️ 位元組，不是字：那個漢字佔三個。
+        // Warning: 位元組，不是字：那個漢字佔三個。
         assert_eq!(body.len(), 11, "three bytes for 漢");
         // …and it reads back whole.
         let mut buf = framed;
@@ -652,7 +652,7 @@ mod tests {
         assert_eq!(take_frame(&mut buf).as_deref(), Some(body), "到齊了就讀得出");
     }
 
-    /// ⚠️ `Content-Type` is in the specification. A reader that assumed the
+    /// Warning: `Content-Type` is in the specification. A reader that assumed the
     /// length came first would lose step here and never find it again.
     #[test]
     fn another_header_is_stepped_over() {
@@ -690,7 +690,7 @@ mod tests {
         assert_eq!(said[1].severity, Severity::Warn);
     }
 
-    /// ⚠️ **No severity means an error**, which is what the specification
+    /// Warning: **No severity means an error**, which is what the specification
     /// says. Reading it as the quietest kind would hide the loudest one.
     #[test]
     fn a_complaint_with_no_severity_is_an_error() {
@@ -709,7 +709,7 @@ mod tests {
     #[test]
     fn the_answer_to_initialize_is_the_handshake_and_a_server_request_is_not() {
         assert_eq!(read(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, 1), Notice::Ready);
-        // ⚠️ **Every other answer comes back with its id** (#53 ②), because
+        // Warning: **Every other answer comes back with its id** (#53 ②), because
         // only the front end knows which id it sent for what. It used to be
         // dropped here as 「nobody's business」; now `gd` has business.
         assert_eq!(
@@ -756,7 +756,7 @@ mod tests {
 
         // 一串 LocationLink——rust-analyzer 送的這一種。
         let links = r#"{"id":2,"result":[{"targetUri":"file:///a.rs","targetRange":{"start":{"line":1,"character":0},"end":{"line":9,"character":1}},"targetSelectionRange":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}]}"#;
-        assert_eq!(here(links), [want], "⚠️ 取的是 targetSelectionRange，不是整段");
+        assert_eq!(here(links), [want], "Warning: 取的是 targetSelectionRange，不是整段");
 
         // 說不出來的時候是 `null`，不是錯。
         assert_eq!(here(r#"{"id":2,"result":null}"#), []);
@@ -780,7 +780,7 @@ mod tests {
         assert_eq!(
             said(ra).as_deref(),
             Some("`fn counted(text: &str) -> usize`\n\n**數**一數有幾個字。"),
-            "⚠️ 圍欄變行內代碼，`---` 變一個空行，`**粗**` 原樣留着讓編輯器自己畫"
+            "Warning: 圍欄變行內代碼，`---` 變一個空行，`**粗**` 原樣留着讓編輯器自己畫"
         );
 
         // 裸字串，以及舊的 {language, value}。
@@ -800,7 +800,7 @@ mod tests {
         assert_eq!(said(r#"{"id":3,"result":null}"#), None);
         assert_eq!(said(r#"{"id":3,"result":{"contents":{"kind":"markdown","value":""}}}"#), None);
 
-        // ⚠️ **問定義的答案不會被讀成 hover，反過來也一樣。**
+        // Warning: **問定義的答案不會被讀成 hover，反過來也一樣。**
         let where_ = r#"{"id":2,"result":{"uri":"file:///a.rs","range":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}}"#;
         assert_eq!(said(where_), None, "定義的答案裏沒有 contents");
         match read(ra, 1) {
@@ -829,7 +829,7 @@ mod tests {
         let got = offered(bare);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].label, "count()", "單子上看見的");
-        assert_eq!(got[0].insert, "count", "⚠️ 真打進檔案的是這個");
+        assert_eq!(got[0].insert, "count", "Warning: 真打進檔案的是這個");
         assert_eq!(got[0].kind, 2);
         assert_eq!(got[0].detail.as_deref(), Some("fn() -> usize"));
         assert_eq!(got[0].replacing, None, "没給範圍就什麽都不替換");
@@ -839,7 +839,7 @@ mod tests {
         let got = offered(list);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].insert, "counted");
-        assert_eq!(got[0].replacing, Some((17, 19)), "⚠️ 替換掉已經打出來的那兩個碼元");
+        assert_eq!(got[0].replacing, Some((17, 19)), "Warning: 替換掉已經打出來的那兩個碼元");
 
         // InsertReplaceEdit：要的是 replace 那一段（「現在那個詞」）。
         let both = r#"{"id":4,"result":[{"label":"x","textEdit":{"newText":"x","insert":{"start":{"line":0,"character":4},"end":{"line":0,"character":5}},"replace":{"start":{"line":0,"character":4},"end":{"line":0,"character":9}}}}]}"#;
@@ -849,7 +849,7 @@ mod tests {
         assert!(offered(r#"{"id":4,"result":null}"#).is_empty());
         assert!(offered(r#"{"id":4,"result":{"items":[]}}"#).is_empty());
 
-        // ⚠️ 三種回答互不誤讀。
+        // Warning: 三種回答互不誤讀。
         assert!(offered(r#"{"id":3,"result":{"contents":"一句話"}}"#).is_empty(), "hover 裏没有候選");
         match read(bare, 1) {
             Notice::Answer { places, told, .. } => {
@@ -859,7 +859,7 @@ mod tests {
         }
     }
 
-    /// ⚠️ 這個編輯器自己的測試檔就叫「第一章.md」。A URI that does not escape
+    /// Warning: 這個編輯器自己的測試檔就叫「第一章.md」。A URI that does not escape
     /// them is a file that silently never gets an answer.
     #[test]
     fn a_path_with_chinese_in_it_survives_the_round_trip() {

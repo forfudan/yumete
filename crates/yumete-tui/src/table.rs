@@ -59,7 +59,7 @@ const GAP: usize = 1;
 
 /// Measure the visible rows and say how wide each column should be drawn.
 ///
-/// ⚠️ **The visible rows, on purpose — not a bug to fix**
+/// Warning: **The visible rows, on purpose — not a bug to fix**
 /// (2026-09-17). Measuring the whole table lets one very long cell a thousand
 /// rows away widen its column on every screen, and push the other columns off
 /// the right edge. The price — columns narrowing and widening as that row
@@ -311,10 +311,10 @@ pub fn char_at(
                 // writing stopped.
                 None => span.1,
             };
-            // ⚠️ **格數是字簇的，位置是 `char` 的**（#422）。走的是檔裏的字符位置
+            // Warning: **格數是字簇的，位置是 `char` 的**（#422）。走的是檔裏的字符位置
             // （點到哪就回答哪一個 `char`），而「這個位置佔幾格」只有整個字簇答得
             // 出來：`cells_per_char` 把字簇的格數記在它第一個 `char` 上。逐字加的
-            // 話，一格裏有一個 `⚠️`，它後面點哪裏都偏一個字。
+            // 話，一格裏有一個 `Warning: `，它後面點哪裏都偏一個字。
             let text: Vec<char> = (from..to).map(|at| rope.char(start + at)).collect();
             let cells = yumete_cjk::cells_per_char(&text);
             let mut column = 0;
@@ -443,7 +443,7 @@ pub fn draw(
     // `fg(White)`, which is brighter than the ink and flattened every colour
     // underneath at the moment the writer was looking hardest.
     //
-    // ⚠️ **This is the selection now, not the cell** (2026-09-12). It used to
+    // Warning: **This is the selection now, not the cell** (2026-09-12). It used to
     // paint the whole cell the caret was in — and since it painted it with the
     // *selection's* rung, a selection inside that cell had no colour left to
     // be drawn in: press `w` in a grid and the word you just took looked
@@ -486,7 +486,7 @@ pub fn draw(
     // where this mode is most useful: with 折行 on, a cell that wraps to three
     // lines has to be tellable from the row under it.
     //
-    // ⚠️ **Which row this is, and which ground it gets, are both somebody
+    // Warning: **Which row this is, and which ground it gets, are both somebody
     // else's to say** (#458, #478). A `|` table read in a chapter and the same
     // table read in this window are the same table, and 「to tf tb tt 的隔行底
     // 色应该是统一的参数」.
@@ -828,7 +828,7 @@ pub fn draw(
                 // row the cursor is on, where the band runs unbroken so the row
                 // reads as one thing. A drawn rule goes in it — and keeps the
                 // row's ground, so the cursor's band is not cut into pieces.
-                // ⚠️ **The seam takes the row's own band too** (#473). It was
+                // Warning: **The seam takes the row's own band too** (#473). It was
                 // the page, which is right when the columns are the only thing
                 // banded — and wrong since the rows are: every body row came
                 // out striped with page-coloured gaps where the walls are,

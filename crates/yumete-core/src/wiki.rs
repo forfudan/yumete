@@ -56,7 +56,7 @@ pub enum Source {
     Read { path: PathBuf, entries: usize },
     /// Named by a directive and not there.
     Missing { path: PathBuf },
-    /// There, and unreadable — no permission, or not UTF-8. ⚠️ **Not the same
+    /// There, and unreadable — no permission, or not UTF-8. Warning: **Not the same
     /// as missing** (2026-09-19, caught in review): `read_to_string` folds
     /// ENOENT, EACCES and invalid UTF-8 into one `Err`, so a `wiki.md` in
     /// GB18030 — plausible for this audience — was reported as 「there is no
@@ -95,7 +95,7 @@ impl Wiki {
             let Some(path) = found(root) else { continue };
             // Includes stay under the directory holding `.yumete/` — or, for
             // the global wiki, the directory it is kept in.
-            // ⚠️ **Canonicalise the wiki's own path first** (2026-09-19,
+            // Warning: **Canonicalise the wiki's own path first** (2026-09-19,
             // caught in review). The bound is 「the directory holding
             // `.yumete/`」, taken as two parents up — and when the book was
             // opened by a *relative* path (`yumete ch.md`, which is how one is
@@ -144,7 +144,7 @@ impl Wiki {
     /// Whether `path` is one of the files this was read from — **the same
     /// file**, however it is spelled (`./x` and an absolute path are one).
     ///
-    /// ⚠️ Both sides have to canonicalise for the canonical answer to count.
+    /// Warning: Both sides have to canonicalise for the canonical answer to count.
     /// Comparing `canonicalize(a).ok() == canonicalize(b).ok()` calls two
     /// missing files equal — `None == None` — so an unsaved buffer and a wiki
     /// that had since been deleted read as the same file.
@@ -238,7 +238,7 @@ impl Reader {
             return;
         }
         let target = from.parent().unwrap_or(Path::new(".")).join(wanted);
-        // ⚠️ `canonicalize` fails on a path that does not exist, so a typo must
+        // Warning: `canonicalize` fails on a path that does not exist, so a typo must
         // not come out as a security refusal: the parent is resolved and the
         // name put back on it.
         let resolved = match std::fs::canonicalize(&target) {

@@ -58,7 +58,7 @@ pub fn readings(ch: char) -> impl Iterator<Item = &'static str> {
 
 /// **查詢能不能當拼音用**：非空、不太長、全是 ASCII 字母。
 ///
-/// ⚠️ **大小寫在這裏收掉**，回的是小寫那一份——表裏是小寫，而讀者打 `ShuZhai`
+/// Warning: **大小寫在這裏收掉**，回的是小寫那一份——表裏是小寫，而讀者打 `ShuZhai`
 /// 的時候心裏想的不是「這是另一個查詢」。
 pub fn as_query(text: &str) -> Option<Vec<char>> {
     let text = text.trim();
@@ -93,7 +93,7 @@ pub fn spans(text: &str, said: &[char]) -> Vec<(usize, usize)> {
 /// 從第 `i` 個字、查詢的第 `q` 個字母起，能不能把查詢吃完；能就回末尾那一個字的
 /// 後面一格。
 ///
-/// ⚠️ **讀音按表裏的次序試，先到先得**：表裏常用的在前，所以歧義處取的是常用那
+/// Warning: **讀音按表裏的次序試，先到先得**：表裏常用的在前，所以歧義處取的是常用那
 /// 一讀。找的是「有沒有」，不是「哪一種最好」——搜索交出一段就夠了。
 fn eat(hay: &[char], i: usize, said: &[char], q: usize) -> Option<usize> {
     if q == said.len() {

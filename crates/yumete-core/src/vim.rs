@@ -16,7 +16,7 @@
 //!   `:h exclusive`, `:h inclusive`. That one word is the whole of what the
 //!   translation table could not say.
 //!
-//! ⚠️ **The same key can be two motions.** 2026-09-20: 「vim 的 `w` 獨立
+//! Warning: **The same key can be two motions.** 2026-09-20: 「vim 的 `w` 獨立
 //! 的時候是跳轉，在命令中是選詞。」 Standalone, `w` asks
 //! [`crate::motion::Reading::Caret`]; under an operator it also asks for the
 //! caret's target and the operator then takes everything up to it, *excluding*
@@ -75,7 +75,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("0", _) => step(Motion::LineStart, Reach::Exclusive),
         ("^", _) => step(Motion::LineFirstNonBlank, Reach::Exclusive),
         // ---- Down the page -----------------------------------------------
-        // ⚠️ **`h` and `l` are exclusive**, which is what makes `dl` take the
+        // Warning: **`h` and `l` are exclusive**, which is what makes `dl` take the
         // one character under the caret and not two: the motion lands on the
         // next cell and exclusive leaves that cell alone.
         ("l", _) | (" ", _) => step(Motion::Char { forward: true }, Reach::Exclusive),
@@ -90,7 +90,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("L", _) => step(Motion::Sentence { forward: true }, Reach::Exclusive),
         // ---- Find, which is told a character ------------------------------
         //
-        // ⚠️ **`t` is `f` one short**, and that is a property of the motion,
+        // Warning: **`t` is `f` one short**, and that is a property of the motion,
         // not a patch on the span: vim's `t,` lands *before* the comma, so
         // `dt,` leaves it and `df,` takes it.
         ("f", None) | ("F", None) | ("t", None) | ("T", None) => {
@@ -122,7 +122,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
 /// `iw` / `i(` — the object a character names.
 fn object(c: char, around: bool) -> Option<Motion> {
     let what = match c {
-        // ⚠️ **`w` 和 `W` 分開了**（2026-09-28）：`iw` 走分詞器，`iW` 是 vim 那個
+        // Warning: **`w` 和 `W` 分開了**（2026-09-28）：`iw` 走分詞器，`iW` 是 vim 那個
         // 「一串非空白」。從前兩個折成同一個，於是 `diW` 和 `diw` 一模一樣。
         'w' => crate::motion::Object::Word { coarse: false },
         'W' => crate::motion::Object::Word { coarse: true },

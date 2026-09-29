@@ -66,7 +66,7 @@ impl Side {
 /// 現在的模型一句話：**邊欄是容器，面板是內容。** 容器只由人開由人關，空了就空
 /// 着；內容一次一個。
 ///
-/// ⚠️ **「臨時」只剩一個屬性**：光標放上去的那幾種（[`Transient`]）在它成立的時候
+/// Warning: **「臨時」只剩一個屬性**：光標放上去的那幾種（[`Transient`]）在它成立的時候
 /// **頂掉**常駐的那一個，不成立了就自己下去——而常駐那一個**一直存着没動過**，所以
 /// 「有前任還給前任，没有就空着」是白拿的，不必記什麼。
 /// **A panel the cursor puts there**, if any — Feature #293.
@@ -79,14 +79,6 @@ pub enum Transient {
     Detail,
     /// What the 拆分表 knows about one character — Feature #215.
     Dictionary,
-    /// **What the language server says this name is** (`空格 K`, #53 ③).
-    ///
-    /// ⚠️ **Shares 字典's slot on purpose.** Both answer 「光標底下這個東西是什
-    /// 麽」—— one about a 字, one about a name —— and they can never both want
-    /// the slot: 2026-09-21 定的那條，「寫代碼的時候才需要 lsp 錯誤，寫普通文章
-    /// 才需要查字典。這兩個場景是很少耦合的」。A setting of its own would be a
-    /// knob nobody ever turns.
-    Hover,
 }
 
 impl Transient {
@@ -95,7 +87,7 @@ impl Transient {
     /// 一律停。2026-09-22 定的規矩只有一條：**浮窗不收鍵，邊欄裏的收**——而
     /// [`Transient`] 描述的就是「擺在邊欄裏的那一個」，所以三個都收。
     ///
-    /// ⚠️ 從前這裏是逐個東西定的（`Detail => false`），理由是詳情欄自己會跟着
+    /// Warning: 從前這裏是逐個東西定的（`Detail => false`），理由是詳情欄自己會跟着
     /// 光標滾、不必走。理由沒錯，可它是**多記一條例外**：新規矩買的正是「不必
     /// 逐個記」，留一個例外等於沒換（2026-09-23 審出來的，`development.md`
     /// §5.12.16 那張「從前／現在」表早就這麽寫了）。走得動不妨礙跟着滾——`C-w`
@@ -112,7 +104,7 @@ impl Transient {
     pub fn takes_keys(self) -> bool {
         match self {
             // 服務器說的話可以有十幾行，一份 28 欄的拆分表行更長——讀得到底纔算數。
-            Transient::Detail | Transient::Dictionary | Transient::Hover => true,
+            Transient::Detail | Transient::Dictionary => true,
         }
     }
 }
@@ -181,7 +173,7 @@ impl Panel {
 
     /// **What to call it, as a message tag rather than a word.**
     ///
-    /// ⚠️ Not a `&'static str` of Chinese like [`View::title`]: that one is a
+    /// Warning: Not a `&'static str` of Chinese like [`View::title`]: that one is a
     /// panel's own header, drawn as it is, while this one is dropped into
     /// sentences (`sidebar.moved`) — and a Chinese word in an English sentence
     /// is a sentence half translated.
@@ -216,11 +208,6 @@ impl From<Transient> for Panel {
     fn from(kind: Transient) -> Panel {
         match kind {
             Transient::Dictionary => Panel::Dictionary,
-            // ⚠️ **hover 2026-09-29 起有自己的位置了。** 從前它和字典共用
-            // `Panel::Dictionary`，於是一份代碼稿子的右欄底下躺着的是「百科」
-            // ——作者報的原話：「就算是定义是空的，也是个空的定义面板而不是空
-            // 的百科面板」。
-            Transient::Hover => Panel::Docs,
             Transient::Detail => Panel::Detail,
         }
     }
@@ -254,7 +241,7 @@ pub enum View {
     /// **語言服務器怎麼說光標底下這個名字**（2026-09-29）。
     ///
     /// `Wiki` 的代碼版，同一個形狀：常駐、跟着光標、開着的時候浮窗就不畫。
-    /// ⚠️ **一處不同：百科是拉的，文檔是推的。** 百科每一幀現算（純函數），
+    /// Warning: **一處不同：百科是拉的，文檔是推的。** 百科每一幀現算（純函數），
     /// 文檔要問服務器，一來一回，所以它多一道「光標停穩了纔問」的閘
     /// （`Editor::docs_follow`）。
     Docs,
@@ -277,19 +264,19 @@ impl View {
 ///
 /// `2/10 → 3/10 → 4/10 → 5/10`，`w` 按一下走一格，到頭回到 2/10。**出廠 3/10**。
 ///
-/// ⚠️ **同一個分母，次序纔一眼看得出來。** 這一檔的名字就是那個分數，寫在狀態欄
+/// Warning: **同一個分母，次序纔一眼看得出來。** 這一檔的名字就是那個分數，寫在狀態欄
 /// 上；`3/10 → 4/10` 是升一格，而 `3/10 → 2/5` 要心算。原話：「2/10, 3/10,
 /// 4/10, 5/10 比较好一些……这样感觉调节的范围更加广一些(20%-50%)」。
 ///
-/// ⚠️ **名字不寫「窄／中／綽／寬」**（同日定）。「綽」和「寬」是近義詞，狀態欄寫着
+/// Warning: **名字不寫「窄／中／綽／寬」**（同日定）。「綽」和「寬」是近義詞，狀態欄寫着
 /// 「邊欄：綽」的時候讀者看不出它比「寬」窄還是寬——他得記。分數自己排序，不用學
 /// 詞，而且直接說出會得到什麼；往後加一檔改一個數組就行。
 ///
-/// ⚠️ **寬度是側欄的屬性，不是面板的屬性**（原話）：「面板自身不能改变侧栏的
+/// Warning: **寬度是側欄的屬性，不是面板的屬性**（原話）：「面板自身不能改变侧栏的
 /// 宽度，它只是借用了侧栏这个容器」。所以這個檔位記在**那一側**上，換視圖不變、
 /// 關掉再開也不變——你把左欄調寬是因為你的屏幕寬，不是因為你在看文件樹。
 ///
-/// ⚠️ **檔位是意圖，寬度是結果。** 兩欄都開而窗口又小的時候，靠後那幾檔會被「正文
+/// Warning: **檔位是意圖，寬度是結果。** 兩欄都開而窗口又小的時候，靠後那幾檔會被「正文
 /// 保底」咬成一樣寬；那時檔位照走，窗口一拉大它就真的寬了。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Width(u8);
@@ -315,7 +302,7 @@ impl Width {
 
     /// 這一檔佔窗口幾欄。
     ///
-    /// ⚠️ **整數算，不用浮點**：一個寬度算出來差一格，畫面上就是一條縫。
+    /// Warning: **整數算，不用浮點**：一個寬度算出來差一格，畫面上就是一條縫。
     pub fn of(self, total: usize) -> usize {
         total * self.0 as usize / Width::DEN
     }
@@ -479,7 +466,7 @@ impl Sidebar {
     /// **這一格的主語**，接在框畫的標題後面——文件樹接的是它扎根的那個目錄
     /// （「文件樹  yumete」）。別的視圖沒有主語，回空。
     ///
-    /// ⚠️ **名字不在這裏**（2026-09-26 定，原話：「我希望你让这些面板都一致，不要
+    /// Warning: **名字不在這裏**（2026-09-26 定，原話：「我希望你让这些面板都一致，不要
     /// 搞特殊化」）：五扇面板的標題一律由 `sidebar_shell` 畫，源頭是 `Panel::tag()`
     /// 那一張表。從前這裏另有一張寫死的繁體短名表，於是同一扇面板有兩個名字，而
     /// 英文界面上這一行照樣是中文。

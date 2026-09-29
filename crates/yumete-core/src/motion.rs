@@ -320,7 +320,7 @@ pub fn next_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmente
 pub enum Span {
     /// The span a motion covers, both ends inclusive of `head`.
     Over { anchor: usize, head: usize },
-    /// The motion found nothing. ⚠️ **Not an empty span**: a verb must be able
+    /// The motion found nothing. Warning: **Not an empty span**: a verb must be able
     /// to tell 「nothing there」 from 「a span of one」 and do nothing at all —
     /// that distinction is what `wdiw` at the end of a buffer turned on.
     Missed,
@@ -349,7 +349,7 @@ pub enum Span {
 /// 西文裏「再選就只剩自己這一格」發生在空隙上；中文没有空隙，所以它發生在詞的
 /// 最後一個字上。同一條規則。
 ///
-/// ⚠️ **vim does not use this.** Its `w` is the bare primitive
+/// Warning: **vim does not use this.** Its `w` is the bare primitive
 /// ([`next_word_start`]): the caret goes there, and `dw` operates on
 /// `[pos, next_word_start)`. That is the whole of why the two feel different,
 /// and why a translation table could never say it.
@@ -359,7 +359,7 @@ pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter)
 
 /// **The forward rule itself**, over whatever unit `next` counts (B1).
 ///
-/// ⚠️ **It was written three times** — for words, for paragraphs (`}`) and for
+/// Warning: **It was written three times** — for words, for paragraphs (`}`) and for
 /// sentences (`L`) — three copies of the same nine lines. They are one rule,
 /// and [`word_forward`]'s doc comment is where it is spelled out: *a forward
 /// motion never hands back a span of just the cell you are already on.*
@@ -394,7 +394,7 @@ pub fn unit_back(rope: &Rope, from: usize, prev: impl Fn(&Rope, usize) -> usize)
 /// helix takes the whole of it as a selection, vim (B3) takes one end as a
 /// caret target or hands the whole of it to a waiting verb.
 ///
-/// ⚠️ **The grain rides along.** `w` and `W` are the same motion at two
+/// Warning: **The grain rides along.** `w` and `W` are the same motion at two
 /// grains — the dictionary's word, or a run between blanks — and `e`／`b` are
 /// deliberately [`Grain::Coarse`] in this editor (「`w` takes a word, `e`
 /// takes a clause」, #304). A key that spells out its grain is a key the
@@ -434,21 +434,21 @@ pub enum Motion {
     /// wants, and it exists because `dl`、`d3l`、`yl`、`c2h` are everyday vim
     /// and a table of motions without `h`/`l` simply drops them on the floor.
     ///
-    /// ⚠️ **Stopping at the line's ends is the whole of it.** vim's `l` will
+    /// Warning: **Stopping at the line's ends is the whole of it.** vim's `l` will
     /// not carry the caret onto the next line, so `dl` on the last character
     /// takes that character and not the newline — which is the difference
     /// between 「delete a letter」 and 「weld two lines together」.
     Char { forward: bool },
     /// `j` / `k` — **a line of the file**, which is what vim counts.
     ///
-    /// ⚠️ Only ever asked for by an operator (`dj`), and only linewise, so it
+    /// Warning: Only ever asked for by an operator (`dj`), and only linewise, so it
     /// answers with the *start* of that line: which column the caret would
     /// keep is the screen's question, and a verb that takes whole lines never
     /// asks it. The keys themselves still walk the screen's rows.
     Line { down: bool },
     /// `mi w`, `ma (` — and vim's `ciw`, `di(`, which press the same door.
     ///
-    /// ⚠️ **An object knows both its ends**, which is why it is not two
+    /// Warning: **An object knows both its ends**, which is why it is not two
     /// motions: `i(` is not 「forward to `)`」, it is 「the thing this caret is
     /// inside of」, and from anywhere in it the answer is the same.
     Object { what: Object, around: bool },
@@ -501,12 +501,12 @@ pub enum Object {
     /// A word — or, standing on blanks, that run of blanks (vim's rule, and
     /// the one that makes `wdiw` the handiest press in this editor).
     ///
-    /// ⚠️ **`coarse` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`／`b` 同一個
+    /// Warning: **`coarse` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`／`b` 同一個
     /// 答案；`iW` 一律粗粒度，也就是 vim 的「一串非空白」。從前這裏沒有這一格，`iw` 寫
     /// 死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w` 走三步。
     /// 一個編輯器對「詞」只能有一個答案。
     ///
-    /// ⚠️ 詞典關着的時候兩個一樣——`word_grain()` 那時本來就回 `Coarse`。
+    /// Warning: 詞典關着的時候兩個一樣——`word_grain()` 那時本來就回 `Coarse`。
     Word { coarse: bool },
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
@@ -515,28 +515,28 @@ pub enum Object {
     /// `**粗**`、`*斜*`、`~~刪~~`、`==標==`、`` `碼` ``、`[文字](地址)`、`[[雙鏈]]`、
     /// `%%批注%%`、腳註。`i` 取裏面的文字，`a` 連標記一起。套着的時候取最裏面那一層。
     ///
-    /// ⚠️ **一個鍵，不是一個標記一個鍵**（2026-09-28 定）。`**` `~~` `==` 是**兩個**
+    /// Warning: **一個鍵，不是一個標記一個鍵**（2026-09-28 定）。`**` `~~` `==` 是**兩個**
     /// 字符，寫不進 `Object::Pair` 那張一對一的表；而且這一族有九種，一種一個鍵就把
     /// `m` 那一層佔掉一半，而這個倉的規矩是「鍵位很貴」。`md`（去掉最裏面那一對括號）
     /// 早就是同一個思路。
     ///
-    /// ⚠️ **跟着語言走**：靠的是這個倉自己手寫的 Markdown 解析器（`crate::markdown`），
+    /// Warning: **跟着語言走**：靠的是這個倉自己手寫的 Markdown 解析器（`crate::markdown`），
     /// 不是 tree-sitter——tree-sitter 在這個倉裏只管代碼檔與代碼圍欄。`:syntax text`
     /// 的檔交空，Typst 交 Typst 自己那一份。
     Markup,
     /// **`mi s`／`ma s` — 光標所在的那一句**（2026-09-28）。
     ///
-    /// ⚠️ **這一條是這個編輯器該有而 helix 和 vim 都不太有的**：句在這裏本來就是一個
+    /// Warning: **這一條是這個編輯器該有而 helix 和 vim 都不太有的**：句在這裏本來就是一個
     /// 單位——`H`／`L` 按句走、`:view-sentence` 一句一縱、`:check-punct` 按句查——可是
     /// 「改寫這一句」從前做不到，只能 `H` 再 `L` 再猜邊界。邊界走的是
     /// [`sentence_starts`]，和那三處同一支：兩個答案就意味着光標停在版面不斷行的地方。
     ///
-    /// ⚠️ **`as` 在中文裏會退化成 `is`**，同 `aw`：它多取句末那一段空白，而中文句子之間
+    /// Warning: **`as` 在中文裏會退化成 `is`**，同 `aw`：它多取句末那一段空白，而中文句子之間
     /// 沒有空白。
     Sentence,
     /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
     ///
-    /// ⚠️ **Whole lines, not a run of characters**, which is what makes it an
+    /// Warning: **Whole lines, not a run of characters**, which is what makes it an
     /// object and not two `}` motions: from anywhere inside a paragraph the
     /// answer is the same block. `ap` takes the blank lines under it as well
     /// — vim's rule, and the one that makes `dap` remove a paragraph rather
@@ -547,7 +547,7 @@ pub enum Object {
 impl Span {
     /// Where the motion ended up — the caret reading of a span.
     ///
-    /// ⚠️ **`Missed` has no head.** The one thing a verb may not do with a
+    /// Warning: **`Missed` has no head.** The one thing a verb may not do with a
     /// motion that found nothing is act as though it landed somewhere.
     pub fn head(self) -> Option<usize> {
         match self {
@@ -560,7 +560,7 @@ impl Span {
 /// **`f` / `F`, as a span** (B1) — the character on this line, and nothing
 /// off it.
 ///
-/// ⚠️ **A line, not the buffer**: `f` that ran on would be a search, and this
+/// Warning: **A line, not the buffer**: `f` that ran on would be a search, and this
 /// editor has one (`/`). Not found is [`Span::Missed`] — the editor says so on
 /// the status line, which is its business and not this function's.
 pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char, till: bool) -> Span {
@@ -578,7 +578,7 @@ pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char, till: boo
     };
     let Some(at) = found else { return Span::Missed };
     let head = line_start + at;
-    // ⚠️ **`t` stops one short, and one short is a *grapheme*** — pulling the
+    // Warning: **`t` stops one short, and one short is a *grapheme*** — pulling the
     // index back by one would cut a 漢字 in half.
     let head = match (till, forward) {
         (false, _) => head,
@@ -590,7 +590,7 @@ pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char, till: boo
 
 /// **`e`, as a span** (B1) — and it sets **both** ends.
 ///
-/// ⚠️ `select_to` would leave the anchor where the caret was, so standing on a
+/// Warning: `select_to` would leave the anchor where the caret was, so standing on a
 /// word's last character gave 「that character ＋ the next word」, the
 /// punctuation between them riding along. The editor has set both ends since
 /// #304; this is that, as a value.
@@ -879,7 +879,7 @@ mod paragraph_and_sentence_tests {
     }
 }
 
-// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
 // 全綠。這一支從前擺在中間，後面壓着 223 行（2026-09-24 審出來的）。
@@ -970,7 +970,7 @@ mod tests {
         assert_eq!(over(&r, 5, Grain::Coarse), "beta ");
 
         // 中文没有空格，所以那個分界落在**詞的最後一個字**上。
-        // ⚠️ 用一個「兩字一詞」的替身詞典：`CategorySegmenter` 按字類切，
+        // Warning: 用一個「兩字一詞」的替身詞典：`CategorySegmenter` 按字類切，
         // 中文在它眼裏一個字就是一個詞，那樣測不出詞的邊界這回事。
         let two = TwoByTwo;
         let over2 = |r: &Rope, at: usize| match word_forward(r, at, Grain::Word, &two) {
@@ -1121,7 +1121,7 @@ mod tests {
         // Chars: f0 o1 o2 ' '3 你4 好5 ' '6 b7 a8 r9.
         assert_eq!(next_word_start(&r, 0, Grain::Word, &seg), 4); // → 你好
         assert_eq!(next_word_start(&r, 4, Grain::Word, &seg), 7); // → "bar" (skips 好)
-        // ⚠️ `e` does **not** consult the dictionary (#304): coarse, 你好 is
+        // Warning: `e` does **not** consult the dictionary (#304): coarse, 你好 is
         // one run of letters either way, and the caret on the space before it
         // takes the space with it.
         assert_eq!(next_word_end(&r, 3, Grain::Coarse, &seg), (3, 5));

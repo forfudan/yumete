@@ -40,7 +40,7 @@ pub enum Engagement {
 
 /// 作品百科 (#287) 的每一件事 —— **一件一個命令**。
 ///
-/// ⚠️ **從前它們是 `:wiki` 的參數**，而它們是動作不是取值（2026-09-25 定，原話：
+/// Warning: **從前它們是 `:wiki` 的參數**，而它們是動作不是取值（2026-09-25 定，原話：
 /// 「他們都是函數不是參數，所以應該用hyphen連結，比如 wiki-reload, wiki-panel
 /// on/off, wiki-edit」）。參數那個位子空出來給真正的參數：**詞條名**。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +50,7 @@ pub enum WikiCommand {
     Report,
     /// `:wiki <詞條名>` — **look an entry up by name** (2026-09-25).
     ///
-    /// ⚠️ **The name is an argument, and the settings are their own commands.**
+    /// Warning: **The name is an argument, and the settings are their own commands.**
     /// `:wiki edit` used to mean 「open the file」 and anything else meant
     /// 「reload」 — so `:wiki 朱宇浩` quietly re-read the wiki instead of
     /// answering. 原話：「他們都是函數不是參數，所以應該用hyphen連結」.
@@ -75,7 +75,7 @@ pub enum WikiCommand {
 /// shown by a colour, tuned by a level, mined out of the book itself, and read
 /// back as 口頭禪; those were `:words`, `:segment` and a config key nobody could
 /// see, and nothing said they were the same question.
-// ⚠️ **Not `Copy` since #452.** The scope a 認詞 reads is [`Where`], which
+// Warning: **Not `Copy` since #452.** The scope a 認詞 reads is [`Where`], which
 // carries a `PathBuf` in one of its arms — the same type `:search` uses, and
 // sharing it is the point: 「這一篇／這個文件夾／這個倉」 is one idea.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,7 +273,7 @@ pub enum Command {
     SetTableNumbers(bool),
     /// `:search` — open the search panel (#419).
     ///
-    /// ⚠️ **It takes no pattern, only a place.** What to look for is typed in
+    /// Warning: **It takes no pattern, only a place.** What to look for is typed in
     /// the panel's own box, so that `:search 卵` can mean 「the folder called
     /// 卵」 without anybody having to guess. `-cd` is this file's folder,
     /// `-wd` the one yumete was opened in, `-gd` the nearest git project —
@@ -490,7 +490,7 @@ pub enum Command {
     /// > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道
     /// > 他們都是幹啥的。
     ///
-    /// ⚠️ **不收參數。** 進去哪一組是用走的，不是用打的——一個命令記得住的是它
+    /// Warning: **不收參數。** 進去哪一組是用走的，不是用打的——一個命令記得住的是它
     /// 自己的名字，記不住八個組名。
     Settings,
     /// `:tutor` — a lesson, written into a file of the reader's own.
@@ -559,7 +559,7 @@ pub enum CommandError {
     },
     /// A subcommand written with a space where this tree uses a hyphen.
     ///
-    /// ⚠️ Only where obeying the typo would be **destructive**. `:write` takes
+    /// Warning: Only where obeying the typo would be **destructive**. `:write` takes
     /// a path, so `:write all` was a perfectly legal request to copy the
     /// manuscript into a file called `all` — and it did, silently, in the
     /// working directory, while the writer believed every buffer had been
@@ -1143,7 +1143,7 @@ fn read_params(
         }
         left = tail;
     }
-    // ⚠️ **Text nobody asked for is a typo, not a decoration.** Every regular
+    // Warning: **Text nobody asked for is a typo, not a decoration.** Every regular
     // command has read what it declared by now, and `rest` is read by nothing
     // in the tree — so anything still standing here was silently dropped.
     // `:word show off` printed the report and left the tinting on; `:buffer
@@ -1958,7 +1958,7 @@ const STROKES: &[Word] = &[
 /// dark` are both sentences — the theme's name is worth saying and worth
 /// leaving out, and neither should be a special case.
 const THEMES: &[Word] = &[
-    // ⚠️ **The three moods are not here** (#449). They were, because `:theme`
+    // Warning: **The three moods are not here** (#449). They were, because `:theme`
     // took them as well — and then 「主題」 meant both 「哪一套墨」 and
     // 「深還是淺」 on one menu. They live under `:theme-mode` now ([`MOODS`]).
     Word {
@@ -2187,7 +2187,7 @@ const WORD_LISTS: &[Word] = &[
 
 /// What `:wiki-mark` takes — **how** a wiki name is marked in the prose.
 ///
-/// ⚠️ **These are the only wiki words left, because they are the only ones
+/// Warning: **These are the only wiki words left, because they are the only ones
 /// that were ever values** (2026-09-25). `edit`, `panel` and `reload` are
 /// things to *do*, and they are now `:wiki-edit`, `:wiki-panel`, `:wiki-reload`.
 /// `hide` became `off`, so it reads as one family with `:wiki-panel on|off`.
@@ -2352,7 +2352,7 @@ const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "files", help: "label.panel.files", needs: &[] },
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
-    // ⚠️ **`search` 開得出來，從前卻不在這張表上**（2026-09-23 審出來的）。
+    // Warning: **`search` 開得出來，從前卻不在這張表上**（2026-09-23 審出來的）。
     // `named_panel` 走的是 `Panel::parse`，而 `Panel::ALL` 有七個——於是
     // `:sidebar-left search` 真的執行得了，命令選單卻從不列這個名字，而那條
     // 說明寫着「寫名字就開在那一格」。以 `Panel::ALL` 為準。
@@ -2437,7 +2437,7 @@ pub const COMMANDS: &[Entry] = &[
             // from the one command that most needs them (#225). With `all`
             // and `as` commands of their own, the ambiguity is gone and so is
             // the shape that carried it.
-            // ⚠️ `:write all` is not a path. `WRITE` lists the two words
+            // Warning: `:write all` is not a path. `WRITE` lists the two words
             // that became commands of their own, and a bare one of them here
             // used to be obeyed as a file name: a copy of the manuscript
             // appeared in the working directory under the name `all`, the
@@ -2491,7 +2491,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.reload",
         needs: &[],
-        // ⚠️ **`config` 掛在這裏而不是自成一條命令**（2026-09-23）。
+        // Warning: **`config` 掛在這裏而不是自成一條命令**（2026-09-23）。
         // `:` 那張菜單在 24 行的窗口下裝得下 54 格，而命令已經 54 條——加任何一
         // 個頂級名字都會把它擠出一屏（`the_command_menu_spreads_across_a_wide_
         // window` 當場紅給我看：「all 55 of them: 54 slots」）。**命令名和鍵位
@@ -2600,7 +2600,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "check-code",
-        // ⚠️ **別名會在 `:` 選單上自己佔一行。** `diagnostics` 當過別名，那張
+        // Warning: **別名會在 `:` 選單上自己佔一行。** `diagnostics` 當過別名，那張
         // 「一眼掃得完」的表當場從 54 漲到 55，一條滾出了窗口（#369）。要讓
         // vim／helix 那個詞找得到，靠 `find` 裏的關鍵詞就夠了，不花一行。
         aliases: &[],
@@ -2786,7 +2786,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.wiki",
         needs: &[],
-        // ⚠️ **自由文本，不是一張詞表**：這裏收的是詞條名，而詞條名是這本書自己
+        // Warning: **自由文本，不是一張詞表**：這裏收的是詞條名，而詞條名是這本書自己
         // 的話（「朱宇浩」「洞庭湖」），沒有哪張表列得完。
         params: &[Param::Free("<詞條名>")],
         build: Some(|p| {
@@ -2970,7 +2970,7 @@ pub const COMMANDS: &[Entry] = &[
             // unknown one is answered there, in a sentence, rather than refused
             // here.
             //
-            // ⚠️ **The mood is not here any more** (#449). `:theme light` used
+            // Warning: **The mood is not here any more** (#449). `:theme light` used
             // to work, and `:theme moxiang dark` too, which made 「主題」 mean
             // two things on one line: the inks, and which way round they go.
             // 「防止和其他的主题混淆」 — so the mood moved out to
@@ -3743,7 +3743,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "search",
         // **`:s` 開這扇面板**（2026-09-26 定的）。`s` 在 vi 裏是 substitute，而
         // 這扇面板正是 substitute 的大號——找與換在同一張表上。
-        // ⚠️ **`:s/找/換/` 還是 vi 那一行，不受影響**：`parse_substitution` 在命令
+        // Warning: **`:s/找/換/` 還是 vi 那一行，不受影響**：`parse_substitution` 在命令
         // 表之前就攔下了帶分隔符的那一種，而它明說「光禿禿的 `:s` 是別的命令」
         // （那支函數開頭那段註釋）。所以兩者分得清：帶斜杠是一次性替換，不帶是
         // 開面板。
@@ -3831,7 +3831,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.detail",
         needs: &[Need::Table],
-        // ⚠️ **`<寬>` 那個參數沒了**（2026-09-26）：寬度歸側欄，面板說不上話
+        // Warning: **`<寬>` 那個參數沒了**（2026-09-26）：寬度歸側欄，面板說不上話
         // （原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
         // 要寬要窄按 `w`，三檔。
         params: &[Param::Words { of: ON_OFF, default: None }],
@@ -4241,7 +4241,7 @@ pub const COMMANDS: &[Entry] = &[
 /// it was wrong for the four typed all day, whose short spellings are in every
 /// vi user's fingers. The long spellings still work and still say what they do
 /// — these are a second way in, not a rename back.
-// ⚠️ `search` was here (it pointed at `table-find`) and is gone from it:
+// Warning: `search` was here (it pointed at `table-find`) and is gone from it:
 // #419 gave the name to a live command, and a signpost may only point
 // *away* from a word nobody can type any more.
 const RENAMED: &[(&str, &str)] = &[
@@ -4298,10 +4298,10 @@ fn moved_to(word: &str) -> Option<String> {
     if found.is_empty() {
         found = under(|name, word| name.starts_with(word));
     }
-    // ⚠️ **同一個去處只說一遍**（2026-09-26 報的：`:s` 答的是
+    // Warning: **同一個去處只說一遍**（2026-09-26 報的：`:s` 答的是
     // 「你要的是 `:convert s` `:convert s`」）。`:convert` 的兩個位置參數用的是
     // 同一張詞表（`SIDES`，「從哪一種轉到哪一種」），於是 `s` 在同一條命令上命中
-    // 兩次。⚠️ **去重要在數數之前**：底下那個「超過三個就別猜了」數的是**幾個去
+    // 兩次。Warning: **去重要在數數之前**：底下那個「超過三個就別猜了」數的是**幾個去
     // 處**，不是幾次命中。
     found.dedup();
     if found.is_empty() || found.len() > 3 {
@@ -4722,7 +4722,7 @@ fn word_fits(words: &[(usize, &str)], w: &Word) -> bool {
     if entry_named(head).map(|e| e.name) != Some("convert") || words.len() != 2 {
         return true;
     }
-    // ⚠️ **第一個詞可能是簡寫。** 菜單自己印的就是簡寫（`:con h ` ＝
+    // Warning: **第一個詞可能是簡寫。** 菜單自己印的就是簡寫（`:con h ` ＝
     // `:convert hk `），所以這裏也得照 `shortest` 那條規矩按前綴認一次，
     // 認不出唯一的一個就全放行。
     let Some((_, said)) = words.get(1) else { return true };
@@ -5331,7 +5331,7 @@ mod tests {
             parse(":yume-panel off"),
             Ok(Command::YumePanel(Some("off".into())))
         );
-        // ⚠️ `:yume-p` 從 2026-09-27 起兩頭都認（`yume-panel`／`yume-preedit`），
+        // Warning: `:yume-p` 從 2026-09-27 起兩頭都認（`yume-panel`／`yume-preedit`），
         // 所以最短的寫法多了一個字母。前綴規矩沒變：認兩個就是誰都不認。
         assert_eq!(
             parse(":yume-pa f"),
@@ -5673,7 +5673,7 @@ mod tests {
     /// the picker having eaten `next`. The manual taught both spellings, which
     /// is how they got typed.
     ///
-    /// ⚠️ `:write all` is the one that wrote a file. `:write` takes a path, so
+    /// Warning: `:write all` is the one that wrote a file. `:write` takes a path, so
     /// `all` was a legal one: a copy of the manuscript appeared in the working
     /// directory called `all`, the status line said 「抄了一份到 all」, and
     /// every other modified buffer stayed unsaved.
@@ -5978,7 +5978,7 @@ mod tests {
 
         // An ambiguous prefix names nothing rather than guessing.
         assert_eq!(parse(":re"), Err(CommandError::Unknown("re".into())));
-        // ⚠️ **`s` 從歧義變成了一個聲明過的簡寫**（2026-09-26 定的）：光禿禿的
+        // Warning: **`s` 從歧義變成了一個聲明過的簡寫**（2026-09-26 定的）：光禿禿的
         // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`／`set`／`shot`… 中間，
         // 哪個都不算——而聲明出來的簡寫壓過前綴規則，同 `w` 之於 `write`。
         assert_eq!(parse(":s"), Ok(Command::OpenSearch(crate::search_panel::Where::Buffer)));
@@ -6361,7 +6361,7 @@ mod tests {
     #[test]
     fn reports_errors() {
         assert_eq!(parse(":"), Err(CommandError::Empty));
-        // ⚠️ **`:open` is not in this list any more** (2026-09-16): with no
+        // Warning: **`:open` is not in this list any more** (2026-09-16): with no
         // path it is the picker, not a missing argument. `:write-as` stands in
         // for the shape — a command that really does need one.
         assert_eq!(parse(":write-as"), Err(CommandError::MissingArgument("write-as")));
