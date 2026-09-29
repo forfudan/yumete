@@ -17648,19 +17648,19 @@ fn the_docs_command_makes_them_follow_the_cursor() {
 
     ed.execute(":docs on").unwrap();
     assert_eq!(ed.status(), "開啓及時文檔顯示");
-    assert!(ed.showing(View::Docs).is_some(), "跟着走就得有地方畫");
-    // Warning: **鍵不許跟過去**（報的原話：「用户希望焦点留在正文」）。
+    // Warning: **它不替人開一扇面板**（2026-09-29 作者第三次說這一句：「docs on
+    // 只是开启即时显示文档功能，并不是说要强行打开侧栏显示」）。畫在哪是另一條
+    // 軸——沒有邊欄就浮。
+    assert!(ed.showing(View::Docs).is_none(), "不開邊欄");
     assert!(!ed.sidebar_focused(), "焦點留在正文");
 
     // 光標停穩之前不問——按住 j 連走的時候一格都不問。
     assert_eq!(ed.docs_owed(), None, "剛動過，等它停穩");
     assert!(ed.docs_due_in().is_some(), "而且要給循環一個鬧鐘，不然它一睡不醒");
 
-    // Warning: 關了那一扇留着（它是常駐的，不隨光標一開一關）。
     ed.execute(":docs off").unwrap();
     assert_eq!(ed.status(), "關閉及時文檔顯示");
     assert_eq!(ed.docs_owed(), None, "關了就不問");
-    assert!(ed.showing(View::Docs).is_some(), "面板不跟着關");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -17827,18 +17827,21 @@ fn in_a_manuscript_those_two_keys_ask_the_wiki_instead() {
     assert!(!ed.sidebar_focused(), "鍵留在正文");
 }
 
-/// **關掉那一扇之後，`空格 k` 還浮得起來**（2026-09-29 報的）。
+/// **「什麽時候問」和「在哪裏顯示」是兩件事**（2026-09-29 作者第三次說這一句）。
 ///
-/// 原話：「我按 :docs，它打开了侧栏显示文檔，然后我 space 4 q 关闭侧栏，他就不再
-/// 显示浮窗了。」
+/// 原話：「docs on 只是开启即时显示文档功能，并不是说要强行打开侧栏显示。docs on
+/// 开启后，就算不开启侧栏，也会即时在浮窗显示文檔，不需要手动空格 k 触发。」
 ///
-/// Warning: **根子是一個看不見的面板把浮窗按住了。** 跟着光標走的那一問每三百毫秒
-/// 跑一次，每一次都把 `hover_afloat` 按成 `false`（答案是要進邊欄的）——而那一扇
-/// 已經關了，於是沒有地方畫，也浮不起來。
+/// 所以兩條軸各管各的，四個格子都要對：
+///
+/// | | 邊欄沒開 | 邊欄開着 |
+/// | --- | --- | --- |
+/// | `:docs off` | 按 `空格 k` 纔問，浮 | 按 `空格 k` 纔問，進邊欄 |
+/// | `:docs on` | **自己問**，浮 | **自己問**，進邊欄 |
 #[test]
-fn closing_the_docs_panel_lets_the_float_come_back() {
+fn asking_and_showing_are_two_separate_things() {
     use crate::sidebar::View;
-    let dir = std::env::temp_dir().join("yumete-docs-closed");
+    let dir = std::env::temp_dir().join("yumete-docs-two-axes");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
@@ -17846,25 +17849,46 @@ fn closing_the_docs_panel_lets_the_float_come_back() {
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
 
+    // Warning: **`:docs on` 不開邊欄。** 它只管「什麽時候問」。
     ed.execute(":docs on").unwrap();
-    assert!(ed.showing(View::Docs).is_some(), "那一扇開出來了");
+    assert!(ed.showing(View::Docs).is_none(), "它不該替人開一扇面板");
 
-    // 關掉它：`空格 4` 把鍵交過去，`q` 關。
+    // Warning: **等它停穩**——光標剛動過的時候去抖那一道本來就攔着，不等的話
+    // 下面幾條是假綠的。
+    std::thread::sleep(std::time::Duration::from_millis(320));
+
+    // 邊欄沒開：自己問，答案浮起來——不必按 `空格 k`。
+    assert!(ed.docs_owed().is_some(), "開着就自己問");
+    ed.show_hover("fn compile_the_table()".into());
+    assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "沒有邊欄就浮");
+
+    // 開一扇出來：同一個開關，答案改走邊欄。
+    // Warning: `:sidebar-*` 把鍵交給了那一扇，`l` 就不再挪正文的光標了——要先
+    // 把鍵拿回來，不然下面那一問看不出光標動過。
+    ed.execute(":sidebar-right docs").unwrap();
+    for _ in 0..4 {
+        if ed.panel_focus().is_none() {
+            break;
+        }
+        ed.on_key(Key::Ctrl('w'));
+    }
+    ed.on_key(Key::Char('l'));
+    std::thread::sleep(std::time::Duration::from_millis(320));
+    assert!(ed.docs_owed().is_some(), "照樣自己問");
+    ed.show_hover("fn compile_the_table()".into());
+    assert_eq!(ed.hover_afloat(), None, "有邊欄就不浮");
+    assert_eq!(ed.hover_in_the_sidebar(), Some("fn compile_the_table()"), "進邊欄");
+
+    // 再關掉它：回到浮窗，開關一個字都沒動。
     press(&mut ed, " 4");
     press(&mut ed, "q");
     assert!(ed.showing(View::Docs).is_none(), "關掉了");
-    assert!(ed.docs_follow(), "開關沒動——那一扇再開它自己接着跟");
-
-    // Warning: **等它停穩**——光標剛動過的時候 `docs_owed` 本來就回 `None`
-    // （去抖那一道），不等的話這一條是假綠的。
+    assert!(ed.docs_follow(), "開關沒動");
+    ed.on_key(Key::Char('l'));
     std::thread::sleep(std::time::Duration::from_millis(320));
-    // Warning: **關着的時候不許再問**，不然每一問都把浮窗按下去。
-    assert_eq!(ed.docs_owed(), None, "沒有地方畫就不問");
-
-    // 於是 `空格 k` 浮得起來。
-    press(&mut ed, " k");
+    assert!(ed.docs_owed().is_some(), "關了邊欄也照樣問");
     ed.show_hover("fn compile_the_table()".into());
-    assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "浮起來了");
+    assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "又浮回來了");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

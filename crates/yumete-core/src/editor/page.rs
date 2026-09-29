@@ -926,18 +926,16 @@ impl Editor {
     /// （[`Editor::docs_owed`]）。出廠**關**：問一次服務器不便宜。
     pub fn follow_with_docs(&mut self, on: bool) {
         self.docs_follow = on;
-        match on {
-            true => {
-                // 跟着走就得有地方畫，所以順手把那一扇開出來——鍵不交過去。
-                if self.showing(crate::sidebar::View::Docs).is_none() {
-                    let side = self.side_for(crate::sidebar::View::Docs);
-                    self.open_panel_without_the_keys(side, crate::sidebar::View::Docs);
-                }
-                self.docs_asked_at = None;
-                self.status = say!("lsp.docs-follow-on");
-            }
-            false => self.status = say!("lsp.docs-follow-off"),
-        }
+        // Warning: **它不開邊欄。** 「什麽時候問」和「在哪裏顯示」是兩件事
+        // （2026-09-29 作者第三次說這一句）：這一個只管前者，後者永遠是同一條規矩
+        // ——那一扇開着就畫進去，沒開就浮。開着它而不開邊欄，文檔就跟着光標浮。
+        self.docs_asked_at = None;
+        // 開的那一刻就起錶——不然第一問要等到光標動過一次纔算數。
+        self.docs_moved = on.then(std::time::Instant::now);
+        self.status = match on {
+            true => say!("lsp.docs-follow-on"),
+            false => say!("lsp.docs-follow-off"),
+        };
     }
 
     /// 文檔此刻跟不跟着光標走。
@@ -1055,16 +1053,7 @@ impl Editor {
     /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
     /// 清空，作者定的）。
     pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
-        // Warning: **那一扇關掉了就不再問**（2026-09-29 報的：`:docs` 之後
-        // `空格 4 q` 關掉邊欄，浮窗就再也不出來了）。
-        //
-        // 跟着光標走的意思是「把那一扇一直填着」——沒有那一扇就沒有要填的地方。
-        // 而它從前照樣每三百毫秒問一次，每一次都把 `hover_afloat` 按成 `false`
-        // （答案是要進邊欄的），於是 `空格 k` 問來的那一份也浮不起來：一個看不
-        // 見的面板把浮窗按住了。
-        //
-        // 開關不動：那一扇再開出來它自己就接着跟。
-        if !self.docs_follow || self.showing(crate::sidebar::View::Docs).is_none() {
+        if !self.docs_follow {
             return None;
         }
         let at = self.sel.head();
@@ -1083,7 +1072,12 @@ impl Editor {
             self.refresh_sidebar();
             return None;
         };
-        self.hover_afloat = false;
+        // Warning: **畫在哪，問的是同一條規矩**（2026-09-29 作者第三次說）：那一扇
+        // 開着就進邊欄，沒開就浮——和 `空格 k` 一個字不差。
+        //
+        // 從前這裏寫死 `false`（「跟着走的都進邊欄」），於是關掉那一扇之後這一問
+        // 每三百毫秒把浮窗按下去一次：一個看不見的面板把浮窗按住了。
+        self.hover_afloat = self.showing(crate::sidebar::View::Docs).is_none();
         Some(query)
     }
 
@@ -1115,9 +1109,14 @@ impl Editor {
         self.docs_follow.then(|| DOCS_SETTLE.saturating_sub(moved.elapsed()))
     }
 
-    /// 光標動了——跟着走的那一問要重新等它停穩。
+    /// 按了一個鍵——跟着走的那一問要重新等它停穩。
+    ///
+    /// Warning: **不問光標動沒動**（2026-09-29 修）。這一支跑在派鍵**之前**，那時
+    /// 光標還沒挪——拿「動沒動」當條件，答完一次之後的下一鍵就重新起不了錶，於是
+    /// 那一問要等到再下一鍵纔算數。按住 `j` 連走照樣一格都不問：攔住它的是
+    /// `docs_asked_at`（同一格不重複問）和這隻錶本身。
     pub(super) fn the_cursor_moved_under_the_docs(&mut self) {
-        if self.docs_follow && self.docs_asked_at != Some(self.sel.head()) {
+        if self.docs_follow {
             self.docs_moved = Some(std::time::Instant::now());
         }
     }
