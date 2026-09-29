@@ -367,17 +367,57 @@ impl Servers {
         server.say(lsp::definition(id, &path, line, column));
     }
 
+    /// **為什麽這一問發不出去**，`None` ＝ 發得出去（2026-09-29）。
+    ///
+    /// 五種，一種一句話。判準就是啓動那條路上的五道閘（見 [`Servers::follow`]），
+    /// 按同樣的次序問一遍——所以屏幕上說的和真正卡住的地方一定是同一處。
+    fn why_it_cannot_ask(
+        &self,
+        editor: &Editor,
+        config: &yumete_config::Config,
+        language: &str,
+    ) -> Option<String> {
+        // 一、設置裏這個語言根本沒寫服務器。
+        let Some(wanted) = config.lsp.get(language).filter(|v| !v.is_empty()) else {
+            return Some(say!("lsp.no-server-configured", language));
+        };
+        // 二、寫了，可這臺機器上一個都找不到。說出它找的是哪一個。
+        if Self::named(config, language).is_none() {
+            let named = wanted.iter().map(|s| s.command.as_str()).find(|c| !c.is_empty());
+            return Some(say!("lsp.not-installed", named.unwrap_or(language)));
+        }
+        // 三、稿子還沒存盤——服務器答的是檔案，沒有路徑就沒得問。
+        if editor.current_buffer().path().is_none() {
+            return Some(say!("lsp.buffer-unsaved"));
+        }
+        // 四、試過了，起不來，此後不再試（`failed`）。
+        if self.failed.contains(language) {
+            return Some(say!("lsp.start-failed"));
+        }
+        // 五、正在起，或者剛握上手還沒說 ready。
+        match self.running.get(language) {
+            Some(server) if server.ready => None,
+            _ => Some(say!("lsp.starting")),
+        }
+    }
+
     /// **Send the 「what is this?」 question** (`空格 k`, #53 ③).
     ///
     /// The same shape as [`Self::ask`], and for the same reasons — a request
     /// wants an answer, and only this side knows which id it sent for what.
     pub fn ask_what(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let _ = config;
         let Some(language) = Self::language_of(editor) else { return };
-        if !self.running.contains_key(language) {
-            // 服務器没起來，就照實說——而不是讓那句問話一直掛着。
+        // **問不出去的話，說清楚是哪一種問不出去**（2026-09-29 報的：「这句话的
+        // 意思是服务器没有开启，还是服务器开启了但是没有找到相关文档？」）。
+        //
+        // Warning: **從前這五種只有一句話**：`no_hover()` 的「服務器對這個沒什麽
+        // 可說的」。那句話字面的意思是「它答了，說沒有」，而服務器根本沒起來的
+        // 時候說的也是它——隔壁註釋還寫着「照實說」。作者原話：「现在太含混了。」
+        if let Some(word) = self.why_it_cannot_ask(editor, config, language) {
+            // Warning: **只有人按了鍵纔說**。跟着光標走的那一問（`:docs on`）是編
+            // 輯器自己發的，每走到一個標點就罵一句不是人要的。
             if editor.take_hover_query().is_some() {
-                editor.no_hover();
+                self.says = Some(word);
             }
             return;
         }
@@ -825,6 +865,67 @@ mod tests {
         servers.follow(&editor, &config);
         servers.follow(&editor, &config);
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didChange");
+    }
+
+    /// **問不出去的五種，一種一句話**（2026-09-29 報的：「这句话的意思是服务器
+    /// 没有开启，还是服务器开启了但是没有找到相关文档？」）。
+    ///
+    /// Warning: **從前這五種只有一句話。** `no_hover()` 的「服務器對這個沒什麽可
+    /// 說的」字面上是「它答了，說沒有」，而服務器根本沒起來的時候說的也是它。
+    #[test]
+    fn a_question_that_cannot_be_asked_says_which_of_the_five_it_is() {
+        let none = yumete_config::Config::default();
+        let stocked =
+            yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+        let (editor, _path) = editor_on("c.rs", "fn main() {}\n");
+
+        // 一、設置裏這個語言根本沒寫服務器。
+        let bare = Servers::default();
+        assert_eq!(
+            bare.why_it_cannot_ask(&editor, &none, "rust"),
+            Some(say!("lsp.no-server-configured", "rust")),
+        );
+
+        // 二、寫了，可這臺機器上一個都找不到。說的是它找的那個名字。
+        let missing = yumete_config::Config {
+            lsp: std::iter::once((
+                "rust".to_string(),
+                vec![yumete_config::Server {
+                    command: "no-such-analyzer".into(),
+                    ..Default::default()
+                }],
+            ))
+            .collect(),
+            ..Default::default()
+        };
+        assert_eq!(
+            bare.why_it_cannot_ask(&editor, &missing, "rust"),
+            Some(say!("lsp.not-installed", "no-such-analyzer")),
+        );
+
+        // 三、稿子還沒存盤——服務器答的是檔案。
+        let (fresh, _heard, _tell) = Servers::pretend("rust");
+        let blank = Editor::new();
+        assert_eq!(
+            fresh.why_it_cannot_ask(&blank, &stocked, "rust"),
+            Some(say!("lsp.buffer-unsaved")),
+        );
+
+        // 四、試過了，起不來，此後不再試。
+        let mut written_off = Servers::default();
+        written_off.failed.insert("rust".to_string());
+        if yumete_config::factory_servers().contains_key("rust") {
+            let told = written_off.why_it_cannot_ask(&editor, &stocked, "rust");
+            // 這臺機器上那個命令可能真的不在，那時二先答——兩句都對，不是這一條要釘的。
+            assert!(
+                told == Some(say!("lsp.start-failed")) || matches!(&told, Some(t) if t.contains("找不到")),
+                "{told:?}"
+            );
+        }
+
+        // 五、起來了、也 ready 了：問得出去，不說話。
+        let (ready, _heard, _tell) = Servers::pretend("rust");
+        assert_eq!(ready.why_it_cannot_ask(&editor, &stocked, "rust"), None, "問得出去");
     }
 
     /// Warning: **Prose has no language server here.** Markdown has one in the

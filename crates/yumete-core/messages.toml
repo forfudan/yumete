@@ -6377,6 +6377,13 @@ zhs = "查询文档中……"
 en = "asking for the docs…"
 
 [[message]]
+# 按 空格 k 的時候：稿子還沒存盤，服務器答的是檔案（2026-09-29 作者寫的）
+key = "lsp.buffer-unsaved"
+zht = "本緩衝區未保存，故而未綁定語言服務器"
+zhs = "本缓冲区未保存，故而未绑定语言服务器"
+en = "this buffer has no file yet, so no language server is watching it"
+
+[[message]]
 # 語言服務器起不來（機器上沒裝）——只說一次
 key = "lsp.cannot-start"
 zht = "{0} 起不來（{1}）——檔照常開，只是沒人查錯"
@@ -6405,11 +6412,25 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
+# 按 空格 k 的時候：這個語言在設置裏根本沒寫服務器（2026-09-29 作者寫的）
+key = "lsp.no-server-configured"
+zht = "未爲{0}文件指定語言服務器，請在設置中填寫"
+zhs = "未为{0}文件指定语言服务器，请在设置中填写"
+en = "no language server configured for {0} — set one in :settings"
+
+[[message]]
 # 空格 k 按在稿子上——那裏沒有語言服務器
 key = "lsp.not-code"
 zht = "這不是程序文件，沒有服務器可問"
 zhs = "这不是程序文件，没有服务器可问"
 en = "not a program file — no server to ask"
+
+[[message]]
+# 按 空格 k 的時候：設置裏寫了，可這臺機器上沒有那個程序（2026-09-29 作者寫的）
+key = "lsp.not-installed"
+zht = "找不到 {0}，請在設置中檢查拼寫或確保其已經安裝"
+zhs = "找不到 {0}，请在设置中检查拼写或确保其已经安装"
+en = "{0} is not on this machine — check the spelling in :settings, or install it"
 
 [[message]]
 # 服務器提不出任何候選
@@ -6438,6 +6459,20 @@ key = "lsp.speechless"
 zht = "服務器對這個沒什麽可說的"
 zhs = "服务器对这个没什么可说的"
 en = "the server has nothing to say about this"
+
+[[message]]
+# 按 空格 k 的時候：試過了，起不來，此後不再試（2026-09-29 作者寫的）
+key = "lsp.start-failed"
+zht = "語言服務器開啓失敗"
+zhs = "语言服务器开启失败"
+en = "the language server could not be started"
+
+[[message]]
+# 按 空格 k 的時候：服務器正在起（2026-09-29 作者寫的）
+key = "lsp.starting"
+zht = "語言服務器開啓中……"
+zhs = "语言服务器开启中……"
+en = "the language server is starting…"
 
 [[message]]
 # 語言服務器死了
