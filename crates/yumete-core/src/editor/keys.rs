@@ -886,10 +886,10 @@ impl Editor {
                     Key::Char('y') | Key::Enter => self.replace_what_was_asked(),
                     // Anything else is no. A question about a hundred files
                     // answers 「no」 to a key nobody meant.
-                    _ => {
-                        self.forget_the_file_it_asked_about();
-                        self.status = say!("search.replace-all-no");
-                    }
+                    //
+                    // ⚠️ **取消之後屏幕不說話**（2026-09-29 定）。問句本來就寫着
+                    // 「取消」，按下去問句就沒了——那已經是答覆。
+                    _ => self.forget_the_file_it_asked_about(),
                 }
                 return;
             }

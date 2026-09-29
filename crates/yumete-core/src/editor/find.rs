@@ -728,13 +728,13 @@ impl Editor {
             // **`r` and `R` change things**, and only while the replace row
             // is showing — `:search` is for looking, `:replace` for changing,
             // and the panel says which it is.
-            // ⚠️ **站錯地方要出聲**（2026-09-25 報的：「替换模式下如何替换？快捷鍵
-            // 是什麼？」）。`r` 換的是「這一處」，所以它要有一個「這一處」——可
-            // 從前站在框上按它是**靜悄悄什麼都不發生**，而一個按了沒反應的鍵，
-            // 讀者只會以為自己記錯了鍵。
-            Key::Char('r') if self.search.replacing && self.search.field != Field::Results => {
-                self.status = say!("search.stand-on-a-hit");
-            }
+            // ⚠️ **站錯地方一聲不吭**（2026-09-29 定，原話：「光标不在结果上，
+            // 不应该显示『r ....』的提示。因此如果用户按了 r，也不需要任何提示」）。
+            //
+            // 2026-09-25 那一輪是反過來的：站在框上按 `r` 要出一句「先 j 走到一
+            // 條命中上」，理由是「按了沒反應的鍵讀者會以為自己記錯了」。⚠️ **那
+            // 條理由的前提是提示行上寫着 `r`** ——現在不寫了（見 `hint.rs`），
+            // 於是它就是一個沒綁的鍵，和別的沒綁的鍵一樣不必解釋。
             Key::Char('r') if self.search.replacing && self.search.field == Field::Results => {
                 match self.search.row() {
                     // ⚠️ **整個檔也要先問一句**（2026-09-27 三個試用的人都指出
@@ -778,7 +778,13 @@ impl Editor {
                 }
                 self.after_replacing_undone(back);
             }
-            Key::Char('R') if self.search.replacing => {
+            // ⚠️ **`R` 也只在名單那一邊活着**（2026-09-29 定，同 `r`）。提示行
+            // 上不寫它的時候，它就是一個沒綁的鍵；名單空着也一樣。
+            Key::Char('R')
+                if self.search.replacing
+                    && self.search.field == Field::Results
+                    && !self.search.hits.is_empty() =>
+            {
                 // **問句要說清楚動的是幾個檔**（2026-09-27 報的）：工作區範圍下
                 // 那 8 處散在 4 個檔裏，而從前這句話和只改一個檔的時候一字不差。
                 let mut files: Vec<&Option<PathBuf>> = Vec::new();
@@ -1507,10 +1513,11 @@ impl Editor {
         }
         // Stay where the eye was, or at the end if the list got shorter.
         self.search.selected = where_.min(self.search.rows().len().saturating_sub(1));
-        self.status = match done {
-            0 => say!("search.replaced-none"),
-            n => say!("search.replaced", n),
-        };
+        // ⚠️ **一處都沒換就不說話**（2026-09-29）：`R` 只在名單上有東西的時候
+        // 纔畫得出來，所以 `done == 0` 是走不到的；真走到了也不必解釋。
+        if done > 0 {
+            self.status = say!("search.replaced", done);
+        }
     }
 
     /// **站到某一格上，站到的要是結果名單就順手看一眼。**

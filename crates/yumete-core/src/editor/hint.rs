@@ -71,14 +71,10 @@ impl Editor {
             // 報的：「替换模式下如何替换？快捷鍵是什麼？如何全部替换？」）。
             // 從前 `r R` 只在鍵已經回到面板之後纔出現在提示行上，而人還在框裏
             // 打「換成什麼」的時候，正是他要問這句話的時候。
-            let out = match self.search().replacing {
-                true => say!("hint.search.out-then-replace"),
-                false => say!("hint.search.out-of-the-box"),
-            };
             return Hint::Keys(say!("label.panel.search"), vec![
                     ("Enter".into(), say!("hint.search.go-look")),
                     ("↑ ↓".into(), say!("hint.search.next-cell")),
-                    ("Esc".into(), out),
+                    ("Esc".into(), say!("hint.search.out-of-the-box")),
                 ]);
         }
         // ⚠️ **這一行不再拿來預覽了**（2026-09-27 定，原話：「命令行现在不显示
@@ -97,22 +93,32 @@ impl Editor {
                 // 是 `u 撤回`——一個是最不常用的，一個是按錯之後唯一的退路。英文
                 // 界面下整行要 170 欄纔寫得完，所以尾巴一定會被砍掉。
                 let mut keys: KeyRows = Vec::new();
-                // **會改稿子的那三個排最前。** 它們只在替換那一檔活着，而它們是
-                // 這扇面板裏唯一沒有別處可學的鍵。
-                if self.search().replacing {
+                // **改稿子的那兩個排最前，而且只在用得上的時候纔畫**
+                // （2026-09-29 定，原話：「光标不在结果上，不应该显示『r ....』
+                // 的提示。因此如果用户按了 r，也不需要任何提示」，`R` 同）。
+                //
+                // ⚠️ 從前它們跟着「勾了替換」一起出現，於是站在搜索框上也寫着
+                // `r 換這一處`——按下去只換來一句解釋為什麽沒反應。鍵不在那裏
+                // 的時候就別說它在。
+                //
+                // ⚠️ **`u 撤銷` 一個字都不寫**（同日定：「理論上用戶是知道 u 是
+                // 撤銷的……這個功能應該是常駐功能」）。這一行是硬砍的，常駐的鍵
+                // 佔着一格就是把別的擠出畫面。
+                if self.search().replacing && self.search().field == crate::search_panel::Field::Results {
                     // ⚠️ **`r` 說的是站着的這一行**：檔名那一行上它換整個檔，
-                    // 命中那一行上它換那一處。一句話寫兩種意思的時候（「換這處
-                    // （站在檔名上就是整個檔）」），這一行就長到把後面的 `q` 擠
-                    // 出畫面——而讀者站在哪一行，編輯器自己看得見。
-                    let here = match self.search().row() {
+                    // 命中那一行上它換那一處。讀者站在哪一行，編輯器自己看得見。
+                    match self.search().row() {
                         Some(crate::search_panel::Row::File { .. }) => {
-                            say!("hint.search.replace-file")
+                            keys.push(("r".into(), say!("hint.search.replace-file")));
                         }
-                        _ => say!("hint.search.replace-here"),
-                    };
-                    keys.push(("r".into(), here));
-                    keys.push(("R".into(), say!("hint.search.replace-all")));
-                    keys.push(("u".into(), say!("hint.search.undo")));
+                        Some(crate::search_panel::Row::Hit(_)) => {
+                            keys.push(("r".into(), say!("hint.search.replace-here")));
+                        }
+                        None => {}
+                    }
+                    if !self.search().hits.is_empty() {
+                        keys.push(("R".into(), say!("hint.search.replace-all")));
+                    }
                 }
                 // The five switches are pressed by number and walked past
                 // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
@@ -123,8 +129,15 @@ impl Editor {
                 keys.push(("/".into(), say!("hint.search.new-word")));
                 // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
                 // 都不管用，而這一行擠不下說了也用不上的東西。
+                //
+                // 四對，大小寫並排（2026-09-29 定的寫法：「dD 删除 cC 修改
+                // aA 追加 iI 插入」）。大寫那一半管到末尾／管到框首框尾，小寫
+                // 管光標底下那一個字。
                 if self.search().takes_text() {
-                    keys.push(("d c a".into(), say!("hint.search.edit-in-place")));
+                    keys.push(("dD".into(), say!("hint.search.box-delete")));
+                    keys.push(("cC".into(), say!("hint.search.box-change")));
+                    keys.push(("aA".into(), say!("hint.search.box-append")));
+                    keys.push(("iI".into(), say!("hint.search.box-insert")));
                 }
                 let title = match self.search().replacing {
                     true => say!("label.panel.replace"),
