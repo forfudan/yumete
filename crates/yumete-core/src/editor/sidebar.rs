@@ -367,10 +367,20 @@ impl Editor {
     pub(super) fn fit_the_panels_to_the_file(&mut self) {
         for side in crate::sidebar::Side::BOTH {
             let Some(here) = self.panel(side).map(|p| p.view()) else { continue };
-            let fits = self.view_that_fits(here);
-            if fits != here {
+            let mut want = self.view_that_fits(here);
+            // **那一格跟着「此刻該擺哪一種」走**（2026-09-29 報的第三次）。
+            //
+            // Warning: 撥了 `:docs on` 之後那一格還擺着診斷，於是文檔找不到地方、
+            // 浮了一個——而地方就在眼前。這一支是「把面板擺成該有的樣子」的那一
+            // 趟，兩件事（換稿子、換內容）都該在這裏辦。
+            if matches!(want, crate::sidebar::View::Docs | crate::sidebar::View::Problems) {
+                if let Some(should) = self.what_this_spot_should_show() {
+                    want = should;
+                }
+            }
+            if want != here {
                 if let Some(panel) = self.panel_mut(side) {
-                    panel.show(fits);
+                    panel.show(want);
                 }
             }
         }
