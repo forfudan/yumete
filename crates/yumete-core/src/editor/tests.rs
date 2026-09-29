@@ -15925,7 +15925,7 @@ three
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// `:check-code` — 語言服務器說過的話，排成一張 `gf` 走得動的單子（#53／#54）。
+/// `:diagnostics-all` — 語言服務器說過的話，排成一張 `gf` 走得動的單子（#53／#54）。
 ///
 /// Warning: **列的是每一個檔，不是手上這一個。** 一個服務器看的是整個 crate，報回來
 /// 的多半是還没打開的那幾個檔——只列當前緩衝區，等於把「翻頁翻不到的那些錯」藏
@@ -15944,7 +15944,7 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
 
     // 一句話都没有的時候，說的是「還没人說過話」——不是「乾淨」。這一步裏還分
     // 不出這兩件事（服務器根本没接上），所以只敢說前一句。
-    ed.execute(":check-code").unwrap();
+    ed.execute(":diagnostics-all").unwrap();
     assert!(ed.status().contains("還没") || ed.status().contains("还没"), "{}", ed.status());
 
     ed.set_problems(
@@ -15958,7 +15958,7 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
             said(1, Severity::Note, "…and here"),
         ],
     );
-    ed.execute(":check-code").unwrap();
+    ed.execute(":diagnostics-all").unwrap();
     let listing = ed.current_buffer().text();
     let lines: Vec<&str> = listing.lines().collect();
     assert_eq!(lines.len(), 3, "兩個檔三句話：{listing}");
@@ -15970,7 +15970,7 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
 
     // 服務器改口說某個檔乾淨了，那個檔就整個離開單子。
     ed.set_problems(std::path::PathBuf::from("src/app.rs"), Vec::new());
-    ed.execute(":check-code").unwrap();
+    ed.execute(":diagnostics-all").unwrap();
     let listing = ed.current_buffer().text();
     assert_eq!(listing.lines().count(), 1, "只剩 zoo：{listing}");
     assert!(listing.contains("src/zoo.rs:9:"), "{listing}");

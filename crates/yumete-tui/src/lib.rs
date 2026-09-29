@@ -5567,19 +5567,30 @@ fn draw_note(
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             scroll: 0,
-            title: match severity {
-                Severity::Error => say!("problem.error"),
-                Severity::Warn => say!("problem.warn"),
-                Severity::Note => say!("problem.note"),
-                Severity::Hint => say!("problem.hint"),
-            },
+            // Warning: **標題是那一扇面板的名字，不是響度**（2026-09-29 報的）。
+            // 浮着和進邊欄是同一件東西的兩個去處，不該有兩個名字——響度改寫在
+            // 每一句前頭，和邊欄裏那幾行逐字相同。
+            title: yumete_core::messages::say(Panel::Problems.tag(), &[]),
             lede: None,
             entry: false,
             // Warning: **An empty line between them, not a bullet.** Two complaints
             // on one line are two sentences, and a compiler's sentences are
             // long enough to wrap — a marker in front of each would be read as
             // part of the first line of each.
-            body: panel::Body::Prose(said.join("\n\n")),
+            body: panel::Body::Prose(
+                said.iter()
+                    .map(|one| {
+                        let loud = match severity {
+                            Severity::Error => say!("problem.error"),
+                            Severity::Warn => say!("problem.warn"),
+                            Severity::Note => say!("problem.note"),
+                            Severity::Hint => say!("problem.hint"),
+                        };
+                        format!("{loud}　{one}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+            ),
             tag: Some(say!("problem.whole-list")),
             marked: false,
             vertical_text: vertical,

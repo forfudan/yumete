@@ -1920,11 +1920,11 @@ pub struct Editor {
     /// **浮着的那一則從第幾行畫起**（2026-09-29）——`PageUp`／`PageDown`／
     /// `C-u`／`C-d` 翻它，同 helix（`ui/popup.rs`：那四個鍵滾浮窗，別的鍵關掉）。
     hover_scroll: usize,
-    /// **`:check-code` 頂上那一行**：哪個語言服務器、在哪、什麽狀態。
+    /// **`:diagnostics-all` 頂上那一行**：哪個語言服務器、在哪、什麽狀態。
     ///
     /// Warning: **前端寫進來的**——`Servers` 住在那一側，核心看不見它。同 `says`
     /// 那一條的理由。空着就是「還沒有服務器接上」，而那與「接上了、一句話都沒說」
-    /// 是兩回事，`:check-code` 分得出來纔說得清。
+    /// 是兩回事，`:diagnostics-all` 分得出來纔說得清。
     server_line: Option<String>,
     /// **這一次的 hover 是浮窗，還是邊欄裏的一頁**（2026-09-22）。
     ///

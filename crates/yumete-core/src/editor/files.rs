@@ -532,7 +532,7 @@ impl Editor {
     ///
     /// The language server does: it keeps analysing a file it was told about
     /// and keeps pushing diagnostics for it, and `Problems` are kept by path —
-    /// so `:check-code` goes on listing a file that was closed an hour ago.
+    /// so `:diagnostics-all` goes on listing a file that was closed an hour ago.
     /// `textDocument/didClose` is what ends that, and this is how the front
     /// end works out which one to send it for. 2026-09-23 補。
     pub fn buffer_paths(&self) -> Vec<PathBuf> {

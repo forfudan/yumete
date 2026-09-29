@@ -321,7 +321,7 @@ impl Editor {
         };
     }
 
-    /// `:check-code` — everything the language servers have said (#53／#54).
+    /// `:diagnostics-all` — everything the language servers have said (#53／#54).
     ///
     /// **The sixth member of a family of five**, and it earns the shape without
     /// doing any of the work: the other five walk the document and find things
@@ -466,7 +466,7 @@ impl Editor {
     /// rather than to the file the reader was looking at.
     ///
     /// Every other listing is about one manuscript, so 「the directory that
-    /// file is in」 is the right root. `:check-code` is about a whole crate,
+    /// file is in」 is the right root. `:diagnostics-all` is about a whole crate,
     /// and a server names files three directories away — so the root is the
     /// project's, and `gf` has to be told that or it looks in the wrong place.
     pub(super) fn show_listing_under(&mut self, listing: String, name: String, root: PathBuf) {
