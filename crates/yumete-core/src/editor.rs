@@ -1913,6 +1913,12 @@ pub struct Editor {
     problems_follow: bool,
     /// 按 `空格 i` 叫出來的那一次，光標當時在哪——它一走那一則就沒。
     problem_asked: Option<usize>,
+    /// **右邊那一格此刻該擺哪一種**——`空格 k` 選文檔，`空格 i` 選診斷。
+    ///
+    /// `None` ＝ 沒人選過，那就看哪個即時開關開着（兩個都關就沒有內容）。
+    /// Warning: 文檔與診斷**不是兩扇面板，是一格的兩種內容**——作者說的：「它就是
+    /// 诊断/文檔二选一呀」。所以它們不會並存，`Tab` 也不在它們之間轉。
+    spot_chosen: Option<crate::sidebar::View>,
     /// 跟着走的時候，上一次問的是哪一格——同一格不重複問。
     docs_asked_at: Option<usize>,
     /// 光標最後一次動是什麽時候，跟着走的那一問等它停穩（`DOCS_SETTLE`）。
@@ -2784,6 +2790,7 @@ impl Editor {
             docs_follow: false,
             problems_follow: true,
             problem_asked: None,
+            spot_chosen: None,
             docs_asked_at: None,
             docs_moved: None,
             hover_scroll: 0,
