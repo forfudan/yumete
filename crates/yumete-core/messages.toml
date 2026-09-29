@@ -6470,9 +6470,9 @@ en = "ready"
 [[message]]
 # 服務器對光標下那個東西無話可說
 key = "lsp.speechless"
-zht = "服務器對這個沒什麽可說的"
-zhs = "服务器对这个没什么可说的"
-en = "the server has nothing to say about this"
+zht = "此處未找到相關文檔"
+zhs = "此处未找到相关文档"
+en = "no documentation here"
 
 [[message]]
 # 按 空格 k 的時候：試過了，起不來，此後不再試（2026-09-29 作者寫的）

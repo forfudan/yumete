@@ -1795,13 +1795,24 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // 五個（`languages.toml`：`["ty", "ruff", "jedi", "pylsp", "zuban"]`），
         // 而且每一個的命令都不一樣。填一個等於替人在五個裏猜一個，猜錯了他每次
         // 打開 `.py` 都吃一句「起不來」。
+        //
+        // Warning: **能講文檔的排前面，`ruff` 墊底**（2026-09-29 當天量出來的）。
+        // 這張表原樣抄的 helix，而 helix 那個次序裏 `ruff` 在第二個——⚠️ **它問符
+        // 號一律回 `null`**：`initialize` 的 capabilities 裏明明寫着
+        // `hoverProvider: true`，可它的 hover 只解釋自己的規則碼（`# noqa: E501`
+        // 那種），它是 linter 不是類型檢查器。作者的 pixi 環境裏 `ruff` 和 `pylsp`
+        // 都在，於是挑中了前者，按 `空格 k` 得到「此處未找到相關文檔」——那句話
+        // 字面上是對的，錯的是名單的次序。
+        //
+        // Warning: **這只是繞開，不是答案。** 真正的答案是一個語言跑多個服務器
+        // （#425）：ruff 的 lint 和 pylsp 的文檔本來就該同時有。
         (
             "python".to_string(),
             vec![
                 one("ty", &["server"]),
-                one("ruff", &["server"]),
                 one("pylsp", &[]),
                 one("jedi-language-server", &[]),
+                one("ruff", &["server"]),
             ],
         ),
     ])
@@ -3390,9 +3401,15 @@ mod runner_tests {
         assert_eq!(named(&bare, "go"), ["gopls"]);
         // Warning: **python 是一串**：它没有那個顯然的答案（helix 列了五個），填一個
         // 等於替人在五個裏猜一個。
-        assert_eq!(named(&bare, "python"), ["ty", "ruff", "pylsp", "jedi-language-server"]);
+        //
+        // Warning: **次序是有意的：能講文檔的在前，`ruff` 墊底**（2026-09-29 量出
+        // 來的）。ruff 問符號一律回 `null`——它聲稱 `hoverProvider: true`，可它的
+        // hover 只解釋自己的規則碼。抄 helix 那個次序時它排第二，於是同時裝了
+        // ruff 和 pylsp 的機器挑中前者，按 `空格 k` 什麽都看不到。
+        assert_eq!(named(&bare, "python"), ["ty", "pylsp", "jedi-language-server", "ruff"]);
         assert_eq!(bare.lsp["python"][0].args, ["server"], "每個候選帶自己的參數");
-        assert!(bare.lsp["python"][3].args.is_empty(), "jedi 不帶參數");
+        assert!(bare.lsp["python"][1].args.is_empty(), "pylsp 不帶參數");
+        assert_eq!(bare.lsp["python"][3].args, ["server"], "ruff 要 `ruff server`");
 
         // 一個的寫法。
         let config = Config::from_toml(

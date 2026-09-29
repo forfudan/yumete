@@ -931,6 +931,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P1 | 一 本檔、二 跨檔、三 替換全部落地 [^419] | Fixed 2026-09-13 |
 | 421 | **設置要有一扇面板，別讓人對着 toml 發呆** | config+tui | P1 | 八組五十三項全部落地；`LATER` 裏只剩色位與要新控件的幾項（§5.12.24） | Fixed 2026-09-24 |
 | 422 | **畫與量要按字簇走，不按字走** | tui+core | P2 | 十處逐字累加的循環改成字簇；新出口 `cells_per_char`（§5.12.47、§5.12.62） | Fixed 2026-09-27 |
+| 425 | **一個語言跑多個服務器** | tui | P2 | 2026-09-29 提；ruff 的 lint 和 pylsp 的文檔本來該同時有，現在只起得了第一個 [^425] | Proposed |
 | 424 | **`:rules 80 100 120`：在指定的欄上畫竪線** | tui | P3 | 2026-09-29 提；現在只有表格自己畫的列號標尺，正文一條都沒有 [^424] | Proposed |
 | 423 | **代碼着色要走增量解析** | core | P2 | 現在超過五千行整份不染（`fences.rs` 的 `LONGEST`）；量過 955 KB 的 `lib.rs`：解析 58 ms ＋ 全文查詢 25 ms，每改一個字付一次 [^423] | Proposed |
 
@@ -18200,3 +18201,12 @@ textDocument/hover 回的：     null
 Warning: **它聲稱會 hover，可它的 hover 只解釋自己的規則碼**（`# noqa: E501` 那種），不解釋
 Python 符號——它是 linter，不是類型檢查器。Warning: 所以「服務器起來了」和「問得出東西」是兩件事。
 真答得出的是 `pylsp`（同一趟量過，`int` 那一段 docstring 完整回來）。
+
+[^425]: **2026-09-29 提**（原話：「我觉得可以 option 3。同时我觉得也可以将 fomatter/linter
+    分开」）。現在 `running` 是「一個語言 → 一個服務器」，找到第一個裝了的就停。四處要重做：
+    ① 啓動全起而不是起第一個；② Warning: **診斷合併**——`Problems::replace` 是按檔整份替換的，
+    兩個服務器都報同一個檔，後到的會把先到的抹掉，所以要按服務器分開存；③ hover 派給所有聲稱
+    會 hover 的，取**第一個非空**的答案；④ 那五句「問不出去」從一個服務器的狀態變成一串的。
+    Warning: **不能只看它聲稱的能力**——ruff 寫着 `hoverProvider: true`，問它卻回 `null`。
+    Warning: 也不必讓使用者在設置裏把 linter 和「講文檔的」分成兩類：按「誰答得出」派比按名字分類
+    可靠，pylsp 自己也帶 lint 插件。
