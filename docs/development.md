@@ -931,6 +931,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P1 | 一 本檔、二 跨檔、三 替換全部落地 [^419] | Fixed 2026-09-13 |
 | 421 | **設置要有一扇面板，別讓人對着 toml 發呆** | config+tui | P1 | 八組五十三項全部落地；`LATER` 裏只剩色位與要新控件的幾項（§5.12.24） | Fixed 2026-09-24 |
 | 422 | **畫與量要按字簇走，不按字走** | tui+core | P2 | 十處逐字累加的循環改成字簇；新出口 `cells_per_char`（§5.12.47、§5.12.62） | Fixed 2026-09-27 |
+| 423 | **代碼着色要走增量解析** | core | P2 | 現在超過五千行整份不染（`fences.rs` 的 `LONGEST`）；量過 955 KB 的 `lib.rs`：解析 58 ms ＋ 全文查詢 25 ms，每改一個字付一次 [^423] | Proposed |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -17904,3 +17905,36 @@ bug 還是 feature」——是 feature，照 vi。
 ⚠️ **`git checkout <一個檔>` 又咬了一次。** 驗閘的時候拿它還原 `page.rs`，把同一個檔裏沒提交
 的新函數整個抹掉了（`local/claude_yumete.md` 記過這一條）。**驗閘要改就改一個和本次改動無關
 的檔，或者先 `cp` 一份。**
+
+[^423]: **2026-09-29 提**（原話：「这个功能对于所有编程语言都很重要。如果能做到这个就太好了」）。
+    兩條路，量出來的數在 §5.38：
+    ① **查詢只查看得見的那一窗**（`QueryCursor::set_byte_range`）——25 ms → **0.27 ms**，九十倍，改動很小。
+    ② **解析走增量**（`Parser::parse(&text, Some(&old_tree))` ＋ `Tree::edit`）——58 ms 那一半只有這麼一條路。
+    ⚠️ 要留住上一棵樹，而現在每一趟都從 `Vec<String>` 重新拼一份源碼、按內容哈希查快取（`fences.rs` 的 `parsed`），
+    所以這一條要動的是快取的形狀，不只是多傳一個參數。
+
+## 5.38 代碼着色為什麼在大檔上整個消失（2026-09-29 量的）
+
+2026-09-29 報的：`crates/yumete-tui/src/lib.rs` 打開之後一點顏色都沒有，而同一個檔在 picker
+的預覽裏是對的。
+
+**預覽對，是因為它走另一條路**：`draw_preview` 直接拿那十幾行叫 `code::highlight`。正文走
+`fences.rs` 的 `parsed`，那裏有一道閘 `LONGEST = 5_000`——**超過五千行整份不染**。
+
+那個數是給「稿子裏貼的一段代碼」定的（註釋原話：「a pasted data file is not something
+anyone reads by its colours」）。⚠️ **可一個兩萬行的源碼檔正是靠顏色讀的**，判準用錯了地方。
+
+### 量出來的三個數（release，955 KB／20,121 行的 `lib.rs`）
+
+| | 耗時 |
+| --- | --- |
+| 解析 | **58 ms** |
+| 全文查詢（110,537 處着色） | **25 ms** |
+| 只查屏幕那一窗（1,139 處） | **0.27 ms** |
+
+⚠️ **這 83 ms 是每改一個字付一次**——快取按內容哈希，改一個字就失效。打字時每一下卡 83 毫秒，
+這就是閘存在的理由。3,771 行的 `editor.rs` 是 8.9 ms，所以閘對中等大小的檔是多餘的。
+
+出路兩條，記在 #423：查詢只查看得見的那一窗（九十倍，改動小），解析走增量（`Tree::edit`）。
+
+⚠️ **編輯器其實答得出「為什麼沒顏色」**（`:view-code` 走 `code_too_long_here`），只是不主動說。
