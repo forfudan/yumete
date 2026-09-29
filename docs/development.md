@@ -18068,12 +18068,12 @@ Warning: **全樹都改**（作者定）：提示行、空格選單、`:help` �
 ### 代碼庫裏不再用 emoji
 
 原話：「Please refrain from abusing emojis in the code base as the width is unstable under
-different fonts…⚠️ should be replaced by a plain "Warning: "」。2,624 處一次掃完。
+different fonts…Warning: should be replaced by a plain "Warning: "」。2,624 處一次掃完。
 
 Warning: **掃過頭了三處，都是同一種**：那個記號**本身就是被測的樣本**——`grapheme.rs` 量
 「一個字簇的寬度記在第一個 `char` 上」、`lib.rs` 量「雙 char 字形佔兩格」、`frames.sh` 那張
 表格夾具的第一欄。它們換成了 `\u{26a0}\u{fe0f}` 的碼位寫法：**意思一樣，而源碼裏不再有一個
-寬度不定的字**。看見「⚠️ 沒了」不等於掃乾淨，要看測試紅不紅。
+寬度不定的字**。看見「Warning: 沒了」不等於掃乾淨，要看測試紅不紅。
 
 ## 5.41 「服務器對這個沒什麽可說的」是五種情況共用一句話（2026-09-29）
 
@@ -18196,5 +18196,5 @@ textDocument/hover 回的：     null
 ```
 
 Warning: **它聲稱會 hover，可它的 hover 只解釋自己的規則碼**（`# noqa: E501` 那種），不解釋
-Python 符號——它是 linter，不是類型檢查器。⚠️ 所以「服務器起來了」和「問得出東西」是兩件事。
+Python 符號——它是 linter，不是類型檢查器。Warning: 所以「服務器起來了」和「問得出東西」是兩件事。
 真答得出的是 `pylsp`（同一趟量過，`int` 那一段 docstring 完整回來）。
