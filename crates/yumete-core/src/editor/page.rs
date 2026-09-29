@@ -876,6 +876,27 @@ impl Editor {
     ///
     /// 與 `gd` 同一個形狀，同一條理由：只在代碼檔上問，問完不等。鍵位是
     /// `空格 k`，helix 的 hover 也是這一個。
+    /// **這一格此刻「應該」擺哪一種**，`None` ＝ 什麽都不該擺（2026-09-29 定）。
+    ///
+    /// 原話：「如果已经有浮窗，就把浮窗搬进去。如果没有浮窗，就显示 on 的那个。
+    /// 如果都是 off，就留空……总之，它显示的是当前状态下『应该』显示的东西。也
+    /// 就是说当前最多只可能显示一种内容，侧栏开了，就会替代浮窗这个容器。」
+    ///
+    /// Warning: **要顯示的東西只有一樣，容器有兩個**（浮窗／邊欄），邊欄開着就
+    /// 替代浮窗。這一支答的是「哪一樣」，容器是另一件事。
+    pub(super) fn what_this_spot_should_show(&self) -> Option<crate::sidebar::View> {
+        if let Some(chosen) = self.spot_chosen {
+            return Some(chosen);
+        }
+        if self.docs_follow {
+            return Some(crate::sidebar::View::Docs);
+        }
+        if self.problems_follow {
+            return Some(crate::sidebar::View::Problems);
+        }
+        None
+    }
+
     /// **那一格此刻擺着文檔還是診斷**——有就回它在哪一側（2026-09-29）。
     ///
     /// Warning: 判準是「**有沒有一塊地方**」，不是「我那一扇開着嗎」。這兩扇答的
@@ -913,6 +934,7 @@ impl Editor {
         //
         // `空格 K`（`afloat == false`）說的是**一定進邊欄**：沒有那一格就開一格，
         // 有了就換成文檔。`空格 k` 只在**一格都沒有**的時候纔浮。
+        self.spot_chosen = Some(crate::sidebar::View::Docs);
         let afloat = afloat && self.the_slot_for_these_two().is_none();
         if !afloat {
             self.put_it_in_the_slot(crate::sidebar::View::Docs);
@@ -940,6 +962,7 @@ impl Editor {
     /// 支不發任何請求，也沒有那道三百毫秒的閘。
     pub(super) fn show_the_problem_here(&mut self, afloat: bool) {
         // 同 `空格 k`，反過來：有那一格就換成診斷，頂掉文檔。
+        self.spot_chosen = Some(crate::sidebar::View::Problems);
         let afloat = afloat && self.the_slot_for_these_two().is_none();
         if !afloat {
             self.put_it_in_the_slot(crate::sidebar::View::Problems);
@@ -960,8 +983,9 @@ impl Editor {
     pub fn problem_afloat(&self) -> Option<(crate::problem::Severity, Vec<String>)> {
         // Warning: **那一扇開着就不浮**（2026-09-29 報的：「浮窗不应该和边栏同时
         // 出现」）。和文檔一條規矩：畫在哪只有一個答案，不會同一句話畫兩遍。
-        if self.hover_afloat().is_some() || self.showing(crate::sidebar::View::Problems).is_some()
-        {
+        // Warning: **問的是「有沒有那一格」**，不是「診斷那一扇開着嗎」——那一格
+        // 擺着文檔的時候它也是這一則的去處（2026-09-29 報的第二次）。
+        if self.hover_afloat().is_some() || self.the_slot_for_these_two().is_some() {
             return None;
         }
         let asked = self.problem_asked == Some(self.sel.head());

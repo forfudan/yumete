@@ -18023,5 +18023,41 @@ fn either_panel_counts_as_a_place_to_draw() {
     assert!(ed.showing(View::Problems).is_some(), "換回診斷");
     assert!(ed.showing(View::Docs).is_none(), "文檔讓開了");
 
+    // Warning: **`Tab` 不在這兩者之間轉**（報的原話：「文檔、诊断不可能同时出现
+    // （不可能 tab 循环）」）。它們是一格的兩種內容，換內容按 `空格 k`／`空格 i`。
+    let ring = ed.views_on(crate::sidebar::Side::Right);
+    assert!(!ring.contains(&View::Problems), "診斷不在環上：{ring:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **那一格開出來擺的是此刻「應該」擺的那一種**（2026-09-29 報的）。
+///
+/// 原話：「我在有需要诊断的行上按了 空格+4，出来了边栏，却是空的文档面板。」
+///
+/// Warning: **`空格 4` 從前自己又找了一遍**（`View::ALL` 裏第一個歸右邊的＝文檔），
+/// 繞過了 `side_view` 知道的兩件事：這一份稿子容不容得下那一扇，以及那一格此刻
+/// 該擺哪一種。
+#[test]
+fn the_slot_opens_showing_whichever_it_ought_to() {
+    use crate::sidebar::View;
+    let dir = std::env::temp_dir().join("yumete-slot-opens");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn one() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    // 出廠診斷即時：開出來是診斷。
+    press(&mut ed, " 4");
+    assert!(ed.showing(View::Problems).is_some(), "出廠擺診斷");
+
+    // 換成文檔即時：關掉再開，擺的是文檔。
+    press(&mut ed, "q");
+    ed.execute(":docs on").unwrap();
+    press(&mut ed, " 4");
+    assert!(ed.showing(View::Docs).is_some(), ":docs on 之後擺文檔");
+
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -337,8 +337,15 @@ impl Editor {
     pub(super) fn view_fits_the_file(&self, view: crate::sidebar::View) -> bool {
         match view {
             crate::sidebar::View::Wiki => !self.writes_code(),
-            // 診斷同文檔：散文沒有服務器，那兩扇在稿子上是空的。
-            crate::sidebar::View::Docs | crate::sidebar::View::Problems => self.writes_code(),
+            crate::sidebar::View::Docs => self.writes_code(),
+            // Warning: **診斷不在 `Tab` 的環上**（2026-09-29 報的：「文檔、诊断
+            // 不可能同时出现（不可能 tab 循环）」）。它和文檔是**一格的兩種內
+            // 容**，換內容按 `空格 k`／`空格 i`，不按 `Tab`——環上放兩格的話它
+            // 們就成了兩扇能並排的面板，而那正是要拆掉的誤會。
+            //
+            // 這一支同時管三張名單：`Tab` 的環、`:sidebar-*` 開哪一扇、底邊那
+            // 一行寫什麽。所以只在這裏說一次。
+            crate::sidebar::View::Problems => false,
             _ => true,
         }
     }
@@ -383,10 +390,18 @@ impl Editor {
     /// Which view a bare `:sidebar-left` opens: the first one that side owns,
     /// and the file tree when it owns none — the same answer the key gives.
     pub(super) fn side_view(&self, side: crate::sidebar::Side) -> crate::sidebar::View {
-        crate::sidebar::View::ALL
+        let first = crate::sidebar::View::ALL
             .into_iter()
             .find(|&view| self.side_for(view) == side && self.view_fits_the_file(view))
-            .unwrap_or(crate::sidebar::View::Explorer)
+            .unwrap_or(crate::sidebar::View::Explorer);
+        // **那一格開出來擺的是此刻「應該」擺的那一種**（2026-09-29 定）：按過
+        // `空格 k`／`空格 i` 就是那一種，沒按過就看哪個即時開關開着。
+        // Warning: 兩個都關的話那一格是空的——作者說「如果不能留空，必須有個面
+        // 板，那就是『診斷』」，而這裏必須有一扇，所以退回診斷。
+        match first == crate::sidebar::View::Docs {
+            true => self.what_this_spot_should_show().unwrap_or(crate::sidebar::View::Problems),
+            false => first,
+        }
     }
 
     /// The view a panel's name stands for, when a slot can hold it. 字典 and
@@ -721,16 +736,20 @@ impl Editor {
                     _ => Side::Right,
                 };
                 if !self.slot_takes_keys(side) {
-                    // **開那一側的頭一扇**。哪幾扇屬於哪一側是配得動的
-                    // （`Editor::sides`），所以這裏問的是配置而不是寫死左邊＝文件樹。
-                    // Warning: 只認 `View::ALL`：字典和詳情是光標帶出來的，開不了。
-                    let Some(&view) = crate::sidebar::View::ALL
-                        .iter()
-                        .find(|&&v| self.side_of(crate::sidebar::Panel::from(v)) == side)
-                    else {
+                    // **開那一側該開的那一扇**——問 `side_view`，別各算各的。
+                    //
+                    // Warning: **從前這裏自己又找了一遍**（`View::ALL` 裏第一個歸這
+                    // 一側的），於是它繞過了兩件 `side_view` 知道的事：這一份稿子
+                    // 容不容得下那一扇（散文沒有文檔），以及右邊那一格此刻「應該」
+                    // 擺文檔還是診斷。作者報的就是這個：在一行有警告的地方按
+                    // `空格 4`，開出來的是**空的文檔面板**。
+                    if self.views_on(side).is_empty() && self.side_view(side) == crate::sidebar::View::Explorer
+                        && self.side_of(crate::sidebar::Panel::Files) != side
+                    {
                         self.status = say!("region.nothing-lives-there");
                         return;
-                    };
+                    }
+                    let view = self.side_view(side);
                     self.show_sidebar(view);
                 }
                 self.focus_slot(side);
