@@ -77,7 +77,7 @@ impl Editor {
         };
         let mine: Vec<crate::sidebar::View> = crate::sidebar::View::ALL
             .into_iter()
-            .filter(|&v| self.side_for(v) == side)
+            .filter(|&v| self.side_for(v) == side && self.view_fits_the_file(v))
             .collect();
         if mine.len() < 2 {
             self.status = say!("sidebar.only-view-on-this-side");
@@ -324,10 +324,48 @@ impl Editor {
     /// ⚠️ **算出來的，不是寫死的**：哪個視圖歸哪一欄是使用者配得動的
     /// （`side_for`），底邊上那一行要說的就是他這一台此刻的真話。少於兩個的時候
     /// 回空——`Tab` 那時什麼都不做，寫一行「Tab 文件」是在許一個不存在的諾。
+    /// **這一份稿子容得下這一扇嗎**（2026-09-29 定）。
+    ///
+    /// 原話：「百科面板和绝对不能侵入程序文件。因此不可能出现同时有百科和文檔的
+    /// 事情。这两个是 enum。」⚠️ **它們不是兩扇可以並存的面板，是一扇面板的兩
+    /// 種**：散文那一份講詞條，代碼那一份講名字。所以 `Tab` 的環上、`:sidebar-*`
+    /// 的名單上、底邊那一行上，同一時刻只該出現其中一扇。
+    pub(super) fn view_fits_the_file(&self, view: crate::sidebar::View) -> bool {
+        match view {
+            crate::sidebar::View::Wiki => !self.writes_code(),
+            crate::sidebar::View::Docs => self.writes_code(),
+            _ => true,
+        }
+    }
+
+    /// 換成這一份稿子容得下的那一扇——百科 ⇄ 文檔，別的原樣。
+    fn view_that_fits(&self, view: crate::sidebar::View) -> crate::sidebar::View {
+        match (view, self.writes_code()) {
+            (crate::sidebar::View::Wiki, true) => crate::sidebar::View::Docs,
+            (crate::sidebar::View::Docs, false) => crate::sidebar::View::Wiki,
+            _ => view,
+        }
+    }
+
+    /// **換了一份稿子，那一扇要跟着換**（2026-09-29）：從散文走進代碼，開着的
+    /// 百科就成了文檔，反過來一樣。⚠️ 不換的話屏幕上會出現一扇這份稿子裏根本
+    /// 不存在的面板，而 `Tab` 又轉不到它——一個走不出去的角落。
+    pub(super) fn fit_the_panels_to_the_file(&mut self) {
+        for side in crate::sidebar::Side::BOTH {
+            let Some(here) = self.panel(side).map(|p| p.view()) else { continue };
+            let fits = self.view_that_fits(here);
+            if fits != here {
+                if let Some(panel) = self.panel_mut(side) {
+                    panel.show(fits);
+                }
+            }
+        }
+    }
+
     pub fn views_on(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::View> {
         let mine: Vec<crate::sidebar::View> = crate::sidebar::View::ALL
             .into_iter()
-            .filter(|&view| self.side_for(view) == side)
+            .filter(|&view| self.side_for(view) == side && self.view_fits_the_file(view))
             .collect();
         match mine.len() < 2 {
             true => Vec::new(),
@@ -340,7 +378,7 @@ impl Editor {
     pub(super) fn side_view(&self, side: crate::sidebar::Side) -> crate::sidebar::View {
         crate::sidebar::View::ALL
             .into_iter()
-            .find(|&view| self.side_for(view) == side)
+            .find(|&view| self.side_for(view) == side && self.view_fits_the_file(view))
             .unwrap_or(crate::sidebar::View::Explorer)
     }
 
@@ -688,6 +726,7 @@ impl Editor {
     /// sidebar is opened, focused, switched, or the file under it changes —
     /// every moment a reader is about to look at it.
     pub(super) fn refresh_sidebar(&mut self) {
+        self.fit_the_panels_to_the_file();
         for side in crate::sidebar::Side::BOTH {
             self.refresh_panel(side);
         }

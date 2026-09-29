@@ -1201,6 +1201,14 @@ en = "what changed, by word rather than by line"
 find = "比較 比较 差異 差异 改動 改动 對照 对照 diff compare changes"
 
 [[message]]
+# : 命令選單裏 docs 那一項的說明（2026-09-29）
+key = "cmd.commands.docs"
+zht = "文檔：光標走到哪就顯示哪一項的文檔（問語言服務器，出廠關）"
+zhs = "文档：光标走到哪就显示哪一项的文档（问语言服务器，出厂关）"
+en = "docs: follow the cursor and show what the language server says (off by default)"
+find = "文檔 文档 docs hover lsp 及時 及时"
+
+[[message]]
 # : 命令選單裏 exit 那一項的說明（commands 組）
 key = "cmd.commands.exit"
 zht = "改過纔存，然後退出（短寫 `:x`，也認 `:xit`）"

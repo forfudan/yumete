@@ -883,6 +883,13 @@ impl Editor {
         // **文檔那一扇開着就畫進去，別再浮一個**（2026-09-29 定，原話：「如果右
         // 侧栏是打开的情况下，按 space k 就应该在侧栏中显示，而不是继续弹窗显
         // 示」）。兩個面在說同一件事，是這個編輯器一直在拆的東西。
+        //
+        // ⚠️ `空格 K`（`afloat == false`）說的是**一定進邊欄**，所以它先把那一扇
+        // 開出來——鍵不交過去。
+        if !afloat && self.showing(crate::sidebar::View::Docs).is_none() {
+            let side = self.side_for(crate::sidebar::View::Docs);
+            self.open_panel_without_the_keys(side, crate::sidebar::View::Docs);
+        }
         let afloat = afloat && self.showing(crate::sidebar::View::Docs).is_none();
         // 再按一次同一個鍵就收起來（同 `空格 d`）。
         if self.hover_afloat == afloat && self.hover_here().is_some() {
@@ -897,20 +904,19 @@ impl Editor {
         true
     }
 
-    /// **`空格 K`：文檔跟不跟着光標走**（2026-09-29 定）。
+    /// **文檔跟不跟着光標走**——一個命令，不是一個鍵（2026-09-29 定）。
     ///
-    /// 原話：「按下它后，光标移动到任何名字上，都會查询并且显示説明……对于『百科』
-    /// 这个是默认开启的。对于『説明』我们可以默认关闭（因为问LSP可能比较耗时）。」
+    /// 原話：「即时显示应该做成一个命令开关而不使用快捷键……这样的话即时显示和在
+    /// 哪里显示就分开了，不会混在一起。」⚠️ **兩件事**：`空格 k`／`空格 K` 說的是
+    /// 「畫在哪」，這一個說的是「什麽時候問」。從前擠在一個鍵上，於是按 `空格 K`
+    /// 的人不知道自己同時定了兩件事。
     ///
     /// 開着的時候它就是百科的代碼版：面板常駐，內容跟着光標。⚠️ **差別在拉與推**
     /// ——百科每一幀現算，文檔要問服務器，所以它多一道「光標停穩了纔問」的閘
-    /// （[`Editor::docs_owed`]）。
-    pub(super) fn follow_with_docs(&mut self) -> bool {
-        if !self.writes_code() {
-            return false;
-        }
-        self.docs_follow = !self.docs_follow;
-        match self.docs_follow {
+    /// （[`Editor::docs_owed`]）。出廠**關**：問一次服務器不便宜。
+    pub fn follow_with_docs(&mut self, on: bool) {
+        self.docs_follow = on;
+        match on {
             true => {
                 // 跟着走就得有地方畫，所以順手把那一扇開出來——鍵不交過去。
                 if self.showing(crate::sidebar::View::Docs).is_none() {
@@ -922,7 +928,11 @@ impl Editor {
             }
             false => self.status = say!("lsp.docs-follow-off"),
         }
-        true
+    }
+
+    /// 文檔此刻跟不跟着光標走。
+    pub fn docs_follow(&self) -> bool {
+        self.docs_follow
     }
 
     /// 光標此刻在哪個代碼檔的哪一行哪一列（**列是 UTF-16 碼元**）。

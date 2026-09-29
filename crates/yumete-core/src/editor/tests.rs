@@ -17626,12 +17626,13 @@ fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`空格 K` 是一個開關：文檔跟不跟着光標走**（2026-09-29 定）。
+/// **`:docs on` 讓文檔跟着光標走**（2026-09-29 定）。
 ///
-/// 原話：「按下它后，光标移动到任何名字上，都會查询并且显示説明……对于『百科』这个
-/// 是默认开启的。对于『説明』我们可以默认关闭（因为问LSP可能比较耗时）。」
+/// ⚠️ **是命令不是鍵**（原話：「即时显示应该做成一个命令开关而不使用快捷键……这样
+/// 的话即时显示和在哪里显示就分开了，不会混在一起」）。`空格 k`／`空格 K` 說的是
+/// 「畫在哪」，這一個說的是「什麽時候問」。
 #[test]
-fn space_shift_k_makes_the_docs_follow_the_cursor() {
+fn the_docs_command_makes_them_follow_the_cursor() {
     use crate::sidebar::View;
     let dir = std::env::temp_dir().join("yumete-docs-follow");
     let _ = std::fs::create_dir_all(&dir);
@@ -17645,7 +17646,7 @@ fn space_shift_k_makes_the_docs_follow_the_cursor() {
     assert!(ed.showing(View::Docs).is_none(), "出廠不開");
     assert_eq!(ed.docs_owed(), None, "關着就不問");
 
-    press(&mut ed, " K");
+    ed.execute(":docs on").unwrap();
     assert_eq!(ed.status(), "開啓及時文檔顯示");
     assert!(ed.showing(View::Docs).is_some(), "跟着走就得有地方畫");
     // ⚠️ **鍵不許跟過去**（報的原話：「用户希望焦点留在正文」）。
@@ -17655,8 +17656,8 @@ fn space_shift_k_makes_the_docs_follow_the_cursor() {
     assert_eq!(ed.docs_owed(), None, "剛動過，等它停穩");
     assert!(ed.docs_due_in().is_some(), "而且要給循環一個鬧鐘，不然它一睡不醒");
 
-    // ⚠️ 再按一下就關，那一扇留着（它是常駐的，不隨光標一開一關）。
-    press(&mut ed, " K");
+    // ⚠️ 關了那一扇留着（它是常駐的，不隨光標一開一關）。
+    ed.execute(":docs off").unwrap();
     assert_eq!(ed.status(), "關閉及時文檔顯示");
     assert_eq!(ed.docs_owed(), None, "關了就不問");
     assert!(ed.showing(View::Docs).is_some(), "面板不跟着關");
@@ -17725,6 +17726,39 @@ fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
     assert_eq!(ed.hover_afloat(), None, "挪了光標就沒了");
     ed.on_key(Key::Ctrl('d'));
     assert!(ed.cursor_line() > 0 || ed.hover_scroll() == 0, "浮窗沒了，C-d 還給稿子");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **百科與文檔是一扇面板的兩種，不是兩扇**（2026-09-29 定）。
+///
+/// 原話：「百科面板和绝对不能侵入程序文件。因此不可能出现同时有百科和文檔的事情。
+/// 这两个是 enum。」⚠️ 從前 `Tab` 那一環上兩扇都在（底邊寫着「Tab 百科 > 文檔」），
+/// 於是一份 `.rs` 轉得到一扇講詞條的面板。
+#[test]
+fn a_code_file_has_docs_and_a_manuscript_has_the_wiki_never_both() {
+    use crate::sidebar::{Side, View};
+    let dir = std::env::temp_dir().join("yumete-wiki-or-docs");
+    let _ = std::fs::create_dir_all(&dir);
+    std::fs::write(dir.join("a.rs"), "fn one() {}\n").unwrap();
+    std::fs::write(dir.join("b.md"), "一段散文。\n").unwrap();
+    let mut ed = Editor::new();
+
+    ed.open_file(dir.join("a.rs")).unwrap();
+    let ring = ed.views_on(Side::Right);
+    assert!(ring.contains(&View::Docs) || ring.is_empty(), "代碼檔轉得到文檔：{ring:?}");
+    assert!(!ring.contains(&View::Wiki), "⚠️ 轉不到百科：{ring:?}");
+
+    ed.open_file(dir.join("b.md")).unwrap();
+    let ring = ed.views_on(Side::Right);
+    assert!(!ring.contains(&View::Docs), "⚠️ 散文轉不到文檔：{ring:?}");
+
+    // **開着的那一扇跟着換。** 從散文走進代碼，百科就成了文檔。
+    ed.execute(":sidebar-right wiki").unwrap();
+    assert_eq!(ed.showing(View::Wiki), Some(Side::Right));
+    ed.open_file(dir.join("a.rs")).unwrap();
+    assert_eq!(ed.showing(View::Docs), Some(Side::Right), "換了稿子，那一扇跟着換");
+    assert!(ed.showing(View::Wiki).is_none(), "⚠️ 不許留一扇轉不到的面板在屏幕上");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -419,6 +419,9 @@ pub enum Command {
     /// on the page and a ground behind it says it a second time. `None`
     /// toggles.
     ThemeFill(Option<bool>),
+    /// **文檔跟不跟着光標走**（`:docs on`／`:docs off`，2026-09-29）。
+    /// `None` ＝ 光打了 `:docs`，那就是翻一下。
+    Docs(Option<bool>),
     /// `:yume-menu-size 1-9` — how many candidates a page of the panel holds.
     /// `None` asks how many it holds now.
     ///
@@ -3022,6 +3025,17 @@ pub const COMMANDS: &[Entry] = &[
                 word => Command::SetKeymap(word.and_then(yumete_cjk::KeyPreset::parse)),
             })
         }),
+    },
+    Entry {
+        // **「什麽時候問」與「畫在哪」分開**（2026-09-29 定，原話：「即时显示应该
+        // 做成一个命令开关而不使用快捷键……这样的话即时显示和在哪里显示就分开了，
+        // 不会混在一起」）。畫在哪是 `空格 k`／`空格 K`。
+        name: "docs",
+        aliases: &[],
+        help: "cmd.commands.docs",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| Ok(Command::Docs(p.arg(0).map(|w| w == "on")))),
     },
     Entry {
         name: "theme-fill",

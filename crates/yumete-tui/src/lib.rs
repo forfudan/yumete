@@ -7859,6 +7859,31 @@ fn draw_dictionary(
     let buf = frame.buffer_mut();
 
     let rows = editor.transient_rows(side);
+    // **邊欄窄，服務器說的話長，所以折行**（2026-09-29 報的：「侧边栏的文檔面板
+    // 没有 soft wrap，导致很多信息没有显示」）。
+    //
+    // ⚠️ **折在畫的這一頭，不在核心那一頭**：折多寬看這一欄此刻多寬，而寬度是
+    // 使用者拖得動的（`空格 w` 四檔）。折完之後 `jk` 走的是**看得見的行**，這也
+    // 正是讀一段長文字時想要的。
+    let rows = match kind == Transient::Hover {
+        true => {
+            let width = to.saturating_sub(from + 1).max(1) as usize;
+            rows.into_iter()
+                .flat_map(|row| {
+                    let folded = match row.name.trim().is_empty() {
+                        // 空行是段落之間的氣口，折行器會把它吃掉。
+                        true => vec![String::new()],
+                        false => wrap_to(&row.name, width),
+                    };
+                    folded.into_iter().map(move |name| yumete_core::sidebar::Row {
+                        name,
+                        ..row.clone()
+                    })
+                })
+                .collect()
+        }
+        false => rows,
+    };
     let visible = (area.height as usize).saturating_sub(1);
     let first = editor
         .transient_scroll()
