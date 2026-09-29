@@ -17982,3 +17982,46 @@ fn the_shifted_digits_close_a_region_without_going_there() {
     press(&mut ed, " #");
     assert_eq!(ed.status(), say!("region.not-open"));
 }
+
+/// **有邊欄就用邊欄，哪一扇都算**（2026-09-29 報的）。
+///
+/// 原話：「如果存在边栏，空格 k 应该在邊欄显示而不是浮窗（暂时顶掉诊断）。」
+///
+/// Warning: **判準是「有沒有一塊地方」，不是「我那一扇開着嗎」。** 文檔和診斷共用
+/// 右邊那一格——診斷開着的時候那就是文檔的地方，頂掉它，不要另浮一個。
+#[test]
+fn either_panel_counts_as_a_place_to_draw() {
+    use crate::sidebar::View;
+    let dir = std::env::temp_dir().join("yumete-either-slot");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn one() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    // 一格都沒有：`空格 k` 浮。
+    press(&mut ed, " k");
+    ed.show_hover("fn one()".into());
+    assert_eq!(ed.hover_afloat(), Some("fn one()"), "沒地方就浮");
+
+    // 開的是**診斷**那一扇——文檔那一扇並沒有開。
+    press(&mut ed, " I");
+    assert!(ed.showing(View::Problems).is_some(), "診斷開着");
+    assert!(ed.showing(View::Docs).is_none(), "文檔沒開");
+
+    // Warning: 這時 `空格 k` 該頂掉它，不該另浮一個。
+    press(&mut ed, " k");
+    ed.show_hover("fn one()".into());
+    assert!(ed.showing(View::Docs).is_some(), "那一格換成了文檔");
+    assert!(ed.showing(View::Problems).is_none(), "診斷讓開了");
+    assert_eq!(ed.hover_afloat(), None, "Warning: 不許再浮一個");
+    assert_eq!(ed.hover_in_the_sidebar(), Some("fn one()"), "畫在邊欄裏");
+
+    // 反過來：`空格 i` 把它換回診斷。
+    press(&mut ed, " i");
+    assert!(ed.showing(View::Problems).is_some(), "換回診斷");
+    assert!(ed.showing(View::Docs).is_none(), "文檔讓開了");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

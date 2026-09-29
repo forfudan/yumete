@@ -6648,9 +6648,9 @@ en = "{0} more"
 [[message]]
 # 貼上選單的標題
 key = "menu.paste.title"
-zht = "粘貼：取過的東西"
-zhs = "粘贴：取过的东西"
-en = "paste: what has been taken"
+zht = "寄存器·剪貼板"
+zhs = "寄存器·剪贴板"
+en = "registers"
 
 
 # ── need ──────────────────────────────────────────────────────────────
@@ -6856,9 +6856,9 @@ en = "nothing matched"
 [[message]]
 # 空格 " 開的貼上單，標題
 key = "picker.paste"
-zht = "粘貼"
-zhs = "粘贴"
-en = "paste"
+zht = "寄存器·剪貼板"
+zhs = "寄存器·剪贴板"
+en = "registers"
 
 
 # ── preview ───────────────────────────────────────────────────────────
