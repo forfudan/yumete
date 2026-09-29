@@ -935,17 +935,18 @@ impl Editor {
         // `空格 K`（`afloat == false`）說的是**一定進邊欄**：沒有那一格就開一格，
         // 有了就換成文檔。`空格 k` 只在**一格都沒有**的時候纔浮。
         self.spot_chosen = Some(crate::sidebar::View::Docs);
-        let afloat = afloat && self.the_slot_for_these_two().is_none();
+        // `空格 K`（`afloat == false`）說的是「一定進邊欄」，所以它先把那一格
+        // 開出來——開了之後「畫在哪」自己就答對了，不必再記一個字段。
         if !afloat {
             self.put_it_in_the_slot(crate::sidebar::View::Docs);
         }
         // 再按一次同一個鍵就收起來（同 `空格 d`）。
-        if self.hover_afloat == afloat && self.hover_here().is_some() {
+        // 再按一次同一個鍵就收起來：此刻畫在哪，和這一鍵要的是不是同一處。
+        if (self.the_slot_for_these_two().is_none() == afloat) && self.hover_here().is_some() {
             self.hovered = None;
             self.refresh_sidebar();
             return true;
         }
-        self.hover_afloat = afloat;
         self.hover_scroll = 0;
         self.hover_query = Some((path, line, utf16));
         self.status = say!("lsp.asking-what");
@@ -1003,10 +1004,14 @@ impl Editor {
         if on {
             self.docs_follow = false;
         }
+        // 撥一次開關是一次新的意思，蓋過上一次按鍵選的那一種。
+        self.spot_chosen = None;
         self.status = match on {
             true => say!("lsp.problems-follow-on"),
             false => say!("lsp.problems-follow-off"),
         };
+        // 撥完就把那一格擺成該有的樣子——不然它還擺着上一種，而地方就在眼前。
+        self.refresh_sidebar();
     }
 
     /// 診斷此刻跟不跟着光標走。
@@ -1030,6 +1035,7 @@ impl Editor {
         if on {
             self.problems_follow = false;
         }
+        self.spot_chosen = None;
         // Warning: **它不開邊欄。** 「什麽時候問」和「在哪裏顯示」是兩件事
         // （2026-09-29 作者第三次說這一句）：這一個只管前者，後者永遠是同一條規矩
         // ——那一扇開着就畫進去，沒開就浮。開着它而不開邊欄，文檔就跟着光標浮。
@@ -1040,6 +1046,7 @@ impl Editor {
             true => say!("lsp.docs-follow-on"),
             false => say!("lsp.docs-follow-off"),
         };
+        self.refresh_sidebar();
     }
 
     /// 文檔此刻跟不跟着光標走。
@@ -1176,12 +1183,6 @@ impl Editor {
             self.refresh_sidebar();
             return None;
         };
-        // Warning: **畫在哪，問的是同一條規矩**（2026-09-29 作者第三次說）：那一扇
-        // 開着就進邊欄，沒開就浮——和 `空格 k` 一個字不差。
-        //
-        // 從前這裏寫死 `false`（「跟着走的都進邊欄」），於是關掉那一扇之後這一問
-        // 每三百毫秒把浮窗按下去一次：一個看不見的面板把浮窗按住了。
-        self.hover_afloat = self.showing(crate::sidebar::View::Docs).is_none();
         Some(query)
     }
 
@@ -1237,7 +1238,7 @@ impl Editor {
     pub(super) fn forget_a_hover_nobody_is_looking_at(&mut self) {
         let Some((asked_at, _)) = self.hovered.as_ref() else { return };
         // 送進邊欄的那一份（`空格 K`），鍵在它身上的時候光標本來就不動。
-        let reading = !self.hover_afloat
+        let reading = self.the_slot_for_these_two().is_some()
             && self.panel_focus == Some(self.side_of(crate::sidebar::Panel::Dictionary));
         if reading || *asked_at == self.sel.head() {
             return;
@@ -1253,12 +1254,12 @@ impl Editor {
 
     /// 那一則說明該不該**浮**在光標旁邊（`空格 k` 問的那一次）。
     pub fn hover_afloat(&self) -> Option<&str> {
-        self.hover_afloat.then(|| self.hover_here()).flatten()
+        self.the_slot_for_these_two().is_none().then(|| self.hover_here()).flatten()
     }
 
     /// 那一則說明該不該畫在**邊欄**裏（`空格 K` 問的那一次）。
     pub fn hover_in_the_sidebar(&self) -> Option<&str> {
-        (!self.hover_afloat).then(|| self.hover_here()).flatten()
+        self.the_slot_for_these_two().is_some().then(|| self.hover_here()).flatten()
     }
 
     // ---- `C-n` 問服務器接下來能打什麽（#53 ④）------------------------------

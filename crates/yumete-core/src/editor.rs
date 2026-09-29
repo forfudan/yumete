@@ -1932,11 +1932,6 @@ pub struct Editor {
     /// 那一條的理由。空着就是「還沒有服務器接上」，而那與「接上了、一句話都沒說」
     /// 是兩回事，`:diagnostics-all` 分得出來纔說得清。
     server_line: Option<String>,
-    /// **這一次的 hover 是浮窗，還是邊欄裏的一頁**（2026-09-22）。
-    ///
-    /// 與 `dictionary_afloat` 同一條規矩：`空格 k` 浮窗、`空格 K` 進邊欄，同一
-    /// 份答案兩個地方。
-    hover_afloat: bool,
     /// The character the 字典 panel is about, and the answer if one has come.
     ///
     /// Three states, because three things can be true. `None`: nobody has
@@ -2795,7 +2790,6 @@ impl Editor {
             docs_moved: None,
             hover_scroll: 0,
             server_line: None,
-            hover_afloat: true,
             completion_query: None,
             completion_at: None,
             completion_by_hand: false,

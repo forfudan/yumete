@@ -17757,7 +17757,8 @@ fn a_code_file_has_docs_and_a_manuscript_has_the_wiki_never_both() {
     ed.execute(":sidebar-right wiki").unwrap();
     assert_eq!(ed.showing(View::Wiki), Some(Side::Right));
     ed.open_file(dir.join("a.rs")).unwrap();
-    assert_eq!(ed.showing(View::Docs), Some(Side::Right), "換了稿子，那一扇跟着換");
+    // 換成代碼檔之後那一格擺的是此刻「應該」擺的那一種——出廠即時的是診斷。
+    assert_eq!(ed.showing(View::Problems), Some(Side::Right), "換了稿子，那一扇跟着換");
     assert!(ed.showing(View::Wiki).is_none(), "Warning: 不許留一扇轉不到的面板在屏幕上");
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -18058,6 +18059,47 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
     ed.execute(":docs on").unwrap();
     press(&mut ed, " 4");
     assert!(ed.showing(View::Docs).is_some(), ":docs on 之後擺文檔");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **撥了即時開關，那一格當場跟着換**（2026-09-29 報的第三次）。
+///
+/// 原話：「诊断在边栏中后……按下 docs on，结果文檔浮窗出现了而不是在侧栏中。」
+///
+/// Warning: **同一個窄判準的第四次。** `docs_owed` 問的是 `showing(View::Docs)`
+/// ——那一格擺着診斷的時候它以為沒地方，浮了一個，而地方就在眼前。現在全樹只有
+/// 一支 `the_slot_for_these_two()` 回答「有沒有那一格」。
+#[test]
+fn flipping_a_toggle_swaps_what_the_slot_shows() {
+    use crate::sidebar::View;
+    let dir = std::env::temp_dir().join("yumete-slot-follows-toggle");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn one() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    // 出廠診斷即時，那一格開出來擺診斷。
+    press(&mut ed, " 4");
+    assert!(ed.showing(View::Problems).is_some(), "擺診斷");
+
+    // 撥成文檔即時：那一格當場換，不必關了再開。
+    ed.execute(":docs on").unwrap();
+    assert!(ed.showing(View::Docs).is_some(), "換成文檔");
+    assert!(ed.showing(View::Problems).is_none(), "診斷讓開");
+
+    // Warning: 而且跟着走的那一問要畫**進去**，不許再浮一個。
+    std::thread::sleep(std::time::Duration::from_millis(320));
+    assert!(ed.docs_owed().is_some(), "問得出去");
+    ed.show_hover("fn one()".into());
+    assert_eq!(ed.hover_afloat(), None, "有那一格就不浮");
+    assert_eq!(ed.hover_in_the_sidebar(), Some("fn one()"), "畫進那一格");
+
+    // 撥回去也一樣。
+    ed.execute(":diagnostics on").unwrap();
+    assert!(ed.showing(View::Problems).is_some(), "換回診斷");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
