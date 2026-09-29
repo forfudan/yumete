@@ -1890,18 +1890,55 @@ struct Viewport {
 /// Two, in **screen order**, so that switching panes moves the keys and not
 /// the pages: the half you were reading stays where it is on the screen.
 #[derive(Default)]
-struct Seats([Viewport; 2]);
+struct Seats {
+    panes: [Viewport; 2],
+    /// **兩扇邊欄各自捲到了第幾行**（左、右），跨幀記着。
+    ///
+    /// ⚠️ **不記就只能從選中那一行倒推**，而倒推不出來：「往上走到頂了纔翻頁」
+    /// 是一件跟歷史有關的事。從前的算法是 `selected - 可見行數 + 1`，也就是把
+    /// 選中那一行**釘在最底下**——往上按 `k`，亮條一動不動，整張單子在它上面
+    /// 滑，滑到頭了亮條纔開始走（2026-09-29 報的）。
+    ///
+    /// 一側只畫一扇面板，所以一格就夠；換了面板這個數是舊的，而它每一幀都先
+    /// 夾一次、再讓選中那一行拉回來（[`window_start`]），下一幀就對了。
+    listed: [usize; 2],
+}
+
+/// **一張捲動的單子，這一幀從第幾行畫起**——2026-09-29。
+///
+/// 規矩只有兩條，而且就是使用者說的那兩條：
+///
+/// * 選中的那一行**在窗口上方之外**——把窗口往上挪到剛好含住它。
+/// * 選中的那一行**在窗口下方之外**——往下挪到剛好含住它。
+///
+/// 剩下的時候窗口一動不動，所以亮條在窗口裏自己走，走到邊上纔帶着窗口走。
+/// 原話：「向上移动的时候（k），这个光标一直在最下一行，直到上方没有可以滚动的
+/// 才往上走。我觉得应该是优先往上走直到顶头才往上翻？」
+fn window_start(stored: usize, selected: usize, room: usize, rows: usize) -> usize {
+    if room == 0 {
+        return 0;
+    }
+    let most = rows.saturating_sub(room);
+    let mut first = stored.min(most);
+    if selected < first {
+        first = selected;
+    }
+    if selected >= first + room {
+        first = selected + 1 - room;
+    }
+    first.min(most)
+}
 
 impl std::ops::Index<usize> for Seats {
     type Output = Viewport;
     fn index(&self, which: usize) -> &Viewport {
-        &self.0[which.min(1)]
+        &self.panes[which.min(1)]
     }
 }
 
 impl std::ops::IndexMut<usize> for Seats {
     fn index_mut(&mut self, which: usize) -> &mut Viewport {
-        &mut self.0[which.min(1)]
+        &mut self.panes[which.min(1)]
     }
 }
 
@@ -4101,7 +4138,8 @@ fn draw(
             // A panel with a box in it has a caret, and the candidate panel
             // has to stand under **that** one — see `draw_search`.
             None => {
-                if let Some(at) = draw_sidebar(frame, editor, config, side, rect) {
+                let scrolled = &mut viewport.listed[usize::from(side == Side::Right)];
+                if let Some(at) = draw_sidebar(frame, editor, config, side, rect, scrolled) {
                     panel_caret = Some(at);
                 }
             }
@@ -6701,6 +6739,7 @@ fn draw_sidebar(
     config: &Config,
     side: Side,
     area: Rect,
+    scrolled: &mut usize,
 ) -> Option<Position> {
     let Some(sidebar) = editor.panel(side) else {
         return None;
@@ -6710,7 +6749,7 @@ fn draw_sidebar(
     }
     // A form and a list of hits, not rows of a tree (#419).
     if sidebar.view() == View::Search {
-        return draw_search(frame, editor, config, side, area);
+        return draw_search(frame, editor, config, side, area, scrolled);
     }
     // The entry under the cursor, drawn from the cursor (#287).
     if sidebar.view() == View::Wiki {
@@ -6755,11 +6794,9 @@ fn draw_sidebar(
     if visible == 0 {
         return None;
     }
-    let first = sidebar
-        .selected()
-        .saturating_sub(visible.saturating_sub(1))
-        .min(rows.len().saturating_sub(visible));
-    for slot in 0..visible.min(rows.len()) {
+    let first = window_start(*scrolled, sidebar.selected(), visible, rows.len());
+    *scrolled = first;
+    for slot in 0..visible.min(rows.len().saturating_sub(first)) {
         let i = first + slot;
         let row = &rows[i];
         let y = area.y + 1 + slot as u16;
@@ -7203,6 +7240,7 @@ fn draw_search(
     config: &Config,
     side: Side,
     area: Rect,
+    scrolled: &mut usize,
 ) -> Option<Position> {
     use yumete_core::search_panel::Field;
     let find = editor.search();
@@ -7567,10 +7605,8 @@ fn draw_search(
         .map(|h| (h.line + 1).to_string().chars().count())
         .max()
         .unwrap_or(1);
-    let first = find
-        .selected
-        .saturating_sub(room.saturating_sub(1))
-        .min(rows.len().saturating_sub(room));
+    let first = window_start(*scrolled, find.selected, room, rows.len());
+    *scrolled = first;
     for slot in 0..room.min(rows.len().saturating_sub(first)) {
         let i = first + slot;
         let y = top + slot as u16;
@@ -11090,6 +11126,64 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// **`window_start` 的兩條規矩**——2026-09-29。
+    #[test]
+    fn a_list_only_scrolls_when_the_highlight_would_leave_it() {
+        // 窗口三行，正停在 5、6、7 上，選中 6：一動不動。
+        assert_eq!(window_start(5, 6, 3, 20), 5);
+        // 往上走出去一行：窗口跟着上一行，選中的那一行就在最上面。
+        assert_eq!(window_start(5, 4, 3, 20), 4);
+        // 往下走出去一行：窗口下一行，選中的那一行在最下面。
+        assert_eq!(window_start(5, 8, 3, 20), 6);
+        // 窗口裏往上走：**窗口不動**，這就是 2026-09-29 報的那一條。
+        assert_eq!(window_start(5, 5, 3, 20), 5, "走到窗口最上面那一行，還不翻");
+        assert_eq!(window_start(5, 7, 3, 20), 5, "走到最下面那一行，也還不翻");
+        // 單子比窗口短：從頭畫。
+        assert_eq!(window_start(9, 1, 8, 4), 0);
+        // 記着的那個數大過單子：夾回去。
+        assert_eq!(window_start(99, 19, 3, 20), 17);
+        assert_eq!(window_start(0, 0, 0, 20), 0, "一行都放不下也不許算崩");
+    }
+
+    /// **往上按 `k`，亮條先在窗口裏走，走到頂纔翻頁**（2026-09-29 報的）。
+    ///
+    /// 原話：「向上移动的时候（k），这个光标一直在最下一行，直到上方没有可以
+    /// 滚动的才往上走。我觉得应该是优先往上走直到顶头才往上翻？」
+    ///
+    /// ⚠️ **一幀畫不出這件事。** 從前的算法是拿選中那一行倒推窗口，所以任何
+    /// 單獨一幀都「看着對」；錯的是**兩幀之間**窗口該不該動。所以這一條一連畫
+    /// 好幾幀，`Seats` 從頭到尾是同一個。
+    #[test]
+    fn walking_up_the_results_moves_the_highlight_before_it_moves_the_list() {
+        let mut ed = editor_with(
+            &(1..=40).map(|i| format!("第{i}行　這一行有一個這字\n")).collect::<String>(),
+        );
+        let config = Config::default();
+        let mut seats = Seats::default();
+        // 打開搜索、找「這」、把鍵交回名單。
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('/'));
+        for c in "這".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        // 一路往下走，走到單子深處——這時窗口一定捲過。
+        keep_drawing(&mut ed, &config, &mut seats, 40, 18, &"j".repeat(30));
+        let deep = seats.listed[0];
+        assert!(deep > 0, "走這麽遠，窗口該捲過了");
+        let at = ed.search().selected;
+
+        // **往上按三下：窗口一動不動，選中的那一行自己往上走。**
+        keep_drawing(&mut ed, &config, &mut seats, 40, 18, "kkk");
+        assert_eq!(ed.search().selected, at - 3, "亮條走了三行");
+        assert_eq!(seats.listed[0], deep, "⚠️ 窗口不許跟着動——這就是報的那一條");
+
+        // 一直往上，走到窗口頂上就該翻了。
+        keep_drawing(&mut ed, &config, &mut seats, 40, 18, &"k".repeat(30));
+        assert_eq!(ed.search().selected, 0, "走到第一條");
+        assert_eq!(seats.listed[0], 0, "翻到了單子頭上");
+    }
+
     /// **設置頁鋪滿整個窗口，而且不在那裏留一根光標**（2026-09-25 報的：
     /// 「为什么「设置」左侧有个光标呢？」）。
     ///
@@ -11223,6 +11317,29 @@ fn squeezed(text: &str) -> String {
     /// An unavailable IME (no data), for tests that don't exercise composing.
     fn no_ime() -> ImeSession {
         ImeSession::new(Scheme::LINGMING, vec![])
+    }
+
+    /// **一連畫好幾幀，邊欄的捲動位置跨幀留着**——那正是 [`window_start`] 要記
+    /// 的東西，一幀一幀單畫是看不出來的。
+    fn keep_drawing(
+        editor: &mut Editor,
+        config: &Config,
+        seats: &mut Seats,
+        w: u16,
+        h: u16,
+        keys: &str,
+    ) -> ratatui::buffer::Buffer {
+        crate::theme::settle(config, None);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut last = None;
+        for key in keys.chars() {
+            editor.on_key(Key::Char(key));
+            terminal
+                .draw(|frame| draw(frame, editor, config, &no_ime(), seats, None))
+                .unwrap();
+            last = Some(terminal.backend().buffer().clone());
+        }
+        last.unwrap_or_else(|| terminal.backend().buffer().clone())
     }
 
     /// Render `editor` with `config` and `ime` to an in-memory terminal buffer.
