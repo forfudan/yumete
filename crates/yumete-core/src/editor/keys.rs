@@ -2360,10 +2360,10 @@ impl Editor {
                     self.set_status(say!("lsp.not-code"));
                 }
             }
-            // **`空格 K` 2026-09-29 起是一個開關**，不是「開進邊欄」：文檔跟不
-            // 跟着光標走。開進邊欄現在不必有自己的鍵——`空格 k` 看那一扇開沒開。
+            // `空格 K`：查一次，**一定畫進邊欄**（沒開就開出來）。`空格 k` 看
+            // 那一扇開沒開：開着就畫進去，沒開就浮。
             Key::Char('K') => {
-                if !self.follow_with_docs() {
+                if !self.ask_what_this_is(false) {
                     self.set_status(say!("lsp.not-code"));
                 }
             }
