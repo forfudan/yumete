@@ -20084,7 +20084,7 @@ fn squeezed(text: &str) -> String {
     /// Warning: **這一條一直沒人報，是因為寫 `Warning: ` 後面永遠跟一個空格**——蓋住的是空格。
     #[test]
     fn a_glyph_made_of_two_chars_takes_both_of_the_cells_it_is_drawn_in() {
-        let mut editor = editor_with("\u{26a0}\u{fe0f}後\n");
+        let editor = editor_with("\u{26a0}\u{fe0f}後\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.command_line = false;
