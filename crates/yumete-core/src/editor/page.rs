@@ -1000,6 +1000,11 @@ impl Editor {
         std::mem::take(&mut self.say_it_again)
     }
 
+    /// **此刻有沒有一句問話等着發**——前端拿它決定要不要解釋為什麽發不出去。
+    pub fn hover_query_is_pending(&self) -> bool {
+        self.hover_query.is_some()
+    }
+
     /// `空格 k` 問出去的那一句，給前端發（下一趟循環取走）。
     pub fn take_hover_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         self.hover_query.take()
