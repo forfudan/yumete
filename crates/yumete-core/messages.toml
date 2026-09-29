@@ -5257,16 +5257,16 @@ en = "Space"
 [[message]]
 # 空格菜單裏那一行：問語言服務器這是什麽
 key = "hint.space.what-is-this"
-zht = "這是什麽（問服務器）"
-zhs = "这是什么（问服务器）"
-en = "what is this? (ask the server)"
+zht = "顯示當前光標所在項目之文檔"
+zhs = "显示当前光标所在项目之文档"
+en = "the docs for the name under the cursor"
 
 [[message]]
 # 空格菜單：把服務器那段話開進邊欄（浮窗是小寫的 k）
 key = "hint.space.what-is-this-panel"
-zht = "同上，開進邊欄（長的讀得完）"
-zhs = "同上，开进边栏（长的读得完）"
-en = "the same, in the sidebar (room to read)"
+zht = "及時顯示光標所在項目之文檔"
+zhs = "及时显示光标所在项目之文档"
+en = "the docs follow the cursor (a toggle)"
 
 [[message]]
 # 表格提示：加一欄
@@ -5871,6 +5871,13 @@ zhs = "字典"
 en = "Dictionary"
 
 [[message]]
+# 邊欄面板的名字：文檔（2026-09-29 作者定的名字）
+key = "label.panel.docs"
+zht = "文檔"
+zhs = "文档"
+en = "Docs"
+
+[[message]]
 # 標籤：文件
 key = "label.panel.files"
 zht = "文件"
@@ -6369,6 +6376,20 @@ zhs = "{0} 起不来（{1}）——档照常开，只是没人查错"
 en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
 
 [[message]]
+# 空格 K：文檔跟着光標走，關了（2026-09-29 作者寫的）
+key = "lsp.docs-follow-off"
+zht = "關閉及時文檔顯示"
+zhs = "关闭及时文档显示"
+en = "docs no longer follow the cursor"
+
+[[message]]
+# 空格 K：文檔跟着光標走，開了（2026-09-29 作者寫的）
+key = "lsp.docs-follow-on"
+zht = "開啓及時文檔顯示"
+zhs = "开启及时文档显示"
+en = "docs follow the cursor"
+
+[[message]]
 # 語言服務器起來一下就沒了（裝得不完整）
 key = "lsp.never-started"
 zht = "{0} 的語言服務器起來就沒了——這臺機器上它可能沒裝好（此後不再試）"
@@ -6440,13 +6461,6 @@ key = "lsp.what-comes-next"
 zht = "接下來"
 zhs = "接下来"
 en = "what comes next"
-
-[[message]]
-# hover 浮窗的標題
-key = "lsp.what-is-this"
-zht = "這是什麽"
-zhs = "这是什么"
-en = "what is this"
 
 [[message]]
 # 補全單子底下：第幾條／一共幾條（單子露不全的時候）

@@ -1904,6 +1904,16 @@ pub struct Editor {
     /// ⚠️ 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
     /// 冒出來的診斷不是這一種——那一種是文件的事實，走到哪都還在。
     hovered: Option<(usize, String)>,
+    /// **`空格 K`：文檔跟不跟着光標走**（2026-09-29）。出廠**關着**——百科是現
+    /// 算的，跟着走不花什麽；文檔要問服務器，一來一回。
+    docs_follow: bool,
+    /// 跟着走的時候，上一次問的是哪一格——同一格不重複問。
+    docs_asked_at: Option<usize>,
+    /// 光標最後一次動是什麽時候，跟着走的那一問等它停穩（`DOCS_SETTLE`）。
+    docs_moved: Option<std::time::Instant>,
+    /// **浮着的那一則從第幾行畫起**（2026-09-29）——`PageUp`／`PageDown`／
+    /// `C-u`／`C-d` 翻它，同 helix（`ui/popup.rs`：那四個鍵滾浮窗，別的鍵關掉）。
+    hover_scroll: usize,
     /// **這一次的 hover 是浮窗，還是邊欄裏的一頁**（2026-09-22）。
     ///
     /// 與 `dictionary_afloat` 同一條規矩：`空格 k` 浮窗、`空格 K` 進邊欄，同一
@@ -2759,6 +2769,10 @@ impl Editor {
             settings_close: None,
             hover_query: None,
             hovered: None,
+            docs_follow: false,
+            docs_asked_at: None,
+            docs_moved: None,
+            hover_scroll: 0,
             hover_afloat: true,
             completion_query: None,
             completion_at: None,
@@ -2898,6 +2912,8 @@ impl Editor {
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Right,
                 crate::sidebar::Side::Right,
+                crate::sidebar::Side::Right,
+                // 文檔：同百科，右邊——它就是百科的代碼版（2026-09-29）。
                 crate::sidebar::Side::Right,
             ],
             dictionary_anchor: None,
@@ -3144,6 +3160,12 @@ enum Spot {
     InFile(PathBuf, usize),
     InBuffer(u64, usize),
 }
+
+/// **跟着光標的那一問，等光標停穩多久**（2026-09-29）。
+///
+/// 同服務器那一頭等打字停下來的那個數（`server.rs` 的 `SETTLE`）。按住 `j` 連走
+/// 的時候一格都不問，手一停纔問一次。
+const DOCS_SETTLE: std::time::Duration = std::time::Duration::from_millis(300);
 
 /// How many files a session remembers.
 ///

@@ -2357,6 +2357,7 @@ const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "detail", help: "label.panel.detail", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
+    Word { name: "docs", help: "label.panel.docs", needs: &[] },
 ];
 
 /// What `:sidebar-left` and `:sidebar-right` take: `off`, or a panel to open
@@ -2373,6 +2374,7 @@ const SIDEBAR_SIDES: &[Word] = &[
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "detail", help: "label.panel.detail", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
+    Word { name: "docs", help: "label.panel.docs", needs: &[] },
 ];
 
 /// Every command, for the completion list.

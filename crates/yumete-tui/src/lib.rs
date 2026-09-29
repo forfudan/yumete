@@ -1006,6 +1006,8 @@ pub fn run(
                 editor.autosave_due_in(),
                 editor.vcs_due_in(),
                 editor.status_due_in(),
+                // 跟着光標的那一問（`空格 K`）：光標停穩三百毫秒就該問一句。
+                editor.docs_due_in(),
                 servers.due_in(),
             ]
                 .into_iter()
@@ -5310,6 +5312,7 @@ fn draw_which_key(
     let (title, keys) = editor.pending_menu()?;
     let vertical = editor.layout() == WritingLayout::Vertical;
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            scroll: 0,
         title,
         lede: None,
         entry: false,
@@ -5497,6 +5500,7 @@ fn draw_note(
             })
             .collect();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            scroll: 0,
             title: say!("lsp.what-comes-next"),
             lede: None,
             entry: false,
@@ -5518,7 +5522,9 @@ fn draw_note(
     // 畫着同一段話是 2026-09-22 出圖纔看見的。
     if let Some(told) = editor.hover_afloat() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            title: say!("lsp.what-is-this"),
+            // 這一扇翻得動——`PageUp`／`PageDown`／`C-u`／`C-d`（2026-09-29）。
+            scroll: editor.hover_scroll(),
+            title: yumete_core::messages::say(Panel::Docs.tag(), &[]),
             lede: None,
             entry: false,
             body: panel::Body::Prose(told.to_string()),
@@ -5549,6 +5555,7 @@ fn draw_note(
     if let Some((severity, said)) = editor.problem_here().filter(|_| !writing) {
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            scroll: 0,
             title: match severity {
                 Severity::Error => say!("problem.error"),
                 Severity::Warn => say!("problem.warn"),
@@ -5589,6 +5596,7 @@ fn draw_note(
             None => vec![(say!("ui.looking-it-up"), String::new())],
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            scroll: 0,
             title: ch.to_string(),
             lede: None,
             entry: false,
@@ -5619,6 +5627,7 @@ fn draw_note(
             Some(Source::TooMany { .. }) => say!("wiki.too-many", &include.named),
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            scroll: 0,
             title: say!("wiki.title"),
             lede: None,
             entry: false,
@@ -5636,6 +5645,7 @@ fn draw_note(
         // `gd` goes there without being told; a reader glancing at a name
         // wants the entry, and the line cost a row of it.
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            scroll: 0,
             title: view.name.clone(),
             // 章節行「辭典 › 君山」不是詞條說的話，是它寫在哪兒——面板把它
             // 畫在名字下面，灰的，和正文隔一行（2026-09-18）。
@@ -5662,6 +5672,7 @@ fn draw_note(
         return None;
     }
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            scroll: 0,
         title: detail.title,
         lede: None,
         entry: false,
@@ -6770,6 +6781,13 @@ fn draw_sidebar(
         draw_wiki(frame, editor, config, side, area);
         return None;
     }
+    // **文檔：同一個形狀，畫的是問服務器問來的那一則**（2026-09-29）。
+    // ⚠️ **空了也照畫一扇框**——這一扇是常駐的，不是光標停上去纔冒出來的那一種，
+    // 所以它不許一開一關（作者報的原話：「侧栏不应该关闭，即使是空的」）。
+    if sidebar.view() == View::Docs {
+        draw_dictionary(frame, editor, config, side, area, Transient::Hover);
+        return None;
+    }
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
     let text = ground.fg(ink.text());
@@ -6860,7 +6878,7 @@ fn draw_sidebar(
                 format!("{mark}{}", row.name)
             }
             // Handled above: they fill no rows.
-            View::Search | View::Wiki => row.name.clone(),
+            View::Search | View::Wiki | View::Docs => row.name.clone(),
         };
         // ⚠️ **裁到頭要有省略號**（2026-09-24 審出來的）。`put_text` 到 `to` 就
         // 停，於是一個長標題是**悄悄**斷在那裏——而「斷了」和「本來就這麼長」是
@@ -7829,8 +7847,11 @@ fn draw_dictionary(
     vertical::clear_wide_left_edge(frame.buffer_mut(), area);
     // ⚠️ **標題的反白去掉了**（2026-09-25）：上邊框現在就是這一行，有焦點時整行
     // 是金的，再單獨反白一次是同一句話說兩遍。
+    // ⚠️ **hover 那一份的名字就是它那扇面板的名字**（2026-09-29）：它 2026-09-29
+    // 起是一扇自己的面板（`Panel::Docs`／「文檔」），浮着和進邊欄是同一件東西的
+    // 兩個去處，不該有兩個名字。
     let name = match kind {
-        Transient::Hover => say!("lsp.what-is-this"),
+        Transient::Hover => yumete_core::messages::say(Panel::Docs.tag(), &[]),
         _ => yumete_core::messages::say(Panel::Dictionary.tag(), &[]),
     };
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
@@ -19000,6 +19021,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
+            scroll: 0,
                     title: "岳陽樓".into(),
                     lede: None,
                     entry: false,

@@ -880,6 +880,10 @@ impl Editor {
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return false;
         };
+        // **文檔那一扇開着就畫進去，別再浮一個**（2026-09-29 定，原話：「如果右
+        // 侧栏是打开的情况下，按 space k 就应该在侧栏中显示，而不是继续弹窗显
+        // 示」）。兩個面在說同一件事，是這個編輯器一直在拆的東西。
+        let afloat = afloat && self.showing(crate::sidebar::View::Docs).is_none();
         // 再按一次同一個鍵就收起來（同 `空格 d`）。
         if self.hover_afloat == afloat && self.hover_here().is_some() {
             self.hovered = None;
@@ -887,8 +891,37 @@ impl Editor {
             return true;
         }
         self.hover_afloat = afloat;
+        self.hover_scroll = 0;
         self.hover_query = Some((path, line, utf16));
         self.status = say!("lsp.asking-what");
+        true
+    }
+
+    /// **`空格 K`：文檔跟不跟着光標走**（2026-09-29 定）。
+    ///
+    /// 原話：「按下它后，光标移动到任何名字上，都會查询并且显示説明……对于『百科』
+    /// 这个是默认开启的。对于『説明』我们可以默认关闭（因为问LSP可能比较耗时）。」
+    ///
+    /// 開着的時候它就是百科的代碼版：面板常駐，內容跟着光標。⚠️ **差別在拉與推**
+    /// ——百科每一幀現算，文檔要問服務器，所以它多一道「光標停穩了纔問」的閘
+    /// （[`Editor::docs_owed`]）。
+    pub(super) fn follow_with_docs(&mut self) -> bool {
+        if !self.writes_code() {
+            return false;
+        }
+        self.docs_follow = !self.docs_follow;
+        match self.docs_follow {
+            true => {
+                // 跟着走就得有地方畫，所以順手把那一扇開出來——鍵不交過去。
+                if self.showing(crate::sidebar::View::Docs).is_none() {
+                    let side = self.side_for(crate::sidebar::View::Docs);
+                    self.open_panel_without_the_keys(side, crate::sidebar::View::Docs);
+                }
+                self.docs_asked_at = None;
+                self.status = say!("lsp.docs-follow-on");
+            }
+            false => self.status = say!("lsp.docs-follow-off"),
+        }
         true
     }
 
@@ -958,21 +991,91 @@ impl Editor {
     /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
     pub fn show_hover(&mut self, told: String) {
         self.hovered = Some((self.sel.head(), told));
+        self.hover_scroll = 0;
         self.status = String::new();
-        // **`空格 K` 開的那一份，鍵跟過去**——與 `空格 D` 逐字同形
-        // （2026-09-23 補）。送進邊欄要的就是「讀得完」，而讀得完得走得動；
-        // 浮窗那一份一個鍵都不收，那是浮窗的通則。答案回來纔交，問出去還沒回
-        // 來的時候交了，讀者看着一扇空面板而正文不聽鍵。
-        if !self.hover_afloat {
-            self.panel_focus = Some(self.side_of(crate::sidebar::Panel::Dictionary));
-        }
+        // ⚠️ **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
+        // 「送進邊欄要的就是讀得完，而讀得完得走得動」——⚠️ **可要走得動本來就有
+        // `空格 4`**，和別的邊欄一個樣；而搶走鍵的代價是人正在寫字的時候光標被
+        // 挪走了。作者報的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在
+        // 正文」。
         self.refresh_sidebar();
     }
 
     /// 服務器對這個東西無話可說。
+    ///
+    /// ⚠️ **跟着光標走的時候不出聲**（2026-09-29）：那一問是編輯器自己發的，
+    /// 報一句「服務器無話可說」等於每走到一個標點就罵一次。面板清空就是答覆。
     pub fn no_hover(&mut self) {
         self.hovered = None;
-        self.status = say!("lsp.speechless");
+        match self.docs_follow {
+            true => self.refresh_sidebar(),
+            false => self.status = say!("lsp.speechless"),
+        }
+    }
+
+    /// **跟着光標那一問，這一刻該不該發出去**（2026-09-29）。
+    ///
+    /// 前端每一輪問一次。三個條件：開關開着、光標停穩了、而且不是上一次問過的
+    /// 那一格。⚠️ **停穩纔問，是為了不閃**——按住 `j` 連走的時候一格都不問，面板
+    /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
+    /// 清空，作者定的）。
+    pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
+        if !self.docs_follow {
+            return None;
+        }
+        let at = self.sel.head();
+        if self.docs_asked_at == Some(at) {
+            return None;
+        }
+        let moved = *self.docs_moved.get_or_insert_with(std::time::Instant::now);
+        if moved.elapsed() < DOCS_SETTLE {
+            return None;
+        }
+        self.docs_asked_at = Some(at);
+        self.docs_moved = None;
+        // 不是代碼、或者光標不在一個名字上：把面板清空，別留着上一條。
+        let Some(query) = self.where_the_cursor_is_in_code() else {
+            self.hovered = None;
+            self.refresh_sidebar();
+            return None;
+        };
+        self.hover_afloat = false;
+        Some(query)
+    }
+
+    /// 浮着的那一則從第幾行畫起。
+    pub fn hover_scroll(&self) -> usize {
+        self.hover_scroll
+    }
+
+    /// **翻那一扇浮窗**——`by` 行，負數往回（2026-09-29）。
+    ///
+    /// 回 `true` ＝ 這一鍵歸浮窗，正文不必再看它一眼。⚠️ **只有浮着的那一份收
+    /// 鍵**：進了邊欄的那一份走邊欄自己的 `jk`，而邊欄是走得進去的
+    /// （`空格 4`）——浮窗不是。
+    pub(super) fn scroll_the_hover(&mut self, by: isize) -> bool {
+        let Some(told) = self.hover_afloat() else { return false };
+        // 最多翻到最後一行，不翻到空白裏去。
+        let last = told.lines().count().saturating_sub(1);
+        self.hover_scroll = self.hover_scroll.saturating_add_signed(by).min(last);
+        true
+    }
+
+    /// **還有多久該問那一句**，`None` ＝ 沒什麽等着（2026-09-29）。
+    ///
+    /// ⚠️ **不給這個數，那一問永遠不會自己發出去。** 光標是按鍵挪的，那一下把
+    /// 循環叫醒了，可那時三百毫秒還沒到；循環接着睡，而睡着的循環不會再看一眼
+    /// 鬧鐘——除非有人先告訴它鬧鐘幾點響。同 `autosave_due_in` 那一族。
+    pub fn docs_due_in(&self) -> Option<std::time::Duration> {
+        let moved = self.docs_moved?;
+        self.docs_follow.then(|| DOCS_SETTLE.saturating_sub(moved.elapsed()))
+    }
+
+    /// 光標動了——跟着走的那一問要重新等它停穩。
+    pub(super) fn the_cursor_moved_under_the_docs(&mut self) {
+        if self.docs_follow && self.docs_asked_at != Some(self.sel.head()) {
+            self.docs_moved = Some(std::time::Instant::now());
+        }
     }
 
     /// **光標離開了問的那一格，那一則說明就作廢**（2026-09-29 報的）。

@@ -389,6 +389,16 @@ impl Servers {
         if !self.told_the_latest(editor) {
             return;
         }
+        // **跟着光標的那一問**（2026-09-29）：`空格 K` 開着的時候編輯器自己發，
+        // 走的是同一條路——它只在光標停穩了三百毫秒之後纔交得出一個問題。
+        if let Some(query) = editor.docs_owed() {
+            let Some(server) = self.running.get_mut(language) else { return };
+            let id = server.next_ask;
+            server.next_ask += 1;
+            server.asked_what = Some(id);
+            server.say(lsp::hover(id, &query.0, query.1, query.2));
+            return;
+        }
         let Some((path, line, column)) = editor.take_hover_query() else { return };
         let Some(server) = self.running.get_mut(language) else { return };
         let id = server.next_ask;

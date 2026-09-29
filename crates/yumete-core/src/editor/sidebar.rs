@@ -167,6 +167,13 @@ impl Editor {
         match self.transient(side) {
             Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows(),
             Some(crate::sidebar::Transient::Hover) => self.hover_rows(),
+            // **常駐的那一扇文檔也走這裏**（2026-09-29）：畫的是同一則東西，
+            // 只是它不因為光標停上去纔出現，所以沒有 transient 可問。
+            None if self.panel(side).map(|p| p.view())
+                == Some(crate::sidebar::View::Docs) =>
+            {
+                self.hover_rows()
+            }
             _ => Vec::new(),
         }
     }
@@ -263,7 +270,24 @@ impl Editor {
         }
     }
 
+    /// **開一扇面板，鍵不交過去**（2026-09-29）。
+    ///
+    /// ⚠️ 別的入口開面板都順手把焦點給它，因為那幾個是「我要去那裏看」。文檔那
+    /// 一扇不是：`空格 K` 說的是「一邊寫一邊讓它跟着」，人還在正文裏
+    /// （作者報的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在正文」）。
+    /// 要走進去就按 `空格 4`，和別的邊欄一個樣。
+    pub(super) fn open_panel_without_the_keys(
+        &mut self,
+        side: crate::sidebar::Side,
+        view: crate::sidebar::View,
+    ) {
+        let was = self.panel_focus;
+        self.open_side_showing(side, view);
+        self.panel_focus = was;
+    }
+
     /// **Open `side` showing `view`** — `show_sidebar`'s second half, without
+    /// the toggle:    /// **Open `side` showing `view`** — `show_sidebar`'s second half, without
     /// the toggle: `:sidebar-left outline` says which side, so the side is not
     /// the configured one and 「already showing」 is not a reason to close it.
     pub(super) fn open_side_showing(
@@ -705,7 +729,8 @@ impl Editor {
             // rows of a tree (#419).
             View::Search => return,
             // Drawn from the cursor every frame, not from rows (#287).
-            View::Wiki => return,
+            // ⚠️ 文檔同形，只是它畫的是問來的那一則，不是現算的。
+            View::Wiki | View::Docs => return,
         };
         if let Some(panel) = self.panel_mut(side) {
             panel.set_rows(rows);
@@ -960,7 +985,7 @@ impl Editor {
     ///
     /// ⚠️ **原樣的 Markdown**，和浮窗裏那一份一個字不差——邊欄畫它的時候走的是
     /// 同一支行內標記渲染。
-    fn hover_rows(&self) -> Vec<crate::sidebar::Row> {
+    pub(super) fn hover_rows(&self) -> Vec<crate::sidebar::Row> {
         let Some(told) = self.hover_in_the_sidebar() else {
             return Vec::new();
         };
