@@ -56,6 +56,9 @@ impl Editor {
         self.forget_a_dictionary_nobody_is_reading();
         // 同上，釘住的那一條詞條也是：光標一動就鬆開（2026-09-25）。
         self.forget_a_pinned_entry();
+        // `空格 k` 問來的那一則說明同理：光標走開就作廢，不許走回去又冒出來
+        // （2026-09-29 報的）。
+        self.forget_a_hover_nobody_is_looking_at();
         // The sidebar takes Normal-mode keys while it has the focus; every
         // other mode is about the text and goes to the text.
         if self.sidebar_focused() && self.mode == Mode::Normal && self.pending == Pending::None {

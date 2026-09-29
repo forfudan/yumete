@@ -17593,3 +17593,35 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`空格 k` 問來的那一則說明，光標走開就作廢**（2026-09-29 報的）。
+///
+/// 原話：「走出之后回到这个字母，它是不是不应该出现了？」對的。從前光標一走只是
+/// **不畫**，答案還留在 `hovered` 裏，於是走回那一格它又冒出來——一個早就過去的
+/// 問題的答案，看着像剛問的。
+#[test]
+fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
+    let dir = std::env::temp_dir().join("yumete-hover-walks-off");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+    assert!(ed.writes_code(), "這是一個代碼檔，不然 `空格 k` 根本不問");
+
+    // 問出去、答案回來：站着的這一格看得見。
+    press(&mut ed, " k");
+    ed.show_hover("fn compile_the_table()".into());
+    assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "答案就在光標這一格");
+
+    // 往右走一格：不畫了。
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.hover_afloat(), None, "光標走開就不畫");
+
+    // ⚠️ **走回來也不許再冒出來。** 這一條是報的那一句。
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.hover_afloat(), None, "問題已經過去了，答案不許復活");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
