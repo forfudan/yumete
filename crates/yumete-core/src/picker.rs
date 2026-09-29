@@ -26,7 +26,7 @@ pub enum Item {
     /// **A wiki entry, by name** — `:wiki 朱宇浩` (2026-09-25).
     ///
     /// The second string is the **blurb**: the head of what the entry says, so
-    /// a list of names is a list you can read. ⚠️ **It is drawn and never
+    /// a list of names is a list you can read. Warning: **It is drawn and never
     /// matched** — typing 「冬天」 should find the entry *called* 冬天, not
     /// every entry that mentions winter.
     ///
@@ -319,7 +319,7 @@ impl Picker {
 ///   `ch63` typed at a novel means the chapter, not the folder it sits in,
 /// - a **short** label over a long one holding the same letters.
 ///
-/// ⚠️ **Two passes, and the second is backwards.** A single greedy pass takes
+/// Warning: **Two passes, and the second is backwards.** A single greedy pass takes
 /// the *first* place each character fits, which for `ch6` in
 /// `chapters/ch6.md` marks the `ch` of 「chapters」 and then the `6` far
 /// away — a scatter, scored as one, and lit up in the wrong place. So the
@@ -328,7 +328,7 @@ impl Picker {
 /// ending at that point. fzf's v1 algorithm does the same thing for the same
 /// reason.
 fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
-    // ⚠️ **One lowercase character per character.** `to_lowercase` may hand
+    // Warning: **One lowercase character per character.** `to_lowercase` may hand
     // back several (İ), and the positions this returns are indices into the
     // label the caller will be drawing — a mapping that is not one to one
     // would light up the wrong cell.
@@ -343,14 +343,14 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
     // apple red 的相近程度其實很高」，而在此之前一個顛倒的查詢不是排在後面，是
     // **整條被篩掉、根本不出現**。
     //
-    // ⚠️ **兩檔之間差着 [`IN_ORDER`] 分**，所以順序對的永遠在上面，顛倒的墊在
+    // Warning: **兩檔之間差着 [`IN_ORDER`] 分**，所以順序對的永遠在上面，顛倒的墊在
     // 底下——放寬不會把本來就對的那一批攪亂。門檻沒有：詞條、檔名這些單子本來就
     // 不長（定的，原話：「寧可多列」）。
     // **簡繁異體照樣算同一個字**（2026-09-26 原話：「中文搜索的匹配繁简体和匹配
     // 拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。和高級搜索那一扇用
     // 的是同一張表。
     //
-    // ⚠️ **放寬的是查詢那一邊，不是名字那一邊**，而這個方向就是那張表值錢的地方：
+    // Warning: **放寬的是查詢那一邊，不是名字那一邊**，而這個方向就是那張表值錢的地方：
     // `class(发) = 发發髮`，所以打「头发」找得到「頭髮」；`class(發) = 發发`，所以
     // 打「發」不會誤中「髮」（見 [`crate::glyphs`]）。反過來折就把這個性質毀了。
     let same = |want: char, have: char| {
@@ -363,10 +363,10 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
             // **字面找不着，就問它念作什麽**（2026-09-26 提的）。`shuzhai` 找得
             // 到「書齋」。
             //
-            // ⚠️ **只認全拼，和高級搜索一條規矩**（定的，原話：「Option 2 更符合目前
+            // Warning: **只認全拼，和高級搜索一條規矩**（定的，原話：「Option 2 更符合目前
             // 的设计哲学——不一下子提供太多东西直到真有人要」）。所以 `sz` 不中。
             //
-            // ⚠️ **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串
+            // Warning: **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串
             // 讀音，而讀者打 `md` 十有八九在找 `.md`。字面接得住就不必問讀音。
             None => {
                 let said = crate::pinyin::as_query(query)?;
@@ -506,14 +506,14 @@ mod tests {
         }
         assert_eq!(picker.chosen(), Some(Item::File("卷一/岳陽樓記.md".to_string())));
 
-        // ⚠️ **放寬的是查詢那一邊**：`发` 含混，兩邊都中；`發` 說得清，不碰「髮」。
+        // Warning: **放寬的是查詢那一邊**：`发` 含混，兩邊都中；`發` 說得清，不碰「髮」。
         let mut picker = files(&["頭髮.md", "發現.md"]);
         picker.push('發');
         assert_eq!(picker.matches().len(), 1, "「發」不該誤中「髮」");
         assert_eq!(picker.chosen(), Some(Item::File("發現.md".to_string())));
     }
 
-    /// **拼音也找得到**（同日）。⚠️ **只認全拼**，和高級搜索一條規矩。
+    /// **拼音也找得到**（同日）。Warning: **只認全拼**，和高級搜索一條規矩。
     #[test]
     fn the_letters_a_name_is_read_as_find_it_too() {
         let mut picker = files(&["卷一/洞庭湖.md", "notes.md"]);
@@ -530,7 +530,7 @@ mod tests {
         }
         assert!(picker.matches().is_empty(), "只認全拼，`dth` 不算");
 
-        // ⚠️ **字面先來**：`md` 是一串讀音，可讀者打它十有八九在找 `.md`。
+        // Warning: **字面先來**：`md` 是一串讀音，可讀者打它十有八九在找 `.md`。
         let mut picker = files(&["notes.md", "馬達.txt"]);
         for c in "md".chars() {
             picker.push(c);
@@ -654,12 +654,12 @@ mod tests {
         let order: Vec<&str> = picker.matches().iter().map(|i| i.label()).collect();
         assert_eq!(order, ["朱浩宇.md", "朱宇浩.md"], "順序對的先出");
 
-        // ⚠️ **缺一個字就不算**——放寬的是次序，不是「有幾個算幾個」。
+        // Warning: **缺一個字就不算**——放寬的是次序，不是「有幾個算幾個」。
         let mut picker = files(&["朱宇浩.md"]);
         for c in "朱浩甲".chars() {
             picker.push(c);
         }
-        // ⚠️ `total()` 是「一共幾條」，不是「配上幾條」——問的是 `matches()`。
+        // Warning: `total()` 是「一共幾條」，不是「配上幾條」——問的是 `matches()`。
         assert_eq!(picker.matches().len(), 0, "甲 不在裏面");
     }
 

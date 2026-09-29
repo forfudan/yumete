@@ -263,7 +263,7 @@ pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
     // and it is Helix's and Neovim's rule too. (`tree-sitter-highlight` has
     // the opposite one, and read with it every function came out plain.)
     //
-    // ⚠️ **One exception: a name beats a string on the same node.** JSON's
+    // Warning: **One exception: a name beats a string on the same node.** JSON's
     // query is the one written the other way round — `@string.special.key`
     // above `(string) @string` — so a key came out the green of its value.
     let named: std::collections::HashSet<(usize, usize)> = found
@@ -274,7 +274,7 @@ pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
     found.retain(|f| !(f.3 == Token::String && named.contains(&(f.0, f.1))));
     found.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
 
-    // ⚠️ **A window over the captures, not a pass over them** (2026-09-20).
+    // Warning: **A window over the captures, not a pass over them** (2026-09-20).
     // This used to walk the whole of `found` for every line and skip what did
     // not overlap — O(lines × captures), and a capture per few bytes means
     // both grow together: measured 600 lines 10 ms, 2400 lines 20 ms, **4800

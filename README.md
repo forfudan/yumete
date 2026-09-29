@@ -149,7 +149,7 @@ list, `M a` / `' a` name a place and come back to it across files.
 **Match mode** (`m`) jumps, selects and surrounds over 「」『』（）《》【】〔〕
 as well as the ASCII pairs.
 
-⚠️ **There is no `t` / `T`.** That letter is the table mode's, all of it.
+Warning: **There is no `t` / `T`.** That letter is the table mode's, all of it.
 
 Coming from vim, `:keymap vim` (or `[keys] preset = "vim"`) translates the keys
 that would *destroy text* if pressed out of habit: `d c y > <` become operators
@@ -353,7 +353,7 @@ Three things differ there and the script handles all three: the binary is
 `~/.local/share/yumete`, and the global `yumete` is a **copy** rather than a
 symlink, because a symlink needs Developer Mode.
 
-⚠️ **The sibling repo is not optional.** `yumete-ime` depends on `yume-core` by
+Warning: **The sibling repo is not optional.** `yumete-ime` depends on `yume-core` by
 path, so `cargo build` without `..\yume` fails in `cargo metadata`, before a
 single crate compiles — it is not「builds but has no 碼表」. What *is* optional
 is yume's **data**: a build with the sibling source but no installed tables

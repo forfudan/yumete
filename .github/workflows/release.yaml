@@ -8,14 +8,14 @@ name: Build release tarballs
 #   yumete-<version>-linux-x86_64.tar.gz
 #   yumete-<version>-linux-aarch64.tar.gz
 #
-# ⚠️ **The IME data is not in them** ([^135]). It is 36 MB compressed, it is
+# Warning: **The IME data is not in them** ([^135]). It is 36 MB compressed, it is
 # **platform-independent** — yume's own `fetch_data_linux.sh` says so, and
 # takes the Linux files out of the macOS release — so bundling it here would
 # build one thing three times and make every reader download it three times.
 # It travels its own way: yume's own install, a `yume-data` formula, or
 # `$YUME_DATA_DIR`. An editor with no tables is still an editor.
 #
-# ⚠️ **Two repositories are checked out, side by side.** `yumete-ime` depends
+# Warning: **Two repositories are checked out, side by side.** `yumete-ime` depends
 # on `yume-core` by path — `../../../yume/crates/yume-core` — so a checkout of
 # this repository alone does not build: `cargo metadata` fails before a single
 # crate compiles. `forfudan/yume` is private and `GITHUB_TOKEN` cannot read it,
@@ -41,7 +41,7 @@ name: Build release tarballs
 #     artifacts and attaches nothing, since there may be no release to attach
 #     them to.
 #
-# ⚠️ The release page is live from the moment it is published, and the assets
+# Warning: The release page is live from the moment it is published, and the assets
 # arrive minutes later — a reader (or a tap) who looks in between sees a
 # release with nothing on it. **Do the manual run first**, look at the
 # artifacts, then publish the release; the build is cached by then and the
@@ -184,7 +184,7 @@ jobs:
           key: ${{ matrix.target }}
           workspaces: yumete
 
-      # ⚠️ **The 碼表 and the word list are build inputs, not tracked files.**
+      # Warning: **The 碼表 and the word list are build inputs, not tracked files.**
       # Both are generated — `lingming_essential.ytab` cut from 宇浩's own
       # 碼表, `common_words.txt` from its language model — and a generated
       # table rewritten whole on every refresh costs the repository its full
@@ -247,7 +247,7 @@ jobs:
           STAGE="dist/${PKG}"
           mkdir -p "${STAGE}/bin" "${STAGE}/docs"
           cp target/release/yumete "${STAGE}/bin/"
-          # ⚠️ No `2>/dev/null || …` here. It used to fall back to copying only
+          # Warning: No `2>/dev/null || …` here. It used to fall back to copying only
           # the README, so the day LICENSE moved, an Apache-2.0 project would
           # have shipped tarballs with no licence text and a green build.
           # `set -e` and a loud failure is the right answer.
@@ -293,7 +293,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}
-          # ⚠️ `path:` is resolved against `$GITHUB_WORKSPACE`, **not** against
+          # Warning: `path:` is resolved against `$GITHUB_WORKSPACE`, **not** against
           # `defaults.run.working-directory` — so it carries the checkout
           # directory even though every `run:` above does not.
           path: yumete/dist/yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}.tar.gz*

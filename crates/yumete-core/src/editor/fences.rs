@@ -22,7 +22,7 @@ const LONGEST: usize = 5_000;
 /// Enough parsed fences to cover several open chapters without growing for as
 /// long as the session runs.
 ///
-/// ⚠️ **Counted in lines as well as in entries** ([`HELD`]). This cache was
+/// Warning: **Counted in lines as well as in entries** ([`HELD`]). This cache was
 /// designed for *fences* — a snippet in a manuscript, a dozen lines — and 256
 /// of those is nothing. Then whole code files started coming through the same
 /// door (#420), where one entry can be five thousand lines of spans; 256 of
@@ -110,7 +110,7 @@ impl Editor {
     /// **How long the code under the cursor is, when that is why it has no
     /// colours** — `(lines, the cap)`, and `None` when nothing is wrong.
     ///
-    /// ⚠️ The cap exists (parsing runs on every edit, so a pasted data file
+    /// Warning: The cap exists (parsing runs on every edit, so a pasted data file
     /// would be re-parsed per keystroke), but a cap that says nothing reads as
     /// a broken feature: 「顏色到這裏就沒了」. `:view-code` asks this, so the
     /// question 「why is this not coloured」 has an answer where a reader would
@@ -201,7 +201,7 @@ impl Editor {
                 .into_iter()
                 .find(|&c| trimmed.starts_with(&c.to_string().repeat(3)));
             match (open, mark) {
-                // ⚠️ **Only a fence opens a fence.** Typst's scan calls a
+                // Warning: **Only a fence opens a fence.** Typst's scan calls a
                 // `#show` body code too, and reading its first line as an info
                 // string would parse `json("a.json")` as JSON.
                 (None, Some(mark)) => {

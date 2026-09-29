@@ -14,7 +14,7 @@
 //!   hl 換欄  jk 上下  空格 切換  i 改  d 撤掉  Tab 換存到哪一份  :w 存  q 走
 //! ```
 //!
-//! ⚠️ **第三欄說的是「這一項現在從哪一層來」**，後面跟着被它蓋掉的那一個值。不寫
+//! Warning: **第三欄說的是「這一項現在從哪一層來」**，後面跟着被它蓋掉的那一個值。不寫
 //! 出來的話，一個讀者看見「首行縮進 2」而他記得自己全局設的是 0，就只能去翻檔。
 
 use ratatui::layout::Rect;
@@ -31,7 +31,7 @@ use yumete_core::say;
 
 /// **`say!`，但標籤是個變量。**
 ///
-/// ⚠️ `say!` 只收字面量（那是有意的：`messages.rs` 那張「每個標籤都有條目」的網
+/// Warning: `say!` 只收字面量（那是有意的：`messages.rs` 那張「每個標籤都有條目」的網
 /// 是讀源碼找的，一個算出來的標籤它看不見）。這一扇面板的標籤**全部**來自
 /// `settings_ui` 那張表，所以它們是變量——而那張網照樣看得見，因為它們在表上寫成
 /// `label:` 與 `hint:`，那兩個開口是 2026-09-24 為此開的。
@@ -46,11 +46,11 @@ const GROUPS_WIDE: u16 = 14;
 
 /// **右邊那三欄從哪裏開始**，以及它們各自到哪裏為止。
 ///
-/// ⚠️ **量出來的，不是寫死的。** 從前是兩個常量（22 與 38），於是 56 欄以下那扇
+/// Warning: **量出來的，不是寫死的。** 從前是兩個常量（22 與 38），於是 56 欄以下那扇
 /// 面板**只剩一列標籤**，什麽值都看不見，而窄窗口下沒有任何降級。2026-09-24 審
 /// 出來的。
 ///
-/// ⚠️ **值那一欄有右邊界。** 從前它的上限是整頁的右邊，於是一個長值直接蓋到
+/// Warning: **值那一欄有右邊界。** 從前它的上限是整頁的右邊，於是一個長值直接蓋到
 /// 「從哪一層來」那一欄上（`layout = "a-very-long-word"`，而 [`drawn`] 有意照原
 /// 樣畫不認得的詞）。`Kind::Text` 那一族填進表之後那就是常態。
 struct Columns {
@@ -69,7 +69,7 @@ impl Columns {
         let right = area.x + area.width;
         let name = area.x + GROUPS_WIDE + 2;
         let room = right.saturating_sub(name);
-        // ⚠️ **按比例算再鉗住，不是純按比例。** 純比例在寬窗口下把三欄拉得老遠
+        // Warning: **按比例算再鉗住，不是純按比例。** 純比例在寬窗口下把三欄拉得老遠
         // ——名字最長五個漢字（10 格），而四成的 110 欄是 38 格，中間攤着一片空
         // 白。鉗上去之後寬窗口是緊的，窄窗口照舊按比例縮。
         let name_wide = (room * 30 / 100).clamp(14, 24);
@@ -90,7 +90,7 @@ impl Columns {
 ///
 /// 回來的是「這一鍵之後面板還開着嗎」——`false` ＝ 該關了。
 ///
-/// ⚠️ **`:` 不在這裏接。** 它要交給編輯器去開命令行，`:w` 與 `:q` 就是在那條命令
+/// Warning: **`:` 不在這裏接。** 它要交給編輯器去開命令行，`:w` 與 `:q` 就是在那條命令
 /// 行上打的（核心認得「面板開着」，於是那兩條說的是面板）。一扇面板自己再長一條
 /// 命令行出來，是第二套規矩。
 pub fn press(panel: &mut Panel, key: Key) -> bool {
@@ -131,7 +131,7 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         Key::Char('G') => {
             let last = |n: usize| n.saturating_sub(1);
             match panel.pane {
-                // ⚠️ **換組要把行號歸零**，同 `step`。不歸的話，在十二行的組裏
+                // Warning: **換組要把行號歸零**，同 `step`。不歸的話，在十二行的組裏
                 // `G` 到末行、`h`、`G`、`l` 進一個三行的組，`here()` 是 `None`
                 // ——沒有一行高亮，空格／`i`／`d` 全沒反應，看起來像面板卡住。
                 Pane::Groups => {
@@ -149,7 +149,7 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
 
 /// **那扇面板在前端的一個座位** —— 開、收鍵、存、關，一整圈。
 ///
-/// ⚠️ **這一支存在的理由是「別寫兩遍」。** 主循環（`run`）與 `--keys`
+/// Warning: **這一支存在的理由是「別寫兩遍」。** 主循環（`run`）與 `--keys`
 /// （`yumete/src/main.rs` 的 `press`）都要走同一套，而 2026-09-24 那兩份各抄一遍
 /// 之後**當天就分岔了**：`--keys` 那一份漏了「有改動不許一下走」的閘，又把存盤
 /// 的錯 `let _ =` 吞掉。兩份代碼一個行為，第三次分岔只是時間問題。
@@ -167,7 +167,7 @@ pub struct Seat {
 impl Seat {
     /// **這一鍵歸面板嗎？** 歸就收下並回 `true`（呼叫方 `continue`）。
     ///
-    /// ⚠️ **`:` 不歸。** 它交給編輯器去開命令行，`:w`／`:q` 就是在那條行上打的
+    /// Warning: **`:` 不歸。** 它交給編輯器去開命令行，`:w`／`:q` 就是在那條行上打的
     /// （核心認得 `settings_open`，於是那幾條說的是面板）。命令行已經開着的時候
     /// 當然也不歸，否則那條命令打不完。
     pub fn took(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {
@@ -178,12 +178,12 @@ impl Seat {
         if key == Some(Key::Char(':')) {
             return false;
         }
-        // ⚠️ **認不出的鍵也算收下了**：面板開着的時候一個 F13 不該掉進正文。
+        // Warning: **認不出的鍵也算收下了**：面板開着的時候一個 F13 不該掉進正文。
         let Some(key) = key else { return true };
         let dirty = page.dirty();
         match press(page, key) {
             true => self.warned = false,
-            // ⚠️ **有改動沒存就不許一下走掉**：面板上攢的東西一個鍵都沒落到磁碟
+            // Warning: **有改動沒存就不許一下走掉**：面板上攢的東西一個鍵都沒落到磁碟
             // 上，走了就是全丟。第一下說一句，第二下纔算數。
             false => self.leave(editor, dirty),
         }
@@ -192,7 +192,7 @@ impl Seat {
 
     /// 核心那幾張條子：開過 `:settings` 沒有、按過 `:w` 沒有、按過 `:q` 沒有。
     pub fn settle(&mut self, editor: &mut Editor) {
-        // ⚠️ **已經開着就什麽都不做。** 無條件重開會把攢着沒存的改動一聲不吭地
+        // Warning: **已經開着就什麽都不做。** 無條件重開會把攢着沒存的改動一聲不吭地
         // 丟掉，而 `q` 與 `:q` 都有兩段式的閘。
         if editor.take_settings_request() && self.panel.is_none() {
             let local = std::env::current_dir()
@@ -262,7 +262,7 @@ impl Seat {
 
 /// 一個值畫成什麽樣。
 ///
-/// ⚠️ **打勾與幾選一戴的是同一副方括號** —— 同搜索面板那條規矩（2026-09-23
+/// Warning: **打勾與幾選一戴的是同一副方括號** —— 同搜索面板那條規矩（2026-09-23
 /// 原話：「這樣用戶就知道這裏是可以空格切換的」）。數字與一段字不戴：它們按空格
 /// 也動，但動的是「加一」而不是「換一個」，戴上會讓人以為只有兩三個值。
 fn drawn(setting: &Setting, value: &str) -> String {
@@ -322,7 +322,7 @@ pub fn draw(
         said(panel.into.layer().label()),
         match (&sheet.path, sheet.there) {
             (Some(p), true) => shorten(p),
-            // ⚠️ **那個檔還沒有就明說，而路徑照畫** —— 本項目那一份多半不存在，
+            // Warning: **那個檔還沒有就明說，而路徑照畫** —— 本項目那一份多半不存在，
             // 存盤時它是被**建出來**的，而建在哪裏是一件該先看得見的事。
             (Some(p), false) => format!("{}（{}）", shorten(p), say!("set.no-file")),
             (None, _) => say!("set.no-file"),
@@ -332,12 +332,12 @@ pub fn draw(
         true => format!("{}  {where_to}", say!("set.unsaved")),
         false => where_to,
     };
-    // ⚠️ **撞上標題就縮**。從前它只 `saturating_sub`，於是 40 欄的窗口上那條路徑
+    // Warning: **撞上標題就縮**。從前它只 `saturating_sub`，於是 40 欄的窗口上那條路徑
     // 直接蓋掉「設置」兩個字（`設置全局] ~/.config/…`）。先丟路徑只留 `[全局]`，
     // 再丟不下就整條不畫——標題不許被吃掉。2026-09-24 審出來的。
     let title_ends = area.x + 1 + yumete_cjk::str_width(&say!("set.title")) as u16 + 2;
     let short = format!("[{}]", said(panel.into.layer().label()));
-    // ⚠️ **「改了還沒存」是最後纔丟的那一個。** 從前這裏只有兩檔——完整那一行，
+    // Warning: **「改了還沒存」是最後纔丟的那一個。** 從前這裏只有兩檔——完整那一行，
     // 或者光一個 `[全局]`——於是 74 欄以下**改了東西沒有任何提示**，而那正是這一
     // 行存在的理由。中間插一檔：徽章 ＋ `[全局]`，路徑先丟。2026-09-24 審出來的。
     let badge = match panel.dirty() {
@@ -367,7 +367,7 @@ pub fn draw(
 
     // ---- 兩道橫綫與一道竪綫 ------------------------------------------------
     let split = area.x + GROUPS_WIDE;
-    // ⚠️ **`foot` 不許爬到上面那道橫綫之上。** 可用高度 ≤3 時它會落到 `area.y`，
+    // Warning: **`foot` 不許爬到上面那道橫綫之上。** 可用高度 ≤3 時它會落到 `area.y`，
     // 於是 `┬` 畫在 `┴` 下面、說明行蓋在橫綫上、標題被抹掉——整扇面板讀成一團。
     // 2026-09-24 審出來的（110×5）。
     let foot = (area.y + area.height.saturating_sub(3)).max(area.y + 2);
@@ -450,7 +450,7 @@ pub fn draw(
             // 動過的那些亮一點：一頁十二行裏哪三行是自己設的，要一眼看得出。
             (false, _) => ground.fg(ink.azure()),
         };
-        // ⚠️ **切了要看得出來。** `put_text` 到了邊界就停，一聲不吭——「候選的序號」
+        // Warning: **切了要看得出來。** `put_text` 到了邊界就停，一聲不吭——「候選的序號」
         // 那九個全角字正好比值欄寬一格，畫出來是 `１２３４５６７８`，看着像設定
         // 裏只有八個。省略號說出「後面還有」。2026-09-24 拍圖看出來的。
         let room = col.value_ends().saturating_sub(col.value) as usize;
@@ -480,7 +480,7 @@ pub fn draw(
             if let Kind::Count { zero: Some(tag), .. } = setting.kind {
                 note.push_str(&format!("　（{}）", said(tag)));
             }
-            // ⚠️ **改的那一層被蓋着就說一句。** 不說的話，一個人在全局上按空格而
+            // Warning: **改的那一層被蓋着就說一句。** 不說的話，一個人在全局上按空格而
             // 本項目壓着這一項，螢幕上那一行紋絲不動——看起來像鍵壞了。
             if panel.shadowed(setting) {
                 note.push_str(&format!("　{}", say!("set.shadowed")));
@@ -536,7 +536,7 @@ mod tests {
 
     /// **檔裏寫了一個不認得的詞，照原樣畫**——不假裝它是第一個選項。
     ///
-    /// ⚠️ 假裝的話，一個把 `layout = "vertcal"` 打錯的人會看見面板上寫着「橫排」
+    /// Warning: 假裝的話，一個把 `layout = "vertcal"` 打錯的人會看見面板上寫着「橫排」
     /// 而檔裏寫着別的，兩邊都說不通。
     #[test]
     fn a_word_we_do_not_know_is_drawn_as_it_was_written() {
@@ -591,7 +591,7 @@ mod tests {
 
     /// **本項目蓋了全局，那一行要把被蓋掉的那個也說出來。**
     ///
-    /// ⚠️ 不說的話，一個讀者看見「首行縮進 2」而他記得自己全局設的是 4，就只能去
+    /// Warning: 不說的話，一個讀者看見「首行縮進 2」而他記得自己全局設的是 4，就只能去
     /// 翻檔案——而這一欄存在的全部理由就是免掉那一趟。
     #[test]
     fn a_row_that_is_overridden_names_what_it_covered() {

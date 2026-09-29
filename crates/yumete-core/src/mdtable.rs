@@ -944,7 +944,7 @@ pub fn measured_window(
     let page = page.max(1);
     let a = top.max(first).min(last);
     let b = top.saturating_add(page).min(last).max(a);
-    // ⚠️ **A window holding one row is no window** (2026-09-19). When the table
+    // Warning: **A window holding one row is no window** (2026-09-19). When the table
     // sits *below* `top + page` — a chapter of prose above it, and in 竪排 the
     // screenful is counted in 縱 while `top` is a line — this clips to
     // `[first, first]`, and the one row it holds is the header. The header was
@@ -1216,7 +1216,7 @@ pub fn padding(
     // **No narrower than its own alignment marker**, where there is one to
     // write — see [`Wall::ruled`].
     //
-    // ⚠️ **Only where the rule row is written out as characters** (2026-09-20).
+    // Warning: **Only where the rule row is written out as characters** (2026-09-20).
     // 竪排 draws that row as the wall running down the 縱 — one glyph, and the
     // `:` are off the page entirely — so there is nothing for this floor to
     // protect, and it was making every band in a `:-:` table **three slots
@@ -2113,7 +2113,7 @@ mod proof_292 {
             worst.0,
             worst.1
         );
-        // ⚠️ **20 萬 → 26 萬，2026-09-28**，而且這一句該不該留着是一個問題。
+        // Warning: **20 萬 → 26 萬，2026-09-28**，而且這一句該不該留着是一個問題。
         //
         // 撞線的那一次是 §5.13（多選區方案）加進來的十四張表——可量出來它們一共只有
         // **3,388 字節**，而當時的總數已經是 19.7 萬。**不是那一節撐爆的，它只是最後
@@ -2127,12 +2127,12 @@ mod proof_292 {
         // | 表格本身 | 219,556（佔 12.2%） |
         // | 對齊要補的 | 228,747（**佔表格 104%**——對齊一遍差不多翻一倍） |
         //
-        // ⚠️ **真正該看的是上面那一句 `worst`，不是這一句。** #292 防的是「**一張**表
+        // Warning: **真正該看的是上面那一句 `worst`，不是這一句。** #292 防的是「**一張**表
         // 的最寬格子是一整段，於是別的每一行都補到那麼寬」——那是單張表的病。而這一
         // 句量的是「整個文檔集加起來」，它**隨文檔一起長**，於是每隔一陣就要調大一次
         // ——一條注定被反覆消音的護欄。
         //
-        // ⚠️ **而它順帶露出一件真事**：`docs/development.md:511` 那張功能表**一張就
+        // Warning: **而它順帶露出一件真事**：`docs/development.md:511` 那張功能表**一張就
         // 99,138 字節**，佔全部的一半，**貼着上面那條「單張不許過十萬」的線**。下一個
         // 功能行就會把那一句（真正要緊的那一句）撞紅。
         //

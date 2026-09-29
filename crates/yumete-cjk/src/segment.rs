@@ -113,7 +113,7 @@ pub trait Segmenter {
 pub enum WordMark {
     /// A hair of colour under every other word.
     ///
-    /// ⚠️ **Not the default any more** (#456). 「tint 模糊却嘈杂」: a ground is
+    /// Warning: **Not the default any more** (#456). 「tint 模糊却嘈杂」: a ground is
     /// a rectangle, so it marks the *space* a word takes rather than the word,
     /// and a paragraph of them is a row of blocks the eye has to look past to
     /// read the writing. It is still the right answer for a reader who wants
@@ -132,7 +132,7 @@ pub enum WordMark {
     /// about weight — two inks equally dark, so no word is louder than its
     /// neighbour.
     ///
-    /// ⚠️ **On the 藍↔黃 axis, never 紅↔綠.** Eight men in a hundred cannot
+    /// Warning: **On the 藍↔黃 axis, never 紅↔綠.** Eight men in a hundred cannot
     /// tell red from green, and this is the one mark on the page whose whole
     /// job is a distinction; blue against yellow survives every common form of
     /// colour blindness. An isoluminant difference is subtle by construction —
@@ -152,7 +152,7 @@ pub enum WordMark {
     /// underlines only each word's **last** cell, which draws one short rule
     /// across the column exactly where the word ends.
     ///
-    /// ⚠️ **線, not 分界線.** It was called `separator` until the picture
+    /// Warning: **線, not 分界線.** It was called `separator` until the picture
     /// settled it: down a column the mark really is a rule *between* two words,
     /// but across a line it is a rule *under* one — 「在横排里本质上不是
     /// separator」. The shorter name is true on both pages.
@@ -164,7 +164,7 @@ impl WordMark {
     pub fn parse(value: &str) -> Option<WordMark> {
         match value.trim().to_ascii_lowercase().as_str() {
             "tint" | "bg" | "background" | "底色" | "背景" => Some(WordMark::Tint),
-            // ⚠️ `colour`/`color` used to mean this one and now names the mode
+            // Warning: `colour`/`color` used to mean this one and now names the mode
             // below (#501): 明度 is what `ink` varies, and 顏色 is what the new
             // one varies. Leaving the old spelling here would put the reader on
             // the mode they did not ask for.
@@ -450,7 +450,7 @@ impl DictionarySegmenter {
     /// Build a segmenter from the word list bundled with this binary, so word
     /// motions and the overlay work without any setup.
     ///
-    /// ⚠️ **The list may be empty** — it is a build-time input, not a tracked
+    /// Warning: **The list may be empty** — it is a build-time input, not a tracked
     /// file (see `build.rs`). Then every word is one 漢字 wide, which is
     /// honest and is what this did before the list existed. Ask
     /// [`Self::word_count`] before writing a test that needs real words.
@@ -719,7 +719,7 @@ impl SegmentMemo {
 /// would hand `w` another paragraph's boundaries, and holding a few hundred
 /// short strings is cheaper than that.
 ///
-/// ⚠️ **What a line cuts into depends on more than the line.** The dictionary
+/// Warning: **What a line cuts into depends on more than the line.** The dictionary
 /// in force, the [`WordLevel`], and the book's own word list all change the
 /// answer without changing a character of the text.
 /// [`set_level`](Memo::set_level) throws away what it holds; the other two are
@@ -775,7 +775,7 @@ impl Segmenter for Memo {
     }
 }
 
-// ⚠️ **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
+// Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
 // 全綠。這一支從前擺在中間，後面壓着 258 行（2026-09-24 審出來的）。
@@ -926,7 +926,7 @@ mod tests {
         assert!(seg.word_count() > 100);
         // 你好 and 世界 are both in the bundled list.
         assert_eq!(seg.segment("你好世界"), vec![(0, 2), (2, 4)]);
-        // Two words in a row cut apart. ⚠️ Pick a pair the corpus does *not*
+        // Two words in a row cut apart. Warning: Pick a pair the corpus does *not*
         // also list as one four-character entry — 「我们今天」 is such an entry
         // (7,395), so the maximum-probability path joins it, correctly.
         assert_eq!(seg.segment("冬天早晨"), vec![(0, 2), (2, 4)]);

@@ -13,7 +13,7 @@ impl Editor {
     /// **Which slot a panel lives in — the one place that decides it** (#293).
     ///
     /// One answer per panel, because a reader may want the outline across from
-    /// the tree, or the 字典 stacked under it. ⚠️ **`Tab` then walks only the
+    /// the tree, or the 字典 stacked under it. Warning: **`Tab` then walks only the
     /// views that share a slot** ([`Editor::cycle_view`]): the motion belongs
     /// to the column, not to the list of views.
     pub fn side_of(&self, panel: crate::sidebar::Panel) -> crate::sidebar::Side {
@@ -47,7 +47,7 @@ impl Editor {
                 }
             }
             Some(_) => {}
-            // ⚠️ **只有這一格自己正拿着鍵的時候，鍵纔跟過去。** 從前的條件是
+            // Warning: **只有這一格自己正拿着鍵的時候，鍵纔跟過去。** 從前的條件是
             // 「焦點在 `was` 那一側」——`Layer` 在的時候那等於「在下層」，沒了
             // 之後它也可能是**那一側的常駐面板**。於是
             // `:panel-dictionary left` 會把鍵從右邊的百科裏拽走
@@ -118,15 +118,15 @@ impl Editor {
     /// remembered it, and nobody put it back.
     pub fn transient(&self, side: crate::sidebar::Side) -> Option<crate::sidebar::Transient> {
         use crate::sidebar::{Panel, Transient};
-        // ⚠️ **浮窗那一次不上邊欄。** `空格 d` 只是看一眼，邊欄的樣子一點都不
+        // Warning: **浮窗那一次不上邊欄。** `空格 d` 只是看一眼，邊欄的樣子一點都不
         // 該變（2026-09-22 定：邊欄是容器，只由人開由人關）。
         if self.side_of(Panel::Dictionary) == side && !self.dictionary_afloat && self.dictionary_live() {
             return Some(Transient::Dictionary);
         }
-        // `空格 K` 問的那一次——與字典共用同一個位置（見 `Transient::Hover`）。
-        if self.side_of(Panel::Dictionary) == side && self.hover_in_the_sidebar().is_some() {
-            return Some(Transient::Hover);
-        }
+        // Warning: **文檔不在這裏**（2026-09-29 拆的）。它 2026-09-29 起是一扇**常駐**
+        // 面板（`View::Docs`），而這一支答的是「光標頂上來的那一層」。兩個身份
+        // 都掛着的後果，作者當場就撞上了：鍵走臨時那一支，於是 `w`、`Tab` 一個
+        // 都不管用，而提示行也只寫得出臨時那一支的兩個鍵。
         if self.side_of(Panel::Detail) == side && self.detail_is_a_panel() {
             return Some(Transient::Detail);
         }
@@ -139,7 +139,7 @@ impl Editor {
     /// about — or while the keys are in the panel, where the cursor cannot
     /// move at all, so a long answer can be read to the end.
     ///
-    /// ⚠️ **Reads the stored focus, not [`Editor::panel_focus`]**: that one
+    /// Warning: **Reads the stored focus, not [`Editor::panel_focus`]**: that one
     /// asks whether the layer is showing, which asks this, which would ask it
     /// again. The stored field is the right one anyway — the question is
     /// 「were the keys put here」, not 「is there something here to look at」.
@@ -166,7 +166,6 @@ impl Editor {
     pub fn transient_rows(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::Row> {
         match self.transient(side) {
             Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows(),
-            Some(crate::sidebar::Transient::Hover) => self.hover_rows(),
             // **常駐的那一扇文檔也走這裏**（2026-09-29）：畫的是同一則東西，
             // 只是它不因為光標停上去纔出現，所以沒有 transient 可問。
             None if self.panel(side).map(|p| p.view())
@@ -199,7 +198,7 @@ impl Editor {
 
     /// **鍵進不進得去這個邊欄**——`C-w` 那個環上有没有這一格的座位。
     ///
-    /// ⚠️ **必須與 [`Editor::slot_showing`] 同進退。** 焦點停不停得住看的是
+    /// Warning: **必須與 [`Editor::slot_showing`] 同進退。** 焦點停不停得住看的是
     /// `slot_showing`，而環上有没有座位看的是這一支；兩者只要分歧，就會出現
     /// 「焦點在這一格，而環上找不到它」——`next_region` 那一句
     /// `let Some(here) = here else { return }` 直接返回，`C-w` **一聲不吭地
@@ -248,7 +247,7 @@ impl Editor {
     ///   the panel".
     pub(super) fn show_sidebar(&mut self, view: crate::sidebar::View) {
         if let Some(side) = self.showing(view) {
-            // ⚠️ **只有常駐那一個在眼前的時候，同一個鍵纔是「收起來」。** 光標把
+            // Warning: **只有常駐那一個在眼前的時候，同一個鍵纔是「收起來」。** 光標把
             // 字典頂上來的那一刻，`空格 o` 說的是「把大綱還給我」，不是「關掉」。
             match self.panel_focus() == Some(side) && self.transient(side).is_none() {
                 true => self.close_panel(side),
@@ -272,7 +271,7 @@ impl Editor {
 
     /// **開一扇面板，鍵不交過去**（2026-09-29）。
     ///
-    /// ⚠️ 別的入口開面板都順手把焦點給它，因為那幾個是「我要去那裏看」。文檔那
+    /// Warning: 別的入口開面板都順手把焦點給它，因為那幾個是「我要去那裏看」。文檔那
     /// 一扇不是：`空格 K` 說的是「一邊寫一邊讓它跟着」，人還在正文裏
     /// （作者報的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在正文」）。
     /// 要走進去就按 `空格 4`，和別的邊欄一個樣。
@@ -321,13 +320,13 @@ impl Editor {
     /// 「底部……可以在上面写上 tab 的循环顺序，比如『Tab 文件 > 缓冲区 > 大纲 >
     /// 搜索』」）。
     ///
-    /// ⚠️ **算出來的，不是寫死的**：哪個視圖歸哪一欄是使用者配得動的
+    /// Warning: **算出來的，不是寫死的**：哪個視圖歸哪一欄是使用者配得動的
     /// （`side_for`），底邊上那一行要說的就是他這一台此刻的真話。少於兩個的時候
     /// 回空——`Tab` 那時什麼都不做，寫一行「Tab 文件」是在許一個不存在的諾。
     /// **這一份稿子容得下這一扇嗎**（2026-09-29 定）。
     ///
     /// 原話：「百科面板和绝对不能侵入程序文件。因此不可能出现同时有百科和文檔的
-    /// 事情。这两个是 enum。」⚠️ **它們不是兩扇可以並存的面板，是一扇面板的兩
+    /// 事情。这两个是 enum。」Warning: **它們不是兩扇可以並存的面板，是一扇面板的兩
     /// 種**：散文那一份講詞條，代碼那一份講名字。所以 `Tab` 的環上、`:sidebar-*`
     /// 的名單上、底邊那一行上，同一時刻只該出現其中一扇。
     pub(super) fn view_fits_the_file(&self, view: crate::sidebar::View) -> bool {
@@ -348,7 +347,7 @@ impl Editor {
     }
 
     /// **換了一份稿子，那一扇要跟着換**（2026-09-29）：從散文走進代碼，開着的
-    /// 百科就成了文檔，反過來一樣。⚠️ 不換的話屏幕上會出現一扇這份稿子裏根本
+    /// 百科就成了文檔，反過來一樣。Warning: 不換的話屏幕上會出現一扇這份稿子裏根本
     /// 不存在的面板，而 `Tab` 又轉不到它——一個走不出去的角落。
     pub(super) fn fit_the_panels_to_the_file(&mut self) {
         for side in crate::sidebar::Side::BOTH {
@@ -403,7 +402,7 @@ impl Editor {
 
     /// **The keys every panel answers, wherever it sits.**
     ///
-    /// ⚠️ 左欄、右欄、光標放上去的那幾種是**同一個組件擺在不同位置**，所以這一組鍵
+    /// Warning: 左欄、右欄、光標放上去的那幾種是**同一個組件擺在不同位置**，所以這一組鍵
     /// 必須是同一份。分成三份各自維護的代價已經付過一次：常駐面板和搜索面板都
     /// 有 `q`，臨時層漏了，於是 `空格 d` 打開的字典**關不掉**——`q`、`Esc`、`j`
     /// 全被那一句 `_ => {}` 吃掉，唯一的出路是 `C-w` 再移動光標，兩步，而且提示
@@ -420,7 +419,7 @@ impl Editor {
     pub(super) fn panel_key_in_common(&mut self, key: Key, side: crate::sidebar::Side) -> bool {
         match key {
             Key::Ctrl('w') => self.next_region(),
-            // ⚠️ **`q` 關的是眼前那一個**：光標把字典頂上來的時候關字典，常駐那
+            // Warning: **`q` 關的是眼前那一個**：光標把字典頂上來的時候關字典，常駐那
             // 一個原封不動地在底下等着——「有前任還給前任」。
             Key::Char('q') => match self.transient(side).is_some() {
                 true => self.close_transient(side),
@@ -448,7 +447,7 @@ impl Editor {
     /// Shut whichever transient layer this side is showing, and hand the keys
     /// back to the writing.
     ///
-    /// ⚠️ **The layer was a trap without this** (2026-09-14). The design is
+    /// Warning: **The layer was a trap without this** (2026-09-14). The design is
     /// that a 字典 answer needs no closing — it goes when the cursor leaves the
     /// character it was asked about. True, *until* `空格 d` opens it with the
     /// keys in it: focus alone keeps `dictionary_live()` true, so the cursor
@@ -463,14 +462,13 @@ impl Editor {
                 self.dictionary_query = None;
                 self.dictionary_anchor = None;
             }
-            Some(crate::sidebar::Transient::Hover) => self.hovered = None,
             Some(crate::sidebar::Transient::Detail) => self.show_detail = Some(false),
             None => return,
         }
         // **有前任還給前任，没有就回正文。** 讀者說的是「我不要眼前這一個」，
         // 而這一格底下要是還站着常駐的那一個，鍵留在這一格並不意外——他本來就
         // 是在這一欄裏。空了纔回正文。
-        // ⚠️ 註釋從前寫的是「不回到底下那個常駐面板」，而代碼一直是這樣
+        // Warning: 註釋從前寫的是「不回到底下那個常駐面板」，而代碼一直是這樣
         // （2026-09-23 對出來的）。
         if self.panel_focus == Some(side) && !self.slot_showing(side) {
             self.panel_focus = None;
@@ -560,11 +558,11 @@ impl Editor {
     /// space+w（切换到下个**可视**区域，按照第一工作区、第二工作区、左边栏、右边栏
     /// 这样的顺序）」。
     ///
-    /// ⚠️ **走的次序就是 `空格 1`–`4` 那四個號**，不是屏幕上從左到右的次序。這樣
+    /// Warning: **走的次序就是 `空格 1`–`4` 那四個號**，不是屏幕上從左到右的次序。這樣
     /// 兩個鍵只有一套坐標：號碼是地址，`w` 是走一步，學會一個就學會另一個。從前
     /// 這一支按屏幕排（左欄 → 正文 → 右欄），和號碼各說各的。
     ///
-    /// ⚠️ **只走開着的**：不在的區不會被順手開出來——那是 `空格 1`–`4` 和 `空格 W`
+    /// Warning: **只走開着的**：不在的區不會被順手開出來——那是 `空格 1`–`4` 和 `空格 W`
     /// 的事。「下一個」說的是眼前這幾個裏的下一個。
     pub(super) fn next_region(&mut self) {
         let open: Vec<u32> = (1..=4).filter(|&n| self.region_open(n)).collect();
@@ -578,10 +576,10 @@ impl Editor {
 
     /// **`空格 W`：四個區全開**（2026-09-26 定的）。
     ///
-    /// ⚠️ **窄窗口照開，不攔**（定的）。比例布局本來就不會塌，而 `空格 Q` 一下
+    /// Warning: **窄窗口照開，不攔**（定的）。比例布局本來就不會塌，而 `空格 Q` 一下
     /// 就收回來了；多一道閘就多一條「為什麼按了沒反應」要解釋。
     ///
-    /// ⚠️ **鍵留在原地**：這一下說的是「把它們擺出來」，不是「帶我去哪裏」。
+    /// Warning: **鍵留在原地**：這一下說的是「把它們擺出來」，不是「帶我去哪裏」。
     pub(super) fn open_every_region(&mut self) {
         let was = self.which_region();
         for nth in 2..=4 {
@@ -598,7 +596,7 @@ impl Editor {
     /// 邊欄就是關掉它自己——和在邊欄裏按 `q` 同一件事（定的，原話：「对于侧栏来说，q
     /// 和 space+q 是一个意思」）。工作區是關掉這一半、鍵跟到另一半去。
     ///
-    /// ⚠️ **只剩一個區就出聲，別靜悄悄**（定的，原話：「什么都不做，出一声」）。關掉
+    /// Warning: **只剩一個區就出聲，別靜悄悄**（定的，原話：「什么都不做，出一声」）。關掉
     /// 最後一個工作區等於退出編輯器，而 `空格 q` 比 `:q` 好按得多——誤觸的代價是
     /// 丟稿子。
     pub(super) fn close_this_region(&mut self) {
@@ -644,10 +642,10 @@ impl Editor {
     /// `C-w`／`空格 s` 輪轉，四個區最多按三下；一個數字一下到位。tmux 的 `prefix
     /// 0-9`、瀏覽器的 `Cmd+1..9` 都是這個，人人都會。
     ///
-    /// ⚠️ **不在的區就開出來**（定的，原話：「开出来并跳过去」）——和 `空格 w` 一個
+    /// Warning: **不在的區就開出來**（定的，原話：「开出来并跳过去」）——和 `空格 w` 一個
     /// 規矩：一個鍵一個意思，「讓我去那裏」。
     ///
-    /// ⚠️ **5–0 給 buffer 那一半沒有做**，等標籤欄帶上號再說。編號不穩又看不見的
+    /// Warning: **5–0 給 buffer 那一半沒有做**，等標籤欄帶上號再說。編號不穩又看不見的
     /// 鍵比沒有這個鍵更糟：一本小說一百多個檔，「第 7 個」按最近用過排每過幾分鐘
     /// 換一個檔，按打開順序排則關掉一個後面全部重編。瀏覽器能成，是因為號碼**畫在
     /// 標籤上**。
@@ -676,7 +674,7 @@ impl Editor {
                 if !self.slot_takes_keys(side) {
                     // **開那一側的頭一扇**。哪幾扇屬於哪一側是配得動的
                     // （`Editor::sides`），所以這裏問的是配置而不是寫死左邊＝文件樹。
-                    // ⚠️ 只認 `View::ALL`：字典和詳情是光標帶出來的，開不了。
+                    // Warning: 只認 `View::ALL`：字典和詳情是光標帶出來的，開不了。
                     let Some(&view) = crate::sidebar::View::ALL
                         .iter()
                         .find(|&&v| self.side_of(crate::sidebar::Panel::from(v)) == side)
@@ -768,7 +766,7 @@ impl Editor {
             // rows of a tree (#419).
             View::Search => return,
             // Drawn from the cursor every frame, not from rows (#287).
-            // ⚠️ 文檔同形，只是它畫的是問來的那一則，不是現算的。
+            // Warning: 文檔同形，只是它畫的是問來的那一則，不是現算的。
             View::Wiki | View::Docs => return,
         };
         if let Some(panel) = self.panel_mut(side) {
@@ -789,7 +787,7 @@ impl Editor {
             Key::Char('J') | Key::PageDown => at.saturating_add(page),
             Key::Char('K') | Key::PageUp => at.saturating_sub(page),
             Key::Char('g') | Key::Home => 0,
-            // ⚠️ **`G` 不在這裏算底在哪**——這一頭數不出來（見
+            // Warning: **`G` 不在這裏算底在哪**——這一頭數不出來（見
             // [`Editor::wiki_scroll`]）。存一個到不了的數，畫的那一趟走到底、
             // 算出總數、把真正的那個數夾回來。
             Key::Char('G') | Key::End => usize::MAX,
@@ -821,7 +819,7 @@ impl Editor {
             Key::Char('R') => self.refresh_sidebar(),
             // **`w` 走一格：窄 → 中 → 寬 → 窄**（2026-09-26 定的）。
             //
-            // ⚠️ **不問這一格裏裝的是什麼**：寬度歸側欄，面板只是借它。所以字典、
+            // Warning: **不問這一格裏裝的是什麼**：寬度歸側欄，面板只是借它。所以字典、
             // 懸停、表格詳情按 `w` 一樣管用——從前它們根本不認這個鍵。
             Key::Char('w') => {
                 let step = self.width[side as usize].next();
@@ -906,7 +904,7 @@ impl Editor {
                 path: heading.path.clone(),
                 // **每級兩格，縮到第三級封頂**（2026-09-26 定的）。
                 //
-                // ⚠️ **深處的層級靠編號自己說**：`5.8.11` 一看就比 `5.8` 深一層，
+                // Warning: **深處的層級靠編號自己說**：`5.8.11` 一看就比 `5.8` 深一層，
                 // 不必再花欄位重說一遍。development.md 有到五級，不封頂的話那一條
                 // 縮 8 欄——24 欄的邊欄只剩 14 欄給標題，而邊欄存在就是為了給標題。
                 name: format!(
@@ -1022,7 +1020,7 @@ impl Editor {
     /// has, and this is that.
     /// 服務器說的那段話，一行一行擺進邊欄（#53 ③）。
     ///
-    /// ⚠️ **原樣的 Markdown**，和浮窗裏那一份一個字不差——邊欄畫它的時候走的是
+    /// Warning: **原樣的 Markdown**，和浮窗裏那一份一個字不差——邊欄畫它的時候走的是
     /// 同一支行內標記渲染。
     pub(super) fn hover_rows(&self) -> Vec<crate::sidebar::Row> {
         let Some(told) = self.hover_in_the_sidebar() else {
@@ -1101,7 +1099,7 @@ impl Editor {
     pub fn look_up(&mut self, ch: char, focus: bool) -> bool {
         // 再按一次 `空格 D` 就收起來——與 `空格 d`、`空格 k`／`空格 K` 同一條
         // 規矩（2026-09-23 補：從前只有浮窗那一半有 toggle）。
-        // ⚠️ **同一個字再問一次纔算「收起來」。** `Tab` 選候選也走這一支，
+        // Warning: **同一個字再問一次纔算「收起來」。** `Tab` 選候選也走這一支，
         // 問的是另一個字——那是換一份答案，不是關窗。
         let same = self.dictionary.as_ref().is_some_and(|(at, _)| *at == ch);
         if same && !self.dictionary_afloat && self.dictionary_live() {
@@ -1154,7 +1152,7 @@ impl Editor {
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
-        // ⚠️ **問的時候不交鍵，就把鍵留在原地**——別清成 `None`。從前寫的是
+        // Warning: **問的時候不交鍵，就把鍵留在原地**——別清成 `None`。從前寫的是
         // `focus.then(..)`，於是從檔案樹裏按 `空格 d`（那條路是通的：面板裏的
         // 空格照樣開選單）會把鍵從樹裏悄悄拿走，而 `空格 d` 的說明寫着「一點都
         // 不碰邊欄」（2026-09-23 審出來的）。
@@ -1208,7 +1206,7 @@ impl Editor {
     /// A pane that takes the keys has to say how to give them back, in the
     /// place a reader already looks for what is going on.
     ///
-    /// ⚠️ **百科那一頁是一段文章**，沒有行可以 `l` 進去、也沒有行可以 `h` 收
+    /// Warning: **百科那一頁是一段文章**，沒有行可以 `l` 進去、也沒有行可以 `h` 收
     /// 起，`R` 重讀的是一張單子而不是一條詞條——這一行從前照樣寫着那三個鍵
     /// （2026-09-23 審出來的：「拿走鍵的那一半有義務」說清楚）。
     pub fn sidebar_keys(&self) -> String {
@@ -1350,7 +1348,7 @@ impl Editor {
     /// **How many fields the bottom layer holds** — what its scrolling is
     /// clamped to (#293).
     ///
-    /// ⚠️ **Fields, not drawn lines.** A value too long for the column wraps,
+    /// Warning: **Fields, not drawn lines.** A value too long for the column wraps,
     /// and only the front end knows how wide the column is — so scrolling by
     /// line would have to be clamped by a number the editor cannot work out.
     /// A field is also the better step: it is the thing a reader is looking
@@ -1362,7 +1360,6 @@ impl Editor {
                 self.detail().map(|d| d.rows.len()).unwrap_or(0)
             }
             Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows().len(),
-            Some(crate::sidebar::Transient::Hover) => self.hover_rows().len(),
             None => 0,
         }
     }
@@ -1394,7 +1391,7 @@ impl Editor {
                     // A directory, a 14 MB 碼表, a binary: read the head and
                     // nothing more, and say nothing rather than guess.
                     //
-                    // ⚠️ **真的只讀頭上那幾行。** 這裏從前是
+                    // Warning: **真的只讀頭上那幾行。** 這裏從前是
                     // `fs::read_to_string`——整個文件進內存，然後纔切掉
                     // 99.99%。2026-09-22 報的就是這個：「picker 如果用 jk 快速
                     // 過文件，會出現到某個文件的時候突然卡死十幾二十秒」，而走
@@ -1829,11 +1826,11 @@ impl Editor {
 /// keystroke cost as much as opening the file — which on a 14 MB 碼表 is the
 /// 「突然卡死十幾二十秒」 that was reported.
 ///
-/// ⚠️ **`lines()` stops where it is told**, so a huge file costs the head and
+/// Warning: **`lines()` stops where it is told**, so a huge file costs the head and
 /// the buffering, not its length. `None` for what cannot be read as text at
 /// all — a directory, a binary — which is what the caller shows nothing for.
 ///
-/// ⚠️ **Invalid UTF-8 ends the preview, it does not fail it.** A `.ytab` that
+/// Warning: **Invalid UTF-8 ends the preview, it does not fail it.** A `.ytab` that
 /// is text for the first megabyte and binary after is still worth showing the
 /// head of, and `read_to_string` would have refused the whole file.
 fn head_of_file(path: &Path, rows: usize) -> Option<Vec<String>> {

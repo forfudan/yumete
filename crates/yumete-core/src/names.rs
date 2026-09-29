@@ -47,7 +47,7 @@ pub struct Slip {
 /// that this module holds no opinion about where a reading comes from and the
 /// test can hand it a table of two.
 ///
-/// ⚠️ **A name written correctly is never a slip**, including a name that is
+/// Warning: **A name written correctly is never a slip**, including a name that is
 /// itself one character from another name (a book of brothers 李明 and 李朋):
 /// an exact match has no mismatched character to ask about.
 pub fn check(text: &str, names: &[String], alike: impl Fn(char, char) -> bool) -> Vec<Slip> {

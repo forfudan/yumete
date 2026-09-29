@@ -8,7 +8,7 @@
 卡片上半是一幀**現拍的** yumete 畫面——`yumete --shot --html` 交出來的就是帶顏色的
 HTML，原樣嵌進去即可，不必先存成圖片再套進來。
 
-⚠️ **沒有 markdown 庫，也不裝一個。** 發布說明只用到列表、粗體、行內代碼、鏈接、代碼
+Warning: **沒有 markdown 庫，也不裝一個。** 發布說明只用到列表、粗體、行內代碼、鏈接、代碼
 塊這幾樣，而一個只認這幾樣的解析器是三十行的事（同 `Editor::outline`：標題就是行首那
 幾個井號，不需要 parser）。真要用到別的語法，改這裏比裝一個依賴便宜。
 
@@ -27,7 +27,7 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 # **字體**（2026-09-26 定的，原話：「用 wenkai GB 來渲染這個卡片以及截圖中的文字」）。
 #
-# ⚠️ **截圖那一塊必須是中文剛好兩倍寬的等寬體**，否則每一行的格子對不齊——終端畫面
+# Warning: **截圖那一塊必須是中文剛好兩倍寬的等寬體**，否則每一行的格子對不齊——終端畫面
 # 是按「一個漢字兩格」排的，字體不守這條，畫面就散。量過（Chrome，100px）：
 #
 #   | 字體 | A | 中 | 比 |
@@ -37,7 +37,7 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 #   | Sarasa Mono SC | 72.2 | 100.0 | 1.385 ← **沒裝**，回落到襯線 |
 #   | Menlo | 60.2 | 100.0 | 1.661 |
 #
-# ⚠️ **`document.fonts.check()` 會撒謊**：上面四個它全回 `true`，包括根本沒裝的
+# Warning: **`document.fonts.check()` 會撒謊**：上面四個它全回 `true`，包括根本沒裝的
 # Sarasa。要判斷一個字體在不在，**量「中」和「A」的寬度比**，別問那個 API。
 MONO = '"LXGW WenKai Mono GB", "Sarasa Mono SC", Menlo, monospace'
 SANS = '"LXGW WenKai GB", "PingFang SC", "Hiragino Sans GB", sans-serif'
@@ -57,10 +57,10 @@ def shell(args, **kw):
 def inline(text):
     """`代碼`、**粗**、[字](網址) —— 其餘原樣轉義。
 
-    ⚠️ **先轉義再套標籤**，不能反過來：正文裏一個 `<` 會把後面整段吃掉。
+    Warning: **先轉義再套標籤**，不能反過來：正文裏一個 `<` 會把後面整段吃掉。
     """
     out = html.escape(text)
-    # ⚠️ **雙反引號先收，而且收完要藏起來。** ``  `s  `` 是「行內代碼裏本身有一個
+    # Warning: **雙反引號先收，而且收完要藏起來。** ``  `s  `` 是「行內代碼裏本身有一個
     # 反引號」的寫法。讓單反引號那一條先跑，它會從中間切開；而**就算雙的先跑**，
     # 換出來的 `<code> `s </code>` 裏還留着那個反引號，單的那一條照樣會再吃一遍，
     # 出來是 `<code> <code>s </code> …`。所以先換成一個占位符，等別的規則都跑完再
@@ -139,19 +139,19 @@ def cells(ch, nxt=""):
     UAX #11：只有 East Asian **Wide** 和 **Fullwidth** 算兩格，組合符與控制字符算零，
     其餘一格。
 
-    ⚠️ **Ambiguous 算一格，不算兩格。** `─ │ · – → ±` 這一族在 UAX #11 裏是
+    Warning: **Ambiguous 算一格，不算兩格。** `─ │ · – → ±` 這一族在 UAX #11 裏是
     「看終端」，而 yumete 出的那一幀按一格排——量出來的：一條 `─────` 的分隔線
     24 個字符正好 24 格，按兩格算會多出 24 格（2026-09-26 自檢報的就是這一行）。
 
-    ⚠️ **變體選擇符本身零格，可它把前一個字撐成兩格。** `⚠️` 是兩個 char
-    （U+26A0 ＋ U+FE0F）：`⚠` 單獨是一格，跟上 VS16 就成了 emoji 呈現，終端給兩格
+    Warning: **變體選擇符本身零格，可它把前一個字撐成兩格。** `Warning: ` 是兩個 char
+    （U+26A0 ＋ U+FE0F）：`Warning: ` 單獨是一格，跟上 VS16 就成了 emoji 呈現，終端給兩格
     （`unicode-width` 的 `width_cjk` 就是這麼算的）。所以要往後看一個字。
 
-    ⚠️ **2026-09-26 這一條漏了兩次。** 第一次是整條沒想到；第二次是自檢只查了
+    Warning: **2026-09-26 這一條漏了兩次。** 第一次是整條沒想到；第二次是自檢只查了
     「超出」沒查「不足」，於是短一格的行靜悄悄地過——畫出來就是那一行的金框往前
     縮了一格，而一眼就被看出來了。**自檢要查兩頭。**
 
-    ⚠️ **這支函數是在複述 yumete 的算法**（`yumete_cjk::char_width`），兩邊有可能
+    Warning: **這支函數是在複述 yumete 的算法**（`yumete_cjk::char_width`），兩邊有可能
     走散。所以 `pin` 每一行都對一次總格數，對不上就當場喊出來——複述不可靠，自檢
     可靠。
     """
@@ -174,12 +174,12 @@ DOWN = "│┃┆┇┊┋╎╏├┤┼╭╮╰╯┌┐└┘┝┞┟┠┡
 def pin(shot, wide):
     """把 `--shot --html` 那一串重排成**一格一個盒子**。
 
-    ⚠️ **不能讓瀏覽器自己排這串 span**，哪怕字體是嚴格兩倍寬的。2026-09-26 量過，
+    Warning: **不能讓瀏覽器自己排這串 span**，哪怕字體是嚴格兩倍寬的。2026-09-26 量過，
     88×22 那一幀裏有四個字符終端和字體各說各的：
 
         ·  U+B7    終端 2 格，字體 1 格
         –  U+2013  終端 2 格，字體 1 格
-        ⚠  U+26A0  終端 1 格，字體 2 格
+        Warning: U+26A0  終端 1 格，字體 2 格
         ️   U+FE0F  終端 0 格，字體 0 格（但它跟着的 emoji 佔兩格）
 
     **換字體修不好這一族**：U+FE0F 在任何字體裏都是零寬，而終端給那個 emoji 兩格。
@@ -208,7 +208,7 @@ def pin(shot, wide):
                 at += w
         if out:
             rows.append("".join(out))
-            # ⚠️ **兩頭都查。** 只查「超出」的話，短一格的行不會報，而它畫出來
+            # Warning: **兩頭都查。** 只查「超出」的話，短一格的行不會報，而它畫出來
             # 就是那一行的邊框往前縮一格——比超出更難看見。
             if at != wide:
                 off.append(f"第 {n + 1} 行 {at} 格（該 {wide}）")
@@ -236,7 +236,7 @@ body {{ margin: 0; background: {PAPER}; width: 1080px;
 /* `--shot --html` 交出來的那一塊，原樣嵌進來 */
 .shot .grid {{ font: {SHOT_PX}px/{LEAD} {MONO}; white-space: pre }}
 .shot .row {{ position: relative; height: {ROW}px }}
-/* ⚠️ **一格一個盒子，位置由列號算**——見 `pin`：字體對寬度沒有發言權。 */
+/* Warning: **一格一個盒子，位置由列號算**——見 `pin`：字體對寬度沒有發言權。 */
 /* `text-align:center` 管「字形比格子窄」那一半：居中留白，不往旁邊靠。
    「比格子寬」那一半由頁尾那段腳本量完壓扁。 */
 .shot i {{ position: absolute; top: 0; font-style: normal; text-align: center;
@@ -272,17 +272,17 @@ hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: 26px 0 }}
 // `left = 欄號 × 格寬` 上，所以誰也推不動誰；剩下的是**一格裝不下的字形**——
 // 讓它溢出去就會蓋住鄰居。量一量，寬了就橫向壓扁。
 //
-// ⚠️ **必須在瀏覽器裏量，不能在腳本裏猜。** 同一個字在不同字體、不同回退鏈下寬度
+// Warning: **必須在瀏覽器裏量，不能在腳本裏猜。** 同一個字在不同字體、不同回退鏈下寬度
 // 不同，而頁面自己知道它實際排成了多寬（`scrollWidth`）。
-// ⚠️ 框綫字是反過來的：它們比格子**窄**，要拉滿，不然一列 `─` 是虛綫。那一組在
+// Warning: 框綫字是反過來的：它們比格子**窄**，要拉滿，不然一列 `─` 是虛綫。那一組在
 // `pin` 裏已經給了 `scaleX`／`scaleY`，這裏不碰它們。
-// ⚠️ **量的是「步進寬度」，不是墨跡外框。** 兩個都試過（2026-09-26）：
+// Warning: **量的是「步進寬度」，不是墨跡外框。** 兩個都試過（2026-09-26）：
 //   * `scrollWidth` 取整——7.5px 的字形報 8，每個半角字都成了「超出」；
 //   * `Range.getBoundingClientRect()` 量的是**墨跡**——楷體的筆畫本來就略微溢出
 //     字身框（漢字 16 對 15），於是幾乎每個字都被判越界，照它壓會把整幅字壓扁。
 // 真正決定「會不會擠到下一格」的是 canvas 的 `measureText().width`。
 const pen = document.createElement("canvas").getContext("2d");
-// ⚠️ **字體要寫死，別從 `getComputedStyle` 拿。** 那裏回來的帶着行高
+// Warning: **字體要寫死，別從 `getComputedStyle` 拿。** 那裏回來的帶着行高
 // （`15px/22.5px …`），canvas 解析不了，靜靜地回落到一個**比例**字體——量出來
 // `M` 是 14.2px 而 `1` 是 8px，於是每一個字都成了「超出」（2026-09-26 踩到）。
 pen.font = '{SHOT_PX}px "LXGW WenKai Mono GB", monospace';
@@ -300,7 +300,7 @@ document.body.dataset.h = document.documentElement.scrollHeight;
 def shoot(work, out):
     """截一張**剛好那麼高**的圖。
 
-    ⚠️ **`--screenshot` 截的是窗口，不是內容**——`--window-size=1080,4000` 出來的
+    Warning: **`--screenshot` 截的是窗口，不是內容**——`--window-size=1080,4000` 出來的
     是一張下面拖着兩千像素黑地的圖。而這裏沒有 PIL 可以裁（系統 python 沒有，
     2026-09-26 查過）。
 
@@ -328,7 +328,7 @@ def main():
     ap.add_argument("--out", help="出圖放哪，默認 local/figures/release-card-<版本>.png")
     ap.add_argument("--repo", default="forfudan/yumete")
     ap.add_argument("--size", default="88x22", help="截那一幀畫面多大")
-    # ⚠️ **這一幀會被畫進卡片發出去，所以它只許出現手冊自己的內容。** 搜索面板
+    # Warning: **這一幀會被畫進卡片發出去，所以它只許出現手冊自己的內容。** 搜索面板
     # 列的是**命中那幾行的原文**——換一個查詢就等於換一批會上圖的句子。
     # **換默認之前把整幅掃一遍**（`--shot` 不帶 `--html` 就是純文本，grep 一下）。
     ap.add_argument(
@@ -345,20 +345,20 @@ def main():
         notes = shell(["gh", "release", "view", f"v{a.version}",
                        "--repo", a.repo, "--json", "body", "--jq", ".body"])
 
-    # 一幀真畫面。⚠️ **用倉根那個 `./yumete`**（`scripts/build.sh` 鏈的就是它），
+    # 一幀真畫面。Warning: **用倉根那個 `./yumete`**（`scripts/build.sh` 鏈的就是它），
     # 不是 `target/release/`——見記事本裏「跑的是哪個 yumete」。
     binary = HERE / "yumete"
     if not binary.exists():
         sys.exit(f"找不到 {binary}——先 cargo build --release 並拷過去")
     shot = shell([str(binary), f"--shot={a.size}", f"--keys={a.keys}",
                   "--html", a.file], cwd=HERE)
-    # ⚠️ **末尾那一行版本號去掉**：`--shot` 每幀都落一句
+    # Warning: **末尾那一行版本號去掉**：`--shot` 每幀都落一句
     # 「-- yumete 0.3.0-dev.2026…+8494074.dirty」，而發布卡片上寫着 dev 和 dirty
     # 是在說「這不是你下載的那一版」。
     shot = re.sub(r"\n?<span[^>]*>-- yumete [^<]*</span>", "", shot)
     shot, off = pin(shot, int(a.size.split("x")[0]))
     if off:
-        print("⚠️ 這幾行寬度對不上，圖上會歪：" + "；".join(off), file=sys.stderr)
+        print("Warning: 這幾行寬度對不上，圖上會歪：" + "；".join(off), file=sys.stderr)
 
     url = f"https://github.com/{a.repo}/releases/tag/v{a.version}"
     # **生成物進 `local/`**（2026-09-26 定的）。那個目錄本來就是為這種東西留的

@@ -6,7 +6,7 @@
 //! Reading a descriptor takes whatever is in it, and what is in it at that
 //! moment is the terminal's reply *and anything the reader has already typed*.
 //!
-//! ⚠️ **That was thrown away, and it is the first four tenths of a second of a
+//! Warning: **That was thrown away, and it is the first four tenths of a second of a
 //! session.** `yumete 第三章.md` followed straight away by `iHELLO` left the
 //! file untouched and the editor still in Normal mode: measured at 0.0 s, 0.1,
 //! 0.2 and 0.3 (gone) against 0.4 (kept). The comment above the probe claimed

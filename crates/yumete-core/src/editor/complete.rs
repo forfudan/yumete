@@ -115,7 +115,7 @@ impl Editor {
         let (refers, typed) = trigger(&before)?;
         // A `[^` quoted in a fence is four characters of somebody's example.
         //
-        // ⚠️ **Asked after the trigger**, for the reason [`Self::continue_the_list`]
+        // Warning: **Asked after the trigger**, for the reason [`Self::continue_the_list`]
         // asks it last: `block_of` walks from the top of the file and its cache
         // is keyed on the revision, so a walk per keystroke is a walk per
         // keystroke. Down here it is paid for only while a reference stands
@@ -210,7 +210,7 @@ impl Editor {
 
     /// **Every file near this one** — `[[`, Feature #418 三.
     ///
-    /// ⚠️ **The folder this file is in, and what is under it — not the
+    /// Warning: **The folder this file is in, and what is under it — not the
     /// project.** A book's manuscript, its notes, its old drafts and its
     /// exports live under one tree, and rooting this at the book would tip
     /// several hundred unrelated names into a panel whose whole job is 「the
@@ -246,7 +246,7 @@ impl Editor {
             let Ok(rel) = path.strip_prefix(&root) else {
                 return;
             };
-            // ⚠️ **A page, not a file.** `[[第三章]]` names a page and the
+            // Warning: **A page, not a file.** `[[第三章]]` names a page and the
             // suffix is the manuscript's — `follow` puts this file's own on
             // first and `.md` second — so writing `[[卷二/雨夜.md]]` would
             // hand a reader back the thing the syntax exists to spare them.
@@ -298,7 +298,7 @@ impl Editor {
 
     /// The same for a reference that wants `want` of them — `[[…]]` (#418 三).
     ///
-    /// ⚠️ **Counted, not merely looked at.** Asking 「is the next character a
+    /// Warning: **Counted, not merely looked at.** Asking 「is the next character a
     /// `]`」 answers 「then write none」, and a hand that typed one bracket
     /// before going back for the name was left with `[[卷二/雨夜.md]`.
     fn closes_with_n(&self, bracket: char, want: usize) -> String {
@@ -422,7 +422,7 @@ fn trigger(before: &[char]) -> Option<(Refers, String)> {
     // None of the three holds a bracket. One turning up means the reference
     // behind it was finished and this caret is somewhere else on the same line.
     //
-    // ⚠️ **A file name may hold a space** — 「卷一 開端.md」 is a file a
+    // Warning: **A file name may hold a space** — 「卷一 開端.md」 is a file a
     // novelist writes — so a space breaks the other two and not this one.
     let broken = typed.chars().any(|c| {
         matches!(c, '[' | ']' | '(' | ')' | '#' | '^')

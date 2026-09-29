@@ -12,7 +12,7 @@
 //! The loader never fails: missing files and parse errors fall back to defaults,
 //! so a broken config can't stop the editor from starting.
 
-// ⚠️ **兩支模組聲明擺在這裏，別擺在 `rung` 那一段之前。** `rung` 頂上那一大段
+// Warning: **兩支模組聲明擺在這裏，別擺在 `rung` 那一段之前。** `rung` 頂上那一大段
 // `///` 是**它的**文檔（紙與墨的階梯），中間插一行 `pub mod` 就把那段註釋搶過去，
 // 而編譯照過、測試照綠——文檔掛在誰身上是看不見的。
 pub mod panel;
@@ -152,7 +152,7 @@ pub struct EditorConfig {
     /// the same question, so a rebound Shift follows it.
     ///
     /// `C-<char>`, `A-<char>`, `F1`…`F12`, or `"off"` for no key at all.
-    /// ⚠️ **A legacy terminal cannot tell `C-^` from `C-6`** — both are the one
+    /// Warning: **A legacy terminal cannot tell `C-^` from `C-6`** — both are the one
     /// byte `0x1E` — so those two names, and `C-\`/`C-4`, `C-]`/`C-5`,
     /// `C-_`/`C-7`, are each one key here.
     pub language_key: String,
@@ -279,7 +279,7 @@ pub struct EditorConfig {
     /// 「差不多是這幾個字」 rather than a pattern (`yumete_core::nearby`). Off
     /// out of the box: a search that finds more than you asked for has to be
     /// asked for. The switch is on the panel, and this only says where it
-    /// starts — ⚠️ and never while the panel is replacing, where a loose range
+    /// starts — Warning: and never while the panel is replacing, where a loose range
     /// would be replacing characters nobody typed.
     pub fuzzy_search: bool,
     /// Whether the command line sits below the status line (#302).
@@ -335,12 +335,12 @@ pub struct EditorConfig {
 /// since the feature was written; until today the code said 「no screenshot
 /// command on this platform」 on every Linux there is.
 ///
-/// ⚠️ **`${YUMETE_SHOT:?}` and not `:-`**: none of these programs can put a
+/// Warning: **`${YUMETE_SHOT:?}` and not `:-`**: none of these programs can put a
 /// picture on the clipboard, so `:shot` with no path has to **fail and say so**
 /// rather than look as though it copied one. `sh` prints the name and exits
 /// non-zero, which is exactly the report wanted.
 ///
-/// ⚠️ **The whole screen, not the window.** X11 needs `xdotool` to be told
+/// Warning: **The whole screen, not the window.** X11 needs `xdotool` to be told
 /// where a window is and Wayland will not say at all; `:shot html` is the way
 /// to get exactly one page.
 fn screenshot_command() -> String {
@@ -516,7 +516,7 @@ pub struct ImeConfig {
     /// 中/英, and records which application asked, so a quiet terminal does not
     /// mute the browser.
     ///
-    /// ⚠️ **Not the input source.** The first version of this switched the
+    /// Warning: **Not the input source.** The first version of this switched the
     /// keyboard input source the way `im-select` does, and that road is broken
     /// on macOS: a background process re-selecting an IMK input method fails to
     /// re-engage about one time in three, for 宇浩 and 鼠鬚管 alike, with no
@@ -618,7 +618,7 @@ pub struct PanelConfig {
 /// 個：多數按鍵取的是首選，為了選它而攤開九行候選，遮掉的是九行稿子，說的是寫的人
 /// 本來就知道的事。所以關得掉，而 `Tab` 照舊能把面板為某一個詞叫出來。
 ///
-/// ⚠️ **這一格只管面板在不在，不管正在打的那一段寫在哪。** 那是
+/// Warning: **這一格只管面板在不在，不管正在打的那一段寫在哪。** 那是
 /// [`Preedit`] 的事，兩件事各走各的（2026-09-27 定，原話：「你搞错了 layout 和
 /// inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面板 ＋ 正在打的那
 /// 一段寫進正文」這個組合按不出來。
@@ -658,7 +658,7 @@ impl PanelDisplay {
 ///
 /// 所以這一格有三檔，而不是一個布爾：不內嵌、內嵌寫編碼、內嵌寫首選。
 ///
-/// ⚠️ **內嵌寫首選的時候，編碼哪兒都不顯示。** 這是這一檔的本意：正文裏站着的就是
+/// Warning: **內嵌寫首選的時候，編碼哪兒都不顯示。** 這是這一檔的本意：正文裏站着的就是
 /// 要上屏的那幾個字，看的人讀的是句子，不是碼。要看碼就選 [`Preedit::Code`]。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Preedit {
@@ -720,7 +720,7 @@ impl Default for PanelConfig {
 /// runs 墨 → 紙 — **反主題色 → 主題色**. A raised strip steps back toward the
 /// ink; a sunken one carries on past the paper.
 ///
-/// ⚠️ **Reversal is not one of them, and was tried once** — see `draw_status`:
+/// Warning: **Reversal is not one of them, and was tried once** — see `draw_status`:
 /// a white bar under a dark page is the loudest thing on the screen saying the
 /// least.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -797,7 +797,7 @@ impl Ladder {
     /// One rung. `0` is the ink, [`rung::PAPER`] the paper, and it does not
     /// stop there.
     ///
-    /// ⚠️ **The ladder runs past 紙** (第 90 檔) to [`rung::DEEP`] (第 100 檔):
+    /// Warning: **The ladder runs past 紙** (第 90 檔) to [`rung::DEEP`] (第 100 檔):
     /// same straight line, carried on. 紙 is 主題色 and 墨 is 反主題色, so one
     /// step further is *deeper* on a dark theme and *lighter* on a light one —
     /// one idea, not two, and no third colour to name. Channels clamp, so a
@@ -828,7 +828,7 @@ pub mod rung {
     //! **101 檔，第 0 檔是墨（最反主題色），第 100 檔是最主題色。紙在第 90 檔。**
     //!
     //! 底下的數字是 0–10000，**一檔一百步**，所以檔號就是數字除以一百：
-    //! `9000` 就是第 90 檔，不必記第二套號。⚠️ **檔與檔之間不必等距** ——
+    //! `9000` 就是第 90 檔，不必記第二套號。Warning: **檔與檔之間不必等距** ——
     //! 有名字的那十幾檔，值都是量出來的（見每一條自己的說明），不是格子除出來
     //! 的；檔號是給人說話用的（「第 90 檔」比「9000」好記），值是給眼睛用的。
     //!
@@ -837,13 +837,13 @@ pub mod rung {
     //! 步，於是像「比表格的底再沉一點點」這種量根本落不到格子上（那一條現在是
     //! 第 87 檔）。
     //!
-    //! ⚠️ **紙不在盡頭。** 從前紙就是梯子的末端，於是「比正文再沉一級」沒有
+    //! Warning: **紙不在盡頭。** 從前紙就是梯子的末端，於是「比正文再沉一級」沒有
     //! 地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的方向。現在
     //! 紙在第 90 檔，後面十檔留給比紙更主題色的東西。
     /// **第 15 檔** — the writing, one small step back, for the *other* word in
     /// an alternated pair (`:word-show ink`, #278).
     ///
-    /// ⚠️ **Not [`ASIDE`].** That rung is 「read this, it is not the prose」 —
+    /// Warning: **Not [`ASIDE`].** That rung is 「read this, it is not the prose」 —
     /// a reading, a 拆分, a candidate's number — and at 第 25 it is far enough
     /// back that alternating words looked like every other word had been
     /// demoted. 分詞 is structure, not rank: 第 15 is 「有一定辨識度但又不會讓
@@ -855,7 +855,7 @@ pub mod rung {
     /// **旁註** — read it, but it is not the prose: a reading beside its base,
     /// a 拆分 annotation, a candidate's number, the tag at a panel's foot.
     ///
-    /// ⚠️ **It was `QUIET`** (#462), which said how loud it is and not what it
+    /// Warning: **It was `QUIET`** (#462), which said how loud it is and not what it
     /// is for — and the name was borrowed on that reading by
     /// [`WORD_INK`], where 「one shade back」 is a different idea entirely.
     /// This one is a *category*: everything on this rung is something the
@@ -865,7 +865,7 @@ pub mod rung {
     ///
     /// Its own rung, and darker than the furniture it used to share, because
     /// it is *read* rather than glanced at: `t3g` means counting to the third
-    /// number, and a reader counting is reading. ⚠️ It is drawn on
+    /// number, and a reader counting is reading. Warning: It is drawn on
     /// [`CHROME`], not on the paper — measured there it was 3.15:1 at
     /// [`FURNITURE`] on the worst of the twenty-one ladders, clearing the 3:1
     /// a border needs and missing the 4.5:1 small text does. At this rung the
@@ -912,7 +912,7 @@ pub mod rung {
     /// lit tab sits among the unlit ones, and a table's cursor row sits among
     /// its alternating columns.
     ///
-    /// ⚠️ **第 73, and it cannot go much deeper.** Near the paper end of the
+    /// Warning: **第 73, and it cannot go much deeper.** Near the paper end of the
     /// ladder the rungs compress, so this one is pinned by the pair it has to
     /// be told apart from: the cursor's row against the column bands under it.
     /// At 第 75 against [`BAND`]'s 第 84 that pair measures **1.21:1** in
@@ -923,7 +923,7 @@ pub mod rung {
     /// A selection: the loudest ground, and still only a ground — the ink on it
     /// is untouched, so a heading inside a selection is still a heading.
     ///
-    /// ⚠️ **第 63, pinned the same way [`HEAD`] is.** A selection inside a
+    /// Warning: **第 63, pinned the same way [`HEAD`] is.** A selection inside a
     /// table's cursor row is two grounds one inside the other, and the three
     /// of them — 選區, 光標行, 欄底 — have to stay a visible step apart all the
     /// way up. At 第 65 against `HEAD`'s 第 73 this measures 1.20:1 in 莫蘭迪's
@@ -1177,7 +1177,7 @@ impl ThemeConfig {
                 gold_light: (0x00, 0x00, 0x00),
                 mark_dark: (0xB4, 0xB4, 0xB4),
                 mark_light: (0x6E, 0x6E, 0x6E),
-                // ⚠️ **官服品色 has no hue to spend here** (#471). The other
+                // Warning: **官服品色 has no hue to spend here** (#471). The other
                 // nine themes inherit the three from the default, and 黑白
                 // inherited them too — so the one theme whose whole question is
                 // 「把顏色全拿走以後，這套設計還立不立得住」 shipped a purple
@@ -1372,7 +1372,7 @@ impl ThemeConfig {
                 gold_light: (0x4A, 0x5A, 0x2C),
                 mark_dark: (0xE2, 0x79, 0x3D),
                 mark_light: (0xA8, 0x50, 0x1E),
-                // ⚠️ **橙 is red in this theme.** Its 朱 is the kiln's orange and
+                // Warning: **橙 is red in this theme.** Its 朱 is the kiln's orange and
                 // keeps it — 「橘色只留給錯誤」 — so the number in a fence takes the
                 // red that 朱 left free, not a second orange.
                 orange_dark: (0xFE, 0x71, 0x5F),
@@ -1400,7 +1400,7 @@ impl ThemeConfig {
                 gold_light: (0xA8, 0x54, 0x00),
                 mark_dark: (0xB9, 0x8C, 0xFF),
                 mark_light: (0x5B, 0x3F, 0xA0),
-                // ⚠️ **橙 is red in this theme**: its 金 is the orange, and a number
+                // Warning: **橙 is red in this theme**: its 金 is the orange, and a number
                 // the colour of a heading says nothing.
                 orange_dark: (0xF6, 0x5D, 0x4C),
                 orange_light: (0xC1, 0x3D, 0x30),
@@ -1438,7 +1438,7 @@ impl Default for ThemeConfig {
                 // page starts to bloom — 「太亮了刺眼有光暈」. 10:1 is the
                 // comfortable end of the band for hours of prose.
                 //
-                // ⚠️ **11:1, not 10:1** — every rung below is a fraction of
+                // Warning: **11:1, not 10:1** — every rung below is a fraction of
                 // this one, so dimming the ink dims the whole page with it.
                 // At 10:1 行内代碼 — 第 27 檔 then, a 品色 now — fell to 5.5:1 against
                 // the paper and stopped reading as a mark at all; 11:1 puts it
@@ -1464,7 +1464,7 @@ impl Default for ThemeConfig {
             // A seal's red on paper; lighter in the dark, for the same reason
             // the ink is dimmer there.
             //
-            // ⚠️ **朱 is 朱, not orange** (2026-09-17). The dark one was
+            // Warning: **朱 is 朱, not orange** (2026-09-17). The dark one was
             // #D2785A — OKLCH hue 39°, a washed terracotta that read as orange
             // the moment a real orange stood beside it. Both moods now sit at
             // 29–30°, the hue of sRGB's own red, and 橙 has a slot of its own.
@@ -1748,7 +1748,7 @@ pub struct Config {
     /// args = ["server"]
     /// ```
     ///
-    /// ⚠️ **A list of names would not do** — each candidate has its own
+    /// Warning: **A list of names would not do** — each candidate has its own
     /// arguments (`ruff server`, `ty server`, but `jedi-language-server` takes
     /// none), which is why it is a list of *tables*. helix's `languages.toml`
     /// has the same shape for the same reason: it names five servers for
@@ -1761,7 +1761,7 @@ pub struct Config {
 
 /// The program that answers for one language, and how it is started.
 ///
-/// ⚠️ **No shell, and no placeholders.** A language server is started once and
+/// Warning: **No shell, and no placeholders.** A language server is started once and
 /// told everything over its own pipe — nothing about a file name reaches the
 /// command line — so the whole class of quoting questions [`Runner`] has to
 /// answer does not arise here. `args` is a list because that is what it is;
@@ -1776,7 +1776,7 @@ pub struct Server {
 
 /// The servers that come filled in — 2026-09-19 定的兩種，go 和 rust。
 ///
-/// ⚠️ **Filled in is not started.** Nothing is spawned until a file of that
+/// Warning: **Filled in is not started.** Nothing is spawned until a file of that
 /// language is really opened, and if the program is not on the machine the
 /// editor says so once and carries on — an editor that refused to open a
 /// `.rs` because a tool is missing would be worse than one with no servers at
@@ -1791,7 +1791,7 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // 答案**，所以這兩種填一個就够。
         ("rust".to_string(), vec![one("rust-analyzer", &[])]),
         ("go".to_string(), vec![one("gopls", &[])]),
-        // ⚠️ **python 没有那個顯然的答案**，所以它是一串。helix 給 python 列了
+        // Warning: **python 没有那個顯然的答案**，所以它是一串。helix 給 python 列了
         // 五個（`languages.toml`：`["ty", "ruff", "jedi", "pylsp", "zuban"]`），
         // 而且每一個的命令都不一樣。填一個等於替人在五個裏猜一個，猜錯了他每次
         // 打開 `.py` 都吃一句「起不來」。
@@ -1928,7 +1928,7 @@ impl Config {
                                     local.display()
                                 ));
                             }
-                            // ⚠️ **鍵位表也只認全域，而這一條是 2026-09-24 審出
+                            // Warning: **鍵位表也只認全域，而這一條是 2026-09-24 審出
                             // 來的一個真洞。** 上面那條註釋從前寫着「screenshot
                             // 是**唯一**經過 shell 的一條」，而那個推理不成立：
                             // `[keys.normal]` 右邊是一串按鍵，**串裏可以放一整行
@@ -2207,7 +2207,7 @@ pub fn data_dir() -> PathBuf {
 /// On Windows there is no such prefix convention — a program's data sits
 /// beside its `.exe` — so the executable's **own** directory is searched too.
 ///
-/// ⚠️ **Two answers, because `current_exe()` gives a different one per
+/// Warning: **Two answers, because `current_exe()` gives a different one per
 /// platform** ([^135]'s two-formula design turns on this). Homebrew installs
 /// each formula into its own `<prefix>/Cellar/<name>/<version>/` and symlinks
 /// the contents into the shared `<prefix>`, so `yumete` and a separate
@@ -2347,7 +2347,7 @@ pub fn yume_data_dirs() -> Vec<PathBuf> {
                 dirs.push(PathBuf::from(dir));
             }
         }
-        // ⚠️ **`XDG_DATA_DIRS` has a default, and unset is not empty.** The
+        // Warning: **`XDG_DATA_DIRS` has a default, and unset is not empty.** The
         // spec says `/usr/local/share:/usr/share` when it is not set, and a
         // desktop session sets it while a bare terminal, an `ssh` login and a
         // systemd user unit often do not. Reading only the variable therefore
@@ -2530,7 +2530,7 @@ struct RawServer {
 
 /// What `[lsp.<語言>]` may be: one server, or a list of candidates.
 ///
-/// ⚠️ **Both spellings, on purpose.** One server is the common case and
+/// Warning: **Both spellings, on purpose.** One server is the common case and
 /// `[lsp.rust] command = "rust-analyzer"` is how anybody would write it; a
 /// language with no obvious answer needs the list. Forcing the list on
 /// everybody would make the common case noisier for the rare one's sake.
@@ -2841,7 +2841,7 @@ impl RawConfig {
         for (name, language) in &other.syntax {
             self.syntax.insert(name.clone(), language.clone());
         }
-        // ⚠️ **Entry by entry here too, and `language` was missing it**
+        // Warning: **Entry by entry here too, and `language` was missing it**
         // (2026-09-20): a project's `[language.…]` and `[lsp.…]` were read,
         // checked, and then dropped on the floor by this merge, so a project
         // could only ever restate the global config — which is exactly what
@@ -3254,7 +3254,7 @@ impl RawConfig {
             config.export.page = page;
         }
         for (k, v) in self.keys.normal {
-            // ⚠️ **A name that is not one is left out**, not installed with a
+            // Warning: **A name that is not one is left out**, not installed with a
             // warning beside it: the fallback for a right-hand side is *keys*,
             // and the keys a misspelt name spells are its own letters going
             // into the manuscript. `check` names it; this is what makes the
@@ -3280,7 +3280,7 @@ fn parse_line_numbers(value: &str) -> LineNumbers {
 
 /// `#rrggbb` as three bytes, or `None` for anything that is not one.
 ///
-/// ⚠️ **It must not panic, and it used to.** The gate was `hex.len() != 6` —
+/// Warning: **It must not panic, and it used to.** The gate was `hex.len() != 6` —
 /// a count of *bytes* — and the digits were then cut with `&hex[0..2]`. Six
 /// bytes that are not six ASCII characters therefore sliced through the middle
 /// of a codepoint: `ink = "#aあbc"` is exactly six bytes, and yumete died on
@@ -3388,7 +3388,7 @@ mod runner_tests {
         };
         assert_eq!(named(&bare, "rust"), ["rust-analyzer"]);
         assert_eq!(named(&bare, "go"), ["gopls"]);
-        // ⚠️ **python 是一串**：它没有那個顯然的答案（helix 列了五個），填一個
+        // Warning: **python 是一串**：它没有那個顯然的答案（helix 列了五個），填一個
         // 等於替人在五個裏猜一個。
         assert_eq!(named(&bare, "python"), ["ty", "ruff", "pylsp", "jedi-language-server"]);
         assert_eq!(bare.lsp["python"][0].args, ["server"], "每個候選帶自己的參數");
@@ -3405,7 +3405,7 @@ args = [\"--log-file\", \"/tmp/ra.log\"]
         // …and the ones nobody mentioned are still there.
         assert_eq!(named(&config, "go"), ["gopls"]);
 
-        // ⚠️ **一串的寫法，而且一串「表」**——每個候選的參數不一樣，所以一串名字
+        // Warning: **一串的寫法，而且一串「表」**——每個候選的參數不一樣，所以一串名字
         // 表達不了（`ruff server`、`ty server`，而 `jedi-language-server` 不帶）。
         let several = Config::from_toml(
             "[[lsp.python]]
@@ -3420,7 +3420,7 @@ command = \"pylsp\"
         assert_eq!(several.lsp["python"][0].args, ["--stdio"]);
         assert!(several.lsp["python"][1].args.is_empty());
 
-        // ⚠️ **空的命令是「這種語言不要服務器」**，不是「用默認那個」。
+        // Warning: **空的命令是「這種語言不要服務器」**，不是「用默認那個」。
         let off = Config::from_toml("[lsp.rust]
 command = \"\"
 ");
@@ -3904,7 +3904,7 @@ mod screenshot_tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let was = std::env::var_os("PATH");
-        // ⚠️ The whole test holds the process's `PATH`, so it may not run
+        // Warning: The whole test holds the process's `PATH`, so it may not run
         // beside another that reads it — this crate's tests are one binary and
         // nothing else here touches the environment.
         std::env::set_var("PATH", &dir);

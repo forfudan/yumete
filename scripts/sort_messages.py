@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """把 messages.toml 裏排錯位置的那幾則搬回去。
 
-⚠️ 2026-09-22 第三次被同一條測試攔下來（`the_table_is_in_order`）。靠腦子算
+Warning: 2026-09-22 第三次被同一條測試攔下來（`the_table_is_in_order`）。靠腦子算
 字母序是算不對的——`ui.looking-it-up` 該排在 `ui.no-screenshot-command` 之前
 還是之後，人一眼看不出，機器一秒鐘。**往後加文案就跑這個。**
 """

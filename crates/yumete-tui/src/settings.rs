@@ -8,11 +8,11 @@
 //! 於是它要有名字。啓動叫一次，`:config-reload` 叫一次，將來那扇設置面板存完盤
 //! 再叫一次——**同一支函數**，所以不會出現「啓動時認這個設定、重載時忘了它」。
 //!
-//! ⚠️ **只放「推設定」，不放「開東西」。** 恢復會話、開檔、造輸入法、認 `--flag`
+//! Warning: **只放「推設定」，不放「開東西」。** 恢復會話、開檔、造輸入法、認 `--flag`
 //! 都留在 `main.rs`：它們一趟只能做一次，而這一支要能叫第二次。判準是
 //! **冪等** —— 叫兩遍和叫一遍一樣。
 //!
-//! ⚠️ **這裏少一項就是一個無聲的洞。** 加了新設定而忘了加進來，啓動時它照舊生效
+//! Warning: **這裏少一項就是一個無聲的洞。** 加了新設定而忘了加進來，啓動時它照舊生效
 //! （因為 `main.rs` 那一段被這一支取代了），可 `:config-reload` 之後它會**退回
 //! 舊值**——而屏幕上什麼都不說。`the_apply_pass_covers_every_setting` 釘着這件事。
 
@@ -31,7 +31,7 @@ pub fn apply(config: &Config, editor: &mut Editor, layout: Option<yumete_core::z
     editor.set_key_aliases(config.keys.normal.clone());
     editor.set_key_preset(config.keys.preset);
     editor.set_layout(layout.unwrap_or(config.editor.layout));
-    // ⚠️ **這四個是「寫了纔算」**，不是「寫了零就當零」：出廠值在 `Editor` 那一
+    // Warning: **這四個是「寫了纔算」**，不是「寫了零就當零」：出廠值在 `Editor` 那一
     // 頭，而配置裏的 0 是「沒說」。照抄啓動時的判準，一個字都不改。
     if config.editor.indent > 0 {
         editor.set_indent(config.editor.indent);
@@ -53,7 +53,7 @@ pub fn apply(config: &Config, editor: &mut Editor, layout: Option<yumete_core::z
     editor.set_code_colours(config.editor.code_highlight);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     editor.set_soft_wrap(config.editor.soft_wrap);
-    // ⚠️ `--syntax` 是**這一趟**的答案，比配置大——所以 `main.rs` 在這一支之後
+    // Warning: `--syntax` 是**這一趟**的答案，比配置大——所以 `main.rs` 在這一支之後
     // 再設一次。這裏設的是配置說的那一個，重載纔認得出它改了。
     editor.set_default_syntax(yumete_core::syntax::Syntax::parse(&config.editor.syntax));
     editor.set_syntax_by_name(
@@ -98,7 +98,7 @@ pub fn apply(config: &Config, editor: &mut Editor, layout: Option<yumete_core::z
 
 /// **The settings the input method keeps**, for the same reason as [`apply`].
 ///
-/// ⚠️ **碼表不在這裏。** `[ime] scheme` 換一個要讀幾十兆的表，那是一件看得見的
+/// Warning: **碼表不在這裏。** `[ime] scheme` 換一個要讀幾十兆的表，那是一件看得見的
 /// 事（`:yume-scheme` 自己會報進度），不是一次重載順手做的。重載改得動的是面板
 /// 那幾格——它們是純設定，不碰磁盤。
 pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {

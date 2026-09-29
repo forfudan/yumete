@@ -10,7 +10,7 @@
 //! keymap binds keys to names. `x = "delete_selection"` says what it means
 //! without the reader knowing that `d` happens to delete today.
 //!
-//! ⚠️ **The names are the surface; the defaults still live in the `match`.**
+//! Warning: **The names are the surface; the defaults still live in the `match`.**
 //! An action here says what it *is* and how it is carried out right now — by
 //! playing the keys the editor already answers, or by running a command. What
 //! this buys today is a stable vocabulary for the config file and the manual;
@@ -70,7 +70,7 @@ pub fn action(name: &str) -> Option<&'static Action> {
 /// a key is spelled with an underscore, so an underscore means a name was
 /// meant, and an unknown one is a typo rather than a key sequence.
 ///
-/// ⚠️ **One function, because two answers would drift.** The config says this
+/// Warning: **One function, because two answers would drift.** The config says this
 /// out loud when it is read and **drops the binding** on the same test; they
 /// were two copies of the condition until 2026-09-19, and only one of them had
 /// teeth — the warning was printed and the binding installed anyway.

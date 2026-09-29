@@ -342,11 +342,11 @@ impl Editor {
         // on would be showing the same reading twice. This is what the 縱書
         // page has always done; the horizontal one now does it too.
         //
-        // ⚠️ **光標在裏面的那一組要露出源碼**，和 `**粗**` 同一條規矩
+        // Warning: **光標在裏面的那一組要露出源碼**，和 `**粗**` 同一條規矩
         // （[`crate::markdown::hidden`]：選區碰到的構造整個展開，近端含、遠端
         // 不含）。2026-09-22 報的：一行上只有一個 ruby 詞的時候，從上一行 `j`
         // 走下來，光標落在**第一個看得見的字**上——那是 `<ruby>` 後面的
-        // `immerhin`，而不是行首——於是 `i` 打進去的字跑進了標籤裏面。⚠️ **兩種
+        // `immerhin`，而不是行首——於是 `i` 打進去的字跑進了標籤裏面。Warning: **兩種
         // 情形畫出來一模一樣**（都是 `甲immerhin`），所以看不出來：從 `3gg` 過去
         // 是對的，從 `j` 走下來是錯的。露出源碼，位置就說得清了。
         let caret = self.selected_columns(line);
@@ -361,7 +361,7 @@ impl Editor {
             .flat_map(|g| [(g.start, g.base.0), (g.base.1, g.end)])
             .filter(|(a, b)| b > a)
             .collect();
-        // ⚠️ **A `:diff` listing hides its markers whatever `:render` says**
+        // Warning: **A `:diff` listing hides its markers whatever `:render` says**
         // (#499). Everywhere else the choice is real: `**` is the writer's own
         // text and `:render off` means 「show me what the file holds」. These
         // four characters are not in any file — `line_changes` wrote them a
@@ -395,7 +395,7 @@ impl Editor {
                     .map(|(start, end, _)| (start, end)),
             );
         }
-        // ⚠️ **The measure and the page must hide the same characters.** This
+        // Warning: **The measure and the page must hide the same characters.** This
         // is the measure's list and `markup_hidden_on_line` is the page's, and
         // 竪排's table slack has to be in both: hidden from the page alone, the
         // padding would be worked out for characters nobody draws and every
@@ -504,7 +504,7 @@ impl Editor {
     /// 源碼在 [`Self::markup_off_line`] 那頭藏起來，這裏在原地畫一個印刷體的
     /// 註號——和表格摺疊畫那個 `>` 是同一條路（藏掉一段、原地立一個記號）。
     ///
-    /// ⚠️ **只有純數字的註號換得了。** 上標數字 Unicode 齊全，上標字母不齊
+    /// Warning: **只有純數字的註號換得了。** 上標數字 Unicode 齊全，上標字母不齊
     /// （`ᵠ` 有、`ᵡ` 沒有），所以 `[^note]` 這種**原樣留着**——畫不出來就別畫，
     /// 半套字形比源碼更難認。
     fn footnote_marks_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
@@ -866,7 +866,7 @@ impl Editor {
         let open = self.folds_open_at(line);
         let mut out = self.cell_tails_against(line, markup, open);
         out.extend(self.cell_slack_against(line, markup, open));
-        // ⚠️ **What a turned table keeps off the page is kept off motion too**
+        // Warning: **What a turned table keeps off the page is kept off motion too**
         // (2026-09-19, caught in review). This is the third list — the measure
         // has one, the page has one, and this one is what #379 built so that
         // 「a step the reader cannot see is not a step」. Without it the caret
@@ -1090,7 +1090,7 @@ impl Editor {
         // either punctuation, because「他们本质上都是分隔符」. The alignments
         // travel with the region rather than with the rows, so a table scrolled
         // past its own rule row keeps them.
-        // ⚠️ **「一屏幾行」竪排要問別的數** (2026-09-19: 「整個表格都在
+        // Warning: **「一屏幾行」竪排要問別的數** (2026-09-19: 「整個表格都在
         // 可視範圍內哦」). The window is `[page_top, page_top + a screenful]`
         // *in lines*, and 橫排 a screenful of lines is the terminal's height.
         // 竪排 a line is a 縱 and the 縱 run **across** the page, so a screenful
@@ -1497,7 +1497,7 @@ impl Editor {
 
     /// 同上，**但不問標記畫不畫得出來**。
     ///
-    /// ⚠️ `:markup off` 說的是「別上色」，不是「這份檔沒有標記」——後者是
+    /// Warning: `:markup off` 說的是「別上色」，不是「這份檔沒有標記」——後者是
     /// `:syntax text`，而那一條在下面的 `match` 裏本來就交空。取文本物件（`mi m`）問的
     /// 是檔裏有什麼，不是屏幕上畫了什麼，所以走這一支。
     pub(super) fn markup_runs(&self, line: usize) -> Vec<crate::markdown::Span> {
@@ -1580,7 +1580,7 @@ impl Editor {
             ) {
                 continue;
             }
-            // ⚠️ **判準走 `heading_marks`，三處同一份**（2026-09-28）。底下那一大段
+            // Warning: **判準走 `heading_marks`，三處同一份**（2026-09-28）。底下那一大段
             // 說明搬進了那一支。這裏跟着多了一條：**七個井號不是標題**，CommonMark
             // 封頂六級，而從前這裏不封頂。
             let Some(depth) = crate::markdown::heading_marks(trimmed, want) else {
@@ -1645,7 +1645,7 @@ impl Editor {
             // hundred and nineteen lines above it: **a listing comes in a
             // run**, a chapter heading stands alone.
             //
-            // ⚠️ Two in a row is not a run. 資治通鑑 ends every 卷 with
+            // Warning: Two in a row is not a run. 資治通鑑 ends every 卷 with
             // 「卷二 ◄ 資治通鑑」 and opens the next with 「第三卷 ► 卷四」 —
             // back to back, every one of its 294 卷. The first try at #390
             // called that a listing and cut the book down to one row.

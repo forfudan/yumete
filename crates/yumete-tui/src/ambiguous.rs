@@ -77,7 +77,7 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
             // SAFETY: one initialised `pollfd` describing a descriptor this
             // process owns, and a timeout in milliseconds.
             if unsafe { libc::poll(&mut watch, 1, left.as_millis() as libc::c_int) } <= 0 {
-                // ⚠️ **The common path, and the one that drops keystrokes.**
+                // Warning: **The common path, and the one that drops keystrokes.**
                 // A terminal that does not answer times out here, and
                 // everything read on the way — which is the reader typing —
                 // was thrown away with the buffer.

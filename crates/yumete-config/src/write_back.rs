@@ -5,11 +5,11 @@
 //!
 //! **改的那一行改掉，別的一個字節都不許動。**
 //!
-//! ⚠️ **`toml` 這個 crate 做不到。** 它只導出 `from_str`／`to_string`，註釋活在
+//! Warning: **`toml` 這個 crate 做不到。** 它只導出 `from_str`／`to_string`，註釋活在
 //! `toml_edit::Decor` 裏，一趟 round-trip 丟掉的不只是註釋——鍵的次序、空行、行
 //! 內註釋、引號的寫法全丟。一份手寫的配置存一次就被抹平成一份機器寫的。
 //!
-//! ⚠️ **而 `toml_edit` 加進來是零成本**：`toml 0.8` 的 `default = ["parse",
+//! Warning: **而 `toml_edit` 加進來是零成本**：`toml 0.8` 的 `default = ["parse",
 //! "display"]` 兩個 feature 都是 `dep:toml_edit`，`Cargo.lock` 裏就躺着
 //! `toml_edit 0.22.27`。寫一行依賴，**新增 crate 0 個、編譯時間增量 0**——同
 //! `serde_json`（#53）與 `libc` 的準入理由逐字相同：**it was already in the
@@ -51,7 +51,7 @@ pub enum Change {
     Text(String),
     /// **把這一項從這一份裏拿掉** —— 本項目那一份上的 `d`：撤掉覆蓋，回去跟全局。
     ///
-    /// ⚠️ 這件事**整份重寫做不到**：刪一個鍵還要留着它周圍的註釋，只有保留格式
+    /// Warning: 這件事**整份重寫做不到**：刪一個鍵還要留着它周圍的註釋，只有保留格式
     /// 的那條路走得通。這是 `toml_edit` 的第二個硬理由。
     Drop,
 }
@@ -74,7 +74,7 @@ pub struct Said {
 /// `text` 是檔裏原樣的那一份（空字串 ＝ 還沒有這個檔）。`changes` 是
 /// `("表.鍵", 怎麽改)`。回來的是新的正文與有話說的那幾句。
 ///
-/// ⚠️ **不認得的鍵在這裏一併註釋掉**，因為它們和「存盤」是同一件事：面板存完盤
+/// Warning: **不認得的鍵在這裏一併註釋掉**，因為它們和「存盤」是同一件事：面板存完盤
 /// 之後那個檔必須是**讀得進去的**，否則使用者按了保存而設定一條都沒生效。
 pub fn rewrite(
     text: &str,
@@ -95,7 +95,7 @@ pub fn rewrite(
                 }
             }
             _ => {
-                // ⚠️ **`or_insert` 一張 implicit table 會寫成 `[表]` 一行**，
+                // Warning: **`or_insert` 一張 implicit table 會寫成 `[表]` 一行**，
                 // 而那正是我們要的：檔裏沒有 `[editor]` 的時候補一個出來。
                 let entry = doc
                     .entry(table)
@@ -110,7 +110,7 @@ pub fn rewrite(
                     Change::Drop => unreachable!("上面那一支接住了"),
                 };
                 match t.get_mut(key) {
-                    // ⚠️ **只換值，不換這一行。** `t[key] = value!(…)` 會把這一
+                    // Warning: **只換值，不換這一行。** `t[key] = value!(…)` 會把這一
                     // 行連 decor 一起換掉——行尾那句 `# 我為什麽這麽設` 就沒了。
                     Some(Item::Value(old)) => {
                         let decor = old.decor().clone();
@@ -140,7 +140,7 @@ pub fn rewrite(
                 Some(v) => format!("{key} ={}", v.to_string().trim_end()),
                 None => continue,
             };
-            // ⚠️ **每一行都要那個 `#`，不是只有第一行。** 值可以跨行——多行數組、
+            // Warning: **每一行都要那個 `#`，不是只有第一行。** 值可以跨行——多行數組、
             // `"""…"""` ——而只註釋掉頭一行，後面幾行就**裸着留在檔裏**，整份
             // toml 從此讀不進去。實測（2026-09-24 審出來的）：
             //
@@ -161,11 +161,11 @@ pub fn rewrite(
                 .join("\n");
             t.remove(&key);
             said.commented_out.push(format!("{table}.{key}"));
-            // ⚠️ **掛在表頭那一行的後綴上**，所以它畫出來是在 `[editor]` **下面
+            // Warning: **掛在表頭那一行的後綴上**，所以它畫出來是在 `[editor]` **下面
             // 一行**，而不是原來那個位置。留在本節裏就夠了——挪一行註釋掉的字比
             // 「為了位置精確而動別人的行」便宜。
             //
-            // ⚠️ 連帶一件事：它會擠在上一行註釋和它注的那一行中間。實測
+            // Warning: 連帶一件事：它會擠在上一行註釋和它注的那一行中間。實測
             // （2026-09-24）：
             //
             // ```toml
@@ -185,7 +185,7 @@ pub fn rewrite(
 
 /// 註釋掉那一行後面跟的那句話。
 ///
-/// ⚠️ **不走 `say!`。** 它寫進使用者的檔裏，而那個檔明天可能被另一種語言的
+/// Warning: **不走 `say!`。** 它寫進使用者的檔裏，而那個檔明天可能被另一種語言的
 /// yumete 讀到；一句跟着界面語言變的註釋會讓同一個檔在兩臺機器上長得不一樣。
 const STRANGER: &str = "yumete does not know this name";
 
@@ -248,7 +248,7 @@ soft_wrap = true    # 行尾這一句也是我寫的
 
     /// **不認得的鍵註釋掉，而不是刪掉**（2026-09-23 定）。
     ///
-    /// ⚠️ 留着它，`deny_unknown_fields` 會讓**整份**配置作廢——同一個檔裏那兩條
+    /// Warning: 留着它，`deny_unknown_fields` 會讓**整份**配置作廢——同一個檔裏那兩條
     /// 對的設定一條都不生效。所以這不是破壞，是修復。
     #[test]
     fn a_name_yumete_does_not_know_is_commented_out_not_deleted() {

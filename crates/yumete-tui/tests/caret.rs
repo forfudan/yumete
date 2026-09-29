@@ -1,6 +1,6 @@
 //! 光標與選區的顏色（#493）。
 //!
-//! ⚠️ **自己一個檔，因為明暗是個全局。** `theme::set_dark` 寫的是一個
+//! Warning: **自己一個檔，因為明暗是個全局。** `theme::set_dark` 寫的是一個
 //! `AtomicU8`，而 cargo 在同一個測試二進制裏是多執行緒跑的：這一族原先住在
 //! `theme.rs` 的 `mod tests` 裏，於是它每翻一次頁面，隔壁正在畫圖的
 //! `the_cell_ground_survives_a_callout_but_not_a_highlight` 就有一次機會量到

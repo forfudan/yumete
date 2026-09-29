@@ -149,7 +149,7 @@ pub struct Buffer {
     edit: Option<(usize, isize)>,
     /// **這一份稿子最後改在哪**（`g.`，2026-09-28）。字符下標，沒改過就是 `None`。
     ///
-    /// ⚠️ **不是撤銷歷史裏那個 `cursor`。** 那一格記的是「報撤銷點的那一刻光標在哪」，
+    /// Warning: **不是撤銷歷史裏那個 `cursor`。** 那一格記的是「報撤銷點的那一刻光標在哪」，
     /// 也就是改**之前**；`g.` 要的是改**之後**落在哪。兩者在 `ciw` 這種先刪後寫的動作
     /// 上差得很遠。
     last_edit: Option<usize>,
@@ -427,7 +427,7 @@ impl Buffer {
             // Same size, same moment: nothing touched it. This is the answer
             // almost every time and it costs one `stat`.
             //
-            // ⚠️ **Unless the moment is too recent to mean anything.** A file
+            // Warning: **Unless the moment is too recent to mean anything.** A file
             // system stamps mtime with a granularity — the kernel's timer tick
             // on Linux, and a full **two seconds** on exFAT, which is what a
             // USB stick is formatted as. Two writes inside one tick get the
@@ -548,7 +548,7 @@ impl Buffer {
         self.last_edit
     }
 
-    /// 只給測試：假裝這一份還沒改過。⚠️ 鋪固定裝置要往 rope 裏寫字，而那一下就把
+    /// 只給測試：假裝這一份還沒改過。Warning: 鋪固定裝置要往 rope 裏寫字，而那一下就把
     /// 「最後改在哪」記上了，於是「還沒改過」這個狀態在測試裏造不出來。
     #[cfg(test)]
     pub fn reset_last_edit_for_test(&mut self) {
@@ -901,7 +901,7 @@ impl Buffer {
     /// The same, but taking its permissions from `like` when `path` itself has
     /// none to take.
     ///
-    /// ⚠️ **This is what keeps a 0600 manuscript's recovery copy at 0600.**
+    /// Warning: **This is what keeps a 0600 manuscript's recovery copy at 0600.**
     /// `write_bytes_atomically` copies the permissions of the file it is
     /// replacing — right for `:w`, useless for a swap, which does not exist
     /// the first time it is written and so takes the umask: 0644. Every
@@ -914,7 +914,7 @@ impl Buffer {
     /// The write itself. `mark` says whether the BOM the file arrived with goes
     /// back on — true for the document, **false for a recovery copy**.
     ///
-    /// ⚠️ The copy mirrors the *rope*, and the rope has no BOM: `open` strips
+    /// Warning: The copy mirrors the *rope*, and the rope has no BOM: `open` strips
     /// it and remembers it in `marked`. A copy that carried one was a copy that
     /// could never equal the document, so `read_draft` offered a stale draft
     /// for every BOM file forever — and `:recover`, which pushes the copy's
@@ -1384,7 +1384,7 @@ fn write_bytes_with_model(
             .or_else(|| like.and_then(|p| fs::metadata(p).ok()));
         if let Some(from) = model {
             let mut how = from.permissions();
-            // ⚠️ **抄權限，但不抄「只讀」。** 抄過去的話，一份 0444 的稿子會讓它
+            // Warning: **抄權限，但不抄「只讀」。** 抄過去的話，一份 0444 的稿子會讓它
             // 的搶救副本也成 0444——而**下一輪**寫那份副本時上面那道只讀閘就攔住
             // 自己，`PermissionDenied`，此後這一場的每一次 autosave 都失敗。那句
             // 提示只說一次（`swap_warned`），全屏編輯器裏下一個按鍵就蓋掉了，於是
@@ -1393,7 +1393,7 @@ fn write_bytes_with_model(
             // 只讀的稿子照樣打得開、`:readonly off` 照樣寫得動（寫的時候另有一道
             // 閘問人），而副本是**我們自己**的東西，沒有理由跟着只讀。
             // 2026-09-24 審出來的。
-            // ⚠️ **只補「自己」那一位，不許用 `set_readonly(false)`。** 那一支在
+            // Warning: **只補「自己」那一位，不許用 `set_readonly(false)`。** 那一支在
             // Unix 上是 `mode |= 0o222`——**把寫權限一併給了組和其他人**：一份
             // 0o600 的日記，它的搶救副本會是 0o622。
             // `a_recovery_copy_is_as_private_as_the_manuscript` 當場逮到
@@ -1483,7 +1483,7 @@ mod tests {
     /// of it on the next `:w`. #310's mark belongs on the document alone.
     #[test]
     fn a_recovery_copy_carries_no_byte_order_mark() {
-        // ⚠️ Not `yumete-bom-…`: `a_byte_order_mark_is_not_the_first_character_of_the_book`
+        // Warning: Not `yumete-bom-…`: `a_byte_order_mark_is_not_the_first_character_of_the_book`
         // already owns that name and removes the directory when it finishes.
         // Two tests, one process id, one directory — green alone, red in the
         // suite, and the failure lands in whichever of them is slower.

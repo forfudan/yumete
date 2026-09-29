@@ -143,7 +143,7 @@ const DISOWNED: &[&str] = &[
     // spelling that replaced each of them. 舊名字直接刪掉 is the philosophy the
     // table is there to state, so every one of these has to stay missing.
     // #419: the search panel took its job, and the manual names it so that a
-    // reader who knew it is told where the job went. ⚠️ `:replace` is **not**
+    // reader who knew it is told where the job went. Warning: `:replace` is **not**
     // here: that name came back, with a different meaning, the way `:search`
     // did — a signpost may only point away from a word nobody can type.
     ":grep",
@@ -169,7 +169,7 @@ const DISOWNED: &[&str] = &[
     // as the tables of the day they were made, and they are names now only in
     // the sense that `:view-wrap` begins with one.
     ":view",
-    // ⚠️ `:clipboard` 也回來了（2026-09-25）：拍平的時候它是個空殼父命令，
+    // Warning: `:clipboard` 也回來了（2026-09-25）：拍平的時候它是個空殼父命令，
     // 現在它自己有意思了——**粘貼菜單**，`空格 "` 開的那一扇。和上面
     // `:clipboard-yank` 那一條同一回事，所以它不在這張單子上。
     ":buffers",
@@ -270,14 +270,14 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
             "空格" => '空',
             one => one.chars().next().filter(|_| one.chars().count() == 1)?,
         };
-        // ⚠️ **Two levels, since the table group moved** (2026-09-21).
+        // Warning: **Two levels, since the table group moved** (2026-09-21).
         // `空格 t/` is three presses — the 空 menu's `t`, then the table
         // menu's `/` — and `空格 t2-10/` puts a column range between them.
         // Asking only about the first key would stop checking the forty keys
         // the table group has, so when the first key is itself a leader the
         // question moves down a level.
         //
-        // ⚠️ **A count stops the descent.** `空格 t1,5,9s` names three columns
+        // Warning: **A count stops the descent.** `空格 t1,5,9s` names three columns
         // and the menu spells that key `1s`, not `s` — pressing a bare `s`
         // there really does nothing, which is what `t s` is doing in
         // [`DISOWNED_KEYS`]. So a spelling with arithmetic in it is checked
@@ -310,15 +310,15 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
 /// `^`. Nothing can be concluded from these in either direction — `m d` happens
 /// to be a real sequence and `t w` is one too — so they are dropped before the
 /// question is asked rather than answered.
-// ⚠️ `[^` and `[[` are **characters typed into the page**, not keys pressed in
+// Warning: `[^` and `[[` are **characters typed into the page**, not keys pressed in
 // Normal: they open a completion panel in Insert (#418 二、三), and `[` is also
 // a real leader (`[c`), so without this the two would be read as one.
-// ⚠️ `go` is a **fence tag**, not a key (2026-09-19, when the Go grammar was
+// Warning: `go` is a **fence tag**, not a key (2026-09-19, when the Go grammar was
 // added): the language table prints ```` ```go ```` beside `rust` and `py`, and
 // `g` really is a leader — so without this the manual teaching Go reads as the
 // `g` menu offering `o`. The other two-letter tags (`py`, `js`, `rs`, `js`) are
 // safe only because their first letter is not a leader; this one is not.
-// ⚠️ `[ ]` 與 `[x]` 是**一個沒勾上／勾上了的方框的畫像**，不是按鍵——搜索面板與
+// Warning: `[ ]` 與 `[x]` 是**一個沒勾上／勾上了的方框的畫像**，不是按鍵——搜索面板與
 // 設置面板（#421）滿頁都是它。`[]` 本來就在這張單子上，而中間那一格空白讓它讀成
 // 「`[` 選單裏的 `]`」，於是同一個東西的兩種寫法一個過一個不過（2026-09-24）。
 const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[["];

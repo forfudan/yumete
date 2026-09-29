@@ -42,7 +42,7 @@ const DEFAULT_INDENT: usize = 2;
 /// one level up, because two panes can hold one buffer and a buffer has room
 /// for one place.
 ///
-/// ⚠️ **這一句從前寫的是「The editor has one cursor」**，而 2026-09-28 起不再是那樣了
+/// Warning: **這一句從前寫的是「The editor has one cursor」**，而 2026-09-28 起不再是那樣了
 /// （#405，`crate::selection::Selections`）。它要說的其實一直是**分屏**那件事——有幾個
 /// 選區和有幾個工作區是兩回事，一個分屏仍舊只有一組選區。
 #[derive(Debug, Clone)]
@@ -52,7 +52,7 @@ pub struct Pane {
     pub buffer: u64,
     cursor: usize,
     anchor: usize,
-    /// `j`／`k` 瞄準的那一列。⚠️ **這一半收起來的時候只剩一段選區**（`cursor`／`anchor`
+    /// `j`／`k` 瞄準的那一列。Warning: **這一半收起來的時候只剩一段選區**（`cursor`／`anchor`
     /// 就是那一段），所以這裏存的是那一段的目標列，不是一組。
     goal_column: Option<usize>,
     /// 竪排那一半的同一件事。見上。
@@ -165,10 +165,10 @@ enum Pending {
     ///
     /// vim 的正統拼法是 `C-g u`（`:h i_CTRL-G_u`，字面意思「斷開 undo 序列」），
     /// 而這裏 `C-g` 底下没有第二件事，那個 `u` 是純儀式。**兩種都收**：斷在
-    /// `C-g` 上，`u` 來了就吞掉、不來就算了——⚠️ 不吞的話，vim 手打完 `C-g u`
+    /// `C-g` 上，`u` 來了就吞掉、不來就算了——Warning: 不吞的話，vim 手打完 `C-g u`
     /// 會在稿子裏留下一個游離的「u」。
     ///
-    /// ⚠️ **helix 那個拼法抄不了**：它用 `C-s`，而終端裏 `C-s` 是 XOFF，按下去
+    /// Warning: **helix 那個拼法抄不了**：它用 `C-s`，而終端裏 `C-s` 是 XOFF，按下去
     /// 屏幕會凍住（除非 `stty -ixon`）。
     UndoBreak,
     /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
@@ -274,7 +274,7 @@ impl Pending {
             // **A vim operator is waiting for a *motion*, which is keys** — the
             // character `f` asks for is read by the motion itself.
             //
-            // ⚠️ **`di`／`da` 之後也不開輸入法**（2026-09-29 撤回，前一天加的）。
+            // Warning: **`di`／`da` 之後也不開輸入法**（2026-09-29 撤回，前一天加的）。
             // 加它的理由是「`di（` 要的是一個全角括號，而 Normal 模式下打不出來」，
             // 而**它等的那一個鍵多半根本不是要寫進去的字**：`diw` 的 `w` 是「詞」，
             // `dip` 的 `p` 是「段」，`dis` 的 `s` 是「句」。開着輸入法的時候 `diw`
@@ -440,7 +440,7 @@ fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
         .enumerate()
         .filter_map(|(line, raw)| {
             let raw = raw.trim_end_matches(['\n', '\r']);
-            // ⚠️ **判準走 `heading_marks`，和着色那一支、大綱那一支同一份**
+            // Warning: **判準走 `heading_marks`，和着色那一支、大綱那一支同一份**
             // （2026-09-28）。從前這裏既不要求 `=` 後面有空白也不封頂六級，於是同一行
             // 在正文裏不畫成標題、卻出現在這張清單上。
             let level = crate::markdown::heading_marks(raw, '=')?;
@@ -527,7 +527,7 @@ pub enum Hint {
     /// so almost every one of them is a `&'static str`. What they mean is a
     /// `String`, because it is said in the reader's.
     ///
-    /// ⚠️ The key is a [`Cow`] rather than a plain `&'static str` because one
+    /// Warning: The key is a [`Cow`] rather than a plain `&'static str` because one
     /// menu's keys are **read off the document**: the register panel lists the
     /// letters that actually hold something, and which letters those are is
     /// only known at the moment the panel is drawn.
@@ -1420,7 +1420,7 @@ fn downloads_dir() -> PathBuf {
 /// settles for the folder the file itself is in. Only a session with no named
 /// file left in it falls back to `here`.
 ///
-/// ⚠️ **Every path is resolved against `here` first.** A file opened as
+/// Warning: **Every path is resolved against `here` first.** A file opened as
 /// `一.md` has a relative path and its `parent()` is the **empty** path; that
 /// used to be skipped, so a book opened by a bare name never climbed to its
 /// `.yumete` and every listing rooted itself in whatever directory the
@@ -1495,7 +1495,7 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
         if !entry.file_type().is_some_and(|t| t.is_file()) {
             continue;
         }
-        // ⚠️ **走到頂就停。** 停下來交出走到的那些，比卡死強：交出來的是真的，
+        // Warning: **走到頂就停。** 停下來交出走到的那些，比卡死強：交出來的是真的，
         // 而卡死的時候屏幕上一個字都沒有。
         seen += 1;
         if seen > WALK_CEILING {
@@ -1517,7 +1517,7 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
 
 /// What 自動認詞 is asked to read: **this file, and the folder around it**.
 ///
-/// ⚠️ **Two passes, not one corpus** (#453). Concatenating the folder and
+/// Warning: **Two passes, not one corpus** (#453). Concatenating the folder and
 /// reading it once looks equivalent and is not. Measured on 宇浩's own docs,
 /// 「宇夢」 comes 8th of 60 candidates in the file that is about it, 46th of
 /// 181 in its folder, and **disappears entirely** from the 969 a whole
@@ -1611,7 +1611,7 @@ const SWAP_BACKLOG_INTERVAL: std::time::Duration = std::time::Duration::from_mil
 const DISK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 /// **What the server says could come next, and where it was asked** (#53 ④).
 ///
-/// ⚠️ **The caret's place is part of the answer.** 「什麽接得下去」 is a
+/// Warning: **The caret's place is part of the answer.** 「什麽接得下去」 is a
 /// question about one spot in one file, and the moment the caret leaves that
 /// spot the answer is about somewhere else. Keeping the list alive across a
 /// move would offer `count` where `count` cannot go.
@@ -1634,7 +1634,7 @@ pub struct Editor {
     mode: Mode,
     /// **選區——複數的那一個**（#405，方案在 `docs/development.md §5.13`）。
     ///
-    /// ⚠️ **Phase 0 裏它永遠只裝一段**，行為和從前的 `cursor`／`anchor` 兩個欄位一字不差
+    /// Warning: **Phase 0 裏它永遠只裝一段**，行為和從前的 `cursor`／`anchor` 兩個欄位一字不差
     /// ——這一期的驗收條件就是「`scripts/frames.sh` 那二十幀逐字節不變」。
     ///
     /// 從前直接讀寫那兩個欄位的三百多處，現在走 `self.sel.head()`／`set_head()` 那四支
@@ -1644,7 +1644,7 @@ pub struct Editor {
     last_file: Option<u64>,
     /// **正則那一族在等什麽**（`s`／`S`／`A-k`／`A-K`，#405 Phase 2）。
     ///
-    /// ⚠️ **它們借的是搜索那一扇提示行**（`Mode::Search`），所以拼音、簡繁、模糊、正則
+    /// Warning: **它們借的是搜索那一扇提示行**（`Mode::Search`），所以拼音、簡繁、模糊、正則
     /// 四個開關一起白拿，中文也照打——那一扇本來就開輸入法（`Mode::composes`）。這一格
     /// 記的是「Enter 按下去要做哪一件」，`None` 就是普通的搜索。
     sift: Option<crate::editor::multi::Sift>,
@@ -1653,7 +1653,7 @@ pub struct Editor {
     /// `edit_each` 逐段跑的時候填上，跑完清掉。`"#p` 於是在第一段貼「1」、第二段貼
     /// 「2」——**編號列表那個用例就是這麼解開的**（§5.13.1）。
     ///
-    /// ⚠️ **算的是文檔次序，不是執行次序。** `edit_each` 從後往前做，而讀者數的是從上
+    /// Warning: **算的是文檔次序，不是執行次序。** `edit_each` 從後往前做，而讀者數的是從上
     /// 往下第幾個。
     edit_nth: Option<usize>,
     /// The text being typed after `:` / `/` (without the leading punctuation).
@@ -1778,7 +1778,7 @@ pub struct Editor {
     /// — the counting is a few hundred milliseconds on a long chapter and it
     /// belongs on a thread that is not drawing the page.
     ///
-    /// ⚠️ **The text, not a root** (#452). This handed over a project root and
+    /// Warning: **The text, not a root** (#452). This handed over a project root and
     /// the front end walked it, which made 自動認詞 answer a question about the
     /// *repository*: in 宇浩's own tree 「宇夢」 never surfaced, because a few
     /// hundred 拆分表 drowned the chapter — 「一堆拆分表形成杂音」. The three
@@ -1847,7 +1847,7 @@ pub struct Editor {
     /// 跟服務器說得上話。所以問題停在這裏，前端下一趟循環取走、發出去，答案回來
     /// 時叫 [`Editor::go_to_definition`]。
     ///
-    /// ⚠️ **列是 UTF-16 碼元**，因爲那是問出去的那一頭要的單位。
+    /// Warning: **列是 UTF-16 碼元**，因爲那是問出去的那一頭要的單位。
     definition_query: Option<(PathBuf, usize, usize)>,
     /// **Normal 模式下按過 Esc，要前端把挂起信號再發一遍**（2026-09-22）。
     ///
@@ -1855,7 +1855,7 @@ pub struct Editor {
     /// 「已經挂起了」而事實上没有（見 `yumete_tui::system_ime`）。信念會漂，所以
     /// 給人留一條重新聲明的路：Normal 模式下再按一次 Esc。
     ///
-    /// ⚠️ **只在 Esc 没有別的事可做的時候。** Esc 先收窗口、先收選區；那幾件都
+    /// Warning: **只在 Esc 没有別的事可做的時候。** Esc 先收窗口、先收選區；那幾件都
     /// 不是這一件，而一個鍵一次只該做一件事。
     say_it_again: bool,
     /// **`:config-reload` 按過了** —— 前端下一趟取走（`take_config_reload`）。
@@ -1865,7 +1865,7 @@ pub struct Editor {
     config_reload: bool,
     /// **`:settings` 按過了** —— 前端下一趟取走並開那扇面板。
     ///
-    /// ⚠️ **那扇面板的狀態不在核心裏**（它讀 `yumete_config::settings_ui` 那張表，
+    /// Warning: **那扇面板的狀態不在核心裏**（它讀 `yumete_config::settings_ui` 那張表，
     /// 而核心不依賴 `yumete-config`），所以這裏只是一張條子。
     settings_request: bool,
     /// 那扇面板此刻開着 —— 前端進出時說一聲。
@@ -1883,7 +1883,7 @@ pub struct Editor {
     completion_query: Option<(PathBuf, usize, usize)>,
     /// **Where the caret was when that question was asked** (#53 ④).
     ///
-    /// ⚠️ **The answer is about that spot, not about wherever the caret is by
+    /// Warning: **The answer is about that spot, not about wherever the caret is by
     /// the time it comes back.** A list that arrived after two more letters
     /// were typed is a list of what could follow the word as it was — showing
     /// it would offer `counted` after `counting`. Kept separate from the query
@@ -1893,7 +1893,7 @@ pub struct Editor {
     /// **Whether that question was asked by hand** (`C-n`) rather than by the
     /// letter just typed (#53 ④).
     ///
-    /// ⚠️ **What it decides is whether silence is reported.** 「這裏接不下什麽」
+    /// Warning: **What it decides is whether silence is reported.** 「這裏接不下什麽」
     /// is the answer to a question somebody asked; said after every pause in
     /// typing it is a status line that flickers all day and is never read.
     completion_by_hand: bool,
@@ -1901,7 +1901,7 @@ pub struct Editor {
     offering: Option<Offering>,
     /// **服務器對光標下那個東西說的話，和問它時光標在哪**（#53 ③）。
     ///
-    /// ⚠️ 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
+    /// Warning: 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
     /// 冒出來的診斷不是這一種——那一種是文件的事實，走到哪都還在。
     hovered: Option<(usize, String)>,
     /// **`空格 K`：文檔跟不跟着光標走**（2026-09-29）。出廠**關着**——百科是現
@@ -1931,7 +1931,7 @@ pub struct Editor {
     ///
     /// `空格 d` 開浮窗，**一點都不碰邊欄**；`空格 D` 纔在邊欄裏開。兩個鍵問的是
     /// 同一件事、答案同一份，差的只是畫在哪兒——所以這裏是一格布爾，不是兩套狀
-    /// 態。⚠️ 大寫是「同一件事的更大版本」，與 `空格 c`／`空格 C` 同一條規矩。
+    /// 態。Warning: 大寫是「同一件事的更大版本」，與 `空格 c`／`空格 C` 同一條規矩。
     dictionary_afloat: bool,
     /// The other work area, when the page is split (Feature #176).
     other: Option<Pane>,
@@ -1953,19 +1953,19 @@ pub struct Editor {
     vcs_base: HashMap<u64, String>,
     /// 上一次**問過** git 的時候，這個 buffer 是哪個 revision。
     ///
-    /// ⚠️ 不能拿 `vcs` 裏有没有答案當「問過了」：不在 git 倉裏的檔問出來是
+    /// Warning: 不能拿 `vcs` 裏有没有答案當「問過了」：不在 git 倉裏的檔問出來是
     /// 「没話說」，那一條會被刪掉——於是它永遠看着像没問過，空閒的鐘就每 300
     /// 毫秒喊一次 git，喊到天亮。
     vcs_asked: HashMap<u64, u64>,
     /// 語言服務器說了什麽不對（#53／#54），按**路徑**存。
     ///
-    /// ⚠️ **鍵是路徑，不是 buffer id。** 服務器說的是一個檔，而它說的時候那個檔
+    /// Warning: **鍵是路徑，不是 buffer id。** 服務器說的是一個檔，而它說的時候那個檔
     /// 不一定開着——rust-analyzer 看一個 crate，報回來的多半是你還没打開的那幾
     /// 個檔。路徑收得下這些，buffer id 收不下。
     problems: crate::problem::Problems,
     /// 剛纔那個**文本對象**沒找到東西（`mi(` 外面沒有括號、`miw` 不在一個詞上）。
     ///
-    /// ⚠️ 一個字的選區和「沒動」在數據上**一模一樣**（`anchor == cursor` 兩者都
+    /// Warning: 一個字的選區和「沒動」在數據上**一模一樣**（`anchor == cursor` 兩者都
     /// 成立），所以操作符不能靠比較位置來判斷對象有沒有命中——`wdiw`（光標停在
     /// 一個空格上）就是這麽被拒掉的。對象自己說。
     object_missed: bool,
@@ -2050,14 +2050,14 @@ pub struct Editor {
     jumped: bool,
     /// **`z` 那一層要把光標放在第幾行**（`zz`／`zt`／`zb`，2026-09-28）。
     ///
-    /// ⚠️ **這個編輯器沒有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
+    /// Warning: **這個編輯器沒有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
     /// 不是視圖——視圖自己滾了，下一幀光標要留在屏幕上的時候會被拉回去。視口住在 TUI
     /// 那一側（`Seats`）。
     ///
     /// 所以 `zz` 不是「滾動」，是**往 [`Editor::page_inset`] 上加一次覆蓋**：那一支本來
     /// 就在回答「光標該坐在頁面第幾行」（跳轉落中間、打字機模式居中都走它）。
     ///
-    /// ⚠️ **一次性的，和 `jumped` 同一套**：按下去的時候立起來，下一個鍵按下去的時候
+    /// Warning: **一次性的，和 `jumped` 同一套**：按下去的時候立起來，下一個鍵按下去的時候
     /// （`on_key` 開頭）放倒。中間那一幀已經畫過了，視口就停在那裏——再下一幀
     /// `page_inset` 回 `None`（光標舒舒服服在頁面上），沒人會把它拉回去。
     aim: Option<Aim>,
@@ -2353,7 +2353,7 @@ pub struct Editor {
     ruby_drawn: bool,
     /// **Which way the reader asked for the text to run** (Feature #61).
     ///
-    /// ⚠️ **Not necessarily how it is drawn.** A program file is always drawn
+    /// Warning: **Not necessarily how it is drawn.** A program file is always drawn
     /// across (`Editor::layout`), and this is what the page goes back to when
     /// one is closed — 2026-09-21 定：「见到程序文件，强制不允许开启竖排模式」，
     /// 而那不能反過來把讀者正在寫的小說也扳平。
@@ -2465,7 +2465,7 @@ pub struct Editor {
     owed_search: bool,
     /// **屏幕上的落腳點和它們的標籤**（`gw`，#406）——亮着的時候整個鍵盤都是標籤。
     ///
-    /// ⚠️ 不是 `jumps`：那個是 `C-o`／`C-i` 走的跳轉表（#45），兩件事。
+    /// Warning: 不是 `jumps`：那個是 `C-o`／`C-i` 走的跳轉表（#45），兩件事。
     labels: Vec<labels::Jump>,
     /// 標籤已經被打進去的那幾個字母。
     jump_typed: String,
@@ -2479,7 +2479,7 @@ pub struct Editor {
     /// 比如几秒，过了这个时间就会从命令行消失。比如那个宽度 1/4。这样不遮挡按键
     /// 提示。」
     ///
-    /// ⚠️ **連那句話一起記下來**，不只記一個時刻：狀態行到處都在被直接賦值，
+    /// Warning: **連那句話一起記下來**，不只記一個時刻：狀態行到處都在被直接賦值，
     /// 只記時刻的話，鐘一響就會把後來那一句不相干的話也抹掉。
     status_fades: Option<(std::time::Instant, String)>,
     /// Where the cursor was when the 字典 was asked, so the answer can go when
@@ -2501,13 +2501,13 @@ pub struct Editor {
     /// **百科那一頁讀到哪了**，以及讀的是站在哪個字上的那一條（2026-09-22 報的：
     /// 「無法用 j/k/J/K 向上下翻動」）。
     ///
-    /// ⚠️ **百科是一段文章，不是一張單子。** 邊欄裏別的視圖都是行的列表，`j` 走
+    /// Warning: **百科是一段文章，不是一張單子。** 邊欄裏別的視圖都是行的列表，`j` 走
     /// 下一行；這一個沒有行可走，要的是**滾動**。從前它連 rows 都不產生
     /// （`View::Wiki => return`），於是 `j` 落在 `sidebar.step()` 上什麼都沒發生。
     ///
     /// 記着光標在哪，是因為光標一走詞條就換了——換了還停在第七行，讀的是另一條
     /// 的中間。
-    /// ⚠️ **`Cell`，因為底在哪只有前端知道。** 一條詞條有多少**屏幕**行，要把
+    /// Warning: **`Cell`，因為底在哪只有前端知道。** 一條詞條有多少**屏幕**行，要把
     /// 它按邊欄的寬度折一遍纔數得出來（表格還不折），而折是畫的時候做的事。
     /// 所以畫完那一趟順手把夾好的值寫回來——`G` 也是這麽落地的（存進去
     /// `usize::MAX`，前端走到底、算出總數、寫回真正的那個數）。
@@ -2947,7 +2947,7 @@ impl Editor {
     /// what it landed on rather than nudge it in from an edge.
     /// **`z` 那一層放在哪一行**。
     ///
-    /// ⚠️ 屏幕上只有三個位置值得一個鍵：頂、中、底。helix 的 `z` 層還有 `zm`（橫向居
+    /// Warning: 屏幕上只有三個位置值得一個鍵：頂、中、底。helix 的 `z` 層還有 `zm`（橫向居
     /// 中），而這個倉橫向滾動只在 `:view-wrap off` 下才動得起來，那時整段是一行——
     /// 「橫向居中」在一行裏沒有意義。
     pub fn aim_the_page(&mut self, aim: Aim) {
@@ -3035,7 +3035,7 @@ impl Editor {
     pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
         // **`z` 那一層先說話**（2026-09-28）：讀者剛剛親口說了這一行要坐在哪。
         //
-        // ⚠️ **`zt` 瞄的是第 `scrolloff` 行，不是第 0 行**，`zb` 同理往回留一截。
+        // Warning: **`zt` 瞄的是第 `scrolloff` 行，不是第 0 行**，`zb` 同理往回留一截。
         // 這一條不是「順便也留點餘地」，是**它停不停得住的唯一條件**：這個覆蓋是一次性
         // 的（下一個鍵按下去就清掉），而視口是靠下一幀的 `page_inset` 回一句「別動」
         // 纔留在原地的。瞄第 0 行的話，下一幀底下那一句 `d < scrolloff` 立刻把它推開
@@ -3134,7 +3134,7 @@ impl Editor {
             .get(cell)
             .cloned()
             .unwrap_or_else(|| format!("+{}", cell + 1 - headings.len()));
-        // ⚠️ **No 「· 字」 tail** (#496). The grain used to be spelt out here
+        // Warning: **No 「· 字」 tail** (#496). The grain used to be spelt out here
         // and again in the hint row's title, and both were saying what the
         // `T` key is already standing there saying — 「似乎不需要吧。因为挺明显
         // 的」. The status line is a scarce row; what is on it has to be
@@ -3517,7 +3517,7 @@ fn scan_back(
     from: usize,
 ) -> Option<(usize, usize)> {
     let to_line = to_line.min(rope.len_lines());
-    // ⚠️ **An empty document is one empty line, and ropey will not walk back
+    // Warning: **An empty document is one empty line, and ropey will not walk back
     // over it**: forwards its iterator yields that line, backwards it yields
     // nothing. `yumete` opens on exactly that document, and `x*` matches in
     // it.
@@ -3593,17 +3593,17 @@ const PAIRS: &[(char, char)] = &[
 /// 成对的括号都执行内部删除？」查下來配對表本身十九對全收，斷的是**查表是精確匹配**：按
 /// `(` 只找 ASCII 的 `()`，而中文稿子裏的括號是全角的。
 ///
-/// ⚠️ **這不只是全半角摺疊，是我們自己定的一張對應表**（2026-09-28 定，選的是「連中文括號
+/// Warning: **這不只是全半角摺疊，是我們自己定的一張對應表**（2026-09-28 定，選的是「連中文括號
 /// 一起掛上去」那一檔）。`（）` 確實是 `()` 的全角形式，Unicode 明說；可是 `【】`『』
 /// `《》` 在 Unicode 裏是獨立的中文標點，不是哪個 ASCII 鍵的全角形式。把它們挂到 ASCII
 /// 鍵上是為了順手：寫中文的時候隨手按一個 `[`，拿到的是眼前那一對中文括號。
 ///
-/// ⚠️ **方引號 `「」`『』掛在 `[` 上，不掛在 `"` 上**（同日定）。它們長得是括號，不是
+/// Warning: **方引號 `「」`『』掛在 `[` 上，不掛在 `"` 上**（同日定）。它們長得是括號，不是
 /// 引號的樣子，手會去按方括號那個鍵。
 ///
-/// ⚠️ **兩頭都認**：從 `【` 查也回同一族，所以 `di【` 一樣找得到 `[]`。
+/// Warning: **兩頭都認**：從 `【` 查也回同一族，所以 `di【` 一樣找得到 `[]`。
 ///
-/// ⚠️ 想「不管哪一對，刪最裏面那一對」用 `md`，那一支掃整張 `PAIRS`，和這裏無關。
+/// Warning: 想「不管哪一對，刪最裏面那一對」用 `md`，那一支掃整張 `PAIRS`，和這裏無關。
 const FAMILIES: &[&[(char, char)]] = &[
     &[('(', ')'), ('（', '）')],
     // **單層的歸 `[`，套在裏面那一層的歸 `{`**（2026-09-28 定）。『』是套在「」裏面的

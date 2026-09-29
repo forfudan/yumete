@@ -417,7 +417,7 @@ impl Editor {
             // the file behind would offer it again on the next launch — and it
             // is written again immediately, because the buffer is modified.
             //
-            // ⚠️ **Written again by whom.** That sentence was true only with
+            // Warning: **Written again by whom.** That sentence was true only with
             // `autosave` on: `autosave_tick` returns on its first line when it
             // is off, and `[editor] autosave = false` is a documented setting.
             // With it off this deleted the only copy of a crashed session's
@@ -427,7 +427,7 @@ impl Editor {
             // So the copy is written *here* before its file goes, and if that
             // write fails the old file stays. A crash between the two costs
             // nothing: the draft is still there and gets offered again.
-            // ⚠️ `write_swap` answers `Ok(())` for a buffer with nowhere to
+            // Warning: `write_swap` answers `Ok(())` for a buffer with nowhere to
             // put a copy, so「沒有出錯」is not「留下了一份」. The recovered
             // buffer is unnamed, and it is `name_scratch_drafts` that gives an
             // unnamed buffer somewhere to write — so that runs first, and the
@@ -588,7 +588,7 @@ impl Editor {
     /// 什麼」，而手上還熱的那幾筆也是這次改的。所以它和 `git diff` 命令行給的
     /// 結果不一定逐字相同——那是有意的。
     ///
-    /// ⚠️ **粒度是詞，不是行。** 一個中文段落就是一行，行級 diff 把整段塗紅再塗
+    /// Warning: **粒度是詞，不是行。** 一個中文段落就是一行，行級 diff 把整段塗紅再塗
     /// 綠，說的是真話卻沒有用（`crate::diff` 開頭那一段）。
     pub(super) fn git_diff_against(&mut self, commit: Option<&str>) {
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {

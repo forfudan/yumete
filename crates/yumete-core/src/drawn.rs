@@ -53,7 +53,7 @@ pub enum Ink {
     /// source comes off the page (it is markup, and the caret standing in it
     /// shows it again, same as `**`) and this stands in its place: `⁽¹⁾`.
     ///
-    /// ⚠️ **Measured, not guessed** — in 霞鶩文楷等寬 at 15px one cell is
+    /// Warning: **Measured, not guessed** — in 霞鶩文楷等寬 at 15px one cell is
     /// 7.50px and `⁽ ⁾ ⁰¹²³⁴⁵⁶⁷⁸⁹` are 7.50 each, so the mark is exactly three
     /// cells. `⁅ ⁆`（superscript-looking brackets）are 9.03 — **not a whole
     /// number of cells** — and `〔〕［］` are two cells each; either would push

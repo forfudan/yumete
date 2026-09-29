@@ -48,7 +48,7 @@ pub struct Panel {
     pub body: Body,
     /// **散文從第幾行畫起**（2026-09-29）——浮窗翻頁用的，別處一律 0。
     ///
-    /// ⚠️ 只管 `Body::Prose` 的橫排那一支。竪書那一支量的是「一縱幾個字」，
+    /// Warning: 只管 `Body::Prose` 的橫排那一支。竪書那一支量的是「一縱幾個字」，
     /// 不是行，翻頁在那裏是另一件事。
     pub scroll: usize,
     /// **Whether the prose inside runs down the page** (2026-09-18:
@@ -211,7 +211,7 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
 /// `text` cut to `cells` wide, with a 「…」 where it was cut and nothing added
 /// when it was not.
 ///
-/// ⚠️ **「…」 is East Asian *Ambiguous*** — one cell for most readers and **two**
+/// Warning: **「…」 is East Asian *Ambiguous*** — one cell for most readers and **two**
 /// under `ambiguous_width = "wide"`, which is what a CJK reader on a CJK font
 /// sets. Charged as one, every cut ran a cell long. Ask the width table.
 fn clip(text: &str, cells: usize) -> String {
@@ -291,7 +291,7 @@ pub(crate) fn table_rows(block: &[&str], budget: usize) -> Vec<String> {
     let fit = |text: &str, room: usize| -> String {
         let mut out = String::new();
         let mut used = 0;
-        // ⚠️ **「…」 is East Asian *Ambiguous*** — one cell for most readers
+        // Warning: **「…」 is East Asian *Ambiguous*** — one cell for most readers
         // and **two** under `ambiguous_width = "wide"`, which is what a CJK
         // reader on a CJK font sets. Charged as one, every cut cell ran two
         // cells long and pushed the last column off the panel. Ask the width
@@ -482,7 +482,7 @@ pub fn draw(
     // How much of the page this may take — two thirds by one third 橫排, the
     // transpose 竪排 (`chrome::room`).
     //
-    // ⚠️ **Prose only.** The 2/3 × 1/3 shape is an argument about *reading*:
+    // Warning: **Prose only.** The 2/3 × 1/3 shape is an argument about *reading*:
     // a measure the eye can take in, and rows of the manuscript covered by
     // halves rather than whole. A key table is not read that way — it is
     // scanned once — and a third of a 24-row terminal is seven rows, which
@@ -524,7 +524,7 @@ pub fn draw(
         text.split('\n')
             .filter(|para| !para.trim().is_empty())
             .map(|para| match panel.entry && !para.trim_start().starts_with('─') {
-                // ⚠️ Not the 「──」 that divides two entries of one name: that
+                // Warning: Not the 「──」 that divides two entries of one name: that
                 // is the panel's own furniture, and an indent on it reads as a
                 // paragraph that begins with a rule.
                 true => format!("　{para}"),
@@ -546,7 +546,7 @@ pub fn draw(
             //
             // 折行交給**頁面自己的竪排折行器**（`yumete_core::zong`）。
             //
-            // ⚠️ **不要拿橫排那一支來折竪書**（2026-09-18 撞到兩次）。橫排的
+            // Warning: **不要拿橫排那一支來折竪書**（2026-09-18 撞到兩次）。橫排的
             // 預算是**格**，而一縱的長度是**字**：半角字一格一個，所以 52 格
             // 裝得下 28 個字，比 26 深的那一縱把框撐破（詞條裏有「500」「>」
             // 這種就會發生）。折完按字數硬切一刀更糟——那一刀不認禁則，於是
@@ -573,7 +573,7 @@ pub fn draw(
             // 無聲少一截。所以竪排自己在這裏截：框最寬只有
             // `chrome::room` 的三分之一，換算成幾縱，多的砍掉。
             //
-            // ⚠️ **「…」接在末縱的腳下，不自己占一縱**（2026-09-18：「最後
+            // Warning: **「…」接在末縱的腳下，不自己占一縱**（2026-09-18：「最後
             // 的省略號後面有個空行」）。自己占一縱的話那一縱只有一個字，底下
             // 一大片白——讀起來就是「這裏空了一行」，而它要說的是「話還没完」。
             let box_w = (room_w as usize).max(24).min(area.width as usize);
@@ -597,7 +597,7 @@ pub fn draw(
             // in the top third or the bottom third and the caret is in
             // neither — so the width is free to be the reading measure
             // instead: two thirds of a 118-column page is 39 漢字 to the line.
-            // ⚠️ **The ring and the padding come out of the budget first**
+            // Warning: **The ring and the padding come out of the budget first**
             // (2026-09-18). Wrapping at the room's full width and then
             // clamping the *box* to it left every line two cells too long,
             // and `put_text` stops at the border — so the last 漢字 of each
@@ -663,7 +663,7 @@ pub fn draw(
             // beside your writing; one that fills the window has stopped
             // being a menu.
             let half = (area.height.saturating_sub(2) / 2).max(1) as usize;
-            // ⚠️ **…and never deeper than the page can actually place**
+            // Warning: **…and never deeper than the page can actually place**
             // (2026-09-19, caught in review). `chrome::place` refuses a box
             // taller than the rows between the top of the page and the footer,
             // and a refusal is drawn as *nothing at all*: on a short terminal
@@ -713,7 +713,7 @@ pub fn draw(
     // says what it can and ends in an ellipsis; the tag on the bottom border
     // still says where to read the rest.
     //
-    // ⚠️ **竪書不走這一段**，它在上面自己截過了：這裏的 `count` 對竪書是「一縱
+    // Warning: **竪書不走這一段**，它在上面自己截過了：這裏的 `count` 對竪書是「一縱
     // 幾個字」而 `lines` 是一條條的縱，兩者不是同一個維度，照這裏辦會把最左那
     // 一縱換成「…」並且把框高壓成縱的條數。
     let cap = room_h.saturating_sub(2).max(1) as usize;
@@ -723,7 +723,7 @@ pub fn draw(
             // 從第幾行起——翻過頁的話（`panel.scroll`），最多翻到「最後一屏」。
             let from = panel.scroll.min(count.saturating_sub(cap));
             let mut kept: Vec<String> = lines.into_iter().skip(from).take(cap).collect();
-            // ⚠️ **Never the only row.** On a short page `cap` is 1, and
+            // Warning: **Never the only row.** On a short page `cap` is 1, and
             // replacing that one row left a panel whose whole content was
             // 「…」 — a ring around an ellipsis, which says nothing at all.
             // Hang the mark off the end of the last row instead.
@@ -778,7 +778,7 @@ pub fn draw(
             )),
         },
     });
-    // ⚠️ **The body sets no ground of its own** (2026-09-18: 「命令行文字
+    // Warning: **The body sets no ground of its own** (2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
     // already painted the panel; text that carried its own copy of that colour
     // dragged a patch of the *old* one behind every line the day the panel's
@@ -807,7 +807,7 @@ pub fn draw(
                         break;
                     }
                     let shown = yumete_cjk::vertical::vertical_form(ch).unwrap_or(ch);
-                    // ⚠️ **A turned table's rules have to reach across the
+                    // Warning: **A turned table's rules have to reach across the
                     // gap** (2026-09-18). A 縱 is two cells wide and 「─」 is
                     // one, so a band rule came out as a dotted line with a
                     // hole between every 縱. Written twice, it joins up.
@@ -824,7 +824,7 @@ pub fn draw(
                 let x = rect.x + 1 + pad as u16;
                 let y = rect.y + 1 + i as u16;
                 let plain = ground.fg(ink_of(i));
-                // ⚠️ **Only the body, and only when it says it is Markdown.**
+                // Warning: **Only the body, and only when it says it is Markdown.**
                 // The 章節 line and the title above it are the panel's own
                 // furniture and are set in their own inks (`ink_of`); running
                 // them through the markup would let an asterisk in a file name
@@ -833,7 +833,7 @@ pub fn draw(
                     put_text(buf, x, y, limit, line, plain);
                     continue;
                 }
-                // ⚠️ **逐格算樣式，不是順着往下切**（2026-09-28 修）。從前這裏是
+                // Warning: **逐格算樣式，不是順着往下切**（2026-09-28 修）。從前這裏是
                 // 「前一段、這一段、下一段」地往右走，記着一個 `from`；那假定了
                 // `spans` 交出來的東西**不重疊**，而它會重疊：`# **甲**` 交的是
                 // `Heading 1..7` 之後跟着 `Marker 2..4`，於是 `from` 已經是 7 而下一
@@ -845,7 +845,7 @@ pub fn draw(
                 let chars: Vec<char> = line.chars().collect();
                 let mut styles = vec![plain; chars.len()];
                 for span in yumete_core::markdown::spans(line) {
-                    // ⚠️ **`a.patch(b)` 是 b 蓋 a。** 底色和行的基本墨色在
+                    // Warning: **`a.patch(b)` 是 b 蓋 a。** 底色和行的基本墨色在
                     // 前，標記的墨色蓋在上面——反過來寫，浮窗裏的 `**` 和
                     // `` ` `` 就一個顏色都不變（2026-09-22 出圖纔看見）。
                     let over = crate::markup_style(span.kind, ink);
@@ -882,7 +882,7 @@ pub fn draw(
                 // The last cell counts what did not fit rather than letting the
                 // table end as though those were all the keys there are.
                 //
-                // ⚠️ **Never the only cell**, the same law the prose cap keeps
+                // Warning: **Never the only cell**, the same law the prose cap keeps
                 // above: on a page with one row to spare, a menu whose whole
                 // content is 「還有 17 個」 has told the reader nothing they can
                 // act on. Then the 「…」 hangs off the one key it could draw.
@@ -896,7 +896,7 @@ pub fn draw(
                     true => ink.quiet(),
                     false => ink.text(),
                 };
-                // ⚠️ **A column is cut at its own edge, not at the ring**
+                // Warning: **A column is cut at its own edge, not at the ring**
                 // (2026-09-19). `limit` is the box, so a meaning longer than
                 // its column was written straight across the column beside it
                 // — which only showed once a menu could have more than two.
@@ -958,7 +958,7 @@ mod tests {
     /// 切的（記一個 `from`，切 `chars[from..span.start]`），於是 `from` 已經走到 7 而下
     /// 一段從 2 開始，`chars[7..2]` 是一個反向區間，Rust 當場 panic。
     ///
-    /// ⚠️ 這一條要真的**畫**出來纔驗得到：崩在繪製那一步，不在解析那一步。
+    /// Warning: 這一條要真的**畫**出來纔驗得到：崩在繪製那一步，不在解析那一步。
     #[test]
     fn a_heading_with_inline_marks_does_not_crash_the_panel() {
         let config = Config::default();
@@ -972,14 +972,14 @@ mod tests {
             scroll: 0,
                     title: "條目".into(),
                     lede: None,
-                    // ⚠️ **不能是 `entry`**：那一檔會給每段加一個全角空格縮進
+                    // Warning: **不能是 `entry`**：那一檔會給每段加一個全角空格縮進
                     // （`indented()`），於是 `#` 不在行首、不算標題，重疊也就不出現，
                     // 這一條會假綠。
                     entry: false,
                     body: Body::Prose("# **甲**\n## 第一章 `碼`\n正文一行。".into()),
                     vertical_text: false,
                     tag: None,
-                    // ⚠️ 這一格是閘：關着的話整段標記都不畫，也就碰不到那個洞。
+                    // Warning: 這一格是閘：關着的話整段標記都不畫，也就碰不到那個洞。
                     marked: true,
                 });
             })

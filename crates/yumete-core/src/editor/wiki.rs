@@ -30,7 +30,7 @@ impl Editor {
         let mut dir = Some(from.as_path());
         while let Some(d) = dir {
             let there = d.join(".yumete");
-            // ⚠️ **Whichever spelling is really there** (2026-09-19, caught in
+            // Warning: **Whichever spelling is really there** (2026-09-19, caught in
             // review). This looked for both and then always answered `wiki.md`
             // — so on a book whose wiki is `wiki.txt`, `:wiki edit` opened an
             // **empty** `wiki.md`, and the first save made the loader prefer
@@ -181,7 +181,7 @@ impl Editor {
 /// One entry, laid out to be read (#287, §5.8.5): the breadcrumb, then its
 /// body with its own sub-headings re-levelled so the entry reads as `#`.
 ///
-/// ⚠️ **It borrows the entry rather than copying it** (2026-09-19). This is
+/// Warning: **It borrows the entry rather than copying it** (2026-09-19). This is
 /// built **every frame the cursor stands on a name**, and an entry may be a
 /// chapter in its own right: copying every line of it cost 10 ms a frame at
 /// 5000 lines and 30 ms at 20000, measured — the editor going sticky while you
@@ -243,7 +243,7 @@ impl WikiView<'_> {
     /// The entry without its 章節 line — what [`Self::lede`] lifted out —
     /// and **no more of it than a panel could draw**.
     ///
-    /// ⚠️ `upto` is not a preference, it is what keeps this off the critical
+    /// Warning: `upto` is not a preference, it is what keeps this off the critical
     /// path (2026-09-19). A float is at most a third of the page deep, so
     /// `upto` lines is already more of the entry than it can use; and since
     /// every line kept is at least one row (or one 縱) drawn, a cut here can
@@ -397,6 +397,31 @@ impl Editor {
         Some(WikiView { name, parts })
     }
 
+    /// **`空格 k`／`空格 K` 在散文裏問的是百科**（2026-09-29 定）。
+    ///
+    /// 原話：「文本文件会说 space k / K 这不是程序文件所以不能显示文档。这是不好
+    /// 的，它以就可以显示百科。比如 space K 强制在邊欄显示。」
+    ///
+    /// Warning: **百科不必「問」**：它是現算的，光標停到一個詞條名上浮窗自己就冒出來
+    /// （`wiki_floating`）。所以這兩個鍵在散文裏只管一件事——**畫在哪**，和它們
+    /// 在代碼裏管的是同一件事。
+    pub(super) fn show_the_wiki_here(&mut self, afloat: bool) -> bool {
+        // `空格 K`：一定進邊欄，沒開就開出來，鍵不交過去。
+        if !afloat {
+            if self.showing(crate::sidebar::View::Wiki).is_none() {
+                let side = self.side_for(crate::sidebar::View::Wiki);
+                self.open_panel_without_the_keys(side, crate::sidebar::View::Wiki);
+            }
+            return true;
+        }
+        // `空格 k`：該畫的地方本來就畫着了。光標底下什麽都沒有纔要說一句——
+        // 一個按了沒反應的鍵，讀者只會以為自己記錯了鍵。
+        if self.wiki_here().is_none() {
+            self.status = say!("wiki.panel-empty");
+        }
+        true
+    }
+
     /// **釘住一條詞條**，直到光標離開這個字。
     pub(super) fn pin_wiki_entry(&mut self, name: String) {
         match self.wiki.by_name.contains_key(&name) {
@@ -411,7 +436,7 @@ impl Editor {
 
     /// 光標一走，釘住的那一條當場鬆開——和字典那一份同一條規矩（#293）。
     ///
-    /// ⚠️ **當場丟掉，不是「留着等光標回來」**：回到同一個字上再把它變出來，
+    /// Warning: **當場丟掉，不是「留着等光標回來」**：回到同一個字上再把它變出來，
     /// 是一個沒人按過的按鍵做了一件事。
     pub(super) fn forget_a_pinned_entry(&mut self) {
         if self.wiki_pinned.as_ref().is_some_and(|(_, at)| *at != self.sel.head()) {
@@ -515,7 +540,7 @@ impl Editor {
     /// named with the lines it is on. Only this file, because only this file is
     /// known; the heading says so.
     fn wiki_missed_here(&self) -> Vec<(String, Vec<usize>)> {
-        // ⚠️ **Only a chapter.** A listing has no path, and `:wiki` twice in a
+        // Warning: **Only a chapter.** A listing has no path, and `:wiki` twice in a
         // row would otherwise read its own report back — 「有身體：第 12 行」
         // says nothing about the book. The wiki itself is out for the same
         // reason: every entry begins `## 名字`, so it would report all of them.

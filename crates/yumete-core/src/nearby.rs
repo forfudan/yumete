@@ -19,7 +19,7 @@
 //! inside a run of at most [`window`] characters. 「差不多是這幾個字」 is a
 //! statement about a *phrase*, not about a line.
 //!
-//! ⚠️ **It is counted in characters, not bytes** — 漢字 are the whole point —
+//! Warning: **It is counted in characters, not bytes** — 漢字 are the whole point —
 //! and 「consecutive」 matters more here than in a Latin fuzzy finder: two
 //! 漢字 carry as much as eight letters, so a gap of two is already a lot to
 //! forgive.
@@ -39,7 +39,7 @@ pub fn window(len: usize) -> usize {
 ///
 /// `fold` lower-cases both sides; the caller decides that from 大小寫.
 ///
-/// ⚠️ **Two passes, and the second is backwards** — the same shape as
+/// Warning: **Two passes, and the second is backwards** — the same shape as
 /// [`crate::picker`], for the same reason. A forward walk alone takes the
 /// *first* place each character fits: 「他説」 in 「他。他説」 would be marked
 /// from the first 他, and the reader would see a range with a full stop in the

@@ -41,7 +41,7 @@ fn main() {
 
 /// **Watch `path` if it is there, or the `yumete` directory it would sit in.**
 ///
-/// ⚠️ **Never hand cargo a path that is not there, and never walk above our
+/// Warning: **Never hand cargo a path that is not there, and never walk above our
 /// own directory.** Both mistakes make the build script rerun on **every**
 /// cargo command, and everything downstream of this crate rebuild with it.
 ///
@@ -63,7 +63,7 @@ fn main() {
 /// So: the file if it exists, else the `yumete` directory it belongs in (a
 /// file appearing changes its directory's mtime, which is the case that
 /// matters — `scripts/build.sh` installs the data *after* the first build),
-/// else nothing at all. ⚠️ **With neither, a later install needs
+/// else nothing at all. Warning: **With neither, a later install needs
 /// `cargo clean -p {crate}`** — that is the honest price, and it is paid once
 /// by whoever installs data onto a machine that had none.
 fn watch(path: &Path) {
@@ -81,7 +81,7 @@ fn watch(path: &Path) {
 
 /// Where the installed data lives, in the order the editor itself looks.
 ///
-/// ⚠️ **Every candidate is watched, not just the one that answered**: the data
+/// Warning: **Every candidate is watched, not just the one that answered**: the data
 /// may be installed into any of them after this build, and then the next one
 /// has to see it.
 fn find(file: &str) -> Option<PathBuf> {

@@ -13,7 +13,7 @@
 //! caret, and 2026-09-23 報的就是這個：「vscode 的 tinymist 預覽，每次按鍵他都
 //! 會刷新一下（而且似乎是增量編譯，所以反應很快）。我們是不是也可以做到？」
 //!
-//! ⚠️ **It is not 「save, then let it notice」.** Measured against the tinymist
+//! Warning: **It is not 「save, then let it notice」.** Measured against the tinymist
 //! on this machine (build 2025-07-25): push a *deliberately broken* text over
 //! the socket while the file on disk stays good, and the server answers
 //! `error: unknown variable: undefined_function_xyz` — it compiled what was
@@ -24,7 +24,7 @@
 //! that costs a string literal rather than by a browser and a stopwatch. The
 //! socket, the thread and the process live in the front end.
 //!
-//! ⚠️ **No websocket crate.** A client that only ever *sends* needs the
+//! Warning: **No websocket crate.** A client that only ever *sends* needs the
 //! handshake, the masking, and nothing else: it may skip `Sec-WebSocket-Accept`
 //! (a 101 is the answer), which is the only part that would want sha1. That is
 //! the whole of why this file is 150 lines and adds no dependency — the same
@@ -34,7 +34,7 @@ use std::path::Path;
 
 /// **The opening request**, ready to write to a freshly connected socket.
 ///
-/// ⚠️ **`Origin` is not optional here.** The server logs 「websocket connection
+/// Warning: **`Origin` is not optional here.** The server logs 「websocket connection
 /// is not set `Origin` header, which will be a hard error in the future」 when
 /// it is left off (seen in its own log, 2026-09-23), so it goes in now rather
 /// than on the day it starts refusing us.
@@ -53,7 +53,7 @@ pub fn handshake(host: &str, key: &str) -> String {
 
 /// Did the server agree to speak websocket?
 ///
-/// ⚠️ **The status line, not the accept key.** Verifying `Sec-WebSocket-Accept`
+/// Warning: **The status line, not the accept key.** Verifying `Sec-WebSocket-Accept`
 /// proves the answer came from something that read our key — worth having on a
 /// public network, worth nothing against a loopback port we spawned ourselves,
 /// and it is the one thing on this wire that would cost a sha1.
@@ -65,11 +65,11 @@ pub fn accepted(head: &str) -> bool {
 
 /// **One client text frame** — `FIN`, opcode 1, masked, with `text` inside.
 ///
-/// ⚠️ **A client frame must be masked** (RFC 6455 §5.3): a server is required
+/// Warning: **A client frame must be masked** (RFC 6455 §5.3): a server is required
 /// to close the connection on an unmasked one. The mask is four bytes the
 /// caller supplies; nothing here is a secret, so anything that varies will do.
 ///
-/// ⚠️ **Three length forms, and a manuscript needs the third.** Under 126 the
+/// Warning: **Three length forms, and a manuscript needs the third.** Under 126 the
 /// length is in the second byte; under 64 KiB it is two more bytes; past that
 /// it is eight. A chapter is past the first form on its first paragraph and a
 /// book is past the second, so the 64-bit arm is the one that carries the
@@ -112,7 +112,7 @@ pub fn update_memory_files(path: &Path, text: &str) -> String {
 /// Free with the socket, and the reason the socket is worth opening even for a
 /// document that is not being typed into.
 ///
-/// ⚠️ **`line` and `character` are 0-based**, and tinymist's own comment says
+/// Warning: **`line` and `character` are 0-based**, and tinymist's own comment says
 /// 「fixme: character is 0-based, UTF-16 code unit. We treat it as UTF-8 now」 —
 /// so this passes characters, not UTF-16 units, deliberately matching what it
 /// does rather than what it says it means to do one day.
@@ -196,7 +196,7 @@ mod tests {
         assert_eq!(u16::from_be_bytes([medium[2], medium[3]]), 200);
         assert_eq!(medium.len(), 4 + 4 + 200);
 
-        // ⚠️ **A manuscript lands here**, so this arm is the feature.
+        // Warning: **A manuscript lands here**, so this arm is the feature.
         let long = frame(&"字".repeat(30_000), mask);
         assert_eq!(long[1], 0x80 | 127);
         assert_eq!(u64::from_be_bytes(long[2..10].try_into().unwrap()), 90_000);
@@ -219,7 +219,7 @@ mod tests {
         for line in [
             "GET / HTTP/1.1",
             "Host: 127.0.0.1:23626",
-            // ⚠️ 服務器自己在日誌裏說少了它「will be a hard error in the future」。
+            // Warning: 服務器自己在日誌裏說少了它「will be a hard error in the future」。
             "Origin: http://127.0.0.1:23626",
             "Upgrade: websocket",
             "Connection: Upgrade",
@@ -270,7 +270,7 @@ mod tests {
             said,
             r#"{"event":"updateMemoryFiles","files":{"/書/第一章.typ":"= 一\n他說「好」。\t\\n"}}"#
         );
-        // ⚠️ A stray control character must not be able to break the message:
+        // Warning: A stray control character must not be able to break the message:
         // a manuscript with one in it is a manuscript the preview never sees.
         let odd = update_memory_files(Path::new("/a.typ"), "a\u{1}b");
         assert!(odd.contains("a\\u0001b"), "{odd}");

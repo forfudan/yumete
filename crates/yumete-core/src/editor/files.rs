@@ -205,7 +205,7 @@ impl Editor {
 
     /// Write the log back, answering with what went wrong.
     ///
-    /// ⚠️ **Atomically, like every other write to a reader's file.** This one
+    /// Warning: **Atomically, like every other write to a reader's file.** This one
     /// rewrites the *whole* ledger on every successful save, and `fs::write`
     /// truncates before it writes: a full disk, a power cut or a `kill` inside
     /// that window leaves months of `:count-progress` history as an empty file
@@ -374,10 +374,10 @@ impl Editor {
 
     /// **切回剛纔那一份**（`ga`，helix 的 `goto_last_accessed_file`）。
     ///
-    /// ⚠️ **`gn`／`gp` 答不了這件事。** 它們按順序走一圈，而正文和筆記、這一章和上一章
+    /// Warning: **`gn`／`gp` 答不了這件事。** 它們按順序走一圈，而正文和筆記、這一章和上一章
     /// 之間來回切是最常做的一件事——開着五個檔的時候 `gp` 未必回得到剛纔那一個。
     ///
-    /// ⚠️ **只記 [`Self::show_buffer`] 那一條路。** 換面板（`switch_pane`）和關檔都是直接
+    /// Warning: **只記 [`Self::show_buffer`] 那一條路。** 換面板（`switch_pane`）和關檔都是直接
     /// 動 `current` 的，它們不算「看過」：前者兩半同時在屏幕上，後者那一份已經不在了。
     pub fn goto_last_file(&mut self) {
         let Some(id) = self.last_file else {
@@ -410,7 +410,7 @@ impl Editor {
         let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
         // **剛纔看的是哪一份**（`ga`，helix 的 `goto_last_accessed_file`，2026-09-28）。
-        // ⚠️ **記的是 id，不是下標**：關掉一個檔會把後面每一個的下標往前挪，記下標的話
+        // Warning: **記的是 id，不是下標**：關掉一個檔會把後面每一個的下標往前挪，記下標的話
         // `ga` 會帶你去另一章。`Pane` 為同一個理由早就記 id 了。
         self.last_file = Some(self.current_buffer().id());
         self.current = index;
@@ -599,7 +599,7 @@ impl Editor {
     /// 就把上一處那一份收走。`Enter` 把它釘住（`search_preview` 清空），從此它就
     /// 是一份普通的緩衝。
     ///
-    /// ⚠️ **改過的不收。** 那是人幹的活，不許無聲無息地關掉；它就此不再是預覽。
+    /// Warning: **改過的不收。** 那是人幹的活，不許無聲無息地關掉；它就此不再是預覽。
     /// `keep` 是剛剛開出來的那一份，同一份就什麼都不做。
     pub(super) fn let_go_of_the_search_preview(&mut self, keep: u64) {
         let Some(id) = self.search_preview else { return };
@@ -889,7 +889,7 @@ impl Editor {
     /// as one argument by the front end (see `yumete_tui::show`), and this side
     /// never builds a command line at all.
     ///
-    /// ⚠️ **`gd` follows one too** (#454), by the same route: a link is a
+    /// Warning: **`gd` follows one too** (#454), by the same route: a link is a
     /// definition, and the one a manuscript has most of.
     pub(super) fn follow_link(&mut self) {
         let Some(link) = self.link_under_cursor() else {
@@ -993,7 +993,7 @@ impl Editor {
     /// screen. Same identity rule as [`Self::buffer_holding`] — a hard link is
     /// one file under two names.
     pub fn holds_file(&self, path: &Path) -> bool {
-        // ⚠️ **便宜的那一問先答。** 這是前端**每按一鍵**都要問的（預覽開着的時
+        // Warning: **便宜的那一問先答。** 這是前端**每按一鍵**都要問的（預覽開着的時
         // 候），而 `buffer_holding` 每個緩衝區要 `canonicalize` 一次——一次系統
         // 調用。拼寫一模一樣就是它，不必問磁碟；只有拼寫對不上纔值得去問「是不
         // 是同一個檔的另一個名字」，而那一步只在快要殺掉服務器之前跑一次。
@@ -1096,7 +1096,7 @@ impl Editor {
             dialects: self.ruby,
             title: self.current_buffer().display_name(),
             paper: self.paper,
-            // ⚠️ **讀的是這一份稿子的語法**，不是要寫成的格式（2026-09-28）。
+            // Warning: **讀的是這一份稿子的語法**，不是要寫成的格式（2026-09-28）。
             source: self.current_buffer().syntax(),
         };
         if self.refuse_to_overwrite(&target, force) {

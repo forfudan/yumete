@@ -79,7 +79,7 @@ impl Editor {
     ///
     /// The third reading of a span, and the narrowest: an object knows what it
     /// is taking, so neither end is negotiable — no extend, and no clamping to
-    /// what the page draws. ⚠️ Objects have never respected extend mode; that
+    /// what the page draws. Warning: Objects have never respected extend mode; that
     /// is preserved here rather than decided, because 「`mi(` while extending」
     /// is a question nobody has asked yet.
     pub(super) fn take_object(&mut self, span: motion::Span) {
@@ -92,7 +92,7 @@ impl Editor {
     /// The span a pair of delimiters encloses, `around` taking the marks too.
     fn pair_span(&self, open: char, _close: char, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope();
-        // ⚠️ **一個鍵管一族括號**（2026-09-28）：按 `(` 找得到 `()` 也找得到 `（）`，
+        // Warning: **一個鍵管一族括號**（2026-09-28）：按 `(` 找得到 `()` 也找得到 `（）`，
         // 按 `[` 連 `【】`『』一起找。取**最裏面**那一對——`【他說（不）】` 裏光標在
         // 「不」上按 `di[`，要的是 `（）` 還是 `【】`？答案跟 `md` 一致：最裏面那一對。
         // 這張族表在 `editor.rs` 的 `FAMILIES`，理由記在那裏。
@@ -118,17 +118,17 @@ impl Editor {
     /// `i` 取標記裏面的文字，`a` 連標記一起——`**粗**` 上按 `mi m` 選中「粗」，按
     /// `ma m` 選中「**粗**」。
     ///
-    /// ⚠️ **靠 `construct` 把一族綁起來**。解析器把一個構造拆成三段交出來（開標記、
+    /// Warning: **靠 `construct` 把一族綁起來**。解析器把一個構造拆成三段交出來（開標記、
     /// 文字、閉標記），三段共用一個 `construct` 號。所以 `a` 那一半不必去數星號有幾個，
     /// 取同號那幾段的兩個端點就行——`**` 兩個字符、`` ` `` 一個字符、`](地址)` 一長串，
     /// 同一句話都說得下來。
     ///
-    /// ⚠️ **眼下套不起來，因為解析器不套。** 量過（2026-09-28）：``**粗的`碼`**`` 交出
+    /// Warning: **眼下套不起來，因為解析器不套。** 量過（2026-09-28）：``**粗的`碼`**`` 交出
     /// 來的是 `Marker`／`Strong`／`Marker` 三段，中間那一段連反引號一起算成粗體的正文，
     /// 沒有內層的 `Code`。所以這裏「取起點最靠後的那一個」現在永遠只有一個候選。留着這
     /// 一句是因為解析器哪天學會套的時候，這一支不必跟着改。
     ///
-    /// ⚠️ **標記本身（`Kind::Marker`）不算一種**。光標停在星號上按 `mi m`，要的是它
+    /// Warning: **標記本身（`Kind::Marker`）不算一種**。光標停在星號上按 `mi m`，要的是它
     /// 圍着的那段文字，不是那兩個星號——而星號的 `construct` 和文字是同一個，所以照樣
     /// 找得到。
     fn markup_object_span(&self, around: bool) -> motion::Span {
@@ -187,10 +187,10 @@ impl Editor {
 
     /// **光標所在的那一句**（`mi s`／`ma s`，vim 的 `cis`／`das`，2026-09-28）。
     ///
-    /// ⚠️ **邊界走 `sentence_starts`**，和 `(`／`)`、`:view-sentence`、`:check-punct`
+    /// Warning: **邊界走 `sentence_starts`**，和 `(`／`)`、`:view-sentence`、`:check-punct`
     /// 同一支。兩個答案就意味着 `mi s` 選的那一段和版面斷行的地方對不上。
     ///
-    /// ⚠️ **一句不跨行**：這個倉的解析是逐行的，`sentence_starts` 也是。一段話寫成一
+    /// Warning: **一句不跨行**：這個倉的解析是逐行的，`sentence_starts` 也是。一段話寫成一
     /// 行（中文稿子的常態）的時候這沒有分別；硬折過行的稿子裏，`mi s` 取的是這一行裏
     /// 的那一句。
     fn sentence_object_span(&self, around: bool) -> motion::Span {
@@ -211,7 +211,7 @@ impl Editor {
         let to = starts.get(which + 1).copied().unwrap_or(chars.len());
         let mut end = to;
         match around {
-            // `as`：連句末那一段空白。⚠️ 中文句子之間沒有空白，所以這一支在中文裏和
+            // `as`：連句末那一段空白。Warning: 中文句子之間沒有空白，所以這一支在中文裏和
             // `is` 拿到同一段——vim 那條規矩在沒有空白的文字裏的自然結果，不是算錯。
             // 後面沒有空白就取前面的，同 `aw`。
             true => {
@@ -242,10 +242,10 @@ impl Editor {
     /// 空行收掉的原因。
     ///
     /// `around` ＝ `ap`：再加它**下面**那一段空行；下面没有就取上面的。
-    /// ⚠️ 少了這一條，`dap` 會在原地留下一個洞——段落走了，夾着它的兩個空行併
+    /// Warning: 少了這一條，`dap` 會在原地留下一個洞——段落走了，夾着它的兩個空行併
     /// 成一個更大的空當，而 `dap` 讀起來應該是「這一段整個不見了」。
     ///
-    /// ⚠️ **整行，不是一段字符**——區間從頭一行的行首一直到末一行的**換行**，
+    /// Warning: **整行，不是一段字符**——區間從頭一行的行首一直到末一行的**換行**，
     /// 那個換行**在裏面**。helix 也是這樣（`textobject.rs` 末尾兩行：`anchor`
     /// 與 `head` 都是 `line_to_char`，也就是行首到行首），而它是對的：少了那個
     /// 換行，`mip` 之後按 `d` 會取走那幾行的正文卻把空行留下，原地多出一個洞。
@@ -293,16 +293,16 @@ impl Editor {
     /// 它前面的，這是 vim 自己的規矩，也是 `daw` 讀起來「整個詞連着那道縫一起
     /// 没了」的原因。
     ///
-    /// ⚠️ 用的是走 `w`／`e` 的那一份分詞（`motion::line_words`），**不是**
+    /// Warning: 用的是走 `w`／`e` 的那一份分詞（`motion::line_words`），**不是**
     /// `segment_line`——那一支只交漢字，標點與拉丁文一個都不交，而 `ciw` 最常
     /// 按在一個拉丁詞上（`delete_selection` 這種）。
     ///
-    /// ⚠️ **粒度跟着 `w` 走，不再寫死**（2026-09-28）。從前這裏是 `Grain::Coarse`，而
+    /// Warning: **粒度跟着 `w` 走，不再寫死**（2026-09-28）。從前這裏是 `Grain::Coarse`，而
     /// `w`／`b` 問的是 `word_grain()`——同一個編輯器對「詞」有兩個答案，於是
     /// 「今天天氣很好」按 `diw` 刪掉六個字，按 `w` 卻走三步。使用者報的原話：「diw，删除
     /// 光标所在词（目前的表现会忽略中文分词器）」。`coarse` 為真的是 `iW`，那個一律粗。
     ///
-    /// ⚠️ **`aw` 在中文裏會退化成 `iw`**：它取的是「詞加它後面那段空白」，而中文詞之間
+    /// Warning: **`aw` 在中文裏會退化成 `iw`**：它取的是「詞加它後面那段空白」，而中文詞之間
     /// 沒有空白，於是 `daw` 和 `diw` 拿到同一段。這是 vim 那條規矩在中文裏的自然結果，
     /// 不是這一支算錯了。
     fn word_object_span(&self, around: bool, coarse: bool) -> motion::Span {
@@ -561,7 +561,7 @@ impl Editor {
         // cannot see is not a step** — and the same rule the grid itself lives
         // by: `row_cells` already leaves the padding out of a cell's span, so
         // whatever falls between two spans is seam.
-        // ⚠️ **A `|` table only.** There the separator is three characters of
+        // Warning: **A `|` table only.** There the separator is three characters of
         // the file — `space pipe space` — drawn as one `┆`, so a caret in it is
         // a caret nowhere. A delimited file's separator is a single comma or
         // tab, and its **empty cells sit at the same offset as the separator
@@ -668,10 +668,10 @@ impl Editor {
                 .with_edit(self.current_buffer().edit())
                 .with_open_line(self.open_line())
                 .with_caret(Some(self.caret_in_line()));
-            // ⚠️ **目標列現在在這一段自己身上**（#405）。沒記過就現算一次——新長出來
+            // Warning: **目標列現在在這一段自己身上**（#405）。沒記過就現算一次——新長出來
             // 的選區、剛從別處跳過來的光標都會落到這一支上。
             //
-            // ⚠️ **算完要記回去**：`j` 自己不叫 `refresh_goal_column`（那正是它保得住
+            // Warning: **算完要記回去**：`j` 自己不叫 `refresh_goal_column`（那正是它保得住
             // 目標列的原因），所以這裏不記的話，下一次 `j` 又從**已經被壓到行尾的**那
             // 一列現算，連按兩下就再也回不到原來那一列了。
             let goal = self.sel.goal();
@@ -709,7 +709,7 @@ impl Editor {
             let turned = |line: usize| self.line_is_table_row(line);
             let grid = self.grid_with(&hidden, &folded, &drawn, &turned);
             let rope = self.current_buffer().rope();
-            // ⚠️ **目標格每一段各記一份**（2026-09-28，同 `goal`）。從前它是 `Editor`
+            // Warning: **目標格每一段各記一份**（2026-09-28，同 `goal`）。從前它是 `Editor`
             // 上的一個 `goal_slot`，於是竪排下 N 段一起按 `h` 會一起瞄準主選區那一格。
             let goal = match continuing {
                 true => self
@@ -784,7 +784,7 @@ impl Editor {
         let at = |p: usize| motion::Span::Over { anchor: p, head: p };
         let caret = how == motion::Reading::Caret;
         match what {
-            // ⚠️ **The one place the two readings really part company.**
+            // Warning: **The one place the two readings really part company.**
             // helix's `w` is the primitive plus 「never just the cell you are
             // on」; vim's is the primitive itself.
             motion::Motion::WordForward(grain) if caret => {
@@ -843,13 +843,13 @@ impl Editor {
             motion::Motion::Char { forward } => {
                 let here = self.sel.head();
                 match forward {
-                    // ⚠️ **Forward may stand still and still count.** `l` on a
+                    // Warning: **Forward may stand still and still count.** `l` on a
                     // line's last character cannot move, but `dl` there is
                     // `x` and must take that character — the verb's range is
                     // 「from here, one grapheme past the head」, so a head that
                     // did not move is exactly one character.
                     true => at(motion::next_grapheme(rope, here).min(motion::line_last(rope, here))),
-                    // …⚠️ **and backward may not.** A backward span runs from
+                    // …Warning: **and backward may not.** A backward span runs from
                     // the target up to the caret's own character, so a target
                     // that did not move would be 「take the character behind
                     // me」 when there is nothing behind: `dh` in column 0 must
@@ -911,7 +911,7 @@ impl Editor {
     /// the anchor alone while extending. vim's reading (take one end, move the
     /// caret, paint nothing) is the other consumer, and it is B3's.
     ///
-    /// ⚠️ [`motion::Span::Missed`] does nothing at all — **not** a collapse.
+    /// Warning: [`motion::Span::Missed`] does nothing at all — **not** a collapse.
     /// A verb must be able to tell 「nothing there」 from 「a span of one」.
     pub(super) fn take_span(&mut self, span: motion::Span) {
         match span {
@@ -955,7 +955,7 @@ impl Editor {
     /// Clamp the cursor and anchor into the valid range of the active buffer.
     pub(super) fn clamp_cursor(&mut self) {
         let len = self.current_buffer().char_count();
-        // ⚠️ **每一段，不只是主選區**（2026-09-28 修，真機上崩出來的）。
+        // Warning: **每一段，不只是主選區**（2026-09-28 修，真機上崩出來的）。
         //
         // 撤銷只把主選區挪了回來（`undo` 那一支叫的是 `set_head`／`set_anchor`，那兩支
         // 問的永遠是主選區），剩下幾段還指着已經不存在的位置。下一幀 `draw_horizontal`

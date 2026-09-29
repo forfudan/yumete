@@ -9,12 +9,12 @@
 //! 字）、**它是什麽**（打勾／幾選一／數字／一段字）、**它歸哪一組**。類型與取值
 //! 域**抄 `into_config`**，不是想出來的——那一支纔是真正在鉗值的地方。
 //!
-//! ⚠️ **一張 Rust 常量表，不是一個 toml。** Yume 那頭是 `settings_layout.toml`
+//! Warning: **一張 Rust 常量表，不是一個 toml。** Yume 那頭是 `settings_layout.toml`
 //! ＋ codegen，這個倉沒有那一套；而這張表要和 `RawEditor` 的字段名對得上，
 //! **編譯期對得上比運行期對得上好**——`tests/settings_ui.rs` 讀源碼逐條核，少一
 //! 項就紅。
 //!
-//! ⚠️ **少一項是一個無聲的洞。** 加了新設定而忘了加進這張表，面板上就沒有它，
+//! Warning: **少一項是一個無聲的洞。** 加了新設定而忘了加進這張表，面板上就沒有它，
 //! 而編譯照過、面板照樣顯示別的設定的對的值——記事本裏那條「全局設置加一項要動
 //! 三處，漏掉第三處編譯照過」說的就是這一族。
 
@@ -47,7 +47,7 @@ pub enum Group {
 
 /// 一組，和它的名字。
 ///
-/// ⚠️ **名字寫成一個 `label:` 字段，不是一支 `match`。** 兩個理由，第二個是硬的：
+/// Warning: **名字寫成一個 `label:` 字段，不是一支 `match`。** 兩個理由，第二個是硬的：
 /// ① 次序與名字在同一張表上，加一組不會只加一半；② `messages.rs` 那張「每個標籤
 /// 都有條目」的網是**讀源碼**找的，而它看得見 `label:`，看不見 `match` 的返回值
 /// ——寫成 `match` 的話，八個組名可以一條條目都沒有而全樹皆綠，面板上逐行寫着
@@ -94,7 +94,7 @@ pub enum Kind {
     Tick,
     /// 一個數，**鉗在這個範圍裏**——範圍抄 `into_config`，那一支纔是真在鉗的。
     ///
-    /// ⚠️ **`zero` 不是 `None` 的時候，`low` 是「最小的**非零**值」**，而真正的
+    /// Warning: **`zero` 不是 `None` 的時候，`low` 是「最小的**非零**值」**，而真正的
     /// 域是「0，或者 `low` 到 `high`」——中間沒有別的。`zong_length` 是「0，或者
     /// 4 到 64」，`tatechuyoko` 是「0，或者 2 到 8」。把 `low` 寫成 0 的話面板停
     /// 得到域外的數，寫進檔裏而 `into_config` 當場鉗掉——**面板顯示的值不是編輯器
@@ -127,7 +127,7 @@ pub struct Setting {
     pub hint: &'static str,
     /// **出廠是什麽，照 toml 的寫法**：`0`、`true`、`"horizontal"`。
     ///
-    /// 面板要說「這一項你沒設，出廠是這個」，而那句話得有個地方來。⚠️ 它是一個
+    /// 面板要說「這一項你沒設，出廠是這個」，而那句話得有個地方來。Warning: 它是一個
     /// **抄來的**字面量，所以一定會漂——除非有人盯着。盯着的是
     /// `tests/settings_ui.rs` 那兩條：把整張表的 `factory` 拼成一份 toml 讀回來，
     /// 必須和 `Config::default()` 逐位元組相同；再逐項餵一個**不是**出廠的值，
@@ -221,7 +221,7 @@ const THEME_STATUS_BAR_WAYS: &[Choice] = &[
     Choice { word: "raised", label: "set.pick.status-bar.raised" },
 ];
 
-/// ⚠️ **兩個詞，沒有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
+/// Warning: **兩個詞，沒有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
 /// 字一律讀成 `auto`。所以這裏不許多寫一個「看着像」的選項——面板上切過去、檔裏
 /// 寫下去，而編輯器當它是 `auto`。2026-09-24 那條「改一項要真的改得動」逮到的。
 const KEYS_PRESET_WAYS: &[Choice] = &[
@@ -253,7 +253,7 @@ const EDITOR_AMBIGUOUS_WIDTH_WAYS: &[Choice] = &[
 
 /// **整張表。**
 ///
-/// ⚠️ **八組都有東西了**（2026-09-24）。[`LATER`] 裏剩下的是二十四個色位（收在
+/// Warning: **八組都有東西了**（2026-09-24）。[`LATER`] 裏剩下的是二十四個色位（收在
 /// 二級入口，見那張表自己的註釋）和幾項要新控件纔畫得出來的（列表、路徑）。
 /// 那張一致性測試讀的是三張表的**並集**，所以漏一項照樣紅。
 pub const SETTINGS: &[Setting] = &[
@@ -271,7 +271,7 @@ pub const SETTINGS: &[Setting] = &[
         table: "editor",
         key: "zong_length",
         group: Group::Layout,
-        // ⚠️ **`low` 是「最小的非零值」，不是「最小值」。** `into_config` 寫的是
+        // Warning: **`low` 是「最小的非零值」，不是「最小值」。** `into_config` 寫的是
         // `if length == 0 {0} else {length.clamp(4,64)}`——真正的域是「0，或者
         // 4 到 64」，中間那三個數不存在。寫 `low: 0` 的時候面板停得到 1／2／3，
         // 寫進檔裏而編輯器按 4 排版。2026-09-24 審出來的。
@@ -745,13 +745,13 @@ pub const SETTINGS: &[Setting] = &[
 
 /// **還沒填進 [`SETTINGS`] 的那些。**
 ///
-/// 一組一組填，這張表跟着縮短。⚠️ **它不是「不做」的名單**——那一張是
+/// 一組一組填，這張表跟着縮短。Warning: **它不是「不做」的名單**——那一張是
 /// [`NOT_IN_THE_PANEL`]，兩者的區別是「還沒輪到」與「有理由不進去」。
 pub const LATER: &[&str] = &[
     "editor.ruby_dialects",
     "editor.usage_groups",
     "editor.syntax",
-    // ⚠️ **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**
+    // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**
     // `ThemeConfig` 自己的註釋寫着「A theme is a few numbers, not a table of
     // colours」，十個內置主題已經覆蓋；而 TUI 裏沒有取色器，只有 `#RRGGBB` 文本
     // 框——擺二十四行等於讓人在一張色號表上發呆，正是這扇面板要消滅的那種發呆。
@@ -788,16 +788,16 @@ pub const LATER: &[&str] = &[
 
 /// **有理由不進面板的那幾個。**
 ///
-/// ⚠️ **判準一（決定性的）：值是一條會被執行的命令行的，不進。**
+/// Warning: **判準一（決定性的）：值是一條會被執行的命令行的，不進。**
 /// `[editor] screenshot` 是全樹唯一一條經過 shell 的設定——本地配置寫了它會被
 /// 當場拒收（`load_reporting`）。`[lsp.*]` 與 `[language.*]` 同理。理由不是
 /// 「難畫」，是**一扇設置面板不該變成從菜單裏運行任意程序的入口**。
 ///
-/// ⚠️ **判準二：鍵集開放的表是編輯器，不是設置。** `[keys.normal]` 左邊是任意鍵
+/// Warning: **判準二：鍵集開放的表是編輯器，不是設置。** `[keys.normal]` 左邊是任意鍵
 /// 序列、右邊是任意動作名；`[syntax]` 的鍵是任意擴展名。要做進面板得有「捕獲任
 /// 意鍵序列」加「動作名補全」兩個新控件，那是另一個功能。
 ///
-/// ⚠️ **`segmentation_threshold` 已經退役**，留在結構裏只為了報一句話。
+/// Warning: **`segmentation_threshold` 已經退役**，留在結構裏只為了報一句話。
 pub const NOT_IN_THE_PANEL: &[&str] = &[
     "editor.screenshot",
     "editor.segmentation_threshold",

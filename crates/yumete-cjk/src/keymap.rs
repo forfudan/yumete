@@ -38,20 +38,20 @@ impl KeyPreset {
     pub fn table(self) -> &'static [(&'static str, &'static str)] {
         match self {
             KeyPreset::Helix => &[],
-            // ⚠️ **`;` first wherever vim acts on one character**: here a
+            // Warning: **`;` first wherever vim acts on one character**: here a
             // motion *is* a selection, so after `w` a bare `D` would cut the
             // word; vim's `x` after `w` cuts the one character under the
             // cursor.
             KeyPreset::Vim => &[
                 ("x", ";{n}D"),
-                // ⚠️ **`s` cannot be 「collapse, then `c`」 any more**
+                // Warning: **`s` cannot be 「collapse, then `c`」 any more**
                 // (2026-09-19). It was written before #429 made `c` an
                 // operator: now `;c` collapses and then *waits for a motion*,
                 // so a hand typing `shello` got no substitution and an opened
                 // line from the `o`. vim's `s` is 「cut this character and
                 // start typing」, which is what `x` does plus `i`.
                 ("s", ";{n}Di"),
-                // ⚠️ **`dd` `dw` `cw` `yy` `cc` `yw` are not in this table
+                // Warning: **`dd` `dw` `cw` `yy` `cc` `yw` are not in this table
                 // any more** (#429, 2026-09-18). They were six lines of a
                 // grammar that has hundreds, and a table cannot spell the rest
                 // — `d$`, `de`, `dG`, `df,`, `di(`. `d`, `c` and `y` are
@@ -69,12 +69,12 @@ impl KeyPreset {
                 // 「this word, elsewhere」 — `g/` here, and the one vim key a
                 // hand reaches for without thinking.
                 ("*", "g/"),
-                // ⚠️ **The ones that do something *else* here**, which is
+                // Warning: **The ones that do something *else* here**, which is
                 // worse than doing nothing: `%` selects the whole file (vim
                 // jumps to the matching bracket), `D` and `C` cut the
                 // selection (vim takes the rest of the line).
                 //
-                // ⚠️ **`J` is deliberately not among them** (2026-09-18):
+                // Warning: **`J` is deliberately not among them** (2026-09-18):
                 // 「J 合併行我們和 helix 也不一樣，我覺得這個應該保持 gJ」.
                 // `J`／`K` are half a page here — the most-pressed pair in a
                 // novel, and not worth a chord — and joining is `gJ` in both
@@ -161,7 +161,7 @@ pub const VIM_MOTIONS: &[(&str, VimMotion)] = &[
     ("k", line("{n}k")),
     ("G", line("{n}G")),
     ("gg", line("{n}gg")),
-    // ⚠️ **`ge` is not among them** (2026-09-19). vim's `ge` is 「the end of
+    // Warning: **`ge` is not among them** (2026-09-19). vim's `ge` is 「the end of
     // the previous word」 — a short backward step — while this editor's `ge`
     // goes to the end of the **file**, so `dge` deleted the whole document
     // where vim would have taken back half a word. A motion that means two

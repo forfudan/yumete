@@ -15,7 +15,7 @@
 //! the same division the IME and the reading table already use (a trait here,
 //! the data over there).
 //!
-//! ⚠️ **A complaint is not a file's truth, it is a server's opinion**, and it
+//! Warning: **A complaint is not a file's truth, it is a server's opinion**, and it
 //! goes stale the moment a key is pressed. Everything here is keyed by the
 //! path it arrived for, so a stale list belongs to a file nobody is looking at
 //! rather than to the wrong lines of the file in front of you.
@@ -57,7 +57,7 @@ pub struct Problem {
     /// Where it starts **in UTF-16 code units**, exactly as the server said
     /// it.
     ///
-    /// ⚠️ **The name is the whole point.** LSP counts in UTF-16, which for
+    /// Warning: **The name is the whole point.** LSP counts in UTF-16, which for
     /// ASCII agrees with bytes and with characters — so a field called
     /// `column` would be right in every English test and wrong down the whole
     /// length of a Chinese line, silently. Turning it into a character offset
@@ -110,7 +110,7 @@ pub struct Problems {
 impl Problems {
     /// Replace everything said about `path`.
     ///
-    /// ⚠️ **Replace, never merge.** `publishDiagnostics` is the whole truth
+    /// Warning: **Replace, never merge.** `publishDiagnostics` is the whole truth
     /// about a file each time it arrives; merging would leave a fixed error on
     /// the page for as long as the session lasted.
     pub fn set(&mut self, path: PathBuf, mut said: Vec<Problem>) {
@@ -175,7 +175,7 @@ mod tests {
         assert_eq!(all.count(), 3);
     }
 
-    /// ⚠️ **Each list replaces the last.** A server that has nothing more to
+    /// Warning: **Each list replaces the last.** A server that has nothing more to
     /// say says so with an empty list, and a fixed error must leave the page.
     #[test]
     fn an_empty_list_clears_the_file() {
@@ -188,7 +188,7 @@ mod tests {
         assert_eq!(all.files().len(), 0);
     }
 
-    /// ⚠️ **UTF-16 is not characters**, and the difference only shows on
+    /// Warning: **UTF-16 is not characters**, and the difference only shows on
     /// exactly the text this editor is for.
     #[test]
     fn a_utf16_offset_becomes_a_character_offset_against_the_line() {
@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(char_column("ab", 99), 2);
     }
 
-    /// ⚠️ 兩個方向要對得上，否則問出去的位置和畫回來的位置差一截。
+    /// Warning: 兩個方向要對得上，否則問出去的位置和畫回來的位置差一截。
     #[test]
     fn the_two_coordinate_systems_are_each_others_undoing() {
         for line in ["let x = 1;", "第一章：開始", "𠀀甲乙", "a𠀀b"] {

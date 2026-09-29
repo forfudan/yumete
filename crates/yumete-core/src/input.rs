@@ -55,7 +55,7 @@ impl Mode {
     /// **The rest are three letters**, the way Helix writes them. Twelve cells
     /// (`-- NORMAL --  `) said one word.
     ///
-    /// ⚠️ **`PAN.` says where the keys are, not what they are.** Standing in
+    /// Warning: **`PAN.` says where the keys are, not what they are.** Standing in
     /// the results list and standing in the page both used to read `NORMAL`,
     /// and `d` means「delete the search word」in one and「delete a line of the
     /// novel」in the other. [`Editor::mode_label`] adds `PAN.NOR`; this one

@@ -1,6 +1,6 @@
 //! **那張設置表和 `RawConfig` 對不對得上** —— 讀源碼核，不靠記性。
 //!
-//! ⚠️ **少一項是一個無聲的洞**：加了新設定而忘了加進 `settings_ui::SETTINGS`，
+//! Warning: **少一項是一個無聲的洞**：加了新設定而忘了加進 `settings_ui::SETTINGS`，
 //! 面板上就沒有它，而編譯照過、面板照樣顯示別的設定的對的值。記事本裏那條「全局
 //! 設置加一項要動三處，漏掉第三處編譯照過、面板照樣顯示對的值」說的就是這一族。
 //!
@@ -56,12 +56,12 @@ fn every_key() -> BTreeSet<String> {
 
 /// **那六張表就是 `RawConfig` 裏所有結構體形狀的表** —— 再加一張，這條紅。
 ///
-/// ⚠️ [`every_key`] 走的是一張**手抄**的表名單子，而那個模組的文檔自己寫着「一張
+/// Warning: [`every_key`] 走的是一張**手抄**的表名單子，而那個模組的文檔自己寫着「一張
 /// 手抄的字段名單正是這條測試要防的東西」。手抄的表名單子是同一件事，只是矮了一層：
 /// 加一個 `RawFoo` 進 `RawConfig` 而忘了加進那張單子，它底下每一個鍵都沒人管，而
 /// 「每個設定都有着落」那條照樣綠。2026-09-24 審出來的。
 ///
-/// ⚠️ **鍵集開放的表不算**（`syntax`／`sidebar`／`language`／`lsp`，都是
+/// Warning: **鍵集開放的表不算**（`syntax`／`sidebar`／`language`／`lsp`，都是
 /// `HashMap`）：它們的鍵是擴展名、面板名、語言名——任意的，數不出一張名單來，所以
 /// 「每個鍵都有着落」對它們沒有意義。`NOT_IN_THE_PANEL` 的判準二說的就是這一族。
 #[test]
@@ -162,7 +162,7 @@ fn every_range_is_a_range() {
 
 /// **出廠態 —— 讀一份什麽都沒說的配置。**
 ///
-/// ⚠️ **不是 `Config::default()`。** 那一個的 `lsp` 是空的，而 `into_config` 會替
+/// Warning: **不是 `Config::default()`。** 那一個的 `lsp` 是空的，而 `into_config` 會替
 /// 沒寫 `[lsp.*]` 的配置填上出廠的三個語言服務器（`factory_servers`）。面板眼裏的
 /// 「出廠」是後者：一份空配置跑出來的樣子。
 fn nothing_said() -> yumete_config::Config {
@@ -195,7 +195,7 @@ fn every_factory_value_really_is_the_factory_value() {
 
 /// **再逐項餵一個不是出廠的值，必須真的改出點什麽來。**
 ///
-/// ⚠️ **這一條纔是硬的**，上面那條單獨立不住：`RawConfig` 是
+/// Warning: **這一條纔是硬的**，上面那條單獨立不住：`RawConfig` 是
 /// `#[serde(deny_unknown_fields)]`，而 `Config::from_toml` 讀不進去就
 /// `unwrap_or_default()`——**鍵名打錯一個字母，整份被默默丟掉，於是「等於出廠
 /// 設定」照樣成立**，上面那條全綠。這一條問的是反面：既然改了，就該有東西動。
@@ -217,7 +217,7 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
                     false => low.to_string(),
                 }
             }
-            // ⚠️ **每一個詞都要試，不是只試第一個。** 從前是 `find(|w| *w != now)`
+            // Warning: **每一個詞都要試，不是只試第一個。** 從前是 `find(|w| *w != now)`
             // ——取排在最前面的那個非出廠詞，於是十六組幾選一裏**四十六個詞只有
             // 十六個被試過**。而這條測試逮到的那一次（`ime.system` 寫了兩個不存在
             // 的詞）純屬運氣：壞詞正好排第二。排第三就逃掉了。
@@ -251,7 +251,7 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
 
 /// **面板停得到的每一個值，編輯器都得原樣收下。**
 ///
-/// ⚠️ **這一條是「面板顯示的值不是編輯器用的值」那一族的網。** `into_config` 有幾
+/// Warning: **這一條是「面板顯示的值不是編輯器用的值」那一族的網。** `into_config` 有幾
 /// 處的域是**斷的**——`zong_length` 是「0，或者 4 到 64」，`tatechuyoko` 是「0，或者
 /// 2 到 8」。把 `low` 寫成 0，面板就停得到 1／2／3，寫進檔裏而編輯器按 4 排版，**編譯
 /// 照過、別的測試照綠**。2026-09-24 審出來的，兩項都中。
@@ -266,7 +266,7 @@ fn every_value_the_panel_can_set_is_its_own() {
         let Kind::Count { low, high, zero } = setting.kind else { continue };
         // 域：`low..=high`，再加上 0 —— **只有 `low > 0` 的時候**。
         //
-        // ⚠️ **`zero` 有兩種意思，這裏要分開。** `zong_length` 的 0 在域**外面**
+        // Warning: **`zero` 有兩種意思，這裏要分開。** `zong_length` 的 0 在域**外面**
         // 另成一檔（域是 4..64）；`indent` 的 0 就在域裏（0..8），`zero` 只是替
         // 它取了個名字（「不縮進」）。判準是 `low`：大於 0 纔說明 0 是另一檔。
         let mut domain: Vec<usize> = Vec::new();
@@ -289,7 +289,7 @@ fn every_value_the_panel_can_set_is_its_own() {
 
 /// **出廠值那一欄要是一個讀得出來的 toml 值，而且類型對得上。**
 ///
-/// ⚠️ **上面那兩條堵不住引號。** `Pick` 的 `factory` 少寫一對引號（`horizontal`
+/// Warning: **上面那兩條堵不住引號。** `Pick` 的 `factory` 少寫一對引號（`horizontal`
 /// 而不是 `"horizontal"`）→ toml 解析失敗 → `from_toml` 走 `unwrap_or_default()`
 /// → **和空配置逐位元組相同** → 第一條綠；第二條自己拼 `format!("\"{other}\"")`，
 /// 永遠帶引號 → 也綠。而面板會拿 `horizontal` 去和 `written()` 出來的

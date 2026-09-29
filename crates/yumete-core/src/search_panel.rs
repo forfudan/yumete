@@ -56,7 +56,7 @@ pub enum Where {
     Folder,
     /// **這一節坐在哪本書上**——開 yumete 的時候定一次的那個根（`-gd`）。
     ///
-    /// ⚠️ **2026-09-27 和「工作區」合並了。** 從前是兩個：「工作區」是啓動
+    /// Warning: **2026-09-27 和「工作區」合並了。** 從前是兩個：「工作區」是啓動
     /// yumete 時 shell 所在的目錄，「項目」是從那裏往上找到的 `.git`／`.yumete`。
     /// 兩個名字說不清區別，而多數時候它們是同一個地方。現在只有一個，見
     /// `Editor::root`。
@@ -70,7 +70,7 @@ impl Where {
     /// 侧栏切换 github directory, working directory, present directory？现在位置
     /// 只能输入路径」）。
     ///
-    /// 本文件 → 本文件夾 → 工作目錄 → git 項目 → 回到本文件。⚠️ **指名道姓那一種
+    /// 本文件 → 本文件夾 → 工作目錄 → git 項目 → 回到本文件。Warning: **指名道姓那一種
     /// 不在圈裏**：它是使用者自己打的一個路徑，輪到它就回本文件——一個「下一個」
     /// 走不到、也走不出的值不該卡在環上。
     pub fn next(&self) -> Where {
@@ -87,7 +87,7 @@ impl Where {
 
     /// Whether this is searched again on every keystroke.
     ///
-    /// ⚠️ **Only the buffer is.** Everything else walks the disk, and a
+    /// Warning: **Only the buffer is.** Everything else walks the disk, and a
     /// hundred chapters per letter typed is not a thing to do — those wait for
     /// `Enter`. The panel says which it is, because one panel behaving two
     /// ways with nothing on the screen to tell them apart is the trap.
@@ -103,7 +103,7 @@ impl Where {
 pub enum Field {
     /// **哪裏找** —— 和 `:search` 的參數同一套：空着是本文件，別的都當路徑。
     ///
-    /// ⚠️ **2026-09-29 從查詢框上面挪到了開關那一列的頭上**，號碼是 `0`。它本來
+    /// Warning: **2026-09-29 從查詢框上面挪到了開關那一列的頭上**，號碼是 `0`。它本來
     /// 就是四選一，`0` 換一檔，和底下那七個按號碼的開關是同一種東西；畫在上面
     /// 的時候 `0` 這個鍵在屏幕上一個字都沒有，沒人找得到它。
     Scope,
@@ -153,7 +153,7 @@ pub enum Field {
 
 impl Field {
     /// Every cell, in `Tab`'s order.
-    /// ⚠️ **這個次序就是畫出來的次序**（`draw_search`）。走的和看的不是一回事
+    /// Warning: **這個次序就是畫出來的次序**（`draw_search`）。走的和看的不是一回事
     /// 的時候，`Tab` 會在一張看不見的表上跳，而那是沒人能學會的。
     ///
     /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
@@ -182,7 +182,7 @@ impl Field {
     /// them, so this order is the whole of what the numbers mean. It is the
     /// screen's order, so a reader counts rows rather than learning a list.
     ///
-    /// ⚠️ **Every one is always drawn**, 模糊 included — it goes quiet while
+    /// Warning: **Every one is always drawn**, 模糊 included — it goes quiet while
     /// 替換 is ticked rather than disappearing, so the numbers below it do not
     /// shift under the reader's eye.
     pub const SWITCHES: [Field; 8] = [
@@ -193,7 +193,7 @@ impl Field {
         Field::Whole,
         Field::Fuzzy,
         Field::Replacing,
-        // ⚠️ **第八個只在替換那一檔畫得出來**，所以它排在最後：畫不出來的時候
+        // Warning: **第八個只在替換那一檔畫得出來**，所以它排在最後：畫不出來的時候
         // 上面七個的號碼一個都不動。
         Field::PreserveCase,
     ];
@@ -205,11 +205,11 @@ impl Field {
 
     /// **`jk` 走不上去的那幾格**——按號碼到，不是走過去。
     ///
-    /// ⚠️ **位置那一格看它是哪一檔**（2026-09-29）。四選一的頭三檔沒有字可改，
+    /// Warning: **位置那一格看它是哪一檔**（2026-09-29）。四選一的頭三檔沒有字可改，
     /// 停上去沒有用處，`0` 換檔就夠了——它 2026-09-29 挪到開關那一列的頭上、號碼
     /// 寫成 `0` 之後，和底下七個就是同一種東西。
     ///
-    /// ⚠️ **第四檔「指定文件夾…」是個輸入框，一定要停。** 跳過去就沒法改那條路
+    /// Warning: **第四檔「指定文件夾…」是個輸入框，一定要停。** 跳過去就沒法改那條路
     /// 徑了，而 `0` 繞一圈回來會把打好的路徑清掉（`step_the_scope` 每走一檔都重
     /// 寫 `scope_text`）。`naming` 就是問這一句，答案在 [`Search::takes_text`]。
     pub fn walked_past(self, naming: bool) -> bool {
@@ -218,7 +218,7 @@ impl Field {
 
     /// Whether this cell is typed into at all (so `i` and the IME belong here).
     ///
-    /// ⚠️ **位置那一格是有條件的**，問 [`Search::takes_text`] 纔算數：它平常是
+    /// Warning: **位置那一格是有條件的**，問 [`Search::takes_text`] 纔算數：它平常是
     /// 一個四選一，只有選到「指定文件夾…」的時候纔打得了字。
     pub fn takes_text(self) -> bool {
         matches!(self, Field::Scope | Field::Query | Field::Replace)
@@ -227,18 +227,18 @@ impl Field {
     /// The next cell in that direction, wrapping — **the boxes and the list,
     /// never a switch**, and the replace box only while the panel is replacing.
     ///
-    /// ⚠️ **The five switches are walked past, not walked into** (2026-09-24,
+    /// Warning: **The five switches are walked past, not walked into** (2026-09-24,
     /// 原話：「中间五行选项，在normal状态下不是移动上去按空格，而是直接通过一个
     /// 字母来选择……这样的话，我们就可以通过 jk 在结果和搜索框之間移動（跳过五行
     /// 设置），避免用户要从他们上面经过浪费 jk」). They are pressed by number;
     /// what the cursor walks is 範圍 → 找什麼 →（換成什麼）→ 結果, which is the
     /// path anybody actually takes through this form.
     ///
-    /// ⚠️ **模糊 and replacing never show together** (2026-09-20). A loose
+    /// Warning: **模糊 and replacing never show together** (2026-09-20). A loose
     /// match covers characters nobody typed, so 「replace them all」 would hand
     /// the manuscript to a range the writer cannot predict. 模糊 is for
     /// finding; when it has found the place, `Esc` and change it there.
-    /// ⚠️ **從一個走不上去的格子出發也要對**（2026-09-29 修）。按了 `0` 或者
+    /// Warning: **從一個走不上去的格子出發也要對**（2026-09-29 修）。按了 `0` 或者
     /// `3`，鍵就落在那一格上了，而它不在可走的名單裏——從前是拿「名單第 0 格」
     /// 頂替，於是按完 `0` 再按 `k` 跳到了名單最底下的結果。所以走的是**畫出來
     /// 的那張全表**，一格一格往那個方向找，碰到第一個停得住的就停。
@@ -272,7 +272,7 @@ impl Field {
 /// | `revision` | 正在寫的這一份改過了 |
 /// | `every` | 某一份改過了，不一定是正在寫的這一份 |
 ///
-/// ⚠️ **`every` 一個數不夠。** 它是所有緩衝的改動次數之和，看得出「有人動過」，
+/// Warning: **`every` 一個數不夠。** 它是所有緩衝的改動次數之和，看得出「有人動過」，
 /// 看不出動的是誰；而「只有正在寫的這一份動過」正是只重搜一份的前提。兩個數
 /// 一減就答得上來：`every` 的增量等於 `revision` 的增量，就是只有它動過。
 ///
@@ -328,7 +328,7 @@ pub const MOST: usize = 500;
 /// reading while `j k` walks the hits. Sixty each way fills a 250-column
 /// terminal, which is wider than anybody's.
 ///
-/// ⚠️ **A hit in another file has nothing else to offer.** The buffer is not
+/// Warning: **A hit in another file has nothing else to offer.** The buffer is not
 /// open, so this excerpt — taken when the search ran — is the only context
 /// that row will ever have. Hence the number is set by the row, and the
 /// column is left to clip.
@@ -388,13 +388,13 @@ pub struct Search {
     /// 之和)`，沒跑過就是 `None`（2026-09-25 報的：「我如果修改了buffer，然後回到
     /// 搜索，按enter，搜索結果沒有刷新」）。
     ///
-    /// 對不上就是過期，`Editor::search_is_stale` 由它算出來。⚠️ **不存「過期」這
+    /// 對不上就是過期，`Editor::search_is_stale` 由它算出來。Warning: **不存「過期」這
     /// 個結論，存的是那一版的指紋**：結論要有人在正文改完的那一刻去改它，而改正文
     /// 的路有幾十條，漏一條就是一張看着新鮮的舊名單。
     ///
     /// 和數之和當指紋成立，是因為**改動次數只增不減**：兩次改動抵消不掉。
     /// 當前緩衝區的號也要記——本文件那一檔換了檔案，名單說的就是別人的事了。
-    /// ⚠️ **搜文件夾也要看所有緩衝區**：開着的檔是從內存讀的，不是從磁盤
+    /// Warning: **搜文件夾也要看所有緩衝區**：開着的檔是從內存讀的，不是從磁盤
     /// （見 `search_now` 裏「An open file is read from its buffer」那一段）。
     pub looked_at: Option<Mark>,
 
@@ -415,10 +415,10 @@ pub struct Search {
     pub field: Field,
     /// **簡繁異字形**：「書齋」找得到「书斋」（2026-09-25，見 [`crate::glyphs`]）。
     ///
-    /// ⚠️ **出廠開着**，所以 `Search` 要走 [`Search::new`] 而不是 `default()`——
+    /// Warning: **出廠開着**，所以 `Search` 要走 [`Search::new`] 而不是 `default()`——
     /// `derive(Default)` 給不出「這一項是 true」。`default()` 留給測試。
     ///
-    /// ⚠️ **和 正則 互斥**：把每個字改寫成 `[...]` 會把使用者寫的式子吃掉，所以
+    /// Warning: **和 正則 互斥**：把每個字改寫成 `[...]` 會把使用者寫的式子吃掉，所以
     /// 正則開着時它畫灰、也不起作用（`Editor::search_pattern`）。
     pub glyphs: bool,
     /// **拼音**：`shuzhai` 找得到「書齋」。出廠開着，見 [`Field::Pinyin`]。
@@ -427,13 +427,13 @@ pub struct Search {
     pub regex: bool,
     /// How much case matters.
     pub case: Case,
-    /// ASCII `\b` on both ends. ⚠️ **A no-op between 漢字** — there is no word
+    /// ASCII `\b` on both ends. Warning: **A no-op between 漢字** — there is no word
     /// boundary there — so it only ever bites on the Western words in a
     /// manuscript. Said in the manual rather than hidden.
     pub whole: bool,
     /// 「差不多是這幾個字」 — [`crate::nearby`] instead of a pattern.
     ///
-    /// ⚠️ **It stands in place of 正則 and 完整匹配**, which are about a
+    /// Warning: **It stands in place of 正則 and 完整匹配**, which are about a
     /// pattern and are drawn quiet while this is on; 大小寫 still applies.
     /// Never on while the panel is replacing (see [`Field::step`]).
     pub fuzzy: bool,
@@ -445,7 +445,7 @@ pub struct Search {
     pub selected: usize,
     /// The pattern does not compile.
     ///
-    /// ⚠️ The hits are **kept** when this is true, and drawn quiet: typing a
+    /// Warning: The hits are **kept** when this is true, and drawn quiet: typing a
     /// regular expression walks through `[`, `(` and every other unfinished
     /// state, and emptying the list on each of them flickers. Quiet says
     /// 「not the answer to what is in the box」, which is the truth; blank
@@ -463,7 +463,7 @@ impl Search {
 
     /// Whether anything has been asked for yet.
     ///
-    /// ⚠️ Not the same as 「found nothing」: an empty box has not been asked,
+    /// Warning: Not the same as 「found nothing」: an empty box has not been asked,
     /// and a panel that answered `0 處` to a question nobody put would be the
     /// `⟨缺⟩`-versus-blank mistake all over again.
     pub fn asked(&self) -> bool {
@@ -615,7 +615,7 @@ impl Search {
         if self.take_selection() {
             return;
         }
-        // ⚠️ **光標停在末尾那個空位上的時候，刪的是它前面那一個**
+        // Warning: **光標停在末尾那個空位上的時候，刪的是它前面那一個**
         // （2026-09-27 兩個試用的人都報「`d` 按了什麼都不發生」）。框裏的光標走
         // 得到文字後面那一格（打字要從那裏接着打），而 `Esc` 出來之後它多半就停
         // 在那裏——於是「刪光標壓着的那一個」壓着的是空氣，鍵位行上明明寫着
@@ -660,7 +660,7 @@ impl Search {
 
     /// **位置那一格現在是不是一個輸入框**——只問位置，不問鍵在哪一格。
     ///
-    /// ⚠️ 和 [`Search::takes_text`] 不是一回事：那一支問的是**鍵所在的**那一格，
+    /// Warning: 和 [`Search::takes_text`] 不是一回事：那一支問的是**鍵所在的**那一格，
     /// 站在查詢框上它一律回真。`jk` 要不要停在位置那一行，問的是這一支。
     pub fn naming(&self) -> bool {
         matches!(self.scope, Where::Named(_))
@@ -682,7 +682,7 @@ impl Search {
 
     /// **Walk to another cell, and park the cursor at the end of it.**
     ///
-    /// ⚠️ **One caret serves every box**, so walking off 搜 (caret at 3) on to
+    /// Warning: **One caret serves every box**, so walking off 搜 (caret at 3) on to
     /// an empty 換 would leave the block cursor sitting three cells past the
     /// end of a box with nothing in it. The caret is the *current* box's, and
     /// changing which box that is has to move it (2026-09-25, when `h`/`l`
