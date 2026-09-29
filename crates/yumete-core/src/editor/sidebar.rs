@@ -173,6 +173,11 @@ impl Editor {
             {
                 self.hover_rows()
             }
+            None if self.panel(side).map(|p| p.view())
+                == Some(crate::sidebar::View::Problems) =>
+            {
+                self.problem_rows()
+            }
             _ => Vec::new(),
         }
     }
@@ -332,7 +337,8 @@ impl Editor {
     pub(super) fn view_fits_the_file(&self, view: crate::sidebar::View) -> bool {
         match view {
             crate::sidebar::View::Wiki => !self.writes_code(),
-            crate::sidebar::View::Docs => self.writes_code(),
+            // 診斷同文檔：散文沒有服務器，那兩扇在稿子上是空的。
+            crate::sidebar::View::Docs | crate::sidebar::View::Problems => self.writes_code(),
             _ => true,
         }
     }
@@ -341,7 +347,9 @@ impl Editor {
     fn view_that_fits(&self, view: crate::sidebar::View) -> crate::sidebar::View {
         match (view, self.writes_code()) {
             (crate::sidebar::View::Wiki, true) => crate::sidebar::View::Docs,
-            (crate::sidebar::View::Docs, false) => crate::sidebar::View::Wiki,
+            (crate::sidebar::View::Docs | crate::sidebar::View::Problems, false) => {
+                crate::sidebar::View::Wiki
+            }
             _ => view,
         }
     }
@@ -649,6 +657,47 @@ impl Editor {
     /// 鍵比沒有這個鍵更糟：一本小說一百多個檔，「第 7 個」按最近用過排每過幾分鐘
     /// 換一個檔，按打開順序排則關掉一個後面全部重編。瀏覽器能成，是因為號碼**畫在
     /// 標籤上**。
+    /// **`空格 !@#$`：不用走過去就關掉那一區**（2026-09-29 定）。
+    ///
+    /// 原話：「space 命令组加四个东西分别是 !@#$，对应 1234，意思是强制关闭
+    /// 1、2、3、4 区域。这样我们就有了对应的关闭按键（不需要移到区域就可以关闭
+    /// 它）。」`空格 1`–`4` 是去那一區，它們的上檔就是關那一區——一對鍵、一個號
+    /// 碼，不必再記第二套。
+    ///
+    /// Warning: **本來就沒開就出聲**，別靜悄悄——按了沒反應的鍵讀者只會以為自己
+    /// 記錯了。關最後一個工作區同 `空格 q`：那等於退出編輯器，不許。
+    pub(super) fn close_region(&mut self, nth: u32) {
+        use crate::sidebar::Side;
+        match nth {
+            1 | 2 => {
+                let want = usize::from(nth == 2);
+                if self.other_pane().is_none() {
+                    self.status = say!("region.only-one-left");
+                    return;
+                }
+                // 關的是**指名的那一個**：先站過去，再走 `空格 q` 那條路——收尾
+                // （鍵去哪、稿子怎麽算）只該有一份。
+                if self.live_pane().min(1) != want {
+                    self.switch_pane();
+                }
+                self.panel_focus = None;
+                self.close_this_region();
+            }
+            3 | 4 => {
+                let side = match nth {
+                    3 => Side::Left,
+                    _ => Side::Right,
+                };
+                if self.panel(side).is_none() && self.transient(side).is_none() {
+                    self.status = say!("region.not-open");
+                    return;
+                }
+                self.close_panel(side);
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn go_to_region(&mut self, nth: u32) {
         use crate::sidebar::Side;
         match nth {
@@ -766,8 +815,8 @@ impl Editor {
             // rows of a tree (#419).
             View::Search => return,
             // Drawn from the cursor every frame, not from rows (#287).
-            // Warning: 文檔同形，只是它畫的是問來的那一則，不是現算的。
-            View::Wiki | View::Docs => return,
+            // Warning: 文檔、診斷同形，只是它們畫的是問來的／推來的那一則。
+            View::Wiki | View::Docs | View::Problems => return,
         };
         if let Some(panel) = self.panel_mut(side) {
             panel.set_rows(rows);
@@ -1022,6 +1071,29 @@ impl Editor {
     ///
     /// Warning: **原樣的 Markdown**，和浮窗裏那一份一個字不差——邊欄畫它的時候走的是
     /// 同一支行內標記渲染。
+    /// **這一行上服務器說的那幾句**，給診斷那一扇（2026-09-29）。
+    ///
+    /// 診斷不必問——它是服務器自己推過來的，早就在內存裏，所以這一支和百科一樣
+    /// 是現算的純函數。
+    pub(super) fn problem_rows(&self) -> Vec<crate::sidebar::Row> {
+        let Some((loud, said)) = self.problem_here() else { return Vec::new() };
+        let head = match loud {
+            crate::problem::Severity::Error => say!("problem.error"),
+            crate::problem::Severity::Warn => say!("problem.warn"),
+            crate::problem::Severity::Note => say!("problem.note"),
+            crate::problem::Severity::Hint => say!("problem.hint"),
+        };
+        said.into_iter()
+            .map(|line| crate::sidebar::Row {
+                path: PathBuf::new(),
+                name: format!("{head}　{line}"),
+                depth: 0,
+                is_dir: false,
+                expanded: false,
+            })
+            .collect()
+    }
+
     pub(super) fn hover_rows(&self) -> Vec<crate::sidebar::Row> {
         let Some(told) = self.hover_in_the_sidebar() else {
             return Vec::new();

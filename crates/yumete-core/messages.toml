@@ -1193,6 +1193,14 @@ en = "how much has been written; `progress` for today, `target` for a daily goal
 find = "字數 字数 統計 统计 wordcount stats"
 
 [[message]]
+# : 命令選單裏 diagnostics 那一項的說明
+key = "cmd.commands.diagnostics"
+zht = "診斷：光標走到哪就顯示哪一行的錯誤警告（和文檔互斥，出廠開）"
+zhs = "诊断：光标走到哪就显示哪一行的错误警告（和文档互斥，出厂开）"
+en = "diagnostics: follow the cursor (exclusive with docs; on by default)"
+find = "診斷 诊断 diagnostics problems error warning 錯誤 错误 及時 及时"
+
+[[message]]
 # : 命令選單裏 diff 那一項的說明（commands 組）
 key = "cmd.commands.diff"
 zht = "改了什麼：按詞比，不是按行"
@@ -5165,11 +5173,39 @@ zhs = "四个区域全开"
 en = "open every region"
 
 [[message]]
+# 空格選單：關掉左邊欄（1234 的上檔，2026-09-29）
+key = "hint.space.close-left"
+zht = "關掉左邊欄"
+zhs = "关掉左边栏"
+en = "close the left sidebar"
+
+[[message]]
+# 空格選單：關掉第一工作區
+key = "hint.space.close-one"
+zht = "關掉第一工作區"
+zhs = "关掉第一工作区"
+en = "close the first pane"
+
+[[message]]
+# 空格選單：關掉右邊欄
+key = "hint.space.close-right"
+zht = "關掉右邊欄"
+zhs = "关掉右边栏"
+en = "close the right sidebar"
+
+[[message]]
 # 提示：空格菜單——關掉站着的這一區
 key = "hint.space.close-this-region"
 zht = "關掉站着的這一區"
 zhs = "关掉站着的这一区"
 en = "close the region you are in"
+
+[[message]]
+# 空格選單：關掉第二工作區
+key = "hint.space.close-two"
+zht = "關掉第二工作區"
+zhs = "关掉第二工作区"
+en = "close the second pane"
 
 [[message]]
 # 空格 C：塊注釋（沒有塊注釋的格式退到行注釋）
@@ -5195,8 +5231,8 @@ en = "the dictionary in the sidebar (room to read)"
 [[message]]
 # 空格選單裏的 s：換到下一個區域（正文、邊欄、另一個工作區）
 key = "hint.space.next-region"
-zht = "去下一個區域：工作區一 → 二 → 左欄 → 右欄，同 C-w"
-zhs = "去下一个区域：工作区一 → 二 → 左栏 → 右栏，同 C-w"
+zht = "前往下一個區域"
+zhs = "前往下一个区域"
 en = "the next region: work area 1, 2, left, right — same as C-w"
 
 [[message]]
@@ -5212,6 +5248,20 @@ key = "hint.space.paste-before"
 zht = "從系統剪貼板貼在前面"
 zhs = "从系统剪贴板贴在前面"
 en = "paste before, from the system clipboard"
+
+[[message]]
+# 空格選單：這一行的診斷，浮窗（2026-09-29 作者寫的）
+key = "hint.space.problems"
+zht = "顯示診斷信息（浮窗）"
+zhs = "显示诊断信息（浮窗）"
+en = "the diagnostics on this line (float)"
+
+[[message]]
+# 空格選單：這一行的診斷，邊欄（2026-09-29 作者寫的）
+key = "hint.space.problems-panel"
+zht = "顯示診斷信息（邊欄）"
+zhs = "显示诊断信息（边栏）"
+en = "the diagnostics on this line (sidebar)"
 
 [[message]]
 # 空格菜單：跳到左邊欄（沒開就開那一側的頭一扇）
@@ -5265,16 +5315,16 @@ en = "Space"
 [[message]]
 # 空格菜單裏那一行：問語言服務器這是什麽
 key = "hint.space.what-is-this"
-zht = "顯示當前光標所在項目之文檔"
-zhs = "显示当前光标所在项目之文档"
-en = "the docs for the name under the cursor"
+zht = "顯示當前項目之文檔（浮窗）"
+zhs = "显示当前项目之文档（浮窗）"
+en = "the docs for the name under the cursor (float)"
 
 [[message]]
 # 空格菜單：把服務器那段話開進邊欄（浮窗是小寫的 k）
 key = "hint.space.what-is-this-panel"
-zht = "及時顯示光標所在項目之文檔"
-zhs = "及时显示光标所在项目之文档"
-en = "the docs follow the cursor (a toggle)"
+zht = "顯示當前項目之文檔（邊欄）"
+zhs = "显示当前项目之文档（边栏）"
+en = "the docs for the name under the cursor (sidebar)"
 
 [[message]]
 # 表格提示：加一欄
@@ -5900,6 +5950,13 @@ zhs = "大纲"
 en = "Outline"
 
 [[message]]
+# 邊欄面板的名字：診斷（2026-09-29 作者定的名字）
+key = "label.panel.problems"
+zht = "診斷"
+zhs = "诊断"
+en = "Diagnostics"
+
+[[message]]
 # 勾上替換之後，面板的名字
 key = "label.panel.replace"
 zht = "搜索與替換"
@@ -6454,6 +6511,20 @@ zhs = "服务器说不出这个写在哪"
 en = "the server does not know where this is written"
 
 [[message]]
+# :diagnostics off
+key = "lsp.problems-follow-off"
+zht = "關閉及時診斷顯示"
+zhs = "关闭及时诊断显示"
+en = "diagnostics no longer follow the cursor"
+
+[[message]]
+# :diagnostics on（和 :docs 互斥）
+key = "lsp.problems-follow-on"
+zht = "開啓及時診斷顯示"
+zhs = "开启及时诊断显示"
+en = "diagnostics follow the cursor"
+
+[[message]]
 # 語言服務器刚起來，還在讀整個項目（只說這一次）
 key = "lsp.reading"
 zht = "{0} 正在讀這個項目……第一次要等一會"
@@ -6928,6 +6999,13 @@ zhs = "还没有语言服务器报过问题"
 en = "no language server has reported anything"
 
 [[message]]
+# 光標這一行上服務器一句話都沒說（按 空格 i 的時候）
+key = "problem.none-here"
+zht = "這一行沒有診斷"
+zhs = "这一行没有诊断"
+en = "nothing reported on this line"
+
+[[message]]
 # 中間那兩檔之一：服務器順帶說的一句話
 key = "problem.note"
 zht = "說明"
@@ -7140,6 +7218,13 @@ key = "region.all-open"
 zht = "四個區域都開着了"
 zhs = "四个区域都开着了"
 en = "all four regions are open"
+
+[[message]]
+# 那一側本來就沒開（按 空格 #／$ 的時候）
+key = "region.not-open"
+zht = "那一側本來就沒開"
+zhs = "那一侧本来就没开"
+en = "that side is not open"
 
 [[message]]
 # 空格 3／4：那一側一扇面板都不歸它

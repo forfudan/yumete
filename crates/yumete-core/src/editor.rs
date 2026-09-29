@@ -1907,6 +1907,12 @@ pub struct Editor {
     /// **`空格 K`：文檔跟不跟着光標走**（2026-09-29）。出廠**關着**——百科是現
     /// 算的，跟着走不花什麽；文檔要問服務器，一來一回。
     docs_follow: bool,
+    /// **診斷跟不跟着光標走**（`:diagnostics`，2026-09-29）。出廠**開着**——它
+    /// 是內存裏現成的，不花什麽，而且這就是 2026-09-29 之前一直的樣子。
+    /// Warning: 和 `docs_follow` 互斥，見 `Editor::follow_with_problems`。
+    problems_follow: bool,
+    /// 按 `空格 i` 叫出來的那一次，光標當時在哪——它一走那一則就沒。
+    problem_asked: Option<usize>,
     /// 跟着走的時候，上一次問的是哪一格——同一格不重複問。
     docs_asked_at: Option<usize>,
     /// 光標最後一次動是什麽時候，跟着走的那一問等它停穩（`DOCS_SETTLE`）。
@@ -2776,6 +2782,8 @@ impl Editor {
             hover_query: None,
             hovered: None,
             docs_follow: false,
+            problems_follow: true,
+            problem_asked: None,
             docs_asked_at: None,
             docs_moved: None,
             hover_scroll: 0,
@@ -2921,6 +2929,8 @@ impl Editor {
                 crate::sidebar::Side::Right,
                 crate::sidebar::Side::Right,
                 // 文檔：同百科，右邊——它就是百科的代碼版（2026-09-29）。
+                crate::sidebar::Side::Right,
+                // 診斷：也在右邊，和文檔並排（`Tab` 換得過去）。
                 crate::sidebar::Side::Right,
             ],
             dictionary_anchor: None,
