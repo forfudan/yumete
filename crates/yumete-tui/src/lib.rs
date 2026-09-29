@@ -5560,7 +5560,10 @@ fn draw_note(
     // 一條最省——行號左邊那一格照舊亮着（那是「這裏有問題」，不打斷），退出插入
     // 模式，浮窗自己回來。
     let writing = editor.mode() == Mode::Insert;
-    if let Some((severity, said)) = editor.problem_here().filter(|_| !writing) {
+    // Warning: **問 `problem_afloat`，不是 `problem_here`**（2026-09-29）。前者多
+    // 問兩句：文檔那一份正浮着嗎（疊在一起是作者報的那一條），以及這一則是即時
+    // 那一檔冒出來的還是剛按過 `空格 i`。
+    if let Some((severity, said)) = editor.problem_afloat().filter(|_| !writing) {
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             scroll: 0,
@@ -6796,6 +6799,11 @@ fn draw_sidebar(
         draw_dictionary(frame, editor, config, side, area, true);
         return None;
     }
+    // 診斷那一扇：同文檔一個形狀，只是內容是現算的（診斷早在內存裏）。
+    if sidebar.view() == View::Problems {
+        draw_dictionary(frame, editor, config, side, area, true);
+        return None;
+    }
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
     let text = ground.fg(ink.text());
@@ -6886,7 +6894,7 @@ fn draw_sidebar(
                 format!("{mark}{}", row.name)
             }
             // Handled above: they fill no rows.
-            View::Search | View::Wiki | View::Docs => row.name.clone(),
+            View::Search | View::Wiki | View::Docs | View::Problems => row.name.clone(),
         };
         // Warning: **裁到頭要有省略號**（2026-09-24 審出來的）。`put_text` 到 `to` 就
         // 停，於是一個長標題是**悄悄**斷在那裏——而「斷了」和「本來就這麼長」是
@@ -7860,9 +7868,12 @@ fn draw_dictionary(
     // Warning: **hover 那一份的名字就是它那扇面板的名字**（2026-09-29）：它 2026-09-29
     // 起是一扇自己的面板（`Panel::Docs`／「文檔」），浮着和進邊欄是同一件東西的
     // 兩個去處，不該有兩個名字。
-    let name = match docs {
-        true => yumete_core::messages::say(Panel::Docs.tag(), &[]),
-        false => yumete_core::messages::say(Panel::Dictionary.tag(), &[]),
+    let name = match (docs, editor.panel(side).map(|p| p.view())) {
+        (true, Some(yumete_core::sidebar::View::Problems)) => {
+            yumete_core::messages::say(Panel::Problems.tag(), &[])
+        }
+        (true, _) => yumete_core::messages::say(Panel::Docs.tag(), &[]),
+        (false, _) => yumete_core::messages::say(Panel::Dictionary.tag(), &[]),
     };
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
     let (from, to, area) = (shell.from, shell.to, shell.area);

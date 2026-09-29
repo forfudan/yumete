@@ -136,11 +136,16 @@ pub enum Panel {
     /// （2026-09-29 定）。`Wiki` 的代碼版：一份稿子要麼有百科要麼有文檔，
     /// 不會兩樣都有。
     Docs,
+    /// **這一行上服務器說了什麽**（`空格 I`，2026-09-29）。
+    ///
+    /// Warning: 和 `Docs` 是兩扇，不是一扇兩種：它們答的是同一個地方的兩件事
+    /// ——「這是什麽」和「這裏哪兒不對」——而一個人可能兩樣都想看着。
+    Problems,
 }
 
 impl Panel {
     /// Every one of them, in the order a setting file lists them.
-    pub const ALL: [Panel; 8] = [
+    pub const ALL: [Panel; 9] = [
         Panel::Files,
         Panel::Buffers,
         Panel::Outline,
@@ -149,6 +154,7 @@ impl Panel {
         Panel::Detail,
         Panel::Wiki,
         Panel::Docs,
+        Panel::Problems,
     ];
 
     /// Its name in the config file and on the command line.
@@ -162,6 +168,7 @@ impl Panel {
             Panel::Detail => "detail",
             Panel::Wiki => "wiki",
             Panel::Docs => "docs",
+            Panel::Problems => "problems",
         }
     }
 
@@ -187,6 +194,7 @@ impl Panel {
             Panel::Detail => "label.panel.detail",
             Panel::Wiki => "label.panel.wiki",
             Panel::Docs => "label.panel.docs",
+            Panel::Problems => "label.panel.problems",
         }
     }
 }
@@ -200,6 +208,7 @@ impl From<View> for Panel {
             View::Search => Panel::Search,
             View::Wiki => Panel::Wiki,
             View::Docs => Panel::Docs,
+            View::Problems => Panel::Problems,
         }
     }
 }
@@ -245,17 +254,21 @@ pub enum View {
     /// 文檔要問服務器，一來一回，所以它多一道「光標停穩了纔問」的閘
     /// （`Editor::docs_follow`）。
     Docs,
+    /// **這一行上服務器說了什麽**（2026-09-29）。`Docs` 的鄰居：同一個地方的另
+    /// 一件事。它不必問服務器——診斷是它自己推過來的，早就在內存裏。
+    Problems,
 }
 
 impl View {
     /// Every view, in the order `Tab` walks them.
-    pub const ALL: [View; 6] = [
+    pub const ALL: [View; 7] = [
         View::Explorer,
         View::Buffers,
         View::Outline,
         View::Search,
         View::Wiki,
         View::Docs,
+        View::Problems,
     ];
 
 }
@@ -520,7 +533,7 @@ impl Sidebar {
             }
             // Never reached: the search panel has a store of its own and
             // never fills these rows (`refresh_panel`).
-            View::Search | View::Wiki | View::Docs => return None,
+            View::Search | View::Wiki | View::Docs | View::Problems => return None,
             View::Explorer => {}
         }
         if !row.is_dir {

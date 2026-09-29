@@ -422,6 +422,8 @@ pub enum Command {
     /// **文檔跟不跟着光標走**（`:docs on`／`:docs off`，2026-09-29）。
     /// `None` ＝ 光打了 `:docs`，那就是翻一下。
     Docs(Option<bool>),
+    /// **診斷跟不跟着光標走**（`:diagnostics on`／`off`）。和上面那個互斥。
+    Diagnostics(Option<bool>),
     /// `:yume-menu-size 1-9` — how many candidates a page of the panel holds.
     /// `None` asks how many it holds now.
     ///
@@ -2361,6 +2363,7 @@ const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "detail", help: "label.panel.detail", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
     Word { name: "docs", help: "label.panel.docs", needs: &[] },
+    Word { name: "problems", help: "label.panel.problems", needs: &[] },
 ];
 
 /// What `:sidebar-left` and `:sidebar-right` take: `off`, or a panel to open
@@ -2378,6 +2381,7 @@ const SIDEBAR_SIDES: &[Word] = &[
     Word { name: "detail", help: "label.panel.detail", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
     Word { name: "docs", help: "label.panel.docs", needs: &[] },
+    Word { name: "problems", help: "label.panel.problems", needs: &[] },
 ];
 
 /// Every command, for the completion list.
@@ -3036,6 +3040,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words { of: ON_OFF, default: None }],
         build: Some(|p| Ok(Command::Docs(p.arg(0).map(|w| w == "on")))),
+    },
+    Entry {
+        name: "diagnostics",
+        aliases: &[],
+        help: "cmd.commands.diagnostics",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| Ok(Command::Diagnostics(p.arg(0).map(|w| w == "on")))),
     },
     Entry {
         name: "theme-fill",

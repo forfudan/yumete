@@ -2028,6 +2028,10 @@ impl Editor {
         ('D', "hint.space.dictionary-panel"),
         ('k', "hint.space.what-is-this"),
         ('K', "hint.space.what-is-this-panel"),
+        // **診斷是文檔的鄰居**（2026-09-29）：同一個地方的另一件事，所以同一個
+        // 形狀——小寫浮，大寫進邊欄。
+        ('i', "hint.space.problems"),
+        ('I', "hint.space.problems-panel"),
         ('r', "hint.space.ruby"),
         // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
         // 快捷鍵太不方便」. The chord stays; this is the same thing with the
@@ -2039,6 +2043,12 @@ impl Editor {
         ('2', "hint.space.region-two"),
         ('3', "hint.space.region-left"),
         ('4', "hint.space.region-right"),
+        // **上檔就是關那一區**（2026-09-29 定）：一對鍵、一個號碼，不必再記第
+        // 二套。`!@#$` 正是 `1234` 的上檔。
+        ('!', "hint.space.close-one"),
+        ('@', "hint.space.close-two"),
+        ('#', "hint.space.close-left"),
+        ('$', "hint.space.close-right"),
         // **一個名詞、四個動詞**（2026-09-26 定的，原話：「可不可以把工作区和
         // 侧边栏统一成一个概念「区域」以简化思维模型」）。從前這裏躺着兩套詞彙說
         // 同一件事：`w`／`W`／`q` 只看得見工作區，`s`／`S` 只看得見邊欄，而
@@ -2325,6 +2335,12 @@ impl Editor {
             Key::Char(n @ '1'..='4') => {
                 self.go_to_region(n.to_digit(10).unwrap_or(0));
             }
+            // 上檔＝關那一區（2026-09-29）：`!@#$` 是 `1234` 的上檔，所以號碼
+            // 只有一套。
+            Key::Char(n @ ('!' | '@' | '#' | '$')) => {
+                let nth = "!@#$".find(n).unwrap_or(0) as u32 + 1;
+                self.close_region(nth);
+            }
 
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
@@ -2367,6 +2383,9 @@ impl Editor {
                     self.set_status(say!("lsp.not-code"));
                 }
             }
+            // 診斷那一對，同形：小寫浮，大寫進邊欄。
+            Key::Char('i') => self.show_the_problem_here(true),
+            Key::Char('I') => self.show_the_problem_here(false),
             Key::Char('r') => self.enter_ruby_mode(),
             Key::Char('"') => self.open_paste_picker(),
             // 衝突 (#249): the three keys that end one. Under `空格` rather

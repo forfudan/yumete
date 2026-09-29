@@ -810,6 +810,10 @@ impl Editor {
                 self.follow_with_docs(on.unwrap_or(!self.docs_follow()));
                 Ok(CommandOutcome::Continue)
             }
+            Command::Diagnostics(on) => {
+                self.follow_with_problems(on.unwrap_or(!self.problems_follow()));
+                Ok(CommandOutcome::Continue)
+            }
             // Rides the same channel, for the same reason: the colours are the
             // front end's and the core does not know one exists.
             Command::ThemeFill(on) => {

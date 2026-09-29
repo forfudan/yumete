@@ -17892,3 +17892,93 @@ fn asking_and_showing_are_two_separate_things() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **診斷與文檔是一對鄰居，而只有一樣會自己冒出來**（2026-09-29 定）。
+///
+/// 原話：「如果 docs on，那么错误就自动 off。如果错误 on，那么 docs 就自动 off。
+/// 这样他俩总归有一个是要 space i / k 触发的。」
+///
+/// Warning: **兩樣都自動就得爭同一塊地方**，而「有文檔顯示文檔、沒有纔顯示診斷」
+/// 要等文檔那一問回話纔判得出來——那一秒裏畫什麽都是錯的：畫診斷會閃，不畫就是
+/// 空着。互斥把這個問題整個拿掉了。
+#[test]
+fn the_docs_and_the_diagnostics_take_turns_never_both() {
+    let dir = std::env::temp_dir().join("yumete-docs-or-problems");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn one() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    // 出廠：診斷自己冒，文檔要按鍵叫——就是 2026-09-29 之前一直的樣子。
+    assert!(ed.problems_follow(), "出廠診斷即時");
+    assert!(!ed.docs_follow(), "出廠文檔不即時");
+
+    ed.execute(":docs on").unwrap();
+    assert!(ed.docs_follow());
+    assert!(!ed.problems_follow(), "開一個自動關另一個");
+
+    ed.execute(":diagnostics on").unwrap();
+    assert!(ed.problems_follow());
+    assert!(!ed.docs_follow(), "反過來也一樣");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **文檔浮着的時候診斷不許疊上去**（2026-09-29 報的：「错误警告提示行会 shadow
+/// 掉文檔的浮窗」）。
+#[test]
+fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
+    let dir = std::env::temp_dir().join("yumete-no-stacking");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn one() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+    ed.set_problems(file.clone(), vec![crate::problem::Problem {
+        line: 0,
+        utf16_column: 3,
+        severity: crate::problem::Severity::Warn,
+        message: "說不通".into(),
+        source: None,
+    }]);
+
+    // 出廠診斷即時：光標在這一行上，它自己浮出來。
+    assert!(ed.problem_afloat().is_some(), "診斷浮着");
+
+    // 問一次文檔，答案回來——這一刻診斷要讓開。
+    press(&mut ed, " k");
+    ed.show_hover("fn one()".into());
+    assert!(ed.hover_afloat().is_some(), "文檔浮着");
+    assert!(ed.problem_afloat().is_none(), "Warning: 兩個浮窗不許疊");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`空格 !@#$`：不用走過去就關掉那一區**（2026-09-29 定）。
+#[test]
+fn the_shifted_digits_close_a_region_without_going_there() {
+    use crate::sidebar::Side;
+    let mut ed = typed("那年冬天。\n");
+    ed.execute(":sidebar-left files").unwrap();
+    ed.execute(":sidebar-right wiki").unwrap();
+    assert!(ed.panel(Side::Left).is_some() && ed.panel(Side::Right).is_some());
+
+    // 鍵回正文，然後隔空關掉右邊那一扇。
+    while ed.panel_focus().is_some() {
+        ed.on_key(Key::Ctrl('w'));
+    }
+    press(&mut ed, " $");
+    assert!(ed.panel(Side::Right).is_none(), "右欄關了");
+    assert!(ed.panel(Side::Left).is_some(), "左欄沒動");
+    assert!(!ed.sidebar_focused(), "鍵一直在正文裏");
+
+    press(&mut ed, " #");
+    assert!(ed.panel(Side::Left).is_none(), "左欄也關了");
+
+    // Warning: **本來就沒開要出聲**，別靜悄悄。
+    press(&mut ed, " #");
+    assert_eq!(ed.status(), say!("region.not-open"));
+}

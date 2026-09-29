@@ -914,6 +914,62 @@ impl Editor {
         true
     }
 
+    /// **`空格 i`／`空格 I`：把這一行的診斷拿出來看**（2026-09-29 定）。
+    ///
+    /// 和 `空格 k`／`空格 K` 一個形狀：小寫浮、大寫進邊欄，而「畫在哪」永遠是
+    /// 同一條規矩——那一扇開着就進去，沒開就浮。⚠️ 大寫那一下**一定**進邊欄，
+    /// 沒開就開出來，鍵不交過去。
+    ///
+    /// Warning: **診斷不必問。** 它是服務器自己推過來的，早就在內存裏，所以這一
+    /// 支不發任何請求，也沒有那道三百毫秒的閘。
+    pub(super) fn show_the_problem_here(&mut self, afloat: bool) {
+        if !afloat && self.showing(crate::sidebar::View::Problems).is_none() {
+            let side = self.side_for(crate::sidebar::View::Problems);
+            self.open_panel_without_the_keys(side, crate::sidebar::View::Problems);
+        }
+        if self.problem_here().is_none() {
+            self.status = say!("problem.none-here");
+            return;
+        }
+        // 浮的那一份要有人記着「它是被叫出來的」——不然光標一走它自己就沒了，
+        // 而那正是 `problem_afloat` 判斷的依據。
+        self.problem_asked = afloat.then(|| self.sel.head());
+    }
+
+    /// 這一刻該不該浮那一則診斷。
+    ///
+    /// 兩種情形：即時那一檔開着（出廠就是），或者剛按過 `空格 i`。⚠️ 文檔那一
+    /// 扇正浮着的時候一個字都不畫——兩個浮窗疊在一起是作者報的那一條。
+    pub fn problem_afloat(&self) -> Option<(crate::problem::Severity, Vec<String>)> {
+        if self.hover_afloat().is_some() {
+            return None;
+        }
+        let asked = self.problem_asked == Some(self.sel.head());
+        (self.problems_follow || asked).then(|| self.problem_here()).flatten()
+    }
+
+    /// **診斷跟不跟着光標走**——`:diagnostics on`／`off`（2026-09-29）。
+    ///
+    /// Warning: **和 `:docs` 互斥**（作者定）：開一個就自動關另一個，於是永遠只有
+    /// 一樣會自己冒出來，另一樣按 `空格 i`／`空格 k` 叫。⚠️ 兩樣都自動的話，
+    /// 「有文檔顯示文檔、沒文檔顯示診斷」要等文檔那一問回話纔判得出來——那一秒
+    /// 裏畫什麽都是錯的：畫診斷會閃，不畫就是空着。
+    pub fn follow_with_problems(&mut self, on: bool) {
+        self.problems_follow = on;
+        if on {
+            self.docs_follow = false;
+        }
+        self.status = match on {
+            true => say!("lsp.problems-follow-on"),
+            false => say!("lsp.problems-follow-off"),
+        };
+    }
+
+    /// 診斷此刻跟不跟着光標走。
+    pub fn problems_follow(&self) -> bool {
+        self.problems_follow
+    }
+
     /// **文檔跟不跟着光標走**——一個命令，不是一個鍵（2026-09-29 定）。
     ///
     /// 原話：「即时显示应该做成一个命令开关而不使用快捷键……这样的话即时显示和在
@@ -926,6 +982,10 @@ impl Editor {
     /// （[`Editor::docs_owed`]）。出廠**關**：問一次服務器不便宜。
     pub fn follow_with_docs(&mut self, on: bool) {
         self.docs_follow = on;
+        // 互斥，見 `follow_with_problems`。
+        if on {
+            self.problems_follow = false;
+        }
         // Warning: **它不開邊欄。** 「什麽時候問」和「在哪裏顯示」是兩件事
         // （2026-09-29 作者第三次說這一句）：這一個只管前者，後者永遠是同一條規矩
         // ——那一扇開着就畫進去，沒開就浮。開着它而不開邊欄，文檔就跟着光標浮。
