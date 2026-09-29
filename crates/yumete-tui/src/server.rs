@@ -780,8 +780,13 @@ const NESTED: &[&str] = &[".pixi/envs", ".direnv"];
 /// **這個命令在哪**——項目裏找得到就回它的絕對路徑，否則回 `PATH` 上那一個。
 ///
 /// 從 `from`（被編輯的那個檔所在的目錄）起一級一級往上，每一級看 [`BINS`] 與
-/// [`NESTED`]；⚠️ **碰到 `.git` 就停**（含那一級），不然一路爬到 `/` 會翻進別人
-/// 的項目。都沒有纔看 `PATH`。
+/// [`NESTED`]，都沒有纔看 `PATH`。
+///
+/// Warning: **爬到最外層那個 `.git` 為止**，不是碰到第一個就停（2026-09-29 當天
+/// 改的）。第一版停在第一個，而作者的樹是 `yuhao-ime/yumete/scripts/x.py`——
+/// `yumete` 自己是一個倉，pixi 的環境在**上一級**的 `yuhao-ime`，於是那一停正好
+/// 把答案關在門外。嵌套的倉全穿過去，停在最外面那一層倉上：再往上就真是別人的
+/// 項目了。
 ///
 /// Warning: **helix 不做這件事。** 它只 `which`（`helix-lsp/src/client.rs:228`），
 /// 文檔明說「Binaries must be in `$PATH`」；vim 根本沒有內建 LSP。這一條是我們自
@@ -795,6 +800,12 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
     if named.is_absolute() || command.contains(std::path::MAIN_SEPARATOR) {
         return named.is_file().then(|| named.to_path_buf());
     }
+    // 先量出邊界：最外層那個帶 `.git` 的祖先。一個都沒有就只爬到 `from` 自己。
+    let outermost = from
+        .into_iter()
+        .flat_map(|d| d.ancestors())
+        .filter(|step| step.join(".git").exists())
+        .last();
     for step in from.into_iter().flat_map(|d| d.ancestors()) {
         for bin in BINS {
             let found = step.join(bin).join(command);
@@ -815,7 +826,7 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
                 }
             }
         }
-        if step.join(".git").exists() {
+        if Some(step) == outermost {
             break;
         }
     }
@@ -1089,11 +1100,24 @@ mod tests {
             "更近的那一級先答",
         );
 
-        // Warning: **碰到 `.git` 就停。** 根的**上面**放一個，不許被找到——不然一路
-        // 爬到 `/` 會翻進別人的項目。
+        // Warning: **嵌套的倉要穿過去，停在最外那一層**（2026-09-29 當天改的）。
+        // 作者的樹是 `yuhao-ime/yumete/scripts/x.py`：`yumete` 自己是一個倉，而
+        // pixi 的環境在上一級的 `yuhao-ime`。第一版停在第一個 `.git` 上，正好把
+        // 答案關在門外。
+        let inner = dir.join("crates/one");
+        std::fs::create_dir_all(inner.join(".git")).unwrap();
+        std::fs::remove_dir_all(&venv).unwrap();
+        assert_eq!(
+            found_here("pylsp", Some(&deep)),
+            Some(bin.join("pylsp")),
+            "裏面那一層倉不擋路，外面那個 pixi 找得到",
+        );
+
+        // 可再往上就是別人的項目了：最外那一層之外的不許找。
         let above = dir.parent().unwrap().join(format!("yumete-above-{}", std::process::id()));
-        std::fs::create_dir_all(above.join("bin")).unwrap();
-        assert_eq!(found_here("no-such-tool-here-9x", Some(&deep)), None, "爬不出 .git");
+        std::fs::create_dir_all(above.join(".venv/bin")).unwrap();
+        std::fs::write(above.join(".venv/bin/lonely-9x"), "#!/bin/sh\n").unwrap();
+        assert_eq!(found_here("lonely-9x", Some(&deep)), None, "爬不出最外那一層倉");
 
         // 找不到就回 `PATH` 上那一個：`sh` 哪臺機器都有。
         assert!(found_here("sh", Some(&deep)).is_some(), "退回 PATH");

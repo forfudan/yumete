@@ -18168,8 +18168,10 @@ Warning: **helix 的 `environment` 配置也救不了**：`which(cmd)` 在 `.env
 .pixi/envs/*/bin   .direnv/*/bin                （NESTED，中間隔一層環境名）
 ```
 
-Warning: **碰到 `.git` 就停**（含那一級）——不然一路爬到 `/` 會翻進別人的項目。都沒有纔看
-`PATH`。Warning: **`NESTED` 那一層要排序**：同一個 `.pixi/envs` 底下可能有幾個環境，不排的話
+Warning: **爬到最外層那個 `.git` 為止，不是碰到第一個就停。** 第一版停在第一個，當天就被
+真樹駁倒了：作者的布局是 `yuhao-ime/yumete/scripts/x.py`——`yumete` 自己是一個倉，而 pixi 的
+環境在**上一級**的 `yuhao-ime`，於是那一停正好把答案關在門外。嵌套的倉全穿過去，停在最外面
+那一層倉上：再往上就真是別人的項目了。都沒有纔看 `PATH`。Warning: **`NESTED` 那一層要排序**：同一個 `.pixi/envs` 底下可能有幾個環境，不排的話
 兩次啓動挑到不同的那一個。
 
 **項目裏的優先於 `PATH`**（作者定）：項目裏那一個跟這個項目的解釋器、依賴對得上，全局那一個
