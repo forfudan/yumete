@@ -876,6 +876,23 @@ impl Editor {
     ///
     /// 與 `gd` 同一個形狀，同一條理由：只在代碼檔上問，問完不等。鍵位是
     /// `空格 k`，helix 的 hover 也是這一個。
+    /// **那一格此刻擺着文檔還是診斷**——有就回它在哪一側（2026-09-29）。
+    ///
+    /// Warning: 判準是「**有沒有一塊地方**」，不是「我那一扇開着嗎」。這兩扇答的
+    /// 是同一個地方的兩件事、共用同一格，所以按 `空格 k` 的時候診斷那一扇就是
+    /// 文檔的地方——頂掉它，不要另浮一個。作者報的原話：「如果存在边栏，空格 k
+    /// 应该在邊欄显示而不是浮窗（暂时顶掉诊断）。」
+    fn the_slot_for_these_two(&self) -> Option<crate::sidebar::Side> {
+        self.showing(crate::sidebar::View::Docs)
+            .or_else(|| self.showing(crate::sidebar::View::Problems))
+    }
+
+    /// 把那一格換成 `view`——它本來擺着那兩扇裏的另一扇。鍵不交過去。
+    fn put_it_in_the_slot(&mut self, view: crate::sidebar::View) {
+        let side = self.the_slot_for_these_two().unwrap_or_else(|| self.side_for(view));
+        self.open_panel_without_the_keys(side, view);
+    }
+
     pub(super) fn ask_what_this_is(&mut self, afloat: bool) -> bool {
         // **散文那一份問的是百科，不是服務器**（2026-09-29 定，原話：「文本文件
         // 会说 space k / K 这不是程序文件所以不能显示文档。这是不好的，它以就可以
@@ -894,13 +911,12 @@ impl Editor {
         // 侧栏是打开的情况下，按 space k 就应该在侧栏中显示，而不是继续弹窗显
         // 示」）。兩個面在說同一件事，是這個編輯器一直在拆的東西。
         //
-        // Warning: `空格 K`（`afloat == false`）說的是**一定進邊欄**，所以它先把那一扇
-        // 開出來——鍵不交過去。
-        if !afloat && self.showing(crate::sidebar::View::Docs).is_none() {
-            let side = self.side_for(crate::sidebar::View::Docs);
-            self.open_panel_without_the_keys(side, crate::sidebar::View::Docs);
+        // `空格 K`（`afloat == false`）說的是**一定進邊欄**：沒有那一格就開一格，
+        // 有了就換成文檔。`空格 k` 只在**一格都沒有**的時候纔浮。
+        let afloat = afloat && self.the_slot_for_these_two().is_none();
+        if !afloat {
+            self.put_it_in_the_slot(crate::sidebar::View::Docs);
         }
-        let afloat = afloat && self.showing(crate::sidebar::View::Docs).is_none();
         // 再按一次同一個鍵就收起來（同 `空格 d`）。
         if self.hover_afloat == afloat && self.hover_here().is_some() {
             self.hovered = None;
@@ -923,9 +939,10 @@ impl Editor {
     /// Warning: **診斷不必問。** 它是服務器自己推過來的，早就在內存裏，所以這一
     /// 支不發任何請求，也沒有那道三百毫秒的閘。
     pub(super) fn show_the_problem_here(&mut self, afloat: bool) {
-        if !afloat && self.showing(crate::sidebar::View::Problems).is_none() {
-            let side = self.side_for(crate::sidebar::View::Problems);
-            self.open_panel_without_the_keys(side, crate::sidebar::View::Problems);
+        // 同 `空格 k`，反過來：有那一格就換成診斷，頂掉文檔。
+        let afloat = afloat && self.the_slot_for_these_two().is_none();
+        if !afloat {
+            self.put_it_in_the_slot(crate::sidebar::View::Problems);
         }
         if self.problem_here().is_none() {
             self.status = say!("problem.none-here");
