@@ -4842,13 +4842,6 @@ zhs = "上一个"
 en = "previous…"
 
 [[message]]
-# 提示：在五種信息之間翻頁
-key = "hint.info.page"
-zht = "換一種"
-zhs = "换一种"
-en = "other kind"
-
-[[message]]
 # g 組：併上一行
 key = "hint.join-with-line-above"
 zht = "併到上一行去"
@@ -5864,34 +5857,6 @@ key = "info.live-is"
 zht = "即時顯示：{0}"
 zhs = "即时显示：{0}"
 en = "following the cursor: {0}"
-
-[[message]]
-# 五種一種都沒有東西可看
-key = "info.nothing-here"
-zht = "這裏沒有可看的信息（翻正文用 C-f／C-b）"
-zhs = "这里没有可看的信息（翻正文用 C-f／C-b）"
-en = "nothing to show here — C-f / C-b page the text"
-
-[[message]]
-# 翻到了哪一種信息（PageUp／PageDown）
-key = "info.now-showing"
-zht = "信息：{0}"
-zhs = "信息：{0}"
-en = "info: {0}"
-
-[[message]]
-# 翻頁翻不動：五種裏只有眼前這一種有東西（#426）
-key = "info.only-one"
-zht = "眼下只有這一種信息（翻正文用 C-f／C-b）"
-zhs = "眼下只有这一种信息（翻正文用 C-f／C-b）"
-en = "this is the only kind here — C-f / C-b page the text"
-
-[[message]]
-# 信息那一格空着的時候，框裏那一句（#426）
-key = "info.panel-empty"
-zht = "光標走過去就有了"
-zhs = "光标走过去就有了"
-en = "move the cursor onto something"
 
 [[message]]
 # gw：這一屏上沒有可以跳的地方

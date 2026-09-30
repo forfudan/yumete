@@ -7186,12 +7186,8 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
     let bottom = area.y + area.height;
     let width = to.saturating_sub(from_x).max(1) as usize;
     // Warning: **走不到這裏了**（#426）：`draw_wiki` 只在 `info_now()` 答「百科」
-    // 的時候纔叫得到，而那一句本身就要求 `wiki_here()` 有東西。留着當個兜底，
-    // 話跟空着的信息那一格說同一句。
-    let Some(view) = editor.wiki_here() else {
-        put_text(buf, from_x, area.y, to, &say!("info.panel-empty"), quiet);
-        return;
-    };
+    // 的時候纔叫得到，而那一句本身就要求 `wiki_here()` 有東西。留着當個兜底。
+    let Some(view) = editor.wiki_here() else { return };
     // Warning: **`y` 是**這一條**裏的第幾行，不是屏幕的第幾行**（2026-09-22 加滾動時
     // 改的）。屏幕那一行是 `area.y + y - scroll`——`scroll` 之前的照走不畫，這樣
     // 折行、表格、分隔綫的計算一個字都不用動，而 `j` 真的翻得動了。
@@ -7967,14 +7963,6 @@ fn draw_dictionary(
     // Warning: **空着也要說一句**（2026-09-30 審出來的）。一扇整片空白的框說不出
     // 自己是幹什麽的，讀者不會知道「光標走過去它就有了」——而這一格是常駐的，
     // 空着的時間比有東西的時間長。同 2026-09-23 給百科那一頁補的那一句。
-    if rows.is_empty() && visible > 0 {
-        let quiet = ground.fg(ink.quiet());
-        // Warning: **裁到頭要有省略號**（這一欄可以窄到 2/10）。`put_text` 到
-        // `to` 就停，而「斷了」和「本來就這麽長」是兩件事。
-        let room = to.saturating_sub(from + 1) as usize;
-        let said = elide(&say!("info.panel-empty"), room);
-        put_text(buf, from + 1, area.y + 1, to, &said, quiet);
-    }
     let first = editor
         .panel_scroll()
         .min(rows.len().saturating_sub(visible.max(1)));

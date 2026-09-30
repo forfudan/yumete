@@ -3096,11 +3096,8 @@ impl Editor {
             Key::Char('H') => self.move_cell_page(count, false, 1.0),
             Key::Ctrl('d') => self.move_cell_page(count, true, 0.5),
             Key::Ctrl('u') => self.move_cell_page(count, false, 0.5),
-            // Warning: **`PageUp`／`PageDown` 不在這裏了**（#426，2026-09-30）：
-            // 編輯區裏那兩個鍵一律是「換一種信息」，格子也算。翻格照舊 `C-f`／
-            // `C-b`，一個都沒少。
-            Key::Ctrl('f') => self.move_cell_page(count, true, 1.0),
-            Key::Ctrl('b') => self.move_cell_page(count, false, 1.0),
+            Key::Ctrl('f') | Key::PageDown => self.move_cell_page(count, true, 1.0),
+            Key::Ctrl('b') | Key::PageUp => self.move_cell_page(count, false, 1.0),
 
             // The three ways into a cell. `i` is at its first character, `a`
             // after its last, and `c` replaces the whole thing — which for a
