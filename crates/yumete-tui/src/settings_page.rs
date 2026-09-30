@@ -281,7 +281,9 @@ fn drawn(setting: &Setting, value: &str) -> String {
                 .unwrap_or_else(|| word.to_string());
             format!("[{label}]")
         }
-        Kind::Count { .. } | Kind::Text => value.trim_matches('"').to_string(),
+        // Warning: **`trim_matches` 不是 toml 轉義的反函數**（2026-10-01，見
+        // `yumete_config::panel::unwritten`）——`"a\"b"` 畫出來是 `a\"b`。
+        Kind::Count { .. } | Kind::Text => yumete_config::panel::unwritten(value),
     }
 }
 

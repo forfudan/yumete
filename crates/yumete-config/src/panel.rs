@@ -191,12 +191,58 @@ fn written(change: &Change) -> String {
         Change::Count(n) => n.to_string(),
         // Warning: **要轉義。** 對面 [`declared_in`] 讀的是 `toml_edit` 吐出來的字串，
         // 那一頭轉義過；這一頭不轉，值裏帶一個 `"` 或 `\` 兩邊就永遠對不上，
-        // `settle` 判不出「改回原值」，那一筆從此掛着「改了還沒存」。今天沒有
-        // 一項是 `Kind::Text`，所以是死代碼——Text 那一行落地那天會咬。
+        // `settle` 判不出「改回原值」，那一筆從此掛着「改了還沒存」。
         Change::Text(s) => toml_edit::Value::from(s.as_str()).to_string().trim().to_string(),
         // 撤掉那一項的人看見的不是一個值，[`Sheet::says`] 先接住了。
         Change::Drop => String::new(),
     }
+}
+
+/// 兩個寫法說的是不是同一個值。
+///
+/// Warning: **不能逐字節比寫法**（2026-10-01）。同一個值 toml 有好幾種寫法，而兩
+/// 頭挑的不一樣：`toml_edit::Value::from("a\"b\\c")` 挑的是**字面串**
+/// `'a"b\c'`，而檔裏人手寫的多半是**基本串** `"a\"b\\c"`。`settle` 從前拿
+/// [`written`] 的結果去比 `declared_in` 的原樣寫法，於是一旦值裏有 `"` 或
+/// `\`，「改回原值」就永遠判不出來——那一行掛着「改了還沒存」，每存一次還
+/// 往檔裏重寫一遍。
+///
+/// 寫法不同不算不同；解析不出來的（面板不認得的寫法）退回逐字節比。
+fn same_value(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    match (a.parse::<toml_edit::Value>(), b.parse::<toml_edit::Value>()) {
+        (Ok(x), Ok(y)) => match (x.as_str(), y.as_str()) {
+            (Some(x), Some(y)) => x == y,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// 檔裏那個寫法還原成一段字——[`written`] 的反函數。
+///
+/// Warning: **`trim_matches('"')` 不是它的反函數**（2026-10-01）。這一頭一直在用
+/// 那一句，而 [`declared_in`] 交出來的是 `toml_edit` 的**原樣寫法**（「面板要照
+/// 原樣顯示」），於是：
+///
+/// | 檔裏 | 從前畫成／編輯成 | 存回去變成 |
+/// | --- | --- | --- |
+/// | `"a\"b"` | `a\"b` | `"a\\\"b"`，反斜線每存一次多一根 |
+/// | `"a\\b"` | `a\\b` | `"a\\\\b"`，同上 |
+/// | `"一\n二"` | 字面的兩個字符 | `"一\\n二"` |
+/// | `'a"b'`（字面串） | `'a"b'`，連引號一起 | `"'a\"b'"` |
+///
+/// 而 `settle` 拿 `written(改)` 去比 `declared_in` 那一份，一旦值裏有 `"` 或
+/// `\` 就永遠比不上：那一行從此掛着「改了還沒存」，每存一次再多一根反斜線。
+/// 兩頭都走 `toml_edit` 就對得上了——`unwritten(written(s)) == s`。
+pub fn unwritten(repr: &str) -> String {
+    repr.parse::<toml_edit::Value>()
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        // 不是一段字（數字、真假），或者檔裏那一行本來就寫壞了：照原樣。
+        .unwrap_or_else(|| repr.trim_matches('"').to_string())
 }
 
 /// **一項此刻長什麽樣** —— 面板一行畫的就是這個。
@@ -356,7 +402,7 @@ impl Panel {
     /// 「把一項設成和出廠一樣」——那一行寫進去純屬噪音。2026-09-24 拍圖看出來的。
     fn settle(&mut self, setting: &Setting, change: Change) {
         let path = setting.path();
-        match written(&change) == self.without_mine(setting) {
+        match same_value(&written(&change), &self.without_mine(setting)) {
             true => {
                 self.sheet_mut().edits.remove(&path);
             }
@@ -438,13 +484,14 @@ impl Panel {
                 Change::Count(next as i64)
             }
             Kind::Pick(choices) => {
-                let word = now.trim_matches('"');
+                let word = unwritten(now.as_str());
+                let word = word.as_str();
                 let at = choices.iter().position(|c| c.word == word).unwrap_or(0);
                 let next = choices[(at + 1) % choices.len()].word;
                 Change::Text(next.to_string())
             }
             Kind::Text => {
-                self.typing = Some(now.trim_matches('"').to_string());
+                self.typing = Some(unwritten(now.as_str()));
                 return;
             }
         };
@@ -457,7 +504,7 @@ impl Panel {
         if matches!(setting.kind, Kind::Tick | Kind::Pick(_)) {
             return;
         }
-        self.typing = Some(self.mine_now(setting).trim_matches('"').to_string());
+        self.typing = Some(unwritten(&self.mine_now(setting)));
     }
 
     /// 打完了 —— `Enter`。打的不是個數就原樣不動。
@@ -731,6 +778,27 @@ mod tests {
         p.drop_here();
         assert!(!p.dirty(), "反悔之後乾淨了：{:?}", p.global.edits);
         assert_eq!(p.shown(find("editor.measure")).value, "0");
+    }
+
+    /// **檔裏帶引號或反斜線的一段字，來回一趟要一個字不差**（2026-10-01）。
+    ///
+    /// Warning: 從前這一頭用 `trim_matches('"')` 還原，而 [`declared_in`] 交出來的是
+    /// `toml_edit` 的原樣寫法（轉義過的）。於是 `"a\"b"` 進面板成了 `a\"b`，寫
+    /// 回去成了 `"a\\\"b"`——反斜線每存一次多一根，而 `settle` 從此判不出
+    /// 「改回原值」，那一行永遠掛着「改了還沒存」。
+    #[test]
+    fn a_quote_in_a_setting_survives_the_round_trip() {
+        // 檔裏是 toml 的寫法：值本身是 `a"b\c`。
+        let mut p = panel("[editor]\nindent_symbol = \"a\\\"b\\\\c\"\n", "");
+        p.pane = Pane::Settings;
+        // `indent_symbol` 在「標記」那一組，不是默認那一組。
+        p.group = GROUPS.iter().position(|n| n.group == crate::settings_ui::Group::Marks).unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "indent_symbol").unwrap();
+        // 進去打字，一個字不改就出來——這不是一次改動。
+        p.begin_typing();
+        assert_eq!(p.typing.as_deref(), Some("a\"b\\c"), "還原成值本身，不是它的寫法");
+        p.finish_typing();
+        assert!(!p.dirty(), "一個字沒改，不算改過：{:?}", p.global.edits);
     }
 
     /// **轉一圈回到原來那個值，就不算改過。**
