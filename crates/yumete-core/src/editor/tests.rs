@@ -11216,11 +11216,17 @@ fn a_book_can_teach_the_editor_its_own_names() {
     assert!(before.len() >= 2, "two characters, two words: {before:?}");
 
     std::fs::write(dir.join(".yumete").join("words.txt"), "# 人物\n阿寧\n").unwrap();
-    ed.reload_project_words();
-    assert_eq!(ed.project_word_count(), 1, "{}", ed.status());
+    // Warning: **讀一遍一聲不吭**（2026-09-30 作者報的：「我打开任何非程序文檔
+    // 或者新建一个 buffer，都会有这个消息在命令栏」）。七個呼叫方裏六個是編輯器
+    // 自己讀的，人什麽都沒做。要報結果有前端那一句 `word.lists-reread`，它兩半
+    // 一起說（`words_in_force`）。
+    assert_eq!(ed.reload_project_words(), Some(dir.join(".yumete").join("words.txt")));
+    assert!(ed.status().is_empty(), "讀一遍不出聲：{}", ed.status());
+    assert_eq!(ed.project_word_count(), 1);
     let after = ed.segment_line(0);
     assert_eq!(after[0], (0, 2), "one word now: {after:?}");
-    assert!(ed.status().contains("words.txt"), "{}", ed.status());
+    // 那一句說得出兩半：底下那本詞典，加上這本書自己的。
+    assert!(ed.words_in_force().contains('1'), "{}", ed.words_in_force());
     std::fs::remove_dir_all(&dir).ok();
 }
 
