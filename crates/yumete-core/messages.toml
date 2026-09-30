@@ -5871,6 +5871,12 @@ zhs = "信息：{0}"
 en = "Info: {0}"
 
 [[message]]
+# 翻頁翻不動：五種裏只有眼前這一種有東西（#426）
+key = "info.only-one"
+zht = "眼下只有這一種信息"
+zhs = "眼下只有这一种信息"
+en = "this is the only kind there is here"
+[[message]]
 # gw：這一屏上沒有可以跳的地方
 key = "jump.nowhere"
 zht = "這一屏上沒有可以跳的地方"

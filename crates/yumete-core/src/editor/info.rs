@@ -172,22 +172,34 @@ impl Editor {
     /// 一種都沒有就什麽都不做，回 `false`——那一鍵讓給正文。
     pub(super) fn page_the_info(&mut self, forward: bool) -> bool {
         let all = Info::ALL;
+        let last = all.len() - 1;
         let here = self.info_now();
-        // 從此刻這一種的下一格起走一圈；沒擺着東西就從頭找。
-        let from = here.and_then(|one| all.iter().position(|&x| x == one)).map_or(0, |at| {
-            match forward {
-                true => at + 1,
-                false => at + all.len() - 1,
-            }
-        });
+        // 從此刻這一種的**下一格**起走一圈。一種都沒擺着的時候從兩頭起：往下
+        // 從第一種，往回從最後一種——那纔是「下一格」在空着時的意思。
+        let from = match here.and_then(|one| all.iter().position(|&x| x == one)) {
+            Some(at) if forward => (at + 1) % all.len(),
+            Some(at) => (at + last) % all.len(),
+            None if forward => 0,
+            None => last,
+        };
+        // `from + all.len() - n` 永遠非負（`from < len`、`n < len`），所以往回
+        // 那一路不會下溢。
         let step = |n: usize| match forward {
             true => (from + n) % all.len(),
-            false => (from + all.len() * all.len() - n) % all.len(),
+            false => (from + all.len() - n) % all.len(),
         };
-        let Some(want) = (0..all.len()).map(|n| all[step(n)]).find(|&one| {
-            Some(one) != here && self.info_has_body(one)
-        }) else {
-            return false;
+        let found = (0..all.len())
+            .map(|n| all[step(n)])
+            .find(|&one| Some(one) != here && self.info_has_body(one));
+        let Some(want) = found else {
+            // Warning: **「只有這一種」和「一種都沒有」要分開說。** 兩個都回
+            // `false` 的話，明明擺着文檔的時候按一下會被告知「這裏沒有可看的
+            // 信息」——那是一句當場看得出是假的話。
+            self.status = match here.is_some() {
+                true => say!("info.only-one"),
+                false => say!("info.nothing-here"),
+            };
+            return true;
         };
         self.info_asked = Some((want, self.sel.head()));
         self.info_scroll = 0;
