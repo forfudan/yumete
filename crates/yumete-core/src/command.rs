@@ -3068,8 +3068,10 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<欄>…｜off")],
         build: Some(|p| {
             Ok(Command::Rules(match p.arg(0) {
-                // 光禿禿的 `:rules` ＝ 第 80 欄，作者說的「比如默认 80」。
-                None => vec![80],
+                // **光禿禿的 `:rules` ＝ 80 和 100**（2026-09-30 作者定）。原
+                // 話：「usually for python the limit of the docstring and the
+                // code」——文檔字串一道，代碼一道，本來就是兩條。
+                None => vec![80, 100],
                 Some("off" | "none" | "0") => Vec::new(),
                 // Warning: `Param::Free` 交回來的是**剩下的一整串**，不是一個
                 // 一個詞——`:rules 80 100 120` 到這裏是 `"80 100 120"`。
