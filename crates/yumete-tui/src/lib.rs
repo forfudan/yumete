@@ -5753,7 +5753,9 @@ fn draw_note(
             ),
             // 讀不完就去邊欄——五種裏它從前是唯一沒有這一行的。
             tag: None,
-            marked: false,
+            // **詞條是 Markdown**（2026-10-01）。`.yumete/wiki.md` 是一份
+            // Markdown 檔，而這裏從前寫死 `false`，於是 `## 別名` 原樣畫出來。
+            marked: true,
             // The one body that turns with the page.
             vertical_text: vertical,
         });
@@ -5780,7 +5782,8 @@ fn draw_note(
             _ => None,
         },
         vertical_text: false,
-        marked: false,
+        // 一條腳註／批注是稿子裏的一段話，和它周圍的正文同一種標記。
+        marked: true,
     })
 }
 
@@ -5912,6 +5915,54 @@ fn drawable(text: &str) -> std::borrow::Cow<'_, str> {
 ///
 /// Returns the first cell it did **not** write, so a caller can put something
 /// after it — a note beside a row (#291) — without measuring the text twice.
+/// [`put_text`], with the line's **Markdown set in its own inks**.
+///
+/// One copy of a loop that had been written out three times — the float
+/// (`panel.rs`), the 文檔 rows in the sidebar, and 百科 — and 2026-09-28 had to
+/// be fixed in two of them separately.
+///
+/// Warning: **逐格算樣式，不是順着往下切。** `spans` 交出來的是**嵌套**的：一行
+/// 標題先壓一條蓋住整行的 `Heading`，行內的構造再壓上去。順着切的話 `was` 已經
+/// 走到行尾而下一段從行中開始，`chars[尾..中]` 是反向區間，Rust 當場 panic。逐格
+/// 算順帶把「內層蓋外層」也畫對了——`a.patch(b)` 是 b 蓋 a，所以底色與這一行的
+/// 基本墨色在前，標記的墨色蓋在上面。
+pub(crate) fn put_marked_text(
+    buf: &mut ratatui::buffer::Buffer,
+    x: u16,
+    y: u16,
+    limit: u16,
+    text: &str,
+    base: Style,
+    ink: crate::theme::Palette,
+) -> u16 {
+    let chars: Vec<char> = text.chars().collect();
+    let mut styles = vec![base; chars.len()];
+    for span in yumete_core::markdown::spans(text) {
+        let over = markup_style(span.kind, ink);
+        let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
+        for one in styles.iter_mut().take(hi).skip(lo) {
+            *one = one.patch(over);
+        }
+    }
+    // 相鄰同樣式的併成一段再畫，省掉逐格一次 `put_text`。
+    let mut at = x;
+    let mut was = 0usize;
+    while was < chars.len() {
+        let one = styles[was];
+        let mut end = was + 1;
+        while end < chars.len() && styles[end] == one {
+            end += 1;
+        }
+        let run: String = chars[was..end].iter().collect();
+        at = put_text(buf, at, y, limit, &run, one);
+        was = end;
+    }
+    if chars.is_empty() {
+        at = put_text(buf, at, y, limit, "", base);
+    }
+    at
+}
+
 pub(crate) fn put_text(
     buf: &mut ratatui::buffer::Buffer,
     x: u16,
@@ -7277,7 +7328,16 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
     }
     editor.set_wiki_scroll(scroll);
     for (y, row, style) in rows {
-        put_text(buf, from_x, area.y + (y - scroll) as u16, to, &row, style);
+        let y = area.y + (y - scroll) as u16;
+        // **詞條是 Markdown，照 Markdown 畫**（2026-10-01）。從前這裏和浮窗那一
+        // 份一樣畫的是生標記，於是 `## 別名` 四個字原樣躺在邊欄裏。
+        //
+        // Warning: **只有正文那一種行**。`walk_wiki` 也交標題行與分隔綫，那是面板
+        // 自己的家具，各有各的墨色（同 `panel.rs` 裏那一條規矩）。
+        match style == text {
+            true => put_marked_text(buf, from_x, y, to, &row, style, ink),
+            false => put_text(buf, from_x, y, to, &row, style),
+        };
     }
     // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 作者定）。
     //
@@ -8050,36 +8110,11 @@ fn draw_dictionary(
         let y = area.y + 1 + slot as u16;
         // Warning: **服務器送的是 Markdown，邊欄裏也照 Markdown 畫**——和浮窗裏那一份
         // 一個字不差（2026-09-22）。走的是正文用的那一支墨色表。
-        if !docs {
-            put_text(buf, from + 1, y, to, &row.name, style);
-            continue;
-        }
-        // Warning: **逐格算樣式，不是順着往下切**（2026-09-28 修，同 `panel.rs` 那一處）。
-        // `spans` 交出來的是**嵌套**的：一行標題會先壓一條蓋住整行的 `Heading`，行內
-        // 的構造再壓上去。順着切的話 `was` 已經走到行尾而下一段從行中開始，
-        // `chars[尾..中]` 是反向區間，Rust 當場 panic——搜索結果裏出現一行帶行內標記
-        // 的標題就會中。逐格算順帶把內層蓋外層也畫對了。
-        let chars: Vec<char> = row.name.chars().collect();
-        let mut styles = vec![style; chars.len()];
-        for span in yumete_core::markdown::spans(&row.name) {
-            let over = markup_style(span.kind, ink);
-            let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
-            for one in styles.iter_mut().take(hi).skip(lo) {
-                *one = one.patch(over);
-            }
-        }
-        let mut at = from + 1;
-        let mut was = 0usize;
-        while was < chars.len() {
-            let one = styles[was];
-            let mut end = was + 1;
-            while end < chars.len() && styles[end] == one {
-                end += 1;
-            }
-            let run: String = chars[was..end].iter().collect();
-            at = put_text(buf, at, y, to, &run, one);
-            was = end;
-        }
+        match docs {
+            true => put_marked_text(buf, from + 1, y, to, &row.name, style, ink),
+            // 字典那一份不是 Markdown——它是拆分與編碼，一個 `*` 就是一個 `*`。
+            false => put_text(buf, from + 1, y, to, &row.name, style),
+        };
     }
 }
 

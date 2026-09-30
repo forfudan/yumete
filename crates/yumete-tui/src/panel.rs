@@ -763,6 +763,12 @@ pub fn draw(
             // 一行。「下面還有」這件事現在由底邊那個數字說，而那個數字還順帶說
             // 了「還有多少」。
             read = Some((from + kept.len(), count));
+            // Warning: **`gold` 與 `quiet` 數的是行的序號，而這裏剛剛把前面幾行
+            // 切掉了**（2026-10-01 上墨之後才看見）。不跟着挪的話，翻過一頁之
+            // 後第一行正文被當成 `章節` 行畫成灰的，而且**不上標記**——一條
+            // 詞條翻到第二頁，`` `代碼` `` 和 `**粗**` 就一個顏色都沒有了。
+            gold = gold.saturating_sub(from);
+            quiet = quiet.start.saturating_sub(from)..quiet.end.saturating_sub(from);
             (kept.len(), kept)
         }
         _ => (count, lines),
@@ -862,43 +868,7 @@ pub fn draw(
                     put_text(buf, x, y, limit, line, plain);
                     continue;
                 }
-                // Warning: **逐格算樣式，不是順着往下切**（2026-09-28 修）。從前這裏是
-                // 「前一段、這一段、下一段」地往右走，記着一個 `from`；那假定了
-                // `spans` 交出來的東西**不重疊**，而它會重疊：`# **甲**` 交的是
-                // `Heading 1..7` 之後跟着 `Marker 2..4`，於是 `from` 已經是 7 而下一
-                // 段從 2 開始，`chars[7..2]` 當場 panic。一行帶行內標記的標題出現在
-                // 任何一個浮窗的正文裏就會中。
-                //
-                // 逐格算順帶把畫面也修對了：內層的標記蓋在外層上面，和正文那一端
-                // （`lib.rs` 的 `styles` 陣列）同一個辦法、同一個結果。
-                let chars: Vec<char> = line.chars().collect();
-                let mut styles = vec![plain; chars.len()];
-                for span in yumete_core::markdown::spans(line) {
-                    // Warning: **`a.patch(b)` 是 b 蓋 a。** 底色和行的基本墨色在
-                    // 前，標記的墨色蓋在上面——反過來寫，浮窗裏的 `**` 和
-                    // `` ` `` 就一個顏色都不變（2026-09-22 出圖纔看見）。
-                    let over = crate::markup_style(span.kind, ink);
-                    let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
-                    for style in styles.iter_mut().take(hi).skip(lo) {
-                        *style = style.patch(over);
-                    }
-                }
-                // 相鄰同樣式的併成一段再畫，省掉逐格一次 `put_text`。
-                let mut at = x;
-                let mut from = 0usize;
-                while from < chars.len() {
-                    let style = styles[from];
-                    let mut to = from + 1;
-                    while to < chars.len() && styles[to] == style {
-                        to += 1;
-                    }
-                    let run: String = chars[from..to].iter().collect();
-                    at = put_text(buf, at, y, limit, &run, style);
-                    from = to;
-                }
-                if chars.is_empty() {
-                    put_text(buf, at, y, limit, "", plain);
-                }
+                crate::put_marked_text(buf, x, y, limit, line, plain, ink);
             }
         }
         Body::Keys(keys) => {
