@@ -73,9 +73,7 @@ impl Editor {
         // 都沒有的時候說一句，不偷偷去翻正文。
         if self.mode == Mode::Normal && self.pending == Pending::None {
             if matches!(key, Key::PageUp | Key::PageDown) {
-                if !self.page_the_info(key == Key::PageDown) {
-                    self.status = say!("info.nothing-here");
-                }
+                self.page_the_info(key == Key::PageDown);
                 return KeyOutcome::Continue;
             }
             // **浮着的那一則收 `C-u`／`C-d`**（2026-09-29 定，同 helix 的

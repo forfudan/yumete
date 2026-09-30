@@ -18114,14 +18114,45 @@ fn the_paging_keys_walk_the_five_kinds_from_the_text() {
     assert_eq!(ed.info_now(), Some(Info::Docs), "翻回文檔");
     assert_eq!(ed.cursor_line(), was);
 
-    // Warning: **一種都沒有的時候說一句，不偷偷去翻正文**——一個鍵有時翻這個
-    // 有時翻那個是最難記的那一種。
+    // Warning: **「只有這一種」和「一種都沒有」要分開說。** 兩句話都不許偷偷
+    // 去翻正文——一個鍵有時翻這個有時翻那個是最難記的那一種。
     let mut bare = typed("那年冬天。\n");
     press(&mut bare, "gg");
     let line = bare.cursor_line();
     bare.on_key(Key::PageDown);
-    assert_eq!(bare.status(), say!("info.nothing-here"));
+    assert_eq!(bare.status(), say!("info.nothing-here"), "一種都沒有");
     assert_eq!(bare.cursor_line(), line, "沒去翻正文");
+
+    // 只擺着一種：說「只有這一種」，不說「什麽都沒有」——後者當場看得出是假的。
+    let mut one = Editor::new();
+    one.open_file(&file).unwrap();
+    press(&mut one, "gg");
+    press(&mut one, " k");
+    one.show_hover("fn one()".into());
+    assert_eq!(one.info_now(), Some(Info::Docs));
+    let line = one.cursor_line();
+    one.on_key(Key::PageDown);
+    assert_eq!(one.status(), say!("info.only-one"));
+    assert_eq!(one.info_now(), Some(Info::Docs), "還擺着它");
+    assert_eq!(one.cursor_line(), line, "也沒去翻正文");
+
+    // 往回翻和往下翻走的是同一個環，反着走。
+    let mut back = Editor::new();
+    back.open_file(&file).unwrap();
+    press(&mut back, "gg");
+    back.set_problems(file.clone(), vec![crate::problem::Problem {
+        line: 0,
+        utf16_column: 3,
+        severity: crate::problem::Severity::Warn,
+        message: "說不通".into(),
+        source: None,
+    }]);
+    press(&mut back, " k");
+    back.show_hover("fn one()".into());
+    back.on_key(Key::PageUp);
+    assert_eq!(back.info_now(), Some(Info::Problems), "往回也走得到");
+    back.on_key(Key::PageUp);
+    assert_eq!(back.info_now(), Some(Info::Docs), "再往回轉回來");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
