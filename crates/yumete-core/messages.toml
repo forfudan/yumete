@@ -5418,9 +5418,9 @@ en = "open it in the sidebar"
 [[message]]
 # t 選單：t q 這一行（只在全屏表格模式下有用）
 key = "hint.table.leave-the-window"
-zht = "交回窗口，回到剛纔那個表格模式"
-zhs = "交回窗口，回到刚才那个表格模式"
-en = "give the window back, to the surface it took"
+zht = "退出全屏視圖"
+zhs = "退出全屏视图"
+en = "leave the full-screen view"
 
 [[message]]
 # 表格提示：重排對齊
