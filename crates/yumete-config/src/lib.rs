@@ -1827,7 +1827,7 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
 /// default there rather than being silently rewritten here.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SidebarConfig {
-    /// Panel name (`files`, `outline`, `dictionary`, …) → `"left"`/`"right"`.
+    /// Panel name (`files` `buffers` `outline` `search` `info`) → `"left"`/`"right"`.
     pub side: HashMap<String, String>,
 }
 
