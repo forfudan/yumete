@@ -47,6 +47,28 @@ pub(super) struct Fence {
 
 type Lines = Rc<Vec<Vec<Span>>>;
 
+/// **一份整個是代碼的檔，解析出來的那棵樹**（#423，2026-09-30）。
+///
+/// Warning: **樹要留着，這是整條的前提。** 從前 `code::highlight` 每叫一次解析
+/// 一次，於是滾一屏也付一次全份解析——量過 20,368 行的 `lib.rs` 是 50 毫秒。
+/// 留着它，滾屏只剩一次窗口查詢（0.06 毫秒），改一個字只剩一次增量解析
+/// （0.7 毫秒）。
+struct Held {
+    buffer: u64,
+    revision: u64,
+    language: Language,
+    /// 解析用的那一份正文（`lines` 接起來，每行帶一個換行）。
+    source: String,
+    lines: Vec<String>,
+    tree: tree_sitter::Tree,
+}
+
+/// 一次畫多少行。
+///
+/// 一屏撐死幾十行，所以一塊蓋得住一屏；而塊越大，跨過邊界重查的次數越少。量過
+/// 五十行一窗是 0.06 毫秒，一百二十八行也還在零點幾毫秒。
+const CHUNK: usize = 128;
+
 #[derive(Default)]
 pub(super) struct CodeCache {
     /// Buffer, revision and syntax the fences were read for.
@@ -58,6 +80,10 @@ pub(super) struct CodeCache {
     by_text: HashMap<u64, Lines>,
     /// How many lines of spans `by_text` is holding.
     held: usize,
+    /// 整份代碼檔那棵樹，和它是哪一版的（#423）。
+    whole: Option<Held>,
+    /// 這一版已經畫過的那幾塊，按塊號（#423）。換一版就清。
+    by_chunk: HashMap<usize, Lines>,
 }
 
 impl Editor {
@@ -95,16 +121,82 @@ impl Editor {
     }
 
     /// The coloured runs of `line` in a file that is code from top to bottom.
+    ///
+    /// Warning: **這一支走的是另一條路**（#423，2026-09-30）。圍欄裏那幾行是幾
+    /// 十行，整份解析一次就完了；一份兩萬行的源碼不是——所以這一條**留着樹**、
+    /// **只查看得見的那一塊**、**改一個字走增量**。三件湊起來把一次按鍵從 75 毫
+    /// 秒壓到 0.8 毫秒，那個五千行的閘也就不必再有了。
     pub(super) fn code_file_line(&self, line: usize, language: Language) -> Vec<Span> {
         if !self.code_colours {
             return Vec::new();
         }
-        // Read for the key's sake: a new revision clears the per-revision
-        // answers, and the whole file is one of them.
-        self.fences();
-        let lines = self.current_buffer().rope().len_lines();
-        let body = self.parsed(usize::MAX, 0..lines, language);
-        body.get(line).cloned().unwrap_or_default()
+        let chunk = line / CHUNK;
+        if let Some(found) = self.code_cache.borrow().by_chunk.get(&chunk) {
+            return found.get(line - chunk * CHUNK).cloned().unwrap_or_default();
+        }
+        self.hold_the_tree(language);
+        let mut cache = self.code_cache.borrow_mut();
+        let Some(held) = cache.whole.as_ref().filter(|h| h.language == language) else {
+            return Vec::new();
+        };
+        let rows = chunk * CHUNK..(chunk + 1) * CHUNK;
+        let painted: Lines = Rc::new(crate::code::paint(
+            language,
+            &held.source,
+            &held.tree,
+            &held.lines,
+            rows,
+        ));
+        cache.by_chunk.insert(chunk, painted.clone());
+        painted.get(line - chunk * CHUNK).cloned().unwrap_or_default()
+    }
+
+    /// **把這一版的樹備好**——已經是這一版就什麽都不做。
+    ///
+    /// Warning: **改過就走增量。** 上一版的正文還在手上，掐頭去尾就看得出改了
+    /// 哪一段（`code::what_changed`），`Tree::edit` 吃下去再解析一遍是 0.7 毫
+    /// 秒；從頭解析要 50 毫秒，而那是**每按一個鍵**付一次。
+    fn hold_the_tree(&self, language: Language) {
+        let buffer = self.current_buffer();
+        let (id, revision) = (buffer.id(), buffer.revision());
+        {
+            let cache = self.code_cache.borrow();
+            if cache.whole.as_ref().is_some_and(|h| {
+                h.buffer == id && h.revision == revision && h.language == language
+            }) {
+                return;
+            }
+        }
+        let rope = buffer.rope();
+        let lines: Vec<String> = (0..rope.len_lines())
+            .map(|l| {
+                let mut text = rope.line(l).to_string();
+                while text.ends_with('\n') || text.ends_with('\r') {
+                    text.pop();
+                }
+                text
+            })
+            .collect();
+        let source = crate::code::joined(&lines);
+        let mut cache = self.code_cache.borrow_mut();
+        // 同一個檔、同一種語言，只是版本新了：拿上一棵樹走增量。
+        let was = cache.whole.take().filter(|h| h.buffer == id && h.language == language);
+        let tree = match was {
+            Some(held) => match crate::code::what_changed(&held.source, &source) {
+                Some(edit) => {
+                    let mut edited = held.tree;
+                    edited.edit(&edit);
+                    crate::code::parse(language, &source, Some(&edited))
+                }
+                // 一個字都沒改（換了 revision 卻同一份正文——撤銷回原處就是）。
+                None => Some(held.tree),
+            },
+            None => crate::code::parse(language, &source, None),
+        };
+        let Some(tree) = tree else { return };
+        // 換了一版，畫過的那幾塊就不算數了。
+        cache.by_chunk.clear();
+        cache.whole = Some(Held { buffer: id, revision, language, source, lines, tree });
     }
 
     /// **How long the code under the cursor is, when that is why it has no
@@ -122,10 +214,11 @@ impl Editor {
         let line = self.cursor_line();
         let rope = self.current_buffer().rope();
         let long = |n: usize| (n > LONGEST).then_some((n, LONGEST));
-        // A file that is code from top to bottom is one body, with no fence
-        // lines around it.
+        // Warning: **整份是代碼的檔沒有這個閘了**（#423，2026-09-30）：它走留樹
+        // ＋窗口查詢＋增量解析那一條，多長都染得起。閘只剩給稿子裏貼的那一段
+        // ——那一種是整份解析的，而一份貼進來的數據檔沒人靠顏色讀。
         if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
-            return long(rope.len_lines());
+            return None;
         }
         let fences = self.fences();
         let at = fences.partition_point(|f| f.open < line);

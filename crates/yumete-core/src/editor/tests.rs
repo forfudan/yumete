@@ -14827,25 +14827,49 @@ fn a_fence_is_coloured_by_its_own_grammar_and_nothing_else_is() {
     assert!(tokens(&ed, 1).is_empty(), ":view-code off");
 }
 
-/// **A block too long to colour says so when asked** (2026-09-20).
+/// **A block too long to colour says so when asked** (2026-09-20)。
 ///
 /// Parsing runs on every edit, so a pasted data file has a cap — but a cap
 /// that says nothing reads as a broken feature (「顏色到這裏就沒了」).
 /// The bare `:view-code` reports, and that is where the answer lives.
+///
+/// Warning: **閘只剩給稿子裏貼的那一段**（#423，2026-09-30）。整份是代碼的檔走
+/// 另一條路——留樹、只查看得見的那一塊、改一個字走增量——多長都染得起，所以那
+/// 一種問 `:view-code` 什麽都不該說。這一條兩種都驗。
 #[test]
 fn a_block_past_the_cap_keeps_one_colour_and_view_code_says_why() {
     use crate::markdown::Kind;
     let long: String = (0..5_100).map(|i| format!("x{i} = {i}\n")).collect();
-    let mut ed = typed(&format!("# 註\n{long}"));
-    ed.execute(":syntax python").unwrap();
     let tokens = |ed: &Editor, line: usize| -> Vec<Kind> {
         ed.markup_line_in(line, ed.block_of(line)).iter().map(|s| s.kind).collect()
     };
-    assert!(tokens(&ed, 0).is_empty(), "past the cap nothing is coloured");
 
+    // **整份是代碼的檔：沒有閘了，照樣染。**
+    let mut whole = typed(&long);
+    whole.execute(":syntax python").unwrap();
+    assert!(
+        tokens(&whole, 0).iter().any(|k| matches!(k, Kind::Token(_))),
+        "兩萬行也染得起：{:?}",
+        tokens(&whole, 0)
+    );
+    assert!(
+        tokens(&whole, 5_000).iter().any(|k| matches!(k, Kind::Token(_))),
+        "第五千行之後也染"
+    );
+    whole.execute(":view-code").unwrap();
+    assert!(!whole.status().contains("5000"), "不該再說有閘：{}", whole.status());
+
+    // **稿子裏貼的那一段：閘還在。** 那一種是整份解析的，而一份貼進來的數據檔
+    // 沒人靠顏色讀。
+    let mut ed = typed(&format!("# 註\n\n```python\n{long}```\n"));
+    assert!(tokens(&ed, 3).is_empty(), "past the cap nothing is coloured");
+
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('j'));
     ed.execute(":view-code").unwrap();
     let said = ed.status().to_string();
-    assert!(said.contains("5101") || said.contains("5102"), "how long it is: {said}");
+    assert!(said.contains("5100") || said.contains("5101"), "how long it is: {said}");
     assert!(said.contains("5000"), "and what the cap is: {said}");
     // Warning: The bare word **reports**; it does not turn anything on or off.
     assert!(ed.code_colours(), "a report is not a switch");
@@ -18188,4 +18212,71 @@ fn the_grid_keeps_the_paging_keys() {
     assert!(ed.cursor_line() < down, "往回也翻得動");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **兩萬行的源碼裏打一個字要多久**（#423，2026-09-30）。
+///
+/// 報數用的，不是斷言：`YUMETE_BENCH=<檔> cargo test -p yumete-core --release
+/// key_in_a_big_file -- --ignored --nocapture`。
+#[test]
+#[ignore = "報數用的；要跑加 --release --nocapture"]
+fn a_keystroke_in_a_big_code_file() {
+    use std::time::Instant;
+    let path = std::env::var("YUMETE_BENCH").expect("YUMETE_BENCH=<一個大源碼檔>");
+    let text = std::fs::read_to_string(&path).expect("讀得到");
+    let mut ed = Editor::new();
+    ed.open_file(std::path::Path::new(&path)).unwrap();
+    let rows = 50usize;
+    let paint = |ed: &Editor| {
+        let at = Instant::now();
+        let mut n = 0usize;
+        for line in 9_000..9_000 + rows {
+            n += ed.markup_line_in(line, ed.block_of(line)).len();
+        }
+        (at.elapsed(), n)
+    };
+    println!("\n{path}：{} 行，{} KB", text.lines().count(), text.len() / 1024);
+    let (first, n) = paint(&ed);
+    println!("  開檔第一屏      {first:?}  {n} 段");
+    let (again, _) = paint(&ed);
+    println!("  同一屏再畫一次  {again:?}");
+
+    // 打一個字：整棵樹的版本變了，這一屏要重畫。
+    press(&mut ed, "9000G");
+    let at = Instant::now();
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('x'));
+    ed.on_key(Key::Esc);
+    let typed = at.elapsed();
+    let (after, _) = paint(&ed);
+    println!("  打一個字        {typed:?}");
+    println!("  改完重畫一屏    {after:?}");
+
+    // 滾到別處：樹沒變，只多查一塊。
+    let at = Instant::now();
+    let mut n = 0usize;
+    for line in 15_000..15_000 + rows {
+        n += ed.markup_line_in(line, ed.block_of(line)).len();
+    }
+    println!("  滾到另一塊      {:?}  {n} 段", at.elapsed());
+
+    // 拆開看：着色那一半 vs 別的那一半。
+    let language = crate::code::Language::Rust;
+    let at = Instant::now();
+    let mut n = 0usize;
+    for line in 17_000..17_000 + rows {
+        n += ed.code_file_line(line, language).len();
+    }
+    println!("  只算着色（新一塊）{:?}  {n} 段", at.elapsed());
+    let at = Instant::now();
+    for line in 17_000..17_000 + rows {
+        let _ = ed.block_of(line);
+    }
+    println!("  只算 block_of     {:?}", at.elapsed());
+    let at = Instant::now();
+    let mut n = 0usize;
+    for line in 17_000..17_000 + rows {
+        n += ed.markup_line_in(line, ed.block_of(line)).len();
+    }
+    println!("  markup_line_in    {:?}  {n} 段\n", at.elapsed());
 }
