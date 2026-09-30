@@ -5319,9 +5319,9 @@ en = "add a column (right / left)"
 [[message]]
 # 表格提示：加一行
 key = "hint.table.add-row"
-zht = "加一行（下／上）"
-zhs = "加一行（下／上）"
-en = "add a row (below / above)"
+zht = "插入新行（下/上）"
+zhs = "插入新行（下/上）"
+en = "insert a new row (below / above)"
 
 [[message]]
 # 空格 t 之後認得哪些鍵——單子是從 keys.rs 那幾張真表生出來的
@@ -5340,15 +5340,15 @@ en = "this column left / centre / right"
 [[message]]
 # t 選單：t q 這一行
 key = "hint.table.back-to-prose"
-zht = "回到正文"
-zhs = "回到正文"
-en = "back to prose"
+zht = "源碼視圖（顯示源碼）"
+zhs = "源码视图（显示源码）"
+en = "source view: the file as written"
 
 [[message]]
 # 表格提示：刪這一行
 key = "hint.table.delete-row"
-zht = "刪這一行"
-zhs = "删这一行"
+zht = "刪除這一行"
+zhs = "删除这一行"
 en = "delete this row"
 
 [[message]]
@@ -5361,23 +5361,23 @@ en = "delete this row / column"
 [[message]]
 # t 組：數據那一格（從前是 空格 d，2026-09-30 從「詳情欄」改名）
 key = "hint.table.detail-panel"
-zht = "數據"
-zhs = "数据"
-en = "the data panel"
+zht = "該行數據"
+zhs = "该行数据"
+en = "this row's data"
 
 [[message]]
 # t 選單：t f 這一行
 key = "hint.table.draw-it"
-zht = "完整：畫牆與列號"
-zhs = "完整：画墙与列号"
-en = "full: the walls and the ruler"
+zht = "完整視圖（表格按列對齊且顯示列號）"
+zhs = "完整视图（表格按列对齐且显示列号）"
+en = "full view: the columns lined up, with column numbers"
 
 [[message]]
 # 表格提示：第一行當欄名／當資料
 key = "hint.table.first-row-is-data"
-zht = "第一行：欄名⇄數據"
-zhs = "第一行：栏名⇄数据"
-en = "the first row: names ⇄ data"
+zht = "表格第一行是否為標題"
+zhs = "表格第一行是否为标题"
+en = "whether the table's first row is a heading row"
 
 [[message]]
 # t 選單：t w 這一行
@@ -5460,8 +5460,8 @@ en = "next cell"
 [[message]]
 # 表格提示：下一張表／上一張表
 key = "hint.table.next-or-previous"
-zht = "下一張表／上一張"
-zhs = "下一张表／上一张"
+zht = "下一張表/上一張表"
+zhs = "下一张表/上一张表"
 en = "the next table / the one before"
 
 [[message]]
@@ -5474,9 +5474,9 @@ en = "the cursor is not in a table — t ] walks to the next one"
 [[message]]
 # t 選單：t b 這一行
 key = "hint.table.operate-it"
-zht = "基本：排齊，按鍵歸表格"
-zhs = "基本：排齐，按键归表格"
-en = "basic: lined up, and the grid's keys"
+zht = "基本視圖（表格按列對齊）"
+zhs = "基本视图（表格按列对齐）"
+en = "basic view: the columns lined up"
 
 [[message]]
 # 表格提示：上一格
@@ -5495,16 +5495,23 @@ en = "this table's schema"
 [[message]]
 # 表格提示：一欄一欄找
 key = "hint.table.search-columns"
-zht = "一欄一欄找：這邊找／那邊看（␣t 2-10?）"
-zhs = "一栏一栏找：这边找／那边看（␣t 2-10?）"
-en = "search down the columns: / here, ? in the other area (t2-10?)"
+zht = "按列搜索（可指定列範圍）"
+zhs = "按列搜索（可指定列范围）"
+en = "search down the columns (a column range can be given)"
+
+[[message]]
+# 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域（2026-09-30 作者寫的）
+key = "hint.table.search-columns-elsewhere"
+zht = "按列搜索（在另一區域顯示）"
+zhs = "按列搜索（在另一区域显示）"
+en = "search down the columns (shown in the other area)"
 
 [[message]]
 # 表格提示：照這欄順排／倒排
 key = "hint.table.sort-by-column"
-zht = "照這欄順排／倒排（␣t 1s；1a2d8as 排幾欄）"
-zhs = "照这栏顺排／倒排（␣t 1s；1a2d8as 排几栏）"
-en = "sort by this column, up / down (t1s; t1a2d8as for several)"
+zht = "按列升序/降序排列（␣t1s; 1a2d8as 多列排序）"
+zhs = "按列升序/降序排列（␣t1s; 1a2d8as 多列排序）"
+en = "sort by column, ascending / descending (t1s; t1a2d8as for several)"
 
 [[message]]
 # t 組提示的標題
@@ -5516,9 +5523,9 @@ en = "t table"
 [[message]]
 # t 選單：t t 這一行
 key = "hint.table.whole-window"
-zht = "整個窗口都給表格"
-zhs = "整个窗口都给表格"
-en = "give the table the whole window"
+zht = "全屏視圖（表格獨佔窗口）"
+zhs = "全屏视图（表格独占窗口）"
+en = "full-screen view: the table takes the window"
 
 [[message]]
 # t 選單：t a 這一行

@@ -2220,14 +2220,16 @@ impl Editor {
     /// (#216), so the keys that rewrite a file are not offered — because they
     /// are refused.
     const TABLE_KEYS_BLOCK: &'static [(&'static str, &'static str)] = &[
-        ("/ ?", "hint.table.search-columns"),
+        ("/", "hint.table.search-columns"),
+        ("?", "hint.table.search-columns-elsewhere"),
         ("g", "hint.table.go-to-cell"),
         ("y p", "hint.table.yank-or-paste-column"),
     ];
 
     /// What `t` adds inside a Markdown table.
     const TABLE_KEYS_MD: &'static [(&'static str, &'static str)] = &[
-        ("/ ?", "hint.table.search-columns"),
+        ("/", "hint.table.search-columns"),
+        ("?", "hint.table.search-columns-elsewhere"),
         ("g", "hint.table.go-to-cell"),
         ("r R", "hint.table.add-row"),
         ("c C", "hint.table.add-column"),
@@ -2251,7 +2253,8 @@ impl Editor {
     /// that listed them was the one place the editor said a key existed and
     /// then said it did not.
     const TABLE_KEYS_FILE: &'static [(&'static str, &'static str)] = &[
-        ("/ ?", "hint.table.search-columns"),
+        ("/", "hint.table.search-columns"),
+        ("?", "hint.table.search-columns-elsewhere"),
         ("g", "hint.table.go-to-cell"),
         ("1s 1S", "hint.table.sort-by-column"),
         ("r R", "hint.table.add-row"),
