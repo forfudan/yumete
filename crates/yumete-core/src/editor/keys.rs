@@ -840,6 +840,12 @@ impl Editor {
                 }
                 return;
             }
+            // **區域那一組**（2026-09-30 定，照 helix 的 `C-w`）。
+            Pending::Region => {
+                self.pending = Pending::None;
+                self.on_region_key(key);
+                return;
+            }
             Pending::Mark => {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
@@ -1623,7 +1629,10 @@ impl Editor {
             // The next region — the panels and the work areas, in the order
             // they sit on the screen. vi spells window motions `C-w`, and this
             // is the one it spells `C-w w` (#293).
-            Key::Ctrl('w') => self.next_region(),
+            // **`C-w` 是那一組的另一扇門**（2026-09-30 定，同 helix：
+            // `default.rs:193` 是 `C-w`，`:260` 是 `空格 w`，兩處同一組）。
+            // 走下一區因此是 `C-w w`——vi 本來就是這麽拼的。
+            Key::Ctrl('w') => self.pending = Pending::Region,
             // …and the keys a keyboard already has for it. `C-f`/`C-b` are
             // vi's; these are the ones a reader who has never used vi presses.
             // Warning: **浮窗開着的時候它們歸浮窗**（見 `on_key` 開頭，同 helix）。
@@ -2032,42 +2041,24 @@ impl Editor {
         ('y', "hint.goto.copy-to-clipboard"),
         ('p', "hint.goto.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
-        ('d', "hint.goto.dictionary"),
-        ('D', "hint.space.dictionary-panel"),
+        ('n', "hint.goto.dictionary"),
+        ('N', "hint.space.dictionary-panel"),
         ('k', "hint.space.what-is-this"),
         ('K', "hint.space.what-is-this-panel"),
-        // **診斷是文檔的鄰居**（2026-09-29）：同一個地方的另一件事，所以同一個
-        // 形狀——小寫浮，大寫進邊欄。
-        ('i', "hint.space.problems"),
-        ('I', "hint.space.problems-panel"),
-        ('r', "hint.space.ruby"),
-        // **`C-w` said twice over** (2026-09-17): 「Ctrl-w 切換到下一個這個
-        // 快捷鍵太不方便」. The chord stays; this is the same thing with the
-        // hand already on the space bar.
-        // **一下跳到某一區**（2026-09-25 提的）——`空格 w` 是走一步，這幾個是
-        // 點名。數字在這張菜單上本來一個都沒占，所以 1–4 不是四個零散的決定，
-        // 是一整塊乾淨的地址空間。
-        ('1', "hint.space.region-one"),
-        ('2', "hint.space.region-two"),
-        ('3', "hint.space.region-left"),
-        ('4', "hint.space.region-right"),
-        // **上檔就是關那一區**（2026-09-29 定）：一對鍵、一個號碼，不必再記第
-        // 二套。`!@#$` 正是 `1234` 的上檔。
-        ('!', "hint.space.close-one"),
-        ('@', "hint.space.close-two"),
-        ('#', "hint.space.close-left"),
-        ('$', "hint.space.close-right"),
-        // **一個名詞、四個動詞**（2026-09-26 定的，原話：「可不可以把工作区和
-        // 侧边栏统一成一个概念「区域」以简化思维模型」）。從前這裏躺着兩套詞彙說
-        // 同一件事：`w`／`W`／`q` 只看得見工作區，`s`／`S` 只看得見邊欄，而
-        // `1`–`4` 兩個都看得見——三套坐標系。
+        // **診斷在 `d`**（2026-09-30 定，照 helix：`space d` 是 diagnostics
+        // picker）。五種信息同一個形狀——小寫浮，大寫進邊欄。
+        ('d', "hint.space.problems"),
+        ('D', "hint.space.problems-panel"),
+        ('i', "hint.space.data"),
+        ('I', "hint.space.data-panel"),
+        // **`空格 w` 是區域那一組的門**（2026-09-30 定，照 helix 的 `C-w`：
+        // `keymap/default.rs:193` 與 `:260` 是同一組，兩扇門）。
         //
-        // Warning: **`空格 s`／`空格 S` 沒了**，被 `w` 和 `Q` 吸收。`C-w` 留着：它是
-        // helix／vim 那一路的和弦，不占菜單位置。
-        ('w', "hint.space.next-region"),
-        ('W', "hint.space.all-regions"),
-        ('q', "hint.space.close-this-region"),
-        ('Q', "hint.space.only-this-region"),
+        // Warning: **這裏從前躺着三套說同一件事的詞彙**——`1234`（點名去）、
+        // `!@#$`（隔空關）、`w/W/q/Q`（走一步／全開／關／只留）。一組一套之
+        // 後，數字整塊空了出來，留給緩衝區（作者 2026-09-30 定：每個緩衝區在
+        // 檔名前帶一個號，十個起補零，於是那是一套不必按空格確認的前綴碼）。
+        ('w', "hint.region.title"),
         ('"', "menu.paste.title"),
         ('c', "hint.space.comment-line"),
         ('C', "hint.space.comment-block"),
@@ -2178,6 +2169,21 @@ impl Editor {
     pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] = &[("c", "hint.hop.conflict")];
 
     /// What `空格 m` may be finished with — which side of the conflict to keep.
+    /// **區域那一組**（`C-w`／`空格 w`，2026-09-30 定）。
+    ///
+    /// 照 helix 的 `C-w`（`keymap/default.rs:193`）：`w` 走一步、`hjkl` 按方向
+    /// 走、`s` 切一刀、`q` 關、`o` 只留這一個。`e`／`i`／`E`／`I` 是這一頭自己
+    /// 加的——helix 沒有邊欄這件東西。
+    pub(super) const REGION_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("w", "hint.region.next"),
+        ("h j k l", "hint.region.go"),
+        ("e i", "hint.region.toggle-bar"),
+        ("E I", "hint.region.into-bar"),
+        ("s", "hint.region.split"),
+        ("q", "hint.region.close"),
+        ("o", "hint.region.only"),
+    ];
+
     pub(super) const CONFLICT_KEYS: &'static [(&'static str, &'static str)] = &[
         ("o", "hint.conflict.ours"),
         ("t", "hint.conflict.theirs"),
@@ -2340,15 +2346,15 @@ impl Editor {
     /// Run one key of a `Space` sequence.
     fn handle_space(&mut self, key: Key) {
         match key {
-            Key::Char(n @ '1'..='4') => {
-                self.go_to_region(n.to_digit(10).unwrap_or(0));
-            }
-            // 上檔＝關那一區（2026-09-29）：`!@#$` 是 `1234` 的上檔，所以號碼
-            // 只有一套。
-            Key::Char(n @ ('!' | '@' | '#' | '$')) => {
-                let nth = "!@#$".find(n).unwrap_or(0) as u32 + 1;
-                self.close_region(nth);
-            }
+            // **`空格 w` 是區域那一組的門**（2026-09-30 定）。從前這一層躺着三
+            // 套說同一件事的詞彙——`空格 1234`（點名去）、`空格 !@#$`（關那
+            // 一區）、`空格 w/W/q/Q`（走一步／全開／關／只留）。現在一組一套。
+            //
+            // Warning: **數字空出來了，留給緩衝區**（作者 2026-09-30 定）：
+            // 「each buffer will be indexed by 1, 2, 3, 4 before the file
+            // name……Then users can use space + N to quickly switch between
+            // them.」——檔數上十位就補零，所以那是一套不必按空格確認的前綴碼。
+            Key::Char('w') => self.pending = Pending::Region,
 
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
@@ -2357,7 +2363,7 @@ impl Editor {
             // lives in the table group as `t i`.
             // **`空格 d` 只開浮窗**（2026-09-22 定）：看一眼那個字，邊欄一點都
             // 不動。Warning: 再按一次收起來。
-            Key::Char('d') => match self.char_at_cursor() {
+            Key::Char('n') => match self.char_at_cursor() {
                 Some(ch) => {
                     self.look_up_afloat(ch);
                 }
@@ -2365,7 +2371,7 @@ impl Editor {
             },
             // **`空格 D` 在邊欄裏開**——同一份答案，鍵跟過去，讀得完長的那些。
             // 大寫是「同一件事的更大版本」，同 `空格 c`／`空格 C`。
-            Key::Char('D') => match self.char_at_cursor() {
+            Key::Char('N') => match self.char_at_cursor() {
                 Some(ch) => {
                     self.look_up(ch, true);
                 }
@@ -2391,10 +2397,14 @@ impl Editor {
                     self.set_status(say!("lsp.not-code"));
                 }
             }
-            // 診斷那一對，同形：小寫浮，大寫進邊欄。
-            Key::Char('i') => self.show_the_problem_here(true),
-            Key::Char('I') => self.show_the_problem_here(false),
-            Key::Char('r') => self.enter_ruby_mode(),
+            // **診斷搬到 `d`／`D`**（2026-09-30 定，照 helix：`space d` 是
+            // diagnostics picker）。同形：小寫浮，大寫進邊欄。
+            Key::Char('d') => self.show_the_problem_here(true),
+            Key::Char('D') => self.show_the_problem_here(false),
+            // **數據**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
+            // 格的事），這一對是順手。
+            Key::Char('i') => self.show_the_data_here(true),
+            Key::Char('I') => self.show_the_data_here(false),
             Key::Char('"') => self.open_paste_picker(),
             // 衝突 (#249): the three keys that end one. Under `空格` rather
             // than a letter of its own because every letter has one already,
@@ -2418,10 +2428,7 @@ impl Editor {
             // same place. Open: hand it the keys. `W`:收掉，留下你站着的這半。
             // **四個動詞，一個名詞**（2026-09-26 定的）。`w` 走一步、`W` 全開、
             // `q` 關這個、`Q` 只留一個工作區；`1`–`4` 是同一套坐標下的點名。
-            Key::Char('w') => self.next_region(),
-            Key::Char('W') => self.open_every_region(),
-            Key::Char('q') => self.close_this_region(),
-            Key::Char('Q') => self.close_other_regions(),
+
             Key::Char('y') => self.copy_to_clipboard(),
             Key::Char('p') => self.clipboard_paste(true),
             Key::Char('P') => self.clipboard_paste(false),

@@ -12485,6 +12485,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('w'));
         let whole = page(&editor);
         assert!(whole.contains(long), "every character of it:\n{whole}");
         assert!(!whole.contains('>'), "and nothing left to unfold:\n{whole}");
@@ -12495,6 +12496,7 @@ fn squeezed(text: &str) -> String {
         // sideways to answer it.
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('w'));
         editor.on_key(Key::Char('w'));
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
@@ -16641,6 +16643,7 @@ fn squeezed(text: &str) -> String {
         editor.execute(&format!(":open {}", other.display())).unwrap();
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('w'));
         println!("split, one book:  {:.2?} a frame", frame(&mut editor, 100));
         editor.execute(":buffer-previous").unwrap();
         println!("split, two books: {:.2?} a frame", frame(&mut editor, 100));
@@ -17262,11 +17265,13 @@ fn squeezed(text: &str) -> String {
         // The split opens where you are standing: on 乙。Warning: **開它的是 `空格 2`
         // 而不是 `空格 w`**（2026-09-26）：`w` 走的是開着的區，點名的那一個纔開。
         editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('2'));
+        editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('s'));
         assert!(editor.other_pane().is_some(), "the page is split");
         // Warning: **點名是「開出來**並跳過去**」**，所以要回第一半再往下走。
         editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('1'));
+        editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('k'));
 
         // …and then the live half goes back to 甲, leaving the other half
         // looking at a file that is no longer the current one.
@@ -17345,7 +17350,8 @@ fn squeezed(text: &str) -> String {
         // 空格 2 opens the other one, showing the same place; the divider
         // carries its caption.（2026-09-26 起開區是點名，`w` 只走開着的。）
         editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('2'));
+        editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('s'));
         assert!(editor.other_pane().is_some());
         assert_eq!(editor.live_pane(), 1, "點名就過去了");
         let buffer = render(&editor, &config, 40, 9);
@@ -17360,15 +17366,18 @@ fn squeezed(text: &str) -> String {
         // `空格 w` 走一步，兩半都留着——它換的是鍵，不是版面。
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('w'));
         assert_eq!(editor.live_pane(), 0, "走回第一半");
         assert!(editor.other_pane().is_some(), "兩半都還在");
         editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('w'));
         editor.on_key(Key::Char('w'));
         assert_eq!(editor.live_pane(), 1, "再走一步回到第二半");
 
         // 空格 Q keeps the half you are standing in.
         editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('Q'));
+        editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('o'));
         assert!(editor.other_pane().is_none());
         assert_eq!(editor.live_pane(), 0);
         let buffer = render(&editor, &config, 40, 9);
@@ -18314,6 +18323,7 @@ fn squeezed(text: &str) -> String {
 
         // With the keys back in the text it says what it always said.
         editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('w'));
         let buffer = render(&editor, &config, 80, 12);
         let status = status_line(&buffer);
         assert!(status.contains("NOR  "), "{status:?}");
@@ -18614,7 +18624,8 @@ fn squeezed(text: &str) -> String {
         let gold = ink(&config).gold();
         let mut editor = editor_with("那年冬天");
         // 左大綱、右字典——出廠 `sides` 把這兩個分在兩邊。
-        for key in " o D".chars() {
+        // （字典 2026-09-30 從 `空格 D` 搬到了 `空格 N`，`d`／`D` 讓給診斷。）
+        for key in " o N".chars() {
             editor.on_key(Key::Char(key));
         }
         // 一欄兩堵牆，兩欄就是四堵。問正文那一行：上下兩條邊有焦點時整條是金的。
@@ -18637,6 +18648,7 @@ fn squeezed(text: &str) -> String {
         // 而 `C-w` 走的是**號碼的次序**——④ 的下一個是 ①。從前它按屏幕排（左欄
         // → 正文 → 右欄），從右欄要走兩下。
         editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('w'));
         let buffer = render(&editor, &config, 80, 10);
         assert_eq!(walls(&buffer), [false; 4], "鍵在正文裏，誰都不金");
     }

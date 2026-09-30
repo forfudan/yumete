@@ -272,6 +272,8 @@ impl Editor {
             Pending::UndoBreak | Pending::None => "",
             Pending::Goto => "g",
             Pending::Space => "␣",
+            // 區域那一組：光標旁邊那個牌子寫 `C-w`（它有兩扇門，這一個短）。
+            Pending::Region => "C-w",
             Pending::Find(FindKind::Forward) => "f",
             Pending::Find(FindKind::Backward) => "F",
             Pending::Find(FindKind::Till) => "t",

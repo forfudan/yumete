@@ -4982,6 +4982,61 @@ zhs = "换一条（Shift-Tab 往回）"
 en = "next one (Shift-Tab goes back)"
 
 [[message]]
+# C-w q：關掉這一區
+key = "hint.region.close"
+zht = "關掉這一區"
+zhs = "关掉这一区"
+en = "close this one"
+
+[[message]]
+# C-w h/j/k/l：按方向走到那一區
+key = "hint.region.go"
+zht = "按方向走"
+zhs = "按方向走"
+en = "go that way"
+
+[[message]]
+# C-w E / C-w I：開出來並且走進去
+key = "hint.region.into-bar"
+zht = "進左右欄"
+zhs = "进左右栏"
+en = "go into the left / right bar"
+
+[[message]]
+# C-w w：走到下一個區域
+key = "hint.region.next"
+zht = "下一個"
+zhs = "下一个"
+en = "next"
+
+[[message]]
+# C-w o：只留這一區
+key = "hint.region.only"
+zht = "只留這一區"
+zhs = "只留这一区"
+en = "keep only this one"
+[[message]]
+# C-w s：切一刀，分成上下兩個編輯區
+key = "hint.region.split"
+zht = "切成兩個編輯區"
+zhs = "切成两个编辑区"
+en = "split in two"
+
+[[message]]
+# C-w／空格 w 那一組的標題（2026-09-30，照 helix 的 window）
+key = "hint.region.title"
+zht = "區域"
+zhs = "区域"
+en = "region"
+
+[[message]]
+# C-w e / C-w i：開關左右邊欄，鍵不過去
+key = "hint.region.toggle-bar"
+zht = "開關左右欄"
+zhs = "开关左右栏"
+en = "toggle the left / right bar"
+
+[[message]]
 # " 之後那張小表：# 那一行（選區序號，#405 Phase 3）
 key = "hint.register.hash"
 zht = "（該選區之序號）"
@@ -5172,48 +5227,6 @@ zhs = "宽窄"
 en = "wide / narrow"
 
 [[message]]
-# 提示：空格菜單——四個區域全開
-key = "hint.space.all-regions"
-zht = "四個區域全開"
-zhs = "四个区域全开"
-en = "open every region"
-
-[[message]]
-# 空格選單：關掉左邊欄（1234 的上檔，2026-09-29）
-key = "hint.space.close-left"
-zht = "關閉左邊欄"
-zhs = "关闭左边栏"
-en = "close the left sidebar"
-
-[[message]]
-# 空格選單：關掉第一工作區
-key = "hint.space.close-one"
-zht = "關閉主編輯區"
-zhs = "关闭主编辑区"
-en = "close the main pane"
-
-[[message]]
-# 空格選單：關掉右邊欄
-key = "hint.space.close-right"
-zht = "關閉右邊欄"
-zhs = "关闭右边栏"
-en = "close the right sidebar"
-
-[[message]]
-# 提示：空格菜單——關掉站着的這一區
-key = "hint.space.close-this-region"
-zht = "關閉當前區域"
-zhs = "关闭当前区域"
-en = "close this region"
-
-[[message]]
-# 空格選單：關掉第二工作區
-key = "hint.space.close-two"
-zht = "關閉副編輯區"
-zhs = "关闭副编辑区"
-en = "close the second pane"
-
-[[message]]
 # 空格 C：塊注釋（沒有塊注釋的格式退到行注釋）
 key = "hint.space.comment-block"
 zht = "塊注釋"
@@ -5228,25 +5241,24 @@ zhs = "行注释"
 en = "comment out, by the line"
 
 [[message]]
+# 空格菜單：這一行攤開，浮窗（#426，2026-09-30）
+key = "hint.space.data"
+zht = "顯示這一行的數據（浮窗）"
+zhs = "显示这一行的数据（浮窗）"
+en = "show this row's data (float)"
+
+[[message]]
+# 空格菜單：這一行攤開，邊欄
+key = "hint.space.data-panel"
+zht = "顯示這一行的數據（邊欄）"
+zhs = "显示这一行的数据（边栏）"
+en = "show this row's data (sidebar)"
+[[message]]
 # 空格菜單裏那一行：把字典開進邊欄（浮窗是小寫的 d）
 key = "hint.space.dictionary-panel"
 zht = "字典開進邊欄（讀得完長的）"
 zhs = "字典开进边栏（读得完长的）"
 en = "the dictionary in the sidebar (room to read)"
-
-[[message]]
-# 空格選單裏的 s：換到下一個區域（正文、邊欄、另一個工作區）
-key = "hint.space.next-region"
-zht = "下一個區域（主／副編輯區／邊欄）"
-zhs = "下一个区域（主／副编辑区／边栏）"
-en = "the next region (panes and sidebars)"
-
-[[message]]
-# 提示：空格菜單——只留一個工作區
-key = "hint.space.only-this-region"
-zht = "只留這一個編輯區，別的全收"
-zhs = "只留这一个编辑区，别的全收"
-en = "keep this pane, put the rest away"
 
 [[message]]
 # 空格組：從系統剪貼簿貼在前面
@@ -5268,41 +5280,6 @@ key = "hint.space.problems-panel"
 zht = "顯示診斷信息（邊欄）"
 zhs = "显示诊断信息（边栏）"
 en = "show diagnostics (sidebar)"
-
-[[message]]
-# 空格菜單：跳到左邊欄（沒開就開那一側的頭一扇）
-key = "hint.space.region-left"
-zht = "前往左邊欄"
-zhs = "前往左边栏"
-en = "the left sidebar"
-
-[[message]]
-# 空格菜單：跳到正文主工作區
-key = "hint.space.region-one"
-zht = "前往主編輯區"
-zhs = "前往主编辑区"
-en = "the main pane"
-
-[[message]]
-# 空格菜單：跳到右邊欄
-key = "hint.space.region-right"
-zht = "前往右邊欄"
-zhs = "前往右边栏"
-en = "the right sidebar"
-
-[[message]]
-# 空格菜單：跳到第二工作區（沒開就開一個）
-key = "hint.space.region-two"
-zht = "前往副編輯區"
-zhs = "前往副编辑区"
-en = "the second pane"
-
-[[message]]
-# 空格組：改這個字的注音（`:ruby` 那一支，二級鍵）
-key = "hint.space.ruby"
-zht = "改這裏的注音"
-zhs = "改这里的注音"
-en = "edit the reading here"
 
 [[message]]
 # 空格 t：表格那一組（2026-09-21 從 `t` 搬來）
@@ -7219,20 +7196,6 @@ en = "no drafts"
 
 
 # ── register ──────────────────────────────────────────────────────────
-
-[[message]]
-# 四個區域都擺出來了
-key = "region.all-open"
-zht = "四個區域都開着了"
-zhs = "四个区域都开着了"
-en = "all four regions are open"
-
-[[message]]
-# 那一側本來就沒開（按 空格 #／$ 的時候）
-key = "region.not-open"
-zht = "那一側本來就沒開"
-zhs = "那一侧本来就没开"
-en = "that side is not open"
 
 [[message]]
 # 空格 3／4：那一側一扇面板都不歸它

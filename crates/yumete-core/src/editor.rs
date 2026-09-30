@@ -209,6 +209,14 @@ enum Pending {
     Aim,
     /// `空格 m` — what to keep of the merge conflict under the cursor.
     Conflict,
+    /// **`C-w`／`空格 w` 之後那一層：區域**（2026-09-30 定，照 helix 的
+    /// `keymap/default.rs:193` 與 `:260`——那兩處是同一組，兩扇門）。
+    ///
+    /// 原話：「space+w is the parent command for 『region』 operations (helix
+    /// uses 『window』)。」Warning: **一組要有好幾個成員纔值一個前綴**：走到哪一
+    /// 區、開關哪一欄、切一刀、關掉、只留這一個。從前它們散在 `空格 1234`、
+    /// `空格 !@#$`、`空格 w/W/q/Q` 三套詞彙裏。
+    Region,
     /// A `:s …c` is asking about one match — `y`/`n`/`a`/`q`/`l` (#415).
     ///
     /// Unlike every other pending here this one is not opened by a key: the
@@ -270,6 +278,9 @@ impl Pending {
             | Pending::Hop { .. }
             // `z` 那一層等的是 `z`／`t`／`b`，不是一個要寫進去的字。
             | Pending::Aim
+            // 區域那一組等的是 `w`／`hjkl`／`e i E I`／`s q o`，一個要寫進去的
+            // 字都沒有。
+            | Pending::Region
             | Pending::Conflict => false,
             // **A vim operator is waiting for a *motion*, which is keys** — the
             // character `f` asks for is read by the motion itself.

@@ -513,13 +513,21 @@ fn a_dot_repeats_an_ime_replace() {
     assert_eq!(ed.current_buffer().text(), "銀銀銀\n");
 }
 
+/// **注音改走 `:ruby`**（2026-09-30 定）。
+///
+/// 原話：「zhuyin can be made a command instead of a space shortcut (I used it
+/// not very often)。」Warning: **`空格 r` 空出來留給 rename-symbol**——helix 的
+/// `space r` 就是那個，而這一頭還沒有 rename，所以先空着，真有了再綁。
 #[test]
-fn space_r_opens_the_reading_prompt() {
-    // 旁注 is worth a key and worth a second one: a page carries one or
-    // two, and it is not something that has to happen the instant you ask.
+fn the_ruby_command_opens_the_reading_prompt() {
     let mut ed = typed("那年冬天。\n");
-    press(&mut ed, " r");
+    ed.execute(":ruby").unwrap();
     assert_eq!(ed.mode(), Mode::Ruby, "{}", ed.status());
+
+    // `空格 r` 現在什麽都不做——不是一個綁錯的鍵，是一個還沒綁的鍵。
+    let mut free = typed("那年冬天。\n");
+    press(&mut free, " r");
+    assert_eq!(free.mode(), Mode::Normal, "空着的鍵不許做別的事");
 }
 
 /// **The throttle grows a trailing edge** (#383).
@@ -710,6 +718,7 @@ fn insert_takes_back_a_word_and_a_line() {
     ed.goto_line(1);
     ed.on_key(Key::Char('A'));
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     let after = ed.current_buffer().text();
     assert!(
         after.starts_with("春天到了") && after.trim_end() != "春天到了很好",
@@ -8132,7 +8141,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     use crate::sidebar::{Side};
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('D'));
+    ed.on_key(Key::Char('N'));
 
     let right = Side::Right;
     assert_eq!(ed.info_in_this_sidebar(right), Some(crate::sidebar::Info::Dictionary));
@@ -8172,6 +8181,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     // **The cursor is what takes it down.** Walk out of the panel, move one
     // character, and the question is no longer being asked.
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.info_in_this_sidebar(right), Some(crate::sidebar::Info::Dictionary), "still on 那");
     ed.on_key(Key::Char('l'));
     assert_eq!(ed.info_in_this_sidebar(right), None, "and gone the moment the cursor left");
@@ -8265,7 +8275,7 @@ fn a_character_the_table_has_nothing_for_says_so() {
     let mut ed = typed("那年冬天");
     ed.set_ime_available(true);
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('D'));
+    ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
     ed.set_dictionary('那', Vec::new());
     let rows = ed.info_rows(crate::sidebar::Side::Right);
@@ -8279,7 +8289,7 @@ fn a_character_the_table_has_nothing_for_says_so() {
 fn with_no_table_loaded_the_panel_says_that_rather_than_blaming_the_character() {
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('D'));
+    ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
     ed.set_dictionary('那', Vec::new());
     let rows = ed.info_rows(crate::sidebar::Side::Right);
@@ -8295,7 +8305,7 @@ fn with_no_table_loaded_the_panel_says_that_rather_than_blaming_the_character() 
 fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('D'));
+    ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
     ed.look_up('年', true);
     ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
@@ -8407,6 +8417,7 @@ fn one_key_moves_between_the_two_panes() {
     // `C-w` walks the regions — with one panel and one work area that is two
     // of them, so it goes back and forth (#293).
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert!(!ed.sidebar_focused(), "the keys are with the text");
     // …and the text really has them.
     ed.on_key(Key::Char('i'));
@@ -8414,12 +8425,15 @@ fn one_key_moves_between_the_two_panes() {
     ed.on_key(Key::Esc);
 
     ed.on_key(Key::Ctrl('w'));
+
+    ed.on_key(Key::Char('w'));
     assert!(ed.sidebar_focused(), "and back again");
     // **Esc is not one of the panel's doors** — it is reserved for leaving
     // Insert in a panel that has a field.
     ed.on_key(Key::Esc);
     assert!(ed.sidebar_focused(), "Esc did nothing");
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert!(!ed.sidebar_focused());
 
     // With no sidebar open it does nothing at all.
@@ -8429,6 +8443,7 @@ fn one_key_moves_between_the_two_panes() {
     ed.on_key(Key::Char('o'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert!(!ed.sidebar_focused());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -8461,6 +8476,7 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     // them again rather than closing something the writer is not in.
     type_keys(&mut ed, " o");
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_some() && !ed.sidebar_focused());
     type_keys(&mut ed, " o");
     assert!(ed.sidebar_focused(), "the keys came back");
@@ -8557,7 +8573,7 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
 
     // The keys are with the text now, so `空格 w` walks back into the tree;
     // `q` in the panel is the door out.
-    type_keys(&mut ed, " w");
+    type_keys(&mut ed, " ww");
     assert!(ed.sidebar_focused());
     ed.on_key(Key::Char('q'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "q closes it");
@@ -8971,6 +8987,7 @@ fn the_box_opens_holding_the_last_pattern_or_what_is_marked() {
     ed.on_key(Key::Char('霜'));
     ed.on_key(Key::Esc);
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
 
     // Opened again: the last pattern, **selected**, so one key does either
     // thing — type over it, or Enter to carry on with it.
@@ -8984,6 +9001,7 @@ fn the_box_opens_holding_the_last_pattern_or_what_is_marked() {
     // screen.
     ed.on_key(Key::Esc);
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('v'));
@@ -9045,6 +9063,7 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     // **Unsaved work is work.** What is on the screen is what is searched.
     ed.on_key(Key::Esc);
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     for c in "i霜霜".chars() {
         ed.on_key(Key::Char(c));
     }
@@ -9375,10 +9394,11 @@ fn the_panels_go_where_the_settings_put_them() {
     ed.set_side(Panel::Info, Side::Left);
     ed.open_sidebar_at(&dir);
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "先是文件樹");
     ed.on_key(Key::Char(' '));
     // Warning: 大寫：進邊欄的是 `空格 D`（2026-09-22）。
-    ed.on_key(Key::Char('D'));
+    ed.on_key(Key::Char('N'));
     assert_eq!(ed.info_in_this_sidebar(Side::Left), Some(crate::sidebar::Info::Dictionary));
     assert_eq!(ed.info_in_this_sidebar(Side::Right), None, "右邊一格都沒開");
     assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Info, "那一扇換成了信息");
@@ -9386,13 +9406,15 @@ fn the_panels_go_where_the_settings_put_them() {
     // 一個槽一個座位：這一格、正文，轉回來。
     assert_eq!(ed.panel_focus(), Some(Side::Left));
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), None, "the writing");
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), Some(Side::Left), "round to the panel");
 
-    // 再按一次 `空格 D` 就收起來——連那一格一起還回去，不留一扇空的。
+    // 再按一次 `空格 N` 就收起來——連那一格一起還回去，不留一扇空的。
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('D'));
+    ed.on_key(Key::Char('N'));
     assert_eq!(ed.info_in_this_sidebar(Side::Left), None, "字典沒了");
     assert!(ed.panel(Side::Left).is_none(), "Warning: 那一格也還回去了，不留空框");
 
@@ -9427,9 +9449,11 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     // With one panel and one work area the ring is two long, and C-w walks it
     // both ways round.
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), None, "C-w handed the keys to the writing");
     assert!(ed.panel(Side::Left).is_some(), "and left the panel up");
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), Some(Side::Left), "and round again");
 
     // `q` is the other door: this slot goes away and the keys come back.
@@ -9439,27 +9463,32 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
 
     // Nothing open but the writing: one region, and neither key has anywhere
     // to go. Warning: **`空格 w` 不再開第二工作區**（2026-09-26）：它走的是**開着的**
-    // 區域，開一個是 `空格 2`（點名）或 `空格 W`（全開）。「去哪裏」和「開出來」
-    // 從此是兩個動作。
+    // **「去哪裏」和「開出來」是兩個動作。** 走一步只走開着的；要多一個編輯區
+    // 得說出來——`C-w s`（切一刀，2026-09-30 照 helix 的 hsplit）。
     ed.on_key(Key::Ctrl('w'));
-    assert!(ed.other_pane().is_none(), "C-w does not open a work area");
-    type_keys(&mut ed, " w");
-    assert!(ed.other_pane().is_none(), "空格 w 也不開——它只走開着的");
-    type_keys(&mut ed, " 2");
-    assert!(ed.other_pane().is_some(), "點名那一個纔開");
+    ed.on_key(Key::Char('w'));
+    assert!(ed.other_pane().is_none(), "C-w w 只走，不開");
+    type_keys(&mut ed, " ww");
+    assert!(ed.other_pane().is_none(), "空格 w w 也一樣");
+    type_keys(&mut ed, " ws");
+    assert!(ed.other_pane().is_some(), "切一刀纔開");
 
     // Two halves of the writing and a panel: three regions, and `w` walks all
     // three **in the order the numbers name** — 工作區一、二、左欄。
     ed.open_sidebar_at(&dir);
-    type_keys(&mut ed, " 1");
+    // `C-w k` 走到主編輯區——數字 2026-09-30 空出來留給緩衝區了。
+    type_keys(&mut ed, " wk");
     assert_eq!(ed.panel_focus(), None);
     assert_eq!(ed.live_pane(), 0);
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), None, "the other half is a region too");
     assert_eq!(ed.live_pane(), 1, "工作區二");
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), Some(Side::Left), "then the left panel");
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), None, "round again");
     assert_eq!(ed.live_pane(), 0, "回到工作區一");
 
@@ -15698,8 +15727,10 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     ed.execute(":wiki-panel").unwrap();
     assert!(ed.panel_focus().is_none(), "the keys stayed in the writing");
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     assert!(ed.panel_focus().is_some(), "C-w walks into the panel");
     ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel_focus().is_none(), "空格 w walks back out");
     ed.execute(":wiki-panel").unwrap();
@@ -16250,7 +16281,7 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     // ——`空格 S` 就算只收左邊，這一條照樣綠。出廠 `sides` 前四格全是左，右邊
     // 那一個是字典。
     press(&mut ed, " o"); // 大綱：左
-    press(&mut ed, " D"); // 字典：右
+    press(&mut ed, " N"); // 字典：右
     for side in Side::BOTH {
         // Warning: 別再寫 `panel(side).is_some() || info_in_this_sidebar(side)
         // .is_some()`——後半句蘊含前半句（那一支先問 `panel(side)`），或起來等於
@@ -16259,10 +16290,10 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     }
 
     // 再開一個工作區——`空格 Q` 連它一起收。
-    press(&mut ed, " 2");
+    press(&mut ed, " ws");
     assert!(ed.other_pane().is_some(), "第二工作區先得有");
 
-    press(&mut ed, " Q");
+    press(&mut ed, " wo");
     for side in Side::BOTH {
         assert!(ed.panel(side).is_none(), "{side:?} 收了");
     }
@@ -17599,6 +17630,7 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
     // 回正文，在這一份裏再打一個「霜」。
     ed.on_key(Key::Esc);
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     press(&mut ed, "i霜");
     ed.on_key(Key::Esc);
     assert!(ed.search_is_stale(), "改完的這一刻，名單答的還是上一版");
@@ -17624,6 +17656,7 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
 
     // **按一次 Enter 就跳走**，不必先按一次刷新（原話那一句）。
     ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
     ed.search_for_test().field = crate::search_panel::Field::Results;
     ed.search_for_test().selected = ed
         .search()
@@ -17850,6 +17883,7 @@ fn the_width_key_works_in_the_info_panel() {
             break;
         }
         ed.on_key(Key::Ctrl('w'));
+        ed.on_key(Key::Char('w'));
     }
     assert_eq!(ed.panel_focus(), Some(side), "鍵進到右欄了");
 
@@ -17940,6 +17974,7 @@ fn asking_and_showing_are_two_separate_things() {
             break;
         }
         ed.on_key(Key::Ctrl('w'));
+        ed.on_key(Key::Char('w'));
     }
     ed.on_key(Key::Char('l'));
     std::thread::sleep(std::time::Duration::from_millis(320));
@@ -17949,7 +17984,7 @@ fn asking_and_showing_are_two_separate_things() {
     assert_eq!(ed.info_now(), Some(Info::Docs), "進邊欄");
 
     // 再關掉它：回到浮窗，開關一個字都沒動。
-    press(&mut ed, " 4");
+    press(&mut ed, " wI");
     press(&mut ed, "q");
     assert!(ed.showing(View::Info).is_none(), "關掉了");
     assert_eq!(ed.info_live(), Info::Docs, "開關沒動");
@@ -18023,30 +18058,49 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`空格 !@#$`：不用走過去就關掉那一區**（2026-09-29 定）。
+/// **`C-w e`／`C-w i`：開關左右欄，鍵不過去**（2026-09-30 定）。
+///
+/// 原話：「_we / _wi for toggling left and right sidebars……Note that _we and
+/// _wi will **not** move focus to the sidebar。」大寫那一對是開了就走進去，而且
+/// 只開不關——「it does not close the sidebar as _we/_wi will do this」。
 #[test]
-fn the_shifted_digits_close_a_region_without_going_there() {
+fn the_region_group_toggles_a_bar_without_going_into_it() {
     use crate::sidebar::Side;
     let mut ed = typed("那年冬天。\n");
     ed.execute(":sidebar-left files").unwrap();
     ed.execute(":sidebar-right info").unwrap();
     assert!(ed.panel(Side::Left).is_some() && ed.panel(Side::Right).is_some());
-
-    // 鍵回正文，然後隔空關掉右邊那一格。
     while ed.panel_focus().is_some() {
         ed.on_key(Key::Ctrl('w'));
+        ed.on_key(Key::Char('w'));
     }
-    press(&mut ed, " $");
+
+    // 隔空關掉右邊那一格，鍵一直在正文裏。
+    press(&mut ed, " wi");
     assert!(ed.panel(Side::Right).is_none(), "右欄關了");
     assert!(ed.panel(Side::Left).is_some(), "左欄沒動");
     assert!(!ed.sidebar_focused(), "鍵一直在正文裏");
 
-    press(&mut ed, " #");
-    assert!(ed.panel(Side::Left).is_none(), "左欄也關了");
+    // 再按一次就開回來——它是開關，不是「關」。
+    press(&mut ed, " wi");
+    assert!(ed.panel(Side::Right).is_some(), "又開回來了");
+    assert!(!ed.sidebar_focused(), "開了鍵也不過去");
 
-    // Warning: **本來就沒開要出聲**，別靜悄悄。
-    press(&mut ed, " #");
-    assert_eq!(ed.status(), say!("region.not-open"));
+    // 左邊同一套。
+    press(&mut ed, " we");
+    assert!(ed.panel(Side::Left).is_none(), "左欄關了");
+
+    // **大寫是開了就走進去**，而且不關——已經開着的按它只是走進去。
+    press(&mut ed, " wE");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "開出來並且走進去");
+    press(&mut ed, " wE");
+    assert!(ed.panel(Side::Left).is_some(), "Warning: 大寫只開不關");
+    assert_eq!(ed.panel_focus(), Some(Side::Left));
+
+    // `C-w q` 關掉手上這一區，`C-w` 那一組兩扇門走的是同一條路。
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert!(ed.panel(Side::Left).is_none(), "C-w q 關掉了");
 }
 
 /// **有那一格就用那一格，此刻擺着哪一種都算**（2026-09-29 報的）。
@@ -18079,7 +18133,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
     assert_eq!(ed.hover_afloat(), Some("fn one()"), "沒地方就浮");
 
     // `空格 I` 把**診斷**送進邊欄——文檔並沒有佔着那一格。
-    press(&mut ed, " I");
+    press(&mut ed, " D");
     assert!(ed.showing(View::Info).is_some(), "那一格開了");
     assert_eq!(ed.info_now(), Some(Info::Problems), "擺的是診斷");
 
@@ -18091,7 +18145,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
     assert!(ed.problem_afloat().is_none(), "診斷讓開了");
 
     // 反過來：`空格 i` 把它換回診斷。
-    press(&mut ed, " i");
+    press(&mut ed, " d");
     assert_eq!(ed.info_now(), Some(Info::Problems), "換回診斷");
 
     // Warning: **`Tab` 不在五種之間轉**（報的原話：「文檔、诊断不可能同时出现
@@ -18127,7 +18181,7 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
     }]);
 
     // 出廠診斷即時：開出來是診斷。
-    press(&mut ed, " 4");
+    press(&mut ed, " wI");
     assert!(ed.showing(View::Info).is_some(), "那一格開了");
     assert_eq!(ed.info_now(), Some(Info::Problems), "出廠擺診斷");
 
