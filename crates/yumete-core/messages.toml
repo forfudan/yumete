@@ -1393,6 +1393,13 @@ en = "edit the reading here; `:ruby off|basic|full` is how much is drawn"
 find = "注音 拼音 振假名 旁註 旁注 furigana annotation"
 
 [[message]]
+# : 命令選單裏 rules 那一項的說明（#424）
+key = "cmd.commands.rules"
+zht = "在指定的欄上鋪一道底紋：`:rules 80 100 120`；不寫數字就是 80，`off` 關掉"
+zhs = "在指定的栏上铺一道底纹：`:rules 80 100 120`；不写数字就是 80，`off` 关掉"
+en = "tint these columns: :rules 80 100 120; bare is 80, off clears them"
+find = "竪綫 竖线 底紋 底纹 欄 栏 rules ruler margin 80"
+[[message]]
 # : 命令選單裏 run 那一項的說明（commands 組）
 key = "cmd.commands.run"
 zht = "跑這種文件在配置裏自己起名的那條命令"
@@ -5253,14 +5260,14 @@ en = "paste before, from the system clipboard"
 key = "hint.space.problems"
 zht = "顯示診斷信息（浮窗）"
 zhs = "显示诊断信息（浮窗）"
-en = "the diagnostics on this line (float)"
+en = "show diagnostics (float)"
 
 [[message]]
 # 空格選單：這一行的診斷，邊欄（2026-09-29 作者寫的）
 key = "hint.space.problems-panel"
 zht = "顯示診斷信息（邊欄）"
 zhs = "显示诊断信息（边栏）"
-en = "the diagnostics on this line (sidebar)"
+en = "show diagnostics (sidebar)"
 
 [[message]]
 # 空格菜單：跳到左邊欄（沒開就開那一側的頭一扇）
@@ -5314,16 +5321,16 @@ en = "Space"
 [[message]]
 # 空格菜單裏那一行：問語言服務器這是什麽
 key = "hint.space.what-is-this"
-zht = "顯示當前項目之文檔（浮窗）"
-zhs = "显示当前项目之文档（浮窗）"
-en = "the docs for the name under the cursor (float)"
+zht = "顯示光標位置之信息（浮窗）"
+zhs = "显示光标位置之信息（浮窗）"
+en = "show info at the cursor (float)"
 
 [[message]]
 # 空格菜單：把服務器那段話開進邊欄（浮窗是小寫的 k）
 key = "hint.space.what-is-this-panel"
-zht = "顯示當前項目之文檔（邊欄）"
-zhs = "显示当前项目之文档（边栏）"
-en = "the docs for the name under the cursor (sidebar)"
+zht = "顯示光標位置之信息（邊欄）"
+zhs = "显示光标位置之信息（边栏）"
+en = "show info at the cursor (sidebar)"
 
 [[message]]
 # 表格提示：加一欄
@@ -7434,6 +7441,20 @@ en = "reading: {0}"
 
 
 # ── scheme ────────────────────────────────────────────────────────────
+
+[[message]]
+# :rules off
+key = "rules.off"
+zht = "竪綫：關"
+zhs = "竖线：关"
+en = "rules: off"
+
+[[message]]
+# :rules 撥開了，說鋪在哪幾欄（#424）
+key = "rules.on"
+zht = "竪綫：第 {0} 欄"
+zhs = "竖线：第 {0} 栏"
+en = "rules at column {0}"
 
 [[message]]
 # 換方案時順帶報面板

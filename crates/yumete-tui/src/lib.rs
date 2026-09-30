@@ -8512,6 +8512,55 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
 /// the right edge as it always did — which is why wrapping is on by default for
 /// prose, where a paragraph is routinely one line of several hundred
 /// characters.
+/// **`:rules` 的那幾道底紋**（#424，2026-09-30）。
+///
+/// 作者原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
+/// `:rules 80 100 120` 來繪製多條。」
+///
+/// Warning: **是底紋不是綫。** 一條真的竪綫要佔一欄，而那一欄本來是寫字的；鋪底
+/// 紋不佔地方，字照樣寫在上面。
+///
+/// Warning: **只補底色，不動已經有底色的格。** 選區、光標行、表格的間色都自帶
+/// 底——蓋掉它們就成了「底紋壓過選區」。所以這一趟只給還是紙色的那些格上色。
+///
+/// Warning: **竪排下不畫。** 那一頭的單位是「第幾縱」不是「第幾欄」，「第 80 欄」
+/// 在那裏沒有意思（#424 的第一個問題，2026-09-30 定：先不畫，等真有人要）。
+fn tint_the_rules(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    text_area: Rect,
+    gutter: usize,
+    left: usize,
+) {
+    let at = editor.rules();
+    if at.is_empty() || text_area.width == 0 || text_area.height == 0 {
+        return;
+    }
+    let ink = crate::theme::Palette::of(config);
+    let paper = ink.paper();
+    // 「the tint past the measure」那一檔——底紋這件事它本來就在管。
+    let tint = ink.at(yumete_config::rung::BAND);
+    let buf = frame.buffer_mut();
+    for &column in at {
+        // 第 `column` 欄是 0 起算的第 `column - 1` 格，再減掉橫向滾動。
+        let Some(into) = column.checked_sub(1).and_then(|n| n.checked_sub(left)) else {
+            continue;
+        };
+        let x = text_area.x + (gutter + into) as u16;
+        if x >= text_area.x + text_area.width {
+            continue;
+        }
+        for y in text_area.y..text_area.y + text_area.height {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                if cell.bg == ratatui::style::Color::Reset || cell.bg == paper {
+                    cell.set_bg(tint);
+                }
+            }
+        }
+    }
+}
+
 fn draw_horizontal(
     frame: &mut Frame,
     editor: &Editor,
@@ -9609,6 +9658,8 @@ fn draw_horizontal(
             }
         }
     }
+
+    tint_the_rules(frame, editor, config, text_area, gutter, left);
 
     // The caret sits where the writing is, not where the source is — and
     // `wrap::position` is where that is decided, for the caret and for `j`
@@ -20328,7 +20379,66 @@ fn squeezed(text: &str) -> String {
 
 
 
-        /// **語言服務器在忙的時候，狀態行左邊那一格轉起來**（2026-09-30 作者提的）。
+        /// **`:rules` 在指定的欄上鋪一道底紋**（#424，2026-09-30 作者提的）。
+    ///
+    /// 原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
+    /// `:rules 80 100 120` 來繪製多條。」
+    ///
+    /// Warning: **量的是格子的底色，不是 HTML 的 span 數。** 相鄰同色的格會併成
+    /// 一個 span，所以數 span 數不出鋪了幾格——第一次就是這麽數錯的。
+    #[test]
+    fn rules_tint_the_columns_they_name() {
+        let config = Config::default();
+        // Warning: 讀墨色要先定明暗，見 §5.12.58——`ink()` 那一支會先定。
+        let ink = ink(&config);
+        let (paper, tint) = (ink.paper(), ink.at(yumete_config::rung::BAND));
+        assert_ne!(paper, tint, "底紋和紙要分得出來");
+        let mut editor = editor_with(&format!("{}\n{}\n{}", "x".repeat(70), "x".repeat(70), "x".repeat(70)));
+        let gutter = |ed: &Editor| -> u16 {
+            // 行號那一條的寬度：第 1 欄畫在它右邊第一格。
+            let buffer = render(ed, &config, 90, 8);
+            let row = 0;
+            (0..90u16)
+                .find(|&x| buffer.cell((x, row)).is_some_and(|c| c.symbol() == "x"))
+                .expect("找得到正文第一格")
+        };
+        let band = gutter(&editor);
+
+        // 沒撥的時候一格都不鋪。
+        let before = render(&editor, &config, 90, 8);
+        assert!(
+            (0..90u16).all(|x| before.cell((x, 0)).is_none_or(|c| c.bg != tint)),
+            "出廠一道都沒有"
+        );
+
+        // 撥兩道：正好那兩欄變色，別的不變。
+        editor.execute(":rules 5 12").unwrap();
+        let after = render(&editor, &config, 90, 8);
+        for (column, want) in [(5u16, true), (12, true), (4, false), (6, false), (11, false)] {
+            let x = band + column - 1;
+            let got = after.cell((x, 0)).map(|c| c.bg == tint).unwrap_or(false);
+            assert_eq!(got, want, "第 {column} 欄（x={x}）該不該有底紋");
+        }
+        // 每一行都鋪，不只第一行。
+        assert!(
+            (0..3u16).all(|y| after.cell((band + 4, y)).is_some_and(|c| c.bg == tint)),
+            "整條鋪下來"
+        );
+
+        // `off` 收乾淨。
+        editor.execute(":rules off").unwrap();
+        let gone = render(&editor, &config, 90, 8);
+        assert!(
+            (0..90u16).all(|x| gone.cell((x, 0)).is_none_or(|c| c.bg != tint)),
+            "關掉就一格都沒有"
+        );
+
+        // 光禿禿的 `:rules` ＝ 第 80 欄（作者說的「比如默认 80」）。
+        editor.execute(":rules").unwrap();
+        assert_eq!(editor.rules(), &[80]);
+    }
+
+    /// **語言服務器在忙的時候，狀態行左邊那一格轉起來**（2026-09-30 作者提的）。
         ///
         /// 原話：「这个动态八个点显示正在加载的符号很好用……如果是的话，我们也可以
         /// 用这个，而不是用下面的那句话。」從前那是一整句

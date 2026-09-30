@@ -1395,8 +1395,11 @@ fn tab_cycles_the_command_completion() {
     for c in "ru".chars() {
         ed.on_key(Key::Char(c));
     }
-    // Tab walks the matches, writing each onto the line — `run` and `ruby`
-    // both start with `ru`, in the order the table lists them.
+    // Tab walks the matches, writing each onto the line — `rules`, `run` and
+    // `ruby` all start with `ru`, in the order the table lists them.
+    // （`rules` 是 2026-09-30 加的，#424，所以它排在最前。）
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.prompt(), Some((":", "rules")));
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "run")));
     ed.on_key(Key::Tab);
