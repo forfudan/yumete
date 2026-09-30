@@ -14,7 +14,7 @@
 use std::sync::OnceLock;
 
 use streaming_iterator::StreamingIterator;
-use tree_sitter::{Parser, Query, QueryCursor};
+use tree_sitter::{Parser, Query, QueryCursor, Tree};
 
 use crate::markdown::{Kind, Span};
 
@@ -224,28 +224,114 @@ fn token_of(capture: &str) -> Paint {
 /// The coloured runs of each line of `lines`, parsed as `language` — one entry
 /// per line, in char indices, in order and non-overlapping.
 pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
-    let mut out = vec![Vec::new(); lines.len()];
-    let Some((query, tokens)) = language.query() else {
-        return out;
-    };
-    let mut source = String::new();
-    let mut starts = Vec::with_capacity(lines.len());
+    let source = joined(lines);
+    match parse(language, &source, None) {
+        Some(tree) => paint(language, &source, &tree, lines, 0..lines.len()),
+        None => vec![Vec::new(); lines.len()],
+    }
+}
+
+/// 一行一行接成一份源碼，每行帶一個換行——`parse` 與 `paint` 讀的是同一份。
+pub fn joined(lines: &[String]) -> String {
+    let mut source = String::with_capacity(lines.iter().map(|l| l.len() + 1).sum());
     for line in lines {
-        starts.push(source.len());
         source.push_str(line);
         source.push('\n');
     }
-    let mut parser = Parser::new();
-    if parser.set_language(&language.grammar()).is_err() {
-        return out;
+    source
+}
+
+/// **上一份源碼和這一份差在哪**——回一個 `Tree::edit` 吃得下的改動（#423）。
+///
+/// Warning: **不必讓編輯器交出「改了什麽」。** 掐頭去尾就看得出來：從前面數到
+/// 第一個不同的字節，從後面數到第一個不同的字節，中間那一段就是改動。打一個字
+/// 是一次 970 KB 的 memcmp，十分之一毫秒；而換來的是增量解析（0.7 毫秒對 50 毫
+/// 秒）。
+///
+/// Warning: **多光標、粘貼也對。** 幾處一起改的話，掐頭去尾框出來的是**把它們
+/// 全包住的那一段**——重解析的範圍大一點，答案一樣對。
+///
+/// `None` ＝ 兩份一模一樣。
+pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
+    if was == now {
+        return None;
     }
-    let Some(tree) = parser.parse(&source, None) else {
+    let (a, b) = (was.as_bytes(), now.as_bytes());
+    let head = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    // 從後面數，兩頭不許越過已經對上的那一段。
+    let most = a.len().min(b.len()) - head;
+    let tail = (0..most)
+        .take_while(|i| a[a.len() - 1 - i] == b[b.len() - 1 - i])
+        .count();
+    let point = |text: &str, byte: usize| {
+        let upto = &text[..byte];
+        let row = upto.matches('\n').count();
+        let column = byte - upto.rfind('\n').map_or(0, |at| at + 1);
+        tree_sitter::Point::new(row, column)
+    };
+    let start = head;
+    let old_end = a.len() - tail;
+    let new_end = b.len() - tail;
+    Some(tree_sitter::InputEdit {
+        start_byte: start,
+        old_end_byte: old_end,
+        new_end_byte: new_end,
+        start_position: point(was, start),
+        old_end_position: point(was, old_end),
+        new_end_position: point(now, new_end),
+    })
+}
+
+/// **解析一份源碼，樹交出去**（#423，2026-09-30）。
+///
+/// `was` 是上一棵樹（`Tree::edit` 過的）：給了它就走增量，一個字的改動七百多微
+/// 秒，從頭解析要五十毫秒。
+///
+/// Warning: **樹要有人存着。** 從前 `highlight` 每叫一次解析一次，於是滾一屏也
+/// 付一次全份解析——量過 20,368 行的 `lib.rs` 是 50 毫秒。
+pub fn parse(language: Language, source: &str, was: Option<&Tree>) -> Option<Tree> {
+    let mut parser = Parser::new();
+    parser.set_language(&language.grammar()).ok()?;
+    parser.parse(source, was)
+}
+
+/// **只給 `rows` 那幾行上色**（#423）。
+///
+/// 樹已經在手上，所以這一支只做查詢，而查詢只掃那幾行覆蓋的字節。量過同一個
+/// `lib.rs`：整棵樹查一遍 25 毫秒，只查五十行 0.06 毫秒。
+///
+/// Warning: **跨過窗口邊緣的那些捕獲照樣算。** 一條橫跨半個檔的塊註釋、一個三
+/// 引號字串，起點在窗口上面、終點在窗口下面——`set_byte_range` 收的是**與這一
+/// 段相交**的節點，不是「整個裝在裏面」的。這一條有測試釘着
+/// （`a_window_paints_exactly_what_the_whole_file_would`）。
+pub fn paint(
+    language: Language,
+    source: &str,
+    tree: &Tree,
+    lines: &[String],
+    rows: std::ops::Range<usize>,
+) -> Vec<Vec<Span>> {
+    let rows = rows.start.min(lines.len())..rows.end.min(lines.len());
+    let mut out = vec![Vec::new(); rows.len()];
+    let Some((query, tokens)) = language.query() else {
         return out;
     };
+    let mut starts = Vec::with_capacity(lines.len());
+    let mut at = 0usize;
+    for line in lines {
+        starts.push(at);
+        at += line.len() + 1;
+    }
+    if rows.is_empty() {
+        return out;
+    }
+    let from = starts[rows.start];
+    let to = starts[rows.end - 1] + lines[rows.end - 1].len();
 
     // (start, end, pattern, token) in bytes of `source`.
     let mut found: Vec<(usize, usize, usize, Token)> = Vec::new();
     let mut cursor = QueryCursor::new();
+    cursor.set_byte_range(from..to);
     let mut matches = cursor.matches(query, tree.root_node(), source.as_bytes());
     while let Some(m) = matches.next() {
         for capture in m.captures {
@@ -255,14 +341,17 @@ pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
             }
         }
     }
-    // **Outer first, then in the order the query lists them**, each painting
-    // over the last: an escape inside a string is its own colour, and when two
-    // patterns name the same node **the later one wins**. That is how these
-    // queries are written — Python opens with `(identifier) @variable` and
-    // says `@function` further down; YAML lists `@string` above `@property` —
-    // and it is Helix's and Neovim's rule too. (`tree-sitter-highlight` has
-    // the opposite one, and read with it every function came out plain.)
-    //
+    paint_the_rows(found, lines, &starts, rows, &mut out);
+    out
+}
+
+fn paint_the_rows(
+    mut found: Vec<(usize, usize, usize, Token)>,
+    lines: &[String],
+    starts: &[usize],
+    rows: std::ops::Range<usize>,
+    out: &mut [Vec<Span>],
+) {
     // Warning: **One exception: a name beats a string on the same node.** JSON's
     // query is the one written the other way round — `@string.special.key`
     // above `(string) @string` — so a key came out the green of its value.
@@ -285,9 +374,25 @@ pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
     // order, so one index is enough: everything that can open on this line has
     // start < `to`, and what is finished (end ≤ `from`) comes out. `live`
     // keeps `found`'s order, which **is** the painting order.
+    // Warning: **跨過窗口上緣的那幾個要先收進來**，一條橫跨半個檔的塊註釋就是
+    // 那一種。`found` 按起點排過，而查詢只交回**與這一窗相交**的捕獲，所以這
+    // 一趟只走 `found`，不走檔子的前半。
+    //
+    // Warning: **別改回「從第 0 行掃起」**（2026-09-30 量出來的）。那樣走的是
+    // `O(窗口在第幾行)`：同一份 `lib.rs`，第 9,000 行那一塊 2.7 毫秒，第
+    // 15,000 行那一塊 6.4 毫秒——愈往下愈慢，而那正是讀長檔的人待的地方。
     let mut next = 0usize;
     let mut live: Vec<(usize, usize, Token)> = Vec::new();
-    for (n, line) in lines.iter().enumerate() {
+    let head = starts[rows.start];
+    while next < found.len() && found[next].0 < head {
+        let (start, end, _, token) = found[next];
+        if end > head {
+            live.push((start, end, token));
+        }
+        next += 1;
+    }
+    for n in rows.clone() {
+        let line = &lines[n];
         let from = starts[n];
         let to = from + line.len();
         while next < found.len() && found[next].0 < to {
@@ -309,7 +414,7 @@ pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
             }
         }
         // Bytes to runs of chars.
-        let spans = &mut out[n];
+        let spans = &mut out[n - rows.start];
         let mut run: Option<(usize, Token)> = None;
         let mut index = 0;
         for (byte, _) in line.char_indices() {
@@ -329,7 +434,6 @@ pub fn highlight(language: Language, lines: &[String]) -> Vec<Vec<Span>> {
             spans.push(span(start, index, token));
         }
     }
-    out
 }
 
 fn span(start: usize, end: usize, token: Token) -> Span {
@@ -427,5 +531,213 @@ mod tests {
     fn broken_code_still_colours_what_it_can() {
         let got = highlight(Language::Python, &lines("def (\n# 註\nreturn"));
         assert_eq!(at(&got, 1, 0), Some(Token::Comment), "{:?}", got);
+    }
+}
+
+#[cfg(test)]
+mod how_long_does_it_take {
+    use super::*;
+    use std::time::Instant;
+
+    /// **增量解析出來的樹，要和從頭解析的畫出一樣的顏色**（#423）。
+    ///
+    /// Warning: **釘的是 `what_changed` 框得準不準。** 框錯一個字節，tree-sitter
+    /// 會拿錯的舊節點去對新文本，顏色從那裏起全歪——而那種錯**只在改過之後纔
+    /// 出現**，開檔看是好的。所以這裏逐種改法試一遍：插一個字、刪一段、換一段、
+    /// 在頭上、在尾上、在中文上。
+    #[test]
+    fn an_edited_tree_paints_what_a_fresh_one_would() {
+        let before = "\
+fn one() {}
+/* 塊註釋
+   第二行 */
+fn two() -> &'static str { \"一個字串\" }
+struct 三 { 甲: u8 }
+";
+        let edits: &[(&str, &str, &str)] = &[
+            ("插一個字", "fn one()", "fn onex()"),
+            ("插在頭上", "fn one() {}", "use std::fmt;\nfn one() {}"),
+            ("插在尾上", "struct 三 { 甲: u8 }\n", "struct 三 { 甲: u8 }\nfn four() {}\n"),
+            ("刪一段", "/* 塊註釋\n   第二行 */\n", ""),
+            ("換一段", "\"一個字串\"", "\"換了的字串\""),
+            ("動中文", "甲: u8", "乙丙丁: u8"),
+            ("把註釋拆開", "/* 塊註釋", "/ * 塊註釋"),
+            ("整個清空", "fn one() {}\n", ""),
+        ];
+        for (what, from, to) in edits {
+            let after = before.replacen(from, to, 1);
+            assert_ne!(after, before, "{what}：這一改沒改動任何東西");
+
+            let tree = parse(Language::Rust, before, None).expect("解析得了");
+            let edit = what_changed(before, &after).expect("看得出改了");
+            let mut edited = tree.clone();
+            edited.edit(&edit);
+            let again =
+                parse(Language::Rust, &after, Some(&edited)).expect("增量也解析得了");
+
+            let lines: Vec<String> = after.lines().map(str::to_string).collect();
+            let source = joined(&lines);
+            let fresh = parse(Language::Rust, &source, None).expect("從頭也解析得了");
+            let rows = 0..lines.len();
+            assert_eq!(
+                paint(Language::Rust, &source, &again, &lines, rows.clone()),
+                paint(Language::Rust, &source, &fresh, &lines, rows),
+                "{what}：增量解析畫出來的和從頭解析的不一樣"
+            );
+        }
+    }
+
+    /// 一模一樣的兩份，`what_changed` 要說「沒改」——不然每一幀白解析一次。
+    #[test]
+    fn nothing_changed_is_nothing_to_do() {
+        assert!(what_changed("abc", "abc").is_none());
+        let one = what_changed("abc", "abXc").expect("看得出");
+        assert_eq!((one.start_byte, one.old_end_byte, one.new_end_byte), (2, 2, 3));
+        let two = what_changed("abXc", "abc").expect("看得出");
+        assert_eq!((two.start_byte, two.old_end_byte, two.new_end_byte), (2, 3, 2));
+    }
+
+    /// **一窗畫出來的，要和整份畫出來的那幾行逐字節相同**（#423）。
+    ///
+    /// Warning: **這一條釘的是「跨過邊緣的捕獲會不會掉」。** 一條橫跨半個檔的
+    /// 塊註釋、一個三引號字串，起點在窗口上面、終點在窗口下面——`set_byte_range`
+    /// 要是只收「整個裝在裏面」的節點，那幾行就會少掉顏色，而那種錯**只在滾到
+    /// 某一屏的時候纔看得見**，逐行對照纔抓得住。
+    ///
+    /// 所以這裏拿一份真有那幾種東西的源碼，**每一個窗口都對一遍**。
+    #[test]
+    fn a_window_paints_exactly_what_the_whole_file_would() {
+        let text = "\
+fn one() {}
+/* 一條橫跨好多行的塊註釋
+   第二行
+   第三行
+   第四行 */
+fn two() -> &'static str {
+    let s = \"一個字串\";
+    let long = \"
+橫跨幾行的字串
+還在裏面
+\";
+    s
+}
+// 末尾一行註釋
+struct 三 { 甲: u8 }
+";
+        let lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let whole = highlight(Language::Rust, &lines);
+        let source = joined(&lines);
+        let tree = parse(Language::Rust, &source, None).expect("解析得了");
+        // 每一個起點、每一種窗高都對一遍。
+        for from in 0..lines.len() {
+            for deep in 1..=lines.len() - from {
+                let rows = from..from + deep;
+                let window = paint(Language::Rust, &source, &tree, &lines, rows.clone());
+                assert_eq!(
+                    window,
+                    whole[rows.clone()].to_vec(),
+                    "第 {from} 行起 {deep} 行，和整份畫的不一樣"
+                );
+            }
+        }
+    }
+
+    /// **量一遍：解析多久、查詢多久、只查一窗多久**（#423）。
+    ///
+    /// 不是斷言，是報數——`cargo test -p yumete-core how_long -- --nocapture`。
+    /// Warning: **debug build 的數不能拿去做決定**，tree-sitter 在 debug 下慢一
+    /// 個數量級；要真數就 `--release`。
+    #[test]
+    #[ignore = "報數用的，不是斷言；要跑加 --release --nocapture"]
+    fn the_three_numbers_behind_423() {
+        let path = std::env::var("YUMETE_BENCH")
+            .unwrap_or_else(|_| "crates/yumete-tui/src/lib.rs".to_string());
+        let text = std::fs::read_to_string(&path).expect("讀得到那個檔");
+        let lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let language = Language::Rust;
+        let mut source = String::new();
+        for line in &lines {
+            source.push_str(line);
+            source.push('\n');
+        }
+        println!("\n{path}：{} 行，{} KB", lines.len(), text.len() / 1024);
+
+        let mut parser = Parser::new();
+        parser.set_language(&language.grammar()).unwrap();
+        let at = Instant::now();
+        let tree = parser.parse(&source, None).unwrap();
+        println!("  解析整份        {:?}", at.elapsed());
+
+        let (query, _tokens) = language.query().unwrap();
+        let count = |range: Option<std::ops::Range<usize>>| {
+            let mut cursor = QueryCursor::new();
+            if let Some(range) = range {
+                cursor.set_byte_range(range);
+            }
+            let at = Instant::now();
+            let mut n = 0usize;
+            let mut matches = cursor.matches(query, tree.root_node(), source.as_bytes());
+            while let Some(m) = matches.next() {
+                n += m.captures.len();
+            }
+            (at.elapsed(), n)
+        };
+        let (whole, n) = count(None);
+        println!("  查詢整份        {whole:?}  {n} 處");
+
+        // 一屏大約五十行，取檔子中間那一段。
+        let mid = source.len() / 2;
+        let window = source[..mid].rfind('\n').unwrap_or(0);
+        let upto = source[window..]
+            .char_indices()
+            .filter(|(_, c)| *c == '\n')
+            .nth(50)
+            .map_or(source.len(), |(i, _)| window + i);
+        let (one, n) = count(Some(window..upto));
+        println!("  只查一窗（50 行）{one:?}  {n} 處");
+
+        // **真檔上也對一遍**：合成的那一份小，橫跨邊緣的東西未必夠多。
+        let whole = highlight(language, &lines);
+        for from in (0..lines.len().saturating_sub(50)).step_by(997) {
+            let rows = from..from + 50;
+            let win = paint(language, &source, &tree, &lines, rows.clone());
+            assert_eq!(win, whole[rows.clone()].to_vec(), "第 {from} 行起那一窗對不上");
+        }
+        println!("  每 997 行取一窗，和整份逐格相同");
+
+        // paint() 本身要多久，在檔子的不同位置各量一次。
+        for at in [500usize, 5_000, 10_000, 19_000] {
+            if at + 128 >= lines.len() {
+                continue;
+            }
+            let t = Instant::now();
+            let got = paint(language, &source, &tree, &lines, at..at + 128);
+            println!("  paint 128 行 @{at:>6}  {:?}  {} 行", t.elapsed(), got.len());
+        }
+
+        // **打一個字之後再解析一遍**，兩條路各量一次。
+        let mut after = source.clone();
+        let at_byte = window;
+        after.insert(at_byte, 'x');
+        let at = Instant::now();
+        let mut fresh = Parser::new();
+        fresh.set_language(&language.grammar()).unwrap();
+        let _ = fresh.parse(&after, None).unwrap();
+        println!("  改一個字，從頭解析 {:?}", at.elapsed());
+
+        let mut edited = tree.clone();
+        edited.edit(&tree_sitter::InputEdit {
+            start_byte: at_byte,
+            old_end_byte: at_byte,
+            new_end_byte: at_byte + 1,
+            start_position: tree_sitter::Point::new(0, 0),
+            old_end_position: tree_sitter::Point::new(0, 0),
+            new_end_position: tree_sitter::Point::new(0, 1),
+        });
+        let at = Instant::now();
+        let again = parser.parse(&after, Some(&edited)).unwrap();
+        println!("  改一個字，增量解析 {:?}", at.elapsed());
+        let _ = again;
+        println!();
     }
 }
