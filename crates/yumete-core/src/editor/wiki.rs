@@ -450,7 +450,7 @@ impl Editor {
         if self.wiki_include_here().is_some() {
             return None;
         }
-        // **邊欄那一格開着就不浮，數據壓在它上面**——「畫在哪」只有一個答案，
+        // **邊欄那一格開着就不浮，記錄壓在它上面**——「畫在哪」只有一個答案，
         // 而五種裏誰在上面由 `info_now` 一處說了算（#426）。
         (self.info_afloat() == Some(crate::sidebar::Info::Wiki))
             .then(|| self.wiki_here())

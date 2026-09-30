@@ -70,7 +70,7 @@ pub struct Panel {
     ///
     /// 決定它多大：讀的那幾扇按 2/3 × 1/3 擺（`chrome::room`），鍵表按老規矩
     /// （半頁高，能塞幾欄塞幾欄）。Warning: **判準是「拿來幹什麽」，不是
-    /// `Body` 是哪一種。** 數據畫成兩欄字段（`Body::Keys`），可它是讀的——它
+    /// `Body` 是哪一種。** 記錄畫成兩欄字段（`Body::Keys`），可它是讀的——它
     /// 從前跟着 `空格` 選單一起吃了「鍵表」那一套，於是鋪滿整個屏幕寬。
     pub reading: bool,
     /// **Whether the body is Markdown and should be set as Markdown**
@@ -500,7 +500,7 @@ pub fn draw(
     // Menus keep the older rule (half the page, as many columns as fit).
     let prose = matches!(panel.body, Body::Prose(_));
     // Warning: **判準是「拿來讀的嗎」，不只是 `Body` 哪一種**（2026-09-30 作者
-    // 報的：數據那一扇「size 和 location 看着不對」）。數據畫成兩欄字段，可它
+    // 報的：記錄那一扇「size 和 location 看着不對」）。記錄畫成兩欄字段，可它
     // 和別的四種信息一樣是讀的，該和它們一樣大。
     let (room_w, room_h) = match prose || panel.reading {
         true => crate::chrome::room(area, vertical),
@@ -782,7 +782,7 @@ pub fn draw(
         .max(read_w + tag_w + 7)
         .min(match &panel.body {
             // Prose keeps to the room (above); a key menu has its own rule
-            // about how many columns it may spread into — and 數據 is read,
+            // about how many columns it may spread into — and 記錄 is read,
             // not scanned, so it keeps to the room too.
             Body::Prose(_) => (room_w as usize).max(24),
             Body::Keys(_) if panel.reading => (room_w as usize).max(24),

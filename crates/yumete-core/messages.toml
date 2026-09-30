@@ -1259,9 +1259,9 @@ find = "縮進 缩进 首行 段落 indent paragraph"
 [[message]]
 # : 命令選單裏 info 那一項的說明（#426）
 key = "cmd.commands.info"
-zht = "信息：即時顯示哪一種（data／diagnostics／dictionary／wiki／docs；不寫就按稿子算）"
-zhs = "信息：即时显示哪一种（data／diagnostics／dictionary／wiki／docs；不写就按稿子算）"
-en = "info: which of data / diagnostics / dictionary / wiki / docs follows the cursor (blank: by the file)"
+zht = "信息：即時顯示哪一種（record／diagnostics／dictionary／wiki／docs；不寫就按稿子算）"
+zhs = "信息：即时显示哪一种（record／diagnostics／dictionary／wiki／docs；不写就按稿子算）"
+en = "info: which of record / diagnostics / dictionary / wiki / docs follows the cursor (blank: by the file)"
 find = "信息 info 記錄 记录 診斷 诊断 字典 百科 文檔 文档 record diagnostics dictionary wiki docs 即時 即时 及時 及时"
 
 [[message]]
@@ -2420,7 +2420,7 @@ find = "分隔 逗號 逗号 制表符 csv tsv 拆開 拆开"
 key = "cmd.table.detail"
 zht = "記錄那一格：開、關，或者給個寬度"
 zhs = "记录那一格：开、关，或者给个宽度"
-en = "the data panel: on, off, or a width"
+en = "the record panel: on, off, or a width"
 find = "記錄 记录 數據 数据 詳情 详情 展開 展开 detail record"
 
 [[message]]

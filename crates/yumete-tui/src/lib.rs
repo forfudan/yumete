@@ -4169,7 +4169,7 @@ fn draw(
         // Warning: **一個邊欄一個面板**（2026-09-22：臨時層廢除）。信息那一格裏
         // 擺哪一種是**問出來的**（`info_now`），這裏什麽都不用記——#426。
         //
-        // 數據那一種自己畫（它是一張表的一行，兩欄對齊），別的四種走
+        // 記錄那一種自己畫（它是一張表的一行，兩欄對齊），別的四種走
         // `draw_sidebar`。
         match editor.info_in_this_sidebar(side) {
             Some(Info::Record) => table::draw_detail(frame, editor, config, side, rect),
@@ -5621,7 +5621,7 @@ fn draw_note(
     }
     // **這一行的字段，浮在旁邊**（#426，2026-09-30）。
     //
-    // Warning: **數據從前只有邊欄一種形態**：它是光標頂上來的「臨時面板」，自己
+    // Warning: **記錄從前只有邊欄一種形態**：它是光標頂上來的「臨時面板」，自己
     // 開自己關。五種併成一格之後那條路沒有了（邊欄只由人開由人關），所以它跟
     // 別的四種一樣要有一個浮窗——作者的模型是「右侧栏就是固定的『浮窗』」，
     // 反過來說，每一種都得浮得起來。
@@ -5912,9 +5912,6 @@ fn drawable(text: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
-///
-/// Returns the first cell it did **not** write, so a caller can put something
-/// after it — a note beside a row (#291) — without measuring the text twice.
 /// [`put_text`], with the line's **Markdown set in its own inks**.
 ///
 /// One copy of a loop that had been written out three times — the float
@@ -5963,6 +5960,8 @@ pub(crate) fn put_marked_text(
     at
 }
 
+/// Returns the first cell it did **not** write, so a caller can put something
+/// after it — a note beside a row (#291) — without measuring the text twice.
 pub(crate) fn put_text(
     buf: &mut ratatui::buffer::Buffer,
     x: u16,
@@ -6943,6 +6942,9 @@ fn draw_sidebar(
                 side,
                 area,
                 !matches!(one, Some(Info::Dictionary)),
+                // 文檔照服務器說的算；字典是拆分與編碼，診斷是編譯器的話——
+                // 兩樣都不是 Markdown。
+                one == Some(Info::Docs) && editor.hover_is_markdown(),
             ),
         }
         return None;
@@ -8045,9 +8047,14 @@ fn draw_dictionary(
     config: &Config,
     side: Side,
     area: Rect,
-    // **這一份是文檔而不是字典**（2026-09-29）：文檔要折行、照 Markdown 畫，
-    // 而且它的名字是它那扇面板的名字。
+    // **這一份是文檔而不是字典**（2026-09-29）：文檔與診斷要折行，而且它們的
+    // 名字是各自那扇面板的名字。
     docs: bool,
+    // **照不照 Markdown 畫**（2026-10-01 審出來的）。從前和 `docs` 是同一格，
+    // 於是兩處畫錯：診斷是編譯器的話，不是 Markdown；而文檔照不照 Markdown
+    // 畫是**服務器自己說的**（`MarkupContent.kind`），浮窗那一頭早就問了，邊欄
+    // 這一頭還寫死着「是」。
+    marked: bool,
 ) {
     if area.width < 3 || area.height == 0 {
         return;
@@ -8110,7 +8117,7 @@ fn draw_dictionary(
         let y = area.y + 1 + slot as u16;
         // Warning: **服務器送的是 Markdown，邊欄裏也照 Markdown 畫**——和浮窗裏那一份
         // 一個字不差（2026-09-22）。走的是正文用的那一支墨色表。
-        match docs {
+        match marked {
             true => put_marked_text(buf, from + 1, y, to, &row.name, style, ink),
             // 字典那一份不是 Markdown——它是拆分與編碼，一個 `*` 就是一個 `*`。
             //

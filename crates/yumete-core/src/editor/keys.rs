@@ -2409,7 +2409,7 @@ impl Editor {
             // diagnostics picker）。同形：小寫浮，大寫進邊欄。
             Key::Char('d') => self.show_the_problem_here(true),
             Key::Char('D') => self.show_the_problem_here(false),
-            // **數據**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
+            // **記錄**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
             // 格的事），這一對是順手。
             Key::Char('i') => self.show_the_record_here(true),
             Key::Char('I') => self.show_the_record_here(false),

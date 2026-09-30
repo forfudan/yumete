@@ -1148,7 +1148,7 @@ impl Editor {
             Info::Wiki => Some(self.wiki_here()?.as_prose().lines().count()),
             Info::Problems => Some(self.problem_here()?.1.len()),
             // Warning: **成對字段的那兩種不收這四個鍵**（2026-09-30 量出來的）。
-            // 一是它們畫成兩欄（`Body::Keys`），本來就不按行翻；二是數據**一直
+            // 一是它們畫成兩欄（`Body::Keys`），本來就不按行翻；二是記錄**一直
             // 浮着**——讀成格子的時候它跟着光標，於是收了鍵就等於把格子的翻頁
             // 永遠吃掉。它們讀不完的出路是底邊那一行寫的「進邊欄」。
             Info::Dictionary | Info::Record => None,

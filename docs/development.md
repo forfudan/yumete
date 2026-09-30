@@ -18701,7 +18701,7 @@ Warning: **只要它是個字段，就永遠會有第四個地方忘記。** 第
 | `enum Transient`：Detail Dictionary | **刪了** |
 | — | `enum Info`：Dictionary Wiki Data Docs Problems |
 | 五個字段：`docs_follow` `problems_follow` `problem_asked` `spot_chosen` `dictionary_afloat` | 兩個：`info_asked: Option<(Info, usize)>` `info_live: Option<Info>` |
-| `:docs [on\|off]` ＋ `:diagnostics [on\|off]` | `:info <名>`（五個名：`data` `diagnostics` `dictionary` `wiki` `docs`） |
+| `:docs [on\|off]` ＋ `:diagnostics [on\|off]` | `:info <名>`（五個名：`record` `diagnostics` `dictionary` `wiki` `docs`） |
 | 「表格」 | 「數據」 |
 
 新模組 `crates/yumete-core/src/editor/info.rs` 收着全部派生：
