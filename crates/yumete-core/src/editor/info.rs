@@ -208,15 +208,27 @@ impl Editor {
         self.info_live
     }
 
-    /// **「讀不完就去邊欄」該寫哪一個數字**（#426，2026-09-30 審出來的）。
+    /// **「把這一則送進邊欄」按哪一個鍵**（#426）。
     ///
-    /// 那一行從前寫死 `空格 4`，而 `空格 4` 的意思是「去**右**邊欄」——信息那一
-    /// 格配到左邊（`:panel-left info`，手冊自己就這麽舉例）之後那句話當場成了假
-    /// 的：按下去回的是「這一側沒有哪一扇面板歸它」。數字要跟着那一格走。
-    pub fn the_key_into_the_info_panel(&self) -> u32 {
-        match self.side_for(View::Info) {
-            Side::Left => 3,
-            Side::Right => 4,
-        }
+    /// 從前這句話寫在浮窗的底邊上，2026-09-30 挪到了命令行——作者說「`␣K 進邊
+    /// 欄` 似乎反而不是很重要的信息，可以在命令行是空的时候放到命令行中」，而
+    /// 底邊那一頭讓給了「怎麽翻頁」。
+    ///
+    /// Warning: **數字要跟着那一格走。** 從前寫死 `空格 4`，而 `空格 4` 的意思
+    /// 是「去**右**邊欄」——信息那一格配到左邊（`:panel-left info`，手冊自己就
+    /// 這麽舉例）之後那句話當場成了假的：按下去回的是「這一側沒有哪一扇面板歸
+    /// 它」。
+    pub fn the_key_into_the_info_panel(&self) -> String {
+        // 五種裏四種有自己的大寫鍵，那一個最短；數據沒有，走那一格的區號。
+        let key = match self.info_now() {
+            Some(Info::Dictionary) => "D".to_string(),
+            Some(Info::Wiki | Info::Docs) => "K".to_string(),
+            Some(Info::Problems) => "I".to_string(),
+            _ => match self.side_for(View::Info) {
+                Side::Left => "3".to_string(),
+                Side::Right => "4".to_string(),
+            },
+        };
+        format!("\u{2423}{key}")
     }
 }

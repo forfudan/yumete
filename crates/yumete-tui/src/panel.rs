@@ -63,6 +63,9 @@ pub struct Panel {
     /// 「第 11 行」 — where the thing being shown is written. Right-aligned on
     /// the bottom border, out of the reading path.
     pub tag: Option<String>,
+    /// **這一扇翻得動嗎**（#426）。翻得動的時候底邊右端寫的是「怎麽翻」而不是
+    /// `tag`——五種信息都是這一類，而註、`[yumete]` 那一行不是。
+    pub pages: bool,
     /// **Whether the body is Markdown and should be set as Markdown**
     /// (#53 ③, 2026-09-21).
     ///
@@ -494,7 +497,21 @@ pub fn draw(
         false => (area.width, area.height / 2 + 1),
     };
     let title_w = yumete_cjk::str_width(&panel.title);
-    let tag_w = panel.tag.as_deref().map(yumete_cjk::str_width).unwrap_or(0);
+    // **翻得動的時候，底邊右端寫「怎麽翻」**（2026-09-30 作者定：「浮窗或者右侧
+    // 面板，可以显示『PgUp/PgDn 翻页』。『␣K 进边栏』似乎反而不是很重要的信息」）。
+    // 「進邊欄」挪到了命令行（`hint.rs` 的 `the_way_back_to_the_list`）。
+    //
+    // 這裏先量一個最寬的：翻不翻得動要等下面算完 `cap` 纔知道，而寬度要先定。
+    let paged = say!("info.page-it");
+    let tag_w = panel
+        .tag
+        .as_deref()
+        .map(yumete_cjk::str_width)
+        .unwrap_or(0)
+        .max(match panel.pages {
+            true => yumete_cjk::str_width(&paged),
+            false => 0,
+        });
     // The ring costs two cells across and two rows down; the bottom edge has
     // to hold the tag as well as a corner.
     let widest = (area.width as usize).saturating_sub(2);
@@ -742,7 +759,7 @@ pub fn draw(
         .max(title_w + 4)
         .max(tag_w + 4)
         // 底邊兩頭各站一個，中間至少留一格橫線。
-        .max(read_w + tag_w + 5)
+        .max(read_w + tag_w + 7)
         .min(match &panel.body {
             // Prose keeps to the room (above); a key menu has its own rule
             // about how many columns it may spread into.
@@ -907,14 +924,24 @@ pub fn draw(
     // Quietly, on the bottom edge and hard right: it is where the thing is
     // written, not part of what it says.
     let floor = rect.y + height - 1;
-    if let Some(tag) = &panel.tag {
-        let x = limit.saturating_sub(tag_w as u16 + 1);
-        put_text(buf, x, floor, limit, tag, ground.fg(ink.quiet()));
+    // 翻得動就寫「怎麽翻」，否則寫這一扇自己的那句話（註寫在第幾行、開哪個檔）。
+    let right = match panel.pages && read.is_some() {
+        true => Some(paged),
+        false => panel.tag.clone(),
+    };
+    if let Some(tag) = right {
+        let w = yumete_cjk::str_width(&tag) as u16;
+        put_text(buf, limit.saturating_sub(w + 1), floor, limit, &tag, ground.fg(ink.quiet()));
     }
-    // **讀到第幾行，貼底邊左端**（2026-09-30 作者定的，和右端那句提示各佔一頭：
-    // 兩類不同的信息，邊框有兩頭）。
+    // **讀到第幾行，貼底邊左端**（2026-09-30 作者定的，和右端那句各佔一頭：兩類
+    // 不同的信息，邊框有兩頭）。
+    //
+    // Warning: **兩邊各留一格空氣。** 貼着角寫出來的是「╰75/90───」，讀起來像
+    // 被擠出去的（作者報的：「现在似乎顶到了前头」）。上邊那一行的標題本來就是
+    // 「╭ 文檔」，這一行照它。
     if let Some((at, all)) = read {
-        put_text(buf, rect.x + 1, floor, limit, &format!("{at}/{all}"), ground.fg(ink.quiet()));
+        let said = format!(" {at}/{all} ");
+        put_text(buf, rect.x + 1, floor, limit, &said, ground.fg(ink.quiet()));
     }
     Some(rect)
 }
@@ -939,6 +966,7 @@ mod tests {
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                    pages: false,
             scroll: 0,
                     title: "洞庭湖".into(),
                     lede: None,
@@ -971,6 +999,7 @@ mod tests {
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
                 draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                    pages: false,
             scroll: 0,
                     title: "條目".into(),
                     lede: None,
@@ -1070,6 +1099,7 @@ mod tests {
                     .map(|n| (format!("k{n}"), format!("第{n}個動作")))
                     .collect::<Vec<_>>();
                 got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, (0, 0), false, &Panel {
+                    pages: false,
             scroll: 0,
                     title: "空格".into(),
                     lede: None,
