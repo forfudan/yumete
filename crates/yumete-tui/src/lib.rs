@@ -12,6 +12,7 @@
 pub mod chrome;
 pub mod panel;
 pub mod table;
+pub mod spinner;
 pub mod theme;
 pub mod vertical;
 pub mod ambiguous;
@@ -954,6 +955,13 @@ pub fn run(
         servers.ask_what(editor, &config);
         servers.ask_next(editor, &config);
         let mut server_said_something = servers.collect(editor);
+        // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
+        // 看不見它，所以每一輪說一聲——同 `note_the_server` 那一條。
+        let spinning = editor.server_busy_since().is_some();
+        editor.note_the_server_is_busy(servers.waiting_since());
+        if spinning != editor.server_busy_since().is_some() {
+            server_said_something = true;
+        }
         if let Some(word) = servers.says.take() {
             editor.set_status(word);
             // **這一句也要當場畫出來**（2026-09-29 報的：打開 `.py` 收不到那句
@@ -1017,6 +1025,9 @@ pub fn run(
                 // 跟着光標的那一問（`空格 K`）：光標停穩三百毫秒就該問一句。
                 editor.docs_due_in(),
                 servers.due_in(),
+                // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
+                // 了一個不動的點（同上面那幾個鬧鐘）。
+                spinner::due_in(editor.server_busy_since()),
             ]
                 .into_iter()
                 .flatten()
@@ -9865,7 +9876,15 @@ fn draw_status(
     let (word, rest) = status.split_at(cut);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(" ".to_string(), bar),
+            // **左邊那一格是轉圈那八個點的位子**（2026-09-30）。不轉的時候它
+            // 是一個空格——位子一直占着，旁邊的字纔不會每八十毫秒跳一次，同
+            // helix（`ui/statusline.rs`：「reserve its space to avoid elements
+            // frequently shifting」）。順帶把這一行的左緣和底下那一行對齊了，
+            // 那是作者同一天報的另一件。
+            Span::styled(
+                spinner::frame(editor.server_busy_since()).to_string(),
+                bar.fg(ink.gold()),
+            ),
             Span::styled(
                 drawable(word).into_owned(),
                 bar.fg(ink.gold()).add_modifier(Modifier::BOLD),
@@ -17655,7 +17674,8 @@ fn squeezed(text: &str) -> String {
         );
         // Warning: **左邊留一格**（2026-09-30 作者報的：「NOR 前面应该空一格
         // （我们现在顶格了，和下面的命令行不对齐）」）。底下那一行本來就從第二
-        // 格起。
+        // 格起。那一格同時是轉圈那八個點的位子——見
+        // `the_spinner_turns_in_the_slot_beside_the_mode`。
         assert!(line.starts_with(" NOR  "), "and the left is untouched");
 
         // Moving names a different one.
@@ -20306,4 +20326,43 @@ fn squeezed(text: &str) -> String {
         }
     }
 
+
+
+        /// **語言服務器在忙的時候，狀態行左邊那一格轉起來**（2026-09-30 作者提的）。
+        ///
+        /// 原話：「这个动态八个点显示正在加载的符号很好用……如果是的话，我们也可以
+        /// 用这个，而不是用下面的那句话。」從前那是一整句
+        /// 「rust-analyzer 正在讀這個項目……第一次要等一會」，佔滿整條命令行，而它
+        /// 說的只是「在忙」——那件事一格就夠了，命令行空着纔放得下別的話。
+        ///
+        /// Warning: **不忙的時候那一格是空格，不是沒有。** 位子一直占着，`NOR` 和它
+        /// 右邊的每一個字纔不會每八十毫秒跳一次（同 helix 的
+        /// `ui/statusline.rs`：「reserve its space to avoid elements frequently
+        /// shifting」）。這一條兩頭都驗。
+        #[test]
+        fn the_spinner_turns_in_the_slot_beside_the_mode() {
+            let config = Config::default();
+            let mut editor = Editor::new();
+
+            // 不忙：那一格是空格，`NOR` 從第二格起。
+            let quiet = status_line(&render(&editor, &config, 60, 6));
+            assert!(quiet.starts_with(" NOR"), "不忙的時候是空格：{quiet:?}");
+
+            // 忙：同一格上是那八個點裏的一個，而 `NOR` 一格都沒挪。
+            editor.note_the_server_is_busy(Some(std::time::Instant::now()));
+            let busy = status_line(&render(&editor, &config, 60, 6));
+            let mark: String = busy.chars().take(1).collect();
+            assert!(spinner::FRAMES.contains(&mark.as_str()), "轉起來了：{busy:?}");
+            assert_eq!(&busy[mark.len()..mark.len() + 3], "NOR", "NOR 一格都沒挪");
+
+            // Warning: **換不換格這裏不驗。** 畫一幀要幾百毫秒，兩次 render 之
+            // 間那八個點本來就轉過去了——拿它當證據是在賭時鐘。走一格的規矩由
+            // `spinner::it_turns_one_step_per_tick_and_comes_round` 釘着，那一
+            // 支不畫東西，時間是它自己給的。
+
+            // 而且要有人叫醒主循環，不然畫一格就睡着了。
+            assert!(spinner::due_in(editor.server_busy_since()).is_some(), "給了鬧鐘");
+            editor.note_the_server_is_busy(None);
+            assert_eq!(spinner::due_in(editor.server_busy_since()), None, "不忙就不叫");
+        }
 }

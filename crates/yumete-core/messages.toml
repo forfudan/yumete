@@ -6532,13 +6532,6 @@ zhs = "服务器说不出这个写在哪"
 en = "the server does not know where this is written"
 
 [[message]]
-# 語言服務器刚起來，還在讀整個項目（只說這一次）
-key = "lsp.reading"
-zht = "{0} 正在讀這個項目……第一次要等一會"
-zhs = "{0} 正在读这个项目……第一次要等一会"
-en = "{0} is reading the project… the first time takes a moment"
-
-[[message]]
 # :diagnostics-all 頂上那一行的狀態：起來了
 key = "lsp.ready"
 zht = "已就緒"

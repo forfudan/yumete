@@ -170,11 +170,17 @@ pub struct Servers {
     /// is milliseconds, and a line that flickered 「分析中」 on every keystroke
     /// would be noise where a status line is the scarcest thing on the page.
     waiting_on: HashSet<PathBuf>,
+    /// **從什麽時候起在等**——轉圈那八個點要它（`spinner::frame`）。
+    ///
+    /// `waiting_on` 空了就清掉。Warning: **不是每次加一個檔都重設**：一直在等的
+    /// 時候重設會讓那幾個點停在第一格上，而它要說的正是「還在轉」。
+    waiting_since: Option<std::time::Instant>,
     /// How long that settle is. A field rather than the constant so a test can
     /// take it to zero instead of sleeping.
     settle: std::time::Duration,
     /// What to put on the status line, once.
     pub says: Option<String>,
+
 }
 
 impl Default for Servers {
@@ -189,6 +195,7 @@ impl Default for Servers {
             whose: HashMap::new(),
             touched: None,
             waiting_on: HashSet::new(),
+            waiting_since: None,
             settle: SETTLE,
             says: None,
         }
@@ -353,10 +360,25 @@ impl Servers {
         // 第一次告訴它這個檔，就開始等；答過一次之後不再說（見 `waiting_on`）。
         if known.is_none() {
             self.waiting_on.insert(path.clone());
-            self.says = Some(say!("lsp.reading", named.command));
+            // **等着的時候轉那八個點，不說那句話**（2026-09-30 作者定）。原話：
+            // 「这个动态八个点显示正在加载的符号很好用……我们也可以用这个，而
+            // 不是用下面的那句话。」一句話佔滿整條命令行，而它說的只是「在忙」
+            // ——那件事一格就夠了，而且命令行空着纔放得下別的話。
+            self.waiting_since.get_or_insert_with(std::time::Instant::now);
         }
         self.whose.insert(path.clone(), language);
         self.sent.insert(path, revision);
+    }
+
+    /// **從什麽時候起在等服務器回話**，`None` ＝ 沒在等。
+    ///
+    /// 給轉圈那八個點用（`crate::spinner`）。Warning: **判準是「我們問了，它還
+    /// 沒答」**，不是 helix 那個「服務器手上有活」——helix 看的是 LSP 的
+    /// `$/progress`（`application.rs:1016`），而這一頭本來就記着
+    /// `waiting_on`：告訴過它的檔裏還有哪幾個沒回診斷。對讀者來說後者更貼切，
+    /// 它答的是「我打開的這個檔還沒被看過」。
+    pub fn waiting_since(&self) -> Option<std::time::Instant> {
+        self.waiting_since
     }
 
     /// **A file that is not open any more is not our business any more.**
@@ -636,6 +658,10 @@ impl Servers {
             }
         }
         self.waiting_on = answered;
+        // 等完了，點也就不轉了。
+        if self.waiting_on.is_empty() {
+            self.waiting_since = None;
+        }
         // 等完了就把那句話收走——留着它會蓋住下一句真要說的話。
         if said_so && self.waiting_on.is_empty() {
             self.says = Some(String::new());
