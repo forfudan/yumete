@@ -57,7 +57,7 @@ impl Editor {
                 };
                 // Warning: **一段文章是「滾」，一張單子是「上下」**（2026-09-22
                 // 定的分別，2026-09-30 差點丟掉）。百科軟折行，`j` 走的是一屏
-                // 行；字典、數據、診斷是一條一條，`j` 走的是一條。同一個鍵兩
+                // 行；字典、記錄、診斷是一條一條，`j` 走的是一條。同一個鍵兩
                 // 件事，這一行得說對是哪一件。
                 let walk = match self.info_in_this_sidebar(side) {
                     Some(crate::sidebar::Info::Wiki) => say!("hint.sidebar.scroll"),
@@ -226,7 +226,7 @@ impl Editor {
                     // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
                     ("\u{2423}t".into(), say!("hint.table.menu")),
                     ("Tab".into(), say!("hint.table.next-cell")),
-                    // **這一行的數據去邊欄**（2026-09-30 作者提）。浮窗那一個是
+                    // **這一行的記錄去邊欄**（2026-09-30 作者提）。浮窗那一個是
                     // 小寫的 `空格 i`，與別的四種信息同一條規矩——大寫進邊欄。
                     ("\u{2423}I".into(), say!("hint.table.into-the-sidebar")),
                 ])

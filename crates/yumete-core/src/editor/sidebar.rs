@@ -145,7 +145,7 @@ impl Editor {
 
     /// **信息那一格畫成一列一列的時候，那些列**（#426）。
     ///
-    /// 五種裏有三種是成對的字段（字典、數據）或成行的句子（診斷、文檔），畫法
+    /// 五種裏有三種是成對的字段（字典、記錄）或成行的句子（診斷、文檔），畫法
     /// 同一個；百科走自己那一支（它是排過版的散文）。
     pub fn info_rows(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::Row> {
         match self.info_in_this_sidebar(side) {

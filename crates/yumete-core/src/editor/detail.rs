@@ -43,7 +43,7 @@ impl Editor {
             return;
         }
         // **再按一次同一個鍵就收起來**，同別的四種。Warning: 判準是
-        // `detail_visible()` 而不是 `info_asked`——數據在 `t t` 那一檔下是**即
+        // `detail_visible()` 而不是 `info_asked`——記錄在 `t t` 那一檔下是**即
         // 時**的（沒人叫過它），而 `t i` 照樣該收得掉它。
         let here = self.info_in_the_sidebar().is_none();
         if self.detail_visible() && here == afloat {
@@ -57,7 +57,7 @@ impl Editor {
         self.status = say!("ui.detail-panel-on");
     }
 
-    /// Show or hide the 數據 panel (`t i`).
+    /// Show or hide the 記錄 panel (`t i`).
     ///
     /// Warning: **同時記一句「這一種是手動叫出來的」**（#426）：五種信息共用一
     /// 格，不記的話這一格下一幀就被即時的那一種頂掉了。
@@ -67,7 +67,7 @@ impl Editor {
         match want {
             // Warning: **走不收起的那一支**（2026-09-30 審出來的）。`ask_for_info`
             // 的判準是「此刻擺的就是它，而且畫在這一鍵要的地方」——`q` 關掉之後
-            // `info_asked` 還記着數據，於是這一下被當成「又按了一次」當場關回
+            // `info_asked` 還記着記錄，於是這一下被當成「又按了一次」當場關回
             // 去，要按兩下纔出得來。同 `look_up_here` 那一個。
             true => {
                 self.put_this_info_here(crate::sidebar::Info::Record, true);
