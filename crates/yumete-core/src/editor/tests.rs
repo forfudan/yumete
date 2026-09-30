@@ -2310,6 +2310,35 @@ fn the_overlay_segments_a_paragraph_once_until_it_changes() {
     );
 }
 
+/// **進度那個數字是按行數出來的，而且和一次抄一整份數出來的一樣**（#343）。
+///
+/// Warning: 從前每一次存檔把整個 rope 抄成 `String` 再抄成 `Vec<char>`——八 MB 的稿
+/// 子每存一次多四十 MB 的拷貝。改成按行走之後，要驗的是**答案沒變**：注音標記
+/// 只算它底下那幾個字，跨行也不許把行首行尾算漏。
+#[test]
+fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
+    let dir = std::env::temp_dir().join(format!("yumete-han-rope-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("一.md");
+    // 三行：注音那一組只算底下的「永和」，`えいわ` 不是字；空行不算。
+    let text = "春天<ruby>永和<rt>えいわ</rt></ruby>來了。\n\n河水很涼。\n";
+    std::fs::write(&file, text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute(":count-target 2000").unwrap();
+    ed.execute(":w").unwrap();
+
+    let ledger = dir.join(".yumete").join("progress.tsv");
+    let log = crate::progress::Log::from_text(&std::fs::read_to_string(&ledger).unwrap());
+    // 春天 2 ＋ 永和 2 ＋ 來了 2 ＋ 河水很涼 4 ＝ 10。
+    assert_eq!(log.rows[0].now, 10, "{:?}", log.rows);
+    // `:count` 走的是另一條路（一次抄整份），兩邊必須說同一個數。
+    ed.execute(":count").unwrap();
+    assert!(ed.status().contains("10"), "{}", ed.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 寫作進度 — the ledger is opened by asking, kept by saving (#244).
 #[test]
 fn the_book_keeps_a_ledger_of_what_was_written_today() {

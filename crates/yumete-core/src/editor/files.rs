@@ -64,11 +64,39 @@ impl Editor {
     /// 字 in `text` — the publisher's count, ruby markup reduced to its base.
     /// The same rule [`Editor::count_report`] answers with, so 進度 and `:count`
     /// can never disagree about how long a chapter is.
-    pub(super) fn han_in(&self, text: &str) -> usize {
-        self.without_markup(text)
-            .iter()
-            .filter(|&&c| is_han(c))
-            .count()
+    /// 一行裏的 字，同 [`Editor::han_in`]，只是一次只看一行。
+    fn han_in_line(&self, line: &str) -> usize {
+        let dialects = self.ruby;
+        // 沒有注音方言就沒有標記要還原——一趟掃過去，一個字節都不用抄。
+        if dialects.is_empty() {
+            return line.chars().filter(|&c| is_han(c)).count();
+        }
+        let chars: Vec<char> = line.chars().collect();
+        let han = |slice: &[char]| slice.iter().filter(|&&c| is_han(c)).count();
+        let mut n = 0;
+        let mut at = 0;
+        for group in crate::ruby::groups(&chars, dialects) {
+            n += han(&chars[at..group.start]);
+            // The base as it reads, not as it is written: a Typst call
+            // holds `\"` where the sentence has a quote (#332).
+            let base: String = group.base_text(&chars).iter().collect();
+            n += group.dialect.unescape(&base).chars().filter(|&c| is_han(c)).count();
+            at = group.end;
+        }
+        n + han(&chars[at..])
+    }
+
+    /// **一整份稿子有幾個字，不抄一份出來數**（#343，2026-10-01）。
+    ///
+    /// Warning: 從前是 `han_in(&rope.to_string())`——**每一次存檔**一次。八 MB 的稿
+    /// 子於是每存一次先抄一份八 MB 的 `String`，`without_markup` 再抄一份
+    /// `Vec<char>`（一個 `char` 四字節，三十二 MB）。這一支按行走，峯值是最長
+    /// 那一行；沒有注音方言的時候連行都不抄。
+    pub(super) fn han_in_rope(&self, rope: &ropey::Rope) -> usize {
+        if self.ruby.is_empty() {
+            return rope.chars().filter(|&c| is_han(c)).count();
+        }
+        (0..rope.len_lines()).map(|i| self.han_in_line(&rope.line(i).to_string())).sum()
     }
 
     /// Today, as the writer's own calendar has it (Feature #244).
@@ -243,7 +271,7 @@ impl Editor {
             return;
         };
         let full = self.current_buffer().path().map(Path::to_path_buf);
-        let now = self.han_in(&self.current_buffer().rope().to_string());
+        let now = self.han_in_rope(self.current_buffer().rope());
         let opened = full
             .as_ref()
             .and_then(|p| self.opened_with.get(p).copied())
@@ -270,7 +298,7 @@ impl Editor {
             .path()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned());
-        let here = self.han_in(&self.current_buffer().rope().to_string());
+        let here = self.han_in_rope(self.current_buffer().rope());
         let date = self.today();
         if let Some(name) = name {
             let full = self.current_buffer().path().map(Path::to_path_buf);

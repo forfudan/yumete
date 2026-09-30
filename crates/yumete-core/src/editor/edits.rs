@@ -903,8 +903,7 @@ impl Editor {
         let opened = self.buffers[self.current].path().map(Path::to_path_buf);
         if let Some(path) = opened {
             if !self.opened_with.contains_key(&path) {
-                let text = self.buffers[self.current].rope().to_string();
-                let han = self.han_in(&text);
+                let han = self.han_in_rope(self.buffers[self.current].rope());
                 self.opened_with.insert(path, han);
             }
         }
