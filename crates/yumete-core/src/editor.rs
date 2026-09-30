@@ -1926,6 +1926,12 @@ pub struct Editor {
     /// 那一條的理由。空着就是「還沒有服務器接上」，而那與「接上了、一句話都沒說」
     /// 是兩回事，`:diagnostics-all` 分得出來纔說得清。
     server_line: Option<String>,
+    /// **語言服務器從什麽時候起沒回話**，`None` ＝ 沒在等（2026-09-30，#426）。
+    ///
+    /// 給狀態行上轉圈那八個點用。Warning: **前端寫進來的**，同 `server_line` 那
+    /// 一條的理由：`Servers` 住在那一側，核心看不見它。存的是**起點**而不是
+    /// 「第幾格」——轉到第幾格是時間算得出來的，存它就會有兩處轉得不同步。
+    server_busy_since: Option<std::time::Instant>,
     /// The character the 字典 panel is about, and the answer if one has come.
     ///
     /// Three states, because three things can be true. `None`: nobody has
@@ -2780,6 +2786,7 @@ impl Editor {
             docs_moved: None,
             info_scroll: 0,
             server_line: None,
+            server_busy_since: None,
             completion_query: None,
             completion_at: None,
             completion_by_hand: false,

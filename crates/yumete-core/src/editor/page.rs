@@ -982,6 +982,16 @@ impl Editor {
         self.server_line = line;
     }
 
+    /// **語言服務器在等回話嗎**——前端每一輪說一聲，狀態行上那八個點靠它轉。
+    pub fn note_the_server_is_busy(&mut self, since: Option<std::time::Instant>) {
+        self.server_busy_since = since;
+    }
+
+    /// 從什麽時候起在等，`None` ＝ 沒在等。
+    pub fn server_busy_since(&self) -> Option<std::time::Instant> {
+        self.server_busy_since
+    }
+
     /// `:diagnostics-all` 頂上那一行，沒有服務器就是 `None`。
     pub(super) fn the_server_line(&self) -> Option<&str> {
         self.server_line.as_deref()

@@ -17941,6 +17941,60 @@ Warning: **這 83 ms 是每改一個字付一次**——快取按內容哈希，
 
 Warning: **編輯器其實答得出「為什麼沒顏色」**（`:view-code` 走 `code_too_long_here`），只是不主動說。
 
+## 5.38.3 轉圈那八個點（2026-09-30）
+
+作者看了 helix 的狀態行提的：「这个动态八个点显示正在加载的符号很好用……我们也可以用这
+个，而不是用下面的那句话」，接着又說「This can be used elsewhere (at different locations
+to mean different things)……So this animation can be made a some tool function (module)
+for re-use.」
+
+### 先量 helix：它表示且只表示什麽
+
+`⣾⣽⣻⢿⡿⣟⣯⣷`，八格，八十毫秒一格（`ui/spinner.rs:51`）。**只由 LSP 的 `$/progress` 驅
+動**：`window/workDoneProgress/create` 起（`application.rs:1016`），那個服務器手上一個進
+度 token 都不剩了纔停（`:890`、`:938`）。所以它說的是「這份稿子的語言服務器手上有活」——
+首次建索引算，後來的一次 `cargo check` 也算。狀態行上的次序是 `Mode → Spinner →
+FileName`（`helix-view/src/editor.rs:694`），正是作者截圖裏的樣子。
+
+Warning: **不轉的時候它畫一個空格，不是什麽都不畫**。helix 自己的註釋：「Even if there's
+no spinner; reserve its space to avoid elements frequently shifting」。旁邊的字纔不會每八
+十毫秒跳一次。
+
+### 這一頭不必動協議
+
+**`waiting_on` 本來就記着那件事**（`server.rs:172`）：告訴過服務器的檔裏，還有哪幾個沒回
+診斷。那句 `lsp.reading` 本來就是拿它開關的。所以那八個點直接騎在它上面，`$/progress` 一
+行都不用碰。
+
+Warning: **和 helix 的判準不同，而這一頭的更貼切。** helix 問「服務器手上有活嗎」，這一頭
+問「**我問的**那個檔它還沒答」。狀態行是說給讀者聽的，讀者關心的是他打開的這一份。
+
+### 模組長什麽樣
+
+`crates/yumete-tui/src/spinner.rs`，三十行，**不存狀態**：轉到第幾格是「從什麽時候開始
+轉」算出來的純函數，所以誰要用它只要記得自己是什麽時候開始忙的，兩處同時轉也不會錯開。
+
+| 給出去的 | 是什麽 |
+| --- | --- |
+| `FRAMES` | 八格 |
+| `TICK` | 八十毫秒 |
+| `WIDTH` | 一欄——不轉的時候也占着 |
+| `frame(Option<Instant>)` | 轉到第幾格；`None` 回一個空格 |
+| `due_in(Option<Instant>)` | 下一格什麽時候到，給主循環當鬧鐘 |
+
+Warning: **難的不是動畫，是鐘。** 這個編輯器有事纔重畫，不按秒重畫——所以 `due_in` 要進
+主循環那張鬧鐘表（同 `docs_due_in`／`vcs_due_in`）。不進的話它畫一格就睡着了，那八個點成
+了一個不動的點。
+
+Warning: **狀態行左邊那一格就是它的位子**，而那一格正是同一天作者要的那個空格（「NOR 前
+面应该空一格」）。兩件事湊成了一件。
+
+### 還沒用上的那一半
+
+作者說的第二個用法——「after a notice to show 『doing』, instead of using 『...』」——模組
+已經給得出來（一句話後面接 `frame(since)` 就是了），只是眼下沒有哪一句話需要它。真要用的
+時候記得：**那一句的主人也得把 `due_in` 報進主循環**，不然它不轉。
+
 ## 5.38.2 `:word-list` 的三個參數拆成三條命令（2026-09-30）
 
 作者報的：「`word-list edit` 和 `word-list global` 一个是 words.txt 一个是 segmentation.txt，
