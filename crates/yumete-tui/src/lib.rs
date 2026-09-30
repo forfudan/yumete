@@ -4136,7 +4136,12 @@ fn draw(
     // the page is, and answered from last frame's scroll together with this
     // frame's cursor — see `table_head_is_off_the_page`.
     let top = viewport[editor.live_pane().min(1)].top.line;
-    let head_rows = 2 * u16::from(editor.table_head_is_off_the_page(top));
+    // Warning: **不給格子模式留這兩行**（2026-09-30 作者報的：拆分表捲過一行，
+    // 整個表頭連同標尺往下掉兩行，上面空出兩行）。那條頂欄是給**散文裏的 `|`
+    // 表**用的：正文照常滾，表頭滾沒了就在頁頂補一條。格子模式（`.csv` 整檔進
+    // 來那一種）自己就凍着表頭與標尺，補的那兩行沒有人畫，於是成了兩行空白。
+    let head_rows = 2
+        * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
     let areas = page_areas(editor, config, area, head_rows);
     let Areas {
         panels: slots,
@@ -12459,7 +12464,7 @@ fn squeezed(text: &str) -> String {
         for key in ['j', 'j', ' ', 't', 't'] {
             editor.on_key(Key::Char(key));
         }
-        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         assert!(editor.grid_has_the_pane(), "{}", editor.status());
         let config = Config::default();
         // **The grid, not the window**: the panel down the right is showing
@@ -15438,7 +15443,7 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         editor.execute("2").unwrap();
-        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
 
         let caret = |e: &Editor, c: &Config| render_caret(e, c, 60, 10).1.unwrap().x;
@@ -15446,7 +15451,7 @@ fn squeezed(text: &str) -> String {
 
         // Reading by character, the caret has to move with the cursor — pinned
         // to the cell's first 字 it would say the cursor had not moved at all.
-        editor.on_key(Key::Char('T'));
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); }
         editor.on_key(Key::Char('l'));
         let one = caret(&editor, &config);
         assert_eq!(one, at_start + 2, "one 漢字 further along the cell");
@@ -15456,7 +15461,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(caret(&editor, &config), one, "and back");
 
         // The same in Insert, where it decides where the next 字 lands.
-        editor.on_key(Key::Char('T'));
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); }
         editor.on_key(Key::Char('i'));
         assert_eq!(caret(&editor, &config), at_start, "`i` is the cell's start");
         editor.on_key(Key::Right);
@@ -15508,7 +15513,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.open_file(&csv).unwrap();
         editor.execute("2").unwrap();
-        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
@@ -15587,7 +15592,7 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         // …and into the second cell, which is `mu`.
         editor.on_key(Key::Char('l'));
         let (line, at) = editor.cell_position().expect("in a cell");
@@ -15772,14 +15777,14 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "on `mu`");
         // `T` is `Grain::Char`, so `l` walks inside the cell and the selection
         // covers two characters. It has to: the block cursor is painted over
         // its own slot last of all, so the column that answers this question is
         // the one **beside** the cursor.
-        editor.on_key(Key::Char('T'));
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); }
         editor.on_key(Key::Char('v'));
         editor.on_key(Key::Char('l'));
         let buf = render(&editor, &config, 30, 8);
@@ -15826,7 +15831,7 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let buf = render(&editor, &config, 30, 8);
@@ -15863,7 +15868,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('h'));
         editor.on_key(Key::Char('h'));
         assert!(editor.enter_table(), "{}", editor.status());
-        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
+        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         let config = vertical_config();
         let ink = ink(&config);
         let want = ink.at(yumete_config::rung::HEAD);
@@ -16299,11 +16304,18 @@ fn squeezed(text: &str) -> String {
         );
         // Every row of the menu still ends in its own right edge — a HUD
         // pinned over it would have taken one out.
-        let ring = drawn
-            .iter()
-            .filter(|row| row.trim_end().ends_with('│'))
-            .count();
-        assert!(ring >= 7, "the menu's rows are whole: {drawn:#?}");
+        //
+        // Warning: **問的是每一行完不完整，不是有幾行**（2026-09-30）。從前這裏
+        // 數的是「收尾是 `│` 的行有幾行」並要求 ≥ 7，於是 `空格 t` 的單子一多
+        // 出一條、鋪成兩欄、行數反而變少，這一條就紅了——而它本來要防的那件事
+        // （HUD 蓋掉右邊那一豎）一點沒發生。
+        let walls: Vec<&String> =
+            drawn.iter().filter(|row| row.trim_start().starts_with('│')).collect();
+        assert!(!walls.is_empty(), "the menu is drawn: {drawn:#?}");
+        assert!(
+            walls.iter().all(|row| row.trim_end().ends_with('│')),
+            "the menu's rows are whole: {drawn:#?}"
+        );
     }
 
     /// **The vertical reader had no HUD at all** (#284).
