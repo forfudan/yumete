@@ -42,20 +42,29 @@ impl Editor {
         if let Some(keys) = self.pending_keys() {
             return keys;
         }
-        // 光標放上去的那一種：没什麽可走進去、也没什麽要收起來，所以這一行只說
-        // 它真有的那兩個鍵（#293）。
+        // **信息那一格：讀，不是走進去**（#293、#426）。這一行只說它真有的那
+        // 幾個鍵，而標題寫的是**此刻擺着哪一種**——五種共用一格，只寫「信息」
+        // 的話讀者不知道眼前這一則是字典還是診斷。
         if let Some(side) = self.panel_focus() {
-            if let Some(kind) = self.transient(side) {
-                // Named for what it is holding: 字典 and 詳情 are two panels
-                // with the same two keys, and the row that says only 「keys」
-                // would leave a reader unsure which one has them.
-                let what = crate::messages::say(crate::sidebar::Panel::from(kind).tag(), &[]);
+            // Warning: **問的是「這一格是信息嗎」，不是「它此刻有東西嗎」**
+            // （2026-09-30 看圖看出來的）。空着的時候問後者會落到下面那一行通用
+            // 的邊欄提示上——而那一行寫着 `Tab 換視圖`、不寫 `PgUp PgDn`，於是
+            // 一個空面板教的是一套它沒有的鍵。標題同理：空着寫「信息」。
+            if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info) {
+                let what = match self.info_in_this_sidebar(side) {
+                    Some(one) => crate::messages::say(one.tag(), &[]),
+                    None => say!("label.panel.info"),
+                };
                 return Hint::Keys(what, vec![
                         ("j k".into(), say!("hint.sidebar.move")),
+                        // Warning: **翻頁那一對也要寫上**（#426）：五種輪流佔這
+                        // 一格，而換一種是這一格最常做的事。
+                        ("PgUp PgDn".into(), say!("hint.info.page")),
                         // Warning: **`w` 也要寫上**（2026-09-29 報的：「不仅没有提示
                         // 而且 w 无效」）。兩件事一起壞的：這一行沒說它，而它
-                        // 本來也真的不管用（見 `on_transient_key`）。
+                        // 本來也真的不管用（見 `on_info_key`）。
                         ("w".into(), say!("hint.sidebar.width")),
+                        ("q".into(), say!("hint.close")),
                         (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
                     ]);
             }
@@ -91,9 +100,7 @@ impl Editor {
         // The search panel is a form, not a list: none of the tree's keys
         // mean anything in it (#419).
         if let Some(side) = self.panel_focus() {
-            if self.transient(side).is_none()
-                && self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search)
-            {
+            if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
                 // Warning: **這一行是硬砍的，所以次序就是重要性**（2026-09-27 三個試
                 // 用的人各自撞上）。從前排頭的是 `/` 和 `d c a`，而砍在尾巴上的
                 // 是 `u 撤回`——一個是最不常用的，一個是按錯之後唯一的退路。英文
@@ -157,7 +164,7 @@ impl Editor {
             // 別的視圖是行的列表，`j` 走下一行——同一個鍵兩件事，所以這一行得說
             // 對是哪一件。
             let walking = match self.panel(side).map(|p| p.view()) {
-                Some(crate::sidebar::View::Wiki) => say!("hint.sidebar.scroll"),
+                Some(crate::sidebar::View::Info) => say!("hint.sidebar.scroll"),
                 _ => say!("hint.sidebar.move"),
             };
             // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，

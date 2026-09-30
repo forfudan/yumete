@@ -419,11 +419,10 @@ pub enum Command {
     /// on the page and a ground behind it says it a second time. `None`
     /// toggles.
     ThemeFill(Option<bool>),
-    /// **文檔跟不跟着光標走**（`:docs on`／`:docs off`，2026-09-29）。
-    /// `None` ＝ 光打了 `:docs`，那就是翻一下。
-    Docs(Option<bool>),
-    /// **診斷跟不跟着光標走**（`:diagnostics on`／`off`）。和上面那個互斥。
-    Diagnostics(Option<bool>),
+    /// **`:info <名>`：即時顯示哪一種信息**（#426，2026-09-30）。
+    ///
+    /// `None` ＝ 光打了 `:info`，回到按稿子算（散文百科、代碼診斷、表格數據）。
+    Info(Option<crate::sidebar::Info>),
     /// `:yume-menu-size 1-9` — how many candidates a page of the panel holds.
     /// `None` asks how many it holds now.
     ///
@@ -2355,15 +2354,20 @@ const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
     // Warning: **`search` 開得出來，從前卻不在這張表上**（2026-09-23 審出來的）。
-    // `named_panel` 走的是 `Panel::parse`，而 `Panel::ALL` 有七個——於是
-    // `:sidebar-left search` 真的執行得了，命令選單卻從不列這個名字，而那條
-    // 說明寫着「寫名字就開在那一格」。以 `Panel::ALL` 為準。
+    // `named_panel` 走的是 `Panel::parse`——於是 `:sidebar-left search` 真的執行
+    // 得了，命令選單卻從不列這個名字，而那條說明寫着「寫名字就開在那一格」。
+    // 以 `Panel::ALL` 為準。
     Word { name: "search", help: "label.panel.search", needs: &[] },
+    Word { name: "info", help: "label.panel.info", needs: &[] },
+];
+
+/// **`:info` 收的那五個詞**（#426）。界面上的標題是中文，這裏是打得出來的名字。
+const INFO_KINDS: &[Word] = &[
+    Word { name: "data", help: "label.panel.data", needs: &[] },
+    Word { name: "diagnostics", help: "label.panel.problems", needs: &[] },
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
-    Word { name: "detail", help: "label.panel.detail", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
     Word { name: "docs", help: "label.panel.docs", needs: &[] },
-    Word { name: "problems", help: "label.panel.problems", needs: &[] },
 ];
 
 /// What `:sidebar-left` and `:sidebar-right` take: `off`, or a panel to open
@@ -2377,11 +2381,7 @@ const SIDEBAR_SIDES: &[Word] = &[
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
     Word { name: "search", help: "label.panel.search", needs: &[] },
-    Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
-    Word { name: "detail", help: "label.panel.detail", needs: &[] },
-    Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
-    Word { name: "docs", help: "label.panel.docs", needs: &[] },
-    Word { name: "problems", help: "label.panel.problems", needs: &[] },
+    Word { name: "info", help: "label.panel.info", needs: &[] },
 ];
 
 /// Every command, for the completion list.
@@ -3035,21 +3035,13 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         // **「什麽時候問」與「畫在哪」分開**（2026-09-29 定，原話：「即时显示应该
         // 做成一个命令开关而不使用快捷键……这样的话即时显示和在哪里显示就分开了，
-        // 不会混在一起」）。畫在哪是 `空格 k`／`空格 K`。
-        name: "docs",
+        // 不会混在一起」）。畫在哪是 `空格 k`／`空格 K` 與 `PageUp`／`PageDown`。
+        name: "info",
         aliases: &[],
-        help: "cmd.commands.docs",
+        help: "cmd.commands.info",
         needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: None }],
-        build: Some(|p| Ok(Command::Docs(p.arg(0).map(|w| w == "on")))),
-    },
-    Entry {
-        name: "diagnostics",
-        aliases: &[],
-        help: "cmd.commands.diagnostics",
-        needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: None }],
-        build: Some(|p| Ok(Command::Diagnostics(p.arg(0).map(|w| w == "on")))),
+        params: &[Param::Words { of: INFO_KINDS, default: None }],
+        build: Some(|p| Ok(Command::Info(p.arg(0).and_then(crate::sidebar::Info::parse)))),
     },
     Entry {
         name: "theme-fill",

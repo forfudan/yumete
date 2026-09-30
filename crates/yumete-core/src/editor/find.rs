@@ -931,10 +931,7 @@ impl Editor {
             return None;
         }
         let side = self.panel_focus()?;
-        // 光標把別的東西頂上來的時候，鍵雖然在這個邊欄裏，眼前那一個卻不是搜索。
-        if self.transient(side).is_some()
-            || self.panel(side).map(|p| p.view()) != Some(crate::sidebar::View::Search)
-        {
+        if self.panel(side).map(|p| p.view()) != Some(crate::sidebar::View::Search) {
             return None;
         }
         let hit = self.search.here()?;

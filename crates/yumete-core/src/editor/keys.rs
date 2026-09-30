@@ -61,22 +61,34 @@ impl Editor {
         self.forget_a_hover_nobody_is_looking_at();
         // 跟着光標走的那一問，光標一動就重新等它停穩。
         self.the_cursor_moved_under_the_docs();
-        // **浮着的那一則文檔收四個翻頁鍵**（2026-09-29 定，同 helix 的
-        // `ui/popup.rs`：那四個鍵滾浮窗，別的鍵一按就關）。
+        // **`PageUp`／`PageDown` 在五種信息之間翻頁**（2026-09-30 定，#426）。
         //
-        // Warning: **只有這四個**：浮窗一個鍵都不收本來是這裏的通則，而通則的理由是
-        // 「浮窗走不進去」——走不進去的東西讀不完長的。收這四個正是為了讀得完，
-        // 別的鍵照舊一個都不收（挪光標的那些照舊把它關掉）。
+        // 原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用 page up /
+        // page down 来对这五类进行翻页了」「这样，光标就在编辑区，也可以对五类
+        // 信息进行翻页。」Warning: **光標留在正文**——這是這兩個鍵存在的全部理由，
+        // 所以它們既不開邊欄也不搶鍵。
+        //
+        // Warning: **翻正文改走 `C-f`／`C-b`。** 這兩個鍵從前也翻正文，而一個鍵
+        // 有時翻這個有時翻那個是最難記的那一種——所以它們**永遠**歸信息，一種
+        // 都沒有的時候說一句，不偷偷去翻正文。
         if self.mode == Mode::Normal && self.pending == Pending::None {
+            if matches!(key, Key::PageUp | Key::PageDown) {
+                if !self.page_the_info(key == Key::PageDown) {
+                    self.status = say!("info.nothing-here");
+                }
+                return KeyOutcome::Continue;
+            }
+            // **浮着的那一則收 `C-u`／`C-d`**（2026-09-29 定，同 helix 的
+            // `ui/popup.rs`：那幾個鍵滾浮窗，別的鍵一按就關）。浮窗一個鍵都不
+            // 收本來是通則，而通則的理由是「浮窗走不進去」——走不進去的東西讀
+            // 不完長的。收這兩個正是為了讀得完。
             let by = match key {
-                Key::PageDown => Some(8),
-                Key::PageUp => Some(-8),
                 Key::Ctrl('d') => Some(4),
                 Key::Ctrl('u') => Some(-4),
                 _ => None,
             };
             if let Some(by) = by {
-                if self.scroll_the_hover(by) {
+                if self.scroll_the_float(by) {
                     return KeyOutcome::Continue;
                 }
             }
@@ -1616,11 +1628,10 @@ impl Editor {
             // they sit on the screen. vi spells window motions `C-w`, and this
             // is the one it spells `C-w w` (#293).
             Key::Ctrl('w') => self.next_region(),
-            // …and the keys a keyboard already has for it. `C-f`/`C-b` are
-            // vi's; these are the ones a reader who has never used vi presses,
-            // and they used to do nothing at all.
-            Key::Ctrl('f') | Key::PageDown => self.move_page(count, false, 1.0),
-            Key::Ctrl('b') | Key::PageUp => self.move_page(count, true, 1.0),
+            // Warning: **`PageUp`／`PageDown` 不在這裏了**（2026-09-30，#426）：
+            // 那兩個鍵歸「換一種信息」，在 `on_key` 開頭就被收走，走不到這裏。
+            Key::Ctrl('f') => self.move_page(count, false, 1.0),
+            Key::Ctrl('b') => self.move_page(count, true, 1.0),
             // Back and forward through the places jumps came from, as in vi
             // and in Helix. Under the Kitty protocol `C-i` and Tab are told
             // apart; without it a terminal sends the same byte for both, and

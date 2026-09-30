@@ -3521,10 +3521,12 @@ fn the_keys_a_keyboard_has_are_not_swallowed() {
     let mut ed = typed(&"一行\n".repeat(200));
     ed.set_page(20, 80);
     ed.execute("1").unwrap();
-    ed.on_key(Key::PageDown);
+    // Warning: **`PageUp`／`PageDown` 2026-09-30 改歸「換一種信息」了**（#426），
+    // 所以正文翻頁在 Normal 模式下只剩 `C-f`／`C-b`。
+    ed.on_key(Key::Ctrl('f'));
     assert!(ed.cursor_line() > 10, "a page down: {}", ed.cursor_line());
     let down = ed.cursor_line();
-    ed.on_key(Key::PageUp);
+    ed.on_key(Key::Ctrl('b'));
     assert!(ed.cursor_line() < down, "and a page back");
 
     // …and in Insert, without leaving it.
@@ -8126,13 +8128,13 @@ fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
 fn the_dictionary_asks_about_the_character_under_the_cursor() {
     // Warning: **`空格 D`，大寫。** 2026-09-22 定：小寫的 `空格 d` 只浮一個窗、邊欄一點
     // 都不動；進邊欄、鍵跟過去的是大寫那一個。這一條測的一直是後者。
-    use crate::sidebar::{Side, Transient};
+    use crate::sidebar::{Side};
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('D'));
 
     let right = Side::Right;
-    assert_eq!(ed.transient(right), Some(Transient::Dictionary));
+    assert_eq!(ed.info_in_this_sidebar(right), Some(crate::sidebar::Info::Dictionary));
     assert_eq!(ed.panel_focus(), Some(right), "the keys go along");
     assert!(ed.panel(Side::Left).is_none(), "and nothing was opened on the left");
     assert_eq!(ed.take_dictionary_query(), Some('那'));
@@ -8140,7 +8142,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
 
     // Until the answer arrives the panel is the character alone — not an
     // empty panel, and not last character's answer.
-    assert_eq!(ed.transient_rows(right).len(), 1);
+    assert_eq!(ed.info_rows(right).len(), 1);
 
     ed.set_dictionary(
         '那',
@@ -8150,7 +8152,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
         ],
     );
     let rows: Vec<String> = ed
-        .transient_rows(right)
+        .info_rows(right)
         .iter()
         .map(|r| r.name.clone())
         .collect();
@@ -8160,18 +8162,18 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
 
     // **It scrolls, because a long answer is why it takes the keys at all.**
     ed.on_key(Key::Char('j'));
-    assert_eq!(ed.transient_scroll(), 1);
+    assert_eq!(ed.panel_scroll(), 1);
     ed.on_key(Key::Char('G'));
-    assert_eq!(ed.transient_scroll(), 2, "the last of three");
+    assert_eq!(ed.panel_scroll(), 2, "the last of three");
     ed.on_key(Key::Char('g'));
-    assert_eq!(ed.transient_scroll(), 0);
+    assert_eq!(ed.panel_scroll(), 0);
 
     // **The cursor is what takes it down.** Walk out of the panel, move one
     // character, and the question is no longer being asked.
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.transient(right), Some(Transient::Dictionary), "still on 那");
+    assert_eq!(ed.info_in_this_sidebar(right), Some(crate::sidebar::Info::Dictionary), "still on 那");
     ed.on_key(Key::Char('l'));
-    assert_eq!(ed.transient(right), None, "and gone the moment the cursor left");
+    assert_eq!(ed.info_in_this_sidebar(right), None, "and gone the moment the cursor left");
 }
 
 /// **搜索面板那四件**（2026-09-23 提的）。
@@ -8265,7 +8267,7 @@ fn a_character_the_table_has_nothing_for_says_so() {
     ed.on_key(Key::Char('D'));
     ed.take_dictionary_query();
     ed.set_dictionary('那', Vec::new());
-    let rows = ed.transient_rows(crate::sidebar::Side::Right);
+    let rows = ed.info_rows(crate::sidebar::Side::Right);
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!(rows[1].name, say!("ui.not-in-the-table"));
 }
@@ -8279,7 +8281,7 @@ fn with_no_table_loaded_the_panel_says_that_rather_than_blaming_the_character() 
     ed.on_key(Key::Char('D'));
     ed.take_dictionary_query();
     ed.set_dictionary('那', Vec::new());
-    let rows = ed.transient_rows(crate::sidebar::Side::Right);
+    let rows = ed.info_rows(crate::sidebar::Side::Right);
     assert_eq!(rows[1].name, say!("ui.no-table-yet"), "{rows:?}");
 }
 
@@ -8297,7 +8299,7 @@ fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     ed.look_up('年', true);
     ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
     assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some('年'));
-    assert_eq!(ed.transient_rows(crate::sidebar::Side::Right).len(), 1, "still waiting");
+    assert_eq!(ed.info_rows(crate::sidebar::Side::Right).len(), 1, "still waiting");
 }
 
 /// #222: how far a notch of the wheel moves is the reader's, not a
@@ -9329,7 +9331,7 @@ fn a_hit_found_by_its_sound_can_be_replaced() {
 /// **Which side each panel lives on is a setting, one per panel** — #293.
 #[test]
 fn the_panels_go_where_the_settings_put_them() {
-    use crate::sidebar::{Panel, Side, Transient, View};
+    use crate::sidebar::{Panel, Side, View};
     let dir = std::env::temp_dir().join(format!("yumete-sides-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -9366,14 +9368,14 @@ fn the_panels_go_where_the_settings_put_them() {
     // **Both on one side is a layout, not a mistake**: the 字典 then stacks
     // under the tree instead of taking a second column, and the tree stays.
     let mut ed = typed("那年冬天");
-    ed.set_side(Panel::Dictionary, Side::Left);
+    ed.set_side(Panel::Info, Side::Left);
     ed.open_sidebar_at(&dir);
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char(' '));
     // Warning: 大寫：進邊欄的是 `空格 D`（2026-09-22）。
     ed.on_key(Key::Char('D'));
-    assert_eq!(ed.transient(Side::Left), Some(Transient::Dictionary));
-    assert_eq!(ed.transient(Side::Right), None);
+    assert_eq!(ed.info_in_this_sidebar(Side::Left), Some(crate::sidebar::Info::Dictionary));
+    assert_eq!(ed.info_in_this_sidebar(Side::Right), None);
     assert!(ed.panel(Side::Left).is_some(), "the tree above it is untouched");
 
     // Three seats in one column, walked in screen order: top, bottom, text.
@@ -15660,7 +15662,7 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     ed.on_key(Key::Char('w'));
     assert!(ed.panel_focus().is_none(), "空格 w walks back out");
     ed.execute(":wiki-panel").unwrap();
-    assert!(ed.showing(crate::sidebar::View::Wiki).is_none(), "and again puts it away");
+    assert!(ed.showing(crate::sidebar::View::Info).is_none(), "and again puts it away");
 }
 
 /// The picker has two layers and a preview (2026-09-17): it opens in the list,
@@ -16208,7 +16210,7 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     press(&mut ed, " D"); // 字典：右
     for side in Side::BOTH {
         assert!(
-            ed.panel(side).is_some() || ed.transient(side).is_some(),
+            ed.panel(side).is_some() || ed.info_in_this_sidebar(side).is_some(),
             "{side:?} 先得有東西可收"
         );
     }
@@ -16220,7 +16222,7 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     press(&mut ed, " Q");
     for side in Side::BOTH {
         assert!(ed.panel(side).is_none(), "{side:?} 收了");
-        assert!(ed.transient(side).is_none(), "{side:?} 上面那一層也收了");
+        assert!(ed.info_in_this_sidebar(side).is_none(), "{side:?} 上面那一層也收了");
     }
     assert!(ed.other_pane().is_none(), "另一個工作區也收了");
     assert!(ed.panel_focus().is_none(), "鍵回到正文");
@@ -17626,14 +17628,14 @@ fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`:docs on` 讓文檔跟着光標走**（2026-09-29 定）。
+/// **`:info docs` 讓文檔跟着光標走**（2026-09-29 定，2026-09-30 併進 `:info`）。
 ///
 /// Warning: **是命令不是鍵**（原話：「即时显示应该做成一个命令开关而不使用快捷键……这样
 /// 的话即时显示和在哪里显示就分开了，不会混在一起」）。`空格 k`／`空格 K` 說的是
 /// 「畫在哪」，這一個說的是「什麽時候問」。
 #[test]
-fn the_docs_command_makes_them_follow_the_cursor() {
-    use crate::sidebar::View;
+fn the_info_command_picks_which_one_follows_the_cursor() {
+    use crate::sidebar::{Info, View};
     let dir = std::env::temp_dir().join("yumete-docs-follow");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -17642,30 +17644,32 @@ fn the_docs_command_makes_them_follow_the_cursor() {
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
 
-    // 出廠關着，那一扇也沒開。
-    assert!(ed.showing(View::Docs).is_none(), "出廠不開");
-    assert_eq!(ed.docs_owed(), None, "關着就不問");
+    // 出廠：代碼檔即時顯示診斷（作者選的：「診斷（推荐）」），文檔要叫。
+    assert_eq!(ed.info_live(), Info::Problems, "出廠診斷即時");
+    assert!(ed.showing(View::Info).is_none(), "出廠不開邊欄");
+    assert_eq!(ed.docs_owed(), None, "不是文檔就不問服務器");
 
-    ed.execute(":docs on").unwrap();
-    assert_eq!(ed.status(), "開啓及時文檔顯示");
+    ed.execute(":info docs").unwrap();
     // Warning: **它不替人開一扇面板**（2026-09-29 作者第三次說這一句：「docs on
     // 只是开启即时显示文档功能，并不是说要强行打开侧栏显示」）。畫在哪是另一條
     // 軸——沒有邊欄就浮。
-    assert!(ed.showing(View::Docs).is_none(), "不開邊欄");
+    assert_eq!(ed.info_live(), Info::Docs);
+    assert!(ed.showing(View::Info).is_none(), "不開邊欄");
     assert!(!ed.sidebar_focused(), "焦點留在正文");
 
     // 光標停穩之前不問——按住 j 連走的時候一格都不問。
     assert_eq!(ed.docs_owed(), None, "剛動過，等它停穩");
     assert!(ed.docs_due_in().is_some(), "而且要給循環一個鬧鐘，不然它一睡不醒");
 
-    ed.execute(":docs off").unwrap();
-    assert_eq!(ed.status(), "關閉及時文檔顯示");
-    assert_eq!(ed.docs_owed(), None, "關了就不問");
+    // `:info` 不帶名字：回到按稿子算。
+    ed.execute(":info").unwrap();
+    assert_eq!(ed.info_live(), Info::Problems, "回到按稿子算");
+    assert_eq!(ed.docs_owed(), None, "不是文檔就不問");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **文檔那一扇開着的時候，`空格 k` 不再浮一個**（2026-09-29 定）。
+/// **那一格開着的時候，`空格 k` 不再浮一個**（2026-09-29 定）。
 ///
 /// 原話：「如果右侧栏是打开的情况下，按 space k 就应该在侧栏中显示，而不是继续
 /// 弹窗显示。」兩個面在說同一件事，是這個編輯器一直在拆的東西。
@@ -17679,26 +17683,30 @@ fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
 
-    // 那一扇沒開：浮。
+    // 那一格沒開：浮。
     press(&mut ed, " k");
     ed.show_hover("fn compile_the_table()".into());
     assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "浮着");
-    assert_eq!(ed.hover_in_the_sidebar(), None);
+    assert!(ed.info_in_the_sidebar().is_none());
 
-    // 開出那一扇再問：不浮了，畫進去。
-    ed.execute(":sidebar-right docs").unwrap();
+    // 開出那一格再問：不浮了，畫進去。
+    ed.execute(":sidebar-right info").unwrap();
     press(&mut ed, " k");
     ed.show_hover("fn compile_the_table()".into());
-    assert_eq!(ed.hover_afloat(), None, "那一扇開着就不浮");
-    assert_eq!(ed.hover_in_the_sidebar(), Some("fn compile_the_table()"));
+    assert_eq!(ed.hover_afloat(), None, "那一格開着就不浮");
+    assert_eq!(ed.hover_here(), Some("fn compile_the_table()"));
+    assert_eq!(ed.info_now(), Some(crate::sidebar::Info::Docs), "那一格擺着文檔");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **浮着的那一則翻得動**——`PageUp`／`PageDown`／`C-u`／`C-d`（2026-09-29 定，
-/// 同 helix 的 `ui/popup.rs`）。
+/// **浮着的那一則翻得動**——`C-u`／`C-d`（2026-09-29 定，同 helix 的
+/// `ui/popup.rs`）。
+///
+/// Warning: **`PageUp`／`PageDown` 2026-09-30 改掉了**（#426）：那兩個鍵歸「換一
+/// 種信息」，翻行只剩 `C-u`／`C-d`。
 #[test]
-fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
+fn the_floating_docs_take_the_half_page_keys_and_nothing_else() {
     let dir = std::env::temp_dir().join("yumete-docs-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -17708,35 +17716,33 @@ fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
     press(&mut ed, "gg");
     press(&mut ed, " k");
     ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect());
-    assert_eq!(ed.hover_scroll(), 0, "從頭讀");
+    assert_eq!(ed.info_scroll(), 0, "從頭讀");
 
     ed.on_key(Key::Ctrl('d'));
-    assert_eq!(ed.hover_scroll(), 4, "半頁");
-    ed.on_key(Key::PageDown);
-    assert_eq!(ed.hover_scroll(), 12, "一頁");
+    assert_eq!(ed.info_scroll(), 4, "半頁");
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(ed.info_scroll(), 8);
     ed.on_key(Key::Ctrl('u'));
-    assert_eq!(ed.hover_scroll(), 8);
-    ed.on_key(Key::PageUp);
-    assert_eq!(ed.hover_scroll(), 0, "翻回頂上，不翻進負數");
-    // Warning: **光標一個字都沒動**——那四個鍵歸浮窗，正文沒看見它們。
+    assert_eq!(ed.info_scroll(), 4);
+    // Warning: **光標一個字都沒動**——那兩個鍵歸浮窗，正文沒看見它們。
     assert_eq!(ed.cursor_line(), 0, "翻的是浮窗，不是稿子");
 
     // Warning: 別的鍵照舊不收：`l` 挪光標，浮窗跟着沒。
     ed.on_key(Key::Char('l'));
     assert_eq!(ed.hover_afloat(), None, "挪了光標就沒了");
-    ed.on_key(Key::Ctrl('d'));
-    assert!(ed.cursor_line() > 0 || ed.hover_scroll() == 0, "浮窗沒了，C-d 還給稿子");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **百科與文檔是一扇面板的兩種，不是兩扇**（2026-09-29 定）。
+/// **五種信息共用一格，所以 `Tab` 的環上它只佔一格**（#426，2026-09-30）。
 ///
 /// 原話：「百科面板和绝对不能侵入程序文件。因此不可能出现同时有百科和文檔的事情。
-/// 这两个是 enum。」Warning: 從前 `Tab` 那一環上兩扇都在（底邊寫着「Tab 百科 > 文檔」），
-/// 於是一份 `.rs` 轉得到一扇講詞條的面板。
+/// 这两个是 enum。」Warning: 從前它們是三扇面板（百科、文檔、診斷），於是一份 `.rs`
+/// 轉得到一扇講詞條的面板，而底邊那一行寫着「Tab 文檔 > 診斷」——那正是要拆掉
+/// 的誤會。現在它們是**一格的五種內容**，`Tab` 換的是面板，`PageUp`／`PageDown`
+/// 換的是內容。
 #[test]
-fn a_code_file_has_docs_and_a_manuscript_has_the_wiki_never_both() {
+fn the_five_kinds_share_one_slot_so_tab_only_sees_one() {
     use crate::sidebar::{Side, View};
     let dir = std::env::temp_dir().join("yumete-wiki-or-docs");
     let _ = std::fs::create_dir_all(&dir);
@@ -17744,35 +17750,35 @@ fn a_code_file_has_docs_and_a_manuscript_has_the_wiki_never_both() {
     std::fs::write(dir.join("b.md"), "一段散文。\n").unwrap();
     let mut ed = Editor::new();
 
-    ed.open_file(dir.join("a.rs")).unwrap();
-    let ring = ed.views_on(Side::Right);
-    assert!(ring.contains(&View::Docs) || ring.is_empty(), "代碼檔轉得到文檔：{ring:?}");
-    assert!(!ring.contains(&View::Wiki), "Warning: 轉不到百科：{ring:?}");
+    for name in ["a.rs", "b.md"] {
+        ed.open_file(dir.join(name)).unwrap();
+        let ring = ed.views_on(Side::Right);
+        assert!(
+            ring.iter().filter(|&&v| v == View::Info).count() <= 1,
+            "{name}：信息只佔環上一格：{ring:?}"
+        );
+    }
 
-    ed.open_file(dir.join("b.md")).unwrap();
-    let ring = ed.views_on(Side::Right);
-    assert!(!ring.contains(&View::Docs), "Warning: 散文轉不到文檔：{ring:?}");
-
-    // **開着的那一扇跟着換。** 從散文走進代碼，百科就成了文檔。
-    ed.execute(":sidebar-right wiki").unwrap();
-    assert_eq!(ed.showing(View::Wiki), Some(Side::Right));
+    // Warning: **換了稿子那一格不必跟着換**——它擺什麽是問出來的，所以屏幕上
+    // 永遠不會留下一扇這份稿子裏根本不存在的面板。
+    ed.execute(":sidebar-right info").unwrap();
+    assert_eq!(ed.showing(View::Info), Some(Side::Right));
     ed.open_file(dir.join("a.rs")).unwrap();
-    // 換成代碼檔之後那一格擺的是此刻「應該」擺的那一種——出廠即時的是診斷。
-    assert_eq!(ed.showing(View::Problems), Some(Side::Right), "換了稿子，那一扇跟着換");
-    assert!(ed.showing(View::Wiki).is_none(), "Warning: 不許留一扇轉不到的面板在屏幕上");
+    assert_eq!(ed.showing(View::Info), Some(Side::Right), "那一格還在");
+    assert_eq!(ed.info_live(), crate::sidebar::Info::Problems, "而擺的已經是代碼那一種");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **文檔那一扇裏 `w` 要調得動寬窄**（2026-09-29 報的：「不仅没有提示而且 w 无效」）。
+/// **信息那一格裏 `w` 要調得動寬窄**（2026-09-29 報的：「不仅没有提示而且 w 无效」）。
 ///
-/// Warning: **根子是它掛着兩個身份**：文檔 2026-09-29 起是一扇**常駐**面板，可 `transient`
-/// 那一支還把它當「光標頂上來的那一層」認。兩個都掛着的後果——鍵走臨時那一支，而那
-/// 一支接不住就把鍵扔了（`w`、`Tab` 一個都不管用），提示行也只寫得出臨時那兩個鍵。
-/// 拆掉 `Transient::Hover` 之後這一族自己就對了。
+/// Warning: **根子是它從前掛着兩個身份**：文檔既是常駐面板又被 `transient` 當成
+/// 「光標頂上來的那一層」認。兩個都掛着的後果——鍵走臨時那一支，而那一支接不住
+/// 就把鍵扔了（`w`、`Tab` 一個都不管用），提示行也只寫得出臨時那兩個鍵。五種併
+/// 成一扇之後這一族自己就對了（#426）。
 #[test]
-fn the_width_key_works_in_the_docs_panel() {
-    use crate::sidebar::{Side, Transient, Width};
+fn the_width_key_works_in_the_info_panel() {
+    use crate::sidebar::{Info, Side, View, Width};
     let dir = std::env::temp_dir().join("yumete-docs-width");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -17784,10 +17790,8 @@ fn the_width_key_works_in_the_docs_panel() {
     press(&mut ed, " K");
     ed.show_hover("fn one()".into());
     let side = Side::Right;
-    assert_eq!(ed.showing(crate::sidebar::View::Docs), Some(side));
-    // Warning: **它不是一個臨時層**——那正是這一條在釘的。
-    assert_ne!(ed.transient(side), Some(Transient::Dictionary));
-    assert_eq!(ed.transient(side), None, "文檔是常駐的，不掛臨時層");
+    assert_eq!(ed.showing(View::Info), Some(side));
+    assert_eq!(ed.info_in_this_sidebar(side), Some(Info::Docs), "擺的是文檔");
 
     // 鍵交進那一側。
     for _ in 0..4 {
@@ -17800,9 +17804,11 @@ fn the_width_key_works_in_the_docs_panel() {
 
     // 提示行要寫着它——不寫的話讀者按了沒反應只會以為自己記錯了。
     // Warning: 問在按之前：按完那一行寫的是「邊欄：4/10」那句回聲。
-    let Hint::Keys(_, keys) = ed.hint() else { panic!("那一行空了：{:?}", ed.hint()) };
+    let Hint::Keys(title, keys) = ed.hint() else { panic!("那一行空了：{:?}", ed.hint()) };
+    assert_eq!(title, say!("label.panel.docs"), "標題寫此刻擺的那一種");
     let said: Vec<&str> = keys.iter().map(|(k, _)| k.as_ref()).collect();
     assert!(said.contains(&"w"), "提示行要說 w：{said:?}");
+    assert!(said.contains(&"PgUp PgDn"), "也要說換一種：{said:?}");
 
     let was: Width = ed.width_of(side);
     ed.on_key(Key::Char('w'));
@@ -17817,15 +17823,13 @@ fn the_width_key_works_in_the_docs_panel() {
 /// 它以就可以显示百科。比如 space K 强制在邊欄显示。」
 #[test]
 fn in_a_manuscript_those_two_keys_ask_the_wiki_instead() {
-    use crate::sidebar::View;
     let mut ed = typed("那年冬天很冷。\n");
     press(&mut ed, "gg");
     assert!(!ed.writes_code(), "這是一份散文");
+    assert_eq!(ed.info_live(), crate::sidebar::Info::Wiki, "散文即時顯示百科");
 
     press(&mut ed, " K");
     assert_ne!(ed.status(), say!("lsp.not-code"), "Warning: 不許再說「這不是程序文件」");
-    assert!(ed.showing(View::Wiki).is_some(), "空格 K 一定把百科開進邊欄");
-    assert!(!ed.sidebar_focused(), "鍵留在正文");
 }
 
 /// **「什麽時候問」和「在哪裏顯示」是兩件事**（2026-09-29 作者第三次說這一句）。
@@ -17837,11 +17841,11 @@ fn in_a_manuscript_those_two_keys_ask_the_wiki_instead() {
 ///
 /// | | 邊欄沒開 | 邊欄開着 |
 /// | --- | --- | --- |
-/// | `:docs off` | 按 `空格 k` 纔問，浮 | 按 `空格 k` 纔問，進邊欄 |
-/// | `:docs on` | **自己問**，浮 | **自己問**，進邊欄 |
+/// | 即時的不是文檔 | 按 `空格 k` 纔問，浮 | 按 `空格 k` 纔問，進邊欄 |
+/// | `:info docs` | **自己問**，浮 | **自己問**，進邊欄 |
 #[test]
 fn asking_and_showing_are_two_separate_things() {
-    use crate::sidebar::View;
+    use crate::sidebar::{Info, View};
     let dir = std::env::temp_dir().join("yumete-docs-two-axes");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -17850,9 +17854,9 @@ fn asking_and_showing_are_two_separate_things() {
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
 
-    // Warning: **`:docs on` 不開邊欄。** 它只管「什麽時候問」。
-    ed.execute(":docs on").unwrap();
-    assert!(ed.showing(View::Docs).is_none(), "它不該替人開一扇面板");
+    // Warning: **`:info docs` 不開邊欄。** 它只管「什麽時候問」。
+    ed.execute(":info docs").unwrap();
+    assert!(ed.showing(View::Info).is_none(), "它不該替人開一扇面板");
 
     // Warning: **等它停穩**——光標剛動過的時候去抖那一道本來就攔着，不等的話
     // 下面幾條是假綠的。
@@ -17863,10 +17867,10 @@ fn asking_and_showing_are_two_separate_things() {
     ed.show_hover("fn compile_the_table()".into());
     assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "沒有邊欄就浮");
 
-    // 開一扇出來：同一個開關，答案改走邊欄。
-    // Warning: `:sidebar-*` 把鍵交給了那一扇，`l` 就不再挪正文的光標了——要先
+    // 開一格出來：同一個開關，答案改走邊欄。
+    // Warning: `:sidebar-*` 把鍵交給了那一格，`l` 就不再挪正文的光標了——要先
     // 把鍵拿回來，不然下面那一問看不出光標動過。
-    ed.execute(":sidebar-right docs").unwrap();
+    ed.execute(":sidebar-right info").unwrap();
     for _ in 0..4 {
         if ed.panel_focus().is_none() {
             break;
@@ -17878,13 +17882,13 @@ fn asking_and_showing_are_two_separate_things() {
     assert!(ed.docs_owed().is_some(), "照樣自己問");
     ed.show_hover("fn compile_the_table()".into());
     assert_eq!(ed.hover_afloat(), None, "有邊欄就不浮");
-    assert_eq!(ed.hover_in_the_sidebar(), Some("fn compile_the_table()"), "進邊欄");
+    assert_eq!(ed.info_now(), Some(Info::Docs), "進邊欄");
 
     // 再關掉它：回到浮窗，開關一個字都沒動。
     press(&mut ed, " 4");
     press(&mut ed, "q");
-    assert!(ed.showing(View::Docs).is_none(), "關掉了");
-    assert!(ed.docs_follow(), "開關沒動");
+    assert!(ed.showing(View::Info).is_none(), "關掉了");
+    assert_eq!(ed.info_live(), Info::Docs, "開關沒動");
     ed.on_key(Key::Char('l'));
     std::thread::sleep(std::time::Duration::from_millis(320));
     assert!(ed.docs_owed().is_some(), "關了邊欄也照樣問");
@@ -17894,16 +17898,16 @@ fn asking_and_showing_are_two_separate_things() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **診斷與文檔是一對鄰居，而只有一樣會自己冒出來**（2026-09-29 定）。
+/// **即時顯示永遠只有一種**（#426，2026-09-30 定）。
 ///
-/// 原話：「如果 docs on，那么错误就自动 off。如果错误 on，那么 docs 就自动 off。
-/// 这样他俩总归有一个是要 space i / k 触发的。」
+/// 原話：「它永远只有一个信息可以即时显示，其他的都必须手动触发。」
 ///
-/// Warning: **兩樣都自動就得爭同一塊地方**，而「有文檔顯示文檔、沒有纔顯示診斷」
-/// 要等文檔那一問回話纔判得出來——那一秒裏畫什麽都是錯的：畫診斷會閃，不畫就是
-/// 空着。互斥把這個問題整個拿掉了。
+/// Warning: **從前這是兩個互斥的布爾**（`docs_follow`／`problems_follow`），於是
+/// 「兩個都關」是一個說不出名字的第三種狀態，而那一秒裏那一格畫什麽都是錯的。
+/// 現在它是一個值，說不出第三種。
 #[test]
-fn the_docs_and_the_diagnostics_take_turns_never_both() {
+fn only_one_kind_is_ever_live() {
+    use crate::sidebar::Info;
     let dir = std::env::temp_dir().join("yumete-docs-or-problems");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -17912,17 +17916,14 @@ fn the_docs_and_the_diagnostics_take_turns_never_both() {
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
 
-    // 出廠：診斷自己冒，文檔要按鍵叫——就是 2026-09-29 之前一直的樣子。
-    assert!(ed.problems_follow(), "出廠診斷即時");
-    assert!(!ed.docs_follow(), "出廠文檔不即時");
+    // 出廠：代碼裏診斷自己冒，文檔要按鍵叫。
+    assert_eq!(ed.info_live(), Info::Problems, "出廠診斷即時");
 
-    ed.execute(":docs on").unwrap();
-    assert!(ed.docs_follow());
-    assert!(!ed.problems_follow(), "開一個自動關另一個");
+    ed.execute(":info docs").unwrap();
+    assert_eq!(ed.info_live(), Info::Docs, "換一個就是換一個");
 
-    ed.execute(":diagnostics on").unwrap();
-    assert!(ed.problems_follow());
-    assert!(!ed.docs_follow(), "反過來也一樣");
+    ed.execute(":info diagnostics").unwrap();
+    assert_eq!(ed.info_live(), Info::Problems, "反過來也一樣");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -17964,10 +17965,10 @@ fn the_shifted_digits_close_a_region_without_going_there() {
     use crate::sidebar::Side;
     let mut ed = typed("那年冬天。\n");
     ed.execute(":sidebar-left files").unwrap();
-    ed.execute(":sidebar-right wiki").unwrap();
+    ed.execute(":sidebar-right info").unwrap();
     assert!(ed.panel(Side::Left).is_some() && ed.panel(Side::Right).is_some());
 
-    // 鍵回正文，然後隔空關掉右邊那一扇。
+    // 鍵回正文，然後隔空關掉右邊那一格。
     while ed.panel_focus().is_some() {
         ed.on_key(Key::Ctrl('w'));
     }
@@ -17984,15 +17985,15 @@ fn the_shifted_digits_close_a_region_without_going_there() {
     assert_eq!(ed.status(), say!("region.not-open"));
 }
 
-/// **有邊欄就用邊欄，哪一扇都算**（2026-09-29 報的）。
+/// **有那一格就用那一格，此刻擺着哪一種都算**（2026-09-29 報的）。
 ///
 /// 原話：「如果存在边栏，空格 k 应该在邊欄显示而不是浮窗（暂时顶掉诊断）。」
 ///
-/// Warning: **判準是「有沒有一塊地方」，不是「我那一扇開着嗎」。** 文檔和診斷共用
-/// 右邊那一格——診斷開着的時候那就是文檔的地方，頂掉它，不要另浮一個。
+/// Warning: **判準是「有沒有一塊地方」，不是「我那一種在擺着嗎」。** 五種共用右
+/// 邊那一格——診斷擺着的時候那就是文檔的地方，頂掉它，不要另浮一個。
 #[test]
-fn either_panel_counts_as_a_place_to_draw() {
-    use crate::sidebar::View;
+fn the_slot_is_a_place_whatever_is_in_it() {
+    use crate::sidebar::{Info, View};
     let dir = std::env::temp_dir().join("yumete-either-slot");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -18000,34 +18001,42 @@ fn either_panel_counts_as_a_place_to_draw() {
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
+    ed.set_problems(file.clone(), vec![crate::problem::Problem {
+        line: 0,
+        utf16_column: 3,
+        severity: crate::problem::Severity::Warn,
+        message: "說不通".into(),
+        source: None,
+    }]);
 
     // 一格都沒有：`空格 k` 浮。
     press(&mut ed, " k");
     ed.show_hover("fn one()".into());
     assert_eq!(ed.hover_afloat(), Some("fn one()"), "沒地方就浮");
 
-    // 開的是**診斷**那一扇——文檔那一扇並沒有開。
+    // `空格 I` 把**診斷**送進邊欄——文檔並沒有佔着那一格。
     press(&mut ed, " I");
-    assert!(ed.showing(View::Problems).is_some(), "診斷開着");
-    assert!(ed.showing(View::Docs).is_none(), "文檔沒開");
+    assert!(ed.showing(View::Info).is_some(), "那一格開了");
+    assert_eq!(ed.info_now(), Some(Info::Problems), "擺的是診斷");
 
     // Warning: 這時 `空格 k` 該頂掉它，不該另浮一個。
     press(&mut ed, " k");
     ed.show_hover("fn one()".into());
-    assert!(ed.showing(View::Docs).is_some(), "那一格換成了文檔");
-    assert!(ed.showing(View::Problems).is_none(), "診斷讓開了");
+    assert_eq!(ed.info_now(), Some(Info::Docs), "那一格換成了文檔");
     assert_eq!(ed.hover_afloat(), None, "Warning: 不許再浮一個");
-    assert_eq!(ed.hover_in_the_sidebar(), Some("fn one()"), "畫在邊欄裏");
+    assert!(ed.problem_afloat().is_none(), "診斷讓開了");
 
     // 反過來：`空格 i` 把它換回診斷。
     press(&mut ed, " i");
-    assert!(ed.showing(View::Problems).is_some(), "換回診斷");
-    assert!(ed.showing(View::Docs).is_none(), "文檔讓開了");
+    assert_eq!(ed.info_now(), Some(Info::Problems), "換回診斷");
 
-    // Warning: **`Tab` 不在這兩者之間轉**（報的原話：「文檔、诊断不可能同时出现
-    // （不可能 tab 循环）」）。它們是一格的兩種內容，換內容按 `空格 k`／`空格 i`。
+    // Warning: **`Tab` 不在五種之間轉**（報的原話：「文檔、诊断不可能同时出现
+    // （不可能 tab 循环）」）。它們是一格的五種內容，換內容按翻頁鍵。
     let ring = ed.views_on(crate::sidebar::Side::Right);
-    assert!(!ring.contains(&View::Problems), "診斷不在環上：{ring:?}");
+    assert!(
+        ring.iter().filter(|&&v| v == View::Info).count() <= 1,
+        "信息只佔環上一格：{ring:?}"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -18035,13 +18044,9 @@ fn either_panel_counts_as_a_place_to_draw() {
 /// **那一格開出來擺的是此刻「應該」擺的那一種**（2026-09-29 報的）。
 ///
 /// 原話：「我在有需要诊断的行上按了 空格+4，出来了边栏，却是空的文档面板。」
-///
-/// Warning: **`空格 4` 從前自己又找了一遍**（`View::ALL` 裏第一個歸右邊的＝文檔），
-/// 繞過了 `side_view` 知道的兩件事：這一份稿子容不容得下那一扇，以及那一格此刻
-/// 該擺哪一種。
 #[test]
 fn the_slot_opens_showing_whichever_it_ought_to() {
-    use crate::sidebar::View;
+    use crate::sidebar::{Info, View};
     let dir = std::env::temp_dir().join("yumete-slot-opens");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -18049,57 +18054,74 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
+    ed.set_problems(file.clone(), vec![crate::problem::Problem {
+        line: 0,
+        utf16_column: 3,
+        severity: crate::problem::Severity::Warn,
+        message: "說不通".into(),
+        source: None,
+    }]);
 
     // 出廠診斷即時：開出來是診斷。
     press(&mut ed, " 4");
-    assert!(ed.showing(View::Problems).is_some(), "出廠擺診斷");
+    assert!(ed.showing(View::Info).is_some(), "那一格開了");
+    assert_eq!(ed.info_now(), Some(Info::Problems), "出廠擺診斷");
 
-    // 換成文檔即時：關掉再開，擺的是文檔。
-    press(&mut ed, "q");
-    ed.execute(":docs on").unwrap();
-    press(&mut ed, " 4");
-    assert!(ed.showing(View::Docs).is_some(), ":docs on 之後擺文檔");
+    // 換成文檔即時：那一格**當場**跟着換，不必關了再開（2026-09-29 報的第三次：
+    // 「诊断在边栏中后……按下 docs on，结果文檔浮窗出现了而不是在侧栏中」）。
+    ed.execute(":info docs").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(320));
+    assert!(ed.docs_owed().is_some(), "問得出去");
+    ed.show_hover("fn one()".into());
+    assert_eq!(ed.info_now(), Some(Info::Docs), "換成文檔");
+    assert_eq!(ed.hover_afloat(), None, "有那一格就不浮");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **撥了即時開關，那一格當場跟着換**（2026-09-29 報的第三次）。
+/// **`PageUp`／`PageDown` 在五種之間翻頁，光標留在正文**（#426，2026-09-30 定）。
 ///
-/// 原話：「诊断在边栏中后……按下 docs on，结果文檔浮窗出现了而不是在侧栏中。」
-///
-/// Warning: **同一個窄判準的第四次。** `docs_owed` 問的是 `showing(View::Docs)`
-/// ——那一格擺着診斷的時候它以為沒地方，浮了一個，而地方就在眼前。現在全樹只有
-/// 一支 `the_slot_for_these_two()` 回答「有沒有那一格」。
+/// 原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用 page up / page down
+/// 来对这五类进行翻页了」「这样，光标就在编辑区，也可以对五类信息进行翻页。」
 #[test]
-fn flipping_a_toggle_swaps_what_the_slot_shows() {
-    use crate::sidebar::View;
-    let dir = std::env::temp_dir().join("yumete-slot-follows-toggle");
+fn the_paging_keys_walk_the_five_kinds_from_the_text() {
+    use crate::sidebar::Info;
+    let dir = std::env::temp_dir().join("yumete-info-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
-    std::fs::write(&file, "fn one() {}\n").unwrap();
+    std::fs::write(&file, "fn one() {}\nfn two() {}\nfn three() {}\n").unwrap();
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
-
-    // 出廠診斷即時，那一格開出來擺診斷。
-    press(&mut ed, " 4");
-    assert!(ed.showing(View::Problems).is_some(), "擺診斷");
-
-    // 撥成文檔即時：那一格當場換，不必關了再開。
-    ed.execute(":docs on").unwrap();
-    assert!(ed.showing(View::Docs).is_some(), "換成文檔");
-    assert!(ed.showing(View::Problems).is_none(), "診斷讓開");
-
-    // Warning: 而且跟着走的那一問要畫**進去**，不許再浮一個。
-    std::thread::sleep(std::time::Duration::from_millis(320));
-    assert!(ed.docs_owed().is_some(), "問得出去");
+    ed.set_problems(file.clone(), vec![crate::problem::Problem {
+        line: 0,
+        utf16_column: 3,
+        severity: crate::problem::Severity::Warn,
+        message: "說不通".into(),
+        source: None,
+    }]);
+    // 文檔那一種也有東西，於是這一格上有兩種翻得動。
+    press(&mut ed, " k");
     ed.show_hover("fn one()".into());
-    assert_eq!(ed.hover_afloat(), None, "有那一格就不浮");
-    assert_eq!(ed.hover_in_the_sidebar(), Some("fn one()"), "畫進那一格");
+    assert_eq!(ed.info_now(), Some(Info::Docs));
 
-    // 撥回去也一樣。
-    ed.execute(":diagnostics on").unwrap();
-    assert!(ed.showing(View::Problems).is_some(), "換回診斷");
+    let was = ed.cursor_line();
+    ed.on_key(Key::PageDown);
+    assert_eq!(ed.info_now(), Some(Info::Problems), "翻到了診斷");
+    assert_eq!(ed.cursor_line(), was, "Warning: 光標一個字都沒動——這是這兩個鍵的全部理由");
+
+    ed.on_key(Key::PageUp);
+    assert_eq!(ed.info_now(), Some(Info::Docs), "翻回文檔");
+    assert_eq!(ed.cursor_line(), was);
+
+    // Warning: **一種都沒有的時候說一句，不偷偷去翻正文**——一個鍵有時翻這個
+    // 有時翻那個是最難記的那一種。
+    let mut bare = typed("那年冬天。\n");
+    press(&mut bare, "gg");
+    let line = bare.cursor_line();
+    bare.on_key(Key::PageDown);
+    assert_eq!(bare.status(), say!("info.nothing-here"));
+    assert_eq!(bare.cursor_line(), line, "沒去翻正文");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

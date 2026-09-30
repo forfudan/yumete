@@ -44,7 +44,7 @@ use yumete_config::{Config, LineNumbers};
 use yumete_cjk::{Segmenter, WordMark};
 use yumete_core::command::Engagement;
 use yumete_core::editor::Hud;
-use yumete_core::sidebar::{Panel, Side, Transient, View};
+use yumete_core::sidebar::{Info, Panel, Side, View};
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
@@ -4150,18 +4150,16 @@ fn draw(
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
-        // Warning: **一個邊欄一個面板**（2026-09-22：臨時層廢除）。光標放上去的那一種
-        // 在的時候**頂掉**常駐的那一個——而常駐那一個原封不動地留着，所以它一走
-        // 就自己回來了，這裏什麽都不用記。
-        match editor.transient(side) {
-            Some(Transient::Detail) => table::draw_detail(frame, editor, config, side, rect),
-            // 字典與 hover 同一張單子、同一個位置，只是標題與上色不同。
-            Some(Transient::Dictionary) => {
-                draw_dictionary(frame, editor, config, side, rect, false)
-            }
+        // Warning: **一個邊欄一個面板**（2026-09-22：臨時層廢除）。信息那一格裏
+        // 擺哪一種是**問出來的**（`info_now`），這裏什麽都不用記——#426。
+        //
+        // 數據那一種自己畫（它是一張表的一行，兩欄對齊），別的四種走
+        // `draw_sidebar`。
+        match editor.info_in_this_sidebar(side) {
+            Some(Info::Data) => table::draw_detail(frame, editor, config, side, rect),
             // A panel with a box in it has a caret, and the candidate panel
             // has to stand under **that** one — see `draw_search`.
-            None => {
+            _ => {
                 let scrolled = &mut viewport.listed[usize::from(side == Side::Right)];
                 if let Some(at) = draw_sidebar(frame, editor, config, side, rect, scrolled) {
                     panel_caret = Some(at);
@@ -5530,9 +5528,10 @@ fn draw_note(
     // 畫着同一段話是 2026-09-22 出圖纔看見的。
     if let Some(told) = editor.hover_afloat() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            // 這一扇翻得動——`PageUp`／`PageDown`／`C-u`／`C-d`（2026-09-29）。
-            scroll: editor.hover_scroll(),
-            title: yumete_core::messages::say(Panel::Docs.tag(), &[]),
+            // 這一扇翻得動——`C-u`／`C-d`（2026-09-29；`PageUp`／`PageDown`
+            // 2026-09-30 改成換一種信息，#426）。
+            scroll: editor.info_scroll(),
+            title: yumete_core::messages::say(Info::Docs.tag(), &[]),
             lede: None,
             entry: false,
             body: panel::Body::Prose(told.to_string()),
@@ -5570,7 +5569,7 @@ fn draw_note(
             // Warning: **標題是那一扇面板的名字，不是響度**（2026-09-29 報的）。
             // 浮着和進邊欄是同一件東西的兩個去處，不該有兩個名字——響度改寫在
             // 每一句前頭，和邊欄裏那幾行逐字相同。
-            title: yumete_core::messages::say(Panel::Problems.tag(), &[]),
+            title: yumete_core::messages::say(Info::Problems.tag(), &[]),
             lede: None,
             entry: false,
             // Warning: **An empty line between them, not a bullet.** Two complaints
@@ -5595,6 +5594,34 @@ fn draw_note(
             marked: false,
             vertical_text: vertical,
         });
+    }
+    // **這一行的字段，浮在旁邊**（#426，2026-09-30）。
+    //
+    // Warning: **數據從前只有邊欄一種形態**：它是光標頂上來的「臨時面板」，自己
+    // 開自己關。五種併成一格之後那條路沒有了（邊欄只由人開由人關），所以它跟
+    // 別的四種一樣要有一個浮窗——作者的模型是「右侧栏就是固定的『浮窗』」，
+    // 反過來說，每一種都得浮得起來。
+    if editor.info_afloat() == Some(Info::Data) {
+        if let Some(detail) = editor.detail() {
+            let rows: Vec<(String, String)> = detail
+                .rows
+                .iter()
+                .map(|(name, value)| (name.clone(), value.clone().unwrap_or_default()))
+                .collect();
+            return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+                scroll: 0,
+                title: detail.title.clone(),
+                lede: None,
+                entry: false,
+                body: panel::Body::Keys(rows),
+                // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。⚠️ 數據沒有自
+                // 己的那一個鍵（字典是 `空格 D`、文檔是 `空格 K`），去邊欄的
+                // 通路是 `空格 4`。
+                tag: Some(say!("info.in-the-sidebar")),
+                vertical_text: false,
+                marked: false,
+            });
+        }
     }
     // **`空格 d` 問的那個字，浮在旁邊**（2026-09-22 定）。
     //
@@ -6752,7 +6779,7 @@ fn sidebar_columns(editor: &Editor, total: u16) -> [u16; 2] {
     let total = total as usize;
     let mut want = [0usize; 2];
     for side in Side::BOTH {
-        let open = editor.panel(side).is_some() || editor.transient(side).is_some();
+        let open = editor.panel(side).is_some();
         if open {
             want[side as usize] = editor.width_of(side).of(total);
         }
@@ -6798,21 +6825,27 @@ fn draw_sidebar(
     if sidebar.view() == View::Search {
         return draw_search(frame, editor, config, side, area, scrolled);
     }
-    // The entry under the cursor, drawn from the cursor (#287).
-    if sidebar.view() == View::Wiki {
-        draw_wiki(frame, editor, config, side, area);
-        return None;
-    }
-    // **文檔：同一個形狀，畫的是問服務器問來的那一則**（2026-09-29）。
-    // Warning: **空了也照畫一扇框**——這一扇是常駐的，不是光標停上去纔冒出來的那一種，
-    // 所以它不許一開一關（作者報的原話：「侧栏不应该关闭，即使是空的」）。
-    if sidebar.view() == View::Docs {
-        draw_dictionary(frame, editor, config, side, area, true);
-        return None;
-    }
-    // 診斷那一扇：同文檔一個形狀，只是內容是現算的（診斷早在內存裏）。
-    if sidebar.view() == View::Problems {
-        draw_dictionary(frame, editor, config, side, area, true);
+    // **信息那一格：擺着哪一種就照那一種畫**（#426）。
+    //
+    // Warning: **空了也照畫一扇框**——這一扇是常駐的，不是光標停上去纔冒出來的那
+    // 一種，所以它不許一開一關（作者報的原話：「侧栏不应该关闭，即使是空的」）。
+    // 空着的時候標題寫「信息」（作者定的：「他如果是空的，就显示『信息』标题。
+    // 如果不是空的，就显示对应的标题」）。
+    if sidebar.view() == View::Info {
+        match editor.info_now() {
+            // 詞條是排過版的散文，自己一支（#287）。
+            Some(Info::Wiki) => draw_wiki(frame, editor, config, side, area),
+            // 字典是成對的字段，文檔與診斷是成行的句子——同一張單子，差別只在
+            // 要不要折行、照不照 Markdown 畫。
+            one => draw_dictionary(
+                frame,
+                editor,
+                config,
+                side,
+                area,
+                !matches!(one, Some(Info::Dictionary)),
+            ),
+        }
         return None;
     }
     let ink = crate::theme::Palette::of(config);
@@ -6905,7 +6938,7 @@ fn draw_sidebar(
                 format!("{mark}{}", row.name)
             }
             // Handled above: they fill no rows.
-            View::Search | View::Wiki | View::Docs | View::Problems => row.name.clone(),
+            View::Search | View::Info => row.name.clone(),
         };
         // Warning: **裁到頭要有省略號**（2026-09-24 審出來的）。`put_text` 到 `to` 就
         // 停，於是一個長標題是**悄悄**斷在那裏——而「斷了」和「本來就這麼長」是
@@ -7128,7 +7161,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
     vertical::clear_wide_left_edge(frame.buffer_mut(), area);
     // Warning: **百科這一扇從前沒有標題行**，正文從第一行起。上邊框佔着那一行，所以它
     // 也得有一個名字——五扇面板裏四扇本來就有，剩它一扇沒有反而不整齊。
-    let name = yumete_core::messages::say(Panel::Wiki.tag(), &[]);
+    let name = yumete_core::messages::say(Info::Wiki.tag(), &[]);
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
     let (from, to) = (shell.from, shell.to);
     let buf = frame.buffer_mut();
@@ -7879,18 +7912,15 @@ fn draw_dictionary(
     // Warning: **hover 那一份的名字就是它那扇面板的名字**（2026-09-29）：它 2026-09-29
     // 起是一扇自己的面板（`Panel::Docs`／「文檔」），浮着和進邊欄是同一件東西的
     // 兩個去處，不該有兩個名字。
-    let name = match (docs, editor.panel(side).map(|p| p.view())) {
-        (true, Some(yumete_core::sidebar::View::Problems)) => {
-            yumete_core::messages::say(Panel::Problems.tag(), &[])
-        }
-        (true, _) => yumete_core::messages::say(Panel::Docs.tag(), &[]),
-        (false, _) => yumete_core::messages::say(Panel::Dictionary.tag(), &[]),
+    let name = match editor.info_in_this_sidebar(side) {
+        Some(one) => yumete_core::messages::say(one.tag(), &[]),
+        None => yumete_core::messages::say(Panel::Info.tag(), &[]),
     };
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
     let (from, to, area) = (shell.from, shell.to, shell.area);
     let buf = frame.buffer_mut();
 
-    let rows = editor.transient_rows(side);
+    let rows = editor.info_rows(side);
     // **邊欄窄，服務器說的話長，所以折行**（2026-09-29 報的：「侧边栏的文檔面板
     // 没有 soft wrap，导致很多信息没有显示」）。
     //
@@ -7918,7 +7948,7 @@ fn draw_dictionary(
     };
     let visible = (area.height as usize).saturating_sub(1);
     let first = editor
-        .transient_scroll()
+        .panel_scroll()
         .min(rows.len().saturating_sub(visible.max(1)));
     for slot in 0..visible.min(rows.len().saturating_sub(first)) {
         let row = &rows[first + slot];
@@ -14597,10 +14627,7 @@ fn squeezed(text: &str) -> String {
 
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
         assert_eq!(editor.take_dictionary_query(), Some('吧'));
-        assert_eq!(
-            editor.transient(Side::Right),
-            Some(yumete_core::sidebar::Transient::Dictionary)
-        );
+        assert_eq!(editor.info_now(), Some(Info::Dictionary));
         // The keys stay with the word: the reader is mid-composition, and the
         // panel is only there to be glanced at.
         assert!(!editor.sidebar_focused());
