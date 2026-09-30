@@ -129,6 +129,66 @@ struct Server {
 }
 
 /// Every server, and the one rule about when to talk to them.
+/// **這一輪各服務器答了什麽**，攢着，等迴圈走完再一起交給編輯器（#425）。
+///
+/// Warning: **一個問題現在發給這種語言的每一個服務器。** 於是「沒什麽可說的」
+/// 這句話不能誰先答空誰說——2026-09-29 量過，**ruff 宣稱 `hoverProvider: true`
+/// 而實際回 `null`**，照舊那樣寫的話它每次都搶在 pylsp 前面把「沒有」說出口。
+/// 規矩是 helix 那一條：**第一個非空的答案算數，全都答空了纔說沒有。**
+#[derive(Default)]
+struct Heard {
+    /// `Some(Some(…))` 有東西，`Some(None)` 答了說沒有，`None` 這一輪沒人答。
+    told: Option<Option<String>>,
+    place: Option<Option<lsp::Place>>,
+    offers: Option<Vec<lsp::Offer>>,
+}
+
+impl Heard {
+    fn what_is_it(&mut self, told: Option<String>) {
+        // 已經收到一個有東西的了，後來的空答案不許蓋掉它。
+        if matches!(self.told, Some(Some(_))) {
+            return;
+        }
+        self.told = Some(told);
+    }
+
+    fn where_is_it(&mut self, place: Option<lsp::Place>) {
+        if matches!(self.place, Some(Some(_))) {
+            return;
+        }
+        self.place = Some(place);
+    }
+
+    fn next_up(&mut self, offers: Vec<lsp::Offer>) {
+        if self.offers.as_ref().is_some_and(|had| !had.is_empty()) {
+            return;
+        }
+        self.offers = Some(offers);
+    }
+
+    /// 交給編輯器。**還有人沒回話的那一種就先不說**——再等一輪。
+    fn settle(self, servers: &Servers, editor: &mut Editor) {
+        let waiting = |pick: fn(&Server) -> Option<i64>| {
+            servers.running.values().any(|server| pick(server).is_some())
+        };
+        match self.told {
+            Some(Some(text)) => editor.show_hover(text),
+            Some(None) if !waiting(|s| s.asked_what) => editor.no_hover(),
+            _ => {}
+        }
+        match self.place {
+            Some(Some(place)) => editor.go_to_definition(&place),
+            Some(None) if !waiting(|s| s.asked_where) => editor.no_definition(),
+            _ => {}
+        }
+        match self.offers {
+            Some(offers) if !offers.is_empty() => editor.show_offers(offers),
+            Some(_) if !waiting(|s| s.asked_next) => editor.show_offers(Vec::new()),
+            _ => {}
+        }
+    }
+}
+
 pub struct Servers {
     /// **命令名 → 那個服務器**（#425，2026-09-30 從「語言名 →」改的）。
     ///
@@ -508,12 +568,34 @@ impl Servers {
             return;
         }
         let Some((path, line, column)) = editor.take_definition_query() else { return };
-        let Some(name) = self.first_for(language) else { return };
-        let Some(server) = self.running.get_mut(&name) else { return };
-        let id = server.next_ask;
-        server.next_ask += 1;
-        server.asked_where = Some(id);
-        server.say(lsp::definition(id, &path, line, column));
+        self.ask_them_all(
+            language,
+            |server, id| server.asked_where = Some(id),
+            |id| lsp::definition(id, &path, line, column),
+        );
+    }
+
+    /// **同一個問題，發給這種語言的每一個服務器**（#425，2026-09-30）。
+    ///
+    /// `mark` 把新發的那個 id 記在對的那一格上（`asked_what` 等），`ask` 造那
+    /// 一句話。
+    ///
+    /// Warning: **不能只問「宣稱有這個能力」的那一個。** 2026-09-29 量過：
+    /// **ruff 宣稱 `hoverProvider: true`，實際回 `null`**。所以問給每一個，
+    /// 第一個非空的答案算數（收口在 `Heard`）——helix 也是這一條。
+    fn ask_them_all(
+        &mut self,
+        language: &str,
+        mark: fn(&mut Server, i64),
+        ask: impl Fn(i64) -> String,
+    ) {
+        for name in self.serving(language) {
+            let Some(server) = self.running.get_mut(&name) else { continue };
+            let id = server.next_ask;
+            server.next_ask += 1;
+            mark(server, id);
+            server.say(ask(id));
+        }
     }
 
     /// 這個語言配了哪幾個候選，頓號隔開——找不到的時候要全說出來。
@@ -596,22 +678,20 @@ impl Servers {
         }
         // **跟着光標的那一問**（2026-09-29）：`空格 K` 開着的時候編輯器自己發，
         // 走的是同一條路——它只在光標停穩了三百毫秒之後纔交得出一個問題。
-        if let Some(query) = editor.docs_owed() {
-            let Some(name) = self.first_for(language) else { return };
-        let Some(server) = self.running.get_mut(&name) else { return };
-            let id = server.next_ask;
-            server.next_ask += 1;
-            server.asked_what = Some(id);
-            server.say(lsp::hover(id, &query.0, query.1, query.2));
+        if let Some((path, line, column)) = editor.docs_owed() {
+            self.ask_them_all(
+                language,
+                |server, id| server.asked_what = Some(id),
+                |id| lsp::hover(id, &path, line, column),
+            );
             return;
         }
         let Some((path, line, column)) = editor.take_hover_query() else { return };
-        let Some(name) = self.first_for(language) else { return };
-        let Some(server) = self.running.get_mut(&name) else { return };
-        let id = server.next_ask;
-        server.next_ask += 1;
-        server.asked_what = Some(id);
-        server.say(lsp::hover(id, &path, line, column));
+        self.ask_them_all(
+            language,
+            |server, id| server.asked_what = Some(id),
+            |id| lsp::hover(id, &path, line, column),
+        );
     }
 
     /// **Send the 「what comes next?」 question** (`C-n` and every letter typed,
@@ -638,12 +718,11 @@ impl Servers {
             return;
         }
         let Some((path, line, column)) = editor.take_completion_query() else { return };
-        let Some(name) = self.first_for(language) else { return };
-        let Some(server) = self.running.get_mut(&name) else { return };
-        let id = server.next_ask;
-        server.next_ask += 1;
-        server.asked_next = Some(id);
-        server.say(lsp::completion(id, &path, line, column));
+        self.ask_them_all(
+            language,
+            |server, id| server.asked_next = Some(id),
+            |id| lsp::completion(id, &path, line, column),
+        );
     }
 
     /// **Does the server hold the text the buffer holds?** See [`Self::ask_next`].
@@ -662,6 +741,7 @@ impl Servers {
         // 借出來給下面那個迴圈用——它同時要借 `self.running`。
         let mut answered = std::mem::take(&mut self.waiting_on);
         let mut said_so = false;
+        let mut heard = Heard::default();
         for (whose, server) in self.running.iter_mut() {
             loop {
                 match server.from.try_recv() {
@@ -687,34 +767,28 @@ impl Servers {
                     Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(id)),
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
+                    // Warning: **答案先收着，出了這個迴圈再說**（#425）。一個
+                    // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
+                    // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
+                    // 一個 server，動不了別人的 `asked_*`。
                     Ok(Notice::Answer { id, places, told, offers }) => {
-                        // **「接下來能打什麽」的答案**（#53 ④）。
                         if server.asked_next == Some(id) {
                             server.asked_next = None;
                             anything = true;
-                            editor.show_offers(offers);
-                        } else
-                        // **「這是什麽」的答案**（#53 ③）。
-                        if server.asked_what == Some(id) {
+                            heard.next_up(offers);
+                        } else if server.asked_what == Some(id) {
                             server.asked_what = None;
                             anything = true;
-                            match told {
-                                Some(text) => editor.show_hover(text),
-                                None => editor.no_hover(),
-                            }
+                            heard.what_is_it(told);
                         } else if server.asked_where == Some(id) {
                             server.asked_where = None;
                             anything = true;
-                            match places.first() {
-                                // Warning: **The first one, and only the first.**
-                                // A definition can have several answers (a
-                                // trait and its impls), and a caret can only
-                                // be in one of them; a picker over the rest is
-                                // its own feature, not this one's half-done
-                                // corner.
-                                Some(place) => editor.go_to_definition(place),
-                                None => editor.no_definition(),
-                            }
+                            // Warning: **The first one, and only the first.**
+                            // A definition can have several answers (a trait
+                            // and its impls), and a caret can only be in one
+                            // of them; a picker over the rest is its own
+                            // feature, not this one's half-done corner.
+                            heard.where_is_it(places.into_iter().next());
                         }
                     }
                     Ok(Notice::Nothing) => {}
@@ -734,6 +808,9 @@ impl Servers {
                 gone.push(whose.clone());
             }
         }
+        // **全都答完了纔說「沒什麽可說的」**（#425）。一個問題發給了好幾個服務
+        // 器，第一個答得出東西的算數；有一個還沒回話，就再等一輪。
+        heard.settle(self, editor);
         self.waiting_on = answered;
         // 等完了，點也就不轉了。
         if self.waiting_on.is_empty() {
@@ -755,14 +832,23 @@ impl Servers {
     /// Warning: **Its complaints go with it.** Leaving them on the page would show
     /// errors from a program that is no longer watching, and every one of them
     /// would stay until the session ended.
-    fn lost(&mut self, language: &str, editor: &mut Editor) {
-        let mut ran = false;
-        for name in self.serving.remove(language).unwrap_or_default() {
-            ran |= self.running.remove(&name).is_some_and(|s| s.ready);
-            self.found.remove(&name);
+    fn lost(&mut self, command: &str, editor: &mut Editor) {
+        // Warning: **進來的是命令名，不是語言名**（#425，2026-09-30）。一種語言
+        // 跑得了好幾個，死的是其中一個——別的還在聽。
+        let Some(language) = self
+            .serving
+            .iter()
+            .find(|(_, names)| names.iter().any(|name| name == command))
+            .map(|(language, _)| language.clone())
+        else {
+            self.running.remove(command);
+            return;
+        };
+        let ran = self.running.remove(command).is_some_and(|s| s.ready);
+        self.found.remove(command);
+        if let Some(names) = self.serving.get_mut(&language) {
+            names.retain(|name| name != command);
         }
-        // 它不在聽了，`:diagnostics-all` 頂上那一行也不該再說它在。
-        editor.note_the_server(None);
         // **只忘這一個服務器說過的那些檔**（見 [`Servers::whose`]）。
         let its: Vec<PathBuf> = self
             .whose
@@ -771,7 +857,20 @@ impl Servers {
             .map(|(path, _)| path.clone())
             .collect();
         for path in &its {
-            editor.forget_problems(path);
+            // Warning: **只抹掉它自己說的那一份**（#425）。從前一個服務器崩掉會
+            // 把那個檔上所有的診斷都抹了——旁邊那一個還在好好聽着，它說的話沒
+            // 有理由跟着陪葬。
+            editor.set_problems(path.clone(), command.to_string(), Vec::new());
+        }
+        // 這種語言還剩着別的服務器，那就只是少了一個，不是整個沒了。
+        if self.serving.get(&language).is_some_and(|names| !names.is_empty()) {
+            self.says = Some(say!("lsp.stopped", command));
+            return;
+        }
+        self.serving.remove(&language);
+        // 它不在聽了，`:diagnostics-all` 頂上那一行也不該再說它在。
+        editor.note_the_server(None);
+        for path in &its {
             self.sent.remove(path);
             self.saved.remove(path);
             self.whose.remove(path);
@@ -1050,8 +1149,22 @@ mod tests {
         /// machine, and in no time at all.
         fn pretend(language: &str) -> (Servers, Receiver<String>, Sender<Notice>) {
             let mut servers = Servers { settle: std::time::Duration::ZERO, ..Default::default() };
-            let (heard, tell) = servers.pretend_one(language, language);
+            // Warning: **要用出廠配置裏那個命令名**（2026-09-30 抓到的）。`running`
+            // 2026-09-30 起按**命令名**存，而 `follow` 的判準是「這個命令還沒
+            // 跑着就起一個」——假服務器掛在語言名下面的話它看不見，於是測試裏
+            // **真的把機器上的 rust-analyzer 起了起來**：慢，而且多出一個誰都
+            // 沒答的服務器，把「全都答空了纔說沒有」那一條卡在半路上。
+            let (heard, tell) = servers.pretend_one(language, &Self::factory_command(language));
             (servers, heard, tell)
+        }
+
+        /// 出廠配置裏這種語言的頭一個命令名。
+        fn factory_command(language: &str) -> String {
+            yumete_config::factory_servers()
+                .get(language)
+                .and_then(|all| all.first())
+                .map(|s| s.command.clone())
+                .unwrap_or_else(|| language.to_string())
         }
 
         /// 再給同一種語言添一個——`ruff` 挑毛病、`pylsp` 講文檔那一種（#425）。
@@ -1390,7 +1503,7 @@ mod tests {
     fn a_server_that_dies_before_it_ever_answers_is_not_started_again() {
         let (mut editor, _path) = editor_on("f.rs", "fn main() {}\n");
         let (mut servers, _heard, tell) = Servers::pretend("rust");
-        servers.running.get_mut("rust").unwrap().ready = false;
+        servers.running.get_mut("rust-analyzer").unwrap().ready = false;
         drop(tell);
         servers.collect(&mut editor);
         assert!(servers.failed.contains("rust"), "不再試了");
@@ -1408,7 +1521,7 @@ mod tests {
     fn an_idle_editor_gives_the_loop_no_deadline_at_all() {
         let (mut servers, _heard, tell) = Servers::pretend("rust");
         assert_eq!(servers.due_in(), None, "閒着就一直等，不燒電");
-        servers.running.get_mut("rust").unwrap().waiting = true;
+        servers.running.get_mut("rust-analyzer").unwrap().waiting = true;
         assert_eq!(servers.due_in(), Some(LOOK_IN));
         // The answer comes, and the deadline goes with it.
         let (mut editor, path) = editor_on("e.rs", "fn main() {}\n");
@@ -1424,7 +1537,7 @@ mod tests {
     fn a_question_still_out_keeps_the_loop_awake_when_a_diagnostic_lands() {
         let (mut servers, _heard, tell) = Servers::pretend("rust");
         let (mut editor, path) = editor_on("e.rs", "fn main() {}\n");
-        servers.running.get_mut("rust").unwrap().asked_where = Some(FIRST_ASK);
+        servers.running.get_mut("rust-analyzer").unwrap().asked_where = Some(FIRST_ASK);
         tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), Some(LOOK_IN), "問出去的還沒答，就不許睡死");
@@ -1485,6 +1598,94 @@ mod tests {
         let left = editor.problems_listed();
         assert_eq!(left.len(), 1, "pylsp 說的還在：{left:?}");
         assert_eq!(left[0].1.message, "bad type");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// **一個服務器答「沒有」，不許把另一個的答案蓋掉**（#425，2026-09-30）。
+    ///
+    /// Warning: **這一條釘的是 ruff 那個坑。** 2026-09-29 量過：ruff 宣稱
+    /// `hoverProvider: true`，問它卻回 `null`。所以「誰先答空誰說了算」是錯
+    /// 的——它每次都搶在 pylsp 前面把「沒什麽可說的」說出口。規矩是 helix 那一
+    /// 條：**第一個非空的答案算數，全都答空了纔說沒有。**
+    #[test]
+    fn a_server_that_says_nothing_does_not_silence_the_one_that_knows() {
+        let (mut servers, _quiet, from_quiet) = Servers::pretend("rust");
+        let (_wise, from_wise) = servers.pretend_one("rust", "second");
+        let (mut editor, path) = editor_on("ask.rs", "fn main() {}\n");
+        let config = yumete_config::Config {
+            lsp: yumete_config::factory_servers(),
+            ..Default::default()
+        };
+        servers.follow(&mut editor, &config);
+
+        // 問一次「這是什麽」——兩個都收到了。
+        editor.on_key(yumete_core::input::Key::Char(' '));
+        editor.on_key(yumete_core::input::Key::Char('k'));
+        servers.ask_what(&mut editor, &config);
+        let ids: Vec<i64> = servers
+            .running
+            .values()
+            .map(|s| s.asked_what.expect("兩個都問到了"))
+            .collect();
+        assert_eq!(ids.len(), 2, "兩個都掛着一個問題");
+
+        // 先答空的那一個：**這時候一個字都不許說**，另一個還沒回話。
+        from_quiet
+            .send(Notice::Answer { id: ids[0], places: Vec::new(), told: None, offers: Vec::new() })
+            .unwrap();
+        servers.collect(&mut editor);
+        // 還寫着「查詢文檔中……」——那是 `空格 k` 說的，問話還沒結束。
+        assert_ne!(
+            editor.status(),
+            say!("lsp.speechless"),
+            "還有人沒答，先別說「沒什麽可說的」"
+        );
+        assert_eq!(editor.hover_here(), None, "也還沒有答案");
+
+        // 後答的那一個有東西：用它。
+        from_wise
+            .send(Notice::Answer {
+                id: ids[1],
+                places: Vec::new(),
+                told: Some("fn main()".into()),
+                offers: Vec::new(),
+            })
+            .unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(editor.hover_here(), Some("fn main()"), "第二個的答案算數");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// **全都答空了，纔說「沒什麽可說的」**（#425）。
+    #[test]
+    fn when_every_server_has_nothing_the_editor_says_so() {
+        let (mut servers, _a, from_a) = Servers::pretend("rust");
+        let (_b, from_b) = servers.pretend_one("rust", "second");
+        let (mut editor, path) = editor_on("quiet.rs", "fn main() {}\n");
+        let config = yumete_config::Config {
+            lsp: yumete_config::factory_servers(),
+            ..Default::default()
+        };
+        servers.follow(&mut editor, &config);
+        editor.on_key(yumete_core::input::Key::Char(' '));
+        editor.on_key(yumete_core::input::Key::Char('k'));
+        servers.ask_what(&mut editor, &config);
+        let ids: Vec<i64> =
+            servers.running.values().map(|s| s.asked_what.expect("問到了")).collect();
+
+        for (n, tell) in [&from_a, &from_b].into_iter().enumerate() {
+            tell.send(Notice::Answer {
+                id: ids[n],
+                places: Vec::new(),
+                told: None,
+                offers: Vec::new(),
+            })
+            .unwrap();
+        }
+        servers.collect(&mut editor);
+        assert_eq!(editor.status(), say!("lsp.speechless"), "這一次纔說得出口");
 
         let _ = std::fs::remove_file(&path);
     }
