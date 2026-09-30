@@ -253,6 +253,14 @@ impl Editor {
     /// otherwise be empty: a pending key, a footnote, a table cell all have
     /// more to say from where the cursor is actually standing.
     fn the_way_back_to_the_list(&self) -> Hint {
+        // **浮着一則信息的時候，這一行說怎麽把它送進邊欄**（2026-09-30 作者定）。
+        //
+        // 原話：「`␣K 進邊欄` 似乎反而不是很重要的信息，可以在命令行是空的时候
+        // 放到命令行中。」——浮窗的底邊那一頭改寫「怎麽翻頁」，那件事更常用；
+        // 「送進邊欄」一天用不了一次，擺在一行本來就空着的地方正好。
+        if self.mode == Mode::Normal && self.info_afloat().is_some() {
+            return Hint::Says(say!("info.into-the-sidebar", self.the_key_into_the_info_panel()));
+        }
         if self.mode != Mode::Normal || !self.search_panel_is_open() {
             return Hint::Quiet;
         }

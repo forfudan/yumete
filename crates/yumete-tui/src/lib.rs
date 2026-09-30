@@ -5318,6 +5318,7 @@ fn draw_which_key(
     let (title, keys) = editor.pending_menu()?;
     let vertical = editor.layout() == WritingLayout::Vertical;
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: false,
             scroll: 0,
         title,
         lede: None,
@@ -5506,6 +5507,7 @@ fn draw_note(
             })
             .collect();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: false,
             scroll: 0,
             title: say!("lsp.what-comes-next"),
             lede: None,
@@ -5528,8 +5530,8 @@ fn draw_note(
     // 畫着同一段話是 2026-09-22 出圖纔看見的。
     if let Some(told) = editor.hover_afloat() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            // 這一扇翻得動——`C-u`／`C-d`（2026-09-29；`PageUp`／`PageDown`
-            // 2026-09-30 改成換一種信息，#426）。
+            // 這一扇翻得動——四個鍵，同 helix 的浮窗（2026-09-29，#426）。
+            pages: true,
             scroll: editor.info_scroll(),
             title: yumete_core::messages::say(Info::Docs.tag(), &[]),
             lede: None,
@@ -5537,7 +5539,7 @@ fn draw_note(
             body: panel::Body::Prose(told.to_string()),
             // 讀不完就去邊欄——與字典那一份逐字同形（2026-09-23 補：從前這裏是
             // `None`，而服務器說的話可以有十幾行，浮窗又不收鍵）。
-            tag: Some(say!("ui.hover-in-the-sidebar")),
+            tag: None,
             vertical_text: vertical,
             // 服務器送來的就是 Markdown，照 Markdown 畫（2026-09-21）。
             marked: true,
@@ -5565,6 +5567,7 @@ fn draw_note(
     if let Some((severity, said)) = editor.problem_afloat().filter(|_| !writing) {
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: true,
             scroll: editor.info_scroll(),
             // Warning: **標題是那一扇面板的名字，不是響度**（2026-09-29 報的）。
             // 浮着和進邊欄是同一件東西的兩個去處，不該有兩個名字——響度改寫在
@@ -5609,6 +5612,7 @@ fn draw_note(
                 .map(|(name, value)| (name.clone(), value.clone().unwrap_or_default()))
                 .collect();
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: false,
                 scroll: 0,
                 // Warning: **標題要寫「數據」**（2026-09-30 審出來的）。作者定的
                 // 是「如果不是空的，就显示对应的标题」——邊欄那一份照辦了，浮
@@ -5624,7 +5628,7 @@ fn draw_note(
                 // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。Warning: 數據沒有
                 // 自己的那一個鍵（字典是 `空格 D`、文檔是 `空格 K`），去邊欄的
                 // 通路是那一格的區號，而它跟着配置走。
-                tag: Some(say!("info.in-the-sidebar", editor.the_key_into_the_info_panel())),
+                tag: None,
                 vertical_text: false,
                 marked: false,
             });
@@ -5652,13 +5656,14 @@ fn draw_note(
             None => vec![(say!("ui.looking-it-up"), String::new())],
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: false,
             scroll: 0,
             title: ch.to_string(),
             lede: None,
             entry: false,
             body: panel::Body::Keys(rows),
             // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。
-            tag: Some(say!("ui.dictionary-in-the-sidebar")),
+            tag: None,
             vertical_text: false,
             marked: false,
         });
@@ -5683,6 +5688,7 @@ fn draw_note(
             Some(Source::TooMany { .. }) => say!("wiki.too-many", &include.named),
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: false,
             scroll: 0,
             title: say!("wiki.title"),
             lede: None,
@@ -5705,6 +5711,7 @@ fn draw_note(
         // 有出路。取多少行要**把翻過去的那幾行算進來**，不然翻到第三屏就空了。
         let scroll = editor.info_scroll();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: true,
             scroll,
             title: view.name.clone(),
             // 章節行「辭典 › 君山」不是詞條說的話，是它寫在哪兒——面板把它
@@ -5720,7 +5727,7 @@ fn draw_note(
                 view.body_prose(scroll + area.height.max(area.width) as usize),
             ),
             // 讀不完就去邊欄——五種裏它從前是唯一沒有這一行的。
-            tag: Some(say!("info.in-the-sidebar", editor.the_key_into_the_info_panel())),
+            tag: None,
             marked: false,
             // The one body that turns with the page.
             vertical_text: vertical,
@@ -5735,6 +5742,7 @@ fn draw_note(
         return None;
     }
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: false,
             scroll: 0,
         title: detail.title,
         lede: None,
@@ -7174,14 +7182,25 @@ pub(crate) struct Shell {
     floor_ink: Style,
 }
 
-/// **在邊欄底邊左端寫「讀到第幾行 ／ 共幾行」**（2026-09-30 作者定）。
+/// **邊欄底邊：左端「讀到第幾行 ／ 共幾行」，右端「怎麽翻」**（2026-09-30 作者定）。
 ///
-/// `at >= all` ＝ 整份都在眼前，一個字都不寫——數字出現本身就是「還有沒露出來
-/// 的」。同浮窗底邊那一份（`panel.rs`），左端數字、右端提示。
+/// `at >= all` ＝ 整份都在眼前，兩頭都不寫——數字出現本身就是「還有沒露出來
+/// 的」。和浮窗底邊逐字同形（`panel.rs`）。
+///
+/// Warning: **數字兩邊各留一格空氣。** 貼着角寫出來的是「╰8/11───」，讀起來像
+/// 被擠出去的（作者報的：「现在似乎顶到了前头」）。
 fn count_on_the_floor(frame: &mut Frame, shell: &Shell, at: usize, all: usize) {
     let (Some(y), true) = (shell.floor, at < all) else { return };
-    let said = format!("{at}/{all}");
-    put_text(frame.buffer_mut(), shell.from + 1, y, shell.to, &said, shell.floor_ink);
+    let buf = frame.buffer_mut();
+    put_text(buf, shell.from + 1, y, shell.to, &format!(" {at}/{all} "), shell.floor_ink);
+    // 右端那一句：鍵在正文裏的時候那四個鍵照樣翻這一格（`scroll_the_float`），
+    // 所以這一格也該說一聲怎麽翻。
+    let paged = say!("info.page-it");
+    let w = yumete_cjk::str_width(&paged) as u16;
+    // 離角留一格，同浮窗那一份（`panel.rs` 的 `limit - w - 1`）。
+    if shell.to > shell.from + 3 + w {
+        put_text(buf, shell.to - w - 1, y, shell.to, &paged, shell.floor_ink);
+    }
 }
 
 /// **The sidebar's 百科 page** (#287): the entry the cursor is on, kept in
@@ -19156,6 +19175,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
+            pages: false,
             scroll: 0,
                     title: "岳陽樓".into(),
                     lede: None,

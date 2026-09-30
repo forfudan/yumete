@@ -5838,12 +5838,11 @@ en = "{0} over-long rows skipped"
 # ── label ─────────────────────────────────────────────────────────────
 
 [[message]]
-# 浮窗底下那一行：這一則讀不完就去邊欄（#426，數據那一種沒有自己的鍵）
-key = "info.in-the-sidebar"
-zht = "␣{0} 進邊欄"
-zhs = "␣{0} 进边栏"
-en = "Space {0} for the sidebar"
-
+# 命令行空着的時候：把浮着的這一則送進邊欄（#426，2026-09-30 作者寫的字）
+key = "info.into-the-sidebar"
+zht = "{0} 邊欄顯示信息"
+zhs = "{0} 边栏显示信息"
+en = "{0} shows it in the sidebar"
 [[message]]
 # `:info` 不帶名字：回到按稿子算
 key = "info.live-by-the-file"
@@ -5857,6 +5856,13 @@ key = "info.live-is"
 zht = "即時顯示：{0}"
 zhs = "即时显示：{0}"
 en = "following the cursor: {0}"
+
+[[message]]
+# 浮窗底邊右端：這一則翻得動（#426，2026-09-30 作者寫的字）
+key = "info.page-it"
+zht = "PgUp/PgDn 翻頁"
+zhs = "PgUp/PgDn 翻页"
+en = "PgUp/PgDn to page"
 
 [[message]]
 # gw：這一屏上沒有可以跳的地方
@@ -10239,20 +10245,6 @@ key = "ui.detail-panel-on"
 zht = "數據：開"
 zhs = "数据：开"
 en = "the data panel: on"
-
-[[message]]
-# 字典浮窗底下那一句：讀不完就去邊欄
-key = "ui.dictionary-in-the-sidebar"
-zht = "␣D 進邊欄"
-zhs = "␣D 进边栏"
-en = "Space D for the sidebar"
-
-[[message]]
-# hover 浮窗底下那一句：讀不完就去邊欄（服務器說的話可以有十幾行）
-key = "ui.hover-in-the-sidebar"
-zht = "␣K 進邊欄"
-zhs = "␣K 进边栏"
-en = "Space K for the sidebar"
 
 [[message]]
 # 界面語言現在是哪一種（`:language`）
