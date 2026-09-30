@@ -9365,25 +9365,35 @@ fn the_panels_go_where_the_settings_put_them() {
     assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer);
     assert_eq!(ed.status(), say!("sidebar.only-view-on-this-side"));
 
-    // **Both on one side is a layout, not a mistake**: the 字典 then stacks
-    // under the tree instead of taking a second column, and the tree stays.
+    // **兩扇配在同一邊，那一邊一次只擺得下一扇**（#426，2026-09-30 改的）。
+    //
+    // Warning: **從前這裏是「字典疊在文件樹底下，樹還在」。** 那是兩層那個模型
+    // ——上層常駐、下層臨時——而它 2026-09-30 拆了：一個槽一扇面板，`空格 D`
+    // 把「信息」擺進去，文件樹就讓開。這一條現在釘的是那件事，不是它的反面。
     let mut ed = typed("那年冬天");
     ed.set_side(Panel::Info, Side::Left);
     ed.open_sidebar_at(&dir);
     ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "先是文件樹");
     ed.on_key(Key::Char(' '));
     // Warning: 大寫：進邊欄的是 `空格 D`（2026-09-22）。
     ed.on_key(Key::Char('D'));
     assert_eq!(ed.info_in_this_sidebar(Side::Left), Some(crate::sidebar::Info::Dictionary));
-    assert_eq!(ed.info_in_this_sidebar(Side::Right), None);
-    assert!(ed.panel(Side::Left).is_some(), "the tree above it is untouched");
+    assert_eq!(ed.info_in_this_sidebar(Side::Right), None, "右邊一格都沒開");
+    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Info, "那一扇換成了信息");
 
-    // Three seats in one column, walked in screen order: top, bottom, text.
+    // 一個槽一個座位：這一格、正文，轉回來。
     assert_eq!(ed.panel_focus(), Some(Side::Left));
     ed.on_key(Key::Ctrl('w'));
     assert_eq!(ed.panel_focus(), None, "the writing");
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "round to the tree");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "round to the panel");
+
+    // 再按一次 `空格 D` 就收起來——連那一格一起還回去，不留一扇空的。
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('D'));
+    assert_eq!(ed.info_in_this_sidebar(Side::Left), None, "字典沒了");
+    assert!(ed.panel(Side::Left).is_none(), "Warning: 那一格也還回去了，不留空框");
 
     // A word nobody knows keeps the default rather than picking a side.
     assert_eq!(Side::parse("right"), Some(Side::Right));
@@ -16209,10 +16219,10 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     press(&mut ed, " o"); // 大綱：左
     press(&mut ed, " D"); // 字典：右
     for side in Side::BOTH {
-        assert!(
-            ed.panel(side).is_some() || ed.info_in_this_sidebar(side).is_some(),
-            "{side:?} 先得有東西可收"
-        );
+        // Warning: 別再寫 `panel(side).is_some() || info_in_this_sidebar(side)
+        // .is_some()`——後半句蘊含前半句（那一支先問 `panel(side)`），或起來等於
+        // 沒寫（2026-09-30 審出來的）。
+        assert!(ed.panel(side).is_some(), "{side:?} 先得有東西可收");
     }
 
     // 再開一個工作區——`空格 Q` 連它一起收。
@@ -16222,7 +16232,6 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     press(&mut ed, " Q");
     for side in Side::BOTH {
         assert!(ed.panel(side).is_none(), "{side:?} 收了");
-        assert!(ed.info_in_this_sidebar(side).is_none(), "{side:?} 上面那一層也收了");
     }
     assert!(ed.other_pane().is_none(), "另一個工作區也收了");
     assert!(ed.panel_focus().is_none(), "鍵回到正文");
@@ -17750,14 +17759,24 @@ fn the_five_kinds_share_one_slot_so_tab_only_sees_one() {
     std::fs::write(dir.join("b.md"), "一段散文。\n").unwrap();
     let mut ed = Editor::new();
 
+    // Warning: **別寫成「`Info` 在環上不超過一格」**——`View::ALL` 裏它本來就只
+    // 有一個，那句話恆真，什麼都沒驗（2026-09-30 審出來的）。要驗的是**這一份
+    // 稿子轉得到哪幾扇**：從前百科、文檔、診斷各是一扇，於是一份 `.rs` 轉得到
+    // 一扇講詞條的面板。現在兩份稿子的環逐字相同，因為內容不在環上。
+    let mut rings = Vec::new();
     for name in ["a.rs", "b.md"] {
         ed.open_file(dir.join(name)).unwrap();
-        let ring = ed.views_on(Side::Right);
-        assert!(
-            ring.iter().filter(|&&v| v == View::Info).count() <= 1,
-            "{name}：信息只佔環上一格：{ring:?}"
-        );
+        ed.execute(":panel-right info").unwrap();
+        ed.execute(":panel-right outline").unwrap();
+        rings.push(ed.views_on(Side::Right));
     }
+    assert_eq!(rings[0], rings[1], "代碼與散文轉得到的是同一組：{rings:?}");
+    assert!(rings[0].contains(&View::Info), "而信息在環上：{rings:?}");
+    assert_eq!(
+        rings[0].iter().filter(|&&v| v == View::Info).count(),
+        1,
+        "只佔一格：{rings:?}"
+    );
 
     // Warning: **換了稿子那一格不必跟着換**——它擺什麽是問出來的，所以屏幕上
     // 永遠不會留下一扇這份稿子裏根本不存在的面板。
@@ -17830,6 +17849,20 @@ fn in_a_manuscript_those_two_keys_ask_the_wiki_instead() {
 
     press(&mut ed, " K");
     assert_ne!(ed.status(), say!("lsp.not-code"), "Warning: 不許再說「這不是程序文件」");
+    // Warning: **光是「沒說錯話」不算驗過**（2026-09-30 審出來的）：這一條從前
+    // 只斷言那一句，於是「什麽都沒做」也是綠的。要驗的是它真把那一格開了出來
+    // ——`空格 K` 說的是「強制在邊欄顯示」。
+    assert_eq!(
+        ed.showing(crate::sidebar::View::Info),
+        Some(crate::sidebar::Side::Right),
+        "空格 K 一定把那一格開出來"
+    );
+    assert!(!ed.sidebar_focused(), "鍵留在正文");
+
+    // 光標挪到詞條名上，那一格自己就有東西了——不必再按一次。
+    let mut with = typed("那年冬天君山很冷。\n");
+    press(&mut with, "gg");
+    assert_eq!(with.info_live(), crate::sidebar::Info::Wiki);
 }
 
 /// **「什麽時候問」和「在哪裏顯示」是兩件事**（2026-09-29 作者第三次說這一句）。
@@ -18031,12 +18064,12 @@ fn the_slot_is_a_place_whatever_is_in_it() {
     assert_eq!(ed.info_now(), Some(Info::Problems), "換回診斷");
 
     // Warning: **`Tab` 不在五種之間轉**（報的原話：「文檔、诊断不可能同时出现
-    // （不可能 tab 循环）」）。它們是一格的五種內容，換內容按翻頁鍵。
-    let ring = ed.views_on(crate::sidebar::Side::Right);
-    assert!(
-        ring.iter().filter(|&&v| v == View::Info).count() <= 1,
-        "信息只佔環上一格：{ring:?}"
-    );
+    // （不可能 tab 循环）」）。換一種按 `PageUp`／`PageDown`，而 `Tab` 在那一
+    // 格上一動不動——只有一扇，它無處可去。
+    let side = crate::sidebar::Side::Right;
+    let was = ed.panel(side).map(|p| p.view());
+    ed.cycle_view(side, false);
+    assert_eq!(ed.panel(side).map(|p| p.view()), was, "Tab 換不走它");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -18153,6 +18186,44 @@ fn the_paging_keys_walk_the_five_kinds_from_the_text() {
     assert_eq!(back.info_now(), Some(Info::Problems), "往回也走得到");
     back.on_key(Key::PageUp);
     assert_eq!(back.info_now(), Some(Info::Docs), "再往回轉回來");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **格子裏 `PageUp`／`PageDown` 也是「換一種信息」**（#426，2026-09-30）。
+///
+/// Warning: **一度想把格子讓出去，結果是那兩個鍵在格子裏什麽都不做。**
+/// `table_motion` 只在粒度是「格」的時候纔接它們，而 `-t` 出廠的粒度是「字」
+/// ——於是它既沒翻格，又因為讓了路而沒翻信息。一個按下去什麽都不發生的鍵，比
+/// 一個意思明確的鍵差得遠。翻格翻頁照舊有 `C-f`／`C-b`。
+#[test]
+fn the_grid_hands_the_paging_keys_to_the_info() {
+    let dir = std::env::temp_dir().join("yumete-grid-paging");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("g.csv");
+    let mut rows = vec!["甲,乙,丙".to_string()];
+    rows.extend((1..40).map(|i| format!("{i},{},{}", i * 2, i * 3)));
+    std::fs::write(&file, rows.join("\n") + "\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.set_page(20, 80);
+    ed.execute(":table").unwrap();
+    press(&mut ed, "gg");
+    assert!(ed.table_here(), "讀成格子了");
+    // 格子裏即時的那一種是數據——它跟着光標走。
+    assert_eq!(ed.info_live(), crate::sidebar::Info::Data);
+
+    // `C-f`／`C-b` 照舊翻頁，一格都沒少。
+    let was = ed.cursor_line();
+    ed.on_key(Key::Ctrl('f'));
+    assert!(ed.cursor_line() > was, "C-f 照舊翻頁：{} → {}", was, ed.cursor_line());
+    press(&mut ed, "gg");
+
+    // 翻頁鍵換的是信息，光標不動。
+    let line = ed.cursor_line();
+    ed.on_key(Key::PageDown);
+    assert_eq!(ed.cursor_line(), line, "Warning: 光標不許動");
+    assert_ne!(ed.status(), String::new(), "Warning: 要有回音，不許一聲不吭");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

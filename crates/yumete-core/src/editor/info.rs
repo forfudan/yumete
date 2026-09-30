@@ -120,6 +120,19 @@ impl Editor {
         if self.info_asked_now() == Some(one) && here == afloat {
             self.info_asked = None;
             self.stop_showing_this_info(one);
+            // Warning: **收起來要連容器一起收**（2026-09-30 審出來的）。這一鍵
+            // 自己把那一格開出來的，「再按一次就收起來」就得把它還回去——不還
+            // 的話屏幕上留着一扇空的「信息」，而同一個鍵關不掉它（再按只是把
+            // 內容裝回去）。
+            //
+            // Warning: **還有東西可擺就不收。** 作者的模型是「會回退到那個即時
+            // 顯示 on 的面板」——散文裏收起手動叫的那一種，百科自己接上來，那
+            // 一格該留着。
+            if let Some(side) = self.info_in_the_sidebar() {
+                if self.info_now().is_none() {
+                    self.close_panel(side);
+                }
+            }
             self.refresh_sidebar();
             return false;
         }
@@ -134,11 +147,22 @@ impl Editor {
     /// 走帶 toggle 的那一支會把它當成「又按了一次」，當場關掉
     /// （2026-09-30 測出來的）。
     pub(super) fn put_this_info_here(&mut self, one: Info, afloat: bool) {
-        if !afloat && self.info_in_the_sidebar().is_none() {
+        if !afloat {
+            self.make_room_for_the_info();
+        }
+        self.info_asked = Some((one, self.sel.head()));
+    }
+
+    /// **把那一格開出來**（鍵不交過去），已經開着就什麽都不做。
+    ///
+    /// 大寫那幾個鍵（`空格 K`／`空格 D`／`空格 I`）說的是「**強制**在邊欄顯示」
+    /// ——那是一個持續的意思，所以光標底下這會兒沒東西也照開：那一格自己會說
+    /// 「光標走到有內容的地方，這裏就顯示它」，而下一步本來就是把光標挪過去。
+    pub(super) fn make_room_for_the_info(&mut self) {
+        if self.info_in_the_sidebar().is_none() {
             let side = self.side_for(View::Info);
             self.open_panel_without_the_keys(side, View::Info);
         }
-        self.info_asked = Some((one, self.sel.head()));
     }
 
     /// 收起來的時候，那一種自己的那份內容也丟掉。
@@ -170,7 +194,7 @@ impl Editor {
     /// Warning: **只停在有東西的那幾種上。** 五種裏能同時成立的通常只有一兩種
     /// （散文裏沒有診斷，代碼裏沒有百科），逐格翻過空的等於按五下什麽都不變。
     /// 一種都沒有就什麽都不做，回 `false`——那一鍵讓給正文。
-    pub(super) fn page_the_info(&mut self, forward: bool) -> bool {
+    pub(super) fn page_the_info(&mut self, forward: bool) {
         let all = Info::ALL;
         let last = all.len() - 1;
         let here = self.info_now();
@@ -199,13 +223,17 @@ impl Editor {
                 true => say!("info.only-one"),
                 false => say!("info.nothing-here"),
             };
-            return true;
+            return;
         };
         self.info_asked = Some((want, self.sel.head()));
+        // Warning: **三處捲軸一起歸零。** 一格裏擺的是另一種東西了，接着上一種
+        // 讀到的那一行畫是無意義的——而這一格有三處捲軸（浮窗、邊欄的單子、百
+        // 科那一頁軟折行的），漏一處就是「翻過去落在半截上」。
         self.info_scroll = 0;
+        self.panel_scroll = 0;
+        self.wiki_scroll.set((0, self.sel.head()));
         self.status = say!("info.now-showing", crate::messages::say(want.tag(), &[]));
         self.refresh_sidebar();
-        true
     }
 
     /// **`:info <名>`：換即時顯示的那一種**（#426）。
@@ -230,5 +258,17 @@ impl Editor {
     /// 即時顯示的那一種是不是 `:info` 指定的（狀態欄與 `:info` 自己要問）。
     pub fn info_live_chosen(&self) -> Option<Info> {
         self.info_live
+    }
+
+    /// **「讀不完就去邊欄」該寫哪一個數字**（#426，2026-09-30 審出來的）。
+    ///
+    /// 那一行從前寫死 `空格 4`，而 `空格 4` 的意思是「去**右**邊欄」——信息那一
+    /// 格配到左邊（`:panel-left info`，手冊自己就這麽舉例）之後那句話當場成了假
+    /// 的：按下去回的是「這一側沒有哪一扇面板歸它」。數字要跟着那一格走。
+    pub fn the_key_into_the_info_panel(&self) -> u32 {
+        match self.side_for(View::Info) {
+            Side::Left => 3,
+            Side::Right => 4,
+        }
     }
 }

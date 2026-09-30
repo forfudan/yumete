@@ -71,11 +71,33 @@ impl Editor {
         // Warning: **翻正文改走 `C-f`／`C-b`。** 這兩個鍵從前也翻正文，而一個鍵
         // 有時翻這個有時翻那個是最難記的那一種——所以它們**永遠**歸信息，一種
         // 都沒有的時候說一句，不偷偷去翻正文。
-        if self.mode == Mode::Normal && self.pending == Pending::None {
-            if matches!(key, Key::PageUp | Key::PageDown) {
-                self.page_the_info(key == Key::PageDown);
-                return KeyOutcome::Continue;
-            }
+        //
+        // Warning: **只在鍵還在編輯區的時候攔**（2026-09-30 審出來的）。作者說的
+        // 是「光标就在编辑区，也可以对五类信息进行翻页」——**編輯區**是條件，不
+        // 是順口一提。從前這一支攔在最前頭，誰都輪不到：檔案樹、大綱、搜索結
+        // 果、百科那一頁、格子裏走格，每一處的 `PageUp`／`PageDown` 全成了死
+        // 碼，而按下去回的是一句「這裏沒有可看的信息」。
+        let loose = self.mode == Mode::Normal && self.pending == Pending::None;
+        // **那兩個鍵歸「信息」，在編輯區和在信息那一格裏都一樣**（#426）。
+        //
+        // Warning: **同一個鍵只許有一個意思。** 拿它們當信息的翻頁鍵，就不能在
+        // 信息那一格裏又變回半頁，也不能在格子裏變回翻格——那正是這一整條在拆
+        // 的毛病。**編輯區（格子也算）與信息那一格，一律是「換一種」**；別的邊
+        // 欄（檔案樹、大綱、搜索）照舊翻頁，那幾處和信息無關。
+        //
+        // Warning: **格子裏也歸信息**（2026-09-30 量出來的）。一度想把格子讓出
+        // 去，結果是那兩個鍵在格子裏**什麽都不做**：`table_motion` 只在粒度是
+        // 「格」的時候纔接它們，而 `-t` 出廠的粒度是「字」，於是它既沒翻格、也
+        // 因為讓了路而沒翻信息。翻格照舊有 `C-f`／`C-b`，一個都沒少。
+        let mine = match self.panel_focus() {
+            Some(side) => self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info),
+            None => true,
+        };
+        if loose && mine && matches!(key, Key::PageUp | Key::PageDown) {
+            self.page_the_info(key == Key::PageDown);
+            return KeyOutcome::Continue;
+        }
+        if loose && !self.sidebar_focused() {
             // **浮着的那一則收 `C-u`／`C-d`**（2026-09-29 定，同 helix 的
             // `ui/popup.rs`：那幾個鍵滾浮窗，別的鍵一按就關）。浮窗一個鍵都不
             // 收本來是通則，而通則的理由是「浮窗走不進去」——走不進去的東西讀
@@ -1273,9 +1295,9 @@ impl Editor {
             // H  L   one sentence       J  K   half a page
             // ```
             //
-            // Warning: `H`/`L` used to be whole-page paging. Nothing was lost: `C-f`,
-            // `C-b`, `PageUp` and `PageDown` all still do it, and the pair a
-            // reader actually wears out is the *half* page on `J`/`K`.
+            // Warning: `H`/`L` used to be whole-page paging. Nothing was lost:
+            // `C-f` and `C-b` still do it, and the pair a reader actually
+            // wears out is the *half* page on `J`/`K`.
             Key::Char('L') => self.repeat(count, |e| {
                 let span = e.run_motion(motion::Motion::Sentence { forward: true });
                 e.take_span(span);
@@ -1627,7 +1649,8 @@ impl Editor {
             // is the one it spells `C-w w` (#293).
             Key::Ctrl('w') => self.next_region(),
             // Warning: **`PageUp`／`PageDown` 不在這裏了**（2026-09-30，#426）：
-            // 那兩個鍵歸「換一種信息」，在 `on_key` 開頭就被收走，走不到這裏。
+            // 鍵在編輯區的時候那兩個鍵歸「換一種信息」，`on_key` 開頭就收走了。
+            // 邊欄、選擇器、格子裏它們照舊是翻頁——收走的只有編輯區那一路。
             Key::Ctrl('f') => self.move_page(count, false, 1.0),
             Key::Ctrl('b') => self.move_page(count, true, 1.0),
             // Back and forward through the places jumps came from, as in vi

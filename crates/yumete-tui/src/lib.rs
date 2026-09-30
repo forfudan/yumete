@@ -5565,7 +5565,7 @@ fn draw_note(
     if let Some((severity, said)) = editor.problem_afloat().filter(|_| !writing) {
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            scroll: 0,
+            scroll: editor.info_scroll(),
             // Warning: **標題是那一扇面板的名字，不是響度**（2026-09-29 報的）。
             // 浮着和進邊欄是同一件東西的兩個去處，不該有兩個名字——響度改寫在
             // 每一句前頭，和邊欄裏那幾行逐字相同。
@@ -5610,14 +5610,21 @@ fn draw_note(
                 .collect();
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
                 scroll: 0,
-                title: detail.title.clone(),
+                // Warning: **標題要寫「數據」**（2026-09-30 審出來的）。作者定的
+                // 是「如果不是空的，就显示对应的标题」——邊欄那一份照辦了，浮
+                // 窗這一份只寫了行號，於是同一則東西兩個地方兩個名字。
+                title: format!(
+                    "{} {}",
+                    yumete_core::messages::say(Info::Data.tag(), &[]),
+                    detail.title
+                ),
                 lede: None,
                 entry: false,
                 body: panel::Body::Keys(rows),
-                // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。Warning: 數據沒有自
-                // 己的那一個鍵（字典是 `空格 D`、文檔是 `空格 K`），去邊欄的
-                // 通路是 `空格 4`。
-                tag: Some(say!("info.in-the-sidebar")),
+                // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。Warning: 數據沒有
+                // 自己的那一個鍵（字典是 `空格 D`、文檔是 `空格 K`），去邊欄的
+                // 通路是那一格的區號，而它跟着配置走。
+                tag: Some(say!("info.in-the-sidebar", editor.the_key_into_the_info_panel())),
                 vertical_text: false,
                 marked: false,
             });
@@ -5693,8 +5700,12 @@ fn draw_note(
         // entry was written in is the *writer of the wiki*'s business, and
         // `gd` goes there without being told; a reader glancing at a name
         // wants the entry, and the line cost a row of it.
+        // Warning: **這一扇也翻得動**（2026-09-30 審出來的）。散文稿子裏默認浮
+        // 的就是它，而一條長詞條被切在「…」上、`C-u`／`C-d` 卻去翻正文，等於沒
+        // 有出路。取多少行要**把翻過去的那幾行算進來**，不然翻到第三屏就空了。
+        let scroll = editor.info_scroll();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            scroll: 0,
+            scroll,
             title: view.name.clone(),
             // 章節行「辭典 › 君山」不是詞條說的話，是它寫在哪兒——面板把它
             // 畫在名字下面，灰的，和正文隔一行（2026-09-18）。
@@ -5705,8 +5716,11 @@ fn draw_note(
             // generous bound, and the panel cuts it to its own room from
             // there. An entry can be a chapter: building and wrapping the
             // whole of it, every frame, was 30 ms a frame at 20000 lines.
-            body: panel::Body::Prose(view.body_prose(area.height.max(area.width) as usize)),
-            tag: None,
+            body: panel::Body::Prose(
+                view.body_prose(scroll + area.height.max(area.width) as usize),
+            ),
+            // 讀不完就去邊欄——五種裏它從前是唯一沒有這一行的。
+            tag: Some(say!("info.in-the-sidebar", editor.the_key_into_the_info_panel())),
             marked: false,
             // The one body that turns with the page.
             vertical_text: vertical,
@@ -7171,8 +7185,11 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
     let from_x = from + 1;
     let bottom = area.y + area.height;
     let width = to.saturating_sub(from_x).max(1) as usize;
+    // Warning: **走不到這裏了**（#426）：`draw_wiki` 只在 `info_now()` 答「百科」
+    // 的時候纔叫得到，而那一句本身就要求 `wiki_here()` 有東西。留着當個兜底，
+    // 話跟空着的信息那一格說同一句。
     let Some(view) = editor.wiki_here() else {
-        put_text(buf, from_x, area.y, to, &say!("wiki.panel-empty"), quiet);
+        put_text(buf, from_x, area.y, to, &say!("info.panel-empty"), quiet);
         return;
     };
     // Warning: **`y` 是**這一條**裏的第幾行，不是屏幕的第幾行**（2026-09-22 加滾動時
@@ -7947,6 +7964,17 @@ fn draw_dictionary(
         false => rows,
     };
     let visible = (area.height as usize).saturating_sub(1);
+    // Warning: **空着也要說一句**（2026-09-30 審出來的）。一扇整片空白的框說不出
+    // 自己是幹什麽的，讀者不會知道「光標走過去它就有了」——而這一格是常駐的，
+    // 空着的時間比有東西的時間長。同 2026-09-23 給百科那一頁補的那一句。
+    if rows.is_empty() && visible > 0 {
+        let quiet = ground.fg(ink.quiet());
+        // Warning: **裁到頭要有省略號**（這一欄可以窄到 2/10）。`put_text` 到
+        // `to` 就停，而「斷了」和「本來就這麽長」是兩件事。
+        let room = to.saturating_sub(from + 1) as usize;
+        let said = elide(&say!("info.panel-empty"), room);
+        put_text(buf, from + 1, area.y + 1, to, &said, quiet);
+    }
     let first = editor
         .panel_scroll()
         .min(rows.len().saturating_sub(visible.max(1)));

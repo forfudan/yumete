@@ -1257,12 +1257,12 @@ en = "how a paragraph opens: `off` / `basic` (indented, blank line kept) / `full
 find = "縮進 缩进 首行 段落 indent paragraph"
 
 [[message]]
-# : 命令選單裏 diagnostics 那一項的說明
+# : 命令選單裏 info 那一項的說明（#426）
 key = "cmd.commands.info"
 zht = "信息：即時顯示哪一種（data／diagnostics／dictionary／wiki／docs；不寫就按稿子算）"
 zhs = "信息：即时显示哪一种（data／diagnostics／dictionary／wiki／docs；不写就按稿子算）"
-en = "info: which of the five follows the cursor (blank: by the file)"
-find = "信息 info 數據 数据 診斷 诊断 字典 百科 文檔 文档 data diagnostics dictionary wiki docs 及時 及时"
+en = "info: which of data / diagnostics / dictionary / wiki / docs follows the cursor (blank: by the file)"
+find = "信息 info 數據 数据 診斷 诊断 字典 百科 文檔 文档 data diagnostics dictionary wiki docs 即時 即时 及時 及时"
 
 [[message]]
 # : 命令選單裏 keymap 那一項的說明
@@ -2024,6 +2024,7 @@ zht = "反過來：開着就關，關着就開"
 zhs = "反过来：开着就关，关着就开"
 en = "the other way: on if it was off"
 find = "切換 切换 反轉 反转 toggle flip"
+
 [[message]]
 # : 命令選單裏 install 那一項（convert opencc 組）
 key = "cmd.opencc.install"
@@ -2091,6 +2092,7 @@ zht = "正文裏寫首選：讀的是句子不是碼，所以編碼哪兒都不�
 zhs = "正文里写首选：读的是句子不是码，所以编码哪儿都不显示"
 en = "the first candidate, in the text — so the code is not shown anywhere"
 find = "首選 首选 內嵌 内嵌 top"
+
 [[message]]
 # :quit-all —— 全部關掉再走；短寫 :qa
 key = "cmd.quit.all"
@@ -2409,10 +2411,10 @@ find = "分隔 逗號 逗号 制表符 csv tsv 拆開 拆开"
 [[message]]
 # : 命令選單裏 detail 那一項的說明（table 組）
 key = "cmd.table.detail"
-zht = "詳情欄：開、關，或者給個寬度"
-zhs = "详情栏：开、关，或者给个宽度"
-en = "the detail panel: on, off, or a width"
-find = "詳情 详情 展開 展开 detail"
+zht = "數據那一格：開、關，或者給個寬度"
+zhs = "数据那一格：开、关，或者给个宽度"
+en = "the data panel: on, off, or a width"
+find = "數據 数据 詳情 详情 展開 展开 detail data"
 
 [[message]]
 # : 命令選單裏 find 那一項的說明（table 組）
@@ -3150,6 +3152,7 @@ key = "config.reload-said"
 zht = "設定重讀了，但有話說：{0}"
 zhs = "设置重读了，但有话说：{0}"
 en = "settings reloaded, with something to say: {0}"
+
 [[message]]
 # :config-reload 做完了
 key = "config.reloaded"
@@ -3660,6 +3663,7 @@ key = "edit.undo-break"
 zht = "從這裏起算一次新的撤銷"
 zhs = "从这里起算一次新的撤销"
 en = "a new undo starts here"
+
 [[message]]
 # y 取了一段字
 key = "edit.yanked-characters"
@@ -4710,6 +4714,7 @@ key = "hint.goto.jump-labels"
 zht = "一眼跳到屏幕上任何地方"
 zhs = "一眼跳到屏幕上任何地方"
 en = "jump anywhere on the screen"
+
 [[message]]
 # g 選單裏的 . ——回到這一份稿子最後改動的地方
 key = "hint.goto.last-change"
@@ -4841,7 +4846,8 @@ en = "previous…"
 key = "hint.info.page"
 zht = "換一種"
 zhs = "换一种"
-en = "another kind"
+en = "other kind"
+
 [[message]]
 # g 組：併上一行
 key = "hint.join-with-line-above"
@@ -5080,6 +5086,7 @@ key = "hint.search.replace-file"
 zht = "替換整個文件"
 zhs = "替换整个文件"
 en = "replace the whole file"
+
 [[message]]
 # 提示：搜索面板——換這一處／全部換
 key = "hint.search.replace-here"
@@ -5107,6 +5114,7 @@ key = "hint.search.walk-the-hits"
 zht = "下一處／上一處"
 zhs = "下一处／上一处"
 en = "next hit / previous"
+
 [[message]]
 # 提示欄：邊欄
 key = "hint.sidebar"
@@ -5388,11 +5396,11 @@ zhs = "删这行／这栏"
 en = "delete this row / column"
 
 [[message]]
-# t 組：詳情欄（從前是 空格 d）
+# t 組：數據那一格（從前是 空格 d，2026-09-30 從「詳情欄」改名）
 key = "hint.table.detail-panel"
-zht = "詳情欄"
-zhs = "详情栏"
-en = "the detail panel"
+zht = "數據"
+zhs = "数据"
+en = "the data panel"
 
 [[message]]
 # t 選單：t f 這一行
@@ -5839,49 +5847,59 @@ en = "{0} over-long rows skipped"
 [[message]]
 # 浮窗底下那一行：這一則讀不完就去邊欄（#426，數據那一種沒有自己的鍵）
 key = "info.in-the-sidebar"
-zht = "␣4 進邊欄"
-zhs = "␣4 进边栏"
-en = "␣4 in the sidebar"
+zht = "␣{0} 進邊欄"
+zhs = "␣{0} 进边栏"
+en = "Space {0} for the sidebar"
+
 [[message]]
 # `:info` 不帶名字：回到按稿子算
 key = "info.live-by-the-file"
 zht = "即時顯示：按稿子算（這一份是{0}）"
 zhs = "即时显示：按稿子算（这一份是{0}）"
-en = "Following the cursor: by the file (here, {0})"
+en = "following the cursor: by the file (here, {0})"
 
 [[message]]
 # `:info <名>` 撥完的回聲
 key = "info.live-is"
 zht = "即時顯示：{0}"
 zhs = "即时显示：{0}"
-en = "Following the cursor: {0}"
+en = "following the cursor: {0}"
 
 [[message]]
 # 五種一種都沒有東西可看
 key = "info.nothing-here"
-zht = "這裏沒有可看的信息"
-zhs = "这里没有可看的信息"
-en = "nothing to show here"
+zht = "這裏沒有可看的信息（翻正文用 C-f／C-b）"
+zhs = "这里没有可看的信息（翻正文用 C-f／C-b）"
+en = "nothing to show here — C-f / C-b page the text"
 
 [[message]]
 # 翻到了哪一種信息（PageUp／PageDown）
 key = "info.now-showing"
 zht = "信息：{0}"
 zhs = "信息：{0}"
-en = "Info: {0}"
+en = "info: {0}"
 
 [[message]]
 # 翻頁翻不動：五種裏只有眼前這一種有東西（#426）
 key = "info.only-one"
-zht = "眼下只有這一種信息"
-zhs = "眼下只有这一种信息"
-en = "this is the only kind there is here"
+zht = "眼下只有這一種信息（翻正文用 C-f／C-b）"
+zhs = "眼下只有这一种信息（翻正文用 C-f／C-b）"
+en = "this is the only kind here — C-f / C-b page the text"
+
+[[message]]
+# 信息那一格空着的時候，框裏那一句（#426）
+key = "info.panel-empty"
+zht = "光標走過去就有了"
+zhs = "光标走过去就有了"
+en = "move the cursor onto something"
+
 [[message]]
 # gw：這一屏上沒有可以跳的地方
 key = "jump.nowhere"
 zht = "這一屏上沒有可以跳的地方"
 zhs = "这一屏上没有可以跳的地方"
 en = "nowhere on this screen to jump to"
+
 [[message]]
 # :keymap actions 那張清單的開頭一段
 key = "keys.actions-head"
@@ -6007,6 +6025,7 @@ key = "label.panel.replace"
 zht = "搜索與替換"
 zhs = "搜索与替换"
 en = "Find & Replace"
+
 [[message]]
 # 標籤：搜索面板
 key = "label.panel.search"
@@ -6907,6 +6926,7 @@ key = "preedit.name.top"
 zht = "正文裏寫首選"
 zhs = "正文里写首选"
 en = "the first candidate, in the text"
+
 [[message]]
 # 没有这种写法
 key = "preedit.no-such-preedit"
@@ -7464,6 +7484,7 @@ key = "scheme.preedit-is"
 zht = "正在打的那一段 {0}"
 zhs = "正在打的那一段 {0}"
 en = "preedit {0}"
+
 [[message]]
 # 換方案時碼表沒裝
 key = "scheme.table-not-installed"
@@ -7480,6 +7501,7 @@ key = "search.after"
 zht = "換後"
 zhs = "换后"
 en = "after"
+
 [[message]]
 # 空的位置框上那句灰字
 key = "search.ask.folder"
@@ -7500,6 +7522,7 @@ key = "search.ask.replace"
 zht = "換成什麼"
 zhs = "换成什么"
 en = "replace with"
+
 [[message]]
 # 搜索：正則寫不通
 key = "search.bad-pattern"
@@ -7597,6 +7620,7 @@ key = "search.hits-one"
 zht = "{0} 處"
 zhs = "{0} 处"
 en = "{0} hit"
+
 [[message]]
 # 搜索面板：查詢框的名字
 key = "search.label.query"
@@ -7655,6 +7679,7 @@ key = "search.nth-hit"
 zht = "{0}/{1}"
 zhs = "{0}/{1}"
 en = "{0}/{1}"
+
 [[message]]
 # 搜索面板：拼音那個開關的名字
 key = "search.pinyin"
@@ -7668,6 +7693,7 @@ key = "search.preserve-case"
 zht = "跟原文的大小寫"
 zhs = "跟原文的大小写"
 en = "preserve case"
+
 [[message]]
 # 搜索：正則那一格
 key = "search.regex"
@@ -7709,12 +7735,14 @@ key = "search.replacing"
 zht = "替換"
 zhs = "替换"
 en = "replace"
+
 [[message]]
 # 搜索：正在走磁盤
 key = "search.scanning"
 zht = "正在找…"
 zhs = "正在找…"
 en = "searching…"
+
 [[message]]
 # 位置那一格是四選一，不是輸入框
 key = "search.scope-is-a-pick"
@@ -7728,6 +7756,7 @@ key = "search.that-edits-the-box"
 zht = "這幾個鍵改的是搜索框裏的字。要去那一處改正文，按 Enter"
 zhs = "这几个键改的是搜索框里的字。要去那一处改正文，按 Enter"
 en = "those keys edit the search box — press Enter to go and edit the text there"
+
 [[message]]
 # 撤回了剛纔那一次替換
 key = "search.undone"
@@ -7741,6 +7770,7 @@ key = "search.undone-files"
 zht = "撤回了剛纔那次替換，{0} 個檔都復原了"
 zhs = "撤回了刚才那次替换，{0} 个档都复原了"
 en = "that replacement is undone in all {0} files"
+
 [[message]]
 # 搜索：在哪裏找——這個檔
 key = "search.where.buffer"
@@ -7761,6 +7791,7 @@ key = "search.where.named"
 zht = "指定文件夾…"
 zhs = "指定文件夹…"
 en = "a folder…"
+
 [[message]]
 # 搜索：在哪裏找——git 項目
 key = "search.where.project"
@@ -10231,18 +10262,18 @@ zhs = "命令"
 en = "commands"
 
 [[message]]
-# 詳情欄關掉
+# 數據那一格關掉（2026-09-30 隨標題一起改名）
 key = "ui.detail-panel-off"
-zht = "詳情欄：關"
-zhs = "详情栏：关"
-en = "detail panel: off"
+zht = "數據：關"
+zhs = "数据：关"
+en = "the data panel: off"
 
 [[message]]
-# 詳情欄打開
+# 數據那一格打開（2026-09-30 隨標題一起改名）
 key = "ui.detail-panel-on"
-zht = "詳情欄：開"
-zhs = "详情栏：开"
-en = "detail panel: on"
+zht = "數據：開"
+zhs = "数据：开"
+en = "the data panel: on"
 
 [[message]]
 # 字典浮窗底下那一句：讀不完就去邊欄
@@ -10950,6 +10981,7 @@ key = "yume.where.from.yume"
 zht = "系統安裝的宇夢輸入法自帶數據"
 zhs = "系统安装的宇梦输入法自带数据"
 en = "data kept by the installed Yume"
+
 [[message]]
 # `:yume-where`：碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。
 key = "yume.where.head"

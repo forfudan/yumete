@@ -36,8 +36,12 @@ impl Editor {
         let want = !self.detail_visible();
         self.show_detail = Some(want);
         match want {
+            // Warning: **走不收起的那一支**（2026-09-30 審出來的）。`ask_for_info`
+            // 的判準是「此刻擺的就是它，而且畫在這一鍵要的地方」——`q` 關掉之後
+            // `info_asked` 還記着數據，於是這一下被當成「又按了一次」當場關回
+            // 去，要按兩下纔出得來。同 `look_up_here` 那一個。
             true => {
-                self.ask_for_info(crate::sidebar::Info::Data, true);
+                self.put_this_info_here(crate::sidebar::Info::Data, true);
                 self.status = say!("ui.detail-panel-on");
             }
             false => {
