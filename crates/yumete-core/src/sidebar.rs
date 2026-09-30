@@ -58,64 +58,76 @@ impl Side {
 /// **What is in a slot right now** — one panel, never two (2026-09-22 定：
 /// 「臨時面板直接廢除，以後只有左右邊欄」)。
 ///
-/// 從前這裏是兩層（`Layer::Top`／`Bottom`）：常駐的一層在上、光標算出來的一層在
-/// 下，同時畫兩個。取消它的理由是**用起來幾乎不會兩個一起看**，而代價一直在付：
-/// 三個正交的問題（誰決定它消失、畫在哪、收不收鍵）被那兩層絞成一團，逐個東西定
-/// 規矩，記不住。
-///
 /// 現在的模型一句話：**邊欄是容器，面板是內容。** 容器只由人開由人關，空了就空
 /// 着；內容一次一個。
 ///
-/// Warning: **「臨時」只剩一個屬性**：光標放上去的那幾種（[`Transient`]）在它成立的時候
-/// **頂掉**常駐的那一個，不成立了就自己下去——而常駐那一個**一直存着没動過**，所以
-/// 「有前任還給前任，没有就空着」是白拿的，不必記什麼。
-/// **A panel the cursor puts there**, if any — Feature #293.
+/// **「信息」——光標底下這個東西是什麽**（2026-09-30 定，#426）。
 ///
-/// 這幾種**不存狀態**：每一幀從光標在哪算出來，不成立就不畫。它們頂掉常駐那一個，
-/// 而常駐那一個原封不動地留着（見上面那一段）。
+/// 五種內容，**一個槽**。作者的原話：「右侧栏和浮窗可以完全做成这样的特征：它永远
+/// 只有一个信息可以即时显示，其他的都必须手动触发……换句话说，右侧栏就是固定的
+/// 『浮窗』，对于这几类信息，它开着，浮窗就不用开了。」
+///
+/// Warning: **這不是五扇面板。** 從前它們是（三扇常駐面板加兩扇臨時面板），於是
+/// 「畫在哪」和「擺哪一種」各存了兩份，四次同一族的 bug 都出在那上面（§5.44）。
+/// 現在內容是一個 `Info`，容器是「那一格開着嗎」，兩個都問出來，不存。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Transient {
-    /// What the cursor is standing in, field by field — Feature #296.
-    Detail,
-    /// What the 拆分表 knows about one character — Feature #215.
+pub enum Info {
+    /// 漢字的拆分與編碼（`空格 d`，#215）。
     Dictionary,
+    /// 詞條（#287）。
+    Wiki,
+    /// 這一格的字段（#296）。2026-09-30 從「表格」改名「數據」——作者說它
+    /// 「比『表格』更能反映这一行的内容」。
+    Data,
+    /// 語言服務器說這個名字是什麽（#53 ③）。
+    Docs,
+    /// 語言服務器說這一行哪兒不對。
+    Problems,
 }
 
-impl Transient {
-    /// **Whether `C-w` stops here** — Feature #293。
+impl Info {
+    /// 五種，`PageUp`／`PageDown` 按這個次序翻。
     ///
-    /// 一律停。2026-09-22 定的規矩只有一條：**浮窗不收鍵，邊欄裏的收**——而
-    /// [`Transient`] 描述的就是「擺在邊欄裏的那一個」，所以三個都收。
-    ///
-    /// Warning: 從前這裏是逐個東西定的（`Detail => false`），理由是詳情欄自己會跟着
-    /// 光標滾、不必走。理由沒錯，可它是**多記一條例外**：新規矩買的正是「不必
-    /// 逐個記」，留一個例外等於沒換（2026-09-23 審出來的，`development.md`
-    /// §5.12.16 那張「從前／現在」表早就這麽寫了）。走得動不妨礙跟着滾——`C-w`
-    /// 進去之前它照舊跟着光標。
-    /// 這個 [`Panel`] 擺在邊欄裏的時候是哪一種臨時面板，沒有就是 `None`。
-    pub fn of(panel: Panel) -> Option<Transient> {
-        match panel {
-            Panel::Dictionary => Some(Transient::Dictionary),
-            Panel::Detail => Some(Transient::Detail),
-            _ => None,
+    /// 次序是**由近及遠**：字典百科講的是眼前這個詞，數據講這一行，文檔診斷是
+    /// 服務器從整份稿子裏看出來的。
+    pub const ALL: [Info; 5] =
+        [Info::Dictionary, Info::Wiki, Info::Data, Info::Docs, Info::Problems];
+
+    /// 每一種的名字，當標題用。
+    pub fn tag(self) -> &'static str {
+        match self {
+            Info::Dictionary => "label.panel.dictionary",
+            Info::Wiki => "label.panel.wiki",
+            Info::Data => "label.panel.data",
+            Info::Docs => "label.panel.docs",
+            Info::Problems => "label.panel.problems",
         }
     }
 
-    pub fn takes_keys(self) -> bool {
+    /// `:info <名>` 認的那個詞。
+    pub fn key(self) -> &'static str {
         match self {
-            // 服務器說的話可以有十幾行，一份 28 欄的拆分表行更長——讀得到底纔算數。
-            Transient::Detail | Transient::Dictionary => true,
+            Info::Dictionary => "dictionary",
+            Info::Wiki => "wiki",
+            Info::Data => "data",
+            Info::Docs => "docs",
+            Info::Problems => "diagnostics",
         }
+    }
+
+    /// 讀那個詞回來。
+    pub fn parse(word: &str) -> Option<Info> {
+        let word = word.trim().to_ascii_lowercase();
+        Info::ALL.into_iter().find(|one| one.key() == word)
     }
 }
 
 /// **Every panel a slot can hold** — Feature #293.
 ///
 /// One name per thing that can be put in a slot, and the only question it
-/// answers is *which side is it on*. The resident ones are also a [`View`]
-/// (they share a slot and `Tab` walks between them); the transient ones are
-/// also a [`Transient`]. This enum is neither of those: it
-/// is the address a setting writes to.
+/// answers is *which side is it on*. Every one of them is also a [`View`]
+/// (they share a slot and `Tab` walks between them); this enum is not that
+/// one — it is the address a setting writes to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Panel {
     /// The files on disk.
@@ -126,36 +138,14 @@ pub enum Panel {
     Outline,
     /// Look for a pattern, and what it found.
     Search,
-    /// The 拆分表 on one character.
-    Dictionary,
-    /// What the cursor is standing in, field by field.
-    Detail,
-    /// The wiki entry the cursor is standing on (#287).
-    Wiki,
-    /// **What the language server says the name under the cursor is**
-    /// （2026-09-29 定）。`Wiki` 的代碼版：一份稿子要麼有百科要麼有文檔，
-    /// 不會兩樣都有。
-    Docs,
-    /// **這一行上服務器說了什麽**（`空格 I`，2026-09-29）。
-    ///
-    /// Warning: 和 `Docs` 是兩扇，不是一扇兩種：它們答的是同一個地方的兩件事
-    /// ——「這是什麽」和「這裏哪兒不對」——而一個人可能兩樣都想看着。
-    Problems,
+    /// **光標底下這個東西是什麽**——五種內容共用的那一格（[`Info`]，#426）。
+    Info,
 }
 
 impl Panel {
     /// Every one of them, in the order a setting file lists them.
-    pub const ALL: [Panel; 9] = [
-        Panel::Files,
-        Panel::Buffers,
-        Panel::Outline,
-        Panel::Search,
-        Panel::Dictionary,
-        Panel::Detail,
-        Panel::Wiki,
-        Panel::Docs,
-        Panel::Problems,
-    ];
+    pub const ALL: [Panel; 5] =
+        [Panel::Files, Panel::Buffers, Panel::Outline, Panel::Search, Panel::Info];
 
     /// Its name in the config file and on the command line.
     pub fn key(self) -> &'static str {
@@ -164,11 +154,7 @@ impl Panel {
             Panel::Buffers => "buffers",
             Panel::Outline => "outline",
             Panel::Search => "search",
-            Panel::Dictionary => "dictionary",
-            Panel::Detail => "detail",
-            Panel::Wiki => "wiki",
-            Panel::Docs => "docs",
-            Panel::Problems => "problems",
+            Panel::Info => "info",
         }
     }
 
@@ -180,7 +166,7 @@ impl Panel {
 
     /// **What to call it, as a message tag rather than a word.**
     ///
-    /// Warning: Not a `&'static str` of Chinese like [`View::title`]: that one is a
+    /// Warning: Not a `&'static str` of Chinese like [`Info::tag`]: that one is a
     /// panel's own header, drawn as it is, while this one is dropped into
     /// sentences (`sidebar.moved`) — and a Chinese word in an English sentence
     /// is a sentence half translated.
@@ -190,11 +176,7 @@ impl Panel {
             Panel::Buffers => "label.panel.buffers",
             Panel::Outline => "label.panel.outline",
             Panel::Search => "label.panel.search",
-            Panel::Dictionary => "label.panel.dictionary",
-            Panel::Detail => "label.panel.detail",
-            Panel::Wiki => "label.panel.wiki",
-            Panel::Docs => "label.panel.docs",
-            Panel::Problems => "label.panel.problems",
+            Panel::Info => "label.panel.info",
         }
     }
 }
@@ -206,18 +188,7 @@ impl From<View> for Panel {
             View::Buffers => Panel::Buffers,
             View::Outline => Panel::Outline,
             View::Search => Panel::Search,
-            View::Wiki => Panel::Wiki,
-            View::Docs => Panel::Docs,
-            View::Problems => Panel::Problems,
-        }
-    }
-}
-
-impl From<Transient> for Panel {
-    fn from(kind: Transient) -> Panel {
-        match kind {
-            Transient::Dictionary => Panel::Dictionary,
-            Transient::Detail => Panel::Detail,
+            View::Info => Panel::Info,
         }
     }
 }
@@ -226,12 +197,9 @@ impl From<Transient> for Panel {
 ///
 /// Views of one question — "what is there, and where am I in it" — at three
 /// scales: the project, the files open in it, and the chapter on screen. `Tab`
-/// walks between them, because they answer each other.
-///
-/// **Every view here is resident**, and that is now a fact about the layer
-/// rather than about the view: what is put up by the cursor and taken down
-/// again is a [`Transient`], not a `View`. 字典 used to be the exception in
-/// this enum and is one of those now.
+/// walks between them, because they answer each other. The fifth is not a
+/// fourth scale: it is [`Info`]'s one slot, and what is *in* it is a question
+/// about the cursor rather than about the panel (#426).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum View {
     /// The files on disk, as a tree.
@@ -243,34 +211,18 @@ pub enum View {
     Outline,
     /// Look for a pattern, and what it found — Feature #419.
     Search,
-    /// The wiki entry under the cursor, kept on the page (#287). While it is
-    /// open the floating panel does not show the entry too: one place at a
-    /// time.
-    Wiki,
-    /// **語言服務器怎麼說光標底下這個名字**（2026-09-29）。
+    /// **光標底下這個東西是什麽**——五種內容輪流佔着的那一格（#426）。
     ///
-    /// `Wiki` 的代碼版，同一個形狀：常駐、跟着光標、開着的時候浮窗就不畫。
-    /// Warning: **一處不同：百科是拉的，文檔是推的。** 百科每一幀現算（純函數），
-    /// 文檔要問服務器，一來一回，所以它多一道「光標停穩了纔問」的閘
-    /// （`Editor::docs_follow`）。
-    Docs,
-    /// **這一行上服務器說了什麽**（2026-09-29）。`Docs` 的鄰居：同一個地方的另
-    /// 一件事。它不必問服務器——診斷是它自己推過來的，早就在內存裏。
-    Problems,
+    /// Warning: **它不是五扇面板，是一格。** 標題是算出來的（擺着哪一種就寫哪
+    /// 一種的名字，空着寫「信息」），所以 `Tab` 的環上它只佔一格，`PageUp`／
+    /// `PageDown` 換的是裏面那一種，不是換面板。
+    Info,
 }
 
 impl View {
     /// Every view, in the order `Tab` walks them.
-    pub const ALL: [View; 7] = [
-        View::Explorer,
-        View::Buffers,
-        View::Outline,
-        View::Search,
-        View::Wiki,
-        View::Docs,
-        View::Problems,
-    ];
-
+    pub const ALL: [View; 5] =
+        [View::Explorer, View::Buffers, View::Outline, View::Search, View::Info];
 }
 
 /// **一個側欄有多寬**，四檔，分母都是十（2026-09-26 定的）。
@@ -531,9 +483,10 @@ impl Sidebar {
                     Chosen::FileLine(row.path, row.depth)
                 })
             }
-            // Never reached: the search panel has a store of its own and
-            // never fills these rows (`refresh_panel`).
-            View::Search | View::Wiki | View::Docs | View::Problems => return None,
+            // Never reached: the search panel has a store of its own, and 信息
+            // is read rather than walked into — neither fills these rows
+            // (`refresh_panel`).
+            View::Search | View::Info => return None,
             View::Explorer => {}
         }
         if !row.is_dir {

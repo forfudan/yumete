@@ -876,78 +876,23 @@ impl Editor {
     ///
     /// 與 `gd` 同一個形狀，同一條理由：只在代碼檔上問，問完不等。鍵位是
     /// `空格 k`，helix 的 hover 也是這一個。
-    /// **這一格此刻「應該」擺哪一種**，`None` ＝ 什麽都不該擺（2026-09-29 定）。
+    /// **`空格 k`／`空格 K`：把光標底下這個東西講給我聽**（#426）。
     ///
-    /// 原話：「如果已经有浮窗，就把浮窗搬进去。如果没有浮窗，就显示 on 的那个。
-    /// 如果都是 off，就留空……总之，它显示的是当前状态下『应该』显示的东西。也
-    /// 就是说当前最多只可能显示一种内容，侧栏开了，就会替代浮窗这个容器。」
-    ///
-    /// Warning: **要顯示的東西只有一樣，容器有兩個**（浮窗／邊欄），邊欄開着就
-    /// 替代浮窗。這一支答的是「哪一樣」，容器是另一件事。
-    pub(super) fn what_this_spot_should_show(&self) -> Option<crate::sidebar::View> {
-        if let Some(chosen) = self.spot_chosen {
-            return Some(chosen);
-        }
-        if self.docs_follow {
-            return Some(crate::sidebar::View::Docs);
-        }
-        if self.problems_follow {
-            return Some(crate::sidebar::View::Problems);
-        }
-        None
-    }
-
-    /// **那一格此刻擺着文檔還是診斷**——有就回它在哪一側（2026-09-29）。
-    ///
-    /// Warning: 判準是「**有沒有一塊地方**」，不是「我那一扇開着嗎」。這兩扇答的
-    /// 是同一個地方的兩件事、共用同一格，所以按 `空格 k` 的時候診斷那一扇就是
-    /// 文檔的地方——頂掉它，不要另浮一個。作者報的原話：「如果存在边栏，空格 k
-    /// 应该在邊欄显示而不是浮窗（暂时顶掉诊断）。」
-    fn the_slot_for_these_two(&self) -> Option<crate::sidebar::Side> {
-        self.showing(crate::sidebar::View::Docs)
-            .or_else(|| self.showing(crate::sidebar::View::Problems))
-    }
-
-    /// 把那一格換成 `view`——它本來擺着那兩扇裏的另一扇。鍵不交過去。
-    fn put_it_in_the_slot(&mut self, view: crate::sidebar::View) {
-        let side = self.the_slot_for_these_two().unwrap_or_else(|| self.side_for(view));
-        self.open_panel_without_the_keys(side, view);
-    }
-
+    /// Warning: **講什麽看稿子**：代碼裏是服務器說的那個名字，散文裏是百科詞條
+    /// （2026-09-29 定，原話：「文本文件会说 space k / K 这不是程序文件所以不能
+    /// 显示文档。这是不好的，它以就可以显示百科」）。兩個鍵說的是同一句話，而
+    /// 「畫在哪」是另一件事——`afloat` 那一半，見 [`Editor::ask_for_info`]。
     pub(super) fn ask_what_this_is(&mut self, afloat: bool) -> bool {
-        // **散文那一份問的是百科，不是服務器**（2026-09-29 定，原話：「文本文件
-        // 会说 space k / K 这不是程序文件所以不能显示文档。这是不好的，它以就可以
-        // 显示百科」）。
-        //
-        // Warning: **這兩個鍵說的是「把光標底下這個東西講給我聽」**，而「這個東西是什
-        // 麽」看的是稿子：代碼裏是一個名字，散文裏是一個詞條。百科與文檔本來就是
-        // 一扇面板的兩種（`view_fits_the_file`），這兩個鍵也該是一個鍵的兩種。
         if !self.writes_code() {
             return self.show_the_wiki_here(afloat);
         }
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return false;
         };
-        // **文檔那一扇開着就畫進去，別再浮一個**（2026-09-29 定，原話：「如果右
-        // 侧栏是打开的情况下，按 space k 就应该在侧栏中显示，而不是继续弹窗显
-        // 示」）。兩個面在說同一件事，是這個編輯器一直在拆的東西。
-        //
-        // `空格 K`（`afloat == false`）說的是**一定進邊欄**：沒有那一格就開一格，
-        // 有了就換成文檔。`空格 k` 只在**一格都沒有**的時候纔浮。
-        self.spot_chosen = Some(crate::sidebar::View::Docs);
-        // `空格 K`（`afloat == false`）說的是「一定進邊欄」，所以它先把那一格
-        // 開出來——開了之後「畫在哪」自己就答對了，不必再記一個字段。
-        if !afloat {
-            self.put_it_in_the_slot(crate::sidebar::View::Docs);
-        }
-        // 再按一次同一個鍵就收起來（同 `空格 d`）。
-        // 再按一次同一個鍵就收起來：此刻畫在哪，和這一鍵要的是不是同一處。
-        if (self.the_slot_for_these_two().is_none() == afloat) && self.hover_here().is_some() {
-            self.hovered = None;
-            self.refresh_sidebar();
+        if !self.ask_for_info(crate::sidebar::Info::Docs, afloat) {
             return true;
         }
-        self.hover_scroll = 0;
+        self.info_scroll = 0;
         self.hover_query = Some((path, line, utf16));
         self.status = say!("lsp.asking-what");
         true
@@ -955,103 +900,22 @@ impl Editor {
 
     /// **`空格 i`／`空格 I`：把這一行的診斷拿出來看**（2026-09-29 定）。
     ///
-    /// 和 `空格 k`／`空格 K` 一個形狀：小寫浮、大寫進邊欄，而「畫在哪」永遠是
-    /// 同一條規矩——那一扇開着就進去，沒開就浮。⚠️ 大寫那一下**一定**進邊欄，
-    /// 沒開就開出來，鍵不交過去。
-    ///
-    /// Warning: **診斷不必問。** 它是服務器自己推過來的，早就在內存裏，所以這一
-    /// 支不發任何請求，也沒有那道三百毫秒的閘。
+    /// 和 `空格 k`／`空格 K` 一個形狀：小寫浮、大寫進邊欄。Warning: **診斷不必問**
+    /// ——它是服務器自己推過來的，早就在內存裏，所以這一支不發任何請求，也沒有
+    /// 那道三百毫秒的閘。
     pub(super) fn show_the_problem_here(&mut self, afloat: bool) {
-        // 同 `空格 k`，反過來：有那一格就換成診斷，頂掉文檔。
-        self.spot_chosen = Some(crate::sidebar::View::Problems);
-        let afloat = afloat && self.the_slot_for_these_two().is_none();
-        if !afloat {
-            self.put_it_in_the_slot(crate::sidebar::View::Problems);
-        }
         if self.problem_here().is_none() {
             self.status = say!("problem.none-here");
             return;
         }
-        // 浮的那一份要有人記着「它是被叫出來的」——不然光標一走它自己就沒了，
-        // 而那正是 `problem_afloat` 判斷的依據。
-        self.problem_asked = afloat.then(|| self.sel.head());
+        self.ask_for_info(crate::sidebar::Info::Problems, afloat);
     }
 
-    /// 這一刻該不該浮那一則診斷。
-    ///
-    /// 兩種情形：即時那一檔開着（出廠就是），或者剛按過 `空格 i`。⚠️ 文檔那一
-    /// 扇正浮着的時候一個字都不畫——兩個浮窗疊在一起是作者報的那一條。
+    /// 這一刻該不該浮那一則診斷，和它是什麽。
     pub fn problem_afloat(&self) -> Option<(crate::problem::Severity, Vec<String>)> {
-        // Warning: **那一扇開着就不浮**（2026-09-29 報的：「浮窗不应该和边栏同时
-        // 出现」）。和文檔一條規矩：畫在哪只有一個答案，不會同一句話畫兩遍。
-        // Warning: **問的是「有沒有那一格」**，不是「診斷那一扇開着嗎」——那一格
-        // 擺着文檔的時候它也是這一則的去處（2026-09-29 報的第二次）。
-        if self.hover_afloat().is_some() || self.the_slot_for_these_two().is_some() {
-            return None;
-        }
-        let asked = self.problem_asked == Some(self.sel.head());
-        (self.problems_follow || asked).then(|| self.problem_here()).flatten()
-    }
-
-    /// **診斷跟不跟着光標走**——`:diagnostics on`／`off`（2026-09-29）。
-    ///
-    /// Warning: **和 `:docs` 互斥**（作者定）：開一個就自動關另一個，於是永遠只有
-    /// 一樣會自己冒出來，另一樣按 `空格 i`／`空格 k` 叫。⚠️ 兩樣都自動的話，
-    /// 「有文檔顯示文檔、沒文檔顯示診斷」要等文檔那一問回話纔判得出來——那一秒
-    /// 裏畫什麽都是錯的：畫診斷會閃，不畫就是空着。
-    pub fn follow_with_problems(&mut self, on: bool) {
-        self.problems_follow = on;
-        if on {
-            self.docs_follow = false;
-        }
-        // 撥一次開關是一次新的意思，蓋過上一次按鍵選的那一種。
-        self.spot_chosen = None;
-        self.status = match on {
-            true => say!("lsp.problems-follow-on"),
-            false => say!("lsp.problems-follow-off"),
-        };
-        // 撥完就把那一格擺成該有的樣子——不然它還擺着上一種，而地方就在眼前。
-        self.refresh_sidebar();
-    }
-
-    /// 診斷此刻跟不跟着光標走。
-    pub fn problems_follow(&self) -> bool {
-        self.problems_follow
-    }
-
-    /// **文檔跟不跟着光標走**——一個命令，不是一個鍵（2026-09-29 定）。
-    ///
-    /// 原話：「即时显示应该做成一个命令开关而不使用快捷键……这样的话即时显示和在
-    /// 哪里显示就分开了，不会混在一起。」Warning: **兩件事**：`空格 k`／`空格 K` 說的是
-    /// 「畫在哪」，這一個說的是「什麽時候問」。從前擠在一個鍵上，於是按 `空格 K`
-    /// 的人不知道自己同時定了兩件事。
-    ///
-    /// 開着的時候它就是百科的代碼版：面板常駐，內容跟着光標。Warning: **差別在拉與推**
-    /// ——百科每一幀現算，文檔要問服務器，所以它多一道「光標停穩了纔問」的閘
-    /// （[`Editor::docs_owed`]）。出廠**關**：問一次服務器不便宜。
-    pub fn follow_with_docs(&mut self, on: bool) {
-        self.docs_follow = on;
-        // 互斥，見 `follow_with_problems`。
-        if on {
-            self.problems_follow = false;
-        }
-        self.spot_chosen = None;
-        // Warning: **它不開邊欄。** 「什麽時候問」和「在哪裏顯示」是兩件事
-        // （2026-09-29 作者第三次說這一句）：這一個只管前者，後者永遠是同一條規矩
-        // ——那一扇開着就畫進去，沒開就浮。開着它而不開邊欄，文檔就跟着光標浮。
-        self.docs_asked_at = None;
-        // 開的那一刻就起錶——不然第一問要等到光標動過一次纔算數。
-        self.docs_moved = on.then(std::time::Instant::now);
-        self.status = match on {
-            true => say!("lsp.docs-follow-on"),
-            false => say!("lsp.docs-follow-off"),
-        };
-        self.refresh_sidebar();
-    }
-
-    /// 文檔此刻跟不跟着光標走。
-    pub fn docs_follow(&self) -> bool {
-        self.docs_follow
+        (self.info_afloat() == Some(crate::sidebar::Info::Problems))
+            .then(|| self.problem_here())
+            .flatten()
     }
 
     /// 光標此刻在哪個代碼檔的哪一行哪一列（**列是 UTF-16 碼元**）。
@@ -1135,7 +999,7 @@ impl Editor {
     /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
     pub fn show_hover(&mut self, told: String) {
         self.hovered = Some((self.sel.head(), told));
-        self.hover_scroll = 0;
+        self.info_scroll = 0;
         self.status = String::new();
         // Warning: **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
         // 「送進邊欄要的就是讀得完，而讀得完得走得動」——Warning: **可要走得動本來就有
@@ -1151,9 +1015,12 @@ impl Editor {
     /// 報一句「服務器無話可說」等於每走到一個標點就罵一次。面板清空就是答覆。
     pub fn no_hover(&mut self) {
         self.hovered = None;
-        match self.docs_follow {
-            true => self.refresh_sidebar(),
-            false => self.status = say!("lsp.speechless"),
+        // 手動叫出來的那一次要當場作廢，不然那一格會空着等到光標動——而「空着」
+        // 的意思是「還在問」，不是「問完了，沒有」。
+        let by_hand = self.info_asked.take().is_some();
+        match by_hand {
+            true => self.status = say!("lsp.speechless"),
+            false => self.refresh_sidebar(),
         }
     }
 
@@ -1164,7 +1031,7 @@ impl Editor {
     /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
     /// 清空，作者定的）。
     pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
-        if !self.docs_follow {
+        if self.info_live() != crate::sidebar::Info::Docs {
             return None;
         }
         let at = self.sel.head();
@@ -1187,8 +1054,8 @@ impl Editor {
     }
 
     /// 浮着的那一則從第幾行畫起。
-    pub fn hover_scroll(&self) -> usize {
-        self.hover_scroll
+    pub fn info_scroll(&self) -> usize {
+        self.info_scroll
     }
 
     /// **翻那一扇浮窗**——`by` 行，負數往回（2026-09-29）。
@@ -1196,11 +1063,11 @@ impl Editor {
     /// 回 `true` ＝ 這一鍵歸浮窗，正文不必再看它一眼。Warning: **只有浮着的那一份收
     /// 鍵**：進了邊欄的那一份走邊欄自己的 `jk`，而邊欄是走得進去的
     /// （`空格 4`）——浮窗不是。
-    pub(super) fn scroll_the_hover(&mut self, by: isize) -> bool {
+    pub(super) fn scroll_the_float(&mut self, by: isize) -> bool {
         let Some(told) = self.hover_afloat() else { return false };
         // 最多翻到最後一行，不翻到空白裏去。
         let last = told.lines().count().saturating_sub(1);
-        self.hover_scroll = self.hover_scroll.saturating_add_signed(by).min(last);
+        self.info_scroll = self.info_scroll.saturating_add_signed(by).min(last);
         true
     }
 
@@ -1211,7 +1078,8 @@ impl Editor {
     /// 鬧鐘——除非有人先告訴它鬧鐘幾點響。同 `autosave_due_in` 那一族。
     pub fn docs_due_in(&self) -> Option<std::time::Duration> {
         let moved = self.docs_moved?;
-        self.docs_follow.then(|| DOCS_SETTLE.saturating_sub(moved.elapsed()))
+        (self.info_live() == crate::sidebar::Info::Docs)
+            .then(|| DOCS_SETTLE.saturating_sub(moved.elapsed()))
     }
 
     /// 按了一個鍵——跟着走的那一問要重新等它停穩。
@@ -1221,7 +1089,7 @@ impl Editor {
     /// 那一問要等到再下一鍵纔算數。按住 `j` 連走照樣一格都不問：攔住它的是
     /// `docs_asked_at`（同一格不重複問）和這隻錶本身。
     pub(super) fn the_cursor_moved_under_the_docs(&mut self) {
-        if self.docs_follow {
+        if self.info_live() == crate::sidebar::Info::Docs {
             self.docs_moved = Some(std::time::Instant::now());
         }
     }
@@ -1238,9 +1106,7 @@ impl Editor {
     pub(super) fn forget_a_hover_nobody_is_looking_at(&mut self) {
         let Some((asked_at, _)) = self.hovered.as_ref() else { return };
         // 送進邊欄的那一份（`空格 K`），鍵在它身上的時候光標本來就不動。
-        let reading = self.the_slot_for_these_two().is_some()
-            && self.panel_focus == Some(self.side_of(crate::sidebar::Panel::Dictionary));
-        if reading || *asked_at == self.sel.head() {
+        if self.reading_the_info() || *asked_at == self.sel.head() {
             return;
         }
         self.hovered = None;
@@ -1252,14 +1118,11 @@ impl Editor {
         (*asked_at == self.sel.head()).then_some(told.as_str())
     }
 
-    /// 那一則說明該不該**浮**在光標旁邊（`空格 k` 問的那一次）。
+    /// 那一則說明該不該**浮**在光標旁邊。
     pub fn hover_afloat(&self) -> Option<&str> {
-        self.the_slot_for_these_two().is_none().then(|| self.hover_here()).flatten()
-    }
-
-    /// 那一則說明該不該畫在**邊欄**裏（`空格 K` 問的那一次）。
-    pub fn hover_in_the_sidebar(&self) -> Option<&str> {
-        self.the_slot_for_these_two().is_some().then(|| self.hover_here()).flatten()
+        (self.info_afloat() == Some(crate::sidebar::Info::Docs))
+            .then(|| self.hover_here())
+            .flatten()
     }
 
     // ---- `C-n` 問服務器接下來能打什麽（#53 ④）------------------------------

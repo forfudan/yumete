@@ -806,12 +806,8 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
-            Command::Docs(on) => {
-                self.follow_with_docs(on.unwrap_or(!self.docs_follow()));
-                Ok(CommandOutcome::Continue)
-            }
-            Command::Diagnostics(on) => {
-                self.follow_with_problems(on.unwrap_or(!self.problems_follow()));
+            Command::Info(which) => {
+                self.set_info_live(which);
                 Ok(CommandOutcome::Continue)
             }
             // Rides the same channel, for the same reason: the colours are the
@@ -986,10 +982,9 @@ impl Editor {
                 // would move a panel the reader is not looking at.
                 let which = match which {
                     Some(panel) => Some(panel),
-                    None => self.panel_focus().and_then(|at| match self.transient(at) {
-                        Some(kind) => Some(crate::sidebar::Panel::from(kind)),
-                        None => self.panel(at).map(|p| crate::sidebar::Panel::from(p.view())),
-                    }),
+                    None => self
+                        .panel_focus()
+                        .and_then(|at| self.panel(at).map(|p| crate::sidebar::Panel::from(p.view()))),
                 };
                 let Some(panel) = which else {
                     self.status = say!("sidebar.which-panel");

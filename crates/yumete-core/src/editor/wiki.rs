@@ -313,12 +313,12 @@ impl Editor {
     /// keys where they are.
     /// `:wiki-panel [on|off]` — `None` 切換，和 `:word-show` 同一套。
     fn show_wiki_panel(&mut self, want: Option<bool>) {
-        let open = self.showing(crate::sidebar::View::Wiki);
+        let open = self.showing(crate::sidebar::View::Info);
         let want = want.unwrap_or(open.is_none());
         match (want, open) {
             (false, Some(side)) => self.close_panel(side),
             (true, None) => {
-                self.show_sidebar(crate::sidebar::View::Wiki);
+                self.show_sidebar(crate::sidebar::View::Info);
                 self.panel_focus = None;
             }
             // 已經是要的樣子了：什麼都不做，也不報錯。
@@ -406,19 +406,13 @@ impl Editor {
     /// （`wiki_floating`）。所以這兩個鍵在散文裏只管一件事——**畫在哪**，和它們
     /// 在代碼裏管的是同一件事。
     pub(super) fn show_the_wiki_here(&mut self, afloat: bool) -> bool {
-        // `空格 K`：一定進邊欄，沒開就開出來，鍵不交過去。
-        if !afloat {
-            if self.showing(crate::sidebar::View::Wiki).is_none() {
-                let side = self.side_for(crate::sidebar::View::Wiki);
-                self.open_panel_without_the_keys(side, crate::sidebar::View::Wiki);
-            }
-            return true;
-        }
-        // `空格 k`：該畫的地方本來就畫着了。光標底下什麽都沒有纔要說一句——
-        // 一個按了沒反應的鍵，讀者只會以為自己記錯了鍵。
+        // 光標底下什麽都沒有就說一句——一個按了沒反應的鍵，讀者只會以為自己記
+        // 錯了鍵。
         if self.wiki_here().is_none() {
             self.status = say!("wiki.panel-empty");
+            return true;
         }
+        self.ask_for_info(crate::sidebar::Info::Wiki, afloat);
         true
     }
 
@@ -451,10 +445,11 @@ impl Editor {
         if self.wiki_include_here().is_some() {
             return None;
         }
-        if self.showing(crate::sidebar::View::Wiki).is_some() || self.detail().is_some() {
-            return None;
-        }
-        self.wiki_here()
+        // **邊欄那一格開着就不浮，數據壓在它上面**——「畫在哪」只有一個答案，
+        // 而五種裏誰在上面由 `info_now` 一處說了算（#426）。
+        (self.info_afloat() == Some(crate::sidebar::Info::Wiki))
+            .then(|| self.wiki_here())
+            .flatten()
     }
 
     /// `gd` on a wiki name: open the file the entry is written in, on its

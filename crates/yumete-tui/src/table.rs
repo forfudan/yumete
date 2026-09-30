@@ -925,7 +925,7 @@ pub fn draw_detail(
     frame.render_widget(Clear, area);
     // **兩堵牆與底色，和常駐面板同一支**，這樣一欄不管怎麼分，讀起來都是一欄
     // （#293）；有焦點時兩邊都是塗滿的金——見 `crate::sidebar_shell`。
-    let whose = yumete_core::messages::say(yumete_core::sidebar::Panel::Detail.tag(), &[]);
+    let whose = yumete_core::messages::say(yumete_core::sidebar::Info::Data.tag(), &[]);
     let shell = crate::sidebar_shell(frame, editor, ink, ground, side, area, &whose);
     let (right, area) = (shell.to, shell.area);
     let buf = frame.buffer_mut();

@@ -1904,28 +1904,24 @@ pub struct Editor {
     /// Warning: 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
     /// 冒出來的診斷不是這一種——那一種是文件的事實，走到哪都還在。
     hovered: Option<(usize, String)>,
-    /// **`空格 K`：文檔跟不跟着光標走**（2026-09-29）。出廠**關着**——百科是現
-    /// 算的，跟着走不花什麽；文檔要問服務器，一來一回。
-    docs_follow: bool,
-    /// **診斷跟不跟着光標走**（`:diagnostics`，2026-09-29）。出廠**開着**——它
-    /// 是內存裏現成的，不花什麽，而且這就是 2026-09-29 之前一直的樣子。
-    /// Warning: 和 `docs_follow` 互斥，見 `Editor::follow_with_problems`。
-    problems_follow: bool,
-    /// 按 `空格 i` 叫出來的那一次，光標當時在哪——它一走那一則就沒。
-    problem_asked: Option<usize>,
-    /// **右邊那一格此刻該擺哪一種**——`空格 k` 選文檔，`空格 i` 選診斷。
+    /// **手動叫出來的那一種信息，和叫的時候光標在哪**（#426，2026-09-30）。
     ///
-    /// `None` ＝ 沒人選過，那就看哪個即時開關開着（兩個都關就沒有內容）。
-    /// Warning: 文檔與診斷**不是兩扇面板，是一格的兩種內容**——作者說的：「它就是
-    /// 诊断/文檔二选一呀」。所以它們不會並存，`Tab` 也不在它們之間轉。
-    spot_chosen: Option<crate::sidebar::View>,
+    /// 光標一走就作廢——那一則是問出來的，問題已經過去了。`None` ＝ 沒人叫過，
+    /// 那就看即時的那一種。
+    info_asked: Option<(crate::sidebar::Info, usize)>,
+    /// **`:info <名>` 指定的那一種即時信息**，`None` ＝ 按稿子算（散文百科、
+    /// 代碼診斷、表格數據）。見 [`Editor::info_live`]。
+    info_live: Option<crate::sidebar::Info>,
     /// 跟着走的時候，上一次問的是哪一格——同一格不重複問。
     docs_asked_at: Option<usize>,
     /// 光標最後一次動是什麽時候，跟着走的那一問等它停穩（`DOCS_SETTLE`）。
     docs_moved: Option<std::time::Instant>,
-    /// **浮着的那一則從第幾行畫起**（2026-09-29）——`PageUp`／`PageDown`／
-    /// `C-u`／`C-d` 翻它，同 helix（`ui/popup.rs`：那四個鍵滾浮窗，別的鍵關掉）。
-    hover_scroll: usize,
+    /// **浮着的那一則從第幾行畫起**（2026-09-29）——`C-u`／`C-d` 翻它，同
+    /// helix（`ui/popup.rs`：那幾個鍵滾浮窗，別的鍵一按就關）。
+    ///
+    /// Warning: **`PageUp`／`PageDown` 不在這裏**（2026-09-30 改）：那兩個鍵歸
+    /// 「換一種信息」（[`Editor::page_the_info`]），翻行只剩 `C-u`／`C-d`。
+    info_scroll: usize,
     /// **`:diagnostics-all` 頂上那一行**：哪個語言服務器、在哪、什麽狀態。
     ///
     /// Warning: **前端寫進來的**——`Servers` 住在那一側，核心看不見它。同 `says`
@@ -1940,12 +1936,6 @@ pub struct Editor {
     /// and the 拆分表 has nothing for it, which the panel has to say out loud
     /// rather than draw as an empty box.
     dictionary: Option<(char, Option<Vec<(String, String)>>)>,
-    /// **這一次的字典是浮窗，還是邊欄裏的一頁**（2026-09-22 定）。
-    ///
-    /// `空格 d` 開浮窗，**一點都不碰邊欄**；`空格 D` 纔在邊欄裏開。兩個鍵問的是
-    /// 同一件事、答案同一份，差的只是畫在哪兒——所以這裏是一格布爾，不是兩套狀
-    /// 態。Warning: 大寫是「同一件事的更大版本」，與 `空格 c`／`空格 C` 同一條規矩。
-    dictionary_afloat: bool,
     /// The other work area, when the page is split (Feature #176).
     other: Option<Pane>,
     /// Which half of the screen holds the keys — **screen order**, so
@@ -2510,7 +2500,7 @@ pub struct Editor {
     wiki_pinned: Option<(String, usize)>,
     /// How far the bottom layer is scrolled — the only state a transient panel
     /// has, and it has it because reading a long answer is the point.
-    transient_scroll: usize,
+    panel_scroll: usize,
     /// **百科那一頁讀到哪了**，以及讀的是站在哪個字上的那一條（2026-09-22 報的：
     /// 「無法用 j/k/J/K 向上下翻動」）。
     ///
@@ -2782,20 +2772,17 @@ impl Editor {
             settings_close: None,
             hover_query: None,
             hovered: None,
-            docs_follow: false,
-            problems_follow: true,
-            problem_asked: None,
-            spot_chosen: None,
+            info_asked: None,
+            info_live: None,
             docs_asked_at: None,
             docs_moved: None,
-            hover_scroll: 0,
+            info_scroll: 0,
             server_line: None,
             completion_query: None,
             completion_at: None,
             completion_by_hand: false,
             offering: None,
             dictionary: None,
-            dictionary_afloat: false,
             other: None,
             live_pane: 0,
             number_fill: false,
@@ -2922,21 +2909,17 @@ impl Editor {
             page_span: (0, 0),
             status_fades: None,
             sides: [
+                // 文件、緩衝、大綱、搜索在左；信息在右（它是「這是什麽」那一
+                // 格，跟着眼睛走，不該把正文往右推）。
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,
-                crate::sidebar::Side::Right,
-                crate::sidebar::Side::Right,
-                crate::sidebar::Side::Right,
-                // 文檔：同百科，右邊——它就是百科的代碼版（2026-09-29）。
-                crate::sidebar::Side::Right,
-                // 診斷：也在右邊，和文檔並排（`Tab` 換得過去）。
                 crate::sidebar::Side::Right,
             ],
             dictionary_anchor: None,
             wiki_pinned: None,
-            transient_scroll: 0,
+            panel_scroll: 0,
             wiki_scroll: std::cell::Cell::new((0, usize::MAX)),
             default_syntax: None,
             syntax_by_name: HashMap::new(),
@@ -3784,6 +3767,7 @@ mod files;
 mod help;
 mod find;
 mod hint;
+mod info;
 mod jumps;
 mod keys;
 mod labels;

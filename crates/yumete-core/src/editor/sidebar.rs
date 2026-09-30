@@ -52,9 +52,7 @@ impl Editor {
             // 之後它也可能是**那一側的常駐面板**。於是
             // `:panel-dictionary left` 會把鍵從右邊的百科裏拽走
             // （2026-09-23 審出來的）。
-            None if self.panel_focus == Some(was)
-                && self.transient(was) == crate::sidebar::Transient::of(panel) =>
-            {
+            None if self.panel_focus == Some(was) && Self::view_of(panel).is_some() => {
                 self.panel_focus = Some(side)
             }
             None => {}
@@ -77,7 +75,7 @@ impl Editor {
         };
         let mine: Vec<crate::sidebar::View> = crate::sidebar::View::ALL
             .into_iter()
-            .filter(|&v| self.side_for(v) == side && self.view_fits_the_file(v))
+            .filter(|&v| self.side_for(v) == side)
             .collect();
         if mine.len() < 2 {
             self.status = say!("sidebar.only-view-on-this-side");
@@ -108,43 +106,23 @@ impl Editor {
         self.panels[side as usize].as_mut()
     }
 
-    /// **What the bottom of that slot is showing** — worked out afresh, never
-    /// stored (#293).
+    /// **這一側的邊欄此刻擺着哪一種信息**，`None` ＝ 那一格不是信息、或者它空着。
     ///
-    /// **Order is the whole rule** when both live on this side: asking about a
-    /// character is a thing a reader just did; what the cursor is standing in
-    /// has been true all along. The question wins while it is live, and when
-    /// it stops being live the row underneath simply shows again — nobody
-    /// remembered it, and nobody put it back.
-    pub fn transient(&self, side: crate::sidebar::Side) -> Option<crate::sidebar::Transient> {
-        use crate::sidebar::{Panel, Transient};
-        // Warning: **浮窗那一次不上邊欄。** `空格 d` 只是看一眼，邊欄的樣子一點都不
-        // 該變（2026-09-22 定：邊欄是容器，只由人開由人關）。
-        if self.side_of(Panel::Dictionary) == side && !self.dictionary_afloat && self.dictionary_live() {
-            return Some(Transient::Dictionary);
-        }
-        // Warning: **文檔不在這裏**（2026-09-29 拆的）。它 2026-09-29 起是一扇**常駐**
-        // 面板（`View::Docs`），而這一支答的是「光標頂上來的那一層」。兩個身份
-        // 都掛着的後果，作者當場就撞上了：鍵走臨時那一支，於是 `w`、`Tab` 一個
-        // 都不管用，而提示行也只寫得出臨時那一支的兩個鍵。
-        if self.side_of(Panel::Detail) == side && self.detail_is_a_panel() {
-            return Some(Transient::Detail);
-        }
-        None
+    /// Warning: **它只問，不存**（#426）。從前這裏答的是「光標頂上來的那一層」，
+    /// 而常駐那一層另有一份記錄——兩份記錄對不上就是那四次 bug。現在信息是一
+    /// 扇面板，裏面擺哪一種由 [`Editor::info_now`] 算，這一支只是把「那一格是
+    /// 信息嗎」和「該擺哪一種」兜在一起。
+    pub fn info_in_this_sidebar(&self, side: crate::sidebar::Side) -> Option<crate::sidebar::Info> {
+        (self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info))
+            .then(|| self.info_now())
+            .flatten()
     }
 
-    /// **Whether the 字典 question is still being asked** (#215, #293).
+    /// **光標走開了、鍵也不在它身上，那一份字典就不再作數**——當場丟掉。
     ///
-    /// It is, while the cursor has not moved off the character it was asked
-    /// about — or while the keys are in the panel, where the cursor cannot
-    /// move at all, so a long answer can be read to the end.
-    ///
-    /// Warning: **Reads the stored focus, not [`Editor::panel_focus`]**: that one
-    /// asks whether the layer is showing, which asks this, which would ask it
-    /// again. The stored field is the right one anyway — the question is
-    /// 「were the keys put here」, not 「is there something here to look at」.
-    /// 光標走開了、鍵也不在它身上，那一份答案就不再作數——**當場丟掉**，而不是
-    /// 留着等下一次焦點落到這一側時復活。見 `on_key` 開頭那一段。
+    /// 原話：「走出之后回到这个字母，它是不是不应该出现了？」對的：那一則是問
+    /// 出來的，問題已經過去了。同
+    /// [`Editor::forget_a_hover_nobody_is_looking_at`]，在派鍵**之前**掃。
     pub(super) fn forget_a_dictionary_nobody_is_reading(&mut self) {
         if self.dictionary.is_none() || self.dictionary_live() {
             return;
@@ -154,30 +132,26 @@ impl Editor {
         self.dictionary_anchor = None;
     }
 
+    /// **字典那一問還算不算數**（#215）。
+    ///
+    /// 光標還在問的那個字上就算，鍵在那一格裏也算——那時光標本來就不動，而一份
+    /// 二十八欄的拆分表要讀得到底。
     fn dictionary_live(&self) -> bool {
         if self.dictionary.is_none() {
             return false;
         }
-        let reading = self.panel_focus == Some(self.side_of(crate::sidebar::Panel::Dictionary));
-        reading || self.dictionary_anchor == Some(self.sel.head())
+        self.reading_the_info() || self.dictionary_anchor == Some(self.sel.head())
     }
 
-    /// The rows of the bottom layer, when it is one that is drawn as a list.
-    pub fn transient_rows(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::Row> {
-        match self.transient(side) {
-            Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows(),
-            // **常駐的那一扇文檔也走這裏**（2026-09-29）：畫的是同一則東西，
-            // 只是它不因為光標停上去纔出現，所以沒有 transient 可問。
-            None if self.panel(side).map(|p| p.view())
-                == Some(crate::sidebar::View::Docs) =>
-            {
-                self.hover_rows()
-            }
-            None if self.panel(side).map(|p| p.view())
-                == Some(crate::sidebar::View::Problems) =>
-            {
-                self.problem_rows()
-            }
+    /// **信息那一格畫成一列一列的時候，那些列**（#426）。
+    ///
+    /// 五種裏有三種是成對的字段（字典、數據）或成行的句子（診斷、文檔），畫法
+    /// 同一個；百科走自己那一支（它是排過版的散文）。
+    pub fn info_rows(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::Row> {
+        match self.info_in_this_sidebar(side) {
+            Some(crate::sidebar::Info::Dictionary) => self.dictionary_rows(),
+            Some(crate::sidebar::Info::Docs) => self.hover_rows(),
+            Some(crate::sidebar::Info::Problems) => self.problem_rows(),
             _ => Vec::new(),
         }
     }
@@ -189,7 +163,7 @@ impl Editor {
     /// written; a footnote is one short paragraph, and taking a slot off the
     /// page for it would be paying the wrong price — it floats over the
     /// writing instead, near the cursor.
-    fn detail_is_a_panel(&self) -> bool {
+    pub(super) fn detail_is_a_panel(&self) -> bool {
         self.detail_visible()
             && (self.detail_shows_a_row()
                 || self.table.as_ref().is_some_and(|view| view.takes_the_pane()))
@@ -198,22 +172,7 @@ impl Editor {
     /// Whether that layer of that slot has anything in it to look at.
     /// **這個邊欄裏此刻有没有東西**（2026-09-22：一個邊欄一個面板）。
     pub fn slot_showing(&self, side: crate::sidebar::Side) -> bool {
-        self.transient(side).is_some() || self.panel(side).is_some()
-    }
-
-    /// **鍵進不進得去這個邊欄**——`C-w` 那個環上有没有這一格的座位。
-    ///
-    /// Warning: **必須與 [`Editor::slot_showing`] 同進退。** 焦點停不停得住看的是
-    /// `slot_showing`，而環上有没有座位看的是這一支；兩者只要分歧，就會出現
-    /// 「焦點在這一格，而環上找不到它」——`next_region` 那一句
-    /// `let Some(here) = here else { return }` 直接返回，`C-w` **一聲不吭地
-    /// 失效**（2026-09-23 審出來的，那時 `Transient::Detail` 是唯一的分歧點）。
-    /// 現在三種臨時面板一律收鍵，兩支問的是同一件事。
-    fn slot_takes_keys(&self, side: crate::sidebar::Side) -> bool {
-        match self.transient(side) {
-            Some(kind) => kind.takes_keys(),
-            None => self.panel(side).is_some(),
-        }
+        self.panel(side).is_some()
     }
 
     /// Which slot and layer the keys are in, if any.
@@ -252,9 +211,7 @@ impl Editor {
     ///   the panel".
     pub(super) fn show_sidebar(&mut self, view: crate::sidebar::View) {
         if let Some(side) = self.showing(view) {
-            // Warning: **只有常駐那一個在眼前的時候，同一個鍵纔是「收起來」。** 光標把
-            // 字典頂上來的那一刻，`空格 o` 說的是「把大綱還給我」，不是「關掉」。
-            match self.panel_focus() == Some(side) && self.transient(side).is_none() {
+            match self.panel_focus() == Some(side) {
                 true => self.close_panel(side),
                 false => self.focus_slot(side),
             }
@@ -328,68 +285,10 @@ impl Editor {
     /// Warning: **算出來的，不是寫死的**：哪個視圖歸哪一欄是使用者配得動的
     /// （`side_for`），底邊上那一行要說的就是他這一台此刻的真話。少於兩個的時候
     /// 回空——`Tab` 那時什麼都不做，寫一行「Tab 文件」是在許一個不存在的諾。
-    /// **這一份稿子容得下這一扇嗎**（2026-09-29 定）。
-    ///
-    /// 原話：「百科面板和绝对不能侵入程序文件。因此不可能出现同时有百科和文檔的
-    /// 事情。这两个是 enum。」Warning: **它們不是兩扇可以並存的面板，是一扇面板的兩
-    /// 種**：散文那一份講詞條，代碼那一份講名字。所以 `Tab` 的環上、`:sidebar-*`
-    /// 的名單上、底邊那一行上，同一時刻只該出現其中一扇。
-    pub(super) fn view_fits_the_file(&self, view: crate::sidebar::View) -> bool {
-        match view {
-            crate::sidebar::View::Wiki => !self.writes_code(),
-            crate::sidebar::View::Docs => self.writes_code(),
-            // Warning: **診斷不在 `Tab` 的環上**（2026-09-29 報的：「文檔、诊断
-            // 不可能同时出现（不可能 tab 循环）」）。它和文檔是**一格的兩種內
-            // 容**，換內容按 `空格 k`／`空格 i`，不按 `Tab`——環上放兩格的話它
-            // 們就成了兩扇能並排的面板，而那正是要拆掉的誤會。
-            //
-            // 這一支同時管三張名單：`Tab` 的環、`:sidebar-*` 開哪一扇、底邊那
-            // 一行寫什麽。所以只在這裏說一次。
-            crate::sidebar::View::Problems => false,
-            _ => true,
-        }
-    }
-
-    /// 換成這一份稿子容得下的那一扇——百科 ⇄ 文檔，別的原樣。
-    fn view_that_fits(&self, view: crate::sidebar::View) -> crate::sidebar::View {
-        match (view, self.writes_code()) {
-            (crate::sidebar::View::Wiki, true) => crate::sidebar::View::Docs,
-            (crate::sidebar::View::Docs | crate::sidebar::View::Problems, false) => {
-                crate::sidebar::View::Wiki
-            }
-            _ => view,
-        }
-    }
-
-    /// **換了一份稿子，那一扇要跟着換**（2026-09-29）：從散文走進代碼，開着的
-    /// 百科就成了文檔，反過來一樣。Warning: 不換的話屏幕上會出現一扇這份稿子裏根本
-    /// 不存在的面板，而 `Tab` 又轉不到它——一個走不出去的角落。
-    pub(super) fn fit_the_panels_to_the_file(&mut self) {
-        for side in crate::sidebar::Side::BOTH {
-            let Some(here) = self.panel(side).map(|p| p.view()) else { continue };
-            let mut want = self.view_that_fits(here);
-            // **那一格跟着「此刻該擺哪一種」走**（2026-09-29 報的第三次）。
-            //
-            // Warning: 撥了 `:docs on` 之後那一格還擺着診斷，於是文檔找不到地方、
-            // 浮了一個——而地方就在眼前。這一支是「把面板擺成該有的樣子」的那一
-            // 趟，兩件事（換稿子、換內容）都該在這裏辦。
-            if matches!(want, crate::sidebar::View::Docs | crate::sidebar::View::Problems) {
-                if let Some(should) = self.what_this_spot_should_show() {
-                    want = should;
-                }
-            }
-            if want != here {
-                if let Some(panel) = self.panel_mut(side) {
-                    panel.show(want);
-                }
-            }
-        }
-    }
-
     pub fn views_on(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::View> {
         let mine: Vec<crate::sidebar::View> = crate::sidebar::View::ALL
             .into_iter()
-            .filter(|&view| self.side_for(view) == side && self.view_fits_the_file(view))
+            .filter(|&view| self.side_for(view) == side)
             .collect();
         match mine.len() < 2 {
             true => Vec::new(),
@@ -400,23 +299,15 @@ impl Editor {
     /// Which view a bare `:sidebar-left` opens: the first one that side owns,
     /// and the file tree when it owns none — the same answer the key gives.
     pub(super) fn side_view(&self, side: crate::sidebar::Side) -> crate::sidebar::View {
-        let first = crate::sidebar::View::ALL
+        crate::sidebar::View::ALL
             .into_iter()
-            .find(|&view| self.side_for(view) == side && self.view_fits_the_file(view))
-            .unwrap_or(crate::sidebar::View::Explorer);
-        // **那一格開出來擺的是此刻「應該」擺的那一種**（2026-09-29 定）：按過
-        // `空格 k`／`空格 i` 就是那一種，沒按過就看哪個即時開關開着。
-        // Warning: 兩個都關的話那一格是空的——作者說「如果不能留空，必須有個面
-        // 板，那就是『診斷』」，而這裏必須有一扇，所以退回診斷。
-        match first == crate::sidebar::View::Docs {
-            true => self.what_this_spot_should_show().unwrap_or(crate::sidebar::View::Problems),
-            false => first,
-        }
+            .find(|&view| self.side_for(view) == side)
+            .unwrap_or(crate::sidebar::View::Explorer)
     }
 
-    /// The view a panel's name stands for, when a slot can hold it. 字典 and
-    /// 詳情 are worked out afresh every frame in the bottom layer and have
-    /// none, so naming one of those only says which side it is to appear on.
+    /// The view a panel's name stands for. Every panel is one now (#426), so
+    /// this never answers `None` — it stays an `Option` because callers读它
+    /// 的時候還不知道那一點。
     pub(super) fn view_of(panel: crate::sidebar::Panel) -> Option<crate::sidebar::View> {
         crate::sidebar::View::ALL
             .into_iter()
@@ -452,10 +343,9 @@ impl Editor {
     pub(super) fn panel_key_in_common(&mut self, key: Key, side: crate::sidebar::Side) -> bool {
         match key {
             Key::Ctrl('w') => self.next_region(),
-            // Warning: **`q` 關的是眼前那一個**：光標把字典頂上來的時候關字典，常駐那
-            // 一個原封不動地在底下等着——「有前任還給前任」。
-            Key::Char('q') => match self.transient(side).is_some() {
-                true => self.close_transient(side),
+            // Warning: **信息那一格的 `q` 連內容一起丟**，見 `close_the_info`。
+            Key::Char('q') => match self.info_in_this_sidebar(side).is_some() {
+                true => self.close_the_info(side),
                 false => self.close_panel(side),
             },
             // **`:` opens the command line from in here too.** It used to be
@@ -477,80 +367,63 @@ impl Editor {
         true
     }
 
-    /// Shut whichever transient layer this side is showing, and hand the keys
-    /// back to the writing.
+    /// **`q` 在信息那一格上：把它收起來**（#426）。
     ///
-    /// Warning: **The layer was a trap without this** (2026-09-14). The design is
-    /// that a 字典 answer needs no closing — it goes when the cursor leaves the
-    /// character it was asked about. True, *until* `空格 d` opens it with the
-    /// keys in it: focus alone keeps `dictionary_live()` true, so the cursor
-    /// cannot leave, so nothing ends it. `q`, `Esc`, `j`, `d` all fell through
-    /// `on_transient_key`'s `_ => {}`, and the only way out anybody could find
-    /// was `C-w` and *then* a cursor move — two steps, and the hint line named
-    /// neither. The reader who reported it said 「我想砸键盘」.
-    pub(super) fn close_transient(&mut self, side: crate::sidebar::Side) {
-        match self.transient(side) {
-            Some(crate::sidebar::Transient::Dictionary) => {
-                self.dictionary = None;
-                self.dictionary_query = None;
-                self.dictionary_anchor = None;
-            }
-            Some(crate::sidebar::Transient::Detail) => self.show_detail = Some(false),
-            None => return,
+    /// Warning: **連內容一起丟，不只關容器。** 「畫在哪」是算出來的，所以光關掉
+    /// 邊欄那一格，同一則東西下一幀就浮到光標旁邊去了——讀者說的是「我不要看
+    /// 這個」，不是「換個地方給我看」。
+    pub(super) fn close_the_info(&mut self, side: crate::sidebar::Side) {
+        if let Some(one) = self.info_in_this_sidebar(side) {
+            self.stop_showing_this_info(one);
         }
-        // **有前任還給前任，没有就回正文。** 讀者說的是「我不要眼前這一個」，
-        // 而這一格底下要是還站着常駐的那一個，鍵留在這一格並不意外——他本來就
-        // 是在這一欄裏。空了纔回正文。
-        // Warning: 註釋從前寫的是「不回到底下那個常駐面板」，而代碼一直是這樣
-        // （2026-09-23 對出來的）。
-        if self.panel_focus == Some(side) && !self.slot_showing(side) {
-            self.panel_focus = None;
-        }
+        self.close_panel(side);
     }
 
     /// Give that sidebar the keys, if it is a place they can be.
     pub(super) fn focus_slot(&mut self, side: crate::sidebar::Side) {
-        if !self.slot_takes_keys(side) {
+        if !self.slot_showing(side) {
             return;
         }
         // 常駐的單子記得自己讀到哪；光標放上去的那幾種每次都是新的，從頭讀。
-        if self.panel_focus != Some(side) && self.transient(side).is_some() {
-            self.transient_scroll = 0;
+        if self.panel_focus != Some(side) && self.info_in_this_sidebar(side).is_some() {
+            self.panel_scroll = 0;
         }
         self.panel_focus = Some(side);
         self.refresh_sidebar();
     }
 
-    /// How far the bottom layer has been scrolled (#293).
-    pub fn transient_scroll(&self) -> usize {
-        self.transient_scroll
+    /// How far the 信息 panel has been scrolled (#293, #426).
+    pub fn panel_scroll(&self) -> usize {
+        self.panel_scroll
     }
 
-    /// One key in the bottom layer: it is read, not walked into.
+    /// One key in the 信息 panel: it is read, not walked into.
     ///
-    /// No `q` — there is nothing here anybody opened. No `l`/`Enter` — a
-    /// reading is not a place to go. What is left is moving the eye down a
-    /// long answer, spelled the way the text and the lists already spell it.
-    fn on_transient_key(&mut self, key: Key, side: crate::sidebar::Side) {
-        let last = self.transient_len(side).saturating_sub(1);
+    /// No `l`/`Enter` — a reading is not a place to go. What is left is moving
+    /// the eye down a long answer, spelled the way the text and the lists
+    /// already spell it, and `q` to put it away.
+    fn on_info_key(&mut self, key: Key, side: crate::sidebar::Side) {
+        let last = self.info_len(side).saturating_sub(1);
         let step = |at: usize, by: usize, down: bool| match down {
             true => at.saturating_add(by).min(last),
             false => at.saturating_sub(by),
         };
         match key {
-            Key::Char('j') | Key::Down => self.transient_scroll = step(self.transient_scroll, 1, true),
-            Key::Char('k') | Key::Up => self.transient_scroll = step(self.transient_scroll, 1, false),
+            Key::Char('j') | Key::Down => self.panel_scroll = step(self.panel_scroll, 1, true),
+            Key::Char('k') | Key::Up => self.panel_scroll = step(self.panel_scroll, 1, false),
             Key::Char('J') | Key::PageDown => {
-                self.transient_scroll = step(self.transient_scroll, Self::PAGE_IN_A_LIST, true)
+                self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, true)
             }
             Key::Char('K') | Key::PageUp => {
-                self.transient_scroll = step(self.transient_scroll, Self::PAGE_IN_A_LIST, false)
+                self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false)
             }
-            Key::Char('g') | Key::Home => self.transient_scroll = 0,
-            Key::Char('G') | Key::End => self.transient_scroll = last,
-            other => {
-                self.panel_key_in_common(other, side);
-            }
+            Key::Char('g') | Key::Home => self.panel_scroll = 0,
+            Key::Char('G') | Key::End => self.panel_scroll = last,
+            // Warning: **落到 `on_sidebar_key_after_the_list`，不是直接落到
+            // `panel_key_in_common`**（2026-09-30 修）。那一支纔認 `w`（寬窄）、
+            // `R`（重讀）、`Tab`、`Esc`——只落到後者的話，信息那一格裏 `w` 又
+            // 一次悄悄失效，而那正是 2026-09-29 報的那一條。
+            other => self.on_sidebar_key_after_the_list(other),
         }
     }
 
@@ -579,8 +452,8 @@ impl Editor {
         match nth {
             1 => true,
             2 => self.other_pane().is_some(),
-            3 => self.slot_takes_keys(Side::Left),
-            4 => self.slot_takes_keys(Side::Right),
+            3 => self.slot_showing(Side::Left),
+            4 => self.slot_showing(Side::Right),
             _ => false,
         }
     }
@@ -713,7 +586,7 @@ impl Editor {
                     3 => Side::Left,
                     _ => Side::Right,
                 };
-                if self.panel(side).is_none() && self.transient(side).is_none() {
+                if self.panel(side).is_none() {
                     self.status = say!("region.not-open");
                     return;
                 }
@@ -745,7 +618,7 @@ impl Editor {
                     3 => Side::Left,
                     _ => Side::Right,
                 };
-                if !self.slot_takes_keys(side) {
+                if !self.slot_showing(side) {
                     // **開那一側該開的那一扇**——問 `side_view`，別各算各的。
                     //
                     // Warning: **從前這裏自己又找了一遍**（`View::ALL` 裏第一個歸這
@@ -802,7 +675,6 @@ impl Editor {
     /// sidebar is opened, focused, switched, or the file under it changes —
     /// every moment a reader is about to look at it.
     pub(super) fn refresh_sidebar(&mut self) {
-        self.fit_the_panels_to_the_file();
         for side in crate::sidebar::Side::BOTH {
             self.refresh_panel(side);
         }
@@ -843,9 +715,9 @@ impl Editor {
             // Its own store, its own shape: a form and a list of hits, not
             // rows of a tree (#419).
             View::Search => return,
-            // Drawn from the cursor every frame, not from rows (#287).
-            // Warning: 文檔、診斷同形，只是它們畫的是問來的／推來的那一則。
-            View::Wiki | View::Docs | View::Problems => return,
+            // Drawn from the cursor every frame, not from rows (#287, #426):
+            // 五種內容各有各的來源，`info_rows` 現算，這裏沒有一份行要存。
+            View::Info => return,
         };
         if let Some(panel) = self.panel_mut(side) {
             panel.set_rows(rows);
@@ -1124,7 +996,7 @@ impl Editor {
     }
 
     pub(super) fn hover_rows(&self) -> Vec<crate::sidebar::Row> {
-        let Some(told) = self.hover_in_the_sidebar() else {
+        let Some(told) = self.hover_here() else {
             return Vec::new();
         };
         told.lines()
@@ -1198,22 +1070,7 @@ impl Editor {
     /// the answer arrives on the next pass through the loop, one frame later,
     /// which is not long enough for a reader to see the gap.
     pub fn look_up(&mut self, ch: char, focus: bool) -> bool {
-        // 再按一次 `空格 D` 就收起來——與 `空格 d`、`空格 k`／`空格 K` 同一條
-        // 規矩（2026-09-23 補：從前只有浮窗那一半有 toggle）。
-        // Warning: **同一個字再問一次纔算「收起來」。** `Tab` 選候選也走這一支，
-        // 問的是另一個字——那是換一份答案，不是關窗。
-        let same = self.dictionary.as_ref().is_some_and(|(at, _)| *at == ch);
-        if same && !self.dictionary_afloat && self.dictionary_live() {
-            self.dictionary = None;
-            self.dictionary_query = None;
-            self.dictionary_anchor = None;
-            self.panel_focus = None;
-            self.refresh_sidebar();
-            return false;
-        }
-        self.dictionary_afloat = false;
-        self.look_up_at(ch, focus);
-        true
+        self.look_up_here(ch, false, focus)
     }
 
     /// **`空格 d`：只浮一個窗**（2026-09-22 定）。
@@ -1221,35 +1078,33 @@ impl Editor {
     /// 同一個問題、同一份答案，畫在光標旁邊而不是邊欄裏——而且**一點都不碰邊
     /// 欄**：邊欄是容器，只由人開由人關，看一眼字不該讓工作區變樣。
     ///
-    /// 浮窗不收鍵（那是浮窗的通則），所以答案長了讀不完——那時候按 `空格 D`，
-    /// 同一份答案進邊欄，鍵也跟過去。
-    ///
     /// 回 `false` 表示這一下是**關掉**（再按一次收起來）。
     pub fn look_up_afloat(&mut self, ch: char) -> bool {
-        // 再按一次 `空格 d` 就收起來（2026-09-21 定）。
-        if self.dictionary_afloat && self.dictionary_live() {
-            self.dictionary = None;
-            self.dictionary_anchor = None;
-            return false;
-        }
-        self.dictionary_afloat = true;
-        self.look_up_at(ch, false);
-        true
+        self.look_up_here(ch, true, false)
     }
 
-    /// 兩個問法共用的那一半。
-    fn look_up_at(&mut self, ch: char, focus: bool) {
+    /// 兩個問法共用的那一半（#426：它們差的只是容器）。
+    fn look_up_here(&mut self, ch: char, afloat: bool, focus: bool) -> bool {
+        // Warning: **同一個字再問一次纔算「收起來」。** `Tab` 選候選也走這一支，
+        // 問的是另一個字——那是換一份答案，不是關窗，所以它走不收起的那一支。
+        let same = self.dictionary.as_ref().is_some_and(|(at, _)| *at == ch);
+        match same {
+            true if !self.ask_for_info(crate::sidebar::Info::Dictionary, afloat) => {
+                self.panel_focus = None;
+                return false;
+            }
+            true => {}
+            false => self.put_this_info_here(crate::sidebar::Info::Dictionary, afloat),
+        }
         self.dictionary_query = Some(ch);
         // Asked, unanswered: what is showing until the answer arrives is the
         // character alone, which is not the same panel as 「查不到」.
         self.dictionary = Some((ch, None));
         // **Where the question was asked from.** The answer stays up while the
         // cursor is still there and goes when it leaves — nothing has to close
-        // it, which is the whole of why the bottom layer holds no state
-        // (#293). Nothing is opened here either: the panel *is* the question,
-        // and `transient()` will draw it because the question is live.
+        // it, which is the whole of why this slot holds no state (#293).
         self.dictionary_anchor = Some(self.sel.head());
-        self.transient_scroll = 0;
+        self.panel_scroll = 0;
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
@@ -1258,9 +1113,12 @@ impl Editor {
         // 空格照樣開選單）會把鍵從樹裏悄悄拿走，而 `空格 d` 的說明寫着「一點都
         // 不碰邊欄」（2026-09-23 審出來的）。
         if focus {
-            self.panel_focus = Some(self.side_of(crate::sidebar::Panel::Dictionary));
+            if let Some(side) = self.info_in_the_sidebar() {
+                self.panel_focus = Some(side);
+            }
         }
         self.refresh_sidebar();
+        true
     }
 
     /// The character `Space d` or `Tab` asked about, for the front end to
@@ -1281,11 +1139,9 @@ impl Editor {
         self.refresh_sidebar();
     }
 
-    /// The character the 字典 panel is about, and the answer if one has come.
-    /// **這一則字典該不該浮在光標旁邊**——`空格 d` 問的那一次，而且光標還在
-    /// 那個字上。
+    /// **這一則字典該不該浮在光標旁邊**——那一格沒開，而此刻擺的正是字典。
     pub fn dictionary_afloat(&self) -> Option<(char, Option<&[(String, String)]>)> {
-        (self.dictionary_afloat && self.dictionary_live())
+        (self.info_afloat() == Some(crate::sidebar::Info::Dictionary))
             .then(|| self.dictionary())
             .flatten()
     }
@@ -1311,10 +1167,11 @@ impl Editor {
     /// 起，`R` 重讀的是一張單子而不是一條詞條——這一行從前照樣寫着那三個鍵
     /// （2026-09-23 審出來的：「拿走鍵的那一半有義務」說清楚）。
     pub fn sidebar_keys(&self) -> String {
-        let article = self
-            .panel_focus()
-            .and_then(|side| self.panel(side))
-            .is_some_and(|p| p.view() == crate::sidebar::View::Wiki);
+        let article = self.info_now() == Some(crate::sidebar::Info::Wiki)
+            && self
+                .panel_focus()
+                .and_then(|side| self.panel(side))
+                .is_some_and(|p| p.view() == crate::sidebar::View::Info);
         match article {
             true => say!("hint.sidebar.keys-wiki"),
             false => say!("hint.sidebar.keys"),
@@ -1355,8 +1212,13 @@ impl Editor {
             return;
         };
         // 光標放上去的那一個在眼前，鍵就歸它——常駐那一個在底下等着，不收鍵。
-        if self.transient(side).is_some() {
-            return self.on_transient_key(key, side);
+        if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info) {
+            // **百科是一段文章，要滾不要走**（2026-09-22）：它軟折行，只有畫的
+            // 那一頭數得出屏幕行，所以它的捲軸自己存一份（`wiki_scroll`）。
+            return match self.info_now() {
+                Some(crate::sidebar::Info::Wiki) => self.scroll_wiki(key),
+                _ => self.on_info_key(key, side),
+            };
         }
         if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
             return self.on_search_panel_key(key, side);
@@ -1364,11 +1226,6 @@ impl Editor {
         let Some(sidebar) = self.panel_mut(side) else {
             return;
         };
-        // **百科是一段文章，要滾不要走**（2026-09-22）。邊欄裏別的視圖都是行的
-        // 列表，這一個不是——`j` 在它身上從前什麼都不做。
-        if sidebar.view() == crate::sidebar::View::Wiki {
-            return self.scroll_wiki(key);
-        }
         match key {
             Key::Char('j') | Key::Down => sidebar.step(true),
             Key::Char('k') | Key::Up => sidebar.step(false),
@@ -1455,12 +1312,19 @@ impl Editor {
     /// A field is also the better step: it is the thing a reader is looking
     /// for, and one press moves to the next one whether it took one row or
     /// four.
-    pub fn transient_len(&self, side: crate::sidebar::Side) -> usize {
-        match self.transient(side) {
-            Some(crate::sidebar::Transient::Detail) => {
-                self.detail().map(|d| d.rows.len()).unwrap_or(0)
+    /// **信息那一格有幾行可讀**——`j`／`k` 走到這裏為止。
+    ///
+    /// Warning: **和畫出來的那幾行是同一個數。** 兩邊各算一次是「滾到底之後還
+    /// 能再按三下」那一族 bug 的來源，所以行是列表的一律問 [`Editor::info_rows`]。
+    pub fn info_len(&self, side: crate::sidebar::Side) -> usize {
+        match self.info_in_this_sidebar(side) {
+            Some(crate::sidebar::Info::Data) => {
+                self.detail().map_or(0, |detail| detail.rows.len())
             }
-            Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows().len(),
+            Some(crate::sidebar::Info::Wiki) => {
+                self.wiki_here().map_or(0, |view| view.as_prose().lines().count())
+            }
+            Some(_) => self.info_rows(side).len(),
             None => 0,
         }
     }

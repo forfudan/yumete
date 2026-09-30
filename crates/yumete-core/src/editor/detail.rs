@@ -28,15 +28,23 @@ impl Editor {
             && !self.table.as_ref().is_some_and(|view| view.pane))
     }
 
-    /// Show or hide the detail panel.
+    /// Show or hide the 數據 panel (`t i`).
+    ///
+    /// Warning: **同時記一句「這一種是手動叫出來的」**（#426）：五種信息共用一
+    /// 格，不記的話這一格下一幀就被即時的那一種頂掉了。
     pub fn toggle_detail(&mut self) {
         let want = !self.detail_visible();
         self.show_detail = Some(want);
-        self.status = if want {
-            say!("ui.detail-panel-on")
-        } else {
-            say!("ui.detail-panel-off")
-        };
+        match want {
+            true => {
+                self.ask_for_info(crate::sidebar::Info::Data, true);
+                self.status = say!("ui.detail-panel-on");
+            }
+            false => {
+                self.info_asked = None;
+                self.status = say!("ui.detail-panel-off");
+            }
+        }
     }
 
     /// What the detail panel should show, if anything.
