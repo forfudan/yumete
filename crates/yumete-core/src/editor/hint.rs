@@ -212,27 +212,23 @@ impl Editor {
             Mode::Normal if self.table_here() => {
                 // Three keys, and every one of them is a key the reader could
                 // not have guessed: `t` opens the rest of the table's keys,
-                // `T` is the only way to change grain, and `Tab` is the only
-                // motion a table has that the text does not. `hjkl`, `c d`,
+                // `Tab` is the only motion a table has that the text does not,
+                // and `空格 I` puts the row in the sidebar. `hjkl`, `c d`,
                 // `y Y`, `p` were here too and are gone — they are the keys
                 // this reader already has in the text, and `t` lists the
                 // ones that are not.
                 //
-                // Warning: **The grain is `T`'s own label, and nowhere else** (#496).
-                // The title said 「表格 · 字」 and the status line said 「· 字」
-                // again a row above, for a fact `T 按字移動` was already
-                // standing there stating — 「似乎不需要吧。因为挺明显的」. So the
-                // title is just 表格 in both, and `T` says what pressing it
-                // *does*: the grain you are not in.
-                let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
+                // Warning: **按格移動不在這一行上了**（2026-09-30 作者定，原話「因为
+                // T 按格移动被折叠到 _t 中了，所以这个提示也就不需要了」）。它
+                // 從前寫在這裏是因為 `T` 是頂層的鍵；`空格 t T` 收了它之後，這
+                // 一行再寫一遍就是把三格裏最貴的一格花在單子上已經有的東西上。
                 Hint::Keys(say!("label.table"), vec![
                     // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
                     ("\u{2423}t".into(), say!("hint.table.menu")),
-                    ("T".into(), match grain {
-                        Grain::Cell => say!("hint.table.by-character-instead"),
-                        Grain::Char => say!("hint.table.by-cell-instead"),
-                    }),
                     ("Tab".into(), say!("hint.table.next-cell")),
+                    // **這一行的數據去邊欄**（2026-09-30 作者提）。浮窗那一個是
+                    // 小寫的 `空格 i`，與別的四種信息同一條規矩——大寫進邊欄。
+                    ("\u{2423}I".into(), say!("hint.table.into-the-sidebar")),
                 ])
             }
             _ => self.the_way_back_to_the_list(),

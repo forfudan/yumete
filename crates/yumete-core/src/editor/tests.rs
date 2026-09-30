@@ -737,7 +737,7 @@ fn taking_back_a_word_stays_inside_its_cell() {
     let mut ed = typed("| 甲 | 春天到了很好 |\n| --- | --- |\n| 丙 | 丁 |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
     ed.on_key(Key::Char('A'));
     ed.on_key(Key::Ctrl('u'));
@@ -3194,7 +3194,7 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     assert!(ed.execute(":table").is_ok());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, " ty");
     press(&mut ed, "ll");
     press(&mut ed, " tp");
@@ -3232,7 +3232,7 @@ fn a_cell_pasted_into_a_pipe_table_keeps_its_backslashes() {
     let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 水 |\n");
     ed.execute(":3").unwrap();
     ed.enter_table();
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
     ed.store("註\nC:\\ 與 |\n".to_string());
     press(&mut ed, " tp");
@@ -3255,7 +3255,7 @@ fn hjkl_walk_cells_when_the_file_is_a_grid() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     assert_eq!(ed.cell_position(), Some((1, 0)), "row 2, first cell");
 
     press(&mut ed, "l");
@@ -3667,7 +3667,9 @@ fn the_detail_panel_says_what_the_whole_row_is() {
     ed.goto_line(2);
 
     let d = ed.detail().expect("a row has fields");
-    assert_eq!(d.title, "一", "titled by its key");
+    // **標題一律是行號**（2026-09-30 作者定：「我建议都用行号数字，不要用主键
+    // 的值（主键的值可能很长）」）。這張表有主鍵 `字`，從前標題寫的是「一」。
+    assert_eq!(d.title, "1", "titled by its row number");
     // Numbered exactly as the rows are, or the panel can never find the
     // field the cursor is in — which is how it came to scroll to the top
     // and light nothing.
@@ -4065,7 +4067,7 @@ fn a_component_leads_to_its_own_row() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一段講的是按格
+    press(&mut ed, " tT"); // #356: 這一段講的是按格
     press(&mut ed, "l");
 
     // The panel lists what the cell points at, and what it cannot.
@@ -4107,7 +4109,7 @@ fn the_key_index_is_not_rebuilt_while_a_cell_is_being_typed_in() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
     assert_eq!(ed.detail().unwrap().links[0], ('木', Some(2)));
 
@@ -4148,7 +4150,7 @@ fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
     assert_eq!(ed.cell_text(1, 1), "⿰木目");
 
@@ -4207,14 +4209,17 @@ fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **The key the hint offers for the grain is the key that changes it** (#399).
+/// **The key the list offers for the grain is the key that changes it** (#399).
 ///
 /// `Tab` held the grain until #356 gave it what every spreadsheet means by the
 /// key and moved the grain to `T` — and the command row went on offering `Tab`.
 /// Pressing it stepped one cell and left the grain, the row and the status line
 /// exactly as they were, which reads as a switch that does not switch.
+///
+/// 2026-09-30 它從頂層的 `T` 搬進了 `空格 t`，所以問的是那一張單子；提示行那
+/// 一頭改成反過來問——它**不**該再寫這一條。
 #[test]
-fn the_hint_offers_the_key_that_really_changes_the_grain() {
+fn the_table_group_offers_the_key_that_really_changes_the_grain() {
     let dir = std::env::temp_dir().join(format!("yumete-grain-hint-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
@@ -4231,41 +4236,26 @@ fn the_hint_offers_the_key_that_really_changes_the_grain() {
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
 
-    // Both ways round: the offer has to be right in either grain.
+    // Both ways round: the key has to work in either grain.
     for _ in 0..2 {
         let before = ed.table().unwrap().grain;
         // A hint is a status line first, and the file has just been opened.
         ed.status.clear();
-        let Hint::Keys(_, keys) = ed.hint() else { panic!("standing in a grid") };
-        let other = match before {
-            Grain::Char => say!("hint.table.by-cell-instead"),
-            Grain::Cell => say!("hint.table.by-character-instead"),
-        };
-        let (key, _) = keys
-            .iter()
-            .find(|(_, what)| *what == other)
-            .unwrap_or_else(|| panic!("the other grain is offered: {keys:?}"));
-        press(&mut ed, key);
+        // 提示行上一個字都不寫粒度——它在單子裏。
+        let Hint::Keys(title, row) = ed.hint() else { panic!("standing in a grid") };
+        assert_eq!(title, say!("label.table"), "the title carries no grain");
+        assert!(!row.iter().any(|(k, _)| *k == "T"), "{row:?}");
+        // 空格 t 開那一組，`T` 在單子上，按下去真的換。
+        press(&mut ed, " t");
+        let Hint::Keys(_, keys) = ed.hint() else { panic!("the table group is open") };
+        let (_, what) = keys.iter().find(|(k, _)| *k == "T").expect("T is on the list");
+        assert_eq!(*what, say!("hint.table.grain"));
+        press(&mut ed, "T");
         assert_ne!(
             ed.table().unwrap().grain,
             before,
-            "the row offers `{key}` for 「{other}」 and it did not change the grain"
-        );
-        // Warning: **The grain is read off `T`'s own label now** (#496), not off
-        // the status line: 「表格 · 字」 and the position line's 「· 字」 were
-        // both saying what this row already says, and both are gone.
-        // A hint is a status line first, and `T` has just written one.
-        ed.status.clear();
-        let Hint::Keys(title, keys) = ed.hint() else { panic!("still in a grid") };
-        assert_eq!(title, say!("label.table"), "the title carries no grain");
-        let (_, now) = keys.iter().find(|(k, _)| *k == "T").expect("T is offered");
-        assert_eq!(
-            *now,
-            match before {
-                Grain::Char => say!("hint.table.by-character-instead"),
-                Grain::Cell => say!("hint.table.by-cell-instead"),
-            },
-            "pressed once, `T` now offers the way back"
+            "`空格 t T` is offered for 「{}」 and it did not change the grain",
+            say!("hint.table.grain")
         );
     }
 
@@ -4297,7 +4287,7 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
     // end 「· 字」, which `T` in the row below was already saying.
     assert_eq!(ed.table_status().as_deref(), Some("char"));
 
-    press(&mut ed, "T");
+    press(&mut ed, " tT");
     assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Cell);
     assert_eq!(ed.table_status().as_deref(), Some("char"), "still just the column");
 
@@ -4307,14 +4297,14 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
     assert_eq!(ed.char_at_cursor(), Some('⿰'), "at the cell's first 字");
 
     // `T`, and the same key steps one character.
-    press(&mut ed, "T");
+    press(&mut ed, " tT");
     assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Char);
-    // …and `T` is where it says so: it now offers the grain you are *not* in.
-    // (A hint is a status line first, and `T` has just written one.)
+    // …and the hint row no longer says a word about it（2026-09-30 作者定：
+    // 「因为 T 按格移动被折叠到 _t 中了，所以这个提示也就不需要了」）。三格裏
+    // 最貴的一格不花在單子上已經有的東西上。
     ed.status.clear();
     let Hint::Keys(_, keys) = ed.hint() else { panic!("still in a grid") };
-    let (_, offered) = keys.iter().find(|(k, _)| *k == "T").expect("T is offered");
-    assert_eq!(*offered, say!("hint.table.by-cell-instead"));
+    assert!(!keys.iter().any(|(k, _)| *k == "T"), "{keys:?}");
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('木'), "one 字, not one cell");
     press(&mut ed, "l");
@@ -4326,7 +4316,7 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
     assert_eq!(ed.char_at_cursor(), Some('⿰'));
 
     // `T` back, and the cursor snaps to cells again.
-    press(&mut ed, "T");
+    press(&mut ed, " tT");
     assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Cell);
     press(&mut ed, "h");
     assert_eq!(ed.cell_position(), Some((1, 0)));
@@ -5365,7 +5355,8 @@ fn clearing_a_cell_does_not_spend_the_register_but_cutting_one_does() {
     // `d`：清掉「甲」，剪貼板上那個「三十」原封不動。
     let mut ed = typed(table);
     ed.goto_line(3);
-    press(&mut ed, " tbT");
+    press(&mut ed, " tb");
+    press(&mut ed, " tT");
     press(&mut ed, "l");
     press(&mut ed, "y"); // 三十 進寄存器
     press(&mut ed, "h");
@@ -5376,7 +5367,8 @@ fn clearing_a_cell_does_not_spend_the_register_but_cutting_one_does() {
     // `D`：同樣清掉，但這一格進了寄存器。
     let mut ed = typed(table);
     ed.goto_line(3);
-    press(&mut ed, " tbT");
+    press(&mut ed, " tb");
+    press(&mut ed, " tT");
     press(&mut ed, "l");
     press(&mut ed, "y");
     press(&mut ed, "h");
@@ -5788,7 +5780,7 @@ fn the_second_table_is_measured_by_its_own_width() {
     // the fifth column of a five-column table was not there — and the
     // refusal named the wrong width, which is the shape of the bug that is
     // hardest to disbelieve: a wrong answer with a number on it.
-    press(&mut ed, "T");
+    press(&mut ed, " tT");
     press(&mut ed, " t5/");
     assert!(!ed.status().contains("沒有"), "column five is there: {}", ed.status());
     press(&mut ed, " t6/");
@@ -5835,7 +5827,7 @@ fn a_pipe_table_is_a_grid_wherever_it_is() {
     let mut ed = with_md_table();
     let before = ed.current_buffer().text();
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     // **Looking does not rewrite.** Entering used to lay the whole region
     // out, which marks a file modified for having been read — 45 lines of
     // this project's own `development.md`, and `:table off` does not undo it.
@@ -5910,7 +5902,7 @@ fn paging_a_column_stops_at_the_table_edge_even_though_a_step_does_not() {
     ed.set_page(80, 40);
     ed.goto_line(2);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "J");
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "{}", ed.status());
     press(&mut ed, "K");
@@ -6008,7 +6000,7 @@ fn t_moves_a_row_and_a_column_with_the_cursor_on_it() {
 fn alignment_is_a_keystroke_and_shows_in_the_source() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l t>");
     assert!(
         ed.current_buffer().text().contains("| ---: |"),
@@ -6050,7 +6042,7 @@ fn tab_at_the_end_of_the_last_row_opens_another() {
     let mut ed = typed("| a | b |\n| --- | --- |\n| x | y |\n");
     ed.goto_line(3);
     assert!(ed.enter_table());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
     press(&mut ed, "i");
     ed.on_key(Key::Tab);
@@ -6178,7 +6170,7 @@ fn a_header_on_the_last_line_with_no_newline_still_gets_its_rule() {
 fn the_rule_row_is_drawn_not_written() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     // `gg`, `G`, `:N` and a search all land on the rule; cell motion does
     // not. Standing there, nothing may change it.
     let before = ed.current_buffer().text();
@@ -6225,7 +6217,7 @@ fn a_cell_may_hold_an_escaped_pipe() {
     // The manual says so: 「`|` 打不進格子…要用寫 `\|`」. It was not true.
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "c");
     press(&mut ed, r"a\|b");
     ed.on_key(Key::Esc);
@@ -6255,7 +6247,7 @@ fn a_row_pasted_on_the_header_lands_under_the_rule() {
     assert!(ed.enter_table());
     ed.goto_line(2);
     ed.enter_table();
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "Y");
     press(&mut ed, "p");
     let text = ed.current_buffer().text();
@@ -6389,7 +6381,7 @@ fn d_on_a_grid_means_the_cell() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     let cell = ed.cell_text(1, 0);
     assert!(!cell.is_empty());
     press(&mut ed, "d");
@@ -6509,7 +6501,7 @@ fn a_hidden_column_is_read_and_written_but_not_walked() {
     assert!(ed.table().is_some());
     assert!(!ed.column_shows(1), "b is hidden");
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
     press(&mut ed, "l");
     assert_eq!(
@@ -6780,7 +6772,7 @@ fn a_block_from_a_spreadsheet_goes_in_as_cells() {
     let mut ed = typed("| 字 | 音 |\n| --- | --- |\n| a | b |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     ed.goto_line(3);
     ed.set_register_for_test("木\tmu\n目\tmu\n禾\the\n");
     press(&mut ed, "p");
@@ -6807,7 +6799,7 @@ fn a_block_too_wide_for_a_schema_is_refused() {
     ed.open_file(&csv).unwrap();
     let width = ed.table().unwrap().schema.columns.len();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     let wide: String = (0..width + 1).map(|i| format!("{i}\t")).collect();
     ed.set_register_for_test(&wide);
     let before = ed.current_buffer().text();
@@ -6823,7 +6815,7 @@ fn ordinary_text_is_still_pasted_as_text() {
     let mut ed = typed("| a | b |\n| --- | --- |\n| x | y |\n");
     ed.goto_line(3);
     assert!(ed.enter_table());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     ed.set_register_for_test("春天");
     press(&mut ed, "p");
     assert_eq!(ed.cell_text(2, 0), "春天", "{}", ed.status());
@@ -6839,7 +6831,7 @@ fn a_whole_column_can_be_taken_and_put_back() {
     let mut ed = typed("| 字 | 音 |\n| --- | --- |\n| 木 | mu |\n| 目 | mo |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     ed.goto_line(4);
     press(&mut ed, "l");
     press(&mut ed, " ty");
@@ -6935,7 +6927,7 @@ fn paging_through_a_table_keeps_to_the_column() {
     ed.open_file(&csv).unwrap();
     ed.set_page(8, 8);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     // Row 7 is the widest of the seven; half a page on is one of the
     // narrowest, whose whole line is shorter than where column c starts
     // here.
@@ -6974,7 +6966,7 @@ fn paging_through_a_pipe_table_stops_at_its_last_row() {
     ed.set_page(8, 8);
     ed.goto_line(5);
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "ll");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "column c");
 
@@ -7468,7 +7460,7 @@ fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
     press(&mut ed, "i");
     ed.on_key(Key::Char('土'));
@@ -7684,7 +7676,7 @@ fn every_far_jump_leaves_a_way_back() {
     // `:table-jump` goes and leaves a way back; `t?` shows and leaves
     // nothing, because nothing was left.
     ed.goto_line(2);
-    press(&mut ed, "T"); // by cell
+    press(&mut ed, " tT"); // by cell
     press(&mut ed, "l"); // 相's 拆分
     let was = ed.cursor();
     press(&mut ed, " t?");
@@ -7739,7 +7731,7 @@ fn a_cell_can_be_copied_and_a_row_can_be_duplicated() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
     assert_eq!(ed.cell_text(1, 1), "⿰木目");
 
@@ -7829,7 +7821,7 @@ fn no_route_at_all_gets_a_delimiter_into_a_cell() {
     let clean = ed.current_buffer().text();
     let n = commas(&ed);
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, "l");
 
     // 1. Typed.
@@ -10578,7 +10570,7 @@ fn a_quoted_field_is_read_as_the_one_field_it_is() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
 
     // Three cells on the quoted row, and the middle one is the whole name.
     assert_eq!(ed.cell_text(2, 1), "\"Smith, John\"");
@@ -12891,7 +12883,7 @@ fn putting_a_column_into_a_block_stops_at_the_blank_line() {
     let mut ed = typed("木,AA\n目,BB\n田,CC\n\n他寫下,然後停筆\n");
     ed.execute(":1").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "T"); // #356: 這一條測的是格
+    press(&mut ed, " tT"); // #356: 這一條測的是格
     press(&mut ed, " ty");
     press(&mut ed, "l");
     press(&mut ed, " tp");
@@ -14248,7 +14240,7 @@ fn insert_arrows_walk_the_grid_they_are_typing_in() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
-    press(&mut ed, "T"); // #356: by the cell
+    press(&mut ed, " tT"); // #356: by the cell
     assert_eq!(ed.cell_position(), Some((1, 0)));
     let before = ed.current_buffer().text();
 
@@ -14292,7 +14284,7 @@ fn an_arrow_key_off_the_end_of_a_table_does_not_open_a_row() {
     let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 水 |\n");
     ed.execute(":3").unwrap();
     ed.enter_table();
-    press(&mut ed, "T");
+    press(&mut ed, " tT");
     press(&mut ed, "l");
     assert_eq!(ed.cell_position(), Some((2, 1)), "the last cell");
     let before = ed.current_buffer().text();

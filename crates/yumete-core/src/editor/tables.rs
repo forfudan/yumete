@@ -3020,39 +3020,19 @@ impl Editor {
 
     /// Run one key while the file is being read as a grid.
     ///
-    /// Only the keys whose meaning actually changes, which since #356 is
-    /// **`T` and `Tab`**: the grain defaults to [`Grain::Char`], so `hjkl`,
-    /// the operators and the selection go on meaning what they mean in any
-    /// other file, and it takes a `T` to hand them to the cells. Everything
+    /// Only the key whose meaning actually changes, which since 2026-09-30 is
+    /// **`Tab`**: the grain defaults to [`Grain::Char`], so `hjkl`, the
+    /// operators and the selection go on meaning what they mean in any other
+    /// file, and it takes `空格 t T` to hand them to the cells. Everything
     /// else — paging, `gg`, search — is about lines and text, and a grid does
     /// not change what those mean either.
+    ///
+    /// Warning: **`T` is till again, in a grid too**（2026-09-30 作者定，原話
+    /// 「这个可能要改成 _tT了，因为 T 现在 till 占用的」）。#356 給了 `T` 換
+    /// 粒度，理由是「在格子裏往回 till 沒人用」；一個頂層字母鍵在一種文件裏
+    /// 換意思，代價比那個理由大。粒度現在在 [`Self::toggle_table_grain`]，掛
+    /// 在表格那一組上。
     pub(super) fn table_motion(&mut self, key: Key, count: usize) -> bool {
-        // **`T` says which unit a step is** (#356). It used to be `Tab`, back
-        // when the grid was the default way to stand in a table; but the cell
-        // is not what a writer mostly wants — the characters in it are — so
-        // the default became 按字 and `Tab` was wanted for the thing every
-        // spreadsheet means by it.
-        //
-        // Warning: **`T` stays a grid key even though `t`／`T` went back to being
-        // till** (2026-09-21): it and `Tab` are the grid's two documented
-        // exceptions, and till-searching backwards inside a grid is not a
-        // thing anybody does. The table *group* is `空格 t` here as
-        // everywhere — a grid changes what two keys mean, not what the
-        // editor is.
-        if key == Key::Char('T') {
-            let grain = match self.table.as_ref().map(|v| v.grain) {
-                Some(Grain::Char) => Grain::Cell,
-                _ => Grain::Char,
-            };
-            if let Some(view) = self.table.as_mut() {
-                view.grain = grain;
-            }
-            self.status = match grain {
-                Grain::Cell => say!("table.moving-by-cell"),
-                Grain::Char => say!("table.moving-by-character"),
-            };
-            return true;
-        }
         // **`Tab` walks the grid, in either grain** — right along the row and
         // on to the first cell of the next when it runs out, `S-Tab` back the
         // way it came. What every spreadsheet means by the key, and what it
@@ -3465,6 +3445,25 @@ impl Editor {
     /// Directions mean what they mean in a grid: `j`/`k` are the row, `h`/`l`
     /// are the column, and which one an edit is about never has to be said
     /// twice. The rest is vi's own spelling — `o`/`O` open, `d` deletes.
+    /// **按格走還是按字走**（`空格 t T`）。
+    ///
+    /// 出廠是按字：`hjkl`、算子、選區在格子裏與在別的檔裏一個意思，要把它們交
+    /// 給格子纔按這一下。從前這一下是頂層的 `T`（#356），2026-09-30 搬進表格
+    /// 那一組——見 [`Self::table_motion`] 上頭那一段。
+    pub(super) fn toggle_table_grain(&mut self) {
+        let grain = match self.table.as_ref().map(|v| v.grain) {
+            Some(Grain::Char) => Grain::Cell,
+            _ => Grain::Char,
+        };
+        if let Some(view) = self.table.as_mut() {
+            view.grain = grain;
+        }
+        self.status = match grain {
+            Grain::Cell => say!("table.moving-by-cell"),
+            Grain::Char => say!("table.moving-by-character"),
+        };
+    }
+
     pub(super) fn table_structure(&mut self, key: Key) {
         use crate::mdtable::Align;
         // **The three that work whether or not there is a table here.** `t` is
@@ -3515,6 +3514,12 @@ impl Editor {
                 self.snap_into_the_grid();
                 return;
             }
+            // **`空格 t T` — 換移動的粒度**（2026-09-30 作者定：「T 按格移动被折
+            // 叠到 _t 中了」）。#356 把它放在頂層的 `T` 上，於是格子模式裏往回
+            // till 按不到——一個頂層字母鍵在一種文件裏換意思，代價比那個理由
+            // 大。大寫，因為它與 `t t`／`t w`／`t a` 一樣是「這一扇窗怎麼走」，
+            // 而 `t t` 已經佔了小寫。
+            Key::Char('T') => return self.toggle_table_grain(),
             // `t w` — 寬. Whether a cell wider than the cap keeps its tail on
             // the page or folds it away behind a `>`. A preference about how
             // the page is *drawn*, so it sits beside `t b` / `t f` and asks

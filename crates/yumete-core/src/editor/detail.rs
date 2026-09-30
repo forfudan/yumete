@@ -33,7 +33,10 @@ impl Editor {
     /// 小寫浮、大寫一定進邊欄——五種信息同一條規矩（#426）。
     pub(super) fn show_the_data_here(&mut self, afloat: bool) {
         if self.detail().is_none() {
-            self.status = say!("ui.nothing-to-look-up");
+            // Warning: **不是字典那一句**（2026-09-30 作者報的）。從前這裏借用
+            // 「光標下沒有字可查」——那是 `空格 d` 查不到字時說的，跟這一鍵沒
+            // 有關係，而讀者只會以為自己按錯了鍵。
+            self.status = say!("ui.cursor-is-not-in-a-table");
             if !afloat {
                 self.make_room_for_the_info();
             }
@@ -548,14 +551,13 @@ impl Editor {
                 .map(|&s| crate::table::cell_text(&text, s))
                 .unwrap_or_default()
         };
-        // Titled by the row's key, since that is what a person calls the row.
         // Warning: **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
         // 攤成整扇窗的時候，行號欄寫 1、狀態欄寫「行 1」，而這裏從前寫 2——
         // 同一行三個數字兩種口徑。`table_row_base` 就是那兩處用的那一個。
-        let title = match &schema.key {
-            Some(key) => value(key),
-            None => format!("{}", line.saturating_sub(self.table_row_base()) + 1),
-        };
+        // Warning: **一律寫行號，不寫主鍵的值**（2026-09-30 作者定，原話「我建议
+        // 都用行号数字，不要用主键的值（主键的值可能很长）」）。從前有主鍵就拿
+        // 主鍵的值當標題，而一格主鍵裏可以是一整句話，浮窗的標題欄放不下。
+        let title = format!("{}", line.saturating_sub(self.table_row_base()) + 1);
         // The field the cursor is in is shown even when it is empty: that it
         // *is* empty is the answer to "what is in this cell".
         // **Numbered the same way the rows are**, or the panel can never find
