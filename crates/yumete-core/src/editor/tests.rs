@@ -2013,6 +2013,27 @@ fn join_omits_the_space_between_two_wide_characters() {
     let mut ed = typed("one\n    two");
     press(&mut ed, "gJ");
     assert_eq!(ed.current_buffer().text(), "one two");
+
+    // **行尾的空白也吞掉**（#326，2026-10-01）。從前它留着，而接縫又補了一個
+    // 空格，於是 `"  \n漢字"` 合成 `"   漢字"`——三個空格。
+    let mut ed = typed("上山  \n下海");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "上山下海", "行尾空白不算字");
+    let mut ed = typed("up hill \t\ndown dale");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "up hill down dale", "一個空格，不是三個");
+    // 兩邊都吃掉，只留下那一個接縫。
+    let mut ed = typed("one   \n    two");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "one two");
+    // 整行都是空白：合完就剩下一行，前面不留東西。
+    let mut ed = typed("   \n下海");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "下海", "空行合過來不帶空格");
+    // 一頭全角一頭半角照舊留一個——`hello 漢字` 讀得順，這是有意的。
+    let mut ed = typed("hello  \n漢字");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "hello 漢字");
 }
 
 /// `gJ` 合幾行，三種說法（#518）。
