@@ -4362,6 +4362,7 @@ Warning: **本來有顏色的段落一點不碰**——標題的金、連結的�
 | `:check-names` | 專名：把百科的名字寫錯了一個**同音字**的地方（醉翁亭／醉翁停），`gf` 跳過去 |
 | `:check-punct` | 標點：中文裏的半角、`...`、開了口没收尾的「」（），`gf` 跳過去 |
 | `:diagnostics-all` | 代碼：語言服務器說過的全部問題，`gf` 跳過去。行號左邊還會鋪一格顏色：朱鋪滿是錯，另外三檔是淡底加 `!` `i` `·` |
+| `:info` [*哪一種*] | 「信息」那一格即時顯示哪一種：`data` `diagnostics` `dictionary` `wiki` `docs`。不寫就回到按稿子算（散文百科、代碼診斷、表格數據） |
 | `:check-charset` | 字集：不在通用規範／臺／港／古籍裏的字，排版社也不會有 |
 | `:diff` [*路徑*] | 改了什麽：按詞比，不是按行。不給路徑就是跟磁盤上那一份比 |
 | `:git-diff` [*提交*] | 同上，跟 git 裏那一份比。不給提交就是 `HEAD`；比的是**還沒存的這一份** |
@@ -4412,7 +4413,7 @@ Warning: **本來有顏色的段落一點不碰**——標題的金、連結的�
 | `:theme-fill`（`on`／`off`） | 代碼、引用要不要坐在底色上（出廠不坐） |
 | `:view-numbers-fill on`／`off` | 行號那一條要不要自己的底色（默認没有） |
 | `:view-diff on`／`off` | 改動條：行號旁邊那一格用底色説哪幾行跟 git 那一份不一樣（出廠開着） |
-| `:panel-left`／`:panel-right` [*哪一格*] | 把一格挪到左／右邊欄。不寫就是手上這一格；名字：`files` `buffers` `outline` `dictionary` `detail` |
+| `:panel-left`／`:panel-right` [*哪一格*] | 把一格挪到左／右邊欄。不寫就是手上這一格；名字：`files` `buffers` `outline` `search` `info` |
 | `:sidebar-left`／`:sidebar-right` [`off`／*哪一格*] | 那一邊的邊欄：不寫就開關，`off` 關掉，寫名字就開在那一格 |
 | `:shot` `:shot screen` | 拍窗口，圖進剪貼板 |
 | `:shot png` [*文件名*] | 同一張，存成 PNG（默認進下載文件夾，名字帶年月日時分秒） |
@@ -4625,8 +4626,8 @@ show_chaifen = false         # 候選旁的拆分注解
 files = "left"               # 文件樹（默認 left）
 buffers = "left"             # 開着的文件（默認 left）
 outline = "left"             # 大綱（默認 left）
-dictionary = "right"         # 字典（默認 right）
-detail = "right"             # 表格詳情（默認 right）
+search = "left"              # 搜索（默認 left）
+info = "right"               # 信息：字典／百科／數據／文檔／診斷（默認 right）
                              # 兩格同一邊就疊起來，上面那格不會消失；
                              # `Tab` 只在同一個槽裏輪。
                              # 當場試：`:panel-left` / `:panel-right`
