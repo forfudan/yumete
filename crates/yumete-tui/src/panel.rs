@@ -224,7 +224,7 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
 /// Warning: **「…」 is East Asian *Ambiguous*** — one cell for most readers and **two**
 /// under `ambiguous_width = "wide"`, which is what a CJK reader on a CJK font
 /// sets. Charged as one, every cut ran a cell long. Ask the width table.
-fn clip(text: &str, cells: usize) -> String {
+pub(crate) fn clip(text: &str, cells: usize) -> String {
     if yumete_cjk::str_width(text) <= cells {
         return text.to_string();
     }
