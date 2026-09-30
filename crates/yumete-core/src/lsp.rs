@@ -106,10 +106,16 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// saved, and a client that never claims to send saves is never sent one.
 /// Without this line, an error stays on the screen after the line that caused
 /// it is deleted — 「我把錯的行刪了，錯誤信息還在」（2026-09-21）。
+/// Warning: **`contentFormat` 是一張按偏好排的單子，頭一個就是要的那一個。**
+/// 從前這裏寫 `["plaintext","markdown"]`，於是 pylsp 照單取頭一個，回的是
+/// `kind: "plaintext"` 的生 docstring——Python 的 docstring 慣例是
+/// reStructuredText，`Main API` 底下那一行 `======` 就這麼原樣畫了出來
+/// （2026-09-30 作者報的）。排 `markdown` 在前，pylsp 就走 `docstring-to-markdown`
+/// 把 reST／numpydoc 譯成 Markdown 再送（譯不動的原樣退回，不會更差）。
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["plaintext","markdown"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
