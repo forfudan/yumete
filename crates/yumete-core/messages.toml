@@ -2781,27 +2781,27 @@ en = "only words beyond argument — more single characters"
 find = "粒度 分詞 分词 單字 单字 strict"
 
 [[message]]
-# : 命令選單裏 edit 那一項的說明（word-lists 組）
-key = "cmd.word-lists.edit"
-zht = "開本書的 .yumete/words.txt——人名、地名"
-zhs = "开本书的 .yumete/words.txt——人名、地名"
-en = "open this book's .yumete/words.txt — names of people and places"
-find = "詞表 词表 人名 地名 自定義 自定义 edit"
-
-[[message]]
 # : 命令選單裏 global 那一項的說明（word-lists 組）
 key = "cmd.word-lists.global"
-zht = "開全域 segmentation.txt"
-zhs = "开全域 segmentation.txt"
-en = "open the global segmentation.txt"
+zht = "開全域詞表 segmentation.txt"
+zhs = "开全域词表 segmentation.txt"
+en = "open the global word list, segmentation.txt"
 find = "詞表 词表 全域 全局 global"
+
+[[message]]
+# : 命令選單裏 edit 那一項的說明（word-lists 組）
+key = "cmd.word-lists.local"
+zht = "開本書的詞表 .yumete/words.txt——人名、地名"
+zhs = "开本书的词表 .yumete/words.txt——人名、地名"
+en = "open this book's word list, .yumete/words.txt — names of people and places"
+find = "詞表 词表 人名 地名 自定義 自定义 edit"
 
 [[message]]
 # : 命令選單裏 reload 那一項的說明（word-lists 組）
 key = "cmd.word-lists.reload"
-zht = "重讀（本書的 ＋ 全域的）"
-zhs = "重读（本书的 ＋ 全域的）"
-en = "reread (this book's and the global one)"
+zht = "重讀兩份詞表（本書的 ＋ 全域的）"
+zhs = "重读两份词表（本书的 ＋ 全域的）"
+en = "reread both word lists, this book's and the global one"
 find = "詞表 词表 重讀 重读 刷新 reload"
 
 [[message]]
@@ -2879,9 +2879,9 @@ find = "粒度 分詞 分词 level"
 [[message]]
 # : 命令選單裏 list 那一項的說明（word-topics 組）
 key = "cmd.word-topics.list"
-zht = "詞表：用哪一份、重讀、編輯"
-zhs = "词表：用哪一份、重读、编辑"
-en = "the lists: which one, reread, edit"
+zht = "此刻用的是哪一份詞表"
+zhs = "此刻用的是哪一份词表"
+en = "which word list is in force"
 find = "詞表 词表 list"
 
 [[message]]

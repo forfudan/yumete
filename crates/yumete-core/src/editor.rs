@@ -1803,7 +1803,7 @@ pub struct Editor {
     /// How readily characters join into words (`:word-level`), kept so a
     /// segmenter installed later arrives at the level the reader chose.
     word_level: yumete_cjk::WordLevel,
-    /// `:word-list reload` asking the front end to build the dictionary again
+    /// `:word-list-reload` asking the front end to build the dictionary again
     /// — it owns the IME and the data directory; the editor owns neither.
     words_request: bool,
     /// How a table's columns are told apart (Feature #157).
