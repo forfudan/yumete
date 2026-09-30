@@ -1395,9 +1395,9 @@ find = "注音 拼音 振假名 旁註 旁注 furigana annotation"
 [[message]]
 # : 命令選單裏 rules 那一項的說明（#424）
 key = "cmd.commands.rules"
-zht = "在指定的欄上鋪一道底紋：`:rules 80 100 120`；不寫數字就是 80，`off` 關掉"
-zhs = "在指定的栏上铺一道底纹：`:rules 80 100 120`；不写数字就是 80，`off` 关掉"
-en = "tint these columns: :rules 80 100 120; bare is 80, off clears them"
+zht = "在指定的欄上鋪一道底紋：`:rules 80 100 120`；不寫數字就是 80 和 100，`off` 關掉"
+zhs = "在指定的栏上铺一道底纹：`:rules 80 100 120`；不写数字就是 80 和 100，`off` 关掉"
+en = "tint these columns: :rules 80 100 120; bare is 80 and 100, off clears them"
 find = "竪綫 竖线 底紋 底纹 欄 栏 rules ruler margin 80"
 [[message]]
 # : 命令選單裏 run 那一項的說明（commands 組）

@@ -66,6 +66,13 @@ pub struct Panel {
     /// **這一扇翻得動嗎**（#426）。翻得動的時候底邊右端寫的是「怎麽翻」而不是
     /// `tag`——五種信息都是這一類，而註、`[yumete]` 那一行不是。
     pub pages: bool,
+    /// **這一扇是拿來讀的，不是一張鍵表**（#426，2026-09-30 作者報的）。
+    ///
+    /// 決定它多大：讀的那幾扇按 2/3 × 1/3 擺（`chrome::room`），鍵表按老規矩
+    /// （半頁高，能塞幾欄塞幾欄）。Warning: **判準是「拿來幹什麽」，不是
+    /// `Body` 是哪一種。** 數據畫成兩欄字段（`Body::Keys`），可它是讀的——它
+    /// 從前跟着 `空格` 選單一起吃了「鍵表」那一套，於是鋪滿整個屏幕寬。
+    pub reading: bool,
     /// **Whether the body is Markdown and should be set as Markdown**
     /// (#53 ③, 2026-09-21).
     ///
@@ -492,7 +499,10 @@ pub fn draw(
     // the `空格` menu does not fit into at all: it simply stopped being drawn.
     // Menus keep the older rule (half the page, as many columns as fit).
     let prose = matches!(panel.body, Body::Prose(_));
-    let (room_w, room_h) = match prose {
+    // Warning: **判準是「拿來讀的嗎」，不只是 `Body` 哪一種**（2026-09-30 作者
+    // 報的：數據那一扇「size 和 location 看着不對」）。數據畫成兩欄字段，可它
+    // 和別的四種信息一樣是讀的，該和它們一樣大。
+    let (room_w, room_h) = match prose || panel.reading {
         true => crate::chrome::room(area, vertical),
         false => (area.width, area.height / 2 + 1),
     };
@@ -525,6 +535,10 @@ pub fn draw(
     // left column is the alignment, and an indent only pushes it off centre.
     let pad: usize = match panel.body {
         Body::Prose(_) => 1,
+        // Warning: **讀的那幾扇兩邊都留一格**（2026-09-30 作者報的：最長那一行
+        // 貼着框，看着像被裁了）。鍵表不留——它自己那一列就是對齊綫，往裏縮一
+        // 格反而把它推離中間。
+        Body::Keys(_) if panel.reading => 1,
         Body::Keys(_) => 0,
     };
     // **Which of the lines are not the body** (2026-09-18). Three inks,
@@ -762,8 +776,10 @@ pub fn draw(
         .max(read_w + tag_w + 7)
         .min(match &panel.body {
             // Prose keeps to the room (above); a key menu has its own rule
-            // about how many columns it may spread into.
+            // about how many columns it may spread into — and 數據 is read,
+            // not scanned, so it keeps to the room too.
             Body::Prose(_) => (room_w as usize).max(24),
+            Body::Keys(_) if panel.reading => (room_w as usize).max(24),
             Body::Keys(_) => area.width as usize,
         })
         .min(area.width as usize) as u16;
@@ -967,6 +983,7 @@ mod tests {
                 let area = Rect::new(0, 0, w, h);
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
                     pages: false,
+                    reading: false,
             scroll: 0,
                     title: "洞庭湖".into(),
                     lede: None,
@@ -1000,6 +1017,7 @@ mod tests {
                 let area = Rect::new(0, 0, w, h);
                 draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
                     pages: false,
+                    reading: false,
             scroll: 0,
                     title: "條目".into(),
                     lede: None,
@@ -1100,6 +1118,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, (0, 0), false, &Panel {
                     pages: false,
+                    reading: false,
             scroll: 0,
                     title: "空格".into(),
                     lede: None,

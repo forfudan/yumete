@@ -5330,6 +5330,7 @@ fn draw_which_key(
     let vertical = editor.layout() == WritingLayout::Vertical;
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: false,
+            reading: false,
             scroll: 0,
         title,
         lede: None,
@@ -5519,6 +5520,7 @@ fn draw_note(
             .collect();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: false,
+            reading: false,
             scroll: 0,
             title: say!("lsp.what-comes-next"),
             lede: None,
@@ -5543,6 +5545,7 @@ fn draw_note(
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             // 這一扇翻得動——四個鍵，同 helix 的浮窗（2026-09-29，#426）。
             pages: true,
+            reading: true,
             scroll: editor.info_scroll(),
             title: yumete_core::messages::say(Info::Docs.tag(), &[]),
             lede: None,
@@ -5579,6 +5582,7 @@ fn draw_note(
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: true,
+            reading: true,
             scroll: editor.info_scroll(),
             // Warning: **標題是那一扇面板的名字，不是響度**（2026-09-29 報的）。
             // 浮着和進邊欄是同一件東西的兩個去處，不該有兩個名字——響度改寫在
@@ -5624,6 +5628,7 @@ fn draw_note(
                 .collect();
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: false,
+            reading: true,
                 scroll: 0,
                 // Warning: **標題要寫「數據」**（2026-09-30 審出來的）。作者定的
                 // 是「如果不是空的，就显示对应的标题」——邊欄那一份照辦了，浮
@@ -5668,6 +5673,7 @@ fn draw_note(
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: false,
+            reading: true,
             scroll: 0,
             title: ch.to_string(),
             lede: None,
@@ -5700,6 +5706,7 @@ fn draw_note(
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: false,
+            reading: false,
             scroll: 0,
             title: say!("wiki.title"),
             lede: None,
@@ -5723,6 +5730,7 @@ fn draw_note(
         let scroll = editor.info_scroll();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: true,
+            reading: true,
             scroll,
             title: view.name.clone(),
             // 章節行「辭典 › 君山」不是詞條說的話，是它寫在哪兒——面板把它
@@ -5754,6 +5762,7 @@ fn draw_note(
     }
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             pages: false,
+            reading: false,
             scroll: 0,
         title: detail.title,
         lede: None,
@@ -9912,10 +9921,17 @@ fn draw_status(
         false => status,
     };
     let tail = fits(&status);
-    // **左邊留一格**（2026-09-30 作者報的：「NOR 前面应该空一格（我们现在顶格
-    // 了，和下面的命令行不对齐）」）。底下那一行本來就從第二格起，兩行左緣對不
-    // 齊，眼睛會先看見那一格參差。
-    let used = yumete_cjk::str_width(&status) + 1;
+    // **左邊留一格，轉圈那八個點在 `NOR` 後面**（2026-09-30 作者報的兩件）。
+    //
+    // 一、「NOR 前面应该空一格（我们现在顶格了，和下面的命令行不对齐）」。
+    // 二、「The 8 dots should be after NOR but not before：`NOR X lib.rs`」
+    // ——helix 的次序就是 `Mode → Spinner → FileName`
+    // （`helix-view/src/editor.rs:694`）。
+    //
+    // Warning: **那一格不轉的時候也占着**（同 helix：「reserve its space to
+    // avoid elements frequently shifting」），所以這一行永遠是「一格空白 ＋
+    // NOR ＋ 空格 ＋ 那一格 ＋ 空格 ＋ 檔名」，轉不轉都一樣寬。
+    let used = yumete_cjk::str_width(&status) + 2;
     let room = (status_area.width as usize).saturating_sub(used);
     let gap = room.saturating_sub(yumete_cjk::str_width(tail));
     // **The mode word is the only thing on this line that is not「where you
@@ -9927,20 +9943,37 @@ fn draw_status(
     let (word, rest) = status.split_at(cut);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            // **左邊那一格是轉圈那八個點的位子**（2026-09-30）。不轉的時候它
-            // 是一個空格——位子一直占着，旁邊的字纔不會每八十毫秒跳一次，同
-            // helix（`ui/statusline.rs`：「reserve its space to avoid elements
-            // frequently shifting」）。順帶把這一行的左緣和底下那一行對齊了，
-            // 那是作者同一天報的另一件。
+            // 左邊那一格是留白，和底下那一行對齊。
+            Span::styled(" ".to_string(), bar),
+            Span::styled(
+                drawable(word).into_owned(),
+                bar.fg(ink.gold()).add_modifier(Modifier::BOLD),
+            ),
+            // `NOR` 之後、檔名之前——那八個點的位子，兩邊各一格空氣。
+            //
+            // Warning: **那一格是從 `rest` 借的。** 模式那一欄本來就是
+            // `「{mode}  」`（兩格空白），這裏借走一格給點站，於是轉不轉都只比
+            // 從前寬一格，而不是三格。`mode` 是空的時候（鍵在邊欄裏）沒得借，
+            // 也沒有點要站。
+            Span::styled(
+                match mode.is_empty() {
+                    true => String::new(),
+                    false => " ".to_string(),
+                },
+                bar,
+            ),
             Span::styled(
                 spinner::frame(editor.server_busy_since()).to_string(),
                 bar.fg(ink.gold()),
             ),
             Span::styled(
-                drawable(word).into_owned(),
-                bar.fg(ink.gold()).add_modifier(Modifier::BOLD),
+                drawable(match mode.is_empty() {
+                    true => rest,
+                    false => rest.get(1..).unwrap_or(rest),
+                })
+                .into_owned(),
+                bar,
             ),
-            Span::styled(drawable(rest).into_owned(), bar),
             Span::styled(drawable(&format!("{}{tail}", " ".repeat(gap))).into_owned(), bar),
         ]))
         .style(bar),
@@ -14266,14 +14299,16 @@ fn squeezed(text: &str) -> String {
         // `-- NORMAL --  ` to `NOR  `, so the whole line is nine cells shorter
         // and twenty-eight now holds everything. The subject is unchanged —
         // this is the width at which something has to go.
-        // …and **twenty-one, not twenty**, since 2026-09-30: the line gained a
-        // cell of margin on the left so it lines up with the row under it.
-        let narrow = status(21);
+        // …and **twenty-two, not twenty**, since 2026-09-30: the line gained a
+        // cell of margin on the left so it lines up with the row under it, and
+        // a cell after `NOR` for the spinner (which holds its place even when
+        // nothing is turning).
+        let narrow = status(22);
         assert!(narrow.contains("行 1, 列 1"), "the position stays: {narrow:?}");
         assert!(!narrow.contains("long.csv"), "the name gave way: {narrow:?}");
         assert!(narrow.contains("NOR"), "{narrow:?}");
         assert!(
-            yumete_cjk::str_width(&narrow) <= 21,
+            yumete_cjk::str_width(&narrow) <= 22,
             "and it fits: {narrow:?}"
         );
     }
@@ -19256,6 +19291,7 @@ fn squeezed(text: &str) -> String {
             .draw(|frame| {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
             pages: false,
+            reading: false,
             scroll: 0,
                     title: "岳陽樓".into(),
                     lede: None,
@@ -20435,7 +20471,7 @@ fn squeezed(text: &str) -> String {
 
         // 光禿禿的 `:rules` ＝ 第 80 欄（作者說的「比如默认 80」）。
         editor.execute(":rules").unwrap();
-        assert_eq!(editor.rules(), &[80]);
+        assert_eq!(editor.rules(), &[80, 100], "光禿禿的是兩道：文檔字串一道，代碼一道");
     }
 
     /// **語言服務器在忙的時候，狀態行左邊那一格轉起來**（2026-09-30 作者提的）。
@@ -20454,16 +20490,19 @@ fn squeezed(text: &str) -> String {
             let config = Config::default();
             let mut editor = Editor::new();
 
-            // 不忙：那一格是空格，`NOR` 從第二格起。
+            // 不忙：那一格是空格——`NOR` 之後三格空白（留白＋點的位子＋空氣）。
             let quiet = status_line(&render(&editor, &config, 60, 6));
-            assert!(quiet.starts_with(" NOR"), "不忙的時候是空格：{quiet:?}");
+            assert!(quiet.starts_with(" NOR   "), "不忙的時候是空格：{quiet:?}");
 
-            // 忙：同一格上是那八個點裏的一個，而 `NOR` 一格都沒挪。
+            // 忙：點在 `NOR` **後面**（2026-09-30 作者報的：「The 8 dots should
+            // be after NOR but not before」，helix 的次序也是 Mode → Spinner →
+            // FileName）。而 `NOR` 一格都沒挪。
             editor.note_the_server_is_busy(Some(std::time::Instant::now()));
             let busy = status_line(&render(&editor, &config, 60, 6));
-            let mark: String = busy.chars().take(1).collect();
-            assert!(spinner::FRAMES.contains(&mark.as_str()), "轉起來了：{busy:?}");
-            assert_eq!(&busy[mark.len()..mark.len() + 3], "NOR", "NOR 一格都沒挪");
+            assert!(busy.starts_with(" NOR "), "NOR 一格都沒挪：{busy:?}");
+            let mark: String = busy.chars().nth(5).into_iter().collect();
+            assert!(spinner::FRAMES.contains(&mark.as_str()), "點在 NOR 後面：{busy:?}");
+            assert_eq!(busy.chars().nth(6), Some(' '), "點的右邊也留一格：{busy:?}");
 
             // Warning: **換不換格這裏不驗。** 畫一幀要幾百毫秒，兩次 render 之
             // 間那八個點本來就轉過去了——拿它當證據是在賭時鐘。走一格的規矩由

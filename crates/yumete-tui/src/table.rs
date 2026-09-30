@@ -914,7 +914,6 @@ pub fn draw_detail(
     };
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
-    let title = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
     let name = ground.fg(ink.quiet());
     let value = ground.fg(ink.text());
     let here = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
@@ -933,7 +932,12 @@ pub fn draw_detail(
     // 而牆與字之間留一格空氣。
     let left = area.x + 2;
     // **標題由框畫，這裏只接自己那一句**（同文件樹接根目錄名）：那張表叫什麼。
-    put_text(buf, shell.head_at + 2, area.y, right, &detail.title, title);
+    //
+    // Warning: **用 `shell.head`，別自己調一個**（2026-09-30 作者報的：「line
+    // index in the title has a wrong background colour」）。有焦點的時候那一行
+    // 整條是金底，而自己調的那一個帶着 CHROME 的底色——寫上去就是金條上一塊
+    // 別的顏色。框交出 `head` 正是為了這件事，文件樹那一支一直用的就是它。
+    put_text(buf, shell.head_at + 2, area.y, right, &detail.title, shell.head);
     let mut y = area.y + 2;
     // The 部件 list first, because it is what the panel is *read for* — and it
     // used to be drawn last, under twenty-eight mostly-blank fields, which on
@@ -1024,7 +1028,22 @@ pub fn draw_detail(
     // 提示行還寫着 `j k J K g G 上下`——一扇拿走了鍵卻不認那幾個鍵的面板。
     // 「拿走鍵的那一半有義務」。
     if editor.panel_focus() == Some(side) {
-        first = editor.panel_scroll().min(detail.rows.len().saturating_sub(1));
+        // Warning: **最多翻到「最後一屏」**（2026-09-30 作者報的：「pressing will
+        // scroll down even though it is not necessary」）。夾在 `rows.len()-1`
+        // 上的話，`j` 一路按得到只剩最後一格，下面全是空的——那不是翻頁，那是
+        // 把東西推出去。
+        // 從最後一格往回數，數到這一屏裝不下為止——那就是翻得到的最遠一格。
+        let mut fits = 0usize;
+        let mut used = 0usize;
+        for i in (0..detail.rows.len()).rev() {
+            used += height(i);
+            if used > room && fits > 0 {
+                break;
+            }
+            fits += 1;
+        }
+        let last = detail.rows.len().saturating_sub(fits);
+        first = editor.panel_scroll().min(last);
     }
     // 讀到第幾行 ／ 共幾行，寫在底邊——翻得動了纔配有這個數。
     let mut seen = 0usize;
