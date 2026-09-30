@@ -717,36 +717,32 @@ pub fn draw(
     // 幾個字」而 `lines` 是一條條的縱，兩者不是同一個維度，照這裏辦會把最左那
     // 一縱換成「…」並且把框高壓成縱的條數。
     let cap = room_h.saturating_sub(2).max(1) as usize;
+    // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 作者定）。`None` ＝ 整則
+    // 都在眼前，那時一個數字都不寫——數字出現本身就是「還有沒露出來的」。
+    let mut read: Option<(usize, usize)> = None;
     let (count, lines) = match &panel.body {
         Body::Prose(_) if panel.vertical_text => (count, lines),
         Body::Prose(_) if count > cap && cap > 0 => {
             // 從第幾行起——翻過頁的話（`panel.scroll`），最多翻到「最後一屏」。
             let from = panel.scroll.min(count.saturating_sub(cap));
-            let mut kept: Vec<String> = lines.into_iter().skip(from).take(cap).collect();
-            // Warning: **Never the only row.** On a short page `cap` is 1, and
-            // replacing that one row left a panel whose whole content was
-            // 「…」 — a ring around an ellipsis, which says nothing at all.
-            // Hang the mark off the end of the last row instead.
-            match kept.len() {
-                0 | 1 => {
-                    if let Some(last) = kept.last_mut() {
-                        last.push('…');
-                    }
-                }
-                _ => {
-                    if let Some(last) = kept.last_mut() {
-                        *last = "…".to_string();
-                    }
-                }
-            }
+            let kept: Vec<String> = lines.into_iter().skip(from).take(cap).collect();
+            // Warning: **省略號整個去掉了**（2026-09-30 作者定：「现在允许翻页
+            // 了，`…` 可以不用了应该」）。它從前無條件把**最後一行換成 `…`**，
+            // 於是翻到底也永遠讀不到最後那一行——它不是多畫一個記號，它是吃掉
+            // 一行。「下面還有」這件事現在由底邊那個數字說，而那個數字還順帶說
+            // 了「還有多少」。
+            read = Some((from + kept.len(), count));
             (kept.len(), kept)
         }
         _ => (count, lines),
     };
+    let read_w = read.map_or(0, |(at, all)| yumete_cjk::str_width(&format!("{at}/{all}")));
     let deep = count.div_ceil(columns);
     let width = (inner + 2 + pad * 2)
         .max(title_w + 4)
         .max(tag_w + 4)
+        // 底邊兩頭各站一個，中間至少留一格橫線。
+        .max(read_w + tag_w + 5)
         .min(match &panel.body {
             // Prose keeps to the room (above); a key menu has its own rule
             // about how many columns it may spread into.
@@ -910,9 +906,15 @@ pub fn draw(
     }
     // Quietly, on the bottom edge and hard right: it is where the thing is
     // written, not part of what it says.
+    let floor = rect.y + height - 1;
     if let Some(tag) = &panel.tag {
         let x = limit.saturating_sub(tag_w as u16 + 1);
-        put_text(buf, x, rect.y + height - 1, limit, tag, ground.fg(ink.quiet()));
+        put_text(buf, x, floor, limit, tag, ground.fg(ink.quiet()));
+    }
+    // **讀到第幾行，貼底邊左端**（2026-09-30 作者定的，和右端那句提示各佔一頭：
+    // 兩類不同的信息，邊框有兩頭）。
+    if let Some((at, all)) = read {
+        put_text(buf, rect.x + 1, floor, limit, &format!("{at}/{all}"), ground.fg(ink.quiet()));
     }
     Some(rect)
 }
