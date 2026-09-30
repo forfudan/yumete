@@ -257,7 +257,7 @@ pub enum Notice {
     /// one it is waiting for: a definition fills `places` and leaves `told`
     /// empty; a hover does the opposite; a server that answered `null` fills
     /// neither, which is 「nothing to say」 in both languages.
-    Answer { id: i64, places: Vec<Place>, told: Option<String>, offers: Vec<Offer> },
+    Answer { id: i64, places: Vec<Place>, told: Option<Told>, offers: Vec<Offer> },
     /// Anything else: progress, logs, an answer nobody is waiting for.
     Nothing,
 }
@@ -366,30 +366,76 @@ fn places(result: Option<&serde_json::Value>) -> Vec<Place> {
 /// each is rewritten into the Markdown that *means the same thing inline*:
 /// a fenced block becomes one `` `code` `` span a line, and a `---` rule
 /// becomes the blank line it was standing in for.
-fn told(result: Option<&serde_json::Value>) -> Option<String> {
-    fn one(value: &serde_json::Value) -> Option<String> {
+fn told(result: Option<&serde_json::Value>) -> Option<Told> {
+    // `(text, markdown)`. Warning: **`kind` is the server's own word for what it
+    // sent** (2026-09-30) — see [`Told::markdown`].
+    fn one(value: &serde_json::Value) -> Option<(String, bool)> {
         match value {
-            serde_json::Value::String(text) => Some(text.clone()),
+            // A bare `MarkedString`: the specification says Markdown.
+            serde_json::Value::String(text) => Some((text.clone(), true)),
             // Both `MarkupContent` and the old `{language, value}` keep the
-            // text under `value`.
-            _ => Some(value.get("value")?.as_str()?.to_string()),
+            // text under `value`. The old shape is a code block, so Markdown;
+            // the new one says which it is.
+            _ => {
+                let text = value.get("value")?.as_str()?.to_string();
+                let plain = value.get("kind").and_then(|k| k.as_str()) == Some("plaintext");
+                Some((text, !plain))
+            }
         }
     }
     let contents = result?.get("contents")?;
-    let raw = match contents {
+    let (raw, markdown) = match contents {
         serde_json::Value::Array(many) => {
-            let parts: Vec<String> = many.iter().filter_map(one).collect();
-            match parts.is_empty() {
-                true => return None,
-                false => parts.join("\n\n"),
+            let parts: Vec<(String, bool)> = many.iter().filter_map(one).collect();
+            if parts.is_empty() {
+                return None;
             }
+            // One array, one answer: it is Markdown unless every part is plain.
+            let markdown = parts.iter().any(|(_, md)| *md);
+            let text: Vec<&str> = parts.iter().map(|(t, _)| t.as_str()).collect();
+            (text.join("\n\n"), markdown)
         }
         value => one(value)?,
     };
-    let flat = inline(&raw);
-    match flat.is_empty() {
+    // Warning: **`inline` rewrites Markdown, so plain text must not go through it**
+    // — it would eat a line of three dashes and put backticks round a table
+    // drawn in ASCII. Plain text is set as it came.
+    let text = match markdown {
+        true => inline(&raw),
+        false => raw.trim_end().to_string(),
+    };
+    match text.is_empty() {
         true => None,
-        false => Some(flat),
+        false => Some(Told { text, markdown }),
+    }
+}
+
+/// **What a server said, and whether it said it in Markdown** (2026-09-30).
+///
+/// Warning: **The `kind` field is not decoration.** This used to read `value` out
+/// of a `MarkupContent` and throw the `kind` beside it away, and the float
+/// then set every answer with the Markdown inks — so a server that only
+/// speaks plain text had its `*` turned into emphasis and its `#` into a
+/// heading. `contentFormat` now asks for Markdown first (see [`initialize`]),
+/// which is what most servers will then send; this is for the ones that
+/// cannot.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Told {
+    pub text: String,
+    /// Whether [`Self::text`] is Markdown and should be set with its inks.
+    pub markdown: bool,
+}
+
+impl From<String> for Told {
+    /// Markdown, which is what every shape but an explicit `plaintext` means.
+    fn from(text: String) -> Self {
+        Self { text, markdown: true }
+    }
+}
+
+impl From<&str> for Told {
+    fn from(text: &str) -> Self {
+        Self::from(text.to_string())
     }
 }
 
@@ -776,10 +822,11 @@ mod tests {
     /// 回答裏最有用的一行，要留住它的墨色。
     #[test]
     fn a_hover_answers_in_several_shapes_and_stays_markdown() {
-        let said = |m: &str| match read(m, 1) {
+        let told_of = |m: &str| match read(m, 1) {
             Notice::Answer { told, .. } => told,
             other => panic!("是一條回答：{other:?}"),
         };
+        let said = |m: &str| told_of(m).map(|t| t.text);
 
         // rust-analyzer 送的這一種：MarkupContent，裏面是 Markdown。
         let ra = r#"{"id":3,"result":{"contents":{"kind":"markdown","value":"```rust\nfn counted(text: &str) -> usize\n```\n\n---\n\n**數**一數有幾個字。"}}}"#;
@@ -813,6 +860,52 @@ mod tests {
             Notice::Answer { places, .. } => assert!(places.is_empty(), "hover 裏沒有地方"),
             other => panic!("{other:?}"),
         }
+    }
+
+    /// **`kind` 說純文本，就不能拿 Markdown 的墨去畫**（2026-09-30 作者報的：
+    /// Python 的 docstring 裏 `Main API` 底下那一行 `======` 原樣畫了出來）。
+    ///
+    /// 兩件事：`Told::markdown` 要跟着服務器說的走，而純文本**不許過
+    /// [`inline`]**——它會把一行三個減號吃掉，把 ASCII 畫的表格每一行包進反
+    /// 引號。
+    #[test]
+    fn a_plaintext_answer_is_not_read_as_markdown() {
+        let told_of = |m: &str| match read(m, 1) {
+            Notice::Answer { told, .. } => told,
+            other => panic!("是一條回答：{other:?}"),
+        };
+
+        // pylsp 在 `contentFormat` 把 plaintext 排在前頭時送的就是這一種：
+        // 生的 reStructuredText docstring。
+        let plain = r#"{"id":3,"result":{"contents":{"kind":"plaintext","value":"Main API\n========\nrun(...): 跑一條命令\n\n---\n\n末尾"}}}"#;
+        let told = told_of(plain).expect("有東西");
+        assert!(!told.markdown, "服務器說了是純文本");
+        assert_eq!(
+            told.text, "Main API\n========\nrun(...): 跑一條命令\n\n---\n\n末尾",
+            "Warning: 一個字都不許改——`---` 還在，換行還在"
+        );
+
+        // 同一段話，`kind` 換成 markdown，就照 Markdown 收拾。
+        let marked = plain.replace("plaintext", "markdown");
+        let told = told_of(&marked).expect("有東西");
+        assert!(told.markdown);
+        assert!(!told.text.contains("---"), "`---` 變成了一個空行：{}", told.text);
+
+        // 沒有 `kind` 的那幾種舊形狀一律算 Markdown。
+        for shape in [
+            r#"{"id":3,"result":{"contents":"一句話"}}"#,
+            r#"{"id":3,"result":{"contents":{"language":"rust","value":"usize"}}}"#,
+            r#"{"id":3,"result":{"contents":["甲","乙"]}}"#,
+        ] {
+            assert!(told_of(shape).expect(shape).markdown, "{shape}");
+        }
+
+        // 一串裏只要有一段是 Markdown，整條就按 Markdown 畫——混着的時候，
+        // 少畫一段標記比把純文本畫錯更輕。
+        let mixed = r#"{"id":3,"result":{"contents":[{"kind":"plaintext","value":"甲"},{"kind":"markdown","value":"**乙**"}]}}"#;
+        assert!(told_of(mixed).expect("有東西").markdown);
+        let all_plain = r#"{"id":3,"result":{"contents":[{"kind":"plaintext","value":"甲"},{"kind":"plaintext","value":"乙"}]}}"#;
+        assert!(!told_of(all_plain).expect("有東西").markdown);
     }
 
     /// 圍欄裏本來就有反引號的那一行不加引號——加了就把那一段提前關掉了。

@@ -17681,7 +17681,7 @@ fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
 
     // 問出去、答案回來：站着的這一格看得見。
     press(&mut ed, " k");
-    ed.show_hover("fn compile_the_table()".into());
+    ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "答案就在光標這一格");
 
     // 往右走一格：不畫了。
@@ -17752,14 +17752,14 @@ fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
 
     // 那一格沒開：浮。
     press(&mut ed, " k");
-    ed.show_hover("fn compile_the_table()".into());
+    ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "浮着");
     assert!(ed.info_in_the_sidebar().is_none());
 
     // 開出那一格再問：不浮了，畫進去。
     ed.execute(":sidebar-right info").unwrap();
     press(&mut ed, " k");
-    ed.show_hover("fn compile_the_table()".into());
+    ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), None, "那一格開着就不浮");
     assert_eq!(ed.hover_here(), Some("fn compile_the_table()"));
     assert_eq!(ed.info_now(), Some(crate::sidebar::Info::Docs), "那一格擺着文檔");
@@ -17779,7 +17779,7 @@ fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
     press(&mut ed, " k");
-    ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect());
+    ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect::<String>());
     assert_eq!(ed.info_scroll(), 0, "從頭讀");
 
     ed.on_key(Key::Ctrl('d'));
@@ -17864,7 +17864,7 @@ fn the_width_key_works_in_the_info_panel() {
     press(&mut ed, "gg");
 
     press(&mut ed, " K");
-    ed.show_hover("fn one()".into());
+    ed.show_hover("fn one()");
     let side = Side::Right;
     assert_eq!(ed.showing(View::Info), Some(side));
     assert_eq!(ed.info_in_this_sidebar(side), Some(Info::Docs), "擺的是文檔");
@@ -17954,7 +17954,7 @@ fn asking_and_showing_are_two_separate_things() {
 
     // 邊欄沒開：自己問，答案浮起來——不必按 `空格 k`。
     assert!(ed.docs_owed().is_some(), "開着就自己問");
-    ed.show_hover("fn compile_the_table()".into());
+    ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "沒有邊欄就浮");
 
     // 開一格出來：同一個開關，答案改走邊欄。
@@ -17971,7 +17971,7 @@ fn asking_and_showing_are_two_separate_things() {
     ed.on_key(Key::Char('l'));
     std::thread::sleep(std::time::Duration::from_millis(320));
     assert!(ed.docs_owed().is_some(), "照樣自己問");
-    ed.show_hover("fn compile_the_table()".into());
+    ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), None, "有邊欄就不浮");
     assert_eq!(ed.info_now(), Some(Info::Docs), "進邊欄");
 
@@ -17983,7 +17983,7 @@ fn asking_and_showing_are_two_separate_things() {
     ed.on_key(Key::Char('l'));
     std::thread::sleep(std::time::Duration::from_millis(320));
     assert!(ed.docs_owed().is_some(), "關了邊欄也照樣問");
-    ed.show_hover("fn compile_the_table()".into());
+    ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), Some("fn compile_the_table()"), "又浮回來了");
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -18043,7 +18043,7 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
 
     // 問一次文檔，答案回來——這一刻診斷要讓開。
     press(&mut ed, " k");
-    ed.show_hover("fn one()".into());
+    ed.show_hover("fn one()");
     assert!(ed.hover_afloat().is_some(), "文檔浮着");
     assert!(ed.problem_afloat().is_none(), "Warning: 兩個浮窗不許疊");
 
@@ -18121,7 +18121,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
 
     // 一格都沒有：`空格 k` 浮。
     press(&mut ed, " k");
-    ed.show_hover("fn one()".into());
+    ed.show_hover("fn one()");
     assert_eq!(ed.hover_afloat(), Some("fn one()"), "沒地方就浮");
 
     // `空格 I` 把**診斷**送進邊欄——文檔並沒有佔着那一格。
@@ -18131,7 +18131,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
 
     // Warning: 這時 `空格 k` 該頂掉它，不該另浮一個。
     press(&mut ed, " k");
-    ed.show_hover("fn one()".into());
+    ed.show_hover("fn one()");
     assert_eq!(ed.info_now(), Some(Info::Docs), "那一格換成了文檔");
     assert_eq!(ed.hover_afloat(), None, "Warning: 不許再浮一個");
     assert!(ed.problem_afloat().is_none(), "診斷讓開了");
@@ -18182,7 +18182,7 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
     ed.execute(":info docs").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(320));
     assert!(ed.docs_owed().is_some(), "問得出去");
-    ed.show_hover("fn one()".into());
+    ed.show_hover("fn one()");
     assert_eq!(ed.info_now(), Some(Info::Docs), "換成文檔");
     assert_eq!(ed.hover_afloat(), None, "有那一格就不浮");
 
@@ -18208,7 +18208,7 @@ fn the_four_keys_scroll_whichever_kind_is_showing() {
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
     press(&mut ed, " k");
-    ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect());
+    ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect::<String>());
     assert_eq!(ed.info_scroll(), 0, "從頭讀");
 
     let line = ed.cursor_line();

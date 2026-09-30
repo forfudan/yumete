@@ -1044,8 +1044,8 @@ impl Editor {
     ///
     /// Warning: **記下問的時候光標在哪**：這一則是**問出來的**，所以光標一走它就該
     /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
-    pub fn show_hover(&mut self, told: String) {
-        self.hovered = Some((self.sel.head(), told));
+    pub fn show_hover(&mut self, told: impl Into<crate::lsp::Told>) {
+        self.hovered = Some((self.sel.head(), told.into()));
         self.info_scroll = 0;
         self.status = String::new();
         // Warning: **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
@@ -1199,7 +1199,16 @@ impl Editor {
     /// 這會兒該不該畫那一則說明——光標還在問的地方纔算。
     pub fn hover_here(&self) -> Option<&str> {
         let (asked_at, told) = self.hovered.as_ref()?;
-        (*asked_at == self.sel.head()).then_some(told.as_str())
+        (*asked_at == self.sel.head()).then_some(told.text.as_str())
+    }
+
+    /// **那一則是不是 Markdown**——服務器自己說的（`MarkupContent.kind`）。
+    ///
+    /// Warning: 從前這裏無條件當 Markdown 畫。只會說純文本的服務器於是被誤畫：
+    /// `*` 成了強調、`#` 成了標題。答不出東西的時候回 `true`，那一格本來也不
+    /// 畫任何東西。
+    pub fn hover_is_markdown(&self) -> bool {
+        self.hovered.as_ref().map(|(_, told)| told.markdown).unwrap_or(true)
     }
 
     /// 那一則說明該不該**浮**在光標旁邊。
