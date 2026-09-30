@@ -2198,21 +2198,24 @@ impl Editor {
     /// These six work anywhere, so they head every list, and on a page with no
     /// table under the cursor they are the whole list.
     const TABLE_KEYS: &'static [(&'static str, &'static str)] = &[
+        // **五個一系列，照它們的次序排**（2026-09-30 作者定：「t 放到 f 后面，
+        // q放到 t后面。这五个是一个系列」）。`o b f t` 是同一個問題的四個答案
+        // ——這張表畫成什麼樣——由淺入深，`q` 是從最深那一檔退回來。
         ("o", "hint.table.back-to-prose"),
         ("b", "hint.table.operate-it"),
         ("f", "hint.table.draw-it"),
+        ("t", "hint.table.whole-window"),
+        ("q", "hint.table.leave-the-window"),
+        // 2026-09-30：從頂層的 `T` 搬進來。
+        ("T", "hint.table.grain"),
         // 摺格子 asks nothing about where the cursor is standing either — it is
         // a preference about how the page is *drawn* — and it had never once
         // been offered by any of the four lists, in the group whose whole
         // purpose is to say what `t` can be finished with.
-        // 2026-09-30：從頂層的 `T` 搬進來。
-        ("T", "hint.table.grain"),
         ("w", "hint.table.fold-wide-cells"),
         // 折行 stands beside 摺起 because it answers the same question — and
         // a key offered nowhere is a key nobody finds.
         ("a", "hint.table.wrap-wide-cells"),
-        ("t", "hint.table.whole-window"),
-        ("q", "hint.table.leave-the-window"),
         ("] [", "hint.table.next-or-previous"),
     ];
 

@@ -5488,9 +5488,9 @@ en = "previous cell"
 [[message]]
 # 表格提示：規格檔
 key = "hint.table.schema"
-zht = "這張表的規格"
-zhs = "这张表的规格"
-en = "this table's schema"
+zht = "這張表格的元數據"
+zhs = "这张表格的元数据"
+en = "this table's metadata"
 
 [[message]]
 # 表格提示：一欄一欄找
