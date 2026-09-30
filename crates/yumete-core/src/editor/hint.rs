@@ -55,8 +55,19 @@ impl Editor {
                     Some(one) => crate::messages::say(one.tag(), &[]),
                     None => say!("label.panel.info"),
                 };
+                // Warning: **一段文章是「滾」，一張單子是「上下」**（2026-09-22
+                // 定的分別，2026-09-30 差點丟掉）。百科軟折行，`j` 走的是一屏
+                // 行；字典、數據、診斷是一條一條，`j` 走的是一條。同一個鍵兩
+                // 件事，這一行得說對是哪一件。
+                let walk = match self.info_in_this_sidebar(side) {
+                    Some(crate::sidebar::Info::Wiki) => say!("hint.sidebar.scroll"),
+                    _ => say!("hint.sidebar.move"),
+                };
                 return Hint::Keys(what, vec![
-                        ("j k".into(), say!("hint.sidebar.move")),
+                        // Warning: **`J K g G` 也寫上**（2026-09-30 審出來的）。
+                        // 它們在這一格上真的管用，而通用那一行一格就寫得下
+                        // `j k J K g G`——只寫 `j k` 是漏報。
+                        ("j k J K g G".into(), walk),
                         // Warning: **翻頁那一對也要寫上**（#426）：五種輪流佔這
                         // 一格，而換一種是這一格最常做的事。
                         ("PgUp PgDn".into(), say!("hint.info.page")),
@@ -164,7 +175,8 @@ impl Editor {
             // 別的視圖是行的列表，`j` 走下一行——同一個鍵兩件事，所以這一行得說
             // 對是哪一件。
             let walking = match self.panel(side).map(|p| p.view()) {
-                Some(crate::sidebar::View::Info) => say!("hint.sidebar.scroll"),
+                // 信息那一格在上面自己答完了，走不到這裏。
+                Some(crate::sidebar::View::Info) => say!("hint.sidebar.move"),
                 _ => say!("hint.sidebar.move"),
             };
             // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，

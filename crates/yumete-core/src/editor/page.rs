@@ -906,6 +906,10 @@ impl Editor {
     pub(super) fn show_the_problem_here(&mut self, afloat: bool) {
         if self.problem_here().is_none() {
             self.status = say!("problem.none-here");
+            // 同 `show_the_wiki_here`：大寫是「強制在邊欄」，開好了等着。
+            if !afloat {
+                self.make_room_for_the_info();
+            }
             return;
         }
         self.ask_for_info(crate::sidebar::Info::Problems, afloat);
@@ -1017,7 +1021,14 @@ impl Editor {
         self.hovered = None;
         // 手動叫出來的那一次要當場作廢，不然那一格會空着等到光標動——而「空着」
         // 的意思是「還在問」，不是「問完了，沒有」。
-        let by_hand = self.info_asked.take().is_some();
+        //
+        // Warning: **只作廢文檔那一次。** 這一句是服務器隔了一趟循環纔回的，那時
+        // `info_asked` 可能早已經是別人了（問完 `空格 k` 馬上按 `空格 d`）——
+        // 無條件 `take()` 會替那一位關窗（2026-09-30 審出來的）。
+        let by_hand = matches!(self.info_asked, Some((crate::sidebar::Info::Docs, _)));
+        if by_hand {
+            self.info_asked = None;
+        }
         match by_hand {
             true => self.status = say!("lsp.speechless"),
             false => self.refresh_sidebar(),
@@ -1063,12 +1074,34 @@ impl Editor {
     /// 回 `true` ＝ 這一鍵歸浮窗，正文不必再看它一眼。Warning: **只有浮着的那一份收
     /// 鍵**：進了邊欄的那一份走邊欄自己的 `jk`，而邊欄是走得進去的
     /// （`空格 4`）——浮窗不是。
+    ///
+    /// Warning: **五種裏畫成散文的那三種都收**（2026-09-30 審出來的）。從前只有
+    /// 文檔收，而散文稿子裏默認浮的是**百科**——一條長詞條被切在「…」上，`C-u`／
+    /// `C-d` 卻去翻了正文，等於沒有出路。字典與數據畫成兩欄的字段（`Body::Keys`），
+    /// 那一種本來就不按行翻，它們的出路是底邊那一行寫的「進邊欄」。
     pub(super) fn scroll_the_float(&mut self, by: isize) -> bool {
-        let Some(told) = self.hover_afloat() else { return false };
+        let Some(lines) = self.how_tall_is_the_float() else { return false };
         // 最多翻到最後一行，不翻到空白裏去。
-        let last = told.lines().count().saturating_sub(1);
+        let last = lines.saturating_sub(1);
         self.info_scroll = self.info_scroll.saturating_add_signed(by).min(last);
         true
+    }
+
+    /// 浮着的那一則有幾行——`None` ＝ 沒浮，或者浮的那一種不按行翻。
+    ///
+    /// Warning: **數的是折行**前**的行**，和畫的那一頭數出來的不是同一個數。夾不
+    /// 準沒關係：畫的那一趟自己再夾一次（`panel.rs` 的 `count - cap`），這裏只要
+    /// 別讓它一路翻進空白裏。
+    fn how_tall_is_the_float(&self) -> Option<usize> {
+        match self.info_afloat()? {
+            crate::sidebar::Info::Docs => Some(self.hover_here()?.lines().count()),
+            crate::sidebar::Info::Wiki => {
+                Some(self.wiki_here()?.as_prose().lines().count())
+            }
+            crate::sidebar::Info::Problems => Some(self.problem_here()?.1.len()),
+            // 兩欄的字段，不按行翻。
+            crate::sidebar::Info::Dictionary | crate::sidebar::Info::Data => None,
+        }
     }
 
     /// **還有多久該問那一句**，`None` ＝ 沒什麽等着（2026-09-29）。

@@ -369,13 +369,18 @@ impl Editor {
 
     /// **`q` 在信息那一格上：把它收起來**（#426）。
     ///
-    /// Warning: **連內容一起丟，不只關容器。** 「畫在哪」是算出來的，所以光關掉
-    /// 邊欄那一格，同一則東西下一幀就浮到光標旁邊去了——讀者說的是「我不要看
-    /// 這個」，不是「換個地方給我看」。
+    /// Warning: **連「誰叫的」一起丟，不只關容器。** 「畫在哪」是算出來的，所以
+    /// 光關掉邊欄那一格，手動叫出來的那一則下一幀就浮到光標旁邊去了——讀者說的
+    /// 是「我不要看這個」，不是「換個地方給我看」（2026-09-30 審出來的）。
+    ///
+    /// Warning: **即時的那一種照樣會浮回來，那是對的。** 作者的模型是「右侧栏就
+    /// 是固定的『浮窗』，它开着，浮窗就不用开了」——反過來說，關掉邊欄，浮窗就
+    /// 回來。即時的那一種關不掉（`:info` 纔換得動它），能收起來的只有手動叫的。
     pub(super) fn close_the_info(&mut self, side: crate::sidebar::Side) {
         if let Some(one) = self.info_in_this_sidebar(side) {
             self.stop_showing_this_info(one);
         }
+        self.info_asked = None;
         self.close_panel(side);
     }
 
@@ -411,10 +416,12 @@ impl Editor {
         match key {
             Key::Char('j') | Key::Down => self.panel_scroll = step(self.panel_scroll, 1, true),
             Key::Char('k') | Key::Up => self.panel_scroll = step(self.panel_scroll, 1, false),
-            Key::Char('J') | Key::PageDown => {
+            // Warning: **`PageUp`／`PageDown` 不在這裏**（#426）：在信息這一格
+            // 上它們是「換一種」，`on_key` 開頭就收走了。半頁是 `J`／`K`。
+            Key::Char('J') => {
                 self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, true)
             }
-            Key::Char('K') | Key::PageUp => {
+            Key::Char('K') => {
                 self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false)
             }
             Key::Char('g') | Key::Home => self.panel_scroll = 0,
@@ -734,8 +741,9 @@ impl Editor {
         let moved = match key {
             Key::Char('j') | Key::Down => at.saturating_add(1),
             Key::Char('k') | Key::Up => at.saturating_sub(1),
-            Key::Char('J') | Key::PageDown => at.saturating_add(page),
-            Key::Char('K') | Key::PageUp => at.saturating_sub(page),
+            // 同 `on_info_key`：那兩個鍵在這一格上是「換一種」。
+            Key::Char('J') => at.saturating_add(page),
+            Key::Char('K') => at.saturating_sub(page),
             Key::Char('g') | Key::Home => 0,
             // Warning: **`G` 不在這裏算底在哪**——這一頭數不出來（見
             // [`Editor::wiki_scroll`]）。存一個到不了的數，畫的那一趟走到底、

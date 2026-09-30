@@ -407,9 +407,14 @@ impl Editor {
     /// 在代碼裏管的是同一件事。
     pub(super) fn show_the_wiki_here(&mut self, afloat: bool) -> bool {
         // 光標底下什麽都沒有就說一句——一個按了沒反應的鍵，讀者只會以為自己記
-        // 錯了鍵。
+        // 錯了鍵。Warning: **大寫那一下照樣把那一格開出來**（2026-09-30 審出來
+        // 的）：作者說的是「space K 强制在邊欄显示」，而「強制」是一個持續的意
+        // 思——開好了等着，不是這一刻沒東西就當沒按過。
         if self.wiki_here().is_none() {
             self.status = say!("wiki.panel-empty");
+            if !afloat {
+                self.make_room_for_the_info();
+            }
             return true;
         }
         self.ask_for_info(crate::sidebar::Info::Wiki, afloat);
