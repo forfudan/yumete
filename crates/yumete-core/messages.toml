@@ -5368,9 +5368,9 @@ en = "this row's data"
 [[message]]
 # t 選單：t f 這一行
 key = "hint.table.draw-it"
-zht = "完整視圖（表格按列對齊且顯示列號）"
-zhs = "完整视图（表格按列对齐且显示列号）"
-en = "full view: the columns lined up, with column numbers"
+zht = "完整視圖（表格顯示列號）"
+zhs = "完整视图（表格显示列号）"
+en = "full view: the table shows column numbers"
 
 [[message]]
 # 表格提示：第一行當欄名／當資料
@@ -5382,9 +5382,9 @@ en = "whether the table's first row is a heading row"
 [[message]]
 # t 選單：t w 這一行
 key = "hint.table.fold-wide-cells"
-zht = "太寬的格子：摺起／攤開"
-zhs = "太宽的格子：折起／摊开"
-en = "over-wide cells: fold the tail away / lay it back out"
+zht = "長單元格摺疊/展開"
+zhs = "长单元格折叠/展开"
+en = "long cells: fold / unfold"
 
 [[message]]
 # 表格提示：去某一格
@@ -5530,9 +5530,9 @@ en = "full-screen view: the table takes the window"
 [[message]]
 # t 選單：t a 這一行
 key = "hint.table.wrap-wide-cells"
-zht = "太寬的格子：折到下面幾行（全窗）"
-zhs = "太宽的格子：折到下面几行（全窗）"
-en = "over-wide cells: wrap them onto the lines below (whole-window)"
+zht = "長單元格自動換行"
+zhs = "长单元格自动换行"
+en = "long cells wrap onto the next line"
 
 [[message]]
 # 表格提示：取這欄／貼一欄
