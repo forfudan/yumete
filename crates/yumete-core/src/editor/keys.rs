@@ -2205,6 +2205,8 @@ impl Editor {
         // a preference about how the page is *drawn* — and it had never once
         // been offered by any of the four lists, in the group whose whole
         // purpose is to say what `t` can be finished with.
+        // 2026-09-30：從頂層的 `T` 搬進來。
+        ("T", "hint.table.grain"),
         ("w", "hint.table.fold-wide-cells"),
         // 折行 stands beside 摺起 because it answers the same question — and
         // a key offered nowhere is a key nobody finds.

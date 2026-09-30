@@ -5284,9 +5284,9 @@ en = "show diagnostics (sidebar)"
 [[message]]
 # 空格 t：表格那一組（2026-09-21 從 `t` 搬來）
 key = "hint.space.table"
-zht = "表格那一組"
-zhs = "表格那一组"
-en = "the table group"
+zht = "表格操作"
+zhs = "表格操作"
+en = "table operations"
 
 [[message]]
 # 空格組提示的標題
@@ -5345,20 +5345,6 @@ zhs = "回到正文"
 en = "back to prose"
 
 [[message]]
-# 表格提示：改按格
-key = "hint.table.by-cell-instead"
-zht = "按格移動"
-zhs = "按格移动"
-en = "move by cell"
-
-[[message]]
-# 表格提示：改按字
-key = "hint.table.by-character-instead"
-zht = "按字移動"
-zhs = "按字移动"
-en = "move by character"
-
-[[message]]
 # 表格提示：刪這一行
 key = "hint.table.delete-row"
 zht = "刪這一行"
@@ -5408,11 +5394,26 @@ zhs = "去某一格（␣t 20,20g）"
 en = "go to a cell (t20,20g)"
 
 [[message]]
+# 空格 t 單子：換移動的粒度（2026-09-30 作者定，原話「按格／按字移動」）
+key = "hint.table.grain"
+zht = "按格／按字移動"
+zhs = "按格／按字移动"
+en = "move by cell or by character"
+
+[[message]]
 # 表格提示：格內
 key = "hint.table.in-a-cell"
 zht = "格內"
 zhs = "格内"
 en = "in a cell"
+
+[[message]]
+# 表格提示：把這一行的數據開進邊欄（2026-09-30 作者定，原話「␣I 在侧栏打开」，
+# 「这个和其他四个信息面板的话术保持一致」——全樹寫的是「邊欄」，不是「側欄」）
+key = "hint.table.into-the-sidebar"
+zht = "在邊欄打開"
+zhs = "在边栏打开"
+en = "open it in the sidebar"
 
 [[message]]
 # t 選單：t q 這一行（只在全屏表格模式下有用）
@@ -10208,6 +10209,14 @@ key = "ui.commands"
 zht = "命令"
 zhs = "命令"
 en = "commands"
+
+[[message]]
+# 空格 i：光標不在任何一行數據上（2026-09-30 作者報的：非表格的地方按下去，
+# 回的是字典那一句「光標下沒有字可查」，說的是另一件事）
+key = "ui.cursor-is-not-in-a-table"
+zht = "光標未在表格中"
+zhs = "光标未在表格中"
+en = "the cursor is not in a table"
 
 [[message]]
 # 數據那一格關掉（2026-09-30 隨標題一起改名）
