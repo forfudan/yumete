@@ -76,9 +76,10 @@ pub enum Info {
     Dictionary,
     /// 詞條（#287）。
     Wiki,
-    /// 這一格的字段（#296）。2026-09-30 從「表格」改名「數據」——作者說它
-    /// 「比『表格』更能反映这一行的内容」。
-    Data,
+    /// 這一行的字段（#296）。改過兩次名：2026-09-30 從「表格」改「數據」
+    /// （原話「比『表格』更能反映这一行的内容」），2026-10-01 又改「記錄」
+    /// （原話「更能反映表格行的事实。数据太 broad 了」）。
+    Record,
     /// 語言服務器說這個名字是什麽（#53 ③）。
     Docs,
     /// 語言服務器說這一行哪兒不對。
@@ -88,17 +89,17 @@ pub enum Info {
 impl Info {
     /// 五種，`PageUp`／`PageDown` 按這個次序翻。
     ///
-    /// 次序是**由近及遠**：字典百科講的是眼前這個詞，數據講這一行，文檔診斷是
+    /// 次序是**由近及遠**：字典百科講的是眼前這個詞，記錄講這一行，文檔診斷是
     /// 服務器從整份稿子裏看出來的。
     pub const ALL: [Info; 5] =
-        [Info::Dictionary, Info::Wiki, Info::Data, Info::Docs, Info::Problems];
+        [Info::Dictionary, Info::Wiki, Info::Record, Info::Docs, Info::Problems];
 
     /// 每一種的名字，當標題用。
     pub fn tag(self) -> &'static str {
         match self {
             Info::Dictionary => "label.panel.dictionary",
             Info::Wiki => "label.panel.wiki",
-            Info::Data => "label.panel.data",
+            Info::Record => "label.panel.record",
             Info::Docs => "label.panel.docs",
             Info::Problems => "label.panel.problems",
         }
@@ -109,7 +110,7 @@ impl Info {
         match self {
             Info::Dictionary => "dictionary",
             Info::Wiki => "wiki",
-            Info::Data => "data",
+            Info::Record => "record",
             Info::Docs => "docs",
             Info::Problems => "diagnostics",
         }

@@ -41,7 +41,7 @@ impl Editor {
             return one;
         }
         if self.detail_is_a_panel() {
-            return Info::Data;
+            return Info::Record;
         }
         match self.writes_code() {
             true => Info::Problems,
@@ -84,7 +84,7 @@ impl Editor {
         match one {
             Info::Dictionary => self.dictionary.is_some(),
             Info::Wiki => self.wiki_here().is_some(),
-            Info::Data => self.detail_is_a_panel(),
+            Info::Record => self.detail_is_a_panel(),
             Info::Docs => self.hover_here().is_some(),
             Info::Problems => self.problem_here().is_some(),
         }
@@ -177,7 +177,7 @@ impl Editor {
                 self.dictionary_anchor = None;
             }
             Info::Docs => self.hovered = None,
-            Info::Data => self.show_detail = Some(false),
+            Info::Record => self.show_detail = Some(false),
             // 百科與診斷是稿子自己的事實，沒有一份「答案」可丟——收起來就是不
             // 再叫它，即時那一輪要不要畫是另一回事。
             Info::Wiki | Info::Problems => {}

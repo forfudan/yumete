@@ -31,7 +31,7 @@ impl Editor {
     /// **`空格 t i`／`空格 t I`（與 `空格 i`／`空格 I`）：把這一行攤開**。
     ///
     /// 小寫浮、大寫一定進邊欄——五種信息同一條規矩（#426）。
-    pub(super) fn show_the_data_here(&mut self, afloat: bool) {
+    pub(super) fn show_the_record_here(&mut self, afloat: bool) {
         if self.detail().is_none() {
             // Warning: **不是字典那一句**（2026-09-30 作者報的）。從前這裏借用
             // 「光標下沒有字可查」——那是 `空格 d` 查不到字時說的，跟這一鍵沒
@@ -53,7 +53,7 @@ impl Editor {
             return;
         }
         self.show_detail = Some(true);
-        self.put_this_info_here(crate::sidebar::Info::Data, afloat);
+        self.put_this_info_here(crate::sidebar::Info::Record, afloat);
         self.status = say!("ui.detail-panel-on");
     }
 
@@ -70,7 +70,7 @@ impl Editor {
             // `info_asked` 還記着數據，於是這一下被當成「又按了一次」當場關回
             // 去，要按兩下纔出得來。同 `look_up_here` 那一個。
             true => {
-                self.put_this_info_here(crate::sidebar::Info::Data, true);
+                self.put_this_info_here(crate::sidebar::Info::Record, true);
                 self.status = say!("ui.detail-panel-on");
             }
             false => {

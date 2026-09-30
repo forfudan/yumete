@@ -2049,8 +2049,8 @@ impl Editor {
         // picker）。五種信息同一個形狀——小寫浮，大寫進邊欄。
         ('d', "hint.space.problems"),
         ('D', "hint.space.problems-panel"),
-        ('i', "hint.space.data"),
-        ('I', "hint.space.data-panel"),
+        ('i', "hint.space.record"),
+        ('I', "hint.space.record-panel"),
         // **`空格 w` 是區域那一組的門**（2026-09-30 定，照 helix 的 `C-w`：
         // `keymap/default.rs:193` 與 `:260` 是同一組，兩扇門）。
         //
@@ -2411,8 +2411,8 @@ impl Editor {
             Key::Char('D') => self.show_the_problem_here(false),
             // **數據**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
             // 格的事），這一對是順手。
-            Key::Char('i') => self.show_the_data_here(true),
-            Key::Char('I') => self.show_the_data_here(false),
+            Key::Char('i') => self.show_the_record_here(true),
+            Key::Char('I') => self.show_the_record_here(false),
             Key::Char('"') => self.open_paste_picker(),
             // 衝突 (#249): the three keys that end one. Under `空格` rather
             // than a letter of its own because every letter has one already,

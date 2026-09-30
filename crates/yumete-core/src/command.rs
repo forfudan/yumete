@@ -2356,7 +2356,7 @@ const SIDEBAR_PANELS: &[Word] = &[
 const INFO_KINDS: &[Word] = &[
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
-    Word { name: "data", help: "label.panel.data", needs: &[] },
+    Word { name: "record", help: "label.panel.record", needs: &[] },
     Word { name: "docs", help: "label.panel.docs", needs: &[] },
     Word { name: "diagnostics", help: "label.panel.problems", needs: &[] },
 ];
