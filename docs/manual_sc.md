@@ -3715,7 +3715,7 @@ Warning: **拼音和 模糊 找到的那几处，一样换得掉**（2026-09-27 
 
 从**正在编辑的那个文件**往上找（和表格 schema 一样：这份词表是稿子的属性，不是这次会话
 的）。启动时读一次，**中途加了名字，`:w` 存下就生效**——存这个文件就是重读它，状态栏会说现
-在有几个词在用。（在别处改了它，`:word-list reload` 手动重读。）
+在有几个词在用。（在别处改了它，`:word-list-reload` 手动重读。）
 
 它是**叠在**现有分词之上的，不是换掉：宇浩的语言模型（或者 `segmentation.txt`、或者
 自带的那份小词表）照样决定其余的边界，只有拼得出你的词的那几段会被并起来。长的优先，
@@ -4418,7 +4418,10 @@ Warning: **本来有颜色的段落一点不碰**——标题的金、连结的�
 | `:word-show`（`on`／`off`） | 分词著色开关 |
 | `:word-show 色相`／`字色`／`底色`／`线` | 四种画法：换墨的颜色（出厂）／换墨的明度／纸上铺淡色／词下画一条线 |
 | `:wiki` [`edit`｜`global`｜`reload`] | 作品百科：读了哪些文件、各几条；`edit` 打开 `.yumete/wiki.md` |
-| `:word-list reload` | 重读 `.yumete/words.txt`——这本书自己的词（存它就自己重读，这是手动的那一下） |
+| `:word-list` | 此刻用的是哪一份词表 |
+| `:word-list-local` | 开这本书自己的词表 `.yumete/words.txt`——人名、地名 |
+| `:word-list-global` | 开全域词表 `segmentation.txt` |
+| `:word-list-reload` | 两份一起重读（存它就自己重读，这是手动的那一下） |
 | `:word-discover` | 重算一遍**这一篇**，把名单写成 `.yumete/discovered_words.txt` 给你看（每次覆盖，yumete 不读它） |
 | `:word-discover-cd` `-gd` `-wd` | 同上，范围换成文件夹／仓／打开的目录（同 `:search` 那三个字） |
 | `:theme` | 现在是哪个主题、深色还是浅色 |

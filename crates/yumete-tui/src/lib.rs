@@ -9850,7 +9850,10 @@ fn draw_status(
         false => status,
     };
     let tail = fits(&status);
-    let used = yumete_cjk::str_width(&status);
+    // **左邊留一格**（2026-09-30 作者報的：「NOR 前面应该空一格（我们现在顶格
+    // 了，和下面的命令行不对齐）」）。底下那一行本來就從第二格起，兩行左緣對不
+    // 齊，眼睛會先看見那一格參差。
+    let used = yumete_cjk::str_width(&status) + 1;
     let room = (status_area.width as usize).saturating_sub(used);
     let gap = room.saturating_sub(yumete_cjk::str_width(tail));
     // **The mode word is the only thing on this line that is not「where you
@@ -9862,6 +9865,7 @@ fn draw_status(
     let (word, rest) = status.split_at(cut);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
+            Span::styled(" ".to_string(), bar),
             Span::styled(
                 drawable(word).into_owned(),
                 bar.fg(ink.gold()).add_modifier(Modifier::BOLD),
@@ -14192,12 +14196,14 @@ fn squeezed(text: &str) -> String {
         // `-- NORMAL --  ` to `NOR  `, so the whole line is nine cells shorter
         // and twenty-eight now holds everything. The subject is unchanged —
         // this is the width at which something has to go.
-        let narrow = status(20);
+        // …and **twenty-one, not twenty**, since 2026-09-30: the line gained a
+        // cell of margin on the left so it lines up with the row under it.
+        let narrow = status(21);
         assert!(narrow.contains("行 1, 列 1"), "the position stays: {narrow:?}");
         assert!(!narrow.contains("long.csv"), "the name gave way: {narrow:?}");
         assert!(narrow.contains("NOR"), "{narrow:?}");
         assert!(
-            yumete_cjk::str_width(&narrow) <= 20,
+            yumete_cjk::str_width(&narrow) <= 21,
             "and it fits: {narrow:?}"
         );
     }
@@ -17647,7 +17653,10 @@ fn squeezed(text: &str) -> String {
             line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
             "the 字 is named at the right edge: {line:?}"
         );
-        assert!(line.starts_with("NOR  "), "and the left is untouched");
+        // Warning: **左邊留一格**（2026-09-30 作者報的：「NOR 前面应该空一格
+        // （我们现在顶格了，和下面的命令行不对齐）」）。底下那一行本來就從第二
+        // 格起。
+        assert!(line.starts_with(" NOR  "), "and the left is untouched");
 
         // Moving names a different one.
         editor.on_key(Key::Char('l'));

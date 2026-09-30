@@ -90,11 +90,11 @@ pub enum WordCommand {
     Mark(yumete_cjk::WordMark),
     /// `:word-list` — the same report, from the list's side.
     List,
-    /// `:word-list reload` — read this book's list and the global one again.
+    /// `:word-list-reload` — read this book's list and the global one again.
     Reload,
-    /// `:word-list edit` — open this book's `.yumete/words.txt`, existing or not.
+    /// `:word-list-local` — open this book's `.yumete/words.txt`, existing or not.
     Edit,
-    /// `:word-list global` — open the global `segmentation.txt`, existing or not.
+    /// `:word-list-global` — open the global `segmentation.txt`, existing or not.
     Global,
     /// `:word-discover` and its three wider spellings — **how far to read**
     /// (Feature #239). Mines the words no dictionary has and writes the list
@@ -2168,23 +2168,6 @@ const WORD_SHOW: &[Word] = &[
     },
 ];
 
-const WORD_LISTS: &[Word] = &[
-    Word {
-        name: "reload",
-        help: "cmd.word-lists.reload",
-        needs: &[],
-    },
-    Word {
-        name: "edit",
-        help: "cmd.word-lists.edit",
-        needs: &[],
-    },
-    Word {
-        name: "global",
-        help: "cmd.word-lists.global",
-        needs: &[],
-    },
-];
 
 /// What `:wiki-mark` takes — **how** a wiki name is marked in the prose.
 ///
@@ -2869,19 +2852,45 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::Wiki(WikiCommand::Reload))),
     },
     Entry {
+        // **三個參數拆成三條命令**（2026-09-30 作者報的）。從前是
+        // `:word-list edit` 開本書那一份、`:word-list global` 開全域那一份——
+        // 兩件事**只差哪一個檔**，可一個用動詞起名、一個用範圍起名，於是誰都猜
+        // 不到另一個：知道 `edit` 的人猜不出 `global`，反過來也一樣。
+        //
+        // 隔壁那一家本來就是這個形狀（`:word-discover` ／ `-cd` ／ `-gd`），而
+        // `:` 選單按連字號前綴併行（今天是 `:word (wd) +7`），所以多三條不多佔
+        // 一行。光禿禿的 `:word-list` 照舊答「此刻用的是哪一份」，同光禿禿的
+        // `:word-discover` 是「這一篇」。
         name: "word-list",
         aliases: &[],
         help: "cmd.word-topics.list",
         needs: &[],
-        params: &[Param::Words { of: WORD_LISTS, default: None }],
-        build: Some(|p| {
-            Ok(Command::Word(match p.arg(0) {
-                None => WordCommand::List,
-                Some("reload") => WordCommand::Reload,
-                Some("edit") => WordCommand::Edit,
-                _ => WordCommand::Global,
-            }))
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::Word(WordCommand::List))),
+    },
+    Entry {
+        name: "word-list-local",
+        aliases: &[],
+        help: "cmd.word-lists.local",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Word(WordCommand::Edit))),
+    },
+    Entry {
+        name: "word-list-global",
+        aliases: &[],
+        help: "cmd.word-lists.global",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Word(WordCommand::Global))),
+    },
+    Entry {
+        name: "word-list-reload",
+        aliases: &[],
+        help: "cmd.word-lists.reload",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Word(WordCommand::Reload))),
     },
     Entry {
         name: "word-level",
@@ -5235,7 +5244,7 @@ mod tests {
         );
         assert_eq!(parse(":word-list"), Ok(Command::Word(WordCommand::List)));
         assert_eq!(
-            parse(":word-list reload"),
+            parse(":word-list-reload"),
             Ok(Command::Word(WordCommand::Reload))
         );
         assert_eq!(

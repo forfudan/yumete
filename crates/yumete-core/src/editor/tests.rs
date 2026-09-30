@@ -11633,7 +11633,7 @@ fn the_word_command_is_one_subject_from_three_sides() {
     assert!(ed.status().contains("分詞"), "{}", ed.status());
 
     // …and reload is a question for the front end, which owns the IME.
-    ed.execute(":word-list reload").unwrap();
+    ed.execute(":word-list-reload").unwrap();
     assert!(ed.take_words_request(), "the front end is asked to rebuild");
 }
 

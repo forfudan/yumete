@@ -2335,7 +2335,7 @@ two files the order is **book first, then a rule, then the global ones under a
 ```
 :wiki                every source file, its entry count, what could not be marked,
                      what was refused (out of bounds, missing, already included)
-:wiki edit           open .yumete/wiki.md, existing or not — the `:word-list edit` bargain
+:wiki edit           open .yumete/wiki.md, existing or not — the `:word-list-local` bargain
 :wiki edit global    the global one
 :wiki reload         read the whole graph again
 :wiki show on|off    the mark on the page
@@ -7750,7 +7750,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     outlives the pane, and `n` brings it back
 
 [^202]: `words` and `segment` were two names for one question.
-    `:word segment on|off`, `:word-show`, `:word-list reload|edit|global`,
+    `:word segment on|off`, `:word-show`, `:word-list-reload|edit|global`,
     `:word-level less|more|full` — the level reaches **both** dictionaries: a
     threshold for the bundled one, a per-word bonus (+2.0 / 0 / −1.5 nats,
     measured) for Yume's model. Replaces `segmentation_threshold` in the config
@@ -11187,12 +11187,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     不是那份文件存在，是它把人從正文裏拽走。做法：統計塊照舊寫進詞表 buffer——那份
     「可刪可改可撤銷、`:w` 纔算答應」的提議是刻意的設計，不能換成「只活在這次會話裏」
     的記憶態，那樣既重啓即失、又無處否決其中某一個——但**不切換過去**，狀態行說
-    「找到 N 個詞，已加入分詞；`:word-list edit` 查看取捨」。零新命令。代價是多一個未存盤
+    「找到 N 個詞，已加入分詞；`:word-list-local` 查看取捨」。零新命令。代價是多一個未存盤
     的後台 buffer 在退出時提醒，而那本來就是真的。
 
     **落地（2026-09-12，`02cb1fb`）** ——照上面那條做的，零新命令。`discover_words` 開頭記
     一句 `let was = self.current`，寫完那一塊之後 `show_buffer(was)` 回去。狀態行改成
-    「找到 N 個本書自己的詞，已經按它們切了；寫進了 <路徑>——`:word-list edit` 去取捨」
+    「找到 N 個本書自己的詞，已經按它們切了；寫進了 <路徑>——`:word-list-local` 去取捨」
     （`word.discover-found`／`word.discover-too-many` 兩則都改了），話裏帶着那個檔在哪、
     怎麼去看。`the_book_hands_the_editor_its_own_names_without_being_asked` 頭一句斷言
     現在是 `current_buffer().path() == ch01.md`。
@@ -17941,13 +17941,36 @@ Warning: **這 83 ms 是每改一個字付一次**——快取按內容哈希，
 
 Warning: **編輯器其實答得出「為什麼沒顏色」**（`:view-code` 走 `code_too_long_here`），只是不主動說。
 
+## 5.38.2 `:word-list` 的三個參數拆成三條命令（2026-09-30）
+
+作者報的：「`word-list edit` 和 `word-list global` 一个是 words.txt 一个是 segmentation.txt，
+不一致。而且一个是 edit 一个是 global，也不一致。」
+
+**兩件事只差哪一個檔，卻一個用動詞起名、一個用範圍起名。** 於是誰都猜不到另一個：知道
+`edit` 的人猜不出 `global`，反過來也一樣，而 `edit` 還悄悄含着「編輯**本書那一份**」。
+
+| 從前 | 現在 |
+| --- | --- |
+| `:word-list` | 不變——此刻用的是哪一份 |
+| `:word-list edit` | `:word-list-local`（`.yumete/words.txt`） |
+| `:word-list global` | `:word-list-global`（`segmentation.txt`） |
+| `:word-list reload` | `:word-list-reload` |
+
+**連字號是這一家本來的形狀**：`:word-discover` ／ `-cd` ／ `-gd` 就是這麽排的，而光禿禿
+的那一條是最常用的那一個意思（`:word-discover` ＝這一篇，`:word-list` ＝哪一份）。
+Warning: **多三條命令不多佔 `:` 選單一行**——那張表按連字號前綴併行（`:word (wd) +7`），
+這是 #369 之後定下的規矩，量過纔敢加。舊拼法由 `MeansTheHyphenatedOne` 接住，報的是新名字。
+
+Warning: **`-which` 沒有加**（作者原提議裏有）。光禿禿的 `:word-list` 已經是那個意思，再
+加一條就破了這一家「裸命令＝默認那一個」的規矩。
+
 ## 5.38.1 啓動就報一句「沒有找到 words.txt」（2026-09-30 修）
 
 作者報的：「我打开任何非程序文檔或者新建一个 buffer，都会有这个消息在命令栏。我觉得它没必
 要……我怕用户会感到奇怪。」
 
 **根子是報結果的那一句寫在了加載器裏。** `reload_project_words` 有七個呼叫方，只有存檔與
-`:word-list reload` 是人做的；別的六個是啓動、輸入法的分詞器晚一秒送到、百科命令之後——人
+`:word-list-reload` 是人做的；別的六個是啓動、輸入法的分詞器晚一秒送到、百科命令之後——人
 什麽都沒做，卻被告知一個他沒在想的檔案在不在。同 `no_hover` 那一條早就寫下的規矩：**編輯器
 自己發的問話，不報結果。**
 

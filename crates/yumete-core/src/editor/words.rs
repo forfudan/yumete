@@ -150,7 +150,7 @@ impl Editor {
     /// How readily characters join into words (`:word-level`).
     ///
     /// Kept here as well as pushed into the segmenter, because a segmenter
-    /// installed later — the IME finishing its load, `:word-list reload` — has
+    /// installed later — the IME finishing its load, `:word-list-reload` — has
     /// to arrive at the level the reader chose rather than at the default.
     pub fn set_word_level(&mut self, level: yumete_cjk::WordLevel) {
         self.word_level = level;
@@ -426,7 +426,7 @@ impl Editor {
     /// 做，卻被告知一個他沒在想的檔案在不在：「我打开任何非程序文檔或者新建一
     /// 个 buffer，都会有这个消息在命令栏……我怕用户会感到奇怪。」
     ///
-    /// Warning: **報結果的那一句本來就有，而且更好。** `:word-list reload` 與
+    /// Warning: **報結果的那一句本來就有，而且更好。** `:word-list-reload` 與
     /// 存下 `words.txt` 都會走前端那一句 `word.lists-reread`，它問的是
     /// [`Editor::words_in_force`]——「宇浩語言模型 1250000 條 ＋ 本書 312 個
     /// 詞」，兩半一起說。沒有 `words.txt` 的時候後半句自己不出現，那正是「這本

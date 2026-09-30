@@ -164,7 +164,7 @@ impl Editor {
             (":yume-chaifen on", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),
             (":word-show on", say!("help.chinese.word-tint")),
-            (":word-list reload", say!("help.chinese.reload-project-words")),
+            (":word-list-reload", say!("help.chinese.reload-project-words")),
             (":word-habit", say!("help.chinese.habit-words")),
             (":ruby", say!("help.chinese.annotate-reading")),
             (":ruby-format html", say!("help.chinese.unify-reading-spelling")),
