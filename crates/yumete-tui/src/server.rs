@@ -138,13 +138,13 @@ struct Server {
 #[derive(Default)]
 struct Heard {
     /// `Some(Some(…))` 有東西，`Some(None)` 答了說沒有，`None` 這一輪沒人答。
-    told: Option<Option<String>>,
+    told: Option<Option<lsp::Told>>,
     place: Option<Option<lsp::Place>>,
     offers: Option<Vec<lsp::Offer>>,
 }
 
 impl Heard {
-    fn what_is_it(&mut self, told: Option<String>) {
+    fn what_is_it(&mut self, told: Option<lsp::Told>) {
         // 已經收到一個有東西的了，後來的空答案不許蓋掉它。
         if matches!(self.told, Some(Some(_))) {
             return;

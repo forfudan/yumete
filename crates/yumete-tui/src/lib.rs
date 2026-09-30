@@ -5560,8 +5560,9 @@ fn draw_note(
             // `None`，而服務器說的話可以有十幾行，浮窗又不收鍵）。
             tag: None,
             vertical_text: vertical,
-            // 服務器送來的就是 Markdown，照 Markdown 畫（2026-09-21）。
-            marked: true,
+            // **服務器自己說了它送的是什麽**（2026-09-30）。從前這裏寫死 `true`
+            // ——只會說純文本的服務器於是被 Markdown 的墨誤畫。
+            marked: editor.hover_is_markdown(),
         });
     }
     // Warning: **插入模式下不畫**（2026-09-22 報的：「每打幾個字母就出 warning 的浮
