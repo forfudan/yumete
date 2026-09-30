@@ -148,18 +148,36 @@ impl Editor {
         if line >= motion::last_line(rope) {
             return;
         }
-        let end = motion::line_end(rope, start);
-        // Swallow the break and any indentation that follows it.
-        let mut next = end + 1;
         let len = rope.len_chars();
-        while next < len && matches!(rope.char(next), ' ' | '\t' | '\u{3000}') {
+        let blank = |c: char| matches!(c, ' ' | '\t' | '\u{3000}');
+        // Swallow the break and any indentation that follows it.
+        let mut next = motion::line_end(rope, start) + 1;
+        while next < len && blank(rope.char(next)) {
             next += 1;
         }
-        let before = (end > 0).then(|| rope.char(end - 1));
+        // **…and the blanks in front of it** (#326, 2026-10-01). The seam used
+        // to begin at `line_end`, so `"  \n漢字"` kept its two spaces and then
+        // took a third from the `_` arm below: 「行尾的空白留着，又加了一個空
+        // 格」. A line's trailing blanks are not text a reader typed on purpose
+        // — they are what a break was standing in for — and they are the
+        // reason the wide/wide rule kept missing: the character before the
+        // seam was a space, not the 漢字 the eye sees there.
+        let head = motion::line_start(rope, start);
+        let mut end = motion::line_end(rope, start);
+        while end > head && blank(rope.char(end - 1)) {
+            end -= 1;
+        }
+        let before = (end > head).then(|| rope.char(end - 1));
         let after = (next < len).then(|| rope.char(next));
+        // **接縫是一支一支寫出來的，不是從 `_` 掉出來的**（#326）。
         let glue = match (before, after) {
-            (Some(a), Some(b)) if is_wide(a) && is_wide(b) => "",
+            // 一頭是空的——行首或檔尾——就沒有接縫可言。
             (None, _) | (_, None) => "",
+            // 兩邊都是全角：中文行末本來就不帶空格，補一個就是插進了沒人打過
+            // 的字。
+            (Some(a), Some(b)) if is_wide(a) && is_wide(b) => "",
+            // 一頭全角一頭半角：`hello 漢字` 讀得順，這是有意的。
+            // 兩頭都是半角：拉丁詞之間本來就要一個空格。
             _ => " ",
         };
         self.snapshot();
