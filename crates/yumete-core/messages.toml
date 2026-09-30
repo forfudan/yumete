@@ -10710,20 +10710,6 @@ zhs = "不知道数据目录在哪里——这一台上没有全域词表"
 en = "no data directory known — this machine has no global word list"
 
 [[message]]
-# 重讀本項目詞表，檔案不在
-key = "word.no-project-words-file"
-zht = "沒有找到 .yumete/words.txt——本項目的詞寫在那裏"
-zhs = "没有找到 .yumete/words.txt——本项目的词写在那里"
-en = "no .yumete/words.txt — this project's own words go there"
-
-[[message]]
-# 重新讀本項目的詞表之後
-key = "word.project-words-loaded"
-zht = "{0} 個本項目的詞：{1}"
-zhs = "{0} 个本项目的词：{1}"
-en = "{0} word(s) from this project: {1}"
-
-[[message]]
 # 分詞的詞表：詞表 ＋ 這本書自己的詞
 key = "word.source-and-book"
 zht = "{0} ＋ 本書 {1} 個詞"

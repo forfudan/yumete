@@ -17941,6 +17941,23 @@ Warning: **這 83 ms 是每改一個字付一次**——快取按內容哈希，
 
 Warning: **編輯器其實答得出「為什麼沒顏色」**（`:view-code` 走 `code_too_long_here`），只是不主動說。
 
+## 5.38.1 啓動就報一句「沒有找到 words.txt」（2026-09-30 修）
+
+作者報的：「我打开任何非程序文檔或者新建一个 buffer，都会有这个消息在命令栏。我觉得它没必
+要……我怕用户会感到奇怪。」
+
+**根子是報結果的那一句寫在了加載器裏。** `reload_project_words` 有七個呼叫方，只有存檔與
+`:word-list reload` 是人做的；別的六個是啓動、輸入法的分詞器晚一秒送到、百科命令之後——人
+什麽都沒做，卻被告知一個他沒在想的檔案在不在。同 `no_hover` 那一條早就寫下的規矩：**編輯器
+自己發的問話，不報結果。**
+
+Warning: **而那一句本來就是多餘的。** 作者接着報了第二件：「At startup it shows that we
+cannot find words.txt... but when I type word-list reload, it shows 『詞表重讀了：宇浩語言
+模型 1250000 條』」——同一件事兩套說法，而後一套更好：`words_in_force` 兩半一起說，
+「宇浩語言模型 1250000 條 ＋ 本書 312 個詞」，沒有 `words.txt` 的時候後半句自己不出現，那
+正是「這本書沒有」的說法。所以 `word.project-words-loaded` 與 `word.no-project-words-file`
+兩則**整個刪掉**，加載器一聲不吭，報結果的只剩前端那一句 `word.lists-reread`。
+
 ## 5.39 `空格 k`／`空格 K` 重新建模（2026-09-29）
 
 作者逐條提的六件，加上他自己重畫的鍵位。

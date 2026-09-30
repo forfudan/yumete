@@ -117,6 +117,8 @@ impl Editor {
             WordCommand::Reload => {
                 // The book's own list, here; the dictionary underneath it is
                 // the front end's to build, so it is asked for one.
+                //
+                // 回話的是前端那一句（`word.lists-reread`）：它兩半一起說。
                 self.reload_project_words();
                 self.words_request = true;
             }
@@ -411,14 +413,26 @@ impl Editor {
         self.project_root().join(".yumete").join("discovered_words.txt")
     }
 
-    /// Read `.yumete/words.txt` again, and say how many words it holds.
+    /// Read `.yumete/words.txt` again.回的是**從哪個檔讀的**，沒有就是 `None`。
     ///
     /// The name on every page of a novel is the one word no dictionary has —
     /// 阿寧 segments as `[阿][寧]`, so `w` steps through it a character at a
     /// time and the overlay tints it as two words. Found by walking **up from
     /// the file being edited**, the way a table's schema is: the list belongs
     /// to the manuscript, not to the session that opened it.
-    pub fn reload_project_words(&mut self) {
+    ///
+    /// Warning: **它一聲不吭**（2026-09-30 作者報的）。這一支有七個呼叫方，六個是
+    /// 編輯器自己讀的——啓動、輸入法的分詞器晚一秒送到、存檔之後。人什麽都沒
+    /// 做，卻被告知一個他沒在想的檔案在不在：「我打开任何非程序文檔或者新建一
+    /// 个 buffer，都会有这个消息在命令栏……我怕用户会感到奇怪。」
+    ///
+    /// Warning: **報結果的那一句本來就有，而且更好。** `:word-list reload` 與
+    /// 存下 `words.txt` 都會走前端那一句 `word.lists-reread`，它問的是
+    /// [`Editor::words_in_force`]——「宇浩語言模型 1250000 條 ＋ 本書 312 個
+    /// 詞」，兩半一起說。沒有 `words.txt` 的時候後半句自己不出現，那正是「這本
+    /// 書沒有」的說法。從前這裏另說一句「沒有找到 .yumete/words.txt」，是**同一
+    /// 件事的第二套說法**，而且說成了抱怨——作者當場看出那是不一致的。
+    pub fn reload_project_words(&mut self) -> Option<PathBuf> {
         let from = self
             .current_buffer()
             .path()
@@ -440,14 +454,10 @@ impl Editor {
             Some((text, path)) => (yumete_cjk::WordList::from_text(&text), Some(path)),
             None => (yumete_cjk::WordList::default(), None),
         };
-        let n = list.len();
         self.own_words = list;
         self.reload_wiki();
         self.rebuild_words();
-        self.status = match where_from {
-            Some(path) => say!("word.project-words-loaded", n, path.display()),
-            None => say!("word.no-project-words-file"),
-        };
+        where_from
     }
 
     /// Hand the segmenter the two halves as one list.
