@@ -7093,19 +7093,20 @@ pub(crate) fn sidebar_shell(
                 // **底邊上寫着 `Tab` 走的次序**（2026-09-25 提的）。算出來的，
                 // 不是寫死的：哪個視圖歸哪一欄使用者配得動。放不下就不寫——一行
                 // 擠成半句的字比沒有字更難懂（同開關那一欄的號碼）。
+                let at = from + 1;
                 let names: Vec<String> = editor
                     .views_on(side)
                     .into_iter()
                     .map(|v| yumete_core::messages::say(Panel::from(v).tag(), &[]))
                     .collect();
-                if !names.is_empty() {
+                if !names.is_empty() && at < to {
                     // Warning: **放不下就截，不是不畫**：出廠 23 欄的邊欄裝不下整條
                     // 「Tab 文件 > 緩衝區 > 大綱 > 尋找」（31 格），而截成
                     // 「Tab 文件 > 緩衝…」照樣把那件要說的事說了——`Tab` 換的是
                     // 視圖。想看全的按 `w` 放寬。
                     let line = format!("Tab {}", names.join(" > "));
-                    let room = to.saturating_sub(from + 1) as usize;
-                    put_text(buf, from + 1, y, to, &elide(&line, room), gold);
+                    let room = to.saturating_sub(at) as usize;
+                    put_text(buf, at, y, to, &elide(&line, room), gold);
                 }
             }
             false => {
@@ -7130,7 +7131,11 @@ pub(crate) fn sidebar_shell(
     }
     put_text(buf, from + 1, area.y, to, name, head);
     let head_at = from + 1 + yumete_cjk::str_width(name) as u16;
-    Shell { from, to, head, head_at, area: room }
+    let floor_ink = match focused {
+        true => gold,
+        false => thin,
+    };
+    Shell { from, to, head, head_at, area: room, floor, floor_ink }
 }
 
 /// 框的四個角。`top` 說上下，`inner` 說是不是朝着正文的那一邊。
@@ -7160,6 +7165,23 @@ pub(crate) struct Shell {
     head_at: u16,
     /// 標題行加正文，**不含底邊**。
     area: Rect,
+    /// **底邊在哪一行**，`None` ＝ 窗口矮到沒有底邊。
+    ///
+    /// 交出來是為了讓面板自己在上面寫「讀到第幾行」——那個數要先折過行纔算得
+    /// 出來，而折多寬又要先有這個框，所以它只能在畫完之後補。
+    floor: Option<u16>,
+    /// 底邊那一行的墨：有焦點是金底，沒有是淡的橫線。
+    floor_ink: Style,
+}
+
+/// **在邊欄底邊左端寫「讀到第幾行 ／ 共幾行」**（2026-09-30 作者定）。
+///
+/// `at >= all` ＝ 整份都在眼前，一個字都不寫——數字出現本身就是「還有沒露出來
+/// 的」。同浮窗底邊那一份（`panel.rs`），左端數字、右端提示。
+fn count_on_the_floor(frame: &mut Frame, shell: &Shell, at: usize, all: usize) {
+    let (Some(y), true) = (shell.floor, at < all) else { return };
+    let said = format!("{at}/{all}");
+    put_text(frame.buffer_mut(), shell.from + 1, y, shell.to, &said, shell.floor_ink);
 }
 
 /// **The sidebar's 百科 page** (#287): the entry the cursor is on, kept in
@@ -7211,6 +7233,18 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
     editor.set_wiki_scroll(scroll);
     for (y, row, style) in rows {
         put_text(buf, from_x, area.y + (y - scroll) as u16, to, &row, style);
+    }
+    // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 作者定）。
+    //
+    // Warning: **總數要再走一趟。** 上面那一趟走到屏幕滿了就停（那是它便宜的原
+    // 因），所以它多半不知道總數。這一趟靠 `scroll = CAP、deep = 0` 空走：一行
+    // 都不收，走過 `CAP` 行就放棄回 `None`——一條長到那個地步的詞條，每一幀重
+    // 數一遍不值得，那時候就不寫數字。
+    const CAP: usize = 5_000;
+    let mut nothing = Vec::new();
+    let all = total.or_else(|| walk_wiki(&view, width, CAP, 0, &mut nothing, head, quiet, text));
+    if let Some(all) = all {
+        count_on_the_floor(frame, &shell, (scroll + deep).min(all), all);
     }
 }
 
@@ -7931,7 +7965,6 @@ fn draw_dictionary(
     };
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
     let (from, to, area) = (shell.from, shell.to, shell.area);
-    let buf = frame.buffer_mut();
 
     let rows = editor.info_rows(side);
     // **邊欄窄，服務器說的話長，所以折行**（2026-09-29 報的：「侧边栏的文檔面板
@@ -7960,12 +7993,12 @@ fn draw_dictionary(
         false => rows,
     };
     let visible = (area.height as usize).saturating_sub(1);
-    // Warning: **空着也要說一句**（2026-09-30 審出來的）。一扇整片空白的框說不出
-    // 自己是幹什麽的，讀者不會知道「光標走過去它就有了」——而這一格是常駐的，
-    // 空着的時間比有東西的時間長。同 2026-09-23 給百科那一頁補的那一句。
     let first = editor
         .panel_scroll()
         .min(rows.len().saturating_sub(visible.max(1)));
+    // 讀到第幾行，寫在底邊左端——折過行之後纔算得出，所以補在這裏。
+    count_on_the_floor(frame, &shell, (first + visible).min(rows.len()), rows.len());
+    let buf = frame.buffer_mut();
     for slot in 0..visible.min(rows.len().saturating_sub(first)) {
         let row = &rows[first + slot];
         let style = if row.is_dir { head } else { text };
