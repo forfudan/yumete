@@ -28,6 +28,32 @@ impl Editor {
             && !self.table.as_ref().is_some_and(|view| view.pane))
     }
 
+    /// **`空格 t i`／`空格 t I`（與 `空格 i`／`空格 I`）：把這一行攤開**。
+    ///
+    /// 小寫浮、大寫一定進邊欄——五種信息同一條規矩（#426）。
+    pub(super) fn show_the_data_here(&mut self, afloat: bool) {
+        if self.detail().is_none() {
+            self.status = say!("ui.nothing-to-look-up");
+            if !afloat {
+                self.make_room_for_the_info();
+            }
+            return;
+        }
+        // **再按一次同一個鍵就收起來**，同別的四種。Warning: 判準是
+        // `detail_visible()` 而不是 `info_asked`——數據在 `t t` 那一檔下是**即
+        // 時**的（沒人叫過它），而 `t i` 照樣該收得掉它。
+        let here = self.info_in_the_sidebar().is_none();
+        if self.detail_visible() && here == afloat {
+            self.show_detail = Some(false);
+            self.info_asked = None;
+            self.status = say!("ui.detail-panel-off");
+            return;
+        }
+        self.show_detail = Some(true);
+        self.put_this_info_here(crate::sidebar::Info::Data, afloat);
+        self.status = say!("ui.detail-panel-on");
+    }
+
     /// Show or hide the 數據 panel (`t i`).
     ///
     /// Warning: **同時記一句「這一種是手動叫出來的」**（#426）：五種信息共用一

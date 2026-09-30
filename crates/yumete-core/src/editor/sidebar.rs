@@ -342,7 +342,10 @@ impl Editor {
     /// so in every panel.
     pub(super) fn panel_key_in_common(&mut self, key: Key, side: crate::sidebar::Side) -> bool {
         match key {
-            Key::Ctrl('w') => self.next_region(),
+            // **邊欄裏 `C-w` 也是那一組的門**（2026-09-30）。從前它在這裏直接
+            // 走下一區，而在正文裏是前綴——同一個和弦兩個意思，正是這一輪在
+            // 拆的毛病。走下一區照舊是 `C-w w`，兩處一樣。
+            Key::Ctrl('w') => self.pending = Pending::Region,
             // Warning: **信息那一格的 `q` 連內容一起丟**，見 `close_the_info`。
             Key::Char('q') => match self.info_in_this_sidebar(side).is_some() {
                 true => self.close_the_info(side),
@@ -475,6 +478,54 @@ impl Editor {
     ///
     /// Warning: **只走開着的**：不在的區不會被順手開出來——那是 `空格 1`–`4` 和 `空格 W`
     /// 的事。「下一個」說的是眼前這幾個裏的下一個。
+    /// **區域那一組的一個鍵**（`C-w` 或 `空格 w` 之後，2026-09-30 定）。
+    ///
+    /// 照 helix 的 `C-w`（`keymap/default.rs:193`）：`w` 走下一個，`hjkl` 按方
+    /// 向走過去，`s` 切一刀，`q` 關掉，`o` 只留這一個。
+    ///
+    /// Warning: **`e`／`i` 是這一頭自己加的**：開關左右邊欄而**鍵不過去**。
+    /// helix 沒有邊欄，所以沒有這一對；作者原話：「_we / _wi for toggling left
+    /// and right sidebars……will not move focus to the sidebar」。大寫那一對
+    /// （`E`／`I`）是開了就走進去，而且**只開不關**——「it does not close the
+    /// sidebar as _we/_wi will do this」。
+    pub(super) fn on_region_key(&mut self, key: Key) {
+        use crate::sidebar::Side;
+        match key {
+            Key::Char('w') => self.next_region(),
+            // 按方向走。四個區域：左欄、正文、副編輯區、右欄。
+            Key::Char('h') | Key::Left => self.go_to_region(3),
+            Key::Char('l') | Key::Right => self.go_to_region(4),
+            Key::Char('k') | Key::Up => self.go_to_region(1),
+            Key::Char('j') | Key::Down => self.go_to_region(2),
+            // 開關那一欄，鍵留在原地。
+            Key::Char('e') => self.toggle_region(Side::Left),
+            Key::Char('i') => self.toggle_region(Side::Right),
+            // 開出來並且走進去（已經開着就只是走進去）。
+            Key::Char('E') => self.go_to_region(3),
+            Key::Char('I') => self.go_to_region(4),
+            // 切一刀：眼下只有上下兩個編輯區，所以「切出來」和「走到第二個」
+            // 是同一件事（`go_to_region` 沒有就開一個）。Warning: 往後真有第三
+            // 個編輯區的時候這兩件事要分家——`s` 是「再切一刀」，`j` 是「走下
+            // 去」。作者說的「We will expand it to more possibilities in
+            // future」指的就是這裏。
+            Key::Char('s') => self.go_to_region(2),
+            Key::Char('q') => self.close_this_region(),
+            Key::Char('o') => self.close_other_regions(),
+            _ => {}
+        }
+    }
+
+    /// **開關那一側的邊欄，鍵不過去**（`C-w e`／`C-w i`，2026-09-30）。
+    pub(super) fn toggle_region(&mut self, side: crate::sidebar::Side) {
+        match self.panel(side).is_some() {
+            true => self.close_panel(side),
+            false => {
+                let view = self.side_view(side);
+                self.open_panel_without_the_keys(side, view);
+            }
+        }
+    }
+
     pub(super) fn next_region(&mut self) {
         let open: Vec<u32> = (1..=4).filter(|&n| self.region_open(n)).collect();
         if open.len() < 2 {
@@ -485,22 +536,6 @@ impl Editor {
         self.go_to_region(open[(at + 1) % open.len()]);
     }
 
-    /// **`空格 W`：四個區全開**（2026-09-26 定的）。
-    ///
-    /// Warning: **窄窗口照開，不攔**（定的）。比例布局本來就不會塌，而 `空格 Q` 一下
-    /// 就收回來了；多一道閘就多一條「為什麼按了沒反應」要解釋。
-    ///
-    /// Warning: **鍵留在原地**：這一下說的是「把它們擺出來」，不是「帶我去哪裏」。
-    pub(super) fn open_every_region(&mut self) {
-        let was = self.which_region();
-        for nth in 2..=4 {
-            if !self.region_open(nth) {
-                self.go_to_region(nth);
-            }
-        }
-        self.go_to_region(was);
-        self.status = say!("region.all-open");
-    }
 
     /// **`空格 q`：關掉站着的這一區**（2026-09-26 定的）。
     ///
@@ -546,60 +581,6 @@ impl Editor {
         self.status = say!("region.only-this-one");
     }
 
-    /// **`空格 1`–`空格 4`：一下跳到某一區**（2026-09-25 提的）。
-    ///
-    /// 原話：「空格 快捷键可以用 1234567890 这些数字来切换到某个工作区和侧栏……
-    /// 比如 1 正文主要工作区，2 正文第二工作区，3 左边栏 4 右边栏」。從前換區只有
-    /// `C-w`／`空格 s` 輪轉，四個區最多按三下；一個數字一下到位。tmux 的 `prefix
-    /// 0-9`、瀏覽器的 `Cmd+1..9` 都是這個，人人都會。
-    ///
-    /// Warning: **不在的區就開出來**（定的，原話：「开出来并跳过去」）——和 `空格 w` 一個
-    /// 規矩：一個鍵一個意思，「讓我去那裏」。
-    ///
-    /// Warning: **5–0 給 buffer 那一半沒有做**，等標籤欄帶上號再說。編號不穩又看不見的
-    /// 鍵比沒有這個鍵更糟：一本小說一百多個檔，「第 7 個」按最近用過排每過幾分鐘
-    /// 換一個檔，按打開順序排則關掉一個後面全部重編。瀏覽器能成，是因為號碼**畫在
-    /// 標籤上**。
-    /// **`空格 !@#$`：不用走過去就關掉那一區**（2026-09-29 定）。
-    ///
-    /// 原話：「space 命令组加四个东西分别是 !@#$，对应 1234，意思是强制关闭
-    /// 1、2、3、4 区域。这样我们就有了对应的关闭按键（不需要移到区域就可以关闭
-    /// 它）。」`空格 1`–`4` 是去那一區，它們的上檔就是關那一區——一對鍵、一個號
-    /// 碼，不必再記第二套。
-    ///
-    /// Warning: **本來就沒開就出聲**，別靜悄悄——按了沒反應的鍵讀者只會以為自己
-    /// 記錯了。關最後一個工作區同 `空格 q`：那等於退出編輯器，不許。
-    pub(super) fn close_region(&mut self, nth: u32) {
-        use crate::sidebar::Side;
-        match nth {
-            1 | 2 => {
-                let want = usize::from(nth == 2);
-                if self.other_pane().is_none() {
-                    self.status = say!("region.only-one-left");
-                    return;
-                }
-                // 關的是**指名的那一個**：先站過去，再走 `空格 q` 那條路——收尾
-                // （鍵去哪、稿子怎麽算）只該有一份。
-                if self.live_pane().min(1) != want {
-                    self.switch_pane();
-                }
-                self.panel_focus = None;
-                self.close_this_region();
-            }
-            3 | 4 => {
-                let side = match nth {
-                    3 => Side::Left,
-                    _ => Side::Right,
-                };
-                if self.panel(side).is_none() {
-                    self.status = say!("region.not-open");
-                    return;
-                }
-                self.close_panel(side);
-            }
-            _ => {}
-        }
-    }
 
     pub(super) fn go_to_region(&mut self, nth: u32) {
         use crate::sidebar::Side;
