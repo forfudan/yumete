@@ -1945,6 +1945,12 @@ pub struct Editor {
     /// Which half of the screen holds the keys — **screen order**, so
     /// switching panes never makes the top one jump to the bottom.
     live_pane: usize,
+    /// **哪幾欄上鋪一道底紋**（`:rules`，#424，2026-09-30）。空 ＝ 一道都不鋪。
+    ///
+    /// 作者原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
+    /// `:rules 80 100 120` 來繪製多條。」Warning: **是底紋不是綫**——一條真的竪
+    /// 綫要佔一欄，那一欄就寫不了字；鋪底紋不佔地方。
+    rules: Vec<usize>,
     /// Whether the line-number band carries a ground of its own.
     number_fill: bool,
     /// 改動條：行號旁邊那一格說不說「這一行跟 git 那一份不一樣」（#55／#298）。
@@ -2794,6 +2800,7 @@ impl Editor {
             dictionary: None,
             other: None,
             live_pane: 0,
+            rules: Vec::new(),
             number_fill: false,
             diff_gutter: false,
             vcs: HashMap::new(),

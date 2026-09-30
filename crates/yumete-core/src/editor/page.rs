@@ -629,6 +629,29 @@ impl Editor {
     }
 
     /// Whether the line-number band carries a ground of its own.
+    /// **哪幾欄鋪着底紋**（`:rules`，#424）。
+    pub fn rules(&self) -> &[usize] {
+        &self.rules
+    }
+
+    /// `:rules` — 設那幾欄，空着就是關掉。
+    ///
+    /// Warning: **出廠一道都不鋪。** 這主要是一個寫稿子的編輯器，而「第 80 欄」
+    /// 對一頁散文沒有意思；要它的人打一次 `:rules` 就有（不帶數字＝ 80）。
+    pub fn set_rules(&mut self, mut columns: Vec<usize>) {
+        columns.retain(|&n| n > 0);
+        columns.sort_unstable();
+        columns.dedup();
+        self.status = match columns.is_empty() {
+            true => say!("rules.off"),
+            false => say!(
+                "rules.on",
+                columns.iter().map(usize::to_string).collect::<Vec<_>>().join(" ")
+            ),
+        };
+        self.rules = columns;
+    }
+
     pub fn number_fill(&self) -> bool {
         self.number_fill
     }

@@ -419,6 +419,10 @@ pub enum Command {
     /// on the page and a ground behind it says it a second time. `None`
     /// toggles.
     ThemeFill(Option<bool>),
+    /// **`:rules 80 100 120`：在那幾欄上鋪一道底紋**（#424，2026-09-30）。
+    ///
+    /// 空的 `Vec` ＝ `off`，一道都不鋪。不帶參數的 `:rules` 送的是 `[80]`。
+    Rules(Vec<usize>),
     /// **`:info <名>`：即時顯示哪一種信息**（#426，2026-09-30）。
     ///
     /// `None` ＝ 光打了 `:info`，回到按稿子算（散文百科、代碼診斷、表格數據）。
@@ -3055,6 +3059,31 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words { of: INFO_KINDS, default: None }],
         build: Some(|p| Ok(Command::Info(p.arg(0).and_then(crate::sidebar::Info::parse)))),
+    },
+    Entry {
+        name: "rules",
+        aliases: &[],
+        help: "cmd.commands.rules",
+        needs: &[],
+        params: &[Param::Free("<欄>…｜off")],
+        build: Some(|p| {
+            Ok(Command::Rules(match p.arg(0) {
+                // 光禿禿的 `:rules` ＝ 第 80 欄，作者說的「比如默认 80」。
+                None => vec![80],
+                Some("off" | "none" | "0") => Vec::new(),
+                // Warning: `Param::Free` 交回來的是**剩下的一整串**，不是一個
+                // 一個詞——`:rules 80 100 120` 到這裏是 `"80 100 120"`。
+                Some(rest) => rest
+                    .split_whitespace()
+                    .map(|word| {
+                        word.parse().map_err(|_| CommandError::InvalidArgument {
+                            command: "rules",
+                            value: word.to_string(),
+                        })
+                    })
+                    .collect::<Result<Vec<usize>, _>>()?,
+            }))
+        }),
     },
     Entry {
         name: "theme-fill",

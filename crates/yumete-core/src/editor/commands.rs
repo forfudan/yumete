@@ -806,6 +806,10 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
+            Command::Rules(at) => {
+                self.set_rules(at);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Info(which) => {
                 self.set_info_live(which);
                 Ok(CommandOutcome::Continue)

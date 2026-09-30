@@ -1016,6 +1016,25 @@ pub fn draw_detail(
         first -= 1;
         used += height(first);
     }
+    // **鍵進來了就換成鍵說了算**（2026-09-30 補）。跟着光標那一套是 2026-09-07
+    // 定的，理由沒錯——「a reading surface with a scrollbar is a surface with a
+    // mode」——可那是**鍵在正文裏**的時候：那時光標一走，這一格自己跟上。
+    //
+    // Warning: **鍵一進來，光標就不動了**，於是跟着光標那一套當場凍住，而底邊
+    // 提示行還寫着 `j k J K g G 上下`——一扇拿走了鍵卻不認那幾個鍵的面板。
+    // 「拿走鍵的那一半有義務」。
+    if editor.panel_focus() == Some(side) {
+        first = editor.panel_scroll().min(detail.rows.len().saturating_sub(1));
+    }
+    // 讀到第幾行 ／ 共幾行，寫在底邊——翻得動了纔配有這個數。
+    let mut seen = 0usize;
+    let mut upto = first;
+    while upto < detail.rows.len() && seen + height(upto) <= room {
+        seen += height(upto);
+        upto += 1;
+    }
+    crate::count_on_the_floor(frame, &shell, upto.max(first + 1), detail.rows.len());
+    let buf = frame.buffer_mut();
     for (i, (field, text)) in detail.rows.iter().enumerate().skip(first) {
         if y >= area.y + area.height {
             return;
