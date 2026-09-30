@@ -13868,9 +13868,21 @@ Warning: **解法不是拒絕存，是重讀。** 改的那幾項是「鍵 → �
 （`[keys.normal]`／`[syntax]`／`[lsp.*]`／`screenshot`，後三者在 `NOT_IN_THE_PANEL`）。
 那張一致性測試讀的是三張表的並集，所以漏一項照樣紅。
 
-Warning: **`written()` 不轉義**（`Change::Text` 直接 `format!("\"{s}\"")`），而 `declared_in` 走
-`toml_edit`（轉義過）。值裏帶 `"` 或 `\` 時兩邊對不上，`settle` 判不出「改回原值」。今天是
-死代碼（`SETTINGS` 裏一條 `Kind::Text` 都沒有），Text 行落地那天會咬。
+Warning: **2026-10-01 覆核，這一條當時就記錯了，而且真的咬了一口。** `written()` 一直是走
+`toml_edit` 的（轉義過），`Kind::Text` 也早就有五行（`indent_symbol`／`markers`／
+`theme.name`／`ime.scheme`／`language_key`）。真正壞的是**另外兩頭**：
+
+- **還原那一頭沒有反函數。** 四處拿 `trim_matches('"')` 當 `written` 的反函數
+  （`panel.rs` 三處＋`settings_page.rs` 一處），而它不是：`"a\"b"` 畫出來是 `a\"b`，
+  存回去成了 `"a\\\"b"`——反斜線每存一次多一根。現在是 `panel::unwritten`，兩頭同走
+  `toml_edit`。
+- **`settle` 比的是寫法，不是值。** 同一個值 toml 有好幾種寫法，而兩頭挑的不一樣：
+  `toml_edit::Value::from` 給 `a"b\c` 挑**字面串** `'a"b\c'`，檔裏人手寫的是**基本串**
+  `"a\"b\\c"`。於是「改回原值」永遠判不出來。現在是 `panel::same_value`，解析完比值。
+
+`LATER` 那 32 項覆核過：26 項是色位（有意不做），3 項是 `Vec<String>`（要一個新的單子控件），
+剩下 3 項（`ime.commit`／`editor.syntax`／`export.page`）是純量，各有現成的 `parse` 可抄，
+一小時能接完——**這三項是那一堆裏唯一值得做的。**
 
 ## 5.12.25 四個子代理審一遍，十七條（2026-09-24）
 
