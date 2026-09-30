@@ -11556,7 +11556,7 @@ fn squeezed(text: &str) -> String {
         terminal.set_cursor_position(Position::new(9, 9)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, &ed, &config, &no_ime(), &mut viewport, Some(&page)))
+            .draw(|frame| draw(frame, &ed, &config, no_ime(), &mut viewport, Some(&page)))
             .unwrap();
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
@@ -11669,8 +11669,25 @@ fn squeezed(text: &str) -> String {
     use yumete_ime::Scheme;
 
     /// An unavailable IME (no data), for tests that don't exercise composing.
-    fn no_ime() -> ImeSession {
-        ImeSession::new(Scheme::LINGMING, vec![])
+    ///
+    /// Warning: **一份，不是一幀一份**（2026-10-01）。名字裏的「no data」是錯的，
+    /// 而且貴：沒有數據目錄的時候 `ImeSession::new` 退到 `load_builtin`，把編進
+    /// 二進制的靈明碼表（3.9 MB ＋ 符號表 0.12 MB）整個抄一份再建一遍索引。這
+    /// 一支在 `render`／`render_wrapped`／`render_vertical`／`render_caret`／
+    /// `keep_drawing` 裏頭，於是**一幀一份**——`"j".repeat(30)` 那幾條一條就是
+    /// 三十份。`yumete-tui --lib` 的四十三秒大半花在這裏，而它量的是碼表，不是
+    /// 畫面（`what_a_frame_costs` 那一條的註釋 2026-09-26 就寫過這件事，只是當
+    /// 時只把它自己那一條挪了出去）。
+    /// Warning: **一條執行緒一份，不是全進程一份**：`ImeSession` 不是 `Sync`
+    /// （引擎裏有 `RefCell` 與 `OnceCell`），所以 `LazyLock` 放不下它。測試跑
+    /// 在八條左右的執行緒上，於是八份，不是兩百五十份。漏掉的那一份留到進程
+    /// 結束——一個測試進程的事。
+    fn no_ime() -> &'static ImeSession {
+        thread_local! {
+            static ONE: &'static ImeSession =
+                Box::leak(Box::new(ImeSession::new(Scheme::LINGMING, vec![])));
+        }
+        ONE.with(|one| *one)
     }
 
     /// **一連畫好幾幀，邊欄的捲動位置跨幀留着**——那正是 [`window_start`] 要記
@@ -11689,7 +11706,7 @@ fn squeezed(text: &str) -> String {
         for key in keys.chars() {
             editor.on_key(Key::Char(key));
             terminal
-                .draw(|frame| draw(frame, editor, config, &no_ime(), seats, None))
+                .draw(|frame| draw(frame, editor, config, no_ime(), seats, None))
                 .unwrap();
             last = Some(terminal.backend().buffer().clone());
         }
@@ -11743,7 +11760,7 @@ fn squeezed(text: &str) -> String {
 
     /// Render with an unavailable IME (the common case for non-IME tests).
     fn render(editor: &Editor, config: &Config, w: u16, h: u16) -> ratatui::buffer::Buffer {
-        render_with(editor, config, &no_ime(), w, h)
+        render_with(editor, config, no_ime(), w, h)
     }
 
     /// Render horizontally, settling the wrap width from the terminal width
@@ -11776,7 +11793,7 @@ fn squeezed(text: &str) -> String {
         // would step every coordinate in by a cell. `render_vertical_ruby`
         // covers the other side.
         editor.set_ruby(yumete_core::ruby::Dialects::NONE);
-        render_vertical_with(editor, config, &no_ime(), w, h)
+        render_vertical_with(editor, config, no_ime(), w, h)
     }
 
     /// Render, returning where the terminal's cursor was left.
@@ -11794,7 +11811,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport, None))
+            .draw(|frame| draw(frame, editor, config, no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().ok();
         (terminal.backend().buffer().clone(), at)
@@ -11816,7 +11833,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport, None))
+            .draw(|frame| draw(frame, editor, config, no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().ok();
         (terminal.backend().buffer().clone(), at)
@@ -11832,7 +11849,7 @@ fn squeezed(text: &str) -> String {
         editor.set_ruby(yumete_core::ruby::Dialects::only(
             yumete_core::ruby::Dialect::Html,
         ));
-        render_vertical_with(editor, config, &no_ime(), w, h)
+        render_vertical_with(editor, config, no_ime(), w, h)
     }
 
     /// As [`render_vertical`], with a live IME session for the panel tests.
@@ -11913,7 +11930,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.char_at_cursor(), Some('\t'), "standing on the tab");
         for w in [40u16, 60, 61, 80, 99, 120] {
-            let buffer = render_with(&editor, &Config::default(), &no_ime(), w, 8);
+            let buffer = render_with(&editor, &Config::default(), no_ime(), w, 8);
             let row = status_line(&buffer);
             assert!(
                 !row.chars().any(char::is_control),
@@ -11997,7 +12014,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('l'));
         editor.set_status("a\tb\u{1b}[31m".to_string());
         for (w, h) in [(40u16, 10u16), (80, 24), (120, 40)] {
-            let buffer = render_with(&editor, &Config::default(), &no_ime(), w, h);
+            let buffer = render_with(&editor, &Config::default(), no_ime(), w, h);
             for y in 0..h {
                 for x in 0..w {
                     let symbol = buffer[(x, y)].symbol();
@@ -12016,7 +12033,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_character_with_a_form_is_still_shown() {
         let editor = editor_with("錐\n");
-        let buffer = render_with(&editor, &Config::default(), &no_ime(), 80, 8);
+        let buffer = render_with(&editor, &Config::default(), no_ime(), 80, 8);
         let row = status_line(&buffer);
         assert!(row.contains("錐 U+9310"), "{row:?}");
     }
@@ -12041,7 +12058,7 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char(c));
         }
         editor.execute("30").unwrap();
-        let buffer = render_with(&editor, &Config::default(), &no_ime(), 44, 12);
+        let buffer = render_with(&editor, &Config::default(), no_ime(), 44, 12);
         let numbers = row_text(&buffer, 0);
         let names = row_text(&buffer, 1);
         let row = row_text(&buffer, 2);
@@ -12086,7 +12103,7 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char(c));
         }
         editor.execute("36").unwrap();
-        let buffer = render_with(&editor, &Config::default(), &no_ime(), 44, 12);
+        let buffer = render_with(&editor, &Config::default(), no_ime(), 44, 12);
         let (upper, lower) = (row_text(&buffer, 0), row_text(&buffer, 1));
         assert!(upper.contains('1') && !upper.contains("地名"), "numbers above: {upper:?}");
         assert!(lower.contains("地名"), "names under them: {lower:?}");
@@ -12129,7 +12146,7 @@ fn squeezed(text: &str) -> String {
         }
         editor.execute("5").unwrap();
         assert!(!editor.table_head_is_off_the_page(0), "its head is in view");
-        let buffer = render_with(&editor, &Config::default(), &no_ime(), 44, 12);
+        let buffer = render_with(&editor, &Config::default(), no_ime(), 44, 12);
         assert!(
             row_text(&buffer, 0).contains("前文"),
             "the page starts at the file: {:?}",
@@ -12211,7 +12228,7 @@ fn squeezed(text: &str) -> String {
             for c in level.chars() {
                 editor.on_key(Key::Char(c));
             }
-            let buffer = render_with(&editor, &Config::default(), &no_ime(), 40, 8);
+            let buffer = render_with(&editor, &Config::default(), no_ime(), 40, 8);
             row_text(&buffer, 0).trim_end().to_string()
         };
         // The numbers stand over their columns, so they are the row's whole
@@ -12237,7 +12254,7 @@ fn squeezed(text: &str) -> String {
         for c in " tf".chars() {
             editor.on_key(Key::Char(c));
         }
-        let buffer = render_with(&editor, &Config::default(), &no_ime(), 40, 6);
+        let buffer = render_with(&editor, &Config::default(), no_ime(), 40, 6);
         // Row 0 is the strip that numbers the columns; the rows follow it.
         let at: Vec<u16> = ["錐", "蜘", "裘"]
             .iter()
@@ -12264,7 +12281,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_code_table_puts_every_character_in_the_same_column() {
         let editor = editor_with("ch\t錐\nbkd\t蜘\nfvtf\t裘\n");
-        let buffer = render_with(&editor, &Config::default(), &no_ime(), 40, 6);
+        let buffer = render_with(&editor, &Config::default(), no_ime(), 40, 6);
         let at: Vec<u16> = ["錐", "蜘", "裘"]
             .iter()
             .enumerate()
@@ -12953,7 +12970,7 @@ fn squeezed(text: &str) -> String {
         let mut seats = Seats::default();
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats, None))
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None))
             .unwrap();
         let click = |x: u16| {
             let mouse = ratatui::crossterm::event::MouseEvent {
@@ -13006,7 +13023,7 @@ fn squeezed(text: &str) -> String {
         let mut seats = Seats::default();
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats, None))
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None))
             .unwrap();
 
         let click = |x: u16| {
@@ -15197,12 +15214,12 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.open_file(&path).unwrap();
 
-        let page = page_text(&render_with(&editor, &Config::default(), &no_ime(), 30, 8));
+        let page = page_text(&render_with(&editor, &Config::default(), no_ime(), 30, 8));
         assert!(page.contains("a␀b␁␡"), "{page:?}");
 
         // …and on the 縱書 page, where the same character had the same nothing.
         let config = vertical_config();
-        let down = buffer_text(&render_vertical_with(&mut editor, &config, &no_ime(), 30, 12));
+        let down = buffer_text(&render_vertical_with(&mut editor, &config, no_ime(), 30, 12));
         assert!(down.contains('␀'), "{down:?}");
 
         // The buffer is unchanged: this is a face, not an edit.
@@ -15283,7 +15300,7 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char(c));
         }
         let config = Config::default();
-        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
 
         let row = buffer.area.height - 1;
         let line: String = (0..buffer.area.width)
@@ -15402,7 +15419,7 @@ fn squeezed(text: &str) -> String {
         let mut before = 0u16;
         let mut said = Vec::new();
         for width in 20..=140u16 {
-            let buffer = render_with(&editor, &config, &no_ime(), width, 10);
+            let buffer = render_with(&editor, &config, no_ime(), width, 10);
             let Some(rule) = (0..width).find(|&x| is_rule(&buffer, x, 1)) else {
                 continue;
             };
@@ -15437,7 +15454,7 @@ fn squeezed(text: &str) -> String {
         // 80 欄窗口：2/10 ＝ 16、3/10 ＝ 24、4/10 ＝ 32、5/10 ＝ 40。裏面那一堵牆
         // 畫在最後一欄上，所以它的座標是寬度減一。
         let inner = |editor: &Editor| -> u16 {
-            let buffer = render_with(editor, &config, &no_ime(), 80, 12);
+            let buffer = render_with(editor, &config, no_ime(), 80, 12);
             (0..80u16)
                 .filter(|&x| is_rule(&buffer, x, 1))
                 .next_back()
@@ -15453,7 +15470,7 @@ fn squeezed(text: &str) -> String {
         for _ in 0..2 {
             editor.on_key(Key::Char('w'));
         }
-        let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
+        let buffer = render_with(&editor, &config, no_ime(), 80, 12);
         let rule = inner(&editor);
         let name: String = (1..rule)
             .map(|x| at(&buffer, x, 1))
@@ -16129,7 +16146,7 @@ fn squeezed(text: &str) -> String {
         // Draw once so the viewport is settled the way a click will read it.
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats, None))
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None))
             .unwrap();
         let buffer = terminal.backend().buffer().clone();
 
@@ -17236,7 +17253,7 @@ fn squeezed(text: &str) -> String {
     ) -> Option<Position> {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         terminal
-            .draw(|frame| draw(frame, editor, config, &no_ime(), viewport, None))
+            .draw(|frame| draw(frame, editor, config, no_ime(), viewport, None))
             .unwrap();
         terminal.get_cursor_position().ok()
     }
@@ -18174,7 +18191,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(40, 6)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport, None))
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().unwrap();
         // 那年冬 is six cells; the four asterisks took their columns with them.
@@ -18372,7 +18389,7 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
 
-        let buffer = render_with(&editor, &config, &no_ime(), 40, 8);
+        let buffer = render_with(&editor, &config, no_ime(), 40, 8);
         let bar = row_text(&buffer, 0);
         assert!(bar.contains("[scratch]"), "both files named: {bar:?}");
         // The one being written is dirty and says so.
@@ -18391,7 +18408,7 @@ fn squeezed(text: &str) -> String {
         // …and with one file open the bar costs nothing.
         let mut alone = Editor::new();
         alone.current_buffer_mut().insert(0, "第一篇").expect("the fixture buffer is writable");
-        let buffer = render_with(&alone, &config, &no_ime(), 40, 8);
+        let buffer = render_with(&alone, &config, no_ime(), 40, 8);
         assert_eq!(at(&buffer, 0, 0), "第", "no bar for a single file");
     }
 
@@ -18437,13 +18454,13 @@ fn squeezed(text: &str) -> String {
         config.editor.line_numbers = LineNumbers::None;
 
         // Without it, the text starts at the left edge.
-        let plain = render_with(&editor, &config, &no_ime(), 60, 12);
+        let plain = render_with(&editor, &config, no_ime(), 60, 12);
         assert_eq!(at(&plain, 0, 0), "那");
 
         // Rooted explicitly rather than at the process's directory, which the
         // other tests share.
         editor.open_sidebar_at(&dir);
-        let buffer = render_with(&editor, &config, &no_ime(), 60, 12);
+        let buffer = render_with(&editor, &config, no_ime(), 60, 12);
         let text = page_text(&buffer);
         assert!(text.contains("卷一"), "the tree: {text:?}");
         assert!(text.contains("notes.md"), "{text:?}");
@@ -18463,14 +18480,14 @@ fn squeezed(text: &str) -> String {
         // Space alone says what its second half can be — which-key, so the set
         // is discoverable without leaving the page.
         editor.on_key(Key::Char(' '));
-        let text = page_text(&render_with(&editor, &config, &no_ime(), 60, 24));
+        let text = page_text(&render_with(&editor, &config, no_ime(), 60, 24));
         assert!(text.contains("打開文件"), "{text:?}");
         assert!(text.contains("切換緩衝區"), "{text:?}");
 
         // `b` replaces it with the picker, which names where you are in a list
         // it does not have to show all of.
         editor.on_key(Key::Char('b'));
-        let buffer = render_with(&editor, &config, &no_ime(), 60, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 60, 24);
         let text = page_text(&buffer);
         assert!(text.contains("緩衝區"), "{text:?}");
         assert!(!text.contains("打開文件"), "the menu is gone: {text:?}");
@@ -18543,7 +18560,7 @@ fn squeezed(text: &str) -> String {
         // Helix caps its completion popup — with a count saying how much more
         // there is. Every command with its help at once covered the page.
         editor.on_key(Key::Char(':'));
-        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
         let text = buffer_text(&buffer);
         assert!(text.contains(":open"), "menu should list commands: absent");
         // The commands, and the aliases that name a whole line (#363) — they
@@ -18568,7 +18585,7 @@ fn squeezed(text: &str) -> String {
         for c in "ruby".chars() {
             editor.on_key(Key::Char(c));
         }
-        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
         let text = buffer_text(&buffer);
         assert!(text.contains("ruby"), "still matching");
         assert!(!text.contains("write"), "no longer matching");
@@ -18576,7 +18593,7 @@ fn squeezed(text: &str) -> String {
         // A space asks the other question — not "which command" but "what may
         // follow it" — and the menu answers with the words and their help.
         editor.on_key(Key::Char(' '));
-        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
         let text = buffer_text(&buffer);
         assert!(text.contains("basic"), "the words `:ruby` takes: {text:?}");
         assert!(!text.contains(":basic"), "a word is not a command, so no colon");
@@ -18606,8 +18623,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
 
-        let tall = render_with(&editor, &config, &no_ime(), 160, 60);
-        let short = render_with(&editor, &config, &no_ime(), 160, 24);
+        let tall = render_with(&editor, &config, no_ime(), 160, 60);
+        let short = render_with(&editor, &config, no_ime(), 160, 24);
         let (deep, wide) = menu_shape(&tall);
         assert_eq!(wide.len(), MENU_COLUMNS, "six columns at this width: {wide:?}");
         assert_eq!(
@@ -18625,7 +18642,7 @@ fn squeezed(text: &str) -> String {
         // …until two thirds of the window is less than that, which is where
         // it stops: on twelve rows, ten and a footer would leave nothing of
         // the page the menu is *for*.
-        let squat = render_with(&editor, &config, &no_ime(), 160, 12);
+        let squat = render_with(&editor, &config, no_ime(), 160, 12);
         assert!(menu_shape(&squat).0.len() < deep.len(), "two thirds of twelve");
 
         // **Typing narrows the panel without moving its rows**, which is what
@@ -18633,7 +18650,7 @@ fn squeezed(text: &str) -> String {
         for c in "view".chars() {
             editor.on_key(Key::Char(c));
         }
-        let narrowed = render_with(&editor, &config, &no_ime(), 160, 60);
+        let narrowed = render_with(&editor, &config, no_ime(), 160, 60);
         assert_eq!(
             menu_shape(&narrowed).0.len(),
             deep.len(),
@@ -18650,7 +18667,7 @@ fn squeezed(text: &str) -> String {
         let config = Config::default();
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
-        let buffer = render_with(&editor, &config, &no_ime(), 120, 12);
+        let buffer = render_with(&editor, &config, no_ime(), 120, 12);
         let (rows, _) = menu_shape(&buffer);
         assert!(!rows.is_empty(), "a menu at all");
         assert!(rows.len() <= 5, "at most two thirds, footer and all: {rows:?}");
@@ -18676,7 +18693,7 @@ fn squeezed(text: &str) -> String {
             for c in keys.chars() {
                 ed.on_key(Key::Char(c));
             }
-            let buffer = render_with(&ed, &config, &no_ime(), 40, 12);
+            let buffer = render_with(&ed, &config, no_ime(), 40, 12);
             println!("=== `{keys}` ===");
             for y in 0..8 {
                 println!("|{}|", row_text(&buffer, y).trim_end());
@@ -18696,7 +18713,7 @@ fn squeezed(text: &str) -> String {
             for c in typed.chars() {
                 ed.on_key(Key::Char(c));
             }
-            let buffer = render_with(&ed, &config, &no_ime(), 160, 60);
+            let buffer = render_with(&ed, &config, no_ime(), 160, 60);
             println!("=== `:{typed}` ===");
             for y in 0..60 {
                 let line = row_text(&buffer, y);
@@ -18756,7 +18773,7 @@ fn squeezed(text: &str) -> String {
         let mut wide = editor_with("那年冬天");
         wide.on_key(Key::Char(':'));
         for (w, h) in [(160u16, 40u16), (100, 30), (80, 24)] {
-            let buffer = render_with(&wide, &config, &no_ime(), w, h);
+            let buffer = render_with(&wide, &config, no_ime(), w, h);
             println!("=== {w}x{h} ===");
             for y in 0..h {
                 let line = row_text(&buffer, y);
@@ -18779,7 +18796,7 @@ fn squeezed(text: &str) -> String {
         // with the rest of the page standing empty beside it.
         let mut wide = editor_with("那年冬天");
         wide.on_key(Key::Char(':'));
-        let buffer = render_with(&wide, &config, &no_ime(), 140, 24);
+        let buffer = render_with(&wide, &config, no_ime(), 140, 24);
         let text = buffer_text(&buffer);
         assert!(text.contains(":open"), "{text:?}");
         assert!(text.contains(":render"), "a command from the far end of the list");
@@ -18815,7 +18832,7 @@ fn squeezed(text: &str) -> String {
         // Narrow: one column, and the count says how much did not fit.
         let mut narrow = editor_with("那年冬天");
         narrow.on_key(Key::Char(':'));
-        let buffer = render_with(&narrow, &config, &no_ime(), 30, 24);
+        let buffer = render_with(&narrow, &config, no_ime(), 30, 24);
         let text = buffer_text(&buffer);
         assert!(text.contains(":open"));
         assert!(!text.contains(":render"), "no room for the far end: {text:?}");
@@ -18828,7 +18845,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('r'));
         let config = Config::default();
 
-        let plain = render_with(&editor, &config, &no_ime(), 90, 24);
+        let plain = render_with(&editor, &config, no_ime(), 90, 24);
         // Above the footing: the status line is the page turned over and is
         // inked along its whole length whether or not anything is picked.
         let inked = |b: &ratatui::buffer::Buffer| {
@@ -18840,7 +18857,7 @@ fn squeezed(text: &str) -> String {
         assert!(!inked(&plain), "nothing picked until Tab is pressed");
 
         editor.on_key(Key::Tab);
-        let picked = render_with(&editor, &config, &no_ime(), 90, 24);
+        let picked = render_with(&editor, &config, no_ime(), 90, 24);
         assert!(inked(&picked), "Tab's pick should be inked");
     }
 
@@ -18850,7 +18867,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char(':'));
         editor.on_key(Key::Char('r'));
         let config = Config::default();
-        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
 
         // The command line is the last row; the menu is directly above it and
         // never covers it.
@@ -18882,7 +18899,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
         let config = Config::default();
-        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
         // A wide glyph covers two cells and only the first carries it.
         let text = buffer_text(&buffer).replace(' ', "");
         assert!(text.contains("命令"), "the panel says what it is: {text:?}");
@@ -18901,7 +18918,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char('/'));
         let config = Config::default();
-        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
         assert!(!buffer_text(&buffer).contains("redo"));
     }
 
@@ -18947,13 +18964,18 @@ fn squeezed(text: &str) -> String {
         // which ratatui fills through `Buffer::diff`, and `diff` skips whatever
         // a wide glyph covers. So the broken frame holds no wall to inspect:
         // the only trace is a right corner whose left corner never arrived.
-        for width in 70..110u16 {
-            let mut editor = editor_with(&prose);
-            // 出廠是 `full` since 2026-09-08; the panel under test is `t`'s.
-            editor.set_hud(Hud::Basic);
-            editor.on_key(Key::Char(' '));
+        // Warning: **一份稿子，四十個寬度**（2026-10-01）。從前每一個寬度都重建
+        // 一次編輯器，而 `editor_with` 是**一個鍵一個鍵**把稿子打進去的：24 行
+        // × 160 字 × 40 趟 ＝ 十五萬次按鍵，這一條自己就佔了 `yumete-tui --lib`
+        // 那三十九秒裏的三十四秒。稿子與光標跟寬度無關，畫一幀也不動編輯器
+        // （`render_with` 拿的是 `&Editor`），所以建一次就夠。
+        let mut editor = editor_with(&prose);
+        // 出廠是 `full` since 2026-09-08; the panel under test is `t`'s.
+        editor.set_hud(Hud::Basic);
+        editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
-            let buffer = render_with(&editor, &config, &no_ime(), width, 16);
+        for width in 70..110u16 {
+            let buffer = render_with(&editor, &config, no_ime(), width, 16);
             let mut tops = 0;
             let mut bottoms = 0;
             for y in 0..buffer.area.height {
@@ -19369,7 +19391,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Esc);
         assert!(editor.picker().is_some_and(|p| !p.typing()));
         // Panicked here before the fix, whatever the query matched.
-        let text = buffer_to_text(&render_with(&editor, &config, &no_ime(), 80, 24));
+        let text = buffer_to_text(&render_with(&editor, &config, no_ime(), 80, 24));
         assert!(text.contains("jj"), "the query is drawn: {text}");
         // **And the box keeps its shape with nothing in it** — the query
         // matches no file, and the panel is still a panel, with the reason
@@ -19435,7 +19457,7 @@ fn squeezed(text: &str) -> String {
         // two cells of what has been typed so far — and it is not a panel;
         // counting it made 「one float」 read as two.
         let rings = |editor: &Editor| {
-            let buffer = render_with(editor, &config, &no_ime(), 80, 24);
+            let buffer = render_with(editor, &config, no_ime(), 80, 24);
             (0..buffer.area.height)
                 .filter(|&y| {
                     let corner = (0..buffer.area.width)
@@ -20104,7 +20126,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(8, 5)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport, None))
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().unwrap();
         assert_eq!((at.x, at.y), (0, 1));
@@ -20168,7 +20190,7 @@ fn squeezed(text: &str) -> String {
         let mut terminal = Terminal::new(TestBackend::new(16, 4)).unwrap();
         let mut viewport = Seats::default();
         terminal
-            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport, None))
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut viewport, None))
             .unwrap();
         let at = terminal.get_cursor_position().unwrap();
         assert!(at.y < 3, "the caret stays on the page, was at row {}", at.y);
