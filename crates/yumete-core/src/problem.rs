@@ -104,23 +104,55 @@ pub fn utf16_column(line: &str, chars: usize) -> usize {
 /// Every server's complaints, by the file they are about.
 #[derive(Debug, Default)]
 pub struct Problems {
+    /// **每一個服務器各存各的**，鍵是（檔，哪一個服務器）——#425，2026-09-30。
+    ///
+    /// Warning: **`publishDiagnostics` 是「這個檔此刻的全部真相，由我說」。**
+    /// 「由我說」那一半從前沒記：一個檔只存一份，於是一種語言跑兩個服務器的時
+    /// 候，ruff 推一次抹掉 pylsp 說的，pylsp 推一次抹掉 ruff 說的，屏幕上永遠
+    /// 只剩最後推的那一個。
+    ///
+    /// Warning: **不是 [`Problem::source`]。** 那一格是服務器自己說這一條是誰發
+    /// 現的（`rustc`／`clippy`），一個服務器報得出好幾種；這裏的鍵是**哪一個服
+    /// 務器**，而「整份替換」要按它來。
+    by_source: HashMap<(PathBuf, String), Vec<Problem>>,
+    /// 併起來的那一份，畫的時候讀它。由 `by_source` 算出來，沒有人單獨改它。
     by_file: HashMap<PathBuf, Vec<Problem>>,
 }
 
 impl Problems {
-    /// Replace everything said about `path`.
+    /// Replace everything `whose` said about `path`.
     ///
-    /// Warning: **Replace, never merge.** `publishDiagnostics` is the whole truth
-    /// about a file each time it arrives; merging would leave a fixed error on
-    /// the page for as long as the session lasted.
-    pub fn set(&mut self, path: PathBuf, mut said: Vec<Problem>) {
-        said.sort_by_key(|p| (p.line, p.utf16_column));
+    /// Warning: **Replace, never merge — but only that server's share.**
+    /// `publishDiagnostics` is the whole truth about a file each time it
+    /// arrives; merging would leave a fixed error on the page for as long as
+    /// the session lasted. Warning: 而**別家說的一個字都不動**，見 `by_source`。
+    pub fn set(&mut self, path: PathBuf, whose: String, said: Vec<Problem>) {
         match said.is_empty() {
             true => {
-                self.by_file.remove(&path);
+                self.by_source.remove(&(path.clone(), whose));
             }
             false => {
-                self.by_file.insert(path, said);
+                self.by_source.insert((path.clone(), whose), said);
+            }
+        }
+        self.gather(&path);
+    }
+
+    /// 把這個檔上各家說的併成一份——畫的時候讀的就是它。
+    fn gather(&mut self, path: &Path) {
+        let mut all: Vec<Problem> = self
+            .by_source
+            .iter()
+            .filter(|((file, _), _)| file == path)
+            .flat_map(|(_, said)| said.iter().cloned())
+            .collect();
+        all.sort_by_key(|p| (p.line, p.utf16_column));
+        match all.is_empty() {
+            true => {
+                self.by_file.remove(path);
+            }
+            false => {
+                self.by_file.insert(path.to_path_buf(), all);
             }
         }
     }
@@ -152,6 +184,7 @@ impl Problems {
     /// Forget a file — what a server sends when it stops watching one, and
     /// what happens when the last server for a language goes away.
     pub fn forget(&mut self, path: &Path) {
+        self.by_source.retain(|(file, _), _| file != path);
         self.by_file.remove(path);
     }
 }
@@ -168,7 +201,7 @@ mod tests {
     fn the_loudest_complaint_wins_a_line() {
         let mut all = Problems::default();
         let file = PathBuf::from("a.rs");
-        all.set(file.clone(), vec![at(3, Severity::Warn), at(3, Severity::Error), at(9, Severity::Hint)]);
+        all.set(file.clone(), "test".into(), vec![at(3, Severity::Warn), at(3, Severity::Error), at(9, Severity::Hint)]);
         assert_eq!(all.worst_on(&file, 3), Some(Severity::Error));
         assert_eq!(all.worst_on(&file, 9), Some(Severity::Hint));
         assert_eq!(all.worst_on(&file, 4), None);
@@ -181,9 +214,9 @@ mod tests {
     fn an_empty_list_clears_the_file() {
         let mut all = Problems::default();
         let file = PathBuf::from("a.rs");
-        all.set(file.clone(), vec![at(1, Severity::Error)]);
+        all.set(file.clone(), "test".into(), vec![at(1, Severity::Error)]);
         assert_eq!(all.of(&file).len(), 1);
-        all.set(file.clone(), Vec::new());
+        all.set(file.clone(), "test".into(), Vec::new());
         assert!(all.of(&file).is_empty(), "a fixed error leaves the page");
         assert_eq!(all.files().len(), 0);
     }
@@ -219,12 +252,53 @@ mod tests {
         }
     }
 
+    /// **兩個服務器說的話不互相抹掉**（#425，2026-09-30）。
+    ///
+    /// Warning: **`publishDiagnostics` 是「這個檔此刻的全部真相，由我說」。**
+    /// 「由我說」那一半從前沒記——一個檔只存一份，於是 ruff 推一次抹掉 pylsp 說
+    /// 的，pylsp 推一次抹掉 ruff 說的，屏幕上永遠只剩最後推的那一個。這一條就
+    /// 是釘那個。
+    #[test]
+    fn two_servers_do_not_erase_each_other() {
+        let mut all = Problems::default();
+        let file = PathBuf::from("a.py");
+        all.set(file.clone(), "ruff".into(), vec![at(1, Severity::Warn)]);
+        all.set(file.clone(), "pylsp".into(), vec![at(5, Severity::Error)]);
+        assert_eq!(all.of(&file).len(), 2, "兩家的都在：{:?}", all.of(&file));
+        assert_eq!(all.of(&file)[0].line, 1);
+        assert_eq!(all.of(&file)[1].line, 5, "併起來還按行排");
+
+        // ruff 那一行改好了：它推一份空的，**只**抹掉自己說的。
+        all.set(file.clone(), "ruff".into(), Vec::new());
+        assert_eq!(all.of(&file).len(), 1, "pylsp 說的還在");
+        assert_eq!(all.of(&file)[0].line, 5);
+
+        // 同一個服務器再推一次，是整份替換，不是加上去。
+        all.set(file.clone(), "pylsp".into(), vec![at(7, Severity::Error)]);
+        assert_eq!(all.of(&file).len(), 1, "替換，不是累加");
+        assert_eq!(all.of(&file)[0].line, 7);
+
+        // 兩家都空了，這個檔就從單子上下去。
+        all.set(file.clone(), "pylsp".into(), Vec::new());
+        assert!(all.of(&file).is_empty());
+        assert_eq!(all.count(), 0, "連計數也歸零");
+
+        // 關掉一個檔，兩家存的都清乾淨——不然換個檔再開回來，舊的又冒出來。
+        all.set(file.clone(), "ruff".into(), vec![at(1, Severity::Warn)]);
+        all.set(file.clone(), "pylsp".into(), vec![at(2, Severity::Warn)]);
+        all.forget(&file);
+        assert!(all.of(&file).is_empty());
+        all.set(file.clone(), "ruff".into(), Vec::new());
+        assert!(all.of(&file).is_empty(), "忘乾淨了，不會借屍還魂");
+    }
+
     #[test]
     fn complaints_come_back_in_reading_order() {
         let mut all = Problems::default();
         let file = PathBuf::from("a.rs");
         all.set(
             file.clone(),
+            "test".into(),
             vec![
                 Problem { line: 9, utf16_column: 2, ..at(9, Severity::Warn) },
                 Problem { line: 1, utf16_column: 7, ..at(1, Severity::Warn) },

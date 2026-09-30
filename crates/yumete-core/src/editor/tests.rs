@@ -15937,7 +15937,7 @@ three
     let mut ed = Editor::new();
     ed.open_file(&path).unwrap();
     ed.set_problems(
-        path,
+        path, "test".into(),
         vec![
             said(1, Severity::Hint, "有個 count 長得像", Some("rust-analyzer")),
             said(1, Severity::Error, "找不到 conut", Some("rustc")),
@@ -15992,10 +15992,12 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
 
     ed.set_problems(
         std::path::PathBuf::from("src/zoo.rs"),
+        "test".into(),
         vec![said(8, Severity::Warn, "unused variable")],
     );
     ed.set_problems(
         std::path::PathBuf::from("src/app.rs"),
+        "test".into(),
         vec![
             said(4, Severity::Error, "cannot find value `x`"),
             said(1, Severity::Note, "…and here"),
@@ -16012,7 +16014,7 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
     assert!(lines[1].contains("cannot find value"), "{}", lines[1]);
 
     // 服務器改口說某個檔乾淨了，那個檔就整個離開單子。
-    ed.set_problems(std::path::PathBuf::from("src/app.rs"), Vec::new());
+    ed.set_problems(std::path::PathBuf::from("src/app.rs"), "test".into(), Vec::new());
     ed.execute(":diagnostics-all").unwrap();
     let listing = ed.current_buffer().text();
     assert_eq!(listing.lines().count(), 1, "只剩 zoo：{listing}");
@@ -18001,7 +18003,7 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
-    ed.set_problems(file.clone(), vec![crate::problem::Problem {
+    ed.set_problems(file.clone(), "test".into(), vec![crate::problem::Problem {
         line: 0,
         utf16_column: 3,
         severity: crate::problem::Severity::Warn,
@@ -18063,7 +18065,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
-    ed.set_problems(file.clone(), vec![crate::problem::Problem {
+    ed.set_problems(file.clone(), "test".into(), vec![crate::problem::Problem {
         line: 0,
         utf16_column: 3,
         severity: crate::problem::Severity::Warn,
@@ -18116,7 +18118,7 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
-    ed.set_problems(file.clone(), vec![crate::problem::Problem {
+    ed.set_problems(file.clone(), "test".into(), vec![crate::problem::Problem {
         line: 0,
         utf16_column: 3,
         severity: crate::problem::Severity::Warn,

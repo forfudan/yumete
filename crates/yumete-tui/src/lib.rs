@@ -13490,7 +13490,7 @@ fn squeezed(text: &str) -> String {
     fn a_servers_complaint_takes_the_leftmost_column_the_way_helix_orders_them() {
         use yumete_core::problem::Severity;
         let (mut editor, path) = editor_on_disk("a.rs", "一\n二\n三\n四\n");
-        editor.set_problems(path, vec![said(1, Severity::Error), said(2, Severity::Warn)]);
+        editor.set_problems(path, "test".into(), vec![said(1, Severity::Error), said(2, Severity::Warn)]);
         let config = Config::default();
         let buffer = render(&editor, &config, 20, 8);
 
@@ -13580,7 +13580,7 @@ fn squeezed(text: &str) -> String {
     fn the_complaint_does_not_float_while_you_are_typing() {
         use yumete_core::problem::Severity;
         let (mut editor, path) = editor_on_disk("c.rs", "一\n二\n三\n四\n");
-        editor.set_problems(path, vec![said(1, Severity::Error)]);
+        editor.set_problems(path, "test".into(), vec![said(1, Severity::Error)]);
         editor.execute(":2").unwrap();
         let config = Config::default();
 
@@ -13604,7 +13604,7 @@ fn squeezed(text: &str) -> String {
     fn a_complaint_and_a_change_sit_in_their_own_cells() {
         use yumete_core::problem::Severity;
         let (mut editor, path) = editor_on_disk("b.rs", "一\n二\n三\n四\n");
-        editor.set_problems(path, vec![said(1, Severity::Error)]);
+        editor.set_problems(path, "test".into(), vec![said(1, Severity::Error)]);
         with_diff(&mut editor, "@@ -1,0 +2,1 @@\n");
         let config = Config::default();
         let buffer = render(&editor, &config, 20, 8);
