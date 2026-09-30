@@ -3521,12 +3521,10 @@ fn the_keys_a_keyboard_has_are_not_swallowed() {
     let mut ed = typed(&"一行\n".repeat(200));
     ed.set_page(20, 80);
     ed.execute("1").unwrap();
-    // Warning: **`PageUp`／`PageDown` 2026-09-30 改歸「換一種信息」了**（#426），
-    // 所以正文翻頁在 Normal 模式下只剩 `C-f`／`C-b`。
-    ed.on_key(Key::Ctrl('f'));
+    ed.on_key(Key::PageDown);
     assert!(ed.cursor_line() > 10, "a page down: {}", ed.cursor_line());
     let down = ed.cursor_line();
-    ed.on_key(Key::Ctrl('b'));
+    ed.on_key(Key::PageUp);
     assert!(ed.cursor_line() < down, "and a page back");
 
     // …and in Insert, without leaving it.
@@ -17709,13 +17707,10 @@ fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **浮着的那一則翻得動**——`C-u`／`C-d`（2026-09-29 定，同 helix 的
-/// `ui/popup.rs`）。
-///
-/// Warning: **`PageUp`／`PageDown` 2026-09-30 改掉了**（#426）：那兩個鍵歸「換一
-/// 種信息」，翻行只剩 `C-u`／`C-d`。
+/// **浮着的那一則翻得動**——`PageUp`／`PageDown`／`C-u`／`C-d`（2026-09-29 定，
+/// 同 helix 的 `ui/popup.rs:289-297`）。
 #[test]
-fn the_floating_docs_take_the_half_page_keys_and_nothing_else() {
+fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
     let dir = std::env::temp_dir().join("yumete-docs-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
@@ -17729,10 +17724,12 @@ fn the_floating_docs_take_the_half_page_keys_and_nothing_else() {
 
     ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.info_scroll(), 4, "半頁");
-    ed.on_key(Key::Ctrl('d'));
-    assert_eq!(ed.info_scroll(), 8);
+    ed.on_key(Key::PageDown);
+    assert_eq!(ed.info_scroll(), 12, "一頁");
     ed.on_key(Key::Ctrl('u'));
-    assert_eq!(ed.info_scroll(), 4);
+    assert_eq!(ed.info_scroll(), 8);
+    ed.on_key(Key::PageUp);
+    assert_eq!(ed.info_scroll(), 0, "翻回頂上");
     // Warning: **光標一個字都沒動**——那兩個鍵歸浮窗，正文沒看見它們。
     assert_eq!(ed.cursor_line(), 0, "翻的是浮窗，不是稿子");
 
@@ -17827,7 +17824,6 @@ fn the_width_key_works_in_the_info_panel() {
     assert_eq!(title, say!("label.panel.docs"), "標題寫此刻擺的那一種");
     let said: Vec<&str> = keys.iter().map(|(k, _)| k.as_ref()).collect();
     assert!(said.contains(&"w"), "提示行要說 w：{said:?}");
-    assert!(said.contains(&"PgUp PgDn"), "也要說換一種：{said:?}");
 
     let was: Width = ed.width_of(side);
     ed.on_key(Key::Char('w'));
@@ -18112,92 +18108,59 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`PageUp`／`PageDown` 在五種之間翻頁，光標留在正文**（#426，2026-09-30 定）。
+/// **四個鍵翻的是那一則的行，五種都收，光標留在正文**（#426，2026-09-30 定）。
 ///
 /// 原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用 page up / page down
 /// 来对这五类进行翻页了」「这样，光标就在编辑区，也可以对五类信息进行翻页。」
+///
+/// Warning: **從前只有文檔收這四個鍵**，於是散文裏默認浮的百科被切在「…」上卻翻
+/// 不動，`C-u`／`C-d` 去翻了正文——等於沒有出路。Warning: **也不是「換一種」**：五種
+/// 各自早有自己的鍵（`空格 d`／`空格 k`／`空格 i`／`t i`），再造一個輪換鍵是白花
+/// 那一對鍵，而 helix 拿它們滾浮窗（`ui/popup.rs:289-297`）。
 #[test]
-fn the_paging_keys_walk_the_five_kinds_from_the_text() {
-    use crate::sidebar::Info;
+fn the_four_keys_scroll_whichever_kind_is_showing() {
     let dir = std::env::temp_dir().join("yumete-info-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
-    std::fs::write(&file, "fn one() {}\nfn two() {}\nfn three() {}\n").unwrap();
+    std::fs::write(&file, "fn one() {}\nfn two() {}\n").unwrap();
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     press(&mut ed, "gg");
-    ed.set_problems(file.clone(), vec![crate::problem::Problem {
-        line: 0,
-        utf16_column: 3,
-        severity: crate::problem::Severity::Warn,
-        message: "說不通".into(),
-        source: None,
-    }]);
-    // 文檔那一種也有東西，於是這一格上有兩種翻得動。
     press(&mut ed, " k");
-    ed.show_hover("fn one()".into());
-    assert_eq!(ed.info_now(), Some(Info::Docs));
+    ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect());
+    assert_eq!(ed.info_scroll(), 0, "從頭讀");
 
-    let was = ed.cursor_line();
+    let line = ed.cursor_line();
     ed.on_key(Key::PageDown);
-    assert_eq!(ed.info_now(), Some(Info::Problems), "翻到了診斷");
-    assert_eq!(ed.cursor_line(), was, "Warning: 光標一個字都沒動——這是這兩個鍵的全部理由");
-
+    assert_eq!(ed.info_scroll(), 8, "一頁");
+    assert_eq!(ed.cursor_line(), line, "Warning: 光標一個字都沒動");
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(ed.info_scroll(), 12, "半頁");
     ed.on_key(Key::PageUp);
-    assert_eq!(ed.info_now(), Some(Info::Docs), "翻回文檔");
-    assert_eq!(ed.cursor_line(), was);
+    assert_eq!(ed.info_scroll(), 4);
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(ed.info_scroll(), 0, "翻回頂上，不翻進負數");
+    assert_eq!(ed.cursor_line(), line, "全程沒挪過光標");
 
-    // Warning: **「只有這一種」和「一種都沒有」要分開說。** 兩句話都不許偷偷
-    // 去翻正文——一個鍵有時翻這個有時翻那個是最難記的那一種。
-    let mut bare = typed("那年冬天。\n");
-    press(&mut bare, "gg");
-    let line = bare.cursor_line();
-    bare.on_key(Key::PageDown);
-    assert_eq!(bare.status(), say!("info.nothing-here"), "一種都沒有");
-    assert_eq!(bare.cursor_line(), line, "沒去翻正文");
-
-    // 只擺着一種：說「只有這一種」，不說「什麽都沒有」——後者當場看得出是假的。
-    let mut one = Editor::new();
-    one.open_file(&file).unwrap();
-    press(&mut one, "gg");
-    press(&mut one, " k");
-    one.show_hover("fn one()".into());
-    assert_eq!(one.info_now(), Some(Info::Docs));
-    let line = one.cursor_line();
-    one.on_key(Key::PageDown);
-    assert_eq!(one.status(), say!("info.only-one"));
-    assert_eq!(one.info_now(), Some(Info::Docs), "還擺着它");
-    assert_eq!(one.cursor_line(), line, "也沒去翻正文");
-
-    // 往回翻和往下翻走的是同一個環，反着走。
-    let mut back = Editor::new();
-    back.open_file(&file).unwrap();
-    press(&mut back, "gg");
-    back.set_problems(file.clone(), vec![crate::problem::Problem {
-        line: 0,
-        utf16_column: 3,
-        severity: crate::problem::Severity::Warn,
-        message: "說不通".into(),
-        source: None,
-    }]);
-    press(&mut back, " k");
-    back.show_hover("fn one()".into());
-    back.on_key(Key::PageUp);
-    assert_eq!(back.info_now(), Some(Info::Problems), "往回也走得到");
-    back.on_key(Key::PageUp);
-    assert_eq!(back.info_now(), Some(Info::Docs), "再往回轉回來");
+    // Warning: **浮窗沒了就讓路**（同 helix）：那四個鍵照舊翻正文。
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.hover_afloat(), None, "挪了光標浮窗就沒了");
+    let mut plain = typed(&"一行\n".repeat(200));
+    plain.set_page(20, 80);
+    plain.execute("1").unwrap();
+    plain.on_key(Key::PageDown);
+    assert!(plain.cursor_line() > 10, "沒浮窗就翻正文：{}", plain.cursor_line());
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **格子裏 `PageUp`／`PageDown` 也是「換一種信息」**（#426，2026-09-30）。
+/// **格子裏 `PageUp`／`PageDown` 照舊翻格**（2026-09-30 量出來的）。
 ///
-/// Warning: **一度想把格子讓出去，結果是那兩個鍵在格子裏什麽都不做。**
+/// Warning: **一度把它們收去做「換一種信息」，結果是它們在格子裏什麽都不做。**
 /// `table_motion` 只在粒度是「格」的時候纔接它們，而 `-t` 出廠的粒度是「字」
-/// ——於是它既沒翻格，又因為讓了路而沒翻信息。一個按下去什麽都不發生的鍵，比
-/// 一個意思明確的鍵差得遠。翻格翻頁照舊有 `C-f`／`C-b`。
+/// ——於是它既沒翻格，又因為讓了路而沒翻別的。#426 把那個輪換整個撤了。
 #[test]
-fn the_grid_hands_the_paging_keys_to_the_info() {
+fn the_grid_keeps_the_paging_keys() {
     let dir = std::env::temp_dir().join("yumete-grid-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("g.csv");
@@ -18210,20 +18173,13 @@ fn the_grid_hands_the_paging_keys_to_the_info() {
     ed.execute(":table").unwrap();
     press(&mut ed, "gg");
     assert!(ed.table_here(), "讀成格子了");
-    // 格子裏即時的那一種是數據——它跟着光標走。
-    assert_eq!(ed.info_live(), crate::sidebar::Info::Data);
 
-    // `C-f`／`C-b` 照舊翻頁，一格都沒少。
     let was = ed.cursor_line();
-    ed.on_key(Key::Ctrl('f'));
-    assert!(ed.cursor_line() > was, "C-f 照舊翻頁：{} → {}", was, ed.cursor_line());
-    press(&mut ed, "gg");
-
-    // 翻頁鍵換的是信息，光標不動。
-    let line = ed.cursor_line();
     ed.on_key(Key::PageDown);
-    assert_eq!(ed.cursor_line(), line, "Warning: 光標不許動");
-    assert_ne!(ed.status(), String::new(), "Warning: 要有回音，不許一聲不吭");
+    assert!(ed.cursor_line() > was, "翻得動：{} → {}", was, ed.cursor_line());
+    let down = ed.cursor_line();
+    ed.on_key(Key::PageUp);
+    assert!(ed.cursor_line() < down, "往回也翻得動");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

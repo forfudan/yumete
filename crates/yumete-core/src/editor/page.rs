@@ -1075,32 +1075,40 @@ impl Editor {
     /// 鍵**：進了邊欄的那一份走邊欄自己的 `jk`，而邊欄是走得進去的
     /// （`空格 4`）——浮窗不是。
     ///
-    /// Warning: **五種裏畫成散文的那三種都收**（2026-09-30 審出來的）。從前只有
-    /// 文檔收，而散文稿子裏默認浮的是**百科**——一條長詞條被切在「…」上，`C-u`／
-    /// `C-d` 卻去翻了正文，等於沒有出路。字典與數據畫成兩欄的字段（`Body::Keys`），
-    /// 那一種本來就不按行翻，它們的出路是底邊那一行寫的「進邊欄」。
+    /// Warning: **五種都收**（#426，作者的原話：「也可以对五类信息进行翻页」）。
+    /// 從前只有文檔收，而散文稿子裏默認浮的是**百科**——一條長詞條被切在「…」
+    /// 上，`C-u`／`C-d` 卻去翻了正文，等於沒有出路。
+    ///
+    /// Warning: **那一格開着的時候翻的是那一格**。五種共用一個容器，那就該共用
+    /// 一套翻頁鍵——而「光標就在編輯區」正是這四個鍵的全部價值：讀完一條長詞
+    /// 條不必先把光標挪進邊欄。
     pub(super) fn scroll_the_float(&mut self, by: isize) -> bool {
-        let Some(lines) = self.how_tall_is_the_float() else { return false };
+        let Some(lines) = self.how_tall_the_info_is() else { return false };
         // 最多翻到最後一行，不翻到空白裏去。
         let last = lines.saturating_sub(1);
-        self.info_scroll = self.info_scroll.saturating_add_signed(by).min(last);
+        match self.info_in_the_sidebar() {
+            Some(_) => self.panel_scroll = self.panel_scroll.saturating_add_signed(by).min(last),
+            None => self.info_scroll = self.info_scroll.saturating_add_signed(by).min(last),
+        }
         true
     }
 
-    /// 浮着的那一則有幾行——`None` ＝ 沒浮，或者浮的那一種不按行翻。
+    /// 此刻擺着的那一則有幾行——`None` ＝ 什麽都沒擺。
     ///
     /// Warning: **數的是折行**前**的行**，和畫的那一頭數出來的不是同一個數。夾不
     /// 準沒關係：畫的那一趟自己再夾一次（`panel.rs` 的 `count - cap`），這裏只要
     /// 別讓它一路翻進空白裏。
-    fn how_tall_is_the_float(&self) -> Option<usize> {
-        match self.info_afloat()? {
-            crate::sidebar::Info::Docs => Some(self.hover_here()?.lines().count()),
-            crate::sidebar::Info::Wiki => {
-                Some(self.wiki_here()?.as_prose().lines().count())
-            }
-            crate::sidebar::Info::Problems => Some(self.problem_here()?.1.len()),
-            // 兩欄的字段，不按行翻。
-            crate::sidebar::Info::Dictionary | crate::sidebar::Info::Data => None,
+    fn how_tall_the_info_is(&self) -> Option<usize> {
+        use crate::sidebar::Info;
+        match self.info_now()? {
+            Info::Docs => Some(self.hover_here()?.lines().count()),
+            Info::Wiki => Some(self.wiki_here()?.as_prose().lines().count()),
+            Info::Problems => Some(self.problem_here()?.1.len()),
+            // Warning: **成對字段的那兩種不收這四個鍵**（2026-09-30 量出來的）。
+            // 一是它們畫成兩欄（`Body::Keys`），本來就不按行翻；二是數據**一直
+            // 浮着**——讀成格子的時候它跟着光標，於是收了鍵就等於把格子的翻頁
+            // 永遠吃掉。它們讀不完的出路是底邊那一行寫的「進邊欄」。
+            Info::Dictionary | Info::Data => None,
         }
     }
 

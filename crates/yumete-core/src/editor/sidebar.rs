@@ -416,12 +416,10 @@ impl Editor {
         match key {
             Key::Char('j') | Key::Down => self.panel_scroll = step(self.panel_scroll, 1, true),
             Key::Char('k') | Key::Up => self.panel_scroll = step(self.panel_scroll, 1, false),
-            // Warning: **`PageUp`／`PageDown` 不在這裏**（#426）：在信息這一格
-            // 上它們是「換一種」，`on_key` 開頭就收走了。半頁是 `J`／`K`。
-            Key::Char('J') => {
+            Key::Char('J') | Key::PageDown => {
                 self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, true)
             }
-            Key::Char('K') => {
+            Key::Char('K') | Key::PageUp => {
                 self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false)
             }
             Key::Char('g') | Key::Home => self.panel_scroll = 0,
@@ -741,9 +739,8 @@ impl Editor {
         let moved = match key {
             Key::Char('j') | Key::Down => at.saturating_add(1),
             Key::Char('k') | Key::Up => at.saturating_sub(1),
-            // 同 `on_info_key`：那兩個鍵在這一格上是「換一種」。
-            Key::Char('J') => at.saturating_add(page),
-            Key::Char('K') => at.saturating_sub(page),
+            Key::Char('J') | Key::PageDown => at.saturating_add(page),
+            Key::Char('K') | Key::PageUp => at.saturating_sub(page),
             Key::Char('g') | Key::Home => 0,
             // Warning: **`G` 不在這裏算底在哪**——這一頭數不出來（見
             // [`Editor::wiki_scroll`]）。存一個到不了的數，畫的那一趟走到底、

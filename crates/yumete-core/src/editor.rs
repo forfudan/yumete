@@ -1916,11 +1916,9 @@ pub struct Editor {
     docs_asked_at: Option<usize>,
     /// 光標最後一次動是什麽時候，跟着走的那一問等它停穩（`DOCS_SETTLE`）。
     docs_moved: Option<std::time::Instant>,
-    /// **浮着的那一則從第幾行畫起**（2026-09-29）——`C-u`／`C-d` 翻它，同
-    /// helix（`ui/popup.rs`：那幾個鍵滾浮窗，別的鍵一按就關）。
-    ///
-    /// Warning: **`PageUp`／`PageDown` 不在這裏**（2026-09-30 改）：那兩個鍵歸
-    /// 「換一種信息」（[`Editor::page_the_info`]），翻行只剩 `C-u`／`C-d`。
+    /// **浮着的那一則從第幾行畫起**（2026-09-29）——`PageUp`／`PageDown`／
+    /// `C-u`／`C-d` 翻它，同 helix（`ui/popup.rs:289-297`：那四個鍵滾浮窗，
+    /// 別的鍵一按就關）。#426 起五種裏畫成散文的三種都收這四個鍵。
     info_scroll: usize,
     /// **`:diagnostics-all` 頂上那一行**：哪個語言服務器、在哪、什麽狀態。
     ///
