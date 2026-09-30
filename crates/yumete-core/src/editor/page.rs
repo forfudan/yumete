@@ -785,8 +785,18 @@ impl Editor {
     /// Warning: **整份換掉，不是添上去**——理由寫在 [`crate::problem::Problems::set`]。
     /// 行與列進來的時候已經是**字符**，不是 LSP 的 UTF-16：換算是前端在收報那
     /// 一刻做的，這道門裏面不該再見到另一套坐標。
-    pub fn set_problems(&mut self, path: std::path::PathBuf, said: Vec<crate::problem::Problem>) {
-        self.problems.set(path, said);
+    /// **一個服務器說的那一份**——`whose` 是哪一個服務器（#425，2026-09-30）。
+    ///
+    /// Warning: **一種語言跑得了好幾個服務器**（ruff 挑毛病、pylsp 講文檔），而
+    /// 每一次 `publishDiagnostics` 只是**那一個**說的全部真相。不帶 `whose` 的
+    /// 時候後來的那一個會把前一個說的整片抹掉。
+    pub fn set_problems(
+        &mut self,
+        path: std::path::PathBuf,
+        whose: String,
+        said: Vec<crate::problem::Problem>,
+    ) {
+        self.problems.set(path, whose, said);
     }
 
     /// 第 `line` 行（0 起算）上最響的那一句話，給行號旁邊那一格。

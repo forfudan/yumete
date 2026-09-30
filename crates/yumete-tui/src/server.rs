@@ -130,8 +130,13 @@ struct Server {
 
 /// Every server, and the one rule about when to talk to them.
 pub struct Servers {
-    /// Language name → the server answering for it.
+    /// **命令名 → 那個服務器**（#425，2026-09-30 從「語言名 →」改的）。
+    ///
+    /// 一種語言跑得了好幾個：Python 常見的是 `ruff` 挑毛病、`pylsp` 講文檔。
+    /// 哪幾個歸哪一種語言記在 [`Servers::serving`]。
     running: HashMap<String, Server>,
+    /// **一種語言此刻跑着哪幾個**，按配置裏寫的次序（#425）。
+    serving: HashMap<String, Vec<String>>,
     /// Languages that could not be started, so the editor says so once.
     failed: HashSet<String>,
     /// **哪幾個語言已經說過「這臺機器上沒有」了**——一個語言只說一次。
@@ -187,6 +192,7 @@ impl Default for Servers {
     fn default() -> Servers {
         Servers {
             running: HashMap::new(),
+            serving: HashMap::new(),
             failed: HashSet::new(),
             told_about: HashSet::new(),
             found: HashMap::new(),
@@ -218,11 +224,42 @@ impl Servers {
         language: &str,
         from: Option<&Path>,
     ) -> Option<&'a yumete_config::Server> {
+        Self::all_named(config, language, from).into_iter().next()
+    }
+
+    /// **這臺機器上，這種語言配了而且找得到的**那幾個，按配置的次序（#425）。
+    ///
+    /// Warning: **不是「頭一個」。** 一種語言跑得了好幾個，各答各的一半：
+    /// Python 常見的是 `ruff` 挑毛病、`pylsp` 講文檔。從前這裏 `.find()` 只取
+    /// 第一個，於是配了兩個也只起得來一個——作者 2026-09-29 報的就是這件事。
+    fn all_named<'a>(
+        config: &'a yumete_config::Config,
+        language: &str,
+        from: Option<&Path>,
+    ) -> Vec<&'a yumete_config::Server> {
         config
             .lsp
-            .get(language)?
-            .iter()
-            .find(|s| !s.command.is_empty() && on_the_path(&s.command, from))
+            .get(language)
+            .map(|all| {
+                all.iter()
+                    .filter(|s| !s.command.is_empty() && on_the_path(&s.command, from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// 這種語言此刻跑着的那幾個命令名，按配置的次序。
+    fn serving(&self, language: &str) -> Vec<String> {
+        self.serving.get(language).cloned().unwrap_or_default()
+    }
+
+    /// 這種語言的頭一個服務器。
+    ///
+    /// Warning: **問話這幾支眼下只問它**（#425 第一步）。診斷是服務器自己推過來
+    /// 的，每一個都推，所以那一半已經齊了；而問話要等答案，一個問題發給兩個服
+    /// 務器就有兩個答案要對——那一半分開做，見 §5.43。
+    fn first_for(&self, language: &str) -> Option<String> {
+        self.serving.get(language)?.first().cloned()
     }
 
     /// **從哪個目錄開始往上爬**——被編輯的那個檔所在的地方。
@@ -254,7 +291,7 @@ impl Servers {
     /// is. Called once a turn, after the keys have been handled.
     pub fn follow(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
         let Some(language) = Self::language_of(editor) else { return };
-        let Some(named) = Self::named(config, language, Some(&Self::look_from(editor))) else {
+        let Some(_named) = Self::named(config, language, Some(&Self::look_from(editor))) else {
             // **打開的那一刻就說，別等人問**（2026-09-29 報的：「为什么不是在打开
             // 文件的时候就检查 LSP 并且显示消息」）。從前這裏是默默 `return`，於是
             // 讀者打開 `.py` 什麽都不知道，一直到按 `空格 k` 纔撞上。
@@ -274,56 +311,81 @@ impl Servers {
             // An unsaved buffer has no URI, and a server answers about files.
             return;
         };
-        if !self.running.contains_key(language) && !self.failed.contains(language) {
+        // **配了幾個就起幾個**（#425）：一種語言跑得了好幾個，各答各的一半。
+        if !self.failed.contains(language) {
             let here = Self::look_from(editor);
-            let Some(at) = found_here(&named.command, Some(&here)) else { return };
-            // **用的是項目裏那一個就說一句**（2026-09-29 作者定）。Warning: 不寫目錄
-            // ——狀態欄那一行很貴，完整路徑在 `:diagnostics-all` 頂上那一行。
-            let mine = !std::env::var_os("PATH")
-                .map(|path| {
-                    std::env::split_paths(&path).any(|dir| dir.join(&named.command) == at)
-                })
-                .unwrap_or(false);
-            match start(named, editor, &at) {
-                Ok(server) => {
-                    self.running.insert(language.to_string(), server);
-                    // `:diagnostics-all` 頂上那一行：名字　路徑　狀態。路徑相對項目根，
-                    // 同那張單子上檔名的規矩——絕對路徑九十個字符，讀不了。
-                    let root = editor.project_root();
-                    let short = at.strip_prefix(&root).unwrap_or(&at);
-                    editor.note_the_server(Some(say!(
-                        "lsp.where-it-is",
-                        named.command,
-                        short.display(),
-                        say!("lsp.ready")
-                    )));
-                    self.found.insert(language.to_string(), at);
-                    if mine {
-                        self.says = Some(say!("lsp.from-the-project", named.command));
-                    }
+            for named in Self::all_named(config, language, Some(&here)) {
+                if self.running.contains_key(&named.command) {
+                    continue;
                 }
-                Err(why) => {
-                    // Warning: **Said once, and never again.** A missing
-                    // `rust-analyzer` is a fact about the machine, not an
-                    // event, and repeating it every keystroke would bury every
-                    // other thing the status line has to say.
-                    self.failed.insert(language.to_string());
-                    self.says = Some(say!("lsp.cannot-start", named.command, why));
+                let Some(at) = found_here(&named.command, Some(&here)) else { continue };
+                // **用的是項目裏那一個就說一句**（2026-09-29 作者定）。Warning: 不
+                // 寫目錄——狀態欄那一行很貴，完整路徑在 `:diagnostics-all` 頂上
+                // 那一行。
+                let mine = !std::env::var_os("PATH")
+                    .map(|path| {
+                        std::env::split_paths(&path).any(|dir| dir.join(&named.command) == at)
+                    })
+                    .unwrap_or(false);
+                match start(named, editor, &at) {
+                    Ok(server) => {
+                        self.running.insert(named.command.clone(), server);
+                        self.serving
+                            .entry(language.to_string())
+                            .or_default()
+                            .push(named.command.clone());
+                        // `:diagnostics-all` 頂上那一行：名字　路徑　狀態。路徑
+                        // 相對項目根，同那張單子上檔名的規矩——絕對路徑九十個
+                        // 字符，讀不了。
+                        let root = editor.project_root();
+                        let short = at.strip_prefix(&root).unwrap_or(&at);
+                        editor.note_the_server(Some(say!(
+                            "lsp.where-it-is",
+                            named.command,
+                            short.display(),
+                            say!("lsp.ready")
+                        )));
+                        self.found.insert(named.command.clone(), at);
+                        if mine {
+                            self.says = Some(say!("lsp.from-the-project", named.command));
+                        }
+                    }
+                    Err(why) => {
+                        // Warning: **Said once, and never again.** A missing
+                        // `rust-analyzer` is a fact about the machine, not an
+                        // event, and repeating it every keystroke would bury
+                        // every other thing the status line has to say.
+                        //
+                        // Warning: **記在語言上，所以一個起不來就不再試這一種
+                        // 語言的任何一個**——那和從前一樣，而多服務器下它偏保
+                        // 守：寧可少起一個，也不要每一幀重試一個起不來的。
+                        self.failed.insert(language.to_string());
+                        self.says = Some(say!("lsp.cannot-start", named.command, why));
+                    }
                 }
             }
         }
-        let Some(server) = self.running.get_mut(language) else { return };
+        // **正文發給這種語言的每一個服務器**（#425）：它們各自守着自己那份
+        // 副本，少發一個，那一個就按舊正文去數行列。
         let revision = editor.current_buffer().revision();
         let known = self.sent.get(&path).copied();
         let saves = editor.current_buffer().saves();
+        let mine = self.serving(language);
+        if mine.is_empty() {
+            return;
+        }
         if known == Some(revision) {
             // The text is as told. **A save still has to be told**, and told
             // *after* the text it saved — so it waits here, one turn behind
             // the `didChange` above, rather than racing it.
             if self.saved.get(&path).copied() != Some(saves) {
                 self.saved.insert(path.clone(), saves);
-                server.say(lsp::did_save(&path));
-                server.waiting = true;
+                for name in &mine {
+                    if let Some(server) = self.running.get_mut(name) {
+                        server.say(lsp::did_save(&path));
+                        server.waiting = true;
+                    }
+                }
             }
             return;
         }
@@ -344,21 +406,24 @@ impl Servers {
             }
         }
         let text = editor.current_buffer().rope().to_string();
-        server.version += 1;
-        let message = match server.open.contains(&path) {
-            false => {
-                server.open.insert(path.clone());
-                // Opened, not saved by us — so the first save the reader makes
-                // is the first one that counts.
-                self.saved.insert(path.clone(), saves);
-                lsp::did_open(&path, language, server.version, &text)
-            }
-            true => lsp::did_change(&path, server.version, &text),
-        };
-        server.say(message);
-        server.waiting = true;
-        // 第一次告訴它這個檔，就開始等；答過一次之後不再說（見 `waiting_on`）。
+        for name in &mine {
+            let Some(server) = self.running.get_mut(name) else { continue };
+            server.version += 1;
+            let message = match server.open.contains(&path) {
+                false => {
+                    server.open.insert(path.clone());
+                    lsp::did_open(&path, language, server.version, &text)
+                }
+                true => lsp::did_change(&path, server.version, &text),
+            };
+            server.say(message);
+            server.waiting = true;
+        }
+        // 第一次告訴它們這個檔，就開始等；答過一次之後不再說（見 `waiting_on`）。
         if known.is_none() {
+            // Opened, not saved by us — so the first save the reader makes is
+            // the first one that counts.
+            self.saved.insert(path.clone(), saves);
             self.waiting_on.insert(path.clone());
             // **等着的時候轉那八個點，不說那句話**（2026-09-30 作者定）。原話：
             // 「这个动态八个点显示正在加载的符号很好用……我们也可以用这个，而
@@ -399,9 +464,12 @@ impl Servers {
             .collect();
         for path in gone {
             if let Some(language) = self.whose.remove(&path) {
-                if let Some(server) = self.running.get_mut(language) {
-                    server.open.remove(&path);
-                    server.say(lsp::did_close(&path));
+                // 開的時候告訴了每一個，關的時候也得告訴每一個（#425）。
+                for name in self.serving(language) {
+                    if let Some(server) = self.running.get_mut(&name) {
+                        server.open.remove(&path);
+                        server.say(lsp::did_close(&path));
+                    }
                 }
             }
             editor.forget_problems(&path);
@@ -424,7 +492,7 @@ impl Servers {
     pub fn ask(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
         let _ = config;
         let Some(language) = Self::language_of(editor) else { return };
-        if !self.running.contains_key(language) {
+        if self.first_for(language).is_none() {
             // 服務器没起來，就照實說——而不是讓那句問話一直掛着。
             if editor.take_definition_query().is_some() {
                 editor.no_definition();
@@ -440,7 +508,8 @@ impl Servers {
             return;
         }
         let Some((path, line, column)) = editor.take_definition_query() else { return };
-        let Some(server) = self.running.get_mut(language) else { return };
+        let Some(name) = self.first_for(language) else { return };
+        let Some(server) = self.running.get_mut(&name) else { return };
         let id = server.next_ask;
         server.next_ask += 1;
         server.asked_where = Some(id);
@@ -488,9 +557,12 @@ impl Servers {
             return Some(say!("lsp.start-failed"));
         }
         // 五、正在起，或者剛握上手還沒說 ready。
-        match self.running.get(language) {
-            Some(server) if server.ready => None,
-            _ => Some(say!("lsp.starting")),
+        // 起了幾個就看幾個：只要有一個 ready 就問得出去。
+        match self.serving(language).iter().any(|name| {
+            self.running.get(name).is_some_and(|server| server.ready)
+        }) {
+            true => None,
+            false => Some(say!("lsp.starting")),
         }
     }
 
@@ -525,7 +597,8 @@ impl Servers {
         // **跟着光標的那一問**（2026-09-29）：`空格 K` 開着的時候編輯器自己發，
         // 走的是同一條路——它只在光標停穩了三百毫秒之後纔交得出一個問題。
         if let Some(query) = editor.docs_owed() {
-            let Some(server) = self.running.get_mut(language) else { return };
+            let Some(name) = self.first_for(language) else { return };
+        let Some(server) = self.running.get_mut(&name) else { return };
             let id = server.next_ask;
             server.next_ask += 1;
             server.asked_what = Some(id);
@@ -533,7 +606,8 @@ impl Servers {
             return;
         }
         let Some((path, line, column)) = editor.take_hover_query() else { return };
-        let Some(server) = self.running.get_mut(language) else { return };
+        let Some(name) = self.first_for(language) else { return };
+        let Some(server) = self.running.get_mut(&name) else { return };
         let id = server.next_ask;
         server.next_ask += 1;
         server.asked_what = Some(id);
@@ -554,7 +628,7 @@ impl Servers {
     pub fn ask_next(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
         let _ = config;
         let Some(language) = Self::language_of(editor) else { return };
-        if !self.running.contains_key(language) {
+        if self.first_for(language).is_none() {
             if editor.take_completion_query().is_some() {
                 editor.no_offers();
             }
@@ -564,7 +638,8 @@ impl Servers {
             return;
         }
         let Some((path, line, column)) = editor.take_completion_query() else { return };
-        let Some(server) = self.running.get_mut(language) else { return };
+        let Some(name) = self.first_for(language) else { return };
+        let Some(server) = self.running.get_mut(&name) else { return };
         let id = server.next_ask;
         server.next_ask += 1;
         server.asked_next = Some(id);
@@ -587,7 +662,7 @@ impl Servers {
         // 借出來給下面那個迴圈用——它同時要借 `self.running`。
         let mut answered = std::mem::take(&mut self.waiting_on);
         let mut said_so = false;
-        for (language, server) in self.running.iter_mut() {
+        for (whose, server) in self.running.iter_mut() {
             loop {
                 match server.from.try_recv() {
                     Ok(Notice::Ready) => {
@@ -602,7 +677,9 @@ impl Servers {
                         if answered.remove(&path) {
                             said_so = true;
                         }
-                        editor.set_problems(path, said);
+                        // `whose` ＝ 這一份是哪一個服務器說的。一種語言跑好
+                        // 幾個的時候，各家各存一份，不互相抹掉（#425）。
+                        editor.set_problems(path, whose.clone(), said);
                         server.waiting = false;
                         anything = true;
                     }
@@ -645,7 +722,7 @@ impl Servers {
                     // The reader thread is gone, which means the pipe closed,
                     // which means the server did.
                     Err(TryRecvError::Disconnected) => {
-                        gone.push(language.clone());
+                        gone.push(whose.clone());
                         break;
                     }
                 }
@@ -653,8 +730,8 @@ impl Servers {
             // A server that exited on its own is gone even if the channel has
             // not noticed yet.
             let ended = server.child.as_mut().is_some_and(|c| matches!(c.try_wait(), Ok(Some(_))));
-            if ended && !gone.contains(language) {
-                gone.push(language.clone());
+            if ended && !gone.contains(whose) {
+                gone.push(whose.clone());
             }
         }
         self.waiting_on = answered;
@@ -679,8 +756,11 @@ impl Servers {
     /// errors from a program that is no longer watching, and every one of them
     /// would stay until the session ended.
     fn lost(&mut self, language: &str, editor: &mut Editor) {
-        let ran = self.running.remove(language).is_some_and(|s| s.ready);
-        self.found.remove(language);
+        let mut ran = false;
+        for name in self.serving.remove(language).unwrap_or_default() {
+            ran |= self.running.remove(&name).is_some_and(|s| s.ready);
+            self.found.remove(&name);
+        }
         // 它不在聽了，`:diagnostics-all` 頂上那一行也不該再說它在。
         editor.note_the_server(None);
         // **只忘這一個服務器說過的那些檔**（見 [`Servers::whose`]）。
@@ -969,11 +1049,24 @@ mod tests {
         /// taking its complaints with it — without a `rust-analyzer` on the
         /// machine, and in no time at all.
         fn pretend(language: &str) -> (Servers, Receiver<String>, Sender<Notice>) {
+            let mut servers = Servers { settle: std::time::Duration::ZERO, ..Default::default() };
+            let (heard, tell) = servers.pretend_one(language, language);
+            (servers, heard, tell)
+        }
+
+        /// 再給同一種語言添一個——`ruff` 挑毛病、`pylsp` 講文檔那一種（#425）。
+        ///
+        /// 回的是那一個的兩頭：讀它說出去的話，和替它說話。
+        fn pretend_one(
+            &mut self,
+            language: &str,
+            command: &str,
+        ) -> (Receiver<String>, Sender<Notice>) {
             let (to, heard) = std::sync::mpsc::channel::<String>();
             let (tell, from) = std::sync::mpsc::channel::<Notice>();
-            let mut servers = Servers { settle: std::time::Duration::ZERO, ..Default::default() };
-            servers.running.insert(
-                language.to_string(),
+            self.serving.entry(language.to_string()).or_default().push(command.to_string());
+            self.running.insert(
+                command.to_string(),
                 Server {
                     child: None,
                     to,
@@ -989,7 +1082,7 @@ mod tests {
                     asked_next: None,
                 },
             );
-            (servers, heard, tell)
+            (heard, tell)
         }
     }
 
@@ -1041,7 +1134,7 @@ mod tests {
         let none = yumete_config::Config::default();
         let stocked =
             yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
-        let (mut editor, _path) = editor_on("c.rs", "fn main() {}\n");
+        let (editor, _path) = editor_on("c.rs", "fn main() {}\n");
 
         // 一、設置裏這個語言根本沒寫服務器。
         let bare = Servers::default();
@@ -1335,5 +1428,105 @@ mod tests {
         tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), Some(LOOK_IN), "問出去的還沒答，就不許睡死");
+    }
+
+    /// **一種語言跑兩個服務器，兩個都聽得見、兩個說的都算數**（#425，2026-09-30）。
+    ///
+    /// 作者 2026-09-29 提的：「ruff 的 lint 和 pylsp 的文檔本來該同時有，現在只
+    /// 起得了第一個。」兩件事要同時成立：
+    ///
+    /// 一、**正文發給每一個**——少發一個，那一個就按舊正文去數行列，指到的是別
+    /// 的東西。
+    /// 二、**診斷各存各的**——`publishDiagnostics` 是「這個檔此刻的全部真相，
+    /// **由我說**」，存在一起的話後推的那一個會把先推的整片抹掉。
+    #[test]
+    fn two_servers_for_one_language_are_both_told_and_both_heard() {
+        // Warning: **用 rust 演，不用 python。** `follow` 要先在這臺機器上找得到
+        // 配着的那個命令，而 ruff／pylsp 未必裝了；演的是「一種語言兩個服務
+        // 器」這件事，哪一種語言不重要。
+        let (mut servers, ruff, from_ruff) = Servers::pretend("rust");
+        let (pylsp, from_pylsp) = servers.pretend_one("rust", "second");
+        let (mut editor, path) = editor_on("two.rs", "fn main() {}\n");
+        let config = yumete_config::Config {
+            lsp: yumete_config::factory_servers(),
+            ..Default::default()
+        };
+
+        servers.follow(&mut editor, &config);
+        // 一、兩個都收到了 didOpen。
+        for (who, heard) in [("第一個", &ruff), ("第二個", &pylsp)] {
+            let said = heard.try_recv().expect("{who} 該收到話");
+            assert!(said.contains("didOpen"), "{who} 收到的是 didOpen：{said}");
+        }
+
+        // 二、兩家各說各的，併起來兩條都在。
+        let lint = Problem {
+            line: 0,
+            utf16_column: 0,
+            severity: Severity::Warn,
+            message: "unused".into(),
+            source: Some("ruff".into()),
+        };
+        let typo = Problem {
+            line: 0,
+            utf16_column: 4,
+            severity: Severity::Error,
+            message: "bad type".into(),
+            source: Some("pylsp".into()),
+        };
+        from_ruff.send(Notice::Said { path: path.clone(), said: vec![lint] }).unwrap();
+        from_pylsp.send(Notice::Said { path: path.clone(), said: vec![typo] }).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(editor.problems_listed().len(), 2, "兩家說的都在");
+
+        // 三、ruff 那一條改好了，它推一份空的——**只**抹掉自己說的。
+        from_ruff.send(Notice::Said { path: path.clone(), said: Vec::new() }).unwrap();
+        servers.collect(&mut editor);
+        let left = editor.problems_listed();
+        assert_eq!(left.len(), 1, "pylsp 說的還在：{left:?}");
+        assert_eq!(left[0].1.message, "bad type");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// **只配一個的時候，一切和從前逐字相同**（#425 的安全綫）。
+    ///
+    /// Warning: **這一條是防回歸的，不是防 bug 的。** 多服務器那一套鋪開之後，
+    /// 最要緊的不是它多會做事，而是**只有一個 rust-analyzer 的人一點都不受影
+    /// 響**——那是每天都在用的那條路。
+    #[test]
+    fn one_server_behaves_exactly_as_before() {
+        let (mut servers, heard, tell) = Servers::pretend("rust");
+        let (mut editor, path) = editor_on("one.rs", "fn main() {}\n");
+        let config = yumete_config::Config {
+            lsp: yumete_config::factory_servers(),
+            ..Default::default()
+        };
+
+        servers.follow(&mut editor, &config);
+        let said = heard.try_recv().expect("didOpen 發出去了");
+        assert!(said.contains("didOpen"));
+        assert!(heard.try_recv().is_err(), "只發一次");
+
+        // 同一版再走一趟，什麽都不發。
+        servers.follow(&mut editor, &config);
+        assert!(heard.try_recv().is_err(), "正文沒變就不再發");
+
+        let one = Problem {
+            line: 0,
+            utf16_column: 3,
+            severity: Severity::Warn,
+            message: "說不通".into(),
+            source: None,
+        };
+        tell.send(Notice::Said { path: path.clone(), said: vec![one] }).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(editor.problems_listed().len(), 1);
+        // 推一份空的就清乾淨——單服務器下這一條從前就是這樣。
+        tell.send(Notice::Said { path: path.clone(), said: Vec::new() }).unwrap();
+        servers.collect(&mut editor);
+        assert!(editor.problems_listed().is_empty(), "空的一推就清乾淨");
+
+        let _ = std::fs::remove_file(&path);
     }
 }
