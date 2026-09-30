@@ -270,7 +270,7 @@ impl Servers {
         if !self.running.contains_key(language) && !self.failed.contains(language) {
             let here = Self::look_from(editor);
             let Some(at) = found_here(&named.command, Some(&here)) else { return };
-            // **用的是項目裏那一個就說一句**（2026-09-29 作者定）。⚠️ 不寫目錄
+            // **用的是項目裏那一個就說一句**（2026-09-29 作者定）。Warning: 不寫目錄
             // ——狀態欄那一行很貴，完整路徑在 `:diagnostics-all` 頂上那一行。
             let mine = !std::env::var_os("PATH")
                 .map(|path| {

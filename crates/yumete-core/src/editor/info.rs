@@ -114,7 +114,7 @@ impl Editor {
     /// 回 `false` ＝ 這一下是**收起來**（再按一次同一個鍵）。
     pub(super) fn ask_for_info(&mut self, one: Info, afloat: bool) -> bool {
         // 再按一次同一個鍵就收起來——此刻擺的就是它，而且畫在這一鍵要的那個
-        // 地方。⚠️ 判準要連容器一起看：浮着的時候按 `空格 K`，說的是「搬進邊
+        // 地方。Warning: 判準要連容器一起看：浮着的時候按 `空格 K`，說的是「搬進邊
         // 欄」，不是「關掉」。
         let here = self.info_in_the_sidebar().is_none();
         if self.info_asked_now() == Some(one) && here == afloat {

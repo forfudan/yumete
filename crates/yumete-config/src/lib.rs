@@ -1797,7 +1797,7 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // 打開 `.py` 都吃一句「起不來」。
         //
         // Warning: **能講文檔的排前面，`ruff` 墊底**（2026-09-29 當天量出來的）。
-        // 這張表原樣抄的 helix，而 helix 那個次序裏 `ruff` 在第二個——⚠️ **它問符
+        // 這張表原樣抄的 helix，而 helix 那個次序裏 `ruff` 在第二個——Warning: **它問符
         // 號一律回 `null`**：`initialize` 的 capabilities 裏明明寫着
         // `hoverProvider: true`，可它的 hover 只解釋自己的規則碼（`# noqa: E501`
         // 那種），它是 linter 不是類型檢查器。作者的 pixi 環境裏 `ruff` 和 `pylsp`

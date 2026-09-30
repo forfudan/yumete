@@ -33,8 +33,8 @@ impl Editor {
         if was == side {
             return;
         }
-        // A resident view that is showing goes across; a transient one has
-        // nothing to carry, since it is worked out afresh every frame.
+        // A panel that is showing goes across; what is *in* the 信息 slot has
+        // nothing to carry, since it is worked out afresh every frame (#426).
         match View::ALL.into_iter().find(|&v| crate::sidebar::Panel::from(v) == panel) {
             Some(view) if self.showing(view) == Some(was) => {
                 let moving = self.panels[was as usize].take();
