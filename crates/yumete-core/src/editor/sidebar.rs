@@ -1304,7 +1304,7 @@ impl Editor {
     /// 能再按三下」那一族 bug 的來源，所以行是列表的一律問 [`Editor::info_rows`]。
     pub fn info_len(&self, side: crate::sidebar::Side) -> usize {
         match self.info_in_this_sidebar(side) {
-            Some(crate::sidebar::Info::Data) => {
+            Some(crate::sidebar::Info::Record) => {
                 self.detail().map_or(0, |detail| detail.rows.len())
             }
             Some(crate::sidebar::Info::Wiki) => {

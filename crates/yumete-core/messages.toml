@@ -1262,7 +1262,7 @@ key = "cmd.commands.info"
 zht = "信息：即時顯示哪一種（data／diagnostics／dictionary／wiki／docs；不寫就按稿子算）"
 zhs = "信息：即时显示哪一种（data／diagnostics／dictionary／wiki／docs；不写就按稿子算）"
 en = "info: which of data / diagnostics / dictionary / wiki / docs follows the cursor (blank: by the file)"
-find = "信息 info 數據 数据 診斷 诊断 字典 百科 文檔 文档 data diagnostics dictionary wiki docs 即時 即时 及時 及时"
+find = "信息 info 記錄 记录 診斷 诊断 字典 百科 文檔 文档 record diagnostics dictionary wiki docs 即時 即时 及時 及时"
 
 [[message]]
 # : 命令選單裏 keymap 那一項的說明
@@ -2418,10 +2418,10 @@ find = "分隔 逗號 逗号 制表符 csv tsv 拆開 拆开"
 [[message]]
 # : 命令選單裏 detail 那一項的說明（table 組）
 key = "cmd.table.detail"
-zht = "數據那一格：開、關，或者給個寬度"
-zhs = "数据那一格：开、关，或者给个宽度"
+zht = "記錄那一格：開、關，或者給個寬度"
+zhs = "记录那一格：开、关，或者给个宽度"
 en = "the data panel: on, off, or a width"
-find = "數據 数据 詳情 详情 展開 展开 detail data"
+find = "記錄 记录 數據 数据 詳情 详情 展開 展开 detail record"
 
 [[message]]
 # : 命令選單裏 find 那一項的說明（table 組）
@@ -5241,19 +5241,6 @@ zhs = "行注释"
 en = "comment out, by the line"
 
 [[message]]
-# 空格菜單：這一行攤開，浮窗（#426，2026-09-30）
-key = "hint.space.data"
-zht = "顯示這一行的數據（浮窗）"
-zhs = "显示这一行的数据（浮窗）"
-en = "show this row's data (float)"
-
-[[message]]
-# 空格菜單：這一行攤開，邊欄
-key = "hint.space.data-panel"
-zht = "顯示這一行的數據（邊欄）"
-zhs = "显示这一行的数据（边栏）"
-en = "show this row's data (sidebar)"
-[[message]]
 # 空格菜單裏那一行：把字典開進邊欄（浮窗是小寫的 d）
 key = "hint.space.dictionary-panel"
 zht = "字典開進邊欄（讀得完長的）"
@@ -5280,6 +5267,20 @@ key = "hint.space.problems-panel"
 zht = "顯示診斷信息（邊欄）"
 zhs = "显示诊断信息（边栏）"
 en = "show diagnostics (sidebar)"
+
+[[message]]
+# 空格菜單：這一行攤開，浮窗（#426，2026-09-30）
+key = "hint.space.record"
+zht = "顯示這一行的記錄（浮窗）"
+zhs = "显示这一行的记录（浮窗）"
+en = "show this row's record (float)"
+
+[[message]]
+# 空格菜單：這一行攤開，邊欄
+key = "hint.space.record-panel"
+zht = "顯示這一行的記錄（邊欄）"
+zhs = "显示这一行的记录（边栏）"
+en = "show this row's record (sidebar)"
 
 [[message]]
 # 空格 t：表格那一組（2026-09-21 從 `t` 搬來）
@@ -5361,9 +5362,9 @@ en = "delete this row / column"
 [[message]]
 # t 組：數據那一格（從前是 空格 d，2026-09-30 從「詳情欄」改名）
 key = "hint.table.detail-panel"
-zht = "該行數據"
-zhs = "该行数据"
-en = "this row's data"
+zht = "該行記錄"
+zhs = "该行记录"
+en = "this row's record"
 
 [[message]]
 # t 選單：t f 這一行
@@ -5934,13 +5935,6 @@ zhs = "缓冲"
 en = "Buffers"
 
 [[message]]
-# 標籤：數據（2026-09-30 從「表格」改名，作者：「『数据』比『表格』更能反映这一行的内容」）
-key = "label.panel.data"
-zht = "數據"
-zhs = "数据"
-en = "Data"
-
-[[message]]
 # 標籤：字典
 key = "label.panel.dictionary"
 zht = "字典"
@@ -5981,6 +5975,13 @@ key = "label.panel.problems"
 zht = "診斷"
 zhs = "诊断"
 en = "Diagnostics"
+
+[[message]]
+# 標籤：數據（2026-09-30 從「表格」改名，作者：「『数据』比『表格』更能反映这一行的内容」）
+key = "label.panel.record"
+zht = "記錄"
+zhs = "记录"
+en = "Record"
 
 [[message]]
 # 勾上替換之後，面板的名字
@@ -10228,16 +10229,16 @@ en = "the cursor is not in a table"
 [[message]]
 # 數據那一格關掉（2026-09-30 隨標題一起改名）
 key = "ui.detail-panel-off"
-zht = "數據：關"
-zhs = "数据：关"
-en = "the data panel: off"
+zht = "記錄：關"
+zhs = "记录：关"
+en = "record: off"
 
 [[message]]
 # 數據那一格打開（2026-09-30 隨標題一起改名）
 key = "ui.detail-panel-on"
-zht = "數據：開"
-zhs = "数据：开"
-en = "the data panel: on"
+zht = "記錄：開"
+zhs = "记录：开"
+en = "record: on"
 
 [[message]]
 # 界面語言現在是哪一種（`:language`）

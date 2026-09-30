@@ -4172,7 +4172,7 @@ fn draw(
         // 數據那一種自己畫（它是一張表的一行，兩欄對齊），別的四種走
         // `draw_sidebar`。
         match editor.info_in_this_sidebar(side) {
-            Some(Info::Data) => table::draw_detail(frame, editor, config, side, rect),
+            Some(Info::Record) => table::draw_detail(frame, editor, config, side, rect),
             // A panel with a box in it has a caret, and the candidate panel
             // has to stand under **that** one — see `draw_search`.
             _ => {
@@ -5625,7 +5625,7 @@ fn draw_note(
     // 開自己關。五種併成一格之後那條路沒有了（邊欄只由人開由人關），所以它跟
     // 別的四種一樣要有一個浮窗——作者的模型是「右侧栏就是固定的『浮窗』」，
     // 反過來說，每一種都得浮得起來。
-    if editor.info_afloat() == Some(Info::Data) {
+    if editor.info_afloat() == Some(Info::Record) {
         if let Some(detail) = editor.detail() {
             let rows: Vec<(String, String)> = detail
                 .rows
@@ -5641,7 +5641,7 @@ fn draw_note(
                 // 窗這一份只寫了行號，於是同一則東西兩個地方兩個名字。
                 title: format!(
                     "{} {}",
-                    yumete_core::messages::say(Info::Data.tag(), &[]),
+                    yumete_core::messages::say(Info::Record.tag(), &[]),
                     detail.title
                 ),
                 lede: None,

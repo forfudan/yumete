@@ -3730,8 +3730,8 @@ impl Editor {
                 // `t i` (information), and it was `t i` for one day only in
                 // between: 表格操作模式 borrowed the letter on 2026-09-05 and
                 // gave it back on the 6th as `t n`. The hand wins.
-                Key::Char('i') => self.show_the_data_here(true),
-                Key::Char('I') => self.show_the_data_here(false),
+                Key::Char('i') => self.show_the_record_here(true),
+                Key::Char('I') => self.show_the_record_here(false),
                 // Each of these is an edit, and each announces an undo point
                 // of its own: without one they were folded into whatever came
                 // before, so a single `u` took back the cell you had just
@@ -3778,8 +3778,8 @@ impl Editor {
             Key::Char('y') => self.yank_column(),
             Key::Char('p') => self.put_column(),
             // `t i` — see the note on the delimited file's copy of this key.
-            Key::Char('i') => self.show_the_data_here(true),
-            Key::Char('I') => self.show_the_data_here(false),
+            Key::Char('i') => self.show_the_record_here(true),
+            Key::Char('I') => self.show_the_record_here(false),
             Key::Char('<') => self.md_align(Align::Left),
             Key::Char('=') => self.md_align(Align::Center),
             Key::Char('>') => self.md_align(Align::Right),
