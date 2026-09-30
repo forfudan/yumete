@@ -2498,8 +2498,12 @@ pub struct Editor {
     /// 存的是**名字**不是序號：百科隨時可能重讀（存一個百科檔就重讀），序號會過
     /// 期，而名字是這個功能自己的鍵（`Wiki::by_name`）。
     wiki_pinned: Option<(String, usize)>,
-    /// How far the bottom layer is scrolled — the only state a transient panel
-    /// has, and it has it because reading a long answer is the point.
+    /// **信息那一格讀到第幾行**——那一格唯一的一格狀態，而它有這一格是因為讀完
+    /// 一份長答案正是它存在的理由（#293、#426）。
+    ///
+    /// Warning: 和 [`Editor::info_scroll`]（浮窗那一份）是兩格，因為它們是兩個
+    /// 容器：邊欄走得進去、按 `j`／`k` 一行一行讀，浮窗走不進去、只收 `C-u`／
+    /// `C-d`。合成一格的話從邊欄退回浮窗會把讀到哪帶過去，而那兩件事沒有關係。
     panel_scroll: usize,
     /// **百科那一頁讀到哪了**，以及讀的是站在哪個字上的那一條（2026-09-22 報的：
     /// 「無法用 j/k/J/K 向上下翻動」）。

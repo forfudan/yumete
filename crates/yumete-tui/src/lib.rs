@@ -5614,7 +5614,7 @@ fn draw_note(
                 lede: None,
                 entry: false,
                 body: panel::Body::Keys(rows),
-                // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。⚠️ 數據沒有自
+                // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。Warning: 數據沒有自
                 // 己的那一個鍵（字典是 `空格 D`、文檔是 `空格 K`），去邊欄的
                 // 通路是 `空格 4`。
                 tag: Some(say!("info.in-the-sidebar")),

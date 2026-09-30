@@ -931,7 +931,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P1 | 一 本檔、二 跨檔、三 替換全部落地 [^419] | Fixed 2026-09-13 |
 | 421 | **設置要有一扇面板，別讓人對着 toml 發呆** | config+tui | P1 | 八組五十三項全部落地；`LATER` 裏只剩色位與要新控件的幾項（§5.12.24） | Fixed 2026-09-24 |
 | 422 | **畫與量要按字簇走，不按字走** | tui+core | P2 | 十處逐字累加的循環改成字簇；新出口 `cells_per_char`（§5.12.47、§5.12.62） | Fixed 2026-09-27 |
-| 426 | **五類「信息」併成一個槽** | core+tui | P1 | 2026-09-30 作者定的模型，§5.44；`hover_afloat` 已刪，其餘五個字段與五扇面板待併 [^426] | Partly |
+| 426 | **五類「信息」併成一個槽** | core+tui | P1 | 2026-09-30 作者定的模型，§5.44。`Transient` 與五個字段全刪，`View`／`Panel` 各縮到五個，`:info <名>`，`PageUp`／`PageDown` 翻五類 [^426] | Done |
 | 425 | **一個語言跑多個服務器** | tui | P2 | 2026-09-29 提；ruff 的 lint 和 pylsp 的文檔本來該同時有，現在只起得了第一個 [^425] | Proposed |
 | 424 | **`:rules 80 100 120`：在指定的欄上畫竪線** | tui | P3 | 2026-09-29 提；現在只有表格自己畫的列號標尺，正文一條都沒有 [^424] | Proposed |
 | 423 | **代碼着色要走增量解析** | core | P2 | 現在超過五千行整份不染（`fences.rs` 的 `LONGEST`）；量過 955 KB 的 `lib.rs`：解析 58 ms ＋ 全文查詢 25 ms，每改一個字付一次 [^423] | Proposed |
@@ -17944,6 +17944,12 @@ Warning: **編輯器其實答得出「為什麼沒顏色」**（`:view-code` 走
 
 作者逐條提的六件，加上他自己重畫的鍵位。
 
+> Warning: **這一節連同 §5.40–5.44 是記錄，不是現狀。** 2026-09-30 的 #426 把五類信息併成了
+> 一個槽（§5.44 末尾「做掉了」那一段）：`:docs`／`:diagnostics` 不在了，換成 `:info <名>`；
+> `Transient` 與那五個字段全刪。Warning: **下面這幾節寫的是當時的樣子和當時的理由**——它們
+> 值得留着，因為 #426 正是從這幾節踩出來的四個坑裏長出來的。要查現在怎麽用，看
+> `docs/manual.md`。
+
 ### 新的模型
 
 | 鍵 | 做什麽 |
@@ -18310,7 +18316,7 @@ Warning: 工作區那兩個先站過去再走 `空格 q` 那條路——收尾�
 ### 「工作區」改叫「主／副編輯區」
 
 作者定的新詞：「我用了新的名词『主编辑区』『副编辑区』，我觉得这个比『正文』『第二工作区』
-好。」⚠️ **十二處一起改**——那八行之外還有四處在說「工作區」（`空格 w`、`空格 Q`、`g/ g?`
+好。」Warning: **十二處一起改**——那八行之外還有四處在說「工作區」（`空格 w`、`空格 Q`、`g/ g?`
 那一則、下一個區域那一則）。同一樣東西兩個名字比舊名字更糟。
 
 | 鍵 | 現在 |
@@ -18353,7 +18359,7 @@ Warning: **我把它寫成了「我那一扇開着嗎」，而該問的是「有
 2. 沒按過 → 哪個即時開關開着就是哪一種
 3. 兩個都關 → 沒有內容（那一格必須有一扇的時候退回診斷，作者定的）
 
-**容器**：那一格在就用那一格，不在就浮。⚠️ 判準是 `the_slot_for_these_two()`——**有沒有那
+**容器**：那一格在就用那一格，不在就浮。Warning: 判準是 `the_slot_for_these_two()`——**有沒有那
 一格**，不是「我那一扇開着嗎」。這一條我連錯兩次。
 
 ### 三處各自繞過了上面那句話
@@ -18397,7 +18403,7 @@ Warning: **我把它寫成了「我那一扇開着嗎」，而該問的是「有
 | 即時那一種 | **算出來的**：散文→百科、代碼→**診斷**、表格→數據 |
 
 - **內容** ＝ `info_asked` 有就用它，沒有就用即時那一種，再濾掉「這一種此刻沒內容」
-- **容器** ＝ 那一格開着就用它，否則浮窗。⚠️ 永不並存
+- **容器** ＝ 那一格開着就用它，否則浮窗。Warning: 永不並存
 - **標題** ＝ 內容的名字；空着叫「信息」
 
 代碼檔裏即時的是**診斷**（2026-09-30 定）：診斷只在少數行上有，安靜；文檔幾乎每個符號都有，
@@ -18415,28 +18421,82 @@ Warning: **我把它寫成了「我那一扇開着嗎」，而該問的是「有
 | `problem_afloat` | 只看 `showing(Problems)`——反過來的同一個錯 |
 | `go_to_region`（`空格 4`） | 自己又找了一遍 `View::ALL`，繞過 `side_view` |
 
-⚠️ **只要它是個字段，就永遠會有第四個地方忘記。** 第二處耦合同形：「摆哪一種」也存了兩份
+Warning: **只要它是個字段，就永遠會有第四個地方忘記。** 第二處耦合同形：「摆哪一種」也存了兩份
 （`spot_chosen`／兩個開關算的，和面板自己的 `View`），所以 `:docs on` 之後要「同步」一次
 ——**同步就是耦合沒解開的證據**。
 
-### 已經做掉的
+### 做掉了（2026-09-30，`7365109`）
 
-`hover_afloat` 那個字段**刪了**，`hover_afloat()`／`hover_in_the_sidebar()` 改成從
-`the_slot_for_these_two()` 算出來。三處寫者一起消失。
+**兩個枚舉、五個字段、三扇面板，換成一個 `Info` 和兩格狀態。**
 
-### 還沒做的（#426）
+| 從前 | 現在 |
+| --- | --- |
+| `View`：Explorer Buffers Outline Search **Wiki Docs Problems**（7） | Explorer Buffers Outline Search **Info**（5） |
+| `Panel`：上面七個 ＋ **Dictionary Detail**（9） | Files Buffers Outline Search **Info**（5） |
+| `enum Transient`：Detail Dictionary | **刪了** |
+| — | `enum Info`：Dictionary Wiki Data Docs Problems |
+| 五個字段：`docs_follow` `problems_follow` `problem_asked` `spot_chosen` `dictionary_afloat` | 兩個：`info_asked: Option<(Info, usize)>` `info_live: Option<Info>` |
+| `:docs [on\|off]` ＋ `:diagnostics [on\|off]` | `:info <名>`（五個名：`data` `diagnostics` `dictionary` `wiki` `docs`） |
+| 「表格」 | 「數據」 |
 
-- `View::Docs` ＋ `View::Problems` ＋ `Transient::Dictionary` ＋ `Transient::Detail` ＋
-  `View::Wiki` → 一個 `View::Info`，標題派生
-- 再刪五個字段：`dictionary_afloat`／`problem_asked`／`spot_chosen`／`docs_follow`／
-  `problems_follow`
-- `:docs` ＋ `:diagnostics` → `:info <名>`
-- 「表格」改名「數據」
-- **`PageUp`／`PageDown` 翻這一槽**（2026-09-30 提）：五類共用一個容器，所以也該共用一套
-  翻頁鍵，而且**光標在編輯區也翻得動**——那四個鍵現在只翻浮着的文檔（§5.39）。
+新模組 `crates/yumete-core/src/editor/info.rs` 收着全部派生：
 
-量過：`Transient::`／`View::Docs`／`View::Problems`／`View::Wiki`／`hover_afloat` 五個詞在
-八個檔裏共 128 處。
+| 問題 | 誰答 | 存嗎 |
+| --- | --- | --- |
+| 擺哪一種 | `info_now()` | 不存 |
+| 即時的是哪一種 | `info_live()` | 只存 `:info` 的覆蓋 |
+| 手動叫的是哪一種 | `info_asked` | **存**，光標一走就作廢 |
+| 畫在哪 | `info_afloat()`／`info_in_the_sidebar()` | 不存 |
+| 有沒有東西可畫 | `info_has_body()` | 不存 |
+
+**`fit_the_panels_to_the_file` 整支刪掉了，這是解耦最直接的證據。** 從前換一份稿子要把開着
+的面板「同步」成這份稿子容得下的那一扇（百科 ⇄ 文檔），撥一次 `:docs on` 也要同步一次；
+現在那一格擺什麽是**每一幀問出來的**，所以屏幕上不可能留下一扇這份稿子裏不存在的面板，
+也就沒有什麽要同步。`view_fits_the_file`、`view_that_fits` 同時消失。
+
+### `PageUp`／`PageDown` 換一種信息
+
+原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用 page up / page down 来对这五类
+进行翻页了」「这样，光标就在编辑区，也可以对五类信息进行翻页。」
+
+- 只停在**此刻真有東西**的那幾種上（`info_has_body`）。五種裏能同時成立的通常只有一兩種
+  ——散文裏沒有診斷，代碼裏沒有百科——逐格翻過空的等於按五下什麽都不變。
+- **光標一個字都不動**，這是這兩個鍵存在的全部理由：那一格開不開、鍵在不在裏頭都不影響。
+- Warning: **正文翻頁從此只剩 `C-f`／`C-b`。** 一種都沒有的時候它說一句
+  （`info.nothing-here`），**不偷偷去翻正文**——一個鍵有時翻這個有時翻那個是最難記的那
+  一種。插入模式不受影響（那兩個鍵在 Insert 裏照舊翻整頁）。
+- 翻行的鍵留給 `C-u`／`C-d`（浮窗），邊欄那一份走它自己的 `j`／`k`。
+
+### 兩格滾動，不是一格
+
+`info_scroll`（浮窗）與 `panel_scroll`（邊欄）分開存。合成一格的話從邊欄退回浮窗會把「讀到
+哪」帶過去，而那兩件事沒有關係——邊欄走得進去、一行一行讀，浮窗走不進去、只收半頁鍵。
+
+### 做的時候撞出來的兩個
+
+**一、換一個新題目不許走帶 toggle 的那一支。** `look_up_here` 對一個**新的字**調了
+`ask_for_info`，而那一支的判準是「此刻擺的就是它，而且畫在這一鍵要的地方」——`info_asked`
+早就是 `Dictionary` 了，於是它把面板當場關掉。拆成兩支：`ask_for_info`（帶 toggle，鍵用）
+與 `put_this_info_here`（不帶，換題目用）。
+
+**二、`w` 在信息那一格裏又一次悄悄失效。** `on_info_key` 接不住的鍵落到了
+`panel_key_in_common`，而認 `w`（寬窄）、`R`、`Tab`、`Esc` 的是
+`on_sidebar_key_after_the_list`。這正是 2026-09-29 報的那一條的同一個形狀（「不仅没有提示
+而且 w 无效」），第二次出現在同一個位置上——**接不住的鍵要落到最全的那一支，不是最近的
+那一支**。
+
+**三、空着的那一格教了一套它沒有的鍵。** 提示行問的是「這一格此刻有東西嗎」而不是「這一格
+是信息嗎」，於是空着的時候落到通用的邊欄提示上，寫着 `Tab 換視圖`、不寫 `PgUp PgDn`。
+看圖看出來的，不是測試。
+
+### 破壞性改動（作者 2026-09-30 許可：「不管向后兼容」）
+
+- 配置 `[sidebar]` 底下 `dictionary` `detail` `wiki` `docs` `problems` 五個鍵**不再認得**，
+  換成一個 `info`。Warning: 不認得的名字是**靜靜跳過**的（`settings.rs`），所以舊配置不報錯，
+  只是那一行不起作用。
+- `:docs`／`:diagnostics` 兩個命令沒有了，也不留別名（`:diagnostics-all` 不受影響）。
+- `:panel-*`／`:sidebar-*` 認的名字從九個縮到五個。
+- `PageUp`／`PageDown` 在 Normal 模式下不再翻正文。
 
 [^426]: 見 §5.44。Warning: **這一條不是新功能，是把四次同一族的 bug 連根拔掉**——「畫在哪」
     和「擺哪一種」各存了兩份，每加一處讀者就多一次算窄的機會。作者的判詞：「如果代码正确，
