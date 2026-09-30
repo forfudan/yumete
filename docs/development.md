@@ -852,7 +852,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | 改問 `is_prompt()`；轉英另問一句 [^340] | Fixed 2026-09-12 |
 | 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 讀盤之前先把「正在載入」畫上去 [^341] | Fixed 2026-09-12 |
 | 342 | **上屏之後那一段 ASCII 不掙 undo 點** | core+ime | P4 | 上屏後 `history.pending` 是 `None` [^342] | Open |
-| 343 | **`note_progress` 每次存檔轉一遍整個 rope** | core | P4 | 有進度日誌就多一次 8 MB 拷貝 [^343] | Open |
+| 343 | **`note_progress` 每次存檔轉一遍整個 rope** | core | P4 | 改成在 rope 上按行數，峯值是最長那一行 [^343] | Fixed 2026-10-01 |
 | 344 | **`:yume-table` 載入非碼表檔案會 panic** | ime | P1 | 上游 clamp 了；這一側交出去之前先除草 [^344] | Fixed 2026-09-12 |
 | 345 | **候選列表無上限物化** | ime | P2 | 上游：為顯示九個，走完四萬八千條 [^345] | Open (upstream) |
 | 346 | **超過 255 位元組的候選截成空白一行** | ime | P4 | 上游：在非字符邊界切，`unwrap_or("")` 吃掉 [^346] | Open (upstream) |
