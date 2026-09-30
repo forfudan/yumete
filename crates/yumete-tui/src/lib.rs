@@ -8113,7 +8113,16 @@ fn draw_dictionary(
         match docs {
             true => put_marked_text(buf, from + 1, y, to, &row.name, style, ink),
             // 字典那一份不是 Markdown——它是拆分與編碼，一個 `*` 就是一個 `*`。
-            false => put_text(buf, from + 1, y, to, &row.name, style),
+            //
+            // **切了就說一聲**（2026-10-01）。文檔那一份折行，字典這一份是兩欄
+            // 對齊的，折行會把值排到名字底下去——所以它硬切。硬切從前不留記
+            // 號，於是「讀音　nà_nā_nuó_nuò_」看着就是一條讀完了的答案，而它
+            // 後面還有。`clip` 是浮窗切標題用的那一支，連「…」在寬字體下佔兩
+            // 格這件事也一起算過了。
+            false => {
+                let room = to.saturating_sub(from + 1) as usize;
+                put_text(buf, from + 1, y, to, &panel::clip(&row.name, room), style)
+            }
         };
     }
 }
@@ -14827,6 +14836,37 @@ fn squeezed(text: &str) -> String {
         // in: 拆分 is two characters and four columns.
         let at = |row: &str, what: &str| row.find(what).map(|b| yumete_cjk::str_width(&row[..b]));
         assert_eq!(at(&rows[1], "刀二阝"), at(&rows[2], "vf-b"), "{rows:?}");
+    }
+
+    /// **一格放不下的值要說一聲**（2026-10-01）。
+    ///
+    /// 文檔那一份折行，字典這一份是兩欄對齊的——折行會把值排到名字底下去，所以
+    /// 它硬切。硬切從前不留記號，於是「讀音　nà_nā_nuó_nuò_」看着就是一條讀完
+    /// 了的答案，而它後面還有半截。
+    #[test]
+    fn a_dictionary_value_too_long_for_the_slot_says_it_was_cut() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        editor.on_key(Key::Char('那'));
+        editor.on_key(Key::Esc);
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.look_up('那', true);
+        editor.take_dictionary_query();
+        let long = "nà_nā_nuó_nuò_né_ne_nèi_nǎ_něi".to_string();
+        editor.set_dictionary('那', vec![
+            ("讀音".to_string(), long.clone()),
+            ("編碼".to_string(), "WSGu".to_string()),
+        ]);
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        let buffer = render_with(&editor, &Config::default(), &ime, 100, 8);
+        let rows: Vec<String> = (0..6).map(|y| past_the_wall(&buffer, y)).collect();
+        let reading = rows.iter().find(|r| r.contains("讀音")).unwrap_or_else(|| panic!("{rows:?}"));
+        assert!(!reading.contains(&long), "整串放不下，不該整串都在：{reading:?}");
+        assert!(reading.contains('…'), "切了要說一聲：{reading:?}");
+        // 放得下的那一行一個記號都不加。
+        let code = rows.iter().find(|r| r.contains("編碼")).unwrap_or_else(|| panic!("{rows:?}"));
+        assert!(code.contains("WSGu") && !code.contains('…'), "{code:?}");
     }
 
     /// #215: with the list up, `Tab` asks the 字典 about the highlighted one.
