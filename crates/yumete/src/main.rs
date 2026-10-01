@@ -752,7 +752,7 @@ fn press(
                             Some(c) if rest.chars().count() == 1 => Key::Alt(c),
                             _ => {
                                 eprintln!("yumete: --keys: alt- wants one character, got {rest:?}");
-                                break;
+                                std::process::exit(2);
                             }
                         }
                     } else if let Some(rest) = name.strip_prefix("ctrl-") {
@@ -764,7 +764,7 @@ fn press(
                             Some(c) if rest.chars().count() == 1 => Key::Ctrl(c),
                             _ => {
                                 eprintln!("yumete: --keys: ctrl- wants one character, got {rest:?}");
-                                break;
+                                std::process::exit(2);
                             }
                         }
                     } else {
@@ -775,11 +775,18 @@ fn press(
                         "pgdn" => Key::PageDown,
                         "del" => Key::Delete,
                         "backtab" => Key::BackTab,
-                        // A name nobody knows is worth saying so: a silent
-                        // fallback here is #389 all over again.
+                        // **`\{space}` 也認**（2026-10-02）。字面的空格一直管用，
+                        // 可一串鍵裏的空格看不見，所以寫腳本的人（包括我）伸手就
+                        // 去拿這個名字——而它從前不存在。
+                        "space" => Key::Char(' '),
+                        // Warning: **認不得的名字就地死掉，不是打一行就往下走**
+                        // （2026-10-02 修）。從前它 `break`，於是這一串鍵**從這裏
+                        // 整個截斷**而退出碼仍然是 0——`frames.sh` 裏兩個場景因此
+                        // 拍了不知多久的錯誤信息，而金樣比對一直是綠的（它比的是
+                        // 「和上次一樣嗎」，上次也可以是錯的）。
                         other => {
                             eprintln!("yumete: --keys: no key called {other:?}");
-                            break;
+                            std::process::exit(2);
                         }
                     }
                     }
@@ -986,9 +993,10 @@ OPTIONS:
                      opens on the third keystroke can be looked at:
                      `\\e` Esc, `\\t` Tab, `\\n` Enter, `\\b` Backspace,
                      `\\^x` Control-x, `\\{{home}}` `\\{{end}}` `\\{{pgup}}`
-                     `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}` `\\{{alt-d}}` `\\{{ctrl-w}}`,
-                     `\\u\\d\\l\\r` the arrows. `--keys='::竖排'` opens the
-                     command search with that in it.
+                     `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}` `\\{{space}}`
+                     `\\{{alt-d}}` `\\{{ctrl-w}}`, `\\u\\d\\l\\r` the arrows.
+                     A name this list does not hold is an error, not a warning.
+                     `--keys='::竖排'` opens the command search with that in it.
         --html       With --shot: the frame **with its colours**, as one
                      self-contained HTML <pre>. What a theme is judged on.
         --timing     Print how long each part of starting up took, and exit.
