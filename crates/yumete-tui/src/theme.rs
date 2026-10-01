@@ -32,6 +32,12 @@
 //! neither. Anything placed there by eye — and several things were — comes out
 //! too faint to read and too pale to write on.
 
+/// 三個字節的顏色——OSC 10／11／12 要的就是這三個數，不是一個 `Color`。
+///
+/// 兩支取色的函數（[`Palette::caret`]、[`Palette::paper_bytes`]）的註釋從前整段
+/// 都在解釋這件事；名字一取，那段話就有地方掛了。
+pub type Rgb = (u8, u8, u8);
+
 use ratatui::style::{Color, Style};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::RwLock;
@@ -685,13 +691,13 @@ impl Palette {
     ///
     /// Not a `Color`: OSC 12 wants the numbers, and `Color::Rgb` is the wrong
     /// shape to carry them out of here.
-    pub fn caret(self) -> (u8, u8, u8) {
+    pub fn caret(self) -> Rgb {
         self.ladder.step(rung::TEXT)
     }
 
     /// The paper, as three bytes — the other half of what OSC 10/11 tell the
     /// terminal (#502). Same reason [`Self::caret`] is not a `Color`.
-    pub fn paper_bytes(self) -> (u8, u8, u8) {
+    pub fn paper_bytes(self) -> Rgb {
         self.ladder.paper
     }
     /// 旁註 — read it, but it is not the prose: a reading, a 拆分, a

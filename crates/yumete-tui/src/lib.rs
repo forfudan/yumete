@@ -516,7 +516,7 @@ pub fn run(
     let mut system_ime = crate::system_ime::SystemIme::new(config.ime.system);
     // The colour the terminal draws its own cursor in — ours to set, and the
     // one thing on the screen the palette could not reach (#493).
-    let mut last_caret: Option<((u8, u8, u8), (u8, u8, u8))> = None;
+    let mut last_caret: Option<(theme::Rgb, theme::Rgb)> = None;
     // An event read ahead of its turn and handed back — see [`drain_the_flick`].
     // The queue is the terminal's, not ours, and this is the one place anything
     // is ever taken out of order: the rest of a wheel gesture, read early so it

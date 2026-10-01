@@ -730,6 +730,12 @@ const REMEMBERED_PARAGRAPHS: usize = 8;
 /// and the rows that came out.
 type Remembered = (u64, usize, Vec<(usize, usize)>);
 
+/// 同一段的上一份答案，連着它當時成立的那個 revision：
+/// `(buffer, line, width, revision, rows)`。
+///
+/// 名字排在 [`Remembered`] 旁邊，因為兩張是同一種表——分別只在拿什麼當鍵。
+type Continued = (u64, usize, usize, u64, Vec<(usize, usize)>);
+
 thread_local! {
     /// Wrapped paragraphs, most recently used first: `(text hash, width, rows)`.
     ///
@@ -746,8 +752,7 @@ thread_local! {
     /// which also throws away the one thing that would let the next answer be
     /// *continued* rather than remade. This keeps exactly that: one row list
     /// per paragraph, the revision it was true of, and nothing else.
-    static LAST: RefCell<Vec<(u64, usize, usize, u64, Vec<(usize, usize)>)>> =
-        const { RefCell::new(Vec::new()) };
+    static LAST: RefCell<Vec<Continued>> = const { RefCell::new(Vec::new()) };
     #[cfg(test)]
     static WHY: RefCell<std::collections::HashMap<String, usize>> =
         RefCell::new(std::collections::HashMap::new());

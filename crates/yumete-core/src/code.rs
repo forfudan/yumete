@@ -172,9 +172,8 @@ impl Language {
     /// The compiled query and what each of its captures means. Compiled once
     /// per process: a query is parsed from its source text, and that is not
     /// something to do per frame.
-    fn query(self) -> Option<&'static (Query, Vec<Paint>)> {
-        static CELLS: [OnceLock<Option<(Query, Vec<Paint>)>>; 9] =
-            [const { OnceLock::new() }; 9];
+    fn query(self) -> Option<&'static Compiled> {
+        static CELLS: [OnceLock<Option<Compiled>>; 9] = [const { OnceLock::new() }; 9];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -189,6 +188,12 @@ impl Language {
 /// What a capture does to the characters it covers: `None` leaves them to
 /// whatever else names them.
 type Paint = Option<Token>;
+
+/// 一套語法編好的查詢，連着它每一格捕獲上什麼色——按捕獲的次序。
+///
+/// 兩者是一個答案：捕獲是靠它在查詢裏的下標認的，換一份查詢配同一張
+/// `Vec<Paint>`，上的就是別人的色。
+type Compiled = (Query, Vec<Paint>);
 
 /// What a grammar's capture name is, in this page's colours.
 fn token_of(capture: &str) -> Paint {
