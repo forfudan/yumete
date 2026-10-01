@@ -715,6 +715,18 @@ impl Servers {
             }
             return;
         }
+        // **還在忙就先別問**，同 [`Self::ask`]（#431，2026-10-01 作者報的：
+        // 「在 LSP 加载的时候（八点转圈），按 _k，还是显示『此处没有找到相关
+        // 文档』」）。那句話的意思是「它答了，說沒有」——而它其實還沒讀完項目。
+        //
+        // Warning: **只有人按了鍵纔說那一句。** 跟着光標走的那一問（`:docs on`）
+        // 是編輯器自己發的，每走一步罵一句不是人要的。
+        if self.busy_since(editor).is_some() {
+            if editor.hover_query_is_pending() {
+                self.says = Some(say!("lsp.server-starting"));
+            }
+            return;
+        }
         // Warning: **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
         // settle（300 毫秒）時 `follow` 一個字都還沒發出去，這時候問，服務器
         // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
@@ -759,6 +771,11 @@ impl Servers {
             if editor.take_completion_query().is_some() {
                 editor.no_offers();
             }
+            return;
+        }
+        // 還在忙就先別問（同上）。Warning: **這一條不說話**——補全是打字順手叫
+        // 出來的，不是人按鍵問的，一句「請稍候」會蓋掉他正在看的東西。
+        if self.busy_since(editor).is_some() {
             return;
         }
         if !self.told_the_latest(editor) {
