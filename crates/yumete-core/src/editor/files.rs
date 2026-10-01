@@ -127,29 +127,13 @@ impl Editor {
     /// up for an existing log or for the `.yumete/` a book already has — a
     /// novel written as twenty files in one directory gets one ledger, and
     /// `第一章.md` opened from anywhere finds it.
+    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**（2026-10-01）。從前
+    /// 它當前緩衝區排第一、再數別的緩衝區，認「已經有 `progress.tsv`」或「有
+    /// 一個 `.yumete/` 目録」——和項目根那一支的走法不一樣（那一支還認 `.git`）。
+    /// 五份各走各的「往上找 `.yumete`」，這是其中一份。順帶解決了那條註釋說的
+    /// 事：清單沒有自己的檔名，而項目根本來就不問緩衝區。
     fn progress_path(&self) -> Option<PathBuf> {
-        // **The book is found from the directory, not from the buffer.** A
-        // listing this very command opened has no file name of its own, and a
-        // second `:progress` read from inside it used to answer 「這一份還沒有
-        // 名字」 about the book it had just drawn. So the search falls back to
-        // the other open buffers before it falls back to the working directory
-        // — a listing is opened *from* a manuscript, and that manuscript is
-        // still open behind it.
-        let from = std::iter::once(self.current)
-            .chain((0..self.buffers.len()).rev())
-            .filter_map(|i| self.buffers.get(i))
-            .filter_map(|b| b.path().and_then(Path::parent).map(Path::to_path_buf))
-            .find(|d| !d.as_os_str().is_empty())
-            .or_else(|| std::env::current_dir().ok())?;
-        let mut dir = Some(from.as_path());
-        while let Some(d) = dir {
-            let here = d.join(".yumete");
-            if here.join("progress.tsv").is_file() || here.is_dir() {
-                return Some(here.join("progress.tsv"));
-            }
-            dir = d.parent();
-        }
-        Some(from.join(".yumete").join("progress.tsv"))
+        Some(self.root().join(".yumete").join("progress.tsv"))
     }
 
     /// The directory a project-wide command should walk — this book, not this
@@ -173,15 +157,22 @@ impl Editor {
     /// **Public because a language server needs it.** A server is started
     /// *in* the project (#53／#54) — asked to analyse a crate from anywhere
     /// else it finds no `Cargo.toml` and answers about nothing, silently.
-    /// **這一節坐在哪本書上。** 見 [`Editor::workspace_root`]。
+    /// **這一節坐在哪個項目上。**
     ///
-    /// 文件樹的根、「項目」這個範圍、位置那一格裏的相對路徑，問的都是這一支——
-    /// 屏幕上那幾處說的必須是同一個地方，否則樹裏看得見的和搜得到的不是一批檔。
+    /// 文件樹的根、`空格 f`、「項目」這個搜索範圍、詞表、百科、表格規格、語言
+    /// 服務器的 `rootUri` 問的都是這一支——屏幕上那幾處說的必須是同一個地方，
+    /// 否則樹裏看得見的和搜得到的不是一批檔。
+    ///
+    /// Warning: **它是[工作路徑][`Editor::working_dir`]的函數，不存**（2026-10-01
+    /// 照 helix 重做）。從前有三個答案：一格釘死的 `workspace_root`、一支按打開
+    /// 的緩衝區現算的 `project_root`、再加一格 `working_dir`——而全樹只有七處
+    /// 問第一個，整個 TUI 一次都沒問過它。helix 只有一個可變的東西（cwd），工作
+    /// 區是 `find_workspace()` 當場從它往上算出來的；這裏照辦。
+    ///
+    /// 於是：`gd` 跳進別人的源碼它**不動**（工作路徑沒動），`:cd` 一改它**跟着
+    /// 改**。
     pub fn root(&self) -> PathBuf {
-        match &self.workspace_root {
-            Some(root) => root.clone(),
-            None => self.project_root(),
-        }
+        self.project_root()
     }
 
     /// 家目錄——`:cd` 不帶參數去的地方（照 helix 與 vim）。
@@ -242,44 +233,38 @@ impl Editor {
         Some(back)
     }
 
-    /// 開 yumete 的時候定一次。命令行給的是文件夾就是它，給的是一個檔就從那個
-    /// 檔往上找項目根，什麼都沒給就不設（退回 `project_root`）。
+    /// **命令行說的那個地方，定[工作路徑][`Editor::working_dir`]。**
+    ///
+    /// 給文件夾就是它，給一個檔就是那個檔所在的那一層。項目路徑不另存——
+    /// [`Editor::root`] 當場從這裏往上算。
+    ///
+    /// Warning: **helix 只讓文件夾參數動 cwd，一個檔不動。** 這裏讓檔也動，是因為
+    /// `ye 卷一/第一章.md` 從 `/tmp` 敲的時候，helix 那條規矩會把工作區定成
+    /// `/tmp`——`空格 f` 於是列出 `/tmp`。讓檔也動一格，`空格 f` 就落在那一章
+    /// 所在的項目上，而「只有一個可變的東西」這一條照舊成立。
     pub fn set_root(&mut self, at: &Path) {
         let full = match at.is_absolute() {
             true => at.to_path_buf(),
             false => std::env::current_dir().unwrap_or_default().join(at),
         };
-        let root = match full.is_dir() {
+        let here = match full.is_dir() {
             true => full,
-            false => {
-                let folder = full.parent().map(Path::to_path_buf).unwrap_or(full);
-                let found = self.project_root_from(&folder);
-                // 那個檔不在任何項目裏，那就它自己那一層。
-                match found.starts_with(&folder) || folder.starts_with(&found) {
-                    true => found,
-                    false => folder,
-                }
-            }
+            false => full.parent().map(Path::to_path_buf).unwrap_or(full),
         };
-        self.workspace_root = Some(std::fs::canonicalize(&root).unwrap_or(root));
+        self.working_dir = Some(std::fs::canonicalize(&here).unwrap_or(here));
     }
 
     pub fn project_root(&self) -> PathBuf {
-        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        self.project_root_from(&here)
+        self.project_root_from(&self.working_dir())
     }
 
-    /// The same, told where 「here」 is and which files are open.
+    /// The same, told where 「here」 is.
+    ///
+    /// Warning: **不看打開了哪幾個檔**（2026-10-01 改，照 helix 的
+    /// `find_workspace`）。從前它當前緩衝區排第一、再數別的緩衝區，於是 `gd`
+    /// 跳進 rustup 的源碼之後整個「項目」跟着跑。
     fn project_root_from(&self, here: &Path) -> PathBuf {
-        // **Not just the current buffer.** A listing — a 拆分表 check, a
-        // `:check` — has no file name, and a command run from inside one still
-        // means the book it was opened from, which is still open behind it.
-        // Same reasoning as `progress_path`, and the same order.
-        let open = std::iter::once(self.current)
-            .chain((0..self.buffers.len()).rev())
-            .filter_map(|i| self.buffers.get(i))
-            .filter_map(|b| b.path());
-        book_root(open, here)
+        book_root(here)
     }
 
     /// This book's log as it stands on disk. Missing is empty, not an error.

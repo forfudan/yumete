@@ -18,32 +18,21 @@ impl Editor {
         self.wiki = Wiki::load(Some(&book), global.as_deref());
     }
 
-    /// This book's `.yumete/wiki.md`, found the way `words.txt` is — up from
-    /// the file being edited — whether or not it is there yet.
+    /// This project's `.yumete/wiki.md`, whether or not it is there yet.
+    ///
+    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**（2026-10-01）。從前
+    /// 它從當前緩衝區往上找一個**已經存在的** `wiki.md`／`wiki.txt`，走法和項目
+    /// 根那一支不一樣——五份各走各的「往上找 `.yumete`」，這是其中一份。
+    ///
+    /// Warning: **哪一種拼法真的在那裏**（2026-09-19，審查逮到的）。從前兩種都找、
+    /// 卻一律答 `wiki.md`——於是一本把百科寫成 `wiki.txt` 的書，`:wiki edit` 開
+    /// 出一個**空的** `wiki.md`，存一下載入那一頭就改認它：作者的詞條一鍵全暗。
     pub(super) fn book_wiki_path(&self) -> PathBuf {
-        let from = self
-            .current_buffer()
-            .path()
-            .and_then(|p| p.parent().map(Path::to_path_buf))
-            .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_else(|| PathBuf::from("."));
-        let mut dir = Some(from.as_path());
-        while let Some(d) = dir {
-            let there = d.join(".yumete");
-            // Warning: **Whichever spelling is really there** (2026-09-19, caught in
-            // review). This looked for both and then always answered `wiki.md`
-            // — so on a book whose wiki is `wiki.txt`, `:wiki edit` opened an
-            // **empty** `wiki.md`, and the first save made the loader prefer
-            // that one: the writer's entries went dark in one keystroke.
-            if there.join(WIKI_MD).is_file() {
-                return there.join(WIKI_MD);
-            }
-            if there.join("wiki.txt").is_file() {
-                return there.join("wiki.txt");
-            }
-            dir = d.parent();
+        let there = self.root().join(".yumete");
+        match there.join("wiki.txt").is_file() && !there.join(WIKI_MD).is_file() {
+            true => there.join("wiki.txt"),
+            false => there.join(WIKI_MD),
         }
-        self.project_root().join(".yumete").join(WIKI_MD)
     }
 
     /// The global wiki, beside the global word list.

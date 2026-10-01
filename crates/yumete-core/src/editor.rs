@@ -1441,22 +1441,21 @@ fn downloads_dir() -> PathBuf {
 /// A free function taking `here` rather than a method reading the process's
 /// working directory, because that is the only way to test it: the other way
 /// is to **move** the process, and every test running beside it would see.
-pub(crate) fn book_root<'a>(open: impl Iterator<Item = &'a Path>, here: &Path) -> PathBuf {
-    let from = open
-        .map(|p| here.join(p))
-        .filter_map(|p| p.parent().map(Path::to_path_buf))
-        .find(|d| !d.as_os_str().is_empty());
-    let Some(from) = from else {
-        return here.to_path_buf();
-    };
+///
+/// Warning: **從工作路徑往上走，不看打開了哪幾個檔**（2026-10-01 改，照 helix 的
+/// `find_workspace`）。從前它先問當前緩衝區、再問別的緩衝區，於是 `gd` 跳進
+/// rustup 的源碼之後「項目」整個跟着跑了——選擇器、`:grep`、詞表、百科各自在
+/// 不同的時刻算，答案還互相對不上。現在它是**工作路徑的函數**：`gd` 跳走它不
+/// 動（工作路徑沒動），`:cd` 一改它跟着改。
+pub(crate) fn book_root(here: &Path) -> PathBuf {
     let marked = |mark: &str, flat: &str| {
-        from.ancestors()
+        here.ancestors()
             .find(|d| d.join(mark).exists() || d.join(flat).exists())
             .map(Path::to_path_buf)
     };
     marked(".yumete", ".yumete.toml")
         .or_else(|| marked(".git", ".git"))
-        .unwrap_or(from)
+        .unwrap_or_else(|| here.to_path_buf())
 }
 
 /// Call `f` for every readable file under `root`, in path order, counting the
@@ -2489,11 +2488,14 @@ pub struct Editor {
     /// 緩衝走——於是換一個 buffer，`.` 就換了意思，而屏幕上看不出來。
     ///
     /// 三家的做法一致（VS Code 的 workspace、Helix 的 workspace root、
-    /// projectile 的 project root）：**一個根，開的時候定死，不跟當前文件走**。
-    /// 從別處打開一個檔只是多一個緩衝，不把根撐大。
+    /// projectile 的 project root）：**一個根，不跟當前文件走**。從別處打開一個
+    /// 檔只是多一個緩衝，不把根撐大。
     ///
-    /// `None` ＝ 命令行沒說，那就退回 [`Self::project_root`]（從 cwd 往上找）。
-    workspace_root: Option<std::path::PathBuf>,
+    /// Warning: **2026-10-01 這一格刪了。** 它是第三份答案：全樹只有七處問
+    /// [`Editor::root`]，整個 TUI 一次都沒問過，而別處各自按緩衝區現算。helix
+    /// 讀了源碼之後發現它只有**一個**可變的東西（cwd），工作區是當場算出來的
+    /// （`find_workspace()`）——照辦之後這一格就沒有存在的理由了。
+    /// 見 [`Editor::working_dir`] 與 [`Editor::root`]。
     /// **欠着一趟走磁盤的搜索**（2026-09-27 報的：「掃描期間表頭是完全靜止的」）。
     ///
     /// 走一遍一本書要幾百毫秒到幾秒，而它從前就在按鍵那一支裏跑完——屏幕在那段
@@ -2949,7 +2951,6 @@ impl Editor {
             search_preview: None,
             replaced_in: Vec::new(),
             replace_this_file: None,
-            workspace_root: None,
             owed_search: false,
             labels: Vec::new(),
             jump_typed: String::new(),

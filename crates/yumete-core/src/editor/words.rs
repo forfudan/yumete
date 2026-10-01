@@ -221,23 +221,15 @@ impl Editor {
         self.data_dir.as_ref().map(|d| d.join("segmentation.txt"))
     }
 
-    /// Where this book's own word list lives, whether or not it is there yet.
+    /// Where this project's own word list lives, whether or not it is there yet.
+    ///
+    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**（2026-10-01）。從前
+    /// 它從**當前緩衝區**往上找一個**已經存在的** `words.txt`——和項目根那一支
+    /// 的走法不一樣（那一支認 `.yumete` 目録與 `.git`，這一支只認那個檔），於是
+    /// `gd` 跳進別人的源碼之後，分詞器悄悄換了一份（通常是空的）詞表，而選擇器
+    /// 還顯示着原來的項目。五份各走各的「往上找 `.yumete`」，這是其中一份。
     fn project_words_path(&self) -> PathBuf {
-        let from = self
-            .current_buffer()
-            .path()
-            .and_then(|p| p.parent().map(Path::to_path_buf))
-            .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_else(|| PathBuf::from("."));
-        let mut dir = Some(from.as_path());
-        while let Some(d) = dir {
-            let candidate = d.join(".yumete").join("words.txt");
-            if candidate.is_file() {
-                return candidate;
-            }
-            dir = d.parent();
-        }
-        from.join(".yumete").join("words.txt")
+        self.root().join(".yumete").join("words.txt")
     }
 
     /// Open a word list for editing, making the directory it belongs in.
