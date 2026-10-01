@@ -115,7 +115,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -258,7 +258,16 @@ pub enum Notice {
     /// empty; a hover does the opposite; a server that answered `null` fills
     /// neither, which is 「nothing to say」 in both languages.
     Answer { id: i64, places: Vec<Place>, told: Option<Told>, offers: Vec<Offer> },
-    /// Anything else: progress, logs, an answer nobody is waiting for.
+    /// **服務器說它在忙，或者忙完了**（`$/progress`，2026-10-01）。
+    ///
+    /// `token` 是那一件活自己的號碼，`begin` 開一件、`end` 關一件（`report`
+    /// 不算開也不算關）。轉圈那八個點數的就是**還開着幾件**。
+    ///
+    /// Warning: **一定要宣告 `window.workDoneProgress`，不然一條都收不到**
+    /// （2026-10-01 量的：宣告之前三十秒零條；宣告之後起一次 rust-analyzer 是
+    /// 221 條，`begin` 十五次 `end` 十五次，兩秒四收場）。
+    Working { token: String, begin: bool, end: bool },
+    /// Anything else: logs, an answer nobody is waiting for.
     Nothing,
 }
 
@@ -309,6 +318,7 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
     match (method, id) {
         (None, Some(id)) if id == initialize_id => Notice::Ready,
         (Some("textDocument/publishDiagnostics"), _) => said(&value),
+        (Some("$/progress"), _) => working(&value),
         // A request from the server: it has both a method *and* an id.
         (Some(_), Some(id)) => Notice::Asked { id },
         // An answer to something we sent: an id and no method.
@@ -318,6 +328,27 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             told: told(value.get("result")),
             offers: offers(value.get("result")),
         },
+        _ => Notice::Nothing,
+    }
+}
+
+/// `$/progress` — 一件活開了還是完了。
+///
+/// `token` 可以是字串也可以是數字（協議兩種都許），這裏一律當字串記。看不懂的
+/// 形狀回 [`Notice::Nothing`]——一條進度消息讀不出來，不是停下來的理由。
+fn working(value: &serde_json::Value) -> Notice {
+    let Some(params) = value.get("params") else { return Notice::Nothing };
+    let token = match params.get("token") {
+        Some(serde_json::Value::String(text)) => text.clone(),
+        Some(serde_json::Value::Number(n)) => n.to_string(),
+        _ => return Notice::Nothing,
+    };
+    let kind = params.get("value").and_then(|v| v.get("kind")).and_then(|k| k.as_str());
+    match kind {
+        Some("begin") => Notice::Working { token, begin: true, end: false },
+        Some("end") => Notice::Working { token, begin: false, end: true },
+        // `report` 只是說「還在忙」，開着的那一件還開着。
+        Some("report") => Notice::Working { token, begin: false, end: false },
         _ => Notice::Nothing,
     }
 }

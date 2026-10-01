@@ -126,6 +126,32 @@ struct Server {
     /// answer carries only an id — one slot would make a hover answer look
     /// like a definition that had somehow lost its place.
     asked_what: Option<i64>,
+    /// **這一個服務器此刻開着幾件活**（`$/progress`，2026-10-01）。
+    ///
+    /// Warning: **數的是服務器自己說的，不是我們猜的。** 從前轉圈那八個點問的是
+    /// 「我告訴過它的檔裏還有沒回診斷的」——而一個**工作區之外**的檔
+    /// （homebrew、rustup 裏的源碼）rust-analyzer 根本不檢查，於是那一格永遠不
+    /// 清，點就一直轉（2026-10-01 作者報的）。`$/progress` 的 `begin` 與 `end`
+    /// 是成對的（量過：起一次 rust-analyzer，15 開 15 關，兩秒四收場），所以它
+    /// 不會卡住。
+    working: HashSet<String>,
+    /// 這個進程是什麽時候起來的——`ready` 之前，「忙」就是「還在啓動」。
+    started: std::time::Instant,
+    /// `working` 從空變成非空的那一刻，空了就清。
+    working_since: Option<std::time::Instant>,
+}
+
+impl Server {
+    /// **此刻在不在忙，從什麽時候起**（2026-10-01）。
+    ///
+    /// 兩段：握手完成之前是「啓動中」；之後看服務器自己報的 `$/progress`。
+    /// 兩段都一定會結束，所以那八個點不會卡住。
+    fn busy_since(&self) -> Option<std::time::Instant> {
+        match self.ready {
+            false => Some(self.started),
+            true => self.working_since,
+        }
+    }
 }
 
 /// Every server, and the one rule about when to talk to them.
@@ -239,7 +265,6 @@ pub struct Servers {
     ///
     /// `waiting_on` 空了就清掉。Warning: **不是每次加一個檔都重設**：一直在等的
     /// 時候重設會讓那幾個點停在第一格上，而它要說的正是「還在轉」。
-    waiting_since: Option<std::time::Instant>,
     /// How long that settle is. A field rather than the constant so a test can
     /// take it to zero instead of sleeping.
     settle: std::time::Duration,
@@ -261,7 +286,6 @@ impl Default for Servers {
             whose: HashMap::new(),
             touched: None,
             waiting_on: HashSet::new(),
-            waiting_since: None,
             settle: SETTLE,
             says: None,
         }
@@ -485,25 +509,37 @@ impl Servers {
             // the first one that counts.
             self.saved.insert(path.clone(), saves);
             self.waiting_on.insert(path.clone());
-            // **等着的時候轉那八個點，不說那句話**（2026-09-30 作者定）。原話：
-            // 「这个动态八个点显示正在加载的符号很好用……我们也可以用这个，而
-            // 不是用下面的那句话。」一句話佔滿整條命令行，而它說的只是「在忙」
-            // ——那件事一格就夠了，而且命令行空着纔放得下別的話。
-            self.waiting_since.get_or_insert_with(std::time::Instant::now);
+            // Warning: **這裏從前還順手開一格「在忙」給那八個點**（2026-09-30
+            // 加的），2026-10-01 拿掉了：那一格要等這個檔的診斷纔清，而工作區
+            // 之外的檔永遠等不到。見 [`Servers::busy_since`]。
         }
         self.whose.insert(path.clone(), language);
         self.sent.insert(path, revision);
     }
 
-    /// **從什麽時候起在等服務器回話**，`None` ＝ 沒在等。
+    /// **這個緩衝區的服務器此刻在不在忙**，`None` ＝ 沒在忙，或者這種語言根本
+    /// 沒有服務器（那時一個點都不該畫）。
     ///
-    /// 給轉圈那八個點用（`crate::spinner`）。Warning: **判準是「我們問了，它還
-    /// 沒答」**，不是 helix 那個「服務器手上有活」——helix 看的是 LSP 的
-    /// `$/progress`（`application.rs:1016`），而這一頭本來就記着
-    /// `waiting_on`：告訴過它的檔裏還有哪幾個沒回診斷。對讀者來說後者更貼切，
-    /// 它答的是「我打開的這個檔還沒被看過」。
-    pub fn waiting_since(&self) -> Option<std::time::Instant> {
-        self.waiting_since
+    /// 給轉圈那八個點用（`crate::spinner`）。
+    ///
+    /// Warning: **2026-10-01 整個換了判準。** 從前問的是「我告訴過服務器的檔裏
+    /// 還有沒回診斷的」，而且是**全局一格**。兩個毛病，作者都撞上了：
+    ///
+    /// 1. **永遠不清。** 一個**工作區之外**的檔（`gd` 跳進 homebrew 或 rustup
+    ///    裏的源碼）rust-analyzer 根本不檢查，它那一份診斷永遠不來——那一格
+    ///    於是永遠開着，點一直轉。
+    /// 2. **串到了每一個緩衝區。** 一格全局的旗子，一個檔卡住，別的檔全跟着轉。
+    ///
+    /// 現在問的是服務器自己說的 `$/progress`（helix 也是這一條），外加「握手還
+    /// 沒完成」那一小段；兩段都一定會結束。而且只算**這個緩衝區那種語言**的服
+    /// 務器。
+    pub fn busy_since(&self, editor: &Editor) -> Option<std::time::Instant> {
+        let language = Self::language_of(editor)?;
+        self.serving(language)
+            .iter()
+            .filter_map(|name| self.running.get(name))
+            .filter_map(Server::busy_since)
+            .min()
     }
 
     /// **A file that is not open any more is not our business any more.**
@@ -564,6 +600,17 @@ impl Servers {
         // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
         // 「哪兒都沒寫」。所以問題**留着不取**，下一輪正文發出去了再問，同
         // [`Self::ask_next`] 一個道理。2026-09-23 補。
+        // **服務器還在忙就先別問**（#431，2026-10-01）。rust-analyzer 讀項目要
+        // 兩秒多，而這期間它對 `textDocument/definition` 回的是 `null`——從前
+        // 我們當場把話說死（「未查到定義位置」），而問話已經被取走，**再也不會
+        // 重問**。現在留着那句問話，等它忙完（`$/progress` 的最後一個 `end`）
+        // 再發出去，期間照實說一句「啓動中」。
+        if self.busy_since(editor).is_some() {
+            if editor.definition_query_is_pending() {
+                editor.set_status(say!("lsp.server-starting"));
+            }
+            return;
+        }
         if !self.told_the_latest(editor) {
             return;
         }
@@ -791,6 +838,22 @@ impl Servers {
                             heard.where_is_it(places.into_iter().next());
                         }
                     }
+                    // **服務器自己說它在忙**（2026-10-01）。開一件記一件，關
+                    // 一件去一件；`report` 兩頭都不動。
+                    Ok(Notice::Working { token, begin, end }) => {
+                        if begin {
+                            server.working.insert(token);
+                        } else if end {
+                            server.working.remove(&token);
+                        }
+                        server.working_since = match server.working.is_empty() {
+                            true => None,
+                            false => server
+                                .working_since
+                                .or_else(|| Some(std::time::Instant::now())),
+                        };
+                        anything = true;
+                    }
                     Ok(Notice::Nothing) => {}
                     Err(TryRecvError::Empty) => break,
                     // The reader thread is gone, which means the pipe closed,
@@ -812,10 +875,6 @@ impl Servers {
         // 器，第一個答得出東西的算數；有一個還沒回話，就再等一輪。
         heard.settle(self, editor);
         self.waiting_on = answered;
-        // 等完了，點也就不轉了。
-        if self.waiting_on.is_empty() {
-            self.waiting_since = None;
-        }
         // 等完了就把那句話收走——留着它會蓋住下一句真要說的話。
         if said_so && self.waiting_on.is_empty() {
             self.says = Some(String::new());
@@ -1109,6 +1168,9 @@ fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::
         next_ask: FIRST_ASK,
         asked_where: None,
         asked_what: None,
+        working: HashSet::new(),
+        started: std::time::Instant::now(),
+        working_since: None,
         asked_next: None,
     };
     server.say_now(lsp::initialize(HELLO, &editor.project_root()));
@@ -1192,6 +1254,9 @@ mod tests {
                     next_ask: FIRST_ASK,
                     asked_where: None,
                     asked_what: None,
+                    working: HashSet::new(),
+                    started: std::time::Instant::now(),
+                    working_since: None,
                     asked_next: None,
                 },
             );

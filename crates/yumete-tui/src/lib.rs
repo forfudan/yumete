@@ -958,7 +958,7 @@ pub fn run(
         // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
         // 看不見它，所以每一輪說一聲——同 `note_the_server` 那一條。
         let spinning = editor.server_busy_since().is_some();
-        editor.note_the_server_is_busy(servers.waiting_since());
+        editor.note_the_server_is_busy(servers.busy_since(editor));
         if spinning != editor.server_busy_since().is_some() {
             server_said_something = true;
         }

@@ -6450,9 +6450,9 @@ en = "no command answers that — say it another way, or backspace to `:`"
 [[message]]
 # gd 問出去了，還沒回話
 key = "lsp.asking"
-zht = "問問這個寫在哪……"
-zhs = "问问这个写在哪……"
-en = "asking where this is written…"
+zht = "向語言服務器詢問定義位置"
+zhs = "向语言服务器询问定义位置"
+en = "asking the language server where this is defined"
 
 [[message]]
 # 空格 k 問出去了，還沒回話
@@ -6520,9 +6520,9 @@ en = "nothing fits here"
 [[message]]
 # gd 問完了，服務器說不出它寫在哪
 key = "lsp.nowhere"
-zht = "服務器說不出這個寫在哪"
-zhs = "服务器说不出这个写在哪"
-en = "the server does not know where this is written"
+zht = "語言服務器未查到定義位置"
+zhs = "语言服务器未查到定义位置"
+en = "the language server found no definition"
 
 [[message]]
 # :diagnostics-all 頂上那一行的狀態：起來了
@@ -6530,6 +6530,13 @@ key = "lsp.ready"
 zht = "已就緒"
 zhs = "已就绪"
 en = "ready"
+
+[[message]]
+# gd 問出去之前，服務器還在讀項目（#431，2026-10-01 作者寫的）
+key = "lsp.server-starting"
+zht = "語言服務器啟動中，請稍候"
+zhs = "语言服务器启动中，请稍候"
+en = "the language server is starting; please wait"
 
 [[message]]
 # 服務器對光標下那個東西無話可說
