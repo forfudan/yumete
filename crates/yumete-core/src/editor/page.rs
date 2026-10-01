@@ -874,6 +874,11 @@ impl Editor {
     }
 
     /// `gd` 問出去的那一句，給前端發（下一趟循環取走）。
+    /// **此刻有沒有一句 `gd` 等着發**——前端拿它決定要不要解釋為什麽還沒發。
+    pub fn definition_query_is_pending(&self) -> bool {
+        self.definition_query.is_some()
+    }
+
     pub fn take_definition_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         self.definition_query.take()
     }
