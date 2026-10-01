@@ -15,6 +15,7 @@ version.workspace = true
 # anyway, which no external tool can see.
 ignore = "0.4"
 regex = "1"
+regex-syntax = "0.8"
 serde = {version = "1", features = ["derive"]}
 # The only new dependency the language-server work takes (#53／#54). Everything
 # on that wire is JSON, and it was already in the lock file.

@@ -38,6 +38,7 @@ pub fn window(len: usize) -> usize {
 /// character ranges — **non-overlapping**, earliest and tightest first.
 ///
 /// `fold` lower-cases both sides; the caller decides that from 大小寫.
+/// `glyphs` counts 書 and 书 as one character, from 中文匹配.
 ///
 /// Warning: **Two passes, and the second is backwards** — the same shape as
 /// [`crate::picker`], for the same reason. A forward walk alone takes the
@@ -49,14 +50,24 @@ pub fn window(len: usize) -> usize {
 ///
 /// The next search resumes at the end of the one before, so a phrase repeated
 /// in a sentence is two rows rather than a cascade of overlapping ones.
-pub fn spans(hay: &[char], needle: &[char], fold: bool) -> Vec<(usize, usize)> {
+pub fn spans(hay: &[char], needle: &[char], fold: bool, glyphs: bool) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     if needle.is_empty() || hay.is_empty() {
         return out;
     }
-    let same = |a: char, b: char| match fold {
-        true => a.to_lowercase().eq(b.to_lowercase()),
-        false => a == b,
+    // Warning: **放寬的是查詢那一邊，不是正文那一邊**（2026-10-01 補的，照
+    // [`crate::picker`] 那一支寫）。`shapes(发) = 发發髮`，所以打「头发」找得到
+    // 「頭髮」；`shapes(發) = 發发`，所以打「發」不會誤中「髮」。反過來折就把這
+    // 個性質毀了。所以這裏 `b` 是查詢那一邊，`a` 是正文那一邊。
+    //
+    // 從前模糊這一路只折大小寫，於是同一個 簡繁異體 開關在挑選器裏管用、在搜索
+    // 面板的模糊底下不管用，而面板上它還畫成亮的（作者 2026-10-01 問出來的）。
+    let same = |a: char, b: char| {
+        let plain = match fold {
+            true => a.to_lowercase().eq(b.to_lowercase()),
+            false => a == b,
+        };
+        plain || (glyphs && crate::glyphs::shapes(b).contains(a))
     };
     let reach = window(needle.len());
     let mut from = 0usize;
@@ -103,7 +114,7 @@ mod tests {
     fn found(hay: &str, needle: &str) -> Vec<String> {
         let hay: Vec<char> = hay.chars().collect();
         let needle: Vec<char> = needle.chars().collect();
-        spans(&hay, &needle, false)
+        spans(&hay, &needle, false, false)
             .into_iter()
             .map(|(a, b)| hay[a..b].iter().collect())
             .collect()
@@ -147,7 +158,7 @@ mod tests {
     fn case_is_the_callers_business() {
         let hay: Vec<char> = "The Plan".chars().collect();
         let needle: Vec<char> = "tp".chars().collect();
-        assert!(spans(&hay, &needle, false).is_empty());
-        assert_eq!(spans(&hay, &needle, true), [(0, 5)]);
+        assert!(spans(&hay, &needle, false, false).is_empty());
+        assert_eq!(spans(&hay, &needle, true, false), [(0, 5)]);
     }
 }

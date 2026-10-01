@@ -112,7 +112,7 @@ impl Where {
     }
 
     /// **Whether this scope walks the disk** — and so whether 包含, 排除 and
-    /// 包含隱藏和忽略 mean anything (2026-10-01 定).
+    /// 搜索隱藏和忽略 mean anything (2026-10-01 定).
     ///
     /// 本文件 and 緩衝區 are a list already in front of the reader; narrowing
     /// it by a path glob is not a thing anyone wants, and a hidden file you
@@ -139,40 +139,44 @@ pub enum Field {
     /// The pattern.
     #[default]
     Query,
-    /// **簡繁異字形**——「書齋」找得到「书斋」（2026-09-25）。
+    /// **中文匹配**——簡繁異體與拼音合成一行（2026-10-01 定，作者原話：
+    /// 「中文匹配 [拼音+繁簡]」）。
     ///
-    /// 排在 大小寫 底下，因為它和大小寫是同一種東西：**兩個字面不同的寫法算不算
-    /// 同一個**。出廠開着。
-    Glyphs,
-    /// **拼音**——`shuzhai` 找得到「書齋」「书斋」（2026-09-25）。
+    /// 四態：`[繁簡+拼音]` → `[繁簡]` → `[拼音]` → `[ ]`。兩個說的是同一件事——
+    /// **字面不同的寫法算不算同一個**——所以合在一行。
     ///
-    /// 排在 簡繁異體 底下，同一族：**字面不同的寫法算不算同一個**。出廠開着，
-    /// 而它只在查詢全是 ASCII 字母的時候纔真的跑（[`crate::pinyin::as_query`]），
+    /// Warning: **合得成，是因為它們同一天都變成了「永遠有效」。** 從前繁簡在正則和模糊
+    /// 底下都失效，合成一行就有一半是假的；`glyphs::widen_pattern` 與
+    /// `nearby::spans` 的字形折疊補上之後兩者再無例外。
+    ///
+    /// 拼音只在查詢全是 ASCII 字母的時候纔真的跑（[`crate::pinyin::as_query`]），
     /// 所以搜 `hello` 一點不受它影響。
-    Pinyin,
-    /// 正則 on or off.
-    Regex,
+    Chinese,
     /// What to put in its place — only there when the panel is replacing.
     Replace,
     /// 大小寫, three ways.
     Case,
-    /// 完整匹配 — ASCII `\b` on both ends.
+    /// **匹配模式**——字面／正則／模糊，三選一（2026-10-01 定）。
+    ///
+    /// 三個互斥的答案回答同一個問題：**這串字怎麼讀**。從前是兩個獨立的勾，而
+    /// 「兩個都關」纔是默認——那一檔沒有名字，只能從兩個空方框去推。
+    Matching,
+    /// 西文整詞匹配 — ASCII `\b` on both ends.
+    ///
+    /// Warning: **不併進 [`Field::Matching`]**：它和 正則 疊得起來（`\b<式子>\b`），
+    /// 只和 模糊 互斥——模糊底下畫灰。
     Whole,
-    /// 模糊 — 「差不多是這幾個字」 (`crate::nearby`).
-    Fuzzy,
-    /// **換上去的那一段跟不跟原文的大小寫**（2026-09-27 定）。
+    /// **替換 —— 一行三態**（2026-10-01 定，作者原話：「替換那一行做成 cycle」）。
     ///
-    /// 只在勾了 [`Field::Replacing`] 的時候出現，緊跟在它後面——它和那六個不是
-    /// 同一類東西：那六個說「怎麼算命中」，這一個說「換上去的怎麼寫」。
-    /// VS Code 也是這麼分的：`Aa`（大小寫算不算數）在**搜索**那一行，
-    /// `AB`（跟不跟原文）在**替換**那一行。
+    /// 關 → 字面替換 → 智能大小寫。從前它是兩行：一個勾（替換）加一個只在勾上
+    /// 之後纔畫得出來的勾（跟原文的大小寫）。合成一行省一行，而且沒勾替換的時候
+    /// 不再有一個灰着的號碼。
     ///
-    /// 出廠關着，同 VS Code：打什麼就寫什麼，是不會讓人意外的那一檔。
-    PreserveCase,
-    /// **替換 —— 勾上就長出替換行**（2026-09-23 報的）。
+    /// 「字面替換」就是出廠那一檔：打什麼就寫什麼。「智能大小寫」是換上去的那一
+    /// 段跟着原文走——VS Code 把它畫成替換行上的 `AB`，和搜索行上的 `Aa` 分開。
     ///
     /// 從前只有 `:replace` 開得出替換行，於是 `:search` 進來的人想改一個詞，得
-    /// 退出去重按一個命令。它是個開關而不是另一扇面板：面板是同一扇，勾上說的
+    /// 退出去重按一個命令。它是個開關而不是另一扇面板：面板是同一扇，開上說的
     /// 是「這些我要改」，不是「剛纔找到的不算了」。
     Replacing,
     /// **只搜哪些文件** —— a glob, or several separated by commas
@@ -205,23 +209,18 @@ impl Field {
     ///
     /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
     /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`／`[ ]` 自然照這個讀法。
-    pub const ALL: [Field; 15] = [
+    pub const ALL: [Field; 12] = [
         Field::Query,
         Field::Replace,
-        // **位置排在開關那一列的頭上**（2026-09-29 定）。它是四選一，按 `0` 換一
-        // 檔——和底下那七個按號碼的開關是同一種東西，所以畫在一起，號碼從 `0`
-        // 起。從前它畫在最上面，於是 `0` 這個鍵在屏幕上一個字都沒有。
-        Field::Scope,
         Field::Case,
-        Field::Glyphs,
-        Field::Pinyin,
-        Field::Regex,
+        Field::Chinese,
+        Field::Matching,
         Field::Whole,
-        Field::Fuzzy,
         Field::Replacing,
-        Field::PreserveCase,
-        // **「搜哪些文件」那三格攢在最下面**（2026-10-01 定）。三格一族，而上面
-        // 七個開關的號碼一個不動。缺點是「位置」還在最上面，和這三格隔開了。
+        // **「搜哪裏、搜哪些」四格攢在最下面**（2026-10-01 定，作者原話：「位置放
+        // 到『包含和排除』上方」）。位置從前畫在開關那一列的頭上、號碼是 `0`，
+        // 可它說的是範圍，和底下三格是一夥的。現在四格一組，號碼接着往下排。
+        Field::Scope,
         Field::Include,
         Field::Exclude,
         Field::Hidden,
@@ -234,21 +233,18 @@ impl Field {
     /// them, so this order is the whole of what the numbers mean. It is the
     /// screen's order, so a reader counts rows rather than learning a list.
     ///
-    /// Warning: **Every one is always drawn**, 模糊 included — it goes quiet while
-    /// 替換 is ticked rather than disappearing, so the numbers below it do not
+    /// Warning: **Every one is always drawn**, 西文整詞匹配 included — it goes quiet
+    /// under 模糊 rather than disappearing, so the numbers below it do not
     /// shift under the reader's eye.
-    pub const SWITCHES: [Field; 9] = [
+    pub const SWITCHES: [Field; 7] = [
         Field::Case,
-        Field::Glyphs,
-        Field::Pinyin,
-        Field::Regex,
+        Field::Chinese,
+        Field::Matching,
         Field::Whole,
-        Field::Fuzzy,
         Field::Replacing,
-        // Warning: **第八個沒在替換的時候畫灰，不是不畫**（2026-10-01 定，作者原話：
-        // 「8號可以灰掉嗎？」）。從前它整行不畫，於是面板上是 1-7 然後一個 9，
-        // 中間缺一個號。灰掉和 模糊 那一行同一個辦法：位子留着，號碼連着。
-        Field::PreserveCase,
+        // **位置也按號碼到**（2026-10-01 起是 `6`，從前是 `0`）。它不是一個勾，是
+        // 四選一，可按法和上面幾個一樣：不必先把光標走上去。
+        Field::Scope,
         Field::Hidden,
     ];
 
@@ -267,11 +263,10 @@ impl Field {
     /// 指定文件夾只能 `:search 某目錄` 進來，進來之後面板裏改不了，所以那一格
     /// 沒有任何可以打字的狀態了。
     ///
-    /// Warning: **包含／排除看範圍走不走磁碟。** 選到 本文件 或 緩衝區 的時候它們畫灰、
-    /// 也停不住——停在一個按什麼都沒用的框上，比跳過它更難懂。
+    /// Warning: **包含／排除看範圍走不走磁碟。** 選到 本文件 或 緩衝區 的時候它們整行
+    /// 不畫（2026-10-01 定），自然也停不住。
     pub fn walked_past(self, on_disk: bool) -> bool {
         match self {
-            Field::Scope => true,
             Field::Include | Field::Exclude => !on_disk,
             other => other.is_switch(),
         }
@@ -428,7 +423,8 @@ pub struct Search {
     pub query: String,
     /// What to put in its place.
     pub replace: String,
-    /// 換上去的那一段跟不跟原文的大小寫。見 [`Field::PreserveCase`]。
+    /// 換上去的那一段跟不跟原文的大小寫——替換那一行的第三檔，見
+    /// [`Field::Replacing`]。
     pub preserve_case: bool,
     /// Whether the replace row is showing — what `:replace` opens with.
     ///
@@ -739,7 +735,7 @@ impl Search {
         }
     }
 
-    /// **現在這一檔走不走磁碟** —— 包含／排除／包含隱藏和忽略 算不算數。
+    /// **現在這一檔走不走磁碟** —— 包含／排除／搜索隱藏和忽略 算不算數。
     pub fn on_disk(&self) -> bool {
         self.scope.walks_the_disk()
     }

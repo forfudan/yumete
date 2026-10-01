@@ -7583,6 +7583,27 @@ zhs = "智能"
 en = "smart"
 
 [[message]]
+# 搜索面板第二行：簡繁異體與拼音合成一行
+key = "search.chinese"
+zht = "中文匹配"
+zhs = "中文匹配"
+en = "Chinese"
+
+[[message]]
+# 中文匹配的一半：簡繁異體
+key = "search.chinese.glyphs"
+zht = "繁簡"
+zhs = "繁简"
+en = "variants"
+
+[[message]]
+# 中文匹配的另一半：拼音
+key = "search.chinese.pinyin"
+zht = "拼音"
+zhs = "拼音"
+en = "pinyin"
+
+[[message]]
 # 搜索：跨檔要按 Enter 纔去找
 key = "search.enter-to-look"
 zht = "Enter 搜索"
@@ -7590,25 +7611,18 @@ zhs = "Enter 搜索"
 en = "Enter to search"
 
 [[message]]
-# 搜索：模糊那一格——打的幾個字按順序出現、而且挨得近就算命中（`crate::nearby`）
-key = "search.fuzzy"
-zht = "模糊匹配"
-zhs = "模糊匹配"
-en = "loose match"
-
-[[message]]
-# 搜索面板：簡繁異體字形混合那個開關的名字
-key = "search.glyphs"
-zht = "繁簡體匹配"
-zhs = "繁简体匹配"
-en = "简 = 繁"
-
-[[message]]
 # 搜索面板第九個開關：連隱藏文件和被忽略的一起搜
 key = "search.hidden"
-zht = "包含隱藏和忽略"
-zhs = "包含隐藏和忽略"
-en = "include hidden and ignored"
+zht = "不搜"
+zhs = "不搜"
+en = "skip"
+
+[[message]]
+# 不搜那一行方框裏列的：不搜哪些
+key = "search.hidden.what"
+zht = "隱藏+忽略"
+zhs = "隐藏+忽略"
+en = "hidden+ignored"
 
 [[message]]
 # 限定一欄搜到第一處
@@ -7695,6 +7709,34 @@ zhs = "位置: "
 en = "In: "
 
 [[message]]
+# 搜索面板第三行：字面／正則／模糊三選一
+key = "search.matching"
+zht = "匹配模式"
+zhs = "匹配模式"
+en = "matching"
+
+[[message]]
+# 匹配方式之三：差不多是這幾個字
+key = "search.matching.fuzzy"
+zht = "模糊"
+zhs = "模糊"
+en = "fuzzy"
+
+[[message]]
+# 匹配方式之一（出廠）：打什麼就找什麼
+key = "search.matching.plain"
+zht = "字面"
+zhs = "字面"
+en = "literal"
+
+[[message]]
+# 匹配方式之二：當成正則式子讀
+key = "search.matching.regex"
+zht = "正則"
+zhs = "正则"
+en = "regex"
+
+[[message]]
 # 搜索：那一處已經不在那裏了（檔案後來被改過）
 key = "search.moved-on"
 zht = "那一處已經不在那裏了，再找一遍"
@@ -7733,27 +7775,6 @@ zhs = "{0}/{1}"
 en = "{0}/{1}"
 
 [[message]]
-# 搜索面板：拼音那個開關的名字
-key = "search.pinyin"
-zht = "拼音匹配"
-zhs = "拼音匹配"
-en = "pinyin → 漢字"
-
-[[message]]
-# 搜索面板第八個開關：換上去的那一段跟不跟原文的大小寫
-key = "search.preserve-case"
-zht = "跟原文的大小寫"
-zhs = "跟原文的大小写"
-en = "preserve case"
-
-[[message]]
-# 搜索：正則那一格
-key = "search.regex"
-zht = "正則"
-zhs = "正则"
-en = "regex"
-
-[[message]]
 # 搜索：全部替換之前問一次
 key = "search.replace-all-sure"
 zht = "把這 {0} 處全部換掉？"
@@ -7773,6 +7794,27 @@ key = "search.replace-file-sure"
 zht = "把 {1} 裏的 {0} 處全部換掉？"
 zhs = "把 {1} 里的 {0} 处全部换掉？"
 en = "Replace all {0} matches in {1}?"
+
+[[message]]
+# 搜索面板第七行三態之二：打什麼就寫什麼（出廠）
+key = "search.replace.literal"
+zht = "字面替換"
+zhs = "字面替换"
+en = "literal"
+
+[[message]]
+# 搜索面板第七行三態之一：不替換
+key = "search.replace.off"
+zht = "關"
+zhs = "关"
+en = "off"
+
+[[message]]
+# 搜索面板第七行三態之三：換上去的跟着原文的大小寫
+key = "search.replace.smart"
+zht = "智能大小寫"
+zhs = "智能大小写"
+en = "smart case"
 
 [[message]]
 # 搜索：換掉了幾處
@@ -7861,8 +7903,8 @@ en = "the working directory"
 [[message]]
 # 搜索：完整匹配那一格
 key = "search.whole"
-zht = "整詞匹配（西文）"
-zhs = "整词匹配（西文）"
+zht = "西文整詞匹配"
+zhs = "西文整词匹配"
 en = "whole word (Latin)"
 
 [[message]]

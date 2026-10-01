@@ -206,10 +206,19 @@ impl Editor {
 
     fn search_pattern(&self) -> String {
         let mut body = match (self.search.regex, self.search.glyphs) {
-            // Warning: **正則開着的時候不折疊字形。** 把每個字改寫成 `[...]` 會把 `.`、
-            // `*`、`[` 一起吃掉——那是毀掉使用者寫的式子。兩個開關因此互斥，面板
-            // 上正則開着時 簡繁異字形 畫灰（2026-09-25）。
-            (true, _) => self.search.query.clone(),
+            // **正則底下也折字形，只折「原樣打出來的那些字」**（2026-10-01 定，
+            // 作者問的：「正则情况下能否也能兼容繁简体？」）。
+            //
+            // Warning: **整串改寫是不行的**，那正是 2026-09-25 讓兩個開關互斥的理由：
+            // 把每個字換成 `[...]` 會把使用者寫的 `.`、`*`、`[` 一起吃掉。
+            // [`crate::glyphs::widen_pattern`] 先解析再動手，所以 `.`、`\d`、
+            // `^$`、括號一律不碰。解析不了（打了一半）就原樣用，壞式子自有它那
+            // 條路。
+            (true, true) => {
+                crate::glyphs::widen_pattern(&self.search.query)
+                    .unwrap_or_else(|| self.search.query.clone())
+            }
+            (true, false) => self.search.query.clone(),
             // **「書齋」找得到「书斋」**：每個字換成它的字形集（`crate::glyphs`）。
             // 這一支自己就轉義，所以不必再 `escape` 一遍。
             (false, true) => crate::glyphs::widen(&self.search.query),
@@ -261,6 +270,12 @@ impl Editor {
             // `/卷一` 是根底下的卷一，不是磁盤根底下的。要出根就寫 `~/…`——
             // 從前填一個 `/` 進來，編輯器去遍歷整塊磁盤。
             Where::Named(path) => {
+                // **開頭那個 `~` 要展開**（2026-10-01 作者報的：`:s ~/Dropbox` 無效）。
+                // 從前它一路當相對路徑接在根後面，於是 `~/Dropbox` 解成
+                // `<項目路徑>/~/Dropbox`，而狀態欄說的是「沒有這個文件夾」——
+                // 聽着像那個目錄不在，其實是我們根本沒去那裏找。`:open` 一直是
+                // 展開的（`Self::expand_tilde`），這一支跟上。
+                let path = &Self::expand_tilde(&path.to_string_lossy());
                 let full = match path.strip_prefix("/") {
                     Ok(inside) => self.root().join(inside),
                     Err(_) => match path.is_absolute() {
@@ -771,16 +786,6 @@ impl Editor {
             // Warning: **模糊 while 替換 is ticked does nothing**, as it did before:
             // the row is drawn quiet, and a quiet row that still flipped would
             // be saying two things at once. `flip_switch` guards it.
-            // **`0` 換一個範圍**（2026-09-26 提的）：本文件 → 本文件夾 →
-            // 工作目錄 → git 項目 → 回到本文件。
-            //
-            // Warning: **和那七個開關同一族的鍵**：它們是 `1`–`7`，這一個是 `0`，都不必
-            // 先把光標走上去。「位置」本來也走得上去（`jk`），可走上去只為按一下
-            // 是浪費——那正是開關改成按號碼的理由。
-            //
-            // Warning: **同時把那一格的文字也寫成新範圍的路徑**：離開那一格會落地
-            // （`land_the_scope`），而落地讀的是文字。不寫就等於按完又被彈回去。
-            Key::Char('0') => self.step_the_scope(),
             // **站在一個換不動的格子上按了改字的鍵**（2026-09-27）：位置那一格
             // 平常是四選一，`i`／`a`／`d` 在它上面沒有東西可改。
             Key::Char('i' | 'a' | 'c' | 'I' | 'A' | 'd' | 'D' | 'C')
@@ -788,12 +793,13 @@ impl Editor {
             {
                 self.status = say!("search.scope-is-a-pick");
             }
+            // **號碼就是從上往下數的行次**（`1`–`9`）。位置那一行 2026-10-01 起是
+            // `8`：它挪到了「包含／排除」上面，和那三格合成「搜哪裏、搜哪些」
+            // 一組，號碼也就接着往下排，不再是從前那個 `0`。
             Key::Char(ch) if ch.is_ascii_digit() && ch != '0' => {
                 let nth = ch as usize - '1' as usize;
                 if let Some(&which) = Field::SWITCHES.get(nth) {
-                    if !(self.search.replacing && which == Field::Fuzzy) {
-                        self.flip_switch(which);
-                    }
+                    self.flip_switch(which);
                 }
             }
             // **`Enter` 就是「再跑一遍」**（2026-09-25 定，原話：「enter 在非結果
@@ -1113,36 +1119,42 @@ impl Editor {
     /// them and `j k` walk past them.
     fn flip_switch(&mut self, which: Field) {
         match which {
-            // Warning: **正則／完整匹配 and 模糊 are alternatives, so asking for one
-            // puts the other down** rather than leaving a tick that does
-            // nothing. They are drawn quiet while 模糊 is on, and a dimmed
-            // switch that still flips would be saying two things at once.
-            Field::Regex => {
-                self.search.regex = !self.search.regex;
-                self.search.fuzzy &= !self.search.regex;
-            }
             Field::Case => self.search.case = self.search.case.next(),
-            // 正則開着的時候這一個不起作用，也就翻不動——畫灰的鍵按下去該什麼都
-            // 不發生，不然它是在說兩句相反的話。
-            Field::Glyphs if !self.search.regex => self.search.glyphs = !self.search.glyphs,
-            Field::Glyphs => return,
-            // 拼音那一路自己走一趟，不經過正則，所以正則開着它照樣管用——
-            // 不像簡繁異體，那一個是往正則裏塞 `[…]`。
-            Field::Pinyin => self.search.pinyin = !self.search.pinyin,
-            Field::Whole => {
-                self.search.whole = !self.search.whole;
-                self.search.fuzzy &= !self.search.whole;
+            // **匹配模式三選一**（2026-10-01 定）：字面 → 正則 → 模糊 → 回字面。
+            // 從前是兩個獨立的勾，而「兩個都關」纔是默認——那一檔沒有名字。
+            Field::Matching => {
+                // Warning: **替換開着的時候轉不到模糊**（2026-09-20 定的那一條，合併之後
+                // 要在這裏守住）：鬆的匹配蓋住讀者沒打的字，「把它們全換掉」交
+                // 出去的範圍他預測不了。那時只在 字面 和 正則 之間轉。
+                let loose = !self.search.replacing;
+                let (regex, fuzzy) = match (self.search.regex, self.search.fuzzy) {
+                    (false, false) => (true, false),
+                    (true, _) => (false, loose),
+                    (false, true) => (false, false),
+                };
+                self.search.regex = regex;
+                self.search.fuzzy = fuzzy;
             }
-            Field::Fuzzy => self.search.fuzzy = !self.search.fuzzy,
+            // **中文匹配四態**（2026-10-01 定）：繁簡+拼音 → 繁簡 → 拼音 → 無。
+            // Warning: **從前這兩個在正則和模糊底下會失效**，所以不敢合；同日補上
+            // `glyphs::widen_pattern` 與 `nearby` 的字形折疊之後，兩者再無例外。
+            Field::Chinese => {
+                let (glyphs, pinyin) = match (self.search.glyphs, self.search.pinyin) {
+                    (true, true) => (true, false),
+                    (true, false) => (false, true),
+                    (false, true) => (false, false),
+                    (false, false) => (true, true),
+                };
+                self.search.glyphs = glyphs;
+                self.search.pinyin = pinyin;
+            }
+            // Warning: **模糊底下它不起作用，也就翻不動**——畫灰的鍵按下去該什麼都不
+            // 發生，不然它是在說兩句相反的話。和正則疊得起來，所以只問模糊。
+            Field::Whole if !self.search.fuzzy => self.search.whole = !self.search.whole,
+            Field::Whole => return,
             Field::Replacing => return self.flip_replacing(),
-            // Warning: **只在替換那一檔畫得出來，所以也只在那時翻得動**：一個看不見
-            // 的開關按下去改了東西，下一次勾上替換的人不知道它從哪兒來的。
-            Field::PreserveCase if self.search.replacing => {
-                self.search.preserve_case = !self.search.preserve_case;
-                // 它不改「找到哪些」，所以不必重找。
-                return;
-            }
-            Field::PreserveCase => return,
+            // 位置不是一個勾，是四選一；按它的號碼就是「換一檔」。
+            Field::Scope => return self.step_the_scope(),
             // **連隱藏文件和 `.gitignore` 裏的一起搜**（2026-10-01 定）。範圍不走
             // 磁碟的時候它畫灰，按下去什麼都不發生——同 模糊 在替換底下那一條。
             Field::Hidden if self.search.on_disk() => self.search.hidden = !self.search.hidden,
@@ -1162,8 +1174,18 @@ impl Editor {
     /// Warning: **關掉替換不會自動把 模糊 打開**：它本來就是關着的那一個，替下去再彈
     /// 回來是替讀者做了他沒說過的決定。
     fn flip_replacing(&mut self) {
-        self.search.replacing = !self.search.replacing;
-        if self.search.replacing {
+        // **一行三態**（2026-10-01 定）：關 → 字面替換 → 智能大小寫 → 回關。
+        // 次序是作者定的：第二檔是出廠那一種（打什麼就寫什麼），按一下到的是平常
+        // 要的，再按纔是特殊的。
+        let (replacing, keep) = match (self.search.replacing, self.search.preserve_case) {
+            (false, _) => (true, false),
+            (true, false) => (true, true),
+            (true, true) => (false, false),
+        };
+        let opening = replacing && !self.search.replacing;
+        self.search.replacing = replacing;
+        self.search.preserve_case = keep;
+        if opening {
             self.search.fuzzy = false;
             self.search.replace.clear();
         }
@@ -1540,6 +1562,9 @@ impl Editor {
         let how = match self.search.fuzzy {
             true => How::Nearby {
                 needle: self.search.query.chars().collect(),
+                // **模糊底下簡繁異體照樣算數**（2026-10-01 補）。挑選器一直是這樣，
+                // 而這一扇從前不是——同一個開關兩種行為。
+                shapes: self.search.glyphs,
                 fold: match self.search.case {
                     Case::Insensitive => true,
                     Case::Sensitive => false,
@@ -1753,7 +1778,7 @@ pub(super) enum How {
     /// A regular expression, flags and all (`search_pattern`).
     Pattern(Regex),
     /// The 模糊 switch: [`crate::nearby`], which counts in characters.
-    Nearby { needle: Vec<char>, fold: bool },
+    Nearby { needle: Vec<char>, fold: bool, shapes: bool },
 }
 
 impl Look {
@@ -1792,9 +1817,9 @@ impl Look {
                 .find_iter(text)
                 .map(|m| (text[..m.start()].chars().count(), text[..m.end()].chars().count()))
                 .collect(),
-            How::Nearby { needle, fold } => {
+            How::Nearby { needle, fold, shapes } => {
                 let hay: Vec<char> = text.chars().collect();
-                crate::nearby::spans(&hay, needle, *fold)
+                crate::nearby::spans(&hay, needle, *fold, *shapes)
             }
         };
         if let Some(said) = &self.said {
