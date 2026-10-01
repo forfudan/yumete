@@ -349,7 +349,7 @@ fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
             // of those if this did not stop here.
             let Some(offers) = Editor::keys_after(lead) else { continue };
             assert!(
-                offers.iter().any(|k| *k == key),
+                offers.contains(&key),
                 "{doc}:{line} teaches `{quote}`, and the {lead} menu does not offer `{key}`"
             );
             asked += 1;
@@ -364,7 +364,7 @@ fn each_key_the_documents_disown_really_is_missing() {
         let Some((lead, key)) = leader_and_key(quote) else { continue };
         let Some(offers) = Editor::keys_after(lead) else { continue };
         assert!(
-            !offers.iter().any(|k| *k == key),
+            !offers.contains(&key),
             "`{quote}` is a key sequence the editor offers — it does not belong on \
              the list of pairs that only look like one"
         );

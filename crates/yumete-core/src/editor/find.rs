@@ -605,8 +605,8 @@ impl Editor {
         match key {
             // `Tab` walks the slot's views, as it does in every other panel;
             // the form's own cells are `hjkl` (below) and `↑`／`↓`.
-            Key::Tab => return self.cycle_view(side, false),
-            Key::BackTab => return self.cycle_view(side, true),
+            Key::Tab => self.cycle_view(side, false),
+            Key::BackTab => self.cycle_view(side, true),
             // **`hl` 橫着走字，`jk` 竪着走格**（2026-09-25 定，原話：「這一個光標
             // 所在的字是反白的……用戶這樣就能用hl在搜索欄中移動光標」）。和正文
             // 一個感覺：框裏站着一個塊光標，`h`／`l` 挪它，`i` 就從它那裏插。

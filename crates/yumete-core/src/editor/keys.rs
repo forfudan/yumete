@@ -1928,11 +1928,10 @@ impl Editor {
             // round the two gates because it edits the rope directly.
             Key::Char('J') if self.joining_welds_a_grid() => {
                 self.status = say!("table.join-would-change-columns");
-                return;
             }
             Key::Char('J') => {
                 let count = self.join_count();
-                return self.repeat_writing(count, |e| e.join_lines());
+                self.repeat_writing(count, |e| e.join_lines())
             }
             // …and the other direction, which helix does not have (#485).
             //
@@ -1961,7 +1960,7 @@ impl Editor {
                 }
                 let above = rope.line_to_char(line - 1);
                 self.set_cursor(above);
-                return self.repeat_writing(count, |e| e.join_lines());
+                self.repeat_writing(count, |e| e.join_lines())
             }
             // **`gj` and `gk` walk lines of the file, as helix's do** — `j`
             // and `k` walk the rows on the screen, and in a manuscript a line
@@ -1971,22 +1970,22 @@ impl Editor {
             // plain pair walks logical lines」 — it is `move_visual_line_down`).
             Key::Char('j') | Key::Down => {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                return self.repeat(count, |e| e.move_textual_line(false));
+                self.repeat(count, |e| e.move_textual_line(false))
             }
             Key::Char('k') | Key::Up => {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                return self.repeat(count, |e| e.move_textual_line(true));
+                self.repeat(count, |e| e.move_textual_line(true))
             }
             // Goto the next / previous buffer, as Helix binds them.
-            Key::Char('n') => return self.next_buffer(),
-            Key::Char('p') => return self.prev_buffer(),
+            Key::Char('n') => self.next_buffer(),
+            Key::Char('p') => self.prev_buffer(),
             // Open the file named on this line — a `:grep` hit, or a line
             // pasted in from any other tool that prints `path:line:`.
-            Key::Char('f') => return self.goto_file_under_cursor(),
+            Key::Char('f') => self.goto_file_under_cursor(),
             // **`gx` follows what is written here.** vim and Helix both keep
             // 「open the thing under the cursor」 on this key, and in a
             // manuscript the thing under the cursor is a link.
-            Key::Char('x') => return self.follow_link(),
+            Key::Char('x') => self.follow_link(),
             // **`gd` goes, `gD` shows.** The pair every editor has: `gd` is
             // *go to definition* — on a footnote that is the note, in a 拆分
             // column the row the component names — and `gD` is the same
@@ -1996,13 +1995,13 @@ impl Editor {
             // same question, shown over there」 twice (`g/`／`g?`, `t/`／`t?`),
             // and `w` said nothing at all. One letter, and the shift key means
             // 「without leaving」.
-            Key::Char('d') => return self.show_definition(false),
-            Key::Char('D') => return self.show_definition(true),
+            Key::Char('d') => self.show_definition(false),
+            Key::Char('D') => self.show_definition(true),
             // **一眼跳到屏幕上任何地方**（#406，2026-09-28）。查定義是 `gd`／`gD`
             // 了（2026-09-09 改的名），而 `gw` 從那天起只剩一句「它搬家了」——
             // Warning: 一個 helix 使用者按 `gw` 收到的是那句話，**看起來像個答案而答的
             // 是另一個問題**。現在它就是 helix 的那個 `gw`。
-            Key::Char('w') => return self.start_jump(),
+            Key::Char('w') => self.start_jump(),
             // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
             // or what the cursor is on — searched across the whole document.
             // `g/` is the sugar `/` has always wanted: search for *this*,
@@ -2014,11 +2013,11 @@ impl Editor {
             // jumped somewhere else.
             Key::Char('/') => {
                 self.definition_preview = false;
-                return self.search_the_page();
+                self.search_the_page()
             }
             Key::Char('?') => {
                 self.definition_preview = true;
-                return self.search_the_page();
+                self.search_the_page()
             }
             _ => {}
         }

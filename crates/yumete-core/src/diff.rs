@@ -407,8 +407,8 @@ mod tests {
 
     #[test]
     fn two_texts_with_nothing_in_common_give_up_rather_than_grind() {
-        let old: String = std::iter::repeat("甲乙丙丁").take(2000).collect();
-        let new: String = std::iter::repeat("戊己庚辛").take(2000).collect();
+        let old: String = std::iter::repeat_n("甲乙丙丁", 2000).collect();
+        let new: String = std::iter::repeat_n("戊己庚辛", 2000).collect();
         let seg: &dyn Fn(&str) -> Vec<(usize, usize)> = &by_character;
         assert!(script(&tokens(&old, seg), &tokens(&new, seg)).is_none());
     }

@@ -555,10 +555,9 @@ impl Editor {
         let mut by_first: HashMap<char, Vec<&str>> = HashMap::new();
         for name in self.wiki.by_name.keys() {
             let mut cs = name.chars();
-            match (cs.next(), cs.next()) {
-                // One-character names are reported already, as never-markable.
-                (Some(first), Some(_)) => by_first.entry(first).or_default().push(name),
-                _ => {}
+            // One-character names are reported already, as never-markable.
+            if let (Some(first), Some(_)) = (cs.next(), cs.next()) {
+                by_first.entry(first).or_default().push(name);
             }
         }
         if by_first.is_empty() {

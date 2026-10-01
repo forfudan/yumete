@@ -34,7 +34,7 @@ fn what_is_in_the_directory_is_what_the_editor_offers() {
     // stop the two that are.
     std::fs::write(schemes.join("notes.txt"), "not a scheme").unwrap();
 
-    assert_eq!(yumete_ime::discover(&[dir.clone()]), 2, "both taken");
+    assert_eq!(yumete_ime::discover(std::slice::from_ref(&dir)), 2, "both taken");
     let tags: Vec<&str> = Scheme::all().iter().map(|s| s.tag()).collect();
     assert_eq!(tags, ["aaa", "zzz"], "the file's own index orders the menu");
     assert_eq!(Scheme::from_tag("aaa").map(|s| s.found_name()), Some("前面那個"));

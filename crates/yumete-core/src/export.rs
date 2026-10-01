@@ -423,7 +423,7 @@ fn html(text: &str, style: &Style) -> String {
                 let body: Vec<String> = lines
                     .iter()
                     .skip(1)
-                    .take(lines.len().saturating_sub(2).max(0))
+                    .take(lines.len().saturating_sub(2))
                     .map(|l| escape_html(l))
                     .collect();
                 out.push_str(&format!("<pre><code>{}</code></pre>\n", body.join("\n")));

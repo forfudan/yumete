@@ -370,8 +370,7 @@ mod tests {
 
     #[test]
     fn a_log_survives_the_round_trip_and_a_hand_edit() {
-        let mut log = Log::default();
-        log.target = Some(2000);
+        let mut log = Log { target: Some(2000), ..Log::default() };
         log.note("2026-09-05", "第一章.md", 0, 1830);
         log.note("2026-09-06", "第一章.md", 1830, 2440);
         let text = log.to_text();

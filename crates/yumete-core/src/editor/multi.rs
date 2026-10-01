@@ -154,7 +154,7 @@ impl super::Editor {
         // （`f` 補上字符之後 `Pending::Find` 就沒了），後面幾段於是把那個字符當成一個
         // 普通的鍵——`f丙` 只有第一段走得動，別的原地不動。`count` 同理（`3w`）。
         // 每一段開跑之前擺回去，跑完之後留最後一段的那一份。
-        let pending = self.pending.clone();
+        let pending = self.pending;
         let count = self.count;
         // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
@@ -162,7 +162,7 @@ impl super::Editor {
         let named = self.pending_register;
         for (nth, one) in was.iter().enumerate() {
             self.sel = crate::selection::Selections::one(*one);
-            self.pending = pending.clone();
+            self.pending = pending;
             self.count = count;
             self.pending_register = named;
             what(self);
@@ -208,7 +208,7 @@ impl super::Editor {
         let grouping = self.current_buffer_mut().begin_undo_group();
         let was = self.sel.clone();
         let primary = was.primary();
-        let pending = self.pending.clone();
+        let pending = self.pending;
         let count = self.count;
         // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
@@ -230,7 +230,7 @@ impl super::Editor {
             one.anchor = one.anchor.min(before);
             one.head = one.head.min(before);
             self.sel = crate::selection::Selections::one(one);
-            self.pending = pending.clone();
+            self.pending = pending;
             self.count = count;
             self.pending_register = named;
             // Warning: **文檔次序，不是執行次序**：這一趟從後往前跑，而讀者數的是從上往下
@@ -277,6 +277,10 @@ impl super::Editor {
     }
 
     /// 上一支的反面：半開區間變回一段選區。
+    ///
+    /// Warning: 名字裏的 `from_` 不是構造函數那個 `from_`——它讀作「從畫出來
+    /// 的那一對還原」，主語是編輯器。
+    #[allow(clippy::wrong_self_convention)]
     pub(super) fn from_drawn(&self, from: usize, to: usize) -> Range {
         let rope = self.current_buffer().rope();
         let head = crate::motion::prev_grapheme(rope, to).max(from);

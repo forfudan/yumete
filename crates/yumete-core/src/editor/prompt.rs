@@ -7,6 +7,11 @@
 use super::*;
 
 impl Editor {
+    // Warning: **`Key::Esc` 那一支不收 `collapsible_if`**（2026-10-01）：收了就
+    // 成了 `Key::Esc if self.drop_the_offering()`，一個**帶副作用的守衛**——中間
+    // 插一支 arm 進來就換了意思，而「按 Esc 一定要把那張單子撤掉」跟它撤沒撤成
+    // 是兩件事。
+    #[allow(clippy::collapsible_if)]
     pub(super) fn on_insert_key(&mut self, key: Key) {
         // Warning: **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
         // `C-g` 後面那個 `u` 得在這裏吞——放在那邊是吞不到的（2026-09-23 測出來
@@ -57,6 +62,11 @@ impl Editor {
                         return;
                     }
                 }
+                // Warning: **不寫成 `Key::Esc if self.drop_the_offering()`**
+                // （`clippy::collapsible_if` 提的，不收）
+                // （2026-10-01 `clippy --fix` 提的，退回來了）。守衛裏帶副作用
+                // 是給下一個讀的人埋的坑：中間插一支 arm 進來就換了意思，而
+                // 「按 Esc 一定要把那張單子撤掉」跟它撤沒撤成是兩件事。
                 Key::Esc => {
                     if self.drop_the_offering() {
                         return;

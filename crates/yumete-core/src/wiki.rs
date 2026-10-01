@@ -149,9 +149,9 @@ impl Wiki {
     /// missing files equal — `None == None` — so an unsaved buffer and a wiki
     /// that had since been deleted read as the same file.
     pub fn came_from(&self, path: &Path) -> bool {
-        self.files().iter().any(|&p| p == path)
+        self.files().contains(&path)
             || std::fs::canonicalize(path)
-                .is_ok_and(|real| self.canonical.iter().any(|p| *p == real))
+                .is_ok_and(|real| self.canonical.contains(&real))
     }
 
     /// Every file the wiki was read from — a save of any of them reloads it.

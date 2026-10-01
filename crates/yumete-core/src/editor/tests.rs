@@ -11332,7 +11332,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // ---- ① 開文件只**留下一個請求**，一個字都不說 ---------------------
     let mut ed = Editor::new();
     ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
-    ed.open_file(&dir.join("ch02.md")).unwrap();
+    ed.open_file(dir.join("ch02.md")).unwrap();
     let ask = ed.take_detect_request().expect("開文件要請前端讀一遍");
     assert!(ask.text.contains("阿寧"), "讀的是這一篇的正文");
     assert_eq!(ask.folder.as_deref(), Some(dir.as_path()), "外加它所在的文件夾");
@@ -11372,7 +11372,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // Warning: **`-cd`, not bare** (#452). 光 `:word-discover` 只讀眼前這一篇，而
     // 阿寧 分散在三章裏 —— 一章兩次夠不上 `MIN_COUNT`。範圍是這族命令的參數，
     // 不是它的背景設定。
-    ed.open_file(&dir.join("ch01.md")).unwrap();
+    ed.open_file(dir.join("ch01.md")).unwrap();
     assert!(ed.execute("word-discover-cd").is_ok(), "{}", ed.status());
     let listing = dir.join(".yumete").join("discovered_words.txt");
     assert!(listing.is_file(), "名單要寫出來：{}", ed.status());
@@ -11387,7 +11387,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
 
     // **整份覆蓋，不追加。** 跑兩次不會變兩份。
     let again = {
-        ed.open_file(&dir.join("ch01.md")).unwrap();
+        ed.open_file(dir.join("ch01.md")).unwrap();
         assert!(ed.execute("word-discover-cd").is_ok(), "{}", ed.status());
         std::fs::read_to_string(&listing).unwrap()
     };
@@ -11396,7 +11396,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
 
     // ---- ④ 那份檔**不讀回來**：在裏面刪一行什麼也不會發生 -------------
     std::fs::write(&listing, "# 清空了\n").unwrap();
-    ed.open_file(&dir.join("ch02.md")).unwrap();
+    ed.open_file(dir.join("ch02.md")).unwrap();
     assert_eq!(
         ed.segment_line(0)[1],
         (1, 3),
@@ -11414,7 +11414,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
         list.add("阿寧");
         ed.set_detected_words(list);
         assert_eq!(ed.detected_word_count(), 1);
-        ed.open_file(&dir.join("ch01.md")).unwrap();
+        ed.open_file(dir.join("ch01.md")).unwrap();
         // 手動那一支掃這一篇（阿寧在這一章只有兩次，夠不上），名單該原封不動。
         assert!(ed.execute("word-discover").is_ok(), "{}", ed.status());
         assert_eq!(
@@ -13526,12 +13526,12 @@ fn the_cost_of_a_key_in_one_paragraph() {
 
         let cost = |what: &str, key: Key, ed: &mut Editor| {
             for _ in 0..3 {
-                ed.on_key(key.clone());
+                ed.on_key(key);
             }
             let began = Instant::now();
             let n = 20;
             for _ in 0..n {
-                ed.on_key(key.clone());
+                ed.on_key(key);
             }
             let ms = began.elapsed().as_secs_f64() * 1000.0 / n as f64;
             println!("{chars:>9} chars  {what:<8} {ms:>8.3} ms a key");
@@ -15482,7 +15482,7 @@ fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
     std::fs::write(dir.join("第一章.md"), "他走進落霞鎮\n").unwrap();
 
     let mut ed = Editor::new();
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
     let line = "他走進落霞鎮";
     let words: Vec<String> = ed
@@ -15497,10 +15497,10 @@ fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
     assert!(report.contains("地理.md") && report.contains('1'), "{report}");
 
     // A new entry in the included file, saved: in force without a command.
-    ed.open_file(&dir.join(".yumete/地理.md")).unwrap();
+    ed.open_file(dir.join(".yumete/地理.md")).unwrap();
     ed.current_buffer_mut().replace(0..0, "## 雁門關\n關口。\n").unwrap();
     ed.execute(":w").unwrap();
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     assert!(ed.wiki.by_name.contains_key("雁門關"), "{:?}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -15580,7 +15580,7 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
     .unwrap();
     std::fs::write(dir.join("第一章.md"), "阿寧回來了\n").unwrap();
     let mut ed = Editor::new();
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
     let view = ed.wiki_floating().expect("standing on 阿寧");
@@ -15589,9 +15589,9 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
     assert_eq!(
         view.parts[0].lines,
         [
-            WikiLine::Text("主角。".into()),
-            WikiLine::Heading(2, "小時候".into()),
-            WikiLine::Text("江邊。".into())
+            WikiLine::Text("主角。"),
+            WikiLine::Heading(2, "小時候"),
+            WikiLine::Text("江邊。")
         ],
         "### under ## reads as ## under the entry"
     );
@@ -15623,7 +15623,7 @@ fn a_long_wiki_entry_is_only_read_as_far_as_the_panel_can_draw() {
     std::fs::write(dir.join(".yumete/wiki.md"), format!("# 地理\n## 君山\n{body}")).unwrap();
     std::fs::write(dir.join("第一章.md"), "君山在那裏。\n").unwrap();
     let mut ed = Editor::new();
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
     let view = ed.wiki_floating().expect("standing on 君山");
@@ -15658,7 +15658,7 @@ fn the_wiki_report_names_what_this_chapter_could_not_mark() {
     .unwrap();
     std::fs::write(dir.join("第一章.md"), "他到落霞鎮。\nA 計劃還在。\n").unwrap();
     let mut ed = Editor::new();
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
     assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)], "落霞鎮 is marked");
     assert!(ed.wiki_marks_on_line(1).is_empty(), "A 計劃 is not");
@@ -15676,7 +15676,7 @@ fn the_wiki_report_names_what_this_chapter_could_not_mark() {
     let again = ed.current_buffer().text();
     assert!(!again.contains("A 計劃"), "the report read itself back: {again}");
     // …and it is there again the moment there is a chapter to be about.
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     ed.execute(":wiki-where").unwrap();
     assert_eq!(ed.current_buffer().text(), report);
     std::fs::remove_dir_all(&dir).ok();
@@ -15717,7 +15717,7 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
     )
     .unwrap();
     let mut ed = Editor::new();
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
     // Warning: **Without readings it says so and reports nothing** — 「one character
@@ -15745,7 +15745,7 @@ fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
     std::fs::write(dir.join(".yumete/wiki.md"), "## 落霞鎮\n小鎮。\n## 墨\n一個字。\n").unwrap();
     std::fs::write(dir.join("第一章.md"), "他到落霞鎮，墨還在。\n```\n落霞鎮\n```\n").unwrap();
     let mut ed = Editor::new();
-    ed.open_file(&dir.join("第一章.md")).unwrap();
+    ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
     assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)], "落霞鎮, and 墨 is one character");
@@ -15790,7 +15790,7 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     std::fs::write(dir.join("一.md"), "第一章的頭一句。\n第二句。\n").unwrap();
     std::fs::write(dir.join("二.md"), "另一章。\n").unwrap();
     let mut ed = Editor::new();
-    ed.open_file(&dir.join("一.md")).unwrap();
+    ed.open_file(dir.join("一.md")).unwrap();
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('f'));
     assert!(ed.picker().is_some_and(|p| !p.typing()), "the keys start in the list");

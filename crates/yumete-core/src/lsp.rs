@@ -800,11 +800,11 @@ mod tests {
 
         // 一個 Location。
         let one = r#"{"id":2,"result":{"uri":"file:///a.rs","range":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}}"#;
-        assert_eq!(here(one), [want.clone()]);
+        assert_eq!(here(one), std::slice::from_ref(&want));
 
         // 一串 Location。
         let many = r#"{"id":2,"result":[{"uri":"file:///a.rs","range":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}]}"#;
-        assert_eq!(here(many), [want.clone()]);
+        assert_eq!(here(many), std::slice::from_ref(&want));
 
         // 一串 LocationLink——rust-analyzer 送的這一種。
         let links = r#"{"id":2,"result":[{"targetUri":"file:///a.rs","targetRange":{"start":{"line":1,"character":0},"end":{"line":9,"character":1}},"targetSelectionRange":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}]}"#;

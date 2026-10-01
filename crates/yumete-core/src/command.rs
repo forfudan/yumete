@@ -679,8 +679,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     Err(CommandError::Unknown(word.to_string()))
 }
 
-/// One entry of the command list: what to type, and what it does.
-
 /// What was asked of `:convert`.
 ///
 /// Three shapes rather than one because they are three different questions:
@@ -4281,10 +4279,7 @@ pub const COMMANDS: &[Entry] = &[
 /// command is what `Entry::aliases` is for — `:wq` and `:x` are `write-quit`'s
 /// aliases and shown in its brackets like every other alias. This table is for
 /// the ones that stand for two words, which no alias can express.
-
-
-
-
+///
 /// **`bc` and `wa` came back** (2026-09-10). The fold retired them along with
 /// `bclose` and `wall`, on the rule that a leaf keeps its name and the tree
 /// says the rest. That is right for the twenty commands a reader meets once;
@@ -4551,8 +4546,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 }
             }
         }
-        let out = placed;
-        out
+        placed
     }
 
     // The first word names a command; every word after it walks down what that
@@ -4699,7 +4693,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // reaches `check-punct` and `view-punct`, two particular commands that
     // happen to share a word, and folding them into `check-` and `view-` would
     // answer the question with the two families they came from.
-    if folding && !reached_for && words.first().is_none() {
+    if folding && !reached_for && words.is_empty() {
         choices = fold(typed, choices);
     }
     (start, choices)
@@ -6079,7 +6073,7 @@ mod tests {
                     "`{}` is in the list and is neither a command nor one's alias",
                     choice.name
                 );
-                assert_eq!(parse(&format!(":{}", choice.name)).is_ok(), true);
+                assert!(parse(&format!(":{}", choice.name)).is_ok());
                 continue;
             };
             assert_eq!(choice.short, short(entry.name), "one rule, not two");

@@ -334,8 +334,8 @@ pub fn typo(query: &str, name: &str, cap: usize) -> Option<usize> {
     for (i, cell) in grid.iter_mut().enumerate() {
         cell[0] = i;
     }
-    for j in 0..=b.len() {
-        grid[0][j] = j;
+    for (j, cell) in grid[0].iter_mut().enumerate() {
+        *cell = j;
     }
     for i in 1..=a.len() {
         for j in 1..=b.len() {
@@ -427,7 +427,7 @@ pub fn look(query: &str) -> Vec<Hit> {
         .iter()
         .zip(&rows)
         .filter_map(|(choice, row)| {
-            let score = score(query, *row, &idf)
+            let score = score(query, *row, idf)
                 .or_else(|| match worth_a_typo_check(query) {
                     true => typo(query, row.name, 2).map(typo_score),
                     false => None,

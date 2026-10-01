@@ -216,7 +216,7 @@ impl Editor {
     /// several hundred unrelated names into a panel whose whole job is 「the
     /// few near here」. That is deliberately **not** where `:search-gd` looks:
     /// 「find a word anywhere in the book」 and 「point at this stack on my
-    /// desk」 are different questions (#419, [^361]).
+    /// desk」 are different questions (#419, `[^361]`).
     fn file_choices(&self, typed: &str) -> Vec<Candidate> {
         let close = self.closes_with_n(']', 2);
         let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
