@@ -9406,6 +9406,93 @@ fn a_hit_in_an_unnamed_draft_is_reached_by_its_buffer_not_its_name() {
     assert_eq!(ed.current_buffer().text(), "乙乙\n", "草稿裏那兩處換掉了");
 }
 
+/// **包含／排除那兩格真的管用**（2026-10-02 補的測試）。
+///
+/// 從前只有我拿 `--shot` 手動驗過一遍，一條測試都沒有。寫法照 `.gitignore`：
+/// 不帶斜杠的只看檔名，帶斜杠的釘在範圍的根上，多條用逗號隔開。
+#[test]
+fn the_include_and_exclude_boxes_narrow_the_walk() {
+    let dir = a_little_book("sieveboxes");
+    std::fs::write(dir.join("c.txt"), "霜在這裏\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":search-project").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    let all = ed.search().total;
+    assert!(all >= 4, "不篩的時候 md 和 txt 都在：{all}");
+
+    // 只搜 .txt。
+    ed.search_for_test().include = "*.txt".into();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 1, "只剩那一個 txt");
+
+    // 只搜 .md。
+    ed.search_for_test().include = "*.md".into();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, all - 1, "txt 那一處沒了");
+
+    // 排除 .md，等於只剩 txt。
+    ed.search_for_test().include = String::new();
+    ed.search_for_test().exclude = "*.md".into();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 1, "排除掉 md");
+
+    // Warning: **帶斜杠的釘在根上**，不帶的看任何一層——同 `.gitignore`。
+    ed.search_for_test().exclude = String::new();
+    ed.search_for_test().include = "卷一/*.md".into();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    let under = ed.search().total;
+    ed.search_for_test().include = "*.md".into();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert!(ed.search().total >= under, "釘在根上的那一條蓋得更窄：{under}");
+
+    // 多條用逗號。
+    ed.search_for_test().include = "*.txt, 卷一/*.md".into();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, under + 1, "兩條加起來");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **走查什麼時候停**（2026-10-02）。
+///
+/// 三個常量是真實世界的數，測試裏造不出那麼大的樹；判斷那一半是純函數，餵什麼數
+/// 都行。這一條守的是 2026-10-02 那個回歸：寬限只歸搜索那一趟，挑選器和 `[[` 補
+/// 全到地板就停——它們在按鍵上同步跑，中間沒有「正在找…」那一幀。
+#[test]
+fn only_the_search_walk_waits_out_the_grace() {
+    use crate::editor::walk_is_done;
+    use std::time::Duration;
+    let instant = Duration::from_millis(1);
+
+    // 沒到地板，誰都不停。
+    assert!(!walk_is_done(0, 0, instant, true));
+    assert!(!walk_is_done(0, 0, instant, false));
+
+    // 到了地板：挑選器當場停，搜索還肯等。
+    assert!(walk_is_done(crate::editor::WALK_CEILING, 0, instant, false), "挑選器到地板就停");
+    assert!(!walk_is_done(crate::editor::WALK_CEILING, 0, instant, true), "搜索還肯等");
+    assert!(
+        walk_is_done(crate::editor::WALK_CEILING, 0, crate::editor::WALK_GRACE, true),
+        "等滿寬限纔停"
+    );
+
+    // 條目那個地板和文本那個地板是「或」。
+    assert!(walk_is_done(0, crate::editor::VISIT_CEILING, instant, false));
+
+    // 硬停不管有沒有到地板，也不管是誰。
+    assert!(walk_is_done(0, 0, crate::editor::WALK_DEADLINE, true));
+    assert!(walk_is_done(0, 0, crate::editor::WALK_DEADLINE, false));
+}
+
 /// **開一次挑選器不許把列表的根蓋掉**（2026-10-02 修）。
 ///
 /// `listing_root` 從前一個槽裝兩件事：`檔名:行號:` 那種列表的根（`gf` 要它）和
