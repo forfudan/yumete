@@ -650,8 +650,15 @@ struct 三 { 甲: u8 }
     #[test]
     #[ignore = "報數用的，不是斷言；要跑加 --release --nocapture"]
     fn the_three_numbers_behind_423() {
-        let path = std::env::var("YUMETE_BENCH")
-            .unwrap_or_else(|_| "crates/yumete-tui/src/lib.rs".to_string());
+        // Warning: **出廠那個路徑要從倉根算起，不是從當前目録**（2026-10-01）：
+        // `cargo test` 跑在**這個 crate 的目録**裏，相對路徑於是找不到檔，一跑就
+        // `NotFound`。帶 `#[ignore]` 的不進閘，所以沒人發現。
+        let path = std::env::var("YUMETE_BENCH").unwrap_or_else(|_| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../yumete-tui/src/lib.rs")
+                .to_string_lossy()
+                .into_owned()
+        });
         let text = std::fs::read_to_string(&path).expect("讀得到那個檔");
         let lines: Vec<String> = text.lines().map(str::to_string).collect();
         let language = Language::Rust;

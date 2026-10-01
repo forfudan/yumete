@@ -12329,15 +12329,19 @@ fn squeezed(text: &str) -> String {
                 editor.on_key(Key::Char(c));
             }
             editor.on_key(Key::Enter);
-            editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('t'));
-            editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('t'));
+            // Warning: **`␣` `t` `t`，不是 `␣t` 兩遍**（2026-10-01 重跑纔發現）。
+            // 2026-09-21 表格組從 `t` 搬到 `␣t`，那一趟的 sed 把這裏每一個單獨
+            // 的 `t` 都換成了 `␣t`，於是 `t t`（整窗）成了 `␣t␣t`——第二個空格
+            // 落進剛開的那一組，掉到兜底。這一條帶 `#[ignore]`，所以沒人發現它
+            // 從那天起一次都沒量過。
+            for key in [' ', 't', 't'] {
+                editor.on_key(Key::Char(key));
+            }
             assert!(editor.grid_has_the_pane(), "t t did not hand the grid the pane");
             if wrap {
-                editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('t'));
-                editor.on_key(Key::Char('a'));
+                for key in [' ', 't', 'a'] {
+                    editor.on_key(Key::Char(key));
+                }
                 assert!(editor.cell_wrap(), "t a did not turn 折行 on");
             }
             let _ = render_with(&editor, &config, ime, w, h);
