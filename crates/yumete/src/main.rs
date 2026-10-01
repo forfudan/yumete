@@ -225,11 +225,25 @@ fn main() -> ExitCode {
     // 定了之後它不再動：從別處打開一個檔只是多一個緩衝，不把根撐大。文件樹、
     // 「項目」這個搜索範圍、位置那一格裏的相對路徑，問的都是這一個地方。
     let mut opened_a_folder = None;
-    if let Some(first) = files.first() {
-        let at = std::path::PathBuf::from(yumete_config::expand_tilde(first));
-        editor.set_root(&at);
-        if at.is_dir() {
-            opened_a_folder = Some(editor.root());
+    match files.first() {
+        Some(first) => {
+            let at = std::path::PathBuf::from(yumete_config::expand_tilde(first));
+            editor.set_root(&at);
+            if at.is_dir() {
+                opened_a_folder = Some(editor.root());
+            }
+        }
+        // **什麽都沒給也要定一次**（2026-10-01 作者報的）。從前這時候不設，
+        // `root()` 就退回 `project_root()`——而那一支是**按打開的緩衝區現算
+        // 的，當前那一個排第一**。於是 `gd` 跳進 homebrew 或 rustup 裏的源碼之
+        // 後，`空格 f` 的搜索範圍跟着跑到了那裏。
+        //
+        // helix 的規矩：`空格 f` 開在**工作區根**上，而工作區根是一開始定下
+        // 的，不跟着你翻到哪兒走（`file_picker`；想搜別處是 `空格 F`）。
+        None => {
+            if let Ok(here) = std::env::current_dir() {
+                editor.set_root(&here);
+            }
         }
     }
     for file in &files {
