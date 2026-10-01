@@ -87,6 +87,13 @@ pub struct Picker {
     /// `k` 從第一條走上來就落在它身上，`j` 再走下去回第一條；`i` 在它身上纔進打
     /// 字。從前 `/` 在列表的任何一條上都進得去，而那不是模態的走法——同日去掉。
     on_query: bool,
+    /// **檔名那一列是相對哪個目錄算的**（2026-10-02）。
+    ///
+    /// Warning: **從前它和列表緩衝區共用 `Editor::listing_root` 一個槽。** 那個槽的本
+    /// 業是「`檔名:行號:` 這種列表的根」，給 `gf` 用；開一次 `空格 f` 就把它蓋
+    /// 掉，於是 `:check` 出一張單子、中間按一下 `空格 f`，再回去 `gf` 就解到挑
+    /// 選器的根底下去了。兩件不相干的事，各存各的。
+    pub root: Option<std::path::PathBuf>,
     /// **What to put near the top before anything is typed**, one number per
     /// item (2026-09-18).
     ///
@@ -127,6 +134,7 @@ impl Picker {
             // 原話：「那就改成默认 normal 状态吧。」
             typing: false,
             on_query: false,
+            root: None,
             bonus: vec![0; count],
         }
     }

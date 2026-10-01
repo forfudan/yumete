@@ -2746,8 +2746,12 @@ pub struct Editor {
     default_syntax: Option<crate::syntax::Syntax>,
     /// Which markup a file is in, by extension or by exact name.
     syntax_by_name: HashMap<String, crate::syntax::Syntax>,
-    /// The directory the last `:grep` listing was gathered from, so `gf` on one
-    /// of its lines resolves the same relative path it printed.
+    /// The directory a `檔名:行號:` listing was gathered from, so `gf` on one of
+    /// its lines resolves the same relative path it printed.
+    ///
+    /// Warning: **挑選器不再借這一格**（2026-10-02 修）。它從前也往這裏寫自己的根，
+    /// 於是 `:check` 出一張單子、中間按一下 `空格 f`，再回去 `gf` 就解錯了地
+    /// 方。挑選器的根現在存在 `Picker::root` 上。
     listing_root: Option<PathBuf>,
     /// **The files this session has been in, newest first** (2026-09-18).
     ///

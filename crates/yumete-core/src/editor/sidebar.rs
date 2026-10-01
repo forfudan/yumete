@@ -1328,7 +1328,7 @@ impl Editor {
         };
         match item {
             crate::picker::Item::File(path) => {
-                let full = match &self.listing_root {
+                let full = match self.picker.as_ref().and_then(|p| p.root.as_ref()) {
                     Some(root) => root.join(&path),
                     None => PathBuf::from(&path),
                 };
@@ -1384,10 +1384,12 @@ impl Editor {
     /// Open whatever the picker is standing on — from either layer.
     fn choose_from_picker(&mut self) {
         let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
+        // **根要在關掉挑選器之前取**：關掉就連根一起沒了。
+        let root = self.picker.as_ref().and_then(|p| p.root.clone());
         self.close_picker();
         match chosen {
             Some(crate::picker::Item::File(path)) => {
-                let full = match &self.listing_root {
+                let full = match &root {
                     Some(root) => root.join(&path),
                     None => PathBuf::from(&path),
                 };
@@ -1513,8 +1515,9 @@ impl Editor {
             .into_iter()
             .map(|(_, shown)| crate::picker::Item::File(shown))
             .collect();
-        self.listing_root = Some(root);
         let mut picker = crate::picker::Picker::new(&say!("picker.files"), items);
+        // 挑選器的根存在挑選器身上，不借 `listing_root` 那個槽——見 `Picker::root`。
+        picker.root = Some(root);
         picker.prefer(bonus);
         self.picker = Some(picker);
         self.mode = Mode::Picker;
