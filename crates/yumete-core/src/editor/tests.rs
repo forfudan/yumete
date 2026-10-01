@@ -9273,6 +9273,44 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **二進制檔不搜，也不算進走查的地板**（2026-10-01 定，作者提的）。
+///
+/// 起因是「包含隱藏和忽略」那個開關：開着它搜 yumete 自己的倉，21 處反而掉成
+/// 7 處——`target/` 把兩萬個檔的地板吃光了，走到頂就停。量出來的：`-uu` 走這個
+/// 倉是 51,673 個檔，**其中 44,503 個是二進制**（86%），文本只有 7,170；而那
+/// 些二進制檔從前是**整個讀進內存（共 5.26 GB）再因為不是 UTF-8 丟掉**。
+///
+/// 判準照抄 helix：`BinaryDetection::quit(b'\x00')`（`commands.rs:2649`）。
+#[test]
+fn a_file_with_a_nul_in_it_is_not_prose() {
+    let dir = std::env::temp_dir().join(format!("yumete-binwalk-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("稿.md"), "霜降於石階。\n").unwrap();
+    // 一個 `.o` 的樣子：頭上就有 NUL。
+    std::fs::write(dir.join("a.o"), b"\x7fELF\x00\x00\x00\xE9\x9C\x9C").unwrap();
+    // Warning: **NUL 在一千零二十四個字節之後的不算**，同 helix：探頭只探那麼深。
+    let mut late = vec![b'x'; 2048];
+    late.push(0);
+    std::fs::write(dir.join("遲.txt"), &late).unwrap();
+
+    let mut seen: Vec<String> = Vec::new();
+    let walked = crate::editor::walk_prose(&dir, &crate::editor::Sieve::default(), &mut |path| {
+        seen.push(path.file_name().unwrap().to_string_lossy().into_owned());
+    });
+    seen.sort();
+    assert_eq!(seen, vec!["稿.md".to_string(), "遲.txt".to_string()], "`.o` 不交出去");
+    assert!(!walked.cut, "三個檔走得完");
+
+    // 挑選器那一支照舊看得見它——開一個 `.png` 是正常的事，搜它不是。
+    let mut all: Vec<String> = Vec::new();
+    crate::editor::walk(&dir, &mut 0, &mut |path| {
+        all.push(path.file_name().unwrap().to_string_lossy().into_owned());
+    });
+    assert_eq!(all.len(), 3, "{all:?}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A lone `\r` is a character, not a line break** — Feature #395.
 ///
 /// A paragraph pasted out of an old Mac text file carries one, and every tool

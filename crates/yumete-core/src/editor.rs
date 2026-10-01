@@ -1531,8 +1531,69 @@ impl Sieve {
     }
 }
 
+/// **走過多少個條目就不往下走了** —— 二進制檔不算進 [`WALK_CEILING`]，可它們自己
+/// 也要有個底（2026-10-01 定）。
+///
+/// 量出來的：`-uu` 走 yumete 這個倉是 51,673 個檔，其中 44,503 個是二進制（86%），
+/// 文本只有 7,170。只數文本的話這一趟根本碰不到兩萬——可一塊兩百萬個檔的盤就算全
+/// 是二進制，光探頭也要四十秒，所以走查本身也要攔。
+const VISIT_CEILING: usize = 200_000;
+
+/// **到了地板之後還肯多走多久**（2026-10-01 定）。
+///
+/// 作者原話：「如果1ms就扫完了这个limit，那其实我们可以扫更多對吧」。所以上面那兩
+/// 個數是**地板不是天花板**：不管多慢都至少走這麼多，走完了看錶，還不到這個數就接
+/// 着走。
+///
+/// Warning: **代價是同一次搜索兩次跑可能給出不同的數目**（盤忙的時候少走幾個）。它只
+/// 在本來就要被截斷的那種樹上發生——正常項目連地板都碰不到。
+const WALK_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// **走到這裏無論如何都停**（2026-10-01 定，作者原話：「算满3秒，5秒硬停」）。
+///
+/// 沒有這一道的話最壞情況是「走完地板要多久」，而那是盤說了算的：這台機器上量過，
+/// 二十萬個條目要 5.3 秒，兩萬個文本檔要 2.5 秒（暖盤；`-uu` 走 yumete 這個倉是
+/// 51,673 個條目、1.37 秒，約三萬七千條目一秒，其中 86% 是二進制、只探 1 KB）。
+/// 換一塊慢盤或者一個網絡掛載，同樣的地板可以凍住幾十秒——而這一趟是同步跑完的，
+/// 按不了取消。
+const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// 一趟走查交代了什麼。
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct Walked {
+    /// 太大、跳過去沒看的。
+    pub skipped: usize,
+    /// **沒走完就停了** —— 交出來的那張單子是半截的，呼叫方有義務說出來。
+    pub cut: bool,
+}
+
 fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
-    walk_sifted(root, &Sieve::default(), skipped, f);
+    *skipped += walk_inner(root, &Sieve::default(), false, f).skipped;
+}
+
+/// [`walk`] for **prose**: a file whose first kilobyte holds a NUL is not
+/// something this editor searches, and it does not count towards the ceiling.
+///
+/// Warning: **The picker does not use this one.** Opening a `.png` from `空格 f` is a
+/// reasonable thing to do; searching inside it is not.
+///
+/// 判準照抄 helix：`BinaryDetection::quit(b'\x00')`
+/// （`helix-term/src/commands.rs:2649`，符號搜索那一支 `syntax.rs:235` 同樣一行）。
+/// 沒有這一道，開着「包含隱藏和忽略」搜 yumete 自己的倉要**從盤上讀 5.26 GB 的
+/// `.o` 與 `.rlib` 進內存，再一個個因為不是 UTF-8 丟掉**；探頭 1 KB 只要 44 MB。
+pub(crate) fn walk_prose(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -> Walked {
+    walk_inner(root, sieve, true, f)
+}
+
+/// 頭 1 KB 裏有沒有 NUL —— 讀不開的也當二進制，反正搜不了。
+fn looks_binary(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(path) else { return true };
+    let mut head = [0u8; 1024];
+    match file.read(&mut head) {
+        Ok(read) => head[..read].contains(&0),
+        Err(_) => true,
+    }
 }
 
 /// [`walk`] with the panel's three cells applied.
@@ -1541,13 +1602,15 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
 /// walk then does nothing at all rather than quietly walking everything —
 /// an answer gathered under a filter that was thrown away is the wrong answer
 /// told confidently.
-pub(crate) fn walk_sifted(
+fn walk_inner(
     root: &Path,
     sieve: &Sieve,
-    skipped: &mut usize,
+    prose_only: bool,
     f: &mut impl FnMut(&Path),
-) {
-    let Some(overrides) = sieve.overrides(root) else { return };
+) -> Walked {
+    let mut walked = Walked::default();
+    let Some(overrides) = sieve.overrides(root) else { return walked };
+    let started = std::time::Instant::now();
     let walker = ignore::WalkBuilder::new(root)
         .overrides(overrides)
         // Warning: **五道閘一起開。** 「包含隱藏和忽略」說的是一句話，而 `ignore`
@@ -1580,14 +1643,19 @@ pub(crate) fn walk_sifted(
         })
         .build();
     let mut seen = 0usize;
+    let mut visited = 0usize;
     for entry in walker.flatten() {
         if !entry.file_type().is_some_and(|t| t.is_file()) {
             continue;
         }
-        // Warning: **走到頂就停。** 停下來交出走到的那些，比卡死強：交出來的是真的，
-        // 而卡死的時候屏幕上一個字都沒有。
-        seen += 1;
-        if seen > WALK_CEILING {
+        // Warning: **走到地板、而且錶也到了，纔停。** 停下來交出走到的那些，比卡死強：
+        // 交出來的是真的，而卡死的時候屏幕上一個字都沒有。地板與錶的分工見
+        // [`WALK_GRACE`]。
+        visited += 1;
+        let spent = started.elapsed();
+        let floored = seen >= WALK_CEILING || visited >= VISIT_CEILING;
+        if spent >= WALK_DEADLINE || (floored && spent >= WALK_GRACE) {
+            walked.cut = true;
             break;
         }
         let path = entry.path();
@@ -1597,11 +1665,19 @@ pub(crate) fn walk_sifted(
         if is_build_output(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        match entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES) {
-            true => f(path),
-            false => *skipped += 1,
+        if !entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES) {
+            walked.skipped += 1;
+            continue;
         }
+        // 二進制那些不交出去，也不算進 [`WALK_CEILING`]——那個數說的是「這本稿子有
+        // 多少篇」，而 `.o` 不是一篇。
+        if prose_only && looks_binary(path) {
+            continue;
+        }
+        seen += 1;
+        f(path);
     }
+    walked
 }
 
 /// What 自動認詞 is asked to read: **this file, and the folder around it**.

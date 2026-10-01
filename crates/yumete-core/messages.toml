@@ -7646,6 +7646,13 @@ zhs = "{0} 处"
 en = "{0} hits"
 
 [[message]]
+# 搜索面板：沒走完就停了，數目後面加一個加號
+key = "search.hits-more"
+zht = "{0}+結果"
+zhs = "{0}+结果"
+en = "{0}+ hits"
+
+[[message]]
 # 只找到一處。中文不分單複數，英文分——「1 hits」每搜一個獨一無二的詞就出現一次
 key = "search.hits-one"
 zht = "{0} 處"
