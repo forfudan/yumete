@@ -11409,6 +11409,7 @@ fn a_book_can_teach_the_editor_its_own_names() {
     std::fs::write(&file, "阿寧走了。\n").unwrap();
 
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
     ed.open_file(&file).unwrap();
     let before = ed.segment_line(0);
@@ -11419,7 +11420,11 @@ fn a_book_can_teach_the_editor_its_own_names() {
     // 或者新建一个 buffer，都会有这个消息在命令栏」）。七個呼叫方裏六個是編輯器
     // 自己讀的，人什麽都沒做。要報結果有前端那一句 `word.lists-reread`，它兩半
     // 一起說（`words_in_force`）。
-    assert_eq!(ed.reload_project_words(), Some(dir.join(".yumete").join("words.txt")));
+    // `set_root` canonicalises（macOS 的 `/var` 是 `/private/var` 的符號鏈接）。
+    assert_eq!(
+        ed.reload_project_words().map(|p| std::fs::canonicalize(p).unwrap()),
+        Some(std::fs::canonicalize(dir.join(".yumete").join("words.txt")).unwrap())
+    );
     assert!(ed.status().is_empty(), "讀一遍不出聲：{}", ed.status());
     assert_eq!(ed.project_word_count(), 1);
     let after = ed.segment_line(0);

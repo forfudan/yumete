@@ -270,7 +270,9 @@ impl Editor {
     /// which as a root walks nothing at all, so 「this folder」 quietly found
     /// only the file already open.
     pub(super) fn here_folder(&self) -> PathBuf {
-        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        // 相對的緩衝區路徑按[工作路徑][`Editor::working_dir`]算，同 `:open`
+        // （2026-10-01）。
+        let here = self.working_dir();
         match self.current_buffer().path() {
             Some(path) => here.join(path).parent().map(Path::to_path_buf).unwrap_or(here),
             None => here,

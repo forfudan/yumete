@@ -219,7 +219,8 @@ impl Editor {
     /// desk」 are different questions (#419, `[^361]`).
     fn file_choices(&self, typed: &str) -> Vec<Candidate> {
         let close = self.closes_with_n(']', 2);
-        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        // 同 `here_folder`：相對的緩衝區路徑按工作路徑算（2026-10-01）。
+        let here = self.working_dir();
         let Some(root) = self
             .current_buffer()
             .path()

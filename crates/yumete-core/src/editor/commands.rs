@@ -124,6 +124,19 @@ impl Editor {
                         self.working_dir()
                     }
                 };
+                // Warning: **換了工作路徑就換了項目，跟着項目走的那幾樣要重算**
+                // （2026-10-01 審出來的，是這一改自己帶出來的）。`root()` 是當
+                // 場算的，所以**問**它的地方自動對；而詞表與百科是**裝在手上
+                // 的**，文件樹記的是開樹那一刻的根——不重算就還是上一個項目的。
+                self.reload_project_words();
+                if let Some(side) = crate::sidebar::Side::BOTH
+                    .into_iter()
+                    .find(|&s| self.panel(s).map(|p| p.view()) == Some(crate::sidebar::View::Explorer))
+                {
+                    let root = self.root();
+                    self.open_sidebar_showing(&root, crate::sidebar::View::Explorer);
+                    let _ = side;
+                }
                 self.status = say!("cd.working-dir", asked.display().to_string());
                 Ok(CommandOutcome::Continue)
             }
