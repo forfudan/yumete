@@ -2325,6 +2325,7 @@ fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
     let text = "春天<ruby>永和<rt>えいわ</rt></ruby>來了。\n\n河水很涼。\n";
     std::fs::write(&file, text).unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(&file).unwrap();
     ed.execute(":count-target 2000").unwrap();
     ed.execute(":w").unwrap();
@@ -2389,6 +2390,7 @@ fn the_book_keeps_a_ledger_of_what_was_written_today() {
     let file = dir.join("第一章.md");
     std::fs::write(&file, "春天來了。\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(&file).unwrap();
     let ledger = dir.join(".yumete").join("progress.tsv");
 
@@ -9187,6 +9189,7 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     use crate::sidebar::Side;
     let dir = a_little_book("searchtree");
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
 
     // Warning: **A wider scope does not run as you type.** A hundred chapters read
@@ -9292,33 +9295,37 @@ fn a_lone_carriage_return_does_not_start_a_line() {
 
 /// **The book is found from a file opened by a bare name too.**
 ///
-/// Warning: A long-standing quiet one, caught by #419 二: a buffer opened as
-/// `一.md` has a *relative* path, its `parent()` is the **empty** path, and
-/// the walk up for `.yumete` skipped it — so every listing rooted itself in
-/// whatever directory the terminal happened to be standing in. Quiet because
-/// the answer is a real directory and a plausible one.
+/// **項目根是從工作路徑往上走出來的**（2026-10-01 重做，照 helix 的
+/// `find_workspace`）。
+///
+/// Warning: 從前它先問打開了哪幾個檔（當前那個排第一），於是 `gd` 跳進別人的源碼
+/// 之後整個「項目」跟着跑——選擇器、`:grep`、詞表、百科各自在不同的時刻算，答
+/// 案還互相對不上。現在它只是**一個目録的函數**，所以同一刻問幾遍都一樣。
 #[test]
-fn the_book_is_found_even_from_a_file_named_without_a_folder() {
+fn the_project_is_the_first_marked_folder_above_the_working_directory() {
     let dir = a_little_book("bareroot");
     // Warning: Told where 「here」 is rather than **moving** the process there:
     // every test running beside this one would see that.
-    let bare = std::path::Path::new("a.md");
-    let root = crate::editor::book_root(std::iter::once(bare), &dir.join("卷一"));
+    let root = crate::editor::book_root(&dir.join("卷一"));
     assert_eq!(
         std::fs::canonicalize(&root).unwrap(),
         std::fs::canonicalize(&dir).unwrap(),
-        "the `.yumete.toml` two levels up is what says 「the book」"
+        "the `.yumete.toml` two levels up is what says 「the project」"
     );
 
-    // …and a name with a folder on it answers the same.
-    let root = crate::editor::book_root(
-        std::iter::once(dir.join("卷一/a.md").as_path()),
-        std::path::Path::new("/"),
-    );
+    // 從根自己問，答的還是它。
+    let root = crate::editor::book_root(&dir);
     assert_eq!(
         std::fs::canonicalize(&root).unwrap(),
         std::fs::canonicalize(&dir).unwrap()
     );
+
+    // 一個標記都沒有的地方：就是那一層，不往上爬到 `/`。
+    let bare = std::env::temp_dir().join(format!("yumete-noroot-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&bare);
+    std::fs::create_dir_all(&bare).unwrap();
+    assert_eq!(crate::editor::book_root(&bare), bare);
+    let _ = std::fs::remove_dir_all(&bare);
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -9335,6 +9342,7 @@ fn the_search_reads_the_ignore_file_and_roots_itself_in_the_book() {
     std::fs::write(dir.join("舊稿/old.md"), "霜霜\n").unwrap();
     std::fs::write(dir.join(".gitignore"), "舊稿/\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
     ed.execute(":search-gd").unwrap();
     ed.on_key(Key::Char('霜'));
@@ -9384,6 +9392,7 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     std::fs::write(dir.join("c.md"), "第二天，阿甯走了。\n").unwrap();
 
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
     ed.execute(":replace-gd").unwrap();
     assert!(ed.search().replacing, "`:replace` opens with the row showing");
@@ -11443,6 +11452,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
 
     // ---- ① 開文件只**留下一個請求**，一個字都不說 ---------------------
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
     ed.open_file(dir.join("ch02.md")).unwrap();
     let ask = ed.take_detect_request().expect("開文件要請前端讀一遍");
@@ -11488,9 +11498,10 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     assert!(ed.execute("word-discover-cd").is_ok(), "{}", ed.status());
     let listing = dir.join(".yumete").join("discovered_words.txt");
     assert!(listing.is_file(), "名單要寫出來：{}", ed.status());
+    // `set_root` canonicalises（macOS 的 `/var` 是 `/private/var` 的符號鏈接）。
     assert_eq!(
-        ed.current_buffer().path(),
-        Some(listing.as_path()),
+        ed.current_buffer().path().map(|p| std::fs::canonicalize(p).unwrap()),
+        Some(std::fs::canonicalize(&listing).unwrap()),
         "這條命令的產物就是那份名單，開它是它的全部用處"
     );
     let text = std::fs::read_to_string(&listing).unwrap();
@@ -13781,8 +13792,10 @@ fn commenting_takes_whole_lines_and_keeps_them_selected() {
     assert_eq!(ed.current_buffer().text(), "甲乙\n丙丁\n戊己\n", "and both come back");
 }
 
-/// `.yumete` first, `.git` second, the file's own directory last — and the
-/// working directory only when there is no named file to ask.
+/// `.yumete` first, `.git` second, the working directory itself last.
+///
+/// Warning: **問的是工作路徑，不是打開了哪幾個檔**（2026-10-01 重做）。從前
+/// `open_file` 就足以把根挪過去；現在要 `set_root`——而那正是命令行做的事。
 #[test]
 fn the_project_root_prefers_yumete_then_git_then_here() {
     let dir = std::env::temp_dir().join(format!("yumete-root-order-{}", std::process::id()));
@@ -13794,12 +13807,18 @@ fn the_project_root_prefers_yumete_then_git_then_here() {
     let chapter = book.join("卷一/一.md");
     std::fs::write(&chapter, "甲\n").unwrap();
 
+    // `set_root` canonicalises（macOS 的 `/var` 是 `/private/var` 的符號鏈接），
+    // 所以兩頭都走一遍再比。
+    let same = |a: &std::path::Path, b: &std::path::Path| {
+        std::fs::canonicalize(a).unwrap() == std::fs::canonicalize(b).unwrap()
+    };
     let mut ed = Editor::new();
+    ed.set_root(&chapter);
     ed.open_file(chapter.clone()).unwrap();
-    assert_eq!(ed.project_root(), repo, "no .yumete yet, so the repository");
+    assert!(same(&ed.project_root(), &repo), "no .yumete yet, so the repository");
 
     std::fs::create_dir_all(book.join(".yumete")).unwrap();
-    assert_eq!(ed.project_root(), book, ".yumete wins over a .git further up");
+    assert!(same(&ed.project_root(), &book), ".yumete wins over a .git further up");
 
     // Neither mark anywhere: the chapter's own directory, not the repository
     // this suite is running in.
@@ -13807,12 +13826,20 @@ fn the_project_root_prefers_yumete_then_git_then_here() {
     std::fs::create_dir_all(&bare).unwrap();
     std::fs::write(bare.join("散.md"), "乙\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&bare.join("散.md"));
     ed.open_file(bare.join("散.md")).unwrap();
-    assert_eq!(ed.project_root(), bare, "the file's own directory");
+    assert!(same(&ed.project_root(), &bare), "the file's own directory");
+
+    // **打開別處一個檔不把根挪走**——這正是 `gd` 跳進 rustup 之後要的。
+    let far = dir.join("別處");
+    std::fs::create_dir_all(&far).unwrap();
+    std::fs::write(far.join("x.md"), "丙\n").unwrap();
+    ed.open_file(far.join("x.md")).unwrap();
+    assert!(same(&ed.project_root(), &bare), "跳到別處，項目還是原來那個");
 
     // Nothing named at all: there is nowhere else to ask.
     let ed = Editor::new();
-    assert_eq!(ed.project_root(), std::env::current_dir().unwrap());
+    assert_eq!(ed.project_root(), crate::editor::book_root(&std::env::current_dir().unwrap()));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -15594,6 +15621,7 @@ fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
     std::fs::write(dir.join("第一章.md"), "他走進落霞鎮\n").unwrap();
 
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
     let line = "他走進落霞鎮";
@@ -15641,6 +15669,7 @@ fn a_named_entry_opens_a_picker_and_stays_put_until_the_cursor_moves() {
     std::fs::write(dir.join("第一章.md"), "那年冬天很冷。
 ").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("第一章.md")).unwrap();
     // Warning: 開檔不讀百科（存一個百科檔纔會重讀），測試裏要自己叫一次。
     ed.reload_project_words();
@@ -15692,6 +15721,7 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
     .unwrap();
     std::fs::write(dir.join("第一章.md"), "阿寧回來了\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
@@ -15735,6 +15765,7 @@ fn a_long_wiki_entry_is_only_read_as_far_as_the_panel_can_draw() {
     std::fs::write(dir.join(".yumete/wiki.md"), format!("# 地理\n## 君山\n{body}")).unwrap();
     std::fs::write(dir.join("第一章.md"), "君山在那裏。\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
@@ -15770,6 +15801,7 @@ fn the_wiki_report_names_what_this_chapter_could_not_mark() {
     .unwrap();
     std::fs::write(dir.join("第一章.md"), "他到落霞鎮。\nA 計劃還在。\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
     assert_eq!(ed.wiki_marks_on_line(0), [(2, 5)], "落霞鎮 is marked");
@@ -15829,6 +15861,7 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
     )
     .unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
@@ -15857,6 +15890,7 @@ fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
     std::fs::write(dir.join(".yumete/wiki.md"), "## 落霞鎮\n小鎮。\n## 墨\n一個字。\n").unwrap();
     std::fs::write(dir.join("第一章.md"), "他到落霞鎮，墨還在。\n```\n落霞鎮\n```\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("第一章.md")).unwrap();
     ed.reload_project_words();
 
@@ -15902,6 +15936,7 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     std::fs::write(dir.join("一.md"), "第一章的頭一句。\n第二句。\n").unwrap();
     std::fs::write(dir.join("二.md"), "另一章。\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("一.md")).unwrap();
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('f'));
@@ -17769,6 +17804,7 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
     use crate::search_panel::Row;
     let dir = a_little_book("searchfollows");
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
     ed.execute(":search-cd").unwrap();
     ed.on_key(Key::Char('霜'));
