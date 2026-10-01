@@ -1931,7 +1931,7 @@ pub struct Editor {
     /// Warning: **不是進程的 cwd。** 真去 `chdir` 會悄悄改掉別處七八個讀
     /// `current_dir()` 的地方（項目根的退路、`:grep` 的退路、百科與詞表的查找），
     /// 而這一格只管一件事。helix 也是自己記一格（`helix_stdx::env`），同理。
-    /// `None` ＝ 還沒改過，那就是啓動時的 cwd。
+    /// 立起來的時候記下 cwd，之後只有 `:cd` 動得了它。
     working_dir: Option<PathBuf>,
     /// `:cd -` 回得去的那一個。
     working_dir_before: Option<PathBuf>,
@@ -2814,7 +2814,10 @@ impl Editor {
             hovered: None,
             info_asked: None,
             info_hushed: None,
-            working_dir: None,
+            // 啓動時的 cwd，記下來。Warning: **不是每次問的時候再去取**——那就
+            // 成了「進程此刻的 cwd」，而這一格的意思是「你敲 yumete 的那個目
+            // 錄」。眼下沒有誰 `chdir`，所以兩者相同；記下來是為了它一直相同。
+            working_dir: std::env::current_dir().ok(),
             working_dir_before: None,
             info_live: None,
             docs_asked_at: None,
