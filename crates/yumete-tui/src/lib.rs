@@ -7610,7 +7610,10 @@ fn draw_search(
         }
         // Warning: 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
         // （2026-09-27 報的）。兩則文案，中文那兩份寫得一模一樣。
-        (false, _, true) if find.total == 1 => (say!("search.hits-one", 1), quiet),
+        (false, _, true) if find.total == 1 && !find.cut => (say!("search.hits-one", 1), quiet),
+        // **沒走完就停了，數目後面一個加號**（2026-10-01 定，作者寫的「21+结果」）。
+        // 一張半截的清單看着和全部一個樣，而那一格是唯一說得出這件事的地方。
+        (false, _, true) if find.cut => (say!("search.hits-more", find.total), quiet),
         (false, _, true) => (say!("search.hits", find.total), quiet),
     };
     // **標題那一行只有面板的名字和右上角那個計數**（2026-09-26 報的：「位置：「本

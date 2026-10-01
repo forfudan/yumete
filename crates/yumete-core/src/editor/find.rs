@@ -383,6 +383,7 @@ impl Editor {
         }
         self.search.mine = mine;
         self.search.mine_total = mine_total;
+        self.search.cut = false;
         self.search.root = None;
         self.search.hits = hits;
         self.search.total = total;
@@ -426,6 +427,7 @@ impl Editor {
         self.search.selected = 0;
         self.search.folded.clear();
         self.search.stale = false;
+        self.search.cut = false;
         // **The pattern hands the search to the panel, and the page follows.**
         // One 「what am I looking for」 with two ways in: the highlight and
         // `n`/`N` are the same search, which is what [^415]记 `:grep` 不寫
@@ -478,9 +480,10 @@ impl Editor {
                 return;
             }
             let mut files = Vec::new();
-            crate::editor::walk_sifted(&root, &sieve.unwrap_or_default(), &mut 0, &mut |path| {
+            let walked = crate::editor::walk_prose(&root, &sieve.unwrap_or_default(), &mut |path| {
                 files.push(path.to_path_buf())
             });
+            self.search.cut = walked.cut;
             for path in files {
                 // Not twice: the one being written was searched from memory.
                 let full = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());

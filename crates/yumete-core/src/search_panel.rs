@@ -448,6 +448,11 @@ pub struct Search {
     pub exclude: String,
     /// 連隱藏文件和 `.gitignore` 裏的一起搜。出廠關着，見 [`Field::Hidden`]。
     pub hidden: bool,
+    /// **這一趟沒走完就停了** —— 數目那一格要說出來（2026-10-01 定）。
+    ///
+    /// 見 `editor::WALK_GRACE`：走查有一個地板加一隻錶，碰到頭就交出半截的答
+    /// 案。從前它一聲不吭，於是一張短清單看着像是全部。
+    pub cut: bool,
     /// The files whose hits are folded away.
     pub folded: std::collections::BTreeSet<std::path::PathBuf>,
     /// What the paths in [`Hit::file`] are relative to, so opening one can
