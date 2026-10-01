@@ -89,8 +89,24 @@ shoot() {
         local pressed="${keys//:open TABLE\\n/}"
         pressed="${pressed//:open RUBY\\n/}"
         pressed="${pressed//:open MANUAL\\n/}"
-        "${BIN}" --shot="${size}" --keys="${pressed}" "${work}/文.md" \
-            > "${into}/${name}.txt" 2>&1 || true
+        # Warning: **錯誤不許混進底片，退出碼不許吞掉**（2026-10-02 修）。從前這一行是
+        # `> 底片 2>&1 || true`：`--keys` 認不得的鍵名會把那句報錯**寫進底片
+        # 裏**，而退出碼被 `|| true` 吃了——於是 `空格選單` 和 `大綱` 兩幀拍了不
+        # 知多久的「yumete: --keys: no key called "space"」，比對還一直是綠的。
+        local whined="${work}/${name}.err"
+        if ! "${BIN}" --shot="${size}" --keys="${pressed}" "${work}/文.md" \
+            > "${into}/${name}.txt" 2> "${whined}"; then
+            printf 'Warning: 拍 %s 的時候 yumete 自己就退出了：\n' "${name}" >&2
+            sed 's/^/    /' "${whined}" >&2
+            rm -rf "${work}"
+            return 1
+        fi
+        if [ -s "${whined}" ]; then
+            printf 'Warning: 拍 %s 的時候 yumete 說了話：\n' "${name}" >&2
+            sed 's/^/    /' "${whined}" >&2
+            rm -rf "${work}"
+            return 1
+        fi
         # Warning: **版本行要抹掉**：它每次構建都變（時間戳加 commit），留着的話這一支
         # 永遠報「全都不一樣」。
         sed -i '' 's/^-- yumete .*/-- yumete （版本行抹掉了）/' "${into}/${name}.txt"
