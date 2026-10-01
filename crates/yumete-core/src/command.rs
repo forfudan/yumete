@@ -2511,7 +2511,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.reload",
         needs: &[],
         // Warning: **`config` 掛在這裏而不是自成一條命令**（2026-09-23）。
-        // `:` 那張菜單在 24 行的窗口下裝得下 54 格，而命令已經 54 條——加任何一
+        // `:` 那張選單在 24 行的窗口下裝得下 54 格，而命令已經 54 條——加任何一
         // 個頂級名字都會把它擠出一屏（`the_command_menu_spreads_across_a_wide_
         // window` 當場紅給我看：「all 55 of them: 54 slots」）。**命令名和鍵位
         // 一樣有預算**，而「把設定再讀一遍」本來就是「把文件再讀一遍」的同一句
@@ -4055,7 +4055,7 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // **裸的那個開粘貼菜單**（2026-09-25 提的），和 `:wiki`、`:buffer`
+        // **裸的那個開粘貼選單**（2026-09-25 提的），和 `:wiki`、`:buffer`
         // 同形：一個命令自己的意思就是有用的那一個，後面不必再跟一個詞。
         // `空格 "` 是同一扇。
         name: "clipboard",
@@ -4798,17 +4798,17 @@ pub fn needs_of(line: &str) -> &'static [Need] {
 /// 一張靜態的詞表答的是「這一格收哪些詞」，而 `:convert` 的第二格收哪些詞
 /// **取決於第一格**：opencc 裝着 `t2jp.json` 與 `jp2t.json`，**沒有
 /// `s2jp.json`**（2026-09-23 在本機 opencc 1.4.2 的 config 目錄裏數過）。於是
-/// `:convert s` 的菜單從前列着一個它自己會拒絕的 `jp`——正是 §5.2.2 記着的那條
+/// `:convert s` 的選單從前列着一個它自己會拒絕的 `jp`——正是 §5.2.2 記着的那條
 /// 「幫助提供了一個命令不收的參數」。
 ///
 /// 判準從 [`crate::convert::destinations`] 來，而那一支是從 `plan` 算出來的：
-/// **菜單與命令永遠說同一句話**，不是第二份手抄的表。
+/// **選單與命令永遠說同一句話**，不是第二份手抄的表。
 fn word_fits(words: &[(usize, &str)], w: &Word) -> bool {
     let Some((_, head)) = words.first() else { return true };
     if entry_named(head).map(|e| e.name) != Some("convert") || words.len() != 2 {
         return true;
     }
-    // Warning: **第一個詞可能是簡寫。** 菜單自己印的就是簡寫（`:con h ` ＝
+    // Warning: **第一個詞可能是簡寫。** 選單自己印的就是簡寫（`:con h ` ＝
     // `:convert hk `），所以這裏也得照 `shortest` 那條規矩按前綴認一次，
     // 認不出唯一的一個就全放行。
     let Some((_, said)) = words.get(1) else { return true };
