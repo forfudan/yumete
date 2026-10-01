@@ -688,6 +688,43 @@ mod tests {
         assert_eq!(picker.chosen(), Some(Item::File("a.md".to_string())));
     }
 
+    /// **審閱 2026-10-02 抓到的三件，都沒有測試守着。**
+    #[test]
+    fn the_query_row_does_not_swallow_the_list() {
+        // ① 單子空着的時候 `j` 不許從搜索行掉下去——下面只有「沒有符合的」。
+        let mut picker = files(&["a.md"]);
+        picker.type_here(true);
+        picker.push('z');
+        picker.push('q');
+        assert!(picker.matches().is_empty(), "什麼都配不上");
+        picker.type_here(false);
+        assert!(picker.on_query(), "離開打字態，鍵落在搜索行上");
+        picker.step_in_list(true);
+        assert!(picker.on_query(), "單子空着，j 留在原地");
+
+        // ② `D` 在末尾什麼都刪不掉，那就別把單子撥回第一條。
+        let mut picker = files(&["a.md", "b.md", "c.md"]);
+        picker.step(true);
+        assert_eq!(picker.selected(), 1);
+        picker.delete_to_end();
+        assert_eq!(picker.selected(), 1, "刪了個空，位置不許丟");
+        picker.push('.');
+        picker.push('m');
+        picker.step(true);
+        let at = picker.selected();
+        picker.move_caret(Caret::Start);
+        picker.delete_to_end();
+        assert_eq!(picker.query(), "", "真的刪了");
+        assert_eq!(picker.selected(), 0, "真刪了纔撥回去，{at}");
+
+        // ③ `leave_query` 把鍵從搜索行帶回單子上。
+        let mut picker = files(&["a.md", "b.md"]);
+        picker.step_in_list(false);
+        assert!(picker.on_query(), "k 從第一條走上搜索行");
+        picker.leave_query();
+        assert!(!picker.on_query());
+    }
+
     /// **一開在列表那一層**——`jk` 第一下就走得動，`/` 或 `i` 纔進查詢。
     ///
     /// Warning: **2026-10-01 試過反過來，當天撤回**：那樣關掉挑選器要按兩次 `Esc`。

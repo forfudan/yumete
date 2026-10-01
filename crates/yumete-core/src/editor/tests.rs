@@ -9341,6 +9341,71 @@ fn a_named_folder_is_reckoned_from_the_working_directory() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **一條寫錯的 glob 之後再改正文，從前會 `usize` 下溢**（2026-10-02 審出來的）。
+///
+/// `search_now` 先填好 `mine`／`mine_total`，走到壞 glob 那一支纔把 `total` 歸零
+/// 卻漏了那兩個。接着在正文裏打一個字，`rescan_the_open_one` 算
+/// `total - mine_total` ＝ `0 - N`——debug 當場 panic，release 畫出個天文數字。
+#[test]
+fn a_bad_glob_leaves_the_three_numbers_agreeing() {
+    let dir = a_little_book("badglob");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":search-project").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert!(ed.search().mine_total > 0, "這一份裏有命中");
+
+    // 包含那一格打一條編譯不過的 glob。
+    ed.search_for_test().include = "[".into();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 0);
+    assert_eq!(ed.search().mine_total, 0, "名單空了，那幾個數也要歸零");
+    assert_eq!(ed.search().mine, 0);
+
+    // 從前下一行就是 `0 - N`。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    press(&mut ed, "i霜");
+    ed.on_key(Key::Esc);
+    ed.refresh_the_edited_file();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **緩衝區那一檔的「檔名」是標籤，不是路徑**（2026-10-02 審出來的）。
+///
+/// 從前 `show_hit` 和 `replace_file` 都只認路徑，於是拿 `[scratch]` 去
+/// `open_file`——而 `Buffer::open` 對不存在的路徑回的是 `Ok` 加一條空繩。結果是
+/// 走過去看見一張白紙、`R` 換了 0 處一聲不吭，還多出一個叫 `[scratch]` 的空檔。
+#[test]
+fn a_hit_in_an_unnamed_draft_is_reached_by_its_buffer_not_its_name() {
+    let mut ed = typed("甲甲\n");
+    let was = ed.buffer_count();
+    ed.execute(":replace-buffers").unwrap();
+    ed.on_key(Key::Char('甲'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 2, "沒有名字的草稿也在裏面");
+    assert!(ed.search().hits.iter().all(|h| h.buffer.is_some()), "每一處都記着號");
+
+    // ① 走過去不許開出一份空的新緩衝。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.buffer_count(), was, "沒有多出一個 [scratch]");
+    assert_eq!(ed.current_buffer().text(), "甲甲\n", "還在那一份草稿上");
+
+    // ② 全部換掉要真的換到。
+    ed.search_for_test().replace = "乙".into();
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.buffer_count(), was, "還是沒有多出來的空檔");
+    assert_eq!(ed.current_buffer().text(), "乙乙\n", "草稿裏那兩處換掉了");
+}
+
 /// **二進制檔不搜，也不算進走查的地板**（2026-10-01 定，作者提的）。
 ///
 /// 起因是「搜索隱藏和忽略」那個開關：開着它搜 yumete 自己的倉，21 處反而掉成
