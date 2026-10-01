@@ -48,7 +48,7 @@ scenes() {
 挑選器-查詢|90x24| fi那
 跳轉標籤|80x20|gw
 跳轉標籤-竪排|60x24|:layout vertical\ngw
-大綱|90x24|:open MANUAL\n\{space}o
+大綱|90x24|:open MANUAL\n o
 設置頁|100x30|:settings\n
 命令選單|80x20|:
 空格選單|80x20| 
