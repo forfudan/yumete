@@ -141,7 +141,26 @@ fn main() -> ExitCode {
     };
 
     // Load global + per-project config and apply the keymap.
-    let (mut config, config_problems) = yumete_config::Config::load_reporting();
+    //
+    // Warning: **從命令行說的那個地方往上找項目配置，不從 shell 站的地方**
+    // （2026-10-01）。從前它無條件走 `current_dir()`，於是在 `/tmp` 敲
+    // `ye ~/書/三體/卷一/第一章.md`，編輯器的根算出來是 `~/書/三體`，而
+    // `.yumete/config.toml` 一個都沒載——配置與根各認各的地方。
+    let said_where = files.first().map(|first| {
+        let at = std::path::PathBuf::from(yumete_config::expand_tilde(first));
+        let full = match at.is_absolute() {
+            true => at,
+            false => std::env::current_dir().unwrap_or_default().join(at),
+        };
+        match full.is_dir() {
+            true => full,
+            false => full.parent().map(std::path::Path::to_path_buf).unwrap_or(full),
+        }
+    });
+    let (mut config, config_problems) = match &said_where {
+        Some(from) => yumete_config::Config::load_reporting_from(from),
+        None => yumete_config::Config::load_reporting(),
+    };
     // Where the reader says the 宇浩 data is, before anything asks. Set once
     // here rather than passed down, because the places that build an IME
     // session are several and none of them carries a config.
@@ -198,13 +217,21 @@ fn main() -> ExitCode {
     if std::fs::create_dir_all(&drafts).is_ok() {
         editor.keep_drafts_in(drafts);
     }
-    // …and somewhere to remember which files were open. Keyed by the working
-    // directory, so a novel and a codebase do not share one.
+    // …and somewhere to remember which files were open. **Keyed by the
+    // project**, so a novel and a codebase do not share one.
     //
     // **Always kept, whatever `session` says** (2026-09-17). `session` only
     // decides whether a bare `yumete` reopens it; `-c` reopens it on the day
     // it is off, and it can only do that if the files were written down.
-    if let Ok(here) = std::env::current_dir() {
+    //
+    // Warning: **按項目，不按 cwd**（2026-10-01）。從前它拿 `current_dir()` 做
+    // 鑰匙，而工作區是命令行參數定的——**同一個項目從兩個目録打開得到兩份會
+    // 話，兩個項目從同一個目録打開共用一份**。
+    let session_key = said_where
+        .clone()
+        .map(|from| yumete_core::editor::book_root_of(&from))
+        .or_else(|| std::env::current_dir().ok());
+    if let Some(here) = session_key {
         editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
     }
     // Before the files, so the files come up locked rather than being locked a

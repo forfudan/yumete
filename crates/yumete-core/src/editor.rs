@@ -1447,6 +1447,12 @@ fn downloads_dir() -> PathBuf {
 /// rustup 的源碼之後「項目」整個跟着跑了——選擇器、`:grep`、詞表、百科各自在
 /// 不同的時刻算，答案還互相對不上。現在它是**工作路徑的函數**：`gd` 跳走它不
 /// 動（工作路徑沒動），`:cd` 一改它跟着改。
+/// [`book_root`] for callers outside this crate — `main.rs` keys the session
+/// by the project, and it has to answer the same question the editor will.
+pub fn book_root_of(here: &Path) -> PathBuf {
+    book_root(here)
+}
+
 pub(crate) fn book_root(here: &Path) -> PathBuf {
     let marked = |mark: &str, flat: &str| {
         here.ancestors()
