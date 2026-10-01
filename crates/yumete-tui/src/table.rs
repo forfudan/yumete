@@ -336,6 +336,10 @@ pub fn char_at(
     Some((start + cells.last().map_or(0, |&(a, _)| a)).min(rope.len_chars().saturating_sub(1)))
 }
 
+// Warning: **`for i in 視窗左邊..widths.len()` 不改成 `enumerate`**（2026-10-01）：
+// 走的是**一段**欄（從橫向捲到的那一欄起），而 `i` 本身就是欄號——標尺與欄名
+// 都要拿它去對 `cursor_cell`。`enumerate` 只會多一次 `skip` 再多一個偏移量。
+#[allow(clippy::needless_range_loop)]
 pub fn draw(
     frame: &mut Frame,
     editor: &Editor,

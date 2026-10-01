@@ -355,8 +355,7 @@ impl Editor {
                         ("z", "hint.aim.middle"),
                         ("t", "hint.aim.top"),
                         ("b", "hint.aim.bottom"),
-                    ]
-                    .into_iter(),
+                    ],
                 ),
             ),
             Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("".into(), say!("hint.type-a-bracket-or-quote"))]),

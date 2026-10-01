@@ -128,6 +128,13 @@ impl Selections {
         self.ranges.len()
     }
 
+    /// **永遠是 `false`。** 一份稿子總有一個光標，所以最少一段——`Selections`
+    /// 立起來就帶着主選區，`keep_primary` 也只留下它。寫在這裏是因為有 `len`
+    /// 就該有這一支，而答案是「不會」正是讀者要知道的那一句。
+    pub fn is_empty(&self) -> bool {
+        self.ranges.is_empty()
+    }
+
     /// 有沒有多於一段——`jumping()` 那一類謂詞將來問的就是它。
     pub fn is_plural(&self) -> bool {
         self.ranges.len() > 1

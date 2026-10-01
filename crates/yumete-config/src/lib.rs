@@ -817,14 +817,15 @@ impl Ladder {
     }
 }
 
-/// Where each part of the editor sits on the ladder.
-///
-/// **The rungs are not evenly useful, and that is what this list encodes.**
-/// Measured against 墨香's own pair: at `t ≤ 350` a colour clears 4.5:1 as ink
-/// on the paper; at `t ≥ 730` ink clears 4.5:1 drawn *on* it. The 38% between
-/// carries nothing — too faint to read, too pale to write on — so nothing here
-/// is placed there except the rules, which are neither.
 pub mod rung {
+    //! Where each part of the editor sits on the ladder.
+    //!
+    //! **The rungs are not evenly useful, and that is what this list encodes.**
+    //! Measured against 墨香's own pair: at `t ≤ 350` a colour clears 4.5:1 as ink
+    //! on the paper; at `t ≥ 730` ink clears 4.5:1 drawn *on* it. The 38% between
+    //! carries nothing — too faint to read, too pale to write on — so nothing here
+    //! is placed there except the rules, which are neither.
+    //!
     //! **101 檔，第 0 檔是墨（最反主題色），第 100 檔是最主題色。紙在第 90 檔。**
     //!
     //! 底下的數字是 0–10000，**一檔一百步**，所以檔號就是數字除以一百：
@@ -2219,7 +2220,7 @@ pub fn data_dir() -> PathBuf {
 /// beside its `.exe` — so the executable's **own** directory is searched too.
 ///
 /// Warning: **Two answers, because `current_exe()` gives a different one per
-/// platform** ([^135]'s two-formula design turns on this). Homebrew installs
+/// platform** (`[^135]`'s two-formula design turns on this). Homebrew installs
 /// each formula into its own `<prefix>/Cellar/<name>/<version>/` and symlinks
 /// the contents into the shared `<prefix>`, so `yumete` and a separate
 /// `yume-data` meet in `<prefix>/share/yumete` — and only there.

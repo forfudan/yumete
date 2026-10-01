@@ -128,13 +128,13 @@ impl Editor {
     /// full-width characters, because in CJK prose a line break carries no
     /// space and joining two 漢字 with one would insert text nobody ever
     /// typed. Between Latin words the space is kept.
-    /// `gK` — join this line onto the one **above** it.
     ///
-    // **`gK` 沒有自己的函數了**（2026-09-19）。它從前是「站到上一行去，然後
-    // 照常合併」，重複的時候一次比一次高，於是合出了選區之外。現在 `handle_goto`
-    // 的 `K` 那一支自己先上去一行，再把 `join_lines` 重複該重複的次數——合併的
-    // 接縫規矩（拉丁詞之間一個空格、漢字之間不留）始終只有這一處。
-
+    /// **`gK` — join this line onto the one above it.**
+    ///
+    /// **`gK` 沒有自己的函數了**（2026-09-19）。它從前是「站到上一行去，然後
+    /// 照常合併」，重複的時候一次比一次高，於是合出了選區之外。現在 `handle_goto`
+    /// 的 `K` 那一支自己先上去一行，再把 `join_lines` 重複該重複的次數——合併的
+    /// 接縫規矩（拉丁詞之間一個空格、漢字之間不留）始終只有這一處。
     pub(super) fn join_lines(&mut self) {
         if self.refuse_readonly() {
             return;

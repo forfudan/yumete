@@ -2293,7 +2293,7 @@ mod data_faults {
         lay(&entry.aux, "not a 字根表 at all".as_bytes());
 
         let mut engine = Engine::new(CodeTable::new());
-        let problem = load_data_file(&mut engine, &[dir.clone()], &entry)
+        let problem = load_data_file(&mut engine, std::slice::from_ref(&dir), &entry)
             .expect_err("the 字根表 is refused");
         let _ = std::fs::remove_dir_all(&dir);
 

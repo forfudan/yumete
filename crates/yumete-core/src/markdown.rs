@@ -740,14 +740,13 @@ fn scan(
         // Warning: **可轉義的只有 ASCII 標點**，CommonMark §2.4 的規矩，兩家實現也一樣：
         // `\甲` 裏那個反斜杠是一個反斜杠，不是轉義。要是連漢字都能轉義，稿子裏每一個
         // 反斜杠都會憑空消失。
-        if chars[at] == '\\' {
-            if chars.get(at + 1).is_some_and(|&c| escapable(c)) {
+        if chars[at] == '\\'
+            && chars.get(at + 1).is_some_and(|&c| escapable(c)) {
                 mark(out, at, at + 1, Kind::Marker, *construct, depth);
                 *construct += 1;
                 at += 2;
                 continue;
             }
-        }
         if let Some((open, close, end)) = comment(chars, at).filter(|&(_, _, e)| e <= to) {
             // Warning: **批注裏面不掃**：`%%…%%` 整個是寫的人對自己說的話，標記也是他的。
             mark(out, at, at + open, Kind::Marker, *construct, depth);
@@ -1572,6 +1571,8 @@ pub mod typst {
     ///
     /// Warning: **字符串字面量裏的方括號不算**：`#f("]")` 裏那個不是括號。這是報告裏說的
     /// 「真要修就只修這一小步，別往上走」——完整的 Typst 表達式解析器換不來什麼。
+    // 走的是 `from..end` 這一段，而 `at` 是要記進 `bodies` 的絕對位置。
+    #[allow(clippy::needless_range_loop)]
     fn code_parts(chars: &[char], from: usize) -> (usize, Vec<(usize, usize)>) {
         let end = code_end(chars, from);
         let mut bodies = Vec::new();

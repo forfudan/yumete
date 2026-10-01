@@ -833,7 +833,7 @@ impl Editor {
             return None;
         }
         // 最響的在前；一樣響的按原來的次序（服務器自己排過）。
-        said.sort_by(|a, b| b.severity.cmp(&a.severity));
+        said.sort_by_key(|p| std::cmp::Reverse(p.severity));
         let loudest = said[0].severity;
         let body = said
             .iter()
@@ -1297,7 +1297,7 @@ impl Editor {
     /// 這會兒該不該畫那張單子——光標還在問的地方纔算。
     pub fn offers_here(&self) -> Option<(&[crate::lsp::Offer], usize)> {
         let offering = self.offering.as_ref()?;
-        (offering.at == self.sel.head()).then(|| (offering.items.as_slice(), offering.picked))
+        (offering.at == self.sel.head()).then_some((offering.items.as_slice(), offering.picked))
     }
 
     /// 單子上下走一格。**首尾相接**——一張十幾條的單子，從頭回到尾比按住鍵往回

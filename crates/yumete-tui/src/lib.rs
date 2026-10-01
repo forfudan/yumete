@@ -948,12 +948,12 @@ pub fn run(
         // **語言服務器**（#53／#54）: start what this file needs, tell it what
         // changed, and take whatever has come back. Both halves are
         // non-blocking; what is not here yet lands on the next turn round.
-        servers.follow(editor, &config);
+        servers.follow(editor, config);
         servers.forget_closed_files(editor);
         // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
-        servers.ask(editor, &config);
-        servers.ask_what(editor, &config);
-        servers.ask_next(editor, &config);
+        servers.ask(editor, config);
+        servers.ask_what(editor, config);
+        servers.ask_next(editor, config);
         let mut server_said_something = servers.collect(editor);
         // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
         // 看不見它，所以每一輪說一聲——同 `note_the_server` 那一條。
@@ -5353,13 +5353,6 @@ fn draw_which_key(
 /// 之後那一行不再畫前後文，於是連它一起刪了。回來是因為**結果名單那一行也該圍着命
 /// 中截**：從前它從行首截，一行上兩處命中就出現兩條一模一樣的行，而站着的那一處常常
 /// 在截斷線外面看不見。同一件事，換了個地方。
-
-/// **As much of a line as the row can hold, centred on one word** — #419.
-///
-/// Warning: **2026-09-27 走過一趟又回來了。** 它本來是命令行畫前後文用的，而預覽挪進正文
-/// 之後那一行不再畫前後文，於是連它一起刪了。回來是因為**結果名單那一行也該圍着命
-/// 中截**：從前它從行首截，一行上兩處命中就出現兩條一模一樣的行，而站着的那一處常常
-/// 在截斷線外面看不見。同一件事，換了個地方。
 ///
 /// Three pieces: what comes before the match, the match, and what comes
 /// after — so the row can pick the match out however it draws. `…` is added
@@ -5510,7 +5503,6 @@ fn draw_note(
             .enumerate()
             .map(|(n, offer)| {
                 let i = from + n;
-                let offer = offer;
                 // 選中的那一條在名字前頭帶一個記號——終端裏一整行反白會把兩欄
                 // 的對齊也一起反掉，而一個記號在哪一行是一眼的事。
                 let mark = match i == picked {
@@ -6913,9 +6905,7 @@ fn draw_sidebar(
     area: Rect,
     scrolled: &mut usize,
 ) -> Option<Position> {
-    let Some(sidebar) = editor.panel(side) else {
-        return None;
-    };
+    let sidebar = editor.panel(side)?;
     if area.width < 3 {
         return None;
     }
@@ -7834,7 +7824,7 @@ fn draw_search(
         // 標題。上限是面板的三分之一。
         let asked = 1 + preview_lines(prose, mark, now, wide).len();
         let cap = ((area.height as usize) / 3).max(2);
-        after_rows = asked.min(cap).min(room.saturating_sub(3).max(0));
+        after_rows = asked.min(cap).min(room.saturating_sub(3));
     }
     room = room.saturating_sub(after_rows);
     if room == 0 {
@@ -8356,16 +8346,20 @@ fn draw_picker(
                 *x += w;
                 true
             };
+            // 走的是名字切開之後的那一段，`i` 要拿去對命中的位置。
+            #[allow(clippy::needless_range_loop)]
             for i in name_at..clusters.len() {
                 if !ink_at(Some(i), clusters[i].1, &mut x, false) {
                     break;
                 }
             }
             if name_at > 0 {
-                for g in ["  "] {
+                {
+                    let g = "  ";
                     ink_at(None, g, &mut x, true);
                 }
                 // The folders, without the separator the name was split on.
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..name_at - 1 {
                     if !ink_at(Some(i), clusters[i].1, &mut x, true) {
                         break;
@@ -8376,7 +8370,8 @@ fn draw_picker(
             // 「檔名之後的文件夾」佔同一個位子，理由也同一條：名字先畫，後面那半
             // 截是讀者可以不看的，所以裁也裁在它身上。
             if !item.2.is_empty() {
-                for g in ["  "] {
+                {
+                    let g = "  ";
                     ink_at(None, g, &mut x, true);
                 }
                 for g in yumete_cjk::graphemes(item.2.as_str()) {
@@ -8412,7 +8407,7 @@ fn draw_picker(
     if over.width >= 20 {
         draw_preview(frame, editor, config, ink, over);
     }
-    let panels = Some(Rect::new(box_.x, box_.y, names + over.width.max(0), rows));
+    let panels = Some(Rect::new(box_.x, box_.y, names + over.width, rows));
     // **The caret sits in the query, and the query is inside the panel** — not
     // on the status line, which is where it used to be put and where it was
     // seen to be: 「光标在状态栏中打了j」. Nothing is being typed while the
@@ -9446,7 +9441,7 @@ fn draw_horizontal(
                         |i| (i + 1).to_string(),
                         ink,
                         head_ground,
-                        gutter as usize,
+                        gutter,
                         drawn,
                         lead,
                         start_in_line,
@@ -9456,7 +9451,7 @@ fn draw_horizontal(
                         |i| names.get(i).cloned().unwrap_or_default(),
                         ink,
                         head_ground.fg(ink.gold()),
-                        gutter as usize,
+                        gutter,
                         drawn,
                         lead,
                         start_in_line,
@@ -10185,7 +10180,7 @@ fn drawn_columns(drawn: Drawn, lead: usize) -> Vec<usize> {
     // ——注音畫在它自己那個字的頭上、列號畫在它自己那一欄的頭上——而「幾格」只有
     // 整個字簇答得出來。逐字加的話，一行上有一個 `Warning: `，它後面每一個注音都往左錯
     // 一格。
-    let cells = yumete_cjk::cells_per_char(&chars);
+    let cells = yumete_cjk::cells_per_char(chars);
     for i in 0..chars.len() {
         at += drawn_before(i);
         column.push(at);
@@ -12345,7 +12340,7 @@ fn squeezed(text: &str) -> String {
                 editor.on_key(Key::Char('a'));
                 assert!(editor.cell_wrap(), "t a did not turn 折行 on");
             }
-            let _ = render_with(&editor, &config, &ime, w, h);
+            let _ = render_with(&editor, &config, ime, w, h);
             let steps = 100;
             let (mut keys, mut drawn) = (0u128, 0u128);
             for i in 0..steps {
@@ -12363,7 +12358,7 @@ fn squeezed(text: &str) -> String {
                 }
                 keys += began.elapsed().as_micros();
                 let began = Instant::now();
-                let _ = render_with(&editor, &config, &ime, w, h);
+                let _ = render_with(&editor, &config, ime, w, h);
                 drawn += began.elapsed().as_micros();
             }
             let per = |t: u128| t as f64 / steps as f64 / 1000.0;
@@ -12412,12 +12407,12 @@ fn squeezed(text: &str) -> String {
                     ed.set_wrap_width(w as usize);
                     ed.set_page(h as usize, w as usize);
                     ed.execute(&format!(":{target}")).unwrap();
-                    let _ = render_with(&ed, &config, &ime, w, h);
+                    let _ = render_with(&ed, &config, ime, w, h);
                     let began = Instant::now();
                     ed.scroll(3 * notches, back);
                     let flick = began.elapsed().as_secs_f64() * 1000.0;
                     let began = Instant::now();
-                    let _ = render_with(&ed, &config, &ime, w, h);
+                    let _ = render_with(&ed, &config, ime, w, h);
                     println!(
                         "line {target:>5}  {:>4} notches {}  scroll {flick:>9.1}  draw {:>7.1}  (ms)",
                         notches,
@@ -13973,10 +13968,10 @@ fn squeezed(text: &str) -> String {
 
         let ime = no_ime();
         let frame = |editor: &Editor| -> f64 {
-            let _ = render_with(editor, &config, &ime, w, h);
+            let _ = render_with(editor, &config, ime, w, h);
             let began = Instant::now();
             for _ in 0..50 {
-                let _ = render_with(editor, &config, &ime, w, h);
+                let _ = render_with(editor, &config, ime, w, h);
             }
             began.elapsed().as_micros() as f64 / 50.0 / 1000.0
         };
@@ -14406,7 +14401,7 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char('i'));
             let mut ime = ImeSession::from_table_text(Scheme::LINGMING, table);
             ime.input('b');
-            let buffer = render_with(&mut editor, &Config::default(), &ime, 40, height);
+            let buffer = render_with(&editor, &Config::default(), &ime, 40, height);
 
             // **The panel is actually on the page.** Without this the test
             // would pass on a build that simply stopped drawing it.
@@ -15455,10 +15450,7 @@ fn squeezed(text: &str) -> String {
         // 畫在最後一欄上，所以它的座標是寬度減一。
         let inner = |editor: &Editor| -> u16 {
             let buffer = render_with(editor, &config, no_ime(), 80, 12);
-            (0..80u16)
-                .filter(|&x| is_rule(&buffer, x, 1))
-                .next_back()
-                .expect("a rule somewhere")
+            (0..80u16).rfind(|&x| is_rule(&buffer, x, 1)).expect("a rule somewhere")
         };
         assert_eq!(inner(&editor), 23, "出廠 3/10");
         for want in [31, 39, 15, 23] {
@@ -16722,7 +16714,7 @@ fn squeezed(text: &str) -> String {
             editor.set_wrap_width(100 - 4);
             let t = Instant::now();
             for _ in 0..n {
-                let _ = render_with(editor, &config, &ime, 100, 40);
+                let _ = render_with(editor, &config, ime, 100, 40);
             }
             t.elapsed() / n
         };
@@ -16782,19 +16774,19 @@ fn squeezed(text: &str) -> String {
             let ime = no_ime();
             editor.set_wrap_width(96);
             let t = Instant::now();
-            let _ = render_with(&editor, &config, &ime, 100, 40);
+            let _ = render_with(&editor, &config, ime, 100, 40);
             let first = t.elapsed();
 
             let t = Instant::now();
             for _ in 0..40 {
                 editor.on_key(Key::Char('j'));
-                let _ = render_with(&editor, &config, &ime, 100, 40);
+                let _ = render_with(&editor, &config, ime, 100, 40);
             }
             let scrolling = t.elapsed();
 
             let t = Instant::now();
             editor.on_key(Key::Char('G'));
-            let _ = render_with(&editor, &config, &ime, 100, 40);
+            let _ = render_with(&editor, &config, ime, 100, 40);
             let end = t.elapsed();
 
             println!("{chars:>10}  {open:>10.1?}  {first:>12.1?}  {scrolling:>12.1?}  {end:>10.1?}");
@@ -17563,7 +17555,7 @@ fn squeezed(text: &str) -> String {
         // 不住，看不見標籤——那不是標籤的毛病。
         let ime = no_ime();
         let shot = |ed: &mut Editor| -> Vec<String> {
-            frame_to_text(ed, &config, &ime, 40, 8, None)
+            frame_to_text(ed, &config, ime, 40, 8, None)
                 .lines()
                 .take(2)
                 .map(|r| r.trim_end().to_string())
@@ -17623,7 +17615,7 @@ fn squeezed(text: &str) -> String {
         for key in [Key::Char('z'), Key::Esc, Key::Char('x'), Key::Char('d')] {
             editor.on_key(Key::Char('g'));
             editor.on_key(Key::Char('w'));
-            let _ = frame_to_text(&mut editor, &config, &ime, 40, 8, None);
+            let _ = frame_to_text(&mut editor, &config, ime, 40, 8, None);
             assert!(editor.jumping(), "{key:?} 之前標籤是亮的");
             editor.on_key(key);
             assert!(!editor.jumping(), "{key:?} 之後收掉了");
@@ -17642,10 +17634,10 @@ fn squeezed(text: &str) -> String {
         let config = vertical_config();
         let ime = no_ime();
 
-        let plain = frame_to_text(&mut editor, &config, &ime, 30, 16, None);
+        let plain = frame_to_text(&mut editor, &config, ime, 30, 16, None);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('w'));
-        let shot = frame_to_text(&mut editor, &config, &ime, 30, 16, None);
+        let shot = frame_to_text(&mut editor, &config, ime, 30, 16, None);
         assert!(editor.jumping(), "竪排下也亮得起來：\n{shot}");
         // Warning: **版面一格沒動**，同橫排那一條：標籤是寫進那個縱自己那兩格的，所以
         // 每一行還是原來那麼寬。
@@ -20348,7 +20340,7 @@ fn squeezed(text: &str) -> String {
         std::fs::write(dir.join("二.md"), "冷得出奇。\n").unwrap();
         let mut editor = Editor::new();
         editor.set_root(&dir);
-        editor.open_file(&dir.join("一.md")).unwrap();
+        editor.open_file(dir.join("一.md")).unwrap();
 
         editor.execute(":search").unwrap();
         // 位置那一格：按 `0` 從本文件換到本文件夾（2026-09-29 起它畫在開關那一
@@ -20474,7 +20466,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn every_row_of_a_grid_puts_its_wall_in_the_same_column() {
         let mut editor = Editor::new();
-        editor
+        let _ = editor
             .current_buffer_mut()
             .insert(0, "名稱XX\t說明\n\u{26a0}\u{fe0f}\t有警告\nXX\t有警告\n甲\t有警告\n");
         let mut config = Config::default();
@@ -20536,7 +20528,7 @@ fn squeezed(text: &str) -> String {
             let kept: String =
                 whole.chars().filter(|&c| c == '\u{26a0}' || c == '\u{fe0f}').collect();
             assert!(
-                kept.chars().count() % 2 == 0,
+                kept.chars().count().is_multiple_of(2),
                 "room={room}：U+26A0 和 VS16 的個數對不上 {whole:?}"
             );
         }

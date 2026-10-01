@@ -53,7 +53,7 @@ fn a_slot_yume_compiled_is_a_scheme_yumete_can_type() {
     std::fs::create_dir_all(dir.join("installed").join("notes")).unwrap();
     std::fs::create_dir_all(dir.join("installed").join("deadbeef")).unwrap();
 
-    assert_eq!(yumete_ime::discover(&[dir.clone()]), 1, "one slot, one scheme");
+    assert_eq!(yumete_ime::discover(std::slice::from_ref(&dir)), 1, "one slot, one scheme");
 
     let tags: Vec<&str> = Scheme::all().iter().map(|s| s.tag()).collect();
     assert_eq!(

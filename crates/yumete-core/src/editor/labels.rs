@@ -105,7 +105,7 @@ impl Editor {
                 let wide: usize = rope
                     .slice(a..b)
                     .chars()
-                    .map(|c| yumete_cjk::char_width(c))
+                    .map(yumete_cjk::char_width)
                     .sum();
                 if wide < LABEL {
                     continue;

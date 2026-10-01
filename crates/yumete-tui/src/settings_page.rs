@@ -347,9 +347,9 @@ pub fn draw(
         false => short.clone(),
     };
     let line = match right.saturating_sub(title_ends) as usize {
-        room if room >= yumete_cjk::str_width(&dirty) + 1 => Some(dirty),
-        room if room >= yumete_cjk::str_width(&badge) + 1 => Some(badge),
-        room if room >= yumete_cjk::str_width(&short) + 1 => Some(short),
+        room if room > yumete_cjk::str_width(&dirty) => Some(dirty),
+        room if room > yumete_cjk::str_width(&badge) => Some(badge),
+        room if room > yumete_cjk::str_width(&short) => Some(short),
         _ => None,
     };
     if let Some(line) = line {
