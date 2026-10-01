@@ -61,10 +61,10 @@ impl Editor {
         out
     }
 
-    /// 字 in `text` — the publisher's count, ruby markup reduced to its base.
+    /// **一行裏的 字** — the publisher's count, ruby markup reduced to its base.
+    ///
     /// The same rule [`Editor::count_report`] answers with, so 進度 and `:count`
     /// can never disagree about how long a chapter is.
-    /// 一行裏的 字，同 [`Editor::han_in`]，只是一次只看一行。
     fn han_in_line(&self, line: &str) -> usize {
         let dialects = self.ruby;
         // 沒有注音方言就沒有標記要還原——一趟掃過去，一個字節都不用抄。

@@ -272,7 +272,10 @@ fn drawn(setting: &Setting, value: &str) -> String {
             _ => "[ ]".to_string(),
         },
         Kind::Pick(choices) => {
-            let word = value.trim_matches('"');
+            // 同底下那一支：`trim_matches` 不是 toml 轉義的反函數，而字面串
+            // （`layout = 'horizontal'`）它一個字都剝不掉。
+            let word = yumete_config::panel::unwritten(value);
+            let word = word.as_str();
             let label = choices
                 .iter()
                 .find(|c| c.word == word)
