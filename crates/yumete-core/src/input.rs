@@ -45,12 +45,15 @@ impl Mode {
     /// A short label for the status line — `None` when the row below already
     /// says it (2026-09-27).
     ///
-    /// **The five that draw nothing**: `:` writes `:` on the row below,
-    /// `/` writes 「搜索:」, the reading writes 「讀音:」, `::` writes `::`,
-    /// and the picker is a window covering the page. A mode word there is the
-    /// same sentence twice, and every cell on this line is contested — the
-    /// file name, the position and the character readout all give way in turn
-    /// when the window narrows (#394, #500).
+    /// **The four that draw nothing**: `:` writes `:` on the row below,
+    /// `/` writes 「搜索:」, the reading writes 「讀音:」 and `::` writes `::`.
+    /// Every cell on this line is contested — the file name, the position and
+    /// the character readout all give way in turn when the window narrows
+    /// (#394, #500).
+    ///
+    /// Warning: **選擇器 2026-10-01 從那一組裏拿了出來**，由
+    /// [`Editor::mode_label`] 報 `PIC.NOR`／`PIC.INS`。這一支仍回 `None`：它答
+    /// 的是「哪一種模式」，而那兩個詞答的是**鍵在哪一層**，同 `PAN.`。
     ///
     /// **The rest are three letters**, the way Helix writes them. Twelve cells
     /// (`-- NORMAL --  `) said one word.

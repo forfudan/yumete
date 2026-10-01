@@ -103,7 +103,40 @@ impl Editor {
     /// （「浮窗不应该和边栏同时出现」），而這一支和 [`Editor::info_in_the_sidebar`]
     /// 問的是同一件事的兩面，所以它們不可能對不上。
     pub fn info_afloat(&self) -> Option<Info> {
+        // **按下去了就不浮**，直到光標挪開（2026-10-01 作者提）。
+        if self.info_hushed == Some(self.sel.head()) {
+            return None;
+        }
+
         self.info_in_the_sidebar().is_none().then(|| self.info_now()).flatten()
+    }
+
+    /// **`Esc`：把浮着的那一扇按下去**，回 `true` 說明這一下用掉了。
+    ///
+    /// Warning: **不是關掉「即時顯示」那個功能**（作者原話：「只是给用户一个可以
+    /// 暂时关闭浮窗的可能性」）。光標挪開就又浮得出來，而**邊欄不受影響**——
+    /// 邊欄只由人開由人關。
+    pub(super) fn hush_the_float(&mut self) -> bool {
+        if self.info_afloat().is_none() {
+            return false;
+        }
+        self.info_hushed = Some(self.sel.head());
+        // 手動叫出來的那一種也一併放下，不然下一幀它又回來了。
+        self.info_asked = None;
+        true
+    }
+
+    /// 光標離開了按下去的那一格，那一下就作廢。
+    ///
+    /// Warning: **要在派鍵之前掃，而且記的是「離開過」不是「不在」**（2026-10-01）。
+    /// 光比「此刻在不在那一格」不夠：走開再走回同一個字，比出來還是「在」，於
+    /// 是那一扇再也浮不出來——而回到一個詞上正是要再看一眼的時候。同
+    /// [`Editor::forget_a_hover_nobody_is_looking_at`]，挪開光標的那一鍵掃的時
+    /// 候光標還沒挪，下一鍵纔掃得掉。
+    pub(super) fn unhush_the_float_once_the_cursor_has_left(&mut self) {
+        if self.info_hushed.is_some_and(|at| at != self.sel.head()) {
+            self.info_hushed = None;
+        }
     }
 
     /// **手動叫一種出來**——`空格 k`／`空格 i`／`空格 d`／`t i` 都走這一句。

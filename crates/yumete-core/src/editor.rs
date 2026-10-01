@@ -1920,6 +1920,12 @@ pub struct Editor {
     /// 光標一走就作廢——那一則是問出來的，問題已經過去了。`None` ＝ 沒人叫過，
     /// 那就看即時的那一種。
     info_asked: Option<(crate::sidebar::Info, usize)>,
+    /// **按 `Esc` 把浮窗按下去的那一格**（2026-10-01 作者提）。
+    ///
+    /// 光標還在這一格上就不浮；挪開就又浮得出來。原話：「只是给用户一个可以暂
+    /// 时关闭浮窗的可能性」——所以它不是一個開關，記的是「在這裏我不想看」。
+    /// 對邊欄不起效（邊欄只由人開由人關）。
+    info_hushed: Option<usize>,
     /// **`:info <名>` 指定的那一種即時信息**，`None` ＝ 按稿子算（散文百科、
     /// 代碼診斷、表格數據）。見 [`Editor::info_live`]。
     info_live: Option<crate::sidebar::Info>,
@@ -2798,6 +2804,7 @@ impl Editor {
             hover_query: None,
             hovered: None,
             info_asked: None,
+            info_hushed: None,
             info_live: None,
             docs_asked_at: None,
             docs_moved: None,

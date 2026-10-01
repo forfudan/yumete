@@ -59,6 +59,7 @@ impl Editor {
         // `空格 k` 問來的那一則說明同理：光標走開就作廢，不許走回去又冒出來
         // （2026-09-29 報的）。
         self.forget_a_hover_nobody_is_looking_at();
+        self.unhush_the_float_once_the_cursor_has_left();
         // 跟着光標走的那一問，光標一動就重新等它停穩。
         self.the_cursor_moved_under_the_docs();
         // **浮着的那一則，四個鍵翻得動**（2026-09-29 定，#426 起五種都收）。
@@ -1355,6 +1356,12 @@ impl Editor {
             // preview is the transient thing on the screen, and Esc is the key
             // every reader presses at a transient thing.
             Key::Esc => {
+                // **浮窗先收**（2026-10-01 作者提）。它是屏幕上最臨時的那一樣，
+                // 而 `Esc` 是人對着臨時的東西按的那一鍵。收的只是「這會兒別擋
+                // 着」——挪開光標它又回來，邊欄一動不動。
+                if self.hush_the_float() {
+                    return;
+                }
                 if self.other.is_some() && self.live_pane == 0 {
                     // **The window goes; the search stays.** Esc dismissed the
                     // pane, and the reader who then presses `n` means the same
