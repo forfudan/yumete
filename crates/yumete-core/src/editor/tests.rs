@@ -8202,6 +8202,7 @@ fn a_table_with_no_schema_gets_one_written_beside_it() {
     std::fs::write(&codes, "雪\txue\n月\tyue\n語\tyu\n星\txing\n").unwrap();
 
     let mut ed = Editor::new();
+    ed.set_root(&dir);
     ed.open_file(&codes).unwrap();
     assert!(ed.enter_table(), "a tab is a delimiter");
     assert!(ed.table().unwrap().from.as_os_str().is_empty(), "nobody's schema yet");
@@ -8220,9 +8221,12 @@ fn a_table_with_no_schema_gets_one_written_beside_it() {
     // It is open in the other half, and the keys did not go with it.
     let pane = ed.other_pane().expect("the schema is in the other area");
     assert_eq!(pane.caption, "codes.toml");
+    // `set_root` canonicalises（macOS 的 `/var` 是 `/private/var` 的符號鏈接）。
     assert_eq!(
-        ed.buffers[ed.buffer_with(pane.buffer).unwrap()].path(),
-        Some(written.as_path()),
+        ed.buffers[ed.buffer_with(pane.buffer).unwrap()]
+            .path()
+            .map(|p| std::fs::canonicalize(p).unwrap()),
+        Some(std::fs::canonicalize(&written).unwrap()),
         "the pane names the schema"
     );
     assert_eq!(ed.current_buffer().path(), Some(codes.as_path()), "still on the table");

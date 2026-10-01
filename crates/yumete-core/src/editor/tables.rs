@@ -3288,11 +3288,12 @@ impl Editor {
         let view = self.table.as_ref()?;
         let name = path.file_name()?.to_string_lossy().into_owned();
         let stem = path.file_stem()?.to_string_lossy().into_owned();
-        let tables = path
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(".yumete")
-            .join("tables");
+        // Warning: **寫進[項目根][`Editor::root`]，不寫在這個檔旁邊**（2026-10-01）。
+        // 讀那一頭（`table::schema_for`）是**每一層祖先的 `.yumete/tables/` 都
+        // 找**，而寫這一頭只看 `path.parent()`——於是規格放在項目根上的那種書，
+        // 在子目録的一章上按 `空格 t e`，會在旁邊另造一個**被蓋住的**
+        // `tables/`，從此兩份規格誰也不知道誰。
+        let tables = self.root().join(".yumete").join("tables");
         let file = tables.join(format!("{stem}.toml"));
         if file.exists() {
             return Some(file);
