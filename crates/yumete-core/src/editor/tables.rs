@@ -3589,6 +3589,13 @@ impl Editor {
         // reader who typed `t2-10g` got row 2, column 10 — a plausible answer
         // to a question nobody asked.
         if key == Key::Char('g') {
+            // **一個數都沒給也要答一句**（2026-10-01 測出來的）。單子上寫着
+            // `g 去某一格（␣t 20,20g）`，而光按 `␣t g` 從前掉到最底下那個兜
+            // 底——回的是「`t` 之後可以按這些」，等於把那張單子再念一遍。
+            if self.sequence.is_none() {
+                self.status = say!("table.cell-wants-a-comma");
+                return;
+            }
             if let Some(sequence) = self.sequence.clone() {
                 if sequence.joint == Some(Joint::Span) {
                     self.status = say!("table.cell-wants-a-comma");

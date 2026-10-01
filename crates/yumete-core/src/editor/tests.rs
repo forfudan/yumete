@@ -4259,6 +4259,77 @@ fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`空格 t` 單子上寫着的每一個鍵，按下去都真的有事發生**（2026-10-01）。
+///
+/// Warning: **這一族的錯出過不止一次**：單子上寫了一個鍵，而那一支 `match` 裏沒
+/// 有它，於是按下去落到最後那個兜底，回的是「`t` 之後可以按這些」——等於編輯
+/// 器自己說了一遍那張單子，卻沒做事。同一天 `T` 從頂層搬進這一組的時候也差點
+/// 再來一次。
+///
+/// 判準就是那個兜底：按完之後狀態欄**不許**是 `table_keys_say(那一檔)`。別的
+/// 任何一句都算數——包括「這一招在這種表上做不了」，那是一個真的回答。
+#[test]
+fn every_key_the_table_group_lists_does_something() {
+    use crate::editor::Bounds;
+
+    // 四種處境，各有各的一張單子。
+    let prose = || typed("那一年的雨下得久。\n");
+    let md = || {
+        let mut ed = typed("| 姓名 | 年紀 |\n| --- | --- |\n| 甲 | 三十 |\n| 乙 | 四十 |\n");
+        ed.execute(":3").unwrap();
+        ed
+    };
+    let block = || {
+        let mut ed = typed("## 第三章\n木,AA\n目,BB\n田,CC\n\n那一年的雨下得久。\n");
+        ed.execute(":2").unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed
+    };
+
+    let dir = std::env::temp_dir().join(format!("yumete-tkeys-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("t.csv");
+    std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
+    let file = || {
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        ed
+    };
+
+    let cases: [(Option<Bounds>, &dyn Fn() -> Editor); 4] = [
+        (None, &prose),
+        (Some(Bounds::Md), &md),
+        (Some(Bounds::Block), &block),
+        (Some(Bounds::WholeFile), &file),
+    ];
+
+    for (inside, make) in cases {
+        // 兩句「什麽都沒發生」：沒人認的鍵落到兜底（再念一遍那張單子），以及
+        // 光標根本不在表格裏那一句——後者擋在那一支 `match` 的中間。
+        let dead = [Editor::table_keys_say(inside), say!("hint.table.not-in-a-table")];
+        // 先驗這一條測試自己驗得出東西：一個**不在**單子上的鍵要落到其中一句。
+        let mut ed = make();
+        press(&mut ed, " tZ");
+        assert!(dead.contains(&ed.status().to_string()), "{inside:?}：沒人認的鍵——{}", ed.status());
+
+        for (keys, what) in Editor::table_keys(inside) {
+            for token in keys.split_whitespace() {
+                let mut ed = make();
+                press(&mut ed, " t");
+                press(&mut ed, token);
+                assert!(
+                    !dead.contains(&ed.status().to_string()),
+                    "{inside:?}：單子上寫着 `␣t {token}`（{what}），按下去什麽都沒發生——{}",
+                    ed.status()
+                );
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **The key the list offers for the grain is the key that changes it** (#399).
 ///
 /// `Tab` held the grain until #356 gave it what every spreadsheet means by the
