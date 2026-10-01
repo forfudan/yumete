@@ -36,6 +36,23 @@ impl Editor {
         if self.mode == Mode::Normal && self.sidebar_focused() {
             return Some("PAN.NOR".to_string());
         }
+        // **選擇器也報狀態**（2026-10-01 作者定：「PICKER 下也可以显示状态，就像
+        // PANEL 一样……这样的好处是用户可以马上知道现在是插入状态与否」）。
+        //
+        // Warning: **2026-09-27 定的是「不報」**，理由寫在 [`Mode::label`] 上：
+        // 「選擇器是一扇蓋住正文的窗，再寫一個模式詞是同一句話說兩遍」。那一句
+        // 說的是「哪一種模式」，而這裏報的是**鍵在哪一層**——選擇器真有兩層
+        // （`picker.typing()`：打查詢詞 ／ 站在單子上），兩層的 `j` 不是一回
+        // 事，正如 `PAN.` 之於正文。
+        //
+        // 順帶把那八個點與檔名之間那一格空氣也補回來了：模式一欄不空，狀態行
+        // 那條「借一格給點站」的路就走得通（`draw_status`）。
+        if self.mode == Mode::Picker {
+            return Some(match self.picker.as_ref().is_some_and(|p| p.typing()) {
+                true => "PIC.INS".to_string(),
+                false => "PIC.NOR".to_string(),
+            });
+        }
         if self.extend && self.mode == Mode::Normal {
             return Some("SEL".to_string());
         }
