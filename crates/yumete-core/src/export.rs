@@ -246,16 +246,49 @@ fn line_into(
         crate::syntax::Syntax::Text => Vec::new(),
         _ => crate::markdown::spans(line),
     };
-    let mut out = String::with_capacity(line.len());
+    render(&chars, &groups, &marks, None, 0, chars.len(), dialect, escape)
+}
+
+/// One run of `chars`, with whatever is marked **inside** it marked too.
+///
+/// Warning: **巢狀的標記從前整段吞掉**（2026-10-01 修）。這一趟從前是平的：
+/// `marks.iter().find(…)` 取頭一個蓋住 `at` 的 span——而 `spans()` 交出來的是
+/// **外層在前**的嵌套表，於是取到的永遠是最外那一層，整段原文連同裏層的分隔符
+/// 一起交給 [`marked`]，`at` 再一步跨到那一層的末尾。結果：
+///
+/// | 寫的 | HTML 從前 | Typst 從前 |
+/// | --- | --- | --- |
+/// | ``**粗體裏的 `代碼`**`` | `<strong>粗體裏的 \`代碼\`</strong>` | `*粗體裏的 \\\`代碼\\\`*` |
+/// | `*斜體裏的 **粗體***` | `<em>斜體裏的 **粗體**</em>` | `_斜體裏的 \\*\\*粗體\\*\\*_` |
+///
+/// 反引號與星號**印進了書裏**，Typst 那一端還帶着反斜線。`Span::depth` 當初存
+/// 下來就是為了這一趟（它的註釋寫着「`:export` 那一趟棧式遍歷有了它是十行」），
+/// 可這裏不看 `depth`——Typst 的 `typst::spans` 給誰都蓋 `depth: 0`，看它會把
+/// Typst 那一端弄壞。認「不是我自己」就夠了：`marks` 是排過序的嵌套表，所以
+/// 第一個落在 `from..to` 裏、又不是 `parent` 的那一條，正是下一層。
+#[allow(clippy::too_many_arguments)]
+fn render(
+    chars: &[char],
+    groups: &[ruby::Ruby],
+    marks: &[crate::markdown::Span],
+    // `marks` 裏「我自己」是第幾條——不排除它，它會把自己再匹配一次，無窮遞歸。
+    parent: Option<usize>,
+    from: usize,
+    to: usize,
+    dialect: Dialect,
+    escape: fn(&str) -> String,
+) -> String {
+    use crate::markdown::Kind;
+    let mut out = String::new();
     let mut plain = String::new();
-    let mut at = 0;
-    while at < chars.len() {
+    let mut at = from;
+    while at < to {
         // A reading group first: it is markup of its own, and its base may hold
         // characters the Markdown scan would read as delimiters.
-        if let Some(group) = groups.iter().find(|g| g.start == at) {
+        if let Some(group) = groups.iter().find(|g| g.start == at && g.end <= to) {
             out.push_str(&escape(&std::mem::take(&mut plain)));
-            let base: String = group.base_text(&chars).iter().collect();
-            let reading: String = group.reading_text(&chars).iter().collect();
+            let base: String = group.base_text(chars).iter().collect();
+            let reading: String = group.reading_text(chars).iter().collect();
             // Read out of the dialect it was written in first (#332).
             let base = group.dialect.unescape(&base);
             let reading = group.dialect.unescape(&reading);
@@ -274,12 +307,33 @@ fn line_into(
             at = group.end;
             continue;
         }
-        match marks.iter().find(|s| at >= s.start && at < s.end) {
-            Some(span) => {
+        let next = marks.iter().enumerate().find(|(i, s)| {
+            Some(*i) != parent && s.start >= from && s.end <= to && at >= s.start && at < s.end
+        });
+        match next {
+            Some((i, span)) => {
                 out.push_str(&escape(&std::mem::take(&mut plain)));
-                let end = span.end.min(chars.len());
-                let text: String = chars[at.max(span.start)..end].iter().collect();
-                out.push_str(&marked(span.kind, &text, dialect, escape));
+                let start = at.max(span.start);
+                let end = span.end.min(to);
+                // **這三種不往裏走。** 代碼與批注裏寫的就是字面（`spans()` 本來
+                // 也不往它們裏面遞），而分隔符自己沒有內容。
+                let leaf = matches!(span.kind, Kind::Code | Kind::Comment | Kind::Marker);
+                let body = match leaf {
+                    true => {
+                        let text: String = chars[start..end].iter().collect();
+                        // Warning: Typst 的反引號裏是**原樣**文本，`\` 就是一個反
+                        // 斜線，所以 `` `code_here` `` 從前出成 `` `code\_here` ``
+                        // （#386）。HTML 的 `<code>` 正相反，`&lt;` 是必須的。
+                        match (span.kind, dialect) {
+                            (Kind::Code, Dialect::Typst) => text,
+                            _ => escape(&text),
+                        }
+                    }
+                    false => {
+                        render(chars, groups, marks, Some(i), start, end, dialect, escape)
+                    }
+                };
+                out.push_str(&marked(span.kind, &body, dialect));
                 at = end.max(at + 1);
             }
             None => {
@@ -296,23 +350,11 @@ fn line_into(
 ///
 /// The markers themselves and the 批注 come out as nothing at all — those are
 /// the two runs that are *about* the manuscript rather than part of it.
-fn marked(
-    kind: crate::markdown::Kind,
-    text: &str,
-    dialect: Dialect,
-    escape: fn(&str) -> String,
-) -> String {
+/// Warning: **`text` 已經排好了**（2026-10-01）：裏層的標記已經包過，該轉義的已
+/// 經轉義過。這一支只管外面那一層怎麽寫。從前它自己 `escape`，而那在巢狀之後
+/// 是錯的——裏層排出來的 `<strong>` 會被當成作者打的字再轉義一遍。
+fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
     use crate::markdown::Kind;
-    // **Escaped here rather than before the call**, because one of these runs
-    // must not be: Typst's backticks hold *raw* text, where a `\` is a
-    // backslash and nothing else, so `` `code_here` `` was coming out as
-    // `` `code\_here` `` (#386). HTML's `<code>` is the opposite — `&lt;` is
-    // required there — so this is a per-dialect answer, not a per-kind one.
-    let raw = matches!((kind, dialect), (Kind::Code, Dialect::Typst));
-    let text = &match raw {
-        true => text.to_string(),
-        false => escape(text),
-    };
     match (kind, dialect) {
         // The delimiters, and the writer's private notes. Not in the book.
         (Kind::Marker | Kind::Comment, _) => String::new(),
@@ -716,6 +758,54 @@ mod tests {
         let out = export("他**很好**，%%私話%%好。\n", Format::Typst, &style);
         assert!(out.contains("*很好*"), "{out}");
         assert!(!out.contains("私話"), "{out}");
+    }
+
+    /// **一層套一層的標記，一層一層排出來**（2026-10-01）。
+    ///
+    /// Warning: 從前那一趟是平的：取頭一個蓋住光標的 span，而 `spans()` 交出來的
+    /// 是**外層在前**的嵌套表，於是永遠取到最外那一層，整段原文連同裏層的分隔
+    /// 符一起包進去——`**粗`碼`**` 出成 `<strong>粗`碼`</strong>`，反引號印進了
+    /// 書裏；Typst 那一端還被 `escape_typst` 加上反斜線，成了 `` \` ``。
+    #[test]
+    fn markup_inside_markup_is_exported_all_the_way_down() {
+        let style = |source| Style {
+            vertical: false,
+            hanging: false,
+            zong_len: 32,
+            dialects: Dialects::NONE,
+            title: "t".to_string(),
+            paper: Paper::A5,
+            source,
+        };
+        let md = style(crate::syntax::Syntax::Markdown);
+        // 只看正文那一段——整份輸出裏還有 CSS，裏頭本來就有星號。
+        let body = |text: &str, format| -> String {
+            let out = export(text, format, &md);
+            out.lines()
+                .find(|l| l.starts_with("<p>") || (format == Format::Typst && l.contains('甲') || l.contains('說')))
+                .unwrap_or_else(|| panic!("{out}"))
+                .to_string()
+        };
+
+        // 粗體裏的代碼。
+        let one = body("他**說`let x`罷**了。\n", Format::Html);
+        assert_eq!(one, "<p>他<strong>說<code>let x</code>罷</strong>了。</p>");
+        let one = body("他**說`let x`罷**了。\n", Format::Typst);
+        assert_eq!(one, "他*說`let x`罷*了。", "Typst 那一端不許帶反斜線");
+
+        // 粗體裏的斜體。Warning: 反過來寫（`*甲**乙**丙*`）在**解析那一層**就不是
+        // 嵌套——`markdown::spans` 把它讀成三段並排的 `Emphasis`。那是解析器的
+        // 事，不是這一趟的事。
+        assert_eq!(body("**甲*乙*丙**\n", Format::Html), "<p><strong>甲<em>乙</em>丙</strong></p>");
+
+        // 高亮裏的粗體。
+        assert_eq!(body("==甲**乙**丙==\n", Format::Html), "<p><mark>甲<strong>乙</strong>丙</mark></p>");
+
+        // 代碼裏寫着星號，那是代碼，不是標記。
+        assert_eq!(body("甲`a**b`\n", Format::Html), "<p>甲<code>a**b</code></p>");
+
+        // 作者自己的尖括號照舊轉義——遞歸之後也只轉一遍。
+        assert_eq!(body("甲**a<b>c**\n", Format::Html), "<p>甲<strong>a&lt;b&gt;c</strong></p>");
     }
 
     #[test]
