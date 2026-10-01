@@ -13822,7 +13822,8 @@ fn the_project_root_prefers_yumete_then_git_then_here() {
         std::fs::canonicalize(a).unwrap() == std::fs::canonicalize(b).unwrap()
     };
     let mut ed = Editor::new();
-    ed.set_root(&chapter);
+    // `set_root` 只收文件夾（照 helix：給一個檔不動工作路徑）。
+    ed.set_root(&book.join("卷一"));
     ed.open_file(chapter.clone()).unwrap();
     assert!(same(&ed.project_root(), &repo), "no .yumete yet, so the repository");
 
@@ -13835,7 +13836,7 @@ fn the_project_root_prefers_yumete_then_git_then_here() {
     std::fs::create_dir_all(&bare).unwrap();
     std::fs::write(bare.join("散.md"), "乙\n").unwrap();
     let mut ed = Editor::new();
-    ed.set_root(&bare.join("散.md"));
+    ed.set_root(&bare);
     ed.open_file(bare.join("散.md")).unwrap();
     assert!(same(&ed.project_root(), &bare), "the file's own directory");
 

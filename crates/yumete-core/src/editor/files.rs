@@ -240,24 +240,25 @@ impl Editor {
         Some(back)
     }
 
-    /// **命令行說的那個地方，定[工作路徑][`Editor::working_dir`]。**
+    /// **命令行給的是一個文件夾，那就定[工作路徑][`Editor::working_dir`]。**
     ///
-    /// 給文件夾就是它，給一個檔就是那個檔所在的那一層。項目路徑不另存——
-    /// [`Editor::root`] 當場從這裏往上算。
+    /// 給一個**檔**不動——照 helix（`helix-term/src/main.rs`：只有目錄參數與
+    /// `-w` 設 cwd）。項目路徑不另存，[`Editor::root`] 當場從工作路徑往上算。
     ///
-    /// Warning: **helix 只讓文件夾參數動 cwd，一個檔不動。** 這裏讓檔也動，是因為
-    /// `ye 卷一/第一章.md` 從 `/tmp` 敲的時候，helix 那條規矩會把工作區定成
-    /// `/tmp`——`空格 f` 於是列出 `/tmp`。讓檔也動一格，`空格 f` 就落在那一章
-    /// 所在的項目上，而「只有一個可變的東西」這一條照舊成立。
+    /// Warning: **2026-10-01 這裏「讓檔也動一格」過，當天撤了。** 當時想的是
+    /// `ye 卷一/一.md` 從 `/tmp` 敲時 `空格 f` 會列出 `/tmp`。可**那一改對項目
+    /// 路徑毫無幫助**：`cd /repo && ye docs/manual.md` 兩種規矩算出來的項目都是
+    /// `/repo`（往上走本來就會走過 `docs/`），它只在「從項目外面敲一個項目裏的
+    /// 檔」那一種纔有用。而代價是每一次從子目録啓動都要付：`:pwd` 報一個你沒打
+    /// 過的目録、`:open README.md` 解到 `docs/` 底下去（那個檔不在就**一聲不吭
+    /// 地**開一個空緩衝，`:w` 在錯的地方造檔）、`!cargo test` 跑在 `docs/` 裏。
+    /// 作者的判詞：撤回去。
     pub fn set_root(&mut self, at: &Path) {
         let full = match at.is_absolute() {
             true => at.to_path_buf(),
             false => std::env::current_dir().unwrap_or_default().join(at),
         };
-        let here = match full.is_dir() {
-            true => full,
-            false => full.parent().map(Path::to_path_buf).unwrap_or(full),
-        };
+        let Some(here) = full.is_dir().then_some(full) else { return };
         self.working_dir = Some(std::fs::canonicalize(&here).unwrap_or(here));
     }
 

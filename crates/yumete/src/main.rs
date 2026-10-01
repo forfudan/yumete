@@ -146,20 +146,19 @@ fn main() -> ExitCode {
     // （2026-10-01）。從前它無條件走 `current_dir()`，於是在 `/tmp` 敲
     // `ye ~/書/三體/卷一/第一章.md`，編輯器的根算出來是 `~/書/三體`，而
     // `.yumete/config.toml` 一個都沒載——配置與根各認各的地方。
-    let said_where = files.first().map(|first| {
+    // Warning: **只有「給了一個文件夾」纔算**（2026-10-01 撤回當天那個 deviation
+    // 之後）。給一個檔不動工作路徑——照 helix。見 `Editor::set_root`。
+    let said_where = files.first().and_then(|first| {
         let at = std::path::PathBuf::from(yumete_config::expand_tilde(first));
         let full = match at.is_absolute() {
             true => at,
             false => std::env::current_dir().unwrap_or_default().join(at),
         };
-        let here = match full.is_dir() {
-            true => full,
-            false => full.parent().map(std::path::Path::to_path_buf).unwrap_or(full),
-        };
+        let here = full.is_dir().then_some(full)?;
         // Warning: **規範化**（2026-10-01 審出來的）。`Editor::set_root` 規範化而
         // 這裏從前不——於是 `ye ../書/一.md` 與 `ye /repo/書/一.md` 指同一個項
         // 目，卻哈希出兩份會話，正是這一改要消滅的那件事。
-        std::fs::canonicalize(&here).unwrap_or(here)
+        Some(std::fs::canonicalize(&here).unwrap_or(here))
     });
     let (mut config, config_problems) = match &said_where {
         Some(from) => yumete_config::Config::load_reporting_from(from),
@@ -254,28 +253,22 @@ fn main() -> ExitCode {
     // horizontal — a file a schema calls a table is read across — and a setting
     // applied afterwards would be silently refused, so which layout you got
     // would depend on the order you named your files in.
-    // **這一節坐在哪本書上，這裏定一次**（2026-09-27 定）。命令行第一個路徑說
-    // 了算：文件夾就是它，一個檔就從那個檔往上找項目根。什麼都沒給就不設，退回
-    // 從 cwd 往上找——也就是從前的樣子。
+    // **工作路徑在這裏定一次。** 照 helix：命令行給了一個**文件夾**就是它，給
+    // 一個檔不動；什麼都沒給就是你敲 `ye` 的那個目録。項目路徑不另存——
+    // `Editor::root()` 當場從工作路徑往上算（`.yumete`，然後 `.git`）。
     //
-    // 定了之後它不再動：從別處打開一個檔只是多一個緩衝，不把根撐大。文件樹、
-    // 「項目」這個搜索範圍、位置那一格裏的相對路徑，問的都是這一個地方。
+    // 於是它不跟着你翻到哪兒走：`gd` 跳進 homebrew 或 rustup 裏的源碼，`空格 f`
+    // 照舊是這個項目。想搜別處是 `空格 F`（工作路徑）或者先 `:cd`。
     let mut opened_a_folder = None;
-    match files.first() {
-        Some(first) => {
-            let at = std::path::PathBuf::from(yumete_config::expand_tilde(first));
+    let first_dir = files
+        .first()
+        .map(|first| std::path::PathBuf::from(yumete_config::expand_tilde(first)))
+        .filter(|at| at.is_dir());
+    match first_dir {
+        Some(at) => {
             editor.set_root(&at);
-            if at.is_dir() {
-                opened_a_folder = Some(editor.root());
-            }
+            opened_a_folder = Some(editor.root());
         }
-        // **什麽都沒給也要定一次**（2026-10-01 作者報的）。從前這時候不設，
-        // `root()` 就退回 `project_root()`——而那一支是**按打開的緩衝區現算
-        // 的，當前那一個排第一**。於是 `gd` 跳進 homebrew 或 rustup 裏的源碼之
-        // 後，`空格 f` 的搜索範圍跟着跑到了那裏。
-        //
-        // helix 的規矩：`空格 f` 開在**工作區根**上，而工作區根是一開始定下
-        // 的，不跟着你翻到哪兒走（`file_picker`；想搜別處是 `空格 F`）。
         None => {
             if let Ok(here) = std::env::current_dir() {
                 editor.set_root(&here);
