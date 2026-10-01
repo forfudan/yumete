@@ -615,14 +615,18 @@ pub fn run(
             system_ime.say_it_again();
         }
         system_ime.want(!composes_here(editor) || yume_has_the_keys);
-        let shown = (editor.mode(), editor.is_extending());
+        // Warning: **挑選器那兩層也要進這個元組**（2026-10-02 修）。換層不換 `mode`，
+        // 於是形狀一次都沒重發過——列表層照樣頂着一根豎線（作者報的：「The cursor
+        // is incorrect in normal mode」）。
+        let in_the_list = editor.picker().is_some_and(|p| !p.typing());
+        let shown = (editor.mode(), editor.is_extending(), in_the_list);
         if last_mode != Some(shown) {
-            let (mode, extending) = shown;
+            let (mode, extending, in_the_list) = shown;
             // A block in Normal, a bar in Insert — the shape a modal editor is
             // read by. Only sent on a change, so the terminal is not asked to
             // reset its cursor on every keystroke.
             let vertical = editor.layout() == WritingLayout::Vertical;
-            let _ = execute!(stdout(), caret_shape(mode, vertical, extending));
+            let _ = execute!(stdout(), caret_shape(mode, vertical, extending, in_the_list));
 
             // Leaving the command line gives Insert its 中/英 back (#225) —
             // *its* state, not 中文 unconditionally. Forcing 中文 back on put
@@ -639,7 +643,7 @@ pub fn run(
             // straight after a 中文 name kept the composition running, and
             // gave nothing back on the way out either.
             if ime.available() {
-                let door = borrowed.crossing(last_mode.map(|(m, _)| m), mode, ime.is_chinese());
+                let door = borrowed.crossing(last_mode.map(|(m, _, _)| m), mode, ime.is_chinese());
                 if door.escape && ime.is_composing() {
                     ime.escape();
                 }
@@ -8498,21 +8502,19 @@ fn draw_picker(
     // seen to be: 「光标在状态栏中打了j」. Nothing is being typed while the
     // keys are in the list, so there the caret is on the name it is standing
     // on instead.
-    let caret = match picker.typing() {
-        true => Position::new(
-            left.x
-                + 2
-                + (yumete_cjk::str_width(&say!("search.label.query"))
-                    + yumete_cjk::str_width(&picker.before_caret())
-                    + yumete_cjk::str_width(&preedit)) as u16,
-            left.y + 1,
-        ),
-        // **列表那一層站在搜索框上的時候，光標也畫在框裏**（2026-10-01 定）。
-        // 它和「正在打字」的分別是底色：打字那一檔鋪到梯子的盡頭，這一檔不鋪。
-        false if picker.on_query() => Position::new(
-            left.x + 2 + yumete_cjk::str_width(&say!("search.label.query")) as u16,
-            left.y + 1,
-        ),
+    // **框裏那一格的位置，兩層算法一樣**（2026-10-02 修）。從前列表層那一支漏了
+    // `before_caret`，於是光標永遠釘在框的開頭、`h`／`l` 挪了它也不動——作者報
+    // 的「the curser does not move with hl」就是這個。
+    let in_the_box = Position::new(
+        left.x
+            + 2
+            + (yumete_cjk::str_width(&say!("search.label.query"))
+                + yumete_cjk::str_width(&picker.before_caret())
+                + yumete_cjk::str_width(&preedit)) as u16,
+        left.y + 1,
+    );
+    let caret = match picker.on_query() {
+        true => in_the_box,
         false => Position::new(left.x + 1, left.y + 3 + (at - first) as u16),
     };
     frame.set_cursor_position(caret);
@@ -10720,7 +10722,13 @@ fn draw_command(
 /// `box_in` paints that one, and the two shapes then say the same thing
 /// everywhere — **bar means the next key is a character, block means it is a
 /// command**.
-fn caret_shape(mode: Mode, vertical: bool, extending: bool) -> SetCursorStyle {
+fn caret_shape(mode: Mode, vertical: bool, extending: bool, in_the_list: bool) -> SetCursorStyle {
+    // **挑選器的列表層是 Normal，所以是方塊**（2026-10-02 修）。`Mode::Picker`
+    // 一律走 `is_prompt()` 那一支，於是列表層也頂着一根豎線——而那一層按 `j` 走
+    // 的是列表，不是打一個 `j`。這一行在 `is_prompt()` 之前。
+    if in_the_list {
+        return SetCursorStyle::SteadyBlock;
+    }
     if mode.is_prompt() {
         return SetCursorStyle::SteadyBar;
     }
@@ -19492,6 +19500,52 @@ fn squeezed(text: &str) -> String {
         assert!(text.contains(&yumete_core::say!("picker.nothing-matched")), "{text}");
     }
 
+    /// **挑選器搜索框裏的光標跟着 `h`／`l` 走，兩層都是**（2026-10-02 修）。
+    ///
+    /// 作者報的：「The cursor is incorrect in normal mode and the curser does
+    /// not move with hl」。兩件事同一個根：列表層那一支算位置的時候**漏了光標前
+    /// 面那一段**，於是它永遠釘在框的開頭；而 `Mode::Picker` 一律走
+    /// `is_prompt()`，形狀被寫死成豎線，連換層都不重發。
+    #[test]
+    fn the_pickers_caret_sits_on_the_character_it_is_standing_on() {
+        let mut editor = Editor::new();
+        let config = Config::default();
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('f'));
+        editor.on_key(Key::Char('i'));
+        for c in "this".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let (_, typing) = render_caret(&editor, &config, 80, 24);
+        let typing = typing.expect("打字的時候有光標");
+
+        // `Esc` 回列表層，鍵落在搜索行上，光標還在同一格。
+        editor.on_key(Key::Esc);
+        let (_, listed) = render_caret(&editor, &config, 80, 24);
+        assert_eq!(listed, Some(typing), "換層不挪光標");
+
+        // Warning: **`h` 要把它往左挪一格。** 從前它一步不動。
+        editor.on_key(Key::Char('h'));
+        let moved = render_caret(&editor, &config, 80, 24).1.expect("列表層站在搜索行上也有光標");
+        assert_eq!(moved.x, typing.x - 1, "h 往左一格");
+        assert_eq!(moved.y, typing.y, "還在那一行");
+        editor.on_key(Key::Char('l'));
+        let (_, back) = render_caret(&editor, &config, 80, 24);
+        assert_eq!(back, Some(typing), "l 回去");
+
+        // 形狀：列表層是方塊，查詢層是豎線。
+        assert_eq!(
+            format!("{}", caret_shape(editor.mode(), false, false, true)),
+            format!("{}", SetCursorStyle::SteadyBlock),
+            "列表層是方塊"
+        );
+        assert_eq!(
+            format!("{}", caret_shape(editor.mode(), false, false, false)),
+            format!("{}", SetCursorStyle::SteadyBar),
+            "查詢層是豎線"
+        );
+    }
+
     /// **A long note keeps every character it draws** (2026-09-18).
     ///
     /// The body used to be wrapped to the room's full width and the box then
@@ -20480,7 +20534,7 @@ fn squeezed(text: &str) -> String {
         // `SetCursorStyle` 沒有 `Debug`，而它 `Display` 出來的正是那串終端轉義，
         // 三種形狀三個字符串——比記住 `\x1b[5 q` 是哪一個好讀。
         let shape = |mode, vertical, extending| {
-            format!("{}", caret_shape(mode, vertical, extending))
+            format!("{}", caret_shape(mode, vertical, extending, false))
         };
         let bar = format!("{}", SetCursorStyle::SteadyBar);
         let under = format!("{}", SetCursorStyle::SteadyUnderScore);
