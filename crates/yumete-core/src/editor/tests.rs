@@ -2339,6 +2339,47 @@ fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **換一個檔就換一套顏色**（2026-10-01 作者報的）。
+///
+/// Warning: 從前 `by_chunk` 只按「第幾塊」記，**不記是哪個檔**。於是先開一份
+/// Rust 再從 picker 開一份 Python，第 0 塊早就在那張表裏了，Python 那一份拿到的
+/// 是**上一個檔的顏色**——而且 `hold_the_tree` 連叫都沒叫到，那一格永遠不清。
+/// 原話：「open a rust file first and then open a python file via picker, the
+/// coloring of the python file is incorrect. And vice verse.」
+#[test]
+fn a_second_buffer_gets_its_own_colours_not_the_first_ones() {
+    use crate::code::Language;
+    let dir = std::env::temp_dir().join(format!("yumete-two-tongues-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let rs = dir.join("a.rs");
+    let py = dir.join("b.py");
+    // 同一行號上兩種語言各有各的關鍵字，而且**字數一樣**，所以比的是顏色不是長短。
+    std::fs::write(&rs, "fn main() {\n    let x = 1;\n}\n").unwrap();
+    std::fs::write(&py, "def main():\n    x = 1\n    return x\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&rs).unwrap();
+    let rust_first = ed.code_file_line(0, Language::Rust);
+    assert!(!rust_first.is_empty(), "Rust 那一行有顏色");
+
+    // 同一個編輯器裏開第二份，第 0 塊在那張表裏已經有東西了。
+    ed.open_file(&py).unwrap();
+    let python_first = ed.code_file_line(0, Language::Python);
+    assert!(!python_first.is_empty(), "Python 那一行也要有顏色");
+    assert_ne!(
+        rust_first, python_first,
+        "Warning: 兩份檔第 0 行拿到了同一套顏色——那就是上一個檔的"
+    );
+
+    // 再切回去，Rust 那一份也要是它自己的。
+    ed.execute(":buffer 1").ok();
+    if ed.current_buffer().path() == Some(rs.as_path()) {
+        assert_eq!(ed.code_file_line(0, Language::Rust), rust_first, "切回來還是它自己的");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 寫作進度 — the ledger is opened by asking, kept by saving (#244).
 #[test]
 fn the_book_keeps_a_ledger_of_what_was_written_today() {

@@ -130,11 +130,19 @@ impl Editor {
         if !self.code_colours {
             return Vec::new();
         }
+        // Warning: **先確認手上那棵樹就是這個檔這一版的**（2026-10-01 作者報
+        // 的：「open a rust file first and then open a python file via picker,
+        // the coloring of the python file is incorrect」）。`by_chunk` 只按
+        // 「第幾塊」記，**不記是哪個檔**——所以從 `build.rs` 切到 `sc2tc.py`，
+        // 第 0 塊早就在裏頭了，直接命中的是**上一個檔的顏色**，而
+        // `hold_the_tree` 連叫都沒叫到，那一格於是永遠不清。
+        //
+        // 放在前面不貴：同一個檔同一版的時候 `hold_the_tree` 就是三個比較。
+        self.hold_the_tree(language);
         let chunk = line / CHUNK;
         if let Some(found) = self.code_cache.borrow().by_chunk.get(&chunk) {
             return found.get(line - chunk * CHUNK).cloned().unwrap_or_default();
         }
-        self.hold_the_tree(language);
         let mut cache = self.code_cache.borrow_mut();
         let Some(held) = cache.whole.as_ref().filter(|h| h.language == language) else {
             return Vec::new();
@@ -181,6 +189,11 @@ impl Editor {
         let mut cache = self.code_cache.borrow_mut();
         // 同一個檔、同一種語言，只是版本新了：拿上一棵樹走增量。
         let was = cache.whole.take().filter(|h| h.buffer == id && h.language == language);
+        // **手上那一棵已經不算數了，畫過的那幾塊也就不算數**——擺在這裏而不是
+        // 擺在最後，因為下面那一句解析失敗會直接 `return`，而那時候
+        // `cache.whole` 已經被 `take` 走了：留着舊的 `by_chunk` 就是一張沒有樹
+        // 的顏色表，下一次查還會命中它。
+        cache.by_chunk.clear();
         let tree = match was {
             Some(held) => match crate::code::what_changed(&held.source, &source) {
                 Some(edit) => {
@@ -194,8 +207,6 @@ impl Editor {
             None => crate::code::parse(language, &source, None),
         };
         let Some(tree) = tree else { return };
-        // 換了一版，畫過的那幾塊就不算數了。
-        cache.by_chunk.clear();
         cache.whole = Some(Held { buffer: id, revision, language, source, lines, tree });
     }
 
