@@ -89,6 +89,31 @@ impl Editor {
         // does not do that in either** (2026-09-24 審出來的). In the box it
         // falls through to nothing; in the panel it walks the slot's views.
         // The next cell is `↓`.
+        // **挑選器的鍵寫在這一行，不寫在面板裏**（2026-10-01 定，作者原話：「快捷
+        // 键文案是不是可以收到命令行中？」）。搜索面板一直是這樣，而挑選器從前把
+        // 鍵寫在自己的腳注上、命令行那一行空着——騰出來的那一行歸列表。
+        //
+        // 用的詞和搜索面板那一行是同一批（`hint.search.box-*`）：兩扇的框 2026-10-01
+        // 起是同一套鍵，說法也該是同一套。
+        if let Some(picker) = self.picker() {
+            let title = picker.title.clone();
+            if picker.typing() {
+                return Hint::Keys(title, vec![
+                    ("Enter".into(), say!("hint.picker.open")),
+                    ("↑ ↓".into(), say!("hint.sidebar.move")),
+                    ("Esc".into(), say!("hint.picker.back-to-the-list")),
+                ]);
+            }
+            return Hint::Keys(title, vec![
+                ("j k".into(), say!("hint.sidebar.move")),
+                ("Enter".into(), say!("hint.picker.open")),
+                ("q".into(), say!("hint.close")),
+                ("d D".into(), say!("hint.search.box-delete")),
+                ("c C".into(), say!("hint.search.box-change")),
+                ("a A".into(), say!("hint.search.box-append")),
+                ("i I".into(), say!("hint.search.box-insert")),
+            ]);
+        }
         if self.mode == Mode::Field {
             // **換字那兩個鍵在框裏按不了，所以框裏那一行要指路**（2026-09-25
             // 報的：「替换模式下如何替换？快捷鍵是什麼？如何全部替换？」）。

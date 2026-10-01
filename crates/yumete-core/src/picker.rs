@@ -81,6 +81,12 @@ pub struct Picker {
     /// `/` (or `i`) is what puts the keys in the query, where `Esc` hands them
     /// back to the list.
     typing: bool,
+    /// **列表那一層，鍵落在搜索框那一行**（2026-10-01 定，作者原話：「当然是移动
+    /// 到搜索行点 i 啊。。。这就是个模态编辑啊」）。
+    ///
+    /// `k` 從第一條走上來就落在它身上，`j` 再走下去回第一條；`i` 在它身上纔進打
+    /// 字。從前 `/` 在列表的任何一條上都進得去，而那不是模態的走法——同日去掉。
+    on_query: bool,
     /// **What to put near the top before anything is typed**, one number per
     /// item (2026-09-18).
     ///
@@ -113,7 +119,14 @@ impl Picker {
             query: String::new(),
             selected: 0,
             caret: 0,
+            // **一開在列表那一層**，`/` 或 `i` 纔進查詢。
+            //
+            // Warning: **2026-10-01 試過改成「一開就能打字」**（helix、fzf、telescope
+            // 都是那樣），當天撤回。代價是作者不要的那兩個：關掉挑選器變成要按
+            // 兩次 `Esc`（一次回列表、一次出門），而且開門第一下退格就換層。
+            // 原話：「那就改成默认 normal 状态吧。」
             typing: false,
+            on_query: false,
             bonus: vec![0; count],
         }
     }
@@ -202,6 +215,42 @@ impl Picker {
     /// Put the keys in the list (`Esc`), or back in the query (`/`).
     pub fn type_here(&mut self, typing: bool) {
         self.typing = typing;
+        // 進了框，列表那一層的鍵就該停在框那一行上——`Esc` 出來纔落回原處。
+        if typing {
+            self.on_query = true;
+        }
+    }
+
+    /// 列表那一層此刻站在搜索框那一行上嗎。
+    pub fn on_query(&self) -> bool {
+        self.on_query
+    }
+
+    /// **把列表那一層的鍵放到搜索框那一行上**，不進打字態。
+    ///
+    /// Warning: **`d`／`D` 也要叫它**（2026-10-01）：那兩個鍵在任何一行上都改得了查詢
+    /// 詞，而站在一條檔名上按 `d`、查詢框裏悄悄少一個字，是看不見的事。改完把
+    /// 鍵放到那一行上，改了什麼就在眼前。
+    pub fn stand_on_query(&mut self) {
+        self.on_query = true;
+    }
+
+    /// **列表那一層走一步**——搜索框是最上面那一「行」，走得上去。
+    ///
+    /// Warning: **不包着走。** 從框往上沒有地方可去，從最後一條往下也不繞回框——
+    /// 繞回去的話一路按 `j` 會在列表和框之間打轉，而那一行不是一條候選。
+    pub fn step_in_list(&mut self, down: bool) {
+        if self.on_query {
+            if down {
+                self.on_query = false;
+            }
+            return;
+        }
+        if !down && self.selected() == 0 {
+            self.on_query = true;
+            return;
+        }
+        self.step(down);
     }
 
     /// Which match is highlighted, clamped to what there is.
@@ -252,6 +301,13 @@ impl Picker {
         self.query.replace_range(from..to, "");
         self.caret = caret - 1;
         true
+    }
+
+    /// **從光標刪到末尾**——框裏的 `D`（2026-10-01）。
+    pub fn delete_to_end(&mut self) {
+        let at = self.byte(self.caret());
+        self.query.truncate(at);
+        self.selected = 0;
     }
 
     /// Remove the character *under* the caret; the caret stays where it is.
@@ -616,6 +672,9 @@ mod tests {
         assert_eq!(picker.chosen(), Some(Item::File("a.md".to_string())));
     }
 
+    /// **一開在列表那一層**——`jk` 第一下就走得動，`/` 或 `i` 纔進查詢。
+    ///
+    /// Warning: **2026-10-01 試過反過來，當天撤回**：那樣關掉挑選器要按兩次 `Esc`。
     #[test]
     fn the_keys_start_in_the_list_and_slash_takes_them_to_the_query() {
         let mut picker = files(&["a.md"]);

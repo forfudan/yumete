@@ -44,12 +44,14 @@ scenes() {
 表格-滿版|80x20|:open TABLE\ntt
 搜索面板|100x24|:s\n那\n
 搜索面板-替換|100x24|:replace\n那\n
+挑選器|90x24| f
+挑選器-查詢|90x24| fi那
 跳轉標籤|80x20|gw
 跳轉標籤-竪排|60x24|:layout vertical\ngw
 大綱|90x24|:open MANUAL\n\{space}o
 設置頁|100x30|:settings\n
 命令選單|80x20|:
-空格選單|80x20|\{space}
+空格選單|80x20| 
 幫助|100x30|:help\n
 注音|80x20|:open RUBY\n
 多選區|40x12|ggllCCC

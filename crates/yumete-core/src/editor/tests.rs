@@ -9808,9 +9808,10 @@ fn space_b_picks_a_buffer_by_name() {
 }
 
 /// `Esc` in the list is the door out; in the query it is the way back to the
-/// list, and so is backspacing past the start of it (2026-09-17) — `/` is how
-/// the keys got there, and going back over the query lands where `/` was
-/// pressed rather than shutting the whole panel.
+/// list, and so is backspacing past the start of it (2026-09-17).
+///
+/// Warning: **一開在列表那一層**，所以一下 `Esc` 就關得掉。2026-10-01 試過改成一開
+/// 就在查詢層，那樣要按兩次，當天撤回。
 #[test]
 fn a_picker_closes_on_esc_and_backspacing_past_the_query_goes_back_to_the_list() {
     let mut ed = Editor::new();
@@ -9820,7 +9821,7 @@ fn a_picker_closes_on_esc_and_backspacing_past_the_query_goes_back_to_the_list()
     assert!(ed.picker().is_none());
 
     type_keys(&mut ed, " b");
-    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Char('i'));
     ed.on_key(Key::Char('x'));
     ed.on_key(Key::Backspace); // back over the `x`
     assert_eq!(ed.mode(), Mode::Picker);
@@ -10188,7 +10189,7 @@ fn every_prompt_has_a_caret() {
     // the list (2026-09-18).
     let mut ed = typed("那年冬天。\n");
     ed.open_buffer_picker();
-    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Char('i'));
     for c in "abc".chars() {
         ed.on_key(Key::Char(c));
     }
@@ -16087,13 +16088,13 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     ed.on_key(Key::Char('j'));
     assert_ne!(ed.picker_preview(4).unwrap().0, first, "j walked, and the preview followed");
 
-    // `/` is the query; `Esc` hands the keys back to the list, and does not
-    // close the picker.
-    ed.on_key(Key::Char('/'));
-    assert!(ed.picker().is_some_and(|p| p.typing()), "/ puts the keys in the query");
+    // **`i` 進框，`/` 2026-10-01 去掉了**；`Esc` 把鍵交回列表，不關挑選器。
+    ed.on_key(Key::Char('i'));
+    assert!(ed.picker().is_some_and(|p| p.typing()), "i puts the keys in the query");
     ed.on_key(Key::Esc);
     assert!(ed.picker().is_some_and(|p| !p.typing()), "Esc is the layer, not the door out");
-    ed.on_key(Key::Char('/'));
+    assert!(ed.picker().is_some_and(|p| p.on_query()), "Esc 落回搜索行，不是落回原處");
+    ed.on_key(Key::Char('i'));
     ed.on_key(Key::Char('二'));
     assert_eq!(ed.picker().unwrap().matches().len(), 1);
     ed.on_key(Key::Enter);
