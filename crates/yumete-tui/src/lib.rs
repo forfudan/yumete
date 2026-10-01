@@ -8270,13 +8270,12 @@ fn draw_picker(
         },
         picker.total(),
     );
-    // Which layer the keys are in, said after the query rather than where it
-    // would be typed.
-    let hint = match picker.typing() {
-        true => format!("  {}", say!("picker.in-the-query")),
-        false => format!("  {}", say!("picker.in-the-list")),
-    };
-    let footer = format!("{counted}{}{preedit}{hint}", picker.query());
+    // **腳注只剩一個數目**（2026-10-01 定）。查詢詞挪進了列表上面那個框（作者原
+    // 話：「我其实有点想在文件下方加一行输入框」，後來定了畫在**上面**，和搜索
+    // 面板同形），鍵位挪去了命令行那一行（「快捷键文案是不是可以收到命令行
+    // 中？」）——搜索面板一直是那樣，而挑選器從前兩樣都寫在自己身上、命令行
+    // 空着。
+    let footer = counted.trim_end().to_string();
     let at = picker.selected();
     // **In the middle of the window, the list on the left and what it is
     // standing on to the right of it** (2026-09-17: 「左側是文件窗口，右側是
@@ -8326,7 +8325,9 @@ fn draw_picker(
     });
     // One column: these are paths, long and of every length, and columns of
     // ragged paths are harder to read down than a single list.
-    let deep = rows.saturating_sub(3) as usize;
+    // Warning: **少兩行**（2026-10-01）：查詢框佔了列表上面那一行，它和列表之間還
+    // 有一道橫線。
+    let deep = rows.saturating_sub(5) as usize;
     let first = at
         .saturating_sub(deep.saturating_sub(1))
         .min(items.len().saturating_sub(deep.min(items.len())));
@@ -8338,7 +8339,7 @@ fn draw_picker(
             let Some(item) = items.get(first + slot) else {
                 break;
             };
-            let y = left.y + 1 + slot as u16;
+            let y = left.y + 3 + slot as u16;
             let picked = first + slot == at;
             let style = match picked {
                 true => on,
@@ -8434,12 +8435,43 @@ fn draw_picker(
                 }
             }
         }
+        // **查詢框，畫在列表上面**（2026-10-01 定）。和搜索面板那一扇同形：名字在
+        // 框外面的淡墨裏，打字的時候那一段鋪到梯子的盡頭去，好和「鍵不在這裏」
+        // 分得開。
+        let tag = say!("search.label.query");
+        let tag_at = left.x + 1;
+        put_text(buf, tag_at, left.y + 1, limit, &tag, ground.fg(ink.quiet()));
+        let box_at = tag_at + yumete_cjk::str_width(&tag) as u16 + 1;
+        let said = format!("{}{preedit}", picker.query());
+        // Warning: **兩種狀態都不改底色**（2026-10-01 定，作者原話：「搜索行 normal 模式
+        // 下不需要特别的底色……进入了 insert 模式也不用修改底色了（因为光标会提示
+        // 这是什么模式）」）。搜索面板那三格的底色當初是為了「沒有名字的空框看不
+        // 出能打字」纔加的，而這一行前面寫着「搜:」，再加上光標形狀本來就在說模
+        // 態（豎線＝下一個鍵是字，方塊＝下一個鍵是命令），底色是第三重說法。
+        put_text(buf, box_at, left.y + 1, limit, &said, ground.fg(ink.text()));
+        // **一道橫線，左右連到邊框上**（2026-10-01 定）。
+        //
+        // Warning: **搜索面板 2026-09-27 把這樣的兩道線拆掉了**（原話：「这里的两条线
+        // 没有什么用，都删了，还能节约两行」），這裏加回來是因為情形不同：那一扇
+        // 框底下是開關，形狀一眼就和框不同；這一扇框底下是一列檔名，不隔開那一行
+        // 讀起來像是列表的第一條。而且挑選器是整屏居中的大面板，不像邊欄那樣一行
+        // 都要省。
+        let rule = ground.fg(ink.rule());
+        let (tee_l, tee_r) = match config.panel.rounded {
+            true => ("├", "┤"),
+            false => ("├", "┤"),
+        };
+        put_text(buf, left.x, left.y + 2, limit + 1, tee_l, rule);
+        for x in left.x + 1..limit {
+            put_text(buf, x, left.y + 2, limit, "─", rule);
+        }
+        put_text(buf, limit, left.y + 2, limit + 1, tee_r, rule);
         // Nothing matched is something to say, not an empty box to puzzle over.
         if items.is_empty() {
             put_text(
                 buf,
                 left.x + 1,
-                left.y + 1,
+                left.y + 3,
                 limit,
                 &say!("picker.nothing-matched"),
                 ground.fg(ink.quiet()),
@@ -8469,13 +8501,19 @@ fn draw_picker(
     let caret = match picker.typing() {
         true => Position::new(
             left.x
-                + 1
-                + (yumete_cjk::str_width(&counted)
+                + 2
+                + (yumete_cjk::str_width(&say!("search.label.query"))
                     + yumete_cjk::str_width(&picker.before_caret())
                     + yumete_cjk::str_width(&preedit)) as u16,
-            left.y + rows - 2,
+            left.y + 1,
         ),
-        false => Position::new(left.x + 1, left.y + 1 + (at - first) as u16),
+        // **列表那一層站在搜索框上的時候，光標也畫在框裏**（2026-10-01 定）。
+        // 它和「正在打字」的分別是底色：打字那一檔鋪到梯子的盡頭，這一檔不鋪。
+        false if picker.on_query() => Position::new(
+            left.x + 2 + yumete_cjk::str_width(&say!("search.label.query")) as u16,
+            left.y + 1,
+        ),
+        false => Position::new(left.x + 1, left.y + 3 + (at - first) as u16),
     };
     frame.set_cursor_position(caret);
     Some((caret, panels))
@@ -19439,7 +19477,7 @@ fn squeezed(text: &str) -> String {
         let config = Config::default();
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('f'));
-        editor.on_key(Key::Char('/'));
+        editor.on_key(Key::Char('i'));
         for c in "jj".chars() {
             editor.on_key(Key::Char(c));
         }
@@ -19552,7 +19590,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('f'));
         assert!(editor.picker().is_some(), "the picker is open");
         assert!(!composes_here(&editor), "it opens in the list, where jk walk");
-        editor.on_key(Key::Char('/'));
+        editor.on_key(Key::Char('i'));
         assert!(composes_here(&editor), "the query takes 中文");
         editor.on_key(Key::Esc);
         assert!(editor.picker().is_some(), "Esc is the layer, not the door out");

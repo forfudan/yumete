@@ -1554,16 +1554,61 @@ impl Editor {
         // typing; `Esc` there closes the picker, as it always did.
         if !picker.typing() {
             match key {
-                Key::Char('j') | Key::Down | Key::Tab | Key::Ctrl('n') => picker.step(true),
-                Key::Char('k') | Key::Up | Key::BackTab | Key::Ctrl('p') => picker.step(false),
+                Key::Char('j') | Key::Down | Key::Tab | Key::Ctrl('n') => {
+                    picker.step_in_list(true)
+                }
+                Key::Char('k') | Key::Up | Key::BackTab | Key::Ctrl('p') => {
+                    picker.step_in_list(false)
+                }
                 Key::Char('g') => picker.go(false),
                 Key::Char('G') => picker.go(true),
                 Key::PageDown => picker.page(true),
                 Key::PageUp => picker.page(false),
-                // Back to typing. `/` because that is 「look for something」
-                // everywhere else here; `i` because this is the layer a
-                // reader of this editor expects to type from.
-                Key::Char('/') | Key::Char('i') => picker.type_here(true),
+                // **`i` 在任何一行上都進框**（2026-10-01 定）。模態的走法是 `k` 走
+                // 到搜索行再按 `i`，而這一個是**抄近路**——作者原話：「我们唯一的
+                // 区别就是用户可以在任何位置按 i 进入搜索行的 insert 模式。这是个
+                // 便捷的途径。」`/` 同日去掉：一件事一個鍵。
+                //
+                // **搜索面板那一整套編輯鍵同日搬了過來**（作者定：「整套搬：
+                // i I a A d D c C」）。學一次兩扇都能用。`o` 不搬——一行的框裏
+                // 「開下一行」沒有意思。
+                Key::Char('i') => picker.type_here(true),
+                Key::Char('I') => {
+                    picker.move_caret(crate::picker::Caret::Start);
+                    picker.type_here(true);
+                }
+                Key::Char('a') => {
+                    picker.move_caret(crate::picker::Caret::Right);
+                    picker.type_here(true);
+                }
+                Key::Char('A') => {
+                    picker.move_caret(crate::picker::Caret::End);
+                    picker.type_here(true);
+                }
+                // Warning: **改完把鍵放到搜索行上**：站在一條檔名上按 `d`、查詢框裏悄
+                // 悄少一個字，是看不見的事。
+                Key::Char('d') => {
+                    picker.delete();
+                    picker.stand_on_query();
+                }
+                Key::Char('D') => {
+                    picker.delete_to_end();
+                    picker.stand_on_query();
+                }
+                Key::Char('c') => {
+                    picker.delete();
+                    picker.type_here(true);
+                }
+                Key::Char('C') => {
+                    picker.delete_to_end();
+                    picker.type_here(true);
+                }
+                Key::Char('h') | Key::Left if picker.on_query() => {
+                    picker.move_caret(crate::picker::Caret::Left)
+                }
+                Key::Char('l') | Key::Right if picker.on_query() => {
+                    picker.move_caret(crate::picker::Caret::Right)
+                }
                 Key::Enter => self.choose_from_picker(),
                 Key::Esc | Key::Char('q') => self.close_picker(),
                 _ => {}

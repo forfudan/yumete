@@ -5014,6 +5014,20 @@ zhs = "盖掉"
 en = "write over"
 
 [[message]]
+# 提示：挑選器查詢層——Esc 回列表
+key = "hint.picker.back-to-the-list"
+zht = "回列表"
+zhs = "回列表"
+en = "back to the list"
+
+[[message]]
+# 提示：挑選器——Enter 打開選中的那一條
+key = "hint.picker.open"
+zht = "打開"
+zhs = "打开"
+en = "open"
+
+[[message]]
 # 提示：注音
 key = "hint.reading"
 zht = "注音"
@@ -6877,20 +6891,6 @@ key = "picker.files"
 zht = "文件"
 zhs = "文件"
 en = "files"
-
-[[message]]
-# picker 剛開時鍵在列表裏：那一層能按什麽
-key = "picker.in-the-list"
-zht = "jk 上下　/ 搜索　Enter 開"
-zhs = "jk 上下　/ 搜索　Enter 开"
-en = "jk walks, / searches, Enter opens"
-
-[[message]]
-# picker 的鍵在查詢裏（按過 / 之後）：怎麽回到列表
-key = "picker.in-the-query"
-zht = "Esc 回列表"
-zhs = "Esc 回列表"
-en = "Esc back to the list"
 
 [[message]]
 # 檔案選擇面板裏這個目錄是空的
