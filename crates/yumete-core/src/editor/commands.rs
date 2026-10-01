@@ -94,6 +94,43 @@ impl Editor {
                 self.open_file_picker();
                 Ok(CommandOutcome::Continue)
             }
+            // **`:cd`／`:pwd`**（2026-10-01）。照 helix 與 vim：不帶參數回家目
+            // 錄，`-` 回上一個。改的是[工作路徑][`Editor::working_dir`]這一格，
+            // **不是進程的 cwd**——真去 `chdir` 會悄悄改掉別處七八個讀
+            // `current_dir()` 的地方。
+            Command::ChangeDir(where_to) => {
+                let asked = match where_to.as_deref() {
+                    Some("-") => match self.working_dir_back() {
+                        Some(back) => back,
+                        None => {
+                            self.status = say!("cd.no-previous");
+                            return Ok(CommandOutcome::Continue);
+                        }
+                    },
+                    Some(path) => {
+                        let full = Self::expand_tilde(path);
+                        if !self.set_working_dir(&full) {
+                            self.status = say!("search.no-such-folder", path.to_string());
+                            return Ok(CommandOutcome::Continue);
+                        }
+                        self.working_dir()
+                    }
+                    None => {
+                        let home = Self::home_dir().unwrap_or_else(|| self.working_dir());
+                        if !self.set_working_dir(&home) {
+                            self.status = say!("search.no-such-folder", home.display().to_string());
+                            return Ok(CommandOutcome::Continue);
+                        }
+                        self.working_dir()
+                    }
+                };
+                self.status = say!("cd.working-dir", asked.display().to_string());
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ShowDir => {
+                self.status = say!("cd.working-dir", self.working_dir().display().to_string());
+                Ok(CommandOutcome::Continue)
+            }
             Command::Open(path) => {
                 self.open_file(path).map_err(EditorError::Io)?;
                 // A file opened mid-session can carry a draft just as one named

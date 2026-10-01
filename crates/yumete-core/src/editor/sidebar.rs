@@ -1466,7 +1466,16 @@ impl Editor {
     /// file」 most often means. Both are tie-breakers: once anything is typed,
     /// the match decides.
     pub(super) fn open_file_picker(&mut self) {
-        let root = self.root();
+        self.open_file_picker_in(self.root());
+    }
+
+    /// `空格 F` —— 同上，但搜的是[工作路徑][`Editor::working_dir`]（2026-10-01，
+    /// 照 helix 的 `file_picker_in_current_directory`）。
+    pub(super) fn open_file_picker_here(&mut self) {
+        self.open_file_picker_in(self.working_dir());
+    }
+
+    fn open_file_picker_in(&mut self, root: PathBuf) {
         let mut prose = Vec::new();
         let mut rest = Vec::new();
         walk(&root, &mut 0, &mut |path| {

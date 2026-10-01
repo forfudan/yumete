@@ -752,6 +752,20 @@ en = "there are unsaved changes — add ! to override"
 # ── cell ──────────────────────────────────────────────────────────────
 
 [[message]]
+# :cd - 而沒有上一個（2026-10-01 作者寫的）
+key = "cd.no-previous"
+zht = "沒有上一個工作路徑可回"
+zhs = "没有上一个工作路径可回"
+en = "no previous working directory to go back to"
+
+[[message]]
+# :pwd 印出來的那一句，:cd 改完也說它（2026-10-01 作者寫的）
+key = "cd.working-dir"
+zht = "工作路徑：{0}"
+zhs = "工作路径：{0}"
+en = "working directory: {0}"
+
+[[message]]
 # 表格模式下往格子裏打分隔符（拆分表是製表符，Markdown 是 |）
 key = "cell.refuses-delimiter"
 zht = "'{0}' 是格與格的分隔——格子裏寫不了它"
@@ -1169,6 +1183,14 @@ en = "the open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
 
 [[message]]
+# : 命令選單裏 cd 那一項的說明（2026-10-01 作者寫的）
+key = "cmd.commands.cd"
+zht = "更改工作路徑"
+zhs = "更改工作路径"
+en = "change the working directory"
+find = "cd chdir change-current-directory 工作路徑 工作路径 目錄 目录 切換 切换"
+
+[[message]]
 # 命令：:clipboard —— 粘貼菜單（空格 " 是同一扇）
 key = "cmd.commands.clipboard"
 zht = "粘貼菜單：剪貼簿和取過的那幾段，挑一個貼（␣" 也是）"
@@ -1311,6 +1333,14 @@ zht = "把選區送給一條命令，用它的輸出換掉（`!`）"
 zhs = "把选区送给一条命令，用它的输出换掉（`!`）"
 en = "send the selection through a command and take back its output (`!`)"
 find = "管道 過濾 过滤 外部命令 filter shell"
+
+[[message]]
+# : 命令選單裏 pwd 那一項的說明（2026-10-01 作者寫的）
+key = "cmd.commands.pwd"
+zht = "查詢工作路徑"
+zhs = "查询工作路径"
+en = "show the working directory"
+find = "pwd show-directory 工作路徑 工作路径 目錄 目录 在哪"
 
 [[message]]
 # : 命令選單裏 quit 那一項的說明（commands 組）
@@ -4753,9 +4783,16 @@ en = "the next / previous open file"
 [[message]]
 # g 組：開啟檔案
 key = "hint.goto.open-file"
-zht = "打開文件"
-zhs = "打开文件"
-en = "open a file"
+zht = "打開文件（項目路徑）"
+zhs = "打开文件（项目路径）"
+en = "open a file (project)"
+
+[[message]]
+# 空格 F：選擇器開在工作路徑上（2026-10-01 作者定）
+key = "hint.goto.open-file-here"
+zht = "打開文件（工作目錄）"
+zhs = "打开文件（工作目录）"
+en = "open a file (working directory)"
 
 [[message]]
 # g 組：開這個檔
