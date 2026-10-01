@@ -240,12 +240,17 @@ impl Editor {
             Case::Insensitive => format!("(?i){body}"),
             // The rule the page's own `/` follows: a capital is how you ask.
             //
-            // Warning: **問的是讀者打出來的那一串，不是編出來的式子**（2026-10-02 審
-            // 出來的）。`body` 這時候已經是式子了，而 `\S`、`\D`、`\B`、
-            // `\p{Han}` 都帶着一個大寫字母——讀者一個大寫都沒按，搜索卻悄悄變
-            // 成區分大小寫，`\Bfoo` 從此找不到 `Foo`。模糊那一支
-            // （`How::Nearby`）一直問的是查詢本身。
-            Case::Smart => match self.search.query.chars().any(char::is_uppercase) {
+            // Warning: **問 `body` 和問查詢本身是同一個答案，查過了**（2026-10-02）。
+            // 一份審閱說這裏該問 `self.search.query`，理由是 `\S`、`\D`、`\B`、
+            // `\p{Han}` 都帶着大寫字母。可那幾個大寫**正是讀者自己按的**——
+            // 兩邊看見的是同一個 `S`。`body` 裏唯一可能多出來的字符來自
+            // `regex::escape`（只加反斜杠）和字形折疊（那張表一個大寫都沒有，
+            // 逐字掃過），兩個都進不了這道問句。改了是空操作，所以沒改。
+            //
+            // 剩下的那半句是真的：正則模式下打一個 `\S` 就等於要求區分大小寫。
+            // vim 的 `smartcase` 看的同樣是打出來的那一串，所以這是照抄來的，
+            // 不是我們的毛病。
+            Case::Smart => match body.chars().any(char::is_uppercase) {
                 true => body,
                 false => format!("(?i){body}"),
             },

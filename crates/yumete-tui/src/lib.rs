@@ -19511,6 +19511,36 @@ fn squeezed(text: &str) -> String {
         assert!(text.contains(&yumete_core::say!("picker.nothing-matched")), "{text}");
     }
 
+    /// **面板矮下去的時候一樣樣讓，不許畫到邊框上**（2026-10-02 審出來的回歸）。
+    ///
+    /// 加了查詢框和橫線之後 `deep` 寫死成 `rows - 5`，於是四行的時候腳注畫在橫線
+    /// 上、「沒有符合的」畫在下邊框上；五行的時候那兩句疊在同一行。
+    #[test]
+    fn the_picker_keeps_its_shape_when_the_window_is_short() {
+        let config = Config::default();
+        for height in 6..=10u16 {
+            let mut editor = Editor::new();
+            editor.on_key(Key::Char(' '));
+            editor.on_key(Key::Char('f'));
+            let text = buffer_to_text(&render_with(&editor, &config, no_ime(), 40, height));
+            let rows: Vec<&str> = text.lines().collect();
+            // 最後一道邊框那一行上只許有邊框。
+            let bottom = rows
+                .iter()
+                .rposition(|r| r.contains('╰'))
+                .unwrap_or_else(|| panic!("{height} 行：找不到下邊框\n{text}"));
+            let drawn: String =
+                rows[bottom].chars().filter(|c| !"╰╯─ ".contains(*c)).collect();
+            assert!(drawn.is_empty(), "{height} 行：下邊框上畫了「{drawn}」\n{text}");
+            // 橫線那一行上也只許有橫線。
+            if let Some(ruled) = rows.iter().position(|r| r.contains('├')) {
+                let on_it: String =
+                    rows[ruled].chars().filter(|c| !"├┤─ ".contains(*c)).collect();
+                assert!(on_it.is_empty(), "{height} 行：橫線上畫了「{on_it}」\n{text}");
+            }
+        }
+    }
+
     /// **挑選器搜索框裏的光標跟着 `h`／`l` 走，兩層都是**（2026-10-02 修）。
     ///
     /// 作者報的：「The cursor is incorrect in normal mode and the curser does
