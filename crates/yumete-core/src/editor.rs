@@ -1488,7 +1488,7 @@ pub(crate) fn book_root(here: &Path) -> PathBuf {
 /// 2026-09-27 報的：「位置」那一格是自由文本，隨手打一個 `/` 進去，編輯器就去
 /// 遍歷整塊磁盤——沒有進度、沒有上限、按不了取消，只能 `kill -9`。一本書幾百個
 /// 檔，一個項目幾千個；到了這個數還沒走完，走的就不是一本書了。
-const WALK_CEILING: usize = 20_000;
+pub(crate) const WALK_CEILING: usize = 20_000;
 
 /// **哪些文件算在裏面** —— 搜索面板底下那三格（2026-10-01 定）。
 ///
@@ -1507,6 +1507,21 @@ impl Sieve {
     /// 兩格 glob 都寫對了嗎 —— 寫錯了呼叫方要說出來。
     pub(crate) fn is_sound(&self, root: &Path) -> bool {
         self.overrides(root).is_some()
+    }
+
+    /// **這一個檔過得了篩子嗎** —— 給走查之外的那一處用。
+    ///
+    /// Warning: **正在編輯的那一份是從內存掃的，不走 [`walk_prose`]**，所以篩子篩不到
+    /// 它（2026-10-02 測試逼出來的）：打開着 `a.md`、包含那一格寫 `*.txt`，那一
+    /// 份的命中照樣出現在名單上，而框上寫着「只搜 .txt」。
+    ///
+    /// 寫錯的 glob 當成「什麼都不篩」——那一趟自有它的報錯那條路。
+    pub(crate) fn lets_through(&self, root: &Path, path: &Path) -> bool {
+        let Some(overrides) = self.overrides(root) else { return true };
+        if overrides.is_empty() {
+            return true;
+        }
+        !overrides.matched(path, false).is_ignore()
     }
 
     /// 兩格 glob 做成一份 [`ignore::overrides::Override`]。
@@ -1537,7 +1552,7 @@ impl Sieve {
 /// 量出來的：`-uu` 走 yumete 這個倉是 51,673 個檔，其中 44,503 個是二進制（86%），
 /// 文本只有 7,170。只數文本的話這一趟根本碰不到兩萬——可一塊兩百萬個檔的盤就算全
 /// 是二進制，光探頭也要四十秒，所以走查本身也要攔。
-const VISIT_CEILING: usize = 200_000;
+pub(crate) const VISIT_CEILING: usize = 200_000;
 
 /// **到了地板之後還肯多走多久**（2026-10-01 定）。
 ///
@@ -1551,7 +1566,7 @@ const VISIT_CEILING: usize = 200_000;
 ///
 /// Warning: **代價是同一次搜索兩次跑可能給出不同的數目**（盤忙的時候少走幾個）。它只
 /// 在本來就要被截斷的那種樹上發生——正常項目連地板都碰不到。
-const WALK_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+pub(crate) const WALK_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// **走到這裏無論如何都停**（2026-10-01 定，作者原話：「算满3秒，5秒硬停」）。
 ///
@@ -1565,7 +1580,31 @@ const WALK_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 /// 不管有沒有碰到地板都會停，慢盤上走不滿兩萬個檔就被切斷是正常的。而且真正的
 /// 上界是「這個數**加上**再處理一個條目的時間」——錶只在 `flatten()` 交出一個條
 /// 目的時候讀，卡死在 `readdir` 上的掛載誰也攔不住。
-const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+pub(crate) const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// **走到這裏就停**——地板、寬限、硬停三條合成一句話。
+///
+/// Warning: **抽出來是為了測得了它**（2026-10-02）。那三個常量是真實世界的數（兩萬個
+/// 檔、二十萬個條目、三秒五秒），測試裏造不出那麼大一棵樹；而這一支是純函數，餵
+/// 什麼數都行。走查那一半靠真機實測，判斷這一半靠這裏。
+///
+/// Warning: **只有搜索那一趟肯為了多走幾個檔多等三秒**（2026-10-02 審出來的回歸）。那
+/// 個寬限本來是給 [`walk_prose`] 的，可它從前寫在共用的走查裏，於是挑選器和 `[[`
+/// 補全也繼承了——而那兩個是**按鍵上同步跑的**，中間沒有「正在找…」那一幀，而且
+/// 它們自己早就夠了（`PICKER_LIMIT` 四千條）。量出來的（`$HOME`，同一個進程同一
+/// 棵樹）：到地板就停是 `seen=20000 138ms`，等滿三秒是 `seen=323177 3.00s`。
+pub(crate) fn walk_is_done(
+    seen: usize,
+    visited: usize,
+    spent: std::time::Duration,
+    prose_only: bool,
+) -> bool {
+    if spent >= WALK_DEADLINE {
+        return true;
+    }
+    let floored = seen >= WALK_CEILING || visited >= VISIT_CEILING;
+    floored && (!prose_only || spent >= WALK_GRACE)
+}
 
 /// 一趟走查交代了什麼。
 #[derive(Debug, Default, Clone, Copy)]
@@ -1671,17 +1710,7 @@ fn walk_inner(
         // 交出來的是真的，而卡死的時候屏幕上一個字都沒有。地板與錶的分工見
         // [`WALK_GRACE`]。
         visited += 1;
-        let spent = started.elapsed();
-        let floored = seen >= WALK_CEILING || visited >= VISIT_CEILING;
-        // Warning: **只有搜索那一趟肯為了多走幾個檔多等三秒**（2026-10-02 審出來的
-        // 回歸）。那個寬限本來是給 `walk_prose` 的，可它寫在共用的這一支裏，於是
-        // 挑選器和 `[[` 補全也繼承了——而那兩個是**按鍵上同步跑的**，中間沒有
-        // 「正在找…」那一幀，而且它們自己早就夠了（`PICKER_LIMIT` 四千條）。
-        //
-        // 量出來的（`$HOME`，同一個進程同一棵樹）：到地板就停是
-        // `seen=20000 visited=20001 138ms`，等滿三秒是 `seen=323177 3.00s`。
-        // `:cd ~` 之後按 `空格 F`，四千條以外的全丟掉，還是凍了整整三秒。
-        if spent >= WALK_DEADLINE || (floored && (!prose_only || spent >= WALK_GRACE)) {
+        if walk_is_done(seen, visited, started.elapsed(), prose_only) {
             walked.cut = true;
             break;
         }

@@ -507,7 +507,18 @@ impl Editor {
         };
         // It comes first, and it comes from memory: what is on the screen is
         // what is searched, saved or not.
-        let (mut hits, mut total) = self.scan_the_open_one(&look, &mine, MOST);
+        //
+        // Warning: **可它也要過篩子**（2026-10-02 測試逼出來的）。這一份不走
+        // `walk_prose`，所以包含／排除從前篩不到它：打開着 `a.md`、包含那一格寫
+        // `*.txt`，它的命中照樣在名單上，而框上寫着「只搜 .txt」。
+        let sifted = match (&root, &here) {
+            (Some(root), Some(here)) => self.sieve().is_none_or(|s| s.lets_through(root, here)),
+            _ => true,
+        };
+        let (mut hits, mut total) = match sifted {
+            true => self.scan_the_open_one(&look, &mine, MOST),
+            false => (Vec::new(), 0),
+        };
         self.search.mine = hits.len();
         self.search.mine_total = total;
         if let Some(root) = root {
