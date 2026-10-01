@@ -1191,9 +1191,9 @@ en = "change the working directory"
 find = "cd chdir change-current-directory 工作路徑 工作路径 目錄 目录 切換 切换"
 
 [[message]]
-# 命令：:clipboard —— 粘貼菜單（空格 " 是同一扇）
+# 命令：:clipboard —— 粘貼選單（空格 " 是同一扇）
 key = "cmd.commands.clipboard"
-zht = "粘貼菜單：剪貼簿和取過的那幾段，挑一個貼（␣" 也是）"
+zht = "粘貼選單：剪貼簿和取過的那幾段，挑一個貼（␣" 也是）"
 zhs = "粘贴菜单：剪贴板和取过的那几段，挑一个贴（␣" 也是）"
 en = "the paste menu: the clipboard and what was yanked, pick one"
 find = "粘貼 粘贴 剪貼簿 剪贴板 寄存器 register clipboard paste yank"
@@ -4762,7 +4762,7 @@ zhs = "去／看它指的地方"
 en = "go to / show what it points at"
 
 [[message]]
-# g 菜單：gw 亮起跳轉標籤
+# g 選單：gw 亮起跳轉標籤
 key = "hint.goto.jump-labels"
 zht = "一眼跳到屏幕上任何地方"
 zhs = "一眼跳到屏幕上任何地方"
@@ -5308,7 +5308,7 @@ zhs = "行注释"
 en = "comment out, by the line"
 
 [[message]]
-# 空格菜單裏那一行：把字典開進邊欄（浮窗是小寫的 d）
+# 空格選單裏那一行：把字典開進邊欄（浮窗是小寫的 d）
 key = "hint.space.dictionary-panel"
 zht = "字典開進邊欄（讀得完長的）"
 zhs = "字典开进边栏（读得完长的）"
@@ -5336,14 +5336,14 @@ zhs = "显示诊断信息（边栏）"
 en = "show diagnostics (sidebar)"
 
 [[message]]
-# 空格菜單：這一行攤開，浮窗（#426，2026-09-30）
+# 空格選單：這一行攤開，浮窗（#426，2026-09-30）
 key = "hint.space.record"
 zht = "顯示這一行的記錄（浮窗）"
 zhs = "显示这一行的记录（浮窗）"
 en = "show this row's record (float)"
 
 [[message]]
-# 空格菜單：這一行攤開，邊欄
+# 空格選單：這一行攤開，邊欄
 key = "hint.space.record-panel"
 zht = "顯示這一行的記錄（邊欄）"
 zhs = "显示这一行的记录（边栏）"
@@ -5364,14 +5364,14 @@ zhs = "空格"
 en = "Space"
 
 [[message]]
-# 空格菜單裏那一行：問語言服務器這是什麽
+# 空格選單裏那一行：問語言服務器這是什麽
 key = "hint.space.what-is-this"
 zht = "顯示光標位置之信息（浮窗）"
 zhs = "显示光标位置之信息（浮窗）"
 en = "show info at the cursor (float)"
 
 [[message]]
-# 空格菜單：把服務器那段話開進邊欄（浮窗是小寫的 k）
+# 空格選單：把服務器那段話開進邊欄（浮窗是小寫的 k）
 key = "hint.space.what-is-this-panel"
 zht = "顯示光標位置之信息（邊欄）"
 zhs = "显示光标位置之信息（边栏）"

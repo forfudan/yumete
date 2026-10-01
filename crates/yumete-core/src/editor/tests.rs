@@ -15715,10 +15715,10 @@ fn a_prefix_can_be_rebound_because_the_right_hand_side_is_keys() {
     ed.on_key(Key::Char(' '));
     assert_eq!(ed.cursor(), 2);
 
-    // …而 `;` 開的是那個菜單：它在等第二個鍵，所以下一個 `f` 是「打開文件」而
+    // …而 `;` 開的是那個選單：它在等第二個鍵，所以下一個 `f` 是「打開文件」而
     // 不是「找字符」。
     ed.on_key(Key::Char(';'));
-    assert!(ed.pending_menu().is_some(), "; 開出了空格菜單");
+    assert!(ed.pending_menu().is_some(), "; 開出了空格選單");
 }
 
 /// **`Enter`、`+`、`-`：下一行，從它的字開始**（B4，2026-09-20，朋友第 1 條）。
