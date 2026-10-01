@@ -1904,6 +1904,15 @@ impl Config {
         Config::load_reporting().0
     }
 
+    /// **同上，但從 `from` 那裏往上找項目配置**（2026-10-01）。
+    ///
+    /// Warning: 從前只有一條路，而它從**進程的 cwd** 往上走——`ye ~/書/三體/卷一/
+    /// 第一章.md` 在 `/tmp` 敲的時候，編輯器的根算出來是 `~/書/三體`，而
+    /// `.yumete/config.toml` 一個都沒載。命令行說了一個地方，那就從那裏找。
+    pub fn load_reporting_from(from: &Path) -> (Config, Vec<String>) {
+        Config::load_reporting_in(Some(from))
+    }
+
     /// Load the config, and say what went wrong while loading it.
     ///
     /// A config file that does not parse — a typo in a key name, a missing
@@ -1912,6 +1921,10 @@ impl Config {
     /// `zong_lenght = 24` must say so rather than look like a setting that does
     /// not work. Each problem is one line, ready for the status bar.
     pub fn load_reporting() -> (Config, Vec<String>) {
+        Config::load_reporting_in(None)
+    }
+
+    fn load_reporting_in(from: Option<&Path>) -> (Config, Vec<String>) {
         let mut raw = RawConfig::default();
         let mut problems = Vec::new();
 
@@ -1923,7 +1936,11 @@ impl Config {
             }
         }
 
-        if let Ok(cwd) = env::current_dir() {
+        let here = match from {
+            Some(from) => Some(from.to_path_buf()),
+            None => env::current_dir().ok(),
+        };
+        if let Some(cwd) = here {
             if let Some(local) = local_config_path(&cwd) {
                 if let Ok(text) = fs::read_to_string(&local) {
                     match toml::from_str::<RawConfig>(&text) {
