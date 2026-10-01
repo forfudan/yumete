@@ -23,7 +23,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-BIN=target/release/yumete
+# **絕對路徑**：拍照是在固定裝置那個目錄裏跑的（見 `shoot`），相對的就找不着了。
+BIN=$PWD/target/release/yumete
 DIR=target/frames
 SHOTS=$DIR/shots
 GOLDEN=$DIR/golden
@@ -45,7 +46,7 @@ scenes() {
 搜索面板|100x24|:s\n那\n
 搜索面板-替換|100x24|:replace\n那\n
 挑選器|90x24| f
-挑選器-查詢|90x24| fi那
+挑選器-查詢|90x24| fi雪
 跳轉標籤|80x20|gw
 跳轉標籤-竪排|60x24|:layout vertical\ngw
 大綱|90x24|:open MANUAL\n o
@@ -80,10 +81,19 @@ shoot() {
     while IFS='|' read -r name size keys; do
         [ -n "${name}" ] || continue
         rm -rf "${work}"
-        mkdir -p "${work}"
+        # Warning: **固定裝置自己是一個項目**（2026-10-02 修）。它坐在 `target/` 底下，
+        # 也就是**倉裏面**——沒有這個記號的話，項目根往上一走就撞到倉自己的
+        # `.git`，於是挑選器那一幀列的是整個倉、預覽的是真實的 `CHANGELOG.md`，
+        # 我每改一次變更記錄它就「變了」。底片只許跟代碼走。
+        mkdir -p "${work}/.yumete"
         local which=PROSE
         case "${keys}" in *TABLE*) which=TABLE ;; *RUBY*) which=RUBY ;; *MANUAL*) which=MANUAL ;; esac
         fixture "${which}" > "${work}/文.md"
+        # **挑選器要有幾個檔纔看得出是個挑選器。** 兩卷，各一篇——順帶驗了路徑那
+        # 一欄（檔名在前、目錄在後）。
+        mkdir -p "${work}/卷一" "${work}/卷二"
+        printf '初雪落下。\n' > "${work}/卷一/初雪.md"
+        printf '驚蟄之後。\n' > "${work}/卷二/驚蟄.md"
         # 場景裏寫的是 `:open TABLE`，那只是說「開哪一份稿子」——真正打開的是上面
         # 鋪好的那一個檔。
         local pressed="${keys//:open TABLE\\n/}"
@@ -93,8 +103,13 @@ shoot() {
         # `> 底片 2>&1 || true`：`--keys` 認不得的鍵名會把那句報錯**寫進底片
         # 裏**，而退出碼被 `|| true` 吃了——於是 `空格選單` 和 `大綱` 兩幀拍了不
         # 知多久的「yumete: --keys: no key called "space"」，比對還一直是綠的。
-        local whined="${work}/${name}.err"
-        if ! "${BIN}" --shot="${size}" --keys="${pressed}" "${work}/文.md" \
+        # Warning: **錯誤文件不許放在固定裝置裏**：挑選器會把它列出來。
+        local whined="${DIR}/last.err"
+        # Warning: **在固定裝置那個目錄裏拍，不在倉根**（2026-10-02 修）。挑選器列的是
+        # 工作路徑底下的檔，而工作路徑從前是**這個倉**——於是 `挑選器` 那一幀預覽
+        # 着真實的 `CHANGELOG.md`，我每改一次變更記錄它就「變了」。底片要只跟代碼
+        # 走，不跟倉裏有哪些檔走。
+        if ! ( cd "${work}" && "${BIN}" --shot="${size}" --keys="${pressed}" 文.md ) \
             > "${into}/${name}.txt" 2> "${whined}"; then
             printf 'Warning: 拍 %s 的時候 yumete 自己就退出了：\n' "${name}" >&2
             sed 's/^/    /' "${whined}" >&2
