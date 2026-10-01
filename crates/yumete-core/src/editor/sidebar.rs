@@ -1560,10 +1560,23 @@ impl Editor {
                 Key::Char('k') | Key::Up | Key::BackTab | Key::Ctrl('p') => {
                     picker.step_in_list(false)
                 }
-                Key::Char('g') => picker.go(false),
-                Key::Char('G') => picker.go(true),
-                Key::PageDown => picker.page(true),
-                Key::PageUp => picker.page(false),
+                // 這四個走的是單子，所以也把鍵從搜索行帶下來——見 `leave_query`。
+                Key::Char('g') => {
+                    picker.leave_query();
+                    picker.go(false);
+                }
+                Key::Char('G') => {
+                    picker.leave_query();
+                    picker.go(true);
+                }
+                Key::PageDown => {
+                    picker.leave_query();
+                    picker.page(true);
+                }
+                Key::PageUp => {
+                    picker.leave_query();
+                    picker.page(false);
+                }
                 // **`i` 在任何一行上都進框**（2026-10-01 定）。模態的走法是 `k` 走
                 // 到搜索行再按 `i`，而這一個是**抄近路**——作者原話：「我们唯一的
                 // 区别就是用户可以在任何位置按 i 进入搜索行的 insert 模式。这是个

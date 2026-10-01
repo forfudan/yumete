@@ -396,7 +396,18 @@ impl Editor {
             Where::Buffer | Where::Buffers => None,
             Where::Working => Some(self.working_dir()),
             Where::Project => Some(self.root()),
-            Where::Named(path) => Some(path.clone()),
+            // Warning: **同 `search_root_of`：`~` 要展開，相對路徑從工作路徑算起**
+            // （2026-10-02 審出來的——1afa2b6 漏了這一支）。同一個範圍交給兩支
+            // 代碼算，答案必須是同一個；從前這裏把 `~/稿` 原樣交給 `walk`，
+            // `ignore` 交出一個錯誤條目、`flatten()` 把它丟掉，於是一個字都沒挖
+            // 到而且一聲不吭。
+            Where::Named(path) => {
+                let full = Self::expand_tilde(&path.to_string_lossy());
+                Some(match full.is_absolute() {
+                    true => full,
+                    false => self.working_dir().join(full),
+                })
+            }
         }
     }
 

@@ -235,13 +235,24 @@ impl Picker {
         self.on_query = true;
     }
 
+    /// 把列表那一層的鍵從搜索框那一行帶回單子上。
+    ///
+    /// Warning: **`g`／`G`／翻頁要叫它**（2026-10-02 審出來的）：那四個走的是單子，
+    /// 從前它們動了高亮卻把鍵留在框上——屏幕上兩個光標，而接着那一下 `j` 只夠
+    /// 用來離開搜索行。
+    pub fn leave_query(&mut self) {
+        self.on_query = false;
+    }
+
     /// **列表那一層走一步**——搜索框是最上面那一「行」，走得上去。
     ///
     /// Warning: **不包着走。** 從框往上沒有地方可去，從最後一條往下也不繞回框——
     /// 繞回去的話一路按 `j` 會在列表和框之間打轉，而那一行不是一條候選。
     pub fn step_in_list(&mut self, down: bool) {
         if self.on_query {
-            if down {
+            // Warning: **單子空着就沒有地方可去**（2026-10-02 審出來的）：下去是站在
+            // 「沒有符合的」那一行上，`Enter` 只能說一句狀態，`k` 是唯一的回路。
+            if down && !self.matches().is_empty() {
                 self.on_query = false;
             }
             return;
@@ -306,6 +317,11 @@ impl Picker {
     /// **從光標刪到末尾**——框裏的 `D`（2026-10-01）。
     pub fn delete_to_end(&mut self) {
         let at = self.byte(self.caret());
+        // Warning: **光標已經在末尾就什麼都別動**（2026-10-02 審出來的）。從前它照樣
+        // 把單子上站着的那一條撥回第一條——刪了個空，位置白丟。
+        if at == self.query.len() {
+            return;
+        }
         self.query.truncate(at);
         self.selected = 0;
     }
