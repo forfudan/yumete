@@ -132,7 +132,15 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Open(path) => {
-                self.open_file(path).map_err(EditorError::Io)?;
+                // **相對路徑按[工作路徑][`Editor::working_dir`]算**（2026-10-01）。
+                // 從前它原樣交給 `Buffer::open`，由作業系統按**進程的 cwd** 解
+                // ——於是 `:pwd` 報的那個目録 `:open` 不認，`:cd` 改了也沒用。
+                let full = Self::expand_tilde(path.as_ref());
+                let full = match full.is_absolute() {
+                    true => full,
+                    false => self.working_dir().join(full),
+                };
+                self.open_file(full).map_err(EditorError::Io)?;
                 // A file opened mid-session can carry a draft just as one named
                 // on the command line can.
                 self.announce_recovery();

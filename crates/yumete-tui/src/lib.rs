@@ -772,10 +772,12 @@ pub fn run(
         if let Some(job) = wants_picture {
             let drawn = drawn.take().unwrap_or_default();
             let said = match job {
-                ShotJob::Screen => photograph_the_screen(config, None),
+                ShotJob::Screen => photograph_the_screen(config, None, &editor.working_dir()),
                 // Not the frame: the same program `:shot` uses, told where to
                 // put the picture instead of filling the clipboard.
-                ShotJob::Png { target } => photograph_the_screen(config, Some(&target)),
+                ShotJob::Png { target } => {
+                    photograph_the_screen(config, Some(&target), &editor.working_dir())
+                }
                 // **The buffer `draw` handed back**, not `current_buffer_mut`.
                 // ratatui swaps its two buffers at the end of every `draw` and
                 // resets the one it swaps in, so the *current* buffer here is
@@ -1186,14 +1188,18 @@ pub fn run(
                             // back first; the next turn of the loop, which is
                             // after that program has finished, takes it again.
                             system_ime.release();
-                            match hand_over(&mut terminal, &want.line, &events) {
+                            match hand_over(&mut terminal, &want.line, &events, &editor.working_dir()) {
                                 Ok(()) => editor.set_status(say!("shell.finished", want.line)),
                                 Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                             }
                         }
                         // Showing you the run: the complaints belong with the
                         // answer, since between them they are what happened.
-                        How::Capture => match run_capturing(&want.line, None) {
+                        How::Capture => match run_capturing(
+                            &want.line,
+                            None,
+                            &editor.working_dir(),
+                        ) {
                             Ok(ran) => {
                                 let mut text = ran.said;
                                 text.push_str(&ran.complained);
@@ -1205,7 +1211,7 @@ pub fn run(
                         // to touch it. `tr -D ' '` is a typo, and its answer is
                         // an error message — replacing a paragraph with that is
                         // an edit nobody asked for, undoable or not.
-                        How::Pipe(input) => match run_capturing(&want.line, Some(&input)) {
+                        How::Pipe(input) => match run_capturing(&want.line, Some(&input), &editor.working_dir()) {
                             Ok(ran) if ran.ok => {
                                 editor.provide_pipe_output(&ran.said);
                                 if !ran.complained.trim().is_empty() {
@@ -1222,7 +1228,7 @@ pub fn run(
                         // **exit code alone** — a converter that complains on
                         // stderr while succeeding is still a converter that
                         // succeeded.
-                        How::Convert(input) => match run_capturing(&want.line, Some(&input)) {
+                        How::Convert(input) => match run_capturing(&want.line, Some(&input), &editor.working_dir()) {
                             Ok(ran) if ran.ok => editor.provide_conversion(&ran.said),
                             Ok(ran) => editor.set_status(say!("shell.left-alone", ran.why())),
                             Err(err) => editor.set_status(say!("shell.cannot-run", err)),
@@ -2119,8 +2125,8 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
 /// Through the shell, not split by hand: a writer typing `:sh wc -w *.md | sort`
 /// means the pipe and the glob, and a command line that quietly did not is
 /// worse than one that says it cannot.
-fn run_capturing(line: &str, input: Option<&str>) -> io::Result<Ran> {
-    let mut child = shell_command(line)
+fn run_capturing(line: &str, input: Option<&str>, in_dir: &std::path::Path) -> io::Result<Ran> {
+    let mut child = shell_command(line, in_dir)
         .stdin(if input.is_some() {
             std::process::Stdio::piped()
         } else {
@@ -2211,6 +2217,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     terminal: &mut ratatui::Terminal<B>,
     line: &str,
     events: &std::sync::mpsc::Receiver<io::Result<Event>>,
+    in_dir: &std::path::Path,
 ) -> io::Result<()> {
     let _ = execute!(
         stdout(),
@@ -2223,7 +2230,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         terminal.backend_mut(),
         ratatui::crossterm::terminal::LeaveAlternateScreen
     )?;
-    let status = shell_command(line).status();
+    let status = shell_command(line, in_dir).status();
     println!();
     match &status {
         Ok(code) if code.success() => println!("[{line}]"),
@@ -2321,12 +2328,16 @@ pub fn set_theme(
 /// somebody wrote themselves before `:shot png` existed does not know that
 /// name, so the file is looked for afterwards and its absence is said out
 /// loud rather than reported as a picture that was never written.
-fn photograph_the_screen(config: &Config, dest: Option<&std::path::Path>) -> String {
+fn photograph_the_screen(
+    config: &Config,
+    dest: Option<&std::path::Path>,
+    in_dir: &std::path::Path,
+) -> String {
     let line = config.editor.screenshot.trim();
     if line.is_empty() {
         return say!("ui.no-screenshot-command");
     }
-    let mut command = shell_command(line);
+    let mut command = shell_command(line, in_dir);
     match dest {
         Some(path) => command.env("YUMETE_SHOT", path),
         None => command.env_remove("YUMETE_SHOT"),
@@ -2351,7 +2362,11 @@ fn photograph_the_screen(config: &Config, dest: Option<&std::path::Path>) -> Str
 ///
 /// `$SHELL` on Unix, `%ComSpec%` on Windows — what the machine says it uses,
 /// falling back to what it is certain to have.
-fn shell_command(line: &str) -> std::process::Command {
+/// Warning: **跑在[工作路徑][`yumete_core::editor::Editor::working_dir`]上**
+/// （2026-10-01）。從前它不設 `current_dir`，於是外部命令繼承的是**進程的
+/// cwd**——`:cd` 改了也沒用，而 vim 的 `:help current-directory` 明寫着那一條
+/// 「It also makes a difference for executing external commands, e.g. `:!ls`」。
+fn shell_command(line: &str, in_dir: &std::path::Path) -> std::process::Command {
     #[cfg(windows)]
     {
         let shell = std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".to_string());
@@ -2359,6 +2374,7 @@ fn shell_command(line: &str) -> std::process::Command {
         // `/C` and not `/c`: identical to `cmd.exe`, and it reads as a flag
         // rather than as a stray letter in the line being run.
         command.arg("/C").arg(line);
+        command.current_dir(in_dir);
         command
     }
     #[cfg(not(windows))]
@@ -2366,6 +2382,7 @@ fn shell_command(line: &str) -> std::process::Command {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
         let mut command = std::process::Command::new(shell);
         command.arg("-c").arg(line);
+        command.current_dir(in_dir);
         command
     }
 }
@@ -2858,6 +2875,8 @@ fn run_for_language(
     config: &Config,
     want: &yumete_core::editor::LanguageRun,
 ) -> String {
+    // 外部程序跑在工作路徑上，同 `!cmd`（2026-10-01）。
+    let here = editor.working_dir();
     let Some(runner) = config
         .language
         .get(&want.language)
@@ -2882,7 +2901,7 @@ fn run_for_language(
         // formatting back like any other edit.
         yumete_config::RunKind::Filter => {
             let text = editor.current_buffer().text();
-            match run_program(program, args, Some(&text)) {
+            match run_program(program, args, Some(&text), &here) {
                 Ok(ran) if ran.ok => {
                     editor.provide_pipe_output(&ran.said);
                     say!("language.replaced", want.verb)
@@ -2898,7 +2917,7 @@ fn run_for_language(
             if editor.current_buffer().is_modified() {
                 return say!("language.save-first");
             }
-            match run_program(program, args, None) {
+            match run_program(program, args, None, &here) {
                 Ok(ran) if ran.ok => {
                     let _ = editor.current_buffer_mut().reread();
                     say!("language.done", want.verb)
@@ -2915,9 +2934,15 @@ fn run_for_language(
 }
 
 /// Run a program **directly**, with no shell between.
-fn run_program(program: &str, args: &[String], input: Option<&str>) -> io::Result<Ran> {
+fn run_program(
+    program: &str,
+    args: &[String],
+    input: Option<&str>,
+    in_dir: &std::path::Path,
+) -> io::Result<Ran> {
     let mut child = std::process::Command::new(program)
         .args(args)
+        .current_dir(in_dir)
         .stdin(match input.is_some() {
             true => std::process::Stdio::piped(),
             false => std::process::Stdio::null(),
@@ -11143,7 +11168,7 @@ fn squeezed(text: &str) -> String {
         assert!(text.len() > 1_000_000, "{} bytes", text.len());
         let (tell, hear) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let ran = super::run_capturing("cat", Some(&text));
+            let ran = super::run_capturing("cat", Some(&text), std::path::Path::new("."));
             let _ = tell.send(ran.map(|r| (r.ok, r.said.len(), text.len())));
         });
         match hear.recv_timeout(std::time::Duration::from_secs(60)) {
@@ -11165,7 +11190,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_filter_that_reads_only_the_first_line_is_not_an_error() {
         let text = "第一行\n".to_string() + &"後面的\n".repeat(200_000);
-        let ran = super::run_capturing("head -1", Some(&text)).expect("no error");
+        let ran = super::run_capturing("head -1", Some(&text), std::path::Path::new("."))
+            .expect("no error");
         assert!(ran.ok);
         assert_eq!(ran.said, "第一行\n");
     }
@@ -19605,7 +19631,7 @@ fn squeezed(text: &str) -> String {
             panic!("a conversion is piped, not handed the screen");
         };
         assert_eq!(input, "他說內人在裏面，吳先生錄了一段。\n", "the way back");
-        let ran = run_capturing(&want.line, Some(&input)).expect("opencc runs");
+        let ran = run_capturing(&want.line, Some(&input), &editor.working_dir()).expect("opencc runs");
         assert!(ran.ok, "{}", ran.why());
         editor.provide_conversion(&ran.said);
         assert_eq!(
@@ -19620,7 +19646,7 @@ fn squeezed(text: &str) -> String {
         let How::Convert(input) = want.how else {
             panic!("a conversion is piped, not handed the screen");
         };
-        let ran = run_capturing(&want.line, Some(&input)).expect("opencc runs");
+        let ran = run_capturing(&want.line, Some(&input), &editor.working_dir()).expect("opencc runs");
         assert!(ran.ok, "{}", ran.why());
         editor.provide_conversion(&ran.said);
         assert_eq!(
