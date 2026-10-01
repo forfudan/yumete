@@ -160,8 +160,14 @@ fn main() -> ExitCode {
         // 目，卻哈希出兩份會話，正是這一改要消滅的那件事。
         Some(std::fs::canonicalize(&here).unwrap_or(here))
     });
-    let (mut config, config_problems) = match &said_where {
-        Some(from) => yumete_config::Config::load_reporting_from(from),
+    // 遞進去的是**項目根**，不是工作路徑——同 helix 的
+    // `find_workspace().0.join(".helix")`。
+    let config_root = said_where
+        .clone()
+        .or_else(|| std::env::current_dir().ok())
+        .map(|from| yumete_core::editor::book_root_of(&from));
+    let (mut config, config_problems) = match &config_root {
+        Some(root) => yumete_config::Config::load_reporting_from(root),
         None => yumete_config::Config::load_reporting(),
     };
     // Where the reader says the 宇浩 data is, before anything asks. Set once
@@ -233,12 +239,7 @@ fn main() -> ExitCode {
     // Warning: **沒給路徑的那一支也要走 `book_root_of`**（2026-10-01 審出來
     // 的）。只有一支走、另一支用生的 cwd 的話，`cd 卷一 && ye` 和 `ye .` 還是
     // 兩份會話。
-    let session_key = said_where
-        .clone()
-        .or_else(|| std::env::current_dir().ok().map(|here| {
-            std::fs::canonicalize(&here).unwrap_or(here)
-        }))
-        .map(|from| yumete_core::editor::book_root_of(&from));
+    let session_key = config_root.clone();
     if let Some(here) = session_key {
         editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
     }

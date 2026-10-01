@@ -2489,21 +2489,20 @@ pub fn data_search_layers() -> Vec<SearchDir> {
     found
 }
 
-/// Find the nearest per-project config by walking up from `start`.
-pub fn local_config_path(start: &Path) -> Option<PathBuf> {
-    let mut dir = Some(start);
-    while let Some(d) = dir {
-        let nested = d.join(".yumete").join("config.toml");
-        if nested.is_file() {
-            return Some(nested);
-        }
-        let flat = d.join(".yumete.toml");
-        if flat.is_file() {
-            return Some(flat);
-        }
-        dir = d.parent();
+/// **這個項目自己的那一份配置**，`None` ＝ 沒有。
+///
+/// Warning: **只看這一層，不往上走**（2026-10-01 改，照 helix）。helix 是
+/// `find_workspace().0.join(".helix").join("config.toml")`——**先把工作區找出
+/// 來，再只在那裏看**。從前這一支自己往上走、而且停法和項目根那一支不一樣
+/// （它停在「有 config.toml 這個**檔**」，項目根停在「有 `.yumete` **目録**」
+/// 再停在 `.git`），於是配置與項目各認各的地方。現在呼叫方把項目根遞進來。
+pub fn local_config_path(root: &Path) -> Option<PathBuf> {
+    let nested = root.join(".yumete").join("config.toml");
+    if nested.is_file() {
+        return Some(nested);
     }
-    None
+    let flat = root.join(".yumete.toml");
+    flat.is_file().then_some(flat)
 }
 
 // ---- Raw (as-parsed) config with per-field merge -------------------------

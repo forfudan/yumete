@@ -196,7 +196,7 @@ impl Seat {
         // 丟掉，而 `q` 與 `:q` 都有兩段式的閘。
         if editor.take_settings_request() && self.panel.is_none() {
             // 同 `lib.rs` 那一處：本項目那一頁跟着工作路徑走（2026-10-01）。
-            let local = Some(yumete_config::panel::local_sheet_path(&editor.working_dir()));
+            let local = Some(yumete_config::panel::local_sheet_path(&editor.root()));
             self.panel = Some(Panel::open(
                 Some(yumete_config::config_dir().join("config.toml")),
                 local,
