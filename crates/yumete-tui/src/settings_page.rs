@@ -195,9 +195,8 @@ impl Seat {
         // Warning: **已經開着就什麽都不做。** 無條件重開會把攢着沒存的改動一聲不吭地
         // 丟掉，而 `q` 與 `:q` 都有兩段式的閘。
         if editor.take_settings_request() && self.panel.is_none() {
-            let local = std::env::current_dir()
-                .ok()
-                .map(|cwd| yumete_config::panel::local_sheet_path(&cwd));
+            // 同 `lib.rs` 那一處：本項目那一頁跟着工作路徑走（2026-10-01）。
+            let local = Some(yumete_config::panel::local_sheet_path(&editor.working_dir()));
             self.panel = Some(Panel::open(
                 Some(yumete_config::config_dir().join("config.toml")),
                 local,

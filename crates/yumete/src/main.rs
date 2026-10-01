@@ -152,10 +152,14 @@ fn main() -> ExitCode {
             true => at,
             false => std::env::current_dir().unwrap_or_default().join(at),
         };
-        match full.is_dir() {
+        let here = match full.is_dir() {
             true => full,
             false => full.parent().map(std::path::Path::to_path_buf).unwrap_or(full),
-        }
+        };
+        // Warning: **規範化**（2026-10-01 審出來的）。`Editor::set_root` 規範化而
+        // 這裏從前不——於是 `ye ../書/一.md` 與 `ye /repo/書/一.md` 指同一個項
+        // 目，卻哈希出兩份會話，正是這一改要消滅的那件事。
+        std::fs::canonicalize(&here).unwrap_or(here)
     });
     let (mut config, config_problems) = match &said_where {
         Some(from) => yumete_config::Config::load_reporting_from(from),
@@ -227,10 +231,15 @@ fn main() -> ExitCode {
     // Warning: **按項目，不按 cwd**（2026-10-01）。從前它拿 `current_dir()` 做
     // 鑰匙，而工作區是命令行參數定的——**同一個項目從兩個目録打開得到兩份會
     // 話，兩個項目從同一個目録打開共用一份**。
+    // Warning: **沒給路徑的那一支也要走 `book_root_of`**（2026-10-01 審出來
+    // 的）。只有一支走、另一支用生的 cwd 的話，`cd 卷一 && ye` 和 `ye .` 還是
+    // 兩份會話。
     let session_key = said_where
         .clone()
-        .map(|from| yumete_core::editor::book_root_of(&from))
-        .or_else(|| std::env::current_dir().ok());
+        .or_else(|| std::env::current_dir().ok().map(|here| {
+            std::fs::canonicalize(&here).unwrap_or(here)
+        }))
+        .map(|from| yumete_core::editor::book_root_of(&from));
     if let Some(here) = session_key {
         editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
     }

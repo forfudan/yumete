@@ -188,13 +188,20 @@ impl Editor {
     }
 
     /// 開頭那個 `~` 換成家目錄；沒有 `~` 就原樣。
+    ///
+    /// Warning: **只認 `~` 自己和 `~/`**（2026-10-01 審出來的）。從前它剝掉任何
+    /// 開頭的 `~`，於是 `~notyou/x.md`（別人的家目錄，shell 的寫法）成了
+    /// `$HOME/notyou/x.md`，而一個真的叫 `~草稿.md` 的檔成了 `$HOME/草稿.md`。
+    /// `yumete_config::expand_tilde` 早就是這條規矩（有一條測試釘着），這一支
+    /// 跟上。
     pub(super) fn expand_tilde(path: &str) -> PathBuf {
-        match path.strip_prefix('~') {
-            Some(rest) => match Self::home_dir() {
-                Some(home) => home.join(rest.trim_start_matches('/')),
-                None => PathBuf::from(path),
-            },
-            None => PathBuf::from(path),
+        let rest = match path {
+            "~" => Some(""),
+            _ => path.strip_prefix("~/"),
+        };
+        match (rest, Self::home_dir()) {
+            (Some(rest), Some(home)) => home.join(rest),
+            _ => PathBuf::from(path),
         }
     }
 

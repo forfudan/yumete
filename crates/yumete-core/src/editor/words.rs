@@ -425,21 +425,11 @@ impl Editor {
     /// 書沒有」的說法。從前這裏另說一句「沒有找到 .yumete/words.txt」，是**同一
     /// 件事的第二套說法**，而且說成了抱怨——作者當場看出那是不一致的。
     pub fn reload_project_words(&mut self) -> Option<PathBuf> {
-        let from = self
-            .current_buffer()
-            .path()
-            .and_then(|p| p.parent().map(Path::to_path_buf))
-            .or_else(|| std::env::current_dir().ok());
-        let mut found: Option<PathBuf> = None;
-        let mut dir = from.as_deref();
-        while let Some(d) = dir {
-            let candidate = d.join(".yumete").join("words.txt");
-            if candidate.is_file() {
-                found = Some(candidate);
-                break;
-            }
-            dir = d.parent();
-        }
+        // Warning: **讀的那一頭也問[項目根][`Editor::root`]**（2026-10-01 審出來
+        // 的）。同一天把 `project_words_path`（寫、`:word-list-edit`）改成了
+        // `root()`，而**真正裝詞表的是這一支**，它還在從當前緩衝區往上走——於是
+        // 讀一份、寫另一份，`gd` 跳一下分詞器就換了詞表。
+        let found = Some(self.root().join(".yumete").join("words.txt")).filter(|p| p.is_file());
         let (list, where_from) = match found.as_ref().and_then(|p| {
             std::fs::read_to_string(p).ok().map(|t| (t, p.clone()))
         }) {

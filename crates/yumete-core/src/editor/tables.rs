@@ -3288,12 +3288,21 @@ impl Editor {
         let view = self.table.as_ref()?;
         let name = path.file_name()?.to_string_lossy().into_owned();
         let stem = path.file_stem()?.to_string_lossy().into_owned();
-        // Warning: **寫進[項目根][`Editor::root`]，不寫在這個檔旁邊**（2026-10-01）。
-        // 讀那一頭（`table::schema_for`）是**每一層祖先的 `.yumete/tables/` 都
-        // 找**，而寫這一頭只看 `path.parent()`——於是規格放在項目根上的那種書，
-        // 在子目録的一章上按 `空格 t e`，會在旁邊另造一個**被蓋住的**
-        // `tables/`，從此兩份規格誰也不知道誰。
-        let tables = self.root().join(".yumete").join("tables");
+        // Warning: **寫在讀那一趟找得到的地方**（2026-10-01）。讀那一頭
+        // （`table::schema_for`）是**從這個檔往上，每一層祖先的 `.yumete/tables/`
+        // 都找**，而寫這一頭從前只看 `path.parent()`——於是規格放在項目根上的
+        // 那種書，在子目録的一章上按 `空格 t e` 會在旁邊另造一個**被蓋住的**
+        // `tables/`，從此兩份誰也不知道誰。
+        //
+        // Warning: **不能改成 `root()`**（當天先那麼改過，審出來是錯的）：讀那一
+        // 趟是**檔的函數**，它的文檔寫着「從任何地方打開同一個 CSV 都要找到同
+        // 一份規格」。寫進項目根的話，項目**外**的檔寫完就再也讀不回來。
+        let from = path.parent().unwrap_or_else(|| Path::new("."));
+        let tables = from
+            .ancestors()
+            .map(|d| d.join(".yumete").join("tables"))
+            .find(|d| d.is_dir())
+            .unwrap_or_else(|| from.join(".yumete").join("tables"));
         let file = tables.join(format!("{stem}.toml"));
         if file.exists() {
             return Some(file);

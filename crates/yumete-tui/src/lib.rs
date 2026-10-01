@@ -327,7 +327,10 @@ fn frame_to(
         editor.set_settings_open(true);
         yumete_config::panel::Panel::open(
             Some(yumete_config::config_dir().join("config.toml")),
-            std::env::current_dir().ok().map(|cwd| yumete_config::panel::local_sheet_path(&cwd)),
+            // 本項目那一頁跟着**工作路徑**走，同啓動那一趟與 `:config-reload`
+            // （2026-10-01）。從前它問進程的 cwd，於是面板改的是另一個項目的
+            // `config.toml`。
+            Some(yumete_config::panel::local_sheet_path(&editor.working_dir())),
         )
     });
     let settings = settings.or(mine.as_ref());
@@ -1406,7 +1409,8 @@ pub fn run(
                 // Warning: **`layout` 傳 `None`**：`-v` 是這一趟啓動的答案，重載說了
                 // 不算——這時候配置說什麼就是什麼。
                 if editor.take_config_reload() {
-                    let (fresh, said) = Config::load_reporting();
+                    // 項目配置從**工作路徑**往上找，同啓動那一趟（2026-10-01）。
+                    let (fresh, said) = Config::load_reporting_from(&editor.working_dir());
                     settings::apply(&fresh, editor, None);
                     settings::apply_ime(&fresh, ime);
                     *config = fresh;
@@ -2888,7 +2892,15 @@ fn run_for_language(
             want.verb
         );
     };
-    let file = want.path.display().to_string();
+    // Warning: **交給程序的是絕對路徑**（2026-10-01 審出來的）。緩衝區存的路徑
+    // 是**當初給的樣子**（可能是 `src/a.rs` 這種相對的），而這一支現在把子進程
+    // 放在工作路徑上跑——`rustfmt src/a.rs` 於是在 `/repo/src` 裏找
+    // `/repo/src/src/a.rs`。改工作路徑之前它碰巧對，因為兩個都是進程的 cwd。
+    let file = match want.path.is_absolute() {
+        true => want.path.clone(),
+        false => std::env::current_dir().unwrap_or_default().join(&want.path),
+    };
+    let file = file.display().to_string();
     let Some(argv) = runner.argv(&file) else {
         return say!("command.broken-line", runner.run);
     };
