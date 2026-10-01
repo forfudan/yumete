@@ -12741,9 +12741,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 命令 | 搜哪裏 |
     | --- | --- |
     | `:search`／`:replace` | 本 buffer（默認） |
-    | `:search-cd`／`:replace-cd` | buffer 所在文件夾，含子目錄 |
+    | `:search-working`／`:replace-working` | buffer 所在文件夾，含子目錄 |
     | `:search-wd`／`:replace-wd` | yumete 打開的文件夾 |
-    | `:search-gd`／`:replace-gd` | 最近的 git 項目（自己往上找） |
+    | `:search-project`／`:replace-project` | 最近的 git 項目（自己往上找） |
     | `:search ../稿` | 指名那一個 |
 
     這六個是**六個真命令**，不是 `:search` 的參數：名字自己把話說完，`:` 裏搜得到、
@@ -14649,7 +14649,7 @@ Warning: **百科 2026-09-23 就中過同一個病並修了**，而修的時候�
 Warning: **連帶修掉一個潛伏的**：`take_scope` 從前無條件把那一格的文字讀成範圍，而
 `scope_as_typed` 把「本文件夾」攤成一個真路徑寫進框裏——於是按完 `0` 一走開，那一格就從
 「本文件夾」變成一長串路徑。兩者搜的是同一批檔案，可屏幕上說的不是同一件事。現在**沒動過
-就不重新解釋**。`:search-cd` 那幾個命令一直有這個毛病，沒人報過。
+就不重新解釋**。`:search-working` 那幾個命令一直有這個毛病，沒人報過。
 
 ### 三、選擇器也認簡繁與拼音
 
@@ -14978,7 +14978,7 @@ Warning: **這一輪最值錢的不是「哪裏不好看」，是「哪一個鍵
   變成 `# daemon notes`、`SERVER_DEBUG` 變成 `daemon_DEBUG`，一句話都不說。中文沒有大小
   寫，所以從來沒人撞上。要做就是第八個開關（VS Code 的 `AB`），~~**等定**~~。
 - ~~**「位置」那一格是自由文本，而它該是四選一。**~~ 做了（§5.12.52）。 四個範圍（本文件／本文件夾／項目／工作
-  區）都做好了，可面板碰不到——只有三個猜不到名字的命令（`:search-cd`／`-gd`／`-wd`）
+  區）都做好了，可面板碰不到——只有三個猜不到名字的命令（`:search-working`／`-gd`／`-wd`）
   進得去。填一個不存在的文件夾會悄悄退回「只搜本文件」，而那個處數看起來完全合理。
   **這是三份報告裏唯一被兩個人同時標成拦路的**，改動也最大，**等定**。
 - ~~**正文裏只有當前那一處反白**，同屏別的命中不標。~~ 做了（`b6003b4`，淡一層的底色）。
@@ -16683,7 +16683,7 @@ helix 的 `空格` 二十八條，yumete 的 `SPACE_KEYS` 二十三條。兩邊�
 | --- | --- | --- | --- |
 | `空格 j` | `jumplist_picker`，把跳轉表整個列出來挑一個 | 只有 `C-o`／`C-i` 一格一格走 | 中：一章翻了十幾處之後，一格一格倒回去很慢 |
 | `空格 '` | `last_picker`，把剛關掉的那個選擇器原樣叫回來 | 沒有 | 中：`空格 f` 挑錯了文件要重新打一遍關鍵詞 |
-| `空格 F` | 在當前文件所在目錄裏開文件選擇器 | 只有 `空格 f`（項目範圍） | 低：`:search-cd` 這一族已經建立了「本目錄」這個範圍，但文件選擇器上沒有 |
+| `空格 F` | 在當前文件所在目錄裏開文件選擇器 | 只有 `空格 f`（項目範圍） | 低：`:search-working` 這一族已經建立了「本目錄」這個範圍，但文件選擇器上沒有 |
 | `空格 R` | 用系統剪貼板的內容替換選區 | 有 `R`（用寄存器替換），沒有剪貼板那一份 | 低：`空格 y`／`空格 p` 已經在，補這一條是補齊三件套 |
 | `空格 g` | `changed_file_picker`，列出 git 裏改過的文件 | 有 `:git-diff` 和 `:view-diff`，但沒有「改過哪幾個文件」的列表 | 低：改稿一輪之後想知道動過哪幾章，但 `git status` 在終端裏就能看 |
 
@@ -16764,7 +16764,7 @@ helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust �
 | `:move` `:mv` | 把當前文件連同緩衝區改名到另一個路徑 | 有 `:write-as`（另存並改為編輯新的那份），舊文件還留着 | 中：改章節名是真實動作，現在要去終端補一次 `rm` |
 | `:reflow` | 把選中的幾行硬折到給定寬度 | `:view-wrap` 是視圖上的軟折，`:format` 按配置走 | 中：交給排版或者交給別人的稿子有時要求硬折；Warning: 先確認 `:format` 在 markdown 下做不做這件事 |
 | `:buffer-close-others` `:buffer-close-all` | 關掉除當前之外的全部緩衝區 | `:buffer` 能列能關，一次一個 | 低：開了二十個文件之後清一次場 |
-| `:cd` `:pwd` `:pushd` `:popd` | 改／看當前工作目錄 | 沒有；`:search-cd` 這一族已經有「本目錄」的概念 | 低 |
+| `:cd` `:pwd` `:pushd` `:popd` | 改／看當前工作目錄 | 沒有；`:search-working` 這一族已經有「本目錄」的概念 | 低 |
 | `:clear-register` `:set-register` | 清空／寫入某個寄存器 | 沒有；`:clipboard` 是粘貼菜單 | 低 |
 | `:insert-output` `:append-output` | 把命令的輸出插在選區前／後 | 有 `:pipe`（替換選區）和 `:sh`（output 進 buffer） | 低：`:pipe` 覆蓋了主要用法 |
 | `:line-ending` `:encoding` | 設行尾／編碼 | 沒有 | 低：直到有人拿到 CRLF 的稿子為止 |
@@ -16887,7 +16887,7 @@ helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust �
 - helix `|`／`A-|`／`!`／`A-!`／`$`（shell 那五個）→ `!` 開 `:pipe`，另有 `:sh`、`:!command`、`:run`。
 - helix `:vsplit`／`:hsplit`／`C-w` 那一整層 → 這裏是「區域」模型，四個固定區域，
   `空格 1`–`4` 點名、`空格 w`／`W`／`q`／`Q`，`C-w` 也留着。
-- helix `空格 /`（global_search）→ `空格 /`，另有 `:search`／`:search-cd`／`:search-gd` 三檔範圍。
+- helix `空格 /`（global_search）→ `空格 /`，另有 `:search`／`:search-working`／`:search-project` 三檔範圍。
 - helix `:character-info` → `空格 d` 字典（報拆分與編碼），字集問題另有 `:check-charset`。
 - helix `:theme`／`:set-option`／`:config-reload`／`:config-open` → `:theme`、`:settings`、
   `:reload config`。
@@ -18865,6 +18865,87 @@ Warning: **診斷不是 Markdown。** 邊欄那一支從前用同一個 `docs` �
   不是噪音，留着。有兩處 `clippy --fix` 的建議**退回來了**：一個把帶副作用的
   `self.drop_the_offering()` 搬進 match 守衛（中間插一支 arm 就換意思），幾個
   `needless_range_loop` 走的是一段區間而下標本身有意義。
+
+## 5.47 搜索的「範圍」重新設計（2026-10-01 定）
+
+起因是作者說：「Search-系列可以重新设计，而不是只改文案。目的是为了和其他的对齐。」接着
+每一處都問「Helix 怎麼做的」。於是先把 helix、vim／neovim、telescope 三家**所有**按路徑錨定
+的功能逐條查了源碼（不看它們的文檔——helix 的手冊在 `空格 f` 與 `空格 /` 兩處都寫反了），
+列成候選表再逐項定。
+
+### 5.47.1 三家的做法
+
+**沒有一家有「在界面裏選範圍」這件事。**
+
+| | 範圍怎麼說 |
+| --- | --- |
+| helix | 就是命令名。`search` ＝ 本文件，`global_search` ＝ **寫死 cwd**（`commands.rs:2614`）。想搜子目錄只能先 `:cd`。這個形狀是它的架構逼出來的（靜態命令不收參數），不是比較出來的優點 |
+| vim | 就是打出來的文件參數：`:vimgrep /pat/ **/*.c` |
+| telescope | 調用處的 opts 表：`cwd`／`search_dirs`／`grep_open_files` |
+
+查出來的幾條事實，後面的取捨都建在上面：
+
+- **helix 的 `空格 f` 與 `空格 /` 用的根不是同一個。** 前者是 cwd 往上找到的版本庫根
+  （`commands.rs:3171`），後者是 cwd 本身（`commands.rs:2614`）。在 monorepo 的子目錄裏啓動，
+  兩個命令蓋的樹不一樣。
+- **helix 唯一一處「跟着光標走」的根**是沒有 LSP 時的 `空格 S`（`syntax.rs:238`），源碼註釋
+  說明那是為了**兩個項目開在分屏裏**。
+- **兩家都是內存蓋過磁碟。** vim 的 `:vimgrep` 把文件讀進 buffer 再搜（實測：盤上 `alpha`、
+  buffer 裏 `bravo`，搜得到 `bravo`、搜不到 `alpha`）；helix 的 `global_search` 走到一個文件
+  時先看這個路徑有沒有開着的 buffer，有就搜那份 rope（`commands.rs:2692-2706`）。
+- **三家都沒有「打開的文件 ＋ 路徑篩選」這個組合。** telescope 的 `grep_open_files` 與
+  `search_dirs` 寫在同一個 `if/elseif` 裏，開了前者後者直接被丟掉（`__files.lua:172-180`）；
+  vim 的 `:bufdo` 不收文件參數。
+- **vim 的跨文件替換範圍是上一次搜索的結果表**（`:vimgrep` → `:cfdo %s/…/ge | update`），
+  而那個 `%` 是整個文件——結果表選中的是**哪些文件**，不是哪些行。
+- **「往上找」的走法三家各不相同**：helix 的工作區根取最近一個標記、LSP 根取**最頂**一個；
+  nvim 的 `vim.fs.root` 取最近一個，但**標記的先後次序壓過遠近**（`{'stylua.toml','.git'}`
+  會讓五層外的 `stylua.toml` 贏過父目錄的 `.git`，`fs.lua:491-502`）。
+- **顯示路徑按哪個根縮短，是和搜索範圍分開的一個選擇。** helix 的 `空格 f` 按它自己的根縮短，
+  別的 picker 全按 cwd——同一個文件在兩個 picker 裏印出來的字不一樣。telescope 把兩者綁死在
+  同一個 `opts.cwd` 上，分不開。
+
+### 5.47.2 定下來的模型
+
+**`0` 輪替，四檔**：本文件 → 緩衝區 → 工作路徑 → 項目路徑。
+
+| 檔 | 定義 |
+| --- | --- |
+| 本文件 | 當前 buffer，含沒存盤的改動 |
+| 緩衝區 | 每一個打開着的 buffer，**含沒有文件名的草稿** |
+| 工作路徑 | `:cd` 定的那個目錄，啓動時＝敲 `ye` 時 shell 所在的目錄 |
+| 項目路徑 | 從工作路徑往上找**最近**一個帶 `.yumete`／`.git`／`.jj`／`.svn` 的祖先 |
+
+**指定文件夾不進輪替**，只能 `:search 某目錄` 進來，進來之後面板裏改不了。
+
+**錨一律在工作路徑，不跟光標。** 原來的候選裏有兩個「跟着當前文件走」的檔（本文件所在的
+文件夾、本文件往上的版本庫根），兩個都去掉了。作者原話：「C这个我觉得大多数时候是D的子集。
+所以有D就好了」——理由要說準：C 的錨是當前文件、D 的錨是工作路徑，分家的場景正是 `gd` 跳進
+homebrew 之後。去掉它們真正的意思是**範圍不跟着光標走**，而「本文件往上的版本庫根」是同一個
+問題問第二遍，所以一併去掉。
+
+**語言服務器的根不做搜索範圍**：拿它當範圍等於把範圍交給服務器決定，而散文文件根本沒有服務器。
+
+**`.yumete` 算一個根。** 它不只是設置——裏面有 `config.toml`、`tables/*.toml`、`progress.tsv`、
+`words.txt`／`discovered_words.txt`、wiki。helix 的同一張標記表裏就有 `.helix`，和 `.git`
+`.svn` `.jj` 並列。去掉它的代價是：一個只有散文、沒有 git 的文件夾再也成不了一個項目。
+
+**規則**：
+
+- **文件夾永遠遞歸**，要只搜一層就在「包含」那一格寫 `*`（VS Code 的形狀）。
+- **內存蓋過磁碟**，照兩家參考實現。走不到的仍然搜不到：改了沒存盤但不在範圍裏的文件、
+  以及還沒存過盤磁碟上根本沒有的新文件。
+- **篩選兩格**：包含、排除，glob，多條用逗號隔開。
+- **一個開關「包含隱藏和忽略」**（include hidden and ignored），出廠關着＝跳過隱藏文件、
+  尊重 `.gitignore`（helix 與 telescope 的默認；vim 的默認 `grepprg` 是 `rg --vimgrep -uu`，
+  故意關掉這兩道閘來跟傳統 grep 對齊）。
+- **這三格只對走磁碟的三檔有效**（工作路徑、項目路徑、指定文件夾）。選到本文件或緩衝區時
+  **三格一起灰掉**，位置不變、下面的號碼不跳。telescope 與 vim 都沒有「打開的文件 ＋ 路徑
+  篩選」這個組合，是同一個取捨。
+
+**命令按四檔各給一條**（照 helix 一個範圍一條命令）：`:search`（本文件）、`:search-buffers`、
+`:search-working`、`:search-project`，`:search 某目錄` 就是指定文件夾；`replace` 同形。
+原來的 `-cd`／`-gd` 兩個縮寫跟新的四檔對不上了，刪掉。
 
 ## 5.44 「信息」：一個槽，五種內容（2026-09-30 定，作者的模型）
 

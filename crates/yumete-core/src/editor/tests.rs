@@ -8357,55 +8357,49 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     ed.open_search();
     assert_eq!(ed.search_for_test().field, Field::Query, "開在查詢框上");
 
-    // ① **範圍那一格按 `0` 到，`jk` 走不上去**（2026-09-29 起它畫在開關那一列
-    // 的頭上，號碼就是 `0`）。
+    // ① **範圍那一格按 `0` 到，`jk` 永遠走不上去**（2026-10-01 起它再也不是輸
+    // 入框：四選一，`0` 換一檔；指定文件夾只能 `:search 某目錄` 進來）。
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search_for_test().field, Field::Results, "j 一步到結果，不停在範圍上");
     ed.on_key(Key::Char('0'));
     assert_eq!(ed.search_for_test().field, Field::Scope, "0 把鍵交到範圍那一格");
-    assert!(matches!(ed.search_for_test().scope, Where::Folder), "順帶換了一檔");
-    // Warning: **`0` 是一個輪盤，按到底再回本文件**（2026-09-29 報的：走到第四檔會自己
-    // 進打字狀態，於是「後續的 0 都變成了文件夾的路徑」）。
-    for _ in 0..4 {
-        ed.on_key(Key::Char('0'));
-    }
-    assert!(matches!(ed.search_for_test().scope, Where::Folder), "轉了一圈回到原處");
+    assert!(matches!(ed.search_for_test().scope, Where::Buffers), "本文件 → 緩衝區");
+    ed.on_key(Key::Char('0'));
+    assert!(matches!(ed.search_for_test().scope, Where::Working), "緩衝區 → 工作路徑");
+    ed.on_key(Key::Char('0'));
+    assert!(matches!(ed.search_for_test().scope, Where::Project), "工作路徑 → 項目路徑");
+    ed.on_key(Key::Char('0'));
+    assert!(matches!(ed.search_for_test().scope, Where::Buffer), "轉了一圈回到本文件");
     assert_eq!(ed.mode(), Mode::Normal, "輪盤從頭到尾不進打字狀態");
-    // 走到「指定文件夾…」那一檔，按 `i` 纔開始打路徑。
-    for _ in 0..2 {
-        ed.on_key(Key::Char('0'));
-    }
-    assert!(matches!(ed.search_for_test().scope, Where::Named(_)), "走到第四檔");
     ed.on_key(Key::Char('i'));
-    assert_eq!(ed.mode(), Mode::Field, "「指定文件夾…」那一檔打得了字");
-    ed.on_key(Key::Char('.'));
-    ed.on_key(Key::Enter);
-    assert_eq!(
-        ed.search_for_test().scope,
-        Where::Named(".".into()),
-        "和 :search 的參數完全一致"
-    );
-    // Warning: **`Enter` 跑一遍搜索，然後把鍵交回面板**（2026-09-25）。
-    assert_eq!(ed.mode(), Mode::Normal);
-    // `Esc` 出框也落地，而且落的是同一個地方。
-    assert_eq!(ed.search_for_test().scope, Where::Named(".".into()));
+    assert_eq!(ed.mode(), Mode::Normal, "位置那一格打不了字");
 
-    // ③ **這一刻位置那一格是個輸入框**（剛打了一條路徑進去），所以 `jk` 停在
-    // 它上面——跳過去那條路徑就再也改不了，而 `0` 繞一圈回來會把它清掉
-    // （2026-09-29 報的：「如果位置那里出现了输入框，就不能跳过，否则无法输入」）。
+    // ② **指定文件夾只有命令進得去**，而且它不在輪替上。
+    ed.execute(":search .").unwrap();
+    assert_eq!(ed.search_for_test().scope, Where::Named(".".into()), "命令的參數就是範圍");
+    // Warning: **命令不許把開着的面板開關掉**（2026-10-01 撞到）。
+    assert!(ed.sidebar_focused(), ":search 進來，鍵在面板上");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('0'));
+    assert!(matches!(ed.search_for_test().scope, Where::Buffer), "`0` 從它身上回本文件");
+
+    // ③ **包含／排除看範圍走不走磁碟**（2026-10-01 定）。走磁碟纔停得住。
+    ed.search_for_test().scope = Where::Project;
     ed.search_for_test().field = Field::Query;
     ed.on_key(Key::Char('j'));
-    assert_eq!(ed.search_for_test().field, Field::Scope, "打着路徑就要停");
+    assert_eq!(ed.search_for_test().field, Field::Include, "走磁碟：停在包含上");
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search_for_test().field, Field::Exclude, "再往下是排除");
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search_for_test().field, Field::Results, "再往下纔是結果");
 
-    // ③b **換回「本文件」，那一格沒有字可改，`jk` 就跳過它**——連同七行開關
+    // ③b **換回「本文件」，那三格一起灰掉**，`jk` 連同七行開關一起跳過
     // （2026-09-24 定，原話：「避免用户要从他们上面经过浪费 jk」）。
     ed.search_for_test().scope = Where::Buffer;
     ed.search_for_test().field = Field::Query;
     ed.on_key(Key::Char('j'));
-    assert_eq!(ed.search_for_test().field, Field::Results, "跳過開關，也跳過位置");
+    assert_eq!(ed.search_for_test().field, Field::Results, "跳過開關、位置，也跳過包含排除");
     ed.on_key(Key::Char('k'));
     assert_eq!(ed.search_for_test().field, Field::Query, "回來也跳過");
 
@@ -8904,15 +8898,20 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     assert_eq!(ed.search().query, "霜大降石", "插在光標那裏");
 
     // ④ 走到別的格子，光標跟着挪到那一格的末尾——一個 caret 伺候所有的框。
-    // Warning: **位置那一格 `jk` 走不上去**（2026-09-29 起它和開關同一列），按 `0`。
+    // Warning: **位置那一格 `jk` 走不上去**（2026-09-29 起它和開關同一列），按 `0`；
+    // 而 2026-10-01 起它再也不是輸入框，所以光標不往那裏挪，也不畫在那裏。
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('0'));
     assert_eq!(ed.search().field, Field::Scope);
-    assert_eq!(
-        ed.search().caret,
-        ed.search().scope_text.chars().count(),
-        "Warning: 不挪的話，塊光標會停在一個空框的第四格上"
-    );
+    assert!(!ed.search().takes_text(), "位置那一格打不了字");
+
+    // 包含那一格是真的輸入框，走上去光標就挪到它的末尾。
+    ed.search_for_test().scope = crate::search_panel::Where::Project;
+    ed.search_for_test().include = "*.md".into();
+    ed.search_for_test().field = Field::Query;
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Include);
+    assert_eq!(ed.search().caret, 4, "Warning: 不挪的話，塊光標會停在框外面");
 }
 
 /// **框裏的 Normal 也編輯得了**（2026-09-25 報的：「normal模式的时候没办法用一些
@@ -9198,7 +9197,7 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
 
     // Warning: **A wider scope does not run as you type.** A hundred chapters read
     // off the disk per letter is not a thing to do, and the panel says so.
-    ed.execute(":search-cd").unwrap();
+    ed.execute(":search-working").unwrap();
     ed.on_key(Key::Char('霜'));
     assert!(ed.search().stale, "it is waiting to be told to look");
     ed.on_key(Key::Enter);
@@ -9208,9 +9207,9 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     ed.settle_search();
     assert!(!ed.search().stale);
 
-    // Three: one here, two next door. **The file being written is searched
-    // once**, from memory — not again off the disk.
-    assert_eq!(ed.search().total, 3, "{:?}", ed.search().hits);
+    // Four: one here, two next door, one in the chapter above. **The file
+    // being written is searched once**, from memory — not again off the disk.
+    assert_eq!(ed.search().total, 4, "{:?}", ed.search().hits);
     let rows = ed.search().rows();
     let files: Vec<String> = rows
         .iter()
@@ -9219,7 +9218,10 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
             Row::Hit(_) => None,
         })
         .collect();
-    assert_eq!(files, vec!["a.md 1".to_string(), "b.md 2".to_string()]);
+    assert_eq!(
+        files,
+        vec!["卷一/a.md 1".to_string(), "c.md 1".to_string(), "卷一/b.md 2".to_string()]
+    );
 
     // **Unsaved work is work.** What is on the screen is what is searched.
     ed.on_key(Key::Esc);
@@ -9231,15 +9233,26 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     ed.on_key(Key::Esc);
     type_keys(&mut ed, " /");
     ed.on_key(Key::Enter);
-    assert_eq!(ed.search().total, 5, "the two just typed count too");
+    assert_eq!(ed.search().total, 6, "the two just typed count too");
 
-    // `-gd` climbs to the book: the chapter next door **and** the one above.
-    ed.execute(":search-gd").unwrap();
+    // 項目路徑：這本書沒有 `.git` 也沒有 `.yumete`，所以它就是工作路徑本身。
+    ed.execute(":search-project").unwrap();
     ed.on_key(Key::Enter);
-    assert!(ed.search().total >= 6, "{:?}", ed.search().total);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 6, "{:?}", ed.search().total);
     assert!(
         ed.search().hits.iter().any(|h| h.file.as_ref().is_some_and(|p| p.ends_with("c.md"))),
         "the one above is in it too"
+    );
+
+    // **緩衝區那一檔只看內存**，磁碟上沒打開的那幾個檔不在裏面。
+    ed.execute(":search-buffers").unwrap();
+    ed.on_key(Key::Enter);
+    let in_buffers = ed.search().total;
+    assert!(in_buffers < 6, "打開的那幾份而已，{in_buffers}");
+    assert!(
+        ed.search().hits.iter().all(|h| h.buffer.is_some()),
+        "每一處命中身上記着是哪一個緩衝區"
     );
 
     // A folder named outright — and one that is not there says so rather
@@ -9348,7 +9361,7 @@ fn the_search_reads_the_ignore_file_and_roots_itself_in_the_book() {
     let mut ed = Editor::new();
     ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
-    ed.execute(":search-gd").unwrap();
+    ed.execute(":search-project").unwrap();
     ed.on_key(Key::Char('霜'));
     ed.on_key(Key::Enter);
     ed.settle_search();
@@ -9398,7 +9411,7 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     let mut ed = Editor::new();
     ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
-    ed.execute(":replace-gd").unwrap();
+    ed.execute(":replace-project").unwrap();
     assert!(ed.search().replacing, "`:replace` opens with the row showing");
     for c in "阿甯".chars() {
         ed.on_key(Key::Char(c));
@@ -9416,7 +9429,12 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     assert_eq!(ed.search().total, 4);
 
     // **`Enter` 跑一遍搜索並把鍵交回面板**（2026-09-25），去結果接着按 `j`。
+    // Warning: **走磁碟的範圍底下多了兩格**（2026-10-01）：查詢 → 包含 → 排除 → 結果。
     assert_eq!(ed.mode(), Mode::Normal);
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Include);
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Exclude);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results);
 
@@ -11504,7 +11522,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // 阿寧 分散在三章裏 —— 一章兩次夠不上 `MIN_COUNT`。範圍是這族命令的參數，
     // 不是它的背景設定。
     ed.open_file(dir.join("ch01.md")).unwrap();
-    assert!(ed.execute("word-discover-cd").is_ok(), "{}", ed.status());
+    assert!(ed.execute("word-discover-working").is_ok(), "{}", ed.status());
     let listing = dir.join(".yumete").join("discovered_words.txt");
     assert!(listing.is_file(), "名單要寫出來：{}", ed.status());
     // `set_root` canonicalises（macOS 的 `/var` 是 `/private/var` 的符號鏈接）。
@@ -11520,7 +11538,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // **整份覆蓋，不追加。** 跑兩次不會變兩份。
     let again = {
         ed.open_file(dir.join("ch01.md")).unwrap();
-        assert!(ed.execute("word-discover-cd").is_ok(), "{}", ed.status());
+        assert!(ed.execute("word-discover-working").is_ok(), "{}", ed.status());
         std::fs::read_to_string(&listing).unwrap()
     };
     assert_eq!(again, text, "第二次跑出來的該一模一樣");
@@ -17816,11 +17834,11 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
     let mut ed = Editor::new();
     ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
-    ed.execute(":search-cd").unwrap();
+    ed.execute(":search-working").unwrap();
     ed.on_key(Key::Char('霜'));
     ed.on_key(Key::Enter);
     ed.settle_search();
-    assert_eq!(ed.search().total, 3, "這一份一處，隔壁兩處");
+    assert_eq!(ed.search().total, 4, "這一份一處，隔壁兩處，上一層一處");
     assert!(!ed.search_is_stale());
 
     // **偷偷改盤上的隔壁那一份。** 下面刷新之後它那兩處要原封不動——那就是
@@ -17838,7 +17856,7 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
     // 畫下一幀之前前端問的就是這一句。
     ed.refresh_the_edited_file();
     assert!(!ed.search_is_stale(), "刷過了，不必再按 Enter");
-    assert_eq!(ed.search().total, 4, "這一份變成兩處，隔壁照舊兩處");
+    assert_eq!(ed.search().total, 5, "這一份變成兩處，隔壁照舊兩處");
     let files: Vec<String> = ed
         .search()
         .rows()
@@ -17850,7 +17868,7 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
         .collect();
     assert_eq!(
         files,
-        vec!["a.md 2".to_string(), "b.md 2".to_string()],
+        vec!["卷一/a.md 2".to_string(), "c.md 1".to_string(), "卷一/b.md 2".to_string()],
         "Warning: b.md 還是兩處——盤上明明改成了三處，說明沒去讀它"
     );
 

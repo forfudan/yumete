@@ -214,7 +214,7 @@ impl Editor {
     /// project.** A book's manuscript, its notes, its old drafts and its
     /// exports live under one tree, and rooting this at the book would tip
     /// several hundred unrelated names into a panel whose whole job is 「the
-    /// few near here」. That is deliberately **not** where `:search-gd` looks:
+    /// few near here」. That is deliberately **not** where `:search-project` looks:
     /// 「find a word anywhere in the book」 and 「point at this stack on my
     /// desk」 are different questions (#419, `[^361]`).
     fn file_choices(&self, typed: &str) -> Vec<Candidate> {

@@ -385,13 +385,16 @@ impl Editor {
 
     /// How far a 認詞 reads, as a root to walk — `None` is **this buffer**.
     ///
-    /// The same four scopes `:search` resolves, resolved the same way, because
-    /// they are the same four words.
+    /// The same scopes `:search` resolves, resolved the same way, because they
+    /// are the same words.
+    ///
+    /// Warning: **緩衝區那一檔也回 `None`**：它和本文件一樣是內存裏的一張表，不是一
+    /// 個可以走的根。認詞那一支走的是「有沒有根」這條岔路，所以兩檔同形。
     fn discover_root(&self, scope: &crate::search_panel::Where) -> Option<PathBuf> {
         use crate::search_panel::Where;
         match scope {
-            Where::Buffer => None,
-            Where::Folder => Some(self.here_folder()),
+            Where::Buffer | Where::Buffers => None,
+            Where::Working => Some(self.working_dir()),
             Where::Project => Some(self.root()),
             Where::Named(path) => Some(path.clone()),
         }

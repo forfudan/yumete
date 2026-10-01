@@ -1001,7 +1001,7 @@ KEYS (Normal mode, Helix-style):
     w b e     next / prev word start, word end (W B E for WORDs)
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
-    gf        open the file:line named on this line (`:search-gd` results)
+    gf        open the file:line named on this line (`:search-project` results)
     Space     menu: o outline, f files, b buffers, / search, ? commands,
               d 字典 (how the character under the cursor is written), y copy,
               r 旁注 (edit the reading here)
@@ -1050,7 +1050,7 @@ KEYS (Normal mode, Helix-style):
               :42  :goto n    put the cursor on a line
               :recover[!]      load (or drop) a crash-recovery draft
               :buffer|next|previous|close   the open files (gn / gp)
-              :search-gd <re>  :toc  across the project / this file's headings
+              :search-project <re>  :toc  across the project / this file's headings
               :export html|typst    write it out for a typesetter
               :layout [horizontal|vertical]      :view-margin [never|dense|loose|always]
               :yume-chaifen   the 拆分 annotation beside candidates

@@ -7570,7 +7570,8 @@ fn draw_search(
     // messages test can see them (`messages.rs::said` reads `say!` calls).
     let place = match &find.scope {
         yumete_core::search_panel::Where::Buffer => say!("search.where.buffer"),
-        yumete_core::search_panel::Where::Folder => say!("search.where.folder"),
+        yumete_core::search_panel::Where::Buffers => say!("search.where.buffers"),
+        yumete_core::search_panel::Where::Working => say!("search.where.working"),
         yumete_core::search_panel::Where::Project => say!("search.where.project"),
         // 指定文件夾：說使用者打的那個名字；還沒打就說這一檔本身叫什麼
         // （2026-09-27）。空着的時候寫一個真的名字，那一格纔看得出是四選一裏
@@ -7584,12 +7585,10 @@ fn draw_search(
     // 所以 `k` 從框裏往上走第一個碰到的是它，`i` 進去改，Enter 落地。
     // Warning: 正在打字的時候畫的是**框裏的字**，不是算出來的名字：那一刻它是一個
     // 輸入框，不是一句說明。
-    let naming = find.field == Field::Scope;
+    // Warning: **位置那一格再也不是輸入框了**（2026-10-01 定）：它是四選一，`0` 換一
+    // 檔，指定文件夾只能 `:search 某目錄` 進來。所以這裏畫的永遠是算出來的名字。
     let typing = editor.mode() == yumete_core::input::Mode::Field;
-    let shown = match naming && typing {
-        true => find.scope_text.clone(),
-        false => place,
-    };
+    let shown = place;
     // **The count, and nothing when nothing was asked.** `0 處` and 「not
     // asked yet」 are two different findings (#419).
     //
@@ -7652,7 +7651,13 @@ fn draw_search(
     // 寬兩格。Warning: **`換: ` 不在畫面上也算進來**，同開關那幾行的理由——勾一下替換，
     // 上面兩格不許跟着挪。
     let labels =
-        [say!("search.label.scope"), say!("search.label.query"), say!("search.label.replace")];
+    [
+        say!("search.label.scope"),
+        say!("search.label.query"),
+        say!("search.label.replace"),
+        say!("search.label.include"),
+        say!("search.label.exclude"),
+    ];
     let widest = labels.iter().map(|t| yumete_cjk::str_width(t)).max().unwrap_or(0);
     let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, tag: &str, what: &str, y: u16| {
         // **名字在格子外面**（2026-09-24 定）：三檔底色說的是「這裏打得了字」，
@@ -7682,7 +7687,11 @@ fn draw_search(
         // 這一個光標所在的字是反白的，也就是説和正文normal時光標所在的那個字一樣
         // 的模式。然後背景依舊是中間灰色」）。從前整條反白，於是那一格看着像被
         // 選中了一整段，而框裏其實站着一個光標——`hl` 挪的就是它。
+        // **範圍不走磁碟的時候，包含／排除畫灰**（2026-10-01 定）。本文件與緩衝區
+        // 是一張現成的表，按路徑篩它沒有意思；灰的但位子留着，下面那個號碼不跳。
+        let dead = matches!(which, Field::Include | Field::Exclude) && !find.on_disk();
         let style = match (find.all_selected && here && !shown.is_empty(), typing && here) {
+            _ if dead => quiet,
             (true, _) => on,
             (false, true) => sunk,
             (false, false) => text,
@@ -7701,13 +7710,16 @@ fn draw_search(
             let asks = match which {
                 Field::Scope => say!("search.ask.folder"),
                 Field::Replace => say!("search.ask.replace"),
+                // **包含／排除空着就空着**（2026-10-01 定）。一句說得清寫法的話在
+                // 這一欄裏放不下，截一半比不寫更糟。
+                Field::Include | Field::Exclude => String::new(),
                 _ => say!("search.ask.query"),
             };
             // Warning: **只換字色，底色照舊是這一格的**：底色說的是「這裏打得了字」，
             // 提示字拿走它就等於把那句話擦了（2026-09-27 測試攔下來的）。
             put_text(buf, box_at, y, to, &asks, Style { fg: quiet.fg, ..style });
         }
-        if here && !find.all_selected {
+        if here && !find.all_selected && !dead {
             caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink);
         }
     };
@@ -7836,11 +7848,27 @@ fn draw_search(
     // **第八個只在勾了「替換」的時候出現**（2026-09-27 定）。它和上面那六個不是
     // 同一類東西：那六個說「怎麼算命中」，這一個說「換上去的那一段怎麼寫」——
     // VS Code 也是這麼分的，`Aa` 在搜索那一行，`AB` 在替換那一行。
-    let mut y = y;
-    if find.replacing {
-        y += 1;
-        switch(buf, y, tick(find.preserve_case), &say!("search.preserve-case"), 8, text);
-    }
+    // **第八個沒在替換的時候畫灰**（2026-10-01 定，原話：「8號可以灰掉嗎？」）。
+    // 同 模糊 那一行：位子留着，號碼連着，按下去什麼都不發生。
+    let mut y = y + 1;
+    let keep_cell = match find.replacing {
+        true => text,
+        false => quiet,
+    };
+    switch(buf, y, tick(find.preserve_case), &say!("search.preserve-case"), 8, keep_cell);
+    // **「搜哪些文件」那三格，攢在最下面**（2026-10-01 定）。三格一族，而上面
+    // 七個開關的號碼一個不動。Warning: **號碼是 9，不是 8**：第八個歸 保留大小寫，
+    // 它畫不出來的時候那個號就空着——拿它當第八會把 替換／保留大小寫 那一對拆開。
+    let files_cell = match find.on_disk() {
+        true => text,
+        false => quiet,
+    };
+    y += 1;
+    draw_box(buf, Field::Include, &say!("search.label.include"), &find.include, y);
+    y += 1;
+    draw_box(buf, Field::Exclude, &say!("search.label.exclude"), &find.exclude, y);
+    y += 1;
+    switch(buf, y, tick(find.hidden), &say!("search.hidden"), 9, files_cell);
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
@@ -11555,18 +11583,21 @@ fn squeezed(text: &str) -> String {
         }
         ed.on_key(Key::Esc);
         // 一路往下走，走到單子深處——這時窗口一定捲過。
-        keep_drawing(&mut ed, &config, &mut seats, 40, 18, &"j".repeat(30));
+        // Warning: **窗口 2026-10-01 加高到 24 行**：面板底下多了包含／排除／包含隱藏
+        // 和忽略三行，18 行的窗口裏名單只剩兩三行，亮條一走就頂到頭，這一條要
+        // 驗的「窗口不許跟着動」就沒有地方發生。
+        keep_drawing(&mut ed, &config, &mut seats, 40, 24, &"j".repeat(30));
         let deep = seats.listed[0];
         assert!(deep > 0, "走這麽遠，窗口該捲過了");
         let at = ed.search().selected;
 
         // **往上按三下：窗口一動不動，選中的那一行自己往上走。**
-        keep_drawing(&mut ed, &config, &mut seats, 40, 18, "kkk");
+        keep_drawing(&mut ed, &config, &mut seats, 40, 24, "kkk");
         assert_eq!(ed.search().selected, at - 3, "亮條走了三行");
         assert_eq!(seats.listed[0], deep, "Warning: 窗口不許跟着動——這就是報的那一條");
 
         // 一直往上，走到窗口頂上就該翻了。
-        keep_drawing(&mut ed, &config, &mut seats, 40, 18, &"k".repeat(30));
+        keep_drawing(&mut ed, &config, &mut seats, 40, 24, &"k".repeat(30));
         assert_eq!(ed.search().selected, 0, "走到第一條");
         assert_eq!(seats.listed[0], 0, "翻到了單子頭上");
     }
@@ -20385,9 +20416,10 @@ fn squeezed(text: &str) -> String {
         editor.open_file(dir.join("一.md")).unwrap();
 
         editor.execute(":search").unwrap();
-        // 位置那一格：按 `0` 從本文件換到本文件夾（2026-09-29 起它畫在開關那一
-        // 列的頭上，`jk` 走不上去），然後回搜索框打字。
+        // 位置那一格：按兩下 `0`，本文件 → 緩衝區 → 工作路徑（2026-10-01 的四
+        // 檔輪替），然後回搜索框打字。
         editor.on_key(Key::Esc);
+        editor.on_key(Key::Char('0'));
         editor.on_key(Key::Char('0'));
         editor.on_key(Key::Char('k'));
         editor.on_key(Key::Char('i'));
@@ -20395,12 +20427,14 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Enter);
         assert!(editor.is_scanning(), "那一趟是欠着的——這正是要拍的那一刻");
 
+        // Warning: **24 行，不是 20**：面板 2026-10-01 長了三行（包含／排除／包含隱藏
+        // 和忽略），20 行的窗口裏名單只畫得下第一個檔。
         let shot = frame_to_text(
             &mut editor,
             &Config::default(),
             &ImeSession::empty(Scheme::LINGMING),
             80,
-            20,
+            24,
             None,
         );
         assert!(!editor.is_scanning(), "拍完不該還欠着：{shot}");

@@ -52,16 +52,31 @@ pub enum Where {
     /// it is in memory, and a pass over it costs nothing worth counting.
     #[default]
     Buffer,
-    /// The folder this file is in, and everything under it — `-cd`.
-    Folder,
-    /// **這一節坐在哪本書上**——開 yumete 的時候定一次的那個根（`-gd`）。
+    /// **Every open buffer**, the unnamed drafts included — in memory, like
+    /// [`Where::Buffer`].
     ///
-    /// Warning: **2026-09-27 和「工作區」合並了。** 從前是兩個：「工作區」是啓動
-    /// yumete 時 shell 所在的目錄，「項目」是從那裏往上找到的 `.git`／`.yumete`。
-    /// 兩個名字說不清區別，而多數時候它們是同一個地方。現在只有一個，見
-    /// `Editor::root`。
+    /// vim has it (`:bufdo`) and telescope has it (`grep_open_files`); helix's
+    /// search does not, though its `空格 b` picker is exactly this list.
+    Buffers,
+    /// The working directory, and everything under it — where `ye` was typed,
+    /// moved by `:cd`.
+    Working,
+    /// **The project** — the nearest ancestor of the working directory holding
+    /// `.yumete`, `.git`, `.jj` or `.svn`.
+    ///
+    /// Warning: **Reckoned from the working directory, never from the file being
+    /// edited** (2026-10-01 定). The two part company exactly when `gd` has
+    /// jumped somewhere else — into homebrew, say — and a scope that followed
+    /// the cursor would then search homebrew rather than the project the
+    /// reader is writing. helix's one cursor-following root is the no-LSP
+    /// `空格 S`, and its comment says that is for two projects open in a
+    /// split, which is not a thing here.
     Project,
     /// A folder named outright: `:search ../稿`.
+    ///
+    /// Warning: **Not in the `0` cycle, and not editable in the panel** (2026-10-01
+    /// 定). A typed path is not something 「next」 can reach, and the cycle used
+    /// to wipe it on the way past.
     Named(std::path::PathBuf),
 }
 
@@ -70,29 +85,43 @@ impl Where {
     /// 侧栏切换 github directory, working directory, present directory？现在位置
     /// 只能输入路径」）。
     ///
-    /// 本文件 → 本文件夾 → 工作目錄 → git 項目 → 回到本文件。Warning: **指名道姓那一種
+    /// 本文件 → 緩衝區 → 工作路徑 → 項目路徑 → 回到本文件。Warning: **指名道姓那一種
     /// 不在圈裏**：它是使用者自己打的一個路徑，輪到它就回本文件——一個「下一個」
     /// 走不到、也走不出的值不該卡在環上。
     pub fn next(&self) -> Where {
         match self {
-            Where::Buffer => Where::Folder,
-            Where::Folder => Where::Project,
-            // **第四檔是「指定文件夾…」**（2026-09-27 定）。從前它不在圈裏，於是
-            // 那一格唯一的用法是打字，而打字是看不出來的——三個試用的人裏有兩個
-            // 把這一格標成拦路，理由都是「我看不出它能填什麼，填錯了它也不說」。
-            Where::Project => Where::Named(std::path::PathBuf::new()),
+            Where::Buffer => Where::Buffers,
+            Where::Buffers => Where::Working,
+            Where::Working => Where::Project,
+            Where::Project => Where::Buffer,
+            // **指定文件夾只能用命令進來**（2026-10-01 定）。從前它是圈上的第四
+            // 檔兼輸入框，於是 `0` 繞一圈就把打好的路徑清掉了。
             Where::Named(_) => Where::Buffer,
         }
     }
 
     /// Whether this is searched again on every keystroke.
     ///
-    /// Warning: **Only the buffer is.** Everything else walks the disk, and a
-    /// hundred chapters per letter typed is not a thing to do — those wait for
-    /// `Enter`. The panel says which it is, because one panel behaving two
-    /// ways with nothing on the screen to tell them apart is the trap.
+    /// Warning: **Only what is already in memory is.** The disk scopes walk files,
+    /// and a hundred chapters per letter typed is not a thing to do — those
+    /// wait for `Enter`. The panel says which it is, because one panel
+    /// behaving two ways with nothing on the screen to tell them apart is the
+    /// trap.
     pub fn live(&self) -> bool {
-        matches!(self, Where::Buffer)
+        matches!(self, Where::Buffer | Where::Buffers)
+    }
+
+    /// **Whether this scope walks the disk** — and so whether 包含, 排除 and
+    /// 包含隱藏和忽略 mean anything (2026-10-01 定).
+    ///
+    /// 本文件 and 緩衝區 are a list already in front of the reader; narrowing
+    /// it by a path glob is not a thing anyone wants, and a hidden file you
+    /// have open is on the list by definition. Neither reference implementation
+    /// offers the combination either: telescope's `grep_open_files` silently
+    /// drops `search_dirs` (`__files.lua:172-180`), and vim's `:bufdo` takes no
+    /// file argument.
+    pub fn walks_the_disk(&self) -> bool {
+        matches!(self, Where::Working | Where::Project | Where::Named(_))
     }
 }
 
@@ -146,6 +175,24 @@ pub enum Field {
     /// 退出去重按一個命令。它是個開關而不是另一扇面板：面板是同一扇，勾上說的
     /// 是「這些我要改」，不是「剛纔找到的不算了」。
     Replacing,
+    /// **只搜哪些文件** —— a glob, or several separated by commas
+    /// (2026-10-01 定, VS Code's 「files to include」).
+    ///
+    /// Warning: **Only means anything for a scope that walks the disk.** 本文件 and
+    /// 緩衝區 are a list already in front of the reader; see
+    /// [`Where::walks_the_disk`].
+    Include,
+    /// **哪些文件不搜** —— the same, the other way round.
+    Exclude,
+    /// **連隱藏文件和 `.gitignore` 裏的一起搜**（2026-10-01 定）。
+    ///
+    /// 出廠關着：跳過隱藏文件、尊重 `.gitignore`，同 helix 與 telescope 的默認。
+    /// vim 的默認 `grepprg` 是 `rg --vimgrep -uu`，故意關掉這兩道閘來跟傳統
+    /// grep 對齊——那是它要兼容的歷史，不是我們的。
+    ///
+    /// Warning: **號碼排在 保留大小寫 後面**，和它一樣是「畫得出來纔算數」那一族的
+    /// 尾巴，所以上面那七個的號碼一個都不動。
+    Hidden,
     /// The list of what was found. Not a cell to type in; `Tab` reaches it so
     /// that walking the form ends up where the answers are.
     Results,
@@ -158,7 +205,7 @@ impl Field {
     ///
     /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
     /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`／`[ ]` 自然照這個讀法。
-    pub const ALL: [Field; 12] = [
+    pub const ALL: [Field; 15] = [
         Field::Query,
         Field::Replace,
         // **位置排在開關那一列的頭上**（2026-09-29 定）。它是四選一，按 `0` 換一
@@ -173,6 +220,11 @@ impl Field {
         Field::Fuzzy,
         Field::Replacing,
         Field::PreserveCase,
+        // **「搜哪些文件」那三格攢在最下面**（2026-10-01 定）。三格一族，而上面
+        // 七個開關的號碼一個不動。缺點是「位置」還在最上面，和這三格隔開了。
+        Field::Include,
+        Field::Exclude,
+        Field::Hidden,
         Field::Results,
     ];
 
@@ -185,7 +237,7 @@ impl Field {
     /// Warning: **Every one is always drawn**, 模糊 included — it goes quiet while
     /// 替換 is ticked rather than disappearing, so the numbers below it do not
     /// shift under the reader's eye.
-    pub const SWITCHES: [Field; 8] = [
+    pub const SWITCHES: [Field; 9] = [
         Field::Case,
         Field::Glyphs,
         Field::Pinyin,
@@ -193,9 +245,11 @@ impl Field {
         Field::Whole,
         Field::Fuzzy,
         Field::Replacing,
-        // Warning: **第八個只在替換那一檔畫得出來**，所以它排在最後：畫不出來的時候
-        // 上面七個的號碼一個都不動。
+        // Warning: **第八個沒在替換的時候畫灰，不是不畫**（2026-10-01 定，作者原話：
+        // 「8號可以灰掉嗎？」）。從前它整行不畫，於是面板上是 1-7 然後一個 9，
+        // 中間缺一個號。灰掉和 模糊 那一行同一個辦法：位子留着，號碼連着。
         Field::PreserveCase,
+        Field::Hidden,
     ];
 
     /// A tick or a state rather than something to type in or a list to walk.
@@ -209,19 +263,26 @@ impl Field {
     /// 停上去沒有用處，`0` 換檔就夠了——它 2026-09-29 挪到開關那一列的頭上、號碼
     /// 寫成 `0` 之後，和底下七個就是同一種東西。
     ///
-    /// Warning: **第四檔「指定文件夾…」是個輸入框，一定要停。** 跳過去就沒法改那條路
-    /// 徑了，而 `0` 繞一圈回來會把打好的路徑清掉（`step_the_scope` 每走一檔都重
-    /// 寫 `scope_text`）。`naming` 就是問這一句，答案在 [`Search::takes_text`]。
-    pub fn walked_past(self, naming: bool) -> bool {
-        self.is_switch() || (self == Field::Scope && !naming)
+    /// Warning: **位置那一格再也停不住了**（2026-10-01 定）。它是四選一，`0` 換一檔；
+    /// 指定文件夾只能 `:search 某目錄` 進來，進來之後面板裏改不了，所以那一格
+    /// 沒有任何可以打字的狀態了。
+    ///
+    /// Warning: **包含／排除看範圍走不走磁碟。** 選到 本文件 或 緩衝區 的時候它們畫灰、
+    /// 也停不住——停在一個按什麼都沒用的框上，比跳過它更難懂。
+    pub fn walked_past(self, on_disk: bool) -> bool {
+        match self {
+            Field::Scope => true,
+            Field::Include | Field::Exclude => !on_disk,
+            other => other.is_switch(),
+        }
     }
 
     /// Whether this cell is typed into at all (so `i` and the IME belong here).
     ///
-    /// Warning: **位置那一格是有條件的**，問 [`Search::takes_text`] 纔算數：它平常是
-    /// 一個四選一，只有選到「指定文件夾…」的時候纔打得了字。
+    /// Warning: **包含／排除是有條件的**，問 [`Search::takes_text`] 纔算數：範圍不走
+    /// 磁碟的時候那兩格畫灰，打不了字。位置那一格從 2026-10-01 起永遠打不了。
     pub fn takes_text(self) -> bool {
-        matches!(self, Field::Scope | Field::Query | Field::Replace)
+        matches!(self, Field::Query | Field::Replace | Field::Include | Field::Exclude)
     }
 
     /// The next cell in that direction, wrapping — **the boxes and the list,
@@ -242,10 +303,10 @@ impl Field {
     /// `3`，鍵就落在那一格上了，而它不在可走的名單裏——從前是拿「名單第 0 格」
     /// 頂替，於是按完 `0` 再按 `k` 跳到了名單最底下的結果。所以走的是**畫出來
     /// 的那張全表**，一格一格往那個方向找，碰到第一個停得住的就停。
-    pub fn step(self, back: bool, replacing: bool, naming: bool) -> Field {
+    pub fn step(self, back: bool, replacing: bool, on_disk: bool) -> Field {
         let stops = |f: Field| match f {
             Field::Replace => replacing,
-            f => !f.walked_past(naming),
+            f => !f.walked_past(on_disk),
         };
         let n = Field::ALL.len();
         let mut at = Field::ALL.iter().position(|&f| f == self).unwrap_or(0);
@@ -311,6 +372,14 @@ pub struct Hit {
     /// the offsets above were counted when the file was read, and a buffer
     /// opened since may have moved everything after the first edit.
     pub nth: usize,
+    /// **Which buffer it is in**, when the answer is a buffer rather than a
+    /// file — the 緩衝區 scope (2026-10-01 定).
+    ///
+    /// Warning: **An unnamed draft has no path to reach it by**, and two of them
+    /// have the same `[scratch]` label, so a path cannot say which. Only the
+    /// 緩衝區 scope fills this in; every other scope reaches a hit by opening
+    /// the file named in [`Hit::file`].
+    pub buffer: Option<u64>,
 }
 
 /// **How many hits the list holds.** Every one is counted; this many are kept.
@@ -373,6 +442,12 @@ pub struct Search {
     /// 與 [`Self::scope`] 分開存，因為它們不是同一個東西：這是**打了一半的**，
     /// 那是**已經在找的**。Enter 纔把這個變成那個（`Editor::take_scope`）。
     pub scope_text: String,
+    /// **只搜哪些文件** —— 逗號隔開的幾條 glob，見 [`Field::Include`]。
+    pub include: String,
+    /// **哪些文件不搜** —— 同上，見 [`Field::Exclude`]。
+    pub exclude: String,
+    /// 連隱藏文件和 `.gitignore` 裏的一起搜。出廠關着，見 [`Field::Hidden`]。
+    pub hidden: bool,
     /// The files whose hits are folded away.
     pub folded: std::collections::BTreeSet<std::path::PathBuf>,
     /// What the paths in [`Hit::file`] are relative to, so opening one can
@@ -571,8 +646,9 @@ impl Search {
     /// Whichever box the keys are in.
     fn box_here(&mut self) -> &mut String {
         match self.field {
-            Field::Scope => &mut self.scope_text,
             Field::Replace => &mut self.replace,
+            Field::Include => &mut self.include,
+            Field::Exclude => &mut self.exclude,
             _ => &mut self.query,
         }
     }
@@ -648,28 +724,33 @@ impl Search {
     /// What is in the box the keys are in.
     /// **這一格現在打得了字嗎。**
     ///
-    /// 「搜」和「換」永遠打得了。「位置」是個四選一（本文件／本文件夾／項目／
-    /// 指定文件夾…），只有選到最後那一檔纔打得了字——`0` 或者 `h`／`l` 換檔
-    /// （2026-09-27 定）。
+    /// 「搜」和「換」永遠打得了。「包含」「排除」只在範圍走磁碟的時候打得了
+    /// （2026-10-01 定）。「位置」永遠打不了：它是四選一，`0` 換一檔，而指定
+    /// 文件夾只能 `:search 某目錄` 進來。
     pub fn takes_text(&self) -> bool {
         match self.field {
-            Field::Scope => self.naming(),
+            Field::Include | Field::Exclude => self.on_disk(),
             other => other.takes_text(),
         }
     }
 
-    /// **位置那一格現在是不是一個輸入框**——只問位置，不問鍵在哪一格。
+    /// **現在這一檔走不走磁碟** —— 包含／排除／包含隱藏和忽略 算不算數。
+    pub fn on_disk(&self) -> bool {
+        self.scope.walks_the_disk()
+    }
+
+    /// **位置那一格現在是不是一條打出來的路徑。**
     ///
-    /// Warning: 和 [`Search::takes_text`] 不是一回事：那一支問的是**鍵所在的**那一格，
-    /// 站在查詢框上它一律回真。`jk` 要不要停在位置那一行，問的是這一支。
+    /// 只剩畫的時候用得上（那一行要印出路徑而不是一個檔名），面板裏改不了它。
     pub fn naming(&self) -> bool {
         matches!(self.scope, Where::Named(_))
     }
 
     pub fn typed(&self) -> &str {
         match self.field {
-            Field::Scope => &self.scope_text,
             Field::Replace => &self.replace,
+            Field::Include => &self.include,
+            Field::Exclude => &self.exclude,
             _ => &self.query,
         }
     }

@@ -2954,21 +2954,21 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "word-discover-cd",
+        name: "word-discover-working",
         aliases: &[],
-        help: "cmd.word-topics.discover-cd",
+        help: "cmd.word-topics.discover-working",
         needs: &[],
         params: &[],
         build: Some(|_| {
             Ok(Command::Word(WordCommand::Discover(
-                crate::search_panel::Where::Folder,
+                crate::search_panel::Where::Working,
             )))
         }),
     },
     Entry {
-        name: "word-discover-gd",
+        name: "word-discover-project",
         aliases: &[],
-        help: "cmd.word-topics.discover-gd",
+        help: "cmd.word-topics.discover-project",
         needs: &[],
         params: &[],
         build: Some(|_| {
@@ -3798,17 +3798,25 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "replace-cd",
+        name: "replace-buffers",
         aliases: &[],
-        help: "cmd.commands.replace-cd",
+        help: "cmd.commands.replace-buffers",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Folder))),
+        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Buffers))),
     },
     Entry {
-        name: "replace-gd",
+        name: "replace-working",
         aliases: &[],
-        help: "cmd.commands.replace-gd",
+        help: "cmd.commands.replace-working",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Working))),
+    },
+    Entry {
+        name: "replace-project",
+        aliases: &[],
+        help: "cmd.commands.replace-project",
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Project))),
@@ -3833,17 +3841,25 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "search-cd",
+        name: "search-buffers",
         aliases: &[],
-        help: "cmd.commands.search-cd",
+        help: "cmd.commands.search-buffers",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Folder))),
+        build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Buffers))),
     },
     Entry {
-        name: "search-gd",
+        name: "search-working",
         aliases: &[],
-        help: "cmd.commands.search-gd",
+        help: "cmd.commands.search-working",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Working))),
+    },
+    Entry {
+        name: "search-project",
+        aliases: &[],
+        help: "cmd.commands.search-project",
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Project))),
@@ -5309,8 +5325,8 @@ mod tests {
         use crate::search_panel::Where;
         for (line, want) in [
             (":word-discover", Where::Buffer),
-            (":word-discover-cd", Where::Folder),
-            (":word-discover-gd", Where::Project),
+            (":word-discover-working", Where::Working),
+            (":word-discover-project", Where::Project),
         ] {
             assert_eq!(parse(line), Ok(Command::Word(WordCommand::Discover(want))), "{line}");
         }
@@ -5924,7 +5940,7 @@ mod tests {
         // …and a word shared by a whole family answers with the family (#452).
         assert_eq!(
             found("discover"),
-            ["word-discover", "word-discover-cd", "word-discover-gd"]
+            ["word-discover", "word-discover-working", "word-discover-project"]
         );
         assert_eq!(found("close"), ["buffer-close"]);
         assert_eq!(found("footnote"), ["markdown-footnote"]);
