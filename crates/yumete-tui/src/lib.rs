@@ -330,7 +330,7 @@ fn frame_to(
             // 本項目那一頁跟着**工作路徑**走，同啓動那一趟與 `:config-reload`
             // （2026-10-01）。從前它問進程的 cwd，於是面板改的是另一個項目的
             // `config.toml`。
-            Some(yumete_config::panel::local_sheet_path(&editor.working_dir())),
+            Some(yumete_config::panel::local_sheet_path(&editor.root())),
         )
     });
     let settings = settings.or(mine.as_ref());
@@ -1410,7 +1410,7 @@ pub fn run(
                 // 不算——這時候配置說什麼就是什麼。
                 if editor.take_config_reload() {
                     // 項目配置從**工作路徑**往上找，同啓動那一趟（2026-10-01）。
-                    let (fresh, said) = Config::load_reporting_from(&editor.working_dir());
+                    let (fresh, said) = Config::load_reporting_from(&editor.root());
                     settings::apply(&fresh, editor, None);
                     settings::apply_ime(&fresh, ime);
                     *config = fresh;
