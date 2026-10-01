@@ -9294,6 +9294,53 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:search 某目錄` 的相對路徑從工作路徑算，絕對路徑就是絕對路徑**（2026-10-01 定）。
+///
+/// 從前它從項目路徑算，而且開頭一個 `/` 也當項目根——於是在 `crates/` 裏敲
+/// `:search yumete-core` 報「沒有這個文件夾」，而同一個位置 `:open yumete-core/…`
+/// 開得了；而且 `strip_prefix("/")` 把**所有**絕對路徑都接到項目根後面，絕對路徑
+/// 根本打不進來。
+///
+/// 調研（2026-10-01）：收相對路徑的兩家都要先寫一個記號纔按項目根算——VS Code 是
+/// `./`、Sublime 是 `//`，兩家的單槓都留給絕對路徑；Emacs 的項目根**就是** git 根，
+/// 可它一讓你打路徑，基準就切回當前緩衝的目錄。**把光禿禿的相對路徑按版本庫根算，
+/// 沒有一家這麼做。**
+#[test]
+fn a_named_folder_is_reckoned_from_the_working_directory() {
+    use crate::search_panel::Where;
+    let dir = a_little_book("searchnamed");
+    let deep = dir.join("卷一");
+    let mut ed = Editor::new();
+    // 項目路徑是書根，工作路徑挪到卷一裏——兩者從此不是同一個地方。
+    ed.set_root(&dir);
+    assert!(ed.set_working_dir(&deep), "挪得進去");
+
+    // ① 相對路徑從**工作路徑**算。書根底下也有一個 `c.md`，可相對的那一個不是它。
+    ed.execute(":search .").unwrap();
+    let here = ed.search().scope.clone();
+    let Where::Named(named) = here else { panic!("{:?}", ed.search().scope) };
+    assert_eq!(named, std::path::PathBuf::from("."), "屏幕上寫着你打的那個字");
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    let in_volume = ed.search().total;
+
+    // ② 同一個詞，項目路徑那一檔多出書根底下那一處。
+    ed.execute(":search-project").unwrap();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert!(ed.search().total > in_volume, "項目比卷一大：{} vs {in_volume}", ed.search().total);
+
+    // ③ **絕對路徑就是絕對路徑**，不再被接到項目根後面。
+    ed.execute(&format!(":search {}", dir.display())).unwrap();
+    assert!(matches!(ed.search().scope, Where::Named(_)), "{:?}", ed.status());
+
+    // ④ 打不存在的還是當場說，不悄悄退回「只搜這個文件」。
+    ed.execute(":search 沒有這個").unwrap();
+    assert_eq!(ed.status(), say!("search.no-such-folder", "沒有這個"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **二進制檔不搜，也不算進走查的地板**（2026-10-01 定，作者提的）。
 ///
 /// 起因是「搜索隱藏和忽略」那個開關：開着它搜 yumete 自己的倉，21 處反而掉成

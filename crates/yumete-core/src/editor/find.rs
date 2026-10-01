@@ -262,26 +262,29 @@ impl Editor {
             Where::Buffer | Where::Buffers => None,
             Where::Working => Some(self.working_dir()),
             Where::Project => Some(self.root()),
-            // Warning: **相對路徑從根算起，不從當前緩衝算起**（2026-09-27 定）。
-            // 從前 `.` 是「當前緩衝的文件夾」，於是換一個 buffer 它就換了意思，
-            // 而屏幕上看不出來。
+            // **相對路徑從工作路徑算起，絕對路徑就是絕對路徑**（2026-10-01 定）。
+            // 和 `:open`、shell、命令行補全同一條規矩——編輯器裏每一條路徑都從同
+            // 一個地方算起，這一支從前是唯一的例外。
             //
-            // Warning: **開頭一個 `/` 也當根算**，同 VS Code 的「包含文件」框：
-            // `/卷一` 是根底下的卷一，不是磁盤根底下的。要出根就寫 `~/…`——
-            // 從前填一個 `/` 進來，編輯器去遍歷整塊磁盤。
+            // Warning: **從前它從項目路徑算起，開頭一個 `/` 也當項目根**（2026-09-27
+            // 定，當時引的理由是「同 VS Code 的包含文件框」）。2026-10-01 查了源
+            // 碼，**VS Code 做的正好相反**：開頭一個 `/` 在它那裏是絕對路徑，自成
+            // 一個搜索根、跑到工作區外面去（`queryBuilder.ts:459-472`）。真正拿兩
+            // 道槓說「項目根」的是 Sublime，而它同樣把單槓留給絕對路徑。
+            //
+            // 那條規矩還有一個沒人發現的代價：`strip_prefix("/")` 把**所有**絕對
+            // 路徑都接到了項目根後面，於是 `:search /usr/share/dict` 報「沒有這個
+            // 文件夾」——絕對路徑根本打不進來。
+            //
+            // 要搜項目根就按號碼換到「項目路徑」那一檔，本來就有。
             Where::Named(path) => {
                 // **開頭那個 `~` 要展開**（2026-10-01 作者報的：`:s ~/Dropbox` 無效）。
-                // 從前它一路當相對路徑接在根後面，於是 `~/Dropbox` 解成
-                // `<項目路徑>/~/Dropbox`，而狀態欄說的是「沒有這個文件夾」——
-                // 聽着像那個目錄不在，其實是我們根本沒去那裏找。`:open` 一直是
-                // 展開的（`Self::expand_tilde`），這一支跟上。
-                let path = &Self::expand_tilde(&path.to_string_lossy());
-                let full = match path.strip_prefix("/") {
-                    Ok(inside) => self.root().join(inside),
-                    Err(_) => match path.is_absolute() {
-                        true => path.clone(),
-                        false => self.root().join(path),
-                    },
+                // 從前它一路當相對路徑接在根後面，狀態欄說「沒有這個文件夾」——
+                // 聽着像那個目錄不在，其實是我們根本沒去那裏找。
+                let path = Self::expand_tilde(&path.to_string_lossy());
+                let full = match path.is_absolute() {
+                    true => path,
+                    false => self.working_dir().join(path),
                 };
                 full.is_dir().then_some(full)
             }
