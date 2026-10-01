@@ -1044,6 +1044,7 @@ dependencies = [
  "ignore",
  "libc",
  "regex",
+ "regex-syntax",
  "ropey",
  "serde",
  "serde_json",

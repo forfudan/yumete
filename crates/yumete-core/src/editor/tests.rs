@@ -8357,19 +8357,22 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     ed.open_search();
     assert_eq!(ed.search_for_test().field, Field::Query, "開在查詢框上");
 
-    // ① **範圍那一格按 `0` 到，`jk` 永遠走不上去**（2026-10-01 起它再也不是輸
-    // 入框：四選一，`0` 換一檔；指定文件夾只能 `:search 某目錄` 進來）。
+    // ① **範圍那一格按 `6` 到，`jk` 永遠走不上去**（2026-10-01 起它再也不是輸
+    // 入框：四選一，`6` 換一檔；指定文件夾只能 `:search 某目錄` 進來）。
+    // Warning: **號碼從前是 `0`**，2026-10-01 挪到開關那一列的末尾：它跟着搬到了包含
+    // ／排除上面，和那三格合成「搜哪裏、搜哪些」一組，號碼接着往下排。同日幾個
+    // 開關合併，於是它落在 `6`。
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search_for_test().field, Field::Results, "j 一步到結果，不停在範圍上");
-    ed.on_key(Key::Char('0'));
-    assert_eq!(ed.search_for_test().field, Field::Scope, "0 把鍵交到範圍那一格");
+    ed.on_key(Key::Char('6'));
+    assert_eq!(ed.search_for_test().field, Field::Scope, "6 把鍵交到範圍那一格");
     assert!(matches!(ed.search_for_test().scope, Where::Buffers), "本文件 → 緩衝區");
-    ed.on_key(Key::Char('0'));
+    ed.on_key(Key::Char('6'));
     assert!(matches!(ed.search_for_test().scope, Where::Working), "緩衝區 → 工作路徑");
-    ed.on_key(Key::Char('0'));
+    ed.on_key(Key::Char('6'));
     assert!(matches!(ed.search_for_test().scope, Where::Project), "工作路徑 → 項目路徑");
-    ed.on_key(Key::Char('0'));
+    ed.on_key(Key::Char('6'));
     assert!(matches!(ed.search_for_test().scope, Where::Buffer), "轉了一圈回到本文件");
     assert_eq!(ed.mode(), Mode::Normal, "輪盤從頭到尾不進打字狀態");
     ed.on_key(Key::Char('i'));
@@ -8381,8 +8384,8 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     // Warning: **命令不許把開着的面板開關掉**（2026-10-01 撞到）。
     assert!(ed.sidebar_focused(), ":search 進來，鍵在面板上");
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('0'));
-    assert!(matches!(ed.search_for_test().scope, Where::Buffer), "`0` 從它身上回本文件");
+    ed.on_key(Key::Char('6'));
+    assert!(matches!(ed.search_for_test().scope, Where::Buffer), "`6` 從它身上回本文件");
 
     // ③ **包含／排除看範圍走不走磁碟**（2026-10-01 定）。走磁碟纔停得住。
     ed.search_for_test().scope = Where::Project;
@@ -8403,14 +8406,19 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     ed.on_key(Key::Char('k'));
     assert_eq!(ed.search_for_test().field, Field::Query, "回來也跳過");
 
-    // ④ 替換是第七個開關，按 `7` 勾；勾上就把模糊放下。
-    // Warning: 2026-09-25 加了「簡繁異體」和「拼音」之後，它後面那幾個號碼順移了兩位。
+    // ④ **替換是第五行，一行三態**（2026-10-01 定）：關 → 字面替換 → 智能大小寫
+    // → 回關。開上就把模糊放下。
     ed.search_for_test().fuzzy = true;
-    ed.on_key(Key::Char('7'));
-    assert!(ed.search_for_test().replacing, "7 勾上了");
+    ed.on_key(Key::Char('5'));
+    assert!(ed.search_for_test().replacing, "5 開上了");
+    assert!(!ed.search_for_test().preserve_case, "第二檔是出廠那一種：打什麼就寫什麼");
     assert!(!ed.search_for_test().fuzzy, "Warning: 模糊自動關掉——鬆的範圍不許拿去替換");
-    ed.on_key(Key::Char('7'));
-    assert!(!ed.search_for_test().replacing, "再按一下撤回");
+    ed.on_key(Key::Char('5'));
+    assert!(ed.search_for_test().replacing, "第三檔還在替換");
+    assert!(ed.search_for_test().preserve_case, "第三檔是跟着原文的大小寫");
+    ed.on_key(Key::Char('5'));
+    assert!(!ed.search_for_test().replacing, "轉一圈回到關");
+    assert!(!ed.search_for_test().preserve_case, "關了就不留着上一檔的設定");
 
     // ② 到了結果列表的頂上再按 `k`，出得去。
     ed.search_for_test().field = Field::Results;
@@ -8781,8 +8789,8 @@ fn the_search_panel_looks_through_the_buffer_as_you_type() {
     assert_eq!(ed.search().total, 0, "a literal dot is not in the text");
     ed.on_key(Key::Esc);
     assert_eq!(ed.mode(), Mode::Normal, "Esc leaves the box, not the panel");
-    // 正則是第四個開關——`4`，不必走過去（2026-09-24 定，2026-09-25 順移兩位）。
-    ed.on_key(Key::Char('4'));
+    // 匹配模式是第三行，按一下從 字面 轉到 正則（2026-10-01 合併）。
+    ed.on_key(Key::Char('3'));
     assert!(ed.search().regex);
     assert!(ed.search().total > 0, "as a pattern it matches every character");
 
@@ -8898,10 +8906,10 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     assert_eq!(ed.search().query, "霜大降石", "插在光標那裏");
 
     // ④ 走到別的格子，光標跟着挪到那一格的末尾——一個 caret 伺候所有的框。
-    // Warning: **位置那一格 `jk` 走不上去**（2026-09-29 起它和開關同一列），按 `0`；
+    // Warning: **位置那一格 `jk` 走不上去**（2026-09-29 起它和開關同一列），按 `6`；
     // 而 2026-10-01 起它再也不是輸入框，所以光標不往那裏挪，也不畫在那裏。
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('0'));
+    ed.on_key(Key::Char('6'));
     assert_eq!(ed.search().field, Field::Scope);
     assert!(!ed.search().takes_text(), "位置那一格打不了字");
 
@@ -9012,21 +9020,25 @@ fn a_query_in_one_script_finds_the_other_writing() {
     }
     assert_eq!(ed.search().total, 2, "「头发」是含混的那一個，兩邊都中");
 
-    // 出廠開着，按 `2` 關掉就只剩本來的寫法。
+    // **中文匹配是第二行，四態**（2026-10-01 合併）：繁簡+拼音 → 繁簡 → 拼音
+    // → 無。按兩下就走到「只剩拼音」，簡繁折疊關掉了。
     assert!(ed.search().glyphs, "出廠開着");
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('2'));
-    assert!(!ed.search().glyphs);
+    assert!(ed.search().glyphs && !ed.search().pinyin, "第二態：只剩繁簡");
+    ed.on_key(Key::Char('2'));
+    assert!(!ed.search().glyphs && ed.search().pinyin, "第三態：只剩拼音");
     assert_eq!(ed.search().total, 1, "關掉之後只有「头发」那一行");
 
-    // Warning: **和正則互斥**：正則開着的時候它不起作用，也翻不動。
+    // Warning: **2026-10-01 起和正則不再互斥。** 從前整串改寫會把使用者寫的 `.` `*`
+    // 一起吃掉，所以兩個開關互斥；現在 `glyphs::widen_pattern` 先解析式子，只折
+    // 「原樣打出來的那些字」。
     ed.on_key(Key::Char('2'));
-    assert!(ed.search().glyphs);
-    ed.on_key(Key::Char('4'));
+    ed.on_key(Key::Char('2'));
+    assert!(ed.search().glyphs && ed.search().pinyin, "轉一圈回到出廠那一態");
+    ed.on_key(Key::Char('3'));
     assert!(ed.search().regex);
-    ed.on_key(Key::Char('2'));
-    assert!(ed.search().glyphs, "正則開着，這一個翻不動——畫灰的鍵按了不該有事");
-    assert_eq!(ed.search().total, 1, "正則那一路照字面走，不折疊字形");
+    assert_eq!(ed.search().total, 2, "正則底下照樣折字形：「头发」兩邊都中");
     assert_eq!(ed.search().field, Field::Query, "按號碼不挪焦點");
 }
 
@@ -9065,8 +9077,11 @@ fn letters_find_the_characters_they_are_read_as() {
         ed.on_key(Key::Char(c));
     }
     assert_eq!(ed.search().total, 1);
+    // 中文匹配按三下：繁簡+拼音 → 繁簡 → 拼音 → 無。
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('3'));
+    for _ in 0..3 {
+        ed.on_key(Key::Char('2'));
+    }
     assert!(!ed.search().pinyin);
     assert_eq!(ed.search().total, 0, "關掉就只剩字面那一路，而文稿裏沒有這七個字母");
     assert_eq!(ed.search().field, Field::Query, "按號碼不挪焦點");
@@ -9085,9 +9100,11 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
     type_keys(&mut ed, "他説");
     assert_eq!(ed.search().total, 1, "as a string, only the exact one");
 
-    // 模糊是第六個開關。Warning: 光標走不上去（2026-09-24）——`Esc` 出框，按 `6`。
+    // 模糊是匹配模式的第三態。Warning: 光標走不上去（2026-09-24）——`Esc` 出框，
+    // 按兩下 `3`：字面 → 正則 → 模糊。
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('6'));
+    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Char('3'));
     assert!(ed.search().fuzzy);
 
     // 他輕輕地説 as well as 他説 — and **not** the third line, where the two
@@ -9102,9 +9119,12 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
     // 「nearly」.
     assert_eq!(ed.last_search(), "他説");
 
-    // Asking for 正則 puts 模糊 down — they are alternatives, and a dimmed
-    // switch that still flipped would say two things at once.
-    ed.on_key(Key::Char('4'));
+    // **匹配模式是三選一**（2026-10-01 起）：字面 → 正則 → 模糊 → 回字面。
+    // 從前它是兩個獨立的勾，而「兩個都關」纔是默認——那一檔沒有名字。此刻停在
+    // 模糊，再按兩下繞回正則。
+    ed.on_key(Key::Char('3'));
+    assert!(!ed.search().fuzzy && !ed.search().regex, "模糊 → 字面");
+    ed.on_key(Key::Char('3'));
     assert!(ed.search().regex);
     assert!(!ed.search().fuzzy, "正則 and 模糊 are not both on");
 }
@@ -9114,21 +9134,22 @@ fn the_loose_switch_finds_a_half_remembered_phrase() {
 /// manuscript a range the writer cannot predict.
 #[test]
 fn the_loose_switch_is_not_there_when_the_panel_replaces() {
-    use crate::search_panel::Field;
     let mut ed = typed("他輕輕地説了一句。\n");
     type_keys(&mut ed, " /");
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('6'));
+    // 匹配模式按兩下：字面 → 正則 → 模糊。
+    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Char('3'));
     assert!(ed.search().fuzzy);
 
     ed.execute(":replace").unwrap();
     assert!(ed.search().replacing);
     assert!(!ed.search().fuzzy, "it comes off when the panel starts changing things");
-    // …and the cell is not in the form at all, so `Tab` cannot reach it.
-    let mut field = Field::Query;
-    for _ in 0..Field::ALL.len() + 1 {
-        field = field.step(false, true, false);
-        assert_ne!(field, Field::Fuzzy);
+    // Warning: **而且轉不回去**（2026-10-01 合併之後要守的那一條）：替換開着的時候
+    // 匹配模式只在 字面 和 正則 之間轉，繞幾圈都到不了模糊。
+    for _ in 0..6 {
+        ed.on_key(Key::Char('3'));
+        assert!(!ed.search().fuzzy, "替換開着就轉不到模糊");
     }
 }
 
@@ -9275,7 +9296,7 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
 
 /// **二進制檔不搜，也不算進走查的地板**（2026-10-01 定，作者提的）。
 ///
-/// 起因是「包含隱藏和忽略」那個開關：開着它搜 yumete 自己的倉，21 處反而掉成
+/// 起因是「搜索隱藏和忽略」那個開關：開着它搜 yumete 自己的倉，21 處反而掉成
 /// 7 處——`target/` 把兩萬個檔的地板吃光了，走到頂就停。量出來的：`-uu` 走這個
 /// 倉是 51,673 個檔，**其中 44,503 個是二進制**（86%），文本只有 7,170；而那
 /// 些二進制檔從前是**整個讀進內存（共 5.26 GB）再因為不是 UTF-8 丟掉**。

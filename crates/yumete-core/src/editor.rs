@@ -1579,7 +1579,7 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
 ///
 /// 判準照抄 helix：`BinaryDetection::quit(b'\x00')`
 /// （`helix-term/src/commands.rs:2649`，符號搜索那一支 `syntax.rs:235` 同樣一行）。
-/// 沒有這一道，開着「包含隱藏和忽略」搜 yumete 自己的倉要**從盤上讀 5.26 GB 的
+/// 沒有這一道，開着「搜索隱藏和忽略」搜 yumete 自己的倉要**從盤上讀 5.26 GB 的
 /// `.o` 與 `.rlib` 進內存，再一個個因為不是 UTF-8 丟掉**；探頭 1 KB 只要 44 MB。
 pub(crate) fn walk_prose(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -> Walked {
     walk_inner(root, sieve, true, f)
@@ -1613,7 +1613,7 @@ fn walk_inner(
     let started = std::time::Instant::now();
     let walker = ignore::WalkBuilder::new(root)
         .overrides(overrides)
-        // Warning: **五道閘一起開。** 「包含隱藏和忽略」說的是一句話，而 `ignore`
+        // Warning: **五道閘一起開。** 「搜索隱藏和忽略」說的是一句話，而 `ignore`
         // 把它拆成了隱藏、`.gitignore`、`.ignore`、全局 git 排除、`.git/info/exclude`
         // 五項——只開頭一項，`target/` 照樣搜不到，而開關上寫着「和忽略」。
         .hidden(!sieve.hidden)

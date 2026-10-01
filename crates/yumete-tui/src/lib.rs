@@ -7690,11 +7690,7 @@ fn draw_search(
         // 這一個光標所在的字是反白的，也就是説和正文normal時光標所在的那個字一樣
         // 的模式。然後背景依舊是中間灰色」）。從前整條反白，於是那一格看着像被
         // 選中了一整段，而框裏其實站着一個光標——`hl` 挪的就是它。
-        // **範圍不走磁碟的時候，包含／排除畫灰**（2026-10-01 定）。本文件與緩衝區
-        // 是一張現成的表，按路徑篩它沒有意思；灰的但位子留着，下面那個號碼不跳。
-        let dead = matches!(which, Field::Include | Field::Exclude) && !find.on_disk();
         let style = match (find.all_selected && here && !shown.is_empty(), typing && here) {
-            _ if dead => quiet,
             (true, _) => on,
             (false, true) => sunk,
             (false, false) => text,
@@ -7722,7 +7718,7 @@ fn draw_search(
             // 提示字拿走它就等於把那句話擦了（2026-09-27 測試攔下來的）。
             put_text(buf, box_at, y, to, &asks, Style { fg: quiet.fg, ..style });
         }
-        if here && !find.all_selected && !dead {
+        if here && !find.all_selected {
             caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink);
         }
     };
@@ -7733,15 +7729,6 @@ fn draw_search(
         y += 1;
         draw_box(buf, Field::Replace, &say!("search.label.replace"), &find.replace, y);
     }
-    // **位置畫在開關那一列的頭上，號碼是 `0`**（2026-09-29 定，原話：「直接把
-    // 『位置』一行搬到1-7的上方，前面加个0可以吗？」）。
-    //
-    // Warning: **起因是 `0` 在屏幕上一個字都沒有。** 它畫在最上面的時候讀起來是一個
-    // 標題，而它其實是四選一的一檔——和底下七個按號碼的開關是同一種東西。挪到
-    // 一起、號碼從 `0` 起，這一列就自己說明了自己，不必再在鍵位行上多寫一格。
-    y += 1;
-    draw_box(buf, Field::Scope, &say!("search.label.scope"), &shown, y);
-    put_text(buf, left, y, to, "0", ground.fg(ink.gold()));
     // The switches. 大小寫 is three ways, not a tick, so it says which one.
     let tick = |on: bool| match on {
         true => "[x]",
@@ -7757,10 +7744,6 @@ fn draw_search(
     // 大小寫 still applies, so it is not dimmed.
     // Warning: **開關那幾行不再認「鍵在不在這一格上」**（2026-09-24）：光標走不上去，
     // 按 `1`–`5`。所以它們只有「亮着」和「畫灰」兩種樣子。
-    let pattern_cell = match find.fuzzy {
-        true => quiet,
-        false => text,
-    };
     // Spelled out rather than asked of `Case`, so the tags sit where the
     // messages test can see them: it reads `say!` calls, and a tag returned
     // from a `match` is a tag nobody can find (`messages.rs::said`).
@@ -7774,24 +7757,9 @@ fn draw_search(
     // 一樣都是 `[ ]` 在前）。否則不知道這裏可以做什麽」)。它是三態，所以括號裏
     // 裝的是狀態的名字而不是一個叉——可它**在同一欄開頭**，於是四行讀成同一族。
     //
-    // Warning: **標籤對齊到同一欄，而那一欄是量出來的。** 三個狀態不一樣寬（智能 4 格、
-    // 不敏感 6 格，英文是 smart／match／ignore），寫死一個數就會在某一種語言下
-    // 參差。取最寬的那一個。
-    let states = [
-        say!("search.case.smart"),
-        say!("search.case.sensitive"),
-        say!("search.case.insensitive"),
-    ];
-    let widest = states
-        .iter()
-        .map(|w| yumete_cjk::str_width(w) + 2)
-        .chain(std::iter::once(3))
-        .max()
-        .unwrap_or(3);
-    let pad = |box_text: &str| {
-        let gap = widest.saturating_sub(yumete_cjk::str_width(box_text)) + 1;
-        format!("{box_text}{}", " ".repeat(gap))
-    };
+    // Warning: **方框不再自成一欄**（2026-10-01 定）。從前那一欄的寬度按最長的狀態名
+    // 量出來，於是「智能大小寫」這樣一個狀態把每一行的名字都往右推六格，24 格的
+    // 面板當場出界。現在方框跟在名字後面，長狀態名只佔自己那一行。
     // **每一行寫着按哪個號**（2026-09-24 定，原話：「在这一行后面显示这个字母
     // 快捷键」，後來選了數字）。號就是**行的次序**，從上往下數，所以讀者數行就
     // 行，不用記一張表。
@@ -7812,66 +7780,83 @@ fn draw_search(
             return;
         }
         put_text(buf, left, y, to, &nth.to_string(), shortcut);
-        let line = format!("{}{label}", pad(box_text));
+        // **方框在名字後面**（2026-10-01 定，作者原話：「把 [] 全部放到文字後面」）。
+        // 從前方框自成一欄、寬度按最長的那個狀態名量出來，於是一個「智能大小寫」
+        // 把每一行的名字都往右推六格，面板當場出界。
+        let line = format!("{label} {box_text}");
         put_text(buf, left + 2, y, to, &line, style);
     };
     let y = y + 1;
     switch(buf, y, &format!("[{which}]"), &say!("search.case"), 1, text);
-    // **簡繁異字形**（2026-09-25）：和大小寫是同一種東西——兩個字面不同的寫法算
-    // 不算同一個——所以緊挨着它。Warning: 正則開着時它不起作用，畫灰。
+    // **中文匹配：簡繁異體與拼音合成一行**（2026-10-01 定）。四態，方框裏列開着
+    // 的那幾個。Warning: **兩者再也不會失效**（同日補的 `glyphs::widen_pattern` 與
+    // `nearby` 的字形折疊），所以這一行不必畫灰，也沒有半句是假的。
     let y = y + 1;
-    let glyph_cell = match find.regex {
+    let mut chinese: Vec<String> = Vec::new();
+    if find.glyphs {
+        chinese.push(say!("search.chinese.glyphs"));
+    }
+    if find.pinyin {
+        chinese.push(say!("search.chinese.pinyin"));
+    }
+    let chinese = match chinese.is_empty() {
+        true => " ".to_string(),
+        false => chinese.join("+"),
+    };
+    switch(buf, y, &format!("[{chinese}]"), &say!("search.chinese"), 2, text);
+    // **匹配模式：字面／正則／模糊，三選一**（2026-10-01 定）。從前是兩個獨立的
+    // 勾，而「兩個都關」纔是默認——那一檔沒有名字，只能從兩個空方框去推。
+    let y = y + 1;
+    let how = match (find.regex, find.fuzzy) {
+        (true, _) => say!("search.matching.regex"),
+        (false, true) => say!("search.matching.fuzzy"),
+        (false, false) => say!("search.matching.plain"),
+    };
+    switch(buf, y, &format!("[{how}]"), &say!("search.matching"), 3, text);
+    // **西文整詞不併進匹配模式**：它和正則疊得起來（`\b式子\b`），只和模糊互斥。
+    // Warning: **模糊底下畫灰，位子留着**——不畫的話底下每一行都往上跳一格，而「跳」
+    // 是這個面板最不該有的東西：讀者的眼睛正落在某一行上。
+    let y = y + 1;
+    let whole_cell = match find.fuzzy {
         true => quiet,
         false => text,
     };
-    switch(buf, y, tick(find.glyphs), &say!("search.glyphs"), 2, glyph_cell);
-    // **拼音**（2026-09-25）：同一族的第三個——字面不同的寫法算不算同一個。
-    // Warning: **正則開着它照畫成亮的**：它自己走一趟，不往正則裏塞東西，所以正則開着
-    // 它照樣管用——和上面那一個不同。
+    switch(buf, y, tick(find.whole), &say!("search.whole"), 4, whole_cell);
+    // **替換是一行三態**（2026-10-01 定，作者原話：「替換那一行做成 cycle」）：
+    // 關 → 字面替換 → 智能大小寫。從前它是兩行，第二行只在勾上之後纔畫得出來。
     let y = y + 1;
-    switch(buf, y, tick(find.pinyin), &say!("search.pinyin"), 3, text);
-    let y = y + 1;
-    switch(buf, y, tick(find.regex), &say!("search.regex"), 4, pattern_cell);
-    let y = y + 1;
-    switch(buf, y, tick(find.whole), &say!("search.whole"), 5, pattern_cell);
-    // **模糊 照畫，替換開着的時候畫灰**（2026-09-23 定：「自動關掉畫灰」）。
-    // Warning: 從前它整行不畫，於是勾一下替換，底下的每一行都往上跳一格——而「跳」
-    // 是這個面板最不該有的東西：讀者的眼睛正落在某一行上。走還是跳過它
-    // （`Field::step`），只是位子留着。
-    let y = y + 1;
-    let fuzzy_cell = match find.replacing {
-        true => quiet,
-        false => text,
+    let swap = match (find.replacing, find.preserve_case) {
+        (false, _) => say!("search.replace.off"),
+        (true, false) => say!("search.replace.literal"),
+        (true, true) => say!("search.replace.smart"),
     };
-    switch(buf, y, tick(find.fuzzy), &say!("search.fuzzy"), 6, fuzzy_cell);
-    // **替換是個開關**（2026-09-23 報的）：`:search` 進來的人想改一個詞，不必退
-    // 出去重按 `:replace`。
-    let y = y + 1;
-    switch(buf, y, tick(find.replacing), &say!("search.replacing"), 7, text);
-    // **第八個只在勾了「替換」的時候出現**（2026-09-27 定）。它和上面那六個不是
-    // 同一類東西：那六個說「怎麼算命中」，這一個說「換上去的那一段怎麼寫」——
-    // VS Code 也是這麼分的，`Aa` 在搜索那一行，`AB` 在替換那一行。
-    // **第八個沒在替換的時候畫灰**（2026-10-01 定，原話：「8號可以灰掉嗎？」）。
-    // 同 模糊 那一行：位子留着，號碼連着，按下去什麼都不發生。
-    let mut y = y + 1;
-    let keep_cell = match find.replacing {
-        true => text,
-        false => quiet,
-    };
-    switch(buf, y, tick(find.preserve_case), &say!("search.preserve-case"), 8, keep_cell);
-    // **「搜哪些文件」那三格，攢在最下面**（2026-10-01 定）。三格一族，而上面
-    // 七個開關的號碼一個不動。Warning: **號碼是 9，不是 8**：第八個歸 保留大小寫，
-    // 它畫不出來的時候那個號就空着——拿它當第八會把 替換／保留大小寫 那一對拆開。
-    let files_cell = match find.on_disk() {
-        true => text,
-        false => quiet,
-    };
+    switch(buf, y, &format!("[{swap}]"), &say!("search.replacing"), 5, text);
+    let mut y = y;
+
+    // **「搜哪裏、搜哪些」四格，攢在最下面**（2026-10-01 定，作者原話：「位置放到
+    // 『包含和排除』上方」）。位置從前畫在開關那一列的頭上、號碼是 `0`，可它說的
+    // 是範圍，和底下三格是一夥的。
     y += 1;
-    draw_box(buf, Field::Include, &say!("search.label.include"), &find.include, y);
-    y += 1;
-    draw_box(buf, Field::Exclude, &say!("search.label.exclude"), &find.exclude, y);
-    y += 1;
-    switch(buf, y, tick(find.hidden), &say!("search.hidden"), 9, files_cell);
+    draw_box(buf, Field::Scope, &say!("search.label.scope"), &shown, y);
+    put_text(buf, left, y, to, "6", ground.fg(ink.gold()));
+    // Warning: **範圍不走磁碟的時候，底下三行整行不畫**（2026-10-01 定）。從前是畫灰，
+    // 而灰着的三行佔着結果列表的位子，說的又是「這裏什麼都做不了」。本文件與
+    // 緩衝區是一張現成的表，按路徑篩它沒有意思。
+    if find.on_disk() {
+        y += 1;
+        draw_box(buf, Field::Include, &say!("search.label.include"), &find.include, y);
+        y += 1;
+        draw_box(buf, Field::Exclude, &say!("search.label.exclude"), &find.exclude, y);
+        y += 1;
+        // **方框裏列「不搜哪些」**（2026-10-01 定，作者原話：「方框裡列『不搜哪些』」）。
+        // 所以它和上面幾行反着讀：方框空了纔是「全都搜」。存着的那個布爾沒有翻
+        // ——它記的是「走查要不要收隱藏和忽略」，走查那一層要的就是這個意思。
+        let skipped = match find.hidden {
+            true => " ".to_string(),
+            false => say!("search.hidden.what"),
+        };
+        switch(buf, y, &format!("[{skipped}]"), &say!("search.hidden"), 7, text);
+    }
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
@@ -11448,19 +11433,21 @@ fn squeezed(text: &str) -> String {
         let row = |y: u16| -> String {
             (0..60).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()
         };
-        // 標題、搜、位置 —— 這個次序就是「這裏能打字」的全部說法。
+        // 標題、搜 —— 這個次序就是「這裏能打字」的全部說法。
         // Warning: **「位置」2026-09-26 從標題那一行挪了下來**；2026-09-27 上下那兩道
-        // 線去掉了，所以「搜」緊貼着標題行；2026-09-29 位置又挪到了開關那一列的
-        // 頭上，號碼是 `0`。一格一個字符，全角字的第二格是空的，所以比的是第一
-        // 個字。
+        // 線去掉了，所以「搜」緊貼着標題行；2026-09-29 挪到開關那一列的頭上、號碼
+        // 是 `0`；**2026-10-01 又挪到了開關那一列的末尾、包含／排除的上面，號碼
+        // `6`**——那四格說的都是「搜哪裏、搜哪些」，是一組。一格一個字符，全角字
+        // 的第二格是空的，所以比的是第一個字。
         let first = say!("label.panel.search").chars().next().unwrap();
         assert!(row(0).contains(first), "{:?}", row(0));
         let query = say!("search.label.query").chars().next().unwrap();
         assert!(row(1).contains(query), "搜緊跟標題：{:?}", row(1));
         assert!(!row(1).contains("──"), "那兩道線去掉了：{:?}", row(1));
         let scope = say!("search.label.scope").chars().next().unwrap();
-        assert!(row(2).contains(scope), "位置在搜底下：{:?}", row(2));
-        assert!(row(2).starts_with(" 0 "), "號碼是 0：{:?}", row(2));
+        let at = (0..16).find(|&y| row(y).contains(scope)).expect("位置那一行在");
+        assert!(row(at).starts_with(" 6 "), "號碼是 6：{:?}", row(at));
+        assert!(at > 2, "位置排在七個開關下面，不在搜的正下方：第 {at} 行");
 
         // **三檔底色，只鋪在打得了字的那一段上**（2026-09-24 報的：「这一块的
         // 颜色不好，我老是搞错」）。從前「正在打字」和「鍵不在這一格」都是紙那
@@ -20419,11 +20406,11 @@ fn squeezed(text: &str) -> String {
         editor.open_file(dir.join("一.md")).unwrap();
 
         editor.execute(":search").unwrap();
-        // 位置那一格：按兩下 `0`，本文件 → 緩衝區 → 工作路徑（2026-10-01 的四
-        // 檔輪替），然後回搜索框打字。
+        // 位置那一格：按兩下 `6`，本文件 → 緩衝區 → 工作路徑（2026-10-01 的四
+        // 檔輪替；號碼同日從 `0` 挪到開關那一列的末尾），然後回搜索框打字。
         editor.on_key(Key::Esc);
-        editor.on_key(Key::Char('0'));
-        editor.on_key(Key::Char('0'));
+        editor.on_key(Key::Char('6'));
+        editor.on_key(Key::Char('6'));
         editor.on_key(Key::Char('k'));
         editor.on_key(Key::Char('i'));
         editor.on_key(Key::Char('冷'));

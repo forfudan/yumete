@@ -70,9 +70,9 @@ pub fn shapes(ch: char) -> &'static str {
 /// 「書齋」→ `[天][門门]`。沒有別的寫法的字原樣轉義過去，所以這一支對純西文的
 /// 查詢什麼都不做。
 ///
-/// Warning: **只給「照字面」那一條路用。** 正則開着的時候，把每個字改寫成 `[...]` 會把
-/// `.`、`*`、`[` 一起吃掉——那是毀掉使用者寫的式子。兩個開關因此互斥，面板上
-/// 正則開着時這一個畫灰。
+/// Warning: **只給「照字面」那一條路用。** 正則開着的時候整串改寫會把 `.`、`*`、`[`
+/// 一起吃掉——那是毀掉使用者寫的式子。正則那一路走 [`widen_pattern`]，它先把式子
+/// 解析一遍，只動「原樣打出來的那些字」。
 pub fn widen(text: &str) -> String {
     let mut out = String::with_capacity(text.len() * 2);
     for ch in text.chars() {
@@ -91,9 +91,115 @@ pub fn widen(text: &str) -> String {
     out
 }
 
+
+/// **把一個正則裏「原樣打出來的那些字」換成它們的字形集**，別的一個字節不動
+/// （2026-10-01 定，作者問的：「正则情况下能否也能兼容繁简体？」）。
+///
+/// `書.*齋` → `[書书].*[齋斋]`；`\d書` → `\d[書书]`；`a.b` 原封不動。
+///
+/// 做法是先用 `regex-syntax`（`regex` 自己的解析器）把式子解析成語法樹，樹上每
+/// 個字面字都帶着它在原文裏的位置，只替換那幾段。於是 `.`、`*`、`\d`、`^$`、
+/// 括號、`(?i)` 一律不碰。
+///
+/// Warning: **只認 `Verbatim`**——`\x{66F8}`、`\u66F8` 這種寫法不折。使用者特意用碼位
+/// 寫出來的那一個字，說的就是那一個字。
+///
+/// Warning: **類裏的字面字照折。** `[書x]` → `[[書书]x]`，`regex` 認得嵌套的字符類（並
+/// 集），所以這一步是安全的。
+///
+/// `None` ＝ 這個式子解析不了（多半是打了一半），呼叫方原樣用它就好——壞式子
+/// 本來就有自己那條路（面板上畫灰）。
+pub fn widen_pattern(pattern: &str) -> Option<String> {
+    use regex_syntax::ast::{self, visit, Ast, Visitor};
+
+    #[derive(Default)]
+    struct Spots(Vec<(usize, usize, char)>);
+
+    impl Spots {
+        fn take(&mut self, lit: &ast::Literal) {
+            if matches!(lit.kind, ast::LiteralKind::Verbatim) && !shapes(lit.c).is_empty() {
+                self.0.push((lit.span.start.offset, lit.span.end.offset, lit.c));
+            }
+        }
+    }
+
+    impl Visitor for Spots {
+        type Output = Vec<(usize, usize, char)>;
+        type Err = ();
+        fn finish(self) -> Result<Self::Output, ()> {
+            Ok(self.0)
+        }
+        fn visit_post(&mut self, ast: &Ast) -> Result<(), ()> {
+            if let Ast::Literal(lit) = ast {
+                self.take(lit);
+            }
+            Ok(())
+        }
+        fn visit_class_set_item_post(&mut self, item: &ast::ClassSetItem) -> Result<(), ()> {
+            if let ast::ClassSetItem::Literal(lit) = item {
+                self.take(lit);
+            }
+            Ok(())
+        }
+    }
+
+    let tree = ast::parse::Parser::new().parse(pattern).ok()?;
+    let mut spots = visit(&tree, Spots::default()).ok()?;
+    spots.sort_by_key(|spot| spot.0);
+    let mut out = String::with_capacity(pattern.len() * 2);
+    let mut at = 0usize;
+    for (from, to, ch) in spots {
+        // 同一個字被兩個訪問鉤子都收到的話（類裏那一種），跳過後來的那一份。
+        if from < at {
+            continue;
+        }
+        out.push_str(&pattern[at..from]);
+        out.push('[');
+        out.push_str(&regex::escape(shapes(ch)));
+        out.push(']');
+        at = to;
+    }
+    out.push_str(&pattern[at..]);
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **正則底下也折字形，而使用者寫的符號一個都不許動**（2026-10-01 定）。
+    ///
+    /// 從前 正則 和 簡繁異體 互斥，理由是整串改寫會把 `.`、`*`、`[` 吃掉。
+    /// [`widen_pattern`] 先解析再只動字面字，於是兩個開關可以同時開。
+    #[test]
+    fn a_pattern_folds_only_the_characters_the_reader_typed() {
+        let hay = "我在书斋里发呆，第2书斋。";
+        for (pattern, want) in [
+            ("書齋", true),
+            ("書.*齋", true),
+            ("^書齋$", false),
+            ("書+", true),
+            // 類裏的字面字也折，嵌套的字符類 `regex` 認得（並集）。
+            ("[書x]", true),
+            ("書|齋", true),
+            ("(書)齋", true),
+            (r"\d書", true),
+            (r"\p{Han}書", true),
+            ("發呆", true),
+            // 沒有漢字就一個字節都不改。
+            ("a.b", false),
+        ] {
+            let grown = widen_pattern(pattern).expect("解析得了");
+            let re = regex::Regex::new(&grown).expect("編譯得過：{grown}");
+            assert_eq!(re.is_match(hay), want, "{pattern} → {grown}");
+        }
+        assert_eq!(widen_pattern("a.b").as_deref(), Some("a.b"), "沒有漢字就原樣");
+        assert_eq!(widen_pattern("書").as_deref(), Some("[書书]"));
+        // Warning: **碼位寫法不折**：特意用 `\x{...}` 寫出來的那一個字，說的就是那一個。
+        assert_eq!(widen_pattern(r"\x{66F8}").as_deref(), Some(r"\x{66F8}"));
+        // 打了一半的式子解析不了，呼叫方原樣用它。
+        assert_eq!(widen_pattern("[書"), None);
+    }
 
     /// **當初舉的那個例子**：「書齋」搜得到「书斋」。
     #[test]
