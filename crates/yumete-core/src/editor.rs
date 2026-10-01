@@ -1545,6 +1545,10 @@ const VISIT_CEILING: usize = 200_000;
 /// 個數是**地板不是天花板**：不管多慢都至少走這麼多，走完了看錶，還不到這個數就接
 /// 着走。
 ///
+/// Warning: **只有 [`walk_prose`] 肯等**（2026-10-02 修）。挑選器與 `[[` 補全走的是
+/// 同一支 [`walk_inner`]，可它們在按鍵上同步跑、中間沒有「正在找…」那一幀，到了
+/// 地板就該停。
+///
 /// Warning: **代價是同一次搜索兩次跑可能給出不同的數目**（盤忙的時候少走幾個）。它只
 /// 在本來就要被截斷的那種樹上發生——正常項目連地板都碰不到。
 const WALK_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
@@ -1556,6 +1560,11 @@ const WALK_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 /// 51,673 個條目、1.37 秒，約三萬七千條目一秒，其中 86% 是二進制、只探 1 KB）。
 /// 換一塊慢盤或者一個網絡掛載，同樣的地板可以凍住幾十秒——而這一趟是同步跑完的，
 /// 按不了取消。
+///
+/// Warning: **所以上面那兩個數不是真的「地板」**（2026-10-02 審出來的措辭錯）：這一條
+/// 不管有沒有碰到地板都會停，慢盤上走不滿兩萬個檔就被切斷是正常的。而且真正的
+/// 上界是「這個數**加上**再處理一個條目的時間」——錶只在 `flatten()` 交出一個條
+/// 目的時候讀，卡死在 `readdir` 上的掛載誰也攔不住。
 const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// 一趟走查交代了什麼。
@@ -1590,10 +1599,20 @@ fn looks_binary(path: &Path) -> bool {
     use std::io::Read;
     let Ok(mut file) = std::fs::File::open(path) else { return true };
     let mut head = [0u8; 1024];
-    match file.read(&mut head) {
-        Ok(read) => head[..read].contains(&0),
-        Err(_) => true,
+    // Warning: **`read` 可以短讀，也可以回 `Interrupted`**（2026-10-02 審出來的）。
+    // 兩個都不是「這是二進制」：短讀會讓第 900 個字節上的 NUL 看不見（網絡文件
+    // 系統上合法），而 `Interrupted` 從前被當成二進制，那個檔就這麼從搜索裏消失
+    // 了，連 `skipped` 都不算。
+    let mut got = 0usize;
+    while got < head.len() {
+        match file.read(&mut head[got..]) {
+            Ok(0) => break,
+            Ok(n) => got += n,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return true,
+        }
     }
+    head[..got].contains(&0)
 }
 
 /// [`walk`] with the panel's three cells applied.
@@ -1654,7 +1673,15 @@ fn walk_inner(
         visited += 1;
         let spent = started.elapsed();
         let floored = seen >= WALK_CEILING || visited >= VISIT_CEILING;
-        if spent >= WALK_DEADLINE || (floored && spent >= WALK_GRACE) {
+        // Warning: **只有搜索那一趟肯為了多走幾個檔多等三秒**（2026-10-02 審出來的
+        // 回歸）。那個寬限本來是給 `walk_prose` 的，可它寫在共用的這一支裏，於是
+        // 挑選器和 `[[` 補全也繼承了——而那兩個是**按鍵上同步跑的**，中間沒有
+        // 「正在找…」那一幀，而且它們自己早就夠了（`PICKER_LIMIT` 四千條）。
+        //
+        // 量出來的（`$HOME`，同一個進程同一棵樹）：到地板就停是
+        // `seen=20000 visited=20001 138ms`，等滿三秒是 `seen=323177 3.00s`。
+        // `:cd ~` 之後按 `空格 F`，四千條以外的全丟掉，還是凍了整整三秒。
+        if spent >= WALK_DEADLINE || (floored && (!prose_only || spent >= WALK_GRACE)) {
             walked.cut = true;
             break;
         }
@@ -2635,7 +2662,7 @@ pub struct Editor {
     /// 從前只有 `R` 會先問一句，而站在檔名那一行上按 `r` **一聲不吭就把整個檔
     /// 換掉了**——三個試用的人都指出這一條：不確認的那個鍵，正是標籤最容易被截掉
     /// 的那一個。現在兩個都問，而問句要說清楚問的是哪一個。
-    replace_this_file: Option<std::path::PathBuf>,
+    replace_this_file: Option<(std::path::PathBuf, Option<u64>)>,
     /// **這一節坐在哪本書上**，開 yumete 的時候定一次，此後不動（2026-09-27 定）。
     ///
     /// 從前沒有這個東西：文件樹問 `project_root()`、「工作區」問 shell 的 cwd、

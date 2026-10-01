@@ -7606,10 +7606,12 @@ fn draw_search(
         (true, _, _) => (say!("search.bad-pattern"), wrong),
         (_, true, true) => (say!("search.enter-to-look"), head),
         (false, _, false) => (String::new(), quiet),
-        (false, _, true) if find.total == 0 => (say!("search.none"), quiet),
+        // Warning: **半截的名單不許說「無結果」**（2026-10-02 審出來的）。零那一格最
+        // 像「真的沒有」，而它恰恰不是——`cut` 要比數目先說話。
+        (false, _, true) if find.total == 0 && !find.cut => (say!("search.none"), quiet),
         // **走到第幾處也寫在這裏**（2026-09-27 報的：「表頭只有 11 處，走到第幾
         // 條不說」）。`4/11`，不寫「第」「共」——那一格在標題右邊，字越少越好。
-        (false, _, true) if find.nth_hit().is_some() => {
+        (false, _, true) if find.nth_hit().is_some() && !find.cut => {
             (say!("search.nth-hit", find.nth_hit().unwrap_or(1), find.total), quiet)
         }
         // Warning: 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
@@ -8329,9 +8331,17 @@ fn draw_picker(
     });
     // One column: these are paths, long and of every length, and columns of
     // ragged paths are harder to read down than a single list.
-    // Warning: **少兩行**（2026-10-01）：查詢框佔了列表上面那一行，它和列表之間還
-    // 有一道橫線。
-    let deep = rows.saturating_sub(5) as usize;
+    // **矮下去的時候一樣樣讓**（2026-10-02 審出來的回歸）。這個形狀要六行纔擺得
+    // 下：上下邊框、查詢框、橫線、至少一行名單、腳注。矮過六行先讓橫線（它只是
+    // 好看），再讓腳注（那個數目比橫線有用）——名單一行都不讓，它是這扇面板的
+    // 全部意義。
+    //
+    // Warning: **從前是寫死的 `rows - 5`**：四行的時候腳注畫到橫線上、「沒有符合的」
+    // 畫到下邊框上；五行的時候那兩句疊在同一行，短的蓋不住長的的尾巴。
+    let ruled = rows >= 6;
+    let footed = rows >= 5;
+    let deep = (rows as usize).saturating_sub(3 + usize::from(ruled) + usize::from(footed));
+    let list_at = left.y + 2 + u16::from(ruled);
     let first = at
         .saturating_sub(deep.saturating_sub(1))
         .min(items.len().saturating_sub(deep.min(items.len())));
@@ -8343,7 +8353,7 @@ fn draw_picker(
             let Some(item) = items.get(first + slot) else {
                 break;
             };
-            let y = left.y + 3 + slot as u16;
+            let y = list_at + slot as u16;
             let picked = first + slot == at;
             let style = match picked {
                 true => on,
@@ -8460,35 +8470,36 @@ fn draw_picker(
         // 框底下是開關，形狀一眼就和框不同；這一扇框底下是一列檔名，不隔開那一行
         // 讀起來像是列表的第一條。而且挑選器是整屏居中的大面板，不像邊欄那樣一行
         // 都要省。
-        let rule = ground.fg(ink.rule());
-        let (tee_l, tee_r) = match config.panel.rounded {
-            true => ("├", "┤"),
-            false => ("├", "┤"),
-        };
-        put_text(buf, left.x, left.y + 2, limit + 1, tee_l, rule);
-        for x in left.x + 1..limit {
-            put_text(buf, x, left.y + 2, limit, "─", rule);
+        if ruled {
+            let rule = ground.fg(ink.rule());
+            // 圓角方角共用這一對：圓的只圓在四個角上。
+            put_text(buf, left.x, left.y + 2, limit + 1, "├", rule);
+            for x in left.x + 1..limit {
+                put_text(buf, x, left.y + 2, limit, "─", rule);
+            }
+            put_text(buf, limit, left.y + 2, limit + 1, "┤", rule);
         }
-        put_text(buf, limit, left.y + 2, limit + 1, tee_r, rule);
         // Nothing matched is something to say, not an empty box to puzzle over.
         if items.is_empty() {
             put_text(
                 buf,
                 left.x + 1,
-                left.y + 3,
+                list_at,
                 limit,
                 &say!("picker.nothing-matched"),
                 ground.fg(ink.quiet()),
             );
         }
-        put_text(
-            buf,
-            left.x + 1,
-            left.y + rows - 2,
-            limit,
-            &footer,
-            ground.fg(ink.quiet()),
-        );
+        if footed {
+            put_text(
+                buf,
+                left.x + 1,
+                left.y + rows - 2,
+                limit,
+                &footer,
+                ground.fg(ink.quiet()),
+            );
+        }
     }
     // The preview, in the columns the names left: the head of the file, or of
     // the buffer if it is already open and has unsaved writing in it.
@@ -8515,7 +8526,7 @@ fn draw_picker(
     );
     let caret = match picker.on_query() {
         true => in_the_box,
-        false => Position::new(left.x + 1, left.y + 3 + (at - first) as u16),
+        false => Position::new(left.x + 1, list_at + (at - first) as u16),
     };
     frame.set_cursor_position(caret);
     Some((caret, panels))

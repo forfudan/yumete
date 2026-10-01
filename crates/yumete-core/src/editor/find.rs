@@ -239,7 +239,13 @@ impl Editor {
             Case::Sensitive => format!("(?-i){body}"),
             Case::Insensitive => format!("(?i){body}"),
             // The rule the page's own `/` follows: a capital is how you ask.
-            Case::Smart => match body.chars().any(char::is_uppercase) {
+            //
+            // Warning: **問的是讀者打出來的那一串，不是編出來的式子**（2026-10-02 審
+            // 出來的）。`body` 這時候已經是式子了，而 `\S`、`\D`、`\B`、
+            // `\p{Han}` 都帶着一個大寫字母——讀者一個大寫都沒按，搜索卻悄悄變
+            // 成區分大小寫，`\Bfoo` 從此找不到 `Foo`。模糊那一支
+            // （`How::Nearby`）一直問的是查詢本身。
+            Case::Smart => match self.search.query.chars().any(char::is_uppercase) {
                 true => body,
                 false => format!("(?i){body}"),
             },
@@ -286,6 +292,12 @@ impl Editor {
                     true => path,
                     false => self.working_dir().join(path),
                 };
+                // Warning: **是個檔就另說一句**（2026-10-02 審出來的）。`:search 卷一.md`
+                // 指着一個真的存在的東西，而狀態欄說「沒有這個文件夾」——正是
+                // `~` 那一條修的時候說過的毛病：聽着像它不在，其實是我們沒去。
+                if full.is_file() {
+                    return None;
+                }
                 full.is_dir().then_some(full)
             }
         }
@@ -429,6 +441,12 @@ impl Editor {
             self.search.total = 0;
             self.search.selected = 0;
             self.search.looked_at = None;
+            // Warning: **那三個數也要歸零。** 名單空了而 `mine_total` 還留着上一次的
+            // 數，`rescan_the_open_one` 拿 `total - mine_total` 一減就是負數
+            // （`usize` 下溢，debug 當場 panic，release 畫出個天文數字）。
+            self.search.mine = 0;
+            self.search.mine_total = 0;
+            self.search.cut = false;
             return;
         }
         let pattern = self.search_pattern();
@@ -492,6 +510,11 @@ impl Editor {
             if sieve.is_none() {
                 self.search.hits.clear();
                 self.search.total = 0;
+                // Warning: **同上，那兩個數要跟着歸零**（2026-10-02 審出來的）。這一支
+                // 在 `mine`／`mine_total` 已經填好之後纔走到，漏了它們就是一次
+                // 真的下溢：打一條寫錯的 glob，再在正文裏打一個字就撞上。
+                self.search.mine = 0;
+                self.search.mine_total = 0;
                 self.search.root = Some(root);
                 self.search.looked_at = Some(self.search_mark());
                 self.status = say!("search.bad-glob");
@@ -842,7 +865,14 @@ impl Editor {
                     Some(crate::search_panel::Row::File { path, hits, .. }) => {
                         let name = path.display().to_string();
                         self.status = say!("search.replace-file-sure", hits, name);
-                        self.replace_this_file = Some(path);
+                        // 緩衝區那一檔要連號一起記下來，見 `replace_file`。
+                        let id = self
+                            .search
+                            .hits
+                            .iter()
+                            .find(|h| h.file.as_deref() == Some(path.as_path()))
+                            .and_then(|h| h.buffer);
+                        self.replace_this_file = Some((path, id));
                         self.pending = Pending::ReplaceAll;
                     }
                     _ => self.replace_hit(),
@@ -1308,6 +1338,17 @@ impl Editor {
 
     /// 把名單開頭那一段——正在寫的那一份的命中——換成新的。
     fn rescan_the_open_one(&mut self) {
+        // Warning: **緩衝區那一檔不走這條快路**（2026-10-02 審出來的）。這一支拿
+        // `my_label()` 給新命中貼名字，而那一支開頭就是 `search.root.as_ref()?`
+        // ——緩衝區那一檔沒有根（`scan_every_buffer` 有意設成 `None`），於是整
+        // 段換上去的命中 `file` 和 `buffer` 全是 `None`：自己那幾處的檔頭變成
+        // 一個空名字，而要是只剩自己那幾處，名單還會從樹悄悄塌成平的。
+        //
+        // 那一檔全在內存裏，重跑一趟不碰盤，所以直接重跑——比兩處各維護一套
+        // 貼名字的規矩靠得住。
+        if matches!(self.search.scope, Where::Buffers) {
+            return self.search_now();
+        }
         let Some(look) = self.looker() else { return };
         let mine = self.my_label();
         let was = self.search.mine.min(self.search.hits.len());
@@ -1380,10 +1421,21 @@ impl Editor {
 
     /// `r` on a file header, and each step of `R`: change **every hit in one
     /// file**.
-    fn replace_file(&mut self, rel: Option<&Path>) -> usize {
+    /// `rel` 是名單上那個名字，`id` 是緩衝區那一檔記下的號——**有號就認號**。
+    ///
+    /// Warning: **2026-10-02 審出來的：從前它只認路徑。** 緩衝區那一檔的「名字」是
+    /// 標籤不是路徑，沒有名字的草稿更是字面的 `[scratch]`；拿它去
+    /// `buffer_for`，`open_file` 會給出一份**空的新緩衝**（`Buffer::open` 對不
+    /// 存在的路徑回的是 `Ok` 加一條空繩），於是 `R` 換了 0 處、一聲不吭、還多
+    /// 出一個叫 `[scratch]` 的空檔。
+    fn replace_file(&mut self, rel: Option<&Path>, id: Option<u64>) -> usize {
         let Some(look) = self.looker() else { return 0 };
         let with = self.replacement();
-        let Some(index) = self.buffer_for(rel) else {
+        let index = match id {
+            Some(id) => self.buffers.iter().position(|b| b.id() == id),
+            None => self.buffer_for(rel),
+        };
+        let Some(index) = index else {
             return 0;
         };
         let done = self.with_buffer(index, |ed| ed.swap_all(&look, &with));
@@ -1405,9 +1457,9 @@ impl Editor {
     /// 那句「換不換」得到了 `y`：換問的是哪一批。
     pub(super) fn replace_what_was_asked(&mut self) {
         match self.replace_this_file.take() {
-            Some(path) => {
+            Some((path, id)) => {
                 self.replaced_in.clear();
-                let done = self.replace_file(Some(&path));
+                let done = self.replace_file(Some(&path), id);
                 self.after_replacing(done);
             }
             None => self.replace_all_found(),
@@ -1416,15 +1468,19 @@ impl Editor {
 
     pub(super) fn replace_all_found(&mut self) {
         self.replaced_in.clear();
-        let mut files: Vec<Option<PathBuf>> = Vec::new();
+        // Warning: **按（名字, 號）一對去重，不是只按名字**（2026-10-02 審出來的）。
+        // 緩衝區那一檔裏兩份沒有名字的草稿標籤都是 `[scratch]`，只按名字去重會
+        // 把第二份整個漏掉。
+        let mut files: Vec<(Option<PathBuf>, Option<u64>)> = Vec::new();
         for hit in &self.search.hits {
-            if !files.contains(&hit.file) {
-                files.push(hit.file.clone());
+            let one = (hit.file.clone(), hit.buffer);
+            if !files.contains(&one) {
+                files.push(one);
             }
         }
         let mut done = 0usize;
-        for file in files {
-            done += self.replace_file(file.as_deref());
+        for (file, id) in files {
+            done += self.replace_file(file.as_deref(), id);
         }
         self.after_replacing(done);
     }
@@ -1532,6 +1588,13 @@ impl Editor {
                 == Some(full.as_path())
         }) {
             return Some(i);
+        }
+        // Warning: **盤上沒有這個檔就別開**（2026-10-02 審出來的）。`Buffer::open`
+        // 對不存在的路徑回的是 `Ok` 加一條空繩——那是 `:open` 要的規矩（開一個
+        // 新檔），在這裏卻是「名單上那個名字解錯了」被悄悄變成一份空緩衝。
+        if !full.is_file() {
+            self.status = say!("search.moved-on");
+            return None;
         }
         // **Opened as a buffer, not rewritten on disk.** That is the whole of
         // why a change across a book is safe here.
@@ -1666,10 +1729,31 @@ impl Editor {
             .current_buffer()
             .path()
             .and_then(|p| std::fs::canonicalize(p).ok());
-        let elsewhere = match (&hit.file, &self.search.root) {
-            (None, _) => false,
-            (Some(rel), Some(root)) => std::fs::canonicalize(root.join(rel)).ok() != mine,
-            (Some(_), None) => true,
+        // Warning: **緩衝區那一檔記的是號，不是路徑**（2026-10-02 審出來的）。那一檔
+        // `search.root` 是 `None` 而每一處都帶着一個標籤，於是下面那張表把**每
+        // 一處**都判成「在別的檔裏」——連你正在寫的這一份也算——然後拿
+        // `[scratch]` 這個標籤去 `open_file`，開出一份空的新緩衝給你看。
+        if let Some(id) = hit.buffer {
+            match self.buffers.iter().position(|b| b.id() == id) {
+                Some(i) if i == self.current => {}
+                Some(i) => {
+                    self.show_buffer(i);
+                    let now = self.current_buffer().id();
+                    self.let_go_of_the_search_preview(now);
+                }
+                // 面板開着的時候那一份被關掉了。
+                None => {
+                    self.status = say!("search.moved-on");
+                    return false;
+                }
+            }
+        }
+        let elsewhere = match (&hit.file, &self.search.root, hit.buffer) {
+            (None, _, _) => false,
+            // 號已經把人送到那一份上了，offsets 也是從同一條繩上量的。
+            (Some(_), _, Some(_)) => false,
+            (Some(rel), Some(root), None) => std::fs::canonicalize(root.join(rel)).ok() != mine,
+            (Some(_), None, None) => true,
         };
         // Another file has to be opened first — and if it cannot be, say so
         // rather than walking the cursor to that line of the wrong file.

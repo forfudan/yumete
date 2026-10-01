@@ -149,7 +149,11 @@ pub fn widen_pattern(pattern: &str) -> Option<String> {
     let mut out = String::with_capacity(pattern.len() * 2);
     let mut at = 0usize;
     for (from, to, ch) in spots {
-        // 同一個字被兩個訪問鉤子都收到的話（類裏那一種），跳過後來的那一份。
+        // Warning: **這一道其實從來沒攔下過什麼**（2026-10-02 審出來的）。類裏的字面
+        // 字不是 `Ast` 節點，`regex-syntax` 的訪問器只從
+        // `visit_class_set_item_*` 那一條路交出它們，所以兩個鉤子收不到同一個
+        // 字——十六種刁鑽寫法逐個instrument過，`dupe=false overlap=false`。
+        // 留着是因為它一毛錢不值，而拆掉就等於賭那個訪問器將來不變。
         if from < at {
             continue;
         }
