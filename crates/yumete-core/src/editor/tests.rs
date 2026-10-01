@@ -9406,6 +9406,32 @@ fn a_hit_in_an_unnamed_draft_is_reached_by_its_buffer_not_its_name() {
     assert_eq!(ed.current_buffer().text(), "乙乙\n", "草稿裏那兩處換掉了");
 }
 
+/// **開一次挑選器不許把列表的根蓋掉**（2026-10-02 修）。
+///
+/// `listing_root` 從前一個槽裝兩件事：`檔名:行號:` 那種列表的根（`gf` 要它）和
+/// 挑選器的根（預覽要它）。於是 `:check` 出一張單子、中間按一下 `空格 f`、再回
+/// 去 `gf`，解到的是挑選器那個根底下。
+#[test]
+fn opening_the_picker_does_not_move_where_gf_looks() {
+    let dir = a_little_book("listingroot");
+    let deep = dir.join("卷一");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(deep.join("a.md")).unwrap();
+
+    // 一張列表，根是那個檔所在的目錄。
+    ed.show_listing("b.md:1: 霜\n".to_string(), "單子".to_string());
+    let was = ed.listing_root.clone();
+    assert_eq!(was.as_deref(), Some(deep.as_path()), "{was:?}");
+
+    // 開一次挑選器，再關掉。
+    ed.open_file_picker();
+    assert!(ed.picker().is_some());
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.listing_root.as_deref(), Some(deep.as_path()), "根不許被蓋掉");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **二進制檔不搜，也不算進走查的地板**（2026-10-01 定，作者提的）。
 ///
 /// 起因是「搜索隱藏和忽略」那個開關：開着它搜 yumete 自己的倉，21 處反而掉成
