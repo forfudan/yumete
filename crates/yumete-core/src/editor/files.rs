@@ -184,6 +184,64 @@ impl Editor {
         }
     }
 
+    /// 家目錄——`:cd` 不帶參數去的地方（照 helix 與 vim）。
+    ///
+    /// Warning: **`yumete-core` 不依賴 `yumete-config`**，所以那一頭那支
+    /// `home_dir` 借不過來。同 `downloads_dir`（`editor.rs`）的那幾行。
+    pub(super) fn home_dir() -> Option<PathBuf> {
+        std::env::var("HOME")
+            .ok()
+            .filter(|h| !h.is_empty())
+            .or_else(|| std::env::var("USERPROFILE").ok().filter(|h| !h.is_empty()))
+            .map(PathBuf::from)
+    }
+
+    /// 開頭那個 `~` 換成家目錄；沒有 `~` 就原樣。
+    pub(super) fn expand_tilde(path: &str) -> PathBuf {
+        match path.strip_prefix('~') {
+            Some(rest) => match Self::home_dir() {
+                Some(home) => home.join(rest.trim_start_matches('/')),
+                None => PathBuf::from(path),
+            },
+            None => PathBuf::from(path),
+        }
+    }
+
+    /// **工作路徑**——`空格 F` 搜的那個目錄（2026-10-01）。
+    ///
+    /// 和[項目路徑][`Editor::root`]是兩件事：項目路徑是**從打開的那個檔往上找
+    /// `.git`／`.yumete` 找到的那一層**，啓動時定一次；工作路徑是**你敲 `ye`
+    /// 的那個目錄**，`:cd` 改得動。在項目根上敲 `ye` 的話兩者相同，從子目錄
+    /// 進去纔分得開。
+    pub fn working_dir(&self) -> PathBuf {
+        self.working_dir
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    }
+
+    /// `:cd <路徑>`。回 `false` ＝ 那裏沒有這個目錄。
+    pub fn set_working_dir(&mut self, at: &Path) -> bool {
+        let full = match at.is_absolute() {
+            true => at.to_path_buf(),
+            false => self.working_dir().join(at),
+        };
+        if !full.is_dir() {
+            return false;
+        }
+        let now = std::fs::canonicalize(&full).unwrap_or(full);
+        self.working_dir_before = Some(self.working_dir());
+        self.working_dir = Some(now);
+        true
+    }
+
+    /// `:cd -`。回 `None` ＝ 還沒有上一個。
+    pub fn working_dir_back(&mut self) -> Option<PathBuf> {
+        let back = self.working_dir_before.take()?;
+        self.working_dir_before = Some(self.working_dir());
+        self.working_dir = Some(back.clone());
+        Some(back)
+    }
+
     /// 開 yumete 的時候定一次。命令行給的是文件夾就是它，給的是一個檔就從那個
     /// 檔往上找項目根，什麼都沒給就不設（退回 `project_root`）。
     pub fn set_root(&mut self, at: &Path) {

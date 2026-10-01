@@ -1926,6 +1926,15 @@ pub struct Editor {
     /// 时关闭浮窗的可能性」——所以它不是一個開關，記的是「在這裏我不想看」。
     /// 對邊欄不起效（邊欄只由人開由人關）。
     info_hushed: Option<usize>,
+    /// **工作路徑**——`空格 F` 搜的那個目錄，`:cd` 改它（2026-10-01）。
+    ///
+    /// Warning: **不是進程的 cwd。** 真去 `chdir` 會悄悄改掉別處七八個讀
+    /// `current_dir()` 的地方（項目根的退路、`:grep` 的退路、百科與詞表的查找），
+    /// 而這一格只管一件事。helix 也是自己記一格（`helix_stdx::env`），同理。
+    /// `None` ＝ 還沒改過，那就是啓動時的 cwd。
+    working_dir: Option<PathBuf>,
+    /// `:cd -` 回得去的那一個。
+    working_dir_before: Option<PathBuf>,
     /// **`:info <名>` 指定的那一種即時信息**，`None` ＝ 按稿子算（散文百科、
     /// 代碼診斷、表格數據）。見 [`Editor::info_live`]。
     info_live: Option<crate::sidebar::Info>,
@@ -2805,6 +2814,8 @@ impl Editor {
             hovered: None,
             info_asked: None,
             info_hushed: None,
+            working_dir: None,
+            working_dir_before: None,
             info_live: None,
             docs_asked_at: None,
             docs_moved: None,

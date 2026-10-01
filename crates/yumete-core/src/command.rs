@@ -116,6 +116,12 @@ pub enum WordCommand {
 /// A parsed command-line command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
+    /// `:cd [<path>|-]` — 換[工作路徑][`crate::editor::Editor::working_dir`]。
+    ///
+    /// 照 helix 與 vim：不帶參數回家目錄，`-` 回上一個（2026-10-01 查過兩家）。
+    ChangeDir(Option<String>),
+    /// `:pwd` — 工作路徑在哪。
+    ShowDir,
     /// `:open <path>` (aliases `:o`, `:edit`, `:e`) — open a file into a buffer.
     Open(String),
     /// `:open` with no path — the file picker, which is where a Chinese file
@@ -2396,6 +2402,26 @@ pub const WRITE: &[Word] = &[
 ];
 
 pub const COMMANDS: &[Entry] = &[
+    // Warning: **名字就叫 `cd`，不叫 `change-current-directory`**（2026-10-01）。
+    // helix 的全名是後者，而這一頭的 `:` 選單按第一個連字符摺家族——
+    // `change-current-directory` 於是摺出一個只有一個成員的 `:change- +1`，
+    // 旁邊再單列一個 `:cd`，同一條命令佔兩格還都看不懂。長名字進 `find`。
+    Entry {
+        name: "cd",
+        aliases: &[],
+        help: "cmd.commands.cd",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::ChangeDir(p.arg(0).map(str::to_string)))),
+    },
+    Entry {
+        name: "pwd",
+        aliases: &[],
+        help: "cmd.commands.pwd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::ShowDir)),
+    },
     Entry {
         name: "open",
         aliases: &["o", "e", "edit"],

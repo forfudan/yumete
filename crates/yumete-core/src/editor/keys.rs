@@ -1653,6 +1653,17 @@ impl Editor {
             Key::Ctrl('i') => self.walk_jumps(false),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
             Key::Ctrl('u') => self.move_page(count, true, 0.5),
+            // **三分之二頁**（2026-10-01 作者定）。起因是 `C-u`／`C-d` 在 Mac 上
+            // 不好按——那塊鍵盤只有一個 Ctrl，而 `u` 和 `d` 都在左手這一邊；
+            // `n` 和 `p` 在右手，左 Ctrl 配右手字母順得多。
+            //
+            // Warning: **二三頁不是哪一家的慣例。** 兩種慣例是「整頁留一兩行」
+            // （vim 的 `C-f`、Emacs 的 `next-screen-context-lines`）與「半頁」
+            // （vim 的 `C-d`）。作者的推理和 vim 留那兩行是同一個：留一截做
+            // 錨。只是留得大方——「前一页留 1/3 不会断，2/3 的新页增加阅读效
+            // 率」。三種都留着，用幾天見分曉。
+            Key::Ctrl('n') => self.move_page(count, false, 2.0 / 3.0),
+            Key::Ctrl('p') => self.move_page(count, true, 2.0 / 3.0),
             // …and on the capitals of the keys that move, which is a reader's
             // most-used pair and does not deserve a chord. `C-d` and its family
             // still work; these are the same four motions under the fingers
@@ -2041,6 +2052,10 @@ impl Editor {
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
         ('o', "hint.goto.outline"),
         ('f', "hint.goto.open-file"),
+        // **`空格 F`：搜工作路徑**（2026-10-01，照 helix 的
+        // `file_picker_in_current_directory`）。與 `空格 f` 的分別見
+        // [`Editor::working_dir`]。
+        ('F', "hint.goto.open-file-here"),
         ('b', "hint.goto.switch-buffer"),
         ('/', "hint.goto.advanced-search"),
         ('?', "hint.goto.all-commands"),
@@ -2430,6 +2445,7 @@ impl Editor {
             Key::Char('c') => self.toggle_comment(crate::comment::Prefer::Line),
             Key::Char('C') => self.toggle_comment(crate::comment::Prefer::Block),
             Key::Char('f') => self.open_file_picker(),
+            Key::Char('F') => self.open_file_picker_here(),
             Key::Char('b') => self.open_buffer_picker(),
             // **高級搜索** (#419). It used to prefill `:grep `, and `:grep` is
             // gone: what to look for is typed in the panel's own box, which
