@@ -18394,7 +18394,16 @@ fn the_grid_keeps_the_paging_keys() {
 #[ignore = "報數用的；要跑加 --release --nocapture"]
 fn a_keystroke_in_a_big_code_file() {
     use std::time::Instant;
-    let path = std::env::var("YUMETE_BENCH").expect("YUMETE_BENCH=<一個大源碼檔>");
+    // Warning: **要有個出廠路徑**（2026-10-01）。從前它無條件 `expect` 一個環境變
+    // 量，於是 `cargo test -- --ignored` 跑到這裏必 panic——而一條「本來就會紅」
+    // 的忽略測試，和一條**鏽掉了**的忽略測試，從輸出上分不出來。同一天就有兩條
+    // 鏽了十天沒人發現（見 §5.45、[^297]）。
+    let path = std::env::var("YUMETE_BENCH").unwrap_or_else(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../yumete-tui/src/lib.rs")
+            .to_string_lossy()
+            .into_owned()
+    });
     let text = std::fs::read_to_string(&path).expect("讀得到");
     let mut ed = Editor::new();
     ed.open_file(std::path::Path::new(&path)).unwrap();

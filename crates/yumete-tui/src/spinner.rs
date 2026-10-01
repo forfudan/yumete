@@ -33,7 +33,7 @@ pub const WIDTH: u16 = 1;
 
 /// **轉到第幾格**——`None` ＝ 沒在忙，回一個空格占位。
 ///
-/// ```ignore
+/// ```text
 /// let mark = spinner::frame(servers.busy_since());
 /// ```
 pub fn frame(since: Option<Instant>) -> &'static str {

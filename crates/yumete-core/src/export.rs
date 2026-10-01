@@ -308,7 +308,20 @@ fn render(
             continue;
         }
         let next = marks.iter().enumerate().find(|(i, s)| {
-            Some(*i) != parent && s.start >= from && s.end <= to && at >= s.start && at < s.end
+            Some(*i) != parent
+                && s.start >= from
+                && s.end <= to
+                && at >= s.start
+                && at < s.end
+                // Warning: **和外面那一條一樣大的不算「裏面那一層」**（2026-10-01
+                // 審出來的，是這一趟改出來的回歸）。只排除「我自己那一條」不
+                // 夠：`markdown::spans` 真的交得出**兩條範圍完全相同**的 span。
+                // 腳註那一支（`markdown.rs:821`）把整個 `[^1]` 收成一條，前面
+                // 不帶 `Marker`——而別的構造都帶，那一截 `Marker` 正是讓裏層嚴
+                // 格小於外層的東西。於是 `**[^1]**` 的 `Strong` 與 `Footnote`
+                // 一樣大，兩條互相當對方的「裏層」，**無窮遞歸，棧溢出**。
+                // `*[^1]*`、`==[^1]==`、`[**[^1]**](u)` 同。
+                && !(parent.is_some() && s.start == from && s.end == to)
         });
         match next {
             Some((i, span)) => {
@@ -781,10 +794,11 @@ mod tests {
         // 只看正文那一段——整份輸出裏還有 CSS，裏頭本來就有星號。
         let body = |text: &str, format| -> String {
             let out = export(text, format, &md);
-            out.lines()
-                .find(|l| l.starts_with("<p>") || (format == Format::Typst && l.contains('甲') || l.contains('說')))
-                .unwrap_or_else(|| panic!("{out}"))
-                .to_string()
+            let wanted = |l: &&str| match format {
+                Format::Html => l.starts_with("<p>"),
+                _ => l.contains('甲') || l.contains('說'),
+            };
+            out.lines().find(wanted).unwrap_or_else(|| panic!("{out}")).to_string()
         };
 
         // 粗體裏的代碼。
@@ -806,6 +820,18 @@ mod tests {
 
         // 作者自己的尖括號照舊轉義——遞歸之後也只轉一遍。
         assert_eq!(body("甲**a<b>c**\n", Format::Html), "<p>甲<strong>a&lt;b&gt;c</strong></p>");
+
+        // Warning: **一條腳註正好填滿一層標記，兩條 span 一樣大**（2026-10-01 審出
+        // 來的回歸）。腳註那一支不帶前導 `Marker`，所以 `Strong` 與 `Footnote`
+        // 的範圍完全相同——只認「不是我自己那一條」的話，兩條互相當對方的裏
+        // 層，**棧溢出**。這幾個輸入從前（平的那一趟）都是好的。
+        for one in ["甲**[^1]**", "甲*[^1]*", "甲==[^1]==", "甲~~[^1]~~"] {
+            let text = format!("{one}\n");
+            let out = export(&text, Format::Html, &md);
+            assert!(out.contains("甲"), "{out}");
+            let out = export(&text, Format::Typst, &md);
+            assert!(out.contains("甲"), "{out}");
+        }
     }
 
     #[test]
