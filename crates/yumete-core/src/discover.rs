@@ -191,7 +191,7 @@ pub fn words(text: &str, joins: &dyn Fn(&str) -> bool) -> Vec<Found> {
     // 左右的鄰字 for the survivors, in one more pass over the runs. This is the
     // part that has to be done on the text rather than on the counts: what a
     // string's neighbours are is not derivable from how often it occurs.
-    let mut sides: HashMap<&[char], (HashMap<char, usize>, HashMap<char, usize>)> = HashMap::new();
+    let mut sides: HashMap<&[char], Sides> = HashMap::new();
     for n in 2..=counts.len() {
         if counts[n - 1].is_empty() {
             continue;
@@ -208,8 +208,8 @@ pub fn words(text: &str, joins: &dyn Fn(&str) -> bool) -> Vec<Found> {
                 let left = if start > a { chars[start - 1] } else { EDGE };
                 let right = if start + n < b { chars[start + n] } else { EDGE };
                 let seen = sides.entry(word).or_default();
-                *seen.0.entry(left).or_insert(0) += 1;
-                *seen.1.entry(right).or_insert(0) += 1;
+                *seen.left.entry(left).or_insert(0) += 1;
+                *seen.right.entry(right).or_insert(0) += 1;
             }
         }
     }
@@ -223,10 +223,10 @@ pub fn words(text: &str, joins: &dyn Fn(&str) -> bool) -> Vec<Found> {
             if cohesion < MIN_COHESION {
                 continue;
             }
-            let Some((left, right)) = sides.get(&word) else {
+            let Some(seen) = sides.get(&word) else {
                 continue;
             };
-            let entropy = spread(left).min(spread(right));
+            let entropy = spread(&seen.left).min(spread(&seen.right));
             if entropy < MIN_ENTROPY {
                 continue;
             }
@@ -268,6 +268,17 @@ pub fn words(text: &str, joins: &dyn Fn(&str) -> bool) -> Vec<Found> {
             entropy,
         })
         .collect()
+}
+
+/// **一個候選詞兩邊的鄰字，各見過幾回。**
+///
+/// 兩邊各存一份而不是合成一份：判準取的是兩邊裏**小**的那一個（一個詞的左邊花樣
+/// 多、右邊只跟着一個字，那它多半是個更長的詞的前半），合起來就沒有「小的那一
+/// 邊」可言了。
+#[derive(Default)]
+struct Sides {
+    left: HashMap<char, usize>,
+    right: HashMap<char, usize>,
 }
 
 /// −Σ p ln p over the neighbours seen on one side.

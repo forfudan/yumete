@@ -126,6 +126,12 @@ struct Hits {
 /// something other than prose is written there.
 type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 
+/// 字典面板裏的一欄：欄名跟欄裏的字（「拆分」——「刀二阝」）。
+///
+/// 哪幾欄、叫什麼名字，是拆分表說的事，核心不認它們——所以是兩個字串而不是一支
+/// 枚舉。
+pub type Gloss = (String, String);
+
 /// Every line's block and every merge conflict in the document, against the
 /// buffer they were worked out for and that buffer's revision — the two things
 /// that decide whether they are still true.
@@ -2175,7 +2181,7 @@ pub struct Editor {
     /// — the panel shows the character alone. `Some(ch, Some([]))`: answered,
     /// and the 拆分表 has nothing for it, which the panel has to say out loud
     /// rather than draw as an empty box.
-    dictionary: Option<(char, Option<Vec<(String, String)>>)>,
+    dictionary: Option<(char, Option<Vec<Gloss>>)>,
     /// The other work area, when the page is split (Feature #176).
     other: Option<Pane>,
     /// Which half of the screen holds the keys — **screen order**, so

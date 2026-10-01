@@ -715,6 +715,9 @@ pub enum ConvertAsk {
     },
 }
 
+/// 把打進來的那一行變成它的意思。
+type Build = fn(&Parsed<'_>) -> Result<Command, CommandError>;
+
 pub struct Entry {
     /// The command word, as typed after the `:`.
     pub name: &'static str,
@@ -733,7 +736,7 @@ pub struct Entry {
     /// `None` while a family still goes through the hand-written arms of
     /// [`parse`]; when the last one is gone, so is the `Option` and so are
     /// they.
-    pub build: Option<fn(&Parsed) -> Result<Command, CommandError>>,
+    pub build: Option<Build>,
     /// What has to be true before it does anything.
     pub needs: &'static [Need],
 }

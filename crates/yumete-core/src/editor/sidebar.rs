@@ -1117,7 +1117,7 @@ impl Editor {
     ///
     /// Dropped if the reader has since asked about a different character —
     /// the answer to last frame's question must not overwrite this frame's.
-    pub fn set_dictionary(&mut self, ch: char, fields: Vec<(String, String)>) {
+    pub fn set_dictionary(&mut self, ch: char, fields: Vec<Gloss>) {
         if self.dictionary.as_ref().is_some_and(|(at, _)| *at != ch) {
             return;
         }
@@ -1126,13 +1126,13 @@ impl Editor {
     }
 
     /// **這一則字典該不該浮在光標旁邊**——那一格沒開，而此刻擺的正是字典。
-    pub fn dictionary_afloat(&self) -> Option<(char, Option<&[(String, String)]>)> {
+    pub fn dictionary_afloat(&self) -> Option<(char, Option<&[Gloss]>)> {
         (self.info_afloat() == Some(crate::sidebar::Info::Dictionary))
             .then(|| self.dictionary())
             .flatten()
     }
 
-    pub fn dictionary(&self) -> Option<(char, Option<&[(String, String)]>)> {
+    pub fn dictionary(&self) -> Option<(char, Option<&[Gloss]>)> {
         self.dictionary
             .as_ref()
             .map(|(ch, answer)| (*ch, answer.as_deref()))
