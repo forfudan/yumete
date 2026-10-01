@@ -77,9 +77,17 @@ impl Editor {
         // 這四個鍵歸浮窗，沒開就照舊翻正文，別的鍵一按浮窗就走。所以這裏**不
         // 攔**——翻不動就讓路，正文那一支自己接住。
         if self.mode == Mode::Normal && self.pending == Pending::None {
+            // Warning: **翻頁那一族要整族在這裏**（2026-10-01 作者報的：「你翻页
+            // 翻的是 buffer 不是浮窗／边栏」）。從前只攔了四個，而 `C-f`／`C-b`
+            // 與當天新加的 `C-n`／`C-p` 沒攔住——同一族鍵，開着浮窗按下去有的
+            // 翻浮窗有的翻正文，讀者沒法預測。
+            //
+            // 行數跟着「翻多少」走：整頁 8、三分之二 6、半頁 4。
             let by = match key {
-                Key::PageDown => Some(8),
-                Key::PageUp => Some(-8),
+                Key::PageDown | Key::Ctrl('f') => Some(8),
+                Key::PageUp | Key::Ctrl('b') => Some(-8),
+                Key::Ctrl('n') => Some(6),
+                Key::Ctrl('p') => Some(-6),
                 Key::Ctrl('d') => Some(4),
                 Key::Ctrl('u') => Some(-4),
                 _ => None,
