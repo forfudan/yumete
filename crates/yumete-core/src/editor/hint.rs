@@ -143,7 +143,7 @@ impl Editor {
                 }
                 // The five switches are pressed by number and walked past
                 // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
-                keys.push(("1–7".into(), say!("hint.search.switches")));
+                keys.push(("1–9".into(), say!("hint.search.switches")));
                 keys.push(("Enter".into(), say!("hint.search.use-it")));
                 keys.push(("q".into(), say!("hint.close")));
                 keys.push((back_to_text_key().into(), say!("hint.sidebar.back-to-text")));

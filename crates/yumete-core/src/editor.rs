@@ -1490,8 +1490,74 @@ pub(crate) fn book_root(here: &Path) -> PathBuf {
 /// 檔，一個項目幾千個；到了這個數還沒走完，走的就不是一本書了。
 const WALK_CEILING: usize = 20_000;
 
+/// **哪些文件算在裏面** —— 搜索面板底下那三格（2026-10-01 定）。
+///
+/// Warning: **只對走磁碟的範圍有效。** 本文件與緩衝區不經過 [`walk`]。
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Sieve {
+    /// 連隱藏文件和 `.gitignore` 裏的一起走。出廠關着。
+    pub hidden: bool,
+    /// 只走這幾條 glob 配得上的，逗號隔開。空着就是不挑。
+    pub include: String,
+    /// 這幾條 glob 配得上的不走。
+    pub exclude: String,
+}
+
+impl Sieve {
+    /// 兩格 glob 都寫對了嗎 —— 寫錯了呼叫方要說出來。
+    pub(crate) fn is_sound(&self, root: &Path) -> bool {
+        self.overrides(root).is_some()
+    }
+
+    /// 兩格 glob 做成一份 [`ignore::overrides::Override`]。
+    ///
+    /// Warning: **`ignore` 的 override 走的是 gitignore 的語義**，所以 `*.py` 配任何
+    /// 深度的 `.py`，而 `docs/*.py` 釘在根上——和 VS Code 的「包含文件」框同形。
+    /// 帶 `!` 的那幾條是排除，正是這個機制本來的用法。
+    ///
+    /// `None` 是「有一條寫錯了」，呼叫方要說出來，不許悄悄當成沒寫。
+    fn overrides(&self, root: &Path) -> Option<ignore::overrides::Override> {
+        if self.include.trim().is_empty() && self.exclude.trim().is_empty() {
+            return Some(ignore::overrides::Override::empty());
+        }
+        let mut build = ignore::overrides::OverrideBuilder::new(root);
+        for one in self.include.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            build.add(one).ok()?;
+        }
+        for one in self.exclude.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            build.add(&format!("!{one}")).ok()?;
+        }
+        build.build().ok()
+    }
+}
+
 fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
+    walk_sifted(root, &Sieve::default(), skipped, f);
+}
+
+/// [`walk`] with the panel's three cells applied.
+///
+/// `Sieve::overrides` returning `None` means a glob the reader mistyped; the
+/// walk then does nothing at all rather than quietly walking everything —
+/// an answer gathered under a filter that was thrown away is the wrong answer
+/// told confidently.
+pub(crate) fn walk_sifted(
+    root: &Path,
+    sieve: &Sieve,
+    skipped: &mut usize,
+    f: &mut impl FnMut(&Path),
+) {
+    let Some(overrides) = sieve.overrides(root) else { return };
     let walker = ignore::WalkBuilder::new(root)
+        .overrides(overrides)
+        // Warning: **五道閘一起開。** 「包含隱藏和忽略」說的是一句話，而 `ignore`
+        // 把它拆成了隱藏、`.gitignore`、`.ignore`、全局 git 排除、`.git/info/exclude`
+        // 五項——只開頭一項，`target/` 照樣搜不到，而開關上寫着「和忽略」。
+        .hidden(!sieve.hidden)
+        .ignore(!sieve.hidden)
+        .git_ignore(!sieve.hidden)
+        .git_global(!sieve.hidden)
+        .git_exclude(!sieve.hidden)
         .follow_links(false)
         // In path order, so a listing of a novel's chapters comes back in
         // chapter order rather than in whatever order the file system holds
@@ -1501,9 +1567,16 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
         // The floor under the ignore files, not a list to keep adding to: a
         // folder with no `.gitignore` at all still holds no prose in these
         // two, and the cost of looking is a whole build tree.
-        .filter_entry(|entry| {
-            !entry.file_type().is_some_and(|t| t.is_dir())
-                || !matches!(&*entry.file_name().to_string_lossy(), "target" | "node_modules")
+        .filter_entry({
+            // Warning: **開了那個開關，這道地板也要讓開**（2026-10-01）。它本來是
+            // 「沒有 .gitignore 的文件夾也不該搜 build 產物」的兜底，而開關說的
+            // 是「全都搜」。
+            let floor = !sieve.hidden;
+            move |entry| {
+                !floor
+                    || !entry.file_type().is_some_and(|t| t.is_dir())
+                    || !matches!(&*entry.file_name().to_string_lossy(), "target" | "node_modules")
+            }
         })
         .build();
     let mut seen = 0usize;
@@ -1799,7 +1872,7 @@ pub struct Editor {
     /// *repository*: in 宇浩's own tree 「宇夢」 never surfaced, because a few
     /// hundred 拆分表 drowned the chapter — 「一堆拆分表形成杂音」. The three
     /// statistics are ratios, so what is read decides what is found, and what
-    /// is being written is one file. `:word-discover-cd` and its two wider
+    /// is being written is one file. `:word-discover-working` and its two wider
     /// spellings are how a reader asks for more.
     detect_request: Option<DetectAsk>,
     /// `:theme-fill` — whether a 品色 run gets a ground. The front end holds

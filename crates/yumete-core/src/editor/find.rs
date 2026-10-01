@@ -94,7 +94,7 @@ impl Editor {
     /// intention is on the screen), otherwise the last thing searched for. It
     /// arrives selected, so typing replaces it and `Enter` keeps it — both
     /// intentions in one key, which is how VSCode's box behaves.
-    /// `:search-cd`／`-wd`／`-gd`／`:search <path>` — open it looking somewhere
+    /// `:search-working`／`-wd`／`-gd`／`:search <path>` — open it looking somewhere
     /// else (#419).
     pub(super) fn open_search_in(&mut self, scope: Where, replacing: bool) {
         // Warning: **A folder that is not there is said out loud.** Falling back to
@@ -122,6 +122,17 @@ impl Editor {
             self.search.fuzzy = false;
         }
         self.open_search();
+        // Warning: **命令進來的那一路不許開關一下就走**（2026-10-01 撞到）。
+        // `show_sidebar` 是個開關：面板開着又拿着鍵的時候它關掉面板，於是
+        // `:search ../稿` 把面板關了，而使用者說的是「去那裏找」。`空格 /`
+        // 照舊是開關，那一個鍵按第二下的意思就是「收起來」。
+        let side = self.side_for(crate::sidebar::View::Search);
+        if self.showing(crate::sidebar::View::Search).is_none() {
+            let root = self.root();
+            self.open_sidebar_showing(&root, crate::sidebar::View::Search);
+        }
+        self.focus_slot(side);
+        self.mode = Mode::Field;
     }
 
     pub(super) fn open_search(&mut self) {
@@ -237,11 +248,10 @@ impl Editor {
     /// The same, for a scope that has not been adopted yet.
     fn search_root_of(&self, scope: &Where) -> Option<PathBuf> {
         match scope {
-            Where::Buffer => None,
-            // The file's own folder. Warning: Not the project: a book's drafts, its
-            // notes and its exports live under one tree, and 「this folder and
-            // what is under it」 is the near thing a reader means.
-            Where::Folder => Some(self.here_folder()),
+            // Warning: **內存那兩檔沒有根。** 本文件與緩衝區都是一張現成的表，不走
+            // 磁碟——`search_now` 走的是另一條岔路。
+            Where::Buffer | Where::Buffers => None,
+            Where::Working => Some(self.working_dir()),
             Where::Project => Some(self.root()),
             // Warning: **相對路徑從根算起，不從當前緩衝算起**（2026-09-27 定）。
             // 從前 `.` 是「當前緩衝的文件夾」，於是換一個 buffer 它就換了意思，
@@ -324,6 +334,74 @@ impl Editor {
         (hits, total)
     }
 
+    /// **搜每一個打開着的緩衝區** —— 緩衝區那一檔（2026-10-01 定）。
+    ///
+    /// 正在寫的那一份排在最前面，於是 `mine` 那一段還是名單開頭連續的一段，
+    /// 只重搜那一份的那條快路照舊走得通。
+    ///
+    /// Warning: **沒有名字的草稿也在裏面**（作者定）。它沒有路徑可以回去，所以每一處
+    /// 命中身上記的是**緩衝區的號**（[`Hit::buffer`]），不是路徑。
+    fn scan_every_buffer(&mut self, look: &Look) {
+        let here = self.working_dir();
+        let order: Vec<usize> = std::iter::once(self.current)
+            .chain((0..self.buffers.len()).filter(|&i| i != self.current))
+            .collect();
+        let mut hits = Vec::new();
+        let mut total = 0usize;
+        let mut mine = 0usize;
+        let mut mine_total = 0usize;
+        for i in order {
+            let id = self.buffers[i].id();
+            // 有名字的按工作路徑縮短，縮不動就印全名；沒名字的印它在狀態欄上
+            // 的那個名字。
+            let label = match self.buffers[i].path() {
+                Some(path) => {
+                    let full = here.join(path);
+                    full.strip_prefix(&here).unwrap_or(&full).to_path_buf()
+                }
+                None => std::path::PathBuf::from(self.buffers[i].display_name()),
+            };
+            let rope = self.buffers[i].rope();
+            let mut at = 0usize;
+            for line in 0..rope.len_lines() {
+                let text: String = rope.line(line).chars().collect();
+                for (nth, (start, stop)) in look.spans(&text).into_iter().enumerate() {
+                    total += 1;
+                    if hits.len() < MOST {
+                        let mut hit =
+                            excerpt(Some(label.clone()), &text, at, start, stop, line, nth);
+                        hit.buffer = Some(id);
+                        hits.push(hit);
+                    }
+                }
+                at += text.chars().count();
+            }
+            if i == self.current {
+                mine = hits.len();
+                mine_total = total;
+            }
+        }
+        self.search.mine = mine;
+        self.search.mine_total = mine_total;
+        self.search.root = None;
+        self.search.hits = hits;
+        self.search.total = total;
+        self.search.looked_at = Some(self.search_mark());
+    }
+
+    /// **面板底下那三格做成一套篩子** —— `None` ＝ 有一條 glob 寫錯了。
+    fn sieve(&self) -> Option<crate::editor::Sieve> {
+        let sieve = crate::editor::Sieve {
+            hidden: self.search.hidden,
+            include: self.search.include.clone(),
+            exclude: self.search.exclude.clone(),
+        };
+        match self.search_root() {
+            Some(root) => sieve.is_sound(&root).then_some(sieve),
+            None => Some(sieve),
+        }
+    }
+
     /// Run it whatever the scope, walking the disk if that is what it takes.
     pub(super) fn search_now(&mut self) {
         self.search.broken = false;
@@ -362,6 +440,9 @@ impl Editor {
             true => regex::escape(&self.search.query),
             false => pattern,
         };
+        if matches!(self.search.scope, Where::Buffers) {
+            return self.scan_every_buffer(&look);
+        }
         let root = self.search_root();
         // Warning: **Compared as absolute paths.** A buffer opened as `a.md` and the
         // same file coming out of the walk as `/…/卷一/a.md` are one file, and
@@ -387,8 +468,19 @@ impl Editor {
         self.search.mine = hits.len();
         self.search.mine_total = total;
         if let Some(root) = root {
+            let sieve = self.sieve();
+            if sieve.is_none() {
+                self.search.hits.clear();
+                self.search.total = 0;
+                self.search.root = Some(root);
+                self.search.looked_at = Some(self.search_mark());
+                self.status = say!("search.bad-glob");
+                return;
+            }
             let mut files = Vec::new();
-            crate::editor::walk(&root, &mut 0, &mut |path| files.push(path.to_path_buf()));
+            crate::editor::walk_sifted(&root, &sieve.unwrap_or_default(), &mut 0, &mut |path| {
+                files.push(path.to_path_buf())
+            });
             for path in files {
                 // Not twice: the one being written was searched from memory.
                 let full = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
@@ -475,7 +567,7 @@ impl Editor {
             // Warning: **只在框裏。** 出了框 `Tab` 還是走邊欄那幾個視圖，那是它在每
             // 一扇面板裏的老意思。
             Key::Tab => {
-                let next = self.search.field.step(false, self.search.replacing, self.search.naming());
+                let next = self.search.field.step(false, self.search.replacing, self.search.on_disk());
                 self.search.stand_on(next);
                 // 走到名單上就不是打字了，鍵交回面板。
                 if self.search.field == Field::Results {
@@ -484,7 +576,7 @@ impl Editor {
                 }
             }
             Key::BackTab => {
-                let back = self.search.field.step(true, self.search.replacing, self.search.naming());
+                let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
                 self.search.stand_on(back);
                 if self.search.field == Field::Results {
                     self.mode = Mode::Normal;
@@ -551,7 +643,6 @@ impl Editor {
                 }
                 self.search.all_selected = false;
                 self.mode = Mode::Normal;
-                self.land_the_scope();
             }
             _ => {}
         }
@@ -567,15 +658,10 @@ impl Editor {
     /// `0` 打出來的是一個 `0`，輪盤就此卡死——使用者報的原話「後續的 0 都變成了
     /// 文件夾的路徑」。一個鍵不能既是輪盤又是入口。要打路徑就在那一格上按 `i`。
     fn step_the_scope(&mut self) {
-        use crate::search_panel::Where;
         self.search.scope = self.search.scope.next();
         self.search.scope_text = self.scope_as_typed();
-        self.search.caret = self.search.scope_text.chars().count();
         self.search.field = crate::search_panel::Field::Scope;
-        match self.search.scope {
-            Where::Named(_) => self.search.all_selected = false,
-            _ => self.look_again(),
-        }
+        self.look_again();
     }
 
     /// A committed string from the IME lands in the field, not in the page.
@@ -591,9 +677,7 @@ impl Editor {
     /// press `i` between them would make `Tab` the wrong key for the commonest
     /// thing anybody does in this panel.
     fn leave_field(&mut self, back: bool) {
-        // 離開「位置」那一格，不管走的是哪一條路，都落地。
-        self.land_the_scope();
-        self.search.field = self.search.field.step(back, self.search.replacing, self.search.naming());
+        self.search.field = self.search.field.step(back, self.search.replacing, self.search.on_disk());
         self.search.all_selected = false;
         match self.search.takes_text() {
             true => self.search.caret = self.search.typed().chars().count(),
@@ -621,7 +705,7 @@ impl Editor {
             // 「少一點／多一點」是同一件事；到頂了 `h` 出去，免得困在列表裏。
             Key::Char('h') | Key::Left if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
-                    let back = self.search.field.step(true, self.search.replacing, self.search.naming());
+                    let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
                     self.stand_on_and_look(back);
                 }
             }
@@ -653,7 +737,7 @@ impl Editor {
                     self.show_hit();
                 }
                 _ => {
-                    let next = self.search.field.step(false, self.search.replacing, self.search.naming());
+                    let next = self.search.field.step(false, self.search.replacing, self.search.on_disk());
                     self.stand_on_and_look(next);
                 }
             },
@@ -663,7 +747,7 @@ impl Editor {
                 // `step(false)` 在第 0 條上飽和，於是列表是個進得去出不來的地
                 // 方——`Tab` 走得出去，可沒人會想到去按它。
                 Field::Results if self.search.selected == 0 => {
-                    let back = self.search.field.step(true, self.search.replacing, self.search.naming());
+                    let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
                     self.stand_on_and_look(back);
                 }
                 Field::Results => {
@@ -671,7 +755,7 @@ impl Editor {
                     self.show_hit();
                 }
                 _ => {
-                    let back = self.search.field.step(true, self.search.replacing, self.search.naming());
+                    let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
                     self.stand_on_and_look(back);
                 }
             },
@@ -1056,6 +1140,10 @@ impl Editor {
                 return;
             }
             Field::PreserveCase => return,
+            // **連隱藏文件和 `.gitignore` 裏的一起搜**（2026-10-01 定）。範圍不走
+            // 磁碟的時候它畫灰，按下去什麼都不發生——同 模糊 在替換底下那一條。
+            Field::Hidden if self.search.on_disk() => self.search.hidden = !self.search.hidden,
+            Field::Hidden => return,
             _ => return,
         }
         self.run_search();
@@ -1106,18 +1194,12 @@ impl Editor {
     /// 和 `on_field_key` 裏打字那一支同一條規矩——「位置」那一格是按了纔算，別的
     /// 兩格改一個字就重找一遍。
     fn after_editing_the_box(&mut self) {
-        if self.search.field != Field::Scope {
-            self.run_search();
-        }
-    }
-
-    /// **離開「位置」那一格就把它打的那個路徑落地**（2026-09-25 定）。
-    ///
-    /// 不在那一格上就什麼都不做，所以三條出口（`Esc`、`Enter`、`↑`／`↓`）可以
-    /// 一律叫它一次，不必各自先問一句「我是不是站在位置上」。
-    fn land_the_scope(&mut self) {
-        if self.search.field == Field::Scope {
-            self.take_scope();
+        match self.search.scope.live() {
+            true => self.run_search(),
+            // Warning: **改了 包含／排除 不自己重走一趟磁碟**（2026-10-01）。那兩格
+            // 只在走磁碟的範圍下打得了字，而磁碟那一趟是 `Enter` 的事。改了就
+            // 記成過期，面板上那句「按 Enter」自己會出來。
+            false => self.search.stale = true,
         }
     }
 
@@ -1126,15 +1208,11 @@ impl Editor {
     /// 邊打邊搜的那一種（本文件）名單已經是新的，可還是照跑：`Enter` 在兩種範圍
     /// 下要做同一件事，而「這一種其實不必跑」是一句只有寫代碼的人纔知道的話。
     fn look_again(&mut self) {
-        match self.search.field == Field::Scope {
-            // 位置那一格：落地本身就帶一次搜索。
-            true => self.take_scope(),
-            false => match self.search.scope.live() {
-                true => self.run_search(),
-                // Warning: **走磁盤那一趟不在這裏跑**（2026-09-27）：先記一筆，讓前端
-                // 畫完一幀「正在找…」再回頭跑。見 `Editor::owed_search`。
-                false => self.owed_search = true,
-            },
+        match self.search.scope.live() {
+            true => self.run_search(),
+            // Warning: **走磁盤那一趟不在這裏跑**（2026-09-27）：先記一筆，讓前端畫完
+            // 一幀「正在找…」再回頭跑。見 `Editor::owed_search`。
+            false => self.owed_search = true,
         }
     }
 
@@ -1235,43 +1313,6 @@ impl Editor {
         let here = std::fs::canonicalize(here).unwrap_or_else(|_| here.to_path_buf());
         let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
         Some(here.strip_prefix(&root).unwrap_or(&here).to_path_buf())
-    }
-
-    fn take_scope(&mut self) {
-        // Warning: **沒動過那一格就別重新解釋它**（2026-09-26）。`scope_as_typed` 把
-        // 「本文件夾」這種範圍攤成一個真路徑寫進框裏，而落地會把路徑讀成
-        // `Named`——於是按一下 `0`、走開，那一格就從「本文件夾」變成一長串路徑。
-        // 兩者搜的是同一批檔案，可屏幕上說的不是同一件事。
-        if self.search.scope_text == self.scope_as_typed()
-            && !matches!(self.search.scope, crate::search_panel::Where::Named(_))
-        {
-            return self.search_now();
-        }
-        let typed = self.search.scope_text.trim().to_string();
-        let scope = match typed.is_empty() {
-            true => crate::search_panel::Where::Buffer,
-            false => crate::search_panel::Where::Named(typed.clone().into()),
-        };
-        // **屏幕上寫着什麼就是什麼**：說了一個不存在的文件夾，那一格照樣寫着它，
-        // 而狀態欄當場說它不在。
-        //
-        // Warning: **不許悄悄退回「只搜這個文件」。** `search_now` 拿不到根就只掃眼前
-        // 這個緩衝區，交出一張**看着像真的**短清單——那是這扇面板從一開始就躲開
-        // 的事（`open_search_in` 開頭那一段說的是同一件）。
-        let nowhere = !matches!(scope, crate::search_panel::Where::Buffer)
-            && self.search_root_of(&scope).is_none();
-        self.search.scope = scope;
-        if nowhere {
-            self.search.hits.clear();
-            self.search.total = 0;
-            self.search.selected = 0;
-            self.search.stale = false;
-            self.search.looked_at = None;
-            self.status = say!("search.no-such-folder", typed);
-            return;
-        }
-        // 換了地方，上一次的答案就不是這個問題的答案了。
-        self.search_now();
     }
 
     // ---- Changing what was found (#419 三) --------------------------------
@@ -1436,7 +1477,13 @@ impl Editor {
     }
 
     /// Which buffer a hit is in, opening the file if it is not open yet.
+    ///
+    /// Warning: **緩衝區那一檔記的是號，不是路徑**——沒有名字的草稿沒有路徑可以回去，
+    /// 而兩個草稿的名字是同一個 `[scratch]`。
     fn buffer_of(&mut self, hit: &Hit) -> Option<usize> {
+        if let Some(id) = hit.buffer {
+            return self.buffers.iter().position(|b| b.id() == id);
+        }
         self.buffer_for(hit.file.as_deref())
     }
 
@@ -1671,6 +1718,7 @@ fn excerpt(
         file,
         line,
         nth,
+        buffer: None,
         at: line_at + start,
         end: line_at + stop,
         mark: lead + (start - from)..lead + (stop - from),
