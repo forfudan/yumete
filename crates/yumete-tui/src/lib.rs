@@ -7757,7 +7757,8 @@ fn draw_search(
             put_text(buf, box_at, y, to, &asks, Style { fg: quiet.fg, ..style });
         }
         if here && !find.all_selected {
-            caret = box_in(buf, box_at, y, to, &shown, find.caret, typing, ink);
+            let box_is = Rect::new(box_at, y, to.saturating_sub(box_at), 1);
+            caret = box_in(buf, box_is, &shown, find.caret, typing, ink);
         }
     };
     draw_box(buf, Field::Query, &say!("search.label.query"), &find.query, y);
@@ -8762,6 +8763,17 @@ fn tint_the_rules(
     }
 }
 
+/// Warning: **九個參數，而且不收 `too_many_arguments`**（2026-10-02 想過一輪，不改）。
+///
+/// 看着該併的是中間那三個 `&mut`：`viewport`、`left`、`span` 本來就是同一個
+/// [`Viewport`] 裏的三格，傳整個結構體就只剩七個。不這麼做的理由是**那個結構
+/// 體裏還有兩格不屬於這一支**——`zong` 是竪排的位置，`table` 是格狀的。現在橫
+/// 排這一支**夠不着它們**，所以「畫橫排的時候動不到竪排捲到哪裏」是編譯器保
+/// 着的；傳整個結構體就只剩下約定。拿一條編譯期的保證去換一個數字，不值。
+///
+/// 併了 `vertical::draw` 也得一起併（不然兩支一支傳結構體、一支傳字段，更亂），
+/// 而它只有七個，本來就不在警告裏。
+#[allow(clippy::too_many_arguments)]
 fn draw_horizontal(
     frame: &mut Frame,
     editor: &Editor,
@@ -10791,14 +10803,14 @@ fn caret_shape(mode: Mode, vertical: bool, extending: bool, in_the_list: bool) -
 
 fn box_in(
     buf: &mut ratatui::buffer::Buffer,
-    box_at: u16,
-    y: u16,
-    to: u16,
+    at: Rect,
     shown: &str,
     caret: usize,
     typing: bool,
     ink: crate::theme::Palette,
 ) -> Option<Position> {
+    // 一格高的一條：`at.x` 是框的左邊，`at.right()` 是它右邊的牆。
+    let (box_at, y, to) = (at.x, at.y, at.right());
     // Where that character starts, in cells: everything before it, measured.
     // Warning: **Cells, not characters** — 一個漢字佔兩格, and a cursor placed by
     // character count lands half a word to the left on a line of prose.
