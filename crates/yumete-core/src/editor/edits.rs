@@ -609,6 +609,16 @@ impl Editor {
         // the next one either, so stop (#318). `revision`, not `char_count`:
         // a macro that types a character and rubs it out has still worked.
         let clipped = count.min(Self::WRITING_MAX);
+        // **數目是一條命令，和 `100p` 同一條規矩**（2026-10-02 補，#323 當初只改了
+        // [`Editor::repeat`]）。第一趟照常掙它自己那幾個撤回點——巨集裏每一條命令
+        // 各算一步，vim 也是這樣；第二趟起就不再掙了，所以 `10q` 和 `1q` 按同樣
+        // 多下 `u` 撤得掉。從前 `10q` 一個改動的巨集要按十一下。
+        //
+        // Warning: **開在哪一份上就關在哪一份上。** 巨集裏什麼鍵都可能有，包括換稿子
+        // 的那幾個；拿 `current_buffer_mut()` 關的話，換過之後關的是別人，而開着
+        // 那一份的 `grouping` 永遠是 `true`——**從此一個撤回點都不記**，而且一聲
+        // 不吭。所以記下號碼，照號碼關。
+        let mut group: Option<(u64, bool)> = None;
         for _ in 0..clipped {
             let before = (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision());
             for &key in &keys {
@@ -616,6 +626,15 @@ impl Editor {
             }
             if (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision()) == before {
                 break;
+            }
+            if group.is_none() {
+                let id = self.current_buffer().id();
+                group = Some((id, self.current_buffer_mut().begin_undo_group()));
+            }
+        }
+        if let Some((id, was)) = group {
+            if let Some(i) = self.buffer_with(id) {
+                self.with_buffer(i, |e| e.current_buffer_mut().end_undo_group(was));
             }
         }
         self.replaying = false;
