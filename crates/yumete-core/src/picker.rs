@@ -323,11 +323,19 @@ impl Picker {
     }
 
     /// **從光標刪到末尾**——框裏的 `D`（2026-10-01）。
+    ///
+    /// Warning: **末尾那一格上刪掉看得見的最後一個字**（2026-10-02 改，和搜索面板同一
+    /// 條規矩）。那一條是 2026-09-27 定的，原話是兩個試用的人都報「`d` 按了什麼都
+    /// 不發生」：框裏的光標走得到文字後面那一格，`Esc` 出來多半就停在那裏，而按
+    /// 的人想刪的是看得見的最後那個字。
+    ///
+    /// 同日早些時候這裏改成了「末尾就什麼都別動」，理由是「刪了個空還把單子撥回
+    /// 第一條，位置白丟」——那個理由現在不成立了：真的刪掉一個字，單子本來就該
+    /// 重篩。兩扇面板一個鍵，不許有兩種答案。
     pub fn delete_to_end(&mut self) {
-        let at = self.byte(self.caret());
-        // Warning: **光標已經在末尾就什麼都別動**（2026-10-02 審出來的）。從前它照樣
-        // 把單子上站着的那一條撥回第一條——刪了個空，位置白丟。
-        if at == self.query.len() {
+        let last = self.query.chars().count();
+        let at = self.byte(self.caret().min(last.saturating_sub(1)));
+        if self.query.is_empty() {
             return;
         }
         self.query.truncate(at);
@@ -335,13 +343,22 @@ impl Picker {
     }
 
     /// Remove the character *under* the caret; the caret stays where it is.
+    ///
+    /// Warning: **末尾那一格上刪的是它前面那一個**——同 [`Picker::delete_to_end`]，
+    /// 同搜索面板的 `Search::delete_here`。
     pub fn delete(&mut self) {
-        let caret = self.caret();
-        if caret < self.query.chars().count() {
-            let (from, to) = (self.byte(caret), self.byte(caret + 1));
-            self.query.replace_range(from..to, "");
-            self.selected = 0;
-        }
+        let last = self.query.chars().count();
+        let caret = match self.caret() >= last {
+            true => match last.checked_sub(1) {
+                Some(back) => back,
+                None => return,
+            },
+            false => self.caret(),
+        };
+        let (from, to) = (self.byte(caret), self.byte(caret + 1));
+        self.query.replace_range(from..to, "");
+        self.caret = self.caret.min(self.query.chars().count());
+        self.selected = 0;
     }
 
     /// Move the caret: `Left`, `Right`, `Home`/`C-a`, `End`/`C-e`.
