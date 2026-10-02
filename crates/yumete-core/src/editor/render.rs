@@ -6,6 +6,11 @@
 
 use super::*;
 
+/// 一行上的若干段，每段是一對字符下標 `(起, 止)`。
+///
+/// 藏起來的標記、摺掉的格子尾巴、留白——都是這個形狀，而且都排過序。
+type Spans = Vec<(usize, usize)>;
+
 impl Editor {
     // ---- How much of the result is shown (Features #96 / #104) -------------
 
@@ -315,7 +320,7 @@ impl Editor {
     /// Empty unless 所見即所得 is on. The construct the cursor is in is never
     /// hidden, so the cursor is never inside text that is not on the screen —
     /// which is what makes every motion and every edit act on what can be seen.
-    pub fn hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+    pub fn hidden_on_line(&self, line: usize) -> Spans {
         let mut off = self.markup_off_line(line);
         // **A folded cell tail is off the page by the same door** (#283), and
         // it has to be: the width the padding squares up, the columns the wrap
@@ -336,7 +341,7 @@ impl Editor {
     ///
     /// Separate because a fold is *measured* against this: how wide a cell is
     /// drawn is how wide it is with its markup already off.
-    fn markup_off_line(&self, line: usize) -> Vec<(usize, usize)> {
+    fn markup_off_line(&self, line: usize) -> Spans {
         // A reading that is being *laid out* is drawn beside the base, so its
         // markup comes off the page whatever `:render` says — leaving the tags
         // on would be showing the same reading twice. This is what the 縱書
@@ -897,7 +902,7 @@ impl Editor {
     /// rebuilt the row's markup and its cells from scratch, and a 5,000-row
     /// table spent 50 ms of every keystroke deriving twice over what the line
     /// before had just worked out.
-    fn measured_on_line(&self, line: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+    fn measured_on_line(&self, line: usize) -> (Spans, Spans) {
         let markup = self.markup_off_line(line);
         let tails = self.cell_tails_against(line, &markup, None);
         let slack = self.cell_slack_against(line, &markup, None);
@@ -926,7 +931,7 @@ impl Editor {
         line: usize,
         markup: &[(usize, usize)],
         open: Option<(usize, usize)>,
-    ) -> Vec<(usize, usize)> {
+    ) -> Spans {
         if !self.cells_fold_here() {
             return Vec::new();
         }
@@ -978,7 +983,7 @@ impl Editor {
         line: usize,
         markup: &[(usize, usize)],
         open: Option<(usize, usize)>,
-    ) -> Vec<(usize, usize)> {
+    ) -> Spans {
         if !self.cells_fold_here() {
             return Vec::new();
         }

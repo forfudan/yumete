@@ -7,11 +7,16 @@
 use super::*;
 
 impl Editor {
-    // Warning: **`Key::Esc` 那一支不收 `collapsible_if`**（2026-10-01）：收了就
+    // Warning: **`Key::Esc` 那一支不收 `collapsible_match`**（2026-10-01）：收了就
     // 成了 `Key::Esc if self.drop_the_offering()`，一個**帶副作用的守衛**——中間
     // 插一支 arm 進來就換了意思，而「按 Esc 一定要把那張單子撤掉」跟它撤沒撤成
     // 是兩件事。
-    #[allow(clippy::collapsible_if)]
+    //
+    // Warning: **這裏原先寫的是 `collapsible_if`，壓不住它**（2026-10-02）。
+    // clippy 的提示句「this `if` can be collapsed into the outer `match`」看着
+    // 像 `collapsible_if`，底下那行 `#[warn(...)]` 纔是真名。壓一條警告之後要
+    // 回頭再跑一次，看它真的不見了。
+    #[allow(clippy::collapsible_match)]
     pub(super) fn on_insert_key(&mut self, key: Key) {
         // Warning: **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
         // `C-g` 後面那個 `u` 得在這裏吞——放在那邊是吞不到的（2026-09-23 測出來
