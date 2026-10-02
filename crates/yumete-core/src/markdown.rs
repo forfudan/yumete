@@ -942,6 +942,16 @@ fn fence(chars: &[char], at: usize) -> Option<usize> {
     if !matches!(c, '*' | '_' | '~' | '=') {
         return None;
     }
+    // Warning: **整行只有這一個字符，那是一條線，不是強調**（2026-10-02 一輪掃查
+    // 報來的）。十四個 `=` 自己一行，從前被當成反覆的 `==高亮==` 一對一對吃掉：
+    // 畫出來只剩六個，而且光標走過去的時候那一行在 6／10／14 格之間變來變去。
+    // setext 標題的下劃線（`====`）和散文裏的 `*****` 分隔線都中。
+    //
+    // CommonMark 也是這麼分的：`***` 自己一行是 thematic break，`===` 自己一行是
+    // setext 的下劃線——兩個都不是強調。只收「整行」這一種，別的照舊。
+    if chars.iter().all(|&x| x == c || x.is_whitespace()) {
+        return None;
+    }
     let len = chars[at..].iter().take_while(|&&x| x == c).count().min(2);
     // `~` and `=` only ever come in pairs: a lone one is a dash or an equals.
     if matches!(c, '~' | '=') && len < 2 {
