@@ -19965,6 +19965,22 @@ fn paste_table_converts_what_the_clipboard_held() {
     ed.provide_clipboard("甲,乙\n", how);
     assert!(ed.current_buffer().text().contains("| 甲"), "{:?}", ed.current_buffer().text());
 
+    // **`空格 t x` 的大寫是貼**（2026-10-02 作者定）：小寫轉這裏這一張，大寫
+    // 要剪貼板那一張。
+    let mut ed = typed("");
+    press(&mut ed, " txP");
+    assert_eq!(
+        ed.take_clipboard_read(),
+        Some(Pasting::AsTable { to: Shape::Pipe, from: None }),
+        "空格 t x P 要的是剪貼板"
+    );
+    // 兩行——一行嗅不出分隔符，那是 `sniff_among` 有意的下限。
+    let mut ed = typed("甲,乙\n丙,丁\n");
+    press(&mut ed, "gg");
+    press(&mut ed, " txt");
+    assert_eq!(ed.take_clipboard_read(), None, "小寫不碰剪貼板");
+    assert!(ed.current_buffer().text().contains('\t'), "小寫轉的是這裏這一張");
+
     // 看不出是張表就說一聲，一個字都不貼。
     let mut ed = typed("");
     ed.execute(":paste-table pipe").unwrap();

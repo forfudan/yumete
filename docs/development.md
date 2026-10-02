@@ -18969,7 +18969,9 @@ bug 的入口（已修）。
 ## 5.64 表格轉換：`:convert-table` 和 `:paste-table`（2026-10-02 作者定）
 
 `:table-pipe` 和 `:table-csv` 改名併成 `:convert-table`，另加 `:paste-table`，鍵位摺在
-`空格 t x` 底下（`p` pipe、`c` csv、`t` tsv）。
+`空格 t x` 底下：**小寫轉這裏這一張，大寫把剪貼板那一張貼成那一種**（`p P` pipe、
+`c C` csv、`t T` tsv）。大小寫分工照這一組本來的習慣——`r R`、`c C`、`d D` 都是「另一個
+方向」或者「重的那一個」。
 
 ### 5.64.1 為什麼改名
 

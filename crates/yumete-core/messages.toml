@@ -5422,23 +5422,23 @@ en = "convert the table's format (delimiter)"
 [[message]]
 # 空格 t x 底下：轉成逗號分隔
 key = "hint.table.convert-csv"
-zht = "csv"
-zhs = "csv"
-en = "csv"
+zht = "csv（轉換／貼上）"
+zhs = "csv（转换/粘贴）"
+en = "csv (convert / paste)"
 
 [[message]]
 # 空格 t x 底下：轉成 | 表格
 key = "hint.table.convert-pipe"
-zht = "pipe"
-zhs = "pipe"
-en = "pipe"
+zht = "pipe（轉換／貼上）"
+zhs = "pipe（转换/粘贴）"
+en = "pipe (convert / paste)"
 
 [[message]]
 # 空格 t x 底下：轉成跳格分隔
 key = "hint.table.convert-tsv"
-zht = "tsv"
-zhs = "tsv"
-en = "tsv"
+zht = "tsv（轉換／貼上）"
+zhs = "tsv（转换/粘贴）"
+en = "tsv (convert / paste)"
 
 [[message]]
 # 表格提示：刪這一行
