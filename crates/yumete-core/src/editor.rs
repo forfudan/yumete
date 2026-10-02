@@ -1709,16 +1709,24 @@ fn walk_inner(
     let mut seen = 0usize;
     let mut visited = 0usize;
     for entry in walker.flatten() {
-        if !entry.file_type().is_some_and(|t| t.is_file()) {
-            continue;
-        }
         // Warning: **走到地板、而且錶也到了，纔停。** 停下來交出走到的那些，比卡死強：
         // 交出來的是真的，而卡死的時候屏幕上一個字都沒有。地板與錶的分工見
         // [`WALK_GRACE`]。
+        //
+        // Warning: **這一句要排在「是不是文件」前面**（2026-10-02 查出來的）。從前它在
+        // 後面，於是**錶只在交出一個文件的時候讀**——一棵全是目錄的樹一次都讀不
+        // 到，兩道地板和那五秒硬停通通不存在。四十六萬個空目錄、一個文件：`空格 f`
+        // 凍了 **13 秒**（量了兩趟），而那正是 [`WALK_CEILING`] 寫出來要擋的那一
+        // 幕。走到一半（二十萬個目錄）更糟——那一趟 3.8 秒走完，`cut` 是 false，
+        // 名單還說自己是全的。`visited` 本來就該是「看過幾個條目」，不是「看過幾
+        // 個文件」；那是 `seen`。
         visited += 1;
         if walk_is_done(seen, visited, started.elapsed(), prose_only) {
             walked.cut = true;
             break;
+        }
+        if !entry.file_type().is_some_and(|t| t.is_file()) {
+            continue;
         }
         let path = entry.path();
         // Not what this editor just wrote. `:export html` puts the book's own
