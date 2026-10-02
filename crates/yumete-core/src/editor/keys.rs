@@ -2365,10 +2365,13 @@ impl Editor {
     ];
 
     /// `空格 t x` 底下那三個格式。名字直接寫——它們就是命令上打的那三個詞。
+    /// `空格 t x` 底下那三種格式。**小寫是轉換，大寫是把剪貼板貼成那一種**
+    /// （2026-10-02 作者定）——和這一組的習慣一致：大寫是「另一個方向」或者
+    /// 「重的那一個」（`r R`、`c C`、`d D`、`F`）。
     pub(super) const TABLE_CONVERT_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("p", "hint.table.convert-pipe"),
-        ("c", "hint.table.convert-csv"),
-        ("t", "hint.table.convert-tsv"),
+        ("p P", "hint.table.convert-pipe"),
+        ("c C", "hint.table.convert-csv"),
+        ("t T", "hint.table.convert-tsv"),
     ];
 
     /// What `t` adds inside a fenced block. A block is read where it lies

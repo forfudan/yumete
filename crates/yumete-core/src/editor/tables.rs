@@ -1775,13 +1775,20 @@ impl Editor {
     /// `空格 t x` 之後那一個鍵：轉成哪一種格式。
     pub(super) fn convert_table_key(&mut self, key: Key) {
         use crate::table::Shape;
-        let to = match key {
-            Key::Char('p') => Shape::Pipe,
-            Key::Char('c') => Shape::Delimited(','),
-            Key::Char('t') => Shape::Delimited('\t'),
+        let Key::Char(c) = key else {
+            return;
+        };
+        let to = match c.to_ascii_lowercase() {
+            'p' => Shape::Pipe,
+            'c' => Shape::Delimited(','),
+            't' => Shape::Delimited('\t'),
             _ => return,
         };
-        self.convert_table(to, None);
+        // **小寫轉這裏這一張，大寫貼剪貼板那一張**（2026-10-02 作者定）。
+        match c.is_ascii_uppercase() {
+            true => self.paste_table(to, None),
+            false => self.convert_table(to, None),
+        }
     }
 
     /// `:convert-table` — **把光標這裏的表寫成另一種樣子**（2026-10-02 作者定）。
