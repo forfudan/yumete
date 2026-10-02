@@ -1044,15 +1044,35 @@ impl Buffer {
     /// Turn an announced undo point into a real one, now that the text has
     /// moved. Called from the two places that move it.
     fn earn_snapshot(&mut self) {
-        if let Some(point) = self.history.pending.take() {
-            // **分了叉，存檔那個位置就走不回去了**（見 [`Buffer::saved_depth`]）。
-            // 撤回幾步再改一個字，重做那一支整個沒了——而存檔的那一刻如果在那
-            // 一支上，從此沒有任何一個位置和盤上一樣。
-            if self.saved_depth.is_some_and(|at| at > self.history.undo.len()) {
-                self.saved_depth = None;
+        match self.history.pending.take() {
+            Some(point) => {
+                // **分了叉，存檔那個位置就走不回去了**（見 [`Buffer::saved_depth`]）。
+                // 撤回幾步再改一個字，重做那一支整個沒了——而存檔的那一刻如果
+                // 在那一支上，從此沒有任何一個位置和盤上一樣。
+                if self.saved_depth.is_some_and(|at| at > self.history.undo.len()) {
+                    self.saved_depth = None;
+                }
+                self.history.undo.push(point);
+                self.history.redo.clear();
             }
-            self.history.undo.push(point);
-            self.history.redo.clear();
+            // Warning: **繩子動了而深度沒動，那個深度就不認得內容了**（2026-10-02
+            // 一輪自查報來的，`saved_depth` 自己的洞）。
+            //
+            // `saved_depth` 記的是深度，靠的是「一條線性的歷史上，深度認得出一個
+            // 位置」。分組裏 `snapshot` 不報點（`grouping`），於是**改了一串字而
+            // 深度一格沒動**——那一串裏如果夾着一次存檔，存的那個深度此後還在長，
+            // `u` 再 `U` 回到那個深度帶回來的是後來的內容，而它說「乾淨」。
+            //
+            // 真打得出來：錄一個「改一下、`:w`、再改一下」的巨集放兩遍，屏幕上
+            // 不寫 `[+]`、`:q` 一聲不吭就退出去——正是這一格要擋的那件事。
+            //
+            // 平時那條路不受影響：`i…Esc` 第一下就把點報掉了，深度早就走過
+            // `saved_depth`，對不上也就不會作廢。
+            None => {
+                if self.saved_depth == Some(self.history.undo.len()) {
+                    self.saved_depth = None;
+                }
+            }
         }
     }
 
@@ -1636,6 +1656,46 @@ mod tests {
         assert_eq!(b.replace(4..7, "改過的"), Ok(()));
         assert_eq!(b.text(), "第一行\n改過的\n");
         assert_eq!(b.revision(), was + 1, "one edit, one revision");
+    }
+
+    /// **分組裏存了一次檔，那個「乾淨位置」就不算數了**（2026-10-02 自查出來的）。
+    ///
+    /// `saved_depth` 記的是深度，靠的是「一條線性的歷史上，深度認得出一個位置」。
+    /// 分組裏不報撤回點，於是改了一串字而深度一格沒動——那一串裏夾着的那次存檔，
+    /// 存的深度此後還在長。`u` 再 `U` 回到那個深度帶回來的是**後來的內容**，而它
+    /// 說「乾淨」：`[+]` 不寫、`:q` 不問、救命稿不寫，三道一起失效。
+    #[test]
+    fn a_save_inside_an_undo_group_leaves_no_clean_point() {
+        let dir = std::env::temp_dir().join(format!("yumete-groupsave-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("章.md");
+        fs::write(&path, "原來\n").unwrap();
+        let mut b = Buffer::open(&path).unwrap();
+
+        // 先在組外改一下，掙到一個真的撤回點（深度 0 → 1）。
+        b.snapshot(0);
+        b.insert(0, "甲").unwrap();
+
+        // 一組之內：改一下、存檔、再改一下。深度一格不動。
+        let was = b.begin_undo_group();
+        b.insert(0, "乙").unwrap();
+        b.save_forcing(false).unwrap();
+        assert!(!b.is_modified(), "剛存完是乾淨的");
+        b.insert(0, "丙").unwrap();
+        b.end_undo_group(was);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "乙甲原來\n", "盤上是存檔那一刻那份");
+
+        // 走開再走回那個深度——帶回來的是「丙」那一版，和盤上不一樣。
+        b.undo(0).unwrap();
+        b.redo(0).unwrap();
+        assert_ne!(
+            b.rope().to_string(),
+            fs::read_to_string(&path).unwrap(),
+            "緩衝區和盤上本來就不一樣"
+        );
+        assert!(b.is_modified(), "不一樣就得說不一樣");
+        fs::remove_dir_all(&dir).ok();
     }
 
     /// **救回來的草稿，撤到棧底也不算乾淨**（2026-10-02 補）。
