@@ -2605,6 +2605,30 @@ fn a_path_typed_into_a_write_command_is_reckoned_from_the_working_directory() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **`:help` 教的鍵要和真的綁法一致**（2026-10-02 一輪掃查報來的）。
+///
+/// 那張表是按**位置**讀的（`u U` 撤銷／重做），而巨集那一行寫的是 `q Q` ——
+/// 於是它教人用 `q` 開錄，而真的是 `Q` 錄、`q` 放。那兩個鍵自己的註釋寫着「調換了
+/// 的一對是最糟的那一種分歧：按錯了不是沒反應，它開始錄，蓋掉你本來要放的那一段」。
+/// 表格那一組同理：2026-09-21 搬進了空格選單，而這一頁還寫着 `t r`、`t s`。
+#[test]
+fn the_help_page_names_keys_that_are_really_bound() {
+    let mut ed = typed("那年冬天\n");
+    ed.execute(":help").unwrap();
+    let page = ed.current_buffer().rope().to_string();
+    assert!(page.contains("`Q q`"), "巨集那一對寫反了：{}", &page[..200.min(page.len())]);
+    assert!(!page.contains("`q Q`"));
+
+    // 表格那一組：`:help table` 裏每一條都要帶空格鍵。
+    let mut ed = typed("那年冬天\n");
+    ed.execute(":help table").unwrap();
+    let page = ed.current_buffer().rope().to_string();
+    for stale in ["`t r", "`t s", "`t/ ", "`t i", "`t y", "`t o"] {
+        assert!(!page.contains(stale), "{stale:?} 還是舊寫法：\n{page}");
+    }
+    assert!(page.contains("␣t"), "{page}");
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是

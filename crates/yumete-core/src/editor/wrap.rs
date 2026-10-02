@@ -299,7 +299,11 @@ impl Editor {
             Pending::Table => "t",
             Pending::Hop { forward: true } => "]",
             Pending::Hop { forward: false } => "[",
-            Pending::Conflict => "␣c",
+            // Warning: **`␣m`，不是 `␣c`**（2026-10-02 更正）。合併衝突 2026-09-12
+            // 就從 `空格 c` 搬到了 `空格 m`（#409，`空格 c` 讓給了行註釋），這一
+            // 格沒跟着搬——按 `␣m` 畫出合併衝突那扇面板，而光標旁邊的小牌子寫着
+            // `␣c`，那是另一個現在還活着的鍵。
+            Pending::Conflict => "␣m",
             Pending::Case => "`",
             Pending::Mark => "M",
             Pending::Recall => "'",

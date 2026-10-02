@@ -130,7 +130,13 @@ impl Editor {
             ("y p", say!("help.common.yank-put")),
             ("u U", say!("help.common.undo-redo")),
             (".", say!("help.common.repeat-edit")),
-            ("q Q", say!("help.common.macros")),
+            // Warning: **`Q` 先，`q` 後**（2026-10-02 更正）。這張表是**按位置**讀的
+            // （`u U` 撤銷／重做、`> <` 縮進／退縮進），而那一句是「錄一段按鍵／
+            // 放一遍」——寫成 `q Q` 就是教人用 `q` 開錄。真的綁法是 `Q` 錄、`q`
+            // 放（`keys.rs`），而那兩個鍵的註釋自己寫着「**調換了的一對是最糟的
+            // 那一種分歧**：手不讀字，就按下去，而這兩個按錯了不是沒反應——它開
+            // 始錄，蓋掉你本來要放的那一段」（#404）。
+            ("Q q", say!("help.common.macros")),
             ("> <", say!("help.common.indent")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
@@ -206,12 +212,15 @@ impl Editor {
             ("h j k l", say!("help.table.step-by-cell")),
             ("Tab S-Tab", say!("help.table.next-previous-cell")),
             ("i a c d", say!("help.table.type-in-cell")),
-            ("t/ t?", say!("help.table.who-uses-this")),
-            ("t o t b t f t t", say!("help.table.four-surfaces")),
-            ("t i t w", say!("help.table.detail-and-folds")),
-            ("t r t d", say!("help.table.add-or-drop-row")),
-            ("t s t S", say!("help.table.sort-by-column")),
-            ("t y t p", say!("help.table.yank-or-put-column")),
+            // Warning: **這一組要寫 `␣t…`**（2026-10-02 更正）。表格那一組 2026-09-21
+            // 搬進了空格選單（`t`／`T` 還給 vi 的 till），而這一頁沒跟着搬——
+            // 上面寫的 `t r`、`t s` 按下去一個都不管用，`t` 當場成了 till。
+            ("␣t/ ␣t?", say!("help.table.who-uses-this")),
+            ("␣to ␣tb ␣tf ␣tt", say!("help.table.four-surfaces")),
+            ("␣ti ␣tw", say!("help.table.detail-and-folds")),
+            ("␣tr ␣td", say!("help.table.add-or-drop-row")),
+            ("␣ts ␣tS", say!("help.table.sort-by-column")),
+            ("␣ty ␣tp", say!("help.table.yank-or-put-column")),
             (":table-rules off", say!("help.table.no-column-rules")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
