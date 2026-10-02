@@ -104,6 +104,14 @@ pub struct Buffer {
     /// What [`Buffer::draft_is_stale`] compares against, so the editor can ask
     /// 「is there anything a crash would take?」 without writing to find out.
     swapped_at: Option<u64>,
+    /// **What tells this session's recovery copy from another yumete's**:
+    /// the process id, as digits.
+    ///
+    /// A field rather than a call to `std::process::id()` so that a test can
+    /// be two sessions — one process cannot otherwise play both parts, and
+    /// 「two yumetes on one chapter」 is exactly what this field exists for.
+    /// Digits only: [`read_draft`] finds drafts by a digit suffix.
+    draft_tag: String,
     /// Whether the recovery copy on disk is *this session's*.
     ///
     /// Until this session writes one, the copy beside the document belongs to
@@ -276,6 +284,7 @@ impl Buffer {
             pending_swap: None,
             wrote_at: None,
             swapped_at: None,
+            draft_tag: std::process::id().to_string(),
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -320,6 +329,7 @@ impl Buffer {
             pending_swap: None,
             wrote_at: None,
             swapped_at: None,
+            draft_tag: std::process::id().to_string(),
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -382,6 +392,7 @@ impl Buffer {
             pending_swap,
             wrote_at: None,
             swapped_at: None,
+            draft_tag: std::process::id().to_string(),
             owns_swap: false,
             syntax,
             syntax_guessed: named.is_none(),
@@ -703,10 +714,8 @@ impl Buffer {
         self.scratch_swap.as_deref()
     }
 
-    /// Where *this* session writes its recovery copy.
-    ///
-    /// The canonical name, unless a draft nobody has taken over is already
-    /// sitting there — then a name of this session's own, `.ch1.md.yumete.4321`.
+    /// Where *this* session writes its recovery copy: **a name of its own**,
+    /// `.ch1.md.yumete.4321`.
     ///
     /// **This is the whole of #305.** Refusing to overwrite an un-taken draft
     /// was right; refusing to write *at all* was the accident, and it made the
@@ -714,13 +723,31 @@ impl Buffer {
     /// a file after a crash — the one session that had none. It also had two
     /// yumetes on one chapter writing over each other, because ownership was a
     /// field in a process and the other process cannot see a field.
+    ///
+    /// Warning: **每個進程一份，永遠**（2026-10-02 作者定「救命稿按 pid 分家」）。
+    /// 從前只有「來的時候already有別人的草稿」那一種情形纔分家，於是兩個 yumete
+    /// 同時開一個乾淨的檔，兩邊寫的是同一個名字：誰後寫誰贏，而任一邊按 `:w`
+    /// 就把那一份刪掉——另一邊沒存的工作連救命稿都沒有了。實測 6/6 丟。
+    ///
+    /// 分了家之後，`clear_swap` 拿走的只會是 `wrote_at`（自己這一份），刪不到別
+    /// 人的；開檔時 `read_draft` 本來就掃整個 `.<名字>.yumete*`，所以撿得回來。
     fn session_swap_path(&self) -> Option<PathBuf> {
         let swap = self.swap_path()?;
-        if self.pending_draft.is_some() && !self.owns_swap {
-            let name = swap.file_name()?.to_string_lossy().into_owned();
-            return Some(swap.with_file_name(format!("{name}.{}", std::process::id())));
+        // **沒有檔名的那一種已經是自己的了**：草稿路徑是編輯器給的，一個會話
+        // 一個，撞不上別人——再綴一次 pid 只會讓 `scratch_draft()` 指不着它。
+        if self.path.is_none() {
+            return Some(swap);
         }
-        Some(swap)
+        let name = swap.file_name()?.to_string_lossy().into_owned();
+        Some(swap.with_file_name(format!("{name}.{}", self.draft_tag)))
+    }
+
+    /// Stand in for another yumete — **a test's way of being two sessions**.
+    /// Digits only, or [`read_draft`] will not find what this writes.
+    #[doc(hidden)]
+    pub fn pretend_to_be_session(&mut self, digits: &str) {
+        debug_assert!(digits.chars().all(|c| c.is_ascii_digit()) && !digits.is_empty());
+        self.draft_tag = digits.to_string();
     }
 
     /// Write the recovery copy.
@@ -798,16 +825,15 @@ impl Buffer {
     /// Take the draft over: this session's text is what the copy should hold
     /// from now on. Called once the writer has loaded it.
     pub fn adopt_draft(&mut self) {
-        // Taken over: the canonical name is this session's from here on, so the
-        // copy kept beside it while it was somebody else's is now two names for
-        // one buffer.
-        if let Some(mine) = self.wrote_at.take() {
-            if Some(&mine) != self.swap_path().as_ref() {
-                let _ = fs::remove_file(mine);
-            }
+        // Warning: **收下了就把那一份刪掉**（2026-10-02，跟着「按 pid 分家」一起
+        // 改的）。從前這裏刪的是自己那一份——那時收下草稿等於接手**正名**，於是
+        // 下一次 `write_swap` 寫的就是草稿原來那個檔，把它蓋掉。分了家之後自己
+        // 永遠寫自己那個名字，蓋不到它；不刪的話那一份會一直被當成「還沒人撿的
+        // 草稿」，每次開檔都再問一遍。自己這一份照舊留着——它是現在的保險。
+        if let Some(theirs) = self.pending_swap.take() {
+            let _ = fs::remove_file(theirs);
         }
         self.pending_draft = None;
-        self.pending_swap = None;
         self.owns_swap = true;
     }
 
@@ -876,6 +902,9 @@ impl Buffer {
     /// recovery write fails too, silently, while the only copy of the text is
     /// in memory.
     pub fn save_as<P: Into<PathBuf>>(&mut self, path: P, force: bool) -> io::Result<()> {
+        // `old_path` 只為了失敗時放回去；舊名字那一份救命稿不必在這裏管——
+        // `save_forcing` 末尾的 `clear_swap` 拿的是 `wrote_at`，而那時它指的
+        // 正是舊名字底下自己寫的那一份（2026-10-02 按 pid 分家之後成立）。
         let old_path = self.path.clone();
         let old_owns = self.owns_swap;
         let old_seen = self.seen.take();
@@ -894,16 +923,7 @@ impl Buffer {
         // made every save-as look like a file that had changed underneath.
         self.owns_swap = false;
         match self.save_forcing(true) {
-            Ok(()) => {
-                // Only now is the old name's copy stale; leaving it behind
-                // would offer this text back the next time that file is opened.
-                if old_owns {
-                    if let Some(swap) = old_path.as_deref().and_then(swap_path_for) {
-                        let _ = fs::remove_file(swap);
-                    }
-                }
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(err) => {
                 self.path = old_path;
                 self.owns_swap = old_owns;
@@ -1900,8 +1920,12 @@ mod tests {
         let mut b = Buffer::open(&path).unwrap();
         b.insert(0, "改了：").expect("the fixture buffer is writable");
         b.write_swap().unwrap();
-        let swap = b.swap_path().unwrap();
-        assert_eq!(swap.file_name().unwrap(), ".chapter.md.yumete");
+        // 每個進程寫自己那一個名字（2026-10-02 作者定「按 pid 分家」）。
+        let swap = b.recovery_copy().expect("a copy was written").to_path_buf();
+        assert_eq!(
+            swap.file_name().unwrap().to_string_lossy(),
+            format!(".chapter.md.yumete.{}", std::process::id())
+        );
         assert!(swap.exists());
 
         // A fresh session over the same file finds the newer draft waiting.
@@ -1965,24 +1989,26 @@ mod tests {
         fs::write(&path, "底稿\n").unwrap();
 
         let mut a = Buffer::open(&path).unwrap();
+        a.pretend_to_be_session("900001");
         a.insert(0, "甲").expect("writable");
         a.write_swap().unwrap();
 
         // B opens while A's draft is already there.
         let mut b = Buffer::open(&path).unwrap();
+        b.pretend_to_be_session("900002");
         b.insert(0, "乙").expect("writable");
         b.write_swap().unwrap();
 
-        assert_eq!(
-            fs::read_to_string(dir.join(".shared.md.yumete")).unwrap(),
-            "甲底稿\n",
-            "A's draft is still A's"
-        );
-        assert_eq!(
-            fs::read_to_string(dir.join(format!(".shared.md.yumete.{}", std::process::id())))
-                .unwrap(),
-            "乙底稿\n"
-        );
+        let ja = dir.join(".shared.md.yumete.900001");
+        let yi = dir.join(".shared.md.yumete.900002");
+        assert_eq!(fs::read_to_string(&ja).unwrap(), "甲底稿\n", "A's draft is still A's");
+        assert_eq!(fs::read_to_string(&yi).unwrap(), "乙底稿\n");
+
+        // Warning: **而且 `:w` 只拿走自己那一份**（2026-10-02 作者定）。這是當初
+        // 報上來的那條——甲按一下存檔，乙沒存的工作連救命稿都沒有了，實測 6/6。
+        a.save().unwrap();
+        assert!(!ja.exists(), "甲存檔，拿走的是甲自己那一份");
+        assert_eq!(fs::read_to_string(&yi).unwrap(), "乙底稿\n", "乙的保險還在");
 
         fs::remove_dir_all(&dir).ok();
     }
