@@ -10097,13 +10097,21 @@ fn draw_status(
         true => char_info(editor, config),
         false => [typed, String::new(), String::new()],
     };
+    // Warning: **那個 `2` 不是空隙，是行首那一格加行尾那一格**（2026-10-02 查出來
+    // 的）。算到頭剛好用完的時候兩半**貼在一起**：36 欄下畫出來的是
+    // `行 1, 列 1, 字 1U+0023`，而 38 欄下是 `字 1# U+0023`——那個 `#` 正是它要
+    // 說明的字，讀起來像位置欄裏多了一個井號。所以再要一格，當作真的空隙。
+    //
+    // Warning: **只要一格，不要兩格。** 要兩格的話，本來擠得下「`字 5 a U+0061`」
+    // 的那幾個寬度會把那個 `a` 整個讓掉——而 `a` 正是這一段要說明的東西，為了
+    // 多一格空白把它扔掉是賠本的（兩張金樣當場攔下來了）。
     let fits = |status: &str| -> &str {
         let room = (status_area.width as usize)
             .saturating_sub(yumete_cjk::str_width(status));
         right
             .iter()
             .map(String::as_str)
-            .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 <= room)
+            .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 + 1 <= room)
             .unwrap_or("")
     };
     // Three stages of giving way — block name, then the 字, then the readout
@@ -12110,6 +12118,50 @@ fn squeezed(text: &str) -> String {
             if w >= 60 {
                 assert!(row.contains("U+0009"), "w={w}: and it still names it: {row:?}");
             }
+        }
+    }
+
+    /// **狀態欄的兩半永遠不許貼在一起**（2026-10-02 一輪黑盒審查報來的）。
+    ///
+    /// 「還放得下嗎」那一句裏的 `+ 2` 算的是行首那一格和行尾那一格，不是兩半之間
+    /// 的空隙。於是算到頭剛好用完的那幾個寬度上，位置和字符說明中間一格都沒有：
+    /// 36 欄畫出來是 `行 1, 列 1, 字 1U+0023`，38 欄是 `字 1# U+0023`——而那個
+    /// `#` 正是它要說明的那個字，讀起來像位置欄裏多了一個井號。
+    #[test]
+    fn the_two_halves_of_the_status_line_never_touch() {
+        let config = Config::default();
+        for width in 24u16..=120 {
+            let mut editor = editor_with("#abc\n");
+            let shot = frame_to_text(
+                &mut editor,
+                &config,
+                &ImeSession::empty(Scheme::LINGMING),
+                width,
+                8,
+                None,
+            );
+            let Some(line) = shot.lines().find(|l| l.contains("行 1")) else {
+                continue;
+            };
+            // 位置那一段是左半的末尾——照着它自己那兩種寫法找。
+            let long = position_of(&editor);
+            let short = position_short(&editor);
+            let Some((at, what)) = line
+                .find(&long)
+                .map(|i| (i, long.len()))
+                .or_else(|| line.find(&short).map(|i| (i, short.len())))
+            else {
+                continue;
+            };
+            let after = &line[at + what..];
+            if after.trim().is_empty() {
+                continue; // 右半整個讓掉了，沒什麼可撞的
+            }
+            let spaces = after.len() - after.trim_start().len();
+            assert!(
+                spaces >= 1,
+                "{width} 欄下兩半之間只有 {spaces} 格：{line:?}"
+            );
         }
     }
 
