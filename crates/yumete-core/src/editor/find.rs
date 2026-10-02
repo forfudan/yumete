@@ -1595,26 +1595,51 @@ impl Editor {
     }
 
     /// Change **every match** in the buffer being worked on; how many.
+    ///
+    /// Warning: **一行一行地問，和找的時候同一個問法**（2026-10-02 查出來的，會丟字）。
+    /// 這一支從前把整份稿子接成一條字符串再問一次 `spans`，而名單上那些命中是
+    /// [`Editor::scan_the_open_one`] **逐行**問出來的，磁碟那一趟也是逐行
+    /// （`split_inclusive('\n')`），`r` 也是逐行。於是 `R` 回答的根本不是名單上
+    /// 那個問題：
+    ///
+    /// | 式子 | 名單說 | `R` 做了 |
+    /// | --- | --- | --- |
+    /// | `霜[\s\S]*三` | 1 處（第三行的「霜三」） | **整份稿子換成一個 `X`**，15 字節剩 2 |
+    /// | `甲\s*乙` | 1 處 | 2 處，而且把一個換行吃掉了 |
+    /// | `^霜` | 3 處 | 1 處（沒有 `(?m)`，`^` 只認整份的開頭） |
+    ///
+    /// 第一行是真的丟字：貪婪的 `*` 跨過換行，一口吃掉三行。`r` 在同一處做的是
+    /// 對的事，所以同一個名單上 `r` 和 `R` 從前給的是兩種答案。
     fn swap_all(&mut self, look: &Look, with: &str) -> usize {
         let rope = self.current_buffer().rope();
-        let text = rope.to_string();
-        let spans = look.spans(&text);
-        if spans.is_empty() {
+        let mut rebuilt = String::with_capacity(rope.len_bytes());
+        let mut done = 0usize;
+        for line in 0..rope.len_lines() {
+            let text: String = rope.line(line).chars().collect();
+            let spans = look.spans(&text);
+            if spans.is_empty() {
+                rebuilt.push_str(&text);
+                continue;
+            }
+            let cuts = byte_cuts(&text);
+            // **從後往前換。** 換上去的那一段和換下來的那一段不一樣長，從前往後
+            // 走會把這一行後面每一處的位置都推着走；倒着走，還沒動到的那幾處位
+            // 置一格不變。
+            let mut row = text.clone();
+            for &(a, b) in spans.iter().rev() {
+                let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
+                    continue;
+                };
+                row.replace_range(b0..b1, &look.expand(&text[b0..b1], with));
+                done += 1;
+            }
+            rebuilt.push_str(&row);
+        }
+        if done == 0 {
             return 0;
         }
-        let cuts = byte_cuts(&text);
-        // **從後往前換。** 換上去的那一段和換下來的那一段不一樣長，從前往後走會
-        // 把後面每一處的位置都推着走；倒着走，還沒動到的那幾處位置一格不變。
-        let mut rebuilt = text.clone();
-        for &(a, b) in spans.iter().rev() {
-            let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
-                continue;
-            };
-            let grown = look.expand(&text[b0..b1], with);
-            rebuilt.replace_range(b0..b1, &grown);
-        }
         match self.write_whole(rebuilt) {
-            true => spans.len(),
+            true => done,
             false => 0,
         }
     }

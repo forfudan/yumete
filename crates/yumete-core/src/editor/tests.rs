@@ -9375,6 +9375,76 @@ fn widening_a_pattern_never_makes_it_stop_compiling() {
     assert_eq!(ed.search().total, 1);
 }
 
+/// **`R` 問的問題要和名單上那個一樣**（2026-10-02 一輪審查報來的，會丟字）。
+///
+/// `swap_all` 從前把整份稿子接成一條字符串再跑一次式子，而名單是**逐行**跑出來的。
+/// 一個跨行的貪婪式子因此一口吃掉整份稿子：`霜[\s\S]*三` 在三行的稿子上名單寫着
+/// 「1 處」，按 `R` 之後磁碟上只剩兩個字節。同一處按 `r` 做的是對的事，所以同一張
+/// 名單上 `r` 和 `R` 給的是兩種答案。
+#[test]
+fn replacing_them_all_asks_the_question_the_list_answered() {
+    // ① 跨行的貪婪式子：只換名單上那一處。
+    let mut ed = typed("霜一\n霜二\n霜三\n");
+    ed.execute(":replace").unwrap();
+    for c in "霜[\\s\\S]*三".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Tab);
+    for c in "X".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('3')); // 字面 → 正則
+    assert!(ed.search().regex);
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 1, "名單上就一處：{:?}", ed.search().hits);
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+    assert_eq!(
+        ed.current_buffer().rope().to_string(),
+        "霜一\n霜二\nX\n",
+        "名單說一處就換一處，別把整份稿子吃掉"
+    );
+
+    // ② `^` 沒有 `(?m)`，逐行跑就是逐行錨定——名單說三處，就該換三處。
+    let mut ed = typed("霜一\n霜二\n霜三\n");
+    ed.execute(":replace").unwrap();
+    for c in "^霜".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('X'));
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 3, "{:?}", ed.search().hits);
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.current_buffer().rope().to_string(), "X一\nX二\nX三\n");
+
+    // ③ 一個換行吃不得：`\s*` 跨行的那一種。
+    let mut ed = typed("甲 乙\n甲\n乙\n末\n");
+    ed.execute(":replace").unwrap();
+    for c in "甲\\s*乙".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('X'));
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 1, "{:?}", ed.search().hits);
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.current_buffer().rope().to_string(), "X\n甲\n乙\n末\n");
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那
