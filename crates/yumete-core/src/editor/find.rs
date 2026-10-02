@@ -469,6 +469,7 @@ impl Editor {
         self.search.folded.clear();
         self.search.stale = false;
         self.search.cut = false;
+        self.search.bad_glob = false;
         // **The pattern hands the search to the panel, and the page follows.**
         // One 「what am I looking for」 with two ways in: the highlight and
         // `n`/`N` are the same search, which is what [^415]记 `:grep` 不寫
@@ -533,6 +534,7 @@ impl Editor {
                 self.search.mine_total = 0;
                 self.search.root = Some(root);
                 self.search.looked_at = Some(self.search_mark());
+                self.search.bad_glob = true;
                 self.status = say!("search.bad-glob");
                 return;
             }

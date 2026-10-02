@@ -7557,11 +7557,54 @@ fn draw_search(
 
     frame.render_widget(Clear, area);
     vertical::clear_wide_left_edge(frame.buffer_mut(), area);
+    // **數目先算**（2026-10-02 修）：標題要給它讓地方。從前它算在後面、畫在標題
+    // 上面，於是 80 欄下 `Find & Replace` 撞上 `204 hits`，屏幕上是
+    // `Find & Replac204 hits`——三位數起每一次都撞。
+    let (tally, style) = match (find.broken, editor.search_is_stale(), find.asked()) {
+        // **正在走磁盤**：這一幀畫完，主循環就回頭把那一趟跑掉（2026-09-27）。
+        _ if editor.is_scanning() => (say!("search.scanning"), head),
+        (true, _, _) => (say!("search.bad-pattern"), wrong),
+        (_, true, true) => (say!("search.enter-to-look"), head),
+        (false, _, false) => (String::new(), quiet),
+        // Warning: **半截的名單不許說「無結果」**（2026-10-02 審出來的）。零那一格最
+        // 像「真的沒有」，而它恰恰不是——`cut` 要比數目先說話。
+        // Warning: **寫錯了 glob 也不許說「無結果」**（2026-10-02 審出來的）：那一趟
+        // 連找都沒找，而狀態欄正說着這件事——標題不能反着說。
+        (false, _, true) if find.bad_glob => (String::new(), quiet),
+        (false, _, true) if find.total == 0 && !find.cut => (say!("search.none"), quiet),
+        // **走到第幾處也寫在這裏**（2026-09-27 報的：「表頭只有 11 處，走到第幾
+        // 條不說」）。`4/11`，不寫「第」「共」——那一格在標題右邊，字越少越好。
+        (false, _, true) if find.nth_hit().is_some() && !find.cut => {
+            (say!("search.nth-hit", find.nth_hit().unwrap_or(1), find.total), quiet)
+        }
+        // Warning: 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
+        // （2026-09-27 報的）。兩則文案，中文那兩份寫得一模一樣。
+        (false, _, true) if find.total == 1 && !find.cut => (say!("search.hits-one", 1), quiet),
+        // **沒走完就停了，數目後面一個加號**（2026-10-01 定，作者寫的「21+结果」）。
+        // 一張半截的清單看着和全部一個樣，而那一格是唯一說得出這件事的地方。
+        (false, _, true) if find.cut => (say!("search.hits-more", find.total), quiet),
+        (false, _, true) => (say!("search.hits", find.total), quiet),
+    };
     // **勾上「替換」之後，標題也要說出來**（2026-09-27 報的：`:replace` 開出來
     // 的面板頂上仍舊只寫「搜索」，而它比搜索多一整行和三個會改稿子的鍵）。
     let name = match find.replacing {
         true => say!("label.panel.replace"),
         false => yumete_core::messages::say(Panel::Search.tag(), &[]),
+    };
+    // 標題讓到數目左邊一格為止；讓不下就截，截的是標題不是數目——數目是答案。
+    let room = (area.width as usize).saturating_sub(yumete_cjk::str_width(&tally) + 4).max(2);
+    let name = match yumete_cjk::str_width(&name) > room {
+        false => name,
+        true => {
+            let mut kept = String::new();
+            for g in yumete_cjk::graphemes(&name) {
+                if yumete_cjk::str_width(&kept) + yumete_cjk::grapheme_width(g) > room {
+                    break;
+                }
+                kept.push_str(g);
+            }
+            kept
+        }
     };
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
     let (from, to, area) = (shell.from, shell.to, shell.area);
@@ -7600,28 +7643,6 @@ fn draw_search(
     // 上面去，所以要先知道它有多寬。
     // Warning: **問編輯器，不是問面板**：正文改過之後名單就過期了，而那件事面板自己看
     // 不見（`Editor::search_is_stale`）。
-    let (tally, style) = match (find.broken, editor.search_is_stale(), find.asked()) {
-        // **正在走磁盤**：這一幀畫完，主循環就回頭把那一趟跑掉（2026-09-27）。
-        _ if editor.is_scanning() => (say!("search.scanning"), head),
-        (true, _, _) => (say!("search.bad-pattern"), wrong),
-        (_, true, true) => (say!("search.enter-to-look"), head),
-        (false, _, false) => (String::new(), quiet),
-        // Warning: **半截的名單不許說「無結果」**（2026-10-02 審出來的）。零那一格最
-        // 像「真的沒有」，而它恰恰不是——`cut` 要比數目先說話。
-        (false, _, true) if find.total == 0 && !find.cut => (say!("search.none"), quiet),
-        // **走到第幾處也寫在這裏**（2026-09-27 報的：「表頭只有 11 處，走到第幾
-        // 條不說」）。`4/11`，不寫「第」「共」——那一格在標題右邊，字越少越好。
-        (false, _, true) if find.nth_hit().is_some() && !find.cut => {
-            (say!("search.nth-hit", find.nth_hit().unwrap_or(1), find.total), quiet)
-        }
-        // Warning: 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
-        // （2026-09-27 報的）。兩則文案，中文那兩份寫得一模一樣。
-        (false, _, true) if find.total == 1 && !find.cut => (say!("search.hits-one", 1), quiet),
-        // **沒走完就停了，數目後面一個加號**（2026-10-01 定，作者寫的「21+结果」）。
-        // 一張半截的清單看着和全部一個樣，而那一格是唯一說得出這件事的地方。
-        (false, _, true) if find.cut => (say!("search.hits-more", find.total), quiet),
-        (false, _, true) => (say!("search.hits", find.total), quiet),
-    };
     // **標題那一行只有面板的名字和右上角那個計數**（2026-09-26 報的：「位置：「本
     // 文件」这一块的底色不正确。我建议把位置：本文件移到下面一行，这样标题就是
     // 「高级搜索」」）。
@@ -7671,6 +7692,12 @@ fn draw_search(
     let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, tag: &str, what: &str, y: u16| {
         // **名字在格子外面**（2026-09-24 定）：三檔底色說的是「這裏打得了字」，
         // 而名字不是打得了字的地方，所以它留在面板自己的底色上。
+        // Warning: **矮窗口裏走到頭就不畫**（2026-10-02 審出來的）。`switch` 一直有這
+        // 道閘，`draw_box` 沒有——而 2026-10-01 位置／包含／排除三格搬到了最下
+        // 面，於是 10 到 12 行的窗口裏它們畫到了「Tab 文件 > …」那一行上。
+        if y >= area.y + area.height {
+            return;
+        }
         let tag = format!("{tag}{}", " ".repeat(widest.saturating_sub(yumete_cjk::str_width(tag))));
         let tag = tag.as_str();
         // **最左邊那兩欄歸號碼**（2026-09-29）：位置那一格畫 `0`，搜／換那兩格
@@ -7682,9 +7709,14 @@ fn draw_search(
             return;
         }
         let room = (to - box_at) as usize;
-        let shown: String = match what.chars().count() > room {
-            true => what.chars().skip(what.chars().count() - room).collect(),
-            false => what.to_string(),
+        // **路徑留尾，名字留頭**（2026-10-02 審出來的）。一條路徑截掉前面還認得出
+        // 是哪一個檔，所以那一種留尾；可位置那一格平常裝的是一個**名字**，留尾
+        // 留出來的是「king directory」——讀着像打錯了字，不像被截斷。
+        let keeps_the_tail = which != Field::Scope || find.naming();
+        let shown: String = match (what.chars().count() > room, keeps_the_tail) {
+            (true, true) => what.chars().skip(what.chars().count() - room).collect(),
+            (true, false) => what.chars().take(room).collect(),
+            (false, _) => what.to_string(),
         };
         let here = find.field == which;
         // **Inked means 「the whole of this is selected」, not 「the keys are
@@ -7844,7 +7876,11 @@ fn draw_search(
     // 是範圍，和底下三格是一夥的。
     y += 1;
     draw_box(buf, Field::Scope, &say!("search.label.scope"), &shown, y);
-    put_text(buf, left, y, to, "6", ground.fg(ink.gold()));
+    // Warning: **號碼和框分開畫，所以也要分開攔**（2026-10-02 審出來的）：`draw_box`
+    // 在矮窗口裏讓開了，而這個金色的 `6` 照畫，蓋在「Tab 文件 > …」的 `T` 上。
+    if y < area.y + area.height {
+        put_text(buf, left, y, to, "6", ground.fg(ink.gold()));
+    }
     // Warning: **範圍不走磁碟的時候，底下三行整行不畫**（2026-10-01 定）。從前是畫灰，
     // 而灰着的三行佔着結果列表的位子，說的又是「這裏什麼都做不了」。本文件與
     // 緩衝區是一張現成的表，按路徑篩它沒有意思。
@@ -19509,6 +19545,36 @@ fn squeezed(text: &str) -> String {
         // matches no file, and the panel is still a panel, with the reason
         // written in it.
         assert!(text.contains(&yumete_core::say!("picker.nothing-matched")), "{text}");
+    }
+
+    /// **搜索面板矮下去的時候不許畫到邊欄的標籤行上**（2026-10-02 審出來的）。
+    ///
+    /// `switch()` 一直有那道閘，`draw_box()` 沒有——而 2026-10-01 位置／包含／排除
+    /// 三格搬到了最下面，於是 10 到 12 行的窗口裏它們畫在「Tab 文件 > …」那一行
+    /// 上。金色的號碼是另一支畫的，所以要分開攔。
+    #[test]
+    fn the_search_panel_stays_off_the_tab_row() {
+        let config = Config::default();
+        for height in 9..=14u16 {
+            let mut ed = Editor::new();
+            ed.on_key(Key::Char(' '));
+            ed.on_key(Key::Char('/'));
+            ed.on_key(Key::Esc);
+            // 換到走磁碟的範圍，底下那三格纔畫得出來。
+            ed.on_key(Key::Char('6'));
+            ed.on_key(Key::Char('6'));
+            let text = buffer_to_text(&render_with(&ed, &config, no_ime(), 90, height));
+            let tabs = text
+                .lines()
+                .find(|r| r.contains("Tab "))
+                .unwrap_or_else(|| panic!("{height} 行：找不到標籤那一行\n{text}"));
+            let head: String = tabs.chars().take_while(|c| *c != 'T').collect();
+            assert!(
+                head.trim().is_empty(),
+                "{height} 行：標籤那一行前面畫了「{}」\n{text}",
+                head.trim()
+            );
+        }
     }
 
     /// **面板矮下去的時候一樣樣讓，不許畫到邊框上**（2026-10-02 審出來的回歸）。
