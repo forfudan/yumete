@@ -17527,6 +17527,20 @@ fn vim_conformance() {
     check("⑮ f, 之後 d,", case("a,b,c,d\n", "f,d,"), "a,b,c,d\n");
     check("⑮ d2; 沒有第二個", case("a,b\n", "f,d2;"), "a,b\n");
 
+    // ⑯ **`ge` 在 vim 鍵位下是 vim 的 `ge`**（2026-10-02 作者定「照參考實現」）：
+    //    往回到上一個詞的末尾，而且是**包含**的——連光標自己那一格一起取。
+    check("⑯ dge 從空白上", case("alpha beta\n", "5ldge"), "alphbeta\n");
+    check("⑯ dge 在詞中", case("alpha beta\n", "ldge"), "pha beta\n");
+    check("⑯ dge 在檔首什麽都不做", case("alpha beta\n", "dge"), "alpha beta\n");
+    // 逗號自己是一個詞，`ge` 停在它上面；`gE` 把 `beta,` 當一個 WORD，退到 alpha。
+    check("⑯ ge 的落點", cursor("alpha beta, gamma\n", "10lge").to_string(), "9");
+    check("⑯ gE 跳過標點", cursor("alpha beta, gamma\n", "10lgE").to_string(), "4");
+
+    // ⑰ **vim 鍵位下光標坐不到換行上**（`:h l`，2026-10-02 作者定）。helix 鍵位
+    //    照舊走一頁，那是 `h`／`l` 那一條有意的偏離。
+    check("⑰ l 停在最後一個字上", case("ab\ncd\n", "lllllx"), "a\ncd\n");
+    check("⑰ h 停在第 1 欄", case("ab\ncd\n", "jhhhhx"), "ab\nd\n");
+
     assert!(bad.is_empty(), "vim 語料紅了 {} 條：\n  {}", bad.len(), bad.join("\n  "));
 }
 
