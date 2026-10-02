@@ -2367,10 +2367,13 @@ impl Editor {
         // The trailing empty line a file ending in a newline leaves is not a
         // row and must not be sorted into the middle.
         let body = &mut lines[header..];
+        // Warning: **按欄位的字排，不按它在檔裏的拼法**（2026-10-02 一輪掃查報來的）。
+        // `cell_text` 交的是原樣的那一段，引號在內——於是 `"Smith, John"` 按 `"`
+        // （0x22）排，落在 `Amy` 前面。排序排的是人看得見的那幾個字。
         let cell = |line: &str, at: usize| -> String {
             crate::table::cells(line, delimiter)
                 .get(at)
-                .map(|&s| crate::table::cell_text(line, s))
+                .map(|&s| crate::table::unquote(&crate::table::cell_text(line, s)))
                 .unwrap_or_default()
         };
         // Numbers as numbers, everything else by code point — the same rule the
