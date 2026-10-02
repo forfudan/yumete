@@ -2442,6 +2442,41 @@ fn a_quoted_field_sorts_by_its_text_not_its_quote() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **上屏也要落在每一段選區上——`r` 和 `f` 那兩支漏了**（2026-10-02 一輪審查報來的）。
+///
+/// #405 Phase 4 把插入那一支接進了 `edit_each`，可 `insert_committed` 裏兩個早退的
+/// 分支沒接：三個光標按 `r` 再打一個「好」，只有主選區換掉了；同樣三個光標按 `r` 再
+/// 敲一個字母，三段全換。**同一個鍵，中文和西文兩種答案。**
+#[test]
+fn a_commit_under_many_cursors_reaches_every_one_of_them() {
+    // ① `r` ＋ 上屏：三段全換，和 `r` ＋ 敲一個字母同一個結果形狀。
+    let mut ed = typed("aa\nbb\ncc\n");
+    press(&mut ed, "CCr");
+    ed.insert_committed("好友");
+    assert_eq!(ed.current_buffer().rope().to_string(), "好友a\n好友b\n好友c\n");
+
+    let mut ed = typed("aa\nbb\ncc\n");
+    press(&mut ed, "CCrZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "Za\nZb\nZc\n", "西文那一路的對照");
+
+    // ② 一段選區的時候照舊。
+    let mut ed = typed("aa\n");
+    press(&mut ed, "r");
+    ed.insert_committed("好");
+    assert_eq!(ed.current_buffer().rope().to_string(), "好a\n");
+
+    // ③ `f` ＋ 上屏：每一段各找各的，和 `f` ＋ 敲一個字母一樣。
+    let mut ed = typed("甲乙\n丙乙\n");
+    press(&mut ed, "CCf");
+    ed.insert_committed("乙");
+    let keyed = {
+        let mut ed = typed("甲乙\n丙乙\n");
+        press(&mut ed, "CCfZ");
+        ed.secondary_selections().len()
+    };
+    assert_eq!(ed.secondary_selections().len(), keyed, "兩條路同樣多段動了");
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是

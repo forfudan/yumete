@@ -815,10 +815,24 @@ impl Editor {
         // has to happen the moment you ask for it — so it stays where Helix
         // put it and learns 中文 instead: press `r`, the panel opens, and
         // whatever you choose is what the selection becomes.
+        // Warning: **也要落在每一段選區上**（2026-10-02 查出來的，#405 Phase 4 漏的
+        // 那一半）。底下那一支插入的已經走 `edit_each` 了，可這兩支早退的沒有：
+        // 三個光標按 `r` 再打一個「好」，只有主選區換掉了；同樣三個光標按 `r` 再
+        // 敲一個字母，三段全換。**同一個鍵，中文和西文兩種答案**——而
+        // `keys.rs` 那一段寫着這個字符「有兩條路進來，一個是鍵，一個是上屏」，
+        // 寫在一處就是為了讓兩條路說同一件事。
+        //
+        // 走哪一支照 `multi` 那兩張表，和敲鍵那一路同一個判準：`r` 是編輯
+        // （`edits_every_selection`），`f`／`mi` 那幾個是動作（`each_selection`）。
         if self.pending == Pending::Replace {
+            let with = text.to_string();
+            let each = with.clone();
+            self.edit_each(move |e| {
+                e.pending = Pending::None;
+                e.replace_str(&each);
+            });
             self.pending = Pending::None;
-            self.replace_str(text);
-            self.last_replacement = text.to_string();
+            self.last_replacement = with;
             self.last_edit_keys = vec![Key::Char('r')];
             self.edit_keys.clear();
             return;
@@ -833,7 +847,17 @@ impl Editor {
             let waiting = self.pending;
             self.pending = Pending::None;
             if let Some(c) = text.chars().next() {
-                self.answer_with_char(waiting, c);
+                // Warning: **清掉 `pending` 之後纔叫它，而且叫完不許再清一次**：`mr`
+                // 收下第一個字符之後**自己要掛一個新的**（它要兩個：舊的那一對、
+                // 新的那一對）。第一版在這一句後面又抹了一次，於是 `mr「『` 做出
+                // 來的是「錢塘江『上」。
+                match super::multi::each_selection_key(&waiting, Key::Char(c)) {
+                    true => self.each_selection(move |e| {
+                        e.pending = Pending::None;
+                        e.answer_with_char(waiting, c);
+                    }),
+                    false => self.answer_with_char(waiting, c),
+                }
             }
             // `m` `s` is in there and the delimiter is not — never let `.`
             // replay half of a command.
