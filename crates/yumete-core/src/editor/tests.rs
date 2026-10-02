@@ -9295,6 +9295,47 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
+///
+/// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那
+/// 一檔沒有根（它不走磁碟），命中身上帶的也不是路徑而是緩衝區號。於是那一比永遠是
+/// `None == Some(名字)`，一處都配不上。本文件那一檔有標記、換成緩衝區就沒了，看着
+/// 像畫面出了毛病，而其實是範圍換了。
+#[test]
+fn the_dim_marks_follow_the_buffer_when_the_scope_is_buffers() {
+    let dir = a_little_book("searchmarks");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/b.md")).unwrap();
+
+    // 本文件那一檔：有幾處就畫幾處，站着的那一處不畫（它另有顏色）。
+    ed.open_search();
+    for c in "霜".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    let in_file = ed.search_marks();
+    assert!(!in_file.is_empty(), "本文件那一檔本來就有");
+
+    // 換成緩衝區，同一份文件、同一個詞——標記不該消失。
+    ed.execute(":search-buffers").unwrap();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert!(
+        ed.search().hits.iter().all(|h| h.buffer.is_some()),
+        "緩衝區那一檔的命中身上記着號"
+    );
+    let in_buffers = ed.search_marks();
+    assert!(!in_buffers.is_empty(), "換個範圍，眼前這一份的標記還在");
+    // 多出來的那一處是「站着的那一處」：跨檔的名單從一行檔名開始，所以此刻沒有站
+    // 在任何一處命中上，一處都不必讓位。
+    for span in &in_file {
+        assert!(in_buffers.contains(span), "{span:?} 不見了：{in_buffers:?}");
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`G` 跳到名單的最後一**行**，不是最後一處命中**（2026-10-02 查出來的）。
 ///
 /// `selected` 一直是 `rows()` 的下標，而 `G` 從前寫的是 `hits.len() - 1`。兩個數

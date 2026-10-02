@@ -46,6 +46,23 @@ impl Editor {
         if self.search_is_stale() || !self.search_panel_is_open() {
             return Vec::new();
         }
+        let here = self.search.here().map(|h| (h.at, h.end));
+        // **緩衝區那一檔按緩衝區認，不按路徑**（2026-10-02 修）。那一檔的命中身
+        // 上帶的是 `buffer`，`file` 裏放的是給人看的名字——草稿根本沒有路徑——
+        // 而它的根是空的。於是底下那條 `h.file == mine` 拿 `None` 去比，一條都
+        // 配不上：**眼前這一份的淡色標記整個不見了**，而本文件那一檔是有的，
+        // 「换個範圍標記就沒了」看着像畫面出了毛病。
+        if matches!(self.search.scope, Where::Buffers) {
+            let id = self.current_buffer().id();
+            return self
+                .search
+                .hits
+                .iter()
+                .filter(|h| h.buffer == Some(id))
+                .map(|h| (h.at, h.end))
+                .filter(|span| Some(*span) != here)
+                .collect();
+        }
         // **命中身上的路徑是相對搜索的根的**，所以要拿眼前這一份的路徑去比同一
         // 把尺。範圍是「本文件」的時候根是空的，那些命中身上也沒有路徑。
         let mine = match &self.search.root {
@@ -66,7 +83,6 @@ impl Editor {
                 }
             }
         };
-        let here = self.search.here().map(|h| (h.at, h.end));
         self.search
             .hits
             .iter()
