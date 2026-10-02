@@ -99,14 +99,16 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("f", Some(c)) => {
             step(Motion::Find { forward: true, target: c, till: false }, Reach::Inclusive)
         }
+        // Warning: **往回的那兩個是排他的**（`:h F`、`:h T`），往前的兩個纔是包含
+        // 的。`dT,` 緊貼在逗號後面按，vim 什麼都不做；標成包含的話它會刪掉一格。
         ("F", Some(c)) => {
-            step(Motion::Find { forward: false, target: c, till: false }, Reach::Inclusive)
+            step(Motion::Find { forward: false, target: c, till: false }, Reach::Exclusive)
         }
         ("t", Some(c)) => {
             step(Motion::Find { forward: true, target: c, till: true }, Reach::Inclusive)
         }
         ("T", Some(c)) => {
-            step(Motion::Find { forward: false, target: c, till: true }, Reach::Inclusive)
+            step(Motion::Find { forward: false, target: c, till: true }, Reach::Exclusive)
         }
         // ---- Text objects, which are their own ends ------------------------
         ("i", None) | ("a", None) => asking(

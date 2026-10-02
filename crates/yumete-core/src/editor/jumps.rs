@@ -172,6 +172,20 @@ impl Editor {
     /// just in front of the searched character, the `;` command will find the
     /// next occurrence」。只有重複要這一下，`t` 自己不要（`t,` 停在原地就是停在
     /// 原地）。
+    /// **光標是不是正貼着 `target`**，往 `forward` 那一邊看一格。
+    ///
+    /// `t,` 停在逗號前面一格，於是「再來一次」問的是下一個逗號——這一句就是
+    /// 「貼着了沒有」。
+    pub(super) fn sits_against(&self, forward: bool, target: char) -> bool {
+        let rope = self.current_buffer().rope();
+        let here = self.sel.head();
+        let at = match forward {
+            true => crate::motion::next_grapheme(rope, here),
+            false => crate::motion::prev_grapheme(rope, here),
+        };
+        at != here && at < rope.len_chars() && rope.char(at) == target
+    }
+
     pub(super) fn find_nth_char(&mut self, kind: FindKind, target: char, nth: usize, again: bool) {
         // 重複的時候，先從「已經貼着的那一個」上讓開一格。
         let from = match again && kind.till() {
@@ -210,7 +224,14 @@ impl Editor {
             }
             other => other,
         };
-        self.take_span(span);
+        // **vim 下獨立的 `f` 是跳轉，不是選擇**（2026-10-02，補上 B3 漏掉的那一族）。
+        // `w B e { } H L` 早就走這一條了（`keys.rs` 那個「A standalone motion, read
+        // vim's way」），只有 `f F t T` 四個落在 helix 那一支上，於是 vim 手指按
+        // `f,` 之後跳過去的那一整段是選中的，再按 `~` 就把那一段全變了大寫。
+        match self.key_preset == yumete_cjk::KeyPreset::Vim && !self.expanding_alias {
+            true => self.jump_to(span),
+            false => self.take_span(span),
+        }
     }
 
 }

@@ -470,6 +470,38 @@ impl Editor {
         if first.is_none() && c == op {
             return self.run_vim_line(op);
         }
+        // Warning: **`;` 和 `,` 也是動作**（`:h ;`）：`d;` 把剛纔那個 `f`／`t` 再做
+        // 一遍，`d,` 反着做。[`crate::vim::step_for`] 是純函數，記不住「剛纔那
+        // 個」——那是編輯器的記憶，不是文法的——所以這一句寫在這裏，而不是寫進
+        // 那張表。從前 `d;` 說的是「不是一個動作」。
+        if first.is_none() && matches!(c, ';' | ',') {
+            let Some((kind, ch)) = self.last_find else {
+                self.count = None;
+                self.alias_count = None;
+                self.status = say!("keys.not-a-motion", c.to_string());
+                return;
+            };
+            let kind = match c {
+                ',' => kind.flipped(),
+                _ => kind,
+            };
+            // Warning: **`t` 貼着目標的時候要跳過它**（`:h ;`：「when the cursor is
+            // just in front of the searched character, the `;` command will
+            // find the next occurrence」）。獨立的 `;` 是靠把頭讓開一格做的
+            // （`find_nth_char` 的 `again`），帶動詞的不能讓——錨點要留在原處——
+            // 所以這裏改成**要下一個**：貼着第一個，就去找第二個。
+            let nudge = kind.till() && self.sits_against(kind.forward(), ch);
+            self.count = Some(self.count.take().unwrap_or(1).max(1) + usize::from(nudge));
+            let told = match kind {
+                FindKind::Forward => 'f',
+                FindKind::Backward => 'F',
+                FindKind::Till => 't',
+                FindKind::TillBack => 'T',
+            };
+            if let Some(step) = crate::vim::step_for(&told.to_string(), grain, Some(ch)) {
+                return self.run_vim_step(op, step);
+            }
+        }
         // A motion still owed a character (`df,`, `di(`) takes this one.
         if let Some(f) = first {
             if let Some(step) = crate::vim::step_for(&f.to_string(), grain, Some(c)) {
@@ -542,21 +574,27 @@ impl Editor {
         self.settle_alias_count();
         let n = self.count.take().unwrap_or(1).max(1);
         let start = self.sel.head();
-        // Warning: **`cw` is `ce`** — vim's own special case (`:h cw`): 「When the
-        // cursor is in a word, `cw` does not include the white space after a
-        // word, it only changes up to the end of the word.」 A translation
-        // table cannot say this; it is not a key, it is a rule about a pair.
-        let step = match (op, step.motion) {
+        // Warning: **`cw` ends the word it is in** — vim's own special case
+        // (`:h cw`): 「When the cursor is in a word, `cw` does not include the
+        // white space after a word, it only changes up to the end of the
+        // word.」 A translation table cannot say this; it is not a key, it is a
+        // rule about a pair.
+        //
+        // Warning: **不是 `ce`。** 那一句話照字面抄就寫成 `e`，而 `e` 站在詞的最後
+        // 一格上跳到下一個詞去。見 [`motion::Motion::WordEndHere`]。
+        //
+        // Warning: **數目只管最後那一個詞。** `c2w` 是「`w` 一趟，然後換到那個詞
+        // 的末尾」，不是「換兩次詞尾」——所以規則落在**最後一跳**上，前面幾跳還
+        // 是 `w`。從前整個動作被換成詞尾，第二跳問到的還是同一個詞尾，於是
+        // `c2w` 只換一個詞（2026-10-02 拿 nvim 逐欄量出來的）。
+        let (step, finally) = match (op, step.motion) {
             ('c', motion::Motion::WordForward(grain))
                 if !self.char_at_cursor().is_some_and(char::is_whitespace) =>
             {
-                crate::vim::Step {
-                    motion: motion::Motion::WordEnd(grain),
-                    reach: crate::vim::Reach::Inclusive,
-                    asks: false,
-                }
+                let reach = crate::vim::Reach::Inclusive;
+                (crate::vim::Step { reach, ..step }, Some(motion::Motion::WordEndHere(grain)))
             }
-            _ => step,
+            _ => (step, None),
         };
         // **An object is already both ends**; everything else is walked to.
         if step.reach == crate::vim::Reach::Object {
@@ -614,8 +652,13 @@ impl Editor {
             motion::Motion::Find { .. } => n,
             _ => 1,
         };
-        for i in 0..(n / nth.max(1)).max(1) {
-            let span = self.read_motion_nth(step.motion, motion::Reading::Caret, nth);
+        let hops = (n / nth.max(1)).max(1);
+        for i in 0..hops {
+            let what = match i + 1 == hops {
+                true => finally.unwrap_or(step.motion),
+                false => step.motion,
+            };
+            let span = self.read_motion_nth(what, motion::Reading::Caret, nth);
             let Some(head) = span.head() else { break };
             // Warning: **The first hop counts even if it does not move.** `t,` with
             // the caret already one short of the comma lands where it stands,
@@ -636,6 +679,22 @@ impl Editor {
             return;
         };
         let rope = self.current_buffer().rope();
+        // Warning: **動不了算不算數，問的是動作的類，不是動作本身**（2026-10-02
+        // 拿 nvim 逐欄量出來的，`:h exclusive` 寫的也是這個）：
+        //
+        // - **排他**的落在原處 ＝ 零寬 ＝ 整個不做。`db` 在檔首、`d^` 在第 1 欄、
+        //   `d0` 在第 1 欄、`dT,` 緊貼逗號後面，四個 nvim 都不動。
+        // - **包含**的落在原處 ＝ 你站的那一格。`d$` 在行末那一格照樣刪掉它。
+        // - **整行**的落在原處 ＝ 這一行。`dgg` 在第 1 行照樣刪掉第 1 行。
+        //
+        // 這個判斷在動作那一層寫過三版，三版都錯：寫成通則（`dl` 在行末紅）、寫
+        // 成「偏移 0」（`dt,` 在檔首紅）、寫成「往回的纔算」（漏掉 `^` 和 `T`）。
+        // 錯的不是哪一版，是**問錯了層**——動作只說落點，類是文法的事。
+        if target == start && step.reach == crate::vim::Reach::Exclusive {
+            self.count = None;
+            self.alias_count = None;
+            return;
+        }
         let span = match step.reach {
             crate::vim::Reach::Linewise => {
                 let (a, b) = (rope.char_to_line(start), rope.char_to_line(target));
@@ -668,25 +727,6 @@ impl Editor {
                         head: motion::prev_grapheme(rope, head),
                     },
                 }
-            }
-            // Warning: **只攔往回的那幾個。** 「動不了就整個動作失敗」對往回的動作
-            // 是對的（nvim 在檔首按 `db` 什麼都不做，而這裏從前刪掉一個字），對
-            // 往前的不是——`dl` 停在行末，`l` 動不了而 vim 照樣刪掉那個字；`dt,`
-            // 停在逗號前一格，`t` 動不了而 vim 照樣刪。
-            //
-            // 兩版都錯過：寫成通則紅了 `vim_conformance` 第 ⑪ 條（`dl` 在行末），
-            // 改成「偏移 0」紅了第 ⑧ 條（`dt,` 在檔首）。**方向是 `step.motion`
-            // 自己知道的事**，別拿位置去猜。
-            _ if target == start
-                && matches!(
-                    step.motion,
-                    motion::Motion::WordBack(_)
-                        | motion::Motion::Find { forward: false, .. }
-                        | motion::Motion::Paragraph { forward: false }
-                        | motion::Motion::Sentence { forward: false }
-                ) =>
-            {
-                motion::Span::Missed
             }
             crate::vim::Reach::Inclusive => motion::Span::Over { anchor: start, head: target },
             // `w` is exclusive: 「up to the next word」, not 「including its
