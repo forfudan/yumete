@@ -221,7 +221,32 @@ impl Editor {
     }
 
     fn search_pattern(&self) -> String {
-        let mut body = match (self.search.regex, self.search.glyphs) {
+        // **折過字形的那一版先試，編不過就退回沒折的**（2026-10-02 查出來的）。
+        //
+        // 把一個字換成 `[…]` 是一次**合法性上的降級**，有三種式子過不去：
+        //
+        // | 打的是 | 改寫成 | 為什麼死 |
+        // | --- | --- | --- |
+        // | `(?-u)書` | `(?-u)[書书]` | 關了 unicode，類裏放不下一個多字節的字 |
+        // | 249 層括號 ＋ `書` | 多一層方括號 | 超過 250 層的嵌套上限 |
+        // | 六萬個漢字 | 八倍長 | 超過 10 MB 的程序上限 |
+        //
+        // 三種都是「本來編得過、開了中文匹配編不過」，而面板把編不過畫成**你的
+        // 式子寫錯了**（灰着舊名單、`broken`）——一個開關把人家對的式子說成錯的。
+        // 折字形是錦上添花，添不上就不添。
+        //
+        // Warning: **要試的是穿好衣服的那一整條**，不是中間那一段。`(?i)` 自己就
+        // 佔一層嵌套（實測：248 層括號下 `[書书]` 編得過，`(?i)` 一加就編不過），
+        // 所以只驗中間那一段等於沒驗。
+        if self.search.regex && self.search.glyphs {
+            if let Some(wide) = crate::glyphs::widen_pattern(&self.search.query) {
+                let whole = self.dressed(wide);
+                if regex::Regex::new(&whole).is_ok() {
+                    return whole;
+                }
+            }
+        }
+        let body = match (self.search.regex, self.search.glyphs) {
             // **正則底下也折字形，只折「原樣打出來的那些字」**（2026-10-01 定，
             // 作者問的：「正则情况下能否也能兼容繁简体？」）。
             //
@@ -230,16 +255,19 @@ impl Editor {
             // [`crate::glyphs::widen_pattern`] 先解析再動手，所以 `.`、`\d`、
             // `^$`、括號一律不碰。解析不了（打了一半）就原樣用，壞式子自有它那
             // 條路。
-            (true, true) => {
-                crate::glyphs::widen_pattern(&self.search.query)
-                    .unwrap_or_else(|| self.search.query.clone())
-            }
-            (true, false) => self.search.query.clone(),
+            //
+            // 折過的那一版上面試過了，到這裏就是「沒折成」或者「折了編不過」。
+            (true, _) => self.search.query.clone(),
             // **「書齋」找得到「书斋」**：每個字換成它的字形集（`crate::glyphs`）。
             // 這一支自己就轉義，所以不必再 `escape` 一遍。
             (false, true) => crate::glyphs::widen(&self.search.query),
             (false, false) => regex::escape(&self.search.query),
         };
+        self.dressed(body)
+    }
+
+    /// 整詞與大小寫那兩件外衣，穿在已經算好的式子身上。
+    fn dressed(&self, mut body: String) -> String {
         // Warning: **`\b` is nothing between 漢字.** There is no word boundary
         // there, so this only ever bites on the Western words in a manuscript
         // — which is what it does in VSCode too, and what the manual says.
