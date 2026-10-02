@@ -1384,6 +1384,15 @@ impl Editor {
     /// Open whatever the picker is standing on — from either layer.
     fn choose_from_picker(&mut self) {
         let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
+        // Warning: **篩不出東西的時候 `Enter` 不關窗**（2026-10-02 一輪黑盒審查報來
+        // 的）。從前它照樣關掉，於是打錯一個字母按了 `Enter`，面板沒了、打過的
+        // 那幾個字也沒了，人回到正文裏看着一句「沒有符合的」——要重開一次、重打
+        // 一遍。helix 的挑選器在這一步什麼都不做。那句話照說，窗留着，退一格就
+        // 改得動。
+        if chosen.is_none() {
+            self.status = say!("picker.nothing-matched");
+            return;
+        }
         // **根要在關掉挑選器之前取**：關掉就連根一起沒了。
         let root = self.picker.as_ref().and_then(|p| p.root.clone());
         self.close_picker();
