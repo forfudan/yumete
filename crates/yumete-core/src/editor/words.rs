@@ -864,8 +864,12 @@ impl Editor {
         // 這一支是**前端直接叫的**，不走 `on_key`，所以 `edit_each` 那一層路由碰不到
         // 它——實測四個光標打 `wo` 空格，「和」只落在最後一段上。中文是打出來的，多
         // 選區下不能上屏纔是真的不能用。
+        // Warning: **多光標下也只在 Normal 記點**（2026-10-02 查出來的）。上面那一句
+        // 已經決定了「插入模式下不記」，而 `edit_each` 在選區是複數的時候**自己
+        // 又記一個**——於是四個光標下一句話上屏八次就是八下 `u`，而同一句話在一
+        // 個光標下是一下。敲鍵那一路早就是 `edit_each_from(false, …)`，這裏跟上。
         let text = text.to_string();
-        self.edit_each(move |e| {
+        self.edit_each_from(self.mode != Mode::Insert, move |e| {
             e.insert_recording.push_str(&text);
             e.insert_str(&text);
             e.maybe_ask_what_comes_next(&text);

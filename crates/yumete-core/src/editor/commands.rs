@@ -761,6 +761,16 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Pipe(line) => {
+                // Warning: **鎖住就別跑那條命令**（2026-10-02 查出來的）。`!` 是把選區
+                // 過一遍外面的程序再**換回來**，而換回來那一下繩子會拒絕——可
+                // 命令那時已經跑完了。`!sed -i`、`!git checkout` 這一類有副作用
+                // 的，鎖着也照樣生效，而屏幕上寫的是「只讀」。
+                //
+                // `:sh`／`:!` 不在此列：那兩個是「跑一下給我看」，不碰這一份。
+                if self.current_buffer().is_readonly() {
+                    self.status = say!("readonly.refused");
+                    return Ok(CommandOutcome::Continue);
+                }
                 let (start, end) = self.selection();
                 let text = self.current_buffer().rope().slice(start..end).to_string();
                 self.shell_request = Some(Shell {
