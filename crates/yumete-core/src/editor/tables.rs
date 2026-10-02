@@ -2686,12 +2686,20 @@ impl Editor {
     }
 
     /// Every cell of one column, header included, top to bottom.
+    ///
+    /// Warning: **交出來的是那一格的字，不是它在檔裏的拼法**（2026-10-02 一輪掃查報來
+    /// 的）。`Parts` 裏存的是原樣的拼法，連 `\|` 那個反斜杠一起；而
+    /// [`Editor::put_column`] 收到之後會**再轉義一遍**。於是 `␣ty` 抄一欄、`␣tp`
+    /// 原地貼回去，`木\|水` 變成 `木\\\|水`——那一格本來是「木|水」，貼完成了
+    /// 「木\|水」。抄了再貼回去不是一件白做的事。
+    ///
+    /// 這一欄抄出去的用處是「貼進表格軟件」（見 `yank_column`），那邊要的也是字。
     fn column_values(&self, cell: usize) -> Vec<String> {
         if let Some((_, parts)) = self.md_parts() {
             return parts
                 .rows
                 .iter()
-                .map(|row| row.get(cell).cloned().unwrap_or_default())
+                .map(|row| crate::mdtable::unescape(row.get(cell).map_or("", String::as_str)))
                 .collect();
         }
         self.cell_lines()

@@ -2404,6 +2404,22 @@ fn the_picker_box_and_the_panel_box_answer_d_the_same_way() {
     assert_eq!(p.query(), "");
 }
 
+/// **抄一欄再貼回原處，那一欄一個字都不該變**（2026-10-02 一輪掃查報來的）。
+///
+/// `column_values` 交出來的是**檔裏的拼法**（`木\|水`，連反斜杠），而 `put_column`
+/// 收到之後再轉義一遍，於是那一格成了 `木\\\|水`——本來是「木|水」，貼完成了
+/// 「木\|水」。抄出去那一份的用處是「貼進表格軟件」，那邊要的也是字不是拼法。
+#[test]
+fn yanking_a_column_and_putting_it_back_changes_nothing() {
+    let mut ed = typed("| a | b |\n| --- | --- |\n| 木\\|水 | x |\n| 火 | y |\n");
+    press(&mut ed, " ty tp");
+    let after = ed.current_buffer().rope().to_string();
+    // 格子裏的字一個不變（寬度被重排是 `md_write` 本來的事）。
+    assert!(after.contains("木\\|水"), "{after}");
+    assert!(!after.contains("木\\\\"), "多了一層反斜杠：{after}");
+    assert!(after.contains("| 火"), "{after}");
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
