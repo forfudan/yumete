@@ -1359,11 +1359,19 @@ pub fn shortest(
 /// prefix names nothing rather than guessing: `:ruby t` could be `typst` and
 /// nothing else, but if a second `t` word were ever added it would stop
 /// working, loudly, instead of quietly meaning the older one.
+/// Warning: **大小寫不算數**（2026-10-02 一輪掃查報來的）。從前這一支逐字節比，而
+/// `Param::WordsOr` 那一路比不中就落到命令自己的解析器上，那些解析器多半折了大小寫
+/// ——於是 `:syntax MARKDOWN`、`:theme INK`、`:layout VERTICAL` 收得下，而
+/// `:language ZH`、`:export HTML`、`:render FULL`、`:keymap VIM` 一概不認。
+/// **同一種參數兩種脾氣**，而讀者分不出哪個命令走哪一路。表裏的詞全是小寫 ASCII，
+/// 所以折一下沒有別的影響。
 pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
-    if let Some(exact) = from.iter().find(|w| w.name == typed) {
+    let same = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
+    if let Some(exact) = from.iter().find(|w| same(w.name, typed)) {
         return Some(exact);
     }
-    let mut starting = from.iter().filter(|w| w.name.starts_with(typed));
+    let lower = typed.to_ascii_lowercase();
+    let mut starting = from.iter().filter(|w| w.name.to_ascii_lowercase().starts_with(&lower));
     match (starting.next(), starting.next()) {
         (Some(only), None) => Some(only),
         _ => None,
@@ -2564,12 +2572,11 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.goto",
         needs: &[],
         params: &[Param::Free("<行號>")],
-        build: Some(|p| {
-            p.arg(0)
-                .and_then(|n| n.parse().ok())
-                .map(Command::GotoLine)
-                .ok_or(CommandError::MissingArgument("goto"))
-        }),
+        // Warning: **讀不懂的數字不是「沒給」**（2026-10-02 一輪掃查報來的）。從前
+        // `:goto abc` 答的是「goto 後面要跟一個參數」——而參數明明給了。
+        // [`Parsed::number`] 手裏就有對的那一句（「goto：不認得「abc」」），
+        // 丟掉它纔換來一句假話。`:wheel abc` 一直是對的，比一下就看得出來。
+        build: Some(|p| p.number(0).map(Command::GotoLine)),
     },
     Entry {
         name: "count",
@@ -4213,9 +4220,10 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Free("<幾級>")],
         build: Some(|p| {
+            // 同 `:goto`：`number` 的錯已經是對的那一句，別蓋掉它。
             Ok(Command::Outline(match p.arg(0) {
                 None => None,
-                Some(_) => Some(p.number(0).map_err(|_| CommandError::MissingArgument("toc"))?),
+                Some(_) => Some(p.number(0)?),
             }))
         }),
     },

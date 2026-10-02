@@ -1632,9 +1632,9 @@ find = "分詞 分词 詞表 词表 粒度 segmentation dictionary"
 [[message]]
 # : 命令選單裏 write 那一項的說明（commands 組）
 key = "cmd.commands.write"
-zht = "保存；給路徑存一份副本，`:write as` 纔換過去"
-zhs = "保存；给路径存一份副本，`:write as` 才换过去"
-en = "save; a path writes a copy, `:write as` moves to it"
+zht = "保存；給路徑存一份副本，`:write-as` 纔換過去"
+zhs = "保存；给路径存一份副本，`:write-as` 才换过去"
+en = "save; a path writes a copy, `:write-as` moves to it"
 find = "保存 存檔 存档 寫入 写入 save wa"
 
 [[message]]
@@ -2512,9 +2512,9 @@ find = "新建 插入 空表 建表 new insert"
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
 key = "cmd.table.numbers"
-zht = "欄號那一行：t3/、t20,20g 用的就是它"
-zhs = "栏号那一行：t3/、t20,20g 用的就是它"
-en = "the row of column numbers — what t3/ and t20,20g count with"
+zht = "欄號那一行：␣t3/、␣t20,20g 用的就是它"
+zhs = "栏号那一行：␣t3/、␣t20,20g 用的就是它"
+en = "the row of column numbers — what ␣t3/ and ␣t20,20g count with"
 find = "欄號 栏号 標號 标号 numbers"
 
 [[message]]
@@ -4336,7 +4336,7 @@ en = "grids, and the 拆分表"
 key = "help.table.sort-by-column"
 zht = "照這一欄順排／倒排；t1a2d8as 一次排幾欄"
 zhs = "照这一栏顺排／倒排；t1a2d8as 一次排几栏"
-en = "sort by this column, ascending / descending; t1a2d8as sorts by several"
+en = "sort by this column, ascending / descending; ␣t1a2d8as sorts by several"
 
 [[message]]
 # 表格幫助：按格走
@@ -5459,7 +5459,7 @@ en = "long cells: fold / unfold"
 key = "hint.table.go-to-cell"
 zht = "去某一格（␣t 20,20g）"
 zhs = "去某一格（␣t 20,20g）"
-en = "go to a cell (t20,20g)"
+en = "go to a cell (␣t20,20g)"
 
 [[message]]
 # 空格 t 單子：換移動的粒度（2026-09-30 作者定，原話「按格／按字移動」）
@@ -5579,7 +5579,7 @@ en = "search down the columns (shown in the other area)"
 key = "hint.table.sort-by-column"
 zht = "按列升序/降序排列（␣t1s; 1a2d8as 多列排序）"
 zhs = "按列升序/降序排列（␣t1s; 1a2d8as 多列排序）"
-en = "sort by column, ascending / descending (t1s; t1a2d8as for several)"
+en = "sort by column, ascending / descending (␣t1s; ␣t1a2d8as for several)"
 
 [[message]]
 # t 組提示的標題
@@ -9597,9 +9597,9 @@ en = "replaced the cell"
 [[message]]
 # tg 給的不是「行,欄」兩個數
 key = "table.cell-wants-a-comma"
-zht = "去某一格要兩個數：`t20,20g` 第 20 行第 20 欄。`-` 是範圍，`t2-10/` 那樣用"
-zhs = "去某一格要两个数：`t20,20g` 第 20 行第 20 栏。`-` 是范围，`t2-10/` 那样用"
-en = "a cell takes two numbers: `t20,20g` is row 20, column 20. `-` is a range, as in `t2-10/`"
+zht = "去某一格要兩個數：`␣t20,20g` 第 20 行第 20 欄。`-` 是範圍，`␣t2-10/` 那樣用"
+zhs = "去某一格要两个数：`␣t20,20g` 第 20 行第 20 栏。`-` 是范围，`␣t2-10/` 那样用"
+en = "a cell takes two numbers: `␣t20,20g` is row 20, column 20. `-` is a range, as in `␣t2-10/`"
 
 [[message]]
 # :check 查完表格，沒有問題
@@ -10157,9 +10157,9 @@ en = "schema: {0}"
 [[message]]
 # 光按 ts／tS，沒說照哪一欄
 key = "table.sort-wants-a-column"
-zht = "排序要指明欄：`t1s` 第一欄、`t0s` 你站的這一欄、`t1,5,9s` 好幾欄"
-zhs = "排序要指明栏：`t1s` 第一栏、`t0s` 你站的这一栏、`t1,5,9s` 好几栏"
-en = "a sort names its column: `t1s` the first, `t0s` the one you are in, `t1,5,9s` several"
+zht = "排序要指明欄：`␣t1s` 第一欄、`␣t0s` 你站的這一欄、`␣t1,5,9s` 好幾欄"
+zhs = "排序要指明栏：`␣t1s` 第一栏、`␣t0s` 你站的这一栏、`␣t1,5,9s` 好几栏"
+en = "a sort names its column: `␣t1s` the first, `␣t0s` the one you are in, `␣t1,5,9s` several"
 
 [[message]]
 # t1a 之後按了 s／S／Esc 以外的鍵，排序鏈斷掉

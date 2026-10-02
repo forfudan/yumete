@@ -559,7 +559,11 @@ impl Editor {
                 }
                 match nth {
                     // `:toc <n>` goes to the nth heading…
-                    Some(n) => match headings.get(n.saturating_sub(1)) {
+                    // Warning: **`:toc 0` 不是第一條**（2026-10-02 一輪掃查報來的）。
+                    // `0usize.saturating_sub(1)` 還是 `0`，於是「第 0 條」悄悄走
+                    // 到了第一條——數是從 1 起的，第 0 條不存在，就該照「一共
+                    // 幾條」那一句說。
+                    Some(n) => match n.checked_sub(1).and_then(|i| headings.get(i)) {
                         Some(&(line, _, _)) => self.goto_line(line + 1),
                         None => self.status = say!("goto.only-n-headings", headings.len()),
                     },
