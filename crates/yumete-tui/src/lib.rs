@@ -9719,6 +9719,21 @@ fn draw_horizontal(
             {
                 to += 1;
             }
+            // Warning: **一段不許斷在一個字的中間**（2026-10-02 一輪掃查報來的）。
+            // 這一段是按**字符**切的，而分詞的着色也是按字符給的下標；一個詞的邊
+            // 界落在基字和它的組合符號之間，那個符號就自己成了一段，而一段只有一
+            // 個零寬符號**畫不出任何一格**——屏幕上 `が`（か＋U+3099）成了 `か`，
+            // **換了一個字**，而稿子裏那兩個碼位都在。`:word-show off` 就好了，
+            // 所以是着色切的。
+            //
+            // 往後吞掉後面那些零寬的，一段就總是整字整字的。
+            while to < chars.len()
+                && shown[to] == shown[at]
+                && yumete_cjk::char_width(chars[to]) == 0
+                && runs.get(gi).is_none_or(|run| run.column != to)
+            {
+                to += 1;
+            }
             if shown[at] {
                 let text: String = chars[at..to].iter().filter(|c| !c.is_control()).collect();
                 spans.push(Span::styled(text, style));
@@ -18206,6 +18221,41 @@ fn squeezed(text: &str) -> String {
             );
             for c in all.chars() {
                 assert!(shot.contains(c), "{width} 欄下 {c} 沒畫出來：\n{shot}");
+            }
+        }
+    }
+
+    /// **一個分解寫的假名，點不許在畫面上丟掉**（2026-10-02 一輪掃查報來的）。
+    ///
+    /// 着色的那一段按**字符**切，而分詞給的下標也是字符下標；一個詞的邊界落在基字
+    /// 和它的組合符號之間，那個符號就自己成了一段，而一段只有一個零寬符號畫不出任
+    /// 何一格——屏幕上 `が`（か＋U+3099）成了 `か`，**換了一個字**。
+    #[test]
+    fn a_combining_mark_is_never_left_alone_in_its_own_span() {
+        /// 一個只在基字和它的組合符號之間斷開的分詞器——真的詞典就是這麼斷的
+        /// （下標是**字符**下標，而組合符號自己佔一個字符）。
+        struct SplitsClusters;
+        impl yumete_cjk::Segmenter for SplitsClusters {
+            fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+                (0..s.chars().count()).map(|i| (i, i + 1)).collect()
+            }
+        }
+
+        let config = Config::default();
+        for text in ["A\u{304b}\u{3099}B\n", "\u{306f}\u{309a}\n", "e\u{301}x\n"] {
+            let mut editor = editor_with(text);
+            editor.set_segmenter(Box::new(SplitsClusters));
+            editor.execute("word-show on").unwrap();
+            let shot = frame_to_text(
+                &mut editor,
+                &config,
+                &ImeSession::empty(Scheme::LINGMING),
+                40,
+                8,
+                None,
+            );
+            for c in text.chars().filter(|c| *c != '\n') {
+                assert!(shot.contains(c), "{:?} 裏的 {c:?} 沒畫出來：\n{shot}", text);
             }
         }
     }
