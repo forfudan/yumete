@@ -381,11 +381,21 @@ impl Editor {
             // and what is left is the one part a reader wants — whose side this
             // is. `=======` has no label, so its row goes empty, which is what
             // a divider between two halves should look like.
+            //
+            // Warning: **光標站上去就要露出來**（2026-10-02 查出來的）。這是整支
+            // `hidden_on_line` 裏**唯一**不問光標的一處——它底下那兩支都問
+            // （`markdown::hidden(…, self.selected_columns(line))`、註號那一支的
+            // `!Self::caret_within(…)`）。不問的後果不是看着怪，是**寫錯地方**：
+            // 光標畫在 `ours` 的 `o` 上，按 `i!`，稿子裏出來的是 `!<<<<<<< ours`，
+            // 而屏幕上從來沒有過那七個尖括號。而且那七格光標進得去出不來——按七下
+            // `l` 畫面一格不動，`wrap::position` 把它們都算在同一格上。
             if block == crate::markdown::Block::Conflict(None) {
                 let text = self.current_buffer().rope().line(line).to_string();
                 let brackets = text.chars().take(7).count();
                 let take = brackets + usize::from(text.chars().nth(7) == Some(' '));
-                off.push((0, take));
+                if !Self::caret_within(self.selected_columns(line), 0, take) {
+                    off.push((0, take));
+                }
             }
             // Inside a fence nothing is markup, so nothing comes off.
             let spans = self.markup_line_in(line, block);

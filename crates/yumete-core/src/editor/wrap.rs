@@ -26,9 +26,18 @@ impl Editor {
     /// A measure the writer has set wins, but only downwards: `:view-wrap 50` on a
     /// 40-column terminal still has to wrap at 40, because rows that do not fit
     /// cannot be read.
+    /// Warning: **那道下限不許大過真有的地方**（2026-10-02 一輪掃查報來的）。
+    /// `.max(MIN_WRAP_WIDTH)` 排在 `.min(available)` 後面，於是正文欄不到八格的
+    /// 時候，折行按八格折而畫只畫得下五格——**中間那幾個字一格都沒畫，也走不到**
+    /// （軟折行開着，沒有橫向滾動）。八格的窗口上三十六個字母丟了十二個。
+    ///
+    /// `MIN_WRAP_WIDTH` 那句註釋說的是「與其一行一個字，不如承認終端太窄」——
+    /// 承認得對，可代價不該是把字吃掉。真有幾格就按幾格折：窄到那個地步本來就
+    /// 不好看，但一個字都不會不見。
     pub fn set_wrap_width(&mut self, available: usize) {
         let width = self.measure.map_or(available, |m| m.min(available));
-        self.wrap_width = Some(width.max(crate::wrap::MIN_WRAP_WIDTH));
+        let floor = crate::wrap::MIN_WRAP_WIDTH.min(available.max(1));
+        self.wrap_width = Some(width.max(floor));
     }
 
     /// The gap between 縱, if the writer has set one for this session.

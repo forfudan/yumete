@@ -2477,6 +2477,31 @@ fn a_commit_under_many_cursors_reaches_every_one_of_them() {
     assert_eq!(ed.secondary_selections().len(), keyed, "兩條路同樣多段動了");
 }
 
+/// **衝突標記底下那七格，光標站上去要露出來**（2026-10-02 一輪掃查報來的）。
+///
+/// 這是整支 `hidden_on_line` 裏唯一不問光標的一處。不問的後果不是看着怪，是**寫錯
+/// 地方**：光標畫在 `ours` 的 `o` 上，按 `i!`，稿子裏出來的是 `!<<<<<<< ours`，而屏
+/// 幕上從來沒有過那七個尖括號。
+#[test]
+fn a_conflict_marker_shows_itself_when_the_caret_is_in_it() {
+    let text = "before\n<<<<<<< ours\nmine\n=======\ntheirs\n>>>>>>> theirs\nafter\n";
+    // 光標不在那一行上：七個括號和它後面那個空格藏起來，只剩 `ours`。
+    let mut ed = typed(text);
+    ed.execute(":render full").unwrap();
+    assert_eq!(ed.hidden_on_line(1), vec![(0, 8)], "{:?}", ed.hidden_on_line(1));
+
+    // 光標走到那一行上：整行露出來，於是打出去的字落在看得見的地方。
+    press(&mut ed, "2gg0");
+    assert!(ed.hidden_on_line(1).is_empty(), "{:?}", ed.hidden_on_line(1));
+    press(&mut ed, "i!");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().rope().to_string().contains("!<<<<<<< ours"),
+        "{}",
+        ed.current_buffer().rope().to_string()
+    );
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
