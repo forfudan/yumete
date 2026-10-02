@@ -199,6 +199,12 @@ mod tests {
         }
         assert_eq!(widen_pattern("a.b").as_deref(), Some("a.b"), "沒有漢字就原樣");
         assert_eq!(widen_pattern("書").as_deref(), Some("[書书]"));
+        // Warning: **類裏也折，否定的類裏也折**——於是 `[^書]` **配得更少**：`书`
+        // 從前配得上，開了中文匹配反而配不上（2026-10-02 定：照舊）。理由在
+        // `find.rs` 的 `Field::Chinese`，一句話是「關掉那個開關是現成的出路，而
+        // 類裏不折會讓 `[書]` 和 `書` 兩種寫法給兩個答案」。
+        assert_eq!(widen_pattern("[^書]").as_deref(), Some("[^[書书]]"));
+        assert_eq!(widen_pattern("[書]").as_deref(), Some("[[書书]]"));
         // Warning: **碼位寫法不折**：特意用 `\x{...}` 寫出來的那一個字，說的就是那一個。
         assert_eq!(widen_pattern(r"\x{66F8}").as_deref(), Some(r"\x{66F8}"));
         // 打了一半的式子解析不了，呼叫方原樣用它。
