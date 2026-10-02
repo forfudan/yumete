@@ -7743,7 +7743,19 @@ fn draw_search(
         // **空框上寫一句灰的，說它要什麼**（2026-09-27 報的：「點進去『本文件』
         // 就沒了，剩一個空格子，命令行一個字的提示都沒有」）。灰的纔讀得出那是
         // 提示不是值——`shown` 有字的時候一個字都不畫。
-        if shown.is_empty() {
+        //
+        // Warning: **搜那一格裏全是空格也算空**（2026-10-02 查出來的）。`Search::asked`
+        // 本來就 `trim` 過（一框空格不是一個問題），所以標題不寫數目、名單也空
+        // 着；可這一句看的是 `is_empty`，於是提示那句話也不畫——**整扇面板一個字
+        // 都不說**，而框裏那幾個空格看不見。打空格的人只會以為編輯器死了。
+        //
+        // 只有搜那一格這樣判。換那一格裏一串空格是**真的要換成空格**，拿提示蓋
+        // 掉它就是說謊。
+        let blank = match which {
+            Field::Query => shown.trim().is_empty(),
+            _ => shown.is_empty(),
+        };
+        if blank {
             let asks = match which {
                 Field::Scope => say!("search.ask.folder"),
                 Field::Replace => say!("search.ask.replace"),
