@@ -18185,6 +18185,31 @@ fn squeezed(text: &str) -> String {
     /// beside every 縱, have nowhere to go. The gap between 縱 is **not** one of
     /// the things it takes — that is `zong_gap`, zero here so the ticks are the
     /// whole difference being measured.
+    /// **窄到放不下八格的時候，一個字都不許丟**（2026-10-02 一輪掃查報來的）。
+    ///
+    /// `set_wrap_width` 的 `.max(MIN_WRAP_WIDTH)` 排在 `.min(available)` 後面，於是
+    /// 正文欄不到八格的時候按八格折、只畫得下五格——**中間那幾個字一格都沒畫，也
+    /// 走不到**（軟折行開着，沒有橫向滾動）。八格的窗口上三十六個字母丟了十二個。
+    #[test]
+    fn a_window_too_narrow_to_wrap_in_still_shows_every_character() {
+        let config = Config::default();
+        let all = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        for width in 8u16..=14 {
+            let mut editor = editor_with(&format!("{all}\n"));
+            let shot = frame_to_text(
+                &mut editor,
+                &config,
+                &ImeSession::empty(Scheme::LINGMING),
+                width,
+                24,
+                None,
+            );
+            for c in all.chars() {
+                assert!(shot.contains(c), "{width} 欄下 {c} 沒畫出來：\n{shot}");
+            }
+        }
+    }
+
     /// **沒有邊欄就沒有地方畫稿紙的點**（2026-10-02 一輪掃查報來的）。
     ///
     /// [`crate::vertical::Metrics::ticks`] 的註釋早就寫着「Ticks live in the lane;
