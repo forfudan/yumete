@@ -700,6 +700,22 @@ fn press(
     let mut composing = false;
     let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
+        // **兩個鍵之間補上主循環會畫的那一幀**（2026-10-02 查出來的）。
+        //
+        // 走磁碟的那一趟搜索是**欠着的**：`Enter` 只記一筆，主循環先畫一幀
+        // 「正在找…」再去跑（`run_owed_search`）。而 `--keys` 是一口氣餵完的，
+        // 從前整串鍵都跑在那一趟之前——於是 `--keys='\{space}/霜\n66jjjj'` 裏
+        // 的每一個 `j` 走的都是**本文件那一檔的舊名單**，走完自己這一份就到頭，
+        // 別的檔一處也去不了；而畫的時候那一趟已經跑完了，照片上名單是全的。
+        // 看起來像「名單走不動」，其實是這支工具自己落後了一幀。
+        //
+        // 和底下 `gw` 那一處同一族（#406），也和這支函數開頭說的 `:settings`
+        // 同一族：**主循環在兩個鍵之間做的事，這裏一件都不許少**，不然拍到的
+        // 面板和人按出來的面板不是同一扇。只是這一件便宜，不必真畫一幀。
+        if editor.take_owed_search() {
+            editor.run_owed_search();
+        }
+        editor.refresh_the_edited_file();
         let key = match c {
             '\\' => match chars.next() {
                 Some('e') => Key::Esc,
@@ -1222,6 +1238,39 @@ fn terminal_width() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **`--keys` 在兩個鍵之間要補上主循環那一幀**，否則走磁碟的名單走不動。
+    ///
+    /// 2026-10-02 一輪黑盒審查報來的：`--keys='␣/霜\n66jjjj'` 在工作路徑那一檔
+    /// 只走得到眼前這一份自己的那幾處，往後按多少下 `j` 都不動。核心裏同一串鍵
+    /// 走得好好的——差的是這支工具：那一趟搜索是欠着的，而整串鍵都餵在它還清
+    /// 之前，於是每一個 `j` 走的都是本文件那一檔的舊名單。
+    #[test]
+    fn keys_pressed_offscreen_wait_for_the_search_the_way_a_frame_would() {
+        let dir = std::env::temp_dir().join(format!("yumete-press-walk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("卷一")).unwrap();
+        std::fs::write(dir.join(".yumete"), "").unwrap();
+        std::fs::write(dir.join("甲.md"), "霜一\n霜二\n").unwrap();
+        std::fs::write(dir.join("卷一/乙.md"), "霜三\n").unwrap();
+
+        let config = yumete_config::Config::default();
+        let mut ime = ImeSession::empty(yumete_ime::Scheme::LINGMING);
+        let mut editor = Editor::new();
+        editor.set_root(&dir);
+        editor.open_file(dir.join("甲.md")).unwrap();
+
+        // 開面板、打一個字、Enter，再把範圍轉到工作路徑，然後一路往下走。
+        // `6` 兩下是 本文件 → 緩衝區 → 工作路徑；`j` 四下到名單，再四下走到底。
+        press(&mut editor, "\\{space}/霜\\n66jjjjjjjj", &config, &mut ime, Some((100, 30)));
+
+        assert_eq!(
+            editor.current_buffer().display_name(),
+            "乙.md",
+            "走到別的檔上去了——走不到就是這支工具落後了一幀"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     /// **A size it cannot read is a refusal, not a default** (#389).
     ///
