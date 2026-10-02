@@ -660,8 +660,72 @@ pub fn word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> S
 ///
 /// A span whose `head` is before its `anchor` is a backwards selection, which
 /// is what this editor has always made of `b`: it selects what it crosses.
+///
+/// Warning: **站在詞首的時候，你站的那一格不算在內**（2026-10-02 照 helix 比出來的）。
+/// 從前錨點一律是 `pos`，於是詞首按 `b` 多拿一個字：`beta` 的 `b` 上按 `b`，選的是
+/// `alpha␣b` 而不是 `alpha␣`，`bd` 於是把 `beta` 咬掉一個頭。而 `b` 正常就是停在
+/// 詞首按的——「把前面那個詞拿過來」——所以分歧落在最常見的那一下。
+///
+/// helix 的 `range_to_target` 在第一步就已經跨過邊界的時候 `anchor = head`
+/// （`movement.rs:477`）。神諭量出來的（`helix-core` 079a789e8，`alpha beta gamma`）：
+///
+/// | 光標在 | helix 選中 |
+/// | --- | --- |
+/// | 3（`alpha` 的 `h`，詞中間） | `alph` ——**帶上**你站的那一格 |
+/// | 6（`beta` 的 `b`，詞首） | `alpha␣` ——**不帶** |
+/// | 11（`gamma` 的 `g`，詞首） | `beta␣` ——**不帶** |
+///
+/// Warning: **也不把換行圈進去。** 站在一行的開頭往回走，走的是上一行的最後一個詞，
+/// 而那個換行不在選中的裏面（helix 第 17 格給的是 `gamma`，不是 `␊gamma`）。
+///
+/// Warning: **這是模型層，兩套鍵位一起改。** vim 的 `db` 刪的也是
+/// `[prev_word_start, cursor)`——同樣不含光標那一格——所以兩邊要的是同一個答案。
 pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
-    unit_back(rope, pos, |r, p| prev_word_start(r, p, grain, seg))
+    // Warning: **往回也停在行首**，和 `w` 停在行末是同一條（`word_forward`）。沒有
+    // 這一條，行首縮進裏按 `b` 會一路退到上一行的詞上，把中間那個換行圈進來。
+    // helix 第 18 格（縮進的第二個空格）選的是 `␣␣`，不是 `gamma␊␣`。
+    let stop_at_line_start = |r: &Rope, p: usize| -> usize {
+        let line = line_of(r, p);
+        if let Some(start) = line_words(r, line, grain, seg)
+            .into_iter()
+            .map(|(start, _)| start)
+            .rfind(|&start| start < p)
+        {
+            return start;
+        }
+        let start = line_start(r, p);
+        match start < p {
+            true => start,
+            // 已經在行首了：這一下纔退到上一行。
+            false => prev_word_start(r, p, grain, seg),
+        }
+    };
+    let Span::Over { anchor, head } = unit_back(rope, pos, stop_at_line_start) else {
+        return Span::Missed;
+    };
+    // Warning: **後面沒東西了就什麼都不做**，不是「選中一格」。`Span::Missed` 自己的
+    // 註釋說的正是這個分別。helix 在檔首按 `b` 原地不動，而從前這裏交出一格，於是
+    // `2bd` 在檔首刪掉一個字。
+    if head >= anchor {
+        return Span::Missed;
+    }
+    // 站的那一格要不要算：詞首不算，行首和行末那一格也不算（它們的前一格是換行）。
+    let line = line_of(rope, pos);
+    let starts_a_word = line_words(rope, line, grain, seg).iter().any(|&(s, _)| s == pos);
+    let at_edge = pos == line_start(rope, pos) || pos >= line_end(rope, pos);
+    let mut anchor = match starts_a_word || at_edge {
+        true => prev_grapheme(rope, anchor),
+        false => anchor,
+    };
+    // 換行不進選區：錨點退到它前面那個字上。`char_to_line` 認不出這一步——換行符
+    // 算在**它自己那一行**裏，所以比行號是比不出來的，要看那一格是不是換行。
+    while anchor > head && rope.char(anchor.min(rope.len_chars().saturating_sub(1))) == '\n' {
+        anchor = prev_grapheme(rope, anchor);
+    }
+    match anchor > head {
+        true => Span::Over { anchor, head },
+        false => Span::Missed,
+    }
 }
 
 /// The end (last character) of the next word after `pos` (`e` / `E`).
@@ -1108,6 +1172,44 @@ mod tests {
             word_forward(&r, 0, Grain::Big, &seg),
             Span::Over { anchor: 0, head: 3 }
         );
+    }
+
+    /// **`b` 在詞首不帶上你站的那一格，也不圈進換行**（2026-10-02 照 helix 比出來的）。
+    ///
+    /// 底下每一行都是拿 helix 自己的 `move_prev_word_start` 量出來的（`helix-core`
+    /// 079a789e8）。`b` 正常就是停在詞首按的——「把前面那個詞拿過來」——所以那一條
+    /// 落在最常見的一下上。
+    #[test]
+    fn b_drops_the_cell_it_stands_on_at_a_word_start() {
+        let seg = CategorySegmenter;
+        let r = rope("alpha beta gamma\n  indented word here\n");
+
+        // 詞中間：帶上你站的那一格。
+        assert_eq!(
+            word_back(&r, 3, Grain::Coarse, &seg),
+            Span::Over { anchor: 3, head: 0 }
+        );
+        // 詞首：不帶。
+        assert_eq!(
+            word_back(&r, 6, Grain::Coarse, &seg),
+            Span::Over { anchor: 5, head: 0 }
+        );
+        assert_eq!(
+            word_back(&r, 11, Grain::Coarse, &seg),
+            Span::Over { anchor: 10, head: 6 }
+        );
+        // 行首往回：走上一行的最後一個詞，而那個換行不在裏面。
+        assert_eq!(
+            word_back(&r, 17, Grain::Coarse, &seg),
+            Span::Over { anchor: 15, head: 11 }
+        );
+        // 縮進裏往回：停在行首，不退到上一行去。
+        assert_eq!(
+            word_back(&r, 18, Grain::Coarse, &seg),
+            Span::Over { anchor: 18, head: 17 }
+        );
+        // 檔首：什麼都不做，不是「選中一格」。
+        assert_eq!(word_back(&r, 0, Grain::Coarse, &seg), Span::Missed);
     }
 
     #[test]
