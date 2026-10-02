@@ -1720,6 +1720,15 @@ impl Editor {
             None => rel.to_path_buf(),
         };
         let full = std::fs::canonicalize(&full).unwrap_or(full);
+        // Warning: **這裏的 `canonicalize` 不是那個慢的地方**（2026-10-02 量過，別再
+        // 試一遍）。看着像：`R` 每個檔叫一次這支，而這一趟對**每一個**已開的緩衝
+        // 都問一次文件系統，N 個檔就是 N² 次。三千個檔的 `R` 要 96 秒，其中 77 秒
+        // 在 `sys`，數字對得上。
+        //
+        // 可是加一道「先按名字比、比不中再問」的快路**一秒都沒省**（96.55 對
+        // 96.06，兩趟）。那 77 秒在別處。五百個檔是 3.97 秒，三千個是 96 秒——
+        // 六倍的量二十四倍的時間，確實是平方，但不是這一行。下一個人從 `open_file`
+        // 那一邊查起。
         if let Some(i) = self.buffers.iter().position(|b| {
             b.path()
                 .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
