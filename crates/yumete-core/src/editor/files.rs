@@ -528,6 +528,9 @@ impl Editor {
         // `ga` 會帶你去另一章。`Pane` 為同一個理由早就記 id 了。
         self.last_file = Some(self.current_buffer().id());
         self.current = index;
+        // **翻到一份還沒決定過的草稿，就在那一刻問**（2026-10-02 作者定）。開檔
+        // 是一條路，換檔是另一條——而「第一次看見這一份」在兩條路上是同一件事。
+        self.ask_about_the_draft();
         let restored = self.current_buffer().saved_cursor();
         self.set_cursor(restored);
         self.extend = false;

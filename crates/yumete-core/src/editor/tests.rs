@@ -13352,10 +13352,13 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
 
     let mut ed = Editor::new();
     ed.execute(&format!(":open {}", path.display())).unwrap();
-    // The draft is not loaded on its own — the writer is told about it.
+    // The draft is not loaded on its own — the writer is asked about it.
     assert_eq!(ed.current_buffer().text(), "第一稿\n");
     ed.announce_recovery();
-    assert!(ed.status().contains(":recover"), "{}", ed.status());
+    assert!(ed.query().is_some(), "開檔就問");
+    // 暫時不管，然後再用 `:recover` 把它叫回來。
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.status(), say!("recover.left-for-now"));
 
     // **兩問纔換得了**（2026-10-02 作者定）：恢復 → 直接恢復。
     ed.execute(":recover").unwrap();
@@ -13480,6 +13483,46 @@ fn a_draft_is_decided_when_the_file_is_opened_and_takes_two_answers() {
         "對比開在自己那一個緩衝裏：{}",
         ed.current_buffer().text()
     );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **一次只問眼前這一個，翻過去再問那一個**（2026-10-02 作者定）。
+///
+/// 從前開檔時狀態欄把每一個有草稿的檔名拼成一句話。原話：「你管別的文件做什麼？
+/// 如果有十幾個文件你寫得完嗎？」——一行放不下，而每一份自己有面板。
+#[test]
+fn each_file_with_a_draft_is_asked_about_when_you_turn_to_it() {
+    let dir = std::env::temp_dir().join(format!("yumete-two-drafts-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for n in ["a", "b"] {
+        std::fs::write(dir.join(format!("{n}.md")), format!("{n} 第一稿\n")).unwrap();
+        std::fs::write(dir.join(format!(".{n}.md.yumete")), format!("{n} 還有三千字\n")).unwrap();
+    }
+
+    let mut ed = Editor::new();
+    ed.execute(&format!(":open {}", dir.join("a.md").display())).unwrap();
+    ed.execute(&format!(":open {}", dir.join("b.md").display())).unwrap();
+    // 眼前是 b，問的就是 b；狀態欄不去列 a。
+    let asked = ed.query().expect("眼前這一個要問");
+    assert!(asked.body.contains("b.md"), "{}", asked.body);
+    assert!(!asked.body.contains("a.md"), "{}", asked.body);
+
+    // 暫時不管，翻到 a，a 自己的那一問站出來。
+    ed.on_key(Key::Esc);
+    assert!(ed.query().is_none());
+    ed.execute(":buffer-previous").unwrap();
+    let asked = ed.query().expect("翻過去就問那一個");
+    assert!(asked.body.contains("a.md"), "{}", asked.body);
+
+    // 說過「暫時不管」的不再自己站出來——翻回 b 不再問。
+    ed.on_key(Key::Esc);
+    ed.execute(":buffer-next").unwrap();
+    assert!(ed.query().is_none(), "答過一次就別每翻一回問一回");
+    // 但明打 `:recover` 就是在要那一問。
+    ed.execute(":recover").unwrap();
+    assert!(ed.query().is_some(), ":recover 不看那一格");
 
     std::fs::remove_dir_all(&dir).ok();
 }

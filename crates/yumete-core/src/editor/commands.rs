@@ -1248,14 +1248,22 @@ impl Editor {
                     self.current_buffer_mut().discard_swap();
                     self.status = say!("recover.draft-dropped");
                 }
-                // 暫時不管：草稿原封不動，狀態欄照舊說它在那裏。
-                _ => self.status = say!("recover.drafts-newer-than-file", self.current_buffer().display_name()),
+                // 暫時不管：草稿原封不動。**不重說一遍「有草稿」**——面板剛
+                // 說過，而人家正是答了那一句纔到這裏的（2026-10-02 原話：
+                // 「不是人家都已經選擇了 n 了嗎？」）。只說怎麼回得去。
+                _ => {
+                    self.current_buffer_mut().leave_the_draft_alone();
+                    self.status = say!("recover.left-for-now");
+                }
             },
             Asking::RecoverConfirm => match answer {
                 'y' => self.take_the_draft(),
                 // 看完再決定——對比開在另一個緩衝裏，稿子一個字沒動。
                 'd' => self.diff_against_draft(),
-                _ => self.status = say!("recover.drafts-newer-than-file", self.current_buffer().display_name()),
+                _ => {
+                    self.current_buffer_mut().leave_the_draft_alone();
+                    self.status = say!("recover.left-for-now");
+                }
             },
         }
     }

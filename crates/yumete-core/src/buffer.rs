@@ -112,6 +112,12 @@ pub struct Buffer {
     /// 「two yumetes on one chapter」 is exactly what this field exists for.
     /// Digits only: [`read_draft`] finds drafts by a digit suffix.
     draft_tag: String,
+    /// **問過了，答的是「暫時不管」**（2026-10-02）。
+    ///
+    /// 那一問在開檔和換檔的時候自己站出來，而說過「暫時不管」之後每翻回來一次
+    /// 就再問一次是**煩**，不是安全。`:recover` 不看這一格——明打那個命令就是
+    /// 在要那一問。
+    draft_left_alone: bool,
     /// Whether the recovery copy on disk is *this session's*.
     ///
     /// Until this session writes one, the copy beside the document belongs to
@@ -285,6 +291,7 @@ impl Buffer {
             wrote_at: None,
             swapped_at: None,
             draft_tag: std::process::id().to_string(),
+            draft_left_alone: false,
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -330,6 +337,7 @@ impl Buffer {
             wrote_at: None,
             swapped_at: None,
             draft_tag: std::process::id().to_string(),
+            draft_left_alone: false,
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -393,6 +401,7 @@ impl Buffer {
             wrote_at: None,
             swapped_at: None,
             draft_tag: std::process::id().to_string(),
+            draft_left_alone: false,
             owns_swap: false,
             syntax,
             syntax_guessed: named.is_none(),
@@ -701,6 +710,16 @@ impl Buffer {
     /// copy of some text needs the stronger fact, which is this one.
     pub fn recovery_copy(&self) -> Option<&Path> {
         self.wrote_at.as_deref()
+    }
+
+    /// 問過了，答的是「暫時不管」——別再自己站出來。
+    pub fn leave_the_draft_alone(&mut self) {
+        self.draft_left_alone = true;
+    }
+
+    /// 這一份的草稿要不要自己把那一問擺出來。
+    pub fn draft_wants_asking(&self) -> bool {
+        self.recovered_draft().is_some() && !self.draft_left_alone
     }
 
     pub fn keep_drafts_at(&mut self, path: PathBuf) {

@@ -540,23 +540,27 @@ impl Editor {
         if orphans > 0 {
             self.status = say!("recover.drafts-waiting", orphans);
         }
-        let waiting: Vec<String> = self
-            .buffers
-            .iter()
-            .filter(|b| b.recovered_draft().is_some())
-            .map(|b| b.display_name())
-            .collect();
-        if waiting.is_empty() {
-            return;
-        }
-        // The status line is cleared by the next keystroke, so the buffer also
-        // wears a `[draft]` tag until the draft is taken or thrown away — the
-        // notice has to still be there when the writer looks up.
-        self.status = say!("recover.drafts-newer-than-file", listed(&waiting));
-        // …and the one on screen is asked about **now**, not left for a
-        // `:recover` the writer may reach for after a morning's typing
-        // （2026-10-02 作者定，見 [`Self::recover_query`]）。
-        if self.query.is_none() {
+        // Warning: **不列別的檔**（2026-10-02 作者定）。從前這裏把每一個有草稿的檔
+        // 名拼成一句話擺在狀態欄上——原話：「你管別的文件做什麼？如果有十幾個
+        // 文件你寫得完嗎？」十幾個檔名一行放不下，而每一份自己有面板：翻到它那
+        // 一刻就問（[`Self::ask_about_the_draft`]），檔名後面那個 `[draft]` 一直
+        // 掛着。
+        self.ask_about_the_draft();
+    }
+
+    /// **翻到一份還沒決定過的草稿，就在那一刻問。**
+    ///
+    /// 開檔、換檔走的都是這一支。說過「暫時不管」的不再自己站出來；要它回來就
+    /// 打 `:recover`。
+    pub(super) fn ask_about_the_draft(&mut self) {
+        // Warning: **問的永遠是屏幕上那一份。** 一個還站着的草稿問題是**上一份**
+        // 的——命令行上兩個檔、或者連着兩句 `:open`，第二句換了屏幕而第一句的
+        // 面板還掛在那裏，於是看着 `b.md` 被問 `a.md` 要不要恢復。換掉它不丟東
+        // 西：沒答過的那一份不算「暫時不管」，翻回去自己會再問。
+        //
+        // 別的問題（`:w` 那個大小核驗）不碰——那一問問的是一條還沒做完的命令。
+        let standing = matches!(self.query.as_ref().map(|q| &q.what), Some(Asking::RecoverDraft));
+        if (self.query.is_none() || standing) && self.current_buffer().draft_wants_asking() {
             self.query = self.recover_query();
         }
     }
