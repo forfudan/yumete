@@ -18866,6 +18866,35 @@ Warning: **診斷不是 Markdown。** 邊欄那一支從前用同一個 `docs` �
   `self.drop_the_offering()` 搬進 match 守衛（中間插一支 arm 就換意思），幾個
   `needless_range_loop` 走的是一段區間而下標本身有意義。
 
+## 5.51 等作者定的八條英文文案（2026-10-02 審出來的）
+
+一份逐檔逐寬度的文案審閱（三種語言 × 80／90／100／120 欄 × 面板每一種狀態）。**繁體和簡體
+零處截斷**；下面八條全是英文那一列的，而英文是我自己定的，所以逐條列出來等作者過。
+
+量法：`./yumete --lang=en --shot=WxH --keys='…'`，面板寬約 24 格。
+
+| # | 鍵 | 現在 | 毛病 | 建議 |
+| --- | --- | --- | --- | --- |
+| 1 | `search.whole` | `whole word (Latin)` | 18 格。**80 欄下方框整個被切掉**，按 `4` 屏幕上什麼都不變；要 88 欄纔看得見 `[x]` | `whole word`（10 格） |
+| 2 | `search.where.working` | `the working directory` | 21 格進 14 格的框。那一格留的是頭（名字不是路徑），80 欄下成了 `the working di` | `working directory`（去掉冠詞，17 格） |
+| 3 | `search.label.exclude` ＋ `search.hidden` | `skip:` 與 `skip` | **兩個相鄰的行用同一個詞說兩件事**（中文是 排除／不搜） | `only:`／`except:` 配成一對，`skip` 留給第七行 |
+| 4 | `search.bad-glob` | `include or exclude holds a bad pattern` | 屏幕上那兩格叫 `only:` 和 `skip:`，沒有 include 也沒有 exclude | 跟着第 3 條的用詞改 |
+| 5 | `search.replace.smart` | `smart case` | **和既有術語撞**：ripgrep／vim／helix 的 smartcase 是**搜索**選項，而這裏說的是「換上去的跟着原文」。同一扇面板第一行已經寫着 `case [smart]` | `keep case` |
+| 6 | `search.matching.plain` ＋ `search.replace.literal` | 都是 `literal` | 第三行和第五行都畫成 `[literal]`（中文分得開：字面／字面替換） | 替換那一個改成 `as typed` |
+| 7 | `search.chinese.glyphs` | `variants` | `Chinese [variants+pinyin]` 在 80／90 欄下被切 | `glyphs` 或 `trad/simp` |
+| 8 | `cmd.commands.replace-*`、`cmd.word-topics.discover-*` | 「replace across the project」「mine words across the working directory」 | 動詞沒有賓語，讀着像硬翻。中文那兩條也換了語域：父條說「挖出這一篇自己的詞」，子條說「探索用戶詞語」，而「用戶」是這份文案通篇避開的系統詞 | 英文「find and replace in …」；中文「挖出工作路徑裏自己的詞」／「挖出項目裏自己的詞」 |
+
+另外兩條**不是文案、是取捨**，也等作者定：
+
+- **`search.scope-is-a-pick`** 英文 83 格，80 欄下被切（中文 76 格合身）；而且它把那一格叫
+  `scope`，屏幕上寫的是 `In:`。
+- **英文面板用了三套詞**說同一件事：標題 `Search`／`Find & Replace`、查詢框 `Find:`、位置
+  `In:`。中文從頭到尾是 搜索／搜:／位置:。
+
+**已經照審閱改掉、不必再問的**（都是繪製錯誤，不是措辭）：位置／包含／排除三格畫到邊欄標籤
+行上、標題和數目相撞、位置那一格留尾留出 `king directory`、寫錯 glob 時標題說「無結果」、
+`find` 關鍵詞漏了 `查找`／`全文`／`grep`／`mine` 那一批。
+
 ## 5.50 挑選器長出一個搜索框，鍵位收進命令行（2026-10-01 定）
 
 作者提的：「我其实有点想在文件下方加一行输入框（和搜索那种类似）」，後來定了畫在列表
