@@ -982,8 +982,9 @@ impl Editor {
             // 的樣子。
             Key::Char('u') if self.search.replacing => {
                 let batch = std::mem::take(&mut self.replaced_in);
+                let empty = batch.is_empty();
                 let mut back = 0usize;
-                match batch.is_empty() {
+                match empty {
                     // 沒有記在案的那一批：撤回當前這一份，和從前一樣。
                     true => self.undo(),
                     // Warning: **一次 `R` 能動好幾個檔，而 `undo` 只管當前那一份。**
@@ -997,7 +998,7 @@ impl Editor {
                         }
                     }
                 }
-                self.after_replacing_undone(back);
+                self.after_replacing_undone((!empty).then_some(back));
             }
             // Warning: **`R` 也只在名單那一邊活着**（2026-09-29 定，同 `r`）。提示行
             // 上不寫它的時候，它就是一個沒綁的鍵；名單空着也一樣。
@@ -1804,7 +1805,9 @@ impl Editor {
     }
 
     /// 撤回一次替換之後，名單要跟着回來——被換掉的那幾處又在了。
-    fn after_replacing_undone(&mut self, files: usize) {
+    fn after_replacing_undone(&mut self, files: Option<usize>) {
+        // `undo` 自己說過一句話，而底下重跑一趟搜索可能把它蓋掉。
+        let said = self.status.clone();
         let where_ = self.search.selected;
         match self.search.scope.live() {
             true => self.run_search(),
@@ -1814,9 +1817,14 @@ impl Editor {
         // **撤回也要出聲。** `r` 說「換掉 1 處」、`R` 說「換掉 8 處」，而 `u` 從前
         // 一個字都不說——剛按錯一次 `R` 的人最需要聽見的就是這一句
         // （2026-09-27 審出來的）。
+        // Warning: **沒換過就別說換過**（2026-10-02 查出來的）。這一句從前是無條件
+        // 寫的：面板裏按 `u`、而這一輪一處都沒替換過，屏幕上照樣寫「撤回了剛纔
+        // 那次替換」——撤掉的其實是讀者自己上一筆改動。按 `u` 的人正是慌了神的
+        // 那個人，這一句話告訴他剛纔發生的是另一件事。
         self.status = match files {
-            0 | 1 => say!("search.undone"),
-            n => say!("search.undone-files", n),
+            None => said,
+            Some(0 | 1) => say!("search.undone"),
+            Some(n) => say!("search.undone-files", n),
         };
     }
 

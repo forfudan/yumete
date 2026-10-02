@@ -9562,6 +9562,41 @@ fn replacing_them_all_leaves_you_where_you_started() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **一處都沒換過，`u` 照樣說「撤回了剛纔那次替換」**（2026-10-02 一輪審查報來的）。
+///
+/// 那一句從前是無條件寫上去的。按 `u` 的人正是慌了神的那一個，而屏幕告訴他剛纔
+/// 發生的是另一件事——撤掉的其實是他自己上一筆改動。
+#[test]
+fn undo_in_the_panel_only_claims_a_replacement_when_there_was_one() {
+    let mut ed = typed("甲一");
+    ed.execute(":replace").unwrap();
+    ed.on_key(Key::Char('甲'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('Z'));
+    ed.on_key(Key::Enter);
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+
+    // ① 什麼都沒換，就按 `u`。
+    ed.on_key(Key::Char('u'));
+    assert_ne!(ed.status(), say!("search.undone"), "沒換過，別說換過");
+
+    // ② 真換一次再按，就該說了。`typed` 是打出來的，所以上面那個 `u` 把字也撤掉
+    // 了——換一份乾淨的。
+    let mut ed = typed("甲一");
+    ed.execute(":replace").unwrap();
+    ed.on_key(Key::Char('甲'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('Z'));
+    ed.on_key(Key::Enter);
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+    assert!(ed.current_buffer().rope().to_string().contains('Z'));
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.status(), say!("search.undone"));
+    assert_eq!(ed.current_buffer().rope().to_string(), "甲一", "字也回來了");
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那
