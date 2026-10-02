@@ -762,6 +762,55 @@ pub fn sniff_among(lines: &[String], guesses: &[char]) -> Option<char> {
     })
 }
 
+/// **一張表的寫法**：`|` 表格，或者某個分隔符分開的文本（2026-10-02 作者定）。
+///
+/// `csv` 和 `tsv` 不是兩種東西，是 [`Shape::Delimited`] 的兩個分隔符——Pandoc
+/// 的叫法也是這樣（`csv`／`tsv`／`pipe_tables`），所以命令上那三個詞是通用詞彙，
+/// 不是我們自己造的。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Shape {
+    /// Markdown 的 `|` 表格。
+    Pipe,
+    /// 分隔符分開的文本——`csv` 是 `,`，`tsv` 是 `\t`。
+    Delimited(char),
+}
+
+impl Shape {
+    /// 命令上那個詞：`pipe`、`csv`、`tsv`，或者任何一個分隔符的名字。
+    pub fn named(word: &str) -> Option<Shape> {
+        match word {
+            "pipe" => Some(Shape::Pipe),
+            "csv" => Some(Shape::Delimited(',')),
+            "tsv" => Some(Shape::Delimited('\t')),
+            _ => delimiter_named(word).map(Shape::Delimited),
+        }
+    }
+}
+
+/// 一個分隔符的名字：`tab`、`space`、`comma`、`semicolon`，或者它自己。
+///
+/// A delimiter is one character, and most of them can simply be typed. The two
+/// that cannot are the tab — which the command line would never see, because
+/// `Tab` completes — and the space, which is spelled out for the same reason
+/// and is accepted here even though the sniffer will never guess it: a writer
+/// who says `space` has looked at their data and decided.
+pub fn delimiter_named(word: &str) -> Option<char> {
+    match word {
+        "tab" | "\\t" => Some('\t'),
+        "space" | "\\s" => Some(' '),
+        "comma" => Some(','),
+        "semicolon" => Some(';'),
+        "\" \"" | "' '" => Some(' '),
+        _ => {
+            let mut chars = word.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if !c.is_whitespace() => Some(c),
+                _ => None,
+            }
+        }
+    }
+}
+
 /// The text of one cell, given the line and the ranges.
 pub fn cell_text(line: &str, span: (usize, usize)) -> String {
     line.chars().take(span.1).skip(span.0).collect()

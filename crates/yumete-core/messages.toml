@@ -2454,12 +2454,12 @@ en = "look the whole table over: repeated row names, components with no row, row
 find = "檢查 检查 校驗 校验 查錯 查错 check lint"
 
 [[message]]
-# : 命令選單裏 csv 那一項的說明（table 組）
-key = "cmd.table.csv"
-zht = "把光標所在的 | 表格拆成分隔文本"
-zhs = "把光标所在的 | 表格拆成分隔文本"
-en = "turn the | table under the cursor into delimited text"
-find = "分隔 逗號 逗号 制表符 csv tsv 拆開 拆开"
+# : 選單裏 convert-table 那一項的說明
+key = "cmd.table.convert"
+zht = "轉為目標格式(csv,tsv,pipe)；兩個參數時第一個為源格式"
+zhs = "转为目标格式(csv,tsv,pipe)；两个参数时第一个为源格式"
+en = "convert to the named format (csv, tsv, pipe); with two words the first is the source"
+find = "表格 转换 轉換 格式 csv tsv pipe 分隔 convert table"
 
 [[message]]
 # : 命令選單裏 detail 那一項的說明（table 組）
@@ -2524,14 +2524,6 @@ zht = "當普通文字"
 zhs = "当普通文字"
 en = "as ordinary text"
 find = "表格 關掉 关掉 普通文字 off"
-
-[[message]]
-# : 命令選單裏 pipe 那一項的說明（table 組）
-key = "cmd.table.pipe"
-zht = "把選中的（或光標所在的）分隔文本作成 | 表格"
-zhs = "把选中的（或光标所在的）分隔文本作成 | 表格"
-en = "turn the selected — or the surrounding — delimited text into a | table"
-find = "管道 markdown 豎線 竖线 pipe 作成 合成"
 
 [[message]]
 # : 命令選單裏 rules 那一項的說明（table 組）

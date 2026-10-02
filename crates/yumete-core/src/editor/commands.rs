@@ -907,12 +907,8 @@ impl Editor {
                 );
                 Ok(CommandOutcome::Continue)
             }
-            Command::TableToPipe(delimiter) => {
-                self.table_to_pipe(delimiter);
-                Ok(CommandOutcome::Continue)
-            }
-            Command::TableToDelimited(delimiter) => {
-                self.table_to_delimited(delimiter);
+            Command::ConvertTable { to, from } => {
+                self.convert_table(to, from);
                 Ok(CommandOutcome::Continue)
             }
             Command::SortTable(keys) => {

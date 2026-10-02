@@ -315,12 +315,25 @@ pub enum Command {
     /// `:table-sort 1 a 2 d` — put the rows in order by these columns, in this
     /// order. Empty sorts by the column the cursor is in.
     SortTable(Vec<(usize, bool)>),
-    /// `:table-pipe [分隔]` — the delimited block under the cursor becomes a
-    /// `|` table (Feature #227). `None` guesses the delimiter.
-    TableToPipe(Option<char>),
-    /// `:table-csv [分隔]` — the `|` table under the cursor becomes delimited
-    /// lines (Feature #227). The delimiter defaults to a comma.
-    TableToDelimited(char),
+    /// `:convert-table <格式> [<格式>]` — **把光標這裏的表寫成另一種樣子**
+    /// （#227；2026-10-02 作者定這個名字和這個形狀）。
+    ///
+    /// 一個詞是**目標**，源自己嗅（`|` 表格、製表符、逗號、空格對齊）；兩個詞
+    /// 是「從哪種轉成哪種」，最後那個永遠是目標。嗅源這一條照 org-mode 和
+    /// markdown-mode——兩家都是看有沒有 TAB、有沒有逗號，要強制纔多給一個參數。
+    ///
+    /// Warning: **從前這是兩條命令**（`:table-pipe` 和 `:table-csv`），而兩個都是
+    /// 名詞接名詞、**一個字都沒說方向**：`table-csv` 讀起來像「從 CSV 做表」，
+    /// 正好反了。查過一圈，有反向命令的編輯器本來就少（org、markdown-mode、
+    /// vim-table-mode、Obsidian 都只轉得進去），而把兩端都寫出來的那幾個
+    /// （Word 的 Convert Text to Table、VS Code 那個擴展的 Convert Markdown
+    /// table to CSV）正是因為有反向纔寫的。
+    ConvertTable {
+        /// 轉成哪一種。
+        to: crate::table::Shape,
+        /// 從哪一種轉——`None` 是「自己嗅」。
+        from: Option<crate::table::Shape>,
+    },
     /// `:view-numbers-fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
@@ -1301,30 +1314,6 @@ fn forceable(name: &str) -> Option<&'static str> {
         .iter()
         .copied()
         .find(|banged| banged.strip_suffix('!') == Some(name))
-}
-
-/// The character a `<分隔>` argument names.
-///
-/// A delimiter is one character, and most of them can simply be typed. The two
-/// that cannot are the tab — which the command line would never see, because
-/// `Tab` completes — and the space, which is spelled out for the same reason
-/// and is accepted here even though the sniffer will never guess it: a writer
-/// who says `:table-pipe " "` has looked at their data and decided.
-fn delimiter_named(word: &str) -> Option<char> {
-    match word {
-        "tab" | "\\t" => Some('\t'),
-        "space" | "\\s" => Some(' '),
-        "comma" => Some(','),
-        "semicolon" => Some(';'),
-        "\" \"" | "' '" => Some(' '),
-        _ => {
-            let mut chars = word.chars();
-            match (chars.next(), chars.next()) {
-                (Some(c), None) if !c.is_whitespace() => Some(c),
-                _ => None,
-            }
-        }
-    }
 }
 
 /// The shortest unambiguous way to write `name`, among `others`.
@@ -4032,37 +4021,36 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "table-pipe",
+        name: "convert-table",
         aliases: &[],
-        help: "cmd.table.pipe",
+        help: "cmd.table.convert",
         needs: &[],
-        params: &[Param::Free("<分隔>")],
-        build: Some(|p| match p.arg(0) {
-            None => Ok(Command::TableToPipe(None)),
-            Some(word) => match delimiter_named(word) {
-                Some(c) => Ok(Command::TableToPipe(Some(c))),
-                None => Err(CommandError::InvalidArgument {
-                    command: "table-pipe",
+        // Warning: **一格 `Free`，不是兩格。** `Param::Free` 吃掉整行剩下的字
+        // （路徑和 `:grep` 的文字裏都可能有空格），所以兩格 `Free` 的第二格永遠
+        // 是空的——`:convert-table csv tsv` 會把 `"csv tsv"` 整個當成一個格式名
+        // 去認。詞在這裏自己分。
+        params: &[Param::Free("<格式> [<格式>]")],
+        build: Some(|p| {
+            let shape = |word: &str| {
+                crate::table::Shape::named(word).ok_or(CommandError::InvalidArgument {
+                    command: "convert-table",
                     value: word.to_string(),
+                })
+            };
+            let words: Vec<&str> = p.arg(0).unwrap_or("").split_whitespace().collect();
+            // 最後那個詞永遠是目標：一個詞就是它，兩個詞是「從…到…」。
+            match words.as_slice() {
+                [] => Err(CommandError::MissingArgument("convert-table")),
+                [one] => Ok(Command::ConvertTable { to: shape(one)?, from: None }),
+                [from, to] => Ok(Command::ConvertTable {
+                    to: shape(to)?,
+                    from: Some(shape(from)?),
                 }),
-            },
-        }),
-    },
-    Entry {
-        name: "table-csv",
-        aliases: &[],
-        help: "cmd.table.csv",
-        needs: &[],
-        params: &[Param::Free("<分隔>")],
-        build: Some(|p| match p.arg(0) {
-            None => Ok(Command::TableToDelimited(',')),
-            Some(word) => match delimiter_named(word) {
-                Some(c) => Ok(Command::TableToDelimited(c)),
-                None => Err(CommandError::InvalidArgument {
-                    command: "table-csv",
-                    value: word.to_string(),
+                _ => Err(CommandError::InvalidArgument {
+                    command: "convert-table",
+                    value: p.arg(0).unwrap_or("").to_string(),
                 }),
-            },
+            }
         }),
     },
     Entry {
