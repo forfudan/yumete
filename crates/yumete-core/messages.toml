@@ -7629,7 +7629,7 @@ en = "replace with"
 key = "search.bad-glob"
 zht = "包含／排除中有錯誤寫法，搜索未完成"
 zhs = "包含/排除中有错误写法，搜索未完成"
-en = "include or exclude holds a bad pattern — the search did not run"
+en = "only: or except: holds a bad pattern — the search did not run"
 
 [[message]]
 # 搜索：正則寫不通
@@ -7678,7 +7678,7 @@ en = "Chinese"
 key = "search.chinese.glyphs"
 zht = "繁簡"
 zhs = "繁简"
-en = "variants"
+en = "glyphs"
 
 [[message]]
 # 中文匹配的另一半：拼音
@@ -7762,7 +7762,7 @@ en = "{0} hit"
 key = "search.label.exclude"
 zht = "排除:"
 zhs = "排除:"
-en = "skip:"
+en = "except:"
 
 [[message]]
 # 搜索面板：包含那一格的名字
@@ -7884,7 +7884,7 @@ en = "Replace all {0} matches in {1}?"
 key = "search.replace.literal"
 zht = "字面替換"
 zhs = "字面替换"
-en = "literal"
+en = "as typed"
 
 [[message]]
 # 搜索面板第七行三態之一：不替換
@@ -7898,7 +7898,7 @@ en = "off"
 key = "search.replace.smart"
 zht = "智能大小寫"
 zhs = "智能大小写"
-en = "smart case"
+en = "keep case"
 
 [[message]]
 # 搜索：換掉了幾處
@@ -7982,14 +7982,14 @@ en = "the project"
 key = "search.where.working"
 zht = "工作路徑"
 zhs = "工作路径"
-en = "the working directory"
+en = "working directory"
 
 [[message]]
 # 搜索：完整匹配那一格
 key = "search.whole"
 zht = "西文整詞匹配"
 zhs = "西文整词匹配"
-en = "whole word (Latin)"
+en = "whole word"
 
 [[message]]
 # 按 _ 去兩端空白，可是每一段都是純空白
@@ -8499,7 +8499,7 @@ en = "smart case"
 key = "set.editor.smart-case.hint"
 zht = "搜索時：模式裏没有大寫就不分大小寫，有一個大寫就分"
 zhs = "搜索时：模式里没有大写就不分大小写，有一个大写就分"
-en = "smart case"
+en = "searching: no capital in the pattern ignores case, one capital respects it"
 
 [[message]]
 # 設置：長行折回來
