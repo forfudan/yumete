@@ -2420,6 +2420,28 @@ fn yanking_a_column_and_putting_it_back_changes_nothing() {
     assert!(after.contains("| 火"), "{after}");
 }
 
+/// **CSV 排序按欄位的字排，不按引號**（2026-10-02 一輪掃查報來的）。
+///
+/// 取格子的那一支交的是原樣的那一段，引號在內——於是 `"Smith, John"` 按 `"`
+/// （0x22）排，落在 `Amy` 前面。排序排的是人看得見的那幾個字。
+#[test]
+fn a_quoted_field_sorts_by_its_text_not_its_quote() {
+    let dir = std::env::temp_dir().join(format!("yumete-csvsort-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("q.csv");
+    std::fs::write(&path, "name,n\nBob,1\n\"Smith, John\",2\nAmy,3\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    press(&mut ed, " t1s");
+    assert_eq!(
+        ed.current_buffer().rope().to_string(),
+        "name,n\nAmy,3\nBob,1\n\"Smith, John\",2\n"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
