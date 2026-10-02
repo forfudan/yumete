@@ -563,7 +563,29 @@ fn main() -> ExitCode {
         }
         let mut unheard: Vec<String> = Vec::new();
         if let Some(asked) = editor.take_scheme_request() {
-            unheard.push(format!(":yume {asked}"));
+            // Warning: **印出去的要是打得出來的那一行**（2026-10-02 一輪掃查報來的）。
+            // `asked` 是核心和前端之間的暗號，不是命令：`:yume-which` 傳的是 `?`，
+            // 於是這裏印「`:yume ?` did nothing」，而 `:yume ?` 這一行輸進去是被
+            // 拒的。這一族 2026-09 加了連字符（`:yume-which`、`:yume-installed`
+            // ……），而暗號留在了那之前。
+            //
+            // 認得出的就還原成真名字，認不出的（方案標籤）本來就是 `:yume-scheme`
+            // 的參數。
+            let line = match asked.as_str() {
+                "?" => ":yume-which".to_string(),
+                "~" => ":yume-installed".to_string(),
+                "!" => ":yume-builtin".to_string(),
+                "where" => ":yume-where".to_string(),
+                rest if rest.starts_with("lang:") => ":yume".to_string(),
+                rest if rest.starts_with("commit:") => ":yume-commit".to_string(),
+                rest if rest.starts_with("panel:") => ":yume-panel".to_string(),
+                rest if rest.starts_with("preedit:") => ":yume-preedit".to_string(),
+                rest => match rest.strip_prefix('=') {
+                    Some(path) => format!(":yume-table {path}"),
+                    None => format!(":yume-scheme {rest}"),
+                },
+            };
+            unheard.push(line);
         }
         if editor.take_chaifen_request().is_some() {
             unheard.push(":chaifen".into());
@@ -594,6 +616,22 @@ fn main() -> ExitCode {
         }
         if editor.take_completion_query().is_some() {
             unheard.push("C-n".into());
+        }
+        // Warning: **四個 2026-10-02 補的**（一輪掃查報來的）。上面那句話說「a tenth
+        // added tomorrow shows up here the day somebody uses it」——沒有，它們就這
+        // 麼悄悄做了無事可做的事。看得最清楚的是剪貼板：`␣y`（寫）印了那句提示，
+        // `␣p`（讀）什麼都不印，同一塊板子兩種待遇。
+        if editor.take_language_run().is_some() {
+            unheard.push(":format / :run".into());
+        }
+        if editor.take_config_reload() {
+            unheard.push(":reload config".into());
+        }
+        if editor.take_clipboard_read().is_some() {
+            unheard.push("␣p / ␣P".into());
+        }
+        if editor.take_words_request() {
+            unheard.push(":word-list-reload".into());
         }
         if !unheard.is_empty() {
             eprintln!(
