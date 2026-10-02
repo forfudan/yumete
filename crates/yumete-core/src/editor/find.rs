@@ -1565,9 +1565,23 @@ impl Editor {
         // Warning: **按（名字, 號）一對去重，不是只按名字**（2026-10-02 審出來的）。
         // 緩衝區那一檔裏兩份沒有名字的草稿標籤都是 `[scratch]`，只按名字去重會
         // 把第二份整個漏掉。
+        // Warning: **換完要回到你出發的那一份**（2026-10-02 查出來的）。`replace_file`
+        // 自己是用 `with_buffer` 借位的，可它底下的 `buffer_for` 為了動一個還沒
+        // 打開的檔會真的 `open_file`——那一下就把 `current` 挪走了，而 `with_buffer`
+        // 記的「原來在哪」是挪過之後的。於是在第二十章寫到一半按個 `R`，人落在
+        // 書裏最後一個被改到的檔上、光標在 1 行 1 列，而那個檔你從來沒打開過。
+        //
+        // 這一批是一件事，一件事該在它開始的地方結束。改掉的那幾份都還開着（它
+        // 們有沒存的改動），只是不站在那裏。
+        let home = self.current_buffer().id();
         let mut done = 0usize;
         for (file, id) in self.search.files.clone() {
             done += self.replace_file(file.as_deref(), id);
+        }
+        if let Some(back) = self.buffer_with(home) {
+            if back != self.current {
+                self.show_buffer(back);
+            }
         }
         self.after_replacing(done);
     }

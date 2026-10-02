@@ -9524,6 +9524,44 @@ fn a_dollar_sign_survives_the_pinyin_path_exactly_once() {
     }
 }
 
+/// **`R` 換完把人丟在它最後碰過的那個檔上**（2026-10-02 一輪審查報來的）。
+///
+/// `replace_file` 是用 `with_buffer` 借位的，可它底下的 `buffer_for` 為了動一個還
+/// 沒打開的檔會真的 `open_file`，那一下就把 `current` 挪走了——而 `with_buffer`
+/// 記的「原來在哪」是挪過之後的。於是在第二十章寫到一半按個 `R`，人落在書裏最後
+/// 一個被改到的檔上、光標 1 行 1 列。
+#[test]
+fn replacing_them_all_leaves_you_where_you_started() {
+    let dir = a_little_book("replacehome");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    let home = ed.current_buffer().id();
+
+    ed.execute(":replace-working").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('Z'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert!(ed.search().files.len() > 1, "好幾個檔：{:?}", ed.search().files);
+
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+
+    assert_eq!(ed.current_buffer().id(), home, "回到出發的那一份");
+    assert!(
+        ed.current_buffer().rope().to_string().contains('Z'),
+        "而那一份自己也換了"
+    );
+    // 別的檔照樣換到了——留在原地不等於沒做事。
+    ed.open_file(dir.join("卷一/b.md")).unwrap();
+    let text = ed.current_buffer().rope().to_string();
+    assert!(text.contains('Z') && !text.contains('霜'), "b.md 沒換到：{text}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那
