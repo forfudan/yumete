@@ -2340,6 +2340,47 @@ fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
+///
+/// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
+/// 書開着的時候隨手存一個別處的檔，那個檔名就進了作者的寫作進度。這個倉自己就中
+/// 着：`cargo test` 在 `$TMPDIR` 裏存臨時檔，而測試進程的 cwd 在倉裏，`root()` 於
+/// 是算成這個倉，`.yumete/progress.tsv` 攢了一百多行 `yumete-editor-write-<pid>.md`，
+/// 混在真的章節中間——而「目標 2000」那個數就是照這本賬算的。
+#[test]
+fn a_file_from_somewhere_else_does_not_enter_this_book_s_ledger() {
+    let dir = std::env::temp_dir().join(format!("yumete-ledger-{}", std::process::id()));
+    let away = std::env::temp_dir().join(format!("yumete-ledger-away-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&away);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::create_dir_all(&away).unwrap();
+    let mine = dir.join("第一章.md");
+    let theirs = away.join("別處的.md");
+    std::fs::write(&mine, "那年冬天\n").unwrap();
+    std::fs::write(&theirs, "不相干的字\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(&mine).unwrap();
+    ed.execute(":count-target 2000").unwrap();
+    ed.execute(":w").unwrap();
+
+    // 書裏那一份記上了。
+    let ledger = dir.join(".yumete").join("progress.tsv");
+    let text = std::fs::read_to_string(&ledger).unwrap();
+    assert!(text.contains("第一章.md"), "{text}");
+
+    // 別處那一份，存一百遍也不許進來。
+    ed.open_file(&theirs).unwrap();
+    ed.execute(":w").unwrap();
+    let text = std::fs::read_to_string(&ledger).unwrap();
+    assert!(!text.contains("別處的.md"), "別處的檔進了這本賬：{text}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&away);
+}
+
 /// **換一個檔就換一套顏色**（2026-10-01 作者報的）。
 ///
 /// Warning: 從前 `by_chunk` 只按「第幾塊」記，**不記是哪個檔**。於是先開一份
