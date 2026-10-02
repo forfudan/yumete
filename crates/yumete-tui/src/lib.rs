@@ -366,6 +366,56 @@ fn frame_to(
 /// is what a frame compared against an expected picture needs.
 static BUILD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+/// **每頁幾個，使用者要的那個數**——窗口還沒說話之前。
+///
+/// 存在這裏而不是只存在 `ImeSession` 上，是因為 `set_page_size` 那一格會被窗口
+/// 夾小，夾小之後就讀不回原來要的是幾個了：窗口再長高，頁就長不回去。
+static PAGE_WISH: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// 使用者要每頁幾個——出廠配置，或者 `:menu-size`。
+pub fn want_page_size(n: usize) {
+    PAGE_WISH.store(n, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// **把頁夾到上一幀畫得下的那麼大**（#516）。
+///
+/// 互動的循環每一幀叫一次；離屏出圖那一支在按鍵**之前**叫一次。高度是
+/// [`page_areas`] 算出來的，不是畫出來的——白畫一幀會動到編輯器（`多選區` 那張
+/// 金樣當場就變了）。**不叫的話離屏看不見這個 bug**，而這個倉審前端靠的就是離
+/// 屏那張圖。
+pub fn fit_the_page(
+    ime: &mut ImeSession,
+    editor: &Editor,
+    config: &Config,
+    width: u16,
+    height: u16,
+) {
+    let wish = match PAGE_WISH.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => config.panel.page_size,
+        n => n,
+    };
+    // 面板站在正文和狀態行之間，和 [`draw`] 給它的 `room` 是同一塊。
+    let area = Rect::new(0, 0, width, height);
+    let room = page_areas(editor, config, area, 0).status.y.saturating_sub(area.y).max(1);
+    let fits = page_for_window(wish, room);
+    if ime.page_size() != fits {
+        ime.set_page_size(fits);
+    }
+}
+
+/// **How many candidates a page may hold in a window this tall.**
+///
+/// Warning: **一頁不許比畫得下的多**（#516，2026-10-02 作者定「把頁縮到畫得下」）。
+/// 面板是 2 行框 ＋ 1 行編碼 ＋ 候選，整個夾在 `room` 裏；從前頁是 6 個而窗口矮
+/// 的時候只畫得出 1 個，而那道閘問的是「這一頁有沒有第 n 個」——六行的窗口上按
+/// `3` 上屏的是一個**從沒畫出來過的字**（實測：`wo` 之後按 3 得到 `𠂎`）。
+///
+/// 縮了頁，`=`／`-` 一樣翻得到後面的，所以一個候選都不會變成夠不着的。使用者設
+/// 的 `[panel] page_size` 從此是**上限**，不是定數。
+fn page_for_window(wish: usize, room: u16) -> usize {
+    wish.min(usize::from(room).saturating_sub(3)).max(1)
+}
+
 /// Tell the shot machinery which build it is drawing for.
 pub fn set_build(version: &str) {
     let _ = BUILD.set(version.to_string());
@@ -742,6 +792,9 @@ pub fn run(
             // stalls here, the stall line says whether drawing was already
             // expensive before it stopped (#359).
             diag::beat(diag::Stage::Drawing, last_frame.as_millis() as u64);
+            // **一頁不許比畫得下的多**（#516）。
+            let size = terminal.size()?;
+            fit_the_page(ime, editor, config, size.width, size.height);
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
@@ -3139,7 +3192,8 @@ fn preedit_method(ime: &mut ImeSession, mode: &str) -> String {
 /// further say.
 fn menu_size(ime: &mut ImeSession, n: &str) -> String {
     if let Some(n) = n.parse::<usize>().ok().filter(|n| (1..=9).contains(n)) {
-        ime.set_page_size(n);
+        // 記下要的那個數，窗口矮的時候照舊夾小——而窗口長高了還長得回去（#516）。
+        want_page_size(n);
     }
     say!("ime.menu-size-is", ime.page_size())
 }
@@ -14814,6 +14868,36 @@ fn squeezed(text: &str) -> String {
         let narrow = super::shortcut_lines(&rows, 1);
         assert_eq!(narrow.len(), 3, "{narrow:?}");
         assert!(super::shortcut_lines(&[], 40).is_empty());
+    }
+
+    /// **一頁不許比畫得下的多**（#516，2026-10-02 作者定「把頁縮到畫得下」）。
+    ///
+    /// 從前頁是 6 個而六行的窗口只畫得出 1 個，那道閘問的卻是「這一頁有沒有第
+    /// n 個」——按 `3` 上屏的是一個從沒畫出來過的字（實測 `wo` 之後按 3 得到
+    /// `𠂎`）。
+    #[test]
+    fn a_page_never_holds_more_candidates_than_the_window_draws() {
+        // 面板是 2 行框 ＋ 1 行編碼 ＋ 候選。
+        assert_eq!(super::page_for_window(6, 9), 6, "放得下就是使用者要的那個數");
+        assert_eq!(super::page_for_window(6, 8), 5);
+        assert_eq!(super::page_for_window(6, 4), 1);
+        // 矮到連一個都放不下，還是給一個——零個候選的面板不是面板。
+        assert_eq!(super::page_for_window(6, 1), 1);
+        assert_eq!(super::page_for_window(6, 0), 1);
+        // 窗口再高也不超過使用者要的那個數。
+        assert_eq!(super::page_for_window(3, 200), 3);
+
+        // **縮了頁，後面那幾個照舊翻得到**——這是「縮頁」比「閘去問屏幕」好的
+        // 全部理由：閘一攔，第 2 到第 6 個就再也夠不着了。
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 把 爸 罷\n");
+        ime.set_page_size(1);
+        ime.input('b');
+        let mut seen = Vec::new();
+        for _ in 0..5 {
+            seen.extend(ime.page_candidates().iter().map(|c| c.text.clone()));
+            ime.page_down();
+        }
+        assert!(seen.contains(&"罷".to_string()), "翻不到最後一個：{seen:?}");
     }
 
     #[test]

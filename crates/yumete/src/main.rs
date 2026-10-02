@@ -389,6 +389,7 @@ fn main() -> ExitCode {
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let load = move |ime: &mut ImeSession| -> String {
         *ime = ImeSession::language_only(wanted);
+        yumete_tui::want_page_size(page_size);
         ime.set_page_size(page_size);
         let said = match start_scheme {
             // …unless the config says this is a session for writing 漢字,
@@ -528,6 +529,19 @@ fn main() -> ExitCode {
             // 的 `editor.set_reader(Box::new(ime.reader()))`），這裏照抄。
             editor.set_reader(Box::new(ime.reader()));
         }
+        // Warning: **按鍵之前先把頁夾好**（#516，2026-10-02）。互動的循環是
+        // 「畫一幀、讀一個鍵、再畫一幀」，所以按鍵那一刻用的是上一幀量出來的高
+        // 度；離屏這一支沒有循環，`--keys` 是在任何一幀之前跑完的。不補這一下，
+        // `--keys='…wo3'` 在六行的窗口上照樣上屏那個從沒畫出來的字——**而那正
+        // 是要驗的那個 bug**。
+        //
+        // Warning: **不能靠「先白畫一幀」把高度量出來。** 試過，`多選區` 那張金
+        // 樣當場變了：`frame_to_text` 收的是 `&mut Editor`，白畫那一幀給了編輯
+        // 器一個它本來沒有的視口，於是後面那幾個動作落在了别的地方。算出來，别
+        // 畫出來。
+        if let Some((w, h)) = shot {
+            yumete_tui::fit_the_page(&mut ime, &editor, &config, w, h);
+        }
         settings_page = press(&mut editor, pressed, &config, &mut ime, shot);
     }
     // Asked for on the command line, and run the same way `:tutor` runs it.
@@ -658,6 +672,7 @@ fn main() -> ExitCode {
                 "        candidate panel need a real terminal (a pty), not this."
             );
         }
+        yumete_tui::fit_the_page(&mut ime, &editor, &config, width, height);
         // The layout the flags asked for, before the picture is taken.
         let picture = match shot_html {
             true => yumete_tui::frame_to_html(
