@@ -120,6 +120,8 @@ pub struct Metrics {
     pub ruby: bool,
     /// Whether 句讀 hang in the margin, which needs the same column.
     pub hanging: bool,
+    /// Whether 平仄 are drawn, which asks for that column too.
+    pub metered: bool,
     /// How many cells the reading margin takes: one for pinyin, two once any
     /// reading on the page is full-width. Uniform across the page, because a
     /// margin that changed width from 縱 to 縱 would not be a margin.
@@ -159,6 +161,7 @@ impl Metrics {
             margin,
             bands,
             diff,
+            metered,
         } = look;
         let numbers = number_rows(config.editor.line_numbers, total_lines);
         // 改動條跟着行號走：號碼帶沒有，那一條也沒有。兩邊同一條規矩——橫排那
@@ -202,6 +205,7 @@ impl Metrics {
             gap,
             ruby,
             hanging,
+            metered,
             ruby_width: 1,
             // Ticks live in the lane; with no lane there is nowhere to rule.
             ticks: config.editor.paper_ticks > 0 && margin.shown(),
@@ -299,7 +303,6 @@ pub fn char_at(
         area,
         capacity,
         &|line, from, to| markup.dotted(line, from, to),
-        editor.meter_drawn(),
     );
 
     // Which band the row fell in, then which 縱 of it the column fell in — or,
@@ -423,8 +426,8 @@ fn layout_page(
     area: Rect,
     capacity: usize,
     dotted: &dyn Fn(usize, usize, usize) -> bool,
-    metered: bool,
 ) -> Page {
+    let metered = metrics.metered;
     let zongs = zong::zongs_from(rope, anchor, grid, capacity);
     let slots: Vec<Vec<zong::Slot>> = zongs
         .iter()
@@ -600,7 +603,7 @@ pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, look: L
 
 /// What the editor says about how this page is to be set.
 ///
-/// Five answers to one question — how much of the window is writing — and they
+/// Answers to one question — how much of the window is writing — and they
 /// travel together everywhere: the 縱 length, the pitch, the reading column and
 /// the tick column are all worked out from them at once.
 #[derive(Debug, Clone, Copy)]
@@ -619,6 +622,12 @@ pub struct Look {
     pub bands: usize,
     /// 改動條開着沒有（`:view-diff`）——它在號碼帶底下自己佔一列。
     pub diff: bool,
+    /// 平仄畫着沒有（`:meter`）。
+    ///
+    /// 和 `ruby`、`hanging` 同一族：它們說的都是「這一頁要不要那條邊欄」。
+    /// 2026-10-02 從 `layout_page` 的第八個參數挪進來——那個參數一路從畫面
+    /// 頂上傳到邊欄那三支 `match`，而問的恰好是這件事。
+    pub metered: bool,
 }
 
 impl Look {
@@ -634,6 +643,7 @@ impl Look {
             margin: editor.margin(),
             bands: editor.bands(),
             diff: editor.diff_gutter(),
+            metered: editor.meter_drawn(),
         }
     }
 }
@@ -894,7 +904,6 @@ pub fn draw(
         area,
         capacity,
         &|line, from, to| markup.dotted(line, from, to),
-        editor.meter_drawn(),
     );
     let visible = page.len().max(1);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
@@ -925,7 +934,6 @@ pub fn draw(
                 area,
                 capacity,
                 &|line, from, to| markup.dotted(line, from, to),
-                editor.meter_drawn(),
             );
             zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
         }

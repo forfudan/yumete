@@ -9575,25 +9575,13 @@ fn draw_horizontal(
                     Some(depth) => Style::default().bg(ink.over(ink.paper(), depth)),
                     None => ink.page(),
                 };
+                let above = Above { ink, ground: head_ground, gutter, drawn, lead };
                 bar_lines = Some((
-                    labels_line(
-                        &cells,
-                        |i| (i + 1).to_string(),
-                        ink,
-                        head_ground,
-                        gutter,
-                        drawn,
-                        lead,
-                        start_in_line,
-                    ),
+                    labels_line(&cells, |i| (i + 1).to_string(), above, start_in_line),
                     labels_line(
                         &cells,
                         |i| names.get(i).cloned().unwrap_or_default(),
-                        ink,
-                        head_ground.fg(ink.gold()),
-                        gutter,
-                        drawn,
-                        lead,
+                        Above { ground: head_ground.fg(ink.gold()), ..above },
                         start_in_line,
                     ),
                 ));
@@ -9628,8 +9616,8 @@ fn draw_horizontal(
                 true => ink.page(),
                 false => fill,
             };
-            let mut reading =
-                reading_line(editor, ink, over, gutter, rope, &row, drawn, gutter + indent)
+            let above = Above { ink, ground: over, gutter, drawn, lead: gutter + indent };
+            let mut reading = reading_line(editor, above, rope, &row)
                 .unwrap_or_else(|| Line::from(Span::styled("", over)));
             if over.bg.is_some() {
                 reading.spans.push(Span::styled(
@@ -10341,16 +10329,29 @@ fn drawn_columns(drawn: Drawn, lead: usize) -> Vec<usize> {
 /// the reader to count columns and on a 拆分表 that is counting to seventeen by
 /// eye. Right-aligned in each column and a rung quieter than the writing, the
 /// same way the pane draws it.
-fn ruler_line(
-    cells: &[(usize, usize)],
+/// 一行**上面**那一行是怎麼畫的。
+///
+/// 注音、平仄、格線、列號、表頭名——畫的東西各不相同，要知道的事卻是同五件：
+/// 拿哪套顏色、底是什麼、行號欄佔幾格、它下面那一行畫成了什麼樣、從第幾格起
+/// 算。五個參數一路往下傳，傳岔一個就整行偏開。
+///
+/// `Copy`，所以換一個底寫 `Above { ground: …, ..above }` 就是了——表頭那兩行
+/// 只差一個顏色。
+#[derive(Clone, Copy)]
+struct Above<'a> {
     ink: crate::theme::Palette,
     ground: Style,
     gutter: usize,
-    drawn: Drawn,
+    drawn: Drawn<'a>,
     lead: usize,
+}
+
+fn ruler_line(
+    cells: &[(usize, usize)],
+    above: Above<'_>,
     start_in_line: usize,
 ) -> Option<Line<'static>> {
-    labels_line(cells, |i| (i + 1).to_string(), ink, ground, gutter, drawn, lead, start_in_line)
+    labels_line(cells, |i| (i + 1).to_string(), above, start_in_line)
 }
 
 /// The same, with something other than a number over each column (#379).
@@ -10363,13 +10364,10 @@ fn ruler_line(
 fn labels_line(
     cells: &[(usize, usize)],
     label: impl Fn(usize) -> String,
-    ink: crate::theme::Palette,
-    ground: Style,
-    gutter: usize,
-    drawn: Drawn,
-    lead: usize,
+    above: Above<'_>,
     start_in_line: usize,
 ) -> Option<Line<'static>> {
+    let Above { ink, ground, gutter, drawn, lead } = above;
     let column = drawn_columns(drawn, lead);
     let mut out = String::new();
     let mut col = 0usize;
@@ -10425,21 +10423,18 @@ fn labels_line(
 /// worse than no reading at all.
 fn reading_line(
     editor: &Editor,
-    ink: crate::theme::Palette,
-    ground: Style,
-    gutter: usize,
+    above: Above<'_>,
     rope: &yumete_core::Rope,
     row: &wrap::Row,
-    drawn: Drawn,
-    lead: usize,
 ) -> Option<Line<'static>> {
+    let Above { ink, drawn, lead, .. } = above;
     // **The ruler owns the row above its table** (#275), ahead of both a reading
     // and 疏排's row of air: it is the table's top edge, and a `|` header with
     // ruby over it is not a thing anybody has written.
     let ruler = editor.table_ruler_on_line(row.line);
     if !ruler.is_empty() && row.starts_line() {
         let start_in_line = row.start - rope.line_to_char(row.line);
-        return ruler_line(&ruler, ink, ground, gutter, drawn, lead, start_in_line);
+        return ruler_line(&ruler, above, start_in_line);
     }
     let groups = readings_in_row(editor, rope, row);
     if groups.is_empty() {
