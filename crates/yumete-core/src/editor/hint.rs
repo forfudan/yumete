@@ -168,7 +168,17 @@ impl Editor {
                 }
                 // The five switches are pressed by number and walked past
                 // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
-                keys.push(("1–7".into(), say!("hint.search.switches")));
+                //
+                // Warning: **第七行只有走磁碟的範圍下纔畫**（2026-10-02 查出來的）。這
+                // 一行從前無條件寫着 `1–7`，而本文件和緩衝區那兩檔只有六行——按
+                // 下去的 `7` 什麼都不做也什麼都不說，而屏幕上寫着它管用。一個寫在
+                // 屏幕上、按下去沒反應的鍵，讀者只會以為自己記錯了（§5.12.39
+                // 那一族）。
+                let numbers = match self.search().on_disk() {
+                    true => "1–7",
+                    false => "1–6",
+                };
+                keys.push((numbers.into(), say!("hint.search.switches")));
                 keys.push(("Enter".into(), say!("hint.search.use-it")));
                 keys.push(("q".into(), say!("hint.close")));
                 keys.push((back_to_text_key().into(), say!("hint.sidebar.back-to-text")));
