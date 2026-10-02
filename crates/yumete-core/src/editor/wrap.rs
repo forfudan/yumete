@@ -297,6 +297,7 @@ impl Editor {
             Pending::Surround => "ms",
             Pending::SurroundFrom | Pending::SurroundTo(_) => "mr",
             Pending::Table => "t",
+            Pending::TableConvert => "tx",
             Pending::Hop { forward: true } => "]",
             Pending::Hop { forward: false } => "[",
             // Warning: **`␣m`，不是 `␣c`**（2026-10-02 更正）。合併衝突 2026-09-12

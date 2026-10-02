@@ -177,6 +177,10 @@ enum Pending {
     /// Warning: **helix 那個拼法抄不了**：它用 `C-s`，而終端裏 `C-s` 是 XOFF，按下去
     /// 屏幕會凍住（除非 `stty -ixon`）。
     UndoBreak,
+    /// **`空格 t x` — 轉換表格格式**，等着那一個格式名（2026-10-02 作者定）。
+    ///
+    /// 命令是 `:convert-table`；這一組是它的鍵位，`p` pipe、`c` csv、`t` tsv。
+    TableConvert,
     /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
     Match,
     /// **A vim operator waiting for its motion** — `d`, `c`, `y` under the vim
@@ -279,6 +283,7 @@ impl Pending {
             | Pending::Case
             | Pending::Match
             | Pending::Table
+            | Pending::TableConvert
             | Pending::Mark
             | Pending::Recall
             | Pending::Hop { .. }

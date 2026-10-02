@@ -5405,6 +5405,34 @@ zhs = "源码视图（显示源码）"
 en = "source view: the file as written"
 
 [[message]]
+# 空格 t 那張表上 x 那一行
+key = "hint.table.convert"
+zht = "轉換表格格式（分隔符）"
+zhs = "转换表格格式（分隔符）"
+en = "convert the table's format (delimiter)"
+
+[[message]]
+# 空格 t x 底下：轉成逗號分隔
+key = "hint.table.convert-csv"
+zht = "csv"
+zhs = "csv"
+en = "csv"
+
+[[message]]
+# 空格 t x 底下：轉成 | 表格
+key = "hint.table.convert-pipe"
+zht = "pipe"
+zhs = "pipe"
+en = "pipe"
+
+[[message]]
+# 空格 t x 底下：轉成跳格分隔
+key = "hint.table.convert-tsv"
+zht = "tsv"
+zhs = "tsv"
+en = "tsv"
+
+[[message]]
 # 表格提示：刪這一行
 key = "hint.table.delete-row"
 zht = "刪除這一行"

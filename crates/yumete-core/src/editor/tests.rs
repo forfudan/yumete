@@ -4888,8 +4888,12 @@ fn every_key_the_table_group_lists_does_something() {
                 let mut ed = make();
                 press(&mut ed, " t");
                 press(&mut ed, token);
+                // **開出一層菜單也算做了事**（2026-10-02，`␣t x` 加進來時補的）。
+                // 那一類鍵不動狀態欄，它把下一問擺出來——`pending_menu` 有東西
+                // 就是它做到了。
+                let opened = ed.pending_menu().is_some();
                 assert!(
-                    !dead.contains(&ed.status().to_string()),
+                    opened || !dead.contains(&ed.status().to_string()),
                     "{inside:?}：單子上寫着 `␣t {token}`（{what}），按下去什麽都沒發生——{}",
                     ed.status()
                 );

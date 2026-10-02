@@ -1772,6 +1772,18 @@ impl Editor {
     }
 
     /// `:table-pipe` — the delimited block under the cursor becomes a `|` table.
+    /// `空格 t x` 之後那一個鍵：轉成哪一種格式。
+    pub(super) fn convert_table_key(&mut self, key: Key) {
+        use crate::table::Shape;
+        let to = match key {
+            Key::Char('p') => Shape::Pipe,
+            Key::Char('c') => Shape::Delimited(','),
+            Key::Char('t') => Shape::Delimited('\t'),
+            _ => return,
+        };
+        self.convert_table(to, None);
+    }
+
     /// `:convert-table` — **把光標這裏的表寫成另一種樣子**（2026-10-02 作者定）。
     ///
     /// 源沒說就自己嗅：光標站在 `|` 表格裏就是 `|` 表格，否則看那一塊用的是什麼
@@ -3628,6 +3640,13 @@ impl Editor {
             // **`f`, not `a`** (2026-09-06): 排齊 gave the letter up
             // and went to `t F`, where the capital reads as the confirmation a
             // whole-file reformat should always have asked for.
+            // **轉換格式也是「有沒有表格都按得下」的一個**（2026-10-02 作者定）：
+            // 把一段分隔文本變成 `|` 表格，正是**還沒有表格**的時候要做的事，所
+            // 以這一格要排在「光標不在表格裏」那道閘的前面。
+            Key::Char('x') => {
+                self.pending = crate::editor::Pending::TableConvert;
+                return;
+            }
             Key::Char('b') | Key::Char('f') => {
                 let want = match key {
                     Key::Char('f') => TableLevel::Full,
