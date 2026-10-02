@@ -1042,7 +1042,16 @@ pub fn draw(
     let cursor_line = editor.cursor_line();
     let numbers = config.editor.line_numbers;
 
-    let ticks = config.editor.paper_ticks;
+    // Warning: **問算出來的那一格，不是配置**（2026-10-02 一輪掃查報來的）。
+    // [`Metrics::ticks`] 自己的註釋寫着「Ticks live in the lane; with no lane
+    // there is nowhere to rule」，而這一句從前直接讀配置——於是
+    // `:view-margin never` 底下沒有邊欄，點照樣畫，而那時 `x + SLOT_WIDTH`
+    // **是右邊那一縱自己的那一格**：它那裏沒字的時候，點就落在人家的字欄裏。
+    // 掃了 23,328 幀，帶野點的 1,188 幀全是 `never` ＋ `paper_ticks > 0`。
+    let ticks = match metrics.ticks {
+        true => config.editor.paper_ticks,
+        false => 0,
+    };
     // What marks a paragraph's opening squares, and how many there are.
     let hint = editor.indent_hint();
     let indent = editor.paragraph_indent();

@@ -18185,6 +18185,34 @@ fn squeezed(text: &str) -> String {
     /// beside every 縱, have nowhere to go. The gap between 縱 is **not** one of
     /// the things it takes — that is `zong_gap`, zero here so the ticks are the
     /// whole difference being measured.
+    /// **沒有邊欄就沒有地方畫稿紙的點**（2026-10-02 一輪掃查報來的）。
+    ///
+    /// [`crate::vertical::Metrics::ticks`] 的註釋早就寫着「Ticks live in the lane;
+    /// with no lane there is nowhere to rule」，而畫的那一句直接讀配置。於是
+    /// `:view-margin never` 底下點照樣畫，而那時它落腳的那一格**是右邊那一縱自己
+    /// 的字欄**——人家那裏沒字的時候，點就進了人家的欄。掃 23,328 幀，帶野點的
+    /// 1,188 幀全是這一種。
+    #[test]
+    fn with_no_lane_there_is_nowhere_to_rule() {
+        let mut editor = editor_with("一二三\n甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉\n春夏秋冬\n");
+        let mut config = vertical_config();
+        config.editor.paper_ticks = 4;
+
+        // 有邊欄的時候點是在的——不然這條測試驗的是「本來就沒有點」。
+        let dense = render_vertical(&mut editor, &config, 30, 14);
+        let dots = |b: &ratatui::buffer::Buffer| {
+            (0..30u16)
+                .flat_map(|x| (0..13u16).map(move |y| (x, y)))
+                .filter(|&(x, y)| at(b, x, y) == ".")
+                .count()
+        };
+        assert!(dots(&dense) > 0, "稿紙的點本來就該在");
+
+        editor.execute("view-margin never").unwrap();
+        let bare = render_vertical(&mut editor, &config, 30, 14);
+        assert_eq!(dots(&bare), 0, "沒有邊欄，一個點都不許畫");
+    }
+
     #[test]
     fn no_margin_spends_every_column_on_writing() {
         // More text than the page can hold, so what is measured is how much of
