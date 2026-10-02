@@ -2502,6 +2502,52 @@ fn a_conflict_marker_shows_itself_when_the_caret_is_in_it() {
     );
 }
 
+/// **狀態欄的列號不許超過那一行畫出來的長度**（2026-10-02 一輪掃查報來的）。
+///
+/// `cursor_visual_column` 加了畫出來的（註號、補齊的格寬），卻從來沒減過藏起來的
+/// （`**`、`(url)`、`[^1]` 的本體）。`:render off`／`basic` 下什麼都沒藏，所以一直
+/// 對；`:render full` 底下五百七十三個光標位置裏有四十九個報得比那一行還長。
+#[test]
+fn the_column_never_points_past_the_end_of_the_drawn_row() {
+    let text = "An image ![img](http://i.com/a.png) and a note[^1] here.\n";
+    let mut ed = typed(text);
+    ed.execute(":render full").unwrap();
+    // 這一行此刻畫出來有多寬。Warning: **每一步都要重算**：光標站進一段標記裏，那
+    // 一段就露出來，行就長了——那正是這條規矩成立的前提。
+    let wide = |ed: &Editor| -> usize {
+        let drawn: usize = ed
+            .drawn_on_line(0)
+            .iter()
+            .map(|(_, t)| yumete_cjk::str_width(t))
+            .sum();
+        let Some(line) = ed.line_text(0) else { return drawn };
+        let chars: Vec<char> = line.chars().collect();
+        let hidden: usize = ed
+            .hidden_on_line(0)
+            .iter()
+            .map(|&(a, b)| {
+                chars[a.min(chars.len())..b.min(chars.len())]
+                    .iter()
+                    .map(|&c| yumete_cjk::char_width(c))
+                    .sum::<usize>()
+            })
+            .sum();
+        let whole: usize = chars.iter().map(|&c| yumete_cjk::char_width(c)).sum();
+        drawn + whole.saturating_sub(hidden)
+    };
+
+    // 走遍這一行的每一個光標位置。
+    press(&mut ed, "gg0");
+    for step in 0..text.chars().count() {
+        let (col, drawn) = (ed.cursor_visual_column(), wide(&ed));
+        assert!(
+            col <= drawn,
+            "第 {step} 步：列號 {col} 超過了畫出來的 {drawn} 格"
+        );
+        ed.on_key(Key::Char('l'));
+    }
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
