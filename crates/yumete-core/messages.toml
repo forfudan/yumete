@@ -1404,7 +1404,7 @@ key = "cmd.commands.replace-buffers"
 zht = "在緩衝區（打開的每一個文件）替換"
 zhs = "在缓冲区（打开的每一个文件）替换"
 en = "replace across every open buffer"
-find = "替換 替换 緩衝 缓冲 buffer buffers 打開 打开"
+find = "替換 替换 replace 緩衝 缓冲 buffer buffers 打開 打开 開著 开着"
 
 [[message]]
 # 命令：在項目路徑替換
@@ -1412,7 +1412,7 @@ key = "cmd.commands.replace-project"
 zht = "在項目路徑替換"
 zhs = "在项目路径替换"
 en = "replace across the project"
-find = "替換 替换 項目 项目 project git"
+find = "替換 替换 replace 項目 项目 project git 全書 全书"
 
 [[message]]
 # 命令：在工作路徑替換
@@ -1420,7 +1420,7 @@ key = "cmd.commands.replace-working"
 zht = "在工作路徑替換"
 zhs = "在工作路径替换"
 en = "replace across the working directory"
-find = "替換 替换 工作 路徑 路径 working cwd"
+find = "替換 替换 replace 工作 路徑 路径 目錄 目录 working cwd"
 
 [[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
@@ -1459,7 +1459,7 @@ key = "cmd.commands.search-buffers"
 zht = "在緩衝區（打開的每一個文件）搜索"
 zhs = "在缓冲区（打开的每一个文件）搜索"
 en = "search every open buffer"
-find = "搜索 緩衝 缓冲 buffer buffers 打開 打开 開著 开着"
+find = "搜索 搜尋 搜寻 查找 尋找 寻找 全文 grep find search 緩衝 缓冲 buffer buffers 打開 打开 開著 开着"
 
 [[message]]
 # 命令：搜項目路徑
@@ -1467,7 +1467,7 @@ key = "cmd.commands.search-project"
 zht = "在項目路徑搜索"
 zhs = "在项目路径搜索"
 en = "search the project"
-find = "搜索 項目 项目 project git 全書 全书"
+find = "搜索 搜尋 搜寻 查找 尋找 寻找 全文 grep find search 項目 项目 project git 全書 全书"
 
 [[message]]
 # 命令：搜工作路徑
@@ -1475,7 +1475,7 @@ key = "cmd.commands.search-working"
 zht = "在工作路徑搜索"
 zhs = "在工作路径搜索"
 en = "search the working directory"
-find = "搜索 工作 路徑 路径 目錄 目录 working cwd"
+find = "搜索 搜尋 搜寻 查找 尋找 寻找 全文 grep find search 工作 路徑 路径 目錄 目录 working cwd"
 
 [[message]]
 # : 命令選單裏 settings 那一項的說明（commands 組）
@@ -2903,7 +2903,7 @@ key = "cmd.word-topics.discover-project"
 zht = "在項目路徑中探索用戶詞語"
 zhs = "在项目路径中探索用户词语"
 en = "mine words across the project"
-find = "挖詞 挖词 認詞 认词 項目 项目 project"
+find = "挖詞 挖词 認詞 认词 詞語 词语 words mine discover 項目 项目 project"
 
 [[message]]
 # 命令：在工作路徑探索用戶詞語
@@ -2911,7 +2911,7 @@ key = "cmd.word-topics.discover-working"
 zht = "在工作路徑中探索用戶詞語"
 zhs = "在工作路径中探索用户词语"
 en = "mine words across the working directory"
-find = "挖詞 挖词 認詞 认词 工作 路徑 路径 working"
+find = "挖詞 挖词 認詞 认词 詞語 词语 words mine discover 工作 路徑 路径 working cwd"
 
 [[message]]
 # : 命令選單裏 habit 那一項的說明（word-topics 組）
