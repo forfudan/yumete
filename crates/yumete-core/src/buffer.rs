@@ -291,6 +291,10 @@ impl Buffer {
     /// without a word, which is the whole of a crashed session's work.
     pub fn mark_modified(&mut self) {
         self.modified = true;
+        // Warning: **連「哪裏算乾淨」一起作廢**（2026-10-02 補）。這一支是給救回來的
+        // 草稿用的：它的字從一個崩掉的 session 來，盤上沒有任何一份和它一樣。
+        // 不作廢的話撤回棧走回棧底就會報「乾淨」——而棧底正是那段救回來的字。
+        self.saved_depth = None;
     }
 
     /// Create a buffer holding `text`, not yet associated with any file.
@@ -1632,6 +1636,23 @@ mod tests {
         assert_eq!(b.replace(4..7, "改過的"), Ok(()));
         assert_eq!(b.text(), "第一行\n改過的\n");
         assert_eq!(b.revision(), was + 1, "one edit, one revision");
+    }
+
+    /// **救回來的草稿，撤到棧底也不算乾淨**（2026-10-02 補）。
+    ///
+    /// 那段字從一個崩掉的 session 來，盤上沒有任何一份和它一樣。棧底不是「和盤上
+    /// 一樣」的那個位置，所以 `mark_modified` 要把那個位置一起作廢。
+    #[test]
+    fn a_recovered_draft_has_no_clean_point_to_go_back_to() {
+        let mut b = Buffer::from_text("崩掉之前寫的那一段\n");
+        b.mark_modified();
+        assert!(b.is_modified());
+        b.snapshot(0);
+        b.insert(0, "又").unwrap();
+        assert!(b.is_modified());
+        b.undo(0).unwrap();
+        assert_eq!(b.rope().to_string(), "崩掉之前寫的那一段\n");
+        assert!(b.is_modified(), "撤回到棧底，那一段還是沒有一份在盤上");
     }
 
     /// **`:w` 之後按一下 `u`，緩衝區不許說自己是乾淨的**（2026-10-02 查出來的，會丟字）。
