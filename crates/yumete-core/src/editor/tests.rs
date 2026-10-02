@@ -15728,9 +15728,12 @@ fn a_change_of_word_level_reaches_a_line_already_cut() {
     ed.set_word_level(yumete_cjk::WordLevel::Full);
     press(&mut ed, "gg");
     press(&mut ed, "w");
+    // Warning: **3，不是 4**（2026-10-02 改）。頭是**含在裏面**的，所以整行四個字是
+    // `[0,3]`；4 是換行符，那正是「`w` 跨行」那個 bug 的樣子——按一下 `d` 就把下
+    // 一行焊上來。改的是 `word_forward`，見那裏的註釋。
     assert_eq!(
-        ed.sel.head(), 4,
-        "at 全 the whole line is one word, so `w` selects all of it"
+        ed.sel.head(), 3,
+        "at 全 the whole line is one word, so `w` selects all of it — and not the break after it"
     );
 }
 
