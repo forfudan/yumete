@@ -432,7 +432,13 @@ impl Editor {
             // buffer is unnamed, and it is `name_scratch_drafts` that gives an
             // unnamed buffer somewhere to write — so that runs first, and the
             // proof is `recovery_copy()`, not the return value.
-            let kept = self.autosave || {
+            //
+            // Warning: **從前這一句是 `self.autosave || { … }`**（2026-10-02 查出來的）。
+            // 自動存檔出廠開着，於是那個 `||` 一路短路：**替代的那一份根本沒寫，
+            // 而底下照樣把舊的刪了**。靠的是「待會兒自動存檔那一拍會寫」——而那
+            // 一拍最遠在五秒之後（`SWAP_INTERVAL`），這五秒裏那段文字一份都沒有。
+            // 上面那三行寫的正是不許有這個窗口。
+            let kept = {
                 self.name_scratch_drafts();
                 match self.buffers.last_mut() {
                     Some(b) => b.write_swap().is_ok() && b.recovery_copy().is_some(),

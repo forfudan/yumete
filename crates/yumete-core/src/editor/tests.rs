@@ -7590,6 +7590,40 @@ fn recovering_with_autosave_off_still_leaves_a_copy() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **自動存檔開着的時候也一樣**（2026-10-02 查出來的）。
+///
+/// 上面那一條修完，判斷寫成了 `self.autosave || { 寫一份 }`——自動存檔出廠開着，
+/// 於是那個 `||` 一路短路，**替代的那一份根本沒寫，而舊的照樣刪了**。靠的是「待
+/// 會兒自動存檔那一拍會寫」，可那一拍最遠在五秒之後，這五秒裏那段文字一份都沒有。
+#[test]
+fn recovering_with_autosave_on_leaves_a_copy_too() {
+    let dir = std::env::temp_dir().join(format!("yumete-recover-on-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let orphan = dir.join("scratch-1-0.yumete");
+    std::fs::write(&orphan, "那年冬天，山下起了大雪。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.keep_drafts_in(dir.clone());
+    ed.set_autosave(true);
+    assert_eq!(ed.orphan_drafts(), vec![orphan.clone()]);
+    ed.execute("recover").unwrap();
+    assert!(ed.current_buffer().text().contains("大雪"));
+
+    // 盤上**當場**就有一份——不是等那一拍。
+    let left: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| std::fs::read_to_string(p).map(|t| t.contains("大雪")).unwrap_or(false))
+        .collect();
+    assert_eq!(left.len(), 1, "一份，不是零份：{left:?}");
+    assert!(!orphan.exists());
+    assert!(ed.orphan_drafts().is_empty());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
     // An undo point used to be pushed when a command *announced* an edit,
