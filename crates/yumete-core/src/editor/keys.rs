@@ -636,10 +636,50 @@ impl Editor {
             // Warning: **Backwards takes the target and leaves the caret's own
             // character**, whichever class the motion is: that is what `db`
             // and `dF,` do in vim.
-            _ if target < start => motion::Span::Over {
-                anchor: target,
-                head: motion::prev_grapheme(rope, start),
-            },
+            //
+            // Warning: **光標在第 1 欄的時候，頭要退到上一行的末尾**（2026-10-02 拿
+            // 這臺機器上的 nvim 量出來的）。`prev_grapheme(start)` 在第 1 欄上**就是
+            // 那個換行**，於是 `j0db` 把兩行焊成一行——正文第二行的開頭按一下，
+            // 上一行就接上來了。這是上面那條「`dw` 不跨行」的鏡像，而往前那一支
+            // （底下的 `Reach::Exclusive`）早就擋了，往回這一支沒有。
+            //
+            // vim 把它寫成一條通則（`:h exclusive`）：「If the motion is exclusive
+            // and the end of the motion is in column 1, the end of the motion is
+            // moved to the end of the previous line and the motion becomes
+            // inclusive.」
+            //
+            // Warning: **退不動就是整個動作失敗。** 檔首按 `db`，`prev_word_start`
+            // 回的是 0（它從不 `Missed`），於是 `target == start` 這一支根本不進
+            // 來，落到底下的排他那一支，做出一格的跨度——nvim 在那裏**什麼都不做**。
+            _ if target < start => {
+                let head = motion::prev_grapheme(rope, start);
+                match rope.char(head.min(rope.len_chars().saturating_sub(1))) == '\n' {
+                    false => motion::Span::Over { anchor: target, head },
+                    true => motion::Span::Over {
+                        anchor: target,
+                        head: motion::prev_grapheme(rope, head),
+                    },
+                }
+            }
+            // Warning: **只攔往回的那幾個。** 「動不了就整個動作失敗」對往回的動作
+            // 是對的（nvim 在檔首按 `db` 什麼都不做，而這裏從前刪掉一個字），對
+            // 往前的不是——`dl` 停在行末，`l` 動不了而 vim 照樣刪掉那個字；`dt,`
+            // 停在逗號前一格，`t` 動不了而 vim 照樣刪。
+            //
+            // 兩版都錯過：寫成通則紅了 `vim_conformance` 第 ⑪ 條（`dl` 在行末），
+            // 改成「偏移 0」紅了第 ⑧ 條（`dt,` 在檔首）。**方向是 `step.motion`
+            // 自己知道的事**，別拿位置去猜。
+            _ if target == start
+                && matches!(
+                    step.motion,
+                    motion::Motion::WordBack(_)
+                        | motion::Motion::Find { forward: false, .. }
+                        | motion::Motion::Paragraph { forward: false }
+                        | motion::Motion::Sentence { forward: false }
+                ) =>
+            {
+                motion::Span::Missed
+            }
             crate::vim::Reach::Inclusive => motion::Span::Over { anchor: start, head: target },
             // `w` is exclusive: 「up to the next word」, not 「including its
             // first character」.
