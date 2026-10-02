@@ -13377,10 +13377,11 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
     assert!(ed.status().contains("沒有搶救稿"), "{}", ed.status());
     assert!(ed.query().is_none(), "沒有草稿就沒有那一問");
 
-    // In a fresh session, `:recover!` throws the copy away instead.
+    // 丟掉草稿走的是面板那一格（2026-10-02 作者定，`:recover!` 取消了）。
     let mut ed = Editor::new();
     ed.execute(&format!(":open {}", path.display())).unwrap();
-    ed.execute(":recover!").unwrap();
+    ed.execute(":recover").unwrap();
+    ed.on_key(Key::Char('d'));
     assert!(!dir.join(".chapter.md.yumete").exists());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -13414,10 +13415,11 @@ fn an_untaken_draft_survives_quitting_and_typing() {
     assert_eq!(ed.execute(":q!").unwrap(), CommandOutcome::Quit);
     assert!(swap.exists(), "quitting deleted an unrecovered draft");
 
-    // Only saying so does.
+    // Only saying so does — 面板上的「丟棄恢復文件」那一格。
     let mut ed = Editor::new();
     ed.execute(&format!(":open {}", path.display())).unwrap();
-    ed.execute(":recover!").unwrap();
+    ed.execute(":recover").unwrap();
+    ed.on_key(Key::Char('d'));
     assert!(!swap.exists());
 
     std::fs::remove_dir_all(&dir).ok();

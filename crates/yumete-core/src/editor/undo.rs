@@ -51,7 +51,7 @@ impl Editor {
     /// A clean quit has nothing to recover, and `:q!` is the writer saying they
     /// do not want these changes — offering them back on the next open would
     /// undo that decision for them. A draft this session never took over is
-    /// somebody else's unrecovered work and stays where it is; `:recover!` is
+    /// somebody else's unrecovered work and stays where it is; 面板上那一格 is
     /// the way to say otherwise.
     fn drop_recovery_copies(&mut self) {
         for buffer in &mut self.buffers {

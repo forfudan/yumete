@@ -790,7 +790,7 @@ impl Buffer {
     ///
     /// A copy this session never wrote is somebody's unrecovered work — a
     /// crashed session's, or a second yumete's — and quitting is not a reason
-    /// to throw it away. `:recover!` is the one thing that says so on purpose.
+    /// to throw it away. 面板上的「丟棄恢復文件」是唯一那麽說的一格。
     pub fn clear_swap(&mut self) {
         // This session's own copy, wherever it put it — never the draft it
         // found on arrival, which belongs to whoever has not recovered it yet.
