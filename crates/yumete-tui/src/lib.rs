@@ -11186,6 +11186,15 @@ fn draw_panel_rows(
         .max(area.y);
     let panel = Rect::new(x, y, panel_w, panel_h);
 
+    // Warning: **放不下就加省略號，別直接切掉**（2026-10-02 一輪掃查報來的）。
+    // 從前這幾行是整條交給 `Paragraph` 的，ratatui 到了邊上一聲不吭地剪斷：十格
+    // 寬的窗口上「３ 优生优育」畫成「３ 优生」，而按 `3` 進稿子的是四個字。
+    // **面板說要插什麼，和它真的插什麼，不是一回事**，而讀者是照着面板按的。
+    //
+    // 省略號這一支 `chrome` 那一族早就有了（[`crate::panel::clip`]，它還知道
+    // 「…」在 `ambiguous_width = "wide"` 底下佔兩格），候選面板是唯一沒用的。
+    let room = panel_w.saturating_sub(2) as usize;
+    let rows: Vec<String> = rows.into_iter().map(|r| crate::panel::clip(&r, room)).collect();
     let mut lines: Vec<Line> = Vec::with_capacity(rows.len());
     for (i, row) in rows.into_iter().enumerate() {
         if i == 0 {
@@ -18258,6 +18267,61 @@ fn squeezed(text: &str) -> String {
                 assert!(shot.contains(c), "{:?} 裏的 {c:?} 沒畫出來：\n{shot}", text);
             }
         }
+    }
+
+    /// **候選放不下就加省略號，別直接切掉**（2026-10-02 一輪掃查報來的）。
+    ///
+    /// 從前這幾行是整條交給 `Paragraph` 的，ratatui 到了邊上一聲不吭地剪斷：十格
+    /// 寬的窗口上「３ 优生优育」畫成「３ 优生」，而按 `3` 進稿子的是四個字。
+    /// **面板說要插什麼，和它真的插什麼，不是一回事**，而讀者是照着面板按的。
+    #[test]
+    fn a_candidate_too_wide_for_the_panel_says_it_was_cut() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let rows = vec![
+            "jjjj".to_string(),
+            "１ 付出".to_string(),
+            "２ 优生优育".to_string(),
+        ];
+        // 那一條是 11 格（２ 兩格、空格一格、四個漢字八格），加上兩道邊框要 13。
+        // 所以 8／10／12 一定切，14 一定不切——兩邊都驗。
+        for w in [8u16, 10, 12] {
+            let mut terminal = Terminal::new(TestBackend::new(w, 10)).unwrap();
+            terminal
+                .draw(|frame| {
+                    let area = Rect::new(0, 0, w, 10);
+                    draw_panel_rows(frame, &config, area, 0, 0, rows.clone(), Some(1));
+                })
+                .unwrap();
+            let shot = terminal.backend().buffer().clone();
+            let text: String = (0..10u16)
+                .map(|y| (0..w).map(|x| at(&shot, x, y)).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n");
+            // 那一條本來就放不下，所以切了——切了就要看得出來。
+            assert!(
+                text.contains('…'),
+                "{w} 格下沒有省略號，於是面板說的和它插的不是一回事：\n{text}"
+            );
+        }
+
+        // 放得下的時候不許平白多一個省略號。
+        let mut terminal = Terminal::new(TestBackend::new(14, 10)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, 14, 10);
+                draw_panel_rows(frame, &config, area, 0, 0, rows.clone(), Some(1));
+            })
+            .unwrap();
+        let shot = terminal.backend().buffer().clone();
+        let text: String = (0..10u16)
+            .map(|y| (0..14u16).map(|x| at(&shot, x, y)).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        // Warning: 寬字的第二格在 `TestBackend` 裏讀不出來，所以逐字查最後那一個，
+        // 不查整串。
+        assert!(text.contains('育'), "放得下就要整條畫出來：\n{text}");
+        assert!(!text.contains('…'), "放得下就不許有省略號：\n{text}");
     }
 
     /// **沒有邊欄就沒有地方畫稿紙的點**（2026-10-02 一輪掃查報來的）。
