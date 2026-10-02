@@ -1226,9 +1226,9 @@ pub fn run(
                 }
                 // …and reading it needs the platform, because almost every
                 // terminal refuses an OSC 52 read.
-                if let Some(after) = editor.take_clipboard_read() {
+                if let Some(how) = editor.take_clipboard_read() {
                     match read_clipboard() {
-                        Some(text) => editor.provide_clipboard(&text, after),
+                        Some(text) => editor.provide_clipboard(&text, how),
                         None => editor.set_status(
                             "cannot read the system clipboard here — ⌘V pastes into the terminal"
                                 .to_string(),

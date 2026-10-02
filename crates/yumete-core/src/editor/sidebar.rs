@@ -1825,26 +1825,79 @@ impl Editor {
     /// Ask for the system clipboard, to be pasted after (or before) the
     /// selection once the front end has fetched it.
     pub(super) fn clipboard_paste(&mut self, after: bool) {
-        self.clipboard_read = Some(after);
+        self.clipboard_read = Some(crate::editor::Pasting::AsIs { after });
     }
 
-    /// Take a pending clipboard read; `true` means paste after.
-    pub fn take_clipboard_read(&mut self) -> Option<bool> {
+    /// `:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼（2026-10-02 作者定）。
+    pub(super) fn paste_table(
+        &mut self,
+        to: crate::table::Shape,
+        from: Option<crate::table::Shape>,
+    ) {
+        self.clipboard_read = Some(crate::editor::Pasting::AsTable { to, from });
+    }
+
+    /// Take a pending clipboard read, and what to do with what comes back.
+    pub fn take_clipboard_read(&mut self) -> Option<crate::editor::Pasting> {
         self.clipboard_read.take()
     }
 
     /// Hand over what the system clipboard held, and paste it.
-    pub fn provide_clipboard(&mut self, text: &str, after: bool) {
+    pub fn provide_clipboard(&mut self, text: &str, how: crate::editor::Pasting) {
+        use crate::editor::Pasting;
         if text.is_empty() {
             self.status = say!("edit.clipboard-empty");
             return;
         }
+        let after = match how {
+            Pasting::AsIs { after } => after,
+            Pasting::AsTable { to, from } => {
+                let Some(text) = self.as_a_table(text, to, from) else {
+                    return;
+                };
+                self.snapshot();
+                self.store(text);
+                self.paste(true);
+                return;
+            }
+        };
         self.snapshot();
         // Whole lines go back as whole lines, and the selection is replaced
         // when there is one — the same rules `p` follows, because this is `p`
         // with the text coming from somewhere else.
         self.store(text.to_string());
         self.paste(after);
+    }
+
+    /// 剪貼板那幾行寫成 `to` 那一種——看不出它是張表就說一聲，什麼都不貼。
+    fn as_a_table(
+        &mut self,
+        text: &str,
+        to: crate::table::Shape,
+        from: Option<crate::table::Shape>,
+    ) -> Option<String> {
+        let lines: Vec<String> = text
+            .trim_end_matches(['\n', '\r'])
+            .lines()
+            .map(str::to_string)
+            .filter(|l| !l.trim().is_empty())
+            .collect();
+        let Some(from) = from.or_else(|| crate::table::shape_of(&lines)) else {
+            self.status = say!("table.no-delimiter-in-sight");
+            return None;
+        };
+        match crate::table::recast(&lines, from, to) {
+            Ok(out) => Some(format!("{}\n", out.join("\n"))),
+            Err((row, column)) => {
+                let delimiter = match to {
+                    crate::table::Shape::Delimited(c) => c,
+                    crate::table::Shape::Pipe => '|',
+                };
+                self.status =
+                    say!("table.cell-holds-the-delimiter", row + 1, column + 1, delimiter);
+                None
+            }
+        }
     }
 
     /// Move to the first non-blank character of line `n`, counting from 1 and

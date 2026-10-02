@@ -2526,6 +2526,14 @@ en = "as ordinary text"
 find = "表格 關掉 关掉 普通文字 off"
 
 [[message]]
+# : 選單裏 paste-table 那一項的說明
+key = "cmd.table.paste"
+zht = "將剪貼板中表格貼作目標格式；兩個參數時第一個為源格式"
+zhs = "将剪贴板中表格贴作目标格式；两个参数时第一个为源格式"
+en = "paste the clipboard's table as the named format; with two words the first is the source"
+find = "表格 贴 貼 剪贴板 剪貼板 粘贴 paste table csv tsv pipe"
+
+[[message]]
 # : 命令選單裏 rules 那一項的說明（table 組）
 key = "cmd.table.rules"
 zht = "欄線：欄與欄之間怎麼分開"

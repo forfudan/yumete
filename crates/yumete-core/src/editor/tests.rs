@@ -8622,7 +8622,7 @@ fn no_route_at_all_gets_a_delimiter_into_a_cell() {
     ed.on_key(Key::Esc);
 
     // 5. The system clipboard (`Space p`).
-    ed.provide_clipboard("木,目", true);
+    ed.provide_clipboard("木,目", crate::editor::Pasting::AsIs { after: true });
     assert_eq!(commas(&ed), n, "from the system clipboard");
     // 6. `r` — two keystrokes in Normal mode, and the easiest of the lot.
     press(&mut ed, "r");
@@ -11185,10 +11185,10 @@ fn the_system_clipboard_goes_both_ways() {
     // Reading needs the platform, so the core asks and the front end
     // answers — the same shape the IME's requests use.
     type_keys(&mut ed, " p");
-    assert_eq!(ed.take_clipboard_read(), Some(true));
+    assert_eq!(ed.take_clipboard_read(), Some(crate::editor::Pasting::AsIs { after: true }));
     assert_eq!(ed.take_clipboard_read(), None, "asked once");
     press(&mut ed, "gg");
-    ed.provide_clipboard("外面的字", true);
+    ed.provide_clipboard("外面的字", crate::editor::Pasting::AsIs { after: true });
     assert!(ed.current_buffer().text().contains("外面的字"));
 }
 
@@ -19917,6 +19917,61 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
     assert!(ed.problem_afloat().is_none(), "Warning: 兩個浮窗不許疊");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼**（2026-10-02 作者定）。
+///
+/// 只有前端讀得了系統剪貼板，所以核心把要求留下等它取。這一條驗的是兩頭：命令留
+/// 下了什麼要求，以及拿回來的字怎麼落地。
+#[test]
+fn paste_table_converts_what_the_clipboard_held() {
+    use crate::editor::Pasting;
+    use crate::table::Shape;
+
+    // 命令留下一個要求，帶着目標格式——它自己不讀剪貼板。
+    let mut ed = typed("");
+    ed.execute(":paste-table pipe").unwrap();
+    assert_eq!(
+        ed.take_clipboard_read(),
+        Some(Pasting::AsTable { to: Shape::Pipe, from: None })
+    );
+    assert_eq!(ed.take_clipboard_read(), None, "問過一次就沒了");
+
+    // 從電子表格抄來的那一種（跳格分隔），貼成 `|` 表格。
+    let mut ed = typed("");
+    ed.execute(":paste-table pipe").unwrap();
+    let how = ed.take_clipboard_read().expect("要過了");
+    ed.provide_clipboard("name\tqty\napple\t3\n", how);
+    let text = ed.current_buffer().text();
+    assert!(text.contains("| name"), "{text:?}");
+    assert!(text.contains("| apple"), "{text:?}");
+
+    // 反過來：剪貼板是 CSV，貼成 TSV——而且格子兩邊的空格留着。
+    let mut ed = typed("");
+    ed.execute(":paste-table tsv").unwrap();
+    let how = ed.take_clipboard_read().expect("要過了");
+    ed.provide_clipboard("  padded  ,1\nplain,3\n", how);
+    assert!(
+        ed.current_buffer().text().contains("  padded  \t1"),
+        "分隔文本存得下那幾個空格：{:?}",
+        ed.current_buffer().text()
+    );
+
+    // 源說得出來的時候就不嗅——一行也認。
+    let mut ed = typed("");
+    ed.execute(":paste-table csv pipe").unwrap();
+    let how = ed.take_clipboard_read().expect("要過了");
+    assert_eq!(how, Pasting::AsTable { to: Shape::Pipe, from: Some(Shape::Delimited(',')) });
+    ed.provide_clipboard("甲,乙\n", how);
+    assert!(ed.current_buffer().text().contains("| 甲"), "{:?}", ed.current_buffer().text());
+
+    // 看不出是張表就說一聲，一個字都不貼。
+    let mut ed = typed("");
+    ed.execute(":paste-table pipe").unwrap();
+    let how = ed.take_clipboard_read().expect("要過了");
+    ed.provide_clipboard("那年冬天，山下起了大雪。\n", how);
+    assert_eq!(ed.current_buffer().text(), "", "不是表格就什麼都不貼");
+    assert_eq!(ed.status(), say!("table.no-delimiter-in-sight"));
 }
 
 /// **`空格 w` 的 h/j/k/l 是走，不是開**（2026-10-02 作者報的）。
