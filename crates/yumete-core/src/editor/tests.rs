@@ -9279,9 +9279,10 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     // A folder named outright — and one that is not there says so rather
     // than quietly searching this file alone.
     //
-    // Warning: **相對路徑從根算起**（2026-09-27 改）：從前它從**當前緩衝的文件夾**算
-    // 起，所以同一個 `../卷一` 在不同的 buffer 裏指着不同的地方，而屏幕上看不出
-    // 來。現在根就是這本書，所以這個文件夾的名字就是 `卷一`。
+    // Warning: **相對路徑從工作路徑算起**（2026-10-01 定，見下一支測試）：從前它從
+    // **當前緩衝的文件夾**算起，所以同一個 `../卷一` 在不同的 buffer 裏指着不同
+    // 的地方，而屏幕上看不出來。這裏 `set_root` 把工作路徑也挪到了書根上，所以
+    // 這個文件夾的名字就是 `卷一`。
     ed.execute(":search 卷一").unwrap();
     assert!(matches!(ed.search().scope, Where::Named(_)));
     ed.on_key(Key::Enter);
@@ -9291,6 +9292,48 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
 
     // Nothing was left on the left-hand slot but the panel itself.
     assert!(ed.panel(Side::Left).is_some());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`G` 跳到名單的最後一**行**，不是最後一處命中**（2026-10-02 查出來的）。
+///
+/// `selected` 一直是 `rows()` 的下標，而 `G` 從前寫的是 `hits.len() - 1`。兩個數
+/// 只在本文件那一檔裏相等——那時候名單是平的，沒有檔名行。一跨檔，每個檔頭佔一
+/// 行，`G` 就短了「檔數」那麼多行，而且短得沒有聲音：`row()` 自己會夾到範圍裏，
+/// 所以它不報錯，只是停在名單中間。
+#[test]
+fn g_in_the_results_goes_to_the_last_row_not_the_last_hit() {
+    use crate::search_panel::{Field, Row};
+    let dir = a_little_book("searchlastrow");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+
+    ed.execute(":search-working").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+
+    // 四處命中分在三個檔裏：七行。
+    let rows = ed.search().rows();
+    assert_eq!(ed.search().hits.len(), 4, "{:?}", ed.search().hits);
+    assert_eq!(rows.len(), 7, "{rows:?}");
+
+    ed.search_for_test().field = Field::Results;
+    ed.on_key(Key::Char('G'));
+    assert_eq!(ed.search().selected, 6, "最後一行");
+    assert!(
+        matches!(ed.search().row(), Some(Row::Hit(i)) if i == 3),
+        "而且那一行上站着最後一處命中：{:?}",
+        ed.search().row()
+    );
+
+    // 往上一步就該是倒數第二行，再 `G` 回得去。
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.search().selected, 5);
+    ed.on_key(Key::End);
+    assert_eq!(ed.search().selected, 6, "End 和 G 同一個意思");
+
     std::fs::remove_dir_all(&dir).ok();
 }
 
