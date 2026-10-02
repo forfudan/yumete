@@ -532,7 +532,25 @@ impl Editor {
     pub(super) fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
         let pos = motion(self.current_buffer().rope(), self.sel.head());
         let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head());
-        self.move_head(pos);
+        self.move_head(self.on_this_line_under_vim(pos));
+    }
+
+    /// **vim 鍵位下 `h`／`l` 不出這一行**（`:h l`；2026-10-02 作者定照參考實現）。
+    ///
+    /// Warning: **要緊的是行末那一格坐不上去。** vim 的普通模式光標停不到換行符
+    /// 上，而 yumete 照 helix 的規矩停得上去——於是在一行的最後一個字上按 `x`，
+    /// 吃掉的是換行，兩行焊成一行。2026-10-02 拿 nvim 逐欄比，這是最後一條兩家
+    /// 真的不一樣的地方（中文分詞那三格除外）。
+    ///
+    /// 跨行一併擋住，那也是 vim 自己的規矩（`whichwrap` 出廠不含 `<`、`>`）。
+    /// helix 鍵位照舊：那一邊「走一頁」是有意的，記在上面 `h`／`l` 那一條。
+    fn on_this_line_under_vim(&self, pos: usize) -> usize {
+        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+            return pos;
+        }
+        let rope = self.current_buffer().rope();
+        let here = self.sel.head();
+        pos.clamp(motion::line_start(rope, here), motion::line_last(rope, here))
     }
 
     /// Step `at` clear of anything a table is keeping off the page, in the
@@ -806,6 +824,16 @@ impl Editor {
             // on」; vim's is the primitive itself.
             motion::Motion::WordForward(grain) if caret => {
                 at(motion::next_word_start(rope, self.sel.head(), grain, seg))
+            }
+            // Warning: **退不動就是整個動作失敗**（2026-10-02 拿 nvim 量的）：第 1 欄
+            // 按 `dge`，nvim 什麼都不做。`ge` 是**包含**的，所以光靠文法那條
+            // 「排他的落在原處就是零寬」攔不住它——要動作自己說沒動到。
+            motion::Motion::WordEndBack(grain) => {
+                let here = self.sel.head();
+                match motion::prev_word_end(rope, here, grain, seg) {
+                    back if back < here => at(back),
+                    _ => motion::Span::Missed,
+                }
             }
             motion::Motion::WordEndHere(grain) => {
                 at(motion::word_end_here(rope, self.sel.head(), grain, seg))

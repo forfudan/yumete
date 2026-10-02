@@ -718,7 +718,11 @@ impl Editor {
             // Warning: **退不動就是整個動作失敗。** 檔首按 `db`，`prev_word_start`
             // 回的是 0（它從不 `Missed`），於是 `target == start` 這一支根本不進
             // 來，落到底下的排他那一支，做出一格的跨度——nvim 在那裏**什麼都不做**。
-            _ if target < start => {
+            //
+            // Warning: **只有排他的往回動作走這一支**（2026-10-02）。`ge` 是往回
+            // 的**包含**動作，它要連光標自己那一格一起取：第 2 欄按 `dge`，nvim
+            // 刪掉 `al` 兩個字，而這一支只給 `a`。
+            _ if target < start && step.reach == crate::vim::Reach::Exclusive => {
                 let head = motion::prev_grapheme(rope, start);
                 match rope.char(head.min(rope.len_chars().saturating_sub(1))) == '\n' {
                     false => motion::Span::Over { anchor: target, head },
@@ -2025,6 +2029,20 @@ impl Editor {
         };
         match key {
             Key::Char('g') => return go(self, motion::Motion::FileStart),
+            // Warning: **vim 鍵位下 `ge`／`gE` 是 vim 的 `ge`**（2026-10-02 作者定
+            // 「照參考實現」）：往回到上一個詞的末尾。helix 鍵位下照舊是「到檔
+            // 尾」。兩套鍵位在這一格上真的各說各的，所以這裏分家。
+            Key::Char('e' | 'E') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                let grain = match key {
+                    Key::Char('E') => motion::Grain::Big,
+                    _ => self.word_grain(),
+                };
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                return self.repeat(count, |e| {
+                    let span = e.read_motion(motion::Motion::WordEndBack(grain), motion::Reading::Caret);
+                    e.jump_to(span);
+                });
+            }
             Key::Char('e') => return go(self, motion::Motion::FileEnd),
             Key::Char('h') => return go(self, motion::Motion::LineStart),
             Key::Char('l') => return go(self, motion::Motion::LineEnd),

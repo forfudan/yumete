@@ -475,6 +475,11 @@ pub enum Motion {
     WordForward(Grain),
     /// `e` / `E` — the end of the run ahead, both ends set.
     WordEnd(Grain),
+    /// `ge` / `gE` — **往回到上一個詞的末尾**（vim；2026-10-02 作者定照參考實現）。
+    ///
+    /// Warning: **helix 沒有這一個**，而 `ge` 在 helix 鍵位裏是「到檔尾」。所以這
+    /// 一支只有 vim 文法問得到，兩邊的 `ge` 各是各的。
+    WordEndBack(Grain),
     /// **vim 的 `cw`，而 `cw` 不是 `ce`** — 光標**所在**那一段的末尾。
     ///
     /// Warning: `:h cw` 說 `cw` 不吃詞後面的空白，照字面抄就寫成 `ce`，而
@@ -809,6 +814,29 @@ pub fn word_end_here(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
         .find(|&(start, end)| (start..end).contains(&pos))
         .map(|(_, end)| prev_grapheme(rope, end))
         .unwrap_or_else(|| next_word_end(rope, pos, grain, seg).1)
+}
+
+/// **The end of the last word that ends before `pos`** — vim's `ge`.
+///
+/// Crosses lines, the way `b` does. Off the front of the buffer it answers
+/// with the buffer's start; the caller is the one that knows 「did not move」
+/// means the motion failed (nvim's `ge` in column 1 does nothing).
+pub fn prev_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
+    let mut line = line_of(rope, pos);
+    loop {
+        if let Some(end) = line_words(rope, line, grain, seg)
+            .into_iter()
+            .rev()
+            .map(|(_, end)| prev_grapheme(rope, end))
+            .find(|&last| last < pos)
+        {
+            return end;
+        }
+        if line == 0 {
+            return 0;
+        }
+        line -= 1;
+    }
 }
 
 /// The start of the previous word before `pos` (`b` / `B`).
