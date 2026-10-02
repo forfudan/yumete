@@ -2376,6 +2376,34 @@ fn a_torn_table_is_left_alone_by_every_key_that_rewrites_it() {
     );
 }
 
+/// **挑選器的框和搜索面板的框，同一個鍵一個答案**（2026-10-02 自查出來的）。
+///
+/// 同一天的兩輪審查把兩扇面板的 `d`／`D` 改向了相反的方向：搜索面板改成「末尾那
+/// 一格上刪掉看得見的最後一個字」（照 2026-09-27 那條定論），挑選器改成「末尾就
+/// 什麼都別動」。兩扇都自洽，合起來不是一條規矩。
+#[test]
+fn the_picker_box_and_the_panel_box_answer_d_the_same_way() {
+    use crate::picker::Picker;
+    for key in ['d', 'D'] {
+        let mut p = Picker::new("文件", Vec::new());
+        p.push('a');
+        p.push('b');
+        // `Esc` 之後光標停在文字後面那一格——框裏的常態。
+        p.move_caret(crate::picker::Caret::End);
+        match key {
+            'd' => p.delete(),
+            _ => p.delete_to_end(),
+        }
+        assert_eq!(p.query(), "a", "挑選器的 {key} 在末尾什麼都沒刪");
+    }
+
+    // 空框上按，兩個鍵都不許 panic，也不許憑空生出東西。
+    let mut p = Picker::new("文件", Vec::new());
+    p.delete();
+    p.delete_to_end();
+    assert_eq!(p.query(), "");
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
