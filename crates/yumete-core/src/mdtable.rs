@@ -1412,6 +1412,14 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
         .map(|line| {
             crate::table::cells(line, delimiter)
                 .into_iter()
+                // Warning: **格子兩邊的空白在這裏沒了，而這是定過的**（2026-10-02）。
+                // `  padded  ,1` 轉出來是 `| padded | 1 |`，整格三個空格的轉成空
+                // 格子——按 RFC 4180，CSV 裏沒加引號的空格就是欄位內容。
+                //
+                // 不是「該不該 `trim`」：**`|` 表格本身存不下那幾個空格**（讀的時
+                // 候格子兩邊一律去掉），所以轉過去就沒地方放。也不報一句，原話：
+                // 「我觉得 csv -> pipe 这个过程本身就是有歧义的，用户做这件事情
+                // 就已经做好了心理准备了。」`u` 退得回來。
                 .map(|span| escape(crate::table::cell_text(line, span).trim()))
                 .collect()
         })

@@ -14509,6 +14509,7 @@ review 讀不到的地方，於是同一條被反覆「發現」。原話：「�
 | `n`／`N` 之外沒有「上一處」在搜索框裏 | `find.rs` 的 `on_field_key` | 往回找是少見的動作，而框裏 `n` 是字母 n，`Shift+Enter` 終端多半送不出來。 |
 | `::` 面板在多高的窗口上都只畫八行 | `yumete-tui/src/lib.rs:4954` | 「A picker is paths — hundreds of them, and no arrangement shows them all — so it stays the glanceable eight and scrolls.」2026-10-02 又被報了一次。 |
 | 候選面板該改用 `drawn_width` 量寬 | `yumete-cjk/src/width.rs:107` | **不該。** 那一支的註釋說它是給「**讀**一幀畫好的東西」用的（`frame_to_text`、點擊映射），不是給量一扇要畫的面板用的。真終端配 CJK 字體確實把「…」畫成兩格，所以 `str_width` 纔是對的那一個；列散掉的根子是 ratatui 和終端對 Ambiguous 這一族本來就不同意，要動是動那一層。2026-10-02 查過。 |
+| `:table-pipe` 把格子兩邊的空白吃掉 | `mdtable.rs` 的 `from_delimited` | **照舊。** `|` 表格本身存不下那幾個空格（讀的時候兩邊一律去掉），所以不是「該不該 trim」。2026-10-02 原話：「csv -> pipe 这个过程本身就是有歧义的，用户做这件事情就已经做好了心理准备了。」 |
 | 正則底下 `[^書]` 折成 `[^[書书]]`，於是配得**更少** | `find.rs` 的 `Field::Chinese` | **留着的。** 2026-10-02 原話：「我觉得 `[^書]` 不应该变成 `[^[書书]]`，因为繁简体和大小写不一样。我们允许繁简，是为了增加匹配。……但是我觉得这也不算 bug，因为用户可以把繁简匹配关掉就好了。」出路現成（按 `2` 關掉繁簡），而「類裏不折」會做出 `[書]` 配不到 `书` 而光禿禿的 `書` 配得到那種怪狀態。手冊上寫了一條。 |
 | 搜索的 smart case 該問 `self.search.query` 而不是 `body` | `find.rs` 的 `search_pattern` | **兩個問句同一個答案。** `body` 裏多出來的只有 `regex::escape` 加的反斜杠和字形折疊（那張表一個大寫都沒有），兩個都進不了這道問句。2026-10-01 驗過，改了是空操作。 |
 
@@ -19384,9 +19385,11 @@ module passes here … so the guard cannot be walked around by an edit」——�
 
 ### 5.55.4 等作者定的，又多了六條
 
-1. **CSV 的空白被 `:table-pipe` 吃掉**：`   ,1` 的三個空格沒了，`  padded  ` 成了
-   `padded`。對一張人寫的 Markdown 表那個 `trim` 是對的，對一個 `.csv` 那些空格就是
-   欄位本身。
+1. ~~**CSV 的空白被 `:table-pipe` 吃掉**~~ **2026-10-02 定：照舊，也不報一句。**
+   `  padded  ,1` 轉出來是 `| padded | 1 |`。原話：「我觉得 csv -> pipe 这个过程本身
+   就是有歧义的，用户做这件事情就已经做好了心理准备了。」而且**`|` 表格本身存不下**
+   那幾個空格（讀的時候格子兩邊一律去掉），所以不是「該不該 trim」的選擇。見
+   `mdtable.rs` 的 `from_delimited`。
 2. **`:export csv` 把 `  "x"  ,1` 寫成 `x,1`**：四個空格和兩個引號一起沒了。
 3. **導出時 BOM 掉了**（`Buffer` 為 `:write` 記着它，導出那條路沒帶）、**永遠寫 LF**
    （不跟緩衝區的 CRLF）、**排序按引號字符排**（`"Smith, John"` 排在 `Amy` 前面）。
