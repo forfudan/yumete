@@ -8967,10 +8967,18 @@ fn the_box_deletes_and_changes_where_the_cursor_stands() {
     assert_eq!(ed.mode(), Mode::Field);
     ed.on_key(Key::Char('冷'));
     assert_eq!(ed.search().query, "冬天冷", "插在光標**後面**");
-    // Warning: 光標停在末尾的時候 `D` 無事可刪——那裏沒有東西。
+    // Warning: **光標停在末尾的時候 `D` 刪掉最後那一個字**（2026-10-02 改，從前是
+    // 「無事可刪」）。同一個位置上 `d` 一直是這麼做的（2026-09-27 定，原話是兩
+    // 個試用的人都報「`d` 按了什麼都不發生」），而 `D` 不是——一行鍵位寫着
+    // 「dD 刪除」，兩個鍵對同一個光標位置給出兩種答案。
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('D'));
-    assert_eq!(ed.search().query, "冬天冷", "末尾按 D 什麼都不動");
+    assert_eq!(ed.search().query, "冬天", "末尾按 D 刪掉看得見的最後一個字");
+    // 刪掉了，補回來再往下走。
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Char('冷'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.search().query, "冬天冷");
     ed.on_key(Key::Char('I'));
     ed.on_key(Key::Char('下'));
     assert_eq!(ed.search().query, "下冬天冷");
