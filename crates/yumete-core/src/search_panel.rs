@@ -414,8 +414,14 @@ pub const AROUND: usize = 60;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Row {
     /// A file, with how many hits are in it and whether they are folded away.
+    ///
+    /// Warning: **名字不夠認出一個檔**（2026-10-02 查出來的）。緩衝區那一檔裏
+    /// `path` 放的是**給人看的名字**，而沒有名字的草稿一律叫 `[scratch]`——兩份
+    /// 草稿於是併成一行，標題寫着「2 處」，`r` 按下去只換得掉第一份裏的那一處。
+    /// 所以認一個檔要名字加號碼這一對，和 [`Hit`] 一樣。
     File {
         path: std::path::PathBuf,
+        buffer: Option<u64>,
         hits: usize,
         folded: bool,
     },
@@ -461,8 +467,8 @@ pub struct Search {
     /// 見 `editor::WALK_GRACE`：走查有一個地板加一隻錶，碰到頭就交出半截的答
     /// 案。從前它一聲不吭，於是一張短清單看着像是全部。
     pub cut: bool,
-    /// The files whose hits are folded away.
-    pub folded: std::collections::BTreeSet<std::path::PathBuf>,
+    /// The files whose hits are folded away，按（名字, 號）這一對記，見 [`Row::File`]。
+    pub folded: std::collections::BTreeSet<(std::path::PathBuf, Option<u64>)>,
     /// What the paths in [`Hit::file`] are relative to, so opening one can
     /// put it back together.
     pub root: Option<std::path::PathBuf>,
@@ -581,19 +587,29 @@ impl Search {
             return (0..self.hits.len()).map(Row::Hit).collect();
         }
         let mut rows = Vec::new();
-        let mut at: Option<&std::path::Path> = None;
+        let mut at: Option<(std::path::PathBuf, Option<u64>)> = None;
         for (i, hit) in self.hits.iter().enumerate() {
-            let path = hit.file.as_deref().unwrap_or(std::path::Path::new(""));
-            if at != Some(path) {
-                at = Some(path);
-                let folded = self.folded.contains(path);
+            let one = (
+                hit.file.clone().unwrap_or_default(),
+                hit.buffer,
+            );
+            if at.as_ref() != Some(&one) {
+                at = Some(one.clone());
+                let folded = self.folded.contains(&one);
                 rows.push(Row::File {
-                    path: path.to_path_buf(),
-                    hits: self.hits.iter().filter(|h| h.file.as_deref() == Some(path)).count(),
+                    hits: self
+                        .hits
+                        .iter()
+                        .filter(|h| {
+                            h.file.clone().unwrap_or_default() == one.0 && h.buffer == one.1
+                        })
+                        .count(),
+                    path: one.0.clone(),
+                    buffer: one.1,
                     folded,
                 });
             }
-            if !self.folded.contains(path) {
+            if !self.folded.contains(&one) {
                 rows.push(Row::Hit(i));
             }
         }
@@ -644,16 +660,19 @@ impl Search {
         let Some(row) = rows.get(self.selected.min(rows.len().saturating_sub(1))) else {
             return false;
         };
-        let path = match row {
-            Row::File { path, .. } => path.clone(),
-            Row::Hit(i) => match self.hits.get(*i).and_then(|h| h.file.clone()) {
-                Some(path) => path,
+        let one = match row {
+            Row::File { path, buffer, .. } => (path.clone(), *buffer),
+            Row::Hit(i) => match self.hits.get(*i) {
+                Some(hit) => match hit.file.clone() {
+                    Some(path) => (path, hit.buffer),
+                    None => return false,
+                },
                 None => return false,
             },
         };
         let changed = match away {
-            true => self.folded.insert(path.clone()),
-            false => self.folded.remove(&path),
+            true => self.folded.insert(one.clone()),
+            false => self.folded.remove(&one),
         };
         // Folding takes rows away; the highlight goes to the header rather
         // than sliding onto whatever filled the gap.
@@ -661,7 +680,7 @@ impl Search {
             if let Some(at) = self
                 .rows()
                 .iter()
-                .position(|r| matches!(r, Row::File { path: p, .. } if *p == path))
+                .position(|r| matches!(r, Row::File { path: p, buffer: b, .. } if (p.clone(), *b) == one))
             {
                 self.selected = at;
             }
