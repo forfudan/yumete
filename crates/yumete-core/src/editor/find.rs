@@ -515,23 +515,33 @@ impl Editor {
         // when the answer has names in it, and namelessly when it is the whole
         // of the answer.
         let mine = match (&root, &here) {
-            (Some(root), Some(here)) => Some(
-                here.strip_prefix(std::fs::canonicalize(root).as_deref().unwrap_or(root))
-                    .unwrap_or(here)
-                    .to_path_buf(),
-            ),
+            (Some(root), Some(here)) => here
+                .strip_prefix(std::fs::canonicalize(root).as_deref().unwrap_or(root))
+                .ok()
+                .map(std::path::Path::to_path_buf),
             _ => None,
         };
+        // Warning: **不在那個根底下的那一份，不搜**（2026-10-02 查出來的）。上面那
+        // 一句從前是 `.unwrap_or(here)`：剝不掉前綴就把**整條絕對路徑**當成「相
+        // 對根的名字」接着用，於是 `:search 一個空文件夾` 報的是你眼前這一份的
+        // 命中數——空文件夾說「2 處」。屏幕上唯一的破綻是檔名那一行變成一條截
+        // 斷的絕對路徑，而那看着只像是名字太長。
+        //
+        // 範圍說的是「去哪裏找」。眼前這一份不在那裏，就不在那裏——helix 的
+        // `global_search` 也只走 cwd，不會把你另一個目錄裏開着的檔算進來。
+        // 沒有名字的草稿不在此列（它哪個根底下都不在，而它是你正在寫的那一份）。
+        let outside = root.is_some() && here.is_some() && mine.is_none();
         // It comes first, and it comes from memory: what is on the screen is
         // what is searched, saved or not.
         //
         // Warning: **可它也要過篩子**（2026-10-02 測試逼出來的）。這一份不走
         // `walk_prose`，所以包含／排除從前篩不到它：打開着 `a.md`、包含那一格寫
         // `*.txt`，它的命中照樣在名單上，而框上寫着「只搜 .txt」。
-        let sifted = match (&root, &here) {
-            (Some(root), Some(here)) => self.sieve().is_none_or(|s| s.lets_through(root, here)),
-            _ => true,
-        };
+        let sifted = !outside
+            && match (&root, &here) {
+                (Some(root), Some(here)) => self.sieve().is_none_or(|s| s.lets_through(root, here)),
+                _ => true,
+            };
         let (mut hits, mut total) = match sifted {
             true => self.scan_the_open_one(&look, &mine, MOST),
             false => (Vec::new(), 0),
