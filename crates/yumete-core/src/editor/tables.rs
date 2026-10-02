@@ -1772,6 +1772,99 @@ impl Editor {
     }
 
     /// `:table-pipe` — the delimited block under the cursor becomes a `|` table.
+    /// `:convert-table` — **把光標這裏的表寫成另一種樣子**（2026-10-02 作者定）。
+    ///
+    /// 源沒說就自己嗅：光標站在 `|` 表格裏就是 `|` 表格，否則看那一塊用的是什麼
+    /// 分隔符。嗅源這一條照 org-mode 和 markdown-mode——兩家都是看有沒有 TAB、
+    /// 有沒有逗號，要強制纔多給一個參數。
+    pub(super) fn convert_table(&mut self, to: crate::table::Shape, from: Option<crate::table::Shape>) {
+        use crate::table::Shape;
+        let Some(source) = from.or_else(|| self.table_shape_here()) else {
+            self.status = say!("table.no-delimiter-in-sight");
+            return;
+        };
+        match (source, to) {
+            (Shape::Pipe, Shape::Pipe) => self.status = say!("table.already-a-pipe-table"),
+            (Shape::Pipe, Shape::Delimited(c)) => self.table_to_delimited(c),
+            // 源說了就按源那個分隔符切，沒說就讓那一支自己嗅——它本來就會。
+            (Shape::Delimited(_), Shape::Pipe) => {
+                let said = match from {
+                    Some(Shape::Delimited(c)) => Some(c),
+                    _ => None,
+                };
+                self.table_to_pipe(said);
+            }
+            (Shape::Delimited(a), Shape::Delimited(b)) => self.redelimit(a, b),
+        }
+    }
+
+    /// 光標這裏那張表是什麼寫法——`|` 表格，還是哪個分隔符分開的。
+    fn table_shape_here(&self) -> Option<crate::table::Shape> {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        if !self.md_row_in_a_fence()
+            && crate::mdtable::region(|i| self.line_text(i), line).is_some()
+        {
+            return Some(crate::table::Shape::Pipe);
+        }
+        let (first, last) = self.block_here();
+        let lines: Vec<String> = (first..=last)
+            .filter_map(|i| self.line_text(i))
+            .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
+            .filter(|l| !l.trim().is_empty())
+            .collect();
+        crate::table::sniff(&lines).map(crate::table::Shape::Delimited)
+    }
+
+    /// 分隔符換一個——CSV 轉 TSV 那一種（2026-10-02 作者定「任一到任一」）。
+    ///
+    /// Warning: **這一條不 `trim`。** 轉成 `|` 表格的時候格子兩邊的空白一定沒
+    /// （`|` 表格存不下，見 `mdtable::from_delimited`），而分隔符換一個是存得下
+    /// 的——`  padded  ,1` 轉成 TSV 還是 `  padded  \t1`。
+    fn redelimit(&mut self, from: char, to: char) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let (first, last) = self.block_here();
+        let lines: Vec<String> = (first..=last)
+            .filter_map(|i| self.line_text(i))
+            .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
+            .filter(|l| !l.trim().is_empty())
+            .collect();
+        if lines.is_empty() {
+            self.status = say!("table.nothing-to-convert");
+            return;
+        }
+        let mut out = Vec::with_capacity(lines.len());
+        for (row, line) in lines.iter().enumerate() {
+            let mut cells = Vec::new();
+            for span in crate::table::cells(line, from) {
+                let text = crate::table::cell_text(line, span);
+                // 同 `mdtable::to_delimited` 的規矩：裝不下就說哪一格，不悄悄改字。
+                if text.contains(to) {
+                    self.status = say!(
+                        "table.cell-holds-the-delimiter",
+                        row + 1,
+                        cells.len() + 1,
+                        to
+                    );
+                    return;
+                }
+                cells.push(text);
+            }
+            out.push(cells.join(&to.to_string()));
+        }
+        let rows = out.len();
+        self.snapshot();
+        self.leave_table_quietly();
+        self.replace_lines(first, last, &out);
+        let at = self.current_buffer().rope().line_to_char(first);
+        self.set_cursor(at);
+        self.clamp_cursor();
+        self.forget_the_document();
+        self.status = say!("table.now-delimited", rows, named_delimiter(to));
+    }
+
     pub(super) fn table_to_pipe(&mut self, delimiter: Option<char>) {
         // `Buffer::insert` would refuse anyway, but silently and far too late:
         // by then the table has been left, the document forgotten and the grid

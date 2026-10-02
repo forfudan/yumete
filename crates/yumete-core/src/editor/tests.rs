@@ -2951,7 +2951,7 @@ fn counting_a_selection_measures_the_scene_not_the_book() {
 fn a_block_of_delimited_text_becomes_a_table_and_goes_back() {
     let mut ed = typed("那年冬天。\n\n字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ\n\n雪下得早。\n");
     ed.execute(":3").unwrap();
-    ed.execute(":table-pipe").unwrap();
+    ed.execute(":convert-table pipe").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "那年冬天。\n\n| 字 | 讀音  |\n| -- | ----- |\n| 永 | ㄩㄥˇ |\n| 和 | ㄏㄜˊ |\n\n雪下得早。\n"
@@ -2964,7 +2964,7 @@ fn a_block_of_delimited_text_becomes_a_table_and_goes_back() {
 
     // Back the other way, from anywhere inside it.
     ed.execute(":5").unwrap();
-    ed.execute(":table-csv").unwrap();
+    ed.execute(":convert-table csv").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "那年冬天。\n\n字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ\n\n雪下得早。\n"
@@ -2982,7 +2982,7 @@ fn a_selection_says_which_lines_the_table_is_made_of() {
     let mut ed = typed("# 人物\n甲,乙\n丙,丁\n那年冬天。\n");
     ed.execute(":2").unwrap();
     press(&mut ed, "xx"); // the two data rows, and only those
-    ed.execute(":table-pipe").unwrap();
+    ed.execute(":convert-table pipe").unwrap();
     let text = ed.current_buffer().text();
     assert!(text.starts_with("# 人物\n| 甲 | 乙 |\n"), "{text:?}");
     assert!(text.ends_with("| 丙 | 丁 |\n那年冬天。\n"), "{text:?}");
@@ -2998,7 +2998,7 @@ fn a_conversion_that_would_lose_a_cell_is_refused() {
     );
     ed.execute(":3").unwrap();
     let before = ed.current_buffer().text();
-    ed.execute(":table-csv").unwrap();
+    ed.execute(":convert-table csv").unwrap();
     // Named, and nothing written: the file is exactly as it was.
     assert_eq!(ed.current_buffer().text(), before);
     // Row 3 counts the header as row 1 and the rule row not at all.
@@ -3010,7 +3010,7 @@ fn a_conversion_that_would_lose_a_cell_is_refused() {
     );
 
     // The writer picks a delimiter the data does not hold, and it goes.
-    ed.execute(":table-csv tab").unwrap();
+    ed.execute(":convert-table tsv").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "字\t註\t部\n永\t水\t丶\n之\t長, 久\t丿\n"
@@ -3021,7 +3021,7 @@ fn a_conversion_that_would_lose_a_cell_is_refused() {
 fn a_paragraph_is_not_quietly_cut_into_columns() {
     let mut ed = typed("那年冬天，雪下得早。\n他站在門口，看了很久，沒有進去。\n");
     let before = ed.current_buffer().text();
-    ed.execute(":table-pipe").unwrap();
+    ed.execute(":convert-table pipe").unwrap();
     // Nothing regular separates these lines, so nothing is guessed at.
     assert_eq!(ed.current_buffer().text(), before);
     assert!(ed.status.contains("tab") || ed.status.contains("分隔"), "{}", ed.status);
@@ -3029,16 +3029,16 @@ fn a_paragraph_is_not_quietly_cut_into_columns() {
     // …but a writer who says what the delimiter is gets what they asked
     // for, even a 、 — they have looked at their data.
     let mut ed = typed("甲、乙\n丙、丁\n");
-    ed.execute(":table-pipe 、").unwrap();
+    ed.execute(":convert-table 、 pipe").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "| 甲 | 乙 |\n| -- | -- |\n| 丙 | 丁 |\n"
     );
 
-    // And `:table-pipe` on a table already made is a no-op, not a table
+    // And `:convert-table pipe` on a table already made is a no-op, not a table
     // twice as wide.
     let before = ed.current_buffer().text();
-    ed.execute(":table-pipe").unwrap();
+    ed.execute(":convert-table pipe").unwrap();
     assert_eq!(ed.current_buffer().text(), before);
 }
 
@@ -3825,7 +3825,7 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     );
 
     // A value that holds the delimiter is refused by row and column, the
-    // way `:table-csv` refuses one — it used to have the commas quietly
+    // way `:convert-table csv` refuses one — it used to have the commas quietly
     // filtered out of it, and 「長, 久」 went in as 「長 久」. Refused
     // before anything is written, so there is nothing to undo.
     let before = ed.current_buffer().text();
@@ -19913,6 +19913,41 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
     assert!(ed.problem_afloat().is_none(), "Warning: 兩個浮窗不許疊");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`空格 w` 的 h/j/k/l 是走，不是開**（2026-10-02 作者報的）。
+///
+/// 原話：「_w + h/j/k/l 不是在可见的窗口里导航，而是会打开新的窗口。这个是不对
+/// 的。」四個方向鍵從前和 `E`／`I`／`s` 共用一支「沒有就開一個」。
+#[test]
+fn the_direction_keys_walk_between_regions_and_never_open_one() {
+    use crate::sidebar::Side;
+    let mut ed = typed("那年冬天。\n");
+    // 一個編輯區、兩欄都沒開——四個方向一個都走不動，而且什麼都不許開。
+    assert!(ed.panel(Side::Left).is_none() && ed.panel(Side::Right).is_none());
+    assert!(ed.other_pane().is_none());
+    for key in [' ', 'w', 'j'] {
+        ed.on_key(Key::Char(key));
+    }
+    assert!(ed.other_pane().is_none(), "j 切出了一個新的編輯區");
+    press(&mut ed, " wh");
+    assert!(ed.panel(Side::Left).is_none(), "h 把左欄開出來了");
+    press(&mut ed, " wl");
+    assert!(ed.panel(Side::Right).is_none(), "l 把右欄開出來了");
+    assert_eq!(ed.status(), "", "走到頭不說話——同 j 走到最後一行");
+
+    // 開出來之後，同樣那幾個鍵就走得動了。四個方向是**絕對的**：`h` 左欄、
+    // `l` 右欄、`k` 正文、`j` 副編輯區——不是「從這裏往左一格」。
+    press(&mut ed, " wE");
+    assert_eq!(ed.panel_focus(), Some(Side::Left));
+    press(&mut ed, " wl");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "右欄沒開，l 不動");
+    press(&mut ed, " wk");
+    assert_eq!(ed.panel_focus(), None, "k 回正文");
+
+    // `s` 和 `E`／`I` 照舊是「沒有就開一個」——那是它們的本分。
+    press(&mut ed, " ws");
+    assert!(ed.other_pane().is_some(), "s 切得出第二個編輯區");
 }
 
 /// **`C-w e`／`C-w i`：開關左右欄，鍵不過去**（2026-09-30 定）。
