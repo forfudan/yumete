@@ -9495,6 +9495,35 @@ fn replacing_them_all_reaches_the_files_past_the_end_of_the_list() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **拼音配上的那一處，換上去的錢號變成兩個**（2026-10-02 一輪審查報來的）。
+///
+/// 非正則那一路 `replacement()` 把 `$` 加倍，指望 `caps.expand` 還原成一個。可拼音
+/// 那一路的命中不是正則配上的，`expand` 走「原樣用」那一支，加倍的錢號就那麼進了
+/// 稿子。同一個詞打「書齋」去查卻是對的——兩條路兩種答案。
+#[test]
+fn a_dollar_sign_survives_the_pinyin_path_exactly_once() {
+    for query in ["shuzhai", "書齋"] {
+        let mut ed = typed("書齋裏");
+        ed.execute(":replace").unwrap();
+        for c in query.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Tab);
+        for c in "US$100".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+        ed.search_for_test().field = crate::search_panel::Field::Results;
+        ed.on_key(Key::Char('R'));
+        ed.on_key(Key::Char('y'));
+        assert_eq!(
+            ed.current_buffer().rope().to_string(),
+            "US$100裏",
+            "查 {query} 的時候錢號多了一個"
+        );
+    }
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那
