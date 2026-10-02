@@ -2298,7 +2298,7 @@ pub struct Editor {
     /// means asking the platform, and the core has no platform. Writing goes
     /// out through the terminal itself (OSC 52), but almost every terminal
     /// refuses to *read* that way, so this one really does need the front end.
-    clipboard_read: Option<bool>,
+    clipboard_read: Option<Pasting>,
     /// How much of the result is shown: the source, the source coloured, or
     /// the page with the markup taken off it.
     render: Render,
@@ -2921,6 +2921,25 @@ pub struct Answer {
     pub key: char,
     /// What it does, as the panel draws it.
     pub label: String,
+}
+
+/// **剪貼板拿回來之後拿它做什麼**（2026-10-02）。
+///
+/// 只有前端讀得了系統剪貼板，所以核心把要求留在這裏等它取。從前這一格是個
+/// `bool`（貼在後面還是前面），而 `:paste-table` 要的是第三件事——帶一個格式
+/// 回來。一格說一件事，別開第二條一樣的路。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Pasting {
+    /// `p`／`P`——原樣貼。`after` 是貼在後面。
+    AsIs { after: bool },
+    /// `:paste-table <格式>`——當成表格數據，轉成那一種再貼。
+    ///
+    /// `from` 是「剪貼板裏那張表是哪一種」，`None` 讓它自己嗅——和
+    /// `:convert-table` 同一條規矩。
+    AsTable {
+        to: crate::table::Shape,
+        from: Option<crate::table::Shape>,
+    },
 }
 
 /// What a [`Query`] is about.

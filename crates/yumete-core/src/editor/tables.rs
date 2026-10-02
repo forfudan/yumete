@@ -1847,25 +1847,15 @@ impl Editor {
             self.status = say!("table.nothing-to-convert");
             return;
         }
-        let mut out = Vec::with_capacity(lines.len());
-        for (row, line) in lines.iter().enumerate() {
-            let mut cells = Vec::new();
-            for span in crate::table::cells(line, from) {
-                let text = crate::table::cell_text(line, span);
-                // 同 `mdtable::to_delimited` 的規矩：裝不下就說哪一格，不悄悄改字。
-                if text.contains(to) {
-                    self.status = say!(
-                        "table.cell-holds-the-delimiter",
-                        row + 1,
-                        cells.len() + 1,
-                        to
-                    );
-                    return;
-                }
-                cells.push(text);
+        use crate::table::Shape;
+        let out = match crate::table::recast(&lines, Shape::Delimited(from), Shape::Delimited(to)) {
+            Ok(out) => out,
+            // 同 `table_to_delimited`：說哪一格，不替人加引號。
+            Err((row, column)) => {
+                self.status = say!("table.cell-holds-the-delimiter", row + 1, column + 1, to);
+                return;
             }
-            out.push(cells.join(&to.to_string()));
-        }
+        };
         let rows = out.len();
         self.snapshot();
         self.leave_table_quietly();

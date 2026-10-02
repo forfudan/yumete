@@ -4523,7 +4523,8 @@ Warning: **本来有颜色的段落一点不碰**——标题的金、连结的�
 | `:table-rules` | 说现在用的是哪一种栏线 |
 | `:table-rules off`／`color`／`line` | 栏线：什么都不画／淡底／竖线 |
 | `:table-rules line dash`／`double` | 虚线 ┆／双线 ║ |
-| `:convert-table` *格式* [*格式*] | 转成 pipe／csv／tsv；两个词时第一个是源 |
+| `:convert-table` *格式* [*格式*] | 转为目标格式(csv,tsv,pipe)；两个参数时第一个为源格式 |
+| `:paste-table` *格式* [*格式*] | 将剪贴板中表格贴作目标格式；两个参数时第一个为源格式 |
 | `:export csv`／`tsv` [*文件名*] | 光标所在的表格另存一份，稿子不动 |
 | `:table-find row`／`column` *模式* | 一行一行找（`/`）／一栏一栏找（表格里的 `空格 t/`） |
 | `:clipboard-yank`／`paste` | 和系统剪贴板交换（`空格 y`／`空格 p`） |

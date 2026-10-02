@@ -907,6 +907,10 @@ impl Editor {
                 );
                 Ok(CommandOutcome::Continue)
             }
+            Command::PasteTable { to, from } => {
+                self.paste_table(to, from);
+                Ok(CommandOutcome::Continue)
+            }
             Command::ConvertTable { to, from } => {
                 self.convert_table(to, from);
                 Ok(CommandOutcome::Continue)

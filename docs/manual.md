@@ -4519,7 +4519,8 @@ Warning: **本來有顏色的段落一點不碰**——標題的金、連結的�
 | `:table-rules` | 説現在用的是哪一種欄線 |
 | `:table-rules off`／`color`／`line` | 欄線：什麽都不畫／淡底／竪線 |
 | `:table-rules line dash`／`double` | 虚線 ┆／雙線 ║ |
-| `:convert-table` *格式* [*格式*] | 轉成 pipe／csv／tsv；兩個詞時第一個是源 |
+| `:convert-table` *格式* [*格式*] | 轉為目標格式(csv,tsv,pipe)；兩個參數時第一個為源格式 |
+| `:paste-table` *格式* [*格式*] | 將剪貼板中表格貼作目標格式；兩個參數時第一個為源格式 |
 | `:export csv`／`tsv` [*文件名*] | 光標所在的表格另存一份，稿子不動 |
 | `:table-find row`／`column` *模式* | 一行一行找（`/`）／一欄一欄找（表格裏的 `空格 t/`） |
 | `:clipboard-yank`／`paste` | 和系統剪貼板交換（`空格 y`／`空格 p`） |

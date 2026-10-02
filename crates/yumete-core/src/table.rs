@@ -811,6 +811,50 @@ pub fn delimiter_named(word: &str) -> Option<char> {
     }
 }
 
+/// **這幾行是哪一種寫法**——`|` 表格，還是哪個分隔符分開的。
+///
+/// `None` 是「看不出來」：一行說明不了什麼規律（見 [`sniff_among`]），而中文散文
+/// 用的 `，、。` 三個猜測一個都不沾。
+pub fn shape_of(lines: &[String]) -> Option<Shape> {
+    let rows: Vec<&String> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
+    if !rows.is_empty() && rows.iter().all(|l| crate::mdtable::is_row(l)) {
+        return Some(Shape::Pipe);
+    }
+    sniff(lines).map(Shape::Delimited)
+}
+
+/// **同一張表，換一種寫法。**
+///
+/// `Err((行, 欄))` 是「那一格裝不下」——目標的分隔符出現在格子裏，而這裏不替人
+/// 加引號（同 [`crate::mdtable::to_delimited`] 的規矩）。
+///
+/// Warning: **轉成 `|` 表格會丟掉格子兩邊的空白**，轉到另一個分隔符不會：`|` 表格
+/// 存不下那幾個空格（讀的時候兩邊一律去掉），分隔文本存得下。2026-10-02 定的，
+/// 理由記在 `mdtable::from_delimited`。
+pub fn recast(lines: &[String], from: Shape, to: Shape) -> Result<Vec<String>, (usize, usize)> {
+    match (from, to) {
+        (Shape::Pipe, Shape::Pipe) => Ok(lines.to_vec()),
+        (Shape::Pipe, Shape::Delimited(c)) => crate::mdtable::to_delimited(lines, c),
+        (Shape::Delimited(c), Shape::Pipe) => Ok(crate::mdtable::from_delimited(lines, c)),
+        (Shape::Delimited(a), Shape::Delimited(b)) if a == b => Ok(lines.to_vec()),
+        (Shape::Delimited(a), Shape::Delimited(b)) => {
+            let mut out = Vec::with_capacity(lines.len());
+            for (row, line) in lines.iter().enumerate() {
+                let mut texts = Vec::new();
+                for span in cells(line, a) {
+                    let text = cell_text(line, span);
+                    if text.contains(b) {
+                        return Err((row, texts.len()));
+                    }
+                    texts.push(text);
+                }
+                out.push(texts.join(&b.to_string()));
+            }
+            Ok(out)
+        }
+    }
+}
+
 /// The text of one cell, given the line and the ranges.
 pub fn cell_text(line: &str, span: (usize, usize)) -> String {
     line.chars().take(span.1).skip(span.0).collect()

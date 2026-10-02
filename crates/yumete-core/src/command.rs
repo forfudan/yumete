@@ -328,6 +328,18 @@ pub enum Command {
     /// vim-table-mode、Obsidian 都只轉得進去），而把兩端都寫出來的那幾個
     /// （Word 的 Convert Text to Table、VS Code 那個擴展的 Convert Markdown
     /// table to CSV）正是因為有反向纔寫的。
+    /// `:paste-table <格式>` — **剪貼板裏那張表，轉成這一種再貼**
+    /// （2026-10-02 作者定）。
+    ///
+    /// 名字和 [`Command::ConvertTable`] 對稱，參數表也是同一張。查過一圈，貼那
+    /// 一族通行的說法就是 `Paste as X`（VS Code 的 `Paste As...`、Google Docs 的
+    /// `Paste from Markdown`），而這裏跟 `convert-table` 對齊更要緊。
+    PasteTable {
+        /// 貼成哪一種。
+        to: crate::table::Shape,
+        /// 剪貼板裏那張表是哪一種——`None` 是「自己嗅」。
+        from: Option<crate::table::Shape>,
+    },
     ConvertTable {
         /// 轉成哪一種。
         to: crate::table::Shape,
@@ -4017,6 +4029,35 @@ pub const COMMANDS: &[Entry] = &[
             match pattern.is_empty() {
                 true => Err(CommandError::MissingArgument("table-find")),
                 false => Ok(Command::Search { pattern, by }),
+            }
+        }),
+    },
+    Entry {
+        name: "paste-table",
+        aliases: &[],
+        help: "cmd.table.paste",
+        needs: &[],
+        // 和 `convert-table` 同一張參數表——一格 `Free`，詞在裏面自己分。
+        params: &[Param::Free("<格式> [<格式>]")],
+        build: Some(|p| {
+            let shape = |word: &str| {
+                crate::table::Shape::named(word).ok_or(CommandError::InvalidArgument {
+                    command: "paste-table",
+                    value: word.to_string(),
+                })
+            };
+            let words: Vec<&str> = p.arg(0).unwrap_or("").split_whitespace().collect();
+            match words.as_slice() {
+                [] => Err(CommandError::MissingArgument("paste-table")),
+                [one] => Ok(Command::PasteTable { to: shape(one)?, from: None }),
+                [from, to] => Ok(Command::PasteTable {
+                    to: shape(to)?,
+                    from: Some(shape(from)?),
+                }),
+                _ => Err(CommandError::InvalidArgument {
+                    command: "paste-table",
+                    value: p.arg(0).unwrap_or("").to_string(),
+                }),
             }
         }),
     },

@@ -18966,6 +18966,58 @@ to enable repeated application"*（`commands.rs:1742`）。yumete 的 `find_char
 而不是 helix 味，沒人會抱怨——只是 §5.58.1 之前它是「整行空白把光標送上換行符」那個
 bug 的入口（已修）。
 
+## 5.64 表格轉換：`:convert-table` 和 `:paste-table`（2026-10-02 作者定）
+
+`:table-pipe` 和 `:table-csv` 改名併成 `:convert-table`，另加 `:paste-table`，鍵位摺在
+`空格 t x` 底下（`p` pipe、`c` csv、`t` tsv）。
+
+### 5.64.1 為什麼改名
+
+原話：「我觉得这个命令不够清晰。」兩個舊名字都是**名詞接名詞，一個字都沒說方向**——
+`table-csv` 讀起來像「從 CSV 做表」，而它做的是反的。
+
+查了一圈別家怎麼叫（名字都是逐字抄的，來源記在這一輪的對話裏）：
+
+| 誰 | 命令 |
+| --- | --- |
+| Word | **Convert Text to Table** ／ **Convert to Text** |
+| VS Code（phoihos 那個擴展） | **Convert CSV to Markdown table** ／ **Convert Markdown table to CSV** ／ **Paste CSV as Markdown table** |
+| Sublime DataConverter | **DataConverter: to CSV** ／ **to TSV** ／ **to Markdown** |
+| Emacs org | `org-table-create-or-convert-from-region`（`C-c |`） |
+| Emacs markdown-mode | **Convert Region to Table** |
+| Vim | `:Tableize` ／ `:Tableize/;` |
+
+兩條有用的結論：
+
+1. **`convert-A-to-B` 是最常見的形狀**，而把兩端都寫出來的那幾個，正是**有反向命令**的
+   那幾個。org、markdown-mode、vim-table-mode、Obsidian 的 Advanced Tables **都只轉得
+   進去，轉不出來**——所以 yumete 的反向是少見的能力，名字要扛的東西比別人多。
+2. **源格式通常是嗅出來的**：org 和 markdown-mode 都看有沒有 TAB、有沒有逗號，要強制
+   纔多給一個參數。yumete 本來就有 `table::sniff`，所以照這個辦：一個詞是目標，兩個詞
+   是「從哪種到哪種」，**最後那個永遠是目標**。
+
+`pipe`／`csv`／`tsv` 三個詞是 **Pandoc 自己的詞彙**（`pipe_tables`、`csv`、`tsv`），不是
+我們造的。
+
+### 5.64.2 順帶長出來的能力：任一到任一
+
+作者定的「任一到任一」。從前轉換一律經過 `|` 表格，`tsv → csv` 要兩條命令，而
+`:table-csv` 站在 TSV 上直接說「光標不在 | 表格裏」。現在 `crate::table::recast` 是**一
+條規矩一處寫**，`:convert-table`、`空格 t x`、`:paste-table` 三個入口都走它。
+
+順帶一個好處：**分隔符換一個不丟格子兩邊的空白**。`  padded  ,1` 轉成 TSV 還是
+`  padded  ⇥1`——`|` 表格存不下那幾個空格（§5.12.39），分隔文本存得下。
+
+### 5.64.3 兩個坑
+
+- **`Param::Free` 吃掉整行剩下的字**（路徑和 `:grep` 的文字裏都可能有空格），所以兩格
+  `Free` 的第二格永遠是空的：`:convert-table csv tsv` 會把 `"csv tsv"` 整個當成一個格式
+  名去認。一格 `Free`，詞在 `build` 裏自己分。
+- **`every_key_the_table_group_lists_does_something` 把 `x` 判成了「按下去什麼都沒發
+  生」**。那條守衛逐個按菜單上每個鍵、斷言狀態欄變了，而 `x` 是**開出一層菜單**，不動狀
+  態欄。教會它「`pending_menu` 有東西也算做了事」。這條守衛很值錢，它是這個倉裏唯一擋得
+  住「菜單上寫着、按下去沒有」的東西。
+
 ## 5.63 一頁不許比畫得下的多（#516，2026-10-02 作者定）
 
 §5.56.3 ④：**數字鍵能選到面板沒畫出來的候選**。實測，四十欄寬、**六行高**的窗口，
