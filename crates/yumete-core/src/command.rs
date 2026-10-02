@@ -183,11 +183,13 @@ pub enum Command {
     Convert(ConvertAsk),
     /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
     GotoLine(usize),
-    /// `:recover` — load the crash-recovery draft into the buffer;
-    /// `:recover!` — throw it away instead (Feature #79).
-    Recover {
-        discard: bool,
-    },
+    /// `:recover` — **問要不要用那一份草稿**（Feature #79）。
+    ///
+    /// Warning: **沒有 `:recover!` 了**（2026-10-02 作者定）。它從前是「不問，直接
+    /// 把草稿刪掉」，而刪草稿這件事面板裏本來就有一格——原話：「recover! 這個命
+    /// 令不需要了，因為如果用戶想做的話，應該是在之前按 d」。留着它就是在「刪掉
+    /// 草稿之前一定看得見那三個選項」這條規矩上開一個後門。
+    Recover,
     /// `:[range]s/pattern/replacement/[flags]` — substitute text.
     ///
     /// The delimiter is whatever character follows the `s`, so a pattern with
@@ -1290,7 +1292,6 @@ const FORCEABLE: &[&str] = &[
     "quit!",
     "export!",
     "replace!",
-    "recover!",
     "shot!",
 ];
 
@@ -2518,7 +2519,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.recover",
         needs: &[],
         params: &[],
-        build: Some(|p| Ok(Command::Recover { discard: p.force })),
+        build: Some(|_| Ok(Command::Recover)),
     },
     Entry {
         name: "reload",
@@ -5181,8 +5182,9 @@ mod tests {
                 );
             }
         }
-        assert_eq!(parse(":rec!"), Ok(Command::Recover { discard: true }));
-        assert_eq!(parse(":recover"), Ok(Command::Recover { discard: false }));
+        assert_eq!(parse(":recover"), Ok(Command::Recover));
+        // `:recover!` 2026-10-02 取消了：刪草稿要走面板那一格。
+        assert!(parse(":recover!").is_err());
 
         // …and the other direction, which is the one that actually failed:
         // `parse` reads `recover!` by its whole name whatever `FORCEABLE`

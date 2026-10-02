@@ -1361,9 +1361,9 @@ find = "只讀 只读 鎖住 锁住 保護 保护 lock"
 [[message]]
 # : 命令選單裏 recover 那一項的說明（commands 組）
 key = "cmd.commands.recover"
-zht = "載入搶救稿；加 ! 是丟掉它"
-zhs = "载入抢救稿；加 ! 是丢掉它"
-en = "load the recovered draft; with ! throw it away"
+zht = "問要不要用搶救稿"
+zhs = "问要不要用抢救稿"
+en = "ask whether to use the draft"
 find = "搶救 抢救 恢復 恢复 崩潰 崩溃 swap crash"
 
 [[message]]
@@ -7285,18 +7285,11 @@ zhs = "抢救稿开好了——:w 留下它，u 回到原来那份"
 en = "the draft is open — :w keeps it, u goes back"
 
 [[message]]
-# 草稿救回面板裏丟掉草稿之後
-key = "recover.drafts-dropped"
-zht = "丟掉了 {0} 份草稿"
-zhs = "丢掉了 {0} 份草稿"
-en = "threw away {0} draft(s)"
-
-[[message]]
-# 啓動時發現搶救稿比檔案新
+# 選了「暫時不管」／「取消」之後，以及開檔時別的檔也有草稿
 key = "recover.drafts-newer-than-file"
-zht = "{0} 有比文件新的搶救稿——:recover 打開，:recover! 丟掉"
-zhs = "{0} 有比文件新的抢救稿——:recover 打开，:recover! 丢掉"
-en = "{0}: draft(s) newer than the file(s) — :recover opens, :recover! throws away"
+zht = "{0} 有比文件新的搶救稿——你可以之後再次使用 :recover 命令來進行文檔恢復"
+zhs = "{0} 有比文件新的抢救稿——你可以之后再次使用 :recover 命令来进行文档恢复"
+en = "{0}: draft(s) newer than the file — :recover asks again whenever you are ready"
 
 [[message]]
 # 啓動時救回沒存的草稿
@@ -7325,13 +7318,6 @@ key = "recover.no-draft-kept"
 zht = "沒有留搶救稿——{0}"
 zhs = "没有留抢救稿——{0}"
 en = "no draft kept — {0}"
-
-[[message]]
-# :recover 但一份草稿都沒有
-key = "recover.no-drafts"
-zht = "沒有草稿"
-zhs = "没有草稿"
-en = "no drafts"
 
 
 # ── register ──────────────────────────────────────────────────────────

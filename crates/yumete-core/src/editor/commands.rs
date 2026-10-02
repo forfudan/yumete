@@ -514,7 +514,7 @@ impl Editor {
                 self.goto_row(&key);
                 Ok(CommandOutcome::Continue)
             }
-            Command::Recover { discard } => self.recover(discard),
+            Command::Recover => self.recover(),
             Command::GotoLine(n) => {
                 self.goto_line(n);
                 Ok(CommandOutcome::Continue)

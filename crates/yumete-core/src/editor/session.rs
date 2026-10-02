@@ -244,7 +244,7 @@ impl Editor {
     ///
     /// The draft is *not* loaded on its own: silently showing text that is not
     /// what is on disk is how a writer ends up unsure which version they are
-    /// reading. `:recover` loads it; `:recover!` throws it away.
+    /// reading. `:recover` 把那一問擺出來，收下還是丟掉在那三格裏。
     /// Where buffers with no file keep their recovery copies.
     ///
     /// Set by the front end, which is the only part that knows where the data
@@ -561,33 +561,21 @@ impl Editor {
         }
     }
 
-    /// Load this buffer's recovery draft, or throw it away (`:recover[!]`).
-    pub(super) fn recover(&mut self, discard: bool) -> Result<CommandOutcome, EditorError> {
+    /// `:recover` — **把開檔時那一問再擺一次**。
+    ///
+    /// Warning: **沒有 `:recover!` 了**（2026-10-02 作者定）。刪草稿在面板裏是
+    /// 「丟棄恢復文件」那一格，而一個不問就刪的拼法等於在那條規矩上開後門。
+    pub(super) fn recover(&mut self) -> Result<CommandOutcome, EditorError> {
         if self.current_buffer().recovered_draft().is_none() {
             // No draft for *this file* — but a session that crashed with an
             // unnamed buffer left its work somewhere with no file to open it
             // by, and this is the only command that would ever go looking.
-            if discard {
-                let orphans = self.orphan_drafts();
-                for path in &orphans {
-                    let _ = std::fs::remove_file(path);
-                }
-                self.status = match orphans.len() {
-                    0 => say!("recover.no-drafts"),
-                    n => say!("recover.drafts-dropped", n),
-                };
-                return Ok(CommandOutcome::Continue);
-            }
+            // 開出來就看得見，看得見纔決定得了——這和那一問是同一條規矩。
             let taken = self.take_orphan_drafts();
             self.status = match taken {
                 0 => say!("recover.no-draft-for-this-file"),
                 n => say!("recover.drafts-opened", n),
             };
-            return Ok(CommandOutcome::Continue);
-        }
-        if discard {
-            self.current_buffer_mut().discard_swap();
-            self.status = say!("recover.draft-dropped");
             return Ok(CommandOutcome::Continue);
         }
         // Warning: **`:recover` 自己不換，它把那一問再擺一次**（2026-10-02 作者
