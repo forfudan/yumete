@@ -2001,6 +2001,19 @@ impl Editor {
     }
 
     /// Write the parts back and put the cursor on one cell of them.
+    /// Warning: **先問那兩道閘**（2026-10-02 一輪掃查報來的，會改壞表）。
+    ///
+    /// [`crate::mdtable::format`] 攔着兩種表不許重排：**撕開的**（某一行的格數和
+    /// 標題不一樣，#328）和**跑飛的**（某一欄寬得沒有窗口放得下，#292）。那邊的
+    /// 註釋寫着「Every door into this module passes here … so the guard cannot be
+    /// walked around by an edit」——而這一支直接叫 `compose`，於是**十個鍵從旁邊
+    /// 繞過去了**：排序、加行、加列、刪列、挪列，連三個對齊鍵都算。
+    ///
+    /// 代價是真的改壞表。一格裏打了一個裸的 `|`（`torn` 的註釋說的正是這一種），
+    /// 按一下 `t1s` 排序：**每一行都多出一格空的，標題多出一個沒名字的欄**——而
+    /// 排序一行字都不該動。跑飛那一種是 543 字節變 1736。
+    ///
+    /// `␣tF` 一直是對的（它走 `format`），所以兩個鍵對同一張表給出兩種答案。
     pub(super) fn md_write(
         &mut self,
         region: &crate::mdtable::Region,
@@ -2008,6 +2021,18 @@ impl Editor {
         row: usize,
         cell: usize,
     ) {
+        // Warning: **問的是盤上那張表，不是手裏這份改好的。** 排序、加行、加列那幾
+        // 支在交過來之前已經 `Parts::square()` 過了——撕開的那一行補齊了，問它
+        // 只會說「沒事」。要問的是「這張表本來准不准動」。
+        let before = crate::mdtable::parse(&self.md_lines(region));
+        if let Some((column, width)) = crate::mdtable::runaway(&before) {
+            self.status = say!("table.column-too-wide", column + 1, width);
+            return;
+        }
+        if let Some((bad, has, heading)) = crate::mdtable::torn(&before) {
+            self.status = say!("table.row-torn", bad + 1, has, heading);
+            return;
+        }
         self.snapshot();
         let lines = crate::mdtable::compose(parts);
         self.replace_md_region(region, &lines);
