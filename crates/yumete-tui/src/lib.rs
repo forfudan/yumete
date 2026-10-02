@@ -7888,8 +7888,14 @@ fn draw_search(
         // **方框在名字後面**（2026-10-01 定，作者原話：「把 [] 全部放到文字後面」）。
         // 從前方框自成一欄、寬度按最長的那個狀態名量出來，於是一個「智能大小寫」
         // 把每一行的名字都往右推六格，面板當場出界。
+        // Warning: **放不下就加省略號，別直接切掉**（2026-10-03；候選面板 2026-10-02
+        // 補過同一條，`draw_panel_rows`）。`put_text` 到了邊上一聲不吭地剪斷：
+        // 80 欄的英文面板上「Chinese [glyphs+pinyin]」畫成「Chinese [glyphs+piny」
+        // ——讀着像拼錯了字，不像被截斷。而 2026-10-02 那一輪量到過更糟的：
+        // 「whole word (Latin)」把**方框整個**切掉，按 `4` 屏幕上什麼都不變。
         let line = format!("{label} {box_text}");
-        put_text(buf, left + 2, y, to, &line, style);
+        let room = to.saturating_sub(left + 2) as usize;
+        put_text(buf, left + 2, y, to, &crate::panel::clip(&line, room), style);
     };
     let y = y + 1;
     switch(buf, y, &format!("[{which}]"), &say!("search.case"), 1, text);
