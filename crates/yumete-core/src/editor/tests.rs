@@ -2340,6 +2340,42 @@ fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **撕開的表，十個結構鍵一個都不許重排它**（2026-10-02 一輪掃查報來的，會改壞表）。
+///
+/// `mdtable::format` 攔着兩種表（撕開的 #328、跑飛的 #292），註釋寫着「Every door
+/// into this module passes here … so the guard cannot be walked around by an
+/// edit」。可 `md_write` 直接叫 `compose`，於是排序、加行、加列、刪列、挪列和三個
+/// 對齊鍵全從旁邊繞過去了：一格裏打了個裸的 `|`，按一下排序，**每一行都多出一格空
+/// 的、標題多出一個沒名字的欄**——而排序一行字都不該動。
+#[test]
+fn a_torn_table_is_left_alone_by_every_key_that_rewrites_it() {
+    // 第 3 行有 3 格，標題只有 2 格——`y|z` 裏那個裸的 `|`。
+    let torn = "| a | b |\n| --- | --- |\n| 3 | x |\n| 1 | y|z |\n| 2 | w |\n";
+    for keys in [" t1s", " tr", " tR", " tc", " tC", " tD", " tl", " t<", " t=", " t>", " tF"] {
+        let mut ed = typed(torn);
+        press(&mut ed, keys);
+        assert_eq!(
+            ed.current_buffer().rope().to_string(),
+            torn,
+            "{keys} 動了一張撕開的表"
+        );
+    }
+
+    // 跑飛的那一種同理：一欄五百格寬，排序不許把整張表撐開。
+    let wide = format!("| a | b |\n| --- | --- |\n| 3 | {} |\n| 1 | y |\n", "X".repeat(500));
+    let mut ed = typed(&wide);
+    press(&mut ed, " t1s");
+    assert_eq!(ed.current_buffer().rope().to_string(), wide, "跑飛的表也不許動");
+
+    // 而一張好表照樣排得了序。
+    let mut ed = typed("| a | b |\n| --- | --- |\n| 3 | x |\n| 1 | y |\n");
+    press(&mut ed, " t1s");
+    assert_eq!(
+        ed.current_buffer().rope().to_string(),
+        "| a | b |\n| - | - |\n| 1 | y |\n| 3 | x |\n"
+    );
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
