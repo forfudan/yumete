@@ -10104,14 +10104,15 @@ fn draw_status(
     //
     // Warning: **只要一格，不要兩格。** 要兩格的話，本來擠得下「`字 5 a U+0061`」
     // 的那幾個寬度會把那個 `a` 整個讓掉——而 `a` 正是這一段要說明的東西，為了
-    // 多一格空白把它扔掉是賠本的（兩張金樣當場攔下來了）。
+    // 多一格空白把它扔掉是賠本的（兩張金樣當場攔下來了）。寫成 `+ 2 < room`
+    // 而不是 `+ 2 + 1 <= room`，是同一句話（clippy 提的）。
     let fits = |status: &str| -> &str {
         let room = (status_area.width as usize)
             .saturating_sub(yumete_cjk::str_width(status));
         right
             .iter()
             .map(String::as_str)
-            .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 + 1 <= room)
+            .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 < room)
             .unwrap_or("")
     };
     // Three stages of giving way — block name, then the 字, then the readout
