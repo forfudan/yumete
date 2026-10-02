@@ -7624,6 +7624,52 @@ fn recovering_with_autosave_on_leaves_a_copy_too() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`!` 在只讀下不許把命令跑完**（2026-10-02 查出來的）。
+///
+/// `!` 是把選區過一遍外面的程序再換回來。換回來那一下繩子會拒絕，可命令那時已經
+/// 跑完了——`!sed -i`、`!git checkout` 這一類有副作用的，鎖着也照樣生效。
+#[test]
+fn a_locked_buffer_does_not_even_run_the_filter() {
+    let mut ed = typed("那年冬天");
+    ed.current_buffer_mut().set_readonly(true);
+    press(&mut ed, "%");
+    ed.execute("pipe tr a-z A-Z").unwrap();
+    assert_eq!(ed.status(), say!("readonly.refused"));
+    assert!(ed.take_shell_request().is_none(), "命令一次都不許排出去");
+
+    // 解了鎖就照跑——排得出去纔算真的解開了。
+    ed.current_buffer_mut().set_readonly(false);
+    ed.execute("pipe tr a-z A-Z").unwrap();
+    assert!(ed.take_shell_request().is_some());
+}
+
+/// **多光標下，一句話上屏八次只算一下 `u`**（2026-10-02 查出來的）。
+///
+/// 插入模式下上屏本來就不記撤回點（進插入那一下記過了），而 `edit_each` 在選區是
+/// 複數的時候自己又記一個——於是同一句話在一個光標下是一下 `u`，在四個光標下是
+/// 八下。敲鍵那一路早就不記了。
+#[test]
+fn an_ime_commit_under_many_cursors_is_still_one_undo() {
+    let mut ed = typed("甲\n乙\n");
+    // 兩段選區：第一行、第二行。
+    press(&mut ed, "ggC");
+    assert!(!ed.secondary_selections().is_empty(), "兩個光標");
+    press(&mut ed, "i");
+    assert_eq!(ed.mode(), Mode::Insert);
+    let before = ed.current_buffer().rope().to_string();
+    ed.insert_committed("那");
+    ed.insert_committed("年");
+    ed.insert_committed("冬天");
+    assert_ne!(ed.current_buffer().rope().to_string(), before);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('u'));
+    assert_eq!(
+        ed.current_buffer().rope().to_string(),
+        before,
+        "一次插入是一次撤銷，上屏幾次都一樣"
+    );
+}
+
 #[test]
 fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
     // An undo point used to be pushed when a command *announced* an edit,
