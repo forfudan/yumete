@@ -1618,8 +1618,12 @@ fn deep_from_root(typed: &str) -> Vec<Choice> {
     for e in COMMANDS {
         // **Every parameter, not only the first.** `:vert` reaches
         // `:layout vertical` because `vertical` is what `:layout`'s one
-        // parameter may be; a mood is what `:theme`'s *second* may be, and a
+        // parameter may be; a mood is what `:theme-mode`'s may be, and a
         // reader typing `dark` means that just as plainly.
+        //
+        // Warning: **從前這句寫的是「`:theme` 的*第二個*參數」**（2026-10-02 更正）。
+        // `:theme` 只有一個參數，`:theme ink dark` 是被拒的——明暗早就搬去
+        // `:theme-mode` 了。
         let before = out.len();
         for param in e.params {
             deep(param, &[e.name], typed, ":", &mut out);
