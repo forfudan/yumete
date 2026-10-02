@@ -9445,6 +9445,56 @@ fn replacing_them_all_asks_the_question_the_list_answered() {
     assert_eq!(ed.current_buffer().rope().to_string(), "X\n甲\n乙\n末\n");
 }
 
+/// **`R` 在第 500 處之後的那幾個檔一個都沒動**（2026-10-02 一輪審查報來的）。
+///
+/// 名單封頂 [`crate::search_panel::MOST`] 條而 `total` 不封頂，`R` 從前拿名單推出
+/// 要動哪幾個檔。於是一本大書裏排在後面的檔整個漏掉，而問句照着 `total` 問「把這
+/// 602 處全部換掉？」、換完說「共替換 600 處」——一聲不吭地換了一半。
+#[test]
+fn replacing_them_all_reaches_the_files_past_the_end_of_the_list() {
+    use crate::search_panel::MOST;
+    let dir = std::env::temp_dir().join(format!("yumete-capreplace-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(".yumete.toml"), "").unwrap();
+    let many: String = (0..MOST + 100).map(|i| format!("甲{i}\n")).collect();
+    std::fs::write(dir.join("甲.md"), &many).unwrap();
+    std::fs::write(dir.join("乙.md"), "甲尾\n甲尾\n").unwrap();
+    std::fs::write(dir.join("丙.md"), "沒有\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("丙.md")).unwrap();
+    ed.execute(":replace-working").unwrap();
+    ed.on_key(Key::Char('甲'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('X'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+
+    assert_eq!(ed.search().total, MOST + 102, "{:?}", ed.search().total);
+    assert_eq!(ed.search().hits.len(), MOST, "名單封頂");
+    assert_eq!(ed.search().files.len(), 2, "有命中的是兩個檔：{:?}", ed.search().files);
+
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+    ed.on_key(Key::Char('R'));
+    assert_eq!(
+        ed.status(),
+        say!("search.replace-all-sure-files", MOST + 102, 2),
+        "問句說的檔數要是真會動的那幾個"
+    );
+    ed.on_key(Key::Char('y'));
+
+    // 兩個檔都要換乾淨——第二個檔的那兩處排在第 500 處之後。
+    for name in ["甲.md", "乙.md"] {
+        ed.open_file(dir.join(name)).unwrap();
+        let text = ed.current_buffer().rope().to_string();
+        assert!(!text.contains('甲'), "{name} 還剩「甲」");
+        assert!(text.contains('X'), "{name} 一處都沒換");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那

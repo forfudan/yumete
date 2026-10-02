@@ -441,6 +441,7 @@ impl Editor {
                 None => std::path::PathBuf::from(self.buffers[i].display_name()),
             };
             let rope = self.buffers[i].rope();
+            let was = total;
             let mut at = 0usize;
             for line in 0..rope.len_lines() {
                 let text: String = rope.line(line).chars().collect();
@@ -454,6 +455,9 @@ impl Editor {
                     }
                 }
                 at += text.chars().count();
+            }
+            if total > was {
+                self.search.files.push((Some(label), Some(id)));
             }
             if i == self.current {
                 mine = hits.len();
@@ -487,6 +491,7 @@ impl Editor {
         self.search.broken = false;
         if !self.search.asked() {
             self.search.hits.clear();
+            self.search.files.clear();
             self.search.total = 0;
             self.search.selected = 0;
             self.search.looked_at = None;
@@ -508,6 +513,7 @@ impl Editor {
             return;
         };
         self.search.hits.clear();
+        self.search.files.clear();
         self.search.total = 0;
         self.search.selected = 0;
         self.search.folded.clear();
@@ -576,10 +582,14 @@ impl Editor {
         };
         self.search.mine = hits.len();
         self.search.mine_total = total;
+        if total > 0 {
+            self.search.files.push((mine.clone(), None));
+        }
         if let Some(root) = root {
             let sieve = self.sieve();
             if sieve.is_none() {
                 self.search.hits.clear();
+                self.search.files.clear();
                 self.search.total = 0;
                 // Warning: **同上，那兩個數要跟着歸零**（2026-10-02 審出來的）。這一支
                 // 在 `mine`／`mine_total` 已經填好之後纔走到，漏了它們就是一次
@@ -626,6 +636,7 @@ impl Editor {
                 };
                 let shown = path.strip_prefix(&root).unwrap_or(&path).to_path_buf();
                 let mut at = 0usize;
+                let was = total;
                 for (line, text) in text.split_inclusive('\n').enumerate() {
                     for (nth, (start, stop)) in look.spans(text).into_iter().enumerate() {
                         total += 1;
@@ -642,6 +653,10 @@ impl Editor {
                         }
                     }
                     at += text.chars().count();
+                }
+                // **有命中就記一筆，不管名單還放不放得下**（見 `Search::files`）。
+                if total > was {
+                    self.search.files.push((Some(shown), None));
                 }
             }
             self.search.root = Some(root);
@@ -993,14 +1008,11 @@ impl Editor {
             {
                 // **問句要說清楚動的是幾個檔**（2026-09-27 報的）：工作區範圍下
                 // 那 8 處散在 4 個檔裏，而從前這句話和只改一個檔的時候一字不差。
-                let mut files: Vec<&Option<PathBuf>> = Vec::new();
-                for hit in &self.search.hits {
-                    if !files.contains(&&hit.file) {
-                        files.push(&hit.file);
-                    }
-                }
+                // Warning: **數的是 `files`，不是名單**（2026-10-02 修）。名單封頂
+                // 500 條，而 `R` 動的是每一個有命中的檔；兩個數一分家，問句就在
+                // 替一件和它說的不一樣的事徵求同意。
                 self.replace_this_file = None;
-                self.status = match files.len() {
+                self.status = match self.search.files.len() {
                     0 | 1 => say!("search.replace-all-sure", self.search.total),
                     n => say!("search.replace-all-sure-files", self.search.total, n),
                 };
@@ -1553,15 +1565,8 @@ impl Editor {
         // Warning: **按（名字, 號）一對去重，不是只按名字**（2026-10-02 審出來的）。
         // 緩衝區那一檔裏兩份沒有名字的草稿標籤都是 `[scratch]`，只按名字去重會
         // 把第二份整個漏掉。
-        let mut files: Vec<(Option<PathBuf>, Option<u64>)> = Vec::new();
-        for hit in &self.search.hits {
-            let one = (hit.file.clone(), hit.buffer);
-            if !files.contains(&one) {
-                files.push(one);
-            }
-        }
         let mut done = 0usize;
-        for (file, id) in files {
+        for (file, id) in self.search.files.clone() {
             done += self.replace_file(file.as_deref(), id);
         }
         self.after_replacing(done);
