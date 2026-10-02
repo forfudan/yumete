@@ -479,6 +479,19 @@ fn main() -> ExitCode {
         }
         editor.set_status(config_problems.join(&yumete_core::say!("label.comma")));
     }
+    // **恢復那一問要在按鍵之前擺出來**，因為它就是開檔那一刻的事（2026-10-02
+    // 作者定）。
+    //
+    // Warning: **而且要在 `--shot` 那一支之前**。從前這一句在下面第 680 行附近，
+    // 而 `--shot` 在第 520 行就把圖印出來走人了——於是離屏**永遠拍不到**開檔時
+    // 的任何通知，救命稿那一問、「接着上次」那一句都在圖外。§5.55 記過同一個形
+    // 狀：拍照的工具看不見人看得見的東西，比 bug 還糟。
+    if restored > 0 {
+        editor.set_status(yumete_core::say!("cli.picked-up-where-you-left-off", restored));
+    }
+    // Recovered work outranks a config typo for the one status line there is.
+    // Only the editor has one; the preview prints its own notice instead.
+    editor.announce_recovery();
     // Every picture from here on — `--shot`, `--html`, and `:shot` inside the
     // editor — carries the build under it, so a shot in a bug report says what
     // it is a picture of.
@@ -671,15 +684,6 @@ fn main() -> ExitCode {
         preview(&editor, &config);
         return ExitCode::SUCCESS;
     }
-
-    // Restoring five chapters without saying so leaves a person wondering
-    // what they are looking at.
-    if restored > 0 {
-        editor.set_status(yumete_core::say!("cli.picked-up-where-you-left-off", restored));
-    }
-    // Recovered work outranks a config typo for the one status line there is.
-    // Only the editor has one; the preview prints its own notice instead.
-    editor.announce_recovery();
 
     // **Somewhere to say what went wrong** (#300). The log lives beside the
     // drafts and the sessions in the data directory, not in `~/.config`: that

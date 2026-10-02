@@ -1238,6 +1238,25 @@ impl Editor {
                 'd' => self.diff_against(None),
                 _ => self.status = say!("write.oversize-stopped"),
             },
+            // **恢復分兩問**（2026-10-02 作者定）。第一問在開檔那一刻擺出來，
+            // 「暫時不管」之後 `:recover` 再擺一次同樣三個；選了「恢復」就接第
+            // 二問——`answer_query` 已經 `take()` 走了第一問，所以這裏直接把第
+            // 二問放上去就接得上，不必另加機關。
+            Asking::RecoverDraft => match answer {
+                'y' => self.query = self.recover_confirm_query(),
+                'd' => {
+                    self.current_buffer_mut().discard_swap();
+                    self.status = say!("recover.draft-dropped");
+                }
+                // 暫時不管：草稿原封不動，狀態欄照舊說它在那裏。
+                _ => self.status = say!("recover.drafts-newer-than-file", self.current_buffer().display_name()),
+            },
+            Asking::RecoverConfirm => match answer {
+                'y' => self.take_the_draft(),
+                // 看完再決定——對比開在另一個緩衝裏，稿子一個字沒動。
+                'd' => self.diff_against_draft(),
+                _ => self.status = say!("recover.drafts-newer-than-file", self.current_buffer().display_name()),
+            },
         }
     }
 

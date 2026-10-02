@@ -453,6 +453,85 @@ impl Editor {
         taken
     }
 
+    /// **開檔時那一問**：恢復／丟棄恢復文件／暫時不管（2026-10-02 作者定）。
+    ///
+    /// 原話：「recover 必須在用戶重新打開這個文件的時候立刻決定。用戶打了 800
+    /// 個字之後再按 recover 這是不對的。」
+    ///
+    /// Warning: **只問眼前這一個。** 面板一次只站一個問題（[`Query`] 的文檔寫着
+    /// 沒有隊列），而恢復上一次的會話可能一口氣開十章。所以問的是正在看的那一
+    /// 章，其餘的照舊在狀態欄上排隊，翻過去的時候再問。
+    pub(super) fn recover_query(&self) -> Option<Query> {
+        self.current_buffer().recovered_draft()?;
+        Some(Query {
+            title: say!("recover.ask-title"),
+            body: say!("recover.ask-what", self.current_buffer().display_name()),
+            choices: vec![
+                Answer { key: 'y', label: say!("recover.ask-take") },
+                Answer { key: 'd', label: say!("recover.ask-drop") },
+                Answer { key: 'n', label: say!("recover.ask-later") },
+            ],
+            what: Asking::RecoverDraft,
+        })
+    }
+
+    /// **選了「恢復」之後再問一次**：直接恢復／打開對比／取消。
+    pub(super) fn recover_confirm_query(&self) -> Option<Query> {
+        self.current_buffer().recovered_draft()?;
+        Some(Query {
+            title: say!("recover.confirm-title"),
+            body: say!("recover.confirm-what", self.current_buffer().display_name()),
+            choices: vec![
+                Answer { key: 'y', label: say!("recover.confirm-go") },
+                Answer { key: 'd', label: say!("recover.confirm-look") },
+                Answer { key: 'n', label: say!("recover.confirm-no") },
+            ],
+            what: Asking::RecoverConfirm,
+        })
+    }
+
+    /// **把草稿和眼前這一份逐詞比出來** — 第二問的「打開對比」。
+    ///
+    /// 基準是草稿，比出來的是「我現在這一份跟它差在哪」，和 `:diff`、`:git-diff`
+    /// 同一個讀法。走 [`Self::show_word_diff`] 而不是 [`Self::diff_against`]：草
+    /// 稿的**文字**在手上，而那個路徑 `write_swap` 隨時會覆蓋（`:diff` 因此從來
+    /// 不收它當基準）。
+    pub(super) fn diff_against_draft(&mut self) {
+        let Some(draft) = self.current_buffer().recovered_draft().map(str::to_string) else {
+            self.status = say!("recover.no-draft-for-this-file");
+            return;
+        };
+        let name = say!("recover.draft-name", self.current_buffer().display_name());
+        self.show_word_diff(&draft, &name);
+    }
+
+    /// 真的換上去——第一問「恢復」＋第二問「直接恢復」走到的那一步。
+    pub(super) fn take_the_draft(&mut self) {
+        let Some(draft) = self.current_buffer().recovered_draft().map(str::to_string) else {
+            self.status = say!("recover.no-draft-for-this-file");
+            return;
+        };
+        // An ordinary, undoable edit: `u` puts the file on disk back, so
+        // recovering is a decision the writer can take back.
+        //
+        // **Which a locked buffer cannot do at all**, and must not pretend to:
+        // `adopt_draft` below takes the swap file over, and on quit it is
+        // deleted — so a `:recover` that quietly changed nothing would throw
+        // away the crashed session's work while saying it had opened it.
+        if self.refuse_readonly() {
+            return;
+        }
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        let done = self.current_buffer_mut().replace(0..len, &draft);
+        if !self.applied(done) {
+            return;
+        }
+        self.current_buffer_mut().adopt_draft();
+        self.clamp_cursor();
+        self.status = say!("recover.draft-opened");
+    }
+
     pub fn announce_recovery(&mut self) {
         // A session that crashed with an unnamed buffer left its work under a
         // name nobody would think to open. Nothing else will ever mention it,
@@ -474,11 +553,17 @@ impl Editor {
         // wears a `[draft]` tag until the draft is taken or thrown away — the
         // notice has to still be there when the writer looks up.
         self.status = say!("recover.drafts-newer-than-file", listed(&waiting));
+        // …and the one on screen is asked about **now**, not left for a
+        // `:recover` the writer may reach for after a morning's typing
+        // （2026-10-02 作者定，見 [`Self::recover_query`]）。
+        if self.query.is_none() {
+            self.query = self.recover_query();
+        }
     }
 
     /// Load this buffer's recovery draft, or throw it away (`:recover[!]`).
     pub(super) fn recover(&mut self, discard: bool) -> Result<CommandOutcome, EditorError> {
-        let Some(draft) = self.current_buffer().recovered_draft().map(str::to_string) else {
+        if self.current_buffer().recovered_draft().is_none() {
             // No draft for *this file* — but a session that crashed with an
             // unnamed buffer left its work somewhere with no file to open it
             // by, and this is the only command that would ever go looking.
@@ -499,31 +584,17 @@ impl Editor {
                 n => say!("recover.drafts-opened", n),
             };
             return Ok(CommandOutcome::Continue);
-        };
+        }
         if discard {
             self.current_buffer_mut().discard_swap();
             self.status = say!("recover.draft-dropped");
             return Ok(CommandOutcome::Continue);
         }
-        // An ordinary, undoable edit: `u` puts the file on disk back, so
-        // recovering is a decision the writer can take back.
-        //
-        // **Which a locked buffer cannot do at all**, and must not pretend to:
-        // `adopt_draft` below takes the swap file over, and on quit it is
-        // deleted — so a `:recover` that quietly changed nothing would throw
-        // away the crashed session's work while saying it had opened it.
-        if self.refuse_readonly() {
-            return Ok(CommandOutcome::Continue);
-        }
-        self.snapshot();
-        let len = self.current_buffer().char_count();
-        let done = self.current_buffer_mut().replace(0..len, &draft);
-        if !self.applied(done) {
-            return Ok(CommandOutcome::Continue);
-        }
-        self.current_buffer_mut().adopt_draft();
-        self.clamp_cursor();
-        self.status = say!("recover.draft-opened");
+        // Warning: **`:recover` 自己不換，它把那一問再擺一次**（2026-10-02 作者
+        // 定）。「暫時不管」之後還回得來，而回來看見的是同樣三個選項——決定沒有
+        // 因為拖了一會兒就變成一個無聲的鍵。真正換上去的那一步在
+        // [`Self::take_the_draft`]，而它要走完兩問纔到得了。
+        self.query = self.recover_query();
         Ok(CommandOutcome::Continue)
     }
 

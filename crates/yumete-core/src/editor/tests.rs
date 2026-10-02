@@ -5807,6 +5807,8 @@ fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
     ed.execute(&format!(":open {}", path.display())).unwrap();
     ed.current_buffer_mut().set_readonly(true);
     ed.execute(":recover").unwrap();
+    ed.on_key(Key::Char('y'));
+    ed.on_key(Key::Char('y'));
     assert!(ed.status().contains("只讀"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), "第一稿\n", "nothing was loaded");
     assert!(swap.exists(), "and the draft is still there to be recovered");
@@ -5814,6 +5816,8 @@ fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
     // Unlock, and it is all still waiting.
     assert!(ed.execute("readonly off").is_ok());
     ed.execute(":recover").unwrap();
+    ed.on_key(Key::Char('y'));
+    ed.on_key(Key::Char('y'));
     assert!(ed.current_buffer().text().contains("三千字"));
 
     std::fs::remove_dir_all(&dir).ok();
@@ -13353,7 +13357,15 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
     ed.announce_recovery();
     assert!(ed.status().contains(":recover"), "{}", ed.status());
 
+    // **兩問纔換得了**（2026-10-02 作者定）：恢復 → 直接恢復。
     ed.execute(":recover").unwrap();
+    assert!(ed.query().is_some(), ":recover 擺出那一問");
+    assert_eq!(ed.current_buffer().text(), "第一稿\n", "問的時候一個字都還沒動");
+    ed.on_key(Key::Char('y'));
+    assert!(ed.query().is_some(), "選了恢復，再問一次");
+    assert_eq!(ed.current_buffer().text(), "第一稿\n");
+    ed.on_key(Key::Char('y'));
+    assert!(ed.query().is_none());
     assert_eq!(ed.current_buffer().text(), "第一稿，寫了更多\n");
     // Recovering is an ordinary edit, so it can be taken back.
     ed.on_key(Key::Char('u'));
@@ -13363,6 +13375,7 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
     // no drafts from a crashed session either, it says so about this file.
     ed.execute(":recover").unwrap();
     assert!(ed.status().contains("沒有搶救稿"), "{}", ed.status());
+    assert!(ed.query().is_none(), "沒有草稿就沒有那一問");
 
     // In a fresh session, `:recover!` throws the copy away instead.
     let mut ed = Editor::new();
@@ -13406,6 +13419,65 @@ fn an_untaken_draft_survives_quitting_and_typing() {
     ed.execute(&format!(":open {}", path.display())).unwrap();
     ed.execute(":recover!").unwrap();
     assert!(!swap.exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **恢復要在開檔那一刻決定，而且要答兩次**（2026-10-02 作者定）。
+///
+/// 原話：「recover 必須在用戶重新打開這個文件的時候立刻決定。用戶打了 800 個字
+/// 之後再按 recover 這是不對的。」從前開檔只在狀態欄寫一句，`:recover` 永遠按得
+/// 下去，而它一按就把屏幕上的正文整個換掉。
+#[test]
+fn a_draft_is_decided_when_the_file_is_opened_and_takes_two_answers() {
+    let dir = std::env::temp_dir().join(format!("yumete-ask-rec-{}", std::process::id()));
+    let fresh = |dir: &std::path::Path| {
+        let _ = std::fs::remove_dir_all(dir);
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join("chapter.md");
+        std::fs::write(&path, "第一稿\n").unwrap();
+        std::fs::write(dir.join(".chapter.md.yumete"), "第一稿，還有三千字\n").unwrap();
+        path
+    };
+
+    // 開檔就問，而問的時候一個字都還沒動。
+    let path = fresh(&dir);
+    let mut ed = Editor::new();
+    ed.execute(&format!(":open {}", path.display())).unwrap();
+    ed.announce_recovery();
+    let asked = ed.query().expect("開檔就把那一問擺出來");
+    assert_eq!(asked.title, say!("recover.ask-title"));
+    assert_eq!(asked.choices.len(), 3);
+    assert_eq!(ed.current_buffer().text(), "第一稿\n");
+
+    // 暫時不管：草稿留着，:recover 回來問同樣三個。
+    ed.on_key(Key::Esc);
+    assert!(ed.query().is_none());
+    assert!(dir.join(".chapter.md.yumete").exists());
+    ed.execute(":recover").unwrap();
+    assert_eq!(ed.query().expect("再問一次").title, say!("recover.ask-title"));
+
+    // 丟棄恢復文件。
+    ed.on_key(Key::Char('d'));
+    assert!(ed.query().is_none());
+    assert!(!dir.join(".chapter.md.yumete").exists(), "草稿丟掉了");
+    assert_eq!(ed.current_buffer().text(), "第一稿\n", "正文一個字沒動");
+
+    // 恢復 → 打開對比：看得見差別，而稿子和草稿都原封不動。
+    let path = fresh(&dir);
+    let mut ed = Editor::new();
+    ed.execute(&format!(":open {}", path.display())).unwrap();
+    ed.execute(":recover").unwrap();
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.query().expect("第二問").title, say!("recover.confirm-title"));
+    ed.on_key(Key::Char('d'));
+    assert!(ed.query().is_none());
+    assert!(dir.join(".chapter.md.yumete").exists(), "對比不動草稿");
+    assert!(
+        ed.current_buffer().text().contains("三千字"),
+        "對比開在自己那一個緩衝裏：{}",
+        ed.current_buffer().text()
+    );
 
     std::fs::remove_dir_all(&dir).ok();
 }
