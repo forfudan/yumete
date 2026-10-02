@@ -1929,11 +1929,13 @@ impl Config {
         let mut problems = Vec::new();
 
         let global = config_dir().join("config.toml");
-        if let Ok(text) = fs::read_to_string(&global) {
-            match toml::from_str::<RawConfig>(&text) {
+        match Self::read_config(&global) {
+            Ok(Some(text)) => match toml::from_str::<RawConfig>(&text) {
                 Ok(parsed) => raw.merge(parsed),
                 Err(err) => problems.push(Self::describe(&global, &err)),
-            }
+            },
+            Ok(None) => {}
+            Err(why) => problems.push(why),
         }
 
         let here = match from {
@@ -1942,7 +1944,11 @@ impl Config {
         };
         if let Some(cwd) = here {
             if let Some(local) = local_config_path(&cwd) {
-                if let Ok(text) = fs::read_to_string(&local) {
+                let read = Self::read_config(&local);
+                if let Err(why) = &read {
+                    problems.push(why.clone());
+                }
+                if let Ok(Some(text)) = read {
                     match toml::from_str::<RawConfig>(&text) {
                         Ok(mut parsed) => {
                             // **`screenshot` runs through a shell**, and a
@@ -2093,6 +2099,28 @@ impl Config {
     }
 
     /// One line naming a config file and what is wrong with it.
+    /// Read a config file: its text, `None` when there is no such file, and a
+    /// sentence when there is one that cannot be read.
+    ///
+    /// Warning: **一個讀不出來的配置從前一聲不吭**（2026-10-02 一輪掃查報來的）。
+    /// 那兩處都是 `if let Ok(text) = fs::read_to_string(…)`，於是一份存成 UTF-16
+    /// 的 `config.toml`（記事本的「Unicode」就是這個）**存在、讀不了、什麼都不
+    /// 說**——編輯器照出廠設定開起來，而唯一的跡象是「設定沒生效」。這一節開頭
+    /// 那段註釋說的正是不許這樣：「used to be dropped in silence, and the only
+    /// sign was that a setting did not take」。
+    ///
+    /// 權限不對、是個目錄、讀到一半壞了，同理。
+    fn read_config(path: &Path) -> Result<Option<String>, String> {
+        match fs::read(path) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(format!("{}: {err}", path.display())),
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(text) => Ok(Some(text)),
+                Err(err) => Err(format!("{}: {err}", path.display())),
+            },
+        }
+    }
+
     fn describe(path: &Path, err: &toml::de::Error) -> String {
         // toml's message names the offending key and what was expected instead;
         // its first line is the part a status bar has room for.
@@ -3932,6 +3960,36 @@ mod screenshot_tests {
     /// 2026-09-19: the manual promised this probe since the feature was
     /// written and the code never had it — on Linux `:shot` answered 「no
     /// screenshot command on this platform」 whatever was installed.
+    /// **一個讀不出來的配置要說話**（2026-10-02 一輪掃查報來的）。
+    ///
+    /// 從前是 `if let Ok(text) = fs::read_to_string(…)`，於是一份存成 UTF-16 的
+    /// `config.toml`（記事本的「Unicode」就是這個）**存在、讀不了、什麼都不說**
+    /// ——編輯器照出廠設定開起來，而唯一的跡象是「設定沒生效」。
+    #[test]
+    fn a_config_that_cannot_be_read_says_so() {
+        let dir = std::env::temp_dir().join(format!("yumete-cfgread-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // 不在就是不在，不是錯。
+        let missing = dir.join("none.toml");
+        assert_eq!(super::Config::read_config(&missing), Ok(None));
+
+        // 讀得出來就交出來。
+        let good = dir.join("good.toml");
+        std::fs::write(&good, "[editor]\n").unwrap();
+        assert_eq!(super::Config::read_config(&good), Ok(Some("[editor]\n".to_string())));
+
+        // 不是 UTF-8：一句話，帶路徑。
+        let bad = dir.join("bad.toml");
+        std::fs::write(&bad, b"\xff\xfe[\x00e\x00]\x00").unwrap();
+        let why = super::Config::read_config(&bad).unwrap_err();
+        assert!(why.contains("bad.toml"), "{why}");
+        assert!(why.contains("utf-8"), "{why}");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn the_first_program_that_is_installed_wins() {
         let dir = std::env::temp_dir().join(format!("yumete-shot-probe-{}", std::process::id()));
