@@ -493,10 +493,20 @@ impl Editor {
         match key {
             Key::Char('w') => self.next_region(),
             // 按方向走。四個區域：左欄、正文、副編輯區、右欄。
-            Key::Char('h') | Key::Left => self.go_to_region(3),
-            Key::Char('l') | Key::Right => self.go_to_region(4),
-            Key::Char('k') | Key::Up => self.go_to_region(1),
-            Key::Char('j') | Key::Down => self.go_to_region(2),
+            //
+            // Warning: **走，不開**（2026-10-02 作者報的）。這四個從前和 `E`／`I`／
+            // `s` 共用 `go_to_region`，而那一支「沒有就開一個」——於是 `空格 w j`
+            // 在只有一個編輯區的時候**切出一個新的**，`空格 w h` 在沒開左欄的時候
+            // 把左欄開出來。原話：「_w + h/j/k/l 不是在可见的窗口里导航，而是会打
+            // 开新的窗口。这个是不对的。」選單自己早就分清楚了：`h j k l` 是「按
+            // 方向走」，`E I` 是「進左右欄」，`s` 是「切成兩個編輯區」。
+            //
+            // 那個方向沒東西就**什麼都不做，也不說話**。原話：「你 j 到最下面一行
+            // 继续按 j 需要提示『没有更多行』吗？」——走到頭不是拒絕。
+            Key::Char('h') | Key::Left => self.walk_to_region(3),
+            Key::Char('l') | Key::Right => self.walk_to_region(4),
+            Key::Char('k') | Key::Up => self.walk_to_region(1),
+            Key::Char('j') | Key::Down => self.walk_to_region(2),
             // 開關那一欄，鍵留在原地。
             Key::Char('e') => self.toggle_region(Side::Left),
             Key::Char('i') => self.toggle_region(Side::Right),
@@ -581,6 +591,16 @@ impl Editor {
         self.status = say!("region.only-this-one");
     }
 
+
+    /// **按方向走到第 `nth` 個區域——只走到開着的那些。**
+    ///
+    /// 和 [`Self::go_to_region`] 的分別就是這一句：那一支沒有就開一個（`E`、
+    /// `I`、`s` 要的正是這個），這一支沒有就不動。
+    fn walk_to_region(&mut self, nth: u32) {
+        if self.region_open(nth) {
+            self.go_to_region(nth);
+        }
+    }
 
     pub(super) fn go_to_region(&mut self, nth: u32) {
         use crate::sidebar::Side;
