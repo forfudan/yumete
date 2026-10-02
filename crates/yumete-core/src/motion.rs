@@ -433,10 +433,27 @@ pub fn unit_forward(rope: &Rope, from: usize, next: impl Fn(&Rope, usize) -> usi
 }
 
 /// The same, backwards: the span from where the caret is to where the unit
-/// behind it begins. Never `Missed` — at the top of the buffer it collapses,
-/// which is what `b` and `{` have always done there.
+/// behind it begins.
+///
+/// Warning: **動不了就是 `Missed`**（2026-10-02 改，原話「Never `Missed` — at the
+/// top of the buffer it collapses」）。往前那一支（[`unit_forward`]）動不了的時候
+/// 交的是 `Missed`，往回這一支交一格——而 `Span::Missed` 自己的註釋說得很清楚，
+/// 那個分別「是 `wdiw` 在檔尾打開的」：動詞要分得出「那裏什麼都沒有」和「那裏有
+/// 一格」。
+///
+/// 少了這個信號，兩套文法只好各自用位置去猜，而且**同一天我把同一條規矩打了兩個
+/// 補丁**：`word_back` 自己判一次（檔首按 `b` 不許選一格），vim 那一邊又在
+/// `keys.rs` 判一次（檔首按 `db` 不許刪一個字）。兩處都是這一行欠的。
+///
+/// Warning: **往前和往回本來就不對稱，這不是抄錯。** 往前動不了照樣蓋住你站的那
+/// 一格——`dl` 停在行末，`l` 動不了而 vim 照樣刪掉那個字；往回動不了就是真的沒有
+/// 東西可拿。所以兩支各說各的方向的規矩，而不是一條。
 pub fn unit_back(rope: &Rope, from: usize, prev: impl Fn(&Rope, usize) -> usize) -> Span {
-    Span::Over { anchor: from, head: prev(rope, from) }
+    let head = prev(rope, from);
+    match head < from {
+        true => Span::Over { anchor: from, head },
+        false => Span::Missed,
+    }
 }
 
 /// **A motion, as a value** — the second half of the grammar layer (B1,
@@ -458,6 +475,13 @@ pub enum Motion {
     WordForward(Grain),
     /// `e` / `E` — the end of the run ahead, both ends set.
     WordEnd(Grain),
+    /// **vim 的 `cw`，而 `cw` 不是 `ce`** — 光標**所在**那一段的末尾。
+    ///
+    /// Warning: `:h cw` 說 `cw` 不吃詞後面的空白，照字面抄就寫成 `ce`，而
+    /// `e` 站在詞的最後一格上會跳到**下一**個詞的末尾。2026-10-02 拿 nvim 逐欄
+    /// 量：`alpha beta` 的第 5 格（`alpha` 的 `a`）按 `cw`，nvim 只換那一格，而
+    /// `ce` 會換掉 `a beta`。所以這是自己的一支，不是 `e`。
+    WordEndHere(Grain),
     /// `b` / `B` — backwards to the start of the run behind.
     WordBack(Grain),
     /// `f` / `F` / `t` / `T` — to a character, **on this line only**.
@@ -771,6 +795,20 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
         }
     }
     (pos, pos)
+}
+
+/// **The end of the run the caret is standing in** — vim's `cw`.
+///
+/// Off a word (on whitespace) there is no run to end, so it falls back to
+/// [`next_word_end`]; the vim grammar never asks in that case, but a motion
+/// that answers 「nowhere」 would be a worse model than one that answers 「the
+/// next one」.
+pub fn word_end_here(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
+    line_words(rope, line_of(rope, pos), grain, seg)
+        .into_iter()
+        .find(|&(start, end)| (start..end).contains(&pos))
+        .map(|(_, end)| prev_grapheme(rope, end))
+        .unwrap_or_else(|| next_word_end(rope, pos, grain, seg).1)
 }
 
 /// The start of the previous word before `pos` (`b` / `B`).

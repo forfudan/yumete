@@ -796,6 +796,8 @@ impl Editor {
     ) -> motion::Span {
         let rope = self.current_buffer().rope();
         let seg = self.segmenter.as_ref();
+        // **落點就是落點**：動了沒有、動不了算不算失敗，是**動詞**的問題，不是
+        // 動作的。見 `keys.rs::run_vim_step` 裏那一條 `:h exclusive`。
         let at = |p: usize| motion::Span::Over { anchor: p, head: p };
         let caret = how == motion::Reading::Caret;
         match what {
@@ -804,6 +806,9 @@ impl Editor {
             // on」; vim's is the primitive itself.
             motion::Motion::WordForward(grain) if caret => {
                 at(motion::next_word_start(rope, self.sel.head(), grain, seg))
+            }
+            motion::Motion::WordEndHere(grain) => {
+                at(motion::word_end_here(rope, self.sel.head(), grain, seg))
             }
             motion::Motion::WordEnd(grain) if caret => {
                 at(motion::next_word_end(rope, self.sel.head(), grain, seg).1)
@@ -863,7 +868,12 @@ impl Editor {
                     // `x` and must take that character — the verb's range is
                     // 「from here, one grapheme past the head」, so a head that
                     // did not move is exactly one character.
-                    true => at(motion::next_grapheme(rope, here).min(motion::line_last(rope, here))),
+                    //
+                    // Warning: **帶着動詞的 `l` 可以落到行末的後面一格**，所以這
+                    // 裏夾的是 `line_end`（換行那一格）而不是 `line_last`（最後
+                    // 一個字）。2026-10-02 拿 nvim 量出來的：`delta` 的 `t` 上按
+                    // `d2l` 刪掉 `ta`，夾在 `line_last` 上只刪得掉 `t`。
+                    true => at(motion::next_grapheme(rope, here).min(motion::line_end(rope, here))),
                     // …Warning: **and backward may not.** A backward span runs from
                     // the target up to the caret's own character, so a target
                     // that did not move would be 「take the character behind

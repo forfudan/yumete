@@ -17501,7 +17501,56 @@ fn vim_conformance() {
     // 開頭那一段没有上面的空行可借，就取下面的。
     check("⑫ dap 首段", case("aa\nbb\n\ncc\n", "dap"), "cc\n");
 
+    // ⑬ **動不了算不算數，問的是動作的類**（2026-10-02 拿這臺機器上的 nvim 逐欄
+    //    量出來的，`:h exclusive`）：排他的落在原處就是零寬，整個不做；包含的落
+    //    在原處就是你站的那一格；整行的落在原處就是這一行。
+    check("⑬ d^ 已在首個非空白上", case("abc\n", "d^"), "abc\n");
+    check("⑬ d0 在第 1 欄", case("abc\n", "d0"), "abc\n");
+    check("⑬ db 在檔首", case("abc\n", "db"), "abc\n");
+    check("⑬ dT, 緊貼逗號後面", case("a,bc\n", "lldT,"), "a,bc\n");
+    check("⑬ d$ 在行末那一格", case("abc\n", "lld$"), "ab\n");
+    check("⑬ dgg 在第 1 行", case("one\ntwo\n", "dgg"), "two\n");
+    // 帶着動詞的 `l` 可以落到行末的後面一格，所以 `d2l` 在倒數第二格上刪兩個。
+    check("⑬ d2l 到行末", case("abc\n", "ld2l"), "a\n");
+
+    // ⑭ **`cw` 不是 `ce`**（`:h cw`）：換的是**所在**那一段的末尾，而 `e` 站在詞
+    //    的最後一格上會跳到下一個詞去。數目只管最後那一個詞。
+    check("⑭ cw 在詞的最後一格", case("alpha beta\n", "4lcwX"), "alphX beta\n");
+    check("⑭ cw 在標點上", case("a, b\n", "lcwX"), "aX b\n");
+    check("⑭ c2w", case("alpha beta, c\n", "c2wX"), "X, c\n");
+
+    // ⑮ **`;` 和 `,` 是動作**（`:h ;`）：`d;` 把剛纔那個 `f`／`t` 再做一遍。
+    check("⑮ f, 之後 d;", case("a,b,c,d\n", "f,d;"), "ac,d\n");
+    check("⑮ t, 之後 d; 跳過貼着的那一個", case("a,b,c,d\n", "t,d;"), ",c,d\n");
+    check("⑮ f, 兩下之後 d,", case("a,b,c,d\n", "f,;d,"), "a,c,d\n");
+    // 往回的 `F`／`T` 是排他的，退不動就整個不做。
+    check("⑮ f, 之後 d,", case("a,b,c,d\n", "f,d,"), "a,b,c,d\n");
+    check("⑮ d2; 沒有第二個", case("a,b\n", "f,d2;"), "a,b\n");
+
     assert!(bad.is_empty(), "vim 語料紅了 {} 條：\n  {}", bad.len(), bad.join("\n  "));
+}
+
+/// **vim 下獨立的 `f` 是跳轉，不是選擇**（2026-10-02）。
+///
+/// B3 把「獨立的動作讀光標、命令裏的動作讀跨度」立下來的時候，`w B e { } H L`
+/// 都接上了，`f F t T` 四個漏在 helix 那一支上——於是 vim 手指按 `f,` 跳過去，
+/// 跳過的那一整段是選中的，再按一下 `~` 就把那一段全變了大寫。
+#[test]
+fn a_standalone_find_in_the_vim_preset_moves_the_caret_and_paints_nothing() {
+    let mut ed = typed("alpha, beta\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    press(&mut ed, "f,");
+    assert_eq!(ed.cursor(), 5, "f 跳到逗號上");
+    // 一格就是「没選」——yumete 的光標自己佔一格。
+    assert_eq!(ed.selection(), (5, 6), "而且什麽都没選");
+
+    // helix 那一邊照舊：跳過去的那一段就是選中的那一段。
+    let mut ed = typed("alpha, beta\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "f,");
+    let (a, b) = ed.selection();
+    assert!(b > a, "helix 的 f 選中跳過的那一段，得到 {a}..{b}");
 }
 
 /// **一次插入是一次撤銷，上屏也算在裏面**（2026-09-21）。
