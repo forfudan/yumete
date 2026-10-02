@@ -2655,6 +2655,42 @@ fn a_bare_setting_command_answers_which_one_it_is_now() {
     assert!(ed.execute(":indent-hint nope").is_err());
 }
 
+/// **全是空白的那一行，`gs` 回行首；全角空格也算空白**（2026-10-02 照 helix 比出來的）。
+///
+/// `line_first_non_blank` 的註釋一直寫着「or the line start if the line is all
+/// blanks or empty」，而代碼走完所有空白就停——在只有空白的行上那是**換行符**。
+/// 站在換行符上 `selection()` 會把下一個字素也算進來，於是 `x` 選中兩行、`xd` 把下
+/// 面那一行一起刪了。helix 的 `goto_first_nonwhitespace_impl` 在那一行上原地不動。
+///
+/// 第二半：從前只認 ASCII 的空格和製表符，而這是寫中文稿子的編輯器——`　` 縮進的
+/// 那一行和空格縮進的那一行，同一個鍵兩種答案。
+#[test]
+fn the_first_non_blank_of_a_blank_line_is_the_line_start() {
+    use crate::motion::line_first_non_blank;
+    let rope = crate::Rope::from_str("first\n   \nthird\n");
+    let blank = rope.line_to_char(1);
+    assert_eq!(line_first_non_blank(&rope, blank), blank, "整行空白就不動");
+
+    // 於是 `x` 只選中那一行，`xd` 只刪那一行。
+    let mut ed = typed("first\n   \nthird\n");
+    press(&mut ed, "2ggxd");
+    assert_eq!(ed.current_buffer().rope().to_string(), "first\nthird\n");
+
+    // 全角空格也是空白。
+    let rope = crate::Rope::from_str("first\n\u{3000}\u{3000}中文\n");
+    let line = rope.line_to_char(1);
+    assert_eq!(
+        line_first_non_blank(&rope, line),
+        line + 2,
+        "兩個全角空格之後纔是第一個字"
+    );
+
+    // 空行同理，而且不許越到下一行去。
+    let rope = crate::Rope::from_str("a\n\nb\n");
+    let empty = rope.line_to_char(1);
+    assert_eq!(line_first_non_blank(&rope, empty), empty);
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是

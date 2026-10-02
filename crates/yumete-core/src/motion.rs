@@ -187,19 +187,33 @@ pub fn line_start(rope: &Rope, pos: usize) -> usize {
 
 /// The first non-blank character of the cursor's line (`^`), or the line start
 /// if the line is all blanks or empty.
+///
+/// Warning: **全是空白的那一行回行首，不是行尾**（2026-10-02 查出來的）。上面那句話
+/// 一直是這麼寫的，而代碼走完所有空白就停——在一行只有空白的行上，那個位置是
+/// **換行符**。站在換行符上，`selection()` 會把下一個字素也算進來（那是下一行的
+/// 第一個字），於是 `x` 選中兩行，`xd` 把下面那一行一起刪了。又是 #382 那個形狀。
+///
+/// helix 的 `goto_first_nonwhitespace_impl` 在 `first_non_whitespace_char()` 回
+/// `None` 的時候**原地不動**。
+///
+/// Warning: **全角空格也是空白**（同日）。從前只認 ASCII 的空格和製表符，而這是一個
+/// 寫中文稿子的編輯器——`　` 縮進的那一行，`gs` 跳到第 1 欄，ASCII 縮進的跳到第 3
+/// 欄，同一個鍵兩種答案。照 helix 用 `char::is_whitespace`（它收 U+3000、U+00A0、
+/// U+2000–U+200A 那一族）。
 pub fn line_first_non_blank(rope: &Rope, pos: usize) -> usize {
     let line = rope.char_to_line(pos);
     let ls = rope.line_to_char(line);
     let text = line_text(rope, line);
     let mut chars = 0;
     for g in graphemes(&text) {
-        if g.chars().all(|c| c == ' ' || c == '\t') {
+        if g.chars().all(|c| c.is_whitespace() && c != '\n' && c != '\r') {
             chars += g.chars().count();
         } else {
-            break;
+            return ls + chars;
         }
     }
-    ls + chars
+    // 走到頭都沒碰上一個實字：這一行沒有「第一個非空白」，所以不動。
+    ls
 }
 
 /// The end of the cursor's line (`$`) — one position past the last character.
