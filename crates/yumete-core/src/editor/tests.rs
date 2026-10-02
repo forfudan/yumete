@@ -16439,10 +16439,13 @@ fn a_named_entry_opens_a_picker_and_stays_put_until_the_cursor_moves() {
     ed.on_key(Key::Char('l'));
     assert!(ed.wiki_here().is_none(), "光標走了，釘住的那一條跟着走");
 
-    // ④ 百科裏沒有的名字，明說。
+    // ④ 百科裏沒有的名字，明說——而且**面板留着**（2026-10-02 改）。從前它照樣
+    // 關掉，於是打錯一個字按了 `Enter`，窗沒了、打過的字也沒了，要重開重打。
     ed.execute(":wiki 沒有這一條").unwrap();
     ed.on_key(Key::Enter);
     assert_eq!(ed.status(), say!("picker.nothing-matched"), "{}", ed.status());
+    assert!(ed.picker().is_some(), "篩不出東西，窗不許關");
+    assert_eq!(ed.picker().map(|p| p.query()), Some("沒有這一條"), "打過的字留着");
     std::fs::remove_dir_all(&dir).ok();
 }
 
