@@ -779,6 +779,21 @@ impl Editor {
     /// with the **primitive**: where the caret lands, collapsed, no rule of
     /// helix's wrapped around it.
     pub(super) fn read_motion(&self, what: motion::Motion, how: motion::Reading) -> motion::Span {
+        self.read_motion_nth(what, how, 1)
+    }
+
+    /// The same, asked for the **nth** one (2026-10-02).
+    ///
+    /// Warning: **一個數目不是「做 n 遍」。** `f`／`t` 帶數目是「第 n 個」，做 n 遍
+    /// 會每一趟都從上一個落點重新下錨，選中的那一段就從第一個起而不是從光標起；
+    /// 而數目超出的時候「做 n 遍」走到最後一個，vim 是整個動作失敗。別的動作做 n
+    /// 遍確實就是對的（`3w`），所以只有這一支認得 `nth`。
+    pub(super) fn read_motion_nth(
+        &self,
+        what: motion::Motion,
+        how: motion::Reading,
+        nth: usize,
+    ) -> motion::Span {
         let rope = self.current_buffer().rope();
         let seg = self.segmenter.as_ref();
         let at = |p: usize| motion::Span::Over { anchor: p, head: p };
@@ -810,7 +825,7 @@ impl Editor {
             motion::Motion::WordEnd(grain) => motion::word_end(rope, self.sel.head(), grain, seg),
             motion::Motion::WordBack(grain) => motion::word_back(rope, self.sel.head(), grain, seg),
             motion::Motion::Find { forward, target, till } => {
-                motion::find_char(rope, self.sel.head(), forward, target, till)
+                motion::find_char(rope, self.sel.head(), forward, target, till, nth)
             }
             // **The gotos collapse**, so they say so in the span: both ends at
             // the target. A goto is not a selection — 「take me there」, not

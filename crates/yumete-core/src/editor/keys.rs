@@ -606,8 +606,16 @@ impl Editor {
         let mut target = None;
         // Where the caret stood before the last hop, for the line rule below.
         let mut before = start;
-        for i in 0..n {
-            let span = self.read_motion(step.motion, motion::Reading::Caret);
+        // Warning: **`f`／`t` 的數目是「第 n 個」，一次問完**（2026-10-02 拿 nvim 量
+        // 出來的）。走底下那個迴圈的話每一趟都從上一個落點重新下錨，`d2f,` 刪的
+        // 就是「第一個逗號到第二個」；而數目超出的時候迴圈留下走成的那幾跳，
+        // `d9f,`（只有四個逗號）**默默吃掉三十二個字**，nvim 在那裏一格不動。
+        let nth = match step.motion {
+            motion::Motion::Find { .. } => n,
+            _ => 1,
+        };
+        for i in 0..(n / nth.max(1)).max(1) {
+            let span = self.read_motion_nth(step.motion, motion::Reading::Caret, nth);
             let Some(head) = span.head() else { break };
             // Warning: **The first hop counts even if it does not move.** `t,` with
             // the caret already one short of the comma lands where it stands,
@@ -1453,7 +1461,9 @@ impl Editor {
                         ',' => kind.flipped(),
                         _ => kind,
                     };
-                    self.repeat(count, |e| e.find_char(kind, ch));
+                    // 數目是「第 n 個」，重複要往前挪一個——兩件事都在
+                    // `find_nth_char` 裏，不靠把它叫 n 遍。
+                    self.find_nth_char(kind, ch, count, true);
                 }
             }
             Key::Char(';') => {
@@ -1791,7 +1801,7 @@ impl Editor {
             Key::Char('.') => self.repeat_writing(count, |e| e.repeat_edit()),
             Key::Alt('.') => {
                 if let Some((kind, c)) = self.last_find {
-                    self.repeat(count, |e| e.find_char(kind, c));
+                    self.find_nth_char(kind, c, count, true);
                 }
             }
             // Nothing here does what this key does elsewhere — so say what
@@ -1823,9 +1833,10 @@ impl Editor {
                 // The count belongs to the `f`, which has already spent it:
                 // `3fx` is the third `x`, not the first.
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                // Through `repeat`, for its early exit: `10000fZ` on a line
-                // with no `Z` left is one look, not ten thousand (#318).
-                self.repeat(count, |e| e.find_char(kind, c));
+                // Warning: **一次問完，不是叫 n 遍**（2026-10-02）。從前走 `repeat`，
+                // 理由是它的早退（`10000fZ` 只看一眼）——而那個早退現在是
+                // `find_char` 自己的事：找不到第 n 個就 `Missed`，一格不動。
+                self.find_nth_char(kind, c, count, false);
             }
             Pending::Replace => self.replace_chars(c),
             Pending::MatchPair { around } => self.select_pair(c, around),
