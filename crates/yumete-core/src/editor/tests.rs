@@ -3314,6 +3314,39 @@ fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **鎖住的那一趟一個檔都不寫，導出也算**（2026-10-02 作者定）。
+///
+/// `--help` 上寫着「Open locked: nothing this run opens can be typed into」，
+/// 而 `:export!` 從前在 `--readonly` 的會話裏照樣把一個**不相干**的檔整個蓋掉。
+#[test]
+fn a_locked_session_does_not_export_either() {
+    let dir = std::env::temp_dir().join(format!("yumete-exro-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("chapter.md");
+    std::fs::write(&path, "# 第一章\n").unwrap();
+    let bystander = dir.join("chapter.html");
+    std::fs::write(&bystander, "別人的東西\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.execute(&format!(":open {}", path.display())).unwrap();
+    ed.execute(":readonly on").unwrap();
+    ed.execute(":export! html").unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&bystander).unwrap(),
+        "別人的東西\n",
+        "鎖着的時候 :export! 蓋掉了一個不相干的檔"
+    );
+    assert_eq!(ed.status(), say!("readonly.refused"));
+
+    // 解開就照常導出。
+    ed.execute(":readonly off").unwrap();
+    ed.execute(":export! html").unwrap();
+    assert!(std::fs::read_to_string(&bystander).unwrap().contains("第一章"));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn a_main_file_that_imports_its_chapters_is_a_table_of_contents() {
     let dir = std::env::temp_dir().join(format!("yumete-imp-{}", std::process::id()));

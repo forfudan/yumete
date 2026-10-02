@@ -1184,6 +1184,14 @@ impl Editor {
         path: Option<&str>,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
+        // Warning: **鎖住的那一份一個檔都不寫**（2026-10-02 作者定「鎖住就不導出」）。
+        // `--help` 上寫着「Open locked: nothing this run opens can be typed
+        // into」，而 `:export!` 從前在 `--readonly` 的會話裏照樣把一個**不相干**
+        // 的檔整個蓋掉。保護的是「這一趟開着的檔」還是「這一趟寫出去的字」，是
+        // 一個範圍問題；定下來的是後者——鎖住就什麼都不寫。
+        if self.refuse_readonly() {
+            return Ok(CommandOutcome::Continue);
+        }
         // **`csv` is the one export that is a region, not the document.** A
         // manuscript has no rows; the table under the cursor does. So it is
         // answered here, from the same machinery `:table-csv` uses, rather than
