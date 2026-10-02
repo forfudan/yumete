@@ -6083,7 +6083,7 @@ en = "Record"
 key = "label.panel.replace"
 zht = "搜索與替換"
 zhs = "搜索与替换"
-en = "Find & Replace"
+en = "Search & Replace"
 
 [[message]]
 # 標籤：搜索面板
@@ -7776,7 +7776,7 @@ en = "only:"
 key = "search.label.query"
 zht = "搜: "
 zhs = "搜: "
-en = "Find: "
+en = "Search: "
 
 [[message]]
 # 搜索面板：替換框的名字
