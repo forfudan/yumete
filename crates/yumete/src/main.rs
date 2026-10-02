@@ -503,6 +503,17 @@ fn main() -> ExitCode {
             if !said.is_empty() {
                 editor.set_status(said);
             }
+            // Warning: **讀音表要跟着換過來**（2026-10-02 一輪掃查報來的）。
+            // `switch_scheme_at_startup` 是整個 `*ime = full` 換掉的，而
+            // `Editor` 手上那份 reader 是**上一個會話的快照**（`ime.reader()`
+            // 拷的是注解表）。不補這一句，`available()` 永遠是 false：狀態欄寫着
+            // `[中 靈明]`、十四兆也真的載進來了，而 `:view-meter` 旁邊永遠空着、
+            // `:ruby-auto` 永遠說「拆分表沒裝」——**於是平仄和注音這兩塊離屏根本
+            // 審不了**，而這個倉審前端就是靠拍照。
+            //
+            // 互動那一支在它自己那次延遲載入之後緊跟着就補了（`yumete-tui`
+            // 的 `editor.set_reader(Box::new(ime.reader()))`），這裏照抄。
+            editor.set_reader(Box::new(ime.reader()));
         }
         settings_page = press(&mut editor, pressed, &config, &mut ime, shot);
     }
