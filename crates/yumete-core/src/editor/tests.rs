@@ -9340,6 +9340,41 @@ fn a_named_folder_does_not_search_the_file_you_happen_to_have_open() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **開了中文匹配，把人家對的正則說成錯的**（2026-10-02 一輪模糊測試報來的）。
+///
+/// 把一個字換成 `[…]` 是合法性上的降級：`(?-u)` 底下類裏放不下多字節的字，248 層
+/// 括號加一層就超了嵌套上限，六萬個漢字乘八倍就超了程序上限。三種都是「本來編得
+/// 過、開了開關編不過」，而面板把編不過畫成**你寫錯了**。
+#[test]
+fn widening_a_pattern_never_makes_it_stop_compiling() {
+    let mut ed = typed("書齋下雪。");
+    ed.open_search();
+    for c in "(?-u)書".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    // `3` 轉一檔：字面 → 正則。
+    ed.on_key(Key::Char('3'));
+    assert!(ed.search().regex, "轉到正則了");
+    assert!(ed.search().glyphs, "中文匹配出廠開着");
+    ed.on_key(Key::Enter);
+    assert!(!ed.search().broken, "式子是對的，不許說它壞");
+    assert_eq!(ed.search().total, 1, "{:?}", ed.search().hits);
+
+    // 嵌套那一種：248 層括號裏一個漢字，加一層方括號就過不去。
+    let deep = format!("{}書{}", "(".repeat(248), ")".repeat(248));
+    let mut ed = typed("書齋");
+    ed.open_search();
+    for c in deep.chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Enter);
+    assert!(!ed.search().broken, "248 層也是對的式子");
+    assert_eq!(ed.search().total, 1);
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那

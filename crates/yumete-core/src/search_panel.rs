@@ -506,8 +506,10 @@ pub struct Search {
     /// Warning: **出廠開着**，所以 `Search` 要走 [`Search::new`] 而不是 `default()`——
     /// `derive(Default)` 給不出「這一項是 true」。`default()` 留給測試。
     ///
-    /// Warning: **和 正則 互斥**：把每個字改寫成 `[...]` 會把使用者寫的式子吃掉，所以
-    /// 正則開着時它畫灰、也不起作用（`Editor::search_pattern`）。
+    /// Warning: **2026-10-01 起正則底下也折**（這一行從前寫的是「和正則互斥」，
+    /// 2026-10-02 更正）。整串改寫確實會把使用者寫的 `.`、`*`、`[` 一起吃掉，所以
+    /// 正則那一路走 [`crate::glyphs::widen_pattern`]：先把式子解析一遍，只動「原
+    /// 樣打出來的那些字」。見 `Editor::search_pattern`。
     pub glyphs: bool,
     /// **拼音**：`shuzhai` 找得到「書齋」。出廠開着，見 [`Field::Pinyin`]。
     pub pinyin: bool,
