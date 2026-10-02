@@ -9681,6 +9681,71 @@ fn d_and_d_agree_at_the_end_of_a_box() {
     assert_eq!(ed.search().query, "hel");
 }
 
+/// **只重搜這一份的那條快路，要和整趟重搜守同一條規矩**（2026-10-02 當天留的洞）。
+///
+/// 整趟那一邊學會了「不在那個根底下就不搜」，快路沒學會：`:search 一個空文件夾`
+/// 報「無結果」，回正文打一個字，它又報出兩處來。兩處問同一件事而各問各的，改一邊
+/// 就在另一邊留一個洞——所以合成了一句 `the_open_one_in_scope`。
+#[test]
+fn the_fast_rescan_keeps_the_file_out_of_scope_out() {
+    let dir = a_little_book("rescanoutside");
+    std::fs::create_dir_all(dir.join("空的")).unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":search 空的").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 0);
+
+    // 回正文多打一個「霜」，那一份還是不在「空的」裏。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    for c in "i霜".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    ed.refresh_the_edited_file();
+    assert_eq!(ed.search().total, 0, "打了字也不該冒出來：{:?}", ed.search().hits);
+    assert!(ed.search().files.is_empty(), "{:?}", ed.search().files);
+}
+
+/// **快路也要維護那張「有命中的檔」**（同日）。
+#[test]
+fn the_fast_rescan_keeps_the_file_list_honest() {
+    let dir = a_little_book("rescanfiles");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    // c.md 裏沒有「雪」，先讓它進不了那張表。
+    ed.open_file(dir.join("c.md")).unwrap();
+    ed.execute(":search-working").unwrap();
+    ed.on_key(Key::Char('雪'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert!(ed.search().files.is_empty(), "{:?}", ed.search().files);
+
+    // 在它裏面打一個「雪」出來，它就該進表。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    for c in "i雪".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    ed.refresh_the_edited_file();
+    assert_eq!(ed.search().total, 1, "{:?}", ed.search().hits);
+    assert_eq!(ed.search().files.len(), 1, "進表了：{:?}", ed.search().files);
+
+    // 再刪掉，它就該出去。鍵還在正文裏（上面走過去就沒回來）。
+    ed.on_key(Key::Char('u'));
+    ed.refresh_the_edited_file();
+    assert_eq!(ed.search().total, 0, "{:?}", ed.search().hits);
+    assert!(ed.search().files.is_empty(), "出表了：{:?}", ed.search().files);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那
