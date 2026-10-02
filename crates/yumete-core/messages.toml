@@ -7285,13 +7285,6 @@ zhs = "抢救稿开好了——:w 留下它，u 回到原来那份"
 en = "the draft is open — :w keeps it, u goes back"
 
 [[message]]
-# 選了「暫時不管」／「取消」之後，以及開檔時別的檔也有草稿
-key = "recover.drafts-newer-than-file"
-zht = "{0} 有比文件新的搶救稿——你可以之後再次使用 :recover 命令來進行文檔恢復"
-zhs = "{0} 有比文件新的抢救稿——你可以之后再次使用 :recover 命令来进行文档恢复"
-en = "{0}: draft(s) newer than the file — :recover asks again whenever you are ready"
-
-[[message]]
 # 啓動時救回沒存的草稿
 key = "recover.drafts-opened"
 zht = "打開了 {0} 份沒存的草稿——:w <名字> 留下它們"
@@ -7304,6 +7297,13 @@ key = "recover.drafts-waiting"
 zht = "有 {0} 份沒存的草稿——:recover 打開"
 zhs = "有 {0} 份没存的草稿——:recover 打开"
 en = "{0} unsaved draft(s) — :recover opens them"
+
+[[message]]
+# 那一問上選了「暫時不管」或「取消」之後
+key = "recover.left-for-now"
+zht = "你可以之後再次使用 :recover 命令來進行文檔恢復"
+zhs = "你可以之后再次使用 :recover 命令来进行文档恢复"
+en = "you can run :recover later to recover the document"
 
 [[message]]
 # 本檔案沒有搶救稿
