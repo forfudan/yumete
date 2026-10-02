@@ -2548,6 +2548,29 @@ fn the_column_never_points_past_the_end_of_the_drawn_row() {
     }
 }
 
+/// **整行只有一種分隔符，那是一條線，不是強調**（2026-10-02 一輪掃查報來的）。
+///
+/// 十四個 `=` 自己一行，從前被當成反覆的 `==高亮==` 一對一對吃掉：畫出來只剩六個，
+/// 而且光標走過去的時候那一行在 6／10／14 格之間變來變去。setext 標題的下劃線和散文
+/// 裏的 `*****` 分隔線都中。
+#[test]
+fn a_line_of_nothing_but_delimiters_is_a_rule_not_emphasis() {
+    for line in ["==============", "*****", "~~~~", "____"] {
+        let mut ed = typed(&format!("前面\n\n{line}\n"));
+        ed.execute(":render full").unwrap();
+        assert!(
+            ed.hidden_on_line(2).is_empty(),
+            "{line:?} 被當成強調吃掉了：{:?}",
+            ed.hidden_on_line(2)
+        );
+    }
+
+    // 而真的強調照舊：這一行不是「整行只有分隔符」。
+    let mut ed = typed("正文 ==高亮== 正文\n");
+    ed.execute(":render full").unwrap();
+    assert!(!ed.hidden_on_line(0).is_empty(), "真的高亮還要認得");
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
