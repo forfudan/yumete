@@ -348,7 +348,7 @@ pub enum Command {
     SetRubyLevel(crate::editor::Render),
     /// `:indent-hint color` — what, if anything, is drawn in the opening
     /// squares.
-    SetIndentHint(crate::zong::IndentHint),
+    SetIndentHint(Option<crate::zong::IndentHint>),
     /// `:indent-tab [spaces|tab]` — what Tab types in Insert mode; bare reports.
     SetTabInserts(Option<bool>),
     /// `:indent-width [n]` — how many columns Tab and `>` move; bare reports.
@@ -3666,12 +3666,21 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.indent.hint",
         needs: &[],
         params: &[Param::Words { of: HINTS, default: None }],
+        // Warning: **光打 `:indent-hint` 要答「現在是哪一檔」**（2026-10-02 一輪掃查
+        // 報來的）。從前它把空字串交給 `parse`，解不出來，答的是「不認得「」」
+        // ——問的人連問了什麼都沒說，而編輯器怪他說錯了。[`Param::Words`] 自己的
+        // 註釋寫着一張值表「**幾乎總該**」有個缺省，理由是「a setting that cannot
+        // answer 「which am I now」 is a setting with a hole in it」。這一支是全表
+        // 唯一一個沒有的。隔壁 `:indent-tab` 一直是對的，照它寫。
         build: Some(|p| {
-            match crate::zong::IndentHint::parse(p.arg(0).unwrap_or("")) {
-                Some(hint) => Ok(Command::SetIndentHint(hint)),
+            let Some(given) = p.arg(0) else {
+                return Ok(Command::SetIndentHint(None));
+            };
+            match crate::zong::IndentHint::parse(given) {
+                Some(hint) => Ok(Command::SetIndentHint(Some(hint))),
                 None => Err(CommandError::InvalidArgument {
                     command: "indent-hint",
-                    value: p.arg(0).unwrap_or("").to_string(),
+                    value: given.to_string(),
                 }),
             }
         }),

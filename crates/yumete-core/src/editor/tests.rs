@@ -2629,6 +2629,32 @@ fn the_help_page_names_keys_that_are_really_bound() {
     assert!(page.contains("␣t"), "{page}");
 }
 
+/// **每一張值表都答得出「我現在是哪一檔」**（2026-10-02 一輪掃查報來的）。
+///
+/// `Param::Words` 自己的註釋寫着一張值表「幾乎總該」有個缺省，理由是「a setting
+/// that cannot answer 「which am I now」 is a setting with a hole in it」。全表只有
+/// `:indent-hint` 沒有：光打它答的是「不認得「」」——問的人連問了什麼都沒說，而編輯
+/// 器怪他說錯了。
+#[test]
+fn a_bare_setting_command_answers_which_one_it_is_now() {
+    let mut ed = typed("那年冬天\n");
+    ed.execute(":indent-hint").unwrap();
+    assert!(
+        ed.status().contains(&say!("layout.indent-hint", "none")),
+        "{}",
+        ed.status()
+    );
+
+    // 設一檔，再問一次，答的是那一檔。
+    ed.execute(":indent-hint color").unwrap();
+    let after = ed.status().to_string();
+    ed.execute(":indent-hint").unwrap();
+    assert_eq!(ed.status(), after, "問一次不該把它改掉");
+
+    // 給一個不認得的詞，照舊是「不認得」。
+    assert!(ed.execute(":indent-hint nope").is_err());
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是

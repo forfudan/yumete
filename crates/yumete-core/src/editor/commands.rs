@@ -468,6 +468,8 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetIndentHint(hint) => {
+                // 沒給就只回答「現在是哪一檔」，用的是同一句話。
+                let hint = hint.unwrap_or(self.indent_hint);
                 self.indent_hint = hint;
                 self.status = say!("layout.indent-hint", hint.name());
                 Ok(CommandOutcome::Continue)
