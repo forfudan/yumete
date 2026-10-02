@@ -861,7 +861,11 @@ impl Editor {
             // 纔去。
             //
             // Warning: **進編輯不缺入口**：`i` `a` `I` `A` `c` 和 `/` 六個；開關也不缺，
-            // `1`–`7` 和空格都翻得動。騰出 `Enter` 沒有讓誰沒路走。
+            // `1`–`7` 一個號碼一行。騰出 `Enter` 沒有讓誰沒路走。
+            //
+            // Warning: **空格翻不動開關**（2026-10-02 更正）。這句話從前寫着「`1`–`7`
+            // 和空格都翻得動」，而面板裏光禿禿的空格一直是開空格選單——它在
+            // `keys.rs` 那一層就被收走了，根本到不了這裏。
             Key::Enter if self.search.field == Field::Results && !self.search_is_stale() => {
                 self.go_to_hit();
             }
@@ -1036,8 +1040,12 @@ impl Editor {
             Key::Char('g') | Key::Home if self.search.field == Field::Results => {
                 self.search.selected = 0
             }
+            // Warning: **數的是行，不是命中**（2026-10-02 查出來的）。`selected` 是
+            // `rows()` 的下標，而跨檔的名單裏夾着檔名那幾行——四處命中分在三個檔
+            // 裏是七行，`G` 卻跳到第 3 行，離底下還差三行。只在本文件那一檔裏湊
+            // 巧對：那時候名單裏沒有檔名行，行數正好等於命中數。
             Key::Char('G') | Key::End if self.search.field == Field::Results => {
-                self.search.selected = self.search.hits.len().saturating_sub(1)
+                self.search.selected = self.search.rows().len().saturating_sub(1)
             }
             // `C-w` `q` `:` 和光禿禿的 `Space` 是每一扇面板都有的，不是這一扇
             // 的——見 `panel_key_in_common`。最後纔試，所以這一扇自己的鍵先贏。

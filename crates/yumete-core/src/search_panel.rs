@@ -62,7 +62,13 @@ pub enum Where {
     /// moved by `:cd`.
     Working,
     /// **The project** — the nearest ancestor of the working directory holding
-    /// `.yumete`, `.git`, `.jj` or `.svn`.
+    /// `.yumete` (or `.yumete.toml`); failing that, the nearest holding `.git`;
+    /// failing both, the working directory itself.
+    ///
+    /// Warning: **`.jj` 和 `.svn` 不算**（2026-10-02 更正）。這行從前把它們也列上
+    /// 了，而 [`crate::editor::book_root`] 從來只找那兩樣。兩道是分開找的，所以
+    /// 上面某一層的 `.yumete` 贏過更近的一層 `.git`——書根是作者標的，版本庫是
+    /// 工具標的。
     ///
     /// Warning: **Reckoned from the working directory, never from the file being
     /// edited** (2026-10-01 定). The two part company exactly when `gd` has
