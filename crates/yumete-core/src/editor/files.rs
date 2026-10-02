@@ -322,6 +322,23 @@ impl Editor {
             return;
         };
         let full = self.current_buffer().path().map(Path::to_path_buf);
+        // Warning: **只記這本書自己的檔**（2026-10-02 查出來的）。從前它只問「有沒有
+        // 這本賬」，不問「這一份在不在這本書裏」——於是**在書開着的時候隨手存一
+        // 個別處的檔，那個檔名就進了作者的寫作進度**。
+        //
+        // 這個倉自己就中着：`cargo test` 在 `$TMPDIR` 裏存臨時檔，而測試進程的
+        // cwd 在倉裏，`root()` 於是算成這個倉——`.yumete/progress.tsv` 裏攢了一百
+        // 多行 `yumete-editor-write-97129.md`，混在真的章節中間，而「目標 2000」
+        // 那個數就是照這本賬算的。順帶：每跑一次測試工作區就髒一次。
+        //
+        // 上面那段註釋早就擔心過這件事（「a config file was edited in a directory
+        // that had never heard of yumete」），可它防的是「這本賬不存在」，不是
+        // 「這一份不屬於這本書」。和搜索那邊同一條規矩（`the_open_one_in_scope`）。
+        let here = full.as_deref().map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
+        let book = std::fs::canonicalize(self.root()).unwrap_or_else(|_| self.root());
+        if !here.is_some_and(|p| p.starts_with(&book)) {
+            return;
+        }
         let now = self.han_in_rope(self.current_buffer().rope());
         let opened = full
             .as_ref()
