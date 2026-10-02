@@ -148,12 +148,7 @@ impl Editor {
                 // **相對路徑按[工作路徑][`Editor::working_dir`]算**（2026-10-01）。
                 // 從前它原樣交給 `Buffer::open`，由作業系統按**進程的 cwd** 解
                 // ——於是 `:pwd` 報的那個目録 `:open` 不認，`:cd` 改了也沒用。
-                let full = Self::expand_tilde(path.as_ref());
-                let full = match full.is_absolute() {
-                    true => full,
-                    false => self.working_dir().join(full),
-                };
-                self.open_file(full).map_err(EditorError::Io)?;
+                self.open_file(self.here_path(path.as_ref())).map_err(EditorError::Io)?;
                 // A file opened mid-session can carry a draft just as one named
                 // on the command line can.
                 self.announce_recovery();
@@ -179,7 +174,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SaveAs { path, force } => {
-                let target = PathBuf::from(&path);
+                let target = self.here_path(&path);
                 // The same one rule: a file another buffer is holding may only
                 // be written by that buffer.
                 if let Some(which) = self.buffer_holding(&target) {
@@ -1251,7 +1246,7 @@ impl Editor {
     /// number that is about to be rounded to 「MB」 anyway.
     fn oversize_write(&self, path: Option<&str>) -> Option<(u64, u64)> {
         let target = match path {
-            Some(p) => PathBuf::from(p),
+            Some(p) => self.here_path(p),
             None => self.current_buffer().path()?.to_path_buf(),
         };
         let was = std::fs::metadata(&target).ok()?.len();
@@ -1301,7 +1296,7 @@ impl Editor {
     ) -> Result<CommandOutcome, EditorError> {
         match path.as_deref() {
             Some(path) => {
-                let target = PathBuf::from(path);
+                let target = self.here_path(path);
                 if let Some(which) = self.buffer_holding(&target) {
                     if which != self.current {
                         let name = self.buffers[which].display_name();
@@ -1375,7 +1370,7 @@ impl Editor {
             // rebind silently, and every save after it went to the copy while
             // the chapter itself stayed at the version before.
             Some(p) => {
-                let target = PathBuf::from(p);
+                let target = self.here_path(p);
                 match self.buffer_holding(&target) {
                     // Its own file, spelled another way: an ordinary save.
                     Some(which) if which == self.current => {
