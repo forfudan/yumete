@@ -1753,7 +1753,12 @@ impl Editor {
             },
             false => How::Pattern(regex::Regex::new(&self.search_pattern()).ok()?),
         };
-        Some(Look { how, said, keep_case: self.search.preserve_case })
+        Some(Look {
+            how,
+            said,
+            keep_case: self.search.preserve_case,
+            doubled: !self.search.regex,
+        })
     }
 
     /// Look again and say how it went. The offsets are all stale now.
@@ -1970,6 +1975,14 @@ pub(super) struct Look {
     /// 搜 `hello` 的人要的是文稿裏那個 `hello`，而搜 `shuzhai` 的人要的是「書齋」
     /// ——兩種都給，讀者自己認得出哪一條是他要的。
     said: Option<Vec<char>>,
+    /// **換上去那一段裏的 `$` 被加倍過**——`replacement()` 在非正則那一路加的，
+    /// 好讓 `caps.expand` 把它還原成一個。
+    ///
+    /// Warning: **還原不一定輪得到 `expand`**（2026-10-02 查出來的）。拼音那一路的命
+    /// 中不是正則配上的（`spans` 把兩路合並了），所以 `expand` 走的是「原樣用」
+    /// 那一支，加倍的 `$` 就那麼進了稿子：查 `shuzhai`、換成 `US$100`，得到的是
+    /// `US$$100`；同一個詞打「書齋」去查卻是對的。所以那一支也要自己還原一次。
+    doubled: bool,
 }
 
 /// 字面那一路怎麼問。
@@ -1996,13 +2009,21 @@ impl Look {
                     out
                 }
                 // 這一處是拼音那一路配上的（`spans` 把兩路合並了），正則配不上它。
-                _ => with.to_string(),
+                _ => self.undoubled(with),
             },
-            _ => with.to_string(),
+            _ => self.undoubled(with),
         };
         match self.keep_case {
             true => follow_the_case_of(matched, &grown),
             false => grown,
+        }
+    }
+
+    /// `caps.expand` 沒跑到的時候，自己把加倍的 `$` 還原回來。見 [`Look::doubled`]。
+    fn undoubled(&self, with: &str) -> String {
+        match self.doubled {
+            true => with.replace("$$", "$"),
+            false => with.to_string(),
         }
     }
 
