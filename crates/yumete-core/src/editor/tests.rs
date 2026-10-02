@@ -9597,6 +9597,47 @@ fn undo_in_the_panel_only_claims_a_replacement_when_there_was_one() {
     assert_eq!(ed.current_buffer().rope().to_string(), "甲一", "字也回來了");
 }
 
+/// **兩份沒名字的草稿併成一行，`r` 只換得掉第一份**（2026-10-02 一輪審查報來的）。
+///
+/// 緩衝區那一檔裏 `Hit::file` 放的是**給人看的名字**，而沒有名字的草稿一律叫
+/// `[scratch]`。名單按名字分組，於是兩份草稿共用一行檔名，標題寫着「2 處」，而
+/// `r` 按下去回頭拿名字去撈緩衝區號，撈到的永遠是第一份。
+#[test]
+fn two_drafts_with_the_same_name_get_a_row_each() {
+    use crate::search_panel::Row;
+    let mut ed = Editor::new();
+    // 兩份沒有名字的草稿，各有一處。
+    ed.execute(":new").unwrap();
+    for c in "i草稿甲".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    ed.execute(":new").unwrap();
+    for c in "i草稿甲".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+
+    ed.execute(":search-buffers").unwrap();
+    ed.on_key(Key::Char('甲'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 2, "{:?}", ed.search().hits);
+
+    let heads: Vec<Row> = ed
+        .search()
+        .rows()
+        .into_iter()
+        .filter(|r| matches!(r, Row::File { .. }))
+        .collect();
+    assert_eq!(heads.len(), 2, "一份草稿一行：{heads:?}");
+    for head in &heads {
+        let Row::File { hits, buffer, .. } = head else { unreachable!() };
+        assert_eq!(*hits, 1, "每一行底下就一處");
+        assert!(buffer.is_some(), "緩衝區那一檔的行要帶號");
+    }
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那

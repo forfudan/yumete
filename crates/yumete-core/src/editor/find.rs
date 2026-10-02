@@ -955,17 +955,13 @@ impl Editor {
                     // 這一條）。從前只有 `R` 問，而 `r` 站在檔名那一行上一聲不吭
                     // 就換掉整個檔——兩個鍵差一個 Shift，兩行差一個 `j`，而不問的
                     // 那一個標籤最短、最容易被窄窗口截掉。
-                    Some(crate::search_panel::Row::File { path, hits, .. }) => {
+                    // 緩衝區那一檔要連號一起記下來，見 `replace_file`——而那個號
+                    // 現在就寫在這一行上（2026-10-02 起 `Row::File` 自己帶着它，
+                    // 從前是拿名字回頭去 `hits` 裏撈第一條，兩份同名的草稿就撈錯）。
+                    Some(crate::search_panel::Row::File { path, buffer, hits, .. }) => {
                         let name = path.display().to_string();
                         self.status = say!("search.replace-file-sure", hits, name);
-                        // 緩衝區那一檔要連號一起記下來，見 `replace_file`。
-                        let id = self
-                            .search
-                            .hits
-                            .iter()
-                            .find(|h| h.file.as_deref() == Some(path.as_path()))
-                            .and_then(|h| h.buffer);
-                        self.replace_this_file = Some((path, id));
+                        self.replace_this_file = Some((path, buffer));
                         self.pending = Pending::ReplaceAll;
                     }
                     _ => self.replace_hit(),

@@ -7955,7 +7955,7 @@ fn draw_search(
         let (line, plain) = match &rows[i] {
             // A file, with the mark the tree and the outline already use for
             // 「there is more under this」.
-            yumete_core::search_panel::Row::File { path, hits, folded } => {
+            yumete_core::search_panel::Row::File { path, hits, folded, .. } => {
                 // Warning: **The path is cut from the left, and the count is never
                 // cut at all** (2026-09-27). Drawn as one string and truncated
                 // the usual way, a 項目 search over this repo produced five
