@@ -14507,6 +14507,9 @@ review 讀不到的地方，於是同一條被反覆「發現」。原話：「�
 | `:convert` 為什麼不自己做簡繁 | `crates/yumete-core/src/convert.rs` 開頭 | 發／髮 要看上下文，那是 OpenCC 做了十五年的事。Warning: 搜索那邊的簡繁折疊是**另一個問題**（見 §5.12.37），別把兩件事混成一件。 |
 | 橫排注音撞車時「滑到別的字頭上」 | `crates/yumete-tui/src/lib.rs:9196` | 比基字寬的讀音會壓過去，後一個**往右推**。不撑開（橫排撑開要把整行後面推走，版心不能這麼動；竪排撑得起是因為它買的是旁邊那一縱），也不丟（「一個差一格的注音讀者看得見、能自己校正；一個沒畫出來的注音，他永遠不知道它在過」）。Warning: 2026-09-25 手冊兩處都還寫着舊說法，已改。 |
 | `n`／`N` 之外沒有「上一處」在搜索框裏 | `find.rs` 的 `on_field_key` | 往回找是少見的動作，而框裏 `n` 是字母 n，`Shift+Enter` 終端多半送不出來。 |
+| `::` 面板在多高的窗口上都只畫八行 | `yumete-tui/src/lib.rs:4954` | 「A picker is paths — hundreds of them, and no arrangement shows them all — so it stays the glanceable eight and scrolls.」2026-10-02 又被報了一次。 |
+| 候選面板該改用 `drawn_width` 量寬 | `yumete-cjk/src/width.rs:107` | **不該。** 那一支的註釋說它是給「**讀**一幀畫好的東西」用的（`frame_to_text`、點擊映射），不是給量一扇要畫的面板用的。真終端配 CJK 字體確實把「…」畫成兩格，所以 `str_width` 纔是對的那一個；列散掉的根子是 ratatui 和終端對 Ambiguous 這一族本來就不同意，要動是動那一層。2026-10-02 查過。 |
+| 搜索的 smart case 該問 `self.search.query` 而不是 `body` | `find.rs` 的 `search_pattern` | **兩個問句同一個答案。** `body` 裏多出來的只有 `regex::escape` 加的反斜杠和字形折疊（那張表一個大寫都沒有），兩個都進不了這道問句。2026-10-01 驗過，改了是空操作。 |
 
 **往這張表上加東西的規矩**：只放「定過並且寫下了理由」的。定過而沒寫理由的不算——那種要麼
 補理由，要麼重新定。
