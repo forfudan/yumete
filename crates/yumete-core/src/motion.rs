@@ -616,7 +616,14 @@ impl Span {
 /// Warning: **A line, not the buffer**: `f` that ran on would be a search, and this
 /// editor has one (`/`). Not found is [`Span::Missed`] — the editor says so on
 /// the status line, which is its business and not this function's.
-pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char, till: bool) -> Span {
+pub fn find_char(
+    rope: &Rope,
+    pos: usize,
+    forward: bool,
+    target: char,
+    till: bool,
+    nth: usize,
+) -> Span {
     let line = line_of(rope, pos);
     let line_start = rope.line_to_char(line);
     let mut text = rope.line(line).to_string();
@@ -625,9 +632,21 @@ pub fn find_char(rope: &Rope, pos: usize, forward: bool, target: char, till: boo
     }
     let chars: Vec<char> = text.chars().collect();
     let col = pos - line_start;
+    // Warning: **數目是「第 n 個」，而且不夠就整個不動**（2026-10-02 拿這臺機器上的
+    // nvim 量出來的）。從前數目是在外面**重複**這一支，於是每一趟都從上一個落點
+    // 重新下錨：`a,b,c,d,e` 上 `2f,` 選的是「第一個逗號到第二個」，而 vim 和 helix
+    // 選的都是「光標到第二個」。數目超出的時候更糟——`9f,` 只有四個逗號，vim 整個
+    // 動作失敗、一格不動，而從前它走到最後一個，`d9f,` **默默吃掉三十二個字**。
+    //
+    // nvim 量出來的（`a,b,c,d,e`，逗號在第 2、4、6、8 欄）：`2f,`→4、`3f,`→6、
+    // `9f,`→1（不動）、`2t,`→3、`3t,`→5。
+    let nth = nth.max(1);
     let found = match forward {
-        true => (col + 1..chars.len()).find(|&i| chars[i] == target),
-        false => (0..col.min(chars.len())).rev().find(|&i| chars[i] == target),
+        true => (col + 1..chars.len()).filter(|&i| chars[i] == target).nth(nth - 1),
+        false => (0..col.min(chars.len()))
+            .rev()
+            .filter(|&i| chars[i] == target)
+            .nth(nth - 1),
     };
     let Some(at) = found else { return Span::Missed };
     let head = line_start + at;
@@ -1109,17 +1128,17 @@ mod tests {
     fn find_stays_on_its_line() {
         let r = rope("alpha, beta\ngamma, delta");
         // Forward to the comma on this line.
-        assert_eq!(find_char(&r, 0, true, ',', false), Span::Over { anchor: 0, head: 5 });
+        assert_eq!(find_char(&r, 0, true, ',', false, 1), Span::Over { anchor: 0, head: 5 });
         // The comma on the *next* line is not this line's business.
-        assert_eq!(find_char(&r, 7, true, ',', false), Span::Missed);
+        assert_eq!(find_char(&r, 7, true, ',', false, 1), Span::Missed);
         // Backwards, and never onto the character the caret is already on.
-        assert_eq!(find_char(&r, 8, false, ',', false), Span::Over { anchor: 8, head: 5 });
-        assert_eq!(find_char(&r, 5, false, ',', false), Span::Missed);
+        assert_eq!(find_char(&r, 8, false, ',', false, 1), Span::Over { anchor: 8, head: 5 });
+        assert_eq!(find_char(&r, 5, false, ',', false, 1), Span::Missed);
         // `t` is `f` one short — a **grapheme** short, not an index short.
-        assert_eq!(find_char(&r, 0, true, ',', true), Span::Over { anchor: 0, head: 4 });
+        assert_eq!(find_char(&r, 0, true, ',', true, 1), Span::Over { anchor: 0, head: 4 });
         let r = rope("他說，她笑");
-        assert_eq!(find_char(&r, 0, true, '，', false), Span::Over { anchor: 0, head: 2 });
-        assert_eq!(find_char(&r, 0, true, '，', true), Span::Over { anchor: 0, head: 1 });
+        assert_eq!(find_char(&r, 0, true, '，', false, 1), Span::Over { anchor: 0, head: 2 });
+        assert_eq!(find_char(&r, 0, true, '，', true, 1), Span::Over { anchor: 0, head: 1 });
     }
 
     /// vim's `w` is the **bare primitive**, and that is the whole difference:

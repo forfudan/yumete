@@ -2732,6 +2732,57 @@ fn vims_backward_delete_neither_welds_lines_nor_eats_a_character() {
     );
 }
 
+/// **`f`／`t` 的數目是「第 n 個」，重複要往前挪一個，不夠就整個不動**
+/// （2026-10-02 拿這臺機器上的 nvim 量出來的）。
+///
+/// 三件事從前都是靠「把這一支叫 n 遍」做的，而那對 `f`／`t` 一件都不對：每一趟都
+/// 從上一個落點重新下錨（`2f,` 選的是第一個逗號到第二個）；`t` 落在目標前一格，再
+/// 叫一遍又配上同一個目標（`;` 永遠不前進，`tdtd` 的第二下把第一下選中的收成一點）；
+/// 數目超出的時候留下走成的那幾跳（`d9f,` 默默吃掉三十二個字）。
+#[test]
+fn a_count_on_find_is_the_nth_and_a_repeat_moves_on() {
+    let col = |keys: &str| {
+        let mut ed = typed("a,b,c,d,e\n");
+        press(&mut ed, keys);
+        ed.sel.head()
+    };
+    // nvim 量的（0 起算；逗號在 1、3、5、7）。
+    assert_eq!(col("t,"), 0, "t,");
+    assert_eq!(col("2t,"), 2, "2t, 是第二個逗號前一格");
+    assert_eq!(col("3t,"), 4, "3t,");
+    assert_eq!(col("f,"), 1, "f,");
+    assert_eq!(col("2f,"), 3, "2f, 是第二個逗號");
+    assert_eq!(col("9f,"), 0, "只有四個逗號，整個動作不動");
+
+    // Warning: **重複那一鍵兩套不同**，而這是寫下來的：helix 的 `;` 是「收成一點」，
+    // 重複走 `A-.`；vim 的 `;` 纔是重複（`keys.rs:1394`）。所以這一段分兩邊問。
+    let mut ed = typed("a,b,c,d,e\n");
+    press(&mut ed, "t,");
+    ed.on_key(Key::Alt('.'));
+    assert_eq!(ed.sel.head(), 2, "helix：A-. 要前進");
+    ed.on_key(Key::Alt('.'));
+    assert_eq!(ed.sel.head(), 4, "再一下");
+
+    let mut ed = typed("a,b,c,d,e\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "t,;");
+    assert_eq!(ed.sel.head(), 2, "vim：; 要前進");
+    press(&mut ed, ";");
+    assert_eq!(ed.sel.head(), 4, "再一下");
+
+    // 帶算子的那一路（vim）同樣。最後一條是會吃字的那一條。
+    let vim = |keys: &str| {
+        let mut ed = typed("a,b,c,d,e\n");
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        press(&mut ed, keys);
+        ed.current_buffer().rope().to_string()
+    };
+    assert_eq!(vim("d2f,"), "c,d,e\n");
+    assert_eq!(vim("d3f,"), "d,e\n");
+    assert_eq!(vim("d2t,"), ",c,d,e\n");
+    assert_eq!(vim("d9f,"), "a,b,c,d,e\n", "數目不夠就一個字都不許動");
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是

@@ -155,28 +155,62 @@ impl Editor {
 
     /// Find `target` on the current line (`f`/`t`/`F`/`T`), moving the head and
     /// selecting the jumped-over range (unless already extending).
-    pub(super) fn find_char(&mut self, kind: FindKind, target: char) {
-        // **The searching is a motion, the saying is the editor's** (B1,
-        // 2026-09-20). What `f` covers is a value now — so an operator can be
-        // handed it without anybody replaying the key — while 「there is no
-        // such character on this line」 stays here, where the status line is.
-        // Warning: **`t`／`T` are till again** (2026-09-21). They were retired when
-        // `t` became the table group, on the reasoning that a verb-last editor
-        // puts till 「one keystroke away from find and no more」. Two things
-        // changed: the vim preset puts the verb *first* (`dt,`), and helix's
-        // own `t` is `find_till_char` (`keymap/default.rs:14`) — so the key
-        // was costing both hands their muscle memory to save one keystroke in
-        // the one group that could afford to be a keystroke longer. The table
-        // group is `空格 t` now.
-        let span = self.run_motion(crate::motion::Motion::Find {
-            forward: kind.forward(),
-            target,
-            till: kind.till(),
-        });
+    /// The same, asked for the **nth** one, and told whether this is a repeat.
+    ///
+    /// Warning: **數目是「第 n 個」，重複要往前挪一個**（2026-10-02 拿 nvim 量出來
+    /// 的）。從前兩件事都是靠**把這一支叫 n 遍**做的，而那對 `f`／`t` 兩樣都不對：
+    ///
+    /// - 每一趟都從上一個落點重新下錨，於是 `2f,` 選的是「第一個逗號到第二個」，
+    ///   而 vim 和 helix 選的都是「光標到第二個」。
+    /// - `t` 落在目標前一格，再叫一遍又配上同一個目標、頭拉回原處——`;` 於是永遠
+    ///   不前進，而 `tdtd` 的第二下把第一下選中的**收成了一點**。
+    ///
+    /// nvim 量的（`a,b,c,d,e`，逗號在 2、4、6、8 欄）：`2t,`→3、`3t,`→5、
+    /// `t,;`→3、`t,;;`→5、`9f,`→1（整個不動）。
+    ///
+    /// `again` 是 `;`／`,`／`A-.`：vim 把它寫在 `:h ;` 裏——「when the cursor is
+    /// just in front of the searched character, the `;` command will find the
+    /// next occurrence」。只有重複要這一下，`t` 自己不要（`t,` 停在原地就是停在
+    /// 原地）。
+    pub(super) fn find_nth_char(&mut self, kind: FindKind, target: char, nth: usize, again: bool) {
+        // 重複的時候，先從「已經貼着的那一個」上讓開一格。
+        let from = match again && kind.till() {
+            true => match kind.forward() {
+                true => crate::motion::next_grapheme(
+                    self.current_buffer().rope(),
+                    self.sel.head(),
+                ),
+                false => crate::motion::prev_grapheme(
+                    self.current_buffer().rope(),
+                    self.sel.head(),
+                ),
+            },
+            false => self.sel.head(),
+        };
+        let was = self.sel.head();
+        self.sel.set_head(from);
+        let span = self.read_motion_nth(
+            crate::motion::Motion::Find {
+                forward: kind.forward(),
+                target,
+                till: kind.till(),
+            },
+            crate::motion::Reading::Selection,
+            nth,
+        );
+        self.sel.set_head(was);
         if span == crate::motion::Span::Missed {
             self.status = say!("find.no-such-character-on-this-line", target);
             return;
         }
+        // 錨點是你**出發**的地方，不是讓開之後那一格。
+        let span = match span {
+            crate::motion::Span::Over { head, .. } => {
+                crate::motion::Span::Over { anchor: was, head }
+            }
+            other => other,
+        };
         self.take_span(span);
     }
+
 }
