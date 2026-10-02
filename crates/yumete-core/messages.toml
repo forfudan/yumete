@@ -7194,6 +7194,76 @@ en = "read-only: {0}"
 # ── recover ───────────────────────────────────────────────────────────
 
 [[message]]
+# 開檔那一問的第二個選項：把草稿刪掉
+key = "recover.ask-drop"
+zht = "丟棄恢復文件"
+zhs = "丢弃恢复文件"
+en = "throw the draft away"
+
+[[message]]
+# 開檔那一問的第三個選項：草稿留着，以後再說
+key = "recover.ask-later"
+zht = "暫時不管"
+zhs = "暂时不管"
+en = "leave it for now"
+
+[[message]]
+# 開檔那一問的第一個選項：接着問第二問
+key = "recover.ask-take"
+zht = "恢復"
+zhs = "恢复"
+en = "recover"
+
+[[message]]
+# 開檔時問「要不要恢復」那一面板的標題
+key = "recover.ask-title"
+zht = "搶救文稿"
+zhs = "抢救文稿"
+en = "a draft was kept"
+
+[[message]]
+# 同一面板的正文，{0} 是檔名
+key = "recover.ask-what"
+zht = "《{0}》有一份比文件新的草稿，是上一次沒存好就結束的那一回留下的。"
+zhs = "《{0}》有一份比文件新的草稿，是上一次没存好就结束的那一回留下的。"
+en = "《{0}》 has a draft newer than the file, left by a run that ended before it saved."
+
+[[message]]
+# 第二問的第一個選項：真的換上去
+key = "recover.confirm-go"
+zht = "直接恢復"
+zhs = "直接恢复"
+en = "recover it"
+
+[[message]]
+# 第二問的第二個選項：先逐詞比一遍再說
+key = "recover.confirm-look"
+zht = "打開對比"
+zhs = "打开对比"
+en = "open the comparison"
+
+[[message]]
+# 第二問的第三個選項：什麽都不做
+key = "recover.confirm-no"
+zht = "取消"
+zhs = "取消"
+en = "cancel"
+
+[[message]]
+# 選了「恢復」之後再問一次，面板的標題
+key = "recover.confirm-title"
+zht = "再次確認"
+zhs = "再次确认"
+en = "one more time"
+
+[[message]]
+# 同一面板的正文，{0} 是檔名
+key = "recover.confirm-what"
+zht = "恢復會把現在的《{0}》整個換成那一份草稿。"
+zhs = "恢复会把现在的《{0}》整个换成那一份草稿。"
+en = "recovering replaces all of 《{0}》 as it stands with that draft."
+
+[[message]]
 # 丟掉本檔案的搶救稿
 key = "recover.draft-dropped"
 zht = "搶救稿丟掉了"

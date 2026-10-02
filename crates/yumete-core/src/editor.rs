@@ -2920,16 +2920,27 @@ pub struct Answer {
 
 /// What a [`Query`] is about.
 ///
-/// One arm today. It is an enum and not a `bool` because the interface is the
-/// point: the next thing that needs to stop and ask adds an arm and a match
-/// branch, and inherits the panel, the key routing and the 「Esc is no」 rule
-/// without touching any of them.
+/// It is an enum and not a `bool` because the interface is the point: the next
+/// thing that needs to stop and ask adds an arm and a match branch, and
+/// inherits the panel, the key routing and the 「Esc is no」 rule without
+/// touching any of them. The recovery pair below is what that promise bought.
 enum Asking {
     /// `:write` about to make the file on disk very much bigger.
     OversizeWrite {
         /// The path `:write` was given, if it was given one.
         path: Option<String>,
     },
+    /// **崩潰前的草稿比文件新**，開檔時立刻問（2026-10-02 作者定）。
+    ///
+    /// 原話：「recover 必須在用戶重新打開這個文件的時候立刻決定。用戶打了 800
+    /// 個字之後再按 recover 這是不對的。」從前開檔只在狀態欄寫一句，而
+    /// `:recover` 永遠按得下去——打了一上午再按一下，那一上午就從屏幕上沒了
+    /// （`u` 退得回來，但那是「知道的人纔救得回來」）。
+    ///
+    /// 「暫時不管」之後 `:recover` 再問同樣這三個。
+    RecoverDraft,
+    /// 選了「恢復」之後再問一次（同一天定的）：直接恢復／打開對比／取消。
+    RecoverConfirm,
 }
 
 /// An error from running an editor command.
