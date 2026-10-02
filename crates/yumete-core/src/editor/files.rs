@@ -194,6 +194,24 @@ impl Editor {
     /// `$HOME/notyou/x.md`，而一個真的叫 `~草稿.md` 的檔成了 `$HOME/草稿.md`。
     /// `yumete_config::expand_tilde` 早就是這條規矩（有一條測試釘着），這一支
     /// 跟上。
+    /// **一個打進來的路徑，解成實在的那一個**——`~` 展開，相對的按
+    /// [工作路徑][`Editor::working_dir`]算。
+    ///
+    /// Warning: **一條規矩，一處寫**（2026-10-02）。`:open` 2026-10-01 就改對了
+    /// （從前它原樣交給作業系統，按**進程的 cwd** 解，於是 `:pwd` 報的那個目録
+    /// `:open` 不認），可**寫出去的那幾個從來沒改**：`:cd sub` 之後
+    /// `:write-as z.md` 把檔存進了上一層，而狀態欄說「存了 z.md」。同一個會話裏
+    /// 讀和寫對「相對於哪裏」給出兩種答案。
+    ///
+    /// `~` 也是這裏展開的：`:write-as ~` 從前真的造出一個**叫 `~` 的檔**。
+    pub(super) fn here_path(&self, path: &str) -> PathBuf {
+        let full = Self::expand_tilde(path.trim());
+        match full.is_absolute() {
+            true => full,
+            false => self.working_dir().join(full),
+        }
+    }
+
     pub(super) fn expand_tilde(path: &str) -> PathBuf {
         let rest = match path {
             "~" => Some(""),
@@ -1179,7 +1197,7 @@ impl Editor {
             return Ok(CommandOutcome::Continue);
         };
         let target = match path {
-            Some(path) => PathBuf::from(path),
+            Some(path) => self.here_path(path),
             None => match self.current_buffer().path() {
                 Some(source) => source.with_extension(format.extension()),
                 None => return Err(EditorError::NoFileName),
@@ -1246,7 +1264,7 @@ impl Editor {
             crate::command::Shot::File { how, path } => (how, path),
         };
         let target = match path {
-            Some(path) => PathBuf::from(path),
+            Some(path) => self.here_path(&path),
             None => match self.current_buffer().path() {
                 Some(source) => {
                     let stem = source
@@ -1335,7 +1353,7 @@ impl Editor {
             }
         };
         let target = match path {
-            Some(path) => PathBuf::from(path),
+            Some(path) => self.here_path(path),
             None => match self.current_buffer().path() {
                 Some(source) => source.with_extension(format.trim().to_ascii_lowercase()),
                 None => return Err(EditorError::NoFileName),

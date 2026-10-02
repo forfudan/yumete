@@ -2571,6 +2571,40 @@ fn a_line_of_nothing_but_delimiters_is_a_rule_not_emphasis() {
     assert!(!ed.hidden_on_line(0).is_empty(), "真的高亮還要認得");
 }
 
+/// **寫出去的那幾個命令也按工作路徑算**（2026-10-02 一輪掃查報來的）。
+///
+/// `:open` 2026-10-01 就改對了（從前它原樣交給作業系統，按**進程的 cwd** 解），可寫
+/// 出去的那幾個從來沒改：`:cd sub` 之後 `:write-as z.md` 把檔存進了上一層，而狀態欄
+/// 說「存了 z.md」。同一個會話裏讀和寫對「相對於哪裏」給出兩種答案。
+#[test]
+fn a_path_typed_into_a_write_command_is_reckoned_from_the_working_directory() {
+    let dir = std::env::temp_dir().join(format!("yumete-writepath-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    let here = dir.join("甲.md");
+    std::fs::write(&here, "那年冬天\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(&here).unwrap();
+    assert!(ed.set_working_dir(&dir.join("卷一")), "挪得進去");
+
+    ed.execute(":write-as 乙.md").unwrap();
+    assert!(dir.join("卷一/乙.md").is_file(), "該落在工作路徑裏");
+    assert!(!dir.join("乙.md").exists(), "不該落在上一層");
+
+    // `~` 展開，而不是造一個叫 `~` 的檔。
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(&here).unwrap();
+    assert!(ed.set_working_dir(&dir));
+    let tilde = dir.join("~");
+    let _ = ed.execute(":write-as ~");
+    assert!(!tilde.exists(), "造出了一個叫 ~ 的檔");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
@@ -2994,14 +3028,23 @@ fn a_shot_names_a_file_and_waits_for_the_frame_it_is_a_picture_of() {
     };
     assert_eq!(target.parent(), Some(downloads_dir().as_path()));
 
-    // A name given is a name kept, wherever it points.
+    // A name given is a name kept — and a **relative** one is reckoned from the
+    // working directory, like every other path typed into a command
+    // （2026-10-02 改，從前它原樣交出去、由作業系統按**進程的 cwd** 解）。
     ed.execute(":shot txt page.txt").unwrap();
     assert_eq!(
         ed.take_screenshot_request(),
         Some(ShotJob::Page {
-            target: PathBuf::from("page.txt"),
+            target: ed.working_dir().join("page.txt"),
             text: true,
         })
+    );
+    // 絕對路徑原樣過去。
+    let named = std::env::temp_dir().join("yumete-shot-absolute.txt");
+    ed.execute(&format!(":shot txt {}", named.display())).unwrap();
+    assert_eq!(
+        ed.take_screenshot_request(),
+        Some(ShotJob::Page { target: named, text: true })
     );
 
     // A scratch buffer has no name to derive one from, exactly as an
