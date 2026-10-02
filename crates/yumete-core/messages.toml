@@ -391,8 +391,8 @@ en = "the next open file"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.next-region"
-zht = "下一個區域（主／副編輯區／邊欄）"
-zhs = "下一个区域（正文／边栏／另一个工作区）"
+zht = "下一個區域"
+zhs = "下一个区域"
 en = "the next region"
 
 [[message]]
