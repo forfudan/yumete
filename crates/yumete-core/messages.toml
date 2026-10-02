@@ -1409,17 +1409,17 @@ find = "替換 替换 replace 緩衝 缓冲 buffer buffers 打開 打开 開著 
 [[message]]
 # 命令：在項目路徑替換
 key = "cmd.commands.replace-project"
-zht = "在項目路徑替換"
-zhs = "在项目路径替换"
-en = "replace across the project"
+zht = "在項目路徑中替換"
+zhs = "在项目路径中替换"
+en = "search and replace in the project"
 find = "替換 替换 replace 項目 项目 project git 全書 全书"
 
 [[message]]
 # 命令：在工作路徑替換
 key = "cmd.commands.replace-working"
-zht = "在工作路徑替換"
-zhs = "在工作路径替换"
-en = "replace across the working directory"
+zht = "在工作路徑中替換"
+zhs = "在工作路径中替换"
+en = "search and replace in the working directory"
 find = "替換 替换 replace 工作 路徑 路径 目錄 目录 working cwd"
 
 [[message]]
@@ -2892,25 +2892,25 @@ find = "分詞 分词 著色 着色 底色 背景 tint"
 [[message]]
 # : 命令選單裏 discover 那一項的說明（word-topics 組）
 key = "cmd.word-topics.discover"
-zht = "挖出這一篇自己的詞：人名地名，字典裏沒有的"
-zhs = "挖出这一篇自己的词：人名地名，字典里没有的"
+zht = "挖掘這一篇的用戶詞語：人名地名，字典裏沒有的"
+zhs = "挖掘这一篇的用户词语：人名地名，字典里没有的"
 en = "mine this file's own words: the names no dictionary has"
 find = "新詞 新词 人名 地名 挖 discover"
 
 [[message]]
 # 命令：在項目路徑探索用戶詞語
 key = "cmd.word-topics.discover-project"
-zht = "在項目路徑中探索用戶詞語"
-zhs = "在项目路径中探索用户词语"
-en = "mine words across the project"
+zht = "在項目路徑中挖掘用戶詞語"
+zhs = "在项目路径中挖掘用户词语"
+en = "mine the project's own words"
 find = "挖詞 挖词 認詞 认词 詞語 词语 words mine discover 項目 项目 project"
 
 [[message]]
 # 命令：在工作路徑探索用戶詞語
 key = "cmd.word-topics.discover-working"
-zht = "在工作路徑中探索用戶詞語"
-zhs = "在工作路径中探索用户词语"
-en = "mine words across the working directory"
+zht = "在工作路徑中挖掘用戶詞語"
+zhs = "在工作路径中挖掘用户词语"
+en = "mine the working directory's own words"
 find = "挖詞 挖词 認詞 认词 詞語 词语 words mine discover 工作 路徑 路径 working cwd"
 
 [[message]]
@@ -7926,7 +7926,7 @@ en = "searching…"
 key = "search.scope-is-a-pick"
 zht = "位置是四選一：按 6 或者左右換一檔。要自己指一個文件夾，用 :search 某目錄"
 zhs = "位置是四选一：按 6 或者左右换一档。要自己指一个文件夹，用 :search 某目录"
-en = "the scope is a choice — press 6 or ← → to change it; `:search <folder>` names one"
+en = "In: is a choice — press 6 or ← → to change it; `:search <folder>` names one"
 
 [[message]]
 # 站在結果上按了改字的鍵
