@@ -9295,6 +9295,51 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **一個空文件夾說「2 處」**（2026-10-02 一輪黑盒審查報來的）。
+///
+/// 範圍指名一個文件夾的時候，眼前這一份照樣從內存裏搜了一遍——不管它在不在那個
+/// 文件夾底下。算「它相對根叫什麼名字」那一句從前是 `strip_prefix(…).unwrap_or(here)`，
+/// 剝不掉就把整條絕對路徑當名字接着用。屏幕上唯一看得出的破綻是檔名那一行變成
+/// 一條截斷的絕對路徑。
+#[test]
+fn a_named_folder_does_not_search_the_file_you_happen_to_have_open() {
+    let dir = a_little_book("searchoutside");
+    let empty = dir.join("空的");
+    std::fs::create_dir_all(&empty).unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+
+    // ① 空文件夾就是空的——眼前這一份有「霜」也不算。
+    ed.execute(":search 空的").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 0, "{:?}", ed.search().hits);
+
+    // ② 指名一個真的文件夾，只算它底下的。`卷一` 裏有 a.md（1）和 b.md（2）。
+    ed.execute(":search 卷一").unwrap();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 3, "{:?}", ed.search().hits);
+
+    // ③ 眼前這一份在根底下的時候照舊從內存裏搜——沒存的字也要找得到。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    for c in "i霜".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    type_keys(&mut ed, " /");
+    ed.execute(":search 卷一").unwrap();
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 4, "剛打的那一個也算：{:?}", ed.search().total);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那
