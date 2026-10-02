@@ -9638,6 +9638,41 @@ fn two_drafts_with_the_same_name_get_a_row_each() {
     }
 }
 
+/// **框裏 `d` 和 `D` 對同一個光標位置給出兩種答案**（2026-10-02 一輪黑盒審查報來的）。
+///
+/// `Enter` 之後光標停在文字後面那一格。`d` 在那裏刪得掉最後一個字（2026-09-27 定的，
+/// 理由是「按的人想刪的是看得見的最後那個字」），而 `D` 什麼都不做——屏幕上那一行
+/// 寫着「dD 刪除」。
+#[test]
+fn d_and_d_agree_at_the_end_of_a_box() {
+    use crate::search_panel::Field;
+    for key in ['d', 'D', 'C'] {
+        let mut ed = typed("霜");
+        ed.open_search();
+        for c in "hello".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.search().field, Field::Query);
+        ed.on_key(Key::Char(key));
+        assert_eq!(ed.search().query, "hell", "{key} 在末尾上什麼都沒刪");
+    }
+
+    // 退一格再按，刪的就是從那裏到末尾。
+    let mut ed = typed("霜");
+    ed.open_search();
+    for c in "hello".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Char('D'));
+    assert_eq!(ed.search().query, "hel");
+}
+
 /// **淡色標記在「緩衝區」那一檔整個不見**（2026-10-02 查出來的）。
 ///
 /// `search_marks` 拿「命中身上的路徑」比「眼前這一份相對搜索根的路徑」，而緩衝區那

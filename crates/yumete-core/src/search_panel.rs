@@ -760,9 +760,24 @@ impl Search {
     }
 
     /// **從光標刪到行尾**——框裏的 `D`。
+    ///
+    /// Warning: **末尾那個空位上照樣刪得掉最後一個字**（2026-10-02 補，同
+    /// [`Search::delete_here`] 2026-09-27 那條）。從前這一支在那裏是 `truncate(len)`
+    /// ＝什麼都不做，而同一個位置上 `d` 刪得掉——**兩個鍵對同一個光標位置給出
+    /// 兩種答案**，而屏幕上那一行寫着「dD 刪除」。
+    ///
+    /// 道理是 `d` 那一條的原話：框裏的光標走得到文字後面那一格（打字要從那裏接
+    /// 着打），`Esc` 出來多半就停在那裏，而按的人想刪的是看得見的最後那個字。
+    /// vi 的 Normal 態根本沒有「末尾後面那一格」，`D` 停在最後一個字上就是刪掉它。
     pub fn delete_to_end(&mut self) {
         self.all_selected = false;
-        let from = self.byte_at(self.caret);
+        let last = self.box_here().chars().count();
+        let at = match self.caret >= last {
+            true => self.caret.saturating_sub(1),
+            false => self.caret,
+        };
+        self.caret = at;
+        let from = self.byte_at(at);
         self.box_here().truncate(from);
     }
 
