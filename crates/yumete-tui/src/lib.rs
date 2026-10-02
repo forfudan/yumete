@@ -8304,6 +8304,13 @@ fn draw_picker(
     // — which was a byte index into the footer. Adding anything *after* the
     // query put that index inside 「開」 and the editor panicked while drawing:
     // 「space + f + j + j + Esc 我就退出 yumete 了」. Now nothing is sliced.
+    // Warning: **分母數的是篩過的那些**（2026-10-02 查出來的）。從前它是
+    // `picker.total()`——一共有幾個檔，不管篩掉了多少。於是打 `alpha` 之後名單上
+    // 一行，底下寫着 `1/7`；打一個誰都配不上的詞，名單空着，底下寫 `0/7`。分子
+    // 說的是「篩過的這些裏的第幾個」，兩個數不在同一個世界裏。
+    //
+    // 搜索面板那一格一直是 `1/3`＝第幾處／共幾處，同一個編輯器裏兩個同形的數目
+    // 不該是兩種意思。
     let counted = format!(
         "{}/{}  ",
         if items.is_empty() {
@@ -8311,7 +8318,7 @@ fn draw_picker(
         } else {
             picker.selected() + 1
         },
-        picker.total(),
+        items.len(),
     );
     // **腳注只剩一個數目**（2026-10-01 定）。查詢詞挪進了列表上面那個框（作者原
     // 話：「我其实有点想在文件下方加一行输入框」，後來定了畫在**上面**，和搜索
