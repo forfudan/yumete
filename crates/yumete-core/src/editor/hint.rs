@@ -354,6 +354,10 @@ impl Editor {
             Pending::Find(_) => (say!("hint.find"), vec![("".into(), say!("hint.type-a-character"))]),
             Pending::Replace => (say!("hint.overwrite"), vec![("".into(), say!("hint.type-a-character-to-overwrite"))]),
             Pending::Case => (say!("hint.case.title"), Self::said(Self::CASE_KEYS.iter().copied())),
+            Pending::TableConvert => (
+                say!("hint.table.convert"),
+                Self::said(Self::TABLE_CONVERT_KEYS.iter().copied()),
+            ),
             Pending::Confirm => {
                 (say!("hint.confirm.title"), Self::said(Self::CONFIRM_KEYS.iter().copied()))
             }

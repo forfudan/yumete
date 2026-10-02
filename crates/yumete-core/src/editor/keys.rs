@@ -913,6 +913,11 @@ impl Editor {
                 self.sort_keys.clear();
                 return;
             }
+            Pending::TableConvert => {
+                self.pending = Pending::None;
+                self.convert_table_key(key);
+                return;
+            }
             Pending::Hop { forward } => {
                 self.pending = Pending::None;
                 if key == Key::Char('c') {
@@ -2355,6 +2360,15 @@ impl Editor {
         // a key offered nowhere is a key nobody finds.
         ("a", "hint.table.wrap-wide-cells"),
         ("] [", "hint.table.next-or-previous"),
+        // 2026-10-02 作者定：命令是 `:convert-table`，鍵位摺在這一組底下。
+        ("x", "hint.table.convert"),
+    ];
+
+    /// `空格 t x` 底下那三個格式。名字直接寫——它們就是命令上打的那三個詞。
+    pub(super) const TABLE_CONVERT_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("p", "hint.table.convert-pipe"),
+        ("c", "hint.table.convert-csv"),
+        ("t", "hint.table.convert-tsv"),
     ];
 
     /// What `t` adds inside a fenced block. A block is read where it lies
