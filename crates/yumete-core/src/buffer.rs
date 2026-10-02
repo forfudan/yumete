@@ -811,6 +811,22 @@ impl Buffer {
     /// stops the save and says so. `:e!` is how you take the other version;
     /// `:w!` is how you keep yours.
     pub fn save_forcing(&mut self, force: bool) -> io::Result<()> {
+        // Warning: **鎖住的那一份，連寫都不寫**（2026-10-02 查出來的）。從前只有繩子
+        // 上了鎖——`insert`／`remove`／`replace`／`undo`／`redo` 五支都攔着，而
+        // 存檔這一支一個字都沒問。三種後果，都實測過：
+        //
+        // ① `--readonly` 開着、一個字沒改，`:w` 照樣把檔重寫一遍（inode 都換了）
+        //    ——而重寫那一下順手 `clear_swap()`，**把別人的救命稿刪了**。
+        // ② 先改、再 `:readonly on`、再 `:w`：改動照樣落盤。面板那一句
+        //    `readonly.on-with-unsaved` 明說「還有沒存的改動」，然後放它過去。
+        // ③ `--help` 上寫着「Open locked: nothing this run opens can be typed
+        //    into」，而這一支讓它變成只對內存成立。
+        //
+        // `force`（`:w!`）不開這道鎖：那個驚嘆號說的是「外面改過了，用我的」，
+        // 和「這一份鎖着」是兩件事。解鎖的話屏幕上一直寫着——`:readonly off`。
+        if self.readonly {
+            return Err(io::Error::other(say!("readonly.refused")));
+        }
         let path = self
             .path
             .clone()
@@ -1580,6 +1596,34 @@ mod tests {
         assert_eq!(b.replace(4..7, "改過的"), Ok(()));
         assert_eq!(b.text(), "第一行\n改過的\n");
         assert_eq!(b.revision(), was + 1, "one edit, one revision");
+    }
+
+    /// **鎖住的那一份，`:w` 連碰都不碰那個檔**（2026-10-02 查出來的）。
+    ///
+    /// 繩子上了鎖，而存檔那一支從前一個字都沒問：`--readonly` 開着、一個字沒改，
+    /// `:w` 照樣把檔重寫一遍（inode 都換了），順手把救命稿刪了。
+    #[test]
+    fn a_locked_buffer_refuses_to_be_written_at_all() {
+        let dir = std::env::temp_dir().join(format!("yumete-lockedsave-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("章.md");
+        fs::write(&path, "原來這樣\n").unwrap();
+
+        let mut buffer = Buffer::open(&path).unwrap();
+        buffer.set_readonly(true);
+        // 一個字沒改也不許寫——重寫一遍會換掉 inode，也會刪掉救命稿。
+        assert!(buffer.save_forcing(false).is_err(), "鎖着還寫得出去");
+        // 驚嘆號不開這道鎖：它說的是「外面改過了，用我的」，不是「解鎖」。
+        assert!(buffer.save_forcing(true).is_err(), "`:w!` 不是解鎖");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "原來這樣\n");
+
+        // 解了鎖就寫得出去。
+        buffer.set_readonly(false);
+        buffer.replace(0..4, "改過了").unwrap();
+        buffer.save_forcing(false).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "改過了\n");
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
