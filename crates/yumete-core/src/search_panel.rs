@@ -531,6 +531,17 @@ pub struct Search {
     pub hits: Vec<Hit>,
     /// How many there are altogether, however many are listed.
     pub total: usize,
+    /// **每一個有命中的檔，一個不落**——`(檔名, 緩衝區號)`，和 [`Hit`] 同一對。
+    ///
+    /// Warning: **`R` 要的是這一張，不是 `hits`**（2026-10-02 查出來的）。`hits` 封頂
+    /// [`MOST`] 條，而 `total` 不封頂；`R` 從前拿 `hits` 推出要動哪幾個檔，於是
+    /// 一本大書裏**排在第 500 處之後的那幾個檔一個都沒動**，而問句照着 `total`
+    /// 問「把這 602 處全部換掉？」，換完說「共替換 600 處」。一聲不吭地換了一半，
+    /// 正是 `R` 最不該犯的錯。
+    ///
+    /// 這張表按**檔**算，不按處算，所以它的長度是這棵樹裏有命中的檔數——封頂沒有
+    /// 意義，也不會大到哪裏去。
+    pub files: Vec<(Option<std::path::PathBuf>, Option<u64>)>,
     /// Which hit the highlight is on.
     pub selected: usize,
     /// The pattern does not compile.
