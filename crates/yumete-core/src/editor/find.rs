@@ -545,37 +545,9 @@ impl Editor {
             .current_buffer()
             .path()
             .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
-        // Where the file being written sits in the answer: under its own name
-        // when the answer has names in it, and namelessly when it is the whole
-        // of the answer.
-        let mine = match (&root, &here) {
-            (Some(root), Some(here)) => here
-                .strip_prefix(std::fs::canonicalize(root).as_deref().unwrap_or(root))
-                .ok()
-                .map(std::path::Path::to_path_buf),
-            _ => None,
-        };
-        // Warning: **不在那個根底下的那一份，不搜**（2026-10-02 查出來的）。上面那
-        // 一句從前是 `.unwrap_or(here)`：剝不掉前綴就把**整條絕對路徑**當成「相
-        // 對根的名字」接着用，於是 `:search 一個空文件夾` 報的是你眼前這一份的
-        // 命中數——空文件夾說「2 處」。屏幕上唯一的破綻是檔名那一行變成一條截
-        // 斷的絕對路徑，而那看着只像是名字太長。
-        //
-        // 範圍說的是「去哪裏找」。眼前這一份不在那裏，就不在那裏——helix 的
-        // `global_search` 也只走 cwd，不會把你另一個目錄裏開着的檔算進來。
-        // 沒有名字的草稿不在此列（它哪個根底下都不在，而它是你正在寫的那一份）。
-        let outside = root.is_some() && here.is_some() && mine.is_none();
         // It comes first, and it comes from memory: what is on the screen is
-        // what is searched, saved or not.
-        //
-        // Warning: **可它也要過篩子**（2026-10-02 測試逼出來的）。這一份不走
-        // `walk_prose`，所以包含／排除從前篩不到它：打開着 `a.md`、包含那一格寫
-        // `*.txt`，它的命中照樣在名單上，而框上寫着「只搜 .txt」。
-        let sifted = !outside
-            && match (&root, &here) {
-                (Some(root), Some(here)) => self.sieve().is_none_or(|s| s.lets_through(root, here)),
-                _ => true,
-            };
+        // what is searched, saved or not — when it is in scope at all.
+        let (mine, sifted) = self.the_open_one_in_scope();
         let (mut hits, mut total) = match sifted {
             true => self.scan_the_open_one(&look, &mine, MOST),
             false => (Vec::new(), 0),
@@ -1441,10 +1413,13 @@ impl Editor {
             return self.search_now();
         }
         let Some(look) = self.looker() else { return };
-        let mine = self.my_label();
+        let (mine, counts) = self.the_open_one_in_scope();
         let was = self.search.mine.min(self.search.hits.len());
         let others = self.search.hits.len() - was;
-        let (fresh, total) = self.scan_the_open_one(&look, &mine, MOST.saturating_sub(others));
+        let (fresh, total) = match counts {
+            true => self.scan_the_open_one(&look, &mine, MOST.saturating_sub(others)),
+            false => (Vec::new(), 0),
+        };
         // 砍過就接不回去：後面漏了哪些沒人知道。整趟重跑，它自己會把數擺對。
         if self.search.total > MOST || total + (self.search.total - self.search.mine_total) > MOST {
             return self.search_now();
@@ -1454,6 +1429,16 @@ impl Editor {
         self.search.total = self.search.total - self.search.mine_total + total;
         self.search.mine = self.search.hits.len() - others;
         self.search.mine_total = total;
+        // **那張「有命中的檔」也要跟着**（見 [`crate::search_panel::Search::files`]）。
+        // 在正文裏打出第一個「霜」來，這一份就該進那張表；刪掉最後一個，就該出
+        // 去。不跟的話 `R` 要麼漏掉眼前這一份，要麼為一個早就沒有命中的檔白開一
+        // 趟——而問句數的也是那張表。
+        let me = (mine.clone(), None);
+        self.search.files.retain(|one| one != &me);
+        if total > 0 {
+            // 整趟重搜的時候它排在最前面（先搜內存再走磁碟），這裏也擺回去。
+            self.search.files.insert(0, me);
+        }
         // **站着的那一行跟着挪。** 站在別人那一段上的時候，前面長了幾行就往下挪
         // 幾行——那一行說的還是同一處命中。站在自己這一段裏就只夾住，那幾處本來
         // 就被剛纔那一筆改動挪動了。
@@ -1466,13 +1451,44 @@ impl Editor {
         self.search.looked_at = Some(self.search_mark());
     }
 
-    /// **正在寫的那一份在名單上叫什麼**——相對搜索的根，沒有根就沒有名字。
-    fn my_label(&self) -> Option<std::path::PathBuf> {
-        let root = self.search.root.as_ref()?;
-        let here = self.current_buffer().path()?;
-        let here = std::fs::canonicalize(here).unwrap_or_else(|_| here.to_path_buf());
-        let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
-        Some(here.strip_prefix(&root).unwrap_or(&here).to_path_buf())
+    /// **眼前這一份在這一趟裏算不算**，以及它在名單上叫什麼。
+    ///
+    /// 兩條路都要問這一句：整趟重搜（[`Editor::search_now`]）和只重搜這一份
+    /// （[`Editor::rescan_the_open_one`]）。Warning: **問成兩份就會留洞**——
+    /// 2026-10-02 當天留過一個：整趟那一邊學會了「不在那個根底下就不搜」，而快路
+    /// 沒學會，於是 `:search 一個空文件夾` 報「無結果」，回正文打一個字，它又報
+    /// 出兩處來。
+    ///
+    /// 兩條規矩：
+    ///
+    /// 1. **不在那個根底下就不算。** 範圍說的是「去哪裏找」，眼前這一份不在那裏
+    ///    就不在那裏——helix 的 `global_search` 也只走 cwd。剝得掉前綴纔算在裏面；
+    ///    剝不掉從前是 `unwrap_or(here)`，把整條絕對路徑當成名字接着用。
+    /// 2. **包含／排除也篩它。** 這一份不走 `walk_prose`，所以從前篩不到：打開着
+    ///    `a.md`、包含那一格寫 `*.txt`，它的命中照樣在名單上，而框上寫着「只搜
+    ///    .txt」。
+    ///
+    /// 沒有名字的草稿不在此列（它哪個根底下都不在，而它是你正在寫的那一份）。
+    fn the_open_one_in_scope(&self) -> (Option<PathBuf>, bool) {
+        let root = self.search_root();
+        let here = self
+            .current_buffer()
+            .path()
+            .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
+        let mine = match (&root, &here) {
+            (Some(root), Some(here)) => here
+                .strip_prefix(std::fs::canonicalize(root).as_deref().unwrap_or(root))
+                .ok()
+                .map(std::path::Path::to_path_buf),
+            _ => None,
+        };
+        let outside = root.is_some() && here.is_some() && mine.is_none();
+        let counts = !outside
+            && match (&root, &here) {
+                (Some(root), Some(here)) => self.sieve().is_none_or(|s| s.lets_through(root, here)),
+                _ => true,
+            };
+        (mine, counts)
     }
 
     // ---- Changing what was found (#419 三) --------------------------------
