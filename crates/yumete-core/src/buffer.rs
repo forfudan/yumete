@@ -133,6 +133,18 @@ pub struct Buffer {
     /// unless the save itself is told. A revision cannot stand in for it:
     /// undo makes one too, and a save makes none.
     saves: u64,
+    /// **撤回棧有多深的時候存的檔**——`None` ＝ 這一份沒有一個「和盤上一樣」的位置。
+    ///
+    /// Warning: **沒有它，`:w` 之後按一下 `u`，緩衝區就說自己是乾淨的**（2026-10-02 查
+    /// 出來的，會丟字）。每一個撤回點記着「拍它的時候改過沒有」，而 `undo` 把那
+    /// 一格原樣寫回來——存檔之前拍的那些點記的都是 `false`。於是：改一個字、
+    /// `:w`、按 `u`，屏幕回到原樣、盤上是改過的那一版、狀態欄**不寫 `[+]`**，
+    /// `:q` 一聲不吭就退出去了。救命稿也不寫（它問的也是 `is_modified`）。
+    ///
+    /// 記的是**深度**不是內容：一條線性的歷史上，撤回棧的深度就認得出一個位置，
+    /// 而比內容要給四十兆的稿子每按一下 `u` 算一次散列。分了叉（撤回之後又改）
+    /// 就把它作廢——那個位置從此走不回去了。
+    saved_depth: Option<usize>,
     /// **Where the last change was, and how much longer it made the text**
     /// (#366) — `None` when the whole rope was replaced.
     ///
@@ -254,6 +266,7 @@ impl Buffer {
             ending: "\n",
             history: History::default(),
             revision: 0,
+            saved_depth: Some(0),
             saves: 0,
             edit: None,
             last_edit: None,
@@ -293,6 +306,7 @@ impl Buffer {
             ending: "\n",
             history: History::default(),
             revision: 0,
+            saved_depth: Some(0),
             saves: 0,
             edit: None,
             last_edit: None,
@@ -356,6 +370,7 @@ impl Buffer {
             marked,
             history: History::default(),
             revision: 0,
+            saved_depth: Some(0),
             saves: 0,
             edit: None,
             last_edit: None,
@@ -489,6 +504,8 @@ impl Buffer {
         self.rope = Rope::from_str(text.as_ref());
         self.seen = seen;
         self.modified = false;
+        // 讀了一遍：撤回棧清空（底下那一句），所以乾淨的位置就是棧底。
+        self.saved_depth = Some(0);
         self.revision = self.revision.wrapping_add(1);
         self.edit = None;
         self.cursor = self.cursor.min(self.rope.len_chars());
@@ -840,6 +857,7 @@ impl Buffer {
         self.seen = stamp_of(&path);
         self.read_as = Some(digest(&self.rope.to_string()));
         self.modified = false;
+        self.saved_depth = Some(self.history.undo.len());
         self.saves += 1;
         // The document *is* the recovery copy now — but only ours goes; a draft
         // the writer has not looked at yet still holds text this file does not.
@@ -1023,9 +1041,20 @@ impl Buffer {
     /// moved. Called from the two places that move it.
     fn earn_snapshot(&mut self) {
         if let Some(point) = self.history.pending.take() {
+            // **分了叉，存檔那個位置就走不回去了**（見 [`Buffer::saved_depth`]）。
+            // 撤回幾步再改一個字，重做那一支整個沒了——而存檔的那一刻如果在那
+            // 一支上，從此沒有任何一個位置和盤上一樣。
+            if self.saved_depth.is_some_and(|at| at > self.history.undo.len()) {
+                self.saved_depth = None;
+            }
             self.history.undo.push(point);
             self.history.redo.clear();
         }
+    }
+
+    /// 走到這一步之後，緩衝區和盤上那一份還一不一樣。
+    fn still_as_saved(&self) -> Option<bool> {
+        self.saved_depth.map(|at| self.history.undo.len() == at)
     }
 
     /// Step back one undo point, returning the cursor position it was taken at,
@@ -1043,7 +1072,11 @@ impl Buffer {
         self.revision += 1;
         self.edit = None;
         self.rope = prev.rope;
-        self.modified = prev.modified;
+        // **走回去了算不算乾淨，問的是走到了哪裏**，不是那一格當初記了什麼。
+        self.modified = match self.still_as_saved() {
+            Some(same) => !same,
+            None => prev.modified,
+        };
         Some(prev.cursor.min(self.rope.len_chars()))
     }
 
@@ -1057,7 +1090,10 @@ impl Buffer {
         self.revision += 1;
         self.edit = None;
         self.rope = next.rope;
-        self.modified = next.modified;
+        self.modified = match self.still_as_saved() {
+            Some(same) => !same,
+            None => next.modified,
+        };
         Some(next.cursor.min(self.rope.len_chars()))
     }
 
@@ -1596,6 +1632,48 @@ mod tests {
         assert_eq!(b.replace(4..7, "改過的"), Ok(()));
         assert_eq!(b.text(), "第一行\n改過的\n");
         assert_eq!(b.revision(), was + 1, "one edit, one revision");
+    }
+
+    /// **`:w` 之後按一下 `u`，緩衝區不許說自己是乾淨的**（2026-10-02 查出來的，會丟字）。
+    ///
+    /// 每一個撤回點記着「拍它的時候改過沒有」，而存檔之前拍的那些點記的都是
+    /// `false`。於是改一個字、`:w`、按 `u`：屏幕回到原樣、盤上是改過的那一版、
+    /// 狀態欄不寫 `[+]`、`:q` 一聲不吭就退出去——而救命稿也不寫，它問的也是這
+    /// 一句。
+    #[test]
+    fn undoing_past_a_save_is_not_clean() {
+        let dir = std::env::temp_dir().join(format!("yumete-cleanpoint-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("章.md");
+        fs::write(&path, "原來這樣\n").unwrap();
+        let mut b = Buffer::open(&path).unwrap();
+        assert!(!b.is_modified());
+
+        // 改一個字、存檔：乾淨。
+        b.snapshot(0);
+        b.insert(0, "新").unwrap();
+        assert!(b.is_modified());
+        b.save_forcing(false).unwrap();
+        assert!(!b.is_modified(), "剛存完是乾淨的");
+
+        // 按 `u`：屏幕回到原樣，而**盤上不是**——這就是沒存的改動。
+        b.undo(0).unwrap();
+        assert_eq!(b.rope().to_string(), "原來這樣\n");
+        assert!(b.is_modified(), "撤回到存檔之前，盤上那一份已經不是這個了");
+
+        // 再 `U` 回去，又和盤上一樣了。
+        b.redo(0).unwrap();
+        assert!(!b.is_modified(), "走回存檔那個位置，就又乾淨了");
+
+        // 撤回之後再改一個字：那個位置從此走不回去，永遠是髒的。
+        b.undo(0).unwrap();
+        b.snapshot(0);
+        b.insert(0, "別").unwrap();
+        assert!(b.is_modified());
+        b.undo(0).unwrap();
+        assert!(b.is_modified(), "分了叉，沒有一個位置和盤上一樣");
+        fs::remove_dir_all(&dir).ok();
     }
 
     /// **鎖住的那一份，`:w` 連碰都不碰那個檔**（2026-10-02 查出來的）。
