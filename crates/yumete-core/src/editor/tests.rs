@@ -2691,6 +2691,47 @@ fn the_first_non_blank_of_a_blank_line_is_the_line_start() {
     assert_eq!(line_first_non_blank(&rope, empty), empty);
 }
 
+/// **vim 那一套：第 1 欄按 `db` 不許焊行，檔首按 `db` 什麼都不做**
+/// （2026-10-02 拿這臺機器上的 nvim 量出來的）。
+///
+/// `prev_grapheme(start)` 在第 1 欄上**就是那個換行**，於是 `j0db` 把兩行焊成一行
+/// ——這是「`dw` 不跨行」（§5.11 B3）的鏡像，往前那一支早就擋了，往回這一支沒有。
+/// vim 把它寫成通則（`:h exclusive`）：排他的動作停在第 1 欄，終點就退到上一行的
+/// 末尾，動作變成包含的。
+///
+/// 第二條：檔首按 `db`，`prev_word_start` 回 0（它從不 `Missed`），從前做出一格的
+/// 跨度，於是刪掉一個字；nvim 在那裏整個動作失敗。
+#[test]
+fn vims_backward_delete_neither_welds_lines_nor_eats_a_character() {
+    let vim = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        press(&mut ed, keys);
+        ed.current_buffer().rope().to_string()
+    };
+
+    // 第 1 欄：上一行留着，換行也留着。
+    assert_eq!(
+        vim("alpha beta gamma\nsecond line here\n", "j0db"),
+        "alpha beta \nsecond line here\n"
+    );
+    // 檔首：一個字都不許動。
+    assert_eq!(
+        vim("alpha beta gamma\nsecond line here\n", "db"),
+        "alpha beta gamma\nsecond line here\n"
+    );
+    // 本來就對的那幾個不許變。
+    assert_eq!(
+        vim("alpha beta gamma\nsecond line here\n", "jwdb"),
+        "alpha beta gamma\nline here\n"
+    );
+    // `$` 停在最後一個字上，`dw` 刪到詞尾——就是那一個字。拿 nvim 對過。
+    assert_eq!(
+        vim("alpha beta gamma\nsecond line here\n", "$dw"),
+        "alpha beta gamm\nsecond line here\n"
+    );
+}
+
 /// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
 ///
 /// `note_progress` 從前只問「有沒有這本賬」，不問「這一份在不在這本書裏」——於是
