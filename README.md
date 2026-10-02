@@ -131,8 +131,8 @@ from the same model; `:word` says which is answering —
 `分詞：75000 條（內置） · balanced · 著色開`. `:word-level` sets the grain —
 `off` (no dictionary at all: 漢字 are letters, so `我們都是apple` is one word),
 `strict`, `balanced`, `full`. `.yumete/words.txt` teaches it the names in *this*
-book, and `:word-discover` mines the project's own repeated n-grams for
-candidates. A tint overlay shows where the boundaries fell, on the words that
+book, and `:word-discover` mines this file's own repeated n-grams for
+candidates — `-working` and `-project` widen it. A tint overlay shows where the boundaries fell, on the words that
 need it — a word already fenced by 標點 on both sides is not tinted, because
 that would say it twice.
 
@@ -176,9 +176,9 @@ left on. The sidebar holds three views on `Tab` — the file tree, the buffers,
 and an **outline** built from Markdown headings or Typst's own (following
 `#include` across chapter files, with no compiler in the loop).
 
-`:search-gd` and `:toc` produce results that are *text*, so `gf` walks them. The
-search panel (`空格 /`) finds a name across the whole project and `:replace`
-renames it everywhere — **nothing touches disk until `:write-all`**. `空格 w`
+`:search-project` and `:toc` produce results that are *text*, so `gf` walks
+them. The search panel (`空格 /` for this file, `:search-project` for the whole
+of it) finds a name and `:replace-project` renames it everywhere — **nothing touches disk until `:write-all`**. `空格 w`
 splits the work area in two.
 
 ### A wiki for the book you are writing
