@@ -308,6 +308,10 @@ fn line_of(rope: &Rope, pos: usize) -> usize {
 }
 
 /// The start of the next word after `pos` (`w` / `W`).
+///
+/// Warning: **這一支是故意跨行的**，見 `word_motions_still_cross_lines`。vim 的 `dw`
+/// 直接用它（`[pos, next_word_start)`），而「行末的 `dw` 不許吃掉換行」那一條
+/// （§5.11 B3）是在 vim 那一邊擋的。helix 那一邊的規矩在 [`unit_forward`] 裏。
 pub fn next_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     for line in line_of(rope, pos)..rope.len_lines() {
         if let Some(start) = line_words(rope, line, grain, seg)
@@ -368,7 +372,42 @@ pub enum Span {
 /// `[pos, next_word_start)`. That is the whole of why the two feel different,
 /// and why a translation table could never say it.
 pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
-    unit_forward(rope, from, |r, p| next_word_start(r, p, grain, seg))
+    // Warning: **一次 `w` 不跨換行**（2026-10-02 照 helix 比出來的，會焊行）。
+    //
+    // 從前行末按 `w` 選中的是「本行剩下的字 ＋ 換行 ＋ 下一行的縮進」，一個 `d`
+    // 就把兩行焊成一行。§5.11 B3 記過這個症狀（「`dw` 在行末吃掉換行**和下一行的
+    // 縮進**」），可那一次只改了 vim 那一套文法，helix 這一套留着。
+    //
+    // helix 的 `range_to_target` 把換行當成一個**目標**（`movement.rs:470`）：`w`
+    // 停在行末，再按一下纔過去；真跨過去的時候 `anchor = head`，所以選中的裏面
+    // 永遠沒有那個換行。實測（`helix-core` 079a789e8，`alpha beta gamma` 那一行）：
+    // 第 14 格按 `w` 選的是 `ma`，第 15 格按 `w` 選的是下一行的縮進 `  `。
+    //
+    // Warning: **這兩條只給 `w` 用。** [`next_word_start`] 是 vim 的 `dw` 直接用的
+    // 原件，故意跨行（`word_motions_still_cross_lines`）；[`unit_forward`] 還服務
+    // 段落和句子，而那兩種本來就該跨行。
+    let stop_at_line_end = |r: &Rope, p: usize| -> usize {
+        let line = line_of(r, p);
+        if let Some(start) = line_words(r, line, grain, seg)
+            .into_iter()
+            .map(|(start, _)| start)
+            .find(|&start| start > p)
+        {
+            return start;
+        }
+        let end = line_end(r, r.line_to_char(line));
+        match end > p {
+            true => end,
+            // 已經在行末了：這一下纔走到下一行。
+            false => next_word_start(r, p, grain, seg),
+        }
+    };
+    match unit_forward(rope, from, stop_at_line_end) {
+        Span::Over { anchor, head } if rope.char_to_line(anchor) != rope.char_to_line(head) => {
+            Span::Over { anchor: line_start(rope, head), head }
+        }
+        other => other,
+    }
 }
 
 /// **The forward rule itself**, over whatever unit `next` counts (B1).
@@ -1033,6 +1072,42 @@ mod tests {
         // 空隙上：vim 只拿那一格，helix 取下一個詞。分歧就這一處。
         assert_eq!(next_word_start(&r, 5, Grain::Coarse, &seg), 6);
         assert_eq!(word_forward(&r, 5, Grain::Coarse, &seg), Span::Over { anchor: 6, head: 10 });
+    }
+
+    /// **一次 `w` 不跨換行**（2026-10-02 照 helix 的 `helix-core` 079a789e8 比出來的）。
+    ///
+    /// 行末按 `w` 從前選中「本行剩下的字 ＋ 換行 ＋ 下一行的縮進」，一個 `d` 就把
+    /// 兩行焊成一行。§5.11 B3 記過這個症狀，可那一次只改了 vim 那一套文法。
+    ///
+    /// 底下三行是拿 helix 自己的 `move_next_word_start` 量出來的答案。
+    #[test]
+    fn w_stops_at_the_line_ending_the_way_helix_does() {
+        let seg = CategorySegmenter;
+        let r = rope("alpha beta gamma\n  indented word here\n");
+
+        // 第 14 格（`gamma` 的 `m`）：選 `ma`，停在行末。
+        assert_eq!(
+            word_forward(&r, 14, Grain::Coarse, &seg),
+            Span::Over { anchor: 14, head: 15 }
+        );
+        // 第 10 格（`gamma` 前面那個空格）：選整個 `gamma`，照樣不帶換行。
+        assert_eq!(
+            word_forward(&r, 10, Grain::Coarse, &seg),
+            Span::Over { anchor: 11, head: 15 }
+        );
+        // 第 15 格（`gamma` 的最後一個字）：這一下纔過去，而錨點落在下一行的開頭
+        // ——選中的裏面沒有那個換行。
+        assert_eq!(
+            word_forward(&r, 15, Grain::Coarse, &seg),
+            Span::Over { anchor: 17, head: 18 }
+        );
+
+        // 整行一個詞的時候，頭停在最後一個字上，不是換行符上。
+        let r = rope("甲乙丙丁\n戊己\n");
+        assert_eq!(
+            word_forward(&r, 0, Grain::Big, &seg),
+            Span::Over { anchor: 0, head: 3 }
+        );
     }
 
     #[test]
