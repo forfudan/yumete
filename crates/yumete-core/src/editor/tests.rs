@@ -14809,6 +14809,33 @@ fn a_huge_count_on_f_costs_one_look_when_the_character_is_not_there() {
 }
 
 /// **A macro answers to the ceiling too** (#318).
+/// **`10q` 和 `1q` 按同樣多下 `u`**（2026-10-02 補，#323 當初只改了 `repeat`）。
+///
+/// 數目是一條命令——`100p` 一下撤得掉，而一個改動的巨集放十遍從前要按十一下。
+/// 巨集**裏面**每一條命令照舊各算一步（vim 也是這樣），改的只是「放了幾遍」。
+#[test]
+fn a_count_on_a_macro_is_one_command_like_any_other_count() {
+    let lines: String = (1..=12).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed(&lines);
+    // 錄一個「行首插一個 `!`、往下一行」的巨集。
+    press(&mut ed, "QA!");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jQ");
+    let after_recording = ed.current_buffer().rope().to_string();
+    assert_eq!(after_recording.matches('!').count(), 1, "錄的時候自己也做了一遍");
+
+    press(&mut ed, "10q");
+    assert_eq!(
+        ed.current_buffer().rope().to_string().matches('!').count(),
+        11,
+        "放了十遍"
+    );
+
+    // 一下 `u` 把那十遍整個撤掉，錄的時候那一遍還在。
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().rope().to_string(), after_recording, "一下撤完十遍");
+}
+
 #[test]
 fn a_macro_asked_for_a_million_stops_at_the_ceiling() {
     let mut ed = typed("雪\n");
