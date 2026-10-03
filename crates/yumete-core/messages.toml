@@ -2765,6 +2765,7 @@ key = "cmd.wikis.edit"
 zht = "打開這本書的 .yumete/wiki.md，沒有就建一個"
 zhs = "打开这本书的 .yumete/wiki.md，没有就建一个"
 en = "open this book's .yumete/wiki.md, existing or not"
+find = "百科 詞條 词条 編輯 编辑 打開 打开 wiki edit"
 
 [[message]]
 # : 命令選單裏 global 那一項的說明（wiki 組）
@@ -2772,6 +2773,7 @@ key = "cmd.wikis.global"
 zht = "打開全局的 wiki.md——整個系列共用的設定"
 zhs = "打开全局的 wiki.md——整个系列共用的设定"
 en = "open the global wiki.md — what a whole series shares"
+find = "百科 詞條 词条 全局 系列 共用 wiki global"
 
 [[message]]
 # : 命令選單裏 line 那一項的說明（wiki 組）
@@ -2793,6 +2795,7 @@ key = "cmd.wikis.panel"
 zht = "把詞條固定在邊欄——開着的時候不再浮出來"
 zhs = "把词条固定在边栏——开着的时候不再浮出来"
 en = "keep the entry in the sidebar — while it is open it no longer floats"
+find = "百科 詞條 词条 邊欄 边栏 固定 面板 wiki panel"
 
 [[message]]
 # : 命令選單裏 reload 那一項的說明（wiki 組）
@@ -2800,6 +2803,7 @@ key = "cmd.wikis.reload"
 zht = "重讀百科和它引到的每一個檔"
 zhs = "重读百科和它引到的每一个文件"
 en = "read the wiki and every file it includes again"
+find = "百科 詞條 词条 重讀 重读 刷新 wiki reload"
 
 [[message]]
 # : 命令選單裏 balanced 那一項的說明（word-levels 組）
