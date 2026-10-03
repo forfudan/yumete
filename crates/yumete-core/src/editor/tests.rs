@@ -19919,6 +19919,28 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **併一個空行不留下行尾空格**（2026-10-03，拿 nvim 比出來的）。
+///
+/// #326 修過「行尾本來就有的空白」，漏了「空白從下一行來」這一種：空行在接縫那一
+/// 支裏露面的樣子是一個換行符，既不全角也不是空白，於是掉進了「補一個空格」。
+#[test]
+fn joining_an_empty_line_leaves_no_trailing_space() {
+    let mut ed = typed("first\n\nsecond\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "first\nsecond\n", "行尾不許多一個空格");
+
+    // 旁邊那幾種照舊：拉丁詞之間要空格，漢字之間不要。
+    let mut ed = typed("first\nsecond\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "first second\n");
+    let mut ed = typed("第一句。\n第二句。\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "第一句。第二句。\n", "漢字之間不補空格");
+}
+
 /// **`第一章` ＋ 一行 `====` 也是一章**（setext 標題，2026-10-03）。
 ///
 /// CommonMark 認它，而 `outline` 從前只找行首的 `#`——於是用下劃線寫章名的稿子，
