@@ -786,7 +786,16 @@ pub fn run(
         // skipping it hands `:shot` a blank page.
         // What the last frame cost, and how long that buys the backlog.
         let floor = (last_frame * FRAME_SLACK).clamp(FRAME_FLOOR, FRAME_CEILING);
-        if wants_picture.is_some() || !waiting || painted.elapsed() >= floor {
+        // Warning: **一批替換做完的那一刻不許跳過這一幀**（2026-10-03 一輪審查報來的）。
+        // 一批是 80 毫秒，而 `FRAME_FLOOR` 是 100——所以每做完一批，`painted` 纔走了
+        // 80 毫秒，沒到那道閘。只要收件箱裏躺着一個鍵（`waiting`），這一整塊就被跳
+        // 過：**那一批不往前走，而鍵落到了下面**，而此刻 `self.current` 是
+        // `buffer_for` 剛為了改某一章打開的那一份——`x` 會砍進一個你沒打開過的檔。
+        if wants_picture.is_some()
+            || !waiting
+            || painted.elapsed() >= floor
+            || editor.replacing_a_batch()
+        {
             // **正文改過的話，把改過的那一份重搜一遍，就在畫之前**（2026-09-29
             // 定）。Warning: **不能放在畫完之後**：那樣這一幀畫的還是舊名單，讀者要等
             // 到下一次按鍵纔看得見側欄跟上。指紋對得上它立刻回來，所以每一幀問
