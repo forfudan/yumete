@@ -140,6 +140,16 @@ fn main() -> ExitCode {
             // **缺省搜當前目錄**，和 rg 一樣；這一個往上搜到項目的根。
             "--project" => g.project = true,
             "--open" => g.open = true,
+            s if s.starts_with("--color=") => match &s["--color=".len()..] {
+                "always" => g.colour = Some(true),
+                "never" => g.colour = Some(false),
+                "auto" => g.colour = None,
+                other => {
+                    eprintln!("yumete: --color: no such setting {other:?}");
+                    eprintln!("try auto, always or never");
+                    return ExitCode::from(2);
+                }
+            },
             // **`-t` is already the table**, so this one is long only. Worth a
             // flag at all because the lesson is what a first run wants, and
             // 「open the editor, then find out how to ask for the lesson」 is
@@ -187,6 +197,15 @@ fn main() -> ExitCode {
     // **`--open` 之外纔印到 stdout 就退出。** 帶了 `--open` 的那一條往下走，等編輯
     // 器建好、配置載好、檔開好之後再把面板擺出來（底下那一處）。
     if !g.open {
+        // **管道那一邊說英文**（2026-10-03 作者定：「cli 搜索结果我建议用英文而不是
+        // 中文……和 rg 稍微对齐一下，这样比较方便（pipe 的 tool 比较容易复用）」）。
+        //
+        // 編輯器裏的話是給寫書的人看的；這裏印出來的多半是給**另一個程序**看的，
+        // 或者給一個正在拼管道的人看的——那一群詞的通用語是英文。明寫了
+        // `--lang` 的人照他說的來。
+        yumete_core::messages::set_language(
+            force_language.unwrap_or(yumete_core::messages::Language::English),
+        );
         if let Some(pattern) = &grep {
             return run_grep(pattern, &files, &g);
         }
@@ -1080,6 +1099,8 @@ struct Grep {
     chinese: (bool, bool),
     /// 往上搜到項目的根，而不是當前目錄。
     project: bool,
+    /// **染不染色**：`None` ＝ 接着終端機就染、進管道就不染（rg 的 `auto`）。
+    colour: Option<bool>,
     /// **開編輯器，別印到 stdout**（2026-10-03 作者定）。`--grep … --open` 開起來
     /// 面板已經在跑，`--files … --open` 開起來挑選器已經打好。
     ///
@@ -1103,6 +1124,7 @@ impl Default for Grep {
             // 存在的理由，`derive(Default)` 給的那一對正好是反的。
             chinese: (true, true),
             project: false,
+            colour: None,
             open: false,
         }
     }
@@ -1119,6 +1141,7 @@ impl Default for Grep {
 /// Warning: **正文那一欄是命中前後各六十個字，不是整行。** 小說的一行是一整段，動輒幾
 /// 千字——rg 印整行是因為代碼的一行是一行。要整行的話那是另一個開關的事。
 fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
+    let ink = Ink(g.colour.unwrap_or_else(|| std::io::stdout().is_terminal()));
     let cwd = std::env::current_dir().unwrap_or_default();
     let mut editor = Editor::new();
     // **給了路徑就站到那裏去**，沒給就站在 shell 站的地方——命令行的整個模型就是
@@ -1163,7 +1186,26 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
         // **印得出來的路徑是相對於你站的地方的**，所以「搜了哪裏」一眼看得出：
         // `--project` 爬上去過的話，印出來就會帶 `../`。
         let shown = pathdiff(&root.join(file), &cwd);
-        let line = format!("{}:{}:{}:{}", shown.display(), hit.line + 1, hit.column + 1, hit.excerpt);
+        // **命中那幾個字自己染**：`mark` 說它們落在摘錄的哪一段（按字計）。
+        let marked: String = {
+            let chars: Vec<char> = hit.excerpt.chars().collect();
+            let cut = |a: usize, b: usize| -> String {
+                chars.get(a.min(chars.len())..b.min(chars.len())).unwrap_or(&[]).iter().collect()
+            };
+            format!(
+                "{}{}{}",
+                cut(0, hit.mark.start),
+                ink.hit(&cut(hit.mark.start, hit.mark.end)),
+                cut(hit.mark.end, chars.len())
+            )
+        };
+        let line = format!(
+            "{}:{}:{}:{}",
+            ink.path(&shown.display().to_string()),
+            ink.number(&(hit.line + 1).to_string()),
+            ink.number(&(hit.column + 1).to_string()),
+            marked
+        );
         match writeln!(sink, "{line}") {
             Ok(()) => found += 1,
             Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
@@ -1186,6 +1228,7 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
 /// Warning: **匹配器是挑選器那一個**（`Editor::files_matching`），所以這裏和編輯器裏
 /// `空格 f` 打同樣幾個字母永遠是同一份答案。
 fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
+    let ink = Ink(g.colour.unwrap_or_else(|| std::io::stdout().is_terminal()));
     let cwd = std::env::current_dir().unwrap_or_default();
     let mut editor = Editor::new();
     let at = where_.first().map(std::path::PathBuf::from).unwrap_or_else(|| cwd.clone());
@@ -1203,7 +1246,7 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     let mut printed = 0usize;
     for name in &found {
         let shown = pathdiff(&root.join(name), &cwd);
-        match writeln!(sink, "{}", shown.display()) {
+        match writeln!(sink, "{}", ink.path(&shown.display().to_string())) {
             Ok(()) => printed += 1,
             Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
             Err(e) => {
@@ -1215,6 +1258,31 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     match printed {
         0 => ExitCode::from(1),
         _ => ExitCode::SUCCESS,
+    }
+}
+
+/// **管道那一邊的顏色**（2026-10-03 作者定：「染色这一块也可以做一下」）。
+///
+/// 照 rg 的缺省配色，因為肌肉記憶和眼睛的習慣都在那兒：路徑洋紅、行號綠、命中的
+/// 那幾個字紅而且粗。`auto` 的判準也和它一樣——**接着終端機就染，進管道就不染**，
+/// 不然 `| cut -d:` 拿到的第一欄裏裹着轉義序列。
+struct Ink(bool);
+
+impl Ink {
+    fn path(&self, text: &str) -> String {
+        self.wrap("35", text)
+    }
+    fn number(&self, text: &str) -> String {
+        self.wrap("32", text)
+    }
+    fn hit(&self, text: &str) -> String {
+        self.wrap("1;31", text)
+    }
+    fn wrap(&self, how: &str, text: &str) -> String {
+        match self.0 {
+            true => format!("\u{1b}[{how}m{text}\u{1b}[0m"),
+            false => text.to_string(),
+        }
     }
 }
 
@@ -1411,6 +1479,15 @@ SEARCHING FROM THE SHELL:
         --no-ignore        The same switch: yumete keeps them together.
         --glob=G           Only files matching these globs (comma-separated).
         --exclude=G        Never these.
+        --color=WHICH      auto (the default: colour on a terminal, plain in a
+                           pipe) / always / never. rg's palette, because that
+                           is where the eye's habits are: path magenta, line
+                           and column green, the match itself bold red.
+
+                     What --grep and --files say for themselves — refusals,
+                     diagnostics — is **English**, whatever `[editor] language`
+                     is set to: it is read by other programs and by whoever is
+                     assembling the pipe. `--lang` still wins if you ask.
         --shot[=WxH] Draw one frame — the page exactly as the editor would set
                      it — to standard output and exit. 100x30 by default.
                      `:shot` inside the editor draws the same picture into a
