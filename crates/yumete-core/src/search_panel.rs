@@ -195,9 +195,19 @@ pub enum Field {
     Include,
     /// **哪些文件不搜** —— the same, the other way round.
     Exclude,
-    /// **連隱藏文件和 `.gitignore` 裏的一起搜**（2026-10-01 定）。
+    /// **不搜哪些**——隱藏文件、`.gitignore` 裏的，兩件事分開撥（2026-10-03 定）。
     ///
-    /// 出廠關着：跳過隱藏文件、尊重 `.gitignore`，同 helix 與 telescope 的默認。
+    /// 按 `7` 轉一格，四態：`[隱藏+忽略]`（出廠）→`[隱藏]`→`[忽略]`→`[無]`。
+    /// 方框裏列的是**不搜哪些**，所以 `[隱藏]` 是「點文件仍然跳過，`.gitignore`
+    /// 裏的那些現在搜」——那一步排在第一，因為想找回來的多半是被忽略的目錄，
+    /// 不是點文件。
+    ///
+    /// Warning: **從前這是一個勾，一撥五道閘**。作者 2026-10-03 定要分開：
+    /// 「我们把 hidden 和 ignore 合到一起，我觉得可以考虑分开一下」。起因是他在
+    /// 一個工作區根上搜，`.gitignore` 裏寫着 `/yu/`，於是整個子倉沒搜到，而要
+    /// 撥的那個開關名叫「隱藏」。
+    ///
+    /// 出廠兩個都關：跳過隱藏文件、尊重 `.gitignore`，同 helix 與 telescope 的默認。
     /// vim 的默認 `grepprg` 是 `rg --vimgrep -uu`，故意關掉這兩道閘來跟傳統
     /// grep 對齊——那是它要兼容的歷史，不是我們的。
     ///
@@ -464,8 +474,10 @@ pub struct Search {
     pub include: String,
     /// **哪些文件不搜** —— 同上，見 [`Field::Exclude`]。
     pub exclude: String,
-    /// 連隱藏文件和 `.gitignore` 裏的一起搜。出廠關着，見 [`Field::Hidden`]。
+    /// 連隱藏文件一起搜。出廠關着，見 [`Field::Hidden`]。
     pub hidden: bool,
+    /// 連 `.gitignore` 裏的一起搜。出廠關着，見 [`Field::Hidden`]。
+    pub ignored: bool,
     /// **名單不封頂**（2026-10-03）。
     ///
     /// [`MOST`] 是給**面板**定的：「的」在一本小說裏是兩萬處，而名單是拿來走的，

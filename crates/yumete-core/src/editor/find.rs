@@ -530,6 +530,7 @@ impl Editor {
     fn sieve(&self) -> Option<crate::editor::Sieve> {
         let sieve = crate::editor::Sieve {
             hidden: self.search.hidden,
+            ignored: self.search.ignored,
             include: self.search.include.clone(),
             exclude: self.search.exclude.clone(),
         };
@@ -1348,9 +1349,19 @@ impl Editor {
             Field::Replacing => return self.flip_replacing(),
             // 位置不是一個勾，是四選一；按它的號碼就是「換一檔」。
             Field::Scope => return self.step_the_scope(),
-            // **連隱藏文件和 `.gitignore` 裏的一起搜**（2026-10-01 定）。範圍不走
-            // 磁碟的時候它畫灰，按下去什麼都不發生——同 模糊 在替換底下那一條。
-            Field::Hidden if self.search.on_disk() => self.search.hidden = !self.search.hidden,
+            // **`7` 轉一格，四態**（2026-10-03 定）。範圍不走磁碟的時候它畫灰，
+            // 按下去什麼都不發生——同 模糊 在替換底下那一條。方框裏列的是不搜哪些：
+            // `[隱藏+忽略]`→`[隱藏]`→`[忽略]`→`[無]`。第一步放開的是忽略那一半
+            // ——想找回來的多半是 `.gitignore` 擋掉的目錄，不是點文件。
+            Field::Hidden if self.search.on_disk() => {
+                (self.search.hidden, self.search.ignored) =
+                    match (self.search.hidden, self.search.ignored) {
+                        (false, false) => (false, true),
+                        (false, true) => (true, false),
+                        (true, false) => (true, true),
+                        (true, true) => (false, false),
+                    }
+            }
             Field::Hidden => return,
             _ => return,
         }

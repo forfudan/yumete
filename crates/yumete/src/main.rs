@@ -150,11 +150,16 @@ fn main() -> ExitCode {
                 g.fuzzy = true;
                 modifiers.push("--fuzzy");
             }
-            // yumete 把「隱藏檔」和「`.gitignore` 裏的」放在**同一個開關**上
-            // （面板那一格寫着「不搜 [隱藏+忽略]」），所以 rg 那兩個名字都撥它。
-            "--hidden" | "--no-ignore" => {
+            // **兩件事，兩個開關**（2026-10-03 作者定），字母與語意都同 rg。
+            // 從前它們是一個，於是一個想搜 `.gitignore` 裏那幾個目錄的人要去撥
+            // 一個名叫 `--hidden` 的旗標。
+            "--hidden" => {
                 g.hidden = true;
                 modifiers.push("--hidden");
+            }
+            "--no-ignore" => {
+                g.ignored = true;
+                modifiers.push("--no-ignore");
             }
             s if s.starts_with("--glob=") => {
                 g.include = s["--glob=".len()..].to_string();
@@ -868,6 +873,7 @@ fn main() -> ExitCode {
                 s.regex = g.regex;
                 s.fuzzy = g.fuzzy;
                 s.hidden = g.hidden;
+                s.ignored = g.ignored;
                 s.include = g.include.clone();
                 s.exclude = g.exclude.clone();
                 (s.glyphs, s.pinyin) = g.chinese;
@@ -1301,6 +1307,8 @@ struct Grep {
     regex: bool,
     fuzzy: bool,
     hidden: bool,
+    /// 連 `.gitignore` 裏的一起搜（`--no-ignore`）。和上面那個是兩件事。
+    ignored: bool,
     include: String,
     exclude: String,
     /// **繁簡、拼音**。出廠兩個都開——那是這個工具存在的理由
@@ -1333,6 +1341,7 @@ impl Default for Grep {
             regex: false,
             fuzzy: false,
             hidden: false,
+            ignored: false,
             include: String::new(),
             exclude: String::new(),
             // Warning: **不是 `(false, false)`。** 繁簡和拼音出廠都開着——那是這個工具
@@ -1463,6 +1472,7 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
             s.regex = g.regex;
             s.fuzzy = g.fuzzy;
             s.hidden = g.hidden;
+            s.ignored = g.ignored;
             // 指名一個檔的時候，那條 glob 就是「只要它」。
             s.include = match &only {
                 Some(name) => name.clone(),
@@ -1580,6 +1590,7 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
         // `Sieve::default()`，於是 `--hidden`／`--glob=`／`--exclude=` 全是死的。
         let sieve = yumete_core::editor::Sieve {
             hidden: g.hidden,
+            ignored: g.ignored,
             include: match &only {
                 Some(name) => name.clone(),
                 None => g.include.clone(),
@@ -1824,7 +1835,8 @@ SEARCHING FROM THE SHELL:
                      reads a query the same way: `zhongguo很大`, `zhong国` and
                      `中guo` all find 中國很大.
 
-                     --files takes --hidden, --glob=, --exclude= and --project.
+                     --files takes --hidden, --no-ignore, --glob=, --exclude=
+                     and --project.
                      The switches that shape a *pattern* belong to --grep, and
                      --files refuses them rather than ignoring them: a name is
                      matched by feel here, and there is no pattern to shape.
@@ -1850,8 +1862,12 @@ SEARCHING FROM THE SHELL:
         --fixed            Read it literally. (The default.)
         --fuzzy            These characters, nearly in a row.
         --chinese=WHICH    off / glyphs (繁簡) / pinyin / both. Default: both.
-        --hidden           Search hidden files and the ones .gitignore names.
-        --no-ignore        The same switch: yumete keeps them together.
+        --hidden           Search the dot-files too.
+        --no-ignore        Search what .gitignore and .ignore name too, and
+                           into target/ and node_modules/. Two switches, not
+                           one: a workspace that keeps its sibling repos out
+                           of git is the common reason a search comes back
+                           short, and that has nothing to do with dot-files.
         --glob=G           Only files matching these globs (comma-separated).
         --exclude=G        Never these.
         --color=WHICH      auto (the default: colour on a terminal, plain in a

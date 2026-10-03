@@ -7713,11 +7713,32 @@ zhs = "不搜"
 en = "skip"
 
 [[message]]
-# 不搜那一行方框裏列的：不搜哪些
+# 不搜那一行方框裏列的：不搜哪些。四態，按 7 轉一格（2026-10-03 定）
 key = "search.hidden.what"
 zht = "隱藏+忽略"
 zhs = "隐藏+忽略"
 en = "hidden+ignored"
+
+[[message]]
+# 第二態：點文件仍然跳過，.gitignore 裏的那些搜
+key = "search.hidden.what.hidden"
+zht = "隱藏"
+zhs = "隐藏"
+en = "hidden"
+
+[[message]]
+# 第三態：點文件搜，.gitignore 仍然尊重
+key = "search.hidden.what.ignored"
+zht = "忽略"
+zhs = "忽略"
+en = "ignored"
+
+[[message]]
+# 第四態：什麼都搜。寫一個字而不是留空——空方框像「沒加載到」
+key = "search.hidden.what.nothing"
+zht = "無"
+zhs = "无"
+en = "nothing"
 
 [[message]]
 # 限定一欄搜到第一處
