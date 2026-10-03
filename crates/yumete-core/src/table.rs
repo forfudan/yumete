@@ -825,33 +825,33 @@ pub fn shape_of(lines: &[String]) -> Option<Shape> {
 
 /// **同一張表，換一種寫法。**
 ///
-/// `Err((行, 欄))` 是「那一格裝不下」——目標的分隔符出現在格子裏，而這裏不替人
-/// 加引號（同 [`crate::mdtable::to_delimited`] 的規矩）。
+/// **轉換不會失敗**（2026-10-03 改）。從前目標的分隔符出現在格子裏就交
+/// `Err((行, 欄))`，理由是「不替人加引號」；而按欄位決定加不加引號正是 RFC 4180
+/// 的規矩，`:export` 那一邊也早就這麼做了——兩邊從前不一致。見
+/// [`crate::mdtable::to_delimited`]。
 ///
 /// Warning: **轉成 `|` 表格會丟掉格子兩邊的空白**，轉到另一個分隔符不會：`|` 表格
 /// 存不下那幾個空格（讀的時候兩邊一律去掉），分隔文本存得下。2026-10-02 定的，
 /// 理由記在 `mdtable::from_delimited`。
-pub fn recast(lines: &[String], from: Shape, to: Shape) -> Result<Vec<String>, (usize, usize)> {
+pub fn recast(lines: &[String], from: Shape, to: Shape) -> Vec<String> {
     match (from, to) {
-        (Shape::Pipe, Shape::Pipe) => Ok(lines.to_vec()),
+        (Shape::Pipe, Shape::Pipe) => lines.to_vec(),
         (Shape::Pipe, Shape::Delimited(c)) => crate::mdtable::to_delimited(lines, c),
-        (Shape::Delimited(c), Shape::Pipe) => Ok(crate::mdtable::from_delimited(lines, c)),
-        (Shape::Delimited(a), Shape::Delimited(b)) if a == b => Ok(lines.to_vec()),
-        (Shape::Delimited(a), Shape::Delimited(b)) => {
-            let mut out = Vec::with_capacity(lines.len());
-            for (row, line) in lines.iter().enumerate() {
-                let mut texts = Vec::new();
-                for span in cells(line, a) {
-                    let text = cell_text(line, span);
-                    if text.contains(b) {
-                        return Err((row, texts.len()));
-                    }
-                    texts.push(text);
-                }
-                out.push(texts.join(&b.to_string()));
-            }
-            Ok(out)
-        }
+        (Shape::Delimited(c), Shape::Pipe) => crate::mdtable::from_delimited(lines, c),
+        (Shape::Delimited(a), Shape::Delimited(b)) if a == b => lines.to_vec(),
+        (Shape::Delimited(a), Shape::Delimited(b)) => lines
+            .iter()
+            .map(|line| {
+                cells(line, a)
+                    .into_iter()
+                    // **讀出值，再按目標的規矩寫回。** 逗號在 `.csv` 裏要引號、在
+                    // `.tsv` 裏不要——帶着原來那一套引號過去，下一個程序拿到的是
+                    // 一個名字裏有引號的值。
+                    .map(|span| quote_for(&unquote(&cell_text(line, span)), b))
+                    .collect::<Vec<_>>()
+                    .join(&b.to_string())
+            })
+            .collect(),
     }
 }
 

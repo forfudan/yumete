@@ -1939,18 +1939,7 @@ impl Editor {
             self.status = say!("table.no-delimiter-in-sight");
             return None;
         };
-        match crate::table::recast(&lines, from, to) {
-            Ok(out) => Some(format!("{}\n", out.join("\n"))),
-            Err((row, column)) => {
-                let delimiter = match to {
-                    crate::table::Shape::Delimited(c) => c,
-                    crate::table::Shape::Pipe => '|',
-                };
-                self.status =
-                    say!("table.cell-holds-the-delimiter", row + 1, column + 1, delimiter);
-                None
-            }
-        }
+        Some(format!("{}\n", crate::table::recast(&lines, from, to).join("\n")))
     }
 
     /// Move to the first non-blank character of line `n`, counting from 1 and

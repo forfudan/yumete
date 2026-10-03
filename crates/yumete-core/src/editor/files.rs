@@ -1337,7 +1337,9 @@ impl Editor {
         // A file that is already a grid exports as itself — reading a `.csv`
         // and writing a `.tsv` is a conversion, and it is the same one.
         let lines = match region.as_ref() {
-            Some(region) => crate::mdtable::to_delimited(&self.md_lines(region), delimiter),
+            Some(region) => {
+                Ok::<_, (usize, usize)>(crate::mdtable::to_delimited(&self.md_lines(region), delimiter))
+            }
             None if self.table.as_ref().is_some_and(|v| v.bounds == Bounds::WholeFile) => {
                 let from = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
                 let text = self.current_buffer().text();

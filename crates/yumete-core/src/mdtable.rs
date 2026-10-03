@@ -1420,7 +1420,12 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
                 // 候格子兩邊一律去掉），所以轉過去就沒地方放。也不報一句，原話：
                 // 「我觉得 csv -> pipe 这个过程本身就是有歧义的，用户做这件事情
                 // 就已经做好了心理准备了。」`u` 退得回來。
-                .map(|span| escape(crate::table::cell_text(line, span).trim()))
+                // **讀出值，不是讀出它在檔裏的寫法**（2026-10-03 修）：`"Smith,
+                // John"` 這一格的值是 `Smith, John`，引號是 CSV 的語法。從前連引
+                // 號一起搬進 `|` 表格，於是再轉回 CSV 就成了「這一格裏有逗號」。
+                .map(|span| {
+                    escape(crate::table::unquote(&crate::table::cell_text(line, span)).trim())
+                })
                 .collect()
         })
         .collect();
@@ -1435,31 +1440,29 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
     })
 }
 
-/// Turn a `|` table's lines into delimited ones, or say which cell will not go.
+/// Turn a `|` table's lines into delimited ones.
 ///
-/// `Err((row, column))` counting from zero over what [`parse`] sees — so the
-/// header is row 0 and the rule row is not counted at all.
+/// **A cell holding the delimiter is quoted, not refused**（2026-10-03 改）。
 ///
-/// **A cell holding the delimiter is refused, not quoted.** That is the same
-/// stance [`crate::table`] takes at the keyboard: a file where one cell is
-/// quoted and the rest are not is a file that reads correctly in one program
-/// and shifts every column right of the damage in the next. There is another
-/// delimiter, and the writer knows their data well enough to pick it.
-pub fn to_delimited(lines: &[String], delimiter: char) -> Result<Vec<String>, (usize, usize)> {
-    let parts = parse(lines);
-    let mut out = Vec::with_capacity(parts.rows.len());
-    for (r, row) in parts.rows.iter().enumerate() {
-        let mut cells = Vec::with_capacity(row.len());
-        for (c, cell) in row.iter().enumerate() {
-            let text = unescape(cell);
-            if text.contains(delimiter) {
-                return Err((r, c));
-            }
-            cells.push(text);
-        }
-        out.push(cells.join(&delimiter.to_string()));
-    }
-    Ok(out)
+/// Warning: 這裏從前拒絕，理由寫着「一個格子加了引號而別的沒加，在一個程序裏讀得對、
+/// 在另一個裏整列右移」。那個擔心是不成立的——**按欄位決定加不加引號正是
+/// RFC 4180 的規矩**，不是權宜。而這一條其實早就定過了（`development.md` 腳註 311：
+/// 「`:export` 遇到含分隔符的格子就**拒絕**——現在加引號就好了，那纔是一次 `.csv`
+/// 讀者讀得對的轉換」），只是那一改當時只落在 `:export` 整檔網格那一支上，`|`
+/// 表格這一支和 `:convert-table` 都沒跟上，於是同一個倉裏兩種答案。
+///
+/// 轉換從此**不會失敗**，所以不再交 `Result`。
+pub fn to_delimited(lines: &[String], delimiter: char) -> Vec<String> {
+    parse(lines)
+        .rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|cell| crate::table::quote_for(&unescape(cell), delimiter))
+                .collect::<Vec<_>>()
+                .join(&delimiter.to_string())
+        })
+        .collect()
 }
 
 /// The columns a header row names.
@@ -1944,7 +1947,7 @@ mod tests {
         assert_eq!(table[2], "| 永 | ㄩㄥˇ | 長 |");
         assert_eq!(table.len(), 4, "header, rule, two rows: {table:?}");
         // …and back, the rule row gone and the padding with it.
-        assert_eq!(to_delimited(&table, ',').unwrap(), lines);
+        assert_eq!(to_delimited(&table, ','), lines);
     }
 
     #[test]
@@ -1955,7 +1958,7 @@ mod tests {
         assert!(table[2].contains(r"a\|b"), "{:?}", table[2]);
         // …and it is still one cell: three pipes on the row, not four.
         assert_eq!(split(&table[2]), ["a\\|b", "或"]);
-        assert_eq!(to_delimited(&table, ',').unwrap(), lines);
+        assert_eq!(to_delimited(&table, ','), lines);
     }
 
     #[test]
@@ -1967,7 +1970,7 @@ mod tests {
         let lines = vec!["式,義".to_string(), r"a\|b,或".to_string()];
         let table = from_delimited(&lines, ',');
         assert_eq!(split(&table[2]).len(), 2, "{:?}", table[2]);
-        assert_eq!(to_delimited(&table, ',').unwrap(), lines);
+        assert_eq!(to_delimited(&table, ','), lines);
     }
 
     #[test]
@@ -1979,19 +1982,25 @@ mod tests {
         assert_eq!(unescape(r"a\\b"), r"a\b");
     }
 
+    /// **格子裏有分隔符就加引號**（2026-10-03 改；從前這一支叫
+    /// `a_cell_holding_the_delimiter_is_refused_rather_than_quoted`）。
+    ///
+    /// 按欄位決定加不加引號是 RFC 4180 的規矩，而 `:export` 那一邊早就這麼做了
+    /// ——兩邊從前不一致。
     #[test]
-    fn a_cell_holding_the_delimiter_is_refused_rather_than_quoted() {
+    fn a_cell_holding_the_delimiter_is_quoted() {
         let table = vec![
             "| 字 | 註 |".to_string(),
             "| -- | -- |".to_string(),
             "| 永 | 長, 久 |".to_string(),
         ];
-        // Row 1 (the header is row 0), column 1 — where a reader can find it.
-        assert_eq!(to_delimited(&table, ','), Err((1, 1)));
-        // The same table goes out fine under a delimiter its cells do not hold.
+        assert_eq!(to_delimited(&table, ','), ["字,註", "永,\"長, 久\""]);
+        // 用不着引號的分隔符底下照舊一個引號都不加。
+        assert_eq!(to_delimited(&table, '\t'), ["字\t註", "永\t長, 久"]);
+        // 轉回去是原樣——這纔是「同一張表，換一種寫法」。
         assert_eq!(
-            to_delimited(&table, '\t').unwrap(),
-            ["字\t註", "永\t長, 久"]
+            from_delimited(&to_delimited(&table, ','), ','),
+            ["| 字 | 註     |", "| -- | ------ |", "| 永 | 長, 久 |"]
         );
     }
 

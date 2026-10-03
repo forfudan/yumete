@@ -2988,28 +2988,42 @@ fn a_selection_says_which_lines_the_table_is_made_of() {
     assert!(text.ends_with("| 丙 | 丁 |\n那年冬天。\n"), "{text:?}");
 }
 
+/// **格子裏有分隔符就加引號**（2026-10-03 改；從前這一支叫
+/// `a_conversion_that_would_lose_a_cell_is_refused`，驗的是那一句拒絕）。
+///
+/// 按欄位決定加不加引號是 RFC 4180 的規矩，而 `:export` 那一邊早就這麼做了。
+/// 這一改之前，同一個倉裏兩種答案：`:export tsv` 脫引號，`:convert-table csv tsv`
+/// 把引號當成值的一部分搬過去，於是 csv→pipe→csv 是**單程**。
 #[test]
-fn a_conversion_that_would_lose_a_cell_is_refused() {
-    // Three rows and three columns, with the comma in **row 3, column 2**
-    // — a shape that tells the two numbers apart. On a 2×2 table this
-    // said 「第 2 行第 2 欄」 whichever way round the arguments went in.
+fn a_conversion_quotes_the_cell_that_holds_the_delimiter() {
     let mut ed = typed(
         "| 字 | 註 | 部 |\n| -- | -- | -- |\n| 永 | 水 | 丶 |\n| 之 | 長, 久 | 丿 |\n",
     );
     ed.execute(":3").unwrap();
-    let before = ed.current_buffer().text();
     ed.execute(":convert-table csv").unwrap();
-    // Named, and nothing written: the file is exactly as it was.
-    assert_eq!(ed.current_buffer().text(), before);
-    // Row 3 counts the header as row 1 and the rule row not at all.
-    let (row, column) = (ed.status.find('3'), ed.status.find('2'));
-    assert!(
-        matches!((row, column), (Some(r), Some(c)) if r < c),
-        "row 3 then column 2, in that order: {}",
+    assert_eq!(
+        ed.current_buffer().text(),
+        "字,註,部\n永,水,丶\n之,\"長, 久\",丿\n",
+        "{}",
         ed.status
     );
+    // 轉回去還是原來那張表——這纔是「同一張表，換一種寫法」。
+    ed.execute(":convert-table csv pipe").unwrap();
+    assert_eq!(
+        ed.current_buffer().text(),
+        "| 字 | 註     | 部 |\n| -- | ------ | -- |\n| 永 | 水     | 丶 |\n| 之 | 長, 久 | 丿 |\n",
+        "{}",
+        ed.status
+    );
+}
 
-    // The writer picks a delimiter the data does not hold, and it goes.
+/// 分隔符不在資料裏的時候，一個引號都不加。
+#[test]
+fn a_delimiter_the_data_does_not_hold_needs_no_quotes() {
+    let mut ed = typed(
+        "| 字 | 註 | 部 |\n| -- | -- | -- |\n| 永 | 水 | 丶 |\n| 之 | 長, 久 | 丿 |\n",
+    );
+    ed.execute(":3").unwrap();
     ed.execute(":convert-table tsv").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
