@@ -1526,6 +1526,27 @@ impl Editor {
         self.open_file_picker_in(self.working_dir());
     }
 
+    /// **`ye --files`**：照挑選器那一支的規矩，列出名字配得上 `query` 的檔。
+    ///
+    /// Warning: **不另寫一個匹配器。** 它建的就是挑選器那個 [`crate::picker::Picker`]、
+    /// 問的就是它的 `matches()`——所以 `ye --files jia` 和編輯器裏 `空格 f` 打
+    /// `jia` 永遠是同一份答案。管道那一邊另寫一份一定會分岔。
+    ///
+    /// Warning: **不封頂。** 挑選器封在 `PICKER_LIMIT`（四千）條，因為那是給人翻的；
+    /// 管道印給別的程序看，少印一條就是錯一條。
+    pub fn files_matching(&self, root: &Path, query: &str) -> Vec<String> {
+        let mut names = Vec::new();
+        crate::editor::walk(root, &mut 0, &mut |path| {
+            names.push(path.strip_prefix(root).unwrap_or(path).display().to_string());
+        });
+        let items = names.into_iter().map(crate::picker::Item::File).collect();
+        let mut picker = crate::picker::Picker::new("", items);
+        for c in query.chars() {
+            picker.push(c);
+        }
+        picker.matches().iter().map(|item| item.label().to_string()).collect()
+    }
+
     fn open_file_picker_in(&mut self, root: PathBuf) {
         let mut prose = Vec::new();
         let mut rest = Vec::new();
