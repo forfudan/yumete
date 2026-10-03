@@ -129,7 +129,10 @@ def render(md):
 
 
 # 一格多寬（像素）。截圖那一塊的字號乘以這個比例——漢字兩格、西文一格。
-CELL = 7.5
+# **截圖那一塊的字號與格寬**，`main` 按 `--shot-px` 撥。格寬永遠是字號的一半：
+# 終端畫面按「一個漢字兩格」排，這兩個數必須是這個比，不然整幅畫面散開。
+SHOT_PX = 15.0
+CELL = SHOT_PX / 2
 LEAD = 1.5  # 行高倍數
 
 
@@ -216,22 +219,43 @@ def pin(shot, wide):
     return body, off
 
 
-def page(version, body, shot, url):
-    SHOT_PX = 15
+def page(version, body, shot, url, width=1080, pad=64, base=19.0):
+    """一張卡片。
+
+    Warning: **每行幾個字，是「正文字號」和「頁寬」的比，不是頁寬本身**（2026-10-04
+    作者報的：上一版「每行差不多 20 到 30 個字比較好，否則手機看起來吃力」）。
+    第一版正文 19px、版心 952px，於是一行排得下 **50 個漢字**；縮窄頁面會把 88 欄
+    的終端截圖擠爆，所以動的是字號——版心與內邊距不變，字放大一倍。
+
+    `base` 是正文字號，別的字號都是它的倍數（原來那一版的比例原樣留着），所以
+    `--chars` 撥一下，整張卡片跟着走。
+    """
+    k = base / 19.0
+
+    def px(n):
+        return round(n * k, 1)
+
+    # Warning: **只有正文按那個倍率放大，頁眉頁腳不跟**（2026-10-04 量出來的）。
+    # 第一版把 `k` 乘到了每一處，於是 46px 的標題成了 92px——「宇夢編輯器」五個字
+    # 一行放不下，折成了「宇夢編輯／器」；頁腳同理，網址和 `Apache-2.0` 撞成了
+    # `…v0.4.0Apache-2.0`。那兩條是裝飾與元信息，不是拿來讀的，所以走平方根：
+    # 正文翻一倍，它們只大四成，版面的主次反而更清楚。
+    def ch(n):
+        return round(n * k**0.5, 1)
     ROW = round(SHOT_PX * LEAD, 1)
     return f"""<!doctype html><meta charset="utf-8"><style>
 * {{ box-sizing: border-box }}
-body {{ margin: 0; background: {PAPER}; width: 1080px;
-  font: 19px/1.9 {SANS};
+body {{ margin: 0; background: {PAPER}; width: {width}px;
+  font: {base:.1f}px/1.9 {SANS};
   color: {TEXT}; }}
-.card {{ padding: 56px 64px 48px }}
-.top {{ display: flex; align-items: baseline; gap: 20px; margin-bottom: 8px }}
-.name {{ font-size: 46px; font-weight: 600; color: {GOLD}; letter-spacing: .04em }}
-.en {{ font-size: 22px; color: {QUIET}; letter-spacing: .12em }}
-.ver {{ margin-left: auto; font-size: 30px; font-weight: 600; color: {PAPER};
-  background: {GOLD}; padding: 2px 18px; border-radius: 4px }}
-.rule {{ height: 3px; background: {GOLD}; margin: 18px 0 34px }}
-.shot {{ margin: 0 0 34px; padding: 18px 20px; background: {PAPER};
+.card {{ padding: {px(56)}px {pad}px {px(48)}px }}
+.top {{ display: flex; align-items: baseline; gap: {px(20)}px; margin-bottom: {px(8)}px }}
+.name {{ white-space: nowrap; font-size: {ch(46)}px; font-weight: 600; color: {GOLD}; letter-spacing: .04em }}
+.en {{ white-space: nowrap; font-size: {ch(22)}px; color: {QUIET}; letter-spacing: .12em }}
+.ver {{ margin-left: auto; white-space: nowrap; font-size: {ch(30)}px; font-weight: 600; color: {PAPER};
+  background: {GOLD}; padding: {px(2)}px {px(18)}px; border-radius: 4px }}
+.rule {{ height: 3px; background: {GOLD}; margin: {px(18)}px 0 {px(34)}px }}
+.shot {{ margin: 0 0 {px(34)}px; padding: {px(18)}px {px(20)}px; background: {PAPER};
   border: 1px solid {CHROME_RUNG}; border-radius: 6px; overflow: hidden }}
 /* `--shot --html` 交出來的那一塊，原樣嵌進來 */
 .shot .grid {{ font: {SHOT_PX}px/{LEAD} {MONO}; white-space: pre }}
@@ -241,21 +265,23 @@ body {{ margin: 0; background: {PAPER}; width: 1080px;
    「比格子寬」那一半由頁尾那段腳本量完壓扁。 */
 .shot i {{ position: absolute; top: 0; font-style: normal; text-align: center;
   display: inline-block; white-space: pre }}
-p {{ margin: 0 0 14px }}
-h1, h2, h3, h4 {{ color: {GOLD}; margin: 30px 0 12px; font-size: 26px }}
-ul {{ margin: 0 0 14px; padding-left: 26px }}
-ul ul {{ margin: 6px 0 2px }}
-li {{ margin: 0 0 10px }}
+p {{ margin: 0 0 {px(14)}px }}
+h1, h2, h3, h4 {{ color: {GOLD}; margin: {px(30)}px 0 {px(12)}px; font-size: {px(26)}px }}
+ul {{ margin: 0 0 {px(14)}px; padding-left: {px(26)}px }}
+ul ul {{ margin: {px(6)}px 0 {px(2)}px }}
+li {{ margin: 0 0 {px(10)}px }}
 b {{ color: #FFF6DD; font-weight: 600 }}
 code {{ font: .9em {MONO}; color: {GOLD};
-  background: {CHROME_RUNG}; padding: 1px 6px; border-radius: 3px }}
+  background: {CHROME_RUNG}; padding: 1px {px(6)}px; border-radius: 3px }}
 a {{ color: #8FC9E8; text-decoration: none }}
-pre.sh {{ background: {CHROME_RUNG}; color: {TEXT}; padding: 16px 20px;
-  border-radius: 5px; margin: 0 0 18px;
-  font: 16px/1.6 {MONO} }}
-hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: 26px 0 }}
-.foot {{ margin-top: 34px; padding-top: 20px; border-top: 1px solid {CHROME_RUNG};
-  color: {QUIET}; font-size: 17px; display: flex; justify-content: space-between }}
+pre.sh {{ background: {CHROME_RUNG}; color: {TEXT}; padding: {px(16)}px {px(20)}px;
+  border-radius: 5px; margin: 0 0 {px(18)}px;
+  font: {px(16)}px/1.6 {MONO} }}
+hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: {px(26)}px 0 }}
+.foot {{ margin-top: {px(34)}px; padding-top: {px(20)}px; border-top: 1px solid {CHROME_RUNG};
+  color: {QUIET}; font-size: {ch(17)}px; display: flex; justify-content: space-between;
+  gap: {px(20)}px }}
+.foot span:first-child {{ word-break: break-all }}
 </style>
 <div class=card>
   <div class=top>
@@ -297,7 +323,7 @@ document.body.dataset.h = document.documentElement.scrollHeight;
 """
 
 
-def shoot(work, out):
+def shoot(work, out, scale=1.0, width=1080):
     """截一張**剛好那麼高**的圖。
 
     Warning: **`--screenshot` 截的是窗口，不是內容**——`--window-size=1080,4000` 出來的
@@ -314,9 +340,14 @@ def shoot(work, out):
     ).stdout
     found = re.search(r'data-h="(\d+)"', high)
     tall = int(found.group(1)) if found else 4000
+    # Warning: **清晰度靠 DPR，不靠把頁面做大**（2026-10-04 作者報的：「上次的清晰度
+    # 不高」）。`--window-size` 給的是 **CSS 像素**，Chrome 缺省 DPR 是 1，所以
+    # 1080 的頁面出來就是 1080 的圖——在手機上放大看就是糊的。
+    # `--force-device-scale-factor=2` 出 2160，版面一格不動。
     subprocess.run(
         [CHROME, "--headless", "--disable-gpu", "--hide-scrollbars",
-         f"--screenshot={out}", f"--window-size=1080,{tall}", str(work)],
+         f"--force-device-scale-factor={scale}",
+         f"--screenshot={out}", f"--window-size={width},{tall}", str(work)],
         check=True, capture_output=True,
     )
 
@@ -328,6 +359,15 @@ def main():
     ap.add_argument("--out", help="出圖放哪，默認 local/figures/release-card-<版本>.png")
     ap.add_argument("--repo", default="forfudan/yumete")
     ap.add_argument("--size", default="88x22", help="截那一幀畫面多大")
+    ap.add_argument(
+        "--chars", type=float, default=25.0,
+        help="正文一行排幾個漢字（2026-10-04 作者定：20–30，手機上纔讀得動）",
+    )
+    ap.add_argument(
+        "--scale", type=float, default=2.0,
+        help="出圖的像素倍率（DPR）。版面不變，只是更清晰",
+    )
+    ap.add_argument("--page-width", type=int, default=1080, help="卡片的 CSS 寬度")
     # Warning: **這一幀會被畫進卡片發出去，所以它只許出現手冊自己的內容。** 搜索面板
     # 列的是**命中那幾行的原文**——換一個查詢就等於換一批會上圖的句子。
     # **換默認之前把整幅掃一遍**（`--shot` 不帶 `--html` 就是純文本，grep 一下）。
@@ -338,6 +378,19 @@ def main():
     )
     ap.add_argument("--file", default="docs/manual.md", help="截圖用哪個檔")
     a = ap.parse_args()
+
+    # **版心定字號，字號定每行幾個字。** 版心 ＝ 頁寬減兩邊的內邊距（`.card` 的
+    # 左右 padding，和 `page` 裏那個 `pad` 是同一個數）。
+    pad = 64
+    base = (a.page_width - 2 * pad) / a.chars
+    # **截圖那一塊鋪滿版心**：88 欄排不滿的話，一幅終端畫面縮在一角，而它是卡片上
+    # 最該看清的東西。格寬是半個字，所以字號是「版心 ÷ 欄數 × 2」。
+    global SHOT_PX, CELL
+    cols = int(a.size.split("x")[0])
+    # Warning: **留 3% 餘地。** 鋪滿到小數點那一位，88 欄算出來是 910.8px 而框內只有
+    # 910px——`overflow:hidden` 把最後一列切了半格（2026-10-04 看圖看出來的）。
+    SHOT_PX = round((a.page_width - 2 * pad - 40) / cols * 2 * 0.97, 1)
+    CELL = SHOT_PX / 2
 
     if a.notes:
         notes = pathlib.Path(a.notes).read_text(encoding="utf-8")
@@ -367,11 +420,17 @@ def main():
     out = pathlib.Path(a.out or HERE / "local" / "figures" / f"release-card-{a.version}.png")
     out.parent.mkdir(parents=True, exist_ok=True)
     work = out.with_suffix(".html")
-    work.write_text(page(a.version, render(notes), shot, url), encoding="utf-8")
+    work.write_text(
+        page(a.version, render(notes), shot, url, a.page_width, pad, base),
+        encoding="utf-8",
+    )
 
-    shoot(work, out)
+    shoot(work, out, a.scale, a.page_width)
     work.unlink()
-    print(f"{out}  ({out.stat().st_size // 1024} KB)")
+    size = out.stat().st_size
+    print(f"{out}  ({size / 1048576:.1f} MB)")
+    print(f"  正文 {base:.1f}px，一行約 {a.chars:.0f} 個漢字；"
+          f"截圖 {SHOT_PX}px；出圖寬 {int(a.page_width * a.scale)}px（DPR {a.scale}）")
 
 
 if __name__ == "__main__":
