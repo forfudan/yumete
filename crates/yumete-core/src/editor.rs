@@ -3625,9 +3625,16 @@ fn listed(items: &[String]) -> String {
 /// A tab printed raw is a status line that says 「用「   」分欄」 — the one
 /// delimiter a reader cannot see is the one this editor's own `:export tsv`
 /// writes.
+/// **畫不出來的分隔符要報名字。**
+///
+/// Warning: **空格和製表符印進句子裏是一樣的空**（2026-10-03）：從前 `' '` 原樣掉下
+/// 去，於是「照「 」分的」讀着像壞了，和製表符那一種一模一樣。報的名字就是命令
+/// 自己收的那個詞（`:convert-table space pipe` 裏的 `space`），所以不是新造的說
+/// 法——`Tab` 本來就是這麼來的。
 fn named_delimiter(delimiter: char) -> String {
     match delimiter {
         '\t' => "Tab".to_string(),
+        ' ' => "Space".to_string(),
         d => d.to_string(),
     }
 }

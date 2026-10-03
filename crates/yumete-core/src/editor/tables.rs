@@ -1925,7 +1925,11 @@ impl Editor {
         // Straight into the grid: the writer asked for a table, and a table in
         // this editor is something you walk by cell.
         self.enter_table();
-        self.status = say!("table.now-a-pipe-table", rows, columns, delimiter);
+        // Warning: **分隔符要報名字，不許把那個字符本身印進句子**（2026-10-03）。
+        // 製表符畫出來什麼都沒有，於是這一句成了「照「」分的」——引號裏空着，讀
+        // 着像壞了。空格同病。`named_delimiter` 那一支就是幹這個的，另一個方向
+        // （`table.now-delimited`）本來就在用。
+        self.status = say!("table.now-a-pipe-table", rows, columns, named_delimiter(delimiter));
     }
 
     /// `:table-csv` — the `|` table under the cursor becomes delimited lines.
