@@ -2997,7 +2997,11 @@ fn run_for_language(
             let text = editor.current_buffer().text();
             match run_program(program, args, Some(&text), &here) {
                 Ok(ran) if ran.ok => {
-                    editor.provide_pipe_output(&ran.said);
+                    // **整份進去，整份回來。** 從前這裏叫的是 `provide_pipe_output`，
+                    // 而那一支換的是選區——Normal 模式下選區是一個字，於是整份格
+                    // 式化好的稿子貼在那一個字上，原文留在後面（2026-10-03 一輪審
+                    // 查報來的）。
+                    editor.provide_formatted_text(&ran.said);
                     say!("language.replaced", want.verb)
                 }
                 Ok(ran) => say!("language.text-untouched", ran.why()),

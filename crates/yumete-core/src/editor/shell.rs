@@ -19,6 +19,38 @@ impl Editor {
     /// One edit, so one `u` takes it back — which matters more here than
     /// anywhere else, because the text that went in is gone and only the
     /// command knows how to make it again.
+    /// **整份進去，整份回來**——`:format` 的 `kind = "filter"` 走這一支。
+    ///
+    /// Warning: **不許借 [`Self::provide_pipe_output`]**（2026-10-03 一輪審查報來的，會
+    /// 毀稿）。那一支換的是**選區**，而格式化餵進去的是整個緩衝：Normal 模式下
+    /// 選區是光標底下那一個字，於是整份格式化好的稿子被貼在那一個字的位置上，
+    /// 原文原封不動留在後面。實測 `aaa\nbbb\nccc\n` 過一遍 `tr a-z A-Z` 出來的
+    /// 是 `AAA\nBBB\nCCCaa\nbbb\nccc\n`——整份重了一遍，還少一個字。
+    ///
+    /// 一個撤回點，所以 `u` 收得回；可這是**看得見纔知道**的那一種壞，而格式化
+    /// 完多半沒人逐行看。
+    pub fn provide_formatted_text(&mut self, output: &str) {
+        if self.refuse_readonly() {
+            return;
+        }
+        if output == self.current_buffer().text() {
+            return;
+        }
+        // 同 `:s` 那一道：改完的行數對不上格子就不寫，而是說一句。
+        if let Some(why) = self.substitution_breaks_the_grid(output) {
+            self.status = why;
+            return;
+        }
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, output));
+        if !self.applied(done) {
+            return;
+        }
+        self.clamp_cursor();
+        self.forget_the_text();
+    }
+
     pub fn provide_pipe_output(&mut self, output: &str) {
         let (start, end) = self.selection();
         // A filter ends its output with a newline whether or not what it was

@@ -13493,6 +13493,26 @@ fn undo_reverts_an_insert_and_redo_reapplies_it() {
     assert_eq!(ed.current_buffer().text(), "hello");
 }
 
+/// **格式化換的是整份稿子，不是光標底下那一個字**（2026-10-03 一輪審查報來的）。
+///
+/// `:format` 的 `kind = "filter"` 把**整個緩衝**餵給外面那個程序，而回來那一段從前
+/// 交給 `provide_pipe_output`——那一支換的是**選區**。Normal 模式下選區是一個字，
+/// 於是整份格式化好的稿子貼在那一個字上，原文原封不動留在後面。
+#[test]
+fn a_filter_over_the_whole_buffer_replaces_the_whole_buffer() {
+    let mut ed = typed("aaa\nbbb\nccc\n");
+    ed.execute(":1").unwrap();
+    ed.provide_formatted_text("AAA\nBBB\nCCC\n");
+    assert_eq!(ed.current_buffer().text(), "AAA\nBBB\nCCC\n");
+    // 一個撤回點。
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "aaa\nbbb\nccc\n");
+    // 一模一樣就什麼都不做——不佔一個撤回點，也不把緩衝標成改過的。
+    let before = ed.current_buffer().revision();
+    ed.provide_formatted_text("aaa\nbbb\nccc\n");
+    assert_eq!(ed.current_buffer().revision(), before, "沒變就別動");
+}
+
 /// **兩份沒有名字的草稿不許共用一個檔**（2026-10-03 一輪審查報來的，會丟字）。
 ///
 /// 草稿的名字從前按緩衝**排在第幾個**取，而那個名字是黏住的、下標不是：關掉前面
