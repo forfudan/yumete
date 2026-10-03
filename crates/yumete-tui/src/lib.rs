@@ -3845,6 +3845,45 @@ fn ime_handle(
     true
 }
 
+/// **把一個 [`Key`] 交給真正的那一支輸入法派發**，回「它收下了沒有」。
+///
+/// 給 `--shot --keys` 用的。Warning: **不許在那邊另寫一份。** 2026-10-03 一輪審查報來
+/// 的就是這個：`main.rs` 裏手抄過一段「打字要用的那幾個鍵」，而真正的
+/// [`ime_handle`] 一直在長——離屏按 `;` 出「；」而真機出「辶」（靈明的選二）、`=`
+/// 離屏出 `=` 而真機翻頁、方向鍵離屏把光標移走並把字上到別處。**這個倉審前端靠
+/// 的那張照片，在輸入法這一塊照的是另一個程序。**
+///
+/// 判準和互動循環那一處逐字相同（`composes_here` ／ `available` ／ `engaged`），
+/// 所以離屏與真機從此只有一份答案。
+pub fn offline_ime_key(ime: &mut ImeSession, editor: &mut Editor, key: Key) -> bool {
+    let (code, mods) = terminal_key(key);
+    composes_here(editor) && ime.available() && ime.engaged() && ime_handle(ime, editor, code, mods)
+}
+
+/// [`map_key`] 的另一半：一個核心的 [`Key`] 寫成終端機報出來的那一對。
+fn terminal_key(key: Key) -> (KeyCode, KeyModifiers) {
+    let plain = KeyModifiers::NONE;
+    match key {
+        Key::Char(c) => (KeyCode::Char(c), plain),
+        Key::Ctrl(c) => (KeyCode::Char(c), KeyModifiers::CONTROL),
+        Key::Alt(c) => (KeyCode::Char(c), KeyModifiers::ALT),
+        Key::Enter => (KeyCode::Enter, plain),
+        Key::Backspace => (KeyCode::Backspace, plain),
+        Key::Delete => (KeyCode::Delete, plain),
+        Key::Esc => (KeyCode::Esc, plain),
+        Key::Left => (KeyCode::Left, plain),
+        Key::Right => (KeyCode::Right, plain),
+        Key::Up => (KeyCode::Up, plain),
+        Key::Down => (KeyCode::Down, plain),
+        Key::Home => (KeyCode::Home, plain),
+        Key::End => (KeyCode::End, plain),
+        Key::PageUp => (KeyCode::PageUp, plain),
+        Key::PageDown => (KeyCode::PageDown, plain),
+        Key::Tab => (KeyCode::Tab, plain),
+        Key::BackTab => (KeyCode::BackTab, plain),
+    }
+}
+
 /// Translate a terminal key event into a core [`Key`], or `None` to ignore it.
 fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
     // ⌘ belongs to the terminal, and with the Kitty protocol on, the terminal
