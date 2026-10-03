@@ -2225,6 +2225,15 @@ pub struct Editor {
     /// 「没話說」，那一條會被刪掉——於是它永遠看着像没問過，空閒的鐘就每 300
     /// 毫秒喊一次 git，喊到天亮。
     vcs_asked: HashMap<u64, u64>,
+    /// **每個路徑的真名**，問過一次就記住（2026-10-03）。
+    ///
+    /// 「這個檔開着沒有」是按真名比的，不按拼法——`./甲.md` 與 `甲.md` 是同一個
+    /// 檔。可是那個比法對**每一個**已開的緩衝都問一次文件系統，而 `R` 又對每一個
+    /// 要改的檔問一次「開着沒有」：三千個檔就是四百五十萬次 `realpath`。
+    ///
+    /// Warning: **問不出來的不記。** 盤上還沒有那個檔的時候 `canonicalize` 會失敗，
+    /// 而它待會兒可能就有了（`:w` 寫一個新檔）——記下來就永遠當它沒有。
+    canonical: RefCell<HashMap<std::path::PathBuf, std::path::PathBuf>>,
     /// 語言服務器說了什麽不對（#53／#54），按**路徑**存。
     ///
     /// Warning: **鍵是路徑，不是 buffer id。** 服務器說的是一個檔，而它說的時候那個檔
@@ -3111,6 +3120,7 @@ impl Editor {
             vcs: HashMap::new(),
             vcs_base: HashMap::new(),
             vcs_asked: HashMap::new(),
+            canonical: RefCell::new(HashMap::new()),
             problems: crate::problem::Problems::default(),
             object_missed: false,
             indent_hint: crate::zong::IndentHint::default(),
