@@ -9979,9 +9979,9 @@ en = "a | table says which row is its header — the --- line under it does"
 [[message]]
 # 表格轉換：光標在圍欄裏，那是代碼不是表格
 key = "table.inside-a-fence"
-zht = "這幾行在圍欄裏——那是代碼，不是表格"
-zhs = "这几行在围栏里——那是代码，不是表格"
-en = "these lines are inside a fence — that is code, not a table"
+zht = "這幾行在代碼圍欄中，非表格"
+zhs = "这几行在代码围栏中，非表格"
+en = "these lines are inside a code fence, not a table"
 
 [[message]]
 # 表格裏想併兩行
@@ -10028,9 +10028,9 @@ en = "moving by character — T goes back to cells"
 [[message]]
 # :table-pipe：看不出什麼在分欄
 key = "table.no-delimiter-in-sight"
-zht = "看不出什麼在分欄——寫明分隔符，例如 :table-pipe , 或 :table-pipe tab"
-zhs = "看不出什么在分栏——写明分隔符，例如 :table-pipe , 或 :table-pipe tab"
-en = "nothing here plainly separates columns — name the delimiter, as in :table-pipe , or :table-pipe tab"
+zht = "無法自動檢測分隔符，請手動聲明，例如 :convert-table , pipe 或 :convert-table tab pipe"
+zhs = "无法自动检测分隔符，请手动声明，例如 :convert-table , pipe 或 :convert-table tab pipe"
+en = "could not detect the delimiter — name it, as in :convert-table , pipe or :convert-table tab pipe"
 
 [[message]]
 # :table 用在沒有檔名的緩衝區上
