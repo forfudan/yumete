@@ -56,11 +56,62 @@ pub fn readings(ch: char) -> impl Iterator<Item = &'static str> {
     table().get(&ch).copied().unwrap_or("").split_ascii_whitespace()
 }
 
-/// **查詢能不能當拼音用**：非空、不太長、全是 ASCII 字母。
+/// **查詢切成的一段一段**（2026-10-03 作者定）。
+///
+/// 從前這一支只收「整條全是字母」的查詢，於是**字母和漢字混不起來**：`zhongguo`
+/// 找得到「中國」，而 `zhongguo很大`、`zhong国`、`di120`、`juan03` 一個都找不着
+/// ——`as_query` 看見一個非字母就整條回 `None`。可真實的查詢幾乎都是混的：找第
+/// 一百二十章打的是 `di120`，找那一卷打的是 `juan03`。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Atom {
+    /// 一串 ASCII 字母。**兩種配法**：照字面，或者當成一串字的讀音。
+    Said(Vec<char>),
+    /// 別的任何一個字——漢字、數字、標點。照字面配。
+    Just(char),
+}
+
+/// **查詢切成 [`Atom`]**，`None` ＝ 這一條沒有拼音可問。
+///
+/// 兩種情形回 `None`：**一個字母都沒有**（那就全是字面，交給字面那一路就夠了，
+/// 問讀音是白跑一趟），以及**某一串字母長過 [`LONGEST`]**（那是關遞歸的門）。
 ///
 /// Warning: **大小寫在這裏收掉**，回的是小寫那一份——表裏是小寫，而讀者打 `ShuZhai`
 /// 的時候心裏想的不是「這是另一個查詢」。
-pub fn as_query(text: &str) -> Option<Vec<char>> {
+pub fn atoms(text: &str) -> Option<Vec<Atom>> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let mut out: Vec<Atom> = Vec::new();
+    let mut letters: Vec<char> = Vec::new();
+    for c in text.chars() {
+        match c.is_ascii_alphabetic() {
+            true => letters.push(c.to_ascii_lowercase()),
+            false => {
+                if !letters.is_empty() {
+                    if letters.len() > LONGEST {
+                        return None;
+                    }
+                    out.push(Atom::Said(std::mem::take(&mut letters)));
+                }
+                out.push(Atom::Just(c));
+            }
+        }
+    }
+    if !letters.is_empty() {
+        if letters.len() > LONGEST {
+            return None;
+        }
+        out.push(Atom::Said(letters));
+    }
+    out.iter().any(|a| matches!(a, Atom::Said(_))).then_some(out)
+}
+
+/// **查詢能不能當拼音用**：非空、不太長、全是 ASCII 字母。
+///
+/// Warning: 只剩測試在用。活的那兩處（高級搜索面板、挑選器）走的是 [`atoms`]。
+#[cfg(test)]
+fn as_query(text: &str) -> Option<Vec<char>> {
     let text = text.trim();
     let ok = !text.is_empty()
         && text.len() <= LONGEST
@@ -68,36 +119,88 @@ pub fn as_query(text: &str) -> Option<Vec<char>> {
     ok.then(|| text.to_ascii_lowercase().chars().collect())
 }
 
-/// **`said` 這串字母念得出來的那些段**，按**字**計，互不重疊。
+/// **這一條查詢配得上的那些段**，按**字**計，互不重疊。
 ///
 /// 和正則的 `find_iter` 一個規矩：從左往右，配上了就從它的末尾接着找。
-pub fn spans(text: &str, said: &[char]) -> Vec<(usize, usize)> {
-    if said.is_empty() {
+///
+/// `fold` 說簡繁異體算不算同一個字——面板那一扇有一個開關管它，挑選器一律算。
+pub fn spans_of(text: &str, atoms: &[Atom], fold: bool) -> Vec<(usize, usize)> {
+    if atoms.is_empty() {
         return Vec::new();
     }
     let hay: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
     let mut at = 0usize;
     while at < hay.len() {
-        match eat(&hay, at, said, 0) {
-            Some(end) => {
+        match eat(&hay, at, atoms, 0, fold) {
+            // 配上了零個字（查詢是空的）不算一段，否則這個迴圈不往前走。
+            Some(end) if end > at => {
                 out.push((at, end));
                 at = end;
             }
-            None => at += 1,
+            _ => at += 1,
         }
     }
     out
 }
 
-/// 從第 `i` 個字、查詢的第 `q` 個字母起，能不能把查詢吃完；能就回末尾那一個字的
-/// 後面一格。
+/// 同一個字嗎——`fold` 開着的時候簡繁異體算同一個。
+fn same(want: char, have: char, fold: bool) -> bool {
+    want == have || (fold && crate::glyphs::shapes(want).contains(have))
+}
+
+/// 從第 `i` 個字、第 `a` 段起，能不能把查詢吃完；能就回末尾那一個字的後面一格。
+fn eat(hay: &[char], i: usize, atoms: &[Atom], a: usize, fold: bool) -> Option<usize> {
+    let Some(atom) = atoms.get(a) else {
+        return Some(i);
+    };
+    match atom {
+        Atom::Just(c) => match same(*c, *hay.get(i)?, fold) {
+            true => eat(hay, i + 1, atoms, a + 1, fold),
+            false => None,
+        },
+        Atom::Said(said) => {
+            // **只有混着寫的查詢纔許照字面配。**
+            //
+            // 一整條都是字母的時候（`shuzhai`），這一路要的就是「念作這幾個字母
+            // 的那幾個漢字」——字面那一路本來就在跑，它會配上稿子裏真的那七個
+            // 字母。兩路分工，所以 `spans("shuzhai", …)` 必須是空的，那是一條舊
+            // 不變式（`letters_in_the_prose_are_not_read_as_readings`）。
+            //
+            // 混着寫就不一樣了：`ch第3` 裏那個 `ch` 沒有讀音可問，它就是兩個字母。
+            // 不給它照字面配的路，整條查詢就斷在第一段上。
+            let literal_ok = atoms.len() > 1;
+            let fits = literal_ok
+                && hay.len() >= i + said.len()
+                && hay[i..i + said.len()]
+                    .iter()
+                    .zip(said)
+                    .all(|(h, s)| h.to_ascii_lowercase() == *s);
+            if fits {
+                if let Some(end) = eat(hay, i + said.len(), atoms, a + 1, fold) {
+                    return Some(end);
+                }
+            }
+            say(hay, i, said, 0, atoms, a, fold)
+        }
+    }
+}
+
+/// 一串字母當讀音吃：從第 `i` 個字、第 `q` 個字母起。
 ///
 /// Warning: **讀音按表裏的次序試，先到先得**：表裏常用的在前，所以歧義處取的是常用那
 /// 一讀。找的是「有沒有」，不是「哪一種最好」——搜索交出一段就夠了。
-fn eat(hay: &[char], i: usize, said: &[char], q: usize) -> Option<usize> {
+fn say(
+    hay: &[char],
+    i: usize,
+    said: &[char],
+    q: usize,
+    atoms: &[Atom],
+    a: usize,
+    fold: bool,
+) -> Option<usize> {
     if q == said.len() {
-        return Some(i);
+        return eat(hay, i, atoms, a + 1, fold);
     }
     let ch = *hay.get(i)?;
     for syllable in readings(ch) {
@@ -105,10 +208,10 @@ fn eat(hay: &[char], i: usize, said: &[char], q: usize) -> Option<usize> {
         if q + n > said.len() {
             continue;
         }
-        if !syllable.bytes().zip(&said[q..q + n]).all(|(a, &b)| a as char == b) {
+        if !syllable.bytes().zip(&said[q..q + n]).all(|(x, &y)| x as char == y) {
             continue;
         }
-        if let Some(end) = eat(hay, i + 1, said, q + n) {
+        if let Some(end) = say(hay, i + 1, said, q + n, atoms, a, fold) {
             return Some(end);
         }
     }
@@ -118,6 +221,51 @@ fn eat(hay: &[char], i: usize, said: &[char], q: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 舊那幾條測試寫的是「整條全是字母」那一種，留着它們——那一種照舊要對。
+    fn spans(text: &str, said: &[char]) -> Vec<(usize, usize)> {
+        let atoms = vec![Atom::Said(said.to_vec())];
+        spans_of(text, &atoms, true)
+    }
+
+    /// **字母和漢字混得起來了**（2026-10-03 作者定）。
+    ///
+    /// 從前查詢要麼整條是拼音、要麼整條是字面：`zhongguo` 找得到「中國」，而
+    /// `zhongguo很大`、`zhong国`、`di120`、`juan03` 一個都找不着。可真實的查詢
+    /// 幾乎都是混的——找第一百二十章打的是 `di120`。
+    #[test]
+    fn letters_and_漢字_mix_in_one_query() {
+        let look = |text: &str, query: &str| spans_of(text, &atoms(query).unwrap_or_default(), true);
+
+        // 讀音在前、漢字在後。
+        assert_eq!(look("中國很大。", "zhongguo很大"), [(0, 4)]);
+        assert_eq!(look("中國很大。", "zhong国"), [(0, 2)], "簡繁照折");
+        // 漢字在前、讀音在後。
+        assert_eq!(look("中國很大。", "中guo"), [(0, 2)]);
+        // 讀音加數字——真實的檔名就長這樣。
+        assert_eq!(look("卷03/第120章.md", "juan03"), [(0, 3)]);
+        assert_eq!(look("卷03/第120章.md", "di120"), [(4, 8)]);
+        assert_eq!(look("卷03/第120章.md", "juan03/di120"), [(0, 8)]);
+
+        // **一個字母都沒有就不勞駕這一路**：那是字面那一路的事。
+        assert!(atoms("很大").is_none());
+        assert!(atoms("").is_none());
+
+        // 混着寫的時候，不是讀音的那一段照字面配。
+        assert_eq!(look("卷03/第120章.md", "di120章.md"), [(4, 12)]);
+        // **整條都是字母的那一種照舊只問讀音**，字面歸字面那一路——見
+        // `letters_in_the_prose_are_not_read_as_readings`。
+        assert!(look("卷03/第120章.md", "md").is_empty());
+    }
+
+    /// 簡繁那一折跟着開關走——關掉就不折。
+    #[test]
+    fn the_variants_switch_reaches_the_pinyin_pass_too() {
+        let atoms = atoms("zhong国").unwrap();
+        assert_eq!(spans_of("中國很大。", &atoms, true), [(0, 2)], "折：國算国");
+        assert!(spans_of("中國很大。", &atoms, false).is_empty(), "不折：不算");
+        assert_eq!(spans_of("中国很大。", &atoms, false), [(0, 2)], "本來就是它，不必折");
+    }
 
     #[test]
     fn a_character_says_what_it_says() {

@@ -466,8 +466,8 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
             // Warning: **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串
             // 讀音，而讀者打 `md` 十有八九在找 `.md`。字面接得住就不必問讀音。
             None => {
-                let said = crate::pinyin::as_query(query)?;
-                let (from, to) = *crate::pinyin::spans(label, &said).first()?;
+                let said = crate::pinyin::atoms(query)?;
+                let (from, to) = *crate::pinyin::spans_of(label, &said, true).first()?;
                 ((from..to).collect(), true)
             }
         },

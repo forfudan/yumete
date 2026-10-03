@@ -1901,10 +1901,13 @@ impl Editor {
     ///
     /// `None` ＝ 式子寫壞了。
     pub(super) fn looker(&self) -> Option<Look> {
-        // **拼音只在查詢全是 ASCII 字母的時候纔跑**，所以開着它不影響搜英文。
+        // **拼音那一路切成一段一段地問**（2026-10-03 作者定）。從前它只收「整條全
+        // 是字母」的查詢，於是字母和漢字混不起來——`zhongguo很大`、`zhong国`、
+        // `di120` 一個都找不着，而真實的查詢幾乎都是混的。查詢裏一個字母都沒有的
+        // 時候它交 `None`：那就全是字面，問讀音是白跑一趟。
         // Warning: 正則開着也照跑：它自己走一趟，不往正則裏塞東西（不像簡繁異體）。
         let said = match self.search.pinyin {
-            true => crate::pinyin::as_query(&self.search.query),
+            true => crate::pinyin::atoms(&self.search.query),
             false => None,
         };
         let how = match self.search.fuzzy {
@@ -1928,6 +1931,7 @@ impl Editor {
             said,
             keep_case: self.search.preserve_case,
             doubled: !self.search.regex,
+            shapes: self.search.glyphs,
         })
     }
 
@@ -2152,7 +2156,7 @@ pub(super) struct Look {
     /// Warning: **它是加出來的，不是替掉的**（2026-09-25 定的，原話：「兩種命中合並」）。
     /// 搜 `hello` 的人要的是文稿裏那個 `hello`，而搜 `shuzhai` 的人要的是「書齋」
     /// ——兩種都給，讀者自己認得出哪一條是他要的。
-    said: Option<Vec<char>>,
+    said: Option<Vec<crate::pinyin::Atom>>,
     /// **換上去那一段裏的 `$` 被加倍過**——`replacement()` 在非正則那一路加的，
     /// 好讓 `caps.expand` 把它還原成一個。
     ///
@@ -2161,6 +2165,11 @@ pub(super) struct Look {
     /// 那一支，加倍的 `$` 就那麼進了稿子：查 `shuzhai`、換成 `US$100`，得到的是
     /// `US$$100`；同一個詞打「書齋」去查卻是對的。所以那一支也要自己還原一次。
     doubled: bool,
+    /// 簡繁異體算不算同一個字——拼音那一路裏那幾個漢字問的就是它（`zhong国` 配
+    /// 不配得上「中國」）。字面那一路自己在式子裏折（`widen_pattern`）。
+    ///
+    /// Warning: **跟着面板那個開關走**，不是一律折：關掉「繁簡」的人要的就是不折。
+    shapes: bool,
 }
 
 /// 字面那一路怎麼問。
@@ -2221,7 +2230,7 @@ impl Look {
             }
         };
         if let Some(said) = &self.said {
-            let also = crate::pinyin::spans(text, said);
+            let also = crate::pinyin::spans_of(text, said, self.shapes);
             if !also.is_empty() {
                 out.extend(also);
                 out.sort_unstable();
