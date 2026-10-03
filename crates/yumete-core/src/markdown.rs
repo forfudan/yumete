@@ -960,7 +960,7 @@ fn fence(chars: &[char], at: usize, to: usize) -> Option<(usize, usize)> {
     // 外面一顆（斜）包着裏面兩顆（粗）。從前這裏寫的是 `.min(2)`，於是外面那一層一上來
     // 就拿走兩顆，首尾各剩一顆掉在正文上——`***both***` 畫出來是 `*both`。
     // 開標記從一串的**前面**取，閉標記從它那一串的**後面**取，剩下的留給外面那一層。
-    let len = if run % 2 == 1 { 1 } else { 2 };
+    let len = if run.is_multiple_of(2) { 2 } else { 1 };
     if c == '_' {
         // Warning: **漢字不算「詞內」**（2026-09-28 修）。這一條本來是保 `snake_case` 的：
         // 拉丁詞中間的下劃線不是強調。可是 `is_alphanumeric()` 對漢字也回真，於是
@@ -1003,7 +1003,12 @@ fn closing(
     if chars.get(from) == Some(&' ') {
         return None;
     }
-    let mut at = from;
+    // 掃從**整串開標記之後**起，不是從正文起：`***x***` 的外層只拿走頭一顆，剩下
+    // 兩顆還在原地，從正文起掃第一個看見的就是它們自己。
+    let mut at = from + run - len;
+    // **還開着幾層。** 一串分隔符既能開也能閉的時候（`**粗***斜*` 中間那三顆），
+    // 要分得清它是在收我這一層還是在開新的一層——這就是那個計數。
+    let mut depth = 0usize;
     while at < to {
         // Warning: **轉義掉的那一個不算閉合**（2026-09-28）：`*斜\*體*` 的斜體到最後那個
         // 星號纔收口，不是到中間那個。
@@ -1012,8 +1017,33 @@ fn closing(
             continue;
         }
         let end = at + (at..to).take_while(|&i| chars[i] == delimiter).count();
-        if end - at == run && chars.get(at.wrapping_sub(1)) != Some(&' ') {
-            return Some(end - len);
+        // CommonMark 的 flanking：左邊不是空白就收得了口，右邊不是空白就開得了頭。
+        let shuts = at > 0 && chars.get(at - 1) != Some(&' ');
+        let opens = end < to && chars.get(end) != Some(&' ');
+        // **CommonMark 的「三的規矩」**（§6.2 那一條）。一串既能開又能閉的時候
+        // （`**甲*乙*丙**` 中間那一顆），兩串長度之和是 3 的倍數就不許配對——除非
+        // 兩串自己都是 3 的倍數。沒有這一條，那一顆星會**收掉**外面的粗體，而它
+        // 要做的是開裏面的斜體。
+        let both = shuts && opens;
+        let allowed = !both
+            || !(run + (end - at)).is_multiple_of(3)
+            || (run.is_multiple_of(3) && (end - at).is_multiple_of(3));
+        if shuts && depth == 0 && allowed {
+            // **一樣長的那一對，開標記取串頭、閉標記取串尾**（`***x***`：外面一顆
+            // 斜，裏面兩顆粗，中間那幾個字留給遞歸）。不一樣長的時候閉標記取**串
+            // 頭**，剩下的留給右邊那一條構造——`**粗***斜*` 中間那三顆，兩顆收粗
+            // 體、一顆開斜體。
+            return Some(match end - at == run {
+                true => end - len,
+                false => at,
+            });
+        }
+        // **收得了口就先收**：裏面還開着一層的時候，這一串是來收它的，不是來
+        // 再開一層的（`**甲*乙*丙**` 第二顆星）。沒有開着的層纔算它開了新的一層。
+        if shuts && depth > 0 {
+            depth -= 1;
+        } else if opens {
+            depth += 1;
         }
         at = end;
     }
@@ -2454,6 +2484,17 @@ mod tests {
         // 一行上兩段，各自配各自的。
         assert_eq!(inner("**甲**和**乙**", Kind::Strong), vec!["甲", "乙"]);
         assert_eq!(inner("*甲*和*乙*", Kind::Emphasis), vec!["甲", "乙"]);
+
+        // **兩段貼在一起，中間那一串是共用的**（2026-10-03 一輪審查報來的，是我
+        // 當天自己挖的洞）。`**粗***斜*` 中間三顆星：兩顆收粗體、一顆開斜體。
+        // 從前這裏要求「閉合那一串和開頭那一串一樣長」，於是兩邊都配不上，兩個
+        // 構造一起落回正文——`**粗***斜*` 畫出來是一條斜體裏裝着三顆裸星。
+        assert_eq!(inner("**粗***斜*", Kind::Strong), vec!["粗"]);
+        assert_eq!(inner("**粗***斜*", Kind::Emphasis), vec!["斜"]);
+        assert_eq!(inner("*a***b**", Kind::Emphasis), vec!["a"]);
+        assert_eq!(inner("*a***b**", Kind::Strong), vec!["b"]);
+        // 多出來的那一顆是正文，不是標記。
+        assert_eq!(inner("**both***", Kind::Strong), vec!["both"]);
     }
 
     /// **兩條不變式**：按起點排好，任意兩條要麼不交要麼全含。
