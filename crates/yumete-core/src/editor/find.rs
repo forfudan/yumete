@@ -4,7 +4,7 @@
 //! panel's *state* is [`crate::search_panel`]; drawing it is the front end's.
 
 use super::*;
-use crate::search_panel::{Case, Field, Hit, Where, AROUND, MOST};
+use crate::search_panel::{Case, Field, Hit, Where, AROUND};
 use std::path::{Path, PathBuf};
 
 impl Editor {
@@ -466,7 +466,7 @@ impl Editor {
                 let text: String = rope.line(line).chars().collect();
                 for (nth, (start, stop)) in look.spans(&text).into_iter().enumerate() {
                     total += 1;
-                    if hits.len() < MOST {
+                    if hits.len() < self.search.most() {
                         let mut hit =
                             excerpt(Some(label.clone()), &text, at, start, stop, line, nth);
                         hit.buffer = Some(id);
@@ -568,7 +568,7 @@ impl Editor {
         // what is searched, saved or not — when it is in scope at all.
         let (mine, sifted) = self.the_open_one_in_scope();
         let (mut hits, mut total) = match sifted {
-            true => self.scan_the_open_one(&look, &mine, MOST),
+            true => self.scan_the_open_one(&look, &mine, self.search.most()),
             false => (Vec::new(), 0),
         };
         self.search.mine = hits.len();
@@ -593,6 +593,7 @@ impl Editor {
                 self.status = say!("search.bad-glob");
                 return;
             }
+            let most = self.search.most();
             let mut files = Vec::new();
             let walked = crate::editor::walk_prose(&root, &sieve.unwrap_or_default(), &mut |path| {
                 files.push(path.to_path_buf())
@@ -638,7 +639,7 @@ impl Editor {
                 for (line, text) in text.split_inclusive('\n').enumerate() {
                     for (nth, (start, stop)) in look.spans(text).into_iter().enumerate() {
                         total += 1;
-                        if hits.len() < MOST {
+                        if hits.len() < most {
                             hits.push(excerpt(
                                 Some(shown.clone()),
                                 text,
@@ -1138,6 +1139,21 @@ impl Editor {
         &mut self.search
     }
 
+    /// **撥搜索的那幾個開關**——給管道那一邊用（`ye --grep`，2026-10-03）。
+    ///
+    /// Warning: **管道那一邊不另寫一個 grep。** 它撥的就是面板撥的那一份狀態，跑的就是
+    /// 面板跑的那一支（[`Editor::run_the_search`]）。另寫一份一定會和面板分岔——
+    /// 同一天上午剛修過一個：離屏拍照那一支手抄了一份輸入法派發，照出來的是另一
+    /// 個程序。
+    pub fn search_mut(&mut self) -> &mut crate::search_panel::Search {
+        &mut self.search
+    }
+
+    /// 照現在那幾個開關搜一趟，當場跑完（不經過「欠着、畫一幀再跑」那條路）。
+    pub fn run_the_search(&mut self) {
+        self.search_now();
+    }
+
     /// The highlighted hit, its line number, and where the match sits in it.
     ///
     /// Warning: **2026-09-27 走過一趟又回來了**，同 `fit_around`。它本來是命令行畫前後文
@@ -1462,11 +1478,12 @@ impl Editor {
         let was = self.search.mine.min(self.search.hits.len());
         let others = self.search.hits.len() - was;
         let (fresh, total) = match counts {
-            true => self.scan_the_open_one(&look, &mine, MOST.saturating_sub(others)),
+            true => self.scan_the_open_one(&look, &mine, self.search.most().saturating_sub(others)),
             false => (Vec::new(), 0),
         };
         // 砍過就接不回去：後面漏了哪些沒人知道。整趟重跑，它自己會把數擺對。
-        if self.search.total > MOST || total + (self.search.total - self.search.mine_total) > MOST {
+        let most = self.search.most();
+        if self.search.total > most || total + (self.search.total - self.search.mine_total) > most {
             return self.search_now();
         }
         let grew = fresh.len() as isize - was as isize;
@@ -2109,6 +2126,7 @@ fn excerpt(
     Hit {
         file,
         line,
+        column: start,
         nth,
         buffer: None,
         at: line_at + start,
