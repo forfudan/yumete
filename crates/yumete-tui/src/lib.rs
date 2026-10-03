@@ -9145,7 +9145,22 @@ fn draw_horizontal(
             true => stood_back,
             false => ink,
         };
-        let text: String = rope.slice(row.start..row.end).to_string();
+        // **一行再長，一幀畫出來的也只有窗口那麼寬**（2026-10-03 量出來的）。
+        //
+        // `:view-wrap off` 把一段變成一行，而一行四十兆的檔上這裏從前把**整整
+        // 兩千萬個字符**拷成一個 `String`、再拆成一個 `Vec<char>`，底下每一道
+        // 樣式都在那上面走一遍——一幀 12.7 秒。開着折行同一個檔是 1.9 秒，所以
+        // 慢的不是檔有多大，是這一行有多長。
+        //
+        // 窗口右邊之外的東西本來就不畫（`scrolled` 砍掉左邊 `left` 格，右邊由
+        // ratatui 截掉），所以只取夠畫的那一截。上限放得很寬——一格一個字符算，
+        // 再加一千個——於是正常的稿子一行都碰不到它，碰到的只有這一種。
+        let keep = (left + page) * 2 + 1024;
+        let row_end = row.end.min(row.start + keep);
+        // 截了的那一行就不再是「走到行尾」的那一行：行尾那一格的光標與選區在
+        // 屏幕外面，畫出來會多一格反白。
+        let ends_line = row.ends_line && row_end == row.end;
+        let text: String = rope.slice(row.start..row_end).to_string();
         let mut spans = Vec::new();
         if gutter > 0 {
             // A continuation row carries no number: the number belongs to the
@@ -9206,7 +9221,7 @@ fn draw_horizontal(
         // Whichever one wins used to be an if/else, so a bold word inside a
         // selection lost its bold and a heading lost its colour the moment the
         // overlay came on.
-        let row_len = row.end - row.start;
+        let row_len = row_end - row.start;
         // **A tab is drawn as the cell it occupies** (#374). The editor counts
         // a tab as one cell — `grapheme_width` gives every ASCII byte one, and
         // the space it advances over is drawn beside it — but `unicode-width`
@@ -9309,7 +9324,7 @@ fn draw_horizontal(
             .filter(|run| {
                 run.column >= start_in_line
                     && (run.column < start_in_line + chars.len()
-                        || (row.ends_line && run.column == start_in_line + chars.len()))
+                        || (ends_line && run.column == start_in_line + chars.len()))
             })
             .map(|run| yumete_core::drawn::Run {
                 column: run.column - start_in_line,
@@ -9583,7 +9598,7 @@ fn draw_horizontal(
         // The cell first, so that everything louder — the selection, the hit —
         // still goes over it.
         if let Some((from, to)) = cell {
-            if to > row.start && from < row.end {
+            if to > row.start && from < row_end {
                 let a = from.saturating_sub(row.start).min(chars.len());
                 let b = to.saturating_sub(row.start).min(chars.len());
                 for (i, style) in styles.iter_mut().enumerate().take(b).skip(a) {
@@ -9616,7 +9631,7 @@ fn draw_horizontal(
 
         // 次選區墊在主選區之前。不變式保證它們不重疊，所以這個次序眼下看不出分別；
         // 寫成這樣是因為「主選區壓在最上面」是這一族唯一不許被推翻的次序。
-        let reach = row.start + row_len + usize::from(row.ends_line);
+        let reach = row.start + row_len + usize::from(ends_line);
         for &(from, to) in &secondary {
             if to > row.start && from < reach {
                 let a = from.saturating_sub(row.start).min(row_len);
@@ -9636,7 +9651,7 @@ fn draw_horizontal(
             for style in styles.iter_mut().take(b).skip(a) {
                 *style = style.patch(sel_style);
             }
-            if row.ends_line && sel_end > row.start + row_len {
+            if ends_line && sel_end > row.start + row_len {
                 break_cell = " ";
             }
         }
@@ -9726,7 +9741,7 @@ fn draw_horizontal(
         // **別的那幾處命中，墊在最底下一層**——站着的那一處畫在它之後，所以蓋
         // 在它上面。兩層的次序就是它們的要緊程度（2026-09-27）。
         for (from, to) in &search_marks {
-            if *to > row.start && *from < row.end {
+            if *to > row.start && *from < row_end {
                 let a = from.saturating_sub(row.start).min(chars.len());
                 let b = to.saturating_sub(row.start).min(chars.len());
                 for style in styles.iter_mut().take(b).skip(a) {
@@ -9737,7 +9752,7 @@ fn draw_horizontal(
 
         // …and the hit itself, over everything else on the row.
         if let Some((from, to)) = hit {
-            if to > row.start && from < row.end {
+            if to > row.start && from < row_end {
                 let a = from.saturating_sub(row.start).min(chars.len());
                 let b = (to.saturating_sub(row.start)).min(chars.len());
                 for style in styles.iter_mut().take(b).skip(a) {
