@@ -475,7 +475,7 @@ pub enum Motion {
     WordForward(Grain),
     /// `e` / `E` — the end of the run ahead, both ends set.
     WordEnd(Grain),
-    /// `ge` / `gE` — **往回到上一個詞的末尾**（vim；2026-10-02 作者定照參考實現）。
+    /// `ge` / `gE` — **往回到上一個詞的末尾**（vim；2026-10-02 定照參考實現）。
     ///
     /// Warning: **helix 沒有這一個**，而 `ge` 在 helix 鍵位裏是「到檔尾」。所以這
     /// 一支只有 vim 文法問得到，兩邊的 `ge` 各是各的。
@@ -770,7 +770,23 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
     while anchor > head && rope.char(anchor.min(rope.len_chars().saturating_sub(1))) == '\n' {
         anchor = prev_grapheme(rope, anchor);
     }
-    match anchor > head {
+    // Warning: **錨點退到和 head 同一格，那也是一段**（2026-10-04 修）。倒着走的
+    // `Span::Over` 是閉區間，所以 `anchor == head` 說的是「選中一個字」，不是
+    // 「什麼都沒選中」。從前這裏寫 `anchor > head`，於是**上一個詞只有一個字符的
+    // 時候交出 `Missed`**——而 `Missed` 的意思是「哪兒也不去」，光標就卡死了：
+    //
+    // ```
+    // alpha beta gamma      光標在 beta 的 b  →  退到 alpha   ✓
+    // alpha `beta` gamma    光標在 beta 的 b  →  一動不動     ✗
+    // ```
+    //
+    // 反引號、逗號、括號、「」——緊挨着詞的標點都是一個字符的詞，所以這一條按得
+    // 出來的次數比看上去多。神諭量過（`helix-core`，`aa `bb` cc`，光標在第 4 格）：
+    // `anchor=4 head=3 span=[3,4) text="`"`，也就是**走到第 3 格、選中那個反引號**。
+    //
+    // 真正的「哪兒也不去」在上面那道閘（`head >= anchor`，退錨點之前問的），
+    // 那一條管的是檔首——它照舊。
+    match anchor >= head {
         true => Span::Over { anchor, head },
         false => Span::Missed,
     }
@@ -1295,6 +1311,64 @@ mod tests {
         );
         // 檔首：什麼都不做，不是「選中一格」。
         assert_eq!(word_back(&r, 0, Grain::Coarse, &seg), Span::Missed);
+    }
+
+    /// **上一個詞只有一個字符的時候，`b` 照樣走得掉**（2026-10-04 修的回歸）。
+    ///
+    /// 報上來的：站在 `` `mam` `` 的 `m` 上按 `b`，光標一動不動，按幾次都不動。
+    /// 跟中文、跟 markdown 都無關，`` aa `bb` cc `` 一樣：
+    ///
+    /// ```text
+    /// alpha beta gamma      光標在 beta 的 b  →  退到 alpha   ✓
+    /// alpha `beta` gamma    光標在 beta 的 b  →  一動不動     ✗
+    /// ```
+    ///
+    /// 根子是末尾那道閘寫成了 `anchor > head`。倒着走的 `Span::Over` 是**閉區間**，
+    /// 所以 `anchor == head` 說的是「選中一個字」；前一個詞只有一個字符（反引號、
+    /// 逗號、括號、「」都是）的時候，詞首那一下的錨點正好退到和 head 同一格，於是
+    /// 它被當成「沒地方可去」交了 `Missed`——而 `Missed` 的意思是光標不動。
+    ///
+    /// 神諭量過（`helix-core`，`` aa `bb` cc ``，光標在第 4 格）：
+    /// `anchor=4 head=3 span=[3,4) text="`"`——走到第 3 格，選中那個反引號。
+    #[test]
+    fn b_gets_out_of_a_word_that_sits_against_a_one_character_word() {
+        let seg = CategorySegmenter;
+        let r = rope("aa `bb` cc\n");
+        // 位：0a 1a 2␣ 3` 4b 5b 6` 7␣ 8c 9c
+        //
+        // 詞首、而前一個詞只有一個字符：選中那一個字符，光標落在它上面。
+        assert_eq!(
+            word_back(&r, 4, Grain::Coarse, &seg),
+            Span::Over { anchor: 3, head: 3 },
+            "`bb` 的第一個 b 上按 b，要走到那個反引號"
+        );
+        assert_eq!(
+            word_back(&r, 8, Grain::Coarse, &seg),
+            Span::Over { anchor: 7, head: 6 },
+            "cc 的第一個 c 上按 b，走到那個反引號（中間還有個空格）"
+        );
+        // 同一串裏不受這一條影響的那幾格，照舊。
+        assert_eq!(
+            word_back(&r, 5, Grain::Coarse, &seg),
+            Span::Over { anchor: 5, head: 4 },
+            "詞中間：帶上你站的那一格"
+        );
+        assert_eq!(
+            word_back(&r, 3, Grain::Coarse, &seg),
+            Span::Over { anchor: 2, head: 0 },
+            "反引號自己也是一個詞，從它往回走是 aa"
+        );
+        // Warning: **檔首那一條不許被這個修順走。** `anchor >= head` 放行的是退錨點
+        // **之後**那一步；真正的「哪兒也不去」在前面那道閘上，它管的是這一格。
+        assert_eq!(word_back(&r, 0, Grain::Coarse, &seg), Span::Missed);
+
+        // 漢字那一邊同形：句讀是一個字符的詞。
+        let r = rope("過「碼」來\n");
+        assert_eq!(
+            word_back(&r, 2, Grain::Coarse, &seg),
+            Span::Over { anchor: 1, head: 1 },
+            "「碼」的碼上按 b，要走到那個開引號"
+        );
     }
 
     #[test]
