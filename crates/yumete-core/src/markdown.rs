@@ -769,16 +769,14 @@ fn scan(
                 continue;
             }
         }
-        if let Some(len) = fence(chars, at) {
+        if let Some((len, run)) = fence(chars, at, to) {
             let kind = match (chars[at], len) {
                 ('*', 2) | ('_', 2) => Kind::Strong,
                 ('~', 2) => Kind::Strike,
                 ('=', 2) => Kind::Highlight,
                 _ => Kind::Emphasis,
             };
-            if let Some(close) = closing(chars, at + len, chars[at], len)
-                .filter(|&close| close + len <= to)
-            {
+            if let Some(close) = closing(chars, at + len, to, chars[at], len, run) {
                 mark(out, at, at + len, Kind::Marker, *construct, depth);
                 mark(out, at + len, close, kind, *construct, depth);
                 let mine = *construct;
@@ -937,7 +935,7 @@ pub fn link_at(line: &str, at: usize) -> Option<Link> {
 /// An underscore only opens where a word does not: `snake_case` is a name, not
 /// an emphasis, and in a manuscript full of file names that matters more than
 /// being able to italicise with `_`.
-fn fence(chars: &[char], at: usize) -> Option<usize> {
+fn fence(chars: &[char], at: usize, to: usize) -> Option<(usize, usize)> {
     let c = chars[at];
     if !matches!(c, '*' | '_' | '~' | '=') {
         return None;
@@ -952,11 +950,17 @@ fn fence(chars: &[char], at: usize) -> Option<usize> {
     if chars.iter().all(|&x| x == c || x.is_whitespace()) {
         return None;
     }
-    let len = chars[at..].iter().take_while(|&&x| x == c).count().min(2);
-    // `~` and `=` only ever come in pairs: a lone one is a dash or an equals.
-    if matches!(c, '~' | '=') && len < 2 {
+    let run = chars[at..to].iter().take_while(|&&x| x == c).count();
+    // `~` and `=` only ever come in pairs: a lone one is a dash or an equals,
+    // and three of them are a code fence or a setext rule, not a longer mark.
+    if matches!(c, '~' | '=') && run != 2 {
         return None;
     }
+    // Warning: **一串三顆星是一層套一層**（2026-10-03 修）：CommonMark 把 `***x***` 讀成
+    // 外面一顆（斜）包着裏面兩顆（粗）。從前這裏寫的是 `.min(2)`，於是外面那一層一上來
+    // 就拿走兩顆，首尾各剩一顆掉在正文上——`***both***` 畫出來是 `*both`。
+    // 開標記從一串的**前面**取，閉標記從它那一串的**後面**取，剩下的留給外面那一層。
+    let len = if run % 2 == 1 { 1 } else { 2 };
     if c == '_' {
         // Warning: **漢字不算「詞內」**（2026-09-28 修）。這一條本來是保 `snake_case` 的：
         // 拉丁詞中間的下劃線不是強調。可是 `is_alphanumeric()` 對漢字也回真，於是
@@ -968,29 +972,50 @@ fn fence(chars: &[char], at: usize) -> Option<usize> {
         }
     }
     // A delimiter with nothing after it opens nothing.
-    (at + len < chars.len()).then_some(len)
+    (at + len < to).then_some((len, run))
 }
 
-/// Where the run of `len` `delimiter`s closing the one opened at `from` begins.
+/// Where the marker closing the run opened at `from` begins, searching `from..to`.
 ///
-/// The content may not be empty and may not start with a space: `** ` in the
-/// middle of a sentence is two asterisks, not the start of a bold run.
-fn closing(chars: &[char], from: usize, delimiter: char, len: usize) -> Option<usize> {
+/// `len` is how many characters the opening marker took and `run` how long the
+/// whole opening run was. The content may not be empty and may not start with a
+/// space: `** ` in the middle of a sentence is two asterisks, not the start of
+/// a bold run.
+///
+/// # Warning: 閉合的那一串要**整串一樣長**，不許在一串中間收口
+///
+/// 2026-10-03 修。從前這裏是逐格比對「接下來 `len` 個都是分隔符」，於是
+/// `*em **strong** em*` 裏那一顆星的強調走到 `**` 的**第二顆**就收了口，畫出來是
+/// `em *`——`**` 被拆掉一顆。
+///
+/// 只擋「串中間」不夠：那樣一顆星的強調會改收在後面那個 `**` 上（`*em **strong*`），
+/// 只是換一種錯法。真正分得開兩層的是**串長**：一顆星配一顆星那一串，兩顆配兩顆。
+/// 而 `***x***` 兩串都是三顆，外層取頭一顆、閉合取末一顆（`end - len`），裏面那兩顆
+/// 留給遞歸那一趟。
+fn closing(
+    chars: &[char],
+    from: usize,
+    to: usize,
+    delimiter: char,
+    len: usize,
+    run: usize,
+) -> Option<usize> {
     if chars.get(from) == Some(&' ') {
         return None;
     }
     let mut at = from;
-    while at + len <= chars.len() {
+    while at < to {
         // Warning: **轉義掉的那一個不算閉合**（2026-09-28）：`*斜\*體*` 的斜體到最後那個
         // 星號纔收口，不是到中間那個。
-        if chars[at..at + len].iter().all(|&c| c == delimiter)
-            && chars.get(at.wrapping_sub(1)) != Some(&' ')
-            && !escaped(chars, at)
-            && at > from
-        {
-            return Some(at);
+        if chars[at] != delimiter || escaped(chars, at) {
+            at += 1;
+            continue;
         }
-        at += 1;
+        let end = at + (at..to).take_while(|&i| chars[i] == delimiter).count();
+        if end - at == run && chars.get(at.wrapping_sub(1)) != Some(&' ') {
+            return Some(end - len);
+        }
+        at = end;
     }
     None
 }
@@ -2397,6 +2422,38 @@ mod tests {
 
         // Warning: **遞歸不許越過外層的閉合符**：``**a`b**c`` 裏那個反引號後面沒有配對的。
         assert!(inner("**a`b**c", Kind::Code).is_empty(), "反引號不許找到外面去");
+    }
+
+    /// **一層套一層的強調**（2026-10-03 修）。
+    ///
+    /// 三條都是 2026-10-02 那一輪掃查報來的：`*em **strong** em*` 畫成 `em *`、
+    /// `***both***` 畫成 `*both`、`**粗 *斜* 粗**` 是對的。前兩條的根子在
+    /// [`closing`]——它在一串分隔符的中間收口。
+    #[test]
+    fn emphasis_nests_without_eating_a_delimiter() {
+        let inner = |line: &str, want: Kind| {
+            spans(line)
+                .into_iter()
+                .filter(|s| s.kind == want)
+                .map(|s| line.chars().skip(s.start).take(s.end - s.start).collect::<String>())
+                .collect::<Vec<_>>()
+        };
+
+        // 一顆星的強調不許收在 `**` 的第二顆上。
+        assert_eq!(inner("*em **strong** em*", Kind::Emphasis), vec!["em **strong** em"]);
+        assert_eq!(inner("*em **strong** em*", Kind::Strong), vec!["strong"]);
+
+        // 一串三顆：外面一顆是斜，裏面兩顆是粗（CommonMark 也是這麼讀的）。
+        assert_eq!(inner("***both***", Kind::Emphasis), vec!["**both**"]);
+        assert_eq!(inner("***both***", Kind::Strong), vec!["both"]);
+
+        // 從前就對的那一條，別改壞。
+        assert_eq!(inner("**outer *inner* outer**", Kind::Strong), vec!["outer *inner* outer"]);
+        assert_eq!(inner("**outer *inner* outer**", Kind::Emphasis), vec!["inner"]);
+
+        // 一行上兩段，各自配各自的。
+        assert_eq!(inner("**甲**和**乙**", Kind::Strong), vec!["甲", "乙"]);
+        assert_eq!(inner("*甲*和*乙*", Kind::Emphasis), vec!["甲", "乙"]);
     }
 
     /// **兩條不變式**：按起點排好，任意兩條要麼不交要麼全含。
