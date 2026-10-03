@@ -859,6 +859,19 @@ fn press(
                         "pgdn" => Key::PageDown,
                         "del" => Key::Delete,
                         "backtab" => Key::BackTab,
+                        // **四個方向鍵與 `Tab`、`Enter`、`Esc`、退格**（2026-10-03 補）。
+                        // 這張表從前缺它們，而 `Key` 一直有——於是離屏驗不了「面板
+                        // 裏按下去會怎樣」那一整族：面板的提示行寫着「↑ ↓ 上下移
+                        // 動」，而寫腳本的人（包括我）伸手去拿 `\{down}` 拿不到。
+                        // `\n` `\e` `\b` 一直認得，這裏多給一個寫得出名字的拼法。
+                        "up" => Key::Up,
+                        "down" => Key::Down,
+                        "left" => Key::Left,
+                        "right" => Key::Right,
+                        "tab" => Key::Tab,
+                        "enter" => Key::Enter,
+                        "esc" => Key::Esc,
+                        "bs" => Key::Backspace,
                         // **`\{space}` 也認**（2026-10-02）。字面的空格一直管用，
                         // 可一串鍵裏的空格看不見，所以寫腳本的人（包括我）伸手就
                         // 去拿這個名字——而它從前不存在。
@@ -1079,6 +1092,10 @@ OPTIONS:
                      `\\^x` Control-x, `\\{{home}}` `\\{{end}}` `\\{{pgup}}`
                      `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}` `\\{{space}}`
                      `\\{{alt-d}}` `\\{{ctrl-w}}`, `\\u\\d\\l\\r` the arrows.
+                     Every one of those also has a spelt-out name, so a script
+                     need not mix the two styles: `\\{{up}}` `\\{{down}}`
+                     `\\{{left}}` `\\{{right}}` `\\{{tab}}` `\\{{enter}}`
+                     `\\{{esc}}` `\\{{bs}}`.
                      A name this list does not hold is an error, not a warning.
                      `--keys='::竖排'` opens the command search with that in it.
         --html       With --shot: the frame **with its colours**, as one
