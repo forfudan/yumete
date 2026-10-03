@@ -3724,6 +3724,15 @@ pub const COMMANDS: &[Entry] = &[
             let mut numbers = spec.split(['x', 'X', '×', ' ', '\t']).filter(|w| !w.is_empty());
             let rows = numbers.next().unwrap_or("3");
             let columns = numbers.next().unwrap_or("3");
+            // Warning: **第三個數是打錯了，不是可以丟掉的**（2026-10-03）。
+            // `:table-new 3 4 5` 從前默默作一張 3×4 的表，而那個 `5` 是人打出來
+            // 的——他要的多半不是 3×4。說一句，別自作主張。
+            if numbers.next().is_some() {
+                return Err(CommandError::InvalidArgument {
+                    command: "table-new",
+                    value: spec.to_string(),
+                });
+            }
             match (rows.parse::<usize>(), columns.parse::<usize>()) {
                 (Ok(r), Ok(c)) if (1..=200).contains(&r) && (1..=32).contains(&c) => {
                     Ok(Command::NewTable { rows: r, columns: c })
