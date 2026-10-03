@@ -2439,6 +2439,30 @@ impl Editor {
             .unwrap_or(0)
     }
 
+    /// `s`／`S` 收尾那一下：把 `a`／`d` 關掉的那幾欄和還在打的那幾欄合起來排。
+    ///
+    /// Warning: **一塊和一份檔案共用這一支**（2026-10-03）。從前塊那一支裏根本沒有
+    /// `s`，於是 `␣tt` 進了格子再 `␣t1s` 一聲不響地落到兜底那一句。
+    fn sort_the_named_columns(&mut self, key: Key) {
+        let down = key == Key::Char('S');
+        // Every column `a`/`d` closed, and then the ones still being
+        // typed: `t1a2d8as` ends on a bare `s`, `t1s` is a single column
+        // with its direction in the verb, `t1,5,9s` is three of them at
+        // once, and `t1a2d5,9s` is both spellings in one command.
+        let mut named = self.sort_keys.clone();
+        named.extend(self.sequence_columns().into_iter().flatten().map(|c| (c, down)));
+        if named.is_empty() {
+            self.status = say!("table.sort-wants-a-column");
+            return;
+        }
+        let here = self.cell_position().map(|(_, c)| c + 1).unwrap_or(1);
+        let named: Vec<(usize, bool)> = named
+            .into_iter()
+            .map(|(column, down)| (if column == 0 { here } else { column }, down))
+            .collect();
+        self.sort_table(&named);
+    }
+
     pub(super) fn sort_table(&mut self, keys: &[(usize, bool)]) {
         // The `|` half of the sort comes through `md_parts_to_edit`, which
         // refuses for itself; a delimited file's half rewrites the whole rope
@@ -2450,13 +2474,24 @@ impl Editor {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        // A block recognised where it stands is not rewritten (#216) — and
-        // the sort below rebuilds the file from its own lines, which for a few
-        // lines of a chapter is the whole chapter.
-        if view.bounds == Bounds::Block {
-            self.status = say!("table.block-is-read-where-it-lies");
-            return;
-        }
+        // **文中那一塊排得了序**（2026-10-03 作者定，原話：「如果是我，我会先在
+        // 逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq 回到正文」）。
+        //
+        // Warning: 從前這裏一句話擋掉：「文中的表格區塊只讀不改寫」。那句話說的不是一
+        // 條規矩，是底下那一段的做法——它把**整份檔案**按表格自己的行重建一遍，
+        // 而一塊只是一章當中的幾行，重建就等於改寫整章。範圍是知道的
+        // （`block_region`），所以擋的是實現，不是語義。
+        let block = match view.bounds {
+            Bounds::Block => match self.block_region() {
+                Some(region) => Some((region.first, region.last)),
+                // 進了格子卻找不着那一塊，那就真的無處可排。
+                None => {
+                    self.status = say!("table.block-is-read-where-it-lies");
+                    return;
+                }
+            },
+            _ => None,
+        };
         // **A column that is not there is said, not ignored.** `t99a1ds` used
         // to sort by nothing at all — every cell of column 99 is missing, so
         // every pair compared equal — and then report 「照『』順排」 with an
@@ -2488,8 +2523,16 @@ impl Editor {
         };
         let delimiter = view.schema.delimiter;
         let header = usize::from(view.schema.header);
-        let text = self.current_buffer().text();
-        let ends_with_newline = text.ends_with('\n');
+        // 一塊就只拿那一塊的行；整份檔案纔拿整份。
+        let text = match block {
+            Some((first, last)) => (first..=last)
+                .filter_map(|i| self.line_text(i))
+                .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            None => self.current_buffer().text(),
+        };
+        let ends_with_newline = block.is_none() && text.ends_with('\n');
         // **Whatever this file ends its lines with, it goes on ending them with
         // it.** `str::lines` strips `\r\n` and a naive rejoin writes `\n`, so
         // one keystroke rewrote all 123,381 lines of a Windows-authored 拆分表
@@ -2554,8 +2597,20 @@ impl Editor {
             return;
         }
         self.snapshot();
-        let len = self.current_buffer().char_count();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+        let done = match block {
+            // 只動那一塊的那幾行；它上面那一章和底下那一章一個字節都不碰。
+            Some((first, last)) => {
+                let rows: Vec<String> = rebuilt.split(eol).map(str::to_string).collect();
+                self.without_cell_guard(|e| {
+                    e.replace_lines(first, last, &rows);
+                    Ok(())
+                })
+            }
+            None => {
+                let len = self.current_buffer().char_count();
+                self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt))
+            }
+        };
         if !self.applied(done) {
             return;
         }
@@ -3878,6 +3933,11 @@ impl Editor {
                 }
                 Key::Char('y') => self.yank_column(),
                 Key::Char('p') => self.put_column(),
+                // **排序也在這一塊上做得了**（2026-10-03 作者定，原話：「我会先
+                // 在逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq 回到正
+                // 文」）。上面那一段註釋寫着「排序會把整份檔案按表格自己的行重建
+                // 一遍」——那是從前的做法，`sort_table` 現在按塊的行寫回。
+                Key::Char('s') | Key::Char('S') => self.sort_the_named_columns(key),
                 Key::Esc => {}
                 _ => self.status = Self::table_keys_say(Some(Bounds::Block)),
             }
@@ -3893,23 +3953,7 @@ impl Editor {
         // sort *up* either way when no column was named, silently, which is
         // the worst way there is to disagree with a keystroke.
         if matches!(key, Key::Char('s') | Key::Char('S')) {
-            let down = key == Key::Char('S');
-            // Every column `a`/`d` closed, and then the ones still being
-            // typed: `t1a2d8as` ends on a bare `s`, `t1s` is a single column
-            // with its direction in the verb, `t1,5,9s` is three of them at
-            // once, and `t1a2d5,9s` is both spellings in one command.
-            let mut named = self.sort_keys.clone();
-            named.extend(self.sequence_columns().into_iter().flatten().map(|c| (c, down)));
-            if named.is_empty() {
-                self.status = say!("table.sort-wants-a-column");
-                return;
-            }
-            let here = self.cell_position().map(|(_, c)| c + 1).unwrap_or(1);
-            let named: Vec<(usize, bool)> = named
-                .into_iter()
-                .map(|(column, down)| (if column == 0 { here } else { column }, down))
-                .collect();
-            self.sort_table(&named);
+            self.sort_the_named_columns(key);
             return;
         }
         if matches!(key, Key::Char('/') | Key::Char('?')) {

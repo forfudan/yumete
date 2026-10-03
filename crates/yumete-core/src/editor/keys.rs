@@ -2382,6 +2382,7 @@ impl Editor {
         ("?", "hint.table.search-columns-elsewhere"),
         ("g", "hint.table.go-to-cell"),
         ("y p", "hint.table.yank-or-paste-column"),
+        ("1s 1S", "hint.table.sort-by-column"),
     ];
 
     /// What `t` adds inside a Markdown table.
