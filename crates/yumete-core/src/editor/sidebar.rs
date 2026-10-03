@@ -1547,6 +1547,18 @@ impl Editor {
         picker.matches().iter().map(|item| item.label().to_string()).collect()
     }
 
+    /// **`ye --files … --open`**：挑選器開着、字已經打好、單子已經篩過。
+    ///
+    /// Warning: **打進去，不是塞進去**：一個字一個字走 `Picker::push`，和人敲鍵盤走的
+    /// 是同一支，所以篩選、評分、第一條預覽都和手打出來的一模一樣。
+    pub fn open_file_picker_with(&mut self, query: &str, root: PathBuf) {
+        self.open_file_picker_in(root);
+        let Some(picker) = self.picker.as_mut() else { return };
+        for c in query.chars() {
+            picker.push(c);
+        }
+    }
+
     fn open_file_picker_in(&mut self, root: PathBuf) {
         let mut prose = Vec::new();
         let mut rest = Vec::new();
