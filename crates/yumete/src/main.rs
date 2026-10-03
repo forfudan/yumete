@@ -139,6 +139,7 @@ fn main() -> ExitCode {
             },
             // **缺省搜當前目錄**，和 rg 一樣；這一個往上搜到項目的根。
             "--project" => g.project = true,
+            "--open" => g.open = true,
             // **`-t` is already the table**, so this one is long only. Worth a
             // flag at all because the lesson is what a first run wants, and
             // 「open the editor, then find out how to ask for the lesson」 is
@@ -183,11 +184,15 @@ fn main() -> ExitCode {
         }
     }
 
-    if let Some(pattern) = grep {
-        return run_grep(&pattern, &files, &g);
-    }
-    if let Some(pattern) = listing {
-        return run_files(&pattern, &files, &g);
+    // **`--open` 之外纔印到 stdout 就退出。** 帶了 `--open` 的那一條往下走，等編輯
+    // 器建好、配置載好、檔開好之後再把面板擺出來（底下那一處）。
+    if !g.open {
+        if let Some(pattern) = &grep {
+            return run_grep(pattern, &files, &g);
+        }
+        if let Some(pattern) = &listing {
+            return run_files(pattern, &files, &g);
+        }
     }
 
     let mut editor = Editor::new();
@@ -620,6 +625,35 @@ fn main() -> ExitCode {
     if tutor {
         let _ = editor.execute(":tutor");
     }
+    // **`--grep … --open` / `--files … --open`**：詞在命令行上已經打過了，進去就
+    // 該是「已經找完」的那個樣子（2026-10-03 作者定）。
+    if g.open {
+        let scope = match g.project {
+            true => Where::Project,
+            false => Where::Working,
+        };
+        if let Some(pattern) = &grep {
+            {
+                let s = editor.search_mut();
+                s.case = g.case.unwrap_or_default();
+                s.whole = g.word;
+                s.regex = g.regex;
+                s.fuzzy = g.fuzzy;
+                s.hidden = g.hidden;
+                s.include = g.include.clone();
+                s.exclude = g.exclude.clone();
+                (s.glyphs, s.pinyin) = g.chinese;
+            }
+            editor.open_search_with(pattern, scope);
+        }
+        if let Some(pattern) = &listing {
+            let root = match g.project {
+                true => editor.project_root(),
+                false => editor.working_dir(),
+            };
+            editor.open_file_picker_with(pattern, root);
+        }
+    }
     if let Some((width, height)) = shot {
         // **一幀也要算一次改動條。** 互動的循環是停手 300 毫秒纔算，離屏出圖没有
         // 那個循環——不補這一句，`--keys` 打進去的改動在圖上永遠看不見，而所有
@@ -1046,6 +1080,13 @@ struct Grep {
     chinese: (bool, bool),
     /// 往上搜到項目的根，而不是當前目錄。
     project: bool,
+    /// **開編輯器，別印到 stdout**（2026-10-03 作者定）。`--grep … --open` 開起來
+    /// 面板已經在跑，`--files … --open` 開起來挑選器已經打好。
+    ///
+    /// 做成一個修飾旗標而不是另一對名字：所有別的開關（`--hidden`、`--project`、
+    /// `--chinese=`…）白拿，只有一套詞彙要記。作者原話：「其实 open 更好。未来
+    /// 可以 -go 来 grep + open，短别名是可以连缀的」。
+    open: bool,
 }
 
 impl Default for Grep {
@@ -1062,6 +1103,7 @@ impl Default for Grep {
             // 存在的理由，`derive(Default)` 給的那一對正好是反的。
             chinese: (true, true),
             project: false,
+            open: false,
         }
     }
 }
@@ -1350,6 +1392,12 @@ SEARCHING FROM THE SHELL:
                      第120章.md, `juan01/di120` finds exactly that chapter.
                      --grep reads them the same way: `zhongguo很大`,
                      `zhong国` and `中guo` all find 中國很大.
+
+        --open       Open the editor on the answer instead of printing it:
+                     --grep with --open comes up with the panel already run and
+                     the keys on the first hit; --files with --open comes up
+                     with the picker open and the query already typed. Every
+                     switch below still applies.
 
         --project          Search up to the project root, not here.
         --ignore-case      Case never matters. (Default: a capital in the

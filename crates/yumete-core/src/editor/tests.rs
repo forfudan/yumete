@@ -9874,6 +9874,52 @@ fn a_little_book(name: &str) -> std::path::PathBuf {
     dir
 }
 
+/// **看一眼不是改一下**（2026-10-03 修）。
+///
+/// 走到別的檔的命中上，面板自己為了預覽把那一份打開了——而「名單還算不算數」
+/// 問的 `search_mark` 裏帶着「當前是哪一份緩衝」，於是它把自己造成的變化讀成了
+/// 「稿子動過了」：標題從「找到 2 處」變成「按 Enter 重新查找」，一個字都沒改。
+#[test]
+fn walking_onto_a_hit_in_another_file_does_not_stale_the_list() {
+    let dir = a_little_book("previewstale");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.open_search_with("霜", crate::search_panel::Where::Project);
+    assert!(ed.search().hits.len() > 2, "好幾個檔：{:?}", ed.search().files);
+    assert!(!ed.search_is_stale(), "剛跑完的名單當然算數");
+
+    // 一路走到頭——中間一定會跨進別的檔。
+    let crossed = (0..ed.search().rows().len()).any(|_| {
+        ed.on_key(Key::Char('j'));
+        ed.current_buffer().path().is_some_and(|p| p.ends_with("b.md"))
+    });
+    assert!(crossed, "走到別的檔上了");
+    assert!(!ed.search_is_stale(), "預覽不是修改：{}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`ye --grep … --open`**：面板開着、搜索跑完、鍵落在第一處命中上。
+#[test]
+fn the_command_line_can_open_the_editor_with_the_search_already_run() {
+    let dir = a_little_book("openwith");
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_search_with("霜", crate::search_panel::Where::Project);
+
+    assert_eq!(ed.search().query, "霜");
+    assert!(ed.search().total >= 4, "找到了：{}", ed.search().total);
+    assert_eq!(ed.search().field, crate::search_panel::Field::Results, "鍵在名單上");
+    // **站的是第一處命中，不是第一個檔名。** 停在檔名那一行上，正文那半還是空的。
+    assert!(
+        matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))),
+        "站在命中上，而不是 {:?}",
+        ed.search().row()
+    );
+    assert!(ed.current_buffer().path().is_some(), "正文那半開着那一處所在的檔");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **Searching past this file** — #419 二.
 #[test]
 fn the_search_panel_walks_the_folder_when_it_is_told_to() {

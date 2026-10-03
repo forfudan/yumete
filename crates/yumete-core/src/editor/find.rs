@@ -156,6 +156,40 @@ impl Editor {
         self.mode = Mode::Field;
     }
 
+    /// **`ye --grep … --open`**：面板開着、搜索跑完、鍵在結果名單上。
+    ///
+    /// 詞在命令行上已經打過了，所以進去不該停在輸入框裏——該停在名單上，`jk`
+    /// 走得了、`Enter` 跳得過去。
+    ///
+    /// Warning: **撥的是面板撥的那幾格、走的是面板走的那幾支**（`open_search_in` 與
+    /// `stand_on_and_look`），不另開一條路。同一天上午修過一個反例：離屏拍照那
+    /// 一支手抄了一份輸入法派發，照出來的是另一個程序。
+    pub fn open_search_with(&mut self, query: &str, scope: crate::search_panel::Where) {
+        self.open_search_in(scope, false);
+        self.search.query = query.to_string();
+        self.search.stale = false;
+        self.search_now();
+        // 名單空着就留在輸入框裏——站到一張空名單上，`jk` 按下去什麼都不動，而
+        // 人要改的正是那個詞。
+        match self.search.hits.is_empty() {
+            true => self.search.field = Field::Query,
+            false => {
+                self.mode = Mode::Normal;
+                // **站在第一處命中上，不是第一個檔名上。** 名單是一棵樹，頭一行是
+                // 檔名那一條；停在它上面正文那半還是空的，而人要看的是那一處。
+                if let Some(at) = self
+                    .search
+                    .rows()
+                    .iter()
+                    .position(|row| matches!(row, crate::search_panel::Row::Hit(_)))
+                {
+                    self.search.selected = at;
+                }
+                self.stand_on_and_look(Field::Results);
+            }
+        }
+    }
+
     pub(super) fn open_search(&mut self) {
         // Warning: **窄到擺不下就不進面板模式**（2026-10-03 作者定，二選）。26 欄的
         // 窗口上面板分到 2 欄，而 2 欄畫不出一個格子，於是從前這裏照常開了面板：
@@ -2101,6 +2135,16 @@ impl Editor {
         self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end.max(at)).max(at));
         self.extend = false;
         self.refresh_goal_column();
+        // **看一眼不是改一下**（2026-10-03 修）。
+        //
+        // 「名單還算不算數」問的是 [`Editor::search_mark`]，而那裏頭帶着**當前是
+        // 哪一份緩衝**——所以面板自己為了預覽打開另一個檔的那一下，被它自己讀成
+        // 了「稿子動過了」：走到第二個檔的命中上，標題就從「找到 2 處」變成「按
+        // Enter 重新查找」，而一個字都沒改。做 `ye --grep … --open` 的時候撞上
+        // 的，互動那一邊一模一樣（`j` 走過去就變）。
+        //
+        // 重新蓋一次戳是誠實的：這一下是面板自己做的，它知道自己什麼都沒改。
+        self.search.looked_at = Some(self.search_mark());
         true
     }
 }
