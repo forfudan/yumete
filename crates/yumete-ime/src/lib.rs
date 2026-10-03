@@ -483,6 +483,15 @@ pub struct ImeSession {
     /// begins, so 「這一個詞我要看清楚」 never turns into a setting nobody
     /// remembers changing.
     summoned: bool,
+    /// **這扇窗畫得下一個候選嗎**，前端每一幀報一次（2026-10-03）。
+    ///
+    /// 頁的大小已經按窗口縮過了（`page_for_window`），可它最後那一下「至少一個」
+    /// 是硬的——三行高的窗口上兩行框加一行編碼就把高度用完，一個候選都畫不出來，
+    /// 而 `page_has(1)` 照樣答真。按 `1` 上屏的於是是一個從沒畫出來過的字。
+    ///
+    /// 記在這裏而不是記成一個全局：全局在測試裏是整個行程共用的，一個測試把它
+    /// 撥成「畫不下」，隔壁正在驗選重的那一條就無緣無故紅了（實測中過）。
+    panel_room: bool,
 }
 
 impl ImeSession {
@@ -515,6 +524,7 @@ impl ImeSession {
             display: PanelDisplay::default(),
             preedit: Preedit::default(),
             summoned: false,
+            panel_room: true,
             engaged: true,
         }
     }
@@ -570,6 +580,7 @@ impl ImeSession {
             display: PanelDisplay::default(),
             preedit: Preedit::default(),
             summoned: false,
+            panel_room: true,
             engaged: true,
         })
     }
@@ -608,6 +619,7 @@ impl ImeSession {
             display: PanelDisplay::default(),
             preedit: Preedit::default(),
             summoned: false,
+            panel_room: true,
             engaged: true,
         }
     }
@@ -705,6 +717,7 @@ impl ImeSession {
             display: PanelDisplay::default(),
             preedit: Preedit::default(),
             summoned: false,
+            panel_room: true,
             engaged: true,
         }
     }
@@ -729,6 +742,7 @@ impl ImeSession {
             display: PanelDisplay::default(),
             preedit: Preedit::default(),
             summoned: false,
+            panel_room: true,
             engaged: true,
         }
     }
@@ -749,6 +763,7 @@ impl ImeSession {
             display: PanelDisplay::default(),
             preedit: Preedit::default(),
             summoned: false,
+            panel_room: true,
             engaged: true,
         }
     }
@@ -774,6 +789,7 @@ impl ImeSession {
             display: PanelDisplay::default(),
             preedit: Preedit::default(),
             summoned: false,
+            panel_room: true,
             engaged: true,
         }
     }
@@ -1271,6 +1287,16 @@ impl ImeSession {
     /// answer. [`Self::panel_is_full`] is the question a renderer asks.
     pub fn panel_display(&self) -> PanelDisplay {
         self.display
+    }
+
+    /// **這扇窗畫得下一個候選嗎。** 前端每一幀說一次；沒有前端的時候是「畫得下」。
+    pub fn set_panel_has_room(&mut self, room: bool) {
+        self.panel_room = room;
+    }
+
+    /// 同上，問。數字鍵那一道閘問的就是它。
+    pub fn panel_has_room(&self) -> bool {
+        self.panel_room
     }
 
     /// Set it, forgetting any panel `Tab` had summoned.

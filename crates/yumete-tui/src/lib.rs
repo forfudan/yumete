@@ -377,6 +377,8 @@ pub fn want_page_size(n: usize) {
     PAGE_WISH.store(n, std::sync::atomic::Ordering::Relaxed);
 }
 
+
+
 /// **把頁夾到上一幀畫得下的那麼大**（#516）。
 ///
 /// 互動的循環每一幀叫一次；離屏出圖那一支在按鍵**之前**叫一次。高度是
@@ -402,6 +404,9 @@ pub fn fit_the_page(
     let area = Rect::new(0, 0, width, height);
     let room = page_areas(editor, config, area, 0).status.y.saturating_sub(area.y).max(1);
     let fits = page_for_window(wish, room);
+    // 兩行框 ＋ 一行編碼之後還剩得下一行嗎。剩不下就一個候選都畫不出來，而數字
+    // 鍵那一道閘要知道這件事（見 `ImeSession::panel_has_room`）。
+    ime.set_panel_has_room(usize::from(room) > 3);
     if ime.page_size() != fits {
         ime.set_page_size(fits);
     }
@@ -3772,8 +3777,17 @@ fn ime_handle(
         // A digit only selects when a candidate is actually under it: with a
         // five-candidate page, `7` must not commit the second candidate of the
         // page the reader cannot see.
+        // Warning: **…而窗口矮到一個候選都畫不出來的時候，一個數字都不許選**
+        // （2026-10-03 一輪審查報來的）。`page_for_window` 那一下 `.max(1)` 是硬
+        // 的，於是三行高的窗口上 `page_has(1)` 照樣答真，而面板那一塊畫出來只有
+        // 兩道框——按 `1` 上屏的還是一個從沒畫出來過的字。這是 #516 沒收住的那
+        // 一端。面板本來就不以框示人的時候（`display = off`／內嵌）不受這一條管，
+        // 那是配置說了算。
         KeyCode::Char(c)
-            if composing && ('1'..='9').contains(&c) && ime.page_has((c as u8 - b'0') as usize) =>
+            if composing
+                && ('1'..='9').contains(&c)
+                && ime.page_has((c as u8 - b'0') as usize)
+                && !(ime.panel_is_full() && !ime.panel_has_room()) =>
         {
             ime.select_in_page((c as u8 - b'1') as usize);
         }
@@ -15034,6 +15048,36 @@ fn squeezed(text: &str) -> String {
             ime.page_down();
         }
         assert!(seen.contains(&"罷".to_string()), "翻不到最後一個：{seen:?}");
+    }
+
+    /// **一個候選都畫不下的時候，一個數字都不許選**（2026-10-03 一輪審查報來的）。
+    ///
+    /// 上面那一支最後兩格寫着「矮到連一個都放不下，還是給一個」——那一句是對的
+    /// （零個候選的面板不是面板），可它留下了另一半沒收：`page_has(1)` 於是照樣
+    /// 答真，而三行高的窗口上面板畫出來只有兩道框。按 `1` 上屏的還是一個從沒畫
+    /// 出來過的字。
+    #[test]
+    fn a_window_too_short_to_draw_a_candidate_refuses_the_number_keys() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 把\n");
+        let config = Config::default();
+
+        let press = |ime: &mut ImeSession, editor: &mut Editor, height: u16| {
+            super::fit_the_page(ime, editor, &config, 40, height);
+            ime.input('b');
+            super::ime_handle(ime, editor, KeyCode::Char('1'), KeyModifiers::NONE);
+            let text = editor.current_buffer().rope().to_string();
+            ime.escape();
+            text
+        };
+
+        // 六行：一個候選畫得出來，`1` 照舊上屏。
+        assert_eq!(press(&mut ime, &mut editor, 6), "吧", "畫得下就選得了");
+        // 三行：兩行框加一行編碼就把高度用完了，一個候選都沒有。
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        assert_eq!(press(&mut ime, &mut editor, 3), "", "畫不下就一個都不許選");
     }
 
     #[test]
