@@ -18966,6 +18966,37 @@ to enable repeated application"*（`commands.rs:1742`）。yumete 的 `find_char
 而不是 helix 味，沒人會抱怨——只是 §5.58.1 之前它是「整行空白把光標送上換行符」那個
 bug 的入口（已修）。
 
+## 5.66 再加六個 tree-sitter 語法（2026-10-03 作者定，排在那五十條之後）
+
+查了 TIOBE 2026 年 9 月前二十，逐個量了 **crates.io tarball 裏 `parser.c` 的字節數**——那
+纔是 yumete 真會編的東西，倉裏的 HEAD 常常比發布的那一版大。
+
+**作者定：便宜的六個都加，剩下的不加。**
+
+| 語言 | crate | `parser.c` | TIOBE |
+| --- | --- | --- | --- |
+| Assembly | `tree-sitter-asm` 0.24 | 0.12 MB | 16 |
+| Ada | `tree-sitter-ada` 0.1 | 2.29 | 17 |
+| Java | `tree-sitter-java` 0.23.5 | 2.56 | 4 |
+| Delphi/Pascal | `tree-sitter-pascal` 0.10.2 | 3.53 | 13 |
+| C | `tree-sitter-c` 0.24.2 | 3.87 | 2 |
+| R | `tree-sitter-r` 1.3.0 | 4.03 | 9 |
+
+六個合起來 16.4 MB 的 C。按倉裏現有九個語法量出來的 `.rlib ÷ parser.c ≈ 0.2`（rust 0.20、
+python 0.17、javascript 0.20、go 0.22），估計 **＋3.3 MB**，和現有九個的總和相當。
+
+**不加的那些，各有各的理由**：Fortran 36.6、COBOL 30.7、C# 29.7、Objective-C 28.2 —— 任何
+一個都比現有九個加起來還大；Swift 20.6、SQL 17.4、C++ 17.3、PHP 14.0、Visual Basic 10.3
+是第二檔。
+
+⚠️ 三個缺口，別再去找：**Scratch 根本沒有語法**；**COBOL 在 crates.io 上那個是空殼**
+（`tree-sitter-cobol` 0.1.0 整包只有 58 字節的 `main.rs`，真語法只在 git 上）；**Visual
+Basic** 那個 crate 的上游倉 0 star、母倉沒有 licence 檔，當未維護看。全部 MIT，沒有授權
+障礙。
+
+⚠️ 真要加 C++ 的話**釘死 0.23.4**：倉裏 HEAD 已經 25.9 MB（發布的那一版 17.3）。C# 同
+（29.7 → 32.0）。
+
 ## 5.65 「緩衝區」留着，第一次出現注原文（2026-10-03 作者定）
 
 作者問：「緩衝區這個概念是不是太 geek 了，但是『打開的文件』又過於冗長。有沒有什麼其他
