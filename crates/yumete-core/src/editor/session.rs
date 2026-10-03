@@ -350,14 +350,22 @@ impl Editor {
     ///
     /// Named late, and only once there is something to lose: an empty scratch
     /// buffer that is never typed into should leave nothing behind.
+    ///
+    /// Warning: **按號取名，不許按它排在第幾個**（2026-10-03 一輪審查報來的，會丟字）。
+    /// 名字是**黏住的**（[`crate::Buffer::keep_drafts_at`] 只設一次），而下標不是
+    /// ——關掉前面一份，後面的就往前挪。於是第一份草稿還記着 `-1` 這個名字，而
+    /// 新開的那一份正好也落在下標 1 上：**兩份緩衝往同一個檔上寫**，後存的蓋掉
+    /// 先存的，先打的那幾百字哪裏都不存在了。重現過，連 `kill -9` 和重開都走了
+    /// 一遍。`Buffer::id` 自己的文檔早就寫着「下標會變，號不會」。
     fn name_scratch_drafts(&mut self) {
         let Some(dir) = self.drafts_dir.clone() else {
             return;
         };
         let session = std::process::id();
-        for (i, buffer) in self.buffers.iter_mut().enumerate() {
+        for buffer in self.buffers.iter_mut() {
             if buffer.path().is_none() && buffer.is_modified() {
-                buffer.keep_drafts_at(dir.join(format!("scratch-{session}-{i}.yumete")));
+                let id = buffer.id();
+                buffer.keep_drafts_at(dir.join(format!("scratch-{session}-{id}.yumete")));
             }
         }
     }
@@ -521,6 +529,19 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
+        // **救回來的字在盤上沒有第二份**（2026-10-03 一輪審查報來的，會丟字）。
+        //
+        // 上面那句「`u` 把盤上那一份放回來，所以恢復是收得回的決定」只說對了一半：
+        // 底下 `adopt_draft` 會把草稿檔刪掉，而撤回一步正好退到棧底——棧底的深度
+        // 就是 `saved_depth`，於是緩衝報「乾淨」，`[+]` 不亮，`:q` 一聲不響地走人。
+        // 那一刻**救回來的字只在重做棧裏**，而退出把重做棧扔了。重現過，看着盤上
+        // 的字節沒的。
+        //
+        // Warning: **要在 `snapshot()` 之前撥**。撤回那一支恢復的是**快照裏記着的**那個
+        // 髒標記（`EditSnapshot::modified`），所以在快照之後撥等於沒撥——我第一
+        // 遍就是撥在後面，測試當場紅了。[`Buffer::mark_modified`] 順帶把「哪裏算
+        // 乾淨」也作廢，這正是它自己的文檔寫的用途。
+        self.current_buffer_mut().mark_modified();
         self.snapshot();
         let len = self.current_buffer().char_count();
         let done = self.current_buffer_mut().replace(0..len, &draft);
