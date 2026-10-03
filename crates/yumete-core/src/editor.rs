@@ -1626,7 +1626,7 @@ pub(crate) struct Walked {
     pub cut: bool,
 }
 
-fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
+pub(crate) fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
     *skipped += walk_inner(root, &Sieve::default(), false, f).skipped;
 }
 

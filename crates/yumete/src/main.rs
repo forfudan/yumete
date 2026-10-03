@@ -72,6 +72,9 @@ fn main() -> ExitCode {
     // `if ye --grep …` 在腳本裏是一句話。
     let mut grep: Option<String> = None;
     let mut want_grep = false;
+    // `ye --files jia` 列出名字配得上的檔——fd 那一半，而它也認拼音。
+    let mut listing: Option<String> = None;
+    let mut want_files = false;
     let mut g = Grep::default();
 
     for arg in std::env::args().skip(1) {
@@ -83,6 +86,11 @@ fn main() -> ExitCode {
         if want_grep {
             grep = Some(arg);
             want_grep = false;
+            continue;
+        }
+        if want_files {
+            listing = Some(arg);
+            want_files = false;
             continue;
         }
         match arg.as_str() {
@@ -105,6 +113,8 @@ fn main() -> ExitCode {
             // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
             "--grep" => want_grep = true,
             s if s.starts_with("--grep=") => grep = Some(s["--grep=".len()..].to_string()),
+            "--files" => want_files = true,
+            s if s.starts_with("--files=") => listing = Some(s["--files=".len()..].to_string()),
             "--ignore-case" => g.case = Some(Case::Insensitive),
             "--case-sensitive" => g.case = Some(Case::Sensitive),
             "--word" => g.word = true,
@@ -175,6 +185,9 @@ fn main() -> ExitCode {
 
     if let Some(pattern) = grep {
         return run_grep(&pattern, &files, &g);
+    }
+    if let Some(pattern) = listing {
+        return run_files(&pattern, &files, &g);
     }
 
     let mut editor = Editor::new();
@@ -1124,6 +1137,45 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     }
 }
 
+/// **`ye --files`**：名字配得上的檔，一行一個，最配的在前。
+///
+/// fd 的那一半，而它認拼音：`ye --files jia` 找得到 `甲.md`。
+///
+/// Warning: **匹配器是挑選器那一個**（`Editor::files_matching`），所以這裏和編輯器裏
+/// `空格 f` 打同樣幾個字母永遠是同一份答案。
+fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let mut editor = Editor::new();
+    let at = where_.first().map(std::path::PathBuf::from).unwrap_or_else(|| cwd.clone());
+    if !at.is_dir() {
+        eprintln!("yumete: --files: not a directory: {}", at.display());
+        return ExitCode::from(2);
+    }
+    editor.set_root(&at);
+    let root = match g.project {
+        true => editor.project_root(),
+        false => at,
+    };
+    let found = editor.files_matching(&root, pattern);
+    let mut sink = std::io::stdout().lock();
+    let mut printed = 0usize;
+    for name in &found {
+        let shown = pathdiff(&root.join(name), &cwd);
+        match writeln!(sink, "{}", shown.display()) {
+            Ok(()) => printed += 1,
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("yumete: --files: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    match printed {
+        0 => ExitCode::from(1),
+        _ => ExitCode::SUCCESS,
+    }
+}
+
 /// `full` 相對於 `from` 怎麼寫——走不到就原樣交絕對路徑。
 fn pathdiff(full: &std::path::Path, from: &std::path::Path) -> std::path::PathBuf {
     let (a, b) = (
@@ -1288,6 +1340,15 @@ SEARCHING FROM THE SHELL:
                      .yumete or .git above you). Paths are printed relative to
                      where you are standing, so a --project that climbed says
                      so with a `../`.
+
+        --files PAT  Print every file whose name matches PAT, best first, and
+                     exit — fd's half, and it reads 拼音 too: `ye --files jia`
+                     finds 甲.md. Same matcher as 空格 f inside the editor.
+
+                     Warning: a query is read as 拼音 **whole or not at all**.
+                     `jia` finds 甲.md; `juan03` finds nothing, because
+                     「juan」 is a reading and「03」is not. The same is true of
+                     --grep: `zhongguo` works, `zhongguo很大` does not.
 
         --project          Search up to the project root, not here.
         --ignore-case      Case never matters. (Default: a capital in the
