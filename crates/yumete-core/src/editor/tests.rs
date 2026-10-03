@@ -19919,6 +19919,35 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **`第一章` ＋ 一行 `====` 也是一章**（setext 標題，2026-10-03）。
+///
+/// CommonMark 認它，而 `outline` 從前只找行首的 `#`——於是用下劃線寫章名的稿子，
+/// 大綱是空的，`空格 o` 和 `:toc` 一章都跳不到。
+#[test]
+fn a_chapter_underlined_with_equals_is_a_heading_too() {
+    let ed = typed("第一章\n====\n\n一段。\n\n小節\n----\n\n# 井號標題\n");
+    assert_eq!(
+        ed.outline(),
+        vec![
+            (0, 1, "第一章".to_string()),
+            (5, 2, "小節".to_string()),
+            (8, 1, "井號標題".to_string()),
+        ],
+        "下劃線那兩章要在大綱裏，而且 `=` 是一級、`-` 是二級"
+    );
+
+    // Warning: **上一行必須是 `Prose`**——這一句擋掉四種假陽性。
+    let ed = typed(
+        "---\ntitle: 我的書\n---\n\n# 真標題\n\n- 一條\n- 兩條\n\n---\n\n| a | b |\n| --- | --- |\n",
+    );
+    let titles: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+    assert_eq!(
+        titles,
+        vec!["真標題".to_string()],
+        "卷首元數據、清單、表格的 `---` 一個都不是標題"
+    );
+}
+
 /// **`:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼**（2026-10-02 作者定）。
 ///
 /// 只有前端讀得了系統剪貼板，所以核心把要求留下等它取。這一條驗的是兩頭：命令留
