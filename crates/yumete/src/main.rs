@@ -528,6 +528,19 @@ fn main() -> ExitCode {
             // 互動那一支在它自己那次延遲載入之後緊跟着就補了（`yumete-tui`
             // 的 `editor.set_reader(Box::new(ime.reader()))`），這裏照抄。
             editor.set_reader(Box::new(ime.reader()));
+            // Warning: **那三個配置也要補上**（2026-10-03 一輪審查報來的）。`load` 那一支
+            // 在換完方案之後緊跟着撥這三格，而這裏是另一條路——不撥的話
+            // `[ime] commit`、`[panel] display`、`[panel] preedit` 離屏整個不生
+            // 效：九種 `preedit × display` 的組合畫出來**逐字節相同**，而真機各
+            // 畫各的。配置那一族的畫面從此離屏審不了。
+            ime.set_commit_strategy(commit);
+            ime.set_panel_display(panel);
+            ime.set_preedit(preedit);
+            // Warning: **還要告訴編輯器輸入法在不在。** 這一格是 `Need::Scheme` 那一道閘
+            // 問的（`words.rs`），不補的話離屏下 `:yume-panel`／`:yume-preedit`／
+            // `:chaifen` 一律答「還不行，需要：載入碼表」，而同一幀的狀態欄已經
+            // 寫着 `[中 靈明]`。互動那一支每一輪都撥一次。
+            editor.set_ime_available(ime.available());
         }
         // Warning: **按鍵之前先把頁夾好**（#516，2026-10-02）。互動的循環是
         // 「畫一幀、讀一個鍵、再畫一幀」，所以按鍵那一刻用的是上一幀量出來的高
@@ -923,36 +936,18 @@ fn press(
         if settings.took(editor, Some(key)) {
             continue;
         }
-        // **走輸入法的那一段**（`\{ime}` 之間，2026-09-28）。這裏只認打字要用的那幾
-        // 個鍵——碼、空格、Enter、退格、選重數字、Esc。互動循環那一支比這個全得多
-        // （`yumete-tui` 的那一大段 `match code`），可是拍一張圖用不着那些。
-        if composing {
-            // Warning: **只有正在組字的時候那幾個鍵纔歸輸入法。** 不加這道閘的話 `Esc` 會被
-            // 輸入法吃掉（它以為你要放棄一串碼），於是 `\{ime}wo \e` 那個 `\e` 退不出
-            // 插入模式——實測下一個 `u` 當成字打進了稿子。互動那一支的判準也是這一條。
-            let mid = ime.is_composing();
-            match key {
-                Key::Char(' ') if mid => ime.space(),
-                Key::Enter if mid => ime.enter(),
-                Key::Esc if mid => ime.escape(),
-                Key::Backspace if mid => {
-                    ime.backspace();
-                }
-                // 選重：那一位上真的有候選纔算，同互動那一支。
-                Key::Char(c @ '1'..='9') if mid && ime.page_has((c as u8 - b'0') as usize) => {
-                    ime.select_in_page((c as u8 - b'1') as usize);
-                }
-                Key::Char(c) => ime.input(c),
-                // 不是打字的鍵，交回編輯器。
-                other => {
-                    editor.on_key(other);
-                    continue;
-                }
-            }
-            let committed = ime.take_committed();
-            if !committed.is_empty() {
-                editor.insert_committed(&committed);
-            }
+        // **走輸入法的那一段**（`\{ime}` 之間，2026-09-28）。
+        //
+        // Warning: **這裏不許自己寫一份派發**（2026-10-03 一輪審查報來的，改掉了）。從前
+        // 這一段是手抄的「打字要用的那幾個鍵」——碼、空格、Enter、退格、選重
+        // 數字、Esc——而真正那一支一直在長。分岔出來的是：離屏按 `;` 出「；」而
+        // 真機出「辶」（靈明的選二）、`=` 離屏出 `=` 而真機翻頁、方向鍵離屏把光標
+        // 移走並把字上到別處、`\t` 離屏插一個製表符而真機開面板。**這個倉審前端
+        // 靠的就是這張照片，而它在輸入法這一塊照的是另一個程序。**
+        //
+        // 現在叫的是互動循環叫的那一支（`yumete_tui::offline_ime_key`），連
+        // 「這一鍵歸不歸輸入法」那三個判準都是同一份。
+        if composing && yumete_tui::offline_ime_key(ime, editor, key) {
             continue;
         }
         editor.on_key(key);
