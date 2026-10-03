@@ -372,7 +372,8 @@ impl Buffer {
         };
         // Whether a crash left a draft here is decided once, now: the status
         // line asks every frame, and the answer cannot change under us.
-        let (pending_draft, pending_swap) = match read_draft(path, &rope) {
+        let tag = std::process::id().to_string();
+        let (pending_draft, pending_swap) = match read_draft(path, &rope, &tag) {
             Some((text, at)) => (Some(text), Some(at)),
             None => (None, None),
         };
@@ -1253,7 +1254,7 @@ fn swap_path_for(path: &Path) -> Option<PathBuf> {
 /// give a copy and the save that followed it the same time, and being offered a
 /// draft one does not need costs nothing, while not being offered one costs the
 /// work.
-fn read_draft(path: &Path, rope: &Rope) -> Option<(String, PathBuf)> {
+fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> {
     let swap = swap_path_for(path)?;
     // The canonical name, and any copy a session kept beside it under a name of
     // its own (`.ch1.md.yumete.4321`, see [`Buffer::session_swap_path`]). Those
@@ -1261,6 +1262,8 @@ fn read_draft(path: &Path, rope: &Rope) -> Option<(String, PathBuf)> {
     // still there — and if *that* session is the one that crashed, its copy is
     // the only place its work is.
     let mut found: Vec<(std::time::SystemTime, String, PathBuf)> = Vec::new();
+    let plain = swap.file_name()?.to_string_lossy().into_owned();
+    let mine = format!("{plain}.{tag}");
     let mut consider = |at: PathBuf| {
         let Ok(draft) = fs::read_to_string(&at) else { return };
         // A copy written before 2026-09-14 carries the document's BOM, which
@@ -1272,16 +1275,31 @@ fn read_draft(path: &Path, rope: &Rope) -> Option<(String, PathBuf)> {
             return;
         }
         let Ok(stamped) = fs::metadata(&at).and_then(|m| m.modified()) else { return };
-        let worth = match fs::metadata(path).and_then(|m| m.modified()) {
-            Ok(saved) => stamped >= saved,
-            // No document on disk at all: everything in the copy is unrecovered.
-            Err(_) => true,
-        };
+        // **別人那一份，存檔時間說明不了什麼**（2026-10-03 一輪審查報來的，會丟字）。
+        //
+        // 「比盤上那一份新纔算數」這條規矩對的是**自己**這一輪的草稿：存過檔之
+        // 後它就只是一份舊照片。可每個進程現在各有一份草稿（#305），而別的進程
+        // 崩掉留下的那一份是**沒人救過的活兒**——我這邊按一次 `:w`，它就永遠不
+        // 再被提起了，既不在開檔那一問裏，也不在 `:recover` 裏。重現過：A 崩了、
+        // B 存了檔，`.a.md.yumete.<pidA>` 還躺在盤上，而編輯器答「這個文件沒有
+        // 搶救稿」。
+        // 「別人那一份」＝ 帶 pid 後綴、而那個 pid 不是我。不帶後綴的那一個是
+        // #305 之前的老名字，不是別人的，照舊按時間判。
+        let someone_elses = at
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .is_some_and(|n| n != plain && n != mine);
+        let worth = someone_elses
+            || match fs::metadata(path).and_then(|m| m.modified()) {
+                Ok(saved) => stamped >= saved,
+                // No document on disk at all: everything in the copy is unrecovered.
+                Err(_) => true,
+            };
         if worth {
             found.push((stamped, draft, at));
         }
     };
-    let name = swap.file_name()?.to_string_lossy().into_owned();
+    let name = plain.clone();
     consider(swap.clone());
     if let Some(dir) = swap.parent() {
         if let Ok(entries) = fs::read_dir(dir) {
@@ -2061,6 +2079,31 @@ mod tests {
         fs::write(dir.join(".ch.md.yumete.bak"), "手裏留的一份\n").unwrap();
         assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
 
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **別人崩掉留下的那一份，我存一次檔不該把它埋掉**（2026-10-03 一輪審查
+    /// 報來的，會丟字）。
+    ///
+    /// 「比盤上那一份新纔算數」對的是自己這一輪的草稿；別的進程崩掉留下的是沒
+    /// 人救過的活兒，和我什麼時候存檔沒有關係。
+    #[test]
+    fn another_sessions_draft_survives_my_save() {
+        let dir = std::env::temp_dir().join(format!("yumete-others-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.md");
+
+        // 別人（pid 999999）崩掉留下的一份，然後我這邊存了檔——檔比草稿新。
+        fs::write(dir.join(".a.md.yumete.999999"), "甲的工作\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(&path, "盤上原文\n").unwrap();
+        let buffer = Buffer::open(&path).unwrap();
+        assert_eq!(
+            buffer.recovered_draft(),
+            Some("甲的工作\n"),
+            "別人那一份照舊提得出來"
+        );
         fs::remove_dir_all(&dir).ok();
     }
 
