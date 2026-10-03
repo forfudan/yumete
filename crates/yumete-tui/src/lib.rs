@@ -1882,7 +1882,7 @@ fn composes_here(editor: &Editor) -> bool {
     // the next character is *text*. One line, because every gate in this file
     // asks this one question — the preedit, the panel and the lone-Shift tap
     // all light up together.
-    editor.takes_a_character()
+    editor.wants_the_ime()
 }
 
 /// Is this scheme request an answer about the **language**, as against the
@@ -20040,10 +20040,16 @@ fn squeezed(text: &str) -> String {
     }
 
     /// Normal mode is not prose — except for the character `f`、`r`、`ms`、
-    /// `mi`、`mr` are waiting for (§5.2.3 ②, #414), which in a Chinese
-    /// manuscript is 中文 and needs the engine. Every gate in this file asks
-    /// `composes_here`, so this one answer opens the preedit, the panel and
-    /// the lone-Shift tap at once.
+    /// `mr` are waiting for (§5.2.3 ②, #414), which in a Chinese manuscript is
+    /// 中文 and needs the engine. Every gate in this file asks `composes_here`,
+    /// so this one answer opens the preedit, the panel and the lone-Shift tap
+    /// at once.
+    ///
+    /// Warning: **`mi`／`ma` 2026-10-04 從上面那一列挪到了下面那一列。** 它們等的是
+    /// **物件的名字**（`mim` 的 `m` 是「標記」），不是要寫進稿子的字——作者報的：
+    /// 「我打 `mam`，最后一個 m 會變成輸入法候選框」。同一個理由 2026-09-29 就為
+    /// vim 的 `di`／`da` 定過，這一族當時被落下了。全角括號不靠輸入法：`ma[` 自己
+    /// 就認得「」。
     #[test]
     fn a_key_waiting_for_a_character_composes_in_normal_mode() {
         let mut editor = Editor::new();
@@ -20052,8 +20058,8 @@ fn squeezed(text: &str) -> String {
         assert!(composes_here(&editor), "`r` is waiting for a character");
         editor.on_key(Key::Esc);
         assert!(!composes_here(&editor), "and it stops when `r` is answered");
-        // The four that could not do this before #414.
-        for keys in [&["f"][..], &["F"], &["m", "s"], &["m", "i"], &["m", "r"]] {
+        // The ones that could not do this before #414.
+        for keys in [&["f"][..], &["F"], &["m", "s"], &["m", "r"]] {
             let mut editor = Editor::new();
             for key in keys {
                 editor.on_key(Key::Char(key.chars().next().unwrap()));
@@ -20065,7 +20071,11 @@ fn squeezed(text: &str) -> String {
             );
         }
         // …while the keys waiting for the *name* of something are still keys.
-        for keys in [&["\""][..], &["m"], &["Z"], &["z"], &["g"], &[" "]] {
+        // `mi`／`ma` are in this list, not the one above: what follows them is
+        // `w`、`p`、`s`、`m` or a bracket — a name, which the engine would eat.
+        for keys in
+            [&["\""][..], &["m"], &["Z"], &["z"], &["g"], &[" "], &["m", "i"], &["m", "a"]]
+        {
             let mut editor = Editor::new();
             for key in keys {
                 editor.on_key(Key::Char(key.chars().next().unwrap()));

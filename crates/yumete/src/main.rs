@@ -1279,7 +1279,11 @@ fn press(
         // whole behaviour (§5.2.3 ②): the IME hands the editor a *string*,
         // which may be two 字 long. Gather the run and commit it, so a picture
         // of `r` 打中文 shows what a reader would actually see.
-        if editor.takes_a_character() {
+        // Warning: **問的要和真編輯器同一個問題**（2026-10-04）。離屏這一支從前問
+        // 「吃不吃一個字符」，而互動迴圈問的是「要不要開輸入法」——`mi`／`ma` 之後
+        // 兩者的答案現在不同，照舊問就會在圖上畫出一個真編輯器裏不會出現的候選框。
+        // 離屏路徑和真路徑分家，這個倉裏已經咬過四次。
+        if editor.wants_the_ime() {
             if let Key::Char(c) = key {
                 let mut text = String::from(c);
                 while let Some(&next) = chars.peek() {

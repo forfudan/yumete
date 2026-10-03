@@ -425,10 +425,10 @@ fn r_replaces_with_what_the_ime_committed() {
     // the panel opens on `r`, and the choice is the replacement.
     let mut ed = typed("錢塘江上\n");
     ed.on_key(Key::Char('r'));
-    assert!(ed.takes_a_character(), "the front end must know to run the IME");
+    assert!(ed.wants_the_ime(), "the front end must know to run the IME");
     ed.insert_committed("銀");
     assert_eq!(ed.current_buffer().text(), "銀塘江上\n");
-    assert!(!ed.takes_a_character(), "and the pending state is spent");
+    assert!(!ed.wants_the_ime(), "and the pending state is spent");
 
     // One character still fills the selection, the way `r` always has…
     let mut ed = typed("錢塘江上\n");
@@ -456,14 +456,14 @@ fn f_and_the_pair_keys_take_what_the_ime_committed() {
     // full-width pair in `PAIRS` was a delimiter nothing could type.
     let mut ed = typed("春風又綠江南岸，明月何時照我還\n");
     ed.on_key(Key::Char('f'));
-    assert!(ed.takes_a_character(), "the front end must run the IME for `f`");
+    assert!(ed.wants_the_ime(), "the front end must run the IME for `f`");
     ed.insert_committed("，");
     assert_eq!(
         ed.current_buffer().rope().char(ed.cursor()),
         '，',
         "`f` stops on the 逗號 it was given"
     );
-    assert!(!ed.takes_a_character(), "and the pending state is spent");
+    assert!(!ed.wants_the_ime(), "and the pending state is spent");
 
     // `Alt-.` repeats it, so the character has to have been remembered.
     let mut ed = typed("一，二，三\n");
@@ -482,7 +482,7 @@ fn f_and_the_pair_keys_take_what_the_ime_committed() {
     // `ms` 圍上 a pair that only an IME can type.
     let mut ed = typed("錢塘江上\n");
     press(&mut ed, "v3lms");
-    assert!(ed.takes_a_character(), "the front end must run the IME for `ms`");
+    assert!(ed.wants_the_ime(), "the front end must run the IME for `ms`");
     ed.insert_committed("「");
     assert_eq!(ed.current_buffer().text(), "「錢塘江上」\n");
 
@@ -507,7 +507,7 @@ fn a_dot_repeats_an_ime_replace() {
     ed.insert_committed("銀");
     press(&mut ed, "l.");
     assert_eq!(ed.current_buffer().text(), "銀銀錢\n");
-    assert!(!ed.takes_a_character(), "`.` must not leave `r` waiting");
+    assert!(!ed.wants_the_ime(), "`.` must not leave `r` waiting");
     // The next key is a key, not the answer to a question nobody asked.
     press(&mut ed, "l.");
     assert_eq!(ed.current_buffer().text(), "銀銀銀\n");
@@ -19649,7 +19649,7 @@ fn a_vim_operator_never_opens_the_input_method() {
         ed.execute(":keymap vim").unwrap();
         press(&mut ed, "gg");
         press(&mut ed, steps);
-        ed.takes_a_character_for_test()
+        ed.wants_the_ime_for_test()
     };
     assert!(!waiting("di"), "di 等的是「詞」「段」「句」這種名字，不是一個字");
     assert!(!waiting("da"), "da 也是");
@@ -19664,6 +19664,48 @@ fn a_vim_operator_never_opens_the_input_method() {
     // 他0 說1 （2 不3 要4 走5 ）6 —— 停在「要」上，括號裏面。
     press(&mut ed, "4ldi(");
     assert_eq!(ed.current_buffer().text(), "他說（）然後走了。\n", "半角鍵刪全角括號裏的話");
+}
+
+/// **`mi`／`ma` 之後也不開輸入法**（2026-10-04 定）。
+///
+/// 和上面那一支是同一個理由，而上面那一條 2026-09-29 就定了——這一族當時被落下，
+/// 作者 2026-10-04 報的：「我打 `mam`，最后一個 m 會變成輸入法候選框。所以我建議
+/// 這裡不解挂系統輸入法，也不允許 yume 輸入中文，這裡必須是一個 ascii 字母。」
+///
+/// 它等的是**物件的名字**：`mim` 的 `m` 是「標記」、`mis` 的 `s` 是「句」、`mip`
+/// 的 `p` 是「段」。開着輸入法，那一鍵被當成碼吃掉，`mam` 就按不出來。
+#[test]
+fn an_object_prefix_never_opens_the_input_method() {
+    let waiting = |preset: &str, steps: &str| {
+        let mut ed = typed("他說（不要走）然後走了。\n");
+        ed.execute(&format!(":keymap {preset}")).unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed.wants_the_ime_for_test()
+    };
+    assert!(!waiting("helix", "mi"), "mi 等的是「詞」「段」「句」這種名字");
+    assert!(!waiting("helix", "ma"), "ma 也是");
+    // vim 可視模式的 `vi`／`va` 是同一個 `Pending`，所以一起好了。
+    assert!(!waiting("vim", "vi"), "vim 的 vi 同族");
+    assert!(!waiting("vim", "va"), "vim 的 va 同族");
+
+    // Warning: **要寫進稿子的那幾個照舊開。** 這一修只摘掉「等名字」的那一族，
+    // 別把 `f`／`r`／`ms`／`mr` 一起摘了——那幾個等的真是一個字（`f，`、`ms「`）。
+    assert!(waiting("helix", "f"), "f 找的是稿子裏的一個字");
+    assert!(waiting("helix", "r"), "r 換上去的是一個字");
+    assert!(waiting("helix", "ms"), "ms 圍上去的是一對真標點");
+    assert!(waiting("helix", "mr"), "mr 換的也是");
+
+    // Warning: **摘掉的只是「請輸入法來」，不是「拒收非 ASCII」。** 挂不起系統輸入
+    // 法的平臺上 `ma「` 照樣要管用，所以上屏那一路仍然收它。
+    let mut ed = typed("他說（不要走）然後走了。\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "ma");
+    ed.insert_committed("（");
+    assert!(
+        ed.selection().1 > ed.selection().0,
+        "輸入法真的送來一個全角括號，照樣選得中那一對"
+    );
 }
 
 /// **`z` 那一層**（`zt`／`zz`／`zb`，2026-09-28）。

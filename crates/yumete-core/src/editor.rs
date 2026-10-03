@@ -308,6 +308,28 @@ impl Pending {
             Pending::VimOperator { .. } => false,
         }
     }
+
+    /// **要不要為這一格請輸入法來** —— 前端問的是這一支（`composes_here`）。
+    ///
+    /// Warning: **和 [`Self::takes_a_character`] 有意不同，差的就是 `mi`／`ma`**
+    /// （2026-10-04 定）。那兩個照樣**吃**一個字符鍵，可它等的是**物件的名字**，
+    /// 不是要寫進稿子的字：`mim` 的 `m` 是「標記」、`mis` 的 `s` 是「句」、
+    /// `mip` 的 `p` 是「段」。開着輸入法，那一鍵被當成碼吃掉——作者報的原話：
+    /// 「我打 `mam`，最后一個 m 會變成輸入法候選框」。
+    ///
+    /// 這和底下 `VimOperator` 那一條是**同一個理由**，而那一條 2026-09-29 就定了
+    /// （`di`／`da`）；`mi`／`ma`（以及 vim 可視模式的 `vi`／`va`，同一個
+    /// `Pending`）當時被落下了。
+    ///
+    /// 全角那一族不靠輸入法：`pair_family` 讓 `ma(` 認得（）〔〕、`ma[` 認得
+    /// 「」，ASCII 一個鍵到底（量過）。
+    ///
+    /// Warning: **沒有去拒收非 ASCII。** 挂不起系統輸入法的平臺上（fcitx5 那一端
+    /// 還沒有模態挂起）`ma「` 照樣要管用，所以 [`Self::takes_a_character`] 仍然
+    /// 收它——這裏改的只是「不主動請輸入法來」。
+    fn wants_the_ime(self) -> bool {
+        self.takes_a_character() && !matches!(self, Pending::MatchPair { .. })
+    }
 }
 
 /// Which way an in-line character search runs.

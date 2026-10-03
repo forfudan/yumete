@@ -997,11 +997,14 @@ impl Editor {
             | Pending::Surround
             | Pending::SurroundFrom
             | Pending::SurroundTo(_)) => {
-                // Spelt out rather than guarded by `takes_a_character`,
-                // because a guard does not count towards exhaustivity and
-                // this match is what catches a new `Pending` nobody handled.
-                // The two lists must agree; in a debug build they are checked.
-                debug_assert!(waiting.takes_a_character());
+                // Spelt out rather than guarded by a predicate, because a
+                // guard does not count towards exhaustivity and this match is
+                // what catches a new `Pending` nobody handled.
+                //
+                // Warning: **這張表和 `wants_the_ime` 有意不同**（2026-10-04）。從前
+                // 兩張表是同一張，這裏還有一句 `debug_assert` 把它們釘在一起；而
+                // `mi`／`ma` 吃一個字符鍵、卻不要輸入法——「吃不吃鍵」和「要不要
+                // 輸入法」本來就是兩個問題，那一句斷言是在逼它們答同一個。
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
                     self.answer_with_char(waiting, c);
