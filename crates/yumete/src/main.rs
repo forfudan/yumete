@@ -1345,10 +1345,11 @@ SEARCHING FROM THE SHELL:
                      exit — fd's half, and it reads 拼音 too: `ye --files jia`
                      finds 甲.md. Same matcher as 空格 f inside the editor.
 
-                     Warning: a query is read as 拼音 **whole or not at all**.
-                     `jia` finds 甲.md; `juan03` finds nothing, because
-                     「juan」 is a reading and「03」is not. The same is true of
-                     --grep: `zhongguo` works, `zhongguo很大` does not.
+                     Letters and 漢字 mix in one query, which is how a real
+                     one is written: `juan03` finds 卷03/, `di120` finds
+                     第120章.md, `juan01/di120` finds exactly that chapter.
+                     --grep reads them the same way: `zhongguo很大`,
+                     `zhong国` and `中guo` all find 中國很大.
 
         --project          Search up to the project root, not here.
         --ignore-case      Case never matters. (Default: a capital in the
