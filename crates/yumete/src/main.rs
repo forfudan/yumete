@@ -194,6 +194,14 @@ fn main() -> ExitCode {
                 g.open = true;
                 modifiers.push("--open");
             }
+            "--heading" => {
+                g.heading = Some(true);
+                modifiers.push("--heading");
+            }
+            "--no-heading" => {
+                g.heading = Some(false);
+                modifiers.push("--heading");
+            }
             s if s.starts_with("--color=") => match s["--color=".len()..].as_ref() {
                 "always" => {
                     g.colour = Some(true);
@@ -308,7 +316,7 @@ fn main() -> ExitCode {
         // Warning: **`--files` 只認得走檔那幾個。** 別的是給式子用的，而檔名那一邊用
         // 的是挑選器的模糊匹配，根本沒有式子。從前它們**悄悄不生效**，而
         // `--help` 說「下面每一個都還管用」——說了假話比少一個功能壞。
-        const FOR_GREP_ONLY: [&str; 7] = [
+        const FOR_GREP_ONLY: [&str; 8] = [
             "--ignore-case",
             "--case-sensitive",
             "--word",
@@ -316,6 +324,7 @@ fn main() -> ExitCode {
             "--fixed",
             "--fuzzy",
             "--chinese",
+            "--heading",
         ];
         if let Some(stray) = modifiers.iter().find(|m| FOR_GREP_ONLY.contains(m)) {
             eprintln!("yumete: {stray} shapes a pattern, and --files matches names by feel");
@@ -1231,6 +1240,12 @@ struct Grep {
     project: bool,
     /// **染不染色**：`None` ＝ 接着終端機就染、進管道就不染（rg 的 `auto`）。
     colour: Option<bool>,
+    /// **按檔分組印，還是一行一條**：`None` ＝ 跟着終端機走，同 `colour`。
+    ///
+    /// 作者 2026-10-03 看過平鋪那一版之後定：「能不能像 rg 这样按照文件分组？看
+    /// 起来好看多了」。分組是**給人看的排版**，所以進了管道照樣一行一條自足的
+    /// `檔:行:列:文字`——`xargs`、`awk` 那一頭讀的還是原來那個形狀。
+    heading: Option<bool>,
     /// **開編輯器，別印到 stdout**（2026-10-03 作者定）。`--grep … --open` 開起來
     /// 面板已經在跑，`--files … --open` 開起來挑選器已經打好。
     ///
@@ -1255,6 +1270,7 @@ impl Default for Grep {
             chinese: (true, true),
             project: false,
             colour: None,
+            heading: None,
             open: false,
         }
     }
@@ -1356,6 +1372,11 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     let mut found = 0usize;
     let mut incomplete = false;
     let given_a_place = !where_.is_empty();
+    // **分組是給人看的，管道裏仍是一行一條。** rg 自己就是這個規矩：接着終端機
+    // 的時候檔名自成一行、底下只寫行列與正文，兩個檔之間空一行；一旦 stdout 不
+    // 是終端機，每一行都要自己說得出自己是哪個檔的。
+    let grouped = g.heading.unwrap_or_else(|| std::io::stdout().is_terminal());
+    let mut heading_shown: Option<String> = None;
     for (at, only) in roots {
         let mut editor = Editor::new();
         editor.set_root(&at);
@@ -1414,21 +1435,38 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
                     cut(hit.mark.end, chars.len())
                 )
             };
-            let line = format!(
-                "{}:{}:{}:{}",
-                ink.path(&shown.display().to_string()),
+            let name = shown.display().to_string();
+            let mut rows: Vec<String> = Vec::with_capacity(3);
+            let place = format!(
+                "{}:{}",
                 ink.number(&(hit.line + 1).to_string()),
-                ink.number(&(hit.column + 1).to_string()),
-                marked
+                ink.number(&(hit.column + 1).to_string())
             );
-            match writeln!(sink, "{line}") {
-                Ok(()) => found += 1,
-                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("yumete: --grep: {e}");
-                    return ExitCode::from(2);
+            if grouped {
+                if heading_shown.as_deref() != Some(name.as_str()) {
+                    if heading_shown.is_some() {
+                        rows.push(String::new());
+                    }
+                    rows.push(ink.path(&name));
+                    heading_shown = Some(name);
+                }
+                rows.push(format!("{place}:{marked}"));
+            } else {
+                rows.push(format!("{}:{place}:{marked}", ink.path(&name)));
+            }
+            for row in rows {
+                match writeln!(sink, "{row}") {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+                        return ExitCode::SUCCESS;
+                    }
+                    Err(e) => {
+                        eprintln!("yumete: --grep: {e}");
+                        return ExitCode::from(2);
+                    }
                 }
             }
+            found += 1;
         }
     }
     match (found, incomplete) {
@@ -1734,6 +1772,11 @@ SEARCHING FROM THE SHELL:
                            pipe) / always / never. rg's palette, because that
                            is where the eye's habits are: path magenta, line
                            and column green, the match itself bold red.
+        --heading          Group the hits under the file they are in, the way
+        --no-heading       rg does, with a blank line between files. On a
+                           terminal that is the default; in a pipe the default
+                           is one self-contained `file:line:column:text` line
+                           per hit, so awk and xargs still read it.
 
                      What --grep and --files say for themselves — refusals,
                      diagnostics — is **English**, whatever `[editor] language`

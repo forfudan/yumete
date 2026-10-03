@@ -16,6 +16,11 @@
 # The editor's own crash copies, written beside the file being edited.
 .*.yumete
 
+# 寫作進度的流水帳：編輯器自己邊寫邊記的，一個使用者一份，不是這個項目的記錄。
+# 2026-10-03 作者定——它在這個倉裏記的 162 行裏有 150 行是測試臨時檔的 `0 0`，
+# 而且每寫一次就讓構建戳上 `.dirty`。
+.yumete/progress.tsv
+
 # Working notes and tables reviewed in the editor itself, not part of the
 # project's record.
 /local/

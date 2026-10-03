@@ -76,11 +76,26 @@ yumete --continue              接着上次——上次開着的那些文件，�
 
 ```
 $ ye --grep zhongguo
+卷一/初雪.md
+3:5:那年「中國」還叫作別的名字
+
+卷二/驚蟄.md
+1:1:中国很大。
+```
+
+**同一個檔的命中擺在它的名字底下**，檔與檔之間空一行，同 `ripgrep`。
+這是給人看的排版，所以**接進管道就自己換一種形狀**——那時一行一條
+`檔:行:列:文字`，每一行自己說得出自己是哪個檔的，`awk`、`xargs` 那一頭照舊：
+
+```
+$ ye --grep zhongguo | cat
 卷一/初雪.md:3:5:那年「中國」還叫作別的名字
 卷二/驚蟄.md:1:1:中国很大。
 ```
 
-一行一條，`檔:行:列:文字`。找到了退出碼是 0，一處都沒有是 1，問題本身說不通
+要固定成哪一種就寫 `--heading` 或 `--no-heading`。
+
+找到了退出碼是 0，一處都沒有是 1，問題本身說不通
 （式子寫壞、分隔符寫錯）是 2——所以 `if ye --grep 霜; then …` 在腳本裏是一句話。
 正文那一欄是命中前後各六十個字，不是整行：小說的一行是一整段。
 
@@ -102,7 +117,8 @@ $ ye --files di120
 命中上；`--files` 開起來挑選器已經打好、單子已經篩過。
 
 開關照 `ripgrep` 的名字：`--ignore-case`、`--case-sensitive`、`--word`、`--regex`、
-`--fixed`、`--fuzzy`、`--hidden`、`--glob=`、`--exclude=`、`--color=`，外加
+`--fixed`、`--fuzzy`、`--hidden`、`--glob=`、`--exclude=`、`--color=`、
+`--heading`／`--no-heading`，外加
 `--chinese=off|glyphs|pinyin|both`（繁簡與拼音，出廠兩個都開）。`ye --help` 一覽。
 
 
