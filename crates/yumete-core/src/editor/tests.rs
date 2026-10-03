@@ -2171,6 +2171,58 @@ fn surround_adds_deletes_and_replaces() {
     assert_eq!(ed.current_buffer().text(), "你好");
 }
 
+/// **`md` 也去得掉 markdown 的標記**（2026-10-04 定）。
+///
+/// 起因是作者問「我只想删掉 `**`，最快怎麼辦」。從前最快是四步八鍵——`mim` 複製、
+/// `mam` 選中、`R` 貼回去——因為 `md` 查的是 `PAIRS`，那張表裏只有括號和引號，
+/// 沒有 `*`／`_`／`~`，而且它寫死了每邊刪**一個**字，`**` 是兩個。
+///
+/// 在一部以 markdown 為主的編輯器裏，這件事該是三個鍵。
+#[test]
+fn md_takes_off_markdown_marks_too() {
+    let off = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        press(&mut ed, "md");
+        ed.current_buffer().text().to_string()
+    };
+    // 一邊一個字的、一邊兩個字的、一邊一片的，都走同一個鍵。
+    assert_eq!(off("這是 **一句話** 的例子。\n", "8l"), "這是 一句話 的例子。\n");
+    assert_eq!(off("這是 *一句話* 的例子。\n", "7l"), "這是 一句話 的例子。\n");
+    assert_eq!(off("這是 ~~一句話~~ 的例子。\n", "8l"), "這是 一句話 的例子。\n");
+    assert_eq!(off("這是 ==標出== 的例子。\n", "6l"), "這是 標出 的例子。\n");
+    assert_eq!(off("這是 `一句話` 的例子。\n", "7l"), "這是 一句話 的例子。\n");
+    // 鏈接整個拆掉，不是只摘方括號——留下 `字(網址)` 是一句壞語法。
+    assert_eq!(off("這是 [字](http://a) 的例子\n", "4l"), "這是 字 的例子\n");
+    assert_eq!(off("這是 [[條目]] 的例子。\n", "5l"), "這是 條目 的例子。\n");
+
+    // **取內層的那一個**，和 `md` 在 `PAIRS` 之間本來的規矩一樣。
+    assert_eq!(
+        off("這是 (**粗**) 的例子。\n", "7l"),
+        "這是 (粗) 的例子。\n",
+        "站在粗上：去掉 **，那對括號留着"
+    );
+    assert_eq!(
+        off("這是 **(a)** 的例子。\n", "6l"),
+        "這是 **a** 的例子。\n",
+        "站在 a 上：去掉括號，** 留着"
+    );
+    assert_eq!(
+        off("這是 **粗*斜*粗** 的例子。\n", "7l"),
+        "這是 **粗斜粗** 的例子。\n",
+        "套起來的強調：去掉裏面那一層"
+    );
+
+    // 括號那一族一個字都沒變。
+    assert_eq!(off("這是（全角）的例子。\n", "5l"), "這是全角的例子。\n");
+    // 什麼標記都沒有：一個字都不動。
+    let mut ed = typed("這是沒有標記的一句話。\n");
+    press(&mut ed, "gg5l");
+    press(&mut ed, "md");
+    assert_eq!(ed.current_buffer().text(), "這是沒有標記的一句話。\n");
+}
+
 #[test]
 fn nested_pairs_match_the_innermost() {
     let mut ed = typed("（甲（乙）丙）");
