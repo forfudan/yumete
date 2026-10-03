@@ -7933,6 +7933,13 @@ zhs = "替换"
 en = "replace"
 
 [[message]]
+# 搜索：全部替換正在做，已經做到第幾個檔
+key = "search.replacing-progress"
+zht = "正在替換… {0}/{1} 個檔"
+zhs = "正在替换… {0}/{1} 个档"
+en = "replacing… {0}/{1} files"
+
+[[message]]
 # 搜索：正在走磁盤
 key = "search.scanning"
 zht = "正在找…"

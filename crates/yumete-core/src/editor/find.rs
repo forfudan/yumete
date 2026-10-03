@@ -1610,6 +1610,51 @@ impl Editor {
         }
     }
 
+    /// **一批做多久就交還一次屏幕。** 八十毫秒是「看得出在動」和「每一幀的開銷
+    /// 不白花」之間的那一檔：三千個檔那一趟畫出一百多幀，數字一路往上走。
+    const REPLACE_SLICE: std::time::Duration = std::time::Duration::from_millis(80);
+
+    /// **這麼少的檔一口氣做完**，不報進度也不多畫一幀。
+    const REPLACE_IN_ONE_GO: usize = 32;
+
+    /// **還在換嗎**——前端每一幀問一次，欠着就再做一批。
+    pub fn replacing_a_batch(&self) -> bool {
+        self.owed_replace.is_some()
+    }
+
+    /// 做一小批，做完就回來；整批做完纔收尾。
+    ///
+    /// Warning: **沒有取消**（2026-10-03 作者定）。所以這一支不讀鍵，也不必管「做了一半
+    /// 被打斷」——它要麼接着做，要麼做完。
+    pub fn run_a_batch_of_replacing(&mut self) {
+        let Some(mut at) = self.owed_replace else { return };
+        let files = self.search.files.clone();
+        let began = std::time::Instant::now();
+        while at < files.len() {
+            let (file, id) = files[at].clone();
+            self.replace_tally += self.replace_file(file.as_deref(), id);
+            at += 1;
+            if began.elapsed() >= Self::REPLACE_SLICE {
+                break;
+            }
+        }
+        if at < files.len() {
+            self.owed_replace = Some(at);
+            self.status = say!("search.replacing-progress", at, files.len());
+            return;
+        }
+        self.owed_replace = None;
+        // **換完要回到你出發的那一份。** `replace_file` 底下的 `buffer_for` 為了
+        // 動一個還沒打開的檔會真的 `open_file`，那一下就把 `current` 挪走了。
+        if let Some(back) = self.buffer_with(self.replace_home) {
+            if back != self.current {
+                self.show_buffer(back);
+            }
+        }
+        let done = std::mem::take(&mut self.replace_tally);
+        self.after_replacing(done);
+    }
+
     pub(super) fn replace_all_found(&mut self) {
         self.replaced_in.clear();
         // Warning: **按（名字, 號）一對去重，不是只按名字**（2026-10-02 審出來的）。
@@ -1623,17 +1668,22 @@ impl Editor {
         //
         // 這一批是一件事，一件事該在它開始的地方結束。改掉的那幾份都還開着（它
         // 們有沒存的改動），只是不站在那裏。
-        let home = self.current_buffer().id();
-        let mut done = 0usize;
-        for (file, id) in self.search.files.clone() {
-            done += self.replace_file(file.as_deref(), id);
-        }
-        if let Some(back) = self.buffer_with(home) {
-            if back != self.current {
-                self.show_buffer(back);
+        self.replace_home = self.current_buffer().id();
+        self.replace_tally = 0;
+        // **一批一批地做，中間把屏幕還回去**（2026-10-03 作者定：「不給取消，只給
+        // 進度」）。從前這裏是一個跑到底的 `for`，而三千個檔那一趟十幾秒裏屏幕
+        // 完全靜止——看不出它在做事，也看不出還剩多少。
+        self.owed_replace = Some(0);
+        // **少到看不出來就別分批。** 分批的代價是多畫幾幀，而幾個檔的替換是幾毫秒
+        // 的事——報一行「正在替換… 0/3 個檔」再立刻蓋掉，只是閃一下。
+        if self.search.files.len() < Self::REPLACE_IN_ONE_GO {
+            // Warning: **要繞到底**：一批是按時間切的，三十一個檔也可能跨過八十毫秒。
+            while self.owed_replace.is_some() {
+                self.run_a_batch_of_replacing();
             }
+            return;
         }
-        self.after_replacing(done);
+        self.status = say!("search.replacing-progress", 0, self.search.files.len());
     }
 
     /// Change **one match on one line** of the buffer being worked on.
