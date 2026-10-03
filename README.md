@@ -64,7 +64,7 @@ running down the half-width column beside 漢字, and not one byte of either
 written back into the file:
 
 ```raw
-$ yumete --shot=22x18 -v --keys=':ruby full\n:view-hanging force\n' 記.md
+$ yumete --shot=22x18 --vertical --keys=':ruby full\n:view-hanging force\n' 記.md
   4  3  2     1
     你｢     h那
     來      à年
@@ -171,7 +171,7 @@ actually be taught.
 ### A book is many files
 
 `gn` / `gp` and a tab bar move between open buffers, each keeping its own cursor
-and its own undo history; `yumete -c` reopens what was open, at the line it was
+and its own undo history; `yumete --continue` reopens what was open, at the line it was
 left on. The sidebar holds three views on `Tab` — the file tree, the buffers,
 and an **outline** built from Markdown headings or Typst's own (following
 `#include` across chapter files, with no compiler in the loop).
@@ -229,7 +229,7 @@ Markdown.
 
 ### Tables
 
-`yumete -t data.csv` edits a delimited file as a **grid**: the cell is the unit
+`yumete --table data.csv` edits a delimited file as a **grid**: the cell is the unit
 of movement, a schema in `.yumete/tables/` names the columns (without one, the
 file's own header row does), and an 8 MB hand-edited file goes back out byte for
 byte. `t` is the whole table group — sort by several columns, go to a cell by
