@@ -55,9 +55,9 @@ en = "insert after the selection"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.buffer-picker"
-zht = "換一個開着的文件"
-zhs = "换一个打开着的文件"
-en = "the buffer picker"
+zht = "打開緩衝區選擇器"
+zhs = "打开缓冲区选择器"
+en = "open the buffer picker"
 
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
@@ -160,9 +160,9 @@ en = "grow the selection to whole lines"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.file-picker"
-zht = "挑一個文件"
-zhs = "挑一个文件"
-en = "the file picker"
+zht = "打開文件選擇器"
+zhs = "打开文件选择器"
+en = "open the file picker"
 
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
@@ -384,9 +384,9 @@ en = "the previous word's start"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.next-buffer"
-zht = "下一個開着的文件"
-zhs = "下一个打开的文件"
-en = "the next open file"
+zht = "切換到下一個緩衝區"
+zhs = "切换到下一个缓冲区"
+en = "the next buffer"
 
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
@@ -454,9 +454,9 @@ en = "the paste menu"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.prev-buffer"
-zht = "上一個開着的文件"
-zhs = "上一个打开的文件"
-en = "the previous open file"
+zht = "切換到上一個緩衝區"
+zhs = "切换到上一个缓冲区"
+en = "the previous buffer"
 
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
@@ -1138,7 +1138,7 @@ find = "衝突 冲突 合併 合并 merge conflict conflicts git"
 # :check-names 在命令表裏的說明
 key = "cmd.check.names"
 zht = "查專名：稿子裏把百科的名字寫錯了一個同音字的地方（醉翁亭寫成醉翁停）"
-zhs = "查专名：稿子里把百科的名字写错了一个同音字的地方（返尘亭写成返尘停）"
+zhs = "查专名：稿子里把百科的名字写错了一个同音字的地方（醉翁亭写成醉翁停）"
 en = "check names: a wiki name written with one homophone out of place"
 find = "專名 专名 人名 地名 百科 別字 别字 同音 校對 校对 names typo homophone"
 
@@ -5422,21 +5422,21 @@ en = "convert the table's format (delimiter)"
 [[message]]
 # 空格 t x 底下：轉成逗號分隔
 key = "hint.table.convert-csv"
-zht = "csv（轉換／貼上）"
+zht = "csv（轉換/貼上）"
 zhs = "csv（转换/粘贴）"
 en = "csv (convert / paste)"
 
 [[message]]
 # 空格 t x 底下：轉成 | 表格
 key = "hint.table.convert-pipe"
-zht = "pipe（轉換／貼上）"
+zht = "pipe（轉換/貼上）"
 zhs = "pipe（转换/粘贴）"
 en = "pipe (convert / paste)"
 
 [[message]]
 # 空格 t x 底下：轉成跳格分隔
 key = "hint.table.convert-tsv"
-zht = "tsv（轉換／貼上）"
+zht = "tsv（轉換/貼上）"
 zhs = "tsv（转换/粘贴）"
 en = "tsv (convert / paste)"
 
@@ -7627,7 +7627,7 @@ en = "replace with"
 [[message]]
 # 搜索面板：包含／排除裏有一條寫錯了
 key = "search.bad-glob"
-zht = "包含／排除中有錯誤寫法，搜索未完成"
+zht = "包含/排除中有錯誤寫法，搜索未完成"
 zhs = "包含/排除中有错误写法，搜索未完成"
 en = "only: or except: holds a bad pattern — the search did not run"
 
@@ -9372,35 +9372,35 @@ en = "unsaved"
 [[message]]
 # 設置：0 的意思——窗口有多高就多長
 key = "set.zero.as-tall-as-the-window"
-zht = "0 ＝ 窗口能給多長就多長"
+zht = "0 = 窗口能給多長就多長"
 zhs = "0 = 窗口能给多长就多长"
 en = "0 = as tall as the window"
 
 [[message]]
 # 設置：0 的意思——窗口有多寬就多寬
 key = "set.zero.as-wide-as-the-window"
-zht = "0 ＝ 用窗口的寬度"
+zht = "0 = 用窗口的寬度"
 zhs = "0 = 用窗口的宽度"
 en = "0 = as wide as the window"
 
 [[message]]
 # 設置：0 的意思——不縮進
 key = "set.zero.no-indent"
-zht = "0 ＝ 不縮進"
+zht = "0 = 不縮進"
 zhs = "0 = 不缩进"
 en = "0 = no indent"
 
 [[message]]
 # 設置：0 的意思——不畫那條線
 key = "set.zero.no-ruler"
-zht = "0 ＝ 不畫"
+zht = "0 = 不畫"
 zhs = "0 = 不画"
 en = "0 = no ruler"
 
 [[message]]
 # 設置：0 的意思——關
 key = "set.zero.off"
-zht = "0 ＝ 關"
+zht = "0 = 關"
 zhs = "0 = 关"
 en = "0 = off"
 
