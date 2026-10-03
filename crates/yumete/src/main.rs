@@ -1517,73 +1517,93 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
             s.exclude = g.exclude.clone();
             (s.glyphs, s.pinyin) = g.chinese;
         }
-        editor.run_the_search();
-        if let Some(code) = the_question_will_not_parse(&editor, "--grep") {
-            return code;
-        }
-        incomplete |= what_was_not_looked_at(&editor, "--grep");
         // **印出來的路徑照你給的那個拼法**（2026-10-03 一輪審查報來的）。搜索的
         // 根是 canonicalize 過的，照它拼出來 `ye --grep x alias` 會答
         // `realdir/f.md`——問的是 `alias`，拿回來的是別的名字，`cd` 過去落在別處。
         // `--project` 沒有「你給的拼法」可依，那時纔退回真路徑。
+        //
+        // Warning: **要在搜之前算好**（2026-10-03）：邊搜邊印，第一條命中來的時候
+        // 路徑就得印得出來了。`search().root` 那時還沒填——它是走完纔填的，所以
+        // `--project` 這一支自己先問一次 `project_root()`。
         let root = match (g.project, given_a_place) {
             (false, true) => at.clone(),
-            _ => editor.search().root.clone().unwrap_or_else(|| at.clone()),
+            _ => editor.project_root(),
         };
         // Warning: **讀的人半路走了不算出錯。** `ye --grep 霜 | head -2` 關掉管道那一頭，
         // 而 Rust 的 `println!` 遇上 EPIPE 是 **panic**——六千條命中的時候它當場吐
-        // 一段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤。
-        for hit in &editor.search().hits {
-            let Some(file) = hit.file.as_ref() else { continue };
-            // **印得出來的路徑是相對於你站的地方的**，所以「搜了哪裏」一眼看得出：
-            // `--project` 爬上去過的話，印出來就會帶 `../`。
-            let shown = pathdiff(&root.join(file), &cwd);
-            // **命中那幾個字自己染**：`mark` 說它們落在摘錄的哪一段（按字計）。
-            let marked: String = {
-                let chars: Vec<char> = hit.excerpt.chars().collect();
-                let cut = |a: usize, b: usize| -> String {
-                    chars.get(a.min(chars.len())..b.min(chars.len())).unwrap_or(&[]).iter().collect()
+        // 一段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤。現在它還**當場收**：
+        // 回 `false`，搜索自己停下，不接着走完整棵樹。
+        let mut quit: Option<ExitCode> = None;
+        {
+            let mut put = |hit: &yumete_core::search_panel::Hit| -> bool {
+                let Some(file) = hit.file.as_ref() else { return true };
+                // **印得出來的路徑是相對於你站的地方的**，所以「搜了哪裏」一眼看得
+                // 出：`--project` 爬上去過的話，印出來就會帶 `../`。
+                let shown = pathdiff(&root.join(file), &cwd);
+                // **命中那幾個字自己染**：`mark` 說它們落在摘錄的哪一段（按字計）。
+                let marked: String = {
+                    let chars: Vec<char> = hit.excerpt.chars().collect();
+                    let cut = |a: usize, b: usize| -> String {
+                        chars
+                            .get(a.min(chars.len())..b.min(chars.len()))
+                            .unwrap_or(&[])
+                            .iter()
+                            .collect()
+                    };
+                    format!(
+                        "{}{}{}",
+                        cut(0, hit.mark.start),
+                        ink.hit(&cut(hit.mark.start, hit.mark.end)),
+                        cut(hit.mark.end, chars.len())
+                    )
                 };
-                format!(
-                    "{}{}{}",
-                    cut(0, hit.mark.start),
-                    ink.hit(&cut(hit.mark.start, hit.mark.end)),
-                    cut(hit.mark.end, chars.len())
-                )
+                let name = shown.display().to_string();
+                let mut rows: Vec<String> = Vec::with_capacity(3);
+                let place = format!(
+                    "{}:{}",
+                    ink.number(&(hit.line + 1).to_string()),
+                    ink.number(&(hit.column + 1).to_string())
+                );
+                if grouped {
+                    if heading_shown.as_deref() != Some(name.as_str()) {
+                        if heading_shown.is_some() {
+                            rows.push(String::new());
+                        }
+                        rows.push(ink.path(&name));
+                        heading_shown = Some(name);
+                    }
+                    rows.push(format!("{place}:{marked}"));
+                } else {
+                    rows.push(format!("{}:{place}:{marked}", ink.path(&name)));
+                }
+                for row in rows {
+                    match writeln!(sink, "{row}") {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+                            quit = Some(ExitCode::SUCCESS);
+                            return false;
+                        }
+                        Err(e) => {
+                            eprintln!("yumete: --grep: {e}");
+                            quit = Some(ExitCode::from(2));
+                            return false;
+                        }
+                    }
+                }
+                found += 1;
+                true
             };
-            let name = shown.display().to_string();
-            let mut rows: Vec<String> = Vec::with_capacity(3);
-            let place = format!(
-                "{}:{}",
-                ink.number(&(hit.line + 1).to_string()),
-                ink.number(&(hit.column + 1).to_string())
-            );
-            if grouped {
-                if heading_shown.as_deref() != Some(name.as_str()) {
-                    if heading_shown.is_some() {
-                        rows.push(String::new());
-                    }
-                    rows.push(ink.path(&name));
-                    heading_shown = Some(name);
-                }
-                rows.push(format!("{place}:{marked}"));
-            } else {
-                rows.push(format!("{}:{place}:{marked}", ink.path(&name)));
-            }
-            for row in rows {
-                match writeln!(sink, "{row}") {
-                    Ok(()) => {}
-                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
-                        return ExitCode::SUCCESS;
-                    }
-                    Err(e) => {
-                        eprintln!("yumete: --grep: {e}");
-                        return ExitCode::from(2);
-                    }
-                }
-            }
-            found += 1;
+            editor.run_the_search_into(&mut put);
         }
+        if let Some(code) = quit {
+            return code;
+        }
+        // **問題說不通要在印完之後纔問得準**：式子編不過的時候一處都印不出來，
+        // 而這兩句問的是跑完之後的那幾格。
+        if let Some(code) = the_question_will_not_parse(&editor, "--grep") {
+            return code;
+        }
+        incomplete |= what_was_not_looked_at(&editor, "--grep");
     }
     match (found, incomplete) {
         // 一處都沒有、而且確實沒看全——「沒找到」在這裏是假話。
@@ -1632,6 +1652,8 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
                 None => g.include.clone(),
             },
             exclude: g.exclude.clone(),
+            // 管道那一邊沒有畫面要護：走查不封頂，大檔也不跳過。
+            uncapped: true,
         };
         for name in editor.files_matching(&root, pattern, &sieve) {
             let shown = pathdiff(&shown_root.join(&name), &cwd);

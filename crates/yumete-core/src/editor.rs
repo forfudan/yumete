@@ -1519,6 +1519,13 @@ pub struct Sieve {
     pub include: String,
     /// 這幾條 glob 配得上的不走。
     pub exclude: String,
+    /// **管道那一邊沒有畫面要護，所以一道閘都不加**（2026-10-03 作者定）。
+    ///
+    /// 編輯器裏那兩道閘（[`WALK_CEILING`] 與 [`GREP_MAX_BYTES`]）護的是**畫面那條
+    /// 線程**：走查跑在它上面，不封頂就是凍住。`ye --grep` 沒有畫面——它慢一點只
+    /// 是慢一點，而「悄悄少看了一半還說找完了」是另一回事。作者原話：「rg 会打印
+    /// 全部，我们会跳过大文件，也会提早停止」。
+    pub uncapped: bool,
 }
 
 impl Sieve {
@@ -1611,12 +1618,21 @@ pub(crate) const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_
 /// 補全也繼承了——而那兩個是**按鍵上同步跑的**，中間沒有「正在找…」那一幀，而且
 /// 它們自己早就夠了（`PICKER_LIMIT` 四千條）。量出來的（`$HOME`，同一個進程同一
 /// 棵樹）：到地板就停是 `seen=20000 138ms`，等滿三秒是 `seen=323177 3.00s`。
+///
+/// Warning: **管道那一邊一條都不認**（2026-10-03 作者定）。那三道閘護的是畫面；
+/// `ye --grep` 沒有畫面，而「悄悄少看了一半」在那裏是一個錯的答案。連那五秒硬停
+/// 也不認——它是「卡死不如交一半」的保險絲，而管道裏卡着的只是一個命令行程序，
+/// Ctrl-C 就是了。
 pub(crate) fn walk_is_done(
     seen: usize,
     visited: usize,
     spent: std::time::Duration,
     prose_only: bool,
+    uncapped: bool,
 ) -> bool {
+    if uncapped {
+        return false;
+    }
     if spent >= WALK_DEADLINE {
         return true;
     }
@@ -1740,7 +1756,7 @@ fn walk_inner(
         // 名單還說自己是全的。`visited` 本來就該是「看過幾個條目」，不是「看過幾
         // 個文件」；那是 `seen`。
         visited += 1;
-        if walk_is_done(seen, visited, started.elapsed(), prose_only) {
+        if walk_is_done(seen, visited, started.elapsed(), prose_only, sieve.uncapped) {
             walked.cut = true;
             break;
         }
@@ -1754,7 +1770,9 @@ fn walk_inner(
         if is_build_output(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        if !entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES) {
+        // **大檔只在編輯器裏跳過。** 管道那一邊是按行流着讀的（見
+        // `Editor::search_now_into`），一個檔多大都不佔內存，所以那裏沒有理由跳。
+        if !sieve.uncapped && !entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES) {
             walked.skipped += 1;
             continue;
         }

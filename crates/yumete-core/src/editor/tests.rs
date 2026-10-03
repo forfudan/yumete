@@ -10770,23 +10770,28 @@ fn only_the_search_walk_waits_out_the_grace() {
     let instant = Duration::from_millis(1);
 
     // 沒到地板，誰都不停。
-    assert!(!walk_is_done(0, 0, instant, true));
-    assert!(!walk_is_done(0, 0, instant, false));
+    assert!(!walk_is_done(0, 0, instant, true, false));
+    assert!(!walk_is_done(0, 0, instant, false, false));
 
     // 到了地板：挑選器當場停，搜索還肯等。
-    assert!(walk_is_done(crate::editor::WALK_CEILING, 0, instant, false), "挑選器到地板就停");
-    assert!(!walk_is_done(crate::editor::WALK_CEILING, 0, instant, true), "搜索還肯等");
+    assert!(walk_is_done(crate::editor::WALK_CEILING, 0, instant, false, false), "挑選器到地板就停");
+    assert!(!walk_is_done(crate::editor::WALK_CEILING, 0, instant, true, false), "搜索還肯等");
     assert!(
-        walk_is_done(crate::editor::WALK_CEILING, 0, crate::editor::WALK_GRACE, true),
+        walk_is_done(crate::editor::WALK_CEILING, 0, crate::editor::WALK_GRACE, true, false),
         "等滿寬限纔停"
     );
 
     // 條目那個地板和文本那個地板是「或」。
-    assert!(walk_is_done(0, crate::editor::VISIT_CEILING, instant, false));
+    assert!(walk_is_done(0, crate::editor::VISIT_CEILING, instant, false, false));
 
     // 硬停不管有沒有到地板，也不管是誰。
-    assert!(walk_is_done(0, 0, crate::editor::WALK_DEADLINE, true));
-    assert!(walk_is_done(0, 0, crate::editor::WALK_DEADLINE, false));
+    assert!(walk_is_done(0, 0, crate::editor::WALK_DEADLINE, true, false));
+    assert!(walk_is_done(0, 0, crate::editor::WALK_DEADLINE, false, false));
+
+    // **管道那一邊一條都不認**（2026-10-03 定）：地板、寬限、硬停，全不停。
+    assert!(!walk_is_done(crate::editor::WALK_CEILING, 0, crate::editor::WALK_GRACE, true, true));
+    assert!(!walk_is_done(0, crate::editor::VISIT_CEILING, instant, false, true));
+    assert!(!walk_is_done(0, 0, crate::editor::WALK_DEADLINE, true, true), "連那五秒硬停也不認");
 }
 
 /// **開一次挑選器不許把列表的根蓋掉**（2026-10-02 修）。
@@ -10853,6 +10858,72 @@ fn a_file_with_a_nul_in_it_is_not_prose() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **管道那一邊沒有上限，而且邊搜邊交**（2026-10-03 作者定）。
+///
+/// 作者原話：「rg 会打印全部，我们会跳过大文件，也会提早停止」「如果我们可以做到
+/// 异步（也就是边搜边打印…）」。編輯器裏那兩道閘（[`crate::editor::GREP_MAX_BYTES`]
+/// 與 [`crate::editor::WALK_CEILING`]）護的是畫面那條線程；管道沒有畫面，少看了一半
+/// 卻說找完了纔是錯的答案。
+///
+/// 這裏驗三件：① 超過那道閘的檔在管道裏搜得到，行號還是對的；② 編輯器裏照舊跳過
+/// 並記一筆；③ 出口回 `false` 就當場收攤。
+#[test]
+fn the_pipe_has_no_ceiling_and_hands_hits_over_as_it_finds_them() {
+    let dir = std::env::temp_dir().join(format!("yumete-nocap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // 剛好越過那道閘，命中擺在最後一行——整個檔讀不下來就找不着它。
+    let filler = "這是一行無關的字。\n";
+    let rows = (crate::editor::GREP_MAX_BYTES as usize / filler.len()) + 100;
+    let mut text = filler.repeat(rows);
+    text.push_str("霜降於石階。\n");
+    std::fs::write(dir.join("大稿.md"), &text).unwrap();
+    assert!(text.len() as u64 > crate::editor::GREP_MAX_BYTES, "靶子要比那道閘大");
+
+    let ask = |uncapped: bool| -> Editor {
+        let mut ed = Editor::new();
+        ed.set_root(&dir);
+        let s = ed.search_mut();
+        s.query = "shuangjiang".to_string();
+        s.scope = crate::search_panel::Where::Working;
+        s.uncapped = uncapped;
+        ed
+    };
+
+    // ① 管道：搜得到，而且行號是最後一行。
+    let mut ed = ask(true);
+    let mut got: Vec<(usize, usize)> = Vec::new();
+    ed.run_the_search_into(&mut |hit| {
+        got.push((hit.line, hit.column));
+        true
+    });
+    assert_eq!(got, vec![(rows, 0)], "最後一行，第一欄");
+    assert_eq!(ed.search().skipped, 0, "管道裏一個檔都不該跳過");
+    assert!(!ed.search().cut, "管道裏走查不封頂");
+    // 交出去的不留在名單裏——不封頂的時候名單是會漲到沒邊的。
+    assert!(ed.search().hits.is_empty(), "印完就不要了");
+    assert_eq!(ed.search().total, 1);
+
+    // ② 編輯器：照舊跳過，並且記一筆（面板靠它說「有東西沒看」）。
+    let mut ed = ask(false);
+    ed.run_the_search();
+    assert!(ed.search().hits.is_empty(), "太大，沒讀");
+    assert_eq!(ed.search().skipped, 1, "跳過的要數出來");
+
+    // ③ 出口回 `false` 就收攤。再寫兩個小檔，只收第一處。
+    std::fs::write(dir.join("甲.md"), "霜一\n霜二\n").unwrap();
+    std::fs::write(dir.join("乙.md"), "霜三\n").unwrap();
+    let mut ed = ask(true);
+    let mut seen = 0usize;
+    ed.run_the_search_into(&mut |_| {
+        seen += 1;
+        false
+    });
+    assert_eq!(seen, 1, "說了收攤就不該再來第二處");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **隱藏與忽略是兩件事，各撥各的**（2026-10-03 作者定）。
 ///
 /// 起因：他在一個工作區的根上搜，那裏的 `.gitignore` 寫着 `/yu/`（幾個兄弟倉
@@ -10879,6 +10950,7 @@ fn hidden_and_ignored_are_two_switches_not_one() {
             ignored,
             include: String::new(),
             exclude: String::new(),
+            uncapped: false,
         };
         let mut seen: Vec<String> = Vec::new();
         crate::editor::walk_prose(&dir, &sieve, &mut |path| {
