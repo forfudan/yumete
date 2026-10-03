@@ -1595,6 +1595,33 @@ impl Editor {
             ) {
                 continue;
             }
+            // **`第一章` ＋ 一行 `====` 也是標題**（setext，2026-10-03）。CommonMark
+            // 認它，而從前這裏只找行首的 `#`——於是用下劃線寫章名的稿子，大綱
+            // 是空的，`空格 o` 和 `:toc` 一章都跳不到。
+            //
+            // Warning: **上一行必須是 `Prose`**，這一句就是 CommonMark 那條「上面要是
+            // 一個段落」。它一次擋掉四種假陽性：卷首 `---` 元數據（那幾行是
+            // `FrontMatter`）、清單項（`Item`）、表格行（`Table`）、引文
+            // （`Quote`）。少了它，`---\ntitle: x\n---` 的第二條橫線會把
+            // `title: x` 變成一章。
+            if want == '#' && line > 0 {
+                let bar = trimmed.trim();
+                let level = match bar.chars().next() {
+                    Some('=') if bar.chars().all(|c| c == '=') => Some(1),
+                    Some('-') if bar.chars().all(|c| c == '-') => Some(2),
+                    _ => None,
+                };
+                if let Some(level) = level {
+                    let above = rope.line(line - 1).to_string();
+                    let title = above.trim_end_matches(['\n', '\r']).trim();
+                    if !title.is_empty()
+                        && matches!(self.block_of(line - 1), crate::markdown::Block::Prose)
+                    {
+                        out.push((line - 1, level, title.to_string()));
+                        continue;
+                    }
+                }
+            }
             // Warning: **判準走 `heading_marks`，三處同一份**（2026-09-28）。底下那一大段
             // 說明搬進了那一支。這裏跟着多了一條：**七個井號不是標題**，CommonMark
             // 封頂六級，而從前這裏不封頂。
