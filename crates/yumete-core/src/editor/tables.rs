@@ -1755,6 +1755,20 @@ impl Editor {
     fn block_here(&self) -> (usize, usize) {
         let rope = self.current_buffer().rope();
         let last_line = rope.len_lines().saturating_sub(1);
+        // **整個檔就是一張表的時候，那一塊就是整個檔**（2026-10-03 一輪審查報來
+        // 的，會毀檔）。`ye --table 表.csv` 開出來的是一張**整檔**的網格，而這一
+        // 支只認「空行之間那幾行」：`␣t x t` 於是只轉了光標所在的那一段，檔子落
+        // 得一半 CSV 一半 TSV，而 schema 說的還是逗號。`:export` 一直是分情形的
+        // （`Bounds::WholeFile` 自己一支），轉換這一邊沒跟上。
+        //
+        // Warning: **選區優先。** 真圈了幾行的人說的是那幾行，整檔那一條讓給他。
+        let whole_file = self
+            .table
+            .as_ref()
+            .is_some_and(|v| v.bounds == crate::editor::Bounds::WholeFile);
+        if whole_file && !self.has_selection() {
+            return (0, last_line);
+        }
         if self.has_selection() {
             let (a, b) = self.selection();
             let first = rope.char_to_line(a.min(rope.len_chars()));
