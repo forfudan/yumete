@@ -2750,6 +2750,16 @@ pub struct Editor {
     ///
     /// 同一個辦法在載入碼表那裏用過（`lib.rs` 的 `loading_the_table`）。
     owed_search: bool,
+    /// **還欠着的那一批替換**：下一個要動的是名單上第幾個檔（2026-10-03）。
+    ///
+    /// `R` 動的是每一個有命中的檔，而三千個檔那一趟要十幾秒——從前那十幾秒裏
+    /// 屏幕一動不動。同 [`Editor::owed_search`] 的辦法：先畫一幀說話，再做一小
+    /// 批，做完再畫一幀。**沒有取消**（2026-10-03 作者定：「不給取消，只給進度」）。
+    owed_replace: Option<usize>,
+    /// 這一批到此刻換掉了幾處，跨幀累着。
+    replace_tally: usize,
+    /// 這一批開始的時候人在哪一份緩衝上——換完要回去。
+    replace_home: u64,
     /// **屏幕上的落腳點和它們的標籤**（`gw`，#406）——亮着的時候整個鍵盤都是標籤。
     ///
     /// Warning: 不是 `jumps`：那個是 `C-o`／`C-i` 走的跳轉表（#45），兩件事。
@@ -3234,6 +3244,9 @@ impl Editor {
             replaced_in: Vec::new(),
             replace_this_file: None,
             owed_search: false,
+            owed_replace: None,
+            replace_tally: 0,
+            replace_home: 0,
             labels: Vec::new(),
             jump_typed: String::new(),
             owed_jump: false,

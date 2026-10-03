@@ -783,6 +783,12 @@ fn press(
         if editor.take_owed_search() {
             editor.run_owed_search();
         }
+        // **全部替換也是欠着做的**（2026-10-03）：主循環一批八十毫秒、中間畫一幀
+        // 報進度，而這裏沒有循環可畫——一口氣做完就是。不補這一下，`--shot` 拍到
+        // 的是「按了 `y`，什麼都沒發生」。
+        while editor.replacing_a_batch() {
+            editor.run_a_batch_of_replacing();
+        }
         editor.refresh_the_edited_file();
         let key = match c {
             '\\' => match chars.next() {
@@ -960,6 +966,11 @@ fn press(
                 let _ = yumete_tui::frame_to_text(editor, config, ime, w, h, settings.panel.as_ref());
             }
         }
+    }
+    // **最後一個鍵欠下的那一批也要做完**：迴圈頂上那一下只補得了鍵**之間**的，
+    // 而 `R y` 正是按在最後。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
+    while editor.replacing_a_batch() {
+        editor.run_a_batch_of_replacing();
     }
     settings.panel
 }
