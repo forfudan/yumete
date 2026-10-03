@@ -4252,6 +4252,13 @@ zhs = "撤销／重做"
 en = "undo / redo"
 
 [[message]]
+# 常用幫助：推薦的窗口大小
+key = "help.common.window-size"
+zht = "推薦窗口大小 80×24。側面板要 36 欄纔擺得下。"
+zhs = "推荐窗口大小 80×24。侧面板要 36 栏才摆得下。"
+en = "a window of 80×24 is what this is laid out for; a side panel needs 36 columns."
+
+[[message]]
 # 常用幫助：這個詞還在哪裏
 key = "help.common.word-elsewhere"
 zht = "這個詞還在哪裏：這邊找／副編輯區看"
@@ -7861,6 +7868,13 @@ key = "search.nth-hit"
 zht = "{0}/{1}"
 zhs = "{0}/{1}"
 en = "{0}/{1}"
+
+[[message]]
+# 搜索：窗口太窄，擺不下面板，退回行內搜索
+key = "search.panel-too-narrow"
+zht = "窗口過窄，改用行內搜索"
+zhs = "窗口过窄，改用行内搜索"
+en = "window too narrow — searching on the line instead"
 
 [[message]]
 # 搜索：全部替換之前問一次

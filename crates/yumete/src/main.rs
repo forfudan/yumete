@@ -540,7 +540,7 @@ fn main() -> ExitCode {
         // 器一個它本來沒有的視口，於是後面那幾個動作落在了别的地方。算出來，别
         // 畫出來。
         if let Some((w, h)) = shot {
-            yumete_tui::fit_the_page(&mut ime, &editor, &config, w, h);
+            yumete_tui::fit_the_page(&mut ime, &mut editor, &config, w, h);
         }
         settings_page = press(&mut editor, pressed, &config, &mut ime, shot);
     }
@@ -672,7 +672,7 @@ fn main() -> ExitCode {
                 "        candidate panel need a real terminal (a pty), not this."
             );
         }
-        yumete_tui::fit_the_page(&mut ime, &editor, &config, width, height);
+        yumete_tui::fit_the_page(&mut ime, &mut editor, &config, width, height);
         // The layout the flags asked for, before the picture is taken.
         let picture = match shot_html {
             true => yumete_tui::frame_to_html(
