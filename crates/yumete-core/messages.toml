@@ -9977,6 +9977,13 @@ zhs = "| 表格的第一行就是栏名——下面那行 --- 说的"
 en = "a | table says which row is its header — the --- line under it does"
 
 [[message]]
+# 表格轉換：光標在圍欄裏，那是代碼不是表格
+key = "table.inside-a-fence"
+zht = "這幾行在圍欄裏——那是代碼，不是表格"
+zhs = "这几行在围栏里——那是代码，不是表格"
+en = "these lines are inside a fence — that is code, not a table"
+
+[[message]]
 # 表格裏想併兩行
 key = "table.join-would-change-columns"
 zht = "兩行併成一行會改欄數——先 :table off"
@@ -10096,7 +10103,7 @@ zhs = "标题行上面加不了——加在它下面了"
 en = "nothing goes above the header — added it below instead"
 
 [[message]]
-# :table-pipe / :table-csv：手上沒有可轉的東西
+# :convert-table：手上沒有可轉的東西
 key = "table.nothing-to-convert"
 zht = "這裏沒有可以轉的行"
 zhs = "这里没有可以转的行"
