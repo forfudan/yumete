@@ -8043,9 +8043,11 @@ fn draw_search(
         // **方框裏列「不搜哪些」**（2026-10-01 定，作者原話：「方框裡列『不搜哪些』」）。
         // 所以它和上面幾行反着讀：方框空了纔是「全都搜」。存着的那個布爾沒有翻
         // ——它記的是「走查要不要收隱藏和忽略」，走查那一層要的就是這個意思。
-        let skipped = match find.hidden {
-            true => " ".to_string(),
-            false => say!("search.hidden.what"),
+        let skipped = match (find.hidden, find.ignored) {
+            (false, false) => say!("search.hidden.what"),
+            (false, true) => say!("search.hidden.what.hidden"),
+            (true, false) => say!("search.hidden.what.ignored"),
+            (true, true) => say!("search.hidden.what.nothing"),
         };
         switch(buf, y, &format!("[{skipped}]"), &say!("search.hidden"), 7, text);
     }

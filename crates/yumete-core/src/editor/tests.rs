@@ -10853,6 +10853,90 @@ fn a_file_with_a_nul_in_it_is_not_prose() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **隱藏與忽略是兩件事，各撥各的**（2026-10-03 作者定）。
+///
+/// 起因：他在一個工作區的根上搜，那裏的 `.gitignore` 寫着 `/yu/`（幾個兄弟倉
+/// 各是各的倉，父倉有意不跟蹤），於是整個子倉一處都沒搜到——而要撥的那個開關
+/// 名叫「隱藏」。作者原話：「我们把 hidden 和 ignore 合到一起，我觉得可以考虑
+/// 分开一下」。
+///
+/// 按 `7` 轉一格，四態，方框裏列的是**不搜哪些**：
+/// `[隱藏+忽略]`（出廠）→`[隱藏]`→`[忽略]`→`[無]`。
+#[test]
+fn hidden_and_ignored_are_two_switches_not_one() {
+    let dir = std::env::temp_dir().join(format!("yumete-twoswitch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("子倉")).unwrap();
+    std::fs::write(dir.join(".gitignore"), "/子倉/\n").unwrap();
+    std::fs::write(dir.join("正文.md"), "霜降於石階。\n").unwrap();
+    std::fs::write(dir.join(".點.md"), "霜在點文件裏。\n").unwrap();
+    std::fs::write(dir.join("子倉").join("章.md"), "霜在被忽略的倉裏。\n").unwrap();
+
+    // 走查認的是 `.gitignore` 這個名字，不要求真有一個 `.git`——`require_git(false)`。
+    let found = |hidden: bool, ignored: bool| -> Vec<String> {
+        let sieve = crate::editor::Sieve {
+            hidden,
+            ignored,
+            include: String::new(),
+            exclude: String::new(),
+        };
+        let mut seen: Vec<String> = Vec::new();
+        crate::editor::walk_prose(&dir, &sieve, &mut |path| {
+            seen.push(path.file_name().unwrap().to_string_lossy().into_owned());
+        });
+        seen.sort();
+        seen
+    };
+
+    assert_eq!(found(false, false), vec!["正文.md".to_string()], "出廠：兩樣都不搜");
+    assert_eq!(
+        found(false, true),
+        vec!["正文.md".to_string(), "章.md".to_string()],
+        "只放開忽略：被忽略的倉進得去，點文件仍然跳過"
+    );
+    assert_eq!(
+        found(true, false),
+        vec![".gitignore".to_string(), ".點.md".to_string(), "正文.md".to_string()],
+        "只放開隱藏：點文件搜得到（`.gitignore` 自己也是一個點文件），而它說的話仍然算數"
+    );
+    assert_eq!(
+        found(true, true),
+        vec![
+            ".gitignore".to_string(),
+            ".點.md".to_string(),
+            "正文.md".to_string(),
+            "章.md".to_string(),
+        ],
+        "兩樣都放開"
+    );
+
+    // `7` 轉一格，順序是「先放開忽略」——想找回來的多半是被忽略的目錄。
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    // 窄到擺不下就不進面板模式，而測試裏窗口是 0×0——先說一個擺得下的大小。
+    ed.note_window(100, 30);
+    ed.open_search();
+    // 這一格只在走磁碟的範圍下按得動——本文件與緩衝區是一張現成的表，按路徑篩它
+    // 沒有意思，那時它畫灰（見 `Field::Hidden`）。
+    ed.search_mut().scope = crate::search_panel::Where::Working;
+    let state = |ed: &Editor| (ed.search().hidden, ed.search().ignored);
+    assert_eq!(state(&ed), (false, false), "出廠");
+    assert!(ed.search().on_disk(), "範圍要走磁碟，這一格纔按得動");
+    // 開起來光標在查詢框裏（`Mode::Field`），那時數字是要打進去的字。`Esc` 退到
+    // 面板的 Normal，號碼纔是號碼。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('7'));
+    assert_eq!(state(&ed), (false, true), "第一步放開的是忽略");
+    ed.on_key(Key::Char('7'));
+    assert_eq!(state(&ed), (true, false));
+    ed.on_key(Key::Char('7'));
+    assert_eq!(state(&ed), (true, true));
+    ed.on_key(Key::Char('7'));
+    assert_eq!(state(&ed), (false, false), "轉回出廠");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A lone `\r` is a character, not a line break** — Feature #395.
 ///
 /// A paragraph pasted out of an old Mac text file carries one, and every tool

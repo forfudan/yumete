@@ -1506,8 +1506,15 @@ pub(crate) const WALK_CEILING: usize = 20_000;
 /// Warning: **只對走磁碟的範圍有效。** 本文件與緩衝區不經過 [`walk`]。
 #[derive(Debug, Clone, Default)]
 pub struct Sieve {
-    /// 連隱藏文件和 `.gitignore` 裏的一起走。出廠關着。
+    /// 連隱藏文件（點開頭的那些）一起走。出廠關着。
+    ///
+    /// Warning: **這一格只管隱藏，不管忽略**（2026-10-03 作者定：「我们把 hidden 和
+    /// ignore 合到一起，我觉得可以考虑分开一下」）。從前一格撥五道閘，於是一個
+    /// 想搜 `.gitignore` 裏那幾個目錄的人，要去撥一個名叫「隱藏」的開關。
     pub hidden: bool,
+    /// 連 `.gitignore`、`.ignore` 裏的一起走，`target/` 與 `node_modules/` 也進。
+    /// 出廠關着。
+    pub ignored: bool,
     /// 只走這幾條 glob 配得上的，逗號隔開。空着就是不挑。
     pub include: String,
     /// 這幾條 glob 配得上的不走。
@@ -1688,14 +1695,14 @@ fn walk_inner(
     let started = std::time::Instant::now();
     let walker = ignore::WalkBuilder::new(root)
         .overrides(overrides)
-        // Warning: **五道閘一起開。** 「搜索隱藏和忽略」說的是一句話，而 `ignore`
-        // 把它拆成了隱藏、`.gitignore`、`.ignore`、全局 git 排除、`.git/info/exclude`
-        // 五項——只開頭一項，`target/` 照樣搜不到，而開關上寫着「和忽略」。
+        // Warning: **忽略那一半是四道閘。** `ignore` 把它拆成了 `.ignore`、
+        // `.gitignore`、全局 git 排除、`.git/info/exclude` 四項——只開頭一項，
+        // `target/` 照樣搜不到，而開關上寫着「忽略」。隱藏那一半只有一道。
         .hidden(!sieve.hidden)
-        .ignore(!sieve.hidden)
-        .git_ignore(!sieve.hidden)
-        .git_global(!sieve.hidden)
-        .git_exclude(!sieve.hidden)
+        .ignore(!sieve.ignored)
+        .git_ignore(!sieve.ignored)
+        .git_global(!sieve.ignored)
+        .git_exclude(!sieve.ignored)
         .follow_links(false)
         // In path order, so a listing of a novel's chapters comes back in
         // chapter order rather than in whatever order the file system holds
@@ -1706,10 +1713,11 @@ fn walk_inner(
         // folder with no `.gitignore` at all still holds no prose in these
         // two, and the cost of looking is a whole build tree.
         .filter_entry({
-            // Warning: **開了那個開關，這道地板也要讓開**（2026-10-01）。它本來是
-            // 「沒有 .gitignore 的文件夾也不該搜 build 產物」的兜底，而開關說的
-            // 是「全都搜」。
-            let floor = !sieve.hidden;
+            // Warning: **開了忽略那一半，這道地板也要讓開**（2026-10-01）。它本來是
+            // 「沒有 .gitignore 的文件夾也不該搜 build 產物」的兜底，而那一半說的
+            // 是「忽略的也搜」。`target/` 與 `node_modules/` 不是隱藏文件，所以
+            // 它歸忽略那一半管，不歸隱藏那一半。
+            let floor = !sieve.ignored;
             move |entry| {
                 !floor
                     || !entry.file_type().is_some_and(|t| t.is_dir())
