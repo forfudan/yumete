@@ -11373,7 +11373,27 @@ fn draw_panel_rows(
     // 省略號這一支 `chrome` 那一族早就有了（[`crate::panel::clip`]，它還知道
     // 「…」在 `ambiguous_width = "wide"` 底下佔兩格），候選面板是唯一沒用的。
     let room = panel_w.saturating_sub(2) as usize;
-    let rows: Vec<String> = rows.into_iter().map(|r| crate::panel::clip(&r, room)).collect();
+    let mut rows: Vec<String> = rows.into_iter().map(|r| crate::panel::clip(&r, room)).collect();
+    // Warning: **高度也要加省略號，不只是寬度**（2026-10-03 一輪審查報來的）。上面那一
+    // 段說的是一行太長；這裏是**行太多**，而它從前一聲不吭：`panel_h` 把面板夾
+    // 到窗口那麼高，剩下的行就沒了。
+    //
+    // 候選那一族另有辦法（頁按窗口縮，`page_for_window`），**快捷符號沒有頁**：
+    // 它是一張三十一條的定表，沒畫出來的那幾行照樣按得動。七十欄六行的窗口上
+    // 只畫得出一行，而 `;z` 上屏「——」、`;x` 上屏「……」——兩個都沒在屏幕上出
+    // 現過。
+    //
+    // Warning: **只畫一道省略號，不把那幾個鍵關掉**，和候選那一族相反。數字鍵說的是
+    // 「名單上第幾個」——沒畫出來就沒有「第幾個」可言；而符號鍵說的是一個**名
+    // 字**，記得住的人按下去就該出來。所以這裏要說的是「下面還有」，不是「下面
+    // 沒有」。
+    let fits = panel_h.saturating_sub(2) as usize;
+    if rows.len() > fits && fits > 0 {
+        rows.truncate(fits);
+        if let Some(last) = rows.last_mut() {
+            *last = "…".to_string();
+        }
+    }
     let mut lines: Vec<Line> = Vec::with_capacity(rows.len());
     for (i, row) in rows.into_iter().enumerate() {
         if i == 0 {
@@ -15005,6 +15025,30 @@ fn squeezed(text: &str) -> String {
     }
 
     /// 二十七格排成格子，鍵對齊成列。
+    /// **行太多也要加省略號**（2026-10-03 一輪審查報來的）。
+    ///
+    /// 太寬那一邊早就加了（`panel::clip`），太高這一邊從前一聲不吭：面板被夾到窗
+    /// 口那麼高，剩下的行就沒了，而那幾行上的字母照樣按得動——七十欄六行的窗口
+    /// 上只畫得出一行，`;z` 卻照樣上屏「——」。
+    #[test]
+    fn a_shortcut_table_taller_than_the_window_says_there_is_more() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
+        ime.input(';');
+        let config = Config::default();
+
+        // 高得放得下：一個省略號都沒有。
+        let tall = buffer_text(&render_with(&editor, &config, &ime, 70, 20));
+        assert!(tall.contains("z ——"), "放得下就全畫出來：{tall:?}");
+        assert!(!tall.contains("│…"), "沒有截斷就別說有：{tall:?}");
+
+        // 矮到放不下：最後一行是省略號，而不是一聲不吭地少掉四行。
+        let short = buffer_text(&render_with(&editor, &config, &ime, 70, 6));
+        assert!(!short.contains("z ——"), "這一行本來就畫不下：{short:?}");
+        assert!(short.contains('…'), "截了就要說一聲：{short:?}");
+    }
+
     #[test]
     fn the_shortcut_table_is_laid_out_in_columns() {
         let rows: Vec<(String, String)> = [("a", "：「"), ("b", "～"), ("c", "！")]
