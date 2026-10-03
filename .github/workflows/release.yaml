@@ -196,10 +196,20 @@ jobs:
       # The tag is fixed and the assets are overwritten in place, so there is
       # one URL for all time and nothing to bump here when the tables change.
       #
-      # **A build with none of this still works** — no 碼表, no word list,
-      # which is what a bare `cargo build` gets and is honest. So the step does
-      # not fail the run; a release that cannot type is caught by the smoke
-      # test, which is a better place to catch it than a guess here.
+      # Warning: **A missing table fails the run** (2026-10-04). A bare
+      # `cargo build` with no 碼表 is honest — it is what somebody who has
+      # never installed 宇浩 gets. **A release with no 碼表 is not**: it is a
+      # package that silently cannot type, and the reader has no way to tell
+      # it from one that can.
+      #
+      # This step used to end in `|| true` and say so in a comment: 「a release
+      # that cannot type is caught by the smoke test」. That was **false** —
+      # the smoke test only checked `--version` and that a page is drawn. On
+      # 2026-10-03 the x86_64 runner's `curl` for `lingming_essential.ytab`
+      # came back empty (`--retry 3` and all), the step shrugged, and what
+      # caught it was an unrelated TUI unit test asserting the scheme tag is
+      # on the status line. The two halves are now both real: this step stops,
+      # and the smoke test below actually types a 漢字.
       - name: Fetch the tables the binary carries
         working-directory: .
         env:
@@ -217,14 +227,22 @@ jobs:
           # A half-written file is worse than none: the loader would take a
           # truncated table and answer nonsense from it. Weigh each one and
           # throw away anything that plainly did not arrive whole.
+          short=0
           for f in schemes/lingming_essential.ytab data/symbols.ytab data/common_words.txt; do
             p="${YUMETE_BUILTIN_DIR}/$f"
             if [[ ! -s "$p" ]] || [[ $(wc -c < "$p") -lt 10000 ]]; then
               echo "!! ${f}: missing, or too small to be it — dropped" >&2
               rm -f "$p"
+              short=1
             fi
           done
           ls -l "${YUMETE_BUILTIN_DIR}"/schemes "${YUMETE_BUILTIN_DIR}"/data
+          if [[ "$short" == 1 ]]; then
+            echo "!! a release without its tables is a package that cannot type." >&2
+            echo "   the download is the usual suspect (it has flaked once per" >&2
+            echo "   runner, not per release) — re-run this job." >&2
+            exit 1
+          fi
 
       # **The tests run here too.** A release built from a tree that does not
       # pass them is the one build where nobody would notice in time.
@@ -289,6 +307,29 @@ jobs:
           # catches a binary that starts and then cannot render.
           printf '那年冬天。\n' > "$RUNNER_TEMP/a.md"
           "$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" --shot=40x6 "$RUNNER_TEMP/a.md" | tee /dev/stderr | grep -q '那年冬天'
+          # …**and it can type** (2026-10-04). `\{ime}` hands the keys that
+          # follow to the engine, so this walks the whole path the tables are
+          # fetched for: 碼表 loaded, code read, candidate chosen, 漢字 on the
+          # page. An empty file, so the only 漢字 there can be is one the
+          # engine put there.
+          : > "$RUNNER_TEMP/b.md"
+          typed=$("$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" \
+            --shot=70x6 --keys='i\{ime}ui\{space}\{ime}' "$RUNNER_TEMP/b.md")
+          printf '%s\n' "$typed" >&2
+          # The scheme's name on the status line is what says the 碼表 loaded —
+          # it is exactly what was missing the day this check was written.
+          if ! printf '%s' "$typed" | grep -q '靈明'; then
+            echo "!! no 碼表 in this build: the status line names no scheme" >&2
+            exit 1
+          fi
+          # And a 漢字 really landed. **Not a particular one** — the table is
+          # refreshed in place, and a smoke test that pins a character would
+          # fail the day 不 stops being the first candidate for `ui`.
+          if ! printf '%s' "$typed" | head -1 | python3 -c \
+            'import sys; sys.exit(0 if any("\u4e00" <= c <= "\u9fff" for c in sys.stdin.read()) else 1)'; then
+            echo "!! the engine put no 漢字 on the page" >&2
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
