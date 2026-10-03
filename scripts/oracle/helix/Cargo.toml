@@ -1,0 +1,15 @@
+# **helix 的 movement 模組，包成一支命令行工具。**
+#
+# 不進 workspace（底下那個空的 `[workspace]` 就是為了這個）：它依賴磁盤上另一份
+# helix 源碼樹，而那一份不屬於這個倉。路徑用 `HELIX` 環境變量改不了——cargo 不吃
+# 環境變量——所以**要改就改這一行**，或者把 helix 克隆到 `../../../../../helix`。
+[package]
+name = "hxor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+helix-core = { path = "../../../../../helix/helix-core" }
+ropey = "1.6"
+
+[workspace]
