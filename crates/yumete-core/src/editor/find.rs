@@ -598,9 +598,21 @@ impl Editor {
                 files.push(path.to_path_buf())
             });
             self.search.cut = walked.cut;
+            // **哪個真名對着哪一份緩衝，一趟建好**（2026-10-03 量出來的）。
+            //
+            // 底下那一句本來是「對每一個走到的檔，把**每一份**開着的緩衝都
+            // canonicalize 一遍再比」。平時開着三五份，看不出來；`R` 換完三千個檔
+            // 之後這三千份全開着，而換完要重搜一遍——九百萬次 `realpath`，
+            // 整整 27 秒的 `sys`，而屏幕一動不動。
+            let open_files: std::collections::HashMap<std::path::PathBuf, usize> = self
+                .buffers
+                .iter()
+                .enumerate()
+                .filter_map(|(i, b)| Some((self.real_path(b.path()?)?, i)))
+                .collect();
             for path in files {
                 // Not twice: the one being written was searched from memory.
-                let full = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                let full = self.real_path(&path).unwrap_or_else(|| path.clone());
                 if Some(&full) == here.as_ref() {
                     continue;
                 }
@@ -612,12 +624,7 @@ impl Editor {
                 // buffer's are two spellings of one file — compared as typed,
                 // a file just changed in a buffer was re-read off the disk and
                 // the change looked as though it had not happened.
-                let text = match self.buffers.iter().find(|b| {
-                    b.path()
-                        .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
-                        .as_deref()
-                        == Some(full.as_path())
-                }) {
+                let text = match open_files.get(&full).map(|&i| &self.buffers[i]) {
                     Some(buffer) => buffer.rope().to_string(),
                     None => match std::fs::read_to_string(&path) {
                         Ok(text) => text,
@@ -1749,22 +1756,18 @@ impl Editor {
             Some(root) => root.join(rel),
             None => rel.to_path_buf(),
         };
-        let full = std::fs::canonicalize(&full).unwrap_or(full);
-        // Warning: **這裏的 `canonicalize` 不是那個慢的地方**（2026-10-02 量過，別再
-        // 試一遍）。看着像：`R` 每個檔叫一次這支，而這一趟對**每一個**已開的緩衝
-        // 都問一次文件系統，N 個檔就是 N² 次。三千個檔的 `R` 要 96 秒，其中 77 秒
-        // 在 `sys`，數字對得上。
-        //
-        // 可是加一道「先按名字比、比不中再問」的快路**一秒都沒省**（96.55 對
-        // 96.06，兩趟）。那 77 秒在別處。五百個檔是 3.97 秒，三千個是 96 秒——
-        // 六倍的量二十四倍的時間，確實是平方，但不是這一行。下一個人從 `open_file`
-        // 那一邊查起。
-        if let Some(i) = self.buffers.iter().position(|b| {
-            b.path()
-                .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
-                .as_deref()
-                == Some(full.as_path())
-        }) {
+        let full = self.real_path(&full).unwrap_or(full);
+        // Warning: **這一趟對每一個已開的緩衝問一次真名，所以它必須問得起**
+        // （2026-10-03 量出來的）。`R` 每個檔叫一次這支，三千個檔就是四百五十萬次
+        // `realpath`——上一輪（2026-10-02）斷定「不是這一行」是錯的：那一次加的
+        // 快路是「先按名字比、比不中再問」，而比不中正是常態，於是一次都沒省下
+        // 來。真名改成問一次就記住（[`Editor::real_path`]）之後，同一個 `R`
+        // **101 秒 → 73 秒**。
+        if let Some(i) = self
+            .buffers
+            .iter()
+            .position(|b| b.path().and_then(|p| self.real_path(p)).as_deref() == Some(full.as_path()))
+        {
             return Some(i);
         }
         // Warning: **盤上沒有這個檔就別開**（2026-10-02 審出來的）。`Buffer::open`

@@ -699,11 +699,24 @@ impl Editor {
         Ok(())
     }
 
+    /// **一個路徑的真名**，問過一次就記住——見 [`Editor::canonical`]。
+    ///
+    /// Warning: **問不出來就回 `None`，而且不記。** 盤上還沒有那個檔是常事
+    /// （`:w` 寫一個新檔），記下來就永遠當它沒有。
+    pub(super) fn real_path(&self, path: &Path) -> Option<std::path::PathBuf> {
+        if let Some(found) = self.canonical.borrow().get(path) {
+            return Some(found.clone());
+        }
+        let real = std::fs::canonicalize(path).ok()?;
+        self.canonical.borrow_mut().insert(path.to_path_buf(), real.clone());
+        Some(real)
+    }
+
     /// **這個文件開着沒有**，按真實路徑比，不按拼法。
     pub(super) fn buffer_showing(&self, path: &Path) -> Option<usize> {
-        let same = std::fs::canonicalize(path).ok();
+        let same = self.real_path(path);
         self.buffers.iter().position(|b| match (b.path(), &same) {
-            (Some(open), Some(want)) => std::fs::canonicalize(open).ok().as_ref() == Some(want),
+            (Some(open), Some(want)) => self.real_path(open).as_ref() == Some(want),
             (Some(open), None) => open == path,
             _ => false,
         })
