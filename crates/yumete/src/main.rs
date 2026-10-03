@@ -111,9 +111,10 @@ fn main() -> ExitCode {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
             }
-            // Warning: **短參數撤了**（2026-10-03 作者定：「舊的讓位。我們現在先不做
-            // short alias。等到全部弄好了再看哪些值得 short alias」）。留下的只有
-            // `-h` 和 `-V`——那兩個不是 yumete 的縮寫，是所有命令行的通例。
+            // Warning: **舊的那八個短名撤了**（2026-10-03 作者定：「舊的讓位……等到
+            // 全部弄好了再看哪些值得 short alias」）。字母留給了搜索那一邊：今天
+            // 有 `-G`（`--grep`）與 `-O`（`--open`），串得起來（見底下那一條分支），
+            // 加上 `-h`、`-V` 這兩個所有命令行的通例。
             "--preview" => force_preview = true,
             "--table" => force_table = true,
             "--readonly" => readonly = true,
@@ -279,6 +280,74 @@ fn main() -> ExitCode {
                 eprintln!("yumete: '{arg}' is gone; it is spelt '{long}' now");
                 eprintln!("single letters are being saved for the search flags");
                 return ExitCode::from(2);
+            }
+            // **短名串得起來，帶值的那個把值留給下一個詞**（2026-10-03 作者定）。
+            //
+            // `-G zhongguo` 找詞、`-GO zhongguo` 找完直接開編輯器。能這麼串，靠的
+            // 正是作者定的那條「參數必須空一格」：getopt 的規矩裏值可以貼在字母
+            // 後面，於是 `-GO x` 只能讀成「`-G`，值是 `O`」；**貼寫這條路一堵死，
+            // `O` 就只可能是另一個字母**，`-GO` 再沒有第二種讀法。代價兩個，都在
+            // 下面當場報錯：貼着寫（`-Gzhongguo`），以及一串裏兩個帶值的。
+            //
+            // Warning: **入口用大寫，小寫那一整排留着**（2026-10-03 作者定）。
+            // `-g` 在 rg 與 fd 裏都是 `--glob`、`-o` 在 rg 裏是 `--only-matching`
+            // ——花掉它們，將來這幾個開關就沒有天然的字母了。這兩個又不是開關：
+            // 它們決定整個程序問哪一個問題。大寫把這個區別寫在臉上，將來
+            // `ye -Giw zhongguo` 裏大寫是入口、小寫是開關，一眼讀得出來。
+            // `--files` 的字母先空着，等它的名字定下來再挑。
+            s if s.len() > 1 && s.starts_with('-') && !s.starts_with("--") => {
+                let letters: Vec<char> = s[1..].chars().collect();
+                let mut wants: Option<&'static str> = None;
+                for (i, c) in letters.iter().enumerate() {
+                    let long = match c {
+                        'G' => "--grep",
+                        'O' => "--open",
+                        _ => {
+                            // **第一個字母帶值、後面卻不是認得的字母**——那多半不是
+                            // 「不認得的開關」，而是把要找的詞貼在了後面。說清楚是
+                            // 哪一件事，別讓人對着 `unknown option '-z'` 發愣。
+                            if i > 0 && letters[0] == 'G' {
+                                let word = &s[2..];
+                                eprintln!(
+                                    "yumete: -G wants its word in the next argument: -G {word}"
+                                );
+                            } else if matches!(c, 'g' | 'o') {
+                                let up = c.to_ascii_uppercase();
+                                eprintln!("yumete: '-{c}' is spelt '-{up}' here");
+                                eprintln!(
+                                    "the lower-case letters are kept for the switches rg spells the same way"
+                                );
+                            } else if *c == 'f' {
+                                eprintln!("yumete: --files has no short name yet");
+                                eprintln!("try 'yumete --help'");
+                            } else {
+                                eprintln!("yumete: unknown option '-{c}' (in '{s}')");
+                                eprintln!("try 'yumete --help'");
+                            }
+                            return ExitCode::from(2);
+                        }
+                    };
+                    match long {
+                        "--open" => {
+                            g.open = true;
+                            modifiers.push("--open");
+                        }
+                        _ => match wants {
+                            Some(already) if already == long => {}
+                            Some(already) => {
+                                eprintln!(
+                                    "yumete: {already} and {long} each want a word; one to a bundle"
+                                );
+                                eprintln!("try 'yumete --help'");
+                                return ExitCode::from(2);
+                            }
+                            None => wants = Some(long),
+                        },
+                    }
+                }
+                if let Some(long) = wants {
+                    owed = Some(long);
+                }
             }
             // Reject unknown flags, but treat a lone "-" as a filename.
             s if s.starts_with('-') && s != "-" => {
@@ -1709,9 +1778,14 @@ OPTIONS:
         --preview    Print a non-interactive preview instead of the editor.
 
 SEARCHING FROM THE SHELL:
-        --grep PAT   Print every place PAT is, as `file:line:column:text`, and
+    -G, --grep PAT   Print every place PAT is, as `file:line:column:text`, and
                      exit — 0 if anything was found, 1 if nothing was, 2 if the
                      question would not parse. The editor never opens.
+
+                     The word goes in its own argument, never stuck to the
+                     letter: `-G zhongguo`, not `-Gzhongguo`. That is what
+                     lets the short names be strung together — `-GO` can only
+                     be read one way.
 
                      **拼音 and 繁簡 are on**, which is the whole point:
                      `ye --grep zhongguo` finds 中國 and 中国 both, and no
@@ -1751,10 +1825,18 @@ SEARCHING FROM THE SHELL:
                      --files refuses them rather than ignoring them: a name is
                      matched by feel here, and there is no pattern to shape.
 
-        --open       Open the editor on the answer instead of printing it:
+    -O, --open       Open the editor on the answer instead of printing it:
                      --grep with --open comes up with the panel already run and
                      the keys on the first hit; --files with --open comes up
-                     with the picker open and the query already typed.
+                     with the picker open and the query already typed. This is
+                     what the search is for: `ye -GO zhongguo`.
+
+                     The two short names are upper case on purpose. They say
+                     *which question is being asked*, where every switch below
+                     only shapes one search — and the lower-case letters are
+                     rg's and fd's (`-g` is --glob to both of them, `-o` is
+                     rg's --only-matching), so taking them would fight a habit
+                     rather than borrow it. --files has no short name yet.
 
         --project          Search up to the project root, not here.
         --ignore-case      Case never matters. (Default: a capital in the
