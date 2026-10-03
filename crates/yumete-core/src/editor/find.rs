@@ -1636,7 +1636,7 @@ impl Editor {
     /// 被打斷」——它要麼接着做，要麼做完。
     pub fn run_a_batch_of_replacing(&mut self) {
         let Some(mut at) = self.owed_replace else { return };
-        let files = self.search.files.clone();
+        let files = std::mem::take(&mut self.replace_queue);
         let began = std::time::Instant::now();
         while at < files.len() {
             let (file, id) = files[at].clone();
@@ -1649,6 +1649,7 @@ impl Editor {
         if at < files.len() {
             self.owed_replace = Some(at);
             self.status = say!("search.replacing-progress", at, files.len());
+            self.replace_queue = files;
             return;
         }
         self.owed_replace = None;
@@ -1702,20 +1703,21 @@ impl Editor {
         // 們有沒存的改動），只是不站在那裏。
         self.replace_home = self.current_buffer().id();
         self.replace_tally = 0;
+        self.replace_queue = self.search.files.clone();
         // **一批一批地做，中間把屏幕還回去**（2026-10-03 作者定：「不給取消，只給
         // 進度」）。從前這裏是一個跑到底的 `for`，而三千個檔那一趟十幾秒裏屏幕
         // 完全靜止——看不出它在做事，也看不出還剩多少。
         self.owed_replace = Some(0);
         // **少到看不出來就別分批。** 分批的代價是多畫幾幀，而幾個檔的替換是幾毫秒
         // 的事——報一行「正在替換… 0/3 個檔」再立刻蓋掉，只是閃一下。
-        if self.search.files.len() < Self::REPLACE_IN_ONE_GO {
+        if self.replace_queue.len() < Self::REPLACE_IN_ONE_GO {
             // Warning: **要繞到底**：一批是按時間切的，三十一個檔也可能跨過八十毫秒。
             while self.owed_replace.is_some() {
                 self.run_a_batch_of_replacing();
             }
             return;
         }
-        self.status = say!("search.replacing-progress", 0, self.search.files.len());
+        self.status = say!("search.replacing-progress", 0, self.replace_queue.len());
     }
 
     /// Change **one match on one line** of the buffer being worked on.

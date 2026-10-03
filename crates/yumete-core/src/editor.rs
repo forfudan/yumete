@@ -2756,6 +2756,13 @@ pub struct Editor {
     /// 屏幕一動不動。同 [`Editor::owed_search`] 的辦法：先畫一幀說話，再做一小
     /// 批，做完再畫一幀。**沒有取消**（2026-10-03 作者定：「不給取消，只給進度」）。
     owed_replace: Option<usize>,
+    /// **這一批要動的那幾個檔，開工那一刻抄下來的。**
+    ///
+    /// Warning: **不許每一批重讀 `search.files`**（2026-10-03 一輪審查報來的）。兩批之間
+    /// 前端會叫 `refresh_the_edited_file`，而那一支會把剛改過的那一份從名單裏摘掉
+    /// 再插回最前——名單一動，記在手裏的那個下標指的就是別人了，中間那個檔**一聲
+    /// 不響地跳過去**，而收尾照樣報「換完了」。
+    replace_queue: Vec<(Option<std::path::PathBuf>, Option<u64>)>,
     /// 這一批到此刻換掉了幾處，跨幀累着。
     replace_tally: usize,
     /// 這一批開始的時候人在哪一份緩衝上——換完要回去。
@@ -3251,6 +3258,7 @@ impl Editor {
             replace_this_file: None,
             owed_search: false,
             owed_replace: None,
+            replace_queue: Vec::new(),
             replace_tally: 0,
             replace_home: 0,
             labels: Vec::new(),
