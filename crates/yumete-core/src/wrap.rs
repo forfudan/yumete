@@ -410,6 +410,24 @@ fn line_text(rope: &Rope, line: usize) -> String {
     text
 }
 
+/// **How many characters are on `line`**, without building the line.
+///
+/// Warning: **不要為了數一行有多長把它整個變成 `String`**（2026-10-03 量出來的）。一行
+/// 四十兆的檔上 `:view-wrap off` 比開着折行慢**七倍半**（14.4 秒對 1.9 秒），整個
+/// 差額就是 [`rows_of_line`] 不折行那一支裏的 `line_text(...).chars().count()`——
+/// 它每一幀被叫很多次，每一次拷貝兩千萬個字符再數一遍。rope 自己數得出來。
+fn line_len_chars(rope: &Rope, line: usize) -> usize {
+    if line >= rope.len_lines() {
+        return 0;
+    }
+    let slice = rope.line(line);
+    let mut len = slice.len_chars();
+    while len > 0 && matches!(slice.char(len - 1), '\n' | '\r') {
+        len -= 1;
+    }
+    len
+}
+
 /// Whether `c` is part of a Latin word that should not be split across rows.
 fn latin_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '_' | '\'' | '-' | '’')
@@ -801,8 +819,7 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     // the cache, because the answer does not depend on the width and caching
     // it under one would only make the next width ask again.
     if m.unwrapped(line) {
-        let len = line_text(rope, line).chars().count();
-        return vec![(0, len)];
+        return vec![(0, line_len_chars(rope, line))];
     }
     let hidden = m.off(line);
     // The hidden runs are part of the answer, so they are part of the key: the
