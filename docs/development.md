@@ -9610,6 +9610,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     已經不成立**，眼下沒有哪一個數到得了看得見的地步（真表是 0.6 ms 與 0.4 ms）。
     留着不動，但下一個讀它的人別照 0.67 秒那個數去估。
 
+    **2026-10-03 又跑了一遍，四個數和 10-01 逐格相同**（0.554／0.390／0.435，
+    33.090／6.904／9.656）。順帶另量了一組形狀相反的表（30,000 行 × 20 欄、每格
+    十來個字，200×50）：**一幀 0.80 ms**。所以貴的不是行數也不是欄數，是**一格裏
+    有多少字**——7,000 字一格那一種纔到 7–10 ms，而那不是人寫得出來的表。
+
     Warning: **這支 stopwatch 從 2026-09-21 起一次都沒跑過。** 表格組那天從 `t` 搬到
     `␣t`，那一趟的 sed 把它裏頭每一個單獨的 `t` 都換成了 `␣t`，於是 `t t`（整窗）
     成了 `␣t␣t`，第二個空格落進剛開的那一組、掉到兜底——它一跑就 panic 在
@@ -18965,6 +18970,68 @@ to enable repeated application"*（`commands.rs:1742`）。yumete 的 `find_char
 一條不算偏離但值得記：**`Ngg` 跳到那一行的第一個非空白**（helix 跳第 0 欄），vim 味
 而不是 helix 味，沒人會抱怨——只是 §5.58.1 之前它是「整行空白把光標送上換行符」那個
 bug 的入口（已修）。
+
+## 5.70 兩個神諭，收進 `scripts/oracle/`（2026-10-03）
+
+從前它們在 `/tmp/mo` 和 scratchpad 裏，下一輪就找不着了。現在在倉裏，連怎麼跑一起
+寫在這裏。
+
+### `scripts/oracle/vim_sweep.py` — 拿 nvim 對 vim 鍵位
+
+```sh
+cargo build --release
+python3 scripts/oracle/vim_sweep.py          # 全套，只印不一樣的
+python3 scripts/oracle/vim_sweep.py dw d2b   # 只跑這幾式
+```
+
+同一段文字、同一串鍵，餵給 nvim 餵給 yumete，比**存出來的檔案**。比檔案而不是比
+光標位置：`d`／`c`／`x` 做完剩下什麼，沒有解釋的餘地。要有 nvim（`NVIM=…` 可以指），
+產物寫在 `target/oracle/`。
+
+### `scripts/oracle/helix/` ＋ `helix_sweep.py` — 拿 helix-core 對選區
+
+```sh
+cargo build --release --manifest-path scripts/oracle/helix/Cargo.toml
+./scripts/oracle/helix/target/release/hxor <檔> <位置> <次數> <動作>…
+python3 scripts/oracle/helix_sweep.py
+```
+
+`hxor` 直接調 `helix_core::movement`，一式一行：
+
+```text
+w: anchor=0 head=6 span=[0,6) text="alpha " cursor=5
+```
+
+**它不在 workspace 裏**（它依賴倉外的 helix 源碼樹），所以自己一個 `target/`，兩個
+都在 `.gitignore` 上。路徑寫死在它自己的 `Cargo.toml` 裏——克隆到別處就改那一行。
+
+### 踩過的四個坑，都寫在腳本的註釋裏了
+
+1. **`-c` 在 `-s` 之前跑。** 存檔那一句寫成 `-c 'w! out'` 的話，每一格的「nvim 答案」
+   都是原封不動的輸入——2026-10-02 整輪 2,350 格全綠而一格都沒驗。存檔要接在按鍵串
+   的末尾。
+2. **兩邊不許共用同一個檔。** yumete 的 `:w` 把改過的寫回它打開的那一份，下一格問
+   helix 的就成了上一格改過的文字，而它答出來的 span 是空的——看起來像「helix 說
+   什麼都不刪」。2026-10-03 這一條讓分歧從 296 虛報到 16。
+3. **固定裝置的行不許對得整整齊齊。** 兩行寬度一樣會被 yumete 認成表格，從此動作
+   跑在格子坐標裏。
+4. **helix 的光標是一格寬的選區，不是一個點。** `Range::point(pos)` 當起點，邊界那
+   幾式就答得不一樣；換成 `Range::new(pos, next_grapheme_boundary(pos))` 之後分歧
+   從 22 掉到 12。
+
+### 現在的數
+
+| | 格數 | 不一樣 | 那幾條是什麼 |
+| --- | --- | --- | --- |
+| `vim_sweep.py` | 2,350 | 3 | 全是中文分詞，**有意的** |
+| `helix_sweep.py` | 240 | 3 | 同上 |
+
+helix 那一支**只掃「本來就該一樣」的四式**（`w W B E`）。兩處有意的分歧不在表上：
+`b` 與 `e` 在 yumete 是粗粒度的（#304：「`b` is `e`'s partner, not `w`'s」，取一個
+小句而不是一個詞），`ge` 在 helix 的鍵位表上是「去文件末尾」。掃它們只會掃出設計。
+
+**它們不是驗收閘**（跑一趟 2,350 格要幾分鐘，而且要機器上有 nvim 和一份 helix 源碼）。
+動了動作那一族就手動跑一次。
 
 ## 5.69 一行很長的檔：量出來的，和改掉的兩處（2026-10-03）
 
