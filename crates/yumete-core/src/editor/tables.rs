@@ -1884,14 +1884,7 @@ impl Editor {
             return;
         }
         use crate::table::Shape;
-        let out = match crate::table::recast(&lines, Shape::Delimited(from), Shape::Delimited(to)) {
-            Ok(out) => out,
-            // 同 `table_to_delimited`：說哪一格，不替人加引號。
-            Err((row, column)) => {
-                self.status = say!("table.cell-holds-the-delimiter", row + 1, column + 1, to);
-                return;
-            }
-        };
+        let out = crate::table::recast(&lines, Shape::Delimited(from), Shape::Delimited(to));
         let rows = out.len();
         self.snapshot();
         self.leave_table_quietly();
@@ -1985,20 +1978,7 @@ impl Editor {
             return;
         };
         let lines = self.md_lines(&region);
-        let out = match crate::mdtable::to_delimited(&lines, delimiter) {
-            Ok(out) => out,
-            // Named where the writer can see it: 「row 4, column 2」 is a place
-            // in the table on the screen, not an offset in a file.
-            Err((row, column)) => {
-                self.status = say!(
-                    "table.cell-holds-the-delimiter",
-                    row + 1,
-                    column + 1,
-                    delimiter
-                );
-                return;
-            }
-        };
+        let out = crate::mdtable::to_delimited(&lines, delimiter);
         // Every line of `out` is a row: `to_delimited` writes no rule row, and
         // there is nothing to subtract. (`table_to_pipe` *does* write one,
         // which is where the `- 1` this used to have came from — copied across
