@@ -11,6 +11,7 @@ use std::process::ExitCode;
 
 use yumete_config::Layout;
 use yumete_core::input::Key;
+use yumete_core::search_panel::{Case, Where};
 use yumete_core::{Editor, TextStore};
 use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 
@@ -66,11 +67,22 @@ fn main() -> ExitCode {
     // because 「打開編輯器，然後去找哪個設定能改語言」 is exactly the loop a
     // reader who cannot read the current language is stuck in.
     let mut force_language: Option<yumete_core::messages::Language> = None;
+    // **管道那一邊**（2026-10-03 作者定：「先做管道吧」）。`ye --grep 霜` 把
+    // `檔:行:列:文字` 印到 stdout 就退出——找到回 0，一處都沒有回 1，所以
+    // `if ye --grep …` 在腳本裏是一句話。
+    let mut grep: Option<String> = None;
+    let mut want_grep = false;
+    let mut g = Grep::default();
 
     for arg in std::env::args().skip(1) {
         if want_syntax {
             force_syntax = Some(arg);
             want_syntax = false;
+            continue;
+        }
+        if want_grep {
+            grep = Some(arg);
+            want_grep = false;
             continue;
         }
         match arg.as_str() {
@@ -82,11 +94,41 @@ fn main() -> ExitCode {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
             }
-            "-p" | "--preview" => force_preview = true,
-            "-t" | "--table" => force_table = true,
-            "-R" | "--readonly" => readonly = true,
-            "-n" | "--new" => fresh = true,
-            "-c" | "--continue" => resume = true,
+            // Warning: **短參數撤了**（2026-10-03 作者定：「舊的讓位。我們現在先不做
+            // short alias。等到全部弄好了再看哪些值得 short alias」）。留下的只有
+            // `-h` 和 `-V`——那兩個不是 yumete 的縮寫，是所有命令行的通例。
+            "--preview" => force_preview = true,
+            "--table" => force_table = true,
+            "--readonly" => readonly = true,
+            "--new" => fresh = true,
+            "--continue" => resume = true,
+            // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
+            "--grep" => want_grep = true,
+            s if s.starts_with("--grep=") => grep = Some(s["--grep=".len()..].to_string()),
+            "--ignore-case" => g.case = Some(Case::Insensitive),
+            "--case-sensitive" => g.case = Some(Case::Sensitive),
+            "--word" => g.word = true,
+            "--regex" => g.regex = true,
+            "--fixed" => g.regex = false,
+            "--fuzzy" => g.fuzzy = true,
+            // yumete 把「隱藏檔」和「`.gitignore` 裏的」放在**同一個開關**上
+            // （面板那一格寫着「不搜 [隱藏+忽略]」），所以 rg 那兩個名字都撥它。
+            "--hidden" | "--no-ignore" => g.hidden = true,
+            s if s.starts_with("--glob=") => g.include = s["--glob=".len()..].to_string(),
+            s if s.starts_with("--exclude=") => g.exclude = s["--exclude=".len()..].to_string(),
+            s if s.starts_with("--chinese=") => match &s["--chinese=".len()..] {
+                "off" => g.chinese = (false, false),
+                "glyphs" => g.chinese = (true, false),
+                "pinyin" => g.chinese = (false, true),
+                "both" => g.chinese = (true, true),
+                other => {
+                    eprintln!("yumete: --chinese: no such setting {other:?}");
+                    eprintln!("try off, glyphs, pinyin or both");
+                    return ExitCode::from(2);
+                }
+            },
+            // **缺省搜當前目錄**，和 rg 一樣；這一個往上搜到項目的根。
+            "--project" => g.project = true,
             // **`-t` is already the table**, so this one is long only. Worth a
             // flag at all because the lesson is what a first run wants, and
             // 「open the editor, then find out how to ask for the lesson」 is
@@ -104,7 +146,7 @@ fn main() -> ExitCode {
             },
             "--html" => shot_html = true,
             s if s.starts_with("--keys=") => keys = Some(s["--keys=".len()..].to_string()),
-            "-s" | "--syntax" => want_syntax = true,
+            "--syntax" => want_syntax = true,
             s if s.starts_with("--syntax=") => {
                 force_syntax = Some(s["--syntax=".len()..].to_string())
             }
@@ -119,8 +161,8 @@ fn main() -> ExitCode {
                     }
                 }
             }
-            "-v" | "--vertical" => force_layout = Some(Layout::Vertical),
-            "-H" | "--horizontal" => force_layout = Some(Layout::Horizontal),
+            "--vertical" => force_layout = Some(Layout::Vertical),
+            "--horizontal" => force_layout = Some(Layout::Horizontal),
             // Reject unknown flags, but treat a lone "-" as a filename.
             s if s.starts_with('-') && s != "-" => {
                 eprintln!("yumete: unknown option '{s}'");
@@ -129,6 +171,10 @@ fn main() -> ExitCode {
             }
             s => files.push(s.to_string()),
         }
+    }
+
+    if let Some(pattern) = grep {
+        return run_grep(&pattern, &files, &g);
     }
 
     let mut editor = Editor::new();
@@ -970,6 +1016,135 @@ fn press(
     settings.panel
 }
 
+/// **管道那一邊的那幾個開關**（`ye --grep`，2026-10-03 作者定）。
+///
+/// 出廠值就是面板的出廠值，只有一處不同：**名單不封頂**。面板封在 500 條，因為
+/// 名單是拿來走的；管道印給別的程序看，少印一條就是錯一條。
+struct Grep {
+    case: Option<Case>,
+    word: bool,
+    regex: bool,
+    fuzzy: bool,
+    hidden: bool,
+    include: String,
+    exclude: String,
+    /// **繁簡、拼音**。出廠兩個都開——那是這個工具存在的理由
+    /// （2026-10-03 作者定：`ye --grep zhongguo` 開箱就搜得到「中國」）。
+    chinese: (bool, bool),
+    /// 往上搜到項目的根，而不是當前目錄。
+    project: bool,
+}
+
+impl Default for Grep {
+    fn default() -> Grep {
+        Grep {
+            case: None,
+            word: false,
+            regex: false,
+            fuzzy: false,
+            hidden: false,
+            include: String::new(),
+            exclude: String::new(),
+            // Warning: **不是 `(false, false)`。** 繁簡和拼音出廠都開着——那是這個工具
+            // 存在的理由，`derive(Default)` 給的那一對正好是反的。
+            chinese: (true, true),
+            project: false,
+        }
+    }
+}
+
+/// **`ye --grep`**：照這些開關搜一趟，把 `檔:行:列:文字` 印出來就退出。
+///
+/// 退出碼照 grep 的規矩：找到 0、一處都沒有 1、說不通 2。
+///
+/// Warning: **這裏不另寫一個 grep。** 它撥的是面板撥的那一份狀態、跑的是面板跑的那一
+/// 支（`Editor::run_the_search`）。另寫一份一定會和面板分岔——同一天上午剛修過
+/// 一個：離屏拍照那一支手抄了一份輸入法派發，照出來的是另一個程序。
+///
+/// Warning: **正文那一欄是命中前後各六十個字，不是整行。** 小說的一行是一整段，動輒幾
+/// 千字——rg 印整行是因為代碼的一行是一行。要整行的話那是另一個開關的事。
+fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let mut editor = Editor::new();
+    // **給了路徑就站到那裏去**，沒給就站在 shell 站的地方——命令行的整個模型就是
+    // 「我站在哪」，而 `ls`／`grep`／`rg`／`fd` 沒有一個例外。
+    let at = where_.first().map(std::path::PathBuf::from).unwrap_or_else(|| cwd.clone());
+    if !at.is_dir() {
+        eprintln!("yumete: --grep: not a directory: {}", at.display());
+        return ExitCode::from(2);
+    }
+    editor.set_root(&at);
+    {
+        let s = editor.search_mut();
+        s.query = pattern.to_string();
+        s.scope = match g.project {
+            true => Where::Project,
+            false => Where::Working,
+        };
+        s.uncapped = true;
+        s.case = g.case.unwrap_or_default();
+        s.whole = g.word;
+        s.regex = g.regex;
+        s.fuzzy = g.fuzzy;
+        s.hidden = g.hidden;
+        s.include = g.include.clone();
+        s.exclude = g.exclude.clone();
+        (s.glyphs, s.pinyin) = g.chinese;
+    }
+    editor.run_the_search();
+    if editor.search().bad_glob {
+        eprintln!("yumete: --grep: {}", editor.status());
+        return ExitCode::from(2);
+    }
+    let root = editor.search().root.clone().unwrap_or(at);
+    let mut found = 0usize;
+    // Warning: **讀的人半路走了不算出錯。** `ye --grep 霜 | head -2` 關掉管道那一頭，
+    // 而 Rust 的 `println!` 遇上 EPIPE 是 **panic**——六千條命中的時候它當場吐一
+    // 段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤，所以這裏自己寫、自己認
+    // 那一種錯。
+    let mut sink = std::io::stdout().lock();
+    for hit in &editor.search().hits {
+        let Some(file) = hit.file.as_ref() else { continue };
+        // **印得出來的路徑是相對於你站的地方的**，所以「搜了哪裏」一眼看得出：
+        // `--project` 爬上去過的話，印出來就會帶 `../`。
+        let shown = pathdiff(&root.join(file), &cwd);
+        let line = format!("{}:{}:{}:{}", shown.display(), hit.line + 1, hit.column + 1, hit.excerpt);
+        match writeln!(sink, "{line}") {
+            Ok(()) => found += 1,
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("yumete: --grep: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    match found {
+        0 => ExitCode::from(1),
+        _ => ExitCode::SUCCESS,
+    }
+}
+
+/// `full` 相對於 `from` 怎麼寫——走不到就原樣交絕對路徑。
+fn pathdiff(full: &std::path::Path, from: &std::path::Path) -> std::path::PathBuf {
+    let (a, b) = (
+        std::fs::canonicalize(full).unwrap_or_else(|_| full.to_path_buf()),
+        std::fs::canonicalize(from).unwrap_or_else(|_| from.to_path_buf()),
+    );
+    let mut ours = a.components().peekable();
+    let mut theirs = b.components().peekable();
+    while ours.peek().is_some() && ours.peek() == theirs.peek() {
+        ours.next();
+        theirs.next();
+    }
+    let up = theirs.count();
+    match up {
+        0 => ours.collect(),
+        _ => std::iter::repeat_n(std::path::Component::ParentDir, up)
+            .collect::<std::path::PathBuf>()
+            .join(ours.collect::<std::path::PathBuf>()),
+    }
+}
+
 /// `WIDTHxHEIGHT`, for `--shot`. Anything unreadable is the default page.
 /// `WxH` for `--shot`, or why it is not that.
 ///
@@ -1065,29 +1240,67 @@ USAGE:
 ARGS:
     FILE    One or more files to open. Each is loaded into its own buffer;
             a file that does not yet exist opens an empty buffer bound to it.
-            With no FILE, an empty scratch buffer; -c (or `[editor] session =
-            true`) opens again what was open last time in this directory,
-            each at the line it was left on.
+            With no FILE, an empty scratch buffer; --continue (or `[editor]
+            session = true`) opens again what was open last time in this
+            directory, each at the line it was left on.
 
 OPTIONS:
-    -t, --table      Read the file as a grid. A schema in .yumete/tables/ names
+    Single-letter flags are gone for now, -h and -V aside: they are the
+    scarcest thing a command line has, and which ones are worth spending is
+    a question to answer once the search flags below have settled.
+
+        --table      Read the file as a grid. A schema in .yumete/tables/ names
                      the columns; without one, the file's own header row does.
-                     A grid is always horizontal, so this overrides -v.
-    -v, --vertical   Lay the text out vertically for this run (縱書), overriding
-                     the config. -H / --horizontal forces the ordinary layout.
-    -R, --readonly   Open locked: nothing this run opens can be typed into.
+                     A grid is always horizontal, so this overrides --vertical.
+        --vertical   Lay the text out vertically for this run (縱書), overriding
+                     the config. --horizontal forces the ordinary layout.
+        --readonly   Open locked: nothing this run opens can be typed into.
                      `:readonly off` unlocks the one you are looking at.
-    -c, --continue   Reopen the files that were open last time here.
-    -n, --new        Start on an empty buffer even when `[editor] session` is
+        --continue   Reopen the files that were open last time here.
+        --new        Start on an empty buffer even when `[editor] session` is
                      on.
         --tutor      Open the lesson (the same as `:tutor` inside the editor).
         --lang=LANG  Which language the editor says things in for this run:
                      zh (繁體, the default), zhs (简体) or en. `[editor]
                      language` in the config is the standing answer, and
                      `:language` switches it without restarting.
-    -s, --syntax     Which markup these files are written in: markdown, typst
+        --syntax     Which markup these files are written in: markdown, typst
                      or text. Outranks both the extension and the config.
-    -p, --preview    Print a non-interactive preview instead of the editor.
+        --preview    Print a non-interactive preview instead of the editor.
+
+SEARCHING FROM THE SHELL:
+        --grep PAT   Print every place PAT is, as `file:line:column:text`, and
+                     exit — 0 if anything was found, 1 if nothing was, 2 if the
+                     question would not parse. The editor never opens.
+
+                     **拼音 and 繁簡 are on**, which is the whole point:
+                     `ye --grep zhongguo` finds 中國 and 中国 both, and no
+                     other grep on the machine can. `--chinese=off` turns it
+                     off; `glyphs` and `pinyin` take one half each.
+
+                     The text column is sixty characters either side of the
+                     match, not the whole line: a line of a novel is a
+                     paragraph.
+
+                     Searches the current directory, as every shell tool does.
+                     Name a directory to search that one instead, or
+                     --project to search up to the book's root (the nearest
+                     .yumete or .git above you). Paths are printed relative to
+                     where you are standing, so a --project that climbed says
+                     so with a `../`.
+
+        --project          Search up to the project root, not here.
+        --ignore-case      Case never matters. (Default: a capital in the
+        --case-sensitive   pattern is how you ask for case to matter.)
+        --word             Whole words only — Latin words; 漢語 has no spaces.
+        --regex            Read the pattern as a regular expression.
+        --fixed            Read it literally. (The default.)
+        --fuzzy            These characters, nearly in a row.
+        --chinese=WHICH    off / glyphs (繁簡) / pinyin / both. Default: both.
+        --hidden           Search hidden files and the ones .gitignore names.
+        --no-ignore        The same switch: yumete keeps them together.
+        --glob=G           Only files matching these globs (comma-separated).
+        --exclude=G        Never these.
         --shot[=WxH] Draw one frame — the page exactly as the editor would set
                      it — to standard output and exit. 100x30 by default.
                      `:shot` inside the editor draws the same picture into a

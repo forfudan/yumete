@@ -358,6 +358,12 @@ pub struct Hit {
     pub file: Option<std::path::PathBuf>,
     /// Which line of the buffer, counting from zero.
     pub line: usize,
+    /// **第幾個字**，從這一行的行首數起、從零起（2026-10-03）。
+    ///
+    /// Warning: [`Self::mark`] 答不了這個：它是命中落在**摘錄**裏的位置，而摘錄是命中
+    /// 前後各六十個字——命中靠後的時候前面還會多一個 `…`。管道那一邊要印的是
+    /// `檔:行:列:文字`，而那個列是行裏的列。
+    pub column: usize,
     /// Where the match starts and ends, as character offsets into the buffer.
     pub at: usize,
     pub end: usize,
@@ -385,6 +391,9 @@ pub struct Hit {
 }
 
 /// **How many hits the list holds.** Every one is counted; this many are kept.
+///
+/// Warning: **問 [`Search::most`]，別直接用這個常量。** 管道那一邊要的是全部
+/// （`ye --grep`），而它是靠 [`Search::uncapped`] 說的。
 ///
 /// 「的」 in a novel is twenty thousand places, and the count is the useful
 /// half of that answer — the list is for walking, and nobody walks twenty
@@ -457,6 +466,12 @@ pub struct Search {
     pub exclude: String,
     /// 連隱藏文件和 `.gitignore` 裏的一起搜。出廠關着，見 [`Field::Hidden`]。
     pub hidden: bool,
+    /// **名單不封頂**（2026-10-03）。
+    ///
+    /// [`MOST`] 是給**面板**定的：「的」在一本小說裏是兩萬處，而名單是拿來走的，
+    /// 沒人走兩萬行。管道那一邊不是拿來走的——`ye --grep` 印給別的程序看，少印
+    /// 一條就是錯一條。出廠是封頂的，所以編輯器一切照舊。
+    pub uncapped: bool,
     /// **包含或排除裏有一條寫錯了** —— 這一趟根本沒跑（2026-10-02 審出來的）。
     ///
     /// Warning: **數目那一格不許因此說「無結果」。** 零那一格最像「真的沒有」，而這一
@@ -573,6 +588,14 @@ impl Search {
     /// Warning: Not the same as 「found nothing」: an empty box has not been asked,
     /// and a panel that answered `0 處` to a question nobody put would be the
     /// `⟨缺⟩`-versus-blank mistake all over again.
+    /// **這一趟留幾條。** 面板留 [`MOST`]，管道全留。
+    pub fn most(&self) -> usize {
+        match self.uncapped {
+            true => usize::MAX,
+            false => MOST,
+        }
+    }
+
     pub fn asked(&self) -> bool {
         !self.query.trim().is_empty()
     }
