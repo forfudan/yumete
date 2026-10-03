@@ -84,6 +84,10 @@ fn main() -> ExitCode {
     // **這幾個開關只有配上 `--grep`／`--files` 纔有意義。** 單獨給是打錯了，不是
     // 「沒關係」——`ye --hidden` 從前悄悄開了編輯器。
     let mut modifiers: Vec<&'static str> = Vec::new();
+    // **`-u` 是一把梯子，不是一個勾**（2026-10-03 作者定，照 rg 原樣）。數的是它一共
+    // 出現幾次，所以 `-u -u` 和 `-uu` 是同一句話，同 rg。一級＝連被忽略的一起搜，
+    // 二級＝再加上點文件。rg 還有三級（連二進制一起搜），我們沒有那一檔。
+    let mut unrestricted = 0usize;
 
     for arg in std::env::args().skip(1) {
         if let Some(which) = owed.take() {
@@ -308,6 +312,17 @@ fn main() -> ExitCode {
                     let long = match c {
                         'G' => "--grep",
                         'O' => "--open",
+                        // 兩個不帶值的開關，字母與語意都照 rg：`-u` 那把梯子，
+                        // 和 `-.`（rg 用一個點，不是字母——所以它不吃字母表）。
+                        'u' => {
+                            unrestricted += 1;
+                            continue;
+                        }
+                        '.' => {
+                            g.hidden = true;
+                            modifiers.push("--hidden");
+                            continue;
+                        }
                         _ => {
                             // **第一個字母帶值、後面卻不是認得的字母**——那多半不是
                             // 「不認得的開關」，而是把要找的詞貼在了後面。說清楚是
@@ -362,6 +377,27 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
             s => files.push(s.to_string()),
+        }
+    }
+
+    // **`-u` 那把梯子只有兩級。** 第三級在 rg 是「連二進制一起搜」，而我們根本不讀
+    // 二進制檔（頭一千零二十四個字節裏有 NUL 就當它不是散文）——說清楚有幾級，
+    // 比把 `-uuu` 當成 `-uu` 悄悄收下好。
+    match unrestricted {
+        0 => {}
+        1 => {
+            g.ignored = true;
+            modifiers.push("--no-ignore");
+        }
+        2 => {
+            g.ignored = true;
+            g.hidden = true;
+            modifiers.push("--no-ignore");
+        }
+        many => {
+            eprintln!("yumete: -u has two levels, not {many}");
+            eprintln!("-u searches what .gitignore names; -uu adds the dot-files");
+            return ExitCode::from(2);
         }
     }
 
@@ -1862,12 +1898,19 @@ SEARCHING FROM THE SHELL:
         --fixed            Read it literally. (The default.)
         --fuzzy            These characters, nearly in a row.
         --chinese=WHICH    off / glyphs (繁簡) / pinyin / both. Default: both.
-        --hidden           Search the dot-files too.
-        --no-ignore        Search what .gitignore and .ignore name too, and
-                           into target/ and node_modules/. Two switches, not
-                           one: a workspace that keeps its sibling repos out
-                           of git is the common reason a search comes back
-                           short, and that has nothing to do with dot-files.
+    -., --hidden       Search the dot-files too.
+    -u, --no-ignore    Search what .gitignore and .ignore name too, and into
+                       target/ and node_modules/. Two switches, not one: a
+                       workspace that keeps its sibling repos out of git is
+                       the common reason a search comes back short, and that
+                       has nothing to do with dot-files.
+
+                       -u is a ladder, as it is in rg: -u is this switch,
+                       -uu is this one and --hidden together. (rg's third
+                       rung searches binaries; there is no such rung here —
+                       a file with a NUL in its first 1024 bytes is not
+                       prose.) The spellings are rg's so the habit carries:
+                       -. for the dot-files, -u for the ignored ones.
         --glob=G           Only files matching these globs (comma-separated).
         --exclude=G        Never these.
         --color=WHICH      auto (the default: colour on a terminal, plain in a
