@@ -963,7 +963,14 @@ impl Buffer {
     /// The buffer's own state — its path, its stamps, its recovery copy, and
     /// whether it is modified — is untouched, because none of it is about this
     /// file. Exactly as in vi.
+    /// Warning: **鎖住的時候一份都不許寫出去**（2026-10-03 一輪審查報來的）。`:export!`
+    /// 那一邊早就擋着（`files.rs`），而隔壁這一支沒有：`--readonly` 開着的時候
+    /// `:w! 別的檔` 照樣把內容寫了出去，蓋掉一個毫不相干的檔。鎖說的是「這一輪
+    /// 不寫盤」，不是「這一輪不改這一個檔」。
     pub fn write_copy(&self, path: &Path, force: bool) -> io::Result<()> {
+        if self.readonly {
+            return Err(io::Error::other(say!("readonly.refused")));
+        }
         if !force && path.exists() {
             return Err(io::Error::other(say!("buffer.file-already-exists")));
         }

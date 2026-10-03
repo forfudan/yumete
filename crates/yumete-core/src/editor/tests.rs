@@ -13493,6 +13493,45 @@ fn undo_reverts_an_insert_and_redo_reapplies_it() {
     assert_eq!(ed.current_buffer().text(), "hello");
 }
 
+/// **兩份沒有名字的草稿不許共用一個檔**（2026-10-03 一輪審查報來的，會丟字）。
+///
+/// 草稿的名字從前按緩衝**排在第幾個**取，而那個名字是黏住的、下標不是：關掉前面
+/// 一份，後面的往前挪，新開的那一份正好落在空出來的下標上——兩份緩衝往同一個檔
+/// 上寫，後存的蓋掉先存的。`Buffer::id` 自己的文檔早就寫着「下標會變，號不會」。
+#[test]
+fn two_unnamed_drafts_never_share_a_file() {
+    let dir = std::env::temp_dir().join(format!("yumete-two-drafts-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut ed = Editor::new();
+    ed.keep_drafts_in(dir.clone());
+
+    // 兩份沒有名字的草稿，中間關掉一份別的——下標會動。
+    ed.on_key(Key::Char('i'));
+    for c in "甲甲甲".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    ed.execute(":new").unwrap();
+    ed.on_key(Key::Char('i'));
+    for c in "乙乙乙".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    // 名字是在「要存草稿了」那一刻取的。
+    ed.rescue_drafts();
+
+    // 這一支在 `mod tests` 裏，和 `Editor` 同一個 crate——直接看那張單子。
+    let names: Vec<String> = ed
+        .buffers
+        .iter()
+        .filter_map(|b| b.scratch_draft().map(|p| p.display().to_string()))
+        .collect();
+    assert_eq!(names.len(), 2, "兩份草稿各有一個名字：{names:?}");
+    assert_ne!(names[0], names[1], "兩份不許共用一個檔：{names:?}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn recover_loads_the_draft_and_undo_takes_it_back() {
     let dir = std::env::temp_dir().join(format!("yumete-rec-{}", std::process::id()));
@@ -13524,6 +13563,16 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
     // Recovering is an ordinary edit, so it can be taken back.
     ed.on_key(Key::Char('u'));
     assert_eq!(ed.current_buffer().text(), "第一稿\n");
+    // **可是撤回之後這一份不許報「乾淨」**（2026-10-03 一輪審查報來的，會丟字）。
+    //
+    // `adopt_draft` 剛剛把草稿檔刪了，而撤回一步正好退到棧底——棧底的深度就是
+    // `saved_depth`，於是 `[+]` 不亮、`:q` 一聲不響地走人，崩掉那一輪寫的東西哪
+    // 裏都沒有了。盤上那一份和緩衝裏這一份一樣不一樣是另一回事：**那份草稿已經
+    // 不在了**，所以在存檔之前這一份就是唯一的一份。
+    assert!(
+        ed.current_buffer().is_modified(),
+        "草稿已經刪了，這一份就是唯一的一份——不許說乾淨"
+    );
 
     // Loading it takes it over: there is nothing left waiting — and with
     // no drafts from a crashed session either, it says so about this file.
