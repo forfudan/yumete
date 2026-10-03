@@ -1222,6 +1222,15 @@ impl Editor {
             return;
         }
         match asked.what {
+            // **`R` 動得太多那一問**（2026-10-03 作者定）。沒有「看一眼」那一格：
+            // 要看的名單就在旁邊，人正站在上面。
+            Asking::ReplaceEverywhere => match answer {
+                'y' => self.replace_what_was_asked(),
+                _ => {
+                    self.forget_the_file_it_asked_about();
+                    self.status = say!("search.replace-all-stopped");
+                }
+            },
             Asking::OversizeWrite { path } => match answer {
                 // Yes: the same save, with the gate already answered.
                 'y' => {

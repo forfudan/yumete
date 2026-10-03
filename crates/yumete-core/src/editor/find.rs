@@ -1007,6 +1007,14 @@ impl Editor {
                 // 500 條，而 `R` 動的是每一個有命中的檔；兩個數一分家，問句就在
                 // 替一件和它說的不一樣的事徵求同意。
                 self.replace_this_file = None;
+                // **動得太多就走「安全核驗」那一扇中央窗**（2026-10-03 作者定：
+                // 「要同時滿足兩個條件：1. 超過 10 個文件 2. 超過 100 處」）。
+                // 狀態欄上那一行 `y`／`n` 按順手了就過去了，而這一下動的是整本
+                // 書；`:w` 那一條的閘也是這個形狀——平日改個錯字一次都不彈。
+                if let Some(query) = self.replace_everywhere_query() {
+                    self.query = Some(query);
+                    return;
+                }
                 self.status = match self.search.files.len() {
                     0 | 1 => say!("search.replace-all-sure", self.search.total),
                     n => say!("search.replace-all-sure-files", self.search.total, n),
@@ -1653,6 +1661,30 @@ impl Editor {
         }
         let done = std::mem::take(&mut self.replace_tally);
         self.after_replacing(done);
+    }
+
+    /// **多到要停一下的那一條線**（2026-10-03 作者定）：兩個條件都過纔算。
+    const REPLACE_ASKS_TWICE_FILES: usize = 10;
+    const REPLACE_ASKS_TWICE_HITS: usize = 100;
+
+    /// 中央那一扇「安全核驗」，或者 `None`（不到那條線，狀態欄一行就夠）。
+    fn replace_everywhere_query(&self) -> Option<crate::editor::Query> {
+        let files = self.search.files.len();
+        let hits = self.search.total;
+        if files <= Self::REPLACE_ASKS_TWICE_FILES || hits <= Self::REPLACE_ASKS_TWICE_HITS {
+            return None;
+        }
+        Some(crate::editor::Query {
+            // Warning: **和 `:w` 那一扇同一個標題**，因為它們是同一件事的兩個入口：
+            // 「這一下動得比你想的多」。兩個標題會讓人以為是兩種東西。
+            title: say!("write.oversize-title"),
+            body: say!("search.replace-all-what", files, hits),
+            choices: vec![
+                crate::editor::Answer { key: 'y', label: say!("search.replace-all-go") },
+                crate::editor::Answer { key: 'n', label: say!("search.replace-all-no") },
+            ],
+            what: crate::editor::Asking::ReplaceEverywhere,
+        })
     }
 
     pub(super) fn replace_all_found(&mut self) {

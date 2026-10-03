@@ -7877,6 +7877,27 @@ zhs = "窗口过窄，改用行内搜索"
 en = "window too narrow — searching on the line instead"
 
 [[message]]
+# 搜索：全部替換動得太多，中央那扇窗問一次——「繼續替換」
+key = "search.replace-all-go"
+zht = "繼續替換"
+zhs = "继续替换"
+en = "Replace them"
+
+[[message]]
+# 搜索：同上，「取消替換」
+key = "search.replace-all-no"
+zht = "取消替換"
+zhs = "取消替换"
+en = "Leave them alone"
+
+[[message]]
+# 搜索：同上，取消之後說的那一句
+key = "search.replace-all-stopped"
+zht = "沒換——一個字都沒動"
+zhs = "没换——一个字都没动"
+en = "Nothing was replaced"
+
+[[message]]
 # 搜索：全部替換之前問一次
 key = "search.replace-all-sure"
 zht = "把這 {0} 處全部換掉？"
@@ -7889,6 +7910,13 @@ key = "search.replace-all-sure-files"
 zht = "把 {1} 個檔裏的 {0} 處全部換掉？"
 zhs = "把 {1} 个档里的 {0} 处全部换掉？"
 en = "Replace all {0} matches, across {1} files?"
+
+[[message]]
+# 搜索：同上，正文（{0} 幾個檔、{1} 幾處）
+key = "search.replace-all-what"
+zht = "本次操作會替換{0}個文件中的{1}處文字。"
+zhs = "本次操作会替换{0}个文件中的{1}处文字。"
+en = "This will replace {1} matches in {0} files."
 
 [[message]]
 # 整個檔要不要全換，先問一句
