@@ -2684,6 +2684,12 @@ pub struct Editor {
     /// 关闭，但是还是会记住上次的宽度状态」）。常駐層（字典、懸停、詳情）借的是
     /// 同一格，所以也吃這一檔——一個格子一套規矩。
     width: [crate::sidebar::Width; 2],
+    /// **上一幀的窗口有多大**，前端每一幀告訴一次（欄、行）。
+    ///
+    /// 編輯器本身沒有視口（見 [`Editor::scroll`]），這一格不是視口——它只用來答
+    /// 一個問題：**這扇面板擺得下嗎**。出廠是「大得很」，所以沒有前端的時候
+    /// （測試、`:export`）一切照舊。
+    window: (u16, u16),
     /// **Which slot each panel lives in**, indexed by
     /// [`crate::sidebar::Panel`] (#293).
     ///
@@ -3208,6 +3214,7 @@ impl Editor {
             preview: RefCell::new(None),
             panels: [None, None],
             width: [crate::sidebar::Width::default(); 2],
+            window: (u16::MAX, u16::MAX),
             panel_focus: None,
             // 檔案／緩衝區／大綱 on the left — 「what is there, and where am
             // I in it」; 字典／詳情 on the right — 「what is this thing I am

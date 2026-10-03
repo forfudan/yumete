@@ -138,6 +138,11 @@ impl Editor {
             self.search.fuzzy = false;
         }
         self.open_search();
+        // 窄到擺不下的時候 [`Self::open_search`] 已經退回行內搜索並說了一句，這裏
+        // 再開一次面板就把它說的話推翻了。
+        if !self.room_for_a_panel() {
+            return;
+        }
         // Warning: **命令進來的那一路不許開關一下就走**（2026-10-01 撞到）。
         // `show_sidebar` 是個開關：面板開着又拿着鍵的時候它關掉面板，於是
         // `:search ../稿` 把面板關了，而使用者說的是「去那裏找」。`空格 /`
@@ -152,6 +157,20 @@ impl Editor {
     }
 
     pub(super) fn open_search(&mut self) {
+        // Warning: **窄到擺不下就不進面板模式**（2026-10-03 作者定，二選）。26 欄的
+        // 窗口上面板分到 2 欄，而 2 欄畫不出一個格子，於是從前這裏照常開了面板：
+        // 狀態欄寫着 `PAN.NOR`、提示行列着鍵位，而面板那一塊是空白——人在對着一扇
+        // 看不見的面板打字。版面一格不動，改的是入口：退回 `/` 那一行，並說一句
+        // 窗口要多寬。
+        if !self.room_for_a_panel() {
+            self.status = say!("search.panel-too-narrow");
+            self.mode = crate::input::Mode::Search;
+            self.search_forward = true;
+            self.command_line.clear();
+            self.command_caret = 0;
+            self.hits = None;
+            return;
+        }
         // Warning: A selection wins over the last pattern — but only one somebody
         // **made**. Every motion in this editor leaves a selection and the
         // cursor covers its own grapheme, so 「one character」 is where the

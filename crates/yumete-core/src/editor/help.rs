@@ -90,6 +90,10 @@ impl Editor {
 
 ");
         out.push_str(&format!("{}\n\n", say!("help.self-reported")));
+        // **窗口要多大**（2026-10-03 作者定：「就说推荐窗口大小 80*24，这个先放在
+        // help」）。擺不下側面板的時候 `空格 /` 會當場退回行內搜索並說一句，而那一句
+        // 說的是此刻；這一行說的是往後。
+        out.push_str(&format!("{}\n\n", say!("help.common.window-size")));
         out.push_str(&format!("## {}\n\n", say!("help.common.motion-title")));
         for (keys, what) in [
             ("h j k l", say!("help.common.hjkl")),

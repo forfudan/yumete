@@ -8961,6 +8961,27 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(ed.info_in_this_sidebar(right), None, "and gone the moment the cursor left");
 }
 
+/// **窄到擺不下就不進面板模式**（2026-10-03 作者定，三選二）。
+///
+/// 26 欄的窗口上面板分到 2 欄，而 2 欄畫不出一個格子。從前這裏照常開了面板：狀態欄
+/// 寫着 `PAN.NOR`、提示行列着鍵位，而面板那一塊是空白——人在對着一扇看不見的面板
+/// 打字。
+#[test]
+fn a_window_too_narrow_for_the_panel_searches_on_the_line() {
+    let mut ed = typed("那年冬天很冷。");
+    ed.note_window(26, 10);
+    ed.open_search();
+    assert_eq!(ed.mode(), Mode::Search, "退回 `/` 那一行");
+    assert!(ed.showing(crate::sidebar::View::Search).is_none(), "面板一扇都沒開");
+    assert!(!ed.status().is_empty(), "說了一句為什麼");
+
+    ed.note_window(Editor::PANEL_NEEDS, 10);
+    ed.on_key(Key::Esc);
+    ed.open_search();
+    assert_eq!(ed.mode(), Mode::Field, "擺得下就照舊開面板");
+    assert!(ed.showing(crate::sidebar::View::Search).is_some(), "面板開着");
+}
+
 /// **搜索面板那四件**（2026-09-23 提的）。
 ///
 /// 一張測試管四條，因為它們是同一條路上的四步：開面板、走格子、改範圍、勾替換。

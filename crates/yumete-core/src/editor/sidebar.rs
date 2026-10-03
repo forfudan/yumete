@@ -444,6 +444,26 @@ impl Editor {
         self.width[side as usize]
     }
 
+    /// **一扇側面板要這麼多欄纔擺得下**（2026-10-03 作者定）。
+    ///
+    /// 版面算術是 `正文保底 = max(窗口/3, 24)`，面板分的是剩下的（見 `yumete-tui`
+    /// 的 `sidebar_columns`）。要讓面板分到十二欄——六個漢字，比那更窄的一列名字
+    /// 只剩一個字加省略號——窗口就得有 24 + 12 欄。
+    pub const PANEL_NEEDS: u16 = 36;
+
+    /// **窗口擺得下一扇側面板嗎。**
+    pub fn room_for_a_panel(&self) -> bool {
+        self.window.0 >= Self::PANEL_NEEDS
+    }
+
+    /// **前端每一幀報一次窗口有多大**（欄、行）。
+    ///
+    /// 不是視口：編輯器不照着它滾動也不照着它折行，它只答「這扇面板擺得下嗎」。
+    /// 離屏那一支在按鍵**之前**報，否則 `--shot` 看不見窄窗口下的行為。
+    pub fn note_window(&mut self, columns: u16, rows: u16) {
+        self.window = (columns, rows);
+    }
+
     /// **這一刻站在第幾區。** 編號就是 `空格 1`–`4` 那四個號。
     pub(super) fn which_region(&self) -> u32 {
         use crate::sidebar::Side;

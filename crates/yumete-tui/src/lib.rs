@@ -385,11 +385,15 @@ pub fn want_page_size(n: usize) {
 /// 屏那張圖。
 pub fn fit_the_page(
     ime: &mut ImeSession,
-    editor: &Editor,
+    editor: &mut Editor,
     config: &Config,
     width: u16,
     height: u16,
 ) {
+    // **窗口有多大，編輯器也要知道一點**（2026-10-03）：不是視口，只夠答「這扇面板
+    // 擺得下嗎」。搭在這一支上是因為它已經是「每一幀一次、離屏那一支在按鍵之前一
+    // 次」的那個鉤子，而窄窗口下的行為同樣要 `--shot` 看得見。
+    editor.note_window(width, height);
     let wish = match PAGE_WISH.load(std::sync::atomic::Ordering::Relaxed) {
         0 => config.panel.page_size,
         n => n,
@@ -10119,11 +10123,22 @@ fn draw_status(
             (preview.to_string(), 6),
             (which, 3),
         ];
-        let message = match command_row || editor.status().is_empty() {
+        // **有話要說而底下那一行正被 `:`／`/` 佔着，就說在這一行上**（2026-10-03）。
+        // 從前只要那一行存在就不說，而那一行上畫着提示符的時候它根本輪不到消息——
+        // 於是「窗口要 36 欄纔擺得下搜索面板」這一類當場退回行內搜索的話一個字都
+        // 看不見。那一行空着的時候照舊歸它說，不會說兩遍。
+        let taken = command_row && editor.prompt().is_none();
+        let message = match taken || editor.status().is_empty() {
             true => String::new(),
-            false => format!("   {}", editor.status()),
+            false => editor.status().to_string(),
         };
-        let room = status_area.width as usize;
+        // Warning: **那兩格是畫出來的，不是算出來的**（2026-10-03）。這一行畫的是
+        // 「行首一格留白 ＋ 模式 ＋ 轉圈那一格 ＋ 其餘」，轉不轉都占着（見下面
+        // 那段註釋），所以左半邊真正能用的比 `width` 少兩格。從前這裏按整個寬度
+        // 算，於是算到頭「剛好擺得下」的那一行到了屏幕上被切掉兩格——26 欄下
+        // 「窗口過窄，改用行內搜索」畫出來是「窗口過窄，改用行內搜」。
+        // 右半邊那一支（`fits`）本來就減了 2，兩邊現在是同一筆賬。
+        let room = (status_area.width as usize).saturating_sub(2);
         let build = |give: u8, gap: usize, where_: &str| -> String {
             let left: String = pieces
                 .iter()
@@ -10131,8 +10146,18 @@ fn draw_status(
                 .map(|(text, _)| text.as_str())
                 .collect::<Vec<_>>()
                 .concat();
+            let left = left.trim_end();
+            // **左邊什麼都不剩了就別再留那三格**（2026-10-03）。那三格是名字與話之
+            // 間的距離；名字讓完之後它只是在把話往外推，而被推出去的是話的尾巴。
+            let lead = match left.is_empty() || message.is_empty() {
+                true => "",
+                false => "   ",
+            };
             let gap = " ".repeat(gap);
-            format!("{}{message}{gap}{where_}", left.trim_end())
+            // 末尾那一段空隙是給位置讀數留的，位置讓完之後它什麼都不隔。
+            format!("{left}{lead}{message}{gap}{where_}")
+                .trim_end()
+                .to_string()
         };
         // **The gap goes before the writing does.** One column over is not a
         // reason to lose `[20/20]` whole: the three spaces between the name and
@@ -10153,13 +10178,23 @@ fn draw_status(
             // Warning: **字 goes before any field does** (#500). It is the third
             // number of three, and the other two are what the status line
             // exists to answer; a name or a `[3/20]` is worth more than it.
-            if where_ != where_short {
+            // Warning: **空了就別再換回短的**——底下那一步會把它整個丟掉，而這一步
+            // 認的是「還不是短的那一份」，兩步會互相把對方的結果改回去，轉不出來
+            // （2026-10-03 當場轉死在 24 欄上）。
+            if !where_.is_empty() && where_ != where_short {
                 where_ = &where_short;
                 continue;
             }
             // The mode and the position are the floor; below that the terminal
             // is too narrow for anything and the renderer's own cut answers.
             if give == 0 {
+                // Warning: **一句話贏過位置**（2026-10-03）。位置一直在那裏，剛發生
+                // 的事只說一次——26 欄的窗口上兩個都擺不下時從前是把話截一半
+                // （「窗口過窄，改用行內搜」），而截掉的恰恰是它要說的那一半。
+                if !message.is_empty() && !where_.is_empty() {
+                    where_ = "";
+                    continue;
+                }
                 break line;
             }
             give -= 1;
