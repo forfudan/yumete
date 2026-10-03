@@ -143,6 +143,27 @@ pub fn spans_cased(text: &str, atoms: &[Atom], fold: bool, fold_case: bool) -> V
     if atoms.is_empty() {
         return Vec::new();
     }
+    // **一整條都是字母的查詢，整行都是 ASCII 就不必問**（2026-10-03 量出來的）。
+    //
+    // 這一檔裏 `eat` 的 `literal_ok` 是假的（`atoms.len() > 1` 不成立），於是每一段
+    // 都只能走 `say`——而 `say` 查的是讀音表，**表裏一個 ASCII 字符都沒有**
+    // （`no_ascii_character_has_a_reading` 把整張表掃過）。所以整行都是 ASCII 的
+    // 時候，這一趟**不可能**配上任何東西，而從前它照樣要 `chars().collect()` 一個
+    // Vec、再從每一個位置試一遍。`is_ascii` 是按字節掃的，還會向量化。
+    //
+    // Warning: **判準只能是 ASCII，不能是「有沒有漢字」。** 先寫的是後者，而
+    // `every_character_with_a_reading_is_a_han_character` 當場把它否了：讀音表裏有
+    // 假名、注音符號、康熙部首——搜 `ka` 配得上「か」，而那道閘會把只有假名的行
+    // 整行跳掉，真會丟命中。
+    //
+    // Warning: **混着寫的那一檔套不上這條。** `zhong-guo` 的 `zhong` 是許照字面配
+    // ASCII 的（`literal_ok` 為真），稿子裏真有 `zhong-guo` 這七個字母就該中。
+    //
+    // 量出來的（本倉帶 `target/`，`-uu`，熱緩存）：`ye --grep zhuyuhao` 12.74 秒 →
+    // 2.46 秒，和同一棵樹上的漢字查詢（2.27 秒）差 8%；散文那一邊不受影響。
+    if atoms.len() == 1 && text.is_ascii() {
+        return Vec::new();
+    }
     let hay: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
     let mut at = 0usize;
@@ -286,6 +307,60 @@ mod tests {
         // **整條都是字母的那一種照舊只問讀音**，字面歸字面那一路——見
         // `letters_in_the_prose_are_not_read_as_readings`。
         assert!(look("卷03/第120章.md", "md").is_empty());
+    }
+
+    /// **那道閘的前提：讀音表裏一個 ASCII 字符都沒有。**
+    ///
+    /// `spans_cased` 的快路是「整行都是 ASCII 就不必問」。表裏要是混進一個 ASCII
+    /// 的鍵，那道閘就會**悄悄漏掉一處命中**——整張表掃一遍，比推理可靠。
+    #[test]
+    fn no_ascii_character_has_a_reading() {
+        let ascii: Vec<char> = table().keys().copied().filter(char::is_ascii).collect();
+        assert!(ascii.is_empty(), "ASCII 竟然有讀音：{ascii:?}");
+        assert!(table().len() > 10_000, "表要是空的，上面那一句什麼都沒驗：{}", table().len());
+    }
+
+    /// **判準不許換成「有沒有漢字」。**
+    ///
+    /// 2026-10-03 先寫的就是那一版，而這一條當場把它否了：讀音表裏有假名、注音符
+    /// 號、康熙部首——搜 `ka` 配得上「か」，可「か」不是漢字（`is_han` 的註釋寫得
+    /// 明白：假名與標點有意不收）。那道閘會把只有假名的行整行跳掉。
+    #[test]
+    fn a_reading_does_not_mean_a_han_character() {
+        assert!(readings('か').any(|s| s == "ka"), "假名有讀音");
+        assert!(!yumete_cjk::word::is_han('か'), "可它不是漢字");
+        let one = atoms("ka").unwrap();
+        assert_eq!(one.len(), 1, "整條都是字母");
+        assert_eq!(spans_of("這一行有個 か 字", &one, true), [(6, 7)], "一樣要找得到");
+    }
+
+    /// **整行都是 ASCII 的時候，整條都是字母的查詢直接跳過**（2026-10-03 量出來的）。
+    ///
+    /// 這是一道提速的閘（`ye --grep zhuyuhao -uu` 在帶 `target/` 的倉上 12.74 秒 →
+    /// 2.46 秒），所以這裏驗的是**它沒有順手扔掉任何東西**：混着寫的那一檔照字面
+    /// 配 ASCII 的本事要一點不少。
+    #[test]
+    fn an_ascii_line_still_answers_a_mixed_query() {
+        // ① 整條都是字母：全是 ASCII 的行本來就配不上（那是字面那一路的事），閘前
+        //    閘後都是空的——見 `letters_in_the_prose_are_not_read_as_readings`。
+        let one = atoms("shuzhai").unwrap();
+        assert_eq!(one.len(), 1, "整條都是字母就是一段");
+        assert!(spans_of("shuzhai in the prose", &one, true).is_empty());
+        assert!(spans_of("nothing here at all", &one, true).is_empty());
+        // 有漢字就照舊中。
+        assert_eq!(spans_of("在書齋裏", &one, true), [(1, 3)]);
+
+        // ② **混着寫的那一檔不許套那道閘**：`zhong` 這一段許照字面配 ASCII，
+        //    而整行一個漢字都沒有。
+        let mixed = atoms("zhong-guo").unwrap();
+        assert!(mixed.len() > 1, "混着寫纔有不止一段");
+        assert_eq!(
+            spans_of("see zhong-guo here", &mixed, true),
+            [(4, 13)],
+            "整行都是 ASCII，可這一條照字面就該中"
+        );
+        // 同一條查詢，漢字那一路也還在。
+        assert_eq!(spans_of("中-國", &mixed, true), [(0, 3)]);
     }
 
     /// 簡繁那一折跟着開關走——關掉就不折。
