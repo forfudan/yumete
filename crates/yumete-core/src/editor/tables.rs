@@ -914,6 +914,18 @@ impl Editor {
     }
 
     /// Whether the cursor's line looks like a table row but is inside a fence.
+    /// **光標這一行在圍欄（或者別的「照字面算」的塊）裏嗎。**
+    ///
+    /// Warning: [`Self::md_row_in_a_fence`] 答不了這個問題：它先要求這一行**長得像
+    /// `|` 表格的一行**，所以圍欄裏的一段 CSV 它一律回假。2026-10-03 一輪審查報
+    /// 來的就是這個洞——`:convert-table csv pipe` 把一段圍在 ``` 裏的 CSV 連圍欄
+    /// 標記一起改寫成了 `|` 表格。
+    pub(super) fn in_a_literal_block(&self) -> bool {
+        let rope = self.current_buffer().rope();
+        let at = rope.char_to_line(self.caret().min(rope.len_chars()));
+        self.block_of(at).is_literal()
+    }
+
     pub(super) fn md_row_in_a_fence(&self) -> bool {
         let rope = self.current_buffer().rope();
         let at = rope.char_to_line(self.caret().min(rope.len_chars()));
@@ -1798,6 +1810,12 @@ impl Editor {
     /// 有沒有逗號，要強制纔多給一個參數。
     pub(super) fn convert_table(&mut self, to: crate::table::Shape, from: Option<crate::table::Shape>) {
         use crate::table::Shape;
+        // **先說在圍欄裏**，再說看不出分隔符：後面那一句在這裏是假話，它會讓人
+        // 以為寫明分隔符就轉得動（2026-10-03 一輪審查報來的）。
+        if self.in_a_literal_block() {
+            self.status = say!("table.inside-a-fence");
+            return;
+        }
         let Some(source) = from.or_else(|| self.table_shape_here()) else {
             self.status = say!("table.no-delimiter-in-sight");
             return;
@@ -1826,6 +1844,9 @@ impl Editor {
         {
             return Some(crate::table::Shape::Pipe);
         }
+        if self.in_a_literal_block() {
+            return None;
+        }
         let (first, last) = self.block_here();
         let lines: Vec<String> = (first..=last)
             .filter_map(|i| self.line_text(i))
@@ -1842,6 +1863,14 @@ impl Editor {
     /// 的——`  padded  ,1` 轉成 TSV 還是 `  padded  \t1`。
     fn redelimit(&mut self, from: char, to: char) {
         if self.refuse_readonly() {
+            return;
+        }
+        // Warning: **圍欄裏的東西不是表格**（2026-10-03 一輪審查報來的）。裏面是代碼，
+        // 而這一支認的是「空行之間那幾行」——圍欄標記自己也在那幾行裏，於是
+        // ``` 連同它圍住的 CSV 一起被改寫成了 `|` 表格。另一個方向
+        // （`table_to_delimited`）本來就擋着，兩半從前不一致。
+        if self.in_a_literal_block() {
+            self.status = say!("table.inside-a-fence");
             return;
         }
         let (first, last) = self.block_here();
@@ -1881,6 +1910,14 @@ impl Editor {
         // a file that did not change a byte. Every caller that edits refuses
         // for itself; these two are callers.
         if self.refuse_readonly() {
+            return;
+        }
+        // Warning: **圍欄裏的東西不是表格**（2026-10-03 一輪審查報來的）。裏面是代碼，
+        // 而這一支認的是「空行之間那幾行」——圍欄標記自己也在那幾行裏，於是
+        // ``` 連同它圍住的 CSV 一起被改寫成了 `|` 表格。另一個方向
+        // （`table_to_delimited`）本來就擋着，兩半從前不一致。
+        if self.in_a_literal_block() {
+            self.status = say!("table.inside-a-fence");
             return;
         }
         let (first, last) = self.block_here();
