@@ -4574,6 +4574,31 @@ fn a_sort_names_the_column_it_sorts_by() {
     assert!(!ed.status().is_empty());
 }
 
+/// **一章正文當中的那一塊，排得了序**（2026-10-03 作者定）。
+///
+/// 原話：「如果是我，我会先在逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq
+/// 回到正文。」從前 `␣t1s` 在那一塊上一聲不響地落到兜底那一句（`s` 根本不在那一
+/// 層的鍵表裏），而命令那一路答「文中的表格區塊只讀不改寫」——那句話說的是當時
+/// 的做法：排序把整份檔案按表格自己的行重建一遍，而一塊只是幾行，重建就等於改寫
+/// 整章。
+#[test]
+fn a_delimited_block_in_a_chapter_sorts_without_touching_the_chapter() {
+    let mut ed = typed("第三章\n\n那年冬天。\n\n乙,2\n甲,1\n丙,3\n\n後來又下了一場。\n");
+    // 走到那一塊上（第五行）。
+    for _ in 0..4 {
+        ed.on_key(Key::Char('j'));
+    }
+    press(&mut ed, " tt");
+    assert!(ed.table().is_some(), "進了格子：{}", ed.status());
+    press(&mut ed, " t1s");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "第三章\n\n那年冬天。\n\n丙,3\n乙,2\n甲,1\n\n後來又下了一場。\n",
+        "只動那三行，上下兩段一個字節都不碰：{}",
+        ed.status()
+    );
+}
+
 /// Sorting a table does not put the table away.
 ///
 /// 「bug：表格排序 t1s 會直接回到源碼視圖。」 A sort rewrites the *text*,
@@ -14705,17 +14730,20 @@ fn putting_a_column_into_a_block_stops_at_the_blank_line() {
     );
 }
 
+/// **文中那一塊排得了序**（2026-10-03 作者定，改掉了從前的拒絕）。
+///
+/// Warning: 這一支從前叫 `a_block_is_read_where_it_lies_and_not_sorted`，驗的是那一句
+/// 拒絕。那句話說的不是一條規矩，是當時的做法——排序把**整份檔案**按表格自己的
+/// 行重建一遍，而一塊只是一章當中的幾行。範圍一直是知道的（`block_region`），所
+/// 以擋的是實現。現在按塊的行寫回，塊外面一個字節都不碰（見
+/// [`a_delimited_block_in_a_chapter_sorts_without_touching_the_chapter`]）。
 #[test]
-fn a_block_is_read_where_it_lies_and_not_sorted() {
-    // Sorting rewrites the lines. In somebody else's document, the lines
-    // around the block are the document — so the answer is no, with the
-    // two commands that *would* do it named.
+fn a_block_is_sorted_where_it_lies() {
     let mut ed = typed("木,AA\n目,BB\n田,CC\n");
     ed.execute(":1").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     ed.execute(":table-sort 1").unwrap();
-    assert!(ed.status().contains("只讀"), "{}", ed.status());
-    assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
+    assert_eq!(ed.current_buffer().text(), "木,AA\n田,CC\n目,BB\n", "{}", ed.status());
 }
 
 
