@@ -414,7 +414,7 @@ pub fn fit_the_page(
 
 /// **How many candidates a page may hold in a window this tall.**
 ///
-/// Warning: **一頁不許比畫得下的多**（#516，2026-10-02 作者定「把頁縮到畫得下」）。
+/// Warning: **一頁不許比畫得下的多**（#516，2026-10-02 定「把頁縮到畫得下」）。
 /// 面板是 2 行框 ＋ 1 行編碼 ＋ 候選，整個夾在 `room` 裏；從前頁是 6 個而窗口矮
 /// 的時候只畫得出 1 個，而那道閘問的是「這一頁有沒有第 n 個」——六行的窗口上按
 /// `3` 上屏的是一個**從沒畫出來過的字**（實測：`wo` 之後按 3 得到 `𠂎`）。
@@ -675,7 +675,7 @@ pub fn run(
         }
         system_ime.want(!composes_here(editor) || yume_has_the_keys);
         // Warning: **挑選器那兩層也要進這個元組**（2026-10-02 修）。換層不換 `mode`，
-        // 於是形狀一次都沒重發過——列表層照樣頂着一根豎線（作者報的：「The cursor
+        // 於是形狀一次都沒重發過——列表層照樣頂着一根豎線（報上來的：「The cursor
         // is incorrect in normal mode」）。
         let in_the_list = editor.picker().is_some_and(|p| !p.typing());
         let shown = (editor.mode(), editor.is_extending(), in_the_list);
@@ -834,7 +834,7 @@ pub fn run(
                 editor.run_owed_search();
                 continue;
             }
-            // **全部替換一批一批地做**（2026-10-03 作者定：「不給取消，只給進度」）。
+            // **全部替換一批一批地做**（2026-10-03 定：「不給取消，只給進度」）。
             // 同一個辦法：剛畫的那一幀寫着「正在替換… 1200/3000 個檔」，然後做
             // 八十毫秒，再回來畫一幀。三千個檔那一趟從前是十幾秒的死屏。
             if editor.replacing_a_batch() {
@@ -1882,7 +1882,7 @@ fn composes_here(editor: &Editor) -> bool {
     // the next character is *text*. One line, because every gate in this file
     // asks this one question — the preedit, the panel and the lone-Shift tap
     // all light up together.
-    editor.takes_a_character()
+    editor.wants_the_ime()
 }
 
 /// Is this scheme request an answer about the **language**, as against the
@@ -4308,7 +4308,7 @@ fn draw(
     // the page is, and answered from last frame's scroll together with this
     // frame's cursor — see `table_head_is_off_the_page`.
     let top = viewport[editor.live_pane().min(1)].top.line;
-    // Warning: **不給格子模式留這兩行**（2026-09-30 作者報的：拆分表捲過一行，
+    // Warning: **不給格子模式留這兩行**（2026-09-30 報上來的：拆分表捲過一行，
     // 整個表頭連同標尺往下掉兩行，上面空出兩行）。那條頂欄是給**散文裏的 `|`
     // 表**用的：正文照常滾，表頭滾沒了就在頁頂補一條。格子模式（`.csv` 整檔進
     // 來那一種）自己就凍着表頭與標尺，補的那兩行沒有人畫，於是成了兩行空白。
@@ -5746,7 +5746,7 @@ fn draw_note(
     // 模式，浮窗自己回來。
     let writing = editor.mode() == Mode::Insert;
     // Warning: **問 `problem_afloat`，不是 `problem_here`**（2026-09-29）。前者多
-    // 問兩句：文檔那一份正浮着嗎（疊在一起是作者報的那一條），以及這一則是即時
+    // 問兩句：文檔那一份正浮着嗎（疊在一起是報上來的那一條），以及這一則是即時
     // 那一檔冒出來的還是剛按過 `空格 i`。
     if let Some((severity, said)) = editor.problem_afloat().filter(|_| !writing) {
         use yumete_core::problem::Severity;
@@ -5787,7 +5787,7 @@ fn draw_note(
     //
     // Warning: **記錄從前只有邊欄一種形態**：它是光標頂上來的「臨時面板」，自己
     // 開自己關。五種併成一格之後那條路沒有了（邊欄只由人開由人關），所以它跟
-    // 別的四種一樣要有一個浮窗——作者的模型是「右侧栏就是固定的『浮窗』」，
+    // 別的四種一樣要有一個浮窗——模型是「右侧栏就是固定的『浮窗』」，
     // 反過來說，每一種都得浮得起來。
     if editor.info_afloat() == Some(Info::Record) {
         if let Some(detail) = editor.detail() {
@@ -5800,7 +5800,7 @@ fn draw_note(
             pages: false,
             reading: true,
                 scroll: 0,
-                // Warning: **標題要寫「數據」**（2026-09-30 審出來的）。作者定的
+                // Warning: **標題要寫「數據」**（2026-09-30 審出來的）。定的
                 // 是「如果不是空的，就显示对应的标题」——邊欄那一份照辦了，浮
                 // 窗這一份只寫了行號，於是同一則東西兩個地方兩個名字。
                 title: format!(
@@ -6624,7 +6624,7 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         Kind::Ref => Style::default()
             .fg(ink.azure())
             .add_modifier(Modifier::UNDERLINED),
-        // 標籤是被指的那一頭——它不是正文，是作者留給自己的一個錨。
+        // 標籤是被指的那一頭——它不是正文，是留給自己的一個錨。
         Kind::Label => Style::default().fg(ink.furniture()),
         // CROSSED_OUT is not everywhere, so the rung carries it as well.
         Kind::Strike => Style::default()
@@ -7088,8 +7088,8 @@ fn draw_sidebar(
     // **信息那一格：擺着哪一種就照那一種畫**（#426）。
     //
     // Warning: **空了也照畫一扇框**——這一扇是常駐的，不是光標停上去纔冒出來的那
-    // 一種，所以它不許一開一關（作者報的原話：「侧栏不应该关闭，即使是空的」）。
-    // 空着的時候標題寫「信息」（作者定的：「他如果是空的，就显示『信息』标题。
+    // 一種，所以它不許一開一關（報上來的原話：「侧栏不应该关闭，即使是空的」）。
+    // 空着的時候標題寫「信息」（定的：「他如果是空的，就显示『信息』标题。
     // 如果不是空的，就显示对应的标题」）。
     if sidebar.view() == View::Info {
         match editor.info_now() {
@@ -7423,13 +7423,13 @@ pub(crate) struct Shell {
     floor_ink: Style,
 }
 
-/// **邊欄底邊：左端「讀到第幾行 ／ 共幾行」，右端「怎麽翻」**（2026-09-30 作者定）。
+/// **邊欄底邊：左端「讀到第幾行 ／ 共幾行」，右端「怎麽翻」**（2026-09-30 定）。
 ///
 /// `at >= all` ＝ 整份都在眼前，兩頭都不寫——數字出現本身就是「還有沒露出來
 /// 的」。和浮窗底邊逐字同形（`panel.rs`）。
 ///
 /// Warning: **數字兩邊各留一格空氣。** 貼着角寫出來的是「╰8/11───」，讀起來像
-/// 被擠出去的（作者報的：「现在似乎顶到了前头」）。
+/// 被擠出去的（報上來的：「现在似乎顶到了前头」）。
 fn count_on_the_floor(frame: &mut Frame, shell: &Shell, at: usize, all: usize) {
     let (Some(y), true) = (shell.floor, at < all) else { return };
     let buf = frame.buffer_mut();
@@ -7503,7 +7503,7 @@ fn draw_wiki(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, ar
             false => put_text(buf, from_x, y, to, &row, style),
         };
     }
-    // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 作者定）。
+    // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 定）。
     //
     // Warning: **總數要再走一趟。** 上面那一趟走到屏幕滿了就停（那是它便宜的原
     // 因），所以它多半不知道總數。這一趟靠 `scroll = CAP、deep = 0` 空走：一行
@@ -7711,7 +7711,7 @@ fn draw_search(
         // Warning: 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
         // （2026-09-27 報的）。兩則文案，中文那兩份寫得一模一樣。
         (false, _, true) if find.total == 1 && !find.cut => (say!("search.hits-one", 1), quiet),
-        // **沒走完就停了，數目後面一個加號**（2026-10-01 定，作者寫的「21+结果」）。
+        // **沒走完就停了，數目後面一個加號**（2026-10-01 定，寫的「21+结果」）。
         // 一張半截的清單看着和全部一個樣，而那一格是唯一說得出這件事的地方。
         (false, _, true) if find.cut => (say!("search.hits-more", find.total), quiet),
         (false, _, true) => (say!("search.hits", find.total), quiet),
@@ -7962,7 +7962,7 @@ fn draw_search(
             return;
         }
         put_text(buf, left, y, to, &nth.to_string(), shortcut);
-        // **方框在名字後面**（2026-10-01 定，作者原話：「把 [] 全部放到文字後面」）。
+        // **方框在名字後面**（2026-10-01 定，原話：「把 [] 全部放到文字後面」）。
         // 從前方框自成一欄、寬度按最長的那個狀態名量出來，於是一個「智能大小寫」
         // 把每一行的名字都往右推六格，面板當場出界。
         // Warning: **放不下就加省略號，別直接切掉**（2026-10-03；候選面板 2026-10-02
@@ -8010,7 +8010,7 @@ fn draw_search(
         false => text,
     };
     switch(buf, y, tick(find.whole), &say!("search.whole"), 4, whole_cell);
-    // **替換是一行三態**（2026-10-01 定，作者原話：「替換那一行做成 cycle」）：
+    // **替換是一行三態**（2026-10-01 定，原話：「替換那一行做成 cycle」）：
     // 關 → 字面替換 → 智能大小寫。從前它是兩行，第二行只在勾上之後纔畫得出來。
     let y = y + 1;
     let swap = match (find.replacing, find.preserve_case) {
@@ -8021,7 +8021,7 @@ fn draw_search(
     switch(buf, y, &format!("[{swap}]"), &say!("search.replacing"), 5, text);
     let mut y = y;
 
-    // **「搜哪裏、搜哪些」四格，攢在最下面**（2026-10-01 定，作者原話：「位置放到
+    // **「搜哪裏、搜哪些」四格，攢在最下面**（2026-10-01 定，原話：「位置放到
     // 『包含和排除』上方」）。位置從前畫在開關那一列的頭上、號碼是 `0`，可它說的
     // 是範圍，和底下三格是一夥的。
     y += 1;
@@ -8040,7 +8040,7 @@ fn draw_search(
         y += 1;
         draw_box(buf, Field::Exclude, &say!("search.label.exclude"), &find.exclude, y);
         y += 1;
-        // **方框裏列「不搜哪些」**（2026-10-01 定，作者原話：「方框裡列『不搜哪些』」）。
+        // **方框裏列「不搜哪些」**（2026-10-01 定，原話：「方框裡列『不搜哪些』」）。
         // 所以它和上面幾行反着讀：方框空了纔是「全都搜」。存着的那個布爾沒有翻
         // ——它記的是「走查要不要收隱藏和忽略」，走查那一層要的就是這個意思。
         let skipped = match (find.hidden, find.ignored) {
@@ -8471,7 +8471,7 @@ fn draw_picker(
         },
         items.len(),
     );
-    // **腳注只剩一個數目**（2026-10-01 定）。查詢詞挪進了列表上面那個框（作者原
+    // **腳注只剩一個數目**（2026-10-01 定）。查詢詞挪進了列表上面那個框（原
     // 話：「我其实有点想在文件下方加一行输入框」，後來定了畫在**上面**，和搜索
     // 面板同形），鍵位挪去了命令行那一行（「快捷键文案是不是可以收到命令行
     // 中？」）——搜索面板一直是那樣，而挑選器從前兩樣都寫在自己身上、命令行
@@ -8652,7 +8652,7 @@ fn draw_picker(
         put_text(buf, tag_at, left.y + 1, limit, &tag, ground.fg(ink.quiet()));
         let box_at = tag_at + yumete_cjk::str_width(&tag) as u16 + 1;
         let said = format!("{}{preedit}", picker.query());
-        // Warning: **兩種狀態都不改底色**（2026-10-01 定，作者原話：「搜索行 normal 模式
+        // Warning: **兩種狀態都不改底色**（2026-10-01 定，原話：「搜索行 normal 模式
         // 下不需要特别的底色……进入了 insert 模式也不用修改底色了（因为光标会提示
         // 这是什么模式）」）。搜索面板那三格的底色當初是為了「沒有名字的空框看不
         // 出能打字」纔加的，而這一行前面寫着「搜:」，再加上光標形狀本來就在說模
@@ -8709,7 +8709,7 @@ fn draw_picker(
     // keys are in the list, so there the caret is on the name it is standing
     // on instead.
     // **框裏那一格的位置，兩層算法一樣**（2026-10-02 修）。從前列表層那一支漏了
-    // `before_caret`，於是光標永遠釘在框的開頭、`h`／`l` 挪了它也不動——作者報
+    // `before_caret`，於是光標永遠釘在框的開頭、`h`／`l` 挪了它也不動——報
     // 的「the curser does not move with hl」就是這個。
     let in_the_box = Position::new(
         left.x
@@ -8874,7 +8874,7 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
 /// characters.
 /// **`:rules` 的那幾道底紋**（#424，2026-09-30）。
 ///
-/// 作者原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
+/// 原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
 /// `:rules 80 100 120` 來繪製多條。」
 ///
 /// Warning: **是底紋不是綫。** 一條真的竪綫要佔一欄，而那一欄本來是寫字的；鋪底
@@ -10341,7 +10341,7 @@ fn draw_status(
         false => status,
     };
     let tail = fits(&status);
-    // **左邊留一格，轉圈那八個點在 `NOR` 後面**（2026-09-30 作者報的兩件）。
+    // **左邊留一格，轉圈那八個點在 `NOR` 後面**（2026-09-30 報上來的兩件）。
     //
     // 一、「NOR 前面应该空一格（我们现在顶格了，和下面的命令行不对齐）」。
     // 二、「The 8 dots should be after NOR but not before：`NOR X lib.rs`」
@@ -15070,7 +15070,7 @@ fn squeezed(text: &str) -> String {
         assert!(super::shortcut_lines(&[], 40).is_empty());
     }
 
-    /// **一頁不許比畫得下的多**（#516，2026-10-02 作者定「把頁縮到畫得下」）。
+    /// **一頁不許比畫得下的多**（#516，2026-10-02 定「把頁縮到畫得下」）。
     ///
     /// 從前頁是 6 個而六行的窗口只畫得出 1 個，那道閘問的卻是「這一頁有沒有第
     /// n 個」——按 `3` 上屏的是一個從沒畫出來過的字（實測 `wo` 之後按 3 得到
@@ -18444,7 +18444,7 @@ fn squeezed(text: &str) -> String {
             line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
             "the 字 is named at the right edge: {line:?}"
         );
-        // Warning: **左邊留一格**（2026-09-30 作者報的：「NOR 前面应该空一格
+        // Warning: **左邊留一格**（2026-09-30 報上來的：「NOR 前面应该空一格
         // （我们现在顶格了，和下面的命令行不对齐）」）。底下那一行本來就從第二
         // 格起。那一格同時是轉圈那八個點的位子——見
         // `the_spinner_turns_in_the_slot_beside_the_mode`。
@@ -20040,10 +20040,16 @@ fn squeezed(text: &str) -> String {
     }
 
     /// Normal mode is not prose — except for the character `f`、`r`、`ms`、
-    /// `mi`、`mr` are waiting for (§5.2.3 ②, #414), which in a Chinese
-    /// manuscript is 中文 and needs the engine. Every gate in this file asks
-    /// `composes_here`, so this one answer opens the preedit, the panel and
-    /// the lone-Shift tap at once.
+    /// `mr` are waiting for (§5.2.3 ②, #414), which in a Chinese manuscript is
+    /// 中文 and needs the engine. Every gate in this file asks `composes_here`,
+    /// so this one answer opens the preedit, the panel and the lone-Shift tap
+    /// at once.
+    ///
+    /// Warning: **`mi`／`ma` 2026-10-04 從上面那一列挪到了下面那一列。** 它們等的是
+    /// **物件的名字**（`mim` 的 `m` 是「標記」），不是要寫進稿子的字——報上來的：
+    /// 「我打 `mam`，最后一個 m 會變成輸入法候選框」。同一個理由 2026-09-29 就為
+    /// vim 的 `di`／`da` 定過，這一族當時被落下了。全角括號不靠輸入法：`ma[` 自己
+    /// 就認得「」。
     #[test]
     fn a_key_waiting_for_a_character_composes_in_normal_mode() {
         let mut editor = Editor::new();
@@ -20052,8 +20058,8 @@ fn squeezed(text: &str) -> String {
         assert!(composes_here(&editor), "`r` is waiting for a character");
         editor.on_key(Key::Esc);
         assert!(!composes_here(&editor), "and it stops when `r` is answered");
-        // The four that could not do this before #414.
-        for keys in [&["f"][..], &["F"], &["m", "s"], &["m", "i"], &["m", "r"]] {
+        // The ones that could not do this before #414.
+        for keys in [&["f"][..], &["F"], &["m", "s"], &["m", "r"]] {
             let mut editor = Editor::new();
             for key in keys {
                 editor.on_key(Key::Char(key.chars().next().unwrap()));
@@ -20065,7 +20071,11 @@ fn squeezed(text: &str) -> String {
             );
         }
         // …while the keys waiting for the *name* of something are still keys.
-        for keys in [&["\""][..], &["m"], &["Z"], &["z"], &["g"], &[" "]] {
+        // `mi`／`ma` are in this list, not the one above: what follows them is
+        // `w`、`p`、`s`、`m` or a bracket — a name, which the engine would eat.
+        for keys in
+            [&["\""][..], &["m"], &["Z"], &["z"], &["g"], &[" "], &["m", "i"], &["m", "a"]]
+        {
             let mut editor = Editor::new();
             for key in keys {
                 editor.on_key(Key::Char(key.chars().next().unwrap()));
@@ -20169,7 +20179,7 @@ fn squeezed(text: &str) -> String {
 
     /// **挑選器搜索框裏的光標跟着 `h`／`l` 走，兩層都是**（2026-10-02 修）。
     ///
-    /// 作者報的：「The cursor is incorrect in normal mode and the curser does
+    /// 報上來的：「The cursor is incorrect in normal mode and the curser does
     /// not move with hl」。兩件事同一個根：列表層那一支算位置的時候**漏了光標前
     /// 面那一段**，於是它永遠釘在框的開頭；而 `Mode::Picker` 一律走
     /// `is_prompt()`，形狀被寫死成豎線，連換層都不重發。
@@ -21361,7 +21371,7 @@ fn squeezed(text: &str) -> String {
 
 
 
-        /// **`:rules` 在指定的欄上鋪一道底紋**（#424，2026-09-30 作者提的）。
+        /// **`:rules` 在指定的欄上鋪一道底紋**（#424，2026-09-30 提的）。
     ///
     /// 原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
     /// `:rules 80 100 120` 來繪製多條。」
@@ -21415,12 +21425,12 @@ fn squeezed(text: &str) -> String {
             "關掉就一格都沒有"
         );
 
-        // 光禿禿的 `:rules` ＝ 第 80 欄（作者說的「比如默认 80」）。
+        // 光禿禿的 `:rules` ＝ 第 80 欄（說的「比如默认 80」）。
         editor.execute(":rules").unwrap();
         assert_eq!(editor.rules(), &[80, 100], "光禿禿的是兩道：文檔字串一道，代碼一道");
     }
 
-    /// **語言服務器在忙的時候，狀態行左邊那一格轉起來**（2026-09-30 作者提的）。
+    /// **語言服務器在忙的時候，狀態行左邊那一格轉起來**（2026-09-30 提的）。
         ///
         /// 原話：「这个动态八个点显示正在加载的符号很好用……如果是的话，我们也可以
         /// 用这个，而不是用下面的那句话。」從前那是一整句
@@ -21440,7 +21450,7 @@ fn squeezed(text: &str) -> String {
             let quiet = status_line(&render(&editor, &config, 60, 6));
             assert!(quiet.starts_with(" NOR   "), "不忙的時候是空格：{quiet:?}");
 
-            // 忙：點在 `NOR` **後面**（2026-09-30 作者報的：「The 8 dots should
+            // 忙：點在 `NOR` **後面**（2026-09-30 報上來的：「The 8 dots should
             // be after NOR but not before」，helix 的次序也是 Mode → Spinner →
             // FileName）。而 `NOR` 一格都沒挪。
             editor.note_the_server_is_busy(Some(std::time::Instant::now()));

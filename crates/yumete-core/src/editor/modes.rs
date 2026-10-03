@@ -11,14 +11,16 @@ impl Editor {
     }
 
     /// Whether a half-finished key is waiting for **a character of the
-    /// document** — `f`, `r`, `ms`, `mi`, `mr` (§5.2.3 ②, #414).
+    /// document** — `f`, `r`, `ms`, `mr` (§5.2.3 ②, #414).
     ///
     /// The front end asks so the IME may run for it: `f` then 中文 opens the
     /// candidate panel, and what is chosen is what `f` looks for. Which
-    /// pendings those are is [`Pending::takes_a_character`]'s to say; this is
+    /// pendings those are is [`Pending::wants_the_ime`]'s to say; this is
     /// only the door it is asked through.
-    pub fn takes_a_character(&self) -> bool {
-        self.pending.takes_a_character()
+    ///
+    /// Warning: **`mi`／`ma` 不在裏面**（2026-10-04）：它們等的是物件的名字。
+    pub fn wants_the_ime(&self) -> bool {
+        self.pending.wants_the_ime()
     }
 
     /// A status-line label for the current mode — `None` when the row below
@@ -36,7 +38,7 @@ impl Editor {
         if self.mode == Mode::Normal && self.sidebar_focused() {
             return Some("PAN.NOR".to_string());
         }
-        // **選擇器也報狀態**（2026-10-01 作者定：「PICKER 下也可以显示状态，就像
+        // **選擇器也報狀態**（2026-10-01 定：「PICKER 下也可以显示状态，就像
         // PANEL 一样……这样的好处是用户可以马上知道现在是插入状态与否」）。
         //
         // Warning: **2026-09-27 定的是「不報」**，理由寫在 [`Mode::label`] 上：
@@ -98,8 +100,8 @@ impl Editor {
     /// 一堆非确定的修改」）。
     /// 只給測試：手上等的是不是一個字符（前端問的是 `Pending` 上同名的那一支）。
     #[cfg(test)]
-    pub fn takes_a_character_for_test(&self) -> bool {
-        self.takes_a_character()
+    pub fn wants_the_ime_for_test(&self) -> bool {
+        self.wants_the_ime()
     }
 
     pub fn has_many_selections(&self) -> bool {

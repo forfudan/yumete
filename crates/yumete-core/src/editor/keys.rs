@@ -64,7 +64,7 @@ impl Editor {
         self.the_cursor_moved_under_the_docs();
         // **浮着的那一則，四個鍵翻得動**（2026-09-29 定，#426 起五種都收）。
         //
-        // 作者的原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用
+        // 原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用
         // page up / page down 来对这五类进行翻页了」「这样，光标就在编辑区，也
         // 可以对五类信息进行翻页。」Warning: **翻的是那一則的行，不是換一種**
         // ——五種共用一個容器，那就該共用一套翻頁鍵；而「光標就在編輯區」正是
@@ -77,7 +77,7 @@ impl Editor {
         // 這四個鍵歸浮窗，沒開就照舊翻正文，別的鍵一按浮窗就走。所以這裏**不
         // 攔**——翻不動就讓路，正文那一支自己接住。
         if self.mode == Mode::Normal && self.pending == Pending::None {
-            // Warning: **翻頁那一族要整族在這裏**（2026-10-01 作者報的：「你翻页
+            // Warning: **翻頁那一族要整族在這裏**（2026-10-01 報上來的：「你翻页
             // 翻的是 buffer 不是浮窗／边栏」）。從前只攔了四個，而 `C-f`／`C-b`
             // 與當天新加的 `C-n`／`C-p` 沒攔住——同一族鍵，開着浮窗按下去有的
             // 翻浮窗有的翻正文，讀者沒法預測。
@@ -997,11 +997,14 @@ impl Editor {
             | Pending::Surround
             | Pending::SurroundFrom
             | Pending::SurroundTo(_)) => {
-                // Spelt out rather than guarded by `takes_a_character`,
-                // because a guard does not count towards exhaustivity and
-                // this match is what catches a new `Pending` nobody handled.
-                // The two lists must agree; in a debug build they are checked.
-                debug_assert!(waiting.takes_a_character());
+                // Spelt out rather than guarded by a predicate, because a
+                // guard does not count towards exhaustivity and this match is
+                // what catches a new `Pending` nobody handled.
+                //
+                // Warning: **這張表和 `wants_the_ime` 有意不同**（2026-10-04）。從前
+                // 兩張表是同一張，這裏還有一句 `debug_assert` 把它們釘在一起；而
+                // `mi`／`ma` 吃一個字符鍵、卻不要輸入法——「吃不吃鍵」和「要不要
+                // 輸入法」本來就是兩個問題，那一句斷言是在逼它們答同一個。
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
                     self.answer_with_char(waiting, c);
@@ -1461,7 +1464,7 @@ impl Editor {
             // preview is the transient thing on the screen, and Esc is the key
             // every reader presses at a transient thing.
             Key::Esc => {
-                // **浮窗先收**（2026-10-01 作者提）。它是屏幕上最臨時的那一樣，
+                // **浮窗先收**（2026-10-01 提）。它是屏幕上最臨時的那一樣，
                 // 而 `Esc` 是人對着臨時的東西按的那一鍵。收的只是「這會兒別擋
                 // 着」——挪開光標它又回來，邊欄一動不動。
                 if self.hush_the_float() {
@@ -1760,13 +1763,13 @@ impl Editor {
             Key::Ctrl('i') => self.walk_jumps(false),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
             Key::Ctrl('u') => self.move_page(count, true, 0.5),
-            // **三分之二頁**（2026-10-01 作者定）。起因是 `C-u`／`C-d` 在 Mac 上
+            // **三分之二頁**（2026-10-01 定）。起因是 `C-u`／`C-d` 在 Mac 上
             // 不好按——那塊鍵盤只有一個 Ctrl，而 `u` 和 `d` 都在左手這一邊；
             // `n` 和 `p` 在右手，左 Ctrl 配右手字母順得多。
             //
             // Warning: **二三頁不是哪一家的慣例。** 兩種慣例是「整頁留一兩行」
             // （vim 的 `C-f`、Emacs 的 `next-screen-context-lines`）與「半頁」
-            // （vim 的 `C-d`）。作者的推理和 vim 留那兩行是同一個：留一截做
+            // （vim 的 `C-d`）。推理和 vim 留那兩行是同一個：留一截做
             // 錨。只是留得大方——「前一页留 1/3 不会断，2/3 的新页增加阅读效
             // 率」。三種都留着，用幾天見分曉。
             Key::Ctrl('n') => self.move_page(count, false, 2.0 / 3.0),
@@ -2034,7 +2037,7 @@ impl Editor {
         };
         match key {
             Key::Char('g') => return go(self, motion::Motion::FileStart),
-            // Warning: **vim 鍵位下 `ge`／`gE` 是 vim 的 `ge`**（2026-10-02 作者定
+            // Warning: **vim 鍵位下 `ge`／`gE` 是 vim 的 `ge`**（2026-10-02 定
             // 「照參考實現」）：往回到上一個詞的末尾。helix 鍵位下照舊是「到檔
             // 尾」。兩套鍵位在這一格上真的各說各的，所以這裏分家。
             Key::Char('e' | 'E') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
@@ -2199,7 +2202,7 @@ impl Editor {
         //
         // Warning: **這裏從前躺着三套說同一件事的詞彙**——`1234`（點名去）、
         // `!@#$`（隔空關）、`w/W/q/Q`（走一步／全開／關／只留）。一組一套之
-        // 後，數字整塊空了出來，留給緩衝區（作者 2026-09-30 定：每個緩衝區在
+        // 後，數字整塊空了出來，留給緩衝區（ 2026-09-30 定：每個緩衝區在
         // 檔名前帶一個號，十個起補零，於是那是一套不必按空格確認的前綴碼）。
         ('w', "hint.region.title"),
         ('"', "menu.paste.title"),
@@ -2341,7 +2344,7 @@ impl Editor {
     /// These six work anywhere, so they head every list, and on a page with no
     /// table under the cursor they are the whole list.
     const TABLE_KEYS: &'static [(&'static str, &'static str)] = &[
-        // **五個一系列，照它們的次序排**（2026-09-30 作者定：「t 放到 f 后面，
+        // **五個一系列，照它們的次序排**（2026-09-30 定：「t 放到 f 后面，
         // q放到 t后面。这五个是一个系列」）。`o b f t` 是同一個問題的四個答案
         // ——這張表畫成什麼樣——由淺入深，`q` 是從最深那一檔退回來。
         ("o", "hint.table.back-to-prose"),
@@ -2360,13 +2363,13 @@ impl Editor {
         // a key offered nowhere is a key nobody finds.
         ("a", "hint.table.wrap-wide-cells"),
         ("] [", "hint.table.next-or-previous"),
-        // 2026-10-02 作者定：命令是 `:convert-table`，鍵位摺在這一組底下。
+        // 2026-10-02 定：命令是 `:convert-table`，鍵位摺在這一組底下。
         ("x", "hint.table.convert"),
     ];
 
     /// `空格 t x` 底下那三個格式。名字直接寫——它們就是命令上打的那三個詞。
     /// `空格 t x` 底下那三種格式。**小寫是轉換，大寫是把剪貼板貼成那一種**
-    /// （2026-10-02 作者定）——和這一組的習慣一致：大寫是「另一個方向」或者
+    /// （2026-10-02 定）——和這一組的習慣一致：大寫是「另一個方向」或者
     /// 「重的那一個」（`r R`、`c C`、`d D`、`F`）。
     pub(super) const TABLE_CONVERT_KEYS: &'static [(&'static str, &'static str)] = &[
         ("p P", "hint.table.convert-pipe"),
@@ -2514,7 +2517,7 @@ impl Editor {
             // 套說同一件事的詞彙——`空格 1234`（點名去）、`空格 !@#$`（關那
             // 一區）、`空格 w/W/q/Q`（走一步／全開／關／只留）。現在一組一套。
             //
-            // Warning: **數字空出來了，留給緩衝區**（作者 2026-09-30 定）：
+            // Warning: **數字空出來了，留給緩衝區**（ 2026-09-30 定）：
             // 「each buffer will be indexed by 1, 2, 3, 4 before the file
             // name……Then users can use space + N to quickly switch between
             // them.」——檔數上十位就補零，所以那是一套不必按空格確認的前綴碼。
