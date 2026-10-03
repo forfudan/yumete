@@ -70,7 +70,8 @@ fn main() -> ExitCode {
     // `檔:行:列:文字` 印到 stdout 就退出——找到回 0，一處都沒有回 1，所以
     // `if ye --grep …` 在腳本裏是一句話。
     let mut grep: Option<String> = None;
-    // `ye --files jia` 列出名字配得上的檔——fd 那一半，而它也認拼音。
+    // `ye --files jia` 列出名字配得上的檔——走檔是 fd 那一半，配名字是 fzf 那一半，
+    // 而它也認拼音。
     let mut listing: Option<String> = None;
     let mut g = Grep::default();
     // **還欠着一個值的那個旗標**（2026-10-03 一輪審查報來的）。
@@ -1548,7 +1549,9 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
 
 /// **`ye --files`**：名字配得上的檔，一行一個，最配的在前。
 ///
-/// fd 的那一半，而它認拼音：`ye --files jia` 找得到 `甲.md`。
+/// **走檔是 fd 那一半，配名字是 fzf 那一半**（子序列模糊、最配的在前），而它認拼音：
+/// `ye --files jia` 找得到 `甲.md`。說成 `fd | fzf -f` 最準——fd 自己是拿正則或 glob
+/// 去配名字、不排序的。
 ///
 /// Warning: **匹配器是挑選器那一個**（`Editor::files_matching`），所以這裏和編輯器裏
 /// `空格 f` 打同樣幾個字母永遠是同一份答案。
@@ -1810,8 +1813,9 @@ SEARCHING FROM THE SHELL:
                      instead of a directory.
 
         --files PAT  Print every file whose name matches PAT, best first, and
-                     exit — fd's half, and it reads 拼音 too: `ye --files jia`
-                     finds 甲.md. Same matcher as 空格 f inside the editor.
+                     exit — fd's walk with fzf's matching (`fd | fzf -f`), and
+                     it reads 拼音 too: `ye --files jia` finds 甲.md. Same
+                     matcher as 空格 f inside the editor.
 
                      Letters and 漢字 mix in one query, which is how a real
                      one is written: `di120` finds 第120章.md, and
