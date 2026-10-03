@@ -66,7 +66,7 @@ fn main() -> ExitCode {
     // because 「打開編輯器，然後去找哪個設定能改語言」 is exactly the loop a
     // reader who cannot read the current language is stuck in.
     let mut force_language: Option<yumete_core::messages::Language> = None;
-    // **管道那一邊**（2026-10-03 作者定：「先做管道吧」）。`ye --grep 霜` 把
+    // **管道那一邊**（2026-10-03 定：「先做管道吧」）。`ye --grep 霜` 把
     // `檔:行:列:文字` 印到 stdout 就退出——找到回 0，一處都沒有回 1，所以
     // `if ye --grep …` 在腳本裏是一句話。
     let mut grep: Option<String> = None;
@@ -84,7 +84,7 @@ fn main() -> ExitCode {
     // **這幾個開關只有配上 `--grep`／`--files` 纔有意義。** 單獨給是打錯了，不是
     // 「沒關係」——`ye --hidden` 從前悄悄開了編輯器。
     let mut modifiers: Vec<&'static str> = Vec::new();
-    // **`-u` 是一把梯子，不是一個勾**（2026-10-03 作者定，照 rg 原樣）。數的是它一共
+    // **`-u` 是一把梯子，不是一個勾**（2026-10-03 定，照 rg 原樣）。數的是它一共
     // 出現幾次，所以 `-u -u` 和 `-uu` 是同一句話，同 rg。一級＝連被忽略的一起搜，
     // 二級＝再加上點文件。rg 還有三級（連二進制一起搜），我們沒有那一檔。
     let mut unrestricted = 0usize;
@@ -116,7 +116,7 @@ fn main() -> ExitCode {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
             }
-            // Warning: **舊的那八個短名撤了**（2026-10-03 作者定：「舊的讓位……等到
+            // Warning: **舊的那八個短名撤了**（2026-10-03 定：「舊的讓位……等到
             // 全部弄好了再看哪些值得 short alias」）。字母留給了搜索那一邊：今天
             // 有 `-G`（`--grep`）與 `-O`（`--open`），串得起來（見底下那一條分支），
             // 加上 `-h`、`-V` 這兩個所有命令行的通例。
@@ -154,7 +154,7 @@ fn main() -> ExitCode {
                 g.fuzzy = true;
                 modifiers.push("--fuzzy");
             }
-            // **兩件事，兩個開關**（2026-10-03 作者定），字母與語意都同 rg。
+            // **兩件事，兩個開關**（2026-10-03 定），字母與語意都同 rg。
             // 從前它們是一個，於是一個想搜 `.gitignore` 裏那幾個目錄的人要去撥
             // 一個名叫 `--hidden` 的旗標。
             "--hidden" => {
@@ -291,15 +291,15 @@ fn main() -> ExitCode {
                 eprintln!("single letters are being saved for the search flags");
                 return ExitCode::from(2);
             }
-            // **短名串得起來，帶值的那個把值留給下一個詞**（2026-10-03 作者定）。
+            // **短名串得起來，帶值的那個把值留給下一個詞**（2026-10-03 定）。
             //
             // `-G zhongguo` 找詞、`-GO zhongguo` 找完直接開編輯器。能這麼串，靠的
-            // 正是作者定的那條「參數必須空一格」：getopt 的規矩裏值可以貼在字母
+            // 正是定的那條「參數必須空一格」：getopt 的規矩裏值可以貼在字母
             // 後面，於是 `-GO x` 只能讀成「`-G`，值是 `O`」；**貼寫這條路一堵死，
             // `O` 就只可能是另一個字母**，`-GO` 再沒有第二種讀法。代價兩個，都在
             // 下面當場報錯：貼着寫（`-Gzhongguo`），以及一串裏兩個帶值的。
             //
-            // Warning: **入口用大寫，小寫那一整排留着**（2026-10-03 作者定）。
+            // Warning: **入口用大寫，小寫那一整排留着**（2026-10-03 定）。
             // `-g` 在 rg 與 fd 裏都是 `--glob`、`-o` 在 rg 裏是 `--only-matching`
             // ——花掉它們，將來這幾個開關就沒有天然的字母了。這兩個又不是開關：
             // 它們決定整個程序問哪一個問題。大寫把這個區別寫在臉上，將來
@@ -447,7 +447,7 @@ fn main() -> ExitCode {
     // **`--open` 之外纔印到 stdout 就退出。** 帶了 `--open` 的那一條往下走，等編輯
     // 器建好、配置載好、檔開好之後再把面板擺出來（底下那一處）。
     if !g.open {
-        // **管道那一邊說英文**（2026-10-03 作者定：「cli 搜索结果我建议用英文而不是
+        // **管道那一邊說英文**（2026-10-03 定：「cli 搜索结果我建议用英文而不是
         // 中文……和 rg 稍微对齐一下，这样比较方便（pipe 的 tool 比较容易复用）」）。
         //
         // 編輯器裏的話是給寫書的人看的；這裏印出來的多半是給**另一個程序**看的，
@@ -814,7 +814,7 @@ fn main() -> ExitCode {
         editor.set_status(config_problems.join(&yumete_core::say!("label.comma")));
     }
     // **恢復那一問要在按鍵之前擺出來**，因為它就是開檔那一刻的事（2026-10-02
-    // 作者定）。
+    // 定）。
     //
     // Warning: **而且要在 `--shot` 那一支之前**。從前這一句在下面第 680 行附近，
     // 而 `--shot` 在第 520 行就把圖印出來走人了——於是離屏**永遠拍不到**開檔時
@@ -895,7 +895,7 @@ fn main() -> ExitCode {
         let _ = editor.execute(":tutor");
     }
     // **`--grep … --open` / `--files … --open`**：詞在命令行上已經打過了，進去就
-    // 該是「已經找完」的那個樣子（2026-10-03 作者定）。
+    // 該是「已經找完」的那個樣子（2026-10-03 定）。
     if g.open {
         let scope = match g.project {
             true => Where::Project,
@@ -1279,7 +1279,11 @@ fn press(
         // whole behaviour (§5.2.3 ②): the IME hands the editor a *string*,
         // which may be two 字 long. Gather the run and commit it, so a picture
         // of `r` 打中文 shows what a reader would actually see.
-        if editor.takes_a_character() {
+        // Warning: **問的要和真編輯器同一個問題**（2026-10-04）。離屏這一支從前問
+        // 「吃不吃一個字符」，而互動迴圈問的是「要不要開輸入法」——`mi`／`ma` 之後
+        // 兩者的答案現在不同，照舊問就會在圖上畫出一個真編輯器裏不會出現的候選框。
+        // 離屏路徑和真路徑分家，這個倉裏已經咬過四次。
+        if editor.wants_the_ime() {
             if let Key::Char(c) = key {
                 let mut text = String::from(c);
                 while let Some(&next) = chars.peek() {
@@ -1333,7 +1337,7 @@ fn press(
     settings.panel
 }
 
-/// **管道那一邊的那幾個開關**（`ye --grep`，2026-10-03 作者定）。
+/// **管道那一邊的那幾個開關**（`ye --grep`，2026-10-03 定）。
 ///
 /// 出廠值就是面板的出廠值，只有一處不同：**名單不封頂**。面板封在 500 條，因為
 /// 名單是拿來走的；管道印給別的程序看，少印一條就是錯一條。
@@ -1348,7 +1352,7 @@ struct Grep {
     include: String,
     exclude: String,
     /// **繁簡、拼音**。出廠兩個都開——那是這個工具存在的理由
-    /// （2026-10-03 作者定：`ye --grep zhongguo` 開箱就搜得到「中國」）。
+    /// （2026-10-03 定：`ye --grep zhongguo` 開箱就搜得到「中國」）。
     chinese: (bool, bool),
     /// 往上搜到項目的根，而不是當前目錄。
     project: bool,
@@ -1356,15 +1360,15 @@ struct Grep {
     colour: Option<bool>,
     /// **按檔分組印，還是一行一條**：`None` ＝ 跟着終端機走，同 `colour`。
     ///
-    /// 作者 2026-10-03 看過平鋪那一版之後定：「能不能像 rg 这样按照文件分组？看
+    ///  2026-10-03 看過平鋪那一版之後定：「能不能像 rg 这样按照文件分组？看
     /// 起来好看多了」。分組是**給人看的排版**，所以進了管道照樣一行一條自足的
     /// `檔:行:列:文字`——`xargs`、`awk` 那一頭讀的還是原來那個形狀。
     heading: Option<bool>,
-    /// **開編輯器，別印到 stdout**（2026-10-03 作者定）。`--grep … --open` 開起來
+    /// **開編輯器，別印到 stdout**（2026-10-03 定）。`--grep … --open` 開起來
     /// 面板已經在跑，`--files … --open` 開起來挑選器已經打好。
     ///
     /// 做成一個修飾旗標而不是另一對名字：所有別的開關（`--hidden`、`--project`、
-    /// `--chinese=`…）白拿，只有一套詞彙要記。作者原話：「其实 open 更好。未来
+    /// `--chinese=`…）白拿，只有一套詞彙要記。原話：「其实 open 更好。未来
     /// 可以 -go 来 grep + open，短别名是可以连缀的」。
     open: bool,
 }
@@ -1673,7 +1677,7 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     }
 }
 
-/// **管道那一邊的顏色**（2026-10-03 作者定：「染色这一块也可以做一下」）。
+/// **管道那一邊的顏色**（2026-10-03 定：「染色这一块也可以做一下」）。
 ///
 /// 照 rg 的缺省配色，因為肌肉記憶和眼睛的習慣都在那兒：路徑洋紅、行號綠、命中的
 /// 那幾個字紅而且粗。`auto` 的判準也和它一樣——**接着終端機就染，進管道就不染**，
