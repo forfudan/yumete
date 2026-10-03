@@ -1505,7 +1505,7 @@ pub(crate) const WALK_CEILING: usize = 20_000;
 ///
 /// Warning: **只對走磁碟的範圍有效。** 本文件與緩衝區不經過 [`walk`]。
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Sieve {
+pub struct Sieve {
     /// 連隱藏文件和 `.gitignore` 裏的一起走。出廠關着。
     pub hidden: bool,
     /// 只走這幾條 glob 配得上的，逗號隔開。空着就是不挑。
@@ -1628,6 +1628,12 @@ pub(crate) struct Walked {
 
 pub(crate) fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
     *skipped += walk_inner(root, &Sieve::default(), false, f).skipped;
+}
+
+/// [`walk`]，但篩子由呼叫方說——`ye --files` 的 `--hidden`／`--glob=`／`--exclude=`
+/// 就是靠它（2026-10-03）。
+pub(crate) fn walk_with(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -> Walked {
+    walk_inner(root, sieve, false, f)
 }
 
 /// [`walk`] for **prose**: a file whose first kilobyte holds a NUL is not

@@ -35,7 +35,6 @@ fn main() -> ExitCode {
     // this says it for one run, which is what you want when the file is
     // called `.txt` and you know what is in it.
     let mut force_syntax: Option<String> = None;
-    let mut want_syntax = false;
     // `--shot` prints one frame — the page as it would be drawn — and exits.
     // `:shot` needs a window, a GUI session and a person; this is the same
     // picture for a headless machine, a bug report, or a reviewer who has to
@@ -71,26 +70,36 @@ fn main() -> ExitCode {
     // `檔:行:列:文字` 印到 stdout 就退出——找到回 0，一處都沒有回 1，所以
     // `if ye --grep …` 在腳本裏是一句話。
     let mut grep: Option<String> = None;
-    let mut want_grep = false;
     // `ye --files jia` 列出名字配得上的檔——fd 那一半，而它也認拼音。
     let mut listing: Option<String> = None;
-    let mut want_files = false;
     let mut g = Grep::default();
+    // **還欠着一個值的那個旗標**（2026-10-03 一輪審查報來的）。
+    //
+    // Warning: **值收不到要當場死**，而且三處從前都不會。`want_syntax`／`want_grep` 那
+    // 幾個閂只在下一輪循環裏看一眼，走完就沒人問了：`ye --grep` 於是悄悄落空，
+    // 退出碼 0，而且**開起了編輯器**。這一格記着「誰在等」，循環走完還在等就是
+    // 使用者少打了一個詞。
+    let mut owed: Option<&'static str> = None;
+    // **這幾個開關只有配上 `--grep`／`--files` 纔有意義。** 單獨給是打錯了，不是
+    // 「沒關係」——`ye --hidden` 從前悄悄開了編輯器。
+    let mut modifiers: Vec<&'static str> = Vec::new();
 
     for arg in std::env::args().skip(1) {
-        if want_syntax {
-            force_syntax = Some(arg);
-            want_syntax = false;
-            continue;
-        }
-        if want_grep {
-            grep = Some(arg);
-            want_grep = false;
-            continue;
-        }
-        if want_files {
-            listing = Some(arg);
-            want_files = false;
+        if let Some(which) = owed.take() {
+            // Warning: **值不許長得像旗標。** `ye --grep --hidden alpha` 從前把
+            // `--hidden` 當成了要找的詞，再把 `alpha` 當成目錄——然後說
+            // 「alpha 不是一個目錄」。少打一個詞的人看不懂那句話。
+            if arg.starts_with('-') && arg != "-" {
+                eprintln!("yumete: {which} wants a word, not another option ({arg:?})");
+                eprintln!("try 'yumete --help'");
+                return ExitCode::from(2);
+            }
+            match which {
+                "--syntax" => force_syntax = Some(arg),
+                "--grep" => grep = Some(arg),
+                "--files" => listing = Some(arg),
+                _ => unreachable!("every owed flag is named here"),
+            }
             continue;
         }
         match arg.as_str() {
@@ -111,26 +120,65 @@ fn main() -> ExitCode {
             "--new" => fresh = true,
             "--continue" => resume = true,
             // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
-            "--grep" => want_grep = true,
+            "--grep" => owed = Some("--grep"),
             s if s.starts_with("--grep=") => grep = Some(s["--grep=".len()..].to_string()),
-            "--files" => want_files = true,
+            "--files" => owed = Some("--files"),
             s if s.starts_with("--files=") => listing = Some(s["--files=".len()..].to_string()),
-            "--ignore-case" => g.case = Some(Case::Insensitive),
-            "--case-sensitive" => g.case = Some(Case::Sensitive),
-            "--word" => g.word = true,
-            "--regex" => g.regex = true,
-            "--fixed" => g.regex = false,
-            "--fuzzy" => g.fuzzy = true,
+            "--ignore-case" => {
+                g.case = Some(Case::Insensitive);
+                modifiers.push("--ignore-case");
+            }
+            "--case-sensitive" => {
+                g.case = Some(Case::Sensitive);
+                modifiers.push("--case-sensitive");
+            }
+            "--word" => {
+                g.word = true;
+                modifiers.push("--word");
+            }
+            "--regex" => {
+                g.regex = true;
+                modifiers.push("--regex");
+            }
+            "--fixed" => {
+                g.regex = false;
+                modifiers.push("--fixed");
+            }
+            "--fuzzy" => {
+                g.fuzzy = true;
+                modifiers.push("--fuzzy");
+            }
             // yumete 把「隱藏檔」和「`.gitignore` 裏的」放在**同一個開關**上
             // （面板那一格寫着「不搜 [隱藏+忽略]」），所以 rg 那兩個名字都撥它。
-            "--hidden" | "--no-ignore" => g.hidden = true,
-            s if s.starts_with("--glob=") => g.include = s["--glob=".len()..].to_string(),
-            s if s.starts_with("--exclude=") => g.exclude = s["--exclude=".len()..].to_string(),
-            s if s.starts_with("--chinese=") => match &s["--chinese=".len()..] {
-                "off" => g.chinese = (false, false),
-                "glyphs" => g.chinese = (true, false),
-                "pinyin" => g.chinese = (false, true),
-                "both" => g.chinese = (true, true),
+            "--hidden" | "--no-ignore" => {
+                g.hidden = true;
+                modifiers.push("--hidden");
+            }
+            s if s.starts_with("--glob=") => {
+                g.include = s["--glob=".len()..].to_string();
+                modifiers.push("--glob");
+            }
+            s if s.starts_with("--exclude=") => {
+                g.exclude = s["--exclude=".len()..].to_string();
+                modifiers.push("--exclude");
+            }
+            s if s.starts_with("--chinese=") => match s["--chinese=".len()..].as_ref() {
+                "off" => {
+                    g.chinese = (false, false);
+                    modifiers.push("--chinese");
+                }
+                "glyphs" => {
+                    g.chinese = (true, false);
+                    modifiers.push("--chinese");
+                }
+                "pinyin" => {
+                    g.chinese = (false, true);
+                    modifiers.push("--chinese");
+                }
+                "both" => {
+                    g.chinese = (true, true);
+                    modifiers.push("--chinese");
+                }
                 other => {
                     eprintln!("yumete: --chinese: no such setting {other:?}");
                     eprintln!("try off, glyphs, pinyin or both");
@@ -138,12 +186,27 @@ fn main() -> ExitCode {
                 }
             },
             // **缺省搜當前目錄**，和 rg 一樣；這一個往上搜到項目的根。
-            "--project" => g.project = true,
-            "--open" => g.open = true,
-            s if s.starts_with("--color=") => match &s["--color=".len()..] {
-                "always" => g.colour = Some(true),
-                "never" => g.colour = Some(false),
-                "auto" => g.colour = None,
+            "--project" => {
+                g.project = true;
+                modifiers.push("--project");
+            }
+            "--open" => {
+                g.open = true;
+                modifiers.push("--open");
+            }
+            s if s.starts_with("--color=") => match s["--color=".len()..].as_ref() {
+                "always" => {
+                    g.colour = Some(true);
+                    modifiers.push("--color");
+                }
+                "never" => {
+                    g.colour = Some(false);
+                    modifiers.push("--color");
+                }
+                "auto" => {
+                    g.colour = None;
+                    modifiers.push("--color");
+                }
                 other => {
                     eprintln!("yumete: --color: no such setting {other:?}");
                     eprintln!("try auto, always or never");
@@ -167,7 +230,7 @@ fn main() -> ExitCode {
             },
             "--html" => shot_html = true,
             s if s.starts_with("--keys=") => keys = Some(s["--keys=".len()..].to_string()),
-            "--syntax" => want_syntax = true,
+            "--syntax" => owed = Some("--syntax"),
             s if s.starts_with("--syntax=") => {
                 force_syntax = Some(s["--syntax=".len()..].to_string())
             }
@@ -184,6 +247,31 @@ fn main() -> ExitCode {
             }
             "--vertical" => force_layout = Some(Layout::Vertical),
             "--horizontal" => force_layout = Some(Layout::Horizontal),
+            // Warning: **「要一個值」和「不認得」是兩句話**（2026-10-03 一輪審查報來的）。
+            // `ye --grep 霜 --chinese off` 從前答「unknown option '--chinese'」
+            // ——那個旗標認得，不認得的是這個寫法。連倉裏的文檔自己都寫過
+            // `--chinese off`。
+            "--chinese" | "--glob" | "--exclude" | "--color" | "--lang" | "--keys" => {
+                eprintln!("yumete: {arg} is written with an equals sign, as in {arg}=…");
+                eprintln!("try 'yumete --help'");
+                return ExitCode::from(2);
+            }
+            // 今天撤掉的那八個短名——說出它變成了什麼，別只說「不認得」。
+            "-t" | "-v" | "-R" | "-c" | "-n" | "-p" | "-s" | "-H" => {
+                let long = match arg.as_str() {
+                    "-t" => "--table",
+                    "-v" => "--vertical",
+                    "-R" => "--readonly",
+                    "-c" => "--continue",
+                    "-n" => "--new",
+                    "-p" => "--preview",
+                    "-s" => "--syntax",
+                    _ => "--horizontal",
+                };
+                eprintln!("yumete: '{arg}' is gone; it is spelt '{long}' now");
+                eprintln!("single letters are being saved for the search flags");
+                return ExitCode::from(2);
+            }
             // Reject unknown flags, but treat a lone "-" as a filename.
             s if s.starts_with('-') && s != "-" => {
                 eprintln!("yumete: unknown option '{s}'");
@@ -191,6 +279,48 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
             s => files.push(s.to_string()),
+        }
+    }
+
+    // **參數層的四道閘**（2026-10-03 一輪審查報來的，四條都真按得出來）。
+    if let Some(which) = owed {
+        eprintln!("yumete: {which} wants a word after it");
+        eprintln!("try 'yumete --help'");
+        return ExitCode::from(2);
+    }
+    if grep.is_some() && listing.is_some() {
+        eprintln!("yumete: --grep and --files ask two different questions; pick one");
+        return ExitCode::from(2);
+    }
+    if grep.as_ref().or(listing.as_ref()).is_some_and(|p| p.trim().is_empty()) {
+        // 空的詞從前一邊回「什麼都沒有」、一邊回「每一個檔」——兩種答案，都不是答案。
+        eprintln!("yumete: the pattern is empty");
+        return ExitCode::from(2);
+    }
+    if grep.is_none() && listing.is_none() {
+        if let Some(stray) = modifiers.first() {
+            eprintln!("yumete: {stray} only means something with --grep or --files");
+            eprintln!("try 'yumete --help'");
+            return ExitCode::from(2);
+        }
+    }
+    if listing.is_some() {
+        // Warning: **`--files` 只認得走檔那幾個。** 別的是給式子用的，而檔名那一邊用
+        // 的是挑選器的模糊匹配，根本沒有式子。從前它們**悄悄不生效**，而
+        // `--help` 說「下面每一個都還管用」——說了假話比少一個功能壞。
+        const FOR_GREP_ONLY: [&str; 7] = [
+            "--ignore-case",
+            "--case-sensitive",
+            "--word",
+            "--regex",
+            "--fixed",
+            "--fuzzy",
+            "--chinese",
+        ];
+        if let Some(stray) = modifiers.iter().find(|m| FOR_GREP_ONLY.contains(m)) {
+            eprintln!("yumete: {stray} shapes a pattern, and --files matches names by feel");
+            eprintln!("it belongs to --grep");
+            return ExitCode::from(2);
         }
     }
 
@@ -1140,83 +1270,171 @@ impl Default for Grep {
 ///
 /// Warning: **正文那一欄是命中前後各六十個字，不是整行。** 小說的一行是一整段，動輒幾
 /// 千字——rg 印整行是因為代碼的一行是一行。要整行的話那是另一個開關的事。
+/// **把命令行給的那幾個地方變成「搜哪裏」。**
+///
+/// 一個都沒給就是當前目錄——命令行的整個模型就是「我站在哪」，而
+/// `ls`／`grep`／`rg`／`fd` 沒有一個例外。
+///
+/// Warning: **給了幾個就搜幾個**（2026-10-03 一輪審查報來的）。從前只看 `first()`，
+/// 後面的一聲不吭地丟掉——`ye --grep alpha d1 d2` 只搜了 `d1`。
+///
+/// Warning: **`~` 要展開。** 倉裏別處都走 `expand_tilde`，就這兩支沒走，於是
+/// `ye --grep 霜 '~/書'` 答「`~` 不是一個目錄」。
+///
+/// Warning: **給一個檔也算數。** `rg pat file` 是最常見的用法。檔案交給它所在的目錄
+/// 加一條只放它進來的 glob——同一套機器，不另開一條路。
+fn places(what: &str, given: &[String], cwd: &std::path::Path) -> Result<Vec<(std::path::PathBuf, Option<String>)>, ExitCode> {
+    if given.is_empty() {
+        return Ok(vec![(cwd.to_path_buf(), None)]);
+    }
+    let mut out = Vec::with_capacity(given.len());
+    for one in given {
+        let path = std::path::PathBuf::from(yumete_config::expand_tilde(one));
+        if path.is_dir() {
+            out.push((path, None));
+            continue;
+        }
+        if path.is_file() {
+            let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(cwd);
+            let name = path.file_name().map(|n| n.to_string_lossy().to_string());
+            out.push((dir.to_path_buf(), name));
+            continue;
+        }
+        eprintln!("yumete: {what}: no such file or directory: {}", path.display());
+        return Err(ExitCode::from(2));
+    }
+    Ok(out)
+}
+
+/// **問題本身說不通**——一個字都不印，退出碼 2。
+///
+/// Warning: **「安安靜靜地說沒找到」是這支工具唯一不許犯的錯**（2026-10-03 一輪審查
+/// 報來的）：式子寫壞從前交退出碼 1，和「真的一處都沒有」分不開，腳本於是分不出
+/// 打錯字和沒結果。
+fn the_question_will_not_parse(editor: &Editor, what: &str) -> Option<ExitCode> {
+    let search = editor.search();
+    if search.broken {
+        eprintln!("yumete: {what}: that pattern will not compile");
+        return Some(ExitCode::from(2));
+    }
+    if search.bad_glob {
+        eprintln!("yumete: {what}: {}", editor.status());
+        return Some(ExitCode::from(2));
+    }
+    None
+}
+
+/// **有沒有東西是沒看的**——說在 stderr 上，答案照印。
+///
+/// 四兆以上的檔跳過、走檔走到上限停了，都屬於這一種。
+///
+/// Warning: **這不改退出碼，除非一處都沒找到。** 照 rg 的分寸：答案拿得到就是 0，讀
+/// 不了的那幾個檔在 stderr 上說一聲——跳過一個大檔就讓整趟失敗，比沉默還糟。
+/// 可是**一處都沒有、而且確實沒看全**的時候，「沒找到」就是一句假話，那時交 2。
+fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
+    let search = editor.search();
+    let mut incomplete = false;
+    if search.skipped > 0 {
+        eprintln!("yumete: {what}: {} file(s) too big to read were skipped", search.skipped);
+        incomplete = true;
+    }
+    if search.cut {
+        eprintln!("yumete: {what}: the walk stopped early; this is not the whole answer");
+        incomplete = true;
+    }
+    incomplete
+}
+
 fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     let ink = Ink(g.colour.unwrap_or_else(|| std::io::stdout().is_terminal()));
     let cwd = std::env::current_dir().unwrap_or_default();
-    let mut editor = Editor::new();
-    // **給了路徑就站到那裏去**，沒給就站在 shell 站的地方——命令行的整個模型就是
-    // 「我站在哪」，而 `ls`／`grep`／`rg`／`fd` 沒有一個例外。
-    let at = where_.first().map(std::path::PathBuf::from).unwrap_or_else(|| cwd.clone());
-    if !at.is_dir() {
-        eprintln!("yumete: --grep: not a directory: {}", at.display());
-        return ExitCode::from(2);
-    }
-    editor.set_root(&at);
-    {
-        let s = editor.search_mut();
-        s.query = pattern.to_string();
-        s.scope = match g.project {
-            true => Where::Project,
-            false => Where::Working,
-        };
-        s.uncapped = true;
-        s.case = g.case.unwrap_or_default();
-        s.whole = g.word;
-        s.regex = g.regex;
-        s.fuzzy = g.fuzzy;
-        s.hidden = g.hidden;
-        s.include = g.include.clone();
-        s.exclude = g.exclude.clone();
-        (s.glyphs, s.pinyin) = g.chinese;
-    }
-    editor.run_the_search();
-    if editor.search().bad_glob {
-        eprintln!("yumete: --grep: {}", editor.status());
-        return ExitCode::from(2);
-    }
-    let root = editor.search().root.clone().unwrap_or(at);
-    let mut found = 0usize;
-    // Warning: **讀的人半路走了不算出錯。** `ye --grep 霜 | head -2` 關掉管道那一頭，
-    // 而 Rust 的 `println!` 遇上 EPIPE 是 **panic**——六千條命中的時候它當場吐一
-    // 段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤，所以這裏自己寫、自己認
-    // 那一種錯。
+    let roots = match places("--grep", where_, &cwd) {
+        Ok(roots) => roots,
+        Err(code) => return code,
+    };
     let mut sink = std::io::stdout().lock();
-    for hit in &editor.search().hits {
-        let Some(file) = hit.file.as_ref() else { continue };
-        // **印得出來的路徑是相對於你站的地方的**，所以「搜了哪裏」一眼看得出：
-        // `--project` 爬上去過的話，印出來就會帶 `../`。
-        let shown = pathdiff(&root.join(file), &cwd);
-        // **命中那幾個字自己染**：`mark` 說它們落在摘錄的哪一段（按字計）。
-        let marked: String = {
-            let chars: Vec<char> = hit.excerpt.chars().collect();
-            let cut = |a: usize, b: usize| -> String {
-                chars.get(a.min(chars.len())..b.min(chars.len())).unwrap_or(&[]).iter().collect()
+    let mut found = 0usize;
+    let mut incomplete = false;
+    let given_a_place = !where_.is_empty();
+    for (at, only) in roots {
+        let mut editor = Editor::new();
+        editor.set_root(&at);
+        {
+            let s = editor.search_mut();
+            s.query = pattern.to_string();
+            s.scope = match g.project {
+                true => Where::Project,
+                false => Where::Working,
             };
-            format!(
-                "{}{}{}",
-                cut(0, hit.mark.start),
-                ink.hit(&cut(hit.mark.start, hit.mark.end)),
-                cut(hit.mark.end, chars.len())
-            )
+            s.uncapped = true;
+            s.case = g.case.unwrap_or_default();
+            s.whole = g.word;
+            s.regex = g.regex;
+            s.fuzzy = g.fuzzy;
+            s.hidden = g.hidden;
+            // 指名一個檔的時候，那條 glob 就是「只要它」。
+            s.include = match &only {
+                Some(name) => name.clone(),
+                None => g.include.clone(),
+            };
+            s.exclude = g.exclude.clone();
+            (s.glyphs, s.pinyin) = g.chinese;
+        }
+        editor.run_the_search();
+        if let Some(code) = the_question_will_not_parse(&editor, "--grep") {
+            return code;
+        }
+        incomplete |= what_was_not_looked_at(&editor, "--grep");
+        // **印出來的路徑照你給的那個拼法**（2026-10-03 一輪審查報來的）。搜索的
+        // 根是 canonicalize 過的，照它拼出來 `ye --grep x alias` 會答
+        // `realdir/f.md`——問的是 `alias`，拿回來的是別的名字，`cd` 過去落在別處。
+        // `--project` 沒有「你給的拼法」可依，那時纔退回真路徑。
+        let root = match (g.project, given_a_place) {
+            (false, true) => at.clone(),
+            _ => editor.search().root.clone().unwrap_or_else(|| at.clone()),
         };
-        let line = format!(
-            "{}:{}:{}:{}",
-            ink.path(&shown.display().to_string()),
-            ink.number(&(hit.line + 1).to_string()),
-            ink.number(&(hit.column + 1).to_string()),
-            marked
-        );
-        match writeln!(sink, "{line}") {
-            Ok(()) => found += 1,
-            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("yumete: --grep: {e}");
-                return ExitCode::from(2);
+        // Warning: **讀的人半路走了不算出錯。** `ye --grep 霜 | head -2` 關掉管道那一頭，
+        // 而 Rust 的 `println!` 遇上 EPIPE 是 **panic**——六千條命中的時候它當場吐
+        // 一段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤。
+        for hit in &editor.search().hits {
+            let Some(file) = hit.file.as_ref() else { continue };
+            // **印得出來的路徑是相對於你站的地方的**，所以「搜了哪裏」一眼看得出：
+            // `--project` 爬上去過的話，印出來就會帶 `../`。
+            let shown = pathdiff(&root.join(file), &cwd);
+            // **命中那幾個字自己染**：`mark` 說它們落在摘錄的哪一段（按字計）。
+            let marked: String = {
+                let chars: Vec<char> = hit.excerpt.chars().collect();
+                let cut = |a: usize, b: usize| -> String {
+                    chars.get(a.min(chars.len())..b.min(chars.len())).unwrap_or(&[]).iter().collect()
+                };
+                format!(
+                    "{}{}{}",
+                    cut(0, hit.mark.start),
+                    ink.hit(&cut(hit.mark.start, hit.mark.end)),
+                    cut(hit.mark.end, chars.len())
+                )
+            };
+            let line = format!(
+                "{}:{}:{}:{}",
+                ink.path(&shown.display().to_string()),
+                ink.number(&(hit.line + 1).to_string()),
+                ink.number(&(hit.column + 1).to_string()),
+                marked
+            );
+            match writeln!(sink, "{line}") {
+                Ok(()) => found += 1,
+                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("yumete: --grep: {e}");
+                    return ExitCode::from(2);
+                }
             }
         }
     }
-    match found {
-        0 => ExitCode::from(1),
+    match (found, incomplete) {
+        // 一處都沒有、而且確實沒看全——「沒找到」在這裏是假話。
+        (0, true) => ExitCode::from(2),
+        (0, false) => ExitCode::from(1),
         _ => ExitCode::SUCCESS,
     }
 }
@@ -1230,28 +1448,43 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
 fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     let ink = Ink(g.colour.unwrap_or_else(|| std::io::stdout().is_terminal()));
     let cwd = std::env::current_dir().unwrap_or_default();
-    let mut editor = Editor::new();
-    let at = where_.first().map(std::path::PathBuf::from).unwrap_or_else(|| cwd.clone());
-    if !at.is_dir() {
-        eprintln!("yumete: --files: not a directory: {}", at.display());
-        return ExitCode::from(2);
-    }
-    editor.set_root(&at);
-    let root = match g.project {
-        true => editor.project_root(),
-        false => at,
+    let roots = match places("--files", where_, &cwd) {
+        Ok(roots) => roots,
+        Err(code) => return code,
     };
-    let found = editor.files_matching(&root, pattern);
     let mut sink = std::io::stdout().lock();
     let mut printed = 0usize;
-    for name in &found {
-        let shown = pathdiff(&root.join(name), &cwd);
-        match writeln!(sink, "{}", ink.path(&shown.display().to_string())) {
-            Ok(()) => printed += 1,
-            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("yumete: --files: {e}");
-                return ExitCode::from(2);
+    for (at, only) in roots {
+        let mut editor = Editor::new();
+        editor.set_root(&at);
+        let root = match g.project {
+            true => editor.project_root(),
+            false => at,
+        };
+        // 同 `run_grep`：給了拼法就照拼法印。
+        let shown_root = match (g.project, !where_.is_empty()) {
+            (false, true) => root.clone(),
+            _ => root.clone(),
+        };
+        // **走檔那三個開關真的生效**（2026-10-03 修）：從前這裏寫死
+        // `Sieve::default()`，於是 `--hidden`／`--glob=`／`--exclude=` 全是死的。
+        let sieve = yumete_core::editor::Sieve {
+            hidden: g.hidden,
+            include: match &only {
+                Some(name) => name.clone(),
+                None => g.include.clone(),
+            },
+            exclude: g.exclude.clone(),
+        };
+        for name in editor.files_matching(&root, pattern, &sieve) {
+            let shown = pathdiff(&shown_root.join(&name), &cwd);
+            match writeln!(sink, "{}", ink.path(&shown.display().to_string())) {
+                Ok(()) => printed += 1,
+                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("yumete: --files: {e}");
+                    return ExitCode::from(2);
+                }
             }
         }
     }
@@ -1288,22 +1521,29 @@ impl Ink {
 
 /// `full` 相對於 `from` 怎麼寫——走不到就原樣交絕對路徑。
 fn pathdiff(full: &std::path::Path, from: &std::path::Path) -> std::path::PathBuf {
-    let (a, b) = (
-        std::fs::canonicalize(full).unwrap_or_else(|_| full.to_path_buf()),
-        std::fs::canonicalize(from).unwrap_or_else(|_| from.to_path_buf()),
-    );
+    // Warning: **不許 canonicalize 要印的那一個**（2026-10-03 一輪審查報來的）。
+    // `ye --grep alpha alias` 從前印 `realdir/f.md`——使用者問的是 `alias`，拿回
+    // 來的是別的名字，`cd` 過去落在別處；連着的目錄指到樹外面的話還會印出一串
+    // `../../..`。**問什麼就答什麼。**
+    let a = full.to_path_buf();
+    let b = std::fs::canonicalize(from).unwrap_or_else(|_| from.to_path_buf());
     let mut ours = a.components().peekable();
     let mut theirs = b.components().peekable();
+    // `full` 本身可能是相對的（搜當前目錄的時候就是），那就已經是答案了。
+    if a.is_relative() {
+        return a;
+    }
     while ours.peek().is_some() && ours.peek() == theirs.peek() {
         ours.next();
         theirs.next();
     }
-    let up = theirs.count();
-    match up {
-        0 => ours.collect(),
-        _ => std::iter::repeat_n(std::path::Component::ParentDir, up)
-            .collect::<std::path::PathBuf>()
-            .join(ours.collect::<std::path::PathBuf>()),
+    // Warning: **只有在底下纔寫成相對的**（2026-10-03 改）。爬出去的那一種寫成
+    // `../` 本來是想讓人看見「它上去過」，可從一個深目錄搜 `~` 印出來的是七層
+    // `../../../..`——那不是提示，是噪音。rg 在這裏印的是你給它的那個路徑，所以
+    // 不在底下就原樣交絕對路徑：一眼看得出搜到了別處去。
+    match theirs.next().is_none() {
+        true => ours.collect(),
+        false => full.to_path_buf(),
     }
 }
 
@@ -1447,25 +1687,36 @@ SEARCHING FROM THE SHELL:
                      Searches the current directory, as every shell tool does.
                      Name a directory to search that one instead, or
                      --project to search up to the book's root (the nearest
-                     .yumete or .git above you). Paths are printed relative to
-                     where you are standing, so a --project that climbed says
-                     so with a `../`.
+                     .yumete or .git above you).
+
+                     A path is printed the way you spelt it — name a symlinked
+                     directory and you get it back under that name. With no
+                     directory named, paths are relative to where you stand;
+                     anything outside that is printed in full.
+
+                     Several directories may be named, and a FILE may be named
+                     instead of a directory.
 
         --files PAT  Print every file whose name matches PAT, best first, and
                      exit — fd's half, and it reads 拼音 too: `ye --files jia`
                      finds 甲.md. Same matcher as 空格 f inside the editor.
 
                      Letters and 漢字 mix in one query, which is how a real
-                     one is written: `juan03` finds 卷03/, `di120` finds
-                     第120章.md, `juan01/di120` finds exactly that chapter.
-                     --grep reads them the same way: `zhongguo很大`,
-                     `zhong国` and `中guo` all find 中國很大.
+                     one is written: `di120` finds 第120章.md, and
+                     `juan01/di120` finds exactly that chapter. Files only —
+                     a directory is never an answer here, unlike fd. --grep
+                     reads a query the same way: `zhongguo很大`, `zhong国` and
+                     `中guo` all find 中國很大.
+
+                     --files takes --hidden, --glob=, --exclude= and --project.
+                     The switches that shape a *pattern* belong to --grep, and
+                     --files refuses them rather than ignoring them: a name is
+                     matched by feel here, and there is no pattern to shape.
 
         --open       Open the editor on the answer instead of printing it:
                      --grep with --open comes up with the panel already run and
                      the keys on the first hit; --files with --open comes up
-                     with the picker open and the query already typed. Every
-                     switch below still applies.
+                     with the picker open and the query already typed.
 
         --project          Search up to the project root, not here.
         --ignore-case      Case never matters. (Default: a capital in the
