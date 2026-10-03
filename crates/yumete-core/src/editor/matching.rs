@@ -394,12 +394,55 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// **一對標記，兩邊各有多長** —— `(外左, 內左, 內右, 外右)`，都是半開區間的端點。
+    ///
+    /// 括號那一對是一邊一個字；markdown 的標記一邊是一串（`**` 兩個、`](網址)` 一片）。
+    /// `md` 要刪的就是外與內之間那兩段。
+    fn marks_around_the_cursor(&self) -> Option<(usize, usize, usize, usize)> {
+        // 括號、引號那一族：一邊一個字。
+        let pair = self.innermost_pair().map(|(open, close)| (open, open + 1, close, close + 1));
+        // markdown 那一族：`ma m` 與 `mi m` 的差就是兩邊的標記。
+        let markup = match (
+            self.markup_object_span(true),
+            self.markup_object_span(false),
+        ) {
+            (
+                motion::Span::Over { anchor: out, head: out_end },
+                motion::Span::Over { anchor: inn, head: inn_end },
+            ) if out < inn || out_end > inn_end => Some((out, inn, inn_end + 1, out_end + 1)),
+            // 兩段一樣寬 ＝ 這個構造沒有標記可刪。
+            _ => None,
+        };
+        // **取內層的那一個**，和 `innermost_pair` 自己在 `PAIRS` 之間挑的規矩一樣：
+        // `(**粗**)` 站在粗上按 `md` 去掉的是 `**`，不是那對括號。
+        //
+        // Warning: **起點一樣的時候讓 markdown 贏**（`>=`，2026-10-04 量出來的）。
+        // `[字](網址)` 的 `[` 和那個鏈接構造都從同一格起；讓括號贏，摘掉的只是
+        // `[` 和 `]`，剩下 `字(網址)` ——一句壞掉的語法。`[[條目]]` 同理，只脫一層
+        // 殼。這兩個都該整個構造一起走。
+        match (pair, markup) {
+            (Some(p), Some(m)) => Some(match m.0 >= p.0 || pair_is_made_of_marks(p, m) {
+                true => m,
+                false => p,
+            }),
+            (Some(p), None) => Some(p),
+            (None, m) => m,
+        }
+    }
+
     /// Remove the innermost pair around the cursor (`md`).
+    ///
+    /// Warning: **markdown 的標記也算一對**（2026-10-04 定）。`PAIRS` 裏只有括號和
+    /// 引號，而這是一部以 markdown 為主的編輯器——要把 `**一句話**` 的星號去掉、
+    /// 字留下，從前最快是四步八鍵：`mim` 複製、`mam` 選中、`R` 貼回去。
+    ///
+    /// 現在 `*斜*`、`**粗**`、`~~刪~~`、`==標==`、`[字](網址)`、`[[條目]]` 都是三個
+    /// 鍵。腳註與註釋同理（凡是 `ma m` 與 `mi m` 答得不一樣的構造）。
     pub(super) fn surround_delete(&mut self) {
         if self.refuse_readonly() {
             return;
         }
-        let Some((start, end)) = self.innermost_pair() else {
+        let Some((out, inn, inn_end, out_end)) = self.marks_around_the_cursor() else {
             self.status = say!("edit.no-pair-to-delete");
             return;
         };
@@ -407,14 +450,14 @@ impl Editor {
         let done = {
             let buffer = self.current_buffer_mut();
             // The closer first, so removing it cannot shift the opener.
-            buffer
-                .remove(end..end + 1)
-                .and_then(|()| buffer.remove(start..start + 1))
+            buffer.remove(inn_end..out_end).and_then(|()| buffer.remove(out..inn))
         };
         if !self.applied(done) {
             return;
         }
-        self.sel.set_head(self.sel.head().saturating_sub(1));
+        // 光標往前挪開頭那一段的長度——`**` 是兩個字，不是一個。
+        let opener = inn - out;
+        self.sel.set_head(self.sel.head().saturating_sub(opener));
         self.sel.set_anchor(self.sel.head());
         self.clamp_cursor();
     }
@@ -535,7 +578,7 @@ impl Editor {
         self.move_head(self.on_this_line_under_vim(pos));
     }
 
-    /// **vim 鍵位下 `h`／`l` 不出這一行**（`:h l`；2026-10-02 作者定照參考實現）。
+    /// **vim 鍵位下 `h`／`l` 不出這一行**（`:h l`；2026-10-02 定照參考實現）。
     ///
     /// Warning: **要緊的是行末那一格坐不上去。** vim 的普通模式光標停不到換行符
     /// 上，而 yumete 照 helix 的規矩停得上去——於是在一行的最後一個字上按 `x`，
@@ -1019,4 +1062,21 @@ impl Editor {
         // `draw_horizontal`。
         self.sel.clamp(len);
     }
+}
+
+/// **那「一對括號」其實是 markdown 自己的標記嗎** —— `md` 挑內層時的例外。
+///
+/// `[[條目]]` 裏的內層 `[`…`]` 起點比整個構造晚，照「取內層」的規矩它會贏；可它
+/// 不是一對括號，是 `[[`／`]]` 的各一半。摘掉它只脫一層殼，剩下 `[條目]`——一句
+/// 壞掉的語法（2026-10-04 量出來的）。
+///
+/// 判準：兩個端點**都**落在構造的標記那兩段裏（`[外左,內左)` 與 `[內右,外右)`）。
+/// `(**粗**)` 不中——那對括號在標記外面，是真的一對。
+fn pair_is_made_of_marks(
+    pair: (usize, usize, usize, usize),
+    markup: (usize, usize, usize, usize),
+) -> bool {
+    let (open, _, close, _) = pair;
+    let (out, inn, inn_end, out_end) = markup;
+    (out..inn).contains(&open) && (inn_end..out_end).contains(&close)
 }
