@@ -65,7 +65,11 @@ pub fn readings(ch: char) -> impl Iterator<Item = &'static str> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Atom {
     /// 一串 ASCII 字母。**兩種配法**：照字面，或者當成一串字的讀音。
-    Said(Vec<char>),
+    ///
+    /// 存兩份：`said` 是小寫的（讀音表是小寫的），`typed` 是打進來的原樣——
+    /// 照字面那一路在「大小寫要緊」的時候比的是後者（2026-10-03 修，從前只存
+    /// 小寫，於是 `--case-sensitive` 對混着寫的查詢是**死的**）。
+    Said { said: Vec<char>, typed: Vec<char> },
     /// 別的任何一個字——漢字、數字、標點。照字面配。
     Just(char),
 }
@@ -84,27 +88,33 @@ pub fn atoms(text: &str) -> Option<Vec<Atom>> {
     }
     let mut out: Vec<Atom> = Vec::new();
     let mut letters: Vec<char> = Vec::new();
+    let close = |letters: &mut Vec<char>, out: &mut Vec<Atom>| -> bool {
+        if letters.is_empty() {
+            return true;
+        }
+        if letters.len() > LONGEST {
+            return false;
+        }
+        let typed = std::mem::take(letters);
+        let said = typed.iter().map(|c| c.to_ascii_lowercase()).collect();
+        out.push(Atom::Said { said, typed });
+        true
+    };
     for c in text.chars() {
         match c.is_ascii_alphabetic() {
-            true => letters.push(c.to_ascii_lowercase()),
+            true => letters.push(c),
             false => {
-                if !letters.is_empty() {
-                    if letters.len() > LONGEST {
-                        return None;
-                    }
-                    out.push(Atom::Said(std::mem::take(&mut letters)));
+                if !close(&mut letters, &mut out) {
+                    return None;
                 }
                 out.push(Atom::Just(c));
             }
         }
     }
-    if !letters.is_empty() {
-        if letters.len() > LONGEST {
-            return None;
-        }
-        out.push(Atom::Said(letters));
+    if !close(&mut letters, &mut out) {
+        return None;
     }
-    out.iter().any(|a| matches!(a, Atom::Said(_))).then_some(out)
+    out.iter().any(|a| matches!(a, Atom::Said { .. })).then_some(out)
 }
 
 /// **查詢能不能當拼音用**：非空、不太長、全是 ASCII 字母。
@@ -125,6 +135,11 @@ fn as_query(text: &str) -> Option<Vec<char>> {
 ///
 /// `fold` 說簡繁異體算不算同一個字——面板那一扇有一個開關管它，挑選器一律算。
 pub fn spans_of(text: &str, atoms: &[Atom], fold: bool) -> Vec<(usize, usize)> {
+    spans_cased(text, atoms, fold, true)
+}
+
+/// 同上，但說得出大小寫要不要緊——`fold_case` 為假時照字面那一路分大小寫。
+pub fn spans_cased(text: &str, atoms: &[Atom], fold: bool, fold_case: bool) -> Vec<(usize, usize)> {
     if atoms.is_empty() {
         return Vec::new();
     }
@@ -132,7 +147,7 @@ pub fn spans_of(text: &str, atoms: &[Atom], fold: bool) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut at = 0usize;
     while at < hay.len() {
-        match eat(&hay, at, atoms, 0, fold) {
+        match eat(&hay, at, atoms, 0, fold, fold_case) {
             // 配上了零個字（查詢是空的）不算一段，否則這個迴圈不往前走。
             Some(end) if end > at => {
                 out.push((at, end));
@@ -150,16 +165,23 @@ fn same(want: char, have: char, fold: bool) -> bool {
 }
 
 /// 從第 `i` 個字、第 `a` 段起，能不能把查詢吃完；能就回末尾那一個字的後面一格。
-fn eat(hay: &[char], i: usize, atoms: &[Atom], a: usize, fold: bool) -> Option<usize> {
+fn eat(
+    hay: &[char],
+    i: usize,
+    atoms: &[Atom],
+    a: usize,
+    fold: bool,
+    fold_case: bool,
+) -> Option<usize> {
     let Some(atom) = atoms.get(a) else {
         return Some(i);
     };
     match atom {
         Atom::Just(c) => match same(*c, *hay.get(i)?, fold) {
-            true => eat(hay, i + 1, atoms, a + 1, fold),
+            true => eat(hay, i + 1, atoms, a + 1, fold, fold_case),
             false => None,
         },
-        Atom::Said(said) => {
+        Atom::Said { said, typed } => {
             // **只有混着寫的查詢纔許照字面配。**
             //
             // 一整條都是字母的時候（`shuzhai`），這一路要的就是「念作這幾個字母
@@ -170,18 +192,24 @@ fn eat(hay: &[char], i: usize, atoms: &[Atom], a: usize, fold: bool) -> Option<u
             // 混着寫就不一樣了：`ch第3` 裏那個 `ch` 沒有讀音可問，它就是兩個字母。
             // 不給它照字面配的路，整條查詢就斷在第一段上。
             let literal_ok = atoms.len() > 1;
+            // **大小寫要緊的時候比打進來的那一份。** 從前一律比小寫，於是
+            // `--case-sensitive` 對混着寫的查詢是死的（`Alpha中` 中了 `alpha中`）。
+            let want: &[char] = match fold_case {
+                true => said,
+                false => typed,
+            };
             let fits = literal_ok
-                && hay.len() >= i + said.len()
-                && hay[i..i + said.len()]
-                    .iter()
-                    .zip(said)
-                    .all(|(h, s)| h.to_ascii_lowercase() == *s);
+                && hay.len() >= i + want.len()
+                && hay[i..i + want.len()].iter().zip(want).all(|(h, s)| match fold_case {
+                    true => h.to_ascii_lowercase() == *s,
+                    false => h == s,
+                });
             if fits {
-                if let Some(end) = eat(hay, i + said.len(), atoms, a + 1, fold) {
+                if let Some(end) = eat(hay, i + want.len(), atoms, a + 1, fold, fold_case) {
                     return Some(end);
                 }
             }
-            say(hay, i, said, 0, atoms, a, fold)
+            say(hay, i, said, 0, atoms, a, fold, fold_case)
         }
     }
 }
@@ -190,6 +218,7 @@ fn eat(hay: &[char], i: usize, atoms: &[Atom], a: usize, fold: bool) -> Option<u
 ///
 /// Warning: **讀音按表裏的次序試，先到先得**：表裏常用的在前，所以歧義處取的是常用那
 /// 一讀。找的是「有沒有」，不是「哪一種最好」——搜索交出一段就夠了。
+#[allow(clippy::too_many_arguments)]
 fn say(
     hay: &[char],
     i: usize,
@@ -198,9 +227,10 @@ fn say(
     atoms: &[Atom],
     a: usize,
     fold: bool,
+    fold_case: bool,
 ) -> Option<usize> {
     if q == said.len() {
-        return eat(hay, i, atoms, a + 1, fold);
+        return eat(hay, i, atoms, a + 1, fold, fold_case);
     }
     let ch = *hay.get(i)?;
     for syllable in readings(ch) {
@@ -211,7 +241,7 @@ fn say(
         if !syllable.bytes().zip(&said[q..q + n]).all(|(x, &y)| x as char == y) {
             continue;
         }
-        if let Some(end) = say(hay, i + 1, said, q + n, atoms, a, fold) {
+        if let Some(end) = say(hay, i + 1, said, q + n, atoms, a, fold, fold_case) {
             return Some(end);
         }
     }
@@ -224,7 +254,7 @@ mod tests {
 
     /// 舊那幾條測試寫的是「整條全是字母」那一種，留着它們——那一種照舊要對。
     fn spans(text: &str, said: &[char]) -> Vec<(usize, usize)> {
-        let atoms = vec![Atom::Said(said.to_vec())];
+        let atoms = vec![Atom::Said { said: said.to_vec(), typed: said.to_vec() }];
         spans_of(text, &atoms, true)
     }
 

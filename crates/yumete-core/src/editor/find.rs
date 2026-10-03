@@ -572,6 +572,7 @@ impl Editor {
         self.search.folded.clear();
         self.search.stale = false;
         self.search.cut = false;
+        self.search.skipped = 0;
         self.search.bad_glob = false;
         // **The pattern hands the search to the panel, and the page follows.**
         // One 「what am I looking for」 with two ways in: the highlight and
@@ -633,6 +634,7 @@ impl Editor {
                 files.push(path.to_path_buf())
             });
             self.search.cut = walked.cut;
+            self.search.skipped = walked.skipped;
             // **哪個真名對着哪一份緩衝，一趟建好**（2026-10-03 量出來的）。
             //
             // 底下那一句本來是「對每一個走到的檔，把**每一份**開着的緩衝都
@@ -1940,7 +1942,12 @@ impl Editor {
         // `di120` 一個都找不着，而真實的查詢幾乎都是混的。查詢裏一個字母都沒有的
         // 時候它交 `None`：那就全是字面，問讀音是白跑一趟。
         // Warning: 正則開着也照跑：它自己走一趟，不往正則裏塞東西（不像簡繁異體）。
-        let said = match self.search.pinyin {
+        // Warning: **「西文整詞匹配」開着的時候拼音那一路不跑**（2026-10-03 一輪審查
+        // 報來的）。那個開關說的是拉丁詞的詞邊界，而拼音那一路配的是漢字——漢語
+        // 沒有詞邊界可言，於是它從前**一條命中都不受 `--word` 管**：`xxalpha中xx`
+        // 在 `--word` 底下照樣中。兩個開關說的不是一件事，那就別讓一個悄悄繞過
+        // 另一個。
+        let said = match self.search.pinyin && !self.search.whole {
             true => crate::pinyin::atoms(&self.search.query),
             false => None,
         };
@@ -1966,6 +1973,12 @@ impl Editor {
             keep_case: self.search.preserve_case,
             doubled: !self.search.regex,
             shapes: self.search.glyphs,
+            fold_case: match self.search.case {
+                Case::Insensitive => true,
+                Case::Sensitive => false,
+                // 式子那一路的規矩：查詢裏有大寫纔分大小寫。
+                Case::Smart => !self.search.query.chars().any(char::is_uppercase),
+            },
         })
     }
 
@@ -2214,6 +2227,13 @@ pub(super) struct Look {
     ///
     /// Warning: **跟着面板那個開關走**，不是一律折：關掉「繁簡」的人要的就是不折。
     shapes: bool,
+    /// 大小寫要不要緊——拼音那一路**照字面**配的那一段問它（`Alpha中` 中不中
+    /// `alpha中`）。讀音那一半天生不分大小寫：讀音表是小寫的，而打 `ZhongGuo`
+    /// 的人想的不是另一個查詢。
+    ///
+    /// Warning: 從前這一路一律折大小寫，於是 `--case-sensitive` 對混着寫的查詢是死的
+    /// （2026-10-03 一輪審查報來的）。
+    fold_case: bool,
 }
 
 /// 字面那一路怎麼問。
@@ -2274,7 +2294,7 @@ impl Look {
             }
         };
         if let Some(said) = &self.said {
-            let also = crate::pinyin::spans_of(text, said, self.shapes);
+            let also = crate::pinyin::spans_cased(text, said, self.shapes, self.fold_case);
             if !also.is_empty() {
                 out.extend(also);
                 out.sort_unstable();

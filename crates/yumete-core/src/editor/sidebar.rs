@@ -1534,9 +1534,12 @@ impl Editor {
     ///
     /// Warning: **不封頂。** 挑選器封在 `PICKER_LIMIT`（四千）條，因為那是給人翻的；
     /// 管道印給別的程序看，少印一條就是錯一條。
-    pub fn files_matching(&self, root: &Path, query: &str) -> Vec<String> {
+    pub fn files_matching(&self, root: &Path, query: &str, sieve: &crate::editor::Sieve) -> Vec<String> {
         let mut names = Vec::new();
-        crate::editor::walk(root, &mut 0, &mut |path| {
+        // Warning: **篩子要傳進來**（2026-10-03 一輪審查報來的）。從前這裏寫死
+        // `Sieve::default()`，於是 `ye --files md --hidden`、`--glob=`、`--exclude=`
+        // 三個開關**全是死的**，而 `--help` 說「下面每一個都還管用」。
+        crate::editor::walk_with(root, sieve, &mut |path| {
             names.push(path.strip_prefix(root).unwrap_or(path).display().to_string());
         });
         let items = names.into_iter().map(crate::picker::Item::File).collect();
