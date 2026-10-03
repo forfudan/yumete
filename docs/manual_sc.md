@@ -135,8 +135,22 @@ $ ye -GO zhongguo
 `--glob`，`-o` 是 `rg` 的 `--only-matching`），占了就是跟肌肉记忆打架。`--files`
 的字母先空着。
 
+开关那一边的短名**照 `ripgrep` 原样**：
+
+```
+$ ye -Gu zhongguo      连 .gitignore 里的一起搜
+$ ye -Guu zhongguo     再加上点文件
+$ ye -G. zhongguo      只加点文件
+```
+
+`-u` 是**一把梯子**，不是一个勾，同 rg：一级是 `--no-ignore`，两级是它再加
+`--hidden`。数的是一共出现几次，所以 `-u -u` 和 `-uu` 是同一句话。rg 还有第三级
+（连二进制一起搜），我们没有那一档——这里的二进制档是**根本不读**的，打 `-uuu`
+会说只有两级。点文件那一个 rg 用的是一个点（`-.`）而不是字母，所以它不占字母表。
+
 开关照 `ripgrep` 的名字：`--ignore-case`、`--case-sensitive`、`--word`、`--regex`、
-`--fixed`、`--fuzzy`、`--hidden`、`--no-ignore`、`--glob=`、`--exclude=`、`--color=`、
+`--fixed`、`--fuzzy`、`--hidden`（`-.`）、`--no-ignore`（`-u`）、`--glob=`、
+`--exclude=`、`--color=`、
 `--heading`／`--no-heading`，外加
 `--chinese=off|glyphs|pinyin|both`（繁简与拼音，出厂两个都开）。`ye --help` 一览。
 
