@@ -10018,6 +10018,47 @@ fn widening_a_pattern_never_makes_it_stop_compiling() {
     assert_eq!(ed.search().total, 1);
 }
 
+/// **`R` 動得太多就走中央那扇窗**（2026-10-03 作者定）。
+///
+/// 原話：「我觉得要同时满足两个条件吧：1. 超过10个文件 2. 超过100处。」兩個條件
+/// 都過了纔停下來；不到的照舊是狀態欄上那一行。同 `:w` 那一條的精神——平日改個
+/// 錯字一次都不彈。
+#[test]
+fn replacing_a_whole_book_asks_in_the_middle_of_the_screen() {
+    let armed = |files: usize, hits: usize| {
+        let mut ed = typed("霜一\n霜二\n");
+        ed.execute(":replace").unwrap();
+        ed.on_key(Key::Char('霜'));
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Char('雪'));
+        ed.on_key(Key::Enter);
+        ed.on_key(Key::Esc);
+        // 名單本身只有這一份稿子；兩個數字直接擺成要驗的那一對。
+        let panel = ed.search_for_test();
+        panel.field = crate::search_panel::Field::Results;
+        panel.total = hits;
+        panel.files = (0..files)
+            .map(|n| (Some(std::path::PathBuf::from(format!("卷{n}.md"))), None))
+            .collect();
+        ed.on_key(Key::Char('R'));
+        ed
+    };
+
+    // 兩個都過了：中央那一扇。
+    let ed = armed(20, 2000);
+    let asked = ed.query().expect("中央那一扇要擺出來");
+    assert_eq!(asked.title, say!("write.oversize-title"), "和 :w 同一個標題");
+    assert_eq!(asked.body, say!("search.replace-all-what", 20, 2000));
+    assert_eq!(asked.choices.len(), 2, "繼續／取消，沒有「看一眼」");
+
+    // 檔數夠而處數不夠：狀態欄一行。
+    let ed = armed(20, 30);
+    assert!(ed.query().is_none(), "三十處不必停下來");
+    // 處數夠而檔數不夠：同上。
+    let ed = armed(3, 2000);
+    assert!(ed.query().is_none(), "三個檔不必停下來");
+}
+
 /// **`R` 問的問題要和名單上那個一樣**（2026-10-02 一輪審查報來的，會丟字）。
 ///
 /// `swap_all` 從前把整份稿子接成一條字符串再跑一次式子，而名單是**逐行**跑出來的。
