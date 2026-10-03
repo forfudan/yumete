@@ -13476,6 +13476,31 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// **光標蓋得住吊到旁邊的句讀**（2026-10-02 一輪掃查報來的：34,840 幀裏 179 處
+    /// 不一致全是這一種）。
+    #[test]
+    fn the_caret_covers_a_mark_hung_into_the_margin() {
+        let probe = |steps: usize| {
+            let mut editor = editor_with("曰：「學");
+            editor.set_hanging_punctuation(true);
+            for _ in 0..steps {
+                editor.on_key(Key::Char('l'));
+            }
+            let config = vertical_config();
+            let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
+            let block = |x: u16, y: u16| {
+                buffer[(x, y)].style().add_modifier.contains(Modifier::REVERSED)
+            };
+            (block(17, 0), block(19, 0), block(19, 1))
+        };
+        // 站在 曰 上：反白蓋的是正文那一格，旁邊兩個標記一個都不碰。
+        assert_eq!(probe(0), (true, false, false), "站在 曰 上");
+        // 站在 ： 上：它整個在旁邊那一欄，反白要跟過去。
+        assert_eq!(probe(1), (false, true, false), "站在 ： 上");
+        // 站在 「 上：同一欄，下面一行。
+        assert_eq!(probe(2), (false, false, true), "站在 「 上");
+    }
+
     /// 漢字 do not lean. The Chinese setting of `<em>` is a dot beside every
     /// character of the run, and 縱書 puts it in the margin (Feature #236).
     #[test]

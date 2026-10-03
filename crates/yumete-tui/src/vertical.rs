@@ -1654,7 +1654,48 @@ pub fn draw(
     // **所有標籤必須長得一樣**：不一樣的那一個會被讀成另一種東西。光標照畫，只是
     // 讓開這一格——標籤亮着的那一瞬間，你正要離開光標所在的地方。
     let under_a_label = labelled.contains(&(cursor_x, cursor_y));
+    // **站在吊出去的句讀上，反白要跟到旁邊那一欄去**（2026-10-03 修；2026-10-02 一輪
+    // 掃查報來的，34,840 幀裏 179 處不一致全是這一種）。
+    //
+    // 標點旁置把 `。` 掛在它跟着的那個字旁邊，而那個字和它**共用一個 slot**——
+    // `line_slots` 把前一格的 `end` 往後拉了一個字。於是光標走到 `。` 上時 slot 沒
+    // 變，反白照舊畫在正文那兩格上，而讀者看見的是「光標蓋着前一個字，句讀在旁邊
+    // 亮着不動」。問正文那一格不夠，要問這一格到底站在哪一個字上。
+    let on_the_hung_mark = at_cursor
+        .and_then(|p| p.slots.get(cursor_pos.slot))
+        .is_some_and(|row| {
+            if row.mark.is_none() {
+                return false;
+            }
+            // 自己一整格就是標記的那一種（沒有基字的開引號），站在哪裏都是站在它上面。
+            if row.text.is_empty() {
+                return true;
+            }
+            let line_at = rope.line_to_char(cursor_pos.line);
+            let in_line = at.saturating_sub(line_at);
+            // **開的排在基字前面，收的排在基字後面。** `曰：` 的 `：` 是這一格的最後
+            // 一個字；`「學` 的 `「` 是第一個——它在等它引出來的那個字，兩個共用
+            // 一格。問這一格頭上那個字自己是不是個掛得起來的標記就分得開。
+            let first = (line_at + row.start < rope.len_chars())
+                .then(|| rope.char(line_at + row.start));
+            match first.is_some_and(|c| yumete_cjk::margin_form(c).is_some()) {
+                true => in_line == row.start,
+                false => in_line + 1 >= row.end,
+            }
+        });
     if cursor_column < visible && editor.mode() != Mode::Insert && !under_a_label {
+        // 旁邊那一欄真畫出東西來了纔跟過去：沒有邊欄的時候（一縱寬的頁、
+        // `:view-margin never`）標記根本沒畫，反白一格空白等於光標憑空消失。
+        let mx = cursor_x + SLOT_WIDTH;
+        let hung_is_drawn = buf
+            .cell((mx, cursor_y))
+            .is_some_and(|c| !c.symbol().trim().is_empty());
+        if on_the_hung_mark && hung_is_drawn {
+            if let Some(cell) = buf.cell_mut((mx, cursor_y)) {
+                cell.set_style(cell.style().add_modifier(Modifier::REVERSED));
+            }
+            return (cursor_x, caret_y);
+        }
         // **A long 縦中横 group is one slot and the block covers all of it**
         // (2026-09-21). The cursor stands on the group, not on its last two
         // digits, and a block over `97` alone would say `1997` is two rows.
