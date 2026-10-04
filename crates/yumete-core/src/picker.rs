@@ -105,6 +105,16 @@ pub struct Picker {
     /// match's own score, so typing still decides what matches best, and this
     /// decides which of two equally good matches is offered first.
     bonus: Vec<i64>,
+    /// **收不收「跳着配」和「亂序」**。缺省**收**，`空格 f` 那一扇一格沒變。
+    ///
+    /// Warning: **只有 `ye --files` 把它關掉**（2026-10-04 定）。那一邊把全部印出來，
+    /// 長尾就是噪音；`空格 f` 是一張排過序的單子，只看前十條，長尾不要錢——而跳着
+    /// 配（`rlcrd` 找 `release_card.py`）在那裏是真有用的。原話：「cli --files
+    /// 更精确（五个选项不全开），只有当加了 open 之后进了 tui 才五个选项都开。」
+    ///
+    /// 關掉的是兩檔，不是五個：**大小寫、繁簡、拼音照舊**。所以 `ye --files` 比
+    /// `ye --grep` 還多一條——後者的大小寫是智能的，這裏一律不分。
+    loose: bool,
 }
 
 /// Where a caret is being asked to go.
@@ -136,7 +146,14 @@ impl Picker {
             on_query: false,
             root: None,
             bonus: vec![0; count],
+            loose: true,
         }
+    }
+
+    /// 只收連在一起的那一段 —— `ye --files` 開門就撥它。
+    pub fn tighten(&mut self) {
+        self.loose = false;
+        self.selected = 0;
     }
 
     /// Say what to prefer: one number per item, bigger first.
@@ -177,7 +194,7 @@ impl Picker {
                 .iter()
                 .enumerate()
                 .filter_map(|(i, item)| {
-                    matched(item.label(), &self.query)
+                    matched(item.label(), &self.query, self.loose)
                         .map(|(s, _)| (s + self.bonus.get(i).copied().unwrap_or(0), i, item))
                 })
                 .collect(),
@@ -196,7 +213,7 @@ impl Picker {
     pub fn hits(&self, label: &str) -> Vec<usize> {
         match self.query.is_empty() {
             true => Vec::new(),
-            false => matched(label, &self.query).map(|(_, at)| at).unwrap_or_default(),
+            false => matched(label, &self.query, self.loose).map(|(_, at)| at).unwrap_or_default(),
         }
     }
 
@@ -424,14 +441,14 @@ impl Picker {
 /// there takes the last place each character fits, which is the tightest match
 /// ending at that point. fzf's v1 algorithm does the same thing for the same
 /// reason.
-fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
-    // Warning: **One lowercase character per character.** `to_lowercase` may hand
-    // back several (İ), and the positions this returns are indices into the
-    // label the caller will be drawing — a mapping that is not one to one
-    // would light up the wrong cell.
-    let low = |c: char| c.to_lowercase().next().unwrap_or(c);
-    let haystack: Vec<char> = label.chars().map(low).collect();
-    let needle: Vec<char> = query.chars().map(low).collect();
+fn matched(label: &str, query: &str, loose: bool) -> Option<(i64, Vec<usize>)> {
+    // **原樣收着，大小寫交給 [`crate::nearby::alike`] 折**（2026-10-04）。
+    //
+    // Warning: **從前這裏自己先折一遍**，而且只能取 `to_lowercase()` 的第一個字
+    // （İ 折出來是兩個），理由是「交回去的下標是要拿來高亮的，一對多就會點亮錯
+    // 的格子」。共用那一支比的是**兩個字**、不改下標，所以那個將就沒有了。
+    let haystack: Vec<char> = label.chars().collect();
+    let needle: Vec<char> = query.chars().collect();
     if needle.is_empty() {
         return Some((0, Vec::new()));
     }
@@ -450,33 +467,41 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
     // Warning: **放寬的是查詢那一邊，不是名字那一邊**，而這個方向就是那張表值錢的地方：
     // `class(发) = 发發髮`，所以打「头发」找得到「頭髮」；`class(發) = 發发`，所以
     // 打「發」不會誤中「髮」（見 [`crate::glyphs`]）。反過來折就把這個性質毀了。
-    let same = |want: char, have: char| {
-        want == have || crate::glyphs::shapes(want).contains(have)
-    };
+
     // **跨多遠算一處命中** —— 和搜索面板那一扇同一條規矩（`nearby::window`，
     // 2026-10-04 合的）。從前這裏不限：`release` 七個字母散在
     // `crates/yumete-core/src/lib.rs` 裏也算配上，於是 `ye --files release`
     // 在本倉吐了四兆。面板限它的理由寫在 `nearby` 的檔頭上——「差不多是這幾個字」
     // 說的是**一個詞組**，不是一行；一條路徑也不是一個詞組。
     let reach = Some(crate::nearby::window(needle.len()));
-    let (positions, in_order) = match crate::nearby::one(&haystack, &needle, 0, reach, false, true)
-    {
-        Some(found) => (found, true),
-        None => match anyhow(&haystack, &needle, same, reach) {
-            Some(found) => (found, false),
-            // **字面找不着，就問它念作什麽**（2026-09-26 提的）。`shuzhai` 找得
-            // 到「書齋」。
-            //
-            // Warning: **只認全拼，和高級搜索一條規矩**（定的，原話：「Option 2 更符合目前
-            // 的设计哲学——不一下子提供太多东西直到真有人要」）。所以 `sz` 不中。
-            //
-            // Warning: **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串
-            // 讀音，而讀者打 `md` 十有八九在找 `.md`。字面接得住就不必問讀音。
-            None => {
-                let said = crate::pinyin::atoms(query)?;
-                let (from, to) = *crate::pinyin::spans_of(label, &said, true).first()?;
-                ((from..to).collect(), true)
-            }
+    // 大小寫折、繁簡折——兩條都是 `alike` 的事，面板問的是同一支。
+    let (fold_case, glyphs) = (true, true);
+    // **字面找不着，就問它念作什麽**（2026-09-26 提的）。`shuzhai` 找得到「書齋」。
+    //
+    // Warning: **只認全拼，和高級搜索一條規矩**（定的，原話：「Option 2 更符合目前的设计
+    // 哲学——不一下子提供太多东西直到真有人要」）。所以 `sz` 不中。
+    //
+    // Warning: **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串讀音，而
+    // 讀者打 `md` 十有八九在找 `.md`。字面接得住就不必問讀音。
+    //
+    // 兩檔共用它：讀音配上的那一段本來就是連着的，所以收緊也不影響。
+    let said_instead = || -> Option<(Vec<usize>, bool)> {
+        let said = crate::pinyin::atoms(query)?;
+        let (from, to) = *crate::pinyin::spans_of(label, &said, true).first()?;
+        Some(((from..to).collect(), true))
+    };
+    let (positions, in_order) = match loose {
+        true => match crate::nearby::one(&haystack, &needle, 0, reach, fold_case, glyphs) {
+            Some(found) => (found, true),
+            None => match anyhow(&haystack, &needle, reach, fold_case, glyphs) {
+                Some(found) => (found, false),
+                None => said_instead()?,
+            },
+        },
+        // **收緊：只收連在一起的那一段。** 跳着配和亂序兩檔都不走。
+        false => match run_of(&haystack, &needle, fold_case, glyphs) {
+            Some(found) => (found, true),
+            None => said_instead()?,
         },
     };
     // Where the name itself begins: everything before the last separator is
@@ -517,6 +542,28 @@ fn matched(label: &str, query: &str) -> Option<(i64, Vec<usize>)> {
 /// the two kinds never interleave — 「順序對的」 is a category, not a nudge.
 const IN_ORDER: i64 = 1_000_000;
 
+/// **連在一起的那一段**，從左往右第一處 —— 收緊那一檔（2026-10-04）。
+///
+/// 和 [`crate::nearby::one`] 的分別就是「跳不跳」：這一支要求每一個字緊挨着上一個。
+/// 折疊規矩還是 [`crate::nearby::alike`]，所以簡繁與大小寫照舊不分。
+fn run_of(
+    haystack: &[char],
+    needle: &[char],
+    fold_case: bool,
+    glyphs: bool,
+) -> Option<Vec<usize>> {
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
+    (0..=haystack.len() - needle.len())
+        .find(|&at| {
+            needle.iter().enumerate().all(|(k, &want)| {
+                crate::nearby::alike(want, haystack[at + k], fold_case, glyphs)
+            })
+        })
+        .map(|at| (at..at + needle.len()).collect())
+}
+
 /// **Every needle character is in there somewhere, order be damned** — 朱浩宇
 /// finding 朱宇浩 (2026-09-25).
 ///
@@ -527,9 +574,11 @@ const IN_ORDER: i64 = 1_000_000;
 fn anyhow(
     haystack: &[char],
     needle: &[char],
-    same: impl Fn(char, char) -> bool,
     reach: Option<usize>,
+    fold_case: bool,
+    glyphs: bool,
 ) -> Option<Vec<usize>> {
+    let same = |query: char, text: char| crate::nearby::alike(query, text, fold_case, glyphs);
     let mut taken = vec![false; haystack.len()];
     let mut positions = Vec::with_capacity(needle.len());
     for &want in needle {
@@ -783,6 +832,37 @@ mod tests {
     }
 
     /// 詞條那一行後半截只畫不比：打「冬天」找的是**叫**冬天的那一條。
+    /// **管道那一邊收緊：跳着配和亂序都不收**（2026-10-04 定）。
+    ///
+    /// 原話：「cli --files 更精确（五个选项不全开），只有当加了 open 之后进了 tui
+    /// 才五个选项都开。」`空格 f` 是一張排過序的單子，只看前十條，長尾不要錢；
+    /// `ye --files` 把全部印出來，長尾就是噪音。
+    ///
+    /// 量出來的（本倉）：`ye --files lib` 從 13 行剩 **5 行**——正好那五個 `lib.rs`，
+    /// 而 `build.rs`／`table.rs`／`labels.rs` 那幾條（`l`…`i`…`b` 跳着湊的）沒了。
+    /// 同一個查詢在 `空格 f` 裏仍是 13 條。
+    #[test]
+    fn the_pipe_takes_a_name_literally() {
+        // 跳着配：鬆的收，緊的不收。
+        assert!(matched("scripts/release_card.py", "rlcrd", true).is_some());
+        assert!(matched("scripts/release_card.py", "rlcrd", false).is_none());
+        // 亂序同理。
+        assert!(matched("scripts/release_card.py", "saeler", true).is_some());
+        assert!(matched("scripts/release_card.py", "saeler", false).is_none());
+        // `l`…`i`…`b` 跳着湊出來的那一族，緊的一條都不收。
+        assert!(matched("crates/yumete/build.rs", "lib", true).is_some());
+        assert!(matched("crates/yumete/build.rs", "lib", false).is_none());
+        // 連在一起的照舊中。
+        assert!(matched("crates/yumete-core/src/lib.rs", "lib", false).is_some());
+
+        // Warning: **關掉的是兩檔，不是五個。** 大小寫、繁簡、拼音在緊的這一檔裏
+        // 一格沒動——讀音配上的那一段本來就是連着的。
+        assert!(matched("README.md", "readme", false).is_some(), "大小寫不分");
+        assert!(matched("雜記/書齋夜話.md", "书斋", false).is_some(), "繁簡");
+        assert!(matched("朱宇浩的手稿.md", "zhuyuhao", false).is_some(), "拼音");
+        assert!(matched("卷01/第120章.md", "di120", false).is_some(), "字母與漢字混寫");
+    }
+
     /// **一處命中跨不過那個窗口** —— 和搜索面板同一條規矩（2026-10-04 合的）。
     ///
     /// 從前這裏不限：子序列跨多遠都算配上，於是 `release` 七個字母散在
@@ -796,22 +876,22 @@ mod tests {
     #[test]
     fn a_match_cannot_reach_across_a_whole_path() {
         // 七個字母，窗口 18 個字；這條路徑 29 個字，散着夠不着。
-        assert!(matched("crates/yumete-core/src/lib.rs", "release").is_none());
+        assert!(matched("crates/yumete-core/src/lib.rs", "release", true).is_none());
         // 同樣七個字母，連在一起的那一條照舊中。
-        assert!(matched("scripts/release_card.py", "release").is_some());
+        assert!(matched("scripts/release_card.py", "release", true).is_some());
         // 跳着配沒有被取消，只是不許跳得太遠：`rlcrd` 在 `release_card` 裏跨 11 個
         // 字，窗口是 14。
-        assert!(matched("scripts/release_card.py", "rlcrd").is_some());
+        assert!(matched("scripts/release_card.py", "rlcrd", true).is_some());
         // 亂序那一檔也限窗——它本來就是最鬆的一檔，不限就全走它那一條。
-        assert!(matched("crates/yumete-core/src/lib.rs", "esaeler").is_none());
-        assert!(matched("scripts/release_card.py", "saeler").is_some(), "亂序、可是挨着");
+        assert!(matched("crates/yumete-core/src/lib.rs", "esaeler", true).is_none());
+        assert!(matched("scripts/release_card.py", "saeler", true).is_some(), "亂序、可是挨着");
 
         // Warning: **中文那幾路一格都沒動**，窗口是按字算的，而它們本來就是連着的。
-        assert!(matched("朱宇浩的手稿.md", "zhuyuhao").is_some(), "拼音");
-        assert!(matched("雜記/書齋夜話.md", "shuzhai").is_some(), "拼音，跨目錄");
-        assert!(matched("雜記/書齋夜話.md", "书斋").is_some(), "繁簡");
-        assert!(matched("卷01/第120章.md", "di120").is_some(), "字母與漢字混寫");
-        assert!(matched("卷01/第120章.md", "juan01/di120").is_some(), "混寫，跨目錄");
+        assert!(matched("朱宇浩的手稿.md", "zhuyuhao", true).is_some(), "拼音");
+        assert!(matched("雜記/書齋夜話.md", "shuzhai", true).is_some(), "拼音，跨目錄");
+        assert!(matched("雜記/書齋夜話.md", "书斋", true).is_some(), "繁簡");
+        assert!(matched("卷01/第120章.md", "di120", true).is_some(), "字母與漢字混寫");
+        assert!(matched("卷01/第120章.md", "juan01/di120", true).is_some(), "混寫，跨目錄");
     }
 
     #[test]
