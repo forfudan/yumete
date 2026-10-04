@@ -422,6 +422,56 @@ mod tests {
         assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
     }
 
+    /// **打到一半，屏幕上有兩處在說話：HUD 和命令行。**
+    ///
+    /// Warning: **這是回歸測試**（2026-10-04 報上來的）。按下 `o`／`u` 的那一刻
+    /// `pending` 回到 `None`，於是 HUD 空了、`g` 那扇菜單也收了——屏幕上一個字
+    /// 都不說話，而編輯器其實正等着人打字母。原話：「我以为我现在在 normal
+    /// 模式，但其实 yumete 是在等我打拼音。這其實有些危險的。」
+    ///
+    /// **HUD 回顯整串按鍵（`gudon`），命令行說在等什麼（請輸入拼音：don）。**
+    #[test]
+    fn the_hud_and_the_command_row_both_speak_while_it_waits() {
+        use crate::editor::Hint;
+        let says = |ed: &Editor| match ed.hint() {
+            Hint::Says(text) => text,
+            _ => String::new(),
+        };
+
+        let mut ed = on_screen("冬天東風都城", true);
+        assert_eq!(ed.typed_so_far(), "gu", "還沒打字母");
+        assert_eq!(says(&ed), "請輸入拼音");
+        press(&mut ed, "don");
+        assert_eq!(ed.typed_so_far(), "gudon", "整串按鍵");
+        assert_eq!(says(&ed), "請輸入拼音：don");
+
+        let mut ed = on_screen("在 dock 旁邊", false);
+        assert_eq!(ed.typed_so_far(), "go");
+        assert_eq!(says(&ed), "請輸入兩個字母");
+        press(&mut ed, "d");
+        assert_eq!(ed.typed_so_far(), "god");
+        assert_eq!(says(&ed), "請輸入兩個字母：d");
+    }
+
+    /// **標籤一亮，兩處都閉嘴**——那時屏幕上全是標籤，自己會說話。
+    #[test]
+    fn both_go_quiet_once_the_labels_are_up() {
+        let mut ed = on_screen("在 dock 旁邊", false);
+        press(&mut ed, "do");
+        assert!(!ed.seek_labels().is_empty(), "標籤亮了");
+        assert_eq!(ed.typed_so_far(), "", "HUD 閉嘴");
+        assert!(matches!(ed.hint(), crate::editor::Hint::Quiet), "命令行閉嘴");
+    }
+
+    /// Warning: **`g` 那扇菜單不許在這時候畫。** 做過一版是「還在等字母就照
+    /// `Pending::Goto` 畫」，當場被否：菜單上那些鍵這時候一個都按不了，而且 `gu`
+    /// 的候選框一開，兩扇浮窗就疊在同一屏上（2026-10-04 截圖報的）。
+    #[test]
+    fn the_goto_menu_is_not_redrawn_while_it_waits() {
+        let ed = on_screen("冬天東風都城", true);
+        assert!(ed.pending_menu().is_none(), "不畫菜單");
+    }
+
     /// 位置是**檔裏**的下標，不是這一屏那一段裏的。
     #[test]
     fn the_places_are_counted_from_the_start_of_the_file() {
