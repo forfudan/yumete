@@ -809,7 +809,7 @@ impl Editor {
             // 一扇面板裏的老意思。
             Key::Tab if self.search.adopt_ghost() => self.look_again(),
             Key::Tab => {
-                let next = self.search.field.step(false, self.search.replacing, self.search.on_disk());
+                let next = self.search.walk(false);
                 self.search.stand_on(next);
                 // 走到名單上就不是打字了，鍵交回面板。
                 if self.search.field == Field::Results {
@@ -818,7 +818,7 @@ impl Editor {
                 }
             }
             Key::BackTab => {
-                let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
+                let back = self.search.walk(true);
                 self.search.stand_on(back);
                 if self.search.field == Field::Results {
                     self.mode = Mode::Normal;
@@ -918,7 +918,7 @@ impl Editor {
     /// press `i` between them would make `Tab` the wrong key for the commonest
     /// thing anybody does in this panel.
     fn leave_field(&mut self, back: bool) {
-        self.search.field = self.search.field.step(back, self.search.replacing, self.search.on_disk());
+        self.search.field = self.search.walk(back);
         match self.search.takes_text() {
             true => self.search.caret = self.search.typed().chars().count(),
             false => self.mode = Mode::Normal,
@@ -945,7 +945,7 @@ impl Editor {
             // 「少一點／多一點」是同一件事；到頂了 `h` 出去，免得困在列表裏。
             Key::Char('h') | Key::Left if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
-                    let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
+                    let back = self.search.walk(true);
                     self.stand_on_and_look(back);
                 }
             }
@@ -979,7 +979,7 @@ impl Editor {
                     self.show_hit();
                 }
                 _ => {
-                    let next = self.search.field.step(false, self.search.replacing, self.search.on_disk());
+                    let next = self.search.walk(false);
                     self.stand_on_and_look(next);
                 }
             },
@@ -989,7 +989,7 @@ impl Editor {
                 // `step(false)` 在第 0 條上飽和，於是列表是個進得去出不來的地
                 // 方——`Tab` 走得出去，可沒人會想到去按它。
                 Field::Results if self.search.selected == 0 => {
-                    let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
+                    let back = self.search.walk(true);
                     self.stand_on_and_look(back);
                 }
                 Field::Results => {
@@ -997,7 +997,7 @@ impl Editor {
                     self.show_hit();
                 }
                 _ => {
-                    let back = self.search.field.step(true, self.search.replacing, self.search.on_disk());
+                    let back = self.search.walk(true);
                     self.stand_on_and_look(back);
                 }
             },

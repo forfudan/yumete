@@ -7622,11 +7622,11 @@ en = "{0}'s table is not installed — put it in {1}, or a table of your own in 
 # ── search ────────────────────────────────────────────────────────────
 
 [[message]]
-# 搜索面板底下那一塊：這一處換完長什麼樣
+# 搜索面板底下那一塊：這一處換完長什麼樣。寫在一道雙橫線的左端。
 key = "search.after"
-zht = "換後"
-zhs = "换后"
-en = "after"
+zht = "替換預覽"
+zhs = "替换预览"
+en = "preview"
 
 [[message]]
 # 空的位置框上那句灰字

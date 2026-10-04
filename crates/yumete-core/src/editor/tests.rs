@@ -9088,6 +9088,10 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     // Warning: **號碼從前是 `0`**，2026-10-01 挪到開關那一列的末尾：它跟着搬到了包含
     // ／排除上面，和那三格合成「搜哪裏、搜哪些」一組，號碼接着往下排。同日幾個
     // 開關合併，於是它落在 `6`。
+    // Warning: **先讓名單有行。** 2026-10-04 起空名單不是落腳點，而這一條要測的是
+    // 「`j` 跳過範圍」，不是「空名單進不進得去」。
+    ed.on_key(Key::Char('冬'));
+    assert!(!ed.search().hits.is_empty(), "本文件是邊打邊搜的");
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search_for_test().field, Field::Results, "j 一步到結果，不停在範圍上");
@@ -9114,6 +9118,13 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     assert!(matches!(ed.search_for_test().scope, Where::Buffer), "`6` 從它身上回本文件");
 
     // ③ **包含／排除看範圍走不走磁碟**（2026-10-01 定）。走磁碟纔停得住。
+    //
+    // Warning: **先把名單填上**：2026-10-04 起空名單不是落腳點，而這一段要測的是
+    // 「停得住哪幾格」。`6` 那幾下把上一趟的結果換掉了，所以在本文件上重跑一趟。
+    ed.search_for_test().field = Field::Query;
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Enter);
+    assert!(!ed.search().hits.is_empty(), "本文件上找得到「冬」");
     ed.search_for_test().scope = Where::Project;
     ed.search_for_test().field = Field::Query;
     ed.on_key(Key::Char('j'));
@@ -9655,6 +9666,45 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     assert_eq!(ed.search().caret, 4, "Warning: 不挪的話，塊光標會停在框外面");
 }
 
+/// **一行都沒有的名單不是一個落腳點**（2026-10-04 報上來的）。
+///
+/// > 這個地方如果按 j，光標不知道去哪里了……然后這個時候如果按 k，光標就消失了，
+/// > 但是再按 k 又會出現在「排除」那一行。太奇怪了。
+///
+/// 一個原因兩種樣子：空名單什麼都不畫，而鍵照舊走得進去。往前走是「按了 `j` 人
+/// 不見了」，往回繞是「消失一下再出現在別處」——繞過的正是隊尾那個空名單。
+#[test]
+fn an_empty_list_is_not_a_place_to_stand() {
+    use crate::search_panel::{Field, Where};
+    let mut ed = typed("那年冬天很冷。");
+    ed.open_search();
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.search().field, Field::Query);
+    assert!(ed.search().hits.is_empty(), "還沒搜，名單空着");
+
+    // ① 本文件、沒有換框、沒有包含排除——「搜」底下無處可去，`j` 原地不動。
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Query, "空名單不是落腳點");
+
+    // ② 往回繞也不許掉進去：走磁盤的範圍下，`k` 一下就到「排除」。
+    ed.search_for_test().scope = Where::Working;
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.search().field, Field::Exclude, "繞過空名單");
+
+    // ③ 名單有行了，它照舊是一個落腳點。
+    ed.search_for_test().scope = Where::Buffer;
+    ed.search_for_test().field = Field::Query;
+    // 還在 `PAN.NOR`，先 `i` 進去纔打得了字。
+    ed.on_key(Key::Char('i'));
+    for c in "冬天".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert!(!ed.search().hits.is_empty(), "找到了");
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.search().field, Field::Results, "有行就走得進去");
+}
+
 /// **記着的那個詞是一行灰字，不是一段選中的文字**（§5.74，2026-10-04 報上來的）。
 ///
 /// > 我先搜索了「這」。回到了主文本區，然後按 `空格 /` 重新搜索……這個時候，搜索框
@@ -9812,8 +9862,15 @@ fn the_box_deletes_and_changes_where_the_cursor_stands() {
     assert_eq!(ed.search().query, "下冬天冷了");
 
     // Warning: **站在結果上，這幾個鍵一個都不許動框。**
+    //
+    // 先換一個找得到的詞：2026-10-04 起空名單不是落腳點，而「下冬天冷了」一處都
+    // 配不上，`j` 於是原地不動。
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Ctrl('u'));
+    ed.on_key(Key::Char('冷'));
+    assert!(!ed.search().hits.is_empty(), "本文件是邊打邊搜的");
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results);
