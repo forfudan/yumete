@@ -171,17 +171,17 @@ impl Editor {
                 *one += from;
             }
         }
-        let only_one = found.han.len() == 1;
+        // **出現得多的排前面**（2026-10-04 定）。`sort_by_key` 是穩定的，所以
+        // 次數一樣的仍按在屏幕上頭一次出現的先後排——號碼小的那幾個離人的視線近。
+        found.han.sort_by_key(|(_, at)| std::cmp::Reverse(at.len()));
+        // **候選剩一個也不自動挑定**（2026-10-04 試過之後撤回）。做過一版，
+        // 當天就撤了：讀音是前綴匹配，所以「只剩一個」隨時可能發生在人打完整個
+        // 拼音之前——原話：「比如我想去『而』這個字，我打了 `e` 他就直接跳轉
+        // 了，但是我其實習慣性會打 `er`，這時候 r 其實無效的。」那個多出來的字母
+        // 配不上任何標籤，整件事當場收掉。**人打的是一個完整的讀音，不是一個剛好
+        // 夠用的前綴**，界面不該在他話說完之前替他截斷。
         if let Some(seeking) = self.seeking.as_mut() {
             seeking.found = found;
-        }
-        // **只剩一個字就不必再按數字了**（2026-10-04 定）。收窄到這一步，面板
-        // 上那一行的號碼是唯一的選擇，讓人再按一下只是多一道手續。
-        //
-        // Warning: **這不是「自動跳」。** 挑定之後亮的是標籤，落腳點還得人自己按
-        // —— 2026-10-04 否掉過自動跳：「用戶可能只是想查找，不想跳轉」。
-        if only_one {
-            self.pick_the_han(0);
         }
     }
 
@@ -393,37 +393,33 @@ mod tests {
         assert_eq!(ed.seeking().unwrap().found.han.len(), 2, "dong 兩個都還在");
     }
 
-    /// **收窄到只剩一個字，就不必再按數字了**（2026-10-04 定）。
+    /// **候選剩一個也要按數字。**
     ///
-    /// 面板收掉，那一個字的每一處當場拿標籤。Warning: **這不是自動跳**——落腳點
-    /// 還得人自己按一個標籤。
+    /// Warning: **這是回歸測試，守的是一條撤回來的設計**（2026-10-04）。做過一版
+    /// 「只剩一個就自己挑定」，當天就撤了：讀音是前綴匹配，「只剩一個」隨時發生在
+    /// 人打完整個拼音之前——想去「而」，打 `e` 就挑定了，而人習慣打 `er`，那個 `r`
+    /// 配不上標籤，整件事收掉。人打的是一個完整的讀音，不是一個剛好夠用的前綴。
     #[test]
-    fn the_last_character_standing_picks_itself() {
-        // 「都」讀 du，這一句裏只有它；冬／東讀 dong，到第二個字母纔分得開。
+    fn the_last_character_standing_still_waits_for_a_digit() {
+        // 這一句裏只有「都」讀 du。
         let mut ed = on_screen("冬天東風都城", true);
-        press(&mut ed, "d");
-        assert_eq!(ed.seek_rows().len(), 4, "冬 東 都，加一行查詢");
-        press(&mut ed, "u");
-        assert!(ed.seek_rows().is_empty(), "只剩「都」，面板不必開");
-        assert_eq!(ed.seek_labels().len(), 1, "都 那一處有標籤");
-        assert!(ed.seeking().is_some(), "沒有自動跳");
-        press(&mut ed, "aa");
-        assert_eq!(ed.sel.head(), 4, "按了標籤纔落在「都」上");
+        press(&mut ed, "du");
+        assert_eq!(ed.seek_rows().len(), 2, "查詢一行，「都」一行");
+        assert!(ed.seek_labels().is_empty(), "沒有自己挑定");
+        // 人照舊打得完整個讀音。
+        press(&mut ed, "1");
+        assert_eq!(ed.seek_labels().len(), 1, "按了數字纔貼標籤");
     }
 
-    /// Warning: **第一個字母就只剩一個，它當場就挑定了**——下一鍵已經是標籤。
-    ///
-    /// 這是自動挑選的代價，記在這裏免得以後當成 bug 查：人以為自己在打「bi」，而
-    /// 「b」打完就收攤進了標籤那一步，那個「i」配不上任何標籤，於是整件事收掉。
-    /// 一屏正文上一個字母就唯一是少見的（量在 [`crate::written`]：`zh` 命中 21 個
-    /// 字），可短文本上真會遇到。
+    /// **出現得多的排前面**（2026-10-04 定）。次數一樣的照舊按出現先後。
     #[test]
-    fn one_letter_can_already_be_the_last_one() {
-        let mut ed = on_screen("東邊冬天東風", true);
-        press(&mut ed, "b");
-        assert_eq!(ed.seek_labels().len(), 1, "「邊」當場挑定了");
-        press(&mut ed, "i");
-        assert!(ed.seeking().is_none(), "那個 i 配不上標籤，收掉");
+    fn the_crowded_characters_come_first() {
+        // 冬 一處、東 兩處：東 先出現，可冬 排在它前面是錯的。
+        let mut ed = on_screen("冬天東風東雨", true);
+        press(&mut ed, "do");
+        let han: Vec<char> = ed.seeking().unwrap().found.han.iter().map(|(c, _)| *c).collect();
+        assert_eq!(han, ['東', '冬'], "兩處的排在一處的前面");
+        assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
     }
 
     /// 位置是**檔裏**的下標，不是這一屏那一段裏的。

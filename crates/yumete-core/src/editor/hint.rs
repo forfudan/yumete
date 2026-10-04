@@ -89,7 +89,7 @@ impl Editor {
         // does not do that in either** (2026-09-24 審出來的). In the box it
         // falls through to nothing; in the panel it walks the slot's views.
         // The next cell is `↓`.
-        // **挑選器的鍵寫在這一行，不寫在面板裏**（2026-10-01 定，作者原話：「快捷
+        // **挑選器的鍵寫在這一行，不寫在面板裏**（2026-10-01 定，原話：「快捷
         // 键文案是不是可以收到命令行中？」）。搜索面板一直是這樣，而挑選器從前把
         // 鍵寫在自己的腳注上、命令行那一行空着——騰出來的那一行歸列表。
         //
@@ -253,7 +253,7 @@ impl Editor {
                 // this reader already has in the text, and `t` lists the
                 // ones that are not.
                 //
-                // Warning: **按格移動不在這一行上了**（2026-09-30 作者定，原話「因为
+                // Warning: **按格移動不在這一行上了**（2026-09-30 定，原話「因为
                 // T 按格移动被折叠到 _t 中了，所以这个提示也就不需要了」）。它
                 // 從前寫在這裏是因為 `T` 是頂層的鍵；`空格 t T` 收了它之後，這
                 // 一行再寫一遍就是把三格裏最貴的一格花在單子上已經有的東西上。
@@ -261,7 +261,7 @@ impl Editor {
                     // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
                     ("\u{2423}t".into(), say!("hint.table.menu")),
                     ("Tab".into(), say!("hint.table.next-cell")),
-                    // **這一行的記錄去邊欄**（2026-09-30 作者提）。浮窗那一個是
+                    // **這一行的記錄去邊欄**（2026-09-30 提）。浮窗那一個是
                     // 小寫的 `空格 i`，與別的四種信息同一條規矩——大寫進邊欄。
                     ("\u{2423}I".into(), say!("hint.table.into-the-sidebar")),
                 ])
@@ -284,7 +284,7 @@ impl Editor {
     /// otherwise be empty: a pending key, a footnote, a table cell all have
     /// more to say from where the cursor is actually standing.
     fn the_way_back_to_the_list(&self) -> Hint {
-        // **浮着一則信息的時候，這一行說怎麽把它送進邊欄**（2026-09-30 作者定）。
+        // **浮着一則信息的時候，這一行說怎麽把它送進邊欄**（2026-09-30 定）。
         //
         // 原話：「`␣K 進邊欄` 似乎反而不是很重要的信息，可以在命令行是空的时候
         // 放到命令行中。」——浮窗的底邊那一頭改寫「怎麽翻頁」，那件事更常用；
@@ -311,7 +311,20 @@ impl Editor {
     /// does not remember what follows it currently has nowhere to look but the
     /// manual, and the editor is sitting there knowing the answer.
     fn pending_keys(&self) -> Option<Hint> {
-        let keys = match self.pending {
+        // **`go`／`gu` 還在等字母，`g` 那扇菜單就不收**（2026-10-04 定）。
+        //
+        // Warning: **按下 `o`／`u` 的那一刻 `pending` 就回到了 `None`**，於是菜單收
+        // 掉，而這兩個鍵恰恰是**還要再打幾個字母才算完**的——屏幕上一個字都不說
+        // 話，人以為自己回到了 Normal，照 Normal 的習慣按鍵。原話：「按下 u
+        // 之后，就没有 HUD 了，整个屏幕也没有任何东西告诉我要做什么。這其實有些
+        // 危險的。」`gw` 沒有這一族：它一按下去標籤就滿屏幕都是。
+        //
+        // 標籤亮起來就收——那時屏幕自己會說話，而且下一鍵是標籤不是菜單。
+        let pending = match self.seeking.as_ref().is_some_and(|s| s.labels.is_empty()) {
+            true => Pending::Goto,
+            false => self.pending,
+        };
+        let keys = match pending {
             // 撤銷已經斷了，剩下那個 `u` 吞不吞都行——没什麽要提示的。
             Pending::UndoBreak => return None,
             Pending::None => {
