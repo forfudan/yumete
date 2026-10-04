@@ -34,81 +34,93 @@ pub fn window(len: usize) -> usize {
     len * 2 + 4
 }
 
+/// **兩個字算不算同一個** —— 大小寫與繁簡那兩條折疊規矩，一份，兩個工具都調它。
+///
+/// Warning: **參數有方向**：`query` 是打進來的那一邊，`text` 是稿子／檔名那一邊。
+/// 繁簡**放寬的是查詢那一邊**——`shapes(发) = 发發髮`，所以打「头发」找得到「頭髮」；
+/// `shapes(發) = 發发`，所以打「發」不會誤中「髮」。對調就把這個性質毀了。
+///
+/// Warning: **從前這條規矩在兩個檔裏各寫了一遍**（`nearby` 與 `picker`，2026-10-04 合
+/// 的）。兩份逐字等價，可「同一條規矩兩處實現」本身就是下一個分歧的種子。
+pub fn alike(query: char, text: char, fold_case: bool, glyphs: bool) -> bool {
+    let plain = match fold_case {
+        true => query.to_lowercase().eq(text.to_lowercase()),
+        false => query == text,
+    };
+    plain || (glyphs && crate::glyphs::shapes(query).contains(text))
+}
+
+/// **從 `from` 起找一處命中，交出每一個字落在哪** —— 兩個工具共用的那個核。
+///
+/// 兩趟：前向那一趟只找「命中能在哪裏收尾」，再從那裏反向收緊。單趟貪心會取**最
+/// 早**配得上的位置，`ch6` 在 `chapters/ch6.md` 上會標中「chapters」的 `ch` 再跳老遠
+/// 去夠那個 `6`——散開的一串，卻按一處算分，還高亮在錯的地方。fzf 的 v1 算法為同
+/// 一個理由做同一件事。
+///
+/// `reach` 是**整處命中最多跨多少個字**，`None` ＝ 不限。面板限（見 [`window`]：
+/// 「他説」要找得到「他輕輕地説」，但不許跨句），挑選器從前不限。
+pub fn one(
+    hay: &[char],
+    needle: &[char],
+    from: usize,
+    reach: Option<usize>,
+    fold_case: bool,
+    glyphs: bool,
+) -> Option<Vec<usize>> {
+    if needle.is_empty() || from >= hay.len() {
+        return None;
+    }
+    let same = |query: char, text: char| alike(query, text, fold_case, glyphs);
+    let mut at = from;
+    loop {
+        at = (at..hay.len()).find(|&i| same(needle[0], hay[i]))?;
+        let mut want = 1usize;
+        let mut end = at + 1;
+        while end < hay.len()
+            && want < needle.len()
+            && reach.is_none_or(|reach| end - at < reach)
+        {
+            if same(needle[want], hay[end]) {
+                want += 1;
+            }
+            end += 1;
+        }
+        if want == needle.len() {
+            // 反向收緊：從終點往回，每一個字取**最晚**配得上的那一格。
+            let mut upto = end;
+            let mut positions = vec![0usize; needle.len()];
+            for (k, &want) in needle.iter().enumerate().rev() {
+                let found = (0..upto).rev().find(|&i| same(want, hay[i])).unwrap_or(at);
+                positions[k] = found;
+                upto = found;
+            }
+            return Some(positions);
+        }
+        at += 1;
+    }
+}
+
 /// Every place `needle` is found in `hay` within [`window`], as `(start, end)`
 /// character ranges — **non-overlapping**, earliest and tightest first.
 ///
 /// `fold` lower-cases both sides; the caller decides that from 大小寫.
 /// `glyphs` counts 書 and 书 as one character, from 中文匹配.
 ///
-/// Warning: **Two passes, and the second is backwards** — the same shape as
-/// [`crate::picker`], for the same reason. A forward walk alone takes the
-/// *first* place each character fits: 「他説」 in 「他。他説」 would be marked
-/// from the first 他, and the reader would see a range with a full stop in the
-/// middle of it when the phrase is right there. So the forward pass only finds
-/// **where a match can end**, and a backward pass from there takes the last
-/// place each character fits — the tightest range ending at that point.
-///
-/// The next search resumes at the end of the one before, so a phrase repeated
-/// in a sentence is two rows rather than a cascade of overlapping ones.
+/// 兩趟那一套在 [`one`] 身上，和挑選器共用（2026-10-04 合的）。這一支只多做一件
+/// 事：接着上一處的後面再找一次，所以一句話裏重複的詞是兩行，不是一串疊着的。
 pub fn spans(hay: &[char], needle: &[char], fold: bool, glyphs: bool) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     if needle.is_empty() || hay.is_empty() {
         return out;
     }
-    // Warning: **放寬的是查詢那一邊，不是正文那一邊**（2026-10-01 補的，照
-    // [`crate::picker`] 那一支寫）。`shapes(发) = 发發髮`，所以打「头发」找得到
-    // 「頭髮」；`shapes(發) = 發发`，所以打「發」不會誤中「髮」。所以這裏 `b` 是
-    // 查詢那一邊，`a` 是正文那一邊。
-    //
-    // Warning: **可這個方向不是這一行守住的**（2026-10-02 查出來的）。整張表逐條
-    // 驗過：`c ∈ shapes(k)` 一定蘊含 `k ∈ shapes(c)`，八千二百多條沒有例外——
-    // 也就是說兩個參數對調了答案一模一樣。上面那個性質來自**生成那張表的人**
-    // （發 和 髮 各自的集合都不含對方），不來自這裏。寫着是怕有人以為對調無害，
-    // 但別把它當成一道閘。
-    //
-    // 從前模糊這一路只折大小寫，於是同一個 簡繁異體 開關在挑選器裏管用、在搜索
-    // 面板的模糊底下不管用，而面板上它還畫成亮的（作者 2026-10-01 問出來的）。
-    let same = |a: char, b: char| {
-        let plain = match fold {
-            true => a.to_lowercase().eq(b.to_lowercase()),
-            false => a == b,
-        };
-        plain || (glyphs && crate::glyphs::shapes(b).contains(a))
-    };
-    let reach = window(needle.len());
+    let reach = Some(window(needle.len()));
     let mut from = 0usize;
     while from < hay.len() {
-        let Some(at) = (from..hay.len()).find(|&i| same(hay[i], needle[0])) else {
-            break;
-        };
-        // Forward from here, taking each character of the query the first time
-        // it turns up — the tightest match that starts at `at`.
-        let mut want = 1usize;
-        let mut end = at + 1;
-        while end < hay.len() && want < needle.len() && end - at < reach {
-            if same(hay[end], needle[want]) {
-                want += 1;
-            }
-            end += 1;
-        }
-        match want == needle.len() {
-            true => {
-                // Backwards from the end, taking the last place each character
-                // fits: the tightest range that ends here.
-                let mut upto = end;
-                let mut start = end;
-                for &want in needle.iter().rev() {
-                    let found = (0..upto).rev().find(|&i| same(hay[i], want)).unwrap_or(at);
-                    start = found;
-                    upto = found;
-                }
-                out.push((start, end));
-                from = end;
-            }
-            // No match from here; the next candidate start is the next place
-            // the first character turns up.
-            false => from = at + 1,
-        }
+        let Some(positions) = one(hay, needle, from, reach, fold, glyphs) else { break };
+        let (start, last) = (positions[0], positions[positions.len() - 1]);
+        out.push((start, last + 1));
+        // 不重疊：下一趟從這一處的後面接着找。
+        from = last + 1;
     }
     out
 }
