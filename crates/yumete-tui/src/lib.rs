@@ -8114,12 +8114,30 @@ fn draw_search(
     // **開關和名單之間畫一道雙橫線**（2026-10-04 定）。那一行本來就是空着的
     // ——一道線不多占地方，而它把「設定」和「找到了什麼」分成兩塊。
     //
-    // Warning: **雙線，同有焦點那一圈**（`sidebar_shell`）：這扇面板裏的線是一套。
-    let rule = ground.fg(ink.at(yumete_config::rung::RULE));
-    if y + 1 < area.y + area.height {
-        let wide = to.saturating_sub(left) as usize;
-        put_text(buf, left, y + 1, to, &"═".repeat(wide), rule);
-    }
+    // Warning: **從牆畫到牆，兩頭是丁字**（看了第一版報的：「沒有和兩邊豎線相
+    // 連」）。接頭跟着邊框的粗細走：有焦點那一圈是雙線，接 `╠╣`；沒焦點是單線，
+    // 接 `╞╡`（單豎、雙橫）。墨色也跟着它——`shell.floor_ink` 就是邊框那一筆，
+    // 所以有焦點時這兩道線一起是金的（「高亮的時候不是金色」）。
+    let rule = shell.floor_ink;
+    let (wall_a, wall_b) = (whole.x, whole.x + whole.width.saturating_sub(1));
+    let tee = match editor.panel_focus() == Some(side) {
+        true => ("╠", "╣"),
+        false => ("╞", "╡"),
+    };
+    let rule_across = |buf: &mut ratatui::buffer::Buffer, y: u16, from: u16| {
+        // Warning: **擋在內容區的邊上，不是整扇面板的邊上。** `area` 已經減掉了底邊
+        // 那一行，而底邊上寫着 `Tab 文件>…`——拿整扇面板的高度當閘，14 行的窗口
+        // 裏這一道線就畫到那一行上，把它整條蓋掉（測試攔下來的）。同 `draw_box`。
+        if y >= area.y + area.height {
+            return;
+        }
+        put_text(buf, wall_a, y, wall_a + 1, tee.0, rule);
+        if wall_b > from {
+            put_text(buf, from, y, wall_b, &"═".repeat((wall_b - from) as usize), rule);
+        }
+        put_text(buf, wall_b, y, wall_b + 1, tee.1, rule);
+    };
+    rule_across(buf, y + 1, wall_a + 1);
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
     let top = y + 2;
@@ -8254,10 +8272,9 @@ fn draw_search(
         if let Some((prose, mark, now)) = &after {
             let head = area.y + area.height - after_rows as u16;
             let name = say!("search.after");
+            // 線先鋪滿、名字再壓上去，兩頭的丁字和上面那一道同一支。
+            rule_across(buf, head, wall_a + 1);
             put_text(buf, left, head, to, &name, quiet);
-            let at = left + yumete_cjk::str_width(&name) as u16;
-            let wide = to.saturating_sub(at) as usize;
-            put_text(buf, at, head, to, &"═".repeat(wide), rule);
             let gone = ground.fg(ink.mark()).add_modifier(Modifier::CROSSED_OUT);
             let come = ground.fg(ink.green());
             for (slot, row) in preview_lines(prose, mark, now, wide)
