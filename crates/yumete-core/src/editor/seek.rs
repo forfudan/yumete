@@ -43,6 +43,13 @@ pub struct Seeking {
     pub labels: Vec<super::labels::Jump>,
     /// 標籤已經被打進去的那幾個字母。
     pub typed_label: String,
+    /// **已經按數字挑定了一個漢字。** 挑定之後候選面板就收掉，數字也不再有意思。
+    ///
+    /// Warning: **這個不等於「標籤亮着」。** `go` 打滿兩個字母的那一刻，西文的標籤
+    /// 和漢字的候選面板**同時**在屏幕上——下一鍵是字母就去標籤，是數字就是在挑字
+    /// （2026-10-04 定的那個關竅）。拿 `labels.is_empty()` 當「面板收了沒有」
+    /// 會把這兩樣攪成一樣，`go` 的中文那一半就整個沒了。
+    pub picked: bool,
 }
 
 /// 候選面板一頁幾個 —— 數字鍵就那麼多（`1`–`9`）。
@@ -169,31 +176,36 @@ impl Editor {
         // **空格也是一個字母**（2026-10-04 問的）：「a bus」那個孤零零的 `a`
         // 後面就是空格，不收的話它永遠去不了。帶空格的查詢自己就不問讀音了
         // （沒有哪個字讀作「a 」），所以不必在這裏分。
-        // **標籤亮起來之後整個鍵盤都是標籤**，同 `gw`。
-        if !seeking.labels.is_empty() {
-            return self.seek_label_key(c);
-        }
-        // **數字挑漢字**（`1`–`9`）。字母和數字是兩個不相交的集合，所以一個鍵同時
-        // 答兩種文字不會含糊——這是整個設計的關竅（2026-10-04 定）。
-        if let Some(n) = c.to_digit(10).filter(|&n| n >= 1) {
-            if seeking.page_han().get(n as usize - 1).is_some() {
-                self.pick_the_han(n as usize - 1);
+        // **候選面板還開着的時候，數字和翻頁鍵歸面板**——標籤亮沒亮都一樣。
+        // `go` 打滿兩個字母的那一刻兩樣東西同時在屏幕上，而數字和字母是兩個不相交
+        // 的集合，所以一個鍵同時答兩種文字不會含糊（2026-10-04 定的關竅）。
+        let panel = !seeking.picked && !seeking.found.han.is_empty();
+        if panel {
+            // **數字挑漢字**（`1`–`9`）。
+            if let Some(n) = c.to_digit(10).filter(|&n| n >= 1) {
+                if seeking.page_han().get(n as usize - 1).is_some() {
+                    self.pick_the_han(n as usize - 1);
+                    return true;
+                }
+                self.cancel_seek();
                 return true;
             }
-            self.cancel_seek();
-            return true;
-        }
-        // **翻頁用 `-`／`=`，寫死**（2026-10-04 定）。不跟方案走：輸入法的翻頁鍵
-        // 由方案決定、各家不同，而跳轉必須可預測。
-        if matches!(c, '-' | '=') && !seeking.found.han.is_empty() {
-            let pages = seeking.pages();
-            if let Some(seeking) = self.seeking.as_mut() {
-                seeking.page = match c {
-                    '-' => (seeking.page + pages - 1) % pages,
-                    _ => (seeking.page + 1) % pages,
-                };
+            // **翻頁用 `-`／`=`，寫死**（2026-10-04 定）。不跟方案走：輸入法的翻頁鍵
+            // 由方案決定、各家不同，而跳轉必須可預測。
+            if matches!(c, '-' | '=') {
+                let pages = seeking.pages();
+                if let Some(seeking) = self.seeking.as_mut() {
+                    seeking.page = match c {
+                        '-' => (seeking.page + pages - 1) % pages,
+                        _ => (seeking.page + 1) % pages,
+                    };
+                }
+                return true;
             }
-            return true;
+        }
+        // **標籤亮起來之後字母都是標籤**，同 `gw`。
+        if !seeking.labels.is_empty() {
+            return self.seek_label_key(c);
         }
         let takes = c.is_ascii_alphabetic() || c == ' ';
         if !takes || !seeking.takes_more() {
@@ -215,7 +227,7 @@ impl Editor {
     pub fn seek_rows(&self) -> Vec<String> {
         self.seeking
             .as_ref()
-            .filter(|s| s.labels.is_empty())
+            .filter(|s| !s.picked)
             .map(Seeking::rows)
             .unwrap_or_default()
     }
@@ -252,6 +264,7 @@ impl Editor {
         if let Some(seeking) = self.seeking.as_mut() {
             seeking.labels = super::labels::label_them(spots);
             seeking.typed_label.clear();
+            seeking.picked = true;
         }
     }
 
@@ -316,6 +329,46 @@ mod tests {
         assert_eq!(found.han, [('冬', vec![10])], "冬 讀 dong");
         // 打滿兩個就不收查詢字母了——往後那幾鍵是標籤和數字的事。
         assert!(!ed.seeking().unwrap().takes_more());
+    }
+
+    /// **`go` 打滿兩個字母之後，標籤和候選面板一起在屏幕上。**
+    ///
+    /// Warning: **這一條是回歸測試**（2026-10-04 修）。從前「標籤亮了」就當「挑完
+    /// 了」，於是 `go` 一打滿兩個字母，西文標籤一亮，漢字那半邊——面板和數字鍵——
+    /// 整個消失。`go` 的中文那一路等於沒有。
+    #[test]
+    fn go_shows_the_labels_and_the_panel_at_the_same_time() {
+        let mut ed = on_screen("在 dock 旁邊的冬天東風", false);
+        press(&mut ed, "do");
+        assert_eq!(ed.seek_labels().len(), 1, "dock 的那一處有標籤");
+        let rows = ed.seek_rows();
+        assert!(rows.iter().any(|r| r.contains('冬')), "面板還在：{rows:?}");
+        assert!(rows.iter().any(|r| r.contains('東')), "面板還在：{rows:?}");
+    }
+
+    /// **數字挑漢字，字母走標籤** —— 兩個不相交的集合，這是整個設計的關竅。
+    #[test]
+    fn a_digit_picks_the_han_even_while_the_latin_labels_are_up() {
+        let mut ed = on_screen("在 dock 旁邊的冬天東風", false);
+        press(&mut ed, "do");
+        // `1` 挑第一個字（冬），面板收掉，只剩它那一處的標籤。
+        press(&mut ed, "1");
+        assert!(ed.seek_rows().is_empty(), "挑完了，面板收掉");
+        assert_eq!(ed.seek_labels().len(), 1, "冬 只有一處");
+        // 標籤是兩個字母的，同 `gw`。
+        press(&mut ed, "aa");
+        assert!(ed.seeking().is_none(), "跳完收攤");
+        assert_eq!(ed.sel.head(), 10, "落在 冬 上");
+    }
+
+    /// 同一屏上按字母走的是西文那一邊，和上面那一條是同一個狀態的另一半。
+    #[test]
+    fn a_letter_follows_the_latin_label_instead() {
+        let mut ed = on_screen("在 dock 旁邊的冬天東風", false);
+        press(&mut ed, "do");
+        press(&mut ed, "aa");
+        assert!(ed.seeking().is_none(), "跳完收攤");
+        assert_eq!(ed.sel.head(), 2, "落在 dock 的 d 上");
     }
 
     /// **`gu` 不定長，而且只問中文。**
