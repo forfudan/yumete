@@ -7841,8 +7841,12 @@ fn draw_search(
     // 過了：上面那一道貼着標題行，下面那一道夾在格子和開關之間。
     let mut y = area.y + 1;
     let mut caret: Option<Position> = None;
-    // **正在打字的那一格畫在第幾行**——收尾的時候整扇面板退後，就它不退。
-    let mut lit_row: Option<u16> = None;
+    // **正在打字的那一格佔了哪幾格**——收尾的時候整扇面板退後，就它不退。
+    //
+    // Warning: **記的是那個框，不是那一行**（2026-10-04 截圖指出來的）。先做的
+    // 一版留的是整行，於是「搜: 」那個標籤和那一行兩頭的邊條照舊亮着——人要找的
+    // 是「我在哪個框裏打字」，標籤不是框。
+    let mut lit: Option<Rect> = None;
     // **三個標籤補齊到同一寬，格子纔對得齊**（2026-09-26）：「位置: 」比「搜: 」
     // 寬兩格。Warning: **`換: ` 不在畫面上也算進來**，同開關那幾行的理由——勾一下替換，
     // 上面兩格不許跟着挪。
@@ -7935,7 +7939,7 @@ fn draw_search(
             put_text(buf, box_at, y, to, &asks, Style { fg: quiet.fg, ..style });
         }
         if here {
-            lit_row = Some(y);
+            lit = Some(Rect::new(box_at, y, to.saturating_sub(box_at), 1));
         }
         if here && !find.all_selected {
             let box_is = Rect::new(box_at, y, to.saturating_sub(box_at), 1);
@@ -8258,12 +8262,24 @@ fn draw_search(
             true => Some(Rect::new(area.x, from, area.width, upto - from)),
             false => None,
         };
-        let bottom = area.y + area.height;
-        let (over, under) = match lit_row {
-            Some(lit) => (rows(area.y, lit), rows(lit + 1, bottom)),
-            None => (rows(area.y, bottom), None),
+        let cells = |from: u16, upto: u16, y: u16| match upto > from {
+            true => Some(Rect::new(from, y, upto - from, 1)),
+            false => None,
         };
-        for part in [over, under].into_iter().flatten() {
+        let bottom = area.y + area.height;
+        let right = area.x + area.width;
+        // 亮着那個框的上面、下面，加上同一行裏它左右兩頭——那一行的標籤和邊條
+        // 都在這兩截裏。
+        let parts = match lit {
+            Some(box_is) => [
+                rows(area.y, box_is.y),
+                rows(box_is.y + 1, bottom),
+                cells(area.x, box_is.x, box_is.y),
+                cells(box_is.x + box_is.width, right, box_is.y),
+            ],
+            None => [rows(area.y, bottom), None, None, None],
+        };
+        for part in parts.into_iter().flatten() {
             stand_back(frame, ink, part);
         }
     }
@@ -11911,10 +11927,14 @@ fn squeezed(text: &str) -> String {
             .max()
             .unwrap_or(0);
         let box_at = label_at + widest as u16;
-        // 名字那幾格留在面板的底色上——三檔說的是「這裏打得了字」。
-        assert_eq!(
+        // 名字那幾格不鋪框的底色——三檔說的是「這裏打得了字」，而名字不是框。
+        //
+        // Warning: **打字的時候它量不成 `chrome`**（2026-10-04 起）：`PAN.INS` 下整扇
+        // 面板退後一步，只剩那個框不退，而名字在框外面。所以這裏只問「它不是框
+        // 那一檔」；它等不等於面板底，下面 ②③ 兩個不退後的狀態纔問得了。
+        assert_ne!(
             buf.cell((label_at, 1)).expect("名字那一段").style().bg,
-            chrome,
+            Some(ink.sunken()),
             "「{tag}」不該跟着框一起變色"
         );
         // ① 正在打字：梯子的盡頭，第 100 檔。
@@ -11939,6 +11959,12 @@ fn squeezed(text: &str) -> String {
         // Warning: **框不再墊一層紙色了**（2026-09-25）：名字已經說明了那裏能打字，
         // 底色是第二重。所以「沒被反白的那幾格」量的是**面板底**。
         let plain = chrome;
+        // 不打字了，面板不退後——名字那幾格這時候就該量成面板底。
+        assert_eq!(
+            buf.cell((label_at, 1)).expect("名字那一段").style().bg,
+            chrome,
+            "「{tag}」留在面板的底色上"
+        );
         let reversed = |buf: &ratatui::buffer::Buffer, x: u16| {
             buf.cell((x, 1)).expect("框裏").style().bg == Some(ink.text())
         };
@@ -17836,16 +17862,34 @@ fn squeezed(text: &str) -> String {
             typing[(x, y)].style(),
             "「位置」那一行沒退後"
         );
-        // 「搜: 」是正在打字那一行的標籤——一格都不許動。
-        // Warning: **認後面那個冒號**：面板的標題也是「搜索」，而標題該退後。
+        // Warning: **亮着的是那個框，不是那一行**（2026-10-04 截圖指出來的）。
+        // 「搜: 」這個標籤和那一行兩頭的邊條都該跟着退後——人要找的是「我在哪個
+        // 框裏打字」，標籤不是框。認後面那個冒號：面板的標題也是「搜索」。
         let (x, y) = (0..24u16)
             .flat_map(|y| (0..24u16).map(move |x| (x, y)))
             .find(|&(x, y)| at(&resting, x, y) == "搜" && at(&resting, x + 2, y) == ":")
             .expect("找得到「搜: 」那一行");
-        assert_eq!(
+        assert_ne!(
             resting[(x, y)].style(),
             typing[(x, y)].style(),
-            "正在打字那一行退後了"
+            "「搜: 」那個標籤沒退後"
+        );
+
+        // 框本身沒退後。Warning: **不能拿兩個模式的樣式相比**——框裏那一段底色本來
+        // 就隨模式變（「三檔底色」）。退後是**往紙色混**，而打字態那一檔比紙還
+        // 暗，所以「仍然比紙暗」就說明沒被混過。
+        let ink = crate::theme::Palette::of(&config);
+        let Color::Rgb(pr, pg, pb) = ink.paper() else { panic!("主題的紙色該是 RGB") };
+        let paper = pr as u32 + pg as u32 + pb as u32;
+        let box_at = (x + 3..24)
+            .find(|&x| !at(&typing, x, y).trim().is_empty())
+            .expect("標籤後面是那個框");
+        let Some(Color::Rgb(r, g, b)) = typing[(box_at, y)].style().bg else {
+            panic!("框的底色該是 RGB")
+        };
+        assert!(
+            r as u32 + g as u32 + b as u32 <= paper,
+            "框被往紙色拉亮了，也就是跟着退後了"
         );
     }
 
