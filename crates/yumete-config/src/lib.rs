@@ -895,6 +895,15 @@ pub mod rung {
     /// eye is supposed to find at the bottom of the window read as part of the
     /// page. A ground with no rule and no position of its own has to be seen.
     pub const CHROME: u16 = 8100; // 第 81 檔
+    /// **空框上寫着的那一句**：搜索面板的「要找什麼」，以及上次搜過的那個詞
+    /// （2026-10-04 定）。
+    ///
+    /// Warning: **它比旁註、比 markup 都還要退後**。別的提示字是「讀它，只是它不是
+    /// 正文」；這一句要的是**看得見、可是一眼就知道那裏沒有字**——它畫在輸入框
+    /// 的底色上，而那一檔比紙還沉，所以同一個墨在這裏讀起來比在正文上更淡。
+    /// 一度用旁註那一檔（第 25 檔），原話：「這個不够灰，感覺還是像有個字
+    /// 在里面而不是提示……必須更淡更淡。」
+    pub const GUESS: u16 = 8000; // 第 80 檔
     /// A ground that must not shout: a table's alternating columns, its cursor
     /// row, a code fence, a callout, the tint past the measure.
     pub const BAND: u16 = 8400; // 第 84 檔
@@ -1003,7 +1012,7 @@ pub struct ThemeConfig {
     ///
     /// | 品 | 色 | 誰 |
     /// | --- | --- | --- |
-    /// | 龍袍 | 金 | 標題：作者自己的聲音 |
+    /// | 龍袍 | 金 | 標題：寫稿人自己的聲音 |
     /// | 一至三品 | 紫 | 代碼、字面：一個字都不能錯 |
     /// | 四至五品 | 朱 | 這裏不對：腳注、danger、衝突 |
     /// | 六至七品 | 綠 | 引用：別人的話 |
@@ -1801,7 +1810,7 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // 這張表原樣抄的 helix，而 helix 那個次序裏 `ruff` 在第二個——Warning: **它問符
         // 號一律回 `null`**：`initialize` 的 capabilities 裏明明寫着
         // `hoverProvider: true`，可它的 hover 只解釋自己的規則碼（`# noqa: E501`
-        // 那種），它是 linter 不是類型檢查器。作者的 pixi 環境裏 `ruff` 和 `pylsp`
+        // 那種），它是 linter 不是類型檢查器。 pixi 環境裏 `ruff` 和 `pylsp`
         // 都在，於是挑中了前者，按 `空格 k` 得到「此處未找到相關文檔」——那句話
         // 字面上是對的，錯的是名單的次序。
         //
