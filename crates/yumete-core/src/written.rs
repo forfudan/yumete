@@ -177,6 +177,24 @@ mod tests {
         assert_eq!(targets("a1b a1c", "a1").latin, [0, 4]);
     }
 
+    /// **空格也是一個字母** —— 「a bus」那個孤零零的 `a` 怎麼去（2026-10-04 問的）。
+    ///
+    /// 定長兩個字母，而那個 `a` 後面就是空格，所以第二鍵只能是空格。leap 也是這樣
+    /// ——它要的是「目標處寫的那兩個字符」，空格是字符。
+    ///
+    /// Warning: **查詢裏有空格，讀音那一路就不問了**（`says` 為假）：讀音是字母串，
+    /// 沒有一個字讀作「a 」。
+    #[test]
+    fn a_space_is_one_of_the_two_letters() {
+        let found = targets("a bus and a cat", "a ");
+        assert_eq!(found.latin, [0, 10], "兩個孤零零的 a");
+        assert!(found.han.is_empty(), "帶空格的查詢不問讀音");
+        // 「and」裏那個 a 後面是 n，不中。
+        assert_eq!(targets("and", "a ").latin, Vec::<usize>::new());
+        // 行尾那一個：後面沒有空格了，不中——它本來就沒有第二個字符可打。
+        assert_eq!(targets("a", "a ").latin, Vec::<usize>::new());
+    }
+
     #[test]
     fn nothing_asked_is_nothing_found() {
         assert!(targets("冬天", "").is_empty());
