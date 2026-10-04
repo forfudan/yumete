@@ -3,17 +3,23 @@
 //! `gw` 給屏幕上的位置**發號碼**（easymotion／helix 那一路）；這一支反過來，**打你
 //! 要去的那個地方寫的字**（leap／flash 那一路）。兩個不衝突，§5.12.63 當時就留了口子。
 //!
-//! 一條規矩管兩種文字：西文打字面那幾個字母，中文打**讀音**那幾個。判誰配得上在
-//! [`crate::written`]，那一層是純文字進、位置出；這裏管的是「走到哪一步了」。
+//! 一條規矩管兩種文字：西文打**字面**那幾個字母，中文打**讀音**那幾個。判誰配得上
+//! 在 [`crate::written`]，那一層是純文字進、位置出，兩種一起答；這裏管的是「走到哪
+//! 一步了」，並且**一個鍵只取其中一半**。
 //!
-//! | | 打幾個字母 | 收什麼 |
-//! | --- | --- | --- |
-//! | **`go`** | **定長兩個** | 中英混合 |
-//! | **`gu`** | **不定長**，打到候選夠短 | 只有中文 |
+//! | | 打幾個字母 | 收什麼 | 怎麼挑 |
+//! | --- | --- | --- | --- |
+//! | **`go`** | **定長兩個** | 只有西文 | 字母標籤，同 `gw` |
+//! | **`gu`** | **不定長**，打到候選夠短 | 只有中文 | 數字挑字、`-`／`=` 翻頁，再貼標籤 |
 //!
-//! `go` 一格都不影響英文：字母照舊是標籤、按下去就跳；**要到中文那一邊走的是數字
-//! 和 `-`／`=`**，兩個集合不重疊（2026-10-04 定）。`zh`／`sh`／`ji` 那幾個擁擠的
-//! 聲母（量出來一屏 21–23 個字）歸 `gu`——它不定長，編碼一長候選就塌下來。
+//! Warning: **一個鍵一種文字**（2026-10-04 定）。當天早先那一版是 `go` 兩種一起
+//! 收——字母標籤和漢字候選面板同時畫出來，數字挑字、字母走標籤，兩個集合不重疊所以
+//! 不含糊。可**面板落在光標處，正好蓋住光標附近那幾處匹配**，而那恰恰是人要跳去的
+//! 地方。分開之後 `go` 根本不開面板，遮擋從源頭上沒有了；中文那一路也沒損失——`gu`
+//! 不限長，想要兩個字母的那種速度，打兩個字母照樣按得到數字。
+//!
+//! `zh`／`sh`／`ji` 那幾個擁擠的聲母（量出來一屏 21–23 個字，量在 [`crate::written`]）
+//! 歸 `gu`——它不定長，編碼一長候選就塌下來。
 //!
 //! # 要等一幀
 //!
@@ -26,8 +32,14 @@ use super::*;
 /// 這一次按「那裏寫的什麼」跳，走到哪一步了。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Seeking {
-    /// `gu` ＝ 只問中文、不定長；`go` ＝ 定長兩個、中英都問。
-    pub only_han: bool,
+    /// `gu` ＝ 按**讀音**找漢字、不定長；`go` ＝ 按**字面**找西文、定長兩個。
+    ///
+    /// Warning: **一個鍵一種文字**（2026-10-04 定，改掉了當天早先那一版）。
+    /// 先前 `go` 是「兩個字母同時問西文和中文」，候選面板和西文標籤一起畫在屏幕
+    /// 上——而面板落在光標處，正好蓋住光標附近那幾處匹配。分開之後 `go` 根本不開
+    /// 面板，遮擋這件事從源頭上沒有了；中文那一路也沒損失，`gu` 不限長，打兩個
+    /// 字母照樣按得到數字。
+    pub reading: bool,
     /// 打進去的那幾個字母。
     pub typed: String,
     /// 這一屏上配得上的。
@@ -60,7 +72,7 @@ impl Seeking {
     ///
     /// `go` 定長兩個——打滿就不收了，往後那幾鍵是標籤和數字的事。
     pub fn takes_more(&self) -> bool {
-        self.only_han || self.typed.chars().count() < 2
+        self.reading || self.typed.chars().count() < 2
     }
 
     /// 候選一共幾頁（一個字都沒有時是 1，空面板也是一頁）。
@@ -91,7 +103,7 @@ impl Seeking {
             false => self.typed.clone(),
         }];
         for (n, (ch, at)) in self.page_han().iter().enumerate() {
-            rows.push(format!("{}. {}  {}", n + 1, ch, at.len()));
+            rows.push(format!("{}. {}  {}", n + 1, ch, say!("seek.places", at.len())));
         }
         rows
     }
@@ -99,8 +111,8 @@ impl Seeking {
 
 impl Editor {
     /// `go`／`gu` 按下去：記一筆，等前端畫完一幀（見本檔開頭）。
-    pub(super) fn start_seek(&mut self, only_han: bool) {
-        self.owed_seek = Some(only_han);
+    pub(super) fn start_seek(&mut self, reading: bool) {
+        self.owed_seek = Some(reading);
     }
 
     /// 欠着沒有——問一句，不取走（`--shot` 那條路用它）。
@@ -114,8 +126,8 @@ impl Editor {
     }
 
     /// 開起來，等着打字。
-    pub fn run_owed_seek(&mut self, only_han: bool) {
-        self.seeking = Some(Seeking { only_han, ..Seeking::default() });
+    pub fn run_owed_seek(&mut self, reading: bool) {
+        self.seeking = Some(Seeking { reading, ..Seeking::default() });
     }
 
     /// 正在按「那裏寫的什麼」跳。
@@ -144,10 +156,11 @@ impl Editor {
         let (from, text) = self.page_text();
         let Some(seeking) = self.seeking.as_ref() else { return };
         let mut found = crate::written::targets(&text, &seeking.typed);
-        // **`gu` 只問中文。** 西文那一半歸 `go`——這一檔存在的理由就是「中文兩個
-        // 字母收不住」，收進西文只會把候選面板攪渾。
-        if seeking.only_han {
-            found.latin.clear();
+        // **一個鍵一種文字。** `gu` 扔掉西文，`go` 扔掉漢字——見 `Seeking::reading`
+        // 上面那條為什麼。
+        match seeking.reading {
+            true => found.latin.clear(),
+            false => found.han.clear(),
         }
         // 位置換成**檔裏**的下標：`written` 答的是相對於餵進去那一段的。
         for at in &mut found.latin {
@@ -158,8 +171,17 @@ impl Editor {
                 *one += from;
             }
         }
+        let only_one = found.han.len() == 1;
         if let Some(seeking) = self.seeking.as_mut() {
             seeking.found = found;
+        }
+        // **只剩一個字就不必再按數字了**（2026-10-04 定）。收窄到這一步，面板
+        // 上那一行的號碼是唯一的選擇，讓人再按一下只是多一道手續。
+        //
+        // Warning: **這不是「自動跳」。** 挑定之後亮的是標籤，落腳點還得人自己按
+        // —— 2026-10-04 否掉過自動跳：「用戶可能只是想查找，不想跳轉」。
+        if only_one {
+            self.pick_the_han(0);
         }
     }
 
@@ -302,12 +324,12 @@ mod tests {
     use super::*;
 
     /// 造一個「已經畫過一幀」的編輯器：`page_span` 是前端交的，測試自己交。
-    fn on_screen(text: &str, only_han: bool) -> Editor {
+    fn on_screen(text: &str, reading: bool) -> Editor {
         let mut ed = Editor::new();
         ed.current_buffer_mut().replace(0..0, text).unwrap();
         let n = ed.current_buffer().rope().len_chars();
         ed.set_page_span(0, n);
-        ed.start_seek(only_han);
+        ed.start_seek(reading);
         let want = ed.take_owed_seek().expect("按了就欠着");
         ed.run_owed_seek(want);
         ed
@@ -319,46 +341,29 @@ mod tests {
         }
     }
 
-    /// **`go` 定長兩個字母，中英一起問。**
+    /// **`go` 定長兩個字母，只問西文。**
     #[test]
-    fn go_asks_both_scripts_with_two_letters() {
+    fn go_asks_the_latin_only() {
         let mut ed = on_screen("在 dock 旁邊的冬天", false);
         press(&mut ed, "do");
         let found = &ed.seeking().expect("還開着").found;
         assert_eq!(found.latin, [2], "dock 的 do");
-        assert_eq!(found.han, [('冬', vec![10])], "冬 讀 dong");
-        // 打滿兩個就不收查詢字母了——往後那幾鍵是標籤和數字的事。
+        assert!(found.han.is_empty(), "冬 讀 dong，可那是 gu 的事");
+        // 打滿兩個就不收查詢字母了——往後那幾鍵是標籤的事。
         assert!(!ed.seeking().unwrap().takes_more());
     }
 
-    /// **`go` 打滿兩個字母之後，標籤和候選面板一起在屏幕上。**
+    /// **`go` 一個候選面板都不開。**
     ///
-    /// Warning: **這一條是回歸測試**（2026-10-04 修）。從前「標籤亮了」就當「挑完
-    /// 了」，於是 `go` 一打滿兩個字母，西文標籤一亮，漢字那半邊——面板和數字鍵——
-    /// 整個消失。`go` 的中文那一路等於沒有。
+    /// Warning: **這一條守的是「面板不許遮住光標附近」**（2026-10-04 定）。
+    /// 面板落在光標處，而 `go` 要跳的那幾處正在光標附近——兩樣東西搶同一塊地方。
+    /// 分成一鍵一種文字之後，`go` 這一路根本不開面板，遮擋從源頭上沒有了。
     #[test]
-    fn go_shows_the_labels_and_the_panel_at_the_same_time() {
+    fn go_never_opens_a_panel() {
         let mut ed = on_screen("在 dock 旁邊的冬天東風", false);
         press(&mut ed, "do");
-        assert_eq!(ed.seek_labels().len(), 1, "dock 的那一處有標籤");
-        let rows = ed.seek_rows();
-        assert!(rows.iter().any(|r| r.contains('冬')), "面板還在：{rows:?}");
-        assert!(rows.iter().any(|r| r.contains('東')), "面板還在：{rows:?}");
-    }
-
-    /// **數字挑漢字，字母走標籤** —— 兩個不相交的集合，這是整個設計的關竅。
-    #[test]
-    fn a_digit_picks_the_han_even_while_the_latin_labels_are_up() {
-        let mut ed = on_screen("在 dock 旁邊的冬天東風", false);
-        press(&mut ed, "do");
-        // `1` 挑第一個字（冬），面板收掉，只剩它那一處的標籤。
-        press(&mut ed, "1");
-        assert!(ed.seek_rows().is_empty(), "挑完了，面板收掉");
-        assert_eq!(ed.seek_labels().len(), 1, "冬 只有一處");
-        // 標籤是兩個字母的，同 `gw`。
-        press(&mut ed, "aa");
-        assert!(ed.seeking().is_none(), "跳完收攤");
-        assert_eq!(ed.sel.head(), 10, "落在 冬 上");
+        assert!(ed.seek_rows().is_empty(), "不開面板：{:?}", ed.seek_rows());
+        assert_eq!(ed.seek_labels().len(), 1, "dock 那一處有標籤");
     }
 
     /// 同一屏上按字母走的是西文那一邊，和上面那一條是同一個狀態的另一半。
@@ -386,6 +391,39 @@ mod tests {
         // 再打一個字母收窄。
         press(&mut ed, "n");
         assert_eq!(ed.seeking().unwrap().found.han.len(), 2, "dong 兩個都還在");
+    }
+
+    /// **收窄到只剩一個字，就不必再按數字了**（2026-10-04 定）。
+    ///
+    /// 面板收掉，那一個字的每一處當場拿標籤。Warning: **這不是自動跳**——落腳點
+    /// 還得人自己按一個標籤。
+    #[test]
+    fn the_last_character_standing_picks_itself() {
+        // 「都」讀 du，這一句裏只有它；冬／東讀 dong，到第二個字母纔分得開。
+        let mut ed = on_screen("冬天東風都城", true);
+        press(&mut ed, "d");
+        assert_eq!(ed.seek_rows().len(), 4, "冬 東 都，加一行查詢");
+        press(&mut ed, "u");
+        assert!(ed.seek_rows().is_empty(), "只剩「都」，面板不必開");
+        assert_eq!(ed.seek_labels().len(), 1, "都 那一處有標籤");
+        assert!(ed.seeking().is_some(), "沒有自動跳");
+        press(&mut ed, "aa");
+        assert_eq!(ed.sel.head(), 4, "按了標籤纔落在「都」上");
+    }
+
+    /// Warning: **第一個字母就只剩一個，它當場就挑定了**——下一鍵已經是標籤。
+    ///
+    /// 這是自動挑選的代價，記在這裏免得以後當成 bug 查：人以為自己在打「bi」，而
+    /// 「b」打完就收攤進了標籤那一步，那個「i」配不上任何標籤，於是整件事收掉。
+    /// 一屏正文上一個字母就唯一是少見的（量在 [`crate::written`]：`zh` 命中 21 個
+    /// 字），可短文本上真會遇到。
+    #[test]
+    fn one_letter_can_already_be_the_last_one() {
+        let mut ed = on_screen("東邊冬天東風", true);
+        press(&mut ed, "b");
+        assert_eq!(ed.seek_labels().len(), 1, "「邊」當場挑定了");
+        press(&mut ed, "i");
+        assert!(ed.seeking().is_none(), "那個 i 配不上標籤，收掉");
     }
 
     /// 位置是**檔裏**的下標，不是這一屏那一段裏的。
@@ -436,7 +474,7 @@ mod tests {
     fn the_panel_lists_one_row_per_character() {
         let mut ed = on_screen("東邊冬天東風", true);
         press(&mut ed, "do");
-        assert_eq!(ed.seek_rows(), ["do", "1. 東  2", "2. 冬  1"]);
+        assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
     }
 
     /// 一個漢字都沒配上，面板就是空的——畫不畫是前端的事，可行數是這裏答的。
@@ -510,7 +548,7 @@ mod tests {
     fn a_digit_picks_a_character_and_labels_every_place_it_sits() {
         let mut ed = on_screen("東邊冬天東風", true);
         press(&mut ed, "do");
-        assert_eq!(ed.seek_rows(), ["do", "1. 東  2", "2. 冬  1"]);
+        assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
         press(&mut ed, "1");
         assert!(ed.seek_rows().is_empty(), "挑完了，面板收掉");
         assert_eq!(ed.seek_labels(), [(0, "aa"), (4, "ab")], "東 的兩處");
