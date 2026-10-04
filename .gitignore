@@ -14,10 +14,14 @@
 .DS_Store
 
 # The editor's own crash copies, written beside the file being edited.
+#
+# Warning: **後面還跟着行程號。** 2026-10-04 一個 `.CHANGELOG.md.yumete.19679` 就是這麼
+# 混進提交的——`.*.yumete` 配不上它，而那一次用的是 `git add -A`。
 .*.yumete
+.*.yumete.*
 
 # 寫作進度的流水帳：編輯器自己邊寫邊記的，一個使用者一份，不是這個項目的記錄。
-# 2026-10-03 作者定——它在這個倉裏記的 162 行裏有 150 行是測試臨時檔的 `0 0`，
+# 2026-10-03 定——它在這個倉裏記的 162 行裏有 150 行是測試臨時檔的 `0 0`，
 # 而且每寫一次就讓構建戳上 `.dirty`。
 .yumete/progress.tsv
 
@@ -25,7 +29,7 @@
 # project's record.
 /local/
 
-# **純數據表格不進 git**（2026-09-14 作者定）。生成物，build 時寫進二進制：
+# **純數據表格不進 git**（2026-09-14 定）。生成物，build 時寫進二進制：
 # 發布流水線從 forfudan/yume-release 下載，`scripts/build.sh` 在本機生成。
 # 配方在 scripts/make_words.py 與 scripts/make_jinghua.py。
 crates/yumete-cjk/src/common_words.txt
