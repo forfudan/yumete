@@ -7841,6 +7841,8 @@ fn draw_search(
     // 過了：上面那一道貼着標題行，下面那一道夾在格子和開關之間。
     let mut y = area.y + 1;
     let mut caret: Option<Position> = None;
+    // **正在打字的那一格畫在第幾行**——收尾的時候整扇面板退後，就它不退。
+    let mut lit_row: Option<u16> = None;
     // **三個標籤補齊到同一寬，格子纔對得齊**（2026-09-26）：「位置: 」比「搜: 」
     // 寬兩格。Warning: **`換: ` 不在畫面上也算進來**，同開關那幾行的理由——勾一下替換，
     // 上面兩格不許跟着挪。
@@ -7931,6 +7933,9 @@ fn draw_search(
             // Warning: **只換字色，底色照舊是這一格的**：底色說的是「這裏打得了字」，
             // 提示字拿走它就等於把那句話擦了（2026-09-27 測試攔下來的）。
             put_text(buf, box_at, y, to, &asks, Style { fg: quiet.fg, ..style });
+        }
+        if here {
+            lit_row = Some(y);
         }
         if here && !find.all_selected {
             let box_is = Rect::new(box_at, y, to.saturating_sub(box_at), 1);
@@ -8236,6 +8241,30 @@ fn draw_search(
                     x += yumete_cjk::str_width(&part) as u16;
                 }
             }
+        }
+    }
+    // **`PAN.INS` 下，整扇面板退後一步，只剩正在打字的那一行亮着**（2026-10-04
+    // 定：「在 pan.ins 的模式下，将左边栏中除了输入框外的其他字灰掉……这样
+    // 用户就立马知道：『啊，我在 insert 模式』」）。
+    //
+    // 走的是挑選器開着時正文退後的同一支 [`stand_back`]—— 2026-09-26 定那一
+    // 條時的原話是「picker 窗口出现的时候，正文区域可以变淡一些，从而突出 picker
+    // 窗口」，這裏問的是同一件事，只是浮着的那一塊換成了一個輸入框。
+    //
+    // Warning: **亮着的是「正在打字的那一格」，不一定是查詢框**——這扇面板有四個框
+    // （查詢／換成／包含／排除），在「包含」裏打字就該是「包含」那一行亮着。
+    if editor.mode() == Mode::Field {
+        let rows = |from: u16, upto: u16| match upto > from {
+            true => Some(Rect::new(area.x, from, area.width, upto - from)),
+            false => None,
+        };
+        let bottom = area.y + area.height;
+        let (over, under) = match lit_row {
+            Some(lit) => (rows(area.y, lit), rows(lit + 1, bottom)),
+            None => (rows(area.y, bottom), None),
+        };
+        for part in [over, under].into_iter().flatten() {
+            stand_back(frame, ink, part);
         }
     }
     caret
@@ -17771,6 +17800,53 @@ fn squeezed(text: &str) -> String {
         // The next paragraph is another one, and stands back.
         assert_eq!(at(&buffer, 12, 0), "短");
         assert_ne!(ink(12), ink(18));
+    }
+
+    /// **`PAN.INS` 下，整扇面板退後一步，只剩正在打字的那一行亮着**（2026-10-04
+    /// 定：「在 pan.ins 的模式下，将左边栏中除了输入框外的其他字灰掉……这样
+    /// 用户就立马知道：『啊，我在 insert 模式』」）。
+    ///
+    /// 走的是挑選器開着時正文退後的同一支 `stand_back`。
+    #[test]
+    fn the_panel_stands_back_except_the_box_being_typed_in() {
+        let mut editor = editor_with("那年冬天很冷。\n");
+        let config = Config::default();
+        editor.execute(":search").unwrap();
+
+        // 面板開出來就在 `PAN.INS`；`Esc` 退到 `PAN.NOR`。
+        assert_eq!(editor.mode(), Mode::Field, "開出來就能打字");
+        let typing = render(&editor, &config, 80, 24);
+        editor.on_key(Key::Esc);
+        assert_ne!(editor.mode(), Mode::Field);
+        let resting = render(&editor, &config, 80, 24);
+
+        // Warning: **比的是兩個標籤，不是整行。** 框裏那一段底色本來就隨模式變
+        // （「三檔底色」：沒選中是中間色、選中是白、insert 是全黑），拿它比就分
+        // 不出「退後了」和「換了一檔底色」。標籤在框外面，兩個模式下本該一模一樣。
+        let find_one = |want: char| {
+            (0..24u16)
+                .flat_map(|y| (0..24u16).map(move |x| (x, y)))
+                .find(|&(x, y)| at(&resting, x, y) == want.to_string())
+                .unwrap_or_else(|| panic!("面板上找不到「{want}」"))
+        };
+        // 「位置」那一行是開關那一列的，在搜索框下面——該退後。
+        let (x, y) = find_one('位');
+        assert_ne!(
+            resting[(x, y)].style(),
+            typing[(x, y)].style(),
+            "「位置」那一行沒退後"
+        );
+        // 「搜: 」是正在打字那一行的標籤——一格都不許動。
+        // Warning: **認後面那個冒號**：面板的標題也是「搜索」，而標題該退後。
+        let (x, y) = (0..24u16)
+            .flat_map(|y| (0..24u16).map(move |x| (x, y)))
+            .find(|&(x, y)| at(&resting, x, y) == "搜" && at(&resting, x + 2, y) == ":")
+            .expect("找得到「搜: 」那一行");
+        assert_eq!(
+            resting[(x, y)].style(),
+            typing[(x, y)].style(),
+            "正在打字那一行退後了"
+        );
     }
 
     /// 焦點模式 dims the writing, not the page's furniture.

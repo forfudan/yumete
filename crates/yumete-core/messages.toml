@@ -5200,11 +5200,11 @@ zhs = "搜索"
 en = "search"
 
 [[message]]
-# 提示：搜索面板——`/` 回搜索框換一個詞（整條選中）
+# 提示：搜索面板——`/` 把鍵挪回搜索行（不進 insert，再按 aci 纔打字）
 key = "hint.search.new-word"
-zht = "修改搜索詞"
-zhs = "修改搜索词"
-en = "edit the pattern"
+zht = "回搜索行"
+zhs = "回搜索行"
+en = "back to the pattern row"
 
 [[message]]
 # 提示：搜索面板——下一格
