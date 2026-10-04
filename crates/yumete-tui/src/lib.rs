@@ -8111,6 +8111,15 @@ fn draw_search(
     // 排在它後面——直接返回就把退後一起跳過了，於是**矮窗口下按 `空格 /` 什麼都
     // 不變暗**（10 行的窗口復現得了，24 行的看不出來）。
     'list: {
+    // **開關和名單之間畫一道雙橫線**（2026-10-04 定）。那一行本來就是空着的
+    // ——一道線不多占地方，而它把「設定」和「找到了什麼」分成兩塊。
+    //
+    // Warning: **雙線，同有焦點那一圈**（`sidebar_shell`）：這扇面板裏的線是一套。
+    let rule = ground.fg(ink.at(yumete_config::rung::RULE));
+    if y + 1 < area.y + area.height {
+        let wide = to.saturating_sub(left) as usize;
+        put_text(buf, left, y + 1, to, &"═".repeat(wide), rule);
+    }
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
     let top = y + 2;
@@ -8233,8 +8242,10 @@ fn draw_search(
     // 換完長什麼樣」：上下文只印一遍，變的那一段出現兩次——換下來的朱加刪除線，
     // 換上去的綠。
     //
-    // Warning: **不加橫線分隔。** 上下那兩道線今天剛拆掉，再加一道是走回頭路；整扇面
-    // 板只有這裏有朱和綠，它自己就分得出來。
+    // Warning: **2026-10-04 加了一道雙橫線，名字也換成「替換預覽」。** 原先這裏寫着
+    // 「不加橫線分隔」（2026-09-27 剛拆掉上下兩道線，不想走回頭路），可那兩道線
+    // 夾的是**查詢框**，這一道分的是**結果和預覽**——兩塊都滿着的時候光靠朱和綠
+    // 認不出界在哪裏。線上寫着名字，同面板自己的標題。
     //
     // Warning: **刪除線不是所有終端都畫得出來**，所以朱那個顏色也得說一遍——同
     // Markdown 的 `~~刪除線~~`（`Kind::Strike`），那裏的註釋寫的是同一件事。
@@ -8242,7 +8253,11 @@ fn draw_search(
         // Warning: `prose`，不叫 `text`——那個名字在這一支裏是正文那一檔的樣式。
         if let Some((prose, mark, now)) = &after {
             let head = area.y + area.height - after_rows as u16;
-            put_text(buf, left, head, to, &say!("search.after"), quiet);
+            let name = say!("search.after");
+            put_text(buf, left, head, to, &name, quiet);
+            let at = left + yumete_cjk::str_width(&name) as u16;
+            let wide = to.saturating_sub(at) as usize;
+            put_text(buf, at, head, to, &"═".repeat(wide), rule);
             let gone = ground.fg(ink.mark()).add_modifier(Modifier::CROSSED_OUT);
             let come = ground.fg(ink.green());
             for (slot, row) in preview_lines(prose, mark, now, wide)

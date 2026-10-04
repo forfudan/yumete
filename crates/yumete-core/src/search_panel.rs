@@ -315,9 +315,14 @@ impl Field {
     /// `3`，鍵就落在那一格上了，而它不在可走的名單裏——從前是拿「名單第 0 格」
     /// 頂替，於是按完 `0` 再按 `k` 跳到了名單最底下的結果。所以走的是**畫出來
     /// 的那張全表**，一格一格往那個方向找，碰到第一個停得住的就停。
-    pub fn step(self, back: bool, replacing: bool, on_disk: bool) -> Field {
+    pub fn step(self, back: bool, replacing: bool, on_disk: bool, any_hits: bool) -> Field {
         let stops = |f: Field| match f {
             Field::Replace => replacing,
+            // **一行都沒有的名單不是一個落腳點**（2026-10-04 報上來的）。空名單
+            // 什麼都不畫，於是鍵走進去就**看不見了**——原話：「如果按 j，光標不
+            // 知道去哪里了」。往回繞也撞得上：從「搜」按 `k` 繞過隊尾那個空名單
+            // 纔到「排除」，看着就是「消失一下再出現在別處」。
+            Field::Results => any_hits,
             f => !f.walked_past(on_disk),
         };
         let n = Field::ALL.len();
@@ -869,6 +874,14 @@ impl Search {
     pub fn stand_on(&mut self, field: Field) {
         self.field = field;
         self.caret = self.typed().chars().count();
+    }
+
+    /// **走一格** —— `jk`／`Tab`／`↑↓` 都問這一支。
+    ///
+    /// 四件事決定哪幾格停得住（換框在不在、走不走磁碟、名單空不空、是不是開關），
+    /// 包在這裏一處，免得每個按鍵自己拼一遍參數——拼漏一個就是一條走法和別人不同。
+    pub fn walk(&self, back: bool) -> Field {
+        self.field.step(back, self.replacing, self.on_disk(), !self.hits.is_empty())
     }
 
     /// **開一扇空框，記着的那個詞寫成灰字** —— `空格 /` 什麼都沒選中的時候。
