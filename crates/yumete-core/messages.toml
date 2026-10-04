@@ -752,14 +752,14 @@ en = "there are unsaved changes — add ! to override"
 # ── cell ──────────────────────────────────────────────────────────────
 
 [[message]]
-# :cd - 而沒有上一個（2026-10-01 作者寫的）
+# :cd - 而沒有上一個（2026-10-01 寫的）
 key = "cd.no-previous"
 zht = "沒有上一個工作路徑可回"
 zhs = "没有上一个工作路径可回"
 en = "no previous working directory to go back to"
 
 [[message]]
-# :pwd 印出來的那一句，:cd 改完也說它（2026-10-01 作者寫的）
+# :pwd 印出來的那一句，:cd 改完也說它（2026-10-01 寫的）
 key = "cd.working-dir"
 zht = "工作路徑：{0}"
 zhs = "工作路径：{0}"
@@ -1183,7 +1183,7 @@ en = "the open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
 
 [[message]]
-# : 命令選單裏 cd 那一項的說明（2026-10-01 作者寫的）
+# : 命令選單裏 cd 那一項的說明（2026-10-01 寫的）
 key = "cmd.commands.cd"
 zht = "更改工作路徑"
 zhs = "更改工作路径"
@@ -1335,7 +1335,7 @@ en = "send the selection through a command and take back its output (`!`)"
 find = "管道 過濾 过滤 外部命令 filter shell"
 
 [[message]]
-# : 命令選單裏 pwd 那一項的說明（2026-10-01 作者寫的）
+# : 命令選單裏 pwd 那一項的說明（2026-10-01 寫的）
 key = "cmd.commands.pwd"
 zht = "查詢工作路徑"
 zhs = "查询工作路径"
@@ -4775,9 +4775,9 @@ en = "go to / show what it points at"
 [[message]]
 # g 選單：gw 亮起跳轉標籤
 key = "hint.goto.jump-labels"
-zht = "一眼跳到屏幕上任何地方"
-zhs = "一眼跳到屏幕上任何地方"
-en = "jump anywhere on the screen"
+zht = "跳到當前屏幕某位置"
+zhs = "跳到当前屏幕某位置"
+en = "go to a place on this screen"
 
 [[message]]
 # g 選單裏的 . ——回到這一份稿子最後改動的地方
@@ -4815,7 +4815,7 @@ zhs = "打开文件（项目路径）"
 en = "open a file (project)"
 
 [[message]]
-# 空格 F：選擇器開在工作路徑上（2026-10-01 作者定）
+# 空格 F：選擇器開在工作路徑上（2026-10-01 定）
 key = "hint.goto.open-file-here"
 zht = "打開文件（工作目錄）"
 zhs = "打开文件（工作目录）"
@@ -4841,6 +4841,20 @@ key = "hint.goto.paste-from-clipboard"
 zht = "從系統剪貼板粘貼"
 zhs = "从系统剪贴板粘贴"
 en = "paste from the system clipboard"
+
+[[message]]
+# `gu`：只問中文，字母不限兩個
+key = "hint.goto.seek-reading"
+zht = "多字母定位並跳轉當前屏幕某漢字"
+zhs = "多字母定位并跳转当前屏幕某汉字"
+en = "more letters to place a 漢字 and go, on this screen"
+
+[[message]]
+# `go`：打目標處寫的兩個字母（西文字面／中文讀音）
+key = "hint.goto.seek-written"
+zht = "兩字母定位並跳轉當前屏幕某位置"
+zhs = "两字母定位并跳转当前屏幕某位置"
+en = "two letters to place and go, on this screen"
 
 [[message]]
 # g 組：檔首
@@ -4962,7 +4976,7 @@ zhs = "叫什么名字"
 en = "name it"
 
 [[message]]
-# ' 之後那張小表：一個位置都還沒記過（2026-09-29 作者寫的那一句）
+# ' 之後那張小表：一個位置都還沒記過（2026-09-29 寫的那一句）
 key = "hint.mark.none-yet"
 zht = "（無位置記錄）"
 zhs = "（无位置记录）"
@@ -5122,7 +5136,7 @@ zhs = "（该选区之序号）"
 en = "(this selection's number)"
 
 [[message]]
-# " 之後那張小表的標題（2026-09-29 作者定的名字）
+# " 之後那張小表的標題（2026-09-29 定的名字）
 key = "hint.register.title"
 zht = "寄存器·剪貼板"
 zhs = "寄存器·剪贴板"
@@ -5333,14 +5347,14 @@ zhs = "从系统剪贴板贴在前面"
 en = "paste before, from the system clipboard"
 
 [[message]]
-# 空格選單：這一行的診斷，浮窗（2026-09-29 作者寫的）
+# 空格選單：這一行的診斷，浮窗（2026-09-29 寫的）
 key = "hint.space.problems"
 zht = "顯示診斷信息（浮窗）"
 zhs = "显示诊断信息（浮窗）"
 en = "show diagnostics (float)"
 
 [[message]]
-# 空格選單：這一行的診斷，邊欄（2026-09-29 作者寫的）
+# 空格選單：這一行的診斷，邊欄（2026-09-29 寫的）
 key = "hint.space.problems-panel"
 zht = "顯示診斷信息（邊欄）"
 zhs = "显示诊断信息（边栏）"
@@ -5501,7 +5515,7 @@ zhs = "去某一格（␣t 20,20g）"
 en = "go to a cell (␣t20,20g)"
 
 [[message]]
-# 空格 t 單子：換移動的粒度（2026-09-30 作者定，原話「按格／按字移動」）
+# 空格 t 單子：換移動的粒度（2026-09-30 定，原話「按格／按字移動」）
 key = "hint.table.grain"
 zht = "按格／按字移動"
 zhs = "按格／按字移动"
@@ -5515,7 +5529,7 @@ zhs = "格内"
 en = "in a cell"
 
 [[message]]
-# 表格提示：把這一行的數據開進邊欄（2026-09-30 作者定，原話「␣I 在侧栏打开」，
+# 表格提示：把這一行的數據開進邊欄（2026-09-30 定，原話「␣I 在侧栏打开」，
 # 「这个和其他四个信息面板的话术保持一致」——全樹寫的是「邊欄」，不是「側欄」）
 key = "hint.table.into-the-sidebar"
 zht = "在邊欄打開"
@@ -5607,7 +5621,7 @@ zhs = "按列搜索（可指定列范围）"
 en = "search down the columns (a column range can be given)"
 
 [[message]]
-# 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域（2026-09-30 作者寫的）
+# 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域（2026-09-30 寫的）
 key = "hint.table.search-columns-elsewhere"
 zht = "按列搜索（在另一區域顯示）"
 zhs = "按列搜索（在另一区域显示）"
@@ -5937,7 +5951,7 @@ en = "{0} over-long rows skipped"
 # ── label ─────────────────────────────────────────────────────────────
 
 [[message]]
-# 命令行空着的時候：把浮着的這一則送進邊欄（#426，2026-09-30 作者寫的字）
+# 命令行空着的時候：把浮着的這一則送進邊欄（#426，2026-09-30 寫的字）
 key = "info.into-the-sidebar"
 zht = "{0} 邊欄顯示信息"
 zhs = "{0} 边栏显示信息"
@@ -5957,7 +5971,7 @@ zhs = "即时显示：{0}"
 en = "following the cursor: {0}"
 
 [[message]]
-# 浮窗底邊右端：這一則翻得動（#426，2026-09-30 作者寫的字）
+# 浮窗底邊右端：這一則翻得動（#426，2026-09-30 寫的字）
 key = "info.page-it"
 zht = "PgUp/PgDn 翻頁"
 zhs = "PgUp/PgDn 翻页"
@@ -6048,7 +6062,7 @@ zhs = "字典"
 en = "Dictionary"
 
 [[message]]
-# 邊欄面板的名字：文檔（2026-09-29 作者定的名字）
+# 邊欄面板的名字：文檔（2026-09-29 定的名字）
 key = "label.panel.docs"
 zht = "文檔"
 zhs = "文档"
@@ -6062,7 +6076,7 @@ zhs = "文件"
 en = "Files"
 
 [[message]]
-# 標籤：信息——五種內容共用那一格，空着的時候寫這個（#426，2026-09-30 作者定）
+# 標籤：信息——五種內容共用那一格，空着的時候寫這個（#426，2026-09-30 定）
 key = "label.panel.info"
 zht = "信息"
 zhs = "信息"
@@ -6076,14 +6090,14 @@ zhs = "大纲"
 en = "Outline"
 
 [[message]]
-# 邊欄面板的名字：診斷（2026-09-29 作者定的名字）
+# 邊欄面板的名字：診斷（2026-09-29 定的名字）
 key = "label.panel.problems"
 zht = "診斷"
 zhs = "诊断"
 en = "Diagnostics"
 
 [[message]]
-# 標籤：數據（2026-09-30 從「表格」改名，作者：「『数据』比『表格』更能反映这一行的内容」）
+# 標籤：數據（2026-09-30 從「表格」改名，：「『数据』比『表格』更能反映这一行的内容」）
 key = "label.panel.record"
 zht = "記錄"
 zhs = "记录"
@@ -6568,7 +6582,7 @@ zhs = "查询文档中……"
 en = "asking for the docs…"
 
 [[message]]
-# 按 空格 k 的時候：稿子還沒存盤，服務器答的是檔案（2026-09-29 作者寫的）
+# 按 空格 k 的時候：稿子還沒存盤，服務器答的是檔案（2026-09-29 寫的）
 key = "lsp.buffer-unsaved"
 zht = "本緩衝區未保存，故而未綁定語言服務器"
 zhs = "本缓冲区未保存，故而未绑定语言服务器"
@@ -6582,7 +6596,7 @@ zhs = "{0} 起不来（{1}）——档照常开，只是没人查错"
 en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
 
 [[message]]
-# 起服務器用的是項目自己帶的那一個，不是 PATH 上的（2026-09-29 作者寫的）
+# 起服務器用的是項目自己帶的那一個，不是 PATH 上的（2026-09-29 寫的）
 key = "lsp.from-the-project"
 zht = "語言服務器：本項目路徑中的 {0}"
 zhs = "语言服务器：本项目路径中的 {0}"
@@ -6596,7 +6610,7 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
-# 按 空格 k 的時候：這個語言在設置裏根本沒寫服務器（2026-09-29 作者寫的）
+# 按 空格 k 的時候：這個語言在設置裏根本沒寫服務器（2026-09-29 寫的）
 key = "lsp.no-server-configured"
 zht = "未爲{0}文件指定語言服務器，請在設置中填寫"
 zhs = "未为{0}文件指定语言服务器，请在设置中填写"
@@ -6610,7 +6624,7 @@ zhs = "这不是程序文件，没有服务器可问"
 en = "not a program file — no server to ask"
 
 [[message]]
-# 按 空格 k 的時候：設置裏寫了，可這臺機器上沒有那個程序（2026-09-29 作者寫的）
+# 按 空格 k 的時候：設置裏寫了，可這臺機器上沒有那個程序（2026-09-29 寫的）
 key = "lsp.not-installed"
 zht = "找不到 {0}，請在設置中檢查拼寫或確保其已經安裝"
 zhs = "找不到 {0}，请在设置中检查拼写或确保其已经安装"
@@ -6638,7 +6652,7 @@ zhs = "已就绪"
 en = "ready"
 
 [[message]]
-# gd 問出去之前，服務器還在讀項目（#431，2026-10-01 作者寫的）
+# gd 問出去之前，服務器還在讀項目（#431，2026-10-01 寫的）
 key = "lsp.server-starting"
 zht = "語言服務器啟動中，請稍候"
 zhs = "语言服务器启动中，请稍候"
@@ -6652,14 +6666,14 @@ zhs = "此处未找到相关文档"
 en = "no documentation here"
 
 [[message]]
-# 按 空格 k 的時候：試過了，起不來，此後不再試（2026-09-29 作者寫的）
+# 按 空格 k 的時候：試過了，起不來，此後不再試（2026-09-29 寫的）
 key = "lsp.start-failed"
 zht = "語言服務器開啓失敗"
 zhs = "语言服务器开启失败"
 en = "the language server could not be started"
 
 [[message]]
-# 按 空格 k 的時候：服務器正在起（2026-09-29 作者寫的）
+# 按 空格 k 的時候：服務器正在起（2026-09-29 寫的）
 key = "lsp.starting"
 zht = "語言服務器開啓中……"
 zhs = "语言服务器开启中……"
@@ -10528,7 +10542,7 @@ zhs = "命令"
 en = "commands"
 
 [[message]]
-# 空格 i：光標不在任何一行數據上（2026-09-30 作者報的：非表格的地方按下去，
+# 空格 i：光標不在任何一行數據上（2026-09-30 報上來的：非表格的地方按下去，
 # 回的是字典那一句「光標下沒有字可查」，說的是另一件事）
 key = "ui.cursor-is-not-in-a-table"
 zht = "光標未在表格中"
