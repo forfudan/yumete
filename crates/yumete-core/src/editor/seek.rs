@@ -198,15 +198,28 @@ impl Editor {
         // **空格也是一個字母**（2026-10-04 問的）：「a bus」那個孤零零的 `a`
         // 後面就是空格，不收的話它永遠去不了。帶空格的查詢自己就不問讀音了
         // （沒有哪個字讀作「a 」），所以不必在這裏分。
-        // **候選面板還開着的時候，數字和翻頁鍵歸面板**——標籤亮沒亮都一樣。
-        // `go` 打滿兩個字母的那一刻兩樣東西同時在屏幕上，而數字和字母是兩個不相交
-        // 的集合，所以一個鍵同時答兩種文字不會含糊（2026-10-04 定的關竅）。
+        // **候選面板還開着的時候，挑字與翻頁那幾個鍵歸面板。**
         let panel = !seeking.picked && !seeking.found.han.is_empty();
         if panel {
-            // **數字挑漢字**（`1`–`9`）。
-            if let Some(n) = c.to_digit(10).filter(|&n| n >= 1) {
-                if seeking.page_han().get(n as usize - 1).is_some() {
-                    self.pick_the_han(n as usize - 1);
+            // **數字挑漢字**（`1`–`9`），**外加輸入法那三個選重鍵**：空格挑第一、
+            // `;` 第二、`'` 第三（2026-10-04 定：「输入法就是这样的。而且没有
+            // 歧义」）。這三個與隔壁 `yumete-ime` 的 `press_func` 逐字相同
+            // （`Semicolon` → 選二、`Quote` → 選三），翻頁的 `-`／`=` 也是同一對
+            // ——**這一扇面板長得像輸入法，手就該和輸入法一樣**。
+            //
+            // Warning: **沒有歧義是因為這一支只在 `gu` 上開。** `gu` 問的是讀音，
+            // 讀音是字母串，所以空格、`;`、`'` 在查詢裏一個都用不上；而 `go` 的
+            // 空格是**第二個字母**（「a bus」那個孤零零的 `a`），它那邊 `found.han`
+            // 恆空、`panel` 恆假，這一段碰都碰不到。
+            let nth = match c {
+                ' ' => Some(0),
+                ';' => Some(1),
+                '\'' => Some(2),
+                _ => c.to_digit(10).filter(|&n| n >= 1).map(|n| n as usize - 1),
+            };
+            if let Some(nth) = nth {
+                if seeking.page_han().get(nth).is_some() {
+                    self.pick_the_han(nth);
                     return true;
                 }
                 self.cancel_seek();
@@ -409,6 +422,41 @@ mod tests {
         // 人照舊打得完整個讀音。
         press(&mut ed, "1");
         assert_eq!(ed.seek_labels().len(), 1, "按了數字纔貼標籤");
+    }
+
+    /// **空格、`;`、`'` 挑一二三，和輸入法一個手感**（2026-10-04 定）。
+    #[test]
+    fn the_ime_selection_keys_pick_a_character_too() {
+        // 冬 兩處、東 一處、至 一處（至 讀 die）。
+        let pick = |key: &str| {
+            let mut ed = on_screen("冬天東風冬至", true);
+            press(&mut ed, "d");
+            press(&mut ed, key);
+            ed.seek_labels().len()
+        };
+        assert_eq!(pick(" "), 2, "空格挑第一個：冬，兩處");
+        assert_eq!(pick("1"), 2, "數字 1 是同一個");
+        assert_eq!(pick(";"), 1, "分號挑第二個：東，一處");
+        assert_eq!(pick("'"), 1, "引號挑第三個：至，一處");
+    }
+
+    /// Warning: **沒有第三個候選的時候，`'` 照舊收攤**，同按了一個沒有行的數字。
+    #[test]
+    fn a_selection_key_with_no_row_behind_it_closes_it() {
+        let mut ed = on_screen("冬天東風", true);
+        press(&mut ed, "d");
+        assert_eq!(ed.seek_rows().len(), 3, "查詢一行，冬 東 各一行");
+        press(&mut ed, "'");
+        assert!(ed.seeking().is_none(), "沒有第三個");
+    }
+
+    /// Warning: **`go` 那邊空格仍然是第二個字母。** 這一支只在 `gu` 上開——`go`
+    /// 的 `found.han` 恆空，挑字那一段碰都碰不到。
+    #[test]
+    fn a_space_is_still_a_letter_on_the_go_side() {
+        let mut ed = on_screen("a bus and a cat", false);
+        press(&mut ed, "a ");
+        assert_eq!(ed.seek_labels().len(), 2, "兩個孤零零的 a 各一個標籤");
     }
 
     /// **出現得多的排前面**（2026-10-04 定）。次數一樣的照舊按出現先後。
