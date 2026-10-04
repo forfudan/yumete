@@ -19,6 +19,12 @@ impl Editor {
             self.answer_query(key);
             return KeyOutcome::Continue;
         }
+        // **按「那裏寫的什麼」跳的時候，鍵先歸它**（`go`／`gu`，§5.73）——和底下
+        // `gw` 同一個理由，而且同樣擺在錄製之前：打進去的那兩個字母是**這一屏上**
+        // 的事，回放的時候屏幕上不是同一批字。
+        if self.seeking().is_some() && self.seek_key(key) {
+            return KeyOutcome::Continue;
+        }
         // **標籤亮着的時候整個鍵盤都是標籤**（`gw`，#406）——在錄製之前，因為
         // 那一兩下打的是屏幕上臨時發的號碼，回放的時候屏幕上不會是同一批號碼。
         // 錄進去的等於一句永遠對不上的話。
@@ -2145,6 +2151,16 @@ impl Editor {
             // Warning: 一個 helix 使用者按 `gw` 收到的是那句話，**看起來像個答案而答的
             // 是另一個問題**。現在它就是 helix 的那個 `gw`。
             Key::Char('w') => self.start_jump(),
+            // **按「那裏寫的什麼」跳**（§5.73，2026-10-04 定）。`gw` 是屏幕發號碼，
+            // 這兩個是打那裏寫的字。`o` 中英混合、定長兩個字母；`u` 只問中文、不
+            // 定長（`zh`／`sh`／`ji` 那幾個擁擠的聲母兩個字母收不住）。
+            //
+            // Warning: **字母是查出來的，不是挑出來的。** `s`／`S`（flash 用的那兩個）
+            // 在這個倉是「選出所有匹配」「拿匹配當分隔符」；`g` 組兩邊都空着的小寫
+            // 只有 `o q u v z`——`gb` 會撞 helix 的 goto_window_bottom，`gx` 這裏
+            // 已經是「跟着鏈接走」。
+            Key::Char('o') => self.start_seek(false),
+            Key::Char('u') => self.start_seek(true),
             // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
             // or what the cursor is on — searched across the whole document.
             // `g/` is the sugar `/` has always wanted: search for *this*,
