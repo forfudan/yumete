@@ -9561,8 +9561,10 @@ fn enter_only_runs_the_search_and_changes_nothing_else() {
     assert_eq!(ed.search().total, 3);
 
     // **找不到的時候一模一樣**——這就是這條規矩買來的東西。
-    // Warning: 上一下 `Enter` 已經把鍵交回面板了，要改詞得先 `/` 回框裏。
+    // Warning: 上一下 `Enter` 已經把鍵交回面板了，要改詞得先 `/` 回那一行、再 `i`
+    // 進去（2026-10-04 起 `/` 只挪窩，不進 insert）。
     ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Char('i'));
     ed.on_key(Key::Backspace);
     ed.on_key(Key::Char('甲'));
     assert_eq!(ed.search().total, 0);
@@ -9572,6 +9574,7 @@ fn enter_only_runs_the_search_and_changes_nothing_else() {
 
     // 去結果就是接着按 `j`。
     ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Char('i'));
     ed.on_key(Key::Backspace);
     ed.on_key(Key::Char('霜'));
     ed.on_key(Key::Enter);
@@ -9592,14 +9595,18 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results, "鍵落到結果上了");
 
-    // ① **`/` 不管站在哪一格，都回搜索框：進 insert、光標末尾、字留着。**
-    // Warning: 和選擇器（`空格 f`／`:wiki`）那一扇裏的 `/` 一個樣——2026-09-25 
-    // 報的就是這一條不一致。它原先是「整條選中」，打一個字就把詞吃掉了。
+    // ① **`/` 不管站在哪一格，都回搜索行：光標末尾、字留着，可是不進 insert。**
+    //
+    // Warning: **挪窩和打字是兩個鍵**（2026-10-04 定：「`/` 這個按鍵可以從任何
+    // 位置快速跳到搜索行但不進去插入模式，用戶需要再按一下 aci」）。這扇面板有
+    // 四個輸入框，`aci` 要留給「就地插入」，跨格子纔歸 `/`。
     ed.on_key(Key::Char('/'));
-    assert_eq!(ed.mode(), Mode::Field);
+    assert_eq!(ed.mode(), Mode::Normal, "回到了那一行，可是還沒進去");
     assert_eq!(ed.search().field, Field::Query);
     assert!(!ed.search().all_selected, "不選中——打字是接着打，不是替掉");
     assert_eq!(ed.search().caret, ed.search().query.chars().count(), "光標在末尾");
+    ed.on_key(Key::Char('i'));
+    assert_eq!(ed.mode(), Mode::Field, "再按一下 i 纔打得了字");
     ed.on_key(Key::Char('夜'));
     assert_eq!(ed.search().query, "冬天夜", "接在後面");
     for _ in 0..3 {
@@ -9646,6 +9653,43 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Include);
     assert_eq!(ed.search().caret, 4, "Warning: 不挪的話，塊光標會停在框外面");
+}
+
+/// **挪窩和打字是兩個鍵**（2026-10-04 定）。
+///
+/// > aci 都必須在那一行才能使用。`/` 這個按鍵可以從任何位置快速跳到搜索行但不進去
+/// > 插入模式，用戶需要再按一下 aci。
+///
+/// Warning: **這扇面板有四個輸入框**（查詢／換成／包含／排除），這是分開的理由：
+/// 要是 `aci` 也能跨格子回查詢框，站在「包含」裏就再也按不出「在包含裏插入」了。
+/// 中間做過一版「`aci` 從任何格子都回查詢框」，當天撤了。
+#[test]
+fn moving_to_the_query_row_and_typing_in_it_are_two_keys() {
+    use crate::search_panel::Field;
+    let mut ed = typed("那年冬天很冷。");
+    ed.open_search();
+    for c in "冬天".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+
+    // 「位置」那一格打不了字——`aci` 在它上面照舊只說一句，不挪窩。
+    ed.on_key(Key::Char('6'));
+    assert_eq!(ed.search().field, Field::Scope);
+    for key in ['i', 'a', 'c', 'I', 'A', 'C'] {
+        ed.on_key(Key::Char(key));
+        assert_eq!(ed.search().field, Field::Scope, "`{key}` 不該挪窩");
+        assert_eq!(ed.mode(), Mode::Normal, "`{key}` 不該進 insert");
+        assert!(!ed.status().is_empty(), "`{key}` 要說一句");
+    }
+
+    // `/` 挪得了窩，可是停在門口。
+    ed.on_key(Key::Char('/'));
+    assert_eq!(ed.search().field, Field::Query, "`/` 回搜索行");
+    assert_eq!(ed.mode(), Mode::Normal, "`/` 不進 insert");
+    ed.on_key(Key::Char('i'));
+    assert_eq!(ed.mode(), Mode::Field, "再按一下纔進去");
+    assert_eq!(ed.search().query, "冬天", "一路上沒動過搜索詞");
 }
 
 /// **框裏的 Normal 也編輯得了**（2026-09-25 報的：「normal模式的时候没办法用一些
