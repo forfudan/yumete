@@ -384,7 +384,8 @@ mod tests {
     fn a_letter_follows_the_latin_label_instead() {
         let mut ed = on_screen("在 dock 旁邊的冬天東風", false);
         press(&mut ed, "do");
-        press(&mut ed, "aa");
+        // 只有一處，所以標籤是一個字母。
+        press(&mut ed, "a");
         assert!(ed.seeking().is_none(), "跳完收攤");
         assert_eq!(ed.sel.head(), 2, "落在 dock 的 d 上");
     }
@@ -631,13 +632,13 @@ mod tests {
         press(&mut ed, "d");
         assert!(ed.seek_labels().is_empty(), "纔打一個，還在問");
         press(&mut ed, "o");
-        assert_eq!(ed.seek_labels(), [(0, "aa"), (11, "ab")], "dock 和 dog");
+        assert_eq!(ed.seek_labels(), [(0, "a"), (11, "b")], "dock 和 dog");
     }
 
     /// **按數字挑定一個漢字，面板收掉，那一個字的每一處拿一個標籤。**
     ///
-    /// 標籤就蓋在目標身上（兩個字母、兩格）——到這一步屏幕上那一批全是**同一個
-    /// 字**，你剛挑的，不必再看。
+    /// 標籤就蓋在目標身上——到這一步屏幕上那一批全是**同一個字**，你剛挑的，
+    /// 不必再看。落腳點不到二十六個，所以是一個字母（見 `labels.rs` 的 `LABEL`）。
     #[test]
     fn a_digit_picks_a_character_and_labels_every_place_it_sits() {
         let mut ed = on_screen("東邊冬天東風", true);
@@ -645,7 +646,7 @@ mod tests {
         assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
         press(&mut ed, "1");
         assert!(ed.seek_rows().is_empty(), "挑完了，面板收掉");
-        assert_eq!(ed.seek_labels(), [(0, "aa"), (4, "ab")], "東 的兩處");
+        assert_eq!(ed.seek_labels(), [(0, "a"), (4, "b")], "東 的兩處");
     }
 
     /// 打標籤就跳過去，而且**版面不許挪**、`C-o` 回得來。
@@ -653,7 +654,7 @@ mod tests {
     fn typing_a_label_goes_there_without_moving_the_page() {
         let mut ed = on_screen("東邊冬天東風", true);
         press(&mut ed, "do1");
-        press(&mut ed, "ab");
+        press(&mut ed, "b");
         assert!(ed.seeking().is_none(), "跳完收攤");
         assert_eq!(ed.selection().0, 4, "第二個東");
         assert!(!ed.jumped(), "落腳點本來就在屏幕上，版面不挪");
@@ -662,13 +663,34 @@ mod tests {
     }
 
     /// 打了一個字母：剩下以它開頭的那些，別的當場滅掉。
+    ///
+    /// Warning: **要三十處纔測得到這一條。** 不到二十六處標籤就只有一個字母，一鍵就
+    /// 跳完了，根本沒有「剩下第二個字母」這一步（見 `labels.rs` 的 `LABEL`）。
     #[test]
     fn one_letter_of_a_label_narrows_what_is_left() {
-        let mut ed = on_screen("東邊冬天東風", true);
+        let mut ed = on_screen(&"東".repeat(30), true);
         press(&mut ed, "do1");
-        assert_eq!(ed.seek_labels().len(), 2);
+        assert_eq!(ed.seek_labels().len(), 30, "三十處，所以是兩個字母");
         press(&mut ed, "a");
-        assert_eq!(ed.seek_labels(), [(0, "a"), (4, "b")], "剩下第二個字母");
+        // `aa`…`az` 是頭二十六個，打了 `a` 就只剩它們。
+        assert_eq!(ed.seek_labels().len(), 26, "剩下 a 開頭的那些");
+        assert_eq!(ed.seek_labels()[0], (0, "a"), "第一處剩第二個字母");
+    }
+
+    /// **不到二十六處就一個字母，超過了纔兩個**（2026-10-04 定）。
+    ///
+    /// `gw` 量下來一屏一百五十多處，永遠落在兩個字母那一檔；`go`／`gu` 中位數是
+    /// 一和二，幾乎每一次都是一個字母。數在 `labels.rs` 的 `measure`。
+    #[test]
+    fn a_label_is_one_letter_while_one_letter_is_enough() {
+        let mut ed = on_screen(&"東".repeat(26), true);
+        press(&mut ed, "do1");
+        assert_eq!(ed.seek_labels().len(), 26);
+        assert!(ed.seek_labels().iter().all(|(_, l)| l.chars().count() == 1), "正好二十六，還夠");
+
+        let mut ed = on_screen(&"東".repeat(27), true);
+        press(&mut ed, "do1");
+        assert!(ed.seek_labels().iter().all(|(_, l)| l.chars().count() == 2), "多一處就兩個");
     }
 
     /// 面板上沒有那一號，按下去就收攤——不是悄悄什麼都不做。

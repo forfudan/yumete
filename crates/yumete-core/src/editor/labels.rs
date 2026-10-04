@@ -65,27 +65,52 @@ const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
 /// 不然同一個位置在兩個鍵下拿到不同的號碼，而讀者記的是「第幾個大概是哪個字母」。
 pub(super) fn label_them(spots: impl IntoIterator<Item = usize>) -> Vec<Jump> {
     let letter = |n: usize| ALPHABET[n % ALPHABET.len()] as char;
+    let spots: Vec<usize> = spots.into_iter().take(ALPHABET.len().pow(LABEL as u32)).collect();
+    // **夠得上就一個字母**（見 [`LABEL`]）。全屏一致：要麼全是一個，要麼全是兩個
+    // ——所以不會有「某個單字母標籤正好是某個雙字母標籤的頭一個字母」那種撞法，
+    // avy／easymotion 為混長度專門做的那套前綴樹這裏一行都不需要。
+    let one = spots.len() <= ALPHABET.len();
     spots
         .into_iter()
-        .take(ALPHABET.len().pow(LABEL as u32))
         .enumerate()
         .map(|(i, at)| Jump {
             at,
-            label: format!("{}{}", letter(i / ALPHABET.len()), letter(i)),
+            label: match one {
+                true => letter(i).to_string(),
+                false => format!("{}{}", letter(i / ALPHABET.len()), letter(i)),
+            },
         })
         .collect()
 }
 
-/// **一個標籤永遠是兩個字母，也就是兩格。**
+/// **一個標籤最多兩個字母**，也就是最多兩格——落腳點不到二十六個就只用一個。
 ///
-/// 一度是「不到二十六個落腳點就用一個字母」，少按一鍵。2026-09-28 定為固定兩個，
-/// 原話：「我觉得就应该固定两个字母，因为很少情况能在 26 个落点内。」量一下就知道
-/// 他是對的：一屏四十行中文、每行三四個小句是一百四十個落腳點，一個字母那一檔只在
-/// 屏幕幾乎空着的時候出現。
+/// # 2026-09-28 定過「固定兩個」，2026-10-04 改回可長可短
 ///
-/// Warning: **而更值錢的理由是肌肉記憶**：永遠兩個，手指學會「`gw` 加兩下」；有時一個的
-/// 話，每一次都得先**讀**標籤有幾個字母——為了在罕見情況下省一鍵，在每一次使用上
-/// 加一道認知。helix 也是固定兩鍵。
+/// 當時的原話：「我觉得就应该固定两个字母，因为很少情况能在 26 个落点内。」**那句話
+/// 到今天仍然對，可它說的只是 `gw`**——那時候這個倉裏只有 `gw`。`go`／`gu` 是另一個
+/// 分佈。十二屏正文量出來的（`measure::how_many_places_does_one_screen_have`）：
+///
+/// ```text
+///        中位   最大   ≤26 的佔
+/// gw      155    239        0%     ← 單字母那一檔一次都輪不到
+/// go        1     11      100%     ← 每一次都是單字母
+/// gu        2     45       99%
+/// ```
+///
+/// 所以這一改**對 `gw` 等於沒改**（它永遠落在兩個字母那一檔），對 `go`／`gu` 是按鍵數
+/// 直接少一半。
+///
+/// 另一條當時的理由是肌肉記憶——「永遠兩個，手指學會加兩下」。 2026-10-04 自己
+/// 撤了：「之前我觉得单字母跳转是怕影响肌肉记忆，现在想来似乎还好，因为是
+/// interactive 的，用户不存在肌肉记忆。」標籤本來就得看了才知道打什麼。
+///
+/// Warning: **沒做大寫那一檔。** 提過「超過 26×26 就動用大寫，湊成 52×52」。量下來
+/// 最大 239，離 676 還差一半還多——那會是一段永遠跑不到的代碼，而大寫要按 Shift，
+/// 在「越快越好」這件事上是負的。
+///
+/// Warning: **全屏一致，所以沒有前綴問題。** 要麼全是一個字母、要麼全是兩個，不會出現
+/// 「`a` 和 `ab` 同時是標籤」。avy／easymotion 為混長度做的那套前綴樹這裏不需要。
 ///
 /// 塌掉的兩處一併刪了：全角標籤（兩個半角字母本來就正好兩格，一個縱、一個漢字都填
 /// 得滿），以及「先按一格數一遍再按兩格數一遍」那個兩趟。
@@ -249,5 +274,84 @@ impl Editor {
             None => self.cancel_jump(),
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod measure {
+    use super::*;
+
+    /// **量一量：一屏上到底有幾個落腳點。**
+    ///
+    /// 2026-09-28 把標籤定為固定兩個字母，靠的就是一個數：一屏中文正文約一百四十個
+    /// 落腳點，「一個字母那一檔只在屏幕幾乎空着的時候出現」。2026-10-04 重提單字母
+    /// 標籤，**那個數只說得了 `gw`**——`go`／`gu` 是另一個分佈。留着是為了重跑得了。
+    #[test]
+    #[ignore = "量數用的，不是斷言"]
+    fn how_many_places_does_one_screen_have() {
+        let Some(all) = ["../../docs/manual.md", "docs/manual.md"]
+            .iter()
+            .find_map(|p| std::fs::read_to_string(p).ok())
+        else {
+            println!("找不到 docs/manual.md，跳過");
+            return;
+        };
+        let lines: Vec<&str> = all.lines().collect();
+        let (mut gw, mut go, mut gu) = (Vec::new(), Vec::new(), Vec::new());
+        let mut too_narrow = 0usize;
+        for start in (0..lines.len()).step_by(400).take(12) {
+            let screen: String = lines[start..(start + 40).min(lines.len())].join("\n");
+            let mut ed = Editor::new();
+            ed.current_buffer_mut().replace(0..0, &screen).unwrap();
+            let n = ed.current_buffer().rope().len_chars();
+            if n == 0 {
+                continue;
+            }
+            ed.set_page_span(0, n);
+            ed.start_jump();
+            assert!(ed.take_owed_jump());
+            ed.run_owed_jump();
+            gw.push(ed.labels_on_the_page().len());
+            // 今天**標不了**的那些：一格寬，兩個字母蓋下去會吃掉後面那個東西。
+            let rope = ed.current_buffer().rope();
+            for line in 0..rope.len_lines() {
+                for (a, b) in motion::line_words(rope, line, motion::Grain::Coarse, ed.segmenter.as_ref()) {
+                    let wide: usize =
+                        rope.slice(a..b).chars().map(yumete_cjk::char_width).sum();
+                    let has = rope.slice(a..b).chars().any(char::is_alphanumeric);
+                    if has && wide < 2 {
+                        too_narrow += 1;
+                    }
+                }
+            }
+            for q in ["th", "de", "in", "an", "zh", "sh", "ji", "do"] {
+                let found = crate::written::targets(&screen, q);
+                if !found.latin.is_empty() {
+                    go.push(found.latin.len());
+                }
+                for (_, at) in &found.han {
+                    gu.push(at.len());
+                }
+            }
+        }
+        let show = |name: &str, v: &mut Vec<usize>| {
+            if v.is_empty() {
+                println!("{name:4} 沒有樣本");
+                return;
+            }
+            v.sort_unstable();
+            println!(
+                "{name:4} 樣本 {:4}　中位 {:3}　最大 {:4}　≤26 的佔 {:3.0}%　≤676 的佔 {:3.0}%",
+                v.len(),
+                v[v.len() / 2],
+                v[v.len() - 1],
+                100.0 * v.iter().filter(|&&n| n <= 26).count() as f64 / v.len() as f64,
+                100.0 * v.iter().filter(|&&n| n <= 676).count() as f64 / v.len() as f64,
+            );
+        };
+        show("gw", &mut gw);
+        show("go", &mut go);
+        show("gu", &mut gu);
+        println!("今天因為「只有一格」而標不了的單位，十二屏合計 {too_narrow} 個");
     }
 }

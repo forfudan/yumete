@@ -9995,16 +9995,35 @@ fn draw_horizontal(
         let mark = ink.page().fg(ink.paper()).bg(ink.gold()).add_modifier(Modifier::BOLD);
         let buf = frame.buffer_mut();
         for (x, y, label) in label_cells {
-            // **兩個字母正好兩格**，也就是一個漢字的寬度——所以蓋掉的就是那一個
-            // 字，整行一格都沒挪。落腳點窄過兩格的（英文的 `a`）根本不給標籤，
-            // 見 `editor/labels.rs` 的 `LABEL`。
-            for (n, g) in yumete_cjk::graphemes(&label).enumerate() {
-                let at = x + n as u16;
+            // **標籤蓋住那一個字，整行一格都沒挪**：兩個字母正好兩格，也就是一個
+            // 漢字的寬度。落腳點窄過兩格的（英文的 `a`）根本不給標籤，見
+            // `editor/labels.rs` 的 `LABEL`。
+            //
+            // Warning: **標籤可以比那個字窄**（2026-10-04，單字母標籤那一檔）：一個
+            // 字母一格，而它底下那個漢字兩格。底下那一格 ratatui 存的是
+            // `Cell::reset()` ——一個**默認樣式**的空格，所以行不會錯位，可它會在
+            // 一串金底標籤中間露出一格頁面底色的缺口。所以寬度不夠的補上去。
+            let under = buf
+                .cell((x, y))
+                .map_or(1, |c| yumete_cjk::str_width(c.symbol()).max(1));
+            let mut wide = 0usize;
+            for g in yumete_cjk::graphemes(&label) {
+                let at = x + wide as u16;
                 if at >= text_area.x + text_area.width {
                     break;
                 }
                 if let Some(cell) = buf.cell_mut((at, y)) {
                     cell.set_symbol(g).set_style(mark);
+                }
+                wide += yumete_cjk::grapheme_width(g).max(1);
+            }
+            for n in wide..under {
+                let at = x + n as u16;
+                if at >= text_area.x + text_area.width {
+                    break;
+                }
+                if let Some(cell) = buf.cell_mut((at, y)) {
+                    cell.set_symbol(" ").set_style(mark);
                 }
             }
         }
@@ -18177,10 +18196,13 @@ fn squeezed(text: &str) -> String {
         assert!(editor.jumping(), "畫完就亮起來了");
         // **落腳點是 `e` 的單位**：「那年冬天」「雪下得早」是兩處，不是六個詞；
         // 標點自成一段，不給標籤。
-        // **兩個字母正好一個漢字寬**，所以蓋掉的就是那一個字。
-        assert_eq!(rows[0], "aa年冬天，ab下得早。", "{rows:#?}");
-        assert_eq!(rows[1], "ac路斷了、ad在門口站了很久。", "{rows:#?}");
-        // Warning: **版面一格都沒動**：一個漢字兩格、一個字母一格加上它讓出來的那一格，
+        //
+        // 這一屏只有四處，**不到二十六個所以標籤是一個字母**（見 `editor/labels.rs`
+        // 的 `LABEL`）。Warning: **一個字母一格，而它底下那個漢字兩格**——剩下那一格是
+        // 這裏補上去的，不補就會在金底中間露出一格頁面底色。
+        assert_eq!(rows[0], "a 年冬天，b 下得早。", "{rows:#?}");
+        assert_eq!(rows[1], "c 路斷了、d 在門口站了很久。", "{rows:#?}");
+        // Warning: **版面一格都沒動**：一個漢字兩格，標籤連同補的那一格也是兩格，
         // 所以每一行還是原來那麼寬。推開的話後面的字全往右擠，而按 `gw` 之前眼睛
         // 已經鎖定了要去的地方。
         for (now, was) in rows.iter().zip(&plain) {
@@ -18191,16 +18213,14 @@ fn squeezed(text: &str) -> String {
             );
         }
 
-        // 打下去就跳過去，而且 `C-o` 回得來。Warning: **永遠兩鍵**，不看標籤有幾個字母。
-        editor.on_key(Key::Char('a'));
-        assert!(editor.jumping(), "只打了一半，標籤還在");
+        // 打下去就跳過去，而且 `C-o` 回得來。這一屏是單字母標籤，所以一鍵。
         editor.on_key(Key::Char('d'));
         assert!(!editor.jumping(), "跳完標籤就收了");
         let at = editor.cursor();
         assert_eq!(
             editor.current_buffer().rope().chars_at(at).next(),
             Some('她'),
-            "ad 那一個標籤站在「她」上"
+            "d 那一個標籤站在「她」上"
         );
         editor.on_key(Key::Ctrl('o'));
         assert_eq!(editor.cursor(), 0, "C-o 回得來");
@@ -18231,8 +18251,9 @@ fn squeezed(text: &str) -> String {
 
     /// **竪排下也有，而且一個縱正好裝得下一個標籤**（#406，2026-09-28）。
     ///
-    /// 一個縱兩格：兩個字母並排就是縱中橫（同行號那一套），一個字母用全角。兩種都
-    /// 把那一格填滿，所以竪排這一頭不必為「留一個洞」再想一次辦法。
+    /// 一個縱兩格：兩個字母並排就是縱中橫（同行號那一套）。**一個字母的時候**走的
+    /// 是 `put_slot_right`，它先把整個縱填成空格再把那個字母寫在右邊——所以兩種都
+    /// 把那一格填滿，竪排這一頭不必為「留一個洞」再想一次辦法。
     #[test]
     fn jump_labels_fill_a_縱_on_the_vertical_page() {
         let mut editor = editor_with("那年冬天，雪下得早。\n她伸手去碰，指尖一涼。\n");
@@ -18254,8 +18275,13 @@ fn squeezed(text: &str) -> String {
                 "這一行寬了：{was:?} → {now:?}"
             );
         }
-        assert!(shot.contains("aa"), "第一個標籤在：\n{shot}");
-        assert!(shot.contains("ab"), "第二個也在：\n{shot}");
+        // 這一屏四處，所以標籤是一個字母。
+        assert_eq!(editor.jump_labels().len(), 4, "四處：\n{shot}");
+        assert!(
+            editor.jump_labels().iter().all(|(_, l)| l.chars().count() == 1),
+            "單字母標籤：{:?}",
+            editor.jump_labels()
+        );
 
         // Warning: **每一個標籤都要長得一樣**（2026-09-28 報的：「竪排的 aa 為什麽不是金色
         // 底色？」）。竪排的光標是畫進頁面的一塊反白，而第一個落腳點常常正是光標站
@@ -18279,15 +18305,14 @@ fn squeezed(text: &str) -> String {
             "標籤的樣式不止一種（光標底下那個被反白翻過去了）：{grounds:?}"
         );
 
-        // 打下去就跳過去。
-        editor.on_key(Key::Char('a'));
+        // 打下去就跳過去。單字母標籤，所以一鍵。
         editor.on_key(Key::Char('b'));
         assert!(!editor.jumping());
         let at = editor.cursor();
         assert_eq!(
             editor.current_buffer().rope().chars_at(at).next(),
             Some('雪'),
-            "ab 那一個站在「雪下得早」的頭上"
+            "b 那一個站在「雪下得早」的頭上"
         );
     }
 
