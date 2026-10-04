@@ -7312,8 +7312,17 @@ pub(crate) fn sidebar_shell(
         Side::Right => (area.x + 1, area.x + area.width - 1),
     };
     let focused = editor.panel_focus() == Some(side);
-    let gold = Style::default().bg(ink.gold()).fg(ink.paper());
-    let thin = ground.fg(ink.quiet());
+    // **有焦點：同一個框，換成雙線、金色**（2026-10-04 定）。從前是整圈刷成
+    // 金底實心條，原話：「我覺得有點刺眼。」雙線一樣說得出「鍵在這一邊」，可它
+    // 是**線**不是**塊**——占的墨少了一個數量級。
+    let line = match focused {
+        true => ground.fg(ink.gold()),
+        false => ground.fg(ink.quiet()),
+    };
+    let (bar, rule) = match focused {
+        true => ("║", "═"),
+        false => ("│", "─"),
+    };
     // 上下兩條橫線鋪在**兩堵牆之間**，不是「正文那一段」——右邊欄的正文從牆後面
     // 第二格起（留白一格），照正文起算會在角旁邊漏出一個洞。
     let (wall_a, wall_b) = (inside.min(outside), inside.max(outside));
@@ -7326,52 +7335,43 @@ pub(crate) fn sidebar_shell(
                 cell.set_symbol(" ").set_style(ground);
             }
         }
-        if let Some(cell) = buf.cell_mut((inside, y)) {
-            match focused {
-                true => cell.set_symbol(" ").set_style(gold),
-                false => cell.set_symbol("│").set_style(thin),
-            };
-        }
-        if let Some(cell) = buf.cell_mut((outside, y)) {
-            match focused {
-                true => cell.set_symbol(" ").set_style(gold),
-                false => cell.set_symbol("│").set_style(thin),
-            };
+        for wall in [inside, outside] {
+            if let Some(cell) = buf.cell_mut((wall, y)) {
+                cell.set_symbol(bar).set_style(line);
+            }
         }
     }
     // **上邊就是標題那一行**：這裏只鋪底，字由各個面板自己寫（它們的標題各不
     // 相同），寫的時候用回報的 `head`。
-    if !focused {
-        for x in wall_a + 1..wall_b {
-            if let Some(cell) = buf.cell_mut((x, area.y)) {
-                cell.set_symbol("─").set_style(thin);
-            }
-        }
-        if let Some(cell) = buf.cell_mut((outside, area.y)) {
-            cell.set_symbol(corner(side, true, false)).set_style(thin);
-        }
-        if let Some(cell) = buf.cell_mut((inside, area.y)) {
-            cell.set_symbol(corner(side, true, true)).set_style(thin);
-        }
-    } else {
-        for x in area.x..area.x + area.width {
-            if let Some(cell) = buf.cell_mut((x, area.y)) {
-                cell.set_symbol(" ").set_style(gold);
-            }
+    for x in wall_a + 1..wall_b {
+        if let Some(cell) = buf.cell_mut((x, area.y)) {
+            cell.set_symbol(rule).set_style(line);
         }
     }
+    if let Some(cell) = buf.cell_mut((outside, area.y)) {
+        cell.set_symbol(corner(side, true, false, focused)).set_style(line);
+    }
+    if let Some(cell) = buf.cell_mut((inside, area.y)) {
+        cell.set_symbol(corner(side, true, true, focused)).set_style(line);
+    }
     let head = match focused {
-        true => gold.add_modifier(Modifier::BOLD),
+        true => line.add_modifier(Modifier::BOLD),
         false => ground.fg(ink.quiet()),
     };
     if let Some(y) = floor {
-        match focused {
-            true => {
-                for x in area.x..area.x + area.width {
-                    if let Some(cell) = buf.cell_mut((x, y)) {
-                        cell.set_symbol(" ").set_style(gold);
-                    }
-                }
+        for x in wall_a + 1..wall_b {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(rule).set_style(line);
+            }
+        }
+        if let Some(cell) = buf.cell_mut((outside, y)) {
+            cell.set_symbol(corner(side, false, false, focused)).set_style(line);
+        }
+        if let Some(cell) = buf.cell_mut((inside, y)) {
+            cell.set_symbol(corner(side, false, true, focused)).set_style(line);
+        }
+        if focused {
+            {
                 // **底邊上寫着 `Tab` 走的次序**（2026-09-25 提的）。算出來的，
                 // 不是寫死的：哪個視圖歸哪一欄使用者配得動。放不下就不寫——一行
                 // 擠成半句的字比沒有字更難懂（同開關那一欄的號碼）。
@@ -7386,22 +7386,12 @@ pub(crate) fn sidebar_shell(
                     // 「Tab 文件 > 緩衝區 > 大綱 > 尋找」（31 格），而截成
                     // 「Tab 文件 > 緩衝…」照樣把那件要說的事說了——`Tab` 換的是
                     // 視圖。想看全的按 `w` 放寬。
-                    let line = format!("Tab {}", names.join(" > "));
+                    // **分隔符不留空**（2026-10-04 定：「這樣會更加緊湊一些」）。
+                    // ` > ` 三格一個、三個就是九格，而這一行本來就裝不下、每次都
+                    // 被截在最後一個名字上；`>` 一格，整行 29 → 23。
+                    let says = format!("Tab {}", names.join(">"));
                     let room = to.saturating_sub(at) as usize;
-                    put_text(buf, at, y, to, &elide(&line, room), gold);
-                }
-            }
-            false => {
-                for x in wall_a + 1..wall_b {
-                    if let Some(cell) = buf.cell_mut((x, y)) {
-                        cell.set_symbol("─").set_style(thin);
-                    }
-                }
-                if let Some(cell) = buf.cell_mut((outside, y)) {
-                    cell.set_symbol(corner(side, false, false)).set_style(thin);
-                }
-                if let Some(cell) = buf.cell_mut((inside, y)) {
-                    cell.set_symbol(corner(side, false, true)).set_style(thin);
+                    put_text(buf, at, y, to, &elide(&says, room), line);
                 }
             }
         }
@@ -7413,24 +7403,28 @@ pub(crate) fn sidebar_shell(
     }
     put_text(buf, from + 1, area.y, to, name, head);
     let head_at = from + 1 + yumete_cjk::str_width(name) as u16;
-    let floor_ink = match focused {
-        true => gold,
-        false => thin,
-    };
+    let floor_ink = line;
     Shell { from, to, head, head_at, area: room, floor, floor_ink }
 }
 
 /// 框的四個角。`top` 說上下，`inner` 說是不是朝着正文的那一邊。
-fn corner(side: Side, top: bool, inner: bool) -> &'static str {
+///
+/// `double` ＝ 有焦點那一圈。Warning: **雙線沒有圓角**——Unicode 裏就沒有這四個字
+/// （`╔╗╚╝` 只有直角），所以有焦點的時候那一圈是方的，沒焦點是圓的。
+fn corner(side: Side, top: bool, inner: bool, double: bool) -> &'static str {
     let left = match side {
         Side::Left => !inner,
         Side::Right => inner,
     };
-    match (top, left) {
-        (true, true) => "╭",
-        (true, false) => "╮",
-        (false, true) => "╰",
-        (false, false) => "╯",
+    match (double, top, left) {
+        (false, true, true) => "╭",
+        (false, true, false) => "╮",
+        (false, false, true) => "╰",
+        (false, false, false) => "╯",
+        (true, true, true) => "╔",
+        (true, true, false) => "╗",
+        (true, false, true) => "╚",
+        (true, false, false) => "╝",
     }
 }
 
@@ -7770,6 +7764,10 @@ fn draw_search(
             kept
         }
     };
+    // **整扇面板，底邊那一行也算**——`shell.area` 是減掉底邊之後的那一塊，而
+    // `PAN.INS` 下退後的是**整扇**（2026-10-04 截圖報的：「在搜索框的時候最
+    // 下面沒有被淡化」）。
+    let whole = area;
     let shell = sidebar_shell(frame, editor, ink, ground, side, area, &name);
     let (from, to, area) = (shell.from, shell.to, shell.area);
     let buf = frame.buffer_mut();
@@ -8252,25 +8250,25 @@ fn draw_search(
     // （查詢／換成／包含／排除），在「包含」裏打字就該是「包含」那一行亮着。
     if editor.mode() == Mode::Field {
         let rows = |from: u16, upto: u16| match upto > from {
-            true => Some(Rect::new(area.x, from, area.width, upto - from)),
+            true => Some(Rect::new(whole.x, from, whole.width, upto - from)),
             false => None,
         };
         let cells = |from: u16, upto: u16, y: u16| match upto > from {
             true => Some(Rect::new(from, y, upto - from, 1)),
             false => None,
         };
-        let bottom = area.y + area.height;
-        let right = area.x + area.width;
+        let bottom = whole.y + whole.height;
+        let right = whole.x + whole.width;
         // 亮着那個框的上面、下面，加上同一行裏它左右兩頭——那一行的標籤和邊條
         // 都在這兩截裏。
         let parts = match lit {
             Some(box_is) => [
-                rows(area.y, box_is.y),
+                rows(whole.y, box_is.y),
                 rows(box_is.y + 1, bottom),
-                cells(area.x, box_is.x, box_is.y),
+                cells(whole.x, box_is.x, box_is.y),
                 cells(box_is.x + box_is.width, right, box_is.y),
             ],
-            None => [rows(area.y, bottom), None, None, None],
+            None => [rows(whole.y, bottom), None, None, None],
         };
         for part in parts.into_iter().flatten() {
             stand_back(frame, ink, part);
@@ -11893,7 +11891,14 @@ fn squeezed(text: &str) -> String {
         assert!(!row(1).contains("──"), "那兩道線去掉了：{:?}", row(1));
         let scope = say!("search.label.scope").chars().next().unwrap();
         let at = (0..16).find(|&y| row(y).contains(scope)).expect("位置那一行在");
-        assert!(row(at).starts_with(" 6 "), "號碼是 6：{:?}", row(at));
+        // Warning: **行首那一格是框的牆**（有焦點是 `║`，沒焦點是 `│`）。2026-10-04
+        // 之前有焦點那一圈是塗滿的金，牆那一格字面上是個空格，所以這裏原先寫的
+        // 是 `starts_with(" 6 ")`。
+        assert!(
+            row(at).trim_start_matches(['║', '│', ' ']).starts_with("6 "),
+            "號碼是 6：{:?}",
+            row(at)
+        );
         assert!(at > 2, "位置排在七個開關下面，不在搜的正下方：第 {at} 行");
 
         // **三檔底色，只鋪在打得了字的那一段上**（2026-09-24 報的：「这一块的
@@ -14110,13 +14115,15 @@ fn squeezed(text: &str) -> String {
     /// ——那件事與焦點無關，而畫法跟着焦點走（[`super::sidebar_shell`]）：沒焦點
     /// 是細線 `│` 與四個角，有焦點是**一格塗滿的金**。
     ///
-    /// Warning: **有焦點時整條上邊和整條下邊都是金的**，所以拿它去找「牆在第幾欄」只
-    /// 能問**正文那幾行**，不能問第 0 行。
+    /// 有焦點那一圈 2026-10-04 起是**雙線**（`║ ═ ╔╗╚╝`），沒焦點是單線圓角。
+    /// 從前有焦點是整圈刷成金底的空白格，所以這裏還認那一種——金底的空格。
     fn is_rule(b: &ratatui::buffer::Buffer, x: u16, y: u16) -> bool {
         let cell = &b[(x, y)];
-        matches!(cell.symbol(), "│" | "┃" | "╭" | "╮" | "╰" | "╯")
-            || (cell.symbol() == " "
-                && cell.style().bg == Some(ink(&Config::default()).gold()))
+        matches!(
+            cell.symbol(),
+            "│" | "┃" | "╭" | "╮" | "╰" | "╯" | "║" | "╔" | "╗" | "╚" | "╝"
+        ) || (cell.symbol() == " "
+            && cell.style().bg == Some(ink(&Config::default()).gold()))
     }
 
     /// 一行裏牆後面那一半——右邊那一欄的面板正文。
@@ -19601,9 +19608,11 @@ fn squeezed(text: &str) -> String {
     /// **哪一欄拿着鍵，框自己說**（2026-09-23 提的：「空格 s 切換，但是我不知道
     /// 目前焦點在哪個裏面」）。
     ///
-    /// Warning: **2026-09-25 起說法變了**：從前是「粗的 `┃` 對細的 `│`」，現在是
-    /// 「**一圈塗滿的金**對一圈細線」（原話：「金线还不够粗，可以改成金色的
-    /// 底纹」）。所以這裏問的是**底色**，不是字形。
+    /// Warning: **說法變過兩次。** 2026-09-25 從「粗的 `┃` 對細的 `│`」改成「一圈
+    /// 塗滿的金對一圈細線」（原話：「金线还不够粗，可以改成金色的底纹」）；
+    /// 2026-10-04 又從塗滿改回線——這一次是**雙線＋金色**（原話：「我覺得有點
+    /// 刺眼……改成未高亮時候的框線，但是使用 1 雙實線 2 金色」）。所以這裏問的
+    /// 是**墨色**，不是底色，也不是字形。
     #[test]
     fn the_rule_says_which_sidebar_has_the_keys() {
         let config = Config::default();
@@ -19618,7 +19627,7 @@ fn squeezed(text: &str) -> String {
         let walls = |buffer: &ratatui::buffer::Buffer| -> Vec<bool> {
             (0..80)
                 .filter(|&x| is_rule(buffer, x, 1))
-                .map(|x| buffer[(x, 1)].style().bg == Some(gold))
+                .map(|x| buffer[(x, 1)].style().fg == Some(gold))
                 .collect()
         };
         let buffer = render(&editor, &config, 80, 10);
@@ -20304,11 +20313,17 @@ fn squeezed(text: &str) -> String {
                 .lines()
                 .find(|r| r.contains("Tab "))
                 .unwrap_or_else(|| panic!("{height} 行：找不到標籤那一行\n{text}"));
-            let head: String = tabs.chars().take_while(|c| *c != 'T').collect();
+            // Warning: **框自己的牆和角不算「畫上去的東西」**（2026-10-04 起有焦點
+            // 那一圈是雙線，底邊左端就是一個 `╚`；從前它是塗滿的金，字面上是空
+            // 格，所以這裏原先只 `trim` 就夠了）。攔的是面板那三格的內容。
+            let head: String = tabs
+                .chars()
+                .take_while(|c| *c != 'T')
+                .filter(|c| !"║│╚╰╔╭ ".contains(*c))
+                .collect();
             assert!(
-                head.trim().is_empty(),
-                "{height} 行：標籤那一行前面畫了「{}」\n{text}",
-                head.trim()
+                head.is_empty(),
+                "{height} 行：標籤那一行前面畫了「{head}」\n{text}"
             );
         }
     }
