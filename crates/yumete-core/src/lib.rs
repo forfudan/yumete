@@ -61,6 +61,7 @@ pub mod vcs;
 pub mod wiki;
 pub mod words;
 pub mod wrap;
+pub mod written;
 pub mod zong;
 
 pub use buffer::Buffer;
