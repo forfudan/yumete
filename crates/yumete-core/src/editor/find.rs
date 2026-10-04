@@ -222,12 +222,28 @@ impl Editor {
         // and showing `(?i)霜` to a reader who typed 霜 would be showing them
         // the plumbing. The panel's own query is that memory; `last_search` is
         // the fallback for a `/` typed on the page.
-        let seed = match (!marked.is_empty() && !marked.contains('\n'), self.search.query.is_empty()) {
-            (true, _) => marked,
-            (false, false) => self.search.query.clone(),
-            (false, true) => self.last_search.clone(),
-        };
-        self.search.ask(seed);
+        // **剛選中的照填，記着的變灰**（2026-10-04 定）。你剛選中的那一段是你
+        // 此刻做的動作，直接進框；上次搜過的詞只是一個猜測，所以寫成灰字，一打字
+        // 它自己就沒了，按 `Tab` 把它收進來。同 `/` 那一行。
+        match !marked.is_empty() && !marked.contains('\n') {
+            true => self.search.ask(marked),
+            false => {
+                // Warning: **再開一次也要記得。** `guess` 把框清空，所以「上次那個
+                // 詞」第二次就不在 `query` 裏了——它在灰字裏。三處依次問：框裏
+                // 的、灰着的、`/` 在正文裏搜過的。漏掉中間那一處，`空格 /` 按兩
+                // 下（或者 `空格 /` 之後再 `:search 某目錄`）就把詞丟了。
+                let remembered = [
+                    self.search.query.as_str(),
+                    self.search.ghost_now(),
+                    self.last_search.as_str(),
+                ]
+                .into_iter()
+                .find(|one| !one.is_empty())
+                .unwrap_or_default()
+                .to_string();
+                self.search.guess(remembered);
+            }
+        }
         // **那一格裏先寫着此刻的範圍**，這樣 `k` 上去 `i` 進去，改的是看得見的
         // 那一份，而不是一個空框（2026-09-23）。
         self.search.scope_text = self.scope_as_typed();
@@ -237,6 +253,10 @@ impl Editor {
         // Warning: **Opened onto a folder, it looks straight away** rather than
         // waiting for an `Enter` nobody knows to press: the reader just named
         // a place, and the pattern was already in the box.
+        //
+        // Warning: **2026-10-04 起「已經在框裏」只剩選中那一路。** 記着的那個詞現在
+        // 是一行灰字，框是空的——於是這一趟搜的是空，名單空着，要按 `Enter`
+        // （它會先把灰字收進來）。這是對的：**沒人打過的詞不該讓整個項目跑一趟**。
         match self.search.scope.live() {
             true => self.run_search(),
             false => self.search_now(),
@@ -767,7 +787,9 @@ impl Editor {
             // 而那讓它在找得到和找不到的時候做兩件不同的事——正是這一條想去掉的
             // 分岔。去結果現在是 `Esc` 然後 `j`，兩個已經學過的鍵。
             Key::Enter => {
-                self.search.all_selected = false;
+                // **空框加一行灰字，`Enter` 就是「再找一次它」**——同 `/`
+                // （`modes.rs`：「`/⏎` 讀作『再找一次這個』」）。
+                self.search.adopt_ghost();
                 self.look_again();
                 // **打完了，去找——然後把鍵交回面板**（2026-09-25 補的：「enter键
                 // 除了触发搜索，还是最好能回到 normal mode」）。它因此讀成一句
@@ -785,6 +807,7 @@ impl Editor {
             //
             // Warning: **只在框裏。** 出了框 `Tab` 還是走邊欄那幾個視圖，那是它在每
             // 一扇面板裏的老意思。
+            Key::Tab if self.search.adopt_ghost() => self.look_again(),
             Key::Tab => {
                 let next = self.search.field.step(false, self.search.replacing, self.search.on_disk());
                 self.search.stand_on(next);
@@ -860,7 +883,6 @@ impl Editor {
                 if self.mode == Mode::Normal {
                     self.say_it_again = true;
                 }
-                self.search.all_selected = false;
                 self.mode = Mode::Normal;
             }
             _ => {}
@@ -897,7 +919,6 @@ impl Editor {
     /// thing anybody does in this panel.
     fn leave_field(&mut self, back: bool) {
         self.search.field = self.search.field.step(back, self.search.replacing, self.search.on_disk());
-        self.search.all_selected = false;
         match self.search.takes_text() {
             true => self.search.caret = self.search.typed().chars().count(),
             false => self.mode = Mode::Normal,

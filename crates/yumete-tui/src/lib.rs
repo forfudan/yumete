@@ -7889,10 +7889,9 @@ fn draw_search(
         // 這一個光標所在的字是反白的，也就是説和正文normal時光標所在的那個字一樣
         // 的模式。然後背景依舊是中間灰色」）。從前整條反白，於是那一格看着像被
         // 選中了一整段，而框裏其實站着一個光標——`hl` 挪的就是它。
-        let style = match (find.all_selected && here && !shown.is_empty(), typing && here) {
-            (true, _) => on,
-            (false, true) => sunk,
-            (false, false) => text,
+        let style = match typing && here {
+            true => sunk,
+            false => text,
         };
         // **The whole row is painted, not just the characters.** A box with
         // one word in it and no ground behind it does not read as a box —
@@ -7917,23 +7916,27 @@ fn draw_search(
             _ => shown.is_empty(),
         };
         if blank {
+            // **記着的那個詞頂掉「要找什麼」**（2026-10-04）：兩句都是灰的、都寫
+            // 在空框裏，而「上次搜的是這個」比「要找什麼」說得多——`Tab` 收它、
+            // `Enter` 直接再找一次它。同 `/` 那一行。
             let asks = match which {
                 Field::Scope => say!("search.ask.folder"),
                 Field::Replace => say!("search.ask.replace"),
                 // **包含／排除空着就空着**（2026-10-01 定）。一句說得清寫法的話在
                 // 這一欄裏放不下，截一半比不寫更糟。
                 Field::Include | Field::Exclude => String::new(),
-                _ => say!("search.ask.query"),
+                _ => match find.ghost_now() {
+                    "" => say!("search.ask.query"),
+                    remembered => remembered.to_string(),
+                },
             };
             // Warning: **只換字色，底色照舊是這一格的**：底色說的是「這裏打得了字」，
             // 提示字拿走它就等於把那句話擦了（2026-09-27 測試攔下來的）。
             put_text(buf, box_at, y, to, &asks, Style { fg: quiet.fg, ..style });
         }
         if here {
-            lit = Some(Rect::new(box_at, y, to.saturating_sub(box_at), 1));
-        }
-        if here && !find.all_selected {
             let box_is = Rect::new(box_at, y, to.saturating_sub(box_at), 1);
+            lit = Some(box_is);
             caret = box_in(buf, box_is, &shown, find.caret, typing, ink);
         }
     };
