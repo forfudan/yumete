@@ -235,7 +235,7 @@ impl Editor {
     ///
     /// Warning: 別的入口開面板都順手把焦點給它，因為那幾個是「我要去那裏看」。文檔那
     /// 一扇不是：`空格 K` 說的是「一邊寫一邊讓它跟着」，人還在正文裏
-    /// （作者報的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在正文」）。
+    /// （報上來的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在正文」）。
     /// 要走進去就按 `空格 4`，和別的邊欄一個樣。
     pub(super) fn open_panel_without_the_keys(
         &mut self,
@@ -376,7 +376,7 @@ impl Editor {
     /// 光關掉邊欄那一格，手動叫出來的那一則下一幀就浮到光標旁邊去了——讀者說的
     /// 是「我不要看這個」，不是「換個地方給我看」（2026-09-30 審出來的）。
     ///
-    /// Warning: **即時的那一種照樣會浮回來，那是對的。** 作者的模型是「右侧栏就
+    /// Warning: **即時的那一種照樣會浮回來，那是對的。** 模型是「右侧栏就
     /// 是固定的『浮窗』，它开着，浮窗就不用开了」——反過來說，關掉邊欄，浮窗就
     /// 回來。即時的那一種關不掉（`:info` 纔換得動它），能收起來的只有手動叫的。
     pub(super) fn close_the_info(&mut self, side: crate::sidebar::Side) {
@@ -444,7 +444,7 @@ impl Editor {
         self.width[side as usize]
     }
 
-    /// **一扇側面板要這麼多欄纔擺得下**（2026-10-03 作者定）。
+    /// **一扇側面板要這麼多欄纔擺得下**（2026-10-03 定）。
     ///
     /// 版面算術是 `正文保底 = max(窗口/3, 24)`，面板分的是剩下的（見 `yumete-tui`
     /// 的 `sidebar_columns`）。要讓面板分到十二欄——六個漢字，比那更窄的一列名字
@@ -504,7 +504,7 @@ impl Editor {
     /// 向走過去，`s` 切一刀，`q` 關掉，`o` 只留這一個。
     ///
     /// Warning: **`e`／`i` 是這一頭自己加的**：開關左右邊欄而**鍵不過去**。
-    /// helix 沒有邊欄，所以沒有這一對；作者原話：「_we / _wi for toggling left
+    /// helix 沒有邊欄，所以沒有這一對；原話：「_we / _wi for toggling left
     /// and right sidebars……will not move focus to the sidebar」。大寫那一對
     /// （`E`／`I`）是開了就走進去，而且**只開不關**——「it does not close the
     /// sidebar as _we/_wi will do this」。
@@ -514,7 +514,7 @@ impl Editor {
             Key::Char('w') => self.next_region(),
             // 按方向走。四個區域：左欄、正文、副編輯區、右欄。
             //
-            // Warning: **走，不開**（2026-10-02 作者報的）。這四個從前和 `E`／`I`／
+            // Warning: **走，不開**（2026-10-02 報上來的）。這四個從前和 `E`／`I`／
             // `s` 共用 `go_to_region`，而那一支「沒有就開一個」——於是 `空格 w j`
             // 在只有一個編輯區的時候**切出一個新的**，`空格 w h` 在沒開左欄的時候
             // 把左欄開出來。原話：「_w + h/j/k/l 不是在可见的窗口里导航，而是会打
@@ -536,7 +536,7 @@ impl Editor {
             // 切一刀：眼下只有上下兩個編輯區，所以「切出來」和「走到第二個」
             // 是同一件事（`go_to_region` 沒有就開一個）。Warning: 往後真有第三
             // 個編輯區的時候這兩件事要分家——`s` 是「再切一刀」，`j` 是「走下
-            // 去」。作者說的「We will expand it to more possibilities in
+            // 去」。說的「We will expand it to more possibilities in
             // future」指的就是這裏。
             Key::Char('s') => self.go_to_region(2),
             Key::Char('q') => self.close_this_region(),
@@ -650,7 +650,7 @@ impl Editor {
                     // Warning: **從前這裏自己又找了一遍**（`View::ALL` 裏第一個歸這
                     // 一側的），於是它繞過了兩件 `side_view` 知道的事：這一份稿子
                     // 容不容得下那一扇（散文沒有文檔），以及右邊那一格此刻「應該」
-                    // 擺文檔還是診斷。作者報的就是這個：在一行有警告的地方按
+                    // 擺文檔還是診斷。報上來的就是這個：在一行有警告的地方按
                     // `空格 4`，開出來的是**空的文檔面板**。
                     if self.views_on(side).is_empty() && self.side_view(side) == crate::sidebar::View::Explorer
                         && self.side_of(crate::sidebar::Panel::Files) != side
@@ -1544,6 +1544,9 @@ impl Editor {
         });
         let items = names.into_iter().map(crate::picker::Item::File).collect();
         let mut picker = crate::picker::Picker::new("", items);
+        // **管道那一邊收緊**（2026-10-04 定）：跳着配和亂序都不收，因為它把全部印
+        // 出來，長尾就是噪音。`空格 f` 不撥它——那是一張排過序的單子，只看前十條。
+        picker.tighten();
         for c in query.chars() {
             picker.push(c);
         }
@@ -1666,11 +1669,11 @@ impl Editor {
                     picker.page(false);
                 }
                 // **`i` 在任何一行上都進框**（2026-10-01 定）。模態的走法是 `k` 走
-                // 到搜索行再按 `i`，而這一個是**抄近路**——作者原話：「我们唯一的
+                // 到搜索行再按 `i`，而這一個是**抄近路**——原話：「我们唯一的
                 // 区别就是用户可以在任何位置按 i 进入搜索行的 insert 模式。这是个
                 // 便捷的途径。」`/` 同日去掉：一件事一個鍵。
                 //
-                // **搜索面板那一整套編輯鍵同日搬了過來**（作者定：「整套搬：
+                // **搜索面板那一整套編輯鍵同日搬了過來**（定：「整套搬：
                 // i I a A d D c C」）。學一次兩扇都能用。`o` 不搬——一行的框裏
                 // 「開下一行」沒有意思。
                 Key::Char('i') => picker.type_here(true),
@@ -1884,7 +1887,7 @@ impl Editor {
         self.clipboard_read = Some(crate::editor::Pasting::AsIs { after });
     }
 
-    /// `:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼（2026-10-02 作者定）。
+    /// `:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼（2026-10-02 定）。
     pub(super) fn paste_table(
         &mut self,
         to: crate::table::Shape,
