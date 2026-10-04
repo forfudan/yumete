@@ -67,7 +67,7 @@ pub enum Where {
     ///
     /// Warning: **`.jj` 和 `.svn` 不算**（2026-10-02 更正）。這行從前把它們也列上
     /// 了，而 [`crate::editor::book_root`] 從來只找那兩樣。兩道是分開找的，所以
-    /// 上面某一層的 `.yumete` 贏過更近的一層 `.git`——書根是作者標的，版本庫是
+    /// 上面某一層的 `.yumete` 贏過更近的一層 `.git`——書根是標的，版本庫是
     /// 工具標的。
     ///
     /// Warning: **Reckoned from the working directory, never from the file being
@@ -146,7 +146,7 @@ pub enum Field {
     /// The pattern.
     #[default]
     Query,
-    /// **中文匹配**——簡繁異體與拼音合成一行（2026-10-01 定，作者原話：
+    /// **中文匹配**——簡繁異體與拼音合成一行（2026-10-01 定，原話：
     /// 「中文匹配 [拼音+繁簡]」）。
     ///
     /// 四態：`[繁簡+拼音]` → `[繁簡]` → `[拼音]` → `[ ]`。兩個說的是同一件事——
@@ -173,7 +173,7 @@ pub enum Field {
     /// Warning: **不併進 [`Field::Matching`]**：它和 正則 疊得起來（`\b<式子>\b`），
     /// 只和 模糊 互斥——模糊底下畫灰。
     Whole,
-    /// **替換 —— 一行三態**（2026-10-01 定，作者原話：「替換那一行做成 cycle」）。
+    /// **替換 —— 一行三態**（2026-10-01 定，原話：「替換那一行做成 cycle」）。
     ///
     /// 關 → 字面替換 → 智能大小寫。從前它是兩行：一個勾（替換）加一個只在勾上
     /// 之後纔畫得出來的勾（跟原文的大小寫）。合成一行省一行，而且沒勾替換的時候
@@ -202,7 +202,7 @@ pub enum Field {
     /// 裏的那些現在搜」——那一步排在第一，因為想找回來的多半是被忽略的目錄，
     /// 不是點文件。
     ///
-    /// Warning: **從前這是一個勾，一撥五道閘**。作者 2026-10-03 定要分開：
+    /// Warning: **從前這是一個勾，一撥五道閘**。 2026-10-03 定要分開：
     /// 「我们把 hidden 和 ignore 合到一起，我觉得可以考虑分开一下」。起因是他在
     /// 一個工作區根上搜，`.gitignore` 裏寫着 `/yu/`，於是整個子倉沒搜到，而要
     /// 撥的那個開關名叫「隱藏」。
@@ -234,7 +234,7 @@ impl Field {
         Field::Matching,
         Field::Whole,
         Field::Replacing,
-        // **「搜哪裏、搜哪些」四格攢在最下面**（2026-10-01 定，作者原話：「位置放
+        // **「搜哪裏、搜哪些」四格攢在最下面**（2026-10-01 定，原話：「位置放
         // 到『包含和排除』上方」）。位置從前畫在開關那一列的頭上、號碼是 `0`，
         // 可它說的是範圍，和底下三格是一夥的。現在四格一組，號碼接着往下排。
         Field::Scope,
@@ -535,9 +535,16 @@ pub struct Search {
     pub mine_total: usize,
     /// Where the caret is in it, in characters.
     pub caret: usize,
-    /// Whether the whole query is selected — what `空格 /` leaves behind, so
-    /// that typing replaces it and `Enter` keeps it (#419).
-    pub all_selected: bool,
+    /// **記着的那個詞，畫成灰字**——`空格 /` 什麼都沒選中的時候留下的。
+    ///
+    /// 框**是空的**，這一串只是寫在那裏給人看：接着打字它自己就沒了，按 `Tab`
+    /// 把它收進框裏。和 `/` 那一行一個樣（`modes.rs` 的 `prompt_ghost`）。
+    ///
+    /// Warning: **從前這裏是 `all_selected: bool`，框裏真的站着一段選中的文字**
+    /// （2026-10-04 換掉）。原話：「這個其實會讓我感到疑惑的（這是什麼意
+    /// 思）。」整條反白在這個倉裏別處是「這一整段被選上了」，而那一刻它想說的是
+    /// 「上次搜的是這個」——同一個樣子說了兩件事。
+    pub ghost: String,
     /// Which cell has the keys.
     pub field: Field,
     /// **簡繁異字形**：「書齋」找得到「书斋」（2026-09-25，見 [`crate::glyphs`]）。
@@ -741,7 +748,6 @@ impl Search {
 
     /// Type a character into the box, replacing all of it if it is selected.
     pub fn type_char(&mut self, ch: char) {
-        self.take_selection();
         let at = self.byte_at(self.caret);
         self.box_here().insert(at, ch);
         self.caret += 1;
@@ -749,17 +755,13 @@ impl Search {
 
     /// The same for a whole committed string — what the IME hands over.
     pub fn type_text(&mut self, text: &str) {
-        self.take_selection();
         let at = self.byte_at(self.caret);
         self.box_here().insert_str(at, text);
         self.caret += text.chars().count();
     }
 
-    /// Backspace: the selection if there is one, else the character before.
+    /// Backspace: 光標前面那一個字。
     pub fn backspace(&mut self) {
-        if self.take_selection() {
-            return;
-        }
         if self.caret == 0 {
             return;
         }
@@ -774,9 +776,6 @@ impl Search {
     /// 光標停在末尾（沒壓着字）就什麼都不做：那裏沒有東西可刪，而「往回刪一個」
     /// 是 `Backspace` 說的另一件事。
     pub fn delete_here(&mut self) {
-        if self.take_selection() {
-            return;
-        }
         // Warning: **光標停在末尾那個空位上的時候，刪的是它前面那一個**
         // （2026-09-27 兩個試用的人都報「`d` 按了什麼都不發生」）。框裏的光標走
         // 得到文字後面那一格（打字要從那裏接着打），而 `Esc` 出來之後它多半就停
@@ -811,7 +810,6 @@ impl Search {
     /// 着打），`Esc` 出來多半就停在那裏，而按的人想刪的是看得見的最後那個字。
     /// vi 的 Normal 態根本沒有「末尾後面那一格」，`D` 停在最後一個字上就是刪掉它。
     pub fn delete_to_end(&mut self) {
-        self.all_selected = false;
         let last = self.box_here().chars().count();
         let at = match self.caret >= last {
             true => self.caret.saturating_sub(1),
@@ -856,9 +854,8 @@ impl Search {
         }
     }
 
-    /// Move the caret, dropping the selection.
+    /// Move the caret.
     pub fn move_caret(&mut self, to: usize) {
-        self.all_selected = false;
         self.caret = to.min(self.typed().chars().count());
     }
 
@@ -871,27 +868,48 @@ impl Search {
     /// started meaning 「走字」 and the caret became something a reader can see).
     pub fn stand_on(&mut self, field: Field) {
         self.field = field;
-        self.all_selected = false;
         self.caret = self.typed().chars().count();
     }
 
-    /// Put a pattern in the box with the whole of it selected — `空格 /`.
-    pub fn ask(&mut self, query: String) {
-        self.caret = query.chars().count();
-        self.query = query;
-        self.all_selected = !self.query.is_empty();
+    /// **開一扇空框，記着的那個詞寫成灰字** —— `空格 /` 什麼都沒選中的時候。
+    pub fn guess(&mut self, remembered: String) {
+        self.query.clear();
+        self.caret = 0;
+        self.ghost = remembered;
         self.field = Field::Query;
     }
 
-    /// Throw the selection away if there is one. Whether there was.
-    fn take_selection(&mut self) -> bool {
-        if !self.all_selected {
+    /// **把剛選中的那段擺進框裏** —— `空格 /` 選着一段的時候。
+    ///
+    /// Warning: **選中的照填，記着的變灰**（2026-10-04 定）。你剛選中的那一段是
+    /// 你此刻做的動作，直接進框、光標在末尾；上次搜過的詞只是一個猜測，所以是
+    /// 灰的。`/` 那一行的規矩也是這一條——它沒有「選中」這個來源，所以只剩灰字。
+    pub fn ask(&mut self, query: String) {
+        self.caret = query.chars().count();
+        self.query = query;
+        self.ghost.clear();
+        self.field = Field::Query;
+    }
+
+    /// 把灰字收進框裏——`Tab`。回 `true` ＝ 真收了一個。
+    pub fn adopt_ghost(&mut self) -> bool {
+        if self.ghost.is_empty() || !self.query.is_empty() || self.field != Field::Query {
             return false;
         }
-        self.box_here().clear();
-        self.caret = 0;
-        self.all_selected = false;
+        self.query = std::mem::take(&mut self.ghost);
+        self.caret = self.query.chars().count();
         true
+    }
+
+    /// 灰字現在畫不畫得出來。
+    ///
+    /// Warning: **一打字它就沒了**，所以問的是「框還空着嗎」，不是「存了沒有」——
+    /// 同 `prompt_ghost`（那一支問的是 `command_line.is_empty()`）。
+    pub fn ghost_now(&self) -> &str {
+        match self.field == Field::Query && self.query.is_empty() {
+            true => &self.ghost,
+            false => "",
+        }
     }
 
     /// Where character `at` starts, in bytes.

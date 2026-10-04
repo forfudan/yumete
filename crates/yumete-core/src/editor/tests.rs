@@ -9603,7 +9603,7 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     ed.on_key(Key::Char('/'));
     assert_eq!(ed.mode(), Mode::Normal, "回到了那一行，可是還沒進去");
     assert_eq!(ed.search().field, Field::Query);
-    assert!(!ed.search().all_selected, "不選中——打字是接着打，不是替掉");
+    assert!(ed.search().ghost_now().is_empty(), "框裏有字，沒有灰字");
     assert_eq!(ed.search().caret, ed.search().query.chars().count(), "光標在末尾");
     ed.on_key(Key::Char('i'));
     assert_eq!(ed.mode(), Mode::Field, "再按一下 i 纔打得了字");
@@ -9653,6 +9653,59 @@ fn the_panel_walks_letters_with_hl_and_comes_back_to_the_box_with_a_slash() {
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Include);
     assert_eq!(ed.search().caret, 4, "Warning: 不挪的話，塊光標會停在框外面");
+}
+
+/// **記着的那個詞是一行灰字，不是一段選中的文字**（§5.74，2026-10-04 報上來的）。
+///
+/// > 我先搜索了「這」。回到了主文本區，然後按 `空格 /` 重新搜索……這個時候，搜索框
+/// > 的狀態是亮色長條。這個其實會讓我感到疑惑的（這是什麼意思）。
+///
+/// 整條反白在這個倉裏別處是「這一整段被選上了」，而那一刻它想說的是「上次搜的是
+/// 這個」——同一個樣子說了兩件事。現在和 `/` 那一行一個規矩：框是空的，詞寫成灰字。
+#[test]
+fn the_remembered_pattern_is_a_grey_guess_not_a_selection() {
+    use crate::search_panel::Field;
+    let mut ed = typed("霜降於石階。\n那一年的霜來得早。");
+    ed.open_search();
+    for c in "霜".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('q'));
+
+    // ① 再開一次：框空着，上次那個詞是灰的。
+    ed.open_search();
+    assert_eq!(ed.search().field, Field::Query);
+    assert_eq!(ed.search().query, "", "框是空的");
+    assert_eq!(ed.search().ghost_now(), "霜", "上次那個詞寫成灰字");
+    assert_eq!(ed.search().caret, 0, "光標在最前，同 `/`");
+
+    // ② `Tab` 把灰字收進來。Warning: **框裏有字之後 `Tab` 還是「下一格」**——灰字只在
+    // 空框上有，收完就沒了，所以兩件事不打架。
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.search().query, "霜", "Tab 收進來了");
+    assert_eq!(ed.search().ghost_now(), "", "收完就沒有灰字了");
+    assert_eq!(ed.search().caret, 1, "光標跟到末尾");
+    ed.on_key(Key::Tab);
+    assert_ne!(ed.search().field, Field::Query, "再按一下就是下一格");
+
+    // ③ 打字就是打字，不必先替掉什麼。
+    ed.open_search();
+    assert_eq!(ed.search().ghost_now(), "霜");
+    // 「年」在那一句裏真有，④ 纔看得出它去找了。
+    ed.on_key(Key::Char('年'));
+    assert_eq!(ed.search().query, "年");
+    assert_eq!(ed.search().ghost_now(), "", "一打字灰字就沒了");
+
+    // ④ 空框按 `Enter` ＝ 再找一次它，同 `/⏎`。
+    // Warning: 還在框裏，`q` 是一個字——先 `Esc` 出來纔是「關」。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('q'));
+    ed.open_search();
+    assert_eq!(ed.search().query, "", "框是空的");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().query, "年", "Enter 先把灰字收進來");
+    assert!(ed.search().total > 0, "而且真的去找了");
 }
 
 /// **挪窩和打字是兩個鍵**（2026-10-04 定）。
@@ -9947,13 +10000,15 @@ fn the_box_opens_holding_the_last_pattern_or_what_is_marked() {
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
 
-    // Opened again: the last pattern, **selected**, so one key does either
-    // thing — type over it, or Enter to carry on with it.
+    // **再開一次：框是空的，上次那個詞寫成灰字**（2026-10-04 換掉了「整條選中」，
+    // 原話：「這個其實會讓我感到疑惑的（這是什麼意思）」）。打字就是打字，
+    // `Tab` 把灰字收進來，`Enter` 直接再找一次它——同 `/` 那一行。
     type_keys(&mut ed, " /");
-    assert_eq!(ed.search().query, "霜");
-    assert!(ed.search().all_selected);
+    assert_eq!(ed.search().query, "", "框是空的");
+    assert_eq!(ed.search().ghost_now(), "霜", "上次那個詞寫成灰字");
     ed.on_key(Key::Char('雪'));
-    assert_eq!(ed.search().query, "雪", "typing replaced the whole of it");
+    assert_eq!(ed.search().query, "雪", "打字就是打字，不必先替掉什麼");
+    assert_eq!(ed.search().ghost_now(), "", "一打字灰字就沒了");
 
     // A short selection wins over it: you marked it, the intention is on the
     // screen.
@@ -10077,7 +10132,11 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     }
     ed.on_key(Key::Esc);
     type_keys(&mut ed, " /");
+    // Warning: **開面板那一下不再順手搜一趟**（2026-10-04）：框是空的，記着的那個詞
+    // 只是一行灰字。`Enter` 把灰字收進來再去找，而走磁盤那一趟是欠着的，所以這裏
+    // 要還一次——同上面第一段。
     ed.on_key(Key::Enter);
+    ed.settle_search();
     assert_eq!(ed.search().total, 6, "the two just typed count too");
 
     // 項目路徑：這本書沒有 `.git` 也沒有 `.yumete`，所以它就是工作路徑本身。
@@ -10110,6 +10169,7 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     ed.execute(":search 卷一").unwrap();
     assert!(matches!(ed.search().scope, Where::Named(_)));
     ed.on_key(Key::Enter);
+    ed.settle_search();
     assert_eq!(ed.search().total, 5, "the same folder by another name");
     ed.execute(":search 沒有這個").unwrap();
     assert_eq!(ed.status(), say!("search.no-such-folder", "沒有這個"));
