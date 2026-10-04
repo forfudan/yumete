@@ -7847,18 +7847,13 @@ fn draw_search(
     // 一版留的是整行，於是「搜: 」那個標籤和那一行兩頭的邊條照舊亮着——人要找的
     // 是「我在哪個框裏打字」，標籤不是框。
     let mut lit: Option<Rect> = None;
-    // **三個標籤補齊到同一寬，格子纔對得齊**（2026-09-26）：「位置: 」比「搜: 」
-    // 寬兩格。Warning: **`換: ` 不在畫面上也算進來**，同開關那幾行的理由——勾一下替換，
-    // 上面兩格不許跟着挪。
-    let labels =
-    [
-        say!("search.label.scope"),
-        say!("search.label.query"),
-        say!("search.label.replace"),
-        say!("search.label.include"),
-        say!("search.label.exclude"),
-    ];
-    let widest = labels.iter().map(|t| yumete_cjk::str_width(t)).max().unwrap_or(0);
+    // **標籤各佔各的寬，不補齊**（2026-10-04 定：「`搜: ` 這個地方我覺得有些
+    // 浪費格子……半角冒號＋一個半角空格跟着搜索框。四個搜索框都這樣」）。
+    //
+    // Warning: **2026-09-26 定過「補齊到同一寬，格子纔對得齊」，這一條撤了它。** 補齊
+    // 是拿最寬那一個（「位置: 」）當尺，於是「搜: 」後面白白空兩格——邊欄本來就
+    // 窄，而那兩格每一行都在交。代價是四個框不再豎着對齊：「搜」「換」的框比
+    // 「包含」「排除」的早兩格開始。要的是把格子還給正文。
     let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, tag: &str, what: &str, y: u16| {
         // **名字在格子外面**（2026-09-24 定）：三檔底色說的是「這裏打得了字」，
         // 而名字不是打得了字的地方，所以它留在面板自己的底色上。
@@ -7868,8 +7863,6 @@ fn draw_search(
         if y >= area.y + area.height {
             return;
         }
-        let tag = format!("{tag}{}", " ".repeat(widest.saturating_sub(yumete_cjk::str_width(tag))));
-        let tag = tag.as_str();
         // **最左邊那兩欄歸號碼**（2026-09-29）：位置那一格畫 `0`，搜／換那兩格
         // 空着。三個格子和底下七個開關於是對在同一欄上。
         let tag_at = left + 2;
@@ -11919,14 +11912,9 @@ fn squeezed(text: &str) -> String {
                 .unwrap_or_else(|| panic!("第 {y} 行上找得到 {ch}"))
         };
         let label_at = column(&buf, 1, lead);
-        // Warning: **三個名字補齊到同一寬**（2026-09-26），所以框不是接在「搜: 」後面，
-        // 而是接在最寬那一個（「位置: 」）後面——三格纔對得齊。
-        let widest = [tag.clone(), say!("search.label.scope"), say!("search.label.replace")]
-            .iter()
-            .map(|t| yumete_cjk::str_width(t))
-            .max()
-            .unwrap_or(0);
-        let box_at = label_at + widest as u16;
+        // **框接在它自己那個名字後面**（2026-10-04 起不再補齊到最寬那一個，見
+        // `draw_search`：「`搜: ` 這個地方我覺得有些浪費格子」）。
+        let box_at = label_at + yumete_cjk::str_width(&tag) as u16;
         // 名字那幾格不鋪框的底色——三檔說的是「這裏打得了字」，而名字不是框。
         //
         // Warning: **打字的時候它量不成 `chrome`**（2026-10-04 起）：`PAN.INS` 下整扇

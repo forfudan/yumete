@@ -7806,16 +7806,16 @@ en = "{0} hit"
 [[message]]
 # 搜索面板：排除那一格的名字
 key = "search.label.exclude"
-zht = "排除:"
-zhs = "排除:"
-en = "except:"
+zht = "排除: "
+zhs = "排除: "
+en = "except: "
 
 [[message]]
 # 搜索面板：包含那一格的名字
 key = "search.label.include"
-zht = "包含:"
-zhs = "包含:"
-en = "only:"
+zht = "包含: "
+zhs = "包含: "
+en = "only: "
 
 [[message]]
 # 搜索面板：查詢框的名字
