@@ -8085,12 +8085,17 @@ fn draw_search(
         switch(buf, y, &format!("[{skipped}]"), &say!("search.hidden"), 7, text);
     }
 
+    // Warning: **名單這一段用帶標籤的塊包着，不是直接 `return`**（2026-10-04 修）。
+    // 它裏面有兩處「擺不下就不畫了」，而收尾那一段（`PAN.INS` 下整扇面板退後）
+    // 排在它後面——直接返回就把退後一起跳過了，於是**矮窗口下按 `空格 /` 什麼都
+    // 不變暗**（10 行的窗口復現得了，24 行的看不出來）。
+    'list: {
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
     let top = y + 2;
     let mut room = (area.y + area.height).saturating_sub(top) as usize;
     if room == 0 {
-        return caret;
+        break 'list;
     }
     // **「換後」那一塊，在名單底下**（2026-09-27 定）。它先跟名單要行，所以要在
     // 走名單之前算——名單有多少行，看它拿走幾行。
@@ -8108,7 +8113,7 @@ fn draw_search(
     }
     room = room.saturating_sub(after_rows);
     if room == 0 {
-        return caret;
+        break 'list;
     }
     let rows = find.rows();
     // **行號那一欄，按真的用得上的寬度**（2026-09-25 報的：「这里空白幾格太浪费
@@ -8246,6 +8251,7 @@ fn draw_search(
     // 條時的原話是「picker 窗口出现的时候，正文区域可以变淡一些，从而突出 picker
     // 窗口」，這裏問的是同一件事，只是浮着的那一塊換成了一個輸入框。
     //
+    } // 'list
     // Warning: **亮着的是「正在打字的那一格」，不一定是查詢框**——這扇面板有四個框
     // （查詢／換成／包含／排除），在「包含」裏打字就該是「包含」那一行亮着。
     if editor.mode() == Mode::Field {
