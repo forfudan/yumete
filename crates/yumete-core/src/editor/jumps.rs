@@ -76,6 +76,26 @@ impl Editor {
         // the thing that was looked for. Cleared on the next key, so it
         // describes the move that just happened and nothing after it.
         self.jumped = true;
+        self.note_where_we_came_from();
+    }
+
+    /// **記一筆，可是別把版面挪動** —— 落腳點本來就在屏幕上的那幾種跳法。
+    ///
+    /// Warning: **「記進跳轉表」和「落在正中」是兩件事**（2026-10-04 報上來的：「`gw`
+    /// 跳转光标后，这一行会被移动到屏幕的中央位置……我总觉得怪怪的」）。
+    ///
+    /// 居中那一條是給**跳到看不見的地方**的：`n`、`gd`、`:search` 的結果、wiki 條目
+    /// ——你落在一個沒見過的地方，貼着邊就只看得見命中的一側。
+    ///
+    /// `gw`／`go`／`gu` 正相反：**那個地方本來就在屏幕上，你正盯着它。** 居中等於
+    /// 把你盯着的那一行挪走——而「版面不動」正是這一族功能成立的前提（按之前眼睛
+    /// 已經鎖定了要去的地方）。
+    ///
+    /// helix 也不挪：`jump_to_label` 跳完只有一句 `doc.set_selection(...)`，沒有
+    /// `align_view`（`helix-term/src/commands.rs`，2026-10-04 讀的）。
+    ///
+    /// `C-o` 照樣回得來——那一半兩種跳法都要。
+    pub(super) fn note_where_we_came_from(&mut self) {
         let here = (self.current_buffer().id(), self.sel.head());
         // Walking away from a place already noted adds nothing.
         if self.jumps.last() == Some(&here) {

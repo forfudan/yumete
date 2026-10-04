@@ -19718,6 +19718,50 @@ fn a_vim_operator_never_opens_the_input_method() {
     assert_eq!(ed.current_buffer().text(), "他說（）然後走了。\n", "半角鍵刪全角括號裏的話");
 }
 
+/// **`gw` 記一筆，可是不把版面挪動**（2026-10-04 報上來的，當日修）。
+///
+/// 原話：「`gw` easymotion跳转光标后，这一行会被移动到屏幕的中央位置。也就是说它不仅
+/// 跳转了光标也移动了屏幕可见区域。这个和helix一致吗？我总觉得怪怪的。」
+///
+/// 不一致。helix 的 `jump_to_label` 跳完只有一句 `set_selection`，沒有 `align_view`。
+/// 我們從前走 `remember_jump()`，而它置 `jumped`，版面就把落腳行挪到正中——居中是
+/// 給「跳到看不見的地方」的（`n`、`gd`、搜索結果），而 `gw` 的落腳點本來就在屏幕上。
+///
+/// 兩件事現在分開了：`C-o` 照舊回得來，版面不動。
+#[test]
+fn a_label_jump_is_remembered_without_moving_the_page() {
+    let mut ed = typed("第一行\n第二行\n第三行\n第四行\n");
+    ed.note_window(80, 24);
+    let n = ed.current_buffer().rope().len_chars();
+    ed.set_page_span(0, n);
+    press(&mut ed, "gw");
+    assert!(ed.take_owed_jump(), "按了就欠着一次");
+    ed.run_owed_jump();
+    let labels = ed.jump_labels();
+    assert!(labels.len() > 1, "不止一個落腳點：{labels:?}");
+    // 走到第三個落腳點去。
+    let (want, label) = (labels[2].0, labels[2].1.to_string());
+    for c in label.chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert_eq!(ed.selection().0, want, "光標去了那裏");
+    assert!(!ed.jumped(), "可是版面不許挪——這一條就是那個修");
+
+    // Warning: **`C-o` 那一半不許跟着丟。** 分開的是「記一筆」和「居中」，不是
+    // 「記一筆」和「不記」。
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(ed.selection().0, 0, "回得到原處");
+}
+
+/// 對照：跳到**看不見的地方**那一族照舊居中。
+#[test]
+fn a_jump_into_the_unseen_still_lands_in_the_middle() {
+    let mut ed = typed(&"一行\n".repeat(200));
+    ed.note_window(80, 24);
+    press(&mut ed, "150gg");
+    assert!(ed.jumped(), "`150gg` 落在看不見的地方，該居中");
+}
+
 /// **`mi`／`ma` 之後也不開輸入法**（2026-10-04 定）。
 ///
 /// 和上面那一支是同一個理由，而上面那一條 2026-09-29 就定了——這一族當時被落下，
