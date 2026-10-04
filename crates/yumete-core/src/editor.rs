@@ -2827,6 +2827,14 @@ pub struct Editor {
     labels: Vec<labels::Jump>,
     /// 標籤已經被打進去的那幾個字母。
     jump_typed: String,
+    /// **按「那裏寫的什麼」跳，走到哪一步了**（`go`／`gu`，§5.73）。
+    ///
+    /// Warning: 和 `labels` 不是一回事：那個是 `gw`——屏幕**發**號碼；這個是打**那裏
+    /// 寫的字**。兩種機制，各存各的。
+    seeking: Option<seek::Seeking>,
+    /// **欠着一次 `go`／`gu`**（`true` ＝ 只問中文）：和 `owed_jump` 同病，落腳點只在
+    /// 這一屏上，而屏幕畫了哪一段要等前端畫完一幀纔知道。
+    owed_seek: Option<bool>,
     /// **欠着一次 `gw`**：按鍵記一筆，前端畫完一幀交了範圍再跑（見 `labels.rs`）。
     owed_jump: bool,
     /// **這一頁畫了哪一段**（字符下標），前端每幀交過來一次（`set_page_span`）。
@@ -3317,6 +3325,8 @@ impl Editor {
             replace_home: 0,
             labels: Vec::new(),
             jump_typed: String::new(),
+            seeking: None,
+            owed_seek: None,
             owed_jump: false,
             page_span: (0, 0),
             status_fades: None,
@@ -4188,6 +4198,7 @@ mod find;
 mod hint;
 mod info;
 mod jumps;
+mod seek;
 mod keys;
 mod labels;
 mod matching;
