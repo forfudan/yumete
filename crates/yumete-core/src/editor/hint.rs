@@ -311,20 +311,32 @@ impl Editor {
     /// does not remember what follows it currently has nowhere to look but the
     /// manual, and the editor is sitting there knowing the answer.
     fn pending_keys(&self) -> Option<Hint> {
-        // **`go`／`gu` 還在等字母，`g` 那扇菜單就不收**（2026-10-04 定）。
+        // **`go`／`gu` 還在等字母，命令行說一句**（2026-10-04 定）。
         //
-        // Warning: **按下 `o`／`u` 的那一刻 `pending` 就回到了 `None`**，於是菜單收
-        // 掉，而這兩個鍵恰恰是**還要再打幾個字母才算完**的——屏幕上一個字都不說
-        // 話，人以為自己回到了 Normal，照 Normal 的習慣按鍵。原話：「按下 u
-        // 之后，就没有 HUD 了，整个屏幕也没有任何东西告诉我要做什么。這其實有些
-        // 危險的。」`gw` 沒有這一族：它一按下去標籤就滿屏幕都是。
+        // Warning: **按下 `o`／`u` 的那一刻 `pending` 就回到了 `None`**，於是 HUD
+        // 空了、`g` 那扇菜單也收了——而這兩個鍵恰恰是**還要再打幾個字母才算完**
+        // 的。屏幕上一個字都不說話，人以為自己回到了 Normal，照 Normal 的習慣按
+        // 鍵。原話：「我以为我现在在 normal 模式，但其实 yumete 是在等我打拼
+        // 音。這其實有些危險的。」`gw` 沒有這一族：它一按下去標籤就滿屏幕都是。
         //
-        // 標籤亮起來就收——那時屏幕自己會說話，而且下一鍵是標籤不是菜單。
-        let pending = match self.seeking.as_ref().is_some_and(|s| s.labels.is_empty()) {
-            true => Pending::Goto,
-            false => self.pending,
-        };
-        let keys = match pending {
+        // Warning: **說的是一句話，不是再畫一遍 `g` 那扇菜單。** 做過那一版，當場
+        // 被否：菜單上那些鍵這時候一個都按不了，而且 `gu` 的候選框一開，兩扇浮窗
+        // 疊在同一屏上。這裏走 `Says`，和 vim 的 `d` 等動作同一條路。
+        //
+        // 標籤亮起來就閉嘴：那時屏幕上全是標籤，自己會說話。
+        if let Some(seeking) = self.seeking.as_ref().filter(|s| s.labels.is_empty()) {
+            // 打進去的那幾個也跟在後面（2026-10-04 定：「請輸入拼音：don 這個
+            // 可以有」）。HUD 旁邊那塊牌子寫的是整串 `gudon`，這裏寫的是查詢本身。
+            let so_far = match seeking.typed.is_empty() {
+                true => String::new(),
+                false => format!("：{}", seeking.typed),
+            };
+            return Some(Hint::Says(match seeking.reading {
+                true => say!("seek.ask-reading", so_far),
+                false => say!("seek.ask-letters", so_far),
+            }));
+        }
+        let keys = match self.pending {
             // 撤銷已經斷了，剩下那個 `u` 吞不吞都行——没什麽要提示的。
             Pending::UndoBreak => return None,
             Pending::None => {

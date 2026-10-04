@@ -8080,6 +8080,20 @@ zhs = "西文整词匹配"
 en = "whole word"
 
 [[message]]
+# `go` 開着、還在等那兩個字母時，命令行上那一句。{0} ＝ 已經打進去的，沒打是空的。
+key = "seek.ask-letters"
+zht = "請輸入兩個字母{0}"
+zhs = "请输入两个字母{0}"
+en = "type two letters{0}"
+
+[[message]]
+# `gu` 開着、還在等讀音時，命令行上那一句。
+key = "seek.ask-reading"
+zht = "請輸入拼音{0}"
+zhs = "请输入拼音{0}"
+en = "type a reading{0}"
+
+[[message]]
 # 候選面板每一行末尾那個數：「那個字在這一屏上有幾處」。
 # 不能只寫數字——行首的序號也是數字，兩個數並排讀者分不出哪個是哪個
 # （2026-10-04 指出）。
