@@ -59,6 +59,23 @@ pub struct Jump {
 /// 個字母；`a s d f g h j k l q` 要一個一個認。
 const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
 
+/// **把一串落腳點發成標籤** —— `gw` 和 `go`／`gu` 共用這一支（2026-10-04）。
+///
+/// 永遠兩個字母（見 [`LABEL`]），所以兩邊的手指學的是同一件事；字母表也是同一張，
+/// 不然同一個位置在兩個鍵下拿到不同的號碼，而讀者記的是「第幾個大概是哪個字母」。
+pub(super) fn label_them(spots: impl IntoIterator<Item = usize>) -> Vec<Jump> {
+    let letter = |n: usize| ALPHABET[n % ALPHABET.len()] as char;
+    spots
+        .into_iter()
+        .take(ALPHABET.len().pow(LABEL as u32))
+        .enumerate()
+        .map(|(i, at)| Jump {
+            at,
+            label: format!("{}{}", letter(i / ALPHABET.len()), letter(i)),
+        })
+        .collect()
+}
+
 /// **一個標籤永遠是兩個字母，也就是兩格。**
 ///
 /// 一度是「不到二十六個落腳點就用一個字母」，少按一鍵。2026-09-28 定為固定兩個，
@@ -154,16 +171,7 @@ impl Editor {
             self.status = say!("jump.nowhere");
             return;
         }
-        let letter = |n: usize| ALPHABET[n % ALPHABET.len()] as char;
-        self.labels = spots
-            .into_iter()
-            .take(ALPHABET.len() * ALPHABET.len())
-            .enumerate()
-            .map(|(i, at)| Jump {
-                at,
-                label: format!("{}{}", letter(i / ALPHABET.len()), letter(i)),
-            })
-            .collect();
+        self.labels = label_them(spots);
         self.jump_typed.clear();
     }
 
@@ -182,6 +190,22 @@ impl Editor {
             .filter(|j| j.label.starts_with(&self.jump_typed))
             .map(|j| (j.at, &j.label[self.jump_typed.len()..]))
             .collect()
+    }
+
+    /// **屏幕上亮着的那些標籤** —— `gw` 與 `go`／`gu` 共用的一問。
+    ///
+    /// 兩種機制、同一種畫法（兩個字母蓋一個字素），所以畫的那一邊不該問「是哪一
+    /// 種」——橫排一處、竪排一處，問兩次就是四處，而它們早晚會分岔。
+    pub fn labels_on_the_page(&self) -> Vec<(usize, &str)> {
+        match self.jumping() {
+            true => self.jump_labels(),
+            false => self.seek_labels(),
+        }
+    }
+
+    /// 有沒有標籤亮着（哪一種都算）。
+    pub fn showing_labels(&self) -> bool {
+        self.jumping() || !self.seek_labels().is_empty()
     }
 
     /// 把標籤收掉。

@@ -1586,10 +1586,10 @@ pub fn draw(
     // 同行號那一套（`put_number` 兩個數字一格）。橫排那一頭是同一件事：兩個字母的
     // 寬度正好是一個漢字。
     let mut labelled: Vec<(u16, u16)> = Vec::new();
-    if editor.jumping() {
+    if editor.showing_labels() {
         // 金，同橫排那一頭——理由見 `lib.rs` 畫標籤那一段。
         let mark = ink.page().fg(ink.paper()).bg(ink.gold()).add_modifier(Modifier::BOLD);
-        for (at, label) in editor.jump_labels() {
+        for (at, label) in editor.labels_on_the_page() {
             let Some(placed) = page.iter().find(|p| at >= p.zong.start && at < p.zong.end) else {
                 continue;
             };

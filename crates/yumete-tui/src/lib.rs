@@ -346,6 +346,16 @@ fn frame_to(
         }
         editor.run_owed_jump();
     }
+    // `go`／`gu` 同病，同一道門（§5.73）。
+    if let Some(only_han) = editor.take_owed_seek() {
+        terminal
+            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
+            .expect("one frame to measure the page by");
+        if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+            editor.set_page_span(a, b);
+        }
+        editor.run_owed_seek(only_han);
+    }
     terminal
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
         .expect("draw one frame");
@@ -849,6 +859,14 @@ pub fn run(
                     editor.set_page_span(a, b);
                 }
                 editor.run_owed_jump();
+                continue;
+            }
+            // `go`／`gu` 同病，同一道門（§5.73）。
+            if let Some(only_han) = editor.take_owed_seek() {
+                if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+                editor.run_owed_seek(only_han);
                 continue;
             }
         }
@@ -4614,6 +4632,21 @@ fn draw(
                 vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
             }
         }
+    }
+    // **按「那裏寫的什麼」跳的候選面板**（`go`／`gu`，§5.73）。
+    //
+    // Warning: **借輸入法那一扇的框，可不經過輸入法**——`draw_panel_rows` 只吃一串
+    // 字符串，快捷符號表早就借着它了（「a different panel wearing the same
+    // frame」）。所以這一扇不必解挂系統輸入法，同 `mi`／`ma` 那一條。
+    //
+    // 核心答畫哪幾行（`Editor::seek_rows`），這裏只管擺。
+    let seek_rows = editor.seek_rows();
+    if !seek_rows.is_empty() {
+        let room = Rect {
+            height: status_area.y.saturating_sub(area.y).max(1),
+            ..area
+        };
+        draw_panel_rows(frame, config, room, cursor_x, cursor_y, seek_rows, None);
     }
     // **設置面板鋪滿整個窗口**（2026-09-25 報的：「设置界面是独占的全屏，所以是
     // 不是可以把下方的状态栏和命令栏覆盖掉？」）。
@@ -9921,12 +9954,12 @@ fn draw_horizontal(
                 fill,
             ));
         }
-        if editor.jumping() {
+        if editor.showing_labels() {
             // `drawn_columns` 是「這個字在第幾格」的唯一答案——注音、列號問的
             // 都是它，標籤問的是同一件事，只是畫在行上而不是行上面。
             let column = drawn_columns(drawn, gutter + indent);
             let y = text_area.y + lines.len() as u16;
-            for (at, label) in editor.jump_labels() {
+            for (at, label) in editor.labels_on_the_page() {
                 if at < row.start || at >= row.start + row_len {
                     continue;
                 }

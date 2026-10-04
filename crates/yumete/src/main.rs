@@ -1323,7 +1323,10 @@ fn press(
         // 段在屏幕上是**畫的時候**量的。一批鍵是一次餵完的，所以餵到欠着的那一刻
         // 先畫一幀丟掉——不然 `--keys='gwf'` 裏那個 `f` 落到正文上當成別的鍵，而
         // 這個倉審前端就是靠拍照。
-        if editor.owes_a_jump() {
+        // Warning: **`go`／`gu` 和 `gw` 同病，所以同一道門**（§5.73）。少了它，
+        // `--keys='gudo'` 裏那個 `d` 落到正文上**當成刪除**——第一次試就把一個字
+        // 刪掉了。離屏路徑和真路徑分家，這個倉咬過四次。
+        if editor.owes_a_jump() || editor.owes_a_seek() {
             if let Some((w, h)) = shot {
                 let _ = yumete_tui::frame_to_text(editor, config, ime, w, h, settings.panel.as_ref());
             }
