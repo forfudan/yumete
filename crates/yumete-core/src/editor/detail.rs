@@ -347,17 +347,29 @@ impl Editor {
     pub(super) fn search_the_page(&mut self, back: bool) {
         let rope = self.current_buffer().rope();
         let (from, to) = self.selection();
-        let needle = match to > from {
+        // Warning: **一個字寬的「選區」是光標，不是選中**（2026-10-06）。這個編輯器
+        // 裏每一次移動都留下選區，而光標蓋着自己那一格——所以 `to > from` 恆真，
+        // 下面那條「取光標下那個詞」的路**一次都沒走到過**。搜索面板那一扇早就
+        // 按這條規矩辦（`open_search` 的 `to > from + 1`），這裏跟上。
+        let needle = match to > from + 1 {
             true => rope.slice(from..to.min(rope.len_chars())).to_string(),
             false => {
+                // Warning: **問 `line_words`，不要問 `segment_line`**（2026-10-06 查出來
+                // 的）。`segment_line` 是**畫分詞底線**用的，它有意把拉丁詞整段濾
+                // 掉（`words.rs`：「標點 runs and Latin words are never words to
+                // paint」）——於是這裏在英文上永遠落到下面那條退路，取的是**一個
+                // 字母**。實測 `one two three alpha` 站在 `o` 上按 `*`，搜的是 `o`、
+                // 報「第 2 處，共 5 處」；`l*` 搜 `n`。中文從來沒事，所以躲了很久。
+                //
+                // `line_words` 正是 `w`／`b` 問的那一支（`word_object_span` 也問
+                // 它），所以這一行的註釋「which is what `w` would have taken」
+                // 現在是真的。
                 let line = rope.char_to_line(self.sel.head());
-                let start = rope.line_to_char(line);
-                let chars = crate::zong::line_chars(rope, line);
-                let at = self.sel.head() - start;
-                let words = self.segment_line(line);
-                match words.iter().find(|&&(a, b)| at >= a && at < b) {
-                    Some(&(a, b)) => chars[a..b.min(chars.len())].iter().collect(),
-                    None => chars.get(at).map(|c| c.to_string()).unwrap_or_default(),
+                let words = crate::motion::line_words(rope, line, self.word_grain(), self.segmenter.as_ref());
+                let here = self.sel.head();
+                match words.iter().find(|&&(a, b)| (a..b).contains(&here)) {
+                    Some(&(a, b)) => rope.slice(a..b.min(rope.len_chars())).to_string(),
+                    None => rope.get_char(here).map(|c| c.to_string()).unwrap_or_default(),
                 }
             }
         };
@@ -376,11 +388,17 @@ impl Editor {
         // The first one *after* where you are standing: the useful answer to
         // 「還在哪裏」 is the next place, not the first page of the book.
         let here = self.sel.head();
+        // Warning: **往回要從這一處的開頭數起，不是從光標數起**（2026-10-06，和
+        // `repeat_search` 裏那一條同一個病）。落地之後光標停在匹配的**最後一個
+        // 字**上，開頭在 `anchor`——拿光標去問，當前這一處的開頭就在光標之前，於是
+        // `#` 把自己又找了一遍，一動不動。匹配只有一個字的時候它是好的，所以這個
+        // 洞要等到 `g/` 真的取整個詞之後才露出來。
+        let from_here = self.sel.anchor().min(here);
         let at = match back {
             // 往回：光標**之前**最後一處；前面沒有就繞到最末一處。
             true => spans
                 .iter()
-                .rposition(|&(from, _)| from < here)
+                .rposition(|&(from, _)| from < from_here)
                 .unwrap_or(spans.len() - 1),
             false => spans.iter().position(|&(from, _)| from > here).unwrap_or(0),
         };

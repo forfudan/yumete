@@ -6786,7 +6786,7 @@ en = "{0} of {1} · Tab takes it"
 key = "macro.nothing-recorded"
 zht = "還沒有錄過——Q 開始錄，再按 Q 停"
 zhs = "还没有录过——Q 开始录，再按 Q 停"
-en = "nothing recorded yet — q starts recording, q again stops"
+en = "nothing recorded yet — Q starts recording, Q again stops"
 
 [[message]]
 # 錄製結束，報鍵數

@@ -17545,6 +17545,44 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **`g/`（和 `*`／`#`）在英文上取的是一個字母，不是那個詞**（2026-10-06 查出來的）。
+///
+/// 兩個病疊在一起，哪一個單獨修都還是錯的：
+///
+/// 一、**「選區」那一條恆真**。這個編輯器每一次移動都留下選區，光標蓋着自己那一
+/// 格，所以 `to > from` 永遠成立——下面那條「取光標下那個詞」的路一次都沒走到。
+/// 搜索面板早就按 `to > from + 1` 辦（`open_search`），這裏從前沒有。
+///
+/// 二、**問錯了人**。那條路問的是 `segment_line`，而那一支是**畫分詞底線**用的，
+/// 它有意把拉丁詞整段濾掉；於是英文落到最後那條退路，取一個字符。中文從來沒事
+/// （分詞器認中文詞），所以這個洞躲了很久。
+#[test]
+fn looking_for_this_word_takes_the_word_not_one_letter() {
+    let hits = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        press(&mut ed, "g/");
+        ed.status().to_string()
+    };
+    // `alpha` 三處；光標站在它頭上、中間，答案都該是三。從前站在 `a` 上搜的是
+    // 字母 `a`（九處），站在 `l` 上搜的是 `l`（三處，數目湊巧也是三，而搜的是
+    // 另一樣東西）。
+    let three = hits("alpha beta\ngamma alpha\nalpha\n", "");
+    assert!(three.contains('3'), "站在詞首：{three}");
+    let also = hits("alpha beta\ngamma alpha\nalpha\n", "l");
+    assert_eq!(also, three, "站在詞中間，答案一樣");
+    // 中文那一邊一個字都沒變。
+    let cn = hits("那年冬天他抬頭看了看。\n冬天很冷。\n那年很長。\n", "2l");
+    assert!(cn.contains('2'), "「冬天」兩處：{cn}");
+    // 真的選中了一段，問的還是那一段。
+    let mut ed = typed("alpha beta\ngamma alpha\nalpha beta\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "vee"); // 選中 `alpha beta`
+    press(&mut ed, "g/");
+    assert!(ed.status().contains('2'), "選中一整句：{}", ed.status());
+}
+
 /// **vim 的 `#`：往回找光標下這個詞**（2026-10-05 定）。
 ///
 /// `g/` 往前、`g?` 是在副編輯區給你看，沒有一支是往回——所以這是一個新動作，而且

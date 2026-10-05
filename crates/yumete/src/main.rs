@@ -2077,8 +2077,8 @@ KEYS (Normal mode, Helix-style):
     {{ }}     previous / next paragraph — here a paragraph is a logical line
     M a  ' a  name this place / go back to it, across files
     C-o C-i   the jump list: back to where a jump came from, and forward
-    f F       find a character, forward / backward; A-. repeats it
-              (**no t / T** — that letter is the table mode's, all of it)
+    f F t T   find a character forward / backward; t T stop in front of it
+              (A-. repeats the last one; `t` alone is the table mode)
     H  L      previous / next sentence — 。！？ and the mark that closes after
     J  K      forward / back half a page   (C-f / C-b for a whole one)
     x  X      select the current line / extend to whole lines
