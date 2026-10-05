@@ -269,6 +269,16 @@ impl Editor {
         self.opened_empty = true;
     }
 
+    /// **開場屏底下那一句**（現在只有鍵位那一條）。
+    pub fn says_at_the_start(&mut self, note: String) {
+        self.start_note = note;
+    }
+
+    /// 那一句，空着就是沒有。
+    pub fn start_note(&self) -> &str {
+        &self.start_note
+    }
+
     /// **開場屏畫不畫。**
     ///
     /// Warning: **一有字就不畫了，不必誰去清它**——問的是「緩衝區還空着嗎」，所以
