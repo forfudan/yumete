@@ -1901,10 +1901,17 @@ impl Editor {
             // every once they join two lines.
             Key::Char('R') => self.replace_with_register(),
             // Search for whatever is selected (Helix `*`).
-            // **`30G` goes to line 30**, and a bare `G` to the last line —
-            // which is what `G` means in vi and in Helix both, and the key was
-            // unbound here. `10gg` and `:30` still work; this is the one a
-            // reader's fingers already know.
+            // **`30G` goes to line 30**, and a bare `G` to the last line,
+            // which is what `G` means in vi; the key was unbound here.
+            // `10gg` and `:30` still work; this is the one a reader's fingers
+            // already know.
+            //
+            // Warning: **helix's bare `G` does nothing** (2026-10-06 correction —
+            // this comment used to claim it went to the last line there too).
+            // `goto_line_impl` opens with `if cx.count.is_some()`
+            // (`helix-term/src/commands.rs`), so an un-counted `G` falls
+            // through. Going somewhere useful is better than going nowhere,
+            // so the key stays as it is; only the claim was wrong.
             Key::Char('G') => {
                 self.remember_jump();
                 // `operator_count`, not `self.count`: the count was taken at
