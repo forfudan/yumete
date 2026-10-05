@@ -201,6 +201,8 @@ enum Pending {
     },
     /// `ms` awaiting the delimiter to wrap the selection in.
     Surround,
+    /// `md` —— 等一個字符說拆哪一種（`m` ＝ 最內層）。同 helix。
+    SurroundOff,
     /// `mr` awaiting the delimiter to replace…
     SurroundFrom,
     /// …and then the one to replace it with.
@@ -271,6 +273,7 @@ impl Pending {
             | Pending::Replace
             | Pending::MatchPair { .. }
             | Pending::Surround
+            | Pending::SurroundOff
             | Pending::SurroundFrom
             | Pending::SurroundTo(_) => true,
             // `y`/`n`/`a`/`q`/`l` name what to do, not what to write；

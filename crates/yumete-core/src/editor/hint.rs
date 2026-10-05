@@ -424,7 +424,8 @@ impl Editor {
             ),
             Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("".into(), say!("hint.type-a-bracket-or-quote"))]),
             Pending::Surround => (say!("hint.match.surround"), vec![("".into(), say!("hint.type-a-bracket"))]),
-            Pending::SurroundFrom => (say!("hint.match.take-off"), vec![("".into(), say!("hint.type-the-one-to-take-off"))]),
+            Pending::SurroundOff => (say!("hint.match.take-off"), vec![("".into(), say!("hint.type-the-one-to-take-off"))]),
+            Pending::SurroundFrom => (say!("hint.change"), vec![("".into(), say!("hint.type-the-one-to-take-off"))]),
             Pending::SurroundTo(_) => (say!("hint.change-to"), vec![("".into(), say!("hint.type-the-one-to-change-to"))]),
             Pending::Hop { forward } => (
                 match forward {

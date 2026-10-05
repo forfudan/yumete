@@ -2167,8 +2167,76 @@ fn surround_adds_deletes_and_replaces() {
     press(&mut ed, "gg2l");
     press(&mut ed, "mr「《");
     assert_eq!(ed.current_buffer().text(), "《你好》");
-    press(&mut ed, "md");
+    // `md` 等一個字符說拆哪一種（2026-10-06 跟 helix 對齊）；`m` 就是最內層那一對。
+    press(&mut ed, "mdm");
     assert_eq!(ed.current_buffer().text(), "你好");
+}
+
+/// **`md`／`mr` 吃一個字符說拆哪一種**（2026-10-06，十三條的第六條）。
+///
+/// helix 的 `surround_delete` 一直是吃的（`commands.rs`：`Some('m') => None,
+/// // m selects the closest surround pair`），我們從前直接拆最內層——同一個鍵
+/// 在兩個編輯器裏不是同一件事。定：「不管是 vim 还是 helix，都和他们的行为
+/// 对齐就好了，不要让用户有意外。」
+#[test]
+fn md_and_mr_are_told_which_pair() {
+    let run = |steps: &str| {
+        let mut ed = typed("（甲「乙」丙）\n");
+        press(&mut ed, "gg3l"); // 站在「乙」上，兩對都套着它
+        press(&mut ed, steps);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(run("mdm"), "（甲乙丙）\n", "m：最內層那一對");
+    assert_eq!(run("md「"), "（甲乙丙）\n", "指名引號");
+    assert_eq!(run("md（"), "甲「乙」丙\n", "指名括號，跳過內層");
+    assert_eq!(run("md）"), "甲「乙」丙\n", "另一半也認");
+    assert_eq!(run("mrm《"), "（甲《乙》丙）\n", "mr 的 m 也是最內層");
+    assert_eq!(run("mr（《"), "《甲「乙」丙》\n", "mr 指名外層");
+}
+
+/// **vim-surround 的三個拼法**（2026-10-06，十三條的第六條）。
+///
+/// `ys{動作}{括號}`、`ds{括號}`、`cs{舊}{新}`，外加 `yss` 整行。`s` 不在
+/// [`yumete_cjk::VIM_MOTIONS`] 上，所以這三條和在原生 vim 裏一樣沒人占。
+#[test]
+fn vim_keys_spell_surround_the_way_vim_surround_does() {
+    let vim = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed.current_buffer().text().to_string()
+    };
+    // 尾巴上的空白留在括號外面，同 vim-surround 的 `s:opfunc`。
+    assert_eq!(vim("hello world\n", "ysw「"), "「hello」 world\n", "ys 加一個動作");
+    // `yss` 是 `^v$h`：縮進在開括號外面，換行在閉括號外面。
+    assert_eq!(vim("hello world\n", "yss「"), "「hello world」\n", "yss 是整行");
+    assert_eq!(vim("    hello\n", "yss「"), "    「hello」\n", "yss 不把縮進括進去");
+    assert_eq!(vim("「甲」乙\n", "lds「"), "甲乙\n", "ds 指名要去掉的那一種");
+    assert_eq!(vim("「甲」乙\n", "ldsm"), "甲乙\n", "ds 的 m 也是最內層");
+    assert_eq!(vim("「甲」乙\n", "lcs「《"), "《甲》乙\n", "cs 換一種");
+    // 這三個只在 vim 鍵位下；helix 鍵位下 `d` 不是算子，`ds` 是「刪掉選區再選行」。
+    let mut ed = typed("「甲」乙\n");
+    press(&mut ed, "gglds「");
+    assert_ne!(ed.current_buffer().text(), "甲乙\n", "helix 鍵位下不認 ds");
+}
+
+/// **vim 鍵位下 `m` 是設標記**（2026-10-06，十三條的第六條）。
+///
+/// 讓得出來是因為 match 那一族在 vim 鍵位下另有拼法：`%` 跳配對、`di(`／`vi(`
+/// 走算子加對象、`ys`／`ds`／`cs` 加去換括號。
+#[test]
+fn vim_m_sets_a_mark_and_percent_still_jumps() {
+    let mut ed = typed("（甲乙丙）\n第二行\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "ggjma"); // 第二行，設標記 a
+    press(&mut ed, "gg");
+    assert_eq!(ed.sel.head(), 0);
+    press(&mut ed, "\'a");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 1, "跳回標記那一行");
+    // `%` 展開成 `mm`，而展開出來的鍵不再過別名層，所以它沒被上面那一行劫走。
+    press(&mut ed, "gg%");
+    assert_eq!(ed.sel.head(), 4, "% 仍跳到配對的那一半");
 }
 
 /// **`md` 也去得掉 markdown 的標記**（2026-10-04 定）。
@@ -2184,7 +2252,7 @@ fn md_takes_off_markdown_marks_too() {
         let mut ed = typed(text);
         press(&mut ed, "gg");
         press(&mut ed, steps);
-        press(&mut ed, "md");
+        press(&mut ed, "mdm");
         ed.current_buffer().text().to_string()
     };
     // 一邊一個字的、一邊兩個字的、一邊一片的，都走同一個鍵。
@@ -2219,7 +2287,7 @@ fn md_takes_off_markdown_marks_too() {
     // 什麼標記都沒有：一個字都不動。
     let mut ed = typed("這是沒有標記的一句話。\n");
     press(&mut ed, "gg5l");
-    press(&mut ed, "md");
+    press(&mut ed, "mdm");
     assert_eq!(ed.current_buffer().text(), "這是沒有標記的一句話。\n");
 }
 

@@ -2103,6 +2103,7 @@ KEYS (Normal mode, Helix-style):
     C-a C-x   increment / decrement the number at the cursor
     m         match mode: mm jump to the matching bracket; mi/ma select
               inside/around a pair; ms surround, md delete, mr replace —
+              each takes a bracket, and m means the closest pair —
               「」『』（）《》【】〔〕 and the ASCII pairs
     / ? n N   search forward / backward; next / previous match
     g/ g?     find what is selected: jump to it / show it in the other pane
