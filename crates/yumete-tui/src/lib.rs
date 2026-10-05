@@ -9040,7 +9040,34 @@ fn tint_the_rules(
             continue;
         }
         for y in text_area.y..text_area.y + text_area.height {
-            if let Some(cell) = buf.cell_mut((x, y)) {
+            // **跱到哪個字就塗整個字**（2026-10-05 定）。
+            //
+            // Warning: **一道底紋落在漢字的後半格上，整行就沒有了。** 一個漢字占兩
+            // 格，而 ratatui 把第二格存成一個默認樣式的空格；終端畫完寬字形就
+            // **跳過那一格**（`Buffer::diff` 按 `symbol().width()` 算跳幾格），於是
+            // 塗在那裏的顏色寫進了緩衝區、永遠送不出去。三種樣子輪流出現：半角字
+            // 上一欄寬、漢字的前半格上兩欄寬、漢字的後半格上一欄都沒有——一頁中文
+            // 看着就是一道忽粗忽斷的線（2026-10-05 截圖報的）。
+            //
+            // **半格是畫不出來的**，這是格子終端的硬限制：屏幕是一張格子網，格與格
+            // 之間沒有位置。所以往左退一格找到蓋住這一欄的那個字，塗它——中文行上
+            // 兩欄寬，可是永遠看得見。
+            //
+            // Warning: **helix 有一模一樣的毛病**（`render_rulers` 那一句
+            // `surface.set_style(area, ruler_theme)`，`helix-term/src/ui/editor.rs`）。
+            // nvim 的 `ColorColumn` 也只是一個 `guibg`。照底色塗這個方向是對的，
+            // 寬字那一步是我們自己要補的。
+            let at = match buf.cell((x, y)).map(|c| c.symbol().is_empty() || c.symbol() == " ") {
+                Some(true) if x > text_area.x => {
+                    let before = buf.cell((x - 1, y)).map(|c| yumete_cjk::str_width(c.symbol()));
+                    match before {
+                        Some(2) => x - 1,
+                        _ => x,
+                    }
+                }
+                _ => x,
+            };
+            if let Some(cell) = buf.cell_mut((at, y)) {
                 if cell.bg == ratatui::style::Color::Reset || cell.bg == paper {
                     cell.set_bg(tint);
                 }
@@ -21610,6 +21637,48 @@ fn squeezed(text: &str) -> String {
     }
 
 
+
+    /// **底紋跱到哪個漢字就塗整個字**（2026-10-05 截圖報的）。
+    ///
+    /// > rules 的底色有問題。
+    ///
+    /// Warning: **一道底紋落在漢字的後半格上，整行就沒有了。** 一個漢字占兩格，而
+    /// ratatui 把第二格存成一個默認樣式的空格；終端畫完寬字形就**跳過那一格**，
+    /// 於是塗在那裏的顏色寫進了緩衝區、永遠送不出去。一頁中文看着就是一道忽粗
+    /// 忽斷的線。半格畫不出來，所以往左退一格塗整個字。
+    #[test]
+    fn a_rule_that_lands_inside_a_han_character_tints_the_whole_of_it() {
+        let config = Config::default();
+        let ink = ink(&config);
+        let tint = ink.at(yumete_config::rung::BAND);
+        // 一行漢字：每一個占兩格，所以**奇數欄全是後半格**。
+        let mut editor = editor_with(&"那年冬天很冷".repeat(4));
+        let band = {
+            let buffer = render(&editor, &config, 90, 6);
+            (0..90u16)
+                .find(|&x| buffer.cell((x, 0)).is_some_and(|c| c.symbol() == "那"))
+                .expect("找得到正文第一格")
+        };
+
+        // 第 4 欄是「年」的後半格（1-2 那、3-4 年）。
+        editor.execute(":rules 4").unwrap();
+        let shot = render(&editor, &config, 90, 6);
+        let lead = band + 2;
+        assert_eq!(shot.cell((lead, 0)).map(|c| c.symbol().to_string()), Some("年".into()));
+        assert!(
+            shot.cell((lead, 0)).is_some_and(|c| c.bg == tint),
+            "跱在後半格上，塗的是整個「年」"
+        );
+
+        // 第 3 欄是同一個字的前半格——塗的還是它，不是左邊那個。
+        editor.execute(":rules 3").unwrap();
+        let shot = render(&editor, &config, 90, 6);
+        assert!(shot.cell((lead, 0)).is_some_and(|c| c.bg == tint), "前半格照舊");
+        assert!(
+            shot.cell((band, 0)).is_none_or(|c| c.bg != tint),
+            "不許連左邊那個「那」一起塗"
+        );
+    }
 
         /// **`:rules` 在指定的欄上鋪一道底紋**（#424，2026-09-30 提的）。
     ///
