@@ -33,7 +33,7 @@ impl Editor {
     /// 小寫浮、大寫一定進邊欄——五種信息同一條規矩（#426）。
     pub(super) fn show_the_record_here(&mut self, afloat: bool) {
         if self.detail().is_none() {
-            // Warning: **不是字典那一句**（2026-09-30 作者報的）。從前這裏借用
+            // Warning: **不是字典那一句**（2026-09-30 報上來的）。從前這裏借用
             // 「光標下沒有字可查」——那是 `空格 d` 查不到字時說的，跟這一鍵沒
             // 有關係，而讀者只會以為自己按錯了鍵。
             self.status = say!("ui.cursor-is-not-in-a-table");
@@ -343,7 +343,8 @@ impl Editor {
     /// 這個詞還出現在哪裏」. The selection is the question when there is one —
     /// so a phrase is asked about by selecting it — and the word under the
     /// cursor when there is not, which is what `w` would have taken.
-    pub(super) fn search_the_page(&mut self) {
+    /// `back` ＝ 往回找（vim 的 `#`）：取光標**之前**最後一處，繞回去就是最末一處。
+    pub(super) fn search_the_page(&mut self, back: bool) {
         let rope = self.current_buffer().rope();
         let (from, to) = self.selection();
         let needle = match to > from {
@@ -375,10 +376,14 @@ impl Editor {
         // The first one *after* where you are standing: the useful answer to
         // 「還在哪裏」 is the next place, not the first page of the book.
         let here = self.sel.head();
-        let at = spans
-            .iter()
-            .position(|&(from, _)| from > here)
-            .unwrap_or(0);
+        let at = match back {
+            // 往回：光標**之前**最後一處；前面沒有就繞到最末一處。
+            true => spans
+                .iter()
+                .rposition(|&(from, _)| from < here)
+                .unwrap_or(spans.len() - 1),
+            false => spans.iter().position(|&(from, _)| from > here).unwrap_or(0),
+        };
         self.remember_hits(spans, at);
         self.show_table_hit();
     }
@@ -554,7 +559,7 @@ impl Editor {
         // Warning: **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
         // 攤成整扇窗的時候，行號欄寫 1、狀態欄寫「行 1」，而這裏從前寫 2——
         // 同一行三個數字兩種口徑。`table_row_base` 就是那兩處用的那一個。
-        // Warning: **一律寫行號，不寫主鍵的值**（2026-09-30 作者定，原話「我建议
+        // Warning: **一律寫行號，不寫主鍵的值**（2026-09-30 定，原話「我建议
         // 都用行号数字，不要用主键的值（主键的值可能很长）」）。從前有主鍵就拿
         // 主鍵的值當標題，而一格主鍵裏可以是一整句話，浮窗的標題欄放不下。
         let title = format!("{}", line.saturating_sub(self.table_row_base()) + 1);

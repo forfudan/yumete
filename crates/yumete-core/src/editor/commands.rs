@@ -1152,9 +1152,17 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetMeasure(measure) => {
-                if measure.is_some() {
-                    self.set_soft_wrap(true);
-                }
+                // **給一個寬度就是折，`0` 也算**（2026-10-05 定）。
+                //
+                // Warning: **從前這裏是 `if measure.is_some()`**，於是 `0`（＝按窗口
+                // 寬折）是唯一一個「給了寬度卻可能什麼都不發生」的參數：從 `off`
+                // 出發按 `:view-wrap 0`，屏幕一點反應都沒有。一位 vim 用戶就是在
+                // 這裏斷定「不能禁止 wrap」的（`:view-wrap 500` 同樣一聲不響，
+                // 而真正關掉它的是 `off`，說明裏當時也沒寫）。
+                //
+                // 整條命令現在一句話說得完：**給一個寬度就是折（`0` ＝ 窗口寬）；
+                // `off` 是不折；`on` 是接着用上次那個寬度。**
+                self.set_soft_wrap(true);
                 self.set_measure(measure);
                 self.refresh_goal_column();
                 Ok(CommandOutcome::Continue)
@@ -1222,7 +1230,7 @@ impl Editor {
             return;
         }
         match asked.what {
-            // **`R` 動得太多那一問**（2026-10-03 作者定）。沒有「看一眼」那一格：
+            // **`R` 動得太多那一問**（2026-10-03 定）。沒有「看一眼」那一格：
             // 要看的名單就在旁邊，人正站在上面。
             Asking::ReplaceEverywhere => match answer {
                 'y' => self.replace_what_was_asked(),
@@ -1247,7 +1255,7 @@ impl Editor {
                 'd' => self.diff_against(None),
                 _ => self.status = say!("write.oversize-stopped"),
             },
-            // **恢復分兩問**（2026-10-02 作者定）。第一問在開檔那一刻擺出來，
+            // **恢復分兩問**（2026-10-02 定）。第一問在開檔那一刻擺出來，
             // 「暫時不管」之後 `:recover` 再擺一次同樣三個；選了「恢復」就接第
             // 二問——`answer_query` 已經 `take()` 走了第一問，所以這裏直接把第
             // 二問放上去就接得上，不必另加機關。

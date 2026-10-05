@@ -74,12 +74,19 @@ impl KeyPreset {
                 // jumps to the matching bracket), `D` and `C` cut the
                 // selection (vim takes the rest of the line).
                 //
-                // Warning: **`J` is deliberately not among them** (2026-09-18):
-                // 「J 合併行我們和 helix 也不一樣，我覺得這個應該保持 gJ」.
-                // `J`／`K` are half a page here — the most-pressed pair in a
-                // novel, and not worth a chord — and joining is `gJ` in both
-                // presets. A vim hand loses `J`; it keeps the pair it presses
-                // a hundred times a day.
+                // Warning: **`J`／`K` 2026-10-05 讓出來了，翻的是 2026-09-18 自己那
+                // 一條**（原話：「J 合併行我們和 helix 也不一樣，我覺得這個應該保持
+                // gJ」，理由是 `J`／`K` 在這裏是翻半頁，讀一本小說按得最多的一對）。
+                //
+                // **翻案的理由是那個代價只落在 helix 那一邊**：`C-f`／`C-b`／`C-d`／
+                // `C-u` 兩套鍵位下都綁着，一個明確選了 vim 鍵位的人本來就用它們翻
+                // 頁，在 vim 裏也從不用 `J`。helix 出廠那一套一個字不動。
+                //
+                // `K` 給的是「查光標下這個東西」——Neovim 掛着 LSP 時 `K` 就是
+                // `vim.lsp.buf.hover()`（`lsp.txt`：「K is mapped to
+                // vim.lsp.buf.hover()」），和 `空格 k` 是同一件事。
+                ("J", "gJ"),
+                ("K", " k"),
                 ("%", "mm"),
                 ("D", "d$"),
                 ("C", "c$"),

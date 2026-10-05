@@ -2747,9 +2747,9 @@ find = "打字機 打字机 居中 置中 centre center"
 [[message]]
 # : 命令選單裏 wrap 那一項的說明（view 組）
 key = "cmd.view.wrap"
-zht = "長段落折到下一行；`:view-wrap 50` 定寬度"
-zhs = "长段落折到下一行；`:view-wrap 50` 定宽度"
-en = "wrap long paragraphs to the next row; `:view-wrap 50` sets a measure"
+zht = "長段落折到下一行；`:view-wrap 50` 定寬度，`off` 不折"
+zhs = "长段落折到下一行；`:view-wrap 50` 定宽度，`off` 不折"
+en = "wrap long paragraphs to the next row; `:view-wrap 50` sets a measure, `off` stops wrapping"
 find = "折行 換行 换行 自動換行 自动换行 寬度 宽度 wrap width"
 
 [[message]]
@@ -7778,9 +7778,9 @@ en = "columns {0}: hit 1/{1}"
 [[message]]
 # 搜到第幾處，共幾處
 key = "search.hit-n-of-m"
-zht = "第 {0}/{1} 處（n N 走）"
-zhs = "第 {0}/{1} 处（n N 走）"
-en = "hit {0} of {1} — n and N walk them"
+zht = "第 {0}/{1} 處（n N 下/上一處）"
+zhs = "第 {0}/{1} 处（n N 下/上一处）"
+en = "hit {0} of {1} — n next, N previous"
 
 [[message]]
 # 搜索：找到幾處

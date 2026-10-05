@@ -1824,7 +1824,18 @@ impl Editor {
             Key::Char('~') => self.map_selection(switch_case),
             Key::Char('*') => {
                 self.definition_preview = false;
-                self.search_the_page();
+                self.search_the_page(false);
+            }
+            // **vim 的 `#`：往回找光標下這個詞**（2026-10-05 定）。
+            //
+            // Warning: **只在 vim 鍵位下，而且不走鍵位表。** 那張表是「鍵 → 一串
+            // 鍵」，而往回找在 helix 那一套上沒有鍵（`g/` 往前、`g?` 是在副編輯區
+            // 給你看，沒有一支是往回），所以表裏沒有東西可以映——這一條直接寫在
+            // 鍵上，同 `d`／`c`／`y` 那幾個操作符。helix 鍵位下不給鍵，要的人在配
+            // 置裏繫得上。
+            Key::Char('#') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.definition_preview = false;
+                self.search_the_page(true);
             }
             // Replacing the selection with the register. Joining is on `gJ`:
             // `J` turns the page, which a reader presses a hundred times for
@@ -2174,11 +2185,11 @@ impl Editor {
             // jumped somewhere else.
             Key::Char('/') => {
                 self.definition_preview = false;
-                self.search_the_page()
+                self.search_the_page(false)
             }
             Key::Char('?') => {
                 self.definition_preview = true;
-                self.search_the_page()
+                self.search_the_page(false)
             }
             _ => {}
         }
