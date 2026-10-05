@@ -9078,6 +9078,12 @@ fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
         let pad = " ".repeat(widest.saturating_sub(yumete_cjk::str_width(key)) + 4);
         lines.push(format!("{key}{pad}{what}"));
     }
+    // 鍵位那一句（第 1 條）落在最底下，空一行隔開。
+    let note = editor.start_note();
+    if !note.is_empty() {
+        lines.push(String::new());
+        lines.push(note.to_string());
+    }
     let wide = lines.iter().map(|l| yumete_cjk::str_width(l)).max().unwrap_or(0);
     if wide + 2 > area.width as usize || lines.len() + 2 > area.height as usize {
         return;

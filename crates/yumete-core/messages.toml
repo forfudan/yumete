@@ -9697,6 +9697,20 @@ zhs = "边栏：{0}/{1}"
 en = "sidebar: {0}/{1}"
 
 [[message]]
+# 第一次打開、沒看見 vim 的痕跡
+key = "start.now-helix"
+zht = "已使用 helix 鍵位。可通過 :keymap vim 切換 vim 鍵位。"
+zhs = "已使用 helix 键位。可通过 :keymap vim 切换 vim 键位。"
+en = "helix keys. :keymap vim switches to the vim keys."
+
+[[message]]
+# 第一次打開、機器上有 vim 的痕跡：已經替他換好了
+key = "start.now-vim"
+zht = "已自動使用 vim 鍵位。可通過 :keymap helix 切換 helix 鍵位。"
+zhs = "已自动使用 vim 键位。可通过 :keymap helix 切换 helix 键位。"
+en = "vim keys, chosen for you. :keymap helix switches to the helix keys."
+
+[[message]]
 # :s …c 走完之後的結語
 key = "substitute.confirm-done"
 zht = "換了 {0} 處，跳過 {1} 處"

@@ -2481,6 +2481,8 @@ pub struct Editor {
     /// 前端在啓動時說一句（它纔知道命令行上有沒有給檔名）；一有東西寫進緩衝區、
     /// 或者開了一個檔，就自己滅掉。
     opened_empty: bool,
+    /// **開場屏底下那一句**——現在只有「用的是哪一套鍵位」。空着就不畫。
+    start_note: String,
     where_config: Option<PathBuf>,
     where_data: Option<PathBuf>,
     /// The data directory, for the global word list. Set by the front end.
@@ -3264,6 +3266,7 @@ impl Editor {
             drafts_dir: None,
             build: String::new(),
             opened_empty: false,
+            start_note: String::new(),
             where_config: None,
             where_data: None,
             data_dir: None,

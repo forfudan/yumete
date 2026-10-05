@@ -22,7 +22,48 @@ use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 /// A release build (`YUMETE_RELEASE=1`) is the bare `0.1.0`.
 const VERSION: &str = env!("YUMETE_VERSION");
 
+/// **這台機器以前用過 yumete 沒有。**
+///
+/// Warning: **要在任何人碰數據目錄之前問**，所以它在 `main` 的第一行。那個目錄一啓動
+/// 就會被建出來（草稿、會話都在裏面），問晚一步答案就永遠是「用過」。
+fn first_time_ever() -> bool {
+    !yumete_config::data_dir().exists()
+}
+
+/// **這台機器上有 vim 的痕跡嗎。**
+///
+/// 只看兩個最常見的地方。看不見不代表沒有（有人把配置放在別處），所以這一支答
+/// 「不」的代價只是少說一句話，不會把誰的鍵位弄錯。
+fn looks_like_a_vim_reader() -> bool {
+    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
+        return false;
+    };
+    home.join(".vimrc").exists()
+        || home.join(".vim").join("vimrc").exists()
+        || home.join(".config").join("nvim").exists()
+}
+
+/// **第一次打開、而且看見 vim 的痕跡時，把鍵位寫下來。**
+///
+/// Warning: **這是 yumete 第一次寫配置文件**（在這之前全樹沒有一處創建它）。寫下來
+/// 而不是每次重新偵測，是為了**往後不再看別人家的文件**：哪天 `.vimrc` 被刪了，
+/// 鍵位也不該跟着無聲無息地變回去。
+fn write_the_first_config() {
+    let dir = yumete_config::config_dir();
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = dir.join("config.toml");
+    // 已經有一份就不碰——偵測只在「第一次」跑，可這一句是給意外留的門。
+    if path.exists() {
+        return;
+    }
+    let _ = std::fs::write(&path, "[keys]\npreset = \"vim\"\n");
+}
+
 fn main() -> ExitCode {
+    // **第一次打開就問一次**，在任何東西碰數據目錄之前（見 `first_time_ever`）。
+    let brand_new = first_time_ever();
     let mut files: Vec<String> = Vec::new();
     let mut force_preview = false;
     let mut force_layout: Option<Layout> = None;
@@ -662,6 +703,33 @@ fn main() -> ExitCode {
     let drawing = !(force_preview || (!std::io::stdout().is_terminal() && shot.is_none()));
     if files.is_empty() && drawing && restored == 0 {
         editor.opened_with_nothing();
+    }
+    // **第一次打開，機器上有 vim 的痕跡就直接換成 vim 鍵位**（2026-10-05 定）。
+    //
+    // 一位用 vim 的朋友試用之後報的第一條：「第一次启动时建议提示下选择什么 keymap，
+    // 目前好像默认是 helix，而用 vim 的人远多于 helix。」⚠️ **他報壞的 `ZZ`、`*`
+    // 其實在 vim 鍵位下都是好的**——他只是從頭到尾沒切過去，而我們從沒告訴他可以切。
+    //
+    // Warning: **只在第一次，而且只在偵測到的時候寫檔。** 沒偵測到就一個字都不動
+    // 他的硬盤（定）——yumete 在這之前**從來不寫配置文件**，所以建一個是一件
+    // 新行為，得有由頭。
+    if brand_new && drawing {
+        // Warning: **鍵名要寫成字面量。** 那條「文案網」測試掃的是 `say!("…")` 的寫
+        // 法；把鍵名存進變量再傳給 `messages::say`，它就掃不到，於是報「在
+        // messages.toml 裏可沒人說它」（寫完當場紅了一次）。
+        let note = match looks_like_a_vim_reader() {
+            true => {
+                editor.set_key_preset(yumete_core::KeyPreset::Vim);
+                write_the_first_config();
+                yumete_core::say!("start.now-vim")
+            }
+            false => yumete_core::say!("start.now-helix"),
+        };
+        // **有開場屏就寫在屏上，沒有就寫命令行**（定）。一句話只出一次。
+        match editor.intro() {
+            true => editor.says_at_the_start(note),
+            false => editor.set_status(note),
+        }
     }
     mark("session", &mut marks);
     // Which ruby dialect to lay out: whatever the config names, else the one
