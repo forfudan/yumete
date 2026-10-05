@@ -653,6 +653,16 @@ fn main() -> ExitCode {
     } else {
         0
     };
+    // **空手打開的那一屏**：沒給檔名、也沒從會話裏撈回什麼東西的時候畫（第 11 條）。
+    //
+    // Warning: **`--shot` 算「要畫」，不算「印出去」**——它畫的就是編輯器此刻的樣子，
+    // 開場屏是那個樣子的一部分。`printing` 那一格把 `--shot` 也算成印（它只問
+    // stdout 是不是終端），所以這裏照 752 行 `printing_now` 的判準，多問一句
+    // `shot.is_none()`。
+    let drawing = !(force_preview || (!std::io::stdout().is_terminal() && shot.is_none()));
+    if files.is_empty() && drawing && restored == 0 {
+        editor.opened_with_nothing();
+    }
     mark("session", &mut marks);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.

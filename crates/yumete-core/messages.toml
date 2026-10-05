@@ -5986,6 +5986,55 @@ zhs = "PgUp/PgDn 翻页"
 en = "PgUp/PgDn to page"
 
 [[message]]
+# 開場屏：空格 ? 做什麼
+key = "intro.all-commands"
+zht = "命令一覽"
+zhs = "命令一览"
+en = "every command"
+
+[[message]]
+# 開場屏：走一遍教程
+key = "intro.learn"
+zht = "學一遍"
+zhs = "学一遍"
+en = "learn it"
+
+[[message]]
+# 開場屏：:q 做什麼
+key = "intro.leave"
+zht = "離開"
+zhs = "离开"
+en = "leave"
+
+[[message]]
+# 開場屏：空格 f 做什麼
+key = "intro.open-a-file"
+zht = "開一個檔"
+zhs = "开一个档"
+en = "open a file"
+
+[[message]]
+# 開場屏：那個鍵怎麼寫（空格 f）
+key = "intro.space-f-key"
+zht = "空格 f"
+zhs = "空格 f"
+en = "space f"
+
+[[message]]
+# 開場屏：那個鍵怎麼寫（空格 ?）
+key = "intro.space-question-key"
+zht = "空格 ?"
+zhs = "空格 ?"
+en = "space ?"
+
+[[message]]
+# 空手打開 ye 時那一屏的頭一行
+key = "intro.title"
+zht = "宇夢編輯器"
+zhs = "宇梦编辑器"
+en = "yumete"
+
+[[message]]
 # gw：這一屏上沒有可以跳的地方
 key = "jump.nowhere"
 zht = "這一屏上沒有可以跳的地方"

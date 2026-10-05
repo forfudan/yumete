@@ -9050,6 +9050,52 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
 ///
 /// Warning: **竪排下不畫。** 那一頭的單位是「第幾縱」不是「第幾欄」，「第 80 欄」
 /// 在那裏沒有意思（#424 的第一個問題，2026-09-30 定：先不畫，等真有人要）。
+/// **空手打開 `ye` 看見的那一屏。**
+///
+/// 現在不畫它的話是一片空白加一個 `[scratch]`——一個新來的人不知道可以按什麼。vim
+/// 那一屏至少說了三件事：這是什麼、怎麼學、怎麼出去。
+///
+/// Warning: **居中，可是不占行**：它寫進已經畫好的那些格子裏，所以窗口多高、正文
+/// 將來有多少字，都和它無關。
+fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    let ink = crate::theme::Palette::of(config);
+    // Warning: **只取版本號那一截**。完整的構建號是
+    // `0.4.0-dev.20261006000901+7b9942c`——開場屏上它比標題還長，看着像一行亂碼。
+    // 要看全的在 `:version` 裏（那一扇正是為這個開的）。
+    let build = editor.build_name();
+    let short = build.split(['-', '+']).next().unwrap_or(build);
+    let name = format!("{}  {short}", say!("intro.title"));
+    let rows: Vec<(String, String)> = vec![
+        (":tutor".into(), say!("intro.learn")),
+        (say!("intro.space-f-key"), say!("intro.open-a-file")),
+        (say!("intro.space-question-key"), say!("intro.all-commands")),
+        (":q".into(), say!("intro.leave")),
+    ];
+    // 鍵那一欄補齊到同一寬，說明纔對得齊。
+    let widest = rows.iter().map(|(k, _)| yumete_cjk::str_width(k)).max().unwrap_or(0);
+    let mut lines: Vec<String> = vec![name, String::new()];
+    for (key, what) in &rows {
+        let pad = " ".repeat(widest.saturating_sub(yumete_cjk::str_width(key)) + 4);
+        lines.push(format!("{key}{pad}{what}"));
+    }
+    let wide = lines.iter().map(|l| yumete_cjk::str_width(l)).max().unwrap_or(0);
+    if wide + 2 > area.width as usize || lines.len() + 2 > area.height as usize {
+        return;
+    }
+    let left = area.x + (area.width - wide as u16) / 2;
+    let top = area.y + (area.height.saturating_sub(lines.len() as u16)) / 3;
+    let quiet = ink.page().fg(ink.quiet());
+    let gold = ink.page().fg(ink.gold()).add_modifier(Modifier::BOLD);
+    let buf = frame.buffer_mut();
+    for (n, line) in lines.iter().enumerate() {
+        let style = match n {
+            0 => gold,
+            _ => quiet,
+        };
+        put_text(buf, left, top + n as u16, area.x + area.width, line, style);
+    }
+}
+
 fn tint_the_rules(
     frame: &mut Frame,
     editor: &Editor,
@@ -10139,6 +10185,15 @@ fn draw_horizontal(
     // on: past the last line of a short file the page is still the page, and
     // 墨香's light page on a dark terminal made that half of the window black.
     frame.render_widget(Paragraph::new(lines).style(ink.page()), text_area);
+
+    // **空手打開的那一屏**（2026-10-05 定，照 vim 的開場）。
+    //
+    // Warning: **畫在正文裏，可它不是正文**——同 `gw` 的標籤，整頁畫完之後蓋上去。
+    // 它不攔路、沒有要按的鍵：**打一個字就沒了**（`Editor::intro` 問的是「緩衝區
+    // 還空着嗎」，所以不必誰去清它）。
+    if editor.intro() {
+        draw_the_intro(frame, editor, config, text_area);
+    }
 
     // **標籤，蓋在那個字上。** 一個漢字兩格、兩個字母也兩格，所以蓋掉的正好是那
     // 一個字，整行一格都沒挪——Warning: 而那是這個功能成立的前提：按 `gw` 之前眼睛已經
