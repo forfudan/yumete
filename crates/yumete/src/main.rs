@@ -559,6 +559,12 @@ fn main() -> ExitCode {
     if std::fs::create_dir_all(&drafts).is_ok() {
         editor.keep_drafts_in(drafts);
     }
+    // 版本號是構建期塞進來的、兩個目錄走 XDG，核心自己都看不見——`:version` 要印。
+    editor.knows_the_build(VERSION);
+    editor.knows_its_paths(
+        yumete_config::config_dir().join("config.toml"),
+        yumete_config::data_dir(),
+    );
     // …and somewhere to remember which files were open. **Keyed by the
     // project**, so a novel and a codebase do not share one.
     //

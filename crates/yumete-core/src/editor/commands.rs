@@ -629,6 +629,10 @@ impl Editor {
             // it does, and which key does it today. The third column is the
             // one a reader coming from a preset needs — 「`x` is
             // `select_line`? then that is what I am rebinding」.
+            Command::Version => {
+                self.show_the_build();
+                Ok(CommandOutcome::Continue)
+            }
             Command::ListActions => {
                 let mut listing = String::new();
                 listing.push_str(&say!("keys.actions-head"));

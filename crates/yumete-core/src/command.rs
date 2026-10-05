@@ -185,7 +185,7 @@ pub enum Command {
     GotoLine(usize),
     /// `:recover` — **問要不要用那一份草稿**（Feature #79）。
     ///
-    /// Warning: **沒有 `:recover!` 了**（2026-10-02 作者定）。它從前是「不問，直接
+    /// Warning: **沒有 `:recover!` 了**（2026-10-02 定）。它從前是「不問，直接
     /// 把草稿刪掉」，而刪草稿這件事面板裏本來就有一格——原話：「recover! 這個命
     /// 令不需要了，因為如果用戶想做的話，應該是在之前按 d」。留着它就是在「刪掉
     /// 草稿之前一定看得見那三個選項」這條規矩上開一個後門。
@@ -244,6 +244,8 @@ pub enum Command {
     /// `:view-wrap <n>` — write to a measure of `n` columns rather than to the
     /// window; `:view-wrap 0` gives the window back (Feature #113).
     SetMeasure(Option<usize>),
+    /// `:version` —— 這一版是哪一版，以及東西都放在哪。
+    Version,
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
@@ -316,7 +318,7 @@ pub enum Command {
     /// order. Empty sorts by the column the cursor is in.
     SortTable(Vec<(usize, bool)>),
     /// `:convert-table <格式> [<格式>]` — **把光標這裏的表寫成另一種樣子**
-    /// （#227；2026-10-02 作者定這個名字和這個形狀）。
+    /// （#227；2026-10-02 定這個名字和這個形狀）。
     ///
     /// 一個詞是**目標**，源自己嗅（`|` 表格、製表符、逗號、空格對齊）；兩個詞
     /// 是「從哪種轉成哪種」，最後那個永遠是目標。嗅源這一條照 org-mode 和
@@ -329,7 +331,7 @@ pub enum Command {
     /// （Word 的 Convert Text to Table、VS Code 那個擴展的 Convert Markdown
     /// table to CSV）正是因為有反向纔寫的。
     /// `:paste-table <格式>` — **剪貼板裏那張表，轉成這一種再貼**
-    /// （2026-10-02 作者定）。
+    /// （2026-10-02 定）。
     ///
     /// 名字和 [`Command::ConvertTable`] 對稱，參數表也是同一張。查過一圈，貼那
     /// 一族通行的說法就是 `Paste as X`（VS Code 的 `Paste As...`、Google Docs 的
@@ -2896,7 +2898,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::Wiki(WikiCommand::Reload))),
     },
     Entry {
-        // **三個參數拆成三條命令**（2026-09-30 作者報的）。從前是
+        // **三個參數拆成三條命令**（2026-09-30 報上來的）。從前是
         // `:word-list edit` 開本書那一份、`:word-list global` 開全域那一份——
         // 兩件事**只差哪一個檔**，可一個用動詞起名、一個用範圍起名，於是誰都猜
         // 不到另一個：知道 `edit` 的人猜不出 `global`，反過來也一樣。
@@ -3075,6 +3077,18 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        // **`:version` 的重點不是版本號，是「東西都在哪」**（2026-10-05 一個用的人
+        // 報的：「這個命令很重要的一點是展示配置文件在哪里」）。人裝完軟件第一個
+        // 問題就是「我該去改哪個文件」，而在這之前**沒有任何命令說得出來**——只有
+        // `:reload config`，它重讀，可不說路徑。
+        name: "version",
+        aliases: &["ver"],
+        help: "cmd.commands.version",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Version)),
+    },
+    Entry {
         name: "keymap",
         aliases: &[],
         help: "cmd.commands.keymap",
@@ -3108,7 +3122,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<欄>…｜off")],
         build: Some(|p| {
             Ok(Command::Rules(match p.arg(0) {
-                // **光禿禿的 `:rules` ＝ 80 和 100**（2026-09-30 作者定）。原
+                // **光禿禿的 `:rules` ＝ 80 和 100**（2026-09-30 定）。原
                 // 話：「usually for python the limit of the docstring and the
                 // code」——文檔字串一道，代碼一道，本來就是兩條。
                 None => vec![80, 100],

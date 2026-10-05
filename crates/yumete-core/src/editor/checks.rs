@@ -368,7 +368,7 @@ impl Editor {
                 )
             })
             .collect();
-        // **哪個服務器在答，在哪**——頂上一行（2026-09-29 作者定）。
+        // **哪個服務器在答，在哪**——頂上一行（2026-09-29 定）。
         //
         // Warning: 「乾淨」和「根本没人說過話」在這張單子上長得一模一樣，而這一行
         // 正是分得開它們的那一句：有它就是有人在聽，沒有它就是沒人在聽。
@@ -458,6 +458,39 @@ impl Editor {
     /// The shape `:grep`, `:table-check` and both `:check` share: `gf` on a row
     /// is how a reader goes and fixes one, and that needs `listing_root` to be the
     /// directory the file it was run on lives in.
+    /// **`:version` —— 這一版是哪一版，以及東西都放在哪。**
+    ///
+    /// Warning: **重點是路徑，不是版本號**（2026-10-05 一個用的人報的）。人裝完軟件
+    /// 第一個問題是「我該去改哪個文件」，而在這之前沒有任何命令說得出來。四個地方
+    /// 各答一個問題：全局配置「我的設定在哪」、項目配置「這本書自己的設定在哪」、
+    /// 數據目錄「我沒存的稿子跑哪去了」、日誌「報 bug 要貼哪個檔」。
+    ///
+    /// **不存在的標「（沒有）」**：他要知道那個檔是不是該自己建。
+    pub(super) fn show_the_build(&mut self) {
+        let shown = |path: Option<std::path::PathBuf>| match path {
+            Some(path) => format!("`{}`", path.display()),
+            None => say!("version.no-such-file"),
+        };
+        let global = self.where_config.clone().filter(|p| p.is_file());
+        // 項目那一份：核心自己認得 `.yumete` 這個記號，照 `project_root` 同一條規矩。
+        let root = self.project_root();
+        let local = [root.join(".yumete").join("config.toml"), root.join(".yumete.toml")]
+            .into_iter()
+            .find(|p| p.is_file());
+        let data = self.where_data.clone();
+        let mut out = format!("# {} {}\n\n", say!("version.title"), self.build);
+        out.push_str("| | |\n| --- | --- |\n");
+        let mut row = |name: String, what: String| {
+            out.push_str(&format!("| {name} | {what} |\n"));
+        };
+        row(say!("version.keymap"), self.key_preset().name().to_string());
+        row(say!("version.config-global"), shown(global));
+        row(say!("version.config-local"), shown(local));
+        row(say!("version.data"), shown(data.clone()));
+        row(say!("version.log"), shown(data.map(|d| d.join("yumete.log"))));
+        self.show_listing(out, say!("version.title"));
+    }
+
     pub(super) fn show_listing(&mut self, listing: String, name: String) {
         self.show_listing_as(listing, name, None)
     }

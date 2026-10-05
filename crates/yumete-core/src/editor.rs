@@ -2465,6 +2465,19 @@ pub struct Editor {
     table_bypass: std::cell::Cell<bool>,
     /// Where buffers with no file keep their recovery copies.
     drafts_dir: Option<PathBuf>,
+    /// **這一份是哪一版**——`:version` 要印它。
+    ///
+    /// 前端告訴核心的，同 [`Editor::keep_drafts_in`]：版本號是構建期塞進可執行檔的
+    /// （`YUMETE_VERSION`），核心編譯的時候還不知道。
+    build: String,
+    /// **全局配置那個檔，和數據目錄**——`:version` 要印它們。
+    ///
+    /// Warning: **也是前端告訴的。** 這兩個走 XDG，而 `yumete-core` 有意不依賴
+    /// `yumete-config`——「只有前端知道數據目錄在哪」（`main.rs` 那一段註釋）。
+    /// 項目那一份不在這裏：核心自己認得 `.yumete` 這個記號（見 `project_root`），
+    /// 算得出來。
+    where_config: Option<PathBuf>,
+    where_data: Option<PathBuf>,
     /// The data directory, for the global word list. Set by the front end.
     data_dir: Option<PathBuf>,
     /// Where this project's session is remembered — which files were open and
@@ -3244,6 +3257,9 @@ impl Editor {
             show_detail: None,
             table_bypass: std::cell::Cell::new(false),
             drafts_dir: None,
+            build: String::new(),
+            where_config: None,
+            where_data: None,
             data_dir: None,
             session_file: None,
             turned_for_table: None,
