@@ -5079,6 +5079,63 @@ fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
 }
 
 /// Split `body` on unescaped `delim`.
+/// **Which part of `:s/找/換/g` a character belongs to** — for drawing it.
+///
+/// The command row paints a substitution in three colours so that a hand can
+/// see at a glance which half is the pattern and which half is what goes in
+/// its place. This is the only place that knows where the fields are, and it
+/// belongs next to [`parse_substitution`] so the two cannot drift: anything
+/// that parser refuses is not coloured either.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubstPart {
+    /// The range, the `s`, and every delimiter — the scaffolding.
+    Mark,
+    /// What is looked for.
+    Find,
+    /// What goes in its place.
+    Replace,
+    /// The flags after the last delimiter.
+    Flags,
+}
+
+/// The parts of `line`, in order, as `(text, part)` — `None` when the line is
+/// not a substitution at all.
+///
+/// Warning: **It must say yes to a half-typed line**, because it runs on every
+/// keystroke while the line is being written: `s/a` has a `Find` and nothing
+/// else, and `s/a/b` has no trailing delimiter yet. The parser proper refuses
+/// both of those, which is right for running them and wrong for drawing them.
+pub fn substitution_parts(line: &str) -> Option<Vec<(String, SubstPart)>> {
+    let (_, rest) = parse_rows(line);
+    let head = line.len() - rest.len();
+    let body = rest.strip_prefix('s')?;
+    let delim = body.chars().next()?;
+    if delim.is_alphanumeric() || delim.is_whitespace() || delim == '\\' {
+        return None;
+    }
+    let fields = split_escaped(&body[delim.len_utf8()..], delim);
+    if fields.len() > 4 {
+        return None;
+    }
+    let mut out = vec![(format!("{}s{delim}", &line[..head]), SubstPart::Mark)];
+    // The delimiter that *introduces* each field after the first is drawn with
+    // the scaffolding, so the fields themselves are exactly what was typed.
+    let kinds = [SubstPart::Find, SubstPart::Replace, SubstPart::Flags];
+    for (n, field) in fields.iter().enumerate() {
+        if n > 0 {
+            out.push((delim.to_string(), SubstPart::Mark));
+        }
+        let kind = kinds.get(n).copied().unwrap_or(SubstPart::Flags);
+        if !field.is_empty() {
+            // `split_escaped` unescapes `\<delim>`; the row draws what was
+            // typed, so the escape goes back on.
+            let shown = field.replace(delim, &format!("\\{delim}"));
+            out.push((shown, kind));
+        }
+    }
+    Some(out)
+}
+
 fn split_escaped(body: &str, delim: char) -> Vec<String> {
     let mut out = vec![String::new()];
     let mut escaped = false;
@@ -6588,4 +6645,68 @@ mod tests {
         assert_eq!(moved_to("zzz"), None);
     }
 
+
+    /// **`:s/找/換/g` 畫成三色，靠的是這一支**（2026-10-06）。
+    ///
+    /// 它在每一次按鍵上跑，所以寫到一半的那幾種形狀也得認得。
+    #[test]
+    fn a_substitution_says_which_part_is_which() {
+        use SubstPart::{Find, Flags, Mark, Replace};
+        let parts = substitution_parts;
+        assert_eq!(
+            parts("s/a/b/g"),
+            Some(vec![
+                ("s/".into(), Mark),
+                ("a".into(), Find),
+                ("/".into(), Mark),
+                ("b".into(), Replace),
+                ("/".into(), Mark),
+                ("g".into(), Flags),
+            ])
+        );
+        // 範圍跟着 `s` 一起當支架。
+        assert_eq!(
+            parts("%s/甲/乙/"),
+            Some(vec![
+                ("%s/".into(), Mark),
+                ("甲".into(), Find),
+                ("/".into(), Mark),
+                ("乙".into(), Replace),
+                ("/".into(), Mark),
+            ])
+        );
+        // 寫到一半的三種。
+        assert_eq!(parts("s/"), Some(vec![("s/".into(), Mark)]));
+        assert_eq!(parts("s/a"), Some(vec![("s/".into(), Mark), ("a".into(), Find)]));
+        assert_eq!(
+            parts("s/a/"),
+            Some(vec![("s/".into(), Mark), ("a".into(), Find), ("/".into(), Mark)])
+        );
+        // 分隔符不是斜杠也認，轉義的那一個不算分隔符。
+        assert_eq!(
+            parts("s,a,b,"),
+            Some(vec![
+                ("s,".into(), Mark),
+                ("a".into(), Find),
+                (",".into(), Mark),
+                ("b".into(), Replace),
+                (",".into(), Mark),
+            ])
+        );
+        assert_eq!(
+            parts("s/a\\/b/c/"),
+            Some(vec![
+                ("s/".into(), Mark),
+                ("a\\/b".into(), Find),
+                ("/".into(), Mark),
+                ("c".into(), Replace),
+                ("/".into(), Mark),
+            ])
+        );
+        // 不是替換的一概不上色。
+        assert_eq!(parts("set"), None);
+        assert_eq!(parts("s"), None);
+        assert_eq!(parts("s abc"), None);
+        assert_eq!(parts("write"), None);
+    }
 }
