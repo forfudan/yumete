@@ -2310,6 +2310,43 @@ impl Ran {
     }
 }
 
+/// **跑一條命令，`C-c` 只打中它，不打中編輯器**（2026-10-05 一個用的人報的）。
+///
+/// Warning: **`:!` 是把終端整個還回去的**（見 [`hand_over`]），於是命令和 yumete 在同一
+/// 個前台進程組裏——`C-c` 發給整個組，兩個一起死，而死的那一個手上還握着沒存的稿子。
+///
+/// 標準的兩手：**父進程在子進程跑的時候忽略 `SIGINT`，子進程在 `exec` 之前恢復成默認**。
+/// ⚠️ **第二手少不了**：忽略會**跨 `exec` 繼承**，只做第一手的話連命令自己也不理 `C-c`，
+/// 那就更糟——人按了半天停不下來。
+///
+/// `SIGQUIT`（`C-\`）同理一起管。沒動 `SIGTSTP`（`C-z`）：那要整套作業控制
+/// （`setpgid` ＋ `tcsetpgrp` ＋ 躲 `SIGTTOU`），而這一支只是為了讓 `C-c` 停對人。
+fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::process::ExitStatus> {
+    use std::os::unix::process::CommandExt;
+    let mut cmd = shell_command(line, in_dir);
+    // Safety: `pre_exec` 跑在 fork 之後、exec 之前，那一刻只有一條執行緒，
+    // 而 `signal` 是 async-signal-safe 的。
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+            libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+            Ok(())
+        });
+    }
+    let (was_int, was_quit) = unsafe {
+        (
+            libc::signal(libc::SIGINT, libc::SIG_IGN),
+            libc::signal(libc::SIGQUIT, libc::SIG_IGN),
+        )
+    };
+    let status = cmd.status();
+    unsafe {
+        libc::signal(libc::SIGINT, was_int);
+        libc::signal(libc::SIGQUIT, was_quit);
+    }
+    status
+}
+
 /// Give the terminal back, run the command in it, and take it again.
 ///
 /// This is what `:!` has meant since vi, and it is the only honest answer to
@@ -2334,7 +2371,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         terminal.backend_mut(),
         ratatui::crossterm::terminal::LeaveAlternateScreen
     )?;
-    let status = shell_command(line, in_dir).status();
+    let status = run_in_the_terminal(line, in_dir);
     println!();
     match &status {
         Ok(code) if code.success() => println!("[{line}]"),

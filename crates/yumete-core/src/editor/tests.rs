@@ -17439,6 +17439,38 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **vim 的 `#`：往回找光標下這個詞**（2026-10-05 定）。
+///
+/// `g/` 往前、`g?` 是在副編輯區給你看，沒有一支是往回——所以這是一個新動作，而且
+/// **只在 vim 鍵位下有鍵**（它不走鍵位表：那張表是「鍵 → 一串鍵」，而 helix 那一套
+/// 上沒有鍵可映）。
+#[test]
+fn the_vim_hash_walks_back_through_this_word() {
+    // 「beta」在三行裏各一處。
+    let mut ed = typed("alpha beta gamma\nbeta again here\nand beta once more");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    // 光標停在第一處的 `b` 上。
+    press(&mut ed, "fb");
+    // `*` 往前：第二處。
+    press(&mut ed, "*");
+    let first = ed.selection().0;
+    // `#` 往回：回到第一處。
+    press(&mut ed, "#");
+    let back = ed.selection().0;
+    assert!(back < first, "`#` 往回走：{back} 該在 {first} 前面");
+    // 再往回：前面沒有了，繞到最末一處。
+    press(&mut ed, "#");
+    assert!(ed.selection().0 > first, "到頭繞回最末一處");
+
+    // Warning: **`#` 只在 vim 鍵位下。** helix 那一套裏它不是一個鍵——往回找在那邊
+    // 沒有鍵（`g/` 往前、`g?` 是在副編輯區看），要的人在配置裏繫得上。
+    let mut ed = typed("alpha beta gamma\nbeta again here");
+    let was = ed.current_buffer().text();
+    press(&mut ed, "gg#");
+    assert_eq!(ed.current_buffer().text(), was, "helix 鍵位下 `#` 不動稿子");
+}
+
 /// **The keys that did something *else* here** (#428, 2026-09-18) — worse
 /// than doing nothing, because the hand does not stop to check.
 ///
@@ -17454,14 +17486,20 @@ fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
     };
     let text = |ed: &Editor| ed.current_buffer().text();
 
-    // Warning: `J` is **not** translated: here it is half a page down in both
-    // presets, and joining is `gJ` (2026-09-18).
+    // **`J` 合併行**（2026-10-05 翻的 2026-09-18 那一條）。helix 那一套裏 `J` 是
+    // 翻半頁，而選了 vim 鍵位的人用 `C-d`／`C-u` 翻——兩套鍵位下都綁着。
     let mut ed = vim("一\n二\n三\n");
     press(&mut ed, "J");
-    assert_eq!(text(&ed), "一\n二\n三\n", "J does not join");
-    // …it paged, so come back before asking `gJ` to join anything.
-    press(&mut ed, "gggJ");
-    assert_eq!(text(&ed), "一二\n三\n", "gJ does");
+    assert_eq!(text(&ed), "一二\n三\n", "J joins, same as vim");
+    // `gJ` 兩套鍵位下都還是合併行。
+    let mut ed = vim("一\n二\n三\n");
+    press(&mut ed, "gJ");
+    assert_eq!(text(&ed), "一二\n三\n", "gJ too");
+
+    // **`K` 查光標下這個東西**（同掛着 LSP 的 Neovim）——它不動稿子。
+    let mut ed = vim("一\n二\n三\n");
+    press(&mut ed, "K");
+    assert_eq!(text(&ed), "一\n二\n三\n", "K does not touch the page");
 
     // `D` and `C` take the rest of the line, not the selection.
     //
