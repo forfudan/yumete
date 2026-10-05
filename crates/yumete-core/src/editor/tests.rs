@@ -13609,6 +13609,44 @@ fn a_mark_names_a_place_and_survives_the_afternoon() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **指名開一個檔，回到上次停的那一行**（2026-10-05 一個用的人報的：「打开文件时没
+/// 有跳到上次光标处」）。
+///
+/// Warning: **和會話是兩件事。** 會話按工作路徑分檔、只記二十四個，而且 `restore_session`
+/// 有一道閘——**只在沒有指名文件的時候才還原**，所以 `ye 某個檔` 永遠從第 1 行開始。
+/// 這一份是全局的 `places.txt`，記一千個，答的是「不管從哪裏打開，這個檔我停在哪」。
+#[test]
+fn opening_a_file_by_name_goes_back_to_where_i_was() {
+    let dir = std::env::temp_dir().join(format!("yumete-places-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    let one = dir.join("ch01.md");
+    std::fs::write(&one, (1..=40).map(|n| format!("第{n}行\n")).collect::<String>()).unwrap();
+
+    let mut ed = Editor::new();
+    ed.knows_its_paths(dir.join("nothing.toml"), dir.join("data"));
+    ed.open_file(&one).unwrap();
+    ed.goto_line(20);
+    assert_eq!(ed.cursor_line(), 19);
+    // Warning: **`places.txt` 不靠會話**——這一趟連 `keep_session_in` 都沒叫過，而它
+    // 照樣要記下來（第一版把這一句排在會話那道閘後面，於是一次都沒寫過）。
+    ed.save_session();
+
+    // 另一天，另一個編輯器，指名開同一個檔。
+    let mut ed = Editor::new();
+    ed.knows_its_paths(dir.join("nothing.toml"), dir.join("data"));
+    ed.open_file(&one).unwrap();
+    assert_eq!(ed.cursor_line(), 19, "回到上次那一行");
+
+    // 沒記過的檔照舊從頭開。
+    let two = dir.join("ch02.md");
+    std::fs::write(&two, "甲\n乙\n丙\n").unwrap();
+    ed.open_file(&two).unwrap();
+    assert_eq!(ed.cursor_line(), 0, "沒記過就從第 1 行");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn the_session_opens_again_what_was_open() {
     // Five `:open`s every morning is five too many.
