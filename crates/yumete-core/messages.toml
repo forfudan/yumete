@@ -4914,6 +4914,20 @@ zhs = "注释掉是 ␣c，整段是 ␣C"
 en = "commenting out is Space c, a whole block Space C"
 
 [[message]]
+# [空格：在上面加一條空行，光標不動
+key = "hint.hop.blank-above"
+zht = "上面加一條空行"
+zhs = "上面加一条空行"
+en = "a blank line above"
+
+[[message]]
+# ]空格：在下面加一條空行，光標不動
+key = "hint.hop.blank-below"
+zht = "下面加一條空行"
+zhs = "下面加一条空行"
+en = "a blank line below"
+
+[[message]]
 # ]／[ 的選單：下一處／上一處合併衝突
 key = "hint.hop.conflict"
 zht = "合併衝突"

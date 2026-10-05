@@ -316,6 +316,40 @@ impl Editor {
         self.enter_insert();
     }
 
+    /// **A blank line, and stay where you are** — helix's `]空格` / `[空格`
+    /// (`add_newline_below` / `add_newline_above`), 2026-10-06.
+    ///
+    /// Not `o` / `O`: those open a line *and start typing in it*. This one is
+    /// for pushing a paragraph apart without leaving where the eye is, which
+    /// is why helix gives it a key of its own and why it does not move the
+    /// cursor. **It takes no indent either** — a blank line with trailing
+    /// spaces on it is a blank line that greps wrong.
+    pub(super) fn add_blank_line(&mut self, below: bool) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let at = match below {
+            true => motion::line_end(rope, self.sel.head()),
+            false => motion::line_start(rope, self.sel.head()),
+        };
+        let ending = self.current_buffer().ending();
+        let was = self.sel.head();
+        self.snapshot();
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, ending));
+        if !self.applied(done) {
+            return;
+        }
+        // Above: everything from the cursor on has shifted by the break.
+        let moved = match below {
+            true => was,
+            false => was + ending.chars().count(),
+        };
+        self.sel.set_head(moved);
+        self.sel.set_anchor(moved);
+        self.clamp_cursor();
+    }
+
     /// Take back the word before the cursor (`C-w` in Insert).
     ///
     /// The word is the segmenter's, not a run of non-space: this is an editor
@@ -343,6 +377,41 @@ impl Editor {
             for _ in 0..taken {
                 self.insert_recording.pop();
             }
+        }
+    }
+
+    /// **Take the word ahead** (`A-d` in Insert) — the other half of `C-w`.
+    ///
+    /// helix binds it (`delete_word_forward`), readline binds it, and it was
+    /// one of four chords Insert mode here swallowed whole (2026-10-06).
+    ///
+    /// The word is the segmenter's, for the reason `C-w` gives: a rule written
+    /// as 「up to the next space」 eats a whole Chinese paragraph. And it never
+    /// crosses the line, which is what every other Insert-mode edit here does
+    /// — `next_word_start` is deliberately a crossing motion, so the ceiling
+    /// is applied here.
+    pub(super) fn delete_word_after_cursor(&mut self) {
+        let at = self.sel.head();
+        let rope = self.current_buffer().rope();
+        let mut to = motion::next_word_start(rope, at, self.word_grain(), self.segmenter.as_ref());
+        // Nothing further on this line: take the rest of the line's text.
+        let line_end = motion::line_end(rope, at);
+        to = to.min(line_end).min(self.insert_ceiling());
+        if to <= at {
+            return;
+        }
+        self.snapshot();
+        if self.edit_remove(at..to) {
+            self.set_cursor(at);
+        }
+    }
+
+    /// The far side of what Insert mode may touch — a cell's end inside a
+    /// grid, and the line's end outside one. The twin of [`Self::insert_floor`].
+    fn insert_ceiling(&self) -> usize {
+        match self.insert_bounds() {
+            Some((_, end)) => end,
+            None => motion::line_end(self.current_buffer().rope(), self.caret()),
         }
     }
 

@@ -19097,6 +19097,30 @@ join」），跟着改了，並把翻案的理由寫進斷言旁邊。
 | `yumete/src/main.rs` 的 `--help` | 「**no t / T** — that letter is the table mode's」 | `t`／`T` 2026-09-21 起就是 find-till |
 | `editor/keys.rs` 裸 `G` 那一段 | 「which is what `G` means in vi and in Helix both」 | helix 的裸 `G` **什麼都不做**（`goto_line_impl` 開頭就是 `if cx.count.is_some()`）。鍵不改，改的是那句話 |
 
+**三、選區模式裏搜索是延伸，不是跳走。** helix 的 select 下 `n`／`N` 綁 `extend_search_next`
+／`_prev`，`/` 的搜索走 `Movement::Extend` 且模式不變。`repeat_search` 從前無條件
+`self.extend = false`，於是 `v` 之後按一下 `/` 就掉回 Normal、剛選的也沒了。錨點現在留着，
+頭走到這一處**去的那一頭**（往前是最後一個字，往回是第一個字）。
+
+**四、插入態吞掉的四個和弦。** `Key::Ctrl(_) | Key::Alt(_) => {}` 那條兜底把它們全收了：
+`C-h`（退格）、`C-j`（換行）、`C-d`（往後刪一個字）、`A-d`（往後刪一個詞，新寫的
+`delete_word_after_cursor`）。前三個是終端在 vi 之前就這麼發的控制碼，helix 的插入態也都
+綁着。順帶把 `C-x` 收進「叫補全出來」，那是 helix 的拼法。
+
+**五、`[`／`]` 那一層只認一個 `c`。** 補 `]p`／`[p`（段落，`}`／`{` 的 helix 拼法）與
+`]空格`／`[空格`（上下加一條空行，**光標不動、不進插入態**——helix 的 `add_newline_below`
+／`_above`）。提示行那兩格的文案是新寫的（`hint.hop.blank-below`／`-above`：「下面加一條
+空行」），⚠️ **請過目**；段落那一格借的是 `:keymap actions` 已有的「下一段」「上一段」。
+
+**六、Normal 裏的 `Tab`。** helix 綁 `jump_forward`，我們只綁了 `C-i`。終端把這兩個發成
+同一個字節，而這個編輯器分得開——於是換一個終端，手上那個 `C-i` 就變成了什麼都不做的
+`Tab`。兩個現在都接 `walk_jumps`。
+
+**七、區域組（`C-w`）不認 Ctrl 變體。** helix 每一格都綁兩個拼法（`C-w C-w`、`C-w C-s`、
+`C-w C-o`、`C-w C-h`…），因為按着 Ctrl 不放是這一組最自然的按法；`on_region_key` 從前只認
+`Key::Char`，那半邊**整組靜默掉地**。進門先把 `Ctrl(c)` 折成 `Char(c)` 就齊了。順帶 `v`
+（helix 的豎切）暫時當 `s` 的別名——眼下只有上下兩個編輯區。
+
 ## 5.83 ⚠️ 全量驗收裏有一條紅的，不是改出來的：詞級的「鬆」和「中」現在一樣（2026-10-06）
 
 `cargo test --workspace` 紅在 `yumete-ime/tests/real_data.rs` 的
