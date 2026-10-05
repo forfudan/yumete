@@ -11160,8 +11160,36 @@ fn draw_command(
             + yumete_cjk::str_width(&tag);
         let gap = (area.width as usize).saturating_sub(used);
         let mut x = area.x;
-        put_text(buf, x, area.y, right, &drawable(&line), news);
-        x += yumete_cjk::str_width(&line) as u16;
+        // **`:s/找/換/g` 分三色**（2026-10-06，十三條第五條裏還站得住的那一半）。
+        // 支架（範圍、`s`、每一個分隔符、結尾的旗標）是金，找的那一半是朱，換上
+        // 去的那一半是綠——同一對顏色在搜索面板的「替換預覽」裏已經是這兩個意思
+        // （換下來的朱、換上去的綠），所以兩處說的是同一件事。
+        let parts = match editor.mode() == yumete_core::input::Mode::Command {
+            true => yumete_core::command::substitution_parts(text),
+            false => None,
+        };
+        match parts {
+            Some(parts) => {
+                put_text(buf, x, area.y, right, &drawable(&prefix), label);
+                x += yumete_cjk::str_width(&prefix) as u16;
+                for (piece, part) in &parts {
+                    let paint = match part {
+                        yumete_core::command::SubstPart::Find => page.fg(ink.mark()),
+                        yumete_core::command::SubstPart::Replace => page.fg(ink.green()),
+                        _ => page.fg(ink.gold()),
+                    };
+                    put_text(buf, x, area.y, right, &drawable(piece), paint);
+                    x += yumete_cjk::str_width(piece) as u16;
+                }
+                let rest = prompt_preedit(editor, ime);
+                put_text(buf, x, area.y, right, &drawable(&rest), news);
+                x += yumete_cjk::str_width(&rest) as u16;
+            }
+            None => {
+                put_text(buf, x, area.y, right, &drawable(&line), news);
+                x += yumete_cjk::str_width(&line) as u16;
+            }
+        }
         put_text(buf, x, area.y, right, &drawable(&drawn), guess);
         x += yumete_cjk::str_width(&drawn) as u16;
         let tail = format!("{}{tag}", " ".repeat(gap));
