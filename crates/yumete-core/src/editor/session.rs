@@ -254,6 +254,17 @@ impl Editor {
         self.drafts_dir = Some(dir);
     }
 
+    /// **哪一版**——前端告訴核心，`:version` 印它。
+    pub fn knows_the_build(&mut self, version: &str) {
+        self.build = version.to_string();
+    }
+
+    /// **全局配置那個檔，和數據目錄**——同上，前端告訴的（走 XDG，核心不知道）。
+    pub fn knows_its_paths(&mut self, config: PathBuf, data: PathBuf) {
+        self.where_config = Some(config);
+        self.where_data = Some(data);
+    }
+
     // ---- The session (Feature #43) ----------------------------------------
 
     /// Where to remember which files are open (`<data>/sessions/<key>.txt`).
@@ -461,7 +472,7 @@ impl Editor {
         taken
     }
 
-    /// **開檔時那一問**：恢復／丟棄恢復文件／暫時不管（2026-10-02 作者定）。
+    /// **開檔時那一問**：恢復／丟棄恢復文件／暫時不管（2026-10-02 定）。
     ///
     /// 原話：「recover 必須在用戶重新打開這個文件的時候立刻決定。用戶打了 800
     /// 個字之後再按 recover 這是不對的。」
@@ -561,7 +572,7 @@ impl Editor {
         if orphans > 0 {
             self.status = say!("recover.drafts-waiting", orphans);
         }
-        // Warning: **不列別的檔**（2026-10-02 作者定）。從前這裏把每一個有草稿的檔
+        // Warning: **不列別的檔**（2026-10-02 定）。從前這裏把每一個有草稿的檔
         // 名拼成一句話擺在狀態欄上——原話：「你管別的文件做什麼？如果有十幾個
         // 文件你寫得完嗎？」十幾個檔名一行放不下，而每一份自己有面板：翻到它那
         // 一刻就問（[`Self::ask_about_the_draft`]），檔名後面那個 `[draft]` 一直
@@ -588,7 +599,7 @@ impl Editor {
 
     /// `:recover` — **把開檔時那一問再擺一次**。
     ///
-    /// Warning: **沒有 `:recover!` 了**（2026-10-02 作者定）。刪草稿在面板裏是
+    /// Warning: **沒有 `:recover!` 了**（2026-10-02 定）。刪草稿在面板裏是
     /// 「丟棄恢復文件」那一格，而一個不問就刪的拼法等於在那條規矩上開後門。
     pub(super) fn recover(&mut self) -> Result<CommandOutcome, EditorError> {
         if self.current_buffer().recovered_draft().is_none() {
@@ -603,7 +614,7 @@ impl Editor {
             };
             return Ok(CommandOutcome::Continue);
         }
-        // Warning: **`:recover` 自己不換，它把那一問再擺一次**（2026-10-02 作者
+        // Warning: **`:recover` 自己不換，它把那一問再擺一次**（2026-10-02 
         // 定）。「暫時不管」之後還回得來，而回來看見的是同樣三個選項——決定沒有
         // 因為拖了一會兒就變成一個無聲的鍵。真正換上去的那一步在
         // [`Self::take_the_draft`]，而它要走完兩問纔到得了。

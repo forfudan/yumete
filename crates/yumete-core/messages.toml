@@ -1590,6 +1590,14 @@ en = "save if changed, and stay (short: :up)"
 find = "改過纔存 改过才存 存檔 存档 update up"
 
 [[message]]
+# : 命令選單裏 version 那一項的說明
+key = "cmd.commands.version"
+zht = "這是哪一版，以及配置、數據、日誌都放在哪"
+zhs = "这是哪一版，以及配置、数据、日志都放在哪"
+en = "which build this is, and where the config, data and log live"
+find = "版本 version ver 配置 config 路徑 路径 path"
+
+[[message]]
 # : 命令選單裏 wheel 那一項的說明（commands 組）
 key = "cmd.commands.wheel"
 zht = "滾輪一格走幾行；`:wheel 1` 是終端自己的一格"
@@ -10777,6 +10785,55 @@ en = "Yumete"
 
 
 # ── wheel ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :version：全局配置在哪
+key = "version.config-global"
+zht = "全局配置"
+zhs = "全局配置"
+en = "config"
+
+[[message]]
+# :version：這個項目自己那一份配置在哪
+key = "version.config-local"
+zht = "項目配置"
+zhs = "项目配置"
+en = "project config"
+
+[[message]]
+# :version：編輯器自己存東西的地方（草稿、會話、碼表）
+key = "version.data"
+zht = "數據目錄"
+zhs = "数据目录"
+en = "data"
+
+[[message]]
+# :version：現在用的是哪一套鍵位
+key = "version.keymap"
+zht = "鍵位"
+zhs = "键位"
+en = "keymap"
+
+[[message]]
+# :version：出錯時寫的那個檔
+key = "version.log"
+zht = "日誌"
+zhs = "日志"
+en = "log"
+
+[[message]]
+# :version：那個檔不在。要緊的是他得知道是不是該自己建一個。
+key = "version.no-such-file"
+zht = "（沒有）"
+zhs = "（没有）"
+en = "(none)"
+
+[[message]]
+# :version 那一扇的標題
+key = "version.title"
+zht = "宇夢編輯器"
+zhs = "宇梦编辑器"
+en = "yumete"
 
 [[message]]
 # 滾輪一格走多遠——問的時候
