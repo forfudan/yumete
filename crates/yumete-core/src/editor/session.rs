@@ -5,6 +5,13 @@
 
 use super::*;
 
+/// **那份「我在哪裏」的檔名**，放在數據目錄裏（全局一份）。
+const PLACES_FILE: &str = "places.txt";
+
+/// **記多少個檔**（2026-10-05 定）。vim 的 viminfo 出廠是一百；一千行純文本幾十
+/// KB，一本長篇的全部章節加筆記都裝得下。
+const PLACES: usize = 1000;
+
 impl Editor {
     // ---- Crash recovery (Feature #79) --------------------------------------
 
@@ -309,17 +316,90 @@ impl Editor {
         self.session_file = Some(dir.join(format!("{key}.txt")));
     }
 
+    /// **那份「我在哪裏」在哪**（`places.txt`），沒有數據目錄就是沒有。
+    fn places_file(&self) -> Option<PathBuf> {
+        self.where_data.as_ref().map(|d| d.join(PLACES_FILE))
+    }
+
+    /// **這個檔上次停在第幾行**，不知道就是不知道。
+    ///
+    /// Warning: **和會話是兩件事。** 會話按工作路徑分檔，答的是「上次開着哪幾個」；
+    /// 這一份是全局一份，答的是「不管從哪裏打開，這個檔我上次停在哪」——`ye 某個檔`
+    /// 要的是後者（2026-10-05 一個用的人報的：「打开文件时没有跳到上次光标处」）。
+    fn where_i_was(&self, path: &Path) -> Option<usize> {
+        let text = std::fs::read_to_string(self.places_file()?).ok()?;
+        let want = path.to_string_lossy();
+        text.lines()
+            .filter_map(|line| line.split_once('\t'))
+            .find(|(p, _)| *p == want)
+            .and_then(|(_, n)| n.parse().ok())
+    }
+
+    /// **記下「我在這個檔的第幾行」**，最近用的排在前面。
+    ///
+    /// Warning: **一千個封頂，滿了把最舊的撈掉**（2026-10-05 定）。純文本一行一個，
+    /// 一千行幾十 KB——一本長篇的全部章節都裝得下，而一個人一輩子也開不了幾萬個檔。
+    fn remember_where_i_was(&self, fresh: &[(String, usize)]) {
+        let Some(file) = self.places_file() else { return };
+        let mut out: Vec<String> = fresh
+            .iter()
+            .map(|(path, line)| format!("{path}\t{line}"))
+            .collect();
+        // 舊的接在後面，剛寫過的那幾個不要重複。
+        if let Ok(text) = std::fs::read_to_string(&file) {
+            for line in text.lines() {
+                let Some((path, _)) = line.split_once('\t') else { continue };
+                if fresh.iter().any(|(p, _)| p == path) {
+                    continue;
+                }
+                out.push(line.to_string());
+            }
+        }
+        out.truncate(PLACES);
+        if let Some(parent) = file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&file, out.join("\n") + "\n");
+    }
+
+    /// **開檔之後回到上次那一行。** 不知道就不動。
+    pub(super) fn go_back_to_where_i_was(&mut self, path: &Path) {
+        if let Some(line) = self.where_i_was(path) {
+            self.move_to_line(line);
+            self.buffers[self.current].save_cursor(self.sel.head());
+        }
+    }
+
     /// Write down which files are open and where the cursor is in each.
     ///
     /// One line per file: `path\tline`. A plain list rather than a format,
     /// because the only thing that reads it is the next hour of this editor,
     /// and a person looking at it should be able to see what it says.
     pub fn save_session(&mut self) {
+        let here = self.sel.head();
+        self.buffers[self.current].save_cursor(here);
+        // **「我在哪裏」先記，它不靠會話**（2026-10-06 修）。
+        //
+        // Warning: **這一句本來排在底下那道閘後面**，於是沒有會話檔的時候——`:w` 之後
+        // 直接 `:q`、或者 `[editor] session` 關着——它一次都沒寫過，而我拿 `--shot`
+        // 驗的正是那一種。會話答的是「這個工作路徑上次開着哪幾個」，這一份答的是
+        // 「這個檔我上次停在哪」，兩件事不該綁在一起。
+        let places: Vec<(String, usize)> = self
+            .buffers
+            .iter()
+            .filter_map(|buffer| {
+                let path = buffer.path()?;
+                let rope = buffer.rope();
+                let line = rope.char_to_line(buffer.saved_cursor().min(rope.len_chars()));
+                Some((path.display().to_string(), line + 1))
+            })
+            .collect();
+        if !places.is_empty() {
+            self.remember_where_i_was(&places);
+        }
         let Some(file) = self.session_file.clone() else {
             return;
         };
-        let here = self.sel.head();
-        self.buffers[self.current].save_cursor(here);
         // The file you are in first, then the rest in order — and **capped**.
         // `:replace` opens every file it changes, so a rename across a book
         // leaves 120 buffers open, and a session that remembered all of them

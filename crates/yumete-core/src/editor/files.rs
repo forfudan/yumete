@@ -270,7 +270,7 @@ impl Editor {
     /// 檔」那一種纔有用。而代價是每一次從子目録啓動都要付：`:pwd` 報一個你沒打
     /// 過的目録、`:open README.md` 解到 `docs/` 底下去（那個檔不在就**一聲不吭
     /// 地**開一個空緩衝，`:w` 在錯的地方造檔）、`!cargo test` 跑在 `docs/` 裏。
-    /// 作者的判詞：撤回去。
+    /// 判詞：撤回去。
     pub fn set_root(&mut self, at: &Path) {
         let full = match at.is_absolute() {
             true => at.to_path_buf(),
@@ -342,7 +342,7 @@ impl Editor {
         let full = self.current_buffer().path().map(Path::to_path_buf);
         // Warning: **只記這本書自己的檔**（2026-10-02 查出來的）。從前它只問「有沒有
         // 這本賬」，不問「這一份在不在這本書裏」——於是**在書開着的時候隨手存一
-        // 個別處的檔，那個檔名就進了作者的寫作進度**。
+        // 個別處的檔，那個檔名就進了寫作進度**。
         //
         // 這個倉自己就中着：`cargo test` 在 `$TMPDIR` 裏存臨時檔，而測試進程的
         // cwd 在倉裏，`root()` 於是算成這個倉——`.yumete/progress.tsv` 裏攢了一百
@@ -528,7 +528,7 @@ impl Editor {
         // `ga` 會帶你去另一章。`Pane` 為同一個理由早就記 id 了。
         self.last_file = Some(self.current_buffer().id());
         self.current = index;
-        // **翻到一份還沒決定過的草稿，就在那一刻問**（2026-10-02 作者定）。開檔
+        // **翻到一份還沒決定過的草稿，就在那一刻問**（2026-10-02 定）。開檔
         // 是一條路，換檔是另一條——而「第一次看見這一份」在兩條路上是同一件事。
         self.ask_about_the_draft();
         let restored = self.current_buffer().saved_cursor();
@@ -687,6 +687,14 @@ impl Editor {
             }
         }
         self.add_buffer(buffer);
+        // **回到上次停的那一行**（2026-10-05 定）。不知道就不動。
+        //
+        // Warning: **擺在這裏，所以誰都蓋得過它**：會話還原、`:open 檔:30`、`:replace`
+        // 跳到命中——那些都在開檔之後纔挪光標，後說的算。
+        let went = self.current_buffer().path().map(Path::to_path_buf);
+        if let Some(path) = went {
+            self.go_back_to_where_i_was(&path);
+        }
         self.mark_visited();
         self.table_on_open();
         // 改動條：開檔是喊 git 的三個時刻之一（#55）。關着的話這一句是個空操作。
@@ -1200,7 +1208,7 @@ impl Editor {
         path: Option<&str>,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
-        // Warning: **鎖住的那一份一個檔都不寫**（2026-10-02 作者定「鎖住就不導出」）。
+        // Warning: **鎖住的那一份一個檔都不寫**（2026-10-02 定「鎖住就不導出」）。
         // `--help` 上寫着「Open locked: nothing this run opens can be typed
         // into」，而 `:export!` 從前在 `--readonly` 的會話裏照樣把一個**不相干**
         // 的檔整個蓋掉。保護的是「這一趟開着的檔」還是「這一趟寫出去的字」，是
