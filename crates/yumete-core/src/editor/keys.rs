@@ -472,9 +472,34 @@ impl Editor {
             return;
         };
         let grain = self.word_grain();
-        // **The operator doubled is the line**: `dd`, `yy`, `cc`.
+        // **The operator doubled is the line**: `dd`, `yy`, `cc`. `yss`, which
+        // is vim-surround's 「wrap this line」, falls out of the same rule.
         if first.is_none() && c == op {
             return self.run_vim_line(op);
+        }
+        // **vim-surround's three** (2026-10-06): `ds{bracket}` takes a pair
+        // off, `cs{old}{new}` swaps one, `ys{motion}{bracket}` puts one on.
+        //
+        // They are written here and not in the preset's table because `d`,
+        // `c` and `y` are operators: the table's left-hand side never gets to
+        // see the `s`. The editor's own spelling is `md`, `mr` and `ms`, and
+        // these three set exactly the same waits — the plugin is a second
+        // way to say it, not a second implementation.
+        //
+        // Warning: **`s` must not be a motion**, or `ds` would mean 「delete
+        // the `s` motion」. It is not one ([`VIM_MOTIONS`]), which is the same
+        // hole vim-surround moved into in the first place.
+        if first.is_none() && c == 's' && matches!(op, 'd' | 'c' | 'y') {
+            self.count = None;
+            self.alias_count = None;
+            self.pending = match op {
+                'd' => Pending::SurroundOff,
+                'c' => Pending::SurroundFrom,
+                // `ys` is still owed a motion; `'s'` is what this editor calls
+                // that wait, and [`Editor::do_vim`] is where it lands.
+                _ => Pending::VimOperator { op: 's', first: None },
+            };
+            return;
         }
         // Warning: **`;` 和 `,` 也是動作**（`:h ;`）：`d;` 把剛纔那個 `f`／`t` 再做
         // 一遍，`d,` 反着做。[`crate::vim::step_for`] 是純函數，記不住「剛纔那
@@ -547,6 +572,17 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let first = rope.char_to_line(self.sel.head());
         let last = (first + n - 1).min(rope.len_lines().saturating_sub(1));
+        // **`yss` is not a linewise `ys`.** vim-surround spells it
+        // `^v{count}$h`, which is 「from where the writing begins to the last
+        // character of the line」 — the indent stays outside the opener and
+        // the newline stays outside the closer. A whole-line span would put
+        // the bracket in front of the indent and after the line break.
+        if op == 's' {
+            let anchor = motion::line_first_non_blank(rope, rope.line_to_char(first));
+            let end = rope.line_to_char((last + 1).min(rope.len_lines()));
+            let head = end.saturating_sub(1).max(anchor);
+            return self.do_vim(op, motion::Span::Over { anchor, head });
+        }
         let span = self.line_span(first, last, op == 'c');
         self.do_vim(op, span);
     }
@@ -771,6 +807,28 @@ impl Editor {
 
     /// Do the verb, and say what the old `play_vim_motion` said about each.
     fn do_vim(&mut self, op: char, span: motion::Span) {
+        // **`ys{motion}{bracket}`**: the motion only says what to wrap, so
+        // nothing is edited yet and there is nothing to take a snapshot of.
+        // Select what it named and wait for the bracket, which is what `ms`
+        // does — [`Editor::surround_add`] takes its own snapshot.
+        if op == 's' {
+            let motion::Span::Over { anchor, mut head } = span else {
+                return;
+            };
+            // Warning: **The blanks at the tail stay outside the brackets.**
+            // vim-surround does this and says so in one line of `s:opfunc`:
+            // `let keeper = substitute(keeper,'\_s\@<!\s*$','','')`, with
+            // the piece it cut off put back after the closer. So `ysw` on
+            // `hello world` gives `(hello) world`, not `(hello )world` —
+            // and the hand that typed `ysw` meant the word, not the gap.
+            let rope = self.current_buffer().rope();
+            while head > anchor && rope.char(head).is_whitespace() {
+                head -= 1;
+            }
+            self.take_object(motion::Span::Over { anchor, head });
+            self.pending = Pending::Surround;
+            return;
+        }
         self.snapshot();
         match op {
             // vim's `d` and `c` fill the unnamed register.
@@ -1001,6 +1059,7 @@ impl Editor {
             | Pending::Replace
             | Pending::MatchPair { .. }
             | Pending::Surround
+            | Pending::SurroundOff
             | Pending::SurroundFrom
             | Pending::SurroundTo(_)) => {
                 // Spelt out rather than guarded by a predicate, because a
@@ -1077,7 +1136,7 @@ impl Editor {
                     Key::Char('i') => self.pending = Pending::MatchPair { around: false },
                     Key::Char('a') => self.pending = Pending::MatchPair { around: true },
                     Key::Char('s') => self.pending = Pending::Surround,
-                    Key::Char('d') => self.surround_delete(),
+                    Key::Char('d') => self.pending = Pending::SurroundOff,
                     Key::Char('r') => self.pending = Pending::SurroundFrom,
                     _ => {}
                 }
@@ -1910,6 +1969,7 @@ impl Editor {
             Pending::Replace => self.replace_chars(c),
             Pending::MatchPair { around } => self.select_pair(c, around),
             Pending::Surround => self.surround_add(c),
+            Pending::SurroundOff => self.surround_delete(c),
             Pending::SurroundFrom => self.pending = Pending::SurroundTo(c),
             Pending::SurroundTo(from) => self.surround_replace(from, c),
             // Everything else waits for a letter naming a command, and those

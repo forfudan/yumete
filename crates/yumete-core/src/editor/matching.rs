@@ -438,11 +438,27 @@ impl Editor {
     ///
     /// 現在 `*斜*`、`**粗**`、`~~刪~~`、`==標==`、`[字](網址)`、`[[條目]]` 都是三個
     /// 鍵。腳註與註釋同理（凡是 `ma m` 與 `mi m` 答得不一樣的構造）。
-    pub(super) fn surround_delete(&mut self) {
+    /// `which` 說拆哪一種：**`m` ＝ 最內層那一對**，別的字符 ＝ 只拆那一種。
+    ///
+    /// Warning: **這是 2026-10-06 補上的，從前它不吃字符。** helix 的 `surround_delete`
+    /// 一直是吃的（`commands.rs`：`Some('m') => None, // m selects the closest
+    /// surround pair`），我們這一支直接拆最內層——**同一個鍵在兩個編輯器裏不是同一件
+    /// 事**。定：「不管是 vim 还是 helix，都和他们的行为对齐就好了，不要让用户
+    /// 有意外。」順帶 vim 的 `ds(` 就能一行表映過來了：`md` 正好在等那個字符。
+    pub(super) fn surround_delete(&mut self, which: char) {
         if self.refuse_readonly() {
             return;
         }
-        let Some((out, inn, inn_end, out_end)) = self.marks_around_the_cursor() else {
+        let found = match which {
+            'm' => self.marks_around_the_cursor(),
+            ch => {
+                let rope = self.current_buffer().rope();
+                pair_of(ch)
+                    .and_then(|(open, close)| surrounding(rope, self.sel.head(), open, close))
+                    .map(|(open, close)| (open, open + 1, close, close + 1))
+            }
+        };
+        let Some((out, inn, inn_end, out_end)) = found else {
             self.status = say!("edit.no-pair-to-delete");
             return;
         };
@@ -467,12 +483,18 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let (Some((open, close)), Some((new_open, new_close))) = (pair_of(from), pair_of(to))
-        else {
+        let Some((new_open, new_close)) = pair_of(to) else {
             return;
         };
         let rope = self.current_buffer().rope();
-        let Some((start, end)) = surrounding(rope, self.sel.head(), open, close) else {
+        // **`m` ＝ 最內層那一對**，同 helix（`surround_replace` 那一支也認它）。
+        // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都沒有。
+        let found = match from {
+            'm' => self.innermost_pair(),
+            ch => pair_of(ch).and_then(|(open, close)| surrounding(rope, self.sel.head(), open, close)),
+        };
+        let Some((start, end)) = found else {
+            let (open, close) = pair_of(from).unwrap_or((from, from));
             self.status = say!("edit.no-pair-around", open, close);
             return;
         };

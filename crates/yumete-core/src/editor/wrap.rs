@@ -286,7 +286,8 @@ impl Editor {
         // typed is `d`, or `dg` on the way to `dgg`, and the HUD's whole job
         // is to hand those characters back.
         if let Pending::VimOperator { op, first } = self.pending {
-            let mut word = String::from(op);
+            // `ys` 内部記作一個字符 `s`；牌子上寫的是手按過的那兩個鍵。
+            let mut word = if op == 's' { String::from("ys") } else { String::from(op) };
             if let Some(f) = first {
                 word.push(f);
             }
@@ -311,6 +312,7 @@ impl Editor {
             Pending::MatchPair { around: false } => "mi",
             Pending::MatchPair { around: true } => "ma",
             Pending::Surround => "ms",
+            Pending::SurroundOff => "md",
             Pending::SurroundFrom | Pending::SurroundTo(_) => "mr",
             Pending::Table => "t",
             Pending::TableConvert => "tx",

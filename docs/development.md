@@ -19207,6 +19207,30 @@ vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 qu
 **不加 `:surround` 命令**：helix 那邊 `ms`／`md`／`mr` 本來就有，命令只是給同一件事加第二
 種寫法。
 
+**做完了（2026-10-06）**，比議定稿多出一件：`md`／`mr` 從前**不吃字符**，而 helix 的
+`surround_delete` 一直是吃的（`helix-term/src/commands.rs`：`Some('m') => None, // m selects
+the closest surround pair`）。同一個鍵在兩個編輯器裏不是同一件事，所以兩邊一起改齊——
+`md`*c*、`mr`*c**d*，`m` 這個字符就是「最裏面那一對」，原來那個行為一個鍵都沒少。
+
+vim 那三條的落點：
+
+| 按的 | 落到 | 在哪 |
+| --- | --- | --- |
+| `ds`*c* | `Pending::SurroundOff` | `keys.rs` 的 `vim_operator_key` |
+| `cs`*c**d* | `Pending::SurroundFrom` | 同上 |
+| `ys`{動作}*c* | `Pending::VimOperator { op: 's' }` → `do_vim` | 同上 |
+| `yss` | `run_vim_line('s')` | 同上 |
+| `m`*a* | 別名 `("m", "M")` | `keymap.rs` |
+
+寫在 `vim_operator_key` 而不是寫進那張別名表，是因為 `d`／`c`／`y` 是操作符，表的左邊看不
+到後面那個 `s`。
+
+⚠️ **`ys` 的跨度要掐掉尾巴上的空白。** vim-surround 的 `s:opfunc` 一行寫着
+`let keeper = substitute(keeper,'\_s\@<!\s*$','','')`，掐下來的那一截放到閉括號後面——所以
+`ysw` 在 `hello world` 上給的是 `(hello) world`，不是 `(hello )world`。
+⚠️ **`yss` 不是「整行的 `ys`」**：vim-surround 拼的是 `^v{count}$h`，縮進在開括號外面、換行
+在閉括號外面。按整行跨度做會把括號放到縮進前面和換行後面，兩頭都錯。
+
 ### 7. `ye 某個檔` 回到上次那一行，另存一份更長的「我在哪裏」
 
 會話檔**已經**每行記着 `路徑\t行號`，可 `restore_session` 有一道閘：**只在沒有指名文件的
