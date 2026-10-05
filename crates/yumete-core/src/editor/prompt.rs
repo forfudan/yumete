@@ -81,9 +81,13 @@ impl Editor {
                 // 問的時候光標在哪）。
                 _ => {}
             }
-        } else if matches!(key, Key::Ctrl('n')) {
+        } else if matches!(key, Key::Ctrl('n') | Key::Ctrl('x')) {
             // **叫它出來。** 稿子裏没有服務器可問，那就什麽都不做——`C-n` 在
             // 這個編輯器裏還没有別的意思，無聲勝過一句用不上的抱怨。
+            //
+            // `C-x` 是 helix 的拼法（`default.rs` 的插入態 `completion`），
+            // 2026-10-06 一併收下：兩個拼法開同一張單子，插入態裏 `C-x` 本來
+            // 什麼都不做。
             if self.ask_what_comes_next(true) {
                 return;
             }
@@ -202,7 +206,7 @@ impl Editor {
                 // command somebody has to remember.
                 self.format_md_table();
             }
-            Key::Enter => {
+            Key::Enter | Key::Ctrl('j') => {
                 // A list carries itself down, and an empty item ends (#418).
                 if self.continue_the_list() {
                     return;
@@ -213,13 +217,23 @@ impl Editor {
                 self.insert_recording.push_str(ending);
                 self.insert_str(ending);
             }
-            Key::Backspace => {
+            // **`C-h` is Backspace** and **`C-j` is Enter** — the two the
+            // terminal has sent as those control codes since before vi, and
+            // helix binds them in Insert as well (`default.rs`:
+            // `C-h` delete_char_backward, `C-j` insert_newline). Here they
+            // used to fall off the end into 「chords are not text」 and do
+            // nothing at all (2026-10-06).
+            Key::Backspace | Key::Ctrl('h') => {
                 self.insert_recording.pop();
                 self.delete_before_cursor();
             }
             // Forward delete. It did nothing at all before — the key never
-            // reached the editor, in any mode.
-            Key::Delete => self.delete_at_cursor(),
+            // reached the editor, in any mode. `C-d` is helix's spelling of
+            // the same thing in Insert (2026-10-06).
+            Key::Delete | Key::Ctrl('d') => self.delete_at_cursor(),
+            // **`A-d` takes the word ahead**, the other half of `C-w`
+            // (helix's `delete_word_forward`, and readline's). 2026-10-06.
+            Key::Alt('d') => self.delete_word_after_cursor(),
             // `C-w` and `C-u` are in vi, in Helix, in readline and in every
             // terminal prompt a person has ever typed at, and Insert mode ate
             // both. Through an IME that mattered more than it looks: taking

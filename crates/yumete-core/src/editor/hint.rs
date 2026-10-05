@@ -432,7 +432,14 @@ impl Editor {
                     true => say!("hint.hop.next"),
                     false => say!("hint.hop.previous"),
                 },
-                Self::said(Self::HOP_KEYS.iter().copied()),
+                Self::said(Self::HOP_KEYS.iter().copied().chain(
+                    match forward {
+                        true => Self::HOP_KEYS_FORWARD,
+                        false => Self::HOP_KEYS_BACK,
+                    }
+                    .iter()
+                    .copied(),
+                )),
             ),
             // **區域那一組**（2026-09-30，照 helix 的 `C-w`）。
             Pending::Region => (say!("hint.region.title"), Self::said(Self::REGION_KEYS.iter().copied())),

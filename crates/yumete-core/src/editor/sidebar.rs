@@ -510,6 +510,14 @@ impl Editor {
     /// sidebar as _we/_wi will do this」。
     pub(super) fn on_region_key(&mut self, key: Key) {
         use crate::sidebar::Side;
+        // **`C-w C-w` 和 `C-w w` 是同一件事**（2026-10-06，對齊 helix）。helix 的
+        // 區域組每一格都綁着兩個拼法——`C-w C-w`、`C-w C-s`、`C-w C-o`、`C-w C-h`…
+        // （`default.rs` 的 window map）——因為按着 Ctrl 不放是這一組最自然的
+        // 按法。從前這裏只認 `Key::Char`，於是那半邊**整組靜默掉地**。
+        let key = match key {
+            Key::Ctrl(c) => Key::Char(c),
+            other => other,
+        };
         match key {
             Key::Char('w') => self.next_region(),
             // 按方向走。四個區域：左欄、正文、副編輯區、右欄。
@@ -538,7 +546,9 @@ impl Editor {
             // 個編輯區的時候這兩件事要分家——`s` 是「再切一刀」，`j` 是「走下
             // 去」。說的「We will expand it to more possibilities in
             // future」指的就是這裏。
-            Key::Char('s') => self.go_to_region(2),
+            // `v` 是 helix 的豎切（`vsplit`）。眼下只有上下兩個編輯區，所以它
+            // 和 `s` 落在同一處；真切得了豎的那一天這兩個分家。
+            Key::Char('s') | Key::Char('v') => self.go_to_region(2),
             Key::Char('q') => self.close_this_region(),
             Key::Char('o') => self.close_other_regions(),
             _ => {}

@@ -984,8 +984,19 @@ impl Editor {
             }
             Pending::Hop { forward } => {
                 self.pending = Pending::None;
-                if key == Key::Char('c') {
-                    self.go_to_conflict(forward);
+                match key {
+                    Key::Char('c') => self.go_to_conflict(forward),
+                    // **`]p` / `[p` 是段落**，helix 的 `goto_next_paragraph` /
+                    // `goto_prev_paragraph`（2026-10-06 補的）。這裏 `}` / `{`
+                    // 早就是同一件事，這兩個是 helix 的手會按的那個拼法。
+                    Key::Char('p') => {
+                        let span = self.run_motion(motion::Motion::Paragraph { forward });
+                        self.take_span(span);
+                    }
+                    // **`]空格` / `[空格` 加一條空行，人不動**（helix 的
+                    // `add_newline_below` / `_above`，2026-10-06 補的）。
+                    Key::Char(' ') => self.add_blank_line(forward),
+                    _ => {}
                 }
                 return;
             }
@@ -1825,7 +1836,11 @@ impl Editor {
             // apart; without it a terminal sends the same byte for both, and
             // `C-i` simply does whatever Tab does.
             Key::Ctrl('o') => self.walk_jumps(true),
-            Key::Ctrl('i') => self.walk_jumps(false),
+            // Warning: **`Tab` 在 Normal 裏也是這一件事**（2026-10-06，對齊 helix 的
+            // `jump_forward`）。終端把 `Tab` 和 `C-i` 發成同一個字節，而這個編輯器
+            // 分得開（`kitty` 那套協議），於是從前 `Tab` 在 Normal 裏一個 arm 都
+            // 沒有、靜默掉地——偏偏一個終端一換，手上那個 `C-i` 就變成了它。
+            Key::Ctrl('i') | Key::Tab => self.walk_jumps(false),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
             Key::Ctrl('u') => self.move_page(count, true, 0.5),
             // **三分之二頁**（2026-10-01 定）。起因是 `C-u`／`C-d` 在 Mac 上
@@ -2413,6 +2428,17 @@ impl Editor {
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
     pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] = &[("c", "hint.hop.conflict")];
+
+    /// The two that read differently depending on which way `[` / `]` points.
+    ///
+    /// Warning: **段落那一行借的是 `:keymap actions` 的名字**（`action.goto-next-paragraph`
+    /// / `action.goto-prev-paragraph`）：同一件事在兩張表上，寫成兩句話只會讓
+    /// 它們慢慢說岔。
+    pub(super) const HOP_KEYS_FORWARD: &'static [(&'static str, &'static str)] =
+        &[("p", "action.goto-next-paragraph"), ("␣", "hint.hop.blank-below")];
+
+    pub(super) const HOP_KEYS_BACK: &'static [(&'static str, &'static str)] =
+        &[("p", "action.goto-prev-paragraph"), ("␣", "hint.hop.blank-above")];
 
     /// What `空格 m` may be finished with — which side of the conflict to keep.
     /// **區域那一組**（`C-w`／`空格 w`，2026-09-30 定）。

@@ -17545,6 +17545,113 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **`]空格`／`[空格` 加一條空行，人不動**（2026-10-06，對齊 helix）。
+///
+/// 不是 `o`／`O`：那兩個開一行**並且開始打字**。這一個是把兩段推開而眼睛不離開
+/// 原處，所以 helix 給了它自己的鍵，也所以它不動光標。
+#[test]
+fn a_blank_line_either_side_and_the_cursor_stays() {
+    let mut ed = typed("甲\n乙\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "]\u{20}");
+    assert_eq!(ed.current_buffer().text(), "甲\n\n乙\n");
+    assert_eq!(ed.selection().0, 0, "光標沒動");
+    assert_eq!(ed.mode(), Mode::Normal, "沒進插入態");
+    press(&mut ed, "[\u{20}");
+    assert_eq!(ed.current_buffer().text(), "\n甲\n\n乙\n");
+    assert_eq!(ed.selection().0, 1, "上面加了一行，光標跟着那一行走");
+    // `]p`／`[p` 和 `}`／`{` 是同一件事，helix 的手按的是前一個拼法。
+    let mut ed = typed("一段。\n\n二段。\n");
+    press(&mut ed, "gg]p");
+    let hop = ed.selection();
+    let mut ed = typed("一段。\n\n二段。\n");
+    press(&mut ed, "gg}");
+    assert_eq!(ed.selection(), hop, "]p 就是 }}");
+}
+
+/// **插入態吞掉的那四個和弦**（2026-10-06，對齊 helix）。
+///
+/// `Key::Ctrl(_) | Key::Alt(_) => {}` 那一條兜底把它們全收了：`C-h`（退格）、
+/// `C-j`（換行）、`C-d`（往後刪一個字）、`A-d`（往後刪一個詞）。前三個是終端在
+/// vi 之前就這麼發的控制碼，helix 的插入態也都綁着。
+#[test]
+fn the_four_chords_insert_mode_used_to_swallow() {
+    let run = |steps: &dyn Fn(&mut Editor)| {
+        let mut ed = typed("alpha beta\n");
+        press(&mut ed, "gg");
+        steps(&mut ed);
+        ed.current_buffer().text().to_string()
+    };
+    // `C-h` 退格。
+    assert_eq!(
+        run(&|ed| {
+            press(ed, "ll");
+            ed.on_key(Key::Char('i'));
+            ed.on_key(Key::Ctrl('h'));
+        }),
+        "apha beta\n"
+    );
+    // `C-j` 換行。
+    assert_eq!(
+        run(&|ed| {
+            press(ed, "ll");
+            ed.on_key(Key::Char('i'));
+            ed.on_key(Key::Ctrl('j'));
+        }),
+        "al\npha beta\n"
+    );
+    // `C-d` 往後刪一個字。
+    assert_eq!(
+        run(&|ed| {
+            ed.on_key(Key::Char('i'));
+            ed.on_key(Key::Ctrl('d'));
+        }),
+        "lpha beta\n"
+    );
+    // `A-d` 往後刪一個詞。
+    assert_eq!(
+        run(&|ed| {
+            ed.on_key(Key::Char('i'));
+            ed.on_key(Key::Alt('d'));
+        }),
+        "beta\n"
+    );
+    // Warning: **`A-d` 不跨行**，和插入態每一條編輯一樣。
+    assert_eq!(
+        run(&|ed| {
+            press(ed, "gl");
+            ed.on_key(Key::Char('a'));
+            ed.on_key(Key::Alt('d'));
+        }),
+        "alpha beta\n"
+    );
+}
+
+/// **選區模式裏 `/`／`n`／`N` 是延伸**（2026-10-06，對齊 helix）。
+///
+/// helix 的 select 下 `n`／`N` 綁的是 `extend_search_next`／`_prev`，`/` 的搜索走
+/// `Movement::Extend` 且**模式不變**。從前這裏無條件把 `extend` 關掉，於是 `v` 之後
+/// 一搜就掉回 Normal，剛選的那一段也沒了。
+#[test]
+fn searching_inside_a_selection_extends_it() {
+    let mut ed = typed("alpha beta gamma\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "v");
+    press(&mut ed, "/gamma");
+    ed.on_key(Key::Enter);
+    assert!(ed.is_extending(), "還在選區模式裏");
+    let (from, to) = ed.selection();
+    assert_eq!(from, 0, "錨點留在原處");
+    assert!(to >= 16, "頭走到 gamma 的末尾：{to}");
+    // Normal 裏還是跳走，不是延伸。
+    let mut ed = typed("alpha beta gamma\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "/gamma");
+    ed.on_key(Key::Enter);
+    assert!(!ed.is_extending());
+    assert_eq!(ed.selection().0, 11, "選中的就是那一處");
+}
+
 /// **`g/`（和 `*`／`#`）在英文上取的是一個字母，不是那個詞**（2026-10-06 查出來的）。
 ///
 /// 兩個病疊在一起，哪一個單獨修都還是錯的：

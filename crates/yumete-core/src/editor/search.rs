@@ -139,9 +139,24 @@ impl Editor {
                 // covers the cursor's own grapheme.
                 let end = end.min(len);
                 let head = motion::prev_grapheme(rope, end).max(pos);
-                self.sel.set_anchor(pos);
-                self.sel.set_head(head);
-                self.extend = false;
+                // **選區模式裏搜索是延伸，不是跳走**（2026-10-06，對齊 helix）。
+                // helix 的 select 下 `n`／`N` 綁的是 `extend_search_next`／`_prev`
+                // （`default.rs:359-360`），而 `/` 的 `search` 在 select 下走
+                // `Movement::Extend`、**模式不變**（`commands.rs` 的 `search_impl`）。
+                // 從前這裏無條件 `self.extend = false`，於是 `v` 之後按一下 `/`
+                // 就掉回 Normal，選區也沒了——實測 `v w w Esc` 之後 `d` 只刪一個
+                // 空格。錨點留着，頭走到這一處**去的那一頭**：往前是最後一個字，
+                // 往回是第一個字。
+                match self.extend {
+                    true => self.sel.set_head(match forward {
+                        true => head,
+                        false => pos,
+                    }),
+                    false => {
+                        self.sel.set_anchor(pos);
+                        self.sel.set_head(head);
+                    }
+                }
                 self.refresh_goal_column();
             }
             None if scoped => self.status = say!("find.not-in-table", pattern),
