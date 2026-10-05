@@ -2476,6 +2476,11 @@ pub struct Editor {
     /// `yumete-config`——「只有前端知道數據目錄在哪」（`main.rs` 那一段註釋）。
     /// 項目那一份不在這裏：核心自己認得 `.yumete` 這個記號（見 `project_root`），
     /// 算得出來。
+    /// **這一次是空手打開的，還沒人動過**——開場屏畫不畫看它。
+    ///
+    /// 前端在啓動時說一句（它纔知道命令行上有沒有給檔名）；一有東西寫進緩衝區、
+    /// 或者開了一個檔，就自己滅掉。
+    opened_empty: bool,
     where_config: Option<PathBuf>,
     where_data: Option<PathBuf>,
     /// The data directory, for the global word list. Set by the front end.
@@ -3258,6 +3263,7 @@ impl Editor {
             table_bypass: std::cell::Cell::new(false),
             drafts_dir: None,
             build: String::new(),
+            opened_empty: false,
             where_config: None,
             where_data: None,
             data_dir: None,

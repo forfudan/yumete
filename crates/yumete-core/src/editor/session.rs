@@ -259,7 +259,26 @@ impl Editor {
         self.build = version.to_string();
     }
 
-    /// **全局配置那個檔，和數據目錄**——同上，前端告訴的（走 XDG，核心不知道）。
+    /// 這一份是哪一版（`:version` 和開場屏都印它）。
+    pub fn build_name(&self) -> &str {
+        &self.build
+    }
+
+    /// **這一次是空手打開的**——前端說的，因為只有它看得見命令行上有沒有檔名。
+    pub fn opened_with_nothing(&mut self) {
+        self.opened_empty = true;
+    }
+
+    /// **開場屏畫不畫。**
+    ///
+    /// Warning: **一有字就不畫了，不必誰去清它**——問的是「緩衝區還空着嗎」，所以
+    /// 打第一個字它自己就沒了（ 2026-10-05 定：「打一個字就消失」）。按 `j`
+    /// 這種不改稿子的鍵它照舊在，同 vim。
+    pub fn intro(&self) -> bool {
+        self.opened_empty
+            && self.current_buffer().path().is_none()
+            && self.current_buffer().char_count() == 0
+    }
     pub fn knows_its_paths(&mut self, config: PathBuf, data: PathBuf) {
         self.where_config = Some(config);
         self.where_data = Some(data);
