@@ -146,7 +146,8 @@ const DISOWNED: &[&str] = &[
     // reader who knew it is told where the job went. Warning: `:replace` is **not**
     // here: that name came back, with a different meaning, the way `:search`
     // did — a signpost may only point away from a word nobody can type.
-    ":grep",
+    // Warning: **`:grep` came back too** (2026-10-06, the thirteen's fifth), as
+    // an alias of `:search`, so it came off this list the same way.
     ":scheme",
     ":chaifen",
     ":cf",

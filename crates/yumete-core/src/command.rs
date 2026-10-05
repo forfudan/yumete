@@ -181,7 +181,7 @@ pub enum Command {
     CheckCharset,
     /// `:convert …` — 簡繁, run through opencc (Feature #241).
     Convert(ConvertAsk),
-    /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
+    /// `:<n>` or `:goto <n>` — put the cursor on line `n`.
     GotoLine(usize),
     /// `:recover` — **問要不要用那一份草稿**（Feature #79）。
     ///
@@ -2576,7 +2576,10 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "goto",
-        aliases: &["g"],
+        // Warning: **`:g` 這個別名 2026-10-06 拿掉了**（十三條的第五條）。`:20` 本來
+        // 就跳第 20 行，別名多餘；而 `:g` 在 vim 裏是 `:global`——「對每一條配得上
+        // 的行做一件事」——占着那個名字去做跳行，是這張單子上最容易出事的一種。
+        aliases: &[],
         help: "cmd.commands.goto",
         needs: &[],
         params: &[Param::Free("<行號>")],
@@ -3877,7 +3880,10 @@ pub const COMMANDS: &[Entry] = &[
         // 表之前就攔下了帶分隔符的那一種，而它明說「光禿禿的 `:s` 是別的命令」
         // （那支函數開頭那段註釋）。所以兩者分得清：帶斜杠是一次性替換，不帶是
         // 開面板。
-        aliases: &["s"],
+        // **`:grep` 也開這扇面板**（2026-10-06，十三條的第五條）。vim 的 `:grep`
+        // 跑外部 grep、結果進 quickfix 列表；共同產出是一張走得了的列表，而這扇
+        // 面板就是那張表。
+        aliases: &["s", "grep"],
         help: "cmd.commands.search",
         needs: &[],
         params: &[Param::Path],
@@ -6511,7 +6517,6 @@ mod tests {
             for alias in entry.aliases {
                 let line = match *alias {
                     "o" | "e" | "edit" => format!(":{alias} a.md"),
-                    "g" => ":g 1".to_string(),
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
                     "md" => ":md footnote".to_string(),
