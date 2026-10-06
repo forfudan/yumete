@@ -17567,6 +17567,55 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **`gv` 重選上一次那一段，插入態 `C-o` 做一個命令就回來**（vim，2026-10-06）。
+#[test]
+fn vim_reselects_and_borrows_one_normal_key() {
+    // ---- `gv` ------------------------------------------------------------
+    let mut ed = typed_vim("alpha beta gamma\n");
+    press(&mut ed, "vll");
+    let was = ed.selection();
+    ed.on_key(Key::Esc);
+    press(&mut ed, "gg");
+    press(&mut ed, "gv");
+    assert!(ed.is_extending(), "回到延伸裏");
+    assert_eq!(ed.selection(), was, "就是剛才那一段");
+    // 動完手的那一段也記得——同 vim。
+    let mut ed = typed_vim("一二三四\n");
+    press(&mut ed, "vld");
+    press(&mut ed, "gv");
+    assert!(ed.is_extending());
+    // 這一趟還沒選過東西就說一句，不是一聲不吭。
+    let mut ed = typed_vim("abc\n");
+    press(&mut ed, "gv");
+    assert!(!ed.status().is_empty(), "要說一句");
+
+    // ---- 插入態的 `C-o` --------------------------------------------------
+    // 寫到一半 `C-o` 再 `gg`，跳到開頭並且**還在插入態**。
+    let mut ed = typed_vim("甲\n乙\n丙\n");
+    press(&mut ed, "jjA");
+    press(&mut ed, "X");
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(ed.mode(), Mode::Normal, "借走了這一鍵");
+    press(&mut ed, "gg");
+    assert_eq!(ed.mode(), Mode::Insert, "一鍵走完就回插入態");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 0);
+    press(&mut ed, "Y");
+    assert_eq!(ed.current_buffer().text(), "Y甲\n乙\n丙X\n", "接着打字");
+
+    // Warning: **進了別的模式就不拽回來**——`C-o` 之後按 `:` 是人自己要去的地方。
+    let mut ed = typed_vim("甲\n");
+    press(&mut ed, "A");
+    ed.on_key(Key::Ctrl('o'));
+    press(&mut ed, ":");
+    assert_eq!(ed.mode(), Mode::Command);
+
+    // Warning: **helix 鍵位下插入態的 `C-o` 什麼都不是。**
+    let mut ed = typed("甲\n");
+    press(&mut ed, "ggA");
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(ed.mode(), Mode::Insert, "helix 不借這一鍵");
+}
+
 /// **vim 的 `R`：打一個字蓋一個字**（2026-10-06 定，只在 vim 鍵位下）。
 #[test]
 fn the_vim_r_writes_over_what_is_there() {
