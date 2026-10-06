@@ -441,12 +441,29 @@ pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
         return None;
     }
     let (a, b) = (was.as_bytes(), now.as_bytes());
-    let head = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    let mut head = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    // Warning: **數的是字節，而一個字的中間也可以對得上**（2026-10-06 按 `d`
+    // 删到「名」當場崩的那一下）。「的名字」删成「的字」：名 是 `E5 90 8D`、
+    // 字 是 `E5 AD 97`，兩個都以 `E5` 開頭，於是前綴數到 4 個字節——正落在那個
+    // 字裏面。下面 `point` 的 `&text[..byte]` 當場 panic，而就算不 panic，
+    // 交給 tree-sitter 的也是一個不存在的位置。
+    //
+    // **退到字的邊界上**。前綴那一段兩邊字節相同，所以邊界也相同；退一步只會讓
+    // 重解析的範圍**大**一點，而上面那一段說過，大一點的答案一樣對。
+    while head > 0 && !(was.is_char_boundary(head) && now.is_char_boundary(head)) {
+        head -= 1;
+    }
     // 從後面數，兩頭不許越過已經對上的那一段。
     let most = a.len().min(b.len()) - head;
-    let tail = (0..most)
+    let mut tail = (0..most)
         .take_while(|i| a[a.len() - 1 - i] == b[b.len() - 1 - i])
         .count();
+    // 尾巴同理，而這一頭兩邊的位置不同，所以兩邊都要問。
+    while tail > 0
+        && !(was.is_char_boundary(a.len() - tail) && now.is_char_boundary(b.len() - tail))
+    {
+        tail -= 1;
+    }
     let point = |text: &str, byte: usize| {
         let upto = &text[..byte];
         let row = upto.matches('\n').count();
@@ -774,6 +791,37 @@ mod tests {
         let got = highlight(Language::Python, &lines("def (\n# 註\nreturn"));
         assert_eq!(at(&got, 1, 0), Some(Token::Comment), "{:?}", got);
     }
+    /// **掐頭去尾不許切進一個字裏**（2026-10-06，按 `d` 删到「名」當場崩的
+    /// 那一下，`code.rs:451` 的 `&text[..byte]`）。
+    ///
+    /// 漢字在 UTF-8 裏三個字節，開頭常常一樣：名 `E5 90 8D`、字 `E5 AD 97`。
+    /// 所以「相同的字節數」會停在一個字的中間，而那不是一個位置。
+    #[test]
+    fn an_edit_never_starts_or_ends_inside_a_character() {
+        // 那一下：「的名字」删成「的字」，前綴數到 4 個字節。
+        let edit = what_changed("的名字", "的字").expect("they differ");
+        assert!("的名字".is_char_boundary(edit.start_byte), "start");
+        assert!("的名字".is_char_boundary(edit.old_end_byte), "old end");
+        assert!("的字".is_char_boundary(edit.new_end_byte), "new end");
+
+        // 同一族：尾巴那一頭也會落在字裏（髮 `E9 AB BC`、髫 `E9 AB AB`）。
+        let edit = what_changed("一髮絲", "一髫絲").expect("they differ");
+        assert!("一髮絲".is_char_boundary(edit.start_byte));
+        assert!("一髮絲".is_char_boundary(edit.old_end_byte));
+        assert!("一髫絲".is_char_boundary(edit.new_end_byte));
+
+        // 整份稿子逐字删一遍，一次都不許切錯——這是按住 `d` 做的事。
+        let text = "（2026-09-29 定的名字）違反了約定，所以删掉。\n下一行。\n";
+        let chars: Vec<char> = text.chars().collect();
+        for n in 0..chars.len() {
+            let now: String =
+                chars.iter().enumerate().filter(|(i, _)| *i != n).map(|(_, c)| c).collect();
+            let Some(edit) = what_changed(text, &now) else { continue };
+            assert!(text.is_char_boundary(edit.start_byte), "start at {n}");
+            assert!(text.is_char_boundary(edit.old_end_byte), "old end at {n}");
+            assert!(now.is_char_boundary(edit.new_end_byte), "new end at {n}");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -990,3 +1038,4 @@ struct 三 { 甲: u8 }
         println!();
     }
 }
+
