@@ -2372,6 +2372,13 @@ pub struct Editor {
     /// 不是一個新的 `Mode`：`Mode` 上有幾十處窮盡的 `match`，而這一件事只在
     /// 「文字落進緩衝區」那一個漏斗上分岔（[`Editor::insert_str`]），退格那一處
     /// 再分一次。狀態欄那一格由 [`Editor::mode_label`] 問它，報 `REP`。
+    /// **延伸關掉那一刻的那一段**，`gv` 拿它重選（vim，2026-10-06）。
+    last_selection: Option<(usize, usize)>,
+    /// **插入態的 `C-o`：做一個 Normal 命令就回來**（vim，2026-10-06）。
+    ///
+    /// 記的是「回哪一個模式」，不是一個布爾——將來若有第二種進得去的模式，這一格
+    /// 不用改。按下去先回 Normal；那一鍵走完，`on_key` 的出口把模式放回來。
+    one_normal_key: Option<crate::input::Mode>,
     overwriting: bool,
     /// 蓋掉的字，一個進去的字一格——原處沒有字（蓋到行尾外面去了）就是 `None`。
     /// 退格照這張單子倒着還回去，同 vim。
@@ -3282,6 +3289,8 @@ impl Editor {
             repeating_edit: false,
             insert_recording: String::new(),
             insert_again: 0,
+            last_selection: None,
+            one_normal_key: None,
             overwriting: false,
             overwritten: Vec::new(),
             insert_opened: None,

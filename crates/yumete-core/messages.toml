@@ -8321,6 +8321,13 @@ zhs = "表格里只能有一个光标"
 en = "a table view holds one cursor"
 
 [[message]]
+# gv：這一趟還沒選過東西，沒有可重選的
+key = "selection.nothing-to-reselect"
+zht = "還没選過東西"
+zhs = "还没选过东西"
+en = "nothing has been selected yet"
+
+[[message]]
 # 按 A-s 想按行切開，可是選區是空的
 key = "selection.nothing-to-split"
 zht = "沒有可切的"

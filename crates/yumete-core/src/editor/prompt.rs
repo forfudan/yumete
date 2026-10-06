@@ -261,6 +261,16 @@ impl Editor {
             // **`C-r` 把一個寄存器插進來**，vi 的拼法。Warning: 它在等一個字符——`"` 是無名
             // 的那一個（同 vi），別的字母是具名的。
             Key::Ctrl('r') => self.pending = Pending::Register,
+            // **`C-o`：做一個 Normal 命令就回來**（vim 的 `i_CTRL-O`，2026-10-06）。
+            // 寫稿子寫到一半要 `gg` 看一眼開頭、要 `p` 貼一段、要 `x` 刪一個字，
+            // 而出插入態再進來會斷掉一次撤銷、也丟了 `A` 那個位置。
+            //
+            // Warning: **只在 vim 鍵位下。** helix 沒有這個鍵，它那邊插入態的 `C-o`
+            // 什麼都不是；兩邊各跟各的。
+            Key::Ctrl('o') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.one_normal_key = Some(Mode::Insert);
+                self.mode = Mode::Normal;
+            }
             // Across the break, as in 常模 — outside a cell, where the two
             // arms above hold the arrows to the cell they are writing in.
             Key::Left => self.move_horizontal(motion::prev_grapheme),

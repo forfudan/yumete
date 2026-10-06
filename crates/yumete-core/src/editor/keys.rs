@@ -141,6 +141,12 @@ impl Editor {
             }
             self.edit_keys.push(key);
         }
+        // 插入態的 `C-o` 借走了一個鍵嗎——借的是**這一鍵之前**就借好的，所以要在
+        // 這裏記下來（見 [`Self::go_back_after_one_key`]）。
+        let borrowed = self.one_normal_key;
+        // 這一鍵按下去之前延伸開着沒有——`gv` 要的那一段就是它關掉的那一刻留下
+        // 的（見 [`Self::keep_the_last_selection`]）。
+        let was_extending = self.extend.then(|| self.span());
         // Where the pane's window was pointed before this key — see
         // [`Self::hold_the_pane`].
         let held = self
@@ -195,9 +201,63 @@ impl Editor {
         }
         self.forget_a_guessed_table();
         self.hold_the_pane(held);
+        self.keep_the_last_selection(was_extending);
+        self.go_back_after_one_key(borrowed);
         self.keep_off_the_newline();
         self.find_the_table_here();
         outcome
+    }
+
+    /// **插入態 `C-o` 借的那一個鍵走完了，把模式放回去**（vim，2026-10-06）。
+    ///
+    /// `borrowed` 是**這一鍵開始之前**那一格的值：`C-o` 自己那一下會把它設上，
+    /// 而那一下不該算成借走的那一鍵。所以問的是進門時的快照，不是現在的。
+    ///
+    /// Warning: **進了別的模式就不放**：`C-o` 之後按 `:`、`/`、`i` 都是人自己要去的
+    /// 地方，把他拽回插入態是搶鍵。只有還站在 Normal 上才回去。
+    fn go_back_after_one_key(&mut self, borrowed: Option<crate::input::Mode>) {
+        let Some(back) = borrowed else {
+            return;
+        };
+        if self.one_normal_key != Some(back) {
+            // 那一鍵自己換了這一格（又一次 `C-o`），聽它的。
+            return;
+        }
+        // Warning: **一個「命令」不一定是一個鍵**（寫這一支的時候當場測出來的）。
+        // `C-o` 之後按 `gg`：第一個 `g` 只是把 `Pending::Goto` 架起來，那一下就
+        // 放回插入態的話，第二個 `g` 就打進稿子裏了。數字也一樣（`C-o` `3` `j`）。
+        // 所以要等這一串**湊完**：沒有半截的序列、沒有攢着的數字、沒有按住的別名。
+        let halfway = self.pending != Pending::None
+            || self.count.is_some()
+            || self.operator_count.is_some()
+            || self.alias_count.is_some()
+            || !self.alias_held.is_empty();
+        if halfway {
+            return;
+        }
+        self.one_normal_key = None;
+        if self.mode == Mode::Normal {
+            self.mode = back;
+        }
+    }
+
+    /// **記下延伸關掉那一刻的那一段**，`gv` 拿它重選（vim，2026-10-06）。
+    ///
+    /// 和 [`Self::hold_the_pane`] 同一個位置、同一條理由：這件事要在**每一鍵之後**
+    /// 問一次，而「延伸是從哪幾條路關掉的」不止一條（`Esc`、`v` 再按一次、`d`、
+    /// `y`、可視模式那八個鍵…）。寫在出口上，就不會漏。
+    ///
+    /// Warning: **動完手的那一段也記**，同 vim：`vjd` 之後 `gv` 選的是那一段原來佔的
+    /// 位置。文字已經不在了，所以還原的時候要夾一次——vim 在這件事上同樣是「大致
+    /// 那一塊」。
+    fn keep_the_last_selection(&mut self, was: Option<(usize, usize)>) {
+        let Some(span) = was else {
+            return;
+        };
+        if self.extend {
+            return;
+        }
+        self.last_selection = Some(span);
     }
 
     /// **vim 鍵位下光標不停在換行符上**（十三條的第 9 條，規劃在 §5.85）。
@@ -2504,6 +2564,20 @@ impl Editor {
             // 在這個倉是「選出所有匹配」「拿匹配當分隔符」；`g` 組兩邊都空着的小寫
             // 只有 `o q u v z`——`gb` 會撞 helix 的 goto_window_bottom，`gx` 這裏
             // 已經是「跟着鏈接走」。
+            // **`gv` 重選上一次那一段**（vim，2026-10-06）。helix 沒有這個命令，
+            // 所以它只在 vim 鍵位下——`g` 那一組在這一端本來就空着一個 `v`。
+            Key::Char('v') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                let Some((anchor, head)) = self.last_selection else {
+                    self.status = say!("selection.nothing-to-reselect");
+                    return;
+                };
+                let len = self.current_buffer().rope().len_chars();
+                self.sel.set_anchor(anchor.min(len));
+                self.sel.set_head(head.min(len));
+                self.extend = true;
+                self.clamp_cursor();
+                self.refresh_goal_column();
+            }
             Key::Char('o') => self.start_seek(false),
             Key::Char('u') => self.start_seek(true),
             // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
