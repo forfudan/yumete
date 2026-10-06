@@ -1329,10 +1329,34 @@ find = "打開 打开 開檔 开档 edit file"
 [[message]]
 # : 命令選單裏 pipe 那一項的說明（commands 組）
 key = "cmd.commands.pipe"
-zht = "把選區送給一條命令，用它的輸出換掉（`!`）"
-zhs = "把选区送给一条命令，用它的输出换掉（`!`）"
-en = "send the selection through a command and take back its output (`!`)"
+zht = "將選區發送爲終端命令，且使用其輸出替換選區"
+zhs = "将选区发送为终端命令，且使用其输出替换选区"
+en = "send the selection through a terminal command and take back its output"
 find = "管道 過濾 过滤 外部命令 filter shell"
+
+[[message]]
+# : 命令選單：:pipe-after（`A-!`）
+key = "cmd.commands.pipe-after"
+zht = "跑一條終端命令，把輸出接在選區之後"
+zhs = "跑一条终端命令，把输出接在选区之后"
+en = "run a terminal command and put its output after the selection"
+find = "管道 外部命令 shell 之後 之后"
+
+[[message]]
+# : 命令選單：:pipe-before（`!`）
+key = "cmd.commands.pipe-before"
+zht = "跑一條終端命令，把輸出插在選區之前"
+zhs = "跑一条终端命令，把输出插在选区之前"
+en = "run a terminal command and put its output before the selection"
+find = "管道 外部命令 shell 之前"
+
+[[message]]
+# : 命令選單：:pipe-to（`A-|`），不收輸出
+key = "cmd.commands.pipe-to"
+zht = "將選區發送爲終端命令"
+zhs = "将选区发送为终端命令"
+en = "send the selection through a terminal command and keep nothing back"
+find = "管道 外部命令 shell 送出"
 
 [[message]]
 # : 命令選單裏 pwd 那一項的說明（2026-10-01 寫的）
@@ -4934,6 +4958,13 @@ key = "hint.hop.blank-below"
 zht = "下面加一條空行"
 zhs = "下面加一条空行"
 en = "a blank line below"
+
+[[message]]
+# ]／[ 的選單：下一處／上一處改動（行號旁那條改動條上的）
+key = "hint.hop.change"
+zht = "改動"
+zhs = "改动"
+en = "a change"
 
 [[message]]
 # ]／[ 的選單：下一處／上一處合併衝突
@@ -10919,6 +10950,13 @@ en = "Yumete"
 
 
 # ── wheel ─────────────────────────────────────────────────────────────
+
+[[message]]
+# ]g／[g：這一份根本沒有改動
+key = "vcs.nothing-changed"
+zht = "本文没有改動"
+zhs = "本文没有改动"
+en = "nothing has changed in this file"
 
 [[message]]
 # :version：全局配置在哪

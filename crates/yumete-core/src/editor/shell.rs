@@ -51,8 +51,43 @@ impl Editor {
         self.forget_the_text();
     }
 
-    pub fn provide_pipe_output(&mut self, output: &str) {
+    /// **只有兩個把選區餵進去**（2026-10-06，逐條照 helix 的 `shell_impl`）：
+    /// `|` 與 `A-|` 餵，`!` 與 `A-!` 不餵——`!date` 是 vi 的 `:r !date`，「跑一條
+    /// 命令，把答案放這裏」，光標在哪一段跟它沒關係。
+    pub(super) fn ask_the_shell(&mut self, line: String, put: crate::editor::Put) {
+        use crate::editor::Put;
+        let fed = match put {
+            Put::Replace | Put::Nowhere => {
+                let (start, end) = self.selection();
+                self.current_buffer().rope().slice(start..end).to_string()
+            }
+            Put::Before | Put::After => String::new(),
+        };
+        self.shell_request = Some(crate::editor::Shell {
+            line,
+            how: crate::editor::How::Pipe(fed, put),
+        });
+    }
+
+    pub fn provide_pipe_output(&mut self, output: &str, put: crate::editor::Put) {
+        use crate::editor::Put;
         let (start, end) = self.selection();
+        // **插在前面／後面的，把原文接回去**（2026-10-06）。整段仍舊走「換掉這一
+        // 段」那條路，所以換行規矩、表格那道閘、撤銷點全是現成的——`!` 和 `|`
+        // 於是不會慢慢長出兩套邊界情形。
+        let keep = self.current_buffer().rope().slice(start..end).to_string();
+        let joined;
+        let output = match put {
+            Put::Replace | Put::Nowhere => output,
+            Put::Before => {
+                joined = format!("{output}{keep}");
+                joined.as_str()
+            }
+            Put::After => {
+                joined = format!("{keep}{output}");
+                joined.as_str()
+            }
+        };
         // A filter ends its output with a newline whether or not what it was
         // given had one. Keeping it where the selection did not have one pushes
         // the rest of the paragraph down a line every time; dropping it where

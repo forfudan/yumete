@@ -1118,6 +1118,8 @@ impl Editor {
                 self.pending = Pending::None;
                 match key {
                     Key::Char('c') => self.go_to_conflict(forward),
+                    // **`]g`／`[g` 跳改動**，helix 的 `goto_next_change`（2026-10-06）。
+                    Key::Char('g') => self.go_to_change(forward),
                     // **`]p` / `[p` 是段落**，helix 的 `goto_next_paragraph` /
                     // `goto_prev_paragraph`（2026-10-06 補的）。這裏 `}` / `{`
                     // 早就是同一件事，這兩個是 helix 的手會按的那個拼法。
@@ -1956,7 +1958,13 @@ impl Editor {
             // typed, so the key is a shortcut and not a second mechanism —
             // and so a reader who presses it by accident can see what it was
             // about to do and press Esc.
-            Key::Char('!') => self.open_the_command_line("pipe "),
+            // **helix 的 shell 四件**（2026-10-06 對齊）。從前只有 `!`，而它做的是
+            // helix 的 `|`（用輸出換掉選區）——一個 helix 的手按 `!date⏎` 以為在
+            // 插一行，實際把選中那段換掉了。**這張單子上唯一會丟字的一條。**
+            Key::Char('|') => self.open_the_command_line("pipe "),
+            Key::Char('!') => self.open_the_command_line("pipe-before "),
+            Key::Alt('!') => self.open_the_command_line("pipe-after "),
+            Key::Alt('|') => self.open_the_command_line("pipe-to "),
             Key::Char('/') => {
                 self.mode = Mode::Search;
                 self.search_forward = true;
@@ -2638,7 +2646,8 @@ impl Editor {
     ];
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
-    pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] = &[("c", "hint.hop.conflict")];
+    pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] =
+        &[("c", "hint.hop.conflict"), ("g", "hint.hop.change")];
 
     /// The two that read differently depending on which way `[` / `]` points.
     ///
