@@ -3159,6 +3159,13 @@ zhs = "光标不在任何注释里"
 en = "the cursor is not inside a comment"
 
 [[message]]
+# ]c：這一份裏一段註釋都没有
+key = "code.no-comments"
+zht = "這一份裏找不到註釋"
+zhs = "这一份里找不到注释"
+en = "no comments in this file"
+
+[[message]]
 # mi f／mi c：光標不在任何一個定義裏
 key = "code.no-definition-here"
 zht = "光標不在任何函數或類裏"
@@ -3178,6 +3185,13 @@ key = "code.no-parameter-here"
 zht = "光標不在任何參數裏"
 zhs = "光标不在任何参数里"
 en = "the cursor is not inside a parameter"
+
+[[message]]
+# ]d：這一份裏一個診斷都没有
+key = "code.no-problems"
+zht = "這一份裏没有診斷"
+zhs = "这一份里没有诊断"
+en = "no diagnostics in this file"
 
 [[message]]
 # 命令行語法壞了
@@ -5023,6 +5037,13 @@ zhs = "类"
 en = "a class"
 
 [[message]]
+# ]／[ 的選單：下一段／上一段註釋（只在代碼檔上）
+key = "hint.hop.comment"
+zht = "註釋"
+zhs = "注释"
+en = "a comment"
+
+[[message]]
 # ]／[ 的選單：下一處／上一處合併衝突
 key = "hint.hop.conflict"
 zht = "合併衝突"
@@ -5049,6 +5070,13 @@ key = "hint.hop.previous"
 zht = "上一個"
 zhs = "上一个"
 en = "previous…"
+
+[[message]]
+# ]／[ 的選單：下一個／上一個診斷（大寫是第一個／最後一個）
+key = "hint.hop.problem"
+zht = "診斷（大寫：第一個／最後一個）"
+zhs = "诊断（大写：第一个／最后一个）"
+en = "a diagnostic (capital: the first / the last)"
 
 [[message]]
 # g 組：併上一行
@@ -6181,9 +6209,9 @@ en = "version"
 [[message]]
 # 開場屏：:yuhao 那一行
 key = "intro.yuhao"
-zht = "打開宇浩系列輸入法官網"
-zhs = "打开宇浩系列输入法官网"
-en = "the 宇浩 input method website"
+zht = "打開宇浩輸入法官網"
+zhs = "打开宇浩输入法官网"
+en = "the Yuhao IME website"
 
 [[message]]
 # gw：這一屏上沒有可以跳的地方

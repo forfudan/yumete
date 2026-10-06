@@ -157,6 +157,86 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// **跳到下一段／上一段註釋**（`]c`／`[c`，2026-10-06，helix 的
+    /// `goto_next_comment`）。到頭繞回去，同 `]g`。
+    pub(super) fn go_to_object_nearby(&mut self, forward: bool, want: crate::code::Object) {
+        let starts: Vec<usize> = self.objects_here(want).into_iter().map(|(from, _)| from).collect();
+        if starts.is_empty() {
+            self.status = match want {
+                crate::code::Object::Parameter => say!("code.no-parameter-here"),
+                crate::code::Object::Comment => say!("code.no-comments"),
+            };
+            return;
+        }
+        let here = self.sel.head();
+        let to = match forward {
+            true => starts.iter().copied().find(|&s| s > here).unwrap_or(starts[0]),
+            false => starts.iter().copied().rfind(|&s| s < here).unwrap_or(starts[starts.len() - 1]),
+        };
+        self.remember_jump();
+        self.sel.collapse_to(to);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+    }
+
+    /// **跳到下一個／上一個診斷**（`]d`／`[d`，`]D`／`[D` 是第一個／最後一個，
+    /// 2026-10-06 定，照 helix `default.rs:112-113`）。
+    ///
+    /// 只看**這一份**的診斷：`空格 d` 那張單子是整個項目的，而這一對是「在這一頁
+    /// 上走」，同 `]g`、`]f`。
+    pub(super) fn go_to_problem(&mut self, forward: bool, edge: bool) {
+        let Some(path) = self.current_buffer().path().map(std::path::Path::to_path_buf) else {
+            self.status = say!("code.no-problems");
+            return;
+        };
+        let mut lines: Vec<usize> = self
+            .problems_listed()
+            .into_iter()
+            .filter(|(at, _)| *at == path)
+            .map(|(_, said)| said.line)
+            .collect();
+        lines.sort_unstable();
+        lines.dedup();
+        if lines.is_empty() {
+            self.status = say!("code.no-problems");
+            return;
+        }
+        let here = self.cursor_line();
+        let to = match (edge, forward) {
+            (true, true) => lines[lines.len() - 1],
+            (true, false) => lines[0],
+            (false, true) => lines.iter().copied().find(|&l| l > here).unwrap_or(lines[0]),
+            (false, false) => {
+                lines.iter().copied().rfind(|&l| l < here).unwrap_or(lines[lines.len() - 1])
+            }
+        };
+        self.remember_jump();
+        self.goto_line(to + 1);
+    }
+
+    /// **跳到屏幕的頂／中／底**（vim 的 `H`／`M`／`L`，2026-10-06 定）。
+    ///
+    /// 屏幕畫了哪一段是前端每一幀交過來的（`set_page_span`，`gw` 也靠它），所以
+    /// 這裏問的是**真畫出來的那一段**，不是「光標那一行加減半屏」。
+    pub(super) fn go_to_screen(&mut self, which: char) {
+        let (from, to) = self.page_span;
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        if to <= from || from > len {
+            // 還没畫過一幀（離屏那條路的第一下），退回不動。
+            return;
+        }
+        let first = rope.char_to_line(from.min(len));
+        let last = rope.char_to_line(to.min(len).saturating_sub(1).max(from));
+        let line = match which {
+            'H' => first,
+            'L' => last,
+            _ => first + (last - first) / 2,
+        };
+        self.remember_jump();
+        self.goto_line(line + 1);
+    }
+
     /// **跳到下一個／上一個函數或類**（`]f`／`[f`／`]c`／`[c`，2026-10-06）。
     ///
     /// 到頭繞回去，同 `]g`。

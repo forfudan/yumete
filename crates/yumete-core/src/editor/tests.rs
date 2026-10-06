@@ -15424,19 +15424,19 @@ fn a_paragraph_about_merges_is_not_a_merge() {
 fn the_brackets_walk_from_one_conflict_to_the_next() {
     let text = format!("{MERGED}{MERGED}");
     let mut ed = merged(&text);
-    press(&mut ed, "]c");
+    press(&mut ed, "]m");
     assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
     // From inside the first one, 「next」 is the second — not this one's
     // own foot marker.
-    press(&mut ed, "]c");
+    press(&mut ed, "]m");
     assert_eq!(ed.cursor_line(), 8, "{}", ed.status());
     // And there is no third: it says so rather than wrapping round.
-    press(&mut ed, "]c");
+    press(&mut ed, "]m");
     assert_eq!(ed.cursor_line(), 8);
     assert!(ed.status().contains("後面"), "{}", ed.status());
-    press(&mut ed, "[c");
+    press(&mut ed, "[m");
     assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
-    press(&mut ed, "[c");
+    press(&mut ed, "[m");
     assert_eq!(ed.cursor_line(), 1);
     assert!(ed.status().contains("前面"), "{}", ed.status());
 }
@@ -15444,7 +15444,7 @@ fn the_brackets_walk_from_one_conflict_to_the_next() {
 #[test]
 fn keeping_a_side_takes_the_markers_with_it() {
     let mut ed = merged(MERGED);
-    press(&mut ed, "]c");
+    press(&mut ed, "]m");
     press(&mut ed, " mo");
     assert_eq!(
         ed.current_buffer().text(),
@@ -15455,12 +15455,12 @@ fn keeping_a_side_takes_the_markers_with_it() {
     assert!(ed.conflicts().is_empty());
 
     let mut ed = merged(MERGED);
-    press(&mut ed, "]c");
+    press(&mut ed, "]m");
     press(&mut ed, " mt");
     assert_eq!(ed.current_buffer().text(), "第一段\n他方寫的\n最後一段\n");
 
     let mut ed = merged(MERGED);
-    press(&mut ed, "]c");
+    press(&mut ed, "]m");
     press(&mut ed, " mb");
     assert_eq!(
         ed.current_buffer().text(),
@@ -15473,7 +15473,7 @@ fn keeping_a_side_takes_the_markers_with_it() {
 #[test]
 fn keeping_an_empty_side_leaves_no_line_at_all() {
     let mut ed = merged("上\n<<<<<<< HEAD\n=======\n新加的一句\n>>>>>>> 枝\n下\n");
-    press(&mut ed, "]c");
+    press(&mut ed, "]m");
     press(&mut ed, " mo");
     assert_eq!(ed.current_buffer().text(), "上\n下\n");
 }
@@ -17614,7 +17614,39 @@ fn the_panel_finds_as_many_as_the_pipe_does() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **語法樹那一族：`]f` `]c` `mi f` `mi c`**（2026-10-06，helix 的那幾個）。
+/// **vim 的 `H`／`M`／`L` 是屏幕的頂／中／底**（2026-10-06 定）。
+///
+/// ⚠️ 這一條 10-05 定過「不讓」，理由是「句子是寫小說按得最多的單位」——而那不是
+/// 理由（§5.94）。這一次一個鍵都没丟：vim 的句子動作本來就是 `(`／`)`。
+#[test]
+fn the_vim_hml_go_to_the_screen() {
+    let mut ed = typed_vim(&(0..40).map(|n| format!("第{n:02}行。\n")).collect::<String>());
+    // 屏幕畫了哪一段是前端交的——這裏自己交，同 `gw` 那幾格測試。
+    let rope = ed.current_buffer().rope().clone();
+    let from = rope.line_to_char(10);
+    let to = rope.line_to_char(30);
+    ed.set_page_span(from, to);
+    ed.goto_line(20);
+    let at = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+    press(&mut ed, "H");
+    assert_eq!(at(&ed), 10, "屏幕頂");
+    press(&mut ed, "L");
+    assert_eq!(at(&ed), 29, "屏幕底");
+    press(&mut ed, "M");
+    assert_eq!(at(&ed), 19, "屏幕中");
+    // 句子還在：vim 的句子動作是 `(`／`)`。
+    let mut ed = typed_vim("一句。二句。三句。\n");
+    press(&mut ed, ")");
+    assert!(ed.selection().1 > 1, "`)` 還是下一句");
+
+    // Warning: **helix 鍵位下 `H`／`L` 照舊是句子**——那一端的 `H`／`L` 本來就不是
+    // 屏幕位置，而 #404 把句子放在那裏是這個倉自己的事。
+    let mut ed = typed("一句。二句。三句。\n");
+    press(&mut ed, "ggL");
+    assert_eq!(ed.selection(), (0, 3), "helix：還是一句");
+}
+
+/// **語法樹那一族：`]f` `]t` `]c` `mi f` `mi t` `mi c`**（2026-10-06，helix 的那幾個）。
 ///
 /// ⚠️ 用的是**語法 crate 自己帶的 `TAGS_QUERY`**，不是 helix 的 `textobjects.scm`
 /// ——那些檔是 MPL-2.0，這個倉是 Apache-2.0。見 `code::Language::tags`。
@@ -17642,7 +17674,7 @@ fn the_syntax_tree_gives_up_its_functions_and_classes() {
     press(&mut ed, "[f");
     assert_eq!(line(&ed), 9, "往回也繞");
 
-    // `]c` 走類。
+    // `]t` 走類。
     let mut ed = code();
     press(&mut ed, "]t");
     assert_eq!(line(&ed), 4, "class Two");
@@ -17670,11 +17702,15 @@ fn the_syntax_tree_gives_up_its_functions_and_classes() {
     press(&mut ed, "mif");
     assert!(!ed.status().is_empty());
 
-    // Warning: **`]c` 一直是「下一處合併衝突」，兩種檔都是。** 類在 `]t` 上——helix
-    // 就是這麼分的，所以一開始綁在 `c` 上撞出來的那一輪麻煩整個沒了。
+    // Warning: **`]c` 是註釋，`]m` 纔是合併衝突**（2026-10-06 定「`]c` 歸註釋，
+    // 衝突換個鍵」）。`m` ＝ merge，helix 那張表上那個字母空着。
     let mut ed = typed("那年冬天。\n");
-    press(&mut ed, "gg]c");
+    press(&mut ed, "gg]m");
     assert!(ed.status().contains("衝突"), "{}", ed.status());
+    // 代碼檔裏 `]c` 走註釋。
+    let mut ed = code();
+    press(&mut ed, "]c");
+    assert!(!ed.status().contains("衝突"), "{}", ed.status());
 }
 
 /// **`g;`／`g,` 在改過的地方之間走**（vim，2026-10-06）。
@@ -18139,9 +18175,10 @@ fn the_four_multi_selection_keys_helix_has() {
 
 /// **vim 的 `(`／`)`／`_`**（2026-10-06）。
 ///
-/// `(`／`)` 在這裏本來是「換主選區」，而 vim 的手按的是上一句／下一句——這個編輯器
-/// 把句子放在 `H`／`L` 上（#404）。`_` 是「這一行」的另一個拼法（`:h _`）：`d_` 就是
-/// `dd`。
+/// `(`／`)` 在這裏本來是「換主選區」，而 vim 的手按的是上一句／下一句。helix 鍵位
+/// 下句子在 `H`／`L` 上（#404），vim 鍵位下那三個鍵當天讓給了屏幕的頂／中／底
+/// （§5.94），所以 vim 這一端只有這一對走句子。`_` 是「這一行」的另一個拼法
+/// （`:h _`）：`d_` 就是 `dd`。
 #[test]
 fn vim_sentences_and_the_underscore_line() {
     let vim = |text: &str, steps: &str| {
@@ -18151,18 +18188,18 @@ fn vim_sentences_and_the_underscore_line() {
         press(&mut ed, steps);
         ed.current_buffer().text().to_string()
     };
-    // `d)` 吃到下一句，`d(` 往回——和 `dL`／`dH` 同一件事。
-    assert_eq!(vim("一句。二句。三句。\n", "d)"), vim("一句。二句。三句。\n", "dL"));
-    assert_eq!(vim("一句。二句。三句。\n", "LLd("), vim("一句。二句。三句。\n", "LLdH"));
+    // `d)` 吃到下一句，`d(` 往回。
+    assert_eq!(vim("一句。二句。三句。\n", "d)"), "二句。三句。\n");
+    // Warning: **`)` 停在這一句的末一格，不是下一句的頭一格**（量出來的）。這個編輯器
+    // 的句子動作是「選中一句」（#404，helix 鍵位下的 `H`／`L` 也是這個），vim 的
+    // `)` 則是「移到下一句的開頭」。於是 `))d(` 在 vim 裏剩「一句。三句。」，在這裏
+    // 剩下面這個。記在 §5.95，等定要不要改。
+    assert_eq!(vim("一句。二句。三句。\n", "))d("), "一句。。三句。\n");
     // 不帶動詞的 `)` 也走句子，不換主選區。
     let mut ed = typed("一句。二句。\n");
     ed.execute(":keymap vim").unwrap();
     press(&mut ed, "gg)");
-    let paren = ed.selection();
-    let mut ed = typed("一句。二句。\n");
-    ed.execute(":keymap vim").unwrap();
-    press(&mut ed, "ggL");
-    assert_eq!(ed.selection(), paren, ") 就是 L");
+    assert_eq!(ed.selection(), (0, 3), ") 選中頭一句");
     // `d_` ＝ `dd`，`2d_` ＝ 兩行。
     assert_eq!(vim("一\n二\n三\n", "d_"), "二\n三\n");
     assert_eq!(vim("一\n二\n三\n", "2d_"), "三\n");
@@ -18474,10 +18511,17 @@ fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
     press(&mut ed, "dd");
     assert_eq!(text(&ed), "二\n", "dd takes the line with it");
 
-    // `Y` is the line, not the selection.
+    // **`Y` 是「到行尾」，跟 nvim**（2026-10-06 定）。
+    //
+    // Warning: **它 2026-10-06 之前是 `yy`**（經典 vim）。nvim 0.6 起出廠改成 `y$`，
+    // 理由是和 `D`（`d$`）`C`（`c$`）成一套，而今天手上是 nvim 的人遠多於 vim。
+    // **一個鍵都没丟**：`yy` 一直是「複製整行」。
+    let mut ed = vim("一二三\n");
+    press(&mut ed, "lYp");
+    assert_eq!(text(&ed), "一二二三三\n", "Y 是 y$：複製「二三」貼在光標後");
     let mut ed = vim("一\n二\n");
-    press(&mut ed, "Yp");
-    assert_eq!(text(&ed), "一\n一\n二\n", "Y is yy");
+    press(&mut ed, "yyp");
+    assert_eq!(text(&ed), "一\n一\n二\n", "yy 照舊是整行");
 
     // `;` repeats the last find, `,` turns it round. In vim's hands these are
     // pressed a dozen times a minute; here they were `A-.` and nothing.
@@ -22032,3 +22076,4 @@ fn a_keystroke_in_a_big_code_file() {
     }
     println!("  markup_line_in    {:?}  {n} 段\n", at.elapsed());
 }
+
