@@ -145,8 +145,9 @@ pub fn visual_column(rope: &Rope, pos: usize) -> usize {
 }
 
 /// The character index on `line` whose starting visual column is the greatest
-/// one not exceeding `goal` (used to preserve the column on vertical motion).
-fn pos_at_visual_column(rope: &Rope, line: usize, goal: usize) -> usize {
+/// one not exceeding `goal` (used to preserve the column on vertical motion,
+/// and by vim's `|`).
+pub fn pos_at_visual_column(rope: &Rope, line: usize, goal: usize) -> usize {
     let ls = rope.line_to_char(line);
     let text = line_text(rope, line);
     let mut width = 0;

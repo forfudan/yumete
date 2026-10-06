@@ -17597,7 +17597,7 @@ fn the_syntax_tree_gives_up_its_functions_and_classes() {
 
     // `]c` 走類。
     let mut ed = code();
-    press(&mut ed, "]c");
+    press(&mut ed, "]t");
     assert_eq!(line(&ed), 4, "class Two");
 
     // `mi f` 選中光標所在的那個函數——**取最裏面那一個**（`def three` 在
@@ -17609,10 +17609,10 @@ fn the_syntax_tree_gives_up_its_functions_and_classes() {
     assert_eq!(ed.current_buffer().rope().char_to_line(from), 5, "從 def three 起");
     assert_eq!(ed.current_buffer().rope().char_to_line(to - 1), 6, "到 return 3 止");
 
-    // `mi c` 在同一處選的是整個類。
+    // `mi t` 在同一處選的是整個類。
     let mut ed = code();
     ed.goto_line(7);
-    press(&mut ed, "mic");
+    press(&mut ed, "mit");
     let (from, to) = ed.selection();
     assert_eq!(ed.current_buffer().rope().char_to_line(from), 4, "從 class Two 起");
     assert_eq!(ed.current_buffer().rope().char_to_line(to - 1), 6);
@@ -17623,8 +17623,8 @@ fn the_syntax_tree_gives_up_its_functions_and_classes() {
     press(&mut ed, "mif");
     assert!(!ed.status().is_empty());
 
-    // Warning: **稿子裏 `]c` 還是「下一處合併衝突」。** 一個鍵兩個意思，而這兩種檔
-    // 從不是同一個檔——`]c` 在 `.py` 上找衝突永遠一無所獲，在 `.md` 上找類也是。
+    // Warning: **`]c` 一直是「下一處合併衝突」，兩種檔都是。** 類在 `]t` 上——helix
+    // 就是這麼分的，所以一開始綁在 `c` 上撞出來的那一輪麻煩整個沒了。
     let mut ed = typed("那年冬天。\n");
     press(&mut ed, "gg]c");
     assert!(ed.status().contains("衝突"), "{}", ed.status());

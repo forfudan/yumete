@@ -1177,18 +1177,15 @@ impl Editor {
             Pending::Hop { forward } => {
                 self.pending = Pending::None;
                 match key {
-                    // Warning: **帶守衛的那一支要排在前面**（寫的時候當場撞的）。
-                    // `match` 從上往下挑，無守衛的 `c` 在前面就把代碼檔那一支整個
-                    // 遮住了——`]c` 在 `.py` 上答的是「沒有合併衝突」。
-                    //
-                    // **`]c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」。** 一個鍵
-                    // 兩個意思本來是這個倉最不肯要的事，而這兩種檔從不是同一個
-                    // 檔：`]c` 在 `.rs` 上找衝突標記永遠一無所獲，在 `.md` 上找類
-                    // 也是。提示行跟着檔走，所以屏幕上那一格從不含糊。
-                    Key::Char('c') if self.writes_code() => {
-                        self.go_to_definition_nearby(forward, false)
-                    }
                     Key::Char('c') => self.go_to_conflict(forward),
+                    // **類是 `t` 不是 `c`**（2026-10-06 當天改正）。先按記憶綁成了
+                    // `c`，於是它和「合併衝突」撞了一整輪——而 helix 的 `]c` 是
+                    // **註釋**、`]t` 纔是類（`keymap/default.rs:117-118`）。照抄
+                    // 參考實現，不照記憶；撞車也就跟着沒了。
+                    //
+                    // Warning: `]c` 仍與 helix 不同：那邊是註釋，這邊是合併衝突。註釋要
+                    // 等自己寫的那份查詢（§5.92），到時再定這個鍵歸誰。
+                    Key::Char('t') => self.go_to_definition_nearby(forward, false),
                     // **`]g`／`[g` 跳改動**，helix 的 `goto_next_change`（2026-10-06）。
                     Key::Char('g') => self.go_to_change(forward),
                     // **`]f`／`[f` 跳到下一個函數**（2026-10-06，helix 的 `]f`）。
@@ -2047,6 +2044,25 @@ impl Editor {
             // **helix 的 shell 四件**（2026-10-06 對齊）。從前只有 `!`，而它做的是
             // helix 的 `|`（用輸出換掉選區）——一個 helix 的手按 `!date⏎` 以為在
             // 插一行，實際把選中那段換掉了。**這張單子上唯一會丟字的一條。**
+            // **vim 的 `|`：跳到第 N 格**（2026-10-06 定「按格，同 vim」）。
+            //
+            // Warning: **格，不是字。** 這個倉對「欄」有兩個答案——`cursor_column` 數的
+            // 是第幾個**字**（狀態欄那個「列」就是它），`cursor_visual_column`
+            // 數的是第幾**格**，一個漢字兩格。vim 的 `|` 數的是屏幕欄，而在中文
+            // 稿子裏只有「格」跟尺規（`:rules`）和夾行對得上。反查那一支
+            // （`pos_at_visual_column`）本來就有，縱向移動一直在用它。
+            //
+            // helix 鍵位下 `|` 是 shell 那一族（今天剛對齊），所以這一條只在
+            // vim 鍵位下。
+            Key::Char('|') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                let goal = count.saturating_sub(1);
+                let rope = self.current_buffer().rope();
+                let line = rope.char_to_line(self.sel.head());
+                let at = motion::pos_at_visual_column(rope, line, goal);
+                self.sel.collapse_to(at);
+                self.clamp_cursor();
+                self.refresh_goal_column();
+            }
             Key::Char('|') => self.open_the_command_line("pipe "),
             Key::Char('!') => self.open_the_command_line("pipe-before "),
             Key::Alt('!') => self.open_the_command_line("pipe-after "),
@@ -2776,7 +2792,7 @@ impl Editor {
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
     pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] =
-        &[("g", "hint.hop.change")];
+        &[("c", "hint.hop.conflict"), ("g", "hint.hop.change")];
 
     /// Warning: **這兩張是**換**的，不是疊的**（2026-10-06 出圖看出來的）。先寫成疊
     /// 加，於是代碼檔的面板上 `c` 出現兩次（「合併衝突」和「類」），稿子的面板上
@@ -2786,10 +2802,7 @@ impl Editor {
     /// 倉最不肯要的事，而這兩種檔從不是同一個檔：`]c` 在 `.rs` 上找衝突標記永遠
     /// 一無所獲，在 `.md` 上找類也是。
     pub(super) const HOP_KEYS_CODE: &'static [(&'static str, &'static str)] =
-        &[("f", "hint.hop.function"), ("c", "hint.hop.class")];
-
-    pub(super) const HOP_KEYS_PROSE: &'static [(&'static str, &'static str)] =
-        &[("c", "hint.hop.conflict")];
+        &[("f", "hint.hop.function"), ("t", "hint.hop.class")];
 
     /// The two that read differently depending on which way `[` / `]` points.
     ///
@@ -2991,7 +3004,6 @@ impl Editor {
             ']' | '[' => [
                 spell(Self::HOP_KEYS),
                 spell(Self::HOP_KEYS_CODE),
-                spell(Self::HOP_KEYS_PROSE),
                 spell(Self::HOP_KEYS_FORWARD),
                 spell(Self::HOP_KEYS_BACK),
             ]

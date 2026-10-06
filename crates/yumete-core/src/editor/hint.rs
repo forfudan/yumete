@@ -470,11 +470,11 @@ impl Editor {
                     Self::HOP_KEYS
                         .iter()
                         .copied()
-                        // 跟着**這一個檔**換，不是疊加——見 `HOP_KEYS_CODE`。
+                        // 代碼檔纔有函數和類，稿子裏列出來也按不出東西。
                         .chain(
                             match self.writes_code() {
                                 true => Self::HOP_KEYS_CODE,
-                                false => Self::HOP_KEYS_PROSE,
+                                false => &[],
                             }
                             .iter()
                             .copied(),

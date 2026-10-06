@@ -50,11 +50,16 @@ impl Editor {
             's' => motion::Object::Sentence,
             // `mi m`／`ma m`：光標所在的那一段 Markdown 標記（2026-09-28）。
             'm' => motion::Object::Markup,
-            // **`mi f`／`mi c`：光標所在的那個函數／類**（2026-10-06，helix 的
-            // `mi f`／`mi c`）。語法樹那一邊的事，所以不走 `Object`——它是
+            // **`mi f`／`mi t`：光標所在的那個函數／類**（2026-10-06，helix 的
+            // `mi f`／`mi t`）。語法樹那一邊的事，所以不走 `Object`——它是
             // 純文本的一支，而這個要問那棵樹。整份是代碼的檔才有，`ma` 和 `mi`
             // 在這裏是同一段：一個定義沒有「連着外面那層」可言。
-            'f' | 'c' => return self.select_definition(c == 'f'),
+            //
+            // Warning: **類是 `t` 不是 `c`**（2026-10-06 當天改正）。先按記憶綁成了
+            // `c`，而 helix 的 `c` 是**註釋**、`t` 纔是類
+            // （`commands.rs:6307-6310`：`'t' => "class"`、`'c' => "comment"`）。
+            // 照抄參考實現，不照記憶。
+            'f' | 't' => return self.select_definition(c == 'f'),
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
                 None => {
