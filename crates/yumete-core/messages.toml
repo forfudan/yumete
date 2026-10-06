@@ -2765,7 +2765,7 @@ find = "預覽 预览 瀏覽器 浏览器 排版 browser"
 key = "cmd.view.punct"
 zht = "標點提示：半角標點與 ... 旁邊畫出該用的那一個"
 zhs = "标点提示：半角标点与 ... 旁边画出该用的那一个"
-en = "inline notes: the full-width mark a half-width one should have been"
+en = "punctuation hints: the full-width mark a half-width one should have been"
 find = "標點 标点 半角 全角 逗號 逗号 省略號 省略号 提示 note punctuation hint"
 
 [[message]]
@@ -2904,9 +2904,9 @@ find = "詞表 词表 重讀 重读 刷新 reload"
 [[message]]
 # : 命令選單裏 color 那一項的說明（word-show 組）
 key = "cmd.word-show.color"
-zht = "換墨的顏色：一半暖一半冷，明度不動"
-zhs = "换墨的颜色：一半暖一半冷，明度不动"
-en = "a second hue at the same lightness"
+zht = "換墨的顏色：一半暖一半冷，明度不動（出廠）"
+zhs = "换墨的颜色：一半暖一半冷，明度不动（出厂）"
+en = "a second hue at the same lightness (the default)"
 find = "色相 顏色 颜色 藍黃 蓝黄 color hue"
 
 [[message]]
@@ -2928,9 +2928,9 @@ find = "線 线 下劃線 下划线 分界 line rule underline sep"
 [[message]]
 # : 命令選單裏 tint 那一項的說明（word-show 組）
 key = "cmd.word-show.tint"
-zht = "鋪底色：隔一個詞在紙上一層極淡的色（出廠）"
-zhs = "铺底色：隔一个词在纸上一层极淡的色（出厂）"
-en = "mark by tint: a very faint ground under every other word (the default)"
+zht = "鋪底色：隔一個詞在紙上一層極淡的色"
+zhs = "铺底色：隔一个词在纸上一层极淡的色"
+en = "mark by tint: a very faint ground under every other word"
 find = "分詞 分词 著色 着色 底色 背景 tint"
 
 [[message]]
