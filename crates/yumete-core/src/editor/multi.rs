@@ -616,6 +616,84 @@ impl super::Editor {
         }
     }
 
+    /// **去掉主選區**（`A-,`，helix 的 `remove_primary_selection`）——`,` 的反面。
+    ///
+    /// 只剩一段的時候什麼都不做並說一句：helix 在那時也不動（它那條規矩是「最後
+    /// 一段刪不得」），而一個不說話的鍵看起來就是壞的。
+    pub(super) fn remove_primary_selection(&mut self) {
+        if !self.sel.is_plural() {
+            self.status = say!("selection.already-one");
+            return;
+        }
+        let which = self.sel.primary_index();
+        let rest: Vec<_> = self
+            .sel
+            .iter()
+            .enumerate()
+            .filter(|&(n, _)| n != which)
+            .map(|(_, r)| *r)
+            .collect();
+        // 下一段接手當主選區，到頭了就回第一段——同 helix。
+        let next = which.min(rest.len() - 1);
+        self.sel.rebuild(rest, next);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        // Warning: **成功的時候不說話**，同 helix。倉裏現成的那幾句都說的是別的事
+        // （「只留主選區，去掉 N 處」「N 處併到一起了」），借過來就是一句假話。
+        // 2026-10-06：等給這一格一句自己的話。
+    }
+
+    /// **合併**（`A--` 全併成一段、`A-_` 只併挨着的那些）。
+    ///
+    /// helix 的 `merge_selections` / `merge_consecutive_selections`。前者把最前
+    /// 和最後兩端拉成一段；後者只把**首尾相接**的併起來，中間隔着字的留着。
+    pub(super) fn merge_selections(&mut self, only_touching: bool) {
+        if !self.sel.is_plural() {
+            self.status = say!("selection.already-one");
+            return;
+        }
+        let was = self.sel.len();
+        let ranges: Vec<_> = self.sel.iter().copied().collect();
+        let out = match only_touching {
+            false => {
+                let from = ranges.iter().map(|r| r.span().0).min().unwrap_or(0);
+                let to = ranges.iter().map(|r| r.span().1).max().unwrap_or(0);
+                vec![crate::selection::Range::new(from, to)]
+            }
+            true => {
+                let mut out: Vec<crate::selection::Range> = Vec::new();
+                for one in ranges {
+                    let (from, to) = one.span();
+                    match out.last_mut() {
+                        // 挨着就是「上一段的末尾够得着這一段的開頭」。
+                        Some(last) if last.span().1 >= from => {
+                            let end = last.span().1.max(to);
+                            *last = crate::selection::Range::new(last.span().0, end);
+                        }
+                        _ => out.push(crate::selection::Range::new(from, to)),
+                    }
+                }
+                out
+            }
+        };
+        let left = out.len();
+        self.sel.rebuild(out, 0);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.say_the_merge(was - left);
+    }
+
+    /// **每一段都轉成正向**（`A-:`，helix 的 `ensure_selections_forward`）：頭在後、
+    /// 錨在前。按了一串 `b` 之後整組是反着的，而 `;` 塌向頭那一端——方向這時是
+    /// 一件看得見的事。
+    pub(super) fn face_them_forward(&mut self) {
+        self.sel.map(|one| {
+            let (from, to) = one.span();
+            crate::selection::Range { anchor: from, head: to, ..one }
+        });
+        self.clamp_cursor();
+    }
+
     /// **合併是靜默地少掉一段，所以要說一句**（2026-09-28 定）。
     ///
     /// helix 不說。中文更常撞上：打一個字要按好幾下，相鄰的兩個光標很容易在中途撞到一

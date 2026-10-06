@@ -1656,6 +1656,12 @@ impl Editor {
             Key::Char('C') => self.copy_selection_on_row(true, count),
             Key::Alt('C') => self.copy_selection_on_row(false, count),
             Key::Char(',') => self.keep_primary_selection(),
+            // **`,` 的反面，和兩種合併，和「全部轉成正向」**（2026-10-06）。
+            // §5.13.6 自己把這四個列成「空着的，直接拿來用」，而四期都沒排到。
+            Key::Alt(',') => self.remove_primary_selection(),
+            Key::Alt('-') => self.merge_selections(false),
+            Key::Alt('_') => self.merge_selections(true),
+            Key::Alt(':') => self.face_them_forward(),
             // **`A-s` 把每一段選區按行切開**（helix 的 `split_selection_on_newline`）。
             // Warning: 它是這一族裏唯一不用打正則的，所以不開提示行。
             Key::Alt('s') => self.split_on_newline(),
