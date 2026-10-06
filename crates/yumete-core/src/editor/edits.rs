@@ -350,6 +350,46 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// **`5ix<Esc>` types five `x`** (`:h count`, 2026-10-06).
+    ///
+    /// Remembered on the way *in* and spent on the way out, because what gets
+    /// repeated is the whole typing session and nobody knows what that is
+    /// until `Esc`. `opened` says whether a new line is part of the thing
+    /// being repeated: `3ohi<Esc>` is three new lines, not one line with
+    /// `hihihi` on it.
+    ///
+    /// Warning: **vim only.** helix's `i` ignores a count.
+    pub(super) fn type_it_again(&mut self, count: usize, opened: Option<bool>) {
+        self.insert_again = match self.key_preset == yumete_cjk::KeyPreset::Vim {
+            true => count.saturating_sub(1),
+            false => 0,
+        };
+        self.insert_opened = opened;
+    }
+
+    /// Put `typed` in `again` more times, as the insert session ends.
+    ///
+    /// One undo point for the whole thing: `5ix` is one command, so `u` takes
+    /// back all five — the same rule [`Self::repeat`] keeps for a counted
+    /// motion. The snapshot was already taken when `i` was pressed.
+    pub(super) fn spend_the_insert_count(&mut self, again: usize, typed: &str) {
+        let opened = self.insert_opened.take();
+        for _ in 0..again {
+            if let Some(below) = opened {
+                // A fresh line each time, and the cursor on it — `open_line_*`
+                // would enter Insert again, which is not what this is.
+                self.add_blank_line(below);
+                let rope = self.current_buffer().rope();
+                let at = match below {
+                    true => motion::line_start(rope, motion::line_end(rope, self.sel.head()) + 1),
+                    false => motion::line_start(rope, self.sel.head()),
+                };
+                self.set_cursor(at.min(self.current_buffer().rope().len_chars()));
+            }
+            self.insert_str(typed);
+        }
+    }
+
     /// Take back the word before the cursor (`C-w` in Insert).
     ///
     /// The word is the segmenter's, not a run of non-space: this is an editor

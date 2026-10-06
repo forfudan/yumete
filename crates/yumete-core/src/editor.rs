@@ -2340,6 +2340,16 @@ pub struct Editor {
     /// The Insert session being recorded, so `C-w` can take a word back out
     /// of it.
     insert_recording: String,
+    /// **`5ix` 要五個 `x`** — how many *more* times the text typed in this
+    /// insert session goes in when it ends (0 = once, the usual).
+    ///
+    /// vim's rule, and vim's alone: helix's `i` ignores a count, so this is
+    /// only ever set under the vim preset.
+    insert_again: usize,
+    /// Whether the insert was opened with `o` (`Some(true)`) or `O`
+    /// (`Some(false)`) — those repeat 「a new line, and this on it」, not just
+    /// the text.
+    insert_opened: Option<bool>,
     /// The last `f`/`t`/`F`/`T`, replayed by `A-.`.
     last_find: Option<(FindKind, char)>,
     /// Columns of indentation added by `>` and removed by `<`.
@@ -3241,6 +3251,8 @@ impl Editor {
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),
+            insert_again: 0,
+            insert_opened: None,
             last_find: None,
             indent_width: 4,
             tab_spaces: true,

@@ -17545,6 +17545,44 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **`5ix` 打五個 `x`**（2026-10-06，`:h count`）。
+///
+/// 數字配插入那六個鍵在 vim 裏是「這段話打幾遍」，在這裏從前只打一遍。記在進門那
+/// 一刻，花在出門那一刻——重複的是整段打字，而那是什麼，到 `Esc` 才知道。
+#[test]
+fn a_count_before_insert_types_it_that_many_times() {
+    let vim = |steps: &str, text: &str| {
+        let mut ed = typed("");
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, steps);
+        press(&mut ed, text);
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(vim("5i", "x"), "xxxxx");
+    assert_eq!(vim("3a", "ab"), "ababab");
+    // `o`／`O` 重複的是「新開一行，上面寫這個」。
+    assert_eq!(vim("3o", "甲"), "\n甲\n甲\n甲");
+    // 一遍就是一遍。
+    assert_eq!(vim("i", "x"), "x");
+    // 整段是一個命令：`u` 一下全回去。
+    let mut ed = typed("");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "5i");
+    press(&mut ed, "x");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "xxxxx");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "", "一下撤完");
+
+    // Warning: **helix 鍵位下不吃這個計數**（它的 `i` 本來就不吃）。
+    let mut ed = typed("");
+    press(&mut ed, "5i");
+    press(&mut ed, "x");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "x");
+}
+
 /// **多選區那四個 helix 綁着而這裏空着的鍵**（2026-10-06，§5.13.6 自己列過）。
 ///
 /// `A-,` 去掉主選區（`,` 的反面）、`A--` 全併成一段、`A-_` 只併挨着的、`A-:` 全部
