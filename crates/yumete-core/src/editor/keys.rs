@@ -2672,9 +2672,16 @@ impl Editor {
         ("j k", "hint.goto.by-file-line"),
         (".", "hint.goto.last-change"),
         ("a", "hint.goto.last-file"),
-        ("J", "hint.join-with-line-below"),
+        // Warning: **`J` 不在這張表上了**（2026-10-06）。`gJ` 撤掉的時候這一行漏了，
+        // 於是提示行列着一個按下去什麼都不做的鍵。`gK` 還在，它沒有單鍵拼法。
         ("K", "hint.join-with-line-above"),
     ];
+
+    /// **vim 鍵位下多出來的那一行**：`gv` 重選上一次那一段。helix 沒有這個命令，
+    /// 所以它不在上面兩張表上——提示行裏列一個在這一端按不出東西的鍵，和那張表
+    /// 說謊是同一件事。
+    pub(super) const GOTO_KEYS_VIM: &'static [(&'static str, &'static str)] =
+        &[("v", "hint.goto.reselect")];
 
     /// The same menu on a 縱書 page, where the four directions turn (see
     /// `handle_goto`).
@@ -2694,7 +2701,6 @@ impl Editor {
         ("h l", "hint.goto.by-file-line-vertical"),
         (".", "hint.goto.last-change"),
         ("a", "hint.goto.last-file"),
-        ("J", "hint.join-with-line-below"),
         ("K", "hint.join-with-line-above"),
     ];
 
@@ -2938,10 +2944,25 @@ impl Editor {
         Some(match leader {
             // 空 is the first character of how the documents spell it: `空格 f`.
             ' ' | '空' => Self::SPACE_KEYS.iter().map(|(k, _)| k.to_string()).collect(),
-            'g' => spell(Self::GOTO_KEYS),
+            // Warning: **每一個前綴的**所有**分表都要在這裏**（2026-10-06）。這一支是
+            // 「手冊教的鍵，編輯器給不給得出」那個測試的唯一真相來源，而這兩組
+            // 的表是按版面／鍵位／方向分開的：漏一張，手冊裏那幾行就**驗過了、
+            // 全綠**，而它們根本沒被對過（`t` 那一條 2026-09-23 就是這麼漏的，
+            // 註釋在下面）。
+            'g' => [
+                spell(Self::GOTO_KEYS),
+                spell(Self::GOTO_KEYS_VERTICAL),
+                spell(Self::GOTO_KEYS_VIM),
+            ]
+            .concat(),
             'm' => spell(Self::MATCH_KEYS),
             '`' => spell(Self::CASE_KEYS),
-            ']' | '[' => spell(Self::HOP_KEYS),
+            ']' | '[' => [
+                spell(Self::HOP_KEYS),
+                spell(Self::HOP_KEYS_FORWARD),
+                spell(Self::HOP_KEYS_BACK),
+            ]
+            .concat(),
             // Warning: **`t` 不在這張表上了。** 2026-09-21 表格組搬到了 `空格 t`，而
             // 這裏一直還答得出表格鍵——於是教程裏那幾行舊拼法（`t r`、`t1s`）
             // 逐條「驗過」，全綠（2026-09-23 審出來的）。`t` 現在只是 vi 的

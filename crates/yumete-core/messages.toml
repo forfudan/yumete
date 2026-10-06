@@ -4883,6 +4883,13 @@ zhs = "从系统剪贴板粘贴"
 en = "paste from the system clipboard"
 
 [[message]]
+# g 選單裏的 v（只在 vim 鍵位下）——重選上一次那一段
+key = "hint.goto.reselect"
+zht = "重選上一次那一段"
+zhs = "重选上一次那一段"
+en = "select what was selected last"
+
+[[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
 key = "hint.goto.seek-reading"
 zht = "多字母定位並跳轉當前屏幕某漢字"
@@ -4993,13 +5000,6 @@ key = "hint.join-with-line-above"
 zht = "併到上一行去"
 zhs = "并到上一行去"
 en = "join onto the line above"
-
-[[message]]
-# g 組：併下一行
-key = "hint.join-with-line-below"
-zht = "併下一行"
-zhs = "并下一行"
-en = "join with the line below"
 
 [[message]]
 # 提示：收下

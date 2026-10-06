@@ -395,10 +395,20 @@ impl Editor {
             ),
             Pending::Goto => (
                 say!("hint.goto.title"),
-                Self::said(match self.layout() == crate::zong::Layout::Vertical {
-                    true => Self::GOTO_KEYS_VERTICAL.iter().copied(),
-                    false => Self::GOTO_KEYS.iter().copied(),
-                }),
+                Self::said(
+                    match self.layout() == crate::zong::Layout::Vertical {
+                        true => Self::GOTO_KEYS_VERTICAL.iter().copied(),
+                        false => Self::GOTO_KEYS.iter().copied(),
+                    }
+                    .chain(
+                        match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                            true => Self::GOTO_KEYS_VIM,
+                            false => &[],
+                        }
+                        .iter()
+                        .copied(),
+                    ),
+                ),
             ),
             Pending::Find(_) => (say!("hint.find"), vec![("".into(), say!("hint.type-a-character"))]),
             Pending::Replace => (say!("hint.overwrite"), vec![("".into(), say!("hint.type-a-character-to-overwrite"))]),
