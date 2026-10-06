@@ -1177,7 +1177,16 @@ impl Editor {
             Pending::Hop { forward } => {
                 self.pending = Pending::None;
                 match key {
-                    Key::Char('c') => self.go_to_conflict(forward),
+                    // **`]c` 是註釋，`]m` 是合併衝突**（2026-10-06 定「`]c` 歸
+                    // 註釋，衝突換個鍵」）。helix 的 `]c` 一直是 `goto_next_comment`
+                    // （`keymap/default.rs:118`）；衝突搬到 `m`（merge），helix 那張
+                    // 表上那個字母空着。
+                    Key::Char('m') => self.go_to_conflict(forward),
+                    Key::Char('c') => self.go_to_object_nearby(forward, crate::code::Object::Comment),
+                    // **`]d`／`[d` 下一個診斷，`]D`／`[D` 第一個／最後一個**
+                    // （2026-10-06 定，照 helix `default.rs:112-113`）。
+                    Key::Char('d') => self.go_to_problem(forward, false),
+                    Key::Char('D') => self.go_to_problem(forward, true),
                     // **類是 `t` 不是 `c`**（2026-10-06 當天改正）。先按記憶綁成了
                     // `c`，於是它和「合併衝突」撞了一整輪——而 helix 的 `]c` 是
                     // **註釋**、`]t` 纔是類（`keymap/default.rs:117-118`）。照抄
@@ -1626,7 +1635,11 @@ impl Editor {
             // nothing. Extend mode still extends, because `jump_to` moves the
             // head and leaves the anchor where it is: that is vim's visual
             // mode, for free.
-            Key::Char(c @ ('w' | 'W' | 'b' | 'B' | 'e' | 'E' | '{' | '}' | 'H' | 'L'))
+            // Warning: **`H`／`L` 2026-10-06 從這張表上撤了**：它們在 vim 裏是屏幕的
+            // 頂／底，而句子是 `(`／`)`（今早照 vim 綁的）。上面那一支接住了裸
+            // 鍵；帶算子的 `dH`／`dL` 暫時答「不是一個動作」——要做得先有一個
+            // 看得見視口的動作，記在 §5.95。
+            Key::Char(c @ ('w' | 'W' | 'b' | 'B' | 'e' | 'E' | '{' | '}'))
                 if self.key_preset == yumete_cjk::KeyPreset::Vim
                     && !self.expanding_alias
                     && crate::vim::step_for(&c.to_string(), self.word_grain(), None).is_some() =>
@@ -1700,6 +1713,30 @@ impl Editor {
             // Warning: `H`/`L` used to be whole-page paging. Nothing was lost:
             // `C-f` and `C-b` still do it, and the pair a reader actually
             // wears out is the *half* page on `J`/`K`.
+            // **vim 鍵位下 `H`／`M`／`L` 是屏幕的頂／中／底**（2026-10-06 定）。
+            //
+            // Warning: **這一條 10-05 定過「不讓」，10-06 翻了。** 當時的理由是「句子是
+            // 寫小說按得最多的單位」——而那不是理由（§5.94：兼容第一，讓位的另找
+            // 空鍵）。這一次一個鍵都沒丟：vim 的句子動作本來就是 `(`／`)`，今早照
+            // vim 綁上去了。
+            //
+            // 屏幕畫了哪一段是前端每幀交過來的（`set_page_span`，`gw` 也靠它）。
+            Key::Char(one @ ('H' | 'M' | 'L')) if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.go_to_screen(one);
+            }
+            // **vim 的句子動作是 `(`／`)`**（2026-10-06）。
+            //
+            // Warning: **不能寫成鍵位表上的 `("(", "H")`**（寫的時候當場撞的）。單字符
+            // 的別名是**替換**不是播放——`expanding_alias` 不會為它撥上，於是換出
+            // 來的 `H` 又被上面那一支接住，`)` 跳到屏幕底下去了。自己一支最清楚。
+            Key::Char(one @ ('(' | ')')) if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.repeat(count, |e| {
+                    let span = e.run_motion(motion::Motion::Sentence { forward: one == ')' });
+                    e.take_span(span);
+                });
+            }
+            // Warning: **上面那一支要排在這兩個前面**（寫的時候當場撞的，當天第二
+            // 次）。`match` 從上往下挑，句子那兩個在前面就把它整個遮住了。
             Key::Char('L') => self.repeat(count, |e| {
                 let span = e.run_motion(motion::Motion::Sentence { forward: true });
                 e.take_span(span);
@@ -1711,6 +1748,22 @@ impl Editor {
             // A mark is where you meant to come *back* to; the jump list is
             // where you came *from*. `M`/`'` rather than vi's `m`/`'`, because
             // `m` here opens match mode.
+            // **vim 鍵位下設標記按的是 `m`**（2026-10-06，十三條的第六條）。這扇門
+            // 後面原本掛着 match 那一族（`mm` 跳配對、`mi(`／`ma(` 選對象、`ms`／
+            // `md`／`mr` 加去換括號），讓得出來是因為那每一件事在 vim 鍵位下都另
+            // 有拼法：`%`、`di(`／`vi(`、`ys`／`ds`／`cs`。
+            //
+            // Warning: **不能寫成鍵位表上的 `("m", "M")`**（寫的時候當場撞的）。單字符
+            // 的別名是**替換**不是播放，換出來的 `M` 看不出是誰按的，而 `M` 今天
+            // 讓給了屏幕中間——`ma` 於是成了「跳到屏幕中間，再 append」。
+            //
+            // `!expanding_alias` 是放 `%` → `mm` 過去：播出來的那兩個 `m` 仍舊是這個
+            // 編輯器自己的 match 那一族。
+            Key::Char('m')
+                if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.expanding_alias =>
+            {
+                self.pending = Pending::Mark;
+            }
             Key::Char('M') => self.pending = Pending::Mark,
             Key::Char('\'') => self.pending = Pending::Recall,
             // 「下一個這種東西」, which is where Helix keeps it too.
@@ -2791,8 +2844,11 @@ impl Editor {
     ];
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
-    pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] =
-        &[("c", "hint.hop.conflict"), ("g", "hint.hop.change")];
+    pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("m", "hint.hop.conflict"),
+        ("g", "hint.hop.change"),
+        ("d D", "hint.hop.problem"),
+    ];
 
     /// Warning: **這兩張是**換**的，不是疊的**（2026-10-06 出圖看出來的）。先寫成疊
     /// 加，於是代碼檔的面板上 `c` 出現兩次（「合併衝突」和「類」），稿子的面板上
@@ -2801,8 +2857,11 @@ impl Editor {
     /// `c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」。一個鍵兩個意思本來是這個
     /// 倉最不肯要的事，而這兩種檔從不是同一個檔：`]c` 在 `.rs` 上找衝突標記永遠
     /// 一無所獲，在 `.md` 上找類也是。
-    pub(super) const HOP_KEYS_CODE: &'static [(&'static str, &'static str)] =
-        &[("f", "hint.hop.function"), ("t", "hint.hop.class")];
+    pub(super) const HOP_KEYS_CODE: &'static [(&'static str, &'static str)] = &[
+        ("f", "hint.hop.function"),
+        ("t", "hint.hop.class"),
+        ("c", "hint.hop.comment"),
+    ];
 
     /// The two that read differently depending on which way `[` / `]` points.
     ///
