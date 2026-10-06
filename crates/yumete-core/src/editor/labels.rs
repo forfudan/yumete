@@ -2,7 +2,7 @@
 //!
 //! 按 `gw`，屏幕上每個落腳點的頭一個字被兩個字母蓋住；打那兩個字母，光標飛過去。
 //! 永遠兩個字母、兩格，正好是一個漢字的寬度。
-//! vim 那邊叫 easymotion／leap／flash，helix 把它做進了核心。
+//! vim 那邊叫 easymotion/leap/flash，helix 把它做進了核心。
 //!
 //! 三件定下來的事（2026-09-27）：
 //!
@@ -59,7 +59,7 @@ pub struct Jump {
 /// 個字母；`a s d f g h j k l q` 要一個一個認。
 const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
 
-/// **把一串落腳點發成標籤** —— `gw` 和 `go`／`gu` 共用這一支（2026-10-04）。
+/// **把一串落腳點發成標籤** —— `gw` 和 `go`/`gu` 共用這一支（2026-10-04）。
 ///
 /// 永遠兩個字母（見 [`LABEL`]），所以兩邊的手指學的是同一件事；字母表也是同一張，
 /// 不然同一個位置在兩個鍵下拿到不同的號碼，而讀者記的是「第幾個大概是哪個字母」。
@@ -68,7 +68,7 @@ pub(super) fn label_them(spots: impl IntoIterator<Item = usize>) -> Vec<Jump> {
     let spots: Vec<usize> = spots.into_iter().take(ALPHABET.len().pow(LABEL as u32)).collect();
     // **夠得上就一個字母**（見 [`LABEL`]）。全屏一致：要麼全是一個，要麼全是兩個
     // ——所以不會有「某個單字母標籤正好是某個雙字母標籤的頭一個字母」那種撞法，
-    // avy／easymotion 為混長度專門做的那套前綴樹這裏一行都不需要。
+    // avy/easymotion 為混長度專門做的那套前綴樹這裏一行都不需要。
     let one = spots.len() <= ALPHABET.len();
     spots
         .into_iter()
@@ -88,7 +88,7 @@ pub(super) fn label_them(spots: impl IntoIterator<Item = usize>) -> Vec<Jump> {
 /// # 2026-09-28 定過「固定兩個」，2026-10-04 改回可長可短
 ///
 /// 當時的原話：「我觉得就应该固定两个字母，因为很少情况能在 26 个落点内。」**那句話
-/// 到今天仍然對，可它說的只是 `gw`**——那時候這個倉裏只有 `gw`。`go`／`gu` 是另一個
+/// 到今天仍然對，可它說的只是 `gw`**——那時候這個倉裏只有 `gw`。`go`/`gu` 是另一個
 /// 分佈。十二屏正文量出來的（`measure::how_many_places_does_one_screen_have`）：
 ///
 /// ```text
@@ -98,7 +98,7 @@ pub(super) fn label_them(spots: impl IntoIterator<Item = usize>) -> Vec<Jump> {
 /// gu        2     45       99%
 /// ```
 ///
-/// 所以這一改**對 `gw` 等於沒改**（它永遠落在兩個字母那一檔），對 `go`／`gu` 是按鍵數
+/// 所以這一改**對 `gw` 等於沒改**（它永遠落在兩個字母那一檔），對 `go`/`gu` 是按鍵數
 /// 直接少一半。
 ///
 /// 另一條當時的理由是肌肉記憶——「永遠兩個，手指學會加兩下」。2026-10-04 撤了：
@@ -110,7 +110,7 @@ pub(super) fn label_them(spots: impl IntoIterator<Item = usize>) -> Vec<Jump> {
 /// 在「越快越好」這件事上是負的。
 ///
 /// Warning: **全屏一致，所以沒有前綴問題。** 要麼全是一個字母、要麼全是兩個，不會出現
-/// 「`a` 和 `ab` 同時是標籤」。avy／easymotion 為混長度做的那套前綴樹這裏不需要。
+/// 「`a` 和 `ab` 同時是標籤」。avy/easymotion 為混長度做的那套前綴樹這裏不需要。
 ///
 /// 塌掉的兩處一併刪了：全角標籤（兩個半角字母本來就正好兩格，一個縱、一個漢字都填
 /// 得滿），以及「先按一格數一遍再按兩格數一遍」那個兩趟。
@@ -217,7 +217,7 @@ impl Editor {
             .collect()
     }
 
-    /// **屏幕上亮着的那些標籤** —— `gw` 與 `go`／`gu` 共用的一問。
+    /// **屏幕上亮着的那些標籤** —— `gw` 與 `go`/`gu` 共用的一問。
     ///
     /// 兩種機制、同一種畫法（兩個字母蓋一個字素），所以畫的那一邊不該問「是哪一
     /// 種」——橫排一處、竪排一處，問兩次就是四處，而它們早晚會分岔。
@@ -285,7 +285,7 @@ mod measure {
     ///
     /// 2026-09-28 把標籤定為固定兩個字母，靠的就是一個數：一屏中文正文約一百四十個
     /// 落腳點，「一個字母那一檔只在屏幕幾乎空着的時候出現」。2026-10-04 重提單字母
-    /// 標籤，**那個數只說得了 `gw`**——`go`／`gu` 是另一個分佈。留着是為了重跑得了。
+    /// 標籤，**那個數只說得了 `gw`**——`go`/`gu` 是另一個分佈。留着是為了重跑得了。
     #[test]
     #[ignore = "量數用的，不是斷言"]
     fn how_many_places_does_one_screen_have() {

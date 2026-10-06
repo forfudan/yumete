@@ -765,7 +765,7 @@ pub fn sniff_among(lines: &[String], guesses: &[char]) -> Option<char> {
 /// **一張表的寫法**：`|` 表格，或者某個分隔符分開的文本（2026-10-02 定）。
 ///
 /// `csv` 和 `tsv` 不是兩種東西，是 [`Shape::Delimited`] 的兩個分隔符——Pandoc
-/// 的叫法也是這樣（`csv`／`tsv`／`pipe_tables`），所以命令上那三個詞是通用詞彙，
+/// 的叫法也是這樣（`csv`/`tsv`/`pipe_tables`），所以命令上那三個詞是通用詞彙，
 /// 不是我們自己造的。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Shape {

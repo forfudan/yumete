@@ -266,9 +266,9 @@ impl Editor {
     ///
     /// Empty when nothing is pending, which is most of the time.
     pub fn typed_so_far(&self) -> String {
-        // **`go`／`gu` 打到一半，HUD 寫的是 `goa`、`gudon`**（2026-10-04 定）。
+        // **`go`/`gu` 打到一半，HUD 寫的是 `goa`、`gudon`**（2026-10-04 定）。
         //
-        // Warning: **按下 `o`／`u` 的那一刻 `pending` 就回到了 `None`**，而這兩個鍵
+        // Warning: **按下 `o`/`u` 的那一刻 `pending` 就回到了 `None`**，而這兩個鍵
         // 還要再打幾個字母才算完——HUD 從那一刻起到標籤亮起來為止一個字都不說，
         // 人會以為自己回到了 Normal。原話：「HUD 一直顯示到出現雙字母標籤。
         // 比如我打了 `goab`，那就等到打完 `b` 之後再清除 HUD，打 `a` 的時候這個
@@ -288,8 +288,8 @@ impl Editor {
         if let Pending::VimOperator { op, first } = self.pending {
             // `ys` 内部記作一個字符 `s`；牌子上寫的是手按過的那兩個鍵。
             // Warning: **只有 `ys` 這一個**（2026-10-06 夜審更正）。同一輪接上的
-            // vim `ds`／`cs` 不走這條路——它們落在 `SurroundOff`／`SurroundFrom`
-            // 上，牌子畫的是這個編輯器自己的 `md`／`mr`。
+            // vim `ds`/`cs` 不走這條路——它們落在 `SurroundOff`/`SurroundFrom`
+            // 上，牌子畫的是這個編輯器自己的 `md`/`mr`。
             let mut word = if op == 's' { String::from("ys") } else { String::from(op) };
             if let Some(f) = first {
                 word.push(f);

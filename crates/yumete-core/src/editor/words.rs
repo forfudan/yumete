@@ -823,7 +823,7 @@ impl Editor {
         // 寫在一處就是為了讓兩條路說同一件事。
         //
         // 走哪一支照 `multi` 那兩張表，和敲鍵那一路同一個判準：`r` 是編輯
-        // （`edits_every_selection`），`f`／`mi` 那幾個是動作（`each_selection`）。
+        // （`edits_every_selection`），`f`/`mi` 那幾個是動作（`each_selection`）。
         if self.pending == Pending::Replace {
             let with = text.to_string();
             let each = with.clone();
@@ -837,7 +837,7 @@ impl Editor {
             self.edit_keys.clear();
             return;
         }
-        // The other five that 打中文 (#414): `f`／`F` 找一個字, `mi`／`ma`
+        // The other five that 打中文 (#414): `f`/`F` 找一個字, `mi`/`ma`
         // 選一對括號, `ms` 圍上, `mr` 換一對. `r` is answered above and not
         // here because it is the one that takes the *whole* commit — 「你好」
         // replaces the selection with two characters. These five each want

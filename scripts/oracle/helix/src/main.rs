@@ -41,7 +41,7 @@ fn main() {
     let pos: usize = a[1].parse().unwrap();
     let count: usize = a[2].parse().unwrap();
     // Warning: **helix 的光標是一格寬的選區，不是一個點。** 用 `Range::point(pos)` 當
-    // 起點，邊界上那幾式就答得不一樣（文件開頭的 `B`、行尾的 `e`／`E`／`W`），而
+    // 起點，邊界上那幾式就答得不一樣（文件開頭的 `B`、行尾的 `e`/`E`/`W`），而
     // 編輯器裏的光標從來不是零寬的。2026-10-03 換成一格寬之後，三個固定裝置上
     // 378 格的分歧從 22 掉到個位數。
     let wide = next_grapheme_boundary(slice, pos);

@@ -1,4 +1,4 @@
-//! Ruby mode — 注音／拼音 above the line (#65).
+//! Ruby mode — 注音/拼音 above the line (#65).
 
 use super::*;
 

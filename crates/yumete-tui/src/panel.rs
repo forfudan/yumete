@@ -748,7 +748,7 @@ pub fn draw(
     // 幾個字」而 `lines` 是一條條的縱，兩者不是同一個維度，照這裏辦會把最左那
     // 一縱換成「…」並且把框高壓成縱的條數。
     let cap = room_h.saturating_sub(2).max(1) as usize;
-    // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 定）。`None` ＝ 整則
+    // **讀到第幾行 / 共幾行**，寫在底邊左端（2026-09-30 定）。`None` ＝ 整則
     // 都在眼前，那時一個數字都不寫——數字出現本身就是「還有沒露出來的」。
     let mut read: Option<(usize, usize)> = None;
     let (count, lines) = match &panel.body {
@@ -970,8 +970,8 @@ mod tests {
 
     /// **一行帶行內標記的標題出現在浮窗正文裏，從前會當場崩**（2026-09-28）。
     ///
-    /// `markdown::spans("# **甲**")` 交的是 `HeadingMark 0..1`／`Heading 1..7`／
-    /// `Marker 2..4`／`Strong 4..5`／`Marker 5..7`——**它會重疊**。從前這一段是順着往右
+    /// `markdown::spans("# **甲**")` 交的是 `HeadingMark 0..1`/`Heading 1..7`/
+    /// `Marker 2..4`/`Strong 4..5`/`Marker 5..7`——**它會重疊**。從前這一段是順着往右
     /// 切的（記一個 `from`，切 `chars[from..span.start]`），於是 `from` 已經走到 7 而下
     /// 一段從 2 開始，`chars[7..2]` 是一個反向區間，Rust 當場 panic。
     ///

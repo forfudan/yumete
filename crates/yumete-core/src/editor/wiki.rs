@@ -21,7 +21,7 @@ impl Editor {
     /// This project's `.yumete/wiki.md`, whether or not it is there yet.
     ///
     /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**（2026-10-01）。從前
-    /// 它從當前緩衝區往上找一個**已經存在的** `wiki.md`／`wiki.txt`，走法和項目
+    /// 它從當前緩衝區往上找一個**已經存在的** `wiki.md`/`wiki.txt`，走法和項目
     /// 根那一支不一樣——五份各走各的「往上找 `.yumete`」，這是其中一份。
     ///
     /// Warning: **哪一種拼法真的在那裏**（2026-09-19，審查逮到的）。從前兩種都找、
@@ -386,7 +386,7 @@ impl Editor {
         Some(WikiView { name, parts })
     }
 
-    /// **`空格 k`／`空格 K` 在散文裏問的是百科**（2026-09-29 定）。
+    /// **`空格 k`/`空格 K` 在散文裏問的是百科**（2026-09-29 定）。
     ///
     /// 原話：「文本文件会说 space k / K 这不是程序文件所以不能显示文档。这是不好
     /// 的，它以就可以显示百科。比如 space K 强制在邊欄显示。」
@@ -520,7 +520,7 @@ impl Editor {
     /// A name joins the segmenter and the mark goes where the segmenter *cut*,
     /// which is the right rule — 中國人 inside 中國人民 is not the name — and
     /// also means a name can be in the wiki, be right there in the sentence,
-    /// and never light up: 「有身體」 loses to 這裏有／身體, and a name with a
+    /// and never light up: 「有身體」 loses to 這裏有/身體, and a name with a
     /// space or a Latin letter is not one token at all. That used to happen
     /// **in silence**: the entry was written, nothing appeared, and `:wiki`
     /// reported nothing wrong. Now it is asked the only way it can be answered

@@ -6,7 +6,7 @@
 //! > 都是幹啥的，也不需要查詢到底有哪些 key 可以用。
 //!
 //! 所以這張表要說出 `RawConfig` 說不出的三件事：**這一項叫什麽**（給人看的名
-//! 字）、**它是什麽**（打勾／幾選一／數字／一段字）、**它歸哪一組**。類型與取值
+//! 字）、**它是什麽**（打勾/幾選一/數字/一段字）、**它歸哪一組**。類型與取值
 //! 域**抄 `into_config`**，不是想出來的——那一支纔是真正在鉗值的地方。
 //!
 //! Warning: **一張 Rust 常量表，不是一個 toml。** Yume 那頭是 `settings_layout.toml`
@@ -273,7 +273,7 @@ pub const SETTINGS: &[Setting] = &[
         group: Group::Layout,
         // Warning: **`low` 是「最小的非零值」，不是「最小值」。** `into_config` 寫的是
         // `if length == 0 {0} else {length.clamp(4,64)}`——真正的域是「0，或者
-        // 4 到 64」，中間那三個數不存在。寫 `low: 0` 的時候面板停得到 1／2／3，
+        // 4 到 64」，中間那三個數不存在。寫 `low: 0` 的時候面板停得到 1/2/3，
         // 寫進檔裏而編輯器按 4 排版。2026-09-24 審出來的。
         kind: Kind::Count { low: 4, high: 64, zero: Some("set.zero.as-tall-as-the-window") },
         label: "set.editor.zong-length",

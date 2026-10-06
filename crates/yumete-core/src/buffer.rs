@@ -179,13 +179,13 @@ pub struct Buffer {
     /// 也就是改**之前**；`g.` 要的是改**之後**落在哪。兩者在 `ciw` 這種先刪後寫的動作
     /// 上差得很遠。
     last_edit: Option<usize>,
-    /// **改動表**（vim 的 `g;`／`g,`，2026-10-06）：改過的地方，舊的在前。
+    /// **改動表**（vim 的 `g;`/`g,`，2026-10-06）：改過的地方，舊的在前。
     ///
     /// 一行只記一條——vim 也是這樣（`:h changelist`：「only one position is
     /// remembered for each line」），不然打一段話就攢出幾十條，`g;` 要按半天才
     /// 挪得出那一行。上限 100 條，同 vim 的預設。
     changes: Vec<usize>,
-    /// `g;`／`g,` 走到第幾條。一改東西就回到末尾——同 vim：新的一改，走查從頭算。
+    /// `g;`/`g,` 走到第幾條。一改東西就回到末尾——同 vim：新的一改，走查從頭算。
     changes_at: usize,
     /// This buffer's own edit history.
     ///
@@ -599,7 +599,7 @@ impl Buffer {
         self.edit
     }
 
-    /// **記一條改動**（`g;`／`g,`）。一行只記一條，最多一百條。
+    /// **記一條改動**（`g;`/`g,`）。一行只記一條，最多一百條。
     fn note_change(&mut self, at: usize) {
         let at = at.min(self.rope.len_chars());
         let line = self.rope.char_to_line(at);
@@ -621,7 +621,7 @@ impl Buffer {
         self.changes_at = self.changes.len();
     }
 
-    /// 改動表，舊的在前（`g;`／`g,`）。
+    /// 改動表，舊的在前（`g;`/`g,`）。
     pub fn changes(&self) -> &[usize] {
         &self.changes
     }
@@ -931,7 +931,7 @@ impl Buffer {
     /// `:w!` is how you keep yours.
     pub fn save_forcing(&mut self, force: bool) -> io::Result<()> {
         // Warning: **鎖住的那一份，連寫都不寫**（2026-10-02 查出來的）。從前只有繩子
-        // 上了鎖——`insert`／`remove`／`replace`／`undo`／`redo` 五支都攔着，而
+        // 上了鎖——`insert`/`remove`/`replace`/`undo`/`redo` 五支都攔着，而
         // 存檔這一支一個字都沒問。三種後果，都實測過：
         //
         // ① `--readonly` 開着、一個字沒改，`:w` 照樣把檔重寫一遍（inode 都換了）
@@ -1235,7 +1235,7 @@ impl Buffer {
 /// Stripped on open and not written back. Kept, it becomes an invisible first
 /// character of the first paragraph — `gg` parks the cursor on a character that
 /// is not there, and it takes a 縱 slot of its own on the vertical page.
-/// **改動表最多記幾條**（`g;`／`g,`）。一百，同 vim 的預設（`:h changelist`）。
+/// **改動表最多記幾條**（`g;`/`g,`）。一百，同 vim 的預設（`:h changelist`）。
 const CHANGES: usize = 100;
 
 const BOM: &str = "\u{feff}";

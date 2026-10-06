@@ -155,7 +155,7 @@ impl Editor {
     /// directory.
     ///
     /// **Public because a language server needs it.** A server is started
-    /// *in* the project (#53／#54) — asked to analyse a crate from anywhere
+    /// *in* the project (#53/#54) — asked to analyse a crate from anywhere
     /// else it finds no `Cargo.toml` and answers about nothing, silently.
     /// **這一節坐在哪個項目上。**
     ///
@@ -226,7 +226,7 @@ impl Editor {
     /// **工作路徑**——`空格 F` 搜的那個目錄（2026-10-01）。
     ///
     /// 和[項目路徑][`Editor::root`]是兩件事：項目路徑是**從打開的那個檔往上找
-    /// `.git`／`.yumete` 找到的那一層**，啓動時定一次；工作路徑是**你敲 `ye`
+    /// `.git`/`.yumete` 找到的那一層**，啓動時定一次；工作路徑是**你敲 `ye`
     /// 的那個目錄**，`:cd` 改得動。在項目根上敲 `ye` 的話兩者相同，從子目錄
     /// 進去纔分得開。
     pub fn working_dir(&self) -> PathBuf {
@@ -488,7 +488,7 @@ impl Editor {
 
     /// **切回剛纔那一份**（`ga`，helix 的 `goto_last_accessed_file`）。
     ///
-    /// Warning: **`gn`／`gp` 答不了這件事。** 它們按順序走一圈，而正文和筆記、這一章和上一章
+    /// Warning: **`gn`/`gp` 答不了這件事。** 它們按順序走一圈，而正文和筆記、這一章和上一章
     /// 之間來回切是最常做的一件事——開着五個檔的時候 `gp` 未必回得到剛纔那一個。
     ///
     /// Warning: **只記 [`Self::show_buffer`] 那一條路。** 換面板（`switch_pane`）和關檔都是直接

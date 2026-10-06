@@ -5,7 +5,7 @@
 //!
 //! ## 為什麼這裏可以用一張字表，而 `:convert` 不可以
 //!
-//! [`crate::convert`] 開頭那一段說得很明白：簡繁**轉換**要在 發／髮 之間挑一個，
+//! [`crate::convert`] 開頭那一段說得很明白：簡繁**轉換**要在 發/髮 之間挑一個，
 //! 那需要詞典和分詞，所以它喊 opencc。
 //!
 //! **搜索問的是另一個問題**：「這兩個字有沒有可能是同一個字？」——不需要上下文。
@@ -14,8 +14,8 @@
 //!
 //! ## 這張表怎麼來的，以及那個不對稱
 //!
-//! `scripts/make_glyph_sets.py` 從 opencc 的 `TSCharacters`／`TWVariants`／
-//! `HKVariants` 加上倉裏那兩張 GujiCC 表（`glyphs_c.txt`／`glyphs_g.txt`）生成。
+//! `scripts/make_glyph_sets.py` 從 opencc 的 `TSCharacters`/`TWVariants`/
+//! `HKVariants` 加上倉裏那兩張 GujiCC 表（`glyphs_c.txt`/`glyphs_g.txt`）生成。
 //! 辦法是定下的：以 **opencc 的繁體字形**為鍵分行，把各標準的字形並進來，再把
 //! 鍵自己也並進去；**然後每個字取它出現過的所有行的並集**。
 //!

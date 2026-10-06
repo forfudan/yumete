@@ -94,7 +94,7 @@ impl Editor {
                 self.open_file_picker();
                 Ok(CommandOutcome::Continue)
             }
-            // **`:cd`／`:pwd`**（2026-10-01）。照 helix 與 vim：不帶參數回家目
+            // **`:cd`/`:pwd`**（2026-10-01）。照 helix 與 vim：不帶參數回家目
             // 錄，`-` 回上一個。改的是[工作路徑][`Editor::working_dir`]這一格，
             // **不是進程的 cwd**——真去 `chdir` 會悄悄改掉別處七八個讀
             // `current_dir()` 的地方。
@@ -635,7 +635,7 @@ impl Editor {
             }
             // **`:yuhao` 開官網**（2026-10-06 定）。走的是跟着鏈接那條路
             // （`open_request`），所以它和 `gx` 同一個機制：前端把網址當**一個
-            // 參數**交給 `open`／`xdg-open`，這一側從不拼命令行。
+            // 參數**交給 `open`/`xdg-open`，這一側從不拼命令行。
             Command::Yuhao => {
                 let url = "https://shurufa.app/";
                 self.status = say!("link.opening", url);
@@ -780,7 +780,7 @@ impl Editor {
                 // 命令那時已經跑完了。`!sed -i`、`!git checkout` 這一類有副作用
                 // 的，鎖着也照樣生效，而屏幕上寫的是「只讀」。
                 //
-                // `:sh`／`:!` 不在此列：那兩個是「跑一下給我看」，不碰這一份。
+                // `:sh`/`:!` 不在此列：那兩個是「跑一下給我看」，不碰這一份。
                 if self.current_buffer().is_readonly() {
                     self.status = say!("readonly.refused");
                     return Ok(CommandOutcome::Continue);
@@ -1192,7 +1192,7 @@ impl Editor {
                 // **縱書 has nothing to turn off.** A 縱 is broken by the
                 // height of the window, and that is not the writer's to set —
                 // `:view-wrap 40` does set the 縱 length, in either layout, but
-                // 開／關 does not reach it. Taking it anyway and answering
+                // 開/關 does not reach it. Taking it anyway and answering
                 // 「長段落跑出右邊」 named a right edge this page does not
                 // have, and left the reader looking for a change that had not
                 // been made.

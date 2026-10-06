@@ -486,7 +486,7 @@ impl Editor {
         }
     }
 
-    /// **`空格 w`／`C-w`：去下一個開着的區**（2026-09-26 定的）。
+    /// **`空格 w`/`C-w`：去下一個開着的區**（2026-09-26 定的）。
     ///
     /// 原話：「可不可以把工作区和侧边栏统一成一个概念「区域」以简化思维模型……保留
     /// space+w（切换到下个**可视**区域，按照第一工作区、第二工作区、左边栏、右边栏
@@ -503,10 +503,10 @@ impl Editor {
     /// 照 helix 的 `C-w`（`keymap/default.rs:193`）：`w` 走下一個，`hjkl` 按方
     /// 向走過去，`s` 切一刀，`q` 關掉，`o` 只留這一個。
     ///
-    /// Warning: **`e`／`i` 是這一頭自己加的**：開關左右邊欄而**鍵不過去**。
+    /// Warning: **`e`/`i` 是這一頭自己加的**：開關左右邊欄而**鍵不過去**。
     /// helix 沒有邊欄，所以沒有這一對；原話：「_we / _wi for toggling left
     /// and right sidebars……will not move focus to the sidebar」。大寫那一對
-    /// （`E`／`I`）是開了就走進去，而且**只開不關**——「it does not close the
+    /// （`E`/`I`）是開了就走進去，而且**只開不關**——「it does not close the
     /// sidebar as _we/_wi will do this」。
     pub(super) fn on_region_key(&mut self, key: Key) {
         use crate::sidebar::Side;
@@ -522,7 +522,7 @@ impl Editor {
             Key::Char('w') => self.next_region(),
             // 按方向走。四個區域：左欄、正文、副編輯區、右欄。
             //
-            // Warning: **走，不開**（2026-10-02 報的）。這四個從前和 `E`／`I`／
+            // Warning: **走，不開**（2026-10-02 報的）。這四個從前和 `E`/`I`/
             // `s` 共用 `go_to_region`，而那一支「沒有就開一個」——於是 `空格 w j`
             // 在只有一個編輯區的時候**切出一個新的**，`空格 w h` 在沒開左欄的時候
             // 把左欄開出來。原話：「_w + h/j/k/l 不是在可见的窗口里导航，而是会打
@@ -555,7 +555,7 @@ impl Editor {
         }
     }
 
-    /// **開關那一側的邊欄，鍵不過去**（`C-w e`／`C-w i`，2026-09-30）。
+    /// **開關那一側的邊欄，鍵不過去**（`C-w e`/`C-w i`，2026-09-30）。
     pub(super) fn toggle_region(&mut self, side: crate::sidebar::Side) {
         match self.panel(side).is_some() {
             true => self.close_panel(side),
@@ -762,7 +762,7 @@ impl Editor {
 
     /// **百科那一頁的滾動**（2026-09-22）。
     ///
-    /// 與別的視圖同一套鍵：`j`／`k` 一行，`J`／`K` 半頁，`g`／`G` 兩頭；`q` 與
+    /// 與別的視圖同一套鍵：`j`/`k` 一行，`J`/`K` 半頁，`g`/`G` 兩頭；`q` 與
     /// `C-w` 照舊由 [`Self::panel_key_in_common`] 接。
     fn scroll_wiki(&mut self, key: Key) {
         let page = Self::PAGE_IN_A_LIST;
@@ -797,7 +797,7 @@ impl Editor {
     }
 
     /// **不管這一頁是單子還是文章，這幾個鍵都算數**（2026-09-23 審出來的：提示
-    /// 行在百科那一頁上照樣寫着 `Tab 換視圖`／`w 寬窄`，而那兩個鍵在那裏什麽都
+    /// 行在百科那一頁上照樣寫着 `Tab 換視圖`/`w 寬窄`，而那兩個鍵在那裏什麽都
     /// 不做——「拿走鍵的那一半有義務」）。
     pub(super) fn on_sidebar_key_after_the_list(&mut self, key: Key) {
         let Some(side) = self.panel_focus() else { return };
@@ -1000,7 +1000,7 @@ impl Editor {
     /// (`拆分` is two characters and four columns wide).
     ///
     /// A row with no value is a heading — the character itself at the top, and
-    /// the 陸／臺／港 label above each block when the 拆分表 has more than one
+    /// the 陸/臺/港 label above each block when the 拆分表 has more than one
     /// answer. `is_dir` is what the sidebar draws headings with; the flat views
     /// already spend the tree's fields on what they have instead of what a tree
     /// has, and this is that.
@@ -1325,7 +1325,7 @@ impl Editor {
             // with `:` and `Space`, because every panel owes the reader the
             // same ones.
             // …and everything that is the same whether this page is a list or
-            // an article: `R`, `w`, `Tab`／`S-Tab`, then `q`／`C-w`／`:`／空格.
+            // an article: `R`, `w`, `Tab`/`S-Tab`, then `q`/`C-w`/`:`/空格.
             // **Tab walks the views that live in *this* slot.** Which ones
             // those are is a setting, so the question belongs to the editor
             // rather than to the panel — with the outline moved across, this
@@ -1348,7 +1348,7 @@ impl Editor {
     /// A field is also the better step: it is the thing a reader is looking
     /// for, and one press moves to the next one whether it took one row or
     /// four.
-    /// **信息那一格有幾行可讀**——`j`／`k` 走到這裏為止。
+    /// **信息那一格有幾行可讀**——`j`/`k` 走到這裏為止。
     ///
     /// Warning: **和畫出來的那幾行是同一個數。** 兩邊各算一次是「滾到底之後還
     /// 能再按三下」那一族 bug 的來源，所以行是列表的一律問 [`Editor::info_rows`]。
@@ -1479,7 +1479,7 @@ impl Editor {
     /// 然後tab和shift + Tab 上下移動。選中的條目浮窗顯示或者右邊欄顯示（如果右
     /// 邊欄開着），按下enter 之后固定浮窗和面板直到光標移動。」
     ///
-    /// 四件事這扇面板本來就有：`Tab`／`S-Tab` 在兩層裏都走、右邊那半是預覽、
+    /// 四件事這扇面板本來就有：`Tab`/`S-Tab` 在兩層裏都走、右邊那半是預覽、
     /// 打字就篩、`Enter` 挑中。要新做的只有「釘住」和**打開時鍵就在查詢裏**——
     /// 名字是命令行上打的，人還在打字的那個心境裏。
     pub(super) fn open_wiki_picker(&mut self, name: &str) {

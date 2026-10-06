@@ -52,7 +52,7 @@ pub struct Pane {
     pub buffer: u64,
     cursor: usize,
     anchor: usize,
-    /// `j`／`k` 瞄準的那一列。Warning: **這一半收起來的時候只剩一段選區**（`cursor`／`anchor`
+    /// `j`/`k` 瞄準的那一列。Warning: **這一半收起來的時候只剩一段選區**（`cursor`/`anchor`
     /// 就是那一段），所以這裏存的是那一段的目標列，不是一組。
     goal_column: Option<usize>,
     /// 竪排那一半的同一件事。見上。
@@ -217,11 +217,11 @@ enum Pending {
     /// walks between things a document *has* on the brackets, and #249's
     /// `]c` is the first of them here.
     Hop { forward: bool },
-    /// **`z` 那一層在等哪一行**（`zz`／`zt`／`zb`，2026-09-28）。
+    /// **`z` 那一層在等哪一行**（`zz`/`zt`/`zb`，2026-09-28）。
     Aim,
     /// `空格 m` — what to keep of the merge conflict under the cursor.
     Conflict,
-    /// **`C-w`／`空格 w` 之後那一層：區域**（2026-09-30 定，照 helix 的
+    /// **`C-w`/`空格 w` 之後那一層：區域**（2026-09-30 定，照 helix 的
     /// `keymap/default.rs:193` 與 `:260`——那兩處是同一組，兩扇門）。
     ///
     /// 原話：「space+w is the parent command for 『region』 operations (helix
@@ -290,16 +290,16 @@ impl Pending {
             | Pending::Mark
             | Pending::Recall
             | Pending::Hop { .. }
-            // `z` 那一層等的是 `z`／`t`／`b`，不是一個要寫進去的字。
+            // `z` 那一層等的是 `z`/`t`/`b`，不是一個要寫進去的字。
             | Pending::Aim
-            // 區域那一組等的是 `w`／`hjkl`／`e i E I`／`s q o`，一個要寫進去的
+            // 區域那一組等的是 `w`/`hjkl`/`e i E I`/`s q o`，一個要寫進去的
             // 字都沒有。
             | Pending::Region
             | Pending::Conflict => false,
             // **A vim operator is waiting for a *motion*, which is keys** — the
             // character `f` asks for is read by the motion itself.
             //
-            // Warning: **`di`／`da` 之後也不開輸入法**（2026-09-29 撤回，前一天加的）。
+            // Warning: **`di`/`da` 之後也不開輸入法**（2026-09-29 撤回，前一天加的）。
             // 加它的理由是「`di（` 要的是一個全角括號，而 Normal 模式下打不出來」，
             // 而**它等的那一個鍵多半根本不是要寫進去的字**：`diw` 的 `w` 是「詞」，
             // `dip` 的 `p` 是「段」，`dis` 的 `s` 是「句」。開着輸入法的時候 `diw`
@@ -314,14 +314,14 @@ impl Pending {
 
     /// **要不要為這一格請輸入法來** —— 前端問的是這一支（`composes_here`）。
     ///
-    /// Warning: **和 [`Self::takes_a_character`] 有意不同，差的就是 `mi`／`ma`**
+    /// Warning: **和 [`Self::takes_a_character`] 有意不同，差的就是 `mi`/`ma`**
     /// （2026-10-04 定）。那兩個照樣**吃**一個字符鍵，可它等的是**物件的名字**，
     /// 不是要寫進稿子的字：`mim` 的 `m` 是「標記」、`mis` 的 `s` 是「句」、
     /// `mip` 的 `p` 是「段」。開着輸入法，那一鍵被當成碼吃掉——原話：「我打
     /// `mam`，最后一個 m 會變成輸入法候選框」。
     ///
     /// 這和底下 `VimOperator` 那一條是**同一個理由**，而那一條 2026-09-29 就定了
-    /// （`di`／`da`）；`mi`／`ma`（以及 vim 可視模式的 `vi`／`va`，同一個
+    /// （`di`/`da`）；`mi`/`ma`（以及 vim 可視模式的 `vi`/`va`，同一個
     /// `Pending`）當時被落下了。
     ///
     /// 全角那一族不靠輸入法：`pair_family` 讓 `ma(` 認得（）〔〕、`ma[` 認得
@@ -1126,7 +1126,7 @@ impl Sequence {
     }
 }
 
-/// **`z` 那一層把光標放在哪一行**（`zz`／`zt`／`zb`，2026-09-28）。
+/// **`z` 那一層把光標放在哪一行**（`zz`/`zt`/`zb`，2026-09-28）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Aim {
     /// `zt` — 頂上那一行。
@@ -1716,7 +1716,7 @@ pub(crate) fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) 
     *skipped += walk_inner(root, &Sieve::default(), false, f).skipped;
 }
 
-/// [`walk`]，但篩子由呼叫方說——`ye --files` 的 `--hidden`／`--glob=`／`--exclude=`
+/// [`walk`]，但篩子由呼叫方說——`ye --files` 的 `--hidden`/`--glob=`/`--exclude=`
 /// 就是靠它（2026-10-03）。
 pub(crate) fn walk_with(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -> Walked {
     walk_inner(root, sieve, false, f)
@@ -1969,15 +1969,15 @@ pub struct Editor {
     mode: Mode,
     /// **選區——複數的那一個**（#405，方案在 `docs/development.md §5.13`）。
     ///
-    /// Warning: **Phase 0 裏它永遠只裝一段**，行為和從前的 `cursor`／`anchor` 兩個欄位一字不差
+    /// Warning: **Phase 0 裏它永遠只裝一段**，行為和從前的 `cursor`/`anchor` 兩個欄位一字不差
     /// ——這一期的驗收條件就是「`scripts/frames.sh` 那二十幀逐字節不變」。
     ///
-    /// 從前直接讀寫那兩個欄位的三百多處，現在走 `self.sel.head()`／`set_head()` 那四支
+    /// 從前直接讀寫那兩個欄位的三百多處，現在走 `self.sel.head()`/`set_head()` 那四支
     /// 門面，它們問的**永遠是主選區**。要作用在全部選區上的入口是 Phase 1 的事。
     sel: crate::selection::Selections,
     /// **剛纔看的是哪一份稿子**（`ga`，2026-09-28）。緩衝區的 **id**，不是下標。
     last_file: Option<u64>,
-    /// **正則那一族在等什麽**（`s`／`S`／`A-k`／`A-K`，#405 Phase 2）。
+    /// **正則那一族在等什麽**（`s`/`S`/`A-k`/`A-K`，#405 Phase 2）。
     ///
     /// Warning: **它們借的是搜索那一扇提示行**（`Mode::Search`），所以拼音、簡繁、模糊、正則
     /// 四個開關一起白拿，中文也照打——那一扇本來就開輸入法（`Mode::composes`）。這一格
@@ -2266,8 +2266,8 @@ pub struct Editor {
     docs_asked_at: Option<usize>,
     /// 光標最後一次動是什麽時候，跟着走的那一問等它停穩（`DOCS_SETTLE`）。
     docs_moved: Option<std::time::Instant>,
-    /// **浮着的那一則從第幾行畫起**（2026-09-29）——`PageUp`／`PageDown`／
-    /// `C-u`／`C-d` 翻它，同 helix（`ui/popup.rs:289-297`：那四個鍵滾浮窗，
+    /// **浮着的那一則從第幾行畫起**（2026-09-29）——`PageUp`/`PageDown`/
+    /// `C-u`/`C-d` 翻它，同 helix（`ui/popup.rs:289-297`：那四個鍵滾浮窗，
     /// 別的鍵一按就關）。#426 起五種裏畫成散文的三種都收這四個鍵。
     info_scroll: usize,
     /// **`:diagnostics-all` 頂上那一行**：哪個語言服務器、在哪、什麽狀態。
@@ -2303,7 +2303,7 @@ pub struct Editor {
     rules: Vec<usize>,
     /// Whether the line-number band carries a ground of its own.
     number_fill: bool,
-    /// 改動條：行號旁邊那一格說不說「這一行跟 git 那一份不一樣」（#55／#298）。
+    /// 改動條：行號旁邊那一格說不說「這一行跟 git 那一份不一樣」（#55/#298）。
     diff_gutter: bool,
     /// 每個 buffer 一份 git 逐行差，連着**算它的時候那個 revision**。
     ///
@@ -2329,7 +2329,7 @@ pub struct Editor {
     /// Warning: **問不出來的不記。** 盤上還沒有那個檔的時候 `canonicalize` 會失敗，
     /// 而它待會兒可能就有了（`:w` 寫一個新檔）——記下來就永遠當它沒有。
     canonical: RefCell<HashMap<std::path::PathBuf, std::path::PathBuf>>,
-    /// 語言服務器說了什麽不對（#53／#54），按**路徑**存。
+    /// 語言服務器說了什麽不對（#53/#54），按**路徑**存。
     ///
     /// Warning: **鍵是路徑，不是 buffer id。** 服務器說的是一個檔，而它說的時候那個檔
     /// 不一定開着——rust-analyzer 看一個 crate，報回來的多半是你還没打開的那幾
@@ -2446,13 +2446,13 @@ pub struct Editor {
     ///
     /// **A prefix-free grammar** (2026-09-05): the old spelling was
     /// `t1s2S8s`, where the very first `s` is already a whole command, so a
-    /// multi-column sort could not be typed at all. `a`／`d` close a column
+    /// multi-column sort could not be typed at all. `a`/`d` close a column
     /// without asking for anything to happen, and `s` is the one key that acts.
     sort_keys: Vec<(usize, bool)>,
     /// Whether the move that just happened was a **jump** — a search hit, a
     /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
     jumped: bool,
-    /// **`z` 那一層要把光標放在第幾行**（`zz`／`zt`／`zb`，2026-09-28）。
+    /// **`z` 那一層要把光標放在第幾行**（`zz`/`zt`/`zb`，2026-09-28）。
     ///
     /// Warning: **這個編輯器沒有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
     /// 不是視圖——視圖自己滾了，下一幀光標要留在屏幕上的時候會被拉回去。視口住在 TUI
@@ -2916,16 +2916,16 @@ pub struct Editor {
     replace_home: u64,
     /// **屏幕上的落腳點和它們的標籤**（`gw`，#406）——亮着的時候整個鍵盤都是標籤。
     ///
-    /// Warning: 不是 `jumps`：那個是 `C-o`／`C-i` 走的跳轉表（#45），兩件事。
+    /// Warning: 不是 `jumps`：那個是 `C-o`/`C-i` 走的跳轉表（#45），兩件事。
     labels: Vec<labels::Jump>,
     /// 標籤已經被打進去的那幾個字母。
     jump_typed: String,
-    /// **按「那裏寫的什麼」跳，走到哪一步了**（`go`／`gu`，§5.73）。
+    /// **按「那裏寫的什麼」跳，走到哪一步了**（`go`/`gu`，§5.73）。
     ///
     /// Warning: 和 `labels` 不是一回事：那個是 `gw`——屏幕**發**號碼；這個是打**那裏
     /// 寫的字**。兩種機制，各存各的。
     seeking: Option<seek::Seeking>,
-    /// **欠着一次 `go`／`gu`**（`true` ＝ 只問中文）：和 `owed_jump` 同病，落腳點只在
+    /// **欠着一次 `go`/`gu`**（`true` ＝ 只問中文）：和 `owed_jump` 同病，落腳點只在
     /// 這一屏上，而屏幕畫了哪一段要等前端畫完一幀纔知道。
     owed_seek: Option<bool>,
     /// **欠着一次 `gw`**：按鍵記一筆，前端畫完一幀交了範圍再跑（見 `labels.rs`）。
@@ -2958,7 +2958,7 @@ pub struct Editor {
     /// 一份長答案正是它存在的理由（#293、#426）。
     ///
     /// Warning: 和 [`Editor::info_scroll`]（浮窗那一份）是兩格，因為它們是兩個
-    /// 容器：邊欄走得進去、按 `j`／`k` 一行一行讀，浮窗走不進去、只收 `C-u`／
+    /// 容器：邊欄走得進去、按 `j`/`k` 一行一行讀，浮窗走不進去、只收 `C-u`/
     /// `C-d`。合成一格的話從邊欄退回浮窗會把讀到哪帶過去，而那兩件事沒有關係。
     panel_scroll: usize,
     /// **百科那一頁讀到哪了**，以及讀的是站在哪個字上的那一條（2026-09-22 報的：
@@ -3117,7 +3117,7 @@ pub struct Answer {
 /// 回來。一格說一件事，別開第二條一樣的路。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Pasting {
-    /// `p`／`P`——原樣貼。`after` 是貼在後面。
+    /// `p`/`P`——原樣貼。`after` 是貼在後面。
     AsIs { after: bool },
     /// `:paste-table <格式>`——當成表格數據，轉成那一種再貼。
     ///
@@ -3150,12 +3150,12 @@ enum Asking {
     ///
     /// 「暫時不管」之後 `:recover` 再問同樣這三個。
     RecoverDraft,
-    /// 選了「恢復」之後再問一次（同一天定的）：直接恢復／打開對比／取消。
+    /// 選了「恢復」之後再問一次（同一天定的）：直接恢復/打開對比/取消。
     RecoverConfirm,
     /// **`R` 一下動得太多**（2026-10-03 定）。
     ///
     /// 原話：「我觉得要同时满足两个条件吧：1. 超过10个文件 2. 超过100处。」
-    /// 兩個條件都過了纔走中央這扇窗；不到的照舊是狀態欄上那一行 `y`／`n`。
+    /// 兩個條件都過了纔走中央這扇窗；不到的照舊是狀態欄上那一行 `y`/`n`。
     /// 和 `:w` 那一條同一個精神——平日改個錯字一次都不彈。
     ReplaceEverywhere,
 }
@@ -3418,8 +3418,8 @@ impl Editor {
             width: [crate::sidebar::Width::default(); 2],
             window: (u16::MAX, u16::MAX),
             panel_focus: None,
-            // 檔案／緩衝區／大綱 on the left — 「what is there, and where am
-            // I in it」; 字典／詳情 on the right — 「what is this thing I am
+            // 檔案/緩衝區/大綱 on the left — 「what is there, and where am
+            // I in it」; 字典/詳情 on the right — 「what is this thing I am
             // standing on」. Two questions, two columns.
             search: crate::search_panel::Search::new(),
             search_preview: None,
@@ -4117,7 +4117,7 @@ const PAIRS: &[(char, char)] = &[
     ('"', '"'),
     ('\'', '\''),
     ('`', '`'),
-    // 真正的全角形式（U+FF02／FF07／FF40）。中文輸入法出的是 “” ‘’，這三個少見，
+    // 真正的全角形式（U+FF02/FF07/FF40）。中文輸入法出的是 “” ‘’，這三個少見，
     // 收進來是為了「不分全半角」這條規矩沒有例外（2026-09-28）。
     ('＂', '＂'),
     ('＇', '＇'),

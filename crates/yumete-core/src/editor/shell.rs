@@ -72,7 +72,7 @@ impl Editor {
     pub fn provide_pipe_output(&mut self, output: &str, put: crate::editor::Put) {
         use crate::editor::Put;
         let (start, end) = self.selection();
-        // **插在前面／後面的，把原文接回去**（2026-10-06）。整段仍舊走「換掉這一
+        // **插在前面/後面的，把原文接回去**（2026-10-06）。整段仍舊走「換掉這一
         // 段」那條路，所以換行規矩、表格那道閘、撤銷點全是現成的——`!` 和 `|`
         // 於是不會慢慢長出兩套邊界情形。
         let keep = self.current_buffer().rope().slice(start..end).to_string();

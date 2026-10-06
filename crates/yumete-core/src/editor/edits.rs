@@ -418,7 +418,7 @@ impl Editor {
             match opened {
                 // `i a I A` — 接着打，就在光標這裏。
                 None => self.insert_str(typed),
-                // Warning: **`o`／`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**
+                // Warning: **`o`/`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**
                 // （2026-10-06 夜審報的，兩個病）。① 那一支自己 `snapshot()`，於是
                 // 「整段算一個命令」是假的——`3o` 打完要按三下 `u` 纔回得去；
                 // ② 它把光標跟着原來那段文字往下挪，`O` 那一路算出來的落點是**已經

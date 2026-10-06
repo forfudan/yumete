@@ -18,7 +18,7 @@ impl Editor {
     /// pendings those are is [`Pending::wants_the_ime`]'s to say; this is
     /// only the door it is asked through.
     ///
-    /// Warning: **`mi`／`ma` 不在裏面**（2026-10-04）：它們等的是物件的名字。
+    /// Warning: **`mi`/`ma` 不在裏面**（2026-10-04）：它們等的是物件的名字。
     pub fn wants_the_ime(&self) -> bool {
         self.pending.wants_the_ime()
     }
@@ -44,7 +44,7 @@ impl Editor {
         // Warning: **2026-09-27 定的是「不報」**，理由寫在 [`Mode::label`] 上：
         // 「選擇器是一扇蓋住正文的窗，再寫一個模式詞是同一句話說兩遍」。那一句
         // 說的是「哪一種模式」，而這裏報的是**鍵在哪一層**——選擇器真有兩層
-        // （`picker.typing()`：打查詢詞 ／ 站在單子上），兩層的 `j` 不是一回
+        // （`picker.typing()`：打查詢詞 / 站在單子上），兩層的 `j` 不是一回
         // 事，正如 `PAN.` 之於正文。
         //
         // 順帶把那八個點與檔名之間那一格空氣也補回來了：模式一欄不空，狀態行
@@ -406,7 +406,7 @@ impl Editor {
         //
         // 畫的那一邊問的是 [`crate::wrap::position`]，它**先濾掉藏起來的**再加畫
         // 出來的。兩邊是同一條規矩的兩份推導，只在「什麼都沒藏」的時候一致——
-        // `:render off`／`basic` 下一直對，所以沒人發現。
+        // `:render off`/`basic` 下一直對，所以沒人發現。
         let gone: usize = match self.line_text(line) {
             Some(text) => {
                 let chars: Vec<char> = text.chars().collect();

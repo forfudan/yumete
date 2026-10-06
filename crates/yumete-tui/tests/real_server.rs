@@ -1,4 +1,4 @@
-//! **One test against a real language server** (#53／#54, 2026-09-20).
+//! **One test against a real language server** (#53/#54, 2026-09-20).
 //!
 //! Everything else about the LSP work is tested without a server — the wire in
 //! `yumete_core::lsp`, the rule in `yumete_tui::server` — and that is the right

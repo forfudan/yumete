@@ -1,4 +1,4 @@
-//! **Talking to a language server — the wire, not the process** (#53／#54,
+//! **Talking to a language server — the wire, not the process** (#53/#54,
 //! L2, 2026-09-20).
 //!
 //! [`crate::problem`] holds what a server *said*; this holds **how it is
@@ -111,7 +111,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// `kind: "plaintext"` 的生 docstring——Python 的 docstring 慣例是
 /// reStructuredText，`Main API` 底下那一行 `======` 就這麼原樣畫了出來
 /// （2026-09-30 報的）。排 `markdown` 在前，pylsp 就走 `docstring-to-markdown`
-/// 把 reST／numpydoc 譯成 Markdown 再送（譯不動的原樣退回，不會更差）。
+/// 把 reST/numpydoc 譯成 Markdown 再送（譯不動的原樣退回，不會更差）。
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(

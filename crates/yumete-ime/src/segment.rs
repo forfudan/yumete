@@ -54,10 +54,10 @@ fn floor_score(unigram: &UnigramTable) -> f64 {
 /// without discarding the phrase entries: a phrase still wins when it is much
 /// likelier than its parts.
 ///
-/// 3 nats is where 「我們的」 splits into 我們 ／ 的 and 「正在改變」 into
-/// 正在 ／ 改變, while 那年冬天, 人工智能 and 生活方式 stay whole. Below about 2
+/// 3 nats is where 「我們的」 splits into 我們 / 的 and 「正在改變」 into
+/// 正在 / 改變, while 那年冬天, 人工智能 and 生活方式 stay whole. Below about 2
 /// the particles stay glued on; above about 4 real words start coming apart
-/// (那 ／ 年, 三 ／ 朵).
+/// (那 / 年, 三 / 朵).
 const WORD_BONUS: f64 = 3.0;
 
 /// A [`Segmenter`] backed by Yume's language model.

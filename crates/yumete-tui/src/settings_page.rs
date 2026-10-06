@@ -133,7 +133,7 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
             match panel.pane {
                 // Warning: **換組要把行號歸零**，同 `step`。不歸的話，在十二行的組裏
                 // `G` 到末行、`h`、`G`、`l` 進一個三行的組，`here()` 是 `None`
-                // ——沒有一行高亮，空格／`i`／`d` 全沒反應，看起來像面板卡住。
+                // ——沒有一行高亮，空格/`i`/`d` 全沒反應，看起來像面板卡住。
                 Pane::Groups => {
                     panel.group = last(GROUPS.len());
                     panel.row = 0;
@@ -167,7 +167,7 @@ pub struct Seat {
 impl Seat {
     /// **這一鍵歸面板嗎？** 歸就收下並回 `true`（呼叫方 `continue`）。
     ///
-    /// Warning: **`:` 不歸。** 它交給編輯器去開命令行，`:w`／`:q` 就是在那條行上打的
+    /// Warning: **`:` 不歸。** 它交給編輯器去開命令行，`:w`/`:q` 就是在那條行上打的
     /// （核心認得 `settings_open`，於是那幾條說的是面板）。命令行已經開着的時候
     /// 當然也不歸，否則那條命令打不完。
     pub fn took(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {

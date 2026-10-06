@@ -172,13 +172,13 @@ impl Language {
     /// The compiled query and what each of its captures means. Compiled once
     /// per process: a query is parsed from its source text, and that is not
     /// something to do per frame.
-    /// **語法樹裏那些「一個定義」的查詢**（`]f`／`mi f` 那一族，2026-10-06）。
+    /// **語法樹裏那些「一個定義」的查詢**（`]f`/`mi f` 那一族，2026-10-06）。
     ///
     /// Warning: **用語法本身帶的 `TAGS_QUERY`，不抄 helix 的 `textobjects.scm`。**
     /// helix 把文本對象寫成自己 runtime 裏的查詢檔，而那些檔是 **MPL-2.0**，這個
     /// 倉是 Apache-2.0——照抄要先定授權怎麼辦。`tags.scm` 是**語法 crate 自己帶
     /// 的**（我們本來就依賴它，和 `HIGHLIGHTS_QUERY` 同一個來源、同一份授權），
-    /// 而它捕獲的 `@definition.function`／`@definition.class` 包的正是整個定義，
+    /// 而它捕獲的 `@definition.function`/`@definition.class` 包的正是整個定義，
     /// 名字另有 `@name`。九種語言裏七種帶，css 與 html 不帶。
     ///
     /// 它給不出的：參數、註釋、測試——那幾種只在 helix 的 textobjects 裏有。
@@ -275,7 +275,7 @@ impl Language {
     }
 }
 
-/// **一個定義是哪一種**（`]f`／`]c`，2026-10-06）。
+/// **一個定義是哪一種**（`]f`/`]c`，2026-10-06）。
 ///
 /// `tags.scm` 的捕獲名分得比這細（`definition.method`、`definition.interface`、
 /// `definition.module`…）；這裏只收兩種，因為鍵只有兩個，而「方法」在讀稿子的人
@@ -298,7 +298,7 @@ fn define_of(capture: &str) -> Option<Define> {
     }
 }
 
-/// **語法樹認得的那兩種小東西**（`mi a`／`mi c`，2026-10-06）。
+/// **語法樹認得的那兩種小東西**（`mi a`/`mi c`，2026-10-06）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Object {
     /// 一個參數（`mi a`）。

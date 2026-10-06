@@ -52,7 +52,7 @@ impl Mode {
     /// (#394, #500).
     ///
     /// Warning: **選擇器 2026-10-01 從那一組裏拿了出來**，由
-    /// [`Editor::mode_label`] 報 `PIC.NOR`／`PIC.INS`。這一支仍回 `None`：它答
+    /// [`Editor::mode_label`] 報 `PIC.NOR`/`PIC.INS`。這一支仍回 `None`：它答
     /// 的是「哪一種模式」，而那兩個詞答的是**鍵在哪一層**，同 `PAN.`。
     ///
     /// **The rest are three letters**, the way Helix writes them. Twelve cells

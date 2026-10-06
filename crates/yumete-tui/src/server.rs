@@ -1,4 +1,4 @@
-//! **Running a language server** — the process half of #53／#54 (L2,
+//! **Running a language server** — the process half of #53/#54 (L2,
 //! 2026-09-20).
 //!
 //! [`yumete_core::lsp`] is the wire: pure functions over strings, every one of
@@ -71,7 +71,7 @@ const HELLO: i64 = 1;
 /// The `id` of the `shutdown` request, and always this.
 ///
 /// Warning: **Not [`FIRST_ASK`].** It used to be a literal `2`, which is the id the
-/// first `gd`／hover／completion of the session wears — 「two requests must
+/// first `gd`/hover/completion of the session wears — 「two requests must
 /// never wear the same one」, and this one broke it (2026-09-23 審出來的).
 /// Nobody reads the answer at exit, so it never showed; the rule is the point.
 const GOODBYE: i64 = 0;
@@ -242,7 +242,7 @@ pub struct Servers {
     saved: HashMap<PathBuf, u64>,
     /// **Which server each file was told to.**
     ///
-    /// Warning: `sent`／`saved`／`waiting_on` 是全局的，而 `running` 是按語言分的——
+    /// Warning: `sent`/`saved`/`waiting_on` 是全局的，而 `running` 是按語言分的——
     /// 少了這一格，rust-analyzer 一崩就會把 `.go` 的診斷也從頁面上抹掉，把
     /// gopls 的 `sent` 也清空（於是下一趟白發一條 `didSave`，讓它整跑一次
     /// 檢查），而 `waiting_on` 裏那個死掉的服務器的路徑永遠清不掉——「分析中」
@@ -672,7 +672,7 @@ impl Servers {
         // 二、寫了，可這臺機器上一個都找不到。
         //
         // Warning: **把找過的全列出來**（2026-09-29 報的）。python 出廠配了四個
-        // 候選（`ty`／`ruff`／`pylsp`／`jedi-language-server`，抄的 helix），而
+        // 候選（`ty`/`ruff`/`pylsp`/`jedi-language-server`，抄的 helix），而
         // 從前這句話只說第一個——讀者於是只會去裝 `ty`，其實裝哪一個都行。
         if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
             return Some(say!("lsp.not-installed", Self::the_names(wanted)));
@@ -1055,7 +1055,7 @@ fn on_the_path(command: &str, from: Option<&Path>) -> bool {
 /// 在项目文件夹中。比如 pixi uv 还有 .env 这种文件夹。都值得搜索。」
 const BINS: &[&str] = &[".venv/bin", "venv/bin", "node_modules/.bin"];
 
-/// 這幾個底下還隔着一層（環境名／版本），所以要展開一級。
+/// 這幾個底下還隔着一層（環境名/版本），所以要展開一級。
 const NESTED: &[&str] = &[".pixi/envs", ".direnv"];
 
 /// **這個命令在哪**——項目裏找得到就回它的絕對路徑，否則回 `PATH` 上那一個。
@@ -1637,7 +1637,7 @@ mod tests {
     #[test]
     fn two_servers_for_one_language_are_both_told_and_both_heard() {
         // Warning: **用 rust 演，不用 python。** `follow` 要先在這臺機器上找得到
-        // 配着的那個命令，而 ruff／pylsp 未必裝了；演的是「一種語言兩個服務
+        // 配着的那個命令，而 ruff/pylsp 未必裝了；演的是「一種語言兩個服務
         // 器」這件事，哪一種語言不重要。
         let (mut servers, ruff, from_ruff) = Servers::pretend("rust");
         let (pylsp, from_pylsp) = servers.pretend_one("rust", "second");

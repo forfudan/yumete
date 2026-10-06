@@ -49,8 +49,8 @@ pub enum Layer {
 ///
 /// Warning: **寫成 `label:` 字段，不是一支 `match`** —— 同 [`crate::settings_ui::Named`]，
 /// 同一個理由，而這一處 2026-09-24 就照着 `match` 寫過一遍、當場被
-/// `messages.rs` 那張網逮住（三則文案「沒人說」）。那張網讀源碼找 `label:`／
-/// `hint:`／`say!(`，**看不見 `match` 的返回值**。
+/// `messages.rs` 那張網逮住（三則文案「沒人說」）。那張網讀源碼找 `label:`/
+/// `hint:`/`say!(`，**看不見 `match` 的返回值**。
 ///
 /// Warning: 更壞的不是紅，是它**紅得像另一件事**：那條 assert 說的是「a renamed or
 /// deleted tag」，照着做就把三則好好的文案刪了，面板第三欄從此逐行寫着
@@ -227,7 +227,7 @@ fn same_value(a: &str, b: &str) -> bool {
 /// 那一句，而 [`declared_in`] 交出來的是 `toml_edit` 的**原樣寫法**（「面板要照
 /// 原樣顯示」），於是：
 ///
-/// | 檔裏 | 從前畫成／編輯成 | 存回去變成 |
+/// | 檔裏 | 從前畫成/編輯成 | 存回去變成 |
 /// | --- | --- | --- |
 /// | `"a\"b"` | `a\"b` | `"a\\\"b"`，反斜線每存一次多一根 |
 /// | `"a\\b"` | `a\\b` | `"a\\\\b"`，同上 |
@@ -437,7 +437,7 @@ impl Panel {
     /// `h` / `l`。
     ///
     /// Warning: **空的那一組進不去**：七組還沒填，`l` 進去會停在一張空表上，而那一刻
-    /// `j`／`k`／空格全部沒有反應——看起來像面板卡住了。
+    /// `j`/`k`/空格全部沒有反應——看起來像面板卡住了。
     pub fn across(&mut self, right: bool) {
         self.typing = None;
         self.pane = match (right, self.rows().is_empty()) {
@@ -466,7 +466,7 @@ impl Panel {
             // Warning: **`0` 另算一檔，而 `low` 是「最小的非零值」。** `zong_length` 真
             // 正的域是「0，或者 4 到 64」（`into_config` 寫着
             // `if length == 0 {0} else {length.clamp(4,64)}`），`tatechuyoko` 是
-            // 「0，或者 2 到 8」。從前 `low` 寫 0，於是面板停得到 1／2／3，寫進
+            // 「0，或者 2 到 8」。從前 `low` 寫 0，於是面板停得到 1/2/3，寫進
             // 檔裏而**編輯器按 4 排版**——面板顯示的值不是編輯器用的值，這個倉最
             // 怕的那一族。2026-09-24 審出來的。
             Kind::Count { low, high, zero } => {
@@ -577,7 +577,7 @@ impl Panel {
             // 拿舊正文改完整份寫回去，**會把人家改的別的鍵一起頂掉**。改的那幾項
             // 是「鍵 → 新值」，套在哪一份正文上都成立，所以重讀一次就沒有這件事。
             //
-            // Warning: 讀不到就用手上這一份（檔剛被刪掉／權限沒了）：那時 `write_atomically`
+            // Warning: 讀不到就用手上這一份（檔剛被刪掉/權限沒了）：那時 `write_atomically`
             // 自己會報，不必在這裏先攔一道。
             let now = std::fs::read_to_string(&path).unwrap_or_else(|_| sheet.text.clone());
             let moved = now != sheet.text;
@@ -617,7 +617,7 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     use std::io::Write;
     // Warning: **穿過鏈接，不是蓋在它上面。** 同 `yumete-core` 存稿子那一支
     // （`buffer.rs:1324`，那裏的註釋寫着同一句）。`~/.config/yumete/config.toml`
-    // 常常是一條指向 dotfiles 的軟鏈（chezmoi／stow／yadm），而 `rename` 換的是
+    // 常常是一條指向 dotfiles 的軟鏈（chezmoi/stow/yadm），而 `rename` 換的是
     // **目録項**——不穿過去的話，存一次就把那條鏈接換成一個普通檔，dotfiles 裏
     // 那一份從此原封不動地被甩掉，而 `git status` 裏什麽都看不見。
     // 2026-09-24 審出來的，實測。
@@ -958,7 +958,7 @@ mod tests {
 
     /// **空的那一組進不去。**
     ///
-    /// Warning: `l` 進去會停在一張空表上，而那一刻 `j`／`k`／空格全部沒有反應——看起來
+    /// Warning: `l` 進去會停在一張空表上，而那一刻 `j`/`k`/空格全部沒有反應——看起來
     /// 像面板卡住了。
     ///
     /// Warning: **這一條不許挑「碰巧空着的那一組」。** 從前它挑的是鍵盤組（那時那一組

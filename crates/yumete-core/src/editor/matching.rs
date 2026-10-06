@@ -31,9 +31,9 @@ impl Editor {
 
     /// Select inside (`mi`) or around (`ma`) the pair named by `c`.
     pub(super) fn select_pair(&mut self, c: char, around: bool) {
-        // **`w` 是一個對象，不是一對括號**（2026-09-19）。helix 的 `mi w`／`ma w`
-        // 是這麽寫的，而 vim 的 `ciw` `diw` `daw` 走的是同一扇門——`i`／`a` 那兩
-        // 個動作播的就是 `mi%`／`ma%`（`keymap.rs` 的 `object`）。從前這裏只認
+        // **`w` 是一個對象，不是一對括號**（2026-09-19）。helix 的 `mi w`/`ma w`
+        // 是這麽寫的，而 vim 的 `ciw` `diw` `daw` 走的是同一扇門——`i`/`a` 那兩
+        // 個動作播的就是 `mi%`/`ma%`（`keymap.rs` 的 `object`）。從前這裏只認
         // 括號，於是 vim 手指最熟的那一組按下去**什麽也不發生**：`ciw` 剪掉光標
         // 底下那一個字就進了插入，比不動還糟。
         // **An object is a motion now** (B1, 2026-09-20). What stays here is
@@ -46,12 +46,12 @@ impl Editor {
             // manuscript it is the handier of the two: a 段 is the unit a
             // writer moves around, a word is the unit they fix.
             'p' => motion::Object::Paragraph,
-            // `mi s`／`ma s`：光標所在的那一句（2026-09-28）。
+            // `mi s`/`ma s`：光標所在的那一句（2026-09-28）。
             's' => motion::Object::Sentence,
-            // `mi m`／`ma m`：光標所在的那一段 Markdown 標記（2026-09-28）。
+            // `mi m`/`ma m`：光標所在的那一段 Markdown 標記（2026-09-28）。
             'm' => motion::Object::Markup,
-            // **`mi f`／`mi t`：光標所在的那個函數／類**（2026-10-06，helix 的
-            // `mi f`／`mi t`）。語法樹那一邊的事，所以不走 `Object`——它是
+            // **`mi f`/`mi t`：光標所在的那個函數/類**（2026-10-06，helix 的
+            // `mi f`/`mi t`）。語法樹那一邊的事，所以不走 `Object`——它是
             // 純文本的一支，而這個要問那棵樹。整份是代碼的檔才有，`ma` 和 `mi`
             // 在這裏是同一段：一個定義沒有「連着外面那層」可言。
             //
@@ -104,7 +104,7 @@ impl Editor {
         }
     }
 
-    /// **選中光標所在的那個函數／類**（`mi f`／`mi c`，2026-10-06）。
+    /// **選中光標所在的那個函數/類**（`mi f`/`mi c`，2026-10-06）。
     ///
     /// 取**最裏面**那一個：巢狀的函數、`impl` 裏的方法，光標站在哪一層就取哪一層
     /// ——和 `mi(` 在同族括號之間挑的規矩一樣。
@@ -131,7 +131,7 @@ impl Editor {
         self.refresh_goal_column();
     }
 
-    /// **選中光標所在的那個參數／註釋**（`mi a`／`mi c`，2026-10-06）。
+    /// **選中光標所在的那個參數/註釋**（`mi a`/`mi c`，2026-10-06）。
     ///
     /// 取最裏面那一個，同 `mi f`：巢狀的閉包參數、文檔註釋裏套的註釋，站在哪一層
     /// 取哪一層。
@@ -157,7 +157,7 @@ impl Editor {
         self.refresh_goal_column();
     }
 
-    /// **跳到下一段／上一段註釋**（`]c`／`[c`，2026-10-06，helix 的
+    /// **跳到下一段/上一段註釋**（`]c`/`[c`，2026-10-06，helix 的
     /// `goto_next_comment`）。到頭繞回去，同 `]g`。
     pub(super) fn go_to_object_nearby(&mut self, forward: bool, want: crate::code::Object) {
         let starts: Vec<usize> = self.objects_here(want).into_iter().map(|(from, _)| from).collect();
@@ -179,7 +179,7 @@ impl Editor {
         self.refresh_goal_column();
     }
 
-    /// **跳到下一個／上一個診斷**（`]d`／`[d`，`]D`／`[D` 是第一個／最後一個，
+    /// **跳到下一個/上一個診斷**（`]d`/`[d`，`]D`/`[D` 是第一個/最後一個，
     /// 2026-10-06 定，照 helix `default.rs:112-113`）。
     ///
     /// 只看**這一份**的診斷：`空格 d` 那張單子是整個項目的，而這一對是「在這一頁
@@ -214,12 +214,12 @@ impl Editor {
         self.goto_line(to + 1);
     }
 
-    /// **跳到屏幕的頂／中／底**（vim 的 `H`／`M`／`L`，2026-10-06 定）。
+    /// **跳到屏幕的頂/中/底**（vim 的 `H`/`M`/`L`，2026-10-06 定）。
     ///
     /// 屏幕畫了哪一段是前端每一幀交過來的（`set_page_span`，`gw` 也靠它），所以
     /// 這裏問的是**真畫出來的那一段**，不是「光標那一行加減半屏」。
     /// **Which line of the file the screen's top, middle or bottom is**
-    /// (2026-10-06), for `H`／`M`／`L` and for `dH`／`dL` alike.
+    /// (2026-10-06), for `H`/`M`/`L` and for `dH`/`dL` alike.
     ///
     /// Warning: **One answer, two callers.** The key and the operator were two
     /// copies of this arithmetic for an afternoon, and `)` ended up jumping to
@@ -251,7 +251,7 @@ impl Editor {
         self.goto_line(line + 1);
     }
 
-    /// **跳到下一個／上一個函數或類**（`]f`／`[f`／`]c`／`[c`，2026-10-06）。
+    /// **跳到下一個/上一個函數或類**（`]f`/`[f`/`]c`/`[c`，2026-10-06）。
     ///
     /// 到頭繞回去，同 `]g`。
     pub(super) fn go_to_definition_nearby(&mut self, forward: bool, function: bool) {
@@ -308,7 +308,7 @@ impl Editor {
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
-    /// **光標底下那一段 Markdown 標記**（`mi m`／`ma m`，2026-09-28）。
+    /// **光標底下那一段 Markdown 標記**（`mi m`/`ma m`，2026-09-28）。
     ///
     /// `i` 取標記裏面的文字，`a` 連標記一起——`**粗**` 上按 `mi m` 選中「粗」，按
     /// `ma m` 選中「**粗**」。
@@ -319,7 +319,7 @@ impl Editor {
     /// 同一句話都說得下來。
     ///
     /// Warning: **眼下套不起來，因為解析器不套。** 量過（2026-09-28）：``**粗的`碼`**`` 交出
-    /// 來的是 `Marker`／`Strong`／`Marker` 三段，中間那一段連反引號一起算成粗體的正文，
+    /// 來的是 `Marker`/`Strong`/`Marker` 三段，中間那一段連反引號一起算成粗體的正文，
     /// 沒有內層的 `Code`。所以這裏「取起點最靠後的那一個」現在永遠只有一個候選。留着這
     /// 一句是因為解析器哪天學會套的時候，這一支不必跟着改。
     ///
@@ -380,9 +380,9 @@ impl Editor {
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
-    /// **光標所在的那一句**（`mi s`／`ma s`，vim 的 `cis`／`das`，2026-09-28）。
+    /// **光標所在的那一句**（`mi s`/`ma s`，vim 的 `cis`/`das`，2026-09-28）。
     ///
-    /// Warning: **邊界走 `sentence_starts`**，和 `(`／`)`、`:view-sentence`、`:check-punct`
+    /// Warning: **邊界走 `sentence_starts`**，和 `(`/`)`、`:view-sentence`、`:check-punct`
     /// 同一支。兩個答案就意味着 `mi s` 選的那一段和版面斷行的地方對不上。
     ///
     /// Warning: **一句不跨行**：這個倉的解析是逐行的，`sentence_starts` 也是。一段話寫成一
@@ -430,7 +430,7 @@ impl Editor {
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
-    /// 光標底下那個**段落**（vim 的 `dip`／`dap`，B5 2026-09-21）。
+    /// 光標底下那個**段落**（vim 的 `dip`/`dap`，B5 2026-09-21）。
     ///
     /// 一段是「上下都被空行夾着的那幾行」，而光標停在空行上時，那一段**就是
     /// 那幾個空行**——vim 自己的規矩，也是 `dap` 在段與段之間按下去能把多餘的
@@ -482,18 +482,18 @@ impl Editor {
         motion::Span::Over { anchor: rope.line_to_char(first), head: tail }
     }
 
-    /// 光標底下那個**詞**（`mi w`／`ma w`，以及 vim 的 `ciw`／`daw`）。
+    /// 光標底下那個**詞**（`mi w`/`ma w`，以及 vim 的 `ciw`/`daw`）。
     ///
     /// `around` ＝ vim 的 `aw`：詞本身，再加它後面那一段空白；後面没有空白就取
     /// 它前面的，這是 vim 自己的規矩，也是 `daw` 讀起來「整個詞連着那道縫一起
     /// 没了」的原因。
     ///
-    /// Warning: 用的是走 `w`／`e` 的那一份分詞（`motion::line_words`），**不是**
+    /// Warning: 用的是走 `w`/`e` 的那一份分詞（`motion::line_words`），**不是**
     /// `segment_line`——那一支只交漢字，標點與拉丁文一個都不交，而 `ciw` 最常
     /// 按在一個拉丁詞上（`delete_selection` 這種）。
     ///
     /// Warning: **粒度跟着 `w` 走，不再寫死**（2026-09-28）。從前這裏是 `Grain::Coarse`，而
-    /// `w`／`b` 問的是 `word_grain()`——同一個編輯器對「詞」有兩個答案，於是
+    /// `w`/`b` 問的是 `word_grain()`——同一個編輯器對「詞」有兩個答案，於是
     /// 「今天天氣很好」按 `diw` 刪掉六個字，按 `w` 卻走三步。使用者報的原話：「diw，删除
     /// 光标所在词（目前的表现会忽略中文分词器）」。`coarse` 為真的是 `iW`，那個一律粗。
     ///
@@ -647,7 +647,7 @@ impl Editor {
         let found = match which {
             'm' => self.marks_around_the_cursor(),
             // Warning: **一個鍵管一族括號**（2026-10-06 夜審報的）。取對象那條路
-            // （`mi(`／`di(`）走的是 `pair_family`——按 `(` 找得到 `（）`，按 `[`
+            // （`mi(`/`di(`）走的是 `pair_family`——按 `(` 找得到 `（）`，按 `[`
             // 連 `「」`【】一起找。這一支從前逐字符精確，於是 `md(` 在 `（甲乙）`
             // 上答「外面沒有成對的符號」，而 `mi(` 選得中。vim 的 `ds[` 在中文稿
             // 子上同病。同族套着的時候取最裏面那一對，同 `pair_span`。
@@ -806,7 +806,7 @@ impl Editor {
         self.move_head(self.on_this_line_under_vim(pos));
     }
 
-    /// **vim 鍵位下 `h`／`l` 不出這一行**（`:h l`；2026-10-02 定照參考實現）。
+    /// **vim 鍵位下 `h`/`l` 不出這一行**（`:h l`；2026-10-02 定照參考實現）。
     ///
     /// Warning: **要緊的是行末那一格坐不上去。** vim 的普通模式光標停不到換行符
     /// 上，而 yumete 照 helix 的規矩停得上去——於是在一行的最後一個字上按 `x`，
@@ -814,7 +814,7 @@ impl Editor {
     /// 真的不一樣的地方（中文分詞那三格除外）。
     ///
     /// 跨行一併擋住，那也是 vim 自己的規矩（`whichwrap` 出廠不含 `<`、`>`）。
-    /// helix 鍵位照舊：那一邊「走一頁」是有意的，記在上面 `h`／`l` 那一條。
+    /// helix 鍵位照舊：那一邊「走一頁」是有意的，記在上面 `h`/`l` 那一條。
     fn on_this_line_under_vim(&self, pos: usize) -> usize {
         if self.key_preset != yumete_cjk::KeyPreset::Vim {
             return pos;
@@ -910,7 +910,7 @@ impl Editor {
     }
 
     /// Step one line **of the file** — a whole paragraph where a paragraph is
-    /// one line — keeping the goal column: helix's `gj`／`gk`
+    /// one line — keeping the goal column: helix's `gj`/`gk`
     /// (`move_line_down`, 「textual (instead of visual) line」).
     pub(super) fn move_textual_line(&mut self, up: bool) {
         self.move_row(up, true);
@@ -1073,7 +1073,7 @@ impl Editor {
 
     /// The same, asked for the **nth** one (2026-10-02).
     ///
-    /// Warning: **一個數目不是「做 n 遍」。** `f`／`t` 帶數目是「第 n 個」，做 n 遍
+    /// Warning: **一個數目不是「做 n 遍」。** `f`/`t` 帶數目是「第 n 個」，做 n 遍
     /// 會每一趟都從上一個落點重新下錨，選中的那一段就從第一個起而不是從光標起；
     /// 而數目超出的時候「做 n 遍」走到最後一個，vim 是整個動作失敗。別的動作做 n
     /// 遍確實就是對的（`3w`），所以只有這一支認得 `nth`。
@@ -1135,7 +1135,7 @@ impl Editor {
             // the target. A goto is not a selection — 「take me there」, not
             // 「take everything between」 — and that is the same reading vim
             // gives *every* standalone motion (B3).
-            // **屏幕的頂／中／底**——整行整行地取，所以答的是那一行的開頭，
+            // **屏幕的頂/中/底**——整行整行地取，所以答的是那一行的開頭，
             // 同 [`motion::Motion::Line`]。
             motion::Motion::Screen { which } => match self.screen_line(which, nth) {
                 Some(line) => at(rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)))),
@@ -1287,7 +1287,7 @@ impl Editor {
         let len = self.current_buffer().char_count();
         // Warning: **每一段，不只是主選區**（2026-09-28 修，真機上崩出來的）。
         //
-        // 撤銷只把主選區挪了回來（`undo` 那一支叫的是 `set_head`／`set_anchor`，那兩支
+        // 撤銷只把主選區挪了回來（`undo` 那一支叫的是 `set_head`/`set_anchor`，那兩支
         // 問的永遠是主選區），剩下幾段還指着已經不存在的位置。下一幀 `draw_horizontal`
         // 拿它們去切 rope，`next_grapheme` 當場 panic，整個編輯器退出。
         //
@@ -1301,7 +1301,7 @@ impl Editor {
 /// **那「一對括號」其實是 markdown 自己的標記嗎** —— `md` 挑內層時的例外。
 ///
 /// `[[條目]]` 裏的內層 `[`…`]` 起點比整個構造晚，照「取內層」的規矩它會贏；可它
-/// 不是一對括號，是 `[[`／`]]` 的各一半。摘掉它只脫一層殼，剩下 `[條目]`——一句
+/// 不是一對括號，是 `[[`/`]]` 的各一半。摘掉它只脫一層殼，剩下 `[條目]`——一句
 /// 壞掉的語法（2026-10-04 量出來的）。
 ///
 /// 判準：兩個端點**都**落在構造的標記那兩段裏（`[外左,內左)` 與 `[內右,外右)`）。

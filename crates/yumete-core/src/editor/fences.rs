@@ -159,7 +159,7 @@ impl Editor {
         painted.get(line - chunk * CHUNK).cloned().unwrap_or_default()
     }
 
-    /// **這一份裏每一個定義**，位置是**字符**（`]f`／`]c`／`mi f`，2026-10-06）。
+    /// **這一份裏每一個定義**，位置是**字符**（`]f`/`]c`/`mi f`，2026-10-06）。
     ///
     /// 只在「整份是代碼」的檔上回得出東西：markdown 裏的圍欄各有各的樹，而一段
     /// 稿子裏的 `def` 不是這本書的結構。空的回空——按鍵那一頭照這個說「這裏沒有」。
@@ -181,7 +181,7 @@ impl Editor {
         found.into_iter().map(|(from, to, kind)| (at(from), at(to), kind)).collect()
     }
 
-    /// **這一份裏每一個參數／註釋**，位置是**字符**（`mi a`／`mi c`，2026-10-06）。
+    /// **這一份裏每一個參數/註釋**，位置是**字符**（`mi a`/`mi c`，2026-10-06）。
     pub(super) fn objects_here(&self, want: crate::code::Object) -> Vec<(usize, usize)> {
         let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
             return Vec::new();

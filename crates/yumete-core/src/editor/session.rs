@@ -581,7 +581,7 @@ impl Editor {
         taken
     }
 
-    /// **開檔時那一問**：恢復／丟棄恢復文件／暫時不管（2026-10-02 定）。
+    /// **開檔時那一問**：恢復/丟棄恢復文件/暫時不管（2026-10-02 定）。
     ///
     /// 原話：「recover 必須在用戶重新打開這個文件的時候立刻決定。用戶打了 800
     /// 個字之後再按 recover 這是不對的。」
@@ -603,7 +603,7 @@ impl Editor {
         })
     }
 
-    /// **選了「恢復」之後再問一次**：直接恢復／打開對比／取消。
+    /// **選了「恢復」之後再問一次**：直接恢復/打開對比/取消。
     pub(super) fn recover_confirm_query(&self) -> Option<Query> {
         self.current_buffer().recovered_draft()?;
         Some(Query {

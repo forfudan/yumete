@@ -28,7 +28,7 @@ impl Editor {
             && !self.table.as_ref().is_some_and(|view| view.pane))
     }
 
-    /// **`空格 t i`／`空格 t I`（與 `空格 i`／`空格 I`）：把這一行攤開**。
+    /// **`空格 t i`/`空格 t I`（與 `空格 i`/`空格 I`）：把這一行攤開**。
     ///
     /// 小寫浮、大寫一定進邊欄——五種信息同一條規矩（#426）。
     pub(super) fn show_the_record_here(&mut self, afloat: bool) {
@@ -200,7 +200,7 @@ impl Editor {
         // later.
         let runs = self.markup_line_in(line, block);
         // Warning: **最裏面那一條，不是第一條**（2026-09-28）。`spans` 交出來的是嵌套的：
-        // `# 見[^1]` 交 `HeadingMark`／`Heading 1..6`／`Footnote 2..6`，而 `Heading`
+        // `# 見[^1]` 交 `HeadingMark`/`Heading 1..6`/`Footnote 2..6`，而 `Heading`
         // 排在前面。取第一條拿到的是標題那個構造，再去它裏面找腳註當然找不到——
         // **標題裏的腳註從此沒有詳情面板**。不變式保證「起點最靠後的那一條」就是最內層。
         let construct = runs
@@ -337,8 +337,8 @@ impl Editor {
         self.follow_note();
     }
 
-    /// **`*`／`A-*`：記下要找什麼，不動光標**（2026-10-06，helix 的
-    /// `search_selection_detect_word_boundaries`／`search_selection`）。
+    /// **`*`/`A-*`：記下要找什麼，不動光標**（2026-10-06，helix 的
+    /// `search_selection_detect_word_boundaries`/`search_selection`）。
     ///
     /// `bounded` 為真時兩端各補一個 `\b`——**補不補是逐端看的**，同 helix：
     /// 選區的開頭落在一個詞的開頭上才補前面那個，末尾落在詞尾上才補後面那個。
@@ -404,7 +404,7 @@ impl Editor {
                 // 字母**。實測 `one two three alpha` 站在 `o` 上按 `*`，搜的是 `o`、
                 // 報「第 2 處，共 5 處」；`l*` 搜 `n`。中文從來沒事，所以躲了很久。
                 //
-                // `line_words` 正是 `w`／`b` 問的那一支（`word_object_span` 也問
+                // `line_words` 正是 `w`/`b` 問的那一支（`word_object_span` 也問
                 // 它），所以這一行的註釋「which is what `w` would have taken」
                 // 現在是真的。
                 let line = rope.char_to_line(self.sel.head());
