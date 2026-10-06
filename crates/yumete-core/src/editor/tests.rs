@@ -22325,3 +22325,34 @@ fn vim_u_undoes_a_whole_line_and_alt_u_walks_the_history() {
     assert_eq!(ed.current_buffer().text(), "甲一\n", "A-U 重做");
 }
 
+/// **vim 的 `gJ` 併行而不補空格**（2026-10-06，`:h gJ`）。
+#[test]
+fn vim_g_join_adds_nothing_at_the_seam() {
+    // 裸 `J` 在兩個拉丁詞之間補一個空格，`gJ` 不補。
+    let mut ed = typed_vim("alpha\nbeta\n");
+    press(&mut ed, "ggJ");
+    assert_eq!(ed.current_buffer().text(), "alpha beta\n", "J 補一個空格");
+    let mut ed = typed_vim("alpha\nbeta\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "alphabeta\n", "gJ 什麼都不補");
+
+    // 下一行的縮進也不吞——「什麼都別算」是這個鍵的全部意義。
+    let mut ed = typed_vim("甲\n    乙\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "甲    乙\n", "縮進原樣留着");
+
+    // 漢字之間裸 `J` 本來就不補，所以兩個鍵在這裏答得一樣。
+    let mut ed = typed_vim("甲\n乙\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "甲乙\n");
+
+    // 最後一行上按下去什麼都不做。
+    let mut ed = typed_vim("甲\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gJ");
+    assert_eq!(ed.current_buffer().text(), "甲\n", "沒有下一行");
+}
+

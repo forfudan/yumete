@@ -2680,6 +2680,13 @@ impl Editor {
                 self.pending = Pending::Case;
                 return;
             }
+            // **vim 的 `gJ`：併行而不補空格**（2026-10-06，`:h gJ`）。裸 `J` 的接縫是
+            // 算出來的（漢字之間不補、拉丁詞之間補一個），`gJ` 要的正是「什麼都別算」。
+            Key::Char('J') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                let n = self.operator_count.take().unwrap_or(1).max(1);
+                self.repeat_writing(n, |e| e.join_lines_raw());
+                return;
+            }
             Key::Char('a') => return self.goto_last_file(),
             _ => {}
         }
@@ -2897,6 +2904,7 @@ impl Editor {
         ("v", "hint.goto.reselect"),
         ("; ,", "hint.goto.walk-changes"),
         ("u U ~", "hint.goto.case-operators"),
+        ("J", "hint.goto.join-without-a-space"),
         ("n N", "hint.goto.next-match"),
         ("`", "hint.goto.glyph-group"),
     ];
