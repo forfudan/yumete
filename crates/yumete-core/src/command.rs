@@ -4558,6 +4558,18 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
 /// three keystrokes away.
 fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     let line = line.strip_prefix(':').unwrap_or(line);
+    // **範圍不算名字的一部分**（2026-10-06 報的：`:s/` 畫得出那一行，`:%s/` 畫不出）。
+    //
+    // 替換那一條在表上叫 `s/pat/rep/`，而選單是拿打出來的那個詞去比前綴的——
+    // `%s/` 比不上 `s/pat/rep/`，於是整扇面板空着。範圍是 `:%s`、`:1-40s`、
+    // `:1,5,9s` 這幾種寫法，它們說的是「改哪幾行」，不是命令叫什麼。
+    //
+    // Warning: **只在前綴真的是一個範圍的時候剝**：`:set` 的 `s` 後面沒有分隔符，
+    // 被 [`parse_substitution`] 擋在外面，這裏同理只認「範圍 ＋ `s` ＋ 分隔符」。
+    let line = match rows_before_a_substitution(line) {
+        Some(at) => &line[at..],
+        None => line,
+    };
     // Where each word starts, and the word itself. A line ending in a space is
     // asking about a *new* word, not still about the last one.
     let mut words: Vec<(usize, &str)> = Vec::new();
@@ -5094,6 +5106,24 @@ pub struct BadRange;
 /// **The two joints do not mix.** `1-40` is a span and `1,5,9` is a list, and
 /// one range is one of them or the other — `1-5,9` is refused rather than
 /// guessed at, exactly as a `t`/`g` sequence refuses it.
+/// **打到一半的 `:%s/` 裏，範圍佔了幾個字節**（2026-10-06）。
+///
+/// `None` ＝ 前面那一段不是範圍，或者後面接的不是一個替換。只給選單用：真正
+/// 執行走的是 [`parse_substitution`]，它自己會再剝一次。
+fn rows_before_a_substitution(line: &str) -> Option<usize> {
+    let (rows, rest) = parse_rows(line);
+    if rows.is_err() || std::ptr::eq(rest, line) || rest.len() == line.len() {
+        return None;
+    }
+    // 剝完之後要真的是一個替換：`s` 加一個不是字母數字空白的分隔符。
+    let after = rest.strip_prefix('s')?;
+    let delim = after.chars().next()?;
+    match delim.is_alphanumeric() || delim.is_whitespace() || delim == '\\' {
+        true => None,
+        false => Some(line.len() - rest.len()),
+    }
+}
+
 fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
     if let Some(rest) = input.strip_prefix('%') {
         return (Ok(Rows::All), rest);

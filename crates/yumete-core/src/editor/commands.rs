@@ -34,6 +34,35 @@ impl Editor {
         // answer was: a failed `:export` used to leave 「存了 ch1.md」 standing,
         // which reads as an export that worked.
         self.status.clear();
+        // **`:/式子` 與 `:?式子` 就是 `/` 與 `?`**（2026-10-06 補的）。
+        //
+        // vim 的 Ex 行認這兩個（`:/pattern` 是一個地址，走到下一處配得上的地方），
+        // 而一個 vim 的手打 `:/a` 在這裏從前得到的是「沒有 `/a` 這個命令」。
+        //
+        // Warning: **這不是一條新的搜索。** §5.80 第五條本來要拿它當「正則搜索」，而那
+        // 條前提當天就被實測推翻了——`/` 在這個編輯器裏本來就是完整的正則，兩個
+        // 拼法做的是同一件事。留着它只為一件事：那隻手按出來的東西要有反應。
+        //
+        // Warning: **和 vim 有兩處不同**（2026-10-06 拿 nvim 逐格量的）。vim 的 `:/` 是一個
+        // **地址**，地址說的是「哪一行」，所以：
+        //
+        // | | nvim | 這裏 |
+        // | --- | --- | --- |
+        // | `:/beta` 落在 `xx beta here` 上 | 行首，第 1 格 | 匹配處，第 7 格 |
+        // | `:/beta/d` | 刪掉那一行 | 搜 `beta/d` 這五個字 |
+        //
+        // 第二處要整套 Ex 地址文法纔做得出來（`:/a/,/b/s/…`），這個編輯器沒有——
+        // 「改哪幾行」在這裏是 `:%s`／`:1-40s`／`:1,5,9s`。
+        if let Some(pattern) = line.strip_prefix('/').or_else(|| line.strip_prefix('?')) {
+            let forward = line.starts_with('/');
+            self.search_forward = forward;
+            if !pattern.is_empty() {
+                remember_line(&mut self.search_history, pattern);
+                self.last_search = pattern.to_string();
+            }
+            self.repeat_search(forward);
+            return Ok(CommandOutcome::Continue);
+        }
         // What this command needs before it can mean anything (Feature #170).
         // A setting whose prerequisite is missing used to be *set* and then
         // read by nobody: `:view-hanging on` on a horizontal page turned a flag on,
