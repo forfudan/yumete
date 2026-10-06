@@ -17552,6 +17552,54 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **vim 鍵位下光標不停在換行符上**（十三條的第 9 條，2026-10-06）。
+///
+/// 規劃在 §5.85，四條守衛都在 [`Editor::keep_off_the_newline`] 的文檔裏。神諭掃完
+/// 從 34 格不同降到 9 格——沒了的 25 格全是檔尾那條虛行。
+#[test]
+fn the_vim_caret_never_rests_on_a_line_break() {
+    let vim = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed
+    };
+    // 報上來的那一式：第二下 `x` 從前把下一行接了上來。
+    let ed = vim("abc\ndef\n", "glxx");
+    assert_eq!(ed.current_buffer().text(), "a\ndef\n", "不許吃掉換行");
+    // 走到行尾就停在最後一個字上，再走不出去。
+    let ed = vim("abc\ndef\n", "lllll");
+    assert_eq!(ed.sel.head(), 2, "停在 c 上");
+    // **檔尾那條虛行**：以換行結尾的檔，rope 多數一行，vim 沒有它。
+    let ed = vim("abc\ndef\n", "jjj");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 1, "下不到第三行");
+    // 空行上停在換行符上——沒別的地方可去，照 vim。
+    let ed = vim("abc\n\ndef\n", "j");
+    assert_eq!(ed.sel.head(), 4, "空行就是那個換行符");
+    // **插入態不夾**，不然 `A` 到不了行尾之後。
+    let mut ed = vim("abc\n", "A");
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "abcd\n");
+    // **`V` 選的整行不夾**：那一段含換行，夾了 `Vd` 會留下空行。
+    let ed = vim("一\n二\n三\n", "Vd");
+    assert_eq!(ed.current_buffer().text(), "二\n三\n", "整行連換行一起走");
+    // Warning: **helix 鍵位一個字都不動**——那一端的選區本來就含換行符，光標停得上去。
+    // `x` 選整行（連換行），`;` 收成一點就落在那個換行符上。
+    let mut ed = typed("abc\ndef\n");
+    press(&mut ed, "ggx;");
+    assert_eq!(ed.sel.head(), 3, "helix：光標就停在換行符上");
+    // Warning: **`V` 之後不動手就走，那個「整行」旗標不許把夾這件事關掉**。它只在
+    // `d`／`c`／`y` 幾個 arm 裏花掉，所以守衛問的是「**現在**還是不是整行可視
+    // 選區」，不是光看旗標。
+    let mut ed = typed("abc\ndef\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggV");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "gl");
+    assert_eq!(ed.sel.head(), 2, "夾還在管事");
+}
+
 /// **夜審報出來的那幾條，各釘一格**（2026-10-06）。
 ///
 /// 一輪對齊做完之後請了一個只讀的審查，逐條實測。下面每一個斷言都對着它報的一條，

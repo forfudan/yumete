@@ -1656,9 +1656,9 @@ find = "存了再退 保存退出 write and quit wq"
 [[message]]
 # : 命令選單：:yuhao
 key = "cmd.commands.yuhao"
-zht = "打開宇浩系列輸入法官網"
-zhs = "打开宇浩系列输入法官网"
-en = "open the 宇浩 input method website"
+zht = "打開宇浩輸入法官網"
+zhs = "打开宇浩输入法官网"
+en = "open Yuhao IME website"
 find = "宇浩 官網 官网 輸入法 输入法 website"
 
 [[message]]
@@ -5043,8 +5043,8 @@ en = "go to the other half of the pair"
 [[message]]
 # m 組：包起來
 key = "hint.match.surround"
-zht = "使用配對符號包住選擇區"
-zhs = "使用配对符号包住选择区"
+zht = "使用配對符號包住選區"
+zhs = "使用配对符号包住选区"
 en = "wrap the selection in a pair"
 
 [[message]]
