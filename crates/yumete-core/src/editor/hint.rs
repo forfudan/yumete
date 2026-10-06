@@ -446,7 +446,7 @@ impl Editor {
             }
             Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
             // `z` 那一層只有三個鍵，一張三行的小表比一句話好認。
-            Pending::Aim => (
+            Pending::Aim | Pending::AimStuck => (
                 say!("hint.aim.title"),
                 Self::said(
                     [

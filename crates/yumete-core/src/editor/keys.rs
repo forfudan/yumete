@@ -1235,13 +1235,22 @@ impl Editor {
             //
             // Warning: **`zj`／`zk`（只滾視窗不動光標）還沒有**，見 §5.98：視窗的位置
             // 在渲染層，核心只讀得到、改不動。
-            Pending::Aim => {
+            Pending::Aim | Pending::AimStuck => {
+                // `Z` 那一層按完不收，`Esc` 纔收（helix 的 sticky view mode）。
+                let stuck = self.pending == Pending::AimStuck;
                 self.pending = Pending::None;
+                if stuck && key != Key::Esc {
+                    self.pending = Pending::AimStuck;
+                }
                 let n = self.operator_count.take().unwrap_or(1).max(1);
                 match key {
                     Key::Char('z') | Key::Char('c') => self.aim_the_page(crate::editor::Aim::Middle),
                     Key::Char('t') => self.aim_the_page(crate::editor::Aim::Top),
                     Key::Char('b') => self.aim_the_page(crate::editor::Aim::Bottom),
+                    // **`zj`／`zk` 只滾視窗，光標的文字不動**（helix 的
+                    // `scroll_down`／`scroll_up`）。擠到邊上纔把光標一起帶走。
+                    Key::Char('j') | Key::Down => self.scroll_the_page(true, n),
+                    Key::Char('k') | Key::Up => self.scroll_the_page(false, n),
                     // 半頁：`z C-d`／`z空格` 往下，`z C-u`／`z退格` 往上。
                     Key::Ctrl('d') | Key::Char(' ') => self.move_page(n, false, 0.5),
                     Key::Ctrl('u') | Key::Backspace => self.move_page(n, true, 0.5),
@@ -1258,6 +1267,7 @@ impl Editor {
                     }
                     Key::Char('n') => self.repeat_search(self.search_forward),
                     Key::Char('N') => self.repeat_search(!self.search_forward),
+                    Key::Esc => {}
                     _ => self.status = say!("page.aim-wants-ztb"),
                 }
                 return;
@@ -1805,6 +1815,8 @@ impl Editor {
             // **`z` 那一層**：把光標這一行挪到屏幕的頂/中/底（2026-09-28）。
             // Warning: `zc` 也是居中，同 helix（它的 `zc` 是 align_view_center）。
             Key::Char('z') => self.pending = Pending::Aim,
+            // **`Z` 是同一層，按完不收**（helix 的 sticky view mode）：`Zjjjj` 一路滾。
+            Key::Char('Z') => self.pending = Pending::AimStuck,
             // **`3]空格` 加三條空行**，所以這一族要把計數帶過去（同 `g`、`f`/`t`
             // 那幾個等第二鍵的前綴）。
             Key::Char(']') | Key::Char('[') => {
