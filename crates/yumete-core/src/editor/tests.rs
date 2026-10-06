@@ -17545,6 +17545,83 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **vim 鍵位下 `q` 錄、`Q` 播，`~` 按完往前走**（2026-10-06）。
+///
+/// 這個倉跟的是 helix 的規矩（`Q` 錄、`q` 播）。一個 vim 的手按 `q` 本來是「開始
+/// 錄」，在這裏當場把上一個巨集放了一遍——倉裏自己寫過「一對調換了的鍵是最壞的
+/// 一種分歧」，那句話說的正是這個。
+#[test]
+fn vim_keys_record_with_q_and_the_tilde_walks_on() {
+    // `~~~` 在 vim 裏換三個字母，這裏從前三下都換同一個。
+    let mut ed = typed("alpha\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg~~~");
+    assert_eq!(ed.current_buffer().text(), "ALPha\n");
+    // helix 鍵位下不走（它作用在整個選區上）。
+    let mut ed = typed("alpha\n");
+    press(&mut ed, "gg~~~");
+    assert_eq!(ed.current_buffer().text(), "Alpha\n");
+    // 行尾不許走出去。
+    let mut ed = typed("ab\ncd\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg~~~~");
+    assert_eq!(ed.current_buffer().text(), "AB\ncd\n", "不跨行");
+
+    // `q` 開始錄，再按一下停——vim 的拼法。
+    let mut ed = typed("甲\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggq");
+    assert!(ed.recording.is_some(), "q 開始錄");
+    press(&mut ed, "q");
+    assert!(ed.recording.is_none(), "再按一下停");
+}
+
+/// **vim 可視模式下那六個按下去會改錯字的鍵**（2026-10-06）。
+///
+/// 它們在 vim 鍵位表上要麼被 `;`（收成一點）劫走，要麼是 Normal 那件事：`vjo` 在稿子
+/// 裏留下一行、`vjx` 只刪一個字符、`dwvju` 把剛才那個 `dw` 撤銷了。
+#[test]
+fn vim_visual_mode_acts_on_the_whole_selection() {
+    let vim = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed.current_buffer().text().to_string()
+    };
+    // `o` 換到選區的另一頭，不開新行。
+    let mut ed = typed("alpha beta\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggvll");
+    let (from, to) = ed.selection();
+    press(&mut ed, "o");
+    assert_eq!(ed.current_buffer().text(), "alpha beta\n", "沒動稿子");
+    assert_eq!(ed.selection(), (from, to), "還是那一段");
+    assert_eq!(ed.sel.head(), from, "頭換到了另一頭");
+    // `x`／`s` 對整個選區動手。
+    assert_eq!(vim("一二三\n四五六\n", "vjx"), "五六\n", "x 刪整個選區");
+    assert_eq!(vim("一二三\n", "vlls"), "\n", "s 刪掉選區並進插入");
+    // `u`／`U` 轉大小寫，不是撤銷／重做。
+    assert_eq!(vim("Alpha Beta\n", "vllllu"), "alpha Beta\n");
+    assert_eq!(vim("alpha beta\n", "vllllU"), "ALPHA beta\n");
+    assert_eq!(vim("aLPHA\n", "vllll~"), "Alpha\n");
+    // `p` 用寄存器換掉選區。
+    assert_eq!(vim("甲乙\n丙丁\n", "vlyjvlp"), "甲乙\n甲乙\n");
+    // `y` 複製完就回 Normal，光標落在那一段的開頭——vim 的可視模式一動完就結束。
+    let mut ed = typed("甲乙丙\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggvly");
+    assert!(!ed.is_extending(), "y 之後回 Normal");
+    assert_eq!(ed.sel.head(), 0, "光標落在那一段的開頭");
+
+    // Warning: **只在 vim 鍵位下。** helix 的 select mode 裏 `u` 還是撤銷——這裏
+    // 它把剛打進去的整段都撤掉了，那正說明它沒去轉大小寫。
+    let mut ed = typed("Alpha\n");
+    press(&mut ed, "ggvllll");
+    press(&mut ed, "u");
+    assert_ne!(ed.current_buffer().text(), "alpha\n", "helix 鍵位下 u 不轉小寫");
+}
+
 /// **`]空格`／`[空格` 加一條空行，人不動**（2026-10-06，對齊 helix）。
 ///
 /// 不是 `o`／`O`：那兩個開一行**並且開始打字**。這一個是把兩段推開而眼睛不離開
