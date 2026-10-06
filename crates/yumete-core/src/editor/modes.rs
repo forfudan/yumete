@@ -58,6 +58,11 @@ impl Editor {
         if self.extend && self.mode == Mode::Normal {
             return Some("SEL".to_string());
         }
+        // **覆寫模式報 `REP`**（vim 的 `R`，2026-10-06）。vim 寫 `-- REPLACE --`；
+        // 這一欄的詞一律三個大寫字母（`NOR` `INS` `SEL`），所以取頭三個。
+        if self.overwriting && self.mode == Mode::Insert {
+            return Some("REP".to_string());
+        }
         self.mode.label().map(str::to_string)
     }
 

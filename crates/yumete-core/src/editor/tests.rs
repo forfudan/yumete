@@ -250,6 +250,14 @@ fn submit_reading(ed: &mut Editor, reading: &str) {
     ed.on_key(Key::Enter);
 }
 
+/// `typed`, with the vim keys on and the cursor at the top.
+fn typed_vim(text: &str) -> Editor {
+    let mut ed = typed(text);
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    ed
+}
+
 /// A Markdown buffer holding `text`, cursor at the top.
 fn markdown(text: &str) -> Editor {
     let mut ed = typed(text);
@@ -13349,6 +13357,8 @@ fn an_action_bound_to_a_chord_is_really_pressed() {
     assert!(ed.span().1 > ed.span().0, "x selected nothing to collapse");
     ed.on_key(Key::Char('z'));
     assert_eq!(ed.span().0, ed.span().1, "collapse_selection did nothing");
+    // Warning: **That action's key is `;` since 2026-10-06** — Esc stopped
+    // collapsing when it was aligned with helix's.
 }
 
 #[test]
@@ -17557,6 +17567,54 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **vim 的 `R`：打一個字蓋一個字**（2026-10-06 定，只在 vim 鍵位下）。
+#[test]
+fn the_vim_r_writes_over_what_is_there() {
+    let vim = |text: &str, steps: &str, typed: &str| {
+        let mut ed = typed_vim(text);
+        press(&mut ed, steps);
+        press(&mut ed, typed);
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(vim("abcdef\n", "R", "XY"), "XYcdef\n");
+    assert_eq!(vim("abcdef\n", "llR", "XY"), "abXYef\n");
+    // 行尾之後是接着寫，不吃換行——同 vim。
+    assert_eq!(vim("ab\ncd\n", "R", "XYZ"), "XYZ\ncd\n");
+    // 中文一個字蓋一個字（按**字**，不按顯示寬度，同 vim）。
+    assert_eq!(vim("甲乙丙\n", "R", "一"), "一乙丙\n");
+
+    // 退格把蓋掉的還回去。
+    let mut ed = typed_vim("abcdef\n");
+    press(&mut ed, "R");
+    press(&mut ed, "XY");
+    assert_eq!(ed.current_buffer().text(), "XYcdef\n");
+    ed.on_key(Key::Backspace);
+    assert_eq!(ed.current_buffer().text(), "Xbcdef\n", "b 還回來了");
+    ed.on_key(Key::Backspace);
+    assert_eq!(ed.current_buffer().text(), "abcdef\n", "a 也是");
+
+    // 狀態欄那一格寫 REP。
+    let mut ed = typed_vim("abc\n");
+    press(&mut ed, "R");
+    assert_eq!(ed.mode_label().as_deref(), Some("REP"));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode_label().as_deref(), Some("NOR"));
+
+    // 整段算一次撤銷。
+    let mut ed = typed_vim("abcdef\n");
+    press(&mut ed, "R");
+    press(&mut ed, "XYZ");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "abcdef\n", "一下撤完");
+
+    // Warning: **helix 鍵位下 `R` 照舊是「用寄存器換掉選區」。**
+    let mut ed = typed("abcdef\n");
+    press(&mut ed, "ggR");
+    assert_eq!(ed.mode(), Mode::Normal, "helix 的 R 不進插入態");
+}
+
 /// **helix 的 shell 四件**（2026-10-06）。
 ///
 /// Warning: 我們的 `!` 從前做的是 helix 的 `|`（用輸出換掉選區），而 helix 的 `!` 是**插在
@@ -19363,11 +19421,13 @@ fn a_second_escape_says_the_suspension_again() {
     ed.goto_line(1);
     assert!(!ed.take_say_it_again(), "什麽都没按，就什麽都不必說");
 
-    // 有選區的那一下：Esc 收選區，不說。
+    // 延伸開着的那一下：Esc 關掉延伸，不說。
+    // Warning: **它不收選區**（2026-10-06 對齊 helix），所以「有事可做」只問延伸。
     ed.on_key(Key::Char('v'));
     ed.on_key(Key::Char('l'));
     ed.on_key(Key::Esc);
-    assert!(!ed.take_say_it_again(), "那一下 Esc 是收選區");
+    assert!(!ed.take_say_it_again(), "那一下 Esc 是關延伸");
+    assert!(ed.span().1 > ed.span().0, "選區留着");
 
     // 再按一次：没別的事了。
     ed.on_key(Key::Esc);

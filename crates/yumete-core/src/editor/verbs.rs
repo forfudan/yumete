@@ -29,6 +29,9 @@ impl Editor {
         // 變成五個。進門清，比每一條出門的路都清一遍可靠。
         self.insert_again = 0;
         self.insert_opened = None;
+        // 覆寫是 `R` 自己打開的，別的入口一律是普通插入。
+        self.overwriting = false;
+        self.overwritten.clear();
         self.reference = None;
         self.mode = Mode::Insert;
     }

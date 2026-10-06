@@ -233,6 +233,13 @@ impl Editor {
             // nothing at all (2026-10-06).
             Key::Backspace | Key::Ctrl('h') => {
                 self.insert_recording.pop();
+                // **覆寫模式的退格是「還回去」**，同 vim：往回走一格，把那個位置
+                // 上原來的字放回來。蓋到行尾外面去的那幾個沒有原文，就只是刪掉。
+                if self.overwriting {
+                    if let Some(was) = self.overwritten.pop() {
+                        return self.put_back_what_was_overwritten(was);
+                    }
+                }
                 self.delete_before_cursor();
             }
             // Forward delete. It did nothing at all before — the key never
