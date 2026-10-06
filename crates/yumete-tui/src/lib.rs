@@ -6466,18 +6466,50 @@ fn draw_command_menu(
     // prerequisite belongs *here*, before the command is run: the writer who
     // typed `:view-hanging` on a horizontal page found out by pressing Enter and
     // watching nothing happen.
-    let unmet: Vec<String> = editor
-        .unmet_needs(matches[focus].needs)
-        .iter()
-        .map(|need| need.says())
-        .collect();
-    // **說明搬到單子上面去了**（2026-10-06，照 helix）：一句話說得完整，跑不動
-    // 的理由跟着它——都是關於挑中的那一條的話，該在一處。下邊框上只剩一個數目。
-    let mut about: Vec<String> =
-        vec![yumete_core::messages::say(matches[focus].help, &[]).to_string()];
-    if !unmet.is_empty() {
-        about.push(say!("ui.needs-these-first", unmet.join(&say!("label.comma"))));
-    }
+    // **說的是按下 Enter 會發生什麼**（2026-10-07 定），不是單子上第一條的事。
+    //
+    // 原話：「我在命令行打任何東西的時候，横向上方的description都應該忠實反應我
+    // 按下Enter時候會發生什麽」。剛按下 `:` 的那一瞬什麼都沒打——那時候整塊不畫
+    // （作者選的「No block, no rule」），單子自己還在。
+    // Warning: **只管「還在打命令名」那一段**。有空格之後挑的是**參數**——`:ruby ` 底下
+    // 那三個 `off`／`basic`／`full`——而那時候要讀的正是挑中的那個詞是什麼意思。
+    // 作者報的是名字那一段：剛按下 `:` 說的是 `cd` 的事，打錯了說的是別人的事。
+    let typed = editor.prompt().map(|(_, t)| t).unwrap_or_default();
+    let naming = yumete_core::command::still_naming(typed);
+    let about: Vec<String> = match naming {
+        false => {
+            let mut lines =
+                vec![yumete_core::messages::say(matches[focus].help, &[]).to_string()];
+            let unmet: Vec<String> = editor
+                .unmet_needs(matches[focus].needs)
+                .iter()
+                .map(|need| need.says())
+                .collect();
+            if !unmet.is_empty() {
+                lines.push(say!("ui.needs-these-first", unmet.join(&say!("label.comma"))));
+            }
+            lines
+        }
+        true => match yumete_core::command::about_the_line(typed) {
+        // 什麼都沒打：不畫說明，也不畫那道橫線。
+        Err(None) => Vec::new(),
+        // 打了一個不存在的命令：照編輯器按下 Enter 時說的那一句說。
+        Err(Some(name)) => vec![say!("cmd.no-such-command", &name)],
+        Ok(what) => {
+            let mut lines = vec![yumete_core::messages::say(what.help, &[]).to_string()];
+            if let Some(spelt) = &what.spelt {
+                lines.push(say!("ui.command-aliases", spelt));
+            }
+            // 跑不動的理由也在這裏，自成一行：它說的是**這一條**，不是單子。
+            let unmet: Vec<String> =
+                editor.unmet_needs(what.needs).iter().map(|need| need.says()).collect();
+            if !unmet.is_empty() {
+                lines.push(say!("ui.needs-these-first", unmet.join(&say!("label.comma"))));
+            }
+            lines
+        }
+        },
+    };
     let footer = format!("{}/{}", focus + 1, matches.len());
     // Spread across the window: the command list is short entries and there
     // are a couple of dozen of them, which is exactly the shape that wants
@@ -20007,13 +20039,33 @@ fn squeezed(text: &str) -> String {
 
         // **Typing narrows the panel without moving its rows**, which is what
         // measuring the shape off the whole list buys.
+        //
+        // Warning: **數的是框裏那幾行，不是帶冒號的那幾行**（2026-10-07 改）。從前兩者
+        // 一樣，而現在單子上混着三種東西：命令、它底下那幾個詞（`view-hanging on`，
+        // 沒有冒號）、以及猜出來的那幾條。`menu_shape` 數冒號，於是它量的不再是
+        // 深淺。框自己說得準：橫線（或者上邊框）到下邊框之間有幾行。
+        let rows_in = |buffer: &ratatui::buffer::Buffer| -> usize {
+            let wall = |y: u16| buffer[(0, y)].symbol().to_string();
+            let top = (0..buffer.area.height)
+                .find(|y| wall(*y) == "╭")
+                .expect("a panel");
+            let rule = (top..buffer.area.height).find(|y| wall(*y) == "├");
+            let foot = (top..buffer.area.height).find(|y| wall(*y) == "╰").expect("a floor");
+            match rule {
+                // 有說明塊：橫線到下邊框之間全是條目。
+                Some(rule) => (foot - rule - 1) as usize,
+                // 沒有說明塊：上邊框到下邊框之間還夾着腳注那一行，它不是條目。
+                None => (foot - top - 2) as usize,
+            }
+        };
+        let before = rows_in(&tall);
         for c in "view".chars() {
             editor.on_key(Key::Char(c));
         }
         let narrowed = render_with(&editor, &config, no_ime(), 160, 60);
         assert_eq!(
-            menu_shape(&narrowed).0.len(),
-            deep.len(),
+            rows_in(&narrowed),
+            before,
             "twelve `view-…` still stand on the rows the whole list settled"
         );
     }
@@ -20271,14 +20323,24 @@ fn squeezed(text: &str) -> String {
         let top = *rows.iter().next().expect("a menu was drawn");
         assert_eq!(*columns.iter().next().unwrap(), 2, "inside the ring");
         assert_eq!(buffer[(0, top)].symbol(), "│", "a ring around it");
-        // **說明塊在單子上面，一道橫線隔開**（2026-10-06）：所以緊挨着頭一行
-        // 條目的不再是上邊框，而是那道橫線；角在說明塊的上面。
+        // **什麼都沒打的時候沒有說明塊**（2026-10-07 定）：按下 Enter 什麼都不會
+        // 發生，而一段說着 `:cd` 的話會是假話。所以緊挨着頭一行條目的是上邊框。
+        assert_eq!(buffer[(0, top - 1)].symbol(), "╭", "and a corner to it");
+
+        // **打出一條命令，說明塊就出來了，底下一道橫線隔開。**
+        for c in "cd".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
+        let top = *menu_shape(&buffer).0.iter().next().expect("a menu was drawn");
         assert_eq!(buffer[(0, top - 1)].symbol(), "├", "a rule under the description");
         let corner = (0..top)
             .rev()
             .find(|y| buffer[(0, *y)].symbol() == "╭")
             .expect("a corner above the description");
         assert!(corner < top - 1, "說明塊夾在角和橫線之間");
+        let said = buffer_text(&buffer).replace(" ", "");
+        assert!(said.contains("更改工作路徑"), "說的是 cd 的事: {said:?}");
     }
 
     /// A search prompt is not a command line and gets no menu.

@@ -10937,6 +10937,13 @@ en = "this copy is yours — break it as you like (:q leaves)"
 # ── ui ────────────────────────────────────────────────────────────────
 
 [[message]]
+# 命令面板上面那一段：這條命令還能怎麼拼
+key = "ui.command-aliases"
+zht = "別名：{0}"
+zhs = "别名：{0}"
+en = "Aliases: {0}"
+
+[[message]]
 # `:` 命令面板的名字，畫在它那圈框的左上角
 key = "ui.commands"
 zht = "命令"
