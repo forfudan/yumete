@@ -22129,3 +22129,62 @@ fn a_keystroke_in_a_big_code_file() {
     println!("  markup_line_in    {:?}  {n} 段\n", at.elapsed());
 }
 
+/// **2026-10-06 那一輪對齊：`C-s`、vim 的 `` ` ``、`gu`/`gU`/`g~`、`gn`/`gN`。**
+///
+/// 原話：「just be aligned」——鍵位有明確答案就照做，佔着的挪到空鍵上。
+#[test]
+fn the_keys_that_were_waiting_on_a_decision() {
+    // `C-s` 把這個選區記進跳轉表，人不動；`C-o` 回得來。
+    let mut ed = typed("一\n二\n三\n四\n五\n");
+    ed.goto_line(2);
+    let was = ed.sel.head();
+    ed.on_key(Key::Ctrl('s'));
+    assert_eq!(ed.sel.head(), was, "C-s 不挪光標");
+    ed.goto_line(5);
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 1, "C-o 回到記下的那一處");
+
+    // vim 鍵位下 `` ` `` 跳標記，字形組搬到 ``g` ``。
+    let mut ed = typed_vim("alpha\nbeta\ngamma\n");
+    press(&mut ed, "ggjma");
+    press(&mut ed, "gg");
+    press(&mut ed, "`a");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 1, "`a 跳回標記");
+    press(&mut ed, "gg");
+    press(&mut ed, "g`u");
+    assert_eq!(ed.current_buffer().text(), "Alpha\nbeta\ngamma\n", "g`u 轉大寫");
+    // helix 鍵位下 `` ` `` 還是字形組。
+    let mut ed = typed("alpha\n");
+    press(&mut ed, "gg`u");
+    assert_eq!(ed.current_buffer().text(), "Alpha\n", "helix：` 仍是字形組");
+
+    // vim 的大小寫算子，連「加倍就是一整行」那條規矩一起。
+    let mut ed = typed_vim("alpha beta\ngamma\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "guw");
+    assert_eq!(ed.current_buffer().text(), "alpha beta\ngamma\n", "本來就是小寫，沒動");
+    let mut ed = typed_vim("ALPHA BETA\ngamma\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "guw");
+    assert_eq!(ed.current_buffer().text(), "alpha BETA\ngamma\n", "guw 一個詞");
+    let mut ed = typed_vim("alpha beta\ngamma\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "gUU");
+    assert_eq!(ed.current_buffer().text(), "ALPHA BETA\ngamma\n", "gUU 一整行");
+    let mut ed = typed_vim("aL\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "g~~");
+    assert_eq!(ed.current_buffer().text(), "Al\n", "g~~ 整行互換");
+
+    // vim 的 `gn` 走到下一處匹配；helix 鍵位下 `gn` 仍是換稿子。
+    let mut ed = typed_vim("甲乙甲丙甲\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "/甲");
+    ed.on_key(Key::Enter);
+    let before = ed.sel.head();
+    press(&mut ed, "gn");
+    assert!(ed.sel.head() != before, "gn 走到下一處");
+    press(&mut ed, "gN");
+    assert_eq!(ed.sel.head(), before, "gN 走回來");
+}
+

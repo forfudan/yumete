@@ -1035,6 +1035,15 @@ impl Editor {
                 self.extend_to_line_bounds();
                 self.indent(op == '>');
             }
+            // **`gu`／`gU`／`g~`** — 換字形，選區就是那一段（2026-10-06）。
+            'u' | 'U' | '~' => {
+                self.take_object(span);
+                match op {
+                    'u' => self.map_selection(|one| one.to_lowercase().collect()),
+                    'U' => self.map_selection(|one| one.to_uppercase().collect()),
+                    _ => self.map_selection(crate::editor::switch_case),
+                }
+            }
             // **`y` leaves the cursor at the head of what it took** — vim's
             // rule, and why `yyp` puts the copy directly under the line.
             _ => {
@@ -2182,6 +2191,15 @@ impl Editor {
             // and in Helix. Under the Kitty protocol `C-i` and Tab are told
             // apart; without it a terminal sends the same byte for both, and
             // `C-i` simply does whatever Tab does.
+            // **`C-s` 把這個選區記進跳轉表**（2026-10-06，helix 的 `save_selection`）。
+            //
+            // Warning: **終端本來把 `C-s` 當 XOFF**（停止輸出）。這個編輯器跑在 raw mode
+            // 裏，流控是關着的，所以它到得了這裏。作者 2026-10-06 定「Who cares
+            // about terminal. Just be aligned」——鍵位對齊優先（§5.94）。
+            Key::Ctrl('s') => {
+                self.remember_jump();
+                self.status = say!("jump.selection-saved");
+            }
             Key::Ctrl('o') => self.walk_jumps(true),
             // Warning: **`Tab` 在 Normal 裏也是這一件事**（2026-10-06，對齊 helix 的
             // `jump_forward`）。終端把 `Tab` 和 `C-i` 發成同一個字節，而這個編輯器
@@ -2242,6 +2260,15 @@ impl Editor {
             // 字形變換 (§5.2.3 ②): `` `l `` 小寫, `` `u `` 大寫, `` `` `` 互換.
             // `~` and `` A-` `` are Helix's and are **unbound** here — the
             // phrasebook catches both and points at this group.
+            // **vim 鍵位下 `` ` `` 跳標記**（2026-10-06，`:h `a`）。vim 的 `` ` `` 落在
+            // 標記記下的那一格上，`'` 落在那一行上；這個編輯器的標記記的就是一格，
+            // 所以兩個拼法同一支。
+            //
+            // 字形組在 vim 鍵位下讓到 ``g` `` 去（`g` 選單裏那個位置空着），一個
+            // 都沒丟：``g`l`` 轉小寫、``g`s`` 繁轉簡，和原來一樣往下接一個字母。
+            Key::Char('`') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.pending = Pending::Recall;
+            }
             Key::Char('`') => self.pending = Pending::Case,
             // **`~` is `` ` `` `` ` ``, and `*` is `g/`** (#404, 2026-09-11).
             // Both were hints pointing at where the thing had moved to, which
@@ -2575,6 +2602,32 @@ impl Editor {
                 let nth = self.operator_count.take().unwrap_or(1);
                 return self.go_to_screen(which, nth);
             }
+            // **vim 的 `gu`／`gU`／`g~` 是大小寫算子**（2026-10-06，`:h gu`）：等一個
+            // 動作，`guw` 把一個詞轉小寫，`guu` 轉一整行（算子加倍那條規矩是通用的，
+            // 所以這三個白拿）。helix 鍵位下 `gu` 仍是「打讀音跳漢字」——那一支在
+            // 兩套鍵位下都另有一個門，`空格 u`。
+            Key::Char(op @ ('u' | 'U' | '~'))
+                if self.key_preset == yumete_cjk::KeyPreset::Vim =>
+            {
+                self.pending = Pending::VimOperator { op, first: None };
+                return;
+            }
+            // **vim 的 `gn`／`gN` 走到下一處／上一處匹配**（`:h gn`）。helix 的
+            // `gn`／`gp` 是換稿子，所以這兩個只在 vim 鍵位下讓出去；換稿子那一對
+            // 在那一端仍舊按 `空格 b` 挑。
+            Key::Char('n') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.repeat_search(self.search_forward);
+                return;
+            }
+            Key::Char('N') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.repeat_search(!self.search_forward);
+                return;
+            }
+            // 字形組在 vim 鍵位下的門（2026-10-06）：那一端的 `` ` `` 歸標記了。
+            Key::Char('`') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.pending = Pending::Case;
+                return;
+            }
             Key::Char('a') => return self.goto_last_file(),
             _ => {}
         }
@@ -2735,6 +2788,7 @@ impl Editor {
         // picker）。五種信息同一個形狀——小寫浮，大寫進邊欄。
         ('d', "hint.space.problems"),
         ('D', "hint.space.problems-panel"),
+        ('u', "hint.goto.seek-reading"),
         ('i', "hint.space.record"),
         ('I', "hint.space.record-panel"),
         // **`空格 w` 是區域那一組的門**（2026-09-30 定，照 helix 的 `C-w`：
@@ -2786,8 +2840,13 @@ impl Editor {
     /// **vim 鍵位下多出來的那一行**：`gv` 重選上一次那一段。helix 沒有這個命令，
     /// 所以它不在上面兩張表上——提示行裏列一個在這一端按不出東西的鍵，和那張表
     /// 說謊是同一件事。
-    pub(super) const GOTO_KEYS_VIM: &'static [(&'static str, &'static str)] =
-        &[("v", "hint.goto.reselect"), ("; ,", "hint.goto.walk-changes")];
+    pub(super) const GOTO_KEYS_VIM: &'static [(&'static str, &'static str)] = &[
+        ("v", "hint.goto.reselect"),
+        ("; ,", "hint.goto.walk-changes"),
+        ("u U ~", "hint.goto.case-operators"),
+        ("n N", "hint.goto.next-match"),
+        ("`", "hint.goto.glyph-group"),
+    ];
 
     /// The same menu on a 縱書 page, where the four directions turn (see
     /// `handle_goto`).
@@ -3118,6 +3177,10 @@ impl Editor {
             // name……Then users can use space + N to quickly switch between
             // them.」——檔數上十位就補零，所以那是一套不必按空格確認的前綴碼。
             Key::Char('w') => self.pending = Pending::Region,
+            // **`空格 u` 也是「打讀音跳漢字」**（2026-10-06）。`gu` 在 vim 鍵位下讓給了
+            // 大小寫算子，而這一支是中文稿子上天天按的——所以它在兩套鍵位下都另有
+            // 一個門，不是只在讓位的那一端補一個。
+            Key::Char('u') => self.start_seek(true),
 
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),

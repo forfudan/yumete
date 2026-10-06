@@ -1913,6 +1913,9 @@ on its own says which set is in force.
 | `g;` `g,` | **new** | walk the places you changed, older / newer (one entry per line, a hundred at most, as in vim) |
 | `C-o` in insert | **new** | run one Normal command and come straight back to insert (a several-key one like `gg` or `3j` is waited out) |
 | `(` `)` | **already there, spelled differently** | previous / next sentence (`(` `)` here normally rotate the primary selection) |
+| `` ` ``*a* | **new** | jump to the cell mark *a* recorded (`'`*a* goes to its line). The glyph group moves to ``g` `` on this side: ``g`l`` lowercases, ``g`s`` goes traditional to simplified |
+| `gu` `gU` `g~` | **new** | case operators, each waiting for a motion: `guw` a word, `guu` a whole line, `gUU` uppercase |
+| `gn` `gN` | **new** | the next/previous match (here `gn` is normally the next file, as it is in Helix; on this side that pair is `空格 b`) |
 | `H` `M` `L` | **new** | go to the top / middle / bottom of this screen (normally those three are previous sentence / set a mark / next sentence) |
 | `ys` `ds` `cs` | **already there, spelled differently** | add / drop / change brackets, as in vim-surround |
 | `D` `C` | translated to `d$` `c$` | delete / change to end of line |
@@ -2762,6 +2765,7 @@ without leaving the page:
 | | |
 | --- | --- |
 | `空格 o` | the sidebar, opened straight onto the outline |
+| `空格 u` | type a reading and jump to that 漢字 (the same as `gu`; under the vim preset `gu` is the lowercase operator, so this door stands open in both) |
 | `空格 f` | open a file: a panel in the middle, the list on the left and the preview on the right (see "Picking a file"); searches the **project path** |
 | `空格 F` | the same, but searches the **working path** (`:cd` changes it, `:pwd` shows it) |
 | `空格 b` | switch buffer |
