@@ -264,8 +264,19 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        self.sel.set_head(end);
-        self.sel.set_anchor(end);
+        // **`A-J` 選中補出來的那一格**（2026-10-06，helix 的 `join_selections_space`）。
+        // 接縫是算出來的，所以人看不見補了沒有——選中它就看得見了，而且要改成
+        // 別的（換行、全角空格）當場就打得掉。接縫是空的就退回原來那樣，收成一點。
+        match self.select_the_seam && !glue.is_empty() {
+            true => {
+                self.sel.set_anchor(end);
+                self.sel.set_head(end + glue.chars().count() - 1);
+            }
+            false => {
+                self.sel.set_head(end);
+                self.sel.set_anchor(end);
+            }
+        }
         self.clamp_cursor();
     }
 

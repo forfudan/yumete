@@ -2072,6 +2072,9 @@ pub struct Editor {
     page_lines: usize,
     /// Which line the page starts at — see [`Editor::set_page_top`].
     page_top: usize,
+    /// `A-J` — 併行的時候把補出來的那一格留在選區裏（helix 的
+    /// `join_selections_space`）。只在那一個鍵按下去的那一瞬間是真。
+    pub(crate) select_the_seam: bool,
     page_columns: usize,
     /// Undo and redo stacks of buffer snapshots (Feature #11).
     /// The last search pattern and direction (Feature #14).
@@ -3241,6 +3244,7 @@ impl Editor {
             replaying: false,
             page_lines: 20,
             page_top: 0,
+            select_the_seam: false,
             page_columns: 10,
             last_search: String::new(),
             search_forward: true,

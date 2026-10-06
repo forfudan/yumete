@@ -2248,6 +2248,13 @@ impl Editor {
             // Warning: **終端本來把 `C-s` 當 XOFF**（停止輸出）。這個編輯器跑在 raw mode
             // 裏，流控是關着的，所以它到得了這裏。作者 2026-10-06 定「Who cares
             // about terminal. Just be aligned」——鍵位對齊優先（§5.94）。
+            // **`A-J`：併行，並且選中補出來的那一格**（2026-10-06，helix 的
+            // `join_selections_space`）。接縫是算出來的，選中它纔看得見算成了什麼。
+            Key::Alt('J') => {
+                self.select_the_seam = true;
+                self.repeat_writing(count, |e| e.join_lines());
+                self.select_the_seam = false;
+            }
             Key::Ctrl('s') => {
                 self.remember_jump();
                 self.status = say!("jump.selection-saved");
