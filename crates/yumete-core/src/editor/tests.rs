@@ -17545,6 +17545,38 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **vim 的 `(`／`)`／`_`**（2026-10-06）。
+///
+/// `(`／`)` 在這裏本來是「換主選區」，而 vim 的手按的是上一句／下一句——這個編輯器
+/// 把句子放在 `H`／`L` 上（#404）。`_` 是「這一行」的另一個拼法（`:h _`）：`d_` 就是
+/// `dd`。
+#[test]
+fn vim_sentences_and_the_underscore_line() {
+    let vim = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed.current_buffer().text().to_string()
+    };
+    // `d)` 吃到下一句，`d(` 往回——和 `dL`／`dH` 同一件事。
+    assert_eq!(vim("一句。二句。三句。\n", "d)"), vim("一句。二句。三句。\n", "dL"));
+    assert_eq!(vim("一句。二句。三句。\n", "LLd("), vim("一句。二句。三句。\n", "LLdH"));
+    // 不帶動詞的 `)` 也走句子，不換主選區。
+    let mut ed = typed("一句。二句。\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg)");
+    let paren = ed.selection();
+    let mut ed = typed("一句。二句。\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggL");
+    assert_eq!(ed.selection(), paren, ") 就是 L");
+    // `d_` ＝ `dd`，`2d_` ＝ 兩行。
+    assert_eq!(vim("一\n二\n三\n", "d_"), "二\n三\n");
+    assert_eq!(vim("一\n二\n三\n", "2d_"), "三\n");
+    assert_eq!(vim("一\n二\n三\n", "y_jp"), "一\n二\n一\n三\n");
+}
+
 /// **vim 鍵位下 `q` 錄、`Q` 播，`~` 按完往前走**（2026-10-06）。
 ///
 /// 這個倉跟的是 helix 的規矩（`Q` 錄、`q` 播）。一個 vim 的手按 `q` 本來是「開始

@@ -5794,9 +5794,9 @@ en = "line start is gh, first non-blank gs"
 [[message]]
 # vim 預設：按下 d／c／y 之後，狀態行說它在等什麽
 key = "hint.vim-operator"
-zht = "{0} 等一個動作：w e b W E B $ 0 ^ G gg j k {{ }} f i a，或者再按一次 {0} 取整行"
-zhs = "{0} 等一个动作：w e b W E B $ 0 ^ G gg j k {{ }} f i a，或者再按一次 {0} 取整行"
-en = "{0} is waiting for a motion: w e b W E B $ 0 ^ G gg j k {{ }} f i a — or {0} again for the line"
+zht = "{0} 等一個動作：{1}，或者再按一次 {0} 取整行"
+zhs = "{0} 等一个动作：{1}，或者再按一次 {0} 取整行"
+en = "{0} is waiting for a motion: {1} — or {0} again for the line"
 
 [[message]]
 # vim 預設：動作按了一半（gg 的 g、f 的那個字）

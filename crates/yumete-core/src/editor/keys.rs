@@ -474,7 +474,13 @@ impl Editor {
         let grain = self.word_grain();
         // **The operator doubled is the line**: `dd`, `yy`, `cc`. `yss`, which
         // is vim-surround's 「wrap this line」, falls out of the same rule.
-        if first.is_none() && c == op {
+        //
+        // **`_` is the same thing spelled the other way** (`:h _`, 2026-10-06):
+        // `d_` is `dd`, and with a count it is that many lines. It is not in
+        // [`yumete_cjk::keymap::VIM_MOTIONS`] because there is no motion for
+        // 「this line and the n−1 below it」 — the doubled operator *is* that
+        // rule, so this is where it belongs.
+        if first.is_none() && (c == op || c == '_') {
             return self.run_vim_line(op);
         }
         // **vim-surround's three** (2026-10-06): `ds{bracket}` takes a pair
@@ -1657,8 +1663,10 @@ impl Editor {
             // 簡繁、模糊、正則四個開關一起管用，中文也照打——helix 的 `s` 只認正則。
             // **`(` `)` 換主選區，`_` 去兩端空白**（#405 Phase 3）。Warning: 前兩個一段都不
             // 動，動的只是「哪一段是主的」——選了二十處要一處一處看過去靠的就是它。
-            Key::Char(')') => self.rotate_primary(true),
-            Key::Char('(') => self.rotate_primary(false),
+            // 帶數字走幾格——helix 的 `rotate_selections` 吃計數（`commands.rs`
+            // 的 `rotate_selections_impl`），從前這裏 `3)` 只走一格（2026-10-06）。
+            Key::Char(')') => self.repeat(count, |e| e.rotate_primary(true)),
+            Key::Char('(') => self.repeat(count, |e| e.rotate_primary(false)),
             Key::Char('_') => self.trim_selections(),
             // **`&` 把每一段的開頭對齊到同一列**（helix 的 `align_selections`）。
             // Warning: 算的是顯示寬度，一個漢字兩格。

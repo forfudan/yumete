@@ -20,6 +20,25 @@ fn back_to_text_key() -> &'static str {
 }
 
 impl Editor {
+    /// **The motions a vim operator may end with, as one line** (2026-10-06).
+    ///
+    /// Warning: **It used to be a hand-written list inside the message**, and it had
+    /// drifted: it said `w e b W E B $ 0 ^ G gg j k { } f i a` while the
+    /// editor also took `h l ␣ F t T ge gE H L ; ,` and, since the surround
+    /// round, `s`. A list of keys is data; writing it out a second time in
+    /// prose is how the two come apart. The wording around it did not change.
+    fn vim_motion_list() -> String {
+        // The table's own order, which groups them the way a reader learnt
+        // them (words, then the line, then down the page, then find).
+        let mut out: Vec<&str> = yumete_cjk::keymap::VIM_MOTIONS.iter().map(|(k, _)| *k).collect();
+        // The four the table cannot hold, each written where its arm is:
+        // `h`/`l`/`␣` are one grapheme (`vim::step_for`), `;`/`,` are 「that
+        // find again」 and live in `vim_operator_key` because the editor
+        // remembers which find it was, and `s` is vim-surround's.
+        out.extend(["h", "l", "␣", ";", ",", "s"]);
+        out.join(" ")
+    }
+
     /// What the row below the status line should say when nothing is being
     /// typed into it.
     ///
@@ -352,7 +371,7 @@ impl Editor {
             // that the editor is still holding the `d`.
             Pending::VimOperator { op, first } => {
                 return Some(Hint::Says(match first {
-                    None => say!("hint.vim-operator", op),
+                    None => say!("hint.vim-operator", op, Self::vim_motion_list()),
                     Some(f) => say!("hint.vim-operator-more", op, f),
                 }));
             }

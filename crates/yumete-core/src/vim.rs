@@ -69,7 +69,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("b", _) => step(Motion::WordBack(g), Reach::Exclusive),
         ("B", _) => step(Motion::WordBack(Grain::Big), Reach::Exclusive),
         ("e", _) => step(Motion::WordEnd(g), Reach::Inclusive),
-        // Warning: **`ge` 在兩套鍵位裏是兩件事**（2026-10-02 作者定）：vim 的是「往
+        // Warning: **`ge` 在兩套鍵位裏是兩件事**（2026-10-02 定）：vim 的是「往
         // 回到上一個詞的末尾」，helix 的是「到檔尾」。這張表只管 vim。
         ("ge", _) => step(Motion::WordEndBack(g), Reach::Inclusive),
         ("gE", _) => step(Motion::WordEndBack(Grain::Big), Reach::Inclusive),
@@ -92,6 +92,11 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("{", _) => step(Motion::Paragraph { forward: false }, Reach::Exclusive),
         ("H", _) => step(Motion::Sentence { forward: false }, Reach::Exclusive),
         ("L", _) => step(Motion::Sentence { forward: true }, Reach::Exclusive),
+        // **`(` 和 `)` 也是句子**（2026-10-06）。vim 的句子動作就是這一對；這個
+        // 編輯器把句子放在 `H`／`L` 上（#404），可一個 vim 的手按的是這一對，而
+        // `d)` 從前什麼都不做。兩個拼法同一件事。
+        ("(", _) => step(Motion::Sentence { forward: false }, Reach::Exclusive),
+        (")", _) => step(Motion::Sentence { forward: true }, Reach::Exclusive),
         // ---- Find, which is told a character ------------------------------
         //
         // Warning: **`t` is `f` one short**, and that is a property of the motion,
