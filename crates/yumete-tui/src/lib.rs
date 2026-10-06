@@ -6441,11 +6441,11 @@ fn draw_command_menu(
     // Warning: **門檻比 `::` 高**（`lookfor::SURE_ENOUGH`）：這裏是正在打名字的人，
     // 猜錯五條就蓋住了他真正在打的那幾條。
     let named: Vec<&str> = matches.iter().map(|c| c.name).collect();
-    let guessed: Vec<yumete_core::command::Choice> =
-        yumete_core::lookfor::guesses(editor.prompt().map(|(_, t)| t).unwrap_or_default())
-            .into_iter()
-            .filter(|c| !named.contains(&c.name))
-            .collect();
+    let guessed: Vec<yumete_core::command::Choice> = editor
+        .command_guesses()
+        .into_iter()
+        .filter(|c| !named.contains(&c.name))
+        .collect();
     let items: Vec<Row> = matches
         .iter()
         // **The whole row is composed in one place** — `Choice::shown` — so
