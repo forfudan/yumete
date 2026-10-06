@@ -246,6 +246,8 @@ pub enum Command {
     SetMeasure(Option<usize>),
     /// `:version` —— 這一版是哪一版，以及東西都放在哪。
     Version,
+    /// `:yuhao` — hand the 宇浩 input-method site to the system's browser.
+    Yuhao,
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
@@ -3195,7 +3197,14 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "yume",
-        aliases: &[],
+        // Warning: **`y` 是明寫的，不是前綴猜出來的**（2026-10-06）。`:yuhao` 一加
+        // 進來，`y` 就同時是兩條命令的前綴，而 `:y` 從前一直是這一條——明寫的別名
+        // 壓過前綴規則（見 `names_something`），所以它一個字沒變。
+        //
+        // Warning: **`:yu` 丟了**：它從前靠前綴走到這裏，現在兩邊都沾。`:y` 和 `:yum`
+        // 都通，`:yuhao` 自己最短是 `:yuh`。只明寫 `y` 不明寫 `yu`，是因為選單
+        // 會把明寫的別名**全列出來**，`(y yu)` 比 `(y)` 吵而換不到什麼。
+        aliases: &["y"],
         help: "cmd.commands.yume",
         needs: &[],
         params: &[Param::Words { of: ENGAGEMENT, default: Some("on") }],
@@ -3871,6 +3880,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Project))),
+    },
+    Entry {
+        name: "yuhao",
+        aliases: &[],
+        help: "cmd.commands.yuhao",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Yuhao)),
     },
     Entry {
         name: "search",
@@ -6196,7 +6213,10 @@ mod tests {
         // family flattened, `y` still reaches the head rather than being torn
         // between it and the eight `yume-…` beside it (#368).
         assert_eq!(parse(":y"), Ok(Command::YumeLanguage(Engagement::Chinese)));
-        assert_eq!(parse(":yu"), Ok(Command::YumeLanguage(Engagement::Chinese)));
+        // Warning: **`:yu` stopped working on 2026-10-06**, when `:yuhao` arrived and
+        // made that prefix touch two commands. `:y` goes on reaching this one
+        // because it is now a *declared* alias, and an alias beats a prefix.
+        assert_eq!(parse(":yum"), Ok(Command::YumeLanguage(Engagement::Chinese)));
         // `:ta` again: `:target` took the two-letter prefix away when it
         // arrived, and gave it back when the fold put it under `:count`
         // (§5.2.3 ③). Ten abbreviations got shorter that way.
@@ -6234,7 +6254,10 @@ mod tests {
                     .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied())),
             )
         };
-        assert_eq!(short("yume"), Some("y"));
+        // `yuhao` holds `y` and `yu` as prefixes, so the shortest *prefix* is
+        // `yum`; the menu prints `(y)` anyway, because that is a declared
+        // alias and the menu lists those first.
+        assert_eq!(short("yume"), Some("yum"));
         assert_eq!(short("render"), Some("ren"), "recover and redo are in the way");
         assert_eq!(short("sh"), None, "nothing shorter than the whole word");
         // `r` and `ro` are both taken — the second by `:readonly`'s alias —

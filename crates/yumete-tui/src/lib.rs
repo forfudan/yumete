@@ -596,6 +596,8 @@ pub fn run(
     let mut painted = std::time::Instant::now();
     // What the last frame cost — the terminal's answer to how fast it can be fed.
     let mut last_frame = std::time::Duration::ZERO;
+    // 上一次寫進終端標題欄的那一句，見 `name_the_window`。
+    let mut window_name = String::new();
     // The frame `:shot` will photograph, kept only when one was asked for.
     let mut drawn: Option<ratatui::buffer::Buffer> = None;
     // **自動認詞** (#448): the book's own names, found without being asked.
@@ -823,6 +825,7 @@ pub fn run(
             // **一頁不許比畫得下的多**（#516）。
             let size = terminal.size()?;
             fit_the_page(ime, editor, config, size.width, size.height);
+            name_the_window(editor, &mut window_name);
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
@@ -6124,6 +6127,37 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
     out
 }
 
+/// **Put the file's name in the terminal's own title bar** (2026-10-06).
+///
+/// 報上來的：「我用 helix 打開一個文件的時候，terminal 的 tab 標題是 hx FILENAME，
+/// 但是我用 ye 打開文件的時候，標題是光秃秃的 ye。」
+///
+/// Warning: **helix does not do this** — what he was seeing is the terminal naming
+/// the tab after the command line it ran. Setting it ourselves is better than
+/// matching that: a tab named after the command never changes, and this one
+/// follows the buffer, so twelve tabs of one book are twelve chapter names.
+///
+/// `was` is the last title written. Nothing is sent when it has not changed:
+/// an OSC on every frame is a write to the terminal sixty times a second, and
+/// some multiplexers redraw their status line for each one.
+///
+/// Warning: **The name is a file's, so it is untrusted** — a file can be called
+/// `\x1b]0;…`. It goes through [`drawable`], the same gate every row of the
+/// page goes through, for the reason written there.
+fn name_the_window(editor: &Editor, was: &mut String) {
+    let buffer = editor.current_buffer();
+    let name = buffer.display_name();
+    let now = match buffer.is_modified() {
+        true => format!("{} [+] — yumete", drawable(&name)),
+        false => format!("{} — yumete", drawable(&name)),
+    };
+    if *was == now {
+        return;
+    }
+    let _ = execute!(stdout(), ratatui::crossterm::terminal::SetTitle(&now));
+    *was = now;
+}
+
 /// `text` with the characters a terminal would *obey* taken out.
 ///
 /// **A manuscript is data, not instructions.** A file can contain `\x1b]0;…\x07`
@@ -9057,23 +9091,56 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
 ///
 /// Warning: **居中，可是不占行**：它寫進已經畫好的那些格子裏，所以窗口多高、正文
 /// 將來有多少字，都和它無關。
+/// The version, cut after `dev` / `beta` / `alpha` / `rc` (2026-10-06).
+///
+/// `0.4.0-dev.20261006000901+7b9942c` → `0.4.0-dev`. Keeping that one word is
+/// the point: it says whether this is a release. Everything after it is a
+/// timestamp and a commit, which belong in `:version`.
+fn short_version(build: &str) -> &str {
+    let (number, rest) = match build.split_once('-') {
+        Some(pair) => pair,
+        None => return build.split('+').next().unwrap_or(build),
+    };
+    let word = rest.split(['.', '+']).next().unwrap_or("");
+    match word.is_empty() {
+        true => number,
+        false => &build[..number.len() + 1 + word.len()],
+    }
+}
+
 fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     let ink = crate::theme::Palette::of(config);
     // Warning: **只取版本號那一截**。完整的構建號是
     // `0.4.0-dev.20261006000901+7b9942c`——開場屏上它比標題還長，看着像一行亂碼。
     // 要看全的在 `:version` 裏（那一扇正是為這個開的）。
+    // Warning: **截到 `dev`／`beta`／`alpha`／`rc` 為止**（2026-10-06 定）。完整的
+    // 構建號是 `0.4.0-dev.20261006000901+7b9942c`——開場屏上它比標題還長，看着
+    // 像一行亂碼。留下那一截是因為它說得出這是不是正式版；要看全的在 `:version`
+    // 裏（那一扇正是為這個開的）。
     let build = editor.build_name();
-    let short = build.split(['-', '+']).next().unwrap_or(build);
-    let name = format!("{}  {short}", say!("intro.title"));
+    let short = short_version(build);
     let rows: Vec<(String, String)> = vec![
         (":tutor".into(), say!("intro.learn")),
+        (":help".into(), say!("intro.help")),
         (say!("intro.space-f-key"), say!("intro.open-a-file")),
         (say!("intro.space-question-key"), say!("intro.all-commands")),
+        (":yuhao".into(), say!("intro.yuhao")),
         (":q".into(), say!("intro.leave")),
     ];
     // 鍵那一欄補齊到同一寬，說明纔對得齊。
     let widest = rows.iter().map(|(k, _)| yumete_cjk::str_width(k)).max().unwrap_or(0);
-    let mut lines: Vec<String> = vec![name, String::new()];
+    // 版本與作者那兩行的標籤也補到同一寬，三欄纔對得齊。
+    let label = |word: String, what: String| {
+        let pad = " ".repeat(widest.saturating_sub(yumete_cjk::str_width(&word)) + 4);
+        format!("{word}{pad}{what}")
+    };
+    let mut lines: Vec<String> = vec![
+        say!("intro.title"),
+        String::new(),
+        label(say!("intro.version"), short.to_string()),
+        label(say!("intro.by"), say!("intro.author")),
+        String::new(),
+    ];
     for (key, what) in &rows {
         let pad = " ".repeat(widest.saturating_sub(yumete_cjk::str_width(key)) + 4);
         lines.push(format!("{key}{pad}{what}"));

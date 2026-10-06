@@ -633,6 +633,15 @@ impl Editor {
                 self.show_the_build();
                 Ok(CommandOutcome::Continue)
             }
+            // **`:yuhao` 開官網**（2026-10-06 定）。走的是跟着鏈接那條路
+            // （`open_request`），所以它和 `gx` 同一個機制：前端把網址當**一個
+            // 參數**交給 `open`／`xdg-open`，這一側從不拼命令行。
+            Command::Yuhao => {
+                let url = "https://shurufa.app/";
+                self.status = say!("link.opening", url);
+                self.open_request = Some(url.to_string());
+                Ok(CommandOutcome::Continue)
+            }
             Command::ListActions => {
                 let mut listing = String::new();
                 listing.push_str(&say!("keys.actions-head"));
