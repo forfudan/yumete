@@ -6485,9 +6485,9 @@ fn draw_lookfor_menu(
             Row::plain(elide(
                 &format!(
                     "{}{}   {}",
-                    hit.choice.leading,
-                    hit.choice.written(),
-                    yumete_core::messages::say(hit.choice.help, &[])
+                    hit.leading(),
+                    hit.written(),
+                    yumete_core::messages::say(hit.help(), &[])
                 ),
                 room,
             ))
@@ -6495,11 +6495,15 @@ fn draw_lookfor_menu(
         .collect();
     // What ⇥ will do with the highlighted row, spelled out. The one thing a
     // reader has to know here is that nothing on this line runs anything.
-    let footer = say!(
-        "ui.lookfor-take",
-        &format!("{}/{}", focus + 1, found.len()),
-        &format!("{}{}", found[focus].choice.leading, found[focus].choice.written())
-    );
+    // **挑中的是一個鍵，腳注就說「按下去」**（2026-10-06）：同一行字說兩件事，
+    // 讀者會按着「寫回 `:`」的理解去按 ⇥，然後看見稿子被改了。
+    let pressing = matches!(found[focus].what, yumete_core::lookfor::What::Keys(_));
+    let count = format!("{}/{}", focus + 1, found.len());
+    let named = format!("{}{}", found[focus].leading(), found[focus].written());
+    let footer = match pressing {
+        true => say!("ui.lookfor-press", &count, &named),
+        false => say!("ui.lookfor-take", &count, &named),
+    };
     let title = say!("ui.lookfor");
     draw_list(
         frame,

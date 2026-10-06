@@ -1093,6 +1093,17 @@ impl Editor {
         self.play_keys(bound)
     }
 
+    /// **按下這一串鍵，當作人按的**（2026-10-06，給 `::` 挑中一個快捷鍵用）。
+    ///
+    /// Warning: **不走 [`Self::play_keys`]**：那一支是別名層的內部管道，它撥着
+    /// `expanding_alias`，於是播出去的鍵繞開別名層——而這裏要的正好相反，
+    /// `空格 f` 在 vim 鍵位下該怎麼走就怎麼走。
+    pub(super) fn play_keys_now(&mut self, keys: &str) {
+        for c in keys.chars() {
+            self.on_key(pressed(c));
+        }
+    }
+
     fn play_keys(&mut self, keys: &str) {
         // Warning: **Saved and restored, not set and cleared** (2026-09-19). An
         // operator inside an expansion replays its motion through this same

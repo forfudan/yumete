@@ -1367,7 +1367,7 @@ fn a_chinese_word_on_that_line_finds_the_english_command() {
     ed.insert_committed("竖排");
     assert_eq!(ed.prompt(), Some(("::", "竖排")), "committed onto the line");
     let (found, focus) = ed.lookfor_menu();
-    let names: Vec<String> = found.iter().map(|h| h.choice.written()).collect();
+    let names: Vec<String> = found.iter().map(|h| h.written()).collect();
     assert_eq!(
         names.first().map(String::as_str),
         Some("layout vertical"),
@@ -1394,7 +1394,7 @@ fn an_abbreviation_reaches_a_word_a_command_takes() {
         ed.on_key(Key::Char(c));
     }
     let (found, _) = ed.lookfor_menu();
-    let names: Vec<String> = found.iter().map(|h| h.choice.written()).collect();
+    let names: Vec<String> = found.iter().map(|h| h.written()).collect();
     assert!(names.iter().any(|n| n == "table-sort"), "{names:?}");
     // Down walks the list, and the next keystroke of the query puts the
     // highlight back on top — the third row for `竖` is not the third row
@@ -22419,5 +22419,54 @@ fn an_unknown_key_says_the_whole_run_that_was_typed() {
     ed.on_key(Key::Char('z'));
     ed.on_key(Key::Esc);
     assert!(!ed.status().contains("無效"), "Esc 不算按錯：{}", ed.status());
+}
+
+/// **`::` 找的是命令**和**快捷鍵**（2026-10-06 定）。
+///
+/// 原話：「we can instead enrich the current find command functionality by making
+/// it find commands or shortcuts」。
+#[test]
+fn lookfor_finds_shortcuts_as_well_as_commands() {
+    use crate::lookfor::{self, What};
+
+    // 打一個鍵的說明，找得到那個鍵。
+    let found = lookfor::look("合併行");
+    assert!(
+        found.iter().any(|h| matches!(h.what, What::Keys(_))),
+        "快捷鍵也進單子了：{:?}",
+        found.iter().map(|h| h.written()).collect::<Vec<_>>()
+    );
+
+    // 命令還在，兩種混在同一張單子上按分數排。
+    let found = lookfor::look("竖排");
+    assert!(found.iter().any(|h| matches!(h.what, What::Command(_))), "命令還在");
+
+    // **很不像的那些不列出來**：門檻是相對最高分的。
+    let found = lookfor::look("竖排");
+    let best = found.first().map(|h| h.score).unwrap_or(0.0);
+    assert!(
+        found.iter().all(|h| h.score >= best * lookfor::FAR_ENOUGH),
+        "尾巴上的噪音砍掉了"
+    );
+    assert!(!found.is_empty(), "門檻不許把整張單子清空");
+
+    // 挑中一個鍵，`⇥` 按下去就是那個鍵——不是把它的名字寫進 `:` 裏。
+    let mut ed = typed("上山\n下海\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Char(':'));
+    for c in "合併行".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let (found, _) = ed.lookfor_menu();
+    let at = found.iter().position(|h| matches!(h.what, What::Keys(_)));
+    if let Some(at) = at {
+        for _ in 0..at {
+            ed.on_key(Key::Down);
+        }
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), "上山下海\n", "按下去的是那個鍵");
+        assert_eq!(ed.mode, Mode::Normal, "按完就回正文，不是停在 : 上");
+    }
 }
 

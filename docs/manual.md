@@ -1756,7 +1756,18 @@ command called" into "what does the command do":
 ::竖排           → :layout vertical    turn the page vertical, 縱 running from the right
 ::排序           → :table-sort         sort by these columns
 ::lyt            → :layout             horizontal or vertical
+::合併行         → J                   join with the line below
 ```
+
+**Commands and shortcuts are on one list** (2026-10-06). What you are asking is
+「how do I do this」, and whether the answer is a command or a key is the editor's
+business rather than yours. Pick a command and `⇥` writes it back onto the `:` line
+for you to look at; pick a key and `⇥` **presses it** — and the run printed on the
+list is the run your own fingers will make next time. The footer says which of the
+two this row is.
+
+**The unlikely ones are left out**: anything scoring below a quarter of the top row
+is noise and is cut. The better you type the question, the shorter the list.
 
 - **Type Chinese straight in.** The input method is on for this line (one tap of
   Shift switches to Chinese, same as `/` search), because the line was made for a

@@ -353,9 +353,53 @@ pub fn typo(query: &str, name: &str, cap: usize) -> Option<usize> {
 /// One command the `::` line turned up, and how well it answered.
 #[derive(Debug, Clone)]
 pub struct Hit {
-    /// The command itself — what ⇥ writes back into the `:` line.
-    pub choice: crate::command::Choice,
+    /// Which of the two kinds of thing was found.
+    pub what: What,
     pub score: f32,
+}
+
+/// **A command, or a key** (2026-10-06).
+///
+/// 原話：「we can instead enrich the current find command functionality by making
+/// it find commands **or shortcuts**」. The two are the same question asked of the
+/// same reader — 「怎麼把這一頁轉成竖排」 is answered by `:layout vertical` and by
+/// a key, and which of the two exists is the editor's business, not theirs.
+#[derive(Debug, Clone)]
+pub enum What {
+    /// A `:` command. ⇥ writes it onto the line, and the reader presses Enter.
+    Command(crate::command::Choice),
+    /// A key sequence. ⇥ **presses it**: there is no line to write it onto, and
+    /// a row that could only be read would be a worse answer than the command.
+    Keys(&'static yumete_cjk::actions::Action),
+}
+
+impl Hit {
+    /// What stands in front of the name — `:` for a command, nothing for a key.
+    pub fn leading(&self) -> &'static str {
+        match &self.what {
+            What::Command(c) => c.leading,
+            What::Keys(_) => "",
+        }
+    }
+
+    /// The name as the reader will see it: `layout vertical`, or `空格 f`.
+    pub fn written(&self) -> String {
+        match &self.what {
+            What::Command(c) => c.written(),
+            What::Keys(a) => match a.how {
+                yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
+                yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+            },
+        }
+    }
+
+    /// The message tag that says what it does.
+    pub fn help(&self) -> &'static str {
+        match &self.what {
+            What::Command(c) => c.help,
+            What::Keys(a) => a.help,
+        }
+    }
 }
 
 /// What a typo on the name alone is worth.
@@ -387,7 +431,7 @@ fn worth_a_typo_check(query: &str) -> bool {
 /// The scorer will rank all 221 of them and the tail is noise — a reader who
 /// has not found it in thirty rows types another character instead of
 /// scrolling.
-pub const SHOWN: usize = 30;
+pub const SHOWN: usize = 60;
 
 /// Every command and every word they take, scored against `query`, best first.
 ///
@@ -412,41 +456,73 @@ pub fn look(query: &str) -> Vec<Hit> {
             crate::messages::Language::English => [e.en, e.zht, e.zhs],
         }
     };
-    let names: Vec<String> = choices.iter().map(|c| c.written()).collect();
-    let rows: Vec<Row<'_>> = choices
+    // **命令和鍵在同一張單子上**（2026-10-06）。`actions::ALL` 本來就是一張「這個
+    // 鍵叫什麼、做什麼」的表（#429 建的），所以這一步不是新造一份索引，是把已經
+    // 有的兩份合起來問同一個問題。
+    //
+    // Warning: **IDF 的語料也跟着變寬了**，這是對的：「模式」在命令裏常見，在鍵的說明
+    // 裏也常見，而一個詞到底稀不稀罕要在讀者能找到的**全部**東西上數。
+    let actions = yumete_cjk::actions::ALL;
+    let names: Vec<String> = choices
         .iter()
-        .zip(&names)
-        .map(|(c, name)| Row {
+        .map(|c| c.written())
+        .chain(actions.iter().map(|a| match a.how {
+            yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
+            yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+        }))
+        .collect();
+    let tags: Vec<&'static str> =
+        choices.iter().map(|c| c.help).chain(actions.iter().map(|a| a.help)).collect();
+    let rows: Vec<Row<'_>> = names
+        .iter()
+        .zip(&tags)
+        .map(|(name, tag)| Row {
             name,
-            find: table.get(c.help).map(|e| e.find).unwrap_or_default(),
-            help: said(c.help),
+            find: table.get(*tag).map(|e| e.find).unwrap_or_default(),
+            help: said(tag),
         })
         .collect();
     let idf = idf_of(&rows);
-    let mut hits: Vec<Hit> = choices
+    let kinds = choices
         .iter()
+        .map(|c| What::Command(c.clone()))
+        .chain(actions.iter().map(What::Keys));
+    let mut hits: Vec<Hit> = kinds
         .zip(&rows)
-        .filter_map(|(choice, row)| {
+        .filter_map(|(what, row)| {
             let score = score(query, *row, idf)
                 .or_else(|| match worth_a_typo_check(query) {
                     true => typo(query, row.name, 2).map(typo_score),
                     false => None,
                 })
                 .filter(|s| *s > 0.0)?;
-            Some(Hit { choice: choice.clone(), score })
+            Some(Hit { what, score })
         })
         .collect();
     // Descending, and **by name** where two rows tie: a list that reshuffles
     // itself between two keystrokes that scored the same is a list nobody can
     // point at.
     hits.sort_by(|a, b| {
-        b.score
-            .total_cmp(&a.score)
-            .then_with(|| a.choice.written().cmp(&b.choice.written()))
+        b.score.total_cmp(&a.score).then_with(|| a.written().cmp(&b.written()))
     });
+    // **很不像的那些不列出來**（2026-10-06 定：「with a likelihood-score threshold
+    // that block some very unlikely matches」）。
+    //
+    // 門檻是**相對最高分**的，不是一個絕對數：打得準的時候最高分很高，尾巴上那些
+    // 只配到一個常用字的行就是噪音；打得含糊的時候滿屏都是低分，那時候一個絕對
+    // 門檻會把整張單子清空——而那正是讀者最需要看見點什麼的時候。
+    if let Some(best) = hits.first().map(|h| h.score) {
+        hits.retain(|h| h.score >= best * FAR_ENOUGH);
+    }
     hits.truncate(SHOWN);
     hits
 }
+
+/// 最高分的幾成之內纔列出來。
+///
+/// 四分之一是量出來的：`竖排` 的最高分 8.6，第二名 5.2（`:layout horizontal`，同一族，
+/// 該列），而第十名 1.9 是一個只配到「模式」兩個字的行，不該列。
+pub const FAR_ENOUGH: f32 = 0.25;
 
 /// The corpus weights, counted once.
 ///

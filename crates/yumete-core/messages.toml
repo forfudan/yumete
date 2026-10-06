@@ -10914,6 +10914,13 @@ zhs = "没有命令答得上「{0}」"
 en = "no command answers 「{0}」"
 
 [[message]]
+# :: 單子的腳注，挑中的那一行是一個鍵——按下去就是它（2026-10-06）
+key = "ui.lookfor-press"
+zht = "{0}　⇥ 按下去：{1}"
+zhs = "{0}　⇥ 按下去：{1}"
+en = "{0}   ⇥ presses {1}"
+
+[[message]]
 # `::` 面板的頁腳：第幾條，以及 ⇥ 會把哪一條寫回 `:` 那一行
 key = "ui.lookfor-take"
 zht = "{0}　⇥ 寫回 `:` 那一行：{1}"
