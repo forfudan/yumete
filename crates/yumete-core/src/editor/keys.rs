@@ -1177,9 +1177,22 @@ impl Editor {
             Pending::Hop { forward } => {
                 self.pending = Pending::None;
                 match key {
+                    // Warning: **帶守衛的那一支要排在前面**（寫的時候當場撞的）。
+                    // `match` 從上往下挑，無守衛的 `c` 在前面就把代碼檔那一支整個
+                    // 遮住了——`]c` 在 `.py` 上答的是「沒有合併衝突」。
+                    //
+                    // **`]c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」。** 一個鍵
+                    // 兩個意思本來是這個倉最不肯要的事，而這兩種檔從不是同一個
+                    // 檔：`]c` 在 `.rs` 上找衝突標記永遠一無所獲，在 `.md` 上找類
+                    // 也是。提示行跟着檔走，所以屏幕上那一格從不含糊。
+                    Key::Char('c') if self.writes_code() => {
+                        self.go_to_definition_nearby(forward, false)
+                    }
                     Key::Char('c') => self.go_to_conflict(forward),
                     // **`]g`／`[g` 跳改動**，helix 的 `goto_next_change`（2026-10-06）。
                     Key::Char('g') => self.go_to_change(forward),
+                    // **`]f`／`[f` 跳到下一個函數**（2026-10-06，helix 的 `]f`）。
+                    Key::Char('f') => self.go_to_definition_nearby(forward, true),
                     // **`]p` / `[p` 是段落**，helix 的 `goto_next_paragraph` /
                     // `goto_prev_paragraph`（2026-10-06 補的）。這裏 `}` / `{`
                     // 早就是同一件事，這兩個是 helix 的手會按的那個拼法。
@@ -2763,7 +2776,14 @@ impl Editor {
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
     pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] =
-        &[("c", "hint.hop.conflict"), ("g", "hint.hop.change")];
+        &[("c", "hint.hop.conflict"), ("g", "hint.hop.change"), ("f", "hint.hop.function")];
+
+    /// Warning: **`c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」**（2026-10-06）。
+    /// 一個鍵兩個意思本來是這個倉最不肯要的事，而這兩種檔從不是同一個檔：
+    /// `]c` 在 `.rs` 上找衝突標記永遠一無所獲，在 `.md` 上找類也是。提示行跟着
+    /// 檔走，所以屏幕上那一格從不含糊。
+    pub(super) const HOP_KEYS_CODE: &'static [(&'static str, &'static str)] =
+        &[("c", "hint.hop.class")];
 
     /// The two that read differently depending on which way `[` / `]` points.
     ///
@@ -2964,6 +2984,7 @@ impl Editor {
             '`' => spell(Self::CASE_KEYS),
             ']' | '[' => [
                 spell(Self::HOP_KEYS),
+                spell(Self::HOP_KEYS_CODE),
                 spell(Self::HOP_KEYS_FORWARD),
                 spell(Self::HOP_KEYS_BACK),
             ]

@@ -17567,6 +17567,69 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **語法樹那一族：`]f` `]c` `mi f` `mi c`**（2026-10-06，helix 的那幾個）。
+///
+/// ⚠️ 用的是**語法 crate 自己帶的 `TAGS_QUERY`**，不是 helix 的 `textobjects.scm`
+/// ——那些檔是 MPL-2.0，這個倉是 Apache-2.0。見 `code::Language::tags`。
+#[test]
+fn the_syntax_tree_gives_up_its_functions_and_classes() {
+    let py = "def one():\n    return 1\n\n\nclass Two:\n    def three(self):\n        return 3\n\n\ndef four():\n    return 4\n";
+    let code = || {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut()
+            .set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Python));
+        ed.replace_everything(py);
+        ed.goto_line(1);
+        ed
+    };
+    let line = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+
+    // `]f` 一個一個函數走，到頭繞回去。
+    let mut ed = code();
+    press(&mut ed, "]f");
+    assert_eq!(line(&ed), 5, "def three");
+    press(&mut ed, "]f");
+    assert_eq!(line(&ed), 9, "def four");
+    press(&mut ed, "]f");
+    assert_eq!(line(&ed), 0, "繞回 def one");
+    press(&mut ed, "[f");
+    assert_eq!(line(&ed), 9, "往回也繞");
+
+    // `]c` 走類。
+    let mut ed = code();
+    press(&mut ed, "]c");
+    assert_eq!(line(&ed), 4, "class Two");
+
+    // `mi f` 選中光標所在的那個函數——**取最裏面那一個**（`def three` 在
+    // `class Two` 裏，而 `mi f` 要的是函數不是類）。
+    let mut ed = code();
+    ed.goto_line(7);
+    press(&mut ed, "mif");
+    let (from, to) = ed.selection();
+    assert_eq!(ed.current_buffer().rope().char_to_line(from), 5, "從 def three 起");
+    assert_eq!(ed.current_buffer().rope().char_to_line(to - 1), 6, "到 return 3 止");
+
+    // `mi c` 在同一處選的是整個類。
+    let mut ed = code();
+    ed.goto_line(7);
+    press(&mut ed, "mic");
+    let (from, to) = ed.selection();
+    assert_eq!(ed.current_buffer().rope().char_to_line(from), 4, "從 class Two 起");
+    assert_eq!(ed.current_buffer().rope().char_to_line(to - 1), 6);
+
+    // 不在任何定義裏就說一句，不是一聲不吭。
+    let mut ed = code();
+    ed.goto_line(3);
+    press(&mut ed, "mif");
+    assert!(!ed.status().is_empty());
+
+    // Warning: **稿子裏 `]c` 還是「下一處合併衝突」。** 一個鍵兩個意思，而這兩種檔
+    // 從不是同一個檔——`]c` 在 `.py` 上找衝突永遠一無所獲，在 `.md` 上找類也是。
+    let mut ed = typed("那年冬天。\n");
+    press(&mut ed, "gg]c");
+    assert!(ed.status().contains("衝突"), "{}", ed.status());
+}
+
 /// **`g;`／`g,` 在改過的地方之間走**（vim，2026-10-06）。
 #[test]
 fn vim_walks_the_change_list() {

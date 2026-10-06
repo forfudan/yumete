@@ -19218,6 +19218,49 @@ N 處」既說明它收下了，也說明接着按 `n` 會走到哪裏。沒有�
 | --- | --- |
 | `\|`（跳到第 N 欄） | 兩件事擋着：① `\|` 在 helix 鍵位下**今天剛綁給 `:pipe`**，vim 那邊要另走一條 preset-only 的路；② 「欄」在這個倉有兩個答案——`cursor_column`（第幾個**字**）與 `cursor_visual_column`（第幾**格**，一個漢字兩格），而 vim 的 `\|` 數的是**屏幕欄**。要定用哪一個，還要寫一支「第 N 格是哪一個字」的反查。**需定** |
 
+## 5.92 語法樹那一族：`]f` `]c` `mi f` `mi c`（2026-10-06）
+
+定的第二族。做之前先查了一個岔路口，**查對了**。
+
+### ⚠️ 不抄 helix 的 `textobjects.scm`——那是授權問題
+
+helix 把文本對象寫成自己 runtime 裏的查詢檔（`runtime/queries/<語言>/textobjects.scm`，
+我們這九種語言裏七種有，加起來約 215 行）。**helix 是 MPL-2.0，這個倉是 Apache-2.0**，
+MPL 是按檔計的 copyleft：抄進來那幾個檔得一直掛着 MPL 並標明。這是纔定得了的事。
+
+**不用抄**：語法 crate 自己帶 `TAGS_QUERY`（和我們一直在用的 `HIGHLIGHTS_QUERY` 同一個
+來源、同一份授權，本來就在依賴裏），而它捕獲的 `@definition.function`／`@definition.class`
+**包的正是整個定義**，名字另有 `@name`。
+
+| 語言 | 帶 tags | 捕獲 |
+| --- | --- | --- |
+| python | 有 | class / constant / function |
+| rust | 有 | class / function / interface / macro / method / module |
+| go | 有 | function / method / type |
+| javascript | 有 | class / constant / function / method |
+| css html json toml yaml | **沒有** | 本來也沒有「定義」可言 |
+
+`tags.scm` 給不出的：**參數、註釋、測試**——那幾種只在 helix 的 textobjects 裏有。要做那幾
+個就得面對上面那個授權問題。**需定。**
+
+### 做了什麼
+
+`code::definitions(language, source, tree)` 交出每一個定義的字節區間與種類（只收兩種：
+`Function` 收函數／方法／巨集，`Class` 收類／結構／枚舉／介面／模組／類型——鍵只有兩個，
+而「方法」在讀的人眼裏就是一個函數）。`Editor::definitions_here` 換成字符下標。
+
+- `]f`／`[f`、`]c`／`[c`：走定義，到頭繞回去（同 `]g`）。
+- `mi f`／`mi c`：選中光標所在的那一個，**取最裏面那一個**（`impl` 裏的方法、巢狀的函數，
+  站在哪一層取哪一層——同 `mi(` 在同族括號之間挑的規矩）。`ma` 和 `mi` 在這裏是同一段：
+  一個定義沒有「連着外面那層」可言。
+
+⚠️ **`]c` 一個鍵兩個意思**：代碼檔裏是「類」，稿子裏是「合併衝突」。一個鍵兩個意思本來是這
+個倉最不肯要的事，而這兩種檔從不是同一個檔——`]c` 在 `.rs` 上找衝突標記永遠一無所獲，在
+`.md` 上找類也是。提示行跟着檔走（`HOP_KEYS_CODE`），所以屏幕上那一格從不含糊。
+
+⚠️ **帶守衛的 `match` 分支要排在無守衛的前面**——寫的時候當場撞的：`Key::Char('c')` 那一支
+在前面就把代碼檔那一支整個遮住，`]c` 在 `.py` 上答的是「沒有合併衝突」。
+
 ## 5.87 搜索改成背景跑（2026-10-06 提，**記着，還沒做**）
 
 報上來的：`ye -G forfudan.com -u` 在命令行上找到四處（跑了約半分鐘），同一句加 `-O` 進編輯

@@ -466,14 +466,29 @@ impl Editor {
                     true => say!("hint.hop.next"),
                     false => say!("hint.hop.previous"),
                 },
-                Self::said(Self::HOP_KEYS.iter().copied().chain(
-                    match forward {
-                        true => Self::HOP_KEYS_FORWARD,
-                        false => Self::HOP_KEYS_BACK,
-                    }
-                    .iter()
-                    .copied(),
-                )),
+                Self::said(
+                    Self::HOP_KEYS
+                        .iter()
+                        .copied()
+                        // `c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」——提示行
+                        // 跟着檔走，所以屏幕上那一格從不含糊（見 `HOP_KEYS_CODE`）。
+                        .chain(
+                            match self.writes_code() {
+                                true => Self::HOP_KEYS_CODE,
+                                false => &[],
+                            }
+                            .iter()
+                            .copied(),
+                        )
+                        .chain(
+                            match forward {
+                                true => Self::HOP_KEYS_FORWARD,
+                                false => Self::HOP_KEYS_BACK,
+                            }
+                            .iter()
+                            .copied(),
+                        ),
+                ),
             ),
             // **區域那一組**（2026-09-30，照 helix 的 `C-w`）。
             Pending::Region => (say!("hint.region.title"), Self::said(Self::REGION_KEYS.iter().copied())),

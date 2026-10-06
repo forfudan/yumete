@@ -172,6 +172,42 @@ impl Language {
     /// The compiled query and what each of its captures means. Compiled once
     /// per process: a query is parsed from its source text, and that is not
     /// something to do per frame.
+    /// **語法樹裏那些「一個定義」的查詢**（`]f`／`mi f` 那一族，2026-10-06）。
+    ///
+    /// Warning: **用語法本身帶的 `TAGS_QUERY`，不抄 helix 的 `textobjects.scm`。**
+    /// helix 把文本對象寫成自己 runtime 裏的查詢檔，而那些檔是 **MPL-2.0**，這個
+    /// 倉是 Apache-2.0——照抄要先定授權怎麼辦。`tags.scm` 是**語法 crate 自己
+    /// 帶的**（我們本來就依賴它，和 `HIGHLIGHTS_QUERY` 同一個來源、同一份授權），
+    /// 而它捕獲的 `@definition.function`／`@definition.class` 包的正是整個定義，
+    /// 名字另有 `@name`。九種語言裏七種帶，css 與 html 不帶。
+    ///
+    /// 它給不出的：參數、註釋、測試——那幾種只在 helix 的 textobjects 裏有。
+    fn tags(self) -> Option<&'static str> {
+        Some(match self {
+            Language::Go => tree_sitter_go::TAGS_QUERY,
+            Language::JavaScript => tree_sitter_javascript::TAGS_QUERY,
+            Language::Python => tree_sitter_python::TAGS_QUERY,
+            Language::Rust => tree_sitter_rust::TAGS_QUERY,
+            // 這幾種沒有定義可言，語法 crate 也不帶 tags。
+            Language::Css | Language::Html | Language::Json | Language::Toml | Language::Yaml => {
+                return None
+            }
+        })
+    }
+
+    /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
+    fn defines(self) -> Option<&'static Defines> {
+        static CELLS: [OnceLock<Option<Defines>>; 9] = [const { OnceLock::new() }; 9];
+        let at = Language::ALL.iter().position(|&l| l == self)?;
+        CELLS[at]
+            .get_or_init(|| {
+                let query = Query::new(&self.grammar(), self.tags()?).ok()?;
+                let kinds = query.capture_names().iter().map(|n| define_of(n)).collect();
+                Some((query, kinds))
+            })
+            .as_ref()
+    }
+
     fn query(self) -> Option<&'static Compiled> {
         static CELLS: [OnceLock<Option<Compiled>>; 9] = [const { OnceLock::new() }; 9];
         let at = Language::ALL.iter().position(|&l| l == self)?;
@@ -185,6 +221,54 @@ impl Language {
     }
 }
 
+/// **一個定義是哪一種**（`]f`／`]c`，2026-10-06）。
+///
+/// `tags.scm` 的捕獲名分得比這細（`definition.method`、`definition.interface`、
+/// `definition.module`…）；這裏只收兩種，因為鍵只有兩個，而「方法」在讀稿子的人
+/// 眼裏就是一個函數。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Define {
+    /// 函數、方法、巨集——按 `]f` 走的。
+    Function,
+    /// 類、結構、枚舉、介面、模組、類型——按 `]c` 走的。
+    Class,
+}
+
+fn define_of(capture: &str) -> Option<Define> {
+    match capture {
+        "definition.function" | "definition.method" | "definition.macro" => Some(Define::Function),
+        "definition.class" | "definition.interface" | "definition.module" | "definition.type" => {
+            Some(Define::Class)
+        }
+        _ => None,
+    }
+}
+
+/// **這份正文裏每一個定義**，按起點排好，位置是**字節**。
+///
+/// 同一個節點可能被兩條規則捕獲（rust 的 `function_item` 既在 `declaration_list`
+/// 裏又在頂層），所以去重。
+pub fn definitions(language: Language, source: &str, tree: &Tree) -> Vec<(usize, usize, Define)> {
+    let Some((query, kinds)) = language.defines() else {
+        return Vec::new();
+    };
+    let mut cursor = QueryCursor::new();
+    let mut out: Vec<(usize, usize, Define)> = Vec::new();
+    let mut matches = cursor.matches(query, tree.root_node(), source.as_bytes());
+    while let Some(one) = streaming_iterator::StreamingIterator::next(&mut matches) {
+        for capture in one.captures {
+            let Some(kind) = kinds.get(capture.index as usize).copied().flatten() else {
+                continue;
+            };
+            let node = capture.node;
+            out.push((node.start_byte(), node.end_byte(), kind));
+        }
+    }
+    out.sort_by_key(|&(from, to, _)| (from, std::cmp::Reverse(to)));
+    out.dedup_by_key(|&mut (from, to, _)| (from, to));
+    out
+}
+
 /// What a capture does to the characters it covers: `None` leaves them to
 /// whatever else names them.
 type Paint = Option<Token>;
@@ -194,6 +278,9 @@ type Paint = Option<Token>;
 /// 兩者是一個答案：捕獲是靠它在查詢裏的下標認的，換一份查詢配同一張
 /// `Vec<Paint>`，上的就是別人的色。
 type Compiled = (Query, Vec<Paint>);
+
+/// 同一件事的 tags 那一份：編好的查詢，連着每一格捕獲算哪一種定義。
+type Defines = (Query, Vec<Option<Define>>);
 
 /// What a grammar's capture name is, in this page's colours.
 fn token_of(capture: &str) -> Paint {
