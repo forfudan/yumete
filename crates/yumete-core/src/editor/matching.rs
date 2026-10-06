@@ -60,6 +60,11 @@ impl Editor {
             // （`commands.rs:6307-6310`：`'t' => "class"`、`'c' => "comment"`）。
             // 照抄參考實現，不照記憶。
             'f' | 't' => return self.select_definition(c == 'f'),
+            // **`mi a` 參數、`mi c` 註釋**（2026-10-06，helix 的同兩個字母）。用的
+            // 是我們自己寫的那份查詢（`code::Language::objects`），不是 helix 的
+            // `textobjects.scm`——授權的事見那裏。
+            'a' if self.writes_code() => return self.select_object(crate::code::Object::Parameter),
+            'c' if self.writes_code() => return self.select_object(crate::code::Object::Comment),
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
                 None => {
@@ -116,6 +121,32 @@ impl Editor {
             .max_by_key(|&(from, _, _)| from);
         let Some((from, to, _)) = found else {
             self.status = say!("code.no-definition-here");
+            return;
+        };
+        let head = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
+        self.sel.set_anchor(from);
+        self.sel.set_head(head);
+        self.extend = false;
+        self.clamp_cursor();
+        self.refresh_goal_column();
+    }
+
+    /// **選中光標所在的那個參數／註釋**（`mi a`／`mi c`，2026-10-06）。
+    ///
+    /// 取最裏面那一個，同 `mi f`：巢狀的閉包參數、文檔註釋裏套的註釋，站在哪一層
+    /// 取哪一層。
+    fn select_object(&mut self, want: crate::code::Object) {
+        let here = self.sel.head();
+        let found = self
+            .objects_here(want)
+            .into_iter()
+            .filter(|&(from, to)| (from..to).contains(&here))
+            .max_by_key(|&(from, _)| from);
+        let Some((from, to)) = found else {
+            self.status = match want {
+                crate::code::Object::Parameter => say!("code.no-parameter-here"),
+                crate::code::Object::Comment => say!("code.no-comment-here"),
+            };
             return;
         };
         let head = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);

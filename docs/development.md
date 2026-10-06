@@ -19240,8 +19240,29 @@ MPL 是按檔計的 copyleft：抄進來那幾個檔得一直掛着 MPL 並標�
 | javascript | 有 | class / constant / function / method |
 | css html json toml yaml | **沒有** | 本來也沒有「定義」可言 |
 
-`tags.scm` 給不出的：**參數、註釋、測試**——那幾種只在 helix 的 textobjects 裏有。要做那幾
-個就得面對上面那個授權問題。**需定。**
+`tags.scm` 給不出的：**參數、註釋、測試**——那幾種只在 helix 的 textobjects 裏有。
+
+### 參數與註釋：自己寫查詢（定「自己写比较好，不要抄」）
+
+ 2026-10-06 定：不抄 helix 那幾個 MPL 檔，自己寫。他問的兩件也答了：
+
+- **「上游改语法是什么意思」**——我們自己寫的查詢裏寫死節點名（python 的 `parameters`、
+  rust 的 `closure_parameters`…）。`tree-sitter-*` 升一版把某個節點改了名或改了結構，
+  查詢就**靜悄悄地不匹配**：不報錯、不編譯失敗，`mi a` 就是沒反應。抄 helix 是 helix 的人
+  替我們盯上游，自己寫就是我們自己盯。
+- **「自己写更符合我们自己的需求」**——是。helix 那份要照顧幾十種語言和它自己的鍵，我們
+  只要四種語言、兩種對象。
+
+⚠️ **代價那一條有一格測試頂着**：`our_textobject_queries_still_match_these_grammars` 逐種
+語言餵一段真代碼、數它找到幾個。**看見它紅，先去看那一版的 `src/node-types.json`**——節點名
+就是從那裏讀出來的，不是記的。
+
+| | python | rust | go | javascript |
+| --- | --- | --- | --- | --- |
+| 參數 | `parameters`／`lambda_parameters` 的子節點 | `parameters`／`closure_parameters`／`type_parameters` | `parameter_list`／`type_parameter_list` | `formal_parameters` |
+| 註釋 | `comment` | `line_comment`／`block_comment` | `comment` | `comment` |
+
+鍵是 helix 的同兩個字母：`mi a` 參數、`mi c` 註釋。
 
 ### 做了什麼
 
