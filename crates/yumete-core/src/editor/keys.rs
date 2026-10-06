@@ -1973,12 +1973,24 @@ impl Editor {
             // 率」。三種都留着，用幾天見分曉。
             Key::Ctrl('n') => self.move_page(count, false, 2.0 / 3.0),
             Key::Ctrl('p') => self.move_page(count, true, 2.0 / 3.0),
-            // …and on the capitals of the keys that move, which is a reader's
-            // most-used pair and does not deserve a chord. `C-d` and its family
-            // still work; these are the same four motions under the fingers
-            // already on `hjkl`.
-            Key::Char('J') => self.move_page(count, false, 0.5),
-            Key::Char('K') => self.move_page(count, true, 0.5),
+            // **`J` 合併行、`K` 按式子篩選區**——helix 出廠就是這兩個
+            // （`default.rs:166`／`:168`），2026-10-06 對齊。
+            //
+            // Warning: **這一格從前是「前進／後退半頁」**，而且 2026-10-05 專門定過不讓
+            // （理由是「讀一本小說按得最多的一對，不該是和弦」）。 10-06 翻案，
+            // 原話：「既然對齊就干脆點……JK 本质上也是和弦（上档）。因此 Ctrl n / p
+            // 并不比 JK 更难按。」——翻半頁現在走 `C-n`／`C-p`（⅔）、`C-d`／`C-u`
+            // （半頁）、`C-f`／`C-b`（整頁），六個鍵都在。
+            //
+            // vim 鍵位各跟各的：那邊 `J` 也是合併行（一樣），`K` 是查詞（`空格 k`）。
+            Key::Char('J') if self.joining_welds_a_grid() => {
+                self.status = say!("table.join-would-change-columns");
+            }
+            Key::Char('J') => {
+                let n = self.join_count(operator_count);
+                self.repeat_writing(n, |e| e.join_lines())
+            }
+            Key::Char('K') => self.open_sift(multi::Sift::Keep),
             // Swap which end of the selection the cursor is on.
             Key::Alt(';') => self.flip_selection(),
             // Whole file, and extending the selection to whole lines.
@@ -2199,7 +2211,7 @@ impl Editor {
     ///   documented spelling was the one that did nothing: `g4J` joined one
     ///   pair. `g30g` next door had it right all along.
     /// * **`4gJ`** — vi's order, a count before the command. This one worked.
-    fn join_count(&mut self) -> usize {
+    fn join_count(&mut self, asked: Option<usize>) -> usize {
         let rope = self.current_buffer().rope();
         let (start, end) = self.selection();
         // Warning: **The last character *in* the selection, not the one past it.**
@@ -2220,9 +2232,14 @@ impl Editor {
         // joins and `4gJ` counted lines — while the manual promised both meant
         // the same thing. Counting lines is the half that matches vim and the
         // half that matches 「選了幾行就併幾行」 above.
+        // Warning: **`asked` 是最上層那一條路**（2026-10-06）。`J` 從 `gJ` 搬到頂層
+        // 之後，`3J` 的那個 3 走的是 `on_normal_key` 開頭就取走的那個計數，既不
+        // 在 `sequence_span` 裏（沒有序列），也不在 `operator_count` 那個**欄位**
+        // 裏（那是前綴鍵存的）。不傳進來的話 `3J` 只併一次。
         self.sequence_span()
             .map(|(n, _)| n)
             .or_else(|| self.operator_count.take())
+            .or(asked)
             .unwrap_or(2)
             .saturating_sub(1)
             .max(1)
@@ -2295,18 +2312,15 @@ impl Editor {
         // not a motion of the page (a file, a definition, the other pane), so
         // every arm answers for itself.
         match key {
-            // Joining lines, which vi also spells `gJ`.
-            // Joining two lines of a grid makes one row with twice the fields
-            // — the one thing table mode promises cannot happen. It went
-            // round the two gates because it edits the rope directly.
-            Key::Char('J') if self.joining_welds_a_grid() => {
-                self.status = say!("table.join-would-change-columns");
-            }
-            Key::Char('J') => {
-                let count = self.join_count();
-                self.repeat_writing(count, |e| e.join_lines())
-            }
-            // …and the other direction, which helix does not have (#485).
+            // Warning: **`gJ` 沒有了**（2026-10-06）。`J` 自己就是合併行了，而 `gJ`
+            // 從那一刻起只是同一件事的第二個拼法——原話：「gJ gK 的别名不需
+            // 要了」。vim 鍵位表裏那一行 `("J", "gJ")` 也一併撤了（它映到的那個鍵
+            // 現在做的就是它要的事）。
+            //
+            // `gK` 留着：它**不是別名**，是「把這一行併到上面那一行」，helix 沒有
+            // 這個命令，撤掉就沒有第二條路了（#485）。
+            //
+            // …the other direction, which helix does not have (#485).
             //
             // Warning: **Step up once, then join downwards** (2026-09-19, caught in
             // review). Repeating `join_with_above` walked *out* of what was
@@ -2324,7 +2338,7 @@ impl Editor {
                 let spans = end > start
                     && rope.char_to_line(start)
                         < rope.char_to_line((end - 1).min(rope.len_chars().saturating_sub(1)));
-                let count = self.join_count() + usize::from(spans);
+                let count = self.join_count(None) + usize::from(spans);
                 let rope = self.current_buffer().rope();
                 let line = rope.char_to_line(self.selection().0);
                 if line == 0 {

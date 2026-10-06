@@ -4122,9 +4122,9 @@ en = "go to line 30"
 [[message]]
 # 常用幫助：前進／後退半頁
 key = "help.common.half-page"
-zht = "前進／後退半頁；整頁是 C-f／C-b"
-zhs = "前进／后退半页；整页是 C-f／C-b"
-en = "half a page forward/back; L and H are whole pages"
+zht = "前進／後退半頁；三分之二是 C-n／C-p，整頁是 C-f／C-b"
+zhs = "前进／后退半页；三分之二是 C-n／C-p，整页是 C-f／C-b"
+en = "half a page forward/back; C-n / C-p for two thirds, C-f / C-b for a whole one"
 
 [[message]]
 # 常用幫助：左下上右

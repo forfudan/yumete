@@ -2080,7 +2080,7 @@ KEYS (Normal mode, Helix-style):
     f F t T   find a character forward / backward; t T stop in front of it
               (A-. repeats the last one; the table group is Space t)
     H  L      previous / next sentence — 。！？ and the mark that closes after
-    J  K      forward / back half a page   (C-f / C-b for a whole one)
+    J  K      join the lines / keep only the selections a pattern matches
     x  X      select the current line / extend to whole lines
     v  ;  %   select (extend) mode / collapse / select the whole file
     d  c  R   delete / change / replace the selection with the register

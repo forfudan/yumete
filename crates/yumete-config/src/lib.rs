@@ -1554,10 +1554,14 @@ pub struct KeyConfig {
     /// Normal-mode aliases: pressing the key on the left behaves as pressing
     /// **the keys** on the right.
     ///
-    /// A sequence rather than a single key, because the defaults this editor
-    /// chose on purpose — `J`/`K` paging a page of a book rather than joining
-    /// lines — are exactly the ones a Vim reader wants back, and what they
-    /// want back is `gJ`. One config line instead of leaving.
+    /// A sequence rather than a single key: not every command this editor has
+    /// is spelled with one. `gK` joins a line onto the one above and no single
+    /// key says it, so `"z" = "gK"` is one config line instead of leaving.
+    ///
+    /// Warning: **The example used to be `"J" = "gJ"`** — `J` paged a book here
+    /// and joining was on `gJ`, which a vim reader wanted swapped back. Both
+    /// keys are helix's own meanings since 2026-10-06, so that line now says
+    /// nothing: `gJ` is gone and `J` already joins.
     ///
     /// **The left may be a sequence too** (#428): `"dd" = "xd"`.
     pub normal: HashMap<String, String>,
@@ -3640,14 +3644,14 @@ mod tests {
             r#"
             [keys.normal]
             "j" = "h"
-            "J" = "gJ"
+            "J" = "gK"
             "toolong" = "x"
             "#,
         );
         assert_eq!(c.keys.normal.get("j").map(String::as_str), Some("h"));
         // The right-hand side may be a whole sequence: one config line puts
         // vi's join back on `J` without the editor keeping two spellings.
-        assert_eq!(c.keys.normal.get("J").map(String::as_str), Some("gJ"));
+        assert_eq!(c.keys.normal.get("J").map(String::as_str), Some("gK"));
         // …and so may the left (#428).
         assert_eq!(c.keys.normal.get("toolong").map(String::as_str), Some("x"));
     }
@@ -3664,18 +3668,18 @@ mod tests {
             [keys.normal]
             "x" = "delete_slection"
             "y" = "delete_selection"
-            "z" = "gJ"
+            "z" = "gK"
             "Z" = ":write_all"
             "#,
         );
         assert_eq!(c.keys.normal.get("x"), None, "the typo was installed anyway");
         assert_eq!(c.keys.normal.get("y").map(String::as_str), Some("delete_selection"));
-        assert_eq!(c.keys.normal.get("z").map(String::as_str), Some("gJ"));
+        assert_eq!(c.keys.normal.get("z").map(String::as_str), Some("gK"));
         // A `:command` is not a name, so an underscore in one is not a typo.
         assert_eq!(c.keys.normal.get("Z").map(String::as_str), Some(":write_all"));
         assert!(yumete_cjk::actions::misspelt("delete_slection"));
         assert!(!yumete_cjk::actions::misspelt("delete_selection"));
-        assert!(!yumete_cjk::actions::misspelt("gJ"));
+        assert!(!yumete_cjk::actions::misspelt("gK"));
         assert!(!yumete_cjk::actions::misspelt(":write_all"));
     }
 
