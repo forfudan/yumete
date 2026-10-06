@@ -265,21 +265,30 @@ impl WordLevel {
     /// A bonus paid once per word favours *more* words, so a bigger one splits
     /// harder. The model's own bonus is 3 nats; these are the adjustment.
     ///
-    /// **Measured, not guessed** — on the installed tables, over 「那年冬天他抬
-    /// 頭看了看那片天，山路已經看不見了。」 (the probe is
-    /// `yumete-ime/tests/real_data.rs::probe_bias_sensitivity`):
+    /// **Measured, not guessed** — on the installed tables, over 「這件事情從頭
+    /// 到尾都是他一個人做的。」 (the probe is
+    /// `yumete-ime/tests/real_data.rs::probe_bias_sensitivity`, which takes
+    /// `PROBE_LINE` from the environment):
     ///
     /// ```text
-    /// -1.5   8  那年冬天 他 抬頭 看了看 那片天 山路 已經 看不見了
-    ///  0.0   9  那年冬天 他 抬頭 看了看 那片天 山路 已經 看不見 了
-    /// +2.0  12  那 年 冬天 他 抬頭 看了看 那片 天 山路 已經 看不見 了
-    /// +3.0  16  那 年 冬天 他 抬頭 看 了 看 那 片 天 山 路 已經 看不見 了
+    /// -1.5   6  這件事情 從頭到尾 都是 他一個人 做的
+    ///  0.0   7  這件事情 從頭到尾 都是 他一個人 做 的
+    /// +2.0   9  這件事情 從頭到尾 都是 他 一個 人 做 的
+    /// +3.0  10  這件事情 從頭到尾 都 是 他 一個 人 做 的
     /// ```
     ///
-    /// +2.0 for `strict`: 那年冬天 comes apart and 山路 does not, which is 「more
-    /// single characters」 without making the motion useless. +3 takes real
-    /// words apart. −1.5 for `full`: the particles stay glued (看不見了 as one),
-    /// and further down changes nothing — the plateau starts at about −0.5.
+    /// +2.0 for `strict`: 他一個人 comes apart and 從頭到尾 does not, which is
+    /// 「more single characters」 without making the motion useless. −1.5 for
+    /// `full`: the particle stays glued (做的 as one), and further down changes
+    /// nothing — the plateau starts at −1.5 on this sentence.
+    ///
+    /// Warning: **This table was re-measured 2026-10-06, on a new word model.**
+    /// It used to be read off 「那年冬天他抬頭看了看那片天，山路已經看不見了。」,
+    /// and on that sentence the new model joins everything at 0.0 already —
+    /// `full` has nowhere left to loosen and the two levels answer the same.
+    /// The model got better, not worse; the probe sentence moved. Warning: **Re-read
+    /// the table before touching these three numbers**, because a model change
+    /// moves the plateau under them (§5.83).
     pub fn split_bias(self) -> f64 {
         match self {
             WordLevel::Off => 0.0,
