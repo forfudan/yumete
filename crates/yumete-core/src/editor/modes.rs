@@ -290,6 +290,24 @@ impl Editor {
         }
     }
 
+    /// **猜出來的那幾條，問的是同一個前綴**（2026-10-06 報的）。
+    ///
+    /// Warning: **不許拿命令行現在那一行去問**。⇥ 把挑中的那一條寫進命令行裏，於是
+    /// 下一幀那一行已經是 `buffer-next` 了——前綴配中的那幾條照舊（它們問的是
+    /// [`Self::completion`] 存着的前綴），而猜的那幾條整批換了一套，看起來像是
+    /// 「按一下 ⇥ 模糊匹配就消失了」。
+    ///
+    /// helix 同一個辦法：`change_completion_selection`（它的 ⇥）改命令行**而不叫**
+    /// `recalculate_completion`，那張單子只在打字的時候重算一次
+    /// （`helix-term/src/ui/prompt.rs:375`）。
+    pub fn command_guesses(&self) -> Vec<command::Choice> {
+        let asked = match &self.completion {
+            Some((prefix, _)) => prefix.as_str(),
+            None => self.command_line.as_str(),
+        };
+        crate::lookfor::guesses(asked)
+    }
+
     #[cfg(test)]
     pub(super) fn recorded_keys_for_test(&self) -> String {
         self.macro_keys
