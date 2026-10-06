@@ -19097,6 +19097,31 @@ join」），跟着改了，並把翻案的理由寫進斷言旁邊。
 | `yumete/src/main.rs` 的 `--help` | 「**no t / T** — that letter is the table mode's」 | `t`／`T` 2026-09-21 起就是 find-till |
 | `editor/keys.rs` 裸 `G` 那一段 | 「which is what `G` means in vi and in Helix both」 | helix 的裸 `G` **什麼都不做**（`goto_line_impl` 開頭就是 `if cx.count.is_some()`）。鍵不改，改的是那句話 |
 
+### 神諭掃了一遍：2256 格 34 格不同，改動前後**一格不差**
+
+動完之後拿 nvim 重掃了一輪（`python3 scripts/oracle/vim_sweep.py`）。為了知道那 34 格是不是
+今夜改出來的，把 `08e535d`（動手前那一個提交）開成一個 worktree、單獨 `cargo build
+--release`，用同一支腳本掃同一輪：**兩邊都是 34 格，分組也一字不差**。所以今夜一條回歸都
+沒有。
+
+那 34 格分兩族：
+
+**一、25 格是同一件事，而且正是第 9 條**（明天那件）：`jjhhhhhhhhhhx`。檔案以換行結尾，
+nvim 眼裏只有兩行，我們多出一條**第三行**——那個換行符後面的空位：
+
+```text
+jj              → nvim 停在第 2 行；我們停在「行 3, 列 1」
+jjhhhhhhhhhh    → 還在行 3（那一行什麼都沒有，h 也動不了）
+x               → nvim 刪掉一個字；我們刪不到東西
+```
+
+⚠️ **這是「光標不停在換行符上」那一條的同一個根**，只是露在檔尾而不是行尾。第 9 條的規劃
+要把它一起算進去。
+
+**二、9 格是分詞器**（`de`／`d2w`／`c2w` 在 `  he said (no) then;` 這一條混排上）：nvim 的
+`e` 走過 `人類`，我們的停在它前面。手冊裏那句「`w` `b` `e` 鍵一樣，**但走分詞器**……停的
+位置和 vim 不會一樣」說的就是它，**不是 bug**。
+
 ### 沒做的，以及為什麼
 
 | 條目 | 為什麼擱着 |
