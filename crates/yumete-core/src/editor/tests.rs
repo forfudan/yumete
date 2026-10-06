@@ -2003,36 +2003,36 @@ fn percent_selects_the_whole_buffer() {
 fn join_omits_the_space_between_two_wide_characters() {
     // CJK prose carries no space across a line break…
     let mut ed = typed("上山\n下海");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "上山下海");
     // …but Latin words still need one.
     let mut ed = typed("up hill\ndown dale");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "up hill down dale");
     // Indentation on the joined line is swallowed, not doubled.
     let mut ed = typed("one\n    two");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "one two");
 
     // **行尾的空白也吞掉**（#326，2026-10-01）。從前它留着，而接縫又補了一個
     // 空格，於是 `"  \n漢字"` 合成 `"   漢字"`——三個空格。
     let mut ed = typed("上山  \n下海");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "上山下海", "行尾空白不算字");
     let mut ed = typed("up hill \t\ndown dale");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "up hill down dale", "一個空格，不是三個");
     // 兩邊都吃掉，只留下那一個接縫。
     let mut ed = typed("one   \n    two");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "one two");
     // 整行都是空白：合完就剩下一行，前面不留東西。
     let mut ed = typed("   \n下海");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "下海", "空行合過來不帶空格");
     // 一頭全角一頭半角照舊留一個——`hello 漢字` 讀得順，這是有意的。
     let mut ed = typed("hello  \n漢字");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "hello 漢字");
 }
 
@@ -2048,25 +2048,26 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     // 一、選區跨幾行就合幾次——helix 的 `J`、vi 在 visual 模式下的 `J`。
     let mut ed = typed(five);
     press(&mut ed, "xxx");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n", "選三行合成一行");
 
     // **數字說的是「幾行併成一行」**（2026-09-19 定），vi 的規矩：`3J`
-    // 把三行焊成一行，也就是兩次併。從前兩種寫法差一個——`g3J` 數併的次數，
-    // `4gJ` 數行——而手冊說它們是同一件事。
-    // 二、`g3J`——本編輯器定的順序（命令＋選擇＋動作）。
+    // 把三行焊成一行，也就是兩次併。
+    //
+    // Warning: **`g3J` 那一種沒有了**（2026-10-06）：`J` 自己就是合併行，`gJ` 連
+    // 同它那個序列内的數字一起撤了。vi 的 `3J` 一直都在，下面這一條就是。
     let mut ed = typed(five);
-    press(&mut ed, "g3J");
+    press(&mut ed, "3J");
     assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n");
 
-    // 三、`4gJ`——vi 的順序，數字在命令前面。同樣是「四行併成一行」。
+    // 數字在命令前面，vi 的順序。「四行併成一行」。
     let mut ed = typed(five);
-    press(&mut ed, "4gJ");
+    press(&mut ed, "4J");
     assert_eq!(ed.current_buffer().text(), "一二三四\n五\n");
 
     // 不給數字也不選：還是「和下一行合併」。
     let mut ed = typed(five);
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "一二\n三\n四\n五\n");
 
     // `gK` 同一套，往上合。
@@ -3820,7 +3821,7 @@ fn the_numbers_a_chapter_is_counted_by() {
 }
 
 #[test]
-fn the_capitals_turn_the_page() {
+fn the_chords_turn_the_page() {
     let text = (1..=60)
         .map(|n| n.to_string())
         .collect::<Vec<_>>()
@@ -3829,20 +3830,20 @@ fn the_capitals_turn_the_page() {
     ed.set_page(20, 10);
     press(&mut ed, "gg");
 
-    // Warning: Only `J`/`K` now. `H`/`L` were the whole-page pair until 2026-09-12
-    // and are a sentence apiece since (#404); nothing was lost, because
-    // `C-f`, `C-b`, `PageUp` and `PageDown` all still turn a whole page, and
-    // the half page is the one a reader wears out.
-    press(&mut ed, "J");
+    // Warning: **`J`/`K` turned the page until 2026-10-06** and are helix's join
+    // and keep-selections since — six chords still turn it: `C-d`/`C-u` (half),
+    // `C-n`/`C-p` (two thirds), `C-f`/`C-b` (whole). `H`/`L` were the
+    // whole-page pair until 2026-09-12 and are a sentence apiece since (#404).
+    ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cursor_line(), 10, "half of twenty lines");
-    press(&mut ed, "J");
+    ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cursor_line(), 20);
-    press(&mut ed, "K");
+    ed.on_key(Key::Ctrl('u'));
     assert_eq!(ed.cursor_line(), 10);
 
-    // Joining moved to `gJ`, which is also how vi spells it.
+    // And `J` is the join, which is what helix and vi both spell `J`.
     let mut ed = typed("上山\n下海");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "上山下海");
 }
 
@@ -5793,7 +5794,7 @@ fn a_locked_buffer_refuses_every_way_in() {
         ("a甲", &[Key::Char('a'), Key::Char('甲')]),
         ("c甲", &[Key::Char('c'), Key::Char('甲')]),
         ("i甲", &[Key::Char('i'), Key::Char('甲')]),
-        ("gJ", &[Key::Char('g'), Key::Char('J')]),
+        ("J", &[Key::Char('J')]),
         ("ms(", &[Key::Char('m'), Key::Char('s'), Key::Char('(')]),
         ("Ctrl-A", &[Key::Ctrl('a')]),
         ("Ctrl-X", &[Key::Ctrl('x')]),
@@ -8830,10 +8831,14 @@ fn no_route_at_all_gets_a_delimiter_into_a_cell() {
 }
 
 #[test]
-fn a_capital_turns_the_page_the_way_its_lowercase_moves() {
-    // 縱書: `j` runs down a 縱 and `J` turns the page onward, whichever way
-    // the page is set. Reading a letter one way in lowercase and the other in
-    // capital is one letter meaning two directions.
+fn turning_the_page_reads_onward_whichever_way_the_page_is_set() {
+    // 縱書: `j` runs down a 縱 and `C-d` turns the page onward, whichever way
+    // the page is set. A key that read one way across and the other way down
+    // would be one key meaning two directions.
+    //
+    // Warning: **This used to be about `J`/`K`**, which turned a half page until
+    // 2026-10-06; they are helix's join and keep-selections now, and the
+    // property moved to the chords that still turn the page.
     //
     // Warning: **The rule is about screen quantities, and only those.** `H`/`L` used
     // to be whole-page and obeyed it; since 2026-09-12 they take a *sentence*,
@@ -8846,25 +8851,25 @@ fn a_capital_turns_the_page_the_way_its_lowercase_moves() {
     ed.execute("200").unwrap();
     let middle = ed.cursor_line();
 
-    press(&mut ed, "J");
-    assert!(ed.cursor_line() > middle, "J reads on, as j does");
-    press(&mut ed, "K");
-    assert_eq!(ed.cursor_line(), middle, "and K comes back");
+    ed.on_key(Key::Ctrl('d'));
+    assert!(ed.cursor_line() > middle, "C-d reads on, as j does");
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(ed.cursor_line(), middle, "and C-u comes back");
 
     // Horizontally the same pair, same meaning.
     ed.set_layout(Layout::Horizontal);
     ed.execute("200").unwrap();
-    press(&mut ed, "J");
-    assert!(ed.cursor_line() > middle, "J reads on");
-    press(&mut ed, "K");
+    ed.on_key(Key::Ctrl('d'));
+    assert!(ed.cursor_line() > middle, "C-d reads on");
+    ed.on_key(Key::Ctrl('u'));
     assert_eq!(ed.cursor_line(), middle);
 }
 
 /// **A sentence reads the same way whichever way the page is set** (#404).
 ///
 /// `H`/`L` are a text unit, not a screen quantity: `L` is the sentence after,
-/// in 橫排 and in 縱書 alike. The page-turning pair `J`/`K` is the one that
-/// follows the direction its lowercase runs.
+/// in 橫排 and in 縱書 alike. The page-turning chords are the ones that follow
+/// the direction the text is read.
 #[test]
 fn the_sentence_pair_does_not_flip_with_the_layout() {
     let text = "第一句。第二句。第三句。\n";
@@ -12018,7 +12023,7 @@ fn no_writer_changes_how_many_cells_a_row_has() {
         press(&mut ed, "j");
     }
     assert!(ed.current_buffer().line(4).unwrap().starts_with("| 木"));
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert!(ed.status().contains("欄數"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), table, "the grid is untouched");
 
@@ -12026,7 +12031,7 @@ fn no_writer_changes_how_many_cells_a_row_has() {
     // gives the header the paragraph's zero cells.
     press(&mut ed, "gg");
     press(&mut ed, "j");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert!(ed.status().contains("欄數"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), table);
 
@@ -13617,8 +13622,8 @@ fn joining_up_and_joining_down_are_one_edit() {
     };
     // 站在第一行按 gJ，與站在第二行按 gK，結果逐字相同——接縫也一樣，兩個漢字
     // 之間不補空格。
-    assert_eq!(both("gJ", 1), both("gK", 2));
-    assert_eq!(both("gJ", 1), "那年冬天山下起了雪\n");
+    assert_eq!(both("J", 1), both("gK", 2));
+    assert_eq!(both("J", 1), "那年冬天山下起了雪\n");
 
     // 拉丁詞之間補一個空格，兩邊同樣。
     let latin = |keys: &str, from: usize| -> String {
@@ -13627,8 +13632,8 @@ fn joining_up_and_joining_down_are_one_edit() {
         press(&mut ed, keys);
         ed.current_buffer().text()
     };
-    assert_eq!(latin("gJ", 1), latin("gK", 2));
-    assert_eq!(latin("gJ", 1), "one two\n");
+    assert_eq!(latin("J", 1), latin("gK", 2));
+    assert_eq!(latin("J", 1), "one two\n");
 
     // 第一行上按 gK 什麼都不動，並且說一句。
     let mut ed = typed("那年冬天\n山下起了雪\n");
@@ -13792,15 +13797,17 @@ fn closing_a_file_does_not_send_a_jump_into_a_different_one() {
 
 #[test]
 fn a_key_alias_may_name_a_sequence() {
-    // The defaults this editor chose on purpose — `J`/`K` paging a book
-    // rather than joining lines — are the ones a Vim reader wants back,
-    // and what they want back is `gJ`. One config line instead of leaving.
+    // Warning: **The example used to be `"J" = "gJ"`** — joining was on `gJ` and
+    // `J` turned the page, and a vim reader wanted the two swapped back. Both
+    // are helix's own meanings since 2026-10-06, so the example had to be a
+    // sequence that still exists: `gK` joins this line onto the one above,
+    // which no single key spells.
     let mut ed = typed("上一句\n下一句\n");
-    ed.goto_line(1);
+    ed.goto_line(2);
     let mut aliases = std::collections::HashMap::new();
-    aliases.insert("J".to_string(), "gJ".to_string());
+    aliases.insert("z".to_string(), "gK".to_string());
     ed.set_key_aliases(aliases);
-    ed.on_key(Key::Char('J'));
+    ed.on_key(Key::Char('z'));
     assert_eq!(ed.current_buffer().text(), "上一句下一句\n");
 }
 
@@ -14450,7 +14457,7 @@ fn line_operators_follow_the_selection_not_the_cursor() {
     // is *for* is unchanged: the lines acted on are the selection's, not the
     // cursor's, and `x` parks the cursor on the line after.
     let mut ed = typed("一\n二\n三\n四\n");
-    type_keys(&mut ed, "ggxxxgJ");
+    type_keys(&mut ed, "ggxxxJ");
     assert_eq!(ed.current_buffer().text(), "一二三\n四\n");
 
     let mut ed = typed("甲甲\n甲甲\n");
@@ -18075,7 +18082,7 @@ fn the_vim_preset_takes_back_the_keys_that_meant_something_else() {
     assert_eq!(text(&ed), "一二\n三\n", "J joins, same as vim");
     // `gJ` 兩套鍵位下都還是合併行。
     let mut ed = vim("一\n二\n三\n");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(text(&ed), "一二\n三\n", "gJ too");
 
     // **`K` 查光標下這個東西**（同掛着 LSP 的 Neovim）——它不動稿子。
@@ -21221,17 +21228,17 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
 fn joining_an_empty_line_leaves_no_trailing_space() {
     let mut ed = typed("first\n\nsecond\n");
     press(&mut ed, "gg");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "first\nsecond\n", "行尾不許多一個空格");
 
     // 旁邊那幾種照舊：拉丁詞之間要空格，漢字之間不要。
     let mut ed = typed("first\nsecond\n");
     press(&mut ed, "gg");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "first second\n");
     let mut ed = typed("第一句。\n第二句。\n");
     press(&mut ed, "gg");
-    press(&mut ed, "gJ");
+    press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "第一句。第二句。\n", "漢字之間不補空格");
 }
 

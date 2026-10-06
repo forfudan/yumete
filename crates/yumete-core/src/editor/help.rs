@@ -90,7 +90,7 @@ impl Editor {
 
 ");
         out.push_str(&format!("{}\n\n", say!("help.self-reported")));
-        // **窗口要多大**（2026-10-03 作者定：「就说推荐窗口大小 80*24，这个先放在
+        // **窗口要多大**（2026-10-03 定：「就说推荐窗口大小 80*24，这个先放在
         // help」）。擺不下側面板的時候 `空格 /` 會當場退回行內搜索並說一句，而那一句
         // 說的是此刻；這一行說的是往後。
         out.push_str(&format!("{}\n\n", say!("help.common.window-size")));
@@ -111,7 +111,7 @@ impl Editor {
             // 與教程，不讀這一頁。手抄的鍵表就是這麽爛掉的。
             ("gg ge", say!("help.common.start-end-of-file")),
             ("gh gl gs", say!("help.common.line-start-end")),
-            ("J K", say!("help.common.half-page")),
+            ("C-d C-u", say!("help.common.half-page")),
             ("gd gD", say!("help.common.follow-what-it-points-at")),
             ("g/ g?", say!("help.common.word-elsewhere")),
             ("/ n N", say!("help.common.search")),
