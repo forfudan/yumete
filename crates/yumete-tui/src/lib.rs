@@ -9113,34 +9113,22 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
 ///
 /// Warning: **居中，可是不占行**：它寫進已經畫好的那些格子裏，所以窗口多高、正文
 /// 將來有多少字，都和它無關。
-/// The version, cut after `dev` / `beta` / `alpha` / `rc` (2026-10-06).
-///
-/// `0.4.0-dev.20261006000901+7b9942c` → `0.4.0-dev`. Keeping that one word is
-/// the point: it says whether this is a release. Everything after it is a
-/// timestamp and a commit, which belong in `:version`.
-fn short_version(build: &str) -> &str {
-    let (number, rest) = match build.split_once('-') {
-        Some(pair) => pair,
-        None => return build.split('+').next().unwrap_or(build),
-    };
-    let word = rest.split(['.', '+']).next().unwrap_or("");
-    match word.is_empty() {
-        true => number,
-        false => &build[..number.len() + 1 + word.len()],
-    }
-}
-
 fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     let ink = crate::theme::Palette::of(config);
     // Warning: **只取版本號那一截**。完整的構建號是
     // `0.4.0-dev.20261006000901+7b9942c`——開場屏上它比標題還長，看着像一行亂碼。
     // 要看全的在 `:version` 裏（那一扇正是為這個開的）。
-    // Warning: **截到 `dev`／`beta`／`alpha`／`rc` 為止**（2026-10-06 定）。完整的
-    // 構建號是 `0.4.0-dev.20261006000901+7b9942c`——開場屏上它比標題還長，看着
-    // 像一行亂碼。留下那一截是因為它說得出這是不是正式版；要看全的在 `:version`
-    // 裏（那一扇正是為這個開的）。
-    let build = editor.build_name();
-    let short = short_version(build);
+    // **整串都印**（2026-10-06 定，當天第二次改）。
+    //
+    // 先截到 `0.4.0`，再截到 `0.4.0-dev`，最後整串。理由是：**正式版的版本
+    // 號本來就是乾淨的**——`build.rs` 裏 `YUMETE_RELEASE` 一撥，印出來就是
+    // `0.4.0`，没有時間戳也没有提交號。那一長串只在他自己的 dev 構建上出現，而
+    // 那正是他要看全的時候。原話：「用户永遠都是正式版……所以他們只會看到
+    // 0.4.0」。
+    //
+    // 寬度不成問題：`0.4.0-dev.20261006140729+a2e1701.dirty` 連標籤四十六格，而
+    // 開場屏放不下就整屏不畫（下面那道閘），六十格的窗口也夠。
+    let short = editor.build_name();
     let rows: Vec<(String, String)> = vec![
         (":tutor".into(), say!("intro.learn")),
         (":help".into(), say!("intro.help")),
