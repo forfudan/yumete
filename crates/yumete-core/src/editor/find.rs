@@ -701,85 +701,35 @@ impl Editor {
                 .filter(|b| b.is_modified())
                 .filter_map(|b| Some((self.real_path(b.path()?)?, b.rope().to_string())))
                 .collect();
-            // **邊走邊搜，不再先收齊整棵樹**（2026-10-03 定：「rg 是一边搜一边
-            // 打印。我们是读完搜完再一起打印」）。走查的回調當場把這一個檔搜了，
-            // 命中立刻從 `sink` 交出去——管道那一邊第一條命中在第一個檔讀完就印得
-            // 出來，不必等整棵樹。
             let sieve = sieve.unwrap_or_default();
-            // 回調不許碰 `self`，所以這一份也先備好，走完再接回去。
             let mut files: Vec<(Option<std::path::PathBuf>, Option<u64>)> = Vec::new();
-            let walked = crate::editor::walk_prose(&root, &sieve, &mut |path| {
-                if stop {
-                    return;
-                }
-                // Not twice: the one being written was searched from memory.
-                //
-                // Warning: **`canonicalize` 直接叫，不走 `real_path`**（2026-10-06）。
-                // 那一支帶記憶而記憶掛在 `self` 上，留在回調裏就把 `self` 一起
-                // 釘進來了。這裏一個檔只問一次，記不記憶差得不多。
-                let full = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-                if Some(&full) == here.as_ref() {
-                    return;
-                }
-                let shown = path.strip_prefix(&root).unwrap_or(path).to_path_buf();
-                let was = total;
-                let mut at = 0usize;
-                // **An open file is read from its buffer, not from disk.**
-                // Unsaved work is work, and a search that could not see it
-                // would send a reader to a line that no longer says that.
-                // Warning: **Matched on the resolved path.** `/tmp` is a link to
-                // `/private/tmp` on this platform, so the walk's path and the
-                // buffer's are two spellings of one file — compared as typed,
-                // a file just changed in a buffer was re-read off the disk and
-                // the change looked as though it had not happened.
-                match unsaved.get(&full) {
-                    Some(text) => {
-                        for (line, text) in text.split_inclusive('\n').enumerate() {
-                            if !take_the_line(
-                                &look, &shown, text, line, keep.then_some(most), &mut at, &mut total,
-                                &mut hits, &mut sink, &mut stop,
-                            ) {
-                                break;
-                            }
+            let mut take = |found: Found| -> bool {
+                match found {
+                    Found::Hit(hit) => {
+                        total += 1;
+                        if keep && hits.len() < most {
+                            hits.push(hit.clone());
+                        }
+                        match sink.as_mut() {
+                            Some(out) => out(&hit),
+                            None => true,
                         }
                     }
-                    // **一行一行地讀，整個檔不進內存**（2026-10-03 定）。從前是
-                    // `read_to_string`，於是超過 `GREP_MAX_BYTES` 的檔只能整個跳過，
-                    // 而那在管道裏就是一句「43 file(s) too big to read were skipped」
-                    // ——一個不完整的答案。搜索本來就是**逐行**做的（式子配不過換行），
-                    // 所以按行流着讀一個字的語義都不改。
-                    //
-                    // Warning: **壞的字節當場換成替代字符，不丟整個檔。** 從前
-                    // `read_to_string` 一個非 UTF-8 的字節就讓整份稿子無聲地不算數。
-                    // 二進制那些早在走查裏按 NUL 攔掉了（`looks_binary`），到這裏的
-                    // 都是文本。
-                    None => {
-                        let Ok(file) = std::fs::File::open(path) else { return };
-                        let mut reader = std::io::BufReader::new(file);
-                        let mut raw = Vec::new();
-                        let mut line = 0usize;
-                        loop {
-                            raw.clear();
-                            match std::io::BufRead::read_until(&mut reader, b'\n', &mut raw) {
-                                Ok(0) | Err(_) => break,
-                                Ok(_) => {}
-                            }
-                            let text = String::from_utf8_lossy(&raw);
-                            if !take_the_line(
-                                &look, &shown, &text, line, keep.then_some(most), &mut at, &mut total,
-                                &mut hits, &mut sink, &mut stop,
-                            ) {
-                                break;
-                            }
-                            line += 1;
-                        }
+                    Found::File(path) => {
+                        files.push((Some(path), None));
+                        true
                     }
                 }
-                // **有命中就記一筆，不管名單還放不放得下**（見 `Search::files`）。
-                if total > was {
-                    files.push((Some(shown), None));
-                }
-            });
+            };
+            let walked = walk_and_search(
+                &root,
+                &sieve,
+                &look,
+                &unsaved,
+                here.as_deref(),
+                &mut stop,
+                &mut take,
+            );
             self.search.files.extend(files);
             self.search.cut = walked.cut;
             self.search.skipped = walked.skipped;
@@ -2289,10 +2239,110 @@ impl Editor {
 }
 
 /// A few characters either side of one match, and where the match is in them.
+/// **走一遍盤，一個檔一個檔地搜**（2026-10-03 起就是邊走邊交的；2026-10-06 抽成
+/// 自由函數，§5.93）。
+///
+/// 抽出來是因為它要**同時**給兩邊用：`ye --grep` 那條路同步跑（印完就退），而面板
+/// 那條路跑在一個線程上。裏面一個 `self` 都不許碰——所有要的東西都在參數上。
+///
+/// `each` 對每一處命中、以及每一個有命中的檔各叫一次；回 `false` 就收攤
+/// （`ye --grep 霜 | head -2` 關掉讀的那一頭，接着走完整棵樹是白費）。
+#[allow(clippy::too_many_arguments)]
+fn walk_and_search(
+    root: &std::path::Path,
+    sieve: &crate::editor::Sieve,
+    look: &Look,
+    unsaved: &std::collections::HashMap<std::path::PathBuf, String>,
+    here: Option<&std::path::Path>,
+    stop: &mut bool,
+    each: &mut dyn FnMut(Found) -> bool,
+) -> crate::editor::Walked {
+    let mut total = 0usize;
+    crate::editor::walk_prose(root, sieve, &mut |path| {
+        if *stop {
+            return;
+        }
+        // Not twice: the one being written was searched from memory.
+        //
+        // Warning: **`canonicalize` 直接叫，不走 `real_path`**（2026-10-06）。那一支帶
+        // 記憶而記憶掛在 `self` 上。這裏一個檔只問一次，記不記憶差得不多。
+        let full = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        if Some(full.as_path()) == here {
+            return;
+        }
+        let shown = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+        let was = total;
+        let mut at = 0usize;
+        // Warning: **這一份永遠是空的**，而且必須是：`take_the_line` 的 `most` 給
+        // `None` 它就一條都不留——命中已經從 `each` 交出去了，留在這裏是第二份。
+        // 封頂歸呼叫方管（它纔知道這一趟留不留名單、留幾條）。
+        let mut unkept: Vec<Hit> = Vec::new();
+        let mut give = |hit: &Hit| each(Found::Hit(hit.clone()));
+        let mut sink: Option<&mut dyn FnMut(&Hit) -> bool> = Some(&mut give);
+        match unsaved.get(&full) {
+            // **改過而没存盤的那幾份從内存裏讀。** Unsaved work is work, and a
+            // search that could not see it would send a reader to a line that
+            // no longer says that.
+            Some(text) => {
+                for (line, text) in text.split_inclusive('\n').enumerate() {
+                    if !take_the_line(
+                        look, &shown, text, line, None, &mut at, &mut total, &mut unkept,
+                        &mut sink, stop,
+                    ) {
+                        break;
+                    }
+                }
+            }
+            // **一行一行地讀，整個檔不進內存**（2026-10-03 定）。搜索本來就是
+            // **逐行**做的（式子配不過換行），所以按行流着讀一個字的語義都不改。
+            // 壞的字節當場換成替代字符，不丟整個檔；二進制那些早在走查裏按 NUL
+            // 攔掉了（`looks_binary`）。
+            None => {
+                let Ok(file) = std::fs::File::open(path) else { return };
+                let mut reader = std::io::BufReader::new(file);
+                let mut raw = Vec::new();
+                let mut line = 0usize;
+                loop {
+                    raw.clear();
+                    match std::io::BufRead::read_until(&mut reader, b'\n', &mut raw) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
+                    }
+                    let text = String::from_utf8_lossy(&raw);
+                    if !take_the_line(
+                        look, &shown, &text, line, None, &mut at, &mut total, &mut unkept,
+                        &mut sink, stop,
+                    ) {
+                        break;
+                    }
+                    line += 1;
+                }
+            }
+        }
+        // **有命中就記一筆，不管名單還放不放得下**（見 `Search::files`）。
+        if total > was && !each(Found::File(shown)) {
+            *stop = true;
+        }
+    })
+}
+
+/// 背景那一趟交回來的東西（§5.93）。
+#[derive(Debug, Clone)]
+pub(crate) enum Found {
+    /// 一處命中。
+    Hit(Hit),
+    /// 一個**有**命中的檔，照走到的次序。
+    File(std::path::PathBuf),
+}
+
 /// **一行，問一遍，命中當場交出去** —— 流式搜索的那一格。
 ///
 /// 回 `false` ＝ 收攤（讀的人走了）。`most` 是 `None` 的時候名單不留，只數數並往
 /// `sink` 裏交——管道那一邊就是這一檔。
+///
+/// Warning: **它的文檔和屬性 2026-10-06 被偷走過一次。** 新寫的 `walk_and_search` 插進
+/// 了這兩行和 `fn` 之間，於是 `#[allow]` 落到了那一支頭上、這一支一個都没有，
+/// clippy 當場報「10 個參數」。**往檔中間插函數，先看一眼插點上面是不是屬性。**
 #[allow(clippy::too_many_arguments)]
 fn take_the_line(
     look: &Look,
