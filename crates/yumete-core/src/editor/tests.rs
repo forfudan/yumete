@@ -17567,6 +17567,53 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **背景搜索：數目和命令行那一路一樣**（§5.93，2026-10-06）。
+///
+/// 這一格盯的是 10-06 撞上的那件事：`ye -G 某詞 -u` 在命令行找到四處，同一句
+/// 加 `-O` 進編輯器只剩一兩處——差的是那道「最多三到五秒」的閘，而它護的是畫面那
+/// 條線程。搬到旁邊之後那道閘對面板不再成立。
+#[test]
+fn the_panel_finds_as_many_as_the_pipe_does() {
+    let dir = std::env::temp_dir().join(format!("yumete-bg-search-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::write(dir.join(".yumete"), "").unwrap();
+    for n in 0..40 {
+        std::fs::write(dir.join(format!("第{n:02}章.md")), "那年冬天，霜下得早。\n").unwrap();
+    }
+    std::fs::write(dir.join("卷一/末.md"), "霜一\n霜二\n").unwrap();
+
+    // 管道那一路：同步跑，不封頂，一條一條印出去。
+    let mut counted = 0usize;
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("第00章.md")).unwrap();
+    ed.search.query = "霜".to_string();
+    ed.search.scope = crate::search_panel::Where::Working;
+    ed.search.uncapped = true;
+    ed.search_now_into(Some(&mut |_: &crate::search_panel::Hit| {
+        counted += 1;
+        true
+    }));
+    assert_eq!(counted, 42, "四十個檔各一處，加末尾那一份的兩處");
+
+    // 面板那一路：交給旁邊跑，等它跑完，數目要一樣。
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("第00章.md")).unwrap();
+    ed.search.query = "霜".to_string();
+    ed.search.scope = crate::search_panel::Where::Working;
+    // 面板裏 `Enter` 做的就是這一下：記一筆，讓前端畫完一幀再還
+    // （`look_again` 的非 live 那一支）。
+    ed.owed_search = true;
+    ed.settle_search();
+    assert!(!ed.still_searching(), "`settle_search` 要等到底");
+    assert_eq!(ed.search.total, 42, "和管道那一路同一個數");
+    assert!(!ed.search.cut, "不許再說「半截的」");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **語法樹那一族：`]f` `]c` `mi f` `mi c`**（2026-10-06，helix 的那幾個）。
 ///
 /// ⚠️ 用的是**語法 crate 自己帶的 `TAGS_QUERY`**，不是 helix 的 `textobjects.scm`
