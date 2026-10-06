@@ -1908,6 +1908,7 @@ on its own says which set is in force.
 | `>` `<` | **operators too** | `>>` indents the line, `>j` two lines, `>ap` a paragraph |
 | `C-r` | already there | redo (normally `U` here) |
 | `U` | **new** | undo the whole run of recent changes on this line (as in vim; redo on this side is `C-r`) |
+| `gJ` | **new** | join the next line **adding no space at all** (the bare `J` works its seam out: nothing between 漢字, one space between Latin words) |
 | `*` | translated to `g/` | where else is this word |
 | `%` | translated to `mm` | jump to the matching bracket (`%` here is select all) |
 | `m`*a* | **already there, spelled differently** | set a mark (`'`*a* jumps back) — `m` is normally the door into match mode |

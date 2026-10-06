@@ -4876,6 +4876,13 @@ zhs = "字形组（vim 键位下 ` 归标记）"
 en = "the glyph group (under vim, ` belongs to marks)"
 
 [[message]]
+# vim 鍵位下 g 選單裏的 J ——併行，一個空格都不補
+key = "hint.goto.join-without-a-space"
+zht = "併下一行，一個空格都不補"
+zhs = "并下一行，一个空格都不补"
+en = "join the next line, adding no space at all"
+
+[[message]]
 # g 選單：gw 亮起跳轉標籤
 key = "hint.goto.jump-labels"
 zht = "跳到當前屏幕某位置"

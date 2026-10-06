@@ -185,6 +185,29 @@ impl Editor {
     /// 照常合併」，重複的時候一次比一次高，於是合出了選區之外。現在 `handle_goto`
     /// 的 `K` 那一支自己先上去一行，再把 `join_lines` 重複該重複的次數——合併的
     /// 接縫規矩（拉丁詞之間一個空格、漢字之間不留）始終只有這一處。
+    /// **vim 的 `gJ`：併行，一個空格都不補、一個空白都不刪**（2026-10-06，`:h gJ`）。
+    ///
+    /// [`Self::join_lines`] 的接縫是算出來的——拉丁詞之間補一個空格、漢字之間不補、
+    /// 下一行的縮進吞掉。vim 的 `gJ` 存在的全部意義就是**不要那一套**：換行符拿掉，
+    /// 別的一個字節不動。寫稿子的時候那是「這兩行本來就是一行，是我手動折的」。
+    pub(super) fn join_lines_raw(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let (start, _) = self.selection();
+        let line = rope.char_to_line(start);
+        if line >= motion::last_line(rope) {
+            return;
+        }
+        let seam = motion::line_end(rope, start);
+        self.snapshot();
+        let _ = self.current_buffer_mut().replace(seam..seam + 1, "");
+        let at = seam.min(self.current_buffer().rope().len_chars());
+        self.sel.set_head(at);
+        self.sel.set_anchor(at);
+    }
+
     pub(super) fn join_lines(&mut self) {
         if self.refuse_readonly() {
             return;
