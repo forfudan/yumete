@@ -332,13 +332,18 @@ const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[
 
 /// Sequences the documents print **in order to say the editor has not got them**.
 ///
-/// `gt`/`gc`/`gb` (跳到屏幕頂/中/底) stand in the 「明說出來，免得你去找」
-/// list beside 多光標, absent for the reason stated there. `t s` is printed to
-/// say 「光按 `t s` 什麼都不會發生」: the sort is real, but it must be told a
-/// column first, which is why the menu spells it `1s` and not `s`. Checked from
-/// the other side by [`each_key_the_documents_disown_really_is_missing`], so
-/// this cannot become the place a stale key goes to hide.
-const DISOWNED_KEYS: &[&str] = &["gt", "gc", "gb", "t s"];
+/// `t s` is printed to say 「光按 `t s` 什麼都不會發生」: the sort is real, but
+/// it must be told a column first, which is why the menu spells it `1s` and not
+/// `s`. Checked from the other side by
+/// [`each_key_the_documents_disown_really_is_missing`], so this cannot become
+/// the place a stale key goes to hide.
+///
+/// Warning: **`gt`/`gc`/`gb` came off this list on 2026-10-06** — and the test on
+/// the other side is what said so, the same hour they were bound. The 「明說出來，
+/// 免得你去找」 list had carried them since the core could not see the viewport;
+/// `Editor::screen_line` ended that, and a key that works must not stand on a
+/// list of keys that do not.
+const DISOWNED_KEYS: &[&str] = &["t s"];
 
 #[test]
 fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {

@@ -2556,6 +2556,25 @@ impl Editor {
                 return self.walk_changes(key == Key::Char(';'));
             }
             // …以及 `goto_last_accessed_file`（同一張表 :84）。
+            // **`gt`/`gc`/`gb`：光標到這一屏的頂/中/底**（2026-10-06，helix 的
+            // `goto_window_top`/`_center`/`_bottom`，`keymap/default.rs:52-54`）。
+            //
+            // §5.84 把這三個擱着，理由是「核心不知道第一可見行」——那條理由當天
+            // 失效了：`H`/`M`/`L` 做成真動作的時候，`Editor::screen_line` 就是
+            // 這個問題的答案，而前端每一幀都交 `page_span`。
+            //
+            // Warning: **`z` 那一層是反過來的**：`zt`/`zc`/`zb` 挪**視窗**，讓光標那一行
+            // 跑到頂/中/底；這三個挪**光標**，讓它跑到視窗的頂/中/底。同一組字母，
+            // 兩件互補的事，helix 也是這麼分的。
+            Key::Char(one @ ('t' | 'c' | 'b')) => {
+                let which = match one {
+                    't' => 'H',
+                    'b' => 'L',
+                    _ => 'M',
+                };
+                let nth = self.operator_count.take().unwrap_or(1);
+                return self.go_to_screen(which, nth);
+            }
             Key::Char('a') => return self.goto_last_file(),
             _ => {}
         }
@@ -2757,6 +2776,7 @@ impl Editor {
         ("/ ?", "hint.goto.word-elsewhere"),
         ("j k", "hint.goto.by-file-line"),
         (".", "hint.goto.last-change"),
+        ("t c b", "hint.goto.screen-top-middle-bottom"),
         ("a", "hint.goto.last-file"),
         // Warning: **`J` 不在這張表上了**（2026-10-06）。`gJ` 撤掉的時候這一行漏了，
         // 於是提示行列着一個按下去什麼都不做的鍵。`gK` 還在，它沒有單鍵拼法。
@@ -2786,6 +2806,7 @@ impl Editor {
         ("/ ?", "hint.goto.word-elsewhere"),
         ("h l", "hint.goto.by-file-line-vertical"),
         (".", "hint.goto.last-change"),
+        ("t c b", "hint.goto.screen-top-middle-bottom"),
         ("a", "hint.goto.last-file"),
         ("K", "hint.join-with-line-above"),
     ];

@@ -387,6 +387,7 @@ the rest is not done, and the status line says so.
 | `C-n` `C-p` | down / up **two thirds of a page**. Warning: in Insert, `C-n` is completion, not paging |
 | `PageUp` `PageDown` | a whole page — the two keys the keyboard already has, in Insert too. Warning: **when "info" is floating they page through that** (see below) |
 | `gg` `ge` | the start of the file / the last line; `10gg` goes to line 10 |
+| `gt` `gc` `gb` | the cursor to the top, middle or bottom of the screen; `3gt` is the third row down. The `z` layer is the opposite: it moves the window |
 | `G` | the last line; `30G` (or `g30g`) goes to line 30 |
 | (a half-typed command) | it shows both in the bottom right corner and beside the cursor (the one beside the cursor is `:view-hud`'s business); `g` `t` `m` `空格` also pop up a table |
 | `gn` `gp` | switch to the next / the previous open file |
@@ -6626,9 +6627,6 @@ Said plainly, so you do not go looking for it:
 - **Multiple cursors.** Helix's `C`, `s` and `S` need the core to hold **a set**
   of selections rather than one anchor/cursor pair. That is rebuilding the
   editor rather than adding to it, so it is better left undone than half done.
-- **Helix's `gt`/`gc`/`gb`** (jump to the top, middle or bottom of the screen).
-  Under the vim preset this lives on `H`/`M`/`L`; under the Helix preset it has
-  no key yet.
 - **Reading marks** (圈點, the emphasis circles) — they can be drawn, in the ruby
   column; the markup syntax is not settled.
 - **Really rotating Latin runs.** A terminal cannot rotate glyphs, so a Latin

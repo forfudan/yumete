@@ -4939,6 +4939,13 @@ zhs = "重选上一次那一段"
 en = "select what was selected last"
 
 [[message]]
+# g 選單裏的 t c b ——光標跳到屏幕的頂/中/底（2026-10-06 定的文案）
+key = "hint.goto.screen-top-middle-bottom"
+zht = "光標跳到屏幕的頂/中/底"
+zhs = "光标跳到屏幕的顶/中/底"
+en = "the cursor to the top, middle or bottom of the screen"
+
+[[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
 key = "hint.goto.seek-reading"
 zht = "多字母定位並跳轉當前屏幕某漢字"

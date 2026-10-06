@@ -17675,6 +17675,22 @@ fn the_vim_hml_go_to_the_screen() {
     press(&mut ed, ")");
     assert!(ed.selection().1 > 1, "`)` 還是下一句");
 
+    // **helix 的 `gt`/`gc`/`gb` 走光標，兩套鍵位下都在**（2026-10-06，§5.84 那一條
+    // 的理由當天失效了）。Warning: 和 `z` 那一層反着：`zt` 挪視窗，`gt` 挪光標。
+    let mut ed = typed(&(0..40).map(|n| format!("第{n:02}行。\n")).collect::<String>());
+    let rope = ed.current_buffer().rope().clone();
+    ed.set_page_span(rope.line_to_char(10), rope.line_to_char(30));
+    ed.goto_line(20);
+    let at = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+    press(&mut ed, "gt");
+    assert_eq!(at(&ed), 10, "屏幕頂");
+    press(&mut ed, "gb");
+    assert_eq!(at(&ed), 29, "屏幕底");
+    press(&mut ed, "gc");
+    assert_eq!(at(&ed), 19, "屏幕中");
+    press(&mut ed, "3gt");
+    assert_eq!(at(&ed), 12, "頂上數第三行");
+
     // Warning: **helix 鍵位下 `H`/`L` 照舊是句子**——那一端的 `H`/`L` 本來就不是
     // 屏幕位置，而 #404 把句子放在那裏是這個倉自己的事。
     let mut ed = typed("一句。二句。三句。\n");
