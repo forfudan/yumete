@@ -21,7 +21,7 @@ use yumete_core::editor::Editor;
 
 /// **每一項設定，推一遍。** 冪等——見本檔開頭。
 ///
-/// `layout` 收一個覆蓋：`-v`／`--horizontal` 是這一趟的答案，不是配置的。重載的
+/// `layout` 收一個覆蓋：`-v`/`--horizontal` 是這一趟的答案，不是配置的。重載的
 /// 時候傳 `None`，配置說什麼就是什麼。
 pub fn apply(config: &Config, editor: &mut Editor, layout: Option<yumete_core::zong::Layout>) {
     // 進程級的那幾個：不屬於某一個 editor，但同樣是配置說了算。

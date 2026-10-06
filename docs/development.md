@@ -210,15 +210,15 @@ Dependency direction (no cycles): `yumete` → {view, tui, lsp, config} →
 | 名字 | 是什麽 | 例子 |
 | --- | --- | --- |
 | **邊欄** | 占列、常駐、鍵可以進去。左右兩槽，**一槽一扇**（#426：兩層那個模型 2026-09-30 拆了） | 檔案樹、緩衝區、大綱（`空格 o`）、高級搜索（`空格 /`）、信息 |
-| **浮框（鍵表）** | 貼光標、不收鍵、按一下就走 | `空格`／`g`／`m`／`z`／`t` 的鍵表，`:` 命令選單，`::` 命令搜索 |
-| **浮框（正文）** | 貼光標、光標一走就没。只收那四個翻頁鍵（`PageUp`／`PageDown`／`C-u`／`C-d`，同 helix） | 「信息」那五種（字典／百科／數據／文檔／診斷）、`[yumete]` 那行的讀取結果、腳註與批註 |
-| **挑選器** | 居中、模態、收全部鍵，讓你**挑一個** | `空格 f`／`空格 b`／`空格 "`，`:open` 不帶參數，表格跳轉命中多行 |
+| **浮框（鍵表）** | 貼光標、不收鍵、按一下就走 | `空格`/`g`/`m`/`z`/`t` 的鍵表，`:` 命令選單，`::` 命令搜索 |
+| **浮框（正文）** | 貼光標、光標一走就没。只收那四個翻頁鍵（`PageUp`/`PageDown`/`C-u`/`C-d`，同 helix） | 「信息」那五種（字典/百科/數據/文檔/診斷）、`[yumete]` 那行的讀取結果、腳註與批註 |
+| **挑選器** | 居中、模態、收全部鍵，讓你**挑一個** | `空格 f`/`空格 b`/`空格 "`，`:open` 不帶參數，表格跳轉命中多行 |
 | **問句** | 居中、模態、收全部鍵，讓你**答一次** | 這一存把檔案撐大了一倍以上、`:reload` 發現外面改了、`R y` 全部換掉 |
-| **候選欄** | 輸入法自己畫，錨在光標 | 橫排／竪排／格狀／內嵌四種 |
+| **候選欄** | 輸入法自己畫，錨在光標 | 橫排/竪排/格狀/內嵌四種 |
 | **狀態欄 ＋ 提示** | 永遠在 | 底行的模式、檔名、行列字數；右端的碼位；光標旁打了一半的命令 |
 
 **兩條軸就說完了**：貼光標還是居中、收鍵還是不收鍵。收不收鍵不是畫法的事，是
-`Mode`（`Picker`／`Query`／其餘）——那一層已經分開了。
+`Mode`（`Picker`/`Query`/其餘）——那一層已經分開了。
 
 ### 4.9.1 代碼層面該切三層（2026-09-18 定，先只做第一層）
 
@@ -230,7 +230,7 @@ Dependency direction (no cycles): `yumete` → {view, tui, lsp, config} →
 | --- | --- | --- |
 | **框** | 邊框、圓角、標題、底色、半格規矩，交回內框 | 八處各寫一遍 |
 | **擺放** | ① 貼光標並躲開它（含四分之一屏上限）② 居中 | ① 在 `panel.rs`；② 在 `draw_picker` 與 `draw_query` 各一份 |
-| **肚子** | 鍵表／正文（折行）／清單（滾動＋高亮＋頁腳） | 前兩個在 `panel::Body`，清單在 `draw_list` 另立一套 |
+| **肚子** | 鍵表/正文（折行）/清單（滾動＋高亮＋頁腳） | 前兩個在 `panel::Body`，清單在 `draw_list` 另立一套 |
 
 **重構的好處不是少幾行**，是這兩條：呼叫統一明確，而且**有優先級、保證同一時刻
 只出現一個**。
@@ -330,7 +330,7 @@ wrap，如果有必要可以省略」）**。一張被當散文折行的表就�
 - Warning: **「只讀」不是附帶條件，是這個設計成立的前提。** 竪排下光標的模型是 `zong` 的字格，
   表格一轉九十度，屏幕位置與緩衝區的字格就對不上——所以那一塊對光標必須是**一個整體**。
   浮框天生只讀，所以先做它；頁面那一半要先讓光標把整塊表跳過去，貴得多。
-- 編輯那條路**本來就有**：`t t`／`t f` 進表格視圖時會把頁面翻成橫排（`tables.rs` 的
+- 編輯那條路**本來就有**：`t t`/`t f` 進表格視圖時會把頁面翻成橫排（`tables.rs` 的
   `grid_is_drawn`）。所以這件事缺的只是只讀渲染那一半。
 - Warning: 一縱兩格而 `─` 一格，所以帶要**寫兩遍**纔連得起來，否則是一條點線（第一版就是）。
 
@@ -356,7 +356,7 @@ compact」「表頭沒對齊」）。兩種空白，竪排一種也養不起：�
 
 **「這一行是不是一條轉過來的表格行」只有一個答案**（2026-09-19 夜，審閱抓到）。從前有三處各自
 問各自的：渲染層問 `mdtable::is_row`、`zong::lay_out` 也問它、藏空白那一支又加了兩個條件。於是
-**`:render off`／`:table off` 下竪排照樣把 `|` 畫成 `──`**——那個模式的全部承諾就是「原樣顯示
+**`:render off`/`:table off` 下竪排照樣把 `|` 畫成 `──`**——那個模式的全部承諾就是「原樣顯示
 文件」，而它顯示了文件裏没有的東西；圍欄裏當例子寫的表格同樣被轉，而核心根本没給它補空。
 現在 `Editor::line_is_table_row` 是唯一的答案，它問的是補空自己問的那個問題（`wall_here`，
 順帶帶上了圍欄與層級），`Grid` 多一個 `table` 閉包把它交給折行器。
@@ -366,7 +366,7 @@ Warning: **只有分隔行的 `-` 纔是牆。** `("-", _)` 讓格子裏的 `UTF
 
 📌 **還開着**（審閱記錄，見 2026-09-19 的四份）：轉義的 `\|` 仍被當成牆；`cell_hidden_on_line`
 没有收到竪排的空白，所以光標能停在頁面上没有的格子上（#379 那條鏡像律）；`Measure::Slots` 假設
-一個字一槽，縦中横／標點旁置／ruby 三種設定下不成立；對齊標記 `:-:` 讓每條帶至少三槽深。
+一個字一槽，縦中横/標點旁置/ruby 三種設定下不成立；對齊標記 `:-:` 讓每條帶至少三槽深。
 
 Warning: **「一屏幾行」竪排要問別的數**（2026-09-19：「整個表格都在可視範圍內哦」）。表格只
 按**屏幕上那幾行**量寬（#378），而那個窗口是 `[page_top, page_top + 一屏行數]`——橫排一屏
@@ -408,7 +408,7 @@ Warning: **虛字要接下面那一層的底色，不能自己刷頁面色**（�
 
 **補空按字不按格**（2026-09-19 收尾）。格子的補空從前一律按**格**算（一個漢字兩格），而一縱是
 按**字**算的——六格的列裝三個漢字是三槽，裝兩個漢字加兩個空格是四槽，於是各行的帶錯開一兩格。
-新的 `mdtable::Measure`（`Cells`／`Slots`）只改**畫出來的補空**這一路（`visible_width` 一處），
+新的 `mdtable::Measure`（`Cells`/`Slots`）只改**畫出來的補空**這一路（`visible_width` 一處），
 `padding()` 多一個參數，`PadKey` 多一格，**文件排版那一路原樣不動**——那會改到文件本身的字節。
 
 Warning: **`table_padding_on` 與「表格視圖自己開門」是兩個問題**，2026-09-19 分了家。從前竪排整個不
@@ -419,7 +419,7 @@ Warning: **`table_padding_on` 與「表格視圖自己開門」是兩個問題**
 
 **三色一套規矩，橫竪通用（2026-09-18 定）**：名字是金，**章節行是灰**，正文是墨。章節行
 （`WikiView::lede`，「辭典 › 君山」）不是詞條說的話，是它寫在哪兒，所以它從正文裏被拎出來，
-畫在名字底下。章節行**緊貼**名字（金與灰已經把兩者分開），空的那一行／一縱只有一道，在
+畫在名字底下。章節行**緊貼**名字（金與灰已經把兩者分開），空的那一行/一縱只有一道，在
 **它們和正文之間**；橫排的名字畫在框線上，那一道線本身就是界。**段落之間不空行，每段縮進一格**（一個全角
 空格，橫竪一樣——竪排它就是那一縱頭上的一個空位）。兩格試過，太重；空行也試過，在只有十來縱
 的小框裏把兩段推得老遠。
@@ -437,7 +437,7 @@ Warning: **`place` 只管放不放得下，不再管多大**。竪書的框按�
 
 ---
 
-## 4.10 鍵位自定義的兩層（#428／#429）
+## 4.10 鍵位自定義的兩層（#428/#429）
 
 **第一層（#428，2026-09-17 落地）**：`[keys.normal]` 把一串鍵翻成另一串鍵。左右都可以
 是序列（`"dd" = "xd"`），`[keys] preset = "vim"` 是一整張這樣的表，`:keymap vim` 當場換。
@@ -458,12 +458,12 @@ x  = "delete_selection"   # 動作名
 
 **第二層乙（#429，2026-09-18 同日落地）**：vim 預設下 `d` `c` `y` 是**真的操作符**——按下去
 等一個動作。`yumete_cjk::keymap::VIM_MOTIONS` 是能接的那張表（詞、行内、成行、段落句子、
-`f`＋字符、`i`／`a`＋對象），做法是**延伸模式 ＋ 動作 ＋ 動手**：`dw` 就是 `v` `w` 然後剪切。
+`f`＋字符、`i`/`a`＋對象），做法是**延伸模式 ＋ 動作 ＋ 動手**：`dw` 就是 `v` `w` 然後剪切。
 
 Warning: **動作不能當鍵播出去**。兩次栽在這上面：`X` 在這個預設下是 vim 自己的「剪掉前一個字」，
 所以成行的操作符按 `X` 去撑行邊界時剪掉了一個字；而 `y` 現在自己就是操作符，於是 `yy` 播出
 的那個 `y` 又坐下來等。鍵是用來說**動作**的，動手那三行寫在代碼裏。
-Warning: **進 `vim_operator_key` 先放掉 pending**，否則它播出去的 `v`／`w` 又被自己當成動作，棧就沒了。
+Warning: **進 `vim_operator_key` 先放掉 pending**，否則它播出去的 `v`/`w` 又被自己當成動作，棧就沒了。
 Warning: **`y` 之後光標回到選區開頭**（vim 的規矩），否則 `yyp` 貼的位置比 vim 低一行。
 
 Warning: **名字是門面，默認鍵還在 `match` 裏。** 一條動作眼下說的是「它是什麽」和「現在怎麽
@@ -482,8 +482,8 @@ Warning: **「說出來」不等於「擋住」**（2026-09-19 審出來的）�
 
 Warning: **和弦要真按下去。** 一串鍵是字符串，而和弦没有自己的字母，所以表裏寫的就是那個控制
 字節（`"\u{1b}"` 是 Esc，`"\u{f}"` 是 `C-o`）。播的時候一律發 `Key::Char`，編輯器對控制字節
-什麽也不答——於是 `jump_backward`／`collapse_selection`／`increment`／`decrement` 四條
-**列得出、綁得上、按下去死的**。`keys.rs` 的 `pressed()` 現在把它們翻成 `Key::Esc`／
+什麽也不答——於是 `jump_backward`/`collapse_selection`/`increment`/`decrement` 四條
+**列得出、綁得上、按下去死的**。`keys.rs` 的 `pressed()` 現在把它們翻成 `Key::Esc`/
 `Key::Ctrl`，與 `actions::spell()` 那一頭對稱。順帶：`jump_backward` 原先寫的是 `\u{11}`
 （`C-q`，編輯器根本没這個鍵），應該是 `\u{f}`。
 
@@ -542,14 +542,14 @@ index, and a row with no number anywhere else is a row that got lost.
 | 30 | IME: number mode / `/`-cmds / `z` reverse | ime | P2 | via engine input routing | Done |
 | 31 | Scheme switch (靈明/星陳/卿雲/日月/拼音) | ime | P2 | load tables at runtime — superseded by #169 (found rather than listed) and `:yume-scheme` | Done |
 | 32 | IME data dir + bundled font guidance | ime | P2 | reuse compiled tables | Done |
-| 33 | **Outline sidebar (foldable)** | tui | P3 | right-hand panel, toggle — #94／#97; the folding half is #37 | Done |
-| 34 | **Markdown LSP → headings** | lsp | P3 | **Dropped**: headings come from `markdown.rs` (#96／#114), not from a language server | Dropped |
+| 33 | **Outline sidebar (foldable)** | tui | P3 | right-hand panel, toggle — #94/#97; the folding half is #37 | Done |
+| 34 | **Markdown LSP → headings** | lsp | P3 | **Dropped**: headings come from `markdown.rs` (#96/#114), not from a language server | Dropped |
 | 35 | **Typst LSP → headings** | lsp | P3 | **Dropped**: same — `syntax.rs` and #106 read Typst's own headings | Dropped |
 | 36 | Jump to outline entry | view | P3 | click/keys — #97's 大綱 view, and `:toc 3` | Done |
-| 37 | **大綱摺得起來** | core+tui | P3 | `h` 摺、`l` 展，記號 `▾`／`▸` [^37] | Done 2026-09-13 |
+| 37 | **大綱摺得起來** | core+tui | P3 | `h` 摺、`l` 展，記號 `▾`/`▸` [^37] | Done 2026-09-13 |
 | 38 | Space (Normal) → hotkey/help overlay | tui | P3 | which-key style — #91 | Done |
 | 39 | Command palette (`:` completions) | tui | P4 | `:` menu, Tab completion | Done |
-| 40 | Themes (TOML, CJK-friendly) | config | P4 | incl. segmentation overlay polish — #156／#164／#203 | Done |
+| 40 | Themes (TOML, CJK-friendly) | config | P4 | incl. segmentation overlay polish — #156/#164/#203 | Done |
 | 41 | Soft-wrap for prose | tui | P4 | width-aware wrap; see #77 | Done |
 | 42 | Auto-save / crash recovery | core | P4 | swap file; see #79 | Done |
 | 43 | Sessions (reopen last files) | view | P4 | #149 | Done |
@@ -557,11 +557,11 @@ index, and a row with no number anywhere else is a row that got lost.
 | 45 | Marks / jumplist | core | P4 | #149 (marks), #120 (jump list) | Done |
 | 46 | Count prefixes (e.g. `3w`) | core | P4 | `3w`, `10j`, `10gg` | Done |
 | 47 | Macros (record/replay) | core | P4 | `q` / `Q` | Done |
-| 48 | Spell/grammar hooks (CJK-aware) | lsp | P4 | `:check-usage`／`標點`／`字集` are the editor's own [^48] | Dropped |
+| 48 | Spell/grammar hooks (CJK-aware) | lsp | P4 | `:check-usage`/`標點`/`字集` are the editor's own [^48] | Dropped |
 | 49 | Word-count / reading-time (prose) | view | P4 | `:count`; 字 and 字符 differ | Done |
 | 50 | Custom 碼表 upload / register | ime | P4 | user `txt` (code table only) — #136 `:yume-table` | Done |
 | 51 | Bracket/quote auto-pair (CJK-aware) | core | P4 | 「」『』（） | Planned |
-| 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96／#116／#162); code in a fence, seven grammars, `:view-code` (#420, 2026-09-17) | Done |
+| 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96/#116/#162); code in a fence, seven grammars, `:view-code` (#420, 2026-09-17) | Done |
 | 53 | Coding LSP (Rust/Python/…) | lsp | P5 | reuse helix-lsp | Planned |
 | 54 | Diagnostics / code actions | lsp | P5 |  | Planned |
 | 55 | Git gutter / blame | vcs | P3 | 改動條的第一個來源（#298 ③）落地；blame 另算 [^55] | Done |
@@ -706,15 +706,15 @@ index, and a row with no number anywhere else is a row that got lost.
 | 194 | **`30G` goes to line 30** | core | P2 | the binding vim and Helix both have, on a key that was unbound | Done |
 | 195 | **`gd` in a grid is one question** | core | P1 | one column named, one question asked [^195] | Done |
 | 196 | **A click in a grid lands where it points** | tui | P0 | the click map had no grid branch [^196] | Done |
-| 197 | **What a language can be told to run** | config | P1 | `preview`／`format`／`run` per language, run without a shell [^197] | Done |
-| 198 | **`:markdown` writes what Markdown is made of** | core | P2 | `:markdown-footnote`／`table` insert the template [^198] | Done |
+| 197 | **What a language can be told to run** | config | P1 | `preview`/`format`/`run` per language, run without a shell [^197] | Done |
+| 198 | **`:markdown` writes what Markdown is made of** | core | P2 | `:markdown-footnote`/`table` insert the template [^198] | Done |
 | 199 | **The action goes last, after the numbers** | core | P2 | the digits are the argument, the verb ends the chord [^199] | Done |
 | 200 | **The terminal is asked how wide `—` is** | tui | P0 | `auto` prints one `—` and reads the column back [^200] | Done |
 | 201 | **Esc shuts the window, not the search** | core | P1 | Esc closes the pane; `n` still means the hit list [^201] | Done |
-| 202 | **`:word` — one command for where a word ends** | both | P1 | `:word segment`／`show`／`list`／`level`, one command [^202] | Done |
+| 202 | **`:word` — one command for where a word ends** | both | P1 | `:word segment`/`show`/`list`/`level`, one command [^202] | Done |
 | 203 | **Ten themes, and an ASCII name for each** | config | P2 | eight more, each with an ASCII name and a pinyin alias [^203] | Done |
 | 204 | **`--shot --html`** | cli | P2 | the same frame with its colours [^204] | Done |
-| 205 | **A sidebar you can page through** | tui | P2 | `J`／`K` by 12, and an outline without the 目錄 [^205] | Done |
+| 205 | **A sidebar you can page through** | tui | P2 | `J`/`K` by 12, and an outline without the 目錄 [^205] | Done |
 | 206 | **`t` is the table group in every mode** | core | P1 | `t` is the table group in every mode; till retires [^206] | Done |
 | 207 | **The HUD takes whichever row has room** | tui | P2 | the row below the caret, above it on the last row [^207] | Done |
 | 208 | **A word boundary is not a highlighter** | tui | P1 | two 朱 tints 1.23:1 apart, re-spaced by search [^208] | Done |
@@ -736,8 +736,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 224 | **`::` searches the commands by what they do** | core | P2 | `::` searches the 147 descriptions, in 中文 [^224] | Done |
 | 225 | **`:s/照首行/照全表/` cannot be typed** | tui | P1 | lone-Shift once the caret is past the command name [^225] | Done |
 | 226 | **A spreadsheet pasted into a table** | core | P2 | ⌘V from Excel is the one paste a table editor must take [^226] | Done |
-| 227 | **`:table` on a selection, and CSV both ways** | core | P3 | `:table-pipe`／`csv` in the buffer, `:export csv` to a file [^227] | Done |
-| 228 | **`t y` / `t p` for a whole column** | core | P3 | `yank_column`／`put_column`, in both branches [^228] | Done |
+| 227 | **`:table` on a selection, and CSV both ways** | core | P3 | `:table-pipe`/`csv` in the buffer, `:export csv` to a file [^227] | Done |
+| 228 | **`t y` / `t p` for a whole column** | core | P3 | `yank_column`/`put_column`, in both branches [^228] | Done |
 | 229 | **The current cell is not drawn** | tui | P3 | the only feedback is the column name in the status line [^229] | Done |
 | 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | 只有真半寬形（`。、`）擠；其餘不掛，ASCII 標點不再進稿子 [^230] | Fixed 2026-09-13 |
 | 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | 掛不下就自己佔一格；Warning: 洞比原記的常見得多 [^231] | Fixed 2026-09-13 |
@@ -753,10 +753,10 @@ index, and a row with no number anywhere else is a row that got lost.
 | 241 | **簡繁 conversion** | core | P4 | `:convert` runs opencc; do not write a converter [^241] | Done |
 | 242 | **`:word-habit`** | core | P4 | crutch words by surprisal against 詞頻表, not raw count [^242] | Done |
 | 243 | **割注 — 小字雙行 inside the 縱** | tui | P4 | 終端裏沒有半號漢字，三條路各有代價 [^243] | Planned |
-| 244 | **寫作進度** | core | P4 | `:progress`／`:target`, off a ledger the writer can edit [^244] | Done |
+| 244 | **寫作進度** | core | P4 | `:progress`/`:target`, off a ledger the writer can edit [^244] | Done |
 | 245 | **A print-ready 直排 HTML export** | core | P4 | `@page` trim from `[export] page`; the type size is derived [^245] | Done |
 | 246 | **焦點模式** | tui | P4 | the 段 stands forward, everything else a rung back [^246] | Done |
-| 247 | **平仄／韻腳 in the margin** | tui | P4 | `○`／`●`／`△` in the margin — 今音平仄, said out loud [^247] | Done |
+| 247 | **平仄/韻腳 in the margin** | tui | P4 | `○`/`●`/`△` in the margin — 今音平仄, said out loud [^247] | Done |
 | 248 | **Virtual text — the mirror of `hidden_on_line`** | core | P4 | the mirror of `hidden_on_line`; the caret never sits on it [^248] | Done |
 | 249 | **Merge conflicts as a `Block` kind** | core | P4 | seven characters exactly, laid over the block scan [^249] | Done |
 | 250 | **Jobs, and `]q`/`[q` over a results buffer** | core | P4 | `:view-preview` generalised; `path:line:` without leaving [^250] | Planned |
@@ -792,7 +792,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 280 | **Caps Lock as Esc** | — | P4 | a terminal application never sees Caps Lock [^280] | Won't build (documented) |
 | 281 | **The other pane draws this file's text under the other file's name** | tui | P2 | the peek half was drawn from `current_buffer()`; see §5.5 [^281] | Done |
 | 282 | **One flick of the wheel over a table froze the window** | core | P1 | the padding that squares a table, paid once per notch [^282] | Done |
-| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | one word each at three levels — `off`／`basic`／`full` [^283] | Done |
+| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | one word each at three levels — `off`/`basic`/`full` [^283] | Done |
 | 284 | **The HUD is a thread, not a panel — and in 縱書 it is nothing at all** | tui | P3 | a bordered panel, free to cover the rows behind it [^284] | Done |
 | 285 | **A Markdown link is something to follow, not only to read** | core+tui | P3 | `gx`, a click, and a local path opened by the OS [^285] | Done |
 | 286 | **A panel whose left edge lands inside a 漢字 loses its whole left wall** | tui | P2 | the second cell of a 漢字 is not free [^286] | Fixed |
@@ -830,7 +830,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 318 | **count 既沒有上限，也沒有提前退出** | core | P2 | 寫的一萬遍封頂，找與宏各自早退 [^318] | Fixed 2026-09-12 |
 | 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Fixed 2026-09-12 |
 | 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Fixed 2026-09-12 |
-| 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | memo 包在 segmenter 外層，key 是那一行的文本本身 [^321] | Fixed 2026-09-12 |
+| 321 | **`w`/`b`/`e` 每一次都重新分詞** | core | P3 | memo 包在 segmenter 外層，key 是那一行的文本本身 [^321] | Fixed 2026-09-12 |
 | 322 | **`blocks_through` 每幀 clone 一整條** | core | P3 | 六萬個元素，只為索引一次 [^322] | Fixed 2026-09-12 |
 | 323 | **帶 count 的編輯留下 N 個 undo 點** | core | P1 | 第一趟宣告，其餘抑制：一趟一個點 [^323] | Fixed 2026-09-09 |
 | 324 | **`r` 作用在多碼位字素上成倍寫出** | core | P2 | 按字素簇迭代，一個字形一個字元 [^324] | Fixed 2026-09-10 |
@@ -846,7 +846,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | 交給綁定表之後，組字中的 Shift 先上屏再切英文 [^334] | Fixed 2026-09-09 |
 | 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
 | 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P1 | 閘挪到進門那一處，不掛在分支上 [^336] | Fixed 2026-09-11 |
-| 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Fixed 2026-09-12 |
+| 337 | **中/ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Fixed 2026-09-12 |
 | 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 提示行上的切換不動那筆借款 [^338] | Fixed 2026-09-12 |
 | 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Fixed 2026-09-12 |
 | 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | 改問 `is_prompt()`；轉英另問一句 [^340] | Fixed 2026-09-12 |
@@ -859,18 +859,18 @@ index, and a row with no number anywhere else is a row that got lost.
 | 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | Shift 走 `key_action` ＋ 上游新增的 `Engine::perform` [^347] | Fixed 2026-09-09 |
 | 348 | **按行的五個快取收成一套 `LineMemo`** | core | P2 | key、上限、失效各說一次；另外四個不按行，留着 [^348] | Fixed 2026-09-12 |
 | 349 | **一個概念一處權威：字素、寬度、分詞** | core | P2 | 走行與最大概率路徑各收成一份；問終端的那個不叫 `width` [^349] | Fixed 2026-09-12 |
-| 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | `:wa` 改走 `with_buffer`／`show_buffer`；整份重寫一律先問格線 [^350] | Fixed 2026-09-12 |
+| 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | `:wa` 改走 `with_buffer`/`show_buffer`；整份重寫一律先問格線 [^350] | Fixed 2026-09-12 |
 | 351 | **按性質提問，不按模式列舉** | core+tui | P3 | 四張列表收成 `Mode` 上四個窮盡問句 [^351] | Fixed 2026-09-12 |
 | 352 | **TUI 設定面板走 `settings_ui` 的兩半事實** | tui+ime | P4 | 第五個前端不必再手抄一份布爾表達式 [^352] | Proposed |
 | 353 | **兩條過時的提示，其中一條還沒走 `messages.toml`** | tui+core | P3 | 面板改說 `gd` 並進了表；Enter 從此沉默 [^353] | Fixed 2026-09-09 |
 | 354 | **表格視窗下的搜索搜的是全文，而光標出不去** | core | P2 | 搜索的範圍與鉗制的範圍收成同一個問題 [^354] | Fixed 2026-09-09 |
 | 355 | **`gw` 改成 `gD`** | core | P3 | 同一個鍵，大寫就是「不離開這裏」 [^355] | Fixed 2026-09-09 |
 | 356 | **表格預設按字，`Tab` 走格，`T` 切粒度** | core | P2 | 寫東西的常態是字，格是問來的 [^356] | Fixed 2026-09-10 |
-| 357 | **表格視窗裏 `j`／`k` 不按看得見的欄走** | core | P2 | 在格子裏，欄就是格——不必知道寬度 [^357] | Fixed 2026-09-09 |
+| 357 | **表格視窗裏 `j`/`k` 不按看得見的欄走** | core | P2 | 在格子裏，欄就是格——不必知道寬度 [^357] | Fixed 2026-09-09 |
 | 358 | **猛滾之後編輯器還在追那條積壓的隊列** | tui | P2 | 上限是計數，而計數是錯的單位 [^358] | Fixed 2026-09-09 |
 | 359 | **崩潰之後留下點什麼：`yumete.log` 與 panic hook** | core+tui | P2 | 從前 panic 不留一個字，草稿也不救 [^359] | Fixed 2026-09-09 |
 | 360 | **畫的那一方擋住了讀的那一方，兩邊互等** | tui | P1 | 讀終端移到自己的執行緒；死鎖的必要條件沒了 [^360] | Fixed 2026-09-09 |
-| 361 | **`:grep` 搜的是 cwd，不是這本書** | core | P2 | 從檔案往上找 `.yumete`／`.git`，cwd 只作末路 [^361] | Fixed 2026-09-12 |
+| 361 | **`:grep` 搜的是 cwd，不是這本書** | core | P2 | 從檔案往上找 `.yumete`/`.git`，cwd 只作末路 [^361] | Fixed 2026-09-12 |
 | 362 | **目錄遍歷換 ripgrep 的 `ignore`** | core | P3 | 走目錄換了，做匹配沒換 [^362] | Fixed 2026-09-12 |
 | 363 | **短寫：完整命令的首字母，別的都不是** | core | P3 | `:bc` 有，`:bclose` 沒有 [^363] | Fixed 2026-09-10 |
 | 364 | **`:quitall` 摺成 `:quit-all`** | core | P3 | 半長半短的最後一個 [^364] | Fixed 2026-09-10 |
@@ -887,14 +887,14 @@ index, and a row with no number anywhere else is a row that got lost.
 | 375 | **狀態行明明放得下，卻折成兩行** | tui | P3 | 讀出條把光標下的 TAB 原樣交給了終端 [^375] | Fixed 2026-09-11 |
 | 376 | **表格裏 Insert 的方向鍵走不出這一格** | core | P3 | 左右跨格、行末接下一行，上下走 `move_cell_row` [^376] | Fixed 2026-09-12 |
 | 377 | **狀態行一折，整頁就糊了** | tui | P1 | 和 #375 同一個 TAB，同一處修好 [^377] | Fixed 2026-09-11 |
-| 378 | **csv／tsv 在 tb／tf 下不排齊** | core | P2 | 分隔符是個值，四種標點走同一條路 [^378] | Fixed 2026-09-11 |
+| 378 | **csv/tsv 在 tb/tf 下不排齊** | core | P2 | 分隔符是個值，四種標點走同一條路 [^378] | Fixed 2026-09-11 |
 | 379 | **正文頁的表格沒有欄名可看** | tui | P2 | tb 也給欄號；釘頂的表頭決定不做 [^379] | Fixed 2026-09-11 |
 | 380 | **一眼就是 TSV 的 .txt，打開卻不當表格** | core | P2 | 認出來就進 基本，並且說一句；`t o` 要記住 [^380] | Fixed 2026-09-12 |
 | 381 | **光標在看不見的補白裏空走** | core | P2 | 表格扣下的字，動作要跨過去 [^381] | Fixed 2026-09-11 |
 | 382 | **`gl` 與 `End` 把光標停在換行符上** | core | P0 | `motion::line_last`：站在最後一個字上 [^382] | Fixed 2026-09-11 |
 | 383 | **自動救回只在按鍵時觸發，停筆即失效** | core+tui | P0 | 節流補上後沿：欠着就帶期限地等 [^383] | Fixed 2026-09-11 |
 | 384 | **分隔符表格末尾那一行幽靈，寫進去就壞檔** | core | P0 | `grid_last_line()`：一處問，四處用 [^384] | Fixed 2026-09-11 |
-| 385 | **`--shot`／`--keys` 完全繞過輸入法** | cli+tui | P1 | 先讓它承認測不到；走主迴圈另計 [^385] | Fixed 2026-09-11 |
+| 385 | **`--shot`/`--keys` 完全繞過輸入法** | cli+tui | P1 | 先讓它承認測不到；走主迴圈另計 [^385] | Fixed 2026-09-11 |
 | 386 | **`:export typst` 吃掉圍欄的兩個反引號** | core | P1 | 圍欄成塊直通，raw 裏不轉義 [^386] | Fixed 2026-09-11 |
 | 387 | **候選欄在矮終端壓穿狀態行** | tui | P1 | 它量的是整個窗口，不是正文 [^387] | Fixed 2026-09-11 |
 | 388 | **`-t` 遇到撕裂的表一聲不吭** | cli | P1 | 它說了，被 `set_status("")` 蓋掉 [^388] | Fixed 2026-09-11 |
@@ -918,20 +918,20 @@ index, and a row with no number anywhere else is a row that got lost.
 | 406 | **`gw`：兩字符跳轉標籤，適配中文** | tui+core | P2 | 落腳點是 `e` 的單位（不是詞首），標籤蓋一個字素不推開版面 [^406]（§5.12.63） | Fixed 2026-09-28 |
 | 407 | **格子裏的選區看不見** | tui | P1 | 光標格和選區同一個顏色 [^407] | Fixed 2026-09-12 |
 | 408 | **`w` 停在畫成一條 `┆` 的三個字符裏** | core | P1 | 讀者看不見的一步不算一步 [^408] | Fixed 2026-09-12 |
-| 409 | **注釋掉：`空格 c`／`空格 C`** | core | P1 | 各說各的形式，不看情況 [^409] | Fixed 2026-09-12 |
+| 409 | **注釋掉：`空格 c`/`空格 C`** | core | P1 | 各說各的形式，不看情況 [^409] | Fixed 2026-09-12 |
 | 410 | **`.txt` 默認是純文本，不是 Markdown** | core | P1 | 湊不夠證據就不猜 [^410] | Fixed 2026-09-12 |
 | 411 | **`v` 的光標換形狀** | tui | P2 | 跟 helix：select 有自己的一格 [^411] | Fixed 2026-09-12 |
-| 412 | **`:yume on` 之後借出去的語言又被還回來** | tui+ime | P2 | 那一句認的是 `+`／`-`，早就沒人送了 [^412] | Fixed 2026-09-12 |
+| 412 | **`:yume on` 之後借出去的語言又被還回來** | tui+ime | P2 | 那一句認的是 `+`/`-`，早就沒人送了 [^412] | Fixed 2026-09-12 |
 | 413 | **`.` 縮回 helix 那個意思：只重複上一次插入** | core | P2 | 現在重複的是任何一次改動，`d` 之後按到就再刪一段 [^413] | Proposed |
 | 414 | **`f`、`mi`、`ms`、`mr` 打不了中文** | core+tui | P1 | 等一個字的鍵只有 `r` 認得上屏 [^414] | Fixed 2026-09-12 |
 | 415 | **五條搜索要打磨成一族** | core | P2 | 五個不同的形狀，能力不齊、名字不成體系 [^415] | Fixed 2026-09-12 |
 | 416 | **`gd` `gD` `g/` `g?` 在表格裏換了意思** | core | P1 | `g` 是全文的命令組，`t` 是表格的 [^416] | Fixed 2026-09-12 |
 | 417 | **`:x` 只是 `:wq` 的別名，沒有「改過纔存」** | core | P2 | vi 與 helix 的 `:x` 不動沒改過的檔，`:update` 整個沒有 [^417] | Fixed 2026-09-12 |
-| 418 | **Markdown 沒有自動補全** | core+tui | P2 | 一 列表接續、二 `[^`／`](#`、三 `[[` 全部落地 [^418] | Fixed 2026-09-13 |
+| 418 | **Markdown 沒有自動補全** | core+tui | P2 | 一 列表接續、二 `[^`/`](#`、三 `[[` 全部落地 [^418] | Fixed 2026-09-13 |
 | 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P1 | 一 本檔、二 跨檔、三 替換全部落地 [^419] | Fixed 2026-09-13 |
 | 421 | **設置要有一扇面板，別讓人對着 toml 發呆** | config+tui | P1 | 八組五十三項全部落地；`LATER` 裏只剩色位與要新控件的幾項（§5.12.24） | Fixed 2026-09-24 |
 | 422 | **畫與量要按字簇走，不按字走** | tui+core | P2 | 十處逐字累加的循環改成字簇；新出口 `cells_per_char`（§5.12.47、§5.12.62） | Fixed 2026-09-27 |
-| 426 | **五類「信息」併成一個槽** | core+tui | P1 | 2026-09-30 定的模型，§5.44。`Transient` 與五個字段全刪，`View`／`Panel` 各縮到五個，`:info <名>`，四個翻頁鍵五種都收 [^426] | Done |
+| 426 | **五類「信息」併成一個槽** | core+tui | P1 | 2026-09-30 定的模型，§5.44。`Transient` 與五個字段全刪，`View`/`Panel` 各縮到五個，`:info <名>`，四個翻頁鍵五種都收 [^426] | Done |
 | 431 | **`gd` 在服務器讀完項目之前問，得到 `null`，當場說「哪兒都沒寫」** | tui | P2 | 一問一答，不重問；rust-analyzer 三百毫秒就先回了一個 null [^431] | Open |
 | 425 | **一個語言跑多個服務器** | tui | P2 | 起全部、正文發給全部、診斷按服務器各存各的、問話問給全部且第一個非空的算數（§5.38.5） [^425] | Fixed 2026-09-30 |
 | 424 | **`:rules 80 100 120`：在指定的欄上畫竪線** | tui | P3 | 正文那幾欄上色，不畫線；`:rules` 收多個數 [^424] | Fixed 2026-09-30 |
@@ -1431,12 +1431,12 @@ Neither applies to `WholeFile`: there is no prose to walk into.
 **Two kinds of file**, and this is the half that keeps the code honest:
 
 - **有明確表格語法** — the extension says so (`.csv` `.tsv` `.md`
-  `.markdown`), or a schema in `.yumete/tables/` claims the file. `t n`／`t a`
-  ／`t t` are then a state of **the whole file**: pressed anywhere, they turn
+  `.markdown`), or a schema in `.yumete/tables/` claims the file. `t n`/`t a`
+  /`t t` are then a state of **the whole file**: pressed anywhere, they turn
   every table in it, and walking the cursor out of a table into the prose above
   leaves that table drawn as a table.
 - **沒有明確表格語法** — `.txt`, `.yaml`, a run of tab-separated lines pasted
-  into a chapter. `t n`／`t a`／`t t` take **the block under the cursor** and
+  into a chapter. `t n`/`t a`/`t t` take **the block under the cursor** and
   nothing else, and leaving it drops straight back to prose; to see it again,
   press again.
 
@@ -1765,7 +1765,7 @@ Twenty-eight columns of a 拆分表 were never meant to be read across.
   **first** table in the file: `t y` in the second table of a document
   reported the first table's column name, and was believed.
   `schema_here()` derives it from the header above the cursor instead, and
-  `t y`／`t s`／`t/` ask it. Still on the view, still first-table: `key`,
+  `t y`/`t s`/`t/` ask it. Still on the view, still first-table: `key`,
   `link`, `details`, `shows`/hidden, `rows_break_the_grid`, and the widths a
   blank row or a paste is made to.
 
@@ -1932,7 +1932,7 @@ that used 「a view exists」 to mean 「somebody asked for one」:
 *one* table's header, so walking out of table 1 into table 2 kept table 1's
 column names — and `t y` there named the wrong column and was believed.
 `schema_here()` derives the schema from the header **above the cursor** for
-every `Bounds::Md` question, and `t i`／`t y`／`t s`／`t/` ask it; the view's
+every `Bounds::Md` question, and `t i`/`t y`/`t s`/`t/` ask it; the view's
 own copy is left alone, so `t h` still toggles what the reader toggled. What is
 still the view's, and therefore still the first table's: `key`, `link`,
 `details`, `shows`/hidden, `rows_break_the_grid`, and the widths a blank row or
@@ -2422,9 +2422,9 @@ Markdown 的一節，寫得下一整章；而 `wiki_here()` 在光標停在名�
 
 | 詞條 | 修之前 | 修之後 |
 | --- | --- | --- |
-| 5000 行 | ＋10 ms／幀 | 量不出來 |
-| 20000 行 | ＋30 ms／幀 | 量不出來 |
-| 20000 行，`:wiki panel` 側欄 | ＋20 ms／幀 | 量不出來 |
+| 5000 行 | ＋10 ms/幀 | 量不出來 |
+| 20000 行 | ＋30 ms/幀 | 量不出來 |
+| 20000 行，`:wiki panel` 側欄 | ＋20 ms/幀 | 量不出來 |
 
 三處，各是一種「把整條詞條走一遍」：
 
@@ -2440,7 +2440,7 @@ Markdown 的一節，寫得下一整章；而 `wiki_here()` 在光標停在名�
    逐行折成 row range 再扔掉。加一句 `if y >= bottom { return; }`。
 
 外加 `is_wiki_file`：它每幀對**每個** wiki 文件 `canonicalize` 兩次（閉包裏連
-`canonicalize(path)` 自己都重算），六十個 include ≈ 2.8 ms／幀。現在載入時算一次存住
+`canonicalize(path)` 自己都重算），六十個 include ≈ 2.8 ms/幀。現在載入時算一次存住
 （`Wiki::canonical`），問的時候先比字面、再比規範化。
 Warning: 順帶修掉一個假相等：`canonicalize(a).ok() == canonicalize(b).ok()` 在兩邊都失敗時是
 `None == None` ＝ **真**，於是「還没存的新文件」和「已經被删掉的 wiki」算成同一個文件。
@@ -2450,12 +2450,12 @@ Warning: 順帶修掉一個假相等：`canonicalize(a).ok() == canonicalize(b).
 記號跟着**分詞器的切點**走（§5.8.4，那是對的：中國人在中國人民裏不是那個名字），代價是
 一個名字可能在稿子裏、卻一次都標不出來：
 
-- 「有身體」在「這裏有身體」裏——分詞器切成 `這裏有／身體`，那個名字從没成為一個切片；
+- 「有身體」在「這裏有身體」裏——分詞器切成 `這裏有/身體`，那個名字從没成為一個切片；
 - 帶空格或拉丁字母的名字（`A 計劃`）根本進不了分詞。
 
 Warning: **從前這是無聲的**：詞條寫了，正文没動靜，`:wiki` 說一切正常（它只報「只有一個字」那
 一類）。2026-09-20 定：**不改標記的規矩，把報告做誠實**——誤標一個「小明」在「他小明
-白了」裏（切成 `小／明白`，字面命中卻跨了切點）比漏標更糟。
+白了」裏（切成 `小/明白`，字面命中卻跨了切點）比漏標更糟。
 
 辦法是**看，而不是預測**。預測做不到：名字在詞表裏還是可能輸給另一條切法，要知道就得看
 真的那一句。所以 `:wiki` 多一節，拿每個名字去**打開着的這一章**裏字面搜一遍，命中處没有
@@ -2498,10 +2498,10 @@ for prioritizing. **Done** = implemented; **Pn** = planned in that phase;
 > on two counts: **how often it is pressed**, and **whether it can wait for a
 > second key**. What can wait, goes down a level — into a group, or into 空格.
 >
-> **前置條件：Helix／vi 的共識鍵不動——爲的是遷移**（2026-09-09 說清楚）。
+> **前置條件：Helix/vi 的共識鍵不動——爲的是遷移**（2026-09-09 說清楚）。
 > yumete is CJK-aware and made for writing, but it is also a general editor,
 > and **這裏有一半時間在寫英文、讀代碼**。共識鍵是別人建好的資產，不是空地。
-> 判準因此不是「我按不按它」，而是「**大多數 vi／helix 使用者從來不碰**」——那樣的
+> 判準因此不是「我按不按它」，而是「**大多數 vi/helix 使用者從來不碰**」——那樣的
 > 鍵纔可以換給中文的功能。代理有三個：vi 與 helix 的交集、cheatsheet 的第一頁、
 > **helix 自己的 `tutor`**（一份教程只教得下幾十個鍵，選哪幾十個就是那個社羣調查的
 > 答案）。見 §5.2.3 ②。
@@ -2561,7 +2561,7 @@ Two corollaries that have already changed decisions:
 | `u` `U` | undo / redo | Done |
 | `y` `p` `P` | yank / paste after / before | Done |
 | `r` `R` | replace a character / with the yank — **`r` runs the IME**, so 中文 態 opens the candidate panel and the choice is the replacement | Done |
-| `` `l `` `` `u `` `` `` `` | 轉小寫／轉大寫／互換 — a group, because on 漢字 these are the identity (§5.2.3 ②). Helix spends `` ` ``, `` A-` `` and `~` at the top level; here those three are unbound | Done |  |
+| `` `l `` `` `u `` `` `` `` | 轉小寫/轉大寫/互換 — a group, because on 漢字 these are the identity (§5.2.3 ②). Helix spends `` ` ``, `` A-` `` and `~` at the top level; here those three are unbound | Done |  |
 | `gJ` | join lines (`J` is half a page — this is a book) | Done |
 | `.` | repeat the last change | Done |
 | `>` `<` | indent / unindent | Done |
@@ -4057,11 +4057,11 @@ space f 進入 picker，按 jk 他開始輸入，而且光標在狀態欄中打�
 | --- | --- |
 | 尺寸 | `max(10, 半屏) + 3` 行、八成寬（上限 120），**固定** |
 | 佈局 | 左邊名字，右邊預覽（開着的檔案預覽緩衝區，所以没存的字也看得見） |
-| 鍵 | 開在**列表**層：`jk` 走、`g`／`G`、`PageUp`／`PageDown`、`Enter` 開、`q`／`Esc` 關；`/` 或 `i` 進查詢層，`Esc` 回來 |
+| 鍵 | 開在**列表**層：`jk` 走、`g`/`G`、`PageUp`/`PageDown`、`Enter` 開、`q`/`Esc` 關；`/` 或 `i` 進查詢層，`Esc` 回來 |
 | 行 | **檔名在前**，目錄淡墨跟在後面 |
 | 命中 | 金色；選中那一行用粗體 |
 | 算分 | 相鄰、詞首、**在檔名裏**加分，短名壓長名；兩趟對齊（正向找終點、反向收緊） |
-| 空查詢的次序 | 這次待過的檔案置頂，其餘 `.md`／`.txt`／`.typ`／`.csv` 在代碼與構建産物之前 |
+| 空查詢的次序 | 這次待過的檔案置頂，其餘 `.md`/`.txt`/`.typ`/`.csv` 在代碼與構建産物之前 |
 | 預覽 | 有 grammar 的走 tree-sitter，markdown 的標題金色、引用淡墨 |
 
 **四件事是這一輪學到的，不是設計出來的：**
@@ -4084,7 +4084,7 @@ was decided, two things paid for themselves — **one table of key names**, and
 **a test that every backticked key sequence in `tutor.rs` and `manual.md`
 exists**. Both are done, and the section below is what they turned out to be;
 the reason they are one piece of work and not two is written there. The `g`
-drift this section named (`gn`／`gp` bound and documented and in no menu) was
+drift this section named (`gn`/`gp` bound and documented and in no menu) was
 the first thing the pair caught.
 
 ### The documents read as source — 2026-09-07
@@ -4117,7 +4117,7 @@ seen; forget this and thirty entries are reported as orphans in one go.
 A document may also print a name **in order to say it is gone** — 「`:re` 同時是
 `recover`、`redo`、`render` 的前綴，所以它報不認識」, the 「沒有了」 column,
 `:yume c`. Those are a `DISOWNED` list of eighteen, `DISOWNED_KEYS` holds four
-more (`gt`／`gc`／`gb`, `t s`), and a second test of each asserts they really
+more (`gt`/`gc`/`gb`, `t s`), and a second test of each asserts they really
 are missing, so neither list can become the place a stale name hides. Three
 two-letter words are dropped outright as `NOT_A_SEQUENCE`: `md` is a file
 suffix, `tw` is OpenCC's 臺灣正體, `[]` is a pair of brackets being shown.
@@ -4125,7 +4125,7 @@ suffix, `tw` is OpenCC's 臺灣正體, `[]` is a pair of brackets being shown.
 Four faults on the first run, and one of them was not in the documents:
 
 - **`:word-show tint｜ink` were undeclared.** `parse` has always taken all four
-  words (and 底色／字色 through `WordMark::parse`); the table said
+  words (and 底色/字色 through `WordMark::parse`); the table said
   `Args::Words(ON_OFF)`. So two drawings ran that the menu could not name and
   `::` could not find — §5.2.2 fault 7's shape exactly. `WORD_SHOW` now holds
   the four.
@@ -4224,14 +4224,14 @@ proposal that raised it.**
 > level on two counts: **how often it is pressed**, and **whether it can wait
 > for a second key**. What can wait, goes down a level.
 >
-> **前置條件：Helix／vi 的共識鍵不動。** yumete is CJK-aware and made for
+> **前置條件：Helix/vi 的共識鍵不動。** yumete is CJK-aware and made for
 > writing, but it is also a general editor — English and code are typed in it.
 > The consensus keys are an asset somebody else built; they are not free space.
 
 **前置條件說清楚了，2026-09-09**：共識鍵不動，**爲的是遷移**——不是因爲自己按得多。
 
-> 判準不是「我按不按它」，而是「**一個從 vi／helix 過來的人，會不會因爲它不在而覺得
-> 這編輯器壞了**」。所以讓得出去的，是**大多數 vi／helix 使用者從來不碰**的那些。
+> 判準不是「我按不按它」，而是「**一個從 vi/helix 過來的人，會不會因爲它不在而覺得
+> 這編輯器壞了**」。所以讓得出去的，是**大多數 vi/helix 使用者從來不碰**的那些。
 
 這是一個關於**別人**的問題，於是有兩個後果。
 
@@ -4244,16 +4244,16 @@ proposal that raised it.**
 helix 自己對「一個新人非學不可的是什麼」的回答——它替我們把那個社羣調查做完了。
 在 tutor 裏的鍵，遷移過來的人一定按過；不在的，多半一輩子沒碰。
 
-**二、按「中文稿子上按不按」列的降級名單作廢。** `f`／`F` 與 `>`／`<` 撤回：寫英文、讀代碼
-的那一半時間，那半邊它們天天按。`%`、`q`／`Q`、`R`、`"` 也移出候選——都是第一
+**二、按「中文稿子上按不按」列的降級名單作廢。** `f`/`F` 與 `>`/`<` 撤回：寫英文、讀代碼
+的那一半時間，那半邊它們天天按。`%`、`q`/`Q`、`R`、`"` 也移出候選——都是第一
 頁的東西，正是遷移會絆倒的地方。
 
 **真正安全的儲備是多數人從來不碰的那些**：`A-` 整族（`A-s` `A-,` `A-_` `A-C` `A-K`
-`A-;`…）、`&`／`_`（對齊、修剪選區）、`K`／`A-K`（保留、剔除匹配的選區）、`C`／`A-C`
-（向下複製選區）、`Z`（粘滯視圖）。連同 `s`／`S`／`,` 那三個——多光標三件套，而
+`A-;`…）、`&`/`_`（對齊、修剪選區）、`K`/`A-K`（保留、剔除匹配的選區）、`C`/`A-C`
+（向下複製選區）、`Z`（粘滯視圖）。連同 `s`/`S`/`,` 那三個——多光標三件套，而
 **yumete 根本沒有多光標**，遷移過來的人在這裏本來就用不了。
 
-`t`／`T` 當初讓給表格，走的正是這個形狀的論證：不是「till 用得少」，而是**在這個編輯器
+`t`/`T` 當初讓給表格，走的正是這個形狀的論證：不是「till 用得少」，而是**在這個編輯器
 的語法下 till 本來就不承擔重量**（動詞在最後，`t，d` 不是 `dt，`）。
 >
 > — 2026-09-06：「helix/vim 中比較重要、使用率最高的一級快捷鍵不要
@@ -4596,9 +4596,9 @@ not a command.
 
 ## 5.2.5 發佈前的通盤檢查 — 2026-09-09（#305–#346）
 
-0.1.0 之前把四條路各走了一遍：**改檔案的路**（存檔、崩潰草稿、編碼往返、`:grep`／
+0.1.0 之前把四條路各走了一遍：**改檔案的路**（存檔、崩潰草稿、編碼往返、`:grep`/
 `:replace`）、**按鍵的路**（模式、count、undo、宏、長按重複）、**表格與標記的路**
-（CSV 格子、Markdown 表格、ruby）、**輸入法的路**（組字狀態、中／英邊界、碼表）。
+（CSV 格子、Markdown 表格、ruby）、**輸入法的路**（組字狀態、中/英邊界、碼表）。
 只收兩種東西：**會靜默改壞或丟掉檔案的**，和**會讓一次按鍵停下來的**。設計意見不收。
 
 四十二條記在 #305–#346。能量的都量了：數字寫在腳註裏，量法一併寫着，**動手之前先照
@@ -4650,7 +4650,7 @@ not a command.
 
 寫下來免得下次當成新發現：
 
-- #306 的 `:w!`／`:wq`／`:wa`，[^295] 裏白紙黑字寫着是**故意先不接**的。新的部分只有
+- #306 的 `:w!`/`:wq`/`:wa`，[^295] 裏白紙黑字寫着是**故意先不接**的。新的部分只有
   兩點：`:wq` 是那條路的常態，以及 swap 從一開始就不在那個決定的範圍裏。
 - #316 的 `caret` 是**載重的**，見上。
 - #289（`t a` 折行找視窗頂）與 #297（格狀面板一次 `100j` 0.67 秒）早就記在表上，
@@ -4660,26 +4660,26 @@ not a command.
 
 同樣要記，免得再走一遍：`write_bytes_atomically` 沿符號連結 canonicalize（臨時檔案
 永遠同一個裝置）、寫前拒絕只讀目標、複製權限、**檔案與目錄都 fsync**、每條錯誤路徑都
-清掉臨時檔案、ENOSPC 在 `sync_all` 處露出來而原檔案不動。**Shift-JIS／EUC-JP 在開檔
+清掉臨時檔案、ENOSPC 在 `sync_all` 處露出來而原檔案不動。**Shift-JIS/EUC-JP 在開檔
 時明確拒絕，不做有損解碼**。CSV 原樣往返在帶引號、CRLF、純 CR、缺末尾換行、參差行、
 重複表頭、中英混排上逐位元組相同。undo 點是掙來的，`u` 不會退過頭。跨 ASCII↔漢字↔全角
-的字素步進與 `j`／`k` 的目標列雙向精確；`w`／`b` 在文種交界不產生零寬步進。`:render`
+的字素步進與 `j`/`k` 的目標列雙向精確；`w`/`b` 在文種交界不產生零寬步進。`:render`
 嚴格只是視圖。圍欄內與引用塊內的表格不被當成表格。輸入法**關着的時候每鍵開銷為零**
 （`ime_handle` 首行就返回），組字**不觸發整篇重排**（兩處備忘錄都按行為 key），所以
-#345 的 12 ms 是**加**在 #313／#316 上，不是乘。
+#345 的 12 ms 是**加**在 #313/#316 上，不是乘。
 
 ### 順序
 
 按「不修的代價 ÷ 改動的大小」，並把同源的併成一次：
 
-1. **#305 ＋ #306** —— swap／write 那一層一次改完（草稿帶 pid、護欄移到 `write_forcing`、
+1. **#305 ＋ #306** —— swap/write 那一層一次改完（草稿帶 pid、護欄移到 `write_forcing`、
    `write_swap` 加尺寸檢查）。`docs/` 裏那份 4.3 MB 順帶清掉。
 2. **#344 ＋ #335** —— 兩處各一行：`emit_entry` 的 clamp，和 `Press` 無條件置 `clean`。
 3. **#314** —— 一句 poll，換來上面每一條性能項都好受一截。
 4. **#323** —— `snapshot` 提到 `repeat` 的迴圈外；「undo 壞了」是第一天就會撞上的印象。
 5. **#307 ＋ #308** —— 兩條靜默的資料損壞，都是「認出來就拒絕」型的改動。
 6. **#316 → #315 → #313** —— 三個備忘錄，由小到大。
-7. **#334／#338／#339／#337** —— 中英邊界一次理乾淨。
+7. **#334/#338/#339/#337** —— 中英邊界一次理乾淨。
 8. 其餘按 Phase 走。
 
 ## 5.2.6 這四十二條裏，哪些是同一件事 — 2026-09-09（#347–#352）
@@ -4689,7 +4689,7 @@ not a command.
 
 ### 一、繞過了 yume 的綁定層（#347 → #334、#335、#337、#339）
 
-yume-core 早就有一張三態按鍵表——空碼／組字中／有候選——而出廠值寫得清清楚楚：
+yume-core 早就有一張三態按鍵表——空碼/組字中/有候選——而出廠值寫得清清楚楚：
 
 ```rust
 // 組字中按 Shift ＝ 上屏原碼並留在英文，不是臨時英文。
@@ -4697,7 +4697,7 @@ yume-core 早就有一張三態按鍵表——空碼／組字中／有候選—�
 ```
 
 旁邊還有 `resolve(key, state, candidates)`、`KeyState::of(buffer_empty, candidates)`，
-以及**單擊偵測的狀態機** `modifier(key, down, other_mods)`／`other_key()`／`reset()`。
+以及**單擊偵測的狀態機** `modifier(key, down, other_mods)`/`other_key()`/`reset()`。
 
 這個倉裏 `KeyBindings` **一次都沒有被建起來**。`yumete-tui` 自己寫了一個
 `ShiftTap { down, clean }`，然後直接叫 `set_chinese(false)`。於是：
@@ -4706,7 +4706,7 @@ yume-core 早就有一張三態按鍵表——空碼／組字中／有候選—�
   按 Shift 要先上屏」那條規矩在綁定表裏，沒人去問。
 - **#335** 丟失一次釋放就失效，左右 Shift 共用一份狀態——因為單擊偵測重寫了一遍，
   而上游那份是四個前端用了很久的。
-- **#337** 中／ABC 全局——語言狀態本來就是引擎的，前端要做的是**顯示**它，不是自己存一份。
+- **#337** 中/ABC 全局——語言狀態本來就是引擎的，前端要做的是**顯示**它，不是自己存一份。
 - **#339** 沒有 Kitty 協議就沒有切換——前端該做的只是如實報告自己收不收得到 modifier。
 
 **這條原則已經寫在這個倉裏了，只是只覆蓋四個鍵。** `press_func` 的註釋：*「The binding
@@ -4730,7 +4730,7 @@ dropping a `；` into the manuscript.」* `;` `'` `-` `=` 上踩過一次，Shif
 - `blocks_through` 回傳整條而不是一格 → **#322**
 
 而 **#321 最說明問題**：`segment_cache` 就在那裏，`editor/words.rs` 用了它，
-`motion.rs` 的 `w`／`b`／`e` 每按一次還是從頭分一遍。**快取有，熱路徑沒接。**
+`motion.rs` 的 `w`/`b`/`e` 每按一次還是從頭分一遍。**快取有，熱路徑沒接。**
 
 缺的是一件東西：一套「記住一行的答案」的設施，共用同一條失效規則。這件事不做，每加一
 個新的視圖層就多一個自己寫 key 的快取。
@@ -4743,7 +4743,7 @@ dropping a `；` into the manuscript.」* `;` `'` `-` `=` 上踩過一次，Shif
 ### 三、護欄掛在呼叫點，不在必經之路（#350 → #305、#306、#308）
 
 - **#306** `oversize_query` 掛在 `Command::Write` 那一個 match 分支上，
-  `:wq`／`:w!`／`:wa` 與 swap 四個入口都不認。
+  `:wq`/`:w!`/`:wa` 與 swap 四個入口都不認。
 - **#305** 草稿的所有權是一個**進程内的 bool**，所以第二個進程看不見。
 - **#308** `:grep` 截斷只是「少了幾條」，沒有一個型別說「這個結果集不完整」，
   於是 `:replace` 照常執行、照常報成功。
@@ -4755,10 +4755,10 @@ dropping a `；` into the manuscript.」* `;` `'` `-` `=` 上踩過一次，Shif
 
 | 概念 | 兩套 | 對不上的時候 | 權威 |
 |---|---|---|---|
-| 字符 | `h`／`l` 按字素走，`r` 對 `chars()` 映射 | #324：`rZ` 對着一個 ZWJ emoji 寫出五個 Z | `yumete-cjk/grapheme.rs` |
+| 字符 | `h`/`l` 按字素走，`r` 對 `chars()` 映射 | #324：`rZ` 對着一個 ZWJ emoji 寫出五個 Z | `yumete-cjk/grapheme.rs` |
 | 大小寫 | `.to_uppercase().next()` 只取一對多的第一個 | #325：`ﬁ` → `F`，`i` 沒了 | 展開整個交出來 |
 | 顯示寬度 | 寫盤一套、畫面一套，ambiguous 預設 `auto` | #327：同一張表在兩個終端存出兩份 | `yumete-cjk/width.rs` |
-| 分詞 | 三處走行 ＋ 兩處 Viterbi | `w` 遇到標點的行爲跟着詞典換 | `ranges_around_cjk`／`best_path` |
+| 分詞 | 三處走行 ＋ 兩處 Viterbi | `w` 遇到標點的行爲跟着詞典換 | `ranges_around_cjk`/`best_path` |
 
 四樣都收完了（2026-09-12）。分詞那一行原先是按行數記的（641 ＋ 317），數行數看不出
 問題在哪：真正重複的是**走行**（`word_ranges`、`DictionarySegmenter::segment`、
@@ -4791,7 +4791,7 @@ dropping a `；` into the manuscript.」* `;` `'` `-` `=` 上踩過一次，Shif
 2026-09-12：「大家都說用 GPU 加速。我們 yumete 能通過 GPU 加速嗎？」
 
 **已經在用了，只是不歸我們用。** 終端編輯器不畫像素：yumete 交出去的是一格一格的字符
-與顏色，把字形柵格化、貼上螢幕的是終端模擬器。Alacritty／Kitty／WezTerm／Ghostty 都是
+與顏色，把字形柵格化、貼上螢幕的是終端模擬器。Alacritty/Kitty/WezTerm/Ghostty 都是
 GPU 渲染的，在它們裏面跑，那一半本來就在顯卡上；在 CPU 渲染的終端裏跑，也不是這個倉能
 改的事。
 
@@ -4803,7 +4803,7 @@ GPU 幫不上，不是沒人做，是形狀不對：一次 kernel launch 加來�
 **量到的瓶頸也全在算法**：#321 把 `w` 從 17.06 ms 壓到 4.09 ms，靠的是別把同一行分詞四
 遍；#348 收掉的兩個快取本來沒有上限。這一類換多少顯卡都一樣。
 
-GPU 真正有意義的是**另一種產品**——Zed／Neovide 那樣自己柵格化字體、自己畫窗口的原生
+GPU 真正有意義的是**另一種產品**——Zed/Neovide 那樣自己柵格化字體、自己畫窗口的原生
 GUI。那要重寫整個前端，並且正面撞上下一節那條「yumete 只做 TUI」的邊界。真要走，是 1.0
 之後的一個產品決定，不是一項加速。
 
@@ -4819,7 +4819,7 @@ GUI。那要重寫整個前端，並且正面撞上下一節那條「yumete 只�
 4. **#348**——按行的五個收成一套（2026-09-12 已收）。
 5. 其餘按 §5.2.5 的順序。
 
-**#344／#345／#346 反過來**：那三條在上游 yume-core 裏，這個倉只是受害者。
+**#344/#345/#346 反過來**：那三條在上游 yume-core 裏，這個倉只是受害者。
 
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
@@ -4919,7 +4919,7 @@ formula follows releases.
 
 正本的字形是**大陸通規繁體**（`裏 爲 説 内 没 麽 册 别 横 録`），與 `:convert … c`
 的目標一致，那張字形表在 `crates/yumete-core/src/glyphs_c.txt`。用詞是**大陸用語**
-（文件／屏幕／窗口／默認／剪貼板），`messages.toml` 兩側同此。
+（文件/屏幕/窗口/默認/剪貼板），`messages.toml` 兩側同此。
 
 Warning: **只有繁 → 簡這一個方向是安全的。** 反過來走 opencc 的 `s2t` 會被它的詞組規則改
 壞正文：整份往返量過，11 萬字裏 327 處回不來（`表/錶`、`注/註`、`才/纔`、`台/臺`、
@@ -5099,7 +5099,7 @@ the same review wanted and did not get:
   the *mechanism* (`language = "zh"|"en"`), which is §5.2 group 9's last item.
 
 **繁體正本用大陸詞彙，生成器只換字形**（2026-09-19 定）。簡體版是生成物，而
-`opencc` 換的是**字**不是**詞**——所以 `背景進程`／`行程`／`預設鍵`／`縦中横` 轉過去還是
+`opencc` 換的是**字**不是**詞**——所以 `背景進程`/`行程`/`預設鍵`/`縦中横` 轉過去還是
 港臺詞。從前這幾處是在**生成出來的那份檔上手工改的**，誰重跑一次生成器就沒了。
 Warning: 修的地方是**正本**：`後臺進程`、`進程`、`默認鍵`、`縱中橫`（那個 `縦` 是日文的字，
 簡體裏根本沒有）。生成器裏不許有詞彙表——有詞彙表就說明正本寫錯了詞。
@@ -5109,7 +5109,7 @@ Warning: 兩處**有意**留着港臺詞：`:convert` 那一節講的正是換�
 ### 想要的（2026-09-19 提出）
 
 - **行號旁邊那一格用底色顯示 `git diff`**（2026-09-19：「非常重要」，P1）。helix 有
-  一個 `diff` gutter（`helix-vcs`，主題鍵 `diff.plus`／`diff.minus`／`diff.delta`），形狀可以
+  一個 `diff` gutter（`helix-vcs`，主題鍵 `diff.plus`/`diff.minus`/`diff.delta`），形狀可以
   照搬，實現不必——**不要為此加一整條 git 依賴**（見 §「供應鏈」那一條），跑 `git` 自己、
   讀它的 hunk 頭就夠。Warning: 絕不能上每一幀的關鍵路徑：開檔與存檔時算一次，按緩衝區的
   revision 存住。竪排那一條號碼帶要另外想。**medium**
@@ -5131,7 +5131,7 @@ Warning: 兩處**有意**留着港臺詞：`:convert` 那一節講的正是換�
   依賴只要 `serde_json`。JSON-RPC 的 framing 是 `Content-Length` 一行加一個 JSON
   體，幾十行。**不引 `tower-lsp`**——那是寫服務端的。
 
-  **分四步，每一步自己就有用**：① 診斷（`initialize` → `didOpen`／`didChange` →
+  **分四步，每一步自己就有用**：① 診斷（`initialize` → `didOpen`/`didChange` →
   `publishDiagnostics`）；② `gd` 走 `textDocument/definition`；③ 懸停進浮框；
   ④ 補全進現有面板。
 
@@ -5161,7 +5161,7 @@ Warning: 兩處**有意**留着港臺詞：`:convert` 那一節講的正是換�
   成灰的，而打開它們模糊自己關掉（灰着還能翻的開關等於同時說兩句話）；大小寫照舊管用，
   智能大小寫那條規矩原樣搬過來。
   Warning: **`last_search` 給頁面的是你打的那幾個字，一模一樣**：没有哪條正則寫得出「差不多」，
-  所以 `n`／`N` 走精確的那些（面板列的是它們的超集），兩邊都没有騙對方。
+  所以 `n`/`N` 走精確的那些（面板列的是它們的超集），兩邊都没有騙對方。
 
 ## 5.5 修好之後才知道的事
 
@@ -5190,7 +5190,7 @@ moved」。 其餘的備忘則**早就按 buffer 做了鍵**：`FoldMap` 與 `Bl
 佔住它，問的也是那一半的文檔。
 
 順帶清掉一族潛伏的錯：24 個 `&self` 的方法從前直接讀 `self.cursor`，現在統一走
-`caret()`／`mark()`，而那個偏移**在進門處 clamp 一次**——另一半隨時可能已經把你站着
+`caret()`/`mark()`，而那個偏移**在進門處 clamp 一次**——另一半隨時可能已經把你站着
 的那段文字刪了，把陳舊的偏移丟進 rope 是崩潰，不是畫錯。
 
 代價量過：一頁兩本二十萬字的書，每幀 365.81 µs →
@@ -5303,8 +5303,8 @@ Warning: **量出來的**（release，`--shot` 一幀，同一份 Python 檔切�
 緩存的，也就是**每改一次就重來一遍**——20000 行那一檔是每按一鍵 90 ms，把「突然没顏色」
 換成「打字發黏」不算修好。真正的解法是 tree-sitter 的增量解析（留着樹、餵編輯），那是
 另一件事，記在這裏。Warning: 眼下補的是**它不解釋自己**：不帶參數的 `:view-code` 從前只是
-`on` 的第二種拼法，現在改成**報告**（`:view-hud`／`:render` 的形狀）——開着没有、認得
-哪幾種語法（從 `Language::ALL` 現數，不再寫死在文案裏，加了 Rust／Go 之後那句話已經
+`on` 的第二種拼法，現在改成**報告**（`:view-hud`/`:render` 的形狀）——開着没有、認得
+哪幾種語法（從 `Language::ALL` 現數，不再寫死在文案裏，加了 Rust/Go 之後那句話已經
 過時了），以及**光標這一段是不是超過了上限**。
 
 順帶把 `fences.rs` 的內容快取按**行數**也算一道（`HELD = 50_000`）：`KEPT = 256` 條是照
@@ -5315,7 +5315,7 @@ Warning: **量出來的**（release，`--shot` 一幀，同一份 Python 檔切�
 
 §5.4 那條「把語言模型花在稿子上」的後半截。**前半截早就做完了**（#233 `:check-usage`：
 內建七十多組用字，只在這一篇同時寫了兩種的時候纔報）——2026-09-20 的清單上重列過一次，
-是抄的時候没核。真正缺的是**專名**：`裏／裡` 在誰的表裏都有，而「醉翁亭」只在**這本書自己的
+是抄的時候没核。真正缺的是**專名**：`裏/裡` 在誰的表裏都有，而「醉翁亭」只在**這本書自己的
 百科**裏，所以全書唯一寫成「醉翁停」的那一處，任何查錯字的東西都看不見。
 
 Warning: **判準是同音，不是「差一個字」。** 中文裏差一個字不是發現：醉翁亭離醉翁路也只差一個
@@ -5415,7 +5415,7 @@ Warning: **`Span` 用的是光標坐標，`range` 不是，差的正好是一個
 做法就是那句話：**一個動作，兩種讀法**（2026-09-20「vim 的 `w` 獨立的時候是跳轉，
 在命令中是選詞；helix 把兩個 `w` 合一了」）。落到簽名上是
 `read_motion(what, Reading::{Selection, Caret})`：helix 問整段，vim 問落點。
-操作符再按動作自己的**類**（`crate::vim::Reach`，vim 自己的 `exclusive`／`inclusive`）決定
+操作符再按動作自己的**類**（`crate::vim::Reach`，vim 自己的 `exclusive`/`inclusive`）決定
 「那一格算不算在内」——**那個詞就是翻譯表永遠說不出的東西**。
 
 Warning: **兩條 vim 的特例現在寫得出來了**，各一行註釋指着 vim 的文檔：`cw` 當 `ce`（`:h cw`）、
@@ -5426,15 +5426,15 @@ Warning: **兩條舊測試改了斷言，理由是語義改對了，不是測試
 走完停在空格上」（翻譯表的産物）；另一條的註釋寫着2026-09-18 的原話——
 **「vim w 是跳到詞頭，這個我們肯定没辦法實現」**——B3 實現了它。改動的原委寫進了那兩處註釋。
 
-Warning: 中途弄丟過一個：`j`／`k` 作爲行式動作（`dj`）第一版漏在表外，舊測試當場抓住。
+Warning: 中途弄丟過一個：`j`/`k` 作爲行式動作（`dj`）第一版漏在表外，舊測試當場抓住。
 
 ### B4：那三個鍵，以及一件本來就能做的事
 
-`Enter`／`+`／`-`（朋友第 1 條）落地。`+` 與 `-` 進預設表，`Enter` 有自己的鍵位分支——
+`Enter`/`+`/`-`（朋友第 1 條）落地。`+` 與 `-` 進預設表，`Enter` 有自己的鍵位分支——
 它在表裏拼不出來，因爲表裏只有字符。順帶修了 `pressed()` 的一個隱患：`\n`（0x0A）從前按
 控制字節規則讀成 `C-j`。
 
-Warning: **前綴鍵本來就綁得動**（朋友第 5 條），三行配置就把 leader 挪到 `;`、空格退格當 `l`／`h`：
+Warning: **前綴鍵本來就綁得動**（朋友第 5 條），三行配置就把 leader 挪到 `;`、空格退格當 `l`/`h`：
 
 ```toml
 [keys.normal]
@@ -5459,7 +5459,7 @@ check`，再把行號抄回來）最貴的地方。
 ### 模組不叫 `diag`
 
 `crates/yumete-core/src/diag.rs` **是崩潰日誌**（#300），不是這個。撞了名字往後每一次
-`grep diag` 都要先分是哪一件事，所以這個模組叫 `problem`，型別叫 `Problem`／`Severity`／
+`grep diag` 都要先分是哪一件事，所以這個模組叫 `problem`，型別叫 `Problem`/`Severity`/
 `Problems`。
 
 ### 三條規矩，都寫在型別上
@@ -5497,12 +5497,12 @@ Warning: **可是散文稿一格都不多花。** 那兩格是從正文身上要
 `Syntax::Code`——Warning: **不是「服務器起來了没有」**：那會讓版心隨一個子進程的生死伸縮，
 而且服務器崩一次版面就跳一次。語法是一個檔的性質，開着的時候不會變。
 
-**朱是一塊鋪滿的顏色，不寫字；另外三檔是 1.5:1 的淡底加一個字**（`!`／`i`／`·`）。
+**朱是一塊鋪滿的顏色，不寫字；另外三檔是 1.5:1 的淡底加一個字**（`!`/`i`/`·`）。
 
 這一條是 2026-09-21 當天走了四輪纔落下來的，前三輪都被同一件事推着走：
 
 **一、`●▲◆·` 一眼就被看穿。** 「紅圈圈是個半圓？」——在 CJK 等寬字體（LXGW 文楷
-Mono GB）裏量：**一格 7.5px，而 `●`／`▲`／`◆` 都是 15.00px，整整兩格**。
+Mono GB）裏量：**一格 7.5px，而 `●`/`▲`/`◆` 都是 15.00px，整整兩格**。
 
 **二、換成真一格的 `•!i·`，「太小了，helix 是怎麼處理的？」。** 查了源碼：
 helix 四檔都寫 `●`、只換顏色（`helix-view/src/gutter.rs:80`）。它敢這麼做是因為**在拉丁
@@ -5522,7 +5522,7 @@ Warning: **響度分兩級，而那是唯一還在的第二條線索。** 字形
 理由）。所以朱用**原色**那一檔、另外三個用 1.5:1：分不出色相的人照樣分得出「一塊滿的亮顏色」和
 「一個字」，也就照樣看得見哪一行是錯。這個明暗差是**要求**，不是風格，釘了測試。
 
-Warning: **順帶量出一筆舊帳**：現有的改動條 `▍` 與剪口 `▔`／`▁` 在同一份字體裏**也是 15px**。
+Warning: **順帶量出一筆舊帳**：現有的改動條 `▍` 與剪口 `▔`/`▁` 在同一份字體裏**也是 15px**。
 它們靠啓動時問終端「模糊寬度算幾格」來決定畫不畫，量出兩格就退回 ASCII——那道閘是對的，
 但它信的是**終端**說的，而終端說一格、字體畫兩格是做得到的。手上那臺終端看着是好的
 （用了兩天沒說歪），所以這一條只記在這裏，不動代碼。
@@ -5553,7 +5553,7 @@ Warning: **列的是每一個檔，不是手上這一個。** 只列當前緩衝
 **78 格**。這一節的推理仍然成立——命令名有預算——只是眼下那道牆遠了一截。見 §5.12.23。）
 
 所以它進了 `check` 家族：`:diagnostics-all`。Warning: **別名也佔一行**——`diagnostics` 當過別名，那張表
-照樣是 55；所以它一個別名都不帶，vim／helix 那個詞由 `find` 的關鍵詞接住（`::` 搜得到，
+照樣是 55；所以它一個別名都不帶，vim/helix 那個詞由 `find` 的關鍵詞接住（`::` 搜得到，
 不花頂層一行）。名字反而更對——
 `:check-punct` 查標點、`:check-names` 查專名、`:check-charset` 查字集，這一條**查代碼**，
 一家人做的是同一件事：列出全文哪裏有問題，`gf` 跳過去。
@@ -5571,13 +5571,13 @@ Warning: **記住這條壓力**：往後再加命令，**先想能不能進現�
 ## 5.12.1 B5：量出來的四條，只有一條是真的（2026-09-21）
 
 B1–B4 之後，手上那張「vim 還欠什麽」的單子寫着四件：寄存器、`.` 重複改動而不是按鍵、
-獨立的 `t`／`T`、`gg` 吃 count。**動手之前先量了一遍，三條是假的：**
+獨立的 `t`/`T`、`gg` 吃 count。**動手之前先量了一遍，三條是假的：**
 
 | 按的 | 實際 | |
 | --- | --- | --- |
-| `5gg`／`3G` | 到第 5、第 3 行 | 本來就吃 count |
-| `x3.`／`ciwX`⎋`w.` | `x` 再刪三個／`X X cc` | `.` 重複的本來就是**改動** |
-| `"ayy`⋯`"ap`／`"add`⋯`"ap` | 都對 | 寄存器本來就有 |
+| `5gg`/`3G` | 到第 5、第 3 行 | 本來就吃 count |
+| `x3.`/`ciwX`⎋`w.` | `x` 再刪三個/`X X cc` | `.` 重複的本來就是**改動** |
+| `"ayy`⋯`"ap`/`"add`⋯`"ap` | 都對 | 寄存器本來就有 |
 | `tc` 獨立按 | **光標不動** | 真的 |
 
 Warning: **那張單子是記憶，不是測量。** 照它做，三件會改成已經對的樣子，而真正的缺口要靠運氣
@@ -5589,7 +5589,7 @@ Warning: **那張單子是記憶，不是測量。** 照它做，三件會改成
 `X` `2dd` `d2w` `2yy p` `P` `%` `di(` `da(` `yi(` `ci"` `ct,` `v…d` `V…d` `Vjjd` `u` `*`
 `dd` 在末行、`yw p`（連 vim 那條「貼在光標那一格**後面**」都對）。
 
-**① `h`／`l` 根本不在動作表裏。** 於是 `dl`、`d3l`、`yl`、`c2h` 全部落在地上——操作符等
+**① `h`/`l` 根本不在動作表裏。** 於是 `dl`、`d3l`、`yl`、`c2h` 全部落在地上——操作符等
 一個動作，而表裏没有這兩個。加了 `Motion::Char { forward }`。
 
 Warning: **前後不對稱，而那是 vim 自己的規矩。** `l` 停在行末最後一格上**還是要取走那一格**
@@ -5598,28 +5598,28 @@ Warning: **前後不對稱，而那是 vim 自己的規矩。** `l` 停在行末
 目標没動就成了「取走我後面那一格」，而後面什麽都没有。第一版兩頭都夾在行内，`dh` 在行首
 把行首那個字吃了。
 
-**② 段落對象 `ip`／`ap` 不存在。** `dap`、`dip`、`cip`、`yap` 一個都不動。加了
+**② 段落對象 `ip`/`ap` 不存在。** `dap`、`dip`、`cip`、`yap` 一個都不動。加了
 `Object::Paragraph`，**helix 的 `mi p` 一併有了**——那不是給 vim 開的後門，helix 自己就有
 （`helix-term/src/commands.rs:6314` 把 `p` 交給 `textobject_paragraph`）。
 
 Warning: **一段是幾「行」，不是幾個字。** 第一版把它當普通區間交給刀子，`dip` 取走了那幾行的
-正文卻把換行留下，原地多出兩個空行。現在它走 `dd`／`cc` 那條路（`do_vim_lines`），兩條規矩
+正文卻把換行留下，原地多出兩個空行。現在它走 `dd`/`cc` 那條路（`do_vim_lines`），兩條規矩
 白拿：`d` 帶走末尾那個換行，`c` 留着。
 Warning: 而**選區那一側也要含那個換行**——helix 是這麽做的（`textobject.rs` 末尾：`anchor` 與
 `head` 都是 `line_to_char`，行首到行首），第一版停在末一行的最後一個字上，`mip` 之後按 `d`
 同樣留下一個洞。
 
-**③ 獨立的 `t`／`T` 没地方站，因爲 `t` 是表格組**（#206）。`dt,`／`ct,` 是好的（操作符在
+**③ 獨立的 `t`/`T` 没地方站，因爲 `t` 是表格組**（#206）。`dt,`/`ct,` 是好的（操作符在
 等，那一鍵歸它），只有裸按不行。這是個**設計決定**，形狀和 2026-09-18 的 `J` 那一條一樣，
 見下。
 
 **④ `J` 不是缺口。** 2026-09-18 定過：「J 合併行我們和 helix 也不一樣，我覺得這個應該保持
-gJ」——`J`／`K` 在這裏是半頁，一本小説裏最常按的一對。量出來「`J` 什麽都没做」只是因爲樣本
+gJ」——`J`/`K` 在這裏是半頁，一本小説裏最常按的一對。量出來「`J` 什麽都没做」只是因爲樣本
 只有兩行。**没動。**
 
 ## 5.12.2 `t` 還給 till，表格組搬進 `空格`（2026-09-21）
 
-B5 量出獨立的 `t`／`T` 不動，查下去不是 bug 是**佔位**：`t` 是表格組（#206），`dt,`／`ct,`
+B5 量出獨立的 `t`/`T` 不動，查下去不是 bug 是**佔位**：`t` 是表格組（#206），`dt,`/`ct,`
 照樣好用（操作符在等，那一鍵歸它），只有裸按没地方站。
 
 原來的理由寫在 `keys.rs` 上：「vi 的 `t` 在這裏本來就够不着——這個編輯器把動詞放在後面
@@ -5630,7 +5630,7 @@ B5 量出獨立的 `t`／`T` 不動，查下去不是 bug 是**佔位**：`t` �
    `"t" => find_till_char`）。yumete 拿 `t` 當表格組是**偏離上游**的。
 
 於是一個鍵同時欠着兩邊的手，而省下的只是表格組的一次擊鍵。定下來（2026-09-21：「表格操作
-並不是特別頻繁」）：**`t`／`T` 到哪裏都是 till，表格組到哪裏都是 `空格 t`。**
+並不是特別頻繁」）：**`t`/`T` 到哪裏都是 till，表格組到哪裏都是 `空格 t`。**
 
 Warning: **格子視圖裏也一樣。** 它自己的說明寫着「只改 `T` 和 `Tab` 兩個鍵，別的都跟別處一個
 意思」——留一個 `t` 在裏面就等於把當初那條病（「一個字母因爲光標在不在 `|` 表格裏而有兩個
@@ -5717,7 +5717,7 @@ Warning: **吞在插入模式那一支，不在 `Pending` 的總分派裏。** �
 
 ## 5.12.4 用起來之後提的三件事（2026-09-21）
 
-L1／L2 發出去當天就收到三條，都是「能用了，可是……」那一種：
+L1/L2 發出去當天就收到三條，都是「能用了，可是……」那一種：
 
 ### ① 冷啓動的十幾秒，一聲不吭
 
@@ -5737,7 +5737,7 @@ Warning: **只說這一次，而且按檔算。** 答過一次之後重算是毫
 
 > 「寫代碼的時候才需要 lsp 錯誤，寫普通文章才需要查字典。這兩個場景是很少耦合的。」
 
-我原本的顧慮是它會和百科／字典那兩個浮框搶地（#430 定過「同一時刻只在一個地方」）。那條
+我原本的顧慮是它會和百科/字典那兩個浮框搶地（#430 定過「同一時刻只在一個地方」）。那條
 顧慮站不住：**代碼檔裏自動浮的是診斷，散文裏自動浮的是百科，字典是 `空格 d` 按出來的**
 ——三者各有自己的場景，真要裁決只在按 `空格 d` 那一下。
 
@@ -5838,7 +5838,7 @@ rust-analyzer 說的話分兩路來，形狀一樣、時機完全不同：
 
 ### `YUMETE_LSP_TRACE`
 
-順手加的：這個環境變量指到一個檔，往來的每一條消息就按 `>>`／`<<` 記進去（每條截到
+順手加的：這個環境變量指到一個檔，往來的每一條消息就按 `>>`/`<<` 記進去（每條截到
 400 字）。默認關着——開着的話每敲一鍵就寫一份文檔進去。
 
 **它當場就掙回了本錢。** 修完第一版仍然紅，看上去像 `didSave` 沒起作用；日誌裏
@@ -5910,7 +5910,7 @@ Warning: **收信的那一頭分不出這條回答是誰的。** 一條回答只
 第一版把 Markdown 壓成純文本。2026-09-21 問：「它為什麼不能渲染 markdown 呢？我覺得完全
 可以呀。」——對的，**這個編輯器本來就是畫 Markdown 的**，現成的東西不用是浪費：
 
-- `yumete_core::markdown::spans(line)` 已經把一行拆成 `Strong`／`Code`／`Heading`／`Link`…
+- `yumete_core::markdown::spans(line)` 已經把一行拆成 `Strong`/`Code`/`Heading`/`Link`…
 - `yumete_tui::markup_style(kind, ink)` 已經把每一種對應到一個墨色，正文用的就是它。
 
 浮窗因此多一格 `marked: bool`，開着就走這兩支。一個看法，一套答案——浮窗裏的 `**` 和正文
@@ -5941,7 +5941,7 @@ hover **排在診斷前面**：它是**問出來的**，而診斷是自己冒出
 
 ### `空格 K` 留着 → **2026-09-22 接上了**（見 §5.12.16）
 
-大寫是「同一件事的更大版本」（`空格 c`／`空格 C`、`空格 w`／`空格 W`），所以「把說明開成側欄」
+大寫是「同一件事的更大版本」（`空格 c`/`空格 C`、`空格 w`/`空格 W`），所以「把說明開成側欄」
 該是 `空格 K`。**這一輪不占**：側欄版 hover 與字典浮窗↔面板（臨時的、光標一走就沒、
 `空格 s` 過去滾動、再按一次關掉）是同一套機制，先做字典那一套，hover 搭車，免得做出兩套
 行為不一樣的面板。
@@ -5989,7 +5989,7 @@ Warning: 那個範圍是 **UTF-16 碼元**，這一頭數字符，中間過 `pro
 ### 單子開着就收鍵，不開就什麽都沒變
 
 `Tab` 在插入模式本來有主人（引用補全，#418）。規矩是**浮出來的東西在，它收鍵**：單子開着
-`Tab` 是「就這一條」，沒開還是原來那件事。`C-n`／`C-p`／上下走，`Esc` 收起來。
+`Tab` 是「就這一條」，沒開還是原來那件事。`C-n`/`C-p`/上下走，`Esc` 收起來。
 
 **不給數字鍵。** 英文態下 `1`-`9` 選候選很順手，可 `2390` 在中文態是 IME 的選重鍵——同一個
 鍵在兩種狀態下兩個意思，正是「前端在把鍵交給引擎之前派掉」那一族 bug 的溫牀。
@@ -6021,7 +6021,7 @@ Warning: **問題必須排在 `didChange` 後面發。** 服務器手上要是�
 第一版直接拿 `Body::Keys`（`空格` 那張鍵表的形狀）裝候選，**編譯綠、測試綠、斷言全過**，
 出了圖纔看見：rust-analyzer 提六十二條，鍵表裝不下就往**寬**裏長，於是鋪成三欄佔掉半個
 屏幕。Warning: **鍵表與補全單子不是同一種東西**：鍵表是一屏掃一眼的，補全單子是一列**走着看**
-的，VSCode／helix／vim 一律單欄十行上下、選到哪滾到哪。
+的，VSCode/helix/vim 一律單欄十行上下、選到哪滾到哪。
 
 現在只畫九行的一扇窗，選中的那一條留在窗子中間偏上，到頭了就貼着頭尾；底下那一行從「怎麽
 用」換成「第幾條，共幾條」——單子露不全的時候，那是唯一說得出「還有」的地方。
@@ -6135,7 +6135,7 @@ Warning: 一步一步 `l` 走不行——從第一組走出來正好踏進第二
 | --- | --- | --- |
 | `⁽ ⁾` 上標圓括號、`⁰¹²³⁴⁵⁶⁷⁸⁹` | 7.50 | ✅ 整格 |
 | `⁅ ⁆` | 9.03 | ❌ **字體裏根本沒有這個字**（2026-09-23 查 cmap 覆核）——9.03 是回退字體的寬，不成格 |
-| `〔〕`／`［］` | 15.00 | ❌ 兩格 |
+| `〔〕`/`［］` | 15.00 | ❌ 兩格 |
 | `†` `‡` | 15.00 | ❌ 兩格 |
 
 **上標方括號 Unicode 裏不存在**，所以是 `⁽¹⁾`（三格，比 `[^1]` 還短一格）。整段源碼下頁面，
@@ -6207,7 +6207,7 @@ Warning: **只在 Esc 没有別的事可做的時候。** Esc 先收窗口、先
 
 ### 一鍵一檔，第二個字母各不相同
 
-最初提的是 `` `tw ``／`` `hk ``。Warning: **那樣 `` `t `` 既是完整命令又是 `` `tw `` 的前綴**，按完
+最初提的是 `` `tw ``/`` `hk ``。Warning: **那樣 `` `t `` 既是完整命令又是 `` `tw `` 的前綴**，按完
 `` `t `` 編輯器只能靠超時猜你還會不會敲 `w`——vim 裏最招人煩的一類行為。所以是：
 
 | 鍵 | | 鍵 | |
@@ -6299,7 +6299,7 @@ schema 的 `.csv`**——它從前只把列對齊，人還得自己按一次 `�
 
 起因是 2026-09-22 看着現狀說的一句：「我覺得現在的模型太亂了。乱七八糟的，我有点头晕。因為
 定義不清楚，同一個概念用不同的詞來描述。」——確實如此，而且亂在**三個正交的問題被絞成了一
-團**：誰決定它消失（人／光標）、畫在哪（浮窗／邊欄）、收不收鍵。
+團**：誰決定它消失（人/光標）、畫在哪（浮窗/邊欄）、收不收鍵。
 
 於是逐個問、逐個定，得出下面這一套。**先寫下來再動手**：對齊了半天的東西不能只留在對話裏。
 
@@ -6330,18 +6330,18 @@ schema 的 `.csv`**——它從前只把列對齊，人還得自己按一次 `�
 Warning: **這一刀把「面板順手帶出邊欄」整個情況消掉了。** 先前糾結的「臨時面板把邊欄帶出來，面板
 没了邊欄留不留」——`空格 d` 不碰邊欄，`空格 D` 本身就是人在開邊欄，兩邊都不含糊。
 
-大寫是「同一件事的更大版本」，與 `空格 c`／`空格 C`、`空格 w`／`空格 W` 同一條規矩。
+大寫是「同一件事的更大版本」，與 `空格 c`/`空格 C`、`空格 w`/`空格 W` 同一條規矩。
 
 ### 這一套替掉了什麼
 
 | 從前 | 現在 |
 | --- | --- |
-| 常駐層／臨時層兩層，右欄上下各畫一個 | 一個容器，一次一個面板 |
+| 常駐層/臨時層兩層，右欄上下各畫一個 | 一個容器，一次一個面板 |
 | 字典收鍵、表格詳情不收——逐個東西定 | 浮窗一律不收鍵；邊欄裏的收 |
 | 百科有邊欄頁而腳注没有 | 都是面板，都能進邊欄 |
 
 **`空格 K` 當天就接上了**：這一套一落地它就搭了車——`空格 k` 浮窗、`空格 K` 進邊欄，與
-`空格 d`／`空格 D` 逐字同形，没有長出第二套行為。
+`空格 d`/`空格 D` 逐字同形，没有長出第二套行為。
 
 Warning: **邊欄裏那一份與浮窗那一份是同一段 Markdown**，連上色都走同一支（`markup_style`）——
 一件事一個樣子。
@@ -6374,7 +6374,7 @@ Warning: **它會動整個檔**，所以加完文案立刻跑、`git diff --stat
 
 | 去掉的 | 換成 |
 | --- | --- |
-| `Layer`（上層／下層）枚舉 | 没有了。一個邊欄一個槽 |
+| `Layer`（上層/下層）枚舉 | 没有了。一個邊欄一個槽 |
 | `slot_layers()`——把一個邊欄切成上下兩塊 | 没有了 |
 | `panel_focus: Option<(Side, Layer)>` | `Option<Side>` |
 | `layer_showing` / `layer_takes_keys` / `focus_layer` | `slot_showing` / `slot_takes_keys` / `focus_slot` |
@@ -6410,11 +6410,11 @@ Warning: 這不是運氣：`Layer` 是個枚舉，**把它刪掉，編譯器就�
 Warning: **提示行一直是有的**——實測拍了一幀：「邊欄　Tab 換視圖　w 寬窄　C-w 去下一區　q 關」。
 `:wiki panel` 只是**開欄**，鍵還在正文裏；要 `C-w`（或 `空格 s`）過去纔算進焦點。
 
-Warning: **`j`／`k` 確實什麽都不做，而且原因很具體**：`View::Wiki` 在 `sidebar_rows` 那一支是
+Warning: **`j`/`k` 確實什麽都不做，而且原因很具體**：`View::Wiki` 在 `sidebar_rows` 那一支是
 `=> return`——它**不產生 rows**（每幀從光標算），而 `j` 走的是 rows。
 
 **判準**：邊欄裏別的視圖都是**行的列表**，百科是**一段文章**——文章要**滾**不要走。所以
-`View::Wiki` 走自己那一支：`j`／`k` 一行、`J`／`K` 半頁、`g`／`G` 兩頭，與別處同一套鍵。
+`View::Wiki` 走自己那一支：`j`/`k` 一行、`J`/`K` 半頁、`g`/`G` 兩頭，與別處同一套鍵。
 提示行也跟着說對是哪一件（「滾動」而不是「上下」）。
 
 Warning: **滾動位置記着光標在哪**：光標一走詞條就換了，換了還停在第七行，讀的是另一條的中間。
@@ -6440,7 +6440,7 @@ Warning: **畫的時候 `y` 改成「這一條裏的第幾行」**，屏幕那�
 `server.waiting` 一格既表示「等診斷」又表示「等答案」，而**診斷是不請自來的，一秒好幾條**。
 於是 `gd` 問出去之後，第一條落地的診斷就把那一格抹掉，`due_in()` 回 `None`，事件循環回去
 阻塞在鍵盤上——答案在管子裏等下一次按鍵。拆成兩件事：`waiting` 只管診斷，欠不欠答案看
-`asked_where`／`asked_what`／`asked_next` 三格在不在（`Server::owed`）。
+`asked_where`/`asked_what`/`asked_next` 三格在不在（`Server::owed`）。
 
 ### 三、問位置之前先把正文交出去
 
@@ -6463,11 +6463,11 @@ Warning: 連帶兩處緩存：`ROWS` 的鍵裏加了這一格（光標一動只�
 
 2026-09-21 表格組從 `t` 搬到 `空格 t`，手冊整本改了，代碼與教程沒跟：`tables.rs` 兩處
 （按字、按格）還把 `t` 收成表格組，`hint.rs` 還畫 `t 表格選單`，`tutor.rs` 整節還教
-`t r`／`t1s`，而 `keys_after('t')` 仍答得出表格鍵——**於是教程那幾行舊拼法逐條「驗過」全綠**。
+`t r`/`t1s`，而 `keys_after('t')` 仍答得出表格鍵——**於是教程那幾行舊拼法逐條「驗過」全綠**。
 以手冊為準（那次搬家買的正是「一個鍵不會因爲光標停在哪裏就換一個意思」），五處一起補完。
 
 Warning: 三則「`t` 後面認得哪些鍵」的文案從此**從真表生出來**（`Editor::table_keys_say`）。手抄
-那一份與真表對不上五處：少了 `b`／`w`／`F`，多了一個根本不存在的 `n`，`1s 1S` 抄成 `s S`。
+那一份與真表對不上五處：少了 `b`/`w`/`F`，多了一個根本不存在的 `n`，`1s 1S` 抄成 `s S`。
 
 ### 六、自己對自己的斷言
 
@@ -6489,10 +6489,10 @@ Warning: 三則「`t` 後面認得哪些鍵」的文案從此**從真表生出�
 整頁空白（拿**源碼行數**去夾，而面板滾的是**折行後的屏幕行**——現在前端走一趟順手把夾好的
 數寫回來，`G` 存 `usize::MAX` 讓它自己算）；`` `j `` 從 `S` 起步而 opencc 只有 `t2jp`
 （那個鍵從來就走不通）；沒載碼表時字典說「拆分表裏沒有這個字」（三種情形合成一句，而出廠
-正是第三種）；`--shot` 答不出字典、也不警告（於是 `空格 d`／`空格 k` 沒法出圖審）；
+正是第三種）；`--shot` 答不出字典、也不警告（於是 `空格 d`/`空格 k` 沒法出圖審）；
 `Transient::takes_keys` 還留着一個例外；`空格 D` 沒有 toggle、hover 浮窗沒有「進邊欄」
 那一句；`:sidebar-left search` 執行得了卻不在命令選單裏；`:` 與 `空格 ?` 同一件事兩種收尾；
-「邊欄／側欄」「工作區／窗格」「選單／選單」各兩個詞；手冊三處寫的是改之前的行為。
+「邊欄/側欄」「工作區/窗格」「選單/選單」各兩個詞；手冊三處寫的是改之前的行為。
 
 ## 5.12.21 哪一欄拿着鍵，線自己說（2026-09-23 報的）
 
@@ -6510,9 +6510,9 @@ Warning: 三則「`t` 後面認得哪些鍵」的文案從此**從真表生出�
 
 **定的是「粗＋金」**（2026-09-23）：有焦點 `┃` ＋金，没焦點 `│` ＋灰。Warning: **形狀和顏色
 各說一遍**——百個男人裏有八個分不出紅綠（同診斷那一格的理由），粗細他們分得出。
-底色那一路没選：邊欄本來就窄，而字典／hover 那一族自己有一套底色，兩種提示疊在一起會吵。
+底色那一路没選：邊欄本來就窄，而字典/hover 那一族自己有一套底色，兩種提示疊在一起會吵。
 
-一處畫（`sidebar_rule`），五個面板共用（大綱／檔案樹、百科、搜索、字典、詳情），
+一處畫（`sidebar_rule`），五個面板共用（大綱/檔案樹、百科、搜索、字典、詳情），
 `the_rule_says_which_sidebar_has_the_keys` 釘着「兩欄兩條線，粗的是拿着鍵的那一條」。
 
 ## 5.12.22 預覽跟着按鍵走：正文從 websocket 推過去，不存盤（2026-09-23）
@@ -6532,7 +6532,7 @@ websocket**，而編輯器在上面說話：
 | --- | --- |
 | `updateMemoryFiles` | `{"files":{"<絕對路徑>":"<全文>"}}`——把緩衝區推進排版器的 VFS，蓋過磁盤，觸發增量重編 |
 | `changeCursorPosition` | 預覽滾到光標那一頁 |
-| `syncMemoryFiles`／`removeMemoryFiles` | 全量同步／撤掉 |
+| `syncMemoryFiles`/`removeMemoryFiles` | 全量同步/撤掉 |
 
 源碼在 `crates/typst-preview/src/actor/editor.rs`（`enum ControlPlaneMessage`），CLI 那一支
 把每一幀當 JSON 解（`crates/tinymist-cli/src/cmd/preview.rs`）。**VS Code 走的就是這條，不是
@@ -7566,8 +7566,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^37]: 卷一底下二十章，看卷二的時候那二十章只是牆。摺疊在**核心**，不在 tui：
     只有它知道每一條標題有多深——`Row` 把 `depth` 花在行號上、縮進烤進了 `name`，
-    層級在那裏是字串的事實而不是數字。所以先建 `sidebar::Heading`（`path`／`line`／
-    `level`／`title`），摺完再變成 `Row`；`is_dir` ＝ 底下有東西、`expanded` ＝ 正
+    層級在那裏是字串的事實而不是數字。所以先建 `sidebar::Heading`（`path`/`line`/
+    `level`/`title`），摺完再變成 `Row`；`is_dir` ＝ 底下有東西、`expanded` ＝ 正
     開着，就是檔案樹已經在花的那兩格，前端一段 `match` 兩個視圖通用。**記號畫在縮進
     前面**（`▾ ` 然後纔是縮進），摺不摺得動讀成左邊一豎排；每一層花兩格畫記號會把窄
     邊欄僅有的字位吃光。鍵：`h` 摺自己，自己沒得摺就摺上面那一層並把游標挪上去（連按
@@ -7576,7 +7576,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     裏（`folded: BTreeSet<(PathBuf, usize)>`），大綱每次看都是重建的，存在別處就永遠
     看不見摺過的樣子；**關掉邊欄就沒了**，和檔案樹的 `open` 一樣。
 
-[^48]: **Dropped**: `:check-usage`／`標點`／`字集` (#233／#238／#240) do this in
+[^48]: **Dropped**: `:check-usage`/`標點`/`字集` (#233/#238/#240) do this in
     the editor's own process; there is no Chinese-prose language server to
     hook, and an optional one would be the same rules written twice
 
@@ -7613,7 +7613,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     記在缺口**下面**那一行（純刪的 `after` 是個空區間）並畫 `▔`，這裏跟它一樣；
     剪在檔尾時改畫 `▁` 在最後一行腳下。**順帶把顏色那一關也過了**：另外兩種是
     鋪滿的一格，這一種是一條邊，所以形狀本身就分得開——百個男人裏有八個分不出
-    紅綠，而綠／藍／朱這一組不必單靠顏色說話（同 `theme.rs` 的 `word_hue`）。
+    紅綠，而綠/藍/朱這一組不必單靠顏色說話（同 `theme.rs` 的 `word_hue`）。
     Warning: **U+2580–U+259F 整個方塊區都是 East Asian Ambiguous**，CJK 字體的終端把
     一個方塊畫成**兩格**，而這一格只有一格寬——多出來的那一格會把整行往右推。
     所以畫之前量一量（`yumete_cjk::char_width`，答案是啓動時問終端問來的），量出
@@ -8057,9 +8057,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | | 誰用 | 狀態 |
     | --- | --- | --- |
     | 〇 · `[ime] data_dirs` | 自己指路的人 | **已實現**（優先於一切） |
-    | 一 · 裝了 yume 就用它的 | Mac／Windows 上用宇浩輸入法的人 | **已實現** |
+    | 一 · 裝了 yume 就用它的 | Mac/Windows 上用宇浩輸入法的人 | **已實現** |
     | 二 · `brew install forfudan/tap/yume-data` | brew 用戶 | **零代碼改動** |
-    | 三 · `:yume-download` | 沒 brew 的 Linux／Windows | 待做（v0.1.1） |
+    | 三 · `:yume-download` | 沒 brew 的 Linux/Windows | 待做（v0.1.1） |
     | 四 · `$YUME_DATA_DIR` | 自己編數據的人 | **已實現** |
     | 五 · 兜底：內嵌**靈明精華版** | 什麼都沒有的人 | **已實現**（2026-09-14） |
 
@@ -8175,12 +8175,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     | 尺子的墨 | 最差 | 墨黑 | 不過 4.5 |
     | --- | --- | --- | --- |
-    | 250 | 4.36 | 5.58 | 1／21 |
-    | 300（`QUIET`） | 3.94 | 5.03 | 8／21 |
-    | 400（`FURNITURE`，現在） | 3.15 | 4.01 | 19／21 |
+    | 250 | 4.36 | 5.58 | 1/21 |
+    | 300（`QUIET`） | 3.94 | 5.03 | 8/21 |
+    | 400（`FURNITURE`，現在） | 3.15 | 4.01 | 19/21 |
 
     **落地（2026-09-13）：② 尺子單獨給一級。** `rung::RULER = 250`，只有欄號那一行動，
-    行號／頁籤／鍵名／批注全不動。判準是**它算不算正文**：數欄號是**真的在讀**（要打
+    行號/頁籤/鍵名/批注全不動。判準是**它算不算正文**：數欄號是**真的在讀**（要打
     `t3g` 跳到第三欄），既然在讀就按 4.5 那條線走。③ 不划算——那一級上掛着五六樣東西，
     為一行尺子把整套傢俱調亮，代價與收益不成比例。
 
@@ -8358,7 +8358,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `DISCOVER_LIMIT` 200 of them — 天龍八部, 1.22 M chars, yields 6004
     candidates in 320 ms. **high**
 
-[^240]: every character outside 通用规范／臺灣／香港／古籍, before the
+[^240]: every character outside 通用规范/臺灣/香港/古籍, before the
     typesetter finds out. The seven `.ycs` sets are loaded at startup already;
     two days. The writer's review called it the **best value-per-day on either
     list**. **high** Done 2026-09-05 as `:check-charset`, off the 字集 column of
@@ -8433,7 +8433,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     the mechanism — run it down a run of slots instead of one. **待定形**：一個
     格位是兩個單元格，而漢字佔滿兩個——終端裏沒有半號漢字，所以「小字」這一半做不
     到。三條路：(a) 割注只受半角文字，真半寬雙行，漢字夾注做不了；(b) 帶割注的那
-    一縱整條加寬到四個單元格（右行先讀，再左行），漢字可以，代價是游標／滑鼠／換
+    一縱整條加寬到四個單元格（右行先讀，再左行），漢字可以，代價是游標/滑鼠/換
     行都要知道有些格位是四格寬；(c) 割注自己佔兩縱，正文從它左邊接着走，斷縱那一
     套要重寫。**medium**
 
@@ -8464,7 +8464,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     and does not draw.
 
 [^245]: `@media print` in the same file `:export html` already wrote — `@page`
-    trim from `[export] page` (a5, 32開, or `137x195`), 天 12%／地 9%／側 10%,
+    trim from `[export] page` (a5, 32開, or `137x195`), 天 12%/地 9%/側 10%,
     chapters on a new page, headings not stranded. The type size is **derived**:
     版心 = 字數 × 字身, so `zong_len` and the paper leave it nothing to be. No
     頁碼: browsers implement no `@page` margin box, and the file says so
@@ -8527,8 +8527,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     matcher** — `:grep` and `:sh` already make the buffers and `gf` already
     parses them. **high**
 
-[^251]: quoting (the invariant generalises from delimiters to *cells*), TSV／`|`
-    ／`;`, the header fallback as a first-class path, and `:sh ps aux` landing
+[^251]: quoting (the invariant generalises from delimiters to *cells*), TSV/`|`
+    /`;`, the header fallback as a first-class path, and `:sh ps aux` landing
     in a grid. `csv.vim` colours; VisiData is not an editor and will not hand
     back a byte-identical 8 MB file. Overlaps #216–#218 and #227. **high**
 
@@ -8579,7 +8579,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **落地（2026-09-13）。** `scripts/build.sh` 在寫完碼表之後把方案檔拷進同一個
     `schemes/`，**逐個以剛寫下的那張表為閘**：`ling.ytab` → `lingming.toml`，
-    `xing`／`qing`／`riyue` 同理，拼音沒有自己的 `.ytab`，以共用的 `pinyin.yflb` 為閘。
+    `xing`/`qing`/`riyue` 同理，拼音沒有自己的 `.ytab`，以共用的 `pinyin.yflb` 為閘。
     Warning: 冰雪仍然在外——它要的數據 yumete 還不編。
     Warning: **原描述已經過時的那一半**：`schemes/` 這個目錄 `build.sh` 早就在寫了（碼表在
     裏面），缺的只是那幾個 `.toml`。所以這件事不 large，真正 large 的是當初看清它。
@@ -8727,7 +8727,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     the menu under it is already showing every command there is. **small**
 
 [^275]: 2026-09-05：「整页的表格视图就是 inline 表格视图的特例。」 Three modes,
-    not two — prose／源碼, **表格操作**（`t n`, the syntax stays, the keys are
+    not two — prose/源碼, **表格操作**（`t n`, the syntax stays, the keys are
     the grid's, and the table's lines stop soft-wrapping）and **真表格顯示**
     （`t t`, drawn as a grid the way a CSV already is, ruler and all, in the
     middle of the prose it sits in）— and two kinds of file: one whose extension
@@ -8758,8 +8758,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     for its first day, and gave the letter back to the detail panel on
     2026-09-06（「還是小寫方便」）. `t q` stops being 「離開表格」 and becomes
     「把窗口還回去」, returning to whichever of the three you came from. 加行
-    moves to `t r`／`t R` and 加欄 to `t c`／`t C`, because `t o` and `t n` were
-    needed for the modes. And `j`／`k` off the end of an in-document table now
+    moves to `t r`/`t R` and 加欄 to `t c`/`t C`, because `t o` and `t n` were
+    needed for the modes. And `j`/`k` off the end of an in-document table now
     walk **out** into the prose instead of stopping — a table in a chapter is
     not the end of the page. **medium**
 
@@ -8783,13 +8783,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^279]: 2026-09-06：「關閉當前 buffer，不是退出 yumete，能不能設個 `:Q` 的命令來
     作為 buffer close 的 alias？我想聽聽最佳實踐的做法。」 The field is
-    unanimous on the *alias*: Vim has `:bd`, Helix `:bc`／`:buffer-close`,
+    unanimous on the *alias*: Vim has `:bd`, Helix `:bc`/`:buffer-close`,
     Kakoune `:db`, and **not one of them uses an uppercase twin** — `:Q` differs
     from `:q` by a Shift, which is exactly the key the hand slips on, and the
-    two would mean different things. So the short spelling is Helix's: **`:bc`／
-    `:bc!`／`:bclose`**. Then the larger half (「Option 2 同時加
+    two would mean different things. So the short spelling is Helix's: **`:bc`/
+    `:bc!`/`:bclose`**. Then the larger half (「Option 2 同時加
     上 qa。我們還沒發佈，所以沒有破壞性改動這個擔憂」): **`:q` now closes this
-    file and leaves only when it was the last one**, and **`:qa`／`:qa!`**
+    file and leaves only when it was the last one**, and **`:qa`/`:qa!`**
     leaves however many are open. That is Vim's arrangement and the reason it is
     Vim's — the common case is 「done with this chapter」, and an editor that
     exits on it throws away the other five files' cursors. `:qa` is still the
@@ -8832,7 +8832,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^283]: 2026-09-06：「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学
     习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with
-    four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an
+    four vocabularies — `:render on`, `t n`/`t a`/`t t`, a dialect set, an
     indent flag — so learning one taught you nothing about the next. They are
     now one word each at three levels, `off` / `basic` / `full`, and **the
     levels are linked at assignment, not at read time**: `:render <級>` *writes*
@@ -8880,7 +8880,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `cell_position` was pointing; and the `Bounds::Md` schema is built from the
     **first** table in the file, so `t y` in the second table reported the
     first table's column name and was believed. `schema_here()` derives it from
-    the header above the cursor, and `t y`／`t s`／`t/` ask it. **The sequence
+    the header above the cursor, and `t y`/`t s`/`t/` ask it. **The sequence
     grammar landed 2026-09-07 with them**: `Sequence { numbers, joint }`
     replaces 「a number and maybe a second one」, a bare `t s` is refused
     outright (a sort of 123 380 rows costs real seconds and `u` refunds the
@@ -8982,7 +8982,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     nothing unasked」 and 「基本 folds when asked」. `None` lets the place
     answer — 全 folds, 基本 does not, the `t t` grid caps at its own width
     however it was opened — and a `Some` written by `t w` travels with the
-    reader across every level, which is also what keeps `t b`／`t f`／`t t`／
+    reader across every level, which is also what keeps `t b`/`t f`/`t t`/
     `t q` from quietly undoing an answer the reader gave.  **The layout stopped
     depending on the caret, 2026-09-07** (「不是说撑开的时候卡，而是不撑开的单元
     格也卡」). `t w` put the caret back into `PadKey` — the very trap that key's
@@ -9078,7 +9078,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     cells** rather than the column after the last glyph: runs are the same
     answer in both writing directions, and they also find the gap between two
     short 縱 that a left-to-right scan walks straight past. The mark hangs from
-    whichever end faces the caret (`╯`／`╮` when the margin turned out to be on
+    whichever end faces the caret (`╯`/`╮` when the margin turned out to be on
     the left, which in 縱書 it nearly always is) — a corner pointing away from
     the caret is worse than no corner at all. The three levels went in as
     designed, with `basic` the factory level and the 藥丸 bought by closing the
@@ -9301,7 +9301,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     （300 行，也就是 #296 把長備註挪進腳註**之前**的路線表）畫一幀，摺起 13.7 ms、
     折行 16.5 ms。**折行的加價是 +0.04 ms 到 +2.9 ms**，不是原先記在這裏的
     「一次按鍵 0.17 秒」——那個數字多半量的是舊表，而且沒有把按鍵與畫面分開計。
-    所以修法（carry the running height，編輯、改寬、摺／攤切換時作廢）**是對的，
+    所以修法（carry the running height，編輯、改寬、摺/攤切換時作廢）**是對的，
     但先不做**：真文件上買不回 0.05 ms，卻要在畫面代碼裏多一份得維護的緩存。
     等哪份文件真畫得慢了再說。
     Warning: **同一趟量出來的兩件事都與折行無關，而且都貴得多**：① 一次帶數字的移動
@@ -9328,7 +9328,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     them. `C-Space` is gone with it — macOS spends it twice over (Spotlight, and
     switching input source) so it never reached the terminal. **The outer
     switch ended the day with no key at all.** `Shift+Space` replaced `C-Space`
-    for half of it and was taken back out: it is 全／半角 in most input methods,
+    for half of it and was taken back out: it is 全/半角 in most input methods,
     and the input method holding the keyboard while yume is 關 is exactly a
     system one — so the single direction that matters most, 關→開, is the one it
     could not be relied on for. Warning: The general shape, worth keeping: **a chord
@@ -9374,20 +9374,20 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^293]: 2026-09-08 的設計：「文檔可以有兩個邊欄，左邊欄是文件、目錄等信息（不需
     要編輯的）；右邊欄是表格、字典、百科等（用户可以編輯的）。」左邊歸 `空格 s`
-    （side bar），右邊歸 `空格 i`（information bar），各自**隱藏／顯示／操作**三
+    （side bar），右邊歸 `空格 i`（information bar），各自**隱藏/顯示/操作**三
     態。Warning: 三態**今天已經存在，只是沒有名字**：`show_sidebar` 那條四段規則裏「側
     欄開着、鍵在正文」就是顯示（editor.rs:15134）。新的是把狀態從「命名視圖的
     鍵」上剝下來交給一個統一鍵——隱藏或顯示按一下進操作，操作按一下進隱藏。**具名鍵
     留着**（已定）：`空格 o` 大綱、`空格 d` 字典、`t i` 表格詳情——檔案那一個
     （空格底下那個 e）2026-09-18 撤了，命令 `:sidebar-left files`
     接手；統一鍵說「哪個邊欄、什麼狀態」，具名鍵說「哪個視圖」，兩件事而不是別
-    名，`空格 s` 開在上次那個視圖。**`Tab`／`Shift+Tab` 各輪自己那三格，輪到空的
+    名，`空格 s` 開在上次那個視圖。**`Tab`/`Shift+Tab` 各輪自己那三格，輪到空的
     畫「這裏沒有」**（已定）——這**推翻**了 `View::Dictionary` 不進輪換的現行規矩
     （sidebar.rs:33「Cycling into it would show an empty panel most of the
     time」），而且推翻得對：跳過空的會讓同一個鍵在不同處境下去到不同地方，那正是
     #272 的形狀。**`q` 回正文，`Esc` 在邊欄層面什麼都不做**（已定，理由在更
     深一層：右欄能編輯之後 `Esc` 是退插入模式的鍵，多按一下就收掉面板是真會
-    發生的事）；今天 `q` 是「直接關掉」（editor.rs:15465），關掉改由 `空格 s`／
+    發生的事）；今天 `q` 是「直接關掉」（editor.rs:15465），關掉改由 `空格 s`/
     `空格 i` 負責。Warning: `Esc` 是所有人的「出去」鍵，卡住的人一定會按它——
     `hint.sidebar.back-to-text` 現在寫的是 `C-w`，必須改寫成 `q`，「拿走鍵的那一
     半有義務說清楚怎麼還」這條規矩在這裏是安全網而不是禮貌。**`C-w` ≡ `空格 w`，
@@ -9405,7 +9405,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **每一槽分兩層：上層常駐，下層臨時（2026-09-13 定，照 VSCode 邊欄那種堆疊分區）。**
 
-    * **上層**是文件樹／緩衝區／大綱，將來還有 #419 的搜索面板。`Tab` 在上層那幾格
+    * **上層**是文件樹/緩衝區/大綱，將來還有 #419 的搜索面板。`Tab` 在上層那幾格
       之間輪，按 `q` 才走。
     * **下層**是字典與表格詳情：**每幀算出來的**，成立就畫、不成立就沒有，**上層原樣
       不動**。字典出廠落在右欄下層（它是「資訊」），表格詳情同槽——右欄上層現在空着，
@@ -9421,13 +9421,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       的原註：「a reading surface with a scrollbar is a surface with a mode」），走到第
       20 欄面板就滾到第 20 欄。讓它拿鍵反而是壞的——鍵在面板裏光標就動不了，面板當場
       凍住。字典不同：它列的是一個字的幾家拆法，**裏面沒有光標可走**，所以它拿鍵、
-      `j`／`k` 滾（三 b 落地）。這一點自洽：鍵在面板裏的時候正文光標不動，那個字還成立，
+      `j`/`k` 滾（三 b 落地）。這一點自洽：鍵在面板裏的時候正文光標不動，那個字還成立，
       面板不會在你滾的時候消失；`C-w` 出去、光標一走它纔收。
 
     **四（2026-09-13 落地，當天又改寬了一次）**：**一格一個側**，不是一組一個側。
-    新增 `sidebar::Panel`（`files`／`buffers`／`outline`／`dictionary`／`detail`），
+    新增 `sidebar::Panel`（`files`/`buffers`/`outline`/`dictionary`/`detail`），
     每格各自認自己在哪邊；配置是 `[sidebar]` 一節、一格一行（原先 `[editor]` 那兩個
-    `sidebar_side`／`info_side` **刪了，不留別名**）。命令 `:panel-left`／
+    `sidebar_side`/`info_side` **刪了，不留別名**）。命令 `:panel-left`/
     `-right`，不寫名字＝手上這一格。
 
     Warning: **`Tab` 因此挪給了編輯器。** 「哪幾個視圖共用這一槽」是設置決定的，`Sidebar`
@@ -9487,10 +9487,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | | 做什麼 | 怎麼算過 |
     | --- | --- | --- |
     | 一 | 抽槽位：`sidebar` ＋ `sidebar_focus` 換成兩個槽加一個焦點指針，四個現有視圖原樣搬進去 | 純重構，畫面**不變**，測試全綠 |
-    | 二 | 面板聲明屬性，三態／`Tab` 輪／寬度由宿主按屬性算 | `View::Dictionary` 那個寫死的特例消失 |
+    | 二 | 面板聲明屬性，三態/`Tab` 輪/寬度由宿主按屬性算 | `View::Dictionary` 那個寫死的特例消失 |
     | 三 a | 每槽分兩層；詳情搬進右槽下層（`split_detail` 退休） | 兩側同時有東西 |
     | 三 b | 字典變成臨時層（右槽下層，收鍵、`j`/`k` 滾），`View::Dictionary` 刪掉 | 槽位真的解耦了 |
-    | 四 | 一格一個側：`[sidebar]` 配置 ＋ `:panel-left`／`:panel-right` | 大綱挪到對面時 `Tab` 只輪這一側的 |
+    | 四 | 一格一個側：`[sidebar]` 配置 ＋ `:panel-left`/`:panel-right` | 大綱挪到對面時 `Tab` 只輪這一側的 |
     | 五 | #419 高級搜索 | 只是「一個聲明了可編輯的面板」，不動宿主。**還沒做** |
 
 [^294]: 2026-09-08：「如果真的要更好看，我覺得可以使用快捷鍵提示的那個面板風格，
@@ -9606,12 +9606,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 7,000 字一格 `100j` | **32.8 ms** | 6.812 ms | 9.594 ms |
 
     `100j` 從 **0.67 秒掉到 32.8 毫秒**（二十倍），一幀從 13 ms 掉到 6.8 ms——沒有
-    人衝着這一條修過，是 #313／#315／#316／#320 那一批順帶的。**「以秒計」這個說法
+    人衝着這一條修過，是 #313/#315/#316/#320 那一批順帶的。**「以秒計」這個說法
     已經不成立**，眼下沒有哪一個數到得了看得見的地步（真表是 0.6 ms 與 0.4 ms）。
     留着不動，但下一個讀它的人別照 0.67 秒那個數去估。
 
-    **2026-10-03 又跑了一遍，四個數和 10-01 逐格相同**（0.554／0.390／0.435，
-    33.090／6.904／9.656）。順帶另量了一組形狀相反的表（30,000 行 × 20 欄、每格
+    **2026-10-03 又跑了一遍，四個數和 10-01 逐格相同**（0.554/0.390/0.435，
+    33.090/6.904/9.656）。順帶另量了一組形狀相反的表（30,000 行 × 20 欄、每格
     十來個字，200×50）：**一幀 0.80 ms**。所以貴的不是行數也不是欄數，是**一格裏
     有多少字**——7,000 字一格那一種纔到 7–10 ms，而那不是人寫得出來的表。
 
@@ -9637,7 +9637,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     快照走或閒下來再算纔對；③ 跟 **git** 比，那是 #55，要麼引一個 git 庫，要麼喊
     `git diff -U0`，這件事本身要先定。
     **兩個沒定的**：顏色與線型是兩個軸（綠藍紅 × 實線虛線），一個軸給
-    「增／改／刪」，另一個軸給誰？——給「比磁碟還是比 git」最自然，但那樣同時開兩個來源就畫不出；
+    「增/改/刪」，另一個軸給誰？——給「比磁碟還是比 git」最自然，但那樣同時開兩個來源就畫不出；
     以及 `:` 開關叫什麼，它該不該跟着 `[editor] line_numbers` 一起關。**medium**
     Warning: **原始觀察後來自己更正了**（2026-09-08 晚）：「默認狀態沒有那條有顏色的細線
     （可能是我那個文件夾的 local 設置加上的，用來表示 git diff），helix 的行號和正文
@@ -9668,8 +9668,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     屬實：`page_areas`（`lib.rs:2180`）只要 `[editor] hints` 開着就永遠扣掉那一行，
     空不空都扣，而它畫在正文的底色上，所以一則訊息看起來像寫稿的人自己打的一行字。
     **四個東西已經是同一個形狀**，只是各寫各的：`空格` 的 which-key（#273 從矩形改成
-    面板）、腳註／註釋那條橫條（#294）、`:write` 的安全核驗（#295），和這條提示行。
-    收成一個之後參數就是**標題、正文、鍵提示、位置**（左下／右下／正文區中央），
+    面板）、腳註/註釋那條橫條（#294）、`:write` 的安全核驗（#295），和這條提示行。
+    收成一個之後參數就是**標題、正文、鍵提示、位置**（左下/右下/正文區中央），
     #294 從一條「要做的事」變成一個參數。
     **三件要定的**：① 狀態行不動——它答的是「我在哪」，永遠在，那是它值一行的理由；
     ② 面板落在光標的對角，而光標在最下面幾行時改用上方角落（#294 已經定了這條，
@@ -9726,7 +9726,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     思路的產物）；收成一個 helper，讓每條渲染斷言失敗時輸出一張可讀的圖，而不是
     `Vec<String>` 的 Debug。
     **二、讓二進制能被問問題，而不是只能被讀源碼。** `--shot` 已經證明有效；同類的還有
-    「把當前折行佈局／表格網格／鍵位派發鏈打印出來」這種一次性查詢。把「讀兩千行」換成
+    「把當前折行佈局/表格網格/鍵位派發鏈打印出來」這種一次性查詢。把「讀兩千行」換成
     「跑一條命令」，邊際成本很低。
     **三、測試名繼續寫成整句。** `the_hud_takes_the_nearest_margin_not_the_first_row_with_room`
     這種名字本身就是文檔——光看名字就知道它在保護什麼。這條已經在做，寫進規範免得退化。
@@ -9735,12 +9735,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     （`the_cost_of_drawing_a_grid`，`#[ignore]`），下一個人先量再改。
     **邊界（2026-09-08 同意的）**：「测试多 100 行换几万 token」只在**不延長牆鐘**的前提下
     成立。workspace 全跑十幾分鐘，再往裏塞重測試會讓人更不敢跑，反而更慢。所以新加的
-    診斷代碼只許落在**失敗路徑**（斷言不失敗就不算）與**按需查詢**（`#[ignore]` ／ CLI
+    診斷代碼只許落在**失敗路徑**（斷言不失敗就不算）與**按需查詢**（`#[ignore]` / CLI
     子命令）上，不進每次都跑的熱路徑。**現有的診斷與測試代碼同樣可以按這條回頭優化**——
     把在成功路徑上算好、只為失敗時打印的東西改成惰性的。**medium**
 
     **2026-09-11 量了一輪，一條做了、兩條否決了。** 起因是「`cargo test --workspace`
-    跑了 48 分鐘，能不能並行」。逐項的數字（14 核，`time` 的 CPU% 是 CPU 秒／牆鐘秒，
+    跑了 48 分鐘，能不能並行」。逐項的數字（14 核，`time` 的 CPU% 是 CPU 秒/牆鐘秒，
     所以滿載是 1400%）：
 
     | 量的東西 | 數字 |
@@ -9748,7 +9748,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 熱跑全workspace（都編好了） | 3:24.6，117% CPU |
     | 29 個 target 真正執行之和 | 91.2s |
     | 從最底層 crate 觸發、全workspace 重編 | **16.8s** |
-    | 其中 user／sys | 12.6s／48.4s |
+    | 其中 user/sys | 12.6s/48.4s |
 
     ① **做了**：`diag` 的 `a_report_says_what_was_pressed` **一個測試 14.58 秒**——
     `report()` 裏是 `Backtrace::force_capture()`，給這個巨大的 debug 測試二進制符號化
@@ -9759,7 +9759,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     測試二進制只有 14.9 秒，能省的是其中幾秒；而 `ambiguous_width.rs` 與 `found_schemes.rs`
     的檔頭已經寫明它們**必須**獨佔一個二進制（`set_ambiguous_wide` 是進程級設置、
     `command::set_schemes` 寫 `OnceLock`），併了就是把 #371 那個病請回來。**不值。**
-    ③ **否決**：`[profile.test] debug = "line-tables-only"`。同一個觸發點 A／B 兩趟，
+    ③ **否決**：`[profile.test] debug = "line-tables-only"`。同一個觸發點 A/B 兩趟，
     CPU 工作量 61.0s ↔ 60.8s，**差 0.3%**。一個買不到東西的旋鈕不如不加。
     ④ **`cargo nextest` 也不是這裏的解**：它優化的是「跑」那 91 秒，而這 91 秒裏 52 秒是
     tui 一個二進制（並行也繞不開），24 秒是 rustdoc 為 3 個 doc-test 現編三個二進制。
@@ -9783,7 +9783,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     Warning: **那個 48 分鐘複現不出來**：現在同樣的樹，重編 16.8 秒、跑 91 秒。最可能是當時機器
     另有負載（B 那一趟就撞上了，174% CPU 對 362%）。**別把它寫成一個需要解釋的數字。**
     ⑤ 順帶量到的垃圾，沒修：`target/` **16 GB**（`debug/deps` 裏 3865 個二進制），
-    `$TMPDIR` 裏 1114 個 `yumete-yume-fault-*` ／ `yumete-sortview-*` 沒人清理的夾具
+    `$TMPDIR` 裏 1114 個 `yumete-yume-fault-*` / `yumete-sortview-*` 沒人清理的夾具
     （整個 `$TMPDIR` 8714 項 13 GB）。Warning: 一度以為那 1114 個是 core 套件變慢的原因，
     **量了不是**：換成空的 `TMPDIR` 反而 18.4 秒，用真的 10.6 秒。
 
@@ -9804,7 +9804,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **2026-09-08 做完了**：`smart_cased`（`editor/search.rs`）加在 `compile` 的最前面，
     快取因此是照**編出來的那一版**存的；`[editor] smart_case` 出廠 `true`
     （欄位、預設、`Option`、merge、apply 五處都動了），`set_smart_case` 順帶清快取。
-    **一併吃到的是 `:s`／`:grep`／`t?` 表列搜索**——它們都走 `compile`，與 vim 的
+    **一併吃到的是 `:s`/`:grep`/`t?` 表列搜索**——它們都走 `compile`，與 vim 的
     smartcase 同形；`:s/a/b/i` 的 `i` 仍在，只是小寫模式下已是多餘。
 
 [^302]: 2026-09-08 看 helix 順帶記下的兩條，都關於底下那幾行：「helix 的底層狀態欄
@@ -9836,7 +9836,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     做的時候與 #299 第二步同一批。
 
     **2026-09-13 落地**（與 #299 第二步同一批，細節記在那一條）。除了說好的三樣，
-    常駐的鍵提示也搬進了這一行，於是它的優先序是**打命令／搜索 → 剛發生的訊息 →
+    常駐的鍵提示也搬進了這一行，於是它的優先序是**打命令/搜索 → 剛發生的訊息 →
     這裏能按什麼**。Warning: **兩條仍沒定**：補全面板的寬度（現在跟着命令長度走），
     和縱書裏「狀態行下面一行」該怎麼算。
 
@@ -9864,7 +9864,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **驗的方法**：`yumete --shot=110,20 --html <檔>` 出一張帶底色的圖，數
     `background:` —— 這條就是 #300 說的「讓二進制能被問問題」，五分鐘定的位。
     **2026-09-08 做完了**：`whole = len <= PREFIX` 那道閘加上了，順帶那道空行保險絲；
-    兩條回歸測試餵的是**截斷過的前綴**（`a_line_too_long_to_be_seen_whole_may_not_open_a_code_block`／
+    兩條回歸測試餵的是**截斷過的前綴**（`a_line_too_long_to_be_seen_whole_may_not_open_a_code_block`/
     `a_multi_line_body_is_code_until_the_brackets_close_or_a_blank_line`）——
     Warning: 舊測試餵的是整行（`l.chars().count()`），所以**它們永遠碰不到這個 bug**，
     這正是 #300 說的那一類：測試綠着，而真正的呼叫方餵的是另一種東西。
@@ -9927,17 +9927,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     ## 要改的
 
     只有 `e`，只有一處：**光標停在某個詞的最後一格時，起點該挪一格而沒挪。**
-    `e`／`b`／`E`／`B` 走的是 `editor/keys.rs:647` 一帶的路子——算出一個位置就
+    `e`/`b`/`E`/`B` 走的是 `editor/keys.rs:647` 一帶的路子——算出一個位置就
     `select_to(p)`，而 `select_to` 把錨點留在光標原處。`w` 沒中，因為
     `select_word_forward`（`editor/matching.rs:325`）自己算錨點。
     給 `e` 一支和 `w` 同形的 `select_word_end`，`b` 照鏡子做一份，四個鍵一起改。
     另外要一份「粗粒度詞」的取法給 `e` 專用（無視 `segmenter`），以及上面說的
-    `is_cjk`／`category` 兩處。
+    `is_cjk`/`category` 兩處。
 
     ## 做完了（2026-09-11）
 
     Warning: **那份「粗粒度詞」有兩個用處，不是一個**：`e` 永遠用它，`w` 在**分詞關**的時候也
-    用它。而「分詞關」這個狀態**當時還不存在**——`WordLevel` 只有 strict／balanced／full，
+    用它。而「分詞關」這個狀態**當時還不存在**——`WordLevel` 只有 strict/balanced/full，
     所以這一條連它一起加了。
 
     * `word_ranges_coarse`（`yumete-cjk/src/word.rs`）：一串同類字符算一個詞，
@@ -10004,15 +10004,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     Warning: **但 helix 的 tutor（`runtime/tutor:282`）教了一句我們接不住的話**：
     「To select the word under cursor, combine `e` and `b`.」
-    兩個鍵只有**同粒度**纔湊得成一個詞，而上面那份規格讓 `e` 走粗、`w`／`b` 走詞典。
+    兩個鍵只有**同粒度**纔湊得成一個詞，而上面那份規格讓 `e` 走粗、`w`/`b` 走詞典。
     實測：光標在 `已`（詞 `已經` 的頭），`e` 再 `b` 給 `見了`——散的。
     英文碰巧對（`O` → `OK`），因為空格把兩種粒度對齊了。
 
-    攤開就是一張缺一格的表：**詞（`w` `b`）／句（`e` ？）／WORD（`E` `B`）**。
+    攤開就是一張缺一格的表：**詞（`w` `b`）/句（`e` ？）/WORD（`E` `B`）**。
 
     **決定（2026-09-11）：把 `b` 也改成粗粒度**，理由是
     「**eb 取句子可能更重要一些。因爲英文的詞語往往有很多字母，但中文的詞一般是
-    2.5 個字符**」。於是 `e`／`b` 成對，`e` 再 `b` 取的是**兩個標點之間那一段**：
+    2.5 個字符**」。於是 `e`/`b` 成對，`e` 再 `b` 取的是**兩個標點之間那一段**：
     `他抬頭看了看那片天`、`山路已經看不見了`、`走吧`。
     Warning: **代價是明知故犯的：往回取「詞」這個動作沒有了。** `w` 成了唯一走詞典粒度的鍵，
     而且只往前。要往回取一個詞，`w` 再 `b`（實測 `已` → `已經`）。
@@ -10064,7 +10064,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^305]: `buffer.rs:527` 那一句 `if self.pending_draft.is_some() && !self.owns_swap
     { return Ok(()) }` 護的是別人沒認領的草稿，可代價是**這一輪整輪不寫草稿**：
-    `:w` 之後 `clear_swap` 也是空轉（`owns_swap` 是 false），只有 `:recover`／
+    `:w` 之後 `clear_swap` 也是空轉（`owns_swap` 是 false），只有 `:recover`/
     `:recover!` 會把它翻過來。量過：`:w` ＋ 六秒輸入 ＋ 三十個 tick 之後，磁盤上那份
     仍與崩潰那次逐位元組相同；`:q!` 之後還在。同一段狀態也解釋了兩個 yumete 開同一個
     檔案時互相蓋草稿——A 寫 `sharedAAA`、B 蓋成 `sharedBBB`、B 的 `:w` 再把它刪掉，
@@ -10084,7 +10084,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `stamped >= saved` 本來就永遠不會再 offer 它，留着只是一塊死數據。**medium**
 
 [^306]: #295 的界限今天只掛在 `commands.rs:89` 的 `Command::Write` 上，那一段註釋
-    自己寫着 `:w!`／`:wq`／`:wa` 是故意先不接的。實際用起來 `:wq` 纔是對齊完一張表
+    自己寫着 `:w!`/`:wq`/`:wa` 是故意先不接的。實際用起來 `:wq` 纔是對齊完一張表
     最順手的收尾，`:write-all` 是全書 `:replace` 的收尾。**而 swap 那一路從一開始就
     不在那個決定裏**：`write_swap` → `write_atomically` 不問尺寸。`docs/.development.md.yumete`
     4.3 MB 就是這麼來的——正文二十個版本裏從沒超過 448,400 位元組，那份草稿卻是
@@ -10094,7 +10094,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     做法：`oversize_query` 從 `Command::Write` 移進 `write_forcing`。
 
     **2026-09-09 落地，並且推翻了這一條原先的後半句。** 寫盤那一半照做了：閘門移進
-    `write_forcing`，於是 `:w`／`:w!`／`:wq`／`:write-all` 一起繼承；`save_as` 不走那個
+    `write_forcing`，於是 `:w`/`:w!`/`:wq`/`:write-all` 一起繼承；`save_as` 不走那個
     漏斗，所以 `:wq <名字>` 那一支另外問一次。`Wrote` 多一個 `Asked`，**由型別逼着每個
     呼叫端表態**——`:wq` 因此不會在問題還立着的時候把稿子從螢幕上拿走，`:write-all` 停在
     問的那一個 buffer 上（問題點名的是一個檔案，讀的人得正看着它）。`:w!` 也照問：那一個
@@ -10104,7 +10104,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **`write_swap` 那一半不做，而且不該做。** 草稿的職責是**照實鏡射緩衝**：緩衝真有
     4.3 MB，就該有一份 4.3 MB 的草稿。加一道尺寸閘門等於拿「磁盤上多一個大檔案」去換
     「這一輪沒有崩潰保護」——後者纔是真正丟東西的那一邊。4.3 MB 那份的成因也不在鏡射：
-    撐大是 `t F` 幹的（#292／#295 管），而它**一直留着**是 #305 幹的。#305 修好，這一類
+    撐大是 `t F` 幹的（#292/#295 管），而它**一直留着**是 #305 幹的。#305 修好，這一類
     殘留自己就沒了。**small**
 
 [^307]: 不是刻意構造的檔案：五千行乾淨資料 ＋ 一個 `2500,"Smith, John",note` 照樣按
@@ -10118,7 +10118,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **2026-09-09 落地，而且比上面那句窄得多。** 在門口攔整份檔案是不必要的：**壞掉的
     範圍就是被改的那一行**——寫回時這一行由它自己的格子重組，動不到別人。所以攔在
     *寫*那一側，逐行問。`cell_span_to_edit` 是新的門，只給會改東西的那五個操作走
-    （`put_column`／`paste_grid`／`clear_cell`／`edit_cell`／`put_cell`），讀那一路照舊
+    （`put_column`/`paste_grid`/`clear_cell`/`edit_cell`/`put_cell`），讀那一路照舊
     ——**一份帶引號的 CSV 仍然看得見、走得動、對得齊**，八 MB 也還是八 MB。
     判斷是 `table::quoted_field`：一個欄位**開頭**是引號纔算（行首或分隔符之後，容許
     中間有空白），所以 `he said "hi"` 不算——它裏面沒有分隔符，`cells` 切得對，而真要
@@ -10179,12 +10179,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **沒有用庫，理由與「坑多不多」無關**：這個編輯器要的是 `cells` 交出**原文行裏的字元
     區間**，光標停在某一格、`c` 只換那幾個字元、其餘位元組一個不動。`csv` crate 交出的是
     解好引號、擁有所有權的值，沒有回指原文的偏移；用它就得改成「解析成值→編輯→重新序列
-    化」，那樣一個字沒改的行也會被規範化一遍——跟 #309／#310／#327 剛立下的東西正面衝突。
+    化」，那樣一個字沒改的行也會被規範化一遍——跟 #309/#310/#327 剛立下的東西正面衝突。
     導出那一段倒是可以用，可它一共五行。
 
     做法：`cells` 走一趟狀態機——欄位**只在開頭**（行首或分隔符之後，容許前導空格）能被
     引號打開，`""` 是一個字面引號（RFC 4180）。span **含引號**，因為引號在檔案裏、而寫的人
-    看的是檔案。另加 `unquote`／`quote_for` 給導出：讀出值，再按**目標**分隔符的規矩寫回——
+    看的是檔案。另加 `unquote`/`quote_for` 給導出：讀出值，再按**目標**分隔符的規矩寫回——
     逗號在 `.csv` 裏要引號、在 `.tsv` 裏不要。
 
     兩處權宜之策隨之退場：`row_would_break`（「碎片寫不回去」不再成立；擋住分隔符的守衛
@@ -10202,7 +10202,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^313]: 快取的 key 是 `(buffer.id(), revision)`，而 `revision` 每編輯一次就動，所以
     「每次編輯掃一遍」＝**每一鍵掃一遍全部行**。量（2026-09-09，release）：6,293 行
-    4.3 ms／15,734 行 10.2／31,469 行 20.0／62,938 行 **37.8 ms**，線性，約 0.6 µs 一行；
+    4.3 ms/15,734 行 10.2/31,469 行 20.0/62,938 行 **37.8 ms**，線性，約 0.6 µs 一行；
     `sample` 6,503/6,600（98.5%）落在 `scan_blocks`。`:render off` → **0.4 ms**。
     **中英混排纔是這一條的常態**：英文段落硬折成很多短行，同樣的位元組換成長中文行
     （約六百行）只要 1.2 ms。
@@ -10226,7 +10226,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^314]: `:913` 已經有 `event::poll(ZERO)`——那是滾輪的（`WHEEL_BURST` 一撥合併 64 格）。
     按鍵那一路沒有：`:343` 每個排隊的重複事件都走一次 `terminal.draw`。一旦每鍵成本
-    超過自動重複的間隔就開始積壓，**鬆手之後光標還在走**，而這正是 #313／#315／#316
+    超過自動重複的間隔就開始積壓，**鬆手之後光標還在走**，而這正是 #313/#315/#316
     從「有點慢」變成「不能用」的那一步。做法：`terminal.draw` 之前照 `:913` 補一句
     poll，還有事件排隊就跳過這一幀。順帶把 `:443` 那個無條件的 `buffer.clone()` 收進
     `take_screenshot_request()` 為 `Some` 的分支（120×50 一幀 24 µs、400×100 94 µs，
@@ -10264,7 +10264,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^316]: `PadKey` 裏有 `caret`，**而那是載重的**：折行要把光標所在那一格留整，答案本來就
     跟着光標走。代價是 Insert 中每一鍵必然 miss，而 miss 一次要把整個表格區域走三到四遍。
-    量（在 `on_key` 裏頭，不含畫面）：500 行 7.4 ms／2,000 行 29.9／5,000 行 **86.7**／
+    量（在 `on_key` 裏頭，不含畫面）：500 行 7.4 ms/2,000 行 29.9/5,000 行 **86.7**/
     10,000 行 **405 ms**；中英混排更差（97–105 ms）。**所以不是把 `caret` 拿掉**，是拿掉
     「光標動了就整表重算」，兩步：
 
@@ -10329,7 +10329,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     一、**寫的有天花板，走的沒有。** `Editor::WRITING_MAX = 10_000`（`verbs.rs`）與
     `repeat_writing()`：跑 `n.min(WRITING_MAX)` 遍，**削過就把削了這件事寫進狀態行**——
-    默默少貼一半比慢更壞。走的那一路（`hjkl`／`w`／`n`／格狀面板的四個方向）一個字沒動，
+    默默少貼一半比慢更壞。走的那一路（`hjkl`/`w`/`n`/格狀面板的四個方向）一個字沒動，
     它們到頭就靠 `repeat` 自己早退，一百萬照舊。改讀 `repeat_writing` 的是十處：
     `>` `<` `C-a` `C-x` `.` `J` `p` `P` `u` `U`。
 
@@ -10373,12 +10373,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一對照（含空匹配 `x*`、`^`、`甲$`、全角、子範圍）；`n_and_shift_n_cost_the_same`
     比的是 `N` 與 `n` 的**比值**（不許貴過六倍），舊碼上是 269 倍。
 
-[^320]: `editor/tables.rs:2488`。每次 `j`：500 行 0.42 ms／5,000 行 **4.0**／10,000 行
+[^320]: `editor/tables.rs:2488`。每次 `j`：500 行 0.42 ms/5,000 行 **4.0**/10,000 行
     **27.8 ms**。照自動重複 30/s 算，是一個核的 12% 到 83%。`l` 沒事（16 µs），CSV
     格狀面板也沒事——那邊快取了每行的起始位移，照搬即可。**small**
 
     **落地（2026-09-12）**：一萬行 **25.8 ms → 0.013 ms**，而且**不再隨行數走**
-    （500／5,000／10,000 行都是 0.013）。三處，每一處自己就是一條 O(rows)：
+    （500/5,000/10,000 行都是 0.013）。三處，每一處自己就是一條 O(rows)：
 
     1. **區域快取只認同一行。** `md_cache` 的 key 帶着「問的是哪一行」，而 `j` 每
        一步問的是新的一行，於是每一步都重走一次整張表去找它剛找過的兩端。一個區域
@@ -10394,13 +10394,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     3. **畫格線的那一支自己又走一遍。** `padded_region` 的 `|` 分支直接叫
        `mdtable::region`，沒有記憶；它上面的 `pad_cache` 存的是一窗（五十行）的答
        案，所以每滑出一窗就整表重走一次——一萬行是 5 ms 的頓挫。加了 `pipe_region`
-       一格記憶（buffer／revision／區域），與 `md_cache` 同形而各管一邊：`md_cache`
+       一格記憶（buffer/revision/區域），與 `md_cache` 同形而各管一邊：`md_cache`
        答的是**光標**所在的表、且只在 `t` 視圖開着時；這一格答的是**畫面上每一行**
        的表，有沒有視圖都問。
 
     Warning: **前端每一幀都送 `set_page_top`（#378），所以第 2 條在真機上只在跳轉後的第
     一鍵發作**——量到的 27.8 ms 有一大半是離屏工具與測試纔碰得到的。但它同時是
-    `:shot`／`--figure` 每一鍵都在付的錢，而那兩支是「離屏出圖比單元測試先抓到前端
+    `:shot`/`--figure` 每一鍵都在付的錢，而那兩支是「離屏出圖比單元測試先抓到前端
     的錯」所靠的東西。
 
     回歸測試 `a_step_down_a_table_costs_the_same_however_long_it_is` 比的是**比值**
@@ -10443,14 +10443,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     「在這裏已經修掉了」，`note_detail` 沒跟上。**small**
 
     **落地（2026-09-12）**：三處 `blocks_through(l).get(l)` 換成 `block_of(l)`
-    （`detail.rs:143`／`detail.rs:436`／`tables.rs:863`），同一份快取、不複製；
+    （`detail.rs:143`/`detail.rs:436`/`tables.rs:863`），同一份快取、不複製；
     `markup_visible()` 為假時 `block_of` 直接回 `Prose`，那個 `vec![Prose; last+1]`
     也沒了。Warning: **這個形狀讀起來就是它的意思，修過一次又回來過兩次**，所以不靠審查記着：
     `tests/one_line_one_lookup.rs` 掃全樹的原始碼，`blocks_through(` 到下一個 `;` 之間
     出現 `.get(` 就紅（綁成變數整條讀的那幾處本來就該整條讀，不算）。
 
 [^323]: `repeat`（`verbs.rs:37`）把動作跑 n 遍，而 `snapshot()` 在動作**裏面**，於是
-    `100p`／`100>` 在使用者眼裏是一條命令，在 undo 裏是一百個點。量過：`100p` 要按
+    `100p`/`100>` 在使用者眼裏是一條命令，在 undo 裏是一百個點。量過：`100p` 要按
     整整一百次 `u`，`100>` 一樣；`100\`u` 不走 `repeat`，正確地只要一次。使用者只會
     理解成「undo 壞了」，而那是第一天就會撞上的印象。做法：`snapshot` 提到迴圈外，
     或第 2..n 次不再 snapshot。
@@ -10466,7 +10466,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^324]: `verbs.rs:154` 的 `replace_chars` 對 `chars()` 映射，而不是對字素。於是 `rZ`
     對着一個 ZWJ 家庭 emoji 寫出 **`ZZZZZ`**；分解式的 `か`（か+U+3099）寫出 `ZZ`；
-    `e+U+0301`、半角 `ｶ+ﾞ` 同理。`h`／`l` **是**按字素走的（驗過），所以使用者選中
+    `e+U+0301`、半角 `ｶ+ﾞ` 同理。`h`/`l` **是**按字素走的（驗過），所以使用者選中
     一個字形、`r` 寫出五個字符。NFD 的日文與 emoji 在中英混排裏很平常。改成按字素簇
     迭代（`yumete_cjk::graphemes` 本來就在）；行尾照舊不寫過去，那一半是對的。**small**
 
@@ -10526,7 +10526,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `t F` 走 `lay_out_md_table`（`asked_for: true`），照舊整張排齊。
     **什麼都沒損失**：把表在*螢幕上*排齊的空格是畫出來的，不寫進檔（`mdtable::padding`），
     所以沒人排過的表在頁面上本來就是方的。
-    Warning: **`t` 選單裏那幾條結構編輯（`t o`／`t d`／`t s`／`t <`）仍然整張重排**：那是按了 `t`
+    Warning: **`t` 選單裏那幾條結構編輯（`t o`/`t d`/`t s`/`t <`）仍然整張重排**：那是按了 `t`
     之後說的話，不是離開一格的副作用；`md_write` 只有 `compose` 一個出口，要讓它也保形
     得先讓 `compose` 寫得出不補空格的表。
 
@@ -10558,20 +10558,20 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `#ruby(""x"", "くお")`——兩個都編譯不過，再讀回來還會切錯。一句帶引號的英文注釋
     就夠了。做法：寫出前對基字與讀音做 Typst 字串轉義（至少 `"` 與 `\`）。**small**
 
-    **落地（2026-09-12）**：轉義收進 `Dialect` 自己（`ruby.rs`）——`escape`／`unescape`
+    **落地（2026-09-12）**：轉義收進 `Dialect` 自己（`ruby.rs`）——`escape`/`unescape`
     一對，HTML 那一支是恆等，Typst 那一支只管 `\` 與 `"`。`write` 寫出前轉義，`call`
     改成**按字串字面量讀**（`string_end` 認 `\` escape），所以
     `#ruby("桜", "say \"hi\"")` 是一組而不是「在第一個內層引號切斷」。文字離開一組
     markup 的三處都先 `unescape`：`reformat`（換方言）、`export.rs`、`files.rs` 的剝離。
     Warning: **查出來的第二半更嚴重**：`export.rs` 對基字與讀音用的是 `escape_typst`，那是
-    **markup** 轉義——而那兩段落在**字串字面量**裏，`*`／`#`／`_`／`[` 在裏面本來就是
+    **markup** 轉義——而那兩段落在**字串字面量**裏，`*`/`#`/`_`/`[` 在裏面本來就是
     普通字符，加了反斜線反倒成了「未知轉義序列」，編譯直接失敗。一個粗體基字
     （`<ruby>**永和**<rt>`）就夠了，而這條路上一個測試都沒有。現在轉義的規矩歸落點：
     Typst 的落點是字串，由 `Dialect::write` 管；只有 HTML 那一支還走 `escape`。
-    Warning: **`Ruby::base_text`／`reading_text` 仍回原文切片**，因為 `zong.rs` 拿它們的下標
+    Warning: **`Ruby::base_text`/`reading_text` 仍回原文切片**，因為 `zong.rs` 拿它們的下標
     對齊屏幕格子，反轉義會改長度、錯行。代價：縱書把 `.typ` 裏的 `\"` 照字面畫出來。
     小，另計。
-    Warning: **`unescape` 只認 `\"` 與 `\\`**。Typst 還有 `\n`／`\u{…}`，這裏原樣留着——
+    Warning: **`unescape` 只認 `\"` 與 `\\`**。Typst 還有 `\n`/`\u{…}`，這裏原樣留着——
     把 `\n` 變成真換行，`escape` 就寫不回去了，來回一趟不還原比什麼都不做更糟。**small**
 
 [^333]: `editor/ruby.rs` 的 `reformat` 是純文字掃描，不看塊結構，所以 ```` ```html ````
@@ -10580,7 +10580,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     （#313 增量化之後這件事更便宜）。**small**
 
     **落地（2026-09-12）**：`format_ruby` 不再把整份 buffer 交給 `ruby::reformat`，先問
-    `blocks_through` 每一行是不是 `Block::Code`／`Block::FrontMatter`，再按這個把文字切成
+    `blocks_through` 每一行是不是 `Block::Code`/`Block::FrontMatter`，再按這個把文字切成
     **段**——散文段各自改寫，代碼段原樣接回去（`editor/ruby.rs` 的 `reformat_prose`）。
     Warning: **切段不切行**：一組注音可以寫成跨行的，逐行送進去解析器就看不見它了。只在散文與
     代碼交界處下刀——那正好是一組注音跨不過去的地方。
@@ -10598,7 +10598,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     時 ⌘-Tab 切走，`down` 就卡在 true；下一個鍵污染 `clean`；再下一次真正的單擊回
     `toggled=false`。模擬 `Shift↓ ⟨丟失⟩ n Shift↓ Shift↑ Shift↓ Shift↑` 只切一次而不是
     兩次——使用者敲一下沒反應，下一個詞就用錯語言打出去了。做法：`Press` 時**無條件**
-    `clean = true`，字面上一個詞。旁邊 `:1064` 左右 Shift 共用一份 `down`／`clean`
+    `clean = true`，字面上一個詞。旁邊 `:1064` 左右 Shift 共用一份 `down`/`clean`
     （`LeftShift↓ RightShift↓ RightShift↑` 會在左 Shift 還按着時觸發切換），一併分開。
 
     **2026-09-09 修好，而且不是照上面那句改的。** 上游的 `ModifierTap` 追的是
@@ -10628,15 +10628,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     測試 `ending_a_composition_leaves_nothing_behind_to_land_elsewhere`。**small**
 
 [^337]: 一個進程一個 `ImeSession`（`lib.rs:264`），所以在第三章切到中文、`gn` 到第四章
-    還是中文。而 `[靈明]`／`[ABC]` 只在 `composes_here` 為真的地方畫，**Normal 模式下
+    還是中文。而 `[靈明]`/`[ABC]` 只在 `composes_here` 為真的地方畫，**Normal 模式下
     根本看不到**——按 `i` 之前不知道會掉進哪一種，只能靠打錯纔發現。做法：先做便宜的
-    一半，狀態行任何模式都顯示中／ABC；語言掛到 buffer 上再說（連同 session 恢復）。
+    一半，狀態行任何模式都顯示中/ABC；語言掛到 buffer 上再說（連同 session 恢復）。
     **medium**
 
     落地（2026-09-12）：`language_tag` 拆成兩個問題。`language_tag` 仍舊答「**這裏**在
     不在組字」——`:` 行的命令名、Normal 的鍵，都該是空的，插在游標旁邊的預編輯與 `/`
     的提示行都問它。新的 `standing_language_tag` 只問引擎，狀態行問它，於是 Normal 也
-    有 `[中 靈明]`／`[ABC]`；yume 把鍵盤交回去（`Engagement::Off`）纔沒有。**語言掛到
+    有 `[中 靈明]`/`[ABC]`；yume 把鍵盤交回去（`Engagement::Off`）纔沒有。**語言掛到
     buffer 上那一半沒做**：一個進程一個 `ImeSession` 仍然成立，這一條收的是「看不見」。
 
     Warning: 它要十格，於是 60 欄的狀態行擠掉了字符讀數。**讓路的不是它**：`char_info` 從
@@ -10650,11 +10650,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **落地（2026-09-12）** ——兩處清 `borrowed` 的（輕點 Shift、沒有 Kitty 協議時的
     語言鍵）換成 `Borrow::answered_in(mode)`，它自己問 `is_prompt()`。第三處
-    （`:yume on`／`off`）是真的答案，改叫 `settled()`，行為不變。
+    （`:yume on`/`off`）是真的答案，改叫 `settled()`，行為不變。
 
 [^339]: `lib.rs:292` 沒有 enhanced 就不推 `REPORT_ALL_KEYS_AS_ESCAPE_CODES`，
-    `KeyCode::Modifier` 於是永遠不來，`ShiftTap` 永遠不觸發（#271／#290 的另一面）。
-    Apple Terminal 上只剩 `:yume abc`／`:yume on`，一趟八個鍵，一小時要走幾十趟。
+    `KeyCode::Modifier` 於是永遠不來，`ShiftTap` 永遠不觸發（#271/#290 的另一面）。
+    Apple Terminal 上只剩 `:yume abc`/`:yume on`，一趟八個鍵，一小時要走幾十趟。
     **而且什麼都不說**：啟動沒有訊息，指示器也看不出差別，這個手勢就是默默不動。
     做法：啟動時認出 `enhanced=false` 就明說一次，狀態行標一下，並給一個可綁定的備用鍵。
     **small**
@@ -10666,7 +10666,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     Warning: **舊終端機分不出 `C-^` 與 `C-6`**：`Ctrl+^` 是一個字節 `0x1E`，crossterm 把
     `0x1C`–`0x1F` 讀回成 `4`–`7`（`parse.rs:111`）——而需要這個鍵的終端機正是那一種。
-    `control_alias` 把 `\`／`]`／`^`／`_` 摺成 `4`／`5`／`6`／`7`，兩種協議送來的同一個
+    `control_alias` 把 `\`/`]`/`^`/`_` 摺成 `4`/`5`/`6`/`7`，兩種協議送來的同一個
     和絃於是同名。
 
     **狀態行的常駐標記沒有做**，有意的：它是關於終端機的一句話，一次就夠，而狀態行上
@@ -10698,8 +10698,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     狀態行不會有的錯法。改成**讀盤之前先畫一幀**：`loading_the_table(tag, ime)` 認出這
     一趟要讀盤，迴圈就把 `ime.loading`（「正在載入碼表…」）畫上去再去讀。與冷啟動同形
     ——那邊也是先把頁面立起來、再讀那 14 MB（`Deferred`，`lib.rs:546`）。
-    Warning: **這個判準寧可多說一句**：問狀態（`?`）、調設定（`commit:`／`panel:`）、交還鍵盤
-    （`lang:abc`／`lang:off`）都不讀盤，`lang:chinese` 只在手上沒表時讀；其餘一律算讀。
+    Warning: **這個判準寧可多說一句**：問狀態（`?`）、調設定（`commit:`/`panel:`）、交還鍵盤
+    （`lang:abc`/`lang:off`）都不讀盤，`lang:chinese` 只在手上沒表時讀；其餘一律算讀。
     多畫一幀的代價是把真話早說一個按鍵。
 
 [^342]: `editor/words.rs:606` 與 `editor/prompt.rs:131`：普通 ASCII 的一段輸入是一個
@@ -10735,18 +10735,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `weed_overlong`（`yumete-ime/src/lib.rs`）：**逐行看有沒有超過 255 位元組的欄，有就整行
     丟掉**，丟了幾行記在 `table_skipped` 上，`:yume-table` 的回話後面接一句
     「跳過 N 條過長的」。量到：`碼表：~/bad_table_test.txt · 跳過 1 條過長的`。
-    Warning: **不分哪一欄是碼。** 格式自己認 `text⇥code`／`code␣text` 與兩者的反向，所以這裏數的是
+    Warning: **不分哪一欄是碼。** 格式自己認 `text⇥code`/`code␣text` 與兩者的反向，所以這裏數的是
     空白分隔的欄，任一欄過長就算——真碼表兩側都沒有 255 位元組的東西，有的那個不是碼表。
     快路：整份文本一次 `split_ascii_whitespace` 掃過沒有過長的欄就原樣返回，不拷。
 
 [^345]: 上游 `yume-core/src/engine.rs:2594`：`normal_candidates` 傳的是
     `normal_candidates_capped(code, usize::MAX)`，於是每一個前綴匹配都被物化——125 萬條
-    的表上一個鍵約四萬八千條、每條三個 `String`，接着 `filter`／`dedup`／`with_adaptive`／
+    的表上一個鍵約四萬八千條、每條三個 `String`，接着 `filter`/`dedup`/`with_adaptive`/
     `with_pinned` 再各走一遍，而面板只畫五到九個。佐證：45.7 萬條的表、前綴 `a` →
     `page_count 1953` × 9 = 17,577，正好是全部。量到每個詞的第一鍵 12.0 ms（中位數），
     第三、四鍵 0.08 ms——成本跟前綴匹配數走，不跟表大小走。做法：傳一個真的上限，
     `normal_candidates_capped` 本來就在，只是只有 `:3720` 用過一次。
-    Warning: **這些數字跑在合成的 125 萬條碼表上**（機器上沒有編譯好的 `.ytab`／`.ywl`，
+    Warning: **這些數字跑在合成的 125 萬條碼表上**（機器上沒有編譯好的 `.ytab`/`.ywl`，
     `builtin.rs` 是 `BUILTIN_TABLE: None`），詞庫與整句層沒壓到，真實延遲最好也就是這樣。
     **small**
 
@@ -10760,10 +10760,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 
 [^347]: 上游 `yume-core/src/key_bindings.rs` 有一張三態表（`KeyState::of(buffer_empty,
-    candidates)` → 空碼／組字中／有候選），`resolve(key, state, candidates)` 查它，
-    出廠值裏 `ShiftL`／`ShiftR` 是 `[ToggleChinese, CommitRawEnglish, CommitRawEnglish]`
+    candidates)` → 空碼/組字中/有候選），`resolve(key, state, candidates)` 查它，
+    出廠值裏 `ShiftL`/`ShiftR` 是 `[ToggleChinese, CommitRawEnglish, CommitRawEnglish]`
     ——**組字中按 Shift 是「上屏原碼並留在英文」**，`:462` 的註釋連為什麼不選臨時英文
-    都寫了。單擊偵測也在上游：`modifier(key, down, other_mods)`／`other_key()`／
+    都寫了。單擊偵測也在上游：`modifier(key, down, other_mods)`/`other_key()`/
     `reset()`（`:730`）。這個倉裏 `KeyBindings` 一次都沒被建起來，`yumete-tui/src/lib.rs:1064`
     自己寫了 `ShiftTap { down, clean }`，`:552` 直接叫 `set_chinese(false)`。於是
     #334（清空不上屏）、#335（丟失釋放、左右共用）、#337（語言狀態自己存一份）、
@@ -10780,8 +10780,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     那一層。#334 與 #335 一起掉下來；#337、#339 是另外兩件事，仍開着。
     **medium**
 
-[^348]: `Editor` 上八個快取（`segment_cache`／`meter_cache`／`note_cache`／`fold_cache`／
-    `markup_cache`／`block_cache`／`pad_cache`／`md_cache`），`wrap.rs` 裏還有第九個
+[^348]: `Editor` 上八個快取（`segment_cache`/`meter_cache`/`note_cache`/`fold_cache`/
+    `markup_cache`/`block_cache`/`pad_cache`/`md_cache`），`wrap.rs` 裏還有第九個
     （thread-local `ROWS`，`Vec` 線性掃當 LRU）。九處各自決定 key 裏放什麼，於是各有
     各的「必然失效」：`revision`（#313）、`caret`（#316）、key 本身 O(段長)（#315）。
     最能說明的是 #321——`segment_cache` 有，`editor/words.rs` 用了，`motion.rs` 沒接。
@@ -10801,7 +10801,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     收出來的兩個真 bug：① **Markdown 段與注音本來沒有上限**，捲一本長書就是一行一條，
     而且它們的印記是版本號——每編輯一次，之前每一行的那一條都作廢卻不會被移走，只在
-    換語法／換渲染時整片清一次；② 分詞、平仄、標點注的 key 只有 `line`，「甲檔第三行」
+    換語法/換渲染時整片清一次；② 分詞、平仄、標點注的 key 只有 `line`，「甲檔第三行」
     與「乙檔第三行」是同一格（印記是文本哈希，所以沒有真的答錯過，但那是走運）。
     回歸測試 `a_line_memo_does_not_grow_with_the_document`（反證過：拿掉上限那三行，
     2000 行全留着）。
@@ -10813,7 +10813,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **另外四個不收，理由是它們不按行**：折疊圖與塊圖是整份文檔一個答案，補白是一次一
     張表，`wrap.rs` 的 `ROWS` 是按「文本哈希 ＋ 寬度」記八段的 LRU——段不是行（一段會
     折成多行），而 `LAST` 是 #366 的續算，本來就不是快取。
-[^349]: 同一個概念的兩套實現，平時看不出來，對不上的那天纔看得見：字素（`h`／`l` 按
+[^349]: 同一個概念的兩套實現，平時看不出來，對不上的那天纔看得見：字素（`h`/`l` 按
     字素，`r` 對 `chars()` 映射 → #324）、大小寫（`.to_uppercase().next()` → #325）、
     顯示寬度（寫盤與畫面各一套，ambiguous 預設 `auto` → #327）、分詞
     （`yumete-cjk/segment.rs` 641 行 ＋ `yumete-ime/segment.rs` 317 行 ＋ 上游
@@ -10822,7 +10822,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **medium**
 
     **落地（2026-09-12）**：四樣逐一指了權威，見 §四那張表。字素（`grapheme.rs` 是
-    全樹唯一 `use unicode_segmentation` 的地方）與大小寫在 #324／#325 就收乾淨了；
+    全樹唯一 `use unicode_segmentation` 的地方）與大小寫在 #324/#325 就收乾淨了；
     這一趟做的是另外兩樣。
 
     分詞收成兩個函數：`yumete_cjk::ranges_around_cjk`（走一行——空白分隔且自身不成詞、
@@ -10842,7 +10842,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `segmentor.rs` 在 `../yume` 裏，是輸入法整句用的，不歸這一條管。
 
 [^350]: #295 的 `Asking` enum 本來就是對的做法（「接口留好」），只是接口留在
-    `Command::Write` 那一側：`oversize_query` 掛在一個 match 分支上，`:wq`／`:w!`／
+    `Command::Write` 那一側：`oversize_query` 掛在一個 match 分支上，`:wq`/`:w!`/
     `:wa` 與 swap 四個入口都不認（#306）。同一個形狀還有兩處：草稿所有權是進程内的
     bool，第二個進程看不見（#305）；`:grep` 的截斷沒有型別表達「這個結果集不完整」，
     於是 `:replace` 照常跑、照常報成功（#308）。做法：規矩放在所有人必經的那道門上
@@ -10871,7 +10871,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^351]: `yumete-tui/src/lib.rs:371` 的
     `let prompting = |m: Mode| matches!(m, Mode::Command | Mode::Lookfor);`
-    ——`Search`／`Ruby`／`Picker` 就這麼掉出去了（#340）。同一個形狀：`Event::Mouse`
+    ——`Search`/`Ruby`/`Picker` 就這麼掉出去了（#340）。同一個形狀：`Event::Mouse`
     不問 `is_composing()` 而 `Event::Key` 問（#336）；`repeat`、`Pending::Find`、
     `replay_macro` 三處各寫各的「不再前進就退出」，沒有一處共用（#318）。做法：問
     「這個模式是不是一條提示行」「這個事件是不是該讓組字先結清」，而不是列舉是哪幾個。
@@ -10880,7 +10880,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **落地（2026-09-12）** ——同族的另外兩條（#336、#318）先前已各自收掉，剩下的就是
     模式列表這一族。四處列表（`lib.rs` 的 `prompting` 與 `composes`、`sidebar.rs:544`
     的貼上、`words.rs:587` 的上屏）換成 `Mode` 上四個**窮盡 match** 的問句：`is_prompt`
-    ／`prompt_opens_in_english`／`types_into_command_line`／`composes`。窮盡是關鍵——
+    /`prompt_opens_in_english`/`types_into_command_line`/`composes`。窮盡是關鍵——
     明天多一個模式，那四個 match 編不過，非說清楚它是什麼不可；從前是靜靜地從五處
     `matches!` 裏各拿一個 `false`。`each_mode_says_what_it_is` 把七個模式乘四個答案攤成
     一張表，改哪一格都得是有人真想改。
@@ -10899,7 +10899,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     掉的一處，順手補回表裏。另一條是 `messages.toml` 的 `hint.vi.enter`，由
     `keys.rs:994` 的 phrasebook 在 Normal 按 Enter 時說出來。兩條合起來正是使用者遇到
     的矛盾：**面板教你按 Enter 跟過去，按下去卻說 Enter 不做事**。跟過去的鍵早就是
-    `gd`（見 #355 之後是 `gd`／`gD`）。做法：面板那句進 `messages.toml` 並改說 `gd`；
+    `gd`（見 #355 之後是 `gd`/`gD`）。做法：面板那句進 `messages.toml` 並改說 `gd`；
     `hint.vi.enter` 整條刪掉，Enter 在 Normal 保持沉默——那條註釋說它是給「上週還在按
     Enter 的人」的過渡提示，過渡期已經過了。
 
@@ -10912,11 +10912,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     護欄），所以 `t t` 的整窗格視圖下 `/` 搜的是整份文件；而 `tables.rs:3165` 又把光標
     clamp 回表格裏。兩件事單獨看都對，湊在一起就是死局：**搜得到表外的命中，卻永遠跳
     不過去，於是 `n` 在表裏轉不動**。做法：格視圖下把搜索的範圍收到這張表的行段內
-    （`table_row_span()` 已經知道邊界），`/` `?`、`g/` `g?`、`t/` `t?` 一律如此，`n`／`N`
+    （`table_row_span()` 已經知道邊界），`/` `?`、`g/` `g?`、`t/` `t?` 一律如此，`n`/`N`
     在表內迴繞。**只在格視圖下收窄**——光標在文件裏的表格上時沒有 clamp，全文搜索仍是
     對的。
 
-    **2026-09-09 落地。** 兩個原語（`search_forward`／`search_backward`）多一個行範圍，
+    **2026-09-09 落地。** 兩個原語（`search_forward`/`search_backward`）多一個行範圍，
     `repeat_search` 用 `search_rows()` 算它——而那個判斷**與鉗制用的是同一個問題**
     （`takes_the_pane()`），所以「搜得到」與「去得了」從此不會再各說各話。環繞也跟着收
     進表內：兩處 `scan` 的兩端本來就是「到頭」和「從頭」，換成範圍的兩端即可。`/` `?`
@@ -10929,26 +10929,26 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     去到」纔照出區別：去掉修復後第二次 `n` 就落空。**medium**
 
 [^355]: goto 組現在是 `gd` 去、`gw` 在另一個工作區看。`w` 沒有理據，而同一個倉裏
-    「在旁邊看」已經有兩對寫法：`g/`／`g?`、`t/`／`t?`。改成 `gd`／`gD`：**同一個鍵，
+    「在旁邊看」已經有兩對寫法：`g/`/`g?`、`t/`/`t?`。改成 `gd`/`gD`：**同一個鍵，
     大寫就是在旁邊看**。`handle_goto` 裏 `D` 是空的，而 goto 組本來就用了大寫（`gJ`）。
     退役的 `gw` 照這個倉的規矩留一條 phrasebook（見 `CASE_KEYS` 末行那條的做法）。
     順帶：`GOTO_KEYS` 那一行 `("d w", …)` 與手冊第 177–178 行一起改。
 
     **2026-09-09 落地。** `gD` 接手，`gw` 留一句 `hint.goto.w-moved` 說它去了哪裏——
-    這個倉對退役鍵一向如此（`~`、`*`、`t`／`T` 都有），而這一次學會舊鍵的手指是這個
+    這個倉對退役鍵一向如此（`~`、`*`、`t`/`T` 都有），而這一次學會舊鍵的手指是這個
     專案自己的。手冊三處、測試九處一起改。**small**
 
 [^356]: 今天 `Grain::Cell` 是預設（`keys.rs:265`、`tables.rs:179/295/523/554` 四處），
     `Tab` 用來切粒度。實際用下來格視圖用得並不多，而**按字纔是寫東西時的常態**。
     2026-09-09 定的做法：**`Grain::Char` 成為預設，markdown 表格與 CSV 整窗格視圖都是**；
-    `Tab` 改成往右走一格（走到最右就落到下一列最左），`S-Tab` 反向；上下靠 `j`／`k`
+    `Tab` 改成往右走一格（走到最右就落到下一列最左），`S-Tab` 反向；上下靠 `j`/`k`
     的普通行移動就夠。粒度切換移到 **`T`**——`keys.rs:722` 的註釋寫着「`t` 與 `T` 都退役
     了，`t` 在每個模式下都是表格組」，所以 `T` 是那個組空着的大寫孿生鍵，不是將就。
     Warning: **這一條動的是預設值、手冊與 `:tutor`，面比它自己大**；而且它**要 #357 先落地**：
-    預設按字之後，`j`／`k` 走不走得對就從次要變成核心。
+    預設按字之後，`j`/`k` 走不走得對就從次要變成核心。
 
     **2026-09-10 落地。** `Grain::Char` 成為五個構造點的預設，`T` 接手切粒度，
-    `Tab`／`S-Tab` 在**兩種粒度下**都走格（`step_cell` 本來就是這個行為，Insert 裏早就
+    `Tab`/`S-Tab` 在**兩種粒度下**都走格（`step_cell` 本來就是這個行為，Insert 裏早就
     這麼用，現在 Normal 也一樣）。三十七條測試跟着改——它們記的是舊預設，不是壞掉。
 
     **中途撞出一個真缺陷，不是測試問題。** 按格時進表會把光標**吸附**到一格上，所以
@@ -10964,8 +10964,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^357]: `refresh_goal_column`（`editor/matching.rs:151`）算的是**源碼**上的顯示列——
     它已經接了 `with_drawn(&drawn)`，而 `drawn_on_line` 裏含 `table_padding_on_line`，
-    所以**文件裏那張對齊過的表**是對的。格視圖不是：`t b`／`t f`／`t t` 的畫面由
-    `yumete-tui/src/table.rs` 自己排欄寬，那套寬度核心一無所知，於是 `j`／`k` 照文件的
+    所以**文件裏那張對齊過的表**是對的。格視圖不是：`t b`/`t f`/`t t` 的畫面由
+    `yumete-tui/src/table.rs` 自己排欄寬，那套寬度核心一無所知，於是 `j`/`k` 照文件的
     列走、畫面照格子的列排，兩邊對不上——**光標在欄與欄之間漂**。這是 #349 那一族的
     第四個：同一個「這一格在第幾欄」有兩套算法，平時看不見，對不上的那天纔看得見。
     做法：格視圖的欄寬要成為核心問得到的東西（像 `drawn` 那樣遞進去），或者把格視圖的
@@ -11023,8 +11023,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     說得出「它卡住了」。所以加了心跳：主迴圈每一步 `beat(Stage, detail)`（兩個 relaxed
     store 加一次讀鐘，不分配、不加鎖、不格式化），另一條執行緒每 250 ms 看一眼，超過
     兩秒沒有心跳就寫一行 `stall`，說停在哪個階段、多久、崩前按了什麼；同一次停頓只說
-    一遍。階段是 `Measuring`／`Drawing`／`Reading`／`Key`／`Wheel`／`Scrolling`／
-    `Mouse`／`Paste`——分得夠細，能一眼看出是畫面、是滾動，還是根本沒回到讀事件那一步。
+    一遍。階段是 `Measuring`/`Drawing`/`Reading`/`Key`/`Wheel`/`Scrolling`/
+    `Mouse`/`Paste`——分得夠細，能一眼看出是畫面、是滾動，還是根本沒回到讀事件那一步。
     同樣演練過（臨時在讀事件之前睡六秒）：日誌寫出
     `no beat for 2140 ms; last stage scrolling (999)`。**medium**
 
@@ -11056,7 +11056,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **修法是拆掉死鎖的必要條件：讀的那一方不能被寫的那一方擋住。** 讀終端移到自己的
     執行緒，事件經一條無界通道交給主迴圈——終端寫給我們的那一下永遠立刻完成，於是它
-    一直在消費我們的輸出。`event::poll`／`event::read` 三處都換成通道；`drain_the_flick`
+    一直在消費我們的輸出。`event::poll`/`event::read` 三處都換成通道；`drain_the_flick`
     改成在收件匣上做。差點順手引入一個新死鎖：`:!` 之後那句「按任意鍵返回」自己也在
     `event::read`，而鍵已經被執行緒取走了——它現在也從通道取。
     冒烟過一遍（`script` 分配僞終端，送 `jjkk` 再送 `:q`）：收鍵、退出、日誌乾淨。
@@ -11069,13 +11069,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     cwd 恰好就是書根。從別處啓動就搜錯樹了。2026-09-09 寫 #308 的測試時親自撞到：在臨時
     目錄裏建了六十章，`:grep` 卻去搜了整個倉庫（68 個檔案、179 處），因為測試進程的 cwd
     是 crate 目錄。
-    helix 的做法是向上找 workspace root（`.git`／`.svn`／`.jj`／`.helix`），找不到纔退回
+    helix 的做法是向上找 workspace root（`.git`/`.svn`/`.jj`/`.helix`），找不到纔退回
     cwd。這裏該先認 **`.yumete`**——這個倉庫已經拿它放 config、`words.txt`、`tables/`——
     其次 `.git`，再次是**檔案自己所在的目錄**，cwd 只作最後手段。`grep_root` 這個欄位本來
     就存着，改的是它怎麼被算出來。**small**
 
     2026-09-12：`Editor::project_root()`（`editor/files.rs`），一處算、四處用。順序是
-    `.yumete`／`.yumete.toml` → `.git` → 檔案自己那一層 → cwd，其中 cwd 只在「一個有名字的
+    `.yumete`/`.yumete.toml` → `.git` → 檔案自己那一層 → cwd，其中 cwd 只在「一個有名字的
     檔案都沒開」時纔輪得到。起點的取法照抄 `progress_path`：當前 buffer 沒名字（`:grep`
     自己的結果、拆分表檢查的清單就沒有）就往後問其餘打開的 buffer——命令是**從**一份稿子
     開出來的，那份稿子還在後面開着。Warning: **同一個 cwd 根不只 `:grep` 一處**：`空格 f` 的檔案
@@ -11100,10 +11100,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `crates/**` 一起搜。這不是「不安全」，是**要一直追着補的那種不完整**。
     匹配那一半先別換：我們已經在用 `regex`，**與 ripgrep 是同一個正則引擎**，而它快在
     mmap、SIMD 預篩與並行——那是 GB 級纔顯出來的，一百章幾 MB 差別是毫秒；未存盤 buffer
-    那條路無論如何要自己留着；而它會帶進 `encoding_rs`／`bstr`，與這裏「非 UTF-8 在開檔
+    那條路無論如何要自己留着；而它會帶進 `encoding_rs`/`bstr`，與這裏「非 UTF-8 在開檔
     時就拒絕」的立場打架。
 
-    Warning: **代價要記下**：`yumete-core` 現在只有五個依賴（regex／serde／toml／ropey／
+    Warning: **代價要記下**：`yumete-core` 現在只有五個依賴（regex/serde/toml/ropey/
     yumete-cjk），`ignore` 會帶進八九個傳遞依賴。這個倉庫的性格是「自己的行為自己擁有」，
     那四十行 `walk` 也一直在工作。換的是「不必再追着補忽略規則」——判斷是划算，但不緊急。
     **medium**
@@ -11112,10 +11112,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `walk` 與 `sidebar.rs` 的 `push_dir`（樹狀圖，逐層展開的那一個）都改走
     `ignore::WalkBuilder`，於是 `:grep`、檔案選擇器、`:word-discover` 與邊欄問的是同一
     個問題。`require_git(false)`：稿子那個文件夾有 `.gitignore` 沒有 `.git` 的機會，和
-    反過來一樣大。`target`／`node_modules` 兩個名字**留着**當地板——沒有任何忽略檔的資料
+    反過來一樣大。`target`/`node_modules` 兩個名字**留着**當地板——沒有任何忽略檔的資料
     夾裏它們照樣不是散文——但不再往上加，那纔是這一條要治的病。`sort_by_file_path` 保住
     章節順序；順帶把「先本層所有檔、再下潛」換成純路徑序，同一棵樹兩次跑出來一樣。
-    傳遞依賴實測多六個（`globset`／`walkdir`／`same-file`／`bstr`／`log`／crossbeam 三件
+    傳遞依賴實測多六個（`globset`/`walkdir`/`same-file`/`bstr`/`log`/crossbeam 三件
     算一組）——`aho-corasick`、`memchr`、`regex-automata`、`regex-syntax` 本來就跟着
     `regex` 進來了。
 
@@ -11156,7 +11156,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `FORCEABLE` 裏 `quitall!` 換成 `quit all!`。
     2026-09-10順帶定了一條更要緊的：**「yumete 還在初期，不存在肌肉記憶這個東西」**
     ——所以拿「大家用慣了」擋一個更好的形狀，在這個倉裏不是理由。要護的只有**繼承來的**
-    那部分（vi／helix 帶過來、讀者一進門就會的），因為那是別人建好的遷移面（§5.2.3 ②）；
+    那部分（vi/helix 帶過來、讀者一進門就會的），因為那是別人建好的遷移面（§5.2.3 ②）；
     yumete 自己發明的拼法沒有這種主張。**small**
 
 [^365]: `found_schemes.rs` 那兩條測試在同一個二進制裏跑，而 cargo 是**並行**跑的：一條
@@ -11235,7 +11235,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **落地（2026-09-12，`02cb1fb`）** ——照上面那條做的，零新命令。`discover_words` 開頭記
     一句 `let was = self.current`，寫完那一塊之後 `show_buffer(was)` 回去。狀態行改成
     「找到 N 個本書自己的詞，已經按它們切了；寫進了 <路徑>——`:word-list-local` 去取捨」
-    （`word.discover-found`／`word.discover-too-many` 兩則都改了），話裏帶着那個檔在哪、
+    （`word.discover-found`/`word.discover-too-many` 兩則都改了），話裏帶着那個檔在哪、
     怎麼去看。`the_book_hands_the_editor_its_own_names_without_being_asked` 頭一句斷言
     現在是 `current_buffer().path() == ch01.md`。
 
@@ -11399,7 +11399,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     所以拆成兩個：`tab_width`（制表位，8，終端自己的答案）與 `indent_width`（`>` `<` 的
     步長，4，和 Python 一致）。
 
-    隨後量到 `tf`／`tb` 下有幾行對不齊——那正是這個 4：三字母的編碼停在第 4 格、
+    隨後量到 `tf`/`tb` 下有幾行對不齊——那正是這個 4：三字母的編碼停在第 4 格、
     四字母的停在第 8 格。改成 8 之後三種模式全齊。
 
     不過這一條原先想岔了一半，2026-09-11：「tf 状态下，tab 分隔符会被表格
@@ -11457,7 +11457,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     三、它上升成了一條法，2026-09-11：「TAB 是个不稳定渲染。除了文本区有 tab 外，
     我们在其他位置不应该有 tab 存在。太危险了。」對的，而且**逐個 span 去記着加是守不住
-    的**：`lib.rs` 裏有三十來個 `Span::styled`／`Paragraph::new` 從不過 `drawable`，塊標題
+    的**：`lib.rs` 裏有三十來個 `Span::styled`/`Paragraph::new` 從不過 `drawable`，塊標題
     和標籤欄拿的是檔名，HUD 拿的是剛敲下的東西。所以規則收在所有路的**共同出口**——每一
     種畫法最後都落進一個 cell，於是幀畫完之後掃一遍 `settle_control_characters`，控制字元
     一律換成空格。換空格而不是刪掉：那一格本來就被算進版面了，現在它裝的正是尺子說的東西。
@@ -11485,7 +11485,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一條關於「編輯」的規矩用在了「走路」上。**small**
 
     **落地（2026-09-12）**：左右到格邊改成 `step_cell`，上下改成 `move_cell_row`——
-    都是 Normal 下 `Tab`／`j`／`k` 已經在走的那一步，不另寫一份「哪一格在上面」。
+    都是 Normal 下 `Tab`/`j`/`k` 已經在走的那一步，不另寫一份「哪一格在上面」。
     往左走進去的落點是那一格的**末端**（從右邊進去的），往右是開頭。
 
     Warning: **`Tab` 與方向鍵在最後一格必須分開**：`Tab` 到 Markdown 表最後一格會開一行新的
@@ -11535,7 +11535,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     ruled，一個兩字寬的欄被墊到三格，每一行都多一個沒人要的空格——齊是齊的，可那個空格
     誰都沒要過。
 
-    於是 `boxes_of`／`cells_of`／`padding` 都只寫一遍，`Wall::Between(' ')` 白送：空格
+    於是 `boxes_of`/`cells_of`/`padding` 都只寫一遍，`Wall::Between(' ')` 白送：空格
     分隔的表現在就能排，只差有人告訴視圖分隔符是空格——**不會**去嗅它，不然一篇散文就
     成了表格。
 
@@ -11665,12 +11665,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     「它壓根沒生效」。問題問錯了，所以答案全綠。
 
     真相：層級的默認值其實是 `Basic`（`TableLevel` 上就標着 `#[default]`），畫出來像
-    源碼是因為**沒有 table view**——`.txt` 不在 csv／tsv 之列，又沒有 scheme，沒人去嗅
+    源碼是因為**沒有 table view**——`.txt` 不在 csv/tsv 之列，又沒有 scheme，沒人去嗅
     那個 tab，`self.table` 是 `None`。於是牆也沒有，tab 回到「內容」的身份，按制表位推進
-    並畫上底色。那條灰底就是全部的線索：它只在 tab 被當成內容時才畫，tb／tf 一生效就該
+    並畫上底色。那條灰底就是全部的線索：它只在 tab 被當成內容時才畫，tb/tf 一生效就該
     消失。**下次先問「這個模式真的生效了嗎」，再問「這個模式對不對」。**
 
-    要的是：`.txt` 內容明顯是 space／tab／comma／semicolon 分欄時，直接以 基本 打開，
+    要的是：`.txt` 內容明顯是 space/tab/comma/semicolon 分欄時，直接以 基本 打開，
     並在信息欄寫「本文件格式似乎是 {type}，故而以表格模式打開，按 t o 回到源碼模式」。
     `{type}` 用現成的 `named_delimiter`（`'\t'` → 「Tab」）。
 
@@ -11690,14 +11690,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `t o`。這一條和自動進是同一個功能的兩半，分開做只有前半是壞的。**small**
 
     2026-09-12 落地。認的門在 `table_on_open` 裏，`delimited_text_file()`：**只問純文本**
-    （Markdown 與 Typst 有自己的表格寫法），**跳過 `csv`／`tsv`／`tab`**（那三種靠檔名就
+    （Markdown 與 Typst 有自己的表格寫法），**跳過 `csv`/`tsv`/`tab`**（那三種靠檔名就
     已經是格子，`grid_shape_here` 不用 view 也給補白），證據與 `:table` 首行那道門同一套
     ——前二十行每行同樣多、至少兩欄——候選多一個空格（`table::TEXT_GUESSES`，順序
     `\t , ; 空格`，強的先試）。**schema 報過錯就不猜**：那句話是衝着這個檔案說的，蓋掉它
     等於答非所問。
     `t o` 的記憶寫在資料目錄的 `source-mode.txt`（一行一個路徑，上限 200，重寫時順手丟掉
     已經不存在的檔案），不寫進書裏——那是「這個人怎麼讀這個檔案」，不是書的屬性。只有**猜**
-    出來的格子纔記；schema 或檔名認定的表格沒什麼可收回。再按一次 `t b`／`t f` 是回頭路，
+    出來的格子纔記；schema 或檔名認定的表格沒什麼可收回。再按一次 `t b`/`t f` 是回頭路，
     同時把那一筆撤掉。
     Warning: **又踩了一次 #388**：`main.rs` 出設置那一步 `set_status(String::new())` 專門用來擦掉
     安裝期的閒話，而開檔要說的那一句就死在這裏。加了 `Editor::take_open_notice()`——**只有
@@ -11744,7 +11744,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     Warning: **`End` 是讀代碼發現的，不是試出來的**——`--keys` 送不出 End 鍵（`press()` 的
     轉義只有 `\e\t\n\b` 與四個方向），六路審閱一個都測不到它。**同一個根因，兩個入口，
     修的時候別只修 `gl`。**
-    修法：`gl`／`End` 落位前鉗到最後一個 grapheme（空行除外），`A` 原樣不動。**small**
+    修法：`gl`/`End` 落位前鉗到最後一個 grapheme（空行除外），`A` 原樣不動。**small**
     **2026-09-11 做完了**：`motion::line_last` 一支（`line_end` 原樣留着，它是插入點），
     `gl`（`keys.rs:1038`）與 `End`（`keys.rs:638`）改讀它。
     Warning: **三條既有的斷言把這個 bug 寫進去了**，一條都不是「測試沒蓋到」：
@@ -11765,11 +11765,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     用的是**不帶超時的** `events.recv()`（`crates/yumete-tui/src/lib.rs` 594 附近）。
     沒有下一個鍵，迴圈就永遠停在那裏，`SWAP_INTERVAL`（`editor.rs:1184`，5 秒）再也
     不會被問到。
-    **A／B 實測**（`expect` 起真 pty，`kill -9` 模擬斷電，不給清理代碼任何機會）：
+    **A/B 實測**（`expect` 起真 pty，`kill -9` 模擬斷電，不給清理代碼任何機會）：
     打一句沒存過的話 → 停 7 秒 → kill，**草稿檔根本不存在**，那句話沒了；
     同樣停 7 秒之後**再多敲一個鍵**再 kill，草稿立刻出現、內容完整。
     Warning: **停筆幾分鐘是寫小說的常態**，不是邊角情況——這個功能存在的理由就是為了那幾分鐘。
-    修法：事件迴圈上掛一個時鐘（vim 的 `updatetime`／`CursorHold` 是同一個形狀），
+    修法：事件迴圈上掛一個時鐘（vim 的 `updatetime`/`CursorHold` 是同一個形狀），
     或者讓 `recv()` 帶超時。Warning: 動的是事件迴圈，**三條 P0 裏風險最高的一條**，改完要
     連 `:reload-auto` 開着與關着兩種情形一起驗。**medium**
     **2026-09-11 做完了。** 病名說準了就好修：**這是一個少了後沿（trailing edge）的
@@ -11809,7 +11809,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **2026-09-11 做完了**：`Editor::grid_last_line()` 一支（就是
     `motion::last_line`——這個概念**倉庫裏本來就有**，註釋寫着「that phantom line is
     excluded here so the cursor can't fall past the content」，只是表格那一側沒有用它），
-    四個 `line_count() - 1` ／ `len_lines() - 1` 全部改成問它：`table_row_span_at`、
+    四個 `line_count() - 1` / `len_lines() - 1` 全部改成問它：`table_row_span_at`、
     `table_lines_at`、縱向移動的兩處邊界；`row_is_ragged` 自己那條守衛也換成問同一處，
     於是判斷只剩一份。
     Warning: **不要改 `Buffer::line_count()`**——它是 `rope.len_lines()`，全樹幾十處在用，
@@ -11840,9 +11840,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     所以**出圖之前還留在那裏的請求，就是沒有人會去執行的請求**。照這個判，
     `:yume-scheme`、`:yume on|off` 這些全都蓋住，將來新加的命令也自動蓋住。
     Warning: **一查發現這不是一個案例，是一族**：核心一共留了**九種**這樣的請求
-    （`take_scheme_request`／`take_chaifen_request`／`take_theme_request`／
-    `take_preview_request`／`take_open_request`／`take_shell_request`／
-    `take_clipboard_request`／`take_screenshot_request`／`take_words_request`），
+    （`take_scheme_request`/`take_chaifen_request`/`take_theme_request`/
+    `take_preview_request`/`take_open_request`/`take_shell_request`/
+    `take_clipboard_request`/`take_screenshot_request`/`take_words_request`），
     而 `--shot` 這條路**一種都沒取**。現在出圖前逐一問一遍，把還留着的**點名**說出來，
     走 stderr——圖本身還是圖。
     **還開着的是 A 案**：讓 `--shot` 真的跑一遍主迴圈的分發。那是一件真功能，
@@ -11884,14 +11884,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     狀態行不行，它答的是「我在哪」。
     Warning: **2026-09-13 起這句作廢**：提示行沒有了（#299），命令行接了它的活並排在狀態行
     **下面**，`room` 的下界跟着上移一行。同日補了 `draw_candidate_panel` 的 clamp——
-    打命令時光標站在 `room` 外面，原先「偏下／翻上去」兩支都不兜底。
+    打命令時光標站在 `room` 外面，原先「偏下/翻上去」兩支都不兜底。
     Warning: **這條與 #299、#302 是同一塊地**，做那兩條的時候要一起想：#299 要把常駐的提示行
     整個拿掉換成浮動面板（那時「可以蓋提示行」這句話就沒有對象了，`room` 的下界要重算）；
     #302 要在狀態行**下面**臨時借一行給命令與搜索（helix 的樣子），那一行出現的時候
     候選欄的下界又要再讓一格。三條各自都成立，但**底下那幾行到底怎麼分，得一次定完**，
     別分頭做完再發現互相拆臺。
     Warning: 這也是「在大屏幕上永遠看不見」的一類：高終端下面板夠不到底，所以躺了很久。
-    回歸測試 `the_candidate_panel_never_covers_the_status_line` 在 8／10／12／16／30 行
+    回歸測試 `the_candidate_panel_never_covers_the_status_line` 在 8/10/12/16/30 行
     各跑一遍，並且**先斷言面板真的畫出來了**——否則哪天面板不畫了，這條測試會綠着騙人。
     把修復撤掉重跑，它復現的正是審閱者看到的那一行：
     `--╰─────╯ --  [中 靈明] [scratch]   Ln 1`。
@@ -11939,7 +11939,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     到正文「第一回」（第 314 行）之間夾着「校閱參考」「蒙古王府本石頭記……」這些版本
     說明，**湊夠了三行**，於是目錄的最後一條被當成真章回收進大綱，而且因為它在檔案裏
     出現得早，**排在「第一回」前面**。
-    「目錄 ＋ 前言／版本說明 ＋ 正文」在公版古典小說和很多人自己的書稿裏都很常見。
+    「目錄 ＋ 前言/版本說明 ＋ 正文」在公版古典小說和很多人自己的書稿裏都很常見。
     修法：判斷裏加一條「這一行是不是本來就和一串同類的行緊挨着出現」——目錄的特徵是
     成串，正文的章回標題是孤立的。**medium**
     Warning: **2026-09-11 照這條做了一版，量完撤掉了。** 規則是「一個候選若緊挨在**同一級**的
@@ -11977,7 +11977,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 史記 | 110，頭一條是目錄的「卷一百三十」 | **109**，頭一條是「卷一」 |
     | 三國演義 | 242 | **240**（漏進去的「序」「凡例」也一起沒了） |
     | 資治通鑑 | 286 | **285**（目錄那條沒了，其餘不動） |
-    | 天龍八部／笑傲江湖 | 51／39 | 51／39，沒動 |
+    | 天龍八部/笑傲江湖 | 51/39 | 51/39，沒動 |
 
     合成的兩種情形在 `editor/tests.rs`：三條連着的目錄要丟掉，兩條連着的頁尾頁首**不許**
     丟。真書那五本在 `outline_corpus.rs`。
@@ -11997,7 +11997,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     而 schema 說三欄。走格、`c`、寫回都走 `cells`，所以位元組是對的；畫面不是。最看得出來
     的是 #379 那條頂欄：它按畫出來的格位擺欄號和欄名，於是**指着甲欄叫乙欄**。
     修法是把引號規則只寫一遍：`table::scan()` 一趟出「牆在哪」與「行尾還在引號裏嗎」，
-    `walls`／`cells`／`field_runs_on` 三個都從它出來，`Wall::Between` 直接叫 `walls`。
+    `walls`/`cells`/`field_runs_on` 三個都從它出來，`Wall::Between` 直接叫 `walls`。
     測試釘的是**兩層相等**（`boxes_of == cells`、`table_cells_on_line == row_cells`），
     不是某一個數字——分開寫兩份規則正是這個 bug。
 
@@ -12018,7 +12018,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     降級成資料行，先按 `t t` 就能保住」，並判為阻塞發布。複跑 `tttb` 之後：**先按 `t t`
     一樣降級**，那條複現結論是錯的。實際情形是 `t b`（基本）本來就把每一行都畫出來——
     它自己的頁腳寫着「一個字都沒藏」——所以顯示表頭行是**設計如此**，不是 bug。
-    真正剩下的問題小得多：**基本視圖把它本來知道的欄名丟了**，回落成 1／2／3，而預設
+    真正剩下的問題小得多：**基本視圖把它本來知道的欄名丟了**，回落成 1/2/3，而預設
     視圖明明認得 `Name` `Age` `City`。順帶那一頁也畫出 #384 的幽靈行。
     Warning: **記在這裏是為了下一個人不要再照原報告去修一個不存在的 bug。** **small**
     **2026-09-11 查完，撤銷這一條——連我收窄後的判斷也是錯的。**
@@ -12038,7 +12038,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     自己按一下 `:` 看面板右下角的 `1/n`。**一個會過期的斷言換成一個不會過期的指路。**
 
 [^394]: 2026-09-11 的六路審閱，寫小說那一路報的。20 欄寬的終端下狀態行是**攔腰切**的，
-    切在半個字／半個詞上，而不是按重要性先丟掉次要欄位（碼位、Unicode 區塊名、檔名）。
+    切在半個字/半個詞上，而不是按重要性先丟掉次要欄位（碼位、Unicode 區塊名、檔名）。
     狀態行答的是「我在哪」，窄到放不下時該留下的是行列號。**small**
     **2026-09-11 做完了。** 左半邊原來是一整個 `format!`，注釋還寫着
     「the left side is never squeezed」——所以窄了只能被渲染器攔腰切。現在拆成七段，
@@ -12057,13 +12057,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^395]: 2026-09-11 的六路審閱，邊界那一路報的。一份主要用 `\n` 收行、中間夾了一個孤立
     `\r` 的檔案（從舊 Mac 文本貼進來的一段就是這樣），內部把那個 `\r` 也當成換行數，
-    於是 `Ln`／`ge`／`:goto` 這些按行號辦事的功能**比 `wc -l` 多數出一行**。
+    於是 `Ln`/`ge`/`:goto` 這些按行號辦事的功能**比 `wc -l` 多數出一行**。
     已驗證**不影響存盤位元組**（`:w` 之後 `cmp` 逐位元組相同）。
     **2026-09-11 查完：不是「數錯了」，是定義之爭。** 那個孤立的 `\r` **畫出來就是換行**
-    ——`CR\rhere\nsecond\n` 在頁面上就是 `1 CR` ／ `2 here` ／ `3 second`，所以行號與
+    ——`CR\rhere\nsecond\n` 在頁面上就是 `1 CR` / `2 here` / `3 second`，所以行號與
     **屏幕上看到的**是一致的，只是與 `wc -l` 不一致。ropey 把 `\r`、`\v`、`\f`、NEL、
     LS、PS 全算換行（`a\x0bb\n` 同樣畫成兩行），而 `wc -l` 只數 `\n`。
-    Warning: **真正要定的是**：孤立的 `\r` 該不該算換行。vim／VS Code／git 都不算，顯示成
+    Warning: **真正要定的是**：孤立的 `\r` 該不該算換行。vim/VS Code/git 都不算，顯示成
     `^M`；那樣行號才和別的工具對得上，也和 #398（NUL 看不見）是同一族「控制字符要看得見」。
     但 ropey 1.x **不讓配**這個集合，改成只認 `\n` 得包住全樹每一處 line 調用——
     **那是 large，不是 P2**。所以這一條的狀態是「等一個決定」，不是「等一個修」。
@@ -12109,12 +12109,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     拆分與編碼」，不提讀音。
 
     **落地（2026-09-12）。** 那張表現在與 `SPACE_KEYS` 逐鍵對得上：補了 `空格 P`
-    與 `空格 w`／`W`／`q`（後三個原本只在前面那張總表裏），`空格 d` 照實際文案改成
-    「查這個字的拆分與編碼」，`空格 c`／`C` 寫明是行注釋與塊注釋。
+    與 `空格 w`/`W`/`q`（後三個原本只在前面那張總表裏），`空格 d` 照實際文案改成
+    「查這個字的拆分與編碼」，`空格 c`/`C` 寫明是行注釋與塊注釋。
     Warning: 原報告說漏的第二項是 `c`（合併衝突），**那一條已經過期**：#409 把合併衝突從
     `空格 c` 挪到 `空格 m`（`空格 c` 讓給注釋），表裏寫的 `空格 m` 是對的。
 
-    順帶補了 `]c`／`[c`——選單有、手冊一個字沒提，是同一種漏，只是不在這張表上。
+    順帶補了 `]c`/`[c`——選單有、手冊一個字沒提，是同一種漏，只是不在這張表上。
 
     **加了一道反向的閘**：`documented_keys.rs` 從前只問「手冊教的鍵編輯器有沒有」，
     現在也問「`空格` 選單有的鍵手冊教了沒有」。只讀這一個選單——字形組寫成
@@ -12141,13 +12141,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一個切換鍵不說自己切到哪一邊，等於沒切。
 
     **落地（2026-09-12）。成因不是「不說」，是說錯了鍵。** 狀態行右邊一直寫着
-    `· 字`／`· 格`（`table_status`），提示行也一直分兩套；換粒度的鍵在 #356 之後是
+    `· 字`/`· 格`（`table_status`），提示行也一直分兩套；換粒度的鍵在 #356 之後是
     **`T`**，`Tab` 拿去做每一個試算表都認的「下一格」。而提示行仍舊寫着 `Tab 改按格`
     ——照它按下去，光標走一格，粒度和那句話原封不動，看起來就是一個不切的開關。
 
     改的是名字：提示行 `T` 換粒度、`Tab` 下一格，兩則狀態消息各補一句回頭路
     （「按字移動（T 回到按格）」）。**加了一道閘**：`the_hint_offers_the_key_that_really_changes_the_grain`
-    去提示行裏找「改按格／改按字」那一條，把它給的鍵真按下去，粒度沒變就紅。
+    去提示行裏找「改按格/改按字」那一條，把它給的鍵真按下去，粒度沒變就紅。
     把 `T` 改回 `Tab` 驗過，會紅。
 
     順帶掃到同一族的過期：手冊 §「`Tab`：按格走還是按字走」整節（連預設是哪一種都反了）、
@@ -12158,13 +12158,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^400]: 2026-09-11 定的：中文名從「宇浩終端文字編輯器」改成 **「宇夢終端編輯器」**，
     簡稱「宇夢編輯器」。理由是**名字本來就是這麼拼的**：
-    **`yumete` ＝ `Yume` ＋ `TE`（Text Editor／Terminal Editor）**，`yume` ＝ 宇夢，
+    **`yumete` ＝ `Yume` ＋ `TE`（Text Editor/Terminal Editor）**，`yume` ＝ 宇夢，
     中文讀者一眼對得上。
     Warning: `README.md:3` 現在寫的是另一個拆法——`yumete = **Yu**hao **IME** **t**ext
     **e**ditor`——**那一行要跟着改**，否則同一個名字在倉庫裏有兩種來歷。
     何況**嵌進來的確實是宇夢引擎**——宇浩是方案家族（光華、星陳、日月、冰雪），
     一個編輯器不是一個方案。
-    砍掉「文字／文本」兩個字是因為「終端編輯器」已經說清楚了，九個字那是介紹不是名字。
+    砍掉「文字/文本」兩個字是因為「終端編輯器」已經說清楚了，九個字那是介紹不是名字。
     Warning: **繁體界面用「宇夢」，簡體對話用「宇梦」。** **small**
     **2026-09-11 做完了**，四處：`README.md:1` 的標題與它下面那句拆法、
     `docs/manual.md:3`、`docs/development.md:1`、`crates/yumete-core/src/lib.rs:1`
@@ -12225,7 +12225,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **一、網頁的箭頭。** 維基文庫導出的書把標題留在導航條裏：
     「`◀上一回 第二回　張翼德怒鞭督郵 下一回▶`」。`chapter_heading` 從第一個字看起，
     看到的是 `◀`。`without_navigation()` 先摘框再認——頭尾各一個**半角空格**分出來的
-    詞（標題自己的空格是全角，所以摘得乾淨），認 `◀…`／`全書始` 與 `…▶`／`全書終`。
+    詞（標題自己的空格是全角，所以摘得乾淨），認 `◀…`/`全書始` 與 `…▶`/`全書終`。
     三國演義這一份是同一本書繁简各存一遍，所以 240 條是**檔案的實情**，不是重複計數。
 
     **二、只數數的書。** 天龍八部五十章全寫作「`一 青衫磊落險峰行`」，沒有「章」也沒有
@@ -12254,10 +12254,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     Warning: **⌘ 那半邊已經有結論了，別再走一遍**：`lib.rs` 的
     `command_key_chords_are_the_terminals_not_ours` 釘着——「With the Kitty protocol on,
     ⌘C really does arrive. Read as a bare letter it is `c` — *change* — so asking for a
-    copy deleted the selection.」所以現在是**一律忽略**，而那是對的：⌘C／⌘V 在終端裏本來
+    copy deleted the selection.」所以現在是**一律忽略**，而那是對的：⌘C/⌘V 在終端裏本來
     就是**終端自己的**複製粘貼，搶過來會讓「選中終端文字複製」失靈。
-    能做的只有 Ctrl 那半邊，而 Windows／Linux 使用者按的本來也是 Ctrl。
-    **Insert 現在佔了四個 Ctrl，而且是 readline／emacs 那一套**：`C-w` 刪前一個詞、
+    能做的只有 Ctrl 那半邊，而 Windows/Linux 使用者按的本來也是 Ctrl。
+    **Insert 現在佔了四個 Ctrl，而且是 readline/emacs 那一套**：`C-w` 刪前一個詞、
     `C-u` 刪到行首、`C-a` 行首、`C-e` 行尾；其餘 `Ctrl(_)` 一律**無聲吞掉**。
     Warning: `C-a` 在 Windows 是「全選」，在這裏是「行首」——**已經衝突了，而且不吭聲**。
     三個最想要的各有一個坑：`C-s` 是終端的 **XOFF**（raw mode 關掉 `IXON` 纔行，要驗）；
@@ -12275,14 +12275,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `/usr/share/vim/vim91/tutor/en/vim-01-beginner.tutor`（998 行）、
     我們自己的 `tutor.rs`（224 行——**這個比例本身值得看一眼**）。
     Warning: **每一格都是按出來的，不是讀文檔讀出來的**。為此先把 `--keys` 補到能送
-    Ctrl（`\^x`）、Alt（`\{alt-d}`）、Home／End／PgUp／PgDn——**在那之前這三族根本量不到**，
+    Ctrl（`\^x`）、Alt（`\{alt-d}`）、Home/End/PgUp/PgDn——**在那之前這三族根本量不到**，
     而 #382 的 `End` bug 正是因為送不出去纔躺了那麼久。
 
     ## 一、一致，不用動
 
     `h j k l` · `i a I A` · `o O` · `Esc` · `:` `:w` `:q` `:q!` `:wq` ·
     `w e b` `W E B` · 計數 `2w 3e 2x` · `d` `c` · `x`（選整行，helix 語義）·
-    `v`（進 `SEL`）· `;` · `u` `U` · `y` `p` `P` · `空格 y`／`空格 p` ·
+    `v`（進 `SEL`）· `;` · `u` `U` · `y` `p` `P` · `空格 y`/`空格 p` ·
     `/ ? n N` · `f<ch>` · `r<ch>` · `.` · `>` · `%` · `Ctrl-o` `Ctrl-i` ·
     `G` `3G` `gg` · **match mode 五課全中**：`mm` 跳、`mi(` 選內、`ma(` 選含界、
     `ms(` 加圍、`md(` 刪圍、`mr([` 換圍——逐個按過，文字結果全對。
@@ -12304,18 +12304,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | `J` `K` | helix 7.2：合併行 | **半頁上下滾**，合併是 `gJ`。按下去默默滾屏 |
     | `)` `(` | helix 10.1：循環選區 | 句子移動，靜默 |
     | `Ctrl-r` | vim：重做 | 無綁定，靜默（我們是 `U`） |
-    | `Ctrl-c` | helix 11.1／11.2 **兩課** | 無綁定，靜默 |
-    | `Alt-d` `Alt-c` | helix 4.2：刪／改**不進剪貼板** | 無綁定，靜默 |
-    | `Alt-.` | helix 6.3：重複上次 f／t | 無綁定，靜默 |
+    | `Ctrl-c` | helix 11.1/11.2 **兩課** | 無綁定，靜默 |
+    | `Alt-d` `Alt-c` | helix 4.2：刪/改**不進剪貼板** | 無綁定，靜默 |
+    | `Alt-.` | helix 6.3：重複上次 f/t | 無綁定，靜默 |
     | `0` | vim：行首 | **被當計數數字吃掉**（`0l` 走一格）——vim 自己也有這個歧義，說不了話 |
 
     Warning: **機制已經有了，只是覆蓋不全**：`$` 會說「行尾是 gl」而 `0` 不會，同一件事只做了一半。
     補這幾句是 **small**，而且是這張表裏**性價比最高的一格**。
 
     **2026-09-23 清了這一格。** 逐條對過之後，這張表上真的還在沉默的**只剩一對**——
-    `A-d`／`A-c`（helix 4.2 的「刪／改不進剪貼板」），補了一句指向寄存器的話（`"a d` 是
-    同一件事的通用辦法）。其餘的早就有了：`)`／`(`、`C-r`、`C-c` 都在 `phrasebook` 裏，
-    `A-.` 根本是**真綁着**的（重複上次 f／t，`keys.rs:1565`）。
+    `A-d`/`A-c`（helix 4.2 的「刪/改不進剪貼板」），補了一句指向寄存器的話（`"a d` 是
+    同一件事的通用辦法）。其餘的早就有了：`)`/`(`、`C-r`、`C-c` 都在 `phrasebook` 裏，
+    `A-.` 根本是**真綁着**的（重複上次 f/t，`keys.rs:1565`）。
     Warning: **`0` 那一格不補**：它被計數吃掉是 vim 自己也有的歧義，說不出話來。
     **記過的事做完了要回來劃掉**——這一格有一半是三個月前就做完的。
 
@@ -12323,10 +12323,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     * **註釋**（`Ctrl-c`，helix 兩課）——`toggle_comment` 與 `:comment` 全樹都沒有。
       Warning: 但我們有 `%%批注%%`（導出時整段拿掉），所以概念在、鍵不在。
-    * **`Alt-d`／`Alt-c`**：刪改不進剪貼板。單光標下也有意義，**不屬多光標族**。
-    * **`Alt-.`**：重複上次 `f`／`t`。
+    * **`Alt-d`/`Alt-c`**：刪改不進剪貼板。單光標下也有意義，**不屬多光標族**。
+    * **`Alt-.`**：重複上次 `f`/`t`。
     * **多光標整族**（`C` `Alt-C` `s` `S` `&` `Alt-s` `Alt-,` `Alt-(` `Alt-)` `Alt-;`，
-      helix 5.1–5.5、10.1–10.4 **九課**）——`S`／`s` 已經明說「沒有多光標」，
+      helix 5.1–5.5、10.1–10.4 **九課**）——`S`/`s` 已經明說「沒有多光標」，
       其餘靜默。Warning: **九課是 helix tutor 的三分之一**，這是最大的一塊缺口，
       也是最該單獨決定「做不做」的一塊。
     * **`t<ch>`（till）**：`t` 被表格模式佔了。tutor 6.1 教 `f` 與 `t` 是一對，
@@ -12341,23 +12341,23 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     ## 定了的（2026-09-11）
 
     * **`*` 與 `~` 從「提示」升成「別名」**，當天做完。理由：**這兩個不是我們故意改了
-      拼法的鍵，它們就是同一個動作在 vi／Helix 裏的名字**——一句能直接做掉的提示，
+      拼法的鍵，它們就是同一個動作在 vi/Helix 裏的名字**——一句能直接做掉的提示，
       白花一次按鍵，還什麼也沒教會。`*` ＝ `g/`，`~` ＝ `` ` `` `` ` ``（組的**第三**個，
       不是打開那個組）。Warning: 順帶學到一件事：`hint.vi.star` 成了孤兒消息，
       **`messages.rs` 那條「在表裏但沒人說」的測試當場抓住了它**——可診斷性起作用的一例。
     * **`C`（多光標）與 `&`（對齊選區）放到 0.2.0**，見 #405。手冊
-      `docs/manual.md:3200` 早就寫死了理由：「需要內核持有**一組**選區而不是一對錨點／
+      `docs/manual.md:3200` 早就寫死了理由：「需要內核持有**一組**選區而不是一對錨點/
       光標。那是改造編輯器而不是給它加東西，所以寧可不做也不半做。」
     * **helix 的 `gw`（2 字符跳轉標籤）要做，而且要適配中文**，見 #406。
       Warning: **我上一輪把這一條寫錯了**：原表寫「`gw` 跳字標籤 → `gD`」，其實兩者毫無關係——
-      `gd`／`gD` 是**查定義**（拆分表裏跳到定義這個字的那一行），而 `keys.rs` 裏那句
+      `gd`/`gD` 是**查定義**（拆分表裏跳到定義這個字的那一行），而 `keys.rs` 裏那句
       `gw` 提示是給**我們自己的老使用者**看的（我們曾把查定義綁在 `gw`，2026-09-09 改名到
       `gD`）。一個 helix 使用者按 `gw` 想要跳轉標籤，收到一句關於改名的話——
       **比不說更壞，因為它看起來像個答案**。
 
     ## 一張對照表，放進手冊（2026-09-11 起，`manual.md` §四末尾）
 
-    「做什麼／yumete／Helix／vi」，三十行，**每一格都是量出來的**：Helix 一列逐鍵按過
+    「做什麼/yumete/Helix/vi」，三十行，**每一格都是量出來的**：Helix 一列逐鍵按過
     `runtime/tutor` 三十課，vi 一列對着 `/usr/share/vim/vim91/` 的 tutor 與
     `doc/motion.txt`。
     Warning: **一度有 Emacs 第四列，撤掉了。** 本機沒有可對照的來源，那一列只能憑印象填——
@@ -12371,25 +12371,25 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
        `ta` 那句提示裏補一句「till 在這裏叫 …」。
     3. **註釋**：做不做是一個決定，不是一個 bug。
     4. **多光標九課**：0.1.0 明說不做，那 tutor 裏就不該留鉤子；要做就是 0.2 的大件。
-    5. Warning: **`Q`／`q` 角色與 helix 互換**（我們 `q` 錄、`Q` 播；helix 反過來）。
+    5. Warning: **`Q`/`q` 角色與 helix 互換**（我們 `q` 錄、`Q` 播；helix 反過來）。
        兩邊都有提示，但**這是最容易手滑的一種分歧**——要不要對齊，另定。
 
     ## 落地（2026-09-12）
 
     **§三那七處，六處不再是啞的**——而其中一處是**綁上去**而不是補一句話。判準沿用
-    `*`／`~` 那一條：**同一個動作、同一個名字、鍵位沒有被佔**，就是別名不是分歧；
+    `*`/`~` 那一條：**同一個動作、同一個名字、鍵位沒有被佔**，就是別名不是分歧；
     一句提示白花一次按鍵，還什麼也沒教會。
 
     | 原本啞的 | 落地 |
     | --- | --- |
-    | `Alt-d` `Alt-c` | **綁上**：刪／改而不動寄存器（`edits.rs` 的 `cut_selection(yanks)`） |
+    | `Alt-d` `Alt-c` | **綁上**：刪/改而不動寄存器（`edits.rs` 的 `cut_selection(yanks)`） |
     | `Ctrl-r` | 說「重做是 U（撤銷是 u）」 |
     | `Ctrl-c` | 說「注釋掉是 空格 c，整段是 空格 C」 |
-    | `(` `)` | 說「輪選區要多光標……一句一句走是 H／L」 |
+    | `(` `)` | 說「輪選區要多光標……一句一句走是 H/L」 |
     | `0` | 說「行首是 gh，第一個非空白是 gs」 |
 
     Warning: **`Alt-.` 那一行是量錯的，它從來就綁着。** `keys.rs` 的 `Key::Alt('.')` 走
-    `last_find`，重複上次 `f`／`t`，`e1bdbdf`（2026-09-08，拆模組那一次）之前就在，
+    `last_find`，重複上次 `f`/`t`，`e1bdbdf`（2026-09-08，拆模組那一次）之前就在，
     TUI 也把 ALT 修飾轉成 `Key::Alt`（`lib.rs:2507`）。**一張「每一格都是按出來的」表
     裏出現一個沒按到的格子**，成因多半是那一輪 `--keys` 還送不出 Alt——量之前先確認量具
     通了那一路，否則「沒反應」與「送不到」在報表上長得一模一樣。
@@ -12399,19 +12399,19 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一路落到 fall-through**，提示機制夠得着它。`20l` 仍然走二十格：那時計數已經起頭。
     **表上寫「做不到」的格子，做之前再讀一次代碼。**
 
-    Warning: **`Alt-d`／`Alt-c` 不能寫成 `d`／`c` 的別名。** 它們是刪除**加上**「寄存器不動」，
+    Warning: **`Alt-d`/`Alt-c` 不能寫成 `d`/`c` 的別名。** 它們是刪除**加上**「寄存器不動」，
     而寄存器是那一族唯一的共享狀態：複製一段，路上順手刪掉一個礙事的頓號，那一段就沒了。
-    所以 `delete_selection()` 拆成 `delete_selection()` ／
+    所以 `delete_selection()` 拆成 `delete_selection()` /
     `delete_selection_keeping_register()` 兩個名字、一個 `cut_selection(yanks: bool)`
     的實現——**不是加一個 `bool` 參數到調用點上**，調用點讀的是名字。
 
-    Warning: **上面那一段的結論在 #492 被推翻了，`Alt-d`／`Alt-c` 已經刪掉。** 診斷是對的，
+    Warning: **上面那一段的結論在 #492 被推翻了，`Alt-d`/`Alt-c` 已經刪掉。** 診斷是對的，
     修法選錯了邊：既然「刪除順手吃掉剪貼板」是這一族唯一的坑，那**常用的那個鍵就不該是
     踩坑的那個**。原話：「d 作为剪切功能会污染 register。这是我觉得 helix 最不好的
-    地方。」現在是 `d`／`c` 刪改不動寄存器、`D`／`C` 剪切，四個鍵一條規矩——**小寫不碰
-    剪貼板，大寫纔碰**。`D`／`C` 在 helix 的 normal 模式本來就空着（原表把它們算進多光標
-    族是錯的：那是 `C`／`Alt-C` 的**複製光標到上下行**，`D` 則從來沒綁過），所以這一換
-    沒有擠掉任何既有的鍵；`Alt-d`／`Alt-c` 換完之後就是 `d`／`c` 的長寫法，留着是同一個
+    地方。」現在是 `d`/`c` 刪改不動寄存器、`D`/`C` 剪切，四個鍵一條規矩——**小寫不碰
+    剪貼板，大寫纔碰**。`D`/`C` 在 helix 的 normal 模式本來就空着（原表把它們算進多光標
+    族是錯的：那是 `C`/`Alt-C` 的**複製光標到上下行**，`D` 則從來沒綁過），所以這一換
+    沒有擠掉任何既有的鍵；`Alt-d`/`Alt-c` 換完之後就是 `d`/`c` 的長寫法，留着是同一個
     動作兩個入口。兩個名字仍在，只是 `delete_selection()` 現在走 `yanks = false`，
     新的 `cut_selection_to_register()` 走 `true`。
 
@@ -12419,16 +12419,16 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `delete_selection()` 再插入，而那時它還吃寄存器——於是**貼上去的同時把被蓋掉的文字寫
     進了寄存器**，連貼兩次，第二次貼的是第一次蓋掉的東西。改完自動就對了。
 
-    **`J`／`K` 一處沒動，這是有意的。** 那兩個鍵**綁着**（半頁滾），所以 phrasebook
+    **`J`/`K` 一處沒動，這是有意的。** 那兩個鍵**綁着**（半頁滾），所以 phrasebook
     根本到不了；而給一個真的做了事的鍵每按一次配一句話是噪音——半頁滾是連按的鍵。
     按下去屏幕會動，讀者知道自己按到了別的東西；「併行是 `gJ`」在手冊那張對照表裏。
     **啞的定義是「什麼都沒發生」，不是「發生的不是我想要的」。**
 
     **§四那條「註釋全樹都沒有」也過期了**：`toggle_comment` 在 `edits.rs:733`，
-    空格選單的 `c`／`C` 兩個鍵各強制一種形式。所以 `Ctrl-c` 說的是「在哪裏」而不是
+    空格選單的 `c`/`C` 兩個鍵各強制一種形式。所以 `Ctrl-c` 說的是「在哪裏」而不是
     「沒有」。
 
-    **手冊三處**：修改那張表加了 `A-d` `A-c` 一行；對照表加了「刪／改，寄存器不動」
+    **手冊三處**：修改那張表加了 `A-d` `A-c` 一行；對照表加了「刪/改，寄存器不動」
     （vi 是黑洞寄存器 `"_d`，`change.txt:1391` 對過）、「再找一次剛纔那個字符」
     （vi 是 `;`，`motion.txt:303`）、「註釋掉」三行；字形組那一行原本寫着「`~` 在這裏
     沒有綁定」，那是 `~` 升成別名之前的話。
@@ -12437,7 +12437,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **`t` 的撞鍵**（建議動作 2）。`t<ch>` 是表格族的字頭，vi 的 till 沒有位子。
     要麼表格換一個字母，要麼在 `ta` 那句提示裏補一句「till 在這裏叫 …」——
-    **這是唯一一個「鍵位真的撞了」的**，別的都已經落地或分出去（#405／#406）。
+    **這是唯一一個「鍵位真的撞了」的**，別的都已經落地或分出去（#405/#406）。
 
 [^405]: 2026-09-11 定：**放到 0.2.0**，「這個的實施細節需要慢慢打磨」。
     helix tutor 的 5.1–5.5 與 10.1–10.4 **九課**都在教它（`C` `Alt-C` `s` `S` `&`
@@ -12452,13 +12452,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **2026-09-28 寫了完整方案，見 §5.13**——照 helix 的模型逐條抄，分四期，Phase 0 沒有
     任何可見變化。Warning: 那一節查實了三件當時不知道的事：① yumete 的模型**已經是對的**
     （「光標就是一段一格寬的選區」早就寫在 `modes.rs:61`），要改的只是「一個」變成「一組」；
-    ② `self.cursor`／`self.anchor` **一個字節都沒漏出 `yumete-core`**，而 `caret()`／`mark()`
+    ② `self.cursor`/`self.anchor` **一個字節都沒漏出 `yumete-core`**，而 `caret()`/`mark()`
     那層間接（當初為分屏加的）能讓 TUI 的 42 行和測試的 261 行一行不改；③ `%` 和 `A-;`
     **已經就是** helix 的 `select_all` 和 `flip_selections`，真正撞車的只有 `C` 和 `K`。
 
 [^406]: 2026-09-11 定：**做，而且要適配中文**，「具體細節之後做的時候詳細討論」。
     helix tutor 9.4：按 `gw`，屏幕上每個詞首換成兩個高亮字符，打那兩個字符就跳過去
-    （easymotion／leap 那一套）。Warning: **與我們的 `gd`／`gD`（查定義）毫無關係**——
+    （easymotion/leap 那一套）。Warning: **與我們的 `gd`/`gD`（查定義）毫無關係**——
     `keys.rs` 裏那句 `gw` 提示是給我們自己的老使用者看的（曾把查定義綁在 `gw`，
     2026-09-09 改名到 `gD`），一個 helix 使用者按 `gw` 收到它，**看起來像個答案而其實不是**。
     要先定的三件（都與中文有關）：① **標籤落在哪**——空白分隔的詞首在中文裏幾乎沒有，
@@ -12482,14 +12482,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     是一條 `┆`，所以停在裏面的光標是一個讀者找不到的光標——`l` 按一下不動、再按一下忽然
     換了一列，而 `w` 一下就落進去。
     治法跟 #382 那條 padding 是同一條規矩（**讀者看不見的一步不算一步**）：
-    `past_what_a_table_keeps_off` 把縫併進原來那張 hidden 表，`l`／`w`／`e`／`b`／點擊
+    `past_what_a_table_keeps_off` 把縫併進原來那張 hidden 表，`l`/`w`/`e`/`b`/點擊
     五條路一起受益。
     Warning: **縫是那道牆本身，不是兩個格子中間的整段空白。** 第一版拿 `row_cells` 的兩個 span
     相減，而 `row_cells` 報的是**內容**，中間那段還含着格子自己的 padding ——
     `| 甲 | 乙␠␠␠…␠|` 整條尾巴都被藏掉，`l` 一下從第 37 個字符跳到 44。padding 是格子的，
     哪一段掉出頁面由 `cell_hidden_on_line` 說。畫成一條線的只有 `空格? | 空格?`，
     藏的就是它（`mdtable::pipes_from` 報位置）。
-    Warning: **只對 `|` 表**。逗號／製表符分隔的文件裏分隔符只有一個字符，而**空格子與它後面
+    Warning: **只對 `|` 表**。逗號/製表符分隔的文件裏分隔符只有一個字符，而**空格子與它後面
     那個分隔符共用同一個偏移**（`一,,木目`：空格子和第二個逗號都在 2），把縫藏起來等於
     讓空格子再也點不進去——而填空正是表格編輯最主要的用處。第一版沒分這兩種，`csv` 那
     三條測試當場變紅（`⿰` 被跳過去到了 `木`）。
@@ -12508,7 +12508,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     反應」的 bug。`Ctrl-c` 也沒綁：raw mode 下收得到，但它在所有人的肌肉記憶裏是
     「停下」，誤按的代價是注釋掉一整段選區。
     Warning: **`空格 c` 原來是合併衝突，挪到了 `空格 m`**（merge）。對一個寫小說的編輯器
-    來說合併衝突比注釋罕見得多，而 helix 教的是 `空格 c`。`]c`／`[c`（跳到下一個衝突）
+    來說合併衝突比注釋罕見得多，而 helix 教的是 `空格 c`。`]c`/`[c`（跳到下一個衝突）
     沒動。
     行注釋的細節：記號對齊到那幾行**最淺的那一級縮進**（不是各按各的，否則取不回來），
     空行不加記號也不算數，**半數已注釋的算「還沒注釋完」**——把剩下的補上，而不是把
@@ -12524,18 +12524,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     這樣的調用、`| --- | --- |` 那一行），或者兩個弱的（`**`、圍欄、`](`、行首 `//`）。
     兩百行裏只出現一次的是散文碰巧含了那個字符。
     順手緊了兩處：① `| --- | --- |` 新算一票——一個通篇是表的 `.txt` 從不寫標題，而
-    `t f` 和自動對齊只在 Markdown 下開；② `#name(`／`#name[` 那一票原來只問「這一行後面
+    `t f` 和自動對齊只在 Markdown 下開；② `#name(`/`#name[` 那一票原來只問「這一行後面
     有沒有括號」，於是 Markdown 自己的 `見 #註 的說明（[附錄](a.md)）` 被讀成調用——
     現在括號必須**貼着**名字。
     Warning: **沒改的：沒有檔名的新緩衝區仍是 Markdown**（`Syntax::default()`）。那裏沒有內容
     可嗅，而新建一個檔開始寫，Markdown 是比純文本有用的猜測。
 
 [^411]: 2026-09-12 的問題：「helix 的 visual 模式（`v` 快捷鍵），似乎用了不同的 cursor
-    樣式」。查了本地那份 helix：`[editor.cursor-shape]` 確實有**三格**——normal／insert／
+    樣式」。查了本地那份 helix：`[editor.cursor-shape]` 確實有**三格**——normal/insert/
     **select**（`helix-view/src/editor.rs:859`，三格出廠都是 `block`），主題另有
-    `ui.cursor.select`／`ui.cursor.primary.select` 兩個作用域，helix 自己的 `theme.toml`
+    `ui.cursor.select`/`ui.cursor.primary.select` 兩個作用域，helix 自己的 `theme.toml`
     給它們上了 `bg = "delta"`。
-    yumete 走形狀不走顏色：crossterm 給的是 `SetCursorStyle`（block／bar／underline），
+    yumete 走形狀不走顏色：crossterm 給的是 `SetCursorStyle`（block/bar/underline），
     **沒有顏色**，要改顏色得自己發 OSC 12，Terminal.app 不認，而且崩潰退出會把顏色留在
     終端裏。顏色那條路本來也走不通——梯子上 HEAD 815 與 SELECTION 700 已經只差 5%，中間
     插不進第三級（見 [^407]）。
@@ -12547,7 +12547,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^412]: #225 在事件迴圈裏留了一句：`:yume on` 是**關於語言的答覆**，而且就打在借走語言的
     那條命令行上，出來的時候不許把舊的還回去——否則寫字的人剛下的命令，一個按鍵之後被
     悄悄撤銷。這一句認的是 `tag == "+" || tag == "-"`。
-    #290 把那個請求改成了 `lang:chinese`／`lang:abc`／`lang:off`（三個答覆，各有名字），
+    #290 把那個請求改成了 `lang:chinese`/`lang:abc`/`lang:off`（三個答覆，各有名字），
     **而這一句沒跟**。全樹再沒有一處送 `+` 或 `-`，於是它從那天起一次都沒成立過，#225
     要擋的事又回來了。
     2026-09-12 收 #338 那一族時看見的。改成問 `answers_the_language(tag)`。
@@ -12562,7 +12562,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     2026-09-12 提出：**窄的那個不容易誤刪**。`.` 就在 `,` 旁邊、不帶任何前綴，而在
     「先選擇後動作」之下它回放的是**鍵**、落在**當前選區**上——所以誤按一次不是重做剛纔
     那一段，是把眼下選中的這一段也刪掉。
-    做法：`repeat_edit` 只在 `last_edit_keys` 是一段插入（`i`／`a`／`c` 開頭、`Esc` 收尾）
+    做法：`repeat_edit` 只在 `last_edit_keys` 是一段插入（`i`/`a`/`c` 開頭、`Esc` 收尾）
     時回放，其餘報 `edit.nothing-to-repeat`；或另給寬的那個一個鍵。
     Warning: **這是破壞性改動**，`.` 現有的六七種用法會少掉大半，所以擱在這裏等定。**small**
 
@@ -12574,8 +12574,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **出廠起一個都指代不了**——`ms「` 要打的正是「，敲不出來就等於沒有。這是同一個 bug 的
     另一半，不是兩件事。
     **落地（2026-09-12）**：問句收到一處。`Pending::takes_a_character()`（`editor.rs`）
-    窮盡列出六個「在等文本的字」——`Find`／`Replace`／`MatchPair`／`Surround`／
-    `SurroundFrom`／`SurroundTo`——其餘十個等的是命令字母。答案也收到一處：
+    窮盡列出六個「在等文本的字」——`Find`/`Replace`/`MatchPair`/`Surround`/
+    `SurroundFrom`/`SurroundTo`——其餘十個等的是命令字母。答案也收到一處：
     `keys.rs::answer_with_char(waiting, c)`，鍵與上屏兩條路都叫它。前端那道閘
     （`yumete-tui` 的 `composes_here`）從 `editor.replacing()` 換成 `takes_a_character()`，
     預編輯、候選框、輕點 Shift 三處**同時**跟着亮，因為這個檔裏每一道閘問的都是這一句。
@@ -12595,7 +12595,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     問題只在它沒有名字說明這件事。
     二、**`:s` 的 `c`（逐個確認）沒做**，而校稿最想要的正是它——`:%s` 之前只能先 `n`
     數一遍，數完還是一次過。
-    三、**`:grep` 與 `n`／`N` 不通氣**。結果緩衝區是普通緩衝區（這是有意的），可跨檔
+    三、**`:grep` 與 `n`/`N` 不通氣**。結果緩衝區是普通緩衝區（這是有意的），可跨檔
     的「下一處」還是沒有。
     四、**`:replace` 改幾個檔算幾次撤銷**沒有定論，要當面驗。
     五、名字五個形狀：一個鍵、一個 `g` 前綴、一個帶斜線的命令、兩個帶參數的命令。
@@ -12604,18 +12604,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **五條驗過了（2026-09-12）**，結論與上面的印象不盡相同：
     一、`g/` 不轉義是**它的定義**，不是 bug——`*` 與它同一支（`keys.rs:938`），兩個都
-    留，照 vim／helix 的樣子。二、`c` 確實沒做（`command.rs` 直接回一句「還沒做」）。
+    留，照 vim/helix 的樣子。二、`c` 確實沒做（`command.rs` 直接回一句「還沒做」）。
     Warning: **第二條後來做了，這一行是舊帳**（2026-09-23 清 todo 時照着它去做，才發現已經
     有了）：`command.rs:4757` 解析 `flags.contains('c')`，`search.rs` 那一整套逐個確認的
-    走查（`Pending::Confirm`／`Confirming`／`answer_confirm`）都在，還有測試。
+    走查（`Pending::Confirm`/`Confirming`/`answer_confirm`）都在，還有測試。
     **記過的事做完了要回來劃掉**——不然下一個人會照着這一行去做一件已經做完的事。
     三、確實不通氣。Warning: **2026-09-23 查了業界做法，結論是「不該通」**：vim 的跨檔下一處
-    是 quickfix 的 `:cnext`／`:cprev`，**另一套鍵**——`n`／`N` 在 vim 裏從來只管本檔；
+    是 quickfix 的 `:cnext`/`:cprev`，**另一套鍵**——`n`/`N` 在 vim 裏從來只管本檔；
     helix 根本没有 `:grep`，它的全局搜索出一個 picker。所以這一條不是缺口，是慣例，
     這一頭的「結果緩衝區 ＋ `gf`」已經是同一個位置上的答案。**不做。**四、`:replace` **每個檔各存一次快照**（`files.rs:689`），所以改二十
     個檔要在二十個緩衝區裏各按一次 `u`——比記下來的更難用。五、照舊。
     另外看見兩處沒記過的：`空格 ?` 開的是一條空命令行，沒有配對的意思；範圍的
-    `,` 與全編輯器的 `-`／`,` 規矩相反。
+    `,` 與全編輯器的 `-`/`,` 規矩相反。
     Warning: **「在第 3 欄裏找完全相等的那一格」不補了**（2026-09-12 定，`t3/`、`t2-5/`
     夠用）。**`g/`、`g?` 留着**——另開一個工作區看搜索結果靠的就是它們。
 
@@ -12631,11 +12631,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一遍模式（`editor/search.rs`）。稿子裏 `.` `*` `(` `)` `$` 就是它們自己的時候居多，
     而漏了反斜線**不會報錯**：`(注)` 照樣編得過，只是去改了單獨的 `注`。
     **右邊也照字面**：左邊都轉義過了，就沒有分組給 `$1` 指，於是 `$` 一律當錢號
-    （`replace('$', "$$")`）；`\n`／`\t` 不變——命令行按 Enter 是送出，那兩個字符
+    （`replace('$', "$$")`）；`\n`/`\t` 不變——命令行按 Enter 是送出，那兩個字符
     沒有別的辦法打。
 
     **落地 ③ `c` 旗標（2026-09-12）**：`:s` 多一個 `c`＝逐處確認（「防止一下子全部都
-    替换了」）。停在每一處匹配上、把它選給使用者看、問 `y`／`n`／`a`／`q`／`l`
+    替换了」）。停在每一處匹配上、把它選給使用者看、問 `y`/`n`/`a`/`q`/`l`
     （`Esc` 同 `q`），**五個之外的鍵不算答案**，問題還在那裏——這個旗標的整個用處就是
     不去改沒看過的東西。做法上有四處是想過纔那麼寫的：
     ① 這是**沒人按出來的 `Pending`**（`Pending::Confirm`）——命令開的，一開就跨很多個
@@ -12659,18 +12659,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     （`t2-10/`、`t1,5,9s`、`g30g`）是另一個機制，不受影響。`hint.rs` 裏兩則
     表格提示與 `messages.toml` 裏六則跟着刪。
 
-    **表格那一半的問題交給 `t`**：`t/`／`t?` 一欄一欄地找，`:table-jump 木` 跳到
+    **表格那一半的問題交給 `t`**：`t/`/`t?` 一欄一欄地找，`:table-jump 木` 跳到
     key 欄裏叫這個名字的那一行。Warning: **「在第 3 欄裏找完全相同的那一格」這個能力沒有
     `t` 的對應寫法**（`t3/` 是子串搜索，不是整格相等），暫時就這樣。**small**
 
 [^417]: `:x` 這裏一直是 `:write-quit` 的別名——無條件寫盤再退出。**vi 與 helix 的
-    `:x` 不是這個**：它只在檔案真的改過時纔寫（helix 叫 `:exit`，`x`／`xit` 是它的
+    `:x` 不是這個**：它只在檔案真的改過時纔寫（helix 叫 `:exit`，`x`/`xit` 是它的
     別名，`typed.rs:3009`）。分別看着小，實際上有人靠它：檔案的修改時間一被推成現在，
     `make`、rsync 與同步文件夾都會當成「這個檔變了」——打開看一眼再 `:x` 出來，就白白
     引出一趟重建或一趟上傳。同一族的 `:update`（`:up`，改過纔存、不退出）這裏根本沒有。
 
-    **落地（2026-09-12）**：`:x`／`:xit` 從 `:write-quit` 的別名搬到新的 `:exit`，
-    `:wq` 只留 `wq` 一個別名；新增 `:update`／`:up`。三條都走同一支
+    **落地（2026-09-12）**：`:x`/`:xit` 從 `:write-quit` 的別名搬到新的 `:exit`，
+    `:wq` 只留 `wq` 一個別名；新增 `:update`/`:up`。三條都走同一支
     `write_then_quit(path, only_if_changed)`（`editor/commands.rs`）。**給了路徑就一定
     寫**（`:x 第二章.md` 是一句指令，不是一個條件），沒給路徑而緩衝區乾淨時只說一句
     「沒有改動，未寫盤」。`:w` 不動，仍然無條件寫。
@@ -12689,7 +12689,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **一落地（2026-09-13）。** `markdown::opening()` 讀一行的開頭，
     `Editor::continue_the_list()` 在插入模式的 `Enter` 前面問它一句。五種記號：
-    `- `／`* `／`+ `、`1. `／`1) `、`> `、`- [ ] `，縮進照抄，號碼 `+1`，勾選框一律
+    `- `/`* `/`+ `、`1. `/`1) `、`> `、`- [ ] `，縮進照抄，號碼 `+1`，勾選框一律
     帶空的下來——下一件事還沒做。**空格是必需的**：`-` 單獨一個是還沒打完的破折號，
     而它就是「不亂猜」那道閘的全部，代價爲零，因爲接下來的記號本身都帶一個空格。
     三處小心都照辦了：`|` 開頭的行在 `opening()` 裏第一個被擋掉（表格的行按 `Enter`
@@ -12705,7 +12705,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     命令行的補全面板（#…「補全跟着走」那一種）就是這個形狀，不必另造一個控件。
 
     **二落地（2026-09-13），`[[` 仍未做。** `editor/complete.rs`：`reference_offer()`
-    從光標往回讀，認 `[^` 與 `](#` 兩個引子，`cycle_reference()` 走 `Tab`／`Shift-Tab`，
+    從光標往回讀，認 `[^` 與 `](#` 兩個引子，`cycle_reference()` 走 `Tab`/`Shift-Tab`，
     面板是 `draw_reference_menu`（照抄 `draw_command_menu` 的 `draw_list`，停在腳那一排
     浮動面板裏，不跟着光標）。
 
@@ -12749,7 +12749,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **原本記的決定：當前檔案所在的那個目錄，連同它的子目錄。**
     不是項目根，也不是 `:grep` 的那個根——一本書的稿子與它的資料、舊稿、導出物常在同一
     棵樹下，往上取一層就把幾百個不相干的檔名倒進面板裏，而 `[[` 這種面板要的是「近處
-    那幾十個」。Warning: 這條與 `:grep` **有意不同**（`:grep` 往上找 `.yumete`／`.git`，見
+    那幾十個」。Warning: 這條與 `:grep` **有意不同**（`:grep` 往上找 `.yumete`/`.git`，見
     [^361]）：`:grep` 是「在整本書裏找一個字」，`[[` 是「指向手邊這一疊」。
 
 
@@ -12761,10 +12761,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     | 命令 | 搜哪裏 |
     | --- | --- |
-    | `:search`／`:replace` | 本 buffer（默認） |
-    | `:search-working`／`:replace-working` | buffer 所在文件夾，含子目錄 |
-    | `:search-wd`／`:replace-wd` | yumete 打開的文件夾 |
-    | `:search-project`／`:replace-project` | 最近的 git 項目（自己往上找） |
+    | `:search`/`:replace` | 本 buffer（默認） |
+    | `:search-working`/`:replace-working` | buffer 所在文件夾，含子目錄 |
+    | `:search-wd`/`:replace-wd` | yumete 打開的文件夾 |
+    | `:search-project`/`:replace-project` | 最近的 git 項目（自己往上找） |
     | `:search ../稿` | 指名那一個 |
 
     這六個是**六個真命令**，不是 `:search` 的參數：名字自己把話說完，`:` 裏搜得到、
@@ -12774,19 +12774,19 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **替換那一行一開頭就是開的**。
 
     **面板上的三個開關**：正則**默認關**（照 VSCode——稿子裏找 `(注)`、`[^1]`、`A.B`
-    居多）；大小寫**三檔**，智能（默認，同全編輯器的 smart case）／敏感／不敏感——兩檔
+    居多）；大小寫**三檔**，智能（默認，同全編輯器的 smart case）/敏感/不敏感——兩檔
     做不到「面板搜的和 `/` 搜的一樣」；完整匹配就是 ASCII `\b`，照 VSCode。
     Warning: **完整匹配對漢字是空的**（兩個漢字之間沒有 `\b`），只對稿子裏的西文起作用；
     走分詞器的「按詞」想過，這一版不做。
 
-    **檔名模式兩欄**：包含／排除，照 VSCode。
+    **檔名模式兩欄**：包含/排除，照 VSCode。
 
     **對齊第二輪（2026-09-13 晚）：**
 
     * **分三次坐下**：一 面板＋搜索框＋三個開關，只搜本 buffer，命中直接列成一層——
-      **這一步交出來就已經比 `/` 好用**；二 結果樹＋`-cd`／`-wd`／`-gd`；三 替換三級。
+      **這一步交出來就已經比 `/` 好用**；二 結果樹＋`-cd`/`-wd`/`-gd`；三 替換三級。
     * **面板是第四個 `View`，出廠在左槽**（跟檔案樹同槽，`Tab` 輪這四個）。
-    * **面板的搜索接管 `/` 那一次**：正文裏每一處都高亮，`n`／`N` 走它們，關掉面板
+    * **面板的搜索接管 `/` 那一次**：正文裏每一處都高亮，`n`/`N` 走它們，關掉面板
       仍然在。一個「此刻在找什麼」，兩個入口。Warning: 這正是 [^415] 記 `:grep` 不寫
       `last_search` 為缺口的那條理由。
     * Warning: **但 `n` 不把面板拉回來。** `/` 那個窗關了以後按 `n` 會自己回來，而那個窗在
@@ -12797,15 +12797,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       幹的正是那件活）。**改詞是搜索裏最常做的動作**，把鍵交出去就意味着每改一個字都要
       先回來。Warning: **「上一處」在框裏不給鍵**：`Esc` 出來按 `N`。往回找是少見動作，而框裏
       是 Insert——`n` 在那裏是字母 n，`Shift+Enter` 又**送不出來**（`KeyCode::Enter`
-      那一支不看修飾鍵，多數終端本來也不區分，要 kitty／CSI-u）。
-      三個地方一張表：正文 `n`／`N`；面板 Normal `n`／`N`；框裏 `Enter`／（`Esc` 出來）。
+      那一支不看修飾鍵，多數終端本來也不區分，要 kitty/CSI-u）。
+      三個地方一張表：正文 `n`/`N`；面板 Normal `n`/`N`；框裏 `Enter`/（`Esc` 出來）。
     * **`空格 /` 開出來，框裏預填上次搜的詞並且全選**（照 VSCode）：直接打字就是新詞，
       直接 `Enter` 就是接着上次找，兩種意圖都只要一個鍵。Warning: **手上有選區就用選區蓋過
       它**——劃中一句再開，意圖擺在那裏，不該還要重打。
     * **每一條命中：行號 ＋ 命中前後各幾個字**，不是整行。小說一行幾千字，「整行」在這裏
       本來就不是一個有用的單位。
     * **面板自己要一個更寬的默認（32 欄）**，因為它是張表單：搜索框、三個開關（Warning: 大小寫
-      是**三檔**，不是勾）、以後還有包含／排除兩欄。24 欄擠得下，但命中那一段只剩五六個
+      是**三檔**，不是勾）、以後還有包含/排除兩欄。24 欄擠得下，但命中那一段只剩五六個
       字。Warning: 代價是 `Tab` 轉到搜索那一格時整頁重排一次（比檔案樹寬 8 欄）。
 
       ```
@@ -12822,8 +12822,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       長久想要的寫 `[search]` 一節。Warning: 一個一年前隨手開的開關今天還在悄悄改變搜索結果、
       而人已經忘了它——那是會話該躲開的東西。
     * **列前 N 條，但數完全部**（同 `:grep` 的 `GREP_LIMIT`）。數目是真的，列表有盡頭。
-      高亮與 `n`／`N` 不受這個限制——那是正文裏的事。
-    * **列表裏 `j`／`k` 走，正文不動**（同大綱），`Enter` 纔跳。一條規矩管所有面板；
+      高亮與 `n`/`N` 不受這個限制——那是正文裏的事。
+    * **列表裏 `j`/`k` 走，正文不動**（同大綱），`Enter` 纔跳。一條規矩管所有面板；
       好處是可以安心翻完全部再決定，原來在哪一章不會被抹掉。
     * Warning: **於是摘要就是唯一的判斷依據**，所以高亮那一條的**前後文寫在命令行那一行**
       （2026-09-13 提的）。那一行是**整窗寬**的（100 多欄），比面板那 28 欄裝得多
@@ -12847,7 +12847,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       中間態，每一下清空再填會閃；灰掉是說「這不是當前的答案」，比清空誠實，也比留着
       不吭聲誠實。
     * **輸入法白拿**：全編輯器只有一道閘 `composes_here()`（tui/lib.rs:1226）答「此刻
-      打的字是正文嗎」——插入模式、`f`／`r` 那一族、命令行上收散文的參數位。面板的格子
+      打的字是正文嗎」——插入模式、`f`/`r` 那一族、命令行上收散文的參數位。面板的格子
       是**第三種**（既不在文檔裏也不在命令行上），那道閘加一支「鍵在面板的格子裏」，
       上屏的字送進那一格；候選面板與單按 Shift 切中英跟着白拿，它們問的是同一道閘。
 
@@ -12858,7 +12858,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     * **`Mode::Field`**（`input.rs`）——正文與命令行之外**第三個**打字的地方。加進那個
       枚舉而不是加個布爾，是因為它的四個窮盡 `match` 會逼着新模式回答「這裏能不能打
       中文」「開在英文嗎」：Warning: **輸入法因此一行都沒改**（`composes_here` 問的就是
-      `mode().composes()`）。上屏的字在 `insert_committed`／`paste_text` 兩處改道進格子。
+      `mode().composes()`）。上屏的字在 `insert_committed`/`paste_text` 兩處改道進格子。
     * **`search_panel.rs`** 是狀態（框、三檔大小寫、五個格子、命中），**`editor/find.rs`**
       是跑與鍵，畫在 tui 的 `draw_search`。
     * Warning: **`last_search` 存的是引擎跑的那條 pattern（帶標誌），框裏存的是人打的字。**
@@ -12875,9 +12875,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     * Warning: **`RENAMED` 裏 `("search", "table-find")` 那塊指路牌撤了**：`:search` 又是活
       命令了，而指路牌只能指向一個**沒人打得出來**的名字。手冊那張「沒有了」表也標了
       這一條——同一個字，完全不同的一件事。
-    * **`:grep`／`:replace` 連根拔掉**（`Command::Grep`、`ReplaceFound`、`files.rs` 的
-      兩支、`grep_found`、十二則訊息、五個測試）。`grep_root`／`GREP_LIMIT` **留下改名**
-      為 `listing_root`／`LISTING_LIMIT`——`:check` 那幾張清單一直在用它們。
+    * **`:grep`/`:replace` 連根拔掉**（`Command::Grep`、`ReplaceFound`、`files.rs` 的
+      兩支、`grep_found`、十二則訊息、五個測試）。`grep_root`/`GREP_LIMIT` **留下改名**
+      為 `listing_root`/`LISTING_LIMIT`——`:check` 那幾張清單一直在用它們。
       Warning: **順帶丟了兩條覆蓋**：走目錄時認 `.gitignore`、以及「哪裏算這本書」，從前是靠
       `:grep` 的測試蓋着的。`walk()` 本身還在（選擇器用），**第二次坐下要把那兩條補回來**。
     * Warning: **`/` 並不高亮全部命中**——查證過了，畫面上那些交替底色是字格條紋。所以「面板一
@@ -12886,15 +12886,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     ---
 
-    **第二次坐下落地（2026-09-13）。** 跨檔、結果樹、四個命令。Warning: **包含／排除兩欄推後**
+    **第二次坐下落地（2026-09-13）。** 跨檔、結果樹、四個命令。Warning: **包含/排除兩欄推後**
     ——那是精修，堵洞不需要它。
 
-    * **`Where`**：`Buffer`／`Folder`（`-cd`）／`Workspace`（`-wd`）／`Project`（`-gd`）／
+    * **`Where`**：`Buffer`/`Folder`（`-cd`）/`Workspace`（`-wd`）/`Project`（`-gd`）/
       `Named`。Warning: **只有 `Buffer` 邊打邊搜**（在記憶體裏），其餘等 `Enter`——一百章讀一遍
       不能每按一個字母做一次。面板標題寫着在哪裏找，數目那一格在等的時候寫「Enter 開找」：
       同一扇面板兩種行為，螢幕上必須看得出來。
     * **結果成樹**：`Search::rows()` 從命中**算**出來（不另存一份），檔案摺疊在
-      `folded` 裏，`h`／`l` 摺與開（同大綱），`Enter` 在檔案頭上也是摺與開。
+      `folded` 裏，`h`/`l` 摺與開（同大綱），`Enter` 在檔案頭上也是摺與開。
       全部命中都在正在寫的那個檔裏時**不畫檔案頭**——在你正看着的檔上頭寫一行「這個檔」
       什麼也沒說。
     * **正在寫的那個檔從記憶體搜，別的檔開着的也從它的緩衝區搜**：沒存的字也是字，
@@ -12924,9 +12924,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     先寫盤：每個有命中的檔開成緩衝區、在裏面改，各自 `u` 撤得回，`gn` 走得過去，
     `:write-all` 纔是說「好」的那一下。
 
-    * `:replace`／`-cd`／`-wd`／`-gd`／`:replace <路徑>` 六個命令，開的是**同一扇面板**，
+    * `:replace`/`-cd`/`-wd`/`-gd`/`:replace <路徑>` 六個命令，開的是**同一扇面板**，
       只是替換那一行一開頭就在。Warning: `replacing` **只在這裏打開**：`:search` 之後那一行
-      收起來，`r`／`R` 跟着失效——「只是看看」之後不該留着兩個會改字的鍵。
+      收起來，`r`/`R` 跟着失效——「只是看看」之後不該留着兩個會改字的鍵。
     * `r` 在命中上換這一處，在檔案頭上換整個檔，`R` 換全部。**只有 `R` 問一句**：前兩個
       是眼睛正看着的改動，一本書的每個檔不是。
     * Warning: **換哪一處是重新跑一遍正則找出來的**（`Hit::nth` ＝ 這一行的第幾個），不是拿
@@ -12936,11 +12936,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     * Warning: **`Tab` 從找什麼落到換成什麼，鍵要留在打字裏。** 兩個框上下挨着、一前一後填，
       中間再按一個 `i` 會讓 `Tab` 變成這扇面板裏最常做的事的錯鍵。
 
-    Warning: **六個短名（`scd`／`sgd`／`swd`／`rcd`／`rgd`／`rwd`）加了又刪。** `:` 那張選單在
+    Warning: **六個短名（`scd`/`sgd`/`swd`/`rcd`/`rgd`/`rwd`）加了又刪。** `:` 那張選單在
     24 行的窗口下當時只裝得下 **6 欄 × 9 行 ＝ 54 格**（2026-09-24 放寬到 13 行 ＝ 78
     格，見 §5.12.23；下面那個 56 因此不再溢出，可**命令名有預算**這條照舊），
     而別名在那張表裏**各佔一行**
-    （`bn`／`bp`／`bc` 也是這樣），六個一加就是 56，整張表溢出一屏、開始滾動——兩條
+    （`bn`/`bp`/`bc` 也是這樣），六個一加就是 56，整張表溢出一屏、開始滾動——兩條
     選單測試同時紅。前綴補全本來就能 `:search-c` 到位，而選單那一格比短名值錢。
     **命令名也有預算，和鍵位一樣。**
 
@@ -12953,7 +12953,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       存着的路徑照字面比，於是一個**剛在緩衝區裏改過**的檔被當成沒打開的、從磁盤重讀，
       改動看起來像沒發生。兩邊都 `canonicalize`。同一族的錯這一輪犯了兩次（另一次是
       當前 buffer 被搜兩遍），**凡是拿路徑當身份的地方都要先解析**。
-    * Warning: **`project_root()` 也中了同一族**（**舊錯**，`:check`／選擇器／`:word-discover`
+    * Warning: **`project_root()` 也中了同一族**（**舊錯**，`:check`/選擇器/`:word-discover`
       一起受影響）：用 `一.md` 這種**裸名字**打開的緩衝區路徑是相對的，`parent()` 是空
       路徑，那一句 `.find(|d| !d.is_empty())` 把它濾掉，於是**從來沒有往上爬到 `.yumete`**
       ——每張清單都以終端當時站的那個目錄為根。**安靜得很**：答案是一個真的目錄，而且看着
@@ -12971,13 +12971,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     找一個字」，跟這扇面板不是一件事。
 
     **結果進邊欄一棵樹**（檔案摺疊、每條命中一行），不是現在那個結果緩衝區。
-    替換**三級**：一條／一個檔／全部。**只有「全部」彈確認框**，另兩級你看着
+    替換**三級**：一條/一個檔/全部。**只有「全部」彈確認框**，另兩級你看着
     哪一條動的手。
 
     **面板是分模式的，形狀就是表格視圖**——幾個格子、`Tab` 走下一格、Insert 綁在一格
-    裏（`insert_bounds()` 那一套現成的）。進面板落在搜索框裏，已經是 Insert；`Tab`／
+    裏（`insert_bounds()` 那一套現成的）。進面板落在搜索框裏，已經是 Insert；`Tab`/
     `S-Tab` 在幾個輸入框與幾個開關之間走，開關上 `Enter` 和空格都翻；`Esc` 第一下回
-    Normal，第二下纔回正文。樹裏 `j`／`k` 走、`h`／`l` 摺疊（同大綱）、`Enter` 跳過去、
+    Normal，第二下纔回正文。樹裏 `j`/`k` 走、`h`/`l` 摺疊（同大綱）、`Enter` 跳過去、
     `d` **忽略**這一條、`r` 替換這一條、`R` 全部替換。
 
     **`空格 /` 開的就是這扇**，位置默認本 buffer，跟 `:search` 一致；那一行現在寫的
@@ -13009,7 +13009,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
   字 ＝ 2 × 0.5em ＝ 一個字寬，**正好是一縱的寬度**，所以兩位數不動格子分毫。
 - **自動縦中横的上限是四位**：CSS Writing Modes 3 把它寫成
   `text-combine-upright: digits <integer [2,4]>`（省略時算 2），InDesign 的「自動縦
-  中横設定 · 組数字」也只給 2／3／4。
+  中横設定 · 組数字」也只給 2/3/4。
 - **三位以上比一格寬，印刷把它壓回一格**：CSS 的規矩是「if the combined text is wider
   than 1em, the user agent must fit the contents within 1em」。壓不動的時候它就探進
   行間——這是 3～4 位縦中横在版面上看得見的代價，也是排版界不往上加的原因。
@@ -13033,13 +13033,13 @@ InDesign《CJK 文字の書式設定》。
 - **`tatechuyoko` 從 `bool` 變成一個數**（`0` 關，`2`–`8`，越界夾住，`1` 讀作關），
   **出廠從「關」改成 `4`**（2026-09-21 定：「我覺得可以改成 4，因為四位數很常見」——
   年份與章節號是中文稿子裏半角字最常出現的兩種，而 `4` 也正是印刷給自己定的上限）。
-  舊拼法 `true`／`false` **不留別名**：「開着」說不出一格裝幾個。但那一行仍然解析得
+  舊拼法 `true`/`false` **不留別名**：「開着」說不出一格裝幾個。但那一行仍然解析得
   出來，只是被拒收並當場報一句——否則整個配置檔都會因為這一行而載不進來，而同一個檔
   裏别的設定跟這件事毫無關係。
 - **上限 8**，比排版界的 4 寬。理由是我們的代價曲線跟印刷不同：印刷壓字，越壓越糊；
   終端探進行間，探多遠就是多遠。八個半角字 ＝ 四個字寬，探出去三個字，再多那一串就
   等於自己占掉旁邊一整縱，所以停在這裏。出廠仍是 `0`：兩個字擠一格時 `yume` 讀成
-  `yu`／`me`，這個理由一點沒變。
+  `yu`/`me`，這個理由一點沒變。
 - **整串一起裝，裝不下就整串都不裝**（本來就是這樣，只是現在更要緊）：半格半格地填
   會把 `1997` 讀成 `19` 和 `97` 兩個數。
 
@@ -13047,10 +13047,10 @@ InDesign《CJK 文字の書式設定》。
 
 | 在哪 | 改了什麼 |
 | --- | --- |
-| `yumete-cjk/src/vertical.rs` | `TATECHUYOKO_CLASSIC`／`TATECHUYOKO_MAX` 兩個常量，連同上面那些出處 |
-| `zong.rs: slot_offsets` | `bool` → 一個數；`slot_cells`／`zong_overhang` 兩支新的純函數 |
+| `yumete-cjk/src/vertical.rs` | `TATECHUYOKO_CLASSIC`/`TATECHUYOKO_MAX` 兩個常量，連同上面那些出處 |
+| `zong.rs: slot_offsets` | `bool` → 一個數；`slot_cells`/`zong_overhang` 兩支新的純函數 |
 | `zong.rs: render_page` | 純文本那一頁按同一個公式留位，`--preview --vertical` 與終端不會分家 |
-| `vertical.rs: place`／`layout_page` | 兩縱之間 ＝ `max(gap, 注音格 + 右邊那一縱探出來的格子)`；`Placed` 多帶一個 `overhang` |
+| `vertical.rs: place`/`layout_page` | 兩縱之間 ＝ `max(gap, 注音格 + 右邊那一縱探出來的格子)`；`Placed` 多帶一個 `overhang` |
 | `vertical.rs: put_slot_wide` | 一格一個字形地畫，靠右挂——整串寫進一個 cell 會把整行推歪 |
 | `vertical.rs` 光標 | Normal 的方塊蓋住整串，不是只蓋最後兩格 |
 | `char_at` | 探出去的那幾格算它自己的，點得中 |
@@ -13079,7 +13079,7 @@ web 部分。我在想，現在我們既然有了 yumete，那麽能不能用什
 
 Warning: **這不是 §10 那個問題。** §10（Direction change: from a terminal editor to web /
 Tauri）問的是「**放棄終端**，拿 CodeMirror 6 在網頁上重寫一個」，寫那一節的時候
-`yumete-core` 只有 rope／selection／motion／history。今天 `crates/` 底下是 **74,482 行
+`yumete-core` 只有 rope/selection/motion/history。今天 `crates/` 底下是 **74,482 行
 正文 ＋ 35,047 行測試**，`:` 命令 **214** 條，竪排、縦中横、表格、注音、拆分、大綱、
 LSP、詞典、IME 全在裏面。所以現在問的是相反的一件事：**把已經長成這樣的這一個原樣搬
 過去**。§10 留着當記錄（本文件開頭那條 blockquote 已經說它過期了），它的結論不管這
@@ -13102,7 +13102,7 @@ LSP、詞典、IME 全在裏面。所以現在問的是相反的一件事：**�
 
 | 項 | 編譯這一關 | 運行這一關 | 量級 |
 | --- | --- | --- | --- |
-| tree-sitter | ✗ 十個 crate 掛在 `'stdlib.h' file not found` | — | 一天（關掉）／一週（wasi-sdk） |
+| tree-sitter | ✗ 十個 crate 掛在 `'stdlib.h' file not found` | — | 一天（關掉）/一週（wasi-sdk） |
 | 文件系統 | ✓ 全部編得過 | ✗ 每一次都回 `Unsupported`，115 處 | **一個月** |
 | 子進程 | ✓ 編得過 | ✗ `Command::spawn` 直接失敗 | 一週（老實承認沒有） |
 | 終端繪製 | ✗ crossterm 九個錯 | — | 一到兩週 |
@@ -13113,8 +13113,8 @@ LSP、詞典、IME 全在裏面。所以現在問的是相反的一件事：**�
 
 ### 13.1 tree-sitter：九個語法包全是 C，而 wasm 這邊沒有 libc 頭文件
 
-`crates/yumete-core/Cargo.toml` 依賴 `tree-sitter` 加九個語法包（css／go／html／
-javascript／json／python／rust／toml-ng／yaml）。往 `wasm32-unknown-unknown` 上編，
+`crates/yumete-core/Cargo.toml` 依賴 `tree-sitter` 加九個語法包（css/go/html/
+javascript/json/python/rust/toml-ng/yaml）。往 `wasm32-unknown-unknown` 上編，
 **十個 crate 的 build script 全掛**，而且掛在同一行上：
 
 ```
@@ -13140,14 +13140,14 @@ error occurred in cc-rs: … "clang" … "--target=wasm32-unknown-unknown" … "
 | 在哪 | 幹什麽 |
 | --- | --- |
 | `editor/fences.rs:166` | Markdown 手稿裏 ```` ``` ```` 圍起來那一段按它自己的語法上色 |
-| `yumete-tui/src/lib.rs:6671` | 打開一個 `.py`／`.rs`／`.json` 時整個檔上色 |
-| `syntax.rs:68`／`:102` | 由 info string 或擴展名認出這是哪一種語言 |
+| `yumete-tui/src/lib.rs:6671` | 打開一個 `.py`/`.rs`/`.json` 時整個檔上色 |
+| `syntax.rs:68`/`:102` | 由 info string 或擴展名認出這是哪一種語言 |
 | `editor/commands.rs:864` | `:view-code` 報「這個 build 認得哪幾種語言」 |
 
 所以關掉的後果是**只少一件事：代碼變成一種顏色**。手稿一個字都不受影響——這個編輯器
 從來不把正文交給 tree-sitter（`code.rs` 開頭那段註釋寫得很清楚：markdown 的標記是
 行局部的、按段落存快取，一個要看整篇的 parser 會跟它打架）。標題、**粗體**、注音、
-表格、竪排、大綱、拼寫檢查，全是自己的 `markdown.rs`／`mdtable.rs`，沒有一處經過
+表格、竪排、大綱、拼寫檢查，全是自己的 `markdown.rs`/`mdtable.rs`，沒有一處經過
 tree-sitter。
 
 Warning: **順帶：這也是包體上最大的一塊白撿。** `Cargo.toml` 那段註釋記着七個語法
@@ -13189,8 +13189,8 @@ Warning: **最要緊的一句：`std::fs` 在 `wasm32-unknown-unknown` 上編得
 `ignore::WalkBuilder`）——它讀 `.gitignore`、跟符號連結、問 inode，**在瀏覽器裏一項都
 沒有**。邊欄那棵樹和 `:search` 跨檔案那一路都靠它。
 
-再有 **88 處** `env::var`／`env::current_dir`／`env::temp_dir`，和 **36 處**
-`SystemTime::now`／`Instant::now`。時鐘沒問題（wasm 有）；環境變量全是空的，於是
+再有 **88 處** `env::var`/`env::current_dir`/`env::temp_dir`，和 **36 處**
+`SystemTime::now`/`Instant::now`。時鐘沒問題（wasm 有）；環境變量全是空的，於是
 `config_dir()`、`data_search_dirs()` 這一族要整個換一個來源。
 
 #### 為什麽 `buffer.rs` 是最硬的一塊
@@ -13201,8 +13201,8 @@ Warning: **最要緊的一句：`std::fs` 在 `wasm32-unknown-unknown` 上編得
 
 | 在哪 | 問的是什麽 | 瀏覽器裏 |
 | --- | --- | --- |
-| `buffer.rs:21 stamp_of` | 檔的大小與 mtime——「它在我背後改過沒有」 | OPFS 的 `File` 有 `size`／`lastModified`，答得上 |
-| `buffer.rs:1247 file_identity` | inode／NTFS file id——「這兩個路徑是不是同一個檔」 | **答不上**。沒有硬連結，也沒有 inode |
+| `buffer.rs:21 stamp_of` | 檔的大小與 mtime——「它在我背後改過沒有」 | OPFS 的 `File` 有 `size`/`lastModified`，答得上 |
+| `buffer.rs:1247 file_identity` | inode/NTFS file id——「這兩個路徑是不是同一個檔」 | **答不上**。沒有硬連結，也沒有 inode |
 | `buffer.rs:1222 write_target` | `canonicalize` 跟穿符號連結再寫 | **不存在**，可以整個去掉 |
 | `buffer.rs:1355` | 原來那個檔的權限，寫回去要保住 | **不存在**，可以整個去掉 |
 | `buffer.rs:1372` | 開目錄 `fsync`，讓 rename 真的落盤 | OPFS 自己保證，可以去掉 |
@@ -13214,10 +13214,10 @@ Warning: **OPFS 的可寫句柄在主線程上是異步的，而 `Buffer::save()
 到。所以擺在面前的是兩種形狀，選哪一種決定了這一項是一週還是一個月：
 
 - **甲：整個編輯器跑在 Web Worker 裏**，主線程只收鍵盤、畫格子。`buffer.rs` 一行不
-  用改函數簽名——`createSyncAccessHandle` 就是同步的 `read`／`write`／`truncate`，
+  用改函數簽名——`createSyncAccessHandle` 就是同步的 `read`/`write`/`truncate`，
   正好對得上 `fs::File`。**這是唯一能讓那 115 處保持同步的辦法**，而且順帶把「打字
   不卡」也解決了（編輯器不在主線程上）。
-- **乙：主線程 ＋ 異步**，於是 `save()`／`open()`／`reread()`／`write_swap()` 全要
+- **乙：主線程 ＋ 異步**，於是 `save()`/`open()`/`reread()`/`write_swap()` 全要
   變成 `async fn`，而它們的呼叫者（`editor/session.rs`、`editor/files.rs`、
   `editor/commands.rs`、`yumete-tui/src/lib.rs`）也跟着變。這是**傳染**，不是改五個
   函數。
@@ -13229,7 +13229,7 @@ Warning: **OPFS 的可寫句柄在主線程上是異步的，而 `Buffer::save()
 | 手稿本身 | 任意路徑 | **OPFS**（一棵真的目錄樹，Worker 裏同步讀寫）；另給一顆按鈕走 File System Access API 認使用者本機的目錄（Chromium 限定） |
 | `config.toml`（全局） | `$XDG_CONFIG_HOME/yumete/` | localStorage 一個鍵就夠（3 KB 級） |
 | `.yumete/`（項目） | 手稿旁邊 | OPFS 裏那棵樹的同一個位置，原樣 |
-| 會話／草稿／崩潰恢復 | `$XDG_DATA_HOME/yumete/sessions`、`drafts` | OPFS。Warning: 它本來就是「崩了還在」的東西，放 localStorage 會被容量上限咬 |
+| 會話/草稿/崩潰恢復 | `$XDG_DATA_HOME/yumete/sessions`、`drafts` | OPFS。Warning: 它本來就是「崩了還在」的東西，放 localStorage 會被容量上限咬 |
 | 詞習慣詞庫、進度台賬 | 同上 | IndexedDB（本來就是「一張表」，不是一個檔） |
 | `yumete.log` | `$XDG_DATA_HOME/yumete/yumete.log` | `console.log`，別落盤 |
 | IME 的碼表 | `~/.local/share/yumete/{data,schemes}/` | `fetch()` ＋ Cache API，見 §13.6 |
@@ -13241,14 +13241,14 @@ Warning: **OPFS 的可寫句柄在主線程上是異步的，而 `Buffer::save()
 `Command::spawn` 在 wasm 裏編得過、跑起來直接失敗。全樹喊外部程序的地方數得完，而且
 **核心與傳輸分得很乾淨**——這是好消息，下面逐條說。
 
-| 沒了誰 | 少了什麽 | 在／不在 | 替代 |
+| 沒了誰 | 少了什麽 | 在/不在 | 替代 |
 | --- | --- | --- | --- |
-| **rust-analyzer 一族**（`yumete-tui/src/server.rs:541`） | `gd` 跳定義、`空格 k` 問這是什麽、`C-n` 補全、行號旁那一格診斷（§5.12 整族） | ✗ | **有路**：`lsp.rs`（899 行）**一句 `Command::spawn` 都沒有**——它只造 JSON 字符串、只解 JSON 字符串（`frame`／`take_frame`／`initialize`／`definition`／`hover`／`completion`／`read`）；全檔唯一一處 `std::process` 是 `lsp.rs:113` 的 `process::id()`，填 `initialize` 那個 `processId` 欄位而已。跑子進程的是 `server.rs`（847 行）。把 `server.rs` 換成一個 WebSocket 到遠端的語言服務器，`lsp.rs` 一個字不改 |
-| **opencc**（`convert.rs`） | `:convert s`／`t`／`tw`／`hk`／`jp` 簡繁互轉 | ✗ | opencc 有 wasm 構建（`opencc-js`），可以接；或者只留 `:convert c`／`g` 那兩檔——那兩檔的 `glyphs_c.txt`／`glyphs_g.txt`（各 3.2 KB）**本來就是編進二進制的數據**，不喊 opencc |
-| **git**（`vcs.rs:91/113/142`） | 行號旁的改動條 `▍`、剪口 `▔`／`▁` | ✗ | **有路**：`Changes::from_diff(diff, lines)` 是純函數，喂它一串 `@@ -a,b +c,d @@` 就行。前端拿 isomorphic-git 或者乾脆關掉。Warning: `vcs.rs:108–119` 那一支落兩個臨時檔再喊 `git diff --no-index`，那一支在瀏覽器裏整個沒有 |
-| **tinymist／typst**（`yumete-tui/src/lib.rs:2267`，`RunKind::Server`） | `:view-preview` 開預覽服務器 | ✗ | typst 有 wasm 版，但那是另一個項目。第一版直說「這裏沒有」 |
-| **`:pipe`／`:table-pipe`／`!`**（`lib.rs:2095 shell_command`） | 把選區交給一條命令，拿答案換回來 | ✗ | 沒有替代。瀏覽器裏沒有 shell，這是設計 |
-| **`open`／`xdg-open`**（`lib.rs:2398 show`） | `gx` 打開光標下那個連結 | ✓ | `window.open()`，一行 |
+| **rust-analyzer 一族**（`yumete-tui/src/server.rs:541`） | `gd` 跳定義、`空格 k` 問這是什麽、`C-n` 補全、行號旁那一格診斷（§5.12 整族） | ✗ | **有路**：`lsp.rs`（899 行）**一句 `Command::spawn` 都沒有**——它只造 JSON 字符串、只解 JSON 字符串（`frame`/`take_frame`/`initialize`/`definition`/`hover`/`completion`/`read`）；全檔唯一一處 `std::process` 是 `lsp.rs:113` 的 `process::id()`，填 `initialize` 那個 `processId` 欄位而已。跑子進程的是 `server.rs`（847 行）。把 `server.rs` 換成一個 WebSocket 到遠端的語言服務器，`lsp.rs` 一個字不改 |
+| **opencc**（`convert.rs`） | `:convert s`/`t`/`tw`/`hk`/`jp` 簡繁互轉 | ✗ | opencc 有 wasm 構建（`opencc-js`），可以接；或者只留 `:convert c`/`g` 那兩檔——那兩檔的 `glyphs_c.txt`/`glyphs_g.txt`（各 3.2 KB）**本來就是編進二進制的數據**，不喊 opencc |
+| **git**（`vcs.rs:91/113/142`） | 行號旁的改動條 `▍`、剪口 `▔`/`▁` | ✗ | **有路**：`Changes::from_diff(diff, lines)` 是純函數，喂它一串 `@@ -a,b +c,d @@` 就行。前端拿 isomorphic-git 或者乾脆關掉。Warning: `vcs.rs:108–119` 那一支落兩個臨時檔再喊 `git diff --no-index`，那一支在瀏覽器裏整個沒有 |
+| **tinymist/typst**（`yumete-tui/src/lib.rs:2267`，`RunKind::Server`） | `:view-preview` 開預覽服務器 | ✗ | typst 有 wasm 版，但那是另一個項目。第一版直說「這裏沒有」 |
+| **`:pipe`/`:table-pipe`/`!`**（`lib.rs:2095 shell_command`） | 把選區交給一條命令，拿答案換回來 | ✗ | 沒有替代。瀏覽器裏沒有 shell，這是設計 |
+| **`open`/`xdg-open`**（`lib.rs:2398 show`） | `gx` 打開光標下那個連結 | ✓ | `window.open()`，一行 |
 | **`pbpaste` 一族**（`lib.rs:2419 read_clipboard`） | 貼板**讀** | ✓ | `navigator.clipboard.readText()`——瀏覽器這一頭反而**比終端好**（終端幾乎都拒 OSC 52 的讀，`lib.rs` 那段註釋寫着理由） |
 | **`:shot`** | 叫系統截圖程序 | ✗ | 不需要：瀏覽器裏截圖是瀏覽器的事 |
 | **`date +%z`**（`progress.rs:255`） | 本機時區偏移 | ✓ | `new Date().getTimezoneOffset()` |
@@ -13372,7 +13372,7 @@ Warning: **另一顆：`🈚️` 帶變體選擇符的時候是 19.000px ＝ 2.5
 在碼表數據裏寫的正是帶 VS16 的那一個（見兩台機器那份記事本裏「🈚️ 是兩個 `char`」
 那一條）。網頁版**一定要在字體棧裏把 emoji 那一支擋掉**，或者畫的時候剝掉 VS16。
 
-Warning: **還有一條舊帳在這裏會變好。** §5.12「那一欄」記過：改動條 `▍` 與剪口 `▔`／`▁`
+Warning: **還有一條舊帳在這裏會變好。** §5.12「那一欄」記過：改動條 `▍` 與剪口 `▔`/`▁`
 在這個字體裏是兩格，而終端說一格——那道「問終端模糊寬度算幾格」的閘信的是
 終端說的話。**在瀏覽器裏這個問題消失了**：字體的 `hmtx` 就是唯一的答案，量得到，不用
 問任何人。`●▲◆` 那三個也一樣（同一節的第一條），量出來確實是 15.000px 兩格。
@@ -13433,7 +13433,7 @@ Warning: 一個字體棧裏的第二順位字體是不是等寬，**這件事沒
 - 它導出的是**按字節喂**的門：`load_table_binary(&[u8])`、`load_reading_table`、
   `load_weights_binary`、`load_lexicon_binary`、`load_annotations_binary`、
   `load_charset_binary`、`load_data_file(kind, data, aux, slot)`，加上
-  `input`／`space`／`enter`／`backspace`／`select_in_page`／`page_candidates`／
+  `input`/`space`/`enter`/`backspace`/`select_in_page`/`page_candidates`/
   `page_comments` 那一整套按鍵與候選面。
 - 而 `yume-core` 這一側**四個載入器都已經有 `_bytes` 的那一版**
   （`code_table.rs:769`、`unigram_table.rs:506`、`lexicon.rs:369`、
@@ -13450,7 +13450,7 @@ Warning: 一個字體棧裏的第二順位字體是不是等寬，**這件事沒
 | `lib.rs:1773` | 同族 | 同上 |
 
 Warning: **`yumete-ime/build.rs` 那一套反而是現成的優勢。** 它在編譯期就把靈明碼表
-（`schemes/ling.ytab`）和符號表 `include_bytes!` 進二進制了（`BUILTIN_TABLE`／
+（`schemes/ling.ytab`）和符號表 `include_bytes!` 進二進制了（`BUILTIN_TABLE`/
 `BUILTIN_SYMBOLS`，找不到就退回 0.25 MB 的靈明精華版）。**一個「打開就能打字、什麽都
 不用下載」的 demo，這條路已經通了**——代價是 wasm 包會脹那麽多。
 
@@ -13474,14 +13474,14 @@ crates.io。網頁版要不要跟 yume 那邊共用同一顆 wasm（一個 `yume
 `yumete` 自己編一顆把 `yume-core` 靜態鏈進去——**後者簡單得多**（純 Rust，不用跨 wasm
 邊界傳字節），建議後者。
 
-Warning: **這一項還有一半沒量：合成事件。** 瀏覽器自己也有輸入法，`compositionstart`／
+Warning: **這一項還有一半沒量：合成事件。** 瀏覽器自己也有輸入法，`compositionstart`/
 `compositionupdate` 那一族會跟 yumete 自己的 IME 搶同一串按鍵。yume 的網頁版是在
 `<textarea>` 上解決的；yumete 這邊是一張自己畫的格子，**那一族事件在自繪網格上怎麽
 走，這份文檔沒有量。**
 
 ---
 
-### 13.7 能做到什麽：一張在／不在的表
+### 13.7 能做到什麽：一張在/不在的表
 
 假定走下面 §13.9 的第一步（tree-sitter 關掉、OPFS＋Worker、自繪 DOM 網格）：
 
@@ -13492,17 +13492,17 @@ Warning: **這一項還有一半沒量：合成事件。** 瀏覽器自己也有
 | Markdown 所見即所得、表格視圖 | ✓ | 同上 |
 | 大綱邊欄 | ✓ | 單檔的部分。**跨檔案那棵樹要 OPFS 遍歷代替 `ignore::WalkBuilder`** |
 | 開檔、存檔、多 buffer、分屏 | ✓ | 走 OPFS |
-| 打開本機真實文件 | 半 | File System Access API，**只有 Chromium**。Safari／Firefox 只能導入導出 |
+| 打開本機真實文件 | 半 | File System Access API，**只有 Chromium**。Safari/Firefox 只能導入導出 |
 | 崩潰恢復、自動存草稿、會話 | ✓ | 走 OPFS。瀏覽器關掉標籤頁也還在 |
 | 查找、替換、跨檔案搜索 | ✓ | `regex` 是純 Rust。跨檔案的遍歷要換 |
-| 宇浩／冰雪 IME、候選面板、拆分注解 | ✓ | §13.6 |
+| 宇浩/冰雪 IME、候選面板、拆分注解 | ✓ | §13.6 |
 | 簡繁轉換 `:convert c` / `g` | ✓ | 那兩檔的字形表是編進二進制的數據 |
 | 簡繁轉換 `:convert s` / `t` / `tw` / `hk` / `jp` | ✗ | 要 opencc。可以接 `opencc-js` |
 | 代碼上色 | ✗ | tree-sitter。手稿的上色**不受影響** |
-| LSP：`gd`／`空格 k`／`C-n`／診斷 | ✗ | 除非接一個遠端服務器（`lsp.rs` 已經是純的） |
-| 改動條 `▍`／剪口 | ✗ | 要 git。`from_diff` 是純函數，前端喂得進來 |
+| LSP：`gd`/`空格 k`/`C-n`/診斷 | ✗ | 除非接一個遠端服務器（`lsp.rs` 已經是純的） |
+| 改動條 `▍`/剪口 | ✗ | 要 git。`from_diff` 是純函數，前端喂得進來 |
 | `:view-preview`（tinymist） | ✗ | 要子進程 |
-| `:pipe`／`!`／`:table-pipe` | ✗ | 沒有 shell |
+| `:pipe`/`!`/`:table-pipe` | ✗ | 沒有 shell |
 | `gx` 打開連結 | ✓ | `window.open()` |
 | 貼板讀 | ✓ | **比終端好**：終端幾乎都拒 OSC 52 的讀 |
 | `:shot` | — | 瀏覽器自己會截圖 |
@@ -13519,10 +13519,10 @@ Warning: **這一項還有一半沒量：合成事件。** 瀏覽器自己也有
 | **tree-sitter 關掉** | **一天** | `code.rs` 429 行，公開面 3 樣，外面只有 4 個呼叫點（`fences.rs:166`、`lib.rs:6671`、`syntax.rs:68/102`、`commands.rs:864`）。等於加一個 feature、改五個檔 |
 | tree-sitter 用 wasi-sdk 編進去 | 一週 | **沒量過**——機器上沒有 wasi-sdk，只知道 10 個 crate 都掛在同一個缺頭文件上。是構建鏈的活，不是代碼的活 |
 | **文件系統（Worker ＋ OPFS shim）** | **一個月** | 115 處非測試調用、24 個檔；`buffer.rs` 一個檔 30 處，而且那 30 處是「暫存檔 → fsync → rename」一整套語義，裏面四件事（inode、canonicalize、權限、目錄 fsync）在 OPFS 上不存在。走 Worker 能保住同步簽名，於是這一個月是**寫一層 shim ＋ 逐處驗**，不是改一百多個函數簽名 |
-| 文件系統（主線程 ＋ 異步） | 兩到三個月 | `async` 會從 `save`／`open`／`reread`／`write_swap` 一路傳染到 `editor/session.rs`（10 處）、`editor/files.rs`（4 處）、`editor/commands.rs` 和 `yumete-tui/src/lib.rs`（9 處）。**這個數字是推的，沒有真改過** |
+| 文件系統（主線程 ＋ 異步） | 兩到三個月 | `async` 會從 `save`/`open`/`reread`/`write_swap` 一路傳染到 `editor/session.rs`（10 處）、`editor/files.rs`（4 處）、`editor/commands.rs` 和 `yumete-tui/src/lib.rs`（9 處）。**這個數字是推的，沒有真改過** |
 | **子進程：老實承認沒有** | **一週** | 核心已經是「留下請求、前端來取」的形狀，十一支 `take_*_request` 齊活，`main.rs:525–552` 就是現成模板。改的是前端那一側各回一句話 |
 | 子進程：接遠端 LSP | 兩週 | `lsp.rs` 899 行**全是純函數**（造 JSON、解 JSON），`server.rs` 847 行纔是子進程。換掉的是後者。Warning: 遠端服務器本身（誰跑、跑在哪、怎麽鑑權）不在這個數字裏 |
-| **終端繪製：自寫 DOM backend** | **一到兩週** | `frame_to_html`／`buffer_to_html`（`lib.rs:229`／`:4782`）已經把「一個 cell 變成一段帶色的 HTML」寫完了。crossterm 九個錯全在 tty 邊界；43 處 `crossterm` 引用散在 6 個檔。ratatui 本體量過，`default-features = false` 一次就編過。剩下的真活是**鍵盤事件那一側**與光標 |
+| **終端繪製：自寫 DOM backend** | **一到兩週** | `frame_to_html`/`buffer_to_html`（`lib.rs:229`/`:4782`）已經把「一個 cell 變成一段帶色的 HTML」寫完了。crossterm 九個錯全在 tty 邊界；43 處 `crossterm` 引用散在 6 個檔。ratatui 本體量過，`default-features = false` 一次就編過。剩下的真活是**鍵盤事件那一側**與光標 |
 | 終端繪製：xterm.js | 一週，但不建議 | 看着省事，代價是把 §10.1 那四條全請回來 |
 | **字體** | **一天** | 量完了：subset 一條 `pyftsubset` 命令，切塊是一段 `@font-face`。40.6 KiB 那一份界面字體 ＋ 1.7 MiB 漢字，數字在 §13.5 |
 | **輸入法** | **一週** | `yumete-ime` 2,228 行正文，只有 7 處磁碟調用；`yume-core` 四個載入器**都已經有 `_bytes` 版**；`yume_wasm_bg.wasm` 378 KB 已經在跑。Warning: **合成事件那一半沒量**，可能翻倍 |
@@ -13548,13 +13548,13 @@ Warning: **這一項還有一半沒量：合成事件。** 瀏覽器自己也有
 1. **打字跟不跟得上手。** 一鍵重畫一幀，`buffer_to_html` 那 21 KB 的形狀夠不夠快。
 2. **格子對不對得齊。** `text-spacing-trim: space-all` 在 Chrome 之外成不成立；
    回退字體進來的那個生僻字是不是還兩格。
-3. **鍵盤搶不搶得贏。** 瀏覽器自己的輸入法、`Ctrl`／`Cmd` 那一族快捷鍵、
+3. **鍵盤搶不搶得贏。** 瀏覽器自己的輸入法、`Ctrl`/`Cmd` 那一族快捷鍵、
    `Tab` 焦點——**這三件現在一件都沒量過**，而它們能單獨否掉整件事。
 
 這三格裏但凡有一格黃，後面那一個月的文件系統活就先別動。
 
 **第二步（一個月）：Worker ＋ OPFS。** 一層同步 shim 頂住 `buffer.rs` 那 30 處，
-`canonicalize`／inode／權限／目錄 fsync 四件當場去掉。做完就有一個真能寫東西的編輯器。
+`canonicalize`/inode/權限/目錄 fsync 四件當場去掉。做完就有一個真能寫東西的編輯器。
 
 **第三步（一週）：老實承認沒有的那幾樣。** 十一支 `take_*_request` 各回一句話，
 `:convert s` 接 `opencc-js`，`gx` 接 `window.open`，貼板接 `navigator.clipboard`。
@@ -13562,7 +13562,7 @@ Warning: **這一項還有一半沒量：合成事件。** 瀏覽器自己也有
 **第四步以後**再談：遠端 LSP、isomorphic-git 的改動條、tree-sitter 走 wasi-sdk。
 
 Warning: **一句要先講清楚的：這一條路和 §10 那一條不能同時走。** §10 的方向是「CodeMirror
-接管 buffer／selection／undo」，這一節的方向是「`yumete-core` 原樣過去」。兩個方向對
+接管 buffer/selection/undo」，這一節的方向是「`yumete-core` 原樣過去」。兩個方向對
 同一件事給的是兩份答案，選一個。**量出來的東西支持這一節這一條**：核心一個編譯錯就
 過了，`frame_to_html` 已經在倉裏，IME 的 wasm 也已經在跑——而 §10 那條路要把 50,106
 行核心裏的大半重寫一遍。
@@ -13593,8 +13593,8 @@ cargo check --target wasm32-unknown-unknown -p yumete-tui 2>&1 \
 ```
 
 **「拿掉 tree-sitter 之後只剩一個錯」是這麽量的**（改完已還原）：
-`yumete-core/Cargo.toml` 刪掉那十行依賴，`code.rs` 把 `grammar()`／`highlights()`／
-`query()`／`highlight()` 換成一個返回空 `Span` 的樁，再 `cargo check`——得到
+`yumete-core/Cargo.toml` 刪掉那十行依賴，`code.rs` 把 `grammar()`/`highlights()`/
+`query()`/`highlight()` 換成一個返回空 `Span` 的樁，再 `cargo check`——得到
 `error[E0080]: attempt to shift left by 40_i32 --> crates/yumete-core/src/wrap.rs:668`
 一條。把 `1 << 40` 改成 `1 << 30` 再跑，`Finished`，一個 unused import 警告。
 
@@ -13850,7 +13850,7 @@ Warning: **有改動沒存時 `q` 要按兩下**：面板上攢的東西一個�
 （`Columns::of`），窄到擺不下第三欄就不畫它。
 
 **⑥ 取值域是斷的，兩項。** `zong_length` 真正的域是「0，或者 4 到 64」，`tatechuyoko` 是
-「0，或者 2 到 8」，而表上兩處 `low` 都寫的 0。面板停得到 1／2／3，寫進檔裏而**編輯器按
+「0，或者 2 到 8」，而表上兩處 `low` 都寫的 0。面板停得到 1/2/3，寫進檔裏而**編輯器按
 4 排版**——面板顯示的值不是編輯器用的值。
 
 Warning: **這一條補了一張本來就該有的網**，`tests/settings_ui.rs::every_value_the_panel_can_set_is_its_own`：
@@ -13869,13 +13869,13 @@ Warning: **`zero` 有兩種意思，這條測試要分開**：`zong_length` 的 
 的——而那三條通用測試立刻抓到一個：
 
 Warning: **`ime.system` 只認 `auto` 與 `keep` 兩個詞**（`SystemImePolicy::parse` 的註釋寫着
-「Two words and no synonyms」，別的字一律讀成 `auto`）。按常理寫的 `always`／`never`
+「Two words and no synonyms」，別的字一律讀成 `auto`）。按常理寫的 `always`/`never`
 面板上切得過去、檔裏寫得下去，而**編輯器當它是 `auto`**。那條
 `a_value_that_is_not_the_factory_one_actually_lands` 頭一次派上用場就逮着了。
 **一個枚舉的詞要去讀它的 `parse`，不能照別處的習慣猜。**
 
 Warning: **簡→繁要人看一遍。** 123 則文案簡體先寫，`scripts/sc2tc.py` 轉繁——opencc 把「码表」
-猜成了 **`碼錶`**（鐘錶的錶），正是那支腳本自己警告的那一族（`注／註 並／併 表／錶`）。
+猜成了 **`碼錶`**（鐘錶的錶），正是那支腳本自己警告的那一族（`注/註 並/併 表/錶`）。
 順帶統一了一個孤例：`絶對` → `絕對`。
 
 Warning: **值欄切了要看得出來。** 「候選的序號」那九個圈字正好比值欄寬一格，`put_text` 到邊界
@@ -13907,12 +13907,12 @@ Warning: **解法不是拒絕存，是重讀。** 改的那幾項是「鍵 → �
 
 `LATER` 裏剩下兩類：**二十四個色位**（十個內置主題已經夠用，而 TUI 裏沒有取色器，攤
 二十四行 `#RRGGBB` 正是這扇面板要消滅的那種發呆），以及**值是一張單子或一條命令行的**
-（`[keys.normal]`／`[syntax]`／`[lsp.*]`／`screenshot`，後三者在 `NOT_IN_THE_PANEL`）。
+（`[keys.normal]`/`[syntax]`/`[lsp.*]`/`screenshot`，後三者在 `NOT_IN_THE_PANEL`）。
 那張一致性測試讀的是三張表的並集，所以漏一項照樣紅。
 
 Warning: **2026-10-01 覆核，這一條當時就記錯了，而且真的咬了一口。** `written()` 一直是走
-`toml_edit` 的（轉義過），`Kind::Text` 也早就有五行（`indent_symbol`／`markers`／
-`theme.name`／`ime.scheme`／`language_key`）。真正壞的是**另外兩頭**：
+`toml_edit` 的（轉義過），`Kind::Text` 也早就有五行（`indent_symbol`/`markers`/
+`theme.name`/`ime.scheme`/`language_key`）。真正壞的是**另外兩頭**：
 
 - **還原那一頭沒有反函數。** 四處拿 `trim_matches('"')` 當 `written` 的反函數
   （`panel.rs` 三處＋`settings_page.rs` 一處），而它不是：`"a\"b"` 畫出來是 `a\"b`，
@@ -13923,7 +13923,7 @@ Warning: **2026-10-01 覆核，這一條當時就記錯了，而且真的咬了�
   `"a\"b\\c"`。於是「改回原值」永遠判不出來。現在是 `panel::same_value`，解析完比值。
 
 `LATER` 那 32 項覆核過：26 項是色位（有意不做），3 項是 `Vec<String>`（要一個新的單子控件），
-剩下 3 項（`ime.commit`／`editor.syntax`／`export.page`）是純量，各有現成的 `parse` 可抄，
+剩下 3 項（`ime.commit`/`editor.syntax`/`export.page`）是純量，各有現成的 `parse` 可抄，
 一小時能接完——**這三項是那一堆裏唯一值得做的。**
 
 ## 5.12.25 四個子代理審一遍，十七條（2026-09-24）
@@ -13941,7 +13941,7 @@ Warning: **子代理報的不許照單全收。** 這一輪十七條裏，**兩�
 | --- | --- |
 | `write_back.rs` | **跨行的值只註釋掉第一行**，後面幾行裸着——整份配置從此讀不進去（`Expected '=' after a key`）。而這扇面板存在的全部理由就是「一個打錯的鍵名不該讓整份配置作廢」，它親手造出了那件事 |
 | `find.rs::replacement` | **「正則」關着，替換串照樣走正則展開**：`一百元` → `US$100` 換出來是 `US`（`$100` 讀成第 100 個捕獲組）。`R` 是每個檔每一處，寫 Typst 的人滿篇 `$…$` |
-| `panel.rs::write_atomically` | 存配置**把軟鏈換成普通檔**（`buffer.rs` 那一支有 `canonicalize`，這一支漏了）。用 chezmoi／stow 的人從此兩份各寫各的 |
+| `panel.rs::write_atomically` | 存配置**把軟鏈換成普通檔**（`buffer.rs` 那一支有 `canonicalize`，這一支漏了）。用 chezmoi/stow 的人從此兩份各寫各的 |
 | `buffer.rs` | 稿子 0444 → 搶救副本也 0444 → **此後每一輪 autosave 都失敗**，而那句提示只說一次 |
 | `lib.rs::run_program` | stdin 死鎖。孿生的 `run_capturing` 2026-09 就為此加了餵料線程，**這一支沒跟上** |
 | `lib.rs`（本地配置） | **`[keys.normal]` 一個普通按鍵跑得了任意 shell** —— 見下 |
@@ -13967,7 +13967,7 @@ Warning: **子代理報的不許照單全收。** 這一輪十七條裏，**兩�
   `the_six_tables_are_every_table_that_has_a_shape`。
 - **幾選一只試每組第一個非出廠詞**：十六組四十六個詞，只試過十六個。而 `ime.system`
   那次逮到純屬運氣——壞詞正好排第二。改成逐個試。
-- 兩處簡→繁猜錯（`隻`／`喫`），`#421` 那行索引落後自己下面一節一整個提交。
+- 兩處簡→繁猜錯（`隻`/`喫`），`#421` 那行索引落後自己下面一節一整個提交。
 
 ### 報對了現象，報錯了病因
 
@@ -13985,7 +13985,7 @@ Warning: **②「`--help` 的 `{{ }}`」——那裏是對的。** 那段文字�
 
 那一頁開頭寫着「每一節都是這個編輯器自己報上來的」，而鍵那幾行是手寫數組，四條是錯的：
 `L H` 說成整頁（其實是上下一句）、`gw`（沒綁，編輯器自己會說「是 gD 了」）、`) (`（沒綁，
-它自己會說「一句一句走是 H／L」）、`}} {{`。
+它自己會說「一句一句走是 H/L」）、`}} {{`。
 Warning: **`documented_keys` 那張網看不見這一頁**——它只讀 `docs/manual.md` 與教程。
 
 ### 三次「測試逮住我」
@@ -14066,7 +14066,7 @@ esc一下」，落點定的在結果列表。
 
 Warning: **`Tab 下一格` 在兩種狀態下都是假的**（追問「Tab 不是说了不再移动格子了吗」逼出來
 的）。框裏 `Tab` 落到 `on_field_key` 的 `_ => {}`，什麽都不做；框外它是邊欄自己的鍵，換的是
-視圖。下一格是 `↑`／`↓`。§5.12.25 那張「還沒做的」單子上記着這一條，這次一起修了。
+視圖。下一格是 `↑`/`↓`。§5.12.25 那張「還沒做的」單子上記着這一條，這次一起修了。
 
 另外 `Enter` 在框裏是**兩個不同的鍵**，提示行從前只說一種：本文件是「下一處」，跨文件是
 「開找」。現在按範圍分開說。
@@ -14082,7 +14082,7 @@ Warning: **現在 `:wiki` 後面打任何不認識的詞，走的是 `reload`**�
 只有七個詞，`wiki_command` 的 `Some(_)` 是重載）。所以 `:wiki 朱宇浩` 今天是「重讀詞庫」。
 
 定的下的樣子：一扇像「找命令」那樣的面板，**每一行是「詞條名 ＋ 正文開頭一小段（放不下用
-`…`）」**；`Tab`／`S-Tab` 上下走；**走到哪一條就預覽哪一條**——右邊欄開着就畫在右邊欄，沒開
+`…`）」**；`Tab`/`S-Tab` 上下走；**走到哪一條就預覽哪一條**——右邊欄開着就畫在右邊欄，沒開
 就浮窗；`Enter` 把那個預覽**釘住**，直到光標一動纔鬆開。
 
 要動的地方：`Item` 多一種（詞條）、選單的行要分「拿去匹配的名字」與「只是畫出來的那一段」
@@ -14172,7 +14172,7 @@ Warning: **舊行為一條測試都沒盯着**，所以改掉它的時候全綠�
 原話：「應該是這一個光標所在的字是反白的，也就是説和正文normal時光標所在的那個字一樣的模式。
 然後背景依舊是中間灰色。用戶這樣就能用hl在搜索欄中移動光標。」
 
-於是那三格（位置／搜／換）現在有四種樣子，量出來是（墨香）：
+於是那三格（位置/搜/換）現在有四種樣子，量出來是（墨香）：
 
 | 樣子 | 底色 | 意思 |
 | --- | --- | --- |
@@ -14182,7 +14182,7 @@ Warning: **舊行為一條測試都沒盯着**，所以改掉它的時候全綠�
 | 全黑 | `#03060A` | 正在打字 |
 
 Warning: **`hl` 從此不走格子了**（定的，原話：「行，格子只用 jk」）——橫着走字、竪着走格，和正文同一條
-規矩。結果列表例外，那裏 `h`／`l` 還是摺起／打開一個檔。`i` 也跟着改成**從光標處插**，不然
+規矩。結果列表例外，那裏 `h`/`l` 還是摺起/打開一個檔。`i` 也跟着改成**從光標處插**，不然
 挪了半天光標一按 `i` 又跳末尾。
 
 Warning: **一個 caret 伺候所有的框**，所以換格子要順手把它挪到新那一格的末尾
@@ -14192,7 +14192,7 @@ Warning: **一個 caret 伺候所有的框**，所以換格子要順手把它挪
 
 原話：「「本文件」「搜索框」「替换框」在normal mode 下都是一个颜色。这样用户就知道这里可以
 写东西」「不应该把「寻找」包含进去」。面板的名字改叫「高級搜索」，三格前面各寫着
-`位置: `／`搜: `／`換: `，**底色只鋪在打得了字的那一段上**，名字留在面板底色上。
+`位置: `/`搜: `/`換: `，**底色只鋪在打得了字的那一段上**，名字留在面板底色上。
 
 ### Warning: 別再踩：寬字的第二格在渲染測試裏讀不到
 
@@ -14225,8 +14225,8 @@ wiki-reload, wiki-panel on/off, wiki-edit」。
 | 從前 | 現在 |
 | --- | --- |
 | `:wiki` | `:wiki-where`（**和 `:yume-where` 同一種問題**：到哪裏找過、各給了什麼） |
-| `:wiki edit`／`global`／`panel`／`reload` | `:wiki-edit`／`:wiki-global`／`:wiki-panel [on\|off]`／`:wiki-reload` |
-| `:wiki line`／`color`／`hide` | `:wiki-mark line\|color\|off`（它們是「怎麼標」的**取值**，所以歸在一支底下；`hide` 改叫 `off`，和 `on/off` 一套） |
+| `:wiki edit`/`global`/`panel`/`reload` | `:wiki-edit`/`:wiki-global`/`:wiki-panel [on\|off]`/`:wiki-reload` |
+| `:wiki line`/`color`/`hide` | `:wiki-mark line\|color\|off`（它們是「怎麼標」的**取值**，所以歸在一支底下；`hide` 改叫 `off`，和 `on/off` 一套） |
 | — | **`:wiki <詞條名>`**，不帶名字就是空着查：翻百科 |
 
 Warning: **從前 `:wiki 朱宇浩` 是靜靜地重讀一遍詞庫**——`Some(_) => reload` 那一條兜底把任何不認識
@@ -14238,7 +14238,7 @@ Warning: `:wiki-which` 沒有用這個名字（本來提的）：這個倉裏 `-
 
 ### 三、挑詞條那扇面板
 
-`Item::Wiki(名字, 那一小段)`。四件事這扇面板本來就有：`Tab`／`S-Tab` 在兩層裏都走、右半邊是
+`Item::Wiki(名字, 那一小段)`。四件事這扇面板本來就有：`Tab`/`S-Tab` 在兩層裏都走、右半邊是
 預覽、打字就篩、`Enter` 挑中。新做的只有兩件：
 
 - **打開時鍵就在查詢裏**（名字是命令行上打的，人還在打字那個心境裏）。
@@ -14275,7 +14275,7 @@ Warning: **那一行後半截（詞條正文）只畫不比**——`Item::blurb(
 
 提法是一條總規矩：「用户在相似的界面按同样的快捷键，他的行为应该是一致的」。
 
-Warning: **那扇「中央面板，左列表右預覽」叫選擇器**（`Picker`／`Mode::Picker`，手冊 §1901）：
+Warning: **那扇「中央面板，左列表右預覽」叫選擇器**（`Picker`/`Mode::Picker`，手冊 §1901）：
 `空格 f` 文件、`空格 b` 緩衝區、`:wiki` 詞條、`:clipboard` 粘貼，是同一扇。
 
 ### 一、`/` 兩處說同一句
@@ -14291,7 +14291,7 @@ Warning: **這推翻了同一天早些時候的決定**（那時問「`/` 進框
 
 Warning: **它從前也沒有真的還原文字**：`scope_text` 一直在，是**畫**的時候只在打字態纔顯示它，
 出框就退回按真實範圍算出來的名字，看着像還原了。所以修的不是「別還原」，是讓它**落地**
-（定的，原話：「算，离开格子就落地」）——`Esc`、`Enter`、`↑`／`↓` 三條出口都叫一次
+（定的，原話：「算，离开格子就落地」）——`Esc`、`Enter`、`↑`/`↓` 三條出口都叫一次
 `land_the_scope()`，屏幕上寫着什麼就是什麼。
 
 Warning: **說了一個不存在的文件夾，照樣寫着它，狀態欄當場說它不在。** `take_scope` 拿不到根的時候
@@ -14309,7 +14309,7 @@ Warning: **這推翻了同一天早些時候的「Enter 落到第一條結果上
 
 ### 四、`:clipboard`
 
-粘貼選單從前只有 `空格 "`。`:clipboard-yank`／`:clipboard-paste` 早就在，所以裸的那個正好落在
+粘貼選單從前只有 `空格 "`。`:clipboard-yank`/`:clipboard-paste` 早就在，所以裸的那個正好落在
 族裏——和 `:wiki`、`:buffer` 同形：一個命令自己的意思就是有用的那一個。
 
 Warning: **`:clipboard` 要從 `documented_keys::DISOWNED` 裏拿掉**：拍平的時候它是個空殼父命令被退役，
@@ -14326,11 +14326,11 @@ Warning: **文案裏不許有反斜杠**（`messages::an_escape_is_not_a_thing_t
 工作区，2 正文第二工作区，3 左边栏 4 右边栏，5-0 可以分配给6个buffer」。
 
 **做了 1–4，5–0 擱下了。** 數字在 `空格` 選單上本來一個都沒占，所以這不是四個零散的鍵位
-決定，是**一整塊乾淨的地址空間**——這一點讓它比看上去划算。換區從前只有 `C-w`／`空格 s`
+決定，是**一整塊乾淨的地址空間**——這一點讓它比看上去划算。換區從前只有 `C-w`/`空格 s`
 輪轉，四個區最多按三下。
 
 - **不在的區就開出來**（定的），和 `空格 w` 一個規矩。
-- `3`／`4` 開的是**那一側的頭一扇**，而哪幾扇歸哪一側是配得動的（`Editor::sides`），所以它
+- `3`/`4` 開的是**那一側的頭一扇**，而哪幾扇歸哪一側是配得動的（`Editor::sides`），所以它
   問的是配置而不是寫死「左邊＝文件樹」。只認 `View::ALL`——2026-09-30 起那是五扇（#426），
   字典與數據在「信息」那一扇裏面。
 - 換區的算法和 `cycle_region` 裏那一句共用（`live_pane().min(1) != want` 就 `switch_pane`），
@@ -14364,10 +14364,10 @@ Warning: **命令行不是「又一條狀態行」，它就是這一頁的頁腳
 ### 一、三格都不鋪底色
 
 原話：「这个底色还在哦，没有移除」。§5.12.32 只摘了「位置」那一格，理由是「它永遠不會是空
-的，而 `搜:`／`換:` 常常是空的，空框沒有字、只有底色說得出它在那裏」。
+的，而 `搜:`/`換:` 常常是空的，空框沒有字、只有底色說得出它在那裏」。
 
 Warning: **那條理由是 #447 時候的，而那時候框前面還沒有名字。** 現在每一格前面都寫着
-`位置:`／`搜:`／`換:`，上下又有兩道橫線圈着——底色是第三重說法。三格一起去掉。
+`位置:`/`搜:`/`換:`，上下又有兩道橫線圈着——底色是第三重說法。三格一起去掉。
 
 剩下三檔說的是**狀態**而不是「這裏能打字」：打字全黑、整條選中反白、鍵在這一格畫一個塊光標。
 
@@ -14396,7 +14396,7 @@ Warning: **怎麼測**：`TestBackend` 的 `cursor: bool` 沒有公開的讀法�
 原話：「这个地方我觉得没必要indentation，定格就好了，因为颜色的区别就知道什么是文件什么是
 具体的搜索结果。这里空白幾格太浪费了」。
 
-- **縮進去掉**。檔名那一行自己就帶着 `▾`／`▸`、又是金色粗體，縮兩格是第三重說法；而邊欄
+- **縮進去掉**。檔名那一行自己就帶着 `▾`/`▸`、又是金色粗體，縮兩格是第三重說法；而邊欄
   每一格都要用在正文上。順帶把本檔與跨檔那兩種畫法合成了一種——從前只有跨檔那一種縮。
 - **行號欄不再寫死五格**，按整張單子裏最長的那個行號算。Warning: **一次量遍整張單子**，不是逐行
   算：幾個檔的命中混在一起，欄要對得齊，摘出來的正文纔會從同一欄起。三百行的稿子從此只佔
@@ -14410,14 +14410,14 @@ insertmode，然后从后向前删除」。
 這是 §5.12.32 給框加了塊光標之後留下的洞：**有了光標位置，卻沒有作用在它身上的編輯鍵**。
 
 補了七個，**全是正文裏同名同義的**：`d` 刪光標壓着的那一個（正文裏 `d` 刪選區）、`D` 刪到
-行尾、`c`／`C` 刪了進插入、`a` 光標後插、`I` 行首插、`A` 行尾插。
+行尾、`c`/`C` 刪了進插入、`a` 光標後插、`I` 行首插、`A` 行尾插。
 
-Warning: **第一版提案把 `0`／`$` 寫進去了，當天被否**：「如果你用了^ $ 这就是 vim 模式了。
+Warning: **第一版提案把 `0`/`$` 寫進去了，當天被否**：「如果你用了^ $ 这就是 vim 模式了。
 如果正文中我们用的是 gh, gl 的helix模式你这不就是让用户困惑了？」——正文用的是 helix 那一套
-（`gh`／`gl`）。**鍵要從正文現有的綁定裏抄，不是從自己的習慣裏編。**
+（`gh`/`gl`）。**鍵要從正文現有的綁定裏抄，不是從自己的習慣裏編。**
 
-Warning: **但 `gh`／`gl` 和 `w b e` 最後也沒搬進來**：它們是為一長行散文準備的，而這是個兩三個字
-的框；`A`／`I` 本來就把行首行尾這兩個去處帶上了。再說 `g` 在結果那一格已經是「到第一條」，
+Warning: **但 `gh`/`gl` 和 `w b e` 最後也沒搬進來**：它們是為一長行散文準備的，而這是個兩三個字
+的框；`A`/`I` 本來就把行首行尾這兩個去處帶上了。再說 `g` 在結果那一格已經是「到第一條」，
 在框裏當引導鍵要多引一套待決狀態。
 
 ### Warning: 順帶抓到一個真 bug：那根豎槓在吃字
@@ -14436,7 +14436,7 @@ Warning: **但 `gh`／`gl` 和 `w b e` 最後也沒搬進來**：它們是為一
 
 ### 一、為什麼這裏可以用一張字表，而 `:convert` 不可以
 
-`convert.rs` 開頭那一段說得很清楚：簡繁**轉換**要在 發／髮 之間挑一個，那需要詞典和分詞，
+`convert.rs` 開頭那一段說得很清楚：簡繁**轉換**要在 發/髮 之間挑一個，那需要詞典和分詞，
 所以它喊 opencc。**而搜索問的是另一個問題**——「這兩個字有沒有可能是同一個字」——不需要
 上下文。搜「头发」順帶命中一條「頭發」在單子上只是多一行，而 `:convert` 把稿子裏的「头发」
 轉成「頭發」是毀稿。**代價差着好幾個數量級。**
@@ -14444,7 +14444,7 @@ Warning: **但 `gh`／`gl` 和 `w b e` 最後也沒搬進來**：它們是為一
 ### 二、那張表，和那個有意的不對稱
 
 辦法是定的的：以 **opencc 的繁體字形**為鍵分行（「它是分離做得最好的」），把
-`TSCharacters`／`TWVariants`／`HKVariants` 加上倉裏那兩張 GujiCC 表（`glyphs_c.txt`／
+`TSCharacters`/`TWVariants`/`HKVariants` 加上倉裏那兩張 GujiCC 表（`glyphs_c.txt`/
 `glyphs_g.txt`）的字形並進來，鍵自己也並進去；**然後每個字取它出現過的所有行的並集**。
 
 Warning: **那個並集不對稱，而這正是它值錢的地方**：
@@ -14460,7 +14460,7 @@ Warning: **那個並集不對稱，而這正是它值錢的地方**：
 `scripts/make_glyph_sets.py` → `crates/yumete-core/src/glyph_sets.txt`（8214 個字，96 KB）。
 
 Warning: **源表都是齊的，不用 clone 任何東西**：opencc 那三張從裝好的 `.ocd2` 反編譯
-（`opencc_dict` 隨 `brew install opencc` 一起來），t2c／t2g 倉裏那兩張**就是完整的**——
+（`opencc_dict` 隨 `brew install opencc` 一起來），t2c/t2g 倉裏那兩張**就是完整的**——
 指出的：「如果到最后一个 key 的集合只有一个 value，这一行可以删掉」，所以 168 行不是
 節選，是完整表刪掉了無事可做的那些行。同一個優化這張新表也做了。
 
@@ -14509,9 +14509,9 @@ review 讀不到的地方，於是同一條被反覆「發現」。原話：「�
 | 會被當成 bug 的 | 答案在哪 | 一句話 |
 | --- | --- | --- |
 | 表格列寬跟着**可見行**變，滾動時整表橫跳 | `crates/yumete-tui/src/table.rs:62` | 量整張表會讓一千行外的一個長單元格把別的列擠出右邊。**這個代價是選定的**，2026-09-15 那次 review 記過、當時就答了，2026-09-24 又記了一次。 |
-| `:convert` 為什麼不自己做簡繁 | `crates/yumete-core/src/convert.rs` 開頭 | 發／髮 要看上下文，那是 OpenCC 做了十五年的事。Warning: 搜索那邊的簡繁折疊是**另一個問題**（見 §5.12.37），別把兩件事混成一件。 |
+| `:convert` 為什麼不自己做簡繁 | `crates/yumete-core/src/convert.rs` 開頭 | 發/髮 要看上下文，那是 OpenCC 做了十五年的事。Warning: 搜索那邊的簡繁折疊是**另一個問題**（見 §5.12.37），別把兩件事混成一件。 |
 | 橫排注音撞車時「滑到別的字頭上」 | `crates/yumete-tui/src/lib.rs:9196` | 比基字寬的讀音會壓過去，後一個**往右推**。不撑開（橫排撑開要把整行後面推走，版心不能這麼動；竪排撑得起是因為它買的是旁邊那一縱），也不丟（「一個差一格的注音讀者看得見、能自己校正；一個沒畫出來的注音，他永遠不知道它在過」）。Warning: 2026-09-25 手冊兩處都還寫着舊說法，已改。 |
-| `n`／`N` 之外沒有「上一處」在搜索框裏 | `find.rs` 的 `on_field_key` | 往回找是少見的動作，而框裏 `n` 是字母 n，`Shift+Enter` 終端多半送不出來。 |
+| `n`/`N` 之外沒有「上一處」在搜索框裏 | `find.rs` 的 `on_field_key` | 往回找是少見的動作，而框裏 `n` 是字母 n，`Shift+Enter` 終端多半送不出來。 |
 | `::` 面板在多高的窗口上都只畫八行 | `yumete-tui/src/lib.rs:4954` | 「A picker is paths — hundreds of them, and no arrangement shows them all — so it stays the glanceable eight and scrolls.」2026-10-02 又被報了一次。 |
 | 候選面板該改用 `drawn_width` 量寬 | `yumete-cjk/src/width.rs:107` | **不該。** 那一支的註釋說它是給「**讀**一幀畫好的東西」用的（`frame_to_text`、點擊映射），不是給量一扇要畫的面板用的。真終端配 CJK 字體確實把「…」畫成兩格，所以 `str_width` 纔是對的那一個；列散掉的根子是 ratatui 和終端對 Ambiguous 這一族本來就不同意，要動是動那一層。2026-10-02 查過。 |
 | `:table-pipe` 把格子兩邊的空白吃掉 | `mdtable.rs` 的 `from_delimited` | **照舊。** `|` 表格本身存不下那幾個空格（讀的時候兩邊一律去掉），所以不是「該不該 trim」。2026-10-02 原話：「csv -> pipe 这个过程本身就是有歧义的，用户做这件事情就已经做好了心理准备了。」 |
@@ -14534,7 +14534,7 @@ review 讀不到的地方，於是同一條被反覆「發現」。原話：「�
 Warning: **和候選框那一條是同一個（#387），可 2026-09-24 審出來的時候只有候選框跟上了。** 修法照
 抄：把 `area` 換成頁腳之上那一塊（`status_area.y - area.y`）。
 
-### 二、大綱／文件樹截斷沒有省略號
+### 二、大綱/文件樹截斷沒有省略號
 
 `put_text` 到邊界就停，於是一個長標題是**悄悄**斷在那裏——而「斷了」和「本來就這麼長」是兩
 件事。走 `elide`，和搜索結果那邊同一支。
@@ -14588,8 +14588,8 @@ enter 的提示應該是『搜索/跳轉』」）。結果那一格上，**過�
 了，更加醒目」「这用金线还不够粗，可以改成金色的底纹，这样就有半角的宽度」。
 
 `sidebar_rule` 改成 `sidebar_walls`：底色、兩堵牆、回報正文能用的那一段，一支做完。五個呼叫方
-（文件樹、百科、搜索、常駐清單、`table.rs::draw_detail`）從前各自抄一份 `rule` ／ `(from, to)`
-／填底色的十幾行，現在各剩一行。
+（文件樹、百科、搜索、常駐清單、`table.rs::draw_detail`）從前各自抄一份 `rule` / `(from, to)`
+/填底色的十幾行，現在各剩一行。
 
 - **有焦點：兩堵都是塗滿的金**（`bg(gold)` ＋ 一個空格），沒焦點：裏面那一堵回到細的 `│` ＋
   灰，外面那一堵什麼都不畫。
@@ -14619,7 +14619,7 @@ Warning: **這一路不能是正則，所以它不是正則。** 字形那一路
 掃描仍交給正則引擎；拼音配的是「幾個漢字的讀音連起來正好是這一串字母」，音節邊界要邊配邊
 定，沒有正則寫法。於是 `Look` 從 enum 變成 struct：`how`（字面那一路）＋ `said`（拼音那一
 路），`spans` 兩路合並、排序、去重。**同一個理由，它和 模糊 一樣只在面板裏管用**——正文的
-`n`／`N` 走 `last_search` 那個正則。
+`n`/`N` 走 `last_search` 那個正則。
 
 Warning: **合並而不是替掉**，而且**只有查詢全是 ASCII 字母時纔跑**：搜 `hello` 的人要的是稿子裏那
 個 `hello`，所以出廠開着不礙事。
@@ -14634,7 +14634,7 @@ Warning: **開關插在第三位，後面四個號碼順移**（正則 3→4、�
 
 - **只多花一行**（定的，原話：「只加底边，标题行当顶边」）。邊欄窄，而頂上本來就有一行標題。
 - `sidebar_walls` 現在畫四邊並回 `Walls { from, to, head, ground, area }`——`area` 已經扣掉
-  底邊，`head`／`ground` 給標題那一行用（它就是上邊）。五個呼叫方各剩一兩行。
+  底邊，`head`/`ground` 給標題那一行用（它就是上邊）。五個呼叫方各剩一兩行。
 - Warning: **百科那一扇從前沒有標題行**，正文從第一行起。上邊框佔了那一行，所以給了它一個名字
   （`View::Wiki.title()`）——四扇裏三扇本來就有。
 - Warning: **上下兩條橫線鋪在兩堵牆之間**，不是「正文那一段」：右邊欄的正文從牆後第二格起，照正文
@@ -14679,7 +14679,7 @@ Warning: **連帶修掉一個潛伏的**：`take_scope` 從前無條件把那一
 
 ### 三、選擇器也認簡繁與拼音
 
-`picker::matched` 的兩支比較（`forwards`／`anyhow`）改成收一個 `same`，簡繁那一路就是把
+`picker::matched` 的兩支比較（`forwards`/`anyhow`）改成收一個 `same`，簡繁那一路就是把
 `==` 換成它。Warning: **放寬的是查詢那一邊**：`class(发)` 寬、`class(發)` 窄，反過來折就毀了那個
 不對稱（見 `glyphs`）。
 
@@ -14711,8 +14711,8 @@ space 1 2 3 4 这样的快捷键，我们其实就不大需要太多快捷键了
 
 | 從前 | 看得見 |
 | --- | --- |
-| `w`／`W`／`q` | 只有工作區 |
-| `s`／`S` | 只有邊欄（`S` 更窄，只收邊欄） |
+| `w`/`W`/`q` | 只有工作區 |
+| `s`/`S` | 只有邊欄（`S` 更窄，只收邊欄） |
 | `1`–`4` | 兩個都看得見 |
 
 三套坐標系，而讀者要在心裏維護三張地圖。
@@ -14722,7 +14722,7 @@ space 1 2 3 4 这样的快捷键，我们其实就不大需要太多快捷键了
 | 鍵 | |
 | --- | --- |
 | `空格 1`–`4` | 點名，沒開的開出來 |
-| `空格 w`／`C-w` | 走一步，去下一個**開着的**，按 ①②③④ 的次序 |
+| `空格 w`/`C-w` | 走一步，去下一個**開着的**，按 ①②③④ 的次序 |
 | `空格 W` | 全開 |
 | `空格 q` | 關掉站着的這一區（邊欄裏和 `q` 同義） |
 | `空格 Q` | 只留一個工作區——優先光標所在的，回退第一個 |
@@ -14734,8 +14734,8 @@ Warning: **「去哪裏」和「開出來」分了家**：`空格 w` 不再開�
 `空格 w` 開窗，都改成了 `空格 2`。
 
 **退休的**：`空格 s`、`空格 S`、`Editor::cycle_region`、`close_all_sidebars`，以及七則文案
-（`hint.goto.other-pane`／`only-this-pane`／`close-this-pane`、`hint.space.close-all`、
-`pane.opened`、`pane.only-one-left`、`ui.sidebars-closed`）。`C-w` 留着——它是 helix／vim 那
+（`hint.goto.other-pane`/`only-this-pane`/`close-this-pane`、`hint.space.close-all`、
+`pane.opened`、`pane.only-one-left`、`ui.sidebars-closed`）。`C-w` 留着——它是 helix/vim 那
 一路的和弦，不占選單位置。
 
 Warning: **連帶挖出一個潛伏的**：`switch_pane` 把離開那一半的 `caption` 寫成空字串，於是換過去之後
@@ -14759,9 +14759,9 @@ Warning: **連帶挖出一個潛伏的**：`switch_pane` 把離開那一半的 `
 1. **右欄天生比左欄窄**——`lib.rs:3868` 把右側的可用寬度算成 `area.width - left`，於是它是
    「左欄剩下的那點的 1/3」。而那支函數自己的文檔寫着「兩個邊欄各 1/3，正文**永遠**是 1/3」。
 2. **`w` 在列表視圖上多半沒反應**：攤開＝「讀得下最長那一行」，而最長那行通常比 1/3 短，
-   `clamp` 落回下限。百科／搜索的 `w` 卻是「直接給一半」——同一個鍵兩種含義。
+   `clamp` 落回下限。百科/搜索的 `w` 卻是「直接給一半」——同一個鍵兩種含義。
 3. **常駐層不認 `w`**，下限是 12 不是 1/3。同一個格子兩套規矩。
-4. **`least` 有三種用法**：不攤開時是下限、列表攤開時是 clamp 的底、百科／搜索攤開時不理會。
+4. **`least` 有三種用法**：不攤開時是下限、列表攤開時是 clamp 的底、百科/搜索攤開時不理會。
 
 **定的的模型**，兩句話砍掉了其中五套：
 
@@ -14852,7 +14852,7 @@ Warning: **不是所有 `char_width` 都要改**：單個常量字形的寬度�
 寬」的，換成 `str_width(那一段)` 就對了（它會正確處理字簇）；邊走邊畫的循環要改成走
 `yumete_cjk::graphemes()`。
 
-Warning: **終端自己也不一定和 Unicode 一致。** iTerm2／Ghostty／Apple Terminal 對 emoji 和
+Warning: **終端自己也不一定和 Unicode 一致。** iTerm2/Ghostty/Apple Terminal 對 emoji 和
 ambiguous 的寬度並不完全相同。ambiguous 已經有出口（`[editor] ambiguous_width`，啓動時
 問終端），**emoji 這一族還沒有**——真要做齊，這是第二步。
 
@@ -14867,9 +14867,9 @@ Warning: **當天定的原則**（給畫圖的那一端用）：「terminal 的�
 報的是「朋友说 inline 的时候，不显示候选项了」，而追下去發現**那不是一個缺陷，是一個按
 不出來的組合**。
 
-隔壁 yume 有三個互不相干的旋鈕：**版式**（豎排／橫排／極簡內嵌，說候選列表畫在哪）、
+隔壁 yume 有三個互不相干的旋鈕：**版式**（豎排/橫排/極簡內嵌，說候選列表畫在哪）、
 **內嵌輸入欄**（正在打的那一段寫在面板第一列，還是寫進宿主的正文）、**內嵌寫什麼**
-（編碼／首選）。yumete 從前只有一個 `:yume-panel full|bare`，而 `bare` 一個詞說了三件
+（編碼/首選）。yumete 從前只有一個 `:yume-panel full|bare`，而 `bare` 一個詞說了三件
 事：面板不畫 ＋ 正在打的那一段寫進正文 ＋ 寫的是首選。於是「面板照畫，而正文裏站着首選」
 ——正是報上來的那一種——按不出來。
 
@@ -14882,7 +14882,7 @@ Warning: **這裏我先答錯了一輪**：把「內嵌」當成版式的一檔�
 | 命令 | 值 | 說的是 |
 | --- | --- | --- |
 | `:yume-panel` | `full` `off` | 候選框畫不畫（yume 的「空空如也」） |
-| `:yume-preedit` | `header` `code` `top` | 正在打的那一段：面板第一列／正文寫編碼／正文寫首選 |
+| `:yume-preedit` | `header` `code` `top` | 正在打的那一段：面板第一列/正文寫編碼/正文寫首選 |
 
 舊的 `bare` ＝ `panel off` ＋ `preedit top`。配置是 `[panel] display` 與 `[panel] preedit`。
 
@@ -14905,7 +14905,7 @@ ime).is_empty()`）：命令行開着的時候正文寫不下，那時編碼要�
 「差不多」。`sifuqi` 當正則在那一行上一個字都配不上，`swap_one` 回 `false`，於是報「不在
 那裏了」。模糊那一路同病（它換的是查詢的字面，不是命中的那一段）。
 
-修法是把「怎麼問」抽成 `Editor::looker()`，兩邊共用；`swap_one`／`swap_all` 改吃 `Look`，
+修法是把「怎麼問」抽成 `Editor::looker()`，兩邊共用；`swap_one`/`swap_all` 改吃 `Look`，
 按它交出的字符區間換，從後往前走。Warning: **`$1` 只有正則那一路認得**，拼音和模糊沒有分組。
 
 ### 二 替換的交互：走一步就在正文裏預覽
@@ -14928,7 +14928,7 @@ ime).is_empty()`）：命令行開着的時候正文寫不下，那時編碼要�
 
 Warning: **命令行那一行不再畫前後文了。** 從前站在一處命中上，它寫的是那一處前後的句子
 （`Hint::Around`）——而預覽現在在正文裏，同一句話說兩遍，佔掉的正是要看鍵位的那一刻。
-`Hint::Around`、`hit_in_context`、`fit_around` 一併刪了。鍵位行現在寫 `r`／`R`／`u`，而
+`Hint::Around`、`hit_in_context`、`fit_around` 一併刪了。鍵位行現在寫 `r`/`R`/`u`，而
 **`r` 那一句跟着站的那一行走**：檔名上寫「換整個檔」，命中上寫「換這處」——一句話寫兩種
 意思的時候（「換這處（站在檔名上就是整個檔）」），這一行長到把後面的 `q 關` 擠出畫面。
 
@@ -14956,12 +14956,12 @@ Warning: **命令行那一行不再畫前後文了。** 從前站在一處命中
 ### 順帶：搜索面板上下那兩道橫線去掉了
 
 原話：「这里的两条线没有什么用，都删了，还能节约两行。」說「這裏打得了字」的是名字
-（`位置:`／`搜:`／`換:`）和三檔底色，線是第三重說法，而邊欄一共只有那麼多行。
+（`位置:`/`搜:`/`換:`）和三檔底色，線是第三重說法，而邊欄一共只有那麼多行。
 
-## 5.12.50 三個試用的人審搜索／替換（2026-09-27）
+## 5.12.50 三個試用的人審搜索/替換（2026-09-27）
 
 三個角色各跑一遍，都只許用屏幕上看得見的東西：**英文為主的使用者**（`--lang=en`）、
-**中文為主的寫小說的人**、**不看手冊的 vim／Helix 老手**。三份報告彼此獨立，而有六條
+**中文為主的寫小說的人**、**不看手冊的 vim/Helix 老手**。三份報告彼此獨立，而有六條
 是三個人各自撞上的同一件事——那六條就是這一輪改的。
 
 Warning: **這一輪最值錢的不是「哪裏不好看」，是「哪一個鍵按下去沒反應、而屏幕上寫着它有
@@ -14977,9 +14977,9 @@ Warning: **這一輪最值錢的不是「哪裏不好看」，是「哪一個鍵
 | `Esc` 在結果名單上完全沒反應 | 那一格沒有 `Esc` 的分支 | 退回搜索框。再按一次纔是「把輸入法的挂起再說一遍」 |
 | 站在一條命中上按 `i`，靜悄悄跳回搜索框接着打，`server` 變成 `serverXX` | `i` 不問站在哪一格 | `i a c I A d D C` 在結果名單上出一句話：這幾個鍵改的是搜索框 |
 | `d` 按了什麼都不發生，而鍵位行寫着「d 刪」 | 光標停在文字後面那個空位上，「刪光標壓着的那一個」壓着的是空氣 | 停在末尾的時候刪它前面那一個 |
-| `Tab` 在框裏什麼都不做，於是「搜的詞 Tab 換的詞」連成了一個 | `Tab` 只在面板的 Normal 那一支接着（走邊欄的視圖） | 框裏的 `Tab`／`BackTab` 是上下一格 |
+| `Tab` 在框裏什麼都不做，於是「搜的詞 Tab 換的詞」連成了一個 | `Tab` 只在面板的 Normal 那一支接着（走邊欄的視圖） | 框裏的 `Tab`/`BackTab` 是上下一格 |
 | 開關的號碼在窄窗口裏整列不見，而鍵位行還寫着「1–7 開關」 | 號碼在右邊那一欄，位置是量出來的；英文的名字比中文長三成，118 欄就出界 | 號碼挪到最左邊。左邊那一欄不會出界 |
-| 英文界面上印着 `C-w／空格 w` | 鍵名是寫死的 `&'static str` | 逐語言各寫一個字面量（`back_to_text_key`）。不用 `Box::leak`：這一行每一幀都算一次 |
+| 英文界面上印着 `C-w/空格 w` | 鍵名是寫死的 `&'static str` | 逐語言各寫一個字面量（`back_to_text_key`）。不用 `Box::leak`：這一行每一幀都算一次 |
 | 位置那一格填 `/`，編輯器去遍歷整塊磁盤，沒有進度也取消不了，只能 `kill -9` | 走目錄那一趟沒有上限 | `WALK_CEILING = 20000`，走到頂就停 |
 | 鍵位行是硬砍的，而砍掉的總是 `u 撤回` | 次序是 `/`、`d c a` 打頭 | 次序改成重要性：`r R u` → `1–7` → `Enter` → `q` → 其餘 |
 | `:replace` 開出來的面板頂上仍舊只寫「搜索」 | 標題是面板名，不看狀態 | 勾上替換就寫「搜索與替換」 |
@@ -15003,15 +15003,15 @@ Warning: **這一輪最值錢的不是「哪裏不好看」，是「哪一個鍵
 - ~~**替換不保留大小寫。**~~ 做了（§5.12.53，第八個開關）。 英文那一份報的第一條：搜 `server` 換 `daemon`，`# Server notes`
   變成 `# daemon notes`、`SERVER_DEBUG` 變成 `daemon_DEBUG`，一句話都不說。中文沒有大小
   寫，所以從來沒人撞上。要做就是第八個開關（VS Code 的 `AB`），~~**等定**~~。
-- ~~**「位置」那一格是自由文本，而它該是四選一。**~~ 做了（§5.12.52）。 四個範圍（本文件／本文件夾／項目／工作
-  區）都做好了，可面板碰不到——只有三個猜不到名字的命令（`:search-working`／`-gd`／`-wd`）
+- ~~**「位置」那一格是自由文本，而它該是四選一。**~~ 做了（§5.12.52）。 四個範圍（本文件/本文件夾/項目/工作
+  區）都做好了，可面板碰不到——只有三個猜不到名字的命令（`:search-working`/`-gd`/`-wd`）
   進得去。填一個不存在的文件夾會悄悄退回「只搜本文件」，而那個處數看起來完全合理。
   **這是三份報告裏唯一被兩個人同時標成拦路的**，改動也最大，**等定**。
 - ~~**正文裏只有當前那一處反白**，同屏別的命中不標。~~ 做了（`b6003b4`，淡一層的底色）。
 - ~~**結果那一行是從行首截的**，不是圍着命中截的，也沒有省略號。~~ 做了（`b6003b4`，
   `fit_around`）。Warning: **檔名那一行還是從右邊截的**，那是另一件，2026-09-27 纔查出來
   （§5.12.59 二）。
-- ~~**`-- FIELD --`** 是這扇面板自己造的詞，而 `NORMAL`／`INSERT` 是編輯器的通用詞。只改
+- ~~**`-- FIELD --`** 是這扇面板自己造的詞，而 `NORMAL`/`INSERT` 是編輯器的通用詞。只改
   這一個會和旁邊那幾個不一致，**等定**。~~ **2026-09-27 做了，見 §5.12.57**——定下來的
   不是換一個詞，是整條線重排。
 
@@ -15044,7 +15044,7 @@ project root）：一個根，會話開始時定死，不跟當前文件走；�
   文件夾只定根、不開緩衝，文件樹會把它攤開。
 - **文件樹的根、「項目」這個範圍、相對路徑的基準，問的是同一支**（`Editor::root`）：樹裏
   看得見的和搜得到的必須是同一批檔。
-- **`工作區` 和 `項目` 合並成一個。** 連帶刪掉 `:search-wd`／`:replace-wd`／
+- **`工作區` 和 `項目` 合並成一個。** 連帶刪掉 `:search-wd`/`:replace-wd`/
   `:word-discover-wd` 三個命令與 `Where::Workspace`。
 - **開頭的 `/` 當根算**，逃生口是 `~/…`。所以 `/Users/…` 會被當成「根底下的 Users/…」，
   找不到就報錯——而不是遍歷整塊磁盤。走目錄那一趟另外還有 `WALK_CEILING = 20000` 兜底。
@@ -15090,7 +15090,7 @@ Warning: **VS Code 沒有把它和「大小寫」放在一起**（查過）：`A
 ### 一 結果那一行圍着命中截
 
 從前是把摘要接在行號後面一路畫過去，畫到面板右邊就硬截。摘要本來是**圍着命中摘**的
-（`excerpt`／`AROUND`），可**截的那一刀是從左邊數的**，於是右半截掉哪兒算哪兒：一行上
+（`excerpt`/`AROUND`），可**截的那一刀是從左邊數的**，於是右半截掉哪兒算哪兒：一行上
 兩處命中就出現兩條一模一樣的行，而站着的那一處常常在截斷線外面。
 
 修法是把剩下的寬度交給 `fit_around`，命中落在中間、本身反白。Warning: **`fit_around` 是今天
@@ -15297,7 +15297,7 @@ Warning: **這個病不是 yumete 獨有的。** 2026-09-27 順手量了兄弟�
 | 正文，打字 | `-- INSERT --` | `INS` |
 | **搜索結果名單** | `-- NORMAL --` | **`PAN.NOR`** |
 | **面板的框裏** | `-- FIELD --` | **`PAN.INS`** |
-| `:`／`/`／注音／`::`／挑選器 | `-- COMMAND --` 等五個 | **不畫** |
+| `:`/`/`/注音/`::`/挑選器 | `-- COMMAND --` 等五個 | **不畫** |
 
 Warning: **前兩行和第四行從前一模一樣**，而 `d` 在名單上清的是搜索詞、在正文裏刪的是稿子。
 自造一個 `FIELD` 只答了「這是什麼」，`PAN.` 答的是「鍵在哪」——後者纔是按下去之前要知
@@ -15440,7 +15440,7 @@ Warning: **只在測試裏。** 生產裏 `run` 在第一幀之前就 settle 了
 自己的上下文裏讀不讀得通」。可從那一刻起鍵位行一個字都沒有：眼前十一處命中，沒有東西說
 怎麼走它們、怎麼回去。而手冊自己寫着「拿走鍵的那一半有義務」說出路（§底下兩行）。
 
-現在那一行寫 `n N 下一處／上一處` 和 `C-w／空格 w 回名單`。
+現在那一行寫 `n N 下一處/上一處` 和 `C-w/空格 w 回名單`。
 
 Warning: **它是所有分支裏的最後一個**（`the_way_back_to_the_list`），所以只填本來就空着的那一
 行：按了一半的鍵、腳註、表格格子，站在那些地方都有更貼切的話要說。
@@ -15478,7 +15478,7 @@ Warning: **但同一屏露出了真問題**：檔名那一行是從右邊截的�
 原話：「搜索框（包括侧边栏的搜索格子，`/` 的搜索行等），在 insert 状态输入东西的时候，光
 标不应该是方格而应该是竖线。否则会让用户感到奇怪，不统一。」
 
-六個地方在打字而畫的是方塊：`/`／`?`、`:`、`::`、注音那一行、挑選器的查詢、搜索面板的三
+六個地方在打字而畫的是方塊：`/`/`?`、`:`、`::`、注音那一行、挑選器的查詢、搜索面板的三
 個框。它們的共同點編輯器裏早就有一個名字——`Mode::is_prompt()`，「自己佔一行打字」，輸入
 法、語言借還、結束組字問的都是它（#351）。所以判準用它，**明天多一種輸入行自己就是對的**。
 
@@ -15585,7 +15585,7 @@ room=6 → "…\u{fe0f}中間…"
 | 挑選器畫路徑 | 一格一格著色 | VS16 自己佔一格，後面整條前移 |
 | `box_in` 的塊光標 | 蓋住光標下那個字 | 只蓋住左半邊 |
 | `prompt.rs` 算縮進的欄 | 對齊到上一行 | 少一格 |
-| 測試的 `column_of`／`last_column_of`／找牆 | **所有斷言的尺子** | 斷言瞄錯欄 |
+| 測試的 `column_of`/`last_column_of`/找牆 | **所有斷言的尺子** | 斷言瞄錯欄 |
 
 ### 第三個問法：`cells_per_char`
 
@@ -15609,7 +15609,7 @@ room=6 → "…\u{fe0f}中間…"
 - **`is_wide(c: char)`**（`gJ` 接行要不要補空格）：問的就是單個字符。一行以 `Warning: ` 結尾時
   它看見的是 VS16、答「不寬」、於是補一個空格——而那是對的，接行不補空格的規矩說的是漢字
   和全角標點，不是 emoji。
-- **終端之間的分歧**（§5.12.47 的「第二步」）：iTerm2／Ghostty／Apple Terminal 對 emoji
+- **終端之間的分歧**（§5.12.47 的「第二步」）：iTerm2/Ghostty/Apple Terminal 對 emoji
   寬度並不一致。ambiguous 已經有出口（`[editor] ambiguous_width`），emoji 這一族還沒有。
   **先把數算對，再談旋鈕**——在錯的數上加一個開關，只是讓人有兩種方式弄錯。
 
@@ -15649,8 +15649,8 @@ helix 把標籤貼在**空白分隔的詞首**上。那是英文的樣子——�
 
 | | 打進去的是什麼 | 中文下按鍵 |
 | --- | --- | --- |
-| **A**（easymotion／helix 內建） | 兩個**字母**，屏幕上發的號碼 | `g` `w` ＋ 一兩個字母 = **3–4 鍵** |
-| **B**（leap／flash，vim 那邊現在的主流） | 兩個**字**，你要去的那個地方寫的 | `g` `w` ＋ 靈明四碼＋可能選重＋一個標籤鍵 = **7–8 鍵** |
+| **A**（easymotion/helix 內建） | 兩個**字母**，屏幕上發的號碼 | `g` `w` ＋ 一兩個字母 = **3–4 鍵** |
+| **B**（leap/flash，vim 那邊現在的主流） | 兩個**字**，你要去的那個地方寫的 | `g` `w` ＋ 靈明四碼＋可能選重＋一個標籤鍵 = **7–8 鍵** |
 
 Warning: **B 在 vim 那邊贏，是因為英文打 `wi` 就是兩鍵；中文打兩個字要過一遍輸入法，那個優勢就
 沒了。** 而且 B 和 `/` 回答的是同一個問題（「我知道要去的地方寫着什麼」），A 回答的是別的
@@ -15658,7 +15658,7 @@ Warning: **B 在 vim 那邊贏，是因為英文打 `wi` 就是兩鍵；中文�
 做這件事。所以 A。
 
 **兩個不衝突**，將來要 B 再給它自己的字母。Warning: **別放在 `gW` 上**：這個倉的大寫是「同一件
-事的一個變奏」（`gd`／`gD` 同一個問題換個地方看、`r`／`R` 這一處／全部、`w`／`W` 按詞／按
+事的一個變奏」（`gd`/`gD` 同一個問題換個地方看、`r`/`R` 這一處/全部、`w`/`W` 按詞/按
 空白）。`gw` 和 `gW` 一個「按一下出標籤」、一個「先打兩個字」，那是兩種機制共用一個字形。
 `gW` 順的用法是 A 的粗粒度那一檔（`Grain::Big`）——中文沒有空格，那就是**一行一個標籤**。
 查過了，`gW` 在 helix 的 keymap 裏也是空的。
@@ -15830,7 +15830,7 @@ Helix」。Warning: **語義層面我們一天都不用改，要改的是「一�
 
 | 要做的 | `:s` 行不行 | 為什麼 |
 | --- | --- | --- |
-| 加／去 `- ` | **行** | 每一行改的是同一個東西 |
+| 加/去 `- ` | **行** | 每一行改的是同一個東西 |
 | 換成 `1.` `2.` `3.` | **不行** | 量過：`:s/^- /1. /` 四行全變成 `1.`。正則沒有計數器 |
 | 重新編號一份亂掉的列表 | 不行 | 同上 |
 | 每一行行尾加東西 | 勉強（`$`） | 但看不見自己在改什麼 |
@@ -15910,7 +15910,7 @@ debug 下 panic，**release 下靜默寫壞文檔**（坑 3）。
 不是文檔長度。
 
 **`normalize()` 做三件事**（`selection.rs:557-587`）：按 `from()` 排序、合併重疊、重新找到
-主選區的新下標。它在 `push`／`replace`／`map`／`new`／`transform`／`ensure_invariants` 裏
+主選區的新下標。它在 `push`/`replace`/`map`/`new`/`transform`/`ensure_invariants` 裏
 **自動被調**。
 
 Warning: **坑 1：它會在背後靜默減少選區數。** 兩個挨着的光標，中間那個字被退格刪掉 → 兩個光標
@@ -15977,7 +15977,7 @@ fn edit_each(&mut self, f: impl Fn(&Editor, Range) -> Option<(Range, String)>) -
 
 #### Warning: undo 要記的是一組，不是一個
 
-`buffer.rs:186` 的 `EditSnapshot { cursor: usize, … }` 要換成一組選區，`snapshot(cursor)`／
+`buffer.rs:186` 的 `EditSnapshot { cursor: usize, … }` 要換成一組選區，`snapshot(cursor)`/
 `undo(cursor) -> Option<usize>`（`buffer.rs:948`、`:990`）的簽名跟着換。不換的話：三個光標
 各改一處，按 `u` 之後**塌成一個光標**，接不下去。
 
@@ -16017,7 +16017,7 @@ unicode-width = "=0.1.12"
 ambiguous 寬度的出口（啓動時問終端）。兩個權威遲早在某一格上打架，而那一族的 bug
 （§5.12.58、#422）今天剛修過兩條。
 
-**結論**：`Range`／`Selections` 寫在 `yumete-core/src/selection.rs`，**語義逐條照 helix**，
+**結論**：`Range`/`Selections` 寫在 `yumete-core/src/selection.rs`，**語義逐條照 helix**，
 文件開頭註明來源與 commit `079a789e8`。不加依賴。
 
 ---
@@ -16058,27 +16058,27 @@ Warning: **`&` 的優先級可以往後放**：中文寫作裏最常用的那一
 
 #### Warning: 兩處真的撞車
 
-**一、`C` 和 `A-C`（往下／往上複製一個選區）——helix 最要緊的兩個創建鍵，這裏都被佔了。**
+**一、`C` 和 `A-C`（往下/往上複製一個選區）——helix 最要緊的兩個創建鍵，這裏都被佔了。**
 
-yumete 的 `keys.rs:1364-1390`：`d`／`c` 是**不進寄存器**的刪除與改寫，`D`／`C` 是**進寄存器**
+yumete 的 `keys.rs:1364-1390`：`d`/`c` 是**不進寄存器**的刪除與改寫，`D`/`C` 是**進寄存器**
 的那一對（`let cut = matches!(key, Key::Char('D') | Key::Char('C'))`）。這是這個倉自己定的
-convention——helix 用 `A-d`／`A-c` 表示不進寄存器，而 yumete 反過來用大寫表示進，
-`A-d`／`A-c` 留了一句提示把 helix 使用者指回去（`keys.rs:1666`）。
+convention——helix 用 `A-d`/`A-c` 表示不進寄存器，而 yumete 反過來用大寫表示進，
+`A-d`/`A-c` 留了一句提示把 helix 使用者指回去（`keys.rs:1666`）。
 
 **所以不能照搬 `C`。** 三條路：
 
 | | 做法 | 代價 |
 | --- | --- | --- |
 | ① | 複製選區另找鍵（`S` 給它？但 `S` 是 split） | 要挑一個空鍵，helix 使用者要重學一個 |
-| ② | 把 yumete 的 `D`／`C` 挪走，讓出 `C` | Warning: 破壞性，而且 `D`／`C` 那條 convention 是寫進手冊的 |
+| ② | 把 yumete 的 `D`/`C` 挪走，讓出 `C` | Warning: 破壞性，而且 `D`/`C` 那條 convention 是寫進手冊的 |
 | ③ | 掛在前綴下（`空格` 選單或新開一層） | Warning: 空格選單很貴（這個倉的規矩：「鍵位很貴，空格選單尤其寶貴」），而且它是最高頻的創建鍵，多一個前綴很虧 |
 
 **我的傾向是 ①**，但選哪一個字母是屏幕上看得見的事，**等定**（§5.13.12 第 3 條）。
 
-**二、`K` 和 `A-K`（按正則留下／去掉選區）。**
+**二、`K` 和 `A-K`（按正則留下/去掉選區）。**
 
-yumete 的 `J`／`K` 是**上下半頁**（`keys.rs:1511-1512`），這也是有意和 helix 不同的
-（helix 的 `J` 是 join，yumete 的 join 是 `gJ`／`gK`）。`A-K` 空着。
+yumete 的 `J`/`K` 是**上下半頁**（`keys.rs:1511-1512`），這也是有意和 helix 不同的
+（helix 的 `J` 是 join，yumete 的 join 是 `gJ`/`gK`）。`A-K` 空着。
 
 **建議**：`keep_selections` 給 `A-k`、`remove_selections` 給 `A-K`。這一對本來就不常按，
 放 Alt 層不虧。Warning: 這條我判斷得了，不用彈窗。
@@ -16131,7 +16131,7 @@ helix 的策略（`helix-term/src/ui/editor.rs:1737-1749`）：
 | --- | --- | --- |
 | 方塊 ＋ 終端有焦點 | **手畫**（終端光標藏起來） | 手畫 |
 | 方塊 ＋ 終端失焦 | 終端畫（降級成下劃線） | 手畫 |
-| 豎線／下劃線 | 終端畫 | 手畫成色塊 |
+| 豎線/下劃線 | 終端畫 | 手畫成色塊 |
 
 Warning: helix 在這裏留了一個它自己標註的 bug（`ui/editor.rs:586-591`）：豎線光標下編輯區失焦時
 **主光標會整個看不見**。我們照它的表做，但**把那個洞補上**——失焦時主光標也手畫。
@@ -16155,7 +16155,7 @@ helix 對全部選區無條件生成 span，**包括完全在屏幕外的**（�
 
 **整個方案裏最難的一件，而且沒有任何編輯器做過可以抄。**
 
-打一個字要經過：按鍵 → 拼音／字根串（preedit）→ 候選面板 → 選中 → 上屏。前三步發生在
+打一個字要經過：按鍵 → 拼音/字根串（preedit）→ 候選面板 → 選中 → 上屏。前三步發生在
 「字還沒進檔案」的時候。N 個光標之下，三樣東西各自要決定放哪：
 
 | | 選項 |
@@ -16166,7 +16166,7 @@ helix 對全部選區無條件生成 span，**包括完全在屏幕外的**（�
 
 Warning: **② 做得到，而且機制今天就有**：`Editor::set_candidate(Vec<(line, col, String)>)`
 （`editor/render.rs:1277`）本來就是「在 N 個位置畫檔案裏沒有的字」（#210 幽靈文本），而量度
-那一側 `hidden_on_line`／`drawn_on_line` 早就按行回答「這一行上有哪些畫出來而不在檔裏的
+那一側 `hidden_on_line`/`drawn_on_line` 早就按行回答「這一行上有哪些畫出來而不在檔裏的
 東西」。**注入點只有一行**——`yumete-tui/src/lib.rs:3125`：
 
 ```rust
@@ -16224,11 +16224,11 @@ Warning: **這一節是整份方案裏最要緊的一節。** 手冊那句「寧
 
 #### Phase 0 — 把單數包起來（**沒有任何可見變化**）
 
-- `yumete-core/src/selection.rs`：`Range`、`Selections`，語義照 §5.13.2／§5.13.3。
-- `Editor::cursor`／`anchor` 兩個欄位換成一個 `selections`，**只許裝一個**。
-- Warning: **槓桿在這裏**：`caret()`／`mark()`（`editor/files.rs:482`、`:489`）這層間接**已經存在**
+- `yumete-core/src/selection.rs`：`Range`、`Selections`，語義照 §5.13.2/§5.13.3。
+- `Editor::cursor`/`anchor` 兩個欄位換成一個 `selections`，**只許裝一個**。
+- Warning: **槓桿在這裏**：`caret()`/`mark()`（`editor/files.rs:482`、`:489`）這層間接**已經存在**
   ——當初為分屏的 `Viewing` 加的，註釋寫着「Every immutable reader of the caret goes through
-  this. The mutable ones read the field」。把這兩支重定義成「主選區的 head／anchor」：
+  this. The mutable ones read the field」。把這兩支重定義成「主選區的 head/anchor」：
 
   | | 要改嗎 |
   | --- | --- |
@@ -16252,8 +16252,8 @@ scripts/frames.sh snap     改之前：拍一套底片（二十幀）
 scripts/frames.sh check    改之後：再拍一套，逐字節比
 ```
 
-二十幀覆蓋橫排／竪排／表格（文中與滿版）／搜索面板／跳轉標籤／大綱／設置頁／命令與空格
-選單／幫助／注音／兩種窄窗口。**底片不進 git**（放在 `target/` 底下）——這個倉的界面天天在
+二十幀覆蓋橫排/竪排/表格（文中與滿版）/搜索面板/跳轉標籤/大綱/設置頁/命令與空格
+選單/幫助/注音/兩種窄窗口。**底片不進 git**（放在 `target/` 底下）——這個倉的界面天天在
 動，進了 git 就是每一次有意的改動都要重新生成一遍，而這一支的用法本來就是「一次重構用一
 次」。
 
@@ -16265,7 +16265,7 @@ Warning: **每一幀開一個乾淨的檔**：共用一個檔的話，前一幀 
 
 #### Phase 1 — 真的有 N 個，最小可用（md 列表那個用例在這一期就能用）
 
-- `Selections` 可以裝多個。新鍵：往下／往上複製一個（鍵待定，見 §5.13.6）、`,`、以及 `Esc`
+- `Selections` 可以裝多個。新鍵：往下/往上複製一個（鍵待定，見 §5.13.6）、`,`、以及 `Esc`
   在有多選區時先塌成一個。
 - 移動：每段各走各的。編輯：`d c i a I A o O` 和打字作用在每一段上，**一次快照、一個 undo 點**。
 - 畫面：主選區照舊，次選區退一檔（`faint_wash`）。
@@ -16276,18 +16276,18 @@ Warning: **每一幀開一個乾淨的檔**：共用一個檔的話，前一幀 
 
 #### Phase 2 — 正則那一族
 
-`s`、`S`、`A-s`、`A-k`／`A-K`。
+`s`、`S`、`A-s`、`A-k`/`A-K`。
 
 Warning: **這一期 yumete 白撿一件 helix 沒有的東西**：`s` 直接復用 `editor/find.rs` 的 `looker()`，
 於是**「選出所有匹配」天生認拼音和簡繁**——搜「书斋」選得出「書齋」，打拼音也選得出。
 
-Warning: 順帶避開 helix 的坑 6：它的 `s`／`S`／`A-s` 之後 **primary 一律重置成 0**
+Warning: 順帶避開 helix 的坑 6：它的 `s`/`S`/`A-s` 之後 **primary 一律重置成 0**
 （`selection.rs:781` 等三處都留着同一句 `// TODO: figure out a new primary index`），於是選了
 二十處之後屏幕跳回檔首。我們讓主選區**留在離原來的主選區最近的那一段**。
 
 #### Phase 3 — 編號、對齊、輪替
 
-`&`、`_`、`(` `)`、`A-(` `A-)`、以及 **`#` 寄存器**（選區序號）＋ `C-a`／`C-x` 遞增。
+`&`、`_`、`(` `)`、`A-(` `A-)`、以及 **`#` 寄存器**（選區序號）＋ `C-a`/`C-x` 遞增。
 Warning: **編號列表那個用例在這一期纔真正解開**（§5.13.1）。
 
 #### Phase 4 — CJK 那三件
@@ -16305,7 +16305,7 @@ Warning: **編號列表那個用例在這一期纔真正解開**（§5.13.1）�
 | 公開 API 呼叫行（`cursor()` `selection()` …） | ~420（其中 `editor/tests.rs` 佔 261） |
 | Warning: `yumete-tui` / `yumete-ime` 裏直接讀寫欄位的 | **0** |
 
-**最後一行是最大的好消息**：`self.cursor`／`self.anchor` 一個字節都沒漏出 `yumete-core`。
+**最後一行是最大的好消息**：`self.cursor`/`self.anchor` 一個字節都沒漏出 `yumete-core`。
 
 大頭四個檔：
 
@@ -16332,7 +16332,7 @@ Warning: **編號列表那個用例在這一期纔真正解開**（§5.13.1）�
 | **1. `normalize()` 靜默合併選區**，屏幕上少一個光標而沒有提示 | Warning: 中文更常撞上（退格、選重、上屏都讓相鄰光標靠近）。**建議合併時 murmur 一句三秒的話**；說不說等定 |
 | **3. `from_changes` 的前置條件是 `debug_assert`**，release 下靜默寫壞文檔 | **改成真的檢查。** 寫壞稿子是這個編輯器唯一不能犯的錯 |
 | **4. offset 累加器在四個地方各寫一份** | **只許有一支 `edit_each` 原語**，命令層不許自己數 |
-| **6. `s`／`S` 之後 primary 重置成 0**，屏幕跳回檔首（helix 自己標着 TODO） | 讓主選區留在離原主選區最近的那一段 |
+| **6. `s`/`S` 之後 primary 重置成 0**，屏幕跳回檔首（helix 自己標着 TODO） | 讓主選區留在離原主選區最近的那一段 |
 | **8. undo 還原選區、redo 不還原** | 我們是快照式，`U` 順手一起還原**不花額外的錢** |
 | **12. `insert_char` 的 count 是 N 個獨立 transaction** | 我們的 count 走同一支 `edit_each`，一次 |
 | **13. 渲染無上限、屏幕外的照樣算** | Warning: 用今晚為 `gw` 建的 `set_page_span` 裁一刀，幾乎不花錢 |
@@ -16346,17 +16346,17 @@ Warning: **編號列表那個用例在這一期纔真正解開**（§5.13.1）�
 
 ### 5.13.12 定了的（2026-09-28 夜裏逐條過的）
 
-#### 一、中文叫 **多選區**／**主選區**
+#### 一、中文叫 **多選區**/**主選區**
 
 不叫「多光標」。和手冊已經教的模型一致（`manual.md:19-20`：「每次移動都會留下選區」「光標
 所在的那個字，本身就在選區裏」），而且**涵蓋得住**：`C` 複製出來的是 N 段一格寬的選區（看
 起來就是光標），`s` 選出來的是 N 段幾個字寬的。Warning: 代價是別的編輯器都叫「多光標」，搜這個詞
 的人找不到——認了。
 
-#### 二、`C`／`A-C` 就用 helix 的拼法，而 `d`／`c` 這一族整族改成 helix 的
+#### 二、`C`/`A-C` 就用 helix 的拼法，而 `d`/`c` 這一族整族改成 helix 的
 
 Warning: **先記一筆錯**：這一族當初定成「小寫不進寄存器、大寫進」，依據之一是我說過「helix 的
-`C`／`D` 都空着」。**那句話錯了一半**——helix 的 `C` 是 `copy_selection_on_next_line`
+`C`/`D` 都空着」。**那句話錯了一半**——helix 的 `C` 是 `copy_selection_on_next_line`
 （`helix-term/src/keymap/default.rs:78`），佔着；只有頂層的 `D` 是空的。而錯的那一半正好
 是現在撞車的這一半。
 
@@ -16364,10 +16364,10 @@ Warning: **先記一筆錯**：這一族當初定成「小寫不進寄存器、�
 
 | 鍵 | 做什麼 | 和 helix |
 | --- | --- | --- |
-| `d` `c` | 刪／改，**進寄存器** | 一樣 |
-| `A-d` `A-c` | 刪／改，**不進** | 一樣 |
+| `d` `c` | 刪/改，**進寄存器** | 一樣 |
+| `A-d` `A-c` | 刪/改，**不進** | 一樣 |
 | **`D`** | 不綁，按了指回 `A-d` | 一樣（helix 頂層也空着） |
-| `C` `A-C` | 往下／往上再加一個選區 | 一樣 |
+| `C` `A-C` | 往下/往上再加一個選區 | 一樣 |
 
 Warning: **`D` 當 `A-d` 別名這一條當天就撤了**（2026-09-28，原話：「D 这个快捷键你先和 vim helix
 保持一致，未来我们再考虑我们自己的一些设定。先保证用户愿意使用 yumete。」）。原生鍵位下
@@ -16388,8 +16388,8 @@ Warning: **這是破壞性改動**：`d` 從此會動寄存器。手冊、`hint.
 
 | | 定了什麼 |
 | --- | --- |
-| 1 名字 | **多選區**／**主選區** |
-| 2 `C` | 就用 `C`／`A-C`，`d`／`c` 整族改成 helix 的，`D` 當 `A-d` 的別名 |
+| 1 名字 | **多選區**/**主選區** |
+| 2 `C` | 就用 `C`/`A-C`，`d`/`c` 整族改成 helix 的，`D` 當 `A-d` 的別名 |
 | 3 合併 | **要說一句**，三秒後自己走掉 |
 | 4 preedit | **推到 Phase 4**，先拍圖再定 |
 | 5 表格留鍵 | **不留** |
@@ -16427,9 +16427,9 @@ Warning: 留鍵給一個沒在做的功能，屏幕上今天什麼都不會出�
 **驗收條件兩條都過了**：`cargo test --workspace` 34 個目標全綠，`scripts/frames.sh check`
 **二十幀逐字節一樣**。改動 23 個檔、307 增 304 刪——幾乎一比一，因為它本來就是換一個說法。
 
-怎麼做的：`crates/yumete-core/src/selection.rs` 立起 `Range`／`Selections`（Phase 0 裏永遠
-只裝一段），`Editor` 的 `cursor`／`anchor` 兩個欄位換成一個 `sel`，那三百多處直接讀寫改成走
-四支門面（`head()`／`anchor()`／`set_head()`／`set_anchor()`）。機械改寫用腳本跑的，**跑之前
+怎麼做的：`crates/yumete-core/src/selection.rs` 立起 `Range`/`Selections`（Phase 0 裏永遠
+只裝一段），`Editor` 的 `cursor`/`anchor` 兩個欄位換成一個 `sel`，那三百多處直接讀寫改成走
+四支門面（`head()`/`anchor()`/`set_head()`/`set_anchor()`）。機械改寫用腳本跑的，**跑之前
 先空跑一遍看它會改成什麼樣**。
 
 Warning: **腳本掃到了兩套同名的別的欄位**：`Buffer::cursor`（離開這個檔時光標在哪）和
@@ -16439,7 +16439,7 @@ Warning: **腳本掃到了兩套同名的別的欄位**：`Buffer::cursor`（離
 
 Warning: **兩處和 §5.13.9 寫的不一樣，都是有意的**：
 
-1. **伴生的五個欄位沒搬**（`goal_column`／`goal_slot`／`zong_motion`／`extend`／`vim_lines`）。
+1. **伴生的五個欄位沒搬**（`goal_column`/`goal_slot`/`zong_motion`/`extend`/`vim_lines`）。
    原計劃排在 Phase 0，可只有一段選區的時候，它們在 `Editor` 上還是在 `Range` 上行為完全
    一樣——搬過來是純粹的攪動。等 Phase 1 真有第二段、它們真的需要各有一份的時候再搬。
 2. **用 `Vec` 不是 `SmallVec`**。這個倉沒有 `smallvec` 這個直接依賴，而為一個「永遠只有一
@@ -16453,9 +16453,9 @@ Warning: **兩處和 §5.13.9 寫的不一樣，都是有意的**：
 
 六步都落地了，每一步全量 34 個測試目標綠、二十二幀逐字節不變。
 
-1. `Selections` 真的裝得下多段（`push`／`keep_primary`／`map`／`rebuild`／`normalize`）。
+1. `Selections` 真的裝得下多段（`push`/`keep_primary`/`map`/`rebuild`/`normalize`）。
 2. 次選區也畫底色。Warning: **設計稿裏「次選區退一檔」那條推翻了**，理由與新辦法見 §5.13.7。
-3. `C`／`A-C`／`,`，拼法照 helix。為了讓出 `C`，`d`／`c` 整族改回了 helix 的拼法
+3. `C`/`A-C`/`,`，拼法照 helix。為了讓出 `C`，`d`/`c` 整族改回了 helix 的拼法
    （§5.13.12 第二條，當天又撤掉了 `D` 那個別名）。
 4. 移動逐段各做一次：`each_selection` 把每一段輪流擺成唯一的那一段跑一趟。
 5. 編輯逐段各做一次：`edit_each` 從後往前做，並把已經算完的那幾段回挪，一個撤銷點。
@@ -16529,7 +16529,7 @@ Warning: **2026-10-01 原地重量了一遍，那個數不成立了。** 最壞�
 
 ### 5.13.12d Phase 1 第一步做完了（2026-09-28）
 
-`Selections` 真的裝得下多段了：`push`／`keep_primary`／`map`／`normalize`，加四條不變式測試
+`Selections` 真的裝得下多段了：`push`/`keep_primary`/`map`/`normalize`，加四條不變式測試
 （排序與合併、相鄰不算疊而零寬碰邊界算、主選區整理後不丟、併起來的方向跟着先來的那一段）。
 **還沒有任何東西會造出第二段**，所以畫面不該變，實測二十幀逐字節不變。
 
@@ -16551,7 +16551,7 @@ Warning: **那四條測試裏第一條自己算錯過一次**：併完之後還�
 分詞器。`word_ranges_coarse`（`yumete-cjk/src/word.rs:178`）按 `is_alphanumeric()` 分類，漢字
 和拉丁字母同一類，所以「今天天氣很好」整串是一個「詞」。
 
-而 `w`／`b` 是走分詞器的（`editor/words.rs:172` 的 `word_grain()`，詞典開着時回
+而 `w`/`b` 是走分詞器的（`editor/words.rs:172` 的 `word_grain()`，詞典開着時回
 `Grain::Word`），手冊 `docs/manual.md:1428` 也是這麼向讀者承諾的。**同一個編輯器裏「詞」有
 兩個答案。**
 
@@ -16561,10 +16561,10 @@ Warning: 這不是疏忽。`matching.rs:152` 那條註釋記着當時的理由�
 那邊沒有分詞器可用（`helix-core/src/textobject.rs:71` 靠 `categorize_char`，漢字全歸 Word），
 所以這一檔是照抄過來的，不是為中文選的。
 
-現有的 `diw`／`daw` 測試（`editor/tests.rs:15266`）全是 `alpha beta`，沒有一條中文。
+現有的 `diw`/`daw` 測試（`editor/tests.rs:15266`）全是 `alpha beta`，沒有一條中文。
 
 **2026-09-28 做完了。** `word_object_span` 的粒度改成問 `word_grain()`，`Object::Word` 帶上
-一格 `coarse`：`iw` 走分詞器，`iW` 一律粗。原生鍵位那邊 `mi w`／`mi W` 同樣分開了。
+一格 `coarse`：`iw` 走分詞器，`iW` 一律粗。原生鍵位那邊 `mi w`/`mi W` 同樣分開了。
 
 Warning: **`aw` 在中文裏會退化成 `iw`**，這是 vim 那條規矩（「詞加它後面那段空白」）在沒有空白
 的文字裏的自然結果，不改。
@@ -16578,12 +16578,12 @@ Warning: **測試假綠過一次**：第一版用原生鍵位按 `diw`，而那�
 是真是假都 `enter_insert()`。它先叫的 `set_cursor`（`matching.rs:775`）順手把 anchor 收到
 head 上，所以剛撐開的選區也一併沒了。
 
-旁邊的 `d`／`c`／`y` 是分情況的（`keys.rs:1358` 那一臂帶 `&& !self.extend`），`v3wd` 因此是
-好的。**這個倉已經有「extend 下同一個鍵做另一件事」的寫法，只是 `i`／`a` 沒跟上。**
+旁邊的 `d`/`c`/`y` 是分情況的（`keys.rs:1358` 那一臂帶 `&& !self.extend`），`v3wd` 因此是
+好的。**這個倉已經有「extend 下同一個鍵做另一件事」的寫法，只是 `i`/`a` 沒跟上。**
 
 `matching.rs:731` 那條註釋自己承認：「物件從來不理會 extend 模式，這是保留下來的，不是決定
 的，因為還沒人問過 `mi(` 在 extend 時該怎麼辦」。這則反饋就是在問。眼下能用的替代是
-`mi(`／`mi w`：`take_object`（`matching.rs:734`）直接設兩端，不理會 extend。
+`mi(`/`mi w`：`take_object`（`matching.rs:734`）直接設兩端，不理會 extend。
 
 **要先定的**：物件選完之後 extend 還留不留（vim 的 `vi(` 之後還在 visual 裏，可以再按 `a(`
 擴大一層），以及退出插入的那個 `i` 怎麼按。
@@ -16591,7 +16591,7 @@ head 上，所以剛撐開的選區也一併沒了。
 ### 三、「只支持半角」（字面不成立，觀感成立，成因在輸入法那道閘）
 
 配對表（`editor.rs:3448`）收了十九對，全角的圓括號、方括號、花括號、書名號、引號、方頭括號
-全在，`mi（`／`mi「` 有綠測試（`editor/tests.rs:2096`），手冊 `docs/manual.md:391` 也列了。
+全在，`mi（`/`mi「` 有綠測試（`editor/tests.rs:2096`），手冊 `docs/manual.md:391` 也列了。
 
 真正成立的是兩件事。
 
@@ -16618,7 +16618,7 @@ ASCII 鍵上是我們自己定的一張表。理由是順手：寫中文的時�
 []而不是＂」）——它們長得是括號，手會去按方括號那個鍵。
 
 Warning: **輸入法那道閘 2026-09-28 也開了**：`Pending::VimOperator { first: Some('i' | 'a') }`
-現在算「等一個字符」，所以按 `di`／`da`／`ci` 之後候選面板會開，`di〖`、`di『` 打得出來了。
+現在算「等一個字符」，所以按 `di`/`da`/`ci` 之後候選面板會開，`di〖`、`di『` 打得出來了。
 
 Warning: **`df,` 那一種不開**：它要的是一個分隔符，多半是 ASCII，開了輸入法打一個逗號出來的是
 全角的。同一個理由，反過來的結論。
@@ -16626,8 +16626,8 @@ Warning: **`df,` 那一種不開**：它要的是一個分隔符，多半是 ASC
 ### 已經有而這則反饋沒提到的
 
 `md` 已經是「不問是哪一對，去掉最裏面那對括號」（`matching.rs:305`），正是第三條想要的行為，
-只是鍵在 `m` 組裏。`mi`／`ma`／`ms`／`mr` 之後可以用輸入法選括號（`docs/manual.md:395`）。
-段落物件 `ip`／`ap` 是有的。`cw` 自動當成 `ce`（`keys.rs:493`）。`:word-show` 能把分詞結果
+只是鍵在 `m` 組裏。`mi`/`ma`/`ms`/`mr` 之後可以用輸入法選括號（`docs/manual.md:395`）。
+段落物件 `ip`/`ap` 是有的。`cw` 自動當成 `ce`（`keys.rs:493`）。`:word-show` 能把分詞結果
 畫出來，調 `diw` 的時候直接看得見分詞器認為詞在哪。
 
 **排期 2026-09-28 定：先記下來，多選區做完再動。**
@@ -16672,14 +16672,14 @@ Warning: **一條算「漏」要同時滿足三件事**：helix 或 vim 有而 y
   `helix-term/src/keymap/default.rs`，命令讀的是 `helix-term/src/commands/typed.rs` 的
   `TYPABLE_COMMAND_LIST`。
 - vim：`~/Programs/vim`，`--depth 1` 克隆成功。鍵位讀的是 `runtime/doc/index.txt`。
-- yumete：`crates/yumete-core/src/editor/keys.rs`（頂層 match 與 `SPACE_KEYS`／`GOTO_KEYS`／
-  `MATCH_KEYS`／`CASE_KEYS`／`HOP_KEYS`／`TABLE_KEYS*` 六張表）、`editor/prompt.rs`
+- yumete：`crates/yumete-core/src/editor/keys.rs`（頂層 match 與 `SPACE_KEYS`/`GOTO_KEYS`/
+  `MATCH_KEYS`/`CASE_KEYS`/`HOP_KEYS`/`TABLE_KEYS*` 六張表）、`editor/prompt.rs`
   （Insert 與命令行）、`editor/matching.rs`（文本對象）、`crates/yumete-core/src/command.rs`
   的 `COMMANDS`、`crates/yumete-cjk/src/keymap.rs`（vim 預設與 `VIM_MOTIONS`）。
 
 動筆之前對過 `docs/development.md` §5.12.39（答過了別再提）、§5.13（多選區方案）、
 `tests/documented_keys.rs` 的 `DISOWNED_KEYS`、`keys.rs` 裏成片的「為什麼不綁」註釋、
-`messages.toml` 的 `hint.vi.*`／`hint.helix.*` 短語表，以及 `docs/manual.md` 的三張對照表。
+`messages.toml` 的 `hint.vi.*`/`hint.helix.*` 短語表，以及 `docs/manual.md` 的三張對照表。
 已經定過的都歸到最後一節，沒有再報一遍。
 
 ---
@@ -16693,13 +16693,13 @@ helix 的 `g` 層二十二條，yumete 的 `GOTO_KEYS` 十三行。逐條對完�
 | 鍵 | helix 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
 | `g.` | `goto_last_modification`，回到本文件裏最後改動過的位置 | 沒有；跳轉表只在「遠距離移動」時記一格（`jumps.rs:61-72` 說得很清楚），編輯本身不入表 | **高**：寫作裏最常問的一句是「我剛纔改到哪了」，而 `C-o` 答不了它 |
-| `ga` | `goto_last_accessed_file`，切回上一個用過的文件 | 沒有；只有 `gn`／`gp` 按打開順序走一格，和 `空格 b` 開選擇器 | **高**：正文和筆記之間來回切是一天幾十次的動作，按順序走和開選擇器都太重 |
+| `ga` | `goto_last_accessed_file`，切回上一個用過的文件 | 沒有；只有 `gn`/`gp` 按打開順序走一格，和 `空格 b` 開選擇器 | **高**：正文和筆記之間來回切是一天幾十次的動作，按順序走和開選擇器都太重 |
 | `gm` | `goto_last_modified_file`，去最近改過的那個文件 | 沒有 | 中：一本書分很多章文件時有用，但比 `ga` 低一檔 |
 | `g\|` | `goto_column`，去第 N 列 | 沒有 | 低：中文行裏「第 N 格」不是一個寫稿的人會數的量 |
 
-Warning: `gt`／`gc`／`gb`（屏幕頂／中／底）不算漏，見最後一節。
-helix 的 `gd`／`gD`／`gy`／`gr`／`gi` 裏，yumete 已有 `gd`／`gD`（跟腳註和拆分表），
-其餘三條是 LSP 的 references／implementation，不算。
+Warning: `gt`/`gc`/`gb`（屏幕頂/中/底）不算漏，見最後一節。
+helix 的 `gd`/`gD`/`gy`/`gr`/`gi` 裏，yumete 已有 `gd`/`gD`（跟腳註和拆分表），
+其餘三條是 LSP 的 references/implementation，不算。
 
 #### 空格層
 
@@ -16707,25 +16707,25 @@ helix 的 `空格` 二十八條，yumete 的 `SPACE_KEYS` 二十三條。兩邊�
 
 | 鍵 | helix 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
-| `空格 j` | `jumplist_picker`，把跳轉表整個列出來挑一個 | 只有 `C-o`／`C-i` 一格一格走 | 中：一章翻了十幾處之後，一格一格倒回去很慢 |
+| `空格 j` | `jumplist_picker`，把跳轉表整個列出來挑一個 | 只有 `C-o`/`C-i` 一格一格走 | 中：一章翻了十幾處之後，一格一格倒回去很慢 |
 | `空格 '` | `last_picker`，把剛關掉的那個選擇器原樣叫回來 | 沒有 | 中：`空格 f` 挑錯了文件要重新打一遍關鍵詞 |
 | `空格 F` | 在當前文件所在目錄裏開文件選擇器 | 只有 `空格 f`（項目範圍） | 低：`:search-working` 這一族已經建立了「本目錄」這個範圍，但文件選擇器上沒有 |
-| `空格 R` | 用系統剪貼板的內容替換選區 | 有 `R`（用寄存器替換），沒有剪貼板那一份 | 低：`空格 y`／`空格 p` 已經在，補這一條是補齊三件套 |
+| `空格 R` | 用系統剪貼板的內容替換選區 | 有 `R`（用寄存器替換），沒有剪貼板那一份 | 低：`空格 y`/`空格 p` 已經在，補這一條是補齊三件套 |
 | `空格 g` | `changed_file_picker`，列出 git 裏改過的文件 | 有 `:git-diff` 和 `:view-diff`，但沒有「改過哪幾個文件」的列表 | 低：改稿一輪之後想知道動過哪幾章，但 `git status` 在終端裏就能看 |
 
 #### `[` 和 `]` 層
 
-helix 各十三條，yumete 只有 `]c`／`[c`（合併衝突）。
+helix 各十三條，yumete 只有 `]c`/`[c`（合併衝突）。
 
 | 鍵 | helix 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
-| `[space` `]space` | 在上／下加一個空行，不進插入模式 | 沒有；要加空行得 `O` 或 `o` 再 `Esc` | 中：中文稿子靠空行分段，加一個空行是高頻動作，而 `o`＋`Esc` 會經過一次插入模式的撤銷點 |
-| `[g` `]g` | 走到上／下一處 git 改動 | 沒有；`:view-diff` 只畫改動條，不能跳 | 中：改稿之後順着自己的改動逐處復看，是散文裏真實的用法 |
-| `[d` `]d` | 走到上／下一條診斷 | 沒有；`:check-*` 出的是一張 `gf` 能走的清單 | 中：`:check-punct`／`:check-usage` 這幾項本身就是「散文的診斷」，值得有一個不用開面板的走法 |
-| `[p` `]p` | 上／下一段 | 這裏是 `{`／`}` | 不算漏 |
+| `[space` `]space` | 在上/下加一個空行，不進插入模式 | 沒有；要加空行得 `O` 或 `o` 再 `Esc` | 中：中文稿子靠空行分段，加一個空行是高頻動作，而 `o`＋`Esc` 會經過一次插入模式的撤銷點 |
+| `[g` `]g` | 走到上/下一處 git 改動 | 沒有；`:view-diff` 只畫改動條，不能跳 | 中：改稿之後順着自己的改動逐處復看，是散文裏真實的用法 |
+| `[d` `]d` | 走到上/下一條診斷 | 沒有；`:check-*` 出的是一張 `gf` 能走的清單 | 中：`:check-punct`/`:check-usage` 這幾項本身就是「散文的診斷」，值得有一個不用開面板的走法 |
+| `[p` `]p` | 上/下一段 | 這裏是 `{`/`}` | 不算漏 |
 | `[f` `]f` `[t` `]t` `[a` `]a` `[c` `]c` `[T` `]T` `[e` `]e` `[x` `]x` | tree-sitter 的函數、類、參數、註釋、測試、XML 元素 | 沒有 | 低：都是代碼結構，散文用不上 |
 
-#### `z`／`Z` 層
+#### `z`/`Z` 層
 
 **這一整層 yumete 一個鍵都沒有。** `z` 在 Normal 下完全未綁，`Z` 只在短語表裏回一句
 「保存是 `:w`」（`hint.vi.z-upper`）。
@@ -16735,7 +16735,7 @@ helix 各十三條，yumete 只有 `]c`／`[c`（合併衝突）。
 | `zz` `zc` | 把光標所在行挪到屏幕正中，光標不動 | 沒有 | **高**：校對時最常按的一個鍵，`:view-typewriter` 是常開的模式，代替不了一次性的「現在給我居中」 |
 | `zt` | 把光標所在行挪到屏幕頂 | 沒有 | **高**：要看這一段後面還有什麼，只有這一個辦法 |
 | `zb` | 把光標所在行挪到屏幕底 | 沒有 | 中：和 `zt` 同族，一起補 |
-| `zk` `zj` | 畫面上下滾一行，光標跟着留在頁內 | 沒有；`C-e`／`C-y` 也沒有 | 中：讀的時候想多看一行，但不想讓光標離開正在寫的地方 |
+| `zk` `zj` | 畫面上下滾一行，光標跟着留在頁內 | 沒有；`C-e`/`C-y` 也沒有 | 中：讀的時候想多看一行，但不想讓光標離開正在寫的地方 |
 | `z/` `z?` `zn` `zN` | 在 `z` 層裏再放一份搜索鍵 | 沒有 | 低：頂層已經有 `/` `?` `n` `N` |
 | `Z` 粘滯層 | 同 `z`，但按完不退出，可以連按 | 沒有 | 低：先有 `z` 層再說 |
 
@@ -16746,9 +16746,9 @@ Warning: 豎排下這一層要重新想一遍：「屏幕中間」在縱書裏�
 
 helix 六條（`mm` `ms` `mr` `md` `ma` `mi`），yumete 六條全有。差的在**文本對象的種類**上。
 
-| 對象 | helix／vim 有 | yumete 現狀 | 值不值得補 |
+| 對象 | helix/vim 有 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
-| `mi s` `ma s`（句） | vim 有 `is`／`as`；helix 走 tree-sitter 沒有句 | 沒有；`Object` 只有 `Word`／`Paragraph`／`Pair`（`motion.rs:500`） | **高**：這個編輯器是唯一把「句」立成單位的（`H`／`L`、`:view-sentence`），卻不能 `cis` 改寫一句話 |
+| `mi s` `ma s`（句） | vim 有 `is`/`as`；helix 走 tree-sitter 沒有句 | 沒有；`Object` 只有 `Word`/`Paragraph`/`Pair`（`motion.rs:500`） | **高**：這個編輯器是唯一把「句」立成單位的（`H`/`L`、`:view-sentence`），卻不能 `cis` 改寫一句話 |
 | `mi W` `ma W`（大詞） | 有 | 沒有；只有 `mi w` | 低：中文裏大詞和詞差別不大 |
 | `mi t` `ma t`（標籤） | 有 | 沒有 | 低：只有寫 `<ruby>` 的時候用得上，而那一族有 `:ruby-html` |
 
@@ -16759,13 +16759,13 @@ helix 六條（`mm` `ms` `mr` `md` `ma` `mi`），yumete 六條全有。差的�
 
 | 鍵 | helix 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
-| `A-u` `A-U` | `earlier`／`later`，按步數或按時間在編輯歷史裏前後走 | 沒有；只有 `u`／`U` 一步一步 | 中：撤銷是快照式的（`buffer.rs:184` 的 `EditSnapshot`），給快照記個時間戳就能做，「回到二十分鐘前那一版」對寫稿的人有真價值 |
+| `A-u` `A-U` | `earlier`/`later`，按步數或按時間在編輯歷史裏前後走 | 沒有；只有 `u`/`U` 一步一步 | 中：撤銷是快照式的（`buffer.rs:184` 的 `EditSnapshot`），給快照記個時間戳就能做，「回到二十分鐘前那一版」對寫稿的人有真價值 |
 | `C-z` | 掛起，回到 shell | 沒有；有 `:!command`、`:sh`、`:pipe` | 中：終端編輯器的常規鍵，但要先想清楚和輸入法掛起（`YumeModalSuspend`）會不會打架 |
 | `A-x` | 把選區縮到它完整覆蓋的那些行 | 沒有；有 `X`（撐到行邊界） | 低：`X` 的反向，用得少 |
-| `A-J` | 合併行並把中間的空白選起來 | 有 `gJ`／`gK`，沒有這一支 | 低 |
+| `A-J` | 合併行並把中間的空白選起來 | 有 `gJ`/`gK`，沒有這一支 | 低 |
 | `C-s` | 把當前位置塞進跳轉表 | 沒有 | 低：跳轉表現在是自動記的 |
 | `=` | 按語言服務器格式化選區 | 有 `:format`，是整文件的 | 低 |
-| `A-o` `A-i` | 順語法樹擴大／縮小選區 | 沒有 | 中（**要換個做法**）：語法樹對散文沒用，但「字 → 詞 → 句 → 段 → 全文」逐級擴選在中文裏很順手，因為中文沒有空格，選一個單位全靠猜邊界 |
+| `A-o` `A-i` | 順語法樹擴大/縮小選區 | 沒有 | 中（**要換個做法**）：語法樹對散文沒用，但「字 → 詞 → 句 → 段 → 全文」逐級擴選在中文裏很順手，因為中文沒有空格，選一個單位全靠猜邊界 |
 
 #### Insert 模式
 
@@ -16780,20 +16780,20 @@ vim 獨有、helix 沒有但值得一提的兩條放在下面 vim 那一節。
 
 #### `:` 命令
 
-helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust 之後，yumete 真缺的：
+helix 的 typable 命令裏，去掉 LSP/DAP/tree-sitter/workspace-trust 之後，yumete 真缺的：
 
 | 命令 | helix 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
 | `:read` `:r` | 把一個文件的內容插到光標處 | 沒有；只能開第二個 buffer 複製粘貼 | **高**：把廢稿、素材、別處寫的一段拉進正文，是寫長篇最常做的一件事 |
-| `:sort` | 把選中的那些行排序，帶 `--insensitive`／`--reverse` | 只有 `:table-sort`（表格按列排） | 中：人名錶、參考書目、詞條列表都是普通幾行文本，不是表格 |
-| `:earlier` `:later` | 按步數或時間在編輯歷史裏走 | 沒有 | 中：同上面 `A-u`／`A-U`，做一個就夠，鍵和命令都有更好 |
+| `:sort` | 把選中的那些行排序，帶 `--insensitive`/`--reverse` | 只有 `:table-sort`（表格按列排） | 中：人名錶、參考書目、詞條列表都是普通幾行文本，不是表格 |
+| `:earlier` `:later` | 按步數或時間在編輯歷史裏走 | 沒有 | 中：同上面 `A-u`/`A-U`，做一個就夠，鍵和命令都有更好 |
 | `:move` `:mv` | 把當前文件連同緩衝區改名到另一個路徑 | 有 `:write-as`（另存並改為編輯新的那份），舊文件還留着 | 中：改章節名是真實動作，現在要去終端補一次 `rm` |
 | `:reflow` | 把選中的幾行硬折到給定寬度 | `:view-wrap` 是視圖上的軟折，`:format` 按配置走 | 中：交給排版或者交給別人的稿子有時要求硬折；Warning: 先確認 `:format` 在 markdown 下做不做這件事 |
 | `:buffer-close-others` `:buffer-close-all` | 關掉除當前之外的全部緩衝區 | `:buffer` 能列能關，一次一個 | 低：開了二十個文件之後清一次場 |
-| `:cd` `:pwd` `:pushd` `:popd` | 改／看當前工作目錄 | 沒有；`:search-working` 這一族已經有「本目錄」的概念 | 低 |
-| `:clear-register` `:set-register` | 清空／寫入某個寄存器 | 沒有；`:clipboard` 是粘貼選單 | 低 |
-| `:insert-output` `:append-output` | 把命令的輸出插在選區前／後 | 有 `:pipe`（替換選區）和 `:sh`（output 進 buffer） | 低：`:pipe` 覆蓋了主要用法 |
-| `:line-ending` `:encoding` | 設行尾／編碼 | 沒有 | 低：直到有人拿到 CRLF 的稿子為止 |
+| `:cd` `:pwd` `:pushd` `:popd` | 改/看當前工作目錄 | 沒有；`:search-working` 這一族已經有「本目錄」的概念 | 低 |
+| `:clear-register` `:set-register` | 清空/寫入某個寄存器 | 沒有；`:clipboard` 是粘貼選單 | 低 |
+| `:insert-output` `:append-output` | 把命令的輸出插在選區前/後 | 有 `:pipe`（替換選區）和 `:sh`（output 進 buffer） | 低：`:pipe` 覆蓋了主要用法 |
+| `:line-ending` `:encoding` | 設行尾/編碼 | 沒有 | 低：直到有人拿到 CRLF 的稿子為止 |
 | `:character-info` | 報光標下那個字的信息 | `空格 d` 報拆分與編碼，`:check-charset` 查字集 | 不算漏 |
 
 ---
@@ -16806,39 +16806,39 @@ helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust �
 
 | 鍵 | vim 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
-| `g;` `g,` | 在改動列表裏往回／往前走一格 | 沒有 | **高**：比 helix 的 `g.` 更強的那一版，`g.` 只回最後一處，`g;` 能一路往回走過剛纔改的五六處 |
+| `g;` `g,` | 在改動列表裏往回/往前走一格 | 沒有 | **高**：比 helix 的 `g.` 更強的那一版，`g.` 只回最後一處，`g;` 能一路往回走過剛纔改的五六處 |
 | `gv` | 重新選中上一次的選區 | 沒有；`Esc` 之後選區就沒了 | 中：選錯了一次、跑去看別處、回來想要回剛纔那一段 |
 | `gi` | 回到上次插入的位置並進入插入模式 | 沒有 | 中：`g.` 加 `i` 就夠，所以有了 `g.` 之後這一條降為低 |
-| `g+` `g-` | 在文本狀態之間前後走（撤銷樹） | 沒有 | 中：同 `:earlier`／`:later`，是同一件事的另一個拼法 |
+| `g+` `g-` | 在文本狀態之間前後走（撤銷樹） | 沒有 | 中：同 `:earlier`/`:later`，是同一件事的另一個拼法 |
 | `gq` `gw` | 把 motion 覆蓋的文字重排到 `textwidth` | 沒有；`gw` 在這裏是跳轉標籤 | 中：同 `:reflow`，Warning: 鍵位已被佔，只能走命令 |
 | `ga` `g8` | 報光標下那個字的編碼值 | `空格 d` 報拆分與編碼 | 低 |
-| `gp` `gP` | 粘貼後光標停在粘上去的內容之後 | 只有 `p`／`P` | 低 |
+| `gp` `gP` | 粘貼後光標停在粘上去的內容之後 | 只有 `p`/`P` | 低 |
 | `gI` | 無論縮進，從第 1 列開始插入 | 沒有 | 低：中文段首用的是 U+3000 全角空格，`I` 會停在它後面，偶爾想繞過它 |
 | `gR` | 虛擬替換模式 | 沒有，`R` 是用寄存器替換選區 | 低：手冊已明說「vim 的替換模式這裏沒有」 |
 | `go` | 去第 N 個字節 | 沒有 | 低 |
 
 #### vim 的 `z` 層
 
-除了 helix 那一節已經列的 `zz`／`zt`／`zb`／`zj`／`zk`，vim 多出來的：
+除了 helix 那一節已經列的 `zz`/`zt`/`zb`/`zj`/`zk`，vim 多出來的：
 
 | 鍵 | vim 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
 | `zf` `za` `zo` `zc` `zR` `zM` | 摺疊：建、開、關、全開、全關 | 沒有真正的正文摺疊；有大綱邊欄（`空格 o`）和表格單元格摺疊（`空格 t w`） | 中：一章兩萬字，把寫完的幾節折起來只看在寫的那一節，大綱邊欄是「另開一欄看目錄」，不是同一件事 |
 | `zj` `zk` `[z` `]z` | 在摺疊之間走 | 沒有 | 低：先有摺疊 |
-| `zg` `zw` `z=` | 拼寫詞典與建議 | 沒有；這裏的對應物是 `:check-usage`／`:check-names`／`:check-punct` | 不算漏：中文沒有拼寫這一層，檢查族是它的位置 |
+| `zg` `zw` `z=` | 拼寫詞典與建議 | 沒有；這裏的對應物是 `:check-usage`/`:check-names`/`:check-punct` | 不算漏：中文沒有拼寫這一層，檢查族是它的位置 |
 | `zh` `zl` `zs` `ze` | 橫向滾動 | 沒有 | 低：這裏默認軟折行，橫向滾動不成立；Warning: 豎排下「縱向滾動」倒是另一個問題 |
 
-#### vim 的 `[`／`]` 層
+#### vim 的 `[`/`]` 層
 
 | 鍵 | vim 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
-| `[s` `]s` | 走到上／下一個拼錯的詞 | 沒有 | 中（**換個做法**）：中文沒有拼寫，但 `:check-punct`／`:check-usage` 找出來的那幾處正是這個形狀，見上面 `[d`／`]d` 那一行 |
-| `['` `]'` `` [` `` `` ]` `` | 走到上／下一個標記 | 沒有；標記只能 `'a` 點名去 | 低：這裏標記是 `M` 設的，數量少 |
-| `[(` `])` `[{` `]}` | 去上／下一個沒配對的括號 | 有 `mm`（跳到配對的那一個） | 低 |
+| `[s` `]s` | 走到上/下一個拼錯的詞 | 沒有 | 中（**換個做法**）：中文沒有拼寫，但 `:check-punct`/`:check-usage` 找出來的那幾處正是這個形狀，見上面 `[d`/`]d` 那一行 |
+| `['` `]'` `` [` `` `` ]` `` | 走到上/下一個標記 | 沒有；標記只能 `'a` 點名去 | 低：這裏標記是 `M` 設的，數量少 |
+| `[(` `])` `[{` `]}` | 去上/下一個沒配對的括號 | 有 `mm`（跳到配對的那一個） | 低 |
 | `[[` `]]` `[]` `][` | 按 section 前後走 | 沒有；大綱是 `空格 o` 和 `:toc` | 中：一章裏在幾個小標題之間上下跳，現在要開大綱或者 `:toc N` |
 | `[p` `]p` | 粘貼並把縮進對齊到當前行 | 沒有 | 低 |
-| `[c` `]c` | 走到上／下一處 diff 改動 | 這裏 `]c` 是合併衝突，不是 diff | 見上面 `[g`／`]g` 那一行，是同一件事 |
-| `[I` `]I` `[d` `]d` `[ CTRL-I` | 找 `#define`／找出現處 | 沒有 | 低：C 語言專用 |
+| `[c` `]c` | 走到上/下一處 diff 改動 | 這裏 `]c` 是合併衝突，不是 diff | 見上面 `[g`/`]g` 那一行，是同一件事 |
+| `[I` `]I` `[d` `]d` `[ CTRL-I` | 找 `#define`/找出現處 | 沒有 | 低：C 語言專用 |
 
 #### vim 的頂層單鍵
 
@@ -16847,8 +16847,8 @@ helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust �
 | `q{a-z}` `@{a-z}` | 具名宏，可以同時存二十六個 | 只有一個宏（`Q` 錄、`q` 放） | 中：改稿時手上常常同時有兩三套重複動作；寄存器已經是具名的（`registers: HashMap<char, String>`），宏跟上去代價不大 |
 | `@:` | 重複上一條 `:` 命令 | 沒有；要 `:` 再按上鍵 | 低：`hint.vi.ampersand` 已經這麼答了 |
 | `C-^` | 切回上一個文件 | 見 helix 的 `ga`，是同一件事 | 同上，高 |
-| `C-e` `C-y` | 畫面滾一行，光標留在頁內 | 沒有 | 見 `z` 層的 `zj`／`zk`，是同一件事 |
-| `g CTRL-G` | 報光標位置與字數 | `:count`（還有 `progress`／`target`） | 不算漏 |
+| `C-e` `C-y` | 畫面滾一行，光標留在頁內 | 沒有 | 見 `z` 層的 `zj`/`zk`，是同一件事 |
+| `g CTRL-G` | 報光標位置與字數 | `:count`（還有 `progress`/`target`） | 不算漏 |
 | `C-l` | 重畫屏幕 | 沒有；helix 的 `:redraw` 也沒有 | 低：終端花屏的時候用一次 |
 | `Q` `gQ` | Ex 模式 | 這裏 `Q` 是錄宏 | 不算漏 |
 | `U` | 撤銷本行的全部改動 | 這裏 `U` 是重做（同 helix） | 不算漏：兩邊衝突，跟 helix 是對的 |
@@ -16857,30 +16857,30 @@ helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust �
 
 | 鍵 | vim 做什麼 | yumete 現狀 | 值不值得補 |
 | --- | --- | --- | --- |
-| `C-o` | 執行一條 Normal 命令後自動回到插入模式 | 沒有 | 中：寫到一半要挪一下光標或者刪上一句，現在得 `Esc` 出去再 `i`／`a` 回來，而一次插入是一次撤銷（§5.12.3），這一齣一進就多了一個撤銷點 |
+| `C-o` | 執行一條 Normal 命令後自動回到插入模式 | 沒有 | 中：寫到一半要挪一下光標或者刪上一句，現在得 `Esc` 出去再 `i`/`a` 回來，而一次插入是一次撤銷（§5.12.3），這一齣一進就多了一個撤銷點 |
 | `C-v u4E00` / `C-k` 雙碼 | 按碼位或者雙字符碼直接打一個字符 | 沒有；靠輸入法（`:yume`） | 中：寫到輸入法打不出的生僻字時，現在沒有別的路；Warning: 這一條要先彈窗問，宇浩的拆分本來就是為生僻字設計的 |
-| `C-t` `C-d` | 在插入模式里加／減一級縮進 | 沒有；`Tab`／`Shift-Tab` 是打字符 | 低 |
+| `C-t` `C-d` | 在插入模式里加/減一級縮進 | 沒有；`Tab`/`Shift-Tab` 是打字符 | 低 |
 | `C-a` | 再插一遍上次插入的內容 | 沒有 | 低 |
 
 #### vim 的文本對象
 
-除了上面 `m` 層那一節列的 `is`／`as`、`iW`／`aW`、`it`／`at`，vim 的 `i"` `i'` `` i` ``
+除了上面 `m` 層那一節列的 `is`/`as`、`iW`/`aW`、`it`/`at`，vim 的 `i"` `i'` `` i` ``
 （引號內）yumete 是有的：`select_pair` 走 `pair_of`，引號在 `PAIRS` 裏。不算漏。
 
 ---
 
 ### 最值得先做的五條
 
-1. **`g.`，回到本文件最後改動的地方**（順帶 `g;`／`g,` 走改動列表）。跳轉表只在遠距離移動時
+1. **`g.`，回到本文件最後改動的地方**（順帶 `g;`/`g,` 走改動列表）。跳轉表只在遠距離移動時
    記一格，`jumps.rs:61-72` 白紙黑字寫着；而寫稿的人一天問一百次的是「我剛纔改到哪」，這個問題
    現在一個鍵都答不了。點名提過 `g` 層漏了不少，這是漏得最貴的一條。
-2. **`z` 層，從 `zz`／`zt`／`zb` 起**。整整一層一個鍵都沒綁，而「把我正在寫的這一行挪到屏幕
+2. **`z` 層，從 `zz`/`zt`/`zb` 起**。整整一層一個鍵都沒綁，而「把我正在寫的這一行挪到屏幕
    中間」是校對時按得最多的鍵。`:view-typewriter` 是一直開着的模式，答不了「就現在這一次」。
-3. **`mi s`／`ma s`，句對象**。這個編輯器是三家裏唯一把「句」立成單位的（`H`／`L`、
+3. **`mi s`/`ma s`，句對象**。這個編輯器是三家裏唯一把「句」立成單位的（`H`/`L`、
    `:view-sentence`、`:check-punct` 都按句走），而 `cis`（改寫這一句）現在做不到，只能
    `H` 再 `L` 再猜邊界。已有的 `Motion::Sentence` 拿過來就是。
 4. **`ga`，切回上一個文件**。正文和筆記、這一章和上一章之間來回切，現在只有按順序走的
-   `gn`／`gp` 和要打字的 `空格 b`。一個鍵就能省掉的動作，頻率極高。
+   `gn`/`gp` 和要打字的 `空格 b`。一個鍵就能省掉的動作，頻率極高。
 5. **Insert 裏的 `C-r`，插入寄存器**。寫到一半要放一個剛複製的人名或術語，現在要 `Esc`、`p`、
    再 `i` 回來，而一次插入是一次撤銷（§5.12.3），這一齣一進白白多一個撤銷點。補它同時把
    `C-k`（刪到行尾）一起補上，`C-u` 已經在了，它缺的就是這另一半。
@@ -16896,52 +16896,52 @@ helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust �
 - 多選區整族：`s`（select_regex）、`S`、`A-s`、`&`、`_`、`(`、`)`、`,`、`A-,`、`K`、`A-K`、
   `C`、`A-minus`、`A-_`、`A-:`。方案在 §5.13，`A-C` 已經綁上（`keys.rs:1343`），
   `hint.vi.s` 和 `hint.helix.cycle-selection` 在短語表裏已經這麼答了。
-- `gt`／`gc`／`gb`（跳到屏幕頂／中／底）：`tests/documented_keys.rs` 的 `DISOWNED_KEYS`，
+- `gt`/`gc`/`gb`（跳到屏幕頂/中/底）：`tests/documented_keys.rs` 的 `DISOWNED_KEYS`，
   文檔是**明說沒有**，還有一條測試反向盯着它不許悄悄出現。
-- `t`／`T`：2026-09-21 已經還回來當 till 用了，表格組搬到 `空格 t`（§5.12.2）。
+- `t`/`T`：2026-09-21 已經還回來當 till 用了，表格組搬到 `空格 t`（§5.12.2）。
 - `空格 e`（文件樹）：2026-09-18 有意刪掉，理由是和 `空格 f` 重了；邊欄還在，`:sidebar-left files`。
-- `~`／`` ` ``／``A-` ``（大小寫三個頂層鍵）：收成了 `` ` `` 組，理由寫在 `Pending::Case` 的
+- `~`/`` ` ``/``A-` ``（大小寫三個頂層鍵）：收成了 `` ` `` 組，理由寫在 `Pending::Case` 的
   註釋裏，漢字上大小寫是恆等變換。
-- `空格 s`／`空格 S`（helix 的 symbol picker 佔的是同一個位置）：yumete 這兩個位置原來是邊欄，
-  2026-09-26 被 `w`／`Q` 吸收，見 `SPACE_KEYS` 的註釋。
+- `空格 s`/`空格 S`（helix 的 symbol picker 佔的是同一個位置）：yumete 這兩個位置原來是邊欄，
+  2026-09-26 被 `w`/`Q` 吸收，見 `SPACE_KEYS` 的註釋。
 
 **有等價物，只是拼法不同**
 
-- helix `C-c`（註釋）→ `空格 c`／`空格 C`（`hint.helix.comment` 就是這麼答的）。
+- helix `C-c`（註釋）→ `空格 c`/`空格 C`（`hint.helix.comment` 就是這麼答的）。
 - helix `%`（全選）yumete 也是 `%`；vim 的 `%`（配對括號）→ `mm`，vim 預設裏已翻。
-- helix `[p`／`]p`（段落）→ `{`／`}`。
-- helix `|`／`A-|`／`!`／`A-!`／`$`（shell 那五個）→ `!` 開 `:pipe`，另有 `:sh`、`:!command`、`:run`。
-- helix `:vsplit`／`:hsplit`／`C-w` 那一整層 → 這裏是「區域」模型，四個固定區域，
-  `空格 1`–`4` 點名、`空格 w`／`W`／`q`／`Q`，`C-w` 也留着。
-- helix `空格 /`（global_search）→ `空格 /`，另有 `:search`／`:search-working`／`:search-project` 三檔範圍。
+- helix `[p`/`]p`（段落）→ `{`/`}`。
+- helix `|`/`A-|`/`!`/`A-!`/`$`（shell 那五個）→ `!` 開 `:pipe`，另有 `:sh`、`:!command`、`:run`。
+- helix `:vsplit`/`:hsplit`/`C-w` 那一整層 → 這裏是「區域」模型，四個固定區域，
+  `空格 1`–`4` 點名、`空格 w`/`W`/`q`/`Q`，`C-w` 也留着。
+- helix `空格 /`（global_search）→ `空格 /`，另有 `:search`/`:search-working`/`:search-project` 三檔範圍。
 - helix `:character-info` → `空格 d` 字典（報拆分與編碼），字集問題另有 `:check-charset`。
-- helix `:theme`／`:set-option`／`:config-reload`／`:config-open` → `:theme`、`:settings`、
+- helix `:theme`/`:set-option`/`:config-reload`/`:config-open` → `:theme`、`:settings`、
   `:reload config`。
 - helix `:tutor`、`:format`、`:goto`、`:clipboard-*`、`:sh` → 都有同名或同義的。
-- vim `g CTRL-G`（字數）→ `:count`，還多了 `progress`／`target`。
+- vim `g CTRL-G`（字數）→ `:count`，還多了 `progress`/`target`。
 - vim `&`（重複上次 `:s`）→ `:` 加上鍵翻歷史，`hint.vi.ampersand` 就這麼答。
-- vim `gu`／`gU`／`g~` → `` ` `` 組。
-- vim `0`／`^`／`$` → `gh`／`gs`／`gl`，而且這幾個鍵按下去命令行會主動說出該按哪個
-  （`hint.vi.zero`／`caret`／`dollar`）。
+- vim `gu`/`gU`/`g~` → `` ` `` 組。
+- vim `0`/`^`/`$` → `gh`/`gs`/`gl`，而且這幾個鍵按下去命令行會主動說出該按哪個
+  （`hint.vi.zero`/`caret`/`dollar`）。
 - vim `C-r`（重做）→ `U`；vim 預設下 `C-r` 也直接接上了。
-- vim `ZZ`／`ZQ` → vim 預設翻成 `:x`／`:quit!`。
+- vim `ZZ`/`ZQ` → vim 預設翻成 `:x`/`:quit!`。
 - vim `M`（屏幕中行）→ 這裏 `M` 是設標記，手冊的「故意不翻」表裏寫了理由。
-- vim `(`／`)`（句子）→ `H`／`L`。
-- vim `zg`／`z=`（拼寫）→ 中文沒有這一層，對應物是 `:check-usage`／`:check-names`／`:check-punct`。
-- vim `i"`／`i'`／`` i` ``（引號內）→ 有，`select_pair` 走 `pair_of`，引號在 `PAIRS` 裏。
-- vim `dd`／`yy`／`cc`／`D`／`C`／`Y`／`S`／`x`／`s`／`V`／`;`／`,` → vim 預設的翻譯表和
+- vim `(`/`)`（句子）→ `H`/`L`。
+- vim `zg`/`z=`（拼寫）→ 中文沒有這一層，對應物是 `:check-usage`/`:check-names`/`:check-punct`。
+- vim `i"`/`i'`/`` i` ``（引號內）→ 有，`select_pair` 走 `pair_of`，引號在 `PAIRS` 裏。
+- vim `dd`/`yy`/`cc`/`D`/`C`/`Y`/`S`/`x`/`s`/`V`/`;`/`,` → vim 預設的翻譯表和
   `VIM_MOTIONS` 全覆蓋了。
 
 **查了但對中文寫作沒意義的**
 
-- LSP：`gy`（type definition）、`gr`（references）、`gi`（implementation）、`空格 s`／`空格 S`
-  （symbol picker）、`空格 d`／`空格 D`（diagnostics picker）、`空格 a`（code action）、
+- LSP：`gy`（type definition）、`gr`（references）、`gi`（implementation）、`空格 s`/`空格 S`
+  （symbol picker）、`空格 d`/`空格 D`（diagnostics picker）、`空格 a`（code action）、
   `空格 r`（rename symbol）、`空格 h`、`=`（format_selections）。
 - DAP：`空格 G` 整層。
-- tree-sitter：`A-o`／`A-i`／`A-I`／`A-p`／`A-n`／`A-e`／`A-b`／`A-a`，以及 `[`／`]` 層裏的
-  `f`／`t`／`a`／`c`／`e`／`T`／`x`。（Warning: `A-o`／`A-i` 有一個**散文版**值得想，已列在頂層那張表裏。）
+- tree-sitter：`A-o`/`A-i`/`A-I`/`A-p`/`A-n`/`A-e`/`A-b`/`A-a`，以及 `[`/`]` 層裏的
+  `f`/`t`/`a`/`c`/`e`/`T`/`x`。（Warning: `A-o`/`A-i` 有一個**散文版**值得想，已列在頂層那張表裏。）
 - helix 的 `:tree-sitter-*`、`:debug-*`、`:lsp-*`、`:workspace-trust` 那幾族。
-- vim 的 `[ CTRL-D`／`]I`／`[d` 那一族（找 `#define`）、`C-]`／`C-T`（tag）、`zh`／`zl`（橫向
+- vim 的 `[ CTRL-D`/`]I`/`[d` 那一族（找 `#define`）、`C-]`/`C-T`（tag）、`zh`/`zl`（橫向
   滾動，這裏默認軟折行）、`gs`（sleep）、`g CTRL-A`（內存剖面）、`g?`（rot13）。
 
 
@@ -16951,8 +16951,8 @@ helix 的 typable 命令裏，去掉 LSP／DAP／tree-sitter／workspace-trust �
 的，暴殄天物啊。」說的是 Rob Pike 1987 年那篇《Structural Regular Expressions》，sam 與 acme
 的 `x` `y` `g` `v` `s` 那一套。
 
-Warning: **「現代編輯器居然沒一個支持」不成立**：kakoune（2011）和 helix 的 `s`／`S`／`A-s`／
-`K`／`A-K` 就是 sam 那五條的按鍵版（helix 自己在 `book/src/usage.md:24,28` 承認血統來自
+Warning: **「現代編輯器居然沒一個支持」不成立**：kakoune（2011）和 helix 的 `s`/`S`/`A-s`/
+`K`/`A-K` 就是 sam 那五條的按鍵版（helix 自己在 `book/src/usage.md:24,28` 承認血統來自
 kakoune），vis 更是把 sam 的命令語言原樣實現了。這句話有道理的部分是另一句：**主流編輯器
 都只做成了交互按鍵，沒做成能寫下來、存下來、重放的一行命令。**
 
@@ -17042,8 +17042,8 @@ sam 的五條語義，kakoune（2011）和 helix 全都有，只是做成了按�
 | `g/re/` | 範圍裏含 re 才留 | `K` `keep_selections` | `commands.rs:5423`，`keep_or_remove_matches` | `:g/re/cmd` |
 | `v/re/` | 不含才留 | `A-K` `remove_selections` | 同上，`remove: true` | `:v/re/cmd` |
 | `s/re/新/` | 在範圍內替換 | **沒有**，helix 連 `:s` 都不存在，靠選完直接打字 | — | `:s` 有 |
-| `d` `c` `i` `a` | 刪／改／插／附 | `d` `c` `i` `a` | — | `:d`、`:normal` |
-| `p` `=` | 打印匹配／報位置 | 沒有直接對應 | — | `:p` `:=` |
+| `d` `c` `i` `a` | 刪/改/插/附 | `d` `c` `i` `a` | — | `:d`、`:normal` |
+| `p` `=` | 打印匹配/報位置 | 沒有直接對應 | — | `:p` `:=` |
 | `{ }`、多條寫成一行、地址算術 | 把整套結構化改動寫下來 | **沒有**，只能用手一個鍵一個鍵按 | — | 半個（`:g` 後面能跟 `:normal`，但單位還是行） |
 
 ### 三個結論
@@ -17053,8 +17053,8 @@ sam 的五條語義，kakoune（2011）和 helix 全都有，只是做成了按�
    計劃裏本來就有。
 2. **命令那一半，vis 做了。** martanne/vis 把 sam 的命令語言原樣實現了，`:x` `:y` `:g` `:v`
    都能寫成一行。它小衆，但它存在，所以「沒一個支持」是事實層面的錯。
-3. **vim 的 `:g` 不是同一件事。** 它是 ed 傳下來的，單位永遠是行，而且只有 `g`／`v` 這一半，
-   沒有 `x`／`y`，切不出比行更細或者跨行的塊。它是 structural regexp 的一個特例。
+3. **vim 的 `:g` 不是同一件事。** 它是 ed 傳下來的，單位永遠是行，而且只有 `g`/`v` 這一半，
+   沒有 `x`/`y`，切不出比行更細或者跨行的塊。它是 structural regexp 的一個特例。
 
 ### 這句話裏有道理的那一部分
 
@@ -17062,7 +17062,7 @@ sam 的五條語義，kakoune（2011）和 helix 全都有，只是做成了按�
 貼給別人、重放的一行命令。** 這個說法成立，而且值得記一筆。
 
 Warning: 順帶說一句：這條反饋和上一條（「vim helix 常用命令都給弄上」）在這裏合流了。
-helix 的 `s`／`S`／`A-s`／`K`／`A-K` 恰好就是 sam 的五條，所以那其實是同一件事的
+helix 的 `s`/`S`/`A-s`/`K`/`A-K` 恰好就是 sam 的五條，所以那其實是同一件事的
 兩個說法。
 
 ---
@@ -17073,7 +17073,7 @@ helix 的 `s`／`S`／`A-s`／`K`／`A-K` 恰好就是 sam 的五條，所以那
 
 - Phase 0 做完了（§5.13.12c），Phase 1 第一步做完了（§5.13.12d）。`Selections` 已經裝得下
   多段，但還沒有任何東西會造出第二段，所以畫面二十幀逐字節不變。
-- §5.13.9 把 `s`／`S`／`A-s`／`A-k`／`A-K` 排進 Phase 2，`&`／`_`／`(`／`)`／`#` 寄存器排進
+- §5.13.9 把 `s`/`S`/`A-s`/`A-k`/`A-K` 排進 Phase 2，`&`/`_`/`(`/`)`/`#` 寄存器排進
   Phase 3。§5.13.6 逐格查過代碼，這幾個鍵位全都空着。
 - `%`（全選）和 `A-;`（翻轉）今天就有，和 helix 一模一樣。
 - **`:s` 這一格 yumete 是領先的**：範圍寫法三種（`%`、`1-40`、`1,5,9`），旗標六個
@@ -17086,12 +17086,12 @@ helix 的 `s`／`S`／`A-s`／`K`／`A-K` 恰好就是 sam 的五條，所以那
 | `,` 整文件當範圍 | 有（`%`） | — | — |
 | `x/re/` | 有（`s`） | — | — |
 | `y/re/` | 有（`S`） | — | — |
-| `g/re/` `v/re/` | 有（`A-k`／`A-K`） | — | — |
+| `g/re/` `v/re/` | 有（`A-k`/`A-K`） | — | — |
 | **`s/re/新/` 作用在每一段選區上** | **沒有** | `:s` 是**按行重建整個 buffer** 的（`search.rs:218` 那個 `for (idx, line) in text.split_inclusive('\n')`），不寫範圍時取的也是「選區覆蓋的那幾行」（`search.rs:280-288` 的 `Rows::Selection`）。有了 N 段選區之後它還是隻看行 | **高**。這是鏈條上唯一真斷的一環，選完了卻沒法在每一段裏各替換一次 |
-| 寫成一行、存下來、重放 | 沒有 | 全靠手按。宏（`Q`／`q`）錄的是按鍵不是意圖，改一個正則要整條重錄 | 中偏低，理由見第五節第 5 條 |
+| 寫成一行、存下來、重放 | 沒有 | 全靠手按。宏（`Q`/`q`）錄的是按鍵不是意圖，改一個正則要整條重錄 | 中偏低，理由見第五節第 5 條 |
 | `{ }` 把幾條命令組合起來 | 沒有 | 同上 | 低 |
 | 地址算術（`#123`、`/re/+1`、`0,/re/`） | 沒有 | yumete 的範圍只有行號三種寫法 | 低。寫中文文章不數字節 |
-| `p`／`=`（打印匹配、報位置） | 沒有 | 有 `:s …n`（只數不改）和搜索面板，夠用 | 低，已有等價物 |
+| `p`/`=`（打印匹配、報位置） | 沒有 | 有 `:s …n`（只數不改）和搜索面板，夠用 | 低，已有等價物 |
 
 ### 壓成一句
 
@@ -17195,7 +17195,7 @@ sam 的**語言**是簡單的，難的是把 `:s` 從按行改成按選區。`su
 
 ### 6. 還有一個更小的反對意見：`s` 這個鍵在中文上有個坑
 
-sam 和 helix 的 `x`／`s` 都要求當場打一條正則。而 Normal 模式下輸入法是關着的
+sam 和 helix 的 `x`/`s` 都要求當場打一條正則。而 Normal 模式下輸入法是關着的
 （`Pending::takes_a_character` 那一套就是為這件事寫的），所以打 `「[^」]*」` 裏面那兩個全角
 引號需要輸入法。§5.13.9 說 `s` 複用 `looker()` 能認拼音，那是**搜索**那條路；`s` 作為正則
 選擇器，正則裏的中文字面量怎麼輸入是一個還沒答的問題。Warning: **Phase 2 開工前要先答這個**，
@@ -17250,7 +17250,7 @@ Markdown 的着重號不在其中。所以這一條是 yumete 自己的，不是
 
 ### Warning: 量出來一件事：解析器不套
 
-``**粗的`碼`**`` 交出來的是 `Marker`／`Strong`／`Marker` 三段，中間那一段**連反引號一起**算
+``**粗的`碼`**`` 交出來的是 `Marker`/`Strong`/`Marker` 三段，中間那一段**連反引號一起**算
 成粗體的正文，沒有內層的 `Code`。所以 `mi m` 的「取最裏面那一層」現在永遠只有一個候選，而
 畫面上那一段行內代碼也不會被畫成代碼。這是解析器的現狀，不是這一支的問題；測試
 `the_markup_object_takes_whatever_marks_the_cursor_is_in` 記的是現狀，解析器學會套的時候它
@@ -17278,7 +17278,7 @@ Warning: **tinymist 自己不寫解析器**，它用 typst 本體的 `crates/typ
 
 **一、標記套得起來了。** 一個構造配對成功之後對它的**文字**那一段再掃一遍，`DEPTH` 三層封
 頂。行內代碼與批注裏面不掃（CommonMark 的規矩，也是常識）。Warning: **遞歸不許越過外層的閉合
-符**：底下那些 `code_span`／`closing`／`find` 找的是整行，``**a`b**c`` 裏會找到外面去，所以
+符**：底下那些 `code_span`/`closing`/`find` 找的是整行，``**a`b**c`` 裏會找到外面去，所以
 每一處算出來的 `end` 都對着 `to` 驗一次。
 
 Warning: **真正的收穫是把約定寫下來了**，見 `spans` 的文檔：**要麼不交要麼全含；按起點排好，包住
@@ -17328,7 +17328,7 @@ Warning: 這是官方那套模式切換裏唯一值得學的一層。再往裏�
 
 ### 還沒做的
 
-- ~~`Kind::Math`／`Ref`／`Label` 三個變體~~ **2026-09-28 做完了**，見 §5.21。
+- ~~`Kind::Math`/`Ref`/`Label` 三個變體~~ **2026-09-28 做完了**，見 §5.21。
 - ~~標題判準在樹裏有三個版本~~ **2026-09-28 併成一支了**，見 §5.21。
 - ~~`:export` 那一趟遍歷還是「找第一條、整段包進去」~~ **2026-10-01 改成遞歸了。**
   `line_into` 現在只是個殼，正文走 `render`，每進一層把自己那一條記成 `parent` 再往裏走；
@@ -17392,10 +17392,10 @@ Warning: 併完之後大綱那一支跟着多了一條規矩：**七個井號不
 | 那一條 | 現在 |
 | --- | --- |
 | `g.` 回到最後改動的地方 | 做了。`Buffer` 上記一格 `last_edit`，每份稿子各記各的 |
-| `z` 層（`zz`／`zt`／`zb`） | **做不成，見下** |
+| `z` 層（`zz`/`zt`/`zb`） | **做不成，見下** |
 | `mi s` 句對象 | 做了 |
 | `ga` 切回上一份 | 做了。記的是緩衝區 **id** 不是下標 |
-| Insert 的 `C-r`／`C-k` | 做了 |
+| Insert 的 `C-r`/`C-k` | 做了 |
 
 ### Warning: `z` 層 2026-09-28 做出來了，見 §5.30
 
@@ -17403,7 +17403,7 @@ Warning: 併完之後大綱那一支跟着多了一條規矩：**七個井號不
 
 ### Warning: 當時的判斷：這個編輯器沒有 viewport
 
-`zz`／`zt`／`zb` 是「把光標這一行挪到屏幕的中間／頂／底」，而**核心裏根本沒有滾動位置這個
+`zz`/`zt`/`zb` 是「把光標這一行挪到屏幕的中間/頂/底」，而**核心裏根本沒有滾動位置這個
 東西**。`Editor::scroll` 的文檔自己寫着：「It moves the **cursor**, not just the view. A view
 scrolled on its own would be pulled straight back the moment the cursor had to stay on screen」。
 視口住在 TUI 那一側（`Seats`），核心只通過 `set_page_top` 知道它畫到哪裏了。
@@ -17412,7 +17412,7 @@ scrolled on its own would be pulled straight back the moment the cursor had to s
 
 1. **讓核心持有滾動位置。** 那是把一個 TUI 的概念搬進核心，而這個倉一直把「畫成什麼樣」留在
    TUI 那一側（竪排、折行、表格全是這麼分的）。
-2. **走「owed」那一套**（`owed_jump`／`owed_search` 已經有五個成員）：核心立一個
+2. **走「owed」那一套**（`owed_jump`/`owed_search` 已經有五個成員）：核心立一個
    「下一幀請把光標這一行放在第 N 行」的請求，渲染器讀完就清。Warning: 連帶要讓 `--shot` 也認它，
    那是「`--shot` 必須做完循環的最後幾步」那一族的第六個成員。
 
@@ -17451,7 +17451,7 @@ Warning: **而且不只中文白拿。** 那一行帶着四個開關（`find.rs`
 ### 形狀
 
 `Editor` 上一格 `sift: Option<Sift>` 記「Enter 按下去做哪一件」，`None` 就是普通搜索。提示
-行前面因此寫的不一定是斜槓：**選出／切開／只留／去掉**。
+行前面因此寫的不一定是斜槓：**選出/切開/只留/去掉**。
 
 Warning: **寫字不寫字母**：`s/` `S/` `k/` `K/` 那一套省三格，可是按下去之後屏幕上那一行說不出它
 要做什麼，而這四件事做完的樣子差得很遠。
@@ -17466,7 +17466,7 @@ Warning: **`Esc` 退出去要把那一格放掉**，不然下一次按 `/` 會�
 
 ### 繞開了 helix 的坑 6
 
-helix 的 `s`／`S`／`A-s` 一律把 primary 重置成 0（`selection.rs` 三處都留着同一句
+helix 的 `s`/`S`/`A-s` 一律把 primary 重置成 0（`selection.rs` 三處都留着同一句
 `// TODO: figure out a new primary index`），於是在第八十行選出二十處之後屏幕當場跳回檔首。
 這裏讓主選區**留在離原來那一段最近的地方**。
 
@@ -17477,14 +17477,14 @@ helix 的 `s`／`S`／`A-s` 一律把 primary 重置成 0（`selection.rs` 三�
 
 ### 順帶
 
-`s`／`S` 從前是未綁定鍵，掛着一句 `hint.vi.s`（「沒有多光標——見手冊」）。那句話和那個 arm
+`s`/`S` 從前是未綁定鍵，掛着一句 `hint.vi.s`（「沒有多光標——見手冊」）。那句話和那個 arm
 一起刪了。
 
 
 ## 5.24 多選區 Phase 3 做完了（2026-09-28）
 
-`(`／`)`（換主選區）、`_`（去兩端空白）、`&`（對齊）、**`#` 寄存器**（選區序號）＋
-`C-a`／`C-x` 逐段遞增。
+`(`/`)`（換主選區）、`_`（去兩端空白）、`&`（對齊）、**`#` 寄存器**（選區序號）＋
+`C-a`/`C-x` 逐段遞增。
 
 ### Warning: 編號列表那個用例解開了
 
@@ -17511,7 +17511,7 @@ Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個
 於是去讀無名的那一個，`"#p` 只有一段貼得上號（實測貼出來的是「4」，因為從後往前跑）。
 
 **這是這一族的第三次了**：`pending`（`f` 補的字符）、`count`（`3w`）、現在是
-`pending_register`。Warning: **判準寫下來**：`edit_each`／`each_selection` 裏，凡是「按一次鍵設
+`pending_register`。Warning: **判準寫下來**：`edit_each`/`each_selection` 裏，凡是「按一次鍵設
 上、用一次就沒」的欄位，都要每一段擺回去。
 
 ### `&` 算的是顯示寬度
@@ -17526,23 +17526,23 @@ Warning: **一行只認一段**：同一行上有兩段的時候，補在前一�
 `A-s` 按行切開之後空行就是這一種。留着它們等於在空行上放一個光標，接着打字會在空行上寫東
 西。Warning: 全丟光了就什麼都不做：選區不能為空。
 
-### `A-(`／`A-)` 輪轉的是裝在裏面的字
+### `A-(`/`A-)` 輪轉的是裝在裏面的字
 
-`(`／`)` 換的是「哪一段是主的」，這一對把甲段的字搬到乙段去，邊界不動。表格裏換兩欄、對話
+`(`/`)` 換的是「哪一段是主的」，這一對把甲段的字搬到乙段去，邊界不動。表格裏換兩欄、對話
 裏換兩個人說的話，都是這一件。
 
 Warning: 各段長短不一，所以從後往前換，並且把後面幾段跟着挪——同 `edit_each`，理由也一樣。
 
 ### 順帶刪掉兩句話
 
-`(`／`)` 從前掛着 `hint.helix.cycle-selection`（「走一句用 H／L」），`&` 掛着
+`(`/`)` 從前掛着 `hint.helix.cycle-selection`（「走一句用 H/L」），`&` 掛着
 `hint.vi.ampersand`。兩個鍵有主人了，兩句話跟着刪。Warning: 一條老測試問的正是那句話，改成問新
 的（`the_phrasebook_answers_the_keys_we_spell_differently`）。
 
 
 ## 5.25 竪排的目標格也搬進 `Range` 了（2026-09-28）
 
-`goal_slot` 是 `goal_column` 的竪排一半（`h`／`l` 跨縱的時候瞄準第幾格），和它同一個洞：
+`goal_slot` 是 `goal_column` 的竪排一半（`h`/`l` 跨縱的時候瞄準第幾格），和它同一個洞：
 在 `Editor` 上只有一個，於是 N 段一起按 `h` 會一起瞄準主選區那一格。
 
 Warning: **兩個量兩格，不共用。** 一個是橫排的顯示列，一個是竪排的槽位；共用一格的話換一次版面
@@ -17580,9 +17580,9 @@ Warning: 共用記事本上記過同一個形狀的坑：「離屏 `--figure` �
 
 ### 三道閘，一道一道踩過來的
 
-1. **鍵根本不進輸入法**。加了 `\{ime}` 這個開關，開着的時候走 `ime.input()`／`space()`／
-   `enter()`／`backspace()`／選重數字。互動循環那一支比這個全得多，可是拍一張圖用不着。
-2. **輸入法沒被打開**。`:yume on` 走的是請求／回應那條路，要互動循環來服務——工具自己早就
+1. **鍵根本不進輸入法**。加了 `\{ime}` 這個開關，開着的時候走 `ime.input()`/`space()`/
+   `enter()`/`backspace()`/選重數字。互動循環那一支比這個全得多，可是拍一張圖用不着。
+2. **輸入法沒被打開**。`:yume on` 走的是請求/回應那條路，要互動循環來服務——工具自己早就
    印過一句話說這件事。Warning: 撥開關的時候直接動會話上那兩格（`set_engaged`、`toggle_language`）。
 3. **碼表沒載進來**。`--shot` 下數據本來推遲到第一幀之後（`yumete_tui::Deferred`），而
    `--keys` 跑在那之前；而且推遲的那一支建的是 `language_only`，只有配置說「這一趟是寫漢字
@@ -17596,7 +17596,7 @@ Warning: 共用記事本上記過同一個形狀的坑：「離屏 `--figure` �
 原話：「我觉得是不是 multiselection 的时候应当禁止 pre-edit 而是用候选面板。这样的话防止
 一堆非确定的修改。」
 
-§5.13.8 一本來留的是兩個選項（只畫在主選區／N 處都畫），§5.13.12b 說「先拍圖再定」。**這個
+§5.13.8 一本來留的是兩個選項（只畫在主選區/N 處都畫），§5.13.12b 說「先拍圖再定」。**這個
 答案比兩個選項都好，而且不用拍圖**：
 
 1. **半成品乘以 N。** 一屏幾十個光標同時長出一串還沒定下來的碼，讀者分不出哪些是稿子哪些
@@ -17762,7 +17762,7 @@ Warning: **一個都沒記過的時候要畫得出一行來**（「（無位置�
 Warning: **`"` 和 `'` 共用 a–z 這一套名字，卻是兩本帳**：`"a` 裝一段話，`' a` 記一個地方。手冊要
 說這一句。
 
-## 5.32 `di`／`da` 不開輸入法了（2026-09-29 撤回前一天加的）
+## 5.32 `di`/`da` 不開輸入法了（2026-09-29 撤回前一天加的）
 
 前一天加的理由是「`di（` 要的是一個全角括號，而 Normal 模式下打不出來」。**那個理由對，
 結論錯**：`di` 等的那一鍵**多半根本不是要寫進去的字**——`diw` 的 `w` 是「詞」，`dip` 的
@@ -17845,7 +17845,7 @@ enter 刷新才能再按 enter 跳轉了。」
 
 `looked_at` 從前是 `(當前緩衝的號, 所有緩衝改動次數之和)`。那個和看得出「有人動過」，Warning: **看
 不出動的是誰**，而「只有正在寫的這一份動過」正是只重搜一份的前提。現在是
-[`search_panel::Mark`] 三個數：`buffer`／`revision`／`every`。兩個數一減就答得上來——`every`
+[`search_panel::Mark`] 三個數：`buffer`/`revision`/`every`。兩個數一減就答得上來——`every`
 的增量等於 `revision` 的增量，就是只有它動過。
 
 ### 走捷徑的三個條件
@@ -17921,10 +17921,10 @@ Warning: **起因是 2026-09-27 的 `a0c291b`：沒有人讓我改，我一口�
 | `search.pinyin` | 拼音也找得到 | 拼音匹配 |
 | `search.whole` | 整詞（西文） | 整詞匹配（西文） |
 | `search.case` | 分大小寫 | 大小寫匹配 |
-| `search.case.*` | 自動／要分／不分 | 智能／敏感／不分 |
+| `search.case.*` | 自動/要分/不分 | 智能/敏感/不分 |
 | `search.enter-to-look` | 按 Enter 開始找 | Enter 搜索 |
 | `search.bad-pattern` | 這串字當正則讀不通 | 正則無效 |
-| `hint.search.use-it` | 找／跳過去 | 搜索／跳轉 |
+| `hint.search.use-it` | 找/跳過去 | 搜索/跳轉 |
 | `hint.search.new-word` | 改搜的詞 | 修改搜索詞 |
 | `hint.search.go-look` | 開始找 | 搜索 |
 | `hint.search.next-cell` | 換一格 | 上下移動 |
@@ -17933,11 +17933,11 @@ Warning: **起因是 2026-09-27 的 `a0c291b`：沒有人讓我改，我一口�
 | `hint.search.replace-here` | 換這一處 | 替換此處 |
 | `hint.search.replace-file` | 換整個檔 | 替換整個文件 |
 | `search.replaced` | 換掉 {0} 處。還沒存檔… | 共替換 {0} 處（使用 :wa 保存全部） |
-| `hint.replace-all.yes/no` | 全部換掉／不換 | 確認／取消 |
+| `hint.replace-all.yes/no` | 全部換掉/不換 | 確認/取消 |
 
 ### 三處連帶的行為改動
 
-**① `r`／`R` 只在光標停在結果那一邊的時候纔畫，按了也不說話。** 原話：「光标不在结果上，
+**① `r`/`R` 只在光標停在結果那一邊的時候纔畫，按了也不說話。** 原話：「光标不在结果上，
 不应该显示『r ....』的提示。因此如果用户按了 r，也不需要任何提示」。Warning: 2026-09-25 那一輪
 是反過來的（站錯地方要出一句「先 j 走到一條命中上」），**那條理由的前提是提示行上寫着
 `r`**；不寫了，它就是一個沒綁的鍵。於是 `search.stand-on-a-hit` 與 `search.replaced-none`
@@ -17952,8 +17952,8 @@ Warning: **起因是 2026-09-27 的 `a0c291b`：沒有人讓我改，我一口�
 
 ### `d c a` 那一格拆成四對
 
-寫下的形狀：`dD 删除 cC 修改 aA 追加 iI 插入`。Warning: **我從前那句「清空／重打／接着打」是
-**錯的**：`d` 刪的是光標底下那一個字，不清空（`c` 同，`D`／`C` 纔刪到末尾）。問過「這是
+寫下的形狀：`dD 删除 cC 修改 aA 追加 iI 插入`。Warning: **我從前那句「清空/重打/接着打」是
+**錯的**：`d` 刪的是光標底下那一個字，不清空（`c` 同，`D`/`C` 纔刪到末尾）。問過「這是
 bug 還是 feature」——是 feature，照 vi。
 
 Warning: **底下那一行裝不下**（100 欄時砍在 `cC 修改` 之後）。2026-09-29 定：「就这样，砍就砍」。
@@ -18020,7 +18020,7 @@ Warning: **`git checkout <一個檔>` 又咬了一次。** 驗閘的時候拿它
 那個數是給「稿子裏貼的一段代碼」定的（註釋原話：「a pasted data file is not something
 anyone reads by its colours」）。Warning: **可一個兩萬行的源碼檔正是靠顏色讀的**，判準用錯了地方。
 
-### 量出來的三個數（release，955 KB／20,121 行的 `lib.rs`）
+### 量出來的三個數（release，955 KB/20,121 行的 `lib.rs`）
 
 | | 耗時 |
 | --- | --- |
@@ -18045,10 +18045,10 @@ operations (helix uses 『window』)。」逐條對完 helix 的 `C-w`（`keymap
 | --- | --- | --- |
 | `w` | 走下一個區域 | `rotate_view` ✓ |
 | `h l j k` | 按方向走過去，沒開的開出來 | `jump_view_*` ✓（yumete 多一條「沒開就開」） |
-| `e` `i` | **開關**左／右邊欄，鍵不過去 | 沒有——helix 沒有邊欄 |
-| `E` `I` | 開左／右邊欄**並且走進去**，只開不關 | 同上 |
+| `e` `i` | **開關**左/右邊欄，鍵不過去 | 沒有——helix 沒有邊欄 |
+| `E` `I` | 開左/右邊欄**並且走進去**，只開不關 | 同上 |
 | `s` | 切成上下兩個編輯區 | `hsplit` ✓ |
-| `q` `o` | 關掉這一區／只留這一區 | `wclose`／`wonly` ✓ |
+| `q` `o` | 關掉這一區/只留這一區 | `wclose`/`wonly` ✓ |
 
 Warning: **一度想把 `w l` 定成「開關左邊欄」**，當場否了：helix 的 `l` 是「往**右**走」，
 那樣一個字母同時錯兩次——方向反了，動詞也換了。`hjkl` 是全編輯器唯一一套方向詞，這一組
@@ -18069,9 +18069,9 @@ Warning: **`C-w` 在邊欄裏也是前綴**。從前它在 `panel_key_in_common`
 
 | | 從前 | 現在 | 為什麽 |
 | --- | --- | --- | --- |
-| 診斷 | `i`／`I` | **`d`／`D`** | helix 的 `space d` 就是 diagnostics picker |
-| 字典 | `d`／`D` | **`n`／`N`** | `d` 讓出去了；`n` 兩家都空着（helix 只有 `space w n`） |
-| 數據 | `t i` | `t i`／`t I`，另加 `i`／`I` | 本家在表格那一組（它是表格的事），`i`／`I` 是順手 |
+| 診斷 | `i`/`I` | **`d`/`D`** | helix 的 `space d` 就是 diagnostics picker |
+| 字典 | `d`/`D` | **`n`/`N`** | `d` 讓出去了；`n` 兩家都空着（helix 只有 `space w n`） |
+| 數據 | `t i` | `t i`/`t I`，另加 `i`/`I` | 本家在表格那一組（它是表格的事），`i`/`I` 是順手 |
 
 Warning: **小寫浮、大寫進邊欄**——五種一條規矩，一個例外都沒有。
 
@@ -18091,11 +18091,11 @@ Warning: **小寫浮、大寫進邊欄**——五種一條規矩，一個例外�
 
 | | 從前 | 現在 |
 | --- | --- | --- |
-| `running` 的鍵 | 語言名 | **命令名**（`ruff`／`pylsp`），另有 `serving: 語言 → [命令名]` |
+| `running` 的鍵 | 語言名 | **命令名**（`ruff`/`pylsp`），另有 `serving: 語言 → [命令名]` |
 | 起幾個 | 第一個找得到的 | **配了幾個起幾個**，按配置次序 |
-| `didOpen`／`didChange`／`didSave`／`didClose` | 發給那一個 | **發給每一個**——少發一個，那一個就按舊正文去數行列 |
+| `didOpen`/`didChange`/`didSave`/`didClose` | 發給那一個 | **發給每一個**——少發一個，那一個就按舊正文去數行列 |
 | 診斷 | 按檔存一份 | 按**（檔，哪一個服務器）**存，畫的時候併起來 |
-| 問話（hover／`gd`／補全） | 那一個 | **暫時仍只問第一個**——見下 |
+| 問話（hover/`gd`/補全） | 那一個 | **暫時仍只問第一個**——見下 |
 
 **`:diagnostics-all` 頂上那一行與 `found` 也跟着按命令名記**，所以兩個服務器各自報得出自
 己在哪。
@@ -18114,7 +18114,7 @@ Warning: **不能只問「宣稱有這個能力」的那一個**——2026-09-29
 
 **一個服務器崩了，只抹掉它自己說的那一份。** 從前一崩把那個檔上所有診斷都抹了；旁邊那一
 個還好好聽着，它說的話沒有理由陪葬。一種語言的最後一個走了，纔算整個沒了（那時纔
-`note_the_server(None)`、纔清 `sent`／`saved`／`whose`／`waiting_on`）。
+`note_the_server(None)`、纔清 `sent`/`saved`/`whose`/`waiting_on`）。
 
 ### 差一點在測試裏起了一個真的 rust-analyzer
 
@@ -18138,7 +18138,7 @@ Warning: **另有一條專門防回歸**（`one_server_behaves_exactly_as_before
 2026-09-29 報的那一條的正解：`crates/yumete-tui/src/lib.rs`（20,368 行）打開之後一點
 顏色都沒有，因為 `fences.rs` 有一道 `LONGEST = 5_000` 的閘。
 
-### 先把三個數重量一遍（release，970 KB／20,368 行）
+### 先把三個數重量一遍（release，970 KB/20,368 行）
 
 | | 耗時 |
 | --- | --- |
@@ -18189,7 +18189,7 @@ Warning: **查詢只交回與這一窗相交的捕獲**，所以那一趟只走 
 ### 量它自己的兩支
 
 `cargo test -p yumete-core --release -- --ignored --nocapture`，兩支都要
-`YUMETE_BENCH=<一個大源碼檔>`：`the_three_numbers_behind_423`（解析／查詢／窗口／增量）與
+`YUMETE_BENCH=<一個大源碼檔>`：`the_three_numbers_behind_423`（解析/查詢/窗口/增量）與
 `a_keystroke_in_a_big_code_file`（從編輯器這一頭走一遍）。Warning: **debug 的數不能用來做
 決定**，tree-sitter 在 debug 下慢一個數量級。
 
@@ -18235,7 +18235,7 @@ Warning: **和 helix 的判準不同，而這一頭的更貼切。** helix 問�
 | `due_in(Option<Instant>)` | 下一格什麽時候到，給主循環當鬧鐘 |
 
 Warning: **難的不是動畫，是鐘。** 這個編輯器有事纔重畫，不按秒重畫——所以 `due_in` 要進
-主循環那張鬧鐘表（同 `docs_due_in`／`vcs_due_in`）。不進的話它畫一格就睡着了，那八個點成
+主循環那張鬧鐘表（同 `docs_due_in`/`vcs_due_in`）。不進的話它畫一格就睡着了，那八個點成
 了一個不動的點。
 
 Warning: **狀態行左邊那一格就是它的位子**，而那一格正是同一天要的那個空格（「NOR 前
@@ -18262,7 +18262,7 @@ Warning: **狀態行左邊那一格就是它的位子**，而那一格正是同�
 | `:word-list global` | `:word-list-global`（`segmentation.txt`） |
 | `:word-list reload` | `:word-list-reload` |
 
-**連字號是這一家本來的形狀**：`:word-discover` ／ `-cd` ／ `-gd` 就是這麽排的，而光禿禿
+**連字號是這一家本來的形狀**：`:word-discover` / `-cd` / `-gd` 就是這麽排的，而光禿禿
 的那一條是最常用的那一個意思（`:word-discover` ＝這一篇，`:word-list` ＝哪一份）。
 Warning: **多三條命令不多佔 `:` 選單一行**——那張表按連字號前綴併行（`:word (wd) +7`），
 這是 #369 之後定下的規矩，量過纔敢加。舊拼法由 `MeansTheHyphenatedOne` 接住，報的是新名字。
@@ -18287,12 +18287,12 @@ cannot find words.txt... but when I type word-list reload, it shows 『詞表重
 正是「這本書沒有」的說法。所以 `word.project-words-loaded` 與 `word.no-project-words-file`
 兩則**整個刪掉**，加載器一聲不吭，報結果的只剩前端那一句 `word.lists-reread`。
 
-## 5.39 `空格 k`／`空格 K` 重新建模（2026-09-29）
+## 5.39 `空格 k`/`空格 K` 重新建模（2026-09-29）
 
 逐條提的六件，加上重畫的鍵位。
 
 > Warning: **這一節連同 §5.40–5.44 是記錄，不是現狀。** 2026-09-30 的 #426 把五類信息併成了
-> 一個槽（§5.44 末尾「做掉了」那一段）：`:docs`／`:diagnostics` 不在了，換成 `:info <名>`；
+> 一個槽（§5.44 末尾「做掉了」那一段）：`:docs`/`:diagnostics` 不在了，換成 `:info <名>`；
 > `Transient` 與那五個字段全刪。Warning: **下面這幾節寫的是當時的樣子和當時的理由**——它們
 > 值得留着，因為 #426 正是從這幾節踩出來的四個坑裏長出來的。要查現在怎麽用，看
 > `docs/manual.md`。
@@ -18304,7 +18304,7 @@ cannot find words.txt... but when I type word-list reload, it shows 『詞表重
 | `空格 k` | 問一次「這一處是什麽」。文檔那一扇開着就畫進去，沒開就浮 |
 | `空格 4` | 去右邊那一區（本來就有，不必為文檔另造一個鍵） |
 | `空格 K` | 查一次，**一定**畫進邊欄（沒開就開出來） |
-| `:docs on`／`off` | 文檔跟不跟着光標走。出廠**關** |
+| `:docs on`/`off` | 文檔跟不跟着光標走。出廠**關** |
 
 ### 「文檔」是一扇面板，不再是借住的
 
@@ -18336,7 +18336,7 @@ Warning: **不給循環一個鬧鐘，那一問永遠不會自己發出去**（`
 
 ### 浮窗收四個鍵
 
-`PageUp`／`PageDown`／`C-u`／`C-d` 翻它（同 helix 的 `ui/popup.rs:293-306`）。Warning: **只有這
+`PageUp`/`PageDown`/`C-u`/`C-d` 翻它（同 helix 的 `ui/popup.rs:293-306`）。Warning: **只有這
 四個**：「浮窗一個鍵都不收」本來是這裏的通則，而那條通則的理由是「浮窗走不進去」——走不進去
 的東西讀不完長的。收這四個正是為了讀得完；別的鍵照舊一個都不收，挪光標的那些照舊把它關掉。
 
@@ -18354,7 +18354,7 @@ Warning: **不給循環一個鬧鐘，那一問永遠不會自己發出去**（`
 **② 兩個鍵只管「畫在哪」。** `空格 k` ＝ 有邊欄就畫進去，沒有就浮；`空格 K` ＝ **一定**畫進
 邊欄（沒開就開出來）。開出來就不關，空着也開着。
 
-**③ 「什麽時候問」是一個命令，不是一個鍵**：`:docs on`／`:docs off`（定下的名字）。原話：
+**③ 「什麽時候問」是一個命令，不是一個鍵**：`:docs on`/`:docs off`（定下的名字）。原話：
 「即时显示应该做成一个命令开关而不使用快捷键……这样的话即时显示和在哪里显示就分开了，不会
 混在一起。」
 
@@ -18371,10 +18371,10 @@ Warning: **不給循環一個鬧鐘，那一問永遠不會自己發出去**（`
 | 面板名 | 文檔 |
 | `空格 k` | 顯示當前光標所在項目之文檔 |
 | `空格 K` | 及時顯示光標所在項目之文檔 |
-| 開關 | 開啓及時文檔顯示／關閉及時文檔顯示 |
+| 開關 | 開啓及時文檔顯示/關閉及時文檔顯示 |
 
 Warning: **`lsp.what-is-this`（「這是什麽」）刪了**：浮着和進邊欄是同一件東西的兩個去處，不該有
-兩個名字。`:sidebar-left docs`／`:sidebar-right docs` 也通了（那兩張 `Word` 表是命令選單的
+兩個名字。`:sidebar-left docs`/`:sidebar-right docs` 也通了（那兩張 `Word` 表是命令選單的
 名字來源，漏了就是「命令執行得了但選單裏沒有」）。
 
 ## 5.40 三件小的，加一次全樹清掃（2026-09-29）
@@ -18383,7 +18383,7 @@ Warning: **`lsp.what-is-this`（「這是什麽」）刪了**：浮着和進邊�
 
 定的（`lsp.asking-what`）。
 
-### 散文裏 `空格 k`／`空格 K` 問的是百科
+### 散文裏 `空格 k`/`空格 K` 問的是百科
 
 原話：「文本文件会说 space k / K 这不是程序文件所以不能显示文档。这是不好的，它以就可以显示
 百科。比如 space K 强制在邊欄显示。」
@@ -18402,7 +18402,7 @@ Warning: **這兩個鍵說的是「把光標底下這個東西講給我聽」**�
 支，提示行也只寫得出臨時那一支的兩個鍵。整個變體拆掉了。
 
 **② 臨時那一支接不住就把鍵扔了。** `on_transient_key` 的兜底叫 `panel_key_in_common`，那一支
-只認 `C-w`／`q`／`:`／空格，回 `false` 沒人理。Warning: **隔壁註釋還寫着「字典、懸停、表格
+只認 `C-w`/`q`/`:`/空格，回 `false` 沒人理。Warning: **隔壁註釋還寫着「字典、懸停、表格
 詳情按 `w` 一樣管用」——那句話一直是假的。** 現在接不住就往 `on_sidebar_key_after_the_list`
 交，`w`、`Tab`、`R`、`Esc` 於是對字典和詳情也管用了。提示行也補上了 `w`。
 
@@ -18411,7 +18411,7 @@ Warning: **這兩個鍵說的是「把光標底下這個東西講給我聽」**�
 「侧边栏的文檔面板没有 soft wrap，导致很多信息没有显示。」折在畫的那一頭（`draw_dictionary`）：
 折多寬看這一欄此刻多寬，而寬度是使用者拖得動的。折完之後 `jk` 走的是看得見的行。
 
-### `C-w／空格 w` 寫成 `␣w`
+### `C-w/空格 w` 寫成 `␣w`
 
 原話：「不用显示 C-w……`_` 其实是空格符号，就是短横+两端两个向上的竖线的符号。这样的话节约
 空间而且用户也能理解。」`␣` 是 U+2423 OPEN BOX。
@@ -18469,13 +18469,13 @@ Warning: **`--shot` 驗不到這一族**：離屏那條路根本不碰 `Servers`
 ### 打開的那一刻就說，而且把候選列全（2026-09-29 當天補的兩條）
 
 **一、`空格 k` 太晚了。** 原話：「为什么不是在打开文件的时候就检查 LSP 并且显示消息。」
-`follow` 那一支碰到「沒配／沒裝」從前是默默 `return`，於是打開 `.py` 什麽都不知道，一直到按
+`follow` 那一支碰到「沒配/沒裝」從前是默默 `return`，於是打開 `.py` 什麽都不知道，一直到按
 `空格 k` 纔撞上。現在打開就說。
 
 Warning: **每個語言只說一次**（定下的）。這是一件關於這臺機器的事實，不是一個事件——一個項目
 裏切五個 `.py` 就罵五遍，會把狀態欄上別的話全蓋掉。同 `lsp.cannot-start` 那一條的理由。
 
-**二、找不到的時候要把候選全列出來。** python 出廠配了四個（`ty`／`ruff`／`pylsp`／
+**二、找不到的時候要把候選全列出來。** python 出廠配了四個（`ty`/`ruff`/`pylsp`/
 `jedi-language-server`，抄的 helix `languages.toml`），而那句話從前只說第一個——讀者於是只
 會去裝 `ty`，其實裝哪一個都行。原話：「ty 是什么意思？」
 
@@ -18616,7 +18616,7 @@ Warning: **這一族的測試第一版是假綠的。** `docs_owed` 頭上那道
 出來，鍵不交過去。Warning: **診斷不必問**——它是服務器自己推過來的，早就在內存裏，所以那一支
 不發任何請求，也沒有那道三百毫秒的閘。
 
-新面板叫「診斷」（`View::Problems`／`Panel::Problems`），和文檔並排在右邊，`Tab` 換得過去。
+新面板叫「診斷」（`View::Problems`/`Panel::Problems`），和文檔並排在右邊，`Tab` 換得過去。
 
 ### 兩個即時開關互斥
 
@@ -18642,8 +18642,8 @@ Warning: 工作區那兩個先站過去再走 `空格 q` 那條路——收尾�
 
 ### 順帶改的兩處文案（2026-09-29 寫的）
 
-`空格 k`／`K` 從前寫的是「顯示當前光標所在項目之文檔」／「及時顯示…」——後者早就不是即時
-那一檔了（那是 `:docs`）。現在是「顯示當前項目之文檔（浮窗／邊欄）」。`空格 w` 那一長串
+`空格 k`/`K` 從前寫的是「顯示當前光標所在項目之文檔」/「及時顯示…」——後者早就不是即時
+那一檔了（那是 `:docs`）。現在是「顯示當前項目之文檔（浮窗/邊欄）」。`空格 w` 那一長串
 （「去下一個區域：工作區一 → 二 → 左欄 → 右欄，同 C-w」）縮成「前往下一個區域」。
 
 ### 當天報的兩條，加一次改名（2026-09-29）
@@ -18660,7 +18660,7 @@ Warning: 工作區那兩個先站過去再走 `空格 q` 那條路——收尾�
 **三、`:check-code` 改名 `:diagnostics-all`，不留別名**（定下的）。它和 `:diagnostics`
 （即時開關）是一件事的兩半，跟那一家比跟 `check-*` 那一排更近。
 
-### 「工作區」改叫「主／副編輯區」
+### 「工作區」改叫「主/副編輯區」
 
 定的新詞：「我用了新的名词『主编辑区』『副编辑区』，我觉得这个比『正文』『第二工作区』
 好。」Warning: **十二處一起改**——那八行之外還有四處在說「工作區」（`空格 w`、`空格 Q`、`g/ g?`
@@ -18668,8 +18668,8 @@ Warning: 工作區那兩個先站過去再走 `空格 q` 那條路——收尾�
 
 | 鍵 | 現在 |
 | --- | --- |
-| `空格 1`–`4` | 前往主編輯區／副編輯區／左邊欄／右邊欄 |
-| `空格 !@#$` | 關閉主編輯區／副編輯區／左邊欄／右邊欄 |
+| `空格 1`–`4` | 前往主編輯區/副編輯區/左邊欄/右邊欄 |
+| `空格 !@#$` | 關閉主編輯區/副編輯區/左邊欄/右邊欄 |
 | `空格 q` | 關閉當前區域 |
 | `空格 Q` | 只留這一個編輯區，別的全收 |
 
@@ -18702,7 +18702,7 @@ Warning: **我把它寫成了「我那一扇開着嗎」，而該問的是「有
 
 **東西**由 `what_this_spot_should_show` 答，一支函數一句話：
 
-1. 按過 `空格 k`／`空格 i` → 就是那一種（`spot_chosen`）
+1. 按過 `空格 k`/`空格 i` → 就是那一種（`spot_chosen`）
 2. 沒按過 → 哪個即時開關開着就是哪一種
 3. 兩個都關 → 沒有內容（那一格必須有一扇的時候退回診斷，定的）
 
@@ -18714,7 +18714,7 @@ Warning: **我把它寫成了「我那一扇開着嗎」，而該問的是「有
 | 哪裏 | 從前怎麽錯的 |
 | --- | --- |
 | `problem_afloat` | 只問 `showing(Problems)`——那一格擺着文檔時它以為沒地方，浮了 |
-| `views_on`／`Tab` 環 | 兩扇都列，於是屏幕上寫着「Tab 文檔 > 診斷」 |
+| `views_on`/`Tab` 環 | 兩扇都列，於是屏幕上寫着「Tab 文檔 > 診斷」 |
 | `空格 4`（`go_to_region`） | **自己又找了一遍** `View::ALL` 裏第一個歸右邊的＝文檔，繞過了 `side_view` |
 
 第三處是這一族的典型：**同一個問題有兩份答案，而只有一份跟着新規矩走。** 現在
@@ -18752,7 +18752,7 @@ LSP leaked between buffers.」
 | --- | --- |
 | 事件總數 | 221 |
 | `$/progress` | **15 開 15 關**，一定收口 |
-| 標題 | Fetching／Building CrateGraph／Roots Scanned／Loading proc-macros／Building compile-time-deps／Indexing／cargo check |
+| 標題 | Fetching/Building CrateGraph/Roots Scanned/Loading proc-macros/Building compile-time-deps/Indexing/cargo check |
 | 乾淨檔的診斷 | 2.2 秒，`n=0` |
 | 全部收場 | 2.4 秒 |
 
@@ -18766,7 +18766,7 @@ Warning: **我在這一輪報過一個錯的測量**（「rust-analyzer 對乾�
 
 ### #431 只好了一半
 
-`gd`／`空格 k` 現在在服務器忙的時候**留着問話不發**，照實說一句「語言服務器啟動中，請稍
+`gd`/`空格 k` 現在在服務器忙的時候**留着問話不發**，照實說一句「語言服務器啟動中，請稍
 候」。但 `$/progress` **不是一個長窗口，是十五個短窗口**，中間有空檔——實測 287 個取樣
 點裏只有 19 個「在忙」，`gd` 在 ~300 毫秒正好掉進一個空檔，請求發出去、服務器回 `null`。
 **要定的是「什麼算它可以答話了」**：安靜一小會兒、等這個檔的第一份診斷、或者空答案不算
@@ -18774,15 +18774,15 @@ Warning: **我在這一輪報過一個錯的測量**（「rust-analyzer 對乾�
 
 ### 翻頁那一族
 
-`C-n`／`C-p` 給了**三分之二頁**（定下的：「前一页留 1/3 不会断，2/3 的新页增加阅读效
+`C-n`/`C-p` 給了**三分之二頁**（定下的：「前一页留 1/3 不会断，2/3 的新页增加阅读效
 率」）。Warning: 二三頁不是哪一家的慣例——兩種慣例是「整頁留一兩行」（vim 的 `C-f`、Emacs
 的 `next-screen-context-lines`）與「半頁」（vim 的 `C-d`）；這個推理和 vim 留那兩行是
 同一個，只是留得大方。三種都留着。
 
-起因是 Mac 鍵盤只有一個 Ctrl，而 `u`／`d` 都在左手這一邊。
+起因是 Mac 鍵盤只有一個 Ctrl，而 `u`/`d` 都在左手這一邊。
 
-Warning: **連帶修了一條不一致**：那一族本來只有四個鍵（`PageUp`／`PageDown`／`C-u`／
-`C-d`）歸浮窗，`C-f`／`C-b` 與新加的兩個沒攔住，於是同一族鍵開着浮窗按下去有的翻窗有的
+Warning: **連帶修了一條不一致**：那一族本來只有四個鍵（`PageUp`/`PageDown`/`C-u`/
+`C-d`）歸浮窗，`C-f`/`C-b` 與新加的兩個沒攔住，於是同一族鍵開着浮窗按下去有的翻窗有的
 翻正文。現在整族都歸它。
 
 ### `Esc` 把浮窗按下去
@@ -18793,7 +18793,7 @@ Warning: **連帶修了一條不一致**：那一族本來只有四個鍵（`Pag
 Warning: **判準是「離開過」不是「此刻不在」**：光比後者的話，走開再走回同一個字，那一扇
 再也浮不出來——而回到一個詞上正是要再看一眼的時候。
 
-### 選擇器報 `PIC.NOR`／`PIC.INS`
+### 選擇器報 `PIC.NOR`/`PIC.INS`
 
 2026-09-27 定的是「選擇器不報模式詞」（理由：它是一扇蓋住正文的窗，再寫一個詞是同一句話
 說兩遍）。那一句說的是「哪一種模式」，而這兩個詞答的是**鍵在哪一層**——選擇器真有兩層
@@ -18856,7 +18856,7 @@ Warning: 一條遺留：腳註與批注也走記錄那一格（`detail()` 先問
 浮窗一處 `marked: true`。順手把寫了三遍的那段「逐格算樣式再併成一段」併成
 `put_marked_text`（`panel.rs`、文檔邊欄、百科邊欄；2026-09-28 它曾經要在兩處分別修一次）。
 
-Warning: **上墨之後纔看見另一個**：`panel.rs` 的 `gold`／`quiet` 數的是**行的序號**，而翻頁那
+Warning: **上墨之後纔看見另一個**：`panel.rs` 的 `gold`/`quiet` 數的是**行的序號**，而翻頁那
 一步先把前面幾行切掉了——翻過一頁之後第一行正文被當成「章節」行畫成灰的，而且不上標記。
 
 Warning: **診斷不是 Markdown。** 邊欄那一支從前用同一個 `docs` 布爾量管「折不折行」和「上不
@@ -18930,7 +18930,7 @@ helix 的規矩兩條（`movement.rs:470`）：換行是一個**目標**（所�
 
 這四條我沒有動。它們不是丟字，是**按下去的手感**，而 `b`、`f`、`t` 是天天按的鍵。
 
-**① `b`／`B` 在詞首多拿一個字。** 神諭量出來的規矩：光標停在一個詞的**第一個字**上
+**① `b`/`B` 在詞首多拿一個字。** 神諭量出來的規矩：光標停在一個詞的**第一個字**上
 （或者行末、換行上）按 `b`，helix **丟掉**你站着的那一格；停在詞中間則帶上。
 
 | 從第幾格 | helix 選中 | yumete 選中 |
@@ -18942,13 +18942,13 @@ helix 的規矩兩條（`movement.rs:470`）：換行是一個**目標**（所�
 而 `b` 正常就是停在詞首按的（「把前面那個詞拿過來」），所以分歧落在最常見的那一下。
 `motion.rs:605` 解釋了反向選區是什麼，沒解釋這一格。
 
-**② `t`／`T` 按第二下沒有用，而且會把第一下選中的扔掉。** helix 的 exclusive 搜索
+**② `t`/`T` 按第二下沒有用，而且會把第一下選中的扔掉。** helix 的 exclusive 搜索
 從 `cursor + 1` 起算，註釋寫着 *"Exclusive search skips the next char after cursor
 to enable repeated application"*（`commands.rs:1742`）。yumete 的 `find_char` 對
 `f` 和 `t` 都從 `col + 1` 起算，於是 `t` 配到的就是光標後面那一個，`prev_grapheme`
 又把頭拉回光標上。`tdtdd` 只刪掉一個空格——第二下把第一下選中的那一段**收成了一點**。
 
-**③ 給 `f`／`t` 一個數目是「重複」，不是「第 n 個」。** `a,b,c,d,e`：`2f,` helix 選
+**③ 給 `f`/`t` 一個數目是「重複」，不是「第 n 個」。** `a,b,c,d,e`：`2f,` helix 選
 `a,b,`（從原處到第二個逗號），yumete 選 `,b,`（從第一個逗號到第二個）。數目超過總數
 的時候 helix **原地不動**，yumete 走到最後一個。helix 一次搜 `find_nth_char` 再
 `put_cursor`，yumete 是 `repeat(count, find_char)`，每一趟都重新下錨。
@@ -18958,14 +18958,14 @@ to enable repeated application"*（`commands.rs:1742`）。yumete 的 `find_char
 
 ### 5.58.3 量過、對得上、不用再查的
 
-- **目標列**（`j`／`k` 走長短不一的行）和 helix 的 `move_vertically` **逐字符相同**；
+- **目標列**（`j`/`k` 走長短不一的行）和 helix 的 `move_vertically` **逐字符相同**；
   `jk` 回到原列，`jlk` 正確地忘掉它。
 - **一格選區蓋住光標那個字**（#83）成立；`v`＋動作、`;`、`A-;`、`%`、`X` 全部對得上
-  helix 的 `collapse_selection`／`flip_selections`／`select_all`／`extend_to_line_bounds`。
-- **`e`／`E` 在 ASCII 上和 helix 的分類粒度完全一致**（兩個檔的每一格）。
-- **七條有意的偏離都寫下來了**，而且行為和註釋說的一致：`f`／`t` 只搜一行、`e`／`b`
-  是 `Grain::Coarse`、`w` 查中文詞典、沒有「詞典粒度的往回一個詞」、`;`／`,` 是
-  helix 的鍵位（vim 那套 `;` 重複是 preset 開關）、`3d` 刪三個字素、`t`／`T` 的來歷。
+  helix 的 `collapse_selection`/`flip_selections`/`select_all`/`extend_to_line_bounds`。
+- **`e`/`E` 在 ASCII 上和 helix 的分類粒度完全一致**（兩個檔的每一格）。
+- **七條有意的偏離都寫下來了**，而且行為和註釋說的一致：`f`/`t` 只搜一行、`e`/`b`
+  是 `Grain::Coarse`、`w` 查中文詞典、沒有「詞典粒度的往回一個詞」、`;`/`,` 是
+  helix 的鍵位（vim 那套 `;` 重複是 preset 開關）、`3d` 刪三個字素、`t`/`T` 的來歷。
 
 一條不算偏離但值得記：**`Ngg` 跳到那一行的第一個非空白**（helix 跳第 0 欄），vim 味
 而不是 helix 味，沒人會抱怨——只是 §5.58.1 之前它是「整行空白把光標送上換行符」那個
@@ -19005,7 +19005,7 @@ bug 的入口（已修）。
 新偵測，是為了**往後不再看別人家的文件**：哪天 `.vimrc` 被刪了，鍵位不該跟着無聲無息地
 變回去。沒偵測到就**一個字都不動他的硬盤**。
 
-四種情形都驗過（拿臨時的 `HOME`／`XDG_*` 假裝一台乾淨機器）：
+四種情形都驗過（拿臨時的 `HOME`/`XDG_*` 假裝一台乾淨機器）：
 
 ```text
 第一次 ＋ 有 nvim   →  換 vim 鍵位、建配置、屏上說那句話；再開檔按 J 真的合併行
@@ -19045,19 +19045,19 @@ join」），跟着改了，並把翻案的理由寫進斷言旁邊。
 **第 4 條，`#` 往回找這個詞。** `search_the_page` 多一個 `back` 參數：往回取的是光標**之
 前**最後一處（`rposition`），前面沒有就繞到最末一處。⚠️ **`#` 不走鍵位表**——那張表是
 「鍵 → 一串鍵」，而往回找在 helix 那一套上沒有鍵可映，所以直接寫在鍵上並判
-`key_preset == Vim`，同 `d`／`c`／`y` 那幾個操作符。實測 `* # #` → 2/3 → 1/3 → 3/3。
+`key_preset == Vim`，同 `d`/`c`/`y` 那幾個操作符。實測 `* # #` → 2/3 → 1/3 → 3/3。
 
 **第 8 條，`:!` 的 `C-c` 只打中命令。** 新的 `run_in_the_terminal`：父進程跑子進程時忽略
-`SIGINT`／`SIGQUIT`，**子進程 `pre_exec` 裏恢復成默認**。⚠️ **第二手少不了**：忽略會跨
+`SIGINT`/`SIGQUIT`，**子進程 `pre_exec` 裏恢復成默認**。⚠️ **第二手少不了**：忽略會跨
 `exec` 繼承，只做第一手的話連命令自己也不理 `C-c`，那更糟。沒動 `SIGTSTP`（`C-z`）——那
 要整套作業控制（`setpgid` ＋ `tcsetpgrp` ＋ 躲 `SIGTTOU`）。
 
-### 順帶查到的：`C-j`／`C-k` 誰在用（2026-10-05 問的）
+### 順帶查到的：`C-j`/`C-k` 誰在用（2026-10-05 問的）
 
 | | `C-j` | `C-k` |
 | --- | --- | --- |
-| 這裏（Normal／Insert） | 空着 | 空着 |
-| 這裏（`:`／`/` 提示行） | 空着 | **刪到行尾**（`C-u` 的對子，2026-09-28） |
+| 這裏（Normal/Insert） | 空着 | 空着 |
+| 這裏（`:`/`/` 提示行） | 空着 | **刪到行尾**（`C-u` 的對子，2026-09-28） |
 | helix（Normal） | `jump_view_down` | `jump_view_up` |
 | helix（Insert） | 換行 | `kill_to_line_end` |
 | vim（Insert） | 換行 | digraph（`C-k a:` → `ä`） |
@@ -19069,7 +19069,7 @@ join」），跟着改了，並把翻案的理由寫進斷言旁邊。
 
 ### 開場屏
 
-參考 vim 寫了一版，照做。版本行**截到 `dev`／`beta`／`alpha`／`rc` 為止**
+參考 vim 寫了一版，照做。版本行**截到 `dev`/`beta`/`alpha`/`rc` 為止**
 （`0.4.0-dev.20261006000901+7b9942c` → `0.4.0-dev`）——留那一個詞是因為它說得出這是不是正式
 版，後面的時間戳與提交號歸 `:version`。標語「情系汉字 沟通古今」定了**不放**。
 「放不下就整屏不畫」那條規矩不動。
@@ -19088,7 +19088,7 @@ multiplexer 會為此重畫狀態欄）。標題過 `drawable`——檔名是檔
 ### `:yuhao`
 
 開官網，走的是跟着鏈接那條路（`open_request`），和 `gx` 同一個機制：網址當**一個參數**交給
-`open`／`xdg-open`，核心這一側從不拼命令行。
+`open`/`xdg-open`，核心這一側從不拼命令行。
 
 ⚠️ **網址換了**：`https://yuhao.forfudan.com` 已經廢棄，正確的是
 `https://shurufa.app/`。倉裏那兩處（手冊繁簡各一）也改了。
@@ -19097,9 +19097,9 @@ multiplexer 會為此重畫狀態欄）。標題過 `drawable`——檔名是檔
 了（給 `:yume` 明寫成別名，明寫的壓過前綴），`:yum` 也通，`:yuhao` 自己最短是 `:yuh`。
 只明寫 `y` 不明寫 `yu`，因為選單把明寫的別名**全列出來**，`(y yu)` 比 `(y)` 吵。
 
-## 5.89 `]g`／`[g` 與 shell 那四個鍵（2026-10-06，§5.84 那張「需定」表清掉兩條）
+## 5.89 `]g`/`[g` 與 shell 那四個鍵（2026-10-06，§5.84 那張「需定」表清掉兩條）
 
-### `]g`／`[g`
+### `]g`/`[g`
 
 ⚠️ **夜審那份報告說「無 git diff 層」，錯的，我還照抄進了 §5.84。** 更正：「git diff
 我們已經有了。就是在行號右側用底色表示修改的情况。」——`crate::vcs` 整支都在
@@ -19197,12 +19197,12 @@ N 處」既說明它收下了，也說明接着按 `n` 會走到哪裏。沒有�
 （`hint.join-with-line-below` 從此也沒人說了，一併刪了）。
 
 ⚠️ **`Editor::keys_after` 只讀主表。** 它是「手冊教的鍵，編輯器給不給得出」那個測試的**唯一
-真相來源**，而 `g` 與 `[`／`]` 兩組的表是按版面／鍵位／方向分開的：`GOTO_KEYS_VERTICAL`、
-今天新加的 `GOTO_KEYS_VIM`、`HOP_KEYS_FORWARD`／`_BACK` 一張都沒進去。漏一張，手冊裏那幾行
+真相來源**，而 `g` 與 `[`/`]` 兩組的表是按版面/鍵位/方向分開的：`GOTO_KEYS_VERTICAL`、
+今天新加的 `GOTO_KEYS_VIM`、`HOP_KEYS_FORWARD`/`_BACK` 一張都沒進去。漏一張，手冊裏那幾行
 就**「驗過了、全綠」而根本沒被對過**——`t` 那一條 2026-09-23 就是這麼漏的，註釋還寫在那裏，
 而我今天又漏了一次。現在那一支把每個前綴的所有分表連起來。
 
-### `g;`／`g,` 走改動表
+### `g;`/`g,` 走改動表
 
 `Buffer` 多了一張 `changes`（位置，舊的在前）加一個走查下標。**一行只記一條**——vim 也是
 （`:h changelist`：「only one position is remembered for each line」），不然打一段話就攢出
@@ -19229,7 +19229,7 @@ helix 把文本對象寫成自己 runtime 裏的查詢檔（`runtime/queries/<�
 MPL 是按檔計的 copyleft：抄進來那幾個檔得一直掛着 MPL 並標明。這一條得彈窗定。
 
 **不用抄**：語法 crate 自己帶 `TAGS_QUERY`（和我們一直在用的 `HIGHLIGHTS_QUERY` 同一個
-來源、同一份授權，本來就在依賴裏），而它捕獲的 `@definition.function`／`@definition.class`
+來源、同一份授權，本來就在依賴裏），而它捕獲的 `@definition.function`/`@definition.class`
 **包的正是整個定義**，名字另有 `@name`。
 
 | 語言 | 帶 tags | 捕獲 |
@@ -19259,25 +19259,25 @@ MPL 是按檔計的 copyleft：抄進來那幾個檔得一直掛着 MPL 並標�
 
 | | python | rust | go | javascript |
 | --- | --- | --- | --- | --- |
-| 參數 | `parameters`／`lambda_parameters` 的子節點 | `parameters`／`closure_parameters`／`type_parameters` | `parameter_list`／`type_parameter_list` | `formal_parameters` |
-| 註釋 | `comment` | `line_comment`／`block_comment` | `comment` | `comment` |
+| 參數 | `parameters`/`lambda_parameters` 的子節點 | `parameters`/`closure_parameters`/`type_parameters` | `parameter_list`/`type_parameter_list` | `formal_parameters` |
+| 註釋 | `comment` | `line_comment`/`block_comment` | `comment` | `comment` |
 
 鍵是 helix 的同兩個字母：`mi a` 參數、`mi c` 註釋。
 
 ### 做了什麼
 
 `code::definitions(language, source, tree)` 交出每一個定義的字節區間與種類（只收兩種：
-`Function` 收函數／方法／巨集，`Class` 收類／結構／枚舉／介面／模組／類型——鍵只有兩個，
+`Function` 收函數/方法/巨集，`Class` 收類/結構/枚舉/介面/模組/類型——鍵只有兩個，
 而「方法」在讀的人眼裏就是一個函數）。`Editor::definitions_here` 換成字符下標。
 
-- `]f`／`[f`、`]c`／`[c`：走定義，到頭繞回去（同 `]g`）。
-- `mi f`／`mi c`：選中光標所在的那一個，**取最裏面那一個**（`impl` 裏的方法、巢狀的函數，
+- `]f`/`[f`、`]c`/`[c`：走定義，到頭繞回去（同 `]g`）。
+- `mi f`/`mi c`：選中光標所在的那一個，**取最裏面那一個**（`impl` 裏的方法、巢狀的函數，
   站在哪一層取哪一層——同 `mi(` 在同族括號之間挑的規矩）。`ma` 和 `mi` 在這裏是同一段：
   一個定義沒有「連着外面那層」可言。
 
 ⚠️ **類是 `t` 不是 `c`，我先按記憶綁錯了**（同日改正）。helix 的字母是
 `'t' => "class"`、`'c' => "comment"`、`'a' => "parameter"`、`'f' => "function"`
-（`commands.rs:6307-6312`，`[`／`]` 那兩張表同字母）。綁成 `c` 之後它和「合併衝突」撞了一
+（`commands.rs:6307-6312`，`[`/`]` 那兩張表同字母）。綁成 `c` 之後它和「合併衝突」撞了一
 整輪，我還為那次撞車寫了「一個鍵兩個意思、提示行跟着檔走」一大段——**照抄參考實現，撞車
 本來就不存在**。這條規矩倉裏早有（「照抄參考實現，別自作主張偏離」），我是照記憶綁的。
 
@@ -19308,7 +19308,7 @@ helix 鍵位下 `|` 是 shell 那一族（今天剛對齊），所以這一條�
 
 我寫過「搜索面板、`R` 批量替換、挑選器、`[[` 補全——四處共用同一支 `walk_inner`」，暗示動
 一處要動四處。**沒那麼寬**：只有搜索走 `walk_prose`（帶 3 秒寬限那一支），挑選器與 `[[`
-走 `walk`／`walk_with`，而且 `walk_prose` 自己的文檔就寫着「**The picker does not use this
+走 `walk`/`walk_with`，而且 `walk_prose` 自己的文檔就寫着「**The picker does not use this
 one**」。要動的是**一處**。
 
 ### 二、現在的形狀
@@ -19324,7 +19324,7 @@ one**」。要動的是**一處**。
 | 收 | 主循環每一幀 `try_recv` 一批，append 到名單尾巴上；右上角那一格跟着跳 |
 | 停 | 一個 `AtomicBool`，回調每個檔問一次。`Esc`、改查詢、關面板都把它撥上 |
 | 搶 | 一個世代號：新搜索把號加一，舊線程交回來的一概丟掉 |
-| 錶 | `WALK_GRACE` 那 3／5 秒**對這條路取消**——它存在的唯一理由就是別凍住界面 |
+| 錶 | `WALK_GRACE` 那 3/5 秒**對這條路取消**——它存在的唯一理由就是別凍住界面 |
 | 數目 | 跑着的時候 `search.hits-more`「N+結果」，跑完 `search.hits`「M 處」。**兩句都現成** |
 | `MOST` | 500 那一條**留着**：那是「名單是拿來走的，沒人走兩萬行」，和凍不凍界面無關 |
 
@@ -19427,19 +19427,19 @@ return false }`），所以命令行跑得滿而面板跑不滿。`-u` 連 `.git
 操作左欄，右上角「N+結果」跟着跳，找完變「M 結果」，中途可以打斷。
 
 ⚠️ **真正的工作不是「解開上限」**：`walk_prose` 現在**同步跑在按鍵那一下上**（前面先畫一幀
-「正在找…」），那 3／5 秒的閘正是為此存在的——沒有它，這次搜索會把編輯器凍住半分鐘。
+「正在找…」），那 3/5 秒的閘正是為此存在的——沒有它，這次搜索會把編輯器凍住半分鐘。
 要做的是把走查挪到**後臺線程**，主循環每幀收一批。原話「append 不用渲染所以不影響操作」
 ——渲染那一半對，可**慢的是走盤不是畫**。
 
 連帶要動：搜索面板、`R` 批量替換、挑選器、`[[` 補全——四處共用同一支 `walk_inner`
 （`editor.rs:1613` 那條註釋已經寫明它們在按鍵上同步跑）。**動手前先出規劃，等過目。**
 
-## 5.86 `J`／`K` 在 helix 鍵位下也讓給 helix（2026-10-06，翻 10-05 自己那一條）
+## 5.86 `J`/`K` 在 helix 鍵位下也讓給 helix（2026-10-06，翻 10-05 自己那一條）
 
 原話：「既然對齊就干脆點……翻頁就用 ctrl+n, ctrl+p……JK 本质上也是和弦（上档）。因此
 Ctrl n / p 并不比 JK 更难按。」
 
-10-05 定過相反的一條（§5.80 第二條：「helix 出廠那一套一個字不動」，理由是「`J`／`K` 在這
+10-05 定過相反的一條（§5.80 第二條：「helix 出廠那一套一個字不動」，理由是「`J`/`K` 在這
 裏是翻半頁，讀一本小說按得最多的一對」）。**我提了那一條當反對意見，被駁回了**，理由就是
 上面那句：`J` 要按上檔鍵，本來就是和弦，`C-n` 不比它難。記在這裏，免得哪天又照 10-05 那條
 改回去。
@@ -19450,18 +19450,18 @@ Ctrl n / p 并不比 JK 更难按。」
 | `K` | 後退半頁 | **按式子只留配得上的選區**（helix `keep_selections`，`:168`） |
 | `gJ` | 合併行 | **沒有了**——`J` 自己就是，它只是第二個拼法 |
 | `gK` | 併到上一行 | **留着**。它不是別名，helix 沒有這個命令，撤掉就沒第二條路 |
-| 翻頁 | `J`／`K` 半頁，外加六個和弦 | `C-d`／`C-u` 半頁、`C-n`／`C-p` 三分之二、`C-f`／`C-b` 整頁 |
+| 翻頁 | `J`/`K` 半頁，外加六個和弦 | `C-d`/`C-u` 半頁、`C-n`/`C-p` 三分之二、`C-f`/`C-b` 整頁 |
 | vim 鍵位 | `("J", "gJ")` 映過去 | 那一行撤了——`J` 本來就是它要的事。`K` 仍是查詞 |
 
 ⚠️ **`g3J` 那一種寫法跟着沒了**（`gJ` 序列内的計數）。vi 的 `3J` 一直都在，`join_count` 現在
 多收一個 `asked` 參數——`J` 搬到頂層之後那個 3 走的是 `on_normal_key` 開頭就取走的計數，既
 不在 `sequence_span` 裏也不在 `operator_count` **欄位**裏，不傳進去 `3J` 只併一次。
 
-⚠️ **側欄裏的 `J`／`K` 沒動**（`sidebar.rs:422`）：那是另一個處理函數，面板裏它們還是翻半頁，
+⚠️ **側欄裏的 `J`/`K` 沒動**（`sidebar.rs:422`）：那是另一個處理函數，面板裏它們還是翻半頁，
 提示行也還那麼寫。
 
 連帶改了的文案：`help.common.half-page` 那一行的鍵、`action.half-page-down/up` 的默認鍵
-（`J`／`K` → `C-d`／`C-u`）、`action.join-lines` 的默認鍵（`gJ` → `J`）、`--help`、手冊六處。
+（`J`/`K` → `C-d`/`C-u`）、`action.join-lines` 的默認鍵（`gJ` → `J`）、`--help`、手冊六處。
 ⚠️ **`[keys.normal]` 的文檔例子從前就是 `"J" = "gJ"`**——那一行現在說的是一件不存在的事，
 換成了 `"z" = "gK"`（併到上一行沒有單鍵，正是這個機制該舉的例子）。
 
@@ -19479,7 +19479,7 @@ glx     → ab            只吃掉 c                        ✓ 本來就對
 glxx    → abdef         ⚠️ 第二下把下一行接上來了
 ```
 
-**漏的只有一處：挪動／編輯之後沒有夾回來。** 第一下 `x` 之後光標落在 `ab` 的換行符上，第二
+**漏的只有一處：挪動/編輯之後沒有夾回來。** 第一下 `x` 之後光標落在 `ab` 的換行符上，第二
 下就把它吃了。`l` 自己擋得住，`x` 擋不住——而擋不住的不只 `x`。
 
 ⚠️ **還有一處同根的，今夜掃神諭掃出來的**（§5.84）：檔案以換行結尾時，我們多出一條**最後
@@ -19518,7 +19518,7 @@ fn keep_off_the_newline(&mut self) {
 
 ### 四、動到誰
 
-`l`／`w`／`e` 自己已經擋住了（實測），所以**改的是落點，不是動作**。一支函數、一個調用點，
+`l`/`w`/`e` 自己已經擋住了（實測），所以**改的是落點，不是動作**。一支函數、一個調用點，
 加上四條守衛。金樣二十四幀是 helix 鍵位拍的，**一幀都不該動**——那正是這一條的驗收。
 
 ### 五、✅ 做了（2026-10-06）
@@ -19540,29 +19540,29 @@ jj            停在第 2 行     從前下得到檔尾那條虛行
 jjhhhhhhhhhhx x              從前一個字都刪不到
 ```
 
-⚠️ **寫的時候當場測出一個**：守衛不能光看 `vim_lines`。那個旗標只在 `d`／`c`／`y` 幾個 arm
+⚠️ **寫的時候當場測出一個**：守衛不能光看 `vim_lines`。那個旗標只在 `d`/`c`/`y` 幾個 arm
 裏花掉，`V` 之後按 `Esc` 它**一直留着 true**，夾這件事從此整個關掉。問的要是「那一段**現在**
 還是不是整行可視選區」（`vim_lines && extend`）。
 
 **神諭：2256 格 34 格不同 → 9 格。** 沒了的 25 格全是檔尾虛行那一式；剩下 9 格是分詞器那一
-族（`de`／`d2w`／`c2w` 在混排上），手冊寫着的有意分歧。helix 那一支 240 格 3 格不同，不變。
+族（`de`/`d2w`/`c2w` 在混排上），手冊寫着的有意分歧。helix 那一支 240 格 3 格不同，不變。
 
 ## 5.84 兩套鍵位的對齊審查（2026-10-06 夜，兩個子代理各掃一遍）
 
 原話：「让两个子代理做一下关于 vim helix 的对齐检查。重點兩個：1 查缺補漏 2 不一致的
 改成一致……有任何需要我决定的内容就跳过，明天再说。」
 
-兩份報告留在 scratchpad（`vim-alignment.md`／`helix-alignment.md`）。下面只記**做了什麼**
+兩份報告留在 scratchpad（`vim-alignment.md`/`helix-alignment.md`）。下面只記**做了什麼**
 與**為什麼有些沒做**。
 
 ### 做掉的
 
-**一、`g/`（連帶 `*`／`#`）在英文上搜的是一個字母。** 兩個病疊着：① 這個編輯器每一次移動
+**一、`g/`（連帶 `*`/`#`）在英文上搜的是一個字母。** 兩個病疊着：① 這個編輯器每一次移動
 都留下選區、光標蓋着自己那一格，所以 `to > from` 恆真，「取光標下那個詞」那條路**一次都
 沒走到過**；② 那條路問的是 `segment_line`，而那一支是**畫分詞底線**用的，有意把拉丁詞整段
-濾掉。實測 `alpha beta／gamma alpha／alpha` 站在第一個 `a` 上按 `g/`，搜的是字母 `a`、報
+濾掉。實測 `alpha beta/gamma alpha/alpha` 站在第一個 `a` 上按 `g/`，搜的是字母 `a`、報
 九處。中文一直是對的（分詞器認中文詞），所以躲了很久。修法：選區那一條改成
-`to > from + 1`（同 `open_search`），詞那一條改問 `motion::line_words`（`w`／`b` 問的就是
+`to > from + 1`（同 `open_search`），詞那一條改問 `motion::line_words`（`w`/`b` 問的就是
 它）。
 
 ⚠️ **修完當場露出第三個**：`#`（往回找）拿**光標**去問「哪一處在我前面」，而落地之後光標
@@ -19576,7 +19576,7 @@ jjhhhhhhhhhhx x              從前一個字都刪不到
 | 在哪 | 從前寫着 | 實際 |
 | --- | --- | --- |
 | `messages.toml` 的 `macro.nothing-recorded` | 英文說 `q starts recording` | 是 `Q`（中文兩行一直是對的） |
-| `yumete/src/main.rs` 的 `--help` | 「**no t / T** — that letter is the table mode's」 | `t`／`T` 2026-09-21 起就是 find-till |
+| `yumete/src/main.rs` 的 `--help` | 「**no t / T** — that letter is the table mode's」 | `t`/`T` 2026-09-21 起就是 find-till |
 | `editor/keys.rs` 裸 `G` 那一段 | 「which is what `G` means in vi and in Helix both」 | helix 的裸 `G` **什麼都不做**（`goto_line_impl` 開頭就是 `if cx.count.is_some()`）。鍵不改，改的是那句話 |
 
 ### 做完請了一個只讀的夜審，報了十一條真的，全修了（2026-10-06 夜）
@@ -19587,17 +19587,17 @@ jjhhhhhhhhhhx x              從前一個字都刪不到
 
 | | 病 | 根 |
 | --- | --- | --- |
-| ⚠️ 1 | **vim 的 `V` 之後 `y`／`p`／`u`／`U`／`~` 不再是整行**（今夜改出來的**回歸**） | 「整行」全樹只有一處守着——`d`／`c`／`y` 那幾個 arm 開頭的 `if self.vim_lines { extend_to_line_bounds() }`。新那一段寫在它們**前面**並且 `return`。連帶 `vim_lines` 永遠留着 `true` |
+| ⚠️ 1 | **vim 的 `V` 之後 `y`/`p`/`u`/`U`/`~` 不再是整行**（今夜改出來的**回歸**） | 「整行」全樹只有一處守着——`d`/`c`/`y` 那幾個 arm 開頭的 `if self.vim_lines { extend_to_line_bounds() }`。新那一段寫在它們**前面**並且 `return`。連帶 `vim_lines` 永遠留着 `true` |
 | 2 | **`A-x` 把「正好是整行」的選區砍掉最後一行** | 照抄 helix 的 `end != range.to()` 抄漏了：它的 `to()` 是**半開**上界，我們的 `span().1` 是最後那個字符自己。條件恆真 |
 | 3 | **`A-_`（只併挨着的）一段都併不了** | 同一個差一格：helix 的判準是 `prev.to() == curr.from()`，這裏要寫 `span().1 + 1 == from` |
 | 4 | **`3O` 打出來的是 `\n\nhihihi\nX`**（vim 給 `hi\nhi\nhi\nX`） | `add_blank_line` 把光標跟着原來那段文字往下挪，`O` 那一路算出來的落點是已經有字的那一行 |
 | 5 | **`3o` 要按三下 `u` 纔回得去** | 同一支 `add_blank_line` 自己 `snapshot()`。手冊寫着「整段算一個命令」 |
 | 6 | **可視模式裏打的數字漏到下一個鍵**（`v` `2u` 之後 `j` 走兩行） | 那一段在 `count` 被讀出之前 `return` |
-| 7 | **`md`*c*／vim 的 `ds`*c* 不認括號「一族」**，而 `mi`*c* 認 | 取對象走 `pair_family`，這兩支逐字符精確。`md(` 在 `（甲乙）` 上答「沒有成對的符號」。**今夜新開出來的** |
+| 7 | **`md`*c*/vim 的 `ds`*c* 不認括號「一族」**，而 `mi`*c* 認 | 取對象走 `pair_family`，這兩支逐字符精確。`md(` 在 `（甲乙）` 上答「沒有成對的符號」。**今夜新開出來的** |
 | 8 | **可視模式那一段把使用者自己的 `[keys.normal]` 也搶了** | 它在別名層前面。改成先問 `user_aliases`（沒摻預設的那一層） |
 | 9 | **`]空格` 只管主選區、不吃計數、還把選區塌成一個光標** | helix 的 `add_newline_impl` 每一段各做一次。順帶插入點也錯：helix 插在**下一行的行首**，不是換行符上 |
 | 10 | **沒花掉的插入計數記到下一次插入上**（`5i` 打一半去開別的檔，回來 `cc` 打一個字出五個） | 只在 `Esc` 那一臂清，而回 Normal 的路不止一條。改成**進門清**（`enter_insert`） |
-| 11 | **生成出來的動作表漏 `ge`／`gE`** | 它讀 `VIM_MOTIONS`，而算子真正問的是 `vim::step_for`，後者 2026-10-02 起認這兩個 |
+| 11 | **生成出來的動作表漏 `ge`/`gE`** | 它讀 `VIM_MOTIONS`，而算子真正問的是 `vim::step_for`，後者 2026-10-02 起認這兩個 |
 
 另外四處**寫錯的話**也改了：`A-x` 引的 helix 函數名（叫 `rotate_selections`，沒有
 `_impl`）、`wrap.rs` 說「牌子寫的是手按過的那兩個鍵」（只有 `ys` 做到了）、
@@ -19609,7 +19609,7 @@ jjhhhhhhhhhhx x              從前一個字都刪不到
 
 ### 還欠一句話
 
-`mr`／`cs` 問第一個字符的時候，提示行畫的是「**換掉** ／ 打要**去掉**的那一種」——標題換
+`mr`/`cs` 問第一個字符的時候，提示行畫的是「**換掉** / 打要**去掉**的那一種」——標題換
 新了，說明那一格還是 `md` 留下的舊話。按倉規中文文案不自己改，**等寫一句**（和
 `A-,` 那一格同一批）。
 
@@ -19634,7 +19634,7 @@ x               → nvim 刪掉一個字；我們刪不到東西
 ⚠️ **這是「光標不停在換行符上」那一條的同一個根**，只是露在檔尾而不是行尾。第 9 條的規劃
 要把它一起算進去。
 
-**二、9 格是分詞器**（`de`／`d2w`／`c2w` 在 `  he said (no) then;` 這一條混排上）：nvim 的
+**二、9 格是分詞器**（`de`/`d2w`/`c2w` 在 `  he said (no) then;` 這一條混排上）：nvim 的
 `e` 走過 `人類`，我們的停在它前面。手冊裏那句「`w` `b` `e` 鍵一樣，**但走分詞器**……停的
 位置和 vim 不會一樣」說的就是它，**不是 bug**。
 
@@ -19642,20 +19642,20 @@ x               → nvim 刪掉一個字；我們刪不到東西
 
 | 條目 | 為什麼擱着 |
 | --- | --- |
-| helix 的 `!`／`\|` | **這張單子上唯一會丟字的**：我們的 `!` 做的是 helix 的 `\|`（用命令輸出換掉選區），而 helix 的 `!` 是**插在前面**。要新加一個命令，而且現狀寫進了 `:pipe` 的文案。**需定** |
+| helix 的 `!`/`\|` | **這張單子上唯一會丟字的**：我們的 `!` 做的是 helix 的 `\|`（用命令輸出換掉選區），而 helix 的 `!` 是**插在前面**。要新加一個命令，而且現狀寫進了 `:pipe` 的文案。**需定** |
 | `Esc` 收不收選區 | helix 的 `Esc` 不收（`enter_normal_mode` 從不動選區），我們收。`Esc` 在這個倉是「退一層」，改它牽動一族。**需定** |
 | `*` 的行為 | 真 helix 的 `*` **光標不動**，只設搜索寄存器；我們跳走並開命中列表（更像 vim 的 `*`，也更好用）。§5.80「不改的兩條」那一段把它寫成「和真 helix 一致」，⚠️ **那句記錄不準**。**需定**是對齊還是留着 |
 | `z` 那一層（`zj zk z C-d z C-u z C-f z C-b z空格 z退格 zm z/ z? zn zN`） | 它們都是**只滾視窗不動光標**，而這個倉是刻意反着的：「A view scrolled on its own would be pulled straight back the moment the cursor had to stay on screen」（`page.rs` 的 `scroll`）。沒有對應物。**需定** |
-| `gt`／`gc`／`gb`（光標到視窗頂／中／底） | 核心**不知道第一可見行**（只有 `page_lines`），`aim_the_page` 是發一個請求給前端。要跨層。**需定** |
+| `gt`/`gc`/`gb`（光標到視窗頂/中/底） | 核心**不知道第一可見行**（只有 `page_lines`），`aim_the_page` 是發一個請求給前端。要跨層。**需定** |
 | `C-s`（save_selection） | `C-s` 是終端的 XOFF（`editor.rs` 已記）。要換鍵。**需定** |
-| `空格 s`／`空格 S`（符號挑選器） | 大綱在 `空格 o`。**需定**哪個字母 |
-| `A-u`／`A-U`（時間軸 undo） | 要先有時間軸。**需定** |
+| `空格 s`/`空格 S`（符號挑選器） | 大綱在 `空格 o`。**需定**哪個字母 |
+| `A-u`/`A-U`（時間軸 undo） | 要先有時間軸。**需定** |
 | 語法樹那一族（`A-o A-i A-p A-n`、`]f ]t ]a ]c`、`mi f/t/a/c`） | ⚠️ **不是不適用**：tree-sitter 0.25 ＋ 九種語言已在 `Cargo.toml` 裏。做不做**需定** |
-| `]d`／`[d`（診斷跳轉） | 診斷已經有（`空格 d`／`D`），這兩個補得起。**需定** |
-| vim 的 `R`（覆寫模式）、`U`（撤銷整行）、`` ` ``（跳標記）、`H`／`M`／`L`、`gu`／`gw`／`gn`、`gJ` 的空格、`Y`、`空格` | 每一個都是「這個鍵在這裏已經有主人」。**需定**，清單在 scratchpad 的兩份報告裏 |
+| `]d`/`[d`（診斷跳轉） | 診斷已經有（`空格 d`/`D`），這兩個補得起。**需定** |
+| vim 的 `R`（覆寫模式）、`U`（撤銷整行）、`` ` ``（跳標記）、`H`/`M`/`L`、`gu`/`gw`/`gn`、`gJ` 的空格、`Y`、`空格` | 每一個都是「這個鍵在這裏已經有主人」。**需定**，清單在 scratchpad 的兩份報告裏 |
 
-**三、選區模式裏搜索是延伸，不是跳走。** helix 的 select 下 `n`／`N` 綁 `extend_search_next`
-／`_prev`，`/` 的搜索走 `Movement::Extend` 且模式不變。`repeat_search` 從前無條件
+**三、選區模式裏搜索是延伸，不是跳走。** helix 的 select 下 `n`/`N` 綁 `extend_search_next`
+/`_prev`，`/` 的搜索走 `Movement::Extend` 且模式不變。`repeat_search` 從前無條件
 `self.extend = false`，於是 `v` 之後按一下 `/` 就掉回 Normal、剛選的也沒了。錨點現在留着，
 頭走到這一處**去的那一頭**（往前是最後一個字，往回是第一個字）。
 
@@ -19664,9 +19664,9 @@ x               → nvim 刪掉一個字；我們刪不到東西
 `delete_word_after_cursor`）。前三個是終端在 vi 之前就這麼發的控制碼，helix 的插入態也都
 綁着。順帶把 `C-x` 收進「叫補全出來」，那是 helix 的拼法。
 
-**五、`[`／`]` 那一層只認一個 `c`。** 補 `]p`／`[p`（段落，`}`／`{` 的 helix 拼法）與
-`]空格`／`[空格`（上下加一條空行，**光標不動、不進插入態**——helix 的 `add_newline_below`
-／`_above`）。提示行那兩格的文案是新寫的（`hint.hop.blank-below`／`-above`：「下面加一條
+**五、`[`/`]` 那一層只認一個 `c`。** 補 `]p`/`[p`（段落，`}`/`{` 的 helix 拼法）與
+`]空格`/`[空格`（上下加一條空行，**光標不動、不進插入態**——helix 的 `add_newline_below`
+/`_above`）。提示行那兩格的文案是新寫的（`hint.hop.blank-below`/`-above`：「下面加一條
 空行」），⚠️ **等過目**；段落那一格借的是 `:keymap actions` 已有的「下一段」「上一段」。
 
 **六、Normal 裏的 `Tab`。** helix 綁 `jump_forward`，我們只綁了 `C-i`。終端把這兩個發成
@@ -19679,16 +19679,16 @@ x               → nvim 刪掉一個字；我們刪不到東西
 | 鍵 | vim | 這裏從前 |
 | --- | --- | --- |
 | `o` | 換到選區的另一頭 | 開一行並進插入——`vjo` 在稿子裏留下一行 |
-| `x` `s` | 刪／改整個選區 | 鍵位表上是 `;{n}D`／`;{n}Di`，那個 `;` 先收成一點，只動一個字 |
-| `u` `U` | 轉小寫／大寫 | 撤銷／重做——`dwvju` 把剛才那個 `dw` 撤了 |
+| `x` `s` | 刪/改整個選區 | 鍵位表上是 `;{n}D`/`;{n}Di`，那個 `;` 先收成一點，只動一個字 |
+| `u` `U` | 轉小寫/大寫 | 撤銷/重做——`dwvju` 把剛才那個 `dw` 撤了 |
 | `~` | 選區大小寫互換 | 只換一個字 |
 | `p` | 用寄存器換掉選區 | 粘在後面 |
 | `y` | 複製完回 Normal，光標落在那一段的開頭 | 選區留着，而且**目標欄沒重置**，下一個 `j` 落錯格 |
 
-寫在別名層**前面**，不然 `x`／`s` 已經被表換成 `;…` 了。⚠️ **只在 vim 鍵位下**：helix 的
+寫在別名層**前面**，不然 `x`/`s` 已經被表換成 `;…` 了。⚠️ **只在 vim 鍵位下**：helix 的
 select mode 裏這幾個就是 Normal 那幾件事（它靠 `A-;` 換頭、`` ` `` 轉大小寫）。
 
-**八（vim）、`q`／`Q` 正好對調。** 這個倉跟 helix（`Q` 錄、`q` 播）。vim 的手按 `q` 想開始
+**八（vim）、`q`/`Q` 正好對調。** 這個倉跟 helix（`Q` 錄、`q` 播）。vim 的手按 `q` 想開始
 錄，當場把上一個巨集放了一遍——倉裏自己寫過「一對調換了的鍵是最壞的一種分歧」，那句話說
 的正是這個。兩行別名就夠（展開出來的鍵不再過別名層，所以不會互相咬）。
 
@@ -19701,22 +19701,22 @@ select mode 裏這幾個就是 Normal 那幾件事（它靠 `A-;` 換頭、`` ` 
 `VIM_MOTIONS` 再接上表裝不下的那六個）——一張鍵表寫兩遍，兩遍就會分家。句子周圍的話一個字
 沒動。
 
-順帶補了三個動作：`(`／`)`（vim 的句子動作，這裏在 `H`／`L` 上；頂層也映過去了，它們本來
+順帶補了三個動作：`(`/`)`（vim 的句子動作，這裏在 `H`/`L` 上；頂層也映過去了，它們本來
 是「換主選區」）和 `_`（`:h _`：`d_` 就是 `dd`，寫在算子那一支裏，因為「這一行加下面
 n−1 行」不是一個動作，是算子加倍那條規矩）。
 
-**十一、`(`／`)` 在 helix 鍵位下不吃計數**（helix 的 `rotate_selections` 吃），`3)` 只走一格。
+**十一、`(`/`)` 在 helix 鍵位下不吃計數**（helix 的 `rotate_selections` 吃），`3)` 只走一格。
 
-**十二、多選區那四個鍵。** §5.13.6 自己把 `A-,`（去掉主選區）、`A--`／`A-_`（全併／只併
+**十二、多選區那四個鍵。** §5.13.6 自己把 `A-,`（去掉主選區）、`A--`/`A-_`（全併/只併
 挨着的）、`A-:`（全部轉成正向）列成「空着的，直接拿來用」，四期都沒排到。都在
 `editor/multi.rs` 裏。⚠️ **`A-,` 成功的時候不說話**（同 helix）：倉裏現成那幾句說的都是別
 的事（「只留主選區，去掉 N 處」「N 處併到一起了」），借過來就是一句假話——**這一格的話
 等寫**。
 
 **十三（vim）、數字配插入那六個鍵不重複。** `5ix⏎` 在 vim 裏是五個 `x`，這裏從前是一個；
-`2o`／`3a`／`4A`／`3O` 同病。記在進門那一刻（`type_it_again`），花在出門那一刻
+`2o`/`3a`/`4A`/`3O` 同病。記在進門那一刻（`type_it_again`），花在出門那一刻
 （`spend_the_insert_count`）——重複的是**整段打字**，而那是什麼，到 `Esc` 才知道。
-`o`／`O` 重複的是「新開一行，上面寫這個」，不是一行上寫三遍。整段算**一個命令**，`u` 一下
+`o`/`O` 重複的是「新開一行，上面寫這個」，不是一行上寫三遍。整段算**一個命令**，`u` 一下
 全回去。⚠️ **helix 鍵位下不吃這個計數**（它的 `i` 本來就不吃）。
 
 **十四、`A-x` 縮到整行**（helix 的 `shrink_to_line_bounds`，`X` 的反面）。逐條照它：跨不過
@@ -19741,7 +19741,7 @@ full should join more:
 
 **根子是裝好的那份詞模型換了**，不是代碼。`~/.local/share/yumete/data/` 整個目錄的時間戳
 是 `10-06 01:15`——那一刻跑的是 `./scripts/build.sh`，它從 `../yume` 重裝了
-`lang.ywtb`／`lang.ywl`。同一天同一趟驗收，`cargo test` 在前、`build.sh` 在後，所以這一條
+`lang.ywtb`/`lang.ywl`。同一天同一趟驗收，`cargo test` 在前、`build.sh` 在後，所以這一條
 是**下一趟**纔紅的。
 
 重新量了一遍（`cargo test -p yumete-ime --test real_data probe_bias_sensitivity -- --ignored
@@ -19787,14 +19787,14 @@ full should join more:
 > 我説了很多遍了，兼容 vim 和 helix 是第一要務。你不要每次都説「我天天寫稿子需要它」……
 > 以后再找其他空余的按鍵不行嗎？？？
 
-**規矩**：一個鍵在 vim／helix 裏有明確答案，這裏就跟。讓位的那個功能**另找一個空鍵**，不是
+**規矩**：一個鍵在 vim/helix 裏有明確答案，這裏就跟。讓位的那個功能**另找一個空鍵**，不是
 留着不讓。
 
-⚠️ **「寫小說天天按它」不是偏離的理由**——我拿它當過理由不止一次（`J`／`K` 那一條
-10-05 就是這麼定下不改的，10-06 翻了；`H`／`M`／`L` 我又拿它寫進了選項）。鍵盤上空着的字母
+⚠️ **「寫小說天天按它」不是偏離的理由**——我拿它當過理由不止一次（`J`/`K` 那一條
+10-05 就是這麼定下不改的，10-06 翻了；`H`/`M`/`L` 我又拿它寫進了選項）。鍵盤上空着的字母
 比「這個鍵很順手」多得多。
 
-**站得住的偏離只有一種：這一端做不到，或者做了就錯。** 例如 `w`／`b`／`e` 走分詞器——中文
+**站得住的偏離只有一種：這一端做不到，或者做了就錯。** 例如 `w`/`b`/`e` 走分詞器——中文
 的詞是分出來的，不是空格斷的，照 vim 那套在中文稿子上根本不成立。那叫做不到，不叫不想讓。
 
 ## 5.95 手冊改成英文為正本（2026-10-06 定）
@@ -19812,10 +19812,10 @@ full should join more:
 | 誰 | 改成讀哪一份 | 為什麼 |
 | --- | --- | --- |
 | `tests/documented_keys.rs` | **兩份都讀** | 兩邊教的鍵要一樣 |
-| `written.rs`／`labels.rs` 的量數測試 | `manual_tc.md` | 它們要的是一屏中文 |
+| `written.rs`/`labels.rs` 的量數測試 | `manual_tc.md` | 它們要的是一屏中文 |
 | `scripts/frames.sh` 的 MANUAL 幀 | `manual_tc.md` | 那一幀驗的是中文版面 |
 | `scripts/release_card.py` | `manual_tc.md` | 宣傳圖拍中文 |
-| `scripts/make_manual_sc.py`／`sc2tc.py` | `manual_tc.md` | 繁體仍是中文那一支的正本 |
+| `scripts/make_manual_sc.py`/`sc2tc.py` | `manual_tc.md` | 繁體仍是中文那一支的正本 |
 | `README.md` | 三份都列 | — |
 
 **由來**（別再走回頭路）：倉裏原有一條規矩是「給人看的中文先彈窗問」（§5.12 那一族，
@@ -19841,7 +19841,7 @@ full should join more:
 
 ## 5.97 vim 的 `)` 落在哪一格：與 vim 不同，**等定**
 
-這個編輯器的句子動作是「**選中一句**」（#404，helix 鍵位下的 `H`／`L` 也是這個），vim 的
+這個編輯器的句子動作是「**選中一句**」（#404，helix 鍵位下的 `H`/`L` 也是這個），vim 的
 `)` 是「**移到下一句的開頭**」。差別只在光標停哪一格，而它看得見：
 
 | 文本 | 按鍵 | vim | 這裏 |
@@ -19850,10 +19850,10 @@ full should join more:
 
 `))` 在 vim 裏停在「三」上，在這裏停在第二個「。」上，於是 `d(` 往回吃的那一段少一格。
 
-**要改就是改 #404 那個句子動作本身**，helix 鍵位下的 `H`／`L` 會跟着動——所以沒自己定。
+**要改就是改 #404 那個句子動作本身**，helix 鍵位下的 `H`/`L` 會跟着動——所以沒自己定。
 斷言照現狀寫在 `vim_sentences_and_the_underscore_line` 裏，附了這一節的號。
 
-**那一件補上了**（同日）：`dH`／`dL`／`dM` 現在成立。`Motion::Screen { which }` 是一個
+**那一件補上了**（同日）：`dH`/`dL`/`dM` 現在成立。`Motion::Screen { which }` 是一個
 真的動作，`Reach::Linewise`（同 `:h H`），而「屏幕的那一行是檔裏的第幾行」只有一處算法
 （`Editor::screen_line`），鍵和算子共用——寫成兩份的那半天裏，`)` 就是因為只改對了一份
 而跳到屏幕底下去的。數目是「從那一邊數第幾行」，不是「做 n 遍」。
@@ -19881,8 +19881,8 @@ full should join more:
 倉裏現在有一個自己的模型，**vim 和 helix 都是它的語法糖**。所以「選區是這個倉的根本」
 不再是拒絕 vim 行為的理由——選區是**模型**的根本，不是**鍵位**的根本。
 
-**驗出來不成立的三條**：`ZZ` 不退出（vim 鍵位下走 `:x`）、`m`／`'` 沒實現（有，在
-`M`／`'` 上，因為 `m` 是 match 那一族）、`*` 不工作——⚠️ **這一條的理由我一開始寫錯了**。
+**驗出來不成立的三條**：`ZZ` 不退出（vim 鍵位下走 `:x`）、`m`/`'` 沒實現（有，在
+`M`/`'` 上，因為 `m` 是 match 那一族）、`*` 不工作——⚠️ **這一條的理由我一開始寫錯了**。
 
 `*` **兩套鍵位下都綁着**，可它們是兩件事（實測，光標停在 `beta` 的 `b` 上、沒有刻意選中
 任何東西）：
@@ -19919,9 +19919,9 @@ vim 鍵位下被改映成 `g/`。一個 vim 的手在 helix 鍵位下按 `*` 拿
 ### 2. vim 鍵位：`J` 讓給合併行，`K` 讓給查詞
 
 ⚠️ **這是翻 2026-09-18 自己那一條**。當時的原話記在 `keymap.rs`：「J 合併行我們和 helix
-也不一樣，我覺得這個應該保持 gJ」，理由是 `J`／`K` 是讀一本小說按得最多的一對。
+也不一樣，我覺得這個應該保持 gJ」，理由是 `J`/`K` 是讀一本小說按得最多的一對。
 
-**翻案的理由是那個代價只落在 helix 那一邊**：`C-f`／`C-b`／`C-d`／`C-u` 兩套鍵位下都綁着
+**翻案的理由是那個代價只落在 helix 那一邊**：`C-f`/`C-b`/`C-d`/`C-u` 兩套鍵位下都綁着
 （查過），選了 vim 鍵位的人本來就用它們翻頁。helix 出廠那一套**一個字不動**。
 
 `K` 接 `空格 k`。⚠️ **量過才敢說它們是同一件事**（這台機器的 Neovim v0.12.5）：
@@ -19937,7 +19937,7 @@ lsp.txt:123        →  K is mapped to vim.lsp.buf.hover() unless …
 
 ### 3. `:view-wrap 0` 也要把折行打開
 
-⚠️ **這條命令在管兩個互相獨立的東西**：折不折（`on`／`off`）與折在第幾欄（`0` ＝ 窗口寬，
+⚠️ **這條命令在管兩個互相獨立的東西**：折不折（`on`/`off`）與折在第幾欄（`0` ＝ 窗口寬，
 `N` ＝ 第 N 欄）。不對稱在 `SetMeasure` 那一句 `if measure.is_some()`——**給一個數字會順帶
 把折打開，唯獨 `0` 不會**。於是從 `off` 出發按 `:view-wrap 0` 屏幕一點反應都沒有，他就是
 在這裏斷定「不能禁止 wrap」的。
@@ -19950,7 +19950,7 @@ lsp.txt:123        →  K is mapped to vim.lsp.buf.hover() unless …
 `g/` 是往這邊找、`g?` 是在副編輯區給你看，**沒有一支是往回找**。新動作只在 vim 鍵位下
 給鍵（`#`）；helix 那邊不給鍵，配置裏繫得上。
 
-### 5. `:grep`／`:g`／`:/`／`:?`
+### 5. `:grep`/`:g`/`:/`/`:?`
 
 vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 quickfix 列表；`:g` 是
 `:global`，**不是搜索**，是「對每一條配得上的行執行一條 Ex 命令」。共同產出是一張可以走
@@ -19959,7 +19959,7 @@ vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 qu
 - **`:grep` 當 `:search` 的別名。** ✅ 2026-10-06 做了。
 - **`:g` 這個別名拿掉。** ✅ 2026-10-06 做了。它本來是 `:goto` 的別名，而 `:20` 本來就跳第
   20 行——別名多餘，卻正好占着 vim 的 `:global`。
-- **新加 `:/式子`／`:?式子` ＝ 不開面板的正則搜索**（前／後）。helix 的 `?` 也是 `rsearch`
+- **新加 `:/式子`/`:?式子` ＝ 不開面板的正則搜索**（前/後）。helix 的 `?` 也是 `rsearch`
   （`default.rs:143`），所以這一對兩個編輯器都站得住。⚠️ **沒有用 `:s/式子`**：那個拼法在
   我們這裏確實空着（`:s/beta` 今天什麼都不做，`:s/beta/` 才刪），可**在 vim 裏它是刪除**。
   搜索不需要 `%`——`%` 說的是「範圍是整篇」，而搜索本來就是整篇找。
@@ -19969,7 +19969,7 @@ vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 qu
 | | |
 | --- | --- |
 | **灰字各記各的** | `/` 只記它自己上次的**字面**詞，`:/` 只記它自己上次的**式子**。兩邊都不說謊 |
-| **`n`／`N` 跟最近那一次** | 不管是 `/`、`:/` 還是面板留下的。⚠️ **面板那一半已經是現狀**（實測：面板搜完關掉，`n` 照樣走它的命中） |
+| **`n`/`N` 跟最近那一次** | 不管是 `/`、`:/` 還是面板留下的。⚠️ **面板那一半已經是現狀**（實測：面板搜完關掉，`n` 照樣走它的命中） |
 
 走過的彎路記下來：先想「一份記憶＋一個『怎麼讀』的標記」，可那個標記會漏到 `/` 的灰字上
 ——灰字寫着 `a.b` 而 `/` 只會字面搜。**根子是我們把 `/` 定成了字面**（vim 的 `/` 本身就是
@@ -19978,10 +19978,10 @@ vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 qu
 ### ⚠️ 5 的前提是錯的（2026-10-06 實測推翻，剩下的部分等定）
 
 **`/` 在這個編輯器裏本來就是完整的正則**，不是字面。`repeat_search` 把 `last_search` 直接
-交給 `Regex::new`（`editor/search.rs:88`／`compile`），中間沒有任何轉義；逃逸那一步只在
+交給 `Regex::new`（`editor/search.rs:88`/`compile`），中間沒有任何轉義；逃逸那一步只在
 **面板**那一邊，而且只在「正則」那一格沒勾的時候（`find.rs` 的 `search_pattern`）。
 
-實測（`sx.txt` 四行：`alpha`／`axc`／`a.c`／`abc`）：
+實測（`sx.txt` 四行：`alpha`/`axc`/`a.c`/`abc`）：
 
 ```text
 /a.c    → 第 2 行 axc     ← `.` 是通配符，不是句點
@@ -19994,10 +19994,10 @@ vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 qu
 
 | 原本要做的 | 現在怎麼看 |
 | --- | --- |
-| 新加 `:/式子`／`:?式子` ＝ 正則搜索 | 和 `/`／`?` **一模一樣**。要麼不做，要麼只當 vim 的手的別名 |
+| 新加 `:/式子`/`:?式子` ＝ 正則搜索 | 和 `/`/`?` **一模一樣**。要麼不做，要麼只當 vim 的手的別名 |
 | 兩份灰字（字面一份、式子一份） | 只有一種搜索，分不出兩份 |
 | 提示符正則的時候字是金的 | 每一次都是正則，全金等於不染 |
-| 提示符寫 `搜索:`／`倒搜:` | **已經是了**（實測那一幀寫着「搜索: a.c」），不用改 |
+| 提示符寫 `搜索:`/`倒搜:` | **已經是了**（實測那一幀寫着「搜索: a.c」），不用改 |
 
 **還站得住的只有 `:s/a/b/c` 上色那一段**（下面），它和搜索是不是正則無關。
 ✅ 2026-10-06 做了：`command::substitution_parts` 說哪一段是哪一段，命令行照着塗。
@@ -20016,24 +20016,24 @@ vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 qu
 所以那個冒號**打到一半會換一次顏色**。看着是對的（它說的正是「現在這是一條替換了」），
 但那一行不是「一進命令行就金」，記在這裏免得下次當成 bug 查。
 
-⚠️ 這個錯是我寫進議定稿的，原話裏沒有。**要定的是**：`:/`／`:?` 還要不要當 `/`／`?`
+⚠️ 這個錯是我寫進議定稿的，原話裏沒有。**要定的是**：`:/`/`:?` 還要不要當 `/`/`?`
 的別名收下來（vim 的手會打），還是整條劃掉。
 
-**提示符**：`搜索:`／`倒搜:` 四種情形**都用這兩個詞**，**正則的時候字是金的**。
+**提示符**：`搜索:`/`倒搜:` 四種情形**都用這兩個詞**，**正則的時候字是金的**。
 ⚠️ **只靠顏色區分，在單色終端上就沒有了**——這個代價接受了。
 
 **`:s/a/b/c` 同理上色**：`:s/`、中間那個 `/`、結尾的 `/c` 是**金**（說「這是正則替換」，
-而 `:s` 本來就是正則——實測 `:%s/a.c/X/` 把 `abc`／`a.c`／`axc` 三行全換了）；`a` **朱**、
+而 `:s` 本來就是正則——實測 `:%s/a.c/X/` 把 `abc`/`a.c`/`axc` 三行全換了）；`a` **朱**、
 `b` **綠**。⚠️ 這兩個顏色在倉裏已經是這兩個意思了（面板的「替換預覽」：換下來的朱加刪除
 線、換上去的綠），同樣兩個顏色在兩處說同一件事。
 
-### 6. 括號那一族走 `ys`／`ds`／`cs`，`m` 讓給設標記
+### 6. 括號那一族走 `ys`/`ds`/`cs`，`m` 讓給設標記
 
 `ms` 加括號、`md` 去括號、`mr` 換括號**只有 `m` 這一個入口**，沒有對應的 `:` 命令——所以
 先給它們別的入口才能讓出 `m`。
 
 ⚠️ **vim-surround 的拼法在我們這裏正好空着**：`s` 不在操作符後面那張動作表上
-（`VIM_MOTIONS` 只有 `w W b B e E $ 0 ^ j k G gg } { H L f F t T i a`），所以 `ds`／`cs`／
+（`VIM_MOTIONS` 只有 `w W b B e E $ 0 ^ j k G gg } { H L f F t T i a`），所以 `ds`/`cs`/
 `ys` 和在原生 vim 裏一樣沒人占——那正是當年 vim-surround 挑中它們的理由。
 
 讓出 `m` 之後 vim 的手一樣不缺（都實測過）：
@@ -20043,13 +20043,13 @@ vim 那兩個詞的意思先查清楚了：`:grep` 跑外部 grep、結果進 qu
 | 跳到配對括號 | `%` | → `mm` |
 | 删括號裏 | `di(` | 操作符＋對象 |
 | **選**括號裏 | `vi(` | 延伸＋對象 |
-| 加／去／換括號 | `ys` `ds` `cs` | **新的** |
+| 加/去/換括號 | `ys` `ds` `cs` | **新的** |
 | 設標記 | `ma` | **新的** |
 
-**不加 `:surround` 命令**：helix 那邊 `ms`／`md`／`mr` 本來就有，命令只是給同一件事加第二
+**不加 `:surround` 命令**：helix 那邊 `ms`/`md`/`mr` 本來就有，命令只是給同一件事加第二
 種寫法。
 
-**做完了（2026-10-06）**，比議定稿多出一件：`md`／`mr` 從前**不吃字符**，而 helix 的
+**做完了（2026-10-06）**，比議定稿多出一件：`md`/`mr` 從前**不吃字符**，而 helix 的
 `surround_delete` 一直是吃的（`helix-term/src/commands.rs`：`Some('m') => None, // m selects
 the closest surround pair`）。同一個鍵在兩個編輯器裏不是同一件事，所以兩邊一起改齊——
 `md`*c*、`mr`*c**d*，`m` 這個字符就是「最裏面那一對」，原來那個行為一個鍵都沒少。
@@ -20064,7 +20064,7 @@ vim 那三條的落點：
 | `yss` | `run_vim_line('s')` | 同上 |
 | `m`*a* | 別名 `("m", "M")` | `keymap.rs` |
 
-寫在 `vim_operator_key` 而不是寫進那張別名表，是因為 `d`／`c`／`y` 是操作符，表的左邊看不
+寫在 `vim_operator_key` 而不是寫進那張別名表，是因為 `d`/`c`/`y` 是操作符，表的左邊看不
 到後面那個 `s`。
 
 ⚠️ **`ys` 的跨度要掐掉尾巴上的空白。** vim-surround 的 `s:opfunc` 一行寫着
@@ -20109,7 +20109,7 @@ fb d$      →  a / def   只吃到行尾，没碰換行      ✓
 A X        →  abcX      插入態到得了行尾之後      ✓（必須這樣）
 ```
 
-漏的是**「挪動／編輯之後夾回來」**那一步。
+漏的是**「挪動/編輯之後夾回來」**那一步。
 
 **管到哪**（定下的，照「完全兼容 vim」）：**Normal 和 visual 都夾在行內，插入態不夾**
 （不然 `A` 就死了）；**空行上光標停在那個換行符上**，因為沒別的地方可去——照 vim。
@@ -20317,13 +20317,13 @@ A X        →  abcX      插入態到得了行尾之後      ✓（必須這樣
 > aci 都必須在那一行才能使用。`/` 這個按鍵可以從任何位置快速跳到搜索行但不進去插入
 > 模式，用戶需要再按一下 aci。
 
-**為什麼分開：這扇面板有四個輸入框**（查詢／換成／包含／排除）。要是 `aci` 也能跨格子
+**為什麼分開：這扇面板有四個輸入框**（查詢/換成/包含/排除）。要是 `aci` 也能跨格子
 回查詢框，站在「包含」裏就再也按不出「在包含裏插入」了——一個鍵答不了兩個問題。
 `/` 從 2026-09-25 起照選擇器那一扇做成了「回查詢框並進 insert」，而選擇器**只有一個
 框**，那裏「挪窩」和「打字」本來就是同一件事；四個框的面板上這個類比不成立。
 
 ⚠️ **當天走過一趟又回來了**，記下來免得再走一遍：先按最早那句「任何位置都可以
-通过 aci／ACI 回到搜索框」做了一版，把「位置」那一行上的六個鍵改成回查詢框。做的過程
+通过 aci/ACI 回到搜索框」做了一版，把「位置」那一行上的六個鍵改成回查詢框。做的過程
 裏撞出兩件事——① 結果行上也有同一族分支，而它是 2026-09-27 修一個真 bug 加的（兩個
 試用的人站在命中行上按 `i`，想的是「去那裏改」，結果靜悄悄跳回搜索框接着打字，
 `server` 變成 `serverXX`）；② `c` 跳回去之後會吃掉搜索詞的最後一個字（自己的測試抓
@@ -20370,7 +20370,7 @@ A X        →  abcX      插入態到得了行尾之後      ✓（必須這樣
 相比**——框裏的底色本來就隨模式變（「三檔底色」）。退後是**往紙色混**，而打字那一檔
 比紙還暗，所以斷的是「它仍然比紙暗」。
 
-⚠️ **我一度斷言「挑選器並不把正文調暗」，是錯的。** grep 了一遍 `dim`／`picker` 沒找到
+⚠️ **我一度斷言「挑選器並不把正文調暗」，是錯的。** grep 了一遍 `dim`/`picker` 沒找到
 就下了結論，而它叫 `stand_back`。當場就被指出來了。**顏色這一族要拿 `--shot --html` 兩張
 圖對，不要靠 grep 關鍵詞下結論。**
 
@@ -20412,7 +20412,7 @@ A X        →  abcX      插入態到得了行尾之後      ✓（必須這樣
 的時候「換成什麼」沒了——而那句話正是在那一刻告訴你那一格是幹什麼的。
 
 **二、提示用第 80 檔**（新常量 `rung::GUESS`，`#2D2E30` 畫在輸入框的 `#03060A` 上）。
-原來是旁註那一檔（第 25 檔 `#9E9C96`）。四檔都畫出來比過（25／40／50／84），定 80。
+原來是旁註那一檔（第 25 檔 `#9E9C96`）。四檔都畫出來比過（25/40/50/84），定 80。
 旁註的說法是「讀它，只是它不是正文」；這一句要的是**看得見、可是一眼就知道那裏沒有字**。
 
 ⚠️ **試配色不要用全文替換。** 我拿 `sed 's/rung::MARKER)/rung::RULE)/'` 一檔一檔試，
@@ -20437,7 +20437,7 @@ A X        →  abcX      插入態到得了行尾之後      ✓（必須這樣
 朋友報的用場：「按 s 后进入 flash 模式，之后你可以输入编码查找开头是该编码的字，比如
 你输 dk，高亮所有编码为 dk 开头的字」。
 
-這是 §5.12.63 裏比過的 **B 案**（leap／flash），當時為按鍵數否了：「中文打两个字要过
+這是 §5.12.63 裏比過的 **B 案**（leap/flash），當時為按鍵數否了：「中文打两个字要过
 一遍输入法」，算的是 7–8 鍵。**朋友這個版本繞開了那條理由**——打的是編碼前綴，不上屏、
 不選重。當時也留了口子：「兩個不衝突，將來要 B 再給它自己的字母」。
 
@@ -20470,7 +20470,7 @@ Warning: leap 為「標籤字母會不會被當成第三個查詢字符」專門
 | `ji` | **23** | 72 |
 | `zho` | 4 | 9 |
 
-`zh`／`sh`／`ji` 是最常見的那幾個聲母組合，**兩個字母要翻三頁候選**，這個設計就垮了；
+`zh`/`sh`/`ji` 是最常見的那幾個聲母組合，**兩個字母要翻三頁候選**，這個設計就垮了；
 第三個字母一加就塌到 4 個。所以中文這一邊**不定長**，邊打邊收窄——那本來就是輸入法的
 節奏，而搜索那一邊打的也是 `zhongguo` 不是 `zh`。
 
@@ -20485,7 +20485,7 @@ Warning: leap 為「標籤字母會不會被當成第三個查詢字符」專門
 - `han: Vec<(char, Vec<usize>)>` —— **哪個字、在哪幾處**，照頭一次出現的先後排
 
 按字分組是為了候選面板；照出現先後而不是出現次數，是因為讀者正看着屏幕，面板的次序
-要跟他的眼睛走。多音字全收（長 ＝ cháng／zhǎng）。大小寫走 `nearby::alike`，和搜索
+要跟他的眼睛走。多音字全收（長 ＝ cháng/zhǎng）。大小寫走 `nearby::alike`，和搜索
 面板、挑選器同一支。
 
 ### 界面：兩個鍵，`go` 與 `gu`（2026-10-04 定）
@@ -20493,9 +20493,9 @@ Warning: leap 為「標籤字母會不會被當成第三個查詢字符」專門
 | | 打幾個字母 | 收什麼 | 怎麼挑 |
 | --- | --- | --- | --- |
 | **`go`** | **定長兩個** | 只有西文 | 字母標籤，同 `gw` |
-| **`gu`** | **不定長**，打到候選夠短 | 只有中文 | 數字挑字、`-`／`=` 翻頁，再貼標籤 |
+| **`gu`** | **不定長**，打到候選夠短 | 只有中文 | 數字挑字、`-`/`=` 翻頁，再貼標籤 |
 
-`zh`／`sh`／`ji` 那幾個擁擠的聲母（量出來 21–23 個字、要翻三頁）歸 `gu`：它不定長，
+`zh`/`sh`/`ji` 那幾個擁擠的聲母（量出來 21–23 個字、要翻三頁）歸 `gu`：它不定長，
 編碼一長候選就塌下來。
 
 #### ⚠️ 同日翻案：從「`go` 中英混合」改成「一個鍵一種文字」
@@ -20528,7 +20528,7 @@ Warning: **這一條記在這裏是給以後的自己看的**——「混排時�
 
 Warning: **權衡過、否掉的另兩條**：①「沒有英文命中時 `go` 的字母也收窄」——混排頁面
 上會咬人，想打第三個字母收窄中文，而那個字母正好是某個英文標籤，光標當場飛走（`sh`
-在 she／short 裏不少見）；②「翻頁時提示用 `gu`」——還是得重來。
+在 she/short 裏不少見）；②「翻頁時提示用 `gu`」——還是得重來。
 
 #### ⚠️ 做過又撤掉：`gu` 只剩一個字就自己挑定（2026-10-04 當天來回）
 
@@ -20545,7 +20545,7 @@ Warning: **權衡過、否掉的另兩條**：①「沒有英文命中時 `go` �
 **一句話**：人打的是**一個完整的讀音**，不是一個剛好夠用的前綴。界面不該在他話說完之前
 替他截斷。
 
-Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 寫 `go`／`gu` 的測試時，
+Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 寫 `go`/`gu` 的測試時，
 「打 `bi` 找『邊』，`b` 打完就被截斷」這個形狀當場就出現了，我把它記成了「少見的邊角」
 並留了一條測試守着。「而」一試就說明它是**常態**——漢語裏單字母起頭就唯一的字太多了。
 **自己的測試裏出現過的怪形狀，不要先替它找理由說它少見。**
@@ -20558,7 +20558,7 @@ Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 
 > 東西告訴我要做什麼。這其實有些危險的，因為我以為我現在在 normal 模式，但其實 yumete
 > 是在等我打拼音。
 
-根子：按下 `o`／`u` 的那一刻 `pending` 回到 `None`，於是**兩樣東西同時沒了**——光標旁
+根子：按下 `o`/`u` 的那一刻 `pending` 回到 `None`，於是**兩樣東西同時沒了**——光標旁
 那塊 HUD（`typed_so_far`）和 `g` 那扇菜單。而這兩個鍵恰恰是**還要再打幾個字母才算完**
 的。`gw` 沒有這一族：它一按下去標籤就滿屏幕都是。
 
@@ -20567,7 +20567,7 @@ Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 
 | | 畫在哪 | 說什麼 |
 | --- | --- | --- |
 | **HUD** | 光標旁 ＋ 狀態欄右緣 | 整串按鍵：`go` → `goa` → `goab`；`gu` → `gud` → `gudon` |
-| **命令行** | 狀態欄底下那一行 | 在等什麼：`請輸入兩個字母：a`／`請輸入拼音：don` |
+| **命令行** | 狀態欄底下那一行 | 在等什麼：`請輸入兩個字母：a`/`請輸入拼音：don` |
 
 標籤一亮兩處都閉嘴——那時屏幕上全是標籤，自己會說話。
 
@@ -20594,7 +20594,7 @@ Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 
 | `gu` | 2 | 45 | **99%** | 100% |
 
 所以這一改**對 `gw` 等於沒改**（它永遠落在兩個字母那一檔，當年那句話到今天仍然對），
-對 `go`／`gu` 是按鍵數直接少一半、而且是每一次。
+對 `go`/`gu` 是按鍵數直接少一半、而且是每一次。
 
 **三件沒做或不必做的：**
 
@@ -20602,9 +20602,9 @@ Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 
   239，離 676 還差一半還多——那會是一段永遠跑不到的代碼，而大寫要按 Shift，在「越快
   越好」這件事上是負的。
 - **全屏一致，所以沒有前綴問題**：要麼全是一個字母、要麼全是兩個，不會出現「`a` 和
-  `ab` 同時是標籤」。avy／easymotion 為混長度專門做的那套前綴樹這裏一行都不需要。
+  `ab` 同時是標籤」。avy/easymotion 為混長度專門做的那套前綴樹這裏一行都不需要。
   （avy 那種混着發會更省鍵——30 處可以是 25 個單字母加 5 個雙字母——可它把「這個標籤
-  有幾個字母」變成每一處都不一樣，而量出來的分佈裏 `go`／`gu` 本來就幾乎全在 26 以內，
+  有幾個字母」變成每一處都不一樣，而量出來的分佈裏 `go`/`gu` 本來就幾乎全在 26 以內，
   換不到什麼。）
 - **一格寬的單位照舊不給標籤**（`jump_spots` 的 `wide < LABEL`）。英文的 `a`、`I` 於是
   仍然跳不到。放寬它會繞成一個圈：標籤有幾個字母取決於落腳點有幾個，而落腳點有幾個
@@ -20617,7 +20617,7 @@ Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 
 不夠就補上。竪排不必管：`put_slot_right` 本來就先把整個縱填成空格再寫。
 
 **英文那一頭順帶變好了**：從前兩個字母蓋掉詞首兩個字符，`and` 成了 `aa d`；現在只蓋
-一個，`and` → `nnd`，剩下的還讀得出來。easymotion／avy 也是只蓋頭一個。
+一個，`and` → `nnd`，剩下的還讀得出來。easymotion/avy 也是只蓋頭一個。
 
 #### 挑字也收輸入法那三個選重鍵（2026-10-04 定）
 
@@ -20625,7 +20625,7 @@ Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 
 > 因為輸入法就是這樣的。而且沒有歧義。
 
 與隔壁 `yumete-ime` 的 `press_func` 逐字相同（`Semicolon` → 選二、`Quote` → 選三），
-翻頁的 `-`／`=` 本來就是同一對——**這一扇面板長得像輸入法，手就該和輸入法一樣**。
+翻頁的 `-`/`=` 本來就是同一對——**這一扇面板長得像輸入法，手就該和輸入法一樣**。
 
 **為什麼真的沒有歧義**：這一支只在 `gu` 上開，而 `gu` 問的是**讀音**，讀音是字母串，
 所以空格、`;`、`'` 在查詢裏一個都用不上。`go` 的空格是**第二個字母**（「a bus」那個孤零
@@ -20636,11 +20636,11 @@ Warning: **這一族我自己的測試先撞見過，可我當成了邊角。** 
 
 原來是光禿禿一個數字（`1. 冬  2`）。指出來的：「后面的几处的数字会和前面的序号混淆。」
 行首的序號也是數字，兩個數並排讀者分不出哪個是哪個。現在走 `seek.places`
-（`共{0}處`／`共{0}处`／`{0} places`）。
+（`共{0}處`/`共{0}处`/`{0} places`）。
 
 ### 鍵位怎麼挑出來的
 
-`s`／`S` 在這個倉是「選出所有匹配」「拿匹配當分隔符」，占着（朋友報的 flash 用的就是
+`s`/`S` 在這個倉是「選出所有匹配」「拿匹配當分隔符」，占着（朋友報的 flash 用的就是
 `s`）。`g` 組**兩邊都空着**的小寫只有 `o` `q` `u` `v` `z`：
 
 ```
@@ -20655,9 +20655,9 @@ Warning: **第一版推薦的 `gb` 會撞**（helix 的 goto_window_bottom），
 
 `draw_panel_rows`（`tui/lib.rs`）只吃一串字符串，快捷符號表早就借着它了——註釋寫着
 「快捷符號 is a different panel wearing the same frame」。所以列漢字**不經過輸入法**，
-也就不必解挂系統 IME（同 `mi`／`ma` 那一條，2026-10-04）。
+也就不必解挂系統 IME（同 `mi`/`ma` 那一條，2026-10-04）。
 
-翻頁用 `-`／`=`，和 yume 面板一致；**不要跟着方案走**（IME 的翻頁鍵是 `KeyAction::PageUp`，
+翻頁用 `-`/`=`，和 yume 面板一致；**不要跟着方案走**（IME 的翻頁鍵是 `KeyAction::PageUp`，
 由方案決定，各家不同），跳轉必須可預測。
 
 ### 只剩一處也不自動跳（2026-10-04 定）
@@ -20743,9 +20743,9 @@ Warning: **第一次寫這一條的時候歸錯了因**，寫的是「語料裏�
 真正的原因是三層疊起來的：
 
 1. **helix sweep 的 `MOTIONS` 裏根本沒有 `b`**，而且是**有意**不放的：yumete 的
-   `b`／`e` 是粗粒度的（#304，取一個小句而不是一個詞），helix 那邊是逐詞，同一個鍵
+   `b`/`e` 是粗粒度的（#304，取一個小句而不是一個詞），helix 那邊是逐詞，同一個鍵
    兩件事，擺進去全是假紅。
-2. **nvim sweep 掃的是 `db`／`d2b`，而且跑在 vim 鍵位下**。那一條路**從來沒壞過**
+2. **nvim sweep 掃的是 `db`/`d2b`，而且跑在 vim 鍵位下**。那一條路**從來沒壞過**
    ——逐格量過（第 5、11、12 格），修前修後都與 nvim 一致。
 3. 於是壞掉的那一個——**helix 鍵位下的光標動作 `b`**——兩邊都不在覆蓋範圍內。
 
@@ -20754,7 +20754,7 @@ Warning: **第一次寫這一條的時候歸錯了因**，寫的是「語料裏�
 就只能透過一個動詞去看見；而 `b` 在 helix 鍵位下的動詞是「先 `b` 再 `d`」兩鍵，兩個
 sweep 都不跑這個形狀。
 
-**要補的**：helix sweep 給 `b`／`e` 開一組「`b` 然後 `d`」的個案。粗粒度那條分歧要先
+**要補的**：helix sweep 給 `b`/`e` 開一組「`b` 然後 `d`」的個案。粗粒度那條分歧要先
 擺平——要麼只在**沒有歧義的 ASCII**語料上比，要麼把 helix 那一邊也問粗粒度的答案。
 
 ### 二、`md` 也去得掉 markdown 的標記 —— **做了**（2026-10-04）
@@ -20765,7 +20765,7 @@ sweep 都不跑這個形狀。
 mim y mam R        這是 **一句話** 的例子。  →  這是 一句話 的例子。
 ```
 
-因為 `md` 查的是 `editor.rs` 的 `PAIRS`，那張表裏只有括號和引號，沒有 `*`／`_`／`~`；
+因為 `md` 查的是 `editor.rs` 的 `PAIRS`，那張表裏只有括號和引號，沒有 `*`/`_`/`~`；
 而且 `surround_delete` 寫死了每邊刪**一個**字，`**` 是兩個。在一部以 markdown 為主的
 編輯器裏，這件事該是三個鍵。
 
@@ -20785,7 +20785,7 @@ mim y mam R        這是 **一句話** 的例子。  →  這是 一句話 的�
 1. **起點一樣的時候讓 markdown 贏。** `[字](網址)` 的 `[` 和那個鏈接構造從同一格起；
    讓括號贏，摘掉的只是 `[` 和 `]`，剩下 `字(網址)` ——一句壞掉的語法。
 2. **「那一對括號」要是 markdown 自己的標記，不算一對**（`pair_is_made_of_marks`）。
-   `[[條目]]` 裏的內層 `[`…`]` 起點比整個構造晚，照「取內層」它會贏；可它是 `[[`／`]]`
+   `[[條目]]` 裏的內層 `[`…`]` 起點比整個構造晚，照「取內層」它會贏；可它是 `[[`/`]]`
    的各一半，摘掉它只脫一層殼，剩下 `[條目]`。判準是兩個端點**都**落在標記那兩段裏——
    `(**粗**)` 不中，那對括號在標記外面，是真的一對。
 
@@ -20794,15 +20794,15 @@ mim y mam R        這是 **一句話** 的例子。  →  這是 一句話 的�
 
 測試：`md_takes_off_markdown_marks_too`。
 
-### 三、`ma`／`mi` 的下一鍵不開輸入法 —— **修了**（2026-10-04）
+### 三、`ma`/`mi` 的下一鍵不開輸入法 —— **修了**（2026-10-04）
 
 原話：「現在 `ma` 之后解挂系統輸入法，但是這樣的話，我打 `mam`，最后一個 m 會變成輸入法
 候選框。所以我建議這裡不解挂系統輸入法，也不允許 yume 輸入中文，這裡必須是一個 ascii
 字母。當然，輸入 `(` 能匹配全角括號依舊是生效的，輸入 `[` 匹配 `「」` 也生效。」
 
 **這不是一個新決定，是一個沒做完的舊決定。** 同一個理由 2026-09-29 就為 vim 的
-`di`／`da` 定過，寫在 `Pending::VimOperator` 的註釋裏：「它等的那一個鍵多半根本不是要
-寫進去的字——`diw` 的 `w` 是「詞」，`dip` 的 `p` 是「段」」。`mi`／`ma` 當時被落下了。
+`di`/`da` 定過，寫在 `Pending::VimOperator` 的註釋裏：「它等的那一個鍵多半根本不是要
+寫進去的字——`diw` 的 `w` 是「詞」，`dip` 的 `p` 是「段」」。`mi`/`ma` 當時被落下了。
 
 **在哪**：`Pending::MatchPair` 在 `takes_a_character()` 裏回 `true`，於是
 `composes_here()`（`tui/lib.rs`）為真，於是 `system_ime.want(false)`——系統輸入法回來、
@@ -20810,7 +20810,7 @@ yume 也拿到了鍵，`mam` 的第三鍵就進了候選框。
 
 **修法是把一個謂詞拆成兩個**，因為那裏本來就是兩個問題：
 
-| 問的 | 誰在問 | `mi`／`ma` |
+| 問的 | 誰在問 | `mi`/`ma` |
 | --- | --- | --- |
 | `takes_a_character()`：來了一個上屏串，誰該吃掉它 | 派發（`keys.rs`）、上屏（`words.rs`） | **收**（六個） |
 | `wants_the_ime()`：要不要主動請輸入法來 | 前端（`composes_here`） | **不要**（五個） |
@@ -20820,14 +20820,14 @@ yume 也拿到了鍵，`mam` 的第三鍵就進了候選框。
 Warning: **沒有去拒收非 ASCII。** fcitx5 那一端還沒有模態挂起，挂不住系統輸入法；那裏
 `ma「` 照樣要管用，所以上屏那一路仍然收它——改的只是「不主動請它來」。
 
-連帶好了的：**vim 可視模式的 `vi`／`va`** 是同一個 `Pending`。
+連帶好了的：**vim 可視模式的 `vi`/`va`** 是同一個 `Pending`。
 連帶改掉的：`--shot --keys` 那條離屏路徑從前問的是 `takes_a_character`，現在和互動迴圈
 問同一支——**離屏與真路徑分家這個倉裏已經咬過四次**，不能再添一次。
 
 全角那一族不靠輸入法（量過）：`ma(` 配得上 `（全角）`，`ma[` 配得上 `「引號」`。
 
 測試：`an_object_prefix_never_opens_the_input_method`，和 2026-09-29 那一支
-`a_vim_operator_never_opens_the_input_method` 並排。它也釘住了反方向：`f`／`r`／`ms`／
+`a_vim_operator_never_opens_the_input_method` 並排。它也釘住了反方向：`f`/`r`/`ms`/
 `mr` 照舊開輸入法，以及「輸入法真送來一個全角括號時 `ma` 照樣收」。
 
 Warning: **真正的驗收在真機上。** `--shot` 這一路不碰系統輸入法，所以這裏測得到
@@ -20878,7 +20878,7 @@ Warning: **真正的驗收在真機上。** `--shot` 這一路不碰系統輸入
 ### 四之二、管道那一邊再收一道（2026-10-04 定）
 
 跨距只治長查詢：`release` 乾淨了，`lib` 三個字母跨距是 10，還夠它在一個檔名裏跳，
-13 行裏 8 行是 `build.rs`／`table.rs`／`labels.rs` 這種 `l`…`i`…`b` 湊出來的。
+13 行裏 8 行是 `build.rs`/`table.rs`/`labels.rs` 這種 `l`…`i`…`b` 湊出來的。
 
 定下的分法：**`空格 f` 五檔全開，`ye --files` 關掉「跳着配」和「亂序」**。原話：
 「cli --files 更精确（五个选项不全开），只有当加了 open 之后进了 tui 才五个选项都开。」
@@ -20919,7 +20919,7 @@ Warning: 第一步（抽出共用核、行為不許變）單獨驗過：24 幀�
 | --- | --- | --- |
 | `ye --grep 詞` | 腳本、管道 | `檔:行:列:文字` 印到 stdout；找到 0、沒有 1、說不通 2 |
 | `ye --files 詞` | 同上 | 名字配得上的檔，最配的在前 |
-| `--open` | 人 | 同樣的問題，開編輯器來答：面板已經跑完／挑選器已經打好 |
+| `--open` | 人 | 同樣的問題，開編輯器來答：面板已經跑完/挑選器已經打好 |
 
 **`--open` 是一個修飾旗標，不是另一對名字**（定下的：「其实 open 更好。未来可以 -go
 来 grep + open，短别名是可以连缀的」）。於是所有開關（`--hidden`、`--project`、
@@ -20970,8 +20970,8 @@ rg 快兩倍半。這個差距要說出來，別含糊。
 - **簡拼與模糊拼音**（同日定）。`zg` 配不上「中國」是**有意的**——原話：「简拼
   匹配并不是主流……简拼会带来很大的不确定性。我们未来可以支持（甚至是模糊拼音），
   可以放到 todo，在高级搜索中做成一个开关。」
-- **短參數全撤了**，只留 `-h`／`-V`（定下的：「舊的讓位。我們現在先不做 short alias。
-  等到全部弄好了再看哪些值得」）。手冊裏七處 `yumete -c`／`-t`／`-v`／`-p` 跟着改成長名。
+- **短參數全撤了**，只留 `-h`/`-V`（定下的：「舊的讓位。我們現在先不做 short alias。
+  等到全部弄好了再看哪些值得」）。手冊裏七處 `yumete -c`/`-t`/`-v`/`-p` 跟着改成長名。
 - 管道那一邊是**先收齊再印**，不是邊走邊印。`| head` 已經不炸了（認 `BrokenPipe`），
   但要真的流式還得把面板那一趟拆開。
 
@@ -20989,7 +20989,7 @@ python3 scripts/oracle/vim_sweep.py dw d2b   # 只跑這幾式
 ```
 
 同一段文字、同一串鍵，餵給 nvim 餵給 yumete，比**存出來的檔案**。比檔案而不是比
-光標位置：`d`／`c`／`x` 做完剩下什麼，沒有解釋的餘地。要有 nvim（`NVIM=…` 可以指），
+光標位置：`d`/`c`/`x` 做完剩下什麼，沒有解釋的餘地。要有 nvim（`NVIM=…` 可以指），
 產物寫在 `target/oracle/`。
 
 ### `scripts/oracle/helix/` ＋ `helix_sweep.py` — 拿 helix-core 對選區
@@ -21074,7 +21074,7 @@ helix 那一支**只掃「本來就該一樣」的四式**（`w W B E`）。兩�
 備忘是按**行**存的，而這個檔只有一行——存不存都一樣。
 
 要治得換思路（窗口化地掃標記、或者長過某個數就當它沒有標記），**等定**。
-小說寫不出兩千萬字一段，但壓縮過的 `.js`／`.json` 就長這樣，而 yumete 也編代碼。
+小說寫不出兩千萬字一段，但壓縮過的 `.js`/`.json` 就長這樣，而 yumete 也編代碼。
 
 ## 5.68 窄窗口下的搜索面板：算清楚了，等定（2026-10-03）
 
@@ -21118,10 +21118,10 @@ helix 那一支**只掃「本來就該一樣」的四式**（`w W B E`）。兩�
    被 1 顆星的強調收走，而它該配的是下標 4 那個 `**`。
 
 第 2 條**只有 delimiter stack 配得出來**：按順序收集每一串分隔符，記下各自能開能閉
-（CommonMark 的 left-flanking／right-flanking），再從後往前配對。`fence` 那個
+（CommonMark 的 left-flanking/right-flanking），再從後往前配對。`fence` 那個
 `.min(2)` 也要跟着改——`***x***` 的外層是 1 顆、內層 2 顆，而現在它一上來就取 2。
 
-**為什麼今晚沒動**：`scan` 是 135 行，而 `construct` 這個編號在 80 處用着（`mi m`／
+**為什麼今晚沒動**：`scan` 是 135 行，而 `construct` 這個編號在 80 處用着（`mi m`/
 `ma m` 取的就是它），上面還壓着 24 張金樣。這是要清醒的時候單獨做的一件事，不是夜裏
 五十條裏的第三條。試過一條「閉合必須是一串的開頭」的一行小補丁，推演下來只是換一種
 錯法（`*em **strong*`），沒有變好，所以沒提交。
@@ -21163,15 +21163,15 @@ Basic** 那個 crate 的上游倉 0 star、母倉沒有 licence 檔，當未維�
 的中文翻譯可以用，有其他中文編輯器有嘗試其他翻譯嗎」。查了一圈（名字都是逐字抄的）：
 
 **終端編輯器那一脈一個例外都沒有**：Emacs 繁簡兩份教程、Vim 的 vimcdoc（光 `windows.cnx`
-一個檔 304 次）、Helix 社區文檔——全是 緩衝區／缓冲区。
+一個檔 304 次）、Helix 社區文檔——全是 緩衝區/缓冲区。
 
 **圖形編輯器那一脈一致拒絕了它**：VS Code、JetBrains、Sublime、Notepad++、CotEditor 說到
-「打開着的文件」時 **緩衝區出現零次**，用的是 打开的编辑器／标签页／頁籤／文档列表／文稿。
+「打開着的文件」時 **緩衝區出現零次**，用的是 打开的编辑器/标签页/頁籤/文档列表/文稿。
 Notepad++ 把界劃得最清楚：它**確實**用「缓冲区」，但只用在真的字節緩衝上（「无法保存，
 缓冲区无效」）。
 
 ⚠️ 兩條查出來的意外：**大陸審定的計算機術語是「缓冲器」不是「缓冲区」**（《计算机科学技术
-名词》2018），「缓冲区」在術語在線裏是**測繪學／GIS** 的詞（buffer zone）。台灣樂詞網另有
+名词》2018），「缓冲区」在術語在線裏是**測繪學/GIS** 的詞（buffer zone）。台灣樂詞網另有
 一條 `buffer - 暫存區`，但那條的學科沒驗到（頁面 JS 渲染，抓不下來），不能憑它下結論。
 
 **定的是留着**，照 Emacs 兩份教程的做法——它們第一次用的時候都寫「緩衝區（ buffer ）」，
@@ -21204,12 +21204,12 @@ Notepad++ 把界劃得最清楚：它**確實**用「缓冲区」，但只用在
 
 | 誰 | 命令 |
 | --- | --- |
-| Word | **Convert Text to Table** ／ **Convert to Text** |
-| VS Code（phoihos 那個擴展） | **Convert CSV to Markdown table** ／ **Convert Markdown table to CSV** ／ **Paste CSV as Markdown table** |
-| Sublime DataConverter | **DataConverter: to CSV** ／ **to TSV** ／ **to Markdown** |
+| Word | **Convert Text to Table** / **Convert to Text** |
+| VS Code（phoihos 那個擴展） | **Convert CSV to Markdown table** / **Convert Markdown table to CSV** / **Paste CSV as Markdown table** |
+| Sublime DataConverter | **DataConverter: to CSV** / **to TSV** / **to Markdown** |
 | Emacs org | `org-table-create-or-convert-from-region`（`C-c |`） |
 | Emacs markdown-mode | **Convert Region to Table** |
-| Vim | `:Tableize` ／ `:Tableize/;` |
+| Vim | `:Tableize` / `:Tableize/;` |
 
 兩條有用的結論：
 
@@ -21220,7 +21220,7 @@ Notepad++ 把界劃得最清楚：它**確實**用「缓冲区」，但只用在
    纔多給一個參數。yumete 本來就有 `table::sniff`，所以照這個辦：一個詞是目標，兩個詞
    是「從哪種到哪種」，**最後那個永遠是目標**。
 
-`pipe`／`csv`／`tsv` 三個詞是 **Pandoc 自己的詞彙**（`pipe_tables`、`csv`、`tsv`），不是
+`pipe`/`csv`/`tsv` 三個詞是 **Pandoc 自己的詞彙**（`pipe_tables`、`csv`、`tsv`），不是
 我們造的。
 
 ### 5.64.2 順帶長出來的能力：任一到任一
@@ -21262,7 +21262,7 @@ keyboard stay in agreement about what the reader can see」。
 ### 5.63.1 兩個坑
 
 - **「使用者要幾個」要單獨記一格。** 夾小之後 `ime.page_size()` 讀回來的是夾過的數，
-  窗口再長高就長不回去了。所以有 `PAGE_WISH`（出廠配置 ／ `:menu-size` 寫它），每一幀
+  窗口再長高就長不回去了。所以有 `PAGE_WISH`（出廠配置 / `:menu-size` 寫它），每一幀
   拿它和當前高度算一次。
 - **不能靠「先白畫一幀」把高度量出來。** 離屏那一支沒有循環，`--keys` 在任何一幀之前
   就跑完了，所以要在按鍵**之前**夾一次；第一版的辦法是先白畫一幀。`多選區` 那張金樣
@@ -21284,9 +21284,9 @@ keyboard stay in agreement about what the reader can see」。
 | --- | --- | --- |
 | `y` | 恢復 | 接第二問 |
 | `d` | 丟棄恢復文件 | 草稿刪掉，正文不動 |
-| `n`／`Esc` | 暫時不管 | 草稿留着；`:recover` 回來問同樣這三個 |
+| `n`/`Esc` | 暫時不管 | 草稿留着；`:recover` 回來問同樣這三個 |
 
-**選了「恢復」再問一次**：`y` 直接恢復／`d` 打開對比／`n` 取消。所以沒有任何一條路
+**選了「恢復」再問一次**：`y` 直接恢復/`d` 打開對比/`n` 取消。所以沒有任何一條路
 是按一下就把正文換掉的。
 
 ### 5.62.1 `:recover!` 取消了
@@ -21421,7 +21421,7 @@ keyboard stay in agreement about what the reader can see」。
 - **`nvim -c 'w! out' -s keys` 的 `-c` 在 `-s` 之前跑。** 於是「nvim 的答案」每一格
   都是**原封不動的檔**，而我差點照着它改了一天的代碼。寫法要把 `:w` 接在按鍵串的
   **末尾**：`keys + "\x1b:w! out\r:qa!\r"`。
-- **對照用的那份文字被 yumete 當成表格了。** `alpha beta, gamma` ／ `second line here`
+- **對照用的那份文字被 yumete 當成表格了。** `alpha beta, gamma` / `second line here`
   兩行的空白正好排成三欄，於是每一個動作都在**格**裏走——`w` 走到第 2 格，狀態欄寫
   的是 `Row 1, Col 2`，而我以為是 `w` 壞了。**對照用的文字要排得參差**。
 
@@ -21440,13 +21440,13 @@ keyboard stay in agreement about what the reader can see」。
 三版都在**動作**那一層問。錯的不是哪一版，是問錯了層——vim 自己把這條規矩寫在
 `:h exclusive`，而它說的是**動作的類**：
 
-- **排他**的落在原處 ＝ 零寬 ＝ 整個不做（`db` 檔首、`d^`／`d0` 第 1 欄、`dT,` 貼着）。
+- **排他**的落在原處 ＝ 零寬 ＝ 整個不做（`db` 檔首、`d^`/`d0` 第 1 欄、`dT,` 貼着）。
 - **包含**的落在原處 ＝ 你站的那一格（`d$` 在行末那一格照樣刪掉它）。
 - **整行**的落在原處 ＝ 這一行（`dgg` 在第 1 行照樣刪掉第 1 行）。
 
-所以動作只交落點，類交給文法：`Motion::goes_back`／`may_stand_still` 兩個試出來的謂
+所以動作只交落點，類交給文法：`Motion::goes_back`/`may_stand_still` 兩個試出來的謂
 詞都刪了，`run_vim_step` 裏一句 `target == start && reach == Exclusive` 就夠。順帶把
-`F`／`T` 從「包含」改成「排他」——那本來就是 `:h F`、`:h T` 寫的。
+`F`/`T` 從「包含」改成「排他」——那本來就是 `:h F`、`:h T` 寫的。
 
 ### 5.59.3 另外四條
 
@@ -21457,11 +21457,11 @@ keyboard stay in agreement about what the reader can see」。
   尾的話，第二跳問到的還是同一個詞尾——`c2w` 只換一個詞（35 格紅）。
 - **帶着動詞的 `l` 可以落到行末的後面一格。** 夾在「最後一個字」上，`d2l` 在倒數第二
   格只刪得掉一個字。
-- **`d;`／`d,` 從前說「不是一個動作」。** `step_for` 是純函數，記不住「剛纔那個 `f`」
+- **`d;`/`d,` 從前說「不是一個動作」。** `step_for` 是純函數，記不住「剛纔那個 `f`」
   ——那是編輯器的記憶，所以這一句寫在 `run_vim_step` 的入口，不寫進那張表。`t` 貼着目
   標的時候要跳過它（`:h ;`），帶着動詞不能像獨立的 `;` 那樣讓開一格（錨點要留在原
   處），所以改成**要下一個**：貼着第一個就去找第二個。
-- **獨立的 `f`／`F`／`t`／`T` 從前留着一片選區。** B3 把「獨立的動作讀光標」立下來的
+- **獨立的 `f`/`F`/`t`/`T` 從前留着一片選區。** B3 把「獨立的動作讀光標」立下來的
   時候 `w B e { } H L` 都接上了，這四個漏在 helix 那一支上——`f,` 跳過去之後再按 `~`，
   跳過的那一整段全變大寫。
 
@@ -21471,11 +21471,11 @@ keyboard stay in agreement about what the reader can see」。
 
 - **`ge`**（往回到上一個詞的末尾）。vim 鍵位裏從前沒有這一個——`ge` 在 helix 那邊是
   「到檔尾」，占着這兩個鍵——於是剩下的 44 格裏有 41 格是它。現在 vim 鍵位下
-  `ge`／`gE` 是 vim 的，helix 鍵位下照舊是「到檔尾」。它是**往回的包含動作**，第一個
+  `ge`/`gE` 是 vim 的，helix 鍵位下照舊是「到檔尾」。它是**往回的包含動作**，第一個
   這樣的：`run_vim_step` 裏那條「往回的取目標、留光標自己那一格」因此收窄成只管排他
   的，`ge` 走包含那一支（第 2 欄按 `dge`，nvim 刪 `al` 兩個字）。
 - **光標坐不坐得上換行。** vim 的普通模式坐不上去，yumete 照 helix 的規矩坐得上去，
-  於是在一行的最後一個字上按 `x` 吃掉的是換行、兩行焊成一行。現在 vim 鍵位下 `h`／
+  於是在一行的最後一個字上按 `x` 吃掉的是換行、兩行焊成一行。現在 vim 鍵位下 `h`/
   `l` 不出這一行（`:h l`，`whichwrap` 出廠不含 `<`、`>`），helix 鍵位照舊走一頁。
 
 ### 5.59.5 剩下的 3 格，和一條順帶量出來的
@@ -21488,7 +21488,7 @@ keyboard stay in agreement about what the reader can see」。
 什麽都不做。這是 helix 的規矩（helix 也畫那一行）。
 
 **2026-10-02 定：先記下來，今天不動。** 理由是它動的不是一個鍵，是「一個檔有幾行」
-——行號、`:N` 跳行、末行上的 `dd`、狀態欄的總行數全都跟着變，helix／vim／ropey 三家
+——行號、`:N` 跳行、末行上的 `dd`、狀態欄的總行數全都跟着變，helix/vim/ropey 三家
 各數各的。要改就單開一輪，自己配一遍神諭和金樣。
 
 ## 5.57 第十一輪：把整張命令表跑了一遍（2026-10-02）
@@ -21503,13 +21503,13 @@ keyboard stay in agreement about what the reader can see」。
 | # | 毛病 |
 | --- | --- |
 | 1 | **讀和寫對「相對於哪裏」給出兩種答案。** `:open` 2026-10-01 改成按工作路徑算，寫出去的那幾個（`:w`、`:write-as`、`:export`、`:shot`、`:table-csv`）從來沒改——`:cd sub` 之後 `:write-as z.md` 把檔存進了**上一層**，而狀態欄說「存了 z.md」。`~` 也沒展開：`:write-as ~` 真的造出一個**叫 `~` 的檔** |
-| 2 | **`:help` 把巨集那一對寫反了。** 那張表按位置讀（`u U` 撤銷／重做），而它寫着 `q Q`——真的是 `Q` 錄、`q` 放。那兩個鍵自己的註釋說「調換了的一對是最糟的那一種分歧：按錯了不是沒反應，它開始錄，蓋掉你本來要放的那一段」 |
+| 2 | **`:help` 把巨集那一對寫反了。** 那張表按位置讀（`u U` 撤銷/重做），而它寫着 `q Q`——真的是 `Q` 錄、`q` 放。那兩個鍵自己的註釋說「調換了的一對是最糟的那一種分歧：按錯了不是沒反應，它開始錄，蓋掉你本來要放的那一段」 |
 | 3 | **`:help table` 和三則提示還寫着 `t …`。** 表格那一組 2026-09-21 搬進了空格選單，而 `t` 現在是 vi 的 till——`t1s`、`t20,20g` 按下去一個都不管用。連「排序要指明欄」那一句自己都是 `␣ts` 印的，而它教的是 `t1s` |
 | 4 | **合併衝突的光標小牌子寫着 `␣c`**，而那個和弦 2026-09-12 就搬到 `␣m` 了（`␣c` 讓給了行註釋） |
 | 5 | **`:goto abc` 答「後面要跟一個參數」**——參數明明給了。`Parsed::number` 手裏就有對的那一句，丟掉它纔換來一句假話。`:toc` 同病 |
 | 6 | **`:toc 0` 悄悄走到第一條**（`0usize.saturating_sub(1)` 還是 `0`） |
 | 7 | **一個讀不出來的配置被悄悄丟掉。** 存成 UTF-16 的 `config.toml`（記事本的「Unicode」）存在、讀不了、什麼都不說 |
-| 8 | **四個命令離屏下白跑且不吭聲**（`:format`／`:run`、`:reload config`、`␣p`、`:word-list-reload`），而剪貼板的**寫**那一半一直是說的——同一塊板子兩種待遇。順帶：那句提示印的 `:yume ?` 是核心和前端之間的暗號，不是打得進去的命令 |
+| 8 | **四個命令離屏下白跑且不吭聲**（`:format`/`:run`、`:reload config`、`␣p`、`:word-list-reload`），而剪貼板的**寫**那一半一直是說的——同一塊板子兩種待遇。順帶：那句提示印的 `:yume ?` 是核心和前端之間的暗號，不是打得進去的命令 |
 | 9 | **值表的大小寫兩種脾氣。** `:syntax MARKDOWN` 收得下而 `:language ZH` 不認——`Param::WordsOr` 比不中會落到命令自己的解析器（多半折大小寫），`Param::Words` 只走 `pick`，而 `pick` 逐字節比。表裏的詞全是小寫 ASCII，折一下沒有別的影響 |
 
 另外 `:indent-hint` 是全表唯一一個答不出「我現在是哪一檔」的設定（光打它答「不認得
@@ -21521,8 +21521,8 @@ keyboard stay in agreement about what the reader can see」。
    `tab_width = 0`、`indent_width = 999`。最後那個還會讓 `:indent-width` 報
    「縮進寬度：999 格」——而這個值它自己打進去是拒的。要攔就要逐項定界。
 2. **`:help` 那一行 `D C`** 在出廠的 helix 鍵位下兩個鍵都不做它說的事（`D` 只在 vim
-   檔有，`C` 是「往下再加一個選區」），而且 `d`／`c` 本來就進寄存器。整行要重寫。
-3. **`:wiki-edit`／`:wiki-global` 用 `::百科` 找不到**（九條命令沒有 `find` 列表）。
+   檔有，`C` 是「往下再加一個選區」），而且 `d`/`c` 本來就進寄存器。整行要重寫。
+3. **`:wiki-edit`/`:wiki-global` 用 `::百科` 找不到**（九條命令沒有 `find` 列表）。
 4. **`:toc` 的參數在選單上寫作 `<幾級>`**，而它跳的是第幾條標題。
 5. 小的：`:view-wrap 99999` 悄悄夾到 400、`:table-pipe tab` 把一個真的製表符印進自己
    那句話裏、`::` 面板在任何窗口高度上都只畫八行、`:table-new 3 4 5` 默默吃掉第三個數。
@@ -21547,7 +21547,7 @@ keyboard stay in agreement about what the reader can see」。
 Markdown 那一輪：3,000 字的段落（CJK、拉丁、長網址、不換行空格、ZWJ、ZWSP、BOM、
 ZWJ 家庭 emoji、五百字的連續串）在**每一個寬度 20–120** 上折出來再拼回去，逐字對——
 除上面第三條之外一字不差。滾動往返六種形狀 × 四個起點全部回到原處。573 個光標位置
-走遍二十種 Markdown 構造，`:render off`／`basic` 下零分歧。
+走遍二十種 Markdown 構造，`:render off`/`basic` 下零分歧。
 
 輸入法那一輪：上屏的字節和面板說的逐一對過——空緩衝、檔首、檔尾、蓋選區、表格格子、
 命令行、`/` 行、搜索面板的框、三個光標、`--readonly`，沒有一處丟字或多字。撤回粒度
@@ -21558,7 +21558,7 @@ ZWJ 家庭 emoji、五百字的連續串）在**每一個寬度 20–120** 上�
 1. ~~狀態欄的「列」在 `:render full` 下算錯~~ **修了**：加了畫出來的卻沒減藏起來的，
    573 個位置裏 49 個報得比那一行畫出來的還長。現在減了。
 2. **一串 `=` 被當成反覆的 `==高亮==` 吃掉**：十四個 `=` 畫成六個，而且光標走過去的
-   時候那一行會在 6／10／14 格之間變來變去。setext 標題的下劃線和散文裏的 `=====` 分
+   時候那一行會在 6/10/14 格之間變來變去。setext 標題的下劃線和散文裏的 `=====` 分
    隔線都中。順帶：setext 標題根本沒認出來。
 3. **嵌套的強調解析錯**：`*em **strong** em*` 畫成 `em *strong** em*`。`closing` 不跳過
    比自己長的那一串分隔符。
@@ -21595,7 +21595,7 @@ ZWJ 家庭 emoji、五百字的連續串）在**每一個寬度 20–120** 上�
 搜索那條規矩只教會了整趟重搜、沒教會快路，§5.53.5）。修法：繩子動了而深度沒動，就把
 那個「乾淨位置」作廢。
 
-**② 同一天的兩輪審查把同一個鍵改向了相反的方向。** 搜索面板的 `d`／`D` 在末尾改成
+**② 同一天的兩輪審查把同一個鍵改向了相反的方向。** 搜索面板的 `d`/`D` 在末尾改成
 「刪掉看得見的最後一個字」（照 2026-09-27 那條定論），而挑選器的 `D` 同日早些時候改成
 「末尾就什麼都別動」。兩扇都自洽，合起來不是一條規矩。統一到有定論的那一邊。
 
@@ -21697,7 +21697,7 @@ module passes here … so the guard cannot be walked around by an edit」——�
 
 ### 5.54.2 查過沒事的（這一半同樣值錢）
 
-- **字節保真十四種全過**：CRLF、混着的 CRLF／LF、只有 `\r`、沒有末尾換行、BOM、
+- **字節保真十四種全過**：CRLF、混着的 CRLF/LF、只有 `\r`、沒有末尾換行、BOM、
   BOM＋CRLF、NFD 的韓文與越南文、一萬行相同的行、末行是一個裸 `\n`、**四十兆的單行**、
   全部 C0 控制字符、**正文中間一個 NUL**、製表符。打開、在遠處改一個字、存檔、`od -c`
   比字節——除了那個字，一個字節都沒動。非 UTF-8 的（孤立代理字節、Latin-1、UTF-16LE）
@@ -21707,7 +21707,7 @@ module passes here … so the guard cannot be walked around by an edit」——�
   檔，在第二秒把它換掉。
 - **寫到一半的五種**：444、路上是個目錄、父目錄沒了、**磁碟寫滿**（4 MB 的內存盤）、
   斷掉的符號連結。沒有一種報了成功而其實沒寫，沒有一種留下半個檔或者臨時檔。
-- **只讀擋得住的那些**：繩子那五支（`insert`／`remove`／`replace`／`undo`／`redo`）全
+- **只讀擋得住的那些**：繩子那五支（`insert`/`remove`/`replace`/`undo`/`redo`）全
   有閘，而且 `Edit = Result<(), ReadOnly>` 帶 `#[must_use]`，呼叫方丟不掉那個拒絕。
 - **撤回一次就夠的那些**：五千行的粘貼、`100p`、`!` 過濾、`gJ`、多光標、十二萬行的
   `:table-sort`（而且結果沒變就不記點）。
@@ -21725,7 +21725,7 @@ module passes here … so the guard cannot be walked around by an edit」——�
 4. **`:recover` 不問一句就把整個緩衝換掉**，而且換上去的是**啓動時緩存的**那一份草稿。
    `u` 退得回來，盤上也沒動，但一個命令就丟掉任意多的當前工作。
 （`!` 過濾在 `--readonly` 下照樣跑完命令那一條**已經修了**：`Command::Pipe` 在排隊之前
-先問一句。`:sh`／`:!` 不在此列——那兩個是「跑一下給我看」，不碰這一份。）
+先問一句。`:sh`/`:!` 不在此列——那兩個是「跑一下給我看」，不碰這一份。）
 
 ## 5.53 一夜四輪審查：十一個真 bug，一個會丟字（2026-10-02）
 
@@ -21822,7 +21822,7 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
    §5.12.39 和 `find.rs` 的 `Field::Chinese`。那句「兩者再無例外」是假的，改口了；
    手冊上補了一條。
 2. **`.jj` 和 `.svn` 算不算項目根記號。** 代碼從來只找 `.yumete` 和 `.git`（見 §5.52）。
-3. **包含／排除那兩格用逗號分隔，於是 `{a,b}` 打不進去**（被拆成 `{a` 和 `b}`，兩個都
+3. **包含/排除那兩格用逗號分隔，於是 `{a,b}` 打不進去**（被拆成 `{a` 和 `b}`，兩個都
    解析不了，整趟搜索報「寫錯了」）。ripgrep、VS Code、`.gitignore` 都收這個寫法。要
    麼換分隔符，要麼在文檔裏說清楚。
 4. **一批替換裏有個只讀的檔，它被跳過而沒人說。** 全都被拒的時候那句拒絕留得住，
@@ -21840,14 +21840,14 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
 | 在哪 | 從前 | 現在 |
 | --- | --- | --- |
 | `manual.md` 面板那張圖 | 七行開關、`位置` 在第二行、`[ ]` 自成一欄 | 照屏幕抄了一張 |
-| 項目路徑那一行 | `.yumete`／`.git`／`.jj`／`.svn` | `.yumete`，没有就 `.git` |
-| 面板行數 | 十行／十四行 | 八行／十一行／十二行 |
+| 項目路徑那一行 | `.yumete`/`.git`/`.jj`/`.svn` | `.yumete`，没有就 `.git` |
+| 面板行數 | 十行/十四行 | 八行/十一行/十二行 |
 | 翻開關的鍵 | `1`–`6` 和空格 | `1`–`7` |
-| 命令一覽、找了換 | `-cd`／`-gd` | `-buffers`／`-working`／`-project` |
+| 命令一覽、找了換 | `-cd`/`-gd` | `-buffers`/`-working`/`-project` |
 | 工作路徑那一節 | `:grep` | `:search-project` |
 | `README.md` | `:search-gd`、`:replace`、`:word-discover` 說成項目範圍 | 改成還在的那幾個名字 |
 
-⚠️ **`.jj`／`.svn` 從來沒有實現過**（`editor.rs` 的 `book_root` 只找那兩樣）。手冊照代碼改
+⚠️ **`.jj`/`.svn` 從來沒有實現過**（`editor.rs` 的 `book_root` 只找那兩樣）。手冊照代碼改
 了，可**該不該認 jj 和 svn 是另一個問題**——jj 的倉自己帶 `.jj`，而 `.git` 在 colocated 的
 倉裏纔有。等定。
 
@@ -21857,7 +21857,7 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
 **全改成「副編輯區」**（六處）。
 
 ⚠️ 改 ⑦ 的時候順手撞出一個**真缺陷**：`action.next-region` 那一則**繁簡兩邊說的不是同一
-件事**——繁體寫「下一個區域（主／副編輯區／邊欄）」，簡體寫「下一个区域（正文／边栏／另
+件事**——繁體寫「下一個區域（主/副編輯區/邊欄）」，簡體寫「下一个区域（正文/边栏/另
 一个工作区）」。不是轉換沒跟上，是兩句話。定成兩邊都只寫「下一個區域」，括號整個去掉。
 **這一族值得再掃一遍**：繁簡不是同一句話的，測試攔不住（它只驗「有沒有 zht」）。
 
@@ -21869,17 +21869,17 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
 | 2 | 「第八個開關：跟原文的大小寫」 | 沒有第八個開關了，它是第五行的第三檔。整個小節的名字要改 |
 | 3 | 「「隔字也算」和正則、「整詞」是三選一」 | 正則和模糊併進了同一行，三選一隻剩「西文整詞」一個 |
 | 4 | 「「替換」是個開關」 | 現在是三檔的輪盤 |
-| 5 | 「勾上替換，模糊那一格自己關掉並畫成灰的」 | 機制換了：替換一離開「關」匹配模式退回字面，而替換開着的時候 `3` 只在字面／正則之間轉 |
+| 5 | 「勾上替換，模糊那一格自己關掉並畫成灰的」 | 機制換了：替換一離開「關」匹配模式退回字面，而替換開着的時候 `3` 只在字面/正則之間轉 |
 | 6 | 「隔字也算」這個叫法（五處，連 `yumete.toml` 的註釋） | 屏幕上寫的是「匹配模式 [模糊]」，手冊拿「隔字也算」當小節名。是留作白話解釋還是換掉，等定 |
 | 7 | 「另一個工作區」（六處） | 界面早就叫「副編輯區」 |
 
 **手冊從來沒提過的四件事**（也要新寫，同樣擱着）：
 
-- `C-n`／`C-p` 在 Normal 下翻三分之二頁（2026-10-01 加）。移動那張表沒有它，而 `C-n` 在
+- `C-n`/`C-p` 在 Normal 下翻三分之二頁（2026-10-01 加）。移動那張表沒有它，而 `C-n` 在
   §2449 是插入態的補全鍵——讀者會以為它只有那一個意思。
 - `:cd` 與 `:pwd` 是命令，而第八章那張命令表裏沒有，只在正文裏順口提過四次。
-- 挑選器的列表層把面板那一整套編輯鍵都收了（`I a A d D c C`、`Tab`／`BackTab`，查詢層還有
-  `Home`／`C-a`、`End`／`C-e`、`C-u`、`Delete`），手冊那張表只列了五個。
+- 挑選器的列表層把面板那一整套編輯鍵都收了（`I a A d D c C`、`Tab`/`BackTab`，查詢層還有
+  `Home`/`C-a`、`End`/`C-e`、`C-u`、`Delete`），手冊那張表只列了五個。
 - 挑選器的鍵位提示收進了命令行、而且跟着層換（§5.50），手冊沒說去哪裏看。
 
 ## 5.51 等定的八條英文文案（2026-10-02 審出來的；2026-10-03 改完）
@@ -21901,7 +21901,7 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
 
 - 四條子命令的中文照寫下的改（`在工作路徑中替換`、`在工作路徑中挖掘用戶詞語`…），
   **父條跟着改成同一個詞**——原話「父条改成『用户词语』就好了」。
-- 面板的英文**統一用 Search**：標題 `Search`／`Search & Replace`，查詢框 `Search:`，
+- 面板的英文**統一用 Search**：標題 `Search`/`Search & Replace`，查詢框 `Search:`，
   位置那一格仍是 `In:`。
 - `search.scope-is-a-pick` 的英文從 81 格縮到 75，順帶把句子裏的 `scope` 改成屏幕上那個
   詞 `In:`。
@@ -21918,7 +21918,7 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
 
 
 
-一份逐檔逐寬度的文案審閱（三種語言 × 80／90／100／120 欄 × 面板每一種狀態）。**繁體和簡體
+一份逐檔逐寬度的文案審閱（三種語言 × 80/90/100/120 欄 × 面板每一種狀態）。**繁體和簡體
 零處截斷**；下面八條全是英文那一列的，而英文是我自己定的，所以逐條列出來等過目。
 
 量法：`./yumete --lang=en --shot=WxH --keys='…'`，面板寬約 24 格。
@@ -21927,23 +21927,23 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
 | --- | --- | --- | --- | --- |
 | 1 | `search.whole` | `whole word (Latin)` | 18 格。**80 欄下方框整個被切掉**，按 `4` 屏幕上什麼都不變；要 88 欄纔看得見 `[x]` | `whole word`（10 格） |
 | 2 | `search.where.working` | `the working directory` | 21 格進 14 格的框。那一格留的是頭（名字不是路徑），80 欄下成了 `the working di` | `working directory`（去掉冠詞，17 格） |
-| 3 | `search.label.exclude` ＋ `search.hidden` | `skip:` 與 `skip` | **兩個相鄰的行用同一個詞說兩件事**（中文是 排除／不搜） | `only:`／`except:` 配成一對，`skip` 留給第七行 |
+| 3 | `search.label.exclude` ＋ `search.hidden` | `skip:` 與 `skip` | **兩個相鄰的行用同一個詞說兩件事**（中文是 排除/不搜） | `only:`/`except:` 配成一對，`skip` 留給第七行 |
 | 4 | `search.bad-glob` | `include or exclude holds a bad pattern` | 屏幕上那兩格叫 `only:` 和 `skip:`，沒有 include 也沒有 exclude | 跟着第 3 條的用詞改 |
-| 5 | `search.replace.smart` | `smart case` | **和既有術語撞**：ripgrep／vim／helix 的 smartcase 是**搜索**選項，而這裏說的是「換上去的跟着原文」。同一扇面板第一行已經寫着 `case [smart]` | `keep case` |
-| 6 | `search.matching.plain` ＋ `search.replace.literal` | 都是 `literal` | 第三行和第五行都畫成 `[literal]`（中文分得開：字面／字面替換） | 替換那一個改成 `as typed` |
-| 7 | `search.chinese.glyphs` | `variants` | `Chinese [variants+pinyin]` 在 80／90 欄下被切 | `glyphs` 或 `trad/simp` |
-| 8 | `cmd.commands.replace-*`、`cmd.word-topics.discover-*` | 「replace across the project」「mine words across the working directory」 | 動詞沒有賓語，讀着像硬翻。中文那兩條也換了語域：父條說「挖出這一篇自己的詞」，子條說「探索用戶詞語」，而「用戶」是這份文案通篇避開的系統詞 | 英文「find and replace in …」；中文「挖出工作路徑裏自己的詞」／「挖出項目裏自己的詞」 |
+| 5 | `search.replace.smart` | `smart case` | **和既有術語撞**：ripgrep/vim/helix 的 smartcase 是**搜索**選項，而這裏說的是「換上去的跟着原文」。同一扇面板第一行已經寫着 `case [smart]` | `keep case` |
+| 6 | `search.matching.plain` ＋ `search.replace.literal` | 都是 `literal` | 第三行和第五行都畫成 `[literal]`（中文分得開：字面/字面替換） | 替換那一個改成 `as typed` |
+| 7 | `search.chinese.glyphs` | `variants` | `Chinese [variants+pinyin]` 在 80/90 欄下被切 | `glyphs` 或 `trad/simp` |
+| 8 | `cmd.commands.replace-*`、`cmd.word-topics.discover-*` | 「replace across the project」「mine words across the working directory」 | 動詞沒有賓語，讀着像硬翻。中文那兩條也換了語域：父條說「挖出這一篇自己的詞」，子條說「探索用戶詞語」，而「用戶」是這份文案通篇避開的系統詞 | 英文「find and replace in …」；中文「挖出工作路徑裏自己的詞」/「挖出項目裏自己的詞」 |
 
 另外兩條**不是文案、是取捨**，也等定：
 
 - **`search.scope-is-a-pick`** 英文 83 格，80 欄下被切（中文 76 格合身）；而且它把那一格叫
   `scope`，屏幕上寫的是 `In:`。
-- **英文面板用了三套詞**說同一件事：標題 `Search`／`Find & Replace`、查詢框 `Find:`、位置
-  `In:`。中文從頭到尾是 搜索／搜:／位置:。
+- **英文面板用了三套詞**說同一件事：標題 `Search`/`Find & Replace`、查詢框 `Find:`、位置
+  `In:`。中文從頭到尾是 搜索/搜:/位置:。
 
-**已經照審閱改掉、不必再問的**（都是繪製錯誤，不是措辭）：位置／包含／排除三格畫到邊欄標籤
+**已經照審閱改掉、不必再問的**（都是繪製錯誤，不是措辭）：位置/包含/排除三格畫到邊欄標籤
 行上、標題和數目相撞、位置那一格留尾留出 `king directory`、寫錯 glob 時標題說「無結果」、
-`find` 關鍵詞漏了 `查找`／`全文`／`grep`／`mine` 那一批。
+`find` 關鍵詞漏了 `查找`/`全文`/`grep`/`mine` 那一批。
 
 ## 5.50 挑選器長出一個搜索框，鍵位收進命令行（2026-10-01 定）
 
@@ -21960,11 +21960,11 @@ unicode，類裏放不下多字節的字）、249 層括號（多一層方括號
 3. **`jk` 走得上搜索行**，走上去按 `i` 進去打字。原話：「这就是个模态编辑啊」。
    **`/` 去掉**：一件事一個鍵。而 `i` **在任何一行上都進框**，定下的抄近路。
 4. **搜索面板那一整套編輯鍵搬了過來**：`i I a A d D c C`。`o` 不搬——一行的框裏「開下一
-   行」沒有意思。`d`／`D` 改完把鍵放到搜索行上：站在一條檔名上按 `d`、查詢框裏悄悄少一個
+   行」沒有意思。`d`/`D` 改完把鍵放到搜索行上：站在一條檔名上按 `d`、查詢框裏悄悄少一個
    字，是看不見的事。
 5. **鍵位提示收進命令行**（原話：「快捷键文案是不是可以收到命令行中？」）。搜索面板一
    直是那樣，而挑選器從前把鍵寫在自己腳注上、命令行空着。騰出來的那一行歸列表；腳注只剩
-   「第幾條／共幾條」。用的詞和搜索面板共用同一批（`hint.search.box-*`）。
+   「第幾條/共幾條」。用的詞和搜索面板共用同一批（`hint.search.box-*`）。
 
 **一開仍然在列表那一層。** 當天試過改成「一開就能打字」（helix、fzf、telescope 都是那樣），
 當天撤回——代價是關掉挑選器要按兩次 `Esc`，而且開門第一下退格就換層。原話：「那就改成
@@ -22053,13 +22053,13 @@ $ cd crates && ye yumete-core/Cargo.toml
 
 | | | |
 | --- | --- | --- |
-| `1` | 大小寫匹配 | `[智能]`／`[要分]`／`[不分]` |
-| `2` | 中文匹配 | `[繁簡+拼音]`／`[繁簡]`／`[拼音]`／`[ ]` |
-| `3` | 匹配模式 | `[字面]`／`[正則]`／`[模糊]` |
+| `1` | 大小寫匹配 | `[智能]`/`[要分]`/`[不分]` |
+| `2` | 中文匹配 | `[繁簡+拼音]`/`[繁簡]`/`[拼音]`/`[ ]` |
+| `3` | 匹配模式 | `[字面]`/`[正則]`/`[模糊]` |
 | `4` | 西文整詞匹配 | 勾 |
-| `5` | 替換 | `[關]`／`[字面替換]`／`[智能大小寫]` |
+| `5` | 替換 | `[關]`/`[字面替換]`/`[智能大小寫]` |
 | `6` | 位置 | 四選一 |
-| `7` | 不搜 | `[隱藏+忽略]`／`[ ]`——**方框裏列的是不搜哪些** |
+| `7` | 不搜 | `[隱藏+忽略]`/`[ ]`——**方框裏列的是不搜哪些** |
 
 **本文件那一檔 8 行，走磁碟＋替換 12 行**，從前一律 15 行。
 
@@ -22086,13 +22086,13 @@ $ cd crates && ye yumete-core/Cargo.toml
 改，挑選器永遠不分」。
 
 Warning: **沒有一個參考實現在正文搜索裏提供模糊**：VS Code 的快速打開是模糊的、搜索框只有
-字面／整詞／正則；helix 的挑選器用 nucleo，`global_search` 純正則。面板這個模糊是
+字面/整詞/正則；helix 的挑選器用 nucleo，`global_search` 純正則。面板這個模糊是
 2026-09-19 自己提的，沒有先例可抄。
 
 ## 5.47 搜索的「範圍」重新設計（2026-10-01 定）
 
 起因是一句：「Search-系列可以重新设计，而不是只改文案。目的是为了和其他的对齐。」接着
-每一處都問「Helix 怎麼做的」。於是先把 helix、vim／neovim、telescope 三家**所有**按路徑錨定
+每一處都問「Helix 怎麼做的」。於是先把 helix、vim/neovim、telescope 三家**所有**按路徑錨定
 的功能逐條查了源碼（不看它們的文檔——helix 的手冊在 `空格 f` 與 `空格 /` 兩處都寫反了），
 列成候選表再逐項定。
 
@@ -22104,7 +22104,7 @@ Warning: **沒有一個參考實現在正文搜索裏提供模糊**：VS Code �
 | --- | --- |
 | helix | 就是命令名。`search` ＝ 本文件，`global_search` ＝ **寫死 cwd**（`commands.rs:2614`）。想搜子目錄只能先 `:cd`。這個形狀是它的架構逼出來的（靜態命令不收參數），不是比較出來的優點 |
 | vim | 就是打出來的文件參數：`:vimgrep /pat/ **/*.c` |
-| telescope | 調用處的 opts 表：`cwd`／`search_dirs`／`grep_open_files` |
+| telescope | 調用處的 opts 表：`cwd`/`search_dirs`/`grep_open_files` |
 
 查出來的幾條事實，後面的取捨都建在上面：
 
@@ -22149,7 +22149,7 @@ must be in `$PATH`」），所以沒有參考可抄，理由寫在那一支的�
 | 本文件 | 當前 buffer，含沒存盤的改動 |
 | 緩衝區 | 每一個打開着的 buffer，**含沒有文件名的草稿** |
 | 工作路徑 | `:cd` 定的那個目錄，啓動時＝敲 `ye` 時 shell 所在的目錄 |
-| 項目路徑 | 從工作路徑往上找**最近**一個帶 `.yumete`／`.git`／`.jj`／`.svn` 的祖先 |
+| 項目路徑 | 從工作路徑往上找**最近**一個帶 `.yumete`/`.git`/`.jj`/`.svn` 的祖先 |
 
 **指定文件夾不進輪替**，只能 `:search 某目錄` 進來，進來之後面板裏改不了。
 
@@ -22162,7 +22162,7 @@ homebrew 之後。去掉它們真正的意思是**範圍不跟着光標走**，�
 **語言服務器的根不做搜索範圍**：拿它當範圍等於把範圍交給服務器決定，而散文文件根本沒有服務器。
 
 **`.yumete` 算一個根。** 它不只是設置——裏面有 `config.toml`、`tables/*.toml`、`progress.tsv`、
-`words.txt`／`discovered_words.txt`、wiki。helix 的同一張標記表裏就有 `.helix`，和 `.git`
+`words.txt`/`discovered_words.txt`、wiki。helix 的同一張標記表裏就有 `.helix`，和 `.git`
 `.svn` `.jj` 並列。去掉它的代價是：一個只有散文、沒有 git 的文件夾再也成不了一個項目。
 
 **規則**：
@@ -22176,7 +22176,7 @@ homebrew 之後。去掉它們真正的意思是**範圍不跟着光標走**，�
   要 39.8 MB。改完 21 處變成 59 處。
 - **走查有兩層地板一隻錶**（定下的）：文本 20,000 個、條目 200,000 個是**地板不是天花板**
   ——「如果1ms就扫完了这个limit，那其实我们可以扫更多」，所以碰到地板之後還不到 **3 秒**就
-  接着走，**5 秒硬停**。沒有硬停的話最壞情況是盤說了算：這台機器暖盤約 **37,700 條目／秒**
+  接着走，**5 秒硬停**。沒有硬停的話最壞情況是盤說了算：這台機器暖盤約 **37,700 條目/秒**
   （全二進制五萬上下，全文本八千上下），二十萬個條目要 5.3 秒。**停下來那一刻數目那一格寫
   「21+結果」**——從前它一聲不吭，一張半截的清單看着像是全部。
 - Warning: **代價是同一次搜索兩次跑可能給出不同的數目**。只在本來就要被截斷的那種樹上發生。
@@ -22192,7 +22192,7 @@ homebrew 之後。去掉它們真正的意思是**範圍不跟着光標走**，�
 
 **命令按四檔各給一條**（照 helix 一個範圍一條命令）：`:search`（本文件）、`:search-buffers`、
 `:search-working`、`:search-project`，`:search 某目錄` 就是指定文件夾；`replace` 同形。
-原來的 `-cd`／`-gd` 兩個縮寫跟新的四檔對不上了，刪掉。
+原來的 `-cd`/`-gd` 兩個縮寫跟新的四檔對不上了，刪掉。
 
 ## 5.44 「信息」：一個槽，五種內容（2026-09-30 定）
 
@@ -22240,7 +22240,7 @@ homebrew 之後。去掉它們真正的意思是**範圍不跟着光標走**，�
 | `go_to_region`（`空格 4`） | 自己又找了一遍 `View::ALL`，繞過 `side_view` |
 
 Warning: **只要它是個字段，就永遠會有第四個地方忘記。** 第二處耦合同形：「摆哪一種」也存了兩份
-（`spot_chosen`／兩個開關算的，和面板自己的 `View`），所以 `:docs on` 之後要「同步」一次
+（`spot_chosen`/兩個開關算的，和面板自己的 `View`），所以 `:docs on` 之後要「同步」一次
 ——**同步就是耦合沒解開的證據**。
 
 ### 做掉了（2026-09-30，`7365109`）
@@ -22264,7 +22264,7 @@ Warning: **只要它是個字段，就永遠會有第四個地方忘記。** 第
 | 擺哪一種 | `info_now()` | 不存 |
 | 即時的是哪一種 | `info_live()` | 只存 `:info` 的覆蓋 |
 | 手動叫的是哪一種 | `info_asked` | **存**，光標一走就作廢 |
-| 畫在哪 | `info_afloat()`／`info_in_the_sidebar()` | 不存 |
+| 畫在哪 | `info_afloat()`/`info_in_the_sidebar()` | 不存 |
 | 有沒有東西可畫 | `info_has_body()` | 不存 |
 
 **`fit_the_panels_to_the_file` 整支刪掉了，這是解耦最直接的證據。** 從前換一份稿子要把開着
@@ -22277,9 +22277,9 @@ Warning: **只要它是個字段，就永遠會有第四個地方忘記。** 第
 原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用 page up / page down 来对这五类
 进行翻页了」「这样，光标就在编辑区，也可以对五类信息进行翻页。」
 
-**翻的是那一則的行。** `PageUp`／`PageDown`／`C-u`／`C-d`，和 helix 的浮窗逐鍵相同
+**翻的是那一則的行。** `PageUp`/`PageDown`/`C-u`/`C-d`，和 helix 的浮窗逐鍵相同
 （`ui/popup.rs:289-297`）：浮窗開着歸浮窗，沒開就照舊翻正文。從前只有**文檔**收這四個
-鍵，於是散文裏默認浮的百科被切在「…」上卻翻不動——`C-u`／`C-d` 去翻了正文，等於沒有
+鍵，於是散文裏默認浮的百科被切在「…」上卻翻不動——`C-u`/`C-d` 去翻了正文，等於沒有
 出路。「光標就在編輯區」是這句話的全部價值：讀完一條長詞條不必先把光標挪進邊欄。
 
 Warning: **字典與數據不收這四個鍵。** 一是它們畫成兩欄字段（`Body::Keys`），本來就不按
@@ -22300,7 +22300,7 @@ Warning: **那個 `…` 不是多畫一個記號，它是吃掉一行。** `pane
 
 | 問 | 定 |
 | --- | --- |
-| 兩個數是什麽 | **讀到第幾行 ／ 共幾行**。到底就是 `234/234`，自帶「到底了」的信號 |
+| 兩個數是什麽 | **讀到第幾行 / 共幾行**。到底就是 `234/234`，自帶「到底了」的信號 |
 | 整份都裝得下呢 | **一個字都不寫**。數字出現本身就是「還有沒露出來的」 |
 | 放哪一頭 | **左端數字，右端那句「進邊欄」**。兩類不同的信息，邊框有兩頭 |
 
@@ -22326,9 +22326,9 @@ Warning: **數據那一格沒有這個數，因為它根本翻不動**（`table:
 
 Warning: **那是把「翻页」讀成了「翻到下一扇」。** 原話是「对这五类进行翻页」——
 主語是那五類的**內容**，不是那五類本身。做成輪換的代價是實的：那四個鍵是 helix 用來滾浮
-窗的，正文翻頁在 Normal 下只剩 `C-f`／`C-b`，而格子與每一扇邊欄的翻頁一併成了死碼。
+窗的，正文翻頁在 Normal 下只剩 `C-f`/`C-b`，而格子與每一扇邊欄的翻頁一併成了死碼。
 
-而它的收益是零：**五種各自早就有自己的鍵**——`空格 d` 字典、`空格 k` 百科／文檔、
+而它的收益是零：**五種各自早就有自己的鍵**——`空格 d` 字典、`空格 k` 百科/文檔、
 `空格 i` 診斷、`t i` 數據。手動觸發本身就是「換一種」，再造一個輪換鍵只是同一件事的第二
 條路。當場就看出來了：「There is at most one kind at a time and you still switch it」。
 
@@ -22362,9 +22362,9 @@ Warning: **那是把「翻页」讀成了「翻到下一扇」。** 原話是「
 - 配置 `[sidebar]` 底下 `dictionary` `detail` `wiki` `docs` `problems` 五個鍵**不再認得**，
   換成一個 `info`。Warning: 不認得的名字是**靜靜跳過**的（`settings.rs`），所以舊配置不報錯，
   只是那一行不起作用。
-- `:docs`／`:diagnostics` 兩個命令沒有了，也不留別名（`:diagnostics-all` 不受影響）。
-- `:panel-*`／`:sidebar-*` 認的名字從九個縮到五個。
-- `PageUp`／`PageDown` 在 Normal 模式下不再翻正文。
+- `:docs`/`:diagnostics` 兩個命令沒有了，也不留別名（`:diagnostics-all` 不受影響）。
+- `:panel-*`/`:sidebar-*` 認的名字從九個縮到五個。
+- `PageUp`/`PageDown` 在 Normal 模式下不再翻正文。
 
 [^431]: **2026-10-01 跑 `--ignored` 那一輪撞出來的。** `rust_analyzer_says_where_a_function_is_written`
     紅了，而鏈外逐段核過：rust-analyzer **答得對**（直接跟它說話，`textDocument/definition`

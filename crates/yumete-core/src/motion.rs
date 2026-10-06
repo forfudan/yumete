@@ -466,7 +466,7 @@ pub fn unit_back(rope: &Rope, from: usize, prev: impl Fn(&Rope, usize) -> usize)
 /// caret target or hands the whole of it to a waiting verb.
 ///
 /// Warning: **The grain rides along.** `w` and `W` are the same motion at two
-/// grains — the dictionary's word, or a run between blanks — and `e`／`b` are
+/// grains — the dictionary's word, or a run between blanks — and `e`/`b` are
 /// deliberately [`Grain::Coarse`] in this editor (「`w` takes a word, `e`
 /// takes a clause」, #304). A key that spells out its grain is a key the
 /// keymap can rebind without the editor knowing which key it was.
@@ -597,7 +597,7 @@ pub enum Object {
     /// A word — or, standing on blanks, that run of blanks (vim's rule, and
     /// the one that makes `wdiw` the handiest press in this editor).
     ///
-    /// Warning: **`coarse` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`／`b` 同一個
+    /// Warning: **`coarse` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`/`b` 同一個
     /// 答案；`iW` 一律粗粒度，也就是 vim 的「一串非空白」。從前這裏沒有這一格，`iw` 寫
     /// 死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w` 走三步。
     /// 一個編輯器對「詞」只能有一個答案。
@@ -606,7 +606,7 @@ pub enum Object {
     Word { coarse: bool },
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
-    /// **`mi m`／`ma m` — 光標所在的那一段 Markdown 標記**（2026-09-28）。
+    /// **`mi m`/`ma m` — 光標所在的那一段 Markdown 標記**（2026-09-28）。
     ///
     /// `**粗**`、`*斜*`、`~~刪~~`、`==標==`、`` `碼` ``、`[文字](地址)`、`[[雙鏈]]`、
     /// `%%批注%%`、腳註。`i` 取裏面的文字，`a` 連標記一起。套着的時候取最裏面那一層。
@@ -620,10 +620,10 @@ pub enum Object {
     /// 不是 tree-sitter——tree-sitter 在這個倉裏只管代碼檔與代碼圍欄。`:syntax text`
     /// 的檔交空，Typst 交 Typst 自己那一份。
     Markup,
-    /// **`mi s`／`ma s` — 光標所在的那一句**（2026-09-28）。
+    /// **`mi s`/`ma s` — 光標所在的那一句**（2026-09-28）。
     ///
     /// Warning: **這一條是這個編輯器該有而 helix 和 vim 都不太有的**：句在這裏本來就是一個
-    /// 單位——`H`／`L` 按句走、`:view-sentence` 一句一縱、`:check-punct` 按句查——可是
+    /// 單位——`H`/`L` 按句走、`:view-sentence` 一句一縱、`:check-punct` 按句查——可是
     /// 「改寫這一句」從前做不到，只能 `H` 再 `L` 再猜邊界。邊界走的是
     /// [`sentence_starts`]，和那三處同一支：兩個答案就意味着光標停在版面不斷行的地方。
     ///

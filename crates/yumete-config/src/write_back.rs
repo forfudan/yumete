@@ -5,7 +5,7 @@
 //!
 //! **改的那一行改掉，別的一個字節都不許動。**
 //!
-//! Warning: **`toml` 這個 crate 做不到。** 它只導出 `from_str`／`to_string`，註釋活在
+//! Warning: **`toml` 這個 crate 做不到。** 它只導出 `from_str`/`to_string`，註釋活在
 //! `toml_edit::Decor` 裏，一趟 round-trip 丟掉的不只是註釋——鍵的次序、空行、行
 //! 內註釋、引號的寫法全丟。一份手寫的配置存一次就被抹平成一份機器寫的。
 //!

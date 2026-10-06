@@ -19,7 +19,7 @@ impl Editor {
             self.answer_query(key);
             return KeyOutcome::Continue;
         }
-        // **按「那裏寫的什麼」跳的時候，鍵先歸它**（`go`／`gu`，§5.73）——和底下
+        // **按「那裏寫的什麼」跳的時候，鍵先歸它**（`go`/`gu`，§5.73）——和底下
         // `gw` 同一個理由，而且同樣擺在錄製之前：打進去的那兩個字母是**這一屏上**
         // 的事，回放的時候屏幕上不是同一批字。
         if self.seeking().is_some() && self.seek_key(key) {
@@ -77,15 +77,15 @@ impl Editor {
         // 這四個鍵的全部價值：讀完一條長詞條不必先把光標挪進邊欄。
         //
         // Warning: **從前只有文檔收這四個鍵**，於是散文稿子裏默認浮的百科被切在
-        // 「…」上卻翻不動，`C-u`／`C-d` 去翻了正文——等於沒有出路。
+        // 「…」上卻翻不動，`C-u`/`C-d` 去翻了正文——等於沒有出路。
         //
         // Warning: **和 helix 逐鍵相同**（`ui/popup.rs:289-297`）：浮窗開着的時候
         // 這四個鍵歸浮窗，沒開就照舊翻正文，別的鍵一按浮窗就走。所以這裏**不
         // 攔**——翻不動就讓路，正文那一支自己接住。
         if self.mode == Mode::Normal && self.pending == Pending::None {
             // Warning: **翻頁那一族要整族在這裏**（2026-10-01 報的：「你翻页
-            // 翻的是 buffer 不是浮窗／边栏」）。從前只攔了四個，而 `C-f`／`C-b`
-            // 與當天新加的 `C-n`／`C-p` 沒攔住——同一族鍵，開着浮窗按下去有的
+            // 翻的是 buffer 不是浮窗/边栏」）。從前只攔了四個，而 `C-f`/`C-b`
+            // 與當天新加的 `C-n`/`C-p` 沒攔住——同一族鍵，開着浮窗按下去有的
             // 翻浮窗有的翻正文，讀者沒法預測。
             //
             // 行數跟着「翻多少」走：整頁 8、三分之二 6、半頁 4。
@@ -270,7 +270,7 @@ impl Editor {
     /// glxx    → abdef   ⚠️ 第二下把下一行接上來
     /// ```
     ///
-    /// 漏的只有**挪動／編輯之後夾回來**那一步：第一下 `x` 之後光標落在 `ab` 的換行
+    /// 漏的只有**挪動/編輯之後夾回來**那一步：第一下 `x` 之後光標落在 `ab` 的換行
     /// 符上，第二下就把它吃了。`l` 自己擋得住（`line_last`），`x` 擋不住——而擋不住
     /// 的不只 `x`。
     ///
@@ -295,7 +295,7 @@ impl Editor {
             return;
         }
         // Warning: **`vim_lines && extend`，不是光看 `vim_lines`**（2026-10-06 寫這一支
-        // 的時候當場測出來的）。那個旗標只在 `d`／`c`／`y` 幾個 arm 裏花掉，所以
+        // 的時候當場測出來的）。那個旗標只在 `d`/`c`/`y` 幾個 arm 裏花掉，所以
         // `V` 之後按 `Esc`（或者任何一條不動手就走的路）它會**一直留着 true**，
         // 而夾這件事從此整個關掉。問「那一段**現在**還是不是整行可視選區」纔對。
         if self.mode != Mode::Normal || (self.vim_lines && self.extend) {
@@ -581,11 +581,11 @@ impl Editor {
     ///
     /// 三條規矩，每一條都是夜審報出來的：
     ///
-    /// 一、⚠️ **`V` 選的是整行，而「整行」全樹只有一處守着**——`d`／`c`／`y` 那幾個
+    /// 一、⚠️ **`V` 選的是整行，而「整行」全樹只有一處守着**——`d`/`c`/`y` 那幾個
     /// arm 開頭的 `if self.vim_lines { extend_to_line_bounds() }`。這一族寫在它們
     /// 前面並且 `return`，所以那一句在這裏要自己再做一次，不然 `Vy` 之後 `p` 是按
     /// 字符貼的（實測貼進了 `beta` 中間），而且 `vim_lines` 永遠留着 `true`，下一個
-    /// `d` 會拿它當整行。`x`／`s` 例外：它們轉交給老 arm，那邊自己做。
+    /// `d` 會拿它當整行。`x`/`s` 例外：它們轉交給老 arm，那邊自己做。
     ///
     /// 二、**計數歸這一段**，不許漏到下一個鍵。`v` 之後 `2u` 轉小寫，接着的 `j` 從前
     /// 走兩行——那個 2 沒人花掉。
@@ -593,7 +593,7 @@ impl Editor {
     /// 三、**動完就回 Normal，光標落在那一段的開頭**。vim 的可視模式是為一次動作而
     /// 開的，一動完就結束；helix 的 select mode 不是，所以這一條只在這裏。
     fn vim_visual_key(&mut self, c: char) {
-        // `x`／`s` 原樣轉交：`d`／`c` 那兩個 arm 自己管整行與計數。
+        // `x`/`s` 原樣轉交：`d`/`c` 那兩個 arm 自己管整行與計數。
         if matches!(c, 'x' | 's') {
             let as_if = match c {
                 'x' => 'd',
@@ -693,7 +693,7 @@ impl Editor {
             };
             return;
         }
-        // Warning: **`;` 和 `,` 也是動作**（`:h ;`）：`d;` 把剛纔那個 `f`／`t` 再做
+        // Warning: **`;` 和 `,` 也是動作**（`:h ;`）：`d;` 把剛纔那個 `f`/`t` 再做
         // 一遍，`d,` 反着做。[`crate::vim::step_for`] 是純函數，記不住「剛纔那
         // 個」——那是編輯器的記憶，不是文法的——所以這一句寫在這裏，而不是寫進
         // 那張表。從前 `d;` 說的是「不是一個動作」。
@@ -860,7 +860,7 @@ impl Editor {
             // took the lines' *text* and left their newlines behind — two
             // empty lines where a paragraph had been. The lines path already
             // knows the two rules this needs: `d` swallows the last break,
-            // `c` keeps it (the `dd`／`cc` pair).
+            // `c` keeps it (the `dd`/`cc` pair).
             if matches!(step.motion, motion::Motion::Object { what: motion::Object::Paragraph, .. })
             {
                 if let motion::Span::Over { anchor, head } = span {
@@ -878,12 +878,12 @@ impl Editor {
         let mut target = None;
         // Where the caret stood before the last hop, for the line rule below.
         let mut before = start;
-        // Warning: **`f`／`t` 的數目是「第 n 個」，一次問完**（2026-10-02 拿 nvim 量
+        // Warning: **`f`/`t` 的數目是「第 n 個」，一次問完**（2026-10-02 拿 nvim 量
         // 出來的）。走底下那個迴圈的話每一趟都從上一個落點重新下錨，`d2f,` 刪的
         // 就是「第一個逗號到第二個」；而數目超出的時候迴圈留下走成的那幾跳，
         // `d9f,`（只有四個逗號）**默默吃掉三十二個字**，nvim 在那裏一格不動。
         let nth = match step.motion {
-            // **`H`／`L` 的數目也是「第 n 個」**：`3H` 是從頂上數第三行，不是
+            // **`H`/`L` 的數目也是「第 n 個」**：`3H` 是從頂上數第三行，不是
             // 「到頂上去三遍」（到了就不動了，第二遍起全是空轉）。
             motion::Motion::Find { .. } | motion::Motion::Screen { .. } => n,
             _ => 1,
@@ -1185,7 +1185,7 @@ impl Editor {
                     // 表上那個字母空着。
                     Key::Char('m') => self.go_to_conflict(forward),
                     Key::Char('c') => self.go_to_object_nearby(forward, crate::code::Object::Comment),
-                    // **`]d`／`[d` 下一個診斷，`]D`／`[D` 第一個／最後一個**
+                    // **`]d`/`[d` 下一個診斷，`]D`/`[D` 第一個/最後一個**
                     // （2026-10-06 定，照 helix `default.rs:112-113`）。
                     Key::Char('d') => self.go_to_problem(forward, false),
                     Key::Char('D') => self.go_to_problem(forward, true),
@@ -1194,9 +1194,9 @@ impl Editor {
                     // **註釋**、`]t` 纔是類（`keymap/default.rs:117-118`）。照抄
                     // 參考實現，不照記憶；撞車也就跟着沒了。
                     Key::Char('t') => self.go_to_definition_nearby(forward, false),
-                    // **`]g`／`[g` 跳改動**，helix 的 `goto_next_change`（2026-10-06）。
+                    // **`]g`/`[g` 跳改動**，helix 的 `goto_next_change`（2026-10-06）。
                     Key::Char('g') => self.go_to_change(forward),
-                    // **`]f`／`[f` 跳到下一個函數**（2026-10-06，helix 的 `]f`）。
+                    // **`]f`/`[f` 跳到下一個函數**（2026-10-06，helix 的 `]f`）。
                     Key::Char('f') => self.go_to_definition_nearby(forward, true),
                     // **`]p` / `[p` 是段落**，helix 的 `goto_next_paragraph` /
                     // `goto_prev_paragraph`（2026-10-06 補的）。這裏 `}` / `{`
@@ -1294,7 +1294,7 @@ impl Editor {
                 //
                 // Warning: **這張表和 `wants_the_ime` 有意不同**（2026-10-04）。從前
                 // 兩張表是同一張，這裏還有一句 `debug_assert` 把它們釘在一起；而
-                // `mi`／`ma` 吃一個字符鍵、卻不要輸入法——「吃不吃鍵」和「要不要
+                // `mi`/`ma` 吃一個字符鍵、卻不要輸入法——「吃不吃鍵」和「要不要
                 // 輸入法」本來就是兩個問題，那一句斷言是在逼它們答同一個。
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
@@ -1339,7 +1339,7 @@ impl Editor {
                     Key::Char('u') => self.map_selection(|c| c.to_uppercase().collect()),
                     Key::Char('`') => self.map_selection(switch_case),
                     // **簡繁也是「把選區裏的字換一種寫法」**（2026-09-22）。
-                    // 一鍵一檔，第二個字母各不相同——`tw`／`hk` 拼全了，`` `t ``
+                    // 一鍵一檔，第二個字母各不相同——`tw`/`hk` 拼全了，`` `t ``
                     // 就既是命令又是前綴，只能靠超時猜。
                     Key::Char('s') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::S),
                     Key::Char('t') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::T),
@@ -1348,7 +1348,7 @@ impl Editor {
                     Key::Char('c') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::C),
                     Key::Char('g') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::G),
                     // Warning: **這一個從繁體起步，另外六個從簡體。** opencc 只有
-                    // `t2jp`／`jp2t` 兩條日文路，沒有 `s2jp`——寫 `S` 的那一版
+                    // `t2jp`/`jp2t` 兩條日文路，沒有 `s2jp`——寫 `S` 的那一版
                     // 按下去什麽都不會發生（2026-09-23 審出來的）。
                     Key::Char('j') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::Jp),
                     _ => {}
@@ -1380,15 +1380,15 @@ impl Editor {
 
         // **vim 的可視模式，那五個按下去會改錯字的鍵**（2026-10-06）。
         //
-        // 這一段要寫在別名層**前面**：`x`／`s` 在 vim 鍵位表上是 `;{n}D`／`;{n}Di`，
+        // 這一段要寫在別名層**前面**：`x`/`s` 在 vim 鍵位表上是 `;{n}D`/`;{n}Di`，
         // 而那個 `;` 是「收成一點」——它是為 Normal 寫的，可視模式下照收，於是
         // `vjx` 只刪一個字符。vim 的可視模式下這五個都是對**整個選區**動手：
         //
         // | 鍵 | vim | 這裏從前 |
         // | --- | --- | --- |
         // | `o` | 換到選區的另一頭 | 開一行並進插入（`vjo` 在稿子裏留下一行） |
-        // | `x` `s` | 刪／改選區 | 先收成一點，只動一個字 |
-        // | `u` `U` | 轉小寫／大寫 | 撤銷／重做（`dwvju` 把 `dw` 撤了） |
+        // | `x` `s` | 刪/改選區 | 先收成一點，只動一個字 |
+        // | `u` `U` | 轉小寫/大寫 | 撤銷/重做（`dwvju` 把 `dw` 撤了） |
         // | `p` | 用寄存器換掉選區 | 粘貼在後面 |
         // | `~` | 選區大小寫互換 | 只換一個字 |
         //
@@ -1614,7 +1614,7 @@ impl Editor {
             }
             // **`Enter`, `+` and `-`** — vim's three ways of saying 「the next
             // line, where its writing begins」 (B4, 2026-09-20). `Enter` is
-            // unbound in Normal here, and `+`／`-` are in the preset's table;
+            // unbound in Normal here, and `+`/`-` are in the preset's table;
             // this is the one that cannot be spelled there, because the table
             // holds characters.
             Key::Enter if self.key_preset == yumete_cjk::KeyPreset::Vim => {
@@ -1634,9 +1634,9 @@ impl Editor {
             // nothing. Extend mode still extends, because `jump_to` moves the
             // head and leaves the anchor where it is: that is vim's visual
             // mode, for free.
-            // Warning: **`H`／`L` 2026-10-06 從這張表上撤了**：它們在 vim 裏是屏幕的
-            // 頂／底，而句子是 `(`／`)`（今早照 vim 綁的）。上面那一支接住了裸
-            // 鍵；帶算子的 `dH`／`dL` 暫時答「不是一個動作」——要做得先有一個
+            // Warning: **`H`/`L` 2026-10-06 從這張表上撤了**：它們在 vim 裏是屏幕的
+            // 頂/底，而句子是 `(`/`)`（今早照 vim 綁的）。上面那一支接住了裸
+            // 鍵；帶算子的 `dH`/`dL` 暫時答「不是一個動作」——要做得先有一個
             // 看得見視口的動作，記在 §5.95。
             Key::Char(c @ ('w' | 'W' | 'b' | 'B' | 'e' | 'E' | '{' | '}'))
                 if self.key_preset == yumete_cjk::KeyPreset::Vim
@@ -1712,18 +1712,18 @@ impl Editor {
             // Warning: `H`/`L` used to be whole-page paging. Nothing was lost:
             // `C-f` and `C-b` still do it, and the pair a reader actually
             // wears out is the *half* page on `J`/`K`.
-            // **vim 鍵位下 `H`／`M`／`L` 是屏幕的頂／中／底**（2026-10-06 定）。
+            // **vim 鍵位下 `H`/`M`/`L` 是屏幕的頂/中/底**（2026-10-06 定）。
             //
             // Warning: **這一條 10-05 定過「不讓」，10-06 翻了。** 當時的理由是「句子是
             // 寫小說按得最多的單位」——而那不是理由（§5.94：兼容第一，讓位的另找
-            // 空鍵）。這一次一個鍵都沒丟：vim 的句子動作本來就是 `(`／`)`，今早照
+            // 空鍵）。這一次一個鍵都沒丟：vim 的句子動作本來就是 `(`/`)`，今早照
             // vim 綁上去了。
             //
             // 屏幕畫了哪一段是前端每幀交過來的（`set_page_span`，`gw` 也靠它）。
             Key::Char(one @ ('H' | 'M' | 'L')) if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                 self.go_to_screen(one, count);
             }
-            // **vim 的句子動作是 `(`／`)`**（2026-10-06）。
+            // **vim 的句子動作是 `(`/`)`**（2026-10-06）。
             //
             // Warning: **不能寫成鍵位表上的 `("(", "H")`**（寫的時候當場撞的）。單字符
             // 的別名是**替換**不是播放——`expanding_alias` 不會為它撥上，於是換出
@@ -1748,9 +1748,9 @@ impl Editor {
             // where you came *from*. `M`/`'` rather than vi's `m`/`'`, because
             // `m` here opens match mode.
             // **vim 鍵位下設標記按的是 `m`**（2026-10-06，十三條的第六條）。這扇門
-            // 後面原本掛着 match 那一族（`mm` 跳配對、`mi(`／`ma(` 選對象、`ms`／
-            // `md`／`mr` 加去換括號），讓得出來是因為那每一件事在 vim 鍵位下都另
-            // 有拼法：`%`、`di(`／`vi(`、`ys`／`ds`／`cs`。
+            // 後面原本掛着 match 那一族（`mm` 跳配對、`mi(`/`ma(` 選對象、`ms`/
+            // `md`/`mr` 加去換括號），讓得出來是因為那每一件事在 vim 鍵位下都另
+            // 有拼法：`%`、`di(`/`vi(`、`ys`/`ds`/`cs`。
             //
             // Warning: **不能寫成鍵位表上的 `("m", "M")`**（寫的時候當場撞的）。單字符
             // 的別名是**替換**不是播放，換出來的 `M` 看不出是誰按的，而 `M` 今天
@@ -1766,10 +1766,10 @@ impl Editor {
             Key::Char('M') => self.pending = Pending::Mark,
             Key::Char('\'') => self.pending = Pending::Recall,
             // 「下一個這種東西」, which is where Helix keeps it too.
-            // **`z` 那一層**：把光標這一行挪到屏幕的頂／中／底（2026-09-28）。
+            // **`z` 那一層**：把光標這一行挪到屏幕的頂/中/底（2026-09-28）。
             // Warning: `zc` 也是居中，同 helix（它的 `zc` 是 align_view_center）。
             Key::Char('z') => self.pending = Pending::Aim,
-            // **`3]空格` 加三條空行**，所以這一族要把計數帶過去（同 `g`、`f`／`t`
+            // **`3]空格` 加三條空行**，所以這一族要把計數帶過去（同 `g`、`f`/`t`
             // 那幾個等第二鍵的前綴）。
             Key::Char(']') | Key::Char('[') => {
                 self.pending = Pending::Hop { forward: key == Key::Char(']') };
@@ -1792,7 +1792,7 @@ impl Editor {
             Key::Char(' ') => self.pending = Pending::Space,
             // In-line character search — **all four of vi's**, `f` `F` `t` `T`.
             //
-            // Warning: **`t`／`T` were the table group until 2026-09-21**, retired as
+            // Warning: **`t`/`T` were the table group until 2026-09-21**, retired as
             // till-keys on the reasoning that a verb-last editor puts till
             // 「one keystroke away from find and no more」. Two things undid
             // that: the vim preset puts the verb **first** (`dt,`), and
@@ -1904,7 +1904,7 @@ impl Editor {
                     self.status = say!("selection.collapsed-in-extend");
                 }
             }
-            // **多選區**（#405）：`C`／`A-C` 往下／往上再加一段，`,` 只留主選區。
+            // **多選區**（#405）：`C`/`A-C` 往下/往上再加一段，`,` 只留主選區。
             // 三個都是 helix 的拼法。Warning: vim 預設下 `C` 被別名成 `c$`，`,` 是「反向重複
             // 剛纔那個 f」，所以那一端按不到這裏——多選區是原生鍵位的東西。
             Key::Char('C') => self.copy_selection_on_row(true, count),
@@ -1916,7 +1916,7 @@ impl Editor {
             Key::Alt('-') => self.merge_selections(false),
             Key::Alt('_') => self.merge_selections(true),
             Key::Alt(':') => self.face_them_forward(),
-            // **`X` 的反面**（helix 的 `shrink_to_line_bounds`）。`x`／`X` 一直都在，
+            // **`X` 的反面**（helix 的 `shrink_to_line_bounds`）。`x`/`X` 一直都在，
             // 缺的是往回收的那一個（2026-10-06）。
             Key::Alt('x') => self.shrink_to_line_bounds(),
             // **`A-s` 把每一段選區按行切開**（helix 的 `split_selection_on_newline`）。
@@ -1950,11 +1950,11 @@ impl Editor {
             //
             // #492 當初把它定成「小寫刪、大寫剪」，原話是「d 作为剪切功能会污染
             // register。这是我觉得 helix 最不好的地方」——剪貼板只有一個，而編輯器裏
-            // 按得最多的那個鍵會花掉它。依據之一是「helix 的 `C`／`D` 都空着」，而**那
+            // 按得最多的那個鍵會花掉它。依據之一是「helix 的 `C`/`D` 都空着」，而**那
             // 句話錯了一半**：helix 的 `C` 是 `copy_selection_on_next_line`，佔着，
             // 只有頂層的 `D` 是空的。多選區（#405）要的正是 `C`。
             //
-            // 現在：`d`／`c` 進寄存器（同 helix），`A-d`／`A-c` 不進（同 helix），
+            // 現在：`d`/`c` 進寄存器（同 helix），`A-d`/`A-c` 不進（同 helix），
             // **`D` 是 `A-d` 的別名**——#492 那個需求（刪掉這段，別蓋掉我剛複製的）
             // 保下來了，只是從最好按的鍵換成了第二好按的。`A-c` 沒有對應的別名，
             // 因為 `C` 讓給了多選區。
@@ -1973,8 +1973,8 @@ impl Editor {
             // Warning: **2026-09-28 整族換成了 helix 的拼法**（#405 要 `C` 這個鍵）。從前是
             // 「小寫刪、大寫剪」，四個鍵一條規矩；現在是 helix 的那一條：
             //
-            // - `d` `c`：刪／改，**進寄存器**（helix 一樣）
-            // - `A-d` `A-c`：刪／改，**不進**（helix 一樣）
+            // - `d` `c`：刪/改，**進寄存器**（helix 一樣）
+            // - `A-d` `A-c`：刪/改，**不進**（helix 一樣）
             // - `D`：`A-d` 的別名。寫東西的人最常要的是「刪掉這段，別蓋掉我剛複製的」，
             //   而那在 helix 裏要按 `A-d`。留一個好按的大寫鍵給它。
             //
@@ -2031,7 +2031,7 @@ impl Editor {
             Key::Char('p') => self.repeat_writing(count, |e| e.paste(true)),
             Key::Char('P') => self.repeat_writing(count, |e| e.paste(false)),
             // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).
-            // **vim 預設下，可視模式裏的 `i`／`a` 是物件前綴**（2026-09-28 收到的反饋：
+            // **vim 預設下，可視模式裏的 `i`/`a` 是物件前綴**（2026-09-28 收到的反饋：
             // 「vi* 进入选择/高亮模式（目前是因为 i 键的关系，进入了插入模式）」）。
             //
             // Warning: **只改 vim 那一端。** helix 的 select 模式是整份繼承 normal 的
@@ -2190,7 +2190,7 @@ impl Editor {
             Key::Ctrl('i') | Key::Tab => self.walk_jumps(false),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
             Key::Ctrl('u') => self.move_page(count, true, 0.5),
-            // **三分之二頁**（2026-10-01 定）。起因是 `C-u`／`C-d` 在 Mac 上
+            // **三分之二頁**（2026-10-01 定）。起因是 `C-u`/`C-d` 在 Mac 上
             // 不好按——那塊鍵盤只有一個 Ctrl，而 `u` 和 `d` 都在左手這一邊；
             // `n` 和 `p` 在右手，左 Ctrl 配右手字母順得多。
             //
@@ -2202,13 +2202,13 @@ impl Editor {
             Key::Ctrl('n') => self.move_page(count, false, 2.0 / 3.0),
             Key::Ctrl('p') => self.move_page(count, true, 2.0 / 3.0),
             // **`J` 合併行、`K` 按式子篩選區**——helix 出廠就是這兩個
-            // （`default.rs:166`／`:168`），2026-10-06 對齊。
+            // （`default.rs:166`/`:168`），2026-10-06 對齊。
             //
-            // Warning: **這一格從前是「前進／後退半頁」**，而且 2026-10-05 專門定過不讓
+            // Warning: **這一格從前是「前進/後退半頁」**，而且 2026-10-05 專門定過不讓
             // （理由是「讀一本小說按得最多的一對，不該是和弦」）。10-06 翻案，
             // 原話：「既然對齊就干脆點……JK 本质上也是和弦（上档）。因此 Ctrl n / p
-            // 并不比 JK 更难按。」——翻半頁現在走 `C-n`／`C-p`（⅔）、`C-d`／`C-u`
-            // （半頁）、`C-f`／`C-b`（整頁），六個鍵都在。
+            // 并不比 JK 更难按。」——翻半頁現在走 `C-n`/`C-p`（⅔）、`C-d`/`C-u`
+            // （半頁）、`C-f`/`C-b`（整頁），六個鍵都在。
             //
             // vim 鍵位各跟各的：那邊 `J` 也是合併行（一樣），`K` 是查詞（`空格 k`）。
             Key::Char('J') if self.joining_welds_a_grid() => {
@@ -2252,7 +2252,7 @@ impl Editor {
             // teaches nothing.
             //
             // Warning: `~` maps to the group's **third** member, not to the group:
-            // `` ` `` opens 「小寫／大寫／互換」, and `~` has always meant the
+            // `` ` `` opens 「小寫/大寫/互換」, and `~` has always meant the
             // last of those on its own.
             Key::Char('~') => {
                 self.map_selection(switch_case);
@@ -2286,7 +2286,7 @@ impl Editor {
             // Warning: **只在 vim 鍵位下，而且不走鍵位表。** 那張表是「鍵 → 一串
             // 鍵」，而往回找在 helix 那一套上沒有鍵（`g/` 往前、`g?` 是在副編輯區
             // 給你看，沒有一支是往回），所以表裏沒有東西可以映——這一條直接寫在
-            // 鍵上，同 `d`／`c`／`y` 那幾個操作符。helix 鍵位下不給鍵，要的人在配
+            // 鍵上，同 `d`/`c`/`y` 那幾個操作符。helix 鍵位下不給鍵，要的人在配
             // 置裏繫得上。
             Key::Char('#') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                 self.definition_preview = false;
@@ -2502,9 +2502,9 @@ impl Editor {
             }
         }
         // **縱書 turns the four the way it turns `hjkl`** (2026-09-17). On the
-        // horizontal page `gj`／`gk` cross lines and `gh`／`gl` run along one;
+        // horizontal page `gj`/`gk` cross lines and `gh`/`gl` run along one;
         // on a 縱書 page the line runs down the 縱 and the lines stack
-        // leftward, so running along is `k`／`j` and crossing is `h`／`l` —
+        // leftward, so running along is `k`/`j` and crossing is `h`/`l` —
         // `h`, leftward, being onward, as it is for `h` alone.
         let key = match (self.layout() == Layout::Vertical, key) {
             (true, Key::Char('h')) => Key::Char('j'),
@@ -2530,7 +2530,7 @@ impl Editor {
         };
         match key {
             Key::Char('g') => return go(self, motion::Motion::FileStart),
-            // Warning: **vim 鍵位下 `ge`／`gE` 是 vim 的 `ge`**（2026-10-02 定
+            // Warning: **vim 鍵位下 `ge`/`gE` 是 vim 的 `ge`**（2026-10-02 定
             // 「照參考實現」）：往回到上一個詞的末尾。helix 鍵位下照舊是「到檔
             // 尾」。兩套鍵位在這一格上真的各說各的，所以這裏分家。
             Key::Char('e' | 'E') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
@@ -2550,7 +2550,7 @@ impl Editor {
             Key::Char('s') => return go(self, motion::Motion::LineFirstNonBlank),
             // helix 的 `goto_last_modification`（`keymap/default.rs:88`）。
             Key::Char('.') => return self.goto_last_modification(),
-            // **`g;`／`g,` 走改動表**（vim，2026-10-06）。`g.` 回最後改的那一處；
+            // **`g;`/`g,` 走改動表**（vim，2026-10-06）。`g.` 回最後改的那一處；
             // 這一對是在改過的地方之間走。helix 沒有這兩個，所以只在 vim 鍵位下。
             Key::Char(';' | ',') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                 return self.walk_changes(key == Key::Char(';'));
@@ -2603,7 +2603,7 @@ impl Editor {
             // **`gj` and `gk` walk lines of the file, as helix's do** — `j`
             // and `k` walk the rows on the screen, and in a manuscript a line
             // of the file is a paragraph, so this is the next paragraph at
-            // the same column. Warning: Until 2026-09-17 this was a copy of `j`／`k`,
+            // the same column. Warning: Until 2026-09-17 this was a copy of `j`/`k`,
             // on a comment that had helix the wrong way round (「In helix the
             // plain pair walks logical lines」 — it is `move_visual_line_down`).
             Key::Char('j') | Key::Down => {
@@ -2630,23 +2630,23 @@ impl Editor {
             // question answered in the other work area, without leaving.
             //
             // The capital is the whole rule: this editor already says 「the
-            // same question, shown over there」 twice (`g/`／`g?`, `t/`／`t?`),
+            // same question, shown over there」 twice (`g/`/`g?`, `t/`/`t?`),
             // and `w` said nothing at all. One letter, and the shift key means
             // 「without leaving」.
             Key::Char('d') => self.show_definition(false),
             Key::Char('D') => self.show_definition(true),
-            // **一眼跳到屏幕上任何地方**（#406，2026-09-28）。查定義是 `gd`／`gD`
+            // **一眼跳到屏幕上任何地方**（#406，2026-09-28）。查定義是 `gd`/`gD`
             // 了（2026-09-09 改的名），而 `gw` 從那天起只剩一句「它搬家了」——
             // Warning: 一個 helix 使用者按 `gw` 收到的是那句話，**看起來像個答案而答的
             // 是另一個問題**。現在它就是 helix 的那個 `gw`。
             Key::Char('w') => self.start_jump(),
             // **按「那裏寫的什麼」跳**（§5.73，2026-10-04 定）。`gw` 是屏幕發號碼，
             // 這兩個是打那裏寫的字。**一個鍵一種文字**：`o` 只問西文、打字面、定長
-            // 兩個字母；`u` 只問中文、打讀音、不定長（`zh`／`sh`／`ji` 那幾個擁擠的
+            // 兩個字母；`u` 只問中文、打讀音、不定長（`zh`/`sh`/`ji` 那幾個擁擠的
             // 聲母兩個字母收不住）。分開的理由是候選面板畫在光標處，會蓋住要跳的
             // 地方——見 `seek.rs` 開頭。
             //
-            // Warning: **字母是查出來的，不是挑出來的。** `s`／`S`（flash 用的那兩個）
+            // Warning: **字母是查出來的，不是挑出來的。** `s`/`S`（flash 用的那兩個）
             // 在這個倉是「選出所有匹配」「拿匹配當分隔符」；`g` 組兩邊都空着的小寫
             // 只有 `o q u v z`——`gb` 會撞 helix 的 goto_window_bottom，`gx` 這裏
             // 已經是「跟着鏈接走」。
@@ -2722,7 +2722,7 @@ impl Editor {
         // `keymap/default.rs:193` 與 `:260` 是同一組，兩扇門）。
         //
         // Warning: **這裏從前躺着三套說同一件事的詞彙**——`1234`（點名去）、
-        // `!@#$`（隔空關）、`w/W/q/Q`（走一步／全開／關／只留）。一組一套之
+        // `!@#$`（隔空關）、`w/W/q/Q`（走一步/全開/關/只留）。一組一套之
         // 後，數字整塊空了出來，留給緩衝區（2026-09-30 定：每個緩衝區在
         // 檔名前帶一個號，十個起補零，於是那是一套不必按空格確認的前綴碼）。
         ('w', "hint.region.title"),
@@ -2734,7 +2734,7 @@ impl Editor {
         // editor for novels a conflict is far the rarer of the two. `m` is
         // merge, and the two letters do not compete for the same word.
         ('m', "hint.conflict.title"),
-        // Warning: **The table group moved here** (2026-09-21) so that `t`／`T` could
+        // Warning: **The table group moved here** (2026-09-21) so that `t`/`T` could
         // go back to being vi's till-keys — helix spells them that way too
         // (`keymap/default.rs:14`). One slot of this menu buys a whole group,
         // which is the best trade a slot here can make.
@@ -2826,7 +2826,7 @@ impl Editor {
     /// looks at this one match and says what happens to **it**.
     /// What `R` in the search panel is asking — one yes, not one per match.
     /// Warning: **Its own words, not [`Self::CONFIRM_KEYS`]'.** Those say 「換這一
-    /// 處」／「跳過，不換」 because a `:s …c` is asking about one match at a
+    /// 處」/「跳過，不換」 because a `:s …c` is asking about one match at a
     /// time; this is asking about all of them at once, and borrowing that
     /// wording would tell a reader the opposite of what `y` does.
     pub(super) const REPLACE_ALL_KEYS: &'static [(&'static str, &'static str)] = &[
@@ -2874,10 +2874,10 @@ impl Editor {
         &[("p", "action.goto-prev-paragraph"), ("␣", "hint.hop.blank-above")];
 
     /// What `空格 m` may be finished with — which side of the conflict to keep.
-    /// **區域那一組**（`C-w`／`空格 w`，2026-09-30 定）。
+    /// **區域那一組**（`C-w`/`空格 w`，2026-09-30 定）。
     ///
     /// 照 helix 的 `C-w`（`keymap/default.rs:193`）：`w` 走一步、`hjkl` 按方向
-    /// 走、`s` 切一刀、`q` 關、`o` 只留這一個。`e`／`i`／`E`／`I` 是這一頭自己
+    /// 走、`s` 切一刀、`q` 關、`o` 只留這一個。`e`/`i`/`E`/`I` 是這一頭自己
     /// 加的——helix 沒有邊欄這件東西。
     pub(super) const REGION_KEYS: &'static [(&'static str, &'static str)] = &[
         ("w", "hint.region.next"),
@@ -2998,8 +2998,8 @@ impl Editor {
 
     /// 「`空格 t` 後面可以按這些」——**從那幾張真表生出來**。
     ///
-    /// Warning: 從前這是三則手抄的文案（`hint.table.after-t`／`block-keys`／
-    /// `csv-keys`）。抄的那一份與真表對不上五處：少了 `b`／`w`／`F`，多了一個
+    /// Warning: 從前這是三則手抄的文案（`hint.table.after-t`/`block-keys`/
+    /// `csv-keys`）。抄的那一份與真表對不上五處：少了 `b`/`w`/`F`，多了一個
     /// 根本不存在的 `n`，`1s 1S` 抄成了 `s S`——而「光按 `t s` 什麽都不會發生」
     /// 正是 `documented_keys.rs` 的 `DISOWNED_KEYS` 記着的那一條
     /// （2026-09-23 審出來的）。按錯鍵的人看見的就這一行，它不能是另一份說法。
@@ -3048,7 +3048,7 @@ impl Editor {
             ' ' | '空' => Self::SPACE_KEYS.iter().map(|(k, _)| k.to_string()).collect(),
             // Warning: **每一個前綴的**所有**分表都要在這裏**（2026-10-06）。這一支是
             // 「手冊教的鍵，編輯器給不給得出」那個測試的唯一真相來源，而這兩組
-            // 的表是按版面／鍵位／方向分開的：漏一張，手冊裏那幾行就**驗過了、
+            // 的表是按版面/鍵位/方向分開的：漏一張，手冊裏那幾行就**驗過了、
             // 全綠**，而它們根本沒被對過（`t` 那一條 2026-09-23 就是這麼漏的，
             // 註釋在下面）。
             'g' => [
@@ -3069,7 +3069,7 @@ impl Editor {
             // Warning: **`t` 不在這張表上了。** 2026-09-21 表格組搬到了 `空格 t`，而
             // 這裏一直還答得出表格鍵——於是教程裏那幾行舊拼法（`t r`、`t1s`）
             // 逐條「驗過」，全綠（2026-09-23 審出來的）。`t` 現在只是 vi 的
-            // till：一個吃任何字符的鍵，和 `f`／`r`／`"` 一樣，沒有單子。
+            // till：一個吃任何字符的鍵，和 `f`/`r`/`"` 一樣，沒有單子。
             _ => return None,
         })
     }
@@ -3090,7 +3090,7 @@ impl Editor {
         match key {
             // **`空格 w` 是區域那一組的門**（2026-09-30 定）。從前這一層躺着三
             // 套說同一件事的詞彙——`空格 1234`（點名去）、`空格 !@#$`（關那
-            // 一區）、`空格 w/W/q/Q`（走一步／全開／關／只留）。現在一組一套。
+            // 一區）、`空格 w/W/q/Q`（走一步/全開/關/只留）。現在一組一套。
             //
             // Warning: **數字空出來了，留給緩衝區**（2026-09-30 定）：
             // 「each buffer will be indexed by 1, 2, 3, 4 before the file
@@ -3112,7 +3112,7 @@ impl Editor {
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },
             // **`空格 D` 在邊欄裏開**——同一份答案，鍵跟過去，讀得完長的那些。
-            // 大寫是「同一件事的更大版本」，同 `空格 c`／`空格 C`。
+            // 大寫是「同一件事的更大版本」，同 `空格 c`/`空格 C`。
             Key::Char('N') => match self.char_at_cursor() {
                 Some(ch) => {
                     self.look_up(ch, true);
@@ -3139,7 +3139,7 @@ impl Editor {
                     self.set_status(say!("lsp.not-code"));
                 }
             }
-            // **診斷搬到 `d`／`D`**（2026-09-30 定，照 helix：`space d` 是
+            // **診斷搬到 `d`/`D`**（2026-09-30 定，照 helix：`space d` 是
             // diagnostics picker）。同形：小寫浮，大寫進邊欄。
             Key::Char('d') => self.show_the_problem_here(true),
             Key::Char('D') => self.show_the_problem_here(false),
@@ -3153,7 +3153,7 @@ impl Editor {
             // and because a merge conflict is a thing that happens to a file
             // a few times a year — not a motion a writer's fingers know.
             Key::Char('m') => self.pending = Pending::Conflict,
-            // 表格組（2026-09-21 從 `t` 搬來，讓 `t`／`T` 回去當 till）。
+            // 表格組（2026-09-21 從 `t` 搬來，讓 `t`/`T` 回去當 till）。
             Key::Char('t') => self.pending = Pending::Table,
             Key::Char('c') => self.toggle_comment(crate::comment::Prefer::Line),
             Key::Char('C') => self.toggle_comment(crate::comment::Prefer::Block),

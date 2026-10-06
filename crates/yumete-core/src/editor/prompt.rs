@@ -1,6 +1,6 @@
 //! The prompt line, and the keys that only mean something in it (#296).
 //!
-//! `:` commands, `/` search, `f`／`t` 找字 and the 找詞 menu all type into the
+//! `:` commands, `/` search, `f`/`t` 找字 and the 找詞 menu all type into the
 //! same one-line field, so its history, its ghost text and its caret live
 //! together here rather than beside the mode each of them belongs to.
 

@@ -53,7 +53,7 @@ pub const TATECHUYOKO_CLASSIC: usize = 2;
 ///
 /// **Print stops at four**: CSS Writing Modes 3 writes the automatic form as
 /// `text-combine-upright: digits <integer [2,4]>`, InDesign's 自動縦中横設定
-/// offers 組数字 2／3／4, and past two the group is wider than the column and
+/// offers 組数字 2/3/4, and past two the group is wider than the column and
 /// has to be squeezed back into it — 「if the combined text is wider than 1em,
 /// the user agent must fit the contents within 1em」. A terminal cannot squeeze
 /// a glyph, so yumete does the other thing print does with a group that will not

@@ -1,6 +1,6 @@
 //! **這一屏上，哪些地方寫着這兩個字母** —— 按「目標處寫的什麼」跳的那一支的核心。
 //!
-//! vim 那邊這一族叫 leap／flash：不給屏幕上的位置發號碼（那是 easymotion，也就是
+//! vim 那邊這一族叫 leap/flash：不給屏幕上的位置發號碼（那是 easymotion，也就是
 //! 這個倉的 [`gw`](crate::editor)），而是**打你要去的那個地方寫的字**。
 //!
 //! # 一條規矩管兩種文字
@@ -86,7 +86,7 @@ pub fn targets(text: &str, query: &str) -> Targets {
     let mut seen: Vec<char> = Vec::new();
     for (at, &ch) in hay.iter().enumerate() {
         if says && crate::pinyin::readings(ch).any(|r| r.starts_with(&said)) {
-            // **多音字全收**（長 ＝ cháng／zhǎng）。收窄是使用者下一鍵的事，
+            // **多音字全收**（長 ＝ cháng/zhǎng）。收窄是使用者下一鍵的事，
             // 這裏少收一個就是一處按不到的地方。
             match seen.iter().position(|&c| c == ch) {
                 Some(k) => found.han[k].1.push(at),
@@ -216,7 +216,7 @@ mod measure {
     /// zho   →  4 個不同的字、  9 處      ← 第三個字母一加就塌下來
     /// ```
     ///
-    /// `zh`／`sh`／`ji` 是最常見的那幾個聲母組合，兩個字母根本收不住。所以中文
+    /// `zh`/`sh`/`ji` 是最常見的那幾個聲母組合，兩個字母根本收不住。所以中文
     /// 這一邊要**邊打邊收窄**，像輸入法那樣——而那本來就是打中文的人熟的節奏
     /// （搜索裏打的也是 `zhongguo` 不是 `zh`）。
     ///

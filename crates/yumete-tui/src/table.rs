@@ -1049,7 +1049,7 @@ pub fn draw_detail(
         let last = detail.rows.len().saturating_sub(fits);
         first = editor.panel_scroll().min(last);
     }
-    // 讀到第幾行 ／ 共幾行，寫在底邊——翻得動了纔配有這個數。
+    // 讀到第幾行 / 共幾行，寫在底邊——翻得動了纔配有這個數。
     let mut seen = 0usize;
     let mut upto = first;
     while upto < detail.rows.len() && seen + height(upto) <= room {

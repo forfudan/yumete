@@ -90,13 +90,13 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("gg", _) => step(Motion::FileStart, Reach::Linewise),
         ("}", _) => step(Motion::Paragraph { forward: true }, Reach::Exclusive),
         ("{", _) => step(Motion::Paragraph { forward: false }, Reach::Exclusive),
-        // **`H`／`M`／`L` 是屏幕的頂／中／底**（2026-10-06），而句子是 `(`／`)`
+        // **`H`/`M`/`L` 是屏幕的頂/中/底**（2026-10-06），而句子是 `(`/`)`
         // ——下面那一對就是。整行整行地取，同 vim（`:h H` 說它是 linewise）。
         ("H", _) => step(Motion::Screen { which: 'H' }, Reach::Linewise),
         ("M", _) => step(Motion::Screen { which: 'M' }, Reach::Linewise),
         ("L", _) => step(Motion::Screen { which: 'L' }, Reach::Linewise),
         // **`(` 和 `)` 也是句子**（2026-10-06）。vim 的句子動作就是這一對；這個
-        // 編輯器把句子放在 `H`／`L` 上（#404），可一個 vim 的手按的是這一對，而
+        // 編輯器把句子放在 `H`/`L` 上（#404），可一個 vim 的手按的是這一對，而
         // `d)` 從前什麼都不做。兩個拼法同一件事。
         ("(", _) => step(Motion::Sentence { forward: false }, Reach::Exclusive),
         (")", _) => step(Motion::Sentence { forward: true }, Reach::Exclusive),
@@ -141,9 +141,9 @@ fn object(c: char, around: bool) -> Option<Motion> {
         'w' => crate::motion::Object::Word { coarse: false },
         'W' => crate::motion::Object::Word { coarse: true },
         'p' => crate::motion::Object::Paragraph,
-        // `dim`／`dam`：光標所在的那一段 Markdown 標記（2026-09-28）。
+        // `dim`/`dam`：光標所在的那一段 Markdown 標記（2026-09-28）。
         'm' => crate::motion::Object::Markup,
-        // `dis`／`das`：光標所在的那一句（2026-09-28）。
+        // `dis`/`das`：光標所在的那一句（2026-09-28）。
         's' => crate::motion::Object::Sentence,
         c => {
             let (open, close) = crate::editor::pair_for(c)?;

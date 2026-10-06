@@ -719,7 +719,7 @@ impl Editor {
         // (2026-09-07). A three-way cycle on `t w` was the other way to spell
         // this, and it would have made the same key mean a toggle in prose
         // and a cycle in the window; a reader learns 「`t w` 摺不摺」 once and
-        // it has to hold everywhere. So `t w` answers 摺／不摺, and either
+        // it has to hold everywhere. So `t w` answers 摺/不摺, and either
         // key pulls the table out of whatever the other one had done.
         //
         // From 折行, `t w` **opens the table out** rather than folding it

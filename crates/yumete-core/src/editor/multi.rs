@@ -1,8 +1,8 @@
 //! **多選區的那幾個鍵**（#405，方案在 `docs/development.md §5.13`）。
 //!
-//! 造出第二段的是 `C`／`A-C`，收回去的是 `,`。語義照 helix
+//! 造出第二段的是 `C`/`A-C`，收回去的是 `,`。語義照 helix
 //! （`helix-term/src/commands.rs` 的 `copy_selection_on_line`，基準 commit `079a789e8`），
-//! 但**「行」走的是這個倉自己的那一套**：`crate::wrap` 的視覺行，也就是 `j`／`k` 踩的那個
+//! 但**「行」走的是這個倉自己的那一套**：`crate::wrap` 的視覺行，也就是 `j`/`k` 踩的那個
 //! 頁面。Warning: 軟折行開着的時候，一個自然段是好幾行，而使用者看見的「下一行」是折出來的那
 //! 一行，不是檔案裏的那一行。竪排同理（§5.13.8 二：「複製到視覺上的下一列」與橫排是同
 //! 一句話）。
@@ -42,7 +42,7 @@ impl Sift {
 }
 
 impl super::Editor {
-    /// **往下／往上再加一個選區**（`C`／`A-C`）。
+    /// **往下/往上再加一個選區**（`C`/`A-C`）。
     ///
     /// 每一段各複製 `count` 份：兩端各自記住自己的**列**，然後一行一行往下走，走到哪一
     /// 行兩端的列都還在，就在那一行放一份。
@@ -361,7 +361,7 @@ impl super::Editor {
         self.mode = crate::input::Mode::Search;
     }
 
-    /// **正則那一族**（`s`／`S`／`A-k`／`A-K`，#405 Phase 2）。
+    /// **正則那一族**（`s`/`S`/`A-k`/`A-K`，#405 Phase 2）。
     ///
     /// 匹配器是搜索那一支（[`Look`]），所以拼音、簡繁、模糊、正則四個開關一起管用。
     ///
@@ -556,7 +556,7 @@ impl super::Editor {
     /// **把每一段選區的文字輪轉一格**（`A-)` 往後、`A-(` 往前，helix 的
     /// `rotate_selection_contents_*`）。
     ///
-    /// Warning: **邊界不動，動的是裝在裏面的字。** `(`／`)` 是換「哪一段是主的」，這一對是
+    /// Warning: **邊界不動，動的是裝在裏面的字。** `(`/`)` 是換「哪一段是主的」，這一對是
     /// 把甲段的字搬到乙段去。表格裏換兩欄、對話裏換兩個人說的話，都是這一件。
     ///
     /// Warning: **各段長短不一，所以要從後往前換，並且把後面幾段跟着挪**——同
@@ -751,7 +751,7 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
         // `f` `F` `t` `T` 補上的那一個字符：逐段各找各的。
         super::Pending::Find(_) => true,
         // Warning: **`g` 那一層只有幾個是移動。** `gf` 開檔、`gd` 看定義、`gw` 撒標籤，每一個
-        // 都是「整個編輯器做一次」。Warning: `gg`／`ge` 也不逐段做：它們是「到檔首／檔尾」，
+        // 都是「整個編輯器做一次」。Warning: `gg`/`ge` 也不逐段做：它們是「到檔首/檔尾」，
         // N 段一起去同一個地方，`normalize` 會把它們併成一段——那不是使用者要的。
         // 逐段做的是**行內**的那三個：到行首、到行首第一個字、到行尾。
         super::Pending::Goto => {
@@ -782,7 +782,7 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         ) || matches!(
             key,
             Key::Char('i' | 'a' | 'I' | 'A' | 'o' | 'O' | 'c') | Key::Alt('c')
-        // `C-a`／`C-x` 給每一段各加各的（#405 Phase 3）。
+        // `C-a`/`C-x` 給每一段各加各的（#405 Phase 3）。
         ) || matches!(key, Key::Ctrl('a') | Key::Ctrl('x')),
         _ => false,
     }

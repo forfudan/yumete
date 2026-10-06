@@ -191,7 +191,7 @@ impl Editor {
                     }
                 }
                 // The five switches are pressed by number and walked past
-                // (2026-09-24) — the row that walks is 範圍／找什麼／結果.
+                // (2026-09-24) — the row that walks is 範圍/找什麼/結果.
                 //
                 // Warning: **第七行只有走磁碟的範圍下纔畫**（2026-10-02 查出來的）。這
                 // 一行從前無條件寫着 `1–7`，而本文件和緩衝區那兩檔只有六行——按
@@ -211,7 +211,7 @@ impl Editor {
                 // 都不管用，而這一行擠不下說了也用不上的東西。
                 //
                 // 四對，大小寫並排（2026-09-29 定的寫法：「dD 删除 cC 修改
-                // aA 追加 iI 插入」）。大寫那一半管到末尾／管到框首框尾，小寫
+                // aA 追加 iI 插入」）。大寫那一半管到末尾/管到框首框尾，小寫
                 // 管光標底下那一個字。
                 if self.search().takes_text() {
                     keys.push(("dD".into(), say!("hint.search.box-delete")));
@@ -227,7 +227,7 @@ impl Editor {
             }
         }
         if let Some(side) = self.panel_focus() {
-            // **百科是一段文章，`j`／`k` 滾它**（2026-09-22 報的：那一頁翻不動）。
+            // **百科是一段文章，`j`/`k` 滾它**（2026-09-22 報的：那一頁翻不動）。
             // 別的視圖是行的列表，`j` 走下一行——同一個鍵兩件事，所以這一行得說
             // 對是哪一件。
             let walking = match self.panel(side).map(|p| p.view()) {
@@ -335,9 +335,9 @@ impl Editor {
     /// does not remember what follows it currently has nowhere to look but the
     /// manual, and the editor is sitting there knowing the answer.
     fn pending_keys(&self) -> Option<Hint> {
-        // **`go`／`gu` 還在等字母，命令行說一句**（2026-10-04 定）。
+        // **`go`/`gu` 還在等字母，命令行說一句**（2026-10-04 定）。
         //
-        // Warning: **按下 `o`／`u` 的那一刻 `pending` 就回到了 `None`**，於是 HUD
+        // Warning: **按下 `o`/`u` 的那一刻 `pending` 就回到了 `None`**，於是 HUD
         // 空了、`g` 那扇菜單也收了——而這兩個鍵恰恰是**還要再打幾個字母才算完**
         // 的。屏幕上一個字都不說話，人以為自己回到了 Normal，照 Normal 的習慣按
         // 鍵。原話：「我以为我现在在 normal 模式，但其实 yumete 是在等我打拼

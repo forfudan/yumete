@@ -110,7 +110,7 @@ impl Editor {
     /// intention is on the screen), otherwise the last thing searched for. It
     /// arrives selected, so typing replaces it and `Enter` keeps it — both
     /// intentions in one key, which is how VSCode's box behaves.
-    /// `:search-working`／`-wd`／`-gd`／`:search <path>` — open it looking somewhere
+    /// `:search-working`/`-wd`/`-gd`/`:search <path>` — open it looking somewhere
     /// else (#419).
     pub(super) fn open_search_in(&mut self, scope: Where, replacing: bool) {
         // Warning: **A folder that is not there is said out loud.** Falling back to
@@ -668,7 +668,7 @@ impl Editor {
                 self.search.files.clear();
                 self.search.total = 0;
                 // Warning: **同上，那兩個數要跟着歸零**（2026-10-02 審出來的）。這一支
-                // 在 `mine`／`mine_total` 已經填好之後纔走到，漏了它們就是一次
+                // 在 `mine`/`mine_total` 已經填好之後纔走到，漏了它們就是一次
                 // 真的下溢：打一條寫錯的 glob，再在正文裏打一個字就撞上。
                 self.search.mine = 0;
                 self.search.mine_total = 0;
@@ -892,7 +892,7 @@ impl Editor {
     /// Warning: **指定文件夾不在圈上**：它只能 `:search 某目錄` 進來，進來之後按一下
     /// 就回本文件，回不去。一個「下一個」走不到的值不該卡在環上。
     ///
-    /// Warning: **號碼 2026-10-01 從 `0` 挪到了 `6`**：位置那一格跟着搬到了包含／排除
+    /// Warning: **號碼 2026-10-01 從 `0` 挪到了 `6`**：位置那一格跟着搬到了包含/排除
     /// 上面，和那三格合成「搜哪裏、搜哪些」一組，號碼就接着往下排。
     fn step_the_scope(&mut self) {
         self.search.scope = self.search.scope.next();
@@ -926,19 +926,19 @@ impl Editor {
     pub(super) fn on_search_panel_key(&mut self, key: Key, side: crate::sidebar::Side) {
         match key {
             // `Tab` walks the slot's views, as it does in every other panel;
-            // the form's own cells are `hjkl` (below) and `↑`／`↓`.
+            // the form's own cells are `hjkl` (below) and `↑`/`↓`.
             Key::Tab => self.cycle_view(side, false),
             Key::BackTab => self.cycle_view(side, true),
             // **`hl` 橫着走字，`jk` 竪着走格**（2026-09-25 定，原話：「這一個光標
             // 所在的字是反白的……用戶這樣就能用hl在搜索欄中移動光標」）。和正文
-            // 一個感覺：框裏站着一個塊光標，`h`／`l` 挪它，`i` 就從它那裏插。
+            // 一個感覺：框裏站着一個塊光標，`h`/`l` 挪它，`i` 就從它那裏插。
             //
             // Warning: **格子之間從此只有 `jk`**（定的，原話：「行，格子只用 jk」）。從前
             // `hl` 和 `jk` 走的是同一串格子，那時框裏沒有光標可挪，`hl` 也就沒有
             // 別的事可做。
             //
-            // 結果列表是例外：那裏 `h`／`l` 是摺起／打開一個檔，和文件樹、大綱說的
-            // 「少一點／多一點」是同一件事；到頂了 `h` 出去，免得困在列表裏。
+            // 結果列表是例外：那裏 `h`/`l` 是摺起/打開一個檔，和文件樹、大綱說的
+            // 「少一點/多一點」是同一件事；到頂了 `h` 出去，免得困在列表裏。
             Key::Char('h') | Key::Left if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
                     let back = self.search.walk(true);
@@ -1007,7 +1007,7 @@ impl Editor {
             // the row is drawn quiet, and a quiet row that still flipped would
             // be saying two things at once. `flip_switch` guards it.
             // **站在一個換不動的格子上按了改字的鍵**（2026-09-27）：位置那一格
-            // 平常是四選一，`i`／`a`／`d` 在它上面沒有東西可改。
+            // 平常是四選一，`i`/`a`/`d` 在它上面沒有東西可改。
             //
             // Warning: **2026-10-04 走過一趟又回來了。** 中間做過一版「這六個在這裏改
             // 成回查詢框」，當天改了主意：「aci 都必須在那一行才能使用。`/`
@@ -1019,7 +1019,7 @@ impl Editor {
                 self.status = say!("search.scope-is-a-pick");
             }
             // **號碼就是從上往下數的行次**（`1`–`9`）。位置那一行 2026-10-01 起是
-            // `8`：它挪到了「包含／排除」上面，和那三格合成「搜哪裏、搜哪些」
+            // `8`：它挪到了「包含/排除」上面，和那三格合成「搜哪裏、搜哪些」
             // 一組，號碼也就接着往下排，不再是從前那個 `0`。
             Key::Char(ch) if ch.is_ascii_digit() && ch != '0' => {
                 let nth = ch as usize - '1' as usize;
@@ -1121,7 +1121,7 @@ impl Editor {
                 self.replace_this_file = None;
                 // **動得太多就走「安全核驗」那一扇中央窗**（2026-10-03 定：
                 // 「要同時滿足兩個條件：1. 超過 10 個文件 2. 超過 100 處」）。
-                // 狀態欄上那一行 `y`／`n` 按順手了就過去了，而這一下動的是整本
+                // 狀態欄上那一行 `y`/`n` 按順手了就過去了，而這一下動的是整本
                 // 書；`:w` 那一條的閘也是這個形狀——平日改個錯字一次都不彈。
                 if let Some(query) = self.replace_everywhere_query() {
                     self.query = Some(query);
@@ -1145,7 +1145,7 @@ impl Editor {
             // 在那一行才能使用。`/` 這個按鍵可以從任何位置快速跳到搜索行但不進去
             // 插入模式，用戶需要再按一下 aci。」
             //
-            // **為什麼要分開**：這扇面板有四個輸入框（查詢／換成／包含／排除）。
+            // **為什麼要分開**：這扇面板有四個輸入框（查詢/換成/包含/排除）。
             // 要是 `aci` 也能跨格子回查詢框，站在「包含」裏就再也按不出「在包含
             // 裏插入」了——一個鍵答不了兩個問題。於是 `aci` 只管「就地」，跨格子
             // 歸 `/` 一個人；它送你到那一行，進不進去你自己說。
@@ -1165,10 +1165,10 @@ impl Editor {
             //
             // Warning: **鍵全是正文裏同名同義的那幾個，一個都沒新發明**：`d` 在正文裏
             // 刪選區，框裏光標壓着一個字，那就是那一個；`c` 刪了進插入；
-            // `a`／`I`／`A` 是正文的三個入口。
+            // `a`/`I`/`A` 是正文的三個入口。
             //
-            // Warning: **`gh`／`gl` 和 `w b e` 沒有搬進來**——它們是為一長行散文準備的，
-            // 而這是個兩三個字的框；`A`／`I` 本來就把行首行尾這兩個去處帶上了。
+            // Warning: **`gh`/`gl` 和 `w b e` 沒有搬進來**——它們是為一長行散文準備的，
+            // 而這是個兩三個字的框；`A`/`I` 本來就把行首行尾這兩個去處帶上了。
             // 再說 `g` 在結果那一格已經是「到第一條」，在框裏當引導鍵要多引一套
             // 待決狀態。
             Key::Char('d') if self.search.takes_text() => {
@@ -1213,10 +1213,10 @@ impl Editor {
                 self.status = say!("search.that-edits-the-box");
             }
             // **站在打不了字的格子上，這六個先回查詢框，再照它們在框裏的意思辦**
-            // （2026-10-04 定：「只要是 normal 状态，任何位置都可以通过 aci／
+            // （2026-10-04 定：「只要是 normal 状态，任何位置都可以通过 aci/
             // ACI 等回到搜索框进入 insert 模式且将光标放到对应的位置」）。
             //
-            // Warning: **從前只有 `i` 有這條退路**，`a`／`c`／`I`／`A`／`C` 都掛着
+            // Warning: **從前只有 `i` 有這條退路**，`a`/`c`/`I`/`A`/`C` 都掛着
             // `if takes_text()` 那道閘——站在「位置」那一行上按下去，屏幕一點反應
             // 都沒有。
             //
@@ -1467,7 +1467,7 @@ impl Editor {
     ///
     /// Warning: **和 模糊 互斥，而勾這一個的時候把那一個關掉、畫灰**（定的，原話：「我傾向
     /// 自動關掉畫灰」）。理由是原來那一條：鬆的匹配蓋住讀者沒打的字，「把它們全
-    /// 換掉」交出去的範圍他預測不了。和 `flip_switch` 裏 正則／完整匹配 壓掉 模糊
+    /// 換掉」交出去的範圍他預測不了。和 `flip_switch` 裏 正則/完整匹配 壓掉 模糊
     /// 是同一個寫法——**要一個就把打架的那個放下**，而不是留一個按了不算數的勾。
     ///
     /// Warning: **關掉替換不會自動把 模糊 打開**：它本來就是關着的那一個，替下去再彈
@@ -1497,7 +1497,7 @@ impl Editor {
 
     /// **此刻的範圍，寫成 `:search` 後面那個詞。**
     ///
-    /// Warning: 三個用命令開的範圍（`-cd`／`-wd`／`-gd`）**沒有**對應的 `:search` 參
+    /// Warning: 三個用命令開的範圍（`-cd`/`-wd`/`-gd`）**沒有**對應的 `:search` 參
     /// 數，所以寫的是它們算出來的那個目錄——那是誠實的，而且改得動。
     fn scope_as_typed(&self) -> String {
         use crate::search_panel::Where;
@@ -1520,7 +1520,7 @@ impl Editor {
     fn after_editing_the_box(&mut self) {
         match self.search.scope.live() {
             true => self.run_search(),
-            // Warning: **改了 包含／排除 不自己重走一趟磁碟**（2026-10-01）。那兩格
+            // Warning: **改了 包含/排除 不自己重走一趟磁碟**（2026-10-01）。那兩格
             // 只在走磁碟的範圍下打得了字，而磁碟那一趟是 `Enter` 的事。改了就
             // 記成過期，面板上那句「按 Enter」自己會出來。
             false => self.search.stale = true,
@@ -1689,7 +1689,7 @@ impl Editor {
     /// 1. **不在那個根底下就不算。** 範圍說的是「去哪裏找」，眼前這一份不在那裏
     ///    就不在那裏——helix 的 `global_search` 也只走 cwd。剝得掉前綴纔算在裏面；
     ///    剝不掉從前是 `unwrap_or(here)`，把整條絕對路徑當成名字接着用。
-    /// 2. **包含／排除也篩它。** 這一份不走 `walk_prose`，所以從前篩不到：打開着
+    /// 2. **包含/排除也篩它。** 這一份不走 `walk_prose`，所以從前篩不到：打開着
     ///    `a.md`、包含那一格寫 `*.txt`，它的命中照樣在名單上，而框上寫着「只搜
     ///    .txt」。
     ///

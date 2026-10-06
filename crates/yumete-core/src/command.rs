@@ -77,7 +77,7 @@ pub enum WikiCommand {
 /// see, and nothing said they were the same question.
 // Warning: **Not `Copy` since #452.** The scope a 認詞 reads is [`Where`], which
 // carries a `PathBuf` in one of its arms — the same type `:search` uses, and
-// sharing it is the point: 「這一篇／這個文件夾／這個倉」 is one idea.
+// sharing it is the point: 「這一篇/這個文件夾/這個倉」 is one idea.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
@@ -100,8 +100,8 @@ pub enum WordCommand {
     /// (Feature #239). Mines the words no dictionary has and writes the list
     /// to `.yumete/discovered_words.txt`, overwriting it.
     ///
-    /// The same four scopes `:search` has, and for the same reason: 「這一篇／
-    /// 這個文件夾／這個倉／打開的那個目錄」 is one idea, and a reader who has
+    /// The same four scopes `:search` has, and for the same reason: 「這一篇/
+    /// 這個文件夾/這個倉/打開的那個目錄」 is one idea, and a reader who has
     /// learnt it once should not have to learn it twice.
     Discover(crate::search_panel::Where),
     /// `:word-habit` — the words this manuscript leans on, by surprisal
@@ -171,7 +171,7 @@ pub enum Command {
     /// `:check-names` — a 百科 name written one homophone out.
     CheckNames,
     /// `:diagnostics-all` — everything the language servers have complained about
-    /// (#53／#54), as a `path:line:` listing `gf` can walk.
+    /// (#53/#54), as a `path:line:` listing `gf` can walk.
     CheckCode,
     /// `:check-punct` — half-width marks in Chinese text, `...` for ……, and
     /// the 「 nothing closes (Feature #238).
@@ -282,7 +282,7 @@ pub enum Command {
     /// `:view-code [on|off|toggle]` — fenced code in its own grammar's colours
     /// (#420). **Three answers, not two**: `None` is the bare word, which
     /// reports rather than setting anything (2026-09-20); `Some(None)` is
-    /// `toggle`; `Some(Some(b))` is `on`／`off`.
+    /// `toggle`; `Some(Some(b))` is `on`/`off`.
     SetCode(Option<Option<bool>>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
@@ -2144,7 +2144,7 @@ const LAYOUTS: &[Word] = &[
 
 /// What `:word-show` may be given — **four words, not two**.
 ///
-/// The parser has always taken `tint` and `ink` here (and 底色／字色, which
+/// The parser has always taken `tint` and `ink` here (and 底色/字色, which
 /// `WordMark::parse` reads), while the table declared `ON_OFF`: so the two
 /// drawings ran, and the menu that exists to say what may follow `show` never
 /// mentioned them. Same shape as §5.2.2 fault 7 — a word the editor accepts
@@ -2297,12 +2297,12 @@ const SWITCH: &[Word] = &[
     },
 ];
 
-/// Which panel a `:panel-left`／`:panel-right` names, or `None` for 「the one
+/// Which panel a `:panel-left`/`:panel-right` names, or `None` for 「the one
 /// I am in」.
 ///
 /// A word nobody knows is an error rather than 「the one I am in」: silently
 /// moving the wrong panel is worse than saying the name is not one.
-/// What a `:sidebar-left`／`:sidebar-right` was asked for.
+/// What a `:sidebar-left`/`:sidebar-right` was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarAsk {
     /// No name: open that side if it is away, put it away if it is there.
@@ -2363,7 +2363,7 @@ const ON_OFF: &[Word] = &[
     },
 ];
 
-/// The panels a slot can hold, for `:panel-left`／`:panel-right` — Feature #293.
+/// The panels a slot can hold, for `:panel-left`/`:panel-right` — Feature #293.
 const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "files", help: "label.panel.files", needs: &[] },
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
@@ -2378,7 +2378,7 @@ const SIDEBAR_PANELS: &[Word] = &[
 
 /// **`:info` 收的那五個詞**（#426）。界面上的標題是中文，這裏是打得出來的名字。
 ///
-/// Warning: **次序跟 [`crate::sidebar::Info::ALL`]**，也就是 `PageUp`／`PageDown`
+/// Warning: **次序跟 [`crate::sidebar::Info::ALL`]**，也就是 `PageUp`/`PageDown`
 /// 翻過去的次序——選單上讀到的順序和按鍵走過的順序是同一個，纔不用記兩套。
 /// （從前這裏是半個字母序：四個排好了，`docs` 落在最後，兩套都不像。）
 const INFO_KINDS: &[Word] = &[
@@ -2649,7 +2649,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "diagnostics-all",
         // Warning: **別名會在 `:` 選單上自己佔一行。** `diagnostics` 當過別名，那張
         // 「一眼掃得完」的表當場從 54 漲到 55，一條滾出了窗口（#369）。要讓
-        // vim／helix 那個詞找得到，靠 `find` 裏的關鍵詞就夠了，不花一行。
+        // vim/helix 那個詞找得到，靠 `find` 裏的關鍵詞就夠了，不花一行。
         aliases: &[],
         help: "cmd.check.code",
         needs: &[],
@@ -2911,7 +2911,7 @@ pub const COMMANDS: &[Entry] = &[
         // 檔**，可一個用動詞起名、一個用範圍起名，於是誰都猜不到另一個：知道
         // `edit` 的人猜不出 `global`，反過來也一樣。
         //
-        // 隔壁那一家本來就是這個形狀（`:word-discover` ／ `-cd` ／ `-gd`），而
+        // 隔壁那一家本來就是這個形狀（`:word-discover` / `-cd` / `-gd`），而
         // `:` 選單按連字號前綴併行（今天是 `:word (wd) +7`），所以多三條不多佔
         // 一行。光禿禿的 `:word-list` 照舊答「此刻用的是哪一份」，同光禿禿的
         // `:word-discover` 是「這一篇」。
@@ -3114,7 +3114,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         // **「什麽時候問」與「畫在哪」分開**（2026-09-29 定，原話：「即时显示应该
         // 做成一个命令开关而不使用快捷键……这样的话即时显示和在哪里显示就分开了，
-        // 不会混在一起」）。畫在哪是 `空格 k`／`空格 K` 與 `PageUp`／`PageDown`。
+        // 不会混在一起」）。畫在哪是 `空格 k`/`空格 K` 與 `PageUp`/`PageDown`。
         name: "info",
         aliases: &[],
         help: "cmd.commands.info",
@@ -5617,7 +5617,7 @@ mod tests {
             parse(":yume-panel off"),
             Ok(Command::YumePanel(Some("off".into())))
         );
-        // Warning: `:yume-p` 從 2026-09-27 起兩頭都認（`yume-panel`／`yume-preedit`），
+        // Warning: `:yume-p` 從 2026-09-27 起兩頭都認（`yume-panel`/`yume-preedit`），
         // 所以最短的寫法多了一個字母。前綴規矩沒變：認兩個就是誰都不認。
         assert_eq!(
             parse(":yume-pa f"),
@@ -6015,7 +6015,7 @@ mod tests {
         assert_eq!(words, ["off", "color", "line"]);
     }
 
-    /// Either command on its own is 「哪一套／哪個深淺」, asked rather than set.
+    /// Either command on its own is 「哪一套/哪個深淺」, asked rather than set.
     #[test]
     fn a_theme_is_two_questions_and_either_may_be_left_out() {
         use Mood::*;
@@ -6268,7 +6268,7 @@ mod tests {
         // An ambiguous prefix names nothing rather than guessing.
         assert_eq!(parse(":re"), Err(CommandError::Unknown("re".into())));
         // Warning: **`s` 從歧義變成了一個聲明過的簡寫**（2026-09-26 定的）：光禿禿的
-        // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`／`set`／`shot`… 中間，
+        // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`/`set`/`shot`… 中間，
         // 哪個都不算——而聲明出來的簡寫壓過前綴規則，同 `w` 之於 `write`。
         assert_eq!(parse(":s"), Ok(Command::OpenSearch(crate::search_panel::Where::Buffer)));
         // 帶分隔符的那一種還是 vi 的一次性替換，兩條路分得清。

@@ -19,8 +19,8 @@
 # Three languages: `zhs` 简体, `zht` 繁體, `en`. **Write `zhs` first** — in
 # 大陆用语 — and convert it to `zht`; that is the
 # rule of 2026-09-08, and the reason for it is that 簡體 is not only
-# different characters, it is sometimes a different word (檔案／文件,
-# 預設／默认, 程式／程序, 游標／光标), and a sentence composed in the second
+# different characters, it is sometimes a different word (檔案/文件,
+# 預設/默认, 程式/程序, 游標/光标), and a sentence composed in the second
 # language picks the second language's vocabulary without meaning to.
 #
 # `zht` must still be filled in, because it is what the editor shows by default
@@ -496,8 +496,8 @@ en = "search backward"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.ruby"
-zht = "注音／旁註"
-zhs = "注音／旁注"
+zht = "注音/旁註"
+zhs = "注音/旁注"
 en = "ruby"
 
 [[message]]
@@ -1113,8 +1113,8 @@ find = "上一個 上一个 前一個 prev bp"
 [[message]]
 # : 命令選單裏 charset 那一項的說明（check 組）
 key = "cmd.check.charset"
-zht = "查字集：不在通用規範／臺灣／香港／古籍裏的字，排版社的字體多半也沒有"
-zhs = "查字集：不在通用规范／台湾／香港／古籍里的字，排版社的字体多半也没有"
+zht = "查字集：不在通用規範/臺灣/香港/古籍裏的字，排版社的字體多半也沒有"
+zhs = "查字集：不在通用规范/台湾/香港/古籍里的字，排版社的字体多半也没有"
 en = "check 字集: characters no current standard carries — the ones a typesetter's font will not have"
 find = "字集 生僻 罕用 缺字 豆腐塊 豆腐块 通用規範 通用规范 造字 charset rare glyph"
 
@@ -1153,8 +1153,8 @@ find = "標點 标点 半角 全角 引號 引号 括號 括号 省略號 省略
 [[message]]
 # : 命令選單裏 usage 那一項的說明（check 組）
 key = "cmd.check.usage"
-zht = "查用字：全文寫了兩種寫法的（裏／裡、為／爲、你自己配的人名），列出少數那一邊"
-zhs = "查用字：全文写了两种写法的（里／裡、为／爲、你自己配的人名），列出少数那一边"
+zht = "查用字：全文寫了兩種寫法的（裏/裡、為/爲、你自己配的人名），列出少數那一邊"
+zhs = "查用字：全文写了两种写法的（里/裡、为/爲、你自己配的人名），列出少数那一边"
 en = "check 用字: where the manuscript wrote the other spelling of something it usually spells one way"
 find = "用字 異體字 异体字 一致 統一 统一 裏裡 為爲 校對 校对 consistency variant"
 
@@ -1273,16 +1273,16 @@ find = "幫助 帮助 說明 说明 手冊 手册 keys manual"
 [[message]]
 # : 命令選單裏 indent 那一項的說明（commands 組）
 key = "cmd.commands.indent"
-zht = "首行縮進：`off`／`basic`（縮進，空行留着）／`full`（連段間空行一起收），或幾格"
-zhs = "首行缩进：`off`／`basic`（缩进，空行留着）／`full`（连段间空行一起收），或几格"
+zht = "首行縮進：`off`/`basic`（縮進，空行留着）/`full`（連段間空行一起收），或幾格"
+zhs = "首行缩进：`off`/`basic`（缩进，空行留着）/`full`（连段间空行一起收），或几格"
 en = "how a paragraph opens: `off` / `basic` (indented, blank line kept) / `full` (the blank line folded too), or a width"
 find = "縮進 缩进 首行 段落 indent paragraph"
 
 [[message]]
 # : 命令選單裏 info 那一項的說明（#426）
 key = "cmd.commands.info"
-zht = "信息：即時顯示哪一種（record／diagnostics／dictionary／wiki／docs；不寫就按稿子算）"
-zhs = "信息：即时显示哪一种（record／diagnostics／dictionary／wiki／docs；不写就按稿子算）"
+zht = "信息：即時顯示哪一種（record/diagnostics/dictionary/wiki/docs；不寫就按稿子算）"
+zhs = "信息：即时显示哪一种（record/diagnostics/dictionary/wiki/docs；不写就按稿子算）"
 en = "info: which of record / diagnostics / dictionary / wiki / docs follows the cursor (blank: by the file)"
 find = "信息 info 記錄 记录 診斷 诊断 字典 百科 文檔 文档 record diagnostics dictionary wiki docs 即時 即时 及時 及时"
 
@@ -1297,8 +1297,8 @@ find = "鍵位 键位 快捷鍵 快捷键 預設 预设 vim vi helix keymap keys
 [[message]]
 # : 命令選單裏 language 那一項的說明（commands 組）
 key = "cmd.commands.language"
-zht = "編輯器自己說話用哪種語言：`zh` 繁體／`zhs` 简体／`en` English"
-zhs = "编辑器自己说话用哪种语言：`zh` 繁体／`zhs` 简体／`en` English"
+zht = "編輯器自己說話用哪種語言：`zh` 繁體/`zhs` 简体/`en` English"
+zhs = "编辑器自己说话用哪种语言：`zh` 繁体/`zhs` 简体/`en` English"
 en = "which language the editor speaks: `zh` 繁體 / `zhs` 简体 / `en` English"
 find = "語言 语言 繁體 繁体 简体 簡體 英文 english language lang 界面"
 
@@ -1528,8 +1528,8 @@ find = "終端 终端 外部 掛起 挂起 shell suspend"
 [[message]]
 # : 命令選單裏 shot 那一項的說明（commands 組）
 key = "cmd.commands.shot"
-zht = "截圖：默認進剪貼板，png／html／txt 則存成文件（進下載文件夾）"
-zhs = "截图：默认进剪贴板，png／html／txt 则存成文件（进下载文件夹）"
+zht = "截圖：默認進剪貼板，png/html/txt 則存成文件（進下載文件夾）"
+zhs = "截图：默认进剪贴板，png/html/txt 则存成文件（进下载文件夹）"
 en = "a picture: the clipboard by default, or a file with `png`/`html`/`txt`"
 find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 剪贴簿"
 
@@ -1996,8 +1996,8 @@ en = "always: every column and every row"
 [[message]]
 # `:view-margin` 可选的一档：dense（出厂）
 key = "cmd.margins.dense"
-zht = "按視覺縱／行：誰有東西誰留（出廠）"
-zhs = "按视觉纵／行：谁有东西谁留（出厂）"
+zht = "按視覺縱/行：誰有東西誰留（出廠）"
+zhs = "按视觉纵/行：谁有东西谁留（出厂）"
 en = "dense: each column or row that carries something (default)"
 
 [[message]]
@@ -3166,14 +3166,14 @@ zhs = "这一份里找不到注释"
 en = "no comments in this file"
 
 [[message]]
-# mi f／mi c：光標不在任何一個定義裏
+# mi f/mi c：光標不在任何一個定義裏
 key = "code.no-definition-here"
 zht = "光標不在任何函數或類裏"
 zhs = "光标不在任何函数或类里"
 en = "the cursor is not inside a function or a class"
 
 [[message]]
-# ]f／]c：這一份裏一個定義都沒有（或者不是代碼檔）
+# ]f/]c：這一份裏一個定義都沒有（或者不是代碼檔）
 key = "code.no-definitions"
 zht = "這一份裏找不到函數或類"
 zhs = "这一份里找不到函数或类"
@@ -3300,7 +3300,7 @@ zhs = "设置重读了"
 en = "settings reloaded"
 
 [[message]]
-# ]c／[c 跳到了第 {0} 行的衝突
+# ]c/[c 跳到了第 {0} 行的衝突
 key = "conflict.at-line"
 zht = "跳到第 {0} 行的衝突"
 zhs = "跳到第 {0} 行的冲突"
@@ -3335,7 +3335,7 @@ zhs = "前面没有冲突了"
 en = "no conflict before this one"
 
 [[message]]
-# ]c／[c／:check-merge 而整份文件裏一處衝突都沒有
+# ]c/[c/:check-merge 而整份文件裏一處衝突都沒有
 key = "conflict.none"
 zht = "這份文件裏沒有合併衝突"
 zhs = "这份文件里没有合并冲突"
@@ -3699,7 +3699,7 @@ zhs = "这已经是第一行，上面没有可以并的"
 en = "this is the first line; there is nothing above it to join"
 
 [[message]]
-# 按 mi m／ma m（di m／da m），可是光標不在任何一段標記裏
+# 按 mi m/ma m（di m/da m），可是光標不在任何一段標記裏
 key = "edit.no-markup-here"
 zht = "這裏沒有標記"
 zhs = "这里没有标记"
@@ -3720,7 +3720,7 @@ zhs = "外面没有成对的符号"
 en = "no pair around this"
 
 [[message]]
-# mi w／ma w（以及 vim 的 ciw daw），光標没有停在一個詞上
+# mi w/ma w（以及 vim 的 ciw daw），光標没有停在一個詞上
 key = "edit.no-word-here"
 zht = "這裏不是一個詞"
 zhs = "这里不是一个词"
@@ -4110,10 +4110,10 @@ zhs = "中文"
 en = "Chinese"
 
 [[message]]
-# 中文幫助：開／關輸入法
+# 中文幫助：開/關輸入法
 key = "help.chinese.toggle-ime"
-zht = "接管鍵盤（`:yume off` 交還給系統）；接管着的時候，單獨按一下 Shift 切 中／ABC"
-zhs = "接管键盘（`:yume off` 交还给系统）；接管着的时候，单独按一下 Shift 切 中／ABC"
+zht = "接管鍵盤（`:yume off` 交還給系統）；接管着的時候，單獨按一下 Shift 切 中/ABC"
+zhs = "接管键盘（`:yume off` 交还给系统）；接管着的时候，单独按一下 Shift 切 中/ABC"
 en = "take the keyboard (`:yume off` hands it back); a lone Shift tap switches 中/ABC"
 
 [[message]]
@@ -4152,17 +4152,17 @@ zhs = "数字在前是次数"
 en = "a number in front is a count"
 
 [[message]]
-# 常用幫助：剪切／剪切後改（大寫的那一對纔動寄存器）
+# 常用幫助：剪切/剪切後改（大寫的那一對纔動寄存器）
 key = "help.common.cut-change"
-zht = "同樣是刪／改，但先把它放進寄存器（剪切）"
-zhs = "同样是删／改，但先把它放进寄存器（剪切）"
+zht = "同樣是刪/改，但先把它放進寄存器（剪切）"
+zhs = "同样是删/改，但先把它放进寄存器（剪切）"
 en = "the same two, but the text goes to the register first (cut)"
 
 [[message]]
-# 常用幫助：刪掉選區／換掉選區
+# 常用幫助：刪掉選區/換掉選區
 key = "help.common.delete-change"
-zht = "刪掉選區／換掉選區（換完就在打字了）"
-zhs = "删掉选区／换掉选区（换完就在打字了）"
+zht = "刪掉選區/換掉選區（換完就在打字了）"
+zhs = "删掉选区/换掉选区（换完就在打字了）"
 en = "delete the selection / change it (and you are typing)"
 
 [[message]]
@@ -4180,17 +4180,17 @@ zhs = "所有 : 命令"
 en = "every : command"
 
 [[message]]
-# 常用幫助：延伸模式開關／收成一個字
+# 常用幫助：延伸模式開關/收成一個字
 key = "help.common.extend-collapse"
-zht = "延伸模式開關／收成一個字；Esc 也退出延伸"
-zhs = "延伸模式开关／收成一个字；Esc 也退出延伸"
+zht = "延伸模式開關/收成一個字；Esc 也退出延伸"
+zhs = "延伸模式开关/收成一个字；Esc 也退出延伸"
 en = "extend mode on-off / collapse to one character; Esc also leaves extend"
 
 [[message]]
-# 常用幫助：去／看它指的地方
+# 常用幫助：去/看它指的地方
 key = "help.common.follow-what-it-points-at"
-zht = "去／看它指的地方：腳註的註、拆分的那一行"
-zhs = "去／看它指的地方：脚注的注、拆分的那一行"
+zht = "去/看它指的地方：腳註的註、拆分的那一行"
+zhs = "去/看它指的地方：脚注的注、拆分的那一行"
 en = "go to / show what this points at: a footnote's note, a component's row"
 
 [[message]]
@@ -4201,10 +4201,10 @@ zhs = "去第 30 行"
 en = "go to line 30"
 
 [[message]]
-# 常用幫助：前進／後退半頁
+# 常用幫助：前進/後退半頁
 key = "help.common.half-page"
-zht = "前進／後退半頁；三分之二是 C-n／C-p，整頁是 C-f／C-b"
-zhs = "前进／后退半页；三分之二是 C-n／C-p，整页是 C-f／C-b"
+zht = "前進/後退半頁；三分之二是 C-n/C-p，整頁是 C-f/C-b"
+zhs = "前进/后退半页；三分之二是 C-n/C-p，整页是 C-f/C-b"
 en = "half a page forward/back; C-n / C-p for two thirds, C-f / C-b for a whole one"
 
 [[message]]
@@ -4215,45 +4215,45 @@ zhs = "左下上右；竖排里是沿着纵走"
 en = "left, down, up, right — down the column in 竪排"
 
 [[message]]
-# 常用幫助：縮進／退縮進
+# 常用幫助：縮進/退縮進
 key = "help.common.indent"
-zht = "縮進／退縮進"
-zhs = "缩进／退缩进"
+zht = "縮進/退縮進"
+zhs = "缩进/退缩进"
 en = "indent / unindent"
 
 [[message]]
-# 常用幫助：在光標前／後打字
+# 常用幫助：在光標前/後打字
 key = "help.common.insert-before-after"
-zht = "在光標前／後開始打字"
-zhs = "在光标前／后开始打字"
+zht = "在光標前/後開始打字"
+zhs = "在光标前/后开始打字"
 en = "start typing before/after the cursor"
 
 [[message]]
-# 常用幫助：跳回去／再跳回來
+# 常用幫助：跳回去/再跳回來
 key = "help.common.jump-list"
-zht = "跳回去／再跳回來"
-zhs = "跳回去／再跳回来"
+zht = "跳回去/再跳回來"
+zhs = "跳回去/再跳回来"
 en = "jump back / forward again"
 
 [[message]]
-# 常用幫助：行首／行尾／首個非空白
+# 常用幫助：行首/行尾/首個非空白
 key = "help.common.line-start-end"
-zht = "行首／行尾／首個非空白"
-zhs = "行首／行尾／首个非空白"
+zht = "行首/行尾/首個非空白"
+zhs = "行首/行尾/首个非空白"
 en = "line start / line end / first non-blank"
 
 [[message]]
-# 常用幫助：錄一段按鍵／放一遍
+# 常用幫助：錄一段按鍵/放一遍
 key = "help.common.macros"
-zht = "錄一段按鍵／放一遍"
-zhs = "录一段按键／放一遍"
+zht = "錄一段按鍵/放一遍"
+zhs = "录一段按键/放一遍"
 en = "record keys / play them back"
 
 [[message]]
-# 常用幫助：記住這裏／回到那裏
+# 常用幫助：記住這裏/回到那裏
 key = "help.common.marks"
-zht = "記住這裏／回到那裏"
-zhs = "记住这里／回到那里"
+zht = "記住這裏/回到那裏"
+zhs = "记住这里/回到那里"
 en = "remember this place / go back to it"
 
 [[message]]
@@ -4264,10 +4264,10 @@ zhs = "动：命令＋选择＋动作"
 en = "moving: command + selection + action"
 
 [[message]]
-# 常用幫助：下面／上面開新的一行
+# 常用幫助：下面/上面開新的一行
 key = "help.common.open-line"
-zht = "下面／上面開新的一行，直接打字"
-zhs = "下面／上面开新的一行，直接打字"
+zht = "下面/上面開新的一行，直接打字"
+zhs = "下面/上面开新的一行，直接打字"
 en = "open a line below/above and start typing"
 
 [[message]]
@@ -4278,10 +4278,10 @@ zhs = "别的几节"
 en = "the other sections"
 
 [[message]]
-# 常用幫助：下一段／上一段
+# 常用幫助：下一段/上一段
 key = "help.common.paragraph-motions"
-zht = "下一段／上一段"
-zhs = "下一段／上一段"
+zht = "下一段/上一段"
+zhs = "下一段/上一段"
 en = "next paragraph / previous paragraph"
 
 [[message]]
@@ -4306,10 +4306,10 @@ zhs = "选这一整行——小说里一行就是一整段"
 en = "select the whole line — in a novel a line is a paragraph"
 
 [[message]]
-# 常用幫助：下一句／上一句
+# 常用幫助：下一句/上一句
 key = "help.common.sentence-motions"
-zht = "下一句／上一句"
-zhs = "下一句／上一句"
+zht = "下一句/上一句"
+zhs = "下一句/上一句"
 en = "next sentence / previous sentence"
 
 [[message]]
@@ -4320,10 +4320,10 @@ zhs = "空格开头的"
 en = "what Space opens"
 
 [[message]]
-# 常用幫助：檔首／檔尾
+# 常用幫助：檔首/檔尾
 key = "help.common.start-end-of-file"
-zht = "文件開頭／末尾"
-zhs = "文件开头／末尾"
+zht = "文件開頭/末尾"
+zhs = "文件开头/末尾"
 en = "start / end of the file"
 
 [[message]]
@@ -4334,10 +4334,10 @@ zhs = "常用"
 en = "the usual keys"
 
 [[message]]
-# 常用幫助：撤銷／重做
+# 常用幫助：撤銷/重做
 key = "help.common.undo-redo"
-zht = "撤銷／重做"
-zhs = "撤销／重做"
+zht = "撤銷/重做"
+zhs = "撤销/重做"
 en = "undo / redo"
 
 [[message]]
@@ -4350,8 +4350,8 @@ en = "a window of 80×24 is what this is laid out for; a side panel needs 36 col
 [[message]]
 # 常用幫助：這個詞還在哪裏
 key = "help.common.word-elsewhere"
-zht = "這個詞還在哪裏：這邊找／副編輯區看"
-zhs = "这个词还在哪里：这边找／副编辑区看"
+zht = "這個詞還在哪裏：這邊找/副編輯區看"
+zhs = "这个词还在哪里：这边找/副编辑区看"
 en = "where else this word is: / here, ? in the other work area"
 
 [[message]]
@@ -4362,10 +4362,10 @@ zhs = "下一词首、上一词首、词尾——认得汉字的词"
 en = "next word, previous word, end of word — it knows 漢字 words"
 
 [[message]]
-# 常用幫助：複製／貼上
+# 常用幫助：複製/貼上
 key = "help.common.yank-put"
-zht = "複製／粘貼"
-zhs = "复制／粘贴"
+zht = "複製/粘貼"
+zhs = "复制/粘贴"
 en = "yank / put"
 
 [[message]]
@@ -4383,17 +4383,17 @@ zhs = "每一节都是这个编辑器自己报上来的，不是抄的。"
 en = "every section here is reported by the editor itself, not copied out of a manual."
 
 [[message]]
-# 表格幫助：加一行／刪一行
+# 表格幫助：加一行/刪一行
 key = "help.table.add-or-drop-row"
-zht = "加一行／刪一行；t j t k 上下移"
-zhs = "加一行／删一行；t j t k 上下移"
+zht = "加一行/刪一行；t j t k 上下移"
+zhs = "加一行/删一行；t j t k 上下移"
 en = "add a row / drop this row; t j and t k move it"
 
 [[message]]
 # 表格幫助：邊欄與摺格子
 key = "help.table.detail-and-folds"
-zht = "這一行攤開來讀／過寬的格子收起尾巴"
-zhs = "这一行摊开来读／过宽的格子收起尾巴"
+zht = "這一行攤開來讀/過寬的格子收起尾巴"
+zhs = "这一行摊开来读/过宽的格子收起尾巴"
 en = "read this row laid out / fold the tails of over-wide cells"
 
 [[message]]
@@ -4406,15 +4406,15 @@ en = "read this file as a grid; :table off leaves"
 [[message]]
 # 表格幫助：四種看法
 key = "help.table.four-surfaces"
-zht = "源碼／表格操作／畫成表格／全窗表格；t q 把窗口交回去"
-zhs = "源码／表格操作／画成表格／全窗表格；t q 把窗口交回去"
+zht = "源碼/表格操作/畫成表格/全窗表格；t q 把窗口交回去"
+zhs = "源码/表格操作/画成表格/全窗表格；t q 把窗口交回去"
 en = "source / table keys / drawn in place / the whole window; t q gives the window back"
 
 [[message]]
-# 表格幫助：格子裏下一格／上一格
+# 表格幫助：格子裏下一格/上一格
 key = "help.table.next-previous-cell"
-zht = "格子裏：下一格／上一格"
-zhs = "格子里：下一格／上一格"
+zht = "格子裏：下一格/上一格"
+zhs = "格子里：下一格/上一格"
 en = "inside a cell: next cell / previous cell"
 
 [[message]]
@@ -4432,10 +4432,10 @@ zhs = "表格与拆分表"
 en = "grids, and the 拆分表"
 
 [[message]]
-# 表格幫助：照這一欄順排／倒排
+# 表格幫助：照這一欄順排/倒排
 key = "help.table.sort-by-column"
-zht = "照這一欄順排／倒排；t1a2d8as 一次排幾欄"
-zhs = "照这一栏顺排／倒排；t1a2d8as 一次排几栏"
+zht = "照這一欄順排/倒排；t1a2d8as 一次排幾欄"
+zhs = "照这一栏顺排/倒排；t1a2d8as 一次排几栏"
 en = "sort by this column, ascending / descending; ␣t1a2d8as sorts by several"
 
 [[message]]
@@ -4446,24 +4446,24 @@ zhs = "按格走；Tab 换成按字走"
 en = "step by cell; Tab steps by character instead"
 
 [[message]]
-# 表格幫助：進格子打字／清掉這一格
+# 表格幫助：進格子打字/清掉這一格
 key = "help.table.type-in-cell"
-zht = "進格子打字／清掉這一格"
-zhs = "进格子打字／清掉这一格"
+zht = "進格子打字/清掉這一格"
+zhs = "进格子打字/清掉这一格"
 en = "type in the cell / empty it"
 
 [[message]]
 # 表格幫助：誰用了它
 key = "help.table.who-uses-this"
-zht = "誰用了它——一欄一欄地找：這邊找／那邊看"
-zhs = "谁用了它——一栏一栏地找：这边找／那边看"
+zht = "誰用了它——一欄一欄地找：這邊找/那邊看"
+zhs = "谁用了它——一栏一栏地找：这边找/那边看"
 en = "who uses this — down the columns: / here, ? in the other area"
 
 [[message]]
-# 表格幫助：取這一欄／貼一欄
+# 表格幫助：取這一欄/貼一欄
 key = "help.table.yank-or-put-column"
-zht = "取這一欄／貼一欄"
-zhs = "取这一栏／贴一栏"
+zht = "取這一欄/貼一欄"
+zhs = "取这一栏/贴一栏"
 en = "yank this column / put one"
 
 [[message]]
@@ -4488,10 +4488,10 @@ zhs = "一纵多少字；:view-wrap 0 跟着窗高走"
 en = "how many characters a column holds; :view-wrap 0 follows the window"
 
 [[message]]
-# 竪排幫助：沿着這一縱往下／往上
+# 竪排幫助：沿着這一縱往下/往上
 key = "help.vertical.down-up-column"
-zht = "沿着這一縱往下／往上"
-zhs = "沿着这一纵往下／往上"
+zht = "沿着這一縱往下/往上"
+zhs = "沿着这一纵往下/往上"
 en = "down / up this column"
 
 [[message]]
@@ -4516,10 +4516,10 @@ zhs = "边栏：每一纵旁边都留一格"
 en = "margin: a lane beside every column"
 
 [[message]]
-# 竪排幫助：上一縱／下一縱
+# 竪排幫助：上一縱/下一縱
 key = "help.vertical.previous-next-column"
-zht = "上一縱／下一縱——縱是往左疊的"
-zhs = "上一纵／下一纵——纵是往左叠的"
+zht = "上一縱/下一縱——縱是往左疊的"
+zhs = "上一纵/下一纵——纵是往左叠的"
 en = "previous/next column — columns stack leftwards"
 
 [[message]]
@@ -4808,15 +4808,15 @@ en = "every command"
 [[message]]
 # g 選單裏的 j k（橫排）
 key = "hint.goto.by-file-line"
-zht = "下／上一行（文件裏的行：一段是一行，所以是下一段／上一段）"
-zhs = "下／上一行（文件里的行：一段是一行，所以是下一段／上一段）"
+zht = "下/上一行（文件裏的行：一段是一行，所以是下一段/上一段）"
+zhs = "下/上一行（文件里的行：一段是一行，所以是下一段/上一段）"
 en = "down / up a line of the file — a paragraph, where it is one line"
 
 [[message]]
 # g 選單裏的 h l（縱書：方向跟 hjkl 一起轉）
 key = "hint.goto.by-file-line-vertical"
-zht = "下／上一段（文件裏的一行，往左是往後）"
-zhs = "下／上一段（文件里的一行，往左是往后）"
+zht = "下/上一段（文件裏的一行，往左是往後）"
+zhs = "下/上一段（文件里的一行，往左是往后）"
 en = "next / previous line of the file — leftward is onward"
 
 [[message]]
@@ -4855,10 +4855,10 @@ zhs = "跟着链接走"
 en = "follow the link"
 
 [[message]]
-# g 組：去／看它指的地方
+# g 組：去/看它指的地方
 key = "hint.goto.follow-note"
-zht = "去／看它指的地方"
-zhs = "去／看它指的地方"
+zht = "去/看它指的地方"
+zhs = "去/看它指的地方"
 en = "go to / show what it points at"
 
 [[message]]
@@ -4883,17 +4883,17 @@ zhs = "切回刚才那一份"
 en = "back to the file before this one"
 
 [[message]]
-# g 組：行首／行尾
+# g 組：行首/行尾
 key = "hint.goto.line-start-or-end"
-zht = "行首／行尾"
-zhs = "行首／行尾"
+zht = "行首/行尾"
+zhs = "行首/行尾"
 en = "line start / end"
 
 [[message]]
-# g 組：切到下一個／上一個打開的檔案
+# g 組：切到下一個/上一個打開的檔案
 key = "hint.goto.next-or-previous-file"
-zht = "下一個／上一個打開的文件"
-zhs = "下一个／上一个打开的文件"
+zht = "下一個/上一個打開的文件"
+zhs = "下一个/上一个打开的文件"
 en = "the next / previous open file"
 
 [[message]]
@@ -4976,15 +4976,15 @@ en = "g"
 [[message]]
 # g 選單裏的 ; , （只在 vim 鍵位下）——在改過的地方之間走
 key = "hint.goto.walk-changes"
-zht = "往舊／往新走一處改動"
-zhs = "往旧／往新走一处改动"
+zht = "往舊/往新走一處改動"
+zhs = "往旧/往新走一处改动"
 en = "an older / newer change"
 
 [[message]]
 # 這一句是 g/ g? 的說明
 key = "hint.goto.word-elsewhere"
-zht = "這個詞還在哪裏：這邊找／那邊看"
-zhs = "这个词还在哪里：这边找／那边看"
+zht = "這個詞還在哪裏：這邊找/那邊看"
+zhs = "这个词还在哪里：这边找/那边看"
 en = "where else this word is: / here, ? in the other area"
 
 [[message]]
@@ -5023,35 +5023,35 @@ zhs = "下面加一条空行"
 en = "a blank line below"
 
 [[message]]
-# ]／[ 的選單：下一處／上一處改動（行號旁那條改動條上的）
+# ]/[ 的選單：下一處/上一處改動（行號旁那條改動條上的）
 key = "hint.hop.change"
 zht = "改動"
 zhs = "改动"
 en = "a change"
 
 [[message]]
-# ]／[ 的選單：下一個／上一個類（只在整份是代碼的檔上）
+# ]/[ 的選單：下一個/上一個類（只在整份是代碼的檔上）
 key = "hint.hop.class"
 zht = "類"
 zhs = "类"
 en = "a class"
 
 [[message]]
-# ]／[ 的選單：下一段／上一段註釋（只在代碼檔上）
+# ]/[ 的選單：下一段/上一段註釋（只在代碼檔上）
 key = "hint.hop.comment"
 zht = "註釋"
 zhs = "注释"
 en = "a comment"
 
 [[message]]
-# ]／[ 的選單：下一處／上一處合併衝突
+# ]/[ 的選單：下一處/上一處合併衝突
 key = "hint.hop.conflict"
 zht = "合併衝突"
 zhs = "合并冲突"
 en = "merge conflict"
 
 [[message]]
-# ]／[ 的選單：下一個／上一個函數
+# ]/[ 的選單：下一個/上一個函數
 key = "hint.hop.function"
 zht = "函數"
 zhs = "函数"
@@ -5072,10 +5072,10 @@ zhs = "上一个"
 en = "previous…"
 
 [[message]]
-# ]／[ 的選單：下一個／上一個診斷（大寫是第一個／最後一個）
+# ]/[ 的選單：下一個/上一個診斷（大寫是第一個/最後一個）
 key = "hint.hop.problem"
-zht = "診斷（大寫：第一個／最後一個）"
-zhs = "诊断（大写：第一个／最后一个）"
+zht = "診斷（大寫：第一個/最後一個）"
+zhs = "诊断（大写：第一个/最后一个）"
 en = "a diagnostic (capital: the first / the last)"
 
 [[message]]
@@ -5260,7 +5260,7 @@ zhs = "切成两个编辑区"
 en = "split in two"
 
 [[message]]
-# C-w／空格 w 那一組的標題（2026-09-30，照 helix 的 window）
+# C-w/空格 w 那一組的標題（2026-09-30，照 helix 的 window）
 key = "hint.region.title"
 zht = "區域"
 zhs = "区域"
@@ -5380,7 +5380,7 @@ zhs = "替换整个文件"
 en = "replace the whole file"
 
 [[message]]
-# 提示：搜索面板——換這一處／全部換
+# 提示：搜索面板——換這一處/全部換
 key = "hint.search.replace-here"
 zht = "替換此處"
 zhs = "替换此处"
@@ -5396,15 +5396,15 @@ en = "switches"
 [[message]]
 # 提示：搜索面板——這一格做什麼
 key = "hint.search.use-it"
-zht = "搜索／跳轉"
-zhs = "搜索／跳转"
+zht = "搜索/跳轉"
+zhs = "搜索/跳转"
 en = "search / go there"
 
 [[message]]
-# 提示：鍵已經交回正文，而結果名單還開着——走下一處／上一處命中
+# 提示：鍵已經交回正文，而結果名單還開着——走下一處/上一處命中
 key = "hint.search.walk-the-hits"
-zht = "下一處／上一處"
-zhs = "下一处／上一处"
+zht = "下一處/上一處"
+zhs = "下一处/上一处"
 en = "next hit / previous"
 
 [[message]]
@@ -5550,8 +5550,8 @@ en = "show info at the cursor (sidebar)"
 [[message]]
 # 表格提示：加一欄
 key = "hint.table.add-column"
-zht = "加一欄（右／左）"
-zhs = "加一栏（右／左）"
+zht = "加一欄（右/左）"
+zhs = "加一栏（右/左）"
 en = "add a column (right / left)"
 
 [[message]]
@@ -5569,10 +5569,10 @@ zhs = "␣t 后面：{0}"
 en = "after 空格 t: {0}"
 
 [[message]]
-# 表格提示：這欄靠左／居中／靠右
+# 表格提示：這欄靠左/居中/靠右
 key = "hint.table.align-column"
-zht = "這欄靠左／居中／靠右"
-zhs = "这栏靠左／居中／靠右"
+zht = "這欄靠左/居中/靠右"
+zhs = "这栏靠左/居中/靠右"
 en = "this column left / centre / right"
 
 [[message]]
@@ -5618,10 +5618,10 @@ zhs = "删除这一行"
 en = "delete this row"
 
 [[message]]
-# 表格提示：刪這行／這欄
+# 表格提示：刪這行/這欄
 key = "hint.table.delete-row-or-column"
-zht = "刪這行／這欄"
-zhs = "删这行／这栏"
+zht = "刪這行/這欄"
+zhs = "删这行/这栏"
 en = "delete this row / column"
 
 [[message]]
@@ -5639,7 +5639,7 @@ zhs = "完整视图（表格显示列号）"
 en = "full view: the table shows column numbers"
 
 [[message]]
-# 表格提示：第一行當欄名／當資料
+# 表格提示：第一行當欄名/當資料
 key = "hint.table.first-row-is-data"
 zht = "表格第一行是否為標題"
 zhs = "表格第一行是否为标题"
@@ -5660,10 +5660,10 @@ zhs = "去某一格（␣t 20,20g）"
 en = "go to a cell (␣t20,20g)"
 
 [[message]]
-# 空格 t 單子：換移動的粒度（2026-09-30 定，原話「按格／按字移動」）
+# 空格 t 單子：換移動的粒度（2026-09-30 定，原話「按格/按字移動」）
 key = "hint.table.grain"
-zht = "按格／按字移動"
-zhs = "按格／按字移动"
+zht = "按格/按字移動"
+zhs = "按格/按字移动"
 en = "move by cell or by character"
 
 [[message]]
@@ -5703,17 +5703,17 @@ zhs = "表格菜单"
 en = "the table menu"
 
 [[message]]
-# 表格提示：這欄左移／右移
+# 表格提示：這欄左移/右移
 key = "hint.table.move-column"
-zht = "這欄左移／右移"
-zhs = "这栏左移／右移"
+zht = "這欄左移/右移"
+zhs = "这栏左移/右移"
 en = "move this column left / right"
 
 [[message]]
-# 表格提示：這行下移／上移
+# 表格提示：這行下移/上移
 key = "hint.table.move-row"
-zht = "這行下移／上移"
-zhs = "这行下移／上移"
+zht = "這行下移/上移"
+zhs = "这行下移/上移"
 en = "move this row down / up"
 
 [[message]]
@@ -5724,7 +5724,7 @@ zhs = "下一格"
 en = "next cell"
 
 [[message]]
-# 表格提示：下一張表／上一張表
+# 表格提示：下一張表/上一張表
 key = "hint.table.next-or-previous"
 zht = "下一張表/上一張表"
 zhs = "下一张表/上一张表"
@@ -5773,7 +5773,7 @@ zhs = "按列搜索（在另一区域显示）"
 en = "search down the columns (shown in the other area)"
 
 [[message]]
-# 表格提示：照這欄順排／倒排
+# 表格提示：照這欄順排/倒排
 key = "hint.table.sort-by-column"
 zht = "按列升序/降序排列（␣t1s; 1a2d8as 多列排序）"
 zhs = "按列升序/降序排列（␣t1s; 1a2d8as 多列排序）"
@@ -5801,10 +5801,10 @@ zhs = "长单元格自动换行"
 en = "long cells wrap onto the next line"
 
 [[message]]
-# 表格提示：取這欄／貼一欄
+# 表格提示：取這欄/貼一欄
 key = "hint.table.yank-or-paste-column"
-zht = "取這欄／貼一欄"
-zhs = "取这栏／贴一栏"
+zht = "取這欄/貼一欄"
+zhs = "取这栏/贴一栏"
 en = "yank this column / paste a column"
 
 [[message]]
@@ -5836,7 +5836,7 @@ zhs = "打一个字盖掉选区，中文也打得"
 en = "type a character to write over it — 中文 too"
 
 [[message]]
-# mr／cs 在等第一個字符：要被換掉的是哪一對
+# mr/cs 在等第一個字符：要被換掉的是哪一對
 key = "hint.type-the-one-being-replaced"
 zht = "輸入將被替換之符號"
 zhs = "输入将被替换之符号"
@@ -5922,7 +5922,7 @@ en = "line start is gh, first non-blank gs"
 # ── hud ───────────────────────────────────────────────────────────────
 
 [[message]]
-# vim 預設：按下 d／c／y 之後，狀態行說它在等什麽
+# vim 預設：按下 d/c/y 之後，狀態行說它在等什麽
 key = "hint.vim-operator"
 zht = "{0} 等一個動作：{1}，或者再按一次 {0} 取整行"
 zhs = "{0} 等一个动作：{1}，或者再按一次 {0} 取整行"
@@ -6018,15 +6018,15 @@ en = "this build carries no 碼表"
 [[message]]
 # 啟動時認出終端機報不出單獨的 Shift，說一次備用鍵是哪一個（#339）
 key = "ime.no-lone-shift"
-zht = "此終端機報不出單獨的 Shift，中／ABC 按 {0}（或 :yume on|abc）"
-zhs = "此终端报不出单独的 Shift，中／ABC 按 {0}（或 :yume on|abc）"
+zht = "此終端機報不出單獨的 Shift，中/ABC 按 {0}（或 :yume on|abc）"
+zhs = "此终端报不出单独的 Shift，中/ABC 按 {0}（或 :yume on|abc）"
 en = "this terminal cannot report a lone Shift; {0} switches 中/ABC (or :yume on|abc)"
 
 [[message]]
 # 同上，而 language_key 關着，於是連備用鍵也沒有
 key = "ime.no-lone-shift-off"
-zht = "此終端機報不出單獨的 Shift，中／ABC 只能用 :yume on|abc（language_key 可綁一個鍵）"
-zhs = "此终端报不出单独的 Shift，中／ABC 只能用 :yume on|abc（language_key 可绑一个键）"
+zht = "此終端機報不出單獨的 Shift，中/ABC 只能用 :yume on|abc（language_key 可綁一個鍵）"
+zhs = "此终端报不出单独的 Shift，中/ABC 只能用 :yume on|abc（language_key 可绑一个键）"
 en = "this terminal cannot report a lone Shift; 中/ABC is :yume on|abc (bind language_key)"
 
 [[message]]
@@ -6464,7 +6464,7 @@ zhs = "段组：一段（整页一纵到底）"
 en = "bands: one — a 縱 runs the whole page"
 
 [[message]]
-# :vertical／-v 碰上一份程序文件——縮進是那門語言的語法，竪排讀不了
+# :vertical/-v 碰上一份程序文件——縮進是那門語言的語法，竪排讀不了
 key = "layout.code-is-horizontal"
 zht = "程序文件一律橫排；小說那一份的竪排照舊留着"
 zhs = "程序文件一律横排；小说那一份的竖排照旧留着"
@@ -6794,7 +6794,7 @@ en = "{0}: this kind of link is not handed to the machine — only http and http
 
 
 [[message]]
-# `::` 那一行按了 ⇥／⏎，可是一條都沒找着
+# `::` 那一行按了 ⇥/⏎，可是一條都沒找着
 key = "lookfor.nothing-to-take"
 zht = "沒有找到相符的命令——換一個說法，或者退格回到 `:`"
 zhs = "没有找到相符的命令——换一个说法，或者退格回到 `:`"
@@ -6954,7 +6954,7 @@ zhs = "{0}  {1}  {2}"
 en = "{0}  {1}  {2}"
 
 [[message]]
-# 補全單子底下：第幾條／一共幾條（單子露不全的時候）
+# 補全單子底下：第幾條/一共幾條（單子露不全的時候）
 key = "lsp.which-of-them"
 zht = "第 {0} 條，共 {1} 條 · Tab 就這條"
 zhs = "第 {0} 条，共 {1} 条 · Tab 就这条"
@@ -7095,7 +7095,7 @@ en = "wrote the note for {0} (C-o goes back)"
 # ── pane ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 按了 z 之後接的不是 z／t／b
+# 按了 z 之後接的不是 z/t/b
 key = "page.aim-wants-ztb"
 zht = "z 後面要 z 中間、t 頂上、b 底下"
 zhs = "z 后面要 z 中间、t 顶上、b 底下"
@@ -7431,8 +7431,8 @@ en = "{0} 字 today, {1} in the book, {2} days running"
 [[message]]
 # :count-progress 的結果，設了每日目標
 key = "progress.report-target"
-zht = "今天 {0}／{1} 字（{2}%），本書 {3} 字，連續 {4} 天"
-zhs = "今天 {0}／{1} 字（{2}%），本书 {3} 字，连续 {4} 天"
+zht = "今天 {0}/{1} 字（{2}%），本書 {3} 字，連續 {4} 天"
+zhs = "今天 {0}/{1} 字（{2}%），本书 {3} 字，连续 {4} 天"
 en = "{0}/{1} 字 today ({2}%), {3} in the book, {4} days running"
 
 [[message]]
@@ -7612,7 +7612,7 @@ en = "no draft kept — {0}"
 # ── register ──────────────────────────────────────────────────────────
 
 [[message]]
-# 空格 3／4：那一側一扇面板都不歸它
+# 空格 3/4：那一側一扇面板都不歸它
 key = "region.nothing-lives-there"
 zht = "這一側沒有哪一扇面板歸它——`:sidebar-left` 可以挪一扇過去"
 zhs = "这一侧没有哪一扇面板归它——`:sidebar-left` 可以挪一扇过去"
@@ -7886,7 +7886,7 @@ zhs = "换成什么"
 en = "replace with"
 
 [[message]]
-# 搜索面板：包含／排除裏有一條寫錯了
+# 搜索面板：包含/排除裏有一條寫錯了
 key = "search.bad-glob"
 zht = "包含/排除中有錯誤寫法，搜索未完成"
 zhs = "包含/排除中有错误写法，搜索未完成"
@@ -8075,7 +8075,7 @@ zhs = "位置: "
 en = "In: "
 
 [[message]]
-# 搜索面板第三行：字面／正則／模糊三選一
+# 搜索面板第三行：字面/正則/模糊三選一
 key = "search.matching"
 zht = "匹配模式"
 zhs = "匹配模式"
@@ -8391,7 +8391,7 @@ zhs = "{0} 处并到一起了，还剩 {1} 处"
 en = "{0} selections merged, {1} left"
 
 [[message]]
-# 按 C／A-C 想再加一個選區，可是那個方向上沒有一行夠長
+# 按 C/A-C 想再加一個選區，可是那個方向上沒有一行夠長
 key = "selection.no-room"
 zht = "那邊沒有一行到得了這一列"
 zhs = "那边没有一行到得了这一列"
@@ -8419,21 +8419,21 @@ zhs = "没有可切的"
 en = "nothing to split"
 
 [[message]]
-# s／S／A-k／A-K 做完了，剩幾段
+# s/S/A-k/A-K 做完了，剩幾段
 key = "selection.sift-done"
 zht = "{0} 處"
 zhs = "{0} 处"
 en = "{0} selections"
 
 [[message]]
-# s／S／A-k／A-K 一段都沒剩下
+# s/S/A-k/A-K 一段都沒剩下
 key = "selection.sift-found-nothing"
 zht = "一處都沒有，選區沒動"
 zhs = "一处都没有，选区没动"
 en = "nothing matched, the selections are unchanged"
 
 [[message]]
-# s／S／A-k／A-K 打完正則按 Enter，可是那一條規則編不出匹配器
+# s/S/A-k/A-K 打完正則按 Enter，可是那一條規則編不出匹配器
 key = "selection.sift-needs-a-pattern"
 zht = "這條規則讀不懂"
 zhs = "这条规则读不懂"
@@ -8669,8 +8669,8 @@ en = "language key"
 [[message]]
 # 設置：切中英的键——一句話
 key = "set.editor.language-key.hint"
-zht = "報不出單獨 Shift 的終端上，用這個鍵切中文／ABC"
-zhs = "报不出单独 Shift 的终端上，用这个键切中文／ABC"
+zht = "報不出單獨 Shift 的終端上，用這個鍵切中文/ABC"
+zhs = "报不出单独 Shift 的终端上，用这个键切中文/ABC"
 en = "language key"
 
 [[message]]
@@ -10390,7 +10390,7 @@ zhs = "没有分隔行，无从对齐"
 en = "no rule row, so there is no alignment to set"
 
 [[message]]
-# t1s／:table-sort 給的欄號超出這張表的欄數
+# t1s/:table-sort 給的欄號超出這張表的欄數
 key = "table.no-such-column"
 zht = "這張表只有 {1} 欄，沒有第 {0} 欄"
 zhs = "这张表只有 {1} 栏，没有第 {0} 栏"
@@ -10621,14 +10621,14 @@ zhs = "schema：{0}"
 en = "schema: {0}"
 
 [[message]]
-# 光按 ts／tS，沒說照哪一欄
+# 光按 ts/tS，沒說照哪一欄
 key = "table.sort-wants-a-column"
 zht = "排序要指明欄：`␣t1s` 第一欄、`␣t0s` 你站的這一欄、`␣t1,5,9s` 好幾欄"
 zhs = "排序要指明栏：`␣t1s` 第一栏、`␣t0s` 你站的这一栏、`␣t1,5,9s` 好几栏"
 en = "a sort names its column: `␣t1s` the first, `␣t0s` the one you are in, `␣t1,5,9s` several"
 
 [[message]]
-# t1a 之後按了 s／S／Esc 以外的鍵，排序鏈斷掉
+# t1a 之後按了 s/S/Esc 以外的鍵，排序鏈斷掉
 key = "table.sort-wants-its-action"
 zht = "排序還沒發令：`s` 順排、`S` 倒排，`Esc` 作罷"
 zhs = "排序还没发令：`s` 顺排、`S` 倒排，`Esc` 作罢"
@@ -10691,7 +10691,7 @@ zhs = "表格是横排的——先 :table off"
 en = "a table is always horizontal — :table off first"
 
 [[message]]
-# 全窗表格裏，gg／G／:120／搜尋想走到表外
+# 全窗表格裏，gg/G/:120/搜尋想走到表外
 key = "table.window-holds-you"
 zht = "全窗表格只走這張表——t q 交回窗口，t ] 去下一張"
 zhs = "全窗表格只走这张表——t q 交回窗口，t ] 去下一张"
@@ -10764,7 +10764,7 @@ zhs = "没有这个主题：{0}"
 en = "no theme called '{0}'"
 
 [[message]]
-# :theme／:theme-mode 換好了，說現在是哪一套、哪個深淺
+# :theme/:theme-mode 換好了，說現在是哪一套、哪個深淺
 key = "theme.set"
 zht = "主題：{0}（{1}）"
 zhs = "主题：{0}（{1}）"
@@ -11043,7 +11043,7 @@ en = "Yumete"
 # ── wheel ─────────────────────────────────────────────────────────────
 
 [[message]]
-# ]g／[g：這一份根本沒有改動
+# ]g/[g：這一份根本沒有改動
 key = "vcs.nothing-changed"
 zht = "本文没有改動"
 zhs = "本文没有改动"
@@ -11151,7 +11151,7 @@ zhs = "百科记号：关"
 en = "wiki marks: off"
 
 [[message]]
-# :wiki 報告裏的一節標題：這些詞條的名字在打開的這一章裏出現了，可是没有標出來——分詞器把它切開了（「有身體」敗給「這裏有／身體」），或者名字裏有空格、拉丁字母，根本成不了一個詞
+# :wiki 報告裏的一節標題：這些詞條的名字在打開的這一章裏出現了，可是没有標出來——分詞器把它切開了（「有身體」敗給「這裏有/身體」），或者名字裏有空格、拉丁字母，根本成不了一個詞
 key = "wiki.missed"
 zht = "在這一章裏出現了，可是標不出來的"
 zhs = "在这一章里出现了，可是标不出来的"

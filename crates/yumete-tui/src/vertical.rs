@@ -104,7 +104,7 @@ pub struct Metrics {
     pub pitch: u16,
     /// Rows reserved above the text for paragraph numbers **and the 改動條**.
     pub head_rows: u16,
-    /// 改動條佔的那一列：`1` 或 `0`（#55／#298）。
+    /// 改動條佔的那一列：`1` 或 `0`（#55/#298）。
     ///
     /// 它在號碼帶的**最底下**，貼着正文——橫排那一格（行號後面、緊挨正文的那
     /// 一格）轉過九十度就是這裏。
@@ -1144,7 +1144,7 @@ pub fn draw(
             // 「23」「24」 would read as 「2324」 — the very objection that kept
             // the numbers one digit to a row for so long. This is the answer
             // settled on: 「相邻的纵号会混在一起，建议每隔一纵序号用不同的
-            // 颜色／色阶区分」, and it is the device the table's own banding
+            // 颜色/色阶区分」, and it is the device the table's own banding
             // already uses. The *line* number decides the parity, not the 縱's
             // place on the screen, so scrolling does not make the pattern
             // crawl.
@@ -1164,7 +1164,7 @@ pub fn draw(
             put_number(buf, x, band_top, rows, n, style);
         }
 
-        // **改動條，轉過九十度**（#55／#298）。橫排那一條是行號後面、貼着正文
+        // **改動條，轉過九十度**（#55/#298）。橫排那一條是行號後面、貼着正文
         // 的一格；這裏是號碼帶最底下、貼着 縱 頭的那一列（[`Metrics::diff_row`]
         // 說了為什麼它自己佔一列，而不是塗在號碼底下）。
         //

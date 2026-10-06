@@ -19,7 +19,7 @@ Warning: **「每個字取它出現過的所有行的並集」做出來的關係
 含混的那個字放寬，精確的那個字保持精確。**誰要是改成傳遞閉包（把 `發` 也並進
 `髮`），這個性質就沒了**，而它正是這張表值錢的地方。
 
-Warning: **這是搜索用的，不是轉換用的。** 轉換要在 發／髮 之間挑一個，那需要上下文和詞
+Warning: **這是搜索用的，不是轉換用的。** 轉換要在 發/髮 之間挑一個，那需要上下文和詞
 典，所以 `:convert` 喊 opencc（見 `convert.rs` 開頭）。搜索只問「這兩個字有沒有
 可能是同一個字」——不需要上下文，多一條命中在單子上只是多一行。
 
@@ -34,7 +34,7 @@ SHARE = pathlib.Path("/opt/homebrew/share/opencc")
 
 # opencc 那幾張：鍵是 opencc 的繁體字形，值是那個標準的字形。
 OCD = ["TSCharacters", "TWVariants", "HKVariants"]
-# 倉裏那兩張（GujiCC 抄來的，`:convert … c`／`… g` 在用）。同樣的形狀。
+# 倉裏那兩張（GujiCC 抄來的，`:convert … c`/`… g` 在用）。同樣的形狀。
 LOCAL = ["crates/yumete-core/src/glyphs_c.txt", "crates/yumete-core/src/glyphs_g.txt"]
 
 

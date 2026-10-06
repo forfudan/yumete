@@ -102,7 +102,7 @@ pub struct EditorConfig {
     /// Off, and the same in both layouts: 縱書 painted its number band and
     /// 橫排 did not, which is one editor with two answers to one question.
     pub line_number_fill: bool,
-    /// 行號旁邊那一格說不說版本庫裏的改動（`:view-diff`，#55／#298）。
+    /// 行號旁邊那一格說不說版本庫裏的改動（`:view-diff`，#55/#298）。
     ///
     /// **出廠開着**，跟這個編輯器裏別的「出廠關着」不一樣。那些關着的——注音、
     /// markup、拆分——畫的是**正文上面**的東西，出廠開着就等於替讀者決定了稿子
@@ -222,7 +222,7 @@ pub struct EditorConfig {
     ///
     /// **Four out of the box** (2026-09-21 定：「我覺得可以改成 4，因為四位數很
     /// 常見」). Four is the top of the range print allows itself — CSS is
-    /// `digits <integer [2,4]>`, InDesign's 組數字 is 2／3／4 — and it is the
+    /// `digits <integer [2,4]>`, InDesign's 組數字 is 2/3/4 — and it is the
     /// one that covers the year and the chapter number, which is what a page of
     /// Chinese prose actually has half-width characters *for*.
     pub tatechuyoko: usize,
@@ -475,7 +475,7 @@ pub struct ImeConfig {
     /// they are typed. `:yume-scheme` starts typing whenever you want it.
     pub start: bool,
     /// 上屏方式 — **when** a finished code goes to the page: `"delayed"`
-    /// (延遲／頂字), `"unique"` (唯一, also written `auto`), `"fluency"` (整句).
+    /// (延遲/頂字), `"unique"` (唯一, also written `auto`), `"fluency"` (整句).
     ///
     /// `None` — the default — leaves the question to the input method, which
     /// answers it per scheme: a 形碼 scheme waits, and 拼音, having no 碼表 to
@@ -1748,7 +1748,7 @@ pub struct Config {
     /// What each language can be told to run, by verb: `preview`, `format`, and
     /// whatever else a reader names.
     pub language: HashMap<String, HashMap<String, Runner>>,
-    /// **Which program answers for a language** (#53／#54) — 語言名 → 候選。
+    /// **Which program answers for a language** (#53/#54) — 語言名 → 候選。
     ///
     /// `[lsp.rust] command = "rust-analyzer"` for one, or an array of tables
     /// for several, of which **the first one installed wins**:
@@ -2015,7 +2015,7 @@ impl Config {
         // way to find out that the question is now spelled `word_level`.
         if raw.editor.segmentation_threshold.is_some() {
             problems.push(
-                "segmentation_threshold 已經沒有了——改成 word_level = \"strict\"／\"balanced\"／\"full\""
+                "segmentation_threshold 已經沒有了——改成 word_level = \"strict\"/\"balanced\"/\"full\""
                     .to_string(),
             );
         }
@@ -3447,7 +3447,7 @@ mod runner_tests {
         assert_eq!(config.language["markdown"]["format"].kind, RunKind::Once);
     }
 
-    /// `[lsp.<語言>]` — 哪個程序替這種文件說話（#53／#54）。
+    /// `[lsp.<語言>]` — 哪個程序替這種文件說話（#53/#54）。
     #[test]
     fn a_language_server_is_named_by_its_language() {
         // 三種現成的，一個字都不用寫。

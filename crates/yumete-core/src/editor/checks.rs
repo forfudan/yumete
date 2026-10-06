@@ -321,7 +321,7 @@ impl Editor {
         };
     }
 
-    /// `:diagnostics-all` — everything the language servers have said (#53／#54).
+    /// `:diagnostics-all` — everything the language servers have said (#53/#54).
     ///
     /// **The sixth member of a family of five**, and it earns the shape without
     /// doing any of the work: the other five walk the document and find things
@@ -590,7 +590,7 @@ impl Editor {
     /// `:check-charset` — the characters that are in no standard (#240).
     ///
     /// **The failure this exists to prevent happens after the manuscript
-    /// leaves.** A character outside 通用規範／臺灣／香港／古籍 reads perfectly
+    /// leaves.** A character outside 通用規範/臺灣/香港/古籍 reads perfectly
     /// on the screen it was typed on, because the editor has a font with it;
     /// the typesetter's does not, and it comes back as a box, or as a
     /// substituted glyph in a face that does not match, three weeks later and

@@ -117,12 +117,12 @@ fn main() -> ExitCode {
     let mut g = Grep::default();
     // **還欠着一個值的那個旗標**（2026-10-03 一輪審查報來的）。
     //
-    // Warning: **值收不到要當場死**，而且三處從前都不會。`want_syntax`／`want_grep` 那
+    // Warning: **值收不到要當場死**，而且三處從前都不會。`want_syntax`/`want_grep` 那
     // 幾個閂只在下一輪循環裏看一眼，走完就沒人問了：`ye --grep` 於是悄悄落空，
     // 退出碼 0，而且**開起了編輯器**。這一格記着「誰在等」，循環走完還在等就是
     // 使用者少打了一個詞。
     let mut owed: Option<&'static str> = None;
-    // **這幾個開關只有配上 `--grep`／`--files` 纔有意義。** 單獨給是打錯了，不是
+    // **這幾個開關只有配上 `--grep`/`--files` 纔有意義。** 單獨給是打錯了，不是
     // 「沒關係」——`ye --hidden` 從前悄悄開了編輯器。
     let mut modifiers: Vec<&'static str> = Vec::new();
     // **`-u` 是一把梯子，不是一個勾**（2026-10-03 定，照 rg 原樣）。數的是它一共出
@@ -954,7 +954,7 @@ fn main() -> ExitCode {
             ime.set_panel_display(panel);
             ime.set_preedit(preedit);
             // Warning: **還要告訴編輯器輸入法在不在。** 這一格是 `Need::Scheme` 那一道閘
-            // 問的（`words.rs`），不補的話離屏下 `:yume-panel`／`:yume-preedit`／
+            // 問的（`words.rs`），不補的話離屏下 `:yume-panel`/`:yume-preedit`/
             // `:chaifen` 一律答「還不行，需要：載入碼表」，而同一幀的狀態欄已經
             // 寫着 `[中 靈明]`。互動那一支每一輪都撥一次。
             editor.set_ime_available(ime.available());
@@ -1294,7 +1294,7 @@ fn press(
                     // **`\{ime}` 撥一下「往後走不走輸入法」**（2026-09-28）。
                     if name == "ime" {
                         composing = !composing;
-                        // Warning: **撥開關的時候順手把它打開。** `:yume on` 走的是請求／回應
+                        // Warning: **撥開關的時候順手把它打開。** `:yume on` 走的是請求/回應
                         // 那條路，而那條路要互動循環來服務——`--shot` 沒有循環，工具自己
                         // 早就印過一句話說這件事。這裏直接撥會話上那兩格。
                         if composing {
@@ -1376,7 +1376,7 @@ fn press(
         // which may be two 字 long. Gather the run and commit it, so a picture
         // of `r` 打中文 shows what a reader would actually see.
         // Warning: **問的要和真編輯器同一個問題**（2026-10-04）。離屏這一支從前問
-        // 「吃不吃一個字符」，而互動迴圈問的是「要不要開輸入法」——`mi`／`ma` 之後
+        // 「吃不吃一個字符」，而互動迴圈問的是「要不要開輸入法」——`mi`/`ma` 之後
         // 兩者的答案現在不同，照舊問就會在圖上畫出一個真編輯器裏不會出現的候選框。
         // 離屏路徑和真路徑分家，這個倉裏已經咬過四次。
         if editor.wants_the_ime() {
@@ -1393,7 +1393,7 @@ fn press(
                 continue;
             }
         }
-        // 面板開着：鍵歸它（`:` 除外——那是命令行，`:w`／`:q` 在那上面打）。
+        // 面板開着：鍵歸它（`:` 除外——那是命令行，`:w`/`:q` 在那上面打）。
         // Warning: **和主循環同一支** `Seat`，不是抄一遍：抄本當天就分岔過（那一份漏了
         // 「有改動不許一下走」的閘，又把存盤的錯 `let _ =` 吞掉）。
         if settings.took(editor, Some(key)) {
@@ -1419,7 +1419,7 @@ fn press(
         // 段在屏幕上是**畫的時候**量的。一批鍵是一次餵完的，所以餵到欠着的那一刻
         // 先畫一幀丟掉——不然 `--keys='gwf'` 裏那個 `f` 落到正文上當成別的鍵，而
         // 這個倉審前端就是靠拍照。
-        // Warning: **`go`／`gu` 和 `gw` 同病，所以同一道門**（§5.73）。少了它，
+        // Warning: **`go`/`gu` 和 `gw` 同病，所以同一道門**（§5.73）。少了它，
         // `--keys='gudo'` 裏那個 `d` 落到正文上**當成刪除**——第一次試就把一個字
         // 刪掉了。離屏路徑和真路徑分家，這個倉咬過四次。
         if editor.owes_a_jump() || editor.owes_a_seek() {
@@ -1507,7 +1507,7 @@ impl Default for Grep {
 /// **把命令行給的那幾個地方變成「搜哪裏」。**
 ///
 /// 一個都沒給就是當前目錄——命令行的整個模型就是「我站在哪」，而
-/// `ls`／`grep`／`rg`／`fd` 沒有一個例外。
+/// `ls`/`grep`/`rg`/`fd` 沒有一個例外。
 ///
 /// Warning: **給了幾個就搜幾個**（2026-10-03 一輪審查報來的）。從前只看 `first()`，
 /// 後面的一聲不吭地丟掉——`ye --grep alpha d1 d2` 只搜了 `d1`。
@@ -1746,7 +1746,7 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
             _ => root.clone(),
         };
         // **走檔那三個開關真的生效**（2026-10-03 修）：從前這裏寫死
-        // `Sieve::default()`，於是 `--hidden`／`--glob=`／`--exclude=` 全是死的。
+        // `Sieve::default()`，於是 `--hidden`/`--glob=`/`--exclude=` 全是死的。
         let sieve = yumete_core::editor::Sieve {
             hidden: g.hidden,
             ignored: g.ignored,

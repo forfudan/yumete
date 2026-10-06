@@ -32,7 +32,7 @@
 //! neither. Anything placed there by eye — and several things were — comes out
 //! too faint to read and too pale to write on.
 
-/// 三個字節的顏色——OSC 10／11／12 要的就是這三個數，不是一個 `Color`。
+/// 三個字節的顏色——OSC 10/11/12 要的就是這三個數，不是一個 `Color`。
 ///
 /// 兩支取色的函數（[`Palette::caret`]、[`Palette::paper_bytes`]）的註釋從前整段
 /// 都在解釋這件事；名字一取，那段話就有地方掛了。
@@ -919,7 +919,7 @@ impl Palette {
         self.tinted(self.accent_colour(accent), 1.5)
     }
 
-    /// 改動條那一格的底色——行號旁邊一欄寬的那一條（#55／#298）。
+    /// 改動條那一格的底色——行號旁邊一欄寬的那一條（#55/#298）。
     ///
     /// Warning: **比 [`Self::short_wash`] 還響，理由還是面積。** 一段 `:::` 的底色
     /// 攤在二十行上，1.08–1.12 就夠了；`==標記==` 是幾個字，1.5；這一條是

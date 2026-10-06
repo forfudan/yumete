@@ -1,4 +1,4 @@
-//! **What a language server says is wrong** — LSP, first step (#53／#54,
+//! **What a language server says is wrong** — LSP, first step (#53/#54,
 //! 2026-09-20).
 //!
 //! 2026-09-19：「yumete 太好了，如果能編程就更好」——說這話的人寫 go 和 rust。
@@ -112,7 +112,7 @@ pub struct Problems {
     /// 只剩最後推的那一個。
     ///
     /// Warning: **不是 [`Problem::source`]。** 那一格是服務器自己說這一條是誰發
-    /// 現的（`rustc`／`clippy`），一個服務器報得出好幾種；這裏的鍵是**哪一個服
+    /// 現的（`rustc`/`clippy`），一個服務器報得出好幾種；這裏的鍵是**哪一個服
     /// 務器**，而「整份替換」要按它來。
     by_source: HashMap<(PathBuf, String), Vec<Problem>>,
     /// 併起來的那一份，畫的時候讀它。由 `by_source` 算出來，沒有人單獨改它。

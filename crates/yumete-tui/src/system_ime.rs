@@ -45,7 +45,7 @@
 //! ## What is actually done — and what was tried first
 //!
 //! yume's own input method already has 模態掛起 (`ModalSuspend.swift`), built
-//! for exactly this and for exactly these editors: 「讓 helix／vim 這類模態編輯
+//! for exactly this and for exactly these editors: 「讓 helix/vim 這類模態編輯
 //! 器在 normal mode 把輸入法整個支開」. Suspended, it hands every key straight
 //! back to the terminal, untouched. It does **not** switch the input source, it
 //! does **not** touch 中/英 (so a writer who was in ABC comes back to ABC), and

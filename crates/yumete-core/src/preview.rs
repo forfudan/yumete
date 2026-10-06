@@ -1,7 +1,7 @@
 //! **The wire to a preview server's control plane** (2026-09-23).
 //!
 //! `tinymist preview` opens two ports. One of them is the page the browser
-//! reads (`crate::…`／`yumete_tui::server_address` picks it). The other is a
+//! reads (`crate::…`/`yumete_tui::server_address` picks it). The other is a
 //! **websocket the editor talks on**, and on it the editor can hand the
 //! typesetter the text of a buffer that has never been saved:
 //!

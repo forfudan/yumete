@@ -3083,7 +3083,7 @@ mod tests {
 
     /// **Only 。 and 、 squeeze; ？ ！ ， do not** — Feature #230.
     ///
-    /// clreq §6.3.2 separates the 問號／嘆號 from the 句號 group, and the
+    /// clreq §6.3.2 separates the 問號/嘆號 from the 句號 group, and the
     /// reason carries straight into a terminal: 。 and 、 are half-em glyphs
     /// whose right half is blank, and Unicode gives them a **true** narrow
     /// form (`｡` `､`). ？ and ！ and ， fill their em, and the only narrow

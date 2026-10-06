@@ -140,7 +140,7 @@ impl Editor {
                 let end = end.min(len);
                 let head = motion::prev_grapheme(rope, end).max(pos);
                 // **選區模式裏搜索是延伸，不是跳走**（2026-10-06，對齊 helix）。
-                // helix 的 select 下 `n`／`N` 綁的是 `extend_search_next`／`_prev`
+                // helix 的 select 下 `n`/`N` 綁的是 `extend_search_next`/`_prev`
                 // （`default.rs:359-360`），而 `/` 的 `search` 在 select 下走
                 // `Movement::Extend`、**模式不變**（`commands.rs` 的 `search_impl`）。
                 // 從前這裏無條件 `self.extend = false`，於是 `v` 之後按一下 `/`
