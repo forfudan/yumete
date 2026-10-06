@@ -10916,9 +10916,9 @@ en = "no command answers 「{0}」"
 [[message]]
 # `::` 面板的頁腳：第幾條，以及 ⇥ 會把哪一條寫回 `:` 那一行
 key = "ui.lookfor-take"
-zht = "{0}　使用 Tab 選擇搜索結果"
-zhs = "{0}　使用 Tab 选择搜索结果"
-en = "{0}   Use Tab to pick a result"
+zht = "{0}　使用 Tab 選擇搜索結果，Enter 採用"
+zhs = "{0}　使用 Tab 选择搜索结果，Enter 采用"
+en = "{0}   Use Tab to cycle the results, Enter to take one"
 
 [[message]]
 # 字典浮窗按不動鍵，長的去邊欄讀

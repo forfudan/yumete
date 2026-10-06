@@ -1374,13 +1374,17 @@ fn a_chinese_word_on_that_line_finds_the_english_command() {
         "{names:?}"
     );
     assert_eq!(focus, 0);
-    // ⇥ writes the **whole** command back onto the `:` line and goes back
-    // there. Nothing has been run: what Enter runs is always the line the
-    // reader can see.
+    // **⇥ 走一格，繞回去**（2026-10-06）：這是挑第二條、第三條的辦法，而從前
+    // 只有方向鍵做得到，腳注卻寫着 ⇥。
     ed.on_key(Key::Tab);
-    assert_eq!(ed.mode(), Mode::Command);
-    assert_eq!(ed.prompt(), Some((":", "layout vertical")));
-    assert_eq!(ed.prompt_caret(), "layout vertical".chars().count());
+    assert_eq!(ed.lookfor_menu().1, 1, "⇥ 走到第二條");
+    ed.on_key(Key::BackTab);
+    assert_eq!(ed.lookfor_menu().1, 0, "⇤ 走回來");
+    // **Enter 做掉挑中的那一條**（2026-10-06 定）：單子上那一行本來就看得見，
+    // 從前還要先寫到 `:` 上再按一次 Enter，那一次是多餘的。
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.mode(), Mode::Normal, "做完就回正文");
+    assert_eq!(ed.layout(), crate::zong::Layout::Vertical, "真的轉成竖排了");
 }
 
 /// A typed abbreviation is a subsequence, and the answer is a **subcommand**
