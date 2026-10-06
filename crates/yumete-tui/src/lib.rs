@@ -6516,15 +6516,10 @@ fn draw_lookfor_menu(
         .collect();
     // What ⇥ will do with the highlighted row, spelled out. The one thing a
     // reader has to know here is that nothing on this line runs anything.
-    // **挑中的是一個鍵，腳注就說「按下去」**（2026-10-06）：同一行字說兩件事，
-    // 讀者會按着「寫回 `:`」的理解去按 ⇥，然後看見稿子被改了。
-    let pressing = matches!(found[focus].what, yumete_core::lookfor::What::Keys(_));
+    // 腳注只說怎麼走這張單子（2026-10-06 定的文案）。Enter 做什麼跟着挑中的那
+    // 一行走——命令寫回 `:`，鍵就按下去——而那一行自己看得見，不必在這裏重說。
     let count = format!("{}/{}", focus + 1, found.len());
-    let named = format!("{}{}", found[focus].leading(), found[focus].written());
-    let footer = match pressing {
-        true => say!("ui.lookfor-press", &count, &named),
-        false => say!("ui.lookfor-take", &count, &named),
-    };
+    let footer = say!("ui.lookfor-take", &count);
     let title = say!("ui.lookfor");
     draw_list(
         frame,
