@@ -365,7 +365,7 @@ fn render(
 /// the two runs that are *about* the manuscript rather than part of it.
 /// Warning: **`text` 已經排好了**（2026-10-01）：裏層的標記已經包過，該轉義的已
 /// 經轉義過。這一支只管外面那一層怎麽寫。從前它自己 `escape`，而那在巢狀之後
-/// 是錯的——裏層排出來的 `<strong>` 會被當成作者打的字再轉義一遍。
+/// 是錯的——裏層排出來的 `<strong>` 會被當成寫稿人打的字再轉義一遍。
 fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
     use crate::markdown::Kind;
     match (kind, dialect) {
@@ -818,7 +818,7 @@ mod tests {
         // 代碼裏寫着星號，那是代碼，不是標記。
         assert_eq!(body("甲`a**b`\n", Format::Html), "<p>甲<code>a**b</code></p>");
 
-        // 作者自己的尖括號照舊轉義——遞歸之後也只轉一遍。
+        // 稿子裏自己打的尖括號照舊轉義——遞歸之後也只轉一遍。
         assert_eq!(body("甲**a<b>c**\n", Format::Html), "<p>甲<strong>a&lt;b&gt;c</strong></p>");
 
         // Warning: **一條腳註正好填滿一層標記，兩條 span 一樣大**（2026-10-01 審出

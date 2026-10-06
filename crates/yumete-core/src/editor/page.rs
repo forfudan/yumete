@@ -1112,7 +1112,7 @@ impl Editor {
     /// 前端每一輪問一次。三個條件：開關開着、光標停穩了、而且不是上一次問過的
     /// 那一格。Warning: **停穩纔問，是為了不閃**——按住 `j` 連走的時候一格都不問，面板
     /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
-    /// 清空，定的）。
+    /// 清空，定下來的）。
     pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         if self.info_live() != crate::sidebar::Info::Docs {
             return None;

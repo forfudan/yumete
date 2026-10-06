@@ -476,7 +476,7 @@ pub enum Motion {
     WordForward(Grain),
     /// `e` / `E` — the end of the run ahead, both ends set.
     WordEnd(Grain),
-    /// `ge` / `gE` — **往回到上一個詞的末尾**（vim；2026-10-02 定照參考實現）。
+    /// `ge` / `gE` — **往回到上一個詞的末尾**（vim；2026-10-02 定，照參考實現）。
     ///
     /// Warning: **helix 沒有這一個**，而 `ge` 在 helix 鍵位裏是「到檔尾」。所以這
     /// 一支只有 vim 文法問得到，兩邊的 `ge` 各是各的。

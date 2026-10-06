@@ -26,7 +26,7 @@ impl Editor {
     ///
     /// Warning: **哪一種拼法真的在那裏**（2026-09-19，審查逮到的）。從前兩種都找、
     /// 卻一律答 `wiki.md`——於是一本把百科寫成 `wiki.txt` 的書，`:wiki edit` 開
-    /// 出一個**空的** `wiki.md`，存一下載入那一頭就改認它：作者的詞條一鍵全暗。
+    /// 出一個**空的** `wiki.md`，存一下載入那一頭就改認它：寫稿人的詞條一鍵全暗。
     pub(super) fn book_wiki_path(&self) -> PathBuf {
         let there = self.root().join(".yumete");
         match there.join("wiki.txt").is_file() && !there.join(WIKI_MD).is_file() {
@@ -397,7 +397,7 @@ impl Editor {
     pub(super) fn show_the_wiki_here(&mut self, afloat: bool) -> bool {
         // 光標底下什麽都沒有就說一句——一個按了沒反應的鍵，讀者只會以為自己記
         // 錯了鍵。Warning: **大寫那一下照樣把那一格開出來**（2026-09-30 審出來
-        // 的）：作者說的是「space K 强制在邊欄显示」，而「強制」是一個持續的意
+        // 的）：原話是「space K 强制在邊欄显示」，而「強制」是一個持續的意
         // 思——開好了等着，不是這一刻沒東西就當沒按過。
         if self.wiki_here().is_none() {
             self.status = say!("wiki.panel-empty");

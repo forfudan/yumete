@@ -901,8 +901,8 @@ pub mod rung {
     /// Warning: **它比旁註、比 markup 都還要退後**。別的提示字是「讀它，只是它不是
     /// 正文」；這一句要的是**看得見、可是一眼就知道那裏沒有字**——它畫在輸入框
     /// 的底色上，而那一檔比紙還沉，所以同一個墨在這裏讀起來比在正文上更淡。
-    /// 一度用旁註那一檔（第 25 檔），原話：「這個不够灰，感覺還是像有個字
-    /// 在里面而不是提示……必須更淡更淡。」
+    /// 一度用旁註那一檔（第 25 檔），原話：「這個不够灰，感覺還是像有個字在里
+    /// 面而不是提示……必須更淡更淡。」
     pub const GUESS: u16 = 8000; // 第 80 檔
     /// A ground that must not shout: a table's alternating columns, its cursor
     /// row, a code fence, a callout, the tint past the measure.
@@ -1814,9 +1814,9 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // 這張表原樣抄的 helix，而 helix 那個次序裏 `ruff` 在第二個——Warning: **它問符
         // 號一律回 `null`**：`initialize` 的 capabilities 裏明明寫着
         // `hoverProvider: true`，可它的 hover 只解釋自己的規則碼（`# noqa: E501`
-        // 那種），它是 linter 不是類型檢查器。 pixi 環境裏 `ruff` 和 `pylsp`
-        // 都在，於是挑中了前者，按 `空格 k` 得到「此處未找到相關文檔」——那句話
-        // 字面上是對的，錯的是名單的次序。
+        // 那種），它是 linter 不是類型檢查器。這臺機器的 pixi 環境裏 `ruff` 和
+        // `pylsp` 都在，於是挑中了前者，按 `空格 k` 得到「此處未找到相關文檔」
+        // ——那句話字面上是對的，錯的是名單的次序。
         //
         // Warning: **這只是繞開，不是答案。** 真正的答案是一個語言跑多個服務器
         // （#425）：ruff 的 lint 和 pylsp 的文檔本來就該同時有。

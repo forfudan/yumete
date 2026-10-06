@@ -176,8 +176,8 @@ impl Language {
     ///
     /// Warning: **用語法本身帶的 `TAGS_QUERY`，不抄 helix 的 `textobjects.scm`。**
     /// helix 把文本對象寫成自己 runtime 裏的查詢檔，而那些檔是 **MPL-2.0**，這個
-    /// 倉是 Apache-2.0——照抄要先定授權怎麼辦。`tags.scm` 是**語法 crate 自己
-    /// 帶的**（我們本來就依賴它，和 `HIGHLIGHTS_QUERY` 同一個來源、同一份授權），
+    /// 倉是 Apache-2.0——照抄要先定授權怎麼辦。`tags.scm` 是**語法 crate 自己帶
+    /// 的**（我們本來就依賴它，和 `HIGHLIGHTS_QUERY` 同一個來源、同一份授權），
     /// 而它捕獲的 `@definition.function`／`@definition.class` 包的正是整個定義，
     /// 名字另有 `@name`。九種語言裏七種帶，css 與 html 不帶。
     ///
@@ -442,8 +442,8 @@ pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
     }
     let (a, b) = (was.as_bytes(), now.as_bytes());
     let mut head = a.iter().zip(b).take_while(|(x, y)| x == y).count();
-    // Warning: **數的是字節，而一個字的中間也可以對得上**（2026-10-06 按 `d`
-    // 删到「名」當場崩的那一下）。「的名字」删成「的字」：名 是 `E5 90 8D`、
+    // Warning: **數的是字節，而一個字的中間也可以對得上**（2026-10-06 按 `d` 删
+    // 到「名」當場崩的那一下）。「的名字」删成「的字」：名 是 `E5 90 8D`、
     // 字 是 `E5 AD 97`，兩個都以 `E5` 開頭，於是前綴數到 4 個字節——正落在那個
     // 字裏面。下面 `point` 的 `&text[..byte]` 當場 panic，而就算不 panic，
     // 交給 tree-sitter 的也是一個不存在的位置。
@@ -791,14 +791,14 @@ mod tests {
         let got = highlight(Language::Python, &lines("def (\n# 註\nreturn"));
         assert_eq!(at(&got, 1, 0), Some(Token::Comment), "{:?}", got);
     }
-    /// **掐頭去尾不許切進一個字裏**（2026-10-06，按 `d` 删到「名」當場崩的
-    /// 那一下，`code.rs:451` 的 `&text[..byte]`）。
+    /// **掐頭去尾不許切進一個字裏**（2026-10-06，按 `d` 删到「名」當場崩的那一
+    /// 下，`code.rs:451` 的 `&text[..byte]`）。
     ///
     /// 漢字在 UTF-8 裏三個字節，開頭常常一樣：名 `E5 90 8D`、字 `E5 AD 97`。
     /// 所以「相同的字節數」會停在一個字的中間，而那不是一個位置。
     #[test]
     fn an_edit_never_starts_or_ends_inside_a_character() {
-        // 那一下：「的名字」删成「的字」，前綴數到 4 個字節。
+        // 報來的那一下：「的名字」删成「的字」，前綴數到 4 個字節。
         let edit = what_changed("的名字", "的字").expect("they differ");
         assert!("的名字".is_char_boundary(edit.start_byte), "start");
         assert!("的名字".is_char_boundary(edit.old_end_byte), "old end");
@@ -810,7 +810,7 @@ mod tests {
         assert!("一髮絲".is_char_boundary(edit.old_end_byte));
         assert!("一髫絲".is_char_boundary(edit.new_end_byte));
 
-        // 整份稿子逐字删一遍，一次都不許切錯——這是按住 `d` 做的事。
+        // 整份稿子逐字删一遍，一次都不許切錯——按住 `d` 就是這麼走的。
         let text = "（2026-09-29 定的名字）違反了約定，所以删掉。\n下一行。\n";
         let chars: Vec<char> = text.chars().collect();
         for n in 0..chars.len() {

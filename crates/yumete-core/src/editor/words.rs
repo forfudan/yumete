@@ -427,7 +427,7 @@ impl Editor {
     /// the file being edited**, the way a table's schema is: the list belongs
     /// to the manuscript, not to the session that opened it.
     ///
-    /// Warning: **它一聲不吭**（2026-09-30 作者報的）。這一支有七個呼叫方，六個是
+    /// Warning: **它一聲不吭**（2026-09-30 報的）。這一支有七個呼叫方，六個是
     /// 編輯器自己讀的——啓動、輸入法的分詞器晚一秒送到、存檔之後。人什麽都沒
     /// 做，卻被告知一個他沒在想的檔案在不在：「我打开任何非程序文檔或者新建一
     /// 个 buffer，都会有这个消息在命令栏……我怕用户会感到奇怪。」
@@ -437,7 +437,7 @@ impl Editor {
     /// [`Editor::words_in_force`]——「宇浩語言模型 1250000 條 ＋ 本書 312 個
     /// 詞」，兩半一起說。沒有 `words.txt` 的時候後半句自己不出現，那正是「這本
     /// 書沒有」的說法。從前這裏另說一句「沒有找到 .yumete/words.txt」，是**同一
-    /// 件事的第二套說法**，而且說成了抱怨——作者當場看出那是不一致的。
+    /// 件事的第二套說法**，而且說成了抱怨——當場就看出那是不一致的。
     pub fn reload_project_words(&mut self) -> Option<PathBuf> {
         // Warning: **讀的那一頭也問[項目根][`Editor::root`]**（2026-10-01 審出來
         // 的）。同一天把 `project_words_path`（寫、`:word-list-edit`）改成了

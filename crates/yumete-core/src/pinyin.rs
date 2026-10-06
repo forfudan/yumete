@@ -56,7 +56,7 @@ pub fn readings(ch: char) -> impl Iterator<Item = &'static str> {
     table().get(&ch).copied().unwrap_or("").split_ascii_whitespace()
 }
 
-/// **查詢切成的一段一段**（2026-10-03 作者定）。
+/// **查詢切成的一段一段**（2026-10-03 定）。
 ///
 /// 從前這一支只收「整條全是字母」的查詢，於是**字母和漢字混不起來**：`zhongguo`
 /// 找得到「中國」，而 `zhongguo很大`、`zhong国`、`di120`、`juan03` 一個都找不着
@@ -279,7 +279,7 @@ mod tests {
         spans_of(text, &atoms, true)
     }
 
-    /// **字母和漢字混得起來了**（2026-10-03 作者定）。
+    /// **字母和漢字混得起來了**（2026-10-03 定）。
     ///
     /// 從前查詢要麼整條是拼音、要麼整條是字面：`zhongguo` 找得到「中國」，而
     /// `zhongguo很大`、`zhong国`、`di120`、`juan03` 一個都找不着。可真實的查詢

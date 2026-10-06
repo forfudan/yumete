@@ -1,4 +1,4 @@
-//! **轉圈的那八個點**，一個模組，誰都用得上（2026-09-30 作者提的）。
+//! **轉圈的那八個點**，一個模組，誰都用得上（2026-09-30 提的）。
 //!
 //! 原話：「⣾⣽⣻⢿⡿⣟⣯⣷ I love this. This can be used elsewhere (at different
 //! locations to mean different things). If it is beside the NOR, it means the
