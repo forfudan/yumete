@@ -218,21 +218,35 @@ impl Editor {
     ///
     /// 屏幕畫了哪一段是前端每一幀交過來的（`set_page_span`，`gw` 也靠它），所以
     /// 這裏問的是**真畫出來的那一段**，不是「光標那一行加減半屏」。
-    pub(super) fn go_to_screen(&mut self, which: char) {
+    /// **Which line of the file the screen's top, middle or bottom is**
+    /// (2026-10-06), for `H`／`M`／`L` and for `dH`／`dL` alike.
+    ///
+    /// Warning: **One answer, two callers.** The key and the operator were two
+    /// copies of this arithmetic for an afternoon, and `)` ended up jumping to
+    /// the bottom of the screen because only one of them had been corrected.
+    ///
+    /// `nth` is vim's count: the nth row in from that edge, clamped to the
+    /// page. `None` when no frame has been drawn yet — the off-screen path's
+    /// first keystroke — so an operator misses rather than guessing.
+    pub(super) fn screen_line(&self, which: char, nth: usize) -> Option<usize> {
         let (from, to) = self.page_span;
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();
         if to <= from || from > len {
-            // 還没畫過一幀（離屏那條路的第一下），退回不動。
-            return;
+            return None;
         }
         let first = rope.char_to_line(from.min(len));
         let last = rope.char_to_line(to.min(len).saturating_sub(1).max(from));
-        let line = match which {
-            'H' => first,
-            'L' => last,
+        let step = nth.max(1) - 1;
+        Some(match which {
+            'H' => (first + step).min(last),
+            'L' => last.saturating_sub(step).max(first),
             _ => first + (last - first) / 2,
-        };
+        })
+    }
+
+    pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
+        let Some(line) = self.screen_line(which, nth) else { return };
         self.remember_jump();
         self.goto_line(line + 1);
     }
@@ -1121,6 +1135,12 @@ impl Editor {
             // the target. A goto is not a selection — 「take me there」, not
             // 「take everything between」 — and that is the same reading vim
             // gives *every* standalone motion (B3).
+            // **屏幕的頂／中／底**——整行整行地取，所以答的是那一行的開頭，
+            // 同 [`motion::Motion::Line`]。
+            motion::Motion::Screen { which } => match self.screen_line(which, nth) {
+                Some(line) => at(rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)))),
+                None => motion::Span::Missed,
+            },
             motion::Motion::FileStart => at(motion::buffer_start(rope, self.sel.head())),
             motion::Motion::FileEnd => at(motion::buffer_end(rope, self.sel.head())),
             motion::Motion::LineStart => at(motion::line_start(rope, self.sel.head())),

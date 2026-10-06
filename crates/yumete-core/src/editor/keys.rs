@@ -883,7 +883,9 @@ impl Editor {
         // 就是「第一個逗號到第二個」；而數目超出的時候迴圈留下走成的那幾跳，
         // `d9f,`（只有四個逗號）**默默吃掉三十二個字**，nvim 在那裏一格不動。
         let nth = match step.motion {
-            motion::Motion::Find { .. } => n,
+            // **`H`／`L` 的數目也是「第 n 個」**：`3H` 是從頂上數第三行，不是
+            // 「到頂上去三遍」（到了就不動了，第二遍起全是空轉）。
+            motion::Motion::Find { .. } | motion::Motion::Screen { .. } => n,
             _ => 1,
         };
         let hops = (n / nth.max(1)).max(1);
@@ -1719,7 +1721,7 @@ impl Editor {
             //
             // 屏幕畫了哪一段是前端每幀交過來的（`set_page_span`，`gw` 也靠它）。
             Key::Char(one @ ('H' | 'M' | 'L')) if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                self.go_to_screen(one);
+                self.go_to_screen(one, count);
             }
             // **vim 的句子動作是 `(`／`)`**（2026-10-06）。
             //

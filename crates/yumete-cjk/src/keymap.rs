@@ -202,6 +202,10 @@ pub const VIM_MOTIONS: &[(&str, VimMotion)] = &[
     // （`hint.rs` 的 `vim_motion_list`），二是 `linewise`／`wants` 這幾格。
     ("(", m("{n}(")),
     (")", m("{n})")),
+    // 屏幕的頂／中／底，整行整行地取（2026-10-06）。
+    ("H", line("{n}H")),
+    ("M", line("{n}M")),
+    ("L", line("{n}L")),
     // ---- Find, which is told a character --------------------------------
     ("f", asks("{n}f%")),
     ("F", asks("{n}F%")),

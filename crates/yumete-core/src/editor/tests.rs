@@ -17634,6 +17634,42 @@ fn the_vim_hml_go_to_the_screen() {
     assert_eq!(at(&ed), 29, "屏幕底");
     press(&mut ed, "M");
     assert_eq!(at(&ed), 19, "屏幕中");
+    // 數目是「從那一邊數第幾行」，同 vim（`:h H`）。
+    press(&mut ed, "3H");
+    assert_eq!(at(&ed), 12, "頂上數第三行");
+    press(&mut ed, "3L");
+    assert_eq!(at(&ed), 27, "底下數第三行");
+
+    // **算子接得住它，整行整行地取**（§5.97 補的）。`dL` 從光標那一行吃到屏幕底。
+    let page = |ed: &mut Editor| {
+        let rope = ed.current_buffer().rope().clone();
+        ed.set_page_span(rope.line_to_char(10), rope.line_to_char(30));
+    };
+    let mut ed = typed_vim(&(0..40).map(|n| format!("第{n:02}行。\n")).collect::<String>());
+    page(&mut ed);
+    ed.goto_line(20);
+    press(&mut ed, "dL");
+    let left = ed.current_buffer().text().to_string();
+    assert!(!left.contains("第19行。"), "第 19 行（光標那一行）吃掉了");
+    assert!(!left.contains("第29行。"), "一直吃到屏幕底那一行");
+    assert!(left.contains("第18行。") && left.contains("第30行。"), "兩頭之外一行不動");
+
+    // 往上也一樣，而且 `dH` 不是「刪一句」——句子那一對在 `(`／`)` 上。
+    let mut ed = typed_vim(&(0..40).map(|n| format!("第{n:02}行。\n")).collect::<String>());
+    page(&mut ed);
+    ed.goto_line(20);
+    press(&mut ed, "dH");
+    let left = ed.current_buffer().text().to_string();
+    assert!(left.contains("第09行。"), "屏幕頂之上一行不動");
+    assert!(!left.contains("第10行。") && !left.contains("第19行。"), "從屏幕頂吃到光標那一行");
+    assert!(left.contains("第20行。"), "光標下面那一行留着");
+
+    // 還没畫過一幀的時候整個動作失敗，不許拿整份檔當屏幕。
+    let mut ed = typed_vim("一\n二\n三\n");
+    ed.goto_line(2);
+    press(&mut ed, "dL");
+    assert_eq!(ed.current_buffer().text(), "一\n二\n三\n", "没有視口就什麼都不做");
+
     // 句子還在：vim 的句子動作是 `(`／`)`。
     let mut ed = typed_vim("一句。二句。三句。\n");
     press(&mut ed, ")");
