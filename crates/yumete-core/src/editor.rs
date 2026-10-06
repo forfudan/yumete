@@ -598,6 +598,19 @@ pub struct Shell {
     pub how: How,
 }
 
+/// **一趟正在背景跑的搜索**（§5.93，2026-10-06）。
+///
+/// 從前搜索跑在按鍵那一下上，編輯器整個停住，所以加了一道「最多找三到五秒就收
+/// 手」的閘—— 10-06 撞上的正是它：命令行找到四處，進編輯器只剩一兩處。
+/// 挪到旁邊跑之後那道閘不需要了。
+pub(crate) struct Searching {
+    /// 哪一趟。收的時候對一下號，對不上就是上一趟的殘響。
+    pub generation: u64,
+    pub heard: std::sync::mpsc::Receiver<(u64, crate::editor::find::Found)>,
+    /// 撥上去那一趟就收攤：改查詢、關面板、再搜一次，都撥它。
+    pub stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
 /// **Where a shell command's output goes** (2026-10-06, helix's four).
 ///
 /// helix spells them `|`, `A-|`, `!`, `A-!` and calls them `Replace`,
@@ -1565,12 +1578,16 @@ pub struct Sieve {
     pub include: String,
     /// 這幾條 glob 配得上的不走。
     pub exclude: String,
-    /// **管道那一邊沒有畫面要護，所以一道閘都不加**（2026-10-03 定）。
+    /// **沒有畫面要護的那一趟，一道閘都不加**（2026-10-03 定）。
     ///
     /// 編輯器裏那兩道閘（[`WALK_CEILING`] 與 [`GREP_MAX_BYTES`]）護的是**畫面那條
     /// 線程**：走查跑在它上面，不封頂就是凍住。`ye --grep` 沒有畫面——它慢一點只
     /// 是慢一點，而「悄悄少看了一半還說找完了」是另一回事。原話：「rg 会打印
     /// 全部，我们会跳过大文件，也会提早停止」。
+    ///
+    /// Warning: **面板那一趟 2026-10-06 起也撥這一格**（§5.93）。它搬到旁邊的線程上
+    /// 去了，上面那條理由對它不再成立——而它還掛着的時候，搜一個詞命令行
+    /// 找到四處、進編輯器只剩一兩處，差的就是那三到五秒。
     pub uncapped: bool,
 }
 
@@ -2373,6 +2390,12 @@ pub struct Editor {
     /// 「文字落進緩衝區」那一個漏斗上分岔（[`Editor::insert_str`]），退格那一處
     /// 再分一次。狀態欄那一格由 [`Editor::mode_label`] 問它，報 `REP`。
     /// **延伸關掉那一刻的那一段**，`gv` 拿它重選（vim，2026-10-06）。
+    /// **背景跑着的那一趟搜索**（§5.93，2026-10-06）。
+    searching: Option<Searching>,
+    /// 這一趟搜索走不走背景——只有 `run_owed_search` 撥上去，見那裏。
+    in_the_background: bool,
+    /// 第幾趟。新的一趟把它加一，舊線程交回來的一概丟掉。
+    search_generation: u64,
     last_selection: Option<(usize, usize)>,
     /// **插入態的 `C-o`：做一個 Normal 命令就回來**（vim，2026-10-06）。
     ///
@@ -3289,6 +3312,9 @@ impl Editor {
             repeating_edit: false,
             insert_recording: String::new(),
             insert_again: 0,
+            searching: None,
+            in_the_background: false,
+            search_generation: 0,
             last_selection: None,
             one_normal_key: None,
             overwriting: false,
@@ -4275,7 +4301,7 @@ mod edits;
 mod fences;
 mod files;
 mod help;
-mod find;
+pub(crate) mod find;
 mod hint;
 mod info;
 mod jumps;

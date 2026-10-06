@@ -297,6 +297,9 @@ fn frame_to(
     // ever, which reads exactly like a hung editor (2026-09-27).
     if editor.take_owed_search() {
         editor.run_owed_search();
+        // **而且等它跑完**（§5.93，2026-10-06）。走查現在跑在旁邊，主循環每一幀
+        // 收一批——而一張靜照没有第二幀。不等就拍到一張空名單。
+        editor.wait_for_the_search();
     }
     editor.refresh_the_edited_file();
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
@@ -826,6 +829,9 @@ pub fn run(
             let size = terminal.size()?;
             fit_the_page(ime, editor, config, size.width, size.height);
             name_the_window(editor, &mut window_name);
+            // **背景那一趟交回來的，每一幀收一批**（§5.93）。收完就畫，所以名單
+            // 是在長的，而右上角那個「N+」跟着跳。
+            editor.collect_search_results();
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
@@ -1132,6 +1138,8 @@ pub fn run(
                 editor.status_due_in(),
                 // 跟着光標的那一問（`空格 K`）：光標停穩三百毫秒就該問一句。
                 editor.docs_due_in(),
+                // 搜索在旁邊跑的時候要醒過來收（同上面那幾個鬧鐘）。
+                editor.searching_due_in(),
                 servers.due_in(),
                 // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
                 // 了一個不動的點（同上面那幾個鬧鐘）。
@@ -7804,6 +7812,13 @@ fn draw_search(
         // Warning: **寫錯了 glob 也不許說「無結果」**（2026-10-02 審出來的）：那一趟
         // 連找都沒找，而狀態欄正說着這件事——標題不能反着說。
         (false, _, true) if find.bad_glob => (String::new(), quiet),
+        // **還在找的時候是「N+結果」**（§5.93，2026-10-06）。那個加號本來就說
+        // 「這不是全部」——截斷和還没跑完是同一句話，而它跑着的時候數字一直在跳。
+        // Warning: **它要排在「無結果」前面**，同 `cut` 那一條：剛按下去一條都還沒
+        // 找到，而那一刻最不能說的就是「無結果」。
+        (false, _, true) if editor.still_searching() => {
+            (say!("search.hits-more", find.total), quiet)
+        }
         (false, _, true) if find.total == 0 && !find.cut => (say!("search.none"), quiet),
         // **走到第幾處也寫在這裏**（2026-09-27 報的：「表頭只有 11 處，走到第幾
         // 條不說」）。`4/11`，不寫「第」「共」——那一格在標題右邊，字越少越好。

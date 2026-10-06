@@ -573,6 +573,10 @@ impl Editor {
     /// 一頭，接着走完整棵樹是白費。給了 `sink` 就**不留名單**：那一邊印完就不要
     /// 了，而不封頂的時候名單是會漲到沒邊的。
     pub(super) fn search_now_into(&mut self, mut sink: Option<&mut dyn FnMut(&Hit) -> bool>) {
+        // 上一趟要是還在跑，這一趟頂掉它——世代號加一那一步在
+        // `search_in_the_background` 裏，而不走到那裏的幾條路（查詢空了、式子寫
+        // 壞了）也得把它停住，不然舊的命中會滴進新的名單。
+        self.stop_searching();
         self.search.broken = false;
         if !self.search.asked() {
             self.search.hits.clear();
@@ -703,6 +707,8 @@ impl Editor {
                 .collect();
             let sieve = sieve.unwrap_or_default();
             let mut files: Vec<(Option<std::path::PathBuf>, Option<u64>)> = Vec::new();
+            // 哪一條路，先問完再借 `sink`——借進閉包之後就問不了了。
+            let piping = sink.is_some();
             let mut take = |found: Found| -> bool {
                 match found {
                     Found::Hit(hit) => {
@@ -719,20 +725,44 @@ impl Editor {
                         files.push((Some(path), None));
                         true
                     }
+                    Found::Done { .. } => true,
                 }
             };
-            let walked = walk_and_search(
-                &root,
-                &sieve,
-                &look,
-                &unsaved,
-                here.as_deref(),
-                &mut stop,
-                &mut take,
-            );
-            self.search.files.extend(files);
-            self.search.cut = walked.cut;
-            self.search.skipped = walked.skipped;
+            // **管道那一條路照舊同步**（`ye --grep`）：它印給別的程序看，印完就
+            // 退，沒有「界面」可以凍住。面板那一條路搬到旁邊去跑。
+            match piping {
+                true => {
+                    let walked = walk_and_search(
+                        &root,
+                        &sieve,
+                        &look,
+                        &unsaved,
+                        here.as_deref(),
+                        &mut stop,
+                        &mut take,
+                    );
+                    self.search.files.extend(files);
+                    self.search.cut = walked.cut;
+                    self.search.skipped = walked.skipped;
+                }
+                false if self.in_the_background => {
+                    self.search_in_the_background(root.clone(), sieve, look, unsaved, here)
+                }
+                false => {
+                    let walked = walk_and_search(
+                        &root,
+                        &sieve,
+                        &look,
+                        &unsaved,
+                        here.as_deref(),
+                        &mut stop,
+                        &mut take,
+                    );
+                    self.search.files.extend(files);
+                    self.search.cut = walked.cut;
+                    self.search.skipped = walked.skipped;
+                }
+            }
             self.search.root = Some(root);
         } else {
             self.search.root = None;
@@ -1517,7 +1547,15 @@ impl Editor {
 
     /// 欠着的那一趟，跑掉。
     pub fn run_owed_search(&mut self) {
+        // **只有這一個入口走背景那一條**（§5.93，2026-10-06）。
+        //
+        // Warning: **`search_now` 自己照舊同步**。沒有主循環替它收的呼叫方多着——
+        // 測試、`settle_search`、`ye --grep`——它們按完就要答案，而背景那一趟
+        // 交回來的東西要有人每一幀去收。欠着那一條是前端專用的（前端先畫一幀
+        // 「正在找…」再還），正好就是「有人收」的那一條。
+        self.in_the_background = true;
         self.search_now();
+        self.in_the_background = false;
     }
 
     /// 屏幕上要不要寫「正在找…」。
@@ -1533,9 +1571,22 @@ impl Editor {
     pub fn settle_search(&mut self) {
         if self.take_owed_search() {
             self.run_owed_search();
+            // **還要等它跑完**（§5.93，2026-10-06）。`run_owed_search` 現在把走查
+            // 交給旁邊那一趟，而這一支的全部意思就是「我現在就要答案」——沒有
+            // 主循環替它收，就地收到底。
+            self.wait_for_the_search();
             return;
         }
         self.refresh_the_edited_file();
+    }
+
+    /// 等背景那一趟跑完，邊等邊收。給沒有主循環的呼叫方用。
+    pub fn wait_for_the_search(&mut self) {
+        while self.still_searching() {
+            if !self.collect_search_results() {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
     }
 
     /// **正文改過之後，把改過的那一份重搜一遍**——只有那一份（2026-09-29 定）。
@@ -2239,6 +2290,110 @@ impl Editor {
 }
 
 /// A few characters either side of one match, and where the match is in them.
+impl Editor {
+    /// **把走查交給旁邊那一趟**（§5.93，2026-10-06）。
+    ///
+    /// 從前這一整趟跑在按鍵那一下上：編輯器停住，所以有一道「最多三到五秒」的閘
+    /// （`WALK_GRACE`）。挪過來之後那道閘不需要了——`uncapped` 那一格現在只對這
+    /// 條路為真，意思也從「不封頂」收窄成了「不看錶」。
+    ///
+    /// Warning: **名單只往尾巴上加。** 走查一個檔一個檔走完，所以命中照檔的次序來，
+    /// `rows()` 按那個次序分組——左欄那一行你站着的位置不會在腳底下挪。
+    /// 10-06 早上就是這麼推的，實測也是。
+    fn search_in_the_background(
+        &mut self,
+        root: std::path::PathBuf,
+        mut sieve: crate::editor::Sieve,
+        look: Look,
+        unsaved: std::collections::HashMap<std::path::PathBuf, String>,
+        here: Option<std::path::PathBuf>,
+    ) {
+        // **那兩道閘護的是畫面那條線程，而這一趟不在它上面**（§5.93，2026-10-06）。
+        // `Sieve::uncapped` 的文檔自己寫着理由：「走查跑在它上面，不封頂就是
+        // 凍住」。搬開之後理由就沒了——撞上的正是這個：命令行四處，進編輯器
+        // 只剩一兩處，差的就是那三到五秒。
+        //
+        // Warning: **只鬆走查這一邊。** 名單仍舊只留 `MOST`（500）條，那是另一格
+        // （`Search::uncapped`），說的是「名單是拿來走的，沒人走兩萬行」。
+        sieve.uncapped = true;
+        self.stop_searching();
+        self.search_generation += 1;
+        let generation = self.search_generation;
+        let (say, heard) = std::sync::mpsc::channel();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mine = stop.clone();
+        std::thread::spawn(move || {
+            let mut stopped = false;
+            let walked = walk_and_search(&root, &sieve, &look, &unsaved, here.as_deref(), &mut stopped, &mut |found| {
+                if mine.load(std::sync::atomic::Ordering::Relaxed) {
+                    return false;
+                }
+                // 收的那一頭沒了（編輯器關了，或者這一趟被頂掉了）就收攤。
+                say.send((generation, found)).is_ok()
+            });
+            let _ = say.send((generation, Found::Done { cut: walked.cut, skipped: walked.skipped }));
+        });
+        self.searching = Some(crate::editor::Searching { generation, heard, stop });
+    }
+
+    /// 叫停跑着的那一趟（改查詢、關面板、再搜一次）。
+    pub(super) fn stop_searching(&mut self) {
+        if let Some(one) = self.searching.take() {
+            one.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// **背景那一趟還在跑嗎**——右上角那個加號看它。
+    pub fn still_searching(&self) -> bool {
+        self.searching.is_some()
+    }
+
+    /// 主循環閒着的時候隔多久醒一次來收（和 `vcs_due_in` 那幾個同一條路）。
+    pub fn searching_due_in(&self) -> Option<std::time::Duration> {
+        self.searching.as_ref().map(|_| std::time::Duration::from_millis(40))
+    }
+
+    /// **收一批回來**，每一幀叫一次。
+    ///
+    /// 回「名單變了沒有」，前端拿它決定要不要重畫。
+    pub fn collect_search_results(&mut self) -> bool {
+        let Some(one) = self.searching.as_ref() else {
+            return false;
+        };
+        let generation = one.generation;
+        let most = self.search.most();
+        let mut moved = false;
+        let mut done = false;
+        // 一次收一批就走，別把一幀的時間全花在這裏。
+        for _ in 0..4096 {
+            let Ok((which, found)) = one.heard.try_recv() else { break };
+            // 上一趟的殘響。
+            if which != generation {
+                continue;
+            }
+            moved = true;
+            match found {
+                Found::Hit(hit) => {
+                    self.search.total += 1;
+                    if self.search.hits.len() < most {
+                        self.search.hits.push(hit);
+                    }
+                }
+                Found::File(path) => self.search.files.push((Some(path), None)),
+                Found::Done { cut, skipped } => {
+                    self.search.cut = cut;
+                    self.search.skipped = skipped;
+                    done = true;
+                }
+            }
+        }
+        if done {
+            self.searching = None;
+        }
+        moved
+    }
+}
+
 /// **走一遍盤，一個檔一個檔地搜**（2026-10-03 起就是邊走邊交的；2026-10-06 抽成
 /// 自由函數，§5.93）。
 ///
@@ -2333,6 +2488,8 @@ pub(crate) enum Found {
     Hit(Hit),
     /// 一個**有**命中的檔，照走到的次序。
     File(std::path::PathBuf),
+    /// 走完了（或者被叫停了）。
+    Done { cut: bool, skipped: usize },
 }
 
 /// **一行，問一遍，命中當場交出去** —— 流式搜索的那一格。
