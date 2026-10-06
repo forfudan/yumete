@@ -324,29 +324,52 @@ impl Editor {
     /// is why helix gives it a key of its own and why it does not move the
     /// cursor. **It takes no indent either** — a blank line with trailing
     /// spaces on it is a blank line that greps wrong.
-    pub(super) fn add_blank_line(&mut self, below: bool) {
+    /// Warning: **每一段選區各插一條，而且不碰選區**（2026-10-06 夜審報的）。helix 的
+    /// `add_newline_impl` 對每一段各做一次、吃計數、一段選區都不動；這裏從前只讀
+    /// 主選區的頭，末尾還把選區塌成一個光標——函數自己的話是「不動光標」，頭確實
+    /// 沒動，錨動了。
+    pub(super) fn add_blank_line(&mut self, below: bool, count: usize) {
         if self.refuse_readonly() {
             return;
         }
+        self.edit_each(|e| e.add_one_blank_line(below, count));
+    }
+
+    /// One selection's worth: `count` breaks, and the selection stays where
+    /// it was pointing at the same text.
+    fn add_one_blank_line(&mut self, below: bool, count: usize) {
+        // Warning: **插在行首，不是行尾**，而且問的是**選區跨到哪一行**，不是光標那
+        // 一行——逐條照 helix 的 `add_newline_impl`：`Open::Below` 算的是
+        // `line_to_char(最後一行 + 1)`，也就是下一行的開頭（換行符後面）。插在
+        // `line_end`（換行符上）等於插進了這一行的末尾，一個頭停在換行符上的選區
+        // 會被撐大一格。
         let rope = self.current_buffer().rope();
+        let (from, to) = self.selection();
+        let first = rope.char_to_line(from);
+        let last = rope.char_to_line(to.saturating_sub(1).max(from));
         let at = match below {
-            true => motion::line_end(rope, self.sel.head()),
-            false => motion::line_start(rope, self.sel.head()),
+            true => rope.line_to_char((last + 1).min(rope.len_lines())),
+            false => rope.line_to_char(first),
         };
-        let ending = self.current_buffer().ending();
-        let was = self.sel.head();
+        let ending = self.current_buffer().ending().to_string();
+        let breaks = ending.repeat(count.max(1));
+        let grew = breaks.chars().count();
+        let (anchor, head) = (self.sel.anchor(), self.sel.head());
         self.snapshot();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, ending));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &breaks));
         if !self.applied(done) {
             return;
         }
-        // Above: everything from the cursor on has shifted by the break.
-        let moved = match below {
-            true => was,
-            false => was + ending.chars().count(),
+        // Inserting above pushes everything from the line's start onward, this
+        // selection included; inserting below is past both ends and moves
+        // nothing. Either way **both** ends travel together — the selection is
+        // on the same text it was on.
+        let shift = |one: usize| match one >= at {
+            true => one + grew,
+            false => one,
         };
-        self.sel.set_head(moved);
-        self.sel.set_anchor(moved);
+        self.sel.set_anchor(shift(anchor));
+        self.sel.set_head(shift(head));
         self.clamp_cursor();
     }
 
@@ -374,20 +397,38 @@ impl Editor {
     /// motion. The snapshot was already taken when `i` was pressed.
     pub(super) fn spend_the_insert_count(&mut self, again: usize, typed: &str) {
         let opened = self.insert_opened.take();
+        let ending = self.current_buffer().ending().to_string();
         for _ in 0..again {
-            if let Some(below) = opened {
-                // A fresh line each time, and the cursor on it — `open_line_*`
-                // would enter Insert again, which is not what this is.
-                self.add_blank_line(below);
-                let rope = self.current_buffer().rope();
-                let at = match below {
-                    true => motion::line_start(rope, motion::line_end(rope, self.sel.head()) + 1),
-                    false => motion::line_start(rope, self.sel.head()),
-                };
-                self.set_cursor(at.min(self.current_buffer().rope().len_chars()));
+            match opened {
+                // `i a I A` — 接着打，就在光標這裏。
+                None => self.insert_str(typed),
+                // Warning: **`o`／`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**
+                // （2026-10-06 夜審報的，兩個病）。① 那一支自己 `snapshot()`，於是
+                // 「整段算一個命令」是假的——`3o` 打完要按三下 `u` 纔回得去；
+                // ② 它把光標跟着原來那段文字往下挪，`O` 那一路算出來的落點是**已經
+                // 有字的那一行**，三遍全寫在同一行上（`3O` 打 `hi` 得
+                // `\n\nhihihi\nX`，而 vim 給 `hi\nhi\nhi\nX`）。
+                Some(true) => {
+                    let at = motion::line_end(self.current_buffer().rope(), self.sel.head());
+                    let text = format!("{ending}{typed}");
+                    if !self.edit_insert(at, &text) {
+                        return;
+                    }
+                    self.set_cursor(at + text.chars().count());
+                }
+                Some(false) => {
+                    let at = motion::line_start(self.current_buffer().rope(), self.sel.head());
+                    let text = format!("{typed}{ending}");
+                    if !self.edit_insert(at, &text) {
+                        return;
+                    }
+                    // 光標留在剛插進去那一行的頭上，下一遍就插在它前面——三遍寫出
+                    // 來的是三行一樣的字，所以次序看不出來，而落點必須對。
+                    self.set_cursor(at);
+                }
             }
-            self.insert_str(typed);
         }
+        self.refresh_goal_column();
     }
 
     /// Take back the word before the cursor (`C-w` in Insert).

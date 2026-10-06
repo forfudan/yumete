@@ -444,6 +444,66 @@ impl Editor {
     /// Warning: **The action is the cutting one.** vim's `d` fills the unnamed
     /// register — `dd` then `p` puts the line back — so it is this editor's
     /// `D` (剪切), not its `d` (刪除，不動寄存器).
+    /// Whether the reader's own `[keys.normal]` claims a key — the preset's
+    /// own lines do not count (2026-10-06).
+    fn user_bound(&self, c: char) -> bool {
+        let one = c.to_string();
+        self.user_aliases.keys().any(|k| k.starts_with(&one))
+    }
+
+    /// **vim 的可視模式那八個鍵**，表在呼叫處（2026-10-06）。
+    ///
+    /// 三條規矩，每一條都是夜審報出來的：
+    ///
+    /// 一、⚠️ **`V` 選的是整行，而「整行」全樹只有一處守着**——`d`／`c`／`y` 那幾個
+    /// arm 開頭的 `if self.vim_lines { extend_to_line_bounds() }`。這一族寫在它們
+    /// 前面並且 `return`，所以那一句在這裏要自己再做一次，不然 `Vy` 之後 `p` 是按
+    /// 字符貼的（實測貼進了 `beta` 中間），而且 `vim_lines` 永遠留着 `true`，下一個
+    /// `d` 會拿它當整行。`x`／`s` 例外：它們轉交給老 arm，那邊自己做。
+    ///
+    /// 二、**計數歸這一段**，不許漏到下一個鍵。`v` 之後 `2u` 轉小寫，接着的 `j` 從前
+    /// 走兩行——那個 2 沒人花掉。
+    ///
+    /// 三、**動完就回 Normal，光標落在那一段的開頭**。vim 的可視模式是為一次動作而
+    /// 開的，一動完就結束；helix 的 select mode 不是，所以這一條只在這裏。
+    fn vim_visual_key(&mut self, c: char) {
+        // `x`／`s` 原樣轉交：`d`／`c` 那兩個 arm 自己管整行與計數。
+        if matches!(c, 'x' | 's') {
+            let as_if = match c {
+                'x' => 'd',
+                _ => 'c',
+            };
+            return self.on_normal_key(Key::Char(as_if));
+        }
+        self.count = None;
+        self.alias_count = None;
+        // `o` 只換頭，不動手也不收工——選區還是整行，`vim_lines` 要留着。
+        if c == 'o' {
+            return self.flip_selection();
+        }
+        if self.vim_lines {
+            self.extend_to_line_bounds();
+            self.vim_lines = false;
+        }
+        let start = self.selection().0;
+        match c {
+            'u' => self.map_selection(|one| one.to_lowercase().collect()),
+            'U' => self.map_selection(|one| one.to_uppercase().collect()),
+            '~' => self.map_selection(switch_case),
+            'p' => self.replace_with_register(),
+            _ => {
+                let (anchor, head) = self.span();
+                self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });
+            }
+        }
+        self.extend = false;
+        self.sel.set_head(start);
+        self.sel.set_anchor(start);
+        // 光標真的挪了，下一個 `j` 要從這一欄數起。
+        self.refresh_goal_column();
+        self.clamp_cursor();
+    }
+
     fn vim_operator_key(&mut self, op: char, first: Option<char>, key: Key) {
         // Warning: **Let go of the wait before doing anything** (2026-09-18): what
         // runs below reads `pending`, and an operator still holding the wait
@@ -1001,7 +1061,10 @@ impl Editor {
                     }
                     // **`]空格` / `[空格` 加一條空行，人不動**（helix 的
                     // `add_newline_below` / `_above`，2026-10-06 補的）。
-                    Key::Char(' ') => self.add_blank_line(forward),
+                    Key::Char(' ') => {
+                        let n = self.operator_count.take().unwrap_or(1).max(1);
+                        self.add_blank_line(forward, n);
+                    }
                     _ => {}
                 }
                 return;
@@ -1185,31 +1248,15 @@ impl Editor {
         //
         // Warning: **只在 vim 鍵位下**。helix 的 select mode 裏這幾個鍵就是 Normal
         // 那幾件事（它靠 `A-;` 換頭、`` ` `` 轉大小寫），兩邊各跟各的。
+        //
+        // Warning: **使用者自己綁過的鍵不搶**（2026-10-06 夜審報的）。這一段在別名層
+        // 前面，搶的本來連 `[keys.normal]` 一起搶了——而手冊寫着「你自己寫的，蓋
+        // 過預設裏同一個鍵」。`user_aliases` 是沒摻預設的那一層，問它就分得開。
         if self.key_preset == yumete_cjk::KeyPreset::Vim && self.extend && !self.expanding_alias {
-            match key {
-                Key::Char('o') => return self.flip_selection(),
-                Key::Char('u') => return self.map_selection(|c| c.to_lowercase().collect()),
-                Key::Char('U') => return self.map_selection(|c| c.to_uppercase().collect()),
-                Key::Char('~') => return self.map_selection(switch_case),
-                Key::Char('p') => return self.replace_with_register(),
-                // 刪／改整個選區 ＝ 這個編輯器的 `d`／`c`，原樣交下去。
-                Key::Char('x') => return self.on_normal_key(Key::Char('d')),
-                Key::Char('s') => return self.on_normal_key(Key::Char('c')),
-                // **`y` 複製完就回 Normal，光標落在那一段的開頭**——vim 的可視
-                // 模式一動完就結束。helix 的 `y` 把選區留着（它的 select mode 不
-                // 為一次動作而開），所以這一條同樣只在 vim 鍵位下。
-                Key::Char('y') => {
-                    let start = self.selection().0;
-                    let (anchor, head) = self.span();
-                    self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });
-                    self.extend = false;
-                    self.sel.set_head(start);
-                    self.sel.set_anchor(start);
-                    // 光標真的挪了，下一個 `j` 要從這一欄數起。
-                    self.refresh_goal_column();
-                    return;
+            if let Key::Char(c) = key {
+                if matches!(c, 'o' | 'u' | 'U' | '~' | 'p' | 'x' | 's' | 'y') && !self.user_bound(c) {
+                    return self.vim_visual_key(c);
                 }
-                _ => {}
             }
         }
 
@@ -1532,8 +1579,12 @@ impl Editor {
             // **`z` 那一層**：把光標這一行挪到屏幕的頂／中／底（2026-09-28）。
             // Warning: `zc` 也是居中，同 helix（它的 `zc` 是 align_view_center）。
             Key::Char('z') => self.pending = Pending::Aim,
-            Key::Char(']') => self.pending = Pending::Hop { forward: true },
-            Key::Char('[') => self.pending = Pending::Hop { forward: false },
+            // **`3]空格` 加三條空行**，所以這一族要把計數帶過去（同 `g`、`f`／`t`
+            // 那幾個等第二鍵的前綴）。
+            Key::Char(']') | Key::Char('[') => {
+                self.pending = Pending::Hop { forward: key == Key::Char(']') };
+                self.operator_count = operator_count;
+            }
             Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),
             Key::Char('E') => self.repeat(count, |e| {
                 let span = e.run_motion(motion::Motion::WordEnd(motion::Grain::Big));
@@ -1672,8 +1723,9 @@ impl Editor {
             // 簡繁、模糊、正則四個開關一起管用，中文也照打——helix 的 `s` 只認正則。
             // **`(` `)` 換主選區，`_` 去兩端空白**（#405 Phase 3）。Warning: 前兩個一段都不
             // 動，動的只是「哪一段是主的」——選了二十處要一處一處看過去靠的就是它。
-            // 帶數字走幾格——helix 的 `rotate_selections` 吃計數（`commands.rs`
-            // 的 `rotate_selections_impl`），從前這裏 `3)` 只走一格（2026-10-06）。
+            // 帶數字走幾格——helix 的 `rotate_selections` 吃計數
+            // （`helix-term/src/commands.rs:5649`），從前這裏 `3)` 只走一格
+            // （2026-10-06）。
             Key::Char(')') => self.repeat(count, |e| e.rotate_primary(true)),
             Key::Char('(') => self.repeat(count, |e| e.rotate_primary(false)),
             Key::Char('_') => self.trim_selections(),

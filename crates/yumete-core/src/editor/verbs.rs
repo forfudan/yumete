@@ -23,6 +23,12 @@ impl Editor {
         // grew a selection instead of moving.
         self.extend = false;
         self.insert_recording.clear();
+        // Warning: **沒花掉的插入計數在這裏清**（2026-10-06 夜審報的）。從前它只在
+        // `Esc` 那一臂清，而回 Normal 的路不止那一條（`show_buffer` 就是一條），
+        // 於是一個沒走完的 `5i` 會把那個 5 記到下一次插入上——下一次打一個字就
+        // 變成五個。進門清，比每一條出門的路都清一遍可靠。
+        self.insert_again = 0;
+        self.insert_opened = None;
         self.reference = None;
         self.mode = Mode::Insert;
     }
@@ -142,7 +148,13 @@ impl Editor {
             if start != from {
                 start = rope.line_to_char((first + 1).min(rope.len_lines()));
             }
-            if end != to {
+            // Warning: **`to + 1`，不是 `to`**（2026-10-06 夜審報的）。照抄 helix 的
+            // `if end != range.to()` 抄漏了一件事：它的 `range.to()` 是**半開**的
+            // 上界，這個倉的 `span().1` 是最後那個字符**自己**。差一格，於是這個
+            // 條件恆真——「末尾已經落在行界上」那條路一次都走不到，每一次都退掉
+            // 最後一行。實測 `xx` 選整整兩行之後 `A-x` 只剩第一行，而 helix 一個
+            // 字都不動。
+            if end != to + 1 {
                 end = rope.line_to_char(last);
             }
             let (start, end) = (start.min(end), start.max(end));

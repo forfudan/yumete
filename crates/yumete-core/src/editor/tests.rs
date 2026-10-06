@@ -17545,6 +17545,129 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **夜審報出來的那幾條，各釘一格**（2026-10-06）。
+///
+/// 一輪對齊做完之後請了一個只讀的審查，逐條實測。下面每一個斷言都對着它報的一條，
+/// 而且**每一條都是當時那支測試擋不住的**——擋不住的理由各寫在旁邊。
+#[test]
+fn what_the_night_review_caught() {
+    // ── 一、vim 的 `V` 之後 `y`／`p` 不再是整行（今夜改出來的回歸）。
+    //    「整行」全樹只有一處守着，而新那一段寫在它前面並且 return。
+    let mut ed = typed("alpha\nbeta\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggVly");
+    press(&mut ed, "jp");
+    assert_eq!(ed.current_buffer().text(), "alpha\nbeta\nalpha\n", "V 之後 y 取整行");
+    assert!(!ed.vim_lines, "`vim_lines` 要花掉，不然下一個 d 拿它當整行");
+
+    // ── 二、可視模式裏打的數字不許漏到下一個鍵。
+    let mut ed = typed("Alpha\n甲\n乙\n丙\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggv2u");
+    press(&mut ed, "j");
+    assert_eq!(
+        ed.current_buffer().rope().char_to_line(ed.sel.head()),
+        1,
+        "那個 2 被 u 花掉了，j 只走一行"
+    );
+
+    // ── 三、使用者自己綁的鍵不搶。
+    let mut ed = typed("alpha beta\n");
+    ed.execute(":keymap vim").unwrap();
+    ed.set_key_aliases([("p".to_string(), "gl".to_string())].into_iter().collect());
+    press(&mut ed, "ggvlp");
+    assert_eq!(ed.current_buffer().text(), "alpha beta\n", "走別名，不是換寄存器");
+
+    // ── 四、`A-x` 在「正好是整行」的選區上不許動。照抄 helix 的 `end != range.to()`
+    //    抄漏了半開與閉的差別，於是每一次都退掉最後一行。原來那支測試兩頭都在行
+    //    中間，撞不到。
+    let mut ed = typed("一二三\n四五六\n七八九\n");
+    press(&mut ed, "ggxx");
+    let whole = ed.selection();
+    ed.on_key(Key::Alt('x'));
+    assert_eq!(ed.selection(), whole, "已經是整行，一個字都不動");
+
+    // ── 五、`A-_` 要併得了首尾相接的兩段。原來那支只斷言「隔着字的不併」。
+    let mut ed = typed("一二三四\n");
+    ed.sel.rebuild(
+        vec![crate::selection::Range::new(0, 1), crate::selection::Range::new(2, 3)],
+        0,
+    );
+    assert_eq!(ed.sel.len(), 2);
+    ed.on_key(Key::Alt('_'));
+    assert_eq!(ed.sel.len(), 1, "首尾相接的要併起來");
+
+    // ── 六、`3O` 打出來的東西。`3o` 從前是對的，`O` 那一路算錯了落點。
+    let vim_open = |steps: &str, text: &str| {
+        let mut ed = typed("X\n");
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        press(&mut ed, text);
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(vim_open("3O", "hi"), "hi\nhi\nhi\nX\n");
+    assert_eq!(vim_open("3o", "hi"), "X\nhi\nhi\nhi\n");
+
+    // ── 七、`3o` 整段算一個命令，`u` 一下全回去（`add_blank_line` 自己 snapshot，
+    //    從前要按三下）。
+    let mut ed = typed("X\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg3o");
+    press(&mut ed, "hi");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "X\nhi\nhi\nhi\n");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "X\n", "一下全回去");
+
+    // ── 八、沒花掉的插入計數不許記到下一次插入上。
+    let mut ed = typed("X\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg5i");
+    press(&mut ed, "ab");
+    ed.execute(":new").unwrap();
+    press(&mut ed, "cc");
+    press(&mut ed, "Q");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "Q", "5 不許跟到 cc 上");
+
+    // ── 九、`md`*c*／`ds`*c* 要認括號那一族，和 `mi`*c* 一樣。
+    let off = |steps: &str| {
+        let mut ed = typed("（甲乙）\n");
+        press(&mut ed, "gg2l");
+        press(&mut ed, steps);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(off("md("), "甲乙\n", "按半角括號找得到全角的");
+    assert_eq!(off("mr(《"), "《甲乙》\n", "mr 同理");
+    let mut ed = typed("「甲乙」\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg2lds[");
+    assert_eq!(ed.current_buffer().text(), "甲乙\n", "vim 的 ds[ 也管這一族");
+
+    // ── 十、`]空格` 每一段各加一條、吃計數、不動選區。
+    let mut ed = typed("甲\n乙\n");
+    press(&mut ed, "ggvl");
+    let was = ed.selection();
+    press(&mut ed, "]\u{20}");
+    assert_eq!(ed.selection(), was, "選區一個字都不動");
+    let mut ed = typed("甲\n");
+    press(&mut ed, "gg3]\u{20}");
+    assert_eq!(ed.current_buffer().text(), "甲\n\n\n\n", "3]空格 加三條");
+
+    // ── 十一、提示行那張動作表要收 `ge`／`gE`（算子真的認它們）。
+    let mut ed = typed("alpha beta gamma\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    press(&mut ed, "d");
+    let said = match ed.hint() {
+        crate::editor::Hint::Says(text) => text,
+        other => panic!("該是一句話：{other:?}"),
+    };
+    assert!(said.contains("ge"), "漏了 ge：{said}");
+}
+
 /// **`A-x` 縮到整行**（2026-10-06，helix 的 `shrink_to_line_bounds`）——`X` 的反面。
 #[test]
 fn shrinking_to_line_bounds_is_the_other_half_of_x() {

@@ -2078,7 +2078,7 @@ KEYS (Normal mode, Helix-style):
     M a  ' a  name this place / go back to it, across files
     C-o C-i   the jump list: back to where a jump came from, and forward
     f F t T   find a character forward / backward; t T stop in front of it
-              (A-. repeats the last one; `t` alone is the table mode)
+              (A-. repeats the last one; the table group is Space t)
     H  L      previous / next sentence — 。！？ and the mark that closes after
     J  K      forward / back half a page   (C-f / C-b for a whole one)
     x  X      select the current line / extend to whole lines
