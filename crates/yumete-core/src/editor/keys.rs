@@ -2808,6 +2808,7 @@ impl Editor {
     // 「open a file」 means now.
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
         ('o', "hint.goto.outline"),
+        ('s', "hint.goto.outline"),
         ('f', "hint.goto.open-file"),
         // **`空格 F`：搜工作路徑**（2026-10-01，照 helix 的
         // `file_picker_in_current_directory`）。與 `空格 f` 的分別見
@@ -3220,6 +3221,10 @@ impl Editor {
             // 大小寫算子，而這一支是中文稿子上天天按的——所以它在兩套鍵位下都另有
             // 一個門，不是只在讓位的那一端補一個。
             Key::Char('u') => self.start_seek(true),
+            // **`空格 s` 也開大綱**（2026-10-06，helix 的 `symbol_picker`）。helix 把
+            // 「這份檔裏的符號」放在 `空格 s`，這個編輯器一直放在 `空格 o`；`s` 空着，
+            // 所以兩個拼法都通，一個 helix 的手按下去得到它預期的那一扇。
+            Key::Char('s') => self.show_sidebar(crate::sidebar::View::Outline),
 
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
