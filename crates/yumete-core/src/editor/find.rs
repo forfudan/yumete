@@ -685,23 +685,39 @@ impl Editor {
             // Warning: **它要排在走查前面**（2026-10-03）。走查的回調現在借着 `self`，
             // 而這一句也要 `self`（`real_path` 帶記憶）——先算完，它就是一份自己的
             // 東西了。
-            let open_files: std::collections::HashMap<std::path::PathBuf, usize> = self
+            //
+            // Warning: **抄的是「改過而没存盤」那幾份的正文，不是每一份**（2026-10-06，
+            // 背景搜索那一步的前置，§5.93）。這一句本來只記下標、回調裏再去借
+            // `self.buffers[i]`——借 `self` 的東西一樣都不許留在回調裏，不然那一
+            // 趟搬不到線程上去。
+            //
+            // 没改過的不抄：磁碟上那一份和内存裏這一份逐字節相同，讓走查自己讀
+            // 就是了。`R` 換完三千個檔之後全開着，抄每一份就是把整個項目複製一
+            // 遍；抄「改過的」在平常是一兩份，而那正是「没存盤的活也是活」要的
+            // 那幾份。
+            let unsaved: std::collections::HashMap<std::path::PathBuf, String> = self
                 .buffers
                 .iter()
-                .enumerate()
-                .filter_map(|(i, b)| Some((self.real_path(b.path()?)?, i)))
+                .filter(|b| b.is_modified())
+                .filter_map(|b| Some((self.real_path(b.path()?)?, b.rope().to_string())))
                 .collect();
             // **邊走邊搜，不再先收齊整棵樹**（2026-10-03 定：「rg 是一边搜一边
             // 打印。我们是读完搜完再一起打印」）。走查的回調當場把這一個檔搜了，
             // 命中立刻從 `sink` 交出去——管道那一邊第一條命中在第一個檔讀完就印得
             // 出來，不必等整棵樹。
             let sieve = sieve.unwrap_or_default();
+            // 回調不許碰 `self`，所以這一份也先備好，走完再接回去。
+            let mut files: Vec<(Option<std::path::PathBuf>, Option<u64>)> = Vec::new();
             let walked = crate::editor::walk_prose(&root, &sieve, &mut |path| {
                 if stop {
                     return;
                 }
                 // Not twice: the one being written was searched from memory.
-                let full = self.real_path(path).unwrap_or_else(|| path.to_path_buf());
+                //
+                // Warning: **`canonicalize` 直接叫，不走 `real_path`**（2026-10-06）。
+                // 那一支帶記憶而記憶掛在 `self` 上，留在回調裏就把 `self` 一起
+                // 釘進來了。這裏一個檔只問一次，記不記憶差得不多。
+                let full = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
                 if Some(&full) == here.as_ref() {
                     return;
                 }
@@ -716,9 +732,8 @@ impl Editor {
                 // buffer's are two spellings of one file — compared as typed,
                 // a file just changed in a buffer was re-read off the disk and
                 // the change looked as though it had not happened.
-                match open_files.get(&full).map(|&i| &self.buffers[i]) {
-                    Some(buffer) => {
-                        let text = buffer.rope().to_string();
+                match unsaved.get(&full) {
+                    Some(text) => {
                         for (line, text) in text.split_inclusive('\n').enumerate() {
                             if !take_the_line(
                                 &look, &shown, text, line, keep.then_some(most), &mut at, &mut total,
@@ -762,9 +777,10 @@ impl Editor {
                 }
                 // **有命中就記一筆，不管名單還放不放得下**（見 `Search::files`）。
                 if total > was {
-                    self.search.files.push((Some(shown), None));
+                    files.push((Some(shown), None));
                 }
             });
+            self.search.files.extend(files);
             self.search.cut = walked.cut;
             self.search.skipped = walked.skipped;
             self.search.root = Some(root);
