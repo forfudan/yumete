@@ -1163,6 +1163,50 @@ impl Editor {
             Pending::None => {}
         }
 
+        // **vim 的可視模式，那五個按下去會改錯字的鍵**（2026-10-06）。
+        //
+        // 這一段要寫在別名層**前面**：`x`／`s` 在 vim 鍵位表上是 `;{n}D`／`;{n}Di`，
+        // 而那個 `;` 是「收成一點」——它是為 Normal 寫的，可視模式下照收，於是
+        // `vjx` 只刪一個字符。vim 的可視模式下這五個都是對**整個選區**動手：
+        //
+        // | 鍵 | vim | 這裏從前 |
+        // | --- | --- | --- |
+        // | `o` | 換到選區的另一頭 | 開一行並進插入（`vjo` 在稿子裏留下一行） |
+        // | `x` `s` | 刪／改選區 | 先收成一點，只動一個字 |
+        // | `u` `U` | 轉小寫／大寫 | 撤銷／重做（`dwvju` 把 `dw` 撤了） |
+        // | `p` | 用寄存器換掉選區 | 粘貼在後面 |
+        // | `~` | 選區大小寫互換 | 只換一個字 |
+        //
+        // Warning: **只在 vim 鍵位下**。helix 的 select mode 裏這幾個鍵就是 Normal
+        // 那幾件事（它靠 `A-;` 換頭、`` ` `` 轉大小寫），兩邊各跟各的。
+        if self.key_preset == yumete_cjk::KeyPreset::Vim && self.extend && !self.expanding_alias {
+            match key {
+                Key::Char('o') => return self.flip_selection(),
+                Key::Char('u') => return self.map_selection(|c| c.to_lowercase().collect()),
+                Key::Char('U') => return self.map_selection(|c| c.to_uppercase().collect()),
+                Key::Char('~') => return self.map_selection(switch_case),
+                Key::Char('p') => return self.replace_with_register(),
+                // 刪／改整個選區 ＝ 這個編輯器的 `d`／`c`，原樣交下去。
+                Key::Char('x') => return self.on_normal_key(Key::Char('d')),
+                Key::Char('s') => return self.on_normal_key(Key::Char('c')),
+                // **`y` 複製完就回 Normal，光標落在那一段的開頭**——vim 的可視
+                // 模式一動完就結束。helix 的 `y` 把選區留着（它的 select mode 不
+                // 為一次動作而開），所以這一條同樣只在 vim 鍵位下。
+                Key::Char('y') => {
+                    let start = self.selection().0;
+                    let (anchor, head) = self.span();
+                    self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });
+                    self.extend = false;
+                    self.sel.set_head(start);
+                    self.sel.set_anchor(start);
+                    // 光標真的挪了，下一個 `j` 要從這一欄數起。
+                    self.refresh_goal_column();
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         // Apply user key aliases (config `[keys.normal]`) to command keys only;
         // pending operator targets above are taken literally.
         //
@@ -1895,7 +1939,19 @@ impl Editor {
             // Warning: `~` maps to the group's **third** member, not to the group:
             // `` ` `` opens 「小寫／大寫／互換」, and `~` has always meant the
             // last of those on its own.
-            Key::Char('~') => self.map_selection(switch_case),
+            Key::Char('~') => {
+                self.map_selection(switch_case);
+                // **vim 的 `~` 按完往前走一格**（`:h ~`），所以 `~~~` 在 `alpha`
+                // 上給 `ALPha`；從前這裏三下都換同一個字，給的是 `Alpha`。
+                // helix 的 `~` 不走（它作用在整個選區上），兩邊各跟各的。
+                if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend {
+                    let rope = self.current_buffer().rope();
+                    let at = self.selection().1.min(motion::line_end(rope, self.sel.head()));
+                    self.sel.set_head(at);
+                    self.sel.set_anchor(at);
+                    self.clamp_cursor();
+                }
+            }
             Key::Char('*') => {
                 self.definition_preview = false;
                 self.search_the_page(false);
