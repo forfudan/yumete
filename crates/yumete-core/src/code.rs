@@ -195,6 +195,60 @@ impl Language {
         })
     }
 
+    /// **我們自己寫的那份文本對象查詢**（2026-10-06 定：「自己写比较好，不要
+    /// 抄」）。
+    ///
+    /// Warning: **不抄 helix 的 `textobjects.scm`**——那些檔是 MPL-2.0，這個倉是
+    /// Apache-2.0（見 [`Language::tags`]）。自己寫還有一層好處：helix 那份要照顧
+    /// 幾十種語言和它自己的鍵，我們只要這四種語言、兩種對象。
+    ///
+    /// ⚠️ **代價是上游改語法我們自己盯**：下面這些節點名是寫死的，`tree-sitter-*`
+    /// 升一版把某個節點改了名，查詢就**靜悄悄地不匹配**——不報錯、不編譯失敗，
+    /// `mi a` 就是沒反應。所以每一種語言各釘一格測試
+    /// （`our_textobject_queries_still_match_these_grammars`）。
+    ///
+    /// 節點名是從語法自己的 `src/node-types.json` 裏讀出來的，不是記的。
+    fn objects(self) -> Option<&'static str> {
+        Some(match self {
+            Language::Python => {
+                "(parameters (_) @parameter)\n                 (lambda_parameters (_) @parameter)\n                 (comment) @comment\n"
+            }
+            Language::Rust => {
+                "(parameters (_) @parameter)\n                 (closure_parameters (_) @parameter)\n                 (type_parameters (_) @parameter)\n                 (line_comment) @comment\n                 (block_comment) @comment\n"
+            }
+            Language::Go => {
+                "(parameter_list (_) @parameter)\n                 (type_parameter_list (_) @parameter)\n                 (comment) @comment\n"
+            }
+            Language::JavaScript => {
+                "(formal_parameters (_) @parameter)\n                 (comment) @comment\n"
+            }
+            Language::Css | Language::Html | Language::Json | Language::Toml | Language::Yaml => {
+                return None
+            }
+        })
+    }
+
+    /// 編好的那份，連着每一格捕獲算哪一種對象。
+    fn object_query(self) -> Option<&'static Objects> {
+        static CELLS: [OnceLock<Option<Objects>>; 9] = [const { OnceLock::new() }; 9];
+        let at = Language::ALL.iter().position(|&l| l == self)?;
+        CELLS[at]
+            .get_or_init(|| {
+                let query = Query::new(&self.grammar(), self.objects()?).ok()?;
+                let kinds = query
+                    .capture_names()
+                    .iter()
+                    .map(|n| match *n {
+                        "parameter" => Some(Object::Parameter),
+                        "comment" => Some(Object::Comment),
+                        _ => None,
+                    })
+                    .collect();
+                Some((query, kinds))
+            })
+            .as_ref()
+    }
+
     /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
     fn defines(self) -> Option<&'static Defines> {
         static CELLS: [OnceLock<Option<Defines>>; 9] = [const { OnceLock::new() }; 9];
@@ -244,6 +298,41 @@ fn define_of(capture: &str) -> Option<Define> {
     }
 }
 
+/// **語法樹認得的那兩種小東西**（`mi a`／`mi c`，2026-10-06）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Object {
+    /// 一個參數（`mi a`）。
+    Parameter,
+    /// 一段註釋（`mi c`）。
+    Comment,
+}
+
+/// **這份正文裏每一個 `want`**，按起點排好，位置是**字節**。
+pub fn objects(
+    language: Language,
+    source: &str,
+    tree: &Tree,
+    want: Object,
+) -> Vec<(usize, usize)> {
+    let Some((query, kinds)) = language.object_query() else {
+        return Vec::new();
+    };
+    let mut cursor = QueryCursor::new();
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let mut matches = cursor.matches(query, tree.root_node(), source.as_bytes());
+    while let Some(one) = streaming_iterator::StreamingIterator::next(&mut matches) {
+        for capture in one.captures {
+            if kinds.get(capture.index as usize).copied().flatten() != Some(want) {
+                continue;
+            }
+            out.push((capture.node.start_byte(), capture.node.end_byte()));
+        }
+    }
+    out.sort_by_key(|&(from, to)| (from, std::cmp::Reverse(to)));
+    out.dedup();
+    out
+}
+
 /// **這份正文裏每一個定義**，按起點排好，位置是**字節**。
 ///
 /// 同一個節點可能被兩條規則捕獲（rust 的 `function_item` 既在 `declaration_list`
@@ -281,6 +370,9 @@ type Compiled = (Query, Vec<Paint>);
 
 /// 同一件事的 tags 那一份：編好的查詢，連着每一格捕獲算哪一種定義。
 type Defines = (Query, Vec<Option<Define>>);
+
+/// 我們自己那份文本對象查詢，同一個形狀。
+type Objects = (Query, Vec<Option<Object>>);
 
 /// What a grammar's capture name is, in this page's colours.
 fn token_of(capture: &str) -> Paint {
@@ -543,6 +635,64 @@ fn span(start: usize, end: usize, token: Token) -> Span {
 
 #[cfg(test)]
 mod tests {
+
+    /// **自己寫的那份查詢，每一種語言各釘一格**（2026-10-06）。
+    ///
+    /// ⚠️ 這一格就是「自己寫不抄 helix」的全部代價。查詢裏的節點名是寫死的，
+    /// `tree-sitter-*` 升一版把某個節點改了名，查詢**靜悄悄地不匹配**——不報錯、
+    /// 不編譯失敗，`mi a` 就是沒反應。所以這裏逐種語言餵一段真代碼，數它找到
+    /// 幾個。**看見這一格紅，先去看那一版的 `src/node-types.json`。**
+    #[test]
+    fn our_textobject_queries_still_match_these_grammars() {
+        let cases = [
+            (
+                Language::Python,
+                "# 一句註釋\ndef f(a, b=2):\n    return a\n",
+                2,
+                1,
+            ),
+            (
+                Language::Rust,
+                "// 一句註釋\nfn f(a: u8, b: u8) -> u8 { a + b }\n",
+                2,
+                1,
+            ),
+            (
+                Language::Go,
+                "// 一句註釋\nfunc f(a int, b int) int { return a }\n",
+                2,
+                1,
+            ),
+            (
+                Language::JavaScript,
+                "// 一句註釋\nfunction f(a, b) { return a; }\n",
+                2,
+                1,
+            ),
+        ];
+        for (language, source, parameters, comments) in cases {
+            let tree = parse(language, source, None).expect("parses");
+            assert_eq!(
+                objects(language, source, &tree, Object::Parameter).len(),
+                parameters,
+                "{language:?} 的參數"
+            );
+            assert_eq!(
+                objects(language, source, &tree, Object::Comment).len(),
+                comments,
+                "{language:?} 的註釋"
+            );
+            // 定義那一份走的是語法自己帶的 tags，同樣會被上游改動影響。
+            assert_eq!(
+                definitions(language, source, &tree)
+                    .iter()
+                    .filter(|&&(_, _, k)| k == Define::Function)
+                    .count(),
+                1,
+                "{language:?} 的函數"
+            );
+        }
+    }
     use super::*;
 
     fn lines(text: &str) -> Vec<String> {

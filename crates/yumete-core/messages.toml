@@ -3152,6 +3152,13 @@ find = "輸入法 输入法 方案 現在 现在 which"
 # ── command ───────────────────────────────────────────────────────────
 
 [[message]]
+# mi c：光標不在任何一段註釋裏
+key = "code.no-comment-here"
+zht = "光標不在任何註釋裏"
+zhs = "光标不在任何注释里"
+en = "the cursor is not inside a comment"
+
+[[message]]
 # mi f／mi c：光標不在任何一個定義裏
 key = "code.no-definition-here"
 zht = "光標不在任何函數或類裏"
@@ -3164,6 +3171,13 @@ key = "code.no-definitions"
 zht = "這一份裏找不到函數或類"
 zhs = "这一份里找不到函数或类"
 en = "no functions or classes in this file"
+
+[[message]]
+# mi a：光標不在任何一個參數裏
+key = "code.no-parameter-here"
+zht = "光標不在任何參數裏"
+zhs = "光标不在任何参数里"
+en = "the cursor is not inside a parameter"
 
 [[message]]
 # 命令行語法壞了

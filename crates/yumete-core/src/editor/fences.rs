@@ -181,6 +181,24 @@ impl Editor {
         found.into_iter().map(|(from, to, kind)| (at(from), at(to), kind)).collect()
     }
 
+    /// **這一份裏每一個參數／註釋**，位置是**字符**（`mi a`／`mi c`，2026-10-06）。
+    pub(super) fn objects_here(&self, want: crate::code::Object) -> Vec<(usize, usize)> {
+        let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
+            return Vec::new();
+        };
+        if !self.code_colours {
+            return Vec::new();
+        }
+        self.hold_the_tree(language);
+        let cache = self.code_cache.borrow();
+        let Some(held) = cache.whole.as_ref().filter(|h| h.language == language) else {
+            return Vec::new();
+        };
+        let found = crate::code::objects(language, &held.source, &held.tree, want);
+        let at = |byte: usize| held.source[..byte.min(held.source.len())].chars().count();
+        found.into_iter().map(|(from, to)| (at(from), at(to))).collect()
+    }
+
     /// **把這一版的樹備好**——已經是這一版就什麽都不做。
     ///
     /// Warning: **改過就走增量。** 上一版的正文還在手上，掐頭去尾就看得出改了
