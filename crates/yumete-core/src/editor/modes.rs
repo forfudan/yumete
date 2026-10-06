@@ -284,28 +284,38 @@ impl Editor {
     /// The commands to offer for the open command line, and which one Tab has
     /// selected.
     pub fn command_menu(&self) -> (Vec<command::Choice>, Option<usize>) {
-        match &self.completion {
-            Some((prefix, i)) => (command::complete(prefix), Some(*i)),
-            None => (command::complete(&self.command_line), None),
-        }
+        let (rows, _) = self.command_rows();
+        (rows, self.completion.as_ref().map(|(_, i)| *i))
     }
 
-    /// **猜出來的那幾條，問的是同一個前綴**（2026-10-06 報的）。
+    /// **面板畫的那張單子，⇥ 走的也是它**——一張，不是兩張（2026-10-06）。
     ///
-    /// Warning: **不許拿命令行現在那一行去問**。⇥ 把挑中的那一條寫進命令行裏，於是
-    /// 下一幀那一行已經是 `buffer-next` 了——前綴配中的那幾條照舊（它們問的是
-    /// [`Self::completion`] 存着的前綴），而猜的那幾條整批換了一套，看起來像是
-    /// 「按一下 ⇥ 模糊匹配就消失了」。
+    /// 回來的第二個數是「前面幾條是前綴配中的」，後面那些是猜的。畫的時候照它
+    /// 分顏色；⇥ 一路走到底，猜的那幾條也走得到（作者定：「tab應該可以走到上面。
+    /// helix 的模糊匹配就能走上去」）。
     ///
-    /// helix 同一個辦法：`change_completion_selection`（它的 ⇥）改命令行**而不叫**
-    /// `recalculate_completion`，那張單子只在打字的時候重算一次
-    /// （`helix-term/src/ui/prompt.rs:375`）。
-    pub fn command_guesses(&self) -> Vec<command::Choice> {
+    /// Warning: **問的是前綴，不是命令行現在那一行**。⇥ 把挑中的寫進命令行，而那一行
+    /// 一變，猜出來的就換了一套——「按一下 ⇥ 模糊匹配就消失了」。helix 同一個
+    /// 辦法：它的 ⇥ 改行而不重算那張單子（`ui/prompt.rs:375`）。
+    pub fn command_rows(&self) -> (Vec<command::Choice>, usize) {
         let asked = match &self.completion {
             Some((prefix, _)) => prefix.as_str(),
             None => self.command_line.as_str(),
         };
-        crate::lookfor::guesses(asked)
+        let mut rows = command::complete(asked);
+        let exact = rows.len();
+        // Warning: **有空格就不猜了**（2026-10-06 當場撞的回歸）。空格之後是參數，
+        // 而參數是檔名、主題名、欄號——不是命令名。`:w draft` 按 ⇥ 從前好好地
+        // 留着 `draft`，加上猜的之後它變成了 `:w indent-width`：一個檔名被當成
+        // 了一句「你要的也許是這個」。
+        if asked.trim().contains(' ') {
+            return (rows, exact);
+        }
+        let named: Vec<&str> = rows.iter().map(|c| c.name).collect();
+        rows.extend(
+            crate::lookfor::guesses(asked).into_iter().filter(|c| !named.contains(&c.name)),
+        );
+        (rows, exact)
     }
 
     #[cfg(test)]
