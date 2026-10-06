@@ -22356,3 +22356,34 @@ fn vim_g_join_adds_nothing_at_the_seam() {
     assert_eq!(ed.current_buffer().text(), "甲\n", "沒有下一行");
 }
 
+/// **`A-J` 併行，並且選中補出來的那一格**（2026-10-06，helix 的
+/// `join_selections_space`）。
+#[test]
+fn alt_j_leaves_the_seam_selected() {
+    // 拉丁詞之間補一個空格——選中的就是那一格。
+    let mut ed = typed("alpha\nbeta\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Alt('J'));
+    assert_eq!(ed.current_buffer().text(), "alpha beta\n");
+    let (from, to) = ed.selection();
+    assert_eq!(
+        ed.current_buffer().rope().slice(from..to).to_string(),
+        " ",
+        "選中的正是補出來的那一格"
+    );
+
+    // 漢字之間不補，所以沒有接縫可選，收成一點。
+    let mut ed = typed("甲\n乙\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Alt('J'));
+    assert_eq!(ed.current_buffer().text(), "甲乙\n");
+    let (from, to) = ed.selection();
+    assert!(to - from <= 1, "沒有接縫就不留選區");
+
+    // 裸 `J` 不選接縫——兩個鍵的分別只在這一件事上。
+    let mut ed = typed("alpha\nbeta\n");
+    press(&mut ed, "ggJ");
+    let (from, to) = ed.selection();
+    assert!(to - from <= 1, "J 收成一點");
+}
+
