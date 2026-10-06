@@ -19097,6 +19097,22 @@ join」），跟着改了，並把翻案的理由寫進斷言旁邊。
 | `yumete/src/main.rs` 的 `--help` | 「**no t / T** — that letter is the table mode's」 | `t`／`T` 2026-09-21 起就是 find-till |
 | `editor/keys.rs` 裸 `G` 那一段 | 「which is what `G` means in vi and in Helix both」 | helix 的裸 `G` **什麼都不做**（`goto_line_impl` 開頭就是 `if cx.count.is_some()`）。鍵不改，改的是那句話 |
 
+### 沒做的，以及為什麼
+
+| 條目 | 為什麼擱着 |
+| --- | --- |
+| helix 的 `!`／`\|` | **這張單子上唯一會丟字的**：我們的 `!` 做的是 helix 的 `\|`（用命令輸出換掉選區），而 helix 的 `!` 是**插在前面**。要新加一個命令，而且現狀寫進了 `:pipe` 的文案。**需定** |
+| `Esc` 收不收選區 | helix 的 `Esc` 不收（`enter_normal_mode` 從不動選區），我們收。`Esc` 在這個倉是「退一層」，改它牽動一族。**需定** |
+| `*` 的行為 | 真 helix 的 `*` **光標不動**，只設搜索寄存器；我們跳走並開命中列表（更像 vim 的 `*`，也更好用）。§5.80「不改的兩條」那一段把它寫成「和真 helix 一致」，⚠️ **那句記錄不準**。**需定**是對齊還是留着 |
+| `z` 那一層（`zj zk z C-d z C-u z C-f z C-b z空格 z退格 zm z/ z? zn zN`） | 它們都是**只滾視窗不動光標**，而這個倉是刻意反着的：「A view scrolled on its own would be pulled straight back the moment the cursor had to stay on screen」（`page.rs` 的 `scroll`）。沒有對應物。**需定** |
+| `gt`／`gc`／`gb`（光標到視窗頂／中／底） | 核心**不知道第一可見行**（只有 `page_lines`），`aim_the_page` 是發一個請求給前端。要跨層。**需定** |
+| `C-s`（save_selection） | `C-s` 是終端的 XOFF（`editor.rs` 已記）。要換鍵。**需定** |
+| `空格 s`／`空格 S`（符號挑選器） | 大綱在 `空格 o`。**需定**哪個字母 |
+| `A-u`／`A-U`（時間軸 undo） | 要先有時間軸。**需定** |
+| 語法樹那一族（`A-o A-i A-p A-n`、`]f ]t ]a ]c`、`mi f/t/a/c`） | ⚠️ **不是不適用**：tree-sitter 0.25 ＋ 九種語言已在 `Cargo.toml` 裏。做不做**需定** |
+| `]d`／`[d`（診斷跳轉） | 診斷已經有（`空格 d`／`D`），這兩個補得起。**需定** |
+| vim 的 `R`（覆寫模式）、`U`（撤銷整行）、`` ` ``（跳標記）、`H`／`M`／`L`、`gu`／`gw`／`gn`、`gJ` 的空格、`Y`、`空格` | 每一個都是「這個鍵在這裏已經有主人」。**需定**，清單在 scratchpad 的兩份報告裏 |
+
 **三、選區模式裏搜索是延伸，不是跳走。** helix 的 select 下 `n`／`N` 綁 `extend_search_next`
 ／`_prev`，`/` 的搜索走 `Movement::Extend` 且模式不變。`repeat_search` 從前無條件
 `self.extend = false`，於是 `v` 之後按一下 `/` 就掉回 Normal、剛選的也沒了。錨點現在留着，
@@ -19161,6 +19177,10 @@ n−1 行」不是一個動作，是算子加倍那條規矩）。
 （`spend_the_insert_count`）——重複的是**整段打字**，而那是什麼，到 `Esc` 才知道。
 `o`／`O` 重複的是「新開一行，上面寫這個」，不是一行上寫三遍。整段算**一個命令**，`u` 一下
 全回去。⚠️ **helix 鍵位下不吃這個計數**（它的 `i` 本來就不吃）。
+
+**十四、`A-x` 縮到整行**（helix 的 `shrink_to_line_bounds`，`X` 的反面）。逐條照它：跨不過
+一行的選區一個字都不動，跨得過的兩頭往裏收。⚠️ **我們的 `head` 停在最後那個字上**，helix
+的 `Range` 是半開的，所以末尾那一步要退一個字素（`extend_to_line_bounds` 早就這麼寫）。
 
 **七、區域組（`C-w`）不認 Ctrl 變體。** helix 每一格都綁兩個拼法（`C-w C-w`、`C-w C-s`、
 `C-w C-o`、`C-w C-h`…），因為按着 Ctrl 不放是這一組最自然的按法；`on_region_key` 從前只認

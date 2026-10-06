@@ -1662,6 +1662,9 @@ impl Editor {
             Key::Alt('-') => self.merge_selections(false),
             Key::Alt('_') => self.merge_selections(true),
             Key::Alt(':') => self.face_them_forward(),
+            // **`X` 的反面**（helix 的 `shrink_to_line_bounds`）。`x`／`X` 一直都在，
+            // 缺的是往回收的那一個（2026-10-06）。
+            Key::Alt('x') => self.shrink_to_line_bounds(),
             // **`A-s` 把每一段選區按行切開**（helix 的 `split_selection_on_newline`）。
             // Warning: 它是這一族裏唯一不用打正則的，所以不開提示行。
             Key::Alt('s') => self.split_on_newline(),

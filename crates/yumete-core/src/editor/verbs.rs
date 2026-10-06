@@ -122,6 +122,41 @@ impl Editor {
         self.sel.set_head(tail);
     }
 
+    /// **縮到整行**（`A-x`，helix 的 `shrink_to_line_bounds`）——`X` 的反面。
+    ///
+    /// 逐條照 helix（`helix-term/src/commands.rs` 的 `shrink_to_line_bounds`）：
+    /// 跨不過一行的選區**一個字都不動**（它自己的註釋說，那是為了不必為那一種
+    /// 另寫一套規矩）；跨得過的，開頭不在行首就挪到下一行的行首，末尾不在行尾
+    /// 就退到上一行。方向留着。
+    pub(super) fn shrink_to_line_bounds(&mut self) {
+        let rope = self.current_buffer().rope().clone();
+        self.sel.map(|one| {
+            let (from, to) = one.span();
+            let first = rope.char_to_line(from);
+            let last = rope.char_to_line(to.min(rope.len_chars()));
+            if first == last {
+                return one;
+            }
+            let mut start = rope.line_to_char(first);
+            let mut end = rope.line_to_char((last + 1).min(rope.len_lines()));
+            if start != from {
+                start = rope.line_to_char((first + 1).min(rope.len_lines()));
+            }
+            if end != to {
+                end = rope.line_to_char(last);
+            }
+            let (start, end) = (start.min(end), start.max(end));
+            // Warning: **這個倉的 `head` 停在最後那個字上**，不是它後面一格——helix 的
+            // `Range` 是半開的。`extend_to_line_bounds` 也在這一步退一個字素。
+            let end = motion::prev_grapheme(&rope, end).max(start);
+            match one.anchor <= one.head {
+                true => crate::selection::Range { anchor: start, head: end, ..one },
+                false => crate::selection::Range { anchor: end, head: start, ..one },
+            }
+        });
+        self.clamp_cursor();
+    }
+
     /// Join the line below onto this one (Helix `J`).
     ///
     /// Helix always inserts a space; yumete does not put one between two
