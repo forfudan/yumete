@@ -36,6 +36,12 @@ pub const WEIGHT_NAME: f32 = 3.0;
 pub const WEIGHT_FIND: f32 = 2.0;
 pub const WEIGHT_HELP: f32 = 1.0;
 
+/// 一個詞只配到它的某幾個字，算幾成。
+///
+/// 三成是量出來的：配得上整個詞的那幾行要穩穩排在前面（`排序` 的頭一名 12.4，
+/// 而只寫着「序」的那些落在 2 上下），可是它們要在單子上。
+pub const HALF_A_WORD: f32 = 0.3;
+
 /// Everything one row offers to a search.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Row<'a> {
@@ -270,8 +276,30 @@ fn wide_score(word: &str, text: &str, idf: &Idf) -> Option<f32> {
     for token in &wanted {
         let weight = idf.at(token);
         asked += weight;
-        if held.iter().any(|h| h == token) {
+        // Warning: **一個字的詞要和正文的「字」比，不是和它的「二字組」比**
+        // （2026-10-06 量出來的）。正文切成二字組，而查詢只有一個字的時候
+        // [`tokens`] 交出來的是那一個字——兩邊永遠不相等，於是「行」整張表
+        // **一條都配不到**，而表裏有幾十行寫着「行」。
+        let there = match token.chars().count() {
+            1 => text.contains(token.as_str()),
+            _ => held.iter().any(|h| h == token),
+        };
+        if there {
             shared += weight;
+        }
+    }
+    // **配不上整個詞的，按字再數一遍，算半分**（2026-10-06 定：「`::` will always
+    // print many possible matches for users to pick up」）。「排序」在表裏只有一行
+    // 原樣寫着，而寫着「排」或「序」的有十幾行——讀者要的是那一張單子，排在
+    // 真正配得上的那幾行後面。
+    for token in &wanted {
+        if token.chars().count() < 2 || held.iter().any(|h| h == token) {
+            continue;
+        }
+        let each: Vec<char> = token.chars().collect();
+        let found = each.iter().filter(|c| text.contains(**c)).count();
+        if found > 0 {
+            shared += idf.at(token) * HALF_A_WORD * found as f32 / each.len() as f32;
         }
     }
     if shared <= 0.0 {
@@ -440,6 +468,12 @@ pub const SHOWN: usize = 60;
 /// invalidate. The IDF over that corpus **is** cached, because it does not
 /// depend on the query.
 pub fn look(query: &str) -> Vec<Hit> {
+    look_above(query, FAR_ENOUGH)
+}
+
+/// The same, with the noise floor named — the measurement below passes `0.0`
+/// to tell 「the scorer found few」 apart from 「the floor cut many」.
+pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
     let choices = crate::command::all_choices();
     let table = crate::messages::table();
     // The description in all three languages, the one in force first: searched
@@ -511,18 +545,21 @@ pub fn look(query: &str) -> Vec<Hit> {
     // 門檻是**相對最高分**的，不是一個絕對數：打得準的時候最高分很高，尾巴上那些
     // 只配到一個常用字的行就是噪音；打得含糊的時候滿屏都是低分，那時候一個絕對
     // 門檻會把整張單子清空——而那正是讀者最需要看見點什麼的時候。
-    if let Some(best) = hits.first().map(|h| h.score) {
-        hits.retain(|h| h.score >= best * FAR_ENOUGH);
-    }
+    hits.retain(|h| h.score >= floor);
     hits.truncate(SHOWN);
     hits
 }
 
-/// 最高分的幾成之內纔列出來。
+/// 低於這個分的當噪音，不列出來。
 ///
-/// 四分之一是量出來的：`竖排` 的最高分 8.6，第二名 5.2（`:layout horizontal`，同一族，
-/// 該列），而第十名 1.9 是一個只配到「模式」兩個字的行，不該列。
-pub const FAR_ENOUGH: f32 = 0.25;
+/// Warning: **是一個絕對分，不是「最高分的幾成」**（2026-10-06 量出來的）。按比例砍
+/// 在有一行**原樣配中**的時候會把單子清空：`排序` 的頭一名 12.4（`:table-sort` 的
+/// `find` 裏就寫着這兩個字），四分之一是 3.1，於是二十三條只剩三條——而那正是
+/// 「多給幾條讓人挑」要的反面。
+///
+/// 1.0 是量出來的：`合併` 的第三名 1.1（只配到一個「併」字）還值得列，再往下是
+/// 配到一個常用字的散兵。
+pub const FAR_ENOUGH: f32 = 1.0;
 
 /// The corpus weights, counted once.
 ///
@@ -622,5 +659,19 @@ mod tests {
         let idf = Idf::of(corpus());
         assert!(score("", corpus()[0], &idf).is_none());
         assert!(score("  ", corpus()[0], &idf).is_none());
+    }
+}
+
+#[cfg(test)]
+mod how_many_does_it_find {
+    #[test]
+    #[ignore = "量數用的，不是斷言"]
+    fn the_spread_of_scores() {
+        for q in ["行", "合併", "竖排", "next line", "排序", "搜索", "複製", "undo"] {
+            let hits = super::look_above(q, 0.0);
+            let scores: Vec<String> =
+                hits.iter().take(12).map(|h| format!("{:.1}", h.score)).collect();
+            println!("{q:10} {:3} hits   {}", hits.len(), scores.join(" "));
+        }
     }
 }

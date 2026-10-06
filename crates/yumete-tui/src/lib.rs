@@ -5006,6 +5006,14 @@ struct List<'a> {
     footer: &'a str,
     /// Whether it may spread across the window.
     columns: bool,
+    /// **深到和命令面板一樣**（2026-10-06）：窗口的三分之二，不是挑選器那個寫死
+    /// 的八行。
+    ///
+    /// `::` 那一張單子兩樣都不是：它不分欄（每一行是一句話，欄會把句子切碎），
+    /// 可是它也不是挑選器那種「幾百條路徑，怎麼擺都擺不下」——它是一張**排過序
+    /// 的短名單**，而讀者要的正是多看幾條。原話：「6 is quite few … we also have
+    /// a protocal about the height of the command panel? That can be used here」。
+    deep_as_the_page: bool,
     /// The name in the top-left of the ring, the way a which-key panel is
     /// named. 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示
     /// 面板。」 — a floating rectangle with no edge and no name is a thing that
@@ -5078,6 +5086,7 @@ fn draw_list(
         highlight,
         footer,
         columns,
+        deep_as_the_page,
         title,
         cap,
         whole,
@@ -5168,8 +5177,17 @@ fn draw_list(
         (lay(deep, 0), deep)
     } else {
         // A picker is paths — hundreds of them, and no arrangement shows them
-        // all — so it stays the glanceable eight and scrolls.
-        let deep = items.len().clamp(1, MENU_ROWS);
+        // all — so it stays the glanceable eight and scrolls. A ranked list
+        // asks for the page's own rule instead (2026-10-06).
+        let tall = match deep_as_the_page {
+            true => (area.height as usize * 2 / 3).saturating_sub(3).max(1),
+            false => MENU_ROWS,
+        };
+        let deep = items.len().clamp(1, tall);
+        // 同上面那一支：框綫兩道加頁腳一行是真佔地方的，高一行就整扇不畫。
+        let deep = deep
+            .min((area.height.min(bottom.saturating_sub(area.y)) as usize).saturating_sub(3))
+            .max(1);
         (lay(deep, 0).into_iter().take(1).collect(), deep)
     };
     let across = widths.len().max(1);
@@ -6344,6 +6362,7 @@ fn draw_command_menu(
         area,
         status.y,
         List {
+            deep_as_the_page: false,
             items: &items,
             focus,
             highlight,
@@ -6402,6 +6421,7 @@ fn draw_reference_menu(
         area,
         status.y,
         List {
+            deep_as_the_page: false,
             items: &items,
             focus,
             highlight,
@@ -6460,6 +6480,7 @@ fn draw_lookfor_menu(
             area,
             status.y,
             List {
+                deep_as_the_page: true,
                 items: &[],
                 focus: 0,
                 highlight: None,
@@ -6476,21 +6497,21 @@ fn draw_lookfor_menu(
     // simply stops at the ring reads as the panel being too narrow, and 「…」
     // says instead that the sentence goes on — which is what the reader has to
     // know to decide whether this is the command they meant.
-    let room = (area.width as usize)
-        .saturating_sub(4)
-        .min(LOOKFOR_WIDTH as usize);
+    // **和窗口一樣寬**（2026-10-06 定：「this hint panel can be as wide as the screen
+    // so that it can show more description text」）。[`LOOKFOR_WIDTH`] 那個 78 從前
+    // 在這裏當上限，於是說明到一半就是 `…`——而說明正是這張單子存在的理由。
+    let room = (area.width as usize).saturating_sub(4);
+    // **說明寫在淡墨裏**（2026-10-06 定：「use a different font color for the
+    // description (lighter), so I can more easily differentiate the
+    // command/shortcut and the description」）。`Row` 的 `note` 本來就是這個——
+    // 命令面板那一邊早就這麼畫，這一邊從前把兩截拼成一個字串，於是同一種墨。
     let items: Vec<Row> = found
         .iter()
         .map(|hit| {
-            Row::plain(elide(
-                &format!(
-                    "{}{}   {}",
-                    hit.leading(),
-                    hit.written(),
-                    yumete_core::messages::say(hit.help(), &[])
-                ),
-                room,
-            ))
+            let name = format!("{}{}", hit.leading(), hit.written());
+            let said = yumete_core::messages::say(hit.help(), &[]);
+            let left = room.saturating_sub(yumete_cjk::str_width(&name) + NOTE_GAP);
+            Row { text: name, note: Some(elide(&said, left)) }
         })
         .collect();
     // What ⇥ will do with the highlighted row, spelled out. The one thing a
@@ -6512,6 +6533,7 @@ fn draw_lookfor_menu(
         area,
         status.y,
         List {
+            deep_as_the_page: true,
             items: &items,
             focus,
             // Always inked, unlike the command menu: there is no drawn on the
