@@ -22441,14 +22441,16 @@ fn lookfor_finds_shortcuts_as_well_as_commands() {
     let found = lookfor::look("竖排");
     assert!(found.iter().any(|h| matches!(h.what, What::Command(_))), "命令還在");
 
-    // **很不像的那些不列出來**：門檻是相對最高分的。
+    // **很不像的那些不列出來**，而門檻是一個絕對分：按比例砍會在有一行原樣配中
+    // 的時候把整張單子清空（`排序` 二十三條只剩三條），而那是「多給幾條讓人挑」
+    // 的反面。
     let found = lookfor::look("竖排");
-    let best = found.first().map(|h| h.score).unwrap_or(0.0);
-    assert!(
-        found.iter().all(|h| h.score >= best * lookfor::FAR_ENOUGH),
-        "尾巴上的噪音砍掉了"
-    );
-    assert!(!found.is_empty(), "門檻不許把整張單子清空");
+    assert!(found.iter().all(|h| h.score >= lookfor::FAR_ENOUGH), "尾巴上的噪音砍掉了");
+    assert!(found.len() > 5, "配得上的那些都列出來了：{}", found.len());
+
+    // **一個字的查詢也配得到**：正文切成二字組，而查詢只有一個字的時候兩邊
+    // 永遠不相等——「行」從前整張表一條都配不到。
+    assert!(lookfor::look("行").len() > 10, "一個字也找得出一張單子");
 
     // 挑中一個鍵，`⇥` 按下去就是那個鍵——不是把它的名字寫進 `:` 裏。
     let mut ed = typed("上山\n下海\n");
