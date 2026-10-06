@@ -204,7 +204,12 @@ impl Editor {
             Some((prefix, _)) => prefix.clone(),
             None => self.command_line.clone(),
         };
-        let matches = command::complete(&prefix);
+        // ⇥ 走的是面板畫的那一張，猜的那幾條也在上面。
+        //
+        // Warning: **不許先把 `completion` 取走**（寫的時候當場撞的）：取走之後
+        // [`Self::command_rows`] 就退回去問命令行現在那一行，而那正是上一個
+        // 修好的毛病。它自己認得存着的前綴。
+        let (matches, _) = self.command_rows();
         if matches.is_empty() {
             return;
         }

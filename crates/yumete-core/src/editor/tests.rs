@@ -22476,3 +22476,56 @@ fn lookfor_finds_shortcuts_as_well_as_commands() {
     }
 }
 
+/// **`:` 那一張單子按一次 ⇥ 不許換一套**（2026-10-06 報的）。
+///
+/// 原話：「按tab，它移到第二個，然后你發現了嗎，模糊匹配的命令不見了！也就是説
+/// 它的結果列表是不穩定的」。根子是猜出來的那幾條問的是**命令行現在那一行**，
+/// 而 ⇥ 剛把挑中的那一條寫了進去。
+///
+/// helix 同一個辦法：它的 ⇥（`change_completion_selection`）改命令行而**不叫**
+/// `recalculate_completion`。
+#[test]
+fn tab_walks_the_command_list_without_reshuffling_it() {
+    let mut ed = typed("那年冬天\n");
+    ed.on_key(Key::Char(':'));
+    for c in "buffer".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let (rows, exact) = ed.command_rows();
+    let before: Vec<&str> = rows.iter().map(|c| c.name).collect();
+    assert!(exact >= 4, "前綴配中的有幾條：{exact}");
+    assert!(rows.len() > exact, "後面還跟着猜出來的：{before:?}");
+
+    // 一路 ⇥ 到底，每一步那張單子一字不變。
+    for step in 1..=rows.len() {
+        ed.on_key(Key::Tab);
+        let (now, _) = ed.command_rows();
+        let names: Vec<&str> = now.iter().map(|c| c.name).collect();
+        assert_eq!(names, before, "第 {step} 下 ⇥ 之後單子換了");
+    }
+
+    // **猜出來的那幾條也走得到**（作者定：「tab應該可以走到上面」）。
+    let mut ed = typed("那年冬天\n");
+    ed.on_key(Key::Char(':'));
+    for c in "buffer".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let (rows, exact) = ed.command_rows();
+    let last = rows[rows.len() - 1].written();
+    for _ in 0..rows.len() {
+        ed.on_key(Key::Tab);
+    }
+    assert_eq!(ed.prompt(), Some((":", last.as_str())), "最後一下走到猜的那一條");
+    assert!(rows.len() > exact, "確實有猜出來的可走");
+
+    // **空格之後不猜**：參數是檔名，不是命令名。`:w draft` 按 ⇥ 要留着 draft。
+    let mut ed = typed("那年冬天\n");
+    ed.on_key(Key::Char(':'));
+    for c in "w draft".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let (rows, exact) = ed.command_rows();
+    assert_eq!(rows.len(), exact, "參數位置上一條都不猜：{:?}",
+               rows.iter().map(|c| c.name).collect::<Vec<_>>());
+}
+

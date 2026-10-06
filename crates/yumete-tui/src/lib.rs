@@ -6440,30 +6440,23 @@ fn draw_command_menu(
     //
     // Warning: **門檻比 `::` 高**（`lookfor::SURE_ENOUGH`）：這裏是正在打名字的人，
     // 猜錯五條就蓋住了他真正在打的那幾條。
-    let named: Vec<&str> = matches.iter().map(|c| c.name).collect();
-    let guessed: Vec<yumete_core::command::Choice> = editor
-        .command_guesses()
-        .into_iter()
-        .filter(|c| !named.contains(&c.name))
-        .collect();
+    // 前面幾條是前綴配中的，後面那些是猜的——同一張單子，⇥ 一路走得到。
+    let exact = editor.command_rows().1;
     let items: Vec<Row> = matches
         .iter()
         // **The whole row is composed in one place** — `Choice::shown` — so
         // that what a menu draws and what the rules say it draws cannot come
         // apart: the name, the spellings worth printing beside it, and how
         // many the fold is standing in front of.
-        .map(|e| Row {
-            dim: false,
+        .enumerate()
+        .map(|(i, e)| Row {
+            // 猜出來的那幾條淡一點：它們不是打出來的那幾個字母開頭的。
+            dim: i >= exact,
             text: format!("{}{}", e.leading, e.shown()),
             // 「冰雪清韻」 beside `custom.6947b838`, for the rows whose name is
             // an identifier and not a word (#291).
             note: e.note.map(str::to_string),
         })
-        .chain(guessed.iter().map(|e| Row {
-            dim: true,
-            text: format!("{}{}", e.leading, e.shown()),
-            note: e.note.map(str::to_string),
-        }))
         .collect();
     // Only the highlighted command's help, on one line. Every command's help at
     // once is what covered the page.
