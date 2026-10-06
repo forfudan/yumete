@@ -5607,13 +5607,13 @@ Seven codes, the first five of them opencc's own configuration names:
 
 | | |
 | --- | --- |
-| `s` | 簡體 |
-| `t` | OpenCC's plain 繁體 — 爲 説 裏 着 |
-| `tw` | <!-- verbatim -->臺灣正體——為 裡 著<!-- verbatim --> |
-| `hk` | 香港繁體 |
-| `jp` | 日本新字体 |
-| `c` | **大陸通規繁體** — 爲 裏 着 説 内 吴 |
-| `g` | **古籍通規繁體** |
+| `s` | 簡體 — 说 为 内 吴 里 发 台 |
+| `t` | opencc's plain 繁體 — 說 爲 內 吳 裏 髮 臺 |
+| `tw` | 臺灣正體 — 說 為 內 吳 裡 髮 臺 |
+| `hk` | 香港繁體 — 説 為 內 吳 裏 髮 台 |
+| `jp` | 日本新字体 — 説 為 内 呉 裏 髪 台 |
+| `c` | **大陸通規繁體** — 説 爲 内 吴 裏 髮 臺 |
+| `g` | **古籍通規繁體** — 説 爲 内 吳 裏 髮 臺 |
 
 `:convert` with no arguments lists these seven and where each one can go. opencc has no
 route between every two of them — `jp` only comes back to 繁體 — and what is listed is
