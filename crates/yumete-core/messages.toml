@@ -7132,9 +7132,9 @@ en = "wrote the note for {0} (C-o goes back)"
 [[message]]
 # 按了 z 之後接的不是 z/t/b
 key = "page.aim-wants-ztb"
-zht = "z 後面要 z 中間、t 頂上、b 底下"
-zhs = "z 后面要 z 中间、t 顶上、b 底下"
-en = "z wants z for middle, t for top, b for bottom"
+zht = "z 後面：z 中間、t 頂上、b 底下；C-d C-u 半頁、C-f C-b 整頁、/ ? n N 搜索"
+zhs = "z 后面：z 中间、t 顶上、b 底下；C-d C-u 半页、C-f C-b 整页、/ ? n N 搜索"
+en = "after z: z middle, t top, b bottom; C-d C-u half a page, C-f C-b a page, / ? n N search"
 
 [[message]]
 # 按 zb：挪到屏幕底下

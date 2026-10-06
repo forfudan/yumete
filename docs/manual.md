@@ -394,6 +394,7 @@ the rest is not done, and the status line says so.
 | `ga` | **switch back to the one just before** — back and forth, not a lap round the ring |
 | `g.` | **back to the last place this manuscript was changed**. `C-o` gets you back out |
 | `zt` `zz` `zb` | **move the cursor's line to the top / the middle / the bottom of the screen** (`zc` is the same as `zz`). Proofreading, `zz` is the one pressed most |
+| the rest of the `z` layer | `z C-d` `z空格` half a page, `z C-u` `z退格` half a page back, `z C-f` `z C-b` a whole page, `z/` `z?` `zn` `zN` search — each the same thing as the bare key, filled in after Helix's view mode |
 | `gf` | open the `文件名:行號` written on this line (the listings from `:check-usage` and its kin jump with this) |
 | `gx` | follow the link under the cursor (see "Following a link"); Ctrl-click does the same |
 | `空格` | open the menu (see below)|

@@ -1225,12 +1225,39 @@ impl Editor {
                 return;
             }
             // **`z` 那一層**（2026-09-28，helix 的 view mode 的那三個）。
+            // **`z` 那一層，照 helix 的 view mode 補齊**（2026-10-06，
+            // `keymap/default.rs` 的 `"z" => { "View" ... }`）。
+            //
+            // helix 那一層裏大半條目做的就是這個編輯器已經有的事——`z C-d` 是
+            // `page_cursor_half_down`，和裸 `C-d` 同一支；`z/` 就是 `/`。所以它們
+            // 在這裏是**同一支的第二個拼法**，不是新功能：一個 helix 的手按下去
+            // 得到它預期的結果，而不是「`z` 不認得這個鍵」。
+            //
+            // Warning: **`zj`／`zk`（只滾視窗不動光標）還沒有**，見 §5.98：視窗的位置
+            // 在渲染層，核心只讀得到、改不動。
             Pending::Aim => {
                 self.pending = Pending::None;
+                let n = self.operator_count.take().unwrap_or(1).max(1);
                 match key {
                     Key::Char('z') | Key::Char('c') => self.aim_the_page(crate::editor::Aim::Middle),
                     Key::Char('t') => self.aim_the_page(crate::editor::Aim::Top),
                     Key::Char('b') => self.aim_the_page(crate::editor::Aim::Bottom),
+                    // 半頁：`z C-d`／`z空格` 往下，`z C-u`／`z退格` 往上。
+                    Key::Ctrl('d') | Key::Char(' ') => self.move_page(n, false, 0.5),
+                    Key::Ctrl('u') | Key::Backspace => self.move_page(n, true, 0.5),
+                    // 整頁。
+                    Key::Ctrl('f') | Key::PageDown => self.move_page(n, false, 1.0),
+                    Key::Ctrl('b') | Key::PageUp => self.move_page(n, true, 1.0),
+                    // 搜索那四個，和外面同一支。
+                    Key::Char(one @ ('/' | '?')) => {
+                        self.mode = Mode::Search;
+                        self.search_forward = one == '/';
+                        self.command_line.clear();
+                        self.command_caret = 0;
+                        self.hits = None;
+                    }
+                    Key::Char('n') => self.repeat_search(self.search_forward),
+                    Key::Char('N') => self.repeat_search(!self.search_forward),
                     _ => self.status = say!("page.aim-wants-ztb"),
                 }
                 return;
