@@ -2776,14 +2776,20 @@ impl Editor {
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
     pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] =
-        &[("c", "hint.hop.conflict"), ("g", "hint.hop.change"), ("f", "hint.hop.function")];
+        &[("g", "hint.hop.change")];
 
-    /// Warning: **`c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」**（2026-10-06）。
-    /// 一個鍵兩個意思本來是這個倉最不肯要的事，而這兩種檔從不是同一個檔：
-    /// `]c` 在 `.rs` 上找衝突標記永遠一無所獲，在 `.md` 上找類也是。提示行跟着
-    /// 檔走，所以屏幕上那一格從不含糊。
+    /// Warning: **這兩張是**換**的，不是疊的**（2026-10-06 出圖看出來的）。先寫成疊
+    /// 加，於是代碼檔的面板上 `c` 出現兩次（「合併衝突」和「類」），稿子的面板上
+    /// 列着一個按下去永遠找不到東西的 `f`。提示行要跟着**這一個檔**走。
+    ///
+    /// `c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」。一個鍵兩個意思本來是這個
+    /// 倉最不肯要的事，而這兩種檔從不是同一個檔：`]c` 在 `.rs` 上找衝突標記永遠
+    /// 一無所獲，在 `.md` 上找類也是。
     pub(super) const HOP_KEYS_CODE: &'static [(&'static str, &'static str)] =
-        &[("c", "hint.hop.class")];
+        &[("f", "hint.hop.function"), ("c", "hint.hop.class")];
+
+    pub(super) const HOP_KEYS_PROSE: &'static [(&'static str, &'static str)] =
+        &[("c", "hint.hop.conflict")];
 
     /// The two that read differently depending on which way `[` / `]` points.
     ///
@@ -2985,6 +2991,7 @@ impl Editor {
             ']' | '[' => [
                 spell(Self::HOP_KEYS),
                 spell(Self::HOP_KEYS_CODE),
+                spell(Self::HOP_KEYS_PROSE),
                 spell(Self::HOP_KEYS_FORWARD),
                 spell(Self::HOP_KEYS_BACK),
             ]
