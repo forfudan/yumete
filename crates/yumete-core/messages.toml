@@ -4822,8 +4822,8 @@ en = "next / previous line of the file — leftward is onward"
 [[message]]
 # vim 鍵位下 g 選單裏的 u U ~ ——大小寫算子，等一個動作
 key = "hint.goto.case-operators"
-zht = "轉小寫/大寫/互換，等一個動作"
-zhs = "转小写/大写/互换，等一个动作"
+zht = "轉小寫/轉大寫/大小寫互換，等待動作"
+zhs = "转小写/转大写/大小写互换，等待动作"
 en = "to lower, to upper, swap them — each waits for a motion"
 
 [[message]]
@@ -4869,17 +4869,10 @@ zhs = "去/看它指的地方"
 en = "go to / show what it points at"
 
 [[message]]
-# vim 鍵位下 g 選單裏的 ` ——字形組在那一端的門
-key = "hint.goto.glyph-group"
-zht = "字形組（vim 鍵位下 ` 歸標記）"
-zhs = "字形组（vim 键位下 ` 归标记）"
-en = "the glyph group (under vim, ` belongs to marks)"
-
-[[message]]
 # vim 鍵位下 g 選單裏的 J ——併行，一個空格都不補
 key = "hint.goto.join-without-a-space"
-zht = "併下一行，一個空格都不補"
-zhs = "并下一行，一个空格都不补"
+zht = "合併下一行，不補空格"
+zhs = "合并下一行，不补空格"
 en = "join the next line, adding no space at all"
 
 [[message]]
@@ -4913,8 +4906,8 @@ en = "line start / end"
 [[message]]
 # vim 鍵位下 g 選單裏的 n N ——下一處/上一處匹配（helix 那一端是換稿子）
 key = "hint.goto.next-match"
-zht = "下一處/上一處匹配"
-zhs = "下一处/上一处匹配"
+zht = "前往下一處/上一處匹配"
+zhs = "前往下一处/上一处匹配"
 en = "the next or previous match"
 
 [[message]]
@@ -4969,8 +4962,8 @@ en = "select what was selected last"
 [[message]]
 # g 選單裏的 t c b ——光標跳到屏幕的頂/中/底（2026-10-06 定的文案）
 key = "hint.goto.screen-top-middle-bottom"
-zht = "光標跳到屏幕的頂/中/底"
-zhs = "光标跳到屏幕的顶/中/底"
+zht = "光標移至屏幕頂部/中部/底部"
+zhs = "光标移至屏幕顶部/中部/底部"
 en = "the cursor to the top, middle or bottom of the screen"
 
 [[message]]
@@ -6258,8 +6251,8 @@ en = "nowhere on this screen to jump to"
 [[message]]
 # C-s：把這個選區記進跳轉表，C-o 回得來
 key = "jump.selection-saved"
-zht = "記下了，C-o 回得來"
-zhs = "记下了，C-o 回得来"
+zht = "已記下此處，C-o 可返回"
+zhs = "已記下此處，C-o 可返回"
 en = "saved; C-o comes back"
 
 [[message]]
@@ -6275,6 +6268,13 @@ key = "keys.actions-title"
 zht = "能綁定的動作"
 zhs = "能绑定的动作"
 en = "actions"
+
+[[message]]
+# 按出來的那一串在這一層裏沒有綁任何東西（2026-10-06 定的說法，所有的層共用）
+key = "keys.no-such-combination"
+zht = "{0} 爲無效按鍵組合，請重試"
+zhs = "{0} 为无效按键组合，请重试"
+en = "{0} is not a key combination here — try again"
 
 [[message]]
 # vim 預設下，`d` `c` `y` 等的是一個動作，而按下的那個鍵不是
@@ -7135,13 +7135,6 @@ en = "wrote the note for {0} (C-o goes back)"
 
 
 # ── pane ──────────────────────────────────────────────────────────────
-
-[[message]]
-# 按了 z 之後接的不是 z/t/b
-key = "page.aim-wants-ztb"
-zht = "z 後面：z 中間、t 頂上、b 底下；j k 滾一行、C-d C-u 半頁、C-f C-b 整頁、/ ? n N 搜索（Z 開着不收）"
-zhs = "z 后面：z 中间、t 顶上、b 底下；j k 滚一行、C-d C-u 半页、C-f C-b 整页、/ ? n N 搜索（Z 开着不收）"
-en = "after z: z middle, t top, b bottom; j k one line, C-d C-u half a page, C-f C-b a page, / ? n N search (Z stays open)"
 
 [[message]]
 # 按 zb：挪到屏幕底下

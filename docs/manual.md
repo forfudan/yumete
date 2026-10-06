@@ -398,6 +398,7 @@ the rest is not done, and the status line says so.
 | `zj` `zk` | **scroll the window only** — the cursor's text does not move, it simply sits a row higher or lower. Squeezed against an edge it is carried along, as in Helix |
 | the rest of the `z` layer | `z C-d` `z空格` half a page, `z C-u` `z退格` half a page back, `z C-f` `z C-b` a whole page, `z/` `z?` `zn` `zN` search — each the same thing as the bare key, filled in after Helix's view mode |
 | `Z` | the same layer, **and it stays open**: `Zjjjj` scrolls all the way, `Esc` closes it (Helix's sticky view mode) |
+| a wrong key | press something unbound in any of these groups and the command line says `ze is not a key combination here — try again`, naming the whole run your fingers made rather than the last letter alone |
 | `gf` | open the `文件名:行號` written on this line (the listings from `:check-usage` and its kin jump with this) |
 | `gx` | follow the link under the cursor (see "Following a link"); Ctrl-click does the same |
 | `空格` | open the menu (see below)|

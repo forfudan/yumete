@@ -265,6 +265,20 @@ impl Editor {
     /// caret, where the eyes already are.
     ///
     /// Empty when nothing is pending, which is most of the time.
+    /// **「`ze` 爲無效按鍵組合，請重試」**——一句話，所有的層共用（2026-10-06 定）。
+    ///
+    /// 原話：「各組如果按了一個無效的按鍵，可以直接説……`ze`」。從前每一層自己寫
+    /// 一句（`z 後面要 z 中間、t 頂上、b 底下`），於是每加一個鍵就要改一句中文，而
+    /// 那幾句話一加長就沒人讀得完。[`Self::typed_so_far`] 本來就答得出按過的那幾個
+    /// 鍵，接上這一個，就是手指真按出來的那一串。
+    /// Warning: **按過的那一串要在層關掉之前取**。每一層進門第一句就是
+    /// `self.pending = Pending::None`，那之後 [`Self::typed_so_far`] 答的是空的
+    /// ——於是報出來的會是光禿禿一個 `e`，而那正是讀者最看不懂的那一種。
+    pub(super) fn no_such_combination(&mut self, prefix: &str, key: crate::input::Key) {
+        let typed = format!("{prefix}{}", spell_one(key));
+        self.status = say!("keys.no-such-combination", typed);
+    }
+
     pub fn typed_so_far(&self) -> String {
         // **`go`/`gu` 打到一半，HUD 寫的是 `goa`、`gudon`**（2026-10-04 定）。
         //
@@ -370,3 +384,20 @@ impl Editor {
         out
     }
 }
+
+/// **一個鍵在屏幕上怎麼寫**——`Esc`、`C-d`、`␣`，其餘就是它自己。
+fn spell_one(key: crate::input::Key) -> String {
+    use crate::input::Key;
+    match key {
+        Key::Char(' ') => "␣".into(),
+        Key::Char(c) => c.to_string(),
+        Key::Esc => "Esc".into(),
+        Key::Enter => "Enter".into(),
+        Key::Tab => "Tab".into(),
+        Key::Backspace => "退格".into(),
+        Key::Ctrl(c) => format!("C-{c}"),
+        Key::Alt(c) => format!("A-{c}"),
+        other => format!("{other:?}"),
+    }
+}
+
