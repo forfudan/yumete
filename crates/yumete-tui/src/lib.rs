@@ -4810,6 +4810,7 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
         return;
     };
     crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        foot: None,
         rounded: config.panel.rounded,
         border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
         ground: Style::default().bg(crate::chrome::panel_ground(ink)),
@@ -5006,6 +5007,18 @@ struct List<'a> {
     footer: &'a str,
     /// Whether it may spread across the window.
     columns: bool,
+    /// **說明寫在單子上面，橫線隔開**（2026-10-06 定，照 helix 的命令面板）。
+    ///
+    /// 一段一行，太長的自己折。空的就是舊形狀——沒有說明塊，也沒有那道橫線。
+    ///
+    /// 原話：「The description is above the horizontal line an can be multiple
+    /// lines. They can go shorter or taller to fit the content.」
+    about: &'a [String],
+    /// **撑滿終端的寬度**（2026-10-06 定），右邊空着也認：那片空白是留給說明的。
+    wide: bool,
+    /// **下邊框壓在狀態欄那一行上**（2026-10-06 定，同 helix）：命令行和它之間
+    /// 不再隔着一行別的東西。
+    over_status: bool,
     /// **深到和命令面板一樣**（2026-10-06）：窗口的三分之二，不是挑選器那個寫死
     /// 的八行。
     ///
@@ -5045,11 +5058,16 @@ struct List<'a> {
 struct Row {
     text: String,
     note: Option<String>,
+    /// **淡一點**：這一行是猜的，不是打出來的那幾個字母開頭的（2026-10-06）。
+    ///
+    /// `:` 那一行上 ⇥ 走的是前綴配中的那些；模糊猜出來的只是說「你要的也許是
+    /// 這個」，走不到。顏色說的就是這件事。
+    dim: bool,
 }
 
 impl Row {
     fn plain(text: String) -> Self {
-        Row { text, note: None }
+        Row { text, note: None, dim: false }
     }
 
     /// How wide the row wants to be, note and all.
@@ -5072,6 +5090,49 @@ const NOTE_GAP: usize = 2;
 /// and that was the whole of the HUD's collision avoidance. `:view-hud full` covers
 /// writing on purpose, so 「有字」 and 「有面板」 stop reading alike and every
 /// panel has to say where it put itself.
+/// **一段話折成幾行，按顯示寬度**（2026-10-06，說明塊用）。
+///
+/// Warning: **折的是格子，不是字節**：一個漢字兩格。拉丁詞之間有空格的在空格上折，
+/// 中文沒有空格——所以折不動的時候就在字與字之間斷，那正是中文本來的斷法。
+fn fold_to_width(text: &str, room: usize) -> Vec<String> {
+    if room == 0 {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut wide = 0usize;
+    // 記住這一行最後一個空格在哪，拉丁詞纔不會被劈開。
+    let mut space: Option<(usize, usize)> = None;
+    for c in text.chars() {
+        let w = yumete_cjk::str_width(&c.to_string());
+        if wide + w > room && !line.is_empty() {
+            match space {
+                // 在空格上斷，空格自己丟掉。
+                Some((at, _)) if at > 0 => {
+                    let rest = line[at..].trim_start().to_string();
+                    out.push(line[..at].trim_end().to_string());
+                    wide = yumete_cjk::str_width(&rest);
+                    line = rest;
+                }
+                _ => {
+                    out.push(std::mem::take(&mut line));
+                    wide = 0;
+                }
+            }
+            space = None;
+        }
+        if c == ' ' {
+            space = Some((line.len(), wide));
+        }
+        line.push(c);
+        wide += w;
+    }
+    if !line.is_empty() {
+        out.push(line);
+    }
+    out
+}
+
 fn draw_list(
     frame: &mut Frame,
     ink: crate::theme::Palette,
@@ -5086,6 +5147,9 @@ fn draw_list(
         highlight,
         footer,
         columns,
+        about,
+        wide,
+        over_status,
         deep_as_the_page,
         title,
         cap,
@@ -5215,12 +5279,49 @@ fn draw_list(
         .sum::<usize>()
         .max(yumete_cjk::str_width(footer) + 1)
         .max(yumete_cjk::str_width(title) + 2);
-    let width = (inner + 2).min(area.width as usize) as u16;
-    let menu = Rect::new(area.x, bottom - height, width, height);
+    // **撑滿終端**（2026-10-06）：右邊那片空白不是浪費，是說明塊的地方。
+    let width = match wide {
+        true => area.width,
+        false => (inner + 2).min(area.width as usize) as u16,
+    };
+    // 說明折到框裏那麼寬，一段一段地折。
+    let said: Vec<String> = about
+        .iter()
+        .flat_map(|p| fold_to_width(p, width.saturating_sub(3) as usize))
+        .collect();
+    // 說明塊 ＋ 一道橫線，兩樣一起加在高度上（定下來的是「panel grows」）。
+    //
+    // Warning: **腳注那一行要讓出來**：舊形狀的高度是 `deep + 3`，那個 3 是上邊框、
+    // 腳注、下邊框；計數搬到下邊框上之後那一行空着，於是單子底下多一條空白。
+    let block = match said.is_empty() {
+        true => 0usize,
+        false => said.len() + 1,
+    };
+    let height = match said.is_empty() {
+        true => height,
+        false => height + block as u16 - 1,
+    };
+    if height > area.height {
+        return None;
+    }
+    // **下邊框壓在狀態欄上**（2026-10-06），所以最後一行是 `bottom` 本身。
+    let top = match over_status {
+        true => (bottom + 1).saturating_sub(height),
+        false => bottom.saturating_sub(height),
+    };
+    let menu = Rect::new(area.x, top, width, height);
     // The same ring, at the same rung, with its name in the same corner as the
     // which-key panel's: two panels that open in the same place and do the
     // same kind of thing should not look like two different programs.
     crate::chrome::draw(frame, menu, &crate::chrome::Ring {
+        // 計數寫在下邊框上，省一行——標題寫在上邊框上，同一個辦法。
+        foot: match said.is_empty() {
+            true => None,
+            false => Some((
+                footer.to_string(),
+                Style::default().fg(ink.quiet()).bg(crate::chrome::panel_ground(ink)),
+            )),
+        },
         rounded,
         border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
         ground: Style::default().bg(crate::chrome::panel_ground(ink)),
@@ -5242,6 +5343,22 @@ fn draw_list(
     let on = Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink));
 
     let buf = frame.buffer_mut();
+    // **說明塊，然後一道橫線**（2026-10-06）。說明在上、單子在下，中間隔開——
+    // 一句話讀得完整，而單子還是一眼掃得過去的那張單子。
+    if !said.is_empty() {
+        for (n, line) in said.iter().enumerate() {
+            // 和單子上那幾行同一個左邊：框內一格，再一格。
+            put_text(buf, menu.x + 2, menu.y + 1 + n as u16, menu.x + width - 1, line, text);
+        }
+        let y = menu.y + 1 + said.len() as u16;
+        let rule = Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink));
+        // 圓角方角共用這一對：圓的只圓在四個角上。
+        put_text(buf, menu.x, y, menu.x + width, "├", rule);
+        for x in menu.x + 1..menu.x + width - 1 {
+            put_text(buf, x, y, menu.x + width, "─", rule);
+        }
+        put_text(buf, menu.x + width - 1, y, menu.x + width, "┤", rule);
+    }
     for slot in 0..visible {
         let i = first + slot;
         if i >= items.len() {
@@ -5250,9 +5367,13 @@ fn draw_list(
         let (column, row) = (slot / deep, slot % deep);
         let x = menu.x + 1 + widths[..column].iter().sum::<usize>() as u16;
         let end = (x + widths[column] as u16).min(menu.x + width - 1);
-        let y = menu.y + 1 + row as u16;
+        let y = menu.y + 1 + block as u16 + row as u16;
         let picked = highlight == Some(i);
-        let style = if picked { on } else { text };
+        let style = match (picked, items[i].dim) {
+            (true, _) => on,
+            (false, true) => quiet,
+            (false, false) => text,
+        };
         if picked {
             for cx in x..end {
                 if let Some(cell) = buf.cell_mut((cx, y)) {
@@ -5271,14 +5392,17 @@ fn draw_list(
             }
         }
     }
-    put_text(
-        buf,
-        menu.x + 1,
-        menu.y + 1 + deep as u16,
-        menu.x + width - 1,
-        footer,
-        quiet,
-    );
+    // 舊形狀的腳注還在它那一行上；有說明塊的時候它已經搬到下邊框去了。
+    if said.is_empty() {
+        put_text(
+            buf,
+            menu.x + 1,
+            menu.y + 1 + deep as u16,
+            menu.x + width - 1,
+            footer,
+            quiet,
+        );
+    }
     Some(menu)
 }
 
@@ -5566,6 +5690,7 @@ fn draw_hud_panel(
     };
     let panel = Rect::new(x, y, width, 3);
     crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        foot: None,
         rounded: config.panel.rounded,
         // The same ring at the same rung as every other panel on the screen:
         // what separates a panel from the page is its rule and its 金墨, not a
@@ -6310,6 +6435,17 @@ fn draw_command_menu(
     // the command line is already saying what the guess is.
     let highlight = selected.map(|i| i.min(matches.len() - 1));
     let focus = highlight.unwrap_or(0);
+    // **猜出來的那幾條跟在後面，淡一點**（2026-10-06 定）。前綴配中的那些是 ⇥
+    // 走得到的；這幾條只是說「你要的也許是這個」，走不到，所以顏色也不一樣。
+    //
+    // Warning: **門檻比 `::` 高**（`lookfor::SURE_ENOUGH`）：這裏是正在打名字的人，
+    // 猜錯五條就蓋住了他真正在打的那幾條。
+    let named: Vec<&str> = matches.iter().map(|c| c.name).collect();
+    let guessed: Vec<yumete_core::command::Choice> =
+        yumete_core::lookfor::guesses(editor.prompt().map(|(_, t)| t).unwrap_or_default())
+            .into_iter()
+            .filter(|c| !named.contains(&c.name))
+            .collect();
     let items: Vec<Row> = matches
         .iter()
         // **The whole row is composed in one place** — `Choice::shown` — so
@@ -6317,11 +6453,17 @@ fn draw_command_menu(
         // apart: the name, the spellings worth printing beside it, and how
         // many the fold is standing in front of.
         .map(|e| Row {
+            dim: false,
             text: format!("{}{}", e.leading, e.shown()),
             // 「冰雪清韻」 beside `custom.6947b838`, for the rows whose name is
             // an identifier and not a word (#291).
             note: e.note.map(str::to_string),
         })
+        .chain(guessed.iter().map(|e| Row {
+            dim: true,
+            text: format!("{}{}", e.leading, e.shown()),
+            note: e.note.map(str::to_string),
+        }))
         .collect();
     // Only the highlighted command's help, on one line. Every command's help at
     // once is what covered the page.
@@ -6336,21 +6478,14 @@ fn draw_command_menu(
         .iter()
         .map(|need| need.says())
         .collect();
-    let footer = match unmet.is_empty() {
-        true => format!(
-            "{}/{}  {}",
-            focus + 1,
-            matches.len(),
-            yumete_core::messages::say(matches[focus].help, &[])
-        ),
-        false => format!(
-            "{}/{}  {}  ⟨{}⟩",
-            focus + 1,
-            matches.len(),
-            yumete_core::messages::say(matches[focus].help, &[]),
-            say!("ui.needs-these-first", unmet.join(&say!("label.comma")))
-        ),
-    };
+    // **說明搬到單子上面去了**（2026-10-06，照 helix）：一句話說得完整，跑不動
+    // 的理由跟着它——都是關於挑中的那一條的話，該在一處。下邊框上只剩一個數目。
+    let mut about: Vec<String> =
+        vec![yumete_core::messages::say(matches[focus].help, &[]).to_string()];
+    if !unmet.is_empty() {
+        about.push(say!("ui.needs-these-first", unmet.join(&say!("label.comma"))));
+    }
+    let footer = format!("{}/{}", focus + 1, matches.len());
     // Spread across the window: the command list is short entries and there
     // are a couple of dozen of them, which is exactly the shape that wants
     // columns.
@@ -6363,6 +6498,9 @@ fn draw_command_menu(
         status.y,
         List {
             deep_as_the_page: false,
+            about: &about,
+            wide: true,
+            over_status: true,
             items: &items,
             focus,
             highlight,
@@ -6409,6 +6547,7 @@ fn draw_reference_menu(
         .iter()
         .zip(&names)
         .map(|(c, name)| Row {
+            dim: false,
             text: format!("{name}{}", " ".repeat(column - yumete_cjk::str_width(name))),
             note: c.note.clone(),
         })
@@ -6422,6 +6561,9 @@ fn draw_reference_menu(
         status.y,
         List {
             deep_as_the_page: false,
+            about: &[],
+            wide: false,
+            over_status: false,
             items: &items,
             focus,
             highlight,
@@ -6481,6 +6623,9 @@ fn draw_lookfor_menu(
             status.y,
             List {
                 deep_as_the_page: true,
+                about: &[],
+                wide: false,
+                over_status: false,
                 items: &[],
                 focus: 0,
                 highlight: None,
@@ -6511,7 +6656,7 @@ fn draw_lookfor_menu(
             let name = format!("{}{}", hit.leading(), hit.written());
             let said = yumete_core::messages::say(hit.help(), &[]);
             let left = room.saturating_sub(yumete_cjk::str_width(&name) + NOTE_GAP);
-            Row { text: name, note: Some(elide(&said, left)) }
+            Row { text: name, note: Some(elide(&said, left)), dim: false }
         })
         .collect();
     // What ⇥ will do with the highlighted row, spelled out. The one thing a
@@ -6520,6 +6665,10 @@ fn draw_lookfor_menu(
     // 一行走——命令寫回 `:`，鍵就按下去——而那一行自己看得見，不必在這裏重說。
     let count = format!("{}/{}", focus + 1, found.len());
     let footer = say!("ui.lookfor-take", &count);
+    // **挑中的那一條，說明寫全**（2026-10-06，和 `:` 那一扇同一個形狀）。行裏那
+    // 一截是截過的——`…` 收尾的正是最值得讀完的那幾條，所以塊裏寫整句。
+    let about: Vec<String> =
+        vec![yumete_core::messages::say(found[focus].help(), &[]).to_string()];
     let title = say!("ui.lookfor");
     draw_list(
         frame,
@@ -6529,6 +6678,9 @@ fn draw_lookfor_menu(
         status.y,
         List {
             deep_as_the_page: true,
+            about: &about,
+            wide: true,
+            over_status: true,
             items: &items,
             focus,
             // Always inked, unlike the command menu: there is no drawn on the
@@ -8758,6 +8910,7 @@ fn draw_picker(
     // whatever is under it.
     let ground = Style::default();
     crate::chrome::draw(frame, left, &crate::chrome::Ring {
+        foot: None,
         rounded: config.panel.rounded,
         border: ground.fg(ink.rule()),
         ground,
@@ -8998,6 +9151,7 @@ fn draw_preview(
         .picker_preview(area.height.saturating_sub(2) as usize)
         .unwrap_or_default();
     crate::chrome::draw(frame, area, &crate::chrome::Ring {
+        foot: None,
         rounded: config.panel.rounded,
         border: ground.fg(ink.rule()),
         ground,
@@ -11836,6 +11990,7 @@ fn draw_panel_rows(
 
     let ground = Style::default().bg(skin.paper()).fg(skin.text());
     let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        foot: None,
         rounded: config.panel.rounded,
         border: Style::default().fg(skin.border()).bg(skin.paper()),
         ground,
@@ -20089,15 +20244,15 @@ fn squeezed(text: &str) -> String {
             .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
             .collect();
         assert!(last.starts_with(":r"), "command line intact: {last:?}");
-        // Above it is the hint row, then the menu's bottom rule, and above
-        // *that* the menu's own footer — the count and what the highlighted
-        // row means — with the rows above that again. The menu stacks upward
-        // from the whole footer, not from the command line alone, so it never
-        // covers either.
-        let footer: String = (0..buffer.area.width)
-            .map(|x| buffer[(x, buffer.area.height - 4)].symbol())
+        // **底下那一道框壓在狀態欄上**（2026-10-06 定，同 helix）：命令行和面板
+        // 之間不再隔着一行別的東西，而計數就寫在那道框上，省掉一行。
+        let rule: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
             .collect();
-        assert!(footer.contains('/'), "a count of the matches: {footer:?}");
+        assert!(rule.contains('/'), "計數寫在下邊框上: {rule:?}");
+        assert!(rule.starts_with('╰') || rule.starts_with('└'), "那一行是框: {rule:?}");
+        // **撑滿終端的寬度**：右邊那片空白是留給說明的。
+        assert!(rule.ends_with('╯') || rule.ends_with('┘'), "一直畫到最右邊: {rule:?}");
         let text = buffer_text(&buffer);
         assert!(text.contains("ruby") || text.contains("redo"), "{text:?}");
     }
@@ -20123,7 +20278,14 @@ fn squeezed(text: &str) -> String {
         let top = *rows.iter().next().expect("a menu was drawn");
         assert_eq!(*columns.iter().next().unwrap(), 2, "inside the ring");
         assert_eq!(buffer[(0, top)].symbol(), "│", "a ring around it");
-        assert_eq!(buffer[(0, top - 1)].symbol(), "╭", "and a corner to it");
+        // **說明塊在單子上面，一道橫線隔開**（2026-10-06）：所以緊挨着頭一行
+        // 條目的不再是上邊框，而是那道橫線；角在說明塊的上面。
+        assert_eq!(buffer[(0, top - 1)].symbol(), "├", "a rule under the description");
+        let corner = (0..top)
+            .rev()
+            .find(|y| buffer[(0, *y)].symbol() == "╭")
+            .expect("a corner above the description");
+        assert!(corner < top - 1, "說明塊夾在角和橫線之間");
     }
 
     /// A search prompt is not a command line and gets no menu.

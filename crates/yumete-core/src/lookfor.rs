@@ -561,6 +561,32 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
 /// 配到一個常用字的散兵。
 pub const FAR_ENOUGH: f32 = 1.0;
 
+/// **`:` 那一行上的門檻，比 `::` 高**（2026-10-06 定：「we need to set a higher
+/// likelihood-score threshold for it than for the search command panel」）。
+///
+/// 兩扇面板問的不是同一個問題。`::` 是「我忘了它叫什麼」——多給幾條讓人挑；
+/// `:` 是「我正在打它的名字」，猜出來的那幾行只是補一句「也許你要的是這個」，
+/// 列長了就蓋住了真正在打的那幾條。
+pub const SURE_ENOUGH: f32 = 4.0;
+
+/// `:` 那一行上最多補幾條猜的。
+pub const GUESSES: usize = 5;
+
+/// **只要命令，不要鍵**（2026-10-06）：`:` 那一行上打不出一個鍵來。
+pub fn guesses(query: &str) -> Vec<crate::command::Choice> {
+    if query.trim().is_empty() {
+        return Vec::new();
+    }
+    look_above(query, SURE_ENOUGH)
+        .into_iter()
+        .filter_map(|h| match h.what {
+            What::Command(c) => Some(c),
+            What::Keys(_) => None,
+        })
+        .take(GUESSES)
+        .collect()
+}
+
 /// The corpus weights, counted once.
 ///
 /// The rows are the command table, which is compiled in — it cannot change

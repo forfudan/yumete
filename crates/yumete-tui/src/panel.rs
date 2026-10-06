@@ -798,6 +798,7 @@ pub fn draw(
         crate::chrome::Anchor::Caret { at: caret, bottom, vertical },
     )?;
     crate::chrome::draw(frame, rect, &crate::chrome::Ring {
+        foot: None,
         rounded: config.panel.rounded,
         // `rule()`, the rung every other ring on the screen is drawn at.
         border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
