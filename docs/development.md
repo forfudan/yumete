@@ -19213,11 +19213,31 @@ fn keep_off_the_newline(&mut self) {
 `l`／`w`／`e` 自己已經擋住了（實測），所以**改的是落點，不是動作**。一支函數、一個調用點，
 加上四條守衛。金樣二十四幀是 helix 鍵位拍的，**一幀都不該動**——那正是這一條的驗收。
 
-### 五、問（明天彈窗）
+### 五、✅ 做了（2026-10-06）
 
-1. 檔尾那條虛行要不要一起夾掉（nvim 沒有它，我們有；25 格神諭差全是它）？
-2. `V` 那一條按上面的辦（不夾）行不行？
-3. 夾回來的那一下要不要**在撤銷裏留痕**——`glx` 之後 `u`，光標回哪裏？
+三個問題都答了：**檔尾虛行一起夾**、**`V` 選的整行不夾**、撤銷那一條不特別處理
+（夾只動光標不動文本，進不了撤銷棧）。
+
+一支 `keep_off_the_newline`，一個調用點（`on_key` 末尾，`hold_the_pane` 旁邊），四條守衛。
+現成的 `motion::line_last` 正是要的那個原語——**它的文檔早就把這個 bug 寫着了**：「A
+Normal-mode caret left on it is standing on the newline, and then every verb aims at the line
+break instead of at the writing: `a` opened on the next line, `d` ate the break and welded two
+lines into one (#382)」。
+
+實測三式，全對上 nvim：
+
+```text
+glxx          a / def        從前是 abdef（第二下把下一行接上來）
+jj            停在第 2 行     從前下得到檔尾那條虛行
+jjhhhhhhhhhhx x              從前一個字都刪不到
+```
+
+⚠️ **寫的時候當場測出一個**：守衛不能光看 `vim_lines`。那個旗標只在 `d`／`c`／`y` 幾個 arm
+裏花掉，`V` 之後按 `Esc` 它**一直留着 true**，夾這件事從此整個關掉。問的要是「那一段**現在**
+還是不是整行可視選區」（`vim_lines && extend`）。
+
+**神諭：2256 格 34 格不同 → 9 格。** 沒了的 25 格全是檔尾虛行那一式；剩下 9 格是分詞器那一
+族（`de`／`d2w`／`c2w` 在混排上），手冊寫着的有意分歧。helix 那一支 240 格 3 格不同，不變。
 
 ## 5.84 兩套鍵位的對齊審查（2026-10-06 夜，兩個子代理各掃一遍）
 

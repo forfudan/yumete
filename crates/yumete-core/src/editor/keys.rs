@@ -195,8 +195,74 @@ impl Editor {
         }
         self.forget_a_guessed_table();
         self.hold_the_pane(held);
+        self.keep_off_the_newline();
         self.find_the_table_here();
         outcome
+    }
+
+    /// **vim 鍵位下光標不停在換行符上**（十三條的第 9 條，規劃在 §5.85）。
+    ///
+    /// 他報的是「`x` 在行尾會把下一行接上來」。實測比那細：
+    ///
+    /// ```text
+    /// gl      → 列 3    停在 c 上               ✓ 本來就對
+    /// glx     → ab      只吃掉 c                ✓ 本來就對
+    /// glxx    → abdef   ⚠️ 第二下把下一行接上來
+    /// ```
+    ///
+    /// 漏的只有**挪動／編輯之後夾回來**那一步：第一下 `x` 之後光標落在 `ab` 的換行
+    /// 符上，第二下就把它吃了。`l` 自己擋得住（`line_last`），`x` 擋不住——而擋不住
+    /// 的不只 `x`。
+    ///
+    /// **寫在一處，不是四十處。** `clamp_cursor` 全樹叫了四十多次而它只夾到檔尾；
+    /// 再往每一處加一道行内的夾，等於把一條規矩交給四十個函數去守。這裏和
+    /// [`Self::hold_the_pane`] 並排，理由是它上面那一句：「a rule kept by forty
+    /// movement functions is a rule one of them will break」。
+    ///
+    /// 四條守衛，每一條都是定的：
+    ///
+    /// * **helix 鍵位不夾**——那一端的選區本來就含換行符，兩邊各跟各的。
+    /// * **插入態不夾**，不然 `A` 到不了行尾之後。
+    /// * **`V` 選的整行不夾**：這個倉把「整行」表示成**含換行**的一段，夾了
+    ///   `Vd` 會留下空行。現成的 `vim_lines` 旗標說的正是這件事。
+    /// * **空行上停在換行符上**——沒別的地方可去，照 vim。
+    ///
+    /// ⚠️ **檔尾那條虛行也一起夾**（ 10-06 定）。檔案以換行結尾時我們多出一條
+    /// 最後那個換行符後面的空行，`j` 下得去而 nvim 眼裏沒有它：掃神諭 2256 格裏
+    /// 34 格不同，**25 格全是它**（`jjhhhhhhhhhhx` 那一式）。
+    fn keep_off_the_newline(&mut self) {
+        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+            return;
+        }
+        // Warning: **`vim_lines && extend`，不是光看 `vim_lines`**（2026-10-06 寫這一支
+        // 的時候當場測出來的）。那個旗標只在 `d`／`c`／`y` 幾個 arm 裏花掉，所以
+        // `V` 之後按 `Esc`（或者任何一條不動手就走的路）它會**一直留着 true**，
+        // 而夾這件事從此整個關掉。問「那一段**現在**還是不是整行可視選區」纔對。
+        if self.mode != Mode::Normal || (self.vim_lines && self.extend) {
+            return;
+        }
+        let rope = self.current_buffer().rope().clone();
+        let floor = self.last_real_line(&rope);
+        self.sel.map(|one| crate::selection::Range {
+            anchor: hold_in_line(&rope, one.anchor, floor),
+            head: hold_in_line(&rope, one.head, floor),
+            ..one
+        });
+    }
+
+    /// 檔尾那條虛行之前的最後一條真行。
+    ///
+    /// Rope 把 `abc\n` 數成兩行——第二條是空的，在那個換行符後面。vim 沒有它。
+    /// 檔案不以換行結尾（或者整個是空的）時沒有虛行，最後一條就是最後一條。
+    fn last_real_line(&self, rope: &crate::Rope) -> usize {
+        let lines = rope.len_lines();
+        let phantom = lines > 1
+            && rope.line_to_char(lines - 1) == rope.len_chars()
+            && rope.len_chars() > 0;
+        match phantom {
+            true => lines - 2,
+            false => lines.saturating_sub(1),
+        }
     }
 
     /// **全窗表格 is a window onto one table, and nothing walks out of it**
@@ -2879,6 +2945,20 @@ impl Editor {
 /// **The key a played character stands for** — the other half of
 /// [`yumete_cjk::actions::spell`], which prints these for `:keymap`.
 ///
+/// 把一個下標夾進它那一行裏，順帶夾掉檔尾那條虛行。見
+/// [`Editor::keep_off_the_newline`]。空行上 `line_last` 回的就是行首，也就是那個
+/// 換行符自己——那是唯一去得了的地方，照 vim。
+fn hold_in_line(rope: &crate::Rope, at: usize, floor: usize) -> usize {
+    let at = at.min(rope.len_chars());
+    let line = rope.char_to_line(at);
+    let at = match line > floor {
+        // 檔尾那條虛行：退到上一行的最後一個字上。
+        true => motion::line_last(rope, rope.line_to_char(floor)),
+        false => at,
+    };
+    motion::line_last(rope, at).min(at.max(motion::line_start(rope, at)))
+}
+
 /// A key sequence is written as a string (`"gJ"`, `"dw"`), and a chord has no
 /// letter of its own, so the table spells it as the control byte it is:
 /// `"\u{f}"` is `C-o`, `"\u{1b}"` is Esc. Played as `Key::Char`, those reached
