@@ -120,8 +120,12 @@ pub enum WordMark {
     /// the boundary to be unmissable.
     Tint,
     /// Every other word's characters in a second ink, the paper untouched.
-    /// **The default**: the mark is on the writing itself, and a page of it is
-    /// still a page of prose.
+    ///
+    /// Warning: **Not the default any more** (#509, and this line said it was
+    /// until 2026-10-06). The mark is on the writing itself, which is right,
+    /// but it alternates *how dark* a word is — see [`Color`](WordMark::Color),
+    /// which carries the same one bit without making every other word look
+    /// emphasised.
     Ink,
     /// Every other word's characters in a **second hue at the same
     /// lightness** (#501).
