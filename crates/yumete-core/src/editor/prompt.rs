@@ -427,7 +427,22 @@ impl Editor {
             self.status = say!("lookfor.nothing-to-take");
             return;
         };
-        self.command_line = hit.choice.written();
+        // **鍵就按下去，命令纔寫到 `:` 上**（2026-10-06）。一個鍵沒有「寫到哪一行」
+        // 可言——把 `空格 f` 這四個字寫進 `:` 裏，按 Enter 得到的是「沒有這條命令」。
+        // 所以這一支按它，而讀者在單子上看見的那一串就是下次自己按的那一串。
+        if let lookfor::What::Keys(action) = &hit.what {
+            let how = action.how;
+            self.lookfor_focus = 0;
+            self.close_prompt();
+            match how {
+                yumete_cjk::actions::How::Keys(keys) => self.play_keys_now(keys),
+                yumete_cjk::actions::How::Command(line) => {
+                    let _ = self.execute(line);
+                }
+            }
+            return;
+        }
+        self.command_line = hit.written();
         self.command_caret = self.command_line.chars().count();
         self.completion = None;
         self.lookfor_focus = 0;
