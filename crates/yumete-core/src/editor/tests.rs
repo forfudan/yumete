@@ -22188,3 +22188,59 @@ fn the_keys_that_were_waiting_on_a_decision() {
     assert_eq!(ed.sel.head(), before, "gN 走回來");
 }
 
+/// **`z` 那一層照 helix 的 view mode 補齊**（2026-10-06，「just be aligned」）。
+///
+/// helix 那一層裏大半條目做的是這個編輯器已經有的事，所以它們是**同一支的第二個
+/// 拼法**：一個 helix 的手按 `z C-d` 要得到半頁，而不是「`z` 不認得這個鍵」。
+#[test]
+fn the_z_layer_answers_what_helix_binds_there() {
+    let text: String = (0..200).map(|n| format!("第{n:03}行。\n")).collect();
+    let line = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+
+    // 半頁：`z C-d` 和裸 `C-d` 落在同一行。
+    let mut a = typed(&text);
+    a.goto_line(1);
+    a.on_key(Key::Ctrl('d'));
+    let mut b = typed(&text);
+    b.goto_line(1);
+    b.on_key(Key::Char('z'));
+    b.on_key(Key::Ctrl('d'));
+    assert_eq!(line(&a), line(&b), "z C-d 就是 C-d");
+
+    // `z空格` 是半頁的另一個拼法，`z退格` 往回。
+    let mut c = typed(&text);
+    c.goto_line(1);
+    c.on_key(Key::Char('z'));
+    c.on_key(Key::Char(' '));
+    assert_eq!(line(&c), line(&a), "z空格 也是半頁");
+    c.on_key(Key::Char('z'));
+    c.on_key(Key::Backspace);
+    assert_eq!(line(&c), 0, "z退格 往回半頁");
+
+    // 整頁。
+    let mut d = typed(&text);
+    d.goto_line(1);
+    d.on_key(Key::Ctrl('f'));
+    let mut e = typed(&text);
+    e.goto_line(1);
+    e.on_key(Key::Char('z'));
+    e.on_key(Key::Ctrl('f'));
+    assert_eq!(line(&d), line(&e), "z C-f 就是 C-f");
+
+    // `z/` 開的是搜索行，同裸 `/`。
+    let mut f = typed(&text);
+    f.on_key(Key::Char('z'));
+    f.on_key(Key::Char('/'));
+    assert_eq!(f.mode, Mode::Search, "z/ 開搜索");
+    f.on_key(Key::Esc);
+    f.on_key(Key::Char('z'));
+    f.on_key(Key::Char('?'));
+    assert_eq!(f.mode, Mode::Search, "z? 也是");
+
+    // 認不得的鍵仍舊說一句，而那句話現在把新加的幾個也列了出來。
+    let mut g = typed(&text);
+    g.on_key(Key::Char('z'));
+    g.on_key(Key::Char('q'));
+    assert!(g.status().contains("C-d"), "說明裏列得出半頁那一對");
+}
+
