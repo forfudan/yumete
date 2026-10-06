@@ -200,6 +200,22 @@ impl Editor {
     /// Insert `text` at the cursor and advance past it.
     pub(super) fn insert_str(&mut self, text: &str) {
         let at = self.sel.head();
+        // **覆寫模式先讓位**（vim 的 `R`，2026-10-06）。一個進去的字蓋一個，蓋到
+        // 行尾就不再蓋——vim 的 `R` 在行尾是接着寫，不吃換行。蓋掉的記下來，退格
+        // 照着還回去。
+        if self.overwriting {
+            let rope = self.current_buffer().rope();
+            let room = motion::line_end(rope, at).saturating_sub(at);
+            let want = text.chars().count();
+            let take = want.min(room);
+            let gone: Vec<Option<char>> = (0..want)
+                .map(|n| (n < take).then(|| rope.char(at + n)))
+                .collect();
+            if take > 0 && !self.edit_remove(at..at + take) {
+                return;
+            }
+            self.overwritten.extend(gone);
+        }
         if !self.edit_insert(at, text) {
             return;
         }
@@ -429,6 +445,29 @@ impl Editor {
             }
         }
         self.refresh_goal_column();
+    }
+
+    /// 覆寫模式下退格：往回一格，把 `was` 放回去（`None` 是那裏本來就沒有字）。
+    pub(super) fn put_back_what_was_overwritten(&mut self, was: Option<char>) {
+        let at = self.sel.head();
+        let rope = self.current_buffer().rope();
+        let back = motion::prev_grapheme(rope, at).max(self.insert_floor());
+        if back >= at {
+            return;
+        }
+        if !self.edit_remove(back..at) {
+            return;
+        }
+        match was {
+            Some(c) => {
+                let mut buf = [0u8; 4];
+                let one = c.encode_utf8(&mut buf).to_string();
+                if self.edit_insert(back, &one) {
+                    self.set_cursor(back);
+                }
+            }
+            None => self.set_cursor(back),
+        }
     }
 
     /// Take back the word before the cursor (`C-w` in Insert).

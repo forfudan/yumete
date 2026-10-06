@@ -123,7 +123,10 @@ pub const ALL: &[Action] = &[
     keys("select_line", "action.select-line", "x"),
     keys("extend_to_line_bounds", "action.extend-to-line-bounds", "X"),
     keys("select_all", "action.select-all", "%"),
-    keys("collapse_selection", "action.collapse-selection", "\u{1b}"),
+    // Warning: **`;`, not Esc** (2026-10-06). Esc used to collapse the selection as
+    // well as leave 延伸 mode; it leaves the selection alone now, the way
+    // helix's does, and `;` is the key whose whole job is collapsing.
+    keys("collapse_selection", "action.collapse-selection", ";"),
     // ---- Changing -------------------------------------------------------
     keys("delete_selection", "action.delete-selection", "d"),
     keys("change_selection", "action.change-selection", "c"),

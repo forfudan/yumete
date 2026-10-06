@@ -1727,11 +1727,24 @@ impl Editor {
                     return;
                 }
                 // **Esc 没有別的事可做的時候，就是「把輸入法的挂起再說一
-                // 遍」**（2026-09-22）。收窗口、收選區都輪不到這一件；而收不收得
-                // 到選區，看的是它本來收不收得起來。
-                let idle = !self.extend && self.sel.anchor() == self.sel.head();
+                // 遍」**（2026-09-22）。收窗口輪不到這一件；而說不說得成，看的是
+                // 這一下有没有別的事做。
+                //
+                // Warning: **選區不收**（2026-10-06，對齊 helix）。helix 的
+                // `exit_select_mode` 只改 mode，`enter_normal_mode` 從不動選區
+                // （`helix-view/src/editor.rs`）。我們從前連錨點一起拉到頭上，於是
+                // `v w w Esc d` 只刪掉一個空格，而 helix 刪掉 `alpha beta `——
+                // 選中了一段、退出延伸、再動手，是這個模型裏最順的一條路，而
+                // `Esc` 從前把中間那一步變成了「全丟掉」。
+                //
+                // 「退一層」那個意思留着：收的是**延伸**這一層，不是選區。要把
+                // 選區收成一點有自己的鍵（`;`）。
+                // Warning: **只問延伸還開不開着**（2026-10-06）。從前還要求選區是塌
+                // 的，因為那一下 Esc 順手把它收了；現在它不收，於是「還有選區」
+                // 不再是 Esc 有事可做——不改這一句的話，選區留着的時候 Esc 永遠
+                // 說不出那一句。
+                let idle = !self.extend;
                 self.extend = false;
-                self.sel.set_anchor(self.sel.head());
                 if idle {
                     self.say_it_again = true;
                 }
@@ -2113,10 +2126,20 @@ impl Editor {
                     self.clamp_cursor();
                 }
             }
-            Key::Char('*') => {
-                self.definition_preview = false;
-                self.search_the_page(false);
-            }
+            // **`*` 只記下要找什麼，光標不動**（2026-10-06，對齊 helix）。
+            //
+            // Warning: **§5.80「不改的兩條」把這一格寫成了「和真 helix 一致」，那句記錄
+            // 是錯的**（2026-10-06 夜審查出來的）。真 helix 的
+            // `search_selection_impl`（`helix-term/src/commands.rs:2463`）唯一的副
+            // 作用是 `registers.push`——它不移動，也不開命中列表。我們從前跳到下
+            // 一處，那是 vim 的 `*`。
+            //
+            // `*` 補 `\b`，`A-*` 不補——helix 那兩個鍵正是這麼分的
+            // （`search_selection_detect_word_boundaries` 與 `search_selection`）。
+            // vim 鍵位下 `*` 另有去處（鍵位表映到 `g/`，那個照舊跳），所以這一條
+            // 只動 helix 那一端。
+            Key::Char('*') => self.remember_the_search(true),
+            Key::Alt('*') => self.remember_the_search(false),
             // **vim 的 `#`：往回找光標下這個詞**（2026-10-05 定）。
             //
             // Warning: **只在 vim 鍵位下，而且不走鍵位表。** 那張表是「鍵 → 一串
@@ -2131,6 +2154,14 @@ impl Editor {
             // Replacing the selection with the register. Joining is on `gJ`:
             // `J` turns the page, which a reader presses a hundred times for
             // every once they join two lines.
+            // **vim 的 `R` 是覆寫模式**（2026-10-06 定：「做，只在 vim 鍵位下」）。
+            // 進去之後打一個字蓋一個字，`Esc` 出來；退格把蓋掉的還回去。helix 沒有
+            // 這個模式，那一端 `R` 照舊是「用寄存器換掉選區」。
+            Key::Char('R') if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend => {
+                self.snapshot();
+                self.enter_insert();
+                self.overwriting = true;
+            }
             Key::Char('R') => self.replace_with_register(),
             // Search for whatever is selected (Helix `*`).
             // **`30G` goes to line 30**, and a bare `G` to the last line,

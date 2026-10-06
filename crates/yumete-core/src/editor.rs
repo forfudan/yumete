@@ -2367,6 +2367,15 @@ pub struct Editor {
     /// vim's rule, and vim's alone: helix's `i` ignores a count, so this is
     /// only ever set under the vim preset.
     insert_again: usize,
+    /// **vim 的 `R`：打一個字蓋一個字**（2026-10-06 定，只在 vim 鍵位下）。
+    ///
+    /// 不是一個新的 `Mode`：`Mode` 上有幾十處窮盡的 `match`，而這一件事只在
+    /// 「文字落進緩衝區」那一個漏斗上分岔（[`Editor::insert_str`]），退格那一處
+    /// 再分一次。狀態欄那一格由 [`Editor::mode_label`] 問它，報 `REP`。
+    overwriting: bool,
+    /// 蓋掉的字，一個進去的字一格——原處沒有字（蓋到行尾外面去了）就是 `None`。
+    /// 退格照這張單子倒着還回去，同 vim。
+    overwritten: Vec<Option<char>>,
     /// Whether the insert was opened with `o` (`Some(true)`) or `O`
     /// (`Some(false)`) — those repeat 「a new line, and this on it」, not just
     /// the text.
@@ -3273,6 +3282,8 @@ impl Editor {
             repeating_edit: false,
             insert_recording: String::new(),
             insert_again: 0,
+            overwriting: false,
+            overwritten: Vec::new(),
             insert_opened: None,
             last_find: None,
             indent_width: 4,

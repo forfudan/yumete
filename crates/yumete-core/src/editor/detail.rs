@@ -337,6 +337,49 @@ impl Editor {
         self.follow_note();
     }
 
+    /// **`*`／`A-*`：記下要找什麼，不動光標**（2026-10-06，helix 的
+    /// `search_selection_detect_word_boundaries`／`search_selection`）。
+    ///
+    /// `bounded` 為真時兩端各補一個 `\b`——**補不補是逐端看的**，同 helix：
+    /// 選區的開頭落在一個詞的開頭上才補前面那個，末尾落在詞尾上才補後面那個。
+    /// 站在 `one` 的 `o` 上按 `*` 得到的是 `\bo`，不是 `\bo\b`。
+    ///
+    /// Warning: **說一句「幾處」而不是 helix 那句「寄存器設成了…」。** 一個不動光標的
+    /// 鍵最像按壞了，而「共 N 處」既說明它收下了，也說明接着按 `n` 會走到哪裏；
+    /// 寄存器那句話對這個倉的讀者什麼都不是。
+    pub(super) fn remember_the_search(&mut self, bounded: bool) {
+        let rope = self.current_buffer().rope();
+        let (from, to) = self.selection();
+        let to = to.min(rope.len_chars());
+        if to <= from {
+            self.status = say!("find.nothing-here-to-look-for");
+            return;
+        }
+        let word = |at: usize| {
+            rope.get_char(at).is_some_and(|c| c.is_alphanumeric() || c == '_')
+        };
+        let head = bounded && word(from) && (from == 0 || !word(from - 1));
+        let tail = bounded && to > 0 && word(to - 1) && !word(to);
+        let text: String = rope.slice(from..to).chars().collect();
+        let pattern = format!(
+            "{}{}{}",
+            match head {
+                true => "\\b",
+                false => "",
+            },
+            regex::escape(&text),
+            match tail {
+                true => "\\b",
+                false => "",
+            }
+        );
+        let found = self.every_match(&pattern).len();
+        self.last_search = pattern;
+        // 這一趟不是走到某一處，所以上一張命中名單作廢——`n` 從現在的地方數起。
+        self.hits = None;
+        self.status = say!("search.hits", found);
+    }
+
     /// `g/` and `g?` (and `*`): **who else says this?**
     ///
     /// One key, one meaning, in a table and out of it: 「在另一個工作區給我看
