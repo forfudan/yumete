@@ -17359,7 +17359,7 @@ fn squeezed(text: &str) -> String {
         let panel: Vec<&String> = page.iter().filter(|r| r.contains('│')).collect();
         assert!(!panel.is_empty(), "a bordered panel: {page:?}");
         assert!(
-            page.iter().any(|r| r.contains("配對")) && page.iter().any(|r| r.contains("包起來")),
+            page.iter().any(|r| r.contains("配對")) && page.iter().any(|r| r.contains("包住")),
             "{page:?}"
         );
         // Its title is in its own border.
@@ -17367,8 +17367,16 @@ fn squeezed(text: &str) -> String {
 
         // The cursor is at the line's start, so the panel keeps to the right:
         // the panel's rows are the ones with a ring on them, and they start
-        // well past the middle of a 60-column page.
-        let b = render(&editor, &config, 60, 14);
+        // well past the middle of the page.
+        //
+        // Warning: **100 columns, not 60** (2026-10-06). The `m` panel's rows used
+        // to read 「配對」「之內」「包起來」 and the whole thing was 27 columns
+        // wide; the rows now say what they do in a sentence
+        // （「選擇配對符號和内部字符」）and it is **54**. On a 60-column page
+        // it no longer *can* keep to the right — it starts at column 6 and
+        // fills the width, which is the panel doing the best it can rather
+        // than the rule breaking.
+        let b = render(&editor, &config, 100, 14);
         let ring = (0..b.area.height)
             .find_map(|y| {
                 (0..b.area.width)
@@ -17376,7 +17384,7 @@ fn squeezed(text: &str) -> String {
                     .map(|x| (x, y))
             })
             .expect("a ring");
-        assert!(ring.0 > 30, "the panel is on the right: {ring:?}");
+        assert!(ring.0 > 40, "the panel is on the right: {ring:?}");
         editor.on_key(Key::Esc);
     }
 

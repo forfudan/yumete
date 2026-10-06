@@ -131,7 +131,13 @@ fn the_word_level_changes_how_readily_words_join() {
         eprintln!("skipping: the language tables are not installed");
         return;
     }
-    let line = "那年冬天他抬頭看了看那片天，山路已經看不見了。";
+    // Warning: **這句話 2026-10-06 換過**（定「乙：換探針句，斷言不動」）。原來
+    // 那句是「那年冬天他抬頭看了看那片天，山路已經看不見了。」，而 10-06 01:15
+    // `build.sh` 從 `../yume` 重裝的詞模型在偏置 0 上就已經把 `看不見了` 黏成一個
+    // 詞了——「鬆」沒地方可鬆，兩級答案一模一樣，這一格於是紅了。**是模型變好**。
+    // 換成一句三級還分得開的（6 / 7 / 9），守的還是同一條性質：這個旋鈕往它名字
+    // 說的方向動。
+    let line = "這件事情從頭到尾都是他一個人做的。";
     let cut = |level| {
         let mut words = session.segmenter();
         yumete_cjk::Segmenter::set_level(&mut words, level);
@@ -191,7 +197,9 @@ fn a_traditional_character_in_daily_use_is_not_a_rare_one() {
 fn probe_bias_sensitivity() {
     let Some(dir) = data_dir() else { return };
     let session = ImeSession::new(Scheme::LINGMING, vec![dir]);
-    let line = "那年冬天他抬頭看了看那片天，山路已經看不見了。";
+    let line = std::env::var("PROBE_LINE")
+        .unwrap_or_else(|_| "那年冬天他抬頭看了看那片天，山路已經看不見了。".to_string());
+    let line = line.as_str();
     for tenths in -40..=40 {
         if tenths % 5 != 0 {
             continue;

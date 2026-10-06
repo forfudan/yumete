@@ -4594,9 +4594,9 @@ en = "to uppercase"
 [[message]]
 # 提示：換掉
 key = "hint.change"
-zht = "換掉"
-zhs = "换掉"
-en = "change"
+zht = "替換配對符號"
+zhs = "替换配对符号"
+en = "replace the pair"
 
 [[message]]
 # 提示：換成
@@ -5014,37 +5014,37 @@ en = "M mark this place"
 [[message]]
 # m 組：連同
 key = "hint.match.around"
-zht = "連同"
-zhs = "连同"
-en = "around"
+zht = "選擇配對符號和内部字符"
+zhs = "选择配对符号和内部字符"
+en = "select the pair and what is inside"
 
 [[message]]
 # m 組：之內
 key = "hint.match.inside"
-zht = "之內"
-zhs = "之内"
-en = "inside"
+zht = "選擇配對符號内部字符"
+zhs = "选择配对符号内部字符"
+en = "select what is inside the pair"
 
 [[message]]
 # m 組：配對
 key = "hint.match.pair"
-zht = "配對"
-zhs = "配对"
-en = "match"
+zht = "前往配對符號的另一個"
+zhs = "前往配对符号的另一个"
+en = "go to the other half of the pair"
 
 [[message]]
 # m 組：包起來
 key = "hint.match.surround"
-zht = "包起來"
-zhs = "包起来"
-en = "surround"
+zht = "使用配對符號包住選擇區"
+zhs = "使用配对符号包住选择区"
+en = "wrap the selection in a pair"
 
 [[message]]
 # m 組：去掉
 key = "hint.match.take-off"
-zht = "去掉"
-zhs = "去掉"
-en = "take off"
+zht = "移除配對符號"
+zhs = "移除配对符号"
+en = "remove the pair"
 
 [[message]]
 # m 組提示的標題
@@ -5687,9 +5687,9 @@ en = "yank this column / paste a column"
 [[message]]
 # 提示：打一種括號
 key = "hint.type-a-bracket"
-zht = "打一種括號"
-zhs = "打一种括号"
-en = "type a kind of bracket"
+zht = "輸入包住的符號"
+zhs = "输入包住的符号"
+en = "type the pair to wrap it in"
 
 [[message]]
 # 提示：打一種括號或引號
@@ -5713,18 +5713,25 @@ zhs = "打一个字盖掉选区，中文也打得"
 en = "type a character to write over it — 中文 too"
 
 [[message]]
+# mr／cs 在等第一個字符：要被換掉的是哪一對
+key = "hint.type-the-one-being-replaced"
+zht = "輸入將被替換之符號"
+zhs = "输入将被替换之符号"
+en = "type the one to be replaced"
+
+[[message]]
 # 提示：打要換成的那一種
 key = "hint.type-the-one-to-change-to"
-zht = "打要換成的那一種"
-zhs = "打要换成的那一种"
-en = "type the one to change it to"
+zht = "輸入替換符號"
+zhs = "输入替换符号"
+en = "type the replacement"
 
 [[message]]
 # 提示：打要去掉的那一種
 key = "hint.type-the-one-to-take-off"
-zht = "打要去掉的那一種"
-zhs = "打要去掉的那一种"
-en = "type the one to take off"
+zht = "輸入要移除之符號"
+zhs = "输入要移除之符号"
+en = "type the one to remove"
 
 [[message]]
 # Normal 模式按 @（vi 的重放鍵，這裏是 q；錄是 Q）
@@ -8205,6 +8212,13 @@ en = "collapsed to one character — v is still on, so the next move grows it ag
 # ── sentence ──────────────────────────────────────────────────────────
 
 [[message]]
+# A-,：去掉主選區（`,` 的反面）
+key = "selection.dropped-the-primary"
+zht = "去掉主選區，還剩 {0} 處"
+zhs = "去掉主选区，还剩 {0} 处"
+en = "dropped the primary, {0} left"
+
+[[message]]
 # 按 , 只留主選區，去掉了幾段
 key = "selection.kept-one"
 zht = "只留主選區，去掉 {0} 處"
@@ -8546,16 +8560,16 @@ en = "line numbers"
 [[message]]
 # 設置：邊欄
 key = "set.editor.margin"
-zht = "邊欄"
-zhs = "边栏"
-en = "margin"
+zht = "夾行"
+zhs = "夹行"
+en = "interlinear lane"
 
 [[message]]
 # 設置：邊欄——一句話
 key = "set.editor.margin.hint"
-zht = "什麽時候留出那條放行號和標記的窄邊"
-zhs = "什么时候留出那条放行号和标记的窄边"
-en = "when to keep the narrow lane that carries numbers and marks"
+zht = "何時顯示夾行（注音、着重號、平仄等信息）"
+zhs = "何时显示夹行（注音、着重号、平仄等信息）"
+en = "when to show the lane that carries readings, emphasis and 平仄"
 
 [[message]]
 # 設置：正文寬度

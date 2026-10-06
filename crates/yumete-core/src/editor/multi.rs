@@ -638,9 +638,8 @@ impl super::Editor {
         self.sel.rebuild(rest, next);
         self.clamp_cursor();
         self.refresh_goal_column();
-        // Warning: **成功的時候不說話**，同 helix。倉裏現成的那幾句都說的是別的事
-        // （「只留主選區，去掉 N 處」「N 處併到一起了」），借過來就是一句假話。
-        // 2026-10-06：等給這一格一句自己的話。
+        // 「只留主選區，去掉 N 處」的反面，說法對稱（2026-10-06 定）。
+        self.murmur(say!("selection.dropped-the-primary", self.sel.len().to_string()));
     }
 
     /// **合併**（`A--` 全併成一段、`A-_` 只併挨着的那些）。
