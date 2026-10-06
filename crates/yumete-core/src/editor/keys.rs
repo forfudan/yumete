@@ -2469,6 +2469,11 @@ impl Editor {
             Key::Char('s') => return go(self, motion::Motion::LineFirstNonBlank),
             // helix 的 `goto_last_modification`（`keymap/default.rs:88`）。
             Key::Char('.') => return self.goto_last_modification(),
+            // **`g;`／`g,` 走改動表**（vim，2026-10-06）。`g.` 回最後改的那一處；
+            // 這一對是在改過的地方之間走。helix 沒有這兩個，所以只在 vim 鍵位下。
+            Key::Char(';' | ',') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                return self.walk_changes(key == Key::Char(';'));
+            }
             // …以及 `goto_last_accessed_file`（同一張表 :84）。
             Key::Char('a') => return self.goto_last_file(),
             _ => {}
@@ -2681,7 +2686,7 @@ impl Editor {
     /// 所以它不在上面兩張表上——提示行裏列一個在這一端按不出東西的鍵，和那張表
     /// 說謊是同一件事。
     pub(super) const GOTO_KEYS_VIM: &'static [(&'static str, &'static str)] =
-        &[("v", "hint.goto.reselect")];
+        &[("v", "hint.goto.reselect"), ("; ,", "hint.goto.walk-changes")];
 
     /// The same menu on a 縱書 page, where the four directions turn (see
     /// `handle_goto`).

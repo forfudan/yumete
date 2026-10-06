@@ -179,6 +179,14 @@ pub struct Buffer {
     /// 也就是改**之前**；`g.` 要的是改**之後**落在哪。兩者在 `ciw` 這種先刪後寫的動作
     /// 上差得很遠。
     last_edit: Option<usize>,
+    /// **改動表**（vim 的 `g;`／`g,`，2026-10-06）：改過的地方，舊的在前。
+    ///
+    /// 一行只記一條——vim 也是這樣（`:h changelist`：「only one position is
+    /// remembered for each line」），不然打一段話就攢出幾十條，`g;` 要按半天才
+    /// 挪得出那一行。上限 100 條，同 vim 的預設。
+    changes: Vec<usize>,
+    /// `g;`／`g,` 走到第幾條。一改東西就回到末尾——同 vim：新的一改，走查從頭算。
+    changes_at: usize,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -284,6 +292,8 @@ impl Buffer {
             saves: 0,
             edit: None,
             last_edit: None,
+            changes: Vec::new(),
+            changes_at: 0,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -330,6 +340,8 @@ impl Buffer {
             saves: 0,
             edit: None,
             last_edit: None,
+            changes: Vec::new(),
+            changes_at: 0,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -397,6 +409,8 @@ impl Buffer {
             saves: 0,
             edit: None,
             last_edit: None,
+            changes: Vec::new(),
+            changes_at: 0,
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -585,6 +599,42 @@ impl Buffer {
         self.edit
     }
 
+    /// **記一條改動**（`g;`／`g,`）。一行只記一條，最多一百條。
+    fn note_change(&mut self, at: usize) {
+        let at = at.min(self.rope.len_chars());
+        let line = self.rope.char_to_line(at);
+        match self.changes.last().copied() {
+            // 同一行上的連續改動算一條，記最後那個位置——同 vim。
+            Some(was) if was.min(self.rope.len_chars()) < self.rope.len_chars()
+                && self.rope.char_to_line(was.min(self.rope.len_chars())) == line =>
+            {
+                *self.changes.last_mut().unwrap() = at;
+            }
+            _ => {
+                self.changes.push(at);
+                if self.changes.len() > CHANGES {
+                    self.changes.remove(0);
+                }
+            }
+        }
+        // 新改了東西，走查從末尾重新算起。
+        self.changes_at = self.changes.len();
+    }
+
+    /// 改動表，舊的在前（`g;`／`g,`）。
+    pub fn changes(&self) -> &[usize] {
+        &self.changes
+    }
+
+    /// 走查停在第幾條，以及把它挪到哪一條。
+    pub fn changes_at(&self) -> usize {
+        self.changes_at
+    }
+
+    pub fn set_changes_at(&mut self, at: usize) {
+        self.changes_at = at.min(self.changes.len());
+    }
+
     /// 這一份稿子最後改在哪（`g.`）。
     pub fn last_edit(&self) -> Option<usize> {
         self.last_edit
@@ -634,6 +684,7 @@ impl Buffer {
         // **最後改動在哪**（`g.`，#405 之外，2026-09-28）。插入記的是**寫完之後的那一
         // 頭**，和 vi 的 `'.` 一樣：剛打完一段話按 `g.` 回來，要回到的是話的末尾。
         self.last_edit = Some(char_idx + text.chars().count());
+        self.note_change(char_idx + text.chars().count());
         Ok(())
     }
 
@@ -654,6 +705,7 @@ impl Buffer {
         self.edit = Some((at, -(taken as isize)));
         // 刪掉的那一段沒有「末尾」可回，回到它原來的起點。
         self.last_edit = Some(at);
+        self.note_change(at);
         Ok(())
     }
 
@@ -744,7 +796,7 @@ impl Buffer {
     /// yumetes on one chapter writing over each other, because ownership was a
     /// field in a process and the other process cannot see a field.
     ///
-    /// Warning: **每個進程一份，永遠**（2026-10-02 作者定「救命稿按 pid 分家」）。
+    /// Warning: **每個進程一份，永遠**（2026-10-02 定「救命稿按 pid 分家」）。
     /// 從前只有「來的時候already有別人的草稿」那一種情形纔分家，於是兩個 yumete
     /// 同時開一個乾淨的檔，兩邊寫的是同一個名字：誰後寫誰贏，而任一邊按 `:w`
     /// 就把那一份刪掉——另一邊沒存的工作連救命稿都沒有了。實測 6/6 丟。
@@ -1183,6 +1235,9 @@ impl Buffer {
 /// Stripped on open and not written back. Kept, it becomes an invisible first
 /// character of the first paragraph — `gg` parks the cursor on a character that
 /// is not there, and it takes a 縱 slot of its own on the vertical page.
+/// **改動表最多記幾條**（`g;`／`g,`）。一百，同 vim 的預設（`:h changelist`）。
+const CHANGES: usize = 100;
+
 const BOM: &str = "\u{feff}";
 
 /// Which line ending this text is written with — the one the editor adds when
@@ -1964,7 +2019,7 @@ mod tests {
         let mut b = Buffer::open(&path).unwrap();
         b.insert(0, "改了：").expect("the fixture buffer is writable");
         b.write_swap().unwrap();
-        // 每個進程寫自己那一個名字（2026-10-02 作者定「按 pid 分家」）。
+        // 每個進程寫自己那一個名字（2026-10-02 定「按 pid 分家」）。
         let swap = b.recovery_copy().expect("a copy was written").to_path_buf();
         assert_eq!(
             swap.file_name().unwrap().to_string_lossy(),
@@ -2048,7 +2103,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&ja).unwrap(), "甲底稿\n", "A's draft is still A's");
         assert_eq!(fs::read_to_string(&yi).unwrap(), "乙底稿\n");
 
-        // Warning: **而且 `:w` 只拿走自己那一份**（2026-10-02 作者定）。這是當初
+        // Warning: **而且 `:w` 只拿走自己那一份**（2026-10-02 定）。這是當初
         // 報上來的那條——甲按一下存檔，乙沒存的工作連救命稿都沒有了，實測 6/6。
         a.save().unwrap();
         assert!(!ja.exists(), "甲存檔，拿走的是甲自己那一份");

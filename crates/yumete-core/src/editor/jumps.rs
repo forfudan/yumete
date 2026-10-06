@@ -135,6 +135,34 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// **走改動表**（vim 的 `g;` 往舊、`g,` 往新，2026-10-06）。
+    ///
+    /// 和 `g.` 是兩件事：那一個回**最後**改的地方，這一對是在改過的地方之間走。
+    /// 一行只記一條（見 `Buffer::note_change`），所以打完一段話按 `g;` 是挪一段，
+    /// 不是挪一個字。
+    pub(super) fn walk_changes(&mut self, back: bool) {
+        let list = self.current_buffer().changes().to_vec();
+        if list.is_empty() {
+            self.status = say!("goto.nothing-changed-yet");
+            return;
+        }
+        let at = self.current_buffer().changes_at();
+        let next = match back {
+            true => at.saturating_sub(1),
+            false => (at + 1).min(list.len() - 1),
+        };
+        if next == at && !back {
+            self.status = say!("goto.newest-change");
+            return;
+        }
+        self.current_buffer_mut().set_changes_at(next);
+        let to = list[next].min(self.current_buffer().rope().len_chars());
+        self.remember_jump();
+        self.sel.collapse_to(to);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+    }
+
     pub(super) fn walk_jumps(&mut self, back: bool) {
         if back {
             if self.jump_at == 0 {
