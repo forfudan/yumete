@@ -675,3 +675,99 @@ mod how_many_does_it_find {
         }
     }
 }
+
+#[cfg(test)]
+mod how_well_does_it_find {
+    /// **每一條用自己說明裏的詞去搜，它排第幾。**
+    ///
+    /// 搜索好不好不是看一兩個例子，是看這個數。留着是為了重跑得了：加了關鍵詞、
+    /// 換了算法，再跑一遍就知道是真好了還是換了個地方壞。
+    #[test]
+    #[ignore = "量數用的，不是斷言"]
+    fn can_each_row_find_itself() {
+        let table = crate::messages::table();
+        let mut rows: Vec<(String, &'static str)> = Vec::new();
+        for c in crate::command::all_choices() {
+            rows.push((c.written(), c.help));
+        }
+        for a in yumete_cjk::actions::ALL {
+            let name = match a.how {
+                yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
+                yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+            };
+            rows.push((name, a.help));
+        }
+        let mut tally = [0usize; 4]; // 第 1、前 5、前 20、沒找着
+        let mut lost: Vec<String> = Vec::new();
+        for (name, tag) in &rows {
+            let Some(said) = table.get(tag).map(|e| e.zht) else { continue };
+            // 說明的頭四個字——讀者記得的多半是開頭。
+            let query: String = said.chars().take(4).collect();
+            if query.trim().is_empty() {
+                continue;
+            }
+            let hits = super::look(&query);
+            let at = hits.iter().position(|h| h.written() == *name);
+            match at {
+                Some(0) => tally[0] += 1,
+                Some(n) if n < 5 => tally[1] += 1,
+                Some(n) if n < 20 => tally[2] += 1,
+                _ => {
+                    tally[3] += 1;
+                    if lost.len() < 12 {
+                        lost.push(format!("{name}  ←  {query}"));
+                    }
+                }
+            }
+        }
+        let all = rows.len();
+        println!("{all} 條：第一 {} ／前五 {} ／前二十 {} ／沒找着 {}",
+                 tally[0], tally[1], tally[2], tally[3]);
+        println!("找不着的頭幾條：");
+        for l in &lost {
+            println!("  {l}");
+        }
+    }
+}
+
+    /// **用「關鍵詞」去搜，那一條排第幾**——關鍵詞就是為這件事寫的。
+    ///
+    /// 說明裏本來就有的詞不算數（那一支見 `can_each_row_find_itself`）：關鍵詞
+    /// 要答的是「讀者想的那個同義詞」，所以只挑說明裏**沒有**的那些來問。
+    #[test]
+    #[ignore = "量數用的，不是斷言"]
+    fn can_a_keyword_find_its_row() {
+        let table = crate::messages::table();
+        let mut asked = 0;
+        let mut first = 0;
+        let mut top5 = 0;
+        let mut lost: Vec<String> = Vec::new();
+        for a in yumete_cjk::actions::ALL {
+            let Some(e) = table.get(a.help) else { continue };
+            let name = match a.how {
+                yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
+                yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+            };
+            for word in e.find.split_whitespace() {
+                if e.zht.contains(word) || word.chars().count() < 2 {
+                    continue;
+                }
+                asked += 1;
+                let hits = crate::lookfor::look(word);
+                match hits.iter().position(|h| h.written() == name) {
+                    Some(0) => first += 1,
+                    Some(n) if n < 5 => top5 += 1,
+                    _ => {
+                        if lost.len() < 10 {
+                            lost.push(format!("{name}  ←  {word}"));
+                        }
+                    }
+                }
+            }
+        }
+        println!("{asked} 個關鍵詞：第一 {first} ／前五 {top5} ／更後面 {}",
+                 asked - first - top5);
+        for l in &lost {
+            println!("  {l}");
+        }
+    }

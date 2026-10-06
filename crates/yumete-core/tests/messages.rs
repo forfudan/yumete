@@ -338,15 +338,21 @@ fn every_command_can_be_looked_up_by_a_word_it_is_not_named_with() {
             .join("\n")
     );
 
-    // A `find` line on anything but a command is never read.
+    // A `find` line anywhere else is never read.
+    //
+    // Warning: **`action.` joined `cmd.` on 2026-10-06**, when `::` began looking for
+    // shortcuts as well as commands. Everything else is still dead weight: a
+    // `find` line on a status message is words nobody can ever type at.
     let stray: Vec<&String> = table
         .iter()
-        .filter(|(k, e)| !k.starts_with("cmd.") && !e.find.is_empty())
+        .filter(|(k, e)| {
+            !k.starts_with("cmd.") && !k.starts_with("action.") && !e.find.is_empty()
+        })
         .map(|(k, _)| k)
         .collect();
     assert!(
         stray.is_empty(),
-        "`find` is only searched under `cmd.`, so these lines are dead:\n{}",
+        "`find` is only searched under `cmd.` and `action.`, so these lines are dead:\n{}",
         stray
             .iter()
             .map(|m| format!("  {m}"))
