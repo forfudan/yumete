@@ -1654,6 +1654,14 @@ en = "always save, then leave (short: :wq; :x saves only if changed)"
 find = "存了再退 保存退出 write and quit wq"
 
 [[message]]
+# : 命令選單：:yuhao
+key = "cmd.commands.yuhao"
+zht = "打開宇浩系列輸入法官網"
+zhs = "打开宇浩系列输入法官网"
+en = "open the 宇浩 input method website"
+find = "宇浩 官網 官网 輸入法 输入法 website"
+
+[[message]]
 # : 命令選單裏 yume 那一項的說明（commands 組）
 key = "cmd.commands.yume"
 zht = "輸入法：現在用的是哪一個；換方案、拆分注解"
@@ -6009,30 +6017,51 @@ en = "PgUp/PgDn to page"
 [[message]]
 # 開場屏：空格 ? 做什麼
 key = "intro.all-commands"
-zht = "命令一覽"
-zhs = "命令一览"
-en = "every command"
+zht = "顯示命令列表"
+zhs = "显示命令列表"
+en = "the list of commands"
+
+[[message]]
+# 開場屏：名字。繁簡兩種寫法，英文用拼音。
+key = "intro.author"
+zht = "朱宇浩"
+zhs = "朱宇浩"
+en = "Yuhao Zhu"
+
+[[message]]
+# 開場屏：那一行的標籤
+key = "intro.by"
+zht = "作者"
+zhs = "作者"
+en = "by"
+
+[[message]]
+# 開場屏：:help 那一行
+key = "intro.help"
+zht = "顯示幫助信息"
+zhs = "显示帮助信息"
+en = "the help pages"
 
 [[message]]
 # 開場屏：走一遍教程
 key = "intro.learn"
-zht = "學一遍"
-zhs = "学一遍"
-en = "learn it"
+zht = "打開基本教程"
+zhs = "打开基本教程"
+en = "the basic tutorial"
 
 [[message]]
 # 開場屏：:q 做什麼
 key = "intro.leave"
-zht = "離開"
-zhs = "离开"
-en = "leave"
+zht = "退出編輯器"
+zhs = "退出编辑器"
+en = "leave the editor"
 
 [[message]]
 # 開場屏：空格 f 做什麼
 key = "intro.open-a-file"
-zht = "開一個檔"
-zhs = "开一个档"
-en = "open a file"
+zht = "打開文件選擇器"
+zhs = "打开文件选择器"
+en = "the file picker"
 
 [[message]]
 # 開場屏：那個鍵怎麼寫（空格 f）
@@ -6051,9 +6080,23 @@ en = "space ?"
 [[message]]
 # 空手打開 ye 時那一屏的頭一行
 key = "intro.title"
-zht = "宇夢編輯器"
-zhs = "宇梦编辑器"
-en = "yumete"
+zht = "YUMETE － 宇夢編輯器"
+zhs = "YUMETE － 宇梦编辑器"
+en = "YUMETE — the YUME text editor"
+
+[[message]]
+# 開場屏：版本那一行的標籤
+key = "intro.version"
+zht = "版本"
+zhs = "版本"
+en = "version"
+
+[[message]]
+# 開場屏：:yuhao 那一行
+key = "intro.yuhao"
+zht = "打開宇浩系列輸入法官網"
+zhs = "打开宇浩系列输入法官网"
+en = "the 宇浩 input method website"
 
 [[message]]
 # gw：這一屏上沒有可以跳的地方
