@@ -702,6 +702,30 @@ impl Editor {
         changes.at(line)
     }
 
+    /// **跳到下一處／上一處改動**（`]g`／`[g`，2026-10-06，helix 的
+    /// `goto_next_change`／`goto_prev_change`）。
+    ///
+    /// Warning: **一度以為我們沒有 git diff 層**（夜審那份報告就是這麼寫的，我也跟着
+    /// 寫進了 §5.84）。更正：「git diff 我們已經有了。就是在行號右側用底色表
+    /// 示修改的情况。」——`crate::vcs` 整支都在，`diff_cell` 畫它。所以這兩個鍵
+    /// 補得起來，不是「不適用」。
+    pub(super) fn go_to_change(&mut self, forward: bool) {
+        let here = self.cursor_line();
+        let found = match self.diff_gutter {
+            false => None,
+            true => self
+                .vcs
+                .get(&self.current_buffer().id())
+                .and_then(|(_, changes)| changes.hunk_from(here, forward)),
+        };
+        let Some(line) = found else {
+            self.status = say!("vcs.nothing-changed");
+            return;
+        };
+        self.remember_jump();
+        self.goto_line(line + 1);
+    }
+
     /// **停手多久纔去重算改動條**（2026-09-19 定：300 毫秒）。
     ///
     /// 按鍵一來就重新等——循環是 `recv_timeout(這個時長)`，所以它實際上是「停手
@@ -1056,7 +1080,7 @@ impl Editor {
         // Warning: **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
         // 「送進邊欄要的就是讀得完，而讀得完得走得動」——Warning: **可要走得動本來就有
         // `空格 4`**，和別的邊欄一個樣；而搶走鍵的代價是人正在寫字的時候光標被
-        // 挪走了。作者報的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在
+        // 挪走了。報上來的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在
         // 正文」。
         self.refresh_sidebar();
     }
@@ -1088,7 +1112,7 @@ impl Editor {
     /// 前端每一輪問一次。三個條件：開關開着、光標停穩了、而且不是上一次問過的
     /// 那一格。Warning: **停穩纔問，是為了不閃**——按住 `j` 連走的時候一格都不問，面板
     /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
-    /// 清空，作者定的）。
+    /// 清空，定的）。
     pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         if self.info_live() != crate::sidebar::Info::Docs {
             return None;
@@ -1123,7 +1147,7 @@ impl Editor {
     /// 鍵**：進了邊欄的那一份走邊欄自己的 `jk`，而邊欄是走得進去的
     /// （`空格 4`）——浮窗不是。
     ///
-    /// Warning: **五種都收**（#426，作者的原話：「也可以对五类信息进行翻页」）。
+    /// Warning: **五種都收**（#426，原話：「也可以对五类信息进行翻页」）。
     /// 從前只有文檔收，而散文稿子裏默認浮的是**百科**——一條長詞條被切在「…」
     /// 上，`C-u`／`C-d` 卻去翻了正文，等於沒有出路。
     ///

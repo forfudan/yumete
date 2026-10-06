@@ -598,6 +598,26 @@ pub struct Shell {
     pub how: How,
 }
 
+/// **Where a shell command's output goes** (2026-10-06, helix's four).
+///
+/// helix spells them `|`, `A-|`, `!`, `A-!` and calls them `Replace`,
+/// `Ignore`, `Insert`, `Append` (`ShellBehavior`). Warning: **Only two of the four
+/// feed the selection in** — `shell_impl` reads
+/// `let pipe = match behavior { Replace | Ignore => true, Insert | Append => false }`.
+/// `!date` is vi's `:r !date`: run a command and put its answer here, and the
+/// paragraph the cursor happens to be in is none of its business.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Put {
+    /// `|` — the output takes the selection's place.
+    Replace,
+    /// `!` — the output goes in front of it, which stays.
+    Before,
+    /// `A-!` — the output goes after it, which stays.
+    After,
+    /// `A-|` — nothing comes back. For sending text *out*.
+    Nowhere,
+}
+
 /// What is done with a command's output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum How {
@@ -605,8 +625,9 @@ pub enum How {
     Capture,
     /// Let the command have the terminal and watch it run (`:!`).
     Terminal,
-    /// Feed it the text and put what it says back in its place (`:pipe`, `!`).
-    Pipe(String),
+    /// Run it over the selection and do [`Put`] with what it says
+    /// (`:pipe` and its three siblings).
+    Pipe(String, Put),
     /// Feed it the **whole buffer** and rewrite the buffer with the answer
     /// (`:convert`).
     ///

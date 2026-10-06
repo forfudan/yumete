@@ -248,6 +248,9 @@ pub enum Command {
     Version,
     /// `:yuhao` — hand the 宇浩 input-method site to the system's browser.
     Yuhao,
+    /// `:pipe-before` / `:pipe-after` / `:pipe-to` — the other three of
+    /// helix's four (`!`, `A-!`, `A-|`); `:pipe` itself is [`Command::Pipe`].
+    PipeInto(String, crate::editor::Put),
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
@@ -3880,6 +3883,39 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Project))),
+    },
+    Entry {
+        name: "pipe-before",
+        aliases: &[],
+        help: "cmd.commands.pipe-before",
+        needs: &[],
+        params: &[Param::Free("<命令>")],
+        build: Some(|p| match p.arg(0) {
+            None => Err(CommandError::MissingArgument("pipe-before")),
+            Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::Before)),
+        }),
+    },
+    Entry {
+        name: "pipe-after",
+        aliases: &[],
+        help: "cmd.commands.pipe-after",
+        needs: &[],
+        params: &[Param::Free("<命令>")],
+        build: Some(|p| match p.arg(0) {
+            None => Err(CommandError::MissingArgument("pipe-after")),
+            Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::After)),
+        }),
+    },
+    Entry {
+        name: "pipe-to",
+        aliases: &[],
+        help: "cmd.commands.pipe-to",
+        needs: &[],
+        params: &[Param::Free("<命令>")],
+        build: Some(|p| match p.arg(0) {
+            None => Err(CommandError::MissingArgument("pipe-to")),
+            Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::Nowhere)),
+        }),
     },
     Entry {
         name: "yuhao",

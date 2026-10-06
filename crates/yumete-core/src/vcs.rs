@@ -68,6 +68,22 @@ impl Changes {
         range.contains(&line).then_some(*change)
     }
 
+    /// **下一處／上一處改動的起點行**（`]g`／`[g`，2026-10-06）。
+    ///
+    /// 走的是**段**不是行：`runs` 本來就是按起點排好、互不重疊的段，所以一段五行
+    /// 的改動只算一處，按五下不會在它裏面爬。
+    ///
+    /// 到頭**繞回去**，同 `g/`（「這個詞還在哪裏」那一支）。helix 的 `]g` 到頭就
+    /// 不動也不說話；這個倉的規矩是「一個不說話的鍵看起來就是壞的」，而繞回去
+    /// 既不用說話也不會讓人以為按壞了。
+    pub fn hunk_from(&self, line: usize, forward: bool) -> Option<usize> {
+        let starts = || self.runs.iter().map(|(r, _)| r.start);
+        match forward {
+            true => starts().find(|&s| s > line).or_else(|| starts().next()),
+            false => starts().rfind(|&s| s < line).or_else(|| starts().next_back()),
+        }
+    }
+
     /// 一條都沒有——沒進 git、沒動過，或者 git 不肯回答，這三件事這裏不分。
     pub fn is_empty(&self) -> bool {
         self.runs.is_empty()

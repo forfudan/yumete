@@ -1317,9 +1317,13 @@ pub fn run(
                         // to touch it. `tr -D ' '` is a typo, and its answer is
                         // an error message — replacing a paragraph with that is
                         // an edit nobody asked for, undoable or not.
-                        How::Pipe(input) => match run_capturing(&want.line, Some(&input), &editor.working_dir()) {
+                        How::Pipe(input, put) => match run_capturing(&want.line, Some(&input), &editor.working_dir()) {
                             Ok(ran) if ran.ok => {
-                                editor.provide_pipe_output(&ran.said);
+                                // `A-|`（`Put::Nowhere`）是「送出去就算了」：命令
+                                // 跑過了，稿子一個字不動。
+                                if put != yumete_core::editor::Put::Nowhere {
+                                    editor.provide_pipe_output(&ran.said, put);
+                                }
                                 if !ran.complained.trim().is_empty() {
                                     editor.set_status(say!("shell.replaced-with-complaints", ran.why()));
                                 }

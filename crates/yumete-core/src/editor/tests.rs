@@ -7314,7 +7314,7 @@ fn a_filter_over_whole_rows_is_a_table_operation() {
     // What a sort would send back: the same rows, another order.
     let mut sorted = rows.clone();
     sorted.reverse();
-    ed.provide_pipe_output(&format!("{}\n", sorted.join("\n")));
+    ed.provide_pipe_output(&format!("{}\n", sorted.join("\n")), crate::editor::Put::Replace);
     let now: Vec<String> = ed
         .current_buffer()
         .text()
@@ -7328,7 +7328,7 @@ fn a_filter_over_whole_rows_is_a_table_operation() {
     let before = ed.current_buffer().text();
     ed.goto_line(2);
     press(&mut ed, "x");
-    ed.provide_pipe_output("一個欄位\n");
+    ed.provide_pipe_output("一個欄位\n", crate::editor::Put::Replace);
     assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
     assert!(ed.status().contains("欄"), "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
@@ -8708,14 +8708,19 @@ fn a_cell_can_be_copied_and_a_row_can_be_duplicated() {
 fn a_bang_sends_the_selection_through_a_command() {
     let mut ed = typed("丙\n甲\n乙\n");
 
-    // `!` opens the command line with the verb already typed, so the key is
-    // a shortcut rather than a second mechanism — and pressing it by
-    // accident shows what it was about to do.
+    // Warning: **`|`, not `!`** (2026-10-06). The key that replaces the selection
+    // with a command's output is helix's `|`; `!` there *inserts* the output
+    // in front and leaves the text alone, and ours did the replacing one —
+    // a helix hand pressing `!date⏎` watched a paragraph vanish.
+    //
+    // The key opens the command line with the verb already typed, so it is a
+    // shortcut rather than a second mechanism — and pressing it by accident
+    // shows what it was about to do.
     ed.goto_line(1);
     press(&mut ed, "x");
     press(&mut ed, "x");
     press(&mut ed, "x");
-    ed.on_key(Key::Char('!'));
+    ed.on_key(Key::Char('|'));
     assert_eq!(ed.mode(), Mode::Command);
     assert_eq!(ed.prompt(), Some((":", "pipe ")));
 
@@ -8726,10 +8731,10 @@ fn a_bang_sends_the_selection_through_a_command() {
     ed.on_key(Key::Enter);
     let asked = ed.take_shell_request().expect("a command to run");
     assert_eq!(asked.line, "tr -d ' '");
-    assert_eq!(asked.how, How::Pipe("丙\n甲\n乙\n".to_string()));
+    assert_eq!(asked.how, How::Pipe("丙\n甲\n乙\n".to_string(), crate::editor::Put::Replace));
 
     // What it says goes back in place of what it was given, as one edit.
-    ed.provide_pipe_output("丙甲乙\n");
+    ed.provide_pipe_output("丙甲乙\n", crate::editor::Put::Replace);
     assert_eq!(ed.current_buffer().text(), "丙甲乙\n");
     ed.on_key(Key::Char('u'));
     assert_eq!(ed.current_buffer().text(), "丙\n甲\n乙\n", "one `u` takes it back");
@@ -17550,6 +17555,51 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     let mut ed = vim();
     press(&mut ed, "v3ld");
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
+}
+
+/// **helix 的 shell 四件**（2026-10-06）。
+///
+/// Warning: 我們的 `!` 從前做的是 helix 的 `|`（用輸出換掉選區），而 helix 的 `!` 是**插在
+/// 前面、原文不動**——對齊審查裏唯一一條會丟字的。四個鍵現在各歸各的，而且**只有
+/// 兩個把選區餵給命令**（`shell_impl`：`Replace | Ignore => true`）。
+#[test]
+fn the_four_shell_keys_each_do_their_own_thing() {
+    let asked = |key: Key| {
+        let mut ed = typed("丙\n甲\n乙\n");
+        ed.goto_line(1);
+        press(&mut ed, "x");
+        ed.on_key(key);
+        let line = ed.prompt().map(|(_, text)| text.to_string());
+        for c in "cat".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+        (line, ed.take_shell_request())
+    };
+    use crate::editor::{How, Put};
+    for (key, verb, put, fed) in [
+        (Key::Char('|'), "pipe ", Put::Replace, "丙\n"),
+        (Key::Char('!'), "pipe-before ", Put::Before, ""),
+        (Key::Alt('!'), "pipe-after ", Put::After, ""),
+        (Key::Alt('|'), "pipe-to ", Put::Nowhere, "丙\n"),
+    ] {
+        let (line, want) = asked(key);
+        assert_eq!(line.as_deref(), Some(verb), "{key:?} 開的是哪一條命令");
+        let want = want.expect("a shell request");
+        assert_eq!(want.how, How::Pipe(fed.to_string(), put), "{key:?}");
+    }
+
+    // 插在前面／後面的，原文留着。
+    let put_round = |put: Put| {
+        let mut ed = typed("甲\n");
+        ed.goto_line(1);
+        press(&mut ed, "x");
+        ed.provide_pipe_output("乙\n", put);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(put_round(Put::Before), "乙\n甲\n");
+    assert_eq!(put_round(Put::After), "甲\n乙\n");
+    assert_eq!(put_round(Put::Replace), "乙\n");
 }
 
 /// **vim 鍵位下光標不停在換行符上**（十三條的第 9 條，2026-10-06）。

@@ -785,12 +785,20 @@ impl Editor {
                     self.status = say!("readonly.refused");
                     return Ok(CommandOutcome::Continue);
                 }
-                let (start, end) = self.selection();
-                let text = self.current_buffer().rope().slice(start..end).to_string();
-                self.shell_request = Some(Shell {
-                    line,
-                    how: How::Pipe(text),
-                });
+                self.ask_the_shell(line, crate::editor::Put::Replace);
+                Ok(CommandOutcome::Continue)
+            }
+            // **helix 那四個裏的另外三個**（2026-10-06）：`!` 插在前面、`A-!` 接在
+            // 後面、`A-|` 不收輸出。
+            Command::PipeInto(line, put) => {
+                // Warning: **只有「不收輸出」那一個也要擋只讀**——它不改稿子，可是
+                // `:pipe-to` 之外那兩個要往稿子裏插字。鎖住就別跑那條命令，理由
+                // 同上面那一段。
+                if put != crate::editor::Put::Nowhere && self.current_buffer().is_readonly() {
+                    self.status = say!("readonly.refused");
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.ask_the_shell(line, put);
                 Ok(CommandOutcome::Continue)
             }
             Command::Convert(ask) => {
