@@ -4820,6 +4820,13 @@ zhs = "下/上一段（文件里的一行，往左是往后）"
 en = "next / previous line of the file — leftward is onward"
 
 [[message]]
+# vim 鍵位下 g 選單裏的 u U ~ ——大小寫算子，等一個動作
+key = "hint.goto.case-operators"
+zht = "轉小寫/大寫/互換，等一個動作"
+zhs = "转小写/大写/互换，等一个动作"
+en = "to lower, to upper, swap them — each waits for a motion"
+
+[[message]]
 # g 組：複製到系統剪貼簿
 key = "hint.goto.copy-to-clipboard"
 zht = "複製到系統剪貼板"
@@ -4862,6 +4869,13 @@ zhs = "去/看它指的地方"
 en = "go to / show what it points at"
 
 [[message]]
+# vim 鍵位下 g 選單裏的 ` ——字形組在那一端的門
+key = "hint.goto.glyph-group"
+zht = "字形組（vim 鍵位下 ` 歸標記）"
+zhs = "字形组（vim 键位下 ` 归标记）"
+en = "the glyph group (under vim, ` belongs to marks)"
+
+[[message]]
 # g 選單：gw 亮起跳轉標籤
 key = "hint.goto.jump-labels"
 zht = "跳到當前屏幕某位置"
@@ -4888,6 +4902,13 @@ key = "hint.goto.line-start-or-end"
 zht = "行首/行尾"
 zhs = "行首/行尾"
 en = "line start / end"
+
+[[message]]
+# vim 鍵位下 g 選單裏的 n N ——下一處/上一處匹配（helix 那一端是換稿子）
+key = "hint.goto.next-match"
+zht = "下一處/上一處匹配"
+zhs = "下一处/上一处匹配"
+en = "the next or previous match"
 
 [[message]]
 # g 組：切到下一個/上一個打開的檔案
@@ -6226,6 +6247,13 @@ key = "jump.nowhere"
 zht = "這一屏上沒有可以跳的地方"
 zhs = "这一屏上没有可以跳的地方"
 en = "nowhere on this screen to jump to"
+
+[[message]]
+# C-s：把這個選區記進跳轉表，C-o 回得來
+key = "jump.selection-saved"
+zht = "記下了，C-o 回得來"
+zhs = "记下了，C-o 回得来"
+en = "saved; C-o comes back"
 
 [[message]]
 # :keymap actions 那張清單的開頭一段
