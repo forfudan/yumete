@@ -90,9 +90,11 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("gg", _) => step(Motion::FileStart, Reach::Linewise),
         ("}", _) => step(Motion::Paragraph { forward: true }, Reach::Exclusive),
         ("{", _) => step(Motion::Paragraph { forward: false }, Reach::Exclusive),
-        // Warning: **`H`／`L` 不在這張表上了**（2026-10-06）。vim 的 `H`／`L` 是屏幕的
-        // 頂／底，而句子是 `(`／`)`——下面那一對就是。`dH` 現在答「不是一個動作」，
-        // 比悄悄刪掉一句話好；真要做得先有一個看得見視口的動作（§5.95）。
+        // **`H`／`M`／`L` 是屏幕的頂／中／底**（2026-10-06），而句子是 `(`／`)`
+        // ——下面那一對就是。整行整行地取，同 vim（`:h H` 說它是 linewise）。
+        ("H", _) => step(Motion::Screen { which: 'H' }, Reach::Linewise),
+        ("M", _) => step(Motion::Screen { which: 'M' }, Reach::Linewise),
+        ("L", _) => step(Motion::Screen { which: 'L' }, Reach::Linewise),
         // **`(` 和 `)` 也是句子**（2026-10-06）。vim 的句子動作就是這一對；這個
         // 編輯器把句子放在 `H`／`L` 上（#404），可一個 vim 的手按的是這一對，而
         // `d)` 從前什麼都不做。兩個拼法同一件事。

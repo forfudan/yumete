@@ -529,6 +529,19 @@ pub enum Motion {
     /// keep is the screen's question, and a verb that takes whole lines never
     /// asks it. The keys themselves still walk the screen's rows.
     Line { down: bool },
+    /// `H` / `M` / `L` — **the top, middle or bottom of what is on the screen**
+    /// (vim; 2026-10-06).
+    ///
+    /// Warning: **The one motion that has to ask the front end.** Every other is a
+    /// function of the rope alone; this one needs to know which slice is drawn,
+    /// and the front end hands that over每一幀 (`set_page_span`). Before any
+    /// frame has been drawn it misses, so an operator takes nothing rather than
+    /// guessing at the whole file.
+    ///
+    /// A count is 「the nth row in from that edge」, as vim has it: `3H` is the
+    /// third row down from the top, `3L` the third up from the bottom, and `M`
+    /// pays a count no attention.
+    Screen { which: char },
     /// `mi w`, `ma (` — and vim's `ciw`, `di(`, which press the same door.
     ///
     /// Warning: **An object knows both its ends**, which is why it is not two
