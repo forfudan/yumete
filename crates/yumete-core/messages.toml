@@ -3932,6 +3932,13 @@ zhs = "记住了「{0}」：{1} 第 {2} 行"
 en = "marked '{0}': {1} line {2}"
 
 [[message]]
+# g, 走到頭了：已經在最新那一處改動上
+key = "goto.newest-change"
+zht = "已經是最新改的那一處了"
+zhs = "已经是最新改的那一处了"
+en = "this is the newest change"
+
+[[message]]
 # 跳轉表已經到最早
 key = "goto.no-earlier-jump"
 zht = "沒有更早的位置了"
@@ -4923,6 +4930,13 @@ key = "hint.goto.title"
 zht = "g"
 zhs = "g"
 en = "g"
+
+[[message]]
+# g 選單裏的 ; , （只在 vim 鍵位下）——在改過的地方之間走
+key = "hint.goto.walk-changes"
+zht = "往舊／往新走一處改動"
+zhs = "往旧／往新走一处改动"
+en = "an older / newer change"
 
 [[message]]
 # 這一句是 g/ g? 的說明

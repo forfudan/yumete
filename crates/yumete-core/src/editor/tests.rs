@@ -17567,6 +17567,54 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **`g;`／`g,` 在改過的地方之間走**（vim，2026-10-06）。
+#[test]
+fn vim_walks_the_change_list() {
+    let mut ed = typed_vim("一\n二\n三\n四\n五\n");
+    // 在第 1、3、5 行各改一處。
+    for line in [0usize, 2, 4] {
+        ed.goto_line(line + 1);
+        press(&mut ed, "A");
+        press(&mut ed, "X");
+        ed.on_key(Key::Esc);
+    }
+    let at = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+    assert_eq!(at(&ed), 4, "剛改完在第 5 行");
+    // `g;` 往舊走。
+    press(&mut ed, "g;");
+    assert_eq!(at(&ed), 4, "第一下回到最後改的那一處");
+    press(&mut ed, "g;");
+    assert_eq!(at(&ed), 2);
+    press(&mut ed, "g;");
+    assert_eq!(at(&ed), 0);
+    // `g,` 往新走回去。
+    press(&mut ed, "g,");
+    assert_eq!(at(&ed), 2);
+    press(&mut ed, "g,");
+    assert_eq!(at(&ed), 4);
+    press(&mut ed, "g,");
+    assert!(!ed.status().is_empty(), "到頭了要說一句");
+
+    // **一行只記一條**，同 vim：在同一行上改五次，表上只多一條。
+    // Warning: **比的是差，不是絕對值**——鋪固定裝置本身就是往 rope 裏打字，那幾下
+    // 也記在表上（同 `reset_last_edit_for_test` 那一條註釋說的事）。
+    let mut ed = typed_vim("甲\n乙\n");
+    let before = ed.current_buffer().changes().len();
+    press(&mut ed, "A");
+    press(&mut ed, "ABCDE");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().changes().len(), before + 1, "一行一條");
+
+    // Warning: **helix 鍵位下 `g;` 不是這個**（那一端 `g` 之後的 `;` 沒有意思）。
+    let mut ed = typed("甲\n乙\n");
+    press(&mut ed, "ggA");
+    press(&mut ed, "X");
+    ed.on_key(Key::Esc);
+    let was = ed.current_buffer().text().to_string();
+    press(&mut ed, "g;");
+    assert_eq!(ed.current_buffer().text(), was, "不動稿子");
+}
+
 /// **`gv` 重選上一次那一段，插入態 `C-o` 做一個命令就回來**（vim，2026-10-06）。
 #[test]
 fn vim_reselects_and_borrows_one_normal_key() {
