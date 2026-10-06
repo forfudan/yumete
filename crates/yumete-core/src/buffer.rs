@@ -834,6 +834,20 @@ impl Buffer {
             self.swapped_at = Some(self.revision);
             return Ok(());
         };
+        // **空的草稿不是草稿**（2026-10-07 定，作者同意：「an empty buffer probably
+        // shouldn't earn a draft」）。
+        //
+        // 没有名字的那一份打過字又清空了——`is_modified` 照樣是真，於是每一趟
+        // 都往盤上寫一個 **0 字節**的檔；下一次開編輯器它就報「有 1 份沒存的草稿」，
+        // 而 `:recover` 取回來的是一張白紙。
+        //
+        // Warning: **只管没有名字的那一份**。一份**有名字**的稿子被清空是一次真的改動
+        // ——那正是最該留一份副本的時候（「我把整章删了」），刪掉它就是幫倒忙。
+        if self.path.is_none() && self.rope.len_chars() == 0 {
+            self.clear_swap();
+            self.swapped_at = Some(self.revision);
+            return Ok(());
+        }
         // The manuscript is the model for the copy's permissions — see
         // `write_atomically_like`. A scratch buffer has no manuscript, and
         // there the umask is the only answer there is.
@@ -2074,6 +2088,42 @@ mod tests {
         assert!(left.exists(), "somebody else's unrecovered work stays");
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **打過字又清空的那一份不留草稿**（2026-10-07 定）。
+    ///
+    /// `is_modified` 照樣是真，於是從前每一趟都寫一個 0 字節的檔，下一次開編輯器
+    /// 就報「有 1 份沒存的草稿」——而取回來的是一張白紙。
+    #[test]
+    fn an_empty_scratch_buffer_keeps_no_draft() {
+        let dir = std::env::temp_dir().join(format!("yumete-blank-draft-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("fixture dir");
+        let draft = dir.join("scratch-1-1.yumete");
+
+        let mut b = Buffer::scratch();
+        b.keep_drafts_at(draft.clone());
+        b.insert(0, "一句話").expect("typed");
+        b.write_swap().expect("swap");
+        assert!(draft.exists(), "打了字就留一份：{draft:?}");
+
+        // 清空它：草稿跟着走，盤上不留一個空檔。
+        let all = b.text().chars().count();
+        b.remove(0..all).expect("emptied");
+        assert_eq!(b.text(), "", "真的空了");
+        b.write_swap().expect("swap");
+        assert!(!draft.exists(), "空了就不留：{draft:?}");
+
+        // **有名字的那一份清空了仍舊留**——那是「我把整章删了」，最該留副本。
+        let chapter = dir.join("ch1.md");
+        fs::write(&chapter, "一章\n").expect("write");
+        let mut named = Buffer::open(&chapter).expect("open");
+        let all = named.text().chars().count();
+        named.remove(0..all).expect("emptied");
+        named.write_swap().expect("swap");
+        assert!(named.wrote_at.as_ref().is_some_and(|p| p.exists()), "有名字的留着");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
