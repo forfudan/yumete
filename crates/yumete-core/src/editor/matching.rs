@@ -50,6 +50,11 @@ impl Editor {
             's' => motion::Object::Sentence,
             // `mi m`／`ma m`：光標所在的那一段 Markdown 標記（2026-09-28）。
             'm' => motion::Object::Markup,
+            // **`mi f`／`mi c`：光標所在的那個函數／類**（2026-10-06，helix 的
+            // `mi f`／`mi c`）。語法樹那一邊的事，所以不走 `Object`——它是
+            // 純文本的一支，而這個要問那棵樹。整份是代碼的檔才有，`ma` 和 `mi`
+            // 在這裏是同一段：一個定義沒有「連着外面那層」可言。
+            'f' | 'c' => return self.select_definition(c == 'f'),
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
                 None => {
@@ -87,6 +92,66 @@ impl Editor {
             self.sel.set_anchor(anchor);
             self.sel.set_head(head.max(anchor));
         }
+    }
+
+    /// **選中光標所在的那個函數／類**（`mi f`／`mi c`，2026-10-06）。
+    ///
+    /// 取**最裏面**那一個：巢狀的函數、`impl` 裏的方法，光標站在哪一層就取哪一層
+    /// ——和 `mi(` 在同族括號之間挑的規矩一樣。
+    fn select_definition(&mut self, function: bool) {
+        let want = match function {
+            true => crate::code::Define::Function,
+            false => crate::code::Define::Class,
+        };
+        let here = self.sel.head();
+        let found = self
+            .definitions_here()
+            .into_iter()
+            .filter(|&(from, to, kind)| kind == want && (from..to).contains(&here))
+            .max_by_key(|&(from, _, _)| from);
+        let Some((from, to, _)) = found else {
+            self.status = say!("code.no-definition-here");
+            return;
+        };
+        let head = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
+        self.sel.set_anchor(from);
+        self.sel.set_head(head);
+        self.extend = false;
+        self.clamp_cursor();
+        self.refresh_goal_column();
+    }
+
+    /// **跳到下一個／上一個函數或類**（`]f`／`[f`／`]c`／`[c`，2026-10-06）。
+    ///
+    /// 到頭繞回去，同 `]g`。
+    pub(super) fn go_to_definition_nearby(&mut self, forward: bool, function: bool) {
+        let want = match function {
+            true => crate::code::Define::Function,
+            false => crate::code::Define::Class,
+        };
+        let starts: Vec<usize> = self
+            .definitions_here()
+            .into_iter()
+            .filter(|&(_, _, kind)| kind == want)
+            .map(|(from, _, _)| from)
+            .collect();
+        if starts.is_empty() {
+            self.status = say!("code.no-definitions");
+            return;
+        }
+        let here = self.sel.head();
+        let to = match forward {
+            true => starts.iter().copied().find(|&s| s > here).unwrap_or(starts[0]),
+            false => starts
+                .iter()
+                .copied()
+                .rfind(|&s| s < here)
+                .unwrap_or_else(|| starts[starts.len() - 1]),
+        };
+        self.remember_jump();
+        self.sel.collapse_to(to);
+        self.clamp_cursor();
+        self.refresh_goal_column();
     }
 
     /// The span a pair of delimiters encloses, `around` taking the marks too.

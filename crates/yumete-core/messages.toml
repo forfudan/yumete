@@ -3152,6 +3152,20 @@ find = "輸入法 输入法 方案 現在 现在 which"
 # ── command ───────────────────────────────────────────────────────────
 
 [[message]]
+# mi f／mi c：光標不在任何一個定義裏
+key = "code.no-definition-here"
+zht = "光標不在任何函數或類裏"
+zhs = "光标不在任何函数或类里"
+en = "the cursor is not inside a function or a class"
+
+[[message]]
+# ]f／]c：這一份裏一個定義都沒有（或者不是代碼檔）
+key = "code.no-definitions"
+zht = "這一份裏找不到函數或類"
+zhs = "这一份里找不到函数或类"
+en = "no functions or classes in this file"
+
+[[message]]
 # 命令行語法壞了
 key = "command.broken-line"
 zht = "命令寫壞了：{0}"
@@ -4988,11 +5002,25 @@ zhs = "改动"
 en = "a change"
 
 [[message]]
+# ]／[ 的選單：下一個／上一個類（只在整份是代碼的檔上）
+key = "hint.hop.class"
+zht = "類"
+zhs = "类"
+en = "a class"
+
+[[message]]
 # ]／[ 的選單：下一處／上一處合併衝突
 key = "hint.hop.conflict"
 zht = "合併衝突"
 zhs = "合并冲突"
 en = "merge conflict"
+
+[[message]]
+# ]／[ 的選單：下一個／上一個函數
+key = "hint.hop.function"
+zht = "函數"
+zhs = "函数"
+en = "a function"
 
 [[message]]
 # ] 按下之後的選單標題

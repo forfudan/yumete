@@ -130,7 +130,7 @@ impl Editor {
         if !self.code_colours {
             return Vec::new();
         }
-        // Warning: **先確認手上那棵樹就是這個檔這一版的**（2026-10-01 作者報
+        // Warning: **先確認手上那棵樹就是這個檔這一版的**（2026-10-01 報
         // 的：「open a rust file first and then open a python file via picker,
         // the coloring of the python file is incorrect」）。`by_chunk` 只按
         // 「第幾塊」記，**不記是哪個檔**——所以從 `build.rs` 切到 `sc2tc.py`，
@@ -157,6 +157,28 @@ impl Editor {
         ));
         cache.by_chunk.insert(chunk, painted.clone());
         painted.get(line - chunk * CHUNK).cloned().unwrap_or_default()
+    }
+
+    /// **這一份裏每一個定義**，位置是**字符**（`]f`／`]c`／`mi f`，2026-10-06）。
+    ///
+    /// 只在「整份是代碼」的檔上回得出東西：markdown 裏的圍欄各有各的樹，而一段
+    /// 稿子裏的 `def` 不是這本書的結構。空的回空——按鍵那一頭照這個說「這裏沒有」。
+    pub(super) fn definitions_here(&self) -> Vec<(usize, usize, crate::code::Define)> {
+        let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
+            return Vec::new();
+        };
+        if !self.code_colours {
+            return Vec::new();
+        }
+        self.hold_the_tree(language);
+        let cache = self.code_cache.borrow();
+        let Some(held) = cache.whole.as_ref().filter(|h| h.language == language) else {
+            return Vec::new();
+        };
+        let found = crate::code::definitions(language, &held.source, &held.tree);
+        // 字節 → 字符。`source` 就是解析用的那一份，所以兩邊數的是同一串。
+        let at = |byte: usize| held.source[..byte.min(held.source.len())].chars().count();
+        found.into_iter().map(|(from, to, kind)| (at(from), at(to), kind)).collect()
     }
 
     /// **把這一版的樹備好**——已經是這一版就什麽都不做。
