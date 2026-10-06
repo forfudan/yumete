@@ -304,11 +304,9 @@ impl Editor {
         };
         let mut rows = command::complete(asked);
         let exact = rows.len();
-        // Warning: **有空格就不猜了**（2026-10-06 當場撞的回歸）。空格之後是參數，
-        // 而參數是檔名、主題名、欄號——不是命令名。`:w draft` 按 ⇥ 從前好好地
-        // 留着 `draft`，加上猜的之後它變成了 `:w indent-width`：一個檔名被當成
-        // 了一句「你要的也許是這個」。
-        if asked.trim().contains(' ') {
+        // **只在還打着命令名的時候猜**（[`command::still_naming`]）。參數位置、
+        // 替換那個形狀、`!`／`/`／`?` 開頭的，都不是名字打了一半。
+        if !command::still_naming(asked) {
             return (rows, exact);
         }
         let named: Vec<&str> = rows.iter().map(|c| c.name).collect();

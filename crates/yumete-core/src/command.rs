@@ -4570,6 +4570,13 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         Some(at) => &line[at..],
         None => line,
     };
+    // **替換打到一半仍舊是替換**（2026-10-07 報的）。表上那一條叫 `s/pat/rep/`，
+    // 而選單比的是前綴：`s/` 比得上，`s/xa` 比不上——於是打到第三個字符，整扇
+    // 面板空了，再往下猜還猜出個 `:syntax` 來。斜杠一出現，名字就定了。
+    let line = match line.starts_with("s/") {
+        true => "s/",
+        false => line,
+    };
     // Where each word starts, and the word itself. A line ending in a space is
     // asking about a *new* word, not still about the last one.
     let mut words: Vec<(usize, &str)> = Vec::new();
@@ -4990,6 +4997,89 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Param> {
 /// stale names the word rather than the line. Walking stops where the words
 /// stop: under a path or free text what follows is the writer's own text, not
 /// this table's vocabulary.
+/// **還在打命令名嗎**（2026-10-07）——猜與不猜、說明說誰的事，都問這一句。
+///
+/// 不是的有三種，每一種都不是「名字打了一半」：
+///
+/// - **有空格了**：後面是參數，而參數是檔名、主題名、欄號。`:w draft` 按 ⇥
+///   從前好好地留着 `draft`，當成名字去猜就成了 `:w indent-width`。
+/// - **替換的那個形狀**（`s/`、`%s/`、`1-40s/`）：斜杠後面是式子。`:s/xa` 當成
+///   名字去猜，配出來的是 `:syntax`——而按下 Enter 根本不會跑 syntax。
+/// - **`!`、`/`、`?` 開頭**：整行交給別人，名字的事到第一個字符就結束了。
+pub fn still_naming(line: &str) -> bool {
+    // Warning: **右邊不許 trim**（寫的時候當場撞的）。`:ruby ` 末尾那一個空格正是
+    // 「名字打完了，現在挑參數」的信號——剪掉它，`:ruby ` 和 `:ruby` 就成了同
+    // 一回事，而那兩個時刻面板該說的話不一樣。
+    let line = line.strip_prefix(':').unwrap_or(line).trim_start();
+    if line.is_empty() {
+        return true;
+    }
+    if line.starts_with(['!', '/', '?']) || line.contains(' ') {
+        return false;
+    }
+    let head = line.split_whitespace().next().unwrap_or("");
+    !(head.starts_with("s/") || rows_before_a_substitution(line).is_some())
+}
+
+/// **按下 Enter 會做什麼**，給面板上面那一段用（2026-10-07）。
+///
+/// 原話：「我在命令行打任何東西的時候，横向上方的description都應該忠實反應我按下
+/// Enter時候會發生什麽，而不是顯示第一個command的描述」。
+///
+/// 從前那一段畫的是**單子上第一條**的說明：剛按下 `:` 什麼都沒打，它說的是
+/// `:cd` 的事，而按下 Enter 什麼都不會發生；打了一個不存在的命令，它照樣說着別
+/// 人的事。
+///
+/// `Err(None)` ＝ 什麼都沒打，`Err(Some(名字))` ＝ 沒有這個命令。
+pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
+    let line = line.strip_prefix(':').unwrap_or(line).trim();
+    if line.is_empty() {
+        return Err(None);
+    }
+    // 這兩種在名字拆分之前就被攔下來，所以也要在這裏自己答一次。
+    if line.starts_with('!') {
+        return Ok(Described { help: "cmd.commands.shell", spelt: None, needs: &[] });
+    }
+    // Warning: **`:/` 不是 `:search`**（2026-10-07 當場看出來的）。`:search` 開的是那扇
+    // 面板；`:/` 做的是 `/` 做的事——走到下一處。兩句話借的是鍵位表上那兩則。
+    if let Some(back) = line.strip_prefix('?').map(|_| true).or(line.strip_prefix('/').map(|_| false))
+    {
+        let help = match back {
+            true => "action.rsearch",
+            false => "action.search",
+        };
+        return Ok(Described { help, spelt: None, needs: &[] });
+    }
+    let head = line.split_whitespace().next().unwrap_or("");
+    let shaped = rows_before_a_substitution(line).is_some()
+        || head == "s"
+        || head.starts_with("s/");
+    if shaped {
+        return Ok(Described { help: "cmd.commands.substitute", spelt: None, needs: &[] });
+    }
+    match entry_named(head) {
+        Some(e) => Ok(Described {
+            help: e.help,
+            spelt: match e.aliases.is_empty() {
+                true => None,
+                false => Some(e.aliases.join(" ")),
+            },
+            needs: e.needs,
+        }),
+        None => Err(Some(head.to_string())),
+    }
+}
+
+/// What [`about_the_line`] found: enough to describe it, and nothing else.
+pub struct Described {
+    /// The message tag for its one-line description.
+    pub help: &'static str,
+    /// Its other spellings, joined — `bc bclose`.
+    pub spelt: Option<String>,
+    /// What it cannot run without.
+    pub needs: &'static [Need],
+}
+
 pub fn names_something(line: &str) -> Result<(), String> {
     let line = line.strip_prefix(':').unwrap_or(line);
     let mut words = line.split_whitespace();
