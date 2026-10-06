@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""從 docs/manual.md 生成簡體版 docs/manual_sc.md。
+"""從 docs/manual_tc.md 生成簡體版 docs/manual_sc.md。
 
     scripts/make_manual_sc.py
 
-**繁體那一份是正本。** 手冊只改 `docs/manual.md`，簡體版跑這支重生成；反過來改
+**繁體那一份是中文的正本。** 中文手冊只改 `docs/manual_tc.md`，簡體版跑這支重生成；反過來改
 簡體版，下一次生成就沒了。
 
 Warning: **只有這一個方向是安全的。** 反過來（簡 → 繁）走 opencc 的 `s2t` 會被它的詞組
@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "docs" / "manual.md"
+SRC = ROOT / "docs" / "manual_tc.md"
 OUT = ROOT / "docs" / "manual_sc.md"
 
 MARK = "<!-- verbatim -->"
@@ -43,8 +43,8 @@ MARK = "<!-- verbatim -->"
 CHUNK = re.compile(rf"({re.escape(MARK)}[\S\s]+?{re.escape(MARK)})|([\S\s]+?(?={re.escape(MARK)})|[\S\s]+)")
 
 HEAD = (
-    "<!-- 由 scripts/make_manual_sc.py 从 docs/manual.md 生成，请勿直接编辑。\n"
-    "     Generated from docs/manual.md — edit that one, then re-run the script.\n"
+    "<!-- 由 scripts/make_manual_sc.py 从 docs/manual_tc.md 生成，请勿直接编辑。\n"
+    "     Generated from docs/manual_tc.md — edit that one, then re-run the script.\n"
     "     繁体正本用大陆通规繁体字形；<!-- verbatim --> 包住的片段原样保留繁体。 -->\n\n"
 )
 
@@ -59,7 +59,7 @@ TRAD_ONLY = "裏爲説麽録"
 #
 # `t2s` 出「选单」而大陸說「菜单」；`tw2sp` 認得這個詞，可整本換成它會順帶改掉一
 # 堆別的說法。所以逐字轉完再過一張小表——表裏只許放**兩岸用詞不同**的詞，不許放
-# 「我覺得這樣更好」的改寫（文案是作者定的）。
+# 「我覺得這樣更好」的改寫（文案是定的）。
 #
 # 對照：`messages.toml` 的 zht／zhs 兩欄本來就各寫各的（`選單`／`菜单`），這張表
 # 是讓手冊和那兩欄對得上。

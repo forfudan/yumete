@@ -25,6 +25,12 @@ fn documents() -> Vec<(&'static str, String)> {
             "docs/manual.md",
             std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual"),
         ),
+        // **兩份手冊都讀**（2026-10-06）。英文那一份是正本，繁體那一份是同一本書
+        // 的中文版——兩邊教的鍵要一樣，所以兩邊都走一遍這張網。
+        (
+            "docs/manual_tc.md",
+            std::fs::read_to_string(format!("{root}/docs/manual_tc.md")).expect("the manual"),
+        ),
         ("tutor.rs", yumete_core::tutor::LESSON.to_string()),
     ]
 }

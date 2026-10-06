@@ -107,7 +107,7 @@ impl Editor {
             // （是 `}` `{`——大括號當成 `format!` 的轉義寫了兩遍，而這裏不是格式
             // 串，於是屏幕上真就印出兩個）。
             //
-            // Warning: **`documented_keys` 那張網看不見這裏**：它只讀 `docs/manual.md`
+            // Warning: **`documented_keys` 那張網看不見這裏**：它只讀兩份手冊
             // 與教程，不讀這一頁。手抄的鍵表就是這麽爛掉的。
             ("gg ge", say!("help.common.start-end-of-file")),
             ("gh gl gs", say!("help.common.line-start-end")),

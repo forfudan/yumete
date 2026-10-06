@@ -66,7 +66,7 @@ fixture() {
     case "$1" in
         TABLE) printf '| 名 | 說明 | 數 |\n| --- | --- | --- |\n| 甲 | 第一條 | 12 |\n| 乙 | 第二條，長一些 | 345 |\n| ⚠️ | 有警告 | 6 |\n' ;;
         RUBY)  printf '那<ruby>韋<rt>wéi</rt></ruby>字念什麼。\n她伸手去碰，指尖一涼。\n' ;;
-        MANUAL) sed -n '1,60p' docs/manual.md ;;
+        MANUAL) sed -n '1,60p' docs/manual_tc.md ;;
         *)     printf '那年冬天，雪下得早。山路斷了、她在門口站了很久。\n霜花在窗上結成了葉子的樣子，後來又下了一場，比上次大。\n她伸手去碰，指尖一涼，那朵花就化了。\n\nIt was a dark and stormy night in the old house.\n\n- 買菜\n- 倒垃圾\n- 寫第三章\n' ;;
     esac
 }

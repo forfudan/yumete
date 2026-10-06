@@ -613,7 +613,7 @@ pub fn hidden(spans: &[Span], selected: Option<(usize, usize)>) -> Vec<(usize, u
 /// 不是標題。Markdown 1.0 原版寬鬆，而那條規矩存在的理由正是 `#128`、`#!/bin/sh`、
 /// `#include` 這一族。Typst 的 `=` 同樣要求後跟空白。
 ///
-/// Warning: **全角空格也算空白**——中文作者最常見的縮進寫法是 `= 　第一章`。
+/// Warning: **全角空格也算空白**——寫中文的人最常見的縮進寫法是 `= 　第一章`。
 ///
 /// Warning: **標題本身空不空由呼叫方決定。** 大綱要求非空（光一個 `##` 是一條線，不是標題），
 /// 而着色那一支不要求。
@@ -1238,7 +1238,7 @@ fn run(chars: &[char], from: usize, text: &str) -> Option<usize> {
 /// first two backticks, and the scan came back out standing on the `%%` — which
 /// then opened a comment and greyed the rest of the file. 2026-09-19:
 /// 「markdown 中的百分號會把後面的所有文字變成註釋」. The same shape did it in
-/// this project's own manual (`docs/manual.md:394`, a line of quoted markup),
+/// this project's own manual (`docs/manual_tc.md:394`, a line of quoted markup),
 /// and the exporter — which strips comments — **dropped those paragraphs from
 /// the exported file**.
 ///
@@ -1449,7 +1449,7 @@ pub mod typst {
                 construct += 1;
                 // **方括號裏裝的是正文，不是代碼**（2026-09-28）。`#chapter[初雪]`、
                 // `#quote[…]`、`#figure(caption: [說明])` 是中文 Typst 稿裏最常見的三
-                // 種寫法，從前整塊畫成代碼色，等於把作者寫的字藏起來。
+                // 種寫法，從前整塊畫成代碼色，等於把寫的字藏起來。
                 //
                 // Warning: **這是官方那套模式切換裏唯一值得學的一層**：Typst 的 `[]` 從 code
                 // 模式切回 markup 模式。再往裏（`#if x { [文字] }` 這種）只出現在模板檔
@@ -1847,7 +1847,7 @@ mod typst_tests {
     #[test]
     fn a_backslash_escapes_and_a_fullwidth_space_still_opens_a_heading() {
         assert_eq!(shape(r"\*不是強調\*"), ".     . ");
-        // Warning: 全角空格是中文作者最常見的縮進，從前它讓整行標題不上色。
+        // Warning: 全角空格是寫中文的人最常見的縮進，從前它讓整行標題不上色。
         assert_eq!(shape("= 　第一章"), ".HHHHH");
         assert_eq!(shape("= 第一章"), ".HHHH");
     }
@@ -1858,7 +1858,7 @@ mod typst_tests {
         // writer has to see them, so they are never hidden, only set back.
         //
         // Warning: **方括號裏的那幾個字不是代碼**（2026-09-28）。`#chapter[初雪]` 裏「初雪」
-        // 是作者寫的字，從前整塊畫成代碼色，等於把它藏起來。現在代碼色只蓋
+        // 是寫的字，從前整塊畫成代碼色，等於把它藏起來。現在代碼色只蓋
         // `#chapter[` 和 `]` 兩截。這一條原先寫的是 `"############"`。
         assert_eq!(shape("#chapter[初雪]"), "#########  #");
         assert_eq!(shape("那年#emph[冬天]。"), "  ######  # ");
@@ -2194,7 +2194,7 @@ mod tests {
     /// 取的是「下一個反引號」，所以兩個挨在一起的反引號被當成一對空代碼段，
     /// 掃描回到 `%%` 上——於是它開了一條註釋，後面半本書變灰，導出的時候那
     /// 幾段**整個不見**。2026-09-19 報的就是這個，而這個檔自己的手冊
-    /// （`docs/manual.md:394`，引用各種標記的那一行）正是這個形狀。
+    /// （`docs/manual_tc.md:394`，引用各種標記的那一行）正是這個形狀。
     ///
     /// Warning: 上面那一條只用了單反引號，所以它永遠是綠的。
     #[test]
