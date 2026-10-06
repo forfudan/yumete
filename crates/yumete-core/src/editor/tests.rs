@@ -22272,11 +22272,12 @@ fn the_z_layer_answers_what_helix_binds_there() {
     j.on_key(Key::Char('j'));
     assert_eq!(line(&j), 2, "Esc 之後 j 又是走一行");
 
-    // 認不得的鍵仍舊說一句，而那句話現在把新加的幾個也列了出來。
+    // **認不得的鍵報的是手指真按出來的那一串**（2026-10-06 定：「`ze` 爲無效按鍵
+    // 組合，請重試」）。從前每一層自己寫一句，而那種句子一加鍵就得重寫。
     let mut g = typed(&text);
     g.on_key(Key::Char('z'));
-    g.on_key(Key::Char('q'));
-    assert!(g.status().contains("C-d"), "說明裏列得出半頁那一對");
+    g.on_key(Key::Char('e'));
+    assert!(g.status().contains("ze"), "報的是 ze，不是光禿禿一個 e：{}", g.status());
 }
 
 /// **vim 的 `U` 撤完這一行，`A-u`／`A-U` 是撤銷／重做**（2026-10-06）。
@@ -22385,5 +22386,38 @@ fn alt_j_leaves_the_seam_selected() {
     press(&mut ed, "ggJ");
     let (from, to) = ed.selection();
     assert!(to - from <= 1, "J 收成一點");
+}
+
+/// **一句話管所有的層：「`ze` 爲無效按鍵組合，請重試」**（2026-10-06 定）。
+///
+/// 原話：「各組如果按了一個無效的按鍵，可以直接説……`ze`」。從前每一層自己寫一句，
+/// 而那種句子一加鍵就得重寫；更壞的是大半層根本不說話——按下去什麼都不發生，
+/// 讀者分不出「按錯了」和「壞了」。
+#[test]
+fn an_unknown_key_says_the_whole_run_that_was_typed() {
+    let each = [
+        ("z", 'e', "ze"),   // 視窗那一層
+        ("`", 'q', "`q"),   // 字形組
+        ("m", 'q', "mq"),   // 配對那一族
+        ("]", 'q', "]q"),   // 往後跳那一族
+    ];
+    for (lead, bad, want) in each {
+        let mut ed = typed("甲乙丙\n");
+        for c in lead.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Char(bad));
+        assert!(
+            ed.status().contains(want),
+            "按 {lead}{bad} 要報 {want}，報的是：{}",
+            ed.status()
+        );
+    }
+
+    // `Esc` 退出一層是正常的事，不是按錯。
+    let mut ed = typed("甲乙丙\n");
+    ed.on_key(Key::Char('z'));
+    ed.on_key(Key::Esc);
+    assert!(!ed.status().contains("無效"), "Esc 不算按錯：{}", ed.status());
 }
 

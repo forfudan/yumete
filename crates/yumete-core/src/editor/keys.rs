@@ -1150,6 +1150,8 @@ impl Editor {
         let continuing_zong = std::mem::take(&mut self.zong_motion);
 
         // A pending multi-key operator consumes this key.
+        // 按過的那一串，趁各層還沒把自己關掉（見 `no_such_combination`）。
+        let typed_before = self.typed_so_far();
         match self.pending {
             Pending::Table => {
                 // 命令＋選擇＋動作: `t20,20g` is 「table · row 20, column 20 ·
@@ -1220,7 +1222,8 @@ impl Editor {
                         let n = self.operator_count.take().unwrap_or(1).max(1);
                         self.add_blank_line(forward, n);
                     }
-                    _ => {}
+                    Key::Esc => {}
+                    _ => self.no_such_combination(&typed_before, key),
                 }
                 return;
             }
@@ -1268,7 +1271,7 @@ impl Editor {
                     Key::Char('n') => self.repeat_search(self.search_forward),
                     Key::Char('N') => self.repeat_search(!self.search_forward),
                     Key::Esc => {}
-                    _ => self.status = say!("page.aim-wants-ztb"),
+                    _ => self.no_such_combination(&typed_before, key),
                 }
                 return;
             }
@@ -1278,7 +1281,8 @@ impl Editor {
                     Key::Char('o') => self.resolve_conflict(crate::conflict::Keep::Ours),
                     Key::Char('t') => self.resolve_conflict(crate::conflict::Keep::Theirs),
                     Key::Char('b') => self.resolve_conflict(crate::conflict::Keep::Both),
-                    _ => {}
+                    Key::Esc => {}
+                    _ => self.no_such_combination(&typed_before, key),
                 }
                 return;
             }
@@ -1397,7 +1401,8 @@ impl Editor {
                     // `t2jp`/`jp2t` 兩條日文路，沒有 `s2jp`——寫 `S` 的那一版
                     // 按下去什麽都不會發生（2026-09-23 審出來的）。
                     Key::Char('j') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::Jp),
-                    _ => {}
+                    Key::Esc => {}
+                    _ => self.no_such_combination(&typed_before, key),
                 }
                 return;
             }
@@ -1410,7 +1415,8 @@ impl Editor {
                     Key::Char('s') => self.pending = Pending::Surround,
                     Key::Char('d') => self.pending = Pending::SurroundOff,
                     Key::Char('r') => self.pending = Pending::SurroundFrom,
-                    _ => {}
+                    Key::Esc => {}
+                    _ => self.no_such_combination(&typed_before, key),
                 }
                 return;
             }
@@ -2913,7 +2919,6 @@ impl Editor {
         ("u U ~", "hint.goto.case-operators"),
         ("J", "hint.goto.join-without-a-space"),
         ("n N", "hint.goto.next-match"),
-        ("`", "hint.goto.glyph-group"),
     ];
 
     /// The same menu on a 縱書 page, where the four directions turn (see
