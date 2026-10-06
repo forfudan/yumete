@@ -8868,7 +8868,10 @@ fn draw_picker(
         let tag = say!("search.label.query");
         let tag_at = left.x + 1;
         put_text(buf, tag_at, left.y + 1, limit, &tag, ground.fg(ink.quiet()));
-        let box_at = tag_at + yumete_cjk::str_width(&tag) as u16 + 1;
+        // Warning: **沒有 `+ 1`**（2026-10-06 報上來的：「There is too much space between
+        // : and the search box. One space is enough.」）。`search.label.query` 這則本身
+        // 就帶一個尾空格（`"搜: "`／`"Search: "`），再加一格就是兩格。
+        let box_at = tag_at + yumete_cjk::str_width(&tag) as u16;
         let said = format!("{}{preedit}", picker.query());
         // Warning: **兩種狀態都不改底色**（2026-10-01 定，原話：「搜索行 normal 模式
         // 下不需要特别的底色……进入了 insert 模式也不用修改底色了（因为光标会提示
@@ -8931,7 +8934,7 @@ fn draw_picker(
     // 的「the curser does not move with hl」就是這個。
     let in_the_box = Position::new(
         left.x
-            + 2
+            + 1
             + (yumete_cjk::str_width(&say!("search.label.query"))
                 + yumete_cjk::str_width(&picker.before_caret())
                 + yumete_cjk::str_width(&preedit)) as u16,
