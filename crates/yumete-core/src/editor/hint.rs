@@ -470,12 +470,11 @@ impl Editor {
                     Self::HOP_KEYS
                         .iter()
                         .copied()
-                        // `c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」——提示行
-                        // 跟着檔走，所以屏幕上那一格從不含糊（見 `HOP_KEYS_CODE`）。
+                        // 跟着**這一個檔**換，不是疊加——見 `HOP_KEYS_CODE`。
                         .chain(
                             match self.writes_code() {
                                 true => Self::HOP_KEYS_CODE,
-                                false => &[],
+                                false => Self::HOP_KEYS_PROSE,
                             }
                             .iter()
                             .copied(),
