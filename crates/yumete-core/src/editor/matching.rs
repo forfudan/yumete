@@ -451,10 +451,17 @@ impl Editor {
         }
         let found = match which {
             'm' => self.marks_around_the_cursor(),
+            // Warning: **一個鍵管一族括號**（2026-10-06 夜審報的）。取對象那條路
+            // （`mi(`／`di(`）走的是 `pair_family`——按 `(` 找得到 `（）`，按 `[`
+            // 連 `「」`【】一起找。這一支從前逐字符精確，於是 `md(` 在 `（甲乙）`
+            // 上答「外面沒有成對的符號」，而 `mi(` 選得中。vim 的 `ds[` 在中文稿
+            // 子上同病。同族套着的時候取最裏面那一對，同 `pair_span`。
             ch => {
                 let rope = self.current_buffer().rope();
-                pair_of(ch)
-                    .and_then(|(open, close)| surrounding(rope, self.sel.head(), open, close))
+                super::pair_family(ch)
+                    .into_iter()
+                    .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
+                    .max_by_key(|&(open, _)| open)
                     .map(|(open, close)| (open, open + 1, close, close + 1))
             }
         };
@@ -491,7 +498,11 @@ impl Editor {
         // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都沒有。
         let found = match from {
             'm' => self.innermost_pair(),
-            ch => pair_of(ch).and_then(|(open, close)| surrounding(rope, self.sel.head(), open, close)),
+            // 同 `surround_delete`：一個鍵管一族，同族套着取最裏面那一對。
+            ch => super::pair_family(ch)
+                .into_iter()
+                .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
+                .max_by_key(|&(open, _)| open),
         };
         let Some((start, end)) = found else {
             let (open, close) = pair_of(from).unwrap_or((from, from));

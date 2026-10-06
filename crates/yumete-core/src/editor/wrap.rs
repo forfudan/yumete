@@ -287,6 +287,9 @@ impl Editor {
         // is to hand those characters back.
         if let Pending::VimOperator { op, first } = self.pending {
             // `ys` 内部記作一個字符 `s`；牌子上寫的是手按過的那兩個鍵。
+            // Warning: **只有 `ys` 這一個**（2026-10-06 夜審更正）。同一輪接上的
+            // vim `ds`／`cs` 不走這條路——它們落在 `SurroundOff`／`SurroundFrom`
+            // 上，牌子畫的是這個編輯器自己的 `md`／`mr`。
             let mut word = if op == 's' { String::from("ys") } else { String::from(op) };
             if let Some(f) = first {
                 word.push(f);

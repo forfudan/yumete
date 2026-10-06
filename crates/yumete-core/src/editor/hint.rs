@@ -31,11 +31,16 @@ impl Editor {
         // The table's own order, which groups them the way a reader learnt
         // them (words, then the line, then down the page, then find).
         let mut out: Vec<&str> = yumete_cjk::keymap::VIM_MOTIONS.iter().map(|(k, _)| *k).collect();
-        // The four the table cannot hold, each written where its arm is:
-        // `h`/`l`/`␣` are one grapheme (`vim::step_for`), `;`/`,` are 「that
-        // find again」 and live in `vim_operator_key` because the editor
-        // remembers which find it was, and `s` is vim-surround's.
-        out.extend(["h", "l", "␣", ";", ",", "s"]);
+        // Warning: **The table is not the whole truth** (2026-10-06): what
+        // `vim_operator_key` actually asks is [`crate::vim::step_for`], and
+        // that match arm takes more than `VIM_MOTIONS` lists. `h`/`l`/`␣` are
+        // one grapheme; `ge`/`gE` are vim's 「back to the end of the previous
+        // word」, which the table deliberately leaves out because helix's `ge`
+        // means something else (that reason stopped applying when `vim.rs`
+        // took them, 2026-10-02); `;`/`,` are 「that find again」 and live in
+        // `vim_operator_key` because the editor remembers which find it was;
+        // `s` is vim-surround's.
+        out.extend(["h", "l", "␣", "ge", "gE", ";", ",", "s"]);
         out.join(" ")
     }
 

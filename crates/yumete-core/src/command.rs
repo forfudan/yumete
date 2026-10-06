@@ -5084,8 +5084,14 @@ fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
 /// The command row paints a substitution in three colours so that a hand can
 /// see at a glance which half is the pattern and which half is what goes in
 /// its place. This is the only place that knows where the fields are, and it
-/// belongs next to [`parse_substitution`] so the two cannot drift: anything
-/// that parser refuses is not coloured either.
+/// sits next to [`parse_substitution`] so the shapes they read stay together.
+///
+/// Warning: **It is deliberately looser than that parser** (2026-10-06
+/// correction — this used to claim 「anything that parser refuses is not
+/// coloured either」, which is not true and could not be: see the next
+/// paragraph). A line with four fields or an unknown flag is painted and
+/// then refused when Enter is pressed. Painting is about reading, not about
+/// running.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubstPart {
     /// The range, the `s`, and every delimiter — the scaffolding.

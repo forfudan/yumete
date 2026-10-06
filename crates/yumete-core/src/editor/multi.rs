@@ -666,7 +666,13 @@ impl super::Editor {
                     let (from, to) = one.span();
                     match out.last_mut() {
                         // 挨着就是「上一段的末尾够得着這一段的開頭」。
-                        Some(last) if last.span().1 >= from => {
+                        // Warning: **`+ 1`**（2026-10-06 夜審報的）。helix 的判準是
+                        // `prev.to() == curr.from()`，而它的 `to()` 是半開的；這個
+                        // 倉的 `span().1` 是最後那個字符自己，所以「首尾相接」寫
+                        // 出來是 `last.span().1 + 1 == from`。少了那個 1，這個謂詞
+                        // 只在**已經重疊**時成立——而重疊的 `normalize` 早併掉了，
+                        // 於是 `A-_` 是個空操作。
+                        Some(last) if last.span().1 + 1 >= from => {
                             let end = last.span().1.max(to);
                             *last = crate::selection::Range::new(last.span().0, end);
                         }
