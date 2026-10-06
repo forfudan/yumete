@@ -17545,6 +17545,48 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **多選區那四個 helix 綁着而這裏空着的鍵**（2026-10-06，§5.13.6 自己列過）。
+///
+/// `A-,` 去掉主選區（`,` 的反面）、`A--` 全併成一段、`A-_` 只併挨着的、`A-:` 全部
+/// 轉成正向。
+#[test]
+fn the_four_multi_selection_keys_helix_has() {
+    // `C` 往下複製一段選區，造出三個光標。
+    let three = || {
+        let mut ed = typed("甲一\n乙二\n丙三\n");
+        press(&mut ed, "ggC");
+        press(&mut ed, "C");
+        ed
+    };
+    let mut ed = three();
+    assert_eq!(ed.sel.len(), 3);
+    // `A-,` 去掉主選區，剩兩段。
+    ed.on_key(Key::Alt(','));
+    assert_eq!(ed.sel.len(), 2, "去掉主選區");
+    // 只剩一段的時候不動，而且說一句。
+    let mut ed = typed("甲\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Alt(','));
+    assert_eq!(ed.sel.len(), 1);
+    assert!(!ed.status().is_empty(), "說一句，不是一聲不吭");
+    // `A--` 把三段拉成一段，從最前到最後。
+    let mut ed = three();
+    ed.on_key(Key::Alt('-'));
+    assert_eq!(ed.sel.len(), 1);
+    assert_eq!(ed.selection().0, 0);
+    assert!(ed.selection().1 >= 6, "拉到第三行：{:?}", ed.selection());
+    // `A-_` 只併挨着的——三段各在一行、中間隔着字，所以一段都不併。
+    let mut ed = three();
+    ed.on_key(Key::Alt('_'));
+    assert_eq!(ed.sel.len(), 3, "隔着字的不併");
+    // `A-:` 全部轉成正向。
+    let mut ed = typed("alpha beta\n");
+    press(&mut ed, "gglllvbb");
+    assert!(ed.sel.head() < ed.sel.anchor(), "先弄成反向的");
+    ed.on_key(Key::Alt(':'));
+    assert!(ed.sel.head() >= ed.sel.anchor(), "轉成正向");
+}
+
 /// **vim 的 `(`／`)`／`_`**（2026-10-06）。
 ///
 /// `(`／`)` 在這裏本來是「換主選區」，而 vim 的手按的是上一句／下一句——這個編輯器
