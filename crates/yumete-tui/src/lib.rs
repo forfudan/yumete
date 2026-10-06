@@ -11282,6 +11282,20 @@ fn draw_command(
                 put_text(buf, x, area.y, right, &drawable(&rest), news);
                 x += yumete_cjk::str_width(&rest) as u16;
             }
+            // **搜索行照同一套分色**（2026-10-06 定：「Everything except for the
+            // pattern (red) and the replace (green) are gold」）。`/` 那一行整行
+            // 都是「找什麼」，所以提示符是金的、式子是朱的——和 `:%s/pat/rep/g`
+            // 上那兩截同一個意思，同一個顏色。
+            //
+            // 順帶它答了另一件事：`/` 在這個編輯器裏**本來就是完整的正則**（§5.80
+            // 第五條實測），而從前整行一種墨，看不出這件事。
+            None if editor.mode() == yumete_core::input::Mode::Search => {
+                put_text(buf, x, area.y, right, &drawable(&prefix), label);
+                x += yumete_cjk::str_width(&prefix) as u16;
+                let rest = format!("{text}{}", prompt_preedit(editor, ime));
+                put_text(buf, x, area.y, right, &drawable(&rest), page.fg(ink.mark()));
+                x += yumete_cjk::str_width(&rest) as u16;
+            }
             None => {
                 put_text(buf, x, area.y, right, &drawable(&line), news);
                 x += yumete_cjk::str_width(&line) as u16;
