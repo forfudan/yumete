@@ -1449,7 +1449,7 @@ pub mod typst {
                 construct += 1;
                 // **方括號裏裝的是正文，不是代碼**（2026-09-28）。`#chapter[初雪]`、
                 // `#quote[…]`、`#figure(caption: [說明])` 是中文 Typst 稿裏最常見的三
-                // 種寫法，從前整塊畫成代碼色，等於把寫的字藏起來。
+                // 種寫法，從前整塊畫成代碼色，等於把寫稿人寫的字藏起來。
                 //
                 // Warning: **這是官方那套模式切換裏唯一值得學的一層**：Typst 的 `[]` 從 code
                 // 模式切回 markup 模式。再往裏（`#if x { [文字] }` 這種）只出現在模板檔
@@ -1858,7 +1858,7 @@ mod typst_tests {
         // writer has to see them, so they are never hidden, only set back.
         //
         // Warning: **方括號裏的那幾個字不是代碼**（2026-09-28）。`#chapter[初雪]` 裏「初雪」
-        // 是寫的字，從前整塊畫成代碼色，等於把它藏起來。現在代碼色只蓋
+        // 是寫稿人寫的字，從前整塊畫成代碼色，等於把它藏起來。現在代碼色只蓋
         // `#chapter[` 和 `]` 兩截。這一條原先寫的是 `"############"`。
         assert_eq!(shape("#chapter[初雪]"), "#########  #");
         assert_eq!(shape("那年#emph[冬天]。"), "  ######  # ");

@@ -1810,14 +1810,14 @@ impl Editor {
             't' => Shape::Delimited('\t'),
             _ => return,
         };
-        // **小寫轉這裏這一張，大寫貼剪貼板那一張**（2026-10-02 作者定）。
+        // **小寫轉這裏這一張，大寫貼剪貼板那一張**（2026-10-02 定）。
         match c.is_ascii_uppercase() {
             true => self.paste_table(to, None),
             false => self.convert_table(to, None),
         }
     }
 
-    /// `:convert-table` — **把光標這裏的表寫成另一種樣子**（2026-10-02 作者定）。
+    /// `:convert-table` — **把光標這裏的表寫成另一種樣子**（2026-10-02 定）。
     ///
     /// 源沒說就自己嗅：光標站在 `|` 表格裏就是 `|` 表格，否則看那一塊用的是什麼
     /// 分隔符。嗅源這一條照 org-mode 和 markdown-mode——兩家都是看有沒有 TAB、
@@ -1870,7 +1870,7 @@ impl Editor {
         crate::table::sniff(&lines).map(crate::table::Shape::Delimited)
     }
 
-    /// 分隔符換一個——CSV 轉 TSV 那一種（2026-10-02 作者定「任一到任一」）。
+    /// 分隔符換一個——CSV 轉 TSV 那一種（2026-10-02 定「任一到任一」）。
     ///
     /// Warning: **這一條不 `trim`。** 轉成 `|` 表格的時候格子兩邊的空白一定沒
     /// （`|` 表格存不下，見 `mdtable::from_delimited`），而分隔符換一個是存得下
@@ -2468,7 +2468,7 @@ impl Editor {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        // **文中那一塊排得了序**（2026-10-03 作者定，原話：「如果是我，我会先在
+        // **文中那一塊排得了序**（2026-10-03 定，原話：「如果是我，我会先在
         // 逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq 回到正文」）。
         //
         // Warning: 從前這裏一句話擋掉：「文中的表格區塊只讀不改寫」。那句話說的不是一
@@ -3255,7 +3255,7 @@ impl Editor {
     /// else — paging, `gg`, search — is about lines and text, and a grid does
     /// not change what those mean either.
     ///
-    /// Warning: **`T` is till again, in a grid too**（2026-09-30 作者定，原話
+    /// Warning: **`T` is till again, in a grid too**（2026-09-30 定，原話
     /// 「这个可能要改成 _tT了，因为 T 现在 till 占用的」）。#356 給了 `T` 換
     /// 粒度，理由是「在格子裏往回 till 沒人用」；一個頂層字母鍵在一種文件裏
     /// 換意思，代價比那個理由大。粒度現在在 [`Self::toggle_table_grain`]，掛
@@ -3727,7 +3727,7 @@ impl Editor {
             // **`f`, not `a`** (2026-09-06): 排齊 gave the letter up
             // and went to `t F`, where the capital reads as the confirmation a
             // whole-file reformat should always have asked for.
-            // **轉換格式也是「有沒有表格都按得下」的一個**（2026-10-02 作者定）：
+            // **轉換格式也是「有沒有表格都按得下」的一個**（2026-10-02 定）：
             // 把一段分隔文本變成 `|` 表格，正是**還沒有表格**的時候要做的事，所
             // 以這一格要排在「光標不在表格裏」那道閘的前面。
             Key::Char('x') => {
@@ -3759,7 +3759,7 @@ impl Editor {
                 self.snap_into_the_grid();
                 return;
             }
-            // **`空格 t T` — 換移動的粒度**（2026-09-30 作者定：「T 按格移动被折
+            // **`空格 t T` — 換移動的粒度**（2026-09-30 定：「T 按格移动被折
             // 叠到 _t 中了」）。#356 把它放在頂層的 `T` 上，於是格子模式裏往回
             // till 按不到——一個頂層字母鍵在一種文件裏換意思，代價比那個理由
             // 大。大寫，因為它與 `t t`／`t w`／`t a` 一樣是「這一扇窗怎麼走」，
@@ -3927,7 +3927,7 @@ impl Editor {
                 }
                 Key::Char('y') => self.yank_column(),
                 Key::Char('p') => self.put_column(),
-                // **排序也在這一塊上做得了**（2026-10-03 作者定，原話：「我会先
+                // **排序也在這一塊上做得了**（2026-10-03 定，原話：「我会先
                 // 在逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq 回到正
                 // 文」）。上面那一段註釋寫着「排序會把整份檔案按表格自己的行重建
                 // 一遍」——那是從前的做法，`sort_table` 現在按塊的行寫回。

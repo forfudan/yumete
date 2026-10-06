@@ -937,7 +937,7 @@ pub fn draw_detail(
     let left = area.x + 2;
     // **標題由框畫，這裏只接自己那一句**（同文件樹接根目錄名）：那張表叫什麼。
     //
-    // Warning: **用 `shell.head`，別自己調一個**（2026-09-30 作者報的：「line
+    // Warning: **用 `shell.head`，別自己調一個**（2026-09-30 報的：「line
     // index in the title has a wrong background colour」）。有焦點的時候那一行
     // 整條是金底，而自己調的那一個帶着 CHROME 的底色——寫上去就是金條上一塊
     // 別的顏色。框交出 `head` 正是為了這件事，文件樹那一支一直用的就是它。
@@ -1032,7 +1032,7 @@ pub fn draw_detail(
     // 提示行還寫着 `j k J K g G 上下`——一扇拿走了鍵卻不認那幾個鍵的面板。
     // 「拿走鍵的那一半有義務」。
     if editor.panel_focus() == Some(side) {
-        // Warning: **最多翻到「最後一屏」**（2026-09-30 作者報的：「pressing will
+        // Warning: **最多翻到「最後一屏」**（2026-09-30 報的：「pressing will
         // scroll down even though it is not necessary」）。夾在 `rows.len()-1`
         // 上的話，`j` 一路按得到只剩最後一格，下面全是空的——那不是翻頁，那是
         // 把東西推出去。

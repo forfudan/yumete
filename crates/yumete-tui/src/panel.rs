@@ -66,7 +66,7 @@ pub struct Panel {
     /// **這一扇翻得動嗎**（#426）。翻得動的時候底邊右端寫的是「怎麽翻」而不是
     /// `tag`——五種信息都是這一類，而註、`[yumete]` 那一行不是。
     pub pages: bool,
-    /// **這一扇是拿來讀的，不是一張鍵表**（#426，2026-09-30 作者報的）。
+    /// **這一扇是拿來讀的，不是一張鍵表**（#426，2026-09-30 報的）。
     ///
     /// 決定它多大：讀的那幾扇按 2/3 × 1/3 擺（`chrome::room`），鍵表按老規矩
     /// （半頁高，能塞幾欄塞幾欄）。Warning: **判準是「拿來幹什麽」，不是
@@ -499,7 +499,7 @@ pub fn draw(
     // the `空格` menu does not fit into at all: it simply stopped being drawn.
     // Menus keep the older rule (half the page, as many columns as fit).
     let prose = matches!(panel.body, Body::Prose(_));
-    // Warning: **判準是「拿來讀的嗎」，不只是 `Body` 哪一種**（2026-09-30 作者
+    // Warning: **判準是「拿來讀的嗎」，不只是 `Body` 哪一種**（2026-09-30
     // 報的：記錄那一扇「size 和 location 看着不對」）。記錄畫成兩欄字段，可它
     // 和別的四種信息一樣是讀的，該和它們一樣大。
     let (room_w, room_h) = match prose || panel.reading {
@@ -507,7 +507,7 @@ pub fn draw(
         false => (area.width, area.height / 2 + 1),
     };
     let title_w = yumete_cjk::str_width(&panel.title);
-    // **翻得動的時候，底邊右端寫「怎麽翻」**（2026-09-30 作者定：「浮窗或者右侧
+    // **翻得動的時候，底邊右端寫「怎麽翻」**（2026-09-30 定：「浮窗或者右侧
     // 面板，可以显示『PgUp/PgDn 翻页』。『␣K 进边栏』似乎反而不是很重要的信息」）。
     // 「進邊欄」挪到了命令行（`hint.rs` 的 `the_way_back_to_the_list`）。
     //
@@ -535,7 +535,7 @@ pub fn draw(
     // left column is the alignment, and an indent only pushes it off centre.
     let pad: usize = match panel.body {
         Body::Prose(_) => 1,
-        // Warning: **讀的那幾扇兩邊都留一格**（2026-09-30 作者報的：最長那一行
+        // Warning: **讀的那幾扇兩邊都留一格**（2026-09-30 報的：最長那一行
         // 貼着框，看着像被裁了）。鍵表不留——它自己那一列就是對齊綫，往裏縮一
         // 格反而把它推離中間。
         Body::Keys(_) if panel.reading => 1,
@@ -748,7 +748,7 @@ pub fn draw(
     // 幾個字」而 `lines` 是一條條的縱，兩者不是同一個維度，照這裏辦會把最左那
     // 一縱換成「…」並且把框高壓成縱的條數。
     let cap = room_h.saturating_sub(2).max(1) as usize;
-    // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 作者定）。`None` ＝ 整則
+    // **讀到第幾行 ／ 共幾行**，寫在底邊左端（2026-09-30 定）。`None` ＝ 整則
     // 都在眼前，那時一個數字都不寫——數字出現本身就是「還有沒露出來的」。
     let mut read: Option<(usize, usize)> = None;
     let (count, lines) = match &panel.body {
@@ -757,7 +757,7 @@ pub fn draw(
             // 從第幾行起——翻過頁的話（`panel.scroll`），最多翻到「最後一屏」。
             let from = panel.scroll.min(count.saturating_sub(cap));
             let kept: Vec<String> = lines.into_iter().skip(from).take(cap).collect();
-            // Warning: **省略號整個去掉了**（2026-09-30 作者定：「现在允许翻页
+            // Warning: **省略號整個去掉了**（2026-09-30 定：「现在允许翻页
             // 了，`…` 可以不用了应该」）。它從前無條件把**最後一行換成 `…`**，
             // 於是翻到底也永遠讀不到最後那一行——它不是多畫一個記號，它是吃掉
             // 一行。「下面還有」這件事現在由底邊那個數字說，而那個數字還順帶說
@@ -919,11 +919,11 @@ pub fn draw(
         let w = yumete_cjk::str_width(&tag) as u16;
         put_text(buf, limit.saturating_sub(w + 1), floor, limit, &tag, ground.fg(ink.quiet()));
     }
-    // **讀到第幾行，貼底邊左端**（2026-09-30 作者定的，和右端那句各佔一頭：兩類
+    // **讀到第幾行，貼底邊左端**（2026-09-30 定的，和右端那句各佔一頭：兩類
     // 不同的信息，邊框有兩頭）。
     //
     // Warning: **兩邊各留一格空氣。** 貼着角寫出來的是「╰75/90───」，讀起來像
-    // 被擠出去的（作者報的：「现在似乎顶到了前头」）。上邊那一行的標題本來就是
+    // 被擠出去的（報的：「现在似乎顶到了前头」）。上邊那一行的標題本來就是
     // 「╭ 文檔」，這一行照它。
     if let Some((at, all)) = read {
         let said = format!(" {at}/{all} ");

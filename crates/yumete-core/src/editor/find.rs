@@ -406,7 +406,7 @@ impl Editor {
             //
             // 要搜項目根就按號碼換到「項目路徑」那一檔，本來就有。
             Where::Named(path) => {
-                // **開頭那個 `~` 要展開**（2026-10-01 報上來的：`:s ~/Dropbox` 無效）。
+                // **開頭那個 `~` 要展開**（2026-10-01 報的：`:s ~/Dropbox` 無效）。
                 // 從前它一路當相對路徑接在根後面，狀態欄說「沒有這個文件夾」——
                 // 聽着像那個目錄不在，其實是我們根本沒去那裏找。
                 let path = Self::expand_tilde(&path.to_string_lossy());
@@ -491,7 +491,7 @@ impl Editor {
     /// 正在寫的那一份排在最前面，於是 `mine` 那一段還是名單開頭連續的一段，
     /// 只重搜那一份的那條快路照舊走得通。
     ///
-    /// Warning: **沒有名字的草稿也在裏面**（定）。它沒有路徑可以回去，所以每一處
+    /// Warning: **沒有名字的草稿也在裏面**（定下來的）。它沒有路徑可以回去，所以每一處
     /// 命中身上記的是**緩衝區的號**（[`Hit::buffer`]），不是路徑。
     fn scan_every_buffer(&mut self, look: &Look) {
         let here = self.working_dir();
@@ -1474,7 +1474,7 @@ impl Editor {
     /// 回來是替讀者做了他沒說過的決定。
     fn flip_replacing(&mut self) {
         // **一行三態**（2026-10-01 定）：關 → 字面替換 → 智能大小寫 → 回關。
-        // 次序是定的：第二檔是出廠那一種（打什麼就寫什麼），按一下到的是平常
+        // 次序是定下來的：第二檔是出廠那一種（打什麼就寫什麼），按一下到的是平常
         // 要的，再按纔是特殊的。
         let (replacing, keep) = match (self.search.replacing, self.search.preserve_case) {
             (false, _) => (true, false),

@@ -6,7 +6,7 @@
 # `#` 開頭與空行跳過。
 #
 # 正文原樣抄自 GujiCC（Apache-2.0，https://github.com/forFudan/GujiCC）的
-# generator/guji/s2g_characters.txt，連作者的取捨註記一起。**別手改這一段**：要改
+# generator/guji/s2g_characters.txt，連原表的取捨註記一起。**別手改這一段**：要改
 # 去上游改，再整段抄回來。
 #
 # 底下「補」那一節是這裏加的。上游那張表是給它自己的 opencc 配置當覆蓋源用的，

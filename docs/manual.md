@@ -4706,8 +4706,8 @@ once the text has moved, that hit's line number is long out of true, and jumping
 would most likely land on some other character. The run leaves a fresh list, and one
 more press goes.
 
-Warning: **A switch does not need the cursor walked onto it** (decided 2026-09-24, in
-the author's words: 「这样的话，我们就可以通过 jk
+Warning: **A switch does not need the cursor walked onto it** (decided 2026-09-24, the
+original words: 「这样的话，我们就可以通过 jk
 在结果和搜索框之間移動（跳过五行设置），避免 用户要从他们上面经过浪费 jk」). `j` used to
 take five switch rows to get from the box to the results, and those five are not pressed
 once a day. Now `jk` goes straight between the box and the results, and a switch goes by

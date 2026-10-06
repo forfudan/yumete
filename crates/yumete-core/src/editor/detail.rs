@@ -33,7 +33,7 @@ impl Editor {
     /// 小寫浮、大寫一定進邊欄——五種信息同一條規矩（#426）。
     pub(super) fn show_the_record_here(&mut self, afloat: bool) {
         if self.detail().is_none() {
-            // Warning: **不是字典那一句**（2026-09-30 報上來的）。從前這裏借用
+            // Warning: **不是字典那一句**（2026-09-30 報的）。從前這裏借用
             // 「光標下沒有字可查」——那是 `空格 d` 查不到字時說的，跟這一鍵沒
             // 有關係，而讀者只會以為自己按錯了鍵。
             self.status = say!("ui.cursor-is-not-in-a-table");

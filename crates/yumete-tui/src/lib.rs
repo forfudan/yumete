@@ -690,7 +690,7 @@ pub fn run(
         }
         system_ime.want(!composes_here(editor) || yume_has_the_keys);
         // Warning: **挑選器那兩層也要進這個元組**（2026-10-02 修）。換層不換 `mode`，
-        // 於是形狀一次都沒重發過——列表層照樣頂着一根豎線（報上來的：「The cursor
+        // 於是形狀一次都沒重發過——列表層照樣頂着一根豎線（報的：「The cursor
         // is incorrect in normal mode」）。
         let in_the_list = editor.picker().is_some_and(|p| !p.typing());
         let shown = (editor.mode(), editor.is_extending(), in_the_list);
@@ -4378,7 +4378,7 @@ fn draw(
     // the page is, and answered from last frame's scroll together with this
     // frame's cursor — see `table_head_is_off_the_page`.
     let top = viewport[editor.live_pane().min(1)].top.line;
-    // Warning: **不給格子模式留這兩行**（2026-09-30 報上來的：拆分表捲過一行，
+    // Warning: **不給格子模式留這兩行**（2026-09-30 報的：拆分表捲過一行，
     // 整個表頭連同標尺往下掉兩行，上面空出兩行）。那條頂欄是給**散文裏的 `|`
     // 表**用的：正文照常滾，表頭滾沒了就在頁頂補一條。格子模式（`.csv` 整檔進
     // 來那一種）自己就凍着表頭與標尺，補的那兩行沒有人畫，於是成了兩行空白。
@@ -5872,8 +5872,8 @@ fn draw_note(
     //
     // Warning: **記錄從前只有邊欄一種形態**：它是光標頂上來的「臨時面板」，自己
     // 開自己關。五種併成一格之後那條路沒有了（邊欄只由人開由人關），所以它跟
-    // 別的四種一樣要有一個浮窗——模型是「右侧栏就是固定的『浮窗』」，
-    // 反過來說，每一種都得浮得起來。
+    // 別的四種一樣要有一個浮窗——模型是「右侧栏就是固定的『浮窗』」，反過來說，
+    // 每一種都得浮得起來。
     if editor.info_afloat() == Some(Info::Record) {
         if let Some(detail) = editor.detail() {
             let rows: Vec<(String, String)> = detail
@@ -6141,10 +6141,10 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
 
 /// **Put the file's name in the terminal's own title bar** (2026-10-06).
 ///
-/// 報上來的：「我用 helix 打開一個文件的時候，terminal 的 tab 標題是 hx FILENAME，
+/// 報的：「我用 helix 打開一個文件的時候，terminal 的 tab 標題是 hx FILENAME，
 /// 但是我用 ye 打開文件的時候，標題是光秃秃的 ye。」
 ///
-/// Warning: **helix does not do this** — what he was seeing is the terminal naming
+/// Warning: **helix does not do this** — what was seen there is the terminal naming
 /// the tab after the command line it ran. Setting it ourselves is better than
 /// matching that: a tab named after the command never changes, and this one
 /// follows the buffer, so twelve tabs of one book are twelve chapter names.
@@ -6740,7 +6740,7 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         Kind::Ref => Style::default()
             .fg(ink.azure())
             .add_modifier(Modifier::UNDERLINED),
-        // 標籤是被指的那一頭——它不是正文，是留給自己的一個錨。
+        // 標籤是被指的那一頭——它不是正文，是寫稿的人留給自己的一個錨。
         Kind::Label => Style::default().fg(ink.furniture()),
         // CROSSED_OUT is not everywhere, so the rung carries it as well.
         Kind::Strike => Style::default()
@@ -7204,7 +7204,7 @@ fn draw_sidebar(
     // **信息那一格：擺着哪一種就照那一種畫**（#426）。
     //
     // Warning: **空了也照畫一扇框**——這一扇是常駐的，不是光標停上去纔冒出來的那
-    // 一種，所以它不許一開一關（報上來的原話：「侧栏不应该关闭，即使是空的」）。
+    // 一種，所以它不許一開一關（報的原話：「侧栏不应该关闭，即使是空的」）。
     // 空着的時候標題寫「信息」（定的：「他如果是空的，就显示『信息』标题。
     // 如果不是空的，就显示对应的标题」）。
     if sidebar.view() == View::Info {
@@ -7539,7 +7539,7 @@ pub(crate) struct Shell {
 /// 的」。和浮窗底邊逐字同形（`panel.rs`）。
 ///
 /// Warning: **數字兩邊各留一格空氣。** 貼着角寫出來的是「╰8/11───」，讀起來像
-/// 被擠出去的（報上來的：「现在似乎顶到了前头」）。
+/// 被擠出去的（報的：「现在似乎顶到了前头」）。
 fn count_on_the_floor(frame: &mut Frame, shell: &Shell, at: usize, all: usize) {
     let (Some(y), true) = (shell.floor, at < all) else { return };
     let buf = frame.buffer_mut();
@@ -7828,7 +7828,7 @@ fn draw_search(
         // Warning: 英文分單複數，而中文不分：`1 hits` 每搜一個獨一無二的詞就出現一次
         // （2026-09-27 報的）。兩則文案，中文那兩份寫得一模一樣。
         (false, _, true) if find.total == 1 && !find.cut => (say!("search.hits-one", 1), quiet),
-        // **沒走完就停了，數目後面一個加號**（2026-10-01 定，寫的「21+结果」）。
+        // **沒走完就停了，數目後面一個加號**（2026-10-01 定，原話「21+结果」）。
         // 一張半截的清單看着和全部一個樣，而那一格是唯一說得出這件事的地方。
         (false, _, true) if find.cut => (say!("search.hits-more", find.total), quiet),
         (false, _, true) => (say!("search.hits", find.total), quiet),
@@ -7941,7 +7941,7 @@ fn draw_search(
     // Warning: **2026-09-26 定過「補齊到同一寬，格子纔對得齊」，這一條撤了它。** 補齊
     // 是拿最寬那一個（「位置: 」）當尺，於是「搜: 」後面白白空兩格——邊欄本來就
     // 窄，而那兩格每一行都在交。代價是四個框不再豎着對齊：「搜」「換」的框比
-    // 「包含」「排除」的早兩格開始。要的是把格子還給正文。
+    // 「包含」「排除」的早兩格開始。這一條要的是把格子還給正文。
     let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, tag: &str, what: &str, y: u16| {
         // **名字在格子外面**（2026-09-24 定）：三檔底色說的是「這裏打得了字」，
         // 而名字不是打得了字的地方，所以它留在面板自己的底色上。
@@ -8020,7 +8020,7 @@ fn draw_search(
                     remembered => remembered.to_string(),
                 },
             };
-            // **提示只在打字的時候出現，而且比旁註還要淡**（2026-10-04 報上來的）。
+            // **提示只在打字的時候出現，而且比旁註還要淡**（2026-10-04 報的）。
             //
             // Warning: **Normal 態下一個字都不畫。** 框裏站着一個方塊光標，它壓在提示
             // 的頭一個字上——於是提示看着和真有一個字一模一樣。原話：「normal 模式
@@ -8030,7 +8030,7 @@ fn draw_search(
             // Warning: **第 80 檔（`GUESS`），不是旁註那一檔。** 旁註是「讀它，只是它
             // 不是正文」；這一句要的是**看得見、可是一眼就知道那裏沒有字**。原話：
             // 「這個不够灰，感覺還是像有個字在里面而不是提示……必須更淡更淡。」
-            // 四檔都畫出來比過（25／40／50／84），定 80。
+            // 四檔都畫出來比過（25／40／50／84），最後定 80。
             let hint = ink.at(yumete_config::rung::GUESS);
             // Warning: **只換字色，底色照舊是這一格的**：底色說的是「這裏打得了字」，
             // 提示字拿走它就等於把那句話擦了（2026-09-27 測試攔下來的）。
@@ -8390,7 +8390,7 @@ fn draw_search(
     // 定：「在 pan.ins 的模式下，将左边栏中除了输入框外的其他字灰掉……这样
     // 用户就立马知道：『啊，我在 insert 模式』」）。
     //
-    // 走的是挑選器開着時正文退後的同一支 [`stand_back`]—— 2026-09-26 定那一
+    // 走的是挑選器開着時正文退後的同一支 [`stand_back`]——2026-09-26 定那一
     // 條時的原話是「picker 窗口出现的时候，正文区域可以变淡一些，从而突出 picker
     // 窗口」，這裏問的是同一件事，只是浮着的那一塊換成了一個輸入框。
     //
@@ -8689,8 +8689,8 @@ fn draw_picker(
         },
         items.len(),
     );
-    // **腳注只剩一個數目**（2026-10-01 定）。查詢詞挪進了列表上面那個框（原
-    // 話：「我其实有点想在文件下方加一行输入框」，後來定了畫在**上面**，和搜索
+    // **腳注只剩一個數目**（2026-10-01 定）。查詢詞挪進了列表上面那個框（原話：
+    // 「我其实有点想在文件下方加一行输入框」，後來定了畫在**上面**，和搜索
     // 面板同形），鍵位挪去了命令行那一行（「快捷键文案是不是可以收到命令行
     // 中？」）——搜索面板一直是那樣，而挑選器從前兩樣都寫在自己身上、命令行
     // 空着。
@@ -8868,7 +8868,7 @@ fn draw_picker(
         let tag = say!("search.label.query");
         let tag_at = left.x + 1;
         put_text(buf, tag_at, left.y + 1, limit, &tag, ground.fg(ink.quiet()));
-        // Warning: **沒有 `+ 1`**（2026-10-06 報上來的：「There is too much space between
+        // Warning: **沒有 `+ 1`**（2026-10-06 報的：「There is too much space between
         // : and the search box. One space is enough.」）。`search.label.query` 這則本身
         // 就帶一個尾空格（`"搜: "`／`"Search: "`），再加一格就是兩格。
         let box_at = tag_at + yumete_cjk::str_width(&tag) as u16;
@@ -8930,8 +8930,8 @@ fn draw_picker(
     // keys are in the list, so there the caret is on the name it is standing
     // on instead.
     // **框裏那一格的位置，兩層算法一樣**（2026-10-02 修）。從前列表層那一支漏了
-    // `before_caret`，於是光標永遠釘在框的開頭、`h`／`l` 挪了它也不動——報
-    // 的「the curser does not move with hl」就是這個。
+    // `before_caret`，於是光標永遠釘在框的開頭、`h`／`l` 挪了它也不動——報上來的
+    // 「the curser does not move with hl」就是這個。
     let in_the_box = Position::new(
         left.x
             + 1
@@ -9122,9 +9122,8 @@ fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
     //
     // 先截到 `0.4.0`，再截到 `0.4.0-dev`，最後整串。理由是：**正式版的版本
     // 號本來就是乾淨的**——`build.rs` 裏 `YUMETE_RELEASE` 一撥，印出來就是
-    // `0.4.0`，没有時間戳也没有提交號。那一長串只在他自己的 dev 構建上出現，而
-    // 那正是他要看全的時候。原話：「用户永遠都是正式版……所以他們只會看到
-    // 0.4.0」。
+    // `0.4.0`，没有時間戳也没有提交號。那一長串只在 dev 構建上出現，而那正是要
+    // 看全的時候。原話：「用户永遠都是正式版……所以他們只會看到 0.4.0」。
     //
     // 寬度不成問題：`0.4.0-dev.20261006140729+a2e1701.dirty` 連標籤四十六格，而
     // 開場屏放不下就整屏不畫（下面那道閘），六十格的窗口也夠。
@@ -10690,7 +10689,7 @@ fn draw_status(
         false => status,
     };
     let tail = fits(&status);
-    // **左邊留一格，轉圈那八個點在 `NOR` 後面**（2026-09-30 報上來的兩件）。
+    // **左邊留一格，轉圈那八個點在 `NOR` 後面**（2026-09-30 報的兩件）。
     //
     // 一、「NOR 前面应该空一格（我们现在顶格了，和下面的命令行不对齐）」。
     // 二、「The 8 dots should be after NOR but not before：`NOR X lib.rs`」
@@ -18914,7 +18913,7 @@ fn squeezed(text: &str) -> String {
             line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
             "the 字 is named at the right edge: {line:?}"
         );
-        // Warning: **左邊留一格**（2026-09-30 報上來的：「NOR 前面应该空一格
+        // Warning: **左邊留一格**（2026-09-30 報的：「NOR 前面应该空一格
         // （我们现在顶格了，和下面的命令行不对齐）」）。底下那一行本來就從第二
         // 格起。那一格同時是轉圈那八個點的位子——見
         // `the_spinner_turns_in_the_slot_beside_the_mode`。
@@ -20657,7 +20656,7 @@ fn squeezed(text: &str) -> String {
 
     /// **挑選器搜索框裏的光標跟着 `h`／`l` 走，兩層都是**（2026-10-02 修）。
     ///
-    /// 報上來的：「The cursor is incorrect in normal mode and the curser does
+    /// 報的：「The cursor is incorrect in normal mode and the curser does
     /// not move with hl」。兩件事同一個根：列表層那一支算位置的時候**漏了光標前
     /// 面那一段**，於是它永遠釘在框的開頭；而 `Mode::Picker` 一律走
     /// `is_prompt()`，形狀被寫死成豎線，連換層都不重發。
@@ -21945,7 +21944,7 @@ fn squeezed(text: &str) -> String {
             "關掉就一格都沒有"
         );
 
-        // 光禿禿的 `:rules` ＝ 第 80 欄（說的「比如默认 80」）。
+        // 光禿禿的 `:rules` ＝ 第 80 欄（原話「比如默认 80」）。
         editor.execute(":rules").unwrap();
         assert_eq!(editor.rules(), &[80, 100], "光禿禿的是兩道：文檔字串一道，代碼一道");
     }
@@ -21970,7 +21969,7 @@ fn squeezed(text: &str) -> String {
             let quiet = status_line(&render(&editor, &config, 60, 6));
             assert!(quiet.starts_with(" NOR   "), "不忙的時候是空格：{quiet:?}");
 
-            // 忙：點在 `NOR` **後面**（2026-09-30 報上來的：「The 8 dots should
+            // 忙：點在 `NOR` **後面**（2026-09-30 報的：「The 8 dots should
             // be after NOR but not before」，helix 的次序也是 Mode → Spinner →
             // FileName）。而 `NOR` 一格都沒挪。
             editor.note_the_server_is_busy(Some(std::time::Instant::now()));

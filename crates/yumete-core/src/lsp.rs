@@ -110,7 +110,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// 從前這裏寫 `["plaintext","markdown"]`，於是 pylsp 照單取頭一個，回的是
 /// `kind: "plaintext"` 的生 docstring——Python 的 docstring 慣例是
 /// reStructuredText，`Main API` 底下那一行 `======` 就這麼原樣畫了出來
-/// （2026-09-30 作者報的）。排 `markdown` 在前，pylsp 就走 `docstring-to-markdown`
+/// （2026-09-30 報的）。排 `markdown` 在前，pylsp 就走 `docstring-to-markdown`
 /// 把 reST／numpydoc 譯成 Markdown 再送（譯不動的原樣退回，不會更差）。
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
@@ -893,7 +893,7 @@ mod tests {
         }
     }
 
-    /// **`kind` 說純文本，就不能拿 Markdown 的墨去畫**（2026-09-30 作者報的：
+    /// **`kind` 說純文本，就不能拿 Markdown 的墨去畫**（2026-09-30 報的：
     /// Python 的 docstring 裏 `Main API` 底下那一行 `======` 原樣畫了出來）。
     ///
     /// 兩件事：`Told::markdown` 要跟着服務器說的走，而純文本**不許過

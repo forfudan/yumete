@@ -342,7 +342,7 @@ impl Editor {
         let full = self.current_buffer().path().map(Path::to_path_buf);
         // Warning: **只記這本書自己的檔**（2026-10-02 查出來的）。從前它只問「有沒有
         // 這本賬」，不問「這一份在不在這本書裏」——於是**在書開着的時候隨手存一
-        // 個別處的檔，那個檔名就進了寫作進度**。
+        // 個別處的檔，那個檔名就進了寫稿人的寫作進度**。
         //
         // 這個倉自己就中着：`cargo test` 在 `$TMPDIR` 裏存臨時檔，而測試進程的
         // cwd 在倉裏，`root()` 於是算成這個倉——`.yumete/progress.tsv` 裏攢了一百

@@ -130,8 +130,8 @@ impl Editor {
         if !self.code_colours {
             return Vec::new();
         }
-        // Warning: **先確認手上那棵樹就是這個檔這一版的**（2026-10-01 報
-        // 的：「open a rust file first and then open a python file via picker,
+        // Warning: **先確認手上那棵樹就是這個檔這一版的**（2026-10-01 報的：
+        // 「open a rust file first and then open a python file via picker,
         // the coloring of the python file is incorrect」）。`by_chunk` 只按
         // 「第幾塊」記，**不記是哪個檔**——所以從 `build.rs` 切到 `sc2tc.py`，
         // 第 0 塊早就在裏頭了，直接命中的是**上一個檔的顏色**，而
