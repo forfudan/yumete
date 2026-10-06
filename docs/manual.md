@@ -2768,6 +2768,7 @@ without leaving the page:
 | | |
 | --- | --- |
 | `空格 o` | the sidebar, opened straight onto the outline |
+| `空格 s` | the same (Helix puts "the symbols in this file" on this key; both spellings work) |
 | `空格 u` | type a reading and jump to that 漢字 (the same as `gu`; under the vim preset `gu` is the lowercase operator, so this door stands open in both) |
 | `空格 f` | open a file: a panel in the middle, the list on the left and the preview on the right (see "Picking a file"); searches the **project path** |
 | `空格 F` | the same, but searches the **working path** (`:cd` changes it, `:pwd` shows it) |
