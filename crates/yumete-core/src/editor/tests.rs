@@ -17545,6 +17545,25 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
     assert_eq!(text(&ed), "a, beta gamma\nsecond line\nthird (inside) line\n");
 }
 
+/// **`A-x` 縮到整行**（2026-10-06，helix 的 `shrink_to_line_bounds`）——`X` 的反面。
+#[test]
+fn shrinking_to_line_bounds_is_the_other_half_of_x() {
+    // 從第一行中間選到第三行中間：兩頭都不在行界上，所以收成中間那一整行。
+    let mut ed = typed("一二三\n四五六\n七八九\n");
+    press(&mut ed, "ggl");
+    press(&mut ed, "vjj");
+    ed.on_key(Key::Alt('x'));
+    let (from, to) = ed.selection();
+    assert_eq!(from, 4, "開頭挪到第二行的行首");
+    assert_eq!(to, 8, "末尾退到第三行之前");
+    // 跨不過一行的，一個字都不動——helix 自己也不動。
+    let mut ed = typed("一二三\n");
+    press(&mut ed, "ggvl");
+    let was = ed.selection();
+    ed.on_key(Key::Alt('x'));
+    assert_eq!(ed.selection(), was, "一行之內不動");
+}
+
 /// **`5ix` 打五個 `x`**（2026-10-06，`:h count`）。
 ///
 /// 數字配插入那六個鍵在 vim 裏是「這段話打幾遍」，在這裏從前只打一遍。記在進門那
