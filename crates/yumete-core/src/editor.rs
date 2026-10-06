@@ -219,6 +219,9 @@ enum Pending {
     Hop { forward: bool },
     /// **`z` 那一層在等哪一行**（`zz`/`zt`/`zb`，2026-09-28）。
     Aim,
+    /// `Z` — the same layer, and it stays open until `Esc` (helix's sticky view
+    /// mode). 2026-10-06.
+    AimStuck,
     /// `空格 m` — what to keep of the merge conflict under the cursor.
     Conflict,
     /// **`C-w`/`空格 w` 之後那一層：區域**（2026-09-30 定，照 helix 的
@@ -292,6 +295,7 @@ impl Pending {
             | Pending::Hop { .. }
             // `z` 那一層等的是 `z`/`t`/`b`，不是一個要寫進去的字。
             | Pending::Aim
+            | Pending::AimStuck
             // 區域那一組等的是 `w`/`hjkl`/`e i E I`/`s q o`，一個要寫進去的
             // 字都沒有。
             | Pending::Region
@@ -1135,6 +1139,13 @@ pub enum Aim {
     Middle,
     /// `zb` — 底下那一行。
     Bottom,
+    /// `zj`／`zk` — **光標這一行坐在第幾個屏幕行上**（2026-10-06）。
+    ///
+    /// 滾視窗和挪光標是同一件事的兩面：視窗往下滾一行，光標的文字沒動，於是它
+    /// 在屏幕上**往上**坐了一行。helix 的 `scroll_up`／`scroll_down` 就是這麼
+    /// 定義的，所以這裏不必另開一個「視窗位置」的概念——那一個在渲染層，核心
+    /// 改不動（§5.98 記着為什麼）。
+    Row(usize),
 }
 
 /// Where the table starts and stops (#261).
@@ -3486,6 +3497,8 @@ impl Editor {
             Aim::Top => say!("page.aimed-top"),
             Aim::Middle => say!("page.aimed-middle"),
             Aim::Bottom => say!("page.aimed-bottom"),
+            // 滾一行不報話：連按十下 `zj` 的時候，狀態欄說十遍同一句話是噪音。
+            Aim::Row(_) => return,
         };
     }
 
@@ -3576,6 +3589,9 @@ impl Editor {
                 Aim::Top => scrolloff,
                 Aim::Middle => last / 2,
                 Aim::Bottom => last.saturating_sub(scrolloff),
+                // Warning: **夾在 `scrolloff` 裏頭**，同上面那一段說的理由：坐到邊上去
+                // 的話下一幀自己又被推開，滾一行變成跳三行。
+                Aim::Row(row) => row.clamp(scrolloff, last.saturating_sub(scrolloff)),
             });
         }
         // Typewriter: the row being written stays in the middle and the paper

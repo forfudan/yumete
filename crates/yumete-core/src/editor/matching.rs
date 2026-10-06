@@ -245,6 +245,34 @@ impl Editor {
         })
     }
 
+    /// **`zj`／`zk`：視窗滾一行，光標的文字不動**（2026-10-06，helix 的
+    /// `scroll_down`／`scroll_up`）。
+    ///
+    /// 滾視窗和挪光標是同一件事的兩面——文字沒動而視窗下去了，光標在屏幕上就
+    /// 往上坐了一行。所以這一支只說「坐第幾行」（[`crate::editor::Aim::Row`]），
+    /// 不必給核心一個它改不動的視窗位置。
+    ///
+    /// Warning: **擠到邊上就把光標一起帶走**，同 helix：視窗往下滾而光標已經是最上面
+    /// 那一行了，光標只能跟着下去一行，否則它就留在屏幕外面了。
+    pub(super) fn scroll_the_page(&mut self, down: bool, n: usize) {
+        let Some(first) = self.screen_line('H', 1) else { return };
+        let Some(last) = self.screen_line('L', 1) else { return };
+        let rope = self.current_buffer().rope();
+        let here = rope.char_to_line(self.sel.head());
+        let n = n.max(1);
+        let top = match down {
+            true => (first + n).min(rope.len_lines().saturating_sub(1)),
+            false => first.saturating_sub(n),
+        };
+        // 光標被擠出去了就跟着走一步，落在新視窗的那一邊上。
+        let deep = last.saturating_sub(first);
+        let line = here.clamp(top, top + deep);
+        if line != here {
+            self.goto_line(line + 1);
+        }
+        self.aim = Some(crate::editor::Aim::Row(line.saturating_sub(top)));
+    }
+
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
         let Some(line) = self.screen_line(which, nth) else { return };
         self.remember_jump();

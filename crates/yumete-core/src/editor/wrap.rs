@@ -312,6 +312,7 @@ impl Editor {
             Pending::Register => "\"",
             Pending::Match => "m",
             Pending::Aim => "z",
+            Pending::AimStuck => "Z",
             Pending::MatchPair { around: false } => "mi",
             Pending::MatchPair { around: true } => "ma",
             Pending::Surround => "ms",

@@ -22237,6 +22237,41 @@ fn the_z_layer_answers_what_helix_binds_there() {
     f.on_key(Key::Char('?'));
     assert_eq!(f.mode, Mode::Search, "z? 也是");
 
+    // **`zj`/`zk` 只滾視窗**：光標那一行的文字不動，它在屏幕上換一行坐。
+    let mut h = typed(&text);
+    let rope = h.current_buffer().rope().clone();
+    h.set_page_span(rope.line_to_char(10), rope.line_to_char(30));
+    h.goto_line(20);
+    let was = line(&h);
+    h.on_key(Key::Char('z'));
+    h.on_key(Key::Char('j'));
+    assert_eq!(line(&h), was, "光標的文字沒動");
+
+    // 擠到邊上纔把光標一起帶走：光標就坐在最上面那一行，視窗再往下只能帶着它走。
+    let mut i = typed(&text);
+    let rope = i.current_buffer().rope().clone();
+    i.set_page_span(rope.line_to_char(10), rope.line_to_char(30));
+    i.goto_line(11);
+    i.on_key(Key::Char('z'));
+    i.on_key(Key::Char('j'));
+    assert_eq!(line(&i), 11, "光標被擠得跟着走一行");
+
+    // `Z` 是同一層，按完不收：一路 `jjj` 都歸它，`Esc` 纔收。
+    let mut j = typed(&text);
+    let rope = j.current_buffer().rope().clone();
+    j.set_page_span(rope.line_to_char(0), rope.line_to_char(20));
+    j.goto_line(1);
+    // 這一層裏 `j` 是滾視窗，所以光標的文字不動；出了層纔是走一行。
+    // Warning: **離屏下 `page_span` 不會逐鍵更新**（沒有幀），所以這裏驗的是
+    // 「`j` 歸不歸這一層」，不是滾了幾行。
+    j.on_key(Key::Char('Z'));
+    j.on_key(Key::Char('j'));
+    j.on_key(Key::Char('j'));
+    assert_eq!(line(&j), 1, "Zjj 都歸這一層，光標沒走");
+    j.on_key(Key::Esc);
+    j.on_key(Key::Char('j'));
+    assert_eq!(line(&j), 2, "Esc 之後 j 又是走一行");
+
     // 認不得的鍵仍舊說一句，而那句話現在把新加的幾個也列了出來。
     let mut g = typed(&text);
     g.on_key(Key::Char('z'));
