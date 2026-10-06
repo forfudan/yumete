@@ -5057,17 +5057,32 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     if shaped {
         return Ok(Described { help: "cmd.commands.substitute", spelt: None, needs: &[] });
     }
-    match entry_named(head) {
-        Some(e) => Ok(Described {
-            help: e.help,
-            spelt: match e.aliases.is_empty() {
-                true => None,
-                false => Some(e.aliases.join(" ")),
-            },
-            needs: e.needs,
-        }),
-        None => Err(Some(head.to_string())),
+    let Some(e) = entry_named(head) else {
+        return Err(Some(head.to_string()));
+    };
+    let mut said = Described {
+        help: e.help,
+        spelt: match e.aliases.is_empty() {
+            true => None,
+            false => Some(e.aliases.join(" ")),
+        },
+        needs: e.needs,
+    };
+    // **參數打全了就說那個詞的事**（2026-10-07 報的）。
+    //
+    // 原話：「我输入 :ruby 加空格的时候……描述区显示的是第一个参数的信息（off）。
+    // 但如果我按下回车，它其实触发的是裸命令」。所以末尾那個空格**不算**挑了
+    // 一個詞——`split_whitespace` 自己就不數它，於是 `:ruby ` 說的是裸 `:ruby`
+    // 的事，`:ruby off` 纔說 `off` 的事。
+    //
+    // 參數不是一張詞表的（`:view-wrap 10` 那個數目）就停下來，說命令自己的事：
+    // 那時候單子上一條都配不中，而那一句仍舊是按下 Enter 會發生的事。
+    for (at, word) in line.split_whitespace().skip(1).enumerate() {
+        let Some(list) = e.params.get(at).and_then(Param::words) else { break };
+        let Some(w) = pick(word.trim_end_matches('!'), list) else { break };
+        said = Described { help: w.help, spelt: None, needs: w.needs };
     }
+    Ok(said)
 }
 
 /// What [`about_the_line`] found: enough to describe it, and nothing else.

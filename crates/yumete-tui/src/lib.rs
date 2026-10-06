@@ -5155,7 +5155,7 @@ fn draw_list(
         cap,
         whole,
     } = list;
-    if items.is_empty() && footer.is_empty() {
+    if items.is_empty() && footer.is_empty() && about.is_empty() {
         return None;
     }
     // Twenty-six commands down one column is three screenfuls with the rest of
@@ -5293,13 +5293,17 @@ fn draw_list(
     //
     // Warning: **腳注那一行要讓出來**：舊形狀的高度是 `deep + 3`，那個 3 是上邊框、
     // 腳注、下邊框；計數搬到下邊框上之後那一行空着，於是單子底下多一條空白。
+    // 橫線隔的是說明和單子；單子空着就不畫它，也不佔那一行。
+    let ruled = !said.is_empty() && !items.is_empty();
     let block = match said.is_empty() {
         true => 0usize,
-        false => said.len() + 1,
+        false => said.len() + usize::from(ruled),
     };
-    let height = match said.is_empty() {
-        true => height,
-        false => height + block as u16 - 1,
+    let height = match (said.is_empty(), items.is_empty()) {
+        (true, _) => height,
+        // 單子空着：整扇面板就是上下兩道框夾着那一段話。
+        (false, true) => said.len() as u16 + 2,
+        (false, false) => height + block as u16 - 1,
     };
     if height > area.height {
         return None;
@@ -5350,14 +5354,16 @@ fn draw_list(
             // 和單子上那幾行同一個左邊：框內一格，再一格。
             put_text(buf, menu.x + 2, menu.y + 1 + n as u16, menu.x + width - 1, line, text);
         }
-        let y = menu.y + 1 + said.len() as u16;
-        let rule = Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink));
-        // 圓角方角共用這一對：圓的只圓在四個角上。
-        put_text(buf, menu.x, y, menu.x + width, "├", rule);
-        for x in menu.x + 1..menu.x + width - 1 {
-            put_text(buf, x, y, menu.x + width, "─", rule);
+        if ruled {
+            let y = menu.y + 1 + said.len() as u16;
+            let rule = Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink));
+            // 圓角方角共用這一對：圓的只圓在四個角上。
+            put_text(buf, menu.x, y, menu.x + width, "├", rule);
+            for x in menu.x + 1..menu.x + width - 1 {
+                put_text(buf, x, y, menu.x + width, "─", rule);
+            }
+            put_text(buf, menu.x + width - 1, y, menu.x + width, "┤", rule);
         }
-        put_text(buf, menu.x + width - 1, y, menu.x + width, "┤", rule);
     }
     for slot in 0..visible {
         let i = first + slot;
@@ -6428,12 +6434,9 @@ fn draw_command_menu(
     };
     let ink = crate::theme::Palette::of(config);
     let (matches, selected) = editor.command_menu();
-    if matches.is_empty() {
-        return None;
-    }
     // Tab's pick is inked; without one nothing is, because the drawn text on
     // the command line is already saying what the guess is.
-    let highlight = selected.map(|i| i.min(matches.len() - 1));
+    let highlight = selected.filter(|_| !matches.is_empty()).map(|i| i.min(matches.len() - 1));
     let focus = highlight.unwrap_or(0);
     // **猜出來的那幾條跟在後面，淡一點**（2026-10-06 定）。前綴配中的那些是 ⇥
     // 走得到的；這幾條只是說「你要的也許是這個」，走不到，所以顏色也不一樣。
@@ -6475,22 +6478,8 @@ fn draw_command_menu(
     // 那三個 `off`／`basic`／`full`——而那時候要讀的正是挑中的那個詞是什麼意思。
     // 作者報的是名字那一段：剛按下 `:` 說的是 `cd` 的事，打錯了說的是別人的事。
     let typed = editor.prompt().map(|(_, t)| t).unwrap_or_default();
-    let naming = yumete_core::command::still_naming(typed);
-    let about: Vec<String> = match naming {
-        false => {
-            let mut lines =
-                vec![yumete_core::messages::say(matches[focus].help, &[]).to_string()];
-            let unmet: Vec<String> = editor
-                .unmet_needs(matches[focus].needs)
-                .iter()
-                .map(|need| need.says())
-                .collect();
-            if !unmet.is_empty() {
-                lines.push(say!("ui.needs-these-first", unmet.join(&say!("label.comma"))));
-            }
-            lines
-        }
-        true => match yumete_core::command::about_the_line(typed) {
+    let about: Vec<String> = {
+        match yumete_core::command::about_the_line(typed) {
         // 什麼都沒打：不畫說明，也不畫那道橫線。
         Err(None) => Vec::new(),
         // 打了一個不存在的命令：照編輯器按下 Enter 時說的那一句說。
@@ -6508,9 +6497,18 @@ fn draw_command_menu(
             }
             lines
         }
-        },
+        }
     };
-    let footer = format!("{}/{}", focus + 1, matches.len());
+    // **一條都配不中、可是有話要說**（2026-10-07 定）：`:view-wrap 10` 的 `10` 不在
+    // 任何一張詞表上，而按下 Enter 它確實會把寬度定成 10。那時候整扇面板就是那
+    // 一段話，底下那道橫線不必畫——橫線隔的是說明和單子，而單子是空的。
+    if matches.is_empty() && about.is_empty() {
+        return None;
+    }
+    let footer = match matches.is_empty() {
+        true => String::new(),
+        false => format!("{}/{}", focus + 1, matches.len()),
+    };
     // Spread across the window: the command list is short entries and there
     // are a couple of dozen of them, which is exactly the shape that wants
     // columns.
@@ -19989,13 +19987,22 @@ fn squeezed(text: &str) -> String {
         let text = buffer_text(&buffer);
         assert!(text.contains("basic"), "the words `:ruby` takes: {text:?}");
         assert!(!text.contains(":basic"), "a word is not a command, so no colon");
-        // A wide glyph covers two cells and only the first carries it. The
-        // help shown is the highlighted word's, and the first word `:ruby`
-        // takes is `off` — the dialects are commands of their own now
-        // (`:ruby-html`), so what follows `:ruby ` is the level and nothing
-        // else (#368).
+        // **說明說的是按下 Enter 會發生什麼**（2026-10-07 定）。`:ruby ` 末尾那
+        // 一個空格還沒挑中任何一個詞，按下 Enter 跑的是**裸** `:ruby`——所以那
+        // 一段說的是裸命令的事，不是單子上第一個詞的事。
+        //
+        // 原話：「我输入 :ruby 加空格的时候……描述区显示的是第一个参数的信息
+        // （off）。但如果我按下回车，它其实触发的是裸命令」。
         let squashed = text.replace(' ', "");
-        assert!(squashed.contains("顯示源碼"), "and what each one does: {squashed:?}");
+        assert!(squashed.contains("改這裏的注音"), "裸命令的事: {squashed:?}");
+
+        // 挑中一個詞之後纔說那個詞的事。
+        for c in "off".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let buffer = render_with(&editor, &config, no_ime(), 90, 24);
+        let squashed = buffer_text(&buffer).replace(' ', "");
+        assert!(squashed.contains("顯示源碼"), "挑中 off 之後說 off 的事: {squashed:?}");
     }
 
     /// **The shape is two caps, and a taller window does not change them**
