@@ -1916,6 +1916,7 @@ pub fn draw_candidate_panel(
     // The candidate list's ring is the editor's ring with the IME's own
     // colours in it — one shape, two palettes (`chrome`).
     let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        foot: None,
         rounded: config.panel.rounded,
         border: Style::default().fg(skin.border()).bg(skin.paper()),
         ground,

@@ -32,6 +32,13 @@ pub struct Ring {
     /// The name in the top-left corner, in whatever ink names are drawn in
     /// here — 金 for the editor's panels. `None` for a ring with no name.
     pub title: Option<(String, Style)>,
+    /// **A word on the bottom wall**, where the title is on the top one
+    /// (2026-10-06 定：「can cover the border (at the left side of the bottom
+    /// border, just like other temp panels) to save one line」).
+    ///
+    /// The counter 「1/47」 lives here. It is about the panel rather than about
+    /// anything in it, which is what a frame is for — and it costs no row.
+    pub foot: Option<(String, Style)>,
 }
 
 /// Clear `rect`, draw the ring on it, and hand back the inside.
@@ -63,6 +70,26 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     }
     let inner = block.inner(rect);
     block.render(rect, frame.buffer_mut());
+    // The foot is written after the wall, over it: one cell in from the
+    // corner, the same inset as the title.
+    if let Some((text, style)) = &ring.foot {
+        if rect.height >= 2 {
+            let y = rect.y + rect.height - 1;
+            let room = rect.width.saturating_sub(2) as usize;
+            let mut x = rect.x + 1;
+            let buf = frame.buffer_mut();
+            for c in text.chars() {
+                let w = yumete_cjk::str_width(&c.to_string()) as u16;
+                if (x + w).saturating_sub(rect.x + 1) as usize > room {
+                    break;
+                }
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_symbol(&c.to_string()).set_style(*style);
+                }
+                x += w;
+            }
+        }
+    }
     inner
 }
 
