@@ -1191,9 +1191,6 @@ impl Editor {
                     // `c`，於是它和「合併衝突」撞了一整輪——而 helix 的 `]c` 是
                     // **註釋**、`]t` 纔是類（`keymap/default.rs:117-118`）。照抄
                     // 參考實現，不照記憶；撞車也就跟着沒了。
-                    //
-                    // Warning: `]c` 仍與 helix 不同：那邊是註釋，這邊是合併衝突。註釋要
-                    // 等自己寫的那份查詢（§5.92），到時再定這個鍵歸誰。
                     Key::Char('t') => self.go_to_definition_nearby(forward, false),
                     // **`]g`／`[g` 跳改動**，helix 的 `goto_next_change`（2026-10-06）。
                     Key::Char('g') => self.go_to_change(forward),
