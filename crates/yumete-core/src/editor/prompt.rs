@@ -197,6 +197,14 @@ impl Editor {
         }
         match key {
             Key::Esc => {
+                // **`5ix` spends its count here** (2026-10-06): what repeats is
+                // the whole typing session, and nobody knows what that is until
+                // now.
+                let again = std::mem::take(&mut self.insert_again);
+                let typed = std::mem::take(&mut self.insert_recording);
+                if again > 0 && !typed.is_empty() {
+                    self.spend_the_insert_count(again, &typed);
+                }
                 // The session just ended is what `.` replays.
                 self.insert_recording.clear();
                 self.mode = Mode::Normal;

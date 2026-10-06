@@ -1793,32 +1793,38 @@ impl Editor {
                 let pos = self.selection().0;
                 self.set_cursor(pos);
                 self.enter_insert();
+                self.type_it_again(count, None);
             }
             Key::Char('a') => {
                 self.snapshot();
                 let pos = self.append_position();
                 self.set_cursor(pos);
                 self.enter_insert();
+                self.type_it_again(count, None);
             }
             Key::Char('I') => {
                 self.snapshot();
                 let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
                 self.set_cursor(pos);
                 self.enter_insert();
+                self.type_it_again(count, None);
             }
             Key::Char('A') => {
                 self.snapshot();
                 let pos = motion::line_end(self.current_buffer().rope(), self.sel.head());
                 self.set_cursor(pos);
                 self.enter_insert();
+                self.type_it_again(count, None);
             }
             Key::Char('o') => {
                 self.snapshot();
                 self.open_line_below();
+                self.type_it_again(count, Some(true));
             }
             Key::Char('O') => {
                 self.snapshot();
                 self.open_line_above();
+                self.type_it_again(count, Some(false));
             }
             // Undo/redo (Helix: `u` / `U`).
             Key::Char('u') => self.repeat_writing(count, |e| e.undo()),
