@@ -400,21 +400,34 @@ impl Editor {
                 self.mode = Mode::Command;
                 self.lookfor_focus = 0;
             }
-            Key::Up | Key::BackTab => {
-                self.lookfor_focus = self.lookfor_focus.saturating_sub(1)
-            }
-            Key::Down => {
-                let found = lookfor::look(&self.command_line).len();
-                if self.lookfor_focus + 1 < found {
-                    self.lookfor_focus += 1;
-                }
-            }
-            Key::Tab | Key::Enter => self.adopt_lookfor(),
+            // **⇥ 走一格，Enter 纔拿**（2026-10-06 定：「Use Tab to cycle the
+            // results」）。
+            //
+            // Warning: **從前 ⇥ 是「拿走這一條」，而挪高亮只有方向鍵**——於是第二條
+            // 根本沒有辦法挑：腳注寫着 ⇥，按下去卻把第一條拿走了。作者的原話是
+            // 「Tab just fill the command line with the command, how can I choose
+            // the 2nd, 3rd one?」。`:` 那一行上的 ⇥ 一直是「走到下一條」，所以這
+            // 一改也把相鄰兩行上同一個鍵的兩種意思合回了一種。
+            //
+            // **走到頭繞回來**：這是一張排過序的短名單，不是一份目錄。
+            Key::Tab | Key::Down => self.walk_lookfor(1),
+            Key::BackTab | Key::Up => self.walk_lookfor(-1),
+            Key::Enter => self.adopt_lookfor(),
             other => {
                 self.edit_prompt(other);
                 self.lookfor_focus = 0;
             }
         }
+    }
+
+    /// 單子上走一格，走到頭繞回去。
+    fn walk_lookfor(&mut self, by: isize) {
+        let found = lookfor::look(&self.command_line).len();
+        if found == 0 {
+            return;
+        }
+        let at = self.lookfor_focus.min(found - 1) as isize;
+        self.lookfor_focus = (at + by).rem_euclid(found as isize) as usize;
     }
 
     /// Take the highlighted row back to the `:` line, whole.
@@ -427,26 +440,27 @@ impl Editor {
             self.status = say!("lookfor.nothing-to-take");
             return;
         };
-        // **鍵就按下去，命令纔寫到 `:` 上**（2026-10-06）。一個鍵沒有「寫到哪一行」
-        // 可言——把 `空格 f` 這四個字寫進 `:` 裏，按 Enter 得到的是「沒有這條命令」。
-        // 所以這一支按它，而讀者在單子上看見的那一串就是下次自己按的那一串。
-        if let lookfor::What::Keys(action) = &hit.what {
-            let how = action.how;
-            self.lookfor_focus = 0;
-            self.close_prompt();
-            match how {
+        // **Enter 就做掉挑中的那一條**（2026-10-06 定：「Enter will execute the
+        // command」）。⇥ 和 ⇧⇥ 在單子上走，Enter 收尾——三個鍵各做一件事。
+        //
+        // 鍵就按下去，命令就跑。從前 Enter 是「把命令寫到 `:` 那一行上」，讓讀者
+        // 再看一眼、再按一次 Enter；而單子上那一行本來就看得見，兩次 Enter 是一次
+        // 多餘的。
+        let what = hit.what.clone();
+        self.lookfor_focus = 0;
+        self.close_prompt();
+        match what {
+            lookfor::What::Keys(action) => match action.how {
                 yumete_cjk::actions::How::Keys(keys) => self.play_keys_now(keys),
                 yumete_cjk::actions::How::Command(line) => {
                     let _ = self.execute(line);
                 }
+            },
+            lookfor::What::Command(choice) => {
+                let line = choice.written();
+                let _ = self.execute(&line);
             }
-            return;
         }
-        self.command_line = hit.written();
-        self.command_caret = self.command_line.chars().count();
-        self.completion = None;
-        self.lookfor_focus = 0;
-        self.mode = Mode::Command;
     }
 
     /// What the `::` line has turned up, and which row is highlighted.
