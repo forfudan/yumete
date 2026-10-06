@@ -210,7 +210,7 @@ pub fn check(text: &str) -> Vec<Slip> {
     }
 
     // The pairs, one paragraph at a time — which here is one line, because a
-    // Chinese paragraph is one line (see `docs/manual.md` §四「想寫多長」).
+    // Chinese paragraph is one line (see `docs/manual_tc.md` §四「想寫多長」).
     for (line, chars) in lines.iter().enumerate() {
         let mut stack: Vec<(usize, char)> = Vec::new();
         for (at, &c) in chars.iter().enumerate() {

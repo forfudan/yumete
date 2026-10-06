@@ -15,9 +15,9 @@ names: `yumete`, and `ye` for the one you actually type.
 brew install forfudan/tap/yumete
 ```
 
-**[docs/manual.md](docs/manual.md)**（繁體, and [简体](docs/manual_sc.md)）is
-the user manual — what the keys and commands do, how vertical layout works, and
-how to configure it. [docs/development.md](docs/development.md) has the design,
+**[docs/manual.md](docs/manual.md)** is the user manual — what the keys and
+commands do, how vertical layout works, and how to configure it. The same book
+in Chinese: [繁體](docs/manual_tc.md), [简体](docs/manual_sc.md). [docs/development.md](docs/development.md) has the design,
 the reasoning, and the feature roadmap.
 
 > Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
@@ -303,8 +303,9 @@ yumete/
 │   └── yumete/                # binary: CLI, launches the editor or preview
 ├── scripts/build.sh           # release build → ./yumete (gitignored)
 └── docs/
-    ├── manual.md           # the user manual (繁體)
-    ├── manual_sc.md        # the same, 简体
+    ├── manual.md           # the user manual (English)
+    ├── manual_tc.md        # the same book, 繁體
+    ├── manual_sc.md        # the same book, 简体 (generated from manual_tc.md)
     └── development.md      # design & roadmap
 ```
 

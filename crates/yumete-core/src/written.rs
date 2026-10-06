@@ -225,11 +225,11 @@ mod measure {
     #[ignore = "量數用的，不是斷言"]
     fn how_crowded_is_a_screen() {
         // 從倉根跑也好、從 crate 跑也好，找不到就不量——它不是一條斷言。
-        let Some(all) = ["../../docs/manual.md", "docs/manual.md"]
+        let Some(all) = ["../../docs/manual_tc.md", "docs/manual_tc.md"]
             .iter()
             .find_map(|p| std::fs::read_to_string(p).ok())
         else {
-            println!("找不到 docs/manual.md，跳過");
+            println!("找不到 docs/manual_tc.md，跳過");
             return;
         };
         // 一屏約四十行。

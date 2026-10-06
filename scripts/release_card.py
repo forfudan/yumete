@@ -376,7 +376,7 @@ def main():
         default=":search\\nbiaodian\\e",
         help="截圖前先按哪幾個鍵（`--shot` 的寫法）",
     )
-    ap.add_argument("--file", default="docs/manual.md", help="截圖用哪個檔")
+    ap.add_argument("--file", default="docs/manual_tc.md", help="截圖用哪個檔")
     a = ap.parse_args()
 
     # **版心定字號，字號定每行幾個字。** 版心 ＝ 頁寬減兩邊的內邊距（`.card` 的
