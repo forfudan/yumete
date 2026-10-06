@@ -22279,3 +22279,49 @@ fn the_z_layer_answers_what_helix_binds_there() {
     assert!(g.status().contains("C-d"), "說明裏列得出半頁那一對");
 }
 
+/// **vim 的 `U` 撤完這一行，`A-u`／`A-U` 是撤銷／重做**（2026-10-06）。
+#[test]
+fn vim_u_undoes_a_whole_line_and_alt_u_walks_the_history() {
+    // 一行上落四個命令，`U` 一次撤完；別的行一個字不動。
+    let mut ed = typed_vim("甲\n乙\n");
+    press(&mut ed, "ggA一");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "A二");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "A三");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "甲一二三\n乙\n");
+    press(&mut ed, "U");
+    assert_eq!(ed.current_buffer().text(), "甲\n乙\n", "這一行上的三筆一次撤完");
+
+    // 撤到別的行就停：第二行改過之後，第一行的 `U` 不許把它一起撤掉。
+    let mut ed = typed_vim("甲\n乙\n");
+    press(&mut ed, "ggjA丁");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "ggA一");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "A二");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "甲一二\n乙丁\n");
+    press(&mut ed, "U");
+    assert_eq!(ed.current_buffer().text(), "甲\n乙丁\n", "第二行那一筆留着");
+
+    // helix 鍵位下 `U` 仍是重做。
+    let mut ed = typed("甲\n");
+    press(&mut ed, "ggA一");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "甲\n");
+    press(&mut ed, "U");
+    assert_eq!(ed.current_buffer().text(), "甲一\n", "helix：U 是重做");
+
+    // `A-u`／`A-U` 兩套鍵位下都是撤銷／重做。
+    let mut ed = typed("甲\n");
+    press(&mut ed, "ggA一");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Alt('u'));
+    assert_eq!(ed.current_buffer().text(), "甲\n", "A-u 撤銷");
+    ed.on_key(Key::Alt('U'));
+    assert_eq!(ed.current_buffer().text(), "甲一\n", "A-U 重做");
+}
+

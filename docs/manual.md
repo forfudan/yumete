@@ -465,6 +465,7 @@ do it for you**: this is not a compatibility layer, it is a dictionary worth usi
 | `>` `<` | indent / unindent the selected lines |
 | `C-a` `C-x` | the number at the cursor up / down by one |
 | `u` `U` | undo / redo. **One insertion is one undo** — from `i` to `Esc`, however many characters you typed and however many times the IME committed, it counts once. To cut it yourself when it runs long: `C-g` in insert mode (vim's `C-g u` is taken too) |
+| `A-u` `A-U` | the same, in Helix's other spelling. Warning: Helix's two walk a tree — undo, then type something else, and the old branch is still reachable — while this history is a single line, so here the two keys are `u` and `U` |
 | `.` | **do that last change again** — `r`, `d`, `c…Esc`, `ms(`, a paste, they all count |
 
 ### Search
@@ -1906,6 +1907,7 @@ on its own says which set is in force.
 | `^` `$` `0` | translated to `gs` `gl` `gh` | first character on the line / end of line / start of line |
 | `>` `<` | **operators too** | `>>` indents the line, `>j` two lines, `>ap` a paragraph |
 | `C-r` | already there | redo (normally `U` here) |
+| `U` | **new** | undo the whole run of recent changes on this line (as in vim; redo on this side is `C-r`) |
 | `*` | translated to `g/` | where else is this word |
 | `%` | translated to `mm` | jump to the matching bracket (`%` here is select all) |
 | `m`*a* | **already there, spelled differently** | set a mark (`'`*a* jumps back) — `m` is normally the door into match mode |

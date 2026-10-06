@@ -84,6 +84,50 @@ impl Editor {
         }
     }
 
+    /// **vim 的 `U`：把這一行上最近那一串改動一次撤完**（2026-10-06，`:h U`）。
+    ///
+    /// vim 說的是「undo all latest changes on one line」。這裏照着做：一步一步撤，
+    /// 每撤一步問一句「剛纔那一步動的還是這一行嗎」——`code::what_changed` 掐頭
+    /// 去尾就答得出來。越界的那一步**退回去**，然後停。
+    ///
+    /// Warning: **它不是 `u` 按幾遍。** `u` 撤的是「上一個命令」，`U` 撤的是「這一行上
+    /// 的所有命令」，而一行上常常落着五六個命令。撤到別的行就停，是這個鍵和
+    /// 「一直按 `u`」唯一的分別，也是它的全部意義。
+    ///
+    /// Warning: **vim 的 `U` 自己也進撤銷表**（再按一次 `u` 把它撤回來），這裏白拿：
+    /// 每一步走的都是同一個撤銷表，所以 `U` 之後按 `C-r` 一步一步回得去。
+    pub(super) fn undo_this_line(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let mut done = 0usize;
+        loop {
+            let was = self.current_buffer().text().to_string();
+            let at = self.sel.head();
+            let Some(cursor) = self.current_buffer_mut().undo(at) else { break };
+            let now = self.current_buffer().text().to_string();
+            // 這一步動了哪幾行——越界就退回去，`U` 到此為止。
+            let touched = crate::code::what_changed(&was, &now).map(|edit| {
+                (edit.start_position.row, edit.old_end_position.row.max(edit.new_end_position.row))
+            });
+            let inside = touched.is_none_or(|(a, b)| a == line && b == line);
+            if !inside {
+                let back = self.sel.head();
+                self.current_buffer_mut().redo(back);
+                break;
+            }
+            self.sel.set_head(cursor);
+            self.sel.set_anchor(cursor);
+            self.clamp_cursor();
+            done += 1;
+        }
+        if done == 0 {
+            self.status = say!("edit.undo-at-oldest");
+        }
+    }
+
     /// Redo the last undone change to this buffer (`:redo`).
     pub(super) fn redo(&mut self) {
         if self.refuse_readonly() {

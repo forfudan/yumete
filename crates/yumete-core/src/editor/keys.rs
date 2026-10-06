@@ -2134,7 +2134,20 @@ impl Editor {
             }
             // Undo/redo (Helix: `u` / `U`).
             Key::Char('u') => self.repeat_writing(count, |e| e.undo()),
+            // **vim 鍵位下 `U` 是「撤完這一行」**（2026-10-06，`:h U`）。重做在那一端
+            // 是 `C-r`（鍵位表上一直有），所以這個鍵讓得出來。
+            Key::Char('U') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.repeat_writing(1, |e| e.undo_this_line());
+            }
             Key::Char('U') => self.repeat_writing(count, |e| e.redo()),
+            // **`A-u`／`A-U` 也是撤銷／重做**（2026-10-06，helix 的 `earlier`／`later`）。
+            //
+            // Warning: **helix 那兩個走的是一棵樹**：撤銷之後再改一筆，舊的那一支在它
+            // 那裏還回得去，`A-u` 是「往前一個時刻」而不是「撤銷一步」。這個編輯器
+            // 的歷史是一條線，重做過的那一支改一筆就沒了——所以這裏兩個鍵是同一件
+            // 事。鍵按下去有它該有的方向，只是回不到另一支上。
+            Key::Alt('u') => self.repeat_writing(count, |e| e.undo()),
+            Key::Alt('U') => self.repeat_writing(count, |e| e.redo()),
             // Search (`/` forward, `?` backward, `n`/`N` repeat).
             // `!` is what it is in vi: send this through a command and take
             // what comes back. It opens the command line with the verb already
