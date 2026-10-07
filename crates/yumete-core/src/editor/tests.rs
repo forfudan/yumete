@@ -7970,16 +7970,17 @@ fn the_grid_never_stands_on_the_header_it_draws() {
     assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
 }
 
-/// `:table` is the **door**, not a level. Typed while a table is already
-/// up it used to walk in again as 畫成表格 — quietly demoting 全窗表格 and
+/// **全窗 is not a fifth level**, so asking for it again changes nothing and
+/// the level it was asked for from is still underneath. The retired `:table`
+/// door used to walk in again as 畫成表格 here — quietly demoting 全窗表格 and
 /// losing the window `t q` would have given back.
 #[test]
-fn typing_table_again_does_not_demote_the_level_it_is_already_in() {
+fn asking_for_the_window_again_does_not_demote_the_level_underneath() {
     let mut ed = with_md_table();
     ed.goto_line(3);
     press(&mut ed, " tt");
     let before = (ed.table_level(), ed.table.as_ref().map(|v| v.pane));
-    ed.execute(":table").unwrap();
+    ed.execute(":table-render window").unwrap();
     assert_eq!(
         (ed.table_level(), ed.table.as_ref().map(|v| v.pane)),
         before,
@@ -7988,7 +7989,11 @@ fn typing_table_again_does_not_demote_the_level_it_is_already_in() {
     );
     assert_eq!(ed.status(), say!("table.already-the-window"));
 
-    // And the door still closes.
+    // And bare `:table-render` says 全窗 rather than the level beneath it.
+    ed.execute(":table-render").unwrap();
+    assert_eq!(ed.status(), say!("table.already-the-window"));
+
+    // The way out is still a level.
     ed.execute(":table-render off").unwrap();
     assert!(ed.table.is_none(), "{}", ed.status());
 }
@@ -8936,8 +8941,8 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
     assert_eq!(ed.layout(), Layout::Vertical, "back to 縱書");
     assert!(ed.status().contains("轉回竪排"), "{}", ed.status());
 
-    // `:table` on again turns it again, and off again gives it back.
-    ed.execute("table").unwrap();
+    // Asking for a level again turns it again, and off again gives it back.
+    ed.execute("table-render full").unwrap();
     assert_eq!(ed.layout(), Layout::Horizontal);
     assert!(ed.status().contains("已轉橫排"), "{}", ed.status());
     ed.execute("table-render off").unwrap();
@@ -12166,16 +12171,17 @@ fn markdown_writes_a_footnote_and_a_table() {
 
 }
 
-/// #276. 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入
+/// #276. 2026-09-05: 「`:table-new 3 4`（當時的名字），迅速在 markdown 中插入
 /// 一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模
 /// 式。」 It used to be `:markdown table 4x3` — columns first, rows meaning
 /// *data* rows, no blank lines and no Insert mode — and that spelling is
-/// gone rather than kept beside this one.
+/// gone rather than kept beside this one. The command is `:table` since
+/// 2026-10-07, and it asks to be standing on a blank line.
 #[test]
 fn a_new_table_is_written_with_room_around_it_and_typed_into() {
-    let mut ed = typed("前文。\n後文。\n");
-    press(&mut ed, "gg");
-    ed.execute(":table-new 3 4").unwrap();
+    let mut ed = typed("前文。\n\n後文。\n");
+    press(&mut ed, "ggj");
+    ed.execute(":table 3 4").unwrap();
     let text = ed.current_buffer().text();
     let lines: Vec<&str> = text.lines().collect();
     let rows: Vec<&str> = lines.iter().copied().filter(|l| l.starts_with('|')).collect();
@@ -12206,16 +12212,31 @@ fn a_new_table_is_written_with_room_around_it_and_typed_into() {
     let mut ed = typed("前文。\n\n後文。\n");
     press(&mut ed, "gg");
     press(&mut ed, "j");
-    ed.execute(":table-new 2 2").unwrap();
+    ed.execute(":table 2 2").unwrap();
     let text = ed.current_buffer().text();
     assert!(!text.contains("\n\n\n"), "no line the writer did not ask for: {text:?}");
 
+    // **In the middle of a paragraph it refuses** (2026-10-07: 「爲了防止出現
+    // 意外，破壞段落」). It used to put the table under the line instead, which
+    // is a guess at where the paragraph ends.
+    let mut ed = typed("那年冬天，雪下得比往常都早。\n");
+    press(&mut ed, "gg");
+    ed.execute(":table 2 2").unwrap();
+    assert_eq!(ed.current_buffer().text(), "那年冬天，雪下得比往常都早。\n");
+    assert_eq!(ed.status(), say!("table.needs-a-blank-line"));
+
+    // Leading spaces are still a blank line: `trim` is the judge.
+    let mut ed = typed("前文。\n   \n");
+    press(&mut ed, "ggj");
+    ed.execute(":table 2 2").unwrap();
+    assert!(ed.current_buffer().text().contains('|'), "{}", ed.status());
+
     // Two numbers, and only sane ones.
-    let mut ed = typed("前文。\n");
-    assert!(ed.execute(":table-new 0 4").is_err());
-    assert!(ed.execute(":table-new 4 99").is_err());
+    let mut ed = typed("\n");
+    assert!(ed.execute(":table 0 4").is_err());
+    assert!(ed.execute(":table 4 99").is_err());
     // On its own it is a small one rather than an error.
-    assert!(ed.execute(":table-new").is_ok());
+    assert!(ed.execute(":table").is_ok());
 }
 
 #[test]

@@ -1151,37 +1151,31 @@ impl Editor {
                 self.status = say!("table.column-rules", self.table_rules.name());
                 Ok(CommandOutcome::Continue)
             }
-            Command::EnterTable => {
-                // **`:table` is the door, not a surface.** Typed while the
-                // grid had the window it went in again as 畫成表格 — a silent
-                // demotion that also threw away `t q`'s way back.
-                match self.table.as_ref().map(|v| v.pane) {
-                    None => {
-                        self.enter_table();
-                    }
-                    Some(true) => self.status = say!("table.already-the-window"),
-                    Some(false) => match self.table_level {
-                        TableLevel::Full => self.status = say!("table.already-drawn"),
-                        _ => self.status = say!("table.already-operated"),
-                    },
-                }
-                Ok(CommandOutcome::Continue)
-            }
             Command::SetTableLevel(level) => {
                 // The same body `空格 t o|b|f` runs: the keys are this command
                 // with its argument already typed.
                 self.ask_for_table_level(level);
                 Ok(CommandOutcome::Continue)
             }
+            Command::TableWindow => {
+                // The same body `空格 t t` runs.
+                self.ask_for_the_table_window();
+                Ok(CommandOutcome::Continue)
+            }
             Command::ReportTableLevel => {
-                // **The three 「already …」 sentences are the report.** Each
-                // one already says which level this is and which keys the
-                // other two are on — 「已經是基本表格了——t f 完整，t t 全窗，
-                // t o 源碼」 — so asking 「which am I now」 wants exactly them.
-                self.status = match self.table_level {
-                    TableLevel::Off => say!("table.already-off"),
-                    TableLevel::Basic => say!("table.already-operated"),
-                    TableLevel::Full => say!("table.already-drawn"),
+                // **The four 「already …」 sentences are the report.** Each one
+                // already says which view this is and which keys the others
+                // are on — 「已經是基本表格了——t f 完整，t t 全窗，t o 源碼」 —
+                // so asking 「which am I now」 wants exactly them. 全窗 is asked
+                // first because it is not a level: it is drawn over whichever
+                // one the reader came from.
+                self.status = match self.table.as_ref().is_some_and(|v| v.pane) {
+                    true => say!("table.already-the-window"),
+                    false => match self.table_level {
+                        TableLevel::Off => say!("table.already-off"),
+                        TableLevel::Basic => say!("table.already-operated"),
+                        TableLevel::Full => say!("table.already-drawn"),
+                    },
                 };
                 Ok(CommandOutcome::Continue)
             }
