@@ -6485,7 +6485,14 @@ fn draw_command_menu(
         // 打了一個不存在的命令：照編輯器按下 Enter 時說的那一句說。
         Err(Some(name)) => vec![say!("cmd.no-such-command", &name)],
         Ok(what) => {
+            // 一支函數，它的一個參數，哪裏不對——三句話，由上而下。
             let mut lines = vec![yumete_core::messages::say(what.help, &[]).to_string()];
+            if let Some(word) = what.word {
+                lines.push(yumete_core::messages::say(word, &[]).to_string());
+            }
+            if let Some(wrong) = &what.wrong {
+                lines.push(wrong.clone());
+            }
             if let Some(spelt) = &what.spelt {
                 lines.push(say!("ui.command-aliases", spelt));
             }
