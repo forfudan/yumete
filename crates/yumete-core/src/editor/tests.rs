@@ -17648,7 +17648,7 @@ fn the_panel_finds_as_many_as_the_pipe_does() {
 
 /// **vim 的 `H`/`M`/`L` 是屏幕的頂/中/底**（2026-10-06 定）。
 ///
-/// ⚠️ 這一條 10-05 定過「不讓」，理由是「句子是寫小說按得最多的單位」——而那不是
+/// ⚠ 這一條 10-05 定過「不讓」，理由是「句子是寫小說按得最多的單位」——而那不是
 /// 理由（§5.94）。這一次一個鍵都没丟：vim 的句子動作本來就是 `(`/`)`。
 #[test]
 fn the_vim_hml_go_to_the_screen() {
@@ -17732,7 +17732,7 @@ fn the_vim_hml_go_to_the_screen() {
 
 /// **語法樹那一族：`]f` `]t` `]c` `mi f` `mi t` `mi c`**（2026-10-06，helix 的那幾個）。
 ///
-/// ⚠️ 用的是**語法 crate 自己帶的 `TAGS_QUERY`**，不是 helix 的 `textobjects.scm`
+/// ⚠ 用的是**語法 crate 自己帶的 `TAGS_QUERY`**，不是 helix 的 `textobjects.scm`
 /// ——那些檔是 MPL-2.0，這個倉是 Apache-2.0。見 `code::Language::tags`。
 #[test]
 fn the_syntax_tree_gives_up_its_functions_and_classes() {
