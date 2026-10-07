@@ -324,16 +324,26 @@ impl Buffer {
     }
 
     /// Create a buffer holding `text`, not yet associated with any file.
+    ///
+    /// **The ending is read off the text, the way [`Buffer::open`] reads it off
+    /// the file** (丟字第二輪, 2026-10-07). It used to be a hard `"\n"` here, so
+    /// a buffer built from CRLF text reported LF and every line the editor
+    /// added to it came out LF — and, worse, almost every test fixture in the
+    /// crate is built this way, so no test could express a CRLF file at all.
+    /// The only harness that could was `tests/byte_fidelity.rs`, because it
+    /// goes through a real file.
     pub fn from_text(text: &str) -> Self {
+        let rope = Rope::from_str(text);
+        let ending = dominant_ending(&rope);
         Buffer {
             id: next_id(),
-            rope: Rope::from_str(text),
+            rope,
             path: None,
             modified: false,
             cursor: 0,
             label: None,
             marked: false,
-            ending: "\n",
+            ending,
             history: History::default(),
             revision: 0,
             saved_depth: Some(0),
