@@ -137,7 +137,7 @@ pub const LESSON: &str = r#"# 宇夢小課堂
 
 ## 八、表格
 
-下面是一張表。把光標放進去，按 `:table`，Enter。
+下面是一張表。把光標放進去，按 `:table-render full`，Enter。
 
 | 字 | 拆分   | 說明     |
 | -- | ------ | -------- |
@@ -208,7 +208,7 @@ mod tests {
         for key in [
             "`i`", "`Esc`", "`u`", "`w`", "`b`", "`e`", "`x`", "`c`", "`d`", "`y`", "`p`",
             "`gg`", "`ge`", "`30G`", "`g/`", "`g?`", "`n`", "`:w`", "`:q`", "`:layout`",
-            "`:table`", "`gd`", "`空格 t /`", "`:help`", "`空格 f`",
+            "`:table-render full`", "`gd`", "`空格 t /`", "`:help`", "`空格 f`",
         ] {
             assert!(LESSON.contains(key), "the lesson never mentions {key}");
         }

@@ -1529,17 +1529,17 @@ find = "替換 替换 replace 工作 路徑 路径 目錄 目录 working cwd"
 [[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
 key = "cmd.commands.ruby"
-zht = "改這裏的注音；排多少在 `:ruby-render`"
-zhs = "改这里的注音；排多少在 `:ruby-render`"
-en = "edit the reading here; how much is drawn is `:ruby-render`"
+zht = "編輯此處注音"
+zhs = "编辑此处注音"
+en = "edit the reading here"
 find = "注音 拼音 振假名 旁註 旁注 furigana annotation"
 
 [[message]]
 # : 命令選單裏 ruby-render 那一項的說明（commands 組）
 key = "cmd.commands.ruby-render"
-zht = "注音排多少：顯示源碼、認得不排、排在正文旁邊；不寫就說現在是哪一檔"
-zhs = "注音排多少：显示源码、认得不排、排在正文旁边；不写就说现在是哪一档"
-en = "how much of a reading is drawn: the source, read but not laid out, or beside the base; bare says which it is now"
+zht = "注音渲染模式：顯示源碼、顔色渲染、夾行顯示。無參數時，報告當前模式名"
+zhs = "注音渲染模式：显示源码、颜色渲染、夹行显示。无参数时，报告当前模式名"
+en = "reading render mode: the source, coloured, laid out beside the base; with no argument it reports the mode"
 find = "注音 拼音 旁註 旁注 排 render 級別 级别"
 
 [[message]]
@@ -1638,20 +1638,21 @@ en = "which markup this file is written in (with no argument, which one it is no
 find = "語法 语法 標記 标记 高亮 highlight filetype"
 
 [[message]]
-# : 命令選單裏 table 那一項的說明（commands 組）
+# : 命令選單裏 table 那一項的說明（commands 組）。從前這個名字是「進表格」那道門，
+# 2026-10-07 改成新建一張表，所以這一則接的是舊 `cmd.table.new` 那一句
 key = "cmd.commands.table"
-zht = "按格子編輯：CSV 整個文件，或光標所在的 | 表格；畫多少在 `:table-render`"
-zhs = "按格子编辑：CSV 整个文件，或光标所在的 | 表格；画多少在 `:table-render`"
-en = "edit as a grid: a whole CSV, or the | table under the cursor; how much is drawn is `:table-render`"
-find = "表格 網格 网格 格子 欄位 栏位 grid csv tsv"
+zht = "一張空表：`:table 3 4` 是三行四欄，首行是欄名。只能在空行上用"
+zhs = "一张空表：`:table 3 4` 是三行四栏，首行是栏名。只能在空行上用"
+en = "an empty table: `:table 3 4` is three rows by four columns, the first row the headings; only on a blank line"
+find = "表格 網格 网格 格子 新建 插入 空表 建表 grid new insert"
 
 [[message]]
-# : 命令選單裏 table-render 那一項的說明（commands 組）。三個參數就是 空格 t o|b|f
+# : 命令選單裏 table-render 那一項的說明（commands 組）。四個參數就是 空格 t o|b|f|t
 key = "cmd.commands.table-render"
-zht = "表格畫多少：源碼視圖、基本視圖、完整視圖；不寫就說現在是哪一檔"
-zhs = "表格画多少：源码视图、基本视图、完整视图；不写就说现在是哪一档"
-en = "how much of a table is drawn: the source, basic, or full view; bare says which it is now"
-find = "表格 視圖 视图 源碼 源码 基本 完整 render 級別 级别"
+zht = "表格渲染模式：源碼視圖、基本視圖、完整視圖、全窗視圖。無參數時，報告當前模式名"
+zhs = "表格渲染模式：源码视图、基本视图、完整视图、全窗视图。无参数时，报告当前模式名"
+en = "how much of a table is drawn: the source, basic, full, or window view; bare says which it is now"
+find = "表格 視圖 视图 源碼 源码 基本 完整 全窗 render 級別 级别"
 
 [[message]]
 # : 命令選單裏 theme 那一項的說明（commands 組）
@@ -2620,14 +2621,6 @@ zht = "跳到表格裏叫這個名字的那一行（`:table-jump 木`）"
 zhs = "跳到表格里叫这个名字的那一行（`:table-jump 木`）"
 en = "go to the row this table names (`:table-jump 木`)"
 find = "行 表格 跳轉 跳转 goto table"
-
-[[message]]
-# : 命令選單裏 new 那一項的說明（table 組）
-key = "cmd.table.new"
-zht = "一張空表：`new 3 4` 是三行四欄，首行是欄名"
-zhs = "一张空表：`new 3 4` 是三行四栏，首行是栏名"
-en = "an empty table: `new 3 4` is three rows by four columns, the first row the headings"
-find = "新建 插入 空表 建表 new insert"
 
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
@@ -10455,6 +10448,13 @@ zhs = "按字移动（T 回到按格）"
 en = "moving by character — T goes back to cells"
 
 [[message]]
+# :table 在段落中間按下——新建一張表會把那一段寫壞，所以不猜，攔住
+key = "table.needs-a-blank-line"
+zht = "當前位置非空行，請在空行中使用此命令"
+zhs = "当前位置非空行，请在空行中使用此命令"
+en = "this line is not empty — use this command on a blank line"
+
+[[message]]
 # :table-pipe：看不出什麼在分欄
 key = "table.no-delimiter-in-sight"
 zht = "無法自動檢測分隔符，請手動聲明，例如 :convert-table , pipe 或 :convert-table tab pipe"
@@ -10520,9 +10520,9 @@ en = "the cursor is not in a | table"
 [[message]]
 # 表格命令用在表格外面
 key = "table.not-in-a-table"
-zht = "不是表格——先 :table"
-zhs = "不是表格——先 :table"
-en = "not a table — :table first"
+zht = "不是表格——先 :table-render full"
+zhs = "不是表格——先 :table-render full"
+en = "not a table — :table-render full first"
 
 [[message]]
 # 想在標題行上面加一行
@@ -10716,9 +10716,9 @@ en = "a schema is for a file that is nothing but a table — this one lives insi
 [[message]]
 # 新寫的 schema 檔頭一行的說明
 key = "table.schema-note"
-zht = "這份 schema 說的就是眼下看到的樣子。改完保存，:table-render off 再 :table 就照新的讀。"
-zhs = "这份 schema 说的就是眼下看到的样子。改完保存，:table-render off 再 :table 就照新的读。"
-en = "this schema says what the grid is already doing. Edit, save, then :table-render off and :table again."
+zht = "這份 schema 說的就是眼下看到的樣子。改完保存，:table-render off 再 :table-render full 就照新的讀。"
+zhs = "这份 schema 说的就是眼下看到的样子。改完保存，:table-render off 再 :table-render full 就照新的读。"
+en = "this schema says what the grid is already doing. Edit, save, then :table-render off and :table-render full again."
 
 [[message]]
 # 進表格模式時，schema 檔有毛病

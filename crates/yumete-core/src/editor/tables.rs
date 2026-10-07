@@ -537,6 +537,21 @@ impl Editor {
         self.snap_into_the_grid();
     }
 
+    /// Ask for the whole window — `空格 t t` and `:table-render window`.
+    ///
+    /// **Not a fifth level**, so it is not `ask_for_table_level`'s: the level
+    /// it was asked for from is untouched, which is what lets `空格 t q` give
+    /// the window back with nothing written down.
+    pub(super) fn ask_for_the_table_window(&mut self) {
+        if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
+            && !self.enter_table_as(true)
+        {
+            return;
+        }
+        self.show_pane(true);
+        self.snap_into_the_grid();
+    }
+
     /// Give the table the whole window, or give the window back (#283).
     ///
     /// **`t q` needs nothing written down.** The level is untouched by the
@@ -2259,21 +2274,20 @@ impl Editor {
                 .map(|t| t.trim().is_empty())
                 .unwrap_or(true)
         };
-        // An empty line is where the writer already made room; anywhere else
-        // the table goes *under* the line they are standing on rather than
-        // through the middle of it.
-        let at_line = match empty(self, here) {
-            true => here,
-            false => here + 1,
-        };
+        // **A blank line, or nothing** (2026-10-07: 「爲了防止出現意外，破壞段
+        // 落，我們可以要求必須在空行（可以有 leading spaces) 使用這個命令」).
+        // It used to put the table *under* the line instead, which is a guess
+        // at where a paragraph ends — and a wrong guess rewrites prose.
+        // Leading spaces still count as blank: `trim` is the judge.
+        if !empty(self, here) {
+            self.status = say!("table.needs-a-blank-line");
+            return;
+        }
+        let at_line = here;
         // The blank line above, when the line before is not already one.
         let above = at_line > 0 && !empty(self, at_line - 1);
         if above {
             block.insert(0, String::new());
-        }
-        // …and below, when what this pushes down is not one either.
-        if !empty(self, at_line) {
-            block.push(String::new());
         }
         let text = block.join("\n");
         let rope = self.current_buffer().rope();
@@ -3803,14 +3817,9 @@ impl Editor {
             // toggle of its own rather than a third stop on `t w`'s cycle, so
             // that `t w` means one thing in every mode.
             Key::Char('a') => return self.toggle_cell_wrap(),
+            // `t t` — 全窗, which is `:table-render window`.
             Key::Char('t') => {
-                if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
-                    && !self.enter_table_as(true)
-                {
-                    return;
-                }
-                self.show_pane(true);
-                self.snap_into_the_grid();
+                self.ask_for_the_table_window();
                 return;
             }
             // `t o` — 源碼模式, the way out of all three. It used to open a

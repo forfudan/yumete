@@ -254,11 +254,15 @@ pub enum Command {
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
-    /// `:table` — the door: read the table the cursor is in (Feature #118).
-    EnterTable,
     /// `:table-render off|basic|full` — how much of a table is drawn (#283).
     SetTableLevel(crate::editor::TableLevel),
-    /// `:table-render` on its own — which of the three levels it is on.
+    /// `:table-render window` — the grid takes the whole window (`空格 t t`).
+    ///
+    /// **Not a fifth level**, and that is why it is its own command: the level
+    /// it was asked for from is untouched, which is what lets `空格 t q` give
+    /// the window back without anything being written down.
+    TableWindow,
+    /// `:table-render` on its own — which of the four it is showing.
     ReportTableLevel,
     /// `:table-rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
@@ -1123,7 +1127,7 @@ impl Need {
         match self {
             Need::Vertical => ":layout vertical",
             Need::Margin => ":view-margin dense",
-            Need::Table => ":table",
+            Need::Table => ":table-render full",
             Need::Scheme => ":yume-scheme",
         }
     }
@@ -1949,6 +1953,11 @@ const TABLE_LEVELS: &[Word] = &[
     Word { name: "off", help: "hint.table.back-to-prose", needs: &[] },
     Word { name: "basic", help: "hint.table.operate-it", needs: &[] },
     Word { name: "full", help: "hint.table.draw-it", needs: &[] },
+    // **全窗 is the fourth answer to the same question** (2026-10-07: 「_tt 可以
+    // 對應命令 `table-render window`，因爲他和另外三個 render 模式是不會
+    // overlap」). `空格 t q` stays a key with no command of its own — 「本質上只
+    // 對全窗模式生效。我建議暫時不用命令」.
+    Word { name: "window", help: "hint.table.whole-window", needs: &[] },
 ];
 
 const RULES: &[Word] = &[
@@ -3729,39 +3738,16 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        // **`:table` makes a table** (2026-10-07: 「現在的 :table 命令不是良定
+        // 義，我覺得可以直接删除。然后把 `table-new` 改成 `table`。換句話說，
+        // `table` 這個命令用來新建一個表格是很自然（用户馬上就能猜到）的行爲。
+        // 就像 `ruby` 新建/編輯注音一樣」). The door it used to be landed on two
+        // different views depending on the file, and the question 「which view」
+        // is `:table-render`'s — so walking in is what asking for a view does,
+        // and the bare name was free for the thing a reader guesses it means.
         name: "table",
         aliases: &[],
         help: "cmd.commands.table",
-        needs: &[],
-        // **One command, one thing** (2026-10-07: 「`table`, this seems not
-        // good. I think `table off|basic|full` can be also renamed as
-        // `table-render off|basic|full` …, just like `ruby`」). `:table` is the
-        // door — walk into the table the cursor is in; how much of it is drawn
-        // is another question, and it is `:table-render`'s. Sharing one name
-        // made the panel say two things in one sentence while Enter did one.
-        params: &[],
-        build: Some(|_| Ok(Command::EnterTable)),
-    },
-    Entry {
-        name: "table-render",
-        aliases: &[],
-        help: "cmd.commands.table-render",
-        needs: &[],
-        params: &[Param::Words { of: TABLE_LEVELS, default: None }],
-        build: Some(|p| {
-            // The bare word reports, for the reason bare `:render` reports.
-            Ok(match p.arg(0) {
-                None => Command::ReportTableLevel,
-                Some("off") => Command::SetTableLevel(crate::editor::TableLevel::Off),
-                Some("basic") => Command::SetTableLevel(crate::editor::TableLevel::Basic),
-                _ => Command::SetTableLevel(crate::editor::TableLevel::Full),
-            })
-        }),
-    },
-    Entry {
-        name: "table-new",
-        aliases: &[],
-        help: "cmd.table.new",
         needs: &[],
         params: &[Param::Free("<行>x<欄>")],
         build: Some(|p| {
@@ -3778,7 +3764,7 @@ pub const COMMANDS: &[Entry] = &[
             // 的——他要的多半不是 3×4。說一句，別自作主張。
             if numbers.next().is_some() {
                 return Err(CommandError::InvalidArgument {
-                    command: "table-new",
+                    command: "table",
                     value: spec.to_string(),
                 });
             }
@@ -3787,10 +3773,27 @@ pub const COMMANDS: &[Entry] = &[
                     Ok(Command::NewTable { rows: r, columns: c })
                 }
                 _ => Err(CommandError::InvalidArgument {
-                    command: "table-new",
+                    command: "table",
                     value: spec.to_string(),
                 }),
             }
+        }),
+    },
+    Entry {
+        name: "table-render",
+        aliases: &[],
+        help: "cmd.commands.table-render",
+        needs: &[],
+        params: &[Param::Words { of: TABLE_LEVELS, default: None }],
+        build: Some(|p| {
+            // The bare word reports, for the reason bare `:render` reports.
+            Ok(match p.arg(0) {
+                None => Command::ReportTableLevel,
+                Some("off") => Command::SetTableLevel(crate::editor::TableLevel::Off),
+                Some("basic") => Command::SetTableLevel(crate::editor::TableLevel::Basic),
+                Some("window") => Command::TableWindow,
+                _ => Command::SetTableLevel(crate::editor::TableLevel::Full),
+            })
         }),
     },
     Entry {
@@ -6467,8 +6470,10 @@ mod tests {
         // `:ta` again: `:target` took the two-letter prefix away when it
         // arrived, and gave it back when the fold put it under `:count`
         // (§5.2.3 ③). Ten abbreviations got shorter that way.
-        assert_eq!(parse(":tab"), Ok(Command::EnterTable));
-        assert_eq!(parse(":ta"), Ok(Command::EnterTable));
+        // The bare name makes a table now, and its default is 3×4's smaller
+        // cousin: three rows, three columns (2026-10-07).
+        assert_eq!(parse(":tab"), Ok(Command::NewTable { rows: 3, columns: 3 }));
+        assert_eq!(parse(":ta"), Ok(Command::NewTable { rows: 3, columns: 3 }));
 
         // A declared alias beats the prefix rule, so the short spellings
         // people already know keep their meanings: `w` begins `write`, `wq`,
@@ -6708,7 +6713,7 @@ mod tests {
         for one in [
             "table",
             "table-sort",
-            "table-new",
+            "table-render window",
             "view-wrap",
             "layout vertical",
             "yume-scheme lingming",

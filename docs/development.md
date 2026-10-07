@@ -19880,6 +19880,18 @@ and repeatedly ask even when alignment is free of charge」。
 在 `on_normal_key` 裏自己一支、`key_preset == Vim` 守住。要讓展開出來的鍵走原意（`%` → `mm`），
 那一支再加 `!self.expanding_alias`。
 
+## 5.100 Normal 模式下用 Shift 切換 [abc] / [中]：**待查**（2026-10-07 提）
+
+原話：
+
+> Can you check whether it is possible to use shift to switch between [abc] and [中] in
+> normal mode (also reflected in the status bar). Currently the switch is only allowed in
+> insert mode.
+
+還沒查。要回答的是三件事：① Normal 模式下這一下 Shift 現在歸誰（有沒有別的鍵位要它）；
+② 模態掛起那條路在 Normal 模式下是「輸入法已經被挪開」，所以切的到底是什麼；③ 狀態欄那
+一格現在讀的是哪一處狀態。
+
 ## 5.97 vim 的 `)` 落在哪一格：與 vim 不同，**等定**
 
 這個編輯器的句子動作是「**選中一句**」（#404，helix 鍵位下的 `H`/`L` 也是這個），vim 的
@@ -19904,32 +19916,50 @@ and repeatedly ask even when alignment is free of charge」。
 了。加進去是 94 格假的不一樣。而**「先白畫一幀」補不得**——試過，`多選區` 那張金樣當場
 變了（`main.rs` 的 `fit_the_page` 上面那一段）。要驗就在測試裏自己交一個 `set_page_span`。
 
-## 5.99 一個命令只做一件事：`:table-render` / `:ruby-render`（2026-10-07 定）
+## 5.99 一個命令只做一件事，快捷鍵是它的語法糖（2026-10-07 定）
 
-`:table` 和 `:ruby` 各兼着兩件事：裸命令是一個動作（走進表格／給這裏注音），加參數
-是一個級別。判詞：
+`:table` 和 `:ruby` 各兼着兩件事：裸命令是一個動作，加參數是一個級別。第一判詞：
 
 > `table`, this seems not good. I think `table off|basic|full` can be also renamed as
 > `table-render off|basic|full`, just like `ruby`.
 
-於是三個級別各搬到自己的命令上，裸命令只剩那個動作，裸 `:table-render` / `:ruby-render`
-**報現在是哪一檔**（同裸 `:render`）。`:table off` 這種舊拼法不再默默生效——`:table` 現在
-`params: &[]`，解析器照 `TakesNoArgument` 報「table 後面不跟東西——「off」多了」。
+於是三個級別搬到 `:table-render` / `:ruby-render`，裸的那一個報現在是哪一檔（同裸
+`:render`）。`:table off` 這種舊拼法不再默默生效：`:table` 現在不收級別，解析器照
+`TakesNoArgument` 報「table 後面不跟東西——「off」多了」。
 
-**快捷鍵是命令加參數的語法糖**（同日定的第二件）：
+**快捷鍵是命令加參數的語法糖**（第二判詞）：
 
 > 如果他們確實等價，其實可以讓他們關聯起來，也就是說快捷鍵就是命令+參數的語法糖。
 > 這樣的好處是文案寫一份就夠了。目前快捷鍵的文案比命令+參數的文案更好。
 
-`空格 t o|b|f` 與 `:table-render off|basic|full` 從前是兩段差不多的代碼，而差的那兩處
-都是意外：**鍵**會走進格子並對準一格（命令不會），**命令**會把「這一份不當表格」記下來
-（#380，鍵不會）。兩邊都對，所以合成 `Editor::ask_for_table_level` 一支，兩邊都叫它。
-文案同理只留一份：`TABLE_LEVELS` 三個詞的說明直接指 `hint.table.*`——空格選單那三行——
-`cmd.table.off/basic/full` 刪了。
+`空格 t o|b|f` 與 `:table-render off|basic|full` 從前是兩段差不多的代碼，而差的兩處都是
+意外：**鍵**會走進格子並對準一格（命令不會），**命令**會把「這一份不當表格」記下來
+（#380，鍵不會）。兩邊都對，所以合成 `Editor::ask_for_table_level` 一支。`空格 t t` 同理
+合成 `ask_for_the_table_window`。文案只留一份：`TABLE_LEVELS` 四個詞的說明直接指
+`hint.table.*`——空格選單那四行——`cmd.table.off/basic/full` 刪了。
 
-**連帶一處**：`command::names_something` 從前對「這個命令一個參數都沒聲明」答 `Ok`，於是
-手冊可以印 `:table off` 而測試說它名得着東西。現在空的 `params` 照 `TakesNoArgument` 答
-`Err`，與解析器同口徑。
+**`:table` 改成新建一張表**（同日第三判詞）：
+
+> 現在的 :table 命令不是良定義，我覺得可以直接删除。然后把 `table-new` 改成 `table`。
+> 換句話說，`table` 這個命令用來新建一個表格是很自然（用户馬上就能猜到）的行爲。
+
+那道門從前照文件落在兩個不同的視圖上（markdown 裏的 `|` 表格 ＝ 完整視圖，整份表格文件
+＝ 全窗），而「哪一個視圖」是 `:table-render` 的問題。走進去是「要一個視圖」自己會做的事，
+所以那個名字空了出來，給了讀者一看就猜得到的意思。新建帶一道閘，理由是他的原話
+「爲了防止出現意外，破壞段落」：**只在空行上作數**（可以有前導空格，`trim` 是判準），在段落
+中間報「當前位置非空行，請在空行中使用此命令」。從前它是插在那一行**底下**——那是在猜段落
+到哪裏結束。
+
+**`空格 t t` ＝ `:table-render window`**，理由是「他和另外三個 render 模式是不會 overlap」。
+`空格 t q` 照他的決定**暫時不給命令**：「本質上只對全窗模式生效。我建議暫時不用命令」。
+全窗不是第五檔——底下那一檔原封不動，這正是 `t q` 不用記任何東西就交得回窗口的原因，所以
+它是 `Command::TableWindow` 而不是 `TableLevel` 的一個值。
+
+**連帶兩處**：① `command::names_something` 從前對「這個命令一個參數都沒聲明」答 `Ok`，於是
+手冊可以印 `:table off` 而測試說它名得着東西；現在空的 `params` 答 `Err`，與解析器同口徑。
+② ⚠️ **族裏的成員排在族頭前面會漏出摺疊**（`fold` 的 `false if its_own` 那一臂）——
+`table-render` 一度插在 `table` 前面，於是命令選單多出一行 `:table-render`、總數 64→65，而
+`cargo test` 全綠，是金樣幀抓到的。**同族的條目，族頭必須排在最前。**
 
 ## 5.80 一個 vim 用戶試用下來的十三條（2026-10-05 逐條議定）
 

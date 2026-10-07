@@ -211,9 +211,16 @@ const DISOWNED: &[&str] = &[
     ":conflicts",
     ":bclose",
     ":appearance",
-    // Two spellings the manual prints to explain why the fold renamed the
-    // child: 「`:table search` 讀起來是『表格搜索』」, 「`:view note` 更糟」.
-    ":table search",
+    // A spelling the manual prints to explain why the fold renamed the child:
+    // 「`:view note` 更糟」.
+    //
+    // Warning: **`:table search` left this list on 2026-10-07** and it is not an
+    // oversight. `:table` makes a table now and its argument is 行×欄 — free
+    // text as far as [`command::names_something`] can see, so that walk
+    // answers 「it names something」 for any word after it. The editor still
+    // refuses `:table search` (`search` is not a number), but the refusal is
+    // `build`'s and this test does not run `build`. The manual's sentence
+    // about how the name reads is unaffected.
     ":view note",
 ];
 

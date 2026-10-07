@@ -1692,9 +1692,8 @@ line will tell you itself.
 - `:indent-hint` ｜ `none` `color` `symbol` — what is drawn in a paragraph's opening two squares
 - `:indent-tab` ｜ `spaces` `tab` — what Tab types in insert mode: spaces (the default, filling to the next indent stop) or a tab; Shift-Tab types the other
 - `:indent-width` ｜ `<1–8>` — indent width: how many spaces Tab types, and how far `>` `<` shift
-- `:table` — edit as a grid: a whole CSV, or the | table under the cursor; how much is drawn is `:table-render`
-  - `render` ｜ `off` `basic` `full` — how much of a table is drawn: the source, basic, or full view; bare says which it is now. The same three as `空格 t o` `空格 t b` `空格 t f`
-  - `new` <rows> <columns> — an empty table: `new 3 4` is three rows by four columns, the first row the headings
+- `:table` <rows> <columns> — an empty table: `:table 3 4` is three rows by four columns, the first row the headings. Only on a blank line, so it can never break a paragraph; with no numbers it is 3×3
+  - `render` ｜ `off` `basic` `full` `window` — how much of a table is drawn: the source, basic, full, or window view; bare reports the mode. The same four as `空格 t o` `空格 t b` `空格 t f` `空格 t t`
   - `check` — look the whole table over: repeated row names, components with no row, rows of the wrong width, characters outside the 字集
   - `rules` ｜ `off` `color` `line` — column rules: how the columns are told apart
   - `sort` <column> a｜d … — sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending
@@ -3690,7 +3689,7 @@ it guessed, the "the first row is data" that `空格 t H` said is in there too, 
 column names follow the first line. So opening it and reading it back changes not one
 cell — every item you then edit edits something you can see in front of you, instead of
 guessing at a format against a blank sheet. Save your edits, then `:table-render off` and
-`:table` again (or `空格 t o` `空格 t t`) and it is read the new way.
+`:table-render full` again (or `空格 t o` `空格 t f`) and it is read the new way.
 
 A file that already has that name is not overwritten: it is somebody's work, and opening
 it to see what it says is the right thing to do. A stretch recognised inside a document
@@ -3701,13 +3700,13 @@ table files.
 
 **The whole file is not a table, those few lines are.** A code table pasted into a
 chapter, a `dict.yaml`'s body under the `---` front matter, LaTeX's `tabular` — put the
-cursor into those lines, `:table`, and it is a grid; `:table-render off` comes out, and not one
-byte of the file has moved.
+cursor into those lines, `:table-render full`, and it is a grid; `:table-render off` comes out,
+and not one byte of the file has moved.
 
 How it is recognised:
 
 * **Whichever delimiter you are standing on is the one.** When a line has both tabs and
-  commas, press `:table` on the comma and it splits by comma. Selecting a few lines
+  commas, press `:table-render full` on the comma and it splits by comma. Selecting a few lines
   works too: the character that appears the same number of times on every line of the
   selection is the one. When nothing has said, it tries tab, comma, semicolon and `&` in
   that order (`&` is for LaTeX and Typst).
@@ -3939,7 +3938,7 @@ is part of the page, and whatever layout the page is in, it is in.
 #### Markdown's `|` tables
 
 The same grid, pointed at **one stretch** of a document instead of a whole file. Put the
-cursor on any `|` line and `:table`:
+cursor on any `|` line and `:table-render full`:
 
 ```
 | 字 | 讀音 |
@@ -4244,8 +4243,8 @@ before.
 write one in a cell, write `\|` — that is the one escape a Markdown table has, and it is
 recognised here: `a\|b` is one cell.
 
-A `|` table inside a code block is **not** a table, it is a quotation: `:table` is
-refused, and it will not go reflowing somebody else's pasted-in example (there are
+A `|` table inside a code block is **not** a table, it is a quotation: `:table-render full`
+is refused, and it will not go reflowing somebody else's pasted-in example (there are
 several in this very manual). A row with only one column is not a table either.
 
 #### The record panel
@@ -5967,7 +5966,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:view-code` [`on`｜`off`] | Code in a fence coloured by its own grammar (nine grammars; with no argument it reports) |
 | `:view-focus` [`on`｜`off`] | Focus: the **paragraph** you are writing stays as it is and the rest of the page steps back one level. The paragraph, not the column — a wrap is not a unit of writing, and when one paragraph wraps into three columns all three are the paragraph you are writing |
 | `:view-margin always` | A margin beside every column and above every row |
-| `:table-new` [*rows* *columns*] | Write an empty table: `:table-new 3 4` is three rows by four columns, the first row the column names (the rule row does not count as a row), a blank line left above and below, the cursor waiting in the first column name ready to type. With no numbers it is 3×3 |
+| `:table` [*rows* *columns*] | Write an empty table: `:table 3 4` is three rows by four columns, the first row the column names (the rule row does not count as a row), a blank line left above and below, the cursor waiting in the first column name ready to type. With no numbers it is 3×3. Only on a blank line: in the middle of a paragraph it refuses rather than guess where the paragraph ends |
 | `:table-sort` *column* `a`｜`d` … | Sort by these columns; `空格 t1a2d8as` is the same thing from the keyboard |
 | `:table-numbers` [`on`｜`off`] | The row of column numbers above the header |
 | `:table-header` [`on`｜`off`] | Whether the table's first row names the columns (`空格 t H`) |
@@ -5981,7 +5980,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:cd` [*path*] | Change the working directory. With no path it goes home, `:cd -` goes back to the last one |
 | `:pwd` | Which directory is the working one now |
 | `:table-jump` *name* | Go to the row this table calls that |
-| `:table` (`off`, `check`) | Edit as a grid: a whole CSV, or the `|` table under the cursor |
+| `:table-render off`/`basic`/`full`/`window` | Edit as a grid: a whole CSV, or the `|` table under the cursor. The four views, and `:table-render` on its own reports which one |
 | `:table-check` | Look the whole table over and list the rows with something wrong |
 | `:table-rules` | Says which kind of column rule is in use |
 | `:table-rules off`/`color`/`line` | Column rules: nothing drawn / a faint ground / a vertical line |

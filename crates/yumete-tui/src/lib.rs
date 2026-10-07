@@ -20027,7 +20027,7 @@ fn squeezed(text: &str) -> String {
         // 原話：「我输入 :ruby 加空格的时候……描述区显示的是第一个参数的信息
         // （off）。但如果我按下回车，它其实触发的是裸命令」。
         let squashed = text.replace(' ', "");
-        assert!(squashed.contains("注音排多少"), "裸命令的事: {squashed:?}");
+        assert!(squashed.contains("注音渲染模式"), "裸命令的事: {squashed:?}");
 
         // 挑中一個詞之後纔說那個詞的事。
         for c in "off".chars() {
