@@ -178,3 +178,52 @@ fn a_block_comment_writes_its_marks_in_this_files_kind_of_line() {
         "the round trip"
     );
 }
+
+/// **導出的那一份跟着源文件走** (丟字第二輪, 2026-10-07).
+///
+/// `:export csv` wrote `\n` and no BOM, whatever the source was. A `.csv`
+/// exported from a BOM'd CRLF table came out with neither — and those three
+/// bytes are how Excel decides the file is UTF-8, which is the reason the
+/// first test in this file exists.
+#[test]
+fn an_exported_csv_keeps_the_mark_and_the_line_ending_it_came_with() {
+    let table = "| 甲 | 乙 |\r\n| --- | --- |\r\n| 一 | 二 |\r\n";
+    let (mut ed, path) = open("marked.md", format!("\u{feff}{table}").as_bytes());
+    ed.execute("table-render basic").unwrap();
+    ed.execute("export csv").unwrap();
+    let out = std::fs::read(path.with_extension("csv")).unwrap();
+    assert_eq!(
+        out,
+        "\u{feff}甲,乙\r\n一,二\r\n".as_bytes(),
+        "BOM 和 CRLF 都跟過來了：{:?}",
+        String::from_utf8_lossy(&out)
+    );
+
+    // …and a plain LF file without a mark exports plain, as it always did.
+    let (mut ed, path) = open("plain.md", table.replace("\r\n", "\n").as_bytes());
+    ed.execute("table-render basic").unwrap();
+    ed.execute("export csv").unwrap();
+    assert_eq!(
+        std::fs::read(path.with_extension("csv")).unwrap(),
+        "甲,乙\n一,二\n".as_bytes()
+    );
+}
+
+/// **空行是一段的盡頭，三種範圍都算** (丟字第二輪, 2026-10-07).
+///
+/// `:convert-table` filtered blank lines *out* of the span it rewrote, so a
+/// CSV with a blank line in it came back one line shorter and said nothing.
+/// 「文中一段」 already stopped at a blank line; the other two now agree.
+/// 判詞：「如果一個文件是csv的話，那么它就是「一個表格」的意思。如果出現空行，
+/// 説明是文件有問題。」
+#[test]
+fn converting_a_table_stops_at_a_blank_line_rather_than_swallowing_it() {
+    // The whole file is the grid, and it has a blank line in the middle.
+    let (mut ed, path) = open("gap.csv", "甲,乙\n一,二\n\n三,四\n".as_bytes());
+    ed.execute("convert-table pipe").unwrap();
+    ed.execute("write").unwrap();
+    let out = String::from_utf8(std::fs::read(&path).unwrap()).unwrap();
+    assert!(out.contains("\n\n三,四"), "空行和它後面的原樣不動：{out:?}");
+    assert!(out.starts_with("| 甲 | 乙 |"), "前面那一段轉了：{out:?}");
+    assert_eq!(out.lines().filter(|l| l.trim().is_empty()).count(), 1, "{out:?}");
+}
