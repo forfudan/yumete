@@ -225,11 +225,24 @@ impl Picker {
         };
     }
 
-    /// Ten at a time.
+    /// Ten at a time, **stopping at the ends**.
+    ///
+    /// Warning: 從前它是十次 [`Self::step`]，而 `step` 是繞回去的——於是一張**短過二十
+    /// 條**的名單上，`PageDown` 往回走：十二條的名單站在第六條上按下去，
+    /// `(5 + 10) % 12 = 3`，高亮退到第四條（2026-10-07 審出來的）。
+    ///
+    /// `j`/`k` 繞回去是對的，一張名單走到底再回頭是挑選器的老規矩；可「翻一頁」
+    /// 從來不是「走十步」——翻到頭就是頭。
     pub fn page(&mut self, down: bool) {
-        for _ in 0..10 {
-            self.step(down);
+        let count = self.matches().len();
+        if count == 0 {
+            return;
         }
+        let at = self.selected();
+        self.selected = match down {
+            true => (at + 10).min(count - 1),
+            false => at.saturating_sub(10),
+        };
     }
 
     /// Whether the keys are in the query rather than in the list.
@@ -908,5 +921,44 @@ mod tests {
         }
         let order: Vec<&str> = picker.matches().iter().map(|i| i.label()).collect();
         assert_eq!(order, ["冬天"], "阿寧 的正文裏有「冬天」，可它不叫冬天");
+    }
+
+
+    /// **翻一頁不是走十步**（2026-10-07 審出來的）。
+    ///
+    /// `page` 從前是十次 `step`，而 `step` 繞回去——於是短過二十條的名單上
+    /// `PageDown` 往回走：十二條，站在第六條上按下去，`(5 + 10) % 12 = 3`。
+    #[test]
+    fn paging_down_a_short_list_never_goes_backwards() {
+        let names: Vec<String> = (1..=12).map(|n| format!("ch{n:02}.md")).collect();
+        let mut picker = files(&names.iter().map(String::as_str).collect::<Vec<_>>());
+        for _ in 0..5 {
+            picker.step(true);
+        }
+        assert_eq!(picker.selected(), 5, "站在第六條上");
+        picker.page(true);
+        assert_eq!(picker.selected(), 11, "翻到底就是底，不是繞回第四條");
+        picker.page(true);
+        assert_eq!(picker.selected(), 11, "到底了就不動");
+        picker.page(false);
+        assert_eq!(picker.selected(), 1, "往回也是十步");
+        picker.page(false);
+        assert_eq!(picker.selected(), 0, "翻到頂就是頂");
+    }
+
+    /// 長名單照舊是十步，而 `j`/`k` 照舊繞回去——那是挑選器的老規矩，沒動。
+    #[test]
+    fn a_long_list_still_moves_ten_and_the_arrows_still_wrap() {
+        let names: Vec<String> = (1..=40).map(|n| format!("ch{n:02}.md")).collect();
+        let mut picker = files(&names.iter().map(String::as_str).collect::<Vec<_>>());
+        picker.page(true);
+        assert_eq!(picker.selected(), 10);
+        picker.step(false);
+        assert_eq!(picker.selected(), 9);
+        // 頂上再往上，繞到底。
+        picker.page(false);
+        assert_eq!(picker.selected(), 0);
+        picker.step(false);
+        assert_eq!(picker.selected(), 39, "`k` 照舊繞回去");
     }
 }
