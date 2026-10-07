@@ -893,6 +893,7 @@ impl Editor {
         // Warning: 問出去的列是 **UTF-16 碼元**，不是字符數。
         let chars = self.sel.head() - rope.line_to_char(line);
         self.definition_query = Some((path, line, crate::problem::utf16_column(&text, chars)));
+        self.asked_where_from = Some((self.current_buffer().id(), self.sel.head()));
         self.status = say!("lsp.asking");
         true
     }
@@ -912,6 +913,14 @@ impl Editor {
     /// Warning: **列是 UTF-16 的，而這一頭數字符**——換算要那一行的正文，所以它在這裏
     /// 做，在檔已經打開之後。
     pub fn go_to_definition(&mut self, place: &crate::lsp::Place) {
+        // **問完就走開的人，不許把他拽回來**（2026-10-07）。答案隔幾百毫秒纔到，
+        // 而那幾百毫秒裏光標可能已經挪開、緩衝區可能已經換掉、人可能已經在插入
+        // 態打字——那時候 `open_file` ＋ `set_cursor` 是把正在寫的那一段從腳下
+        // 抽走。懸停與補全都各有這一道閘，這一支從前沒有。
+        let here = (self.current_buffer().id(), self.sel.head());
+        if self.asked_where_from.take() != Some(here) {
+            return;
+        }
         self.remember_jump();
         if self.current_buffer().path() != Some(place.path.as_path()) {
             if let Err(err) = self.open_file(&place.path) {
@@ -1367,14 +1376,22 @@ impl Editor {
         let long = rope.len_chars();
         let line = rope.char_to_line(self.sel.head().min(long));
         let head = rope.line_to_char(line);
-        let text = rope.line(line).to_string();
+        // **行末那個換行符不算這一行的字**（2026-10-07）。`Rope::line` 把它一起
+        // 交出來，而 [`char_column`] 對「超出行尾」的答覆是「行尾」——兩件事湊在
+        // 一起，一個數過了頭的 `end` 就指到**下一行的頭上**，`overwrite` 於是把
+        // 換行符吃掉，兩行併成一行。服務器照着一份舊的文本數出界，是天天發生的事。
+        let text = crate::motion::line_text(rope, line);
         let (start, end) = match item.replacing {
             // Warning: 服務器說的是 **UTF-16 碼元**，這一頭數字符。
-            Some((from, to)) => (
-                head + crate::problem::char_column(&text, from),
-                head + crate::problem::char_column(&text, to),
+            //
+            // **說的是哪一行也要對得上**：這一頭只蓋得了光標所在的那一行，而服務
+            // 器給的範圍可能在別處（多行的編輯，或者照着一份舊文本算出來的）。對
+            // 不上就當作「沒給範圍」——什麼都不蓋，只在光標處插入。
+            Some(span) if span.line == line => (
+                head + crate::problem::char_column(&text, span.from),
+                head + crate::problem::char_column(&text, span.to),
             ),
-            None => (self.sel.head(), self.sel.head()),
+            _ => (self.sel.head(), self.sel.head()),
         };
         // 打進去算**一次**編輯——`u` 一下把整個詞撤掉，而不是一個字母一個字母地
         // 撤（同 2026-09-21 定下的「一次插入是一次撤銷」）。

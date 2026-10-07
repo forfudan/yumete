@@ -2247,6 +2247,14 @@ pub struct Editor {
     ///
     /// Warning: **列是 UTF-16 碼元**，因爲那是問出去的那一頭要的單位。
     definition_query: Option<(PathBuf, usize, usize)>,
+    /// **`gd` 問出去的那一刻，光標在哪個緩衝區的哪一格**（2026-10-07 審出來的）。
+    ///
+    /// 答案是隔幾百毫秒纔回來的，而那幾百毫秒裏人沒有停下來。從前答案一回來就
+    /// `open_file` ＋ `set_cursor`，於是按下 `gd` 之後順手按 `i` 開始打字的人，
+    /// **打到一半緩衝區在腳底下換了**，後面每一個字都落進那個定義所在的檔。
+    /// 懸停（`hovered`）與補全（`completion_at`）早就各記了一格問這件事，`gd`
+    /// 這一支漏了。
+    asked_where_from: Option<(u64, usize)>,
     /// **Normal 模式下按過 Esc，要前端把挂起信號再發一遍**（2026-09-22）。
     ///
     /// 在別的窗口用系統輸入法打完字切回來，輸入法還開着、鍵被吞掉——前端那頭記着
@@ -3365,6 +3373,7 @@ impl Editor {
             screenshot_request: None,
             dictionary_query: None,
             definition_query: None,
+            asked_where_from: None,
             say_it_again: false,
             config_reload: false,
             settings_request: false,

@@ -291,8 +291,17 @@ pub struct Offer {
     /// The type, the signature, the module it comes from — one short line the
     /// server offers *about* the item. `None` when it offered none.
     pub detail: Option<String>,
-    /// **How much of what is already typed this replaces**, in UTF-16 code
-    /// units on the line the caret is on.
+    /// **How much of what is already typed this replaces** — which line, and
+    /// the two UTF-16 code-unit columns on it.
+    ///
+    /// Warning: **The line is carried, not assumed** (2026-10-07). It used to read
+    /// `start.character` and `end.character` and drop both line numbers, and
+    /// the caller then applied those two columns to **whatever line the caret
+    /// was on**. A server whose range is one line up — a multi-line edit, or
+    /// an item computed against a stale copy — silently cut an arbitrary span
+    /// out of the line being typed. A range that spans two lines is refused
+    /// here rather than flattened: this field's whole contract is 「how much of
+    /// *this* word」, and nothing in the caller can honour more.
     ///
     /// Warning: **The server decides this, not the editor.** `self.co` completing to
     /// `count` replaces `co` — three characters back from the caret, or two,
@@ -301,7 +310,17 @@ pub struct Offer {
     /// `a.b`, `#[der`, `'lifet` and every language whose words are not this
     /// language's words. `None` when the server sent no edit range, and then
     /// the caller replaces nothing.
-    pub replacing: Option<(usize, usize)>,
+    pub replacing: Option<Replacing>,
+}
+
+/// The span one completion item overwrites: a line, and two columns on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Replacing {
+    /// Which line the server meant, counted from zero as LSP counts.
+    pub line: usize,
+    /// Where the span starts and ends on it, in **UTF-16 code units**.
+    pub from: usize,
+    pub to: usize,
 }
 
 /// Read one message.
@@ -564,9 +583,16 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
         // `replace` instead, and **replace is the one that means 「the word
         // that is there now」**.
         let range = e.get("range").or_else(|| e.get("replace")).or_else(|| e.get("insert"))?;
-        let from = range.get("start")?.get("character")?.as_u64()? as usize;
-        let to = range.get("end")?.get("character")?.as_u64()? as usize;
-        Some((from, to))
+        let at = |which: &str, part: &str| -> Option<usize> {
+            Some(range.get(which)?.get(part)?.as_u64()? as usize)
+        };
+        let line = at("start", "line")?;
+        // 跨行的範圍這一頭接不住——接住了也只能亂切。寧可當作「沒給範圍」，
+        // 那一檔的意思是「什麼都不蓋，只在光標處插入」。
+        if at("end", "line")? != line {
+            return None;
+        }
+        Some(Replacing { line, from: at("start", "character")?, to: at("end", "character")? })
     });
     Some(Offer {
         label,
@@ -969,11 +995,19 @@ mod tests {
         let got = offered(list);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].insert, "counted");
-        assert_eq!(got[0].replacing, Some((17, 19)), "Warning: 替換掉已經打出來的那兩個碼元");
+        assert_eq!(
+            got[0].replacing.map(|r| (r.from, r.to)),
+            Some((17, 19)),
+            "Warning: 替換掉已經打出來的那兩個碼元"
+        );
 
         // InsertReplaceEdit：要的是 replace 那一段（「現在那個詞」）。
         let both = r#"{"id":4,"result":[{"label":"x","textEdit":{"newText":"x","insert":{"start":{"line":0,"character":4},"end":{"line":0,"character":5}},"replace":{"start":{"line":0,"character":4},"end":{"line":0,"character":9}}}}]}"#;
-        assert_eq!(offered(both)[0].replacing, Some((4, 9)), "replace，不是 insert");
+        assert_eq!(
+            offered(both)[0].replacing.map(|r| (r.from, r.to)),
+            Some((4, 9)),
+            "replace，不是 insert"
+        );
 
         // 没東西可提是 `null` 或空的，不是錯。
         assert!(offered(r#"{"id":4,"result":null}"#).is_empty());

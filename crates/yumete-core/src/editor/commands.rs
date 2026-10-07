@@ -68,9 +68,17 @@ impl Editor {
         // read by nobody: `:view-hanging on` on a horizontal page turned a flag on,
         // changed nothing, and said 「標點旁置：開」, which is three kinds of
         // wrong at once.
+        // Warning: **只有「有前提可補」的命令纔吃得掉末尾那個 `force`**（2026-10-07
+        // 審出來的）。從前這一刀是無條件的，於是**任何**末一格吃整行的命令都
+        // 會把它丟掉：`:open force` 開的是挑選器而不是那個叫 `force` 的檔
+        // （實測），`:run force`、`:sh echo force`、`:grep force`、
+        // `:table-jump force` 同病。一條沒有前提的命令，那個詞不可能是說給它
+        // 聽的——它是參數的一部分。
         let (line, force) = match line.trim_end().strip_suffix(" force") {
-            Some(rest) => (rest.trim_end(), true),
-            None => (line, false),
+            Some(rest) if !command::needs_of(rest.trim_end()).is_empty() => (rest.trim_end(), true),
+            // `:convert … force` 說的是另一件事（「做大的那一種改寫」），它自己
+            // 的參數表裏有那個詞，所以留給 `parse` 去讀。
+            _ => (line, false),
         };
         let unmet: Vec<command::Need> = command::needs_of(line)
             .iter()

@@ -19904,7 +19904,7 @@ fn an_answer_to_a_question_that_was_dropped_is_not_shown() {
         insert: "counted".into(),
         kind: 3,
         detail: None,
-        replacing: Some((0, 4)),
+        replacing: Some(crate::lsp::Replacing { line: 0, from: 0, to: 4 }),
     }]);
     assert!(ed.offers_here().is_none(), "作廢的答案不擺出來");
     std::fs::remove_dir_all(&dir).ok();
@@ -22599,3 +22599,82 @@ fn the_line_is_described_as_a_function_with_its_argument() {
     assert!(matches!(about_the_line(":"), Err(None)), "什麼都沒打");
 }
 
+
+/// **一條補全只蓋得了它自己說的那一行，而且蓋不過行末**（2026-10-07 審出來的）。
+///
+/// 兩個洞在同一支 `take_the_offer` 裏：
+///
+/// - `Offer::replacing` 從前只讀 `character`，兩個 `line` 都丟掉，於是服務器指着
+///   別的行說的範圍被當成**光標這一行**的列號，正文裏憑空少一截。
+/// - `Rope::line` 把行末那個換行符一起交出來，而 `char_column` 對「超出行尾」的
+///   答覆是「行尾」——一個數過了頭的 `end` 於是指到下一行的頭上，`overwrite`
+///   把換行符吃掉，兩行併成一行。
+#[test]
+fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
+    use crate::lsp::{Offer, Replacing};
+    let offer = |line: usize, from: usize, to: usize| Offer {
+        label: "counted".into(),
+        insert: "counted".into(),
+        kind: 0,
+        detail: None,
+        replacing: Some(Replacing { line, from, to }),
+    };
+
+    // 擺好一條待選的，光標停在那一行的行尾。
+    let stand = |text: &str, line: usize, one: crate::lsp::Offer| -> Editor {
+        let mut ed = typed(text);
+        ed.goto_line(line);
+        let rope = ed.current_buffer().rope().clone();
+        let at = crate::motion::line_end(&rope, rope.line_to_char(line - 1));
+        ed.set_cursor(at);
+        ed.offering = Some(crate::editor::Offering { at, items: vec![one], picked: 0 });
+        ed
+    };
+
+    // 範圍指着**別的行**：什麼都不蓋，只在光標處插入。
+    let mut ed = stand("第一行。\n第二行 cou\n", 2, offer(0, 0, 3));
+    assert!(ed.take_the_offer(), "{}", ed.status());
+    assert_eq!(
+        ed.current_buffer().text(),
+        "第一行。\n第二行 coucounted\n",
+        "第一行一個字都沒動"
+    );
+
+    // 數過了頭的 `end`：蓋到行尾為止，換行符留着。
+    let mut ed = stand("第二行 cou\n後面一行。\n", 1, offer(0, 4, 999));
+    assert!(ed.take_the_offer(), "{}", ed.status());
+    assert_eq!(
+        ed.current_buffer().text(),
+        "第二行 counted\n後面一行。\n",
+        "兩行沒有併成一行"
+    );
+}
+
+/// **`force` 只給補得上前提的那些命令**（2026-10-07 審出來的）。
+///
+/// 從前末尾那個 `force` 是無條件削掉的，於是**任何**末一格吃整行的命令都把它
+/// 丟掉：`:open force` 開的是挑選器而不是那個叫 `force` 的檔。一條沒有前提的
+/// 命令，那個詞不可能是說給它聽的——它是參數的一部分。
+#[test]
+fn the_word_force_belongs_to_the_argument_when_there_is_no_prerequisite() {
+    let dir = a_little_book("forceword");
+    std::fs::write(dir.join("force"), "這個檔叫 force。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute("open force").unwrap();
+    assert_eq!(
+        ed.current_buffer().path().and_then(|p| p.file_name()),
+        Some(std::ffi::OsStr::new("force")),
+        "開的是那個檔，不是挑選器：{}",
+        ed.status()
+    );
+
+    // …而補前提那一路一個字都沒變：橫排的頁面上，`force` 仍舊把竪排一併打開。
+    let mut ed = typed("那年冬天。\n");
+    ed.execute("view-hanging on").unwrap();
+    assert!(ed.status().contains("force"), "先報缺前提：{}", ed.status());
+    ed.execute("view-hanging on force").unwrap();
+    assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
