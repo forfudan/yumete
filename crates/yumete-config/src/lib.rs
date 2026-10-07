@@ -1255,6 +1255,19 @@ impl ThemeConfig {
                 gold_light: (0x6B, 0x46, 0x10),
                 mark_dark: (0xFF, 0x3C, 0x2C),
                 mark_light: (0xA6, 0x30, 0x24),
+                // Warning: **這四格從前是繼承來的**（2026-10-07 一輪審查量出來的）。
+                // 十套主題裏，除了墨香與黑白，每一套都自己定了第二梯隊那四個
+                // （橙粉青綠），卻都繼承了第一梯隊這四個——重新調了配角、讓主角
+                // 留在原主題，沒有人會故意這麼做。在這一套的紙上量出來是 紫 4.07、
+                // 綠 3.38、藍 4.44、黃 3.52，四個全在 WCAG 的 4.5:1 以下，而它自己
+                // 定的那四個穩穩在 4.8。
+                //
+                // 補法就是照它自己那四個的做法：**色相不動，只把亮度壓到 4.8**。
+                // 深色那一檔量過，不必動。
+                purple_light: (0x63, 0x3A, 0xAF),
+                green_light: (0x13, 0x5F, 0x3E),
+                azure_light: (0x1D, 0x57, 0x82),
+                amber_light: (0x6F, 0x4C, 0x0E),
                 orange_dark: (0xE8, 0x8F, 0x56),
                 orange_light: (0x86, 0x3F, 0x03),
                 pink_dark: (0xE3, 0x91, 0xB9),
@@ -1385,6 +1398,10 @@ impl ThemeConfig {
                 // Warning: **橙 is red in this theme.** Its 朱 is the kiln's orange and
                 // keeps it — 「橘色只留給錯誤」 — so the number in a fence takes the
                 // red that 朱 left free, not a second orange.
+                // 同 琥珀 那一處（2026-10-07）：這一套的紙上，繼承來的綠是 4.00、
+                // 黃是 4.16，兩個在 4.5:1 以下。色相不動，只壓亮度。
+                green_light: (0x15, 0x6B, 0x45),
+                amber_light: (0x7E, 0x56, 0x10),
                 orange_dark: (0xFE, 0x71, 0x5F),
                 orange_light: (0xAC, 0x32, 0x26),
                 pink_dark: (0xFB, 0xA6, 0xCE),
