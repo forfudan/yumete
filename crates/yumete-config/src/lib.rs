@@ -2058,6 +2058,64 @@ impl Config {
             }
         }
 
+        // **打錯的設定要出聲，不許默默退回出廠值**（2026-10-07 一輪審查報來的）。
+        //
+        // 這一族底下每一條的形狀都一樣：`parse` 回 `None` 就落回缺省，而落回缺省
+        // 和「這個設定不管用」在屏幕上長得一模一樣。這個檔自己的文檔寫着它存在的
+        // 理由就是終結這件事，而這幾格漏了。
+        if let Some(word) = raw.theme.name.as_deref() {
+            if !word.trim().is_empty() && ThemeConfig::named(word).is_none() {
+                problems.push(format!(
+                    "[theme] name = \"{word}\" 不是主題的名字——:theme 按一下 Tab 看有哪些"
+                ));
+            }
+        }
+        if let Some(word) = raw.theme.mode.as_deref() {
+            if Mode::parse(word).is_none() {
+                problems.push(format!("[theme] mode = \"{word}\" 只能是 system、dark、light"));
+            }
+        }
+        if let Some(word) = raw.editor.line_numbers.as_deref() {
+            // ⚠️ `parse_line_numbers` 不回 `Option`——**任何**一個詞都成了
+            // `absolute`，所以這一格的判準要寫在這裏。
+            let known = ["absolute", "abs", "relative", "rel", "none", "off", "false"];
+            let word = word.trim();
+            if !known.contains(&word.to_ascii_lowercase().as_str()) {
+                problems.push(format!(
+                    "[editor] line_numbers = \"{word}\" 只能是 absolute、relative、none"
+                ));
+            }
+        }
+        if let Some(word) = raw.editor.ambiguous_width.as_deref() {
+            if !["auto", "wide", "narrow"].contains(&word.trim().to_ascii_lowercase().as_str()) {
+                problems.push(format!(
+                    "[editor] ambiguous_width = \"{word}\" 只能是 auto、wide、narrow"
+                ));
+            }
+        }
+        if let Some(word) = raw.editor.language.as_deref() {
+            // ⚠️ **這一張單子抄自 `yumete_core::messages::Language::parse`**，因為
+            // 這個 crate 不依賴那一個。那邊加一種寫法，這裏要跟。
+            let known = [
+                "zh", "zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体",
+                "zhs", "zh-hans", "zh-cn", "简体", "簡體", "en", "english",
+            ];
+            let said = word.trim().to_ascii_lowercase();
+            if !said.is_empty() && !known.contains(&said.as_str()) {
+                problems.push(format!("[editor] language = \"{word}\" 只能是 zh、zhs、en"));
+            }
+        }
+        if let Some(word) = raw.panel.display.as_deref() {
+            if PanelDisplay::parse(word).is_none() {
+                problems.push(format!("[panel] display = \"{word}\" 不是候選面板的畫法"));
+            }
+        }
+        if let Some(word) = raw.panel.preedit.as_deref() {
+            if Preedit::parse(word).is_none() {
+                problems.push(format!("[panel] preedit = \"{word}\" 不是編碼的擺法"));
+            }
+        }
+
         if let Some(word) = raw.keys.preset.as_deref() {
             if KeyPreset::parse(word).is_none() {
                 problems.push(format!("[keys] preset = \"{word}\" 只能是 helix 或 vim"));
@@ -4029,5 +4087,53 @@ mod screenshot_tests {
             None => std::env::remove_var("PATH"),
         }
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod a_typo_is_said_out_loud {
+    use super::*;
+
+    /// **打錯的設定要出聲**（2026-10-07 一輪審查報來的）。
+    ///
+    /// 落回出廠值和「這個設定不管用」在屏幕上長得一模一樣，而這個檔的文檔自己
+    /// 寫着它存在的理由就是終結這件事。這幾格從前是啞的。
+    #[test]
+    fn a_misspelt_value_is_named_rather_than_quietly_defaulted() {
+        // 走的是真路徑：一份項目配置，照 `:reload-config` 讀它的那一支讀。
+        let nth = std::sync::atomic::AtomicUsize::new(0);
+        let said = |text: &str| -> Vec<String> {
+            let n = nth.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let dir = std::env::temp_dir()
+                .join(format!("yumete-typo-{}-{n}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(dir.join(".yumete")).expect("a project");
+            std::fs::write(dir.join(".yumete/config.toml"), text).expect("the config");
+            let (_, problems) = Config::load_reporting_from(&dir);
+            let _ = std::fs::remove_dir_all(&dir);
+            problems
+        };
+        for (text, want) in [
+            ("[theme]\nname = \"黒白\"\n", "[theme] name"),
+            ("[theme]\nmode = \"drak\"\n", "[theme] mode"),
+            ("[editor]\nline_numbers = \"relatve\"\n", "line_numbers"),
+            ("[editor]\nambiguous_width = \"wde\"\n", "ambiguous_width"),
+            ("[editor]\nlanguage = \"zhh\"\n", "language"),
+            ("[panel]\ndisplay = \"ful\"\n", "[panel] display"),
+            ("[panel]\npreedit = \"nowhere\"\n", "[panel] preedit"),
+        ] {
+            let problems = said(text);
+            assert!(
+                problems.iter().any(|p| p.contains(want)),
+                "{text:?} 該報 {want}，報的是 {problems:?}"
+            );
+        }
+        // …and a spelling that is right says nothing at all.
+        for text in [
+            "[theme]\nname = \"黑白\"\nmode = \"dark\"\n",
+            "[editor]\nline_numbers = \"relative\"\nambiguous_width = \"wide\"\nlanguage = \"en\"\n",
+        ] {
+            assert!(said(text).is_empty(), "{text:?} 是對的，不該報：{:?}", said(text));
+        }
     }
 }
