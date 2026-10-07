@@ -2111,14 +2111,66 @@ impl Editor {
     }
 
     /// Look again and say how it went. The offsets are all stale now.
-    fn after_replacing(&mut self, done: usize) {
-        let where_ = self.search.selected;
+    /// 重搜一趟，而**眼睛停在原處**（2026-10-07 審出來的）。
+    ///
+    /// 記的是那一處命中本身，不是它排第幾。
+        //
+    ///
+    /// 重搜一趟會 `selected = 0` 並且 `folded.clear()`（見 `search_now`），所以
+    /// 重搜之後的行號和重搜之前**根本不是同一套**：折起來的檔全展開了，而剛換掉
+    /// 的那一處自己也從名單上沒了。照號碼放回去，高亮就落在一處讀者沒看過的命中
+    /// 上——而下一下 `r` 換的就是它。這是這個倉最貴的那一類：**改了一行人沒看過
+    /// 的字**。
+    ///
+    /// 撤回那一路也走這裏：撤完那一處**回來了**，於是「它或它之後的頭一處」正好
+    /// 就是它自己。
+    fn look_again_and_stand_still(&mut self) {
+        let was = self.search.row().and_then(|row| match row {
+            crate::search_panel::Row::Hit(at) => self.search.hits.get(at).map(|h| {
+                (h.file.clone(), h.line, h.column)
+            }),
+            crate::search_panel::Row::File { .. } => None,
+        });
+        // 折起來的那幾個檔也是讀者說過的話，重搜一趟不該把它們全掀開。
+        let folds = self.search.folded.clone();
         match self.search.scope.live() {
             true => self.run_search(),
             false => self.search_now(),
         }
-        // Stay where the eye was, or at the end if the list got shorter.
-        self.search.selected = where_.min(self.search.rows().len().saturating_sub(1));
+        self.search.folded = folds;
+        // 剛換掉的那一處已經不在名單上了，所以站的是**它原來那個位置之後**的頭
+        // 一處——換完一處接着換下一處，本來就是這個手勢。
+        self.search.selected = match was {
+            Some((file, line, column)) => self
+                .search
+                .rows()
+                .iter()
+                .position(|row| match row {
+                    crate::search_panel::Row::Hit(at) => self
+                        .search
+                        .hits
+                        .get(*at)
+                        .is_some_and(|h| h.file == file && (h.line, h.column) >= (line, column)),
+                    crate::search_panel::Row::File { .. } => false,
+                })
+                .or_else(|| {
+                    // 那個檔一處都不剩了：往下找第一處命中，別停在檔名那一行上。
+                    self.search
+                        .rows()
+                        .iter()
+                        .position(|row| matches!(row, crate::search_panel::Row::Hit(_)))
+                })
+                .unwrap_or(0),
+            None => 0,
+        };
+        self.search.selected = self
+            .search
+            .selected
+            .min(self.search.rows().len().saturating_sub(1));
+    }
+
+    fn after_replacing(&mut self, done: usize) {
+        self.look_again_and_stand_still();
         // Warning: **一處都沒換就不說話**（2026-09-29）：`R` 只在名單上有東西的時候
         // 纔畫得出來，所以 `done == 0` 是走不到的；真走到了也不必解釋。
         if done > 0 {
@@ -2142,12 +2194,7 @@ impl Editor {
     fn after_replacing_undone(&mut self, files: Option<usize>) {
         // `undo` 自己說過一句話，而底下重跑一趟搜索可能把它蓋掉。
         let said = self.status.clone();
-        let where_ = self.search.selected;
-        match self.search.scope.live() {
-            true => self.run_search(),
-            false => self.search_now(),
-        }
-        self.search.selected = where_.min(self.search.rows().len().saturating_sub(1));
+        self.look_again_and_stand_still();
         // **撤回也要出聲。** `r` 說「換掉 1 處」、`R` 說「換掉 8 處」，而 `u` 從前
         // 一個字都不說——剛按錯一次 `R` 的人最需要聽見的就是這一句
         // （2026-09-27 審出來的）。
