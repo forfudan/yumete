@@ -19090,8 +19090,8 @@ multiplexer 會為此重畫狀態欄）。標題過 `drawable`——檔名是檔
 開官網，走的是跟着鏈接那條路（`open_request`），和 `gx` 同一個機制：網址當**一個參數**交給
 `open`/`xdg-open`，核心這一側從不拼命令行。
 
-⚠️ **網址換了**：`https://yuhao.forfudan.com` 已經廢棄，正確的是
-`https://shurufa.app/`。倉裏那兩處（手冊繁簡各一）也改了。
+⚠️ 正確的官網是
+`https://shurufa.app/`。
 
 ⚠️ **`:yu` 這個簡寫丟了**：`:yuhao` 一加進來，`y` 和 `yu` 就同時是兩條命令的前綴。`:y` 保住
 了（給 `:yume` 明寫成別名，明寫的壓過前綴），`:yum` 也通，`:yuhao` 自己最短是 `:yuh`。

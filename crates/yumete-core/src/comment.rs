@@ -161,18 +161,34 @@ pub fn toggle_line(lines: &[&str], mark: &str) -> Vec<String> {
 /// the run is more than one**, because a `<!--` at the end of a paragraph's
 /// first line and a `-->` in the middle of its last is a thing nobody can read
 /// back; a single line keeps them inline, where they read as one unit.
-pub fn toggle_block(text: &str, open: &str, close: &str) -> String {
+pub fn toggle_block(text: &str, open: &str, close: &str, ending: &str) -> String {
     let trimmed = text.trim();
     if trimmed.starts_with(open) && trimmed.ends_with(close) && trimmed.len() >= open.len() + close.len() {
         let inner = &trimmed[open.len()..trimmed.len() - close.len()];
         // Whatever shape it was put on in, take the same shape off: the
         // newline-and-indent form and the inline form both come back clean.
-        let inner = inner.strip_prefix('\n').unwrap_or_else(|| inner.strip_prefix(' ').unwrap_or(inner));
-        let inner = inner.strip_suffix('\n').unwrap_or_else(|| inner.strip_suffix(' ').unwrap_or(inner));
-        return inner.to_string();
+        // **`\r\n` before `\n`**: stripping the `\n` off a CRLF pair leaves the
+        // `\r` standing alone in the middle of a line.
+        fn off_the_front(s: &str) -> &str {
+            s.strip_prefix("\r\n")
+                .or_else(|| s.strip_prefix('\n'))
+                .or_else(|| s.strip_prefix(' '))
+                .unwrap_or(s)
+        }
+        fn off_the_back(s: &str) -> &str {
+            s.strip_suffix("\r\n")
+                .or_else(|| s.strip_suffix('\n'))
+                .or_else(|| s.strip_suffix(' '))
+                .unwrap_or(s)
+        }
+        return off_the_back(off_the_front(inner)).to_string();
     }
+    // **The two marks stand on lines of their own, ending the way this file's
+    // lines end** (丟字第二輪, 2026-10-07). A literal `\n` here wrote two LF
+    // lines into a CRLF manuscript — `/*` and `*/` — and left the file with
+    // two kinds of line in it, which is the thing #309 exists to prevent.
     match text.contains('\n') {
-        true => format!("{open}\n{text}\n{close}"),
+        true => format!("{open}{ending}{text}{ending}{close}"),
         false => format!("{open} {text} {close}"),
     }
 }
@@ -233,15 +249,36 @@ mod tests {
 
     #[test]
     fn a_block_comment_is_inline_on_one_line_and_stands_off_on_several() {
-        assert_eq!(toggle_block("甲乙", "<!--", "-->"), "<!-- 甲乙 -->");
-        assert_eq!(toggle_block("甲\n乙", "<!--", "-->"), "<!--\n甲\n乙\n-->");
+        assert_eq!(toggle_block("甲乙", "<!--", "-->", "\n"), "<!-- 甲乙 -->");
+        assert_eq!(toggle_block("甲\n乙", "<!--", "-->", "\n"), "<!--\n甲\n乙\n-->");
+    }
+
+    /// **The two marks end their lines the way the file's lines end** (丟字第
+    /// 二輪, 2026-10-07). A literal `\n` wrote `/*` and `*/` as LF lines into a
+    /// CRLF manuscript, so commenting a paragraph left the file with two kinds
+    /// of line in it — and the page looks identical either way, because the
+    /// view strips `\r`.
+    #[test]
+    fn a_block_comment_ends_its_own_two_lines_the_way_the_file_does() {
+        assert_eq!(
+            toggle_block("甲\r\n乙", "<!--", "-->", "\r\n"),
+            "<!--\r\n甲\r\n乙\r\n-->"
+        );
+        // One line is still inline, where no ending is written at all.
+        assert_eq!(toggle_block("甲乙", "<!--", "-->", "\r\n"), "<!-- 甲乙 -->");
     }
 
     #[test]
     fn a_block_comment_comes_off_the_same_shape_it_went_on() {
-        for text in ["甲乙", "甲\n乙", "  甲  "] {
-            let on = toggle_block(text, "<!--", "-->");
-            assert_eq!(toggle_block(&on, "<!--", "-->"), text, "round trip: {on:?}");
+        for ending in ["\n", "\r\n"] {
+            for text in ["甲乙", "甲\n乙", "  甲  ", "甲\r\n乙"] {
+                let on = toggle_block(text, "<!--", "-->", ending);
+                assert_eq!(
+                    toggle_block(&on, "<!--", "-->", ending),
+                    text,
+                    "round trip: {on:?} with {ending:?}"
+                );
+            }
         }
     }
 }

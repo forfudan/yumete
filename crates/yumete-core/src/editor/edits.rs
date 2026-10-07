@@ -1166,15 +1166,28 @@ impl Editor {
         let rope = self.current_buffer().rope().clone();
         let (from, to) = self.selection();
         let start = crate::motion::line_start(&rope, from.min(rope.len_chars()));
-        let end = crate::motion::line_end(&rope, to.min(rope.len_chars()));
+        // **The last line the selection covers, not the one after it** (丟字第
+        // 二輪, 2026-10-07). A selection made with `x` ends on the *start* of
+        // the following line, so `line_end` there reached past the last line's
+        // break: the break went inside the comment (a blank line before the
+        // closing mark) and the file came back with no final newline.
+        let to = to.min(rope.len_chars());
+        let to = match to > start && crate::motion::line_start(&rope, to) == to {
+            true => to - 1,
+            false => to,
+        };
+        let end = crate::motion::line_end(&rope, to);
         let text: String = rope.slice(start..end).to_string();
         let rebuilt = match form {
             crate::comment::Form::Line(mark) => {
+                // Splitting on `\n` leaves each piece carrying its own `\r`,
+                // so a CRLF file comes back out of this one unchanged.
                 let lines: Vec<&str> = text.split('\n').collect();
                 crate::comment::toggle_line(&lines, mark).join("\n")
             }
             crate::comment::Form::Block(open, close) => {
-                crate::comment::toggle_block(&text, open, close)
+                let ending = self.current_buffer().ending();
+                crate::comment::toggle_block(&text, open, close, ending)
             }
         };
         if rebuilt == text {
