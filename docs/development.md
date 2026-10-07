@@ -19890,7 +19890,7 @@ Miscellaneous Symbols`——**沒有 VS16**，而倉裏那三條測試
 `drawable()`（`lib.rs:6363`）只濾控制字符，不是它。同一個字體、同一個終端，兩處一好
 一壞，所以先查寬度與補位，別去查字體。
 
-## 5.101 搜索要說它正在搜哪一個檔（2026-10-07 提，**等定**）
+## 5.101 搜索要說它正在搜哪一個檔（2026-10-07 定，做完了）
 
 原話：「I used `ye -Guu forfudan.com --open` … the search panel is like this for 5 minutes
 (0+ means that it is searching). The time is too long … I suspect that the search is not
@@ -19905,6 +19905,29 @@ actually working.」
 要補的東西只有一件：**走查現在走到哪一個檔，要說得出來**。`Found`（`find.rs:2486`）
 今天只有三格——`Hit`、`File`（**有命中的**檔）、`Done`——所以面板根本問不出「我在看
 誰」。
+
+**做法：一個共用的格子，不是第四格消息。** `editor::Progress`（`editor.rs`）裏一個
+`AtomicUsize` 加一個 `Mutex<String>`，走查每看一個檔寫一次，畫面按自己的節拍讀。走一個
+檔發一則消息在那個資料夾裏就是二十三萬則，而要答的問題只有「**此刻**在看誰」。
+
+三處用它：
+
+- **面板**：名單底下一道線，線下一行（`draw_search`）。它跟名單要行，名單矮下來先讓
+  位；走完就收——標題上那個數目已經說了結果。文案是作者寫的：「己搜 {0} 個文件, 搜索
+  {1}」。路徑從左邊摺（`elide_head`），留住檔名。
+- **命令行**：`ye --grep` 在 stderr 上原地重寫，四分之一秒一次，**只在 stderr 是終端機
+  的時候**——`> out.txt` 和 `| head` 要逐字節同從前。命中那一下先把那一行抹掉再印
+  stdout（兩邊共用一把鎖）。
+- 測試：`the_panel_says_which_file_the_walk_is_on` 真的起一趟四千個檔的背景走查，等它
+  動起來再畫一幀。
+
+**連帶**：邊欄那道橫線沒焦點時改成單線（`├─┤`），有焦點纔是金色雙線（`╠═╣`）。原話：
+「the horizontal rule in sidebar should be single line when it is not highlighted. It is
+golden double line if and only if the region is highlighted.」
+
+⚠️ **真正的慢不在畫面**：那趟搜索本來就要兩分鐘。`-uu` 在那個資料夾裏連 `target/`、
+`.git`、`.pixi` 一起走，而 rg 的 `-uu` 也是這樣，所以照 兼容第一 不動；要快就別加第二個
+`u`，或者 `--exclude=target`。
 
 ## 5.100 Normal 模式下用 Shift 切換 [abc] / [中]：**待查**（2026-10-07 提）
 
