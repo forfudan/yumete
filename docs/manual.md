@@ -1594,12 +1594,12 @@ line will tell you itself.
 - `:write`（w） — save; a path writes a copy, `:write-as` moves to it
   - `all` — save every file that changed
   - `as` path — save under a new name and edit that one (`:w <文件名>` only copies, and you stay here)
-- `:wq`（x） — save, then leave
+- `:wq` — save, then leave
 - `:recover` — ask whether to use the draft
 - `:reload` — read the file again; ! throws away what you changed here
 - `:reload-auto` ｜ `on` `off` — re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own
 - `:readonly`（ro） ｜ `on` `off` — read-only: lock this one against editing
-- `:goto`（g） — go to a line (`:42` will do)
+- `:goto` — go to a line (`:42` will do)
 - `:count`（wc） — how much has been written
 - `:count-progress` — how much was written today, and how far the target still is
 - `:count-target` <count>｜off — how many 字 a day; `:count-target off` stops counting against one
@@ -1624,27 +1624,24 @@ line will tell you itself.
 - `:redo`（red） — redo
 - `:word`（wd） — words: which list, the tint, the level
   - `show` ｜ `on` `off` `ink` `color` `tint` `line` — the word tint
-  - `list` ｜ `reload` `edit` `global` — the word list: which one is used, reread, edit
-  - `level` ｜ `strict` `balanced` `full` — word level: how many characters make a word
+  - `list` ｜ `local` `global` `reload` — the word list: which one is used, edit it, reread it
+  - `level` ｜ `off` `strict` `balanced` `full` — word level: how many characters make a word
   - `discover` — mine this book's own words: names of people and places no dictionary has
   - `habit` — habit words: what this one says far more than others do
 - `:layout`（lay） — flip horizontal and vertical
   - `vertical` — vertical, 縱 running from the right
   - `horizontal` — horizontal
 - `:theme` — theme: which set of inks (light or dark is `:theme-mode`)
-  - `system` — follow the terminal's own background
-  - `dark` — dark
-  - `light` — light
-  - `ink` ｜ `system` `dark` `light` — moxiang: black, white-gold, gold and red ink; every other shade computed
-  - `bw` ｜ `system` `dark` `light` — heibai: black, white and grey only — weight says it, colour says nothing
-  - `cyanotype` ｜ `system` `dark` `light` — cyanotype: white lines on Prussian blue — the one theme of the ten whose ground truly carries colour
-  - `amber` ｜ `system` `dark` `light` — amber: one colour for the whole page
-  - `mogao` ｜ `system` `dark` `light` — mogao: the brown-black the murals really oxidised into; the gold is not gold but malachite — the caves' own mineral
-  - `morandi` ｜ `system` `dark` `light` — morandi: the lowest text contrast and the greyest ground of the ten
-  - `firefly` ｜ `system` `dark` `light` — firefly: a near-black ground, cool grey text, and warmth only in that gold — a firefly is not neon, a page should hold a few sparks
-  - `meridian` ｜ `system` `dark` `light` — meridian: the 朱 is not red but blue, so red-green blindness tells it apart too
-  - `kiln` ｜ `system` `dark` `light` — kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold
-  - `complement` ｜ `system` `dark` `light` — complement: colour lives in the grounds only, the writing stays neutral grey
+  - `ink` — moxiang: black, white-gold, gold and red ink; every other shade computed
+  - `bw` — heibai: black, white and grey only — weight says it, colour says nothing
+  - `cyanotype` — cyanotype: white lines on Prussian blue — the one theme of the ten whose ground truly carries colour
+  - `amber` — amber: one colour for the whole page
+  - `mogao` — mogao: the brown-black the murals really oxidised into; the gold is not gold but malachite — the caves' own mineral
+  - `morandi` — morandi: the lowest text contrast and the greyest ground of the ten
+  - `firefly` — firefly: a near-black ground, cool grey text, and warmth only in that gold — a firefly is not neon, a page should hold a few sparks
+  - `meridian` — meridian: the 朱 is not red but blue, so red-green blindness tells it apart too
+  - `kiln` — kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold
+  - `complement` — complement: colour lives in the grounds only, the writing stays neutral grey
 - `:shot` — a picture: the clipboard by default, or png/html/txt saved as a file (into the downloads folder)
   - `screen` — photograph the window onto the clipboard
   - `png` path — photograph the window into a PNG
@@ -1690,7 +1687,7 @@ line will tell you itself.
   - `basic` — basic: coloured, and not one character hidden (the default)
   - `full` — the markup comes off, and opens only where the cursor is
 - `:indent` ｜ `off` `basic` `full` `<幾格>` — how a paragraph opens: `basic` indents and keeps the blank line, `full` folds the blank line between paragraphs too; with no argument it reports which level it is
-- `:keymap` ｜ `helix` `vim` — keymap preset: vim's `x` `s` `dd` `^` `$` translated into the keys here; with no argument it reports
+- `:keymap` ｜ `helix` `vim` `actions` — keymap preset: vim's `x` `s` `dd` `^` `$` translated into the keys here; with no argument it reports
 - `:indent-hint` ｜ `none` `color` `symbol` — what is drawn in a paragraph's opening two squares
 - `:indent-tab` ｜ `spaces` `tab` — what Tab types in insert mode: spaces (the default, filling to the next indent stop) or a tab; Shift-Tab types the other
 - `:indent-width` ｜ `<1–8>` — indent width: how many spaces Tab types, and how far `>` `<` shift
@@ -1699,14 +1696,12 @@ line will tell you itself.
   - `check` — look the whole table over: repeated row names, components with no row, rows of the wrong width, characters outside the 字集
   - `rules` ｜ `off` `color` `line` — column rules: how the columns are told apart
   - `sort` <column> a｜d … — sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending
-  - `detail` on｜off｜<width> — the detail column: on, off, or a width
+  - `detail` ｜ `on` `off` — the detail column (its width is `w` inside the panel)
   - `numbers` ｜ `on` `off` — the row of column numbers: that is what t3/ and t20,20g count with
   - `header` ｜ `on` `off` — whether the first row names the columns or is a row of data like any other
   - `schema` — open this table's schema in the other area — writing a starting one if there is none
   - `jump` <the row's name> — go to the row this table names (`:table-jump 木`)
   - `find` ｜ `row` `column` — search: `row` runs across (that is `/`), `column` runs down (that is t/ t? in a table)
-  - `pipe` <delimiter> — make a | table out of the delimited text selected (or under the cursor)
-  - `csv` <delimiter> — break the | table under the cursor into delimited text
 - `:wheel` — how far one notch of the wheel moves; `:wheel 1` is the terminal's own
 - `:clipboard` — the paste menu: the clipboard and what was yanked, pick one (`空格 "` does it too)
 - `:clipboard-yank` — put the selection on the system clipboard
@@ -3438,7 +3433,7 @@ eyes. Table mode is that grid: another view of the same text, where the unit of 
 goes from the character to the cell.
 
 ```
-yumete --table 表.csv          # or :table from inside
+yumete --table 表.csv          # or :table-render full from inside
 ```
 
 #### Four surfaces
@@ -5996,7 +5991,9 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:clipboard-yank`/`paste` | Trade with the system clipboard (`空格 y`/`空格 p`) |
 | `:word-show` (`on`/`off`) | The word tint on or off |
 | `:word-show 色相`/`字色`/`底色`/`線` | The four ways of drawing it: the ink's colour (factory) / the ink's lightness / a faint colour on the paper / a rule under the word |
-| `:wiki` [`edit`｜`global`｜`reload`] | The book's wiki: which files were read and how many entries each; `edit` opens `.yumete/wiki.md` |
+| `:wiki` *name* | Look a name up in the book's wiki |
+| `:wiki-where` | Which files were read, and how many entries each |
+| `:wiki-edit` | Open `.yumete/wiki.md` |
 | `:word-list` | Which word list is in force right now |
 | `:word-list-local` | Open this book's own word list, `.yumete/words.txt` — names of people and places |
 | `:word-list-global` | Open the global word list, `segmentation.txt` |

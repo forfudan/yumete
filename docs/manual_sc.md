@@ -1268,12 +1268,12 @@ Warning: **两种都用连字号，都不用空格。** `:write` 后面跟的是
 - `:write`（w） — 保存；给路径存一份副本，`:write-as` 才换过去
   - `all` — 存下所有改过的文件
   - `as` 路径 — 另存成新文件并改编辑它（`:w <文件名>` 只抄一份，人还在这边）
-- `:wq`（x） — 存好再退出
+- `:wq` — 存好再退出
 - `:recover` — 问要不要用抢救稿
 - `:reload` — 把文件再读一遍；加 ! 是丢掉你这里的改动
 - `:reload-auto` ｜ `on` `off` — 文件在外面改了就自己重读——你这里有改动时只提醒，不动手
 - `:readonly`（ro） ｜ `on` `off` — 只读：锁住这一份，不许改
-- `:goto`（g） — 跳到某一行（`:42` 就够了）
+- `:goto` — 跳到某一行（`:42` 就够了）
 - `:count`（wc） — 写了多少字
 - `:count-progress` — 写作进度：今天写了多少，离目标还有多少
 - `:count-target` <字数>｜off — 每天要写多少字；`:count-target off` 不再算
@@ -1298,27 +1298,24 @@ Warning: **两种都用连字号，都不用空格。** `:write` 后面跟的是
 - `:redo`（red） — 重做
 - `:word`（wd） — 分词：哪一份词表、著色、粒度
   - `show` ｜ `on` `off` `ink` `color` `tint` `line` — 分词著色
-  - `list` ｜ `reload` `edit` `global` — 词表：用哪一份、重读、编辑
-  - `level` ｜ `strict` `balanced` `full` — 分词粒度：多少个字算一个词
+  - `list` ｜ `local` `global` `reload` — 词表：用哪一份、改它、重读
+  - `level` ｜ `off` `strict` `balanced` `full` — 分词粒度：多少个字算一个词
   - `discover` — 挖出本书自己的词：人名地名，字典里没有的
   - `habit` — 口头禅：这一篇比别人多说的那些词
 - `:layout`（lay） — 横排竖排互换
   - `vertical` — 竖排，纵从右往左
   - `horizontal` — 横排
 - `:theme` — 主题：用哪一套墨（深浅在 `:theme-mode`）
-  - `system` — 跟终端的底色走
-  - `dark` — 深色
-  - `light` — 浅色
-  - `ink` ｜ `system` `dark` `light` — 墨香：黑墨、白金墨、金墨、红墨，其余的色阶都算出来
-  - `bw` ｜ `system` `dark` `light` — 黑白：只有黑、白和灰——轻重说话，颜色不说
-  - `cyanotype` ｜ `system` `dark` `light` — 蓝晒：普鲁士蓝的地、白线的字——十套里唯一底色真带饱和色的一套
-  - `amber` ｜ `system` `dark` `light` — 琥珀：整页只有一种颜色
-  - `mogao` ｜ `system` `dark` `light` — 莫高：墨是壁画氧化之后真正变成的褐黑；金不是金色，是石绿——洞窟自己的矿物
-  - `morandi` ｜ `system` `dark` `light` — 莫兰迪：十套里最低的正文对比、最灰的地
-  - `firefly` ｜ `system` `dark` `light` — 夜萤：近乎全黑的地，字是冷灰，唯一的暖处是那点黄金——萤火不是霓虹，一页上只该有几点
-  - `meridian` ｜ `system` `dark` `light` — 明度阶：朱不是红的，是蓝的：红绿色盲也分得开
-  - `kiln` ｜ `system` `dark` `light` — 陶窑：灰釉炻器：地是窑灰，金是草木灰的青绿
-  - `complement` ｜ `system` `dark` `light` — 靛橘：颜色只活在底色里，正文永远是中性灰
+  - `ink` — 墨香：黑墨、白金墨、金墨、红墨，其余的色阶都算出来
+  - `bw` — 黑白：只有黑、白和灰——轻重说话，颜色不说
+  - `cyanotype` — 蓝晒：普鲁士蓝的地、白线的字——十套里唯一底色真带饱和色的一套
+  - `amber` — 琥珀：整页只有一种颜色
+  - `mogao` — 莫高：墨是壁画氧化之后真正变成的褐黑；金不是金色，是石绿——洞窟自己的矿物
+  - `morandi` — 莫兰迪：十套里最低的正文对比、最灰的地
+  - `firefly` — 夜萤：近乎全黑的地，字是冷灰，唯一的暖处是那点黄金——萤火不是霓虹，一页上只该有几点
+  - `meridian` — 明度阶：朱不是红的，是蓝的：红绿色盲也分得开
+  - `kiln` — 陶窑：灰釉炻器：地是窑灰，金是草木灰的青绿
+  - `complement` — 靛橘：颜色只活在底色里，正文永远是中性灰
 - `:shot` — 截图：默认进剪贴板，png/html/txt 则存成文件（进下载文件夹）
   - `screen` — 把窗口拍下来放进剪贴板
   - `png` 路径 — 把窗口拍成 PNG 存起来
@@ -1364,7 +1361,7 @@ Warning: **两种都用连字号，都不用空格。** `:write` 后面跟的是
   - `basic` — 基本：著色，一个字都不藏（默认）
   - `full` — 标记拿掉，只在光标那一处展开
 - `:indent` ｜ `off` `basic` `full` `<几格>` — 首行缩进：`basic` 缩进、空行留着，`full` 连段间空行一起收；不写就是报告现在是哪一级
-- `:keymap` ｜ `helix` `vim` — 键位预设：vim 的 `x` `s` `dd` `^` `$` 翻成这里的键；不写就是报告
+- `:keymap` ｜ `helix` `vim` `actions` — 键位预设：vim 的 `x` `s` `dd` `^` `$` 翻成这里的键；不写就是报告
 - `:indent-hint` ｜ `none` `color` `symbol` — 缩进的那两格上画什么
 - `:indent-tab` ｜ `spaces` `tab` — 插入模式的 Tab 打什么：空格（出厂，补到下一个缩进位）还是制表符；Shift-Tab 打另一种
 - `:indent-width` ｜ `<1–8>` — 缩进宽度：Tab 打几个空格，`>` `<` 挪几格
@@ -1373,14 +1370,12 @@ Warning: **两种都用连字号，都不用空格。** `:write` 后面跟的是
   - `check` — 从头看一遍：重复的行名、查无此行的部件、栏数不对的行、超出字集的字
   - `rules` ｜ `off` `color` `line` — 栏线：栏与栏之间怎么分开
   - `sort` <栏> a｜d … — 照这几栏排：`sort 1 a 2 d` 是先第一栏顺排、再第二栏倒排
-  - `detail` on｜off｜<宽度> — 详情栏：开、关，或者给个宽度
+  - `detail` ｜ `on` `off` — 详情栏：开、关（宽窄在栏里按 `w`）
   - `numbers` ｜ `on` `off` — 栏号那一行：t3/、t20,20g 用的就是它
   - `header` ｜ `on` `off` — 第一行是栏名，还是跟别的行一样是数据
   - `schema` — 把这张表的规格开在另一半——没有就先写一份
   - `jump` <那一行的名字> — 跳到表格里叫这个名字的那一行（`:table-jump 木`）
   - `find` ｜ `row` `column` — 找：`row` 一行一行（就是 `/`），`column` 一栏一栏（表格里 t/ t? 就是它）
-  - `pipe` <分隔> — 把选中的（或光标所在的）分隔文本作成 | 表格
-  - `csv` <分隔> — 把光标所在的 | 表格拆成分隔文本
 - `:wheel` — 滚轮一格走几行；`:wheel 1` 是终端自己的一格
 - `:clipboard` — 粘贴菜单：剪贴簿和取过的那几段，挑一个贴（`空格 "` 也是）
 - `:clipboard-yank` — 选区送到系统剪贴板
@@ -2710,7 +2705,7 @@ NOR  ch01.md   Ln 12, Col 8                       螭 U+87ED · CJK Unified Ideo
 同一份文字的另一种视图，移动的单位从字变成格。
 
 ```
-yumete --table 表.csv          # 或者在里面 :table
+yumete --table 表.csv          # 或者在里面 :table-render full
 ```
 
 #### 四种看法
