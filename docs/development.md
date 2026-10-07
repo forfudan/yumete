@@ -19880,6 +19880,32 @@ and repeatedly ask even when alignment is free of charge」。
 在 `on_normal_key` 裏自己一支、`key_preset == Vim` 守住。要讓展開出來的鍵走原意（`%` → `mm`），
 那一支再加 `!self.expanding_alias`。
 
+## 5.102 裸 U+26A0 在正文區畫成豆腐塊，在狀態欄好好的：**待查**（2026-10-07 報）
+
+原話：「The triangle warning symbol cannot be rendered in the main editor region but can be
+rendered in the status bar (unicode infomation).」截圖裏狀態欄寫的是 `U+26A0 ·
+Miscellaneous Symbols`——**沒有 VS16**，而倉裏那三條測試
+（`yumete-tui/src/lib.rs:18810`、`:22046`、`:22075`）用的全是 `U+26A0 + VS16` 那一對。
+所以要查的多半是**裸 U+26A0**這一種：它是東亞寬度 ambiguous，兩處算寬可能不一樣。
+`drawable()`（`lib.rs:6363`）只濾控制字符，不是它。同一個字體、同一個終端，兩處一好
+一壞，所以先查寬度與補位，別去查字體。
+
+## 5.101 搜索要說它正在搜哪一個檔（2026-10-07 提，**等定**）
+
+原話：「I used `ye -Guu forfudan.com --open` … the search panel is like this for 5 minutes
+(0+ means that it is searching). The time is too long … I suspect that the search is not
+actually working.」
+
+**量過了，搜索是好的，壞的是它一聲不吭。** 那個資料夾開 `-uu` 之後是 **239,125 個檔、
+38 GB**（`target/`、`.git`、`.pixi` 全在裏面）：命令行那一支同樣的詞，**頭 30 秒一行都不
+印**，到 75 秒纔印出 7 行。面板走的是同一支 `walk_and_search`（`find.rs:2406`），也是單
+線程、也是流式，所以它和命令行一樣慢——只是命令行會一行一行冒字，面板只有一個不動的
+`0+結果`。
+
+要補的東西只有一件：**走查現在走到哪一個檔，要說得出來**。`Found`（`find.rs:2486`）
+今天只有三格——`Hit`、`File`（**有命中的**檔）、`Done`——所以面板根本問不出「我在看
+誰」。
+
 ## 5.100 Normal 模式下用 Shift 切換 [abc] / [中]：**待查**（2026-10-07 提）
 
 原話：

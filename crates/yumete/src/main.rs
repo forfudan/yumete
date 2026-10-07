@@ -1637,9 +1637,51 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
         // 一段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤。現在它還**當場收**：
         // 回 `false`，搜索自己停下，不接着走完整棵樹。
         let mut quit: Option<ExitCode> = None;
+        // **走查走到哪了，寫在 stderr 上**（§5.101，2026-10-07 定）。原話：「This
+        // status can also be used in CLI so that users do not see a flinking
+        // cursor.」那個資料夾 `-uu` 開着是 239,125 個檔，頭 30 秒一行都不印。
+        //
+        // Warning: **只在 stderr 是終端機的時候畫**，而且一個字節都不進 stdout：
+        // `ye -G x > out.txt` 和 `ye -G x | head` 要和從前逐字節相同。
+        // 一支筆兩個人用（`pen`）：命中那一下先把這一行抹掉再印，不然半行進度
+        // 會跟結果擠在同一行上。
+        let telling = std::io::stderr().is_terminal();
+        let pen = std::sync::Arc::new(std::sync::Mutex::new(()));
+        let ticking = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(telling));
+        let ticker = telling.then(|| {
+            let cell = editor.search_progress_cell();
+            let pen = std::sync::Arc::clone(&pen);
+            let going = std::sync::Arc::clone(&ticking);
+            std::thread::spawn(move || {
+                // 四分之一秒一次：看得出在動，又不是每個檔重畫一遍。
+                while going.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    if !going.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                    let at = cell.at();
+                    if at.is_empty() {
+                        continue;
+                    }
+                    let said = yumete_core::say!("search.progress", cell.looked(), at);
+                    let _guard = pen.lock();
+                    eprint!("\r\x1b[2K{said}");
+                    let _ = std::io::Write::flush(&mut std::io::stderr());
+                }
+            })
+        });
+        let wipe = |pen: &std::sync::Mutex<()>| {
+            if telling {
+                let _guard = pen.lock();
+                eprint!("\r\x1b[2K");
+                let _ = std::io::Write::flush(&mut std::io::stderr());
+            }
+        };
         {
             let mut put = |hit: &yumete_core::search_panel::Hit| -> bool {
                 let Some(file) = hit.file.as_ref() else { return true };
+                // 這一行要進 stdout 了，先把進度那一行抹乾淨。
+                wipe(&pen);
                 // **印得出來的路徑是相對於你站的地方的**，所以「搜了哪裏」一眼看得
                 // 出：`--project` 爬上去過的話，印出來就會帶 `../`。
                 let shown = pathdiff(&root.join(file), &cwd);
@@ -1698,6 +1740,11 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
             };
             editor.run_the_search_into(&mut put);
         }
+        ticking.store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Some(one) = ticker {
+            let _ = one.join();
+        }
+        wipe(&pen);
         if let Some(code) = quit {
             return code;
         }
