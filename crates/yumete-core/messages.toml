@@ -5775,11 +5775,11 @@ zhs = "在边栏打开"
 en = "open it in the sidebar"
 
 [[message]]
-# t 選單：t q 這一行（只在全屏表格模式下有用）
+# t 選單：t q 這一行（只在全窗表格模式下有用）
 key = "hint.table.leave-the-window"
-zht = "退出全屏視圖"
-zhs = "退出全屏视图"
-en = "leave the full-screen view"
+zht = "退出全窗視圖"
+zhs = "退出全窗视图"
+en = "leave the full-window view"
 
 [[message]]
 # 表格提示：重排對齊
@@ -5882,9 +5882,9 @@ en = "t table"
 [[message]]
 # t 選單：t t 這一行
 key = "hint.table.whole-window"
-zht = "全屏視圖（表格獨佔窗口）"
-zhs = "全屏视图（表格独占窗口）"
-en = "full-screen view: the table takes the window"
+zht = "全窗視圖（表格獨佔窗口）"
+zhs = "全窗视图（表格独占窗口）"
+en = "full-window view: the table takes the window"
 
 [[message]]
 # t 選單：t a 這一行
@@ -10609,7 +10609,7 @@ zhs = "贴进了 {0}×{1} 格"
 en = "pasted {0}×{1} cells"
 
 [[message]]
-# 不在全屏表格模式下按了 t q
+# 不在全窗表格模式下按了 t q
 key = "table.q-is-for-the-window"
 zht = "t q 只在全窗表格裏交回窗口——退出表格按 t o"
 zhs = "t q 只在全窗表格里交回窗口——退出表格按 t o"
