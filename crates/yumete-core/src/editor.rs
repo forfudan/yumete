@@ -508,8 +508,11 @@ enum CellEdit {
     Start,
     /// After its last.
     End,
-    /// Take the whole thing out and start again.
+    /// Take the whole thing out and start again, **the old text going into the
+    /// register** — prose's `c`.
     Replace,
+    /// The same, **leaving the register alone** — prose's `A-c` (2026-10-08).
+    ReplaceKeeping,
 }
 
 /// Which line holds the row with each key, and what it was built from.
