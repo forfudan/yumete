@@ -6214,37 +6214,38 @@ fn with_lined_up_md_table() -> Editor {
 
 /// A document whose second table has a cell far wider than the cap, and a
 /// first table with different columns — so a test can tell the two apart.
-/// 小寫刪、大寫剪，格子裏也一樣（#492）。
+/// **格子裏哪一個進寄存器，和正文同一條規矩**（#492；2026-10-07 把這兩個鍵換了過
+/// 來）。
 ///
-/// 填表是這條規矩最值錢的地方：複製一個值，路上順手清掉兩格再貼，從前那個值就沒了
-/// ——`clear_cell` 無條件 `store`。
+/// 從前格子裏是「`d` 不進、`D` 進」，而正文 2026-09-28 起是「`d` 進、`A-d` 不進」
+/// ——同一個大寫鍵在散文裏和表格裏意思相反。定的是「一個編輯器一條規矩」；格子裏
+/// 沒有 `A-d`，所以不進寄存器的那一個是 `D`。
+///
+/// 填表是這條規矩最值錢的地方：複製一個值，路上順手清掉兩格再貼，那個值不許沒了。
 #[test]
-fn clearing_a_cell_does_not_spend_the_register_but_cutting_one_does() {
+fn clearing_a_cell_keeps_the_register_under_the_same_rule_as_prose() {
     let table = "| 姓名 | 年紀 |\n| --- | --- |\n| 甲 | 三十 |\n";
+    let cleared_with = |key: &str| -> Editor {
+        let mut ed = typed(table);
+        ed.goto_line(3);
+        press(&mut ed, " tb");
+        press(&mut ed, " tT");
+        press(&mut ed, "l");
+        press(&mut ed, "y"); // 三十 進寄存器
+        press(&mut ed, "h");
+        press(&mut ed, key);
+        ed
+    };
 
-    // `d`：清掉「甲」，剪貼板上那個「三十」原封不動。
-    let mut ed = typed(table);
-    ed.goto_line(3);
-    press(&mut ed, " tb");
-    press(&mut ed, " tT");
-    press(&mut ed, "l");
-    press(&mut ed, "y"); // 三十 進寄存器
-    press(&mut ed, "h");
-    press(&mut ed, "d");
+    // `d`：清掉「甲」，而它進了寄存器——和正文的 `d` 一樣。
+    let ed = cleared_with("d");
     assert!(ed.current_buffer().text().contains("|  | 三十"), "{}", ed.current_buffer().text());
-    assert_eq!(ed.paste_menu()[0].1, "三十", "寄存器沒被那一格吃掉");
+    assert_eq!(ed.paste_menu()[0].1, "甲", "`d` 剪，所以寄存器上是那一格");
 
-    // `D`：同樣清掉，但這一格進了寄存器。
-    let mut ed = typed(table);
-    ed.goto_line(3);
-    press(&mut ed, " tb");
-    press(&mut ed, " tT");
-    press(&mut ed, "l");
-    press(&mut ed, "y");
-    press(&mut ed, "h");
-    press(&mut ed, "D");
+    // `D`：同樣清掉，而剛複製好的那個「三十」原封不動。
+    let ed = cleared_with("D");
     assert!(ed.current_buffer().text().contains("|  | 三十"), "{}", ed.current_buffer().text());
-    assert_eq!(ed.paste_menu()[0].1, "甲", "剪切纔進寄存器");
+    assert_eq!(ed.paste_menu()[0].1, "三十", "`D` 不動寄存器");
 }
 
 fn with_two_md_tables() -> Editor {
@@ -22916,4 +22917,40 @@ fn a_huge_directory_keeps_the_first_names_not_an_arbitrary_five_hundred() {
     assert_eq!(names[0], "ch0001.md", "留下的是按名字數的頭五百個");
     assert_eq!(names[499], "ch0500.md");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **⇥ 挑中一個主題，也要先畫出來**（2026-10-08 報的：「命令面板 tab 到主題的時候
+/// 會暫時 preview 這個主題，但是我發現没有效果」）。
+///
+/// `Key::Tab` 在命令行裏自己一支，走不到那個 `other` 分支——而喊預覽的是那裏。於是
+/// 手打 `:theme mogao` 預覽得了，⇥ 到同一個名字上一點反應都沒有，而 ⇥ 正是挑主題最
+/// 順手的那條路（名字就在單子上）。2026-10-07 加預覽那一趟一個測試都沒寫，所以這個
+/// 洞沒人看見。
+#[test]
+fn a_theme_picked_with_tab_is_previewed_the_way_a_typed_one_is() {
+    use crate::editor::{Shown, Trial};
+    let theme_shown = |ed: &mut Editor| -> Option<String> {
+        match ed.take_trial() {
+            Some(Trial::Show(Shown::Theme(name))) => Some(name),
+            _ => None,
+        }
+    };
+    let mut ed = typed("那年冬天。\n");
+    press(&mut ed, ":theme ");
+    assert_eq!(theme_shown(&mut ed), None, "還沒有名字，沒什麼可畫");
+
+    // ⇥ 把一個名字寫到行上，預覽跟着它。
+    ed.on_key(Key::Tab);
+    let first = theme_shown(&mut ed).expect("⇥ 到一個主題上就該先畫出來");
+    assert!(ed.command_line().contains(&first), "{}", ed.command_line());
+    // 再 ⇥ 一下是另一個主題，預覽也換一個。
+    ed.on_key(Key::Tab);
+    let second = theme_shown(&mut ed).expect("第二下也要");
+    assert_ne!(second, first, "⇥ 走到了下一個");
+    // ⇧⇥ 走回去。
+    ed.on_key(Key::BackTab);
+    assert_eq!(theme_shown(&mut ed).as_deref(), Some(first.as_str()));
+    // Esc 把原來那個樣子放回去——這一半本來就有。
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.take_trial(), Some(Trial::Undo), "退出去要還原");
 }

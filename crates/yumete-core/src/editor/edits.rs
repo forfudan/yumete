@@ -655,12 +655,17 @@ impl Editor {
     /// A collapsed selection deletes the grapheme under the cursor. The caller
     /// takes the undo snapshot.
     ///
-    /// Warning: **Deleting is not copying** (#492). Helix's `d` yanks, and that is
-    /// its worst idea: 「d 作为剪切功能会污染 register」. The register
-    /// is a clipboard of one, so under that rule every tidy-up between a copy
-    /// and a paste silently throws the copy away — yank a paragraph, take out
-    /// a stray 、 before pasting it, and the paragraph is gone. Here the
-    /// register is only ever written by a key that says so: `y` and `D`/`C`.
+    /// Warning: **Deleting is not copying** — the reason this half exists at all
+    /// (#492): 「d 作为剪切功能会污染 register」. The register is a clipboard of
+    /// one, so under a yanking `d` every tidy-up between a copy and a paste
+    /// silently throws the copy away — yank a paragraph, take out a stray 、
+    /// before pasting it, and the paragraph is gone.
+    ///
+    /// Warning: **Which key this is under changed on 2026-09-28** (#405), and this
+    /// comment went on claiming the old answer until 2026-10-07. It is `A-d`
+    /// and `A-c`, which is Helix's own spelling; `d` and `c` yank, which is
+    /// also Helix's. In a grid it is `D` (`tables.rs`), because a grid has no
+    /// `A-d`.
     pub(super) fn delete_selection(&mut self) {
         self.cut_selection(false);
     }

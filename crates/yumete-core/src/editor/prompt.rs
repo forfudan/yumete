@@ -364,8 +364,19 @@ impl Editor {
                 self.mode = Mode::Lookfor;
                 self.lookfor_focus = 0;
             }
-            Key::Tab => self.cycle_completion(1),
-            Key::BackTab => self.cycle_completion(-1),
+            // Warning: **⇥ 也要預覽**（2026-10-07 報的：「命令面板 tab 到主題的時候會暫時
+            // preview 這個主題，但是我發現没有效果」）。這兩個鍵自己一支，走不到
+            // 下面那個 `other` 分支——而那裏纔是喊預覽的地方。於是手打
+            // `:theme mogao` 預覽得了，⇥ 到同一個名字上一點反應都沒有，而 ⇥ 正是
+            // 挑主題最順手的那條路（名字就在單子上）。
+            Key::Tab => {
+                self.cycle_completion(1);
+                self.ask_for_a_trial();
+            }
+            Key::BackTab => {
+                self.cycle_completion(-1);
+                self.ask_for_a_trial();
+            }
             Key::Esc => {
                 // 退出去：把預覽放回原樣（helix 的 `PromptEvent::Abort`）。
                 self.end_a_trial(crate::editor::Trial::Undo);
@@ -373,6 +384,8 @@ impl Editor {
             }
             Key::Up | Key::Down => {
                 self.walk_history(key == Key::Up, false);
+                // 翻出來的那一行也是一行：`:theme 墨香` 從歷史裏翻上來，照樣先畫。
+                self.ask_for_a_trial();
                 self.ask_for_a_trial();
             }
             Key::Enter => {
