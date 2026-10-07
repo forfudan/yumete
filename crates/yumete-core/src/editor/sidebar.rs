@@ -1644,6 +1644,16 @@ impl Editor {
         self.picker.as_ref()
     }
 
+    /// **告訴挑選器名單畫了幾行**，`PageUp`/`PageDown` 翻的就是這個數。
+    ///
+    /// 和 [`Editor::set_page`] 同一個理由：視口住在 TUI 那一側，這裏只收它量出
+    /// 來的數。没開挑選器就没人要知道。
+    pub fn note_picker_rows(&mut self, rows: usize) {
+        if let Some(picker) = self.picker.as_mut() {
+            picker.note_rows(rows);
+        }
+    }
+
     /// Run one key while a picker is open.
     pub(super) fn on_picker_key(&mut self, key: Key) {
         let Some(picker) = self.picker.as_mut() else {
