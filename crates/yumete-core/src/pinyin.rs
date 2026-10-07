@@ -56,6 +56,63 @@ pub fn readings(ch: char) -> impl Iterator<Item = &'static str> {
     table().get(&ch).copied().unwrap_or("").split_ascii_whitespace()
 }
 
+/// 表裏出現過的每一個音節，和最長那個有多長。
+///
+/// 最長那個一併量出來，切分的時候不必往後試過頭（`zhuang` 是六個字母）。
+fn syllables() -> &'static (std::collections::HashSet<&'static str>, usize) {
+    static ONCE: OnceLock<(std::collections::HashSet<&'static str>, usize)> = OnceLock::new();
+    ONCE.get_or_init(|| {
+        let mut whole = std::collections::HashSet::new();
+        let mut longest = 0usize;
+        for said in table().values() {
+            for one in said.split_ascii_whitespace() {
+                whole.insert(one);
+                longest = longest.max(one.len());
+            }
+        }
+        (whole, longest)
+    })
+}
+
+/// **這一串字母讀得出來嗎**（2026-10-07 定）。
+///
+/// 原話：「拼音搜索的時候不允許英文/拼音混合。也就是説如果一串[a-zA-Z]+不是合法
+/// 的漢字拼音音節組合（而是可能混雜了拼音和英文），那么我們就直接不開啓拼音搜索。
+/// `renman` 是合法的拼音音節組合，故而它開啓拼音搜索。`daxue3` 是合法拼音音節加數
+/// 字，所以我們允許它進行拼音搜索。`for3hao` 含有非法拼音音節，所以不開啓拼音搜
+/// 索。`shurufa.zhuyuhao` 的字母部分是合法拼音音節，我們可以開啓拼音搜索。
+/// `forfudan.com` 含有 `com` 這個非法拼音音節，因此不開啓拼音搜索。」
+///
+/// **每一串都要整整齊齊切成音節，末一串也一樣。** 打了一半的那一個音節不給通融，
+/// 而這一條**一個命中都不會丟**：[`say`] 只吃得下**整個**音節（`q + n > said.len()`
+/// 就跳過），所以 `zhongg` 這種半截的查詢從前走完整趟慢路，一處也配不上。逐鍵
+/// 搜的時候這一路於是自己開關：打到 `zhong` 纔開，`zhongg` 又關上。
+///
+/// 切分用的是一張「到第幾個字母為止讀得通」的表，從左往右填，所以 `xian` 這種
+/// 兩種切法（`xi+an` 與 `xian`）不必回頭試。
+fn sayable(letters: &[char]) -> bool {
+    let (whole, longest) = syllables();
+    let text: String = letters.iter().collect();
+    if text.is_empty() {
+        return false;
+    }
+    let n = text.len();
+    let mut reached = vec![false; n + 1];
+    reached[0] = true;
+    for at in 0..n {
+        if !reached[at] {
+            continue;
+        }
+        for take in 1..=(*longest).min(n - at) {
+            let Some(bit) = text.get(at..at + take) else { continue };
+            if whole.contains(bit) {
+                reached[at + take] = true;
+            }
+        }
+    }
+    reached[n]
+}
+
 /// **查詢切成的一段一段**（2026-10-03 定）。
 ///
 /// 從前這一支只收「整條全是字母」的查詢，於是**字母和漢字混不起來**：`zhongguo`
@@ -114,7 +171,19 @@ pub fn atoms(text: &str) -> Option<Vec<Atom>> {
     if !close(&mut letters, &mut out) {
         return None;
     }
-    out.iter().any(|a| matches!(a, Atom::Said { .. })).then_some(out)
+    if !out.iter().any(|a| matches!(a, Atom::Said { .. })) {
+        return None;
+    }
+    // **一串讀不出來，整條就不走拼音這一路**（2026-10-07 定，見 [`sayable`]）。
+    //
+    // 這同時是這一路最大的一筆提速：從前任何一條帶字母的查詢都要在**每一個字的
+    // 位置**上查一次讀音表，而 `forfudan.com` 那樣的查詢一處也配不上。量出來
+    // （794 MB 的中文語料，熱緩存）：`ye -G forfudan.com` **10.44 秒 → 0.9 秒**。
+    let ok = out.iter().all(|atom| match atom {
+        Atom::Said { said, .. } => sayable(said),
+        Atom::Just(_) => true,
+    });
+    ok.then_some(out)
 }
 
 /// **查詢能不能當拼音用**：非空、不太長、全是 ASCII 字母。
@@ -210,8 +279,12 @@ fn eat(
             // 字母。兩路分工，所以 `spans("shuzhai", …)` 必須是空的，那是一條舊
             // 不變式（`letters_in_the_prose_are_not_read_as_readings`）。
             //
-            // 混着寫就不一樣了：`ch第3` 裏那個 `ch` 沒有讀音可問，它就是兩個字母。
-            // 不給它照字面配的路，整條查詢就斷在第一段上。
+            // 混着寫就不一樣了：`zhong-guo` 裏那個 `zhong` 既可以是「中」的讀音，
+            // 也可以就是稿子裏真的那五個字母。
+            //
+            // Warning: **`ch第3` 那種不再走到這裏**（2026-10-07）：`ch` 不成音節，
+            // 整條查詢根本不問讀音了（[`sayable`]）。這一路留給的是**每一串都讀
+            // 得出來**而稿子裏偏偏寫着那幾個字母的那一種。
             let literal_ok = atoms.len() > 1;
             // **大小寫要緊的時候比打進來的那一份。** 從前一律比小寫，於是
             // `--case-sensitive` 對混着寫的查詢是死的（`Alpha中` 中了 `alpha中`）。
@@ -302,8 +375,10 @@ mod tests {
         assert!(atoms("很大").is_none());
         assert!(atoms("").is_none());
 
-        // 混着寫的時候，不是讀音的那一段照字面配。
-        assert_eq!(look("卷03/第120章.md", "di120章.md"), [(4, 12)]);
+        // **有一串讀不出來，整條就不問讀音了**（2026-10-07 定，判詞在 [`sayable`]）。
+        // `md` 不成音節，所以 `di120章.md` 這一條整條走字面——`di` 那一半不再換
+        // 得到「第」。這是那一條規矩明碼標價的代價，作者過目定下的。
+        assert!(look("卷03/第120章.md", "di120章.md").is_empty());
         // **整條都是字母的那一種照舊只問讀音**，字面歸字面那一路——見
         // `letters_in_the_prose_are_not_read_as_readings`。
         assert!(look("卷03/第120章.md", "md").is_empty());
@@ -428,5 +503,55 @@ mod tests {
         assert!(as_query("shu zhai").is_none());
         assert!(as_query(&"a".repeat(LONGEST + 1)).is_none());
         assert_eq!(as_query(" ShuZhai ").unwrap().iter().collect::<String>(), "shuzhai");
+    }
+}
+
+#[cfg(test)]
+mod can_it_be_read {
+    use super::*;
+
+    /// **讀不出來的那一串，整條查詢就不走拼音**（2026-10-07 定）。
+    ///
+    /// 判詞與例子都是作者的：「`renman` 是合法的拼音音節組合，故而它開啓拼音搜
+    /// 索。`daxue3` 是合法拼音音節加數字，所以我們允許它進行拼音搜索。`for3hao`
+    /// 含有非法拼音音節，所以不開啓拼音搜索。`shurufa.zhuyuhao` 的字母部分是合法
+    /// 拼音音節，我們可以開啓拼音搜索。`forfudan.com` 含有 `com` 這個非法拼音音
+    /// 節，因此不開啓拼音搜索。」
+    #[test]
+    fn a_query_that_cannot_be_read_does_not_ask_the_readings() {
+        for yes in ["renman", "daxue3", "shurufa.zhuyuhao", "zhongguo", "di120", "juan03"] {
+            assert!(atoms(yes).is_some(), "讀得出來：{yes}");
+        }
+        for no in ["for3hao", "forfudan.com", "xyzzyqq", "github.com", "readme"] {
+            assert!(atoms(no).is_none(), "讀不出來，不該走拼音：{no}");
+        }
+    }
+
+    /// **半截的音節這一路自己關掉，而且一個命中都不會丟。**
+    ///
+    /// [`say`] 只吃得下整個音節，所以 `zhongg` 從前走完整趟慢路、一處也配不上。
+    /// 逐鍵搜的時候這一路於是自己開關：打到 `zhong` 纔開，`zhongg` 又關上，而
+    /// 關着的那幾鍵本來就沒有拼音命中可給。
+    #[test]
+    fn half_a_syllable_turns_the_path_off_and_loses_nothing() {
+        let said = |q: &str| atoms(q).map(|a| spans_of("中國人", &a, true)).unwrap_or_default();
+        assert!(!said("zhong").is_empty(), "整個音節配得上");
+        assert!(atoms("zhongg").is_none(), "半截的不走這一路");
+        // 而它本來就配不上任何東西——不是這一條把命中弄丟了。
+        for half in ["zhongg", "zhonggu"] {
+            let anyway = Atom::Said { said: half.chars().collect(), typed: half.chars().collect() };
+            assert!(
+                spans_of("中國人", &[anyway], true).is_empty(),
+                "{half} 強行走一趟也配不上：這一路只吃整個音節"
+            );
+        }
+    }
+
+    /// 一個字母都沒有的查詢本來就不問讀音——那是字面那一路的事。
+    #[test]
+    fn a_query_with_no_letters_never_asked_in_the_first_place() {
+        assert!(atoms("中國").is_none());
+        assert!(atoms("。。。").is_none());
+        assert!(atoms("").is_none());
     }
 }

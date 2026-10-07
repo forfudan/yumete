@@ -176,8 +176,10 @@ $ ye --files di120
 
 **Letters and 漢字 mix in one query.** A real query almost always is mixed — chapter one
 hundred and twenty is typed `di120`, and `zhongguo很大`, `zhong国` and `中guo` all hit.
-Only an all-letters query is read as 拼音 throughout; when it is mixed, the part that is
-not a reading is matched as written.
+**Every run of letters has to read as 拼音 syllables** for the readings to be asked at
+all: `di120` does, `zhongguo很大` does. One that does not — `forfudan.com`, whose `com` is
+no syllable — is searched as written, and never pays for the readings. That is also what
+makes it fast: on a 794 MB corpus the same query went from 10.4 seconds to 0.9.
 
 **With nothing named it searches the current directory**, as every other command-line
 tool does; `--project` searches up to the book's root (the nearest `.yumete` or `.git`
