@@ -10203,6 +10203,7 @@ fn walking_onto_a_hit_in_another_file_does_not_stale_the_list() {
     ed.set_root(&dir);
     ed.open_file(dir.join("卷一/a.md")).unwrap();
     ed.open_search_with("霜", crate::search_panel::Where::Project);
+    ed.settle_search();
     assert!(ed.search().hits.len() > 2, "好幾個檔：{:?}", ed.search().files);
     assert!(!ed.search_is_stale(), "剛跑完的名單當然算數");
 
@@ -10223,6 +10224,9 @@ fn the_command_line_can_open_the_editor_with_the_search_already_run() {
     let mut ed = Editor::new();
     ed.set_root(&dir);
     ed.open_search_with("霜", crate::search_panel::Where::Project);
+    // **那一趟現在是欠着的**（2026-10-07）：前端先畫一幀再在背景裏跑，而沒有主
+    // 循環的呼叫方自己還掉——`--shot` 和 `--keys` 那兩條路做的就是這一下。
+    ed.settle_search();
 
     assert_eq!(ed.search().query, "霜");
     assert!(ed.search().total >= 4, "找到了：{}", ed.search().total);

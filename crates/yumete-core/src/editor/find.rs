@@ -168,26 +168,23 @@ impl Editor {
         self.open_search_in(scope, false);
         self.search.query = query.to_string();
         self.search.stale = false;
-        self.search_now();
-        // 名單空着就留在輸入框裏——站到一張空名單上，`jk` 按下去什麼都不動，而
-        // 人要改的正是那個詞。
-        match self.search.hits.is_empty() {
-            true => self.search.field = Field::Query,
-            false => {
-                self.mode = Mode::Normal;
-                // **站在第一處命中上，不是第一個檔名上。** 名單是一棵樹，頭一行是
-                // 檔名那一條；停在它上面正文那半還是空的，而人要看的是那一處。
-                if let Some(at) = self
-                    .search
-                    .rows()
-                    .iter()
-                    .position(|row| matches!(row, crate::search_panel::Row::Hit(_)))
-                {
-                    self.search.selected = at;
-                }
-                self.stand_on_and_look(Field::Results);
-            }
-        }
+        // **欠着，讓主循環在背景裏還**（2026-10-07 報的）。
+        //
+        // 原話：「加了 open 參數確是有bug。他等了大概10秒進入了 TUI界面，然后側欄
+        // 就一直是圖中的狀態（Pan.ins) 卡住不動，没有在搜索。」查出來是這裏：
+        // `search_now` 走的是**同步**那一條（`in_the_background` 是假的），於是
+        // ① 整個啓動被走查堵住，② 同步那一條還帶着那道「最多走幾秒」的閘，到時
+        // 間就收手——`0+結果` 不是「還在找」，是「沒走完就停了」，而它停了。
+        //
+        // 欠着那一條正是為這件事寫的：前端先畫一幀（表頭寫「正在找…」），再在
+        // 背景裏跑，每一幀收一批。`--shot` 與 `--keys` 那兩條路自己會等到底
+        // （`wait_for_the_search`），所以靜照照樣是跑完的樣子。
+        self.owed_search = true;
+        // **鍵落在名單上，不落在輸入框裏**（2026-10-07 定：「正常情况下應該是直接
+        // 打開TUI界面，然后進入 pan.nor 模式，且開始搜索」）。詞已經在命令行上
+        // 打過了，沒有什麼要再打的；名單這一刻是空的，而它會一條一條長出來。
+        self.mode = Mode::Normal;
+        self.stand_on_and_look(Field::Results);
     }
 
     pub(super) fn open_search(&mut self) {
@@ -2384,6 +2381,7 @@ impl Editor {
         let most = self.search.most();
         let mut moved = false;
         let mut done = false;
+        let mut first_hit = false;
         // 一次收一批就走，別把一幀的時間全花在這裏。
         for _ in 0..4096 {
             let Ok((which, found)) = one.heard.try_recv() else { break };
@@ -2398,6 +2396,7 @@ impl Editor {
                     if self.search.hits.len() < most {
                         self.search.hits.push(hit);
                     }
+                    first_hit = true;
                 }
                 Found::File(path) => self.search.files.push((Some(path), None)),
                 Found::Done { cut, skipped } => {
@@ -2409,6 +2408,23 @@ impl Editor {
         }
         if done {
             self.searching = None;
+        }
+        // **第一處命中一到，就站上去**（2026-10-07）。
+        //
+        // `ye -GO 詞` 答應的是「進去鍵就在第一處命中上」，而命中現在是一條一條
+        // 流進來的：開面板那一刻名單是空的，站無可站。所以這件事挪到這裏——只在
+        // 還沒有人動過（停在第 0 行）而第 0 行又是個檔名的時候做，那一行上正文
+        // 那半本來就是空的，站着也看不見東西。
+        if first_hit && self.search.field == Field::Results && self.search.selected == 0 {
+            let at = self
+                .search
+                .rows()
+                .iter()
+                .position(|row| matches!(row, crate::search_panel::Row::Hit(_)));
+            if let Some(at) = at.filter(|&at| at > 0) {
+                self.search.selected = at;
+                self.show_hit();
+            }
         }
         moved
     }

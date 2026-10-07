@@ -4972,7 +4972,7 @@ const LOOKFOR_WIDTH: u16 = 78;
 /// By display width, not by `char`s — a Chinese sentence half-cut by a `char`
 /// count overruns the panel it was measured for. The mark is one cell, so what
 /// is kept is one cell less.
-pub(crate) fn elide(line: &str, width: usize) -> String {
+pub fn elide(line: &str, width: usize) -> String {
     if yumete_cjk::str_width(line) <= width {
         return line.to_string();
     }
@@ -4998,7 +4998,7 @@ pub(crate) fn elide(line: &str, width: usize) -> String {
 /// `crates/yumete-core…`, and in a 項目 search five different files came out
 /// as five identical rows — the count beside each one was cut off too, so
 /// there was nothing at all to tell them apart (2026-09-27).
-pub(crate) fn elide_head(line: &str, width: usize) -> String {
+pub fn elide_head(line: &str, width: usize) -> String {
     if yumete_cjk::str_width(line) <= width {
         return line.to_string();
     }
@@ -22352,8 +22352,10 @@ fn squeezed(text: &str) -> String {
 
         let buffer = render_with(&editor, &config, no_ime(), 90, 30);
         let whole = buffer_to_text(&buffer).replace(' ', "");
+        // **窄的邊欄裏先保住數目，路徑摺掉**：會跳的那個數字就是「它還活着」，
+        // 而路徑是錦上添花——整行裝不下的時候後半截讓位。
         assert!(
-            whole.contains("己搜"),
+            whole.contains("已搜"),
             "面板底下要有那一行（看過 {looked} 個，在 {at}）：{whole:?}"
         );
         // 單線，不是雙線——那一道是分隔，不是這一塊有焦點。

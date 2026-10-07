@@ -1663,9 +1663,24 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
                     if at.is_empty() {
                         continue;
                     }
-                    let said = yumete_core::say!("search.progress", cell.looked(), at);
+                    // Warning: **一行要裝得下，不然原地重寫就不成立**（2026-10-07 報
+                    // 的）。超過終端機寬度的那一行自己折到下一行去，於是 `\r`
+                    // 回到的是**折出來那一截**的行首，`\x1b[2K` 擦掉的也只有那
+                    // 一截——屏幕上於是攢出一長串「747 files searched, searching
+                    // .pixi/…2703 files searched, searching .pixi/…」。
+                    //
+                    // 路徑從左邊摺，留住檔名：那是「走到哪了」裏唯一認得出來的
+                    // 一半，和面板裏那一行同一個規矩。
+                    let wide = yumete_tui::terminal_width().unwrap_or(80).saturating_sub(1);
+                    let bare = yumete_core::say!("search.progress", cell.looked(), "");
+                    let room = wide.saturating_sub(bare.chars().count());
+                    let said = yumete_core::say!(
+                        "search.progress",
+                        cell.looked(),
+                        yumete_tui::elide_head(&at, room.max(8))
+                    );
                     let _guard = pen.lock();
-                    eprint!("\r\x1b[2K{said}");
+                    eprint!("\r\x1b[2K{}", yumete_tui::elide(&said, wide));
                     let _ = std::io::Write::flush(&mut std::io::stderr());
                 }
             })
