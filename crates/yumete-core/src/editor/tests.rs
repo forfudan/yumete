@@ -22791,7 +22791,7 @@ fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
 #[test]
 fn closing_a_buffer_redraws_the_buffer_list() {
     use crate::sidebar::Side;
-    let dir = std::env::temp_dir().join("yumete-bd-panel");
+    let dir = std::env::temp_dir().join(format!("yumete-bd-panel-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("one.md"), "甲\n").unwrap();

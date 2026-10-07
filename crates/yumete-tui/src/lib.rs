@@ -21050,7 +21050,7 @@ fn squeezed(text: &str) -> String {
     /// ——窗口停着，高亮在這一頁裏走。
     #[test]
     fn the_pickers_list_turns_by_pages_instead_of_dragging_the_bottom_row() {
-        let root = std::env::temp_dir().join("yumete-picker-pages");
+        let root = std::env::temp_dir().join(format!("yumete-picker-pages-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("make the fixture");
         for n in 1..=40 {

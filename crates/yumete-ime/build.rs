@@ -46,7 +46,6 @@ fn main() {
     }
     let table = find(LINGMING);
     let xingchen = find(XINGCHEN);
-    let jinghua = true;
     // The 符號表 is the same file either way — 精華版's is cut from the same
     // 15,716 rows — so there is no mixture to worry about.
     let symbols = find(SYMBOLS).or_else(|| find("symbols.ytab"));
@@ -57,10 +56,9 @@ fn main() {
     // Say *which* table, not just how old. `:yume` prints this, and 「出廠自帶
     // 2026-09-12」 beside a candidate list with no 詞 in it is an answer that
     // sends the reader looking for a bug in 宇浩.
-    let version = table.as_deref().and_then(stamp).map(|when| match jinghua {
-        true => format!("精華版 {when}"),
-        false => when,
-    });
+    // 永遠是精華版，所以這三個字無條件寫上去——從前這裏有個 `jinghua` 開關，是
+    // 「裝了宇浩就嵌完整表」那個年代留下的（2026-10-07 撤了那條路）。
+    let version = table.as_deref().and_then(stamp).map(|when| format!("精華版 {when}"));
     body.push_str(&format!(
         "pub const BUILTIN_VERSION: Option<&str> = {version:?};\n"
     ));
