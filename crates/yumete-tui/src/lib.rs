@@ -8193,11 +8193,15 @@ fn draw_search(
         // 是哪一個檔，所以那一種留尾；可位置那一格平常裝的是一個**名字**，留尾
         // 留出來的是「king directory」——讀着像打錯了字，不像被截斷。
         let keeps_the_tail = which != Field::Scope || find.naming();
-        let shown: String = match (what.chars().count() > room, keeps_the_tail) {
-            (true, true) => what.chars().skip(what.chars().count() - room).collect(),
-            (true, false) => what.chars().take(room).collect(),
-            (false, _) => what.to_string(),
-        };
+        // ⚠️ **按格數裁，不是按字數**（2026-10-07 審出來的）。`room` 是格子數，而
+        // 這裏從前拿 `chars().count()` 跟它比、拿 `skip`/`take` 去切——一個漢字兩
+        // 格，於是整整多出一倍：字被牆截掉（`put_text` 不出聲），而 `box_in` 拿到
+        // 的是**截短了的** `shown` 配上**整條**的那個 caret，算出來的 `at` 越過了
+        // 右牆，它就回 `None`——**光標當場消失**。打一句中文進搜索框就能看見。
+        //
+        // 窗口要含住 caret：留尾那幾格是正在打字的，窗口貼着 caret 往左展；位置
+        // 那一格裝的是名字，從頭展。
+        let (shown, caret_in) = window_on(what, find.caret, room, keeps_the_tail);
         let here = find.field == which;
         // **Inked means 「the whole of this is selected」, not 「the keys are
         // here」.** While it is being typed into, the caret says where you
@@ -8274,7 +8278,7 @@ fn draw_search(
         if here {
             let box_is = Rect::new(box_at, y, to.saturating_sub(box_at), 1);
             lit = Some(box_is);
-            caret = box_in(buf, box_is, &shown, find.caret, typing, ink);
+            caret = box_in(buf, box_is, &shown, caret_in, typing, ink);
         }
     };
     draw_box(buf, Field::Query, &say!("search.label.query"), &find.query, y);
@@ -11681,6 +11685,51 @@ fn caret_shape(mode: Mode, vertical: bool, extending: bool, in_the_list: bool) -
         // Elsewhere a block, which vertically is drawn into the page instead
         // and the terminal's own cursor stays hidden.
         _ => SetCursorStyle::SteadyBlock,
+    }
+}
+
+/// **一個框裝得下的那一段，以及光標落在它的第幾個字上**（2026-10-07）。
+///
+/// `room` 是**格子**數。一個漢字兩格，所以「裝得下幾個字」要一個字一個字加寬度
+/// 加出來——按字數算的話一句中文會多出一倍，而多出來的那一半是看不見地被牆截掉
+/// 的。寬字只剩一格的時候整個不要：半個字畫不出來。
+///
+/// `keep_tail` 為真時窗口**貼着光標往左展**（正在打字的那幾格），否則從頭展（位
+/// 置那一格裝的是一個名字，留頭纔認得出來）。
+fn window_on(text: &str, caret: usize, room: usize, keep_tail: bool) -> (String, usize) {
+    let chars: Vec<char> = text.chars().collect();
+    if yumete_cjk::str_width(text) <= room {
+        return (text.to_string(), caret.min(chars.len()));
+    }
+    let caret = caret.min(chars.len());
+    match keep_tail {
+        // 往左數到裝不下為止，光標那一格自己也要有位置站。
+        true => {
+            let mut wide = 0usize;
+            let mut from = caret;
+            while from > 0 {
+                let w = yumete_cjk::char_width(chars[from - 1]);
+                if wide + w > room {
+                    break;
+                }
+                wide += w;
+                from -= 1;
+            }
+            (chars[from..caret].iter().collect(), caret - from)
+        }
+        false => {
+            let mut wide = 0usize;
+            let mut upto = 0usize;
+            while upto < chars.len() {
+                let w = yumete_cjk::char_width(chars[upto]);
+                if wide + w > room {
+                    break;
+                }
+                wide += w;
+                upto += 1;
+            }
+            (chars[..upto].iter().collect(), caret.min(upto))
+        }
     }
 }
 

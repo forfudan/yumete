@@ -1317,7 +1317,12 @@ impl Editor {
         match items.is_empty() {
             true => self.no_offers(),
             false => {
-                self.offering = Some(Offering { at: self.sel.head(), items, picked: 0 });
+                self.offering = Some(Offering {
+                    buffer: self.current_buffer().id(),
+                    at: self.sel.head(),
+                    items,
+                    picked: 0,
+                });
                 self.status = String::new();
             }
         }
@@ -1335,14 +1340,15 @@ impl Editor {
     /// 這會兒該不該畫那張單子——光標還在問的地方纔算。
     pub fn offers_here(&self) -> Option<(&[crate::lsp::Offer], usize)> {
         let offering = self.offering.as_ref()?;
-        (offering.at == self.sel.head()).then_some((offering.items.as_slice(), offering.picked))
+        (offering.stands_here(self)).then_some((offering.items.as_slice(), offering.picked))
     }
 
     /// 單子上下走一格。**首尾相接**——一張十幾條的單子，從頭回到尾比按住鍵往回
     /// 翻快，而且没有「按到頭了」這種無聲的失敗。
     pub(super) fn pick_offer(&mut self, forward: bool) -> bool {
+        let here = (self.current_buffer().id(), self.sel.head());
         let Some(offering) = self.offering.as_mut() else { return false };
-        if offering.at != self.sel.head() || offering.items.is_empty() {
+        if (offering.buffer, offering.at) != here || offering.items.is_empty() {
             return false;
         }
         let last = offering.items.len() - 1;
@@ -1367,8 +1373,9 @@ impl Editor {
     /// 語言的那一頭知道（見 [`crate::lsp::Offer::replacing`]）。服務器没說就
     /// 什麽都不蓋，只在光標處插入。
     pub(super) fn take_the_offer(&mut self) -> bool {
+        let here = (self.current_buffer().id(), self.sel.head());
         let Some(offering) = self.offering.take() else { return false };
-        if offering.at != self.sel.head() {
+        if (offering.buffer, offering.at) != here {
             return false;
         }
         let Some(item) = offering.items.get(offering.picked).cloned() else { return false };
