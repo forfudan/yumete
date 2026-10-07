@@ -8434,14 +8434,18 @@ fn draw_search(
     // ——一道線不多占地方，而它把「設定」和「找到了什麼」分成兩塊。
     //
     // Warning: **從牆畫到牆，兩頭是丁字**（看了第一版報的：「沒有和兩邊豎線相
-    // 連」）。接頭跟着邊框的粗細走：有焦點那一圈是雙線，接 `╠╣`；沒焦點是單線，
-    // 接 `╞╡`（單豎、雙橫）。墨色也跟着它——`shell.floor_ink` 就是邊框那一筆，
-    // 所以有焦點時這兩道線一起是金的（「高亮的時候不是金色」）。
+    // 連」）。接頭跟着邊框的粗細走，墨色也跟着它——`shell.floor_ink` 就是邊框那
+    // 一筆，所以有焦點時這幾道線一起是金的（「高亮的時候不是金色」）。
+    //
+    // **橫筆也跟着**（2026-10-07 定）：「the horizontal rule in sidebar should be
+    // single line when it is not highlighted. It is golden double line if and
+    // only if the region is highlighted.」從前沒焦點那一檔是「單豎、雙橫」
+    // （`╞═╡`），於是一道雙橫線在一圈單線框裏，看着還是在喊人。
     let rule = shell.floor_ink;
     let (wall_a, wall_b) = (whole.x, whole.x + whole.width.saturating_sub(1));
-    let tee = match editor.panel_focus() == Some(side) {
-        true => ("╠", "╣"),
-        false => ("╞", "╡"),
+    let (tee, stroke) = match editor.panel_focus() == Some(side) {
+        true => (("╠", "╣"), "═"),
+        false => (("├", "┤"), "─"),
     };
     let rule_across = |buf: &mut ratatui::buffer::Buffer, y: u16, from: u16| {
         // Warning: **擋在內容區的邊上，不是整扇面板的邊上。** `area` 已經減掉了底邊
@@ -8452,7 +8456,7 @@ fn draw_search(
         }
         put_text(buf, wall_a, y, wall_a + 1, tee.0, rule);
         if wall_b > from {
-            put_text(buf, from, y, wall_b, &"═".repeat((wall_b - from) as usize), rule);
+            put_text(buf, from, y, wall_b, &stroke.repeat((wall_b - from) as usize), rule);
         }
         put_text(buf, wall_b, y, wall_b + 1, tee.1, rule);
     };
@@ -8464,6 +8468,22 @@ fn draw_search(
     if room == 0 {
         break 'list;
     }
+    // **走查走到哪了，在最底下**（§5.101，2026-10-07 定）。原話：「it just give
+    // users an interactive signal that the searching is still ongoing in the
+    // background」——那個資料夾 `-uu` 開着是 239,125 個檔，頭一處命中在一分鐘
+    // 開外，而面板在那一分鐘裏只有一個不動的 `0+結果`。
+    //
+    // 它先跟名單要行（同「換後」那一塊），而名單矮下來的時候它第一個讓位：名單
+    // 纔是主體。走完就收，不留一行說廢話——標題上那個數目已經說了結果。
+    let going = editor
+        .still_searching()
+        .then(|| editor.search_progress())
+        .filter(|(_, at)| !at.is_empty());
+    let going_rows = match going.is_some() && room >= 5 {
+        true => 2usize,
+        false => 0,
+    };
+    room = room.saturating_sub(going_rows);
     // **「換後」那一塊，在名單底下**（2026-09-27 定）。它先跟名單要行，所以要在
     // 走名單之前算——名單有多少行，看它拿走幾行。
     //
@@ -8589,7 +8609,7 @@ fn draw_search(
     if after_rows > 0 {
         // Warning: `prose`，不叫 `text`——那個名字在這一支裏是正文那一檔的樣式。
         if let Some((prose, mark, now)) = &after {
-            let head = area.y + area.height - after_rows as u16;
+            let head = area.y + area.height - (after_rows + going_rows) as u16;
             let name = say!("search.after");
             // 線先鋪滿、名字再壓上去，兩頭的丁字和上面那一道同一支。
             rule_across(buf, head, wall_a + 1);
@@ -8613,6 +8633,20 @@ fn draw_search(
                     x += yumete_cjk::str_width(&part) as u16;
                 }
             }
+        }
+    }
+    // 一道線，底下一行字。路徑從**左邊**摺，留住檔名——那是「走到哪了」裏唯一
+    // 認得出來的一半（`elide_head`，邊欄那張單子摺的也是它）。
+    if going_rows > 0 {
+        if let Some((looked, at)) = &going {
+            let head = area.y + area.height - going_rows as u16;
+            rule_across(buf, head, wall_a + 1);
+            let counted = looked.to_string();
+            // 留給路徑的寬度：整行減掉文案裏除路徑以外的那些字。
+            let bare = say!("search.progress", counted, "");
+            let room = wide.saturating_sub(yumete_cjk::str_width(&bare));
+            let line = say!("search.progress", counted, elide_head(at, room.max(8)));
+            put_text(buf, left, head + 1, to, &elide(&line, wide), quiet);
         }
     }
     // **`PAN.INS` 下，整扇面板退後一步，只剩正在打字的那一行亮着**（2026-10-04

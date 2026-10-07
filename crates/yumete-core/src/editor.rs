@@ -1714,6 +1714,49 @@ pub(crate) fn walk_is_done(
     floored && (!prose_only || spent >= WALK_GRACE)
 }
 
+/// **走查走到哪一個檔了** —— 畫面讀，走查寫（2026-10-07）。
+///
+/// 一個共用的格子，不是一條通道。走一個檔發一則消息，在那個資料夾裏就是二十三萬
+/// 則；而要答的問題只有「**此刻**在看誰」，所以舊的一則永遠沒人要。寫是每個檔一
+/// 次（比讀那個檔便宜得多），讀是畫面自己按它的節拍來，沒人看的時候一文不花。
+///
+/// 量過的：`-uu` 開着的那個資料夾是 **239,125 個檔、38 GB**，命令行同一個詞頭
+/// 30 秒一行都不印——走查沒壞，是它不吭聲（§5.101）。
+#[derive(Default)]
+pub struct Progress {
+    looked: std::sync::atomic::AtomicUsize,
+    at: std::sync::Mutex<String>,
+}
+
+impl Progress {
+    /// 走查每看一個檔叫一次。
+    pub(crate) fn looking_at(&self, shown: &Path) {
+        self.looked.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut held) = self.at.lock() {
+            held.clear();
+            held.push_str(&shown.display().to_string());
+        }
+    }
+
+    /// 從頭數起。
+    pub(crate) fn start_again(&self) {
+        self.looked.store(0, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut held) = self.at.lock() {
+            held.clear();
+        }
+    }
+
+    /// 看過幾個檔了。
+    pub fn looked(&self) -> usize {
+        self.looked.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// 此刻在看哪一個——還沒開始走就是空的。
+    pub fn at(&self) -> String {
+        self.at.lock().map(|held| held.clone()).unwrap_or_default()
+    }
+}
+
 /// 一趟走查交代了什麼。
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct Walked {
@@ -2410,6 +2453,9 @@ pub struct Editor {
     in_the_background: bool,
     /// 第幾趟。新的一趟把它加一，舊線程交回來的一概丟掉。
     search_generation: u64,
+    /// **走查走到哪了**（§5.101，2026-10-07）。三條走查路（管道、前景、背景）都
+    /// 往它寫，畫面和命令行各按自己的節拍讀。
+    search_progress: std::sync::Arc<Progress>,
     last_selection: Option<(usize, usize)>,
     /// **插入態的 `C-o`：做一個 Normal 命令就回來**（vim，2026-10-06）。
     ///
@@ -3364,6 +3410,7 @@ impl Editor {
             searching: None,
             in_the_background: false,
             search_generation: 0,
+            search_progress: std::sync::Arc::default(),
             last_selection: None,
             one_normal_key: None,
             overwriting: false,

@@ -706,6 +706,10 @@ impl Editor {
                 .filter_map(|b| Some((self.real_path(b.path()?)?, b.rope().to_string())))
                 .collect();
             let sieve = sieve.unwrap_or_default();
+            // **一趟搜索從頭數起**（§5.101）。借一份出來，因為底下兩條路一條要
+            // 把它交給線程，另一條在 `self` 還借着的時候用。
+            let going = std::sync::Arc::clone(&self.search_progress);
+            going.start_again();
             let mut files: Vec<(Option<std::path::PathBuf>, Option<u64>)> = Vec::new();
             // 哪一條路，先問完再借 `sink`——借進閉包之後就問不了了。
             let piping = sink.is_some();
@@ -739,6 +743,7 @@ impl Editor {
                         &unsaved,
                         here.as_deref(),
                         &mut stop,
+                        &going,
                         &mut take,
                     );
                     self.search.files.extend(files);
@@ -746,7 +751,7 @@ impl Editor {
                     self.search.skipped = walked.skipped;
                 }
                 false if self.in_the_background => {
-                    self.search_in_the_background(root.clone(), sieve, look, unsaved, here)
+                    self.search_in_the_background(root.clone(), sieve, look, unsaved, here, going)
                 }
                 false => {
                     let walked = walk_and_search(
@@ -756,6 +761,7 @@ impl Editor {
                         &unsaved,
                         here.as_deref(),
                         &mut stop,
+                        &going,
                         &mut take,
                     );
                     self.search.files.extend(files);
@@ -2307,6 +2313,7 @@ impl Editor {
         look: Look,
         unsaved: std::collections::HashMap<std::path::PathBuf, String>,
         here: Option<std::path::PathBuf>,
+        going: std::sync::Arc<crate::editor::Progress>,
     ) {
         // **那兩道閘護的是畫面那條線程，而這一趟不在它上面**（§5.93，2026-10-06）。
         // `Sieve::uncapped` 的文檔自己寫着理由：「走查跑在它上面，不封頂就是
@@ -2324,7 +2331,7 @@ impl Editor {
         let mine = stop.clone();
         std::thread::spawn(move || {
             let mut stopped = false;
-            let walked = walk_and_search(&root, &sieve, &look, &unsaved, here.as_deref(), &mut stopped, &mut |found| {
+            let walked = walk_and_search(&root, &sieve, &look, &unsaved, here.as_deref(), &mut stopped, &going, &mut |found| {
                 if mine.load(std::sync::atomic::Ordering::Relaxed) {
                     return false;
                 }
@@ -2346,6 +2353,19 @@ impl Editor {
     /// **背景那一趟還在跑嗎**——右上角那個加號看它。
     pub fn still_searching(&self) -> bool {
         self.searching.is_some()
+    }
+
+    /// **走查走到哪了**：看過幾個檔，此刻在看哪一個（§5.101，2026-10-07）。
+    ///
+    /// 路徑是相對於搜索的根的，畫的人自己決定不夠寬時從哪一頭摺。走查還沒開始
+    /// （或者剛從頭數起）的時候路徑是空的。
+    pub fn search_progress(&self) -> (usize, String) {
+        (self.search_progress.looked(), self.search_progress.at())
+    }
+
+    /// 給命令行那一支：同一個格子，它自己開一條線程按自己的節拍讀。
+    pub fn search_progress_cell(&self) -> std::sync::Arc<crate::editor::Progress> {
+        std::sync::Arc::clone(&self.search_progress)
     }
 
     /// 主循環閒着的時候隔多久醒一次來收（和 `vcs_due_in` 那幾個同一條路）。
@@ -2410,6 +2430,7 @@ fn walk_and_search(
     unsaved: &std::collections::HashMap<std::path::PathBuf, String>,
     here: Option<&std::path::Path>,
     stop: &mut bool,
+    going: &crate::editor::Progress,
     each: &mut dyn FnMut(Found) -> bool,
 ) -> crate::editor::Walked {
     let mut total = 0usize;
@@ -2426,6 +2447,9 @@ fn walk_and_search(
             return;
         }
         let shown = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+        // **Say where we are before reading it**, not after: the file about to
+        // be read is the one the reader is waiting on.
+        going.looking_at(&shown);
         let was = total;
         let mut at = 0usize;
         // Warning: **這一份永遠是空的**，而且必須是：`take_the_line` 的 `most` 給

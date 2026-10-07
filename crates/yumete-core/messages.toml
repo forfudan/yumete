@@ -8248,6 +8248,13 @@ zhs = "窗口过窄，改用行内搜索"
 en = "window too narrow — searching on the line instead"
 
 [[message]]
+# 搜索面板底下那一行：走查走到哪了（§5.101，2026-10-07 作者定的文案）
+key = "search.progress"
+zht = "己搜 {0} 個文件, 搜索 {1}"
+zhs = "己搜 {0} 个文件, 搜索 {1}"
+en = "{0} files searched, searching {1}"
+
+[[message]]
 # 搜索：全部替換動得太多，中央那扇窗問一次——「繼續替換」
 key = "search.replace-all-go"
 zht = "繼續替換"
