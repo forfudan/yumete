@@ -5038,7 +5038,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     }
     // 這兩種在名字拆分之前就被攔下來，所以也要在這裏自己答一次。
     if line.starts_with('!') {
-        return Ok(Described { help: "cmd.commands.shell", spelt: None, needs: &[] });
+        return Ok(Described { help: "cmd.commands.shell", word: None, wrong: None, spelt: None, needs: &[] });
     }
     // Warning: **`:/` 不是 `:search`**（2026-10-07 當場看出來的）。`:search` 開的是那扇
     // 面板；`:/` 做的是 `/` 做的事——走到下一處。兩句話借的是鍵位表上那兩則。
@@ -5048,20 +5048,22 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
             true => "action.rsearch",
             false => "action.search",
         };
-        return Ok(Described { help, spelt: None, needs: &[] });
+        return Ok(Described { help, word: None, wrong: None, spelt: None, needs: &[] });
     }
     let head = line.split_whitespace().next().unwrap_or("");
     let shaped = rows_before_a_substitution(line).is_some()
         || head == "s"
         || head.starts_with("s/");
     if shaped {
-        return Ok(Described { help: "cmd.commands.substitute", spelt: None, needs: &[] });
+        return Ok(Described { help: "cmd.commands.substitute", word: None, wrong: None, spelt: None, needs: &[] });
     }
     let Some(e) = entry_named(head) else {
         return Err(Some(head.to_string()));
     };
     let mut said = Described {
         help: e.help,
+        word: None,
+        wrong: None,
         spelt: match e.aliases.is_empty() {
             true => None,
             false => Some(e.aliases.join(" ")),
@@ -5079,16 +5081,43 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     // 那時候單子上一條都配不中，而那一句仍舊是按下 Enter 會發生的事。
     for (at, word) in line.split_whitespace().skip(1).enumerate() {
         let Some(list) = e.params.get(at).and_then(Param::words) else { break };
-        let Some(w) = pick(word.trim_end_matches('!'), list) else { break };
-        said = Described { help: w.help, spelt: None, needs: w.needs };
+        match pick(word.trim_end_matches('!'), list) {
+            // **命令的說明留着，參數的說明加在它下面**：一支函數和它的一個參數
+            // 是兩句話，不是一句換掉另一句。
+            Some(w) => {
+                said.word = Some(w.help);
+                said.needs = w.needs;
+                said.spelt = None;
+            }
+            // 這張表不認得這個詞——按下 Enter 報的就是這一句，提前說出來。
+            None => {
+                said.wrong = Some(say!("cmd.not-one-of-its-values", e.name, word));
+                said.word = None;
+                break;
+            }
+        }
     }
     Ok(said)
 }
 
 /// What [`about_the_line`] found: enough to describe it, and nothing else.
+///
+/// **一條命令像一支函數**（2026-10-07 作者的說法）：`help` 是它的說明，`word` 是
+/// 挑中那個參數的說明，`wrong` 是打錯了的時候的診斷。面板上面那一段就是這三樣
+/// 疊起來——說明、參數、哪裏不對。
 pub struct Described {
     /// The message tag for its one-line description.
     pub help: &'static str,
+    /// **挑中那個參數自己的說明**，命令的說明之外再加一行。
+    ///
+    /// 原話：「it is better two show both the hint of `:ruby` and `off`（so both
+    /// the description for the "function" and the "parameter"）」。
+    pub word: Option<&'static str>,
+    /// **打了一個這條命令不認得的詞**——按下 Enter 會報的正是這一句。
+    ///
+    /// 原話：「yumete failed to tell that a parameter is invalid, and that the
+    /// description does not match the real behaviour of pressing the enter key」。
+    pub wrong: Option<String>,
     /// Its other spellings, joined — `bc bclose`.
     pub spelt: Option<String>,
     /// What it cannot run without.
@@ -6908,5 +6937,39 @@ mod tests {
         assert_eq!(parts("s"), None);
         assert_eq!(parts("s abc"), None);
         assert_eq!(parts("write"), None);
+    }
+}
+
+#[cfg(test)]
+mod which_commands_are_overloaded {
+    /// **裸命令做的事，和帶參數做的事，是不是同一件事**（2026-10-07 作者提的）。
+    ///
+    /// 原話：「a function has been overload to two different purposes and will be
+    /// a little bit confusing……A command with no option would be better
+    /// defaulted to one of the branch.」
+    ///
+    /// 這一支列出**第一個參數是一張詞表、而那張表沒有默認值**的命令：那些就是
+    /// 「不給參數」沒有自動答案的，裸着按下去要麼報錯，要麼另做一件事。
+    #[test]
+    #[ignore = "量數用的，不是斷言"]
+    fn list_them() {
+        let mut loose = Vec::new();
+        for e in super::COMMANDS {
+            let Some(first) = e.params.first() else { continue };
+            let Some(words) = first.words() else { continue };
+            if first.default().is_some() {
+                continue;
+            }
+            let runs_bare = super::parse(e.name).is_ok();
+            loose.push((e.name, words.len(), runs_bare));
+        }
+        println!("{} 條：第一個參數是詞表而沒有默認值", loose.len());
+        for (name, n, bare) in &loose {
+            let mark = match bare {
+                true => "⚠ 裸着也跑",
+                false => "  裸着報錯",
+            };
+            println!("  {mark}  :{name}  （{n} 個詞）");
+        }
     }
 }

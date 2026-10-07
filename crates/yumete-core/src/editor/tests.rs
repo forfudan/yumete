@@ -22529,3 +22529,39 @@ fn tab_walks_the_command_list_without_reshuffling_it() {
                rows.iter().map(|c| c.name).collect::<Vec<_>>());
 }
 
+/// **命令像一支函數：說明、參數、診斷三句話**（2026-10-07 定）。
+///
+/// 原話：「the description block actually shows the docstring of the function
+/// and the parameteres on type, and should also provide diagnostics
+/// information if the typing is invalid」。
+#[test]
+fn the_line_is_described_as_a_function_with_its_argument() {
+    use crate::command::about_the_line;
+
+    // 裸命令：只說命令自己的事。
+    let bare = about_the_line(":ruby").expect("a command");
+    assert!(bare.word.is_none(), "還沒挑參數");
+    assert!(bare.wrong.is_none(), "沒有錯");
+
+    // 末尾一個空格仍舊是裸命令——按下 Enter 跑的就是它。
+    let spaced = about_the_line(":ruby ").expect("a command");
+    assert!(spaced.word.is_none(), "空格不算挑了一個詞");
+
+    // 挑中一個詞：**兩句都在**，命令的說明不被換掉。
+    let picked = about_the_line(":ruby off").expect("a command");
+    assert_eq!(picked.help, bare.help, "命令的說明留着");
+    assert!(picked.word.is_some(), "參數的說明加在下面");
+    assert!(picked.wrong.is_none());
+
+    // 打錯了：說哪裏不對，而那一句正是按下 Enter 會報的。
+    let bad = about_the_line(":ruby on").expect("a command");
+    assert_eq!(bad.help, bare.help, "命令的說明還在");
+    assert!(bad.word.is_none(), "沒有參數可說");
+    let said = bad.wrong.expect("a complaint");
+    assert!(said.contains("on"), "點名那個詞：{said}");
+
+    // 整條命令不存在是另一回事，那一句在 Err 裏。
+    assert!(matches!(about_the_line(":nonsense-command"), Err(Some(_))));
+    assert!(matches!(about_the_line(":"), Err(None)), "什麼都沒打");
+}
+
