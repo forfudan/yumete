@@ -558,6 +558,9 @@ fn main() -> ExitCode {
     // expected to diagnose a caret two cells off the character as a setting.
     // A terminal that will not answer is taken to draw them narrow: that is
     // what the page itself does, so at least the caret sits on the character.
+    // Warning: **這一下要趕在第一幀之前**，所以它留在這裏而不是只在 `settings::apply`
+    // 裏——寬度錯了光標就離字兩格。`apply` 也推同一格（重載要用），兩遍是同一個
+    // 答案，推兩次沒有代價。
     yumete_core::set_ambiguous_wide(match config.editor.ambiguous_width {
         yumete_config::Ambiguity::Wide => true,
         yumete_config::Ambiguity::Narrow => false,
@@ -570,6 +573,9 @@ fn main() -> ExitCode {
     //
     // The flag wins over the config, the way `-v` wins over `layout` — it was
     // typed for this run, and the config was typed once.
+    //
+    // 同上面那一格：`settings::apply` 也推它（重載要用），而這一下要趕在第一句話
+    // 之前，所以兩邊都有。同一個判準、同一個答案。
     if let Some(language) = force_language
         .or_else(|| yumete_core::messages::Language::parse(&config.editor.language))
     {
@@ -578,7 +584,7 @@ fn main() -> ExitCode {
     // **每一項設定推一遍，一處**（`yumete_tui::settings::apply`）。從前這裏攤着
     // 一百多行 `editor.set_…`；抽出去是因為 `:config-reload` 要叫同一支——否則
     // 「啓動時認這個設定、重載時忘了它」是遲早的事。
-    yumete_tui::settings::apply(&config, &mut editor, force_layout);
+    yumete_tui::settings::apply(&config, &mut editor, force_layout, force_language);
     // `--syntax` outranks the config and the extension both: it is this run's
     // answer about these files, and there is nothing further to guess from.
     let named_syntax = force_syntax
@@ -734,19 +740,6 @@ fn main() -> ExitCode {
     mark("session", &mut marks);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
-    editor
-        .execute(if config.editor.show_ruby {
-            ":ruby-render full"
-        } else {
-            // 中階, not `off`: a reading nobody asked to see is still a
-            // reading, so the word count knows 「錢塘」 is two 字 and the
-            // tags are none of them (#283).
-            ":ruby-render basic"
-        })
-        .ok();
-    for name in &config.editor.ruby_dialects {
-        let _ = editor.execute(&format!(":ruby {name}"));
-    }
     // The reader's own 用字 groups (#233) — a novel's names, which no built-in
     // 異體字表 can hold.
 
@@ -1112,7 +1105,7 @@ fn main() -> ExitCode {
             unheard.push(":format / :run".into());
         }
         if editor.take_config_reload() {
-            unheard.push(":reload config".into());
+            unheard.push(":reload-config".into());
         }
         if editor.take_clipboard_read().is_some() {
             unheard.push("␣p / ␣P".into());
