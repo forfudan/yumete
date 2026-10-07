@@ -235,18 +235,131 @@ pub fn spans_cased(text: &str, atoms: &[Atom], fold: bool, fold_case: bool) -> V
     }
     let hay: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
-    let mut at = 0usize;
-    while at < hay.len() {
-        match eat(&hay, at, atoms, 0, fold, fold_case) {
-            // 配上了零個字（查詢是空的）不算一段，否則這個迴圈不往前走。
-            Some(end) if end > at => {
-                out.push((at, end));
-                at = end;
+    // **先問篩子，再走深度優先**（2026-10-07）。頭一段配不上這個字，`eat` 一定
+    // 回 `None`——而問篩子是一次位測試，問 `eat` 是一次讀音表查找。量出來
+    // （794 MB 的中文語料）：`ye -G zhongguo` 12.9 秒 → 1.6 秒。
+    sifted(atoms, fold, fold_case, |sieve| {
+        let mut at = 0usize;
+        while at < hay.len() {
+            if !sieve.may(hay[at]) {
+                at += 1;
+                continue;
             }
-            _ => at += 1,
+            match eat(&hay, at, atoms, 0, fold, fold_case) {
+                // 配上了零個字（查詢是空的）不算一段，否則這個迴圈不往前走。
+                Some(end) if end > at => {
+                    out.push((at, end));
+                    at = end;
+                }
+                _ => at += 1,
+            }
+        }
+    });
+    out
+}
+
+/// **哪些字可能起頭**——走查的篩子（2026-10-07）。
+///
+/// 一張 BMP 的位圖（1024 個 `u64`，8 KB）加一個收容基本多文種平面以外那幾個字的
+/// 集合。問一次是兩次取數加一次位移，而從前每一個位置問的是讀音表那張 HashMap。
+struct Starts {
+    bits: Vec<u64>,
+    far: std::collections::HashSet<char>,
+}
+
+impl Starts {
+    fn new() -> Starts {
+        Starts { bits: vec![0; 1024], far: std::collections::HashSet::new() }
+    }
+
+    fn add(&mut self, ch: char) {
+        let n = ch as u32;
+        match n < 0x1_0000 {
+            true => self.bits[(n >> 6) as usize] |= 1u64 << (n & 63),
+            false => {
+                self.far.insert(ch);
+            }
+        }
+    }
+
+    fn may(&self, ch: char) -> bool {
+        let n = ch as u32;
+        match n < 0x1_0000 {
+            true => self.bits[(n >> 6) as usize] & (1u64 << (n & 63)) != 0,
+            false => self.far.contains(&ch),
+        }
+    }
+}
+
+/// 頭一段配得上的那些字——**只看第一個字**，所以它是個真超集：篩子說不中的位置，
+/// [`eat`] 一定也回 `None`。
+///
+/// 三條路要收齊，與 [`eat`] 的頭一步逐條對着寫：
+///
+/// - `Just(c)`：那個字本身，`fold` 開着再加它的異體。
+/// - `Said` 照字面（只有混着寫纔許，`atoms.len() > 1`）：那一串的頭一個字母。
+/// - `Said` 問讀音：讀音表裏**某個讀音正好是這一串的開頭**的那些字。
+fn starts_of(atoms: &[Atom], fold: bool, fold_case: bool) -> Starts {
+    let mut out = Starts::new();
+    match &atoms[0] {
+        Atom::Just(c) => {
+            out.add(*c);
+            if fold {
+                for one in crate::glyphs::shapes(*c).chars() {
+                    out.add(one);
+                }
+            }
+        }
+        Atom::Said { said, typed } => {
+            if atoms.len() > 1 {
+                match fold_case {
+                    // 折大小寫的時候兩種拼法都進得來。
+                    true => {
+                        if let Some(c) = said.first() {
+                            out.add(*c);
+                            out.add(c.to_ascii_uppercase());
+                        }
+                    }
+                    false => {
+                        if let Some(c) = typed.first() {
+                            out.add(*c);
+                        }
+                    }
+                }
+            }
+            for (ch, reads) in table() {
+                let fits = reads.split_ascii_whitespace().any(|one| {
+                    one.len() <= said.len() && one.bytes().zip(said).all(|(x, &y)| x as char == y)
+                });
+                if fits {
+                    out.add(*ch);
+                }
+            }
         }
     }
     out
+}
+
+/// 建好的那一張，按查詢存着——**一趟搜索建一次**，不是一行建一次。
+///
+/// Warning: 鑰匙要帶上 `fold` 和 `fold_case`：`Just` 那一支的異體看前者，照字面那一支
+/// 的大小寫看後者。少一格就會把上一趟的篩子用在這一趟上。
+fn sifted<T>(atoms: &[Atom], fold: bool, fold_case: bool, with: impl FnOnce(&Starts) -> T) -> T {
+    /// 存着的那一份：鑰匙（查詢、折異體、折大小寫）加篩子本身。
+    type Held = Option<(Vec<Atom>, bool, bool, Starts)>;
+    thread_local! {
+        static HELD: std::cell::RefCell<Held> = const { std::cell::RefCell::new(None) };
+    }
+    HELD.with(|held| {
+        let mut held = held.borrow_mut();
+        let same = held
+            .as_ref()
+            .is_some_and(|(a, f, c, _)| a == atoms && *f == fold && *c == fold_case);
+        if !same {
+            *held = Some((atoms.to_vec(), fold, fold_case, starts_of(atoms, fold, fold_case)));
+        }
+        with(&held.as_ref().expect("just put one there").3)
+    })
 }
 
 /// 同一個字嗎——`fold` 開着的時候簡繁異體算同一個。
