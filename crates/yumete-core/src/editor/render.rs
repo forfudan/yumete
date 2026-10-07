@@ -285,6 +285,17 @@ impl Editor {
         }
     }
 
+    /// Which level the readings are on, in words — `:ruby-render` asks it, and
+    /// `:ruby-render off|basic|full` answers with it too, because 「which level
+    /// is this now」 and 「which level did that just set」 are one fact.
+    pub(super) fn ruby_level_report(&self) -> String {
+        match self.ruby_level() {
+            Render::Off => say!("ruby.level-off"),
+            Render::Basic => say!("ruby.level-basic"),
+            Render::Full => say!("ruby.level-full"),
+        }
+    }
+
     /// `:indent off|basic|full` — how much of a paragraph's opening is drawn.
     ///
     /// **The three words, and not `:render`'s to write** (settled 2026-09-06).

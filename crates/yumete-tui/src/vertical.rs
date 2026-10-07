@@ -224,7 +224,7 @@ impl Metrics {
     ///
     /// A 着重號 asks the same way, and asks whether or not the page is showing
     /// readings: it is the text's own emphasis, not an annotation laid over it,
-    /// so `:ruby off` has nothing to say about it. What it asks for is measured
+    /// so `:ruby-render off` has nothing to say about it. What it asks for is measured
     /// rather than assumed — see [`EMPHASIS`].
     fn ruby_cell(&self, margin: Margin) -> u16 {
         let reading = if margin.reading && (self.ruby || self.hanging) {

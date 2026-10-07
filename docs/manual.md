@@ -1102,7 +1102,7 @@ spacing. `always` is the most like squared paper: every column the same width.
 
 **`never` still knows about ruby.** The `<ruby>` tags are hidden all the same
 and only the text is left; the readings simply are not set. To see the tags
-themselves, that is `:ruby off`.
+themselves, that is `:ruby-render off`.
 
 **The margin is not the column gap.** `zong_gap` (factory 0) is the white space
 between one column and the next, on every column, whether or not anything is
@@ -1463,7 +1463,7 @@ outright** — keeping two spellings would mean this philosophy was only talk:
 | now | gone |
 |---|---|
 | `:yume-scheme 靈明` `:yume-chaifen` | `:scheme` `:chaifen` `:cf` |
-| `:ruby full/off` `:ruby-html on` `:ruby-format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
+| `:ruby-render full/off` `:ruby-html on` `:ruby-format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
 | `:layout vertical` | `:vertical` `:horizontal` |
 | `:view-wrap off` | `:nowrap` |
 | `:render off/basic/full` | `:markup` `:wysiwyg` `:source` |
@@ -1692,10 +1692,8 @@ line will tell you itself.
 - `:indent-hint` ｜ `none` `color` `symbol` — what is drawn in a paragraph's opening two squares
 - `:indent-tab` ｜ `spaces` `tab` — what Tab types in insert mode: spaces (the default, filling to the next indent stop) or a tab; Shift-Tab types the other
 - `:indent-width` ｜ `<1–8>` — indent width: how many spaces Tab types, and how far `>` `<` shift
-- `:table` — edit as a grid: a whole CSV, or the | table under the cursor; `:table off` stops
-  - `off` — as ordinary text
-  - `basic` — edit it as a grid, and not one character hidden (the default)
-  - `full` — drawn as a table: the pipes become walls, with a column ruler above
+- `:table` — edit as a grid: a whole CSV, or the | table under the cursor; how much is drawn is `:table-render`
+  - `render` ｜ `off` `basic` `full` — how much of a table is drawn: the source, basic, or full view; bare says which it is now. The same three as `空格 t o` `空格 t b` `空格 t f`
   - `new` <rows> <columns> — an empty table: `new 3 4` is three rows by four columns, the first row the headings
   - `check` — look the whole table over: repeated row names, components with no row, rows of the wrong width, characters outside the 字集
   - `rules` ｜ `off` `color` `line` — column rules: how the columns are told apart
@@ -1734,10 +1732,8 @@ line will tell you itself.
 - `:diff` — what changed, by word rather than by line
 - `:git-diff` — the same, against what git has (`HEAD` unless a commit is named)
 - `:toc`（outline） — list the headings; `:toc 3` goes to the third
-- `:ruby` — edit the reading here; `:ruby off|basic|full` is how much is drawn
-  - `off` — show the source
-  - `basic` — readings are read but not laid out; the markup stays on the page
-  - `full` — laid out beside the base, and the markup comes off
+- `:ruby` — edit the reading here; how much is drawn is `:ruby-render`
+  - `render` ｜ `off` `basic` `full` — how much of a reading is drawn: the source, read but not laid out, or beside the base; bare says which it is now
   - `auto` — write the readings in, by word (the selection, or the file)
   - `html` ｜ `on` `off` — read `<ruby>`
   - `typst` ｜ `on` `off` — read `#ruby(…)`
@@ -2221,7 +2217,7 @@ and by default the file's suffix decides.
 
 | | |
 | --- | --- |
-| `:ruby full` / `:ruby basic` / `:ruby off` | readings laid out / readings read but the markup stays on the page / the source |
+| `:ruby-render full` / `:ruby-render basic` / `:ruby-render off` | readings laid out / readings read but the markup stays on the page / the source |
 | `:ruby-html` | also read HTML ruby (`:ruby-html off` stops) |
 | `:ruby-typst` | also read Typst ruby (`:ruby-typst off` stops) |
 | `:ruby-format html` | rewrite every reading in the file as HTML |
@@ -3693,7 +3689,7 @@ What gets written out says **exactly what you are looking at**: the delimiter is
 it guessed, the "the first row is data" that `空格 t H` said is in there too, and the
 column names follow the first line. So opening it and reading it back changes not one
 cell — every item you then edit edits something you can see in front of you, instead of
-guessing at a format against a blank sheet. Save your edits, then `:table off` and
+guessing at a format against a blank sheet. Save your edits, then `:table-render off` and
 `:table` again (or `空格 t o` `空格 t t`) and it is read the new way.
 
 A file that already has that name is not overwritten: it is somebody's work, and opening
@@ -3705,7 +3701,7 @@ table files.
 
 **The whole file is not a table, those few lines are.** A code table pasted into a
 chapter, a `dict.yaml`'s body under the `---` front matter, LaTeX's `tabular` — put the
-cursor into those lines, `:table`, and it is a grid; `:table off` comes out, and not one
+cursor into those lines, `:table`, and it is a grid; `:table-render off` comes out, and not one
 byte of the file has moved.
 
 How it is recognised:
@@ -6028,7 +6024,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:view-wrap` (`off`, or a number) | Whether a long paragraph wraps to the next row (`on`/`off` only mean anything horizontal) |
 | `:view-wrap 50` | A measure of fifty columns (vertical: fifty characters to a 縱); `:view-wrap 0` puts it back |
 | `:wheel` (or a number) | How many rows one notch of the wheel moves (vertical: how many columns); `:wheel 1` is the terminal's own notch |
-| `:ruby off`/`basic`/`full` | The source / readings read but not laid out / laid out beside the base (`:ruby` on its own edits the reading here) |
+| `:ruby-render off`/`basic`/`full` | The source / readings read but not laid out / laid out beside the base (`:ruby` on its own edits the reading here) |
 | `:view-margin` *never*｜*dense*｜*loose*｜*always* | Where the margin is kept: nowhere / each column or row that carries something / a whole paragraph if any of it does / everywhere |
 | `:indent off`/`basic`/`full` (or a number) | The first-line indent; `full` folds the blank line between paragraphs in too (a Chinese paragraph indents two squares) |
 | `:view-bands` (`off`, or 1–4) | Bands: divide the vertical page across into so many strips |

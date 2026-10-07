@@ -884,16 +884,16 @@ fn ruby_rendering_is_set_per_dialect() {
         ed.ruby().contains(Dialect::Html),
         "HTML readings are laid out by default"
     );
-    ed.execute(":ruby off").unwrap();
+    ed.execute(":ruby-render off").unwrap();
     assert!(ed.ruby().is_empty());
     // 中階 knows the reading and does not draw it, so the drawn set is
     // empty there too — and naming a dialect is what asks to see one.
-    ed.execute(":ruby basic").unwrap();
+    ed.execute(":ruby-render basic").unwrap();
     assert!(ed.ruby().is_empty());
     assert_eq!(ed.ruby_level(), Render::Basic);
-    ed.execute(":ruby full").unwrap();
+    ed.execute(":ruby-render full").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
-    ed.execute(":ruby basic").unwrap();
+    ed.execute(":ruby-render basic").unwrap();
     ed.execute(":ruby-html").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
 
@@ -6700,7 +6700,7 @@ fn a_pipe_table_is_a_grid_wherever_it_is() {
     press(&mut ed, " tT"); // #356: 這一條測的是格
     // **Looking does not rewrite.** Entering used to lay the whole region
     // out, which marks a file modified for having been read — 45 lines of
-    // this project's own `development.md`, and `:table off` does not undo it.
+    // this project's own `development.md`, and `:table-render off` does not undo it.
     assert_eq!(ed.current_buffer().text(), before, "entering changed nothing");
     // `t f` is the tidy-up, said out loud: the columns line up on the
     // terminal, which is what a Markdown table is supposed to look like.
@@ -7989,7 +7989,7 @@ fn typing_table_again_does_not_demote_the_level_it_is_already_in() {
     assert_eq!(ed.status(), say!("table.already-the-window"));
 
     // And the door still closes.
-    ed.execute(":table off").unwrap();
+    ed.execute(":table-render off").unwrap();
     assert!(ed.table.is_none(), "{}", ed.status());
 }
 
@@ -8928,11 +8928,11 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
     // …and it stays turned: the command is refused, not silently ignored.
     ed.execute("layout vertical").unwrap();
     assert_eq!(ed.layout(), Layout::Horizontal);
-    assert!(ed.status().contains(":table off"), "{}", ed.status());
+    assert!(ed.status().contains(":table-render off"), "{}", ed.status());
 
     // Leaving the grid gives the layout back. A toggle that does not
     // return you to where you were is not a toggle.
-    ed.execute("table off").unwrap();
+    ed.execute("table-render off").unwrap();
     assert_eq!(ed.layout(), Layout::Vertical, "back to 縱書");
     assert!(ed.status().contains("轉回竪排"), "{}", ed.status());
 
@@ -8940,7 +8940,7 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
     ed.execute("table").unwrap();
     assert_eq!(ed.layout(), Layout::Horizontal);
     assert!(ed.status().contains("已轉橫排"), "{}", ed.status());
-    ed.execute("table off").unwrap();
+    ed.execute("table-render off").unwrap();
     assert_eq!(ed.layout(), Layout::Vertical);
 
     // A grid opened in a horizontal session leaves the layout alone, both
@@ -8948,7 +8948,7 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     assert_eq!(ed.layout(), Layout::Horizontal);
-    ed.execute("table off").unwrap();
+    ed.execute("table-render off").unwrap();
     assert_eq!(ed.layout(), Layout::Horizontal);
     assert!(!ed.status().contains("轉回"), "{}", ed.status());
 
@@ -12027,7 +12027,7 @@ fn unknown_command_is_reported() {
 /// Four writers reached the rope without passing one: `gJ`, `:replace`,
 /// `:s` and `:ruby-format`. Three of the four asked `self.table` first, so
 /// they were off in exactly the state a `|` table in a manuscript is
-/// normally edited in — nobody types `:table basic` to fix a typo in their own
+/// normally edited in — nobody types `:table-render basic` to fix a typo in their own
 /// documentation.
 #[test]
 fn no_writer_changes_how_many_cells_a_row_has() {
@@ -16185,7 +16185,7 @@ fn source_mode_is_remembered_for_a_guessed_grid_and_taken_back() {
     ed.open_file(&path).unwrap();
     assert!(ed.table().is_some(), "guessed on the way in");
 
-    ed.execute(":table off").unwrap();
+    ed.execute(":table-render off").unwrap();
     assert!(ed.table().is_none(), "and left when told to");
     assert!(
         data.join("source-mode.txt").is_file(),
@@ -16199,7 +16199,7 @@ fn source_mode_is_remembered_for_a_guessed_grid_and_taken_back() {
     assert!(ed.table().is_none(), "it does not ask again");
 
     // …and asking for a level again is the way back in, note withdrawn.
-    ed.execute(":table basic").unwrap();
+    ed.execute(":table-render basic").unwrap();
     assert!(ed.table().is_some(), "t b re-enters");
     let mut ed = Editor::new();
     ed.keep_word_list_in(data.clone());
@@ -19667,8 +19667,8 @@ fn a_footnote_inside_a_table_cell_still_answers() {
 #[test]
 fn the_caret_inside_a_reading_shows_its_source() {
     let mut ed = typed("前面\n<ruby>immerhin<rt>這是一個單詞</rt></ruby>\n");
-    // `:ruby full` 同時做兩件事：認得讀音，並且把它排出來。
-    ed.execute(":ruby full").unwrap();
+    // `:ruby-render full` 同時做兩件事：認得讀音，並且把它排出來。
+    ed.execute(":ruby-render full").unwrap();
 
     // 光標不在那一行：標籤藏起來，注音排在旁邊。
     ed.goto_line(1);
@@ -22539,22 +22539,22 @@ fn the_line_is_described_as_a_function_with_its_argument() {
     use crate::command::about_the_line;
 
     // 裸命令：只說命令自己的事。
-    let bare = about_the_line(":ruby").expect("a command");
+    let bare = about_the_line(":ruby-render").expect("a command");
     assert!(bare.word.is_none(), "還沒挑參數");
     assert!(bare.wrong.is_none(), "沒有錯");
 
     // 末尾一個空格仍舊是裸命令——按下 Enter 跑的就是它。
-    let spaced = about_the_line(":ruby ").expect("a command");
+    let spaced = about_the_line(":ruby-render ").expect("a command");
     assert!(spaced.word.is_none(), "空格不算挑了一個詞");
 
     // 挑中一個詞：**兩句都在**，命令的說明不被換掉。
-    let picked = about_the_line(":ruby off").expect("a command");
+    let picked = about_the_line(":ruby-render off").expect("a command");
     assert_eq!(picked.help, bare.help, "命令的說明留着");
     assert!(picked.word.is_some(), "參數的說明加在下面");
     assert!(picked.wrong.is_none());
 
     // 打錯了：說哪裏不對，而那一句正是按下 Enter 會報的。
-    let bad = about_the_line(":ruby on").expect("a command");
+    let bad = about_the_line(":ruby-render on").expect("a command");
     assert_eq!(bad.help, bare.help, "命令的說明還在");
     assert!(bad.word.is_none(), "沒有參數可說");
     let said = bad.wrong.expect("a complaint");

@@ -736,12 +736,12 @@ fn main() -> ExitCode {
     // the file's extension implies.
     editor
         .execute(if config.editor.show_ruby {
-            ":ruby full"
+            ":ruby-render full"
         } else {
             // 中階, not `off`: a reading nobody asked to see is still a
             // reading, so the word count knows 「錢塘」 is two 字 and the
             // tags are none of them (#283).
-            ":ruby basic"
+            ":ruby-render basic"
         })
         .ok();
     for name in &config.editor.ruby_dialects {

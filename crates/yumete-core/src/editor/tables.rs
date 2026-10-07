@@ -493,6 +493,50 @@ impl Editor {
         };
     }
 
+    /// Ask for one of the three levels — the one thing `空格 t o|b|f` and
+    /// `:table-render off|basic|full` both do.
+    ///
+    /// **A shortcut is the command with its argument already typed**
+    /// (2026-10-07: 「如果他們確實等價，其實可以讓他們關聯起來，也就是說快捷鍵
+    /// 就是命令+參數的語法糖。這樣的好處是文案寫一份就夠了」). They were two
+    /// bodies of code that read almost the same, and the two that differed did
+    /// so by accident: the keys walked into the grid and snapped to a cell,
+    /// which the command never did, and the command wrote down 「not this one」
+    /// for a guessed grid (#380), which the key never did. Both are right, so
+    /// both are here and there is one of them.
+    ///
+    /// [`Self::set_table_level`] is still the assignment, and still cannot
+    /// fail: `:render` goes straight to it, with no file to walk into.
+    pub(super) fn ask_for_table_level(&mut self, want: TableLevel) {
+        if want == TableLevel::Off {
+            // Nothing is being read as a grid, so there is nothing to put
+            // down — and 「本來就不在表格裏」 is the answer to the question.
+            if self.table.is_none() && self.table_level == TableLevel::Off {
+                self.status = say!("table.already-off");
+                return;
+            }
+            self.set_table_level(TableLevel::Off);
+            return;
+        }
+        // **The level is set first, and it cannot fail.** Finding the table
+        // can — a buffer with no name, a file that is not a grid — and that
+        // used to take the level down with it. It is a preference: a file with
+        // nothing to draw it on is not a reason to forget what was asked for.
+        self.set_table_level(want);
+        // **A file-wide mode is switched from anywhere in the file** — 「可以在
+        // 文件任何位置通過 ti tt 進入表格視圖」 — so this is not
+        // `table_here()`, which is false in the paragraph between two tables
+        // and is the right answer for the *keys*.
+        if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
+            && !self.enter_table_as(false)
+        {
+            // `enter_table_as` has already said why, and the level stands:
+            // walk into a table and it is drawn at that level.
+            return;
+        }
+        self.snap_into_the_grid();
+    }
+
     /// Give the table the whole window, or give the window back (#283).
     ///
     /// **`t q` needs nothing written down.** The level is untouched by the
@@ -554,7 +598,7 @@ impl Editor {
     ///
     /// A toggle that does not return you to where you were is not a toggle —
     /// the sidebar's own rule, and the same rule here: whatever `:table` turned
-    /// the page away from, `:table off` turns it back to.
+    /// the page away from, `:table-render off` turns it back to.
     pub(super) fn leave_table_quietly(&mut self) {
         self.table = None;
         if let Some(back) = self.turned_for_table.take() {
@@ -882,7 +926,7 @@ impl Editor {
         // with a `|`」 is `mdtable::is_row`, and on its own it turned tables
         // that are not being drawn as tables at all:
         //
-        // - **源碼** (`:render off`, `:table off`) promises the file as it
+        // - **源碼** (`:render off`, `:table-render off`) promises the file as it
         //   stands, and there the core stops padding and stops hiding the
         //   cushions — but the renderer went on drawing `──` and `│`, so the
         //   one mode whose whole job is honesty showed characters the file
@@ -1681,7 +1725,7 @@ impl Editor {
             .unwrap_or(0);
         // **Looking at a table does not rewrite it.** Entering used to lay the
         // whole region out again — 45 lines of this project's own `development.md`,
-        // `modified` set, and `:table off` does not undo it. The padding is
+        // `modified` set, and `:table-render off` does not undo it. The padding is
         // this editor's, not theirs, and `:write-all` was one keystroke from
         // committing a diff nobody typed. The layout is kept up *after an
         // edit*, which is where it came from and where it belongs.
@@ -3734,29 +3778,14 @@ impl Editor {
                 self.pending = crate::editor::Pending::TableConvert;
                 return;
             }
+            // `t b` / `t f` — 基本 and 完整, the same two words the command
+            // takes: [`Self::ask_for_table_level`] is the whole of both.
             Key::Char('b') | Key::Char('f') => {
                 let want = match key {
                     Key::Char('f') => TableLevel::Full,
                     _ => TableLevel::Basic,
                 };
-                // **The level is set first, and it cannot fail.** Finding the
-                // table can — a buffer with no name, a file that is not a grid
-                // — and that used to take the level down with it. It is a
-                // preference: a file with nothing to draw it on is not a
-                // reason to forget what the reader asked for.
-                self.set_table_level(want);
-                // **A file-wide mode is switched from anywhere in the file**
-                // — 「可以在文件任何位置通過 ti tt 進入表格視圖」 — so this is
-                // not `table_here()`, which is false in the paragraph between
-                // two tables and is the right answer for the *keys*.
-                if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
-                    && !self.enter_table_as(false)
-                {
-                    // `enter_table_as` has already said why, and the level
-                    // stands: walk into a table and it is drawn at that level.
-                    return;
-                }
-                self.snap_into_the_grid();
+                self.ask_for_table_level(want);
                 return;
             }
             // **`空格 t T` — 換移動的粒度**（2026-09-30 定：「T 按格移动被折
@@ -3788,11 +3817,7 @@ impl Editor {
             // row; 加行 is `t r` since 2026-09-05, which is what freed the
             // letter that spells the mode it now names.
             Key::Char('o') => {
-                if self.table.is_none() && self.table_level == TableLevel::Off {
-                    self.status = say!("table.already-off");
-                    return;
-                }
-                self.leave_table();
+                self.ask_for_table_level(TableLevel::Off);
                 return;
             }
             // `t q` — 「只在全屏表格模式下生效，退到 markdown 文件中，且回到此

@@ -64,7 +64,7 @@ running down the half-width column beside 漢字, and not one byte of either
 written back into the file:
 
 ```raw
-$ yumete --shot=22x18 --vertical --keys=':ruby full\n:view-hanging force\n' 記.md
+$ yumete --shot=22x18 --vertical --keys=':ruby-render full\n:view-hanging force\n' 記.md
   4  3  2     1
     你｢     h那
     來      à年

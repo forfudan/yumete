@@ -872,7 +872,7 @@ Warning: **稿子裏貼的一段，超過五千行就不上色，只留一種顔
 `always` 最像稿紙，每一縱一樣寬。
 
 **`never` 也認得注音。** `<ruby>` 的標籤照樣藏起來，只剩正文，讀音不排。想看標籤本身，
-是 `:ruby off`。
+是 `:ruby-render off`。
 
 **邊欄不是縱間距。** `zong_gap`（出廠 0）是縱與縱之間的空白，每一縱都有，跟有没有東西無關；
 邊欄只在要畫東西的地方留。兩個都是 0/`never` 時**一縱就是兩格**——正好一個漢字，終端能畫
@@ -1156,7 +1156,7 @@ scheme lingming          靈明
 | 現在 | 没有了 |
 |---|---|
 | `:yume-scheme 靈明` `:yume-chaifen` | `:scheme` `:chaifen` `:cf` |
-| `:ruby full/off` `:ruby-html on` `:ruby-format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
+| `:ruby-render full/off` `:ruby-html on` `:ruby-format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
 | `:layout vertical` | `:vertical` `:horizontal` |
 | `:view-wrap off` | `:nowrap` |
 | `:render off/basic/full` | `:markup` `:wysiwyg` `:source` |
@@ -1363,10 +1363,8 @@ Warning: **兩種都用連字號，都不用空格。** `:write` 後面跟的是
 - `:indent-hint` ｜ `none` `color` `symbol` — 縮進的那兩格上畫什麽
 - `:indent-tab` ｜ `spaces` `tab` — 插入模式的 Tab 打什麽：空格（出廠，補到下一個縮進位）還是製表符；Shift-Tab 打另一種
 - `:indent-width` ｜ `<1–8>` — 縮進寬度：Tab 打幾個空格，`>` `<` 挪幾格
-- `:table` — 按格子編輯：CSV 整個文件，或光標所在的 | 表格；`:table off` 收工
-  - `off` — 當普通文字
-  - `basic` — 按格子編輯，一個字都不藏（默認）
-  - `full` — 畫成表格：| 畫作牆，欄尺在上頭
+- `:table` — 按格子編輯：CSV 整個文件，或光標所在的 | 表格；畫多少在 `:table-render`
+  - `render` ｜ `off` `basic` `full` — 表格畫多少：源碼視圖、基本視圖、完整視圖；不寫就說現在是哪一檔。就是 `空格 t o` `空格 t b` `空格 t f` 那三個
   - `new` <行> <欄> — 一張空表：`new 3 4` 是三行四欄，首行是欄名
   - `check` — 從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字
   - `rules` ｜ `off` `color` `line` — 欄線：欄與欄之間怎麽分開
@@ -1405,10 +1403,8 @@ Warning: **兩種都用連字號，都不用空格。** `:write` 後面跟的是
 - `:diff` — 改了什麽：按詞比，不是按行
 - `:git-diff` — 同上，跟 git 裏那一份比（不寫提交就是 `HEAD`）
 - `:toc`（outline） — 列出標題；`:toc 3` 跳到第三條
-- `:ruby` — 改這裏的注音；`:ruby off|basic|full` 是排多少
-  - `off` — 顯示源碼
-  - `basic` — 認得注音，但不排出來，標記留在畫面上
-  - `full` — 排在正文旁邊，標記拿掉
+- `:ruby` — 改這裏的注音；排多少在 `:ruby-render`
+  - `render` ｜ `off` `basic` `full` — 注音排多少：顯示源碼、認得不排、排在正文旁邊；不寫就說現在是哪一檔
   - `auto` — 按詞自動注音（選中的，或者整份）
   - `html` ｜ `on` `off` — 認 `<ruby>` 這一種
   - `typst` ｜ `on` `off` — 認 `#ruby(…)` 這一種
@@ -1793,7 +1789,7 @@ Warning: **光標仍然一個字一個字地走**：格是畫面上的單位。�
 
 | | |
 | --- | --- |
-| `:ruby full` / `:ruby basic` / `:ruby off` | 排出注音/認得讀音但標記留在畫面上/源碼 |
+| `:ruby-render full` / `:ruby-render basic` / `:ruby-render off` | 排出注音/認得讀音但標記留在畫面上/源碼 |
 | `:ruby-html` | 也讀 HTML 注音（`:ruby-html off` 停止） |
 | `:ruby-typst` | 也讀 Typst 注音（`:ruby-typst off` 停止） |
 | `:ruby-format html` | 把全篇注音改寫成 HTML |
@@ -2906,7 +2902,7 @@ schema：跳格、逗號、分號、空格這四個裏，哪一個每行都出�
 
 寫出來的那份説的**就是眼下看到的樣子**：分隔符是它猜到的那個，`空格 t H` 説過的「第一行
 是數據」也在裏面，欄名照首行。所以開了它、讀回去，一格都不會變——接下來你改的每一
-項，改的都是眼前看得見的東西，而不是對着一張白紙猜格式。改完保存，`:table off` 再
+項，改的都是眼前看得見的東西，而不是對着一張白紙猜格式。改完保存，`:table-render off` 再
 `:table`（或 `空格 t o` `空格 t t`）就照新的讀。
 
 已經有那個文件名的不會被蓋掉：那是别人的東西，把它打開看看它説什麽纔是對的做法。文中
@@ -2916,7 +2912,7 @@ schema：跳格、逗號、分號、空格這四個裏，哪一個每行都出�
 #### 文中的一段也可以是表格
 
 **整個文件不是表，裏面那幾行是。** 一張碼表貼進了章節，`dict.yaml` 的正文在 `---` 前
-言底下，LaTeX 的 `tabular`——把光標放進那幾行裏，`:table`，它就是格子；`:table off`
+言底下，LaTeX 的 `tabular`——把光標放進那幾行裏，`:table`，它就是格子；`:table-render off`
 出來，文件一個字節都没動過。
 
 怎麽認的：
@@ -4719,7 +4715,7 @@ Warning: **本來有顏色的段落一點不碰**——標題的金、連結的�
 | `:view-wrap`（`off`、或一個數字） | 長段落是否折到下一行（`on`/`off` 只管横排） |
 | `:view-wrap 50` | 寫到五十欄寬（竪排：一縱五十字）；`:view-wrap 0` 還原 |
 | `:wheel`（或一個數字） | 滚輪一格走幾行（竪排：幾縱）；`:wheel 1` 是終端自己的一格 |
-| `:ruby off`/`basic`/`full` | 源碼/認得讀音但不排/排在正文旁邊（`:ruby` 單獨用是改這裏的注音） |
+| `:ruby-render off`/`basic`/`full` | 源碼/認得讀音但不排/排在正文旁邊（`:ruby` 單獨用是改這裏的注音） |
 | `:view-margin` *never*｜*dense*｜*loose*｜*always* | 邊欄留在哪：不留/有東西的縱或行/有東西的段/處處 |
 | `:indent off`/`basic`/`full`（或一個數字） | 首行縮進；`full` 連段間空行一起收（中文的段落是縮進兩格） |
 | `:view-bands`（`off`、或 1–4） | 段組：把竪排頁面横着分成幾條 |

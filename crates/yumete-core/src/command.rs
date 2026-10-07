@@ -254,11 +254,12 @@ pub enum Command {
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
-    /// `:table` / `:table off` — read the file as a grid (Feature #118).
-    /// `:table` — the door: read the table the cursor is in.
+    /// `:table` — the door: read the table the cursor is in (Feature #118).
     EnterTable,
-    /// `:table off|basic|full` — how much of a table is drawn (#283).
+    /// `:table-render off|basic|full` — how much of a table is drawn (#283).
     SetTableLevel(crate::editor::TableLevel),
+    /// `:table-render` on its own — which of the three levels it is on.
+    ReportTableLevel,
     /// `:table-rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
@@ -377,9 +378,11 @@ pub enum Command {
     SetIndentLevel(crate::editor::Render),
     /// `:indent` on its own — which of the three levels it is on.
     ReportIndent,
-    /// `:ruby off|basic|full` — whether a reading is known, and whether it is
-    /// drawn beside its base (#283).
+    /// `:ruby-render off|basic|full` — whether a reading is known, and whether
+    /// it is drawn beside its base (#283).
     SetRubyLevel(crate::editor::Render),
+    /// `:ruby-render` on its own — which of the three levels it is on.
+    ReportRubyLevel,
     /// `:indent-hint color` — what, if anything, is drawn in the opening
     /// squares.
     SetIndentHint(Option<crate::zong::IndentHint>),
@@ -1937,10 +1940,15 @@ const HINTS: &[Word] = &[
 /// How a table's columns are told apart.
 /// How much of a `|` table is drawn — the same three levels `:render` has,
 /// in this dimension's own words.
+/// The three levels `:table-render` takes — **and the `空格 t o|b|f` menu's own
+/// three lines**, read from the one entry each (2026-10-07: 「這樣的好處是文案寫
+/// 一份就夠了。目前快捷鍵的文案比命令+參數的文案更好」). The key and the
+/// argument do the same thing, so a reader who has read one of them has read
+/// the other, and there is no second wording to keep true.
 const TABLE_LEVELS: &[Word] = &[
-    Word { name: "off", help: "cmd.table.off", needs: &[] },
-    Word { name: "basic", help: "cmd.table.basic", needs: &[] },
-    Word { name: "full", help: "cmd.table.full", needs: &[] },
+    Word { name: "off", help: "hint.table.back-to-prose", needs: &[] },
+    Word { name: "basic", help: "hint.table.operate-it", needs: &[] },
+    Word { name: "full", help: "hint.table.draw-it", needs: &[] },
 ];
 
 const RULES: &[Word] = &[
@@ -3725,13 +3733,25 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.table",
         needs: &[],
+        // **One command, one thing** (2026-10-07: 「`table`, this seems not
+        // good. I think `table off|basic|full` can be also renamed as
+        // `table-render off|basic|full` …, just like `ruby`」). `:table` is the
+        // door — walk into the table the cursor is in; how much of it is drawn
+        // is another question, and it is `:table-render`'s. Sharing one name
+        // made the panel say two things in one sentence while Enter did one.
+        params: &[],
+        build: Some(|_| Ok(Command::EnterTable)),
+    },
+    Entry {
+        name: "table-render",
+        aliases: &[],
+        help: "cmd.commands.table-render",
+        needs: &[],
         params: &[Param::Words { of: TABLE_LEVELS, default: None }],
         build: Some(|p| {
+            // The bare word reports, for the reason bare `:render` reports.
             Ok(match p.arg(0) {
-                // **The bare word is the door; a level is a level.** `:table`
-                // reads the table the cursor is in — that is what it has
-                // always meant and it is not a surface.
-                None => Command::EnterTable,
+                None => Command::ReportTableLevel,
                 Some("off") => Command::SetTableLevel(crate::editor::TableLevel::Off),
                 Some("basic") => Command::SetTableLevel(crate::editor::TableLevel::Basic),
                 _ => Command::SetTableLevel(crate::editor::TableLevel::Full),
@@ -4357,14 +4377,22 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.ruby",
         needs: &[],
+        // **注音 is something you *do* to a word**, and that reading of the
+        // name wins the whole name (2026-10-07, with `:table`): the three
+        // levels went to `:ruby-render`, so this one is only the verb.
+        params: &[],
+        build: Some(|_| Ok(Command::Ruby)),
+    },
+    Entry {
+        name: "ruby-render",
+        aliases: &[],
+        help: "cmd.commands.ruby-render",
+        needs: &[],
         params: &[Param::Words { of: RUBY_LEVELS, default: None }],
         build: Some(|p| {
-            // **The bare word annotates the selection.** It is the one level
-            // setting whose own name is also a verb — 注音 is something you
-            // *do* to a word — and that reading of it wins, which is why
-            // `:ruby` alone does not report the way `:render` does.
+            // The bare word reports, for the reason bare `:render` reports.
             Ok(match p.arg(0) {
-                None => Command::Ruby,
+                None => Command::ReportRubyLevel,
                 Some("off") => Command::SetRubyLevel(crate::editor::Render::Off),
                 Some("basic") => Command::SetRubyLevel(crate::editor::Render::Basic),
                 _ => Command::SetRubyLevel(crate::editor::Render::Full),
@@ -5157,6 +5185,14 @@ pub fn names_something(line: &str) -> Result<(), String> {
         return Err(head.to_string());
     };
     for (at, word) in words.enumerate() {
+        // **A command that declares nothing takes nothing.** The parser says
+        // so already (`CommandError::TakesNoArgument`), and this walk has to
+        // say the same, or a document can print `:table off` — a spelling the
+        // editor refuses — and be told it names something (2026-10-07, when
+        // the three levels left `:table` for `:table-render`).
+        if entry.params.is_empty() {
+            return Err(format!("{} {word}", entry.name));
+        }
         let Some(list) = entry.params.get(at).and_then(Param::words) else {
             return Ok(());
         };
@@ -6371,31 +6407,26 @@ mod tests {
             COMMANDS.len(),
             "and every one of them is still findable"
         );
-        // One name, not three: `:ruby-on` and `:ruby-off` were the setting
-        // wearing the verb's name, and they are now words `:ruby` takes — and
-        // a finished word says what it takes, so they are listed under it.
-        // The three levels come first because they are the setting; the
-        // dialects after, because they are overrides of it (#283).
+        // One name, one thing: `:ruby-on` and `:ruby-off` were the setting
+        // wearing the verb's name (#283), and the three levels that replaced
+        // them wore it too until 2026-10-07 — `:ruby` is the verb alone now,
+        // and 排多少 is `:ruby-render`'s, which says its own three words.
         let ruby: Vec<String> = complete("ruby").iter().map(Choice::written).collect();
         assert_eq!(
             ruby,
-            [
-                "ruby",
-                "ruby-auto",
-                "ruby-html",
-                "ruby-typst",
-                "ruby-format",
-                "ruby off",
-                "ruby basic",
-                "ruby full",
-            ]
+            ["ruby", "ruby-render", "ruby-auto", "ruby-html", "ruby-typst", "ruby-format"]
+        );
+        let render: Vec<String> = complete("ruby-render").iter().map(Choice::written).collect();
+        assert_eq!(
+            render,
+            ["ruby-render", "ruby-render off", "ruby-render basic", "ruby-render full"]
         );
         // Half a word narrows to the one family, and a family with nothing
         // to choose against opens (#369).
         let rub: Vec<String> = complete("rub").iter().map(Choice::written).collect();
         assert_eq!(
             rub,
-            ["ruby", "ruby-auto", "ruby-html", "ruby-typst", "ruby-format"]
+            ["ruby", "ruby-render", "ruby-auto", "ruby-html", "ruby-typst", "ruby-format"]
         );
         // The words a finished command takes, under the command itself.
         let format: Vec<String> = complete("ruby-format").iter().map(Choice::written).collect();
@@ -6567,10 +6598,7 @@ mod tests {
 
         // A parent command is not a mechanism of its own — its subcommands are
         // simply the words it takes, and they go as deep as they like.
-        assert_eq!(
-            words("ruby "),
-            ["off", "basic", "full"]
-        );
+        assert_eq!(words("ruby-render "), ["off", "basic", "full"]);
         assert_eq!(words("ruby-html "), ["on", "off"]);
 
         // Where the word being completed starts, so a completion replaces it

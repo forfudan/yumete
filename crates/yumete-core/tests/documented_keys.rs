@@ -240,7 +240,7 @@ fn every_command_the_documents_print_is_a_command_the_editor_has() {
                 continue;
             }
             // The words below the head are checked only as far as they are
-            // written out. `:ruby full/off`, `:view-wrap 24`, `:e 第三章.md` and
+            // written out. `:ruby-render full/off`, `:view-wrap 24`, `:e 第三章.md` and
             // `:run <名字>` all say「一個什麼」rather than naming one, and a
             // placeholder is not a word this table could ever know.
             let mut line_to_ask = String::from(head);

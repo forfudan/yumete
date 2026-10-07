@@ -1168,7 +1168,21 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableLevel(level) => {
-                self.set_table_level(level);
+                // The same body `空格 t o|b|f` runs: the keys are this command
+                // with its argument already typed.
+                self.ask_for_table_level(level);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ReportTableLevel => {
+                // **The three 「already …」 sentences are the report.** Each
+                // one already says which level this is and which keys the
+                // other two are on — 「已經是基本表格了——t f 完整，t t 全窗，
+                // t o 源碼」 — so asking 「which am I now」 wants exactly them.
+                self.status = match self.table_level {
+                    TableLevel::Off => say!("table.already-off"),
+                    TableLevel::Basic => say!("table.already-operated"),
+                    TableLevel::Full => say!("table.already-drawn"),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::ReportIndent => {
@@ -1182,11 +1196,11 @@ impl Editor {
             }
             Command::SetRubyLevel(how) => {
                 self.set_ruby_level(how);
-                self.status = match self.ruby_level() {
-                    Render::Off => say!("ruby.level-off"),
-                    Render::Basic => say!("ruby.level-basic"),
-                    Render::Full => say!("ruby.level-full"),
-                };
+                self.status = self.ruby_level_report();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ReportRubyLevel => {
+                self.status = self.ruby_level_report();
                 Ok(CommandOutcome::Continue)
             }
             Command::SetWheelStep(step) => {

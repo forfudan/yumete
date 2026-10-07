@@ -19904,6 +19904,33 @@ and repeatedly ask even when alignment is free of charge」。
 了。加進去是 94 格假的不一樣。而**「先白畫一幀」補不得**——試過，`多選區` 那張金樣當場
 變了（`main.rs` 的 `fit_the_page` 上面那一段）。要驗就在測試裏自己交一個 `set_page_span`。
 
+## 5.99 一個命令只做一件事：`:table-render` / `:ruby-render`（2026-10-07 定）
+
+`:table` 和 `:ruby` 各兼着兩件事：裸命令是一個動作（走進表格／給這裏注音），加參數
+是一個級別。判詞：
+
+> `table`, this seems not good. I think `table off|basic|full` can be also renamed as
+> `table-render off|basic|full`, just like `ruby`.
+
+於是三個級別各搬到自己的命令上，裸命令只剩那個動作，裸 `:table-render` / `:ruby-render`
+**報現在是哪一檔**（同裸 `:render`）。`:table off` 這種舊拼法不再默默生效——`:table` 現在
+`params: &[]`，解析器照 `TakesNoArgument` 報「table 後面不跟東西——「off」多了」。
+
+**快捷鍵是命令加參數的語法糖**（同日定的第二件）：
+
+> 如果他們確實等價，其實可以讓他們關聯起來，也就是說快捷鍵就是命令+參數的語法糖。
+> 這樣的好處是文案寫一份就夠了。目前快捷鍵的文案比命令+參數的文案更好。
+
+`空格 t o|b|f` 與 `:table-render off|basic|full` 從前是兩段差不多的代碼，而差的那兩處
+都是意外：**鍵**會走進格子並對準一格（命令不會），**命令**會把「這一份不當表格」記下來
+（#380，鍵不會）。兩邊都對，所以合成 `Editor::ask_for_table_level` 一支，兩邊都叫它。
+文案同理只留一份：`TABLE_LEVELS` 三個詞的說明直接指 `hint.table.*`——空格選單那三行——
+`cmd.table.off/basic/full` 刪了。
+
+**連帶一處**：`command::names_something` 從前對「這個命令一個參數都沒聲明」答 `Ok`，於是
+手冊可以印 `:table off` 而測試說它名得着東西。現在空的 `params` 照 `TakesNoArgument` 答
+`Err`，與解析器同口徑。
+
 ## 5.80 一個 vim 用戶試用下來的十三條（2026-10-05 逐條議定）
 
 一位用 vim 的朋友從頭試了一遍，提了十三條。2026-10-05 **逐條議過，每一處細節都問到底**，
