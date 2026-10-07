@@ -1259,10 +1259,10 @@ fn a_command_says_what_it_is_waiting_for() {
     assert!(!ed.hanging_punctuation(), "{}", ed.status());
     let said = ed.status().to_string();
     assert!(said.contains("竪排") && said.contains("邊欄不是 never"), "{said}");
-    assert!(said.contains("force"), "{said}");
+    assert!(said.contains('!'), "{said}");
 
-    // …and `force` brings the prerequisites about, in one line.
-    ed.execute(":view-hanging on force").unwrap();
+    // …and the bang brings the prerequisites about, in one line.
+    ed.execute(":view-hanging! on").unwrap();
     assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
     assert!(ed.margin().shown());
     assert!(ed.hanging_punctuation(), "{}", ed.status());
@@ -8485,7 +8485,7 @@ fn simplified_to_traditional_is_handed_to_opencc() {
 #[test]
 fn a_pair_opencc_cannot_do_is_refused_rather_than_attempted() {
     let mut ed = typed("なにか\n");
-    for line in ["convert jp s", "convert c g", "convert s s", "convert s t force"] {
+    for line in ["convert jp s", "convert c g", "convert s s", "convert! s t"] {
         assert!(ed.execute(line).is_ok(), "{line}");
         assert!(
             ed.take_shell_request().is_none(),
@@ -8500,12 +8500,11 @@ fn a_pair_opencc_cannot_do_is_refused_rather_than_attempted() {
     assert!(ed.execute("convert s zh").is_err());
 }
 
-/// `force` is stripped by [`Editor::execute`] before the parser sees it —
-/// it is the editor-wide 「do it anyway」 suffix — so `:convert … force`
-/// reached the command with the flag already gone and quietly ran the
-/// character-only config (#241).
+/// **`:convert!` 連詞一起換**（#241；2026-10-07 從第三個參數 `force` 收進
+/// 那一下 `!`）。從前那個詞是 [`Editor::execute`] 在解析之前無條件削掉的，於是
+/// 它到不了這條命令手上，默默跑了只換字的那一套。
 #[test]
-fn convert_force_survives_the_suffix_that_every_command_shares() {
+fn convert_with_a_bang_changes_the_words_too() {
     // Warning: `:convert` hands the work to **opencc**, and says how to install it
     // instead when it is not there — so with no opencc there is no shell
     // request to look at, and this asserts nothing. Both CI Linux runners and
@@ -8515,7 +8514,7 @@ fn convert_force_survives_the_suffix_that_every_command_shares() {
         return;
     }
     let mut ed = typed("内存不足\n");
-    assert!(ed.execute("convert s tw force").is_ok());
+    assert!(ed.execute("convert! s tw").is_ok());
     let asked = ed.take_shell_request().expect("opencc to run");
     assert!(asked.line.ends_with("-c s2twp.json"), "{}", asked.line);
 
@@ -8536,7 +8535,7 @@ fn convert_on_its_own_says_what_it_can_do() {
     for side in ["s", "tw", "hk", "jp", "c", "g"] {
         assert!(out.contains(side), "{side} missing from:\n{out}");
     }
-    assert!(out.contains("force"), "and where force works:\n{out}");
+    assert!(out.contains('!'), "and where the bang works:\n{out}");
     // 日本新字体 has no way back to 簡體, and the page must not offer one.
     let jp = out
         .lines()
@@ -22673,8 +22672,8 @@ fn the_word_force_belongs_to_the_argument_when_there_is_no_prerequisite() {
     // …而補前提那一路一個字都沒變：橫排的頁面上，`force` 仍舊把竪排一併打開。
     let mut ed = typed("那年冬天。\n");
     ed.execute("view-hanging on").unwrap();
-    assert!(ed.status().contains("force"), "先報缺前提：{}", ed.status());
-    ed.execute("view-hanging on force").unwrap();
+    assert!(ed.status().contains('!'), "先報缺前提：{}", ed.status());
+    ed.execute("view-hanging! on").unwrap();
     assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }

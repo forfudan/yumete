@@ -1332,7 +1332,46 @@ const FORCEABLE: &[&str] = &[
     "export!",
     "replace!",
     "shot!",
+    // **前提一併補上，也是這一下**（2026-10-07 定）。從前它是行末一個 `force`
+    // 字，而那個詞吃掉了別人的參數（`:open force` 開的是挑選器）。判詞：
+    // 「I think that force should not be a parameter but should be a part of the
+    // command function.」兩個意思——「改過也要退」與「前提一併補上」——是同一個
+    // 手勢：別問了，做。所以它們共用同一個 `!`，倉裏本來就有的那一個。
+    //
+    // 這一串就是全樹聲明了 `needs:` 的那些（`:convert!` 另算，它那個 `force` 說
+    // 的是「做大的那一種改寫」）。
+    "convert!",
+    "yume-chaifen!",
+    "yume-commit!",
+    "yume-panel!",
+    "yume-preedit!",
+    "yume-menu-size!",
+    "yume-autocompletion!",
+    "view-bands!",
+    "view-sentence!",
+    "view-hanging!",
+    "view-meter!",
+    "table-check!",
+    "table-rules!",
+    "table-sort!",
+    "table-detail!",
+    "table-numbers!",
+    "table-header!",
+    "table-schema!",
+    "table-jump!",
 ];
+
+/// **這一行末尾那個 `!` 是說給命令聽的嗎**（2026-10-07）。
+///
+/// [`Editor::execute`] 要在解析**之前**知道這件事：它先算前提夠不夠，不夠而人
+/// 又說了「做」，就把前提一併補上再跑。
+pub fn forced(line: &str) -> bool {
+    let line = line.strip_prefix(':').unwrap_or(line);
+    let Some(head) = line.split_whitespace().next() else {
+        return false;
+    };
+    head.ends_with('!') && entry_named(head).is_some()
+}
 
 /// The banged spelling of `name`, if the command takes a bang at all.
 fn forceable(name: &str) -> Option<&'static str> {
@@ -2273,11 +2312,6 @@ const RELOAD_WHAT: &[Word] = &[
     Word { name: "config", help: "cmd.reload.config", needs: &[] },
 ];
 
-/// The word that says 「yes, the whole file, I mean it」.
-const FORCE: &[Word] = &[
-    Word { name: "force", help: "cmd.convert.force", needs: &[] },
-];
-
 const OPENCC: &[Word] = &[
     Word {
         name: "install",
@@ -2706,12 +2740,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.convert",
         needs: &[],
-        params: &[Param::Words { of: SIDES, default: None }, Param::Words { of: SIDES, default: None }, Param::Words { of: FORCE, default: None }],
+        params: &[Param::Words { of: SIDES, default: None }, Param::Words { of: SIDES, default: None }],
         build: Some(|p| {
-            // 簡繁 (Feature #241). Two sides and an optional `force`: the pair
-            // names an opencc config (`s tw` is `s2tw`), so what the editor
-            // runs is readable from what was typed. With neither, it explains
-            // which ways it can go.
+            // 簡繁 (Feature #241). Two sides, and the bang says 「連詞一起換」:
+            // the pair names an opencc config (`s tw` is `s2tw`), so what the
+            // editor runs is readable from what was typed. With neither, it
+            // explains which ways it can go.
+            //
+            // **那個 `force` 從前是第三個參數**（2026-10-07 收進 `!`）。它的壞處
+            // 在別處看得見：`execute` 為了讓前提那一路也認得這個詞，把行末的
+            // ` force` 無條件削掉，於是 `:open force` 開的是挑選器。
             let (Some(from), Some(to)) = (p.arg(0), p.arg(1)) else {
                 return Ok(Command::Convert(ConvertAsk::Explain));
             };
@@ -2719,7 +2757,7 @@ pub const COMMANDS: &[Entry] = &[
                 (Some(from), Some(to)) => Ok(Command::Convert(ConvertAsk::Run {
                     from,
                     to,
-                    force: p.arg(2).is_some(),
+                    force: p.force,
                 })),
                 (None, _) => Err(CommandError::InvalidArgument {
                     command: "convert",

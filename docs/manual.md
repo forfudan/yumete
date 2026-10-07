@@ -1610,10 +1610,10 @@ line will tell you itself.
 - `:check-merge` — list the merge conflicts in this file
 - `:check-punct` — check 標點: half-width commas and periods in Chinese, `...`, and a 「」（）《》 opened and never closed
 - `:convert` — 簡繁 conversion, run by opencc — :convert lists the pairs it can do
-  - `s` t｜tw｜hk｜c｜g [force] — simplified（说 为 内 吴 里 发 台）
+  - `s` t｜tw｜hk｜c｜g — simplified（说 为 内 吴 里 发 台）
   - `t` s｜tw｜hk｜jp｜c｜g — opencc 繁體, <!-- verbatim -->港臺字形（說 爲 內 吳 裏 髮 臺）<!-- verbatim -->
-  - `tw` s｜t｜c｜g [force] — <!-- verbatim -->臺灣正體（說 為 內 吳 裡 髮 臺）<!-- verbatim -->
-  - `hk` s｜t｜c｜g [force] — 香港繁體（説 爲 内 吴 裏 髮 台）
+  - `tw` s｜t｜c｜g — <!-- verbatim -->臺灣正體（說 為 內 吳 裡 髮 臺）<!-- verbatim -->
+  - `hk` s｜t｜c｜g — 香港繁體（説 爲 内 吴 裏 髮 台）
   - `jp` t｜c｜g — Japanese 新字体（説 爲 内 呉 裏 髪 台）
   - `c` s｜t｜tw｜hk｜jp｜g — 大陸通規繁體（説 爲 内 吴 裏 髮 臺）
   - `g` s｜t｜tw｜hk｜jp｜c — <!-- verbatim -->古籍通規繁體（説 爲 内 吳 裏 髮 臺）<!-- verbatim -->
@@ -5654,11 +5654,11 @@ characters will not go back —
 <!-- verbatim -->通規把 蝨 併進 虱、把 嶽 併進 岳<!-- verbatim -->, and a 虱 has no one place it
 came from — and those are left as they stand rather than guessed at.
 
-**`force` changes words, not characters.** A few of opencc's configurations carry a `p`
-(`s2twp`, `tw2sp`) and convert the vocabulary along with it: 内存 becomes 記憶體, 鼠標
+**The bang changes words, not characters.** A few of opencc's configurations carry a
+`p` (`s2twp`, `tw2sp`) and convert the vocabulary along with it: 内存 becomes 記憶體, 鼠標
 becomes 滑鼠. That is a different thing from everything above — it changes the 字 count,
-and nothing reverses it — so it has to be asked for: `:convert s tw force`. For the
-pairs with no `p` configuration, `force` is refused outright.
+and nothing reverses it — so it has to be asked for: `:convert! s tw`. For the pairs with
+no `p` configuration, the bang is refused outright.
 
 **To take it back, `u`.** One conversion is one undo, and the whole manuscript comes
 back together. **Never use the reverse direction as an undo**: `s t` and then
@@ -5900,13 +5900,15 @@ and `:table-rules` want table mode first; `:yume-chaifen` wants a 碼表 loaded.
 conditions are **written next to the command**, so all three places can say them:
 
 - the entry in the menu is labelled ⟨needs vertical layout, a margin (not never);
-  add force at the end⟩;
+  add `!` to the name⟩;
 - pressing it does not quietly set a flag nobody reads either; it says "not yet —
   this needs vertical layout, a margin (not never)";
-- **add `force` at the end** and they come on with it: `:view-hanging on force`
+- **add `!` to the command's name** and they come on with it: `:view-hanging! on`
   equals `:layout vertical` + `:view-margin dense` + `:view-hanging on`.
 
-Without `force` **nothing moves** — a small command has no business flipping the
+It is the same bang as `:w!` and `:q!`, and it says the same thing: do it anyway.
+
+Without it **nothing moves** — a small command has no business flipping the
 whole page to vertical; you can see what is missing, and whether to change it is
 yours.
 
