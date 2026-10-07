@@ -65,7 +65,7 @@ pub struct Said {
     ///
     /// 不是錯——存盤照舊落地，而且落在**磁碟上此刻那一份**上（見
     /// [`crate::panel::Panel::save`]）。說出來是因為畫面上那幾個值可能已經不是
-    /// 檔裏寫的了，該按一下 `:reload config` 或者重開一次面板。
+    /// 檔裏寫的了，該按一下 `:reload-config` 或者重開一次面板。
     pub changed_underneath: Vec<String>,
 }
 

@@ -25,7 +25,7 @@
 //! # `:w`，不是即時生效
 //!
 //! 2026-09-23 定，原話：「需要 :w，即時生效不好，改錯了都沒辦法反悔。」所以改動
-//! 攢在 [`Sheet::edits`] 裏，存盤那一下纔落到檔上，落完由 `:reload config` 那條
+//! 攢在 [`Sheet::edits`] 裏，存盤那一下纔落到檔上，落完由 `:reload-config` 那條
 //! 同一支推進編輯器。
 
 use std::collections::BTreeMap;

@@ -2224,7 +2224,7 @@ and by default the file's suffix decides.
 | `:ruby-format html` | rewrite every reading in the file as HTML |
 | `:ruby-format typst` | rewrite as Typst |
 | `:ruby-auto` | write the readings in by word (see 5.6) |
-| `:ruby-auto rare` | annotate only the rare characters |
+| `:ruby-auto-rare` | annotate only the rare characters |
 
 **Rewriting skips code**: ruby markup inside a ``` fence, and the front matter at the
 head of the file, are left exactly as they are. A book about readings is full of
@@ -2305,7 +2305,7 @@ overwritten by this command.
 — 爲, 難 (`nán`/`nàn`), 好, 教, 中 — always gets the commoner one, and you may have to
 fix it by hand. Characters that differ in spelling (了, 行, 和, 長) have no such problem.
 
-**What you actually want is probably `:ruby-auto rare`.** A novel with a reading over
+**What you actually want is probably `:ruby-auto-rare`.** A novel with a reading over
 every character is a textbook, not a novel; a novel with readings only on the few
 genuinely rare characters is one you can finish. `rare` annotates only characters that
 **none of the four current character sets contain** — the mainland 通用規範, its
@@ -2313,7 +2313,7 @@ traditional counterpart, Taiwan, Hong Kong; if any one of the four has it, it is
 annotated. Only what is in the old-book character lists and in none of the four gets a
 reading. Which is to say: the ones a reader really will stall on.
 
-    :ruby-auto rare        the whole manuscript, rare characters only
+    :ruby-auto-rare        the whole manuscript, rare characters only
     :ruby-auto             the selection, every word
 
 The readings come from 宇夢's **拆分表** (the one `:yume-scheme` loads). With none
@@ -5597,7 +5597,7 @@ block it is in — the block is the answer to 「will a font have it」.
 
 With no scheme loaded it says only 「no 字集 data」 and does not pretend to have looked.
 
-A character that is 「only in 古籍」 is **not reported** — that is `:ruby-auto rare`'s job
+A character that is 「only in 古籍」 is **not reported** — that is `:ruby-auto-rare`'s job
 (it rubies the rare ones), 古籍 is a 字集 of its own, and a font will usually have it.
 What is reported here is what none of the four has.
 
@@ -5619,7 +5619,7 @@ for fifteen years. So `:convert` goes and runs `opencc`: writing another one wou
 produce a worse OpenCC, and a manuscript has to trust it.
 
 With opencc not installed it says in one line how to install it and changes nothing.
-`:convert-opencc install` will run `brew install opencc` for you on macOS; on other
+`:convert-opencc-install` will run `brew install opencc` for you on macOS; on other
 systems it only prints the command, because that needs sudo, and a full-screen editor is
 not the place to be asked for your password. Once it is installed, opencc has to be on
 `PATH` for `:convert` to find it.
@@ -5961,7 +5961,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:help` [*section*] | The keys and the commands, opened as a file you can read and search: `chinese`, `vertical`, `table`, `commands` |
 | `:tutor` | A lesson: the text is copied into a file of your own, and you learn by editing it |
 | `:markdown-footnote` | Insert a footnote: the next free number, the note at the foot opened with it, the cursor waiting in the note |
-| `:markdown-footnote inline` | An inline note `^[…]`, the cursor inside the brackets |
+| `:markdown-footnote-inline` | An inline note `^[…]`, the cursor inside the brackets |
 | `:format` | Format this file the way the config says for its kind |
 | `:run` *name* | Run the command this kind of file names for itself |
 | `:view-typewriter` [`on`｜`off`] | Typewriter: the cursor's row stays in the middle of the screen and the paper moves up |
@@ -6045,7 +6045,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:yume-menu-size` [*1–9*] | How many candidates a page of the panel holds (6 out of the box, the same as 宇浩) |
 | `:yume-autocompletion` | Autocompletion: candidates before the code is finished |
 | `:ruby` and the rest | See 5.4 and 5.5 |
-| `:ruby-auto` `:ruby-auto rare` | Write the readings in by word (the whole file, or the selection); `rare` annotates only the rare characters |
+| `:ruby-auto` `:ruby-auto-rare` | Write the readings in by word (the whole file, or the selection); `rare` annotates only the rare characters |
 
 ---
 ## 9. Configuration
@@ -6103,7 +6103,7 @@ said it looks like a dead key.
 
 Warning: **saving does not take effect on the spot** (settled 2026-09-23: "taking effect
 immediately is bad; get it wrong and there is no way back"). After saving press
-**`:reload config`**, or wait for the next start.
+**`:reload-config`**, or wait for the next start.
 
 Warning: **it changes the line you changed and not one other byte.** The comments you
 wrote, the order you put things in, the blank lines you left are all still there — that
