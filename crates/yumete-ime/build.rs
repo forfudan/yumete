@@ -1,30 +1,36 @@
-//! Put 靈明's 碼表 into the binary at build time — the installed one when this
-//! machine has it, and 靈明精華版 from this repository when it does not.
+//! Put 靈明精華版 into the binary at build time — **always the same table**,
+//! whatever this machine happens to have installed.
 //!
-//! **Why the full table is not in the repository.** It is 3.7 MB of compiled
-//! binary, and a binary blob does not delta: committing it would take the
-//! repository from one megabyte to four, and another four with every refresh,
-//! for a file that is *generated* from the 宇浩 source tree and is not source.
-//! So the full table is read from wherever it is already installed, at the
-//! moment the binary is built, and never stored here.
+//! **Why not the installed one.** It used to prefer the full `ling.ytab` when
+//! the build machine had it, and fall back to 精華版 when it did not. That
+//! made the binary a function of the machine: 2026-10-07 判詞——「編譯不是跟着
+//! 電腦走的！！！編譯應該是穩定的！！！爲什麽必須帶靈明精華版是爲了壓縮二進制
+//! 尺寸！！！」 On the author's own machine it embedded 3.7 MB that **nothing
+//! ever read**: at run time an installed 靈明 wins over whichever table is in
+//! the binary (`ImeSession::new`), so the full copy was pure weight. Now CI
+//! (homebrew) and a developer's build carry the same 0.24 MB.
 //!
-//! **What stands in when it is not there.** 靈明精華版 —
-//! `schemes/lingming_essential.ytab`, 0.25 MB: every character in CJK 基本區
-//! and 擴展A plus the 字根區 and the seven 字集, all sources, the 簡碼 — but no
-//! 詞 (recipe and reasoning in `scripts/make_jinghua.py`). Warning: **It is not in
-//! this repository either**: pure data tables are a build input, never a
-//! tracked file. A release build downloads it from `forfudan/yume-release`
-//! (public, no token); `scripts/build.sh` installs the *full* table instead,
-//! which is better and is what a developer's build carries.
+//! **Where it comes from.** `yume` generates it and publishes it; this build
+//! downloads it once and keeps it. 精華版 is every character in CJK 基本區 and
+//! 擴展A plus the 字根區 and the seven 字集, all sources, the 簡碼 — but no 詞
+//! (recipe in `scripts/make_jinghua.py`, which runs in the *yume* tree). Warning:
+//! **It is not in this repository**: a pure data table is a build input, never
+//! a tracked file — a binary blob does not delta, so committing it would make
+//! the repository fatter with every refresh.
 //!
-//! It is the floor, never the ceiling: the full table wins when both are
-//! there, and at run time an installed 靈明 wins over whichever one is in the
-//! binary (`ImeSession::new`). **A machine with neither builds anyway**, and
-//! says so honestly rather than failing.
+//! **The cache is a `YUMETE_BUILTIN_DIR` this build fills in itself** — same
+//! layout (`schemes/`, `data/`, `VERSION`), so there is one way to read these
+//! files and not two. Delete it to take a newer 精華版; nothing expires on its
+//! own, because a build that quietly changes what it embeds is the thing this
+//! module is here to stop.
 //!
-//! `YUMETE_BUILTIN_DIR` says to look **only** there, for a release build that
-//! wants the tables from somewhere specific — an empty directory therefore
-//! forces the bundled 精華版, which is how the fallback is tested.
+//! `YUMETE_BUILTIN_DIR` still says to look **only** there, for a release build
+//! that wants the tables from somewhere specific — and it is checked before
+//! the cache, so it never reaches the network.
+//!
+//! **A machine with neither builds anyway**, and says so honestly rather than
+//! failing: offline with an empty cache means no table in the binary, which is
+//! what `cargo build` on a disconnected machine has always done.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -32,19 +38,17 @@ use std::path::{Path, PathBuf};
 fn main() {
     println!("cargo:rerun-if-env-changed=YUMETE_BUILTIN_DIR");
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
-    // Where `yume_core::data_manifest` says they live: a scheme's own table
-    // under `schemes/`, the shared 符號表 under `data/`. The old flat names are
-    // still looked for, so a machine whose data directory predates yume's
-    // split still builds with 靈明 in it.
-    let full = find("schemes/ling.ytab").or_else(|| find("ling.ytab"));
-    let jinghua = full.is_none();
-    let table = match &full {
-        Some(path) => Some(path.clone()),
-        None => find("schemes/lingming_essential.ytab"),
-    };
+    // **精華版，永遠**——裝好的那份完整表這裏不看，理由在模塊開頭。沒有就去取
+    // 一次，取進一個自己填的 `YUMETE_BUILTIN_DIR`（同一套 `schemes/`＋`data/`
+    // 的擺法），於是下面兩支 `find` 一個字都不用改。
+    if std::env::var_os("YUMETE_BUILTIN_DIR").is_none() && find(JINGHUA).is_none() {
+        fetch_the_builtin();
+    }
+    let table = find(JINGHUA);
+    let jinghua = true;
     // The 符號表 is the same file either way — 精華版's is cut from the same
     // 15,716 rows — so there is no mixture to worry about.
-    let symbols = find("data/symbols.ytab").or_else(|| find("symbols.ytab"));
+    let symbols = find(SYMBOLS).or_else(|| find("symbols.ytab"));
     let mut body = String::new();
     body.push_str(&declare("BUILTIN_TABLE", table.as_deref()));
     body.push_str(&declare("BUILTIN_SYMBOLS", symbols.as_deref()));
@@ -194,6 +198,61 @@ fn watch(path: &Path) {
 /// the data, so the first run embeds 靈明精華版 and the second must notice the
 /// full tables. Otherwise the binary keeps saying 「出廠自帶 精華版」 on a
 /// machine that has them, until somebody runs `cargo clean`.
+/// 出廠自帶那幾個檔，在 `yume-release` 上的名字與在這裏的擺法。
+const JINGHUA: &str = "schemes/lingming_essential.ytab";
+const SYMBOLS: &str = "data/symbols.ytab";
+const RELEASE: &str =
+    "https://github.com/forfudan/yume-release/releases/download/yumete-data";
+
+/// 取一次 精華版，放進快取。
+///
+/// **一次，而且三個檔要麼齊要麼不算**：`VERSION` 缺了 `:yume-where` 那一行就答
+/// 不出版本，符號表缺了候選欄就沒有標點——半份比沒有更難查。取不到（離線、沒有
+/// `curl`）就安安靜靜回去，二進制不帶表，照舊出聲。
+fn fetch_the_builtin() {
+    let Some(cache) = cache_dir() else { return };
+    for dir in ["schemes", "data"] {
+        if std::fs::create_dir_all(cache.join(dir)).is_err() {
+            return;
+        }
+    }
+    let mut got = Vec::new();
+    for (asset, into) in [
+        ("lingming_essential.ytab", JINGHUA),
+        ("symbols.ytab", SYMBOLS),
+        ("VERSION", "VERSION"),
+    ] {
+        let to = cache.join(into);
+        let ok = std::process::Command::new("curl")
+            .args(["-fsSL", "--max-time", "60", "-o"])
+            .arg(&to)
+            .arg(format!("{RELEASE}/{asset}"))
+            .status()
+            .is_ok_and(|code| code.success())
+            && to.metadata().is_ok_and(|m| m.len() > 0);
+        if !ok {
+            // 半份不留：下一趟編譯要麼乾淨地再取一次，要麼乾淨地沒有表。
+            for one in got {
+                let _ = std::fs::remove_file(cache.join(one));
+            }
+            let _ = std::fs::remove_file(&to);
+            println!("cargo:warning=取不到出廠自帶的碼表（{RELEASE}/{asset}），這一份二進制不帶表");
+            return;
+        }
+        got.push(into);
+    }
+}
+
+/// 快取擺在哪：`$XDG_CACHE_HOME/yumete/builtin`，沒有就 `~/.cache/…`。
+///
+/// 放在家目錄而不是 `target/`，因為 `cargo clean` 不該讓人重下一遍。
+fn cache_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
+    Some(base.join("yumete").join("builtin"))
+}
+
 fn find(file: &str) -> Option<PathBuf> {
     // Set, and it is the whole list: a release build that names a directory
     // means *that* directory, and silently reaching past it to whatever the
@@ -214,6 +273,10 @@ fn find(file: &str) -> Option<PathBuf> {
             PathBuf::from(&home).join("Library/Application Support/yumete"),
         );
     }
+    // 自己填的那一份排在最後：裝好的和取回來的是同一個檔（`scripts/build.sh`
+    // 印的那幾行 curl 就是往裝的地方放），誰先誰後都一樣，而排後面意味着這一支
+    // 的老行為一個字都沒變。
+    dirs.extend(cache_dir());
     let mut found = None;
     for path in dirs.into_iter().map(|dir| dir.join(file)) {
         watch(&path);
