@@ -749,6 +749,13 @@ pub fn run(
             // the screen, and this is the only place that knows which those
             // are. Last frame's, necessarily — it is settled while drawing.
             editor.set_page_top(viewport[editor.live_pane().min(1)].top.line);
+            // **挑選器的「一頁」也是這裏量的**（2026-10-07）：那扇窗的高度只有
+            // 畫的那一支算得出來，而 `PageUp`/`PageDown` 跑在核心裏。同上一句，
+            // 上一幀的答案——窗口沒改大小的話兩幀一樣。
+            editor.note_picker_rows(picker_depth(picker_height(Rect {
+                height: areas.status.y.max(1),
+                ..Rect::new(0, 0, size.width, size.height)
+            })));
             // **…以及這一頁真畫了哪一段**（#406）：`gw` 的落腳點只算屏幕上的，而
             // 「屏幕上」是畫的那一支上一幀量出來的。同上一句，上一幀的答案。
             if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
@@ -8924,6 +8931,25 @@ fn stand_back(frame: &mut Frame, ink: crate::theme::Palette, area: Rect) {
     }
 }
 
+/// 挑選器那扇窗佔幾行。`area` 是它能用的那一塊（頁腳以上）。
+///
+/// **窗口的 3/4 高**，見 [`draw_picker`] 裏那一段。畫的那一支和主循環各要一次
+/// ——主循環要它是為了告訴核心「翻一頁」是幾條——所以它在這裏，不在那個函數
+/// 肚子裏。
+fn picker_height(area: Rect) -> u16 {
+    ((area.height * 3 / 4).max(10) + 3).min(area.height).max(4)
+}
+
+/// 名單那一列有幾行：扣掉上下邊框、查詢框、橫線和腳注。
+///
+/// 矮下去的時候橫線和腳注一樣樣讓（`rows >= 6`／`rows >= 5`），見
+/// [`draw_picker`]——名單一行都不讓。
+fn picker_depth(rows: u16) -> usize {
+    let ruled = usize::from(rows >= 6);
+    let footed = usize::from(rows >= 5);
+    (rows as usize).saturating_sub(3 + ruled + footed).max(1)
+}
+
 fn draw_picker(
     frame: &mut Frame,
     editor: &Editor,
@@ -9002,7 +9028,7 @@ fn draw_picker(
     // Warning: **寬度那個上限從 120 提到 160**：4/5 在 160 欄的終端上是 128，從前被那個
     // 上限砍成 120，看着像「沒到 4/5」。上限本身留着——超寬顯示器上一條 200 欄的
     // 名字要眼睛橫着掃一趟。
-    let rows = ((area.height * 3 / 4).max(10) + 3).min(area.height).max(4);
+    let rows = picker_height(area);
     let wide = (area.width * 4 / 5).clamp(24, 160).min(area.width.saturating_sub(2));
     let box_ = crate::chrome::place(area, (wide, rows), crate::chrome::Anchor::Centre)?;
     // Two fifths for the names, the rest for the preview — and a window too
@@ -9037,11 +9063,18 @@ fn draw_picker(
     // 畫到下邊框上；五行的時候那兩句疊在同一行，短的蓋不住長的的尾巴。
     let ruled = rows >= 6;
     let footed = rows >= 5;
-    let deep = (rows as usize).saturating_sub(3 + usize::from(ruled) + usize::from(footed));
+    let deep = picker_depth(rows);
     let list_at = left.y + 2 + u16::from(ruled);
-    let first = at
-        .saturating_sub(deep.saturating_sub(1))
-        .min(items.len().saturating_sub(deep.min(items.len())));
+    // **一頁一頁地讓**（helix 的 `Picker::render`：`cursor - cursor % rows`）。
+    //
+    // Warning: 從前是 `at - (deep - 1)`，也就是**高亮釘在最後一行**：往下走過一屏之
+    // 後，被選中的那一條永遠貼在名單的底邊，它後面還有什麼一條都看不見；往回
+    // 走也一樣，名單在底下那一行上換內容。挑選器是「看一眼周圍再決定」的面板，
+    // 而那個擺法把「周圍」砍掉了一半（2026-10-07 審出來的）。
+    //
+    // 一頁一頁地讓是 helix 的答案：窗口停着不動，高亮在這一頁裏走，走出去了纔
+    // 整頁翻。它還正好和 [`Picker::page`] 對上——那一支翻的就是 `deep` 條。
+    let first = at - at % deep.max(1);
     let on = Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink));
     let limit = left.x + names - 1;
     {
@@ -21002,6 +21035,35 @@ fn squeezed(text: &str) -> String {
         // matches no file, and the panel is still a panel, with the reason
         // written in it.
         assert!(text.contains(&yumete_core::say!("picker.nothing-matched")), "{text}");
+    }
+
+    /// **名單一頁一頁地讓，高亮不釘在最後一行**（2026-10-07 審出來的）。
+    ///
+    /// 從前第一行是 `at - (deep - 1)`：往下走過一屏之後高亮永遠貼着底邊，被選中
+    /// 的那一條後面還有什麼一條都看不見。helix 的擺法是 `cursor - cursor % rows`
+    /// ——窗口停着，高亮在這一頁裏走。
+    #[test]
+    fn the_pickers_list_turns_by_pages_instead_of_dragging_the_bottom_row() {
+        let root = std::env::temp_dir().join("yumete-picker-pages");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("make the fixture");
+        for n in 1..=40 {
+            std::fs::write(root.join(format!("ch{n:02}.md")), "一行\n").expect("write");
+        }
+        let mut editor = Editor::new();
+        let config = Config::default();
+        editor.open_file_picker_with("", root.clone());
+        for _ in 0..20 {
+            editor.on_key(Key::Char('j'));
+        }
+        let text = buffer_to_text(&render_with(&editor, &config, no_ime(), 80, 24));
+        assert!(text.contains("ch21.md"), "站着的那一條在上面：{text}");
+        // 二十四行的窗口上名單十四行深，高亮在第二十一條：一頁一頁地讓是
+        // 第十五到第二十八條，所以它**後面**還有七條看得見。從前這一行是
+        // 「第八到第二十一條」，高亮是最後一行，底下一條都沒有。
+        assert!(text.contains("ch28.md"), "後面那幾條也畫得出來：{text}");
+        assert!(!text.contains("ch08.md"), "前一頁不畫了：{text}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// **搜索面板矮下去的時候不許畫到邊欄的標籤行上**（2026-10-02 審出來的）。

@@ -115,6 +115,11 @@ pub struct Picker {
     /// 關掉的是兩檔，不是五個：**大小寫、繁簡、拼音照舊**。所以 `ye --files` 比
     /// `ye --grep` 還多一條——後者的大小寫是智能的，這裏一律不分。
     loose: bool,
+    /// **名單那一列有幾行**——翻一頁翻的就是這個數（2026-10-07）。
+    ///
+    /// 這個編輯器沒有 viewport（`Editor::page_lines` 那一格同理），所以畫的那一
+    /// 支每一幀量一次，告訴核心。上一幀的答案，而窗口的高度上一幀和這一幀一樣。
+    rows: usize,
 }
 
 /// Where a caret is being asked to go.
@@ -147,6 +152,8 @@ impl Picker {
             root: None,
             bonus: vec![0; count],
             loose: true,
+            // 畫之前先按過鍵的話（`--keys`、測試），一頁就是這個數。
+            rows: 10,
         }
     }
 
@@ -225,24 +232,38 @@ impl Picker {
         };
     }
 
-    /// Ten at a time, **stopping at the ends**.
+    /// **一頁就是窗口上那一頁**，繞回去（helix 的 `Picker::page_down`）。
     ///
     /// Warning: 從前它是十次 [`Self::step`]，而 `step` 是繞回去的——於是一張**短過二十
     /// 條**的名單上，`PageDown` 往回走：十二條的名單站在第六條上按下去，
     /// `(5 + 10) % 12 = 3`，高亮退到第四條（2026-10-07 審出來的）。
     ///
-    /// `j`/`k` 繞回去是對的，一張名單走到底再回頭是挑選器的老規矩；可「翻一頁」
-    /// 從來不是「走十步」——翻到頭就是頭。
+    /// 當天先改成了「十步，到頭就停」，隔一步就發現那是自作主張：helix 的那一支
+    /// 是 `move_by(completion_height)`，數目是**窗口的高度**，而且照 `% len` 繞
+    /// （它自己的註釋寫着「After the last page comes the first page」）。寫死的
+    /// 十纔是那個倒退的根子——一頁二十八行的窗口上「翻一頁」走十步，走的不是一
+    /// 頁。現在數目由 [`Self::note_rows`] 從畫的那一支來。
     pub fn page(&mut self, down: bool) {
         let count = self.matches().len();
         if count == 0 {
             return;
         }
+        let step = self.rows.max(1) % count;
         let at = self.selected();
         self.selected = match down {
-            true => (at + 10).min(count - 1),
-            false => at.saturating_sub(10),
+            true => (at + step) % count,
+            false => (at + count - step) % count,
         };
+    }
+
+    /// 告訴它名單那一列畫了幾行。畫的那一支每一幀叫一次。
+    pub fn note_rows(&mut self, rows: usize) {
+        self.rows = rows.max(1);
+    }
+
+    /// 名單那一列有幾行——畫的那一支上一幀量的。
+    pub fn rows(&self) -> usize {
+        self.rows
     }
 
     /// Whether the keys are in the query rather than in the list.
@@ -924,41 +945,53 @@ mod tests {
     }
 
 
-    /// **翻一頁不是走十步**（2026-10-07 審出來的）。
+    /// **翻一頁翻的是窗口上那一頁**（2026-10-07）。
     ///
     /// `page` 從前是十次 `step`，而 `step` 繞回去——於是短過二十條的名單上
     /// `PageDown` 往回走：十二條，站在第六條上按下去，`(5 + 10) % 12 = 3`。
+    /// 根子是那個寫死的十；數目改成窗口的高度之後，一頁裝得下整張名單的時候
+    /// 「翻一頁」就是繞回原地，而不是退四條。
     #[test]
-    fn paging_down_a_short_list_never_goes_backwards() {
+    fn a_page_is_the_window_not_ten_steps() {
         let names: Vec<String> = (1..=12).map(|n| format!("ch{n:02}.md")).collect();
         let mut picker = files(&names.iter().map(String::as_str).collect::<Vec<_>>());
+        picker.note_rows(28);
         for _ in 0..5 {
             picker.step(true);
         }
         assert_eq!(picker.selected(), 5, "站在第六條上");
+        // 二十八行的窗口裝得下十二條：`28 % 12 = 4`，往下翻一頁落在第十條。
+        // 從前寫死的十在這裏算出 `(5 + 10) % 12 = 3`，高亮**往回**跳。
         picker.page(true);
-        assert_eq!(picker.selected(), 11, "翻到底就是底，不是繞回第四條");
-        picker.page(true);
-        assert_eq!(picker.selected(), 11, "到底了就不動");
+        assert_eq!(picker.selected(), 9);
         picker.page(false);
-        assert_eq!(picker.selected(), 1, "往回也是十步");
-        picker.page(false);
-        assert_eq!(picker.selected(), 0, "翻到頂就是頂");
+        assert_eq!(picker.selected(), 5, "翻回來就是原地");
     }
 
-    /// 長名單照舊是十步，而 `j`/`k` 照舊繞回去——那是挑選器的老規矩，沒動。
+    /// 繞回去是 helix 的 `move_by`（「After the last page comes the first
+    /// page」），`j`/`k` 和 `PageUp`/`PageDown` 同一條規矩。
     #[test]
-    fn a_long_list_still_moves_ten_and_the_arrows_still_wrap() {
+    fn paging_wraps_like_the_arrows_do() {
         let names: Vec<String> = (1..=40).map(|n| format!("ch{n:02}.md")).collect();
         let mut picker = files(&names.iter().map(String::as_str).collect::<Vec<_>>());
+        picker.note_rows(15);
+        picker.page(true);
+        assert_eq!(picker.selected(), 15);
+        picker.step(false);
+        assert_eq!(picker.selected(), 14);
+        picker.page(false);
+        assert_eq!(picker.selected(), 39, "頂上再往上，繞到底");
+        picker.step(true);
+        assert_eq!(picker.selected(), 0, "`j` 照舊繞回去");
+    }
+
+    /// 窗口還沒量過（`--keys`、測試裏按鍵在畫之前）就是十，和從前一樣。
+    #[test]
+    fn a_page_before_the_first_frame_is_ten() {
+        let names: Vec<String> = (1..=40).map(|n| format!("ch{n:02}.md")).collect();
+        let mut picker = files(&names.iter().map(String::as_str).collect::<Vec<_>>());
+        assert_eq!(picker.rows(), 10);
         picker.page(true);
         assert_eq!(picker.selected(), 10);
-        picker.step(false);
-        assert_eq!(picker.selected(), 9);
-        // 頂上再往上，繞到底。
-        picker.page(false);
-        assert_eq!(picker.selected(), 0);
-        picker.step(false);
-        assert_eq!(picker.selected(), 39, "`k` 照舊繞回去");
     }
 }
