@@ -2339,7 +2339,7 @@ impl Editor {
             Key::Char('X') => self.extend_to_line_bounds(),
             // 字形變換 (§5.2.3 ②): `` `l `` 小寫, `` `u `` 大寫, `` `` `` 互換.
             // `~` and `` A-` `` are Helix's and are **unbound** here — the
-            // phrasebook catches both and points at this group.
+            // 這一組的兩個鍵都在這兒。
             // **vim 鍵位下 `` ` `` 跳標記**（2026-10-06，`:h `a`）。vim 的 `` ` `` 落在
             // 標記記下的那一格上，`'` 落在那一行上；這個編輯器的標記記的就是一格，
             // 所以兩個拼法同一支。
@@ -2450,14 +2450,17 @@ impl Editor {
                     self.find_nth_char(kind, c, count, true);
                 }
             }
-            // Nothing here does what this key does elsewhere — so say what
-            // yumete calls the thing you meant, in the place a reader is
-            // already looking. See [`Self::phrasebook`].
-            other => {
-                if let Some(said) = Self::phrasebook(other) {
-                    self.status = said;
-                }
-            }
+            // Warning: **沒綁的鍵就是沒反應**（2026-10-08 定）。這裏從前站着一本
+            // 「別的編輯器那個鍵在我們這兒叫什麼」的對照簿（`phrasebook`）：按
+            // `$` 答「行尾是 gl」、按 `D` 答「刪了不動寄存器是 A-d」。原話——
+            //
+            // > 這一類提示是多餘的。比如按了 D 之後提示應該按 alt-d。這個提示
+            // > 假設用户的意圖，這是不對的。
+            //
+            // 整本連那十一條文案一起刪了。**留着的不是這一類**：自己打開的選單
+            // （`空格`、`` ` `` 那幾張）是問出來的，不是猜出來的；「`ze` 爲無效
+            // 按鍵組合」報的是手指真按出來的那一串，也不猜意圖。
+            _ => {}
         }
     }
 
@@ -2494,55 +2497,6 @@ impl Editor {
             // are answered where they are read.
             _ => {}
         }
-    }
-
-    /// What to say when a key that means something in another editor is
-    /// pressed here and means nothing.
-    ///
-    /// **Not a compatibility layer**: it never *does* the thing. The first
-    /// minute in any editor is spent pressing exactly these keys, and a key
-    /// that does nothing and says nothing is an hour of guessing. A key that
-    /// says 「行尾是 gl」 is an hour of learning.
-    ///
-    /// Reached only from the fall-through, so it can never contradict a real
-    /// binding: bind the key and this stops being consulted.
-    fn phrasebook(key: Key) -> Option<String> {
-        let c = match key {
-            Key::Char(c) => c,
-            // Helix's 轉大寫. Its two companions are `~` and `` ` ``; the
-            // group took the third, so this is the only one that needs the
-            // `Alt` arm.
-            Key::Alt('`') => {
-                return Some(say!("hint.helix.case-keys"));
-            }
-            // vi's redo. Ours is `U`, the capital of the key that undoes —
-            // a chord for it would be a second name for one action.
-            Key::Ctrl('r') => return Some(say!("hint.vi.ctrl-r")),
-            // Helix spends two tutor lessons on `C-c` (11.1, 11.2). We have
-            // the thing, on the 空格 menu with the other 「do something to
-            // this line」 keys, so this says where rather than binding a chord.
-            Key::Ctrl('c') => return Some(say!("hint.helix.comment")),
-            _ => return None,
-        };
-        Some(match c {
-            '$' => say!("hint.vi.dollar"),
-            '^' => say!("hint.vi.caret"),
-            // vi's 行首. It gets here only with no count under way — with one,
-            // `0` is still the digit it looks like (`20l`).
-            '0' => say!("hint.vi.zero"),
-            'Z' => say!("hint.vi.z-upper"),
-            '@' => say!("hint.vi.at"),
-            '+' | '-' => say!("hint.vi.line-motions"),
-            '\\' => say!("hint.vi.backslash"),
-            // helix 頂層的 `D` 是空的，這裏也空着（2026-09-28）。按它的人分兩種：
-            // vim 手要的是「刪到行尾」，helix 手要的是「刪了別動寄存器」，一句話說得
-            // 完兩件。Warning: vim 預設下按不到這裏，那一端 `D` 是 `d$`。
-            'D' => say!("hint.helix.capital-d"),
-            // No `` ` `` arm: it is a real binding now (the 字形 group), so the
-            // fall-through never reaches here for it. `hint.vi.backtick` moved
-            // into that group's menu, where vi's reader will see it anyway.
-            _ => return None,
-        })
     }
 
     /// Handle the second key of a goto (`g`) sequence, Helix-style: `gg` to the
@@ -2970,10 +2924,9 @@ impl Editor {
 
     /// What `` ` `` may be finished with.
     ///
-    /// The last row is `hint.vi.backtick`, which had never been read by
-    /// anybody: the phrasebook is consulted only for keys that are *not*
-    /// bound, and `` ` `` was bound to 轉小寫. As a group prefix it has a menu,
-    /// and a vi reader looking for a mark meets the answer here.
+    /// The last row is `hint.vi.backtick` — 「vi 的記號：M 記、`'` 回去」. It is a
+    /// row in a menu the reader opened, not a guess about why a key was
+    /// pressed, which is why it outlived the phrasebook (2026-10-08).
     pub(super) const CASE_KEYS: &'static [(&'static str, &'static str)] = &[
         ("l", "hint.case.lower"),
         ("u", "hint.case.upper"),

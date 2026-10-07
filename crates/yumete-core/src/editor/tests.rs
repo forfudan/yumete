@@ -371,9 +371,10 @@ fn the_retired_keys_say_what_replaced_them() {
 }
 
 #[test]
-fn the_phrasebook_answers_the_keys_we_spell_differently() {
-    // Three keys a reader arrives with and does not find here (#404). Each
-    // says where the thing went; none of them touches the document.
+fn a_key_with_an_owner_speaks_and_one_without_stays_quiet() {
+    // Warning: 這一支從前叫 `the_phrasebook_answers_the_keys_we_spell_differently`，
+    // 問的是那本對照簿（按 `C-r` 答「重做是 U」這一族）。2026-10-08 整本刪了，
+    // 留下的是它的反面：**綁了的鍵照舊說它該說的話，沒綁的一個字都不說。**
     let ask = |key: Key| {
         let mut ed = typed("那年冬天。\n");
         ed.on_key(key);
@@ -381,20 +382,17 @@ fn the_phrasebook_answers_the_keys_we_spell_differently() {
         assert_eq!(ed.mode(), Mode::Normal, "{}", ed.status());
         ed.status().to_string()
     };
-    // vi's redo. Ours is the capital of the key that undoes.
-    assert!(ask(Key::Ctrl('r')).contains('U'), "{}", ask(Key::Ctrl('r')));
-    // Helix spends two tutor lessons on `C-c`; ours is on the 空格 menu.
-    assert!(ask(Key::Ctrl('c')).contains("\u{2423}c"), "{}", ask(Key::Ctrl('c')));
-    // Warning: **`(` 和 `)` 2026-09-28 有主人了**（#405 Phase 3：換一段當主選區）。從前它們
-    // 是未綁定鍵，這裏問的是那句「走一句用 H/L」的提示；現在按下去說的是「本來就只有
-    // 一處選區」。這一段原先在上面那個 `for` 裏。
+    // **`(` 和 `)` 有主人**（#405 Phase 3：換一段當主選區）——它們說的是自己做了
+    // 什麼（「本來就只有一處選區」），不是猜你想按哪個鍵。
     for key in ['(', ')'] {
         let said = ask(Key::Char(key));
         assert!(said.contains('一'), "{key}: {said}");
     }
-    // vi's 行首 — and it can speak, because `0` builds a count only when one
-    // is already under way.
-    assert!(ask(Key::Char('0')).contains("gh"), "{}", ask(Key::Char('0')));
+    // 沒綁的那幾個：一個字都不說。
+    for key in [Key::Ctrl('r'), Key::Ctrl('c'), Key::Char('0')] {
+        assert_eq!(ask(key), "", "{key:?}");
+    }
+    // `0` 在計數裏照舊是數字，這一條沒動。
     let mut ed = typed("那年冬天。\n");
     press(&mut ed, "gg20l");
     assert!(ed.status().is_empty(), "a count swallows it: {}", ed.status());
@@ -420,11 +418,14 @@ fn the_case_keys_moved_under_one_prefix() {
     let mut ed = typed("Hello World\n");
     press(&mut ed, "x~");
     assert_eq!(ed.current_buffer().text(), "hELLO wORLD\n");
-    // Helix's 轉大寫 is `Alt-\``, which we do **not** have — that one is still
-    // a hint, because the answer really is spelled differently here.
+    // Helix's 轉大寫 is `Alt-\``, which we do **not** have. It used to answer
+    // 「大小寫在 ` 組裏」; since 2026-10-08 an unbound key says nothing at all
+    // （「這個提示假設用户的意圖，這是不對的」）. The group's own menu is where
+    // a reader meets those keys.
     let mut ed = typed("Hello World\n");
     ed.on_key(Key::Alt('`'));
-    assert!(ed.status().contains("`l"), "{}", ed.status());
+    assert_eq!(ed.status(), "", "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "Hello World\n", "也沒動稿子");
 }
 
 #[test]
@@ -1886,16 +1887,14 @@ fn the_alt_pair_is_back_and_the_capital_d_stays_unbound() {
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "甲丙甲", "而寄存器裏還是 甲");
 
-    // 原生鍵位下 `D` 空着，同 helix 頂層；按了只說一句話。
+    // 原生鍵位下 `D` 空着，同 helix 頂層——而且**一句話都不說**（2026-10-08 定：
+    // 「這一類提示是多餘的……這個提示假設用户的意圖」）。從前它答「刪了不動寄存器
+    // 是 A-d」。
     let mut ed = typed("甲乙丙");
     press(&mut ed, "ggl");
     press(&mut ed, "D");
     assert_eq!(ed.current_buffer().text(), "甲乙丙", "什麼都沒動");
-    assert!(
-        ed.status().contains("A-d"),
-        "要指回 A-d：{:?}",
-        ed.status()
-    );
+    assert_eq!(ed.status(), "", "也什麼都沒說");
 }
 
 #[test]
@@ -6242,10 +6241,25 @@ fn clearing_a_cell_keeps_the_register_under_the_same_rule_as_prose() {
     assert!(ed.current_buffer().text().contains("|  | 三十"), "{}", ed.current_buffer().text());
     assert_eq!(ed.paste_menu()[0].1, "甲", "`d` 剪，所以寄存器上是那一格");
 
-    // `D`：同樣清掉，而剛複製好的那個「三十」原封不動。
-    let ed = cleared_with("D");
+    // `A-d`：同樣清掉，而剛複製好的那個「三十」原封不動。格子裏從前這一個是
+    // `D`；2026-10-08 接上了 `A-d`，`D` 就刪了——不留別名。
+    let mut ed = typed(table);
+    ed.goto_line(3);
+    press(&mut ed, " tb");
+    press(&mut ed, " tT");
+    press(&mut ed, "l");
+    press(&mut ed, "y");
+    press(&mut ed, "h");
+    ed.on_key(Key::Alt('d'));
     assert!(ed.current_buffer().text().contains("|  | 三十"), "{}", ed.current_buffer().text());
-    assert_eq!(ed.paste_menu()[0].1, "三十", "`D` 不動寄存器");
+    assert_eq!(ed.paste_menu()[0].1, "三十", "`A-d` 不動寄存器");
+    // 而 `D` 在格子裏也沒綁了，按它什麼都不動。
+    let mut ed = typed(table);
+    ed.goto_line(3);
+    press(&mut ed, " tb");
+    press(&mut ed, " tT");
+    press(&mut ed, "D");
+    assert!(ed.current_buffer().text().contains("| 甲 "), "{}", ed.current_buffer().text());
 }
 
 fn with_two_md_tables() -> Editor {
@@ -7258,17 +7272,17 @@ fn d_on_a_grid_means_the_cell() {
     press(&mut ed, "d");
     assert_eq!(ed.cell_text(1, 0), "", "{}", ed.status());
     assert_eq!(ed.row_cells(1).len(), ed.row_cells(0).len(), "the row kept its shape");
-    // Warning: **`d` does not put it on the register any more** (#492) — that is
-    // `D`, here as in the prose. Clearing cells while filling a table is
-    // exactly where 「d 作为剪切功能会污染 register」 bites hardest.
-    press(&mut ed, "D");
-    assert_eq!(ed.cell_text(1, 0), "", "already empty, and it says so");
-    press(&mut ed, "u"); // back to the text, so D has something to cut
-    assert_eq!(ed.cell_text(1, 0), cell);
-    press(&mut ed, "D");
-    assert_eq!(ed.cell_text(1, 0), "");
+    // Warning: **`d` cuts the cell into the register, `A-d` leaves it alone** —
+    // prose's rule, and the grid follows it key for key since 2026-10-08. It
+    // used to be the other way round here (`d` quiet, `D` cutting), which made
+    // one capital letter mean opposite things in prose and in a table.
     press(&mut ed, "p");
-    assert_eq!(ed.cell_text(1, 0), cell, "and what `D` cut can be put back");
+    assert_eq!(ed.cell_text(1, 0), cell, "what `d` cut can be put back");
+    ed.on_key(Key::Alt('d'));
+    assert_eq!(ed.cell_text(1, 0), "", "A-d 也清得掉");
+    // 而寄存器沒動：剛纔那一格還在上面，貼得回來。
+    press(&mut ed, "p");
+    assert_eq!(ed.cell_text(1, 0), cell, "A-d 不吃寄存器");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -13393,23 +13407,32 @@ fn an_action_bound_to_a_chord_is_really_pressed() {
     // collapsing when it was aligned with helix's.
 }
 
+/// **沒綁的鍵就是沒反應**（2026-10-08 定）。
+///
+/// 這裏從前反過來：按 `$` 答「行尾是 gl」、按 `@` 答「重放宏是 q」——一本「別的編
+/// 輯器那個鍵在我們這兒叫什麼」的對照簿。原話：「這一類提示是多餘的。比如按了 D
+/// 之後提示應該按 alt-d。這個提示假設用户的意圖，這是不對的。」
 #[test]
-fn an_unbound_key_says_what_this_editor_calls_it() {
-    // The first minute in any editor is spent pressing exactly these, and
-    // a key that does nothing and says nothing is an hour of guessing.
-    let mut ed = typed("一行字\n");
-    ed.goto_line(1);
-    let before = ed.current_buffer().text();
-    // `G` is not among them any more: it is bound — `30G` goes to line 30
-    // and a bare `G` to the last line, as in vi and in Helix.
-    for (key, want) in [('$', "gl"), ('^', "gs"), ('@', "Q")] {
-        ed.on_key(Key::Char(key));
-        assert!(ed.status().contains(want), "{key}: {}", ed.status());
-        assert_eq!(ed.current_buffer().text(), before, "and it never does it");
+fn an_unbound_key_says_nothing_at_all() {
+    // 一個鍵一個編輯器：`Z` 是 helix 的黏滯視圖前綴，連着按會讀成 `ZD` 那一串，
+    // 而「`ZD` 爲無效按鍵組合」報的是手指真按出來的東西，不是猜意圖——留着的。
+    let quiet = |key: Key| {
+        let mut ed = typed("一行字\n");
+        ed.goto_line(1);
+        ed.on_key(key);
+        assert_eq!(ed.status(), "", "{key:?} 不許説話");
+        assert_eq!(ed.current_buffer().text(), "一行字\n", "也不許動稿子");
+    };
+    for c in ['$', '^', '@', '+', '-', '\\', 'D'] {
+        quiet(Key::Char(c));
     }
-    // A key that *is* bound is not second-guessed.
-    ed.on_key(Key::Char('x'));
-    assert!(!ed.status().contains("gl"));
+    for key in [Key::Ctrl('r'), Key::Ctrl('c'), Key::Alt('`')] {
+        quiet(key);
+    }
+    // `0` 照舊是數字（有計數在走的時候），這一條沒動。
+    let mut ed = typed("一行字\n");
+    press(&mut ed, "gg20l");
+    assert_eq!(ed.status(), "", "{}", ed.status());
 }
 
 #[test]

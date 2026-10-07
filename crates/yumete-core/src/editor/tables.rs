@@ -3395,6 +3395,9 @@ impl Editor {
             Key::Char('a') | Key::Char('A') => self.edit_cell(CellEdit::End),
             Key::Char('I') => self.edit_cell(CellEdit::Start),
             Key::Char('c') => self.edit_cell(CellEdit::Replace),
+            // 同上那一對：`c` 改寫**進**寄存器（`CellEdit::Replace` 自己 `store`），
+            // `A-c` 改寫**不進**。正文那兩個鍵就是這樣分的。
+            Key::Alt('c') => self.edit_cell(CellEdit::ReplaceKeeping),
             // Everything below is about the table's *shape* rather than its
             // contents, and a Markdown table is the only one whose shape the
             // editor may change: a delimited file's columns are the schema's,
@@ -3405,14 +3408,18 @@ impl Editor {
             // exactly on the delimiter.
             // …with a selection standing, `d` still means the selection: `x d`
             // must go on being refused rather than quietly clearing one cell.
-            // Warning: **哪一個進寄存器，和正文同一條規矩**（2026-10-07 定）。從前這兩
-            // 個鍵是反的——格子裏 `d` 不進、`D` 進，而正文裏 `d` 進、`A-d` 不進
-            // ——於是同一個大寫鍵在散文裏和表格裏意思相反，而手冊還寫着兩處是同
-            // 一條規矩。helix 沒有格子模式，所以這一條沒有參考實現可照；定的是
-            // 「一個編輯器一條規矩」。格子裏沒有 `A-d`，不進寄存器的那一個就是
-            // `D`。
+            // Warning: **哪一個進寄存器，和正文逐鍵一樣**（2026-10-08 定）。
+            //
+            // 從前格子裏是「`d` 不進、`D` 進」，而正文 2026-09-28 起是「`d` 進、
+            // `A-d` 不進」——同一個大寫鍵在散文裏和表格裏意思相反，而手冊 2640
+            // 行自己承諾過「一個鍵不會因爲光標停在哪裏就換一個意思」。
+            //
+            // 中間改過一版「`d` 進、`D` 不進」，當天就被問到點子上：**爲什麽格子
+            // 裏沒有 `A-d`？有了不就不用 `D` 了嗎。** 量過——`A-d` 在格子裏是個
+            // 死鍵，按下去一點反應都沒有，它只是從來沒人給它接上。接上了，`D` 就
+            // 刪掉：不留別名，也不出「你要的是 A-d」那種提示。
             Key::Char('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(true),
-            Key::Char('D') if self.sel.anchor() == self.sel.head() => self.clear_cell(false),
+            Key::Alt('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(false),
             // Warning: **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
             // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
             // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
@@ -4236,14 +4243,17 @@ impl Editor {
         match how {
             CellEdit::Start => self.set_cursor(start),
             CellEdit::End => self.set_cursor(end),
-            CellEdit::Replace => {
+            CellEdit::Replace | CellEdit::ReplaceKeeping => {
                 // The cell exactly, and not one character more: a selection
                 // here would cover the head's own grapheme — Helix's model —
                 // and the character after a cell's last is the delimiter, so
                 // the two neighbours would be joined into one.
                 if end > start {
-                    let text = self.current_buffer().rope().slice(start..end).to_string();
-                    self.store(text);
+                    // 進不進寄存器是這兩檔唯一的分別（`c` 進、`A-c` 不進）。
+                    if matches!(how, CellEdit::Replace) {
+                        let text = self.current_buffer().rope().slice(start..end).to_string();
+                        self.store(text);
+                    }
                     self.edit_remove(start..end);
                 }
                 self.set_cursor(start);

@@ -1843,8 +1843,12 @@ Warning: **what cannot be measured is not written.** There was an Emacs column h
 once, filled in from memory — with no source to check against, a column that looks
 confident and has in fact never been verified is worse than no column at all.
 
-An unbound key does not sit there silently: press `$` and the command line says "end
-of line is `gl`". So this table is for the eyes; the fingers can ask for themselves.
+**An unbound key says nothing at all.** The command line used to answer `$` with
+"end of line is `gl`", and a dozen other keys likewise — a phrasebook of what
+another editor's keys are called here. It was removed on 2026-10-08, because a
+hint like that assumes why you pressed the key: press `D` and being told to
+press `A-d` is the editor deciding what you meant. This table is the answer
+instead, and so is `:keymap`.
 
 | What | yumete | Helix | vi |
 | --- | --- | --- | --- |
@@ -3754,9 +3758,10 @@ surrounds it is somebody else's prose. To really tidy it up, `:convert-table` it
 | `h` `l` | one cell left or right |
 | `j` `k` | one row up or down, staying in the same column |
 | `0` `$` | the first/last cell of this row — **press `T` for the cell grain first**; by character (the default) they answer by the text's rule, 「行首是 `gh`」 |
-| `c` | **replace this cell** — the whole cell cleared, type the new one straight in. The most used key in the grid |
+| `c` | **replace this cell** — the whole cell cleared **into the register**, type the new one straight in. The most used key in the grid |
 | `d` | **empty this cell** (the delimiter stays), **putting it in the register** — the text's rule, where `d` cuts; with a selection it still deletes the selection |
-| `D` | empties it the same way but **leaves the register alone**, so the piece you just copied is still there. It stands in for `A-d`, which a grid does not have |
+| `A-d` | empties it the same way but **leaves the register alone**, so the piece you just copied is still there — the text's `A-d`, key for key |
+| `A-c` | replaces the cell like `c`, but **leaves the register alone** |
 | `i` | into the cell, stopping **before the first character** (`I` is the same) |
 | `a` | into the cell, stopping **after the last character** (`A` is the same) |
 | `空格 t/` `空格 t?` | **who used it** — searching column by column. `/` searches here, `?` looks in the other area. `空格 t1/` searches column 1 only, `空格 t2-10?` columns 2–10 |
