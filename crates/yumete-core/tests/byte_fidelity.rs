@@ -90,3 +90,60 @@ fn enter_in_insert_mode_ends_the_line_the_same_way() {
         "one\r\nx\r\ntwo\r\n"
     );
 }
+
+/// **A line break is one break, even when it is two characters** (丟字第二輪,
+/// 2026-10-07).
+///
+/// `J` and `gJ` deleted one character at [`line_end`], and on a CRLF file that
+/// character is the `\r`: the two lines were not joined at all, the `\n` stayed
+/// behind, and the manuscript came back with one line in LF and the rest in
+/// CRLF. Nothing said so — the page looked the same, because the view strips
+/// `\r` either way. A writer joining lines down a chapter would have converted
+/// its endings one line at a time.
+///
+/// [`line_end`]: yumete_core::motion::line_end
+#[test]
+fn joining_two_lines_takes_the_whole_break_however_long_it_is() {
+    // helix `J`: the seam between two 漢字 is empty, so this is the join alone.
+    let (mut ed, path) = open("crlf-join.md", "甲\r\n乙\r\n丙\r\n".as_bytes());
+    ed.on_key(Key::Char('J'));
+    ed.execute("write").unwrap();
+    assert_eq!(
+        String::from_utf8(std::fs::read(&path).unwrap()).unwrap(),
+        "甲乙\r\n丙\r\n",
+        "helix J on a CRLF file"
+    );
+
+    // vim `gJ`: 「換行符拿掉，別的一個字節不動」 — and the whole break is the
+    // line break.
+    let (mut ed, path) = open("crlf-join-raw.md", "甲\r\n乙\r\n丙\r\n".as_bytes());
+    ed.execute("keymap vim").unwrap();
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('J'));
+    ed.execute("write").unwrap();
+    assert_eq!(
+        String::from_utf8(std::fs::read(&path).unwrap()).unwrap(),
+        "甲乙\r\n丙\r\n",
+        "vim gJ on a CRLF file"
+    );
+
+    // **The seam is still worked out**, and a CRLF file must not read its own
+    // `\n` as 「the next line is blank」: between two Latin words the space is
+    // kept, and a genuinely blank next line still gets no space.
+    let (mut ed, path) = open("crlf-seam.md", "hello\r\nworld\r\n".as_bytes());
+    ed.on_key(Key::Char('J'));
+    ed.execute("write").unwrap();
+    assert_eq!(
+        String::from_utf8(std::fs::read(&path).unwrap()).unwrap(),
+        "hello world\r\n"
+    );
+
+    let (mut ed, path) = open("crlf-blank.md", "hello\r\n\r\nworld\r\n".as_bytes());
+    ed.on_key(Key::Char('J'));
+    ed.execute("write").unwrap();
+    assert_eq!(
+        String::from_utf8(std::fs::read(&path).unwrap()).unwrap(),
+        "hello\r\nworld\r\n",
+        "no space from a blank line"
+    );
+}

@@ -46,6 +46,25 @@ pub(crate) fn line_char_len(rope: &Rope, line: usize) -> usize {
     line_text(rope, line).chars().count()
 }
 
+/// The first character **after** this line's break — where the next line starts.
+///
+/// ⚠️ **A line break is not always one character.** [`line_end`] is one past
+/// the line's last *character*, and [`line_text`] strips `\r` as well as `\n`
+/// — so on a CRLF file `line_end` stands on the `\r`, and `line_end + 1`
+/// stands between the two halves of one break. Two joins did exactly that
+/// (2026-10-07, 丟字第二輪): `J` and `gJ` deleted the `\r` and left the `\n`,
+/// so a CRLF manuscript came back with one line in LF and the two lines not
+/// joined at all. Ask for this instead of adding one.
+///
+/// On the last line, where there is no break, this is the end of the rope.
+pub fn past_the_break(rope: &Rope, pos: usize) -> usize {
+    let line = rope.char_to_line(pos);
+    match line + 1 < rope.len_lines() {
+        true => rope.line_to_char(line + 1),
+        false => rope.len_chars(),
+    }
+}
+
 /// The last line the cursor may sit on.
 ///
 /// `ropey` reports a trailing empty line when the text ends with a newline;

@@ -201,8 +201,11 @@ impl Editor {
             return;
         }
         let seam = motion::line_end(rope, start);
+        // **The whole break, not one character of it** — a CRLF pair is one
+        // break, and `seam + 1` used to leave its `\n` behind.
+        let past = motion::past_the_break(rope, start);
         self.snapshot();
-        let _ = self.current_buffer_mut().replace(seam..seam + 1, "");
+        let _ = self.current_buffer_mut().replace(seam..past, "");
         let at = seam.min(self.current_buffer().rope().len_chars());
         self.sel.set_head(at);
         self.sel.set_anchor(at);
@@ -223,8 +226,11 @@ impl Editor {
         }
         let len = rope.len_chars();
         let blank = |c: char| matches!(c, ' ' | '\t' | '\u{3000}');
-        // Swallow the break and any indentation that follows it.
-        let mut next = motion::line_end(rope, start) + 1;
+        // Swallow the break and any indentation that follows it. **The break
+        // may be two characters**, so this is asked for rather than counted:
+        // on a CRLF file `line_end + 1` landed between the `\r` and the `\n`,
+        // and the `\n` then read as 「the next line is blank」 below.
+        let mut next = motion::past_the_break(rope, start);
         while next < len && blank(rope.char(next)) {
             next += 1;
         }
