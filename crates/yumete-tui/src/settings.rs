@@ -21,12 +21,51 @@ use yumete_core::editor::Editor;
 
 /// **每一項設定，推一遍。** 冪等——見本檔開頭。
 ///
-/// `layout` 收一個覆蓋：`-v`/`--horizontal` 是這一趟的答案，不是配置的。重載的
-/// 時候傳 `None`，配置說什麼就是什麼。
-pub fn apply(config: &Config, editor: &mut Editor, layout: Option<yumete_core::zong::Layout>) {
+/// `layout` 與 `language` 各收一個覆蓋：`-v`/`--horizontal` 和 `--language` 是這一
+/// 趟啓動的答案，不是配置的。重載的時候兩個都傳 `None`，配置說什麼就是什麼。
+pub fn apply(
+    config: &Config,
+    editor: &mut Editor,
+    layout: Option<yumete_core::zong::Layout>,
+    language: Option<yumete_core::messages::Language>,
+) {
     // 進程級的那幾個：不屬於某一個 editor，但同樣是配置說了算。
     if !config.ime.data_dirs.is_empty() {
         yumete_config::set_data_dirs(config.ime.data_dirs.clone());
+    }
+    // **這三格從前只有啓動那一趟推**（2026-10-07 審出來的）。面板裏改了界面語言、
+    // 歧義寬度或顯示注音，存盤，`:reload-config`——屏幕上寫着「設定重讀了」，而那
+    // 三樣原封不動。這一支的開頭就寫着「每一項設定，推一遍」，漏掉的那幾項正是
+    // 「加一個設定要動三處，漏了第三處」那一族。
+    yumete_core::set_ambiguous_wide(match config.editor.ambiguous_width {
+        yumete_config::Ambiguity::Wide => true,
+        yumete_config::Ambiguity::Narrow => false,
+        // 只有終端自己知道它的字體把 `—` 和 `…` 畫成幾格。問不出來就當窄的：
+        // 正文本來就是那麼排的，至少光標落在字上。
+        yumete_config::Ambiguity::Auto => {
+            crate::ambiguous::ask_the_terminal_about_width().unwrap_or(false)
+        }
+    });
+    if let Some(language) =
+        language.or_else(|| yumete_core::messages::Language::parse(&config.editor.language))
+    {
+        yumete_core::messages::set_language(language);
+    }
+    // 注音畫多少，以及認哪幾種寫法。
+    //
+    // Warning: **方言那一行從前是 `:ruby {name}`**，而 `:ruby` 從來不收這個詞——它收的
+    // 是三個級別。所以 `ruby_dialects` 這一格**一直是死的**（叫的人還 `let _ =`
+    // 把錯吞了）。真正的命令是 `:ruby-html on` / `:ruby-typst on`。
+    editor
+        .execute(match config.editor.show_ruby {
+            true => ":ruby-render full",
+            // 中階，不是 `off`：沒人要看的讀音也還是讀音，所以字數知道「錢塘」是
+            // 兩個字而標記一個都不是（#283）。
+            false => ":ruby-render basic",
+        })
+        .ok();
+    for name in &config.editor.ruby_dialects {
+        let _ = editor.execute(&format!(":ruby-{name} on"));
     }
     editor.set_key_aliases(config.keys.normal.clone());
     editor.set_key_preset(config.keys.preset);
@@ -105,4 +144,51 @@ pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
     ime.set_page_size(config.panel.page_size);
     ime.set_panel_display(config.panel.display);
     ime.set_preedit(config.panel.preedit);
+    // **上屏方式也在這裏推**（2026-10-07 審出來的）。從前只有啓動那一趟推它
+    // （`main.rs` 的 `load`），於是面板裏改了上屏方式、存了、`:reload-config`，
+    // 屏幕上說「設定重讀了」而那一格原封不動。
+    //
+    // `None` 要一路傳下去，不能折成一個值：配置沒說話的時候，意思是「這個方案
+    // 自己說了算」，而不是「拿拼音的整句去套每一個形碼方案」。
+    ime.set_commit_strategy(
+        config.ime.commit.as_deref().and_then(yumete_ime::CommitStrategy::from_str_tag),
+    );
+}
+
+#[cfg(test)]
+mod every_setting_is_pushed_here {
+    /// **`:reload-config` 推得到的，和啓動時推的，要是同一批**（2026-10-07 審出
+    /// 來的）。
+    ///
+    /// 這一支開頭就寫着「每一項設定，推一遍」，而四樣東西從前只有 `main.rs` 的
+    /// 啓動那一段推：界面語言、歧義寬度、顯示注音＋注音寫法、輸入法上屏方式。
+    /// 面板裏改了、存了、`:reload-config`——屏幕上寫着「設定重讀了」，那四樣原封
+    /// 不動。這是「加一個設定要動三處，漏了第三處」那一族。
+    ///
+    /// 釘的是**源碼**：那幾個推送器只許在這個檔裏叫，不許散回啓動那一段去。源碼
+    /// 比行為好釘——這四樣是進程級的全局，測試裏撥一下會弄紅鄰居。
+    #[test]
+    fn the_startup_path_pushes_nothing_this_one_does_not() {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let main = std::fs::read_to_string(format!("{root}/crates/yumete/src/main.rs"))
+            .expect("the front end's main");
+        let here = std::fs::read_to_string(format!(
+            "{root}/crates/yumete-tui/src/settings.rs"
+        ))
+        .expect("this file");
+        for (what, needle) in [("顯示注音", ":ruby-render"), ("注音寫法", "ruby_dialects")] {
+            assert!(here.contains(needle), "{what} 要在這個檔裏推：{needle}");
+            assert!(
+                !main.contains(needle),
+                "{what} 又跑回啓動那一段了（{needle}）——那樣 `:reload-config` 就推不到它"
+            );
+        }
+        // 這三樣兩頭都有，而且必須。前兩個要趕在第一幀／第一句話之前；上屏方式
+        // 是因為啓動那一趟會把整個輸入法會話**換掉**（`ImeSession::language_only`），
+        // 換完的那一個沒聽過 `apply_ime`。所以釘的是「這個檔裏也有」，不是「那邊
+        // 沒有」。
+        for needle in ["set_ambiguous_wide", "messages::set_language", "set_commit_strategy"] {
+            assert!(here.contains(needle), "{needle} 要在這個檔裏也推一遍");
+        }
+    }
 }

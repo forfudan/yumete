@@ -1529,7 +1529,7 @@ pub fn run(
                 if editor.take_config_reload() {
                     // 項目配置從**工作路徑**往上找，同啓動那一趟（2026-10-01）。
                     let (fresh, said) = Config::load_reporting_from(&editor.root());
-                    settings::apply(&fresh, editor, None);
+                    settings::apply(&fresh, editor, None, None);
                     settings::apply_ime(&fresh, ime);
                     *config = fresh;
                     // 主題是進程級的一格，要重新問一次，否則配色改了畫面不動。
