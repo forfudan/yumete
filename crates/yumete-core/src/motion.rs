@@ -48,7 +48,7 @@ pub(crate) fn line_char_len(rope: &Rope, line: usize) -> usize {
 
 /// The first character **after** this line's break — where the next line starts.
 ///
-/// ⚠️ **A line break is not always one character.** [`line_end`] is one past
+/// ⚠ **A line break is not always one character.** [`line_end`] is one past
 /// the line's last *character*, and [`line_text`] strips `\r` as well as `\n`
 /// — so on a CRLF file `line_end` stands on the `\r`, and `line_end + 1`
 /// stands between the two halves of one break. Two joins did exactly that
