@@ -394,8 +394,30 @@ impl Sidebar {
 
     /// Fill the sidebar with rows the editor built (buffers, or headings).
     pub fn set_rows(&mut self, rows: Vec<Row>) {
+        // **高亮留在它站着的那一條上，不是留在第幾行上**（2026-10-07 審出來的）。
+        //
+        // Warning: 從前這裏只夾一下數字。於是大綱在上面多出一個標題的時候——改一個
+        // 字就重建一次——高亮**滑到了另一條**上，而大綱上按 `Enter` 跳的就是高亮
+        // 那一條；緩衝區那一扇關掉一條之後同理。文件樹那一支（[`Self::rebuild`]）
+        // 一直是按路徑認的，這一支照它辦。
+        //
+        // 認的是「路徑＋名字」：大綱每一行的路徑都一樣（同一份稿子），而
+        // `depth` 存的是行號，上面多一行它就變了，所以行號不能當身份。同名的標
+        // 題挑**離原來最近**的那一條。
+        let at = self.selected();
+        let was = self.rows.get(at).map(|r| (r.path.clone(), r.name.clone()));
         self.rows = rows;
-        self.selected = self.selected.min(self.rows.len().saturating_sub(1));
+        self.selected = was
+            .and_then(|(path, name)| {
+                self.rows
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, r)| r.path == path && r.name == name)
+                    .min_by_key(|(i, _)| i.abs_diff(at))
+                    .map(|(i, _)| i)
+            })
+            .unwrap_or(at)
+            .min(self.rows.len().saturating_sub(1));
     }
 
     /// The rows to draw, top to bottom.

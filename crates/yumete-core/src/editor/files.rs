@@ -796,6 +796,12 @@ impl Editor {
             self.buffers[0] = Buffer::scratch();
             self.set_cursor(0);
             self.forget_the_document();
+            // Warning: **關掉一個緩衝區也要重畫那張單子**（2026-10-07 審出來的）。換
+            // 緩衝區那條路（[`Self::show_buffer`]）一直有這一句，關掉這一條沒
+            // 有——而緩衝區那一扇面板的行是推進去存着的，不是每幀現算。於是
+            // `:bd` 之後單子上那一條還在，上面還標着「你在這裏」；按下去打開
+            // 的是一個已經不在的號碼。
+            self.refresh_sidebar();
             self.status = say!("buffer.closed");
             return Ok(CommandOutcome::Continue);
         }
@@ -804,6 +810,7 @@ impl Editor {
         let restored = self.current_buffer().saved_cursor();
         self.set_cursor(restored);
         self.forget_the_document();
+        self.refresh_sidebar();
         let (n, total) = self.buffer_position();
         self.status = say!("buffer.closed-now-showing", closed, self.buffer_name(), n, total);
         Ok(CommandOutcome::Continue)

@@ -22782,3 +22782,63 @@ fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
     assert!(!ed.take_the_offer(), "更不許蓋進來");
     assert_eq!(ed.current_buffer().text(), "甲\n", "一個字都沒進來");
 }
+
+/// **`:bd` 之後緩衝區那一扇面板不許留着關掉的那一條**（2026-10-07 審出來的）。
+///
+/// 那一扇的行是推進去存着的（`refresh_panel`），不是每幀現算；而 `close_buffer`
+/// 從前不叫 `refresh_sidebar`——換緩衝區那條路一直叫。於是單子上那一條還在，還
+/// 標着「你在這裏」，按下去打開的是一個已經不在的號碼。
+#[test]
+fn closing_a_buffer_redraws_the_buffer_list() {
+    use crate::sidebar::Side;
+    let dir = std::env::temp_dir().join("yumete-bd-panel");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("one.md"), "甲\n").unwrap();
+    std::fs::write(dir.join("two.md"), "乙\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("one.md")).unwrap();
+    ed.open_file(dir.join("two.md")).unwrap();
+    ed.execute(":sidebar-left buffers").unwrap();
+    let names = |ed: &Editor| -> Vec<String> {
+        ed.panel(Side::Left)
+            .expect("那一扇開着")
+            .rows()
+            .iter()
+            .map(|r| r.name.clone())
+            .collect()
+    };
+    assert_eq!(names(&ed).len(), 2, "兩條：{:?}", names(&ed));
+    ed.execute(":buffer-close!").unwrap();
+    assert_eq!(names(&ed).len(), 1, "關掉一條就該少一條：{:?}", names(&ed));
+    // 「你在這裏」那個記號也跟着走——它是按號碼標的，而號碼被往前挪了。
+    let rows = ed.panel(Side::Left).expect("那一扇開着").rows().to_vec();
+    assert!(rows[0].expanded, "剩下那一條就是眼前這一份：{rows:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **大綱重建之後高亮留在它站着的那一條上**（2026-10-07 審出來的）。
+///
+/// `set_rows` 從前只把序號夾一下，而大綱的行是「改一個字就重建一次」的——上面
+/// 多出一個標題，高亮就滑到了另一條上，而大綱上 `Enter` 跳的就是高亮那一條。
+/// 文件樹那一支一直是按路徑認的，這一支從前不是。
+#[test]
+fn the_outline_keeps_the_heading_it_was_standing_on() {
+    use crate::sidebar::Side;
+    let mut ed = typed("# 一\n\n# 二\n\n# 三\n");
+    ed.execute(":sidebar-left outline").unwrap();
+    let standing = |ed: &Editor| -> String {
+        let panel = ed.panel(Side::Left).expect("那一扇開着");
+        panel.rows()[panel.selected()].name.clone()
+    };
+    if let Some(panel) = ed.panel_mut(Side::Left) {
+        panel.select(2);
+    }
+    assert_eq!(standing(&ed), "三");
+    // 在最上面再加一個標題：三條變四條，「三」從第三條挪到第四條。
+    ed.set_cursor(0);
+    ed.insert_str("# 零\n\n");
+    ed.refresh_sidebar();
+    assert_eq!(ed.panel(Side::Left).unwrap().rows().len(), 4);
+    assert_eq!(standing(&ed), "三", "高亮跟着那一條走，不是停在第三行");
+}
