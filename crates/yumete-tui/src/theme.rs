@@ -57,6 +57,20 @@ pub fn name(config: &Config) -> String {
 }
 
 /// Wear this theme from now on.
+/// **眼下選着的那一個，原樣取一份**（2026-10-07，預覽用）。
+///
+/// `None` ＝ 誰都沒選過，配置裏那一個還在位子上——放回去的時候也放回 `None`。
+pub fn snapshot() -> Option<ThemeConfig> {
+    CHOSEN.read().ok().and_then(|c| c.clone())
+}
+
+/// 把 [`snapshot`] 取的那一份放回去。
+pub fn put_back(was: Option<ThemeConfig>) {
+    if let Ok(mut chosen) = CHOSEN.write() {
+        *chosen = was;
+    }
+}
+
 pub fn choose(theme: ThemeConfig) {
     if let Ok(mut chosen) = CHOSEN.write() {
         *chosen = Some(theme);

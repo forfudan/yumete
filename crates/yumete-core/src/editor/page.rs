@@ -1414,6 +1414,11 @@ impl Editor {
     /// and `:theme moxiang` names no mood, and a bare `:theme` names neither,
     /// which is how it comes to be the way to *ask*.
     #[allow(clippy::type_complexity)]
+    /// **這一幀要不要先畫成別的樣子**（2026-10-07）。前端每幀取一次。
+    pub fn take_trial(&mut self) -> Option<crate::editor::Trial> {
+        self.trial.take()
+    }
+
     pub fn take_theme_request(
         &mut self,
     ) -> Option<(Option<String>, Option<crate::command::Mood>)> {

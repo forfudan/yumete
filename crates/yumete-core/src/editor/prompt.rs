@@ -366,9 +366,18 @@ impl Editor {
             }
             Key::Tab => self.cycle_completion(1),
             Key::BackTab => self.cycle_completion(-1),
-            Key::Esc => self.close_prompt(),
-            Key::Up | Key::Down => self.walk_history(key == Key::Up, false),
+            Key::Esc => {
+                // 退出去：把預覽放回原樣（helix 的 `PromptEvent::Abort`）。
+                self.end_a_trial(crate::editor::Trial::Undo);
+                self.close_prompt();
+            }
+            Key::Up | Key::Down => {
+                self.walk_history(key == Key::Up, false);
+                self.ask_for_a_trial();
+            }
             Key::Enter => {
+                // 按下了：預覽成真，記下的舊樣子不必再留（`PromptEvent::Validate`）。
+                self.end_a_trial(crate::editor::Trial::Keep);
                 let line = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
@@ -379,9 +388,39 @@ impl Editor {
                     Err(err) => self.status = err.to_string(),
                 }
             }
-            other => self.edit_prompt(other),
+            other => {
+                self.edit_prompt(other);
+                // 行變了：照新的樣子先畫出來（`PromptEvent::Update`）。
+                self.ask_for_a_trial();
+            }
         }
         KeyOutcome::Continue
+    }
+
+    /// **命令行打到一半，照它先畫一次**（2026-10-07 定，照 helix 的三個事件）。
+    ///
+    /// Warning: **還原歸這裏管，不歸命令管。** 每一條命令自己記一遍「退出去要放回
+    /// 什麼」，就是每一條都有機會記錯；記在這一處，`:theme` 之外再加一條只要
+    /// 進那張白名單，不必再寫一次還原。
+    ///
+    /// 名字被退格退沒了也要還原——helix 那邊同一句話：「Ensures that a preview
+    /// theme gets cleaned up if the user backspaces until the prompt is empty」。
+    fn ask_for_a_trial(&mut self) {
+        match crate::command::preview_of(&self.command_line) {
+            Some(shown) => {
+                self.trial = Some(crate::editor::Trial::Show(shown));
+                self.previewing = true;
+            }
+            None => self.end_a_trial(crate::editor::Trial::Undo),
+        }
+    }
+
+    /// 收場：`Keep` 留着，`Undo` 放回去。沒有預覽在場就什麼都不做。
+    fn end_a_trial(&mut self, how: crate::editor::Trial) {
+        if self.previewing {
+            self.previewing = false;
+            self.trial = Some(how);
+        }
     }
 
     /// The `::` line: searching the commands by what they **do** (#224).

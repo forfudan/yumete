@@ -555,6 +555,9 @@ pub fn run(
     let mut all_keys = false;
     // What Insert's 中/英 was when a prompt borrowed it (#225). See [`Borrow`].
     let mut borrowed = Borrow::default();
+    // **預覽開始之前主題是什麼樣**（2026-10-07）。外面那一層是「有沒有預覽在場」，
+    // 裏面那一層是「開始的時候選着誰」——誰都沒選過也要記得，放回去纔放得準。
+    let mut was_themed: Option<Option<yumete_config::ThemeConfig>> = None;
     // A typesetter started with `:view-preview`, if one is running — and one left
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
@@ -1593,6 +1596,29 @@ pub fn run(
                 // (Feature #214). Throttled inside too, and off by default.
                 // Also asked on the idle path above, which is where it matters.
                 editor.disk_tick();
+                // **預覽：打到一半就照它畫**（2026-10-07，helix 的三個 prompt 事件）。
+                //
+                // 記下的舊樣子歸這裏管，不歸命令管——命令只說「照這個畫」，
+                // 放回去是命令行的事（`prompt.rs` 的 `end_a_trial`）。
+                if let Some(trial) = editor.take_trial() {
+                    use yumete_core::editor::{Shown, Trial};
+                    match trial {
+                        Trial::Show(Shown::Theme(name)) => {
+                            // 頭一次纔記：一路打下去中間那幾個樣子都不是原樣。
+                            if was_themed.is_none() {
+                                was_themed = Some(crate::theme::snapshot());
+                            }
+                            // 不報話：預覽不是一件做完的事。
+                            let _ = set_theme(config, Some(name), None);
+                        }
+                        Trial::Undo => {
+                            if let Some(was) = was_themed.take() {
+                                crate::theme::put_back(was);
+                            }
+                        }
+                        Trial::Keep => was_themed = None,
+                    }
+                }
                 if let Some((name, mood)) = editor.take_theme_request() {
                     editor.set_status(set_theme(config, name, mood));
                 }

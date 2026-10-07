@@ -2438,6 +2438,11 @@ pub struct Editor {
     scheme_request: Option<String>,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
+    /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
+    /// prompt 事件）。前端每幀取一次。
+    trial: Option<Trial>,
+    /// 眼下有沒有一條預覽在場——退出去的時候要不要還原，問的是它。
+    previewing: bool,
     /// Text waiting to be put on the system clipboard, which only the front end
     /// can reach (it owns the terminal).
     clipboard_request: Option<String>,
@@ -3066,6 +3071,35 @@ pub enum KeyOutcome {
     Quit,
 }
 
+/// **打到一半就看得見的那幾條**（2026-10-07 定）。
+///
+/// 原話：「`:theme mogao` immediately change (temparaliy) the theme to mogao so
+/// that users can preview that theme」。
+///
+/// Warning: **這是一張白名單，永遠不許反過來寫**。預覽的意思是「這條命令在你按下
+/// Enter 之前就跑了」——`:w`、`:quit`、`:pipe`、`:convert` 跑一次就回不去了。
+/// 所以沒有「預設可預覽」這回事：一條命令進了這張表纔預覽，而進表的前提是它
+/// **還原得回去**。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Shown {
+    /// `:theme <名字>`——眼下唯一的一條。
+    Theme(String),
+}
+
+/// 一次預覽的三步，同 helix 的 `PromptEvent`（`ui/prompt.rs`）。
+///
+/// 還原歸**命令行**管，不歸命令管：每一條命令自己寫一遍「退出去要放回什麼」，
+/// 就是每一條都有機會寫錯的意思。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Trial {
+    /// 行變了：照這個樣子先畫出來。
+    Show(Shown),
+    /// 按了 Enter：留着，記下的舊樣子不必再留。
+    Keep,
+    /// 按了 Esc，或者名字被退格退沒了：放回原來那個。
+    Undo,
+}
+
 /// What should happen after a command runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandOutcome {
@@ -3341,6 +3375,8 @@ impl Editor {
             chaifen_request: None,
             scheme_request: None,
             theme_request: None,
+            trial: None,
+            previewing: false,
             clipboard_request: None,
             clipboard_read: None,
             render: Render::Basic,
