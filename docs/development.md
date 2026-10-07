@@ -20114,6 +20114,50 @@ warning了。所以我覺得 Option 1 + 一個csv tree-sitter 會很好。」
 
 沒自己定，等他說。
 
+## 5.108 內置碼表永遠是精華版，編譯不跟着機器走（2026-10-07 定）
+
+從作者的一個提問開始：`:yume-where` 那一行寫的是「靈明碼表 2026-10-07」，而他以為
+該寫「靈明精華版」。查出來**不是文案的毛病**：那一行的 `{0}` 裏本來就會帶「精華版」
+三個字，而他那台機器嵌的根本不是精華版——
+
+```
+BUILTIN_TABLE:   ~/.local/share/yumete/schemes/ling.ytab   ← 完整表，3.7 MB
+BUILTIN_VERSION: "2026-10-07"                              ← 所以沒有「精華版」
+```
+
+`build.rs` 從前的規矩是「機器上有完整表就用完整表，沒有纔退回精華版」，模塊頭還把它
+寫成了優點（「that is better and is what a developer's build carries」）。判詞：
+
+> 編譯不是跟着電腦走的！！！！編譯應該是穩定的！！！爲什麽必須帶靈明精華版是爲了
+> 壓縮二進制尺寸！！！
+
+兩條都對，而且**那 3.7 MB 連一個讀者都沒有**：運行時裝好的靈明永遠贏過內嵌的那一份
+（`ImeSession::new`），所以完整表只在「這台機器沒裝宇浩」時纔會被讀到——而那時它也不
+在。於是一個只有退路纔用得上的位置，放了一份比退路大十五倍的東西。
+
+**改成：永遠精華版。** 沒有就去 `yume-release` 取一次，放進 `~/.cache/yumete/builtin`，
+那是一個 `build.rs` 自己填的 `YUMETE_BUILTIN_DIR`（同一套 `schemes/`＋`data/`＋
+`VERSION` 的擺法，於是讀這幾個檔的路只有一條）。`YUMETE_BUILTIN_DIR` 照舊優先，而且
+排在取之前——指定了目錄的發布構建一個字節都不上網。離線又沒快取就不帶表，照舊出聲。
+
+| | 前 | 後 |
+| --- | --- | --- |
+| 作者機器上嵌的 | `ling.ytab` 3.69 MB | `lingming_essential.ytab` 0.24 MB |
+| 二進制 | 16.5 MB | **13.1 MB** |
+| 和 CI（homebrew）編出來的 | 不一樣 | **一樣** |
+
+⚠️ **三件連帶**：① 快取不過期——`cargo clean` 不該讓人重下一遍，所以它在家目錄而不是
+`target/`；要換新的就刪掉那個目錄，因為「悄悄換掉嵌進去的東西」正是這一節要攔的事。
+② 三個檔（表、符號表、`VERSION`）要麼齊要麼不算，半份比沒有更難查——`VERSION` 缺了
+`:yume-where` 答不出版本，符號表缺了候選欄沒有標點。③ `common_words.txt` 歸另一支
+build script（`yumete-cjk`），**它不自動取**，`scripts/build.sh` 的提示照這個改了。
+
+**還欠一件**：作者要星陳也內置一張精簡版。`yume-release` 上今天只有完整的
+`xingchen.ytab`（2.87 MB），精簡版要 yume 那一側（`yume/scripts/make_yumete_data.py`）
+生成並發布——已經請輸入法那個 session 做。yumete 這一側三處要改：`build.rs` 多取一張、
+`load_builtin` 按方案挑表、`yumete-ime/src/lib.rs:510` 那個寫死 `Scheme::LINGMING` 的
+閘。等那張發出來再做。
+
 ## 5.101 搜索要說它正在搜哪一個檔（2026-10-07 定，做完了）
 
 原話：「I used `ye -Guu forfudan.com --open` … the search panel is like this for 5 minutes
