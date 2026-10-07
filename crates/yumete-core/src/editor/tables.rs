@@ -3405,8 +3405,14 @@ impl Editor {
             // exactly on the delimiter.
             // …with a selection standing, `d` still means the selection: `x d`
             // must go on being refused rather than quietly clearing one cell.
-            Key::Char('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(false),
-            Key::Char('D') if self.sel.anchor() == self.sel.head() => self.clear_cell(true),
+            // Warning: **哪一個進寄存器，和正文同一條規矩**（2026-10-07 定）。從前這兩
+            // 個鍵是反的——格子裏 `d` 不進、`D` 進，而正文裏 `d` 進、`A-d` 不進
+            // ——於是同一個大寫鍵在散文裏和表格裏意思相反，而手冊還寫着兩處是同
+            // 一條規矩。helix 沒有格子模式，所以這一條沒有參考實現可照；定的是
+            // 「一個編輯器一條規矩」。格子裏沒有 `A-d`，不進寄存器的那一個就是
+            // `D`。
+            Key::Char('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(true),
+            Key::Char('D') if self.sel.anchor() == self.sel.head() => self.clear_cell(false),
             // Warning: **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
             // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
             // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
