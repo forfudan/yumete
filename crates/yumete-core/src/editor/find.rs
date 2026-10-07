@@ -536,6 +536,7 @@ impl Editor {
         }
         self.search.mine = mine;
         self.search.mine_total = mine_total;
+        self.search.mine_is = Some(self.current_buffer().id());
         self.search.cut = false;
         self.search.root = None;
         self.search.hits = hits;
@@ -586,6 +587,7 @@ impl Editor {
             // （`usize` 下溢，debug 當場 panic，release 畫出個天文數字）。
             self.search.mine = 0;
             self.search.mine_total = 0;
+            self.search.mine_is = None;
             self.search.cut = false;
             return;
         }
@@ -641,6 +643,7 @@ impl Editor {
         };
         self.search.mine = hits.len();
         self.search.mine_total = total;
+        self.search.mine_is = Some(self.current_buffer().id());
         if total > 0 {
             self.search.files.push((mine.clone(), None));
         }
@@ -669,6 +672,7 @@ impl Editor {
                 // 真的下溢：打一條寫錯的 glob，再在正文裏打一個字就撞上。
                 self.search.mine = 0;
                 self.search.mine_total = 0;
+                self.search.mine_is = None;
                 self.search.root = Some(root);
                 self.search.looked_at = Some(self.search_mark());
                 self.search.bad_glob = true;
@@ -1616,7 +1620,12 @@ impl Editor {
         if now == was {
             return;
         }
+        // Warning: **`looked_at` 那個戳認不出「換了稿子」**（2026-10-07 審出來的）：面板
+        // 為了預覽打開另一個檔的時候它有意重蓋一次，於是 `now.buffer == was.buffer`
+        // 在那之後是真的，而 `mine`/`mine_total` 說的還是上一份。所以這裏問的是
+        // 那兩個數自己說的是哪一份——[`crate::search_panel::Search::mine_is`]。
         let only_the_open_one = now.buffer == was.buffer
+            && self.search.mine_is == Some(now.buffer)
             && now.every.wrapping_sub(was.every) == now.revision.wrapping_sub(was.revision);
         if !only_the_open_one {
             return;
@@ -1650,7 +1659,16 @@ impl Editor {
         if self.search.total > most || total + (self.search.total - self.search.mine_total) > most {
             return self.search_now();
         }
-        let grew = fresh.len() as isize - was as isize;
+        // **站着的那一處，按它自己認回來**（2026-10-07 審出來的）。
+        //
+        // Warning: 從前這裏算的是 `grew = 新的處數 - 舊的處數`，然後把 `selected` 加上
+        // 它——而 `selected` 數的是**行**，行裏還有檔名那一種。於是眼前這一份從
+        // 「一處都沒有」變成「有」的那一下多出一行檔名，高亮整個錯一行；反過來
+        // 掉到零也一樣。`selected >= was` 更是拿行號去比處數。
+        //
+        // 重搜那一支（[`Self::look_again_and_stand_still`]）早就不按號碼放回去了，
+        // 這一支照它辦：記下那一處命中本身，擺完名單再找回來。
+        let standing = self.the_hit_under_the_highlight();
         self.search.hits.splice(0..was, fresh);
         self.search.total = self.search.total - self.search.mine_total + total;
         self.search.mine = self.search.hits.len() - others;
@@ -1665,15 +1683,10 @@ impl Editor {
             // 整趟重搜的時候它排在最前面（先搜內存再走磁碟），這裏也擺回去。
             self.search.files.insert(0, me);
         }
-        // **站着的那一行跟着挪。** 站在別人那一段上的時候，前面長了幾行就往下挪
-        // 幾行——那一行說的還是同一處命中。站在自己這一段裏就只夾住，那幾處本來
-        // 就被剛纔那一筆改動挪動了。
-        let rows = self.search.rows().len();
-        self.search.selected = match self.search.selected >= was && grew != 0 {
-            true => self.search.selected.saturating_add_signed(grew),
-            false => self.search.selected,
-        }
-        .min(rows.saturating_sub(1));
+        // 站在別人那一段上的時候，那一處原封不動，找回去就是原處；站在自己這一
+        // 段裏的時候，那幾處剛被這一筆改動挪過，於是落在「它或它之後」的頭一處
+        // 上——和換掉一處之後接着換下一處是同一條規矩。
+        self.stand_on_that_hit(standing);
         self.search.looked_at = Some(self.search_mark());
     }
 
@@ -2125,12 +2138,7 @@ impl Editor {
     /// 撤回那一路也走這裏：撤完那一處**回來了**，於是「它或它之後的頭一處」正好
     /// 就是它自己。
     fn look_again_and_stand_still(&mut self) {
-        let was = self.search.row().and_then(|row| match row {
-            crate::search_panel::Row::Hit(at) => self.search.hits.get(at).map(|h| {
-                (h.file.clone(), h.line, h.column)
-            }),
-            crate::search_panel::Row::File { .. } => None,
-        });
+        let was = self.the_hit_under_the_highlight();
         // 折起來的那幾個檔也是讀者說過的話，重搜一趟不該把它們全掀開。
         let folds = self.search.folded.clone();
         match self.search.scope.live() {
@@ -2138,8 +2146,28 @@ impl Editor {
             false => self.search_now(),
         }
         self.search.folded = folds;
-        // 剛換掉的那一處已經不在名單上了，所以站的是**它原來那個位置之後**的頭
-        // 一處——換完一處接着換下一處，本來就是這個手勢。
+        self.stand_on_that_hit(was);
+    }
+
+    /// 高亮那一行說的是哪一處命中——重搜之前問一次。
+    ///
+    /// 檔名那一行不算一處命中，所以答 `None`：那一行沒有「它之後的頭一處」可說。
+    fn the_hit_under_the_highlight(&self) -> Option<(Option<PathBuf>, usize, usize)> {
+        self.search.row().and_then(|row| match row {
+            crate::search_panel::Row::Hit(at) => self
+                .search
+                .hits
+                .get(at)
+                .map(|h| (h.file.clone(), h.line, h.column)),
+            crate::search_panel::Row::File { .. } => None,
+        })
+    }
+
+    /// 站回那一處命中上去。
+    ///
+    /// 剛換掉的那一處已經不在名單上了，所以站的是**它原來那個位置之後**的頭一處
+    /// ——換完一處接着換下一處，本來就是這個手勢。
+    fn stand_on_that_hit(&mut self, was: Option<(Option<PathBuf>, usize, usize)>) {
         self.search.selected = match was {
             Some((file, line, column)) => self
                 .search

@@ -22842,3 +22842,57 @@ fn the_outline_keeps_the_heading_it_was_standing_on() {
     assert_eq!(ed.panel(Side::Left).unwrap().rows().len(), 4);
     assert_eq!(standing(&ed), "三", "高亮跟着那一條走，不是停在第三行");
 }
+
+/// **快路不許把一份稿子的命中接到另一份的位置上**（2026-10-07 審出來的）。
+///
+/// 兩件事碰在一起：① `mine`/`mine_total` 說的是「名單開頭那一段是正在寫的那一份
+/// 的」，② `looked_at` 那個戳在面板**為了預覽打開另一個檔**的時候有意重蓋一次
+/// （2026-10-03 修的，不然走一步標題就變「按 Enter 重新查找」）。於是「換的不是
+/// 稿子」那道閘看着是過了，而那兩個數還說着上一份——在預覽出來的那一份裏打一個
+/// 字，它的命中就被整段**插進**名單開頭，而它原來那幾處還在後面：同一個檔在名單
+/// 上出現兩次，處數也憑空多出來。
+#[test]
+fn the_fast_rescan_refuses_when_the_counts_describe_another_buffer() {
+    let dir = std::env::temp_dir().join(format!("yumete-rescanmine-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("one.md"), "甲\n").unwrap();
+    std::fs::write(dir.join("two.md"), "霜一\n霜二\n").unwrap();
+    std::fs::write(dir.join(".yumete.toml"), "").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    // 開着的是 one.md，它一處都沒有——`mine` 因此是 0。
+    ed.open_file(dir.join("one.md")).unwrap();
+    ed.execute(":search-working").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 2, "{:?}", ed.search().hits);
+    // 走到 two.md 的命中上——面板為了預覽把它打開了，於是眼前這一份換了人。
+    // 頭幾下還在框裏走，第四下纔站上第一處命中——站上去面板就把 two.md 打開了。
+    for _ in 0..5 {
+        ed.on_key(Key::Char('j'));
+    }
+    assert!(
+        ed.current_buffer().path().is_some_and(|p| p.ends_with("two.md")),
+        "眼前這一份換成了預覽出來的那一個：{:?}",
+        ed.current_buffer().path()
+    );
+    // 按 Enter 跳過去（鍵也就回了正文），在 two.md 裏打一個「霜」出來。
+    ed.on_key(Key::Enter);
+    for c in "i霜".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    ed.refresh_the_edited_file();
+    let listed: Vec<_> = ed.search().hits.iter().map(|h| (h.file.clone(), h.line)).collect();
+    let mut once = listed.clone();
+    once.sort();
+    once.dedup();
+    assert_eq!(listed.len(), once.len(), "一處都不許重：{listed:?}");
+    // 快路讓開了，於是名單照實說它過期了——面板上就是「按 Enter 重新查找」。
+    assert!(ed.search_is_stale(), "名單過期了，等 Enter");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+
