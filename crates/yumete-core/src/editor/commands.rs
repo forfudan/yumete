@@ -68,18 +68,18 @@ impl Editor {
         // read by nobody: `:view-hanging on` on a horizontal page turned a flag on,
         // changed nothing, and said 「標點旁置：開」, which is three kinds of
         // wrong at once.
-        // Warning: **只有「有前提可補」的命令纔吃得掉末尾那個 `force`**（2026-10-07
-        // 審出來的）。從前這一刀是無條件的，於是**任何**末一格吃整行的命令都
-        // 會把它丟掉：`:open force` 開的是挑選器而不是那個叫 `force` 的檔
-        // （實測），`:run force`、`:sh echo force`、`:grep force`、
-        // `:table-jump force` 同病。一條沒有前提的命令，那個詞不可能是說給它
-        // 聽的——它是參數的一部分。
-        let (line, force) = match line.trim_end().strip_suffix(" force") {
-            Some(rest) if !command::needs_of(rest.trim_end()).is_empty() => (rest.trim_end(), true),
-            // `:convert … force` 說的是另一件事（「做大的那一種改寫」），它自己
-            // 的參數表裏有那個詞，所以留給 `parse` 去讀。
-            _ => (line, false),
-        };
+        // **「前提一併補上」就是那一下 `!`**（2026-10-07 定）。判詞：「I think that
+        // force should not be a parameter but should be a part of the command
+        // function.」
+        //
+        // Warning: 從前它是行末一個 `force` 字，而那個字是**無條件**削掉的——於是任何
+        // 末一格吃整行的命令都把它丟掉：`:open force` 開的是挑選器而不是那個叫
+        // `force` 的檔（實測），`:run`、`:sh`、`:grep`、`:table-jump` 同病。一個
+        // 參數位能被另一件事徵用，這就是代價。
+        //
+        // 行**原樣**往下傳：`!` 在名字上，`parse` 自己認得，所以 `:convert!` 讀
+        // 得到它自己的那一格 `p.force`，不必再有人把它接回去。
+        let force = command::forced(line);
         let unmet: Vec<command::Need> = command::needs_of(line)
             .iter()
             .copied()
@@ -111,19 +111,7 @@ impl Editor {
                 }
             }
         }
-        let mut asked = command::parse(line)?;
-        // `force` is stripped above, where it means 「do it anyway」 for a
-        // command whose prerequisites are missing. `:convert … force` spells
-        // the same word for the same kind of reason — do the *bigger* edit,
-        // the one that changes words and not just characters — and the strip
-        // above ate it before [`command::parse`] ever saw it. Handing it back
-        // is the whole fix: every other reader of that word (the `:` menu,
-        // [`command::parse`] called directly) sees it in place.
-        if force {
-            if let Command::Convert(command::ConvertAsk::Run { force, .. }) = &mut asked {
-                *force = true;
-            }
-        }
+        let asked = command::parse(line)?;
         match asked {
             // `:open` with nothing to open is the picker — the command line
             // takes no 中文, and a chapter's name is 中文 (2026-09-16).

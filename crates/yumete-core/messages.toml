@@ -1822,14 +1822,6 @@ zhs = "大陆通规繁体（説 爲 内 吴 裏 髮 臺）"
 en = "大陸通規繁體"
 
 [[message]]
-# : 命令選單裏 force 那一項的說明（convert 組）
-key = "cmd.convert.force"
-zht = "整份轉，不管本來寫的是哪一種"
-zhs = "整份转，不管本来写的是哪一种"
-en = "convert the whole file, whatever it was written in"
-find = "強制 强制 force 全部"
-
-[[message]]
 # : 命令選單裏 g 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
 key = "cmd.convert.g"
 zht = "古籍通規繁體（説 爲 内 吳 裏 髮 臺）"
@@ -2160,9 +2152,9 @@ en = "{0} takes an argument"
 [[message]]
 # 命令要求的前提沒開，提示加 force
 key = "cmd.needs-these-first"
-zht = "還不行，需要：{0}——句末加 force 一併打開"
-zhs = "还不行，需要：{0}——句末加 force 一并打开"
-en = "not yet — this needs {0}; add force at the end to turn them on with it"
+zht = "還不行，需要：{0}——命令名後面加 `!` 一併打開"
+zhs = "还不行，需要：{0}——命令名后面加 `!` 一并打开"
+en = "not yet — this needs {0}; add `!` to the command name to turn them on with it"
 
 [[message]]
 # 冒號命令是空的
@@ -3444,9 +3436,9 @@ en = "{0} characters changed (u to undo)"
 [[message]]
 # :convert 的說明頁最後一行，解釋 force 是什麼
 key = "convert.force-means"
-zht = "加 force ＝ 連詞一起換（内存 → 記憶體）。字數會變，也回不來，所以要自己寫出來。"
-zhs = "加 force ＝ 连词一起换（内存 → 記憶體）。字数会变，也回不来，所以要自己写出来。"
-en = "`force` converts words too (内存 → 記憶體): the length changes and nothing reverses it, so it has to be asked for"
+zht = "加 `!` ＝ 連詞一起換（内存 → 記憶體）。字數會變，也回不來，所以要自己寫出來。"
+zhs = "加 `!` ＝ 连词一起换（内存 → 記憶體）。字数会变，也回不来，所以要自己写出来。"
+en = "`!` converts words too (内存 → 記憶體): the length changes and nothing reverses it, so it has to be asked for"
 
 [[message]]
 # :convert opencc install，這台機器不能替你跑，只把命令說出來
