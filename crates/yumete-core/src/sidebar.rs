@@ -360,8 +360,14 @@ pub struct Sidebar {
 
 /// How many entries one directory contributes before the tree gives up on it.
 ///
-/// A directory of ten thousand files is not a manuscript, and reading it would
+/// A directory of ten thousand files is not a manuscript, and drawing it would
 /// stall the keystroke that opened the sidebar.
+///
+/// Warning: **砍在排序之後，不是之前**（2026-10-07 審出來的）。從前是
+/// `children.take(MAX_PER_DIR)`——先砍再排，而目錄給出來的次序是**文件系統的**
+/// 次序，於是一千個檔的目錄裏留下的是任意的五百個：`a.md` 可能不在樹上，而
+/// `z.md` 在。現在是整個目錄讀進來、排好、再砍，所以留下的是按名字數的頭五百個，
+/// 而且每次都一樣。讀一層目錄是有限的活，畫一萬行不是。
 const MAX_PER_DIR: usize = 500;
 
 impl Sidebar {
@@ -613,7 +619,7 @@ impl Sidebar {
         // `depth() > 0` rather than `skip(1)`: the walker's first answer is
         // the directory itself, and it is not always there to be skipped.
         let children = walker.flatten().filter(|e| e.depth() > 0);
-        for entry in children.take(MAX_PER_DIR) {
+        for entry in children {
             let name = entry.file_name().to_string_lossy().into_owned();
             // The floor under the ignore files; see `editor::walk`.
             if name == "target" || name == "node_modules" {
@@ -627,6 +633,10 @@ impl Sidebar {
         }
         dirs.sort();
         files.sort();
+        // 文件夾先留，它們是走得進去的那一種；五百的上限數的是這一層的總數，和
+        // 從前一樣。
+        dirs.truncate(MAX_PER_DIR);
+        files.truncate(MAX_PER_DIR - dirs.len());
         for (name, path) in dirs {
             let expanded = self.open.contains(&path);
             self.rows.push(Row {

@@ -9077,6 +9077,22 @@ fn draw_picker(
     let first = at - at % deep.max(1);
     let on = Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink));
     let limit = left.x + names - 1;
+    // Warning: **沒有 `+ 1`**（2026-10-06 報的：「There is too much space between
+    // : and the search box. One space is enough.」）。`search.label.query` 這則本身
+    // 就帶一個尾空格（`"搜: "`/`"Search: "`），再加一格就是兩格。
+    let tag_at = left.x + 1;
+    let box_at = tag_at + yumete_cjk::str_width(&say!("search.label.query")) as u16;
+    // **框裝得下的那一段，按格數裁**（2026-10-07 審出來的，和搜索面板那三格同一
+    // 支 [`window_on`]）。
+    //
+    // Warning: 從前這一行整條畫出去、光標也整條算出去：`put_text` 把越過右牆的那一截
+    // 悄悄截掉（它不出聲），而光標那一格照整條算，於是**光標停在框外面**——寬到
+    // 填滿那一列的查詢詞（一列二十四格，十二個漢字就滿了）就看得見。窗口貼着光
+    // 標往左展：這一格正在打字，看得見的要是打的那幾個字。
+    let said = format!("{}{preedit}", picker.query());
+    let room = limit.saturating_sub(box_at) as usize;
+    let (shown, caret_in) =
+        window_on(&said, picker.caret() + preedit.chars().count(), room, true);
     {
         let buf = frame.buffer_mut();
         for slot in 0..deep {
@@ -9183,19 +9199,13 @@ fn draw_picker(
         // 框外面的淡墨裏，打字的時候那一段鋪到梯子的盡頭去，好和「鍵不在這裏」
         // 分得開。
         let tag = say!("search.label.query");
-        let tag_at = left.x + 1;
         put_text(buf, tag_at, left.y + 1, limit, &tag, ground.fg(ink.quiet()));
-        // Warning: **沒有 `+ 1`**（2026-10-06 報的：「There is too much space between
-        // : and the search box. One space is enough.」）。`search.label.query` 這則本身
-        // 就帶一個尾空格（`"搜: "`/`"Search: "`），再加一格就是兩格。
-        let box_at = tag_at + yumete_cjk::str_width(&tag) as u16;
-        let said = format!("{}{preedit}", picker.query());
         // Warning: **兩種狀態都不改底色**（2026-10-01 定，原話：「搜索行 normal 模式
         // 下不需要特别的底色……进入了 insert 模式也不用修改底色了（因为光标会提示
         // 这是什么模式）」）。搜索面板那三格的底色當初是為了「沒有名字的空框看不
         // 出能打字」纔加的，而這一行前面寫着「搜:」，再加上光標形狀本來就在說模
         // 態（豎線＝下一個鍵是字，方塊＝下一個鍵是命令），底色是第三重說法。
-        put_text(buf, box_at, left.y + 1, limit, &said, ground.fg(ink.text()));
+        put_text(buf, box_at, left.y + 1, limit, &shown, ground.fg(ink.text()));
         // **一道橫線，左右連到邊框上**（2026-10-01 定）。
         //
         // Warning: **搜索面板 2026-09-27 把這樣的兩道線拆掉了**（原話：「这里的两条线
@@ -9250,11 +9260,7 @@ fn draw_picker(
     // `before_caret`，於是光標永遠釘在框的開頭、`h`/`l` 挪了它也不動——報上來的
     // 「the curser does not move with hl」就是這個。
     let in_the_box = Position::new(
-        left.x
-            + 1
-            + (yumete_cjk::str_width(&say!("search.label.query"))
-                + yumete_cjk::str_width(&picker.before_caret())
-                + yumete_cjk::str_width(&preedit)) as u16,
+        box_at + yumete_cjk::str_width(&shown.chars().take(caret_in).collect::<String>()) as u16,
         left.y + 1,
     );
     let caret = match picker.on_query() {
@@ -21176,6 +21182,49 @@ fn squeezed(text: &str) -> String {
             format!("{}", SetCursorStyle::SteadyBar),
             "查詢層是豎線"
         );
+    }
+
+    /// **查詢框裏打滿中文，光標不許跑到框外面**（2026-10-07 審出來的）。
+    ///
+    /// 那一行從前整條畫出去、光標也整條算出去：`put_text` 把越過右牆那一截悄悄
+    /// 截掉，而光標那一格照整條算。搜索面板那三格同日修過（`window_on`），這一
+    /// 扇沒跟上。
+    #[test]
+    fn the_pickers_query_box_keeps_the_caret_inside_it() {
+        let mut editor = Editor::new();
+        let config = Config::default();
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('f'));
+        editor.on_key(Key::Char('i'));
+        // 一列二十四格，一個漢字兩格——二十個字遠遠超過框的寬度。
+        for c in "一二三四五六七八九十百千萬億兆京垓秭穰".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let (frame, caret) = render_caret(&editor, &config, 80, 24);
+        let caret = caret.expect("打字的時候有光標");
+        // 框在哪一列：名單那一半的右牆就是 `limit`，照 `draw_picker` 自己那一套
+        // 算（頁腳佔最後一行，所以它能用的那一塊高 23）。
+        let room = Rect::new(0, 0, 80, 23);
+        let wide = (room.width * 4 / 5).clamp(24, 160).min(room.width.saturating_sub(2));
+        let box_ = crate::chrome::place(
+            room,
+            (wide, picker_height(room)),
+            crate::chrome::Anchor::Centre,
+        )
+        .expect("面板擺得下");
+        let names = match box_.width >= 56 {
+            true => (box_.width * 2 / 5).max(24),
+            false => box_.width,
+        };
+        let limit = box_.x + names - 1;
+        assert!(caret.x < limit, "光標在框裏（第 {} 欄，牆在 {limit}）", caret.x);
+        // 而且它停在最後打進去的那個字上——窗口貼着光標往左展。
+        let row = buffer_to_text(&frame)
+            .lines()
+            .nth(caret.y as usize)
+            .expect("那一行畫出來了")
+            .to_string();
+        assert!(row.contains('穰'), "看得見的是打的那幾個字：{row}");
     }
 
     /// **A long note keeps every character it draws** (2026-09-18).
