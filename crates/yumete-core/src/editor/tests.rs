@@ -1211,7 +1211,7 @@ fn auto_ruby_without_a_reader_says_where_readings_come_from() {
 #[test]
 fn auto_ruby_rare_annotates_only_what_a_reader_would_stumble_on() {
     let mut ed = with_toy_reader("漢龘字");
-    ed.execute(":ruby-auto rare").unwrap();
+    ed.execute(":ruby-auto-rare").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "漢<ruby>龘<rt>dá</rt></ruby>字"
@@ -12170,7 +12170,7 @@ fn markdown_writes_a_footnote_and_a_table() {
     // An inline note leaves the cursor between the brackets.
     let mut ed = typed("那年冬天。\n");
     press(&mut ed, "gg");
-    ed.execute(":markdown-footnote inline").unwrap();
+    ed.execute(":markdown-footnote-inline").unwrap();
     assert_eq!(ed.mode(), Mode::Insert);
     type_keys(&mut ed, "存疑");
     assert!(ed.current_buffer().text().starts_with("^[存疑]"), "{}", ed.current_buffer().text());

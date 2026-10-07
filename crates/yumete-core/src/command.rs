@@ -750,7 +750,7 @@ pub enum ConvertAsk {
         /// not bring it back.
         force: bool,
     },
-    /// `:convert-opencc install` / `:convert-opencc update`.
+    /// `:convert-opencc-install` / `:convert-opencc-update`.
     Opencc {
         update: bool,
     },
@@ -1058,13 +1058,6 @@ const SHOT: &[Word] = &[
         needs: &[],
     },
 ];
-
-/// …and the one word a footnote takes.
-const FOOTNOTE_KINDS: &[Word] = &[Word {
-    name: "inline",
-    help: "cmd.footnote-kinds.inline",
-    needs: &[],
-}];
 
 /// A piece of Markdown the editor can write for you.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2212,11 +2205,6 @@ const RUBY_LEVELS: &[Word] = &[
     Word { name: "full", help: "cmd.ruby.full", needs: &[] },
 ];
 
-/// What `:ruby-auto` may be asked for beyond the common readings.
-const RARE: &[Word] = &[
-    Word { name: "rare", help: "cmd.ruby.auto.rare", needs: &[] },
-];
-
 /// The dialects `:ruby-format` writes every reading into.
 const DIALECTS: &[Word] = &[
     Word { name: "html", help: "cmd.ruby.format.html", needs: &[] },
@@ -2305,24 +2293,6 @@ const SIDES: &[Word] = &[
     Word { name: "jp", help: "cmd.convert.jp", needs: &[] },
     Word { name: "c", help: "cmd.convert.c", needs: &[] },
     Word { name: "g", help: "cmd.convert.g", needs: &[] },
-];
-
-/// `:reload` 的賓語。沒有賓語就是「這個檔」——那是它本來的意思。
-const RELOAD_WHAT: &[Word] = &[
-    Word { name: "config", help: "cmd.reload.config", needs: &[] },
-];
-
-const OPENCC: &[Word] = &[
-    Word {
-        name: "install",
-        help: "cmd.opencc.install",
-        needs: &[],
-    },
-    Word {
-        name: "update",
-        help: "cmd.opencc.update",
-        needs: &[],
-    },
 ];
 
 /// The side `:convert` starts from.
@@ -2585,19 +2555,23 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.reload",
         needs: &[],
-        // Warning: **`config` 掛在這裏而不是自成一條命令**（2026-09-23）。
-        // `:` 那張選單在 24 行的窗口下裝得下 54 格，而命令已經 54 條——加任何一
-        // 個頂級名字都會把它擠出一屏（`the_command_menu_spreads_across_a_wide_
-        // window` 當場紅給我看：「all 55 of them: 54 slots」）。**命令名和鍵位
-        // 一樣有預算**，而「把設定再讀一遍」本來就是「把文件再讀一遍」的同一句
-        // 話換個賓語。
-        params: &[Param::Words { of: RELOAD_WHAT, default: None }],
-        build: Some(|p| {
-            Ok(match p.arg(0) {
-                Some("config") => Command::ReloadConfig,
-                _ => Command::Reload { force: p.force },
-            })
-        }),
+        params: &[],
+        build: Some(|p| Ok(Command::Reload { force: p.force })),
+    },
+    Entry {
+        // **一個詞的參數表就是名字的一半**（2026-10-07 定）。旁邊就是
+        // `:reload-auto`，而「再讀一遍設定」卻是 `:reload config`——同一族兩種
+        // 拼法。
+        //
+        // Warning: 2026-09-23 把它掛成參數，理由是選單的預算：「`:` 那張選單在 24 行
+        // 的窗口下裝得下 54 格，而命令已經 54 條」。那個理由在 #369 折疊同族之後
+        // 不成立了——`reload-config` 折進 `:reload` 那一行，頂層一格都不多佔。
+        name: "reload-config",
+        aliases: &[],
+        help: "cmd.reload.config",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::ReloadConfig)),
     },
     Entry {
         name: "reload-auto",
@@ -2775,14 +2749,24 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.convert.opencc",
         needs: &[],
-        params: &[Param::Words { of: OPENCC, default: None }],
-        build: Some(|p| {
-            Ok(Command::Convert(match p.arg(0) {
-                None => ConvertAsk::Explain,
-                Some("install") => ConvertAsk::Opencc { update: false },
-                _ => ConvertAsk::Opencc { update: true },
-            }))
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::Convert(ConvertAsk::Explain))),
+    },
+    Entry {
+        name: "convert-opencc-install",
+        aliases: &[],
+        help: "cmd.opencc.install",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Convert(ConvertAsk::Opencc { update: false }))),
+    },
+    Entry {
+        name: "convert-opencc-update",
+        aliases: &[],
+        help: "cmd.opencc.update",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Convert(ConvertAsk::Opencc { update: true }))),
     },
     Entry {
         name: "quit",
@@ -3143,7 +3127,7 @@ pub const COMMANDS: &[Entry] = &[
         // **`:version` 的重點不是版本號，是「東西都在哪」**（2026-10-05 一個用的人
         // 報的：「這個命令很重要的一點是展示配置文件在哪里」）。人裝完軟件第一個
         // 問題就是「我該去改哪個文件」，而在這之前**沒有任何命令說得出來**——只有
-        // `:reload config`，它重讀，可不說路徑。
+        // `:reload-config`，它重讀，可不說路徑。
         name: "version",
         aliases: &["ver"],
         help: "cmd.commands.version",
@@ -4337,13 +4321,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.markdown-bits.footnote",
         needs: &[],
-        params: &[Param::Words { of: FOOTNOTE_KINDS, default: None }],
-        build: Some(|p| {
-            Ok(Command::Markdown(match p.arg(0) {
-                None => MarkdownBit::Footnote,
-                _ => MarkdownBit::InlineNote,
-            }))
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::Markdown(MarkdownBit::Footnote))),
+    },
+    Entry {
+        name: "markdown-footnote-inline",
+        aliases: &[],
+        help: "cmd.footnote-kinds.inline",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Markdown(MarkdownBit::InlineNote))),
     },
     Entry {
         name: "settings",
@@ -4445,8 +4432,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.ruby.auto",
         needs: &[],
-        params: &[Param::Words { of: RARE, default: None }],
-        build: Some(|p| Ok(Command::AutoRuby { rare: p.arg(0).is_some() })),
+        params: &[],
+        build: Some(|_| Ok(Command::AutoRuby { rare: false })),
+    },
+    Entry {
+        name: "ruby-auto-rare",
+        aliases: &[],
+        help: "cmd.ruby.auto.rare",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::AutoRuby { rare: true })),
     },
     Entry {
         name: "ruby-html",
@@ -6346,9 +6341,8 @@ mod tests {
         // `view-wrap`'s spelling, not the thirteen's.
         assert_eq!(row("", "view-"), ":view- +14");
         assert_eq!(row("", "check-"), ":check- +5");
-        // …and one command under a stem is still a stem: `markdown-` names a
-        // group whether or not it has grown a second one yet.
-        assert_eq!(row("", "markdown-"), ":markdown- +1");
+        // …and a stem is a stem however many are under it.
+        assert_eq!(row("", "markdown-"), ":markdown- +2");
         // …while a name that merely begins the same way is no relation:
         // `shot` starts with `sh` and belongs to nobody.
         assert_eq!(row("", "sh"), ":sh");
@@ -6400,7 +6394,7 @@ mod tests {
             ["word-discover", "word-discover-working", "word-discover-project"]
         );
         assert_eq!(found("close"), ["buffer-close"]);
-        assert_eq!(found("footnote"), ["markdown-footnote"]);
+        assert_eq!(found("footnote"), ["markdown-footnote", "markdown-footnote-inline"]);
         // Two commands can share a word, and then both are the answer —
         // **not** the two families they came from, which is what a fold would
         // have made of them.
@@ -6455,7 +6449,15 @@ mod tests {
         let ruby: Vec<String> = complete("ruby").iter().map(Choice::written).collect();
         assert_eq!(
             ruby,
-            ["ruby", "ruby-render", "ruby-auto", "ruby-html", "ruby-typst", "ruby-format"]
+            [
+                "ruby",
+                "ruby-render",
+                "ruby-auto",
+                "ruby-auto-rare",
+                "ruby-html",
+                "ruby-typst",
+                "ruby-format"
+            ]
         );
         let render: Vec<String> = complete("ruby-render").iter().map(Choice::written).collect();
         assert_eq!(
@@ -6467,7 +6469,15 @@ mod tests {
         let rub: Vec<String> = complete("rub").iter().map(Choice::written).collect();
         assert_eq!(
             rub,
-            ["ruby", "ruby-render", "ruby-auto", "ruby-html", "ruby-typst", "ruby-format"]
+            [
+                "ruby",
+                "ruby-render",
+                "ruby-auto",
+                "ruby-auto-rare",
+                "ruby-html",
+                "ruby-typst",
+                "ruby-format"
+            ]
         );
         // The words a finished command takes, under the command itself.
         let format: Vec<String> = complete("ruby-format").iter().map(Choice::written).collect();

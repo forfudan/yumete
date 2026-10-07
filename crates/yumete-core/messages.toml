@@ -3441,14 +3441,14 @@ zhs = "加 `!` ＝ 连词一起换（内存 → 記憶體）。字数会变，�
 en = "`!` converts words too (内存 → 記憶體): the length changes and nothing reverses it, so it has to be asked for"
 
 [[message]]
-# :convert opencc install，這台機器不能替你跑，只把命令說出來
+# :convert-opencc-install，這台機器不能替你跑，只把命令說出來
 key = "convert.install-it-yourself"
 zht = "這台機器要你自己裝：{0}"
 zhs = "这台机器要你自己装：{0}"
 en = "install it yourself on this machine: {0}"
 
 [[message]]
-# :convert opencc install 交出螢幕之前
+# :convert-opencc-install 交出螢幕之前
 key = "convert.installing"
 zht = "跑：{0}"
 zhs = "跑：{0}"
@@ -3506,8 +3506,8 @@ en = "opencc: {0}"
 [[message]]
 # :convert 要跑了才發現沒裝 opencc
 key = "convert.opencc-needed"
-zht = "沒裝 opencc。裝它：{0}（macOS 上 :convert opencc install 就是這句）"
-zhs = "没装 opencc。装它：{0}（macOS 上 :convert opencc install 就是这句）"
+zht = "沒裝 opencc。裝它：{0}（macOS 上 :convert-opencc-install 就是這句）"
+zhs = "没装 opencc。装它：{0}（macOS 上 :convert-opencc-install 就是这句）"
 en = "opencc is not installed. Install it with: {0}"
 
 [[message]]
@@ -9720,9 +9720,9 @@ en = "word mark.tint"
 [[message]]
 # 設置面板：存好了（{0} ＝ 檔名）
 key = "set.saved"
-zht = "設置存進 {0}——:reload config 讓它生效，或者下次啓動"
-zhs = "设置存进 {0}——:reload config 让它生效，或者下次启动"
-en = "settings written to {0} — :reload config applies them, or the next start"
+zht = "設置存進 {0}——:reload-config 讓它生效，或者下次啓動"
+zhs = "设置存进 {0}——:reload-config 让它生效，或者下次启动"
+en = "settings written to {0} — :reload-config applies them, or the next start"
 
 [[message]]
 # 設置面板：存好了，而這期間那個檔被外面改過（{0} 檔名）
