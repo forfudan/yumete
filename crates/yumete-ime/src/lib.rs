@@ -506,9 +506,11 @@ impl ImeSession {
         // Nothing installed. Rather than an editor that cannot type 漢字 until
         // somebody clones the 宇浩 source tree, 靈明's own 碼表 stands in when
         // this binary was built on a machine that had it.
+        // **哪個方案有出廠表就認哪個**（2026-10-07 加星陳）。從前這裏寫死
+        // `== Scheme::LINGMING`，於是多嵌一張也沒人讀得到。
         let mut builtin = false;
-        if !available && scheme == Scheme::LINGMING {
-            available = load_builtin(&mut engine);
+        if !available {
+            available = load_builtin(&mut engine, scheme);
             builtin = available;
         }
         ImeSession {
@@ -604,7 +606,7 @@ impl ImeSession {
                 }
             }
         }
-        let available = load_builtin(&mut engine);
+        let available = load_builtin(&mut engine, Scheme::LINGMING);
         engine.set_scheme_by_tag(Scheme::LINGMING.tag());
         ImeSession {
             engine,
@@ -1454,20 +1456,33 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
     None
 }
 
-/// 靈明's 碼表, put here at build time by `build.rs` when the machine that
-/// built this binary had it installed — `None` when it did not.
+/// 出廠自帶的那幾張精簡碼表，`build.rs` 在編譯時放進來的——取不到就是 `None`。
 ///
-/// Everything else yume needs is data a writer installs; this one file is the
+/// Everything else yume needs is data a writer installs; these files are the
 /// difference between "an editor that types Chinese" and "an editor that will
-/// type Chinese once you have cloned another repository and run a script". It
-/// is never committed: see `build.rs` for why, and for where it is found.
+/// type Chinese once you have cloned another repository and run a script".
+/// They are never committed: see `build.rs` for why, and for where they come
+/// from.
 mod builtin {
     include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
 }
 
-/// Put the built-in 靈明 tables into `engine`, reporting whether it can type.
-fn load_builtin(engine: &mut Engine) -> bool {
-    let Some(bytes) = builtin::BUILTIN_TABLE else {
+/// 這個方案有沒有一張出廠自帶的精簡碼表。
+fn builtin_for(scheme: Scheme) -> Option<&'static [u8]> {
+    match scheme {
+        Scheme::LINGMING => builtin::BUILTIN_LINGMING,
+        Scheme::XINGCHEN => builtin::BUILTIN_XINGCHEN,
+        _ => None,
+    }
+}
+
+/// Put `scheme`'s built-in table into `engine`, reporting whether it can type.
+///
+/// **符號表兩個方案共用一張**（2026-10-07 比對過：星陳源表那 15,711 條是靈明
+/// 15,716 條的真子集，共有的逐字相同，多出來的五條是 `/bdkg`、`/em`、`/en`、
+/// `/kg`、`/nbsp`）。符號碼是 `/` 引導的助記符，與方案無關。
+fn load_builtin(engine: &mut Engine, scheme: Scheme) -> bool {
+    let Some(bytes) = builtin_for(scheme) else {
         return false;
     };
     let mut table = CodeTable::new();
@@ -1486,7 +1501,7 @@ fn load_builtin(engine: &mut Engine) -> bool {
 
 /// Whether this binary carries a 碼表 at all.
 pub fn has_builtin_table() -> bool {
-    builtin::BUILTIN_TABLE.is_some()
+    builtin::BUILTIN_LINGMING.is_some() || builtin::BUILTIN_XINGCHEN.is_some()
 }
 
 /// Which build of yume the built-in 碼表 came from.
@@ -1978,6 +1993,39 @@ mod tests {
         let mut table = CodeTable::new();
         table.load_text("a 啊\nb 吧 八\n");
         ImeSession::from_engine(Engine::new(table), Scheme::LINGMING)
+    }
+
+    /// **出廠自帶的那幾張，一個方案一張**（2026-10-07 加星陳）。
+    ///
+    /// 從前這道閘寫死 `scheme == Scheme::LINGMING`，所以就算多嵌一張也沒人讀得
+    /// 到。這一條驗的是真的打得出字——沒裝任何東西的機器上，選星陳也能打。
+    ///
+    /// ⚠️ **取不到就跳過**：出廠表是編譯時從 `yume-release` 取的，離線編出來的
+    /// 二進制本來就不帶表，那時這一條什麼也證明不了（同 `:convert` 那幾條在沒有
+    /// opencc 的機器上的辦法）。
+    #[test]
+    fn each_scheme_with_a_built_in_table_can_type_with_nothing_installed() {
+        for (scheme, code, want) in [
+            (Scheme::LINGMING, 'e', "的"),
+            (Scheme::XINGCHEN, 'd', "的"),
+        ] {
+            if builtin_for(scheme).is_none() {
+                continue;
+            }
+            // **空的搜索路徑**：裝好的東西一概看不見，只剩內嵌那一張。
+            let mut ime = ImeSession::new(scheme, Vec::new());
+            assert!(ime.available(), "{} 該靠內嵌的那張站得住", scheme.tag());
+            assert!(ime.is_builtin(), "{} 用的該是內嵌的那一張", scheme.tag());
+            ime.input(code);
+            assert_eq!(ime.top_candidate(), want, "{} 打 {code} 該出「{want}」", scheme.tag());
+        }
+    }
+
+    /// 沒有出廠表的方案照舊答「沒有」，不許拿靈明那張頂上。
+    #[test]
+    fn a_scheme_with_no_built_in_table_says_so() {
+        assert!(builtin_for(Scheme::PINYIN).is_none());
+        assert!(builtin_for(Scheme::QINGYUN).is_none());
     }
 
     #[test]

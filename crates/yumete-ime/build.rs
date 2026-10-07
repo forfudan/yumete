@@ -41,16 +41,18 @@ fn main() {
     // **精華版，永遠**——裝好的那份完整表這裏不看，理由在模塊開頭。沒有就去取
     // 一次，取進一個自己填的 `YUMETE_BUILTIN_DIR`（同一套 `schemes/`＋`data/`
     // 的擺法），於是下面兩支 `find` 一個字都不用改。
-    if std::env::var_os("YUMETE_BUILTIN_DIR").is_none() && find(JINGHUA).is_none() {
+    if std::env::var_os("YUMETE_BUILTIN_DIR").is_none() && find(LINGMING).is_none() {
         fetch_the_builtin();
     }
-    let table = find(JINGHUA);
+    let table = find(LINGMING);
+    let xingchen = find(XINGCHEN);
     let jinghua = true;
     // The 符號表 is the same file either way — 精華版's is cut from the same
     // 15,716 rows — so there is no mixture to worry about.
     let symbols = find(SYMBOLS).or_else(|| find("symbols.ytab"));
     let mut body = String::new();
-    body.push_str(&declare("BUILTIN_TABLE", table.as_deref()));
+    body.push_str(&declare("BUILTIN_LINGMING", table.as_deref()));
+    body.push_str(&declare("BUILTIN_XINGCHEN", xingchen.as_deref()));
     body.push_str(&declare("BUILTIN_SYMBOLS", symbols.as_deref()));
     // Say *which* table, not just how old. `:yume` prints this, and 「出廠自帶
     // 2026-09-12」 beside a candidate list with no 詞 in it is an answer that
@@ -199,7 +201,8 @@ fn watch(path: &Path) {
 /// full tables. Otherwise the binary keeps saying 「出廠自帶 精華版」 on a
 /// machine that has them, until somebody runs `cargo clean`.
 /// 出廠自帶那幾個檔，在 `yume-release` 上的名字與在這裏的擺法。
-const JINGHUA: &str = "schemes/lingming_essential.ytab";
+const LINGMING: &str = "schemes/lingming_essential.ytab";
+const XINGCHEN: &str = "schemes/xingchen_essential.ytab";
 const SYMBOLS: &str = "data/symbols.ytab";
 const RELEASE: &str =
     "https://github.com/forfudan/yume-release/releases/download/yumete-data";
@@ -216,11 +219,14 @@ fn fetch_the_builtin() {
             return;
         }
     }
+    // **靈明那三個要麼齊要麼不算**，星陳是添頭：少了它星陳打不了字，少了那三個裏
+    // 任何一個是連漢字都打不了。所以前者缺了收攤，後者缺了只說一聲。
     let mut got = Vec::new();
-    for (asset, into) in [
-        ("lingming_essential.ytab", JINGHUA),
-        ("symbols.ytab", SYMBOLS),
-        ("VERSION", "VERSION"),
+    for (asset, into, needed) in [
+        ("lingming_essential.ytab", LINGMING, true),
+        ("symbols.ytab", SYMBOLS, true),
+        ("VERSION", "VERSION", true),
+        ("xingchen_essential.ytab", XINGCHEN, false),
     ] {
         let to = cache.join(into);
         let ok = std::process::Command::new("curl")
@@ -231,11 +237,15 @@ fn fetch_the_builtin() {
             .is_ok_and(|code| code.success())
             && to.metadata().is_ok_and(|m| m.len() > 0);
         if !ok {
+            let _ = std::fs::remove_file(&to);
+            if !needed {
+                println!("cargo:warning=取不到 {asset}，這一份二進制不帶那個方案的出廠碼表");
+                continue;
+            }
             // 半份不留：下一趟編譯要麼乾淨地再取一次，要麼乾淨地沒有表。
             for one in got {
                 let _ = std::fs::remove_file(cache.join(one));
             }
-            let _ = std::fs::remove_file(&to);
             println!("cargo:warning=取不到出廠自帶的碼表（{RELEASE}/{asset}），這一份二進制不帶表");
             return;
         }

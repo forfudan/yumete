@@ -20152,11 +20152,30 @@ BUILTIN_VERSION: "2026-10-07"                              ← 所以沒有「�
 `:yume-where` 答不出版本，符號表缺了候選欄沒有標點。③ `common_words.txt` 歸另一支
 build script（`yumete-cjk`），**它不自動取**，`scripts/build.sh` 的提示照這個改了。
 
-**還欠一件**：作者要星陳也內置一張精簡版。`yume-release` 上今天只有完整的
-`xingchen.ytab`（2.87 MB），精簡版要 yume 那一側（`yume/scripts/make_yumete_data.py`）
-生成並發布——已經請輸入法那個 session 做。yumete 這一側三處要改：`build.rs` 多取一張、
-`load_builtin` 按方案挑表、`yumete-ime/src/lib.rs:510` 那個寫死 `Scheme::LINGMING` 的
-閘。等那張發出來再做。
+### 星陳也內置一張（同日，隔壁發完就接上了）
+
+`xingchen_essential.ytab` 279,158 位元組，yume `62fa340` 把 `make_jinghua` 參數化之後
+發到同一個 tag 上。yumete 這一側三處：
+
+- `build.rs` 多取一張。⚠️ **靈明那三個要麼齊要麼不算，星陳是添頭**——少了星陳那張只是
+  星陳打不了字，少了表／符號表／`VERSION` 任何一個是連漢字都打不了。
+- `load_builtin` 收一個 `scheme`，按方案挑表（`builtin_for`）。
+- `yumete-ime/src/lib.rs` 那道閘從前寫死 `scheme == Scheme::LINGMING`，於是多嵌一張也
+  沒人讀得到。
+
+**符號表兩個方案共用一張**（隔壁比對過：星陳源表那 15,711 條是靈明 15,716 條的真子集，
+共有的逐字相同，多出來的五條是 `/bdkg`、`/em`、`/en`、`/kg`、`/nbsp`）。符號碼是 `/`
+引導的助記符，與方案無關，所以不發 `xingchen_symbols.ytab`。
+
+驗的是**真打得出字**，不是「檔案嵌進去了」：空的搜索路徑（裝好的一概看不見），星陳 `d`
+出「的」、靈明 `e` 出「的」。取不到出廠表的機器上這一條自己跳過——離線編出來的二進制本來
+就不帶表，那時它什麼也證明不了。
+
+二進制 13.1 → **13.3 MB**（多的 0.27 MB 就是那張表）。
+
+⚠️ 隔壁同時重發了整套：`VERSION` 的 `build=` 走到 `20261006212837`，`source=` 那一行變成
+兩個檔名。**`stamp()` 只讀 `build=`**，`source=` 全樹沒人 parse，所以不受影響——查過了。
+`common_words.txt` 也換了內容，那歸 `yumete-cjk` 那一支，它不自動取。
 
 ## 5.101 搜索要說它正在搜哪一個檔（2026-10-07 定，做完了）
 
