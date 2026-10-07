@@ -828,7 +828,7 @@ impl Servers {
                         anything = true;
                     }
                     // Warning: An unanswered request can stall a server for good.
-                    Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(id)),
+                    Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(&id)),
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
                     // Warning: **答案先收着，出了這個迴圈再說**（#425）。一個
@@ -903,6 +903,24 @@ impl Servers {
         anything
     }
 
+    /// **把那個子進程收走**，然後交出那條記錄。
+    ///
+    /// Warning: 從前這裏只有 `self.running.remove(command)`——而扔掉一個
+    /// `std::process::Child` **既不殺它也不收它**（Rust 明文如此）。死法有兩種：
+    /// 它自己退了而沒人 `wait`，於是留一個僵屍；或者它還活着、只是管子斷了（這一
+    /// 支正是「管子斷了」那條路叫的），於是留一個沒人管的程序，手裏還攥着那根管
+    /// 子和它那幾百兆（2026-10-07 審出來的）。
+    ///
+    /// [`Servers::stop`] 一直是殺完再收的，這一支照它辦。
+    fn bury(&mut self, command: &str) -> Option<Server> {
+        let mut server = self.running.remove(command)?;
+        if let Some(child) = server.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        Some(server)
+    }
+
     /// A server died. Forget what it said and say so — **once**.
     ///
     /// Warning: **Its complaints go with it.** Leaving them on the page would show
@@ -917,10 +935,10 @@ impl Servers {
             .find(|(_, names)| names.iter().any(|name| name == command))
             .map(|(language, _)| language.clone())
         else {
-            self.running.remove(command);
+            self.bury(command);
             return;
         };
-        let ran = self.running.remove(command).is_some_and(|s| s.ready);
+        let ran = self.bury(command).is_some_and(|s| s.ready);
         self.found.remove(command);
         if let Some(names) = self.serving.get_mut(&language) {
             names.retain(|name| name != command);
@@ -1514,11 +1532,42 @@ mod tests {
         assert!(servers.failed.is_empty(), "崩了不等於這臺機器沒有它");
     }
 
+    /// **一個死掉的服務器，它那個子進程要收走**（2026-10-07 審出來的）。
+    ///
+    /// 扔掉一個 `Child` 既不殺它也不收它：管子斷了那條路留下的是一個沒人管的程
+    /// 序，手裏還攥着那根管子和它那幾百兆。
+    // 這一支收它的是 `bury`，而 clippy 跟不進那個 `struct`——它只看見子進程被
+    // 搬走了。下面結尾還無條件 `kill` ＋ `wait` 一次。
+    #[allow(clippy::zombie_processes)]
+    #[test]
+    fn losing_a_server_reaps_its_child() {
+        let (mut servers, _heard, _tell) = Servers::pretend("rust");
+        // 一個真的、不會自己退的子進程，替那個「還活着、只是管子斷了」的服務器。
+        let child = std::process::Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        if let Some(server) = servers.running.get_mut("rust-analyzer") {
+            server.child = Some(child);
+        }
+        let mut buried = servers.bury("rust-analyzer").expect("那條記錄在");
+        let child = buried.child.as_mut().expect("子進程在");
+        // Warning: **先看一眼，再無論如何收一次**：斷言炸了也不許留一個 `sleep` 在機器
+        // 上（clippy 的 `zombie_processes` 攔的就是這個）。
+        let reaped = matches!(child.try_wait(), Ok(Some(_)));
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(reaped, "殺過也收過了——扔掉它只會留一個沒人管的程序");
+    }
+
     #[test]
     fn a_request_from_the_server_is_answered_rather_than_left_hanging() {
         let (mut editor, _path) = editor_on("c.rs", "fn main() {}\n");
         let (mut servers, heard, tell) = Servers::pretend("rust");
-        tell.send(Notice::Asked { id: 7 }).unwrap();
+        tell.send(Notice::Asked { id: "7".into() }).unwrap();
         servers.collect(&mut editor);
         let answer: serde_json::Value =
             serde_json::from_str(&heard.try_recv().expect("答了")).unwrap();

@@ -243,7 +243,12 @@ pub enum Notice {
     /// /create`, `client/registerCapability`). Warning: **An unanswered request can
     /// stall a server** — `rust-analyzer` waits on its own registration — so
     /// the id comes back out to be answered with an empty result.
-    Asked { id: i64 },
+    ///
+    /// Warning: **號碼照 JSON 原樣帶着，不是 `i64`**（2026-10-07 審出來的）。協議說
+    /// `id` 可以是數字**也可以是字串**，而從前這裏是 `as_i64()`：字串號碼的請求
+    /// 讀成了 [`Notice::Nothing`]，於是**永遠沒人答**，而那正是這一格存在的理由
+    /// ——等自己註冊回音的服務器就停在那裏。`"3"` 原樣回 `"3"`，數字原樣回數字。
+    Asked { id: String },
     /// **The answer to something we asked**, with the id that says which.
     ///
     /// Warning: **Typed, not raw JSON.** Only the front end knows which id it sent
@@ -333,13 +338,22 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
         return Notice::Nothing;
     };
     let method = value.get("method").and_then(|m| m.as_str());
+    // 這一頭發出去的號碼一律是數字，所以「回答」那兩檔照數字讀；**服務器自己發
+    // 來的請求**那一檔不是這一頭取的名字，字串也認（見 [`Notice::Asked`]）。
+    let asked = match value.get("id") {
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        Some(serde_json::Value::String(text)) => Some(serde_json::Value::String(text.clone()).to_string()),
+        _ => None,
+    };
     let id = value.get("id").and_then(|i| i.as_i64());
     match (method, id) {
         (None, Some(id)) if id == initialize_id => Notice::Ready,
         (Some("textDocument/publishDiagnostics"), _) => said(&value),
         (Some("$/progress"), _) => working(&value),
         // A request from the server: it has both a method *and* an id.
-        (Some(_), Some(id)) => Notice::Asked { id },
+        (Some(_), Some(id)) => Notice::Asked { id: asked.unwrap_or_else(|| id.to_string()) },
+        // 號碼是字串的請求——同上一檔，只是號碼不是數字。
+        (Some(_), None) if asked.is_some() => Notice::Asked { id: asked.unwrap_or_default() },
         // An answer to something we sent: an id and no method.
         (None, Some(id)) => Notice::Answer {
             id,
@@ -578,6 +592,19 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
         (None, Some(text)) => text.to_string(),
         (None, None) => label.clone(),
     };
+    // **`insertTextFormat: 2` 是片段，照字面插進去就是往稿子裏寫 `${1:}`**
+    // （2026-10-07 審出來的）。
+    //
+    // 這一頭報的是 `snippetSupport: false`（見 [`initialize`]），所以守規矩的服務
+    // 器不會送片段來——可「不會送」靠的是對方守規矩，而這一條錯的代價是**在人的
+    // 檔裏留下幾個他沒打的字**。所以照實問一句，是片段就把洞填平。
+    //
+    // 不拿 `label` 兜底：rust-analyzer 的 label 是 `counted(…)`，那個省略號比
+    // `${1:text}` 還糟。
+    let insert = match item.get("insertTextFormat").and_then(|f| f.as_i64()) {
+        Some(2) => without_the_holes(&insert),
+        _ => insert,
+    };
     let replacing = edit.and_then(|(e, _)| {
         // A `TextEdit` has `range`; an `InsertReplaceEdit` has `insert` and
         // `replace` instead, and **replace is the one that means 「the word
@@ -607,8 +634,85 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
     })
 }
 
+/// **把一段片段裏的洞填平**，留下的是它的字面那一半。
+///
+/// `counted(${1:text})` → `counted(text)`，`println!("$0")` → `println!("")`。
+/// 規矩照 LSP 的片段語法：`$n`／`${n}` 是個光標位置，沒有字，去掉；
+/// `${n:默認}` 留那個默認；`${n|甲,乙|}` 留頭一個；`\$`／`\}`／`\\` 是轉義，
+/// 脫掉那條反斜線。
+///
+/// Warning: **這不是片段引擎**——它不給跳轉，只保證插進去的是字，不是語法。真要做
+/// 跳轉是另一件事（報 `snippetSupport: true`、存一列洞、`Tab` 走），而那件事沒做
+/// 之前，這一支是那條「稿子裏不許出現沒打過的字」的底線。
+fn without_the_holes(snippet: &str) -> String {
+    let mut out = String::new();
+    let mut chars = snippet.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            // 轉義：下一個字原樣留着。
+            '\\' => match chars.next() {
+                Some(next) => out.push(next),
+                None => out.push('\\'),
+            },
+            '$' => match chars.peek() {
+                // `${…}`：數字之後要麼就完了，要麼 `:默認`，要麼 `|甲,乙|`。
+                Some('{') => {
+                    chars.next();
+                    let mut body = String::new();
+                    let mut depth = 1usize;
+                    while let Some(c) = chars.next() {
+                        match c {
+                            '\\' => {
+                                if let Some(next) = chars.next() {
+                                    body.push(next);
+                                }
+                            }
+                            '{' => {
+                                depth += 1;
+                                body.push(c);
+                            }
+                            '}' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    break;
+                                }
+                                body.push(c);
+                            }
+                            _ => body.push(c),
+                        }
+                    }
+                    // `1:默認` 的默認那一半；沒有冒號就整個是個序號，沒有字。
+                    match body.split_once(':') {
+                        Some((_, text)) => out.push_str(&without_the_holes(text)),
+                        None => {
+                            if let Some((_, choices)) = body.split_once('|') {
+                                out.push_str(
+                                    choices.trim_end_matches('|').split(',').next().unwrap_or(""),
+                                );
+                            }
+                        }
+                    }
+                }
+                // `$1`、`$0`：一串數字，去掉。`$` 後面不是數字也不是 `{` 的話，
+                // 那個 `$` 就是個普通的錢號（服務器本該轉義，沒轉義就按字面算）。
+                Some(c) if c.is_ascii_digit() => {
+                    while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+                        chars.next();
+                    }
+                }
+                _ => out.push('$'),
+            },
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// The empty answer to a request we do not really implement.
-pub fn empty_answer(id: i64) -> String {
+///
+/// `id` 是**那條請求裏的 JSON 原樣**（`4` 或 `"abc"`），所以回去的號碼和來的那個
+/// 逐字節相同——協議要的就是這個。
+pub fn empty_answer(id: &str) -> String {
     format!(r#"{{"jsonrpc":"2.0","id":{id},"result":null}}"#)
 }
 
@@ -829,8 +933,16 @@ mod tests {
         // be answered or the server may wait on it forever.
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":2,"method":"client/registerCapability"}"#, 1),
-            Notice::Asked { id: 2 }
+            Notice::Asked { id: "2".into() }
         );
+        // Warning: **號碼也可以是字串**（協議兩種都許，2026-10-07 審出來的）。從前這一
+        // 條讀成 `Nothing`：沒人答，而等自己註冊回音的服務器就停在那裏。回去的號
+        // 碼要和來的那個逐字節相同，所以引號也帶着。
+        assert_eq!(
+            read(r#"{"jsonrpc":"2.0","id":"abc","method":"client/registerCapability"}"#, 1),
+            Notice::Asked { id: "\"abc\"".into() }
+        );
+        assert_eq!(empty_answer("\"abc\""), r#"{"jsonrpc":"2.0","id":"abc","result":null}"#);
         // A plain notification wants nothing back.
         assert_eq!(read(r#"{"jsonrpc":"2.0","method":"$/progress"}"#, 1), Notice::Nothing);
     }
@@ -972,6 +1084,28 @@ mod tests {
         assert_eq!(inline(raw), "let x = `y`;\n`fn f()`");
     }
 
+    /// **片段不許照字面插進稿子裏**（2026-10-07 審出來的）。
+    ///
+    /// 這一頭報的是 `snippetSupport: false`，所以這是一道底線：對方不守規矩的時
+    /// 候，進稿子的也得是字，不是 `${1:}`。
+    #[test]
+    fn a_snippet_has_its_holes_filled_in_before_it_is_inserted() {
+        let offered = |m: &str| match read(m, 1) {
+            Notice::Answer { offers, .. } => offers,
+            other => panic!("是一條回答：{other:?}"),
+        };
+        let snippet = r#"{"id":4,"result":[{"label":"counted(…)","insertText":"counted(${1:text})$0","insertTextFormat":2}]}"#;
+        assert_eq!(offered(snippet)[0].insert, "counted(text)");
+        // 說是字面（1）就照字面——那一串裏的 `$` 是人家真要的字。
+        let plain = r#"{"id":4,"result":[{"label":"x","insertText":"cost$1","insertTextFormat":1}]}"#;
+        assert_eq!(offered(plain)[0].insert, "cost$1");
+        // 一根光禿禿的序號沒有字；轉義脫一層；`|甲,乙|` 留頭一個。
+        assert_eq!(without_the_holes("a${1}b"), "ab");
+        assert_eq!(without_the_holes("\\$x"), "$x");
+        assert_eq!(without_the_holes("${1|甲,乙|}"), "甲");
+        assert_eq!(without_the_holes("${1:${2:裏}}"), "裏", "洞裏還有洞");
+    }
+
     /// **補全的兩種回答，以及「顯示的」與「打進去的」不是同一個字串**（#53 ④）。
     #[test]
     fn a_completion_answers_in_two_shapes_and_label_is_not_insert() {
@@ -1048,7 +1182,7 @@ mod tests {
         assert_eq!(parsed["params"]["contentChanges"][0]["text"], text);
         assert_eq!(parsed["params"]["textDocument"]["version"], 2);
         // …and the rest are JSON too.
-        for message in [initialize(1, Path::new("/tmp")), initialized(), shutdown(2), exit(), empty_answer(3)] {
+        for message in [initialize(1, Path::new("/tmp")), initialized(), shutdown(2), exit(), empty_answer("3")] {
             serde_json::from_str::<serde_json::Value>(&message).expect(&message);
         }
     }

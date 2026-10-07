@@ -565,6 +565,8 @@ impl Sidebar {
         if self.view != View::Explorer {
             return;
         }
+        let path = self.in_my_world(path);
+        let path = path.as_path();
         // Expand every directory between the root and the file first.
         let mut at = path.parent();
         let mut opened = false;
@@ -600,6 +602,29 @@ impl Sidebar {
             .and_then(|path| self.rows.iter().position(|r| r.path == path))
             .unwrap_or(self.selected)
             .min(self.rows.len().saturating_sub(1));
+    }
+
+    /// **把一條規範化過的路徑說成這棵樹自己那套說法**（2026-10-07 審出來的）。
+    ///
+    /// Warning: 呼叫方交來的路徑是 `canonicalize` 過的（見 `Editor::open_sidebar_showing`
+    /// ——它那樣做是對的，不然同一個檔兩種寫法認不出是一個），而根是項目自己說
+    /// 的那一條。macOS 上 `/tmp` 是 `/private/tmp` 的符號連結，於是
+    /// `starts_with(root)` 一上來就不成立：[`Self::reveal`] 一個目錄都不展開，高
+    /// 亮也永遠落不到那一條上——打開一個檔，樹上不說你在哪。
+    ///
+    /// 剝掉規範根、接回項目說的那個根，兩邊就說同一種話了。認不出來就原樣交回去
+    /// （根本來就不在路上，那是另一回事）。
+    fn in_my_world(&self, path: &Path) -> PathBuf {
+        if path.starts_with(&self.root) {
+            return path.to_path_buf();
+        }
+        let Ok(real) = std::fs::canonicalize(&self.root) else {
+            return path.to_path_buf();
+        };
+        match path.strip_prefix(&real) {
+            Ok(rest) => self.root.join(rest),
+            Err(_) => path.to_path_buf(),
+        }
     }
 
     /// Append `dir`'s children, directories first and each sorted by name.
@@ -786,6 +811,32 @@ mod tests {
             sidebar.step(false);
         }
         assert_eq!(sidebar.selected(), 0, "the first");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **符號連結上的根也認得出那一條**（2026-10-07 審出來的）。
+    ///
+    /// 呼叫方交來的路徑是規範化過的，而根是項目說的那一條——macOS 上 `/tmp` 就是
+    /// `/private/tmp` 的連結，於是 `starts_with(root)` 一上來就不成立：一個目錄都
+    /// 不展開，打開一個檔樹上不說你在哪。
+    #[cfg(unix)]
+    #[test]
+    fn revealing_works_through_a_symlinked_root() {
+        let dir = novel();
+        let link = dir.with_file_name(format!(
+            "{}-link",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&dir, &link).unwrap();
+        // 樹扎在連結上，交來的卻是規範化過的那一條——`open_sidebar_showing` 就是
+        // 這麼叫的。
+        let mut sidebar = Sidebar::new(&link);
+        let real = std::fs::canonicalize(dir.join("卷二/ch02.md")).unwrap();
+        sidebar.reveal(&real);
+        assert_eq!(sidebar.rows()[sidebar.selected()].name, "ch02.md");
+        assert!(sidebar.rows().iter().any(|r| r.name == "卷二" && r.expanded));
+        let _ = std::fs::remove_file(&link);
         std::fs::remove_dir_all(&dir).ok();
     }
 
