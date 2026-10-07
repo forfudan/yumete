@@ -6059,11 +6059,11 @@ zhs = "输入预测：{0}"
 en = "autocompletion: {0}"
 
 [[message]]
-# :yume ! 切到編進二進制的那一份靈明
-key = "ime.builtin-lingming"
-zht = "方案：靈明（出廠自帶的碼表）"
-zhs = "方案：灵明（出厂自带的码表）"
-en = "scheme: 靈明 (the built-in 碼表)"
+# :yume ! 切到編進二進制的那一份碼表（`! 方案名` 指定哪一家）
+key = "ime.builtin-scheme"
+zht = "方案：{0}（出廠自帶的碼表）"
+zhs = "方案：{0}（出厂自带的码表）"
+en = "scheme: {0} (the built-in 碼表)"
 
 [[message]]
 # 輸入法切到中文
