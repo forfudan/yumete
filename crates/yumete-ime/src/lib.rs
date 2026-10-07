@@ -587,13 +587,21 @@ impl ImeSession {
         })
     }
 
-    /// A session using the 碼表 in the binary, whatever is installed.
+    /// A session using `scheme`'s 碼表 **in the binary**, whatever is installed.
     ///
-    /// The escape hatch the fallback creates a need for: an installed table
-    /// that is broken, or older than this binary's, or simply not the one you
-    /// meant. Without it the only way back to a known 靈明 would be moving
-    /// files about outside the editor.
-    pub fn builtin_lingming() -> Self {
+    /// 平常的次序是反過來的——裝好的那張贏過內嵌的那張，內嵌的只是沒裝時的退
+    /// 路。這一支把次序倒過來，而它存在的理由是：裝好的那張可能壞了、可能比二
+    /// 進制裏這張舊、也可能根本不是你要的那張。沒有它，想回到一張已知能用的
+    /// 表，只能離開編輯器去磁碟上挪檔案。
+    ///
+    /// `None` ＝ 這個方案在這一份二進制裏沒有表（2026-10-07 加星陳之前寫死的是
+    /// 靈明，於是多嵌一張也走不到）。
+    pub fn builtin(scheme: Scheme) -> Option<Self> {
+        builtin_for(scheme)?;
+        Some(Self::builtin_made(scheme))
+    }
+
+    fn builtin_made(scheme: Scheme) -> Self {
         let dirs = yumete_config::data_search_dirs();
         let mut engine = Engine::new(CodeTable::new());
         // The language layer still comes from disk where it is: it is not what
@@ -606,11 +614,11 @@ impl ImeSession {
                 }
             }
         }
-        let available = load_builtin(&mut engine, Scheme::LINGMING);
-        engine.set_scheme_by_tag(Scheme::LINGMING.tag());
+        let available = load_builtin(&mut engine, scheme);
+        engine.set_scheme_by_tag(scheme.tag());
         ImeSession {
             engine,
-            scheme: Scheme::LINGMING,
+            scheme,
             data_dirs: dirs,
             available,
             annotations: false,

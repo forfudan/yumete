@@ -1272,45 +1272,63 @@ typing 宇浩. Loading it for everyone means paying at every start-up for an inp
 method most people never asked for. So it **waits for you to say so**:
 
 ```
-:yume-scheme          use the scheme in the config (靈明 by default)
-:yume-scheme riyue    name one
-:yume-s l             the same — a prefix counts as long as no second word matches
+:yume-scheme            use the scheme in the config (靈明 by default)
+:yume-scheme riyue      name one
+:yume-s l               the same — a prefix counts as long as no second word matches
+:yume-scheme !          the 碼表 inside the binary, even when one is installed
+:yume-scheme ! xingchen the same, for 星陳 (a scheme the binary has no table for says so)
+:yume-scheme ~          back to the installed one
+:yume-scheme =<path>    a 碼表 file of your own
 ```
+
+The last four are for when the panel answers something you did not expect: `!`
+and `~` are the same scheme read from two different places, so trying both says
+which of the two tables is at fault.
 
 A prefix counts at every level: `s` is the only word under `:yume` beginning
 with s, and `l` is the only scheme beginning with l. If two words both match it
 picks **neither**, rather than quietly taking whichever was written first.
 
-**You can type with nothing installed at all.** Every yumete binary carries a
-靈明 碼表 of its own:
+**You can type with nothing installed at all.** Every yumete binary carries two
+碼表 of its own — **靈明精華版** (0.25 MB) and **星陳精簡版** (0.27 MB), plus the
+symbol table — and **every build carries the same two**.
 
-- The machine that compiled it **had 宇浩 installed**, and what went in is the
-  complete table (3.69 MB plus the symbol table). `scripts/build.sh` installs
-  the data before it compiles, so that is what it produces. The complete one is
-  not kept in the repository — binaries do not delta, so one commit takes the
-  repository from 1 MB to 4 MB, and every update takes it up again.
-- **Not installed** (CI, which is where the release packages come from): what
-  goes in is the **靈明精華版**, 0.25 MB. It takes **every character** in CJK
-  Basic and Extension A, the 宇浩 radical block, and the characters from the
-  seven character sets that fall outside those blocks, from every source, plus
-  the short codes and the symbol table; it carries **no words**, so
-  whole-sentence input falls back to one character at a time. The panel reports
-  it as 「出廠自帶 精華版 ⋯⋯」, which tells it apart from the complete one.
-- **Neither one** (`cargo build` on a machine that has never had 宇浩
-  installed): then it carries no 碼表, and the panel says so plainly.
+精華版 takes **every character** in CJK Basic and Extension A, the 宇浩 radical
+block, and the characters from the seven character sets that fall outside those
+blocks, from every source, plus the short codes; it carries **no words**, so
+whole-sentence input falls back to one character at a time. The panel reports it
+as 「出廠自帶 精華版 ⋯⋯」, which tells it apart from an installed table.
+
+- **The binary does not depend on the machine that compiled it.** It used to:
+  with 宇浩 installed the complete 3.69 MB 靈明 went in, and without it the
+  精華版. 2026-10-07: 「編譯不是跟着電腦走的！！！！編譯應該是穩定的！！！爲什
+  麽必須帶靈明精華版是爲了壓縮二進制尺寸！！！」 On a machine with 宇浩
+  installed those 3.69 MB were read by nobody anyway — an installed table wins
+  at run time — so they were pure weight. CI and your own `cargo build` now
+  produce the same bytes.
+- **Where they come from**: `yume` generates them and publishes them in the
+  `yumete-data` release of `forfudan/yume-release` (public, no token needed).
+  The build downloads them **once** into `~/.cache/yumete/builtin/` and reads
+  that cache from then on; delete it to pick up a newer 精華版. Nothing expires
+  on its own, because a build that quietly changes what it embeds is the thing
+  this is here to stop. `YUMETE_BUILTIN_DIR` points the build at a directory of
+  your own instead, and is checked **before** the cache, so it never touches
+  the network.
+- **Offline with an empty cache**: the binary carries no 碼表 and the panel says
+  so plainly, rather than the build failing.
 
 Warning: **not one of these tables is in yumete's repository.** They are
-generated — the 碼表 is cut from 宇浩's `ling.txt`, the segmentation word list
-is cut from its language model — and a generated file is rewritten whole with
-every new version, so committing it to git means paying the full price over
-again each time. So they are **build-time inputs**: the release pipeline
-downloads them from the `yumete-data` release of `forfudan/yume-release`
-(public, no token needed), and `scripts/build.sh` generates them on your own
-machine. The recipes are `scripts/make_jinghua.py` and `scripts/make_words.py`.
+generated — the 碼表 is cut from 宇浩's `ling.txt` and `xing.txt`, the
+segmentation word list from its language model — and a generated file is
+rewritten whole with every new version, so committing one means paying its full
+size over again each time. They are **build-time inputs**: the 碼表 come from
+the release above, and `scripts/build.sh` generates the word list on your own
+machine (`scripts/make_words.py`).
 
-An installed 碼表 **wins** — the factory one is the fallback. The other four
-schemes are not carried; with nothing installed they are honestly unavailable,
-rather than quietly turning into 靈明.
+An installed 碼表 **wins** — the factory one is the fallback, and `:yume-scheme !`
+is how to ask for it anyway. The other three schemes are not carried; with
+nothing installed they are honestly unavailable, rather than quietly turning
+into 靈明.
 
 **Where it looks**: first where you pointed it yourself (`[ime] data_dirs`,
 `$YUMETE_DATA_DIR`), then yumete's own data directory (`scripts/build.sh`

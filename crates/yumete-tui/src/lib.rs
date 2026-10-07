@@ -3607,6 +3607,17 @@ fn where_report(ime: &ImeSession) -> String {
     out
 }
 
+/// What to answer when a 方案名 is not one of ours. Both the `!` form and the
+/// plain form land here so the misspelling gets the same list either way.
+fn no_such_scheme(tag: &str) -> String {
+    let names = Scheme::all()
+        .iter()
+        .map(|s| s.tag())
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("no scheme '{tag}' — one of: {names}")
+}
+
 fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     // Two questions ride the same request, because both are about the session
     // the front end holds and neither is worth a second channel.
@@ -3711,18 +3722,28 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         *ime = full;
         return say!("ime.scheme-from-system", ime.scheme_name());
     }
-    if tag == "!" {
-        if !yumete_ime::has_builtin_table() {
+    // **`!` 後面跟得了一個方案名**（2026-10-07 定）。`!` 光着還是靈明，和從前
+    // 一個字不差；`! xingchen` 是內嵌的星陳。從前這裏寫死 `builtin_lingming`，
+    // 於是二進制裏多嵌一張也走不到——星陳裝好的表壞了的時候沒有這條路。
+    if let Some(rest) = tag.strip_prefix('!') {
+        let rest = rest.trim();
+        let scheme = match rest.is_empty() {
+            true => Some(yumete_ime::Scheme::LINGMING),
+            false => yumete_ime::Scheme::from_tag(rest),
+        };
+        let Some(scheme) = scheme else {
+            return no_such_scheme(rest);
+        };
+        let Some(mut full) = ImeSession::builtin(scheme) else {
             return say!("ime.no-builtin-table");
-        }
-        let mut full = ImeSession::builtin_lingming();
+        };
         full.set_page_size(ime.page_size());
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
         full.set_preedit(ime.preedit());
         *ime = full;
-        return say!("ime.builtin-lingming");
+        return say!("ime.builtin-scheme", ime.scheme_name());
     }
     // No name means "the one this project writes in" — `:yume s` is the whole
     // of starting to type, and the config already said which.
@@ -3732,12 +3753,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         tag
     };
     let Some(scheme) = Scheme::from_tag(tag) else {
-        let names = Scheme::all()
-            .iter()
-            .map(|s| s.tag())
-            .collect::<Vec<_>>()
-            .join(" ");
-        return format!("no scheme '{tag}' — one of: {names}");
+        return no_such_scheme(tag);
     };
     // The session may be the language-only one that starts every launch, in
     // which case there is no 碼表 in it to switch *from* — so this is the
@@ -16233,6 +16249,31 @@ fn squeezed(text: &str) -> String {
         let said = panel_method(&mut ime, "invisible");
         assert!(said.contains("invisible") && said.contains("off"), "{said}");
         assert_eq!(ime.panel_display(), PanelDisplay::Off, "unchanged");
+    }
+
+    /// **`!` 後面跟得了一個方案名**（2026-10-07 定）。從前這條路寫死靈明，於
+    /// 是二進制裏第二張表走不到；`! xingchen` 是走到它的辦法。
+    #[test]
+    fn the_bang_takes_a_scheme_name() {
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        let config = Config::default();
+        // 寫錯的方案名給的是方案清單，和不帶 `!` 的那條路一個字不差——同一支
+        // `no_such_scheme`。
+        let said = switch_scheme(&mut ime, "!nosuch", &config);
+        assert!(said.contains("nosuch") && said.contains("xingchen"), "{said}");
+        assert_eq!(ime.scheme(), Scheme::LINGMING, "沒換成半個方案");
+        // 帶不帶表是編譯時決定的，所以斷言跟着二進制走：有表就該真換過去，沒
+        // 表就該照實說這個二進制不帶。
+        for (tag, want) in [("!", Scheme::LINGMING), ("! xingchen", Scheme::XINGCHEN)] {
+            let said = switch_scheme(&mut ime, tag, &config);
+            match ImeSession::builtin(want).is_some() {
+                true => {
+                    assert_eq!(ime.scheme(), want, "{tag}: {said}");
+                    assert!(said.contains("出廠自帶"), "{tag}: {said}");
+                }
+                false => assert!(said.contains("不帶碼表"), "{tag}: {said}"),
+            }
+        }
     }
 
     /// **正在打的那一段那一格，也有設置、命令和問句**（2026-09-27）。
