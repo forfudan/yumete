@@ -22896,3 +22896,24 @@ fn the_fast_rescan_refuses_when_the_counts_describe_another_buffer() {
 }
 
 
+
+/// **一層目錄砍在排序之後**（2026-10-07 審出來的）。
+///
+/// 從前是先砍再排，而目錄給出來的次序是文件系統的次序——於是超過上限的那一層
+/// 留下的是任意的五百個，`ch0001.md` 可能不在樹上而 `ch0600.md` 在。
+#[test]
+fn a_huge_directory_keeps_the_first_names_not_an_arbitrary_five_hundred() {
+    let dir = std::env::temp_dir().join(format!("yumete-bigdir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for n in 1..=600 {
+        std::fs::write(dir.join(format!("ch{n:04}.md")), "一行\n").unwrap();
+    }
+    let mut panel = crate::sidebar::Sidebar::new(&dir);
+    panel.rebuild();
+    let names: Vec<&str> = panel.rows().iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(names.len(), 500, "上限照舊是五百");
+    assert_eq!(names[0], "ch0001.md", "留下的是按名字數的頭五百個");
+    assert_eq!(names[499], "ch0500.md");
+    std::fs::remove_dir_all(&dir).ok();
+}
