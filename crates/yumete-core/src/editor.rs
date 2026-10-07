@@ -1791,7 +1791,7 @@ pub(crate) fn walk_prose(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) 
 }
 
 /// 頭 1 KB 裏有沒有 NUL —— 讀不開的也當二進制，反正搜不了。
-fn looks_binary(path: &Path) -> bool {
+pub(crate) fn looks_binary(path: &Path) -> bool {
     use std::io::Read;
     let Ok(mut file) = std::fs::File::open(path) else { return true };
     let mut head = [0u8; 1024];
@@ -1895,7 +1895,13 @@ fn walk_inner(
         }
         // 二進制那些不交出去，也不算進 [`WALK_CEILING`]——那個數說的是「這本稿子有
         // 多少篇」，而 `.o` 不是一篇。
-        if prose_only && looks_binary(path) {
+        //
+        // ⚠️ **沒有閘的那一趟不在這裏探頭**（2026-10-07）。探一次頭是開一個檔、讀
+        // 一千個字節，而 `-uu` 走一棵代碼樹**八成六是二進制**（本倉量過：51,673
+        // 個檔裏 44,503 個）——這一句於是成了整趟搜索唯一的瓶頸，二十三萬次開檔
+        // 全排在走查這一條線程上。`uncapped` 那一檔本來就不看 `seen`（見
+        // [`too_far`] 第一句），所以把探頭交給工人，一個字的語義都不改。
+        if prose_only && !sieve.uncapped && looks_binary(path) {
             continue;
         }
         seen += 1;
