@@ -22315,4 +22315,50 @@ fn squeezed(text: &str) -> String {
             editor.note_the_server_is_busy(None);
             assert_eq!(spinner::due_in(editor.server_busy_since()), None, "不忙就不叫");
         }
+
+    
+
+    /// **一趟走得久的搜索要看得出它在動**（§5.101，2026-10-07 定）。
+    ///
+    /// 原話：「the search panel is like this for 5 minutes … I suspect that the
+    /// search is not actually working.」量出來那個資料夾 `-uu` 開着是 239,125 個
+    /// 檔、38 GB，頭一處命中在一分鐘開外——搜索沒壞，是它一聲不吭。
+    #[test]
+    fn the_panel_says_which_file_the_walk_is_on() {
+        let dir = std::env::temp_dir().join(format!("yumete-going-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // 夠多的檔，走查纔來得及被看見還在走。
+        std::fs::create_dir_all(dir.join("深")).unwrap();
+        for n in 0..4000 {
+            std::fs::write(dir.join("深").join(format!("第{n:04}章.md")), "那年冬天。\n").unwrap();
+        }
+
+        let config = Config::default();
+        let mut editor = editor_with("那年冬天。\n");
+        editor.set_root(&dir);
+        editor.execute(":search").unwrap();
+        editor.search_mut().query = "冬天".to_string();
+        editor.search_mut().scope = yumete_core::search_panel::Where::Working;
+        // 前端那一條路：先欠着，再在背景裏還——`--grep --open` 走的就是它。
+        editor.run_owed_search();
+        // 等走查真的動起來（它在旁邊那條線程上）。
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while editor.search_progress().1.is_empty() && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        let (looked, at) = editor.search_progress();
+        assert!(!at.is_empty(), "走查要說得出它在看哪一個檔");
+        assert!(editor.still_searching(), "四千個檔，這時候還沒走完");
+
+        let buffer = render_with(&editor, &config, no_ime(), 90, 30);
+        let whole = buffer_to_text(&buffer).replace(' ', "");
+        assert!(
+            whole.contains("己搜"),
+            "面板底下要有那一行（看過 {looked} 個，在 {at}）：{whole:?}"
+        );
+        // 單線，不是雙線——那一道是分隔，不是這一塊有焦點。
+        assert!(whole.contains('├') || whole.contains('╠'), "那一行上面要有一道線");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
