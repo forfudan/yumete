@@ -11486,11 +11486,14 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.search().field, Field::Results);
 
-    // **One hit** — standing on a hit, not on the file above it.
-    // 跨檔的第 0 行是檔名，`j` 一下纔站到命中上。
-    if !matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))) {
-        ed.on_key(Key::Char('j'));
-    }
+    // **One hit** — 站到**只有一處命中**的那個檔底下那一行。
+    //
+    // Warning: **不許靠「名單頭一行是誰」**（2026-10-07）。檔與檔之間的先後現在是
+    // 「誰先跑完誰先到」，頭一行可能正是有兩處命中的那個檔——在它身上換掉一處，
+    // 下面那一句「找有兩處命中的那個檔」就撲空了，而且是三趟裏壞一趟的那種壞法。
+    // 這一條問的是「一處、一檔、全部」三種換法，不是名單的次序。
+    ed.search_go_to_file_with(1);
+    ed.on_key(Key::Char('j'));
     assert!(matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))));
     ed.on_key(Key::Char('r'));
     assert_eq!(ed.search().total, 3, "{}", ed.status());
@@ -21300,9 +21303,15 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
             Row::Hit(_) => None,
         })
         .collect();
+    // 改過的那一份重搜了，排在最前——這一條是刷新那一支的行為，照舊作數。
+    assert_eq!(files.first().map(String::as_str), Some("卷一/a.md 2"), "{files:?}");
+    // Warning: **其餘兩個比的是集合，不是次序**（2026-10-07）。檔與檔之間的先後現在是
+    // 「誰先跑完誰先到」，而這一條問的是**數目**：b.md 還是兩處，說明沒去讀它。
+    let mut rest: Vec<&str> = files[1..].iter().map(String::as_str).collect();
+    rest.sort_unstable();
     assert_eq!(
-        files,
-        vec!["卷一/a.md 2".to_string(), "c.md 1".to_string(), "卷一/b.md 2".to_string()],
+        rest,
+        vec!["c.md 1", "卷一/b.md 2"],
         "Warning: b.md 還是兩處——盤上明明改成了三處，說明沒去讀它"
     );
 

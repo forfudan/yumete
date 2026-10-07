@@ -733,16 +733,15 @@ impl Editor {
             // 退，沒有「界面」可以凍住。面板那一條路搬到旁邊去跑。
             match piping {
                 true => {
-                    let walked = walk_and_search(
-                        &root,
-                        &sieve,
-                        &look,
-                        &unsaved,
-                        here.as_deref(),
-                        &mut stop,
-                        &going,
-                        &mut take,
-                    );
+                    let hunt = Hunt {
+                        sniff: sieve.uncapped,
+                        root: &root,
+                        look: &look,
+                        unsaved: &unsaved,
+                        here: here.as_deref(),
+                        going: &going,
+                    };
+                    let walked = walk_and_search(&hunt, &sieve, &mut stop, &mut take);
                     self.search.files.extend(files);
                     self.search.cut = walked.cut;
                     self.search.skipped = walked.skipped;
@@ -751,16 +750,15 @@ impl Editor {
                     self.search_in_the_background(root.clone(), sieve, look, unsaved, here, going)
                 }
                 false => {
-                    let walked = walk_and_search(
-                        &root,
-                        &sieve,
-                        &look,
-                        &unsaved,
-                        here.as_deref(),
-                        &mut stop,
-                        &going,
-                        &mut take,
-                    );
+                    let hunt = Hunt {
+                        sniff: sieve.uncapped,
+                        root: &root,
+                        look: &look,
+                        unsaved: &unsaved,
+                        here: here.as_deref(),
+                        going: &going,
+                    };
+                    let walked = walk_and_search(&hunt, &sieve, &mut stop, &mut take);
                     self.search.files.extend(files);
                     self.search.cut = walked.cut;
                     self.search.skipped = walked.skipped;
@@ -2328,7 +2326,15 @@ impl Editor {
         let mine = stop.clone();
         std::thread::spawn(move || {
             let mut stopped = false;
-            let walked = walk_and_search(&root, &sieve, &look, &unsaved, here.as_deref(), &mut stopped, &going, &mut |found| {
+            let hunt = Hunt {
+                sniff: sieve.uncapped,
+                root: &root,
+                look: &look,
+                unsaved: &unsaved,
+                here: here.as_deref(),
+                going: &going,
+            };
+            let walked = walk_and_search(&hunt, &sieve, &mut stopped, &mut |found| {
                 if mine.load(std::sync::atomic::Ordering::Relaxed) {
                     return false;
                 }
@@ -2439,86 +2445,239 @@ impl Editor {
 /// `each` 對每一處命中、以及每一個有命中的檔各叫一次；回 `false` 就收攤
 /// （`ye --grep 霜 | head -2` 關掉讀的那一頭，接着走完整棵樹是白費）。
 #[allow(clippy::too_many_arguments)]
+/// 一趟走查從頭到尾共用的那幾樣東西。
+///
+/// 綁成一束，因為並行那一條要把它整個借給每一個工人——而且一支函數帶八個參數，
+/// clippy 自己就說不過去。
+#[derive(Clone, Copy)]
+struct Hunt<'a> {
+    /// 二進制要不要在這裏探頭——`uncapped` 那一趟走查不探了，見 `walk_inner`。
+    sniff: bool,
+    root: &'a std::path::Path,
+    look: &'a Look,
+    unsaved: &'a std::collections::HashMap<std::path::PathBuf, String>,
+    here: Option<&'a std::path::Path>,
+    going: &'a crate::editor::Progress,
+}
+
+/// **一個檔看一遍**，命中逐條交出去。回 `false` ＝ 收攤。
+///
+/// 從走查裏抽出來的（2026-10-07），因為並行那一條要在別的線程上叫它。裏面一個
+/// `self` 都沒有，拿的全是共享的引用——這正是它搬得動的原因。
+fn look_in_one_file(
+    hunt: &Hunt<'_>,
+    path: &std::path::Path,
+    each: &mut dyn FnMut(Found) -> bool,
+) -> bool {
+    let Hunt { sniff, root, look, unsaved, here, going } = *hunt;
+    // 探頭挪到了這裏（並行那一條上就是每雙手自己探自己的）。
+    if sniff && crate::editor::looks_binary(path) {
+        return true;
+    }
+    // Not twice: the one being written was searched from memory.
+    //
+    // Warning: **`canonicalize` 直接叫，不走 `real_path`**（2026-10-06）。那一支帶
+    // 記憶而記憶掛在 `self` 上。這裏一個檔只問一次，記不記憶差得不多。
+    let full = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if Some(full.as_path()) == here {
+        return true;
+    }
+    let shown = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+    // **Say where we are before reading it**, not after: the file about to
+    // be read is the one the reader is waiting on.
+    going.looking_at(&shown);
+    let mut at = 0usize;
+    let mut found = 0usize;
+    let mut stopped = false;
+    // Warning: **這一份永遠是空的**，而且必須是：`take_the_line` 的 `most` 給
+    // `None` 它就一條都不留——命中已經從 `each` 交出去了，留在這裏是第二份。
+    // 封頂歸呼叫方管（它纔知道這一趟留不留名單、留幾條）。
+    let mut unkept: Vec<Hit> = Vec::new();
+    let mut give = |hit: &Hit| each(Found::Hit(hit.clone()));
+    let mut sink: Option<&mut dyn FnMut(&Hit) -> bool> = Some(&mut give);
+    match unsaved.get(&full) {
+        // **改過而没存盤的那幾份從内存裏讀。** Unsaved work is work, and a
+        // search that could not see it would send a reader to a line that
+        // no longer says that.
+        Some(text) => {
+            for (line, text) in text.split_inclusive('\n').enumerate() {
+                if !take_the_line(
+                    look, &shown, text, line, None, &mut at, &mut found, &mut unkept,
+                    &mut sink, &mut stopped,
+                ) {
+                    break;
+                }
+            }
+        }
+        // **一行一行地讀，整個檔不進內存**（2026-10-03 定）。搜索本來就是
+        // **逐行**做的（式子配不過換行），所以按行流着讀一個字的語義都不改。
+        // 壞的字節當場換成替代字符，不丟整個檔；二進制那些早在走查裏按 NUL
+        // 攔掉了（`looks_binary`）。
+        None => {
+            let Ok(file) = std::fs::File::open(path) else { return true };
+            let mut reader = std::io::BufReader::new(file);
+            let mut raw = Vec::new();
+            let mut line = 0usize;
+            loop {
+                raw.clear();
+                match std::io::BufRead::read_until(&mut reader, b'\n', &mut raw) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+                let text = String::from_utf8_lossy(&raw);
+                if !take_the_line(
+                    look, &shown, &text, line, None, &mut at, &mut found, &mut unkept,
+                    &mut sink, &mut stopped,
+                ) {
+                    break;
+                }
+                line += 1;
+            }
+        }
+    }
+    // **有命中就記一筆，不管名單還放不放得下**（見 `Search::files`）。
+    if found > 0 && !each(Found::File(shown)) {
+        return false;
+    }
+    !stopped
+}
+
+/// 幾雙手——**一個檔一雙**，誰先跑完誰先交（2026-10-07 定）。
+///
+/// 量出來的（作者的 `yuhao-ime`，`-uu`，239,125 個檔、38 GB）：`rg -j1` 34.2 秒、
+/// `rg` 全核 5.1 秒，而我們單線程那時是 36 秒——**追平了 rg 的單線程**，差的七倍
+/// 全在這裏。走查那一層自己留在主線程上（光走名字 2.37 秒），與工人並行地跑，所以
+/// 它不是地板。
+fn hands() -> usize {
+    std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(16)
+}
+
+/// **頭幾個檔照舊一個一個來**，名單的次序因此是穩的（2026-10-07）。
+///
+/// 一部書是幾十個檔，一棵代碼樹是二十三萬個。前者走查一趟本來就不到一眨眼，拆給
+/// 十四雙手省不出什麼，而**次序穩**是真金白銀：名單每回都長一個樣，測試也不必
+/// 繞開「誰先跑完」。後者在這幾個檔上花的時間可以忽略不計。
+///
+/// 所以不是「大樹纔並行」那種要先數一遍的判準——走到第幾個就知道第幾個。
+const ONE_BY_ONE_FIRST: usize = 256;
+
 fn walk_and_search(
-    root: &std::path::Path,
+    hunt: &Hunt<'_>,
     sieve: &crate::editor::Sieve,
-    look: &Look,
-    unsaved: &std::collections::HashMap<std::path::PathBuf, String>,
-    here: Option<&std::path::Path>,
     stop: &mut bool,
-    going: &crate::editor::Progress,
     each: &mut dyn FnMut(Found) -> bool,
 ) -> crate::editor::Walked {
-    let mut total = 0usize;
-    crate::editor::walk_prose(root, sieve, &mut |path| {
-        if *stop {
-            return;
-        }
-        // Not twice: the one being written was searched from memory.
-        //
-        // Warning: **`canonicalize` 直接叫，不走 `real_path`**（2026-10-06）。那一支帶
-        // 記憶而記憶掛在 `self` 上。這裏一個檔只問一次，記不記憶差得不多。
-        let full = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        if Some(full.as_path()) == here {
-            return;
-        }
-        let shown = path.strip_prefix(root).unwrap_or(path).to_path_buf();
-        // **Say where we are before reading it**, not after: the file about to
-        // be read is the one the reader is waiting on.
-        going.looking_at(&shown);
-        let was = total;
-        let mut at = 0usize;
-        // Warning: **這一份永遠是空的**，而且必須是：`take_the_line` 的 `most` 給
-        // `None` 它就一條都不留——命中已經從 `each` 交出去了，留在這裏是第二份。
-        // 封頂歸呼叫方管（它纔知道這一趟留不留名單、留幾條）。
-        let mut unkept: Vec<Hit> = Vec::new();
-        let mut give = |hit: &Hit| each(Found::Hit(hit.clone()));
-        let mut sink: Option<&mut dyn FnMut(&Hit) -> bool> = Some(&mut give);
-        match unsaved.get(&full) {
-            // **改過而没存盤的那幾份從内存裏讀。** Unsaved work is work, and a
-            // search that could not see it would send a reader to a line that
-            // no longer says that.
-            Some(text) => {
-                for (line, text) in text.split_inclusive('\n').enumerate() {
-                    if !take_the_line(
-                        look, &shown, text, line, None, &mut at, &mut total, &mut unkept,
-                        &mut sink, stop,
-                    ) {
-                        break;
-                    }
-                }
+    let root = hunt.root;
+    let hands = hands();
+    if hands <= 1 || *stop {
+        return crate::editor::walk_prose(root, sieve, &mut |path| {
+            if *stop {
+                return;
             }
-            // **一行一行地讀，整個檔不進內存**（2026-10-03 定）。搜索本來就是
-            // **逐行**做的（式子配不過換行），所以按行流着讀一個字的語義都不改。
-            // 壞的字節當場換成替代字符，不丟整個檔；二進制那些早在走查裏按 NUL
-            // 攔掉了（`looks_binary`）。
-            None => {
-                let Ok(file) = std::fs::File::open(path) else { return };
-                let mut reader = std::io::BufReader::new(file);
-                let mut raw = Vec::new();
-                let mut line = 0usize;
+            if !look_in_one_file(hunt, path, each) {
+                *stop = true;
+            }
+        });
+    }
+    // **一個檔整批交出來**，所以同一個檔的幾處命中永遠挨在一起、按行號——名單
+    // 仍舊只往尾巴上加，左欄那一行不會在腳底下挪。變的只有**檔與檔之間**的先後：
+    // 過了 [`ONE_BY_ONE_FIRST`] 之後是誰先跑完誰先到（作者 2026-10-07 定，同 rg
+    // 的缺省）。
+    let quit = std::sync::atomic::AtomicBool::new(*stop);
+    // ⚠️ **通道要在 `scope` 外面宣告**：工人借的東西得比那一圈活得久，而在閉包裏
+    // 宣告的活不到那時候（借用檢查當場就說了）。
+    //
+    // 工作那一頭有閘：隊列滿了走查自己等一等，不然二十三萬個路徑全排在內存裏。
+    let (hand_out, take) = std::sync::mpsc::sync_channel::<std::path::PathBuf>(hands * 4);
+    let take = std::sync::Mutex::new(take);
+    // 交回來那一頭不設閘：設了就可能主線程在發、工人在交，兩頭都等着。
+    let (say, heard) = std::sync::mpsc::channel::<Vec<Found>>();
+    // 筆按人數發完，原本那一支當場扔掉——不扔，收那一頭就永遠等得到下一批。
+    let mut pens: Vec<std::sync::mpsc::Sender<Vec<Found>>> =
+        (0..hands).map(|_| say.clone()).collect();
+    drop(say);
+    let walked = std::thread::scope(|team| {
+        for say in pens.drain(..) {
+            let take = &take;
+            let quit = &quit;
+            team.spawn(move || {
                 loop {
-                    raw.clear();
-                    match std::io::BufRead::read_until(&mut reader, b'\n', &mut raw) {
-                        Ok(0) | Err(_) => break,
-                        Ok(_) => {}
-                    }
-                    let text = String::from_utf8_lossy(&raw);
-                    if !take_the_line(
-                        look, &shown, &text, line, None, &mut at, &mut total, &mut unkept,
-                        &mut sink, stop,
-                    ) {
+                    if quit.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
-                    line += 1;
+                    let Ok(path) = ({
+                        let held = take.lock().expect("the queue");
+                        held.recv()
+                    }) else {
+                        break;
+                    };
+                    let mut batch = Vec::new();
+                    let mut keep = |one: Found| {
+                        batch.push(one);
+                        true
+                    };
+                    let more = look_in_one_file(hunt, &path, &mut keep);
+                    if !batch.is_empty() && say.send(batch).is_err() {
+                        break;
+                    }
+                    if !more {
+                        quit.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
+                }
+            });
+        }
+        // 主線程走查，順帶把交回來的收掉——`each` 只在這一條線程上叫，所以呼叫方
+        // 那個閉包不必是 `Send`。
+        // 一支明寫的函數，不是閉包：閉包會把 `each` 借走，而走查那一支也要用它。
+        fn pass(
+            heard: &std::sync::mpsc::Receiver<Vec<Found>>,
+            wait: bool,
+            each: &mut dyn FnMut(Found) -> bool,
+            quit: &std::sync::atomic::AtomicBool,
+        ) {
+            loop {
+                let got = match wait {
+                    true => heard.recv().ok(),
+                    false => heard.try_recv().ok(),
+                };
+                let Some(batch) = got else { break };
+                for one in batch {
+                    if !each(one) {
+                        quit.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                if !wait {
+                    break;
                 }
             }
         }
-        // **有命中就記一筆，不管名單還放不放得下**（見 `Search::files`）。
-        if total > was && !each(Found::File(shown)) {
-            *stop = true;
-        }
-    })
+        let mut seen = 0usize;
+        let walked = crate::editor::walk_prose(root, sieve, &mut |path| {
+            if quit.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
+            seen += 1;
+            // 頭幾個就在這條線程上看完，順序與從前逐字相同。
+            if seen <= ONE_BY_ONE_FIRST {
+                if !look_in_one_file(hunt, path, each) {
+                    quit.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                return;
+            }
+            if hand_out.send(path.to_path_buf()).is_err() {
+                quit.store(true, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+            pass(&heard, false, each, &quit);
+        });
+        // 走完了，隊列關上，工人自己收攤；剩下的收齊。
+        drop(hand_out);
+        pass(&heard, true, each, &quit);
+        walked
+    });
+    *stop = quit.load(std::sync::atomic::Ordering::Relaxed);
+    crate::editor::Walked { cut: walked.cut || *stop, skipped: walked.skipped }
 }
 
 /// 背景那一趟交回來的東西（§5.93）。
