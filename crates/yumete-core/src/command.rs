@@ -4997,6 +4997,22 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Param> {
 /// stale names the word rather than the line. Walking stops where the words
 /// stop: under a path or free text what follows is the writer's own text, not
 /// this table's vocabulary.
+/// **這一行打到一半，看得見嗎**（2026-10-07 定）。
+///
+/// `None` ＝ 看不見：絕大多數命令都是這一種。白名單眼下只有 `:theme <名字>`。
+///
+/// Warning: **只認「解析得出 `Theme{name: Some(_)}`」那一種**。`:theme` 裸着是報告，
+/// `:theme dark` 是明暗（那一支還原起來是另一件事），都不預覽——寧可少預覽一
+/// 條，也不要在一條回不去的命令上先跑一遍。
+pub fn preview_of(line: &str) -> Option<crate::editor::Shown> {
+    match parse(line) {
+        Ok(Command::Theme { name: Some(name), mood: None }) => {
+            Some(crate::editor::Shown::Theme(name))
+        }
+        _ => None,
+    }
+}
+
 /// **還在打命令名嗎**（2026-10-07）——猜與不猜、說明說誰的事，都問這一句。
 ///
 /// 不是的有三種，每一種都不是「名字打了一半」：
