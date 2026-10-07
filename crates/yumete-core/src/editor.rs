@@ -2012,6 +2012,13 @@ const DISK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 /// move would offer `count` where `count` cannot go.
 #[derive(Debug, Clone)]
 pub(crate) struct Offering {
+    /// **Which buffer** it was asked about (2026-10-07 審出來的).
+    ///
+    /// Warning: 光標的位置單獨認不出一份稿子。從前只記 [`Self::at`]，而每一道閘問的都
+    /// 是「`offering.at == sel.head()`」——換一個緩衝區，光標恰好也在那一格上，
+    /// 這張單子就當成是這一份的，`Tab` 一下把**另一份檔算出來的那一段**蓋進眼前
+    /// 這一份。`gd` 那一支同日修的是同一個形狀的洞。
+    pub(crate) buffer: u64,
     /// Where the caret was when this was asked.
     pub(crate) at: usize,
     /// What the server offered, in the server's own order (it ranks them).
@@ -2019,6 +2026,13 @@ pub(crate) struct Offering {
     /// Which one is picked — always a real index, because an empty list is
     /// 「no offering」 and is never stored.
     pub(crate) picked: usize,
+}
+
+impl Offering {
+    /// 這張單子是**這一份稿子、這一格**上問出來的嗎。
+    fn stands_here(&self, editor: &Editor) -> bool {
+        (self.buffer, self.at) == (editor.current_buffer().id(), editor.sel.head())
+    }
 }
 
 

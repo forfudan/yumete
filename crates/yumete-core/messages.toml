@@ -11650,7 +11650,9 @@ zhs = "出厂自带（前面都没有的时候）"
 en = "built in (when none of the above answered)"
 
 [[message]]
-# `:yume-where`：靈明精華版 {0}
+# `:yume-where`：出廠自帶的那一份是哪一份。⚠️ {0} 是**版本**，而「精華版」三個字
+# 在它裏面：編譯的機器上有完整的靈明表就嵌完整的（{0} 只有日期），沒有纔退回倉裏
+# 那份 `lingming_essential.ytab`（{0} 是「精華版 日期」）。見 `yumete-ime/build.rs`。
 key = "yume.where.builtin-is"
 zht = "靈明碼表 {0}"
 zhs = "灵明码表 {0}"

@@ -22626,7 +22626,12 @@ fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
         let rope = ed.current_buffer().rope().clone();
         let at = crate::motion::line_end(&rope, rope.line_to_char(line - 1));
         ed.set_cursor(at);
-        ed.offering = Some(crate::editor::Offering { at, items: vec![one], picked: 0 });
+        ed.offering = Some(crate::editor::Offering {
+            buffer: ed.current_buffer().id(),
+            at,
+            items: vec![one],
+            picked: 0,
+        });
         ed
     };
 
@@ -22747,4 +22752,33 @@ fn replacing_one_hit_leaves_the_eye_on_the_next_one_not_on_a_row_number() {
     assert!(ed.search().folded.contains(&first_file), "{:?}", ed.search().folded);
     let _ = Where::Project;
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **一張補全單子只對問它的那一份稿子作數**（2026-10-07 審出來的）。
+///
+/// 每一道閘從前問的都是「光標還在原來那一格嗎」，而光標的位置單獨認不出一份稿
+/// 子：換一個緩衝區、光標恰好也在那一格上，`Tab` 就把**另一份檔算出來的那一段**
+/// 蓋進眼前這一份。同日 `gd` 那一支修的是同一個形狀的洞。
+#[test]
+fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
+    let offer = crate::lsp::Offer {
+        label: "counted".into(),
+        insert: "counted".into(),
+        kind: 0,
+        detail: None,
+        replacing: None,
+    };
+    let mut ed = typed("甲\n");
+    // 光標在第 0 格——從前「還在那一格嗎」答是，就足以讓單子認錯門。
+    ed.set_cursor(0);
+    let other = ed.current_buffer().id();
+    ed.offering = Some(crate::editor::Offering {
+        buffer: other.wrapping_add(1),
+        at: 0,
+        items: vec![offer],
+        picked: 0,
+    });
+    assert!(ed.offers_here().is_none(), "別的稿子問出來的單子，這裏不算數");
+    assert!(!ed.take_the_offer(), "更不許蓋進來");
+    assert_eq!(ed.current_buffer().text(), "甲\n", "一個字都沒進來");
 }
