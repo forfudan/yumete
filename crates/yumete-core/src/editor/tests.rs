@@ -22677,3 +22677,74 @@ fn the_word_force_belongs_to_the_argument_when_there_is_no_prerequisite() {
     assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **換掉一處之後，高亮要落在它之後那一處，不是落在第幾行**（2026-10-07 審出來的）。
+///
+/// 重搜一趟會把 `selected` 歸零、把折起來的檔全掀開，所以重搜前後的行號不是同一
+/// 套。從前是照號碼放回去的：折過一個檔再按 `r`，高亮就落在一處讀者沒看過的命中
+/// 上，而下一下 `r` 換的就是它。
+#[test]
+fn replacing_one_hit_leaves_the_eye_on_the_next_one_not_on_a_row_number() {
+    use crate::search_panel::{Row, Where};
+    let dir = a_little_book("standstill");
+    std::fs::write(dir.join("卷一/a.md"), "阿甯一。\n阿甯二。\n阿甯三。\n").unwrap();
+    std::fs::write(dir.join("卷一/b.md"), "阿甯四。\n阿甯五。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":replace-project").unwrap();
+    for c in "阿甯".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Down);
+    for c in "阿寧".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 5, "{}", ed.status());
+
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+
+    // **折起走在前面的那個檔**，於是重搜一掀開，後面每一行的號碼都挪了位——
+    // 這正是「照號碼放回去」會掉進去的那個坑。
+    let first_file = ed
+        .search()
+        .rows()
+        .iter()
+        .find_map(|row| match row {
+            Row::File { path, buffer, .. } => Some((path.clone(), *buffer)),
+            Row::Hit(_) => None,
+        })
+        .expect("頭一行是檔名");
+    ed.search_for_test().folded.insert(first_file.clone());
+
+    // 站到**另一個檔**的頭一處命中上，記下它是哪一行。
+    let (at, line) = ed
+        .search()
+        .rows()
+        .iter()
+        .enumerate()
+        .find_map(|(at, row)| match row {
+            Row::Hit(h) => Some((at, ed.search().hits[*h].line)),
+            Row::File { .. } => None,
+        })
+        .expect("折起一個之後還有命中");
+    ed.search_for_test().selected = at;
+    ed.on_key(Key::Char('r'));
+    assert_eq!(ed.search().total, 4, "換掉一處：{}", ed.status());
+
+    // 站的仍舊是一處**命中**（不是檔名那一行），而且是剛纔那一處之後的。
+    match ed.search().row() {
+        Some(Row::Hit(h)) => {
+            let now = ed.search().hits[h].line;
+            assert!(now > line, "站在它之後那一處上：{line} → {now}");
+        }
+        other => panic!("站的不是命中：{other:?}；{:?}", ed.search().rows()),
+    }
+    // 折起來的那個檔還折着——讀者說過的話，重搜一趟不該掀開。
+    assert!(ed.search().folded.contains(&first_file), "{:?}", ed.search().folded);
+    let _ = Where::Project;
+    std::fs::remove_dir_all(&dir).ok();
+}
