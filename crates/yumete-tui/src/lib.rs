@@ -20005,7 +20005,7 @@ fn squeezed(text: &str) -> String {
         );
 
         // Typing narrows it, and the commands that no longer match go away.
-        for c in "ruby".chars() {
+        for c in "ruby-render".chars() {
             editor.on_key(Key::Char(c));
         }
         let buffer = render_with(&editor, &config, no_ime(), 90, 24);
@@ -20018,7 +20018,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char(' '));
         let buffer = render_with(&editor, &config, no_ime(), 90, 24);
         let text = buffer_text(&buffer);
-        assert!(text.contains("basic"), "the words `:ruby` takes: {text:?}");
+        assert!(text.contains("basic"), "the words `:ruby-render` takes: {text:?}");
         assert!(!text.contains(":basic"), "a word is not a command, so no colon");
         // **說明說的是按下 Enter 會發生什麼**（2026-10-07 定）。`:ruby ` 末尾那
         // 一個空格還沒挑中任何一個詞，按下 Enter 跑的是**裸** `:ruby`——所以那
@@ -20027,7 +20027,7 @@ fn squeezed(text: &str) -> String {
         // 原話：「我输入 :ruby 加空格的时候……描述区显示的是第一个参数的信息
         // （off）。但如果我按下回车，它其实触发的是裸命令」。
         let squashed = text.replace(' ', "");
-        assert!(squashed.contains("改這裏的注音"), "裸命令的事: {squashed:?}");
+        assert!(squashed.contains("注音排多少"), "裸命令的事: {squashed:?}");
 
         // 挑中一個詞之後纔說那個詞的事。
         for c in "off".chars() {

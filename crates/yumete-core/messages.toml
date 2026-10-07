@@ -1529,10 +1529,18 @@ find = "替換 替换 replace 工作 路徑 路径 目錄 目录 working cwd"
 [[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
 key = "cmd.commands.ruby"
-zht = "改這裏的注音；`:ruby off|basic|full` 是排多少"
-zhs = "改这里的注音；`:ruby off|basic|full` 是排多少"
-en = "edit the reading here; `:ruby off|basic|full` is how much is drawn"
+zht = "改這裏的注音；排多少在 `:ruby-render`"
+zhs = "改这里的注音；排多少在 `:ruby-render`"
+en = "edit the reading here; how much is drawn is `:ruby-render`"
 find = "注音 拼音 振假名 旁註 旁注 furigana annotation"
+
+[[message]]
+# : 命令選單裏 ruby-render 那一項的說明（commands 組）
+key = "cmd.commands.ruby-render"
+zht = "注音排多少：顯示源碼、認得不排、排在正文旁邊；不寫就說現在是哪一檔"
+zhs = "注音排多少：显示源码、认得不排、排在正文旁边；不写就说现在是哪一档"
+en = "how much of a reading is drawn: the source, read but not laid out, or beside the base; bare says which it is now"
+find = "注音 拼音 旁註 旁注 排 render 級別 级别"
 
 [[message]]
 # : 命令選單裏 rules 那一項的說明（#424）
@@ -1632,10 +1640,18 @@ find = "語法 语法 標記 标记 高亮 highlight filetype"
 [[message]]
 # : 命令選單裏 table 那一項的說明（commands 組）
 key = "cmd.commands.table"
-zht = "按格子編輯：CSV 整個文件，或光標所在的 | 表格；`:table off` 收工"
-zhs = "按格子编辑：CSV 整个文件，或光标所在的 | 表格；`:table off` 收工"
-en = "edit as a grid: a whole CSV, or the | table under the cursor; `:table off` stops"
+zht = "按格子編輯：CSV 整個文件，或光標所在的 | 表格；畫多少在 `:table-render`"
+zhs = "按格子编辑：CSV 整个文件，或光标所在的 | 表格；画多少在 `:table-render`"
+en = "edit as a grid: a whole CSV, or the | table under the cursor; how much is drawn is `:table-render`"
 find = "表格 網格 网格 格子 欄位 栏位 grid csv tsv"
+
+[[message]]
+# : 命令選單裏 table-render 那一項的說明（commands 組）。三個參數就是 空格 t o|b|f
+key = "cmd.commands.table-render"
+zht = "表格畫多少：源碼視圖、基本視圖、完整視圖；不寫就說現在是哪一檔"
+zhs = "表格画多少：源码视图、基本视图、完整视图；不写就说现在是哪一档"
+en = "how much of a table is drawn: the source, basic, or full view; bare says which it is now"
+find = "表格 視圖 视图 源碼 源码 基本 完整 render 級別 级别"
 
 [[message]]
 # : 命令選單裏 theme 那一項的說明（commands 組）
@@ -2558,14 +2574,6 @@ en = "`=` headings, `#import`"
 find = "語法 语法 排版 typst"
 
 [[message]]
-# : 命令選單裏 basic 那一項的說明（table 組）
-key = "cmd.table.basic"
-zht = "按格子編輯，一個字都不藏（默認）"
-zhs = "按格子编辑，一个字都不藏（默认）"
-en = "edit it as a grid, and not one character hidden (the default)"
-find = "表格 格子 basic 中階 中阶"
-
-[[message]]
 # : 命令選單裏 check 那一項的說明（table 組）
 key = "cmd.table.check"
 zht = "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字"
@@ -2598,14 +2606,6 @@ en = "search: `row` runs across (that is `/`), `column` runs down (that is Enter
 find = "查找 搜索 搜尋 搜寻 一行 一欄 一栏 direction"
 
 [[message]]
-# : 命令選單裏 full 那一項的說明（table 組）
-key = "cmd.table.full"
-zht = "畫成表格：| 畫作牆，欄尺在上頭"
-zhs = "画成表格：| 画作墙，栏尺在上头"
-en = "drawn as a table: the pipes become walls, with a column ruler above"
-find = "表格 畫成 画成 欄尺 栏尺 full 全"
-
-[[message]]
 # : 命令選單裏 header 那一項的說明（table 組）
 key = "cmd.table.header"
 zht = "第一行是欄名，還是跟別的行一樣是數據"
@@ -2636,14 +2636,6 @@ zht = "欄號那一行：␣t3/、␣t20,20g 用的就是它"
 zhs = "栏号那一行：␣t3/、␣t20,20g 用的就是它"
 en = "the row of column numbers — what ␣t3/ and ␣t20,20g count with"
 find = "欄號 栏号 標號 标号 numbers"
-
-[[message]]
-# : 命令選單裏 off 那一項的說明（table 組）
-key = "cmd.table.off"
-zht = "當普通文字"
-zhs = "当普通文字"
-en = "as ordinary text"
-find = "表格 關掉 关掉 普通文字 off"
 
 [[message]]
 # : 選單裏 paste-table 那一項的說明
@@ -4479,9 +4471,9 @@ en = "read this row laid out / fold the tails of over-wide cells"
 [[message]]
 # 表格幫助：把檔案當表格讀
 key = "help.table.enter-table"
-zht = "把這個文件當表格讀；:table off 退出"
-zhs = "把这个文件当表格读；:table off 退出"
-en = "read this file as a grid; :table off leaves"
+zht = "把這個文件當表格讀；:table-render off 退出"
+zhs = "把这个文件当表格读；:table-render off 退出"
+en = "read this file as a grid; :table-render off leaves"
 
 [[message]]
 # 表格幫助：四種看法
@@ -7174,9 +7166,9 @@ en = "the note is on this line"
 [[message]]
 # 表格模式下不許寫腳注
 key = "note.not-in-a-grid"
-zht = "表格裏寫不了腳注——先 :table off"
-zhs = "表格里写不了脚注——先 :table off"
-en = "a grid holds no footnotes — :table off first"
+zht = "表格裏寫不了腳注——先 :table-render off"
+zhs = "表格里写不了脚注——先 :table-render off"
+en = "a grid holds no footnotes — :table-render off first"
 
 [[message]]
 # 這個檔不是 Markdown，寫不了腳注
@@ -7862,7 +7854,7 @@ zhs = "没有要注的字"
 en = "nothing here to annotate"
 
 [[message]]
-# :ruby off，注音不排
+# :ruby-render off，注音不排
 key = "ruby.layout-off"
 zht = "注音：不排，標記留在畫面上"
 zhs = "注音：不排，标记留在画面上"
@@ -7876,21 +7868,21 @@ zhs = "注音：排 {0}"
 en = "readings: laying out {0}"
 
 [[message]]
-# :ruby basic — 認得注音，不排出來
+# :ruby-render basic — 認得注音，不排出來
 key = "ruby.level-basic"
 zht = "注音：認得，不排，標記留在畫面上"
 zhs = "注音：认得，不排，标记留在画面上"
 en = "readings: read, not laid out, and the markup stays on the page"
 
 [[message]]
-# :ruby full — 注音排在正文旁邊
+# :ruby-render full — 注音排在正文旁邊
 key = "ruby.level-full"
 zht = "注音：排在正文旁邊，標記拿掉"
 zhs = "注音：排在正文旁边，标记拿掉"
 en = "readings: laid out beside the base, and the markup comes off"
 
 [[message]]
-# :ruby off — 注音當普通文字，字數也照原文算
+# :ruby-render off — 注音當普通文字，字數也照原文算
 key = "ruby.level-off"
 zht = "注音：當普通文字，不認得"
 zhs = "注音：当普通文字，不认得"
@@ -10423,9 +10415,9 @@ en = "these lines are inside a code fence, not a table"
 [[message]]
 # 表格裏想併兩行
 key = "table.join-would-change-columns"
-zht = "兩行併成一行會改欄數——先 :table off"
-zhs = "两行并成一行会改栏数——先 :table off"
-en = "joining two rows would change the column count — `:table off` first"
+zht = "兩行併成一行會改欄數——先 :table-render off"
+zhs = "两行并成一行会改栏数——先 :table-render off"
+en = "joining two rows would change the column count — `:table-render off` first"
 
 [[message]]
 # 跳到某一行的表格
@@ -10724,9 +10716,9 @@ en = "a schema is for a file that is nothing but a table — this one lives insi
 [[message]]
 # 新寫的 schema 檔頭一行的說明
 key = "table.schema-note"
-zht = "這份 schema 說的就是眼下看到的樣子。改完保存，:table off 再 :table 就照新的讀。"
-zhs = "这份 schema 说的就是眼下看到的样子。改完保存，:table off 再 :table 就照新的读。"
-en = "this schema says what the grid is already doing. Edit, save, then :table off and :table again."
+zht = "這份 schema 說的就是眼下看到的樣子。改完保存，:table-render off 再 :table 就照新的讀。"
+zhs = "这份 schema 说的就是眼下看到的样子。改完保存，:table-render off 再 :table 就照新的读。"
+en = "this schema says what the grid is already doing. Edit, save, then :table-render off and :table again."
 
 [[message]]
 # 進表格模式時，schema 檔有毛病
@@ -10801,9 +10793,9 @@ en = "too few rows to sort"
 [[message]]
 # 竪排下進表格模式
 key = "table.vertical-not-allowed"
-zht = "表格是橫排的——先 :table off"
-zhs = "表格是横排的——先 :table off"
-en = "a table is always horizontal — :table off first"
+zht = "表格是橫排的——先 :table-render off"
+zhs = "表格是横排的——先 :table-render off"
+en = "a table is always horizontal — :table-render off first"
 
 [[message]]
 # 全窗表格裏，gg/G/:120/搜尋想走到表外

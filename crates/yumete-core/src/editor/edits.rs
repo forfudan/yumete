@@ -83,7 +83,7 @@ impl Editor {
             .find(|((_, a), (_, b))| a != b)
             .map(|((n, a), (_, b))| (*n, *a, *b))?;
         // **A refusal that names no way through is a wall.** It used to say
-        // 「先 :table off」, which stopped being an escape the moment the check
+        // 「先 :table-render off」, which stopped being an escape the moment the check
         // stopped asking whether table mode was on.
         Some(say!(
             "table.substitution-would-change-width",

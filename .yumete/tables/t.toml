@@ -1,4 +1,4 @@
-# 這份 schema 說的就是眼下看到的樣子。改完保存，:table off 再 :table 就照新的讀。
+# 這份 schema 說的就是眼下看到的樣子。改完保存，:table-render off 再 :table 就照新的讀。
 
 [table]
 file = "t.csv"
