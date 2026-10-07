@@ -1396,8 +1396,18 @@ impl Editor {
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
         }
-        let mut written = lines.join("\n");
-        written.push('\n');
+        // **導出的那一份跟着源文件走**（2026-10-07 定）：它帶 BOM 就寫 BOM，它是
+        // CRLF 就寫 CRLF。從前這裏寫死了 `\n`、也不寫 BOM——而一份 BOM ＋ CRLF 的
+        // `.csv` 導出來兩樣都沒了，Excel 打開就是亂碼。那三個字節正是
+        // `tests/byte_fidelity.rs` 存在的理由之一，它的註釋寫着「the thing Excel
+        // reads to decide a `.csv` is UTF-8」。
+        let ending = self.current_buffer().ending();
+        let mut written = match self.current_buffer().marked() {
+            true => String::from("\u{feff}"),
+            false => String::new(),
+        };
+        written.push_str(&lines.join(ending));
+        written.push_str(ending);
         crate::buffer::write_file_atomically(&target, &written).map_err(EditorError::Io)?;
         self.status = say!("export.wrote", target.display());
         Ok(CommandOutcome::Continue)

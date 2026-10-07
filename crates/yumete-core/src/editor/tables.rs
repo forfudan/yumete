@@ -1821,12 +1821,26 @@ impl Editor {
         // （`Bounds::WholeFile` 自己一支），轉換這一邊沒跟上。
         //
         // Warning: **選區優先。** 真圈了幾行的人說的是那幾行，整檔那一條讓給他。
+        let blank = |i: usize| {
+            self.line_text(i)
+                .is_none_or(|l| l.trim().is_empty())
+        };
+        // **空行是一段的盡頭，三種範圍都算**（2026-10-07 定）。
+        //
+        // 「文中一段」那一種本來就這樣（底下那兩個 `while`），而整檔與選區那兩種
+        // 從前是把範圍裏的空行**濾掉**再拼——四行帶一個空行的 CSV 轉出來是一張四
+        // 行的表，那個空行沒了，一聲不吭。`|` 表格本來就裝不下空行，所以「停在它
+        // 前面」是唯一不丟字的做法。判詞：「如果一個文件是csv的話，那么它就是
+        // 「一個表格」的意思。如果出現空行，説明是文件有問題。」
+        let upto = |from: usize, last: usize| -> usize {
+            (from..=last).take_while(|&i| !blank(i)).last().unwrap_or(from)
+        };
         let whole_file = self
             .table
             .as_ref()
             .is_some_and(|v| v.bounds == crate::editor::Bounds::WholeFile);
         if whole_file && !self.has_selection() {
-            return (0, last_line);
+            return (0, upto(0, last_line));
         }
         if self.has_selection() {
             let (a, b) = self.selection();
@@ -1838,13 +1852,9 @@ impl Editor {
             if last > first && b == rope.line_to_char(last) {
                 last -= 1;
             }
-            return (first, last.min(last_line));
+            return (first, upto(first, last.min(last_line)));
         }
         let here = self.cursor_line().min(last_line);
-        let blank = |i: usize| {
-            self.line_text(i)
-                .is_none_or(|l| l.trim().is_empty())
-        };
         let mut first = here;
         while first > 0 && !blank(first - 1) {
             first -= 1;

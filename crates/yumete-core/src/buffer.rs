@@ -1107,6 +1107,13 @@ impl Buffer {
     /// was already in the file is never rewritten: the rope holds the bytes
     /// that were read, mixed endings and all, and that is what makes reading
     /// and writing a file back an exact round trip.
+    /// **這個檔是帶 BOM 來的嗎** —— `:export` 問它（2026-10-07）。
+    ///
+    /// 散文裏那三個字節沒人在意，`.csv` 裏它是下一個程序判定 UTF-8 的依據。
+    pub fn marked(&self) -> bool {
+        self.marked
+    }
+
     pub fn ending(&self) -> &'static str {
         self.ending
     }
