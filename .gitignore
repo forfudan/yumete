@@ -23,6 +23,10 @@
 # 寫作進度的流水帳：編輯器自己邊寫邊記的，一個使用者一份，不是這個項目的記錄。
 # 2026-10-03 定——它在這個倉裏記的 162 行裏有 150 行是測試臨時檔的 `0 0`，
 # 而且每寫一次就讓構建戳上 `.dirty`。
+#
+# 同一個提交（`659419d3`）也把它從索引裏摘了：`.gitignore` 管不了已經跟蹤的檔，
+# 光加一行不生效。2026-10-07 覆查過——`git ls-files .yumete/` 只剩三個檔，本機那
+# 一份一百六十多行是未跟蹤的，只影響這台機器上的 `:progress`。
 .yumete/progress.tsv
 
 # Working notes and tables reviewed in the editor itself, not part of the
@@ -30,10 +34,9 @@
 /local/
 
 # **純數據表格不進 git**（2026-09-14 定）。生成物，build 時寫進二進制：
-# 發布流水線從 forfudan/yume-release 下載，`scripts/build.sh` 在本機生成。
-# 配方在 scripts/make_words.py 與 scripts/make_jinghua.py。
+# 碼表一律從 forfudan/yume-release 下載（2026-10-07 起，見 `yumete-ime/build.rs`），
+# 分詞詞表由 `scripts/build.sh` 在本機生成（配方 `scripts/make_words.py`）。
 crates/yumete-cjk/src/common_words.txt
-crates/yumete-ime/jinghua/
 
 # subagent 的臨時 worktree（`isolation: worktree`），不進倉
 .claude/worktrees/
