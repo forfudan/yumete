@@ -821,7 +821,12 @@ pub fn draw(
         // Vertical prose carries its name as its first 縱 (below), so the
         // ring is left bare — a name in both places would be the same word
         // twice, two cells apart.
-        title: match panel.vertical_text && prose {
+        // **名字是空的就不畫名字**（2026-10-08 定）。辦法是「空標題」而不是在
+        // `Panel` 上再加一個開關：一扈浮窗要不要名字，就是「它叫什麼」這一個問題。
+        // ① 竦書的散文把名字畫成第一縱（見下面），框上再寫一遍是同一個詞兩格之隔；
+        // ② 補全那一扈有意不要名字（2026-10-08 原話：「自動補全這個 title 太吸引
+        // 眼球，建議不要。這個面板就是空的標題，這樣不會干扰視線」）。
+        title: match (panel.vertical_text && prose) || panel.title.is_empty() {
             true => None,
             false => Some((
                 panel.title.clone(),
