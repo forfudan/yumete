@@ -3089,6 +3089,14 @@ en = "save under a new name and edit that one (`:w <path>` only copies)"
 find = "另存 改名 saveas rename"
 
 [[message]]
+# :yank-on-delete ——`d`/`c` 刪掉的東西進不進寄存器
+key = "cmd.yank-on-delete"
+zht = "`d` `c` 刪掉的東西要不要進寄存器。關掉就和 `A-d` `A-c` 對調：刪的不進，剪的進"
+zhs = "`d` `c` 删掉的东西要不要进寄存器。关掉就和 `A-d` `A-c` 对调：删的不进，剪的进"
+en = "whether `d` and `c` fill the register. Off swaps them with `A-d` and `A-c`: the deleting pair leaves it alone, the cutting pair fills it"
+find = "寄存器 剪 剪切 刪 删 刪除 删除 剪貼板 剪贴板 yank register cut delete"
+
+[[message]]
 # : 命令選單裏 abc 那一項的說明（yume 組）
 key = "cmd.yume.abc"
 zht = "ABC：yume 還接着鍵盤，按鍵直通英文（Shift 點一下也是這個）"
@@ -3871,6 +3879,13 @@ en = "yanked {0} character(s)"
 
 
 # ── export ────────────────────────────────────────────────────────────
+
+[[message]]
+# :yank-on-delete ——無參數時報當前狀態
+key = "editor.yank-on-delete-is"
+zht = "刪的時候進寄存器：{0}"
+zhs = "删的时候进寄存器：{0}"
+en = "deleting fills the register: {0}"
 
 [[message]]
 # :export 給了不認得的格式
@@ -9010,6 +9025,19 @@ zht = "詞語着色用哪一種畫法"
 zhs = "词语着色用哪一种画法"
 en = "word mark"
 
+[[message]]
+# 設置：刪的時候進寄存器
+key = "set.editor.yank-on-delete"
+zht = "刪的時候進寄存器"
+zhs = "删的时候进寄存器"
+en = "deleting fills the register"
+
+[[message]]
+# 設置：刪的時候進寄存器——一句話
+key = "set.editor.yank-on-delete.hint"
+zht = "關掉之後 `d` `c` 只刪不剪，要剪按 `A-d` `A-c`——剛複製好的那一段不再被一次隨手刪除吃掉"
+zhs = "关掉之后 `d` `c` 只删不剪，要剪按 `A-d` `A-c`——刚复制好的那一段不再被一次随手删除吃掉"
+en = "with this off, `d` and `c` only delete; `A-d` and `A-c` are the ones that cut — so a tidy-up between a copy and a paste cannot eat the copy"
 [[message]]
 # 設置：縱間距
 key = "set.editor.zong-gap"

@@ -3394,10 +3394,16 @@ impl Editor {
             Key::Char('i') => self.edit_cell(CellEdit::Start),
             Key::Char('a') | Key::Char('A') => self.edit_cell(CellEdit::End),
             Key::Char('I') => self.edit_cell(CellEdit::Start),
-            Key::Char('c') => self.edit_cell(CellEdit::Replace),
-            // 同上那一對：`c` 改寫**進**寄存器（`CellEdit::Replace` 自己 `store`），
-            // `A-c` 改寫**不進**。正文那兩個鍵就是這樣分的。
-            Key::Alt('c') => self.edit_cell(CellEdit::ReplaceKeeping),
+            // 同上那一對：`c` 改寫**進**寄存器，`A-c` 改寫**不進**；
+            // `:yank-on-delete off` 把這兩個對調，和正文同一條規矩。
+            Key::Char('c') => self.edit_cell(match self.yank_on_delete() {
+                true => CellEdit::Replace,
+                false => CellEdit::ReplaceKeeping,
+            }),
+            Key::Alt('c') => self.edit_cell(match self.yank_on_delete() {
+                true => CellEdit::ReplaceKeeping,
+                false => CellEdit::Replace,
+            }),
             // Everything below is about the table's *shape* rather than its
             // contents, and a Markdown table is the only one whose shape the
             // editor may change: a delimited file's columns are the schema's,
@@ -3418,8 +3424,12 @@ impl Editor {
             // 裏沒有 `A-d`？有了不就不用 `D` 了嗎。** 量過——`A-d` 在格子裏是個
             // 死鍵，按下去一點反應都沒有，它只是從來沒人給它接上。接上了，`D` 就
             // 刪掉：不留別名，也不出「你要的是 A-d」那種提示。
-            Key::Char('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(true),
-            Key::Alt('d') if self.sel.anchor() == self.sel.head() => self.clear_cell(false),
+            Key::Char('d') if self.sel.anchor() == self.sel.head() => {
+                self.clear_cell(self.yank_on_delete())
+            }
+            Key::Alt('d') if self.sel.anchor() == self.sel.head() => {
+                self.clear_cell(!self.yank_on_delete())
+            }
             // Warning: **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
             // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
             // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
