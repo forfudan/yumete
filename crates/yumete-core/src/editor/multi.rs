@@ -62,6 +62,9 @@ impl super::Editor {
             let drawn = |line: usize| self.drawn_on_line(line);
             let typed = |line: usize| self.typed_on_line(line);
             let flat = |line: usize| self.table_row_at(line);
+            // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
+            // 不必每動一下就把前面那一整段逐字素走一遍。
+            let widths = |rope: &ropey::Rope, line: usize, span: usize| self.line_widths(rope, line, span);
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
@@ -69,6 +72,7 @@ impl super::Editor {
                 .with_drawn(&drawn)
                 .with_typed_drawn(&typed)
                 .with_unwrapped(&flat)
+                .with_widths(&widths)
                 .with_version(self.current_buffer().id(), self.current_buffer().revision())
                 .with_edit(self.current_buffer().edit())
                 .with_open_line(self.open_line())
