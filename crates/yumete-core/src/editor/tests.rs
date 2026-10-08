@@ -23792,3 +23792,40 @@ fn a_tab_on_a_very_long_line_is_measured_once_not_once_a_row() {
         "二十次記著的比一次真算的還慢：{warm:?} 對 {cold:?}"
     );
 }
+
+
+/// **全窗表格裏 `gg`／`ge` 不許走出表格**（2026-10-08 報的）。
+///
+/// 原話：「我在 txt 文件中有個 tab-separated 部分，我进入了 _tt 後， gg 會跑到文件
+/// 最頂端（也就退出了全窗模式）。markdown 中的表格是對的」——兩者的差別是
+/// `forget_a_guessed_table` 在 `hold_the_pane` 前面跑，把猜來的視圖先扔了。
+#[test]
+fn the_window_holds_you_even_when_the_table_was_guessed() {
+    let dir = std::env::temp_dir().join(format!("yumete-tsvhold-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.txt");
+    std::fs::write(&file, "前面一段。\n\n甲\t1901\n乙\t1902\n丙\t1903\n\n後面一段。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.goto_line(3);
+    press(&mut ed, " tt");
+    assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
+    let (first, last) = ed.table_row_span().expect("有幾行");
+
+    press(&mut ed, "gg");
+    assert!(ed.table().is_some(), "`gg` 不該把全窗表格扔掉：{}", ed.status());
+    assert_eq!(ed.cursor_line(), first, "`gg` 停在表格第一行");
+
+    press(&mut ed, "ge");
+    assert!(ed.table().is_some(), "`ge` 也不該：{}", ed.status());
+    assert_eq!(ed.cursor_line(), last, "`ge` 停在表格最後一行");
+
+    // 而「走出猜來的塊就把它忘掉」那一條在**內嵌**模式下照舊算。
+    press(&mut ed, " tq");
+    assert!(!ed.table().unwrap().takes_the_pane(), "回到內嵌：{}", ed.status());
+    press(&mut ed, "gg");
+    assert!(ed.table().is_none(), "不占窗的時候走出去就忘掉：{}", ed.status());
+
+    std::fs::remove_dir_all(&dir).ok();
+}

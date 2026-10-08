@@ -199,8 +199,20 @@ impl Editor {
         if watching {
             self.finish_watching();
         }
-        self.forget_a_guessed_table();
+        // Warning: **留人要排在忘掉前面**（2026-10-08 報的：「我在 txt 文件中有個
+        // tab-separated 部分，我进入了 _tt 後， gg 會跑到文件最頂端」）。
+        //
+        // 兩支誰先跑決定了結果：`gg` 把光標丟到表格外面之後，
+        // `forget_a_guessed_table` 看見「猜來的表格，而光標不在區域裏」就把視圖扔了；
+        // 等 `hold_the_pane` 跑到的時候 `self.table` 已經是 `None`，它第一句就回來了。
+        // `|` 表格沒這個毛病，因為它不是猜來的（`Reach::File`）——于是同一下 `gg`，
+        // markdown 裏停在表格第一行，txt 裏的制表符表格跑到文首。
+        //
+        // 換個順序就對了：留住之後光標回到格子裏，忘掉那一支自己就不再成立。
+        // Warning: 內嵌那一種（不占整窗）不受影響：`hold_the_pane` 第二句就問
+        // `takes_the_pane()`，不占窗就直接回來，走出猜來的塊照舊把它忘掉。
         self.hold_the_pane(held);
+        self.forget_a_guessed_table();
         self.keep_the_last_selection(was_extending);
         self.go_back_after_one_key(borrowed);
         self.keep_off_the_newline();
