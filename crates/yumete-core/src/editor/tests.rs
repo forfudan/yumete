@@ -21387,6 +21387,47 @@ fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **走開再走回來，`空格 k` 一下就該開**（2026-10-08 報的）。
+///
+/// 原話：「space+k/K 開啓文檔窗口後，移動 cursor 後下次要開文檔得按兩次。」
+///
+/// 成因是上面那一條的另一半：那一則說明走開就作廢（2026-09-29 定的，對的），而
+/// **記着「按過這個鍵」的那一格只比位置**——走回同一格，位置又對上了，於是這一鍵
+/// 被當成「又按了一次」，去收一扇早就不在的窗。第一下白按，第二下纔開。
+#[test]
+fn asking_again_after_walking_back_opens_it_in_one_press() {
+    let dir = std::env::temp_dir().join(format!("yumete-hover-again-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    press(&mut ed, " k");
+    let _ = ed.take_hover_query();
+    ed.show_hover("fn compile_the_table()");
+    assert!(ed.hover_afloat().is_some(), "開着");
+
+    // 走一格再走回來：屏幕上沒有東西了（上面那一條釘着的行為）。
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.hover_afloat(), None, "答案作廢了");
+
+    // Warning: **這一下就該問出去**，而不是去收一扇不在的窗。
+    press(&mut ed, " k");
+    assert!(ed.hover_query_is_pending(), "一下就問了出去：{}", ed.status());
+
+    // 而真正開着的時候，再按一次照舊收起來——那一半沒動。
+    let _ = ed.take_hover_query();
+    ed.show_hover("fn compile_the_table()");
+    assert!(ed.hover_afloat().is_some());
+    press(&mut ed, " k");
+    assert_eq!(ed.hover_afloat(), None, "開着的時候按一下就收");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **`:info docs` 讓文檔跟着光標走**（2026-09-29 定，2026-09-30 併進 `:info`）。
 ///
 /// Warning: **是命令不是鍵**（原話：「即时显示应该做成一个命令开关而不使用快捷键……这样
@@ -23231,4 +23272,78 @@ fn a_colon_slash_is_not_a_command_at_all() {
     press(&mut ed, "/冬天");
     ed.on_key(Key::Enter);
     assert_ne!(ed.caret_in_line(), was, "`/` 自己走得動");
+}
+
+/// **打了半個詞，單子就按那半個詞重排**（2026-10-08 報的：「I typed "unwrap", the
+/// function hint … still show the prediction using the original order」）。
+///
+/// 服務器給的是「這個點後面能接什麼」的全單（`isIncomplete: false` 的意思就是「接着
+/// 打字自己篩」），所以這一頭不排就是不排——截圖裏打完 `.unwrap` 頭三條還是
+/// `is_some_and`／`is_none_or`／`expect`。
+#[test]
+fn the_offer_list_is_ranked_by_what_has_been_typed() {
+    let offer = |label: &str| crate::lsp::Offer {
+        label: label.into(),
+        insert: label.into(),
+        kind: 2,
+        detail: None,
+        replacing: None,
+    };
+    // 服務器給的次序，照截圖。
+    let from_the_server = || {
+        vec![
+            offer("is_some_and"),
+            offer("is_none_or"),
+            offer("expect"),
+            offer("unwrap"),
+            offer("unwrap_or"),
+            offer("unwrap_or_else"),
+            offer("UNWRAP_LOUD"),
+            offer("map"),
+        ]
+    };
+
+    let mut ed = typed("x\n");
+    ed.current_buffer_mut()
+        .set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Rust));
+    // 打出 `x.unwrap` 來，光標停在 `unwrap` 後面——`.` 之後那一段纔是要配的那
+    // 半個詞（服務器給的 `label` 也只是方法名）。
+    press(&mut ed, "A");
+    for c in ".unwrap".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.completion_at = Some(ed.caret());
+    ed.show_offers(from_the_server());
+    let (items, _) = ed.offers_here().expect("單子擺出來了");
+    let order: Vec<&str> = items.iter().map(|o| o.label.as_str()).collect();
+    assert_eq!(
+        order,
+        [
+            // 整個就是它
+            "unwrap",
+            // 前綴，大小寫也對——服務器給的次序在這一檔裏原樣保留
+            "unwrap_or",
+            "unwrap_or_else",
+            // 前綴，不計大小寫
+            "UNWRAP_LOUD",
+            // 配不上的落到最後，但**一條都沒少**
+            "is_some_and",
+            "is_none_or",
+            "expect",
+            "map",
+        ],
+        "{order:?}"
+    );
+
+    // 什麼都還沒打（剛打完一個 `.`）就不動服務器的次序——那時它的相關度是唯一
+    // 的答案。
+    let mut ed = typed("x\n");
+    ed.current_buffer_mut()
+        .set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Rust));
+    press(&mut ed, "A");
+    ed.on_key(Key::Char('.'));
+    ed.completion_at = Some(ed.caret());
+    ed.show_offers(from_the_server());
+    let (items, _) = ed.offers_here().expect("單子擺出來了");
+    assert_eq!(items[0].label, "is_some_and", "沒打字就不重排");
 }

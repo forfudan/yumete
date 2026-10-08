@@ -150,7 +150,17 @@ impl Editor {
         // 地方。Warning: 判準要連容器一起看：浮着的時候按 `空格 K`，說的是「搬進邊
         // 欄」，不是「關掉」。
         let here = self.info_in_the_sidebar().is_none();
-        if self.info_asked_now() == Some(one) && here == afloat {
+        // Warning: **有東西可收纔收**（2026-10-08 報的：「space+k/K 開啓文檔窗口後，移動
+        // cursor 後下次要開文檔得按兩次」）。
+        //
+        // 走一步再走回來，鍵記着的那個位置又對上了（[`Self::info_asked_now`] 比的
+        // 就是位置），於是這一支把它當成「又按了一次」——而屏幕上**早就沒有東西
+        // 了**：那一則說明跟着光標走（`hover_here` 比位置），中間問過別處的話
+        // `hovered` 也已經換了人。於是第一下白按，第二下纔開。
+        //
+        // `info_has_body` 就是為這件事存在的（它那段註釋寫着「這一支不問光標在不
+        // 在原處」）——兩個問題分開問，合起來纔是「此刻那一扇真的開着」。
+        if self.info_asked_now() == Some(one) && here == afloat && self.info_has_body(one) {
             self.info_asked = None;
             self.stop_showing_this_info(one);
             // Warning: **收起來要連容器一起收**（2026-09-30 審出來的）。這一鍵

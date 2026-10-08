@@ -20119,7 +20119,7 @@ warning了。所以我覺得 Option 1 + 一個csv tree-sitter 會很好。」
 作者當天連着報的，明說「put in your stack and assess it later; not interrupt the
 current task」。原話抄在這裏，免得只活在一個 session 裏。
 
-### ① 補全單子不隨打字重排
+### ① 補全單子不隨打字重排——修了（2026-10-08）
 
 > I typed "unwrap", the function hint (autocompletion), however, still show the
 > prediction using the original order. … The list of autocompletion should be renewed
@@ -20132,6 +20132,27 @@ current task」。原話抄在這裏，免得只活在一個 session 裏。
 「服務器給的次序」說的，不是對「打了字之後還要不要篩」說的**，兩件事別混。另外
 `isIncomplete` 這一頭沒用（`offers` 的文檔自己寫着），而它的意思正是「接着打就再問一
 次」。
+
+**查出來的**：每打一個字母這一頭**確實再問一次**服務器，所以不是「沒刷新」。壞在
+`isIncomplete: false` 那半句協議——它的意思是「這就是全部，接着打字**由你自己篩**」，
+於是 rust-analyzer 一次給出那個點後面全部 131 條，按它自己的相關度排，而「使用者已經
+打了 `unwrap`」它不再過問。VS Code、helix 都在客戶端這一頭篩。
+
+**做法**：答案裝上去的那一刻照「光標前面那半個詞」重排一遍（`lsp::rank`），五檔——
+整個就是它／前綴／不計大小寫的前綴／模糊／配不上——**檔內保持服務器給的次序**（那是
+相關度，它比這一頭懂）。Warning: **只重排，不扔**：這一頭認的是 `label`，而服務器真正拿來
+篩的是 `filterText`（還沒接）；兩者不一樣的那天，扔掉的就是人要的那一條。
+
+### ③ `空格 k` 開文檔窗要按兩次——修了（2026-10-08）
+
+成因是兩條對的規矩撞在一起：① 那一則說明**走開就作廢**（2026-09-29 定，見
+`a_hover_is_thrown_away_once_the_cursor_walks_off_it`）；② 記着「按過這個鍵」的那一格
+（`info_asked`）**只比位置**。於是走一格再走回來，位置又對上了，這一鍵被當成「又按了
+一次」，去收一扇早就不在的窗——第一下白按，第二下纔開。
+
+**做法**：那道 toggle 多問一句 `info_has_body(one)`——「此刻那一種真有東西可畫嗎」。
+這支函數本來就在，它的註釋寫着「這一支不問光標在不在原處」，正是為了和
+`info_asked_now` 分開問。合起來纔是「那一扇真的開着」。
 
 ### ② 插入態打 `(` 就該看見函數簽名
 
