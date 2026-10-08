@@ -1696,6 +1696,17 @@ impl Editor {
                 // **搜索面板那一整套編輯鍵同日搬了過來**（原話：「整套搬：
                 // i I a A d D c C」）。學一次兩扇都能用。`o` 不搬——一行的框裏
                 // 「開下一行」沒有意思。
+                // **`/` 把鍵放到搜索行上，不進打字**（2026-10-08 報的：「Please
+                // give picker an extra shortcut `/` (same as the search panel)
+                // that go back to the search line」）。
+                //
+                // Warning: **這不是把 2026-10-01 拿掉的那個 `/` 加回來。** 那一個做的是
+                // `i` 做的事（進打字），兩個鍵一件事，所以去掉了；這一個做的是
+                // 「挪窩」——和搜索面板那一扇逐鍵一樣（`find.rs` 的
+                // `Key::Char('/') => stand_on(Field::Query)`，那邊 2026-09-25 也正
+                // 是從「進 insert」改成「挪窩」的）。`k` 一路走上去是同一件事，
+                // 這是它的近路。
+                Key::Char('/') => picker.stand_on_query(),
                 Key::Char('i') => picker.type_here(true),
                 Key::Char('I') => {
                     picker.move_caret(crate::picker::Caret::Start);

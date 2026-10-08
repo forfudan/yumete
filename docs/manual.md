@@ -5404,6 +5404,7 @@ there first, then `i`.
 | The list layer | |
 | --- | --- |
 | `j` `k` | Up and down (`g` `G` to the top/the bottom, `PageUp` `PageDown` ten at a time). One more `k` at the top goes to the search box |
+| `/` | **Back to the search box**, without typing — the short cut for `k`-ing up to it. The search panel's `/` does exactly this too |
 | `i` | Into the search box to type. **From any line** — walking there first is the modal way, pressing it anywhere is the short cut |
 | `Enter` | Open |
 | `q` or `Esc` | Close |
@@ -5412,9 +5413,10 @@ Inside the search box you are in the **query** layer: typing filters (subsequenc
 matching, so `ch63` finds `卷三/ch63.md`), `↑` `↓` and `C-n` `C-p` move, `Enter` opens,
 and `Esc` — or backspacing to empty — goes back to the list layer.
 
-Warning: **`/` was taken out on 2026-10-01.** It used to enter the query layer just as
-`i` does, but two keys for one thing make no sense, and `i` means here what it means in
-the prose and in the search panel's boxes.
+Warning: **`/` and `i` are not the same key.** `/` only moves the keys to the search
+box; `i` starts typing in it. (`/` was taken out on 2026-10-01, when it did enter the
+query layer just as `i` does — two keys for one thing. It came back on 2026-10-08 doing
+the other thing, which is what it does in the search panel.)
 
 Warning: **neither layer changes the box's ground colour.** What says which layer you
 are in is **the shape of the cursor** — a bar means the next key becomes a character, a
