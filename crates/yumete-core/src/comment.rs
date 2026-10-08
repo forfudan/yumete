@@ -52,6 +52,11 @@ pub fn marks(syntax: Syntax) -> Marks {
                 | Language::C
                 | Language::Java => Marks { line: Some("//"), block: Some(("/*", "*/")) },
                 Language::Css => Marks { line: None, block: Some(("/*", "*/")) },
+                // **匯編分兩門，分家分的就是這一格**（見 `code::Language::Gas`）。
+                // GAS 裏 `;` 是語句分隔符，NASM 裏 `#` 是錯——寫錯一邊真的編不過。
+                // 塊註釋只有 GAS 有（NASM 用 `%comment`，那是宏不是註釋）。
+                Language::Gas => Marks { line: Some("#"), block: Some(("/*", "*/")) },
+                Language::Nasm => Marks { line: Some(";"), block: None },
                 Language::Html => Marks { line: None, block: Some(("<!--", "-->")) },
                 // JSON has no comment at all.
                 Language::Json => Marks { line: None, block: None },

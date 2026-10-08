@@ -94,12 +94,18 @@ impl Syntax {
 }
 
 /// What a file's *name* says, when it says anything.
+///
+/// Warning: **副檔名原樣往下傳，轉小寫是查表那一步自己的事**（2026-10-08 定）。
+/// 從前這一步就把 `.S` 捲成了 `.s`，於是下游再也分不出兩者——而汇編正好
+/// 靠這一個字母的大小寫分家（`.S` 是要走預處理的那一種）。原話：「我觉得根本的
+/// 方法是副檔名不轉小寫？或者先轉小寫再查，但是看到 `.s` 這樣有歧義的再看一下原始
+/// 到底是大寫还是小寫」。
 pub fn from_extension(name: &str) -> Option<Syntax> {
-    let extension = name.rsplit_once('.')?.1.to_ascii_lowercase();
-    match extension.as_str() {
+    let raw = name.rsplit_once('.')?.1;
+    match raw.to_ascii_lowercase().as_str() {
         "md" | "markdown" | "mdown" => Some(Syntax::Markdown),
         "typ" | "typst" => Some(Syntax::Typst),
-        other => crate::code::Language::from_extension(other).map(Syntax::Code),
+        _ => crate::code::Language::from_extension(raw).map(Syntax::Code),
     }
 }
 

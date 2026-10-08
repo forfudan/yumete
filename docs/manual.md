@@ -834,6 +834,8 @@ language name on the fence's first line decides which grammar is used:
 | Rust | `rust` `rs` |
 | Go | `go` `golang` |
 | C | `c` |
+| NASM | `asm` `nasm` |
+| GAS | `gas` |
 | Java | `java` `jav` |
 | R | `r` |
 

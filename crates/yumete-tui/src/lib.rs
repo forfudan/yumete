@@ -5827,6 +5827,7 @@ fn draw_which_key(
     let vertical = editor.layout() == WritingLayout::Vertical;
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         stand: panel::Stand::Corner,
+        accent: None,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6012,6 +6013,7 @@ fn draw_note(
             // **貼着光標畫**（2026-10-08 定，見 `chrome::Anchor::UnderCaret`）。
             // 這張單子說的是「剛打的那半個詞接下來是什麼」，是唯一一張跟着手走的浮窗。
             stand: panel::Stand::UnderCaret,
+            accent: None,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6038,6 +6040,7 @@ fn draw_note(
     if let Some(told) = editor.hover_afloat() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
+            accent: None,
             // 這一扇翻得動——四個鍵，同 helix 的浮窗（2026-09-29，#426）。
             pages: true,
             reading: true,
@@ -6071,11 +6074,14 @@ fn draw_note(
     // 一個「這一段換個墨色」的本事，這扇面板現在只收整段文字。
     if let Some(one) = editor.signature_here() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            // **貼着光標畫，和補全那一扇一樣**（2026-10-08 定）。原話：「這個雖然和
-            // 『文檔』內容一樣，但本質上不同，它的目的在於及時的提示，故而在光標旁邊，
-            // 不進側欄」——它答的是「這個括號裏該填什麼」，與補全同一類；`tag: None`
-            // 一直就是「這一扇不進側欄」。
+            // **貼着光標畫，和補全那一扇一樣**（2026-10-08 定）。原話（他自己改過
+            // 一次的那一句）：「內容上相同，但行為上不同，它的目的在於及時的提示，故而在
+            // 光標旁邊，不進側欄」——它答的是「這個括號裏該填什麼」，與補全同一類；
+            // `tag: None` 一直就是「這一扇不進側欄」。
             stand: panel::Stand::UnderCaret,
+            // **正在填第幾個參數，那一段加重**（2026-10-08）。服務器說得出來；
+            // 它說不出來（或者說的是這一頭對不上的形狀）就是 `None`——寧可不加重。
+            accent: one.active,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6111,6 +6117,7 @@ fn draw_note(
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
+            accent: None,
             pages: true,
             reading: true,
             scroll: editor.info_scroll(),
@@ -6158,6 +6165,7 @@ fn draw_note(
                 .collect();
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
+            accent: None,
             pages: false,
             reading: true,
                 scroll: 0,
@@ -6204,6 +6212,7 @@ fn draw_note(
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
+            accent: None,
             pages: false,
             reading: true,
             scroll: 0,
@@ -6238,6 +6247,7 @@ fn draw_note(
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
+            accent: None,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6263,6 +6273,7 @@ fn draw_note(
         let scroll = editor.info_scroll();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
+            accent: None,
             pages: true,
             reading: true,
             scroll,
@@ -6298,6 +6309,7 @@ fn draw_note(
     }
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
         stand: panel::Stand::Corner,
+        accent: None,
             pages: false,
             reading: false,
             scroll: 0,
@@ -21430,6 +21442,7 @@ fn squeezed(text: &str) -> String {
             .draw(|frame| {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
             stand: panel::Stand::Corner,
+            accent: None,
             pages: false,
             reading: false,
             scroll: 0,

@@ -670,6 +670,8 @@ Warning: 写进去的是**篇名**，不是文件名——`[[卷二/雨夜]]`，
 | Rust | `rust` `rs` |
 | Go | `go` `golang` |
 | C | `c` |
+| NASM | `asm` `nasm` |
+| GAS | `gas` |
 | Java | `java` `jav` |
 | R | `r` |
 
