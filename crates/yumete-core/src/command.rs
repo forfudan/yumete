@@ -297,6 +297,8 @@ pub enum Command {
     /// reports rather than setting anything (2026-09-20); `Some(None)` is
     /// `toggle`; `Some(Some(b))` is `on`/`off`.
     SetCode(Option<Option<bool>>),
+    /// `:view-long-line`：一行長過多少列就不上色。`None` ＝裸的，報告現在多少。
+    SetLongLine(Option<Option<usize>>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
     /// `:search` — open the search panel (#419).
@@ -2392,6 +2394,14 @@ const ON_OFF: &[Word] = &[
     },
 ];
 
+/// `off` 和沒別的：`:view-long-line` 的參數不是開關，是一個數目，而 `off` 是那個
+/// 數目的「沒有上限」那一格（vim 的 `synmaxcol=0`）。
+const OFF_ONLY: &[Word] = &[Word {
+    name: "off",
+    help: "hint.close",
+    needs: &[],
+}];
+
 /// The panels a slot can hold, for `:panel-left`/`:panel-right` — Feature #293.
 const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "files", help: "label.panel.files", needs: &[] },
@@ -3654,6 +3664,27 @@ pub const COMMANDS: &[Entry] = &[
                 None => None,
                 Some("toggle") => Some(None),
                 Some(word) => Some(Some(word == "on")),
+            }))
+        }),
+    },
+    Entry {
+        // **一行長過多少列就不上色**（2026-10-08 定）。vim 的 `synmaxcol`，同數
+        // （3000），只是這裏管得寬一點——標記、語法、分詞三筆賬一起摔，所以名字
+        // 說的是「長的行」而不是「語法」。裸的報告現在多少，同 `:view-hud`。
+        name: "view-long-line",
+        aliases: &[],
+        help: "cmd.view.long-line",
+        needs: &[],
+        params: &[Param::WordsOr {
+            of: OFF_ONLY,
+            default: None,
+            or: "<幾列>",
+        }],
+        build: Some(|p| {
+            Ok(Command::SetLongLine(match p.arg(0) {
+                None => None,
+                Some("off") | Some("0") => Some(None),
+                Some(_) => Some(Some(p.number(0)?)),
             }))
         }),
     },
@@ -6371,7 +6402,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +14");
+        assert_eq!(row("", "view-"), ":view- +15");
         assert_eq!(row("", "check-"), ":check- +5");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");

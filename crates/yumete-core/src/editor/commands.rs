@@ -1036,6 +1036,17 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetLongLine(want) => {
+                // 裸的**報告**，同 `:view-code`：一個數目的「我現在多少」比再一種寫法有用。
+                if let Some(upto) = want {
+                    self.set_long_line(upto);
+                }
+                self.status = match self.long_line() {
+                    Some(upto) => say!("layout.long-line-on", upto),
+                    None => say!("layout.long-line-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetCode(want) => {
                 // The bare word **reports**, the shape `:view-hud` has: with a
                 // switch, 「which am I on」 is a better use of the word than a

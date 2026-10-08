@@ -2804,6 +2804,14 @@ en = "the little sign beside the caret: nothing, a pill, a bordered panel"
 find = "提示 光標 光标 面板 藥丸 药丸 hud"
 
 [[message]]
+# `:view-long-line` 在命令表裏的說明
+key = "cmd.view.long-line"
+zht = "某行長度超過此列數，將停止上色"
+zhs = "某行长度超过此列数，将停止上色"
+en = "stop colouring a line past this many columns"
+find = "長行 长行 上色 語法 语法 分詞 分词 慢 卡 long line synmaxcol slow minified"
+
+[[message]]
 # `:` 命令選單裏 margin 那一項的說明（view 組）
 key = "cmd.view.margin"
 zht = "邊欄：注音、旁置標點、着重號、平仄那一格留不留"
@@ -6773,6 +6781,20 @@ key = "layout.line-numbers-on-the-page"
 zht = "行號：無底"
 zhs = "行号：无底"
 en = "line numbers: on the page"
+
+[[message]]
+# `:view-long-line off`——沒有上限（vim 的 `synmaxcol=0`）
+key = "layout.long-line-off"
+zht = "不管多長的行都會上色"
+zhs = "不管多长的行都会上色"
+en = "every line is coloured, however long"
+
+[[message]]
+# `:view-long-line N` ——門槛開著的時候狀態欄那一句
+key = "layout.long-line-on"
+zht = "列數超過 {0} 的行不會上色"
+zhs = "列数超过 {0} 的行不会上色"
+en = "a line past {0} columns is left plain"
 
 [[message]]
 # `:view-margin always`

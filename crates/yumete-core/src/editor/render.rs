@@ -353,6 +353,17 @@ impl Editor {
     /// Separate because a fold is *measured* against this: how wide a cell is
     /// drawn is how wide it is with its markup already off.
     fn markup_off_line(&self, line: usize) -> Spans {
+        // **太長的一行也不藏記號**（`:view-long-line`，2026-10-08）。
+        //
+        // 和 [`Self::markup_runs`] 同一條門槛，因為是同一筆賬：這一支走
+        // `readings_on_line` 與 `markdown::hidden`，兩個都把整行物化一遍。量過：
+        // 一行 150 萬字的 `.txt`，只摔住 `markup_runs` 是 0.35 秒一幀，兩支都摔
+        // 住是 0.04。
+        //
+        // 藏與不藏要**量的和畫的一致**，而兩邊問的都是這一支，所以摔在這裏安全。
+        if self.line_is_too_long(line) {
+            return Spans::new();
+        }
         // A reading that is being *laid out* is drawn beside the base, so its
         // markup comes off the page whatever `:render` says — leaving the tags
         // on would be showing the same reading twice. This is what the 縱書
@@ -1526,9 +1537,26 @@ impl Editor {
     /// Warning: `:markup off` 說的是「別上色」，不是「這份檔沒有標記」——後者是
     /// `:syntax text`，而那一條在下面的 `match` 裏本來就交空。取文本物件（`mi m`）問的
     /// 是檔裏有什麼，不是屏幕上畫了什麼，所以走這一支。
+    #[cfg(test)]
+    pub(crate) fn markup_runs_for_test(&self, line: usize) -> Vec<crate::markdown::Span> {
+        self.markup_runs(line)
+    }
+
     pub(super) fn markup_runs(&self, line: usize) -> Vec<crate::markdown::Span> {
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        // **太長的一行一個記號都不算**（`:view-long-line`，2026-10-08）。
+        //
+        // 這一句摔在最前面是有意的：下面兩條路都按**整行**算——散文那一條把一整行
+        // 物化成 `String` 再走 `markdown::spans()`，代碼那一條的 `hold_the_tree` 要把
+        // 整份源碼解一遍。正常稿子一行幾十個字，沒人撞得到；一行就是全文的時候，
+        // 那筆賬每幀付一次。量出來的數在 [`Editor::long_line`] 上。
+        //
+        // vim 的 `synmaxcol` 說的就是這件事（`options.txt`）：「This helps to avoid
+        // very slow redrawing for an XML file that is one long line.」
+        if self.line_is_too_long(line) {
             return Vec::new();
         }
         // A code file is one fence with no fence lines, and has its own cache.

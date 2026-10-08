@@ -717,6 +717,17 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
+        // **太長的一行不分詞**（`:view-long-line`，2026-10-08）。
+        //
+        // 量出來的：一行 150 萬字的 CJK `.txt`，摔住標記那兩支之後每幀還要
+        // 0.29 秒，`sample` 指的就是這裏（`DictionarySegmenter::segment` 與
+        // `RopeSlice::to_string`）。而且付兩次：備忘的鑰匙是**整行的雜湊**，光是算
+        // 那個雜湊就要把一百五十萬個字走一遍，每幀一遍。
+        //
+        // 詞的底紋是裝飾，與標記、語法上色同一類，所以歸同一條門槛。
+        if self.line_is_too_long(line) {
+            return Vec::new();
+        }
         let mut text = rope.line(line).to_string();
         if text.ends_with('\n') {
             text.pop();
