@@ -616,6 +616,11 @@ pub(crate) struct Searching {
     pub heard: std::sync::mpsc::Receiver<(u64, crate::editor::find::Found)>,
     /// 撥上去那一趟就收攤：改查詢、關面板、再搜一次，都撥它。
     pub stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// **這一趟什麼時候開跑的**——面板那個轉圈照它算第幾格（2026-10-08）。
+    ///
+    /// 轉圈那一支不存狀態，只問「從什麼時候開始忙」（`spinner::frame`），所以這
+    /// 裏只要記一個時刻；誰都不必數格子，也不會有兩處轉得不同步。
+    pub since: std::time::Instant,
 }
 
 /// **Where a shell command's output goes** (2026-10-06, helix's four).

@@ -8098,6 +8098,22 @@ fn draw_search(
         (false, _, true) if find.cut => (say!("search.hits-more", find.total), quiet),
         (false, _, true) => (say!("search.hits", find.total), quiet),
     };
+    // **走查還跑着的時候，數目前面轉一個圈**（2026-10-08 報的）。
+    //
+    // 擺法是他畫的：`⣾ 21+結果` → 搜完 `  21 結果`——**數字和「結果」一格都不
+    // 動**，只有轉圈和那個 `+` 變成空格。所以這一格不轉的時候也占着（`frame`
+    // 回一個空格，見 `spinner` 那個模組），而 `+` 那一格的兩則文案本來就隔着一
+    // 個空格對齊。
+    //
+    // 空的那一檔不加——那時候標題右邊什麼都不寫，憑空兩格空白是看得見的。
+    //
+    // Warning: **這是第一處真轉得起來的圈**。`spinner` 的模組註釋 2026-10-02 記着「慢
+    // 的那幾件全是同步跑完的，轉不動」——走查 2026-10-06 搬到旁邊去跑了（§5.93），
+    // 主循環每四十毫秒醒一次收結果，所以它轉得動。
+    let tally = match tally.is_empty() {
+        true => tally,
+        false => format!("{} {tally}", spinner::frame(editor.searching_since())),
+    };
     // **勾上「替換」之後，標題也要說出來**（2026-09-27 報的：`:replace` 開出來
     // 的面板頂上仍舊只寫「搜索」，而它比搜索多一整行和三個會改稿子的鍵）。
     let name = match find.replacing {
