@@ -967,9 +967,13 @@ impl Editor {
 
     /// Whether the cursor's own line is a row of a `|` table.
     pub(super) fn md_row_at_cursor(&self) -> bool {
+        // Warning: **不造字串**（2026-10-08）。這一支在**每一鍵的末尾**被問一次
+        // （`find_the_table_here`），而從前它 `rope.line(line).to_string()`——一行 1240 萬
+        // 字的稿子上就是**每按一下拷 37 MB**。`opens_with_a_pipe` 問的是同一件事，
+        // 一個字一個字讀 rope，一個字节也不配。
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.caret().min(rope.len_chars()));
-        crate::mdtable::is_row(&rope.line(line).to_string())
+        self.opens_with_a_pipe(line)
     }
 
     /// Whether the cursor's line looks like a table row but is inside a fence.
