@@ -221,9 +221,20 @@ impl Editor {
                 }
                 // The file's own line ending, so that one keystroke does not
                 // leave a CRLF manuscript with two kinds of line in it (#309).
-                let ending = self.current_buffer().ending();
-                self.insert_recording.push_str(ending);
-                self.insert_str(ending);
+                let ending = self.current_buffer().ending().to_string();
+                // **縮進跟着下來**（2026-10-08 報的：「In `go file`, pressing enter
+                // in a code block won't auto indent」）。vim 的 `autoindent`、helix
+                // 的 `insert_newline` 都做這件事，而這一頭一件都不做——代碼檔裏每
+                // 按一次 Enter 光標就回到第 0 列。
+                //
+                // 規矩與代價都在 [`Editor::indent_of_line`] 上：只帶光標前面那一截
+                // 空白，所以一個字符都不是憑空長出來的；行首按下去什麼都不帶。
+                let indent = self.indent_to_carry();
+                // 重放（`3i…`、`.`）是把記下來的字串原樣插進去的，所以縮進要記在
+                // 裏面——不記，`.` 重放出來的那幾行就貼着左邊。
+                self.insert_recording.push_str(&ending);
+                self.insert_recording.push_str(&indent);
+                self.insert_str(&format!("{ending}{indent}"));
             }
             // **`C-h` is Backspace** and **`C-j` is Enter** — the two the
             // terminal has sent as those control codes since before vi, and

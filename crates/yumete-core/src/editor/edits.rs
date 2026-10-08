@@ -296,20 +296,60 @@ impl Editor {
     }
 
     /// Open a new line below the cursor and enter Insert mode (`o`).
+    /// **這一行開頭那一段空白**——`o`、`O` 和 Enter 拿它把縮進帶下去。
+    ///
+    /// vim 的 `autoindent`、helix 的 `insert_newline` 都做這件事，而這一頭 2026-10-08
+    /// 之前一件都不做：代碼檔裏每按一次 Enter 光標就回到第 0 列（報的原話：「In
+    /// `go file`, pressing enter in a code block won't auto indent to the same
+    /// indentation level of the previous line」）。
+    ///
+    /// Warning: **不許「發明」空白。** `upto` 是光標在這一行的第幾個字——光標停在縮進
+    /// *裏面*的時候只帶它前面那一截，於是 `\t\tfoo` 在兩個 tab 中間按 Enter 得到
+    /// `\t` ＋ `\tfoo`，兩行加起來一個字符不多不少。行首（第 0 列）按下去因此什麼
+    /// 都不帶，而被推下去的那一行本來就帶着自己的縮進——同 vim。
+    ///
+    /// Warning: **只在代碼檔裏**（`Syntax::Code`）。報的那一條就是代碼的
+    /// （「In `go file`, pressing enter …」），而散文這一頭本來就有自己的首行縮進
+    /// （`paragraph_indent`，那是畫出來的，檔案裏沒有空白）——給一本小說自動帶
+    /// 縮進，是往稿子裏寫作者沒打的空白。Markdown 的列表另有一條路
+    /// （[`Self::continue_the_list`]），它在這一支之前就答完了。
+    ///
+    /// 全角空格（U+3000）也算空白：它在代碼註釋裏真出現過。
+    pub(super) fn indent_of_line(&self, line: usize, upto: Option<usize>) -> String {
+        if !self.writes_code() {
+            return String::new();
+        }
+        let text = self.line_text(line).unwrap_or_default();
+        let indent: String = text.chars().take_while(|c| *c == ' ' || *c == '\t' || *c == '\u{3000}').collect();
+        match upto {
+            Some(n) => indent.chars().take(n).collect(),
+            None => indent,
+        }
+    }
+
+    /// 眼下這一行要帶下去的那一段縮進（Enter 用的，截到光標為止）。
+    pub(super) fn indent_to_carry(&self) -> String {
+        let (line, at) = self.caret_in_line();
+        self.indent_of_line(line, Some(at))
+    }
+
     pub(super) fn open_line_below(&mut self) {
         if self.refuse_readonly() {
             return;
         }
         let end = motion::line_end(self.current_buffer().rope(), self.sel.head());
         let row = self.blank_row();
+        // 縮進跟着下來，同 vim 的 `o`（2026-10-08）。
+        let indent = self.indent_of_line(self.cursor_line(), None);
         // **The file's own line ending** (#309), not a literal `\n`.
         let ending = self.current_buffer().ending();
-        let done =
-            self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("{ending}{row}")));
+        let done = self.without_cell_guard(|e| {
+            e.current_buffer_mut().insert(end, &format!("{ending}{indent}{row}"))
+        });
         if !self.applied(done) {
             return;
         }
-        self.sel.set_head(end + ending.chars().count());
+        self.sel.set_head(end + ending.chars().count() + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
         self.enter_insert();
     }
@@ -321,13 +361,16 @@ impl Editor {
         }
         let start = motion::line_start(self.current_buffer().rope(), self.sel.head());
         let row = self.blank_row();
+        // 同 `o`：縮進照這一行的來（2026-10-08）。
+        let indent = self.indent_of_line(self.cursor_line(), None);
         let ending = self.current_buffer().ending();
-        let done = self
-            .without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}{ending}")));
+        let done = self.without_cell_guard(|e| {
+            e.current_buffer_mut().insert(start, &format!("{indent}{row}{ending}"))
+        });
         if !self.applied(done) {
             return;
         }
-        self.sel.set_head(start);
+        self.sel.set_head(start + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
         self.enter_insert();
     }
