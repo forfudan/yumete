@@ -2800,6 +2800,13 @@ pub struct Editor {
     /// *about* the text, in the text's own place, as it is written.
     notes: bool,
     note_memo: memo::LineMemo<Vec<crate::drawn::Run>>,
+    /// **製表符把格寬補到哪裏，算過就記著**（2026-10-08）。
+    ///
+    /// 量出來的：一行 47 萬字、裏面有 97 個製表符的檔，一幀 0.43 秒；同樣長、同樣
+    /// 內容、**一個製表符也沒有**的是 0.04 秒。差別在於：那一支要把整行走一遍字簇
+    /// 才算得出每一個製表符的列，而折行每量一行就問一次——十幾行就是十幾遍。
+    /// 答案只跟著正文與那幾個輸入變，所以記起來就是一次改動算一遍。
+    tab_memo: memo::LineMemo<Vec<crate::drawn::Run>>,
     /// Which lines are folded away, against the buffer they were worked out
     /// for. One pass over the file per edit — the answer is not line-local (a
     /// blank line inside a fence is code, not a paragraph break), and asking
@@ -3557,6 +3564,7 @@ impl Editor {
             meter_memo: memo::LineMemo::default(),
             notes: false,
             note_memo: memo::LineMemo::default(),
+            tab_memo: memo::LineMemo::default(),
             fold_cache: RefCell::new(None),
             markup_memo: memo::LineMemo::default(),
             ruby_memo: memo::LineMemo::default(),

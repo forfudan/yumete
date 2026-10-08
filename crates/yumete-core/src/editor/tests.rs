@@ -23630,3 +23630,42 @@ fn a_line_past_the_limit_is_left_plain() {
     assert_eq!(ed.long_line(), None);
     assert_eq!(ed.status, say!("layout.long-line-off"));
 }
+
+
+/// **一行裏有一個製表符，那一行就不該每幀重算一遍**（2026-10-08 使用者報的）。
+///
+/// 原話：「我有兩個文章，一個 50 萬字…每個按鍵都要幾秒反應。但是另一個 200 萬字的
+/// 文件卡頓就小多了」——量出來的差別就是那 97 個製表符：同樣長、同樣內容，
+/// 有製表符的一幀 0.43 秒，沒有的 0.04 秒。
+///
+/// 這支測試攣的是「答案記起來了」：同一行問兩次，第二次不再算。攣法是數時間——
+/// 備忘命中與不命中的差距在長行上是兩個數量級，不會因為機器快慢而翻盤。
+#[test]
+fn a_tab_on_a_very_long_line_is_measured_once_not_once_a_row() {
+    let mut line = String::new();
+    for i in 0..200_000 {
+        line.push(if i % 4000 == 3999 { '\t' } else { '一' });
+    }
+    line.push('\n');
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text(&line));
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
+    ed.set_wrap_width(80);
+
+    // 第一次：真算一遍。
+    let cold = std::time::Instant::now();
+    let first = ed.drawn_on_line(0).len();
+    let cold = cold.elapsed();
+    assert!(first >= 40, "五十個製表符都畫了格寬：{first}");
+
+    // 後面幾次：記著的。折行每量一行就問一次，所以這才是常態。
+    let warm = std::time::Instant::now();
+    for _ in 0..20 {
+        assert_eq!(ed.drawn_on_line(0).len(), first);
+    }
+    let warm = warm.elapsed();
+    assert!(
+        warm < cold,
+        "二十次記著的比一次真算的還慢：{warm:?} 對 {cold:?}"
+    );
+}

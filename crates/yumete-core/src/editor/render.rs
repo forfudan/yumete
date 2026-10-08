@@ -479,15 +479,43 @@ impl Editor {
         if !self.current_buffer().rope().line(line).chunks().any(|c| c.contains('\t')) {
             return Vec::new();
         }
-        let Some(text) = self.line_text(line) else {
-            return Vec::new();
-        };
         let stop = self.tab_stop();
         let hidden = self.hidden_on_line(line);
         // A tab a table has taken over as its separator is not indentation
         // (see [`Self::wall_columns`]) — it keeps its own single cell, exactly
         // as a `|` or a `,` does, and nothing is drawn beside it.
         let walls = self.wall_columns(line);
+        // Warning: **算過就記著**（2026-10-08 使用者報的：「50 萬字的比 200 萬字的還卡」）。
+        //
+        // 這一支要把整行走一遍字簇才算得出每一個製表符的列（製表符補到哪一格，
+        // 跟它前面所有字的寬度走），而折行每量一行就問一次——一屏十幾行就是十幾遍。
+        // 實測他那兩份稿子：**47 萬字、97 個製表符的那份 0.43 秒一幀，206 萬字、
+        // 一個製表符也沒有的那份 0.16 秒**——小四倍的檔慢兩倍多，差別全在這裏。
+        //
+        // 答案只跟著「正文、製表位寬、藏起來的那幾段、表格的牆」走，四樣都進指紋；
+        // 光標走一步不改其中任何一樣，所以一次改動算一遍就夠。
+        let stamp = super::memo::stamp((
+            self.current_buffer().revision(),
+            stop,
+            &hidden,
+            &walls,
+        ));
+        self.tab_memo.or_work_out(self.current_buffer().id(), line, stamp, || {
+            self.tab_stops_worked_out(line, stop, &hidden, &walls)
+        })
+    }
+
+    /// [`Self::tab_stops_on_line`] 算那一遍的那一半——只在備忘沒命中的時候走。
+    fn tab_stops_worked_out(
+        &self,
+        line: usize,
+        stop: usize,
+        hidden: &[(usize, usize)],
+        walls: &[usize],
+    ) -> Vec<crate::drawn::Run> {
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
         let mut out = Vec::new();
         let mut at = 0usize;
         let mut column = 0usize;
