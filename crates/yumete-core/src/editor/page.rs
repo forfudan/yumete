@@ -1333,6 +1333,11 @@ impl Editor {
         if self.completion_at.take() != Some(self.sel.head()) {
             return;
         }
+        // **照已經打出來的那半個詞排一遍**（2026-10-08）。服務器給的是一張
+        // 「這個點後面能接什麼」的全單，相關度是它算的，而「使用者已經打了
+        // `unwrap`」這件事要這一頭自己認——規矩與理由在 [`crate::lsp::rank`]。
+        let mut items = items;
+        crate::lsp::rank(&mut items, &self.word_before_the_cursor());
         match items.is_empty() {
             true => self.no_offers(),
             false => {
@@ -1354,6 +1359,25 @@ impl Editor {
         if self.completion_by_hand {
             self.status = say!("lsp.nothing-to-offer");
         }
+    }
+
+    /// **光標前面那半個詞**——補全單子拿它重排（[`crate::lsp::rank`]）。
+    ///
+    /// 從光標往回走，一直走到不是「名字的字」為止。`.`／`:` 不算在裏面：`self.unw`
+    /// 問的是 `unw`，不是 `self.unw`——服務器給的那些 `label` 也只是方法名。
+    fn word_before_the_cursor(&self) -> String {
+        let rope = self.current_buffer().rope();
+        let at = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        let head = rope.line_to_char(line);
+        let text: String = rope.slice(head..at).to_string();
+        text.chars()
+            .rev()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
     }
 
     /// 這會兒該不該畫那張單子——光標還在問的地方纔算。

@@ -708,6 +708,65 @@ fn without_the_holes(snippet: &str) -> String {
     out
 }
 
+/// **按已經打出來的那半個詞排一遍**（2026-10-08 報的）。
+///
+/// 報的原話：「I typed "unwrap", the function hint (autocompletion), however, still
+/// show the prediction using the original order. … items with exact prefix go first;
+/// fuzzy matching is nice-to-have but should go at bottoms.」截圖裏打完 `.unwrap`
+/// 之後單子頭三條還是 `is_some_and`／`is_none_or`／`expect`。
+///
+/// **為什麼服務器不替我們排。** 一張 `isIncomplete: false` 的單子，協議的意思是
+/// 「這就是全部，接着打字由**你**自己篩」——rust-analyzer 因此一次給出那個點後面
+/// 全部 131 條，按它自己算的相關度排，而「使用者已經打了 `unwrap`」這件事它不再過
+/// 問。VS Code、helix 都在這一頭篩。
+///
+/// Warning: **只重排，不扔。** 配不上的落到最後，不從單子上消失——這一頭認的是 `label`，
+/// 而服務器真正拿來篩的是 `filterText`（還沒接）。兩者不一樣的那天，扔掉的就是人要
+/// 的那一條；排到後面只是看不見，`C-n` 一路走下去還找得到。
+///
+/// 分五檔，檔內**保持服務器給的次序**（它那一檔是相關度，比這一頭懂得多）：
+///
+/// | 檔 | 什麼 |
+/// | --- | --- |
+/// | 0 | 整個就是它 |
+/// | 1 | 前綴，大小寫也對 |
+/// | 2 | 前綴，不計大小寫 |
+/// | 3 | 字母按順序出現過（模糊） |
+/// | 4 | 配不上 |
+pub fn rank(items: &mut [Offer], word: &str) {
+    if word.is_empty() {
+        return;
+    }
+    let small = word.to_lowercase();
+    let tier = |offer: &Offer| -> u8 {
+        let label = offer.label.as_str();
+        if label == word {
+            return 0;
+        }
+        if label.starts_with(word) {
+            return 1;
+        }
+        let quiet = label.to_lowercase();
+        if quiet.starts_with(&small) {
+            return 2;
+        }
+        // 字母按順序出現過就算模糊配得上——`unwrap` 配得上 `unwrap_or_default`，
+        // 也配得上 `u_n_w…`。不打分：這一檔本來就排在後面。
+        let mut want = small.chars().peekable();
+        for c in quiet.chars() {
+            if want.peek() == Some(&c) {
+                want.next();
+            }
+        }
+        match want.peek().is_none() {
+            true => 3,
+            false => 4,
+        }
+    };
+    // `sort_by_key` 是穩定排序，所以同一檔裏服務器給的次序一個字都不動。
+    items.sort_by_key(tier);
+}
+
 /// The empty answer to a request we do not really implement.
 ///
 /// `id` 是**那條請求裏的 JSON 原樣**（`4` 或 `"abc"`），所以回去的號碼和來的那個
