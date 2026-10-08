@@ -23393,3 +23393,28 @@ fn the_file_report_says_what_this_file_is() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **挑選器裏 `/` 回到搜索行**（2026-10-08 報的，和搜索面板那一扇一樣）。
+///
+/// Warning: **不是把 2026-10-01 拿掉的那個 `/` 加回來。** 那一個進的是打字態，和 `i`
+/// 一件事；這一個只挪窩——鍵站到搜索行上，模式沒變。
+#[test]
+fn a_slash_in_the_picker_stands_on_the_search_line() {
+    let mut ed = Editor::new();
+    press(&mut ed, " f");
+    let picker = ed.picker().expect("挑選器開着");
+    assert!(!picker.typing(), "開門在列表那一層");
+    assert!(!picker.on_query(), "站在單子上");
+
+    // 走下去幾條，再按 `/` 回搜索行。
+    press(&mut ed, "jj");
+    assert!(!ed.picker().expect("開着").on_query());
+    press(&mut ed, "/");
+    let picker = ed.picker().expect("還開着");
+    assert!(picker.on_query(), "`/` 把鍵放到搜索行上");
+    assert!(!picker.typing(), "⚠ 可是沒進打字——這是它和 `i` 的分別");
+
+    // `i` 在那一行上纔進打字（模態的走法）。
+    press(&mut ed, "i");
+    assert!(ed.picker().expect("還開着").typing(), "`i` 纔打字");
+}
