@@ -4040,8 +4040,8 @@ en = "size"
 [[message]]
 # :info 這一頁的標題
 key = "file.title"
-zht = "這份檔案"
-zhs = "这份档案"
+zht = "這份文檔"
+zhs = "这份文档"
 en = "this file"
 
 [[message]]
