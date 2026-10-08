@@ -692,18 +692,17 @@ pub fn run(
             system_ime.say_it_again();
         }
         system_ime.want(!composes_here(editor) || yume_has_the_keys);
-        // Warning: **挑選器那兩層也要進這個元組**（2026-10-02 修）。換層不換 `mode`，
-        // 於是形狀一次都沒重發過——列表層照樣頂着一根豎線（報的：「The cursor
-        // is incorrect in normal mode」）。
-        let in_the_list = editor.picker().is_some_and(|p| !p.typing());
-        let shown = (editor.mode(), editor.is_extending(), in_the_list);
+        // Warning: **挑選器從前有兩層，那一層也要進這個元組**（2026-10-02 修，
+        // 2026-10-08 隨着那一層一起去掉）。現在它只有打字這一層，走的是
+        // `is_prompt()` 那條路，豎線是對的。
+        let shown = (editor.mode(), editor.is_extending());
         if last_mode != Some(shown) {
-            let (mode, extending, in_the_list) = shown;
+            let (mode, extending) = shown;
             // A block in Normal, a bar in Insert — the shape a modal editor is
             // read by. Only sent on a change, so the terminal is not asked to
             // reset its cursor on every keystroke.
             let vertical = editor.layout() == WritingLayout::Vertical;
-            let _ = execute!(stdout(), caret_shape(mode, vertical, extending, in_the_list));
+            let _ = execute!(stdout(), caret_shape(mode, vertical, extending));
 
             // Leaving the command line gives Insert its 中/英 back (#225) —
             // *its* state, not 中文 unconditionally. Forcing 中文 back on put
@@ -720,7 +719,7 @@ pub fn run(
             // straight after a 中文 name kept the composition running, and
             // gave nothing back on the way out either.
             if ime.available() {
-                let door = borrowed.crossing(last_mode.map(|(m, _, _)| m), mode, ime.is_chinese());
+                let door = borrowed.crossing(last_mode.map(|(m, _)| m), mode, ime.is_chinese());
                 if door.escape && ime.is_composing() {
                     ime.escape();
                 }
@@ -1962,13 +1961,10 @@ const FRAME_CEILING: std::time::Duration = std::time::Duration::from_millis(500)
 /// finds the file, and `/` takes 中文 and finds the words. Those are the three
 /// places a Chinese name is actually typed.
 fn composes_here(editor: &Editor) -> bool {
-    // Warning: **The picker has two layers, and only one of them is typing**
-    // (2026-09-17). `Mode::Picker` composes because the query takes 中文 — but
-    // with the keys in the *list*, `j` and `k` walk it, and handing them to the
-    // engine made them a code: 「我按了 space f 進入 picker，按 jk 他開始輸入」.
-    if let Some(picker) = editor.picker() {
-        return picker.typing();
-    }
+    // Warning: **挑選器從前有兩層，只有一層打字**（2026-09-17 加的那道閘）。鍵在列表
+    // 那一層的時候把 `j` 交給引擎就成了一個碼：「我按了 space f 進入 picker，按
+    // jk 他開始輸入」。2026-10-08 那一層去掉了——`Mode::Picker` 只有打字這一個
+    // 狀態，`composes()` 本來就說它收中文，那道閘隨之刪了。
     if editor.mode().composes() {
         return true;
     }
@@ -9201,7 +9197,7 @@ fn draw_picker(
     // 一頁一頁地讓是 helix 的答案：窗口停着不動，高亮在這一頁裏走，走出去了纔
     // 整頁翻。它還正好和 [`Picker::page`] 對上——那一支翻的就是 `deep` 條。
     let first = at - at % deep.max(1);
-    // **鍵不在單子上的時候，選中那一條畫得淡一檔**（2026-10-08 報的）。
+    // **選中那一條一律畫得淡一檔**（2026-10-08 報的）。
     //
     // 原話：「My cursor is in the search line. But the first result is also highlighted
     // so I am confused sometimes where I am. … highlighting (and thus with preview) the
@@ -9211,11 +9207,10 @@ fn draw_picker(
     // 所以**不是不選**：它照舊選着、照舊預覽、`Enter` 照舊開得了它——只是那一條
     // 整條反白會讓人以為光標在那裏。淡的那一檔用的是 `BAND`（制表位那一片、搜索
     // 命中那一行用的同一個底色），不是寫死一個灰。
-    let listed = !picker.typing() && !picker.on_query();
-    let on = match listed {
-        true => Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink)),
-        false => Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.text()),
-    };
+    //
+    // Warning: **從前它分兩種畫法**，整條反白那一種留給「鍵在單子上」。同日挑選器只剩
+    // 打字一層，鍵永遠不在單子上——淡的那一種是唯一的那一種了。
+    let on = Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.text());
     let limit = left.x + names - 1;
     // Warning: **沒有 `+ 1`**（2026-10-06 報的：「There is too much space between
     // : and the search box. One space is enough.」）。`search.label.query` 這則本身
@@ -9393,20 +9388,15 @@ fn draw_picker(
     let panels = Some(Rect::new(box_.x, box_.y, names + over.width, rows));
     // **The caret sits in the query, and the query is inside the panel** — not
     // on the status line, which is where it used to be put and where it was
-    // seen to be: 「光标在状态栏中打了j」. Nothing is being typed while the
-    // keys are in the list, so there the caret is on the name it is standing
-    // on instead.
-    // **框裏那一格的位置，兩層算法一樣**（2026-10-02 修）。從前列表層那一支漏了
-    // `before_caret`，於是光標永遠釘在框的開頭、`h`/`l` 挪了它也不動——報上來的
-    // 「the curser does not move with hl」就是這個。
-    let in_the_box = Position::new(
+    // seen to be: 「光标在状态栏中打了j」.
+    //
+    // Warning: **從前它有第二個去處**：鍵在單子上的時候它落在站着的那一條檔名上
+    // （2026-10-02 修過那一支的算法）。2026-10-08 挑選器只剩打字一層，框裏這一格
+    // 是唯一的去處。
+    let caret = Position::new(
         box_at + yumete_cjk::str_width(&shown.chars().take(caret_in).collect::<String>()) as u16,
         left.y + 1,
     );
-    let caret = match picker.on_query() {
-        true => in_the_box,
-        false => Position::new(left.x + 1, list_at + (at - first) as u16),
-    };
     frame.set_cursor_position(caret);
     Some((caret, panels))
 }
@@ -11913,13 +11903,9 @@ fn draw_command(
 /// `box_in` paints that one, and the two shapes then say the same thing
 /// everywhere — **bar means the next key is a character, block means it is a
 /// command**.
-fn caret_shape(mode: Mode, vertical: bool, extending: bool, in_the_list: bool) -> SetCursorStyle {
-    // **挑選器的列表層是 Normal，所以是方塊**（2026-10-02 修）。`Mode::Picker`
-    // 一律走 `is_prompt()` 那一支，於是列表層也頂着一根豎線——而那一層按 `j` 走
-    // 的是列表，不是打一個 `j`。這一行在 `is_prompt()` 之前。
-    if in_the_list {
-        return SetCursorStyle::SteadyBlock;
-    }
+fn caret_shape(mode: Mode, vertical: bool, extending: bool) -> SetCursorStyle {
+    // Warning: **從前這裏還有一道「挑選器的列表層是方塊」**（2026-10-02 加）。挑選器
+    // 2026-10-08 只剩打字那一層，`is_prompt()` 交出的豎線就是對的那一個。
     if mode.is_prompt() {
         return SetCursorStyle::SteadyBar;
     }
@@ -21219,26 +21205,26 @@ fn squeezed(text: &str) -> String {
         }
     }
 
-    /// **A query, then `Esc`, and the frame still draws** (2026-09-17).
+    /// **A query that matches nothing, and the frame still draws** (2026-09-17).
     ///
-    /// The hint that says what the list layer's keys are goes on the end of
-    /// the footer, and the caret's column used to be worked out by subtracting
-    /// byte lengths from the whole of it — so anything after the query put the
-    /// index inside a 漢字 and the editor panicked **while drawing**, which is
-    /// the one place a panic takes the session with it: 「space + f + j + j +
-    /// Esc 我就退出 yumete 了」.
+    /// The hint row goes on the end of the footer, and the caret's column used
+    /// to be worked out by subtracting byte lengths from the whole of it — so
+    /// anything after the query put the index inside a 漢字 and the editor
+    /// panicked **while drawing**, which is the one place a panic takes the
+    /// session with it: 「space + f + j + j + Esc 我就退出 yumete 了」.
+    ///
+    /// Warning: 原來那一串按鍵是 `i jj Esc`（進框、打字、退回列表那一層）。2026-10-08
+    /// 挑選器只剩一層，`i` 和 `Esc` 不再是那個意思，所以 `jj` 直接打進去。
     #[test]
-    fn the_picker_draws_with_a_query_and_the_keys_in_the_list() {
+    fn the_picker_draws_with_a_query_that_matches_nothing() {
         let mut editor = Editor::new();
         let config = Config::default();
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('f'));
-        editor.on_key(Key::Char('i'));
         for c in "jj".chars() {
             editor.on_key(Key::Char(c));
         }
-        editor.on_key(Key::Esc);
-        assert!(editor.picker().is_some_and(|p| !p.typing()));
+        assert!(editor.picker().is_some(), "窗還開着");
         // Panicked here before the fix, whatever the query matched.
         let text = buffer_to_text(&render_with(&editor, &config, no_ime(), 80, 24));
         assert!(text.contains("jj"), "the query is drawn: {text}");
@@ -21263,9 +21249,10 @@ fn squeezed(text: &str) -> String {
         }
         let mut editor = Editor::new();
         let config = Config::default();
-        editor.open_file_picker_with("", root.clone());
+        editor.open_file_picker_with("", root.clone(), yumete_core::editor::Sieve::default());
+        // `Tab` 走一條，不是 `j`——2026-10-08 起 `j` 是查詢詞裏的一個字母。
         for _ in 0..20 {
-            editor.on_key(Key::Char('j'));
+            editor.on_key(Key::Tab);
         }
         let text = buffer_to_text(&render_with(&editor, &config, no_ime(), 80, 24));
         assert!(text.contains("ch21.md"), "站着的那一條在上面：{text}");
@@ -21343,59 +21330,57 @@ fn squeezed(text: &str) -> String {
         }
     }
 
-    /// **挑選器搜索框裏的光標跟着 `h`/`l` 走，兩層都是**（2026-10-02 修）。
+    /// **挑選器搜索框裏的光標跟着 `←`/`→` 走**（2026-10-02 修）。
     ///
     /// 報的：「The cursor is incorrect in normal mode and the curser does
-    /// not move with hl」。兩件事同一個根：列表層那一支算位置的時候**漏了光標前
-    /// 面那一段**，於是它永遠釘在框的開頭；而 `Mode::Picker` 一律走
-    /// `is_prompt()`，形狀被寫死成豎線，連換層都不重發。
+    /// not move with hl」。
+    ///
+    /// Warning: **那一輪驗的是兩層**（`h`/`l` 在列表層站在搜索行上也要挪光標，形狀還要
+    /// 跟着層換成方塊）。2026-10-08 挑選器只剩打字一層：挪光標的是方向鍵，`h`
+    /// 和 `l` 是查詢詞裏的字母，而形狀一律是豎線。
     #[test]
     fn the_pickers_caret_sits_on_the_character_it_is_standing_on() {
         let mut editor = Editor::new();
         let config = Config::default();
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('f'));
-        editor.on_key(Key::Char('i'));
         for c in "this".chars() {
             editor.on_key(Key::Char(c));
         }
         let (_, typing) = render_caret(&editor, &config, 80, 24);
         let typing = typing.expect("打字的時候有光標");
 
-        // `Esc` 回列表層，鍵落在搜索行上，光標還在同一格。
-        editor.on_key(Key::Esc);
-        let (_, listed) = render_caret(&editor, &config, 80, 24);
-        assert_eq!(listed, Some(typing), "換層不挪光標");
-
-        // Warning: **`h` 要把它往左挪一格。** 從前它一步不動。
-        editor.on_key(Key::Char('h'));
-        let moved = render_caret(&editor, &config, 80, 24).1.expect("列表層站在搜索行上也有光標");
-        assert_eq!(moved.x, typing.x - 1, "h 往左一格");
+        // Warning: **`←` 要把它往左挪一格。** 從前它一步不動。
+        editor.on_key(Key::Left);
+        let moved = render_caret(&editor, &config, 80, 24).1.expect("框裏有光標");
+        assert_eq!(moved.x, typing.x - 1, "← 往左一格");
         assert_eq!(moved.y, typing.y, "還在那一行");
-        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Right);
         let (_, back) = render_caret(&editor, &config, 80, 24);
-        assert_eq!(back, Some(typing), "l 回去");
+        assert_eq!(back, Some(typing), "→ 回去");
 
-        // 形狀：列表層是方塊，查詢層是豎線。
+        // `h` 不挪光標了，它是查詢詞裏的一個字母。
+        editor.on_key(Key::Char('h'));
+        assert_eq!(editor.picker().map(|p| p.query()), Some("thish"));
+
+        // 形狀：一層，一律是豎線。
         assert_eq!(
-            format!("{}", caret_shape(editor.mode(), false, false, true)),
-            format!("{}", SetCursorStyle::SteadyBlock),
-            "列表層是方塊"
-        );
-        assert_eq!(
-            format!("{}", caret_shape(editor.mode(), false, false, false)),
+            format!("{}", caret_shape(editor.mode(), false, false)),
             format!("{}", SetCursorStyle::SteadyBar),
-            "查詢層是豎線"
+            "挑選器一律是豎線"
         );
     }
 
-    /// **鍵在搜索行上的時候，選中那一條淡一檔**（2026-10-08 報的）。
+    /// **選中那一條一律淡一檔**（2026-10-08 報的）。
     ///
     /// 「整條反白」在這個編輯器裏說的是「光標在這裏」。鍵在搜索行上而第一條照樣
     /// 整條反白，於是屏幕上有兩個「這裏」。淡一檔之後它還是選着的——`Enter` 照舊
     /// 開得了它，預覽也照舊——只是不再冒充光標。
+    ///
+    /// Warning: 同日早些時候它分兩種畫法，整條反白那一種留給「鍵在單子上」。挑選器只剩
+    /// 打字一層之後鍵永遠不在單子上，淡的那一種是唯一的那一種了。
     #[test]
-    fn the_picked_row_is_dimmer_while_the_keys_are_in_the_query() {
+    fn the_picked_row_is_always_the_dimmer_one() {
         let config = Config::default();
         let ink = ink(&config);
         let grounds = |ed: &Editor| -> Vec<ratatui::style::Color> {
@@ -21406,18 +21391,14 @@ fn squeezed(text: &str) -> String {
         ed.on_key(Key::Char(' '));
         ed.on_key(Key::Char('f'));
         assert!(ed.picker().is_some(), "空格 f 開得了挑選器");
-        // 鍵在單子上：選中那一條整條反白。
-        let listed = grounds(&ed);
-        assert!(listed.contains(&ink.text()), "鍵在單子上就整條反白");
-        // 鍵進了搜索行（`/` 只是挪窩，沒打字）：同一條，淡一檔。
-        ed.on_key(Key::Char('/'));
-        assert!(ed.picker().expect("開着").on_query(), "`/` 挪到搜索行");
-        let on_query = grounds(&ed);
-        assert!(!on_query.contains(&ink.text()), "鍵不在單子上就不該整條反白");
-        assert!(
-            on_query.contains(&ink.at(yumete_config::rung::BAND)),
-            "照舊畫着，只是淡一檔"
-        );
+        let fresh = grounds(&ed);
+        assert!(!fresh.contains(&ink.text()), "開門那一下就不該整條反白");
+        assert!(fresh.contains(&ink.at(yumete_config::rung::BAND)), "照舊畫着，只是淡一檔");
+        // 打過字、走過一條，還是淡的那一種。
+        ed.on_key(Key::Char('m'));
+        ed.on_key(Key::Tab);
+        let walked = grounds(&ed);
+        assert!(!walked.contains(&ink.text()), "走一條也不整條反白");
         // 而它**還是選着的**——`Enter` 照舊開得了它。
         assert!(ed.picker().expect("開着").chosen().is_some(), "照舊預選着");
     }
@@ -21551,25 +21532,25 @@ fn squeezed(text: &str) -> String {
         assert_eq!(rings(&editor), 1, "the command menu, alone");
     }
 
-    /// **The picker's query composes; its list does not** (2026-09-17).
+    /// **挑選器開門就收中文**（2026-10-08 定）。
     ///
-    /// The gate used to ask only 「is this mode a typing one」, and `Mode::Picker`
-    /// is — so with the keys in the list, `j` and `k` went to the engine as a
-    /// code instead of walking the list: 「我按了 space f 進入 picker，按 jk 他
-    /// 開始輸入」. One line in `composes_here`, and this is the test that keeps
-    /// it: a layer nobody asked about is how that bug happened.
+    /// Warning: **從前這一支驗的是反過來那件事**（2026-09-17 加的那道閘）：挑選器開在列表
+    /// 那一層，鍵不許交給引擎，不然 `j` 和 `k` 進了碼而不是走單子（「我按了
+    /// space f 進入 picker，按 jk 他開始輸入」）。那一層 2026-10-08 去掉了——開門
+    /// 就是查詢框，第一下按鍵就該能打中文，而中文檔名正是這一扇存在的理由。
     #[test]
-    fn the_pickers_list_layer_does_not_compose() {
+    fn the_picker_composes_from_the_first_keystroke() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('f'));
         assert!(editor.picker().is_some(), "the picker is open");
-        assert!(!composes_here(&editor), "it opens in the list, where jk walk");
-        editor.on_key(Key::Char('i'));
+        assert!(composes_here(&editor), "開門就在框裏，框收中文");
+        // 打過字還是收，`Esc` 關掉之後回正文那一套。
+        editor.on_key(Key::Char('x'));
         assert!(composes_here(&editor), "the query takes 中文");
         editor.on_key(Key::Esc);
-        assert!(editor.picker().is_some(), "Esc is the layer, not the door out");
-        assert!(!composes_here(&editor), "…and back in the list");
+        assert!(editor.picker().is_none(), "Esc 一下就關");
+        assert!(!composes_here(&editor), "回 Normal，鍵不再是字");
     }
 
     /// The command line takes no 中文 anywhere on it — not after the command
@@ -22455,7 +22436,7 @@ fn squeezed(text: &str) -> String {
         // `SetCursorStyle` 沒有 `Debug`，而它 `Display` 出來的正是那串終端轉義，
         // 三種形狀三個字符串——比記住 `\x1b[5 q` 是哪一個好讀。
         let shape = |mode, vertical, extending| {
-            format!("{}", caret_shape(mode, vertical, extending, false))
+            format!("{}", caret_shape(mode, vertical, extending))
         };
         let bar = format!("{}", SetCursorStyle::SteadyBar);
         let under = format!("{}", SetCursorStyle::SteadyUnderScore);

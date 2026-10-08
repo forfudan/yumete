@@ -2510,29 +2510,27 @@ fn a_torn_table_is_left_alone_by_every_key_that_rewrites_it() {
 
 /// **挑選器的框和搜索面板的框，同一個鍵一個答案**（2026-10-02 自查出來的）。
 ///
-/// 同一天的兩輪審查把兩扇面板的 `d`/`D` 改向了相反的方向：搜索面板改成「末尾那
-/// 一格上刪掉看得見的最後一個字」（照 2026-09-27 那條定論），挑選器改成「末尾就
-/// 什麼都別動」。兩扇都自洽，合起來不是一條規矩。
+/// 同一天的兩輪審查把兩扇面板的刪字鍵改向了相反的方向：搜索面板改成「末尾那一格
+/// 上刪掉看得見的最後一個字」（照 2026-09-27 那條定論），挑選器改成「末尾就什麼
+/// 都別動」。兩扇都自洽，合起來不是一條規矩。
+///
+/// Warning: **從前這一支連 `D` 一起驗**（`Picker::delete_to_end`）。2026-10-08 挑選器只剩
+/// 一層，`D` 和框裏那一整套 vim 編輯鍵都成了查詢詞裏的字母，那一支隨之刪了；
+/// 留下的 `Delete` 這一個還在，規矩也還是這一條。
 #[test]
 fn the_picker_box_and_the_panel_box_answer_d_the_same_way() {
     use crate::picker::Picker;
-    for key in ['d', 'D'] {
-        let mut p = Picker::new("文件", Vec::new());
-        p.push('a');
-        p.push('b');
-        // `Esc` 之後光標停在文字後面那一格——框裏的常態。
-        p.move_caret(crate::picker::Caret::End);
-        match key {
-            'd' => p.delete(),
-            _ => p.delete_to_end(),
-        }
-        assert_eq!(p.query(), "a", "挑選器的 {key} 在末尾什麼都沒刪");
-    }
+    let mut p = Picker::new("文件", Vec::new());
+    p.push('a');
+    p.push('b');
+    // 光標停在文字後面那一格——框裏的常態。
+    p.move_caret(crate::picker::Caret::End);
+    p.delete();
+    assert_eq!(p.query(), "a", "挑選器的 Delete 在末尾刪的是看得見的最後那個字");
 
-    // 空框上按，兩個鍵都不許 panic，也不許憑空生出東西。
+    // 空框上按，不許 panic，也不許憑空生出東西。
     let mut p = Picker::new("文件", Vec::new());
     p.delete();
-    p.delete_to_end();
     assert_eq!(p.query(), "");
 }
 
@@ -11767,29 +11765,31 @@ fn space_b_picks_a_buffer_by_name() {
     assert_eq!(ed.current_buffer().text(), "第二篇");
 }
 
-/// `Esc` in the list is the door out; in the query it is the way back to the
-/// list, and so is backspacing past the start of it (2026-09-17).
+/// **一下 `Esc` 就關，退格到頭什麼都不做**（2026-10-08 定）。
 ///
-/// Warning: **一開在列表那一層**，所以一下 `Esc` 就關得掉。2026-10-01 試過改成一開
-/// 就在查詢層，那樣要按兩次，當天撤回。
+/// 從前 `Esc` 在查詢層是「回列表」、在列表層纔是出門，而退到頭的那一下退格也換層。
+/// 四個編輯器（helix、VS Code、Zed、nvim）一個都沒有挑選器裏的模式，四個都是一下
+/// `Esc` 關掉。2026-10-01 只改了「開門就打字」那一半，代價是關窗要按兩次，當天撤回
+/// ——這一趟把另一半也做了。
 #[test]
-fn a_picker_closes_on_esc_and_backspacing_past_the_query_goes_back_to_the_list() {
+fn one_esc_closes_the_picker_and_backspacing_an_empty_query_does_nothing() {
     let mut ed = Editor::new();
     type_keys(&mut ed, " b");
+    assert!(ed.picker().is_some_and(|p| p.query().is_empty()), "開門就在框裏");
     ed.on_key(Key::Esc);
     assert_eq!(ed.mode(), Mode::Normal);
-    assert!(ed.picker().is_none());
+    assert!(ed.picker().is_none(), "一下就關");
 
     type_keys(&mut ed, " b");
-    ed.on_key(Key::Char('i'));
     ed.on_key(Key::Char('x'));
     ed.on_key(Key::Backspace); // back over the `x`
     assert_eq!(ed.mode(), Mode::Picker);
-    assert!(ed.picker().is_some_and(|p| p.typing()), "still in the query");
+    assert_eq!(ed.picker().map(|p| p.query()), Some(""), "退回空的，窗還開着");
     ed.on_key(Key::Backspace); // nothing left to go back over
-    assert!(ed.picker().is_some_and(|p| !p.typing()), "and the keys are in the list");
+    assert_eq!(ed.mode(), Mode::Picker, "空着再退一下，什麼都不發生");
+    assert!(ed.picker().is_some(), "尤其不是關窗");
     ed.on_key(Key::Esc);
-    assert_eq!(ed.mode(), Mode::Normal, "from the list, Esc is the door out");
+    assert_eq!(ed.mode(), Mode::Normal, "出門只有 Esc 這一條");
 }
 
 /// `空格 /` opens the panel, not a prompt — Feature #419.
@@ -12145,11 +12145,10 @@ fn every_prompt_has_a_caret() {
     assert_eq!(ed.prompt_before_caret(), "Z");
     ed.on_key(Key::Esc);
 
-    // The picker's query, the same way — `/` first, because the keys start in
-    // the list (2026-09-18).
+    // The picker's query, the same way — and with one state there is no `i`
+    // to press first (2026-10-08).
     let mut ed = typed("那年冬天。\n");
     ed.open_buffer_picker();
-    ed.on_key(Key::Char('i'));
     for c in "abc".chars() {
         ed.on_key(Key::Char(c));
     }
@@ -19013,7 +19012,6 @@ fn a_named_entry_opens_a_picker_and_stays_put_until_the_cursor_moves() {
     ed.execute(":wiki 朱浩宇").unwrap();
     assert_eq!(ed.mode(), Mode::Picker, "彈的是一扇面板：{}", ed.status());
     let picker = ed.picker().expect("面板開着");
-    assert!(picker.typing(), "鍵落在查詢裏，命令行上打了一半的心境接着走");
     assert_eq!(
         picker.chosen().as_ref().map(|i| i.label()),
         Some("朱宇浩"),
@@ -19263,9 +19261,10 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     assert!(ed.showing(crate::sidebar::View::Info).is_none(), "and again puts it away");
 }
 
-/// The picker has two layers and a preview (2026-09-17): it opens in the list,
-/// where `jk` walk; `/` puts the keys in the query, where typing narrows it and
-/// `Esc` hands them back; and what is highlighted is shown beside it.
+/// **一扇挑選器一個狀態**（2026-10-08 定）：開門就在框裏打字，`Tab`/`S-Tab`、
+/// `C-n`/`C-p`、`↑`/`↓` 走單子，`Enter` 開，`Esc` 關；高亮那一條在旁邊預覽。
+///
+/// Warning: **`j`、`q`、`i` 現在是查詢詞裏的字母。** 從前它們是列表那一層的命令。
 #[test]
 fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     let dir = std::env::temp_dir().join(format!("yumete-picker-{}", std::process::id()));
@@ -19278,7 +19277,7 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     ed.open_file(dir.join("一.md")).unwrap();
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('f'));
-    assert!(ed.picker().is_some_and(|p| !p.typing()), "the keys start in the list");
+    assert!(ed.picker().is_some(), "空格 f 開得了挑選器");
 
     // The preview is the file the highlight is on — the open buffer where
     // there is one, so unsaved writing shows.
@@ -19286,24 +19285,129 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     assert!(name.ends_with(".md"), "{name}");
     assert!(!lines.is_empty());
 
-    // `jk` walk from the first keystroke, and the preview follows.
+    // **六個移動鍵，一個一個按過**：往前 `Tab`/`C-n`/`↓`，往後 `S-Tab`/`C-p`/`↑`。
+    // 單子上兩條，所以走一步換一條、再走一步換回來。
     let first = ed.picker_preview(4).unwrap().0;
-    ed.on_key(Key::Char('j'));
-    assert_ne!(ed.picker_preview(4).unwrap().0, first, "j walked, and the preview followed");
+    for forward in [Key::Tab, Key::Ctrl('n'), Key::Down] {
+        ed.on_key(forward);
+        assert_ne!(ed.picker_preview(4).unwrap().0, first, "{forward:?} 往前走了一條");
+        ed.on_key(Key::Up);
+        assert_eq!(ed.picker_preview(4).unwrap().0, first, "↑ 走回來了");
+    }
+    for back in [Key::BackTab, Key::Ctrl('p'), Key::Up] {
+        ed.on_key(back);
+        assert_ne!(ed.picker_preview(4).unwrap().0, first, "{back:?} 往後走了一條");
+        ed.on_key(Key::Down);
+        assert_eq!(ed.picker_preview(4).unwrap().0, first, "↓ 走回來了");
+    }
 
-    // **`i` 進框，`/` 2026-10-01 去掉了**；`Esc` 把鍵交回列表，不關挑選器。
-    ed.on_key(Key::Char('i'));
-    assert!(ed.picker().is_some_and(|p| p.typing()), "i puts the keys in the query");
-    ed.on_key(Key::Esc);
-    assert!(ed.picker().is_some_and(|p| !p.typing()), "Esc is the layer, not the door out");
-    assert!(ed.picker().is_some_and(|p| p.on_query()), "Esc 落回搜索行，不是落回原處");
-    ed.on_key(Key::Char('i'));
+    // 打字就篩，`Enter` 開中那一條。
     ed.on_key(Key::Char('二'));
     assert_eq!(ed.picker().unwrap().matches().len(), 1);
     ed.on_key(Key::Enter);
     assert!(ed.picker().is_none());
     assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("二.md")));
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **從前是命令的那幾個鍵，現在是查詢詞裏的字母**（2026-10-08 定）。
+///
+/// `j`/`k` 走單子、`q` 關窗、`i` 進框、`g`/`G` 到兩頭、`d`/`D`/`c`/`C`/`a`/`A`/`I`
+/// 那一套框裏的編輯鍵、`/` 回搜索行——整整一層鍵刪了，每一個都落進查詢詞。
+#[test]
+fn the_pickers_old_commands_are_letters_of_the_query_now() {
+    let mut ed = Editor::new();
+    type_keys(&mut ed, " b");
+    for c in "jqigGdDcCaAI/".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert_eq!(ed.mode(), Mode::Picker, "一個都沒把窗關掉");
+    assert_eq!(ed.picker().map(|p| p.query()), Some("jqigGdDcCaAI/"), "全進了框");
+}
+
+/// **`A-h` 轉一格：跳過哪些，四態繞回來，打過的字留着**（2026-10-08 定）。
+///
+/// 次序照搜索面板那個 `7` 鍵：`(隱藏, 忽略)` 走 `(f,f) → (f,t) → (t,f) → (t,t) →
+/// (f,f)`。隱藏那一檔真的管用——點開頭的目錄本來一條都不列，撥到第三格就列得出來。
+#[test]
+fn alt_h_cycles_what_the_picker_skips_and_keeps_the_query() {
+    let dir = std::env::temp_dir().join(format!("yumete-picker-sieve-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".隱")).unwrap();
+    std::fs::write(dir.join("甲稿.md"), "一行\n").unwrap();
+    std::fs::write(dir.join(".隱/乙稿.md"), "一行\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    type_keys(&mut ed, " f");
+
+    // 出廠那一格：隱藏和忽略都不搜，所以 `.隱/` 底下那一份不在單子上。
+    let skipping = |ed: &Editor| {
+        let sieve = ed.picker().expect("開着").sieve.clone().expect("走磁碟那一扇有篩子");
+        (sieve.hidden, sieve.ignored)
+    };
+    assert_eq!(skipping(&ed), (false, false), "出廠是「不搜隱藏＋忽略」");
+    let listed = |ed: &Editor| ed.picker().expect("開着").total();
+    let plain = listed(&ed);
+
+    // 打幾個字，往後每一格都要原封不動留着。
+    ed.on_key(Key::Char('稿'));
+    assert_eq!(ed.picker().map(|p| p.query()), Some("稿"));
+
+    // 第二格：放開忽略那一半（`.gitignore` 擋掉的目錄）。隱藏還關着。
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(skipping(&ed), (false, true), "第一步放開的是忽略那一半");
+    assert_eq!(ed.picker().map(|p| p.query()), Some("稿"), "打過的字留着");
+
+    // 第三格：隱藏的搜、忽略的不搜——`.隱/乙稿.md` 這下進來了。
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(skipping(&ed), (true, false));
+    assert!(listed(&ed) > plain, "隱藏那一檔真的管用：{} > {plain}", listed(&ed));
+    assert_eq!(ed.picker().map(|p| p.query()), Some("稿"));
+
+    // 第四格：全部搜索。
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(skipping(&ed), (true, true));
+
+    // 再一下繞回出廠那一格。
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(skipping(&ed), (false, false), "四態繞回來");
+    assert_eq!(listed(&ed), plain, "單子也回到原樣");
+    assert_eq!(ed.picker().map(|p| p.query()), Some("稿"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **挑選器那一行提示：一行，`Tab S-Tab` 寫在前面，`A-h` 寫着此刻跳過哪些**
+/// （2026-10-08 定）。
+#[test]
+fn the_pickers_hint_row_names_what_the_walk_skips() {
+    let mut ed = Editor::new();
+    type_keys(&mut ed, " f");
+    let row = |ed: &Editor| match ed.hint() {
+        crate::editor::Hint::Keys(_, keys) => keys,
+        other => panic!("提示行不是一排鍵：{other:?}"),
+    };
+    let keys = row(&ed);
+    let shown: Vec<&str> = keys.iter().map(|(k, _)| k.as_ref()).collect();
+    assert_eq!(shown, vec!["Enter", "Tab S-Tab ↑ ↓", "A-h", "Esc"], "次序是定下來的");
+    assert_eq!(keys[0].1, say!("hint.picker.open"));
+    assert_eq!(keys[1].1, say!("hint.sidebar.move"));
+    assert_eq!(keys[2].1, say!("hint.picker.skip-hidden-and-ignored"), "出廠那一格");
+    assert_eq!(keys[3].1, say!("hint.close"), "Esc 說的是「關」，不是「回列表」");
+
+    // 轉一格，提示行跟着改。
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(row(&ed)[2].1, say!("hint.picker.skip-hidden"));
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(row(&ed)[2].1, say!("hint.picker.skip-ignored"));
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(row(&ed)[2].1, say!("hint.picker.search-everything"));
+
+    // Warning: **不走磁碟的那幾扇不寫 `A-h`**——那裏沒有篩子，按下去什麼都不發生，而沒綁
+    // 的鍵不許寫進提示行。
+    let mut ed = Editor::new();
+    type_keys(&mut ed, " b");
+    let shown: Vec<String> = row(&ed).iter().map(|(k, _)| k.to_string()).collect();
+    assert_eq!(shown, vec!["Enter", "Tab S-Tab ↑ ↓", "Esc"], "緩衝區那一扇沒有 A-h");
 }
 
 
@@ -23393,31 +23497,6 @@ fn the_file_report_says_what_this_file_is() {
     assert_eq!(page.matches(&say!("file.never-saved")).count(), 2, "{page}");
 
     std::fs::remove_dir_all(&dir).ok();
-}
-
-/// **挑選器裏 `/` 回到搜索行**（2026-10-08 報的，和搜索面板那一扇一樣）。
-///
-/// Warning: **不是把 2026-10-01 拿掉的那個 `/` 加回來。** 那一個進的是打字態，和 `i`
-/// 一件事；這一個只挪窩——鍵站到搜索行上，模式沒變。
-#[test]
-fn a_slash_in_the_picker_stands_on_the_search_line() {
-    let mut ed = Editor::new();
-    press(&mut ed, " f");
-    let picker = ed.picker().expect("挑選器開着");
-    assert!(!picker.typing(), "開門在列表那一層");
-    assert!(!picker.on_query(), "站在單子上");
-
-    // 走下去幾條，再按 `/` 回搜索行。
-    press(&mut ed, "jj");
-    assert!(!ed.picker().expect("開着").on_query());
-    press(&mut ed, "/");
-    let picker = ed.picker().expect("還開着");
-    assert!(picker.on_query(), "`/` 把鍵放到搜索行上");
-    assert!(!picker.typing(), "⚠ 可是沒進打字——這是它和 `i` 的分別");
-
-    // `i` 在那一行上纔進打字（模態的走法）。
-    press(&mut ed, "i");
-    assert!(ed.picker().expect("還開着").typing(), "`i` 纔打字");
 }
 
 /// **插入態打 `(` 就問一次簽名**（2026-10-08 報的：「In insert mode, when I type `(`,

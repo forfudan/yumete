@@ -4772,7 +4772,7 @@ Carry on into the results with `j`, and back with `k`.
 | --- | --- |
 | `j` `k` | walk the boxes: search → (replace) → (only → except) → results. **The switches and "In:" cannot be walked onto**, they go by number; in the results box it walks the hits — stand on the first and press `k` and you are back in the box, never trapped in the list |
 | `h` `l` | **move the cursor inside the box**, the same feel as in the text; in the results box they fold a file up and open it |
-| `/` | **back to the search row**: wherever you stand, the cursor goes to the end of the search box with what you typed still in it. Warning: **It does not enter typing** — one more press of `a`/`c`/`i` and you can type. This panel has four boxes (query / replace with / only / except), and `aci` has to be kept for "insert right here", so crossing boxes falls to `/`. The picker (`空格 f`) has only one box, which is why `/` came out of it on 2026-10-01; there it is only `i` |
+| `/` | **back to the search row**: wherever you stand, the cursor goes to the end of the search box with what you typed still in it. Warning: **It does not enter typing** — one more press of `a`/`c`/`i` and you can type. This panel has four boxes (query / replace with / only / except), and `aci` has to be kept for "insert right here", so crossing boxes falls to `/`. The picker (`空格 f`) has no `/` and no boxes to cross: it is one box, and the keys are in it from the moment it opens |
 | `i` `a` | type right here: `i` **inserts from the cursor**, `a` inserts after it |
 | `I` `A` | insert at the start of the line / at the end of it — "to the start and the end of the line" inside a box is these two |
 | `d` `D` | delete the one the cursor covers / delete to the end of the line |
@@ -5431,31 +5431,33 @@ and a file already open is previewed from the **buffer**, so unsaved words show 
 **The top line is the search box**, reading `Search:`, with a rule between it and the
 list (added 2026-10-01).
 
-**Two layers of keys.** When it first opens the keys are in the **list**, so `jk` walks
-straight away — and one more `k` at the top of the list lands on the search box's own
-line, where `i` goes in to type. That is the same bargain as the prose: walk the cursor
-there first, then `i`.
+**One state: the keys are in the search box from the first keystroke**, and `Esc`
+closes the panel. There is no mode in here — helix, VS Code, Zed and nvim all open
+their pickers in text entry and close them on one `Esc`, and so does this one.
 
-| The list layer | |
+| | |
 | --- | --- |
-| `j` `k` | Up and down (`g` `G` to the top/the bottom, `PageUp` `PageDown` ten at a time). One more `k` at the top goes to the search box |
-| `/` | **Back to the search box**, without typing — the short cut for `k`-ing up to it. The search panel's `/` does exactly this too |
-| `i` | Into the search box to type. **From any line** — walking there first is the modal way, pressing it anywhere is the short cut |
+| *anything printable* | into the query, which narrows the list (subsequence matching, so `ch63` finds `卷三/ch63.md`) |
+| `Tab` `S-Tab` | down and up the list. `C-n` `C-p` and `↓` `↑` do the same thing |
+| `PageDown` `PageUp` | a page at a time |
+| `A-h` | **what the walk skips**, four ways round: skip hidden + ignored → skip hidden → skip ignored → search everything → back to the first. What you have typed stays in the box |
 | `Enter` | Open |
-| `q` or `Esc` | Close |
+| `Esc` | Close |
 
-Inside the search box you are in the **query** layer: typing filters (subsequence
-matching, so `ch63` finds `卷三/ch63.md`), `↑` `↓` and `C-n` `C-p` move, `Enter` opens,
-and `Esc` — or backspacing to empty — goes back to the list layer.
+Editing the query is what it is on the `:` line: `←` `→` `Home` `End` `C-a` `C-e`
+move, Backspace and `Delete` delete, `C-u` clears back to the start. Warning:
+**Backspace on an empty query does nothing** — it is not a second way out.
 
-Warning: **`/` and `i` are not the same key.** `/` only moves the keys to the search
-box; `i` starts typing in it. (`/` was taken out on 2026-10-01, when it did enter the
-query layer just as `i` does — two keys for one thing. It came back on 2026-10-08 doing
-the other thing, which is what it does in the search panel.)
+Warning: **it used to have two layers**, from 2026-09-17 until 2026-10-08: it opened
+in the **list**, where `jk` walked and `i` or `/` went into the box, `Esc` was the way
+back to the list rather than the way out, and `i I a A d D c C` `g G q` were commands.
+2026-10-01 tried only the first half of this — opening in the box — and reverted it the
+same day, because closing then took two `Esc`s. Doing the whole thing answers that:
+`Esc` now closes outright, and every one of those letters is a letter of a file name
+again.
 
-Warning: **neither layer changes the box's ground colour.** What says which layer you
-are in is **the shape of the cursor** — a bar means the next key becomes a character, a
-block means the next key is a command, one rule throughout the editor.
+**The cursor is always a bar in here**, because the next key always becomes a
+character — one rule throughout the editor.
 
 **The matched characters are 金**, so you can see why a line is on the list — when the
 letters are scattered through the name, that is the only way to make it clear.
@@ -5468,22 +5470,16 @@ start of a word, and letters **in the file name** rather than in a directory nam
 score higher, and a short name beats a long one. Those two orders above only decide
 ties.
 
-Warning: there is no `jk` in the query layer — there `j` is a letter in a file name. So
-moving is left to the arrow keys and `C-n` `C-p`; for `jk`, `Esc` back to the list
-layer first.
+**The first line is pre-selected and previewed, and drawn a shade dimmer than a
+highlighted line elsewhere.** A whole row reversed means 「the cursor is here」 in this
+editor, and the cursor is in the search box: 「it allows you to pre-select the first
+result (and preview) it … but not give me a feeling that the cursor is on this line」.
+`Enter` opens it all the same.
 
-**The list layer takes more than those five keys.** Into the query box go `i` `a` `I`
-`A` `c` `C` (the same set as the search panel's boxes: `i` at the cursor, `a` one
-forward, `I` to the start, `A` to the end, `c` deletes a character and types, `C`
-deletes to the end and types), and `d` deletes a character, `D` deletes to the end.
-Besides `jk`/`↑↓`, the line also changes with `Tab`/`BackTab` and `C-n`/`C-p` — all
-four pairs **work in both layers**, so there is no need to leave the query box to
-change line. `PageUp`/`PageDown` turns a page.
-
-**The key hints are on the command line** (changed 2026-10-01), and they follow the
-layer: standing in the list it writes the list layer's keys, inside the query box the
-box's. The panel no longer lists keys itself, and the height that saves goes to the
-list.
+**The key hints are on the command line** (changed 2026-10-01); the panel no longer
+lists keys itself, and the height that saves goes to the list. The `A-h` cell names
+the state it is in now, and it is only written for the pickers that walk the disk —
+the buffer list and the wiki list have nothing to skip.
 
 `空格 b` is the same panel listing the open buffers, and `:open` entered with no path
 opens it too.

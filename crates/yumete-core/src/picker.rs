@@ -72,21 +72,6 @@ pub struct Picker {
     selected: usize,
     /// How far into the query the caret is, in characters.
     caret: usize,
-    /// **Whether the keys are in the query or in the list** (2026-09-17).
-    ///
-    /// A picker where typing narrows the list cannot also spend `j` and `k` on
-    /// moving through it — `j` is a letter of a file name. So it has two
-    /// layers, and **it opens in the list**: 「通過 jklh 什麽的可以在文件樹裏
-    /// 移動，也能通過 `/` 搜索文件」 — `jk` walk from the first keystroke, and
-    /// `/` (or `i`) is what puts the keys in the query, where `Esc` hands them
-    /// back to the list.
-    typing: bool,
-    /// **列表那一層，鍵落在搜索框那一行**（2026-10-01 定，原話：「当然是移动到
-    /// 搜索行点 i 啊。。。这就是个模态编辑啊」）。
-    ///
-    /// `k` 從第一條走上來就落在它身上，`j` 再走下去回第一條；`i` 在它身上纔進打
-    /// 字。從前 `/` 在列表的任何一條上都進得去，而那不是模態的走法——同日去掉。
-    on_query: bool,
     /// **檔名那一列是相對哪個目錄算的**（2026-10-02）。
     ///
     /// Warning: **從前它和列表緩衝區共用 `Editor::listing_root` 一個槽。** 那個槽的本
@@ -94,6 +79,12 @@ pub struct Picker {
     /// 掉，於是 `:check` 出一張單子、中間按一下 `空格 f`，再回去 `gf` 就解到挑
     /// 選器的根底下去了。兩件不相干的事，各存各的。
     pub root: Option<std::path::PathBuf>,
+    /// **走檔的時候跳過哪些** —— `A-h` 轉一格（2026-10-08）。
+    ///
+    /// `None` 是「這一扇不走磁碟」：緩衝區、百科、粘貼單子、跳轉那幾扇列的是內存
+    /// 裏現成的東西，篩子對它們沒有意思，`A-h` 在那裏什麼都不做，提示行上也就不
+    /// 寫它——沒綁的鍵不許寫進提示。只有 `Editor::open_file_picker_in` 那一支填得出它。
+    pub sieve: Option<crate::editor::Sieve>,
     /// **What to put near the top before anything is typed**, one number per
     /// item (2026-09-18).
     ///
@@ -141,15 +132,8 @@ impl Picker {
             query: String::new(),
             selected: 0,
             caret: 0,
-            // **一開在列表那一層**，`/` 或 `i` 纔進查詢。
-            //
-            // Warning: **2026-10-01 試過改成「一開就能打字」**（helix、fzf、telescope
-            // 都是那樣），當天撤回。代價是那兩樣不想要的：關掉挑選器變成要按
-            // 兩次 `Esc`（一次回列表、一次出門），而且開門第一下退格就換層。
-            // 原話：「那就改成默认 normal 状态吧。」
-            typing: false,
-            on_query: false,
             root: None,
+            sieve: None,
             bonus: vec![0; count],
             loose: true,
             // 畫之前先按過鍵的話（`--keys`、測試），一頁就是這個數。
@@ -224,14 +208,6 @@ impl Picker {
         }
     }
 
-    /// The first or the last match.
-    pub fn go(&mut self, last: bool) {
-        self.selected = match last {
-            true => self.matches().len().saturating_sub(1),
-            false => 0,
-        };
-    }
-
     /// **一頁就是窗口上那一頁**，繞回去（helix 的 `Picker::page_down`）。
     ///
     /// Warning: 從前它是十次 [`Self::step`]，而 `step` 是繞回去的——於是一張**短過二十
@@ -264,63 +240,6 @@ impl Picker {
     /// 名單那一列有幾行——畫的那一支上一幀量的。
     pub fn rows(&self) -> usize {
         self.rows
-    }
-
-    /// Whether the keys are in the query rather than in the list.
-    pub fn typing(&self) -> bool {
-        self.typing
-    }
-
-    /// Put the keys in the list (`Esc`), or back in the query (`/`).
-    pub fn type_here(&mut self, typing: bool) {
-        self.typing = typing;
-        // 進了框，列表那一層的鍵就該停在框那一行上——`Esc` 出來纔落回原處。
-        if typing {
-            self.on_query = true;
-        }
-    }
-
-    /// 列表那一層此刻站在搜索框那一行上嗎。
-    pub fn on_query(&self) -> bool {
-        self.on_query
-    }
-
-    /// **把列表那一層的鍵放到搜索框那一行上**，不進打字態。
-    ///
-    /// Warning: **`d`/`D` 也要叫它**（2026-10-01）：那兩個鍵在任何一行上都改得了查詢
-    /// 詞，而站在一條檔名上按 `d`、查詢框裏悄悄少一個字，是看不見的事。改完把
-    /// 鍵放到那一行上，改了什麼就在眼前。
-    pub fn stand_on_query(&mut self) {
-        self.on_query = true;
-    }
-
-    /// 把列表那一層的鍵從搜索框那一行帶回單子上。
-    ///
-    /// Warning: **`g`/`G`/翻頁要叫它**（2026-10-02 審出來的）：那四個走的是單子，
-    /// 從前它們動了高亮卻把鍵留在框上——屏幕上兩個光標，而接着那一下 `j` 只夠
-    /// 用來離開搜索行。
-    pub fn leave_query(&mut self) {
-        self.on_query = false;
-    }
-
-    /// **列表那一層走一步**——搜索框是最上面那一「行」，走得上去。
-    ///
-    /// Warning: **不包着走。** 從框往上沒有地方可去，從最後一條往下也不繞回框——
-    /// 繞回去的話一路按 `j` 會在列表和框之間打轉，而那一行不是一條候選。
-    pub fn step_in_list(&mut self, down: bool) {
-        if self.on_query {
-            // Warning: **單子空着就沒有地方可去**（2026-10-02 審出來的）：下去是站在
-            // 「沒有符合的」那一行上，`Enter` 只能說一句狀態，`k` 是唯一的回路。
-            if down && !self.matches().is_empty() {
-                self.on_query = false;
-            }
-            return;
-        }
-        if !down && self.selected() == 0 {
-            self.on_query = true;
-            return;
-        }
-        self.step(down);
     }
 
     /// Which match is highlighted, clamped to what there is.
@@ -359,44 +278,27 @@ impl Picker {
         self.selected = 0;
     }
 
-    /// Remove the character before the caret, returning `false` when there was
-    /// none — which is how Backspace on an empty query closes the picker.
-    pub fn backspace(&mut self) -> bool {
+    /// Remove the character before the caret.
+    ///
+    /// Warning: **框空着的時候它什麼都不做**（2026-10-08 定）。從前它交出一個
+    /// `false`，而呼叫方拿那個 `false` 去換層——挑選器只剩一層之後沒有層可換，
+    /// 而「退格到頭就把窗關掉」是另一回事：打空了接着打纔是人要的。
+    pub fn backspace(&mut self) {
         self.selected = 0;
         let caret = self.caret();
         if caret == 0 {
-            return !self.query.is_empty();
+            return;
         }
         let (from, to) = (self.byte(caret - 1), self.byte(caret));
         self.query.replace_range(from..to, "");
         self.caret = caret - 1;
-        true
-    }
-
-    /// **從光標刪到末尾**——框裏的 `D`（2026-10-01）。
-    ///
-    /// Warning: **末尾那一格上刪掉看得見的最後一個字**（2026-10-02 改，和搜索面板同一
-    /// 條規矩）。那一條是 2026-09-27 定的，原話是兩個試用的人都報「`d` 按了什麼都
-    /// 不發生」：框裏的光標走得到文字後面那一格，`Esc` 出來多半就停在那裏，而按
-    /// 的人想刪的是看得見的最後那個字。
-    ///
-    /// 同日早些時候這裏改成了「末尾就什麼都別動」，理由是「刪了個空還把單子撥回
-    /// 第一條，位置白丟」——那個理由現在不成立了：真的刪掉一個字，單子本來就該
-    /// 重篩。兩扇面板一個鍵，不許有兩種答案。
-    pub fn delete_to_end(&mut self) {
-        let last = self.query.chars().count();
-        let at = self.byte(self.caret().min(last.saturating_sub(1)));
-        if self.query.is_empty() {
-            return;
-        }
-        self.query.truncate(at);
-        self.selected = 0;
     }
 
     /// Remove the character *under* the caret; the caret stays where it is.
     ///
-    /// Warning: **末尾那一格上刪的是它前面那一個**——同 [`Picker::delete_to_end`]，
-    /// 同搜索面板的 `Search::delete_here`。
+    /// Warning: **末尾那一格上刪的是它前面那一個**——同搜索面板的 `Search::delete_here`。
+    /// 那一條是 2026-09-27 定的，原話是兩個試用的人都報「`d` 按了什麼都不發生」：
+    /// 框裏的光標走得到文字後面那一格，而按的人想刪的是看得見的最後那個字。
     pub fn delete(&mut self) {
         let last = self.query.chars().count();
         let caret = match self.caret() >= last {
@@ -727,14 +629,6 @@ mod tests {
     }
 
     #[test]
-    fn backspace_says_when_the_query_was_already_empty() {
-        let mut picker = files(&["a.md"]);
-        picker.push('a');
-        assert!(picker.backspace());
-        assert!(!picker.backspace(), "nothing left to delete");
-    }
-
-    #[test]
     fn the_name_beats_the_folder_it_is_in() {
         // 2026-09-18: 「ch63」 typed at a novel means the chapter, not the
         // folder the chapters are in.
@@ -778,52 +672,20 @@ mod tests {
         assert_eq!(picker.chosen(), Some(Item::File("a.md".to_string())));
     }
 
-    /// **審閱 2026-10-02 抓到的三件，都沒有測試守着。**
-    #[test]
-    fn the_query_row_does_not_swallow_the_list() {
-        // ① 單子空着的時候 `j` 不許從搜索行掉下去——下面只有「沒有符合的」。
-        let mut picker = files(&["a.md"]);
-        picker.type_here(true);
-        picker.push('z');
-        picker.push('q');
-        assert!(picker.matches().is_empty(), "什麼都配不上");
-        picker.type_here(false);
-        assert!(picker.on_query(), "離開打字態，鍵落在搜索行上");
-        picker.step_in_list(true);
-        assert!(picker.on_query(), "單子空着，j 留在原地");
-
-        // ② `D` 在末尾什麼都刪不掉，那就別把單子撥回第一條。
-        let mut picker = files(&["a.md", "b.md", "c.md"]);
-        picker.step(true);
-        assert_eq!(picker.selected(), 1);
-        picker.delete_to_end();
-        assert_eq!(picker.selected(), 1, "刪了個空，位置不許丟");
-        picker.push('.');
-        picker.push('m');
-        picker.step(true);
-        let at = picker.selected();
-        picker.move_caret(Caret::Start);
-        picker.delete_to_end();
-        assert_eq!(picker.query(), "", "真的刪了");
-        assert_eq!(picker.selected(), 0, "真刪了纔撥回去，{at}");
-
-        // ③ `leave_query` 把鍵從搜索行帶回單子上。
-        let mut picker = files(&["a.md", "b.md"]);
-        picker.step_in_list(false);
-        assert!(picker.on_query(), "k 從第一條走上搜索行");
-        picker.leave_query();
-        assert!(!picker.on_query());
-    }
-
-    /// **一開在列表那一層**——`jk` 第一下就走得動，`/` 或 `i` 纔進查詢。
+    /// **框空着的時候退格什麼都不做**（2026-10-08 定）。
     ///
-    /// Warning: **2026-10-01 試過反過來，當天撤回**：那樣關掉挑選器要按兩次 `Esc`。
+    /// 從前它交出一個 `false`，呼叫方拿它換層；挑選器只剩一層之後沒有層可換，而
+    /// 「退格到頭就關窗」是另一回事。
     #[test]
-    fn the_keys_start_in_the_list_and_slash_takes_them_to_the_query() {
+    fn backspacing_an_empty_query_does_nothing_at_all() {
         let mut picker = files(&["a.md"]);
-        assert!(!picker.typing(), "jk walk from the first keystroke");
-        picker.type_here(true);
-        assert!(picker.typing());
+        picker.push('a');
+        picker.backspace();
+        assert_eq!(picker.query(), "");
+        assert_eq!(picker.caret(), 0);
+        picker.backspace();
+        assert_eq!(picker.query(), "", "空着再退一下，還是空的");
+        assert_eq!(picker.caret(), 0);
     }
 
     #[test]

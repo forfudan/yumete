@@ -1479,9 +1479,12 @@ impl Editor {
     /// 然後tab和shift + Tab 上下移動。選中的條目浮窗顯示或者右邊欄顯示（如果右
     /// 邊欄開着），按下enter 之后固定浮窗和面板直到光標移動。」
     ///
-    /// 四件事這扇面板本來就有：`Tab`/`S-Tab` 在兩層裏都走、右邊那半是預覽、
-    /// 打字就篩、`Enter` 挑中。要新做的只有「釘住」和**打開時鍵就在查詢裏**——
-    /// 名字是命令行上打的，人還在打字的那個心境裏。
+    /// 四件事這扇面板本來就有：`Tab`/`S-Tab` 走單子、右邊那半是預覽、打字就篩、
+    /// `Enter` 挑中。要新做的只有「釘住」。
+    ///
+    /// Warning: **從前這裏還要撥一下「鍵落在查詢裏」**（`type_here(true)`）——命令行上
+    /// 打過名字的人還在打字那個心境裏。2026-10-08 挑選器只剩打字這一層，每一扇
+    /// 開門就是這樣，那一句隨之刪了。
     pub(super) fn open_wiki_picker(&mut self, name: &str) {
         if self.wiki.by_name.is_empty() {
             self.status = say!("wiki.none", self.book_wiki_path().display());
@@ -1504,8 +1507,6 @@ impl Editor {
             })
             .collect();
         let mut picker = crate::picker::Picker::new(&say!("picker.wiki"), items);
-        // 命令行上打了名字就接着打——鍵落在查詢裏，不是落在單子上。
-        picker.type_here(true);
         for c in name.chars() {
             picker.push(c);
         }
@@ -1527,13 +1528,13 @@ impl Editor {
     /// file」 most often means. Both are tie-breakers: once anything is typed,
     /// the match decides.
     pub(super) fn open_file_picker(&mut self) {
-        self.open_file_picker_in(self.root());
+        self.open_file_picker_in(self.root(), crate::editor::Sieve::default());
     }
 
     /// `空格 F` —— 同上，但搜的是[工作路徑][`Editor::working_dir`]（2026-10-01，
     /// 照 helix 的 `file_picker_in_current_directory`）。
     pub(super) fn open_file_picker_here(&mut self) {
-        self.open_file_picker_in(self.working_dir());
+        self.open_file_picker_in(self.working_dir(), crate::editor::Sieve::default());
     }
 
     /// **`ye --files`**：照挑選器那一支的規矩，列出名字配得上 `query` 的檔。
@@ -1567,18 +1568,57 @@ impl Editor {
     ///
     /// Warning: **打進去，不是塞進去**：一個字一個字走 `Picker::push`，和人敲鍵盤走的
     /// 是同一支，所以篩選、評分、第一條預覽都和手打出來的一模一樣。
-    pub fn open_file_picker_with(&mut self, query: &str, root: PathBuf) {
-        self.open_file_picker_in(root);
+    ///
+    /// Warning: **篩子要傳進來**（2026-10-08 修）。從前這一支走的是寫死的
+    /// `Sieve::default()`，於是 `ye --files --hidden --open` 的 `--hidden`、
+    /// `--no-ignore`、`--glob=`、`--exclude=` 四個開關**印出來那條路管用、進編輯
+    /// 器那條路全是死的**，而 `--help` 說它們都管用。它也是 `A-h` 轉一格之後重走
+    /// 那一趟走的同一支。
+    pub fn open_file_picker_with(
+        &mut self,
+        query: &str,
+        root: PathBuf,
+        sieve: crate::editor::Sieve,
+    ) {
+        self.open_file_picker_in(root, sieve);
         let Some(picker) = self.picker.as_mut() else { return };
         for c in query.chars() {
             picker.push(c);
         }
     }
 
-    fn open_file_picker_in(&mut self, root: PathBuf) {
+    /// **`A-h` 轉一格：跳過哪些，然後照新的篩子重走一趟**（2026-10-08 定）。
+    ///
+    /// 四態的次序照搜索面板那個 `7` 鍵（`find.rs` 的 `Field::Hidden`）：
+    /// `(隱藏, 忽略)` 走 `(f,f) → (f,t) → (t,f) → (t,t) → (f,f)`。那邊記下的理由
+    /// 是「第一步放開的是忽略那一半——想找回來的多半是 `.gitignore` 擋掉的目錄，
+    /// 不是點文件」，兩扇一個答案。
+    ///
+    /// Warning: **鍵是 `A-h`，不是 `C-h`**：`C-h` 在很多終端裏就是退格，而 helix 的挑選
+    /// 器已經把 `C-t` 用在切預覽上了（它那一扇只用 Alt 做 `A-Enter`）。
+    ///
+    /// 打過的字留着：重走完一趟，那幾個字一個一個再 `push` 回去（`open_file_picker_with`）。
+    /// 不走磁碟的那幾扇（緩衝區、百科…）沒有篩子，這一下什麼都不做。
+    fn cycle_what_the_picker_skips(&mut self) {
+        let Some(picker) = self.picker.as_ref() else { return };
+        let (Some(root), Some(sieve)) = (picker.root.clone(), picker.sieve.clone()) else {
+            return;
+        };
+        let query = picker.query().to_string();
+        let mut sieve = sieve;
+        (sieve.hidden, sieve.ignored) = match (sieve.hidden, sieve.ignored) {
+            (false, false) => (false, true),
+            (false, true) => (true, false),
+            (true, false) => (true, true),
+            (true, true) => (false, false),
+        };
+        self.open_file_picker_with(&query, root, sieve);
+    }
+
+    fn open_file_picker_in(&mut self, root: PathBuf, sieve: crate::editor::Sieve) {
         let mut prose = Vec::new();
         let mut rest = Vec::new();
-        walk(&root, &mut 0, &mut |path| {
+        crate::editor::walk_with(&root, &sieve, &mut |path| {
             if prose.len() + rest.len() >= PICKER_LIMIT {
                 return;
             }
@@ -1616,6 +1656,8 @@ impl Editor {
         let mut picker = crate::picker::Picker::new(&say!("picker.files"), items);
         // 挑選器的根存在挑選器身上，不借 `listing_root` 那個槽——見 `Picker::root`。
         picker.root = Some(root);
+        // 篩子也存在它身上：`A-h` 轉一格要知道此刻跳過的是哪些，提示行要寫出來。
+        picker.sieve = Some(sieve);
         picker.prefer(bonus);
         self.picker = Some(picker);
         self.mode = Mode::Picker;
@@ -1655,116 +1697,40 @@ impl Editor {
     }
 
     /// Run one key while a picker is open.
+    ///
+    /// **一扇挑選器只有一個狀態**（2026-10-08 定）：開門就在打字，`Esc` 一下關掉。
+    ///
+    /// Warning: **從前有兩層**（2026-09-17 到 2026-10-08）：開門在「列表」那一層，`jk`
+    /// 走單子、`i` 或 `/` 進打字、`Esc` 回列表、再一下纔出門。四個編輯器對過一遍
+    /// ——helix、VS Code、Zed、nvim **一個都沒有挑選器裏的模式**，四個都是開門就
+    /// 打字、一下 `Esc` 關掉（helix 的 `helix-term/src/ui/picker.rs:1090-1108` 把
+    /// `Tab`/`Down`/`ctrl-n`、`shift-Tab`/`Up`/`ctrl-p` 和
+    /// `key!(Esc) | ctrl!('c') => return close_fn(self)` 寫在同一個 match 裏，配不
+    /// 上的一律落到那一行輸入框上，`:1160`）。
+    ///
+    /// Warning: **2026-10-01 試過「開門就打字」，當天撤回**，理由是關窗變成要按兩次
+    /// `Esc`。那一條是對的，而答案是把另一半也做掉：`Esc` 現在一下就關。
     pub(super) fn on_picker_key(&mut self, key: Key) {
         let Some(picker) = self.picker.as_mut() else {
             self.mode = Mode::Normal;
             return;
         };
-        // **The list layer** (2026-09-17): `Esc` moves the keys out of the
-        // query and into the list, where `jk` walk it and `/` goes back to
-        // typing; `Esc` there closes the picker, as it always did.
-        if !picker.typing() {
-            match key {
-                Key::Char('j') | Key::Down | Key::Tab | Key::Ctrl('n') => {
-                    picker.step_in_list(true)
-                }
-                Key::Char('k') | Key::Up | Key::BackTab | Key::Ctrl('p') => {
-                    picker.step_in_list(false)
-                }
-                // 這四個走的是單子，所以也把鍵從搜索行帶下來——見 `leave_query`。
-                Key::Char('g') => {
-                    picker.leave_query();
-                    picker.go(false);
-                }
-                Key::Char('G') => {
-                    picker.leave_query();
-                    picker.go(true);
-                }
-                Key::PageDown => {
-                    picker.leave_query();
-                    picker.page(true);
-                }
-                Key::PageUp => {
-                    picker.leave_query();
-                    picker.page(false);
-                }
-                // **`i` 在任何一行上都進框**（2026-10-01 定）。模態的走法是 `k` 走
-                // 到搜索行再按 `i`，而這一個是**抄近路**——原話：「我们唯一的
-                // 区别就是用户可以在任何位置按 i 进入搜索行的 insert 模式。这是个
-                // 便捷的途径。」`/` 同日去掉：一件事一個鍵。
-                //
-                // **搜索面板那一整套編輯鍵同日搬了過來**（原話：「整套搬：
-                // i I a A d D c C」）。學一次兩扇都能用。`o` 不搬——一行的框裏
-                // 「開下一行」沒有意思。
-                // **`/` 把鍵放到搜索行上，不進打字**（2026-10-08 報的：「Please
-                // give picker an extra shortcut `/` (same as the search panel)
-                // that go back to the search line」）。
-                //
-                // Warning: **這不是把 2026-10-01 拿掉的那個 `/` 加回來。** 那一個做的是
-                // `i` 做的事（進打字），兩個鍵一件事，所以去掉了；這一個做的是
-                // 「挪窩」——和搜索面板那一扇逐鍵一樣（`find.rs` 的
-                // `Key::Char('/') => stand_on(Field::Query)`，那邊 2026-09-25 也正
-                // 是從「進 insert」改成「挪窩」的）。`k` 一路走上去是同一件事，
-                // 這是它的近路。
-                Key::Char('/') => picker.stand_on_query(),
-                Key::Char('i') => picker.type_here(true),
-                Key::Char('I') => {
-                    picker.move_caret(crate::picker::Caret::Start);
-                    picker.type_here(true);
-                }
-                Key::Char('a') => {
-                    picker.move_caret(crate::picker::Caret::Right);
-                    picker.type_here(true);
-                }
-                Key::Char('A') => {
-                    picker.move_caret(crate::picker::Caret::End);
-                    picker.type_here(true);
-                }
-                // Warning: **改完把鍵放到搜索行上**：站在一條檔名上按 `d`、查詢框裏悄
-                // 悄少一個字，是看不見的事。
-                Key::Char('d') => {
-                    picker.delete();
-                    picker.stand_on_query();
-                }
-                Key::Char('D') => {
-                    picker.delete_to_end();
-                    picker.stand_on_query();
-                }
-                Key::Char('c') => {
-                    picker.delete();
-                    picker.type_here(true);
-                }
-                Key::Char('C') => {
-                    picker.delete_to_end();
-                    picker.type_here(true);
-                }
-                Key::Char('h') | Key::Left if picker.on_query() => {
-                    picker.move_caret(crate::picker::Caret::Left)
-                }
-                Key::Char('l') | Key::Right if picker.on_query() => {
-                    picker.move_caret(crate::picker::Caret::Right)
-                }
-                Key::Enter => self.choose_from_picker(),
-                Key::Esc | Key::Char('q') => self.close_picker(),
-                _ => {}
-            }
-            return;
-        }
         match key {
-            Key::Esc => picker.type_here(false),
-            // Backspace past the start of the query hands the keys back to the
-            // list rather than closing the picker: `/` is how they got here,
-            // and going back over the query should land where `/` was pressed.
-            Key::Backspace => {
-                if !picker.backspace() {
-                    picker.type_here(false);
-                }
-            }
-            Key::Down | Key::Tab | Key::Ctrl('n') => picker.step(true),
-            Key::Up | Key::BackTab | Key::Ctrl('p') => picker.step(false),
+            // **一下就關。** 沒有層可退回去了。
+            Key::Esc => self.close_picker(),
+            // Warning: **框空着的時候退格什麼都不做**。從前它換層（`i` 是怎麼進來的，
+            // 退到頭就該退回去）；只剩一層之後那個去處不存在，而「退格到頭就關
+            // 窗」是另一回事——打空了接着打纔是人要的。
+            Key::Backspace => picker.backspace(),
+            // **往前三個鍵，往後三個鍵**，照 helix 那一行。`Tab`/`S-Tab` 先說，
+            // 原話：「这两个其实更加顺手」。
+            Key::Tab | Key::Ctrl('n') | Key::Down => picker.step(true),
+            Key::BackTab | Key::Ctrl('p') | Key::Up => picker.step(false),
             Key::PageDown => picker.page(true),
             Key::PageUp => picker.page(false),
             Key::Enter => self.choose_from_picker(),
+            // 跳過哪些，轉一格——見 [`Editor::cycle_what_the_picker_skips`]。
+            Key::Alt('h') => self.cycle_what_the_picker_skips(),
             Key::Char(c) => picker.push(c),
             // A query is typed text, and typed text is edited in the middle.
             Key::Delete => picker.delete(),

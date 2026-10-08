@@ -20719,6 +20719,27 @@ buffer 的 id 與行號，戳是 revision 加 `yumete_cjk::ambiguous_is_wide`—
 測試 `a_signature_goes_away_with_the_bracket_that_asked_for_it`：打完 `(` 浮著、裏面再打字
 照舊浮著、整段刪掉就沒了、改打別的也不會回來。
 
+## 5.131 挑選器只剩一個狀態（2026-10-08 定）
+
+「每次打開 picker 都應該直接進入 insert…helix is doing this」。量過四家：helix、
+VS Code、Zed、nvim 的挑選器**沒有一家有模態**，都是開門就打字、一下 `Esc` 關
+（helix `picker.rs:1090-1108` 把移動與 `Esc` 排在同一個 match，其餘全落給 prompt）。
+
+⚠ **2026-10-01 試過一半，當天撤回**（`picker.rs` 那條註釋），理由正是「關掉要按兩下
+`Esc`」。這一次把另一半也做了：`Esc` 直接關，那個代價就不存在了。
+
+拆掉：列表層整個（`i I a A d D c C`、`j k g G q`、今天才加的 `/`）、`PIC.NOR`、
+`hint.picker.back-to-the-list`，以及被它們弄成死程式的十來個方法。空查詢按退格：什麼都不做
+（`Esc` 是唯一的門，退格不該是第二扇）。
+
+**`A-h` 轉四態**：不搜隱藏＋忽略 → 不搜隱藏 → 不搜忽略 → 全部搜索。狀態機與次序是搜索
+面板 `7` 那一支搬過來的。用 Alt 是因為 `C-h` 在很多終端上就是退格，而 helix 挑選器
+已經拿 `C-t` 切預覽。不走磁碟的幾扇（緩衝區、百科、粘貼）`sieve` 是 `None`，
+`A-h` 在那裏不寫進提示行——沒綁的鍵不許寫提示（§5.111）。
+
+順帶修了一個 bug：`ye --files --hidden --open` 的篩子從前到挑選器就被丟掉，而 `--help`
+是承諺了的。
+
 ## 5.130 一下 `e` 不許把整行分一遍（2026-10-08）
 
 「分词是非贪婪的。只需要看某个区间就行。」對的——`line_words` 從前把整行物化並全分一遍，
