@@ -833,9 +833,11 @@ language name on the fence's first line decides which grammar is used:
 | CSS | `css` |
 | Rust | `rust` `rs` |
 | Go | `go` `golang` |
+| Ada | `ada` |
 | C | `c` |
 | NASM | `asm` `nasm` |
 | GAS | `gas` |
+| Pascal | `pascal` `delphi` `pas` |
 | Java | `java` `jav` |
 | R | `r` |
 

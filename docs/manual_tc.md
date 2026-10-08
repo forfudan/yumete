@@ -665,9 +665,11 @@ Warning: 寫進去的是**篇名**，不是文件名——`[[卷二/雨夜]]`，
 | CSS | `css` |
 | Rust | `rust` `rs` |
 | Go | `go` `golang` |
+| Ada | `ada` |
 | C | `c` |
 | NASM | `asm` `nasm` |
 | GAS | `gas` |
+| Pascal | `pascal` `delphi` `pas` |
 | Java | `java` `jav` |
 | R | `r` |
 

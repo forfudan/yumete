@@ -20232,7 +20232,35 @@ nvim-cmp 的 `C-n`／`C-p` 加箭頭）。一個字都不用改。
 上色有（`HIGHLIGHTS_QUERY` 這個 crate 導出來了）；tags、文本對象、縮進查詢都沒有——
 匯編沒有「參數」也沒有「塊」，標籤下面縮不縮是寫稿子的人自己的事。
 
-⚠ **Ada 與 Pascal 還欠著**：他定了「我們自己寫，最安全」（不抄那兩份 `.scm`）。
+### 三、Ada 與 Pascal：上色查詢是我們自己寫的
+
+他定的：「我們自己寫，最安全」——不抄那兩份 `.scm`（MIT，抄要帶授權聲明）。
+與 `objects()`／`indents()` 同一條規矩。
+
+**節點名是生成的，不是記的**：從兩個語法自己的 `src/node-types.json` 裏數出來的。
+兩門的形狀正好相反：
+
+- **Pascal 把每一個關鍵字做成了有名節點**（`kBegin`、`kEnd`…共 157 個），所以查詢裏
+  寫的是 `(kBegin)` 這種；23 個是運算符（`kAdd`、`kAssign`…）歸 `@operator`，
+  `kTrue`／`kFalse`／`kNil` 歸 `@constant`，其餘 131 個歸 `@keyword`。
+- **Ada 的關鍵字是匿名節點**，所以寫的是 `"procedure"` 這種字串。Ada 不分大小寫，
+  而語法給的 token 名是小寫的那一個，所以源稿寫 `PROCEDURE` 也匹配得上。
+  它還多一樣：`name:` 這個字段在四個節點上都有，所以子程序名與調用得出 `@function`。
+
+⚠ **`r##"` 不是 `r#"`**：Ada 的 gnatprep 那四個詞（`#if` `#else` `#elsif` `#end`）裏的
+`"#` 會把 `r#"` 当場收掉。
+
+⚠ **「編得起來」與「匹配得上」是兩件事。** `every_shipped_grammar_compiles_its_own_query`
+只描前者；名字寫對了卻搭錯形狀，查詢照樣編得過、一個字也不上色。所以另有
+`the_two_queries_we_wrote_ourselves_really_paint`：真畫一段 Ada 與一段 Pascal，比墨。
+
+副檔名：Ada `.adb` `.ads` `.ada`；Pascal `.pas` `.pp` `.dpr` `.dpk` `.lpr`。
+註釋：Ada `--`（沒有塊註釋）；Pascal `//` 加 `{ }`。
+tags、文本對象、縮進查詢都沒有——這兩門的塊是 `begin`／`end` 這種詞而不是括號，
+第一期那一套在這裏不是同一件事，留給下一期。
+
+**§5.66 那六門到此全部做完**，共八門新語言（匯編算兩門），release 二進制
+**15.90 MB**（做這一輪之前是 15.59，再之前九門語法時是 13.6）。
 
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
