@@ -1315,9 +1315,26 @@ impl Editor {
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return;
         };
-        // **記住是哪一個括號問的**（2026-10-08 報的）。這一下跑在字落地之後，
-        // 所以那個 `(`（或者 `,`）就在光標前一格。見 [`Self::signature_here`]。
-        self.signature_on = self.sel.head().checked_sub(1).map(|at| (at, last));
+        // **記的是這一次調用的左括號，不是剛打的那一個字**（2026-10-08 第二版）。
+        //
+        // 第一版記的是「剛打的那個觸發字」，攣不住他報的那一幕：「我先打了
+        // std::env::var，显示了签名。然后我打 println!(，打到括号的时候显示的还是
+        // std:env:var 的签名」——因為打下新的 `(` 時這一格跟著更新了，而
+        // `self.signature` 裏還壓著上一次的答案，於是**新括號配舊答案**，守衛一路放行。
+        //
+        // 所以分成兩件事：
+        //
+        // - 打的是 `(`：這是**另一次調用**。記下新的左括號，並且把舊答案扔掉——
+        //   它說的是別人家的事。新答案回來之前什麼都不畫。
+        // - 打的是 `,`：還是**同一次調用**，只是跳到下一個參數。左括號不動，
+        //   舊答案留著畫——否則每打一個逗號那一扇就闃一下。
+        if last == '(' {
+            self.signature = None;
+            self.signature_on = self.sel.head().checked_sub(1);
+        } else if self.signature_on.is_none() {
+            // 一開始就打在一個現成的調用裏的逗號上：沒有左括號可記，那就記逗號自己。
+            self.signature_on = self.sel.head().checked_sub(1);
+        }
         self.signature_query = Some((path, line, utf16));
     }
 
@@ -1385,9 +1402,13 @@ impl Editor {
         // **那一次調用還在嗎**。記下問的時候那個 `(` 在第幾格，這一格不再是它了，
         // 那一則就是上一次調用的答案，該收了。刪掉 `first_time_ever(` 再打 `println!`，
         // 原先那一格上現在是 `p`，就是這一條接住的。
-        let (at, mark) = self.signature_on?;
+        let at = self.signature_on?;
         let rope = self.current_buffer().rope();
-        if at >= rope.len_chars() || rope.char(at) != mark || self.sel.head() <= at {
+        // 那一格不再是標點，或者光標退到了它前面：那一次調用沒了。
+        if at >= rope.len_chars()
+            || !matches!(rope.char(at), '(' | ',')
+            || self.sel.head() <= at
+        {
             return None;
         }
         self.signature.as_ref().map(|(_, one)| one)

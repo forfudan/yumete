@@ -1895,9 +1895,22 @@ fn walk_inner(
         if is_build_output(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        // **大檔只在編輯器裏跳過。** 管道那一邊是按行流着讀的（見
+        // **大檔只在「要讀它」的那一趡跳過。** 管道那一邊是按行流著讀的（見
         // `Editor::search_now_into`），一個檔多大都不佔內存，所以那裏沒有理由跳。
-        if !sieve.uncapped && !entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES) {
+        //
+        // Warning: **這一道閘從前漏到了挑選器上**（2026-10-08 報的：「我用 ye --files
+        // 可以搜到 assets/division/yuhao_division_golden_source.csv，但是我在 ye 中用
+        // file picker 是搜索不到這個文件的」）。那一個是 7.63 MB，超過了 4 MB 的閘；
+        // `ye --files` 撥了 `uncapped` 所以看得見，挑選器故意不撥（那兩道閘護的
+        // 是畫面線程），於是連大小那一道一起吃了。
+        //
+        // 可挑選器**一個字節也不讀**——它按檔名挑，檔多大跟它沒關係。所以這一道
+        // 歸 `prose_only`，和底下那一道「二進制不交出去」同一個理由、同一個條件
+        // （那一道的註釋早就寫著「挑選器不走這一支」）。
+        if prose_only
+            && !sieve.uncapped
+            && !entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES)
+        {
             walked.skipped += 1;
             continue;
         }
@@ -2544,7 +2557,7 @@ pub struct Editor {
     /// 問簽名的那一下，那個 `(`（或 `,`）在第幾格、是哪一個字。
     ///
     /// 那一格不再是它了，浮著的那一則就是上一次調用的答案（見 `signature_here`）。
-    signature_on: Option<(usize, char)>,
+    signature_on: Option<usize>,
     /// 那一句補問的 hover，等前端取走（見 `show_signature`）。
     signature_doc_query: Option<(std::path::PathBuf, usize, usize)>,
     /// A pending `:theme`, waiting for the front end that owns the palette.

@@ -20777,6 +20777,25 @@ cursor is back inside.
 the table does not own the window, so walking out of a guessed block still forgets it. The test
 pins both halves.
 
+## 5.133 The picker inherited grep's size gate (2026-10-08, reported)
+
+> 我用 ye --files 可以搜到 assets/division/yuhao_division_golden_source.csv，但是我在 ye 中用
+> file picker 是搜索不到這個文件的。即使我用 alt-h 切換搜索全部文件無效。
+
+The file is **7.63 MB** and `GREP_MAX_BYTES` is 4 MB. `walk_inner` skipped it for every walk that
+was not `uncapped`; `ye --files` sets `uncapped`, the picker deliberately does not (those ceilings
+guard the drawing thread), so the picker ate the size gate too. `A-h` could not help — those four
+states are about hidden and `.gitignore`, not size.
+
+The gate now sits under `prose_only`, beside the binary-file gate, whose comment already said
+「The picker does not use this one」 for the same reason: **a picker reads no bytes**, it matches
+names. Searching inside a 5 MB file is the cost; listing its name is free.
+
+⚠ Still open, and he did not know it either: **`:search` silently skips files over 4 MB.**
+`Walked.skipped` is counted and stored in `search.skipped`, and **nothing reads it** — so a search
+can miss a file and say nothing, which is the one thing `Walked`'s own doc comment forbids
+(「沒走完就停了——交出來的那張單子是半截的，呼叫方有義務說出來」). Awaiting his decision.
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 報的是選單上兩行「大綱」。`s` 是 2026-10-06 **有意**加的（註釋：「helix 把『這份檔裏的

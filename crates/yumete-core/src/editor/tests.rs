@@ -23583,6 +23583,28 @@ fn a_signature_goes_away_with_the_bracket_that_asked_for_it() {
     ed.on_key(Key::Char('x'));
     assert!(ed.signature_here().is_some(), "填參數的時候照舊浮著");
 
+    // **另一次調用的左括號一打下去，舊答案當場就該沒**（2026-10-08 第二版）。
+    //
+    // 他報的：「我先打了 std::env::var，显示了签名。然后我打 println!(，打到括号的
+    // 时候显示的还是 std:env:var 的签名」。
+    for c in ", println!(".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(
+        ed.signature_here().is_none(),
+        "新的左括號配不上舊答案：{:?}",
+        ed.signature_here().map(|s| s.label.clone())
+    );
+    // 而同一次調用裏的逗號不該把它弄掉——否則每打一個逗號那一扇就闃一下。
+    ed.show_signature(Some(crate::lsp::Signature {
+        label: "fn println(args: Arguments)".into(),
+        active: None,
+    }));
+    assert!(ed.signature_here().is_some());
+    ed.on_key(Key::Char('1'));
+    ed.on_key(Key::Char(','));
+    assert!(ed.signature_here().is_some(), "逗號不該把它收掉");
+
     // 把 `first_time_ever(x` 整段刪掉。
     for _ in 0.."first_time_ever(x".chars().count() {
         ed.on_key(Key::Backspace);
@@ -23826,6 +23848,41 @@ fn the_window_holds_you_even_when_the_table_was_guessed() {
     assert!(!ed.table().unwrap().takes_the_pane(), "回到內嵌：{}", ed.status());
     press(&mut ed, "gg");
     assert!(ed.table().is_none(), "不占窗的時候走出去就忘掉：{}", ed.status());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+
+/// **挑選器不嫌檔大**（2026-10-08 報的）。
+///
+/// 原話：「我用 ye --files 可以搜到 assets/division/yuhao_division_golden_source.csv，
+/// 但是我在 ye 中用 file picker 是搜索不到這個文件的。即使我用 alt-h 切換搜索
+/// 全部文件無效。」那一個 7.63 MB，而 `GREP_MAX_BYTES` 是 4 MB。`A-h` 當然沒用——
+/// 那四態管的是隱藏與 `.gitignore`，不管大小。
+#[test]
+fn a_file_too_big_to_grep_is_still_a_file_to_open() {
+    let dir = std::env::temp_dir().join(format!("yumete-bigpick-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("small.txt"), "hi\n").unwrap();
+    // 比 `GREP_MAX_BYTES`（4 MB）大一點。
+    std::fs::write(dir.join("big.txt"), "x".repeat(5 * 1024 * 1024)).unwrap();
+
+    let sieve = crate::editor::Sieve::default();
+    let mut names: Vec<String> = Vec::new();
+    crate::editor::walk_with(&dir, &sieve, &mut |p| {
+        names.push(p.file_name().unwrap().to_string_lossy().into_owned())
+    });
+    names.sort();
+    assert_eq!(names, ["big.txt", "small.txt"], "按檔名挑的那一趡不看大小");
+
+    // 而要**讀**它的那一趡照舊跳－讀一個 5 MB 的檔去找一個詞不劃算。
+    let mut read: Vec<String> = Vec::new();
+    let walked = crate::editor::walk_prose(&dir, &sieve, &mut |p| {
+        read.push(p.file_name().unwrap().to_string_lossy().into_owned())
+    });
+    assert_eq!(read, ["small.txt"], "搜內容那一趡照舊有上限");
+    assert_eq!(walked.skipped, 1, "而且數得出來跳了幾個");
 
     std::fs::remove_dir_all(&dir).ok();
 }
