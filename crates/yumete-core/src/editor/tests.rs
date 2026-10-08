@@ -23118,3 +23118,37 @@ fn yank_on_delete_reaches_the_grid_too() {
     let ed = cell_cleared_with(Key::Alt('d'), false);
     assert_eq!(ed.paste_menu()[0].1, "甲", "換成 `A-d` 剪");
 }
+
+/// **行首是 tab 的時候 `j`/`k` 要落在同一列上**（2026-10-08 使用者報的：「行首有
+/// tab 縮進時（go 代碼），按下 j/k 時 cursor 位置不對齊」）。
+///
+/// 一個 tab 在這個編輯器裏是**一格真字符 ＋ 一段畫出來的空白**（到下一個制表位，
+/// `Editor::tab_stops_on_line`）。算目標列的那一支（`wrap::position`）把畫出來的那
+/// 幾格算進去了，而落點那一支（`wrap::char_at_column`）從前只數真字符——於是行首一
+/// 個 tab（八格）就差七格，`j` 一下偏十四格。報的那一例：站在第三行第 15 列的 `e`
+/// 上按 `j`，落在第四行第 22 列的第二個 `=` 上，而不是第 15 列那個空格。
+#[test]
+fn j_keeps_its_column_on_a_tab_indented_line() {
+    let mut ed = typed("func f() {\n\t// After tab.\n\treturn 0xFFFFFFFF\n    // After spaces.\n}\n");
+    // 第二行，tab 之後第七個字——`// Afte` 的那個 `e`，螢幕上第 15 列。
+    ed.goto_line(2);
+    for _ in 0..6 {
+        press(&mut ed, "l");
+    }
+    assert_eq!(ed.caret_in_line(), (1, 7), "站在 `e` 上");
+
+    // 往下：第三行同一列，是 `return` 後面那個空格。
+    press(&mut ed, "j");
+    assert_eq!(ed.caret_in_line(), (2, 7), "同一列：`\\treturn` 後面那一格");
+    assert_eq!(ed.char_at_cursor(), Some(' '));
+
+    // 再往下：那一行用四個空格縮進，同一列是第 15 個字。
+    press(&mut ed, "j");
+    assert_eq!(ed.caret_in_line(), (3, 14), "空格縮進的行上也是第 15 列");
+
+    // 原路走回去，一格不差。
+    press(&mut ed, "k");
+    assert_eq!(ed.caret_in_line(), (2, 7));
+    press(&mut ed, "k");
+    assert_eq!(ed.caret_in_line(), (1, 7), "回到那個 `e`");
+}
