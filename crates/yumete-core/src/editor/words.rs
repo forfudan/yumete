@@ -302,7 +302,7 @@ impl Editor {
                 files = 1;
                 text = self.current_buffer().text();
             }
-            Some(root) => walk(&root, &mut 0, &mut |path| {
+            Some(root) => walk(&root, &mut |path| {
                 if text.len() >= DISCOVER_MAX_BYTES {
                     return;
                 }

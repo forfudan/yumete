@@ -235,7 +235,7 @@ impl Editor {
             .path()
             .and_then(|p| std::fs::canonicalize(p).ok());
         let mut found: Vec<(String, Option<String>)> = Vec::new();
-        crate::editor::walk(&root, &mut 0, &mut |path| {
+        crate::editor::walk(&root, &mut |path| {
             if found.len() >= MOST * 4 {
                 return;
             }

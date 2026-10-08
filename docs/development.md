@@ -20403,10 +20403,20 @@ The gate now sits under `prose_only`, beside the binary-file gate, whose comment
 「The picker does not use this one」 for the same reason: **a picker reads no bytes**, it matches
 names. Searching inside a 5 MB file is the cost; listing its name is free.
 
-⚠ Still open, and he did not know it either: **`:search` silently skips files over 4 MB.**
-`Walked.skipped` is counted and stored in `search.skipped`, and **nothing reads it** — so a search
-can miss a file and say nothing, which is the one thing `Walked`'s own doc comment forbids
-(「沒走完就停了——交出來的那張單子是半截的，呼叫方有義務說出來」). Awaiting his decision.
+**Then the gate went away entirely** (same day, his call). Measured first and shown to him: that
+repo is 9,193 files / 13.3 GB, and the 154 files over 4 MB are 12.7 GB of it (two plain-text
+corpora alone are 7.6 GB). He chose 「拿掉闸，搜全部」 anyway, with his own safety net:
+「因为搜索是默认本文件的，所以还好。用户切换到搜索路径也必须 enter 触发搜索」 — walking a whole
+tree is something a person asks for with Enter, not something the editor does on its own.
+
+`GREP_MAX_BYTES` and the whole `skipped` count are gone with it: `Walked.skipped`,
+`Search::skipped`, the `Found::Done` field, and the CLI line that printed
+「N file(s) too big to read were skipped」. ⚠ Correction to what I told him in the moment — I said
+nothing read that count; `ye --grep` did (`main.rs:1579`), the **editor** did not.
+
+⚠ Two gates remain, so do not read this as "it reads everything": the binary check (a NUL in the
+first kilobyte) keeps `.ygram` and `.tar` off the path, and `WALK_CEILING` and friends guard the
+drawing thread.
 
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
