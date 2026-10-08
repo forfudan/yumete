@@ -59,12 +59,15 @@ pub enum Token {
 /// A language this build can parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
+    C,
     Css,
     Go,
     Html,
+    Java,
     JavaScript,
     Json,
     Python,
+    R,
     Rust,
     Toml,
     Yaml,
@@ -72,13 +75,16 @@ pub enum Language {
 
 impl Language {
     /// Every language, for `:view-code`'s report and the tests.
-    pub const ALL: [Language; 9] = [
+    pub const ALL: [Language; 12] = [
+        Language::C,
         Language::Css,
         Language::Go,
         Language::Html,
+        Language::Java,
         Language::JavaScript,
         Language::Json,
         Language::Python,
+        Language::R,
         Language::Rust,
         Language::Toml,
         Language::Yaml,
@@ -96,12 +102,15 @@ impl Language {
             .collect::<String>()
             .to_ascii_lowercase();
         Some(match word.as_str() {
+            "c" => Language::C,
             "css" => Language::Css,
             "go" | "golang" => Language::Go,
             "html" | "htm" | "xhtml" => Language::Html,
+            "java" | "jav" => Language::Java,
             "javascript" | "js" | "mjs" | "cjs" | "jsx" | "node" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
             "python" | "py" | "python3" | "py3" => Language::Python,
+            "r" => Language::R,
             "rust" | "rs" => Language::Rust,
             "toml" => Language::Toml,
             "yaml" | "yml" => Language::Yaml,
@@ -113,12 +122,15 @@ impl Language {
     /// [`Self::from_info`]: a file called `node` is not JavaScript.
     pub fn from_extension(extension: &str) -> Option<Language> {
         Some(match extension {
+            "c" => Language::C,
             "css" => Language::Css,
             "go" => Language::Go,
             "html" | "htm" | "xhtml" => Language::Html,
+            "java" | "jav" | "pde" => Language::Java,
             "js" | "mjs" | "cjs" | "jsx" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
             "py" | "pyw" => Language::Python,
+            "r" => Language::R,
             "rs" => Language::Rust,
             "toml" => Language::Toml,
             "yaml" | "yml" => Language::Yaml,
@@ -129,12 +141,15 @@ impl Language {
     /// Its name, as a fence would spell it.
     pub fn name(self) -> &'static str {
         match self {
+            Language::C => "c",
             Language::Css => "css",
             Language::Go => "go",
             Language::Html => "html",
+            Language::Java => "java",
             Language::JavaScript => "javascript",
             Language::Json => "json",
             Language::Python => "python",
+            Language::R => "r",
             Language::Rust => "rust",
             Language::Toml => "toml",
             Language::Yaml => "yaml",
@@ -143,12 +158,15 @@ impl Language {
 
     fn grammar(self) -> tree_sitter::Language {
         match self {
+            Language::C => tree_sitter_c::LANGUAGE.into(),
             Language::Css => tree_sitter_css::LANGUAGE.into(),
             Language::Go => tree_sitter_go::LANGUAGE.into(),
             Language::Html => tree_sitter_html::LANGUAGE.into(),
+            Language::Java => tree_sitter_java::LANGUAGE.into(),
             Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
             Language::Json => tree_sitter_json::LANGUAGE.into(),
             Language::Python => tree_sitter_python::LANGUAGE.into(),
+            Language::R => tree_sitter_r::LANGUAGE.into(),
             Language::Rust => tree_sitter_rust::LANGUAGE.into(),
             Language::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
             Language::Yaml => tree_sitter_yaml::LANGUAGE.into(),
@@ -157,12 +175,16 @@ impl Language {
 
     fn highlights(self) -> &'static str {
         match self {
+            // Warning: **C 那一個叫 `HIGHLIGHT_QUERY`**，單數——同一族 crate 兩種拼法。
+            Language::C => tree_sitter_c::HIGHLIGHT_QUERY,
             Language::Css => tree_sitter_css::HIGHLIGHTS_QUERY,
             Language::Go => tree_sitter_go::HIGHLIGHTS_QUERY,
             Language::Html => tree_sitter_html::HIGHLIGHTS_QUERY,
+            Language::Java => tree_sitter_java::HIGHLIGHTS_QUERY,
             Language::JavaScript => tree_sitter_javascript::HIGHLIGHT_QUERY,
             Language::Json => tree_sitter_json::HIGHLIGHTS_QUERY,
             Language::Python => tree_sitter_python::HIGHLIGHTS_QUERY,
+            Language::R => tree_sitter_r::HIGHLIGHTS_QUERY,
             Language::Rust => tree_sitter_rust::HIGHLIGHTS_QUERY,
             Language::Toml => tree_sitter_toml_ng::HIGHLIGHTS_QUERY,
             Language::Yaml => tree_sitter_yaml::HIGHLIGHTS_QUERY,
@@ -184,9 +206,12 @@ impl Language {
     /// 它給不出的：參數、註釋、測試——那幾種只在 helix 的 textobjects 裏有。
     fn tags(self) -> Option<&'static str> {
         Some(match self {
+            Language::C => tree_sitter_c::TAGS_QUERY,
             Language::Go => tree_sitter_go::TAGS_QUERY,
+            Language::Java => tree_sitter_java::TAGS_QUERY,
             Language::JavaScript => tree_sitter_javascript::TAGS_QUERY,
             Language::Python => tree_sitter_python::TAGS_QUERY,
+            Language::R => tree_sitter_r::TAGS_QUERY,
             Language::Rust => tree_sitter_rust::TAGS_QUERY,
             // 這幾種沒有定義可言，語法 crate 也不帶 tags。
             Language::Css | Language::Html | Language::Json | Language::Toml | Language::Yaml => {
@@ -222,6 +247,18 @@ impl Language {
             Language::JavaScript => {
                 "(formal_parameters (_) @parameter)\n                 (comment) @comment\n"
             }
+            Language::C => {
+                "(parameter_list (_) @parameter)\n                 (comment) @comment\n"
+            }
+            Language::Java => {
+                "(formal_parameters (_) @parameter)\n                 (type_parameters (_) @parameter)\n                 (inferred_parameters (_) @parameter)\n                 (line_comment) @comment\n                 (block_comment) @comment\n"
+            }
+            // Warning: **R 這一門不許寫 `(_)`**：它把逗號也做成了一個**有名字**的節點
+            // （`node-types.json` 裏 `parameters` 的子節點類型就只列着 `comma`），
+            // 於是 `(a, b)` 用 `(_)` 數出來是三個。寫明 `(parameter)`。
+            Language::R => {
+                "(parameters (parameter) @parameter)\n                 (comment) @comment\n"
+            }
             Language::Css | Language::Html | Language::Json | Language::Toml | Language::Yaml => {
                 return None
             }
@@ -230,7 +267,7 @@ impl Language {
 
     /// 編好的那份，連着每一格捕獲算哪一種對象。
     fn object_query(self) -> Option<&'static Objects> {
-        static CELLS: [OnceLock<Option<Objects>>; 9] = [const { OnceLock::new() }; 9];
+        static CELLS: [OnceLock<Option<Objects>>; 12] = [const { OnceLock::new() }; 12];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -251,7 +288,7 @@ impl Language {
 
     /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
     fn defines(self) -> Option<&'static Defines> {
-        static CELLS: [OnceLock<Option<Defines>>; 9] = [const { OnceLock::new() }; 9];
+        static CELLS: [OnceLock<Option<Defines>>; 12] = [const { OnceLock::new() }; 12];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -311,6 +348,27 @@ impl Language {
                     (set) (tuple) (parenthesized_expression)] @indent
                    ["}" "]" ")"] @outdent"#
             }
+            // Java 的塊、三種體、兩種參數表、陣列初始化、`switch` 體與註解的參數表。
+            Language::Java => {
+                r#"[(block) (class_body) (interface_body) (enum_body)
+                    (constructor_body) (argument_list) (formal_parameters)
+                    (type_parameters) (array_initializer) (switch_block)
+                    (annotation_argument_list)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            // C：`{}` 那一族在這門語言裏叫 `compound_statement`，另有結構體、
+            // 枚舉、初始化串。
+            Language::C => {
+                r#"[(compound_statement) (field_declaration_list) (enumerator_list)
+                    (initializer_list) (argument_list) (parameter_list)
+                    (declaration_list)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            // R 只有三處：`{}`、呼叫的實參、函數的形參。
+            Language::R => {
+                r#"[(braced_expression) (arguments) (parameters)] @indent
+                   ["}" ")"] @outdent"#
+            }
             Language::Json => r#"[(object) (array)] @indent
                                  ["}" "]"] @outdent"#,
             Language::Css => r#"[(block)] @indent
@@ -324,7 +382,7 @@ impl Language {
 
     /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
     fn indent_query(self) -> Option<&'static Query> {
-        static CELLS: [OnceLock<Option<Query>>; 9] = [const { OnceLock::new() }; 9];
+        static CELLS: [OnceLock<Option<Query>>; 12] = [const { OnceLock::new() }; 12];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         let text = self.indents();
         if text.is_empty() {
@@ -334,7 +392,7 @@ impl Language {
     }
 
     fn query(self) -> Option<&'static Compiled> {
-        static CELLS: [OnceLock<Option<Compiled>>; 9] = [const { OnceLock::new() }; 9];
+        static CELLS: [OnceLock<Option<Compiled>>; 12] = [const { OnceLock::new() }; 12];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -847,6 +905,24 @@ mod tests {
                 2,
                 1,
             ),
+            (
+                Language::C,
+                "// 一句註釋\nint f(int a, int b) { return a; }\n",
+                2,
+                1,
+            ),
+            (
+                Language::Java,
+                "// 一句註釋\nclass A { int f(int a, int b) { return a; } }\n",
+                2,
+                1,
+            ),
+            (
+                Language::R,
+                "# 一句註釋\nf <- function(a, b) { a }\n",
+                2,
+                1,
+            ),
         ];
         for (language, source, parameters, comments) in cases {
             let tree = parse(language, source, None).expect("parses");
@@ -915,6 +991,33 @@ mod tests {
         // tree-sitter 給的是 `(source_file (ERROR …))`——**一個 block 節點都沒有**，
         // 所以這一支答 0。那一刻靠的是上一行的真實縮進（見上面那一段），和從前一樣。
         assert_eq!(at("fn f() {\n", 9, None), 0, "半截的源碼：答不出來，不是答錯");
+    }
+
+    /// **每一門的縮進查詢都編得起來，而且真數得出級**。2026-10-08 加 C／Java／R
+    /// 那一輪的教訓：查詢編不起來是 `None`，**不報錯**——節點名寫錯了只是
+    /// 「那一門永遠不縮」，沒人會知道。
+    #[test]
+    fn every_indent_query_opens_a_level_where_a_bracket_opens_one() {
+        let cases = [
+            (Language::C, "int f(void) {\n    g(\n    );\n}\n", "g("),
+            (Language::Java, "class A { void f() {\n    g(\n    ); } }\n", "g("),
+            (Language::R, "f <- function() {\n  g(\n  )\n}\n", "g("),
+            (Language::Go, "func f() {\n\tg(\n\t)\n}\n", "g("),
+            (Language::Rust, "fn f() {\n    g(\n    );\n}\n", "g("),
+            (Language::JavaScript, "function f() {\n  g(\n  )\n}\n", "g("),
+            (Language::Python, "def f():\n    g(\n    )\n", "g("),
+        ];
+        for (language, source, after) in cases {
+            assert!(language.indent_query().is_some(), "{} 的查詢編得起來", language.name());
+            let tree = parse(language, source, None).expect("parses");
+            let byte = source.find(after).expect("在") + after.len();
+            let line = source[..byte].matches('\n').count();
+            assert!(
+                open_levels(language, source, &tree, byte, line + 1, None) >= 1,
+                "{} ：行尾一個 `(` 至少開着一級",
+                language.name(),
+            );
+        }
     }
 
     /// **縮進是語法本身的那兩種不給查詢**（TOML／YAML）。

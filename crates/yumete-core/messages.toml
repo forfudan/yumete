@@ -2550,7 +2550,7 @@ key = "cmd.syntaxes.code"
 zht = "代碼：整個文件按這種語言的語法上色，沒有標記"
 zhs = "代码：整个文件按这种语言的语法上色，没有标记"
 en = "code: the whole file coloured by this language's grammar, no markup"
-find = "語法 语法 代碼 代码 python javascript json yaml toml html css"
+find = "語法 语法 代碼 代码 python javascript json yaml toml html css java"
 
 [[message]]
 # : 命令選單裏 markdown 那一項的說明（syntaxes 組）
