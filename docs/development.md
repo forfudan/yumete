@@ -20114,6 +20114,46 @@ warning了。所以我覺得 Option 1 + 一個csv tree-sitter 會很好。」
 
 沒自己定，等他說。
 
+## 5.116 收到的三條，**還沒查**（2026-10-08）
+
+作者當天連着報的，明說「put in your stack and assess it later; not interrupt the
+current task」。原話抄在這裏，免得只活在一個 session 裏。
+
+### ① 補全單子不隨打字重排
+
+> I typed "unwrap", the function hint (autocompletion), however, still show the
+> prediction using the original order. … The list of autocompletion should be renewed
+> on every keystroke to provide the best matched items (items with exact prefix go
+> first; fuzzy matching is nice-to-have but should go at bottoms).
+
+截圖裏打完 `.unwrap` 之後單子頭三條還是 `is_some_and`／`is_none_or`／`expect`，而
+`unwrap` 排第四。Warning: 查的時候先讀 `lsp.rs` 那條「**Not sorted here**：服務器自己排過
+（`sortText`），編輯器再排一次等於推翻唯一懂這門語言的那一方」——**那條規矩是對
+「服務器給的次序」說的，不是對「打了字之後還要不要篩」說的**，兩件事別混。另外
+`isIncomplete` 這一頭沒用（`offers` 的文檔自己寫着），而它的意思正是「接着打就再問一
+次」。
+
+### ② 插入態打 `(` 就該看見函數簽名
+
+> In insert mode, when I type `(`, I expect that the function doc can appear without
+> triggering, so that I can understand the function better. Even though `:info ` is
+> set to, e.g., dignostics. In insert mode, the doc can still show instantly.
+
+LSP 那邊這件事叫 `textDocument/signatureHelp`，是一個**獨立的請求**，不是 hover。這一頭
+現在一個字都沒接（`initialize` 的 capabilities 裏沒有它）。他要的還有一條：插入態下它
+**蓋過 `:info` 那一格現在擺的東西**。
+
+### ③ `空格 k` 開文檔窗要按兩次
+
+> space+k/K 開啓文檔窗口後，移動 cursor 後下次要開文檔得按兩次。
+>
+> I use space+k to trigger doc panel at a letter X, I then move cursor to another
+> letter … and then move back to the letter A using h. Then I use space+k. Nothing
+> happens. I use another space+k, the doc panel appears.
+
+連帶一個要定的：光標在同一個詞裏動（`push()` 的 `p` 走到 `u`），那一扇該不該關？他要
+一份別家怎麼做的調查再定。
+
 ## 5.115 行首一個 tab，`j`/`k` 偏十四格（2026-10-08 使用者報的）
 
 原話（王牌餅乾）：「行首有 tab 縮進時（go 代碼），按下 j/k 時 cursor 位置不對齊。」
