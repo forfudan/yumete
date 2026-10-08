@@ -137,6 +137,19 @@ pub struct Measure<'a> {
     /// is wrapped from its head, which is what typing into a million-character
     /// paragraph used to cost 25.4 ms a key for.
     edit: Option<(usize, isize)>,
+    /// **這一行的前綴寬度索引**，有的話（2026-10-08）。見 [`Widths`]。
+    ///
+    /// 與 `version` 一樣是純粹的省工夫：`None` 的時候每一處都逐字素走，答案一樣
+    /// ——只是不折行的一行 1242 萬字上，光標在行尾按一下 `h` 要 223 ms。
+    ///
+    /// 建一次要走一遍那一行，所以**記在哪裏、按什麼作廢是前端的事**（`Editor`
+    /// 那邊是 `width_memo`，鍵是 buffer 的 id 與行號、戳是 revision 加
+    /// [`yumete_cjk::ambiguous_is_wide`]）。這裏只負責問。
+    ///
+    /// 第三個參數是**這一問跨多少個字符**，答的那一邊據此決定值不值得建：一段不
+    /// 到一塊長，逐字素走至多 86 µs，而建索引要把那一行整個走一遍（1242 萬字是
+    /// 190 ms）。2026-10-08 量到的：`gh` 之後不往右走，少了這一道就白付 192 ms。
+    widths: &'a AskWidths<'a>,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -148,6 +161,17 @@ const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
 
 /// A page with nothing on it but the file's own characters.
 const NOTHING_DRAWN: &dyn Fn(usize) -> Vec<(usize, String)> = &|_| Vec::new();
+
+/// **問一行的前綴寬度索引**那一支：`(rope, 行號, 這一問跨多少個字符)`。見
+/// [`Measure::widths`]。
+///
+/// Warning: **`'a` 要寫出來。** 類型別名裏裸的 `dyn Trait` 默認 `+ 'static`，而這一支
+/// 是從 `&self` 上借出來的閉包——寫漏了，調用方那一句 `Measure::new(…)` 報的是
+/// 「borrowed data escapes outside of method」，看不出跟別名有關。
+type AskWidths<'a> = dyn Fn(&Rope, usize, usize) -> Option<std::rc::Rc<Widths>> + 'a;
+
+/// 沒有誰替這一頁記過寬度——每一處都逐字素走。見 [`Measure::widths`]。
+const NOTHING_INDEXED: &AskWidths<'static> = &|_, _, _| None;
 
 impl<'a> Measure<'a> {
     /// `width` cells, with every character on the page.
@@ -164,6 +188,7 @@ impl<'a> Measure<'a> {
             unwrapped: NOTHING_FOLDED,
             version: None,
             edit: None,
+            widths: NOTHING_INDEXED,
         }
     }
 
@@ -181,6 +206,7 @@ impl<'a> Measure<'a> {
             unwrapped: NOTHING_FOLDED,
             version: None,
             edit: None,
+            widths: NOTHING_INDEXED,
         }
     }
 
@@ -235,6 +261,32 @@ impl<'a> Measure<'a> {
     /// rather than remade (#366). See the field.
     pub fn with_edit(self, edit: Option<(usize, isize)>) -> Measure<'a> {
         Measure { edit, ..self }
+    }
+
+    /// 交進「這一行的前綴寬度索引」那一支（2026-10-08）。見 [`Measure::widths`]。
+    pub fn with_widths(
+        self,
+        widths: &'a AskWidths<'a>,
+    ) -> Measure<'a> {
+        Measure { widths, ..self }
+    }
+
+    /// **一行裏 `[a, b)` 這一段佔多少格**，`hidden` 裏的字符不算。
+    ///
+    /// 有索引就從索引裏減，沒有就逐字素走——兩條路逐格相同，見
+    /// [`Widths::width`]。
+    fn width_between(
+        self,
+        rope: &Rope,
+        line: usize,
+        a: usize,
+        b: usize,
+        hidden: &[(usize, usize)],
+    ) -> usize {
+        match (self.widths)(rope, line, b.saturating_sub(a)) {
+            Some(index) => index.width(rope, line, a, b, hidden),
+            None => walk_width(rope, line, a, b, hidden),
+        }
     }
 
     /// Whether `line` is one row however long it is.
@@ -1067,6 +1119,252 @@ fn remember(hash: u64, width: usize, rows: &[(usize, usize)]) {
     });
 }
 
+/// 一塊多少個字符——[`Widths`] 每隔這麼多字符記一條累計寬度。
+///
+/// 4096 是這麼挑的（2026-10-08 量的，一個字素約 21 ns）：一次查詢的代價是兩頭各
+/// 走至多一塊，4096 個字符是 **86 µs**，一幀問四五次也還在半毫秒以內；而一行
+/// 1242 萬字的稿子上索引本身只有 12 419 022 / 4096 ≈ 3031 條、48 KB。再大
+/// （65536）兩頭那一走漲到 1.4 ms，一幀問五次就看得見了；再小（256）索引漲到
+/// 48 500 條而那一走本來就只有 5 µs，省不出什麼來。
+///
+/// 也是**建不建索引**的門檻：一行不到一塊長，索引裏連一個內部切點都沒有，走的
+/// 就是從前那一條路。
+pub(crate) const BLOCK: usize = 4096;
+
+/// **這個切點記得下嗎**——只問一句：它左邊那個字符是不是區域指示符（國旗那
+/// 半邊，U+1F1E6..U+1F1FF）。
+///
+/// 索引成立的前提是：切點 `p` 在**從任何一處起**的分段裏都是字素邊界，而且 `p`
+/// 右邊的分段與「從 `p` 起重新分段」逐一相同。索引是**從行首**分段算出來的，查
+/// 詢卻是**從 `a`** 分段走的（從前那一支就是 `steps(slice(a..b))`），兩者只有在
+/// 這種切點上接得起來纔保證逐格相同。
+///
+/// 一句話夠用，理由是 UAX #29 那十幾條裏只有三條要往左看一個字符以上——GB9c
+/// （印度系連寫）、GB11（ZWJ × 繪文字）、GB12／GB13（區域指示符兩個一對）：
+///
+/// - 其餘各條（CR LF、Control、諺文 GB6-8、Extend／ZWJ、SpacingMark、Prepend）
+///   只看切點左右那一個字符。切點本來就是行首那一份分段的邊界，也就是說那一對
+///   字符按這些條**斷開**；而「斷不斷」只看這一對，從哪裏起數都一樣。
+/// - GB9c 與 GB11 要左邊配上一段（輔音…連接符、繪文字…ZWJ）纔**合併**。從 `a`
+///   起分段看到的左邊只會更少，配不上的照樣配不上——所以它們只會多斷，不會少
+///   斷，而切點要的正是「斷」。右邊也不會兩樣：那一段配料若落在 `p` 左邊，
+///   GB9 早把 `p` 上的 ZWJ／連接符併到左邊去了，`p` 就不會是邊界。
+/// - **只剩 GB12／GB13。** 區域指示符是從左邊**數出對**來的：四個 U+1F1E6 從頭數
+///   是兩面旗，從第二個字符起數是「一個落單的、一面旗、一個落單的」——同一個下
+///   標在一種分段裏是邊界，在另一種裏在字素中間。數的起點只被非區域指示符打斷，
+///   所以「左邊那個不是區域指示符」正好把這一條關掉。
+///
+/// 一行全是國旗就一個切點都記不下來（見那條性質測試），於是照從前那樣逐字素
+/// 走——慢，不會錯。
+fn clean_cut(before: char) -> bool {
+    !matches!(before as u32, 0x1F1E6..=0x1F1FF)
+}
+
+/// **一行裏 `[a, b)` 這一段佔多少格**，逐字素走——`hidden` 裏的字符不算。
+///
+/// 索引算得出來的那一支（[`Widths::width`]）逐格與這一支相同，而這一支就是
+/// 2026-10-08 之前 [`position`] 裏那幾行：答案以它為準。
+pub fn walk_width(rope: &Rope, line: usize, a: usize, b: usize, hidden: &[(usize, usize)]) -> usize {
+    if b <= a {
+        return 0;
+    }
+    let start = rope.line_to_char(line);
+    let text = rope.slice(start + a..start + b).to_string();
+    steps(&text)
+        .filter(|(i, _)| {
+            let at = a + i;
+            !hidden.iter().any(|&(x, y)| at >= x && at < y)
+        })
+        .map(|(_, w)| w)
+        .sum()
+}
+
+/// `hidden` 併成互不相交、按頭排好的一串。
+///
+/// 從前那道過濾是 `any(…)`，所以重疊的區間只算一次；索引那一支是**減**出來的，
+/// 重疊就會減兩遍。併一次，兩條路就說同一句話。
+fn merged(hidden: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut spans: Vec<(usize, usize)> = hidden.iter().copied().filter(|&(a, b)| a < b).collect();
+    spans.sort_unstable();
+    let mut out: Vec<(usize, usize)> = Vec::with_capacity(spans.len());
+    for (a, b) in spans {
+        match out.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => out.push((a, b)),
+        }
+    }
+    out
+}
+
+/// **一行的前綴寬度索引**（2026-10-08）：在若干個乾淨切點上記下從行首數起的累計
+/// 顯示寬度，於是「行首到第 `col` 個字符有多寬」不必每次逐字素走一遍。
+///
+/// 為什麼要它：不折行的時候一段就是一行，於是 [`position`] 裏那句「只量這一行裏
+/// 光標前面那一段」量的是**整個前綴**。一行 1 242 萬字的檔上，光標在行尾按一下
+/// `h` 要 **223 ms**（行首 5.5 ms；開着折行則處處都快，因為那時行起點就在光標邊
+/// 上，那句註釋說的「量一行不量一段」只在折行開着的時候是真的）。
+///
+/// 一行走一遍就建得出來，而它只隨編輯改變，所以是 [`Measure::widths`] 交進來的
+/// ——記在哪裏、按什麼作廢是前端的事（`Editor::width_memo`）。
+#[derive(Debug)]
+pub struct Widths {
+    /// `(字符下標, 行首到這個下標的累計寬度)`，按下標遞增，第一條恆為 `(0, 0)`、
+    /// 最後一條恆為行末。
+    cuts: Vec<(usize, usize)>,
+}
+
+impl Widths {
+    /// 走一遍 `line`，每隔 [`BLOCK`] 個字符記一條（只記在乾淨切點上）。
+    pub fn of(rope: &Rope, line: usize) -> Widths {
+        Widths::every(rope, line, BLOCK)
+    }
+
+    /// [`Self::of`]，塊多大由調用方說。
+    ///
+    /// 性質測試拿很小的塊（4、8、64）把一行裏每一列都掃一遍——[`BLOCK`] 那麼大的
+    /// 塊要掃到同樣的密度得走上億個字素，而塊的大小是個調參，對不對不歸它管。
+    fn every(rope: &Rope, line: usize, block: usize) -> Widths {
+        let block = block.max(1);
+        let text = line_text(rope, line);
+        let mut cuts: Vec<(usize, usize)> = vec![(0, 0)];
+        let mut at = 0usize;
+        let mut width = 0usize;
+        let mut before: Option<char> = None;
+        for g in graphemes(&text) {
+            // 切點記在**這一個字素之前**：它左邊那個字符是上一個字素的末字符。
+            if at - cuts[cuts.len() - 1].0 >= block && before.is_some_and(clean_cut) {
+                cuts.push((at, width));
+            }
+            width += grapheme_width(g);
+            at += g.chars().count();
+            before = g.chars().last();
+        }
+        // 行末也是一條：它在任何一種分段裏都是邊界，所以當得了右邊那個接點。
+        if cuts[cuts.len() - 1].0 != at {
+            cuts.push((at, width));
+        }
+        Widths { cuts }
+    }
+
+    /// 最小的、不小於 `at` 的切點。
+    fn at_or_after(&self, at: usize) -> Option<(usize, usize)> {
+        let i = self.cuts.partition_point(|&(c, _)| c < at);
+        self.cuts.get(i).copied()
+    }
+
+    /// 最大的、不大於 `at` 的切點。
+    fn at_or_before(&self, at: usize) -> Option<(usize, usize)> {
+        let i = self.cuts.partition_point(|&(c, _)| c <= at);
+        self.cuts.get(i.checked_sub(1)?).copied()
+    }
+
+    /// 這一行有多長（行末那一條切點）。
+    fn len(&self) -> usize {
+        self.cuts[self.cuts.len() - 1].0
+    }
+
+    /// **一行裏 `[a, b)` 這一段佔多少格**，`hidden` 裏的字符不算——與
+    /// [`walk_width`] 逐格相同，只是中間那一大段是從索引裏減出來的。
+    ///
+    /// 證明分三句：
+    ///
+    /// 1. `p` 是乾淨切點，所以它在「從 `a` 起分段」裏也是邊界，於是 `[a, b)` 的
+    ///    分段 ＝ `[a, p)` 的分段接上「從 `p` 起」的分段；
+    /// 2. 「從 `p` 起」的分段 ＝ 行首那一份在 `[p, …)` 上的截斷（`p` 左邊是個
+    ///    平字符，攢不下 ZWJ 與區域指示符的狀態），所以 `[p, q)` 這一段的淨寬就
+    ///    是兩條累計之差；
+    /// 3. `q` 同樣是乾淨切點，所以尾巴 `[q, b)` 逐字素走出來的那幾個字素，與整
+    ///    段走出來的末幾個逐一對應——連 `b` 處那個被切斷的字素也一樣。
+    pub fn width(
+        &self,
+        rope: &Rope,
+        line: usize,
+        a: usize,
+        b: usize,
+        hidden: &[(usize, usize)],
+    ) -> usize {
+        if b <= a {
+            return 0;
+        }
+        // 索引說不了的就照從前走：`b` 超出這一行（不該有，兜底），或者 `a` 與 `b`
+        // 之間擠不進兩個切點（那本來也沒什麼可省的）。
+        let (Some((p, wp)), Some((q, wq))) = (self.at_or_after(a), self.at_or_before(b)) else {
+            return walk_width(rope, line, a, b, hidden);
+        };
+        if b > self.len() || p >= q {
+            return walk_width(rope, line, a, b, hidden);
+        }
+        let hidden = merged(hidden);
+        let mut total = wq - wp
+            + walk_width(rope, line, a, p, &hidden)
+            + walk_width(rope, line, q, b, &hidden);
+        // 中間那一段的淨寬是連 `hidden` 一起算進去的，所以要把落在 `hidden` 裏的
+        // 字素減掉。區間少（多半一個都沒有）而且短，所以一段一段地走就夠。
+        for &(h0, h1) in &hidden {
+            let (x, y) = (h0.max(p), h1.min(q));
+            if x < y {
+                total -= self.covered(rope, line, x, y);
+            }
+        }
+        total
+    }
+
+    /// `[x, y)` 裏起頭的那些字素一共佔多少格——減 `hidden` 用的那一項。
+    ///
+    /// 從 `x` 左邊那個切點走到 `y` 右邊那個切點：兩頭都是切點，所以走出來的字素
+    /// 與行首那一份分段逐一對應，而**起頭在 `[x, y)` 裏**正是從前那道過濾的判準。
+    /// 調用方保證 `p <= x < y <= q`，於是這兩個切點都在 `[p, q)` 裏夾得住。
+    fn covered(&self, rope: &Rope, line: usize, x: usize, y: usize) -> usize {
+        let u = self.at_or_before(x).map_or(x, |(c, _)| c);
+        let v = self.at_or_after(y).map_or(y, |(c, _)| c);
+        let start = rope.line_to_char(line);
+        let text = rope.slice(start + u..start + v).to_string();
+        steps(&text)
+            .filter(|(i, _)| (x..y).contains(&(u + i)))
+            .map(|(_, w)| w)
+            .sum()
+    }
+
+    /// **從 `s` 往 `goal` 跳過整塊整塊的純文字**（[`char_at_column`] 用）：回答
+    /// 「從哪一個切點接着逐字素走」、「走到那裏累計了幾格」、「走到哪裏為止」。
+    ///
+    /// 只跳 `hidden` 與 `drawn` 都碰不着的塊：那兩樣各有自己的坐標，一格都不能算
+    /// 錯。跳到越過 `goal` 的那一塊就停——答案在那一塊裏，所以往後只要走一塊；碰
+    /// 上那兩樣（或者塊不夠一整個了）就把終點交回 `e`，從那裏起照從前那樣走。
+    fn skip_to(
+        &self,
+        s: usize,
+        e: usize,
+        goal: usize,
+        col: usize,
+        hidden: &[(usize, usize)],
+        drawn: &[(usize, String)],
+    ) -> Option<(usize, usize, usize)> {
+        // 起點本身要是切點，不然「從 `s` 起分段」與行首那一份接不起來。
+        let (mut from, mut wf) = self.at_or_before(s).filter(|&(c, _)| c == s)?;
+        let mut col = col;
+        let mut i = self.cuts.partition_point(|&(c, _)| c <= from);
+        loop {
+            // 切點用完了，或者下一個已經出了這一行（這一行的末尾），或者這一塊裏
+            // 有自己坐標的東西：剩下的照從前那樣逐字素走。
+            let Some(&(c, wc)) = self.cuts.get(i).filter(|&&(c, _)| c <= e) else {
+                return Some((from, col, e));
+            };
+            if hidden.iter().any(|&(x, y)| x < c && from < y)
+                || drawn.iter().any(|&(x, _)| (from..c).contains(&x))
+            {
+                return Some((from, col, e));
+            }
+            if col + (wc - wf) > goal {
+                return Some((from, col, c));
+            }
+            col += wc - wf;
+            (from, wf) = (c, wc);
+            i += 1;
+        }
+    }
+}
+
 /// How many lines the grid covers — ropey's count, which includes the empty
 /// line a trailing newline opens, because that is where the caret sits after
 /// `o` and the renderer draws it.
@@ -1113,7 +1411,12 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     let (row_start, _) = rows[index_in_line];
     // Only the part of the row before the cursor is measured — a row, not a
     // paragraph, however long the paragraph is.
-    let ahead = rope.slice(start + row_start..start + col).to_string();
+    //
+    // Warning: **那句話只在折行開着的時候是真的**（2026-10-08 量出來的）。折行關
+    // 掉，一段就是一行，於是 `row_start` 恆為 0 而這裏量的是**整個前綴**——一行
+    // 1242 萬字的檔上，光標在行尾按一下 `h` 要 223 ms（行首 5.5 ms）。現在中間那
+    // 一大段從 [`Widths`] 那份索引裏減出來，兩頭各逐字素走至多一塊。
+    //
     // **A character that is not drawn takes no column.** This summed the
     // source, while `line_rows_indented` — the function that decides where the
     // rows actually break — zeroes what is hidden. So with 所見即所得 on, a
@@ -1121,13 +1424,7 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     // per hidden character, and the front end papered over the caret's half of
     // it by subtracting the hidden width again on its way to the screen.
     let hidden = m.off(line);
-    let column: usize = steps(&ahead)
-        .filter(|(i, _)| {
-            let at = row_start + i;
-            !hidden.iter().any(|&(a, b)| at >= a && at < b)
-        })
-        .map(|(_, w)| w)
-        .sum();
+    let column = m.width_between(rope, line, row_start, col, &hidden);
     // **Text drawn before the caret is page the caret is past.** A run stands
     // before the character it is anchored at, so a run anchored anywhere to
     // the left of the caret is wholly behind it.
@@ -1303,10 +1600,6 @@ fn char_at_column(
         e.saturating_sub(1)
     };
 
-    // The grapheme whose own columns cover `goal` — not the one after it, which
-    // is where `col >= goal` would stop and would put `j` one glyph right of
-    // the column it was aiming at whenever that column is inside a wide glyph.
-    let row = rope.slice(start + s..start + e).to_string();
     // A goal column inside the indent lands on the row's first character:
     // there is nothing in the indent to land on.
     let mut col = m.indent_of(line, &line_head(rope, line), index_in_line);
@@ -1323,9 +1616,28 @@ fn char_at_column(
     // 規矩照 `position` 抄：跑段站在它所錨的那個字**之前**，所以錨點等於眼下這
     // 一格的時候，它整段都在前面。
     let drawn = m.drawn_on(line);
+    // Warning: **這一行不許整個物化**（2026-10-08）。從前這裏是
+    // `rope.slice(start + s..start + e).to_string()`，而折行關掉的時候一段就是一
+    // 行：一行 1242 萬字的檔上，`j`／`k` 每按一下拷 37 MB 再逐字素走最多一遍。
+    // 現在先拿 [`Widths`] 那份索引整塊整塊地跳，剩下的只物化至多一塊。
+    let (from, upto) = match (m.widths)(rope, line, e.saturating_sub(s)) {
+        Some(index) => match index.skip_to(s, e, goal, col, &hidden, &drawn) {
+            Some((from, skipped, upto)) => {
+                col = skipped;
+                (from, upto)
+            }
+            None => (s, e),
+        },
+        None => (s, e),
+    };
+    let row = rope.slice(start + from..start + upto).to_string();
+    // `upto` 短過 `e` 的那一條路**一定在這一走裏停下來**：那是「這一塊的淨寬越過
+    // 了 `goal`」纔會給的終點，而那一塊裏沒有 `hidden` 也沒有 `drawn`，所以逐字
+    // 素累加出來的就是那個淨寬。停不下來就是索引與逐字素走說了兩句話。
     let mut at = e;
+    let mut stopped = false;
     for (i, w) in steps(&row) {
-        let here = s + i;
+        let here = from + i;
         col += drawn
             .iter()
             .filter(|&&(a, _)| a == here)
@@ -1339,10 +1651,12 @@ fn char_at_column(
         };
         if col + w > goal {
             at = here;
+            stopped = true;
             break;
         }
         col += w;
     }
+    debug_assert!(stopped || upto >= e, "索引跳過了答案所在的那一塊");
     start + at.min(limit)
 }
 
@@ -1712,6 +2026,280 @@ mod tests {
         assert_eq!(position(&rope, 1, m).column, 2, "before the run");
         assert_eq!(position(&rope, 2, m).column, 6, "on its anchor, so past it");
         assert_eq!(position(&rope, 3, m).column, 8);
+    }
+
+    // ---- 前綴寬度索引（2026-10-08）-----------------------------------------
+
+    /// 定了種子的隨機數源（LCG）——性質測試要重跑得出同一批字，而這個倉不為一個
+    /// 測試加依賴。
+    struct Roll(u64);
+
+    impl Roll {
+        fn roll(&mut self) -> usize {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 33) as usize
+        }
+    }
+
+    /// 性質測試餵的那些字。
+    ///
+    /// 挑的標準是「哪一種寫法會把索引算錯」：按 `char` 數寬度的錯在組合符號與變
+    /// 體選擇符上，按字符數切塊的錯在字素跨過塊界的時候，而**從別處重新分段**的
+    /// 錯只在 ZWJ 與區域指示符上——那兩條是 UAX #29 裏唯一要往左看任意遠的規則，
+    /// 也正是 [`clean_cut`] 存在的理由。
+    const TOKENS: &[&str] = &[
+        // ASCII：一個 `char`、一個字素、一格
+        "a", "Z", "7", " ", "-", "(",
+        // 製表符：`grapheme_width` 走 ASCII 那條快路，也是一格
+        "\t",
+        // 漢字與全角標點：兩格
+        "天", "地", "玄", "黃", "宇", "，", "。", "」", "（",
+        // 歧義寬度那幾個（這個進程裏是一格，索引與逐字素走問的是同一支）
+        "—", "…", "“",
+        // 組合符號：兩三個 `char` 一個字素，寬度記在頭一個上
+        "e\u{0301}", "a\u{0300}\u{0301}", "o\u{0308}",
+        // 繪文字 ＋ 變體選擇符：頭一個單看一格，合起來兩格
+        "\u{26A0}\u{FE0F}", "\u{2764}\u{FE0F}",
+        // 漢字 ＋ 異體字選擇符
+        "葛\u{E0101}",
+        // ZWJ 連成的一家子（男 ZWJ 女 ZWJ 女孩）：五個 `char`，一個字素
+        "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+        // 區域指示符：兩個一對，而「對」是從左邊數起的——落單的那個會把它後面的
+        // 配對整個挪一位，所以切點一旦記在這中間，兩邊的分段就不是同一回事
+        "\u{1F1E6}\u{1F1E6}", "\u{1F1FF}",
+        // 寬繪文字
+        "\u{1F004}", "\u{1F642}",
+    ];
+
+    /// 混出至少 `upto` 個字符的一段（用完整的 token，所以可能多出幾個）。
+    fn made(seed: u64, upto: usize) -> String {
+        let mut roll = Roll(seed);
+        let mut text = String::new();
+        let mut chars = 0usize;
+        while chars < upto {
+            let token = TOKENS[roll.roll() % TOKENS.len()];
+            text.push_str(token);
+            chars += token.chars().count();
+        }
+        text
+    }
+
+    /// 這一行上隨機撒幾段「藏起來的」——起點不管字素邊界，正是最難的那一種。
+    fn spans(seed: u64, len: usize, how_many: usize) -> Vec<(usize, usize)> {
+        let mut roll = Roll(seed);
+        let mut out = Vec::new();
+        for _ in 0..how_many {
+            let a = roll.roll() % (len + 1);
+            let b = (a + 1 + roll.roll() % 7).min(len);
+            if a < b {
+                out.push((a, b));
+            }
+        }
+        out
+    }
+
+    /// 要掃的那幾種行長：剛不到一塊、正好一塊、剛過一塊，以及好幾塊。
+    fn lengths(block: usize) -> Vec<usize> {
+        vec![
+            block.saturating_sub(1),
+            block,
+            block + 1,
+            2 * block,
+            3 * block + 7,
+            5 * block,
+        ]
+    }
+
+    /// **索引答得與逐字素走逐格相同——一行裏每一列都問一遍。**
+    ///
+    /// 種子 `20261008`（加上塊與行長），塊 4／8／64，每個塊六種行長（見
+    /// [`lengths`]：剛不到一塊、正好一塊、剛過一塊、兩塊、三塊零七個字、五塊），
+    /// 字是 [`TOKENS`] 混出來的——ASCII、漢字、全角標點、組合符號、帶變體選擇符
+    /// 的繪文字、異體字選擇符、ZWJ 連成的一家子、區域指示符、製表符。
+    ///
+    /// 斷言的是 `[0, b)`（光標的那一問）與**每一對** `[a, b)`（折行開着的時候
+    /// `a` 是某一行的起點），`b` 從 0 掃到行末。
+    ///
+    /// Warning: **塊用的是小數**。真正那個 [`BLOCK`] 是 4096，照同樣的密度掃一行
+    /// 要走上億個字素；而對不對與塊多大無關，塊多大只是調參。
+    #[test]
+    fn the_width_index_agrees_with_the_walk_at_every_column() {
+        for block in [4usize, 8, 64] {
+            for want in lengths(block) {
+                let text = made(20261008 + block as u64 * 1000 + want as u64, want);
+                let rope = Rope::from_str(&format!("{text}\n"));
+                let index = Widths::every(&rope, 0, block);
+                let len = line_len_chars(&rope, 0);
+                // 索引真的用上了纔算掃過——全退回逐字素走的話，底下那幾千條
+                // 斷言是在拿同一支函數和自己比。
+                assert!(
+                    len <= 2 * block || index.cuts.len() > 2,
+                    "block {block}, len {len}: 只有 {} 條切點",
+                    index.cuts.len()
+                );
+                for b in 0..=len {
+                    assert_eq!(
+                        index.width(&rope, 0, 0, b, &[]),
+                        walk_width(&rope, 0, 0, b, &[]),
+                        "block {block}, len {len}, [0, {b})"
+                    );
+                }
+                for a in 0..=len {
+                    for b in a..=len {
+                        assert_eq!(
+                            index.width(&rope, 0, a, b, &[]),
+                            walk_width(&rope, 0, a, b, &[]),
+                            "block {block}, len {len}, [{a}, {b})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// **藏起來的那幾段照樣算對。**
+    ///
+    /// 索引記的是淨寬，所以落在 `hidden` 裏的字素要**減**出去；減的那一項與從前
+    /// 那道過濾的判準必須是同一句話——「字素的**起頭**在區間裏就整個不算」。
+    ///
+    /// 區間是隨機撒的，起點**不管字素邊界**：一段 `hidden` 從組合序列中間開始，
+    /// 從前那道過濾照樣把那整個字素去掉，所以減的時候也得整個減。
+    #[test]
+    fn the_width_index_agrees_with_the_walk_with_things_hidden() {
+        for block in [4usize, 8, 64] {
+            for want in lengths(block) {
+                let text = made(20261008 + want as u64, want);
+                let rope = Rope::from_str(&format!("{text}\n"));
+                let index = Widths::every(&rope, 0, block);
+                let len = line_len_chars(&rope, 0);
+                for how_many in [1usize, 3, 9] {
+                    let hidden = spans(777 + how_many as u64 + len as u64, len, how_many);
+                    for b in 0..=len {
+                        assert_eq!(
+                            index.width(&rope, 0, 0, b, &hidden),
+                            walk_width(&rope, 0, 0, b, &hidden),
+                            "block {block}, len {len}, [0, {b}), hidden {hidden:?}"
+                        );
+                    }
+                    for a in 0..=len {
+                        assert_eq!(
+                            index.width(&rope, 0, a, len, &hidden),
+                            walk_width(&rope, 0, a, len, &hidden),
+                            "block {block}, len {len}, [{a}, {len}), hidden {hidden:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// **一段 `hidden` 整個蓋住這一行，與一段都沒有，答案一樣。**
+    ///
+    /// 兩頭的極端：全藏起來就是零格（一個字素的起頭都不在區間外），而重疊的區間
+    /// 只許減一次——從前那道過濾是 `any(…)`，減卻會減兩遍。
+    #[test]
+    fn hidden_spans_that_overlap_are_only_taken_off_once() {
+        let text = made(31415, 600);
+        let rope = Rope::from_str(&format!("{text}\n"));
+        let index = Widths::every(&rope, 0, 8);
+        let len = line_len_chars(&rope, 0);
+        let all = [(0usize, len)];
+        assert_eq!(index.width(&rope, 0, 0, len, &all), 0, "全藏起來就是零格");
+        // 一段蓋一段，再加一段挨着的：併起來是 `[3, 40)`。
+        let piled = [(3usize, 20), (10, 30), (30, 40)];
+        assert_eq!(
+            index.width(&rope, 0, 0, len, &piled),
+            walk_width(&rope, 0, 0, len, &piled),
+            "重疊的區間只減一次"
+        );
+    }
+
+    /// **掛上索引與不掛，`position` 與 `char_at_column` 一個格子都不差。**
+    ///
+    /// 前一個是光標的列，後一個是 `j`／`k` 的落點——兩支共用一份索引（一支拿它
+    /// 減、一支拿它整塊整塊地跳），所以兩支都要掃。`drawn` 也餵了：那一段畫在文
+    /// 字旁邊，有自己的坐標，跳塊的時候一碰上它就得老老實實走。
+    #[test]
+    fn the_index_changes_no_column_and_no_landing() {
+        let text = made(20261009, 600);
+        let rope = Rope::from_str(&format!("{text}\n"));
+        let len = line_len_chars(&rope, 0);
+        let index = std::rc::Rc::new(Widths::every(&rope, 0, 8));
+        // 跨多少個字符不管（見 [`Measure::widths`] 第三個參數）：那一道是省工夫
+        // 的閘，而這一條驗的是「掛上索引與不掛，答案一樣」——短行上也要走索引。
+        let widths = |_: &Rope, _: usize, _: usize| Some(index.clone());
+        let hide = |_: usize| spans(2718, len, 5);
+        let runs = |_: usize| vec![(0usize, "候".to_string()), (len / 3, "補".to_string())];
+        for width in [NO_WRAP, 40, 9] {
+            let plain = Measure::new(width, &hide).with_drawn(&runs).with_indent(2);
+            let indexed = plain.with_widths(&widths);
+            for pos in 0..=len {
+                assert_eq!(
+                    position(&rope, pos, plain),
+                    position(&rope, pos, indexed),
+                    "width {width}, pos {pos}"
+                );
+            }
+            let rows = rows_of_line(&rope, 0, plain).len();
+            let total = position(&rope, len, plain).column + 4;
+            for row in 0..rows {
+                for goal in 0..=total {
+                    assert_eq!(
+                        char_at_column(&rope, 0, row, plain, goal),
+                        char_at_column(&rope, 0, row, indexed, goal),
+                        "width {width}, row {row}, goal {goal}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// **一行全是國旗，索引記不下一個切點——而答案照樣對。**
+    ///
+    /// 區域指示符是 UAX #29 裏「從哪裏起分段」最要緊的那一種：四個 U+1F1E6 從頭數
+    /// 是兩面旗，從第二個字符起數是「一個落單的、一面旗、一個落單的」。所以
+    /// [`clean_cut`] 一個切點都不許記在它們中間，而這一行就是那一種——退回逐字素
+    /// 走，慢，不會錯。
+    #[test]
+    fn a_line_of_flags_keeps_no_cut_and_still_measures_right() {
+        let text: String = std::iter::repeat_n("\u{1F1E6}", 400).collect();
+        let rope = Rope::from_str(&format!("{text}\n"));
+        let index = Widths::every(&rope, 0, 8);
+        let len = line_len_chars(&rope, 0);
+        assert_eq!(index.cuts.len(), 2, "只有行首與行末兩條");
+        for b in 0..=len {
+            assert_eq!(
+                index.width(&rope, 0, 0, b, &[]),
+                walk_width(&rope, 0, 0, b, &[]),
+                "[0, {b})"
+            );
+        }
+    }
+
+    /// **不到一塊長的行不建索引**——尋常的一段走的還是從前那一條路。
+    #[test]
+    fn a_paragraph_shorter_than_a_block_is_not_indexed() {
+        let mut editor = crate::editor::Editor::new();
+        editor.replace_everything(&format!("{}\n", made(161803, 100)));
+        let rope = editor.current_buffer().rope().clone();
+        assert!(editor.line_widths(&rope, 0, 200).is_none(), "一百個字用不上索引");
+        editor.replace_everything(&format!("{}\n", made(161803, BLOCK * 2)));
+        let rope = editor.current_buffer().rope().clone();
+        let len = line_len_chars(&rope, 0);
+        let index = editor.line_widths(&rope, 0, len).expect("兩塊長的行建得出索引");
+        // 問得短也不建——建它比逐字素走那一小段貴。
+        assert!(
+            editor.line_widths(&rope, 0, BLOCK).is_none(),
+            "跨不到一塊的那一問用不上索引"
+        );
+        assert_eq!(
+            index.width(&rope, 0, 0, len, &[]),
+            walk_width(&rope, 0, 0, len, &[]),
+            "記在備忘裏的那一份也答得對"
+        );
     }
 
     #[test]

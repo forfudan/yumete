@@ -5,6 +5,41 @@ use super::*;
 impl Editor {
     // ---- Soft wrap (Feature #77) ------------------------------------------
 
+    /// **這一行的前綴寬度索引**，長得值得建一份的話（2026-10-08）。見
+    /// [`crate::wrap::Widths`]，以及它掛在哪裏：[`crate::wrap::Measure::widths`]。
+    ///
+    /// 兩種情形回 `None`，都是「建它比不建貴」：
+    ///
+    /// - **這一行不到一塊長**——索引裏連一個內部切點都沒有，走的就是從前那一條
+    ///   路，一個格子也不差；尋常的一段也就不佔備忘那 512 格。
+    /// - **這一問跨不到一塊**（`span`）——逐字素走至多 86 µs，而建一份要把那一行
+    ///   整個走一遍。1242 萬字那一行上建一次 190 ms，而光標一直在行首附近的人一
+    ///   條切點都用不上：2026-10-08 量到的，`gh` 之後不往右走，少了這一道就白付
+    ///   192 ms。
+    ///
+    /// `rope` 收的是調用方手上那一份，與 [`crate::wrap::Measure::version`] 同一條
+    /// 約定：它必須是這個 buffer 的。
+    pub fn line_widths(
+        &self,
+        rope: &ropey::Rope,
+        line: usize,
+        span: usize,
+    ) -> Option<std::rc::Rc<crate::wrap::Widths>> {
+        if span <= crate::wrap::BLOCK
+            || line >= rope.len_lines()
+            || rope.line(line).len_chars() <= crate::wrap::BLOCK
+        {
+            return None;
+        }
+        let stamp = super::memo::stamp((
+            self.current_buffer().revision(),
+            yumete_cjk::ambiguous_is_wide(),
+        ));
+        Some(self.width_memo.or_work_out(self.current_buffer().id(), line, stamp, || {
+            std::rc::Rc::new(crate::wrap::Widths::of(rope, line))
+        }))
+    }
+
     /// Whether long paragraphs wrap onto further screen rows.
     pub fn soft_wrap(&self) -> bool {
         self.soft_wrap

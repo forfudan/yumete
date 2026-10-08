@@ -2811,6 +2811,15 @@ pub struct Editor {
     /// 才算得出每一個製表符的列，而折行每量一行就問一次——十幾行就是十幾遍。
     /// 答案只跟著正文與那幾個輸入變，所以記起來就是一次改動算一遍。
     tab_memo: memo::LineMemo<Vec<crate::drawn::Run>>,
+    /// **一行的前綴寬度索引，算過就記着**（2026-10-08）。見 [`crate::wrap::Widths`]。
+    ///
+    /// 量出來的：一行 1242 萬字、折行關掉的檔上，光標在行尾按一下 `h` 要 223 ms
+    /// （行首 5.5 ms）。`crate::wrap::position` 一幀問四五次，每一次都把光標前面
+    /// 那一整段逐字素走一遍，而「不折行的一行就是一段」正是那一段最長的時候。
+    ///
+    /// 戳裏除了 revision 還有 [`yumete_cjk::ambiguous_is_wide`]：那是個進程全局，
+    /// 一翻 `—` `…` 這一類字就從一格變兩格，而索引記的正是格數。
+    width_memo: memo::LineMemo<std::rc::Rc<crate::wrap::Widths>>,
     /// Which lines are folded away, against the buffer they were worked out
     /// for. One pass over the file per edit — the answer is not line-local (a
     /// blank line inside a fence is code, not a paragraph break), and asking
@@ -3570,6 +3579,7 @@ impl Editor {
             notes: false,
             note_memo: memo::LineMemo::default(),
             tab_memo: memo::LineMemo::default(),
+            width_memo: memo::LineMemo::default(),
             fold_cache: RefCell::new(None),
             markup_memo: memo::LineMemo::default(),
             ruby_memo: memo::LineMemo::default(),
