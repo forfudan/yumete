@@ -328,9 +328,39 @@ impl Editor {
     }
 
     /// 眼下這一行要帶下去的那一段縮進（Enter 用的，截到光標為止）。
+    ///
+    /// **外加語法樹說的那幾級**（2026-10-08 第二期）：行尾一個 `(`、`{`、`[`，下一
+    /// 行就多縮一級；新那一行開頭是 `}` 之類就少一級。差由 [`Editor::levels_to_open`]
+    /// 算（helix 的 `Hybrid`），這裏只負責把它換成真的空白。
     pub(super) fn indent_to_carry(&self) -> String {
         let (line, at) = self.caret_in_line();
-        self.indent_of_line(line, Some(at))
+        let carried = self.indent_of_line(line, Some(at));
+        if !self.writes_code() {
+            return carried;
+        }
+        let levels = self.levels_to_open(None);
+        // **一級是多少格，照這一行自己的寫法**：它用 tab 就加一個 tab，用空格就加
+        // `indent_width` 個空格。問這一行比問設置準——一份檔混着兩種的時候，跟着
+        // 眼前這一段走纔不會把兩種拌在一起。
+        let unit = match carried.contains('\t') || (carried.is_empty() && !self.tab_spaces) {
+            true => "\t".to_string(),
+            false => " ".repeat(self.indent_width),
+        };
+        match levels {
+            0 => carried,
+            n if n > 0 => format!("{carried}{}", unit.repeat(n as usize)),
+            // 退級：從帶下來的那一段尾巴上拿掉幾個單位。
+            n => {
+                let mut kept = carried;
+                for _ in 0..(-n) {
+                    match kept.strip_suffix(&unit) {
+                        Some(less) => kept = less.to_string(),
+                        None => break,
+                    }
+                }
+                kept
+            }
+        }
     }
 
     pub(super) fn open_line_below(&mut self) {

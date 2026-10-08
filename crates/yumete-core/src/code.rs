@@ -262,6 +262,77 @@ impl Language {
             .as_ref()
     }
 
+    /// **哪些節點開一級縮進，哪些把自己退回去**（2026-10-08，第一期）。
+    ///
+    /// 由來：作者問「行尾是一個 `(`，下一行該不該再縮一級」。查過三家——
+    ///
+    /// | | 縮嗎 |
+    /// | --- | --- |
+    /// | vim `autoindent` | 不縮，只照抄上一行的空白 |
+    /// | vim `smartindent` | 不縮：它只認行尾的 `{`（`options.txt`：「After a line ending in '{'」） |
+    /// | vim `cindent` | 縮，默認 `shiftwidth × 2`（`cinoptions` 的 `(N`） |
+    /// | helix | **縮一級，`)` 退一級**（`indents.scm`：`arguments`/`parameters`/`call_expression` 是 `@indent`，`")"` 是 `@outdent`） |
+    ///
+    /// 定的是 helix 那一套（用語法樹，不用字符啓發式）。
+    ///
+    /// Warning: **這是我們自己寫的查詢，不是抄 helix 的檔。** 兩個理由：① 語法包只帶
+    /// `highlights`/`injections`/`tags`，`indents.scm` 是 helix 自己的檔，而 helix 是
+    /// MPL-2.0，這個倉是 Apache-2.0；② 第一期只用得上「哪些節點類型」這一層，而那
+    /// 是語法本身的事實（`call_expression` 就叫這個名字），不是誰的文章。
+    ///
+    /// Warning: **第一期只有 `@indent` 和 `@outdent`。** helix 那一支還認 `@align`、
+    /// `@extend`、`#not-same-line?` 那幾個謂詞，以及「賦值右邊」「`.await` 鏈」這些
+    /// 專門的形狀——1502 行。那些留給下一期，見 `docs/development.md` §5.117。
+    fn indents(self) -> &'static str {
+        match self {
+            // 括號那三族 ＋ 塊。`token_tree` 是宏裏面，照樣要縮。
+            Language::Rust => {
+                r#"[(block) (arguments) (parameters) (declaration_list)
+                    (field_declaration_list) (field_initializer_list)
+                    (enum_variant_list) (call_expression) (token_tree)
+                    (array_expression) (tuple_expression) (use_list)
+                    (match_block)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            Language::Go => {
+                r#"[(block) (argument_list) (parameter_list) (literal_value)
+                    (expression_case) (type_declaration) (const_declaration)
+                    (var_declaration)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            Language::JavaScript => {
+                r#"[(statement_block) (arguments) (formal_parameters) (object)
+                    (array) (class_body) (switch_body)
+                    (parenthesized_expression)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            Language::Python => {
+                r#"[(block) (argument_list) (parameters) (list) (dictionary)
+                    (set) (tuple) (parenthesized_expression)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            Language::Json => r#"[(object) (array)] @indent
+                                 ["}" "]"] @outdent"#,
+            Language::Css => r#"[(block)] @indent
+                                ["}"] @outdent"#,
+            Language::Html => "[(element)] @indent",
+            // TOML 與 YAML 的縮進是**語法本身**（一個鍵一行、靠縮進分層），
+            // 多縮一級是錯的——這兩種不給查詢。
+            Language::Toml | Language::Yaml => "",
+        }
+    }
+
+    /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
+    fn indent_query(self) -> Option<&'static Query> {
+        static CELLS: [OnceLock<Option<Query>>; 9] = [const { OnceLock::new() }; 9];
+        let at = Language::ALL.iter().position(|&l| l == self)?;
+        let text = self.indents();
+        if text.is_empty() {
+            return None;
+        }
+        CELLS[at].get_or_init(|| Query::new(&self.grammar(), text).ok()).as_ref()
+    }
+
     fn query(self) -> Option<&'static Compiled> {
         static CELLS: [OnceLock<Option<Compiled>>; 9] = [const { OnceLock::new() }; 9];
         let at = Language::ALL.iter().position(|&l| l == self)?;
@@ -423,6 +494,95 @@ pub fn joined(lines: &[String]) -> String {
         source.push('\n');
     }
     source
+}
+
+/// **這一個位置開着幾級縮進**（2026-10-08，第一期）。
+///
+/// 算法照 helix 的 `indent.rs`，取它最頂上那一層：從 `byte` 那個節點往上走，每遇
+/// 到一個 `@indent` 的祖先就加一級——**而且那個祖先要是在前面某一行開的**。同一
+/// 行上開了又關的（`foo(1)` 整個在一行裏）不算，不然打完一行正常的調用，下一行就
+/// 莫名其妙縮進去了。
+///
+/// Warning: **一行只算一級。** `foo(bar(` 兩個括號都在這一行開着，helix 那一支也只給
+/// 一級——縮進說的是「層次」，不是「括號數」。
+///
+/// `closing` 是**新那一行開頭第一個非空白字符**：它要是 `}`/`]`/`)` 這種
+/// `@outdent`，就退一級。這一半讓 `}` 自己回到和 `{` 那一行齊平。
+pub fn open_levels(
+    language: Language,
+    source: &str,
+    tree: &Tree,
+    byte: usize,
+    before_line: usize,
+    closing: Option<char>,
+) -> usize {
+    let Some(query) = language.indent_query() else { return 0 };
+    let Some(indent) = query.capture_index_for_name("indent") else { return 0 };
+    let outdent = query.capture_index_for_name("outdent");
+    let byte = byte.min(source.len());
+    // 哪些節點是 `@indent`，哪些字是 `@outdent`。節點按 **id** 記——下面是順着
+    // 祖先鏈往上走，而不是拿範圍去套。
+    let mut opens: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut shutters: Vec<String> = Vec::new();
+    let mut cursor = QueryCursor::new();
+    let mut hits = cursor.matches(query, tree.root_node(), source.as_bytes());
+    {
+        use tree_sitter::StreamingIterator as _;
+        while let Some(m) = {
+            hits.next();
+            hits.get()
+        } {
+            for capture in m.captures {
+                if Some(capture.index) == outdent {
+                    if let Ok(text) = capture.node.utf8_text(source.as_bytes()) {
+                        shutters.push(text.to_string());
+                    }
+                } else if capture.index == indent {
+                    opens.insert(capture.node.id());
+                }
+            }
+        }
+    }
+    // Warning: **順着祖先鏈走，不許拿範圍去套**（寫的時候當場撞的兩個）。
+    // ① 沒閉合的塊（`fn f() {` 正打到一半，而這正是按 Enter 的那一刻）**結束在
+    // 檔尾**，所以 `to > byte` 是假的，一級都數不出來；② 改成 `to >= byte` 又把
+    // 「光標剛好停在 `}` 後面」那一種錯數成在塊裏。祖先鏈兩種都答得對：沒閉合的
+    // 塊仍然罩着這個位置，而閉合完了的不再罩着。
+    let at = tree
+        .root_node()
+        .descendant_for_byte_range(byte, byte)
+        .unwrap_or_else(|| tree.root_node());
+    // **按「開在第幾行」數，一行只算一級**：`foo(bar(` 兩個括號開在同一行，helix
+    // 那一支也只給一級——縮進說的是層次，不是括號數。`call_expression` 和它的
+    // `arguments` 也是這麼合成一級的。
+    //
+    // **`before_line` 是「正在算哪一行」**——只數開在它**之前**的那些。這一格分得
+    // 出兩種問法（2026-10-08 寫的時候兩次撞在它上面）：
+    //
+    // - 按 Enter 要算的是**新開的那一行**，所以傳光標那一行 ＋ 1：`go(` 這種「這一
+    //   行剛開的括號」算數，而它正是作者問的那一條。
+    // - 拿上一行當基準的時候傳**那一行自己**：`call_expression` 就開在那一行的第一
+    //   個字上，算進去的話兩頭一樣多，差就成了零——那正是這個功能整個不生效的樣子。
+    let mut lines: Vec<usize> = Vec::new();
+    let mut node = Some(at);
+    while let Some(one) = node {
+        if opens.contains(&one.id()) {
+            let line = source[..one.start_byte()].matches('\n').count();
+            if line < before_line && !lines.contains(&line) {
+                lines.push(line);
+            }
+        }
+        node = one.parent();
+    }
+    let mut level = lines.len();
+    // 新那一行開頭是個 `@outdent` 的字：退一級，它自己回到和開的那一行齊平。
+    // 查的是**字**不是節點——那一行還沒進語法樹，它正要被打出來。
+    if let Some(c) = closing {
+        if shutters.iter().any(|t| t.starts_with(c)) {
+            level = level.saturating_sub(1);
+        }
+    }
+    level
 }
 
 /// **上一份源碼和這一份差在哪**——回一個 `Tree::edit` 吃得下的改動（#423）。
@@ -652,6 +812,7 @@ fn span(start: usize, end: usize, token: Token) -> Span {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     /// **自己寫的那份查詢，每一種語言各釘一格**（2026-10-06）。
     ///
@@ -710,7 +871,58 @@ mod tests {
             );
         }
     }
-    use super::*;
+
+    /// **行尾一個 `(`，下一行開着一級**（2026-10-08，作者問的那一條）。
+    ///
+    /// 查過的三家寫在 [`Language::indents`] 上：vim 的 `autoindent` 不縮、
+    /// `smartindent` 只認 `{`、`cindent` 和 helix 都縮。這裏照 helix。
+    ///
+    /// Warning: **數的是「開着幾級」，不是「這一行該縮多少」**。那一步在編輯器那一頭：
+    /// 拿這個數和**上一行**的數相減，差多少就在上一行的真實縮進上加多少——helix 的
+    /// `Hybrid` 就是這麼做的，它自己的註釋寫着理由：「incomplete queries, incomplete
+    /// source code & differing indentation styles」。
+    #[test]
+    fn an_open_bracket_opens_a_level() {
+        // 問的是「新開的那一行」，所以門檻是這個位置那一行 ＋ 1——同 Enter 那一刻。
+        let at = |source: &str, byte: usize, closing: Option<char>| {
+            let tree = parse(Language::Rust, source, None).expect("解析得了");
+            let line = source[..byte.min(source.len())].matches('\n').count();
+            open_levels(Language::Rust, source, &tree, byte, line + 1, closing)
+        };
+        // 塊裏頭：一級。
+        let source = "fn f() {\n    let x = 1;\n}\n";
+        let in_block = source.find("    let").expect("在") + 4;
+        assert_eq!(at(source, in_block, None), 1);
+        // 塊外頭：零級。
+        assert_eq!(at(source, 0, None), 0);
+
+        // **行尾一個 `(`，而括號還開着：兩級**（塊一級、調用一級）——作者問的就是它。
+        let source = "fn f() {\n    go(\n        1,\n    );\n}\n";
+        let after_paren = source.find("go(").expect("在") + 3;
+        assert_eq!(at(source, after_paren, None), 2, "塊一級、括號一級");
+
+        // Warning: **同一行開了又關的不算**——`go(1);` 整個在這一行裏，下一行只該回到塊
+        // 那一級。
+        let source = "fn f() {\n    go(1);\n}\n";
+        let after_call = source.find("go(1);").expect("在") + 6;
+        assert_eq!(at(source, after_call, None), 1);
+
+        // 新那一行開頭是 `}`：退一級，它自己回到和 `{` 齊平。
+        let source = "fn f() {\n    let x = 1;\n}\n";
+        assert_eq!(at(source, in_block, Some('}')), 0);
+
+        // Warning: **半截的源碼問不出東西來**（2026-10-08 量的）：`fn f() {` 自己一份檔，
+        // tree-sitter 給的是 `(source_file (ERROR …))`——**一個 block 節點都沒有**，
+        // 所以這一支答 0。那一刻靠的是上一行的真實縮進（見上面那一段），和從前一樣。
+        assert_eq!(at("fn f() {\n", 9, None), 0, "半截的源碼：答不出來，不是答錯");
+    }
+
+    /// **縮進是語法本身的那兩種不給查詢**（TOML／YAML）。
+    #[test]
+    fn where_indentation_is_the_syntax_nothing_is_added() {
+        assert_eq!(Language::Toml.indents(), "");
+        assert_eq!(Language::Yaml.indents(), "");
+    }
 
     fn lines(text: &str) -> Vec<String> {
         text.lines().map(str::to_owned).collect()
@@ -822,8 +1034,9 @@ mod tests {
             assert!(now.is_char_boundary(edit.new_end_byte), "new end at {n}");
         }
     }
-}
 
+
+}
 #[cfg(test)]
 mod how_long_does_it_take {
     use super::*;
@@ -1038,4 +1251,3 @@ struct 三 { 甲: u8 }
         println!();
     }
 }
-

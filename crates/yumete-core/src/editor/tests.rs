@@ -23473,3 +23473,45 @@ fn typing_an_open_bracket_asks_what_goes_in_it() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
+///
+/// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是
+/// helix 那一套：語法樹說差幾級，上一行的真實縮進當基準（helix 的 `Hybrid`）。
+#[test]
+fn an_open_bracket_indents_the_next_line_one_more_level() {
+    let code = |text: &str| {
+        let dir = std::env::temp_dir().join(format!("yumete-tsindent-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("a.rs");
+        std::fs::write(&file, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        ed
+    };
+    // 塊裏一行，行尾是 `(`，而括號在下面關着——下一行該縮到兩級。
+    let mut ed = code("fn f() {\n    go(\n        1,\n    );\n}\n");
+    ed.goto_line(2);
+    press(&mut ed, "A");
+    ed.on_key(Key::Enter);
+    let line = ed.current_buffer().text().lines().nth(2).unwrap_or_default().to_string();
+    assert_eq!(line, "        ", "八格：塊一級 ＋ 括號一級");
+
+    // 行尾不是括號：照抄上一行（從前的 autoindent）。
+    let mut ed = code("fn f() {\n    let x = 1;\n}\n");
+    ed.goto_line(2);
+    press(&mut ed, "A");
+    ed.on_key(Key::Enter);
+    let line = ed.current_buffer().text().lines().nth(2).unwrap_or_default().to_string();
+    assert_eq!(line, "    ", "四格：和上一行齊");
+
+    // Warning: **半截的源碼問不出東西，就照抄上一行**——不是答錯，是答不出來。
+    // `fn f() {` 自己一份檔，tree-sitter 給的是 `(source_file (ERROR …))`。
+    let mut ed = code("fn f() {\n");
+    ed.goto_line(1);
+    press(&mut ed, "A");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "fn f() {\n\n", "答不出來就不動");
+
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!("yumete-tsindent-{}", std::process::id())));
+}

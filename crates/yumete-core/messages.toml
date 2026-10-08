@@ -1321,12 +1321,13 @@ en = "write it out as html or typst, layout and all"
 find = "導出 导出 輸出 输出 html typst 排版"
 
 [[message]]
-# :info ——這份檔案是什麼
+# :info ——這份文檔是什麼
 key = "cmd.commands.file-info"
-zht = "這份檔案：位置、大小、行字數、語言、哪幾個服務器在看着它"
-zhs = "这份档案：位置、大小、行字数、语言、哪几个服务器在看着它"
+zht = "這份文檔：位置、大小、行字數、語言、哪幾個服務器同它關聯"
+zhs = "这份文档：位置、大小、行字数、语言、哪几个服务器同它关联"
 en = "this file: where it is, how big, how many lines and characters, its language, which servers watch it"
 find = "檔案 档案 文件 信息 元數據 元数据 位置 大小 info file metadata"
+
 [[message]]
 # : 命令選單裏 format 那一項的說明（commands 組）
 key = "cmd.commands.format"
