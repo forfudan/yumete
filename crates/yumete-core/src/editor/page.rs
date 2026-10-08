@@ -1367,6 +1367,16 @@ impl Editor {
         self.ask_what_comes_next(false);
     }
 
+    /// **有一句補全的問題等着發嗎**（2026-10-08）。
+    ///
+    /// 前端拿這一句決定要不要**現在就把 `didChange` 發出去**：那一發平常按
+    /// 300 毫秒節流，而補全要等服務器收到剛打的那一個字母才答得出來，於是
+    /// 單子慢上那一拍。原話：「this autocompletion should be instant (not as
+    /// delayed by 300ms as docs)」。
+    pub fn completion_is_waiting(&self) -> bool {
+        self.completion_query.is_some()
+    }
+
     /// `C-n` 問出去的那一句，給前端發（下一趟循環取走）。
     pub fn take_completion_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         self.completion_query.take()

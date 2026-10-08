@@ -491,8 +491,17 @@ impl Servers {
         }
         // **Wait for the typing to stop.** `touched` is reset by every change,
         // so this fires once, 300 ms after the last one.
+        //
+        // Warning: **有一句補全的問題等著的時候不節流**（2026-10-08 報的：「this
+        // autocompletion should be instant (not as delayed by 300ms as docs)」）。
+        // 補全那一問要等服務器先收到剛打的那一個字母（見 [`Self::ask_next`]），
+        // 所以節流的那三百毫秒整條加在單子前面。這一句是「人剛打了一個字母、
+        // 正等著單子」的唯一時刻，而真正的語言服務器客戶端本來就每一次改動都發
+        // （見 [`SETTLE`] 那段）——打字中那一暫不節流，其餘照舊。
+        let urgent = editor.completion_is_waiting();
         match known {
             None => {}
+            Some(_) if urgent => self.touched = None,
             Some(_) => {
                 let now = std::time::Instant::now();
                 match self.touched {
@@ -1390,6 +1399,29 @@ mod tests {
         editor.on_key(yumete_core::input::Key::Char('x'));
         // The first pass after a change starts the settle; the second sends.
         servers.follow(&mut editor, &config);
+        servers.follow(&mut editor, &config);
+        assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didChange");
+    }
+
+    /// **有一張補全單子等著的時候，那一發不等節流**（2026-10-08 報的）。
+    ///
+    /// 上一支測的是平常那條路：第一趡起表、第二趡才發。補全單子要等這一發
+    /// 才問得出去，所以那三百毫秒整條加在單子前面——「this autocompletion should
+    /// be instant」。
+    #[test]
+    fn a_waiting_completion_sends_the_text_at_once() {
+        let config =
+            yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+        let (mut editor, _path) = editor_on("b.rs", "fn main() {}\n");
+        let (mut servers, heard, _tell) = Servers::pretend("rust");
+
+        servers.follow(&mut editor, &config);
+        assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didOpen");
+
+        editor.on_key(yumete_core::input::Key::Char('i'));
+        editor.on_key(yumete_core::input::Key::Char('x'));
+        assert!(editor.completion_is_waiting(), "打了一個字母，補全問題排上了");
+        // **一趡就發出去**——不是第二趡。
         servers.follow(&mut editor, &config);
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didChange");
     }
