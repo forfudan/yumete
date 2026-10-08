@@ -23210,3 +23210,25 @@ fn enter_and_o_carry_the_indent_down_in_code() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.current_buffer().text(), "    甲\n\n");
 }
+
+/// **`:/` 和 `:?` 什麼都不做**（2026-10-08 定）。
+///
+/// 2026-10-06 到 10-08 之間它們是 `/` 和 `?` 的別名——`:/冬天` 真的跳過去。拿掉的理由
+/// 是它**像 vim 而不是 vim**：那邊 `:/式子` 是一個行地址（`:/foo/d` ＝ 跳到配得上的那
+/// 一行再刪掉它），這裏跳的是匹配那一格。判詞：「vim 有的話就对齐它。不要让用户有
+/// unexpected。两步走，先删掉当前实现（宁可没有不能让人有错误预期），然后再实现行
+/// 地址。」
+#[test]
+fn a_colon_slash_is_not_a_command_at_all() {
+    let mut ed = typed("那年冬天。\n冬天很冷。\n");
+    ed.goto_line(1);
+    let was = ed.caret_in_line();
+    for line in [":/冬天", ":?冬天", ":/"] {
+        assert!(ed.execute(line).is_err(), "{line} 不是一條命令");
+        assert_eq!(ed.caret_in_line(), was, "{line} 也不許挪光標");
+    }
+    // 真的那個搜索照舊。
+    press(&mut ed, "/冬天");
+    ed.on_key(Key::Enter);
+    assert_ne!(ed.caret_in_line(), was, "`/` 自己走得動");
+}
