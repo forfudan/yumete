@@ -20262,6 +20262,44 @@ tags、文本對象、縮進查詢都沒有——這兩門的塊是 `begin`／`e
 **§5.66 那六門到此全部做完**，共八門新語言（匯編算兩門），release 二進制
 **15.90 MB**（做這一輪之前是 15.59，再之前九門語法時是 13.6）。
 
+## 5.122 表格要等光標站進去一次才不折行（2026-10-08 報的）
+
+> `:info` print a table. However, this table is wrapped. Rembember that we do not wrap
+> table for markdown files. Interestingly, as soon as I click any place of this file, the
+> table is not wrapped (good behaviour). Please check the reason?
+
+**量出來的原因**：折行那一問走 `table_row_at` → `table_lines_at`，而後者第一句就是
+`let view = self.table.as_ref()?`。`self.table` 只由 `find_the_table_here` 建，而那一支
+要求「光標**此刻**站在一個 `|` 行上」。實測：一份 md，光標在第 1 行時
+`table_row_at(2)` 是 `false`，按兩下 `j` 走進表格後是 `true`。所以 `:info` 剛開出來、
+光標停在標題那行的時候整張表是折的，點進去一下就正了。
+
+**他定的做法**（不是全文掃描，也不是照舊）：
+
+> I think a balanced method for Option 1 is to check whether top 100 lines (or the
+> currently visible lines) belongs to a md table. This is balanced because we only check
+> the top 100 lines (or currently visible lines). We do not care the rest of the document
+> because users have to use cursor to navigate to them.
+
+實現成**就地問這一行**：折行那一問本來就只對畫得出來的行問，所以「就地」正好是
+他說的「看得見的那幾行」，而且比寫死 100 行更準。`mdtable::region` 只往上下走到
+表格的邊為止。
+
+⚠ **四道閘的順序是量出來的，不是排的**：
+
+1. `opens_with_a_pipe(line)`——新寫的，**一個字一個字讀 rope，不造字串**；
+2. `table_view_opens_itself()` 與 `syntax() == Markdown`；
+3. `block_of(line).is_literal()`——圍欄裏的表格是例子不是表格；
+4. `mdtable::region` ＋ `md_table_parses`。
+
+把第 1 道排到第 3 道後面，`a_paste_asked_for_a_million_stops_at_the_ceiling`
+**從 0.99 秒變成 41 秒**（`block_of` 按版本緩存，而那支測試每貼一次就換一個版本）。
+同樣地，`mdtable::is_row` 收的是 `&str`，要先把整行物化再 `chars().count()`——一行兩萬
+個字的文件上每幀每行問一次就是平方，所以第 1 道閘自己讀 rope。
+
+兩支測試：`a_markdown_table_does_not_wrap_before_the_cursor_has_been_in_it`、
+`a_table_quoted_in_a_fence_still_wraps`。
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 報的是選單上兩行「大綱」。`s` 是 2026-10-06 **有意**加的（註釋：「helix 把『這份檔裏的

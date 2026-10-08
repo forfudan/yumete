@@ -23516,3 +23516,37 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
 
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!("yumete-tsindent-{}", std::process::id())));
 }
+
+
+/// **表格不折行，不等光標站進去**（2026-10-08 報的）。
+///
+/// 原話：「`:info` print a table. However, this table is wrapped. … as soon as I click
+/// any place of this file, the table is not wrapped」。根子是 `table_lines_at` 要
+/// `self.table` 先存在，而它只在光標站到 `|` 行上那一刻才建。
+#[test]
+fn a_markdown_table_does_not_wrap_before_the_cursor_has_been_in_it() {
+    let mut ed = typed("# 題\n\n| 一個很長很長的欄位名字 | 另一個很長很長的值 |\n| --- | --- |\n| 位置 | x |\n");
+    ed.set_wrap_width(40);
+    assert!(ed.table().is_none(), "光標在標題那行，表格視圖還沒建");
+    for line in 2..=4 {
+        assert!(ed.table_row_at(line), "第 {line} 行是表格的一行，不該折");
+    }
+    // 散文與標題照舊折。
+    assert!(!ed.table_row_at(0), "標題不是表格");
+    assert!(!ed.table_row_at(1), "空行不是表格");
+    // 走進去再走出來，答案不變。
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('j'));
+    assert!(ed.table_row_at(2));
+    ed.on_key(Key::Char('k'));
+    ed.on_key(Key::Char('k'));
+    assert!(ed.table_row_at(2), "走出來了也還是表格");
+}
+
+/// 引在圍欄裏的表格是「表格的例子」，照舊折行（手冊裏好幾張）。
+#[test]
+fn a_table_quoted_in_a_fence_still_wraps() {
+    let mut ed = typed("```\n| a | b |\n| --- | --- |\n```\n");
+    ed.set_wrap_width(40);
+    assert!(!ed.table_row_at(1), "圍欄裏的不算表格");
+}

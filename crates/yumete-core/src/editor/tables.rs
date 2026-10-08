@@ -1366,7 +1366,51 @@ impl Editor {
     /// grid is one row, however long it is, because a cell that has wrapped
     /// onto the next screen row is no longer in its column.
     pub fn table_row_at(&self, line: usize) -> bool {
-        self.table_lines_at(line).is_some()
+        if self.table_lines_at(line).is_some() {
+            return true;
+        }
+        // **光標還沒站進去過的時候，這一行自己也說得出來**（2026-10-08 報的）。
+        //
+        // 上面那一句要 `self.table` 先存在，而它只由 [`Self::find_the_table_here`] 建，
+        // 那一支又要求「光標此刻站在一個 `|` 行上」——於是 `:info` 剛開出來、
+        // 光標在標題那行的時候，整張表是折的，點進去一下就正了（實測：光標在第
+        // 1 行時 `table_row_at(2)` 是 `false`，按兩下 `j` 走進表格後是 `true`）。
+        //
+        // **不走全文掃描**（[`Self::with_md_tables`]），而是就地問這一行——他定的：
+        // 「only check the top 100 lines (or currently visible lines) … we do not care the
+        // rest of the document because users have to use cursor to navigate to them」。
+        // 折行那一問只對**畫得出來的行**問，所以「就地」正好是「看得見的那幾行」；
+        // `mdtable::region` 只往上下走到表格的邊為止，散文行第一句就回 `None`。
+        // Warning: **最便宜的那一句先問**。下面兩句裏 `block_of` 要掃一遍團塊
+        // （按版本緩存，可每改一次就重掃一次），而絕大多數行根本不以 `|` 開頭。
+        // 順序搭錯的代價量過：`a_paste_asked_for_a_million_stops_at_the_ceiling`
+        // 在 0.99 秒與 41 秒之間。
+        if !self.opens_with_a_pipe(line) {
+            return false;
+        }
+        if !self.table_view_opens_itself() || self.syntax() != crate::syntax::Syntax::Markdown {
+            return false;
+        }
+        // 引在圍欄裏的表格是「表格的例子」，不是表格（手冊裏好幾張）。
+        // `block_of` 是一次查表，不是 `blocks_through` 那種整段拷貝。
+        if self.block_of(line).is_literal() {
+            return false;
+        }
+        crate::mdtable::region(|i| self.line_text(i), line)
+            .is_some_and(|region| self.md_table_parses(&region))
+    }
+
+    /// 這一行是不是以 `|` 開頭並且後面還有字——**一個字一個字讀，不造字串**。
+    ///
+    /// 與 `mdtable::is_row` 同一個意思，差別只在成本：那一支收 `&str`，而這裏要問的行
+    /// 可能有兩萬個字。散文行第一個非空白字就回假。
+    fn opens_with_a_pipe(&self, line: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return false;
+        }
+        let mut chars = rope.line(line).chars().skip_while(|c| *c == ' ' || *c == '\t');
+        chars.next() == Some('|') && chars.any(|c| !c.is_whitespace())
     }
 
     /// Where `line`'s cells are told apart, when it belongs to a table that is
