@@ -129,6 +129,8 @@ struct Server {
     /// **簽名那一問發出去的號碼**（2026-10-08）。同 `asked_what`：答案回來要對得上
     /// 號，不然是上一問的殘響。
     asked_signature: Option<i64>,
+    /// 簽名回空之後那一句補問的 hover（2026-10-08）。
+    asked_signature_doc: Option<i64>,
     /// **這一個服務器此刻開着幾件活**（`$/progress`，2026-10-01）。
     ///
     /// Warning: **數的是服務器自己說的，不是我們猜的。** 從前轉圈那八個點問的是
@@ -171,6 +173,8 @@ struct Heard {
     place: Option<Option<lsp::Place>>,
     offers: Option<Vec<lsp::Offer>>,
     signature: Option<Option<lsp::Signature>>,
+    /// 簽名回空之後那一句補問的 hover（2026-10-08）。
+    signature_doc: Option<Option<lsp::Told>>,
 }
 
 impl Heard {
@@ -194,6 +198,13 @@ impl Heard {
             return;
         }
         self.signature = Some(one);
+    }
+
+    fn signature_doc(&mut self, told: Option<lsp::Told>) {
+        if matches!(self.signature_doc, Some(Some(_))) {
+            return;
+        }
+        self.signature_doc = Some(told);
     }
 
     fn next_up(&mut self, offers: Vec<lsp::Offer>) {
@@ -227,6 +238,10 @@ impl Heard {
             Some(Some(one)) => editor.show_signature(Some(one)),
             Some(None) if !waiting(|s| s.asked_signature) => editor.show_signature(None),
             _ => {}
+        }
+        // **回退那一句**：只取正文第一段，答空就什麼都不畫。
+        if let Some(Some(told)) = self.signature_doc {
+            editor.show_signature_from_doc(&told.text);
         }
     }
 }
@@ -813,6 +828,27 @@ impl Servers {
         );
     }
 
+    /// **簽名回空之後補問的那一句 hover**（2026-10-08 定）。
+    ///
+    /// 量出來的：rust-analyzer 對**宏**的 `signatureHelp` 一律回 `null`（`println!(`
+    /// 就是），可同一處的 `hover` 答得好好的——兩個是兩種請求，前者問的是「你站在
+    /// 哪一次調用裏」，後者問的是「光標下那個符號」，而宏不是一次調用。
+    pub fn ask_signature_doc(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        let Some(language) = Self::language_of(editor) else { return };
+        if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
+            return;
+        }
+        if !self.told_the_latest(editor) {
+            return;
+        }
+        let Some((path, line, column)) = editor.take_signature_doc_query() else { return };
+        self.ask_them_all(
+            language,
+            |server, id| server.asked_signature_doc = Some(id),
+            |id| lsp::hover(id, &path, line, column),
+        );
+    }
+
     /// **Send the 「what comes next?」 question** (`C-n` and every letter typed,
     /// #53 ④).
     ///
@@ -900,6 +936,11 @@ impl Servers {
                             server.asked_signature = None;
                             anything = true;
                             heard.signature(signature);
+                        } else if server.asked_signature_doc == Some(id) {
+                            // 簽名回空之後補問的那一句（2026-10-08）。
+                            server.asked_signature_doc = None;
+                            anything = true;
+                            heard.signature_doc(told);
                         } else if server.asked_next == Some(id) {
                             server.asked_next = None;
                             anything = true;
@@ -1268,6 +1309,7 @@ fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::
         asked_where: None,
         asked_what: None,
         asked_signature: None,
+        asked_signature_doc: None,
         working: HashSet::new(),
         started: std::time::Instant::now(),
         working_since: None,
@@ -1355,6 +1397,7 @@ mod tests {
                     asked_where: None,
                     asked_what: None,
                     asked_signature: None,
+                    asked_signature_doc: None,
                     working: HashSet::new(),
                     started: std::time::Instant::now(),
                     working_since: None,

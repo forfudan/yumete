@@ -20300,6 +20300,53 @@ tags、文本對象、縮進查詢都沒有——這兩門的塊是 `begin`／`e
 兩支測試：`a_markdown_table_does_not_wrap_before_the_cursor_has_been_in_it`、
 `a_table_quoted_in_a_fence_still_wraps`。
 
+## 5.123 宏沒有簽名，那就拿文檔的第一段頂上（2026-10-08 報的）
+
+> 我在 println! 上按 space k 是有文檔的。
+
+兩件事都是真的，因為它們是**兩種請求**。拿真 rust-analyzer（1.99.0）同一份檔、
+同一次會話量的：
+
+| 打在哪 | `signatureHelp` | `hover` |
+| --- | --- | --- |
+| `v.push(` | `fn push(&mut self, value: i32)` | 有 |
+| `Command::new(` | `fn new<S: AsRef<OsStr>>(program: &str) -> Command` | 有 |
+| **`println!(`** | **`null`** | **有** |
+
+根本的分别：hover 問的是「光標下那個符號」（宏、類型、變量、模塊它都答），
+signatureHelp 問的是「你正站在哪一次調用裏」——**宏不是一次調用**。
+
+① **回退**（他定的）：簽名回空就在**同一處**問一句 hover，框裏最多畫**正文第一段**，
+後面還有就單排一個 `…`。`lsp::first_paragraph` 跳過圍欄與 `---`（rust-analyzer 把
+簽名排在前面），第一行真正的散文起算一段。
+
+三家都不在插入態冒整段文檔，這是那一段限額的來源（都是在檔裏查的）：
+
+| | 插入態 | 整段文檔 |
+| --- | --- | --- |
+| Neovim 0.11 | `i_CTRL-S` → `vim.lsp.buf.signature_help()`（出廠默認，`lsp.txt:88`） | `K`，Normal |
+| helix | 自動簽名，沒有插入態的 hover 鍵 | `空格 k`，要先 `Esc` |
+| VS Code | `Ctrl+Shift+Space` | `Ctrl+K Ctrl+I` |
+
+② **標題改成「簽名」**（`lsp.signature`）。他的理由：「因為現在看來他們本質不同」。
+同一扇浮窗現在答兩種問題，名字是唯一說得出「剛才答的是哪一個」的地方。
+⚠ 回退的時候框裏是一段文檔而標題仍寫「簽名」——**按場合命名，不按內容**，当面說過。
+
+### 順帶量到、還沒修的一條
+
+**觸發字符是服務器自己說的，而我們寫死了 `(` 與 `,`。** 實測 pylsp 的 initialize 回話：
+
+```json
+"signatureHelpProvider": {"triggerCharacters": ["(", ",", "="]}
+```
+
+它要的第三個是 `=`（關鍵字參數），所以 python 裏打 `f(x=` 不會問。**他定「這個之後再修」。**
+
+順帶排掉的一個誤會：截圖上 `fn new<S: AsRef<OsStr>>(program: **bool**) -> Command` 不是
+我們畫錯——**複現了**：`Command::new(` 沒關起來的時候，解析器把下一句
+吐進去當參數，而下一句是 `std::env::var(…).is_ok_and(…)`，那是個 `bool`，於是
+`S` 跟著 `bool` 合了一。服務器真的就是這麼說的，我們照字面畫。
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 報的是選單上兩行「大綱」。`s` 是 2026-10-06 **有意**加的（註釋：「helix 把『這份檔裏的

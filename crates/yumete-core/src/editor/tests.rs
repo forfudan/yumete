@@ -23475,6 +23475,53 @@ fn typing_an_open_bracket_asks_what_goes_in_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **簽名回空就在同一處補問一句 hover**（2026-10-08 定）。
+///
+/// 量出來的：rust-analyzer 對**宏**的 `signatureHelp` 一律回 `null`，可同一處的
+/// `hover` 答得好好的（`println!` 就是）。回退那一段**最多一段**。
+#[test]
+fn no_signature_falls_back_to_one_paragraph_of_the_doc() {
+    let dir = std::env::temp_dir().join(format!("yumete-sigdoc-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn main() {\n    println!\n}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.goto_line(2);
+    press(&mut ed, "A");
+
+    ed.on_key(Key::Char('('));
+    assert!(ed.take_signature_query().is_some(), "`(` 問了一次");
+    // 服務器說「沒有簽名」——那就在同一處排一句 hover。
+    ed.show_signature(None);
+    assert!(ed.take_signature_doc_query().is_some(), "補問那一句排上了");
+    // 而且只排一次：取走了就沒了。
+    assert!(ed.take_signature_doc_query().is_none(), "只問一遍");
+
+    // 答案回來：只留正文第一段，後面還有就單排一個 `…`。
+    ed.show_signature_from_doc(
+        "```rust\nstd::macros\n```\n\n---\n\nPrints to the standard output, with a newline.\n\nOn all platforms…\n",
+    );
+    assert_eq!(
+        ed.signature_here().map(|s| s.label.as_str()),
+        Some("Prints to the standard output, with a newline.\n…"),
+    );
+    // 回退那一段沒有「正在填第幾個參數」可說。
+    assert!(ed.signature_here().and_then(|s| s.active).is_none(), "沒有參數可加重");
+
+    // 簽名真的有的時候，一句 hover 都不補問。
+    ed.on_key(Key::Char(','));
+    assert!(ed.take_signature_query().is_some());
+    ed.show_signature(Some(crate::lsp::Signature {
+        label: "fn push(&mut self, value: T)".into(),
+        active: None,
+    }));
+    assert!(ed.take_signature_doc_query().is_none(), "有簽名就不再問");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
 ///
 /// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是

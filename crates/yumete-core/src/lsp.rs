@@ -686,6 +686,61 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
 /// Warning: **這不是片段引擎**——它不給跳轉，只保證插進去的是字，不是語法。真要做
 /// 跳轉是另一件事（報 `snippetSupport: true`、存一列洞、`Tab` 走），而那件事沒做
 /// 之前，這一支是那條「稿子裏不許出現沒打過的字」的底線。
+/// **一段 hover 裏的「正文第一段」**（2026-10-08 定）。
+///
+/// 簽名回空時那一句回退用的（見 `Editor::show_signature_from_doc`）。三家都不在
+/// 插入態冒整段文檔，所以最多一段，後面還有就單排一個 `…`。
+///
+/// 服務器把簽名與說明排在一起：rust-analyzer 的 hover 是「一對圍欄 ＋ `---`
+/// ＋ 正文」。所以跳過圍欄裏的東西與分隔線，第一行真正的散文起算一段。
+///
+/// `None` ＝整段沒有一句散文（只有簽名）——那就什麼都不畫，寧可不說。
+pub fn first_paragraph(told: &str) -> Option<String> {
+    let mut fenced = false;
+    let mut said: Vec<&str> = Vec::new();
+    let mut more = false;
+    for line in told.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            // 圍欄開著的時候碰到第二道就是關；收過一段之後碰到圍欄就是「後面還有」。
+            if !said.is_empty() {
+                more = true;
+                break;
+            }
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        // `---` 是 rust-analyzer 拿來隔開簽名與說明的，不是正文。
+        if trimmed.chars().all(|c| c == '-') && trimmed.len() >= 3 {
+            continue;
+        }
+        if trimmed.is_empty() {
+            if said.is_empty() {
+                continue;
+            }
+            // 一段完了。後面還有沒有字，決定要不要那一個 `…`。
+            more = told
+                .lines()
+                .skip_while(|l| !std::ptr::eq(l.as_ptr(), line.as_ptr()))
+                .skip(1)
+                .any(|l| !l.trim().is_empty());
+            break;
+        }
+        said.push(trimmed);
+    }
+    if said.is_empty() {
+        return None;
+    }
+    let mut out = said.join("\n");
+    if more {
+        out.push_str("\n…");
+    }
+    Some(out)
+}
+
 fn without_the_holes(snippet: &str) -> String {
     let mut out = String::new();
     let mut chars = snippet.chars().peekable();
@@ -1377,5 +1432,28 @@ mod tests {
         let open = did_open(Path::new("/a.rs"), "rust", 1, "a\u{1}b");
         let parsed: serde_json::Value = serde_json::from_str(&open).expect("valid JSON");
         assert_eq!(parsed["params"]["textDocument"]["text"], "a\u{1}b");
+    }
+
+    /// **回退那一段：跳過圍欄與分隔線，只取第一段**（2026-10-08）。
+    #[test]
+    fn the_first_paragraph_of_a_hover_is_the_prose_not_the_signature() {
+        // rust-analyzer 對 `println!` 的 hover，形狀是量出來的。
+        let told = "```rust\nstd::macros\n```\n\n```rust\nmacro_rules! println\n```\n\n---\n\nPrints to the standard output, with a newline.\n\nOn all platforms, the newline is the LINE FEED character.\n";
+        assert_eq!(
+            first_paragraph(told).as_deref(),
+            Some("Prints to the standard output, with a newline.\n…"),
+            "一段，後面還有就單排一個 …"
+        );
+        // 最後一段：沒有 `…`。
+        let one = "```rust\nfn f()\n```\n\n---\n\nDoes a thing.\n";
+        assert_eq!(first_paragraph(one).as_deref(), Some("Does a thing."));
+        // 一段可以是好幾行，空行才斷。
+        let two = "---\n\nOne line\nand its continuation.\n\nNext paragraph.\n";
+        assert_eq!(
+            first_paragraph(two).as_deref(),
+            Some("One line\nand its continuation.\n…")
+        );
+        // 只有簽名，沒有散文：什麼都不畫。
+        assert_eq!(first_paragraph("```rust\nfn f()\n```\n"), None);
     }
 }

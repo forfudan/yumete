@@ -3332,9 +3332,17 @@ one**, `Esc` puts it away. What goes in is the clean name — it will not drag a
 `(${1:…})` placeholder form.
 
 **Typing `(` asks what goes in it.** In insert mode an open bracket — and every `,`
-after it — asks the server for the call's signature, and it floats where the docs do:
-`fn push(&mut self, value: T)`. Nothing to press. `)`, `Esc`, or leaving insert mode
-puts it away. (Which parameter you are on is **not** emphasised yet.)
+after it — asks the server for the call's signature, and it floats **beside the caret**
+under the name 「簽名」: `fn push(&mut self, value: T)`, with **the parameter you are
+filling** in gold. Nothing to press. `)`, `Esc`, or leaving insert mode puts it away.
+
+**A macro has no signature, so the first paragraph of its doc stands in.** Measured:
+rust-analyzer answers `null` to `signatureHelp` for every macro — a macro is not a call
+— while `hover` at the same place answers perfectly well. So when the signature comes
+back empty the editor asks `hover` instead and draws **one paragraph**, with a `…` on
+its own line if there is more. `println!(` gives you 「Prints to the standard output,
+with a newline.」 The whole page is still `空格 k`'s job: no editor worth copying puts a
+screenful of documentation up while you are typing.
 
 Warning: **the signature and a diagnostic never fight over that float**: a diagnostic is
 never drawn in insert mode (see below), which is exactly when the signature is.
