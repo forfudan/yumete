@@ -607,7 +607,6 @@ impl Editor {
         self.search.folded.clear();
         self.search.stale = false;
         self.search.cut = false;
-        self.search.skipped = 0;
         self.search.bad_glob = false;
         // **The pattern hands the search to the panel, and the page follows.**
         // One 「what am I looking for」 with two ways in: the highlight and
@@ -748,7 +747,6 @@ impl Editor {
                     let walked = walk_and_search(&hunt, &sieve, &mut stop, &mut take);
                     self.search.files.extend(files);
                     self.search.cut = walked.cut;
-                    self.search.skipped = walked.skipped;
                 }
                 false if self.in_the_background => {
                     self.search_in_the_background(root.clone(), sieve, look, unsaved, here, going)
@@ -765,7 +763,6 @@ impl Editor {
                     let walked = walk_and_search(&hunt, &sieve, &mut stop, &mut take);
                     self.search.files.extend(files);
                     self.search.cut = walked.cut;
-                    self.search.skipped = walked.skipped;
                 }
             }
             self.search.root = Some(root);
@@ -2416,7 +2413,7 @@ impl Editor {
                 // 收的那一頭沒了（編輯器關了，或者這一趟被頂掉了）就收攤。
                 say.send((generation, found)).is_ok()
             });
-            let _ = say.send((generation, Found::Done { cut: walked.cut, skipped: walked.skipped }));
+            let _ = say.send((generation, Found::Done { cut: walked.cut }));
         });
         self.searching = Some(crate::editor::Searching {
             generation,
@@ -2494,9 +2491,8 @@ impl Editor {
                     first_hit = true;
                 }
                 Found::File(path) => self.search.files.push((Some(path), None)),
-                Found::Done { cut, skipped } => {
+                Found::Done { cut } => {
                     self.search.cut = cut;
-                    self.search.skipped = skipped;
                     done = true;
                 }
             }
@@ -2766,7 +2762,7 @@ fn walk_and_search(
         walked
     });
     *stop = quit.load(std::sync::atomic::Ordering::Relaxed);
-    crate::editor::Walked { cut: walked.cut || *stop, skipped: walked.skipped }
+    crate::editor::Walked { cut: walked.cut || *stop }
 }
 
 /// 背景那一趟交回來的東西（§5.93）。
@@ -2777,7 +2773,7 @@ pub(crate) enum Found {
     /// 一個**有**命中的檔，照走到的次序。
     File(std::path::PathBuf),
     /// 走完了（或者被叫停了）。
-    Done { cut: bool, skipped: usize },
+    Done { cut: bool },
 }
 
 /// **一行，問一遍，命中當場交出去** —— 流式搜索的那一格。

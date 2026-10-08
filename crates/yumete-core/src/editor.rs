@@ -406,11 +406,6 @@ const LISTING_LIMIT: usize = 500;
 /// 二〇二五年 in the book and bury the finding the check exists for.
 const EVERY_FONT_HAS: [char; 2] = ['〇', '々'];
 
-/// The largest file `:grep` will read. A manuscript chapter is kilobytes;
-/// anything above this is data that happens to live in the same directory.
-const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
-
-
 /// How much of a project `:word-discover` reads before it stops.
 ///
 /// The three signals are ratios, so more text only sharpens them; this bound
@@ -1569,9 +1564,6 @@ pub(crate) fn book_root(here: &Path) -> PathBuf {
 /// question properly; `require_git(false)` because a manuscript folder is as
 /// likely to have a `.gitignore` and no `.git` as the other way round.
 ///
-/// **`skipped` is counted because it used to be silent** (#308): a chapter over
-/// [`GREP_MAX_BYTES`] was passed over and left out of 「searched N files」 as
-/// well, so the number looked right and the answer was short.
 /// **一趟走最多看幾個檔。**
 ///
 /// 2026-09-27 報的：「位置」那一格是自由文本，隨手打一個 `/` 進去，編輯器就去
@@ -1599,7 +1591,7 @@ pub struct Sieve {
     pub exclude: String,
     /// **沒有畫面要護的那一趟，一道閘都不加**（2026-10-03 定）。
     ///
-    /// 編輯器裏那兩道閘（[`WALK_CEILING`] 與 [`GREP_MAX_BYTES`]）護的是**畫面那條
+    /// 編輯器裏那幾道闸（[`WALK_CEILING`] 那一族）護的是**畫面那條
     /// 線程**：走查跑在它上面，不封頂就是凍住。`ye --grep` 沒有畫面——它慢一點只
     /// 是慢一點，而「悄悄少看了一半還說找完了」是另一回事。原話：「rg 会打印全
     /// 部，我们会跳过大文件，也会提早停止」。
@@ -1768,14 +1760,12 @@ impl Progress {
 /// 一趟走查交代了什麼。
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct Walked {
-    /// 太大、跳過去沒看的。
-    pub skipped: usize,
     /// **沒走完就停了** —— 交出來的那張單子是半截的，呼叫方有義務說出來。
     pub cut: bool,
 }
 
-pub(crate) fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
-    *skipped += walk_inner(root, &Sieve::default(), false, f).skipped;
+pub(crate) fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
+    walk_inner(root, &Sieve::default(), false, f);
 }
 
 /// [`walk`]，但篩子由呼叫方說——`ye --files` 的 `--hidden`/`--glob=`/`--exclude=`
@@ -1895,33 +1885,20 @@ fn walk_inner(
         if is_build_output(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        // **大檔只在「要讀它」的那一趡跳過。** 管道那一邊是按行流著讀的（見
-        // `Editor::search_now_into`），一個檔多大都不佔內存，所以那裏沒有理由跳。
+        // **「太大就不搜」那一道闸沒有了**（2026-10-08 定）。從前超過 `GREP_MAX_BYTES`
+        // （4 MB）的檔在編輯器裏整個跳過，**而且不說**——`Walked.skipped` 算得出來、
+        // 存進了 `search.skipped`，全樹沒有一處讀它。一次搜索漏掉一個檔而一聲不吺，
+        // 正是 `Walked` 自己的註釋禁止的那件事。
         //
-        // Warning: **這一道閘從前漏到了挑選器上**（2026-10-08 報的：「我用 ye --files
-        // 可以搜到 assets/division/yuhao_division_golden_source.csv，但是我在 ye 中用
-        // file picker 是搜索不到這個文件的」）。那一個是 7.63 MB，超過了 4 MB 的閘；
-        // `ye --files` 撥了 `uncapped` 所以看得見，挑選器故意不撥（那兩道閘護的
-        // 是畫面線程），於是連大小那一道一起吃了。
+        // 拿掉之前量過代價並且給他看過：那個倉 9,193 個檔、共 13.3 GB，而 154 個超過
+        // 4 MB 的就占了 12.7 GB（兩個純文本語料共 7.6 GB）。看完這個數字還是定
+        // 「拿掉闸，搜全部」，理由是他自己說的：「因为搜索是默认本文件的，所以还好。
+        // 用户切换到搜索路径也必须 enter 触发搜索，因此我们算是有安全保障。」
+        // ——走整棵樹那一趡是人按下 Enter 要的，不是編輯器自己跑的。
         //
-        // 可挑選器**一個字節也不讀**——它按檔名挑，檔多大跟它沒關係。所以這一道
-        // 歸 `prose_only`，和底下那一道「二進制不交出去」同一個理由、同一個條件
-        // （那一道的註釋早就寫著「挑選器不走這一支」）。
-        if prose_only
-            && !sieve.uncapped
-            && !entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES)
-        {
-            walked.skipped += 1;
-            continue;
-        }
-        // 二進制那些不交出去，也不算進 [`WALK_CEILING`]——那個數說的是「這本稿子有
-        // 多少篇」，而 `.o` 不是一篇。
-        //
-        // ⚠ **沒有閘的那一趟不在這裏探頭**（2026-10-07）。探一次頭是開一個檔、讀
-        // 一千個字節，而 `-uu` 走一棵代碼樹**八成六是二進制**（本倉量過：51,673
-        // 個檔裏 44,503 個）——這一句於是成了整趟搜索唯一的瓶頸，二十三萬次開檔
-        // 全排在走查這一條線程上。`uncapped` 那一檔本來就不看 `seen`（見
-        // [`too_far`] 第一句），所以把探頭交給工人，一個字的語義都不改。
+        // ⚠ 兩道闸還在，別把這一條讀成「什麼都讀」：二進制那一道（頭 1 KB 有 NUL
+        // 就不讀）把 `.ygram`、`.tar` 那些擋在路外，而 [`WALK_CEILING`] 那幾道護的是
+        // 畫面線程。挑選器按檔名挑，一個字節也不讀，兩道都不走。
         if prose_only && !sieve.uncapped && looks_binary(path) {
             continue;
         }
@@ -1978,7 +1955,7 @@ pub fn detect_words_in(
 ) -> (Vec<crate::discover::Found>, usize, usize) {
     let mut text = String::new();
     let mut files = 0usize;
-    walk(root, &mut 0, &mut |path| {
+    walk(root, &mut |path| {
         if text.len() >= DISCOVER_MAX_BYTES {
             return;
         }

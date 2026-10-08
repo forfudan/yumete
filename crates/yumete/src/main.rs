@@ -1576,10 +1576,6 @@ fn the_question_will_not_parse(editor: &Editor, what: &str) -> Option<ExitCode> 
 fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
     let search = editor.search();
     let mut incomplete = false;
-    if search.skipped > 0 {
-        eprintln!("yumete: {what}: {} file(s) too big to read were skipped", search.skipped);
-        incomplete = true;
-    }
     if search.cut {
         eprintln!("yumete: {what}: the walk stopped early; this is not the whole answer");
         incomplete = true;

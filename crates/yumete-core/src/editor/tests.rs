@@ -11176,7 +11176,7 @@ fn a_file_with_a_nul_in_it_is_not_prose() {
 
     // 挑選器那一支照舊看得見它——開一個 `.png` 是正常的事，搜它不是。
     let mut all: Vec<String> = Vec::new();
-    crate::editor::walk(&dir, &mut 0, &mut |path| {
+    crate::editor::walk(&dir, &mut |path| {
         all.push(path.file_name().unwrap().to_string_lossy().into_owned());
     });
     assert_eq!(all.len(), 3, "{all:?}");
@@ -11186,12 +11186,11 @@ fn a_file_with_a_nul_in_it_is_not_prose() {
 /// **管道那一邊沒有上限，而且邊搜邊交**（2026-10-03 定）。
 ///
 /// 原話：「rg 会打印全部，我们会跳过大文件，也会提早停止」「如果我们可以做到
-/// 异步（也就是边搜边打印…）」。編輯器裏那兩道閘（[`crate::editor::GREP_MAX_BYTES`]
-/// 與 [`crate::editor::WALK_CEILING`]）護的是畫面那條線程；管道沒有畫面，少看了一半
-/// 卻說找完了纔是錯的答案。
+/// 异步（也就是边搜边打印…）」。[`crate::editor::WALK_CEILING`] 那幾道闸護的是畫面
+/// 那條線程；管道沒有畫面，少看了一半卻說找完了纔是錯的答案。
 ///
-/// 這裏驗三件：① 超過那道閘的檔在管道裏搜得到，行號還是對的；② 編輯器裏照舊跳過
-/// 並記一筆；③ 出口回 `false` 就當場收攤。
+/// 這裏驗三件：① 很大的檔在管道裏搜得到，行號還是對的；② **編輯器裏也搜得到**
+/// （2026-10-08 定：「拿掉闸，搜全部」）；③ 出口回 `false` 就當場收攝。
 #[test]
 fn the_pipe_has_no_ceiling_and_hands_hits_over_as_it_finds_them() {
     let dir = std::env::temp_dir().join(format!("yumete-nocap-{}", std::process::id()));
@@ -11199,11 +11198,11 @@ fn the_pipe_has_no_ceiling_and_hands_hits_over_as_it_finds_them() {
     std::fs::create_dir_all(&dir).unwrap();
     // 剛好越過那道閘，命中擺在最後一行——整個檔讀不下來就找不着它。
     let filler = "這是一行無關的字。\n";
-    let rows = (crate::editor::GREP_MAX_BYTES as usize / filler.len()) + 100;
+    let rows = (4 * 1024 * 1024 / filler.len()) + 100;
     let mut text = filler.repeat(rows);
     text.push_str("霜降於石階。\n");
     std::fs::write(dir.join("大稿.md"), &text).unwrap();
-    assert!(text.len() as u64 > crate::editor::GREP_MAX_BYTES, "靶子要比那道閘大");
+    assert!(text.len() > 4 * 1024 * 1024, "靶子要比從前那道闸大");
 
     let ask = |uncapped: bool| -> Editor {
         let mut ed = Editor::new();
@@ -11223,17 +11222,17 @@ fn the_pipe_has_no_ceiling_and_hands_hits_over_as_it_finds_them() {
         true
     });
     assert_eq!(got, vec![(rows, 0)], "最後一行，第一欄");
-    assert_eq!(ed.search().skipped, 0, "管道裏一個檔都不該跳過");
     assert!(!ed.search().cut, "管道裏走查不封頂");
     // 交出去的不留在名單裏——不封頂的時候名單是會漲到沒邊的。
     assert!(ed.search().hits.is_empty(), "印完就不要了");
     assert_eq!(ed.search().total, 1);
 
-    // ② 編輯器：照舊跳過，並且記一筆（面板靠它說「有東西沒看」）。
+    // ② 編輯器：**也搜得到**。2026-10-08 定的，原話「拿掉闸，搜全部」——一次搜索
+    // 漏掉一個檔而不說，比多讀幾秒更貴。他的安全網：「搜索是默认本文件的…切换到
+    // 搜索路径也必须 enter 觸發」。
     let mut ed = ask(false);
     ed.run_the_search();
-    assert!(ed.search().hits.is_empty(), "太大，沒讀");
-    assert_eq!(ed.search().skipped, 1, "跳過的要數出來");
+    assert_eq!(ed.search().total, 1, "大檔也要搜：{}", ed.status());
 
     // ③ 出口回 `false` 就收攤。再寫兩個小檔，只收第一處。
     std::fs::write(dir.join("甲.md"), "霜一\n霜二\n").unwrap();
@@ -23860,7 +23859,7 @@ fn the_window_holds_you_even_when_the_table_was_guessed() {
 /// 全部文件無效。」那一個 7.63 MB，而 `GREP_MAX_BYTES` 是 4 MB。`A-h` 當然沒用——
 /// 那四態管的是隱藏與 `.gitignore`，不管大小。
 #[test]
-fn a_file_too_big_to_grep_is_still_a_file_to_open() {
+fn a_big_file_is_neither_hidden_from_the_picker_nor_from_the_search() {
     let dir = std::env::temp_dir().join(format!("yumete-bigpick-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -23876,13 +23875,13 @@ fn a_file_too_big_to_grep_is_still_a_file_to_open() {
     names.sort();
     assert_eq!(names, ["big.txt", "small.txt"], "按檔名挑的那一趡不看大小");
 
-    // 而要**讀**它的那一趡照舊跳－讀一個 5 MB 的檔去找一個詞不劃算。
+    // 而要**讀**它的那一趡現在也不跳了（2026-10-08 定：「拿掉闸，搜全部」）。
     let mut read: Vec<String> = Vec::new();
-    let walked = crate::editor::walk_prose(&dir, &sieve, &mut |p| {
+    crate::editor::walk_prose(&dir, &sieve, &mut |p| {
         read.push(p.file_name().unwrap().to_string_lossy().into_owned())
     });
-    assert_eq!(read, ["small.txt"], "搜內容那一趡照舊有上限");
-    assert_eq!(walked.skipped, 1, "而且數得出來跳了幾個");
+    read.sort();
+    assert_eq!(read, ["big.txt", "small.txt"], "搜內容那一趡也不再嫌檔大");
 
     std::fs::remove_dir_all(&dir).ok();
 }
