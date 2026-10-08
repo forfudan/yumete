@@ -476,9 +476,6 @@ impl Editor {
         //
         // ⚠ **這一支不走長行門槛**：製表符的格寬是**量出來的位置**，不是裝飾——
         // 不畫它光標就停在一個那一頁沒有的列上。一行很長的 TSV 正是這種檔。
-        if !self.current_buffer().rope().line(line).chunks().any(|c| c.contains('\t')) {
-            return Vec::new();
-        }
         let stop = self.tab_stop();
         let hidden = self.hidden_on_line(line);
         // A tab a table has taken over as its separator is not indentation
@@ -501,6 +498,11 @@ impl Editor {
             &walls,
         ));
         self.tab_memo.or_work_out(self.current_buffer().id(), line, stamp, || {
+            // 「這一行有製表符嗎」也收進備忘裏（2026-10-08）：那一遍字节掃描不配內存，
+            // 可在一行 1240 萬字的稿子上一幀仍要走好幾遍（折行每量一行就問一次）。
+            if !self.current_buffer().rope().line(line).chunks().any(|c| c.contains('\t')) {
+                return Vec::new();
+            }
             self.tab_stops_worked_out(line, stop, &hidden, &walls)
         })
     }

@@ -1080,6 +1080,23 @@ pub fn row_count_in_line(rope: &Rope, line: usize, m: Measure) -> usize {
 }
 
 /// Locate the char index `pos` in the wrapped grid.
+/// **一行開頭那幾個字**——問「這一行開不開段」只要這麼多（2026-10-08）。
+///
+/// Warning: **從前這幾處都把整行物化成 `String`。** `Measure::indent_of` 收的是一行文字，
+/// 而它轉手交給 `zong::opens_a_paragraph`——那一支只看開頭的空白與第一兩個字。於是
+/// 一行 1240 萬字的稿子上，**每動一下光標就拷 37 MB**（`sample` 指的就是這裏）。
+///
+/// 六十四個字足夠，而且答案與整行逐字相同：
+///
+/// - 這一段裏有非空白字——`trim_start()` 之後非空，而後面三道關口只看頭兩個字；
+/// - 這一段全是空白——那這一行以空白開頭，`starts_with([' ', '\t', '\u{3000}'])`
+///   那一道本來就回假；全行都是空白的話第一道也回假。兩條路同一個答案。
+pub fn line_head(rope: &Rope, line: usize) -> String {
+    let start = rope.line_to_char(line);
+    let end = (start + rope.line(line).len_chars()).min(start + 64);
+    rope.slice(start..end).to_string()
+}
+
 pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     let pos = pos.min(rope.len_chars());
     let line = rope.char_to_line(pos);
@@ -1135,7 +1152,7 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
             .sum::<usize>();
     // The indent is real page: a caret on the paragraph's first character sits
     // two cells in, and `j` from the row below should land under it.
-    let column = column + m.indent_of(line, &line_text(rope, line), index_in_line);
+    let column = column + m.indent_of(line, &line_head(rope, line), index_in_line);
     Position {
         line,
         index_in_line,
@@ -1292,7 +1309,7 @@ fn char_at_column(
     let row = rope.slice(start + s..start + e).to_string();
     // A goal column inside the indent lands on the row's first character:
     // there is nothing in the indent to land on.
-    let mut col = m.indent_of(line, &line_text(rope, line), index_in_line);
+    let mut col = m.indent_of(line, &line_head(rope, line), index_in_line);
     let hidden = m.off(line);
     // **The page drawn beside the text counts here too** (2026-10-08 報的：
     // 「行首有 tab 縮進時（go 代碼），按下 j/k 時 cursor 位置不對齊」).

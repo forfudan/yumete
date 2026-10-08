@@ -6967,7 +6967,11 @@ fn text_at(
             // The row starts where it was drawn: a click anywhere in a
             // paragraph's opening indent means its first character.
             let mut column =
-                measure.indent_of(row.line, &buffer.rope().line(row.line).to_string(), row.index_in_line);
+                measure.indent_of(
+                    row.line,
+                    &wrap::line_head(buffer.rope(), row.line),
+                    row.index_in_line,
+                );
             // **A click on drawn text means the character it stands before.**
             // The cells are on the page but not in the file, so they are the
             // one thing a click cannot land *in*.
@@ -10059,7 +10063,7 @@ fn draw_horizontal(
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
         // marked — and the blank line it replaces costs a whole row.
-        let indent = measure.indent_of(row.line, &rope.line(row.line).to_string(), row.index_in_line);
+        let indent = measure.indent_of(row.line, &wrap::line_head(rope, row.line), row.index_in_line);
         if indent > 0 {
             spans.push(indent_span(indent, editor, ink));
         }
