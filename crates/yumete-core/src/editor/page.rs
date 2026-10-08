@@ -1315,6 +1315,9 @@ impl Editor {
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return;
         };
+        // **記住是哪一個括號問的**（2026-10-08 報的）。這一下跑在字落地之後，
+        // 所以那個 `(`（或者 `,`）就在光標前一格。見 [`Self::signature_here`]。
+        self.signature_on = self.sel.head().checked_sub(1).map(|at| (at, last));
         self.signature_query = Some((path, line, utf16));
     }
 
@@ -1370,10 +1373,24 @@ impl Editor {
     /// 一則過期的答案佔着正文。位置不比：手正在往裏填字，光標當然一直在動，那正是
     /// 它要跟着的那次調用。
     pub fn signature_here(&self) -> Option<&crate::lsp::Signature> {
-        match self.mode == Mode::Insert {
-            true => self.signature.as_ref().map(|(_, one)| one),
-            false => None,
+        if self.mode != Mode::Insert {
+            return None;
         }
+        // Warning: **問它的那個括號還在不在**（2026-10-08 報的）。
+        //
+        // 原話：「I first typed `first_time_ever(` and it showed signature. I deleted the
+        // `first_time_ever(` but typed println!, the signature panel still persists.」
+        //
+        // 位置不比是對的——手正往括號裏填字，光標當然一直在走。要比的是另一件事：
+        // **那一次調用還在嗎**。記下問的時候那個 `(` 在第幾格，這一格不再是它了，
+        // 那一則就是上一次調用的答案，該收了。刪掉 `first_time_ever(` 再打 `println!`，
+        // 原先那一格上現在是 `p`，就是這一條接住的。
+        let (at, mark) = self.signature_on?;
+        let rope = self.current_buffer().rope();
+        if at >= rope.len_chars() || rope.char(at) != mark || self.sel.head() <= at {
+            return None;
+        }
+        self.signature.as_ref().map(|(_, one)| one)
     }
 
     /// **字落到頁面上了，要不要順手問一句**（#53 ④，自動那一半）。

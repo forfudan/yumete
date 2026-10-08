@@ -1101,9 +1101,12 @@ pub fn run(
         servers.ask(editor, config);
         servers.ask_what(editor, config);
         servers.ask_signature(editor, config);
-        servers.ask_signature_doc(editor, config);
         servers.ask_next(editor, config);
         let mut server_said_something = servers.collect(editor);
+        // **回退那一句要在同一趡發出去**（2026-10-08）。`collect` 才是「服務器說沒有
+        // 簽名」落地的地方（`show_signature(None)`），而排在它前面的話那一句要等下一輪
+        // 循環——下一輪往往是下一次按鍵，而那時候正文已經改了。
+        servers.ask_signature_doc(editor, config);
         // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
         // 看不見它，所以每一輪說一聲——同 `note_the_server` 那一條。
         let spinning = editor.server_busy_since().is_some();
