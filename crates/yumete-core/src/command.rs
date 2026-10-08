@@ -5142,16 +5142,6 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     if line.starts_with('!') {
         return Ok(Described { help: "cmd.commands.shell", word: None, wrong: None, spelt: None, needs: &[] });
     }
-    // Warning: **`:/` 不是 `:search`**（2026-10-07 當場看出來的）。`:search` 開的是那扇
-    // 面板；`:/` 做的是 `/` 做的事——走到下一處。兩句話借的是鍵位表上那兩則。
-    if let Some(back) = line.strip_prefix('?').map(|_| true).or(line.strip_prefix('/').map(|_| false))
-    {
-        let help = match back {
-            true => "action.rsearch",
-            false => "action.search",
-        };
-        return Ok(Described { help, word: None, wrong: None, spelt: None, needs: &[] });
-    }
     let head = line.split_whitespace().next().unwrap_or("");
     let shaped = rows_before_a_substitution(line).is_some()
         || head == "s"

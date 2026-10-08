@@ -34,35 +34,18 @@ impl Editor {
         // answer was: a failed `:export` used to leave 「存了 ch1.md」 standing,
         // which reads as an export that worked.
         self.status.clear();
-        // **`:/式子` 與 `:?式子` 就是 `/` 與 `?`**（2026-10-06 補的）。
+        // Warning: **`:/` 和 `:?` 這裏一個字都不做**（2026-10-08 定）。
         //
-        // vim 的 Ex 行認這兩個（`:/pattern` 是一個地址，走到下一處配得上的地方），
-        // 而一個 vim 的手打 `:/a` 在這裏從前得到的是「沒有 `/a` 這個命令」。
+        // 2026-10-06 到 10-08 之間它們是 `/` 和 `?` 的別名：`:/冬天` 真的跳到下一
+        // 處。拿掉的理由是**它和 vim 不是同一件事**，而像到足以讓人以為是——
+        // vim 的 `:/式子` 是一個**行地址**（`:/foo/d` 是「跳到配得上的那一行，刪
+        // 掉它」），這裏做的是「跳到匹配那一格」。判詞：
         //
-        // Warning: **這不是一條新的搜索。** §5.80 第五條本來要拿它當「正則搜索」，而那
-        // 條前提當天就被實測推翻了——`/` 在這個編輯器裏本來就是完整的正則，兩個
-        // 拼法做的是同一件事。留着它只為一件事：那隻手按出來的東西要有反應。
+        // > vim 有的話就对齐它。不要让用户有 unexpected。两步走，先删掉当前实现
+        // > （宁可没有不能让人有错误预期），然后再实现行地址。
         //
-        // Warning: **和 vim 有兩處不同**（2026-10-06 拿 nvim 逐格量的）。vim 的 `:/` 是一個
-        // **地址**，地址說的是「哪一行」，所以：
-        //
-        // | | nvim | 這裏 |
-        // | --- | --- | --- |
-        // | `:/beta` 落在 `xx beta here` 上 | 行首，第 1 格 | 匹配處，第 7 格 |
-        // | `:/beta/d` | 刪掉那一行 | 搜 `beta/d` 這五個字 |
-        //
-        // 第二處要整套 Ex 地址文法纔做得出來（`:/a/,/b/s/…`），這個編輯器沒有——
-        // 「改哪幾行」在這裏是 `:%s`／`:1-40s`／`:1,5,9s`。
-        if let Some(pattern) = line.strip_prefix('/').or_else(|| line.strip_prefix('?')) {
-            let forward = line.starts_with('/');
-            self.search_forward = forward;
-            if !pattern.is_empty() {
-                remember_line(&mut self.search_history, pattern);
-                self.last_search = pattern.to_string();
-            }
-            self.repeat_search(forward);
-            return Ok(CommandOutcome::Continue);
-        }
+        // 所以現在 `:/foo` 答的是「沒有這條命令」，和別的打錯的名字一樣。行地址
+        // 那一套（`:/a/,/b/s/…`）要整套 Ex 文法，記在 §5.80 第 5 條底下。
         // What this command needs before it can mean anything (Feature #170).
         // A setting whose prerequisite is missing used to be *set* and then
         // read by nobody: `:view-hanging on` on a horizontal page turned a flag on,
