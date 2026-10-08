@@ -20329,7 +20329,7 @@ rust-analyzer，回的是零條；可**連現成的那支 `rust_analyzer_really_
 ⚠ **記一條**：一個記號擺在**框綫上**就要同時交代「不轉的時候那一格畫什麼墨」，擺在
 **面板身上**就不用——這是挑位置的時候值得先問的一句。
 
-### ⑧ 鍵在搜索行上的時候，第一條也整條反白（2026-10-08 報的，**還沒做**）
+### ⑧ 鍵在搜索行上的時候，第一條也整條反白——做了（2026-10-08）
 
 > My cursor is in the search line. But the first result is also highlighted so I am
 > confused sometimes where I am. … Another (better) solution is highlighting (and thus
@@ -20337,9 +20337,18 @@ rust-analyzer，回的是零條；可**連現成的那支 `rust_analyzer_really_
 > first result (and preview) it (so you can use enter to open it even you are in the
 > search line), but not give me a feeling that the cursor is on this line.
 
-他自己定了做法：**第一條照舊預選、照舊預覽，只是畫得淡一些**。要改的是
-`draw_picker` 裏那個 `on`（`bg(ink.text())`）——鍵不在單子上的時候（`picker.on_query()`
-或 `typing()`）換一檔淡的。⚠ 顏色是主題的事，別寫死一個灰。
+他自己定了做法：**第一條照舊預選、照舊預覽、`Enter` 照舊開得了它，只是畫得
+淡一檔**。改的是 `draw_picker` 裏那個 `on`：鍵在單子上照舊整條反白
+（`bg(ink.text())`），鍵不在單子上（`picker.on_query()` 或 `typing()`）改成
+`bg(ink.at(rung::BAND))`。
+
+**淡的那一檔用 `BAND`**，不是寫死一個灰：那一格是主題自己的橯子，制表位那
+一片、搜索命中那一行用的是同一個底色——「選著但鍵不在這裏」在這一倉裏一直就是
+這一檔墨。
+
+測試 `the_picked_row_is_dimmer_while_the_keys_are_in_the_query` 比的是一幀裏有沒有
+`ink.text()` 那個底色，並且同時攣住「還是選著的」（`chosen().is_some()`）——淡下去
+不該順手把預選也取消掉。
 
 ### ⑥ `:info docs` 這個名字誤導——做了（2026-10-08）
 

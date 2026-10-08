@@ -9154,7 +9154,21 @@ fn draw_picker(
     // 一頁一頁地讓是 helix 的答案：窗口停着不動，高亮在這一頁裏走，走出去了纔
     // 整頁翻。它還正好和 [`Picker::page`] 對上——那一支翻的就是 `deep` 條。
     let first = at - at % deep.max(1);
-    let on = Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink));
+    // **鍵不在單子上的時候，選中那一條畫得淡一檔**（2026-10-08 報的）。
+    //
+    // 原話：「My cursor is in the search line. But the first result is also highlighted
+    // so I am confused sometimes where I am. … highlighting (and thus with preview) the
+    // first result with a dimmer color … allows you to pre-select the first result (and
+    // preview) it … but not give me a feeling that the cursor is on this line.」
+    //
+    // 所以**不是不選**：它照舊選着、照舊預覽、`Enter` 照舊開得了它——只是那一條
+    // 整條反白會讓人以為光標在那裏。淡的那一檔用的是 `BAND`（制表位那一片、搜索
+    // 命中那一行用的同一個底色），不是寫死一個灰。
+    let listed = !picker.typing() && !picker.on_query();
+    let on = match listed {
+        true => Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink)),
+        false => Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.text()),
+    };
     let limit = left.x + names - 1;
     // Warning: **沒有 `+ 1`**（2026-10-06 報的：「There is too much space between
     // : and the search box. One space is enough.」）。`search.label.query` 這則本身
@@ -21297,6 +21311,39 @@ fn squeezed(text: &str) -> String {
             format!("{}", SetCursorStyle::SteadyBar),
             "查詢層是豎線"
         );
+    }
+
+    /// **鍵在搜索行上的時候，選中那一條淡一檔**（2026-10-08 報的）。
+    ///
+    /// 「整條反白」在這個編輯器裏說的是「光標在這裏」。鍵在搜索行上而第一條照樣
+    /// 整條反白，於是屏幕上有兩個「這裏」。淡一檔之後它還是選着的——`Enter` 照舊
+    /// 開得了它，預覽也照舊——只是不再冒充光標。
+    #[test]
+    fn the_picked_row_is_dimmer_while_the_keys_are_in_the_query() {
+        let config = Config::default();
+        let ink = ink(&config);
+        let grounds = |ed: &Editor| -> Vec<ratatui::style::Color> {
+            let frame = render_with(ed, &config, no_ime(), 80, 24);
+            frame.content().iter().filter_map(|cell| cell.style().bg).collect()
+        };
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('f'));
+        assert!(ed.picker().is_some(), "空格 f 開得了挑選器");
+        // 鍵在單子上：選中那一條整條反白。
+        let listed = grounds(&ed);
+        assert!(listed.contains(&ink.text()), "鍵在單子上就整條反白");
+        // 鍵進了搜索行（`/` 只是挪窩，沒打字）：同一條，淡一檔。
+        ed.on_key(Key::Char('/'));
+        assert!(ed.picker().expect("開着").on_query(), "`/` 挪到搜索行");
+        let on_query = grounds(&ed);
+        assert!(!on_query.contains(&ink.text()), "鍵不在單子上就不該整條反白");
+        assert!(
+            on_query.contains(&ink.at(yumete_config::rung::BAND)),
+            "照舊畫着，只是淡一檔"
+        );
+        // 而它**還是選着的**——`Enter` 照舊開得了它。
+        assert!(ed.picker().expect("開着").chosen().is_some(), "照舊預選着");
     }
 
     /// **查詢框裏打滿中文，光標不許跑到框外面**（2026-10-07 審出來的）。
