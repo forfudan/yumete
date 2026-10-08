@@ -733,6 +733,15 @@ pub const SETTINGS: &[Setting] = &[
         factory: r#""C-^""#,
     },
     Setting {
+        table: "editor",
+        key: "yank_on_delete",
+        group: Group::Keys,
+        kind: Kind::Tick,
+        label: "set.editor.yank-on-delete",
+        hint: "set.editor.yank-on-delete.hint",
+        factory: "true",
+    },
+    Setting {
         table: "keys",
         key: "preset",
         group: Group::Keys,

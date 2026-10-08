@@ -2135,6 +2135,15 @@ pub struct Editor {
     /// How much of the buffer is on screen: lines, and 縱 across. Set by the
     /// renderer, which is the only part that knows, so `C-d` can mean "half of
     /// what you can see" rather than a fixed number.
+    /// **`d` 和 `c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。
+    ///
+    /// 出廠進（helix 和 vi 都是這樣）。關掉是**對調**：`d`/`c` 刪而不進，
+    /// `A-d`/`A-c` 變成剪的那一對——正文和格子都照這一條（格子裏那四個鍵
+    /// 2026-10-08 剛對齊過，不許再分家）。
+    ///
+    /// Warning: **它不是鍵位表。** `[keys.normal]` 裏那四行做同一件事，而那一層在前面
+    /// 就把鍵換掉了，所以寫了那四行的人自然蓋過這個開關，不用在這裏寫特例。
+    yank_on_delete: bool,
     page_lines: usize,
     /// Which line the page starts at — see [`Editor::set_page_top`].
     page_top: usize,
@@ -3353,6 +3362,7 @@ impl Editor {
             recording: None,
             macro_keys: Vec::new(),
             replaying: false,
+            yank_on_delete: true,
             page_lines: 20,
             page_top: 0,
             select_the_seam: false,

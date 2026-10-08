@@ -160,6 +160,18 @@ pub struct EditorConfig {
     /// On by default so the CJK word grouping is visible; toggle with
     /// `:word-show off` or set `show_segmentation = false`.
     pub show_segmentation: bool,
+    /// **Whether `d` and `c` fill the register** (`:yank-on-delete`, 2026-10-08).
+    ///
+    /// On by default, which is helix's answer and vi's. Off swaps the pair:
+    /// `d`/`c` take the text out and leave the register alone, and `A-d`/`A-c`
+    /// are the ones that cut. That is what a helix discussion with ninety-odd
+    /// votes asks for ([#10361]) — and the four lines in `[keys.normal]` that
+    /// thread names to keys do the same thing, which is why this switch is a
+    /// setting and not those four lines written into a file: a binding would
+    /// go on overriding whatever the defaults become.
+    ///
+    /// [#10361]: https://github.com/helix-editor/helix/discussions/10361
+    pub yank_on_delete: bool,
     /// How readily characters join into words: `strict`, `balanced`, `full`
     /// (Feature #24), the same three `:word-level` names.
     ///
@@ -393,6 +405,7 @@ impl Default for EditorConfig {
             table_rules: "line dash".to_string(),
             language_key: "C-^".to_string(),
             show_segmentation: true,
+            yank_on_delete: true,
             word_level: yumete_cjk::WordLevel::default(),
             word_mark: yumete_cjk::WordMark::default(),
             layout: Layout::Horizontal,
@@ -2747,6 +2760,7 @@ struct RawEditor {
     table_rules: Option<String>,
     language_key: Option<String>,
     show_segmentation: Option<bool>,
+    yank_on_delete: Option<bool>,
     word_level: Option<String>,
     word_mark: Option<String>,
     /// Retired. Kept so a config that still sets it is *told*, rather than
@@ -2871,6 +2885,9 @@ impl RawConfig {
         }
         if other.editor.show_segmentation.is_some() {
             self.editor.show_segmentation = other.editor.show_segmentation;
+        }
+        if other.editor.yank_on_delete.is_some() {
+            self.editor.yank_on_delete = other.editor.yank_on_delete;
         }
         if other.editor.word_level.is_some() {
             self.editor.word_level = other.editor.word_level.clone();
@@ -3123,6 +3140,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.show_segmentation {
             config.editor.show_segmentation = on;
+        }
+        if let Some(on) = self.editor.yank_on_delete {
+            config.editor.yank_on_delete = on;
         }
         if let Some(level) = self
             .editor

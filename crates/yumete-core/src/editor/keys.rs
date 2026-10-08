@@ -2105,7 +2105,11 @@ impl Editor {
                 // `D` 被別名成 `d$`（`yumete-cjk/src/keymap.rs`），所以原生的 `D` 只在
                 // 別名展開裏出現，而 vim 的 `x` 展開成 `;{n}D`，vim 的 `x` 就是進寄存
                 // 器的。
-                let cut = !matches!(key, Key::Alt('d') | Key::Alt('c'));
+                // **開關關掉就對調**（`:yank-on-delete`，2026-10-08）：`d`/`c` 刪
+                // 而不進，`A-d`/`A-c` 變成剪的那一對。寫了 `[keys.normal]` 那四行
+                // 的人走不到這裏——別名那一層在前面就把鍵換掉了。
+                let alt = matches!(key, Key::Alt('d') | Key::Alt('c'));
+                let cut = alt != self.yank_on_delete();
                 let op = match matches!(key, Key::Char('c') | Key::Alt('c')) {
                     true => motion::Operator::Change { cut },
                     false => match cut {

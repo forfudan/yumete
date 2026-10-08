@@ -227,6 +227,9 @@ pub enum Command {
     Word(WordCommand),
     /// 作品百科 (#287) — the report, one entry, or one of the settings.
     Wiki(WikiCommand),
+    /// `:yank-on-delete [on|off]` — 「`d` 和 `c` 刪掉的東西進不進寄存器」
+    /// （2026-10-08）。`None` 是不帶參數，報當前這一格。
+    YankOnDelete(Option<bool>),
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
@@ -2898,6 +2901,25 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Wiki(WikiCommand::Global))),
+    },
+    Entry {
+        // **一條命令管一個開關**（2026-10-08 定，原話：「我覺得他很好用欸」）。
+        //
+        // Warning: **它是個設置，不是往配置檔裏寫那四行。** `[keys.normal]` 裏寫得出同一
+        // 件事（手冊那一節有那四行），可寫進去的是**鍵**：以後出廠值改了、第三套
+        // 鍵位來了，那四行還壓着。定的理由是這個（§5.113）。
+        name: "yank-on-delete",
+        aliases: &[],
+        help: "cmd.yank-on-delete",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| {
+            Ok(Command::YankOnDelete(match p.arg(0) {
+                None => None,
+                Some("on") => Some(true),
+                _ => Some(false),
+            }))
+        }),
     },
     Entry {
         name: "wiki-panel",

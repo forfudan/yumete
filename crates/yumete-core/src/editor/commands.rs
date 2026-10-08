@@ -450,6 +450,19 @@ impl Editor {
             }
             Command::Word(what) => self.word_command(what),
             Command::Wiki(what) => self.wiki_command(what),
+            Command::YankOnDelete(how) => {
+                // 不帶參數就報這一格現在是哪一邊——同別的開關（原話：「我用的是
+                // 『無參數時，報告當前模式名』」）。
+                if let Some(on) = how {
+                    self.set_yank_on_delete(on);
+                }
+                let word = match self.yank_on_delete() {
+                    true => say!("label.on"),
+                    false => say!("label.off"),
+                };
+                self.status = say!("editor.yank-on-delete-is", word);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetBands(n) => {
                 self.set_bands(n);
                 Ok(CommandOutcome::Continue)

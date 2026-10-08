@@ -23055,3 +23055,66 @@ fn the_factory_keys_still_follow_helix() {
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "甲丙乙", "出廠的 `d` 是剪，同 helix");
 }
+
+/// **一條命令撥得動那件事**（2026-10-08 定，原話：「我覺得他很好用欸」）。
+///
+/// `:yank-on-delete off` 把 `d`/`c` 和 `A-d`/`A-c` 對調——正文和格子一起管，而
+/// `[keys.normal]` 那四行照舊蓋過它（別名那一層在前面就把鍵換掉了）。
+#[test]
+fn yank_on_delete_swaps_the_pair_in_prose_and_in_a_grid() {
+    // 出廠：`d` 剪。
+    let mut ed = typed("甲乙丙");
+    assert!(ed.yank_on_delete(), "出廠進寄存器，同 helix 同 vi");
+    ed.execute(":yank-on-delete off").unwrap();
+    assert!(!ed.yank_on_delete());
+    assert!(ed.status().contains(&say!("label.off")), "{}", ed.status());
+
+    // `d` 只刪，寄存器裏還是剛複製的「甲」。
+    press(&mut ed, "ggy");
+    press(&mut ed, "l");
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "甲丙");
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙甲", "`d` 不再吃寄存器");
+
+    // 而 `A-d` 變成剪的那一個。
+    let mut ed = typed("甲乙丙");
+    ed.execute(":yank-on-delete off").unwrap();
+    press(&mut ed, "ggy");
+    press(&mut ed, "l");
+    ed.on_key(Key::Alt('d'));
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙乙", "`A-d` 剪");
+
+    // 不帶參數就報這一格現在是哪一邊。
+    let mut ed = typed("甲");
+    ed.execute(":yank-on-delete").unwrap();
+    assert!(ed.status().contains(&say!("label.on")), "{}", ed.status());
+    assert!(ed.yank_on_delete(), "問一句不許改它");
+}
+
+/// 格子裏那兩個鍵跟着同一個開關走——2026-10-08 剛把格子和正文對齊，不許再分家。
+#[test]
+fn yank_on_delete_reaches_the_grid_too() {
+    let table = "| 姓名 | 年紀 |\n| --- | --- |\n| 甲 | 三十 |\n";
+    let cell_cleared_with = |key: Key, on: bool| -> Editor {
+        let mut ed = typed(table);
+        ed.set_yank_on_delete(on);
+        ed.goto_line(3);
+        press(&mut ed, " tb");
+        press(&mut ed, " tT");
+        press(&mut ed, "l");
+        press(&mut ed, "y"); // 三十 進寄存器
+        press(&mut ed, "h");
+        ed.on_key(key);
+        ed
+    };
+    // 開着：`d` 剪，寄存器換成那一格。
+    let ed = cell_cleared_with(Key::Char('d'), true);
+    assert_eq!(ed.paste_menu()[0].1, "甲");
+    // 關掉：`d` 只清空，而 `A-d` 成了剪的那一個。
+    let ed = cell_cleared_with(Key::Char('d'), false);
+    assert_eq!(ed.paste_menu()[0].1, "三十", "`d` 不動寄存器了");
+    let ed = cell_cleared_with(Key::Alt('d'), false);
+    assert_eq!(ed.paste_menu()[0].1, "甲", "換成 `A-d` 剪");
+}

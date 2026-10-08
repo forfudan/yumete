@@ -471,6 +471,16 @@ impl Editor {
         zong::position(self.current_buffer().rope(), self.caret(), grid)
     }
 
+    /// **`d`/`c` 進不進寄存器**（`:yank-on-delete`）。
+    pub fn yank_on_delete(&self) -> bool {
+        self.yank_on_delete
+    }
+
+    /// 撥那個開關。
+    pub fn set_yank_on_delete(&mut self, on: bool) {
+        self.yank_on_delete = on;
+    }
+
     /// Install the reader's own Normal-mode aliases (`[keys.normal]`).
     pub fn set_key_aliases(&mut self, aliases: HashMap<String, String>) {
         self.user_aliases = aliases;
