@@ -7102,9 +7102,9 @@ en = "the {0} language server stopped — what it said no longer counts, and the
 [[message]]
 # 補全單子底下那一句：怎麽用
 key = "lsp.take-it"
-zht = "Tab 就這條 · C-n/C-p 換"
-zhs = "Tab 就这条 · C-n/C-p 换"
-en = "Tab takes it · C-n/C-p to move"
+zht = "Tab 補全 · C-n/C-p 換"
+zhs = "Tab 补全 · C-n/C-p 换"
+en = "Tab completes · C-n/C-p to move"
 
 [[message]]
 # gd 跳到了定義那一行
@@ -7117,13 +7117,6 @@ en = "{0} line {1} (C-o comes back)"
 # ── macro ─────────────────────────────────────────────────────────────
 
 [[message]]
-# 補全單子的標題
-key = "lsp.what-comes-next"
-zht = "自動補全"
-zhs = "自动补全"
-en = "autocompletion"
-
-[[message]]
 # :diagnostics-all 頂上那一行：名字　路徑　狀態
 key = "lsp.where-it-is"
 zht = "{0}  {1}  {2}"
@@ -7133,9 +7126,9 @@ en = "{0}  {1}  {2}"
 [[message]]
 # 補全單子底下：第幾條/一共幾條（單子露不全的時候）
 key = "lsp.which-of-them"
-zht = "第 {0} 條，共 {1} 條 · Tab 就這條"
-zhs = "第 {0} 条，共 {1} 条 · Tab 就这条"
-en = "{0} of {1} · Tab takes it"
+zht = "{0}/{1} · Tab 補全"
+zhs = "{0}/{1} · Tab 补全"
+en = "{0}/{1} · Tab completes"
 
 [[message]]
 # 還沒錄過巨集就按了播放

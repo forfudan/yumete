@@ -6015,7 +6015,8 @@ fn draw_note(
             pages: false,
             reading: false,
             scroll: 0,
-            title: say!("lsp.what-comes-next"),
+            // 沒有名字（2026-10-08 定，見 `panel::draw`）。
+            title: String::new(),
             lede: None,
             entry: false,
             body: panel::Body::Keys(rows),
@@ -6070,7 +6071,11 @@ fn draw_note(
     // 一個「這一段換個墨色」的本事，這扇面板現在只收整段文字。
     if let Some(one) = editor.signature_here() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            stand: panel::Stand::Corner,
+            // **貼着光標畫，和補全那一扇一樣**（2026-10-08 定）。原話：「這個雖然和
+            // 『文檔』內容一樣，但本質上不同，它的目的在於及時的提示，故而在光標旁邊，
+            // 不進側欄」——它答的是「這個括號裏該填什麼」，與補全同一類；`tag: None`
+            // 一直就是「這一扇不進側欄」。
+            stand: panel::Stand::UnderCaret,
             pages: false,
             reading: false,
             scroll: 0,

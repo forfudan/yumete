@@ -1368,6 +1368,14 @@ impl Editor {
     }
 
     /// **有一句補全的問題等着發嗎**（2026-10-08）。
+    /// **簽名那一問也等著發嗎**（2026-10-08）。
+    ///
+    /// 與 [`Self::completion_is_waiting`] 同一個理由：它也要服務器先收到剛打的那個
+    /// `(`。原話：「我觉得這個地方可以和 autocompletion 一樣，及時响应、光標位置」。
+    pub fn signature_is_waiting(&self) -> bool {
+        self.signature_query.is_some()
+    }
+
     ///
     /// 前端拿這一句決定要不要**現在就把 `didChange` 發出去**：那一發平常按
     /// 300 毫秒節流，而補全要等服務器收到剛打的那一個字母才答得出來，於是
