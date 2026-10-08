@@ -20154,15 +20154,44 @@ current task」。原話抄在這裏，免得只活在一個 session 裏。
 這支函數本來就在，它的註釋寫着「這一支不問光標在不在原處」，正是為了和
 `info_asked_now` 分開問。合起來纔是「那一扇真的開着」。
 
-### ② 插入態打 `(` 就該看見函數簽名
+### ② 插入態打 `(` 就該看見函數簽名——做了（2026-10-08）
 
 > In insert mode, when I type `(`, I expect that the function doc can appear without
 > triggering, so that I can understand the function better. Even though `:info ` is
 > set to, e.g., dignostics. In insert mode, the doc can still show instantly.
 
 LSP 那邊這件事叫 `textDocument/signatureHelp`，是一個**獨立的請求**，不是 hover。這一頭
-現在一個字都沒接（`initialize` 的 capabilities 裏沒有它）。他要的還有一條：插入態下它
-**蓋過 `:info` 那一格現在擺的東西**。
+從前一個字都沒接（`initialize` 的 capabilities 裏沒有它）。
+
+**擺在哪：他定的「直接复用 doc 的浮窗/边栏」**，理由是他自己推的——
+
+> 它不會抢 instant-info diagnostics 的浮窗/边栏，因爲它是在 insert 模式下打 `(` 和 `,`
+> 才觸發的，而 diagnostics 是在 normal 状态下移动光标時即時觸發的。两者不重叠。你看看
+> 我说的对不对。
+
+**查過了，對的，而且理由早就寫在倉裏**：診斷那一扇在插入模式下**根本不畫**
+（`problem_afloat().filter(|_| !writing)`，2026-09-22 定，對着 nvim 的
+`update_in_insert=false` 和 VS Code 量出來的）。所以不會搶——不是碰巧，是那條規矩已經
+保證了。
+
+⚠ **本來想自己量一遍「打到一半那一行有沒有診斷」，量不成**：臨時寫了一支探針跑真
+rust-analyzer，回的是零條；可**連現成的那支 `rust_analyzer_really_answers` 在這台機器上
+也是零條**（90 秒超時，那支是 `#[ignore]` 的，不進驗收）。所以那一趟測的是環境不是行為，
+探針刪了。**那支 ignore 掉的真服務器測試現在是紅的**，記在這裏——不是這一輪弄的。
+
+### 做出來的
+
+- `initialize` 報上 `signatureHelp`（`documentationFormat` 只要 `plaintext`——那一則畫在
+  一行上）。
+- `lsp::signature_help` 發問，`lsp::signature` 讀答案 → `lsp::Signature { label, active }`。
+  **`active` 兩種寫法都認**：一對 UTF-16 下標（rust-analyzer）和一個參數名（pylsp）；
+  名字在簽名裏找不到就當沒說——寧可不加重，也不許加重錯的那一段。
+- 觸發：插入態、代碼檔、打 `(` 或 `,`；`)`、`Esc`、出插入態都收。
+- 畫：「文檔」那一扇浮窗，**照字面畫**（`marked: false`）——簽名裏 `*mut T`、`_: T` 這種
+  寫法在 Markdown 眼裏是強調，一渲染就少兩個星號。
+
+**還沒做的那一半：正在填第幾個參數沒有加重。** 服務器說得出來（`Signature::active` 收着
+了），缺的是「把一段文字換個墨色」的本事——那扇面板現在只收整段 `Prose(String)`。
 
 ### ③ `空格 k` 開文檔窗要按兩次
 

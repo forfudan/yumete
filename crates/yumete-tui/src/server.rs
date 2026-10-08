@@ -126,6 +126,9 @@ struct Server {
     /// answer carries only an id — one slot would make a hover answer look
     /// like a definition that had somehow lost its place.
     asked_what: Option<i64>,
+    /// **簽名那一問發出去的號碼**（2026-10-08）。同 `asked_what`：答案回來要對得上
+    /// 號，不然是上一問的殘響。
+    asked_signature: Option<i64>,
     /// **這一個服務器此刻開着幾件活**（`$/progress`，2026-10-01）。
     ///
     /// Warning: **數的是服務器自己說的，不是我們猜的。** 從前轉圈那八個點問的是
@@ -167,6 +170,7 @@ struct Heard {
     told: Option<Option<lsp::Told>>,
     place: Option<Option<lsp::Place>>,
     offers: Option<Vec<lsp::Offer>>,
+    signature: Option<Option<lsp::Signature>>,
 }
 
 impl Heard {
@@ -183,6 +187,13 @@ impl Heard {
             return;
         }
         self.place = Some(place);
+    }
+
+    fn signature(&mut self, one: Option<lsp::Signature>) {
+        if matches!(self.signature, Some(Some(_))) {
+            return;
+        }
+        self.signature = Some(one);
     }
 
     fn next_up(&mut self, offers: Vec<lsp::Offer>) {
@@ -210,6 +221,11 @@ impl Heard {
         match self.offers {
             Some(offers) if !offers.is_empty() => editor.show_offers(offers),
             Some(_) if !waiting(|s| s.asked_next) => editor.show_offers(Vec::new()),
+            _ => {}
+        }
+        match self.signature {
+            Some(Some(one)) => editor.show_signature(Some(one)),
+            Some(None) if !waiting(|s| s.asked_signature) => editor.show_signature(None),
             _ => {}
         }
     }
@@ -768,6 +784,26 @@ impl Servers {
         );
     }
 
+    /// **「這個括號裏該填什麼」**（`textDocument/signatureHelp`，2026-10-08）。
+    ///
+    /// 插入態打 `(` 或 `,` 就問一次（`Editor::signature_owed`）。同 `ask_what`：
+    /// 服務器得先收到這一份的新正文，不然它照着上一版答。
+    pub fn ask_signature(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        let Some(language) = Self::language_of(editor) else { return };
+        if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
+            return;
+        }
+        if !self.told_the_latest(editor) {
+            return;
+        }
+        let Some((path, line, column)) = editor.take_signature_query() else { return };
+        self.ask_them_all(
+            language,
+            |server, id| server.asked_signature = Some(id),
+            |id| lsp::signature_help(id, &path, line, column),
+        );
+    }
+
     /// **Send the 「what comes next?」 question** (`C-n` and every letter typed,
     /// #53 ④).
     ///
@@ -850,8 +886,12 @@ impl Servers {
                     // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
-                    Ok(Notice::Answer { id, places, told, offers }) => {
-                        if server.asked_next == Some(id) {
+                    Ok(Notice::Answer { id, places, told, offers, signature }) => {
+                        if server.asked_signature == Some(id) {
+                            server.asked_signature = None;
+                            anything = true;
+                            heard.signature(signature);
+                        } else if server.asked_next == Some(id) {
                             server.asked_next = None;
                             anything = true;
                             heard.next_up(offers);
@@ -1218,6 +1258,7 @@ fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::
         next_ask: FIRST_ASK,
         asked_where: None,
         asked_what: None,
+        asked_signature: None,
         working: HashSet::new(),
         started: std::time::Instant::now(),
         working_since: None,
@@ -1304,6 +1345,7 @@ mod tests {
                     next_ask: FIRST_ASK,
                     asked_where: None,
                     asked_what: None,
+                    asked_signature: None,
                     working: HashSet::new(),
                     started: std::time::Instant::now(),
                     working_since: None,
@@ -1778,7 +1820,13 @@ mod tests {
 
         // 先答空的那一個：**這時候一個字都不許說**，另一個還沒回話。
         from_quiet
-            .send(Notice::Answer { id: ids[0], places: Vec::new(), told: None, offers: Vec::new() })
+            .send(Notice::Answer {
+                id: ids[0],
+                places: Vec::new(),
+                told: None,
+                offers: Vec::new(),
+                signature: None,
+            })
             .unwrap();
         servers.collect(&mut editor);
         // 還寫着「查詢文檔中……」——那是 `空格 k` 說的，問話還沒結束。
@@ -1796,6 +1844,7 @@ mod tests {
                 places: Vec::new(),
                 told: Some("fn main()".into()),
                 offers: Vec::new(),
+                signature: None,
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -1827,6 +1876,7 @@ mod tests {
                 places: Vec::new(),
                 told: None,
                 offers: Vec::new(),
+                signature: None,
             })
             .unwrap();
         }

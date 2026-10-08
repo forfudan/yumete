@@ -897,6 +897,7 @@ impl Editor {
             e.insert_recording.push_str(&text);
             e.insert_str(&text);
             e.maybe_ask_what_comes_next(&text);
+            e.maybe_ask_for_a_signature(&text);
         });
     }
 }

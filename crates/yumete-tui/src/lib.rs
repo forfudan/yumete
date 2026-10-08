@@ -1100,6 +1100,7 @@ pub fn run(
         // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
         servers.ask(editor, config);
         servers.ask_what(editor, config);
+        servers.ask_signature(editor, config);
         servers.ask_next(editor, config);
         let mut server_said_something = servers.collect(editor);
         // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
@@ -6046,6 +6047,34 @@ fn draw_note(
             // **服務器自己說了它送的是什麽**（2026-09-30）。從前這裏寫死 `true`
             // ——只會說純文本的服務器於是被 Markdown 的墨誤畫。
             marked: editor.hover_is_markdown(),
+        });
+    }
+    // **簽名提示：插入態打 `(` 之後的那一行**（2026-10-08 報的）。
+    //
+    // 擺在「文檔」那一扇裏，作者定的：「直接复用 doc 的浮窗/边栏。它不會抢
+    // instant-info diagnostics 的浮窗/边栏，因爲它是在 insert 模式下打 `(` 和 `,`
+    // 才觸發的，而 diagnostics 是在 normal 状态下移动光标時即時觸發的。」
+    //
+    // **查過了，他說得對，而且理由早就寫在下面那一段裏**：診斷那一扇在插入模式下
+    // 根本不畫（2026-09-22 定的，對着 nvim 的 `update_in_insert=false` 和 VS Code
+    // 量的）。所以兩者不會搶同一格——不是碰巧，是那一條規矩已經保證了。
+    //
+    // Warning: **那一行照字面畫（`marked: false`）。** 簽名裏 `*mut T`、`_: T` 這種寫法
+    // 在 Markdown 眼裏是強調，一渲染就少兩個星號——而它是代碼，不是散文。正在填
+    // 第幾個參數**還沒有加重**（服務器說得出來，`Signature::active` 收着了），那要
+    // 一個「這一段換個墨色」的本事，這扇面板現在只收整段文字。
+    if let Some(one) = editor.signature_here() {
+        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            pages: false,
+            reading: false,
+            scroll: 0,
+            title: yumete_core::messages::say(Info::Docs.tag(), &[]),
+            lede: None,
+            entry: false,
+            body: panel::Body::Prose(one.label.clone()),
+            tag: None,
+            vertical_text: vertical,
+            marked: false,
         });
     }
     // Warning: **插入模式下不畫**（2026-09-22 報的：「每打幾個字母就出 warning 的浮

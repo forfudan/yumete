@@ -115,7 +115,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -171,6 +171,24 @@ pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> Str
 pub fn hover(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/hover","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `textDocument/signatureHelp` —— **這個括號裏該填什麼**（2026-10-08）。
+///
+/// 報的原話：「In insert mode, when I type `(`, I expect that the function doc can
+/// appear without triggering, so that I can understand the function better.」
+///
+/// Warning: **它和 hover 是兩個請求。** hover 答的是「光標底下這個名字是什麼」，這一支
+/// 答的是「你正在填的這一次調用，簽名長什麼樣、填到第幾個參數了」——位置一樣，問題
+/// 不一樣。helix 的 `auto-signature-help` 問的就是它。
+///
+/// `documentationFormat` 只報 `plaintext`：這一則畫在一行上（見
+/// [`Signature`]），Markdown 在那裏沒有地方施展。
+pub fn signature_help(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/signatureHelp","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
         uri = json_string(&uri_of(path)),
     )
 }
@@ -262,7 +280,14 @@ pub enum Notice {
     /// one it is waiting for: a definition fills `places` and leaves `told`
     /// empty; a hover does the opposite; a server that answered `null` fills
     /// neither, which is 「nothing to say」 in both languages.
-    Answer { id: i64, places: Vec<Place>, told: Option<Told>, offers: Vec<Offer> },
+    Answer {
+        id: i64,
+        places: Vec<Place>,
+        told: Option<Told>,
+        offers: Vec<Offer>,
+        /// 簽名那一問的答案（2026-10-08）。同上：讀出來擺着，前端拿它要的那一格。
+        signature: Option<Signature>,
+    },
     /// **服務器說它在忙，或者忙完了**（`$/progress`，2026-10-01）。
     ///
     /// `token` 是那一件活自己的號碼，`begin` 開一件、`end` 關一件（`report`
@@ -274,6 +299,22 @@ pub enum Notice {
     Working { token: String, begin: bool, end: bool },
     /// Anything else: logs, an answer nobody is waiting for.
     Nothing,
+}
+
+/// **正在填的那一次調用，簽名長什麼樣**（`textDocument/signatureHelp`，2026-10-08）。
+///
+/// Warning: **只留一行。** 服務器可以給好幾個重載（`signatures`），這一頭取它說的那個
+/// 「正在用的」（`activeSignature`，不說就是第一個）——一行浮在光標旁邊，是打字當口
+/// 看得完的全部。別的重載要看，那是 `空格 k` 的事。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Signature {
+    /// 那一行本身，例如 `fn push(&mut self, value: T)`。
+    pub label: String,
+    /// **正在填第幾個參數**，以及它在 `label` 裏的哪一段（字符下標，不是字節）。
+    ///
+    /// `None` ＝ 服務器沒說，或者說的是一個這一頭對不上的形狀。畫的那一頭拿它把
+    /// 那一段加重——「填到哪了」正是這一則存在的理由。
+    pub active: Option<(usize, usize)>,
 }
 
 /// **One thing the server says could come next** (#53 ④).
@@ -360,6 +401,7 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             places: places(value.get("result")),
             told: told(value.get("result")),
             offers: offers(value.get("result")),
+            signature: signature(value.get("result")),
         },
         _ => Notice::Nothing,
     }
@@ -767,6 +809,51 @@ pub fn rank(items: &mut [Offer], word: &str) {
     items.sort_by_key(tier);
 }
 
+/// Read a `SignatureHelp` answer. See [`Signature`].
+///
+/// Warning: **`activeParameter` 說的是第幾個參數，不是第幾格字。** 哪一段要加重得自己
+/// 去 `parameters` 那張表上取：那裏的 `label` 可以是一個字串（在簽名裏找它），也可以
+/// 是一對 UTF-16 下標。兩種都認——rust-analyzer 給下標，pylsp 給字串。
+///
+/// Warning: **參數那一層也有自己的 `activeParameter`**（協議 3.16 起）：簽名自己說的
+/// 蓋過頂上那一個。頂上那個是「這一組的默認」。
+fn signature(result: Option<&serde_json::Value>) -> Option<Signature> {
+    let result = result?;
+    let all = result.get("signatures")?.as_array()?;
+    let which = result.get("activeSignature").and_then(|n| n.as_u64()).unwrap_or(0) as usize;
+    let one = all.get(which).or_else(|| all.first())?;
+    let label = one.get("label")?.as_str()?.to_string();
+    let active = one
+        .get("activeParameter")
+        .or_else(|| result.get("activeParameter"))
+        .and_then(|n| n.as_u64())
+        .map(|n| n as usize);
+    let span = active.and_then(|nth| {
+        let it = one.get("parameters")?.as_array()?.get(nth)?.get("label")?;
+        match it {
+            // 一對 UTF-16 下標，直接是簽名裏的那一段。
+            serde_json::Value::Array(pair) => {
+                let from = pair.first()?.as_u64()? as usize;
+                let to = pair.get(1)?.as_u64()? as usize;
+                // 服務器數的是 UTF-16 碼元，這一頭數字符。
+                Some((
+                    crate::problem::char_column(&label, from),
+                    crate::problem::char_column(&label, to),
+                ))
+            }
+            // 一個名字：在簽名裏找它。找不到就當沒說——寧可不加重，也不許加重錯
+            // 的那一段。
+            serde_json::Value::String(name) => {
+                let at = label.find(name.as_str())?;
+                let from = label[..at].chars().count();
+                Some((from, from + name.chars().count()))
+            }
+            _ => None,
+        }
+    });
+    Some(Signature { label, active: span })
+}
+
 /// The empty answer to a request we do not really implement.
 ///
 /// `id` 是**那條請求裏的 JSON 原樣**（`4` 或 `"abc"`），所以回去的號碼和來的那個
@@ -986,7 +1073,13 @@ mod tests {
         // dropped here as 「nobody's business」; now `gd` has business.
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":7,"result":{}}"#, 1),
-            Notice::Answer { id: 7, places: Vec::new(), told: None, offers: Vec::new() }
+            Notice::Answer {
+                id: 7,
+                places: Vec::new(),
+                told: None,
+                offers: Vec::new(),
+                signature: None,
+            }
         );
         // A *request* from the server has a method as well as an id, and must
         // be answered or the server may wait on it forever.
@@ -1163,6 +1256,38 @@ mod tests {
         assert_eq!(without_the_holes("\\$x"), "$x");
         assert_eq!(without_the_holes("${1|甲,乙|}"), "甲");
         assert_eq!(without_the_holes("${1:${2:裏}}"), "裏", "洞裏還有洞");
+    }
+
+    /// **簽名那一答的兩種參數寫法**（2026-10-08）。
+    ///
+    /// 協議說 `parameters[].label` 可以是一對 UTF-16 下標，也可以是一個名字
+    /// ——rust-analyzer 給下標，pylsp 給名字，兩種都要認。
+    #[test]
+    fn a_signature_says_which_parameter_is_being_filled() {
+        let answered = |m: &str| match read(m, 1) {
+            Notice::Answer { signature, .. } => signature,
+            other => panic!("是一條回答：{other:?}"),
+        };
+        // 下標那一種：`&mut self` 是第 0 個，`value: T` 是第 1 個。
+        let by_index = r#"{"id":4,"result":{"signatures":[{"label":"fn push(&mut self, value: T)","parameters":[{"label":[8,17]},{"label":[19,27]}]}],"activeSignature":0,"activeParameter":1}}"#;
+        let one = answered(by_index).expect("有一條");
+        assert_eq!(one.label, "fn push(&mut self, value: T)");
+        assert_eq!(one.active, Some((19, 27)));
+        assert_eq!(&one.label[19..27], "value: T", "那一段正是第二個參數");
+
+        // 名字那一種：在簽名裏找它。
+        let by_name = r#"{"id":4,"result":{"signatures":[{"label":"def push(self, value)","parameters":[{"label":"self"},{"label":"value"}]}],"activeParameter":1}}"#;
+        let one = answered(by_name).expect("有一條");
+        assert_eq!(one.active, Some((15, 20)));
+        assert_eq!(&one.label[15..20], "value");
+
+        // Warning: **找不到那個名字就當沒說**——寧可不加重，也不許加重錯的那一段。
+        let wrong = r#"{"id":4,"result":{"signatures":[{"label":"def push(self, value)","parameters":[{"label":"nowhere"}]}],"activeParameter":0}}"#;
+        assert_eq!(answered(wrong).expect("有一條").active, None);
+
+        // 一條都沒有：沒什麼可畫。
+        assert_eq!(answered(r#"{"id":4,"result":{"signatures":[]}}"#), None);
+        assert_eq!(answered(r#"{"id":4,"result":null}"#), None);
     }
 
     /// **補全的兩種回答，以及「顯示的」與「打進去的」不是同一個字串**（#53 ④）。

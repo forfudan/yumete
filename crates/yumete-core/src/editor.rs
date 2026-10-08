@@ -2532,6 +2532,13 @@ pub struct Editor {
     /// 同 `scheme_request`：表上有一行只有前端答得出來（哪幾個語言服務器在看着這
     /// 一份），所以核心把表排好，前端填那一格再開。
     file_info_request: bool,
+    /// **正在填的那一次調用的簽名**（`textDocument/signatureHelp`，2026-10-08）。
+    ///
+    /// 記着**問的時候光標在哪**，同 `hovered`：打字一路走，那一則說的是哪一次調用
+    /// 要說得清楚。出插入態、打了 `)`、按 `Esc` 都把它丟掉。
+    signature: Option<(usize, crate::lsp::Signature)>,
+    /// 簽名那一問在等前端發（`(` 和 `,` 按下去的時候放進來）。
+    signature_query: Option<(std::path::PathBuf, usize, usize)>,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
     /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
@@ -3474,6 +3481,8 @@ impl Editor {
             chaifen_request: None,
             scheme_request: None,
             file_info_request: false,
+            signature: None,
+            signature_query: None,
             theme_request: None,
             trial: None,
             previewing: false,
