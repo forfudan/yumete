@@ -57,6 +57,10 @@ pub fn marks(syntax: Syntax) -> Marks {
                 // 塊註釋只有 GAS 有（NASM 用 `%comment`，那是宏不是註釋）。
                 Language::Gas => Marks { line: Some("#"), block: Some(("/*", "*/")) },
                 Language::Nasm => Marks { line: Some(";"), block: None },
+                // Ada 只有行註釋 `--`；Pascal 的行註釋 `//` 是後來的，塊註釋
+                // 兩套（`{ }` 與 `(* *)`），這裏取 `{ }`——Delphi 與 FPC 都寫那一套。
+                Language::Ada => Marks { line: Some("--"), block: None },
+                Language::Pascal => Marks { line: Some("//"), block: Some(("{", "}")) },
                 Language::Html => Marks { line: None, block: Some(("<!--", "-->")) },
                 // JSON has no comment at all.
                 Language::Json => Marks { line: None, block: None },

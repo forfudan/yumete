@@ -60,6 +60,7 @@ pub enum Token {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     C,
+    Ada,
     Css,
     /// GAS（`.s`）——與 [`Language::Nasm`] 共用一套通用匯編語法，分家分的是註釋記號。
     Gas,
@@ -70,6 +71,7 @@ pub enum Language {
     Json,
     /// NASM（`.asm` `.S` `.nasm`）——見 [`Language::Gas`]。
     Nasm,
+    Pascal,
     Python,
     R,
     Rust,
@@ -79,7 +81,8 @@ pub enum Language {
 
 impl Language {
     /// Every language, for `:view-code`'s report and the tests.
-    pub const ALL: [Language; 14] = [
+    pub const ALL: [Language; 16] = [
+        Language::Ada,
         Language::C,
         Language::Css,
         Language::Gas,
@@ -89,6 +92,7 @@ impl Language {
         Language::JavaScript,
         Language::Json,
         Language::Nasm,
+        Language::Pascal,
         Language::Python,
         Language::R,
         Language::Rust,
@@ -108,6 +112,7 @@ impl Language {
             .collect::<String>()
             .to_ascii_lowercase();
         Some(match word.as_str() {
+            "ada" => Language::Ada,
             "asm" | "nasm" => Language::Nasm,
             "c" => Language::C,
             "css" => Language::Css,
@@ -117,6 +122,7 @@ impl Language {
             "java" | "jav" => Language::Java,
             "javascript" | "js" | "mjs" | "cjs" | "jsx" | "node" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
+            "pascal" | "delphi" | "pas" => Language::Pascal,
             "python" | "py" | "python3" | "py3" => Language::Python,
             "r" => Language::R,
             "rust" | "rs" => Language::Rust,
@@ -142,6 +148,7 @@ impl Language {
         }
         let extension = extension.to_ascii_lowercase();
         Some(match extension.as_str() {
+            "adb" | "ads" | "ada" => Language::Ada,
             "asm" | "nasm" => Language::Nasm,
             "c" => Language::C,
             "css" => Language::Css,
@@ -150,6 +157,7 @@ impl Language {
             "java" | "jav" | "pde" => Language::Java,
             "js" | "mjs" | "cjs" | "jsx" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
+            "pas" | "pp" | "dpr" | "dpk" | "lpr" => Language::Pascal,
             "py" | "pyw" => Language::Python,
             "r" => Language::R,
             "rs" => Language::Rust,
@@ -162,6 +170,7 @@ impl Language {
     /// Its name, as a fence would spell it.
     pub fn name(self) -> &'static str {
         match self {
+            Language::Ada => "ada",
             Language::C => "c",
             Language::Css => "css",
             Language::Gas => "gas",
@@ -171,6 +180,7 @@ impl Language {
             Language::JavaScript => "javascript",
             Language::Json => "json",
             Language::Nasm => "nasm",
+            Language::Pascal => "pascal",
             Language::Python => "python",
             Language::R => "r",
             Language::Rust => "rust",
@@ -181,6 +191,7 @@ impl Language {
 
     fn grammar(self) -> tree_sitter::Language {
         match self {
+            Language::Ada => tree_sitter_ada::LANGUAGE.into(),
             Language::C => tree_sitter_c::LANGUAGE.into(),
             Language::Css => tree_sitter_css::LANGUAGE.into(),
             // **一套語法兩門語言**：`tree-sitter-asm` 是通用匯編語法，三種行
@@ -193,6 +204,7 @@ impl Language {
             Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
             Language::Json => tree_sitter_json::LANGUAGE.into(),
             Language::Python => tree_sitter_python::LANGUAGE.into(),
+            Language::Pascal => tree_sitter_pascal::LANGUAGE.into(),
             Language::R => tree_sitter_r::LANGUAGE.into(),
             Language::Rust => tree_sitter_rust::LANGUAGE.into(),
             Language::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
@@ -202,6 +214,80 @@ impl Language {
 
     fn highlights(self) -> &'static str {
         match self {
+            // **Ada 與 Pascal 這兩份是我們自己寫的**（2026-10-08 定：「我們自己寫，最
+            // 安全」）。兩個 crate 包裏有 `queries/highlights.scm` 這個**檔**，可
+            // `bindings/rust/lib.rs` 裏那一行 `pub const HIGHLIGHTS_QUERY` 是**注掉的**，
+            // 跨 crate 的 `include_str!` 做不到。抄那兩份 `.scm` 要帶它們的授權聲明，
+            // 自己寫沒這一層事——同 `objects()`／`indents()` 那一條規矩。
+            //
+            // ⚠ **節點名是從語法自己的 `src/node-types.json` 生成的，不是記的。**
+            // 一個名字寫錯，`Query::new` 整條失敗，那一門語言**一個字都不上色**
+            // 而且不報錯——`every_shipped_grammar_compiles_its_own_query` 就是描這一條的。
+            // ⚠ **`r##"` 不是 `r#"`**：gnatprep 那四個詞裏的 `"#` 會把 `r#"` 当場收掉。
+            Language::Ada => r##"
+                    (comment) @comment
+                    [(string_literal) (character_literal)] @string
+                    (numeric_literal) @number
+                    (procedure_specification name: (identifier) @function)
+                    (function_specification name: (identifier) @function)
+                    (procedure_call_statement name: (identifier) @function)
+                    (function_call name: (identifier) @function)
+                    [
+                      "#else" "#elsif" "#end" "#if" "Class" "abort" "abs"
+                      "abstract" "accept" "access" "aliased" "all" "and" "array"
+                      "at" "begin" "body" "case" "constant" "declare" "delay"
+                      "delta" "digits" "do" "else" "elsif" "end" "entry"
+                      "exception" "exit" "for" "function" "generic" "goto" "if"
+                      "in" "interface" "is" "limited" "loop" "mod" "new"
+                      "not" "null" "of" "or" "others" "out" "overriding"
+                      "package" "parallel" "pragma" "private" "procedure" "protected" "raise"
+                      "range" "record" "rem" "renames" "requeue" "return" "reverse"
+                      "select" "separate" "some" "subtype" "synchronized" "tagged" "task"
+                      "terminate" "then" "type" "until" "use" "when" "while"
+                      "with" "xor"
+                    ] @keyword
+                    [
+                      "&" "*" "**" "+" "-" "." ".." "/" "/="
+                      ":=" "<" "<<" "<=" "<>" "=" "=>" ">" ">="
+                      ">>" "|"
+                    ] @operator
+"##,
+            Language::Pascal => r#"
+                    (comment) @comment
+                    [(literalString) (literalChar)] @string
+                    (literalNumber) @number
+                    [(kTrue) (kFalse) (kNil)] @constant
+                    [
+                      (kAbsolute) (kAbstract) (kAlias) (kAnd) (kArray) (kAs)
+                      (kAsm) (kAssembler) (kBegin) (kCase) (kCdecl) (kClass)
+                      (kConst) (kConstref) (kConstructor) (kCppdecl) (kCvar) (kDefault)
+                      (kDelayed) (kDeprecated) (kDestructor) (kDispId) (kDispInterface) (kDo)
+                      (kDownto) (kDynamic) (kElse) (kEnd) (kExcept) (kExperimental)
+                      (kExport) (kExports) (kExternal) (kFar) (kFile) (kFinalization)
+                      (kFinally) (kFor) (kForward) (kFunction) (kGeneric) (kGoto)
+                      (kHardfloat) (kHelper) (kIf) (kImplementation) (kImplements) (kIn)
+                      (kIndex) (kInherited) (kInitialization) (kInline) (kInterface) (kInterrupt)
+                      (kIocheck) (kIs) (kLabel) (kLibrary) (kLocal) (kMessage)
+                      (kMs_abi_cdecl) (kMs_abi_default) (kMwpascal) (kName) (kNear) (kNodefault)
+                      (kNoreturn) (kNostackframe) (kNot) (kObjccategory) (kObjcclass) (kObjcprotocol)
+                      (kObject) (kOf) (kOn) (kOperator) (kOptional) (kOr)
+                      (kOut) (kOverload) (kOverride) (kPacked) (kPascal) (kPlatform)
+                      (kPrivate) (kProcedure) (kProgram) (kProperty) (kProtected) (kPublic)
+                      (kPublished) (kRaise) (kRead) (kRecord) (kReference) (kRegister)
+                      (kReintroduce) (kRepeat) (kRequired) (kResourcestring) (kSafecall) (kSaveregisters)
+                      (kSealed) (kSet) (kSoftfloat) (kSpecialize) (kStatic) (kStdcall)
+                      (kStored) (kStrict) (kString) (kSysv_abi_cdecl) (kSysv_abi_default) (kThen)
+                      (kThreadvar) (kTo) (kTry) (kType) (kUnimplemented) (kUnit)
+                      (kUntil) (kUses) (kVar) (kVarargs) (kVectorcall) (kVirtual)
+                      (kWhile) (kWinapi) (kWith) (kWrite) (kXor)
+                    ] @keyword
+                    [
+                      (kAdd) (kAssign) (kAssignAdd) (kAssignDiv) (kAssignMul) (kAssignSub)
+                      (kAt) (kDiv) (kDot) (kEndDot) (kEq) (kFdiv)
+                      (kGt) (kGte) (kHat) (kLt) (kLte) (kMod)
+                      (kMul) (kNeq) (kShl) (kShr) (kSub)
+                    ] @operator
+"#,
             // Warning: **C 那一個叫 `HIGHLIGHT_QUERY`**，單數——同一族 crate 兩種拼法。
             Language::C => tree_sitter_c::HIGHLIGHT_QUERY,
             Language::Css => tree_sitter_css::HIGHLIGHTS_QUERY,
@@ -248,7 +334,10 @@ impl Language {
             | Language::Toml
             | Language::Yaml
             | Language::Gas
-            | Language::Nasm => return None,
+            | Language::Nasm
+            // 這兩門的 crate 同樣沒把 `tags.scm` 導出來。
+            | Language::Ada
+            | Language::Pascal => return None,
         })
     }
 
@@ -298,13 +387,15 @@ impl Language {
             | Language::Yaml
             // 匯編裏沒有「參數」這種東西。
             | Language::Gas
-            | Language::Nasm => return None,
+            | Language::Nasm
+            | Language::Ada
+            | Language::Pascal => return None,
         })
     }
 
     /// 編好的那份，連着每一格捕獲算哪一種對象。
     fn object_query(self) -> Option<&'static Objects> {
-        static CELLS: [OnceLock<Option<Objects>>; 14] = [const { OnceLock::new() }; 14];
+        static CELLS: [OnceLock<Option<Objects>>; 16] = [const { OnceLock::new() }; 16];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -325,7 +416,7 @@ impl Language {
 
     /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
     fn defines(self) -> Option<&'static Defines> {
-        static CELLS: [OnceLock<Option<Defines>>; 14] = [const { OnceLock::new() }; 14];
+        static CELLS: [OnceLock<Option<Defines>>; 16] = [const { OnceLock::new() }; 16];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -414,13 +505,20 @@ impl Language {
             // TOML 與 YAML 的縮進是**語法本身**（一個鍵一行、靠縮進分層），
             // 多縮一級是錯的——這兩種不給查詢。
             // 匯編沒有塊：標籤下面那一段縮不縮是寫稿子的人自己的事。
-            Language::Toml | Language::Yaml | Language::Gas | Language::Nasm => "",
+            Language::Toml
+            | Language::Yaml
+            | Language::Gas
+            | Language::Nasm
+            // Ada 與 Pascal 的塊是 `begin`／`end` 這種詞，不是括號——第一期那一套
+            // （`@indent` 配 `["}" "]" ")"]` 退一級）在這裏不是同一件事。留給下一期。
+            | Language::Ada
+            | Language::Pascal => "",
         }
     }
 
     /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
     fn indent_query(self) -> Option<&'static Query> {
-        static CELLS: [OnceLock<Option<Query>>; 14] = [const { OnceLock::new() }; 14];
+        static CELLS: [OnceLock<Option<Query>>; 16] = [const { OnceLock::new() }; 16];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         let text = self.indents();
         if text.is_empty() {
@@ -430,7 +528,7 @@ impl Language {
     }
 
     fn query(self) -> Option<&'static Compiled> {
-        static CELLS: [OnceLock<Option<Compiled>>; 14] = [const { OnceLock::new() }; 14];
+        static CELLS: [OnceLock<Option<Compiled>>; 16] = [const { OnceLock::new() }; 16];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -1146,6 +1244,32 @@ mod tests {
         assert_eq!(at(&got, 2, 13), Some(Token::String), "{:?}", got[2]);
         let one = got[2].last().unwrap();
         assert_eq!((one.start, one.kind), (26, Kind::Token(Token::Constant)), "{:?}", got[2]);
+    }
+
+    /// **我們自己寫的那兩份查詢真的會匹配**（2026-10-08）。
+    ///
+    /// Warning: **「編得起來」與「匹配得上」是兩件事。**`Query::new` 只檢查節點名
+    /// 存不存在；寫對了名字卻搭錯了形狀，查詢照樣編得過、一個字也不上色。
+    #[test]
+    fn the_two_queries_we_wrote_ourselves_really_paint() {
+        let got = highlight(
+            Language::Ada,
+            &lines("procedure Hello is\n   -- 打個招呼\nbegin\n   Put_Line (\"你好\");\nend Hello;"),
+        );
+        assert_eq!(at(&got, 0, 0), Some(Token::Keyword), "procedure：{:?}", got[0]);
+        assert_eq!(at(&got, 0, 10), Some(Token::Function), "子程序的名字：{:?}", got[0]);
+        assert_eq!(at(&got, 1, 3), Some(Token::Comment), "{:?}", got[1]);
+        assert_eq!(at(&got, 2, 0), Some(Token::Keyword), "begin：{:?}", got[2]);
+        assert_eq!(at(&got, 3, 14), Some(Token::String), "{:?}", got[3]);
+
+        let got = highlight(
+            Language::Pascal,
+            &lines("program Hello;\n// 打個招呼\nbegin\n  WriteLn('你好');\nend."),
+        );
+        assert_eq!(at(&got, 0, 0), Some(Token::Keyword), "program：{:?}", got[0]);
+        assert_eq!(at(&got, 1, 0), Some(Token::Comment), "{:?}", got[1]);
+        assert_eq!(at(&got, 2, 0), Some(Token::Keyword), "begin：{:?}", got[2]);
+        assert_eq!(at(&got, 3, 10), Some(Token::String), "{:?}", got[3]);
     }
 
     #[test]
