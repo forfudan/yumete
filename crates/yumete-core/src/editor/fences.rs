@@ -199,6 +199,48 @@ impl Editor {
         found.into_iter().map(|(from, to)| (at(from), at(to))).collect()
     }
 
+    /// **新開的那一行，比這一行多縮幾級**（2026-10-08，tree-sitter 縮進第一期）。
+    ///
+    /// 回 `0` ＝ 和這一行一樣（照抄空白，從前的行為）。`closing` 是新那一行開頭已
+    /// 經打出來的那個字——`}` 之類會把這個數減一。
+    ///
+    /// **照 helix 的 `Hybrid`**：樹只說「差幾級」，**基準是上一行真實的縮進**。它
+    /// 自己的註釋寫着理由——「incomplete queries, incomplete source code &
+    /// differing indentation styles」——而這三樣每一樣這裏都有。所以源碼打到一半
+    /// 解析不出來的時候（實測：`fn f() {` 自己一份檔，tree-sitter 給的是
+    /// `(source_file (ERROR …))`，一個 `block` 都沒有），兩頭都答 0，差也是 0，
+    /// 於是照抄上一行——和 2026-10-08 早些時候做的 `autoindent` 一字不差。
+    pub(super) fn levels_to_open(&self, closing: Option<char>) -> isize {
+        let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
+            return 0;
+        };
+        self.hold_the_tree(language);
+        let cache = self.code_cache.borrow();
+        let Some(held) = cache
+            .whole
+            .as_ref()
+            .filter(|h| h.buffer == self.current_buffer().id() && h.language == language)
+        else {
+            return 0;
+        };
+        // 樹是按**字節**數的，而這一頭數字符。
+        let rope = self.current_buffer().rope();
+        let at = self.sel.head().min(rope.len_chars());
+        let byte = rope.char_to_byte(at).min(held.source.len());
+        let line = rope.char_to_line(at);
+        // 算的是**新開的那一行**，所以門檻是光標這一行 ＋ 1。
+        let here =
+            crate::code::open_levels(language, &held.source, &held.tree, byte, line + 1, closing);
+        // 上一行的第一個非空白——基準那一行自己開着幾級（門檻是它自己）。
+        let start = rope.line_to_char(line);
+        let text = crate::motion::line_text(rope, line);
+        let first = text.chars().take_while(|c| c.is_whitespace()).count();
+        let base_byte = rope.char_to_byte((start + first).min(rope.len_chars())).min(held.source.len());
+        let base =
+            crate::code::open_levels(language, &held.source, &held.tree, base_byte, line, None);
+        here as isize - base as isize
+    }
+
     /// **把這一版的樹備好**——已經是這一版就什麽都不做。
     ///
     /// Warning: **改過就走增量。** 上一版的正文還在手上，掐頭去尾就看得出改了

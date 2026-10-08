@@ -20114,6 +20114,59 @@ warning了。所以我覺得 Option 1 + 一個csv tree-sitter 會很好。」
 
 沒自己定，等他說。
 
+## 5.117 行尾一個 `(`，下一行再縮一級（2026-10-08 問的，第一期做了）
+
+作者問：「if the end of line is a `(` due to a function call, should the enter indent the
+next line further? I do not know how other editors do and what is the best practice.」
+
+### 查了三家，都是直接讀源碼和文檔，不是憑印象
+
+| | 縮嗎 | 依據 |
+| --- | --- | --- |
+| vim `autoindent` | **不縮** | 它只照抄上一行的空白（2026-10-08 早些時候做的就是這一層） |
+| vim `smartindent` | **不縮** | `options.txt`：「An indent is automatically inserted: **After a line ending in `{`**」——只認 `{` |
+| vim `cindent` | **縮** | `indent.txt` 的 `cinoptions` `(N`：默認 `shiftwidth × 2`；`cino=(0` 則對齊到括號後第一個非空白 |
+| helix | **縮一級，`)` 退一級** | `runtime/queries/rust/indents.scm`：`(arguments)`／`(parameters)`／`(call_expression)` 是 `@indent`，`"}" "]" ")"` 是 `@outdent` |
+| VS Code | 縮 | 語言的 `increaseIndentPattern` 多半含未閉合括號 |
+
+**凡是認真做縮進的都縮**，分歧只在縮多少：一級（helix／VS Code）還是對齊到括號
+（vim `cindent` 默認）。作者定：**照 helix 那一套做到底**。
+
+### 兩件查出來的、本來不知道的事
+
+- **語法包不帶縮進查詢。** `tree-sitter-rust` 那幾個 crate 只導出
+  `HIGHLIGHTS_QUERY`／`INJECTIONS_QUERY`／`TAGS_QUERY`——`indents.scm` 是 **helix 自己
+  的檔**。而 helix 是 MPL-2.0，這個倉是 Apache-2.0。所以查詢是**自己寫的**
+  （`Language::indents`）：第一期只用得上「哪些節點類型」這一層，而那是語法本身的事實。
+- **helix 自己也不信語法樹一家之言。** 它的出廠啓發式是 `Hybrid`，註釋寫着理由：
+  「incomplete queries, **incomplete source code** & differing indentation styles」。
+
+### 做法：樹只說「差幾級」，基準是上一行真實的縮進
+
+`code::open_levels` 數「這個位置開着幾級」，`Editor::levels_to_open` 拿它減去**上一行**
+的同一個數，差多少就在上一行的真實縮進上加多少。於是：
+
+- 行尾 `(` 而括號還開着 → 多一級（實測：`go(` 那一行四格，下一行八格）。
+- 行尾不是括號 → 差是零 → 照抄上一行，和 `autoindent` 一字不差。
+- **源碼打到一半解析不出來 → 也是零**。量過：`fn f() {` 自己一份檔，tree-sitter 給的是
+  `(source_file (ERROR …))`，**一個 `block` 節點都沒有**。這不是答錯，是答不出來——而
+  `Hybrid` 的意義正在這裏：答不出來就退回上一行的縮進。
+
+### 寫的時候撞了三次，每一次都記在代碼裏
+
+1. **沒閉合的節點結束在檔尾**，所以「範圍罩不罩得住光標」這個判準數不出一級；改成
+   `to >= byte` 又把「光標剛停在 `}` 後面」錯數成在塊裏。**順着祖先鏈走**兩種都對。
+2. **參照行是「新開的那一行」，不是光標那一行。** 拿光標那一行去比，`go(` 這種「這一
+   行剛開的括號」就被濾掉——而它正是作者問的那一條。
+3. **基準那一頭要用它自己那一行當門檻**：`call_expression` 就開在基準行的第一個字上，
+   算進去的話兩頭一樣多，差成了零——那正是這個功能整個不生效的樣子。
+
+### 第一期沒做的
+
+`@align`（閉包參數對齊）、`@extend`、`#not-same-line?` 那幾個謂詞，以及「賦值右邊」
+「`.await` 鏈」這些專門形狀——helix 那支解釋器 1502 行，這一期只做了 `@indent`／
+`@outdent`。TOML 與 YAML **有意不給查詢**：那兩種的縮進是語法本身，多縮一級是錯的。
+
 ## 5.116 收到的三條，**還沒查**（2026-10-08）
 
 作者當天連着報的，明說「put in your stack and assess it later; not interrupt the
@@ -20230,6 +20283,28 @@ rust-analyzer，回的是零條；可**連現成的那支 `rust_analyzer_really_
 當天那條規矩（一件事一個鍵）照舊成立。
 
 手冊裏那條「`/` 2026-10-01 去掉了」的警告跟着改成「`/` 和 `i` 不是同一個鍵」。
+
+### ⑨ 轉圈沒了之後那兩格該是框綫，不是兩格底色（2026-10-08 報的，**還沒做**）
+
+> When the search has been done and the eight-dot is gone. The two spaces should be
+> replaced by the border line instead of two spaces with background. Is this feasible?
+
+**做得到。** 現在那一整串（轉圈 ＋ 空格 ＋ 數目）是**一段，一個底色**，所以不轉的時候
+那兩格是「有底色的空白」，壓在框綫上看着像缺了一口。要的是那兩格畫成 `═` 並且用**框
+綫的墨**——也就是說畫的那一支要把這一串拆成兩截：前面那一截歸框，後面那一截歸那塊金
+底。數字和「結果」照舊一格不動（§5.116 ⑤ 那一條）。
+
+### ⑧ 鍵在搜索行上的時候，第一條也整條反白（2026-10-08 報的，**還沒做**）
+
+> My cursor is in the search line. But the first result is also highlighted so I am
+> confused sometimes where I am. … Another (better) solution is highlighting (and thus
+> with preview) the first result with a dimmer color. … it allows you to pre-select the
+> first result (and preview) it (so you can use enter to open it even you are in the
+> search line), but not give me a feeling that the cursor is on this line.
+
+他自己定了做法：**第一條照舊預選、照舊預覽，只是畫得淡一些**。要改的是
+`draw_picker` 裏那個 `on`（`bg(ink.text())`）——鍵不在單子上的時候（`picker.on_query()`
+或 `typing()`）換一檔淡的。⚠ 顏色是主題的事，別寫死一個灰。
 
 ### ⑥ `:info docs` 這個名字誤導——做了（2026-10-08）
 
