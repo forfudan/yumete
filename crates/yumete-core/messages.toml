@@ -5413,18 +5413,39 @@ zhs = "盖掉"
 en = "write over"
 
 [[message]]
-# 提示：挑選器查詢層——Esc 回列表
-key = "hint.picker.back-to-the-list"
-zht = "回列表"
-zhs = "回列表"
-en = "back to the list"
-
-[[message]]
 # 提示：挑選器——Enter 打開選中的那一條
 key = "hint.picker.open"
 zht = "打開"
 zhs = "打开"
 en = "open"
+
+[[message]]
+# 提示：挑選器 A-h 轉到第四格——隱藏與忽略的都搜
+key = "hint.picker.search-everything"
+zht = "全部搜索"
+zhs = "全部搜索"
+en = "search everything"
+
+[[message]]
+# 提示：挑選器 A-h 的第二格——不搜隱藏文件，忽略的搜
+key = "hint.picker.skip-hidden"
+zht = "不搜隱藏"
+zhs = "不搜隐藏"
+en = "skip hidden"
+
+[[message]]
+# 提示：挑選器 A-h 的出廠那一格——隱藏和忽略的都不搜
+key = "hint.picker.skip-hidden-and-ignored"
+zht = "不搜隱藏＋忽略"
+zhs = "不搜隐藏+忽略"
+en = "skip hidden + ignored"
+
+[[message]]
+# 提示：挑選器 A-h 的第三格——不搜 .gitignore 擋掉的，隱藏的搜
+key = "hint.picker.skip-ignored"
+zht = "不搜忽略"
+zhs = "不搜忽略"
+en = "skip ignored"
 
 [[message]]
 # 提示：注音

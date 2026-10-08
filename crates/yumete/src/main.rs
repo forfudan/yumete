@@ -998,7 +998,22 @@ fn main() -> ExitCode {
                 true => editor.project_root(),
                 false => editor.working_dir(),
             };
-            editor.open_file_picker_with(pattern, root);
+            // **走檔那四個開關進編輯器那條路也真的生效**（2026-10-08 修）。印出來那
+            // 條路 2026-10-03 就接上了篩子，而 `--open` 這一條走的是寫死的
+            // `Sieve::default()`——於是 `ye --files --hidden --open` 開出來的挑選器
+            // 裏一個點文件都沒有，而 `--help` 說它管用。進去之後 `A-h` 就從這一格
+            // 往下轉。
+            //
+            // Warning: **`uncapped` 不撥**：和 `run_files` 那一邊不同，這一趟交給的是一扇
+            // 有畫面的面板，走查那兩道閘護的正是畫面那條線程。
+            let sieve = yumete_core::editor::Sieve {
+                hidden: g.hidden,
+                ignored: g.ignored,
+                include: g.include.clone(),
+                exclude: g.exclude.clone(),
+                uncapped: false,
+            };
+            editor.open_file_picker_with(pattern, root, sieve);
         }
     }
     if let Some((width, height)) = shot {
