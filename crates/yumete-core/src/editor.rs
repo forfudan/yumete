@@ -2539,6 +2539,10 @@ pub struct Editor {
     signature: Option<(usize, crate::lsp::Signature)>,
     /// 簽名那一問在等前端發（`(` 和 `,` 按下去的時候放進來）。
     signature_query: Option<(std::path::PathBuf, usize, usize)>,
+    /// 剛剛拿哪一處問過簽名——回空的話要在同一處補問一句 hover。
+    signature_asked_at: Option<(std::path::PathBuf, usize, usize)>,
+    /// 那一句補問的 hover，等前端取走（見 `show_signature`）。
+    signature_doc_query: Option<(std::path::PathBuf, usize, usize)>,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
     /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
@@ -3483,6 +3487,8 @@ impl Editor {
             file_info_request: false,
             signature: None,
             signature_query: None,
+            signature_asked_at: None,
+            signature_doc_query: None,
             theme_request: None,
             trial: None,
             previewing: false,

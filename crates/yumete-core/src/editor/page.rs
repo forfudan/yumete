@@ -1319,13 +1319,49 @@ impl Editor {
     }
 
     /// 簽名那一問，交給前端發。
+    ///
+    /// **問的地方記下來**：服務器說「沒有簽名」的時候要在**同一處**回頭問一句
+    /// hover（見 [`Self::show_signature`]）。
     pub fn take_signature_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
-        self.signature_query.take()
+        let asked = self.signature_query.take();
+        if asked.is_some() {
+            self.signature_asked_at = asked.clone();
+        }
+        asked
     }
 
-    /// **答案回來了**：記在問的那個位置上。`None` ＝ 服務器說不出。
+    /// **簽名回空之後要補問的那一句 hover**，給前端發（2026-10-08）。
+    pub fn take_signature_doc_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.signature_doc_query.take()
+    }
+
+    /// **答案回來了**：記在問的那個位置上。
+    ///
+    /// `None` ＝ 服務器說不出簽名。**那就在同一處問一句 hover**（2026-10-08 定）——
+    /// 量出來的：rust-analyzer 對**宏**一律回 `null`（`println!(` 就是），可同一處
+    /// 的 hover 答得好好的。原話：「優先顯示 signatureHelp，如果是 null，回退到
+    /// hover（…則最多顯示正文部分第一段）」。
     pub fn show_signature(&mut self, one: Option<crate::lsp::Signature>) {
-        self.signature = one.map(|one| (self.sel.head(), one));
+        match one {
+            Some(one) => {
+                self.signature_asked_at = None;
+                self.signature = Some((self.sel.head(), one));
+            }
+            // 沒有簽名：把問過的那個地方排成一句 hover，下一趟發出去。
+            None => self.signature_doc_query = self.signature_asked_at.take(),
+        }
+    }
+
+    /// **回退那一句 hover 答回來了**：只取正文第一段（2026-10-08 定）。
+    ///
+    /// 三家都不在插入態冒整段文檔（Neovim 的 `i_CTRL-S` 只給簽名，helix 要先
+    /// `Esc`，VS Code 分兩個鍵），所以這裏最多一段，後面還有就單排一個 `…`。
+    /// 要讀全部是 `空格 k` 的事。
+    pub fn show_signature_from_doc(&mut self, told: &str) {
+        let Some(label) = crate::lsp::first_paragraph(told) else {
+            return;
+        };
+        self.signature = Some((self.sel.head(), crate::lsp::Signature { label, active: None }));
     }
 
     /// **此刻該不該畫那一則簽名**。

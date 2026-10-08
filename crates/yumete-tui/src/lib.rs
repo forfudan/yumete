@@ -1101,6 +1101,7 @@ pub fn run(
         servers.ask(editor, config);
         servers.ask_what(editor, config);
         servers.ask_signature(editor, config);
+        servers.ask_signature_doc(editor, config);
         servers.ask_next(editor, config);
         let mut server_said_something = servers.collect(editor);
         // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
@@ -6085,7 +6086,10 @@ fn draw_note(
             pages: false,
             reading: false,
             scroll: 0,
-            title: yumete_core::messages::say(Info::Docs.tag(), &[]),
+            // **叫「簽名」，不叫「文檔」**（2026-10-08 定，原話：「標題應該是『簽名』而
+            // 不是『文檔』，因為現在看來他們本質不同」）。同一扇浮窗答兩種問題，
+            // 名字是唯一說得出「剛才答的是哪一個」的地方。
+            title: say!("lsp.signature"),
             lede: None,
             entry: false,
             body: panel::Body::Prose(one.label.clone()),
