@@ -1015,6 +1015,13 @@ pub fn draw(
         None => editor.secondary_selections(),
         Some(_) => Vec::new(),
     };
+    // **光標停在括號上的時候，另一半那一格塗成金的**（2026-10-08）——竪排這一頁
+    // 也有，理由與規矩全在 `lib.rs` 的 `partner` 那一段：只畫遠那一半，金，不換
+    // 底色。兩頁同形，不然同一份稿子換個版面就少一個記號。
+    let partner = match peek {
+        None => editor.matching_bracket(),
+        Some(_) => None,
+    };
     // **The cell you are standing on** (#229), on the vertical page too. A `|`
     // table inside a 縱書 manuscript is edited where it lies — the page is not
     // turned for it (`turn_for_table`) — so this is the only surface that ever
@@ -1560,6 +1567,15 @@ pub fn draw(
 
             if has_selection && at < sel_end && at + len > sel_start {
                 style = style.patch(sel_style);
+            }
+
+            // …和配對的那一半，一格金。擺在最後，同橫排那一頭：它只改墨色，上面
+            // 每一層改的都是底色。
+            //
+            // Warning: **一格可能裝着好幾個字符**（注音的一組、縦中横的一對），所以問的是
+            // 「那一半落在這一格裏嗎」，不是「這一格就是那一格嗎」。
+            if partner.is_some_and(|mate| at <= mate && mate < at + len.max(1)) {
+                style = style.fg(ink.gold());
             }
 
             // Hung right, so half-width characters line up as one edge running
