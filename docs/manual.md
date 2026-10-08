@@ -2819,8 +2819,7 @@ without leaving the page:
 
 | | |
 | --- | --- |
-| `空格 o` | the sidebar, opened straight onto the outline |
-| `空格 s` | the same (Helix puts "the symbols in this file" on this key; both spellings work) |
+| `空格 s` | the sidebar, opened straight onto the outline — Helix puts "the symbols in this file" on this key too |
 | `空格 u` | type a reading and jump to that 漢字 (the same as `gu`; under the vim preset `gu` is the lowercase operator, so this door stands open in both) |
 | `空格 f` | open a file: a panel in the middle, the list on the left and the preview on the right (see "Picking a file"); searches the **project path** |
 | `空格 F` | the same, but searches the **working path** (`:cd` changes it, `:pwd` shows it) |
@@ -2950,7 +2949,7 @@ at all (`Tab` does nothing then).
 the two ends) — the other views are lists, and in them those keys walk rows. The way
 in is `C-w w`; `:wiki-panel` only opens the column, and the keys stay in the text.
 
-`空格 o` means "**show me this view**", one rule: if the sidebar is closed, open it on
+`空格 s` means "**show me this view**", one rule: if the sidebar is closed, open it on
 that view; if it is open on another view, switch to it; if it is open on that very
 view but the keys are in the text, take the keys back; if the keys are in the sidebar
 already, fold it away. So the same key twice always returns to where you started —
@@ -2993,7 +2992,7 @@ tree, the open buffers, the outline and search, and the right has only "Info". T
 first three answer the same question at three scales — what is in the project, which
 of it is open, what shape the chapter in front of you has — so they take turns in one
 place instead of being three panels. Each view remembers where it was left, so `Tab`
-back and forth does not return you to the top. `空格 o` opens straight on the outline.
+back and forth does not return you to the top. `空格 s` opens straight on the outline.
 
 Warning: **`Tab` changes the panel**, while which kind the "Info" slot holds is
 decided by the caret and the key you pressed (`空格 d`/`空格 k`/`空格 i`/
@@ -6715,4 +6714,4 @@ Said plainly, so you do not go looking for it:
   most, not a sentence.
 - **Syntax highlighting for code, LSP, split windows.** See the feature table in
   [development.md](development.md). (Colouring for Markdown and Typst does
-  exist, see "Markdown colouring"; so does the outline sidebar, `空格 o`.)
+  exist, see "Markdown colouring"; so does the outline sidebar, `空格 s`.)
