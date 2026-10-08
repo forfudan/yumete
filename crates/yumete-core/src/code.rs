@@ -61,11 +61,15 @@ pub enum Token {
 pub enum Language {
     C,
     Css,
+    /// GAS（`.s`）——與 [`Language::Nasm`] 共用一套通用匯編語法，分家分的是註釋記號。
+    Gas,
     Go,
     Html,
     Java,
     JavaScript,
     Json,
+    /// NASM（`.asm` `.S` `.nasm`）——見 [`Language::Gas`]。
+    Nasm,
     Python,
     R,
     Rust,
@@ -75,14 +79,16 @@ pub enum Language {
 
 impl Language {
     /// Every language, for `:view-code`'s report and the tests.
-    pub const ALL: [Language; 12] = [
+    pub const ALL: [Language; 14] = [
         Language::C,
         Language::Css,
+        Language::Gas,
         Language::Go,
         Language::Html,
         Language::Java,
         Language::JavaScript,
         Language::Json,
+        Language::Nasm,
         Language::Python,
         Language::R,
         Language::Rust,
@@ -102,8 +108,10 @@ impl Language {
             .collect::<String>()
             .to_ascii_lowercase();
         Some(match word.as_str() {
+            "asm" | "nasm" => Language::Nasm,
             "c" => Language::C,
             "css" => Language::Css,
+            "gas" => Language::Gas,
             "go" | "golang" => Language::Go,
             "html" | "htm" | "xhtml" => Language::Html,
             "java" | "jav" => Language::Java,
@@ -120,8 +128,21 @@ impl Language {
 
     /// The language a file's extension says it is in. Narrower than
     /// [`Self::from_info`]: a file called `node` is not JavaScript.
+    ///
+    /// Warning: **收的是原樣的副檔名，轉小寫在這一支裏面**（2026-10-08 定）。幾乎
+    /// 所有副檔名不分大小寫，但**匯編分**：`.s` 是 GAS（註釋 `#`），`.S` 是要
+    /// 走預處理的那一種，照 helix 歸 NASM（註釋 `;`）。轉小寫放在呼叫端的話，
+    /// 這一層永遠再也分不出兩者——所以先看原樣的，再轉小寫查其餘。
     pub fn from_extension(extension: &str) -> Option<Language> {
-        Some(match extension {
+        // **大小寫真的算數的就這兩個**，實打實地寫在前面。
+        match extension {
+            "s" => return Some(Language::Gas),
+            "S" => return Some(Language::Nasm),
+            _ => {}
+        }
+        let extension = extension.to_ascii_lowercase();
+        Some(match extension.as_str() {
+            "asm" | "nasm" => Language::Nasm,
             "c" => Language::C,
             "css" => Language::Css,
             "go" => Language::Go,
@@ -143,11 +164,13 @@ impl Language {
         match self {
             Language::C => "c",
             Language::Css => "css",
+            Language::Gas => "gas",
             Language::Go => "go",
             Language::Html => "html",
             Language::Java => "java",
             Language::JavaScript => "javascript",
             Language::Json => "json",
+            Language::Nasm => "nasm",
             Language::Python => "python",
             Language::R => "r",
             Language::Rust => "rust",
@@ -160,6 +183,10 @@ impl Language {
         match self {
             Language::C => tree_sitter_c::LANGUAGE.into(),
             Language::Css => tree_sitter_css::LANGUAGE.into(),
+            // **一套語法兩門語言**：`tree-sitter-asm` 是通用匯編語法，三種行
+            // 註釋（`#` `//` `;`）全認；分成 GAS 與 NASM 是為了 `空格 c` 寫得出
+            // 對的那一個——寫錯一邊是真的編不過。helix 也分兩門（它用兩套語法）。
+            Language::Gas | Language::Nasm => tree_sitter_asm::LANGUAGE.into(),
             Language::Go => tree_sitter_go::LANGUAGE.into(),
             Language::Html => tree_sitter_html::LANGUAGE.into(),
             Language::Java => tree_sitter_java::LANGUAGE.into(),
@@ -178,6 +205,7 @@ impl Language {
             // Warning: **C 那一個叫 `HIGHLIGHT_QUERY`**，單數——同一族 crate 兩種拼法。
             Language::C => tree_sitter_c::HIGHLIGHT_QUERY,
             Language::Css => tree_sitter_css::HIGHLIGHTS_QUERY,
+            Language::Gas | Language::Nasm => tree_sitter_asm::HIGHLIGHTS_QUERY,
             Language::Go => tree_sitter_go::HIGHLIGHTS_QUERY,
             Language::Html => tree_sitter_html::HIGHLIGHTS_QUERY,
             Language::Java => tree_sitter_java::HIGHLIGHTS_QUERY,
@@ -214,9 +242,13 @@ impl Language {
             Language::R => tree_sitter_r::TAGS_QUERY,
             Language::Rust => tree_sitter_rust::TAGS_QUERY,
             // 這幾種沒有定義可言，語法 crate 也不帶 tags。
-            Language::Css | Language::Html | Language::Json | Language::Toml | Language::Yaml => {
-                return None
-            }
+            Language::Css
+            | Language::Html
+            | Language::Json
+            | Language::Toml
+            | Language::Yaml
+            | Language::Gas
+            | Language::Nasm => return None,
         })
     }
 
@@ -259,15 +291,20 @@ impl Language {
             Language::R => {
                 "(parameters (parameter) @parameter)\n                 (comment) @comment\n"
             }
-            Language::Css | Language::Html | Language::Json | Language::Toml | Language::Yaml => {
-                return None
-            }
+            Language::Css
+            | Language::Html
+            | Language::Json
+            | Language::Toml
+            | Language::Yaml
+            // 匯編裏沒有「參數」這種東西。
+            | Language::Gas
+            | Language::Nasm => return None,
         })
     }
 
     /// 編好的那份，連着每一格捕獲算哪一種對象。
     fn object_query(self) -> Option<&'static Objects> {
-        static CELLS: [OnceLock<Option<Objects>>; 12] = [const { OnceLock::new() }; 12];
+        static CELLS: [OnceLock<Option<Objects>>; 14] = [const { OnceLock::new() }; 14];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -288,7 +325,7 @@ impl Language {
 
     /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
     fn defines(self) -> Option<&'static Defines> {
-        static CELLS: [OnceLock<Option<Defines>>; 12] = [const { OnceLock::new() }; 12];
+        static CELLS: [OnceLock<Option<Defines>>; 14] = [const { OnceLock::new() }; 14];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -376,13 +413,14 @@ impl Language {
             Language::Html => "[(element)] @indent",
             // TOML 與 YAML 的縮進是**語法本身**（一個鍵一行、靠縮進分層），
             // 多縮一級是錯的——這兩種不給查詢。
-            Language::Toml | Language::Yaml => "",
+            // 匯編沒有塊：標籤下面那一段縮不縮是寫稿子的人自己的事。
+            Language::Toml | Language::Yaml | Language::Gas | Language::Nasm => "",
         }
     }
 
     /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
     fn indent_query(self) -> Option<&'static Query> {
-        static CELLS: [OnceLock<Option<Query>>; 12] = [const { OnceLock::new() }; 12];
+        static CELLS: [OnceLock<Option<Query>>; 14] = [const { OnceLock::new() }; 14];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         let text = self.indents();
         if text.is_empty() {
@@ -392,7 +430,7 @@ impl Language {
     }
 
     fn query(self) -> Option<&'static Compiled> {
-        static CELLS: [OnceLock<Option<Compiled>>; 12] = [const { OnceLock::new() }; 12];
+        static CELLS: [OnceLock<Option<Compiled>>; 14] = [const { OnceLock::new() }; 14];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -1018,6 +1056,30 @@ mod tests {
                 language.name(),
             );
         }
+    }
+
+    /// **`.s` 與 `.S` 不是同一門語言**（2026-10-08 定）。
+    ///
+    /// 分家分的是 `空格 c` 寫哪一個記號。其餘副檔名照舊不分大小寫。
+    #[test]
+    fn the_one_extension_whose_case_decides_which_language_it_is() {
+        use crate::comment::{marks, Marks};
+        use crate::syntax::Syntax;
+        assert_eq!(Language::from_extension("s"), Some(Language::Gas));
+        assert_eq!(Language::from_extension("S"), Some(Language::Nasm));
+        assert_eq!(Language::from_extension("asm"), Some(Language::Nasm));
+        // 別的副檔名大寫小寫都是同一門。
+        assert_eq!(Language::from_extension("RS"), Some(Language::Rust));
+        assert_eq!(Language::from_extension("R"), Some(Language::R));
+        assert_eq!(Language::from_extension("Go"), Some(Language::Go));
+        // 而分家是為了這一格：
+        assert_eq!(marks(Syntax::Code(Language::Gas)).line, Some("#"));
+        assert_eq!(marks(Syntax::Code(Language::Nasm)).line, Some(";"));
+        assert_eq!(
+            marks(Syntax::Code(Language::Nasm)),
+            Marks { line: Some(";"), block: None },
+            "NASM 沒有塊註釋"
+        );
     }
 
     /// **縮進是語法本身的那兩種不給查詢**（TOML／YAML）。

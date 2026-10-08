@@ -42,6 +42,16 @@ pub enum Stand {
 pub struct Panel {
     /// 站在哪裏——見 [`Stand`]。
     pub stand: Stand,
+    /// **正文裏要加重的那一段**（字符下標，不是字節；2026-10-08）。
+    ///
+    /// 簽名那一扇用它說「你正在填第幾個參數」——服務器說得出來
+    /// （`lsp::Signature::active`），而「填到哪了」正是這一則存在的理由。
+    ///
+    /// Warning: **只管橫排、散文、不走 Markdown、正文裏沒有換行的那一種。**
+    /// 算法是「折行不會弄丟字」：一行一行數過去，第 i 行就是原文的第
+    /// `seen..seen+n` 個字。換行符不在任何一行裏（`wrap` 按 `\n` 先分段），
+    /// 所以正文帶換行就不加重——寧可不加重，也不許加重錯的那一段。
+    pub accent: Option<(usize, usize)>,
     pub title: String,
     /// **The 章節 line**, drawn quietly between the name and the body, with a
     /// blank line (竪排: a blank 縱) under it (2026-09-18).
@@ -875,11 +885,35 @@ pub fn draw(
                 }
             }
         }
-        Body::Prose(_) => {
+        Body::Prose(text) => {
+            // **加重那一段只在最簡單的那一種上做**——見 [`Panel::accent`]。
+            let accent = panel.accent.filter(|_| !panel.marked && !text.contains('\n'));
+            let mut seen = 0usize;
             for (i, line) in lines.iter().enumerate() {
                 let x = rect.x + 1 + pad as u16;
                 let y = rect.y + 1 + i as u16;
                 let plain = ground.fg(ink_of(i));
+                let here = seen;
+                let wide = line.chars().count();
+                seen += wide;
+                // 這一行落在加重那一段裏的就拆成三截畫：前、中、後。
+                if let Some((from, to)) = accent {
+                    let a = from.saturating_sub(here).min(wide);
+                    let b = to.saturating_sub(here).min(wide);
+                    if a < b {
+                        let cut = |skip: usize, take: usize| {
+                            line.chars().skip(skip).take(take).collect::<String>()
+                        };
+                        let (head, mid, tail) = (cut(0, a), cut(a, b - a), cut(b, wide - b));
+                        let mut at = x;
+                        put_text(buf, at, y, limit, &head, plain);
+                        at += yumete_cjk::str_width(&head) as u16;
+                        put_text(buf, at, y, limit, &mid, ground.fg(ink.gold()));
+                        at += yumete_cjk::str_width(&mid) as u16;
+                        put_text(buf, at, y, limit, &tail, plain);
+                        continue;
+                    }
+                }
                 // Warning: **Only the body, and only when it says it is Markdown.**
                 // The 章節 line and the title above it are the panel's own
                 // furniture and are set in their own inks (`ink_of`); running
@@ -974,6 +1008,7 @@ mod tests {
                 let area = Rect::new(0, 0, w, h);
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
                     stand: Stand::Corner,
+                    accent: None,
                     pages: false,
                     reading: false,
             scroll: 0,
@@ -1009,6 +1044,7 @@ mod tests {
                 let area = Rect::new(0, 0, w, h);
                 draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
                     stand: Stand::Corner,
+                    accent: None,
                     pages: false,
                     reading: false,
             scroll: 0,
@@ -1111,6 +1147,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, (0, 0), false, &Panel {
                     stand: Stand::Corner,
+                    accent: None,
                     pages: false,
                     reading: false,
             scroll: 0,
@@ -1162,5 +1199,87 @@ mod tests {
         let text = written(rect, &buffer);
         assert!(text.contains("k23"), "the last key is missing: {text:?}");
         assert!(!text.contains('…'), "nothing was cut, yet it says so: {text:?}");
+    }
+
+    /// **正在填的那一段加重，其餘不動**（2026-10-08，簽名提示）。
+    ///
+    /// 量的是墨：`value: T` 那幾格是金的，`fn push(` 與最後那一個 `)` 不是。
+    #[test]
+    fn the_parameter_being_filled_is_the_only_gold_in_the_line() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let ink = crate::theme::Palette::of(&config);
+        let label = "fn push(&mut self, value: T)";
+        let at = label.find("value: T").expect("在");
+        let span = (label[..at].chars().count(), label[..at].chars().count() + "value: T".chars().count());
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                got = draw(frame, &config, Rect::new(0, 0, 80, 24), 23, (0, 0), false, &Panel {
+                    stand: Stand::Corner,
+                    accent: Some(span),
+                    pages: false,
+                    reading: false,
+                    scroll: 0,
+                    title: "文檔".into(),
+                    lede: None,
+                    entry: false,
+                    body: Body::Prose(label.into()),
+                    vertical_text: false,
+                    tag: None,
+                    marked: false,
+                });
+            })
+            .unwrap();
+        let rect = got.expect("畫出來了");
+        let buffer = terminal.backend().buffer().clone();
+        // 正文那一行：框裏的第一行。每一格的字與墨一起收下來。
+        let row: Vec<(String, bool)> = (1..rect.width - 1)
+            .map(|x| {
+                let cell = &buffer[(rect.x + x, rect.y + 1)];
+                (cell.symbol().to_string(), cell.style().fg == Some(ink.gold()))
+            })
+            .collect();
+        let gold: String = row.iter().filter(|(_, g)| *g).map(|(c, _)| c.as_str()).collect();
+        let rest: String =
+            row.iter().filter(|(_, g)| !*g).map(|(c, _)| c.as_str()).collect::<String>();
+        assert_eq!(gold, "value: T", "金的只該是正在填的那一個參數");
+        assert!(rest.trim().starts_with("fn push(&mut self,"), "別的段照舊：{rest:?}");
+        assert!(rest.trim().ends_with(')'), "最後那一個括號不該是金的：{rest:?}");
+    }
+
+    /// 服務器沒說是哪一段就一格金的都沒有——寧可不加重。
+    #[test]
+    fn no_accent_means_no_gold_in_the_body() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let ink = crate::theme::Palette::of(&config);
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                got = draw(frame, &config, Rect::new(0, 0, 80, 24), 23, (0, 0), false, &Panel {
+                    stand: Stand::Corner,
+                    accent: None,
+                    pages: false,
+                    reading: false,
+                    scroll: 0,
+                    title: "文檔".into(),
+                    lede: None,
+                    entry: false,
+                    body: Body::Prose("fn push(&mut self, value: T)".into()),
+                    vertical_text: false,
+                    tag: None,
+                    marked: false,
+                });
+            })
+            .unwrap();
+        let rect = got.expect("畫出來了");
+        let buffer = terminal.backend().buffer().clone();
+        let gold = (1..rect.width - 1)
+            .filter(|&x| buffer[(rect.x + x, rect.y + 1)].style().fg == Some(ink.gold()))
+            .count();
+        assert_eq!(gold, 0, "沒說就不加重");
     }
 }
