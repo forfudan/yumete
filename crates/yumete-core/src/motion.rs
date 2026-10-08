@@ -150,7 +150,16 @@ pub fn visual_column(rope: &Rope, pos: usize) -> usize {
     let line = rope.char_to_line(pos);
     let ls = rope.line_to_char(line);
     let col = pos - ls;
-    let text = line_text(rope, line);
+    // Warning: **只拿光標前面那一截**（2026-10-08）。下面那個迴圈 `chars >= col`
+    // 就斷，所以後面的字一個也用不著；可 `line_text` 把**整行**物化成 `String`，
+    // 而這一支是狀態欄與光標每幀都問的——一行 150 萬字的檔上就是每幀一次
+    // 4.5 MB 的拷貝（`sample` 指的就是這裏）。
+    //
+    // 多拿 64 個字是給**跨過光標那一個字簇**留的余地：迴圈收的是「起點在 `col`
+    // 之前」的字簇，而一個字簇要整個在手裏才量得出寬度。真正的文字裏一個字簇
+    // 兩三個碼位就到頂，64 是十幾倍的餘量。
+    let end = rope.line_to_char(line) + rope.line(line).len_chars();
+    let text: String = rope.slice(ls..end.min(ls + col + 64)).to_string();
     let mut width = 0;
     let mut chars = 0;
     for g in graphemes(&text) {

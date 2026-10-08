@@ -433,22 +433,30 @@ impl Editor {
         // 畫的那一邊問的是 [`crate::wrap::position`]，它**先濾掉藏起來的**再加畫
         // 出來的。兩邊是同一條規矩的兩份推導，只在「什麼都沒藏」的時候一致——
         // `:render off`/`basic` 下一直對，所以沒人發現。
-        let gone: usize = match self.line_text(line) {
-            Some(text) => {
-                let chars: Vec<char> = text.chars().collect();
-                self.hidden_on_line(line)
-                    .iter()
-                    .map(|&(from, to)| (from.min(col), to.min(col)))
-                    .filter(|(from, to)| to > from)
-                    .map(|(from, to)| {
-                        chars[from.min(chars.len())..to.min(chars.len())]
-                            .iter()
-                            .map(|&c| yumete_cjk::char_width(c))
-                            .sum::<usize>()
-                    })
-                    .sum()
-            }
-            None => 0,
+        // Warning: **沒藏東西就別把那一行拿出來**（2026-10-08）。`line_text` 把一整行物化成
+        // `String` 再拆成 `Vec<char>`，而這一支每幀都要問一次——一行 150 萬字的
+        // 檔上就是每幀兩次大拷貝（`sample` 指的就是這裏）。藏起來的那一列空著的
+        // 時候這筆賬是零，而「空著」正是沒開 `:render` 與長行門槛下的常態。
+        let hidden = self.hidden_on_line(line);
+        let gone: usize = match hidden.is_empty() {
+            true => 0,
+            false => match self.line_text(line) {
+                Some(text) => {
+                    let chars: Vec<char> = text.chars().collect();
+                    hidden
+                        .iter()
+                        .map(|&(from, to)| (from.min(col), to.min(col)))
+                        .filter(|(from, to)| to > from)
+                        .map(|(from, to)| {
+                            chars[from.min(chars.len())..to.min(chars.len())]
+                                .iter()
+                                .map(|&c| yumete_cjk::char_width(c))
+                                .sum::<usize>()
+                        })
+                        .sum()
+                }
+                None => 0,
+            },
         };
         (text + drawn).saturating_sub(gone)
     }

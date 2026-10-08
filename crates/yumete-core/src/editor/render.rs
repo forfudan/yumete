@@ -468,12 +468,20 @@ impl Editor {
     /// columns collapsed and the caret standing on a column the page did not
     /// have.
     fn tab_stops_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
+        // Warning: **「這一行有製表符嗎」要先問，而且不造字串**（2026-10-08）。
+        //
+        // 從前是先 `line_text`（一整行物化成 `String`）再 `contains('\t')`。絕大多數行
+        // 一個製表符都沒有，而這一支每幀每行要問一次——一行 150 萬字的檔上就是
+        // 每幀一次 4.5 MB 的拷貝。rope 自己按塊存著，一塊一塊找字節不配任何內存。
+        //
+        // ⚠ **這一支不走長行門槛**：製表符的格寬是**量出來的位置**，不是裝飾——
+        // 不畫它光標就停在一個那一頁沒有的列上。一行很長的 TSV 正是這種檔。
+        if !self.current_buffer().rope().line(line).chunks().any(|c| c.contains('\t')) {
+            return Vec::new();
+        }
         let Some(text) = self.line_text(line) else {
             return Vec::new();
         };
-        if !text.contains('\t') {
-            return Vec::new();
-        }
         let stop = self.tab_stop();
         let hidden = self.hidden_on_line(line);
         // A tab a table has taken over as its separator is not indentation
@@ -648,6 +656,10 @@ impl Editor {
     fn notes_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
         use crate::drawn::{Ink, Run};
         if !self.notes || !self.markup_visible() {
+            return Vec::new();
+        }
+        // 標點的提示是裝飾，與標記、語法、分詞同一條門槛（`:view-long-line`）。
+        if self.line_is_too_long(line) {
             return Vec::new();
         }
         if self.block_of(line).is_literal() {
