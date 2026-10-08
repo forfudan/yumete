@@ -20470,7 +20470,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天");
         // 左大綱、右字典——出廠 `sides` 把這兩個分在兩邊。
         // （字典 2026-09-30 從 `空格 D` 搬到了 `空格 N`，`d`/`D` 讓給診斷。）
-        for key in " o N".chars() {
+        // （大綱那一鍵 2026-10-08 從 `空格 o` 併到了 `空格 s`——helix 的那一格。）
+        for key in " s N".chars() {
             editor.on_key(Key::Char(key));
         }
         // 一欄兩堵牆，兩欄就是四堵。問正文那一行：上下兩條邊有焦點時整條是金的。

@@ -9444,11 +9444,12 @@ fn one_key_moves_between_the_two_panes() {
     ed.on_key(Key::Char('w'));
     assert!(!ed.sidebar_focused());
 
-    // With no sidebar open it does nothing at all.
+    // With no sidebar open it does nothing at all. （2026-10-08：大綱那一鍵從
+    // `空格 o` 併到了 `空格 s`——helix 把「這份檔裏的符號」放在 `s`。）
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('o'));
+    ed.on_key(Key::Char('s'));
     ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('o'));
+    ed.on_key(Key::Char('s'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
@@ -9471,24 +9472,24 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     assert!(ed.sidebar_focused());
 
     // A *different* view's key means 「show me the outline」, not 「close」.
-    type_keys(&mut ed, " o");
+    type_keys(&mut ed, " s");
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Outline);
     assert!(ed.sidebar_focused());
 
     // The same key again closes it: a toggle that cannot undo itself is not
     // a toggle.
-    type_keys(&mut ed, " o");
+    type_keys(&mut ed, " s");
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
 
     // `C-w` hands the keys back without putting it away, and the key takes
     // them again rather than closing something the writer is not in.
-    type_keys(&mut ed, " o");
+    type_keys(&mut ed, " s");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_some() && !ed.sidebar_focused());
-    type_keys(&mut ed, " o");
+    type_keys(&mut ed, " s");
     assert!(ed.sidebar_focused(), "the keys came back");
-    type_keys(&mut ed, " o");
+    type_keys(&mut ed, " s");
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "and now it closes");
 
     // **The file tree has no key of its own** since 2026-09-18 — `空格 e` was
@@ -19871,7 +19872,7 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     // 檔案樹與大綱**同在左邊**，後一個把前一個頂掉了，前置條件又寫的是 `any`
     // ——`空格 S` 就算只收左邊，這一條照樣綠。出廠 `sides` 前四格全是左，右邊
     // 那一個是字典。
-    press(&mut ed, " o"); // 大綱：左
+    press(&mut ed, " s"); // 大綱：左
     press(&mut ed, " N"); // 字典：右
     for side in Side::BOTH {
         // Warning: 別再寫 `panel(side).is_some() || info_in_this_sidebar(side)

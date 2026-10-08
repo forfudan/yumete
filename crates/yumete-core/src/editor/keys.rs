@@ -2841,7 +2841,6 @@ impl Editor {
     // menu is the scarcest thing the editor has, and the picker is what
     // 「open a file」 means now.
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
-        ('o', "hint.goto.outline"),
         ('s', "hint.goto.outline"),
         ('f', "hint.goto.open-file"),
         // **`空格 F`：搜工作路徑**（2026-10-01，照 helix 的
@@ -3254,13 +3253,19 @@ impl Editor {
             // 大小寫算子，而這一支是中文稿子上天天按的——所以它在兩套鍵位下都另有
             // 一個門，不是只在讓位的那一端補一個。
             Key::Char('u') => self.start_seek(true),
-            // **`空格 s` 也開大綱**（2026-10-06，helix 的 `symbol_picker`）。helix 把
-            // 「這份檔裏的符號」放在 `空格 s`，這個編輯器一直放在 `空格 o`；`s` 空着，
-            // 所以兩個拼法都通，一個 helix 的手按下去得到它預期的那一扇。
+            // **大綱在 `空格 s`，只在這一格**（2026-10-08 去重）。
+            //
+            // helix 把「這份檔裏的符號」放在 `空格 s`（`lsp_or_syntax_symbol_picker`），
+            // 這個編輯器從前放在 `空格 o`，2026-10-06 兩個拼法一起留着。報上來的是
+            // 選單上兩行「大綱」。
+            //
+            // Warning: **去掉的是 `o` 那一個**，雖然它是這裏一直用的那一個。查過 helix 的
+            // 空格選單全部二十八格：`s` 有主（就是這件事），而 `o` **一格都沒有**
+            // ——所以 `s` 是對齊、`o` 是自己發明的。照「對齊是第一要務」與 §5.94
+            // （「我天天按它」不是理由）兩條，留對齊的那一個。
+            //
+            // `o` 從此沒綁，按下去**一個字都不說**（2026-10-08 那條規矩，§5.111）。
             Key::Char('s') => self.show_sidebar(crate::sidebar::View::Outline),
-
-            // The outline is the sidebar showing the view that has it.
-            Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
             // 定義 (#215): the 拆分表 on the character under the cursor. The
             // table detail panel this key used to open is a table key, and now
             // lives in the table group as `t i`.
