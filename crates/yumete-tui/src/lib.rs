@@ -9970,10 +9970,19 @@ fn draw_horizontal(
         // page. A lone `\r` is **not** among them: `wrap::line_text` takes it
         // off with the rest of the break, so it never reaches this row at all
         // — which is #395, and a different question (is it a line?).
-        let chars: Vec<char> = text.chars().map(|c| match c {
-            '\t' => ' ',
-            _ => yumete_cjk::control_picture(c).unwrap_or(c),
-        }).collect();
+        // **哪幾格本來是 tab**，下面要給它們和它們拉出來的那一段同一個底色。
+        let mut tabs: Vec<usize> = Vec::new();
+        let chars: Vec<char> = text
+            .chars()
+            .enumerate()
+            .map(|(i, c)| match c {
+                '\t' => {
+                    tabs.push(i);
+                    ' '
+                }
+                _ => yumete_cjk::control_picture(c).unwrap_or(c),
+            })
+            .collect();
         // The block grounds the whole row; the inline runs are patched onto it.
         // **The page is painted.** Until this line, the manuscript itself was
         // drawn with no colour at all — the terminal's own ink on the
@@ -10134,6 +10143,23 @@ fn draw_horizontal(
             let indent = chars.iter().take_while(|c| c.is_whitespace()).count();
             for style in styles.iter_mut().take(indent) {
                 *style = under;
+            }
+        }
+        // **一個 tab 的八格是同一塊**（2026-10-08 報的：「tab size is strange ……
+        // first 7 are greyed, the last 1 is normal background」）。
+        //
+        // 一個 tab 在這裏是**一格真字符 ＋ 一段畫出來的空白**（`tab_stops_on_line`），
+        // 而那一段有自己的底色（`Ink::Tab`），真字符那一格從前走的是頁面的底色——
+        // 於是八格裏七格一個色、第八格另一個色，看着像畫錯了。
+        //
+        // 只給**拉出過那一段**的 tab 上色：表格拿 tab 當分隔符的時候它就是一堵牆，
+        // 不拉空白，也不該有底色（見 `Editor::wall_columns`）。
+        for &at in &tabs {
+            let pulled = runs
+                .iter()
+                .any(|r| r.ink == yumete_core::drawn::Ink::Tab && r.column == at);
+            if let (true, Some(style)) = (pulled, styles.get_mut(at)) {
+                *style = run_style(yumete_core::drawn::Ink::Tab);
             }
         }
         // Where a `==highlight==` covers this row, in this row's own indices,

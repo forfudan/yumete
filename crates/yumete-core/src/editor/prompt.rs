@@ -386,7 +386,6 @@ impl Editor {
                 self.walk_history(key == Key::Up, false);
                 // 翻出來的那一行也是一行：`:theme 墨香` 從歷史裏翻上來，照樣先畫。
                 self.ask_for_a_trial();
-                self.ask_for_a_trial();
             }
             Key::Enter => {
                 // 按下了：預覽成真，記下的舊樣子不必再留（`PromptEvent::Validate`）。

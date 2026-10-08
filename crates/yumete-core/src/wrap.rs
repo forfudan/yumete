@@ -1294,16 +1294,34 @@ fn char_at_column(
     // there is nothing in the indent to land on.
     let mut col = m.indent_of(line, &line_text(rope, line), index_in_line);
     let hidden = m.off(line);
+    // **The page drawn beside the text counts here too** (2026-10-08 報的：
+    // 「行首有 tab 縮進時（go 代碼），按下 j/k 時 cursor 位置不對齊」).
+    //
+    // Warning: 這一支從前只數了真字符，而 [`position`]（算目標列的那一支）數的是
+    // 真字符**加上畫在它們旁邊的那些**。一個 tab 正是後者：它自己佔一格，到下一
+    // 個制表位的那幾格是一段 `Ink::Tab` 的 `drawn` 跑出來的（見
+    // `Editor::tab_stops_on_line`）。於是一行行首一個 tab，目標列多算七格，而落
+    // 點這一頭少算七格——`j` 一下就偏了十四格。表格的填充（`Ink::Padding`）同病。
+    //
+    // 規矩照 `position` 抄：跑段站在它所錨的那個字**之前**，所以錨點等於眼下這
+    // 一格的時候，它整段都在前面。
+    let drawn = m.drawn_on(line);
     let mut at = e;
     for (i, w) in steps(&row) {
+        let here = s + i;
+        col += drawn
+            .iter()
+            .filter(|&&(a, _)| a == here)
+            .map(|(_, text)| yumete_cjk::str_width(text))
+            .sum::<usize>();
         // Hidden markup takes no column here either — the same rule the rows
         // were broken by, asked the same way.
-        let w = match hidden.iter().any(|&(a, b)| s + i >= a && s + i < b) {
+        let w = match hidden.iter().any(|&(a, b)| here >= a && here < b) {
             true => 0,
             false => w,
         };
         if col + w > goal {
-            at = s + i;
+            at = here;
             break;
         }
         col += w;
