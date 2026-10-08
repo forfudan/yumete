@@ -42,8 +42,22 @@ fn col_of_byte(s: &str, byte: usize) -> usize {
 }
 
 /// The number of characters on `line` (excluding the trailing line break).
+///
+/// Warning: **不抄整行**（2026-10-08）。從前寫的是
+/// `line_text(rope, line).chars().count()`——為了數一個數字，把一行一千兩百萬字
+/// 的行抄成一個 37 MB 的 `String`，而 `line_end` 問的就是這個數，於是每一下詞動
+/// 作都抄一次。`ropey` 的行切片自己報得出字數，剩下的只是把尾巴上那一兩格扣掉，
+/// 扣的與 `line_text` 一樣（先 `\n`，再它前面的 `\r`），所以答案逐位相同。
 pub(crate) fn line_char_len(rope: &Rope, line: usize) -> usize {
-    line_text(rope, line).chars().count()
+    let slice = rope.line(line);
+    let mut n = slice.len_chars();
+    if n > 0 && slice.char(n - 1) == '\n' {
+        n -= 1;
+        if n > 0 && slice.char(n - 1) == '\r' {
+            n -= 1;
+        }
+    }
+    n
 }
 
 /// The first character **after** this line's break — where the next line starts.
@@ -317,18 +331,174 @@ pub enum Grain {
     Coarse,
 }
 
+/// Warning: **詞動作不問這一支，問 [`near_words`]**（2026-10-08）。整行一份答案
+/// 在一行一千兩百萬字的檔上就是整份文件一份答案，而一下 `e` 只用得上其中一條。
+/// 畫面上的東西（跳轉標籤、`miw`、`*` 取光標下那個詞）還是問這一支：它們要的本
+/// 來就是一整行。
 pub fn line_words(rope: &Rope, line: usize, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
     let start = rope.line_to_char(line);
     let text = line_text(rope, line);
-    let ranges = match grain {
-        Grain::Big => yumete_cjk::word_ranges_big(&text),
-        Grain::Coarse => yumete_cjk::word_ranges_coarse(&text),
-        Grain::Word => seg.segment(&text),
-    };
-    ranges
+    segment_text(&text, grain, seg)
         .into_iter()
         .map(|(a, b)| (start + a, start + b))
         .collect()
+}
+
+/// 一段文本按某個粒度切出來的詞範圍（相對這段文本）。
+fn segment_text(text: &str, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
+    match grain {
+        Grain::Big => yumete_cjk::word_ranges_big(text),
+        Grain::Coarse => yumete_cjk::word_ranges_coarse(text),
+        Grain::Word => seg.segment(text),
+    }
+}
+
+// ---- 長行上的詞動作：只切光標附近那一段（2026-10-08） ----------------------
+
+/// 一次詞動作往兩邊各看多少個字元。
+///
+/// **量出來的病**（2026-10-08，§5.126 ② 留下的那一條）：一行 12,419,022 字的檔
+/// 上，`e` 每一下 287 ms、`w` 272 ms、`b` 379 ms，而 `l` 只要 5.7 ms——
+/// [`line_words`] 把整行抄成一個 37 MB 的 `String`，分完一千兩百萬字的詞，然後
+/// 用掉其中一條。helix 那一邊是 `slice.chars_at(head)` 往前走、碰上第一個邊界就
+/// `break`（`helix-core/src/movement.rs:255` 與 `:468-480`），代價跟着**走了多遠**
+/// 算，不跟着行長算。這一節要的是同一件事，差別只在漢語的分詞器要的是一段上下
+/// 文，不是一個遊標。
+///
+/// 4096 的來由：這是**一下按出去走多遠**的量，不是上下文的量（那是
+/// [`WORD_SEAM`]）。一扇窗（8192 字）走一趟 Viterbi 是十微秒的量級，按住鍵也追得
+/// 上一幀；而一下走過四千字的動作不是人在稿子裏按的——[`near_words`] 推窗那條路是
+/// 給病態文本留的，不是給正文留的。
+const WORD_REACH: usize = 4096;
+
+/// 推窗的時候兩扇窗重疊多少——**一條邊界要多少上下文纔算得準**。
+///
+/// 窗邊上那條邊界不可信，所以下一扇窗要把它罩進裏面去（[`Window`] 的註釋）；重疊
+/// 多少就是那條邊界在新窗裏有多少左文。512 比詞典裏最長的詞（`max_len`，幾個字）
+/// 多兩個數量級，而逐字掃的那兩種粒度（`Big`/`Coarse`）只看相鄰兩個字。
+///
+/// Warning: **別把這個數和 [`WORD_REACH`] 合成一個。** 重疊取 `WORD_REACH` 的時候
+/// 推一次只前進半扇窗，於是「一行裏一個空白都沒有」那種檔上 `W` 要把整行分兩遍
+/// （量出來和整行分詞一樣慢，49.8 ms 一鍵，白推）。分開之後推一次前進
+/// `2 * WORD_REACH - WORD_SEAM`，整行總共只多分 6%。
+const WORD_SEAM: usize = 512;
+
+/// 比這麼長的行纔走窗口；到這個長度為止照舊整行分詞。
+///
+/// `2 * WORD_REACH` 以下的行，窗口本來就是整行，所以這個門檻只是在說「從哪裏開
+/// 始算長行」。取四倍半徑：到了這個長度窗口已經比整行便宜一半，而一行一萬六千
+/// 字的「段落」不是稿子裏有的東西（那是幾十頁書擠成一段）——**正文走的永遠是從
+/// 前那條路，一次整行，答案與開銷逐位相同**。
+const WORD_WINDOW_LINE: usize = 4 * WORD_REACH;
+
+/// 一扇窗裏的詞範圍，絕對字元索引。
+///
+/// Warning: **兩頭那個邊界是窗切出來的，不算。** 窗邊很可能落在一個詞的中間，於
+/// 是第一條的**起點**與最後一條的**終點**都可能是假的，而一個可能是錯的邊界一次
+/// 都不許交出去——所以問的人拿到的是 [`Window::starts`] 與 [`Window::ended`]，它
+/// 們各自把那一頭摘掉。中間那些是真的：`word_ranges_big`/`word_ranges_coarse` 是
+/// 逐字掃出來的連續段（窗口改不了它們的內部邊界），詞典那一支的最大概率路徑在幾個
+/// 字之內就重新對上——「分词是非贪婪的。只需要看某个区间就行」，那是這一整節的前提。
+/// 被丟掉的那條邊界不會就此失傳：[`near_words`] 推下一扇窗的時候重疊 [`WORD_SEAM`]，
+/// 於是它在新窗裏離窗邊有五百個字。
+struct Window {
+    /// 窗裏切出來的詞，絕對索引。
+    words: Vec<(usize, usize)>,
+    /// 窗的兩頭。
+    lo: usize,
+    hi: usize,
+    /// 行的兩頭（不含換行）。窗的那一頭正好落在這上面，那一頭的邊界就是真的。
+    line: (usize, usize),
+}
+
+impl Window {
+    /// 整行就是一扇窗——短行走的這一條，兩頭都是真邊界。
+    fn whole(words: Vec<(usize, usize)>, line: (usize, usize)) -> Window {
+        Window { words, lo: line.0, hi: line.1, line }
+    }
+
+    /// 只切 `[lo, hi]` 這一段。
+    fn cut(
+        rope: &Rope,
+        line: (usize, usize),
+        lo: usize,
+        hi: usize,
+        grain: Grain,
+        seg: &dyn Segmenter,
+    ) -> Window {
+        let text = rope.slice(lo..hi).to_string();
+        let words = segment_text(&text, grain, seg)
+            .into_iter()
+            .map(|(a, b)| (lo + a, lo + b))
+            .collect();
+        Window { words, lo, hi, line }
+    }
+
+    /// 這扇窗罩着 `pos` 嗎——也就是「`pos` 在不在詞裏」這種問題它答不答得出。
+    fn holds(&self, pos: usize) -> bool {
+        (self.lo..=self.hi).contains(&pos)
+    }
+
+    /// **起點可信**的那幾條的起點。
+    fn starts(&self) -> impl DoubleEndedIterator<Item = usize> + '_ {
+        let cut = self.lo > self.line.0 && self.words.first().is_some_and(|&(s, _)| s == self.lo);
+        self.words[usize::from(cut)..].iter().map(|&(s, _)| s)
+    }
+
+    /// **終點可信**的那幾條，整條交出去——`e` 還要問它前面那一條的終點。
+    fn ended(&self) -> &[(usize, usize)] {
+        let cut = self.hi < self.line.1 && self.words.last().is_some_and(|&(_, e)| e == self.hi);
+        &self.words[..self.words.len() - usize::from(cut)]
+    }
+}
+
+/// **在 `pos` 附近一段一段地問，問到有答案為止**（2026-10-08）。
+///
+/// 第一扇窗是 `[pos - WORD_REACH, pos + WORD_REACH]`，夾在這一行裏；窗裏沒有答
+/// 案就往 `forward` 的方向再推一扇，推到行的那一頭為止。
+///
+/// Warning: **推，不是停下來。** 一行裏一個空白都沒有的時候，`E` 真要走到行尾，
+/// 而那段路一扇窗裝不下；窗裏找不着邊界就當成「沒有」交出去，光標會卡在原地。
+/// 兩扇窗重疊 [`WORD_SEAM`]：上一扇窗邊上那條不可信的邊界，在新窗裏離窗邊有五百
+/// 個字，是中間那些可信的邊界之一。
+///
+/// Warning: **短行只問一次，窗就是整行**，於是答案與開銷都和從前整行分詞那一版
+/// 逐位相同——稿子走的是這一條。
+fn near_words<T>(
+    rope: &Rope,
+    line: usize,
+    pos: usize,
+    grain: Grain,
+    seg: &dyn Segmenter,
+    forward: bool,
+    mut pick: impl FnMut(&Window) -> Option<T>,
+) -> Option<T> {
+    let ls = rope.line_to_char(line);
+    let le = ls + line_char_len(rope, line);
+    if le - ls <= WORD_WINDOW_LINE {
+        return pick(&Window::whole(line_words(rope, line, grain, seg), (ls, le)));
+    }
+    // 問的人可能站在別的行上（`b` 往回翻行的時候），那就從這一行的那一頭問起。
+    let pos = pos.clamp(ls, le);
+    let mut lo = pos.saturating_sub(WORD_REACH).max(ls);
+    let mut hi = (pos + WORD_REACH).min(le);
+    loop {
+        if let Some(found) = pick(&Window::cut(rope, (ls, le), lo, hi, grain, seg)) {
+            return Some(found);
+        }
+        match forward {
+            true if hi < le => {
+                lo = hi - WORD_SEAM;
+                hi = (lo + 2 * WORD_REACH).min(le);
+            }
+            false if lo > ls => {
+                hi = lo + WORD_SEAM;
+                lo = hi.saturating_sub(2 * WORD_REACH).max(ls);
+            }
+            // 推到行頭了：這一行真的沒有。
+            _ => return None,
+        }
+    }
 }
 
 /// The line `pos` sits on, clamped into the buffer.
@@ -343,10 +513,8 @@ fn line_of(rope: &Rope, pos: usize) -> usize {
 /// （§5.11 B3）是在 vim 那一邊擋的。helix 那一邊的規矩在 [`unit_forward`] 裏。
 pub fn next_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     for line in line_of(rope, pos)..rope.len_lines() {
-        if let Some(start) = line_words(rope, line, grain, seg)
-            .into_iter()
-            .map(|(start, _)| start)
-            .find(|&start| start > pos)
+        if let Some(start) =
+            near_words(rope, line, pos, grain, seg, true, |w| w.starts().find(|&start| start > pos))
         {
             return start;
         }
@@ -417,10 +585,8 @@ pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter)
     // 段落和句子，而那兩種本來就該跨行。
     let stop_at_line_end = |r: &Rope, p: usize| -> usize {
         let line = line_of(r, p);
-        if let Some(start) = line_words(r, line, grain, seg)
-            .into_iter()
-            .map(|(start, _)| start)
-            .find(|&start| start > p)
+        if let Some(start) =
+            near_words(r, line, p, grain, seg, true, |w| w.starts().find(|&start| start > p))
         {
             return start;
         }
@@ -776,10 +942,8 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
     // helix 第 18 格（縮進的第二個空格）選的是 `␣␣`，不是 `gamma␊␣`。
     let stop_at_line_start = |r: &Rope, p: usize| -> usize {
         let line = line_of(r, p);
-        if let Some(start) = line_words(r, line, grain, seg)
-            .into_iter()
-            .map(|(start, _)| start)
-            .rfind(|&start| start < p)
+        if let Some(start) =
+            near_words(r, line, p, grain, seg, false, |w| w.starts().rfind(|&start| start < p))
         {
             return start;
         }
@@ -801,7 +965,12 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
     }
     // 站的那一格要不要算：詞首不算，行首和行末那一格也不算（它們的前一格是換行）。
     let line = line_of(rope, pos);
-    let starts_a_word = line_words(rope, line, grain, seg).iter().any(|&(s, _)| s == pos);
+    // 一扇窗就夠，不用推：窗是罩着 `pos` 畫的，兩頭那兩個可能是假的邊界離 `pos`
+    // 有四千字（或者那一頭本來就是行的那一頭），落不到 `pos` 這一格上。
+    let starts_a_word = near_words(rope, line, pos, grain, seg, true, |w| {
+        Some(w.starts().any(|s| s == pos))
+    })
+    .unwrap_or(false);
     let at_edge = pos == line_start(rope, pos) || pos >= line_end(rope, pos);
     let mut anchor = match starts_a_word || at_edge {
         true => prev_grapheme(rope, anchor),
@@ -837,12 +1006,16 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
 /// The end (last character) of the next word after `pos` (`e` / `E`).
 pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> (usize, usize) {
     for line in line_of(rope, pos)..rope.len_lines() {
-        let words = line_words(rope, line, grain, seg);
-        for (k, &(_, end)) in words.iter().enumerate() {
-            let last = end.saturating_sub(1);
-            if last <= pos {
-                continue;
-            }
+        // Warning: **窗把前一條切掉的時候，`leading` 照樣對**（2026-10-08）。那一格
+        // 只在它等於 `pos + 1` 的時候改得了答案——也就是「前一個詞的末字正是 `pos`」
+        // ——因爲被跳過的那一條末字不超過 `pos`，所以它的終點不超過 `pos + 1`，再往
+        // 前就一律被 `pos.max(..)` 壓掉了。而 `pos + 1` 這條邊界在罩着 `pos` 那一扇
+        // 窗的正中間，窗答得出；真答不出的那幾扇（往後推過去的）裏 `k == 0` 走的是
+        // 行首那一枝，`pos.max(行首)` 仍舊是 `pos`，與整行那一版同一個答案。
+        let found = near_words(rope, line, pos, grain, seg, true, |w| {
+            let words = w.ended();
+            let (k, &(_, end)) =
+                words.iter().enumerate().find(|(_, &(_, end))| end.saturating_sub(1) > pos)?;
             // **A word owns the whitespace in front of it** — that is the half
             // of the boundary `e` takes, and `w` takes the other (#304). So the
             // selection starts at the end of the word before, not at the start
@@ -854,7 +1027,10 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
             };
             // …but never *behind* the caret: when the caret is already inside
             // this word, `e` takes the rest of it and nothing before.
-            return (pos.max(leading), last);
+            Some((pos.max(leading), end.saturating_sub(1)))
+        });
+        if let Some(found) = found {
+            return found;
         }
     }
     (pos, pos)
@@ -867,11 +1043,24 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
 /// that answers 「nowhere」 would be a worse model than one that answers 「the
 /// next one」.
 pub fn word_end_here(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
-    line_words(rope, line_of(rope, pos), grain, seg)
-        .into_iter()
-        .find(|&(start, end)| (start..end).contains(&pos))
-        .map(|(_, end)| prev_grapheme(rope, end))
-        .unwrap_or_else(|| next_word_end(rope, pos, grain, seg).1)
+    let line = line_of(rope, pos);
+    // Warning: **窗裏問的是「`pos` 後面第一個可信的詞尾」**，不是「罩着 `pos` 那一條
+    // 的詞尾」（2026-10-08）。兩者在整行上是同一個答案——詞不重疊，`pos` 前面那幾條
+    // 的終點都不超過 `pos`——而光標那一條的尾巴落在窗外的時候只有前者還答得出：推
+    // 一扇窗之後 `pos` 已經不在窗裏了（一行全是漢字沒有標點的時候，`E` 的「本詞」就
+    // 是整行）。
+    let end = near_words(rope, line, pos, grain, seg, true, |w| {
+        // 「光標在不在詞裏」只有罩着 `pos` 那一扇答得出，而那正是第一扇。空白上沒有
+        // 「本詞」可言，`Some(None)` 就是這個回答，外面那一層照老路退回下一個詞的尾。
+        if w.holds(pos) && !w.words.iter().any(|&(start, end)| (start..end).contains(&pos)) {
+            return Some(None);
+        }
+        w.ended().iter().map(|&(_, end)| end).find(|&end| end > pos).map(Some)
+    });
+    match end.flatten() {
+        Some(end) => prev_grapheme(rope, end),
+        None => next_word_end(rope, pos, grain, seg).1,
+    }
 }
 
 /// **The end of the last word that ends before `pos`** — vim's `ge`.
@@ -882,12 +1071,20 @@ pub fn word_end_here(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
 pub fn prev_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     let mut line = line_of(rope, pos);
     loop {
-        if let Some(end) = line_words(rope, line, grain, seg)
-            .into_iter()
-            .rev()
-            .map(|(_, end)| prev_grapheme(rope, end))
-            .find(|&last| last < pos)
-        {
+        if let Some(end) = near_words(rope, line, pos, grain, seg, false, |w| {
+            w.ended()
+                .iter()
+                .rev()
+                // Warning: **起點在 `pos` 之後的那些詞，先用整數比掉**（2026-10-08）。
+                // 一個詞的最後一個字素起在它自己裏面（`start <= prev_grapheme(end)`），
+                // 所以那些詞一條都過不了下面那道閘——答案與逐條問 `prev_grapheme` 的
+                // 從前完全相同，而少問的那幾下很貴：`prev_grapheme` 在長行上是 O(行長)
+                // （`prev_grapheme_boundary` 從行尾往回數字素），於是 `ge` 從前在光標
+                // 後面每有一個詞就掃一遍整行。這一跳之後最多問兩次。
+                .filter(|&&(start, _)| start < pos)
+                .map(|&(_, end)| prev_grapheme(rope, end))
+                .find(|&last| last < pos)
+        }) {
             return end;
         }
         if line == 0 {
@@ -901,11 +1098,8 @@ pub fn prev_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
 pub fn prev_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     let mut line = line_of(rope, pos);
     loop {
-        if let Some(start) = line_words(rope, line, grain, seg)
-            .into_iter()
-            .rev()
-            .map(|(start, _)| start)
-            .find(|&start| start < pos)
+        if let Some(start) =
+            near_words(rope, line, pos, grain, seg, false, |w| w.starts().rfind(|&start| start < pos))
         {
             return start;
         }
@@ -1203,6 +1397,311 @@ mod tests {
         let seg = Counting::default();
         prev_word_start(&r, r.len_chars() - 1, Grain::Word, &seg);
         assert!(seg.0.get() <= 24, "read {} going back", seg.0.get());
+    }
+
+    // ---- 一行就是整份文件的時候（2026-10-08） ----------------------------
+    //
+    // 下面這幾支守的是同一件事：`near_words` 那扇窗交出來的答案，**和整行分詞那
+    // 一版逐位相同**。所以參照實現就擺在這裏，一字不改地照搬改之前的代碼——它們
+    // 是「從前的答案」這句話的本體，別為了「更好寫」去改它們。
+
+    /// 從前的 `next_word_start`。
+    fn whole_next_word_start(r: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
+        for line in line_of(r, pos)..r.len_lines() {
+            if let Some(start) = line_words(r, line, grain, seg)
+                .into_iter()
+                .map(|(start, _)| start)
+                .find(|&start| start > pos)
+            {
+                return start;
+            }
+        }
+        r.len_chars()
+    }
+
+    /// 從前的 `prev_word_start`。
+    fn whole_prev_word_start(r: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
+        let mut line = line_of(r, pos);
+        loop {
+            if let Some(start) = line_words(r, line, grain, seg)
+                .into_iter()
+                .rev()
+                .map(|(start, _)| start)
+                .find(|&start| start < pos)
+            {
+                return start;
+            }
+            if line == 0 {
+                return 0;
+            }
+            line -= 1;
+        }
+    }
+
+    /// 從前的 `next_word_end`。
+    fn whole_next_word_end(
+        r: &Rope,
+        pos: usize,
+        grain: Grain,
+        seg: &dyn Segmenter,
+    ) -> (usize, usize) {
+        for line in line_of(r, pos)..r.len_lines() {
+            let words = line_words(r, line, grain, seg);
+            for (k, &(_, end)) in words.iter().enumerate() {
+                let last = end.saturating_sub(1);
+                if last <= pos {
+                    continue;
+                }
+                let leading = match k {
+                    0 => r.line_to_char(line),
+                    _ => words[k - 1].1,
+                };
+                return (pos.max(leading), last);
+            }
+        }
+        (pos, pos)
+    }
+
+    /// 從前的 `prev_word_end`。
+    ///
+    /// Warning: **這一支帶着那道 `start < pos` 的整數閘**，和改完的那一版一樣——
+    /// 不帶的話參照實現自己是行長的平方（`prev_grapheme` 在長行上是 O(行長)），一
+    /// 個兩萬字的靶行要跑一分多鐘。它比的仍舊是**整行**的詞，而這幾支要驗的正是窗
+    /// 口交出來的答案和整行的一樣。
+    fn whole_prev_word_end(r: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
+        let mut line = line_of(r, pos);
+        loop {
+            if let Some(end) = line_words(r, line, grain, seg)
+                .into_iter()
+                .rev()
+                .filter(|&(start, _)| start < pos)
+                .map(|(_, end)| prev_grapheme(r, end))
+                .find(|&last| last < pos)
+            {
+                return end;
+            }
+            if line == 0 {
+                return 0;
+            }
+            line -= 1;
+        }
+    }
+
+    /// 從前的 `word_end_here`。
+    fn whole_word_end_here(r: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
+        line_words(r, line_of(r, pos), grain, seg)
+            .into_iter()
+            .find(|&(start, end)| (start..end).contains(&pos))
+            .map(|(_, end)| prev_grapheme(r, end))
+            .unwrap_or_else(|| whole_next_word_end(r, pos, grain, seg).1)
+    }
+
+    /// 從前的 `word_forward` 停在哪：`stop_at_line_end` 餵給 [`unit_forward`]。
+    fn whole_word_forward(r: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
+        let stop = |r: &Rope, p: usize| -> usize {
+            let line = line_of(r, p);
+            if let Some(start) = line_words(r, line, grain, seg)
+                .into_iter()
+                .map(|(start, _)| start)
+                .find(|&start| start > p)
+            {
+                return start;
+            }
+            let end = line_end(r, r.line_to_char(line));
+            match end > p {
+                true => end,
+                false => whole_next_word_start(r, p, grain, seg),
+            }
+        };
+        match unit_forward(r, from, stop) {
+            Span::Over { anchor, head } if r.char_to_line(anchor) != r.char_to_line(head) => {
+                Span::Over { anchor: line_start(r, head), head }
+            }
+            other => other,
+        }
+    }
+
+    /// 一行很長的中文，長到走窗口（`WORD_WINDOW_LINE` 以上）。
+    ///
+    /// 寫成一段一段不一樣長的，好讓窗邊落在詞裏、落在標點上、落在空隙上都撞得到。
+    fn one_long_line() -> String {
+        let bits = [
+            "那年冬天雪下得比往常都早",
+            "，",
+            "她說",
+            "「不用等我了」",
+            "。",
+            "abc def",
+            "山上的雲很低",
+            "；",
+            "孩子們在院子裏玩",
+            " ",
+        ];
+        let mut s = String::new();
+        let mut i = 0;
+        while s.chars().count() <= WORD_WINDOW_LINE + 4000 {
+            s.push_str(bits[i % bits.len()]);
+            i += 1;
+        }
+        s.push('\n');
+        s
+    }
+
+    /// **一行就是整份文件的時候，一下詞動作只讀光標附近那一段**（2026-10-08）。
+    ///
+    /// 計時會讓測試飄，所以數的是字數：一個把交給它的字數記下來的分詞器。實測的
+    /// 病是一行 12,419,022 字的檔上 `e` 每一下 181 ms、`w` 298 ms——整行抄成一個
+    /// 37 MB 的 `String`，分完一千兩百萬字，用掉其中一條。
+    #[test]
+    fn a_word_motion_on_one_huge_line_reads_only_a_window() {
+        let text = one_long_line();
+        let len = text.chars().count() - 1;
+        let r = rope(&text);
+        assert!(len > WORD_WINDOW_LINE, "靶行要長到走窗口：{len}");
+
+        // 一扇窗是 `2 * WORD_REACH`；`w` 要兩次（`unit_forward` 問兩回），所以放到
+        // 三扇的量——要攔的是「讀了整行」那一種，而整行比這個多得多。
+        let budget = 6 * WORD_REACH;
+        for &at in &[len / 2, len / 3, len - 1] {
+            let seg = Counting::default();
+            next_word_start(&r, at, Grain::Word, &seg);
+            assert!(seg.0.get() > 0, "總得讀點什麽");
+            assert!(seg.0.get() <= budget, "`w` 在第 {at} 格讀了 {} 字", seg.0.get());
+
+            let seg = Counting::default();
+            word_forward(&r, at, Grain::Word, &seg);
+            assert!(seg.0.get() <= budget, "`w` 的 span 在第 {at} 格讀了 {} 字", seg.0.get());
+
+            let seg = Counting::default();
+            prev_word_start(&r, at, Grain::Word, &seg);
+            assert!(seg.0.get() <= budget, "`b` 在第 {at} 格讀了 {} 字", seg.0.get());
+
+            let seg = Counting::default();
+            word_back(&r, at, Grain::Word, &seg);
+            assert!(seg.0.get() <= budget, "`b` 的 span 在第 {at} 格讀了 {} 字", seg.0.get());
+        }
+    }
+
+    /// **窗裏沒有邊界就推一扇，不是停在原地**（2026-10-08）。
+    ///
+    /// 一行幾萬個同一個漢字，粗粒度看就是**一個詞**——`e` 真要走到行尾，而那段路
+    /// 一扇窗（`2 * WORD_REACH`）裝不下。從前整行分詞答得出，所以這一條守的是
+    /// 「窗口那條路不許因為看不見邊界就少走」。
+    #[test]
+    fn the_window_slides_when_a_run_is_longer_than_it_is() {
+        let n = 5 * WORD_REACH;
+        let text: String = std::iter::repeat_n('啊', n).chain(['\n']).collect();
+        let r = rope(&text);
+        let seg = CategorySegmenter;
+
+        for grain in [Grain::Coarse, Grain::Big] {
+            // 行首按 `e`：走到行尾那個字，和整行分詞那一版同一格。
+            assert_eq!(
+                next_word_end(&r, 0, grain, &seg),
+                whole_next_word_end(&r, 0, grain, &seg),
+                "{grain:?}：`e` 要走過好幾扇窗"
+            );
+            assert_eq!(next_word_end(&r, 0, grain, &seg), (0, n - 1), "{grain:?}");
+            // 行尾按 `b`：退回行首。
+            assert_eq!(
+                prev_word_start(&r, n - 1, grain, &seg),
+                whole_prev_word_start(&r, n - 1, grain, &seg),
+                "{grain:?}：`b` 要往回走過好幾扇窗"
+            );
+            assert_eq!(prev_word_start(&r, n - 1, grain, &seg), 0, "{grain:?}");
+            // `ge` 與 `cw` 同理：一個往回推，一個往前推。
+            assert_eq!(
+                prev_word_end(&r, n / 2, grain, &seg),
+                whole_prev_word_end(&r, n / 2, grain, &seg),
+                "{grain:?}：`ge`"
+            );
+            assert_eq!(
+                word_end_here(&r, n / 2, grain, &seg),
+                whole_word_end_here(&r, n / 2, grain, &seg),
+                "{grain:?}：`cw` 的本詞詞尾"
+            );
+            assert_eq!(word_end_here(&r, n / 2, grain, &seg), n - 1, "{grain:?}");
+            // 整行一個詞，所以 `w` 停在行末（`word_forward` 自己那一條）。
+            assert_eq!(
+                word_forward(&r, 0, grain, &seg),
+                whole_word_forward(&r, 0, grain, &seg),
+                "{grain:?}：`w`"
+            );
+        }
+    }
+
+    /// **窗口交出來的答案，和整行分詞那一版逐位相同**（2026-10-08）。
+    ///
+    /// 這是「行為一個字都不許變」那一條的本體：同一行文字，兩套實現，幾十個位置
+    /// 逐個對。位置取得密是故意的——窗邊落在詞裏、落在標點上、落在空隙上，切出來
+    /// 的那半個詞要被丟掉，而丟錯一條就是一個走偏一格的動作。
+    ///
+    /// Warning: **粒度只取這三種。** `Big` 與 `Coarse` 是逐字掃出來的連續段，窗口
+    /// 改不了它們的內部邊界；`Word` 這裏配的是 `CategorySegmenter`，它也是按字類
+    /// 切的。真詞典那一支（Viterbi）在理論上看得見整段，靠的是「分词是非贪婪的，
+    /// 只需要看某个区间就行」——那是設計上的前提，不是這一支能證的事。
+    #[test]
+    fn the_window_answers_what_the_whole_line_answers() {
+        let text = one_long_line();
+        let len = text.chars().count() - 1;
+        let r = rope(&text);
+        let seg = CategorySegmenter;
+
+        let mut spots: Vec<usize> = (0..len).step_by(409).collect();
+        spots.extend(0..24);
+        spots.extend(len.saturating_sub(24)..=len);
+        for grain in [Grain::Coarse, Grain::Big, Grain::Word] {
+            for &at in &spots {
+                assert_eq!(
+                    next_word_start(&r, at, grain, &seg),
+                    whole_next_word_start(&r, at, grain, &seg),
+                    "{grain:?} 第 {at} 格的 `w`"
+                );
+                assert_eq!(
+                    prev_word_start(&r, at, grain, &seg),
+                    whole_prev_word_start(&r, at, grain, &seg),
+                    "{grain:?} 第 {at} 格的 `b`"
+                );
+                assert_eq!(
+                    next_word_end(&r, at, grain, &seg),
+                    whole_next_word_end(&r, at, grain, &seg),
+                    "{grain:?} 第 {at} 格的 `e`"
+                );
+                assert_eq!(
+                    prev_word_end(&r, at, grain, &seg),
+                    whole_prev_word_end(&r, at, grain, &seg),
+                    "{grain:?} 第 {at} 格的 `ge`"
+                );
+                assert_eq!(
+                    word_end_here(&r, at, grain, &seg),
+                    whole_word_end_here(&r, at, grain, &seg),
+                    "{grain:?} 第 {at} 格的 `cw`"
+                );
+                assert_eq!(
+                    word_forward(&r, at, grain, &seg),
+                    whole_word_forward(&r, at, grain, &seg),
+                    "{grain:?} 第 {at} 格的 `w`（整段）"
+                );
+                // `b` 的那一段：頭是「行內上一個詞首」，錨點退不退看「站的那一格是
+                // 不是詞首」——兩件事都是窗答的，所以兩件事都對一遍。
+                let Span::Over { anchor, head } = word_back(&r, at, grain, &seg) else {
+                    assert_eq!(at, 0, "只有檔首纔是 Missed");
+                    continue;
+                };
+                let back = whole_prev_word_start(&r, at, grain, &seg);
+                assert_eq!(head, back, "{grain:?} 第 {at} 格的 `b` 落點");
+                let starts = line_words(&r, 0, grain, &seg).iter().any(|&(s, _)| s == at);
+                let drop = starts || at == 0 || at >= len;
+                assert_eq!(
+                    anchor,
+                    match drop {
+                        true => prev_grapheme(&r, at),
+                        false => at,
+                    },
+                    "{grain:?} 第 {at} 格的 `b` 錨點（詞首要不要退一格）"
+                );
+            }
+        }
     }
 
     /// **The rule `w` has always followed, written down at last** (B1,
