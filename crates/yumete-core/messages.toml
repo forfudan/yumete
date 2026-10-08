@@ -7119,9 +7119,9 @@ en = "{0} line {1} (C-o comes back)"
 [[message]]
 # 補全單子的標題
 key = "lsp.what-comes-next"
-zht = "接下來"
-zhs = "接下来"
-en = "what comes next"
+zht = "自動補全"
+zhs = "自动补全"
+en = "autocompletion"
 
 [[message]]
 # :diagnostics-all 頂上那一行：名字　路徑　狀態

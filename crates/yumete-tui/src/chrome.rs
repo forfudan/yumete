@@ -129,6 +129,16 @@ pub enum Anchor {
     /// `bottom` is the row the floats stack up from — the top of the footer;
     /// `vertical` picks which way [`room`] is turned.
     Caret { at: (u16, u16), bottom: u16, vertical: bool },
+    /// **貼着光標，畫在它下面那一行**（2026-10-08 定）。
+    ///
+    /// 補全那張單子用的是這一個，而不是「光標不在的那個角」。原話：「this
+    /// autocompletion seems to be better below the cursor (as the best practice)」——
+    /// 三家都這樣（VS Code、helix 的 `completion`、nvim-cmp），理由是這張單子
+    /// 說的是「你剛打的那半個詞接下來是什麼」，眼睛要在詞與單子之間來回；
+    /// 擺到屏幕角上就是把那一來回拉成半個屏幕。
+    ///
+    /// 下面裝不下就畫在上面（同三家）；左邊貼光標那一欄，靠右最多推到裝得下為止。
+    UnderCaret { at: (u16, u16), bottom: u16 },
     /// The middle of the page: the picker and the question, both of which hold
     /// every key while they are open.
     Centre,
@@ -152,6 +162,17 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             width,
             height,
         )),
+        Anchor::UnderCaret { at, bottom } => {
+            // 下面裝得下就畫在下面，否則翻到上面。`bottom` 是頁腳那一行，
+            // 所以比的是「光標這一行之下、頁腳之上」還有幾行。
+            let y = match bottom.saturating_sub(at.1 + 1) >= height {
+                true => at.1 + 1,
+                // 上面也裝不下就貼頂——蓋住幾行正文，總比一格都不畫好。
+                false => at.1.saturating_sub(height).max(area.y),
+            };
+            let far = area.x + area.width.saturating_sub(width);
+            Some(Rect::new(at.0.min(far), y, width, height))
+        }
         Anchor::Caret { at, bottom, vertical } => {
             // Warning: **The policy caps belong to the caller, this only asks
             // whether it physically fits** (2026-09-18). A 竪書 note is two
@@ -194,4 +215,29 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
 /// and its contents read this.
 pub fn panel_ground(ink: crate::theme::Palette) -> ratatui::style::Color {
     ink.at(yumete_config::rung::FLOAT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **貼着光標那一種：下面放得下就放下面，放不下翻到上面**（2026-10-08）。
+    #[test]
+    fn a_box_under_the_caret_stands_on_the_next_line() {
+        let page = Rect::new(0, 0, 80, 24);
+        // 腳着那一行是 22（底下兩行歸狀態欄與提示行）。
+        let bottom = 22;
+        let under = |at: (u16, u16), height: u16| {
+            place(page, (20, height), Anchor::UnderCaret { at, bottom }).expect("放得下")
+        };
+        // 光標在第 3 行、第 12 欄：盒子的左上角就在它正下方。
+        let it = under((12, 3), 6);
+        assert_eq!((it.x, it.y), (12, 4), "左邊貼光標那一欄，上邊貼它下一行");
+        // 下面只剩兩行，盒子要六行：翻到上面去，底邊挨着光標那一行。
+        let it = under((12, 20), 6);
+        assert_eq!((it.x, it.y), (12, 14), "裝不下就畫在上面");
+        // 靠右的光標：往左推到裝得下為止，不許伸出紙外。
+        let it = under((75, 3), 6);
+        assert_eq!((it.x, it.y), (60, 4), "靠右就推回來");
+    }
 }

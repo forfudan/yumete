@@ -20114,6 +20114,49 @@ warning了。所以我覺得 Option 1 + 一個csv tree-sitter 會很好。」
 
 沒自己定，等他說。
 
+## 5.119 補全那張單子：不等那三百毫秒，而且貼着光標畫（2026-10-08 報的）
+
+> 1. Usually, this autocompletion should be instant (not as delayed by 300ms as docs).
+>    This is because the docs should be delayed to prevent long pressing j to navigate
+>    causing flashing panels. autocompletion should be instant so that users can see the
+>    completions immediately.
+> 2. This autocompletion seems to be better below the cursor (as the best practice, do
+>    you agree?) So the floating panel should has another position parameter "at cursor"
+>    (now we have four corners and center of the screen). Note that autocompletion is not
+>    an "info" type so it never be in the side bar (existing behavior, good).
+
+### 一、慢的那三百毫秒不在浮窗上，在 `didChange` 上
+
+**查清楚了：補全這一半本來就沒有自己的延遲。** 它慢是因為它被一條
+`told_the_latest` 攣著（`server.rs`）——服務器必須先收到剛打的那一個字母，答案才
+不是「上一個版本的此處能接什麼」。而 `didChange` 按 `SETTLE` 節流，300 毫秒一發。
+所以那三百毫秒是**整條加在單子前面的**。
+
+**做法：有一句補全的問題等著的時候，那一發不節流**（`Editor::completion_is_waiting`）。
+這不是把節流拿掉：它只在「人剛打了一個字母、正等著單子」那一暫越過，其餘照舊。
+`SETTLE` 那段註釋本來就寫著「真正的語言服務器客戶端多半連節流都沒有，每一次改動
+都發」——這一改是往那邊挺了一步，不是做了一件別家不做的事。
+
+測試 `a_waiting_completion_sends_the_text_at_once`：打一個字母，**一趡**循環就
+`didChange`（旁邊那支測的是平常那條路：第一趡起表、第二趡才發）。
+
+### 二、「貼着光標」是一個新的站位，而且他說得對
+
+**三家都把補全單子畫在光標下面**（VS Code、helix、nvim-cmp），裝不下翻到上面。
+理由在「這張單子答的是哪一種問題」：「這是什麼」是讀一段話，讀完回到正文，所以
+越不擋著正文越好；「接下來是什麼」是一張跟著手走的單子，眼睛要在剛打的那半個詞
+與單子之間來回——擺到屏幕角上就是把那一來回拉成半個屏幕。
+
+做法是他說的那個形狀：**浮窗多一個站位參數**。`chrome::Anchor` 多了一格
+`UnderCaret`（旁邊兩格是老的 `Caret`＝光標不在的那個角，與 `Centre`），
+`panel::Panel` 多了一個 `stand: Stand`。十一扈浮窗裏只有補全那一扈是
+`Stand::UnderCaret`。
+
+⚠ **章書那一邊回老規矩**：章書的「下一行」在旁邊不在底下。代碼檔不竦排，所以
+補全單子實際上碰不到這一條，但規矩寫死了免得哪天有人把別的扈改成貼光標。
+
+他順帶確認了一件現狀：**補全不是「信息」那一族，永遠不進邊欄**——本來就是這樣。
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 報的是選單上兩行「大綱」。`s` 是 2026-10-06 **有意**加的（註釋：「helix 把『這份檔裏的

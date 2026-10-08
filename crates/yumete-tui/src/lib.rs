@@ -5826,6 +5826,7 @@ fn draw_which_key(
     let (title, keys) = editor.pending_menu()?;
     let vertical = editor.layout() == WritingLayout::Vertical;
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+        stand: panel::Stand::Corner,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6008,6 +6009,9 @@ fn draw_note(
             })
             .collect();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            // **貼着光標畫**（2026-10-08 定，見 `chrome::Anchor::UnderCaret`）。
+            // 這張單子說的是「剛打的那半個詞接下來是什麼」，是唯一一張跟着手走的浮窗。
+            stand: panel::Stand::UnderCaret,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6032,6 +6036,7 @@ fn draw_note(
     // 畫着同一段話是 2026-09-22 出圖纔看見的。
     if let Some(told) = editor.hover_afloat() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            stand: panel::Stand::Corner,
             // 這一扇翻得動——四個鍵，同 helix 的浮窗（2026-09-29，#426）。
             pages: true,
             reading: true,
@@ -6065,6 +6070,7 @@ fn draw_note(
     // 一個「這一段換個墨色」的本事，這扇面板現在只收整段文字。
     if let Some(one) = editor.signature_here() {
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            stand: panel::Stand::Corner,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6099,6 +6105,7 @@ fn draw_note(
     if let Some((severity, said)) = editor.problem_afloat().filter(|_| !writing) {
         use yumete_core::problem::Severity;
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            stand: panel::Stand::Corner,
             pages: true,
             reading: true,
             scroll: editor.info_scroll(),
@@ -6145,6 +6152,7 @@ fn draw_note(
                 .map(|(name, value)| (name.clone(), value.clone().unwrap_or_default()))
                 .collect();
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            stand: panel::Stand::Corner,
             pages: false,
             reading: true,
                 scroll: 0,
@@ -6190,6 +6198,7 @@ fn draw_note(
             None => vec![(say!("ui.looking-it-up"), String::new())],
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            stand: panel::Stand::Corner,
             pages: false,
             reading: true,
             scroll: 0,
@@ -6223,6 +6232,7 @@ fn draw_note(
             Some(Source::TooMany { .. }) => say!("wiki.too-many", &include.named),
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            stand: panel::Stand::Corner,
             pages: false,
             reading: false,
             scroll: 0,
@@ -6247,6 +6257,7 @@ fn draw_note(
         // 有出路。取多少行要**把翻過去的那幾行算進來**，不然翻到第三屏就空了。
         let scroll = editor.info_scroll();
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+            stand: panel::Stand::Corner,
             pages: true,
             reading: true,
             scroll,
@@ -6281,6 +6292,7 @@ fn draw_note(
         return None;
     }
     panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+        stand: panel::Stand::Corner,
             pages: false,
             reading: false,
             scroll: 0,
@@ -21409,6 +21421,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| {
                 panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
+            stand: panel::Stand::Corner,
             pages: false,
             reading: false,
             scroll: 0,

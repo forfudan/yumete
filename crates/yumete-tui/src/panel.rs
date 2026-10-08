@@ -26,9 +26,22 @@ pub enum Body {
     Keys(Vec<(String, String)>),
 }
 
+/// **這一扇站在哪裏**（2026-10-08）。
+///
+/// 兩種，因為兩種浮窗答的是兩種問題：「這是什麼」是讀一段話，讀完回到正文，
+/// 所以越不擋着正文越好；「接下來是什麼」是一張跟着手走的單子，越貼着手越好。
+pub enum Stand {
+    /// 光標不在的那個角——浮窗的老規矩。
+    Corner,
+    /// 貼着光標下面那一行（裝不下就上面）。補全那張單子用這一個。
+    UnderCaret,
+}
+
 /// A floating panel: what it is called, what it holds, and one short thing
 /// said quietly at the far end of its bottom edge.
 pub struct Panel {
+    /// 站在哪裏——見 [`Stand`]。
+    pub stand: Stand,
     pub title: String,
     /// **The 章節 line**, drawn quietly between the name and the body, with a
     /// blank line (竪排: a blank 縱) under it (2026-09-18).
@@ -792,11 +805,13 @@ pub fn draw(
     let height = (deep + 2) as u16;
     // Where it stands, and whether there is room at all — one rule, in
     // `chrome`, shared with everything else that floats (2026-09-18).
-    let rect = crate::chrome::place(
-        area,
-        (width, height),
-        crate::chrome::Anchor::Caret { at: caret, bottom, vertical },
-    )?;
+    // Warning: **站在光標底下那一種只管橫排**。竦書的「下一行」在旁邊不在底下，
+    // 而補全那張單子只在代碼檔裏出來（代碼檔不竦排），所以竦的那一邊回老規矩。
+    let stand = match (&panel.stand, vertical) {
+        (Stand::UnderCaret, false) => crate::chrome::Anchor::UnderCaret { at: caret, bottom },
+        _ => crate::chrome::Anchor::Caret { at: caret, bottom, vertical },
+    };
+    let rect = crate::chrome::place(area, (width, height), stand)?;
     crate::chrome::draw(frame, rect, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
@@ -953,6 +968,7 @@ mod tests {
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
                 got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                    stand: Stand::Corner,
                     pages: false,
                     reading: false,
             scroll: 0,
@@ -987,6 +1003,7 @@ mod tests {
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
                 draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                    stand: Stand::Corner,
                     pages: false,
                     reading: false,
             scroll: 0,
@@ -1088,6 +1105,7 @@ mod tests {
                     .map(|n| (format!("k{n}"), format!("第{n}個動作")))
                     .collect::<Vec<_>>();
                 got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, (0, 0), false, &Panel {
+                    stand: Stand::Corner,
                     pages: false,
                     reading: false,
             scroll: 0,
