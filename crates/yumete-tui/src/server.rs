@@ -1106,6 +1106,12 @@ impl Server {
             || self.asked_where.is_some()
             || self.asked_what.is_some()
             || self.asked_next.is_some()
+            // Warning: **簽名那兩句從前不算「欠著」**（2026-10-08 報的：「`println!(` 還是
+            // 沒有簽名」）。這一支決定事件迴圈睡多久：沒人欠著就一直阻塞在鍵盤上。
+            // 於是問出去的簽名答回來也沒人收，**要等你下一次按鍵**——而那時候正文
+            // 已經改了。回退那一句（`asked_signature_doc`）更是永遠排不上。
+            || self.asked_signature.is_some()
+            || self.asked_signature_doc.is_some()
     }
 }
 

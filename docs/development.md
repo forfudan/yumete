@@ -20571,6 +20571,32 @@ signatureHelp 問的是「你正站在哪一次調用裏」——**宏不是一�
    `MAX_PLAINTEXT_SCAN = 10000`；解析器是**計時**不是計字數（`PARSE_TIMEOUT = 500ms`，
    `syntax.rs:518`）。
 
+## 5.127 簽名那一扇的三個毛病（2026-10-08 報的）
+
+> 1. `println!(` still does not show signature (fallback)
+> 2. I first typed `first_time_ever(` and it showed signature. I deleted the
+>    `first_time_ever(` but typed println!, the signature panel still persists.
+
+三個，前兩個是同一個根子。
+
+① **簽名那兩句從前不算「欠著」**。`Server::owed()` 列了 `asked_where`、`asked_what`、
+`asked_next`，**漏了 `asked_signature`**（也漏了新的 `asked_signature_doc`）。而那一支決定
+事件迴圈睡多久：沒人欠著就阻塞在鍵盤上。於是簽名答回來也沒人收，**要等下一次
+按鍵**——而那時候正文已經改了。
+
+② **回退那一句排在 `collect` 前面**。`collect` 才是「服務器說沒有簽名」落地的地方
+（`show_signature(None)`），所以排在它前面的話那一句要等下一輪循環。加上 ①，它幾乎
+永遠排不上。現在排在 `collect` 後面，同一趡發出去。
+
+③ **浮著的那一則不知道自己屬於哪一個括號**。`signature_here` 故意不比位置（註釋寫著
+「手正往裏填字，光標當然一直在走」）——那一條是對的，只是它漏了另一件要比的事：
+**那一次調用還在嗎**。現在記下問的時候那個 `(`（或 `,`）在第幾格、是哪一個字
+（`signature_on`）；那一格不再是它了就收。刪掉 `first_time_ever(` 再打 `println!`，
+原先那一格上現在是 `p`，就是這一條接住的。
+
+測試 `a_signature_goes_away_with_the_bracket_that_asked_for_it`：打完 `(` 浮著、裏面再打字
+照舊浮著、整段刪掉就沒了、改打別的也不會回來。
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 報的是選單上兩行「大綱」。`s` 是 2026-10-06 **有意**加的（註釋：「helix 把『這份檔裏的

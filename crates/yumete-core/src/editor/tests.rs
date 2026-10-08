@@ -23475,6 +23475,50 @@ fn typing_an_open_bracket_asks_what_goes_in_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **問它的那個括號沒了，那一則就該收**（2026-10-08 報的）。
+///
+/// 原話：「I first typed `first_time_ever(` and it showed signature. I deleted the
+/// `first_time_ever(` but typed println!, the signature panel still persists.」
+#[test]
+fn a_signature_goes_away_with_the_bracket_that_asked_for_it() {
+    let dir = std::env::temp_dir().join(format!("yumete-sigstale-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn main() {\n    \n}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.goto_line(2);
+    press(&mut ed, "A");
+
+    for c in "first_time_ever(".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.take_signature_query().is_some());
+    ed.show_signature(Some(crate::lsp::Signature {
+        label: "fn first_time_ever() -> bool".into(),
+        active: None,
+    }));
+    assert!(ed.signature_here().is_some(), "打完 `(` 就浮著");
+    // 裏面再打字，它還在——手正往那一對括號裏填。
+    ed.on_key(Key::Char('x'));
+    assert!(ed.signature_here().is_some(), "填參數的時候照舊浮著");
+
+    // 把 `first_time_ever(x` 整段刪掉。
+    for _ in 0.."first_time_ever(x".chars().count() {
+        ed.on_key(Key::Backspace);
+    }
+    assert!(ed.signature_here().is_none(), "括號沒了就不該還浮著");
+
+    // 改打別的，那一格上現在是 `p`，更不該浮著上一次的答案。
+    for c in "println!".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.signature_here().is_none(), "上一次調用的答案不該站在新打的字旁邊");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **簽名回空就在同一處補問一句 hover**（2026-10-08 定）。
 ///
 /// 量出來的：rust-analyzer 對**宏**的 `signatureHelp` 一律回 `null`，可同一處的

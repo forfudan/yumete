@@ -2541,6 +2541,10 @@ pub struct Editor {
     signature_query: Option<(std::path::PathBuf, usize, usize)>,
     /// 剛剛拿哪一處問過簽名——回空的話要在同一處補問一句 hover。
     signature_asked_at: Option<(std::path::PathBuf, usize, usize)>,
+    /// 問簽名的那一下，那個 `(`（或 `,`）在第幾格、是哪一個字。
+    ///
+    /// 那一格不再是它了，浮著的那一則就是上一次調用的答案（見 `signature_here`）。
+    signature_on: Option<(usize, char)>,
     /// 那一句補問的 hover，等前端取走（見 `show_signature`）。
     signature_doc_query: Option<(std::path::PathBuf, usize, usize)>,
     /// A pending `:theme`, waiting for the front end that owns the palette.
@@ -3505,6 +3509,7 @@ impl Editor {
             signature: None,
             signature_query: None,
             signature_asked_at: None,
+            signature_on: None,
             signature_doc_query: None,
             theme_request: None,
             trial: None,
