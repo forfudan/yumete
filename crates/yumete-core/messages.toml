@@ -8049,25 +8049,27 @@ zhs = "第 {0}/{1} 处（n N 下/上一处）"
 en = "hit {0} of {1} — n next, N previous"
 
 [[message]]
-# 搜索：找到幾處
+# 搜索：找到幾處。⚠ **和 `search.hits-more` 一格一格對齊**（2026-10-08 定）：那一則
+# 是「{0}+結果」，所以這一則的中間是**一個空格**，搜完的那一刻只有 `+` 變成空格，
+# 數字和「結果」兩個字一格都不動。
 key = "search.hits"
-zht = "{0} 處"
-zhs = "{0} 处"
-en = "{0} hits"
+zht = "{0} 結果"
+zhs = "{0} 结果"
+en = "{0} results"
 
 [[message]]
 # 搜索面板：沒走完就停了，數目後面加一個加號
 key = "search.hits-more"
 zht = "{0}+結果"
 zhs = "{0}+结果"
-en = "{0}+ hits"
+en = "{0}+ results"
 
 [[message]]
-# 只找到一處。中文不分單複數，英文分——「1 hits」每搜一個獨一無二的詞就出現一次
+# 只找到一處。中文不分單複數，英文分——「1 results」每搜一個獨一無二的詞就出現一次
 key = "search.hits-one"
-zht = "{0} 處"
-zhs = "{0} 处"
-en = "{0} hit"
+zht = "{0} 結果"
+zhs = "{0} 结果"
+en = "{0} result"
 
 [[message]]
 # 搜索面板：排除那一格的名字

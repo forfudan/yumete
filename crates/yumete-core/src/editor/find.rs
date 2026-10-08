@@ -2418,7 +2418,12 @@ impl Editor {
             });
             let _ = say.send((generation, Found::Done { cut: walked.cut, skipped: walked.skipped }));
         });
-        self.searching = Some(crate::editor::Searching { generation, heard, stop });
+        self.searching = Some(crate::editor::Searching {
+            generation,
+            heard,
+            stop,
+            since: std::time::Instant::now(),
+        });
     }
 
     /// 叫停跑着的那一趟（改查詢、關面板、再搜一次）。
@@ -2431,6 +2436,15 @@ impl Editor {
     /// **背景那一趟還在跑嗎**——右上角那個加號看它。
     pub fn still_searching(&self) -> bool {
         self.searching.is_some()
+    }
+
+    /// **這一趟走查什麼時候開跑的**，`None` ＝ 沒在跑。
+    ///
+    /// 面板那個轉圈拿它算第幾格（`spinner::frame`）。走查跑在旁邊，而主循環每
+    /// 四十毫秒醒一次收結果（[`Editor::searching_due_in`]）——所以這一處的圈是
+    /// 真轉得起來的，不像 2026-10-02 那時候記下的那幾件同步的慢事。
+    pub fn searching_since(&self) -> Option<std::time::Instant> {
+        self.searching.as_ref().map(|one| one.since)
     }
 
     /// **走查走到哪了**：看過幾個檔，此刻在看哪一個（§5.101，2026-10-07）。
