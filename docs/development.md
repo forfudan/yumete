@@ -20759,6 +20759,24 @@ VS Code、Zed、nvim 的挑選器**沒有一家有模態**，都是開門就打�
 
 ⚠ **有三處故意沒改**（`gw` 跳標、`*` 取詞、`mi w`）——它們要的就是整行。
 
+## 5.132 `gg` walked out of a full-window table when the table was guessed (2026-10-08)
+
+> 我在 txt 文件中有個 tab-separated 部分，我进入了 _tt 后， gg 会跑到文件最顶端（也就退出了
+> 全窗模式）。这应该是个 bug 吧。
+
+Yes. Reproduced: in a `.txt` with a tab-separated block, `空格 t t` then `gg` landed on file line 1
+and dropped the view; the same keys on a `|` table stayed on the table's first row.
+
+**Two end-of-key passes ran in the wrong order.** `forget_a_guessed_table` dropped the view the
+moment the cursor left the region, and only then did `hold_the_pane` look — by which time
+`self.table` was `None` and it returned on its first line. A `|` table was immune because it is
+not guessed (`Reach::File`). Swapped: hold first, and forgetting no longer applies because the
+cursor is back inside.
+
+⚠ The inline mode is untouched: `hold_the_pane` asks `takes_the_pane()` second and returns when
+the table does not own the window, so walking out of a guessed block still forgets it. The test
+pins both halves.
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 報的是選單上兩行「大綱」。`s` 是 2026-10-06 **有意**加的（註釋：「helix 把『這份檔裏的
