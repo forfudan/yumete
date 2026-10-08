@@ -489,14 +489,23 @@ impl Editor {
     }
 
     /// The preset's lines, then the reader's own over them.
+    ///
+    /// **左邊那一串在這裏翻成內部拼法**（2026-10-08）：`A-d` 存成
+    /// [`yumete_cjk::actions::ALT`] ＋ `d`，`C-o` 存成那個控制字節。從前不翻，於是
+    /// 配置裏寫 `"A-d" = …` 綁的是 `A`、`-`、`d` 三個鍵連按——那個鍵永遠按不出來，
+    /// 而配置照收、一聲不吭。一處翻，兩層（預設表和使用者那一層）都算。
     fn lay_aliases(&mut self) {
         let mut all: HashMap<String, String> = self
             .key_preset
             .table()
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| (yumete_cjk::actions::written(k), v.to_string()))
             .collect();
-        all.extend(self.user_aliases.clone());
+        all.extend(
+            self.user_aliases
+                .iter()
+                .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
+        );
         self.key_aliases = all;
         self.alias_held.clear();
     }

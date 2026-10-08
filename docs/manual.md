@@ -1995,6 +1995,10 @@ it is, the table above applies; if not, the original key goes through. `Esc` can
 **What you write in `[keys.normal]` yourself beats the same key in the preset**, and
 the left side may be a run of keys: `"dj" = "xxd"`.
 
+**`A-d` and `C-o` are written that way on either side.** Until 2026-10-08 only plain
+characters could be, so `"A-d" = …` quietly bound the three keys `A`, `-`, `d` — a
+combination no hand can press — and the config was accepted without a word.
+
 ### Prefix keys rebind too
 
 The menu `空格` opens, and the groups opened by `g` `m` `t` — **write that prefix key
@@ -2032,7 +2036,21 @@ somewhere else, `x = "delete_selection"` still deletes.
 
 **`:keymap actions` lists them all** (eighty-odd), in three columns: name, what it
 does, which key it is on now. The names match helix, so anyone coming from there can
-guess.
+guess — including the pairs helix spells with `_noyank`:
+
+```toml
+# What a helix discussion with ninety-odd votes asks for: delete and change
+# stop filling the register, and the Alt keys do the cutting.
+[keys.normal]
+"A-d" = "delete_selection"
+"d" = "delete_selection_noyank"
+"A-c" = "change_selection"
+"c" = "change_selection_noyank"
+```
+
+The factory keys do **not** do this: `d` and `c` cut, as in helix, and `A-d`/`A-c`
+leave the register alone. Three keymaps are planned and this is the difference the
+third will carry; until then it is these four lines.
 
 Warning: a misspelt name is **said out loud on the spot** instead of being typed into
 your text: a right side with an underscore in it that is not recognised is reported at

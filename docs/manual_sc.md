@@ -1626,6 +1626,8 @@ preset = "vim"
 不是 `d`、`w`：是就照上表，不是就当原来的键按出去；`Esc` 取消。
 **你自己在 `[keys.normal]` 里写的，盖过预设里同一个键**，左边也可以是一串键：`"dj" = "xxd"`。
 
+**`A-d`、`C-o` 这样的写法两边都算数。**
+
 ### 前缀键也绑得动
 
 `空格` 开的那个菜单、`g` `m` `t` 开的那几组——**右边写成那个前缀键本身**就搬得走。
@@ -1658,6 +1660,18 @@ x = "delete_selection"      # 动作名
 
 **`:keymap actions` 列出全部**（八十来个），三列：名字、做什么、现在是哪个键。名字跟
 helix 取一致，所以从那边过来的人猜得到。
+
+要让 `d`、`c` 不填寄存器，写这四行：
+
+```toml
+[keys.normal]
+"A-d" = "delete_selection"
+"d" = "delete_selection_noyank"
+"A-c" = "change_selection"
+"c" = "change_selection_noyank"
+```
+
+出厂值照 helix，不是这样。
 
 Warning: 名字写错了会被**当场说出来**而不是打进文章里：右边带下划线却不认得，启动时就报
 「不是动作名」，**那一条也不会装上**——否则按下去就是把 `delete_slection` 一个字母一个
