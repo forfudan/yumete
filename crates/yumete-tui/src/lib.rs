@@ -3602,15 +3602,27 @@ fn where_report(ime: &ImeSession) -> String {
         let _ = writeln!(out, "    {}\n        {said}", found.dir.display());
     }
     let _ = writeln!(out, "{}", say!("yume.where.layer", nth + 1, say!("yume.where.builtin")));
-    let _ = writeln!(
-        out,
-        "    {}",
-        match yumete_ime::builtin_version() {
-            Some(when) => say!("yume.where.builtin-is", when),
-            None => say!("yume.where.nothing"),
+    // **一家一行**（2026-10-08 定）。從前這裏寫死「靈明碼表 {版本}」，而 2026-10-07
+    // 起二進制裏是兩張（靈明 ＋ 星陳）——報出來的只有一張。
+    let built_in = yumete_ime::builtin_tables();
+    match built_in.is_empty() {
+        true => {
+            let _ = writeln!(out, "    {}", say!("yume.where.nothing"));
         }
-    );
-    let _ = writeln!(out, "\n{}", say!("yume.where.now", ime.table_source()));
+        false => {
+            for scheme in built_in {
+                let name = scheme.factory_name().unwrap_or_else(|| scheme.tag());
+                let when = yumete_ime::builtin_version().unwrap_or_default();
+                let _ = writeln!(out, "    {}", say!("yume.where.builtin-is", name, when));
+            }
+        }
+    }
+    // 沒有表的時候由這一頭說——`table_source` 住在一個沒有文案表的 crate 裏。
+    let now = match ime.table_source() {
+        Some(said) => said,
+        None => say!("yume.where.no-table"),
+    };
+    let _ = writeln!(out, "\n{}", say!("yume.where.now", now));
     out
 }
 
@@ -3633,7 +3645,8 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             say!(
                 "ime.state",
                 ime.scheme_name(),
-                ime.table_source(),
+                // 這一支只在 `available()` 爲真的時候走得到，所以一定說得出。
+                ime.table_source().unwrap_or_default(),
                 match ime.annotations_enabled() {
                     true => say!("label.on"),
                     false => say!("label.off"),
@@ -12802,8 +12815,17 @@ fn squeezed(text: &str) -> String {
             report.rfind(&builtin) > report.find("yumete"),
             "the built-in layer comes after the directories\n{report}"
         );
-        // …and the last thing it says is which one is answering.
-        assert!(report.trim_end().ends_with(&ime.table_source()), "{report}");
+        // …and the last thing it says is which one is mounted — or that none is.
+        let mounted = ime
+            .table_source()
+            .unwrap_or_else(|| crate::say!("yume.where.no-table"));
+        assert!(report.trim_end().ends_with(&mounted), "{report}");
+        // **出廠自帶那一段一家一行**（2026-10-08）：嵌了幾張就寫幾行，每一行帶方案
+        // 名。從前它寫死「靈明碼表 …」，於是二進制裏那第二張報不出來。
+        for scheme in yumete_ime::builtin_tables() {
+            let name = scheme.factory_name().unwrap_or_else(|| scheme.tag());
+            assert!(report.contains(name), "出廠自帶要寫出 {name}\n{report}");
+        }
         // A directory with nothing in it says so rather than being left blank.
         assert!(report.contains(&crate::say!("yume.where.nothing")), "{report}");
     }
