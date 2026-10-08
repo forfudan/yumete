@@ -40,14 +40,67 @@ pub struct Action {
     pub how: How,
 }
 
+/// **Alt 的內部拼法**：`A-d` 存成這個字 ＋ `d`（2026-10-08）。
+///
+/// 一串按鍵在這個倉裏是一個 `String`——控制鍵用的是真的控制字節（`C-o` 就是
+/// `\u{f}`），而 Alt 沒有這樣一個字節。所以借一個私用區的碼位當前綴：存着的時候
+/// 一個鍵仍然是一兩個 `char`，`HashMap<String, String>` 那一層一個字都不用改。
+///
+/// Warning: **不許寫進任何人看得見的地方。** 進來由 [`written`] 翻，出去由 [`spell`]
+/// 翻，中間那一段纔是這個字。
+pub const ALT: char = '\u{e000}';
+
+/// **把人寫的那一串翻成內部拼法**：`A-d` → [`ALT`] ＋ `d`，`C-o` → `\u{f}`。
+///
+/// `[keys.normal]` 的左邊和預設表都走這一支。從前它不存在，於是配置裏寫
+/// `"A-d" = …` 綁的是 **`A`、`-`、`d` 三個鍵連按**——編譯照過、配置照收，而那個鍵
+/// 永遠按不出來（2026-10-08 查出來的）。
+///
+/// Warning: **`C-` 只翻字母。** `C-[`、`C-]` 那幾個在舊終端上和數字鍵撞車（見
+/// `Config::language_key` 的註釋），這裏不替它們猜。
+pub fn written(spelled: &str) -> String {
+    let mut out = String::new();
+    let mut chars = spelled.chars().peekable();
+    while let Some(c) = chars.next() {
+        let modified = matches!(c, 'A' | 'C') && chars.peek() == Some(&'-');
+        if !modified {
+            out.push(c);
+            continue;
+        }
+        // `A-` / `C-` 後面要真有一個字，不然那兩個字就是它們自己。
+        let mut rest = chars.clone();
+        rest.next();
+        match rest.next() {
+            Some(next) if c == 'A' => {
+                out.push(ALT);
+                out.push(next);
+                chars = rest;
+            }
+            Some(next) if next.is_ascii_alphabetic() => {
+                out.push((next.to_ascii_lowercase() as u8 - b'a' + 1) as char);
+                chars = rest;
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// **A key sequence, spelled the way the manual spells it** — `空格 f`, not a
-/// space and an `f`; `C-o`, not a control byte.
+/// space and an `f`; `C-o`, not a control byte. The inverse of [`written`].
 pub fn spell(keys: &str) -> String {
     let mut out = String::new();
-    for c in keys.chars() {
+    let mut chars = keys.chars();
+    while let Some(c) = chars.next() {
         match c {
             ' ' => out.push_str("空格 "),
             '\u{1b}' => out.push_str("Esc"),
+            ALT => {
+                out.push_str("A-");
+                if let Some(next) = chars.next() {
+                    out.push(next);
+                }
+            }
             c if (c as u32) < 32 => {
                 out.push_str("C-");
                 out.push((b'a' + c as u8 - 1) as char);
@@ -128,10 +181,20 @@ pub const ALL: &[Action] = &[
     // helix's does, and `;` is the key whose whole job is collapsing.
     keys("collapse_selection", "action.collapse-selection", ";"),
     // ---- Changing -------------------------------------------------------
+    // Warning: **這四個 2026-10-08 改了名，也改了指向的鍵。**
+    //
+    // 從前是 `delete_selection`→`d`、`cut_selection`→`D`，而文案說的是「刪除選區
+    // （不動寄存器）」「剪切選區（進寄存器）」——**和它們真做的事相反**：`d` 自
+    // 2026-09-28 起就進寄存器了，而 `D` 在 helix 鍵位下根本沒綁。於是這四行寫進
+    // 配置一行都不生效，`::` 那張單子照着四句錯文案列了十天。
+    //
+    // 名字改成 helix 的（這個模組開頭那條規矩：helix 有同一個動作就用它的名字）。
+    // 從前我們同名而意思相反——一個 helix 使用者寫 `d = "delete_selection"` 會得
+    // 到和他家裏相反的行為，這是最壞的一種。
     keys("delete_selection", "action.delete-selection", "d"),
+    keys("delete_selection_noyank", "action.delete-selection-noyank", "\u{e000}d"),
     keys("change_selection", "action.change-selection", "c"),
-    keys("cut_selection", "action.cut-selection", "D"),
-    keys("cut_and_change", "action.cut-and-change", "C"),
+    keys("change_selection_noyank", "action.change-selection-noyank", "\u{e000}c"),
     keys("insert_mode", "action.insert-mode", "i"),
     keys("append_mode", "action.append-mode", "a"),
     keys("insert_at_line_start", "action.insert-at-line-start", "I"),

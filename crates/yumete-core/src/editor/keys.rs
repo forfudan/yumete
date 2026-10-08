@@ -1090,7 +1090,9 @@ impl Editor {
                 }
             }
         }
-        self.play_keys(bound)
+        // 一串按鍵：`A-d`、`C-o` 這種寫法在這裏纔翻（`:` 那一檔和動作名已經先
+        // 走掉了，所以翻不到它們身上）。
+        self.play_keys(&yumete_cjk::actions::written(bound))
     }
 
     /// **按下這一串鍵，當作人按的**（2026-10-06，給 `::` 挑中一個快捷鍵用）。
@@ -1136,6 +1138,14 @@ impl Editor {
                 if let Some(n) = count.take() {
                     self.count = Some(n);
                 }
+            }
+            // Alt 那一種是兩個 `char`（見 `actions::ALT`）：一下按出去，走兩格。
+            if c == yumete_cjk::actions::ALT {
+                if let Some(&next) = spelled.get(at + 1) {
+                    self.on_key(Key::Alt(next));
+                }
+                at += 2;
+                continue;
             }
             self.on_key(pressed(c));
             at += 1;
@@ -1500,8 +1510,15 @@ impl Editor {
                         && self.count.is_some()
                         && self.alias_held.is_empty()) =>
                 {
-                    Some(c)
+                    Some(c.to_string())
                 }
+                // **Alt 也綁得了**（2026-10-08）。鍵位表的鍵是一個 `String`，而
+                // Alt 沒有自己的字節——借一個私用區的碼位當前綴（`actions::ALT`），
+                // 於是 `A-d` 在表裏是兩個 `char`，而查表那一層一個字都不用改。
+                //
+                // Warning: 從前這裏只認 `Key::Char`，於是配置裏寫 `"A-d" = …` 綁的是
+                // `A`、`-`、`d` 三個鍵連按：那個鍵永遠按不出來，而配置照收。
+                Key::Alt(c) => Some(format!("{}{c}", yumete_cjk::actions::ALT)),
                 _ => None,
             };
             if key == Key::Esc && !self.alias_held.is_empty() {
@@ -1510,7 +1527,11 @@ impl Editor {
                 return;
             }
             let mut held = std::mem::take(&mut self.alias_held);
-            if let Some(c) = typed {
+            if let Some(typed) = typed {
+                // 一下按出來的可能是兩個 `char`（Alt 那一種），所以這裏接的是一段
+                // 而不是一個字。數字那條規矩只問單字符，Alt 不是數字。
+                let c = typed.chars().next_back().unwrap_or('\0');
+                let alone = typed.chars().count() == 1;
                 // **A digit inside a held sequence is a count** (2026-09-18):
                 // vim writes `d10w`, and `d1` is not the name of anything. An
                 // alias whose own name has a digit in it still wins, because
@@ -1520,7 +1541,8 @@ impl Editor {
                     longer.push(c);
                     self.key_aliases.keys().any(|k| k.starts_with(&longer))
                 };
-                if !held.is_empty()
+                if alone
+                    && !held.is_empty()
                     && c.is_ascii_digit()
                     && !named(&held, c)
                     && (c != '0' || self.alias_count.is_some())
@@ -1534,7 +1556,7 @@ impl Editor {
                     self.alias_held = held;
                     return;
                 }
-                held.push(c);
+                held.push_str(&typed);
                 let longer = self
                     .key_aliases
                     .keys()
@@ -1553,7 +1575,13 @@ impl Editor {
                         return self.run_binding(&bound);
                     }
                     None => {
-                        held.pop();
+                        // 放掉剛按的那一下——Alt 那一種是兩個 `char`，掉一個會留
+                        // 下一個孤零零的前綴。
+                        if held.pop() == Some(yumete_cjk::actions::ALT) {
+                            // 不可能：前綴在前面。留着這一句是怕以後改了次序。
+                        } else if held.ends_with(yumete_cjk::actions::ALT) {
+                            held.pop();
+                        }
                         // What was held is pressed for real, and the digits
                         // typed after it belong to whatever follows them.
                         self.settle_alias_count();

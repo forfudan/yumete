@@ -22977,3 +22977,81 @@ fn a_theme_picked_with_tab_is_previewed_the_way_a_typed_one_is() {
     ed.on_key(Key::Esc);
     assert_eq!(ed.take_trial(), Some(Trial::Undo), "退出去要還原");
 }
+
+/// **helix 那個討論裏的四行配置，照抄就該生效**（2026-10-08）。
+///
+/// [#10361](https://github.com/helix-editor/helix/discussions/10361)：92 個人想讓
+/// `d`/`c` 不進寄存器。出廠值照 helix 不動（§5.110），而讀者自己寫得出來——
+///
+/// ```toml
+/// [keys.normal]
+/// "A-d" = "delete_selection"
+/// "d" = "delete_selection_noyank"
+/// "A-c" = "change_selection"
+/// "c" = "change_selection_noyank"
+/// ```
+///
+/// 從前這四行**一行都不生效**，兩頭都壞：左邊 `"A-d"` 綁的是 `A`、`-`、`d` 三個鍵連
+/// 按（`Key::Alt` 連不上那一層），右邊 `delete_selection` 按的是 `d`——而 `d` 自
+/// 2026-09-28 起就進寄存器了。
+#[test]
+fn the_four_lines_from_that_helix_discussion_do_what_they_say() {
+    let swap: std::collections::HashMap<String, String> = [
+        ("A-d", "delete_selection"),
+        ("d", "delete_selection_noyank"),
+        ("A-c", "change_selection"),
+        ("c", "change_selection_noyank"),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
+    let typed_with_swap = || {
+        let mut ed = typed("甲乙丙");
+        ed.set_key_aliases(swap.clone());
+        // 「甲」進寄存器，底下四個鍵誰吃掉它就看得見。
+        press(&mut ed, "ggy");
+        press(&mut ed, "l");
+        ed
+    };
+
+    // `d` 刪掉「乙」而**不動**寄存器——裏面還是「甲」。
+    let mut ed = typed_with_swap();
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "甲丙", "刪掉了 乙");
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙甲", "寄存器沒被 乙 吃掉");
+
+    // `A-d` 是剪：寄存器換成「乙」。
+    let mut ed = typed_with_swap();
+    ed.on_key(Key::Alt('d'));
+    assert_eq!(ed.current_buffer().text(), "甲丙", "一樣刪掉了 乙");
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙乙", "而 乙 進了寄存器");
+
+    // `c` 改寫而不動寄存器，`A-c` 改寫並進寄存器。
+    let mut ed = typed_with_swap();
+    press(&mut ed, "c");
+    assert_eq!(ed.mode(), Mode::Insert, "改寫就進插入");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙甲", "寄存器沒動");
+
+    let mut ed = typed_with_swap();
+    ed.on_key(Key::Alt('c'));
+    assert_eq!(ed.mode(), Mode::Insert);
+    ed.on_key(Key::Esc);
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙乙", "乙 進了寄存器");
+}
+
+/// **沒配過的話，出廠值一個鍵都沒動**——這是 §5.110 那條規矩的看門狗。
+#[test]
+fn the_factory_keys_still_follow_helix() {
+    let mut ed = typed("甲乙丙");
+    press(&mut ed, "ggy");
+    press(&mut ed, "l");
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "甲丙");
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙乙", "出廠的 `d` 是剪，同 helix");
+}

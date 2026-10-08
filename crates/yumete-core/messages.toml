@@ -64,6 +64,14 @@ find = "緩衝 缓冲 稿子 切換 切换 開著的 开着的 buffer picker"
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
 key = "action.change-selection"
+zht = "剪切後改寫"
+zhs = "剪切后改写"
+en = "cut into the register, then change"
+find = "改 改寫 改写 換 换 替換 替换 剪切 剪 change cut"
+
+[[message]]
+# :keymap actions 那張表裏這一行寫什麽
+key = "action.change-selection-noyank"
 zht = "改寫選區（不動寄存器）"
 zhs = "改写选区（不动寄存器）"
 en = "change the selection, leaving the register"
@@ -119,22 +127,6 @@ find = "字數 字数 進度 进度 今天 寫了多少 写了多少 count progr
 
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
-key = "action.cut-and-change"
-zht = "剪切後改寫"
-zhs = "剪切后改写"
-en = "cut into the register, then change"
-find = "剪切 剪 改寫 改写 cut change"
-
-[[message]]
-# :keymap actions 那張表裏這一行寫什麽
-key = "action.cut-selection"
-zht = "剪切選區（進寄存器）"
-zhs = "剪切选区（进寄存器）"
-en = "cut the selection into the register"
-find = "剪切 剪 寄存器 cut"
-
-[[message]]
-# :keymap actions 那張表裏這一行寫什麽
 key = "action.decrement"
 zht = "光標處的數字減一"
 zhs = "光标处的数字减一"
@@ -143,7 +135,17 @@ find = "數字 数字 減 减 減一 减一 decrement"
 
 [[message]]
 # :keymap actions 那張表裏這一行寫什麽
+# Warning: **2026-10-08 這四句換了主人，一個字都沒改。** 從前 `delete_selection`
+# 掛的是「不動寄存器」那一句，而它真按的是 `d`——`d` 自 2026-09-28 起進寄存器。
 key = "action.delete-selection"
+zht = "剪切選區（進寄存器）"
+zhs = "剪切选区（进寄存器）"
+en = "cut the selection into the register"
+find = "剪切 剪 寄存器 刪 删 delete cut"
+
+[[message]]
+# :keymap actions 那張表裏這一行寫什麽
+key = "action.delete-selection-noyank"
 zht = "刪除選區（不動寄存器）"
 zhs = "删除选区（不动寄存器）"
 en = "delete the selection, leaving the register"
