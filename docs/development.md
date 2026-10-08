@@ -19882,87 +19882,65 @@ and repeatedly ask even when alignment is free of charge」。
 
 ## 5.102 ⚠ 在正文區是豆腐塊，在狀態欄好好的：**是 VS16，兩處都沒畫錯**（2026-10-07）
 
-原話：「The triangle warning symbol cannot be rendered in the main editor region but can be
-rendered in the status bar (unicode infomation).」
+> The triangle warning symbol cannot be rendered in the main editor region but can be
+> rendered in the status bar (unicode infomation).
 
-**先猜錯了一次**：看見狀態欄寫 `U+26A0 · Miscellaneous Symbols`，以為文件裏是**裸**的
-U+26A0。量了纔知道正相反——`docs/development.md` 裏 141 處**全帶 VS16**，裸的一個沒有。
-狀態欄報的是光標下**第一個碼位**，所以它說 U+26A0 是對的，不是說文件裏沒有 VS16。
+Both places are right; they draw different strings. The text area draws `U+26A0 U+FE0F` —
+emoji presentation, two cells. The status bar reports only the first code point, so
+`U+26A0` alone — text presentation, one cell. That terminal has the text glyph and not the
+emoji one.
 
-兩處畫的真的不是同一串（`--shot` 逐字節看出來的）：
+⚠ The status bar naming `U+26A0` is **not** evidence of a bare one in the file: all 141
+occurrences in `docs/development.md` carried VS16, not one was bare.
 
-| | 畫出去的 | 要求的呈現 | 佔幾格 |
-| --- | --- | --- | --- |
-| 正文區 | `U+26A0` ＋ `U+FE0F` | emoji | 2 |
-| 狀態欄 | `U+26A0` | 文字 | 1 |
-
-所以兩處都沒畫錯，寬度也對——是那臺終端畫得了文字呈現、畫不了 emoji 呈現。
-
-**定的是改文檔**（同日）：全倉 153 處 `⚠️` 去掉 VS16 成 `⚠`，**只留 `scripts/frames.sh:67`
-那一處**——那是金樣的素材，正是用來驗「那一對佔兩格」的，動了就沒人守着那條規矩了。
-倉裏本來就有「代碼裏不用 emoji，寬度在不同字體下不一樣」這條規矩，這算把它延到文檔。
+Decided the same day: strip VS16 from all 153 `⚠️` in the repo, **keeping the one in
+`scripts/frames.sh:67`** — that one is golden-frame material, there to prove the pair takes
+two cells.
 
 ## 5.103 `--grep … --open` 根本沒在搜（2026-10-07 報，修了）
 
-原話：「加了 open 參數確是有bug。他等了大概10秒進入了 TUI界面，然后側欄就一直是圖中的
-狀態（Pan.ins) 卡住不動，没有在搜索。」
+> 加了 open 參數確是有bug。他等了大概10秒進入了 TUI界面，然后側欄就一直是圖中的狀態
+> （Pan.ins) 卡住不動，没有在搜索。
 
-**`0+結果` 不是「還在找」，是「沒走完就停了」。** 兩個字面一樣的標題，說的是兩件事
-（`hits-more` 同時給 `cut` 和 `still_searching` 用）。查出來：`open_search_with` 叫的是
-`search_now()`，而那一支走**同步**那一條——`in_the_background` 是假的。於是
+`open_search_with` called `search_now()`, the **synchronous** path — `in_the_background`
+was false. So the walk blocked startup (his ten seconds), and the sync path still carries
+the seconds cap (`Sieve::uncapped` is set only on the background path): it gave up, left
+`searching` empty, and the panel never moved again.
 
-1. 整個啓動被走查堵住（他等的那十秒）；
-2. 同步那一條還帶着那道「最多走幾秒」的閘（`Sieve::uncapped` 只有背景那一條撥開），到時
-   間就收手。收手之後 `searching` 是空的，面板再也不動——卡住的不是界面，是**那趟搜索
-   已經結束了**，一條都沒找着。
+⚠ **`0+結果` means "it stopped before finishing", not "still looking".** One caption
+(`hits-more`) serves both `cut` and `still_searching`, so the screen cannot tell them apart.
 
-**修法：欠着。** `open_search_with` 不再自己跑，只把 `owed_search` 撥上去，交給主循環
-——它先畫一幀（表頭「正在找…」），再 `run_owed_search()` 走背景那一條，每一幀收一批。
-沒有主循環的三條路（測試、`--shot`、`--keys`）自己 `settle_search()` / 等到底，所以靜照
-照舊是跑完的樣子。
-
-**連帶兩條**：
-
-- 鍵落在名單上、模式是 Normal（原話：「正常情况下應該是直接打開TUI界面，然后進入
-  pan.nor 模式，且開始搜索」）。詞已經在命令行上打過了，沒有什麼要再打的。
-- 「站在第一處命中上」挪進了 `collect_search_results`：開面板那一刻名單是空的，站無可
-  站。只在還沒有人動過（停在第 0 行）而第 0 行是個檔名的時候做一次。
+Fix: **owe it.** `open_search_with` only raises `owed_search`; the main loop draws a frame
+first, then runs the search on the background path. The three routes with no main loop
+(tests, `--shot`, `--keys`) settle it themselves, so stills are unchanged. Two knock-ons:
+the keys land on the list in Normal mode, and "stand on the first hit" moved into
+`collect_search_results` — when the panel opens there is nothing to stand on yet.
 
 ## 5.104 命令行那一行進度要先裝得下，再談原地重寫（2026-10-07 報，修了）
 
-`\r` 回到的是**折出來那一截**的行首。進度那一行比終端機寬，於是它自己折到下一行去，
-`\r\x1b[2K` 只擦掉後半截，屏幕上攢出一長串：
+> 理想情况是這個信息即時顯示，及時清除。最後只打印搜索到的結果。如果這個做不到，那就干
+> 脆CLI不打印搜索進度（以免視覺污染）。
+
+⚠ **`\r` returns to the start of the wrapped row, not of the logical line.** The progress
+line was wider than the terminal, so it wrapped and `\r\x1b[2K` cleared only the tail:
 
 ```
 747 files searched, searching .pixi/…/str_for2703 files searched, searching .pixi/…
 ```
 
-修法：先按終端機寬度把路徑從左邊摺（`elide_head`，同面板那一行），整行再 `elide` 一次，
-留一格不佔滿。判詞：「理想情况是這個信息即時顯示，及時清除。最後只打印搜索到的結果。
-如果這個做不到，那就干脆CLI不打印搜索進度（以免視覺污染）。」
+Fix: fold the path from the left (`elide_head`), then `elide` the whole line to the terminal
+width less one cell.
 
 ## 5.105 拼音那一路為什麼慢，和作者定的那道閘（2026-10-07）
 
-報的是「搜索感覺很慢……我感覺我們的慢不是在於遍歷而是在于某些超大文件上花的時間很
-多」，問的是能不能多核分塊。**量下來超大文件是對的，分塊不是。** 794 MB 的
-`fineweb2-cmn/300M/hans.txt`，同一個詞：
+On a 794 MB corpus file, one word: `rg` 0.14 s, `ye -G` **10.44 s**, `--chinese=off` 0.86,
+`--chinese=pinyin` 10.33. **The pinyin path is the entire cost, glyph folding is free**, and it
+does not depend on the query — `xyzzyqq` cost the same. `spans_cased` tries `eat` at every
+character position and `eat` begins with a reading-table lookup: 265 M characters × ~38 ns ≈
+10 s. The tree's one gate (`atoms.len() == 1 && text.is_ascii()`) stops only pure-ASCII lines,
+so a Chinese corpus never hit it.
 
-| 怎麼搜 | 秒 |
-| --- | --- |
-| `rg forfudan.com` | 0.14 |
-| `ye -G forfudan.com` | **10.44** |
-| 同上 `--chinese=off` | 0.86 |
-| 同上 `--chinese=glyphs`（只繁簡） | 0.85 |
-| 同上 `--chinese=pinyin` | **10.33** |
-| `ye -G 中華人民`（漢字查詢） | 0.95 |
-
-**拼音那一路就是全部的代價，繁簡不要錢。** 而且與查詢內容無關——`xyzzyqq`（永遠不可能
-是拼音）一樣 10.40 秒。成因：`spans_cased` 在**每一個字的位置**上試一次 `eat`，而 `eat`
-頭一件事就是查那個字的讀音表（一次 HashMap 加一次字符串切分）。2.65 億個字 × 約 38 奈
-秒 ≈ 10 秒。倉裏本來有一道閘（`atoms.len() == 1 && text.is_ascii()`），只擋得住**純
-ASCII 的行**，而中文語料每一行都有漢字，一次都沒擋住。
-
-### 作者定的那道閘：讀不出來就不問讀音
+His gate — **if it does not read, do not ask for readings**:
 
 > 拼音搜索的時候不允許英文/拼音混合。也就是説如果一串[a-zA-Z]+不是合法的漢字拼音音節
 > 組合（而是可能混雜了拼音和英文），那么我們就直接不開啓拼音搜索。`renman` 是合法的拼
@@ -19971,728 +19949,362 @@ ASCII 的行**，而中文語料每一行都有漢字，一次都沒擋住。
 > 是合法拼音音節，我們可以開啓拼音搜索。`forfudan.com`含有`com`這個非法拼音音節，因此
 > 不開啓拼音搜索。
 
-落地在 `pinyin::sayable`：音節表從讀音表自己建（`syllables()`，一次），每一串字母用一張
-「到第幾個字母為止讀得通」的表切分。**每一串都要整整齊齊切完**，半個音節不通融——而這
-一半**一個命中都不丟**，因為 `say` 本來就只吃得下整個音節（`q + n > said.len()` 就跳
-過）：`zhongg` 從前走完整趟慢路、一處也配不上。逐鍵搜的時候這一路於是自己開關。
+`pinyin::sayable` builds the syllable table off the reading table once and demands that every
+letter run split cleanly into syllables. It loses no hit, because `say` only ever ate whole
+syllables. `forfudan.com` **10.44 → 0.93**.
 
-量出來（同一個 794 MB 的檔）：
+⚠ **One priced loss, put to him and approved**: `md` in `di120章.md` is not a syllable, so that
+whole string stops asking and `di` no longer yields 「第」. 「就按我説的，每一串都要合法」.
 
-| 查詢 | 前 | 後 |
-| --- | --- | --- |
-| `forfudan.com` | 10.44 | **0.93** |
-| `xyzzyqq` | 10.40 | **0.87** |
-| `github.com` | 10.4 | **0.88** |
-| `for3hao` | 10.4 | **0.87** |
-| `zhongguo`（真拼音） | 12.7 | 12.9（不變，見下） |
+**Second half, a leading-character bitmap** (`pinyin::Starts`): a real pinyin query still needs
+the table, so ask the other question — *can this character start the match*. One pass builds a
+1024-`u64` BMP bitmap (8 KB) plus a set for the astral few, and a bit test comes before any
+lookup; it is written clause by clause against `eat`'s first step, so it is a true superset and
+drops nothing. `zhongguo` **12.88 → 4.84**.
 
-⚠ **明碼標價的一處代價，作者過目定的**：`di120章.md` 裏的 `md` 不成音節，於是整條不問
-讀音——`di` 那一半不再換得到「第」。列過表、問過，他的答覆是「就按我説的，每一串都要合
-法」。`letters_and_漢字_mix_in_one_query` 那一行斷言跟着改了，兩份手冊那一句也改了。
+⚠ The sieve is cached thread-local on `(atoms, fold, fold_case)` — **one key short and last
+run's sieve gets used on this one.**
 
-### 第二半：起頭字位圖（同日做了）
-
-真拼音的查詢**應該**查讀音表，所以上面那道閘對它沒用。這一半問的是另一件事：**這個字
-可能起頭嗎**。查詢定下來之後能起頭的字是固定的一小撮（`zhongguo` 要的是讀音以 `zhong`
-開頭的那些漢字），一次掃讀音表建一張 BMP 位圖（1024 個 `u64`，8 KB）＋一個收容平面外
-那幾個字的集合（`pinyin::Starts`）。每個位置先測一個 bit，中不了連讀音表都不碰。
-
-篩子與 `eat` 的頭一步**逐條對着寫**，所以它是個真超集，一個命中都不會漏：
-
-| `eat` 第一步 | 篩子收的 |
-| --- | --- |
-| `Just(c)` 比 `same(c, …, fold)` | `c`，`fold` 開着再加它的異體 |
-| `Said` 照字面（只有 `atoms.len() > 1` 纔許） | 那一串的頭一個字母（折大小寫就兩種都收） |
-| `Said` 問讀音（`say` 的 `q = 0`） | 讀音表裏某個讀音正好是這一串開頭的那些字 |
-
-一趟搜索建一次，按 `(atoms, fold, fold_case)` 存在 thread-local 裏——⚠ 鑰匙少一格就會
-把上一趟的篩子用在這一趟上。
-
-量出來（同一個 794 MB 的檔）：
-
-| 查詢 | 原先 | 加了那道閘 | 再加位圖 |
-| --- | --- | --- | --- |
-| `zhongguo` | 12.88 | 12.9 | **4.84** |
-| `shuzhai` | ~12 | ~12 | **1.82** |
-| `renman` | ~12 | ~12 | **1.86** |
-| `forfudan.com` | 10.44 | 0.93 | **0.87** |
-| `中華人民` | 0.95 | 0.96 | 0.95 |
-
-`zhongguo` 比 `shuzhai` 慢，是因為讀 `zhong` 的字（中种钟…）在中文裏本來就密——篩子放
-過去的位置多，真走 `eat` 的也多。那是這條查詢自己的代價，不是篩子漏了。
-
-**不做文件內分塊**：十核大概 8 倍，而位圖也是 8 倍且更便宜；文件內分塊還要處理跨塊的行
-邊界、把結果按行號併回去，而面板那張名單現在靠「一個檔一個檔走完」保證左欄那一行不在腳
-底下挪。要並行就先並行**跨檔**那一層。
+**No chunking inside a file**: the bitmap bought the same 8× more cheaply, and chunking would
+have to stitch line boundaries while the panel's list relies on finishing one file at a time.
+Parallelise **across** files first (§5.106).
 
 ## 5.106 跨檔並行：36 秒 → 8.9 秒（2026-10-07 定，做完了）
 
-**先量了纔動手。** 同一棵樹（作者的 `yuhao-ime`，`-uu`，239,125 個檔、38 GB）：
+Measured before touching anything, same tree (239,125 files, 38 GB, `-uu`): `rg -j1`
+34.2 s, `rg` on 14 cores 5.1 s, `ye -Guu` 36 s. **We were already at rg's single-thread
+speed**; the remaining sevenfold was all parallelism. Predicted 5–7 s, got **8.9 s**.
 
-| | 秒 |
-| --- | --- |
-| `rg -uu -j1`（單線程） | 34.2 |
-| `rg -uu`（14 核） | 5.1 |
-| `ye -Guu`（§5.105 之後，單線程） | 36 |
+One file per worker, whoever finishes first delivers first (rg's default, and his call). A
+file's hits go over as one batch, so hits within a file stay adjacent and in line order;
+only the order between files changed.
 
-兩件事一起看得很清楚：**那時我們已經是 rg 的單線程速度了**，剩下那七倍全是並行。據此
-報的預估是「5–7 秒」，做完是 **8.9 秒**。
+⚠ **The first 256 files still go one at a time** (`ONE_BY_ONE_FIRST`). A book is a few dozen
+files and fourteen hands save nothing there, while stable order is worth real money: without
+it, three tests failed one run in three.
 
-**一個檔一雙手，誰先跑完誰先交**（作者定，同 rg 的缺省）。一個檔的命中**整批**交出來，
-所以同一個檔的幾處永遠挨在一起、按行號；名單仍舊只往尾巴上加。變的只有檔與檔之間的先後。
+⚠ **The bottleneck was not the search, it was the `looks_binary` probe on the walk thread.**
+The first parallel version only went 36 → 27 s. `-uu` over a code tree is 86% binary (44,503
+of 51,673 files, by this repo's own count), so 230,000 file opens queued on one thread and
+most files never reached a worker. The uncapped walk never consults `seen` anyway, so the
+probe moved to the workers: **27 → 8.9 s**, with byte-identical output.
 
-⚠ **頭 256 個檔照舊一個一個來**（`ONE_BY_ONE_FIRST`）。一部書是幾十個檔，拆給十四雙手
-省不出什麼，而次序穩是真金白銀。不加這一條的代價當場就看見了：三個測試成了**三趟裏壞一
-趟**的那種壞法（`the_panel_changes_one_hit_one_file_or_all_of_them` 站到了命中最多的那個
-檔上、`the_panel_follows_an_edit…` 比的是檔的次序、`the_search_panel_walks_the_folder…`）。
-前兩個本來就該與次序無關，改了；第三個靠這條閘回到確定。
-
-### ⚠ 真正的瓶頸不是搜索，是走查裏那一句探頭
-
-第一版並行做完只有 36 → 27 秒。查出來：`looks_binary` 跑在**走查那一條線程**上，而它是
-開一個檔、讀一千個字節——`-uu` 走一棵代碼樹**八成六是二進制**（本倉自己的註釋量過：
-51,673 個檔裏 44,503 個），於是二十三萬次開檔全排在一條線程上，八成六的檔連工人都見不着。
-
-`uncapped` 那一趟本來就不看 `seen`（`too_far` 第一句就 `return false`），所以探頭交給工
-人，一個字的語義都不改。**27 → 8.9 秒**，而且同一個詞的輸出與上一版逐條相同。
-
-兩條熱路都是 `uncapped`：命令行 `ye -G`，以及面板那一趟（§5.93 起也撥了這一格）。有閘的
-那一趟（編輯器裏 20,000 個檔封頂）照舊在走查裏探頭，它本來就走不遠。
-
-### 還剩下的
-
-8.9 對 rg 的 5.1。差的是走查自己那一層——光走名字（`ye --files`）就要 2.37 秒，它仍在主
-線程上，與工人並行地跑但自己不拆。rg 用的是並行走查（`WalkParallel`）。要再快就是那一步，
-**沒做**。
+Still open: 8.9 against rg's 5.1. Walking names alone (`ye --files`) is 2.37 s and still on
+the main thread; rg uses a parallel walk. **Not done.**
 
 ## 5.107 丟字第二輪剩下那兩條（2026-10-07 定，做完了）
 
-### `:export csv` 把源文件的 BOM 和換行都丟了
+**① `:export csv` dropped the source file's BOM and newlines.** `export_delimited` hard-coded
+`join("\n")`, always appended a newline and never wrote a BOM, so a BOM+CRLF `.csv` came back
+as neither and Excel read mojibake — those three bytes are why `tests/byte_fidelity.rs`'s
+first case exists. Decided: **follow the source file.** `Buffer::marked()` opened a reader for
+it, the BOM being stripped on read and kept in that slot rather than in the rope.
 
-`files.rs` 的 `export_delimited` 寫死 `join("\n")`、末尾無條件加一個換行、也不寫 BOM。
-一份 BOM ＋ CRLF 的 `.csv` 導出來兩樣都沒了，Excel 打開就是亂碼——而那三個字節正是
-`tests/byte_fidelity.rs` 第一條存在的理由，它的註釋寫着「the thing Excel reads to decide
-a `.csv` is UTF-8」。
+**② `:convert-table` ate blank lines inside the range.** Three kinds of range and only one was
+right: a paragraph under the cursor was fine, because a blank line is already its boundary,
+but a whole `.csv`/`.tsv` and a selection crossing a blank line both went through
+`.filter(|l| !l.trim().is_empty())` in `redelimit`/`table_to_pipe` and silently lost the line.
+A `|` table cannot hold a blank line, so stopping before it is the only lossless answer —
+fixed in `block_here`, one rule for all three ranges.
 
-定的是**跟着源文件走**：它帶 BOM 就寫 BOM，它是 CRLF 就寫 CRLF。`Buffer::marked()` 為此
-開了讀口（BOM 是讀的時候摘下來記在那一格的，繩子裏沒有它）。
+> 如果一個文件是csv的話，那么它就是「一個表格」的意思。如果出現空行，説明是文件有問題。
 
-### `:convert-table` 把範圍裏的空行吃掉
-
-**範圍有三種，而從前只有一種是對的**（量出來的，不是推出來的）：
-
-| 範圍 | 從前 |
-| --- | --- |
-| 文中一段（光標所在，不選區） | 空行本來就是邊界，**對的** |
-| 整份 `.csv`／`.tsv` | 範圍裏的空行被**濾掉**，四行併成一張表 |
-| 選區跨過空行 | 同上 |
-
-後兩種是 `redelimit`／`table_to_pipe` 裏那一句 `.filter(|l| !l.trim().is_empty())`：濾完
-拼起來交給 `replace_lines`，於是那一行沒了，一聲不吭。`|` 表格本來就裝不下空行，所以
-「停在它前面」是唯一不丟字的做法——也正是第一種早就在做的事。修在 `block_here`，一條
-規矩管三種範圍。
-
-判詞：「如果一個文件是csv的話，那么它就是「一個表格」的意思。如果出現空行，説明是文件
-有問題。」
-
-### 連帶記一筆：CSV 的 tree-sitter（**等定**）
-
-同一句話的後半：「我們如果有csv 格式的 tree-sitter，那么用户打開這個文件的時候就可以收到
-warning了。所以我覺得 Option 1 + 一個csv tree-sitter 會很好。」
-
-⚠️ 先說清楚再做：**一份 tree-sitter 語法交出來的是語法樹，它自己不報警**。「這份 CSV 有
-一個空行」這句話要有人說，而現在說得出這類話的有兩處——`:table-check`（從頭看一遍，列出
-有問題的行）與開檔那一刻的 `open_notice`。所以這件事拆成兩半：
-
-1. **要不要在開檔那一刻說**（「這份 CSV 第 3 行是空的」）——**不需要 tree-sitter**，但也
-   不是「`:table-check` 多加一條判準」那麼便宜。⚠️ 量過了：一份四行、中間一個空行的
-   `.csv`，`:table-check` 答的是「3 行，沒查出問題」——**格子根本沒把那個空行讀成一行**，
-   於是表格這一側的每一道檢查都看不見它。那正是 `:convert-table` 從前會把它吃掉的同一個
-   根子。要說這句話，得有人去看**文件**，不是看格子。
-2. **要不要 CSV 的 tree-sitter**——那是著色與語法動作（`]f`、`mi f`）那一族的事，排在
-   §5.66 那六個語法後面。
-
-沒自己定，等他說。
+**A CSV tree-sitter is still 等定.** ⚠ A grammar hands back a syntax tree; it does not warn.
+And ⚠ **measured: on a four-line `.csv` with a blank line in the middle, `:table-check`
+answers 「3 行，沒查出問題」** — the grid never read that blank line as a row, which is the
+same root as ②. Whoever says "line 3 is blank" has to read the **file**, not the grid.
+Colouring and the syntax motions queue behind §5.66's six.
 
 ## 5.119 補全那張單子：不等那三百毫秒，而且貼着光標畫（2026-10-08 報的）
 
-> 1. Usually, this autocompletion should be instant (not as delayed by 300ms as docs).
->    This is because the docs should be delayed to prevent long pressing j to navigate
->    causing flashing panels. autocompletion should be instant so that users can see the
->    completions immediately.
-> 2. This autocompletion seems to be better below the cursor (as the best practice, do
->    you agree?) So the floating panel should has another position parameter "at cursor"
->    (now we have four corners and center of the screen). Note that autocompletion is not
->    an "info" type so it never be in the side bar (existing behavior, good).
+> Usually, this autocompletion should be instant (not as delayed by 300ms as docs). …
+> This autocompletion seems to be better below the cursor (as the best practice, do you
+> agree?) So the floating panel should has another position parameter "at cursor".
 
-### 一、慢的那三百毫秒不在浮窗上，在 `didChange` 上
+**The 300 ms was never in the float.** Completion has no delay of its own; it waits on
+`told_the_latest` — the server must have the letter just typed — and `didChange` is throttled
+by `SETTLE` at 300 ms, so the whole wait sat in front of the list. Fix: when a completion
+question is waiting, **that one send skips the throttle** (`Editor::completion_is_waiting`);
+everything else is unchanged. Test `a_waiting_completion_sends_the_text_at_once`.
 
-**查清楚了：補全這一半本來就沒有自己的延遲。** 它慢是因為它被一條
-`told_the_latest` 攣著（`server.rs`）——服務器必須先收到剛打的那一個字母，答案才
-不是「上一個版本的此處能接什麼」。而 `didChange` 按 `SETTLE` 節流，300 毫秒一發。
-所以那三百毫秒是**整條加在單子前面的**。
+**"At cursor" is a new anchor, and he is right about it**: VS Code, helix and nvim-cmp all
+draw the list under the caret and flip above it when it will not fit. `chrome::Anchor` gained
+`UnderCaret` and `panel::Panel` a `stand: Stand`; of eleven floats only completion uses it.
 
-**做法：有一句補全的問題等著的時候，那一發不節流**（`Editor::completion_is_waiting`）。
-這不是把節流拿掉：它只在「人剛打了一個字母、正等著單子」那一暫越過，其餘照舊。
-`SETTLE` 那段註釋本來就寫著「真正的語言服務器客戶端多半連節流都沒有，每一次改動
-都發」——這一改是往那邊挺了一步，不是做了一件別家不做的事。
+⚠ **Vertical text keeps the old rule** — there the "next line" is beside, not below. Code
+files are never vertical so completion cannot reach this today, but the rule is written down
+so nobody moves another float to the caret and breaks it.
 
-測試 `a_waiting_completion_sends_the_text_at_once`：打一個字母，**一趡**循環就
-`didChange`（旁邊那支測的是平常那條路：第一趡起表、第二趡才發）。
-
-### 二、「貼着光標」是一個新的站位，而且他說得對
-
-**三家都把補全單子畫在光標下面**（VS Code、helix、nvim-cmp），裝不下翻到上面。
-理由在「這張單子答的是哪一種問題」：「這是什麼」是讀一段話，讀完回到正文，所以
-越不擋著正文越好；「接下來是什麼」是一張跟著手走的單子，眼睛要在剛打的那半個詞
-與單子之間來回——擺到屏幕角上就是把那一來回拉成半個屏幕。
-
-做法是他說的那個形狀：**浮窗多一個站位參數**。`chrome::Anchor` 多了一格
-`UnderCaret`（旁邊兩格是老的 `Caret`＝光標不在的那個角，與 `Centre`），
-`panel::Panel` 多了一個 `stand: Stand`。十一扇浮窗裏只有補全那一扇是
-`Stand::UnderCaret`。
-
-⚠ **章書那一邊回老規矩**：章書的「下一行」在旁邊不在底下。代碼檔不竦排，所以
-補全單子實際上碰不到這一條，但規矩寫死了免得哪天有人把別的扇改成貼光標。
-
-他順帶確認了一件現狀：**補全不是「信息」那一族，永遠不進邊欄**——本來就是這樣。
+He also confirmed existing behaviour: completion is not an "info" kind and never goes to the
+sidebar.
 
 ## 5.120 補全那一扇的四條，和簽名跟著改（2026-10-08 報的）
 
-> 1. 「自動補全這個 title」太吸引眼球，建議不要。這個面板就是空的標題，這樣不會干扰視線。
-> 2. 「tab 就这样」改成 "Tab 补全" 或者相似的语言。“就这样”太奇怪了。
-> 3. 第一條共 133 條太囉嗦，直接用 1/133 這樣就好。
-> 4. 选择其他的 item 是用上下箭頭的對吧？其他编辑器也是这样的对吧？
+> 1.「自動補全這個 title」太吸引眼球，建議不要。…… 3. 第一條共 133 條太囉嗦，直接用
+> 1/133 這樣就好。 4. 选择其他的 item 是用上下箭頭的對吧？
 
-① **標題拿掉了**。辦法是「名字是空的就不畫名字」（`panel::draw`），不是在 `Panel`
-上再加一個開關——一扇浮窗要不要名字，就是「它叫什麼」這一個問題。`lsp.what-comes-next`
-那一則文案跟著刪了（文案網要求每一則都有人說）。
+① **Title gone**, done as "an empty name draws no name" in `panel::draw` rather than a new
+flag on `Panel` — whether a float has a title *is* the question of what it is called;
+`lsp.what-comes-next` went with it. ②③ The footer is now `1/133 · Tab 補全` (English
+`{0}/{1} · Tab completes`), both strings changed together, since one action spelled two ways
+is the stranger thing. ④ Yes: `prompt.rs` already took `Ctrl('n') | Down` and
+`Ctrl('p') | Up`, and all three references accept both sets. Nothing changed.
 
-②③ **底邊那一句改成 `1/133 · Tab 補全`**。兩則一起改（`lsp.which-of-them` 與
-`lsp.take-it`）——同一個動作在兩則裏兩種寫法是更奇怪的那一種。英文是
-`{0}/{1} · Tab completes`。
+**The signature float moved into completion's class**, on his reasoning:
 
-④ **是的，上下箭頭本來就走得動**（`prompt.rs`：`Key::Ctrl('n') | Key::Down`、
-`Key::Ctrl('p') | Key::Up`），而且三家都是這兩套同時收（VS Code 的 ↑↓、helix 與
-nvim-cmp 的 `C-n`／`C-p` 加箭頭）。一個字都不用改。
+> 它雖然和「文檔」內容一樣，但本質上不同，它的目的在於及時的提示，故而在光標旁邊，不進側欄。
 
-### 連帶：簽名那一扇改成和補全同一類
+So `signature_is_waiting()` also counts as urgent and skips the `didChange` throttle
+(§5.119), it stands `UnderCaret`, and `tag: None` already kept it out of the sidebar. The
+request itself was §5.116 ② (`601ef1a7`).
 
-> insert 模式下，函數的 `(`, `,` 觸發 doc 你是不是还没做？我觉得這個地方可以和
-> autocompletion 一樣、及時响应、光標位置。這個雖然和「文檔」內容一樣，但本質上不同，
-> 它的目的在於及時的提示，故而在光標旁邊，不進側欄。
-
-**做了，在 §5.116 ②（`601ef1a7`）**——打 `(` 與 `,` 問得出去、答案浮得出來。他說的
-兩件是它的**擺法**，那兩件從前跟著「文檔」那一扇走，現在改成跟著補全走：
-
-- **及時**：`signature_is_waiting()` 也算「急」，`didChange` 同樣不節流（見 §5.119）。
-- **光標旁邊**：`Stand::UnderCaret`。
-- **不進側欄**：`tag: None` 一直就是這個意思，没改。
-
-⚠ 它的標題還寫著「文檔」（`Info::Docs.tag()`）。他這一句正好說「本質上不同」，
-所以那個名字可能也該換或者拿掉——**没動，等他定**。
+⚠ Its title still reads 「文檔」 (`Info::Docs.tag()`), which his own 「本質上不同」 argues
+against — **not touched, waiting on him.**
 
 ## 5.121 簽名裏正在填的那一段加重，和 `.s` / `.S` 分家（2026-10-08）
 
-### 一、加重：浮窗多了一個 `accent`
+**① Accent.** `panel::Panel` gained `accent: Option<(usize, usize)>` (character indices) and the
+signature float hands it `lsp::Signature::active`, finishing what §5.116 ② owed. Counting rows
+works only because `wrap` goes through `yumete_core::wrap::line_rows` and the editor's own
+wrapping never loses a character — one row's `to` is the next row's `from`. ⚠ **Four
+preconditions, any one missing means no accent**: horizontal, `Body::Prose`, `marked: false`, no
+`\n` in the text. **Rather no accent than the wrong span.** The ink is gold, the same "you are
+here" gold as a picker's matched letters.
 
-§5.116 ② 欠的那一半做了。`panel::Panel` 多一格 `accent: Option<(usize, usize)>`
-（字符下標），簽名那一扇把 `lsp::Signature::active` 直接交給它。
+**② `.s` against `.S`.** 「我覺得根本的方法是副檔名不轉小寫？或者先轉小寫再查，但是看到 `.s`
+這樣有歧義的再看一下原始到底是大寫还是小寫？」 — the latter, and the root was a level up:
+`syntax::from_extension` lowercased before passing down, so nothing below could ever tell the two
+apart. It passes the extension through verbatim now. Two languages, `Language::Gas` and
+`Language::Nasm`, **sharing one grammar**; the only reason to split them is the comment mark —
+GAS `.s` → `#` (plus `/* */`), NASM `.asm` `.S` `.nasm` → `;`.
 
-**算法是「折行不會弄丟字」**：畫散文那一圈裏一行一行數過去，第 i 行就是原文的
-第 `seen..seen+n` 個字。這一條成立是因為 `wrap` 走的是 `yumete_core::wrap::line_rows`
-（編輯器自己那一支），而編輯器的折行不許丟字——上一行的 `to` 就是下一行的
-`from`。
+**③ The Ada and Pascal highlight queries are ours.** 「我們自己寫，最安全」 — helix's `.scm`
+files are MIT and copying means carrying the notice. Node names were generated out of each
+grammar's own `src/node-types.json`, not remembered: Pascal names every keyword as a node (157 of
+them) while Ada's keywords are anonymous, so its query writes `"procedure"` strings. ⚠ **`r##"`,
+not `r#"`**: the `"#` inside Ada's `#if`/`#else`/`#elsif`/`#end` closes `r#"` on the spot. ⚠
+**"compiles" and "matches" are two things** — a right name on the wrong shape compiles and paints
+nothing, so beside `every_shipped_grammar_compiles_its_own_query` there is
+`the_two_queries_we_wrote_ourselves_really_paint`, which paints real Ada and Pascal and compares
+ink. Neither language gets tags, text objects or indent queries: their blocks are words like
+`begin`/`end`, not brackets.
 
-⚠ **四個前提，缺一個就不加重**：橫排、`Body::Prose`、`marked: false`、正文裏沒有
-`\n`（換行符不在任何一行裏，數字會偏）。**寧可不加重，也不許加重錯的那一段。**
-
-墨是金的——和挑選器裏「查詢詞命中的那幾個字」同一個，那一欄本來就是「你在這裏」。
-
-### 二、`.s` 與 `.S`：副檔名不在呼叫端轉小寫了
-
-上一輪把匯編擱下來，是因為「`空格 c` 該寫 `;` 還是 `#`」答不出來。他的定法：
-
-> 我觉得根本的方法是副檔名不轉小寫？或者先轉小寫再查，但是看到 `.s` 這樣有歧義的
-> 再看一下原始到底是大寫还是小寫？
-
-就是後面那一種，而且根子在更上面一層：**`syntax::from_extension` 從前自己先轉了
-小寫再往下傳**，於是下游永遠再也分不出 `.S` 與 `.s`。現在原樣往下傳，轉小寫是
-`Language::from_extension` 自己的事，而它先把這兩個按原樣認完再轉。
-
-分成兩門語言（`Language::Gas` / `Language::Nasm`），**共用同一套語法**
-（`tree-sitter-asm` 是通用的，三種行註釋全認）——helix 也分兩門，只是它用兩套語法。
-分家的唯一理由就是註釋記號：GAS `#`（加 `/* */`）、NASM `;`（沒有塊註釋）。
-
-| | 副檔名 | `空格 c` |
-| --- | --- | --- |
-| NASM | `.asm` `.S` `.nasm` | `;` |
-| GAS | `.s` | `#` |
-
-上色有（`HIGHLIGHTS_QUERY` 這個 crate 導出來了）；tags、文本對象、縮進查詢都沒有——
-匯編沒有「參數」也沒有「塊」，標籤下面縮不縮是寫稿子的人自己的事。
-
-### 三、Ada 與 Pascal：上色查詢是我們自己寫的
-
-他定的：「我們自己寫，最安全」——不抄那兩份 `.scm`（MIT，抄要帶授權聲明）。
-與 `objects()`／`indents()` 同一條規矩。
-
-**節點名是生成的，不是記的**：從兩個語法自己的 `src/node-types.json` 裏數出來的。
-兩門的形狀正好相反：
-
-- **Pascal 把每一個關鍵字做成了有名節點**（`kBegin`、`kEnd`…共 157 個），所以查詢裏
-  寫的是 `(kBegin)` 這種；23 個是運算符（`kAdd`、`kAssign`…）歸 `@operator`，
-  `kTrue`／`kFalse`／`kNil` 歸 `@constant`，其餘 131 個歸 `@keyword`。
-- **Ada 的關鍵字是匿名節點**，所以寫的是 `"procedure"` 這種字串。Ada 不分大小寫，
-  而語法給的 token 名是小寫的那一個，所以源稿寫 `PROCEDURE` 也匹配得上。
-  它還多一樣：`name:` 這個字段在四個節點上都有，所以子程序名與調用得出 `@function`。
-
-⚠ **`r##"` 不是 `r#"`**：Ada 的 gnatprep 那四個詞（`#if` `#else` `#elsif` `#end`）裏的
-`"#` 會把 `r#"` 当場收掉。
-
-⚠ **「編得起來」與「匹配得上」是兩件事。** `every_shipped_grammar_compiles_its_own_query`
-只描前者；名字寫對了卻搭錯形狀，查詢照樣編得過、一個字也不上色。所以另有
-`the_two_queries_we_wrote_ourselves_really_paint`：真畫一段 Ada 與一段 Pascal，比墨。
-
-副檔名：Ada `.adb` `.ads` `.ada`；Pascal `.pas` `.pp` `.dpr` `.dpk` `.lpr`。
-註釋：Ada `--`（沒有塊註釋）；Pascal `//` 加 `{ }`。
-tags、文本對象、縮進查詢都沒有——這兩門的塊是 `begin`／`end` 這種詞而不是括號，
-第一期那一套在這裏不是同一件事，留給下一期。
-
-**§5.66 那六門到此全部做完**，共八門新語言（匯編算兩門），release 二進制
-**15.90 MB**（做這一輪之前是 15.59，再之前九門語法時是 13.6）。
+**§5.66's six are all done** — eight new languages, assembly counting two. Release binary
+**15.90 MB** (15.59 before this round, 13.6 at nine grammars).
 
 ## 5.122 表格要等光標站進去一次才不折行（2026-10-08 報的）
 
-> `:info` print a table. However, this table is wrapped. Rembember that we do not wrap
-> table for markdown files. Interestingly, as soon as I click any place of this file, the
-> table is not wrapped (good behaviour). Please check the reason?
+> this table is wrapped. Rembember that we do not wrap table for markdown files.
+> Interestingly, as soon as I click any place of this file, the table is not wrapped.
 
-**量出來的原因**：折行那一問走 `table_row_at` → `table_lines_at`，而後者第一句就是
-`let view = self.table.as_ref()?`。`self.table` 只由 `find_the_table_here` 建，而那一支
-要求「光標**此刻**站在一個 `|` 行上」。實測：一份 md，光標在第 1 行時
-`table_row_at(2)` 是 `false`，按兩下 `j` 走進表格後是 `true`。所以 `:info` 剛開出來、
-光標停在標題那行的時候整張表是折的，點進去一下就正了。
+Measured: `table_row_at` goes through `table_lines_at`, whose first line is
+`let view = self.table.as_ref()?`, and `self.table` is built only by `find_the_table_here`,
+which demands the cursor be on a `|` row **at that moment**. With the cursor on line 1,
+`table_row_at(2)` is `false`; two `j` into the table and it is `true`.
 
-**他定的做法**（不是全文掃描，也不是照舊）：
+His method — 「check whether top 100 lines (or the currently visible lines) belongs to a md
+table」 — became **ask about this row in place**: the wrap question is only ever asked about
+rows being drawn, which is exactly "the visible lines" and more accurate than a hard 100.
 
-> I think a balanced method for Option 1 is to check whether top 100 lines (or the
-> currently visible lines) belongs to a md table. This is balanced because we only check
-> the top 100 lines (or currently visible lines). We do not care the rest of the document
-> because users have to use cursor to navigate to them.
-
-實現成**就地問這一行**：折行那一問本來就只對畫得出來的行問，所以「就地」正好是
-他說的「看得見的那幾行」，而且比寫死 100 行更準。`mdtable::region` 只往上下走到
-表格的邊為止。
-
-⚠ **四道閘的順序是量出來的，不是排的**：
-
-1. `opens_with_a_pipe(line)`——新寫的，**一個字一個字讀 rope，不造字串**；
-2. `table_view_opens_itself()` 與 `syntax() == Markdown`；
-3. `block_of(line).is_literal()`——圍欄裏的表格是例子不是表格；
-4. `mdtable::region` ＋ `md_table_parses`。
-
-把第 1 道排到第 3 道後面，`a_paste_asked_for_a_million_stops_at_the_ceiling`
-**從 0.99 秒變成 41 秒**（`block_of` 按版本緩存，而那支測試每貼一次就換一個版本）。
-同樣地，`mdtable::is_row` 收的是 `&str`，要先把整行物化再 `chars().count()`——一行兩萬
-個字的文件上每幀每行問一次就是平方，所以第 1 道閘自己讀 rope。
-
-兩支測試：`a_markdown_table_does_not_wrap_before_the_cursor_has_been_in_it`、
-`a_table_quoted_in_a_fence_still_wraps`。
+⚠ **The order of the four gates was measured, not arranged**: `opens_with_a_pipe(line)`, then
+`table_view_opens_itself()` and `syntax() == Markdown`, then `block_of(line).is_literal()`,
+then `mdtable::region`. Moving gate 1 behind gate 3 took
+`a_paste_asked_for_a_million_stops_at_the_ceiling` **from 0.99 s to 41 s**, because `block_of`
+caches per revision and that test changes revision on every paste. For the same reason gate 1
+reads the rope character by character and builds no string: materialising a 20,000-character
+line once per row per frame is quadratic.
 
 ## 5.123 宏沒有簽名，那就拿文檔的第一段頂上（2026-10-08 報的）
 
 > 我在 println! 上按 space k 是有文檔的。
 
-兩件事都是真的，因為它們是**兩種請求**。拿真 rust-analyzer（1.99.0）同一份檔、
-同一次會話量的：
+Both are true because they are two requests. Measured against real rust-analyzer (1.99.0), one
+file, one session: `v.push(` and `Command::new(` answer `signatureHelp` and `hover` both;
+**`println!(` answers `hover` while `signatureHelp` is `null`.** Hover asks about the symbol
+under the cursor — macro, type, variable, module alike; signatureHelp asks which call you are
+standing in, and **a macro is not a call**.
 
-| 打在哪 | `signatureHelp` | `hover` |
-| --- | --- | --- |
-| `v.push(` | `fn push(&mut self, value: i32)` | 有 |
-| `Command::new(` | `fn new<S: AsRef<OsStr>>(program: &str) -> Command` | 有 |
-| **`println!(`** | **`null`** | **有** |
+① **Fallback** (his call): when the signature comes back empty, ask hover at the same place
+and draw **at most the first paragraph**, with a lone `…` if more follows —
+`lsp::first_paragraph` skips fences and `---`, which rust-analyzer puts first. The
+one-paragraph cap comes from the three references, none of which pops whole docs in insert
+mode: Neovim `i_CTRL-S` against `K`, helix auto-signature against `空格 k` after `Esc`, VS
+Code `Ctrl+Shift+Space` against `Ctrl+K Ctrl+I`.
 
-根本的分别：hover 問的是「光標下那個符號」（宏、類型、變量、模塊它都答），
-signatureHelp 問的是「你正站在哪一次調用裏」——**宏不是一次調用**。
+② **The title is now 「簽名」** (`lsp.signature`), 「因為現在看來他們本質不同」. One float now
+answers two questions and the title is the only thing that can say which. ⚠ On the fallback the
+box holds documentation while the title still reads 「簽名」 — **named by occasion, not by
+content**, agreed in person.
 
-① **回退**（他定的）：簽名回空就在**同一處**問一句 hover，框裏最多畫**正文第一段**，
-後面還有就單排一個 `…`。`lsp::first_paragraph` 跳過圍欄與 `---`（rust-analyzer 把
-簽名排在前面），第一行真正的散文起算一段。
+⚠ **Trigger characters are the server's to declare and we hardcode `(` and `,`.** pylsp's
+initialize reply asks for `["(", ",", "="]`, so `f(x=` in Python never asks. **He decided this
+is for later.**
 
-三家都不在插入態冒整段文檔，這是那一段限額的來源（都是在檔裏查的）：
-
-| | 插入態 | 整段文檔 |
-| --- | --- | --- |
-| Neovim 0.11 | `i_CTRL-S` → `vim.lsp.buf.signature_help()`（出廠默認，`lsp.txt:88`） | `K`，Normal |
-| helix | 自動簽名，沒有插入態的 hover 鍵 | `空格 k`，要先 `Esc` |
-| VS Code | `Ctrl+Shift+Space` | `Ctrl+K Ctrl+I` |
-
-② **標題改成「簽名」**（`lsp.signature`）。他的理由：「因為現在看來他們本質不同」。
-同一扇浮窗現在答兩種問題，名字是唯一說得出「剛才答的是哪一個」的地方。
-⚠ 回退的時候框裏是一段文檔而標題仍寫「簽名」——**按場合命名，不按內容**，当面說過。
-
-### 順帶量到、還沒修的一條
-
-**觸發字符是服務器自己說的，而我們寫死了 `(` 與 `,`。** 實測 pylsp 的 initialize 回話：
-
-```json
-"signatureHelpProvider": {"triggerCharacters": ["(", ",", "="]}
-```
-
-它要的第三個是 `=`（關鍵字參數），所以 python 裏打 `f(x=` 不會問。**他定「這個之後再修」。**
-
-順帶排掉的一個誤會：截圖上 `fn new<S: AsRef<OsStr>>(program: **bool**) -> Command` 不是
-我們畫錯——**複現了**：`Command::new(` 沒關起來的時候，解析器把下一句
-吐進去當參數，而下一句是 `std::env::var(…).is_ok_and(…)`，那是個 `bool`，於是
-`S` 跟著 `bool` 合了一。服務器真的就是這麼說的，我們照字面畫。
+Also reproduced, and not our bug: with `Command::new(` left unclosed the parser swallows the
+next statement as the argument, so the server itself reported `(program: bool)`.
 
 ## 5.124 `:view-long-line`：一行長過三千列就不上色（2026-10-08 定）
 
-§5.69 那條「等定」定了。他選的是 vim 那一條：過了 N 列就不上色。
+§5.69's open question is settled; he took vim's answer — past N columns, do not colour. One
+frame, gate off → on: minified `.js`, 1.5 M ASCII on one line, **2.57 s → 0.05 s**; CJK `.txt`,
+1.5 M characters on one line, 0.37 → 0.15; 15,000 lines of the same text 0.04 either way.
 
-### 先量，再定名字
+⚠ **A `.txt` is read as markdown anyway** (he asked for the measurement: prefixing `# ` changed
+almost nothing). There is no `txt` in the extension table, so it goes by content and a Chinese
+manuscript guesses markdown — which is also why `:info` says markdown there.
 
-| 一幀 | 門槛關 | 門槛開 |
-| --- | --- | --- |
-| 壓縮的 `.js`，150 萬 ASCII 一行 | 2.57 秒 | **0.05 秒** |
-| CJK `.txt`，150 萬字一行 | 0.37 | **0.15** |
-| 同一份開頭加 `# ` | 0.38 | **0.12** |
-| 同樣字數，15000 行 | 0.04 | 0.04 |
+**Three bills are dropped and the largest is not syntax** (`sample` named them): markdown markup,
+tree-sitter colouring (the `.js` 2.5 s), and **Chinese word shading, dearest on a CJK file and
+paid twice** — its memo key is a hash of the whole line, so hashing alone walks it. That is why
+the name is not `:view-syntax-max-columns`, which he had offered: the word says two thirds too
+little. Factory 3000, vim's number; `off` means no limit; `Editor::line_is_too_long` reads the
+rope character by character.
 
-⚠ **`.txt` 本來就被當成 markdown 讀**（他要求量的：開頭加 `# ` 看看差多少）——
-副檔名表裏沒有 `txt`，走的是按內容猜那一條，而一份中文稿子猜出來就是 markdown。
-所以三行數字幾乎一樣，`:info` 上那個「語言 markdown」也不是 `#` 帶來的。
+**① Still owed: segmentation should count only the visible span rather than be skipped** —
+他的話：「分词是非贪婪的。只需要看某个区间就行。……只要对可视区域上色就可以了。」 Segmentation is
+window-local, so the shading is curable and the gate then need only cover markup and syntax.
 
-**剔掉的是三筆賬，而最大的一筆不是語法**（`sample` 指的）：
+**② The rest was not decoration but materialising whole lines into `String`** — three places, all
+changed the same day: `tab_stops_on_line` asks the rope's chunks for `\t`, `cursor_visual_column`
+skips the line when nothing is hidden, `motion::visual_column` takes `col + 64` characters. ⚠
+`tab_stops_on_line` **does not go through the long-line gate**: a tab's width is a measured
+position, not decoration — skip it and the cursor sits in a column the page does not have, which
+is what a long TSV line is.
 
-1. markdown 標記（`markup_runs` ＋ `markup_off_line`）——兩支都把整行物化一遍；
-2. tree-sitter 語法上色（`code_file_line` 背後的 `hold_the_tree`）——`.js` 那 2.5 秒是它；
-3. **中文分詞的詞底紋**（`segment_line`）——CJK 檔上最貴，而且**付兩次**：備忘的
-   鑰匙是整行的雜湊，光算雜湊就要走一遍全文。
-
-所以名字最後沒叫 `:view-syntax-max-columns`（他提過三個帶 syntax 的）：那個詞說小了
-三分之二。定的是 **`:view-long-line`**，它說的是「長的行」。
-
-### 門槛在哪幾處
-
-`Editor::line_is_too_long`，三個呼叫點都在最前面。那一支自己**一個字一個字讀 rope**
-（`line(n).len_chars()`）——為了問「這一行是不是太長」把整行拷一份是自己把自己抵消掉。
-
-出廠 3000，和 vim 同數；`off` ＝沒有上限（vim 的 `synmaxcol=0`）；裸的報告。
-
-### 還欠著的兩條
-
-① **分詞應該「只算看得見的那一段」，而不是不算**（他 2026-10-08 提的）：
-
-> 理论上说，这里面「分词」的影响不应该特别大。因为分词是非贪婪的。只需要看某个区间
-> 就行。也就是说只要对可视区域上色就可以了。
-
-對的——分詞是局部的，窗口外的字不影響窗口裏的切法。做成「只分看得見的那一段」
-之後，長行上的詞底紋可以治回來，門槛就只要管標記與語法兩筆。
-
-② **剩下的不在裝飾上，是「把整行物化成 `String`」**。`sample` 指到三處，都改了
-（同一天）：
-
-| 哪一支 | 從前 | 現在 |
-| --- | --- | --- |
-| `tab_stops_on_line` | `line_text()` 再 `contains('\t')` | 先問 rope 的塊裏有沒有 `\t`，一個字节也不配 |
-| `cursor_visual_column` | 沒藏東西也先 `line_text()` | 藏起來的那一列空著就不拿行 |
-| `motion::visual_column` | 整行物化，只為了走到光標 | 只拿 `col + 64` 個字（迴圈本來就在 `col` 斷） |
-
-⚠ `tab_stops_on_line` **不走長行門槛**：製表符的格寬是量出來的位置而不是裝飾，不畫
-光標就停在一個那一頁沒有的列上（一行很長的 TSV 正是這種檔）。
-
-全部做完之後的一幀：CJK 一行 150 萬字 **0.37 → 0.10 秒**，壓縮 `.js` **2.57 → 0.05**，
-15000 行的對照組一直是 0.04。`j` 走 120 下：0.38 → 0.28 秒。
-
-③ **還沒做：分詞改成「只算看得見的那一段」**（上面 ①）。做了之後長行上的詞底紋
-可以治回來，`segment_line` 那一道門槛就可以拿掉。
+After all of it: CJK 1.5 M on one line **0.37 → 0.10 s** a frame, minified `.js` **2.57 → 0.05**,
+the 15,000-line control 0.04 throughout, and 120 presses of `j` 0.38 → 0.28.
 
 ## 5.129 光標停在括號上，另一半那一格塗成金的（2026-10-08）
 
-### 三家各是怎麼答的
-
 | 編輯器 | 點亮幾半 | 怎麼找 | 用什麼 |
 | --- | --- | --- | --- |
-| vim（`matchparen`，出廠就開） | **兩半** | 純文本掃，數層數 | `MatchParen` 高亮組（出廠是一塊青底） |
-| helix（`ui/editor.rs::highlight_focused_view_elements`） | **只點遠那一半**，一格 | `helix_core::match_brackets::find_matching_bracket`，走語法樹 | 主題鍵 `ui.cursor.match` |
-| VS Code | **兩半** | 文本掃 | `editorBracketMatch.border`，一圈框 |
+| vim（`matchparen`，出廠就開） | 兩半 | 純文本掃，數層數 | `MatchParen` 高亮組 |
+| helix | **只點遠那一半**，一格 | `find_matching_bracket`，走語法樹 | `ui.cursor.match` |
+| VS Code | 兩半 | 文本掃 | `editorBracketMatch.border` |
 
-### 照 helix，而不是照「兩家對一家」
+**Follow helix, not two against one: only the far half.** The near half already has the cursor's
+own reversed block under it, and **two reversed blocks read as two cursors**. Background is the
+reader's mark on this page — selection, hits, the cursor band — so this speaks in ink instead:
+`ink.gold()`, the page's existing "the thing you are on" ink. No new theme key and no switch;
+helix has neither.
 
-**只畫遠那一半。** 理由不只是對齊：近那一半底下已經坐着光標自己那個反白方塊，再點亮
-一次是同一句話說兩遍，而**兩塊反白讀起來是兩個光標**。vim 的 `MatchParen` 出廠是一塊
-底色，疊在它自己的光標上也還好認；這一頁上底色是**讀者的**記號（選區、朱底的命中、
-光標那一條帶），所以這裏換成墨色說——`ink.gold()`，不動底色。
+`Editor::matching_bracket()` answers the other half's character index, and **`mm` now asks the
+same function** — the cell the page points at and the cell `mm` jumps to must not be two answers.
+Both pages draw it as the **last** style layer, so it changes only ink and every background layer
+survives; the vertical page asks whether the half *falls inside* this cell, since one cell can
+hold several characters. Quotes are not a pair: standing on one you cannot say which side the
+other is on.
 
-金是這一頁現成的「你在的那個東西」那個墨色：挑候選時打中的那幾個字母、簽名裏正在填
-的那個參數、格子兩邊那兩道豎線，用的都是它。**沒有新開主題鍵，也沒有開關**——helix
-那邊也沒有開關。
-
-### 怎麼實現的
-
-核心加一支 `Editor::matching_bracket() -> Option<usize>`（`editor/matching.rs`），答的是
-另一半那個**字符下標**，光標不在括號上就是 `None`。`mm` 從此問的是同一支：**跳的那一格
-和畫成金的那一格不許是兩個答案**，寫兩遍就意味着頁面指着一格而 `mm` 跳到另一格。
-
-兩頁都畫（`lib.rs::draw_horizontal`、`vertical.rs`），擺在每一格樣式的**最後**一層：它只
-改墨色，上面每一層改的都是底色，所以朱底的命中、選區那一塊都還在。竪排那一頁問的是
-「那一半落在這一格裏嗎」而不是「這一格就是那一格嗎」——一格可能裝着好幾個字符（注音
-的一組、縦中横的一對）。
-
-**引號不算一對**：`closing_of`/`opening_of` 本來就跳過兩半一樣的那些（`"`、`'`、`` ` ``），
-站在一個上面說不出另一半在左還是在右。helix 走語法樹，也只認括號。
-
-### 量出來的，和順帶改掉的一處
-
-一幀問一次，所以要緊的是最壞那一檔：**光標停在一個配不上的括號上**——那時要從光標一路
-掃到檔尾。四十萬字一行的檔上量（release，`editor::matching::tests::how_long_does_the_worst_case_take`，
-帶 `--ignored` 重跑得了）：
-
-| 掃法 | 四十萬字掃到底 |
-| --- | --- |
-| 逐格 `rope.char(i)`（本來的寫法） | **22.8 ms** |
-| `rope.chars_at()` 迭代器（改成這個） | **1.3–2.3 ms**（跑三趟） |
-
-`char(i)` 每一格都從樹根重新索一遍，而這兩支走的是一整條連續的字符。從前只有按鍵那一
-路問得到 `find_forward`/`find_backward`（`mm`/`md`/`mr`），22 ms 看不出來；一幀問一次
-之後它成了畫面的事，所以兩支都改成走迭代器了。配得上的時候掃到那一半就停，正常稿子上
-是幾微秒——所以**不設上限**：最壞那一檔要湊齊「一行四十萬字」加「光標正停在一個配不上
-的括號上」纔碰得到，而它已經比畫一幀便宜。
-
-金樣一幀都沒變：那二十四幀裏沒有一幀的光標停在括號上。
+The worst case is a cursor on an **unmatched** bracket, which scans to end of file. On a
+400,000-character line: per-index `rope.char(i)` **22.8 ms**, `rope.chars_at()` iterator
+**1.3–2.3 ms**, because `char(i)` re-indexes from the tree root every time — so `find_forward`
+and `find_backward` both moved to the iterator now that a frame asks once. **No cap**: that case
+needs a 400k line *and* an unmatched bracket under the cursor, and it is already cheaper than
+drawing a frame. Golden frames unchanged; none of the 24 has its cursor on a bracket.
 
 ## 5.125 一個製表符就讓那一行每幀重走一遍（2026-10-08 使用者報的）
 
-> 见鬼了我跟你说。我有两个文章，一个 50 万字（之前卡的那几个之一）…打开的时候黑屏了
-> 几秒，每个按键（包括命令）都要几秒反应。但是另一个 200 万字的文件卡顿就小多了。。。
-> 我感觉有什么 bug。
+> 见鬼了我跟你说。我有两个文章，一个 50 万字（之前卡的那几个之一）…每个按键（包括命令）都要
+> 几秒反应。但是另一个 200 万字的文件卡顿就小多了。。。我感觉有什么 bug。
 
-**他的感覺是對的，而且他那兩份稿子自己把病證明了**：
+**His two manuscripts prove it themselves**: `test.txt`, 2,069,837 characters on one line with
+**0** tabs, 0.16 s a frame; `all_text.txt`, 476,764 characters on one line with **97** tabs,
+**0.43 s**. A file four times smaller, twice as slow. A synthetic pair ruled out his text being
+special — same 476,763 characters, same frequencies, 97 tabs against none: **0.40 s against
+0.04**.
 
-| | 字數 | 行數 | 製表符 | 一幀 |
-| --- | --- | --- | --- | --- |
-| `test.txt` | 2,069,837 | 1 | **0** | 0.16 秒 |
-| `all_text.txt` | 476,764 | 1 | **97** | **0.43 秒** |
+Cause: `tab_stops_on_line` has to walk the line's graphemes to know what each tab pads to, since
+a tab's width follows everything before it and cannot be computed in halves — and wrapping **asks
+once per row it measures**. When the line is the whole file, one tab multiplies a full pass by the
+height of the screen.
 
-小四倍的檔慢兩倍多。為了排掉「是不是他的文字有什麼特別」，另造了一對合成檔：同樣
-476,763 個字、同樣的字頻，一份插 97 個製表符、一份一個也沒有——**0.40 秒對 0.04 秒**。
+⚠ **§5.124's gate deliberately does not cover this**: a tab stop is a measured position, not
+decoration — skip it and the cursor lands in a column the page does not have. That is why the
+round which took the `.js` from 2.5 s to 0.05 did nothing at all for his file. **The two look
+alike and are not.**
 
-### 成因
-
-`tab_stops_on_line` 要把整行走一遍字簇才算得出每一個製表符補到哪一格——製表符的寬度
-跟它前面所有字的寬度走，所以算不得半段。而折行**每量一行就問一次**，一屏十幾行
-就是十幾遍。正常稿子一行幾十個字，一個製表符也不痛不癮；一行就是全文的時候，
-一個製表符就把「走一遍全文」乘上了屏幕行數。
-
-⚠ **前一輪的門槛（§5.124）故意沒管它**：製表符的格寬是量出來的位置，不是裝飾——
-不畫它光標就停在一個那一頁沒有的列上。所以那一輪把 `.js` 從 2.5 秒治到 0.05，
-卻一點治不到他這份。兩件事長得像，根子不同。
-
-### 做法：算過就記著
-
-答案只跟著四樣東西走：正文（版本）、製表位寬、藏起來的那幾段、表格的牆。四樣都進指紋
-（`tab_memo`），光標走一步一樣都不改，所以**一次改動算一遍**而不是一幀十幾遍。
-
-量出來的：
-
-| | 一幀 | 按 120 下 `j` |
-| --- | --- | --- |
-| `all_text.txt`（47 萬字 ＋ 97 個製表符） | 0.43 → **0.06 秒** | **0.08 秒**（0.2 毫秒一鍵） |
-| `test.txt`（206 萬字、沒製表符） | 0.16 → 0.17 | 0.44 秒（2.3 毫秒一鍵） |
-
-現在小那份比大那份快，跟字數對得上了。
-
-測試 `a_tab_on_a_very_long_line_is_measured_once_not_once_a_row` 攣的是「記起來了」：同一行
-問二十次比真算一次還快。攣法是數時間——備忘命中與不命中在長行上是兩個數量級，
-不會因為機器快慢而翻盤（拿掉備忘實測當場紅）。
+Fix: memoise. The answer depends on four things — text revision, tab stop width, hidden spans,
+table walls — all four in one fingerprint (`tab_memo`), and a cursor step changes none of them, so
+it is **once per edit instead of a dozen times per frame**. `all_text.txt` 0.43 → **0.06 s** a
+frame; `test.txt` unchanged at 0.17, so the smaller file is now the faster one.
+`a_tab_on_a_very_long_line_is_measured_once_not_once_a_row` asserts by timing, sound only because
+memo hit and miss are two orders of magnitude apart on a long line.
 
 ## 5.126 一行 1240 萬字：每按一下拷三份全文（2026-10-08）
 
-他把 `test.txt` 放到 **12,419,022 個字、一行**，報了三個現象：折行開著到處卡；關掉折行之後
-文首按 `l` 不卡、按 `e` 卡、走到文末按 `h` 也卡。量下來三條全是同一個形狀：
-**問一個位置的事，卻付整行的錢**。
+He pushed `test.txt` to **12,419,022 characters on one line** and reported three things: wrapping
+on, stalls everywhere; wrapping off, `l` at the start fine, `e` stalls, `h` at the end stalls.
+All three are one shape — **asking about one position and paying for the whole line**. Three
+culprits, each materialising the 37 MB line: `md_row_at_cursor` (every keystroke, via
+`find_the_table_here`), the caller of `Measure::indent_of` (every cursor move, via
+`wrap::position`), and `tab_stops_on_line`'s byte scan for `\t` (once per measured row).
 
-| 哪一支 | 幹了什麼 | 誰叫它 |
-| --- | --- | --- |
-| `md_row_at_cursor` | `rope.line(line).to_string()`——37 MB | **每一鍵**的末尾（`find_the_table_here`） |
-| `Measure::indent_of` 的呼叫端 | 同上，只為了問「這一行開不開段」 | `wrap::position`，每次光標移動 |
-| `tab_stops_on_line` 的字节掃描 | 掃 12 MB 找 `\t` | 折行每量一行就問一次 |
+Each now takes only the slice it needs, or remembers: `md_row_at_cursor` goes through
+`opens_with_a_pipe`, which reads the rope character by character; the new
+`wrap::line_head(rope, line)` takes the first 64 characters, which is exact because
+`opens_a_paragraph` only looks at the leading whitespace and the first character or two, and
+"this head is all whitespace" and "the whole line is" give the same answer; the `\t` scan went
+into `tab_memo`. Open plus first frame 0.98 → **0.73 s**; 50 presses of `l` at the start
+**2.07 → 0.99 s**, 5 ms a key where it had been 25.
 
-三條都改成「只拿用得著的那一截」或者「算過就記著」：
+**Two left, both diagnosed.** ① **`h` at the end of the line, 267 ms a key**: unwrapped, a row is
+the whole line, so `wrap::position`'s `ahead = slice(row_start..col)` is the entire 12.4 M
+prefix — cured by a per-line prefix-width index in §5.128. ② **`e`, 130 ms a key**:
+`motion::line_words` materialises *and* segments the whole line; 他的話：「分词是非贪婪的，只需
+要看某个区间就行」, so segment a window around `pos` — done in §5.130.
 
-- `md_row_at_cursor` 改走 `opens_with_a_pipe`（一個字一個字讀 rope）；
-- 新的 `wrap::line_head(rope, line)` 只拿開頭 64 個字——`opens_a_paragraph` 只看開頭的空白與
-  第一兩個字，而「這一段全是空白」與「整行全是空白」兩條路同一個答案，所以逼近是精確的；
-- 那個找 `\t` 的掃描收進了 `tab_memo` 裏。
-
-| | 改之前 | 現在 |
-| --- | --- | --- |
-| 開檔 ＋ 第一幀 | 0.98 秒 | **0.73** |
-| 50 下 `l`（文首，不折行） | 2.07 | **0.99**（5 毫秒一鍵，從前 25） |
-| 50 下 `l`（文首，折行） | 1.89 | **0.98** |
-
-### 還卡的兩條，根子都清楚了
-
-① **文末按 `h`：267 毫秒一鍵。** 不折行的時候一行就是一個「屏幕行」，所以
-`wrap::position` 的 `ahead = slice(row_start..col)` 就是**整個前綴**（1240 萬字）。
-折行開著反而快，因為 row 起點就在光標旁邊。治法：按行做一張**前綴寬度索引**
-（每 4096 個字一個積，按版本緩存），問第 N 列就是「查表 ＋ 走不到 4096 個字」。
-
-② **`e` 走詞：130 毫秒一鍵。** `motion::line_words` 把整行物化**並且整行分詞**。
-他的話：「分词是非贪婪的，只需要看某个区间就行」——對的，治法是只分 `pos` 周圍
-一個窗口。
-
-### helix 怎麼做的（讀源碼，`079a789e8`）
-
-⚠ **helix 在這一點上比我們更差，而且它自己知道。** 整棵樹裏**一條長行門槛也沒有**；
-該有的地方是一個 TODO：
-
-> `doc_formatter.rs:214`：`// TODO divide long lines into blocks to avoid bad performance for long lines`
-
-它的 `DocumentFormatter` 只能從**行首**起走，所以畫一屏也要把前面所有字簇 `continue` 掉
-（`ui/document.rs:99-101`）；不折行的時候 row 永遠不增，所以**一幀要走完一千萬個字簇**。
-它也沒有 row 的緩存。
-
-值得抄的四條（都是讀出來的，不是推的）：
-
-1. **製表符的寬度是「帶著走的列號」的函數，永遠不重新推**。`graphemes.rs:19`的
-   `tab_width_at(visual_x, tab_width)`，寬度在**字簇造出來那一刻**就決定了、存在字簇裏
-   （`Grapheme::Tab { width }`）；折行把一個詞挪到下一行的時候才 `change_position` 重算，
-   而那是 O(一個詞)。——我們現在是「算過就記著」，路子不同而旨趣一樣。
-2. **詞的走法用懶的 rope 游標**：`slice.chars_at(head)` 再 `next()`／`prev()`，碰到第一個
-   邊界就 `break`（`movement.rs:255, 468-480`）。**一千萬字的行中間按 `w`，它碰的數據
-   跟行長無關**。我們的 `e` 正好相反。
-3. **光標的屏幕位置是一個每幀的備忘，而且由畫圖順手填上**（`CursorCache`,
-   `editor.rs:2677`；填它的是 `text_decorations.rs:161` 那個什麼事也不做、只在走到光標那一格
-   時 `cache.set()` 的 decoration）。畫過一幀之後再問光標在哪，成本是零。
-4. **找不到便宜算法的掃描就加 `take(N)`**：`match_brackets.rs:9` 的
-   `MAX_PLAINTEXT_SCAN = 10000`；解析器是**計時**不是計字數（`PARSE_TIMEOUT = 500ms`，
-   `syntax.rs:518`）。
+⚠ **helix is worse than us here and knows it** (read at `079a789e8`): not one long-line gate in
+the tree, and where one belongs there is `doc_formatter.rs:214`, `// TODO divide long lines into
+blocks to avoid bad performance for long lines`. Its `DocumentFormatter` can only start from the
+beginning of a line, so an unwrapped twelve-million-character line costs a full grapheme pass per
+frame, uncached. Four of its ideas are worth copying, all read rather than guessed: a tab's width
+is fixed when the grapheme is made and carried in it (`Grapheme::Tab { width }`); word motion
+walks a lazy rope cursor and breaks at the first boundary, so `w` touches data unrelated to line
+length; the cursor's screen position is a per-frame memo the drawing itself fills in
+(`CursorCache`); and a scan with no cheap algorithm just gets a cap
+(`MAX_PLAINTEXT_SCAN = 10000`), while the parser is capped by **time** (`PARSE_TIMEOUT = 500ms`).
 
 ## 5.128 不折行的行尾按 `h` 要 223 毫秒：一行一份前綴寬度索引（2026-10-08）
 
-**量出來的**：一行 12 419 022 個字、`:view-wrap off`，光標在行尾按一下 `h` 要
-**223 ms**；行首是 **5.5 ms**；折行開着則處處都快。
+Measured: 12,419,022 characters on one line, `:view-wrap off`, one `h` at the end of the line
+**223 ms**, at the start 5.5 ms, and fast everywhere with wrapping on.
 
-**病根**在 `crates/yumete-core/src/wrap.rs` 的 `position`，那一句
+⚠ `wrap.rs::position`'s comment claimed it measured only the part of the row before the cursor.
+**That is true only while wrapping is on**, when the row starts next to the cursor. Unwrapped a
+row is the whole line, `row_start` is always 0, and every cursor step measured the entire 12.42 M
+prefix by graphemes at about 21 ns each.
 
-```rust
-let ahead = rope.slice(start + row_start..start + col).to_string();
-let column: usize = steps(&ahead).filter(…).map(|(_, w)| w).sum();
-```
+Cure: `crate::wrap::Widths`, a per-line prefix-width index — `(character index, width from line
+start)` every `BLOCK = 4096` characters, so a query is a difference of two entries plus at most
+one block of walking at each end (86 µs), and that line's whole index is 3031 entries, 48 KB. It
+lives in `Editor::width_memo`, stamped with the revision **and** `yumete_cjk::ambiguous_is_wide`
+— a process global that turns `—` and `…` from one cell into two, which is exactly what the
+index stores. **It is not built when the query does not span a block**: building costs a full
+pass, 190 ms on that line, and someone sitting near the line start never uses a cut point.
 
-上面的註釋寫着「只量這一行裏光標前面那一段——量的是一行，不是一段」。那句話
-**只在折行開着的時候是真的**：那時行起點就在光標邊上。折行關掉，一段就是一行，
-`row_start` 恆為 0，於是這裏按字素量的是**整個 1242 萬字的前綴**——每動一下光標一
-次。一個字素約 21 ns，1242 萬個就是 223 ms。
+⚠ Hidden spans are **subtracted** now, not filtered, so overlapping ones must be `merged()`
+first — `any(…)` counted a cell once where subtraction would take it twice.
 
-### 治法：一行一份前綴寬度索引，一次編輯算一遍
+⚠ `clean_cut`: the index segments from the line start while a query segments from `a`, and of
+UAX #29's rules only regional indicators can disagree about whether a given index is a boundary
+(GB9c and GB11 can only merge, so from `a` they break more, never less). A cut point therefore
+requires that the character to its left is not a regional indicator; a line of flags keeps no cut
+at all and falls back to walking — slow, never wrong.
+`a_line_of_flags_keeps_no_cut_and_still_measures_right` is that guard's nail, and four more
+property tests compare the index against the walk at **every** column, seeded `20261008`.
 
-`crate::wrap::Widths`：每隔 `BLOCK` 個字符記一條 `(字符下標, 行首到這裏的累計寬
-度)`。`[a, b)` 的寬度 ＝ 兩條累計之差，加上兩頭各至多一塊的逐字素走。索引由
-`Measure::with_widths` 交進來，記在 `Editor::width_memo`（`memo::LineMemo`，鍵是
-buffer 的 id 與行號，戳是 revision 加 `yumete_cjk::ambiguous_is_wide`——後者是個進程
-全局，一翻 `—` `…` 這一類字就從一格變兩格，而索引記的正是格數）。
+`char_at_column`, the `j`/`k` landing, had the same disease and the same cure: skip whole blocks
+with `Widths::skip_to` and materialise at most one.
 
-**兩種情形不建**（`Editor::line_widths` 第一句），都是「建它比不建貴」：一行不到
-一塊長（索引裏連一個內部切點都沒有），或者**這一問跨不到一塊**。後者是量出來補上
-的：建一份要把那一行整個走一遍，1242 萬字是 **190 ms**，而光標一直在行首附近的人
-一條切點都用不上——`gh` 之後不往右走，少了這一道就白付 192 ms。所以
-`Measure::with_widths` 那支閉包收三個參數，第三個是「這一問跨多少個字符」，答的那
-一邊據此決定值不值得建。不建的時候走的還是從前那一條路，一個格子也不差；尋常的一
-段也就不佔備忘那 512 格。
+Result: that one `h` **222.8 → 37.5 ms**; `l` at the line start, opening the file, inserting at
+the end and 50 `j` in an 8,000-line file all unchanged within noise; the 24 golden frames
+byte-identical.
 
-**`BLOCK = 4096` 是這麼挑的**：一次查詢的代價是兩頭各走至多一塊，4096 個字符 ×
-21 ns ＝ **86 µs**，一幀問四五次還在半毫秒以內；而 1242 萬字那一行的索引只有
-12 419 022 / 4096 ≈ **3031 條、48 KB**。再大（65536）兩頭那一走漲到 1.4 ms，一幀問
-五次就看得見了；再小（256）索引漲到 48 500 條，而那一走本來就只有 5 µs，省不出
-什麼來。
+⚠ **The remaining 38 ms is not here.** Under `sample`, `wrap::position` is off the chart and all
+of it is `motion::left` / `motion::prev_grapheme`, which copies the whole span before the cursor
+and then counts its characters. `crate::grapheme::prev_grapheme_boundary` already walks
+right-to-left; the layer above it materialises. **Another bill, not touched.**
 
-### 藏起來的那幾段
-
-從前那道過濾是「字素的**起頭**落在 `hidden` 裏就不算寬度」。索引記的是淨寬，所以
-改成**減**：`[a, b)` 的淨寬，減去每一段 `hidden` 與它相交那一截（每一截自己也是一
-次索引查詢）。區間少（多半一個都沒有）又短，所以這一步很便宜。
-
-兩處要小心，都已經做了：
-
-- **重疊的區間只許減一次**。`any(…)` 本來就只算一次，減卻會減兩遍——先 `merged()`
-  併成互不相交的一串。
-- 很長的一行上 `:view-long-line`（`Editor::line_is_too_long`，門檻 3000）本來就把
-  `hidden` 清空了，**但不靠它**：長行帶 `hidden` 的情形也是對的。
-
-### 分段從哪裏起數：`clean_cut`
-
-索引是**從行首**分段算的，查詢卻是**從 `a`** 分段走的（從前那一支就是
-`steps(slice(a..b))`）。兩者接得起來纔談得上逐格相同，而 UAX #29 十幾條規則裏只有
-三條要往左看一個字符以上：GB9c（印度系連寫）、GB11（ZWJ × 繪文字）、GB12/GB13
-（區域指示符兩個一對）。
-
-前兩條要左邊配上一段纔**合併**，從 `a` 起看到的左邊只會更少，所以它們只會多斷、
-不會少斷——而切點要的正是「斷」。**只剩區域指示符**：四個 U+1F1E6 從頭數是兩面旗，從第二
-個字符起數是「一個落單的、一面旗、一個落單的」，同一個下標在一種分段裏是邊界、在
-另一種裏在字素中間。數的起點只被非區域指示符打斷，所以 `clean_cut` 只問一句：
-**切點左邊那個字符不是區域指示符**。一行全是國旗就一個切點都記不下來，退回逐字素
-走——慢，不會錯。
-
-### `char_at_column` 同病，同治
-
-`j` / `k` 的落點那一支（`position` 下面那一個）從前無條件
-`rope.slice(start + s..start + e).to_string()`——折行關掉就是整行，每按一下拷 37 MB。
-現在先用 `Widths::skip_to` 整塊整塊地跳（只跳 `hidden` 與 `drawn` 都碰不着的塊），
-剩下的只物化至多一塊：跳到「這一塊的淨寬越過了 `goal`」就停，答案一定在那一塊
-裏（那一塊裏沒有 `hidden` 也沒有 `drawn`，所以逐字素累加出來的就是那個淨寬——
-`debug_assert` 盯着這一條）。
-
-### 性質測試：每一列都問一遍
-
-光標的列是要命的東西：`j`/`k` 帶着它走，鼠標按它換算，狀態行把它印出來。所以
-`wrap.rs` 的測試模組裏有五條，拿**定了種子的**隨機行把索引的答案與逐字素走的答案
-對逐一比：
-
-- `the_width_index_agrees_with_the_walk_at_every_column`——種子 `20261008`（加塊與行
-  長），塊 4／8／64，每個塊六種行長（剛不到一塊、正好一塊、剛過一塊、兩塊、三塊零
-  七個字、五塊），字是 `TOKENS` 混出來的：ASCII、製表符、漢字、全角標點、歧義寬度
-  那幾個、組合符號、帶變體選擇符的繪文字、異體字選擇符、ZWJ 連成的一家子、區域指示
-  符（成對的與落單的）、寬繪文字。斷言 `[0, b)` 以及**每一對** `[a, b)`，`b` 從 0 掃
-  到行末。順帶斷言「索引真的用上了」——不然那幾千條是在拿同一支函數和自己比。
-- `…with_things_hidden`——同樣掃一遍，另加隨機撒的 `hidden`，**起點不管字素邊界**
-  （一段 `hidden` 從組合序列中間開始，從前那道過濾照樣把那整個字素去掉，所以減的時
-  候也得整個減）。
-- `hidden_spans_that_overlap_are_only_taken_off_once`——全藏起來是零格，疊起來的三段
-  只減一次。
-- `the_index_changes_no_column_and_no_landing`——掛上索引與不掛，`position` 與
-  `char_at_column` 在三種幅寬（不折行／40／9）、每一個位置、每一個目標列上都一樣；
-  `drawn` 也餵了。
-- `a_line_of_flags_keeps_no_cut_and_still_measures_right`——一行 400 個國旗，索引只有
-  行首行末兩條，而答案照樣對。這一條是 `clean_cut` 的釘子：把那道關口拆掉，它當場
-  紅。
-
-**塊用的是小數**（4／8／64）：真正那個 4096 照同樣的密度掃一行要走上億個字素，而對
-不對與塊多大無關。
-
-### 結果
-
-| | 改前 | 改後 |
-| --- | --- | --- |
-| 1242 萬字一行、不折行、**行尾**一下 `h` | **222.8 ms** | **37.5 ms** |
-| 同一行、**行首**一下 `l` | 5.45 ms | 5.58 ms（噪音範圍） |
-| 同一行，開檔 ＋ `gl`（含那一次建索引） | 3233 ms | 3066 ms |
-| 同一行，開檔 ＋ `gh`（用不上索引那一頭） | 694 ms | 685 ms |
-| 同一行，行尾插一個字 | 418 ms | 429 ms（噪音範圍） |
-| 8000 行的尋常檔，50 下 `j`（兩個二進制交替跑七趟） | 50.7 ms | 50.4 ms |
-
-（底片是 `7bfef1e`。每格取最好的那一趟；一下 `h` 是「`gl` ＋ 50 下 `h`」減掉
-「`gl`」再除以五十。金樣 24 幀逐字節一樣。）
-
-⚠ **剩下那 38 ms 不在這裏**。採樣（`sample`）之後 `wrap::position` 整個不在圖上了，
-那 38 ms 全在 `motion::left` / `motion::prev_grapheme`：那一支把光標前面的整段
-`rope.slice(..).to_string()` 一份再 `str::count_chars` 一遍（`spec_to_string` ＋
-`do_count_chars` ＋ 一次 37 MB 的 `free` 佔滿了圖）。`crate::grapheme` 裏
-`prev_grapheme_boundary` 已經是從右往左走的了，問題在它上面那一層把整段物化了。
-**這是另一條帳，沒動。**
 ## 5.127 簽名那一扇的三個毛病（2026-10-08 報的）
 
 > 1. `println!(` still does not show signature (fallback)
@@ -20798,537 +20410,278 @@ can miss a file and say nothing, which is the one thing `Walked`'s own doc comme
 
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
-報的是選單上兩行「大綱」。`s` 是 2026-10-06 **有意**加的（註釋：「helix 把『這份檔裏的
-符號』放在 `空格 s`，`s` 空着，所以兩個拼法都通」）。
+Two 「大綱」 rows in the space menu. He asked first whether helix has those two keys spoken
+for, so `helix-term/src/keymap/default.rs` was read: **`空格 s` is
+`lsp_or_syntax_symbol_picker`**, "the symbols in this file", and **`空格 o` is unbound** —
+only `空格 G o` and `空格 w o` exist. So his premise was wrong: **`s` is alignment, `o` was
+our own invention.** By "alignment first" and §5.94, **keep `s`, drop `o`.** helix shows a
+picker where this shows a sidebar, but the question asked is the same one.
 
-**他要求先確認 helix 那兩格有沒有主**，查了 `helix-term/src/keymap/default.rs`，空格選單
-頂層一共二十八格：
+`o` is now unbound and says nothing when pressed (§5.111).
 
-```
-f F e . b j  s S  d D g a '  G(Debug) w(Window)
-y Y p P R  /  k r h  c C A-c  ?
-```
-
-| 鍵 | helix | 這裏 |
-| --- | --- | --- |
-| `空格 s` | **`lsp_or_syntax_symbol_picker`**——「這份檔裏的符號」 | 大綱 |
-| `空格 o` | **一格都沒有**（只有 `空格 G o` 調試步出、`空格 w o` 只留這一扇） | 大綱 |
-
-所以他原本的前提（兩個在 helix 都空着）不成立：**`s` 是對齊，`o` 是自己發明的**。照
-「對齊是第一要務」與 §5.94，**留 `s`，去掉 `o`**。helix 那邊是挑選器、這裏是邊欄，可問
-的是同一句話。
-
-`o` 從此沒綁，按下去一個字都不說（§5.111）。
-
-⚠ **一個鍵住在五個地方**，這一趟逐個改了：鍵的 `match`、空格選單那張表
-（`SPACE_KEYS`）、兩本手冊（四處）、八支測試、**以及 `scripts/frames.sh` 裏拍「大綱」
-那一幀的按鍵**——最後這個是金樣攔下來的：按鍵沒改，那一幀拍出來是一張沒有邊欄的正文。
+⚠ **One key lives in five places**, all of which had to change: the key `match`,
+`SPACE_KEYS`, both manuals (four spots), eight tests, **and the keystrokes in
+`scripts/frames.sh` that shoot the 大綱 frame** — that last one was caught by the golden
+frame, which came out as a page with no sidebar at all.
 
 ## 5.117 行尾一個 `(`，下一行再縮一級（2026-10-08 問的，第一期做了）
 
-作者問：「if the end of line is a `(` due to a function call, should the enter indent the
-next line further? I do not know how other editors do and what is the best practice.」
+> if the end of line is a `(` due to a function call, should the enter indent the next line
+> further? I do not know how other editors do and what is the best practice.
 
-### 查了三家，都是直接讀源碼和文檔，不是憑印象
+Read out of source and documentation, not memory:
 
 | | 縮嗎 | 依據 |
 | --- | --- | --- |
-| vim `autoindent` | **不縮** | 它只照抄上一行的空白（2026-10-08 早些時候做的就是這一層） |
-| vim `smartindent` | **不縮** | `options.txt`：「An indent is automatically inserted: **After a line ending in `{`**」——只認 `{` |
-| vim `cindent` | **縮** | `indent.txt` 的 `cinoptions` `(N`：默認 `shiftwidth × 2`；`cino=(0` 則對齊到括號後第一個非空白 |
-| helix | **縮一級，`)` 退一級** | `runtime/queries/rust/indents.scm`：`(arguments)`／`(parameters)`／`(call_expression)` 是 `@indent`，`"}" "]" ")"` 是 `@outdent` |
-| VS Code | 縮 | 語言的 `increaseIndentPattern` 多半含未閉合括號 |
+| vim `autoindent` | 不縮 | copies the previous line's whitespace |
+| vim `smartindent` | 不縮 | `options.txt`: indents only **after a line ending in `{`** |
+| vim `cindent` | 縮 | `cinoptions` `(N`, default `shiftwidth × 2` |
+| helix | 縮一級，`)` 退一級 | `rust/indents.scm`: `(arguments)`/`(call_expression)` are `@indent` |
+| VS Code | 縮 | `increaseIndentPattern` usually covers an open bracket |
 
-**凡是認真做縮進的都縮**，分歧只在縮多少：一級（helix／VS Code）還是對齊到括號
-（vim `cindent` 默認）。作者定：**照 helix 那一套做到底**。
+**Everyone who takes indentation seriously indents**, differing only on how much. He decided:
+**follow helix all the way.**
 
-### 兩件查出來的、本來不知道的事
+⚠ **Grammar crates ship no indent query** — `indents.scm` is helix's own file, and helix is
+MPL-2.0 against this repo's Apache-2.0, so `Language::indents` is written here. And **helix does
+not trust the tree alone either**: its factory heuristic is `Hybrid`, for "incomplete queries,
+incomplete source code & differing indentation styles".
 
-- **語法包不帶縮進查詢。** `tree-sitter-rust` 那幾個 crate 只導出
-  `HIGHLIGHTS_QUERY`／`INJECTIONS_QUERY`／`TAGS_QUERY`——`indents.scm` 是 **helix 自己
-  的檔**。而 helix 是 MPL-2.0，這個倉是 Apache-2.0。所以查詢是**自己寫的**
-  （`Language::indents`）：第一期只用得上「哪些節點類型」這一層，而那是語法本身的事實。
-- **helix 自己也不信語法樹一家之言。** 它的出廠啓發式是 `Hybrid`，註釋寫着理由：
-  「incomplete queries, **incomplete source code** & differing indentation styles」。
+So the tree says only **how many levels of difference**: `code::open_levels` counts the levels
+open at a position, `Editor::levels_to_open` subtracts the previous line's, and the difference is
+added to that line's real indent. A line ending in `(` gains a level (measured: `go(` at four
+columns, the next line eight); anything else is zero and copies the previous line, exactly like
+`autoindent`. **Half-typed code that will not parse is also zero** — measured, `fn f() {` alone
+parses to `(source_file (ERROR …))` with no `block` node at all. That is no answer rather than a
+wrong one, and falling back is what `Hybrid` is for.
 
-### 做法：樹只說「差幾級」，基準是上一行真實的縮進
-
-`code::open_levels` 數「這個位置開着幾級」，`Editor::levels_to_open` 拿它減去**上一行**
-的同一個數，差多少就在上一行的真實縮進上加多少。於是：
-
-- 行尾 `(` 而括號還開着 → 多一級（實測：`go(` 那一行四格，下一行八格）。
-- 行尾不是括號 → 差是零 → 照抄上一行，和 `autoindent` 一字不差。
-- **源碼打到一半解析不出來 → 也是零**。量過：`fn f() {` 自己一份檔，tree-sitter 給的是
-  `(source_file (ERROR …))`，**一個 `block` 節點都沒有**。這不是答錯，是答不出來——而
-  `Hybrid` 的意義正在這裏：答不出來就退回上一行的縮進。
-
-### 寫的時候撞了三次，每一次都記在代碼裏
-
-1. **沒閉合的節點結束在檔尾**，所以「範圍罩不罩得住光標」這個判準數不出一級；改成
-   `to >= byte` 又把「光標剛停在 `}` 後面」錯數成在塊裏。**順着祖先鏈走**兩種都對。
-2. **參照行是「新開的那一行」，不是光標那一行。** 拿光標那一行去比，`go(` 這種「這一
-   行剛開的括號」就被濾掉——而它正是作者問的那一條。
-3. **基準那一頭要用它自己那一行當門檻**：`call_expression` 就開在基準行的第一個字上，
-   算進去的話兩頭一樣多，差成了零——那正是這個功能整個不生效的樣子。
-
-### 第一期沒做的
-
-`@align`（閉包參數對齊）、`@extend`、`#not-same-line?` 那幾個謂詞，以及「賦值右邊」
-「`.await` 鏈」這些專門形狀——helix 那支解釋器 1502 行，這一期只做了 `@indent`／
-`@outdent`。TOML 與 YAML **有意不給查詢**：那兩種的縮進是語法本身，多縮一級是錯的。
+**Not in the first phase**: `@align`, `@extend`, `#not-same-line?` and shapes such as the right
+side of an assignment or an `.await` chain — helix's interpreter is 1502 lines and this phase did
+`@indent`/`@outdent` only. TOML and YAML **deliberately get no query**: there the indentation is
+the syntax, and an extra level is wrong.
 
 ## 5.116 收到的三條，**還沒查**（2026-10-08）
 
-作者當天連着報的，明說「put in your stack and assess it later; not interrupt the
-current task」。原話抄在這裏，免得只活在一個 session 裏。
+Reported in one run with 「put in your stack and assess it later; not interrupt the current
+task」. His words are kept here so they do not live in one session only.
 
-### ① 補全單子不隨打字重排——修了（2026-10-08）
+**① The completion list did not re-rank as he typed — fixed.** 「items with exact prefix go
+first」. It *did* re-ask the server on every letter; the fault is `isIncomplete: false`, which
+means "this is all of it, filter it yourself as they type" — rust-analyzer handed over all 131
+items in its own relevance order and stopped caring that `unwrap` had been typed. VS Code and
+helix both filter client-side. `lsp::rank` re-orders on the half-word before the cursor in five
+tiers (whole thing / prefix / case-insensitive prefix / fuzzy / no match), **keeping the
+server's order inside each tier**. ⚠ **Re-order only, never drop**: we match on `label` while
+the server filters on `filterText` (not wired up), and the day those differ the dropped item is
+the wanted one. ⚠ `lsp.rs`'s 「Not sorted here」 rule is about **the order the server gave**, not
+about whether to filter after a keystroke.
 
-> I typed "unwrap", the function hint (autocompletion), however, still show the
-> prediction using the original order. … The list of autocompletion should be renewed
-> on every keystroke to provide the best matched items (items with exact prefix go
-> first; fuzzy matching is nice-to-have but should go at bottoms).
+**② `(` in insert mode should show the signature — done** (`601ef1a7`). In LSP this is
+`textDocument/signatureHelp`, a **separate request**, and nothing here spoke it. He put it in
+the docs float on his own reasoning — signature triggers on `(` and `,` in insert mode while
+diagnostics trigger on cursor movement in Normal, 「两者不重叠」 — and ⚠ **that is guaranteed
+rather than lucky**: the diagnostics float is not drawn in insert mode at all
+(`problem_afloat().filter(|_| !writing)`, 2026-09-22). `active` is accepted **both ways**, a
+UTF-16 index pair (rust-analyzer) or a parameter name (pylsp), and a name not found in the label
+counts as unsaid — rather no accent than the wrong span. Drawn literally (`marked: false`),
+because `*mut T` and `_: T` are emphasis to Markdown. The accent itself landed in §5.121.
 
-截圖裏打完 `.unwrap` 之後單子頭三條還是 `is_some_and`／`is_none_or`／`expect`，而
-`unwrap` 排第四。Warning: 查的時候先讀 `lsp.rs` 那條「**Not sorted here**：服務器自己排過
-（`sortText`），編輯器再排一次等於推翻唯一懂這門語言的那一方」——**那條規矩是對
-「服務器給的次序」說的，不是對「打了字之後還要不要篩」說的**，兩件事別混。另外
-`isIncomplete` 這一頭沒用（`offers` 的文檔自己寫着），而它的意思正是「接着打就再問一
-次」。
+⚠ **"Does a half-typed line have diagnostics" could not be measured**: a probe against a real
+rust-analyzer returned zero, but so does the existing `rust_analyzer_really_answers` on this
+machine (90-second timeout). **That `#[ignore]`d live-server test is red, and not from this
+round.**
 
-**查出來的**：每打一個字母這一頭**確實再問一次**服務器，所以不是「沒刷新」。壞在
-`isIncomplete: false` 那半句協議——它的意思是「這就是全部，接着打字**由你自己篩**」，
-於是 rust-analyzer 一次給出那個點後面全部 131 條，按它自己的相關度排，而「使用者已經
-打了 `unwrap`」它不再過問。VS Code、helix 都在客戶端這一頭篩。
+**③ `空格 k` needed two presses — fixed.** Two correct rules collided: a hover is thrown away
+once the cursor walks off it (2026-09-29), while `info_asked` **only compares position** — so
+stepping away and back looked like a second press, which went to close a window long gone. The
+toggle now also asks `info_has_body(one)`, "is there something to draw right now". Still to
+decide: should it close when the cursor moves inside the same word? He wants a survey first.
 
-**做法**：答案裝上去的那一刻照「光標前面那半個詞」重排一遍（`lsp::rank`），五檔——
-整個就是它／前綴／不計大小寫的前綴／模糊／配不上——**檔內保持服務器給的次序**（那是
-相關度，它比這一頭懂）。Warning: **只重排，不扔**：這一頭認的是 `label`，而服務器真正拿來
-篩的是 `filterText`（還沒接）；兩者不一樣的那天，扔掉的就是人要的那一條。
+**④ The status-bar spinner turns clockwise now — done.** Each of helix's eight braille frames
+`⣾⣽⣻⢿⡿⣟⣯⣷` is missing one dot, and the hole ran down the left and up the right; reversing the
+seven frames after the first makes it clockwise, and `the_hole_goes_round_clockwise` computes
+the hole's coordinates rather than trusting eyes. ⚠ **A deliberate difference from helix**, so
+nobody calls it a regression: not a key and not a semantic, just which way a mark turns.
 
-### ③ `空格 k` 開文檔窗要按兩次——修了（2026-10-08）
+**⑤ 「N 處」 → 「N 結果」, with a spinner in front while the walk runs — done.** All three
+strings changed together on his call, two of them being what `g/` writes in the status bar. The
+number and the word never move — only the spinner and the `+` become spaces, so `spinner::frame`
+returns a space when still. ⚠ **This is the first place the spinner really turns**: its
+2026-10-02 comment said everything slow ran synchronously, and the walk moved off-thread in
+§5.93. Two golden frames were reshot.
 
-成因是兩條對的規矩撞在一起：① 那一則說明**走開就作廢**（2026-09-29 定，見
-`a_hover_is_thrown_away_once_the_cursor_walks_off_it`）；② 記着「按過這個鍵」的那一格
-（`info_asked`）**只比位置**。於是走一格再走回來，位置又對上了，這一鍵被當成「又按了
-一次」，去收一扇早就不在的窗——第一下白按，第二下纔開。
+**⑥ `:info docs` was a misleading name — done.** 「能不能改成 `:instant-info` 来强调「及時」的
+含义。同时，也需要有一个 `:info` 的命令…來顯示文檔的元數據。」 That command was always about
+*when to ask*, so it is `:instant-info`, and `:info` was handed to "what this file is", a
+thirteen-row page shaped like `:version`'s. The core lays out the whole table and **leaves one
+slot** for the frontend to say which servers are watching it, because only it knows; the Hanzi
+count is `counts_of`, the same function as `:count`, since two counts of one thing are two
+answers; and **the modified time is UTC**, labelled as such rather than pretending to be local.
 
-**做法**：那道 toggle 多問一句 `info_has_body(one)`——「此刻那一種真有東西可畫嗎」。
-這支函數本來就在，它的註釋寫着「這一支不問光標在不在原處」，正是為了和
-`info_asked_now` 分開問。合起來纔是「那一扇真的開着」。
+**Knock-on: generated pages are read-only.** He asked for 「開一個只读的新緩衝區」 and it turned
+out `:version`, the `:check` family and `:yume-where` were **all typeable** — measured, `ix`
+after `:version` really wrote into it and raised the unsaved `+`, which then stops `:q`.
+`:readonly off` still lifts it.
 
-### ② 插入態打 `(` 就該看見函數簽名——做了（2026-10-08）
+**⑦ The picker gets `/` back to the search line — done.** ⚠ **`/` was removed from the picker on
+2026-10-01**, so that day's reason was read first: then it did what `i` did, one thing with two
+keys. What he wants is a different thing — move the keys to the search line without typing —
+which is **key for key what the search panel does** (itself changed from "enter insert" to
+"move" on 2026-09-25). The old rule still holds; the manual's warning became 「`/` 和 `i` 不是
+同一個鍵」.
 
-> In insert mode, when I type `(`, I expect that the function doc can appear without
-> triggering, so that I can understand the function better. Even though `:info ` is
-> set to, e.g., dignostics. In insert mode, the doc can still show instantly.
+**⑧ With the keys in the search line, the first row was also fully reversed — done.** He settled
+it: the first row stays pre-selected, stays previewed and still opens with `Enter`, only **one
+shade dimmer** — `bg(ink.text())` with the keys on the list, `bg(ink.at(rung::BAND))` without.
+**`BAND` rather than a hard-coded grey**: that rung already carries tab stops and the search hit
+row, so "selected but the keys are elsewhere" has always been this shade here. The test also
+pins `chosen().is_some()`, so dimming cannot quietly cancel the pre-selection.
 
-LSP 那邊這件事叫 `textDocument/signatureHelp`，是一個**獨立的請求**，不是 hover。這一頭
-從前一個字都沒接（`initialize` 的 capabilities 裏沒有它）。
-
-**擺在哪：他定的「直接复用 doc 的浮窗/边栏」**，理由是他自己推的——
-
-> 它不會抢 instant-info diagnostics 的浮窗/边栏，因爲它是在 insert 模式下打 `(` 和 `,`
-> 才觸發的，而 diagnostics 是在 normal 状态下移动光标時即時觸發的。两者不重叠。你看看
-> 我说的对不对。
-
-**查過了，對的，而且理由早就寫在倉裏**：診斷那一扇在插入模式下**根本不畫**
-（`problem_afloat().filter(|_| !writing)`，2026-09-22 定，對着 nvim 的
-`update_in_insert=false` 和 VS Code 量出來的）。所以不會搶——不是碰巧，是那條規矩已經
-保證了。
-
-⚠ **本來想自己量一遍「打到一半那一行有沒有診斷」，量不成**：臨時寫了一支探針跑真
-rust-analyzer，回的是零條；可**連現成的那支 `rust_analyzer_really_answers` 在這台機器上
-也是零條**（90 秒超時，那支是 `#[ignore]` 的，不進驗收）。所以那一趟測的是環境不是行為，
-探針刪了。**那支 ignore 掉的真服務器測試現在是紅的**，記在這裏——不是這一輪弄的。
-
-### 做出來的
-
-- `initialize` 報上 `signatureHelp`（`documentationFormat` 只要 `plaintext`——那一則畫在
-  一行上）。
-- `lsp::signature_help` 發問，`lsp::signature` 讀答案 → `lsp::Signature { label, active }`。
-  **`active` 兩種寫法都認**：一對 UTF-16 下標（rust-analyzer）和一個參數名（pylsp）；
-  名字在簽名裏找不到就當沒說——寧可不加重，也不許加重錯的那一段。
-- 觸發：插入態、代碼檔、打 `(` 或 `,`；`)`、`Esc`、出插入態都收。
-- 畫：「文檔」那一扇浮窗，**照字面畫**（`marked: false`）——簽名裏 `*mut T`、`_: T` 這種
-  寫法在 Markdown 眼裏是強調，一渲染就少兩個星號。
-
-**還沒做的那一半：正在填第幾個參數沒有加重。** 服務器說得出來（`Signature::active` 收着
-了），缺的是「把一段文字換個墨色」的本事——那扇面板現在只收整段 `Prose(String)`。
-
-### ③ `空格 k` 開文檔窗要按兩次
-
-> space+k/K 開啓文檔窗口後，移動 cursor 後下次要開文檔得按兩次。
->
-> I use space+k to trigger doc panel at a letter X, I then move cursor to another
-> letter … and then move back to the letter A using h. Then I use space+k. Nothing
-> happens. I use another space+k, the doc panel appears.
-
-連帶一個要定的：光標在同一個詞裏動（`push()` 的 `p` 走到 `u`），那一扇該不該關？他要
-一份別家怎麼做的調查再定。
-
-### ④ 狀態欄那個轉圈要順時針——做了（2026-10-08）
-
-> 這裏能不能改成顺时针转圈？
-
-**他看得沒錯，從前是逆時針。** 那八個字各缺一個點，眼睛跟的是那個缺口，而缺口的位置
-是算得出來的（布萊葉點位 1 4／2 5／3 6／7 8）：helix 那一組 `⣾⣽⣻⢿⡿⣟⣯⣷` 的缺口走的
-是**左邊往下、右邊往上**。把第一格之後的七格倒過來就成了順時針。測試不靠眼睛——
-`the_hole_goes_round_clockwise` 自己把缺口的座標算出來比。
-
-⚠ **這是有意和 helix 不同的一處**，記在這裏免得哪天當成回歸改回去：它不是鍵位也不是
-語義，是一個記號轉哪一邊。
-
-### ⑦ 挑選器也給一個 `/` 回到搜索行——做了（2026-10-08）
-
-> Please give picker an extra shortcut `/` (same as the search panel) that go back to
-> the search line.
-
-⚠ **`/` 在挑選器裏 2026-10-01 拿掉過**，所以先把當天的理由讀了一遍：那時候它做的是
-**`i` 做的事**（進打字態），一件事兩個鍵，所以去掉。
-
-他現在要的是**另一件事**：把鍵挪到搜索行上，不進打字（`k` 一路走上去的近路）。這和
-搜索面板那一扇**逐鍵一樣**——那邊 `Key::Char('/') => stand_on(Field::Query)`，而且那
-一扇 2026-09-25 也正是從「進 insert」改成「挪窩」的。所以這不是把拿掉的那個加回來，
-當天那條規矩（一件事一個鍵）照舊成立。
-
-手冊裏那條「`/` 2026-10-01 去掉了」的警告跟着改成「`/` 和 `i` 不是同一個鍵」。
-
-### ⑨ 轉圈沒了之後那兩格該是框綫——**他自己想出了更好的去處**（2026-10-08 做了）
-
-> When the search has been done and the eight-dot is gone. The two spaces should be
-> replaced by the border line instead of two spaces with background. Is this feasible?
-
-做得到（把那一串拆成「歸框的」和「歸金底的」兩截），可他接着說：
-
-> 這個转圈可以放到「搜:」之前（1 上方），你觉得呢？这样的好处是，就不需要为框线設計
-> 复杂的逻辑了。因爲「搜:」的前面是真空格。
-
-**照這個做了，一行代碼。** 那一格是面板自己的底色，而且**本來就是號碼那一欄**——底下
-七個開關的 `1`…`7` 就畫在它正下方（同一個 `left`）。所以轉與不轉都占着，一個字都不會
-跳，而上邊框回到原樣：`════1/2═`，不再缺一口。
-
-⚠ **記一條**：一個記號擺在**框綫上**就要同時交代「不轉的時候那一格畫什麼墨」，擺在
-**面板身上**就不用——這是挑位置的時候值得先問的一句。
-
-**轉圈是金的**（2026-10-08 補定，原話：「[搜:] 前面的那個 8 點轉轉用金色（和下面的
-1234）數字顏色一致，而且更加醒目」）。它就在七個開關號碼的正上方，同一欄裡兩種墨
-說不出別的事；從前用的是 `quiet()`。
-
-### ⑧ 鍵在搜索行上的時候，第一條也整條反白——做了（2026-10-08）
-
-> My cursor is in the search line. But the first result is also highlighted so I am
-> confused sometimes where I am. … Another (better) solution is highlighting (and thus
-> with preview) the first result with a dimmer color. … it allows you to pre-select the
-> first result (and preview) it (so you can use enter to open it even you are in the
-> search line), but not give me a feeling that the cursor is on this line.
-
-他自己定了做法：**第一條照舊預選、照舊預覽、`Enter` 照舊開得了它，只是畫得
-淡一檔**。改的是 `draw_picker` 裏那個 `on`：鍵在單子上照舊整條反白
-（`bg(ink.text())`），鍵不在單子上（`picker.on_query()` 或 `typing()`）改成
-`bg(ink.at(rung::BAND))`。
-
-**淡的那一檔用 `BAND`**，不是寫死一個灰：那一格是主題自己的橯子，制表位那
-一片、搜索命中那一行用的是同一個底色——「選著但鍵不在這裏」在這一倉裏一直就是
-這一檔墨。
-
-測試 `the_picked_row_is_dimmer_while_the_keys_are_in_the_query` 比的是一幀裏有沒有
-`ink.text()` 那個底色，並且同時攣住「還是選著的」（`chosen().is_some()`）——淡下去
-不該順手把預選也取消掉。
-
-### ⑥ `:info docs` 這個名字誤導——做了（2026-10-08）
-
-> `:info docs` 這個命令讓人誤解是查看这个文档的信息（位置、大小、作者、编辑时间、
-> 元数据、关联的LSP等等）。能不能改成 `:instant-info` 来强调「及時」的含义。
->
-> 同时，也需要有一个 `:info` 的命令（或者类似的命令，可能已经有了？）來顯示文檔的
-> 元數據。
-
-兩件事都做了。
-
-**① 改名 `:instant-info`。** 那條命令管的從來就是**什麼時候問**，不是這份檔案是什麼。
-命令選單上它現在折成 `:instant- +1`（一個命令也算一個詞幹，同 `:yank-`／`:diagnostics-`，
-2026-09-10 定的）。
-
-**② `:info` 讓給「這份檔案是什麼」。** 十三行，照 `:version` 那一頁的形狀（標題 ＋ 兩欄
-表），開成**一頁**而不是一句話——他定的。量出來長這樣：
-
-```text
-# 這份檔案  ch01.md
-
-| 位置 | `…/ch01.md` |
-| 大小 | 41 B |
-| 改過沒存 | 否 |
-| 唯讀 | 否 |
-| 行數 | 4 |
-| 字數（不含空白） | 13 |
-| 漢字 | 10 |
-| 語言 | markdown |
-| 換行符 | LF |
-| 修改時間 | 2026-10-08 11:39 UTC |
-| 項目根 | `…` |
-| 語言服務器 | marksman（在跑） |
-```
-
-三件要知道的：
-
-- **那一張表只有一處排得出來。** 核心把整張排好，**留一格**給前端填「哪幾個服務器在
-  看着它」——只有它知道（`Servers::watching`）。同 `:yume-where` 那條路。
-- **漢字數和 `:count` 是同一支算的**（`counts_of`）。兩處各數一遍就是兩個答案，而它們
-  說的是同一件事。
-- **修改時間是 UTC**，自己從紀元算的（`when_was`）。本地時區要麼拉一個庫要麼走 libc，
-  而這是整個倉裏唯一要把時刻寫成字的地方——所以寫明 `UTC`，不裝作是本地時間。
-
-### 連帶：**生成出來的頁面現在是只讀的**
-
-他追了一句「開一個**只读**的新緩衝區」。查下來 `:version`、`:check` 那一族、
-`:yume-where` **全都是可以打字的**（實測：`:version` 之後按 `ix` 真的寫進去了，還掛上
-「改過沒存」那個 `+`）。它們都沒有檔案，改了存不到任何地方，而那個 `+` 會讓 `:q` 攔着
-不讓走。`open_report` 和 `show_listing_as` 兩支一起撥了只讀；`:readonly off` 照舊解得開。
-
-### ⑤ 「N 處」改成「N 結果」，而且搜着的時候前面帶個轉圈
-
-> `N 處`改成 `N結果`（和搜索时候的`N+結果`一致）。同时，如果在搜索中未结束，能不能在
-> `N+結果` 前加个8點旋转标志，也就是 `X N+結果`，X是那个八点旋转标志。
-
-兩件事，都做了（2026-10-08）：
-
-① **三則文案統一成「結果」**（`search.hits`／`search.hits-one`／`search.hits-more`）。
-前兩則同時也是 `g/`（跟我搜這個詞）寫在狀態欄上的那一句——他定「三处一起改」。
-
-② **走查跑着的時候數目前面轉一個圈**。擺法是他畫的：
-
-```text
-⣾ 21+結果      ← 還在跑
-  21 結果      ← 跑完了
-```
-
-**數字和「結果」一格都不動**，只有轉圈和那個 `+` 變成空格。所以那一格不轉的時候也占
-着（`spinner::frame` 回一個空格），而兩則文案本來就隔着一個空格對齊——
-`search.hits` 那一則的註釋把這條對齊寫下來了，免得哪天有人把那個空格刪掉。
-
-⚠ **這是 `spinner` 第一處真轉得起來的地方。** 那個模組 2026-10-02 的註釋寫着「慢的那
-幾件全是同步跑完的，轉不動」——走查 2026-10-06 搬到旁邊去跑了（§5.93），主循環每四十
-毫秒醒一次收結果，所以這一處轉得動。那段註釋跟着改了。
-
-兩幀金樣跟着變（`搜索面板`／`搜索面板-替換`：`════1/2═` → `══  1/2═`），重拍過。
+**⑨ The two cells the spinner left should become border line — he found a better place.** It was
+feasible, but he said 「這個转圈可以放到「搜:」之前（1 上方）…因爲「搜:」的前面是真空格。」
+**Done in one line.** That cell is the panel's own ground and is **already the number column** —
+the seven switches' `1`…`7` sit directly below it — so nothing shifts whether it turns or not and
+the top border is whole again: `════1/2═`. The spinner is gold, 「和下面的 1234 數字顏色一致」. ⚠
+**A mark on a border line owes an answer for "what ink when it is not turning"; a mark on the
+panel's body does not** — worth asking before picking the spot.
 
 ## 5.115 行首一個 tab，`j`/`k` 偏十四格（2026-10-08 使用者報的）
 
-原話（王牌餅乾）：「行首有 tab 縮進時（go 代碼），按下 j/k 時 cursor 位置不對齊。」
-復現法他自己給了：「新開個空文檔，打几行字再用 `:%s` 把行首空格替换成 `\t` 就会復現。」
-作者復現之後又報了同一族的兩條。逐條：
+> 行首有 tab 縮進時（go 代碼），按下 j/k 時 cursor 位置不對齊。
 
-### ① `j`/`k` 落錯列——修了
+His own repro: 「新開個空文檔，打几行字再用 `:%s` 把行首空格替换成 `\t` 就会復現。」
 
-量出來的：第三行第 15 列的 `e` 上按 `j`，落到第四行**第 22 列**（第二個 `=`），而不是
-第 15 列。
+**① Wrong landing column — fixed.** Measured: `j` from column 15 of line 3 landed on column
+**22** of line 4. A tab here is **one real character plus a drawn span** (`tab_stops_on_line`,
+#374), and `wrap::position` counted those drawn cells while `wrap::char_at_column` did not —
+seven cells at each end, hence fourteen. `char_at_column` now follows `position`'s rule: a drawn
+run stands **before** the character it is anchored to. Table padding (`Ink::Padding`) is the same
+family and came right with it.
 
-**一個 tab 在這個編輯器裏是「一格真字符 ＋ 一段畫出來的空白」**（`tab_stops_on_line`，
-#374：寬度要看它站在哪一列，而這裏每一次問寬度都是單獨問一個字素的，沒有列在手，所以
-那幾格是當作 `drawn` 畫出來的）。於是：
+**② Seven of eight cells had one background — fixed.** The drawn span has its own `Ink::Tab`
+while the tab's own cell took the page's; a tab that pulled a span now takes the same colour. A
+tab acting as a table separator is not coloured — there it is a wall and pulls no span. **Eight
+is `tab_stop`, factory 8**, as in the terminal, `less` and vim; there is only
+`Editor::set_tab_stop` and **no config key for it yet**.
 
-| | 算目標列（`wrap::position`） | 找落點（`wrap::char_at_column`） |
-| --- | --- | --- |
-| 真字符 | 數 | 數 |
-| 畫出來的那幾格 | **數** | **從前不數** |
+**③ Enter did not auto-indent in code — fixed.** The only thing carrying the previous line down
+was `Editor::continue_the_list`, which begins `if self.syntax() != Markdown { return false }` —
+list-only, so Enter returned to column 0 in every code file. vim's `autoindent` and helix's
+`insert_newline` both do this, so **whether** was never the question (§5.94). Three things were:
+only in code files, since prose already has a first-line indent and that one is **drawn** (giving
+a novel real whitespace its author never typed is wrong); only the whitespace **before the
+cursor**, so the true line start carries nothing; and `o`/`O` along with it.
 
-一行行首一個 tab 就差七格，而且是兩頭各差七格，所以偏十四格。`char_at_column` 照
-`position` 的規矩補上了：跑段站在它所錨的那個字**之前**。表格的填充（`Ink::Padding`）
-是同一族，一併好了。
-
-### ② 八格裏七格一個底色——修了
-
-那一段畫出來的空白有自己的底色（`Ink::Tab`），而 tab 自己那一格走的是頁面的底色。現在
-拉出過空白的那個 tab，它自己那一格跟着上同一個色。拿 tab 當表格分隔符的那一種不上色
-——那時它是一堵牆，本來就不拉空白。
-
-**八格這個數是 `tab_stop`，出廠 8**，和終端、`less`、vim 的預設一樣；Go 用 tab 縮進、
-按 8 顯示也是 gofmt 那一邊的慣例。（這一格現在只有 `Editor::set_tab_stop`，**配置裏
-還沒有這一項**。）
-
-### ③ 代碼裏按 Enter 不自動縮進——修了
-
-插入態的 Enter 從前只插一個換行，唯一「把上一行帶下來」的是
-`Editor::continue_the_list`，而那一支開頭就是 `if self.syntax() != Markdown { return
-false }`——**列表專用**。所以任何代碼檔裏 Enter 都回到第 0 列。
-
-vim 的 `autoindent`、helix 的 `insert_newline` 都做這件事，所以**做不做不是問題**
-（§5.94）。定了三件：
-
-- **只在代碼檔裏**（`Syntax::Code`）。散文這一頭本來就有自己的首行縮進，而那是**畫**
-  出來的——檔案裏沒有空白。給一本小說自動帶縮進，是往稿子裏寫作者沒打的空白。
-- **只帶光標前面那一截空白**（`Editor::indent_of_line` 的 `upto`）。於是真行首按下去
-  什麼都不帶（被推下去的那一行自己帶着縮進），停在縮進中間按下去也一個字符都不憑空
-  長出來。同 vim。
-- **`o`/`O` 一起**，它們是同一件事的另外兩個入口。
-
-⚠ **測試固定裝置是真按鍵打出來的**（`tests::typed`），所以這個開關一開，凡是打過縮進
-行的固定裝置都會變。當時紅了四條——全是 `typed()` 打出來的文字本身變了，不是功能錯。
-收進「只在代碼檔」那一條之後自然沒了（`typed()` 打字時掛的是 `Syntax::Text`）。真正的
-粘貼不走這條路（`Event::Paste` → `paste_text`，一次插入），所以不會有 vim 那個
-「貼代碼貼成階梯」的老毛病。
-
-**還沒做的下一段**：按 `{` 多一級（vim 的 `smartindent`／helix 的 tree-sitter
-`indents.scm`）。這一趟做的是 `autoindent` 那一層。
+⚠ **Test fixtures are typed with real keys** (`tests::typed`), so this changes the text of every
+fixture with an indented line — four went red, all of them the typed text and not the feature,
+and scoping it to code files settled it (`typed()` runs under `Syntax::Text`). A real paste goes
+another way (`Event::Paste` → `paste_text`), so vim's "pasted code comes out as a staircase"
+cannot happen. **Not done next**: a level after `{`.
 
 ## 5.114 `:yume-where` 那一頁的四處（2026-10-08 報的）
 
-看着那一頁問的兩個問題，兩個都是真的：
+Two real faults on that page. **「六層」 means nothing to a reader**: `DataSource` has six kinds
+and **empty layers are not printed**, so his machine printed three numbers — and the fourth
+number was 「出廠自帶」, which is not one of the six at all. The count follows the machine, so a
+number written into the string can never be right. **Dropped.** And **「出廠自帶」 named only
+靈明**, because that string was written before 星陳 was embedded on 2026-10-07. It is **one line
+per scheme** now, asked from `yumete_ime::builtin_tables()` and named by the new
+`Scheme::factory_name()` — the existing `factory_scheme_name` needs installed data in hand and
+is precisely unavailable here, since a machine reading this page usually has nothing installed.
 
-- **「六層」是什麽意思**——`DataSource` 有六種來源，而**空的層不印**：他那台機器上只
-  印了三個編號，而第四個編號是「出廠自帶」，它根本不是那六層之一（開頭那句自己寫着
-  「六層都沒有，就用出廠自帶的那一份」）。這個數跟着機器變，寫死在文案裏永遠對不上。
-  **去掉數目。**
-- **「出廠自帶」只寫了靈明**——那一則是 2026-10-07 嵌星陳之前寫的，寫死「靈明碼表
-  {版本}」。現在**一家一行**，由 `yumete_ime::builtin_tables()` 問出真嵌了哪幾張，
-  名字由新加的 `Scheme::factory_name()` 給（裝好的數據在手纔答得出的
-  `factory_scheme_name` 在這個場合正好不可用——問這一頁的時候機器上多半什麼都沒裝）。
+Two more were his wording: 「現在答話的是：」→「當前掛載的是：」, 「沒有碼表」→「未掛載碼表」.
 
-另外兩處是他口述的改法：「現在答話的是：」→「當前掛載的是：」，「沒有碼表」→
-「未掛載碼表」。
-
-### 連帶：`table_source()` 改成回 `Option<String>`
-
-那句「沒有碼表」從前是**寫死在 `yumete-ime` 裏的一句中文**——那個 crate 沒有文案表，
-所以它在英文界面上也是中文，而且改一個字要動代碼。現在沒有表就回 `None`，由呼叫方
-說（`yume.where.no-table`）。另一個呼叫方（`:yume ?`）本來就在 `available()` 的閘後
-面，拿不到 `None`。
+**Knock-on: `table_source()` returns `Option<String>`.** 「沒有碼表」 used to be a Chinese
+sentence hard-coded inside `yumete-ime`, a crate with no string table — so it showed in the
+English UI too, and changing a word meant changing code. No table now returns `None` and the
+caller says it (`yume.where.no-table`).
 
 ## 5.113 `:yank-on-delete` —— 一個開關，不是往配置檔裏寫四行（2026-10-08 定）
 
-原話：「我有個小問題，我們可以不可以有個命令來做這個 no yank，我覺得他很好用欸。」
-他自己提了兩條路：① 內置開關，可被 toml 那四個值覆蓋；② 命令按下去就在 toml 裏新建／
-修改那四個值。
+> 我有個小問題，我們可以不可以有個命令來做這個 no yank，我覺得他很好用欸。
 
-**定的是 ①**，理由是我提的、他判的：
+He offered two routes: ① a built-in switch that the four toml keys can still override, or ② a
+command that writes those four keys into the toml. **① was chosen**, on the reason I put and he
+judged:
 
 > 第二條寫進去的那四行**會永久蓋過以後的默認值**。你計劃要做第三套「yumete 模式」
-> （§5.110），到那天這四行還蹲在配置檔裏——新預設改了什麼都被它們壓住，而你不會記得
-> 是哪年哪月哪個命令幫你寫下的。這正是「名字比鍵好」那條理由的反面。
+> （§5.110），到那天這四行還蹲在配置檔裏——新預設改了什麼都被它們壓住，而你不會記得是哪年
+> 哪月哪個命令幫你寫下的。
 
-### 它是什麼
+`[editor] yank_on_delete`, factory `true` as in helix and vi; `:yank-on-delete on|off`, and bare
+reports the current setting. It has a row in the settings panel's 鍵盤 group, so it writes back
+to the config file — **scalar settings write back and key tables do not**, which is the other way
+① is cheaper than ②.
 
-`[editor] yank_on_delete`，出廠 `true`（helix 和 vi 都是這樣）。命令
-`:yank-on-delete on|off`，不帶參數報當前這一格（照定下的那條：「無參數時，報告當前
-模式名」）。設置面板「鍵盤」那一組裏也有一行，所以寫得回配置檔——**標量設置本來就
-寫得回，而鍵位表寫不回**（`settings_ui.rs` 那條「判準二：鍵集開放的表是編輯器，不是
-設置」），這也是 ① 比 ② 省事的地方。
-
-**關掉是對調，不是「都不進」**：`d`/`c` 刪而不進，`A-d`/`A-c` 變成剪的那一對。和那四行
-配置做的是同一件事，所以兩種辦法的結果逐鍵相同。
-
-**正文和格子一起管**。格子裏那四個鍵同一天纔和正文對齊（§5.111 末尾），這個開關要是
-只管正文，當天就又分家了。
-
-### 兩層怎麼讓
-
-`[keys.normal]` 那四行**自然蓋過開關**，一個特例都不用寫：別名那一層在鍵走到那個
-`match` 之前就把鍵換掉了。所以手冊上那四行留着，旁邊多一句「有個開關做同一件事，而且
-那個更好」。
+**Off is a swap, not a suppression**: `d`/`c` delete without yanking and `A-d`/`A-c` become the
+cutting pair, so the switch and those four config lines agree key for key. **It governs the grid
+as well as the body** — the grid's four keys had only just been aligned with the body (§5.111),
+and a body-only switch would have split them again the same day. The `[keys.normal]` lines
+override the switch with no special case, because the alias layer swaps the key before it
+reaches the `match`.
 
 ## 5.112 層二修好了：Alt 寫得出來，四個動作改用 helix 的名字（2026-10-08）
 
-§5.110 那四行配置從前**一行都不生效**，而且兩頭都壞。逐條查出來的：
+§5.110's four config lines did not work at all, and both halves were broken.
 
-**一、左邊寫不出 `A-d`。** 鍵位表的鍵是 `String`，而認鍵那一支只接 `Key::Char`——
-於是 `"A-d" = …` 綁的是 `A`、`-`、`d` **三個鍵連按**：沒有哪隻手按得出來，而配置照
-收、一聲不吭。控制鍵也同病（`"C-o"` 綁的是三個鍵；`C-o` 真正的拼法是那個控制字節）。
+**① `A-d` could not be written on the left.** A key in the keymap is a `String` while the reader
+only accepted `Key::Char`, so `"A-d" = …` bound **three keys pressed in sequence** — `A`, `-`,
+`d` — which no hand can press, and the config was accepted in silence. Control had the same
+disease. Fix: borrow a private-use code point as the Alt prefix (`actions::ALT = U+E000`), so a
+key is one or two `char`s and the `HashMap<String, String>` layer needs no change;
+`actions::written` translates going in, `actions::spell` coming out, and **only two places
+translate** — `lay_aliases` on the left and `run_binding`'s fallback on the right.
 
-**修法**：借一個私用區的碼位當 Alt 前綴（`actions::ALT = U+E000`），於是一個鍵在表裏
-是一兩個 `char`，`HashMap<String, String>` 那一層一個字都不用改。進來由
-`actions::written`（`A-d` → ALT＋`d`、`C-o` → `\u{f}`）翻，出去由 `actions::spell`
-翻回來。翻的地方**只有兩處**：`lay_aliases`（左邊，兩層一起）和 `run_binding` 的兜底
-（右邊那一檔「一串鍵」，`:` 和動作名已經先走掉了）。
+**② The four names on the right pointed at the wrong keys and were ⚠ the same name with the
+opposite meaning to helix's** — the worst kind, since a helix user writing
+`d = "delete_selection"` would get the reverse of what he has at home. Missed when #405 moved to
+helix spelling on 2026-09-28; `::` and the settings panel listed four wrong descriptions for ten
+days. **Decided: use helix's names** (a rule already at the top of `actions.rs`):
 
-**二、右邊那四個名字指錯了鍵，而且和 helix 同名反義。**
-
-| 名字 | 文案說 | 2026-10-08 之前真做的 |
-| --- | --- | --- |
-| `delete_selection` | 刪除選區（不動寄存器） | 按 `d` → **進**寄存器 |
-| `change_selection` | 改寫選區（不動寄存器） | 按 `c` → **進**寄存器 |
-| `cut_selection` | 剪切選區（進寄存器） | 按 `D` → helix 鍵位下**什麼都不做** |
-| `cut_and_change` | 剪切後改寫 | 按 `C` → **往下加一個選區**（多選區那一族） |
-
-2026-09-28（#405）換成 helix 拼法那一趟漏下的，`::` 那張單子和設置面板照着四句錯文案
-列了十天。helix 那邊 `delete_selection` 是**進**寄存器的那一個，不進的叫
-`delete_selection_noyank`——我們同名而反義，是最壞的一種：一個 helix 使用者寫
-`d = "delete_selection"` 會得到和他家裏相反的行為。
-
-**定的是用 helix 的名字**（`actions.rs` 開頭本來就寫着這條規矩）：
-
-| 名字 | 鍵 | 文案（一個字沒改，只是換了主人） |
+| 名字 | 鍵 | 做什麼 |
 | --- | --- | --- |
 | `delete_selection` | `d` | 剪切選區（進寄存器） |
 | `delete_selection_noyank` | `A-d` | 刪除選區（不動寄存器） |
 | `change_selection` | `c` | 剪切後改寫 |
 | `change_selection_noyank` | `A-c` | 改寫選區（不動寄存器） |
 
-`cut_selection`／`cut_and_change` 兩個名字刪了——它們本來就沒人配得到。
-
-**驗的是真配置檔，不只是測試**：`$HOME/.config/yumete/config.toml` 寫上那四行，
-`ggyldglp` 出廠貼回「乙」（`d` 是剪），配了之後貼回「甲」（`d` 不剪），`A-d` 又貼回
-「乙」。另有一支測試釘住出廠值照 helix 不動（`the_factory_keys_still_follow_helix`）。
+`cut_selection` and `cut_and_change` were deleted — nothing could ever bind them. **Verified
+against a real config file**, not only in tests: with those four lines in
+`$HOME/.config/yumete/config.toml`, `ggyldglp` pastes 「甲」 where the factory pastes 「乙」, and
+`A-d` pastes 「乙」 again. `the_factory_keys_still_follow_helix` pins the defaults.
 
 ## 5.111 「你按了 X，你要的是 Y」這一類提示整個刪了（2026-10-08 定）
 
-從格子裏那個 `D` 問出來的。原話：
+> 删掉且不需要提示。記住所有的提示都不需要。提示是一個很奇怪的冗余信息，他假設用户想要的是
+> 另一個鍵。
 
-> 删掉且不需要提示。記住所有的提示都不需要。提示是一個很奇怪的冗余信息，他假設用户
-> 想要的是另一個鍵。
+⚠ **The scope was pinned down on the spot — do not widen it**:
 
-當場問細一些之後**範圍定住了**（這一條很重要，別擴大）：
+> 我再説得詳細一些，我的意思不是所有的提示，而是這一類提示是多餘的。比如按了 D 之後提示應該
+> 按 alt-d。這個提示假設用户的意圖，這是不對的。
 
-> 我再説得詳細一些，我的意思不是所有的提示，而是這一類提示是多餘的。比如按了 D 之後
-> 提示應該按 alt-d。這個提示假設用户的意圖，這是不對的。
+**Deleted**: `Editor::phrasebook` entire, with eleven strings (`hint.vi.*` eight, `hint.helix.*`
+three) — a phrasebook of "what another editor's key is called here", hanging off the unbound-key
+fallback for `$ ^ 0 @ + - \ Z D C-r C-c A-\``.
 
-**刪的**：`Editor::phrasebook` 整支，連十一條文案（`hint.vi.*` 八條、`hint.helix.*`
-三條）。它是一本「別的編輯器那個鍵在我們這兒叫什麼」的對照簿，掛在未綁定鍵的兜底分
-支上：
+**Kept, and this is the criterion.** A menu **you opened yourself** (`空格`, `` ` ``, `空格 t`)
+was asked for, not guessed — which is why the `` ` `` menu's row about vi's marks stays. And a
+sentence **about what just happened** (「`ze` 爲無效按鍵組合」, 「`C-w q` 站在唯一一個區域上什麼
+都不做」) reports the keys a hand really pressed, or says it did nothing. Neither guesses intent.
+Both manuals' promise that an unbound key 「不會靜靜地没反應」 was changed.
 
-| 按了 | 從前答 |
-| --- | --- |
-| `$` `^` `0` | 行尾是 `gl` / 行首第一個非空白是 `gs` / 行首是 `gh` |
-| `@` | 重放宏是 `q`（錄是 `Q`） |
-| `+` `-` | 上下行是 `j` `k`；段落是 `{` `}` |
-| `\` | 空格是選單鍵：`␣f` 開文件… |
-| `Z` | 保存是 `:w`，存了就走是 `:wq` |
-| `D` | 刪到行尾是 `d` 再 `gl`；刪了不動寄存器是 `A-d` |
-| `C-r` | 重做是 `U`（撤銷是 `u`） |
-| `C-c` | 注釋掉是 `␣c`，整段是 `␣C` |
-| `A-\`` | 大小寫在 `` ` `` 組裏 |
-
-**留下的**（不是這一類，判準寫在這裏備查）：
-
-- **自己打開的選單**——`空格`、`` ` ``、`空格 t` 那幾張。那是問出來的，不是猜出來的。
-  `` ` `` 那張的末行「vi 的記號：`M` 記、`'` 回去」因此留着（`hint.vi.backtick`）。
-- **說剛才發生了什麼**的話——「`ze` 爲無效按鍵組合，請重試」報的是手指真按出來的那
-  一串；「`C-w q` 站在唯一一個區域上什麼都不做」說的是它自己沒做事。都不猜意圖。
-
-這一條之前已經走了兩步，現在走完了：2026-09-11 `*` 不再指向 `g/`（它就是 `g/`），
-2026-09-28 `gw` 不再說「查定義搬到 gD 了」。手冊兩處承諾（英文 1846、繁體 1490）跟着
-改掉——那兩句原本寫着「没綁的鍵不會靜靜地没反應」。
-
-### 連帶：格子裏補上了 `A-d`/`A-c`，`D` 刪了
-
-同一天問出來的另一句：**爲什麽格子裏沒有 `A-d`？有了不就不用 `D` 了嗎。** 量過——
-`A-d` 在格子裏按下去一點反應都沒有，它只是從來沒人接上。接上之後格子和正文逐鍵一樣：
-
-| | 正文 | 格子 |
-| --- | --- | --- |
-| `d` | 剪（進寄存器） | 剪掉這一格 |
-| `A-d` | 刪，不動寄存器 | 清空這一格，不動寄存器 |
-| `c` | 改（進寄存器） | 換掉這一格，舊的進寄存器 |
-| `A-c` | 改，不動寄存器 | 換掉這一格，不動寄存器 |
-| `D` | 沒綁 | 沒綁 |
-
-手冊 2640 行那句承諾（「一個鍵不會因爲光標停在哪裏就換一個意思」）從 2026-09-28 起
-一直是破的，到這天纔補上。
+**Knock-on: the grid got `A-d`/`A-c` and lost `D`.** From his other question that day — 爲什麽格
+子裏沒有 `A-d`？有了不就不用 `D` 了嗎 — and measured: `A-d` in the grid did nothing at all, it
+had simply never been wired up. Wired, the grid and the body agree key for key (`d` cuts, `A-d`
+clears without the register, `c` changes through the register, `A-c` without it, `D` unbound both
+sides). ⚠ The manual's promise at line 2640 that 「一個鍵不會因爲光標停在哪裏就換一個意思」 **had
+been broken since 2026-09-28** and was only made true this day.
 
 ## 5.110 第三套鍵位「yumete 模式」：在 helix 上做加減（2026-10-07 定，**還沒做**）
 
-起因是 helix 那邊一個討論（[#10361](https://github.com/helix-editor/helix/discussions/10361)，
-92 個 👍，上游至今沒改）：很多人反感 `d`/`c` 進寄存器，而底下有人貼了這四行配置——
+From a helix discussion ([#10361](https://github.com/helix-editor/helix/discussions/10361), 92
+👍, still unchanged upstream): many people dislike `d`/`c` going through the register, and someone
+posted these four lines.
 
 ```toml
 [keys.normal]
@@ -21338,176 +20691,122 @@ A-c = "change_selection"
 c = "change_selection_noyank"
 ```
 
-**定下來的是三套，不是改默認**（原話）：
+**Three presets, not a changed default:**
 
 > 我的想法是：vim 模式和 vim 保持對齊；helix 模式現在和 helix 對齊；然后未來我打算有個
 > yumete 模式，在 helix 的基礎上做一些加減（比如這個 cd 進不進 register）
 
-所以：
+So vim keys follow vim (`ddp` moves a line, and vim will never change), helix keys follow helix
+(`d`/`c` through the register, `A-d`/`A-c` not), **not one factory key moves even where the owner
+himself prefers the other way** (§5.94's rule, said a third time), and 「yumete 模式」 is a third
+preset built by adding to and subtracting from helix. **Not done** — recorded here so it is known
+to exist and what it needs.
 
-1. **vim 鍵位照 vim。** `d` 進寄存器，`ddp` 搬一行照舊——那是 vim 最常用的手勢之一，
-   而 vim 永遠不會改。
-2. **helix 鍵位照 helix。** `d`/`c` 進，`A-d`/`A-c` 不進。出廠值一個鍵都不動，哪怕
-   作者自己更喜歡另一種（§5.94 第三次說過的那條規矩：「我天天按它」不是理由）。
-3. **「yumete 模式」是第三套**，在 helix 的基礎上加減。第一個候選就是這一條。**還沒
-   做**，這裏只記住它存在、以及它要什麼。
-
-### 它需要什麼：先把「層二」弄誠實
-
-第三套鍵位不該是第三份寫死的 `match`——那就是三份要同步的真相。它該是**一張名字到鍵
-的表**（`yumete-cjk/src/actions.rs` 那一層，#429 的「層二」），而那一層現在是壞的：
-四個名字全指錯了鍵（2026-09-28 #405 換拼法時漏下的），文案說的和真做的相反。詳情與
-修法見 §5.111。
-
-修完了（§5.112）：那四行一字不改就生效，而「yumete 模式」只是同一張表的另一個預設值。
+What it needs first: the third preset must not be a third hard-coded `match`, which would be three
+truths to keep in step. It has to be a **name-to-key table** (`yumete-cjk/src/actions.rs`, #429's
+"layer two") — and that layer was broken, all four names pointing at the wrong keys. Diagnosis and
+fix in §5.111 and §5.112; once fixed those four lines work unchanged, and 「yumete 模式」 is just
+another default for the same table.
 
 ## 5.109 夜單 21–30 那幾份審查報告，逐條驗完之後修的（2026-10-07）
 
-報來的大約三十條裏，**驗為真又值得動的是八條**，分四次提交。每一條都先寫一個會紅的
-測試，再修——其中五條還把修補撤回去跑過一次，確認那個測試真的攔得住。
+Of roughly thirty reported items, **eight verified true and worth doing**, in four commits. Each
+got a failing test first, and five had the fix backed out again to confirm the test catches it.
 
-| 條 | 真假 | 做了什麼 |
-| --- | --- | --- |
-| 挑選器沒有 kept window | 真 | 名單改成**一頁一頁地讓**（helix 的 `cursor - cursor % rows`），順帶把「翻一頁」從寫死的十改成**窗口那一頁**（`Picker::note_rows`，TUI 每幀量一次） |
-| `:bd` 之後緩衝區面板留舊行 | 真 | `close_buffer` 補 `refresh_sidebar()`——換緩衝區那條路一直有，關掉這一條沒有 |
-| 面板高亮按序號記 | 真 | `set_rows` 改成**按那一行自己**認回來（路徑＋名字，同名挑離原來最近的）；文件樹那一支本來就是這樣 |
-| `rescan_the_open_one` 行號對不上處數 | 真 | 那段 `grew` 算術整個換成「記下那一處命中、擺完名單再找回來」（`stand_on_that_hit`，和重搜那一支共用） |
-| ——順帶查出來的 | **真，而且更重** | 快路會把一份稿子的命中**插進**另一份的位置上：`looked_at` 那個戳在預覽打開別的檔時有意重蓋（§5.71 那條「預覽不是修改」），於是「換的不是稿子」那道閘看着是過了，而 `mine` 還說着上一份。同一個檔在名單上出現兩次。新加一格 `Search::mine_is` 記「那兩個數說的是哪一份」 |
-| 挑選器查詢框光標沒夾緊 | 真 | 那一行改走 `window_on`（按**格**裁）：一列二十四格，十二個漢字就滿，從前光標停在框外面十九欄 |
-| `MAX_PER_DIR` 砍在排序前 | 真 | 先排再砍——從前留下的是文件系統次序裏任意的五百個，`ch0001.md` 可能不在樹上而 `ch0600.md` 在 |
-| 符號連結上的根 `reveal` 不認 | 真 | 交來的路徑是規範化過的，根是項目說的那一條（macOS 的 `/tmp` → `/private/tmp`），於是一個目錄都不展開。新加 `Sidebar::in_my_world` 把路徑說成樹自己那套說法 |
-| LSP 片段 | 真（但要對方不守規矩纔碰得到） | 這一頭報的是 `snippetSupport: false`，所以守規矩的服務器不送片段來——可這一條錯的代價是**在人的檔裏留下他沒打的字**，所以照實問一句 `insertTextFormat`，是片段就把洞填平（`without_the_holes`，不是片段引擎，只保證進去的是字） |
-| LSP 號碼是字串的請求 | 真 | 協議說 `id` 數字字串都許，而從前是 `as_i64()`：字串號碼的請求讀成 `Nothing`，**永遠沒人答**，而等自己註冊回音的服務器就停在那裏 |
-| 服務器死掉漏子進程 | 真 | 扔掉一個 `Child` 既不殺也不收。管子斷了那條路留下的是一個沒人管的程序，手裏還攥着管子。新加 `Servers::bury`（`stop` 一直是殺完再收的） |
+| 條 | 做了什麼 |
+| --- | --- |
+| picker had no kept window | the list yields **a page at a time** (helix's `cursor - cursor % rows`), and "a page" became the window's own rows rather than a hard-coded ten |
+| `:bd` left a stale row | `close_buffer` gained `refresh_sidebar()` — switching buffers always had it, closing one never did |
+| panel highlight tracked by index | `set_rows` recognises **the row itself** now (path plus name, nearest of duplicates); the file tree already did |
+| `rescan_the_open_one` line numbers | the `grew` arithmetic is gone: note the hit, rebuild the list, find it again (`stand_on_that_hit`) |
+| ⚠ **found while doing that, and worse** | the fast path could **insert one file's hits into another's place**. `looked_at` is deliberately restamped when preview opens another file (§5.71), so "the file did not change" passed while `mine` still named the previous one, and one file appeared twice. New `Search::mine_is` records which file those two numbers describe |
+| picker query cursor not clamped | that row clamps **by cell** now (`window_on`) — 24 cells is 12 Hanzi, and the cursor used to sit nineteen columns outside the box |
+| `MAX_PER_DIR` cut before sorting | sort then cut; it used to keep an arbitrary 500 in filesystem order, so `ch0001.md` could be missing while `ch0600.md` was there |
+| root `reveal` through a symlink | paths arrive canonicalised while the root is what the project said (macOS `/tmp` → `/private/tmp`), so nothing expanded. New `Sidebar::in_my_world` |
+| LSP snippets | we advertise `snippetSupport: false`, so a well-behaved server sends none — but being wrong costs **characters in the author's file that he did not type**, so `insertTextFormat` is read and the holes filled in |
+| LSP request ids as strings | the protocol allows a string `id` and this read `as_i64()`, so such a request parsed as `Nothing` and **was never answered** — a server waiting for its own registration echo simply stopped |
+| server death leaked a child | dropping a `Child` neither kills nor reaps it, so a broken pipe left an unowned process still holding the pipe. New `Servers::bury` |
 
-### 擱下的四條，和為什麼
-
-- **邊欄在畫不出來的寬度上還可達**：真，但只在**二十六欄以下**（`sidebar_columns` 給
-  零欄的門檻）。要修得讓核心知道「這一格這一幀畫了幾欄」——又一條 TUI → 核心的通道。
-  二十六欄的終端是十三個漢字，先擱着。
-- **`PICKER_LIMIT` 靜默切**：真，但那道閘在**四千個檔**上，而 `walk` 認 `.gitignore`
-  ——作者自己那棵樹走出來是 229 個（`ye --files .` 量的，20 毫秒）。那 12431 個是
-  `-Guu` 的數，不走這條路。要修就是「散文那一半不許切，只切別的」，兩行；可造一個
-  四千個檔的測試固定裝置要跑好幾秒，不值。
-- **LSP 的 `error` 欄從不讀**：真。現在一條錯誤回答讀成「服務器沒話說」，面板清空
-  ——行為上不算壞，壞在**那句話丟了**。要說出來就要新文案，**等定**。
-- **`additionalTextEdits` 不讀**：真。它的意思是「補全這一條還要在**別處**改幾行」
-  （rust-analyzer 補一個名字順帶加一條 `use`）。這不是漏了一個欄位，是一件要定的事
-  ——**在光標不在的地方改字**，在一個寫小說的編輯器裏得作者說句話。**等定**。
+**Four left alone.** The sidebar is reachable at a width it cannot draw, but only below **26
+columns**, and fixing it needs the core to know how many columns a frame drew — another TUI → core
+channel. `PICKER_LIMIT` cuts silently, but at **four thousand files** while the walk honours
+`.gitignore`, and the owner's own tree walks to 229. LSP's `error` field is never read, so an
+error reply reads as "the server has nothing to say" — **the sentence is lost**, and saying it
+needs new strings: **等定**. `additionalTextEdits` is not read, which means **changing lines where
+the cursor is not** (rust-analyzer adding a `use`) — in an editor for novels that needs the
+owner's word: **等定**.
 
 ## 5.108 內置碼表永遠是精華版，編譯不跟着機器走（2026-10-07 定）
 
-從作者的一個提問開始：`:yume-where` 那一行寫的是「靈明碼表 2026-10-07」，而他以為
-該寫「靈明精華版」。查出來**不是文案的毛病**：那一行的 `{0}` 裏本來就會帶「精華版」
-三個字，而他那台機器嵌的根本不是精華版——
+`:yume-where` said 「靈明碼表 2026-10-07」 where he expected 「靈明精華版」. Not a string fault:
+that `{0}` does carry 精華版 when it applies, and his machine had embedded the **full** 3.69 MB
+`ling.ytab`, because `build.rs`'s rule was "use the full table if this machine has one".
 
-```
-BUILTIN_TABLE:   ~/.local/share/yumete/schemes/ling.ytab   ← 完整表，3.7 MB
-BUILTIN_VERSION: "2026-10-07"                              ← 所以沒有「精華版」
-```
+> 編譯不是跟着電腦走的！！！！編譯應該是穩定的！！！爲什麽必須帶靈明精華版是爲了壓縮二進
+> 制尺寸！！！
 
-`build.rs` 從前的規矩是「機器上有完整表就用完整表，沒有纔退回精華版」，模塊頭還把它
-寫成了優點（「that is better and is what a developer's build carries」）。判詞：
-
-> 編譯不是跟着電腦走的！！！！編譯應該是穩定的！！！爲什麽必須帶靈明精華版是爲了
-> 壓縮二進制尺寸！！！
-
-兩條都對，而且**那 3.7 MB 連一個讀者都沒有**：運行時裝好的靈明永遠贏過內嵌的那一份
-（`ImeSession::new`），所以完整表只在「這台機器沒裝宇浩」時纔會被讀到——而那時它也不
-在。於是一個只有退路纔用得上的位置，放了一份比退路大十五倍的東西。
-
-**改成：永遠精華版。** 沒有就去 `yume-release` 取一次，放進 `~/.cache/yumete/builtin`，
-那是一個 `build.rs` 自己填的 `YUMETE_BUILTIN_DIR`（同一套 `schemes/`＋`data/`＋
-`VERSION` 的擺法，於是讀這幾個檔的路只有一條）。`YUMETE_BUILTIN_DIR` 照舊優先，而且
-排在取之前——指定了目錄的發布構建一個字節都不上網。離線又沒快取就不帶表，照舊出聲。
+Both true — and **those 3.69 MB had not one reader**: an installed 靈明 always beats the
+embedded copy (`ImeSession::new`), so the full table could only be read on a machine with no
+宇浩 installed, where it is not there either. **Always the essential table now**, fetched from
+`yume-release` into `~/.cache/yumete/builtin` when absent; `YUMETE_BUILTIN_DIR` still wins and
+is checked **before** fetching, so a release build with it set touches no network.
 
 | | 前 | 後 |
 | --- | --- | --- |
-| 作者機器上嵌的 | `ling.ytab` 3.69 MB | `lingming_essential.ytab` 0.24 MB |
+| 嵌的 | `ling.ytab` 3.69 MB | `lingming_essential.ytab` 0.24 MB |
 | 二進制 | 16.5 MB | **13.1 MB** |
-| 和 CI（homebrew）編出來的 | 不一樣 | **一樣** |
+| 和 CI 編出來的 | 不一樣 | **一樣** |
 
-⚠️ **三件連帶**：① 快取不過期——`cargo clean` 不該讓人重下一遍，所以它在家目錄而不是
-`target/`；要換新的就刪掉那個目錄，因為「悄悄換掉嵌進去的東西」正是這一節要攔的事。
-② 三個檔（表、符號表、`VERSION`）要麼齊要麼不算，半份比沒有更難查——`VERSION` 缺了
-`:yume-where` 答不出版本，符號表缺了候選欄沒有標點。③ `common_words.txt` 歸另一支
-build script（`yumete-cjk`），**它不自動取**，`scripts/build.sh` 的提示照這個改了。
+⚠ **Three knock-ons.** The cache does not expire and lives in the home directory rather than
+`target/`, so `cargo clean` forces no re-download — and because quietly swapping what gets
+embedded is the thing this section exists to prevent. The three files are **all or nothing**: no
+`VERSION` and `:yume-where` cannot name a version, no symbol table and the candidate bar has no
+punctuation. And `common_words.txt` belongs to `yumete-cjk`'s build script, which **does not
+fetch automatically**.
 
-### 星陳也內置一張（同日，隔壁發完就接上了）
-
-`xingchen_essential.ytab` 279,158 位元組，yume `62fa340` 把 `make_jinghua` 參數化之後
-發到同一個 tag 上。yumete 這一側三處：
-
-- `build.rs` 多取一張。⚠️ **靈明那三個要麼齊要麼不算，星陳是添頭**——少了星陳那張只是
-  星陳打不了字，少了表／符號表／`VERSION` 任何一個是連漢字都打不了。
-- `load_builtin` 收一個 `scheme`，按方案挑表（`builtin_for`）。
-- `yumete-ime/src/lib.rs` 那道閘從前寫死 `scheme == Scheme::LINGMING`，於是多嵌一張也
-  沒人讀得到。
-
-**符號表兩個方案共用一張**（隔壁比對過：星陳源表那 15,711 條是靈明 15,716 條的真子集，
-共有的逐字相同，多出來的五條是 `/bdkg`、`/em`、`/en`、`/kg`、`/nbsp`）。符號碼是 `/`
-引導的助記符，與方案無關，所以不發 `xingchen_symbols.ytab`。
-
-驗的是**真打得出字**，不是「檔案嵌進去了」：空的搜索路徑（裝好的一概看不見），星陳 `d`
-出「的」、靈明 `e` 出「的」。取不到出廠表的機器上這一條自己跳過——離線編出來的二進制本來
-就不帶表，那時它什麼也證明不了。
-
-二進制 13.1 → **13.3 MB**（多的 0.27 MB 就是那張表）。
-
-⚠️ 隔壁同時重發了整套：`VERSION` 的 `build=` 走到 `20261006212837`，`source=` 那一行變成
-兩個檔名。**`stamp()` 只讀 `build=`**，`source=` 全樹沒人 parse，所以不受影響——查過了。
-`common_words.txt` 也換了內容，那歸 `yumete-cjk` 那一支，它不自動取。
+**星陳 is embedded too** (same day), 279,158 bytes, binary 13.1 → **13.3 MB**, sharing 靈明's
+symbol table (星陳's 15,711 entries are a true subset of 靈明's 15,716, the common ones
+identical — a `/`-led mnemonic has nothing to do with the scheme). ⚠ **靈明's three files are
+all-or-nothing while 星陳 is an extra.** Verified by **actually typing** on an empty search
+path: 星陳 `d` → 「的」, 靈明 `e` → 「的」. ⚠ `stamp()` reads only `VERSION`'s `build=`; nothing
+parses `source=`, which now holds two filenames.
 
 ## 5.101 搜索要說它正在搜哪一個檔（2026-10-07 定，做完了）
 
-原話：「I used `ye -Guu forfudan.com --open` … the search panel is like this for 5 minutes
-(0+ means that it is searching). The time is too long … I suspect that the search is not
-actually working.」
+> I used `ye -Guu forfudan.com --open` … the search panel is like this for 5 minutes (0+ means
+> that it is searching). The time is too long … I suspect that the search is not actually working.
 
-**量過了，搜索是好的，壞的是它一聲不吭。** 那個資料夾開 `-uu` 之後是 **239,125 個檔、
-38 GB**（`target/`、`.git`、`.pixi` 全在裏面）：命令行那一支同樣的詞，**頭 30 秒一行都不
-印**，到 75 秒纔印出 7 行。面板走的是同一支 `walk_and_search`（`find.rs:2406`），也是單
-線程、也是流式，所以它和命令行一樣慢——只是命令行會一行一行冒字，面板只有一個不動的
-`0+結果`。
+**Measured: the search was fine, it was silent.** That folder under `-uu` is **239,125 files,
+38 GB**; the command line with the same word **printed nothing for the first 30 seconds** and had
+seven lines by 75. The panel runs the same `walk_and_search`, equally single-threaded and
+streaming — the only difference is that the CLI dribbles lines while the panel showed one
+motionless `0+結果`. One thing was missing: **the walk could not say which file it was on.**
 
-要補的東西只有一件：**走查現在走到哪一個檔，要說得出來**。`Found`（`find.rs:2486`）
-今天只有三格——`Hit`、`File`（**有命中的**檔）、`Done`——所以面板根本問不出「我在看
-誰」。
+**A shared cell, not a fourth message kind.** `editor::Progress` is an `AtomicUsize` plus a
+`Mutex<String>`, written once per file by the walk and read by the screen at its own pace — one
+message per file would be 230,000 messages in that folder, while the only question is **who is
+being looked at now**. Three users: the panel (a rule under the list and a line below it, yielding
+rows to the list and gone when done; his wording, 「己搜 {0} 個文件, 搜索 {1}」); `ye --grep`
+rewriting in place on stderr four times a second, **only when stderr is a terminal**, so
+`> out.txt` and `| head` stay byte-identical; and `the_panel_says_which_file_the_walk_is_on`.
 
-**做法：一個共用的格子，不是第四格消息。** `editor::Progress`（`editor.rs`）裏一個
-`AtomicUsize` 加一個 `Mutex<String>`，走查每看一個檔寫一次，畫面按自己的節拍讀。走一個
-檔發一則消息在那個資料夾裏就是二十三萬則，而要答的問題只有「**此刻**在看誰」。
+**Knock-on**: the sidebar's horizontal rule is single (`├─┤`) without focus and a gold double rule
+(`╠═╣`) only with it — 「the horizontal rule in sidebar should be single line when it is not
+highlighted. It is golden double line if and only if the region is highlighted.」
 
-三處用它：
-
-- **面板**：名單底下一道線，線下一行（`draw_search`）。它跟名單要行，名單矮下來先讓
-  位；走完就收——標題上那個數目已經說了結果。文案是作者寫的：「己搜 {0} 個文件, 搜索
-  {1}」。路徑從左邊摺（`elide_head`），留住檔名。
-- **命令行**：`ye --grep` 在 stderr 上原地重寫，四分之一秒一次，**只在 stderr 是終端機
-  的時候**——`> out.txt` 和 `| head` 要逐字節同從前。命中那一下先把那一行抹掉再印
-  stdout（兩邊共用一把鎖）。
-- 測試：`the_panel_says_which_file_the_walk_is_on` 真的起一趟四千個檔的背景走查，等它
-  動起來再畫一幀。
-
-**連帶**：邊欄那道橫線沒焦點時改成單線（`├─┤`），有焦點纔是金色雙線（`╠═╣`）。原話：
-「the horizontal rule in sidebar should be single line when it is not highlighted. It is
-golden double line if and only if the region is highlighted.」
-
-⚠ **真正的慢不在畫面**：那趟搜索本來就要兩分鐘。`-uu` 在那個資料夾裏連 `target/`、
-`.git`、`.pixi` 一起走，而 rg 的 `-uu` 也是這樣，所以照 兼容第一 不動；要快就別加第二個
-`u`，或者 `--exclude=target`。
+⚠ **The real slowness is not the screen**: that search genuinely takes two minutes. `-uu` walks
+`target/`, `.git` and `.pixi`, and rg's `-uu` does the same, so compatibility wins and it stands.
+To go faster, drop the second `u` or pass `--exclude=target`.
 
 ## 5.100 Normal 模式下用 Shift 切換 [abc] / [中]：**待查**（2026-10-07 提）
 
-原話：
+> Can you check whether it is possible to use shift to switch between [abc] and [中] in normal
+> mode (also reflected in the status bar). Currently the switch is only allowed in insert mode.
 
-> Can you check whether it is possible to use shift to switch between [abc] and [中] in
-> normal mode (also reflected in the status bar). Currently the switch is only allowed in
-> insert mode.
-
-還沒查。要回答的是三件事：① Normal 模式下這一下 Shift 現在歸誰（有沒有別的鍵位要它）；
-② 模態掛起那條路在 Normal 模式下是「輸入法已經被挪開」，所以切的到底是什麼；③ 狀態欄那
-一格現在讀的是哪一處狀態。
+Not looked at yet. Three things have to be answered: who owns that Shift press in Normal mode
+today (does any keymap want it); what the switch would even mean there, since the modal-suspend
+route has already moved the IME aside in Normal mode; and which state that status bar cell
+actually reads.
 
 ## 5.97 vim 的 `)` 落在哪一格：與 vim 不同，**等定**
 
@@ -21535,48 +20834,37 @@ golden double line if and only if the region is highlighted.」
 
 ## 5.99 一個命令只做一件事，快捷鍵是它的語法糖（2026-10-07 定）
 
-`:table` 和 `:ruby` 各兼着兩件事：裸命令是一個動作，加參數是一個級別。第一判詞：
+`:table` and `:ruby` each did two jobs: bare was an action, with an argument a level.
 
 > `table`, this seems not good. I think `table off|basic|full` can be also renamed as
 > `table-render off|basic|full`, just like `ruby`.
 
-於是三個級別搬到 `:table-render` / `:ruby-render`，裸的那一個報現在是哪一檔（同裸
-`:render`）。`:table off` 這種舊拼法不再默默生效：`:table` 現在不收級別，解析器照
-`TakesNoArgument` 報「table 後面不跟東西——「off」多了」。
+The three levels moved to `:table-render` / `:ruby-render`, bare reporting which level is
+current. `:table off` no longer works silently: `:table` takes no level, so the parser reports it
+as a word too many, and `command::names_something` now answers `Err` for a command that declares
+no parameters instead of letting the manual print `:table off`.
 
-**快捷鍵是命令加參數的語法糖**（第二判詞）：
+**A shortcut is sugar for a command plus an argument** (second verdict: 「快捷鍵就是命令+參數的
+語法糖。這樣的好處是文案寫一份就夠了。」). `空格 t o|b|f` and `:table-render off|basic|full`
+were two near-copies, and **both differences were accidents** — the key walked into the grid and
+aimed at a cell, the command recorded "this one is not a table" (#380). Both were right, so they
+merged into `Editor::ask_for_table_level` (and `空格 t t` into `ask_for_the_table_window`) with
+**one set of strings**: `TABLE_LEVELS` points at `hint.table.*`, and `cmd.table.off/basic/full`
+were deleted.
 
-> 如果他們確實等價，其實可以讓他們關聯起來，也就是說快捷鍵就是命令+參數的語法糖。
-> 這樣的好處是文案寫一份就夠了。目前快捷鍵的文案比命令+參數的文案更好。
+**`:table` now creates a table** (third verdict: 「`table` 這個命令用來新建一個表格是很自然
+（用户馬上就能猜到）的行爲。」). The old door chose between two views by file type, and which
+view it is belongs to `:table-render`, so the name came free for the meaning a reader guesses
+first. One gate, 爲了防止出現意外，破壞段落: **it counts only on a blank line** (leading spaces
+allowed, `trim` decides) and refuses mid-paragraph; it used to insert *below* the line, which was
+guessing where the paragraph ended. `空格 t q` deliberately gets no command (「本質上只對全窗模
+式生效」) and is `Command::TableWindow` rather than a `TableLevel` value, because the level
+underneath is untouched — which is why `t q` hands the window back remembering nothing.
 
-`空格 t o|b|f` 與 `:table-render off|basic|full` 從前是兩段差不多的代碼，而差的兩處都是
-意外：**鍵**會走進格子並對準一格（命令不會），**命令**會把「這一份不當表格」記下來
-（#380，鍵不會）。兩邊都對，所以合成 `Editor::ask_for_table_level` 一支。`空格 t t` 同理
-合成 `ask_for_the_table_window`。文案只留一份：`TABLE_LEVELS` 四個詞的說明直接指
-`hint.table.*`——空格選單那四行——`cmd.table.off/basic/full` 刪了。
-
-**`:table` 改成新建一張表**（同日第三判詞）：
-
-> 現在的 :table 命令不是良定義，我覺得可以直接删除。然后把 `table-new` 改成 `table`。
-> 換句話說，`table` 這個命令用來新建一個表格是很自然（用户馬上就能猜到）的行爲。
-
-那道門從前照文件落在兩個不同的視圖上（markdown 裏的 `|` 表格 ＝ 完整視圖，整份表格文件
-＝ 全窗），而「哪一個視圖」是 `:table-render` 的問題。走進去是「要一個視圖」自己會做的事，
-所以那個名字空了出來，給了讀者一看就猜得到的意思。新建帶一道閘，理由是他的原話
-「爲了防止出現意外，破壞段落」：**只在空行上作數**（可以有前導空格，`trim` 是判準），在段落
-中間報「當前位置非空行，請在空行中使用此命令」。從前它是插在那一行**底下**——那是在猜段落
-到哪裏結束。
-
-**`空格 t t` ＝ `:table-render window`**，理由是「他和另外三個 render 模式是不會 overlap」。
-`空格 t q` 照他的決定**暫時不給命令**：「本質上只對全窗模式生效。我建議暫時不用命令」。
-全窗不是第五檔——底下那一檔原封不動，這正是 `t q` 不用記任何東西就交得回窗口的原因，所以
-它是 `Command::TableWindow` 而不是 `TableLevel` 的一個值。
-
-**連帶兩處**：① `command::names_something` 從前對「這個命令一個參數都沒聲明」答 `Ok`，於是
-手冊可以印 `:table off` 而測試說它名得着東西；現在空的 `params` 答 `Err`，與解析器同口徑。
-② ⚠ **族裏的成員排在族頭前面會漏出摺疊**（`fold` 的 `false if its_own` 那一臂）——
-`table-render` 一度插在 `table` 前面，於是命令選單多出一行 `:table-render`、總數 64→65，而
-`cargo test` 全綠，是金樣幀抓到的。**同族的條目，族頭必須排在最前。**
+⚠ **A family member listed before the family head leaks out of the fold** (`fold`'s
+`false if its_own` arm): `table-render` sat before `table` for a while, so the command menu grew
+a `:table-render` row and the total went 64 → 65 **while `cargo test` stayed green** — the golden
+frame caught it. **The head must come first.**
 
 ## 5.80 一個 vim 用戶試用下來的十三條（2026-10-05 逐條議定）
 
