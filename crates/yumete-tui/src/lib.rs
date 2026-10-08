@@ -8293,8 +8293,11 @@ fn draw_search(
         // 面板自己的底色，而且本來就是號碼那一欄（底下七個開關的 `1`…`7` 就在它
         // 正下方），所以轉與不轉都占着，一個字都不會跳。
         if which == Field::Query {
+            // **金的，和正下方那七個號碼同一個墨**（2026-10-08 定，原話：
+            // 「那個 8 點轉轉用金色（和下面的 1234）數字顏色一致，而且更加醒目」。
+            // 它上下就是同一欄（見下面 `shortcut`），一欄裡兩種墨說不出別的事。
             let mark = spinner::frame(editor.searching_since());
-            put_text(buf, left, y, to, mark, quiet);
+            put_text(buf, left, y, to, mark, ground.fg(ink.gold()));
         }
         let tag_at = left + 2;
         put_text(buf, tag_at, y, to, tag, quiet);
