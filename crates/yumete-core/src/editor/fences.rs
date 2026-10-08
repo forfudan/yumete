@@ -92,6 +92,34 @@ impl Editor {
         self.code_colours
     }
 
+    /// **一行長過這個就不上色**——vim 的 `synmaxcol`，和它同數（2026-10-08 定）。
+    pub const LONG_LINE: usize = 3000;
+
+    /// 那個門槛，`None` ＝沒有上限。
+    pub fn long_line(&self) -> Option<usize> {
+        self.long_line
+    }
+
+    pub fn set_long_line(&mut self, upto: Option<usize>) {
+        self.long_line = upto;
+        // 上過色的那幾行記在備忘裏，换了門槛就不算數了。
+        self.markup_memo.forget();
+        self.code_cache.borrow_mut().by_chunk.clear();
+    }
+
+    /// **這一行長得超過門槛了嗎**——超了就一個記號都不算。
+    ///
+    /// Warning: **一個字一個字數，不造字串**：這一句每幀每行要問一次，而它存在的
+    /// 理由就是「那一行太長」——為了問這一句把整行拷一份是自己把自己抵消掉。
+    /// `rope.line(n)` 是一個切片，`len_chars` 是 O(log n)。
+    pub(super) fn line_is_too_long(&self, line: usize) -> bool {
+        let Some(upto) = self.long_line else {
+            return false;
+        };
+        let rope = self.current_buffer().rope();
+        line < rope.len_lines() && rope.line(line).len_chars() > upto
+    }
+
     /// Colour fenced code by its grammar, or draw it in the fence's one colour.
     pub fn set_code_colours(&mut self, on: bool) {
         self.code_colours = on;

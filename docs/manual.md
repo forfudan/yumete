@@ -880,7 +880,17 @@ lines you can see** are coloured, and one character changed parses only the part
 changed again. Measured on a twenty-thousand-line `lib.rs`: 0.08 ms to type a character,
 0.55 ms to scroll into a block that has never been drawn.
 
-Why only these nine: every grammar takes up space in the executable. The first seven
+**A line longer than 3000 columns is left plain** (`:view-long-line`, 2026-10-08). Past
+that many columns a line gets no markdown markup, no syntax colour and no word tint —
+the three things worked out per *line*, which costs nothing on an ordinary paragraph and
+everything on a file that is one line. Measured: a minified `.js` of 1.5 million ASCII
+characters on one line went from **2.54 s a frame to 0.05 s**; the same characters as
+15,000 lines are 0.04 s either way, so a manuscript pays nothing. vim's `synmaxcol` is
+the same rule and the same number, and its documentation says why: 「This helps to avoid
+very slow redrawing for an XML file that is one long line.」 `:view-long-line off`
+removes the limit, a number sets it, and the bare word reports which it is.
+
+Why only these: every grammar takes up space in the executable. The first seven
 came to 1.3 MB together; Rust and Go were added on 2026-09-19 and measured 1.28 MB for
 the pair (13.41 MB → 14.69 MB), which is worth it — people write those two in it. Below
 that the arithmetic changes: `bash` alone wants 1.3 MB, and all hundred-odd grammars

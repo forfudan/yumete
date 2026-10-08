@@ -23597,3 +23597,36 @@ fn a_table_quoted_in_a_fence_still_wraps() {
     ed.set_wrap_width(40);
     assert!(!ed.table_row_at(1), "圍欄裏的不算表格");
 }
+
+
+/// **一行長過門槛就不上色、不藏標記、不分詞**（`:view-long-line`，2026-10-08）。
+///
+/// vim 的 `synmaxcol`，同數（3000）。量出來的：一行 150 萬 ASCII 的 `.js`，
+/// 一幀從 2.54 秒變成 0.05 秒；同樣字數切成 15000 行是 0.04 秒，兩邊一樣。
+#[test]
+fn a_line_past_the_limit_is_left_plain() {
+    let short = "**粗**一句話。\n";
+    let mut ed = typed(short);
+    assert!(!ed.markup_runs_for_test(0).is_empty(), "短行照舊上色");
+    assert!(!ed.segment_line(0).is_empty(), "短行照舊分詞");
+
+    // 門槛改成 5：同一行立刻超標。
+    ed.set_long_line(Some(5));
+    assert!(ed.markup_runs_for_test(0).is_empty(), "超標了就不上色");
+    assert!(ed.segment_line(0).is_empty(), "超標了也不分詞");
+
+    // `off` ＝沒有上限，多長都照舊畫。
+    ed.set_long_line(None);
+    assert!(!ed.markup_runs_for_test(0).is_empty(), "沒有上限就照舊");
+    assert_eq!(ed.long_line(), None);
+
+    // 命令走得通，而且裸的是報告。
+    ed.execute(":view-long-line 3000").unwrap();
+    assert_eq!(ed.long_line(), Some(3000));
+    ed.execute(":view-long-line").unwrap();
+    assert_eq!(ed.long_line(), Some(3000), "裸的只報告，不改");
+    assert_eq!(ed.status, say!("layout.long-line-on", 3000usize));
+    ed.execute(":view-long-line off").unwrap();
+    assert_eq!(ed.long_line(), None);
+    assert_eq!(ed.status, say!("layout.long-line-off"));
+}
