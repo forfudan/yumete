@@ -11601,13 +11601,12 @@ zhs = "出厂自带（前面都没有的时候）"
 en = "built in (when none of the above answered)"
 
 [[message]]
-# `:yume-where`：出廠自帶的那一份是哪一份。⚠️ {0} 是**版本**，而「精華版」三個字
-# 在它裏面：編譯的機器上有完整的靈明表就嵌完整的（{0} 只有日期），沒有纔退回倉裏
-# 那份 `lingming_essential.ytab`（{0} 是「精華版 日期」）。見 `yumete-ime/build.rs`。
+# `:yume-where`：出廠自帶的碼表，一家一行。{0} 是方案名，{1} 是版本（「精華版
+# 日期」那一段是編譯時戳的，見 `yumete-ime/build.rs`）。
 key = "yume.where.builtin-is"
-zht = "靈明碼表 {0}"
-zhs = "灵明码表 {0}"
-en = "靈明 {0}"
+zht = "{0} {1}"
+zhs = "{0} {1}"
+en = "{0} {1}"
 
 [[message]]
 # `:yume-where`：可執行文件旁邊
@@ -11654,8 +11653,8 @@ en = "data kept by the installed Yume"
 [[message]]
 # `:yume-where`：碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。
 key = "yume.where.head"
-zht = "碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。"
-zhs = "码表和字料到哪里找的。先找到的先用；六层都没有，就用出厂自带的那一份。"
+zht = "碼表和字料到哪裏找的。先找到的先用；都没有，就用出廠自帶的那一份。"
+zhs = "码表和字料到哪里找的。先找到的先用；都没有，就用出厂自带的那一份。"
 en = "Where 碼表 and 字料 are looked for. First one holding a file wins; when none do, the built-in tables answer."
 
 [[message]]
@@ -11680,6 +11679,13 @@ zhs = "数据在哪"
 en = "where the data is"
 
 [[message]]
+# `:yume-where`：一張碼表都沒掛上的時候，「當前掛載的是」後面那一句
+key = "yume.where.no-table"
+zht = "未掛載碼表"
+zhs = "未挂载码表"
+en = "no 碼表 mounted"
+
+[[message]]
 # `:yume-where`：（没有）
 key = "yume.where.nothing"
 zht = "（没有）"
@@ -11689,9 +11695,9 @@ en = "(nothing)"
 [[message]]
 # `:yume-where`：現在答話的是：{0}
 key = "yume.where.now"
-zht = "現在答話的是：{0}"
-zhs = "现在答话的是：{0}"
-en = "answering now: {0}"
+zht = "當前掛載的是：{0}"
+zhs = "当前挂载的是：{0}"
+en = "mounted now: {0}"
 
 [[message]]
 # `:yume-where`：開在一個新緩衝區裏了

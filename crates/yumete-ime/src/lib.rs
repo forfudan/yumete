@@ -142,6 +142,25 @@ impl Scheme {
     /// 拼音 — the phonetic, fluency-only scheme.
     pub const PINYIN: Scheme = Scheme("pinyin");
 
+    /// **出廠那五家給人看的名字**（2026-10-08）。
+    ///
+    /// 和 [`Scheme::from_tag`] 認的那幾個中文名是同一組字。裝好的數據在手的時候
+    /// `data_manifest::factory_scheme_name` 也答得出來——可問這一支的那個場合
+    /// （`:yume-where` 報出廠自帶的碼表）**正是一臺什麼都沒裝的機器**，那一頭回
+    /// 的是空。方案名是專名，各語言同形，所以擺在這裏不經過文案表。
+    ///
+    /// 使用者自己裝的方案不在此列：它的名字寫在它自己那個槽的 `custom.yscm` 裏。
+    pub fn factory_name(self) -> Option<&'static str> {
+        Some(match self {
+            Scheme::LINGMING => "靈明",
+            Scheme::XINGCHEN => "星陳",
+            Scheme::QINGYUN => "卿雲",
+            Scheme::RIYUE => "日月",
+            Scheme::PINYIN => "拼音",
+            _ => return None,
+        })
+    }
+
     /// Every scheme, in menu order: what was shipped, then what the writer
     /// imported.
     ///
@@ -666,28 +685,33 @@ impl ImeSession {
     }
 
     /// Where the 碼表 in use came from, for `:yume` to say.
-    pub fn table_source(&self) -> String {
+    pub fn table_source(&self) -> Option<String> {
+        // Warning: **沒有碼表就回 `None`，不回一句中文**（2026-10-08）。這個 crate 沒有
+        // 文案表，所以從前那句寫死的「沒有碼表」在英文界面上也是中文，而且改一個
+        // 字要動代碼。說這句話的是呼叫方（`yume.where.no-table`）。
         if !self.available {
-            return "沒有碼表".to_string();
+            return None;
         }
         if let Some(path) = &self.table_file {
-            return path.display().to_string();
+            return Some(path.display().to_string());
         }
         if self.builtin {
-            return match builtin_version() {
+            return Some(match builtin_version() {
                 Some(version) => format!("出廠自帶 {version}"),
                 None => "出廠自帶".to_string(),
-            };
+            });
         }
         // The manifest knows which file this scheme's 碼表 is — and for a
         // 自定義方案, which the manifest says nothing about, the slot does.
         // Either way, asking beats guessing at the name.
-        own_data_set(self.scheme)
-            .into_iter()
-            .find(|f| f.kind == DataKind::Table)
-            .and_then(|f| find_file(&self.data_dirs, &f.file))
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "已安裝".to_string())
+        Some(
+            own_data_set(self.scheme)
+                .into_iter()
+                .find(|f| f.kind == DataKind::Table)
+                .and_then(|f| find_file(&self.data_dirs, &f.file))
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "已安裝".to_string()),
+        )
     }
 
     /// Build a session using [`yumete_config::data_search_dirs`].
@@ -1512,6 +1536,18 @@ pub fn has_builtin_table() -> bool {
     builtin::BUILTIN_LINGMING.is_some() || builtin::BUILTIN_XINGCHEN.is_some()
 }
 
+/// **哪幾家的碼表真編進了這個二進制**（2026-10-08）。
+///
+/// Warning: 從前只問得出「有沒有」（[`has_builtin_table`]）和「哪一版」
+/// （[`builtin_version`]），於是 `:yume-where` 那一行寫死了「靈明碼表」——而
+/// 2026-10-07 起裏面是兩張（靈明 ＋ 星陳），報出來的只有一張。
+pub fn builtin_tables() -> Vec<Scheme> {
+    [Scheme::LINGMING, Scheme::XINGCHEN]
+        .into_iter()
+        .filter(|&s| builtin_for(s).is_some())
+        .collect()
+}
+
 /// Which build of yume the built-in 碼表 came from.
 ///
 /// A table compiled into a binary is a *snapshot*, and a writer looking at a
@@ -2207,11 +2243,8 @@ mod tests {
         assert_eq!(s.scheme(), Scheme::LINGMING);
         s.input('a');
         assert!(!s.page_candidates().is_empty(), "and it really answers");
-        assert!(
-            s.table_source().starts_with("出廠自帶"),
-            "and says which one: {}",
-            s.table_source()
-        );
+        let source = s.table_source().expect("有表就說得出是哪一份");
+        assert!(source.starts_with("出廠自帶"), "and says which one: {source}");
 
         // Only 靈明 — the others are installed, and without their tables the
         // session is honestly unavailable rather than silently 靈明.
