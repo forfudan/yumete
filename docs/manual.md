@@ -618,7 +618,7 @@ know, do it anyway」.
 | `ma` *c* | select the brackets along with it |
 | `mi w` / `mi p` | select the **word** / the **paragraph** under the cursor |
 | `mi f` / `mi t` | select the **function** / the **class** the cursor is in (only in a file that is code all through; the innermost one) |
-| `mi a` / `mi c` | select the **parameter** / the **comment** the cursor is in (same as above; four languages: python rust go javascript) |
+| `mi a` / `mi c` | select the **parameter** / the **comment** the cursor is in (same as above; seven languages: python rust go javascript c java r) |
 | `ms` *c* | wrap the selection in *c* |
 | `md` *c* | take the *c* pair away; `md m` is 「whichever pair it is, take the innermost one away」 |
 | `mr` *c* *d* | turn the *c* pair into the *d* pair; `mr m` *d* turns the innermost one |
@@ -833,6 +833,9 @@ language name on the fence's first line decides which grammar is used:
 | CSS | `css` |
 | Rust | `rust` `rs` |
 | Go | `go` `golang` |
+| C | `c` |
+| Java | `java` `jav` |
+| R | `r` |
 
 | What | Colour |
 | --- | --- |

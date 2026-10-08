@@ -41,13 +41,16 @@ pub fn marks(syntax: Syntax) -> Marks {
         Syntax::Code(language) => {
             use crate::code::Language;
             match language {
-                Language::Python | Language::Toml | Language::Yaml => {
+                // R 的註釋和 Python 同形（`#'` 是 roxygen 的文檔註釋，不是另一種）。
+                Language::Python | Language::Toml | Language::Yaml | Language::R => {
                     Marks { line: Some("#"), block: None }
                 }
                 // C 那一族的兩種註釋：`//` 與 `/* */`。
-                Language::JavaScript | Language::Go | Language::Rust => {
-                    Marks { line: Some("//"), block: Some(("/*", "*/")) }
-                }
+                Language::JavaScript
+                | Language::Go
+                | Language::Rust
+                | Language::C
+                | Language::Java => Marks { line: Some("//"), block: Some(("/*", "*/")) },
                 Language::Css => Marks { line: None, block: Some(("/*", "*/")) },
                 Language::Html => Marks { line: None, block: Some(("<!--", "-->")) },
                 // JSON has no comment at all.
