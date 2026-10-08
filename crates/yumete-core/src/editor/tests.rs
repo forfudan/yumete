@@ -23152,3 +23152,61 @@ fn j_keeps_its_column_on_a_tab_indented_line() {
     press(&mut ed, "k");
     assert_eq!(ed.caret_in_line(), (1, 7), "回到那個 `e`");
 }
+
+/// **代碼裏按 Enter，縮進跟着下來**（2026-10-08 報的：「In `go file`, pressing enter
+/// in a code block won't auto indent to the same indentation level of the previous
+/// line」）。vim 的 `autoindent`、helix 的 `insert_newline` 都做這件事。
+///
+/// `o`/`O` 是同一件事的另外兩個入口，一起。
+#[test]
+fn enter_and_o_carry_the_indent_down_in_code() {
+    let code = |text: &str| {
+        let mut ed = typed(text);
+        ed.current_buffer_mut()
+            .set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Go));
+        ed
+    };
+    // Enter 在行尾：下一行從同一列起。
+    let mut ed = code("func f() {\n\treturn 1\n}\n");
+    ed.goto_line(2);
+    press(&mut ed, "A");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "func f() {\n\treturn 1\n\t\n}\n");
+
+    // `o` 也是。
+    let mut ed = code("func f() {\n\treturn 1\n}\n");
+    ed.goto_line(2);
+    press(&mut ed, "o");
+    assert_eq!(ed.current_buffer().text(), "func f() {\n\treturn 1\n\t\n}\n");
+
+    // `O` 開在上面那一行，縮進照這一行的來。
+    let mut ed = code("func f() {\n\treturn 1\n}\n");
+    ed.goto_line(2);
+    press(&mut ed, "O");
+    assert_eq!(ed.current_buffer().text(), "func f() {\n\t\n\treturn 1\n}\n");
+
+    // **真行首按下去什麼都不帶**（`gh` 走到第 0 列）：被推下去的那一行自己帶着
+    // 縮進，憑空再加一截就是往稿子裏寫沒打過的空白。
+    let mut ed = code("func f() {\n\treturn 1\n}\n");
+    ed.goto_line(2);
+    press(&mut ed, "gh");
+    press(&mut ed, "i");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "func f() {\n\n\treturn 1\n}\n");
+
+    // **停在縮進裏面，只帶光標前面那一截**——`goto_line` 落在第一個非空白上，所以
+    // 這裏光標前面正好一個 tab：上一行留一個，新的一行帶一個，同 vim。
+    let mut ed = code("func f() {\n\treturn 1\n}\n");
+    ed.goto_line(2);
+    press(&mut ed, "i");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "func f() {\n\t\n\treturn 1\n}\n");
+
+    // **散文不帶**：小說的首行縮進是畫出來的，檔案裏沒有空白——自動加一截就是
+    // 替作者寫字。
+    let mut ed = typed("    甲\n");
+    ed.goto_line(1);
+    press(&mut ed, "A");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "    甲\n\n");
+}
