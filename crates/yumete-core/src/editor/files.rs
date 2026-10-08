@@ -29,11 +29,84 @@ impl Editor {
         } else {
             (rope.to_string(), say!("count.whole-file"))
         };
+        let (han, chars, paragraphs) = self.counts_of(&text);
+        say!("count.report", what, han, chars, paragraphs)
+    }
+
+    /// **`:info`：這份檔案是什麼**（2026-10-08 定）。
+    ///
+    /// 由來：`:info docs` 那個名字讓人以為是「查看這個文檔的信息」，所以那條改名
+    /// `:instant-info`，而這個名字讓給真正回答那件事的一頁。
+    ///
+    /// `servers` 是**前端填的那一行**——哪幾個語言服務器在看着這一份，只有它知道
+    /// （`Servers::watching`）。核心這一頭把整張表排好，留那一格給它，於是表的形
+    /// 狀只有一處說得算。
+    /// `:info` 問出去了沒有——前端每輪取一次。
+    pub fn take_file_info_request(&mut self) -> bool {
+        std::mem::take(&mut self.file_info_request)
+    }
+
+    pub fn file_report(&self, servers: Option<String>) -> String {
+        let buffer = self.current_buffer();
+        let path = buffer.path().map(|p| p.to_path_buf());
+        let text = buffer.rope().to_string();
+        let (han, chars, _) = self.counts_of(&text);
+        let yes_no = |yes: bool| match yes {
+            true => say!("file.yes"),
+            false => say!("file.no"),
+        };
+        let mut out = format!("# {}  {}\n\n", say!("file.title"), buffer.display_name());
+        out.push_str("| | |\n| --- | --- |\n");
+        let mut row = |name: String, what: String| {
+            out.push_str(&format!("| {name} | {what} |\n"));
+        };
+        match &path {
+            Some(path) => row(say!("file.where"), format!("`{}`", path.display())),
+            None => row(say!("file.where"), say!("file.never-saved")),
+        }
+        let on_disk = path.as_ref().and_then(|p| std::fs::metadata(p).ok());
+        row(
+            say!("file.size"),
+            match &on_disk {
+                Some(it) => how_big(it.len()),
+                None => say!("file.never-saved"),
+            },
+        );
+        row(say!("file.unsaved"), yes_no(buffer.is_modified()));
+        row(say!("file.readonly"), yes_no(buffer.is_readonly()));
+        row(say!("file.lines"), buffer.line_count().to_string());
+        row(say!("file.chars"), chars.to_string());
+        row(say!("file.han"), han.to_string());
+        row(say!("file.language"), buffer.syntax().name().to_string());
+        // 換行符：檔案自己那一種（`\r\n` 的檔存回去還是 `\r\n`，#309）。
+        row(
+            say!("file.ending"),
+            match buffer.ending() {
+                "\r\n" => "CRLF".to_string(),
+                _ => "LF".to_string(),
+            },
+        );
+        if let Some(when) = on_disk.as_ref().and_then(|it| it.modified().ok()) {
+            row(say!("file.modified-at"), when_was(when));
+        }
+        row(say!("file.root"), format!("`{}`", self.project_root().display()));
+        if let Some(servers) = servers {
+            row(say!("file.servers"), servers);
+        }
+        out
+    }
+
+    /// **一段文字有幾個漢字、幾個字、幾段**——`:count` 和 `:info` 共用這一支。
+    ///
+    /// 「字」不含空白，而且**不含標記**（見 [`Self::without_markup`]：注音那一族
+    /// 算它注的那幾個字，不算標籤）。兩處各數一遍就是兩個答案，而它們說的是同一
+    /// 件事。
+    pub(super) fn counts_of(&self, text: &str) -> (usize, usize, usize) {
         let paragraphs = text.lines().filter(|l| !l.trim().is_empty()).count();
-        let prose = self.without_markup(&text);
+        let prose = self.without_markup(text);
         let chars = prose.iter().filter(|c| !c.is_whitespace()).count();
         let han = prose.iter().filter(|&&c| is_han(c)).count();
-        say!("count.report", what, han, chars, paragraphs)
+        (han, chars, paragraphs)
     }
 
     /// `text` with every ruby group reduced to the base it annotates — what a
@@ -1419,4 +1492,58 @@ impl Editor {
         self.status = say!("export.wrote", target.display());
         Ok(CommandOutcome::Continue)
     }
+}
+
+/// **多大**，給人看的那一種：`812 B`、`12.4 KB`、`3.1 MB`。
+///
+/// 一千零二十四進一位，小數點後一位——`:info` 那一頁上這個數是拿來估量的，不是
+/// 拿來對賬的（要準的那個數在 `ls -l` 那裏）。
+fn how_big(bytes: u64) -> String {
+    const STEP: f64 = 1024.0;
+    let names = ["B", "KB", "MB", "GB"];
+    let mut size = bytes as f64;
+    let mut which = 0;
+    while size >= STEP && which + 1 < names.len() {
+        size /= STEP;
+        which += 1;
+    }
+    match which {
+        0 => format!("{bytes} B"),
+        _ => format!("{size:.1} {}", names[which]),
+    }
+}
+
+/// **什麼時候改的**，`2026-10-08 13:02`。
+///
+/// 自己從 Unix 紀元算起，不拉一個日期庫進來：這一處是整個倉裏唯一要把時刻寫成
+/// 字的地方（`:yume-where` 那個版本號是編譯時戳好的字串）。閏年認，閏秒不認——
+/// 一份稿子的修改時間差一秒沒有人會發現，而多一條依賴是要養的。
+fn when_was(when: std::time::SystemTime) -> String {
+    let secs = match when.duration_since(std::time::UNIX_EPOCH) {
+        Ok(it) => it.as_secs() as i64,
+        Err(_) => return String::new(),
+    };
+    // 本地時區：拿 `localtime` 那一套要麼拉庫、要麼走 libc，所以這裏報的是 UTC
+    // 偏移之前的那個數——⚠ 它是 **UTC**，不是本地時間。
+    let days = secs.div_euclid(86_400);
+    let rest = secs.rem_euclid(86_400);
+    let (hour, minute) = (rest / 3600, (rest % 3600) / 60);
+    let (mut year, mut left) = (1970, days);
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        let in_year = if leap { 366 } else { 365 };
+        if left < in_year {
+            break;
+        }
+        left -= in_year;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let lengths = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 0;
+    while month < 12 && left >= lengths[month] {
+        left -= lengths[month];
+        month += 1;
+    }
+    format!("{year:04}-{:02}-{:02} {hour:02}:{minute:02} UTC", month + 1, left + 1)
 }

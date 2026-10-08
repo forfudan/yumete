@@ -21449,7 +21449,7 @@ fn the_info_command_picks_which_one_follows_the_cursor() {
     assert!(ed.showing(View::Info).is_none(), "出廠不開邊欄");
     assert_eq!(ed.docs_owed(), None, "不是文檔就不問服務器");
 
-    ed.execute(":info docs").unwrap();
+    ed.execute(":instant-info docs").unwrap();
     // Warning: **它不替人開一扇面板**（2026-09-29 第三次說這一句：「docs on
     // 只是开启即时显示文档功能，并不是说要强行打开侧栏显示」）。畫在哪是另一條
     // 軸——沒有邊欄就浮。
@@ -21462,7 +21462,7 @@ fn the_info_command_picks_which_one_follows_the_cursor() {
     assert!(ed.docs_due_in().is_some(), "而且要給循環一個鬧鐘，不然它一睡不醒");
 
     // `:info` 不帶名字：回到按稿子算。
-    ed.execute(":info").unwrap();
+    ed.execute(":instant-info").unwrap();
     assert_eq!(ed.info_live(), Info::Problems, "回到按稿子算");
     assert_eq!(ed.docs_owed(), None, "不是文檔就不問");
 
@@ -21678,7 +21678,7 @@ fn asking_and_showing_are_two_separate_things() {
     press(&mut ed, "gg");
 
     // Warning: **`:info docs` 不開邊欄。** 它只管「什麽時候問」。
-    ed.execute(":info docs").unwrap();
+    ed.execute(":instant-info docs").unwrap();
     assert!(ed.showing(View::Info).is_none(), "它不該替人開一扇面板");
 
     // Warning: **等它停穩**——光標剛動過的時候去抖那一道本來就攔着，不等的話
@@ -21743,10 +21743,10 @@ fn only_one_kind_is_ever_live() {
     // 出廠：代碼裏診斷自己冒，文檔要按鍵叫。
     assert_eq!(ed.info_live(), Info::Problems, "出廠診斷即時");
 
-    ed.execute(":info docs").unwrap();
+    ed.execute(":instant-info docs").unwrap();
     assert_eq!(ed.info_live(), Info::Docs, "換一個就是換一個");
 
-    ed.execute(":info diagnostics").unwrap();
+    ed.execute(":instant-info diagnostics").unwrap();
     assert_eq!(ed.info_live(), Info::Problems, "反過來也一樣");
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -22069,7 +22069,7 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
 
     // 換成文檔即時：那一格**當場**跟着換，不必關了再開（2026-09-29 報的第三次：
     // 「诊断在边栏中后……按下 docs on，结果文檔浮窗出现了而不是在侧栏中」）。
-    ed.execute(":info docs").unwrap();
+    ed.execute(":instant-info docs").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(320));
     assert!(ed.docs_owed().is_some(), "問得出去");
     ed.show_hover("fn one()");
@@ -23346,4 +23346,50 @@ fn the_offer_list_is_ranked_by_what_has_been_typed() {
     ed.show_offers(from_the_server());
     let (items, _) = ed.offers_here().expect("單子擺出來了");
     assert_eq!(items[0].label, "is_some_and", "沒打字就不重排");
+}
+
+/// **`:info`：這份檔案是什麼**（2026-10-08 定）。
+///
+/// 由來：`:info docs` 那個名字讓人以為是「查看這個文檔的信息」，所以那一條改名
+/// `:instant-info`，這個名字讓給真正回答那件事的一頁。
+#[test]
+fn the_file_report_says_what_this_file_is() {
+    let dir = std::env::temp_dir().join(format!("yumete-fileinfo-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(".yumete.toml"), "").unwrap();
+    let file = dir.join("ch01.md");
+    std::fs::write(&file, "# 卷一\n\n那年冬天，雪下得早。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(&file).unwrap();
+
+    let page = ed.file_report(Some("marksman（在跑）".into()));
+    for want in [
+        &say!("file.title"),
+        &say!("file.where"),
+        &say!("file.size"),
+        &say!("file.lines"),
+        &say!("file.han"),
+        &say!("file.language"),
+        &say!("file.root"),
+        &say!("file.servers"),
+    ] {
+        assert!(page.contains(want.as_str()), "少了「{want}」：\n{page}");
+    }
+    assert!(page.contains("ch01.md"), "{page}");
+    assert!(page.contains("marksman"), "服務器那一行是前端填的：\n{page}");
+    // 漢字數和 `:count` 說的是同一個數——兩處各數一遍就是兩個答案。
+    let (han, _, _) = ed.counts_of(&ed.current_buffer().rope().to_string());
+    assert!(page.contains(&format!("| {} | {han} |", say!("file.han"))), "{page}");
+    // 沒有服務器的時候那一行整個不寫，而不是寫一個空格。
+    let bare = ed.file_report(None);
+    assert!(!bare.contains(&say!("file.servers")), "{bare}");
+
+    // **還沒存過的草稿**：位置和大小都說「還沒存過」，不說一個假路徑。
+    let draft = Editor::new();
+    let page = draft.file_report(None);
+    assert_eq!(page.matches(&say!("file.never-saved")).count(), 2, "{page}");
+
+    std::fs::remove_dir_all(&dir).ok();
 }

@@ -227,6 +227,11 @@ pub enum Command {
     Word(WordCommand),
     /// 作品百科 (#287) — the report, one entry, or one of the settings.
     Wiki(WikiCommand),
+    /// **`:info`：這份檔案是什麼**（2026-10-08）。
+    ///
+    /// 和 [`Command::YumeWhere`] 同一條路：答案是**一頁**，而且有一行只有前端答
+    /// 得出來（哪幾個語言服務器在看着它）。
+    FileInfo,
     /// `:yank-on-delete [on|off]` — 「`d` 和 `c` 刪掉的東西進不進寄存器」
     /// （2026-10-08）。`None` 是不帶參數，報當前這一格。
     YankOnDelete(Option<bool>),
@@ -3173,10 +3178,25 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        // **這個名字 2026-10-08 讓給了「這份檔案是什麼」**，即時顯示那一條改叫
+        // `:instant-info`（見下面那一條）。
+        name: "info",
+        aliases: &[],
+        help: "cmd.commands.file-info",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::FileInfo)),
+    },
+    Entry {
         // **「什麽時候問」與「畫在哪」分開**（2026-09-29 定，原話：「即时显示应该
         // 做成一个命令开关而不使用快捷键……这样的话即时显示和在哪里显示就分开了，
         // 不会混在一起」）。畫在哪是 `空格 k`/`空格 K` 與 `PageUp`/`PageDown`。
-        name: "info",
+        //
+        // Warning: **2026-10-08 從 `:info` 改名 `:instant-info`**。原話：「`:info docs`
+        // 這個命令讓人誤解是查看这个文档的信息（位置、大小、作者、编辑时间、元
+        // 数据、关联的LSP等等）。能不能改成 `:instant-info` 来强调「及時」的含
+        // 義。」這條命令管的從來就是**什麼時候問**，不是這份檔案是什麼。
+        name: "instant-info",
         aliases: &[],
         help: "cmd.commands.info",
         needs: &[],
