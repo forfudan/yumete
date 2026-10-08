@@ -521,6 +521,8 @@ impl Editor {
     ) {
         let mut buffer = Buffer::from_text(&listing);
         buffer.name_as(&name);
+        // 同 [`Editor::open_report`]：算出來的單子沒有檔案，改它改不到任何地方。
+        buffer.set_readonly(true);
         if let Some(syntax) = syntax {
             buffer.set_syntax(syntax);
         }

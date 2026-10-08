@@ -1321,6 +1321,13 @@ en = "write it out as html or typst, layout and all"
 find = "導出 导出 輸出 输出 html typst 排版"
 
 [[message]]
+# :info ——這份檔案是什麼
+key = "cmd.commands.file-info"
+zht = "這份檔案：位置、大小、行字數、語言、哪幾個服務器在看着它"
+zhs = "这份档案：位置、大小、行字数、语言、哪几个服务器在看着它"
+en = "this file: where it is, how big, how many lines and characters, its language, which servers watch it"
+find = "檔案 档案 文件 信息 元數據 元数据 位置 大小 info file metadata"
+[[message]]
 # : 命令選單裏 format 那一項的說明（commands 組）
 key = "cmd.commands.format"
 zht = "照這種文件在配置裏說的那樣格式化（[language.markdown] format = …）"
@@ -3091,9 +3098,9 @@ find = "另存 改名 saveas rename"
 [[message]]
 # :yank-on-delete ——`d`/`c` 刪掉的東西進不進寄存器
 key = "cmd.yank-on-delete"
-zht = "`d` `c` 刪掉的東西要不要進寄存器。關掉就和 `A-d` `A-c` 對調：刪的不進，剪的進"
-zhs = "`d` `c` 删掉的东西要不要进寄存器。关掉就和 `A-d` `A-c` 对调：删的不进，剪的进"
-en = "whether `d` and `c` fill the register. Off swaps them with `A-d` and `A-c`: the deleting pair leaves it alone, the cutting pair fills it"
+zht = "`d` `c` 刪除時是否進寄存器。若關閉，則同 `A-d` `A-c` 功能對調"
+zhs = "`d` `c` 删除时是否进寄存器。若关闭，则同 `A-d` `A-c` 功能对调"
+en = "whether `d` and `c` fill the register. Off swaps them with `A-d` and `A-c`"
 find = "寄存器 剪 剪切 刪 删 刪除 删除 剪貼板 剪贴板 yank register cut delete"
 
 [[message]]
@@ -3883,8 +3890,8 @@ en = "yanked {0} character(s)"
 [[message]]
 # :yank-on-delete ——無參數時報當前狀態
 key = "editor.yank-on-delete-is"
-zht = "刪的時候進寄存器：{0}"
-zhs = "删的时候进寄存器：{0}"
+zht = "刪除時進寄存器：{0}"
+zhs = "删除时进寄存器：{0}"
 en = "deleting fills the register: {0}"
 
 [[message]]
@@ -3924,6 +3931,138 @@ en = "wrote {0}"
 
 
 # ── find ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :info：字數（不含空白，也不含標記——同 :count）
+key = "file.chars"
+zht = "字數（不含空白）"
+zhs = "字数（不含空白）"
+en = "characters (no spaces)"
+
+[[message]]
+# :info：換行符
+key = "file.ending"
+zht = "換行符"
+zhs = "换行符"
+en = "line ending"
+
+[[message]]
+# :info：漢字
+key = "file.han"
+zht = "漢字"
+zhs = "汉字"
+en = "han"
+
+[[message]]
+# :info：語言
+key = "file.language"
+zht = "語言"
+zhs = "语言"
+en = "language"
+
+[[message]]
+# :info：行數
+key = "file.lines"
+zht = "行數"
+zhs = "行数"
+en = "lines"
+
+[[message]]
+# :info：修改時間（磁碟上那一份的）
+key = "file.modified-at"
+zht = "修改時間"
+zhs = "修改时间"
+en = "last written"
+
+[[message]]
+# :info：還沒存過的草稿，沒有位置也沒有大小
+key = "file.never-saved"
+zht = "還沒存過"
+zhs = "还没存过"
+en = "never saved"
+
+[[message]]
+# :info 表格裏的「否」
+key = "file.no"
+zht = "否"
+zhs = "否"
+en = "no"
+
+[[message]]
+# :info 開在一個只讀的新緩衝區裏了
+key = "file.opened"
+zht = "開在一個新緩衝區裏了（只讀）"
+zhs = "开在一个新缓冲区里了（只读）"
+en = "opened in a new buffer (read-only)"
+[[message]]
+# :info：唯讀
+key = "file.readonly"
+zht = "唯讀"
+zhs = "只读"
+en = "read-only"
+
+[[message]]
+# :info：項目根
+key = "file.root"
+zht = "項目根"
+zhs = "项目根"
+en = "project root"
+
+[[message]]
+# :info：配置裏有這個服務器，可它還沒起來（或者機器上沒裝）
+key = "file.server-not-running"
+zht = "{0}（沒起來）"
+zhs = "{0}（没起来）"
+en = "{0} (not running)"
+
+[[message]]
+# :info：這一份起着的服務器，名字後面說它握完手沒有
+key = "file.server-ready"
+zht = "{0}（在跑）"
+zhs = "{0}（在跑）"
+en = "{0} (running)"
+
+[[message]]
+# :info：哪幾個語言服務器在看着這一份
+key = "file.servers"
+zht = "語言服務器"
+zhs = "语言服务器"
+en = "language servers"
+
+[[message]]
+# :info：大小
+key = "file.size"
+zht = "大小"
+zhs = "大小"
+en = "size"
+
+[[message]]
+# :info 這一頁的標題
+key = "file.title"
+zht = "這份檔案"
+zhs = "这份档案"
+en = "this file"
+
+[[message]]
+# :info：改過沒存
+key = "file.unsaved"
+zht = "改過沒存"
+zhs = "改过没存"
+en = "unsaved changes"
+
+[[message]]
+# :info：位置
+key = "file.where"
+zht = "位置"
+zhs = "位置"
+en = "where"
+
+[[message]]
+# :info 表格裏的「是」
+key = "file.yes"
+zht = "是"
+zhs = "是"
+en = "yes"
 
 [[message]]
 # :s 的模式是空的
@@ -9030,8 +9169,8 @@ en = "word mark"
 [[message]]
 # 設置：刪的時候進寄存器
 key = "set.editor.yank-on-delete"
-zht = "刪的時候進寄存器"
-zhs = "删的时候进寄存器"
+zht = "刪除時進寄存器"
+zhs = "删除时进寄存器"
 en = "deleting fills the register"
 
 [[message]]

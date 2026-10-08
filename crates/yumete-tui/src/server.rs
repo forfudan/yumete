@@ -533,6 +533,21 @@ impl Servers {
     /// 現在問的是服務器自己說的 `$/progress`（helix 也是這一條），外加「握手還
     /// 沒完成」那一小段；兩段都一定會結束。而且只算**這個緩衝區那種語言**的服
     /// 務器。
+    /// **哪幾個服務器在看着眼前這一份**，以及各自起來了沒有（2026-10-08，`:info`）。
+    ///
+    /// 名字是**命令名**，不是語言名：一種語言跑得了好幾個（#425），而「誰在服務
+    /// 這一份」問的就是那幾個程序。`ready` ＝ 握完手了，問得了問題。
+    pub fn watching(&self, editor: &Editor) -> Vec<(String, bool)> {
+        let Some(language) = Self::language_of(editor) else { return Vec::new() };
+        self.serving(language)
+            .into_iter()
+            .map(|name| {
+                let ready = self.running.get(&name).is_some_and(|s| s.ready);
+                (name, ready)
+            })
+            .collect()
+    }
+
     pub fn busy_since(&self, editor: &Editor) -> Option<std::time::Instant> {
         let language = Self::language_of(editor)?;
         self.serving(language)

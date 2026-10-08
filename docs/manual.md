@@ -3291,8 +3291,11 @@ four you ask for.
   sidebar**, like `␣K shows it in the sidebar` (which key depends on what is in front of
   you: the dictionary `␣N`, the wiki and the docs `␣K`, diagnostics `␣D`, the record
   `␣I`).
-- **`:info <name>`** changes which one comes up by itself; the five names are
-  `record`/`diagnostics`/`dictionary`/`wiki`/`docs`. A bare `:info` goes back to
+**`:info` is a different command** and answers a different question — 「what is this
+file」, as a page. The one below is about *when* the editor asks, not about the file.
+
+- **`:instant-info <name>`** changes which one comes up by itself; the five names are
+  `record`/`diagnostics`/`dictionary`/`wiki`/`docs`. A bare `:instant-info` goes back to
   deciding by the manuscript.
 - Each of the five has its own key, so press the one you want: `空格 n` the dictionary,
   `空格 k` the wiki or the docs, `空格 d` the diagnostics, `空格 t i` the record. Upper
@@ -5994,7 +5997,8 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:check-punct` | Punctuation: half-width marks in Chinese, `...`, a 「」（） opened and never closed, `gf` jumps there |
 | `:diagnostics-all` | Code: everything the language servers have said, `gf` jumps there. A cell of colour goes left of the line number too: solid vermilion is an error, the other three are a faint ground with `!` `i` `·` |
 | `:rules` [*column*…｜`off`] | Lay a ground down those columns (not a line, and it takes no space): `:rules 80 100 120`. With no numbers it is 80 and 100 (one for a python docstring, one for the code), `off` clears them. None at all out of the box, and none drawn vertically |
-| `:info` [*which one*] | Which one the 「info」 panel follows as you go: `record` `diagnostics` `dictionary` `wiki` `docs`. With nothing it goes back to deciding by the file (prose the wiki, code the diagnostics, a table the record) |
+| `:info` | **What this file is**: where it is, how big, how many lines and characters, its language, its line ending, when it was last written, which project it belongs to, and which language servers are watching it. Opens as a read-only page |
+| `:instant-info` [*which one*] | Which one the 「info」 panel follows as you go: `record` `diagnostics` `dictionary` `wiki` `docs`. With nothing it goes back to deciding by the file (prose the wiki, code the diagnostics, a table the record) |
 | `:check-charset` | 字集: characters in none of 通用規範/臺/港/古籍 — a typesetter will not have them either |
 | `:diff` [*path*] | What changed: by word, not by line. With no path, against the copy on disk |
 | `:git-diff` [*commit*] | The same, against what git has. With no commit it is `HEAD`; it compares **the unsaved copy** |

@@ -20,6 +20,10 @@ impl Editor {
     pub fn open_report(&mut self, name: &str, text: &str) {
         let mut buffer = Buffer::from_text(text);
         buffer.name_as(name);
+        // **生成出來的頁面是只讀的**（2026-10-08 定）。它沒有檔案，改了存不到任何
+        // 地方，而改一下就掛上「改過沒存」那個 `+`，`:q` 於是攔着不讓走——為一份
+        // 編輯器自己算出來的東西。`:readonly off` 照舊解得開。
+        buffer.set_readonly(true);
         self.add_buffer(buffer);
         self.set_cursor(0);
     }
@@ -712,6 +716,10 @@ impl Editor {
             // follow the paths with `gf`.
             Command::YumeWhere => {
                 self.scheme_request = Some(String::from("where"));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::FileInfo => {
+                self.file_info_request = true;
                 Ok(CommandOutcome::Continue)
             }
             Command::BuiltinScheme => {

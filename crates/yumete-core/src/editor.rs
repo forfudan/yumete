@@ -2527,6 +2527,11 @@ pub struct Editor {
     chaifen_request: Option<bool>,
     /// A pending `:scheme` request, waiting for the front end to reach the IME.
     scheme_request: Option<String>,
+    /// **`:info` 在等前端把那一頁擺出來**（2026-10-08）。
+    ///
+    /// 同 `scheme_request`：表上有一行只有前端答得出來（哪幾個語言服務器在看着這
+    /// 一份），所以核心把表排好，前端填那一格再開。
+    file_info_request: bool,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
     /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
@@ -3468,6 +3473,7 @@ impl Editor {
             tab_spaces: true,
             chaifen_request: None,
             scheme_request: None,
+            file_info_request: false,
             theme_request: None,
             trial: None,
             previewing: false,

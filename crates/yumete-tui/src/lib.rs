@@ -1074,6 +1074,29 @@ pub fn run(
         // non-blocking; what is not here yet lands on the next turn round.
         servers.follow(editor, config);
         servers.forget_closed_files(editor);
+        // **`:info`：這份檔案是什麼**（2026-10-08）。核心把那張表排好，這一頭只填
+        // 「哪幾個服務器在看着它」那一行——同 `:yume-where`，答案是一頁，而那一
+        // 行只有前端知道。擺在 `follow` 後面：剛打開的那一份要先起得了服務器，
+        // 這一行纔不是空的。
+        if editor.take_file_info_request() {
+            let watching = servers.watching(editor);
+            let said = match watching.is_empty() {
+                true => None,
+                false => Some(
+                    watching
+                        .into_iter()
+                        .map(|(name, ready)| match ready {
+                            true => say!("file.server-ready", name),
+                            false => say!("file.server-not-running", name),
+                        })
+                        .collect::<Vec<_>>()
+                        .join("、"),
+                ),
+            };
+            let report = editor.file_report(said);
+            editor.open_report(&say!("file.title"), &report);
+            editor.set_status(say!("file.opened"));
+        }
         // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
         servers.ask(editor, config);
         servers.ask_what(editor, config);
