@@ -1288,6 +1288,58 @@ impl Editor {
         true
     }
 
+    /// **這個括號裏該填什麼**——簽名提示（2026-10-08）。
+    ///
+    /// 報的原話：「In insert mode, when I type `(`, I expect that the function doc can
+    /// appear without triggering.」helix 的 `auto-signature-help` 是同一件事，出廠開着。
+    ///
+    /// 三條規矩：
+    ///
+    /// - **只在插入態，只在代碼裏**，同 [`Self::maybe_ask_what_comes_next`]。
+    /// - **`(` 和 `,` 問**：一個是這一次調用的開頭，一個是下一個參數——協議管這兩個
+    ///   叫觸發字符，helix 與 VS Code 用的也是它們。
+    /// - **`)` 收**：這一次調用填完了，那一則就不再是答案。
+    pub(super) fn maybe_ask_for_a_signature(&mut self, just_typed: &str) {
+        if !self.writes_code() || self.mode != Mode::Insert {
+            return;
+        }
+        let Some(last) = just_typed.chars().last() else { return };
+        if last == ')' {
+            self.signature = None;
+            self.signature_query = None;
+            return;
+        }
+        if last != '(' && last != ',' {
+            return;
+        }
+        let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
+            return;
+        };
+        self.signature_query = Some((path, line, utf16));
+    }
+
+    /// 簽名那一問，交給前端發。
+    pub fn take_signature_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.signature_query.take()
+    }
+
+    /// **答案回來了**：記在問的那個位置上。`None` ＝ 服務器說不出。
+    pub fn show_signature(&mut self, one: Option<crate::lsp::Signature>) {
+        self.signature = one.map(|one| (self.sel.head(), one));
+    }
+
+    /// **此刻該不該畫那一則簽名**。
+    ///
+    /// Warning: **出了插入態就不畫。** 它是打字當口的東西——`Esc` 之後還浮在那裏，就是
+    /// 一則過期的答案佔着正文。位置不比：手正在往裏填字，光標當然一直在動，那正是
+    /// 它要跟着的那次調用。
+    pub fn signature_here(&self) -> Option<&crate::lsp::Signature> {
+        match self.mode == Mode::Insert {
+            true => self.signature.as_ref().map(|(_, one)| one),
+            false => None,
+        }
+    }
+
     /// **字落到頁面上了，要不要順手問一句**（#53 ④，自動那一半）。
     ///
     /// 2026-09-21 定下的模型：**「只有當文字上屏才算字符落到屏幕上」觸發自動補

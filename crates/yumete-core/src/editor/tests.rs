@@ -23418,3 +23418,58 @@ fn a_slash_in_the_picker_stands_on_the_search_line() {
     press(&mut ed, "i");
     assert!(ed.picker().expect("還開着").typing(), "`i` 纔打字");
 }
+
+/// **插入態打 `(` 就問一次簽名**（2026-10-08 報的：「In insert mode, when I type `(`,
+/// I expect that the function doc can appear」）。
+///
+/// 三條規矩一起釘住：只在代碼裏、只在插入態、`)` 收。
+#[test]
+fn typing_an_open_bracket_asks_what_goes_in_it() {
+    let dir = std::env::temp_dir().join(format!("yumete-sig-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn main() {\n    v.push\n}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.goto_line(2);
+    press(&mut ed, "A");
+
+    // `(` 問出去。
+    ed.on_key(Key::Char('('));
+    assert!(ed.take_signature_query().is_some(), "`(` 問了一次");
+    // 答案回來，插入態裏看得見。
+    ed.show_signature(Some(crate::lsp::Signature {
+        label: "fn push(&mut self, value: T)".into(),
+        active: Some((8, 17)),
+    }));
+    assert_eq!(
+        ed.signature_here().map(|s| s.label.as_str()),
+        Some("fn push(&mut self, value: T)")
+    );
+    // `,` 再問一次——下一個參數。
+    ed.on_key(Key::Char('1'));
+    ed.on_key(Key::Char(','));
+    assert!(ed.take_signature_query().is_some(), "`,` 也問");
+    // `)` 這一次調用填完了，那一則就收起來。
+    ed.on_key(Key::Char(')'));
+    assert!(ed.signature_here().is_none(), "`)` 之後不畫了");
+
+    // 出插入態也收——它是打字當口的東西。
+    ed.on_key(Key::Char('('));
+    ed.show_signature(Some(crate::lsp::Signature {
+        label: "fn push(&mut self, value: T)".into(),
+        active: None,
+    }));
+    assert!(ed.signature_here().is_some());
+    ed.on_key(Key::Esc);
+    assert!(ed.signature_here().is_none(), "Esc 之後不畫了");
+
+    // 散文裏一個字都不問——那裏沒有函數。
+    let mut prose = typed("那年冬天。\n");
+    press(&mut prose, "A");
+    prose.on_key(Key::Char('('));
+    assert!(prose.take_signature_query().is_none(), "散文不問");
+
+    std::fs::remove_dir_all(&dir).ok();
+}

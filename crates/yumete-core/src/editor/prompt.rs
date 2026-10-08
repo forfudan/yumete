@@ -208,6 +208,9 @@ impl Editor {
                 // The session just ended is what `.` replays.
                 self.insert_recording.clear();
                 self.mode = Mode::Normal;
+                // 那一則簽名是打字當口的東西，出了插入態就不是答案了。
+                self.signature = None;
+                self.signature_query = None;
                 // A cell that grew while it was being typed in made its column
                 // too narrow for it. Laying the table out again on the way out
                 // is what keeps "aligned" a property of the file rather than a
@@ -318,6 +321,7 @@ impl Editor {
                 let one = c.encode_utf8(&mut buf).to_string();
                 self.insert_str(&one);
                 self.maybe_ask_what_comes_next(&one);
+                self.maybe_ask_for_a_signature(&one);
             }
             // **Tab types what the editor was told to, and Shift-Tab the
             // other one** — spaces out of the box, as VS Code and Zed do, so a
