@@ -3325,6 +3325,14 @@ type or signature. `C-n`/`C-p` (or the arrow keys) move a line, **`Tab` takes th
 one**, `Esc` puts it away. What goes in is the clean name — it will not drag along a
 `(${1:…})` placeholder form.
 
+**Typing `(` asks what goes in it.** In insert mode an open bracket — and every `,`
+after it — asks the server for the call's signature, and it floats where the docs do:
+`fn push(&mut self, value: T)`. Nothing to press. `)`, `Esc`, or leaving insert mode
+puts it away. (Which parameter you are on is **not** emphasised yet.)
+
+Warning: **the signature and a diagnostic never fight over that float**: a diagnostic is
+never drawn in insert mode (see below), which is exactly when the signature is.
+
 Warning: **this list and the IME's candidate bar do not fight.** While the code string
 is still in the IME's hands the editor does not know you are typing at all; the space
 bar and `2390` belong to the IME throughout. Only once a word is committed is it the
