@@ -9859,6 +9859,22 @@ fn draw_horizontal(
     let hit = editor.current_hit().filter(|_| {
         peek.is_some_and(|pane| pane.highlight.is_some()) || peek.is_none()
     });
+    // **光標停在括號上的時候，另一半那一格塗成金的**（2026-10-08，helix 的
+    // `ui.cursor.match`）。
+    //
+    // **只畫遠那一半。** 近那一半底下已經坐着光標自己那個反白塊——再點亮一次是同
+    // 一句話說兩遍，而兩個反白塊讀起來是兩個光標。vim 的 matchparen 與 VS Code
+    // 都點兩半，這一條照 helix（`highlight_focused_view_elements`）。
+    //
+    // 金，不換底色：底色在這一頁上是**讀者的**記號（選區、朱底的命中、光標那一
+    // 條帶），而金是這一頁說「你在的那個東西」用的墨色——挑候選時打中的那幾個
+    // 字母、簽名裏正在填的那個參數、格子兩邊那兩道豎線，用的都是它。
+    //
+    // 只在自己這一半問：`peek` 那一半是只讀的一眼，它沒有光標。
+    let partner = match peek {
+        None => editor.matching_bracket(),
+        Some(_) => None,
+    };
     let hit_line = hit.map(|(from, _)| rope.char_to_line(from.min(rope.len_chars())));
     let hit_style = Style::default().bg(ink.wash());
     // **同屏別的那幾處命中，淡一層**（2026-09-27 定，原話：「同屏幕別的命中的
@@ -10636,6 +10652,15 @@ fn draw_horizontal(
                 for style in styles.iter_mut().take(b).skip(a) {
                     *style = style.patch(hit_style);
                 }
+            }
+        }
+
+        // …and 配對的那一半，一格金（見上面 `partner` 那一段）。擺在最後：它只改
+        // 墨色，而它上面每一層改的都是底色——所以朱底的命中、選區那一塊都還在，
+        // 只有那一個括號的字變成金的。
+        if let Some(mate) = partner.filter(|&m| m >= row.start && m < row_end) {
+            if let Some(style) = styles.get_mut(mate - row.start) {
+                *style = style.fg(ink.gold());
             }
         }
 
@@ -22767,5 +22792,90 @@ fn squeezed(text: &str) -> String {
         assert!(whole.contains('├') || whole.contains('╠'), "那一行上面要有一道線");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- 配對的那一半（2026-10-08） --------------------------------------
+
+    /// **正文那幾行**上有幾格是金的，連它們畫的是什麼字一起報。
+    ///
+    /// Warning: **只數 `rows` 那幾行。** 狀態欄那個 `NOR` 本來就是金的（模式那一格），
+    /// 整頁一起數的話「只有一格」永遠是假的。
+    fn gold_cells(
+        buffer: &ratatui::buffer::Buffer,
+        ink: crate::theme::Palette,
+        rows: u16,
+    ) -> Vec<(u16, u16, String)> {
+        let gold = ink.gold();
+        let mut found = Vec::new();
+        for y in 0..rows.min(buffer.area.height) {
+            for x in 0..buffer.area.width {
+                if buffer[(x, y)].style().fg == Some(gold) {
+                    found.push((x, y, at(buffer, x, y)));
+                }
+            }
+        }
+        found
+    }
+
+    /// 一份只有括號、沒有別的記號的稿子，光標坐在第 `steps` 格上。
+    fn on_a_bracket(text: &str, steps: usize) -> (Editor, Config) {
+        let mut editor = editor_with(text);
+        for _ in 0..steps {
+            editor.on_key(Key::Char('l'));
+        }
+        let mut config = Config::default();
+        // 號碼欄、分詞、折疊標誌都會自己拿金的那一格或者占掉座標——這一條只驗
+        // 括號那一格。
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        (editor, config)
+    }
+
+    /// **光標停在括號上，另一半那一格是金的——而且只有那一格。**
+    ///
+    /// 照 helix（`highlight_focused_view_elements`，主題鍵 `ui.cursor.match`）：
+    /// **只點遠那一半**。近那一半底下坐着光標自己那個反白塊，兩塊反白讀起來是兩
+    /// 個光標。vim 的 matchparen 與 VS Code 都點兩半，我們不。
+    #[test]
+    fn the_far_half_of_the_pair_is_the_only_gold_cell() {
+        // 他說（不）了——`（` 在第 2 格，`）` 在第 4 格，一個漢字兩欄。
+        let (editor, config) = on_a_bracket("他說（不）了", 2);
+        let ink = ink(&config);
+        let buffer = render(&editor, &config, 40, 6);
+        let gold = gold_cells(&buffer, ink, 4);
+        assert_eq!(gold.len(), 1, "一格，不是兩格也不是零格：{gold:?}");
+        assert_eq!(gold[0].2, "）", "金的那一格畫的是閉的那一半：{gold:?}");
+        // 遠那一半纔是金的：近那一半（光標底下那個 `（`）照舊。
+        assert_ne!(gold[0].0, 4, "不是光標底下那一格：{gold:?}");
+
+        // 從閉的那一半往回數，答的是開的那一半。
+        let (editor, config) = on_a_bracket("他說（不）了", 4);
+        let buffer = render(&editor, &config, 40, 6);
+        let gold = gold_cells(&buffer, ink, 4);
+        assert_eq!(gold.len(), 1, "還是一格：{gold:?}");
+        assert_eq!(gold[0].2, "（", "金的那一格畫的是開的那一半：{gold:?}");
+    }
+
+    /// **光標不在括號上，整頁一格金的都沒有。** 這一條是上面那一條的另一半：
+    /// 沒有這一句，一頁上本來就有的金（折疊標誌、格子兩道豎線）會讓上面那條恆真。
+    #[test]
+    fn an_ordinary_character_lights_nothing_up() {
+        // 光標坐在「不」上——括號裏面，不是括號本身。
+        let (editor, config) = on_a_bracket("他說（不）了", 3);
+        let buffer = render(&editor, &config, 40, 6);
+        let gold = gold_cells(&buffer, ink(&config), 4);
+        assert!(gold.is_empty(), "一格都不該有：{gold:?}");
+    }
+
+    /// **竪排那一頁同形。** 同一份稿子換個版面不該少一個記號。
+    #[test]
+    fn the_vertical_page_lights_the_far_half_too() {
+        let (mut editor, _) = on_a_bracket("他說（不）了", 2);
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 40, 12);
+        let gold = gold_cells(&buffer, ink(&config), 10);
+        assert_eq!(gold.len(), 1, "一格，不是兩格也不是零格：{gold:?}");
+        // 竪排把括號換成竪着的那一式（`）` → `︶`，U+FE36），所以對的是那一個。
+        assert_eq!(gold[0].2, "\u{fe36}", "金的那一格畫的是閉的那一半：{gold:?}");
     }
 }

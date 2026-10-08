@@ -623,6 +623,9 @@ know, do it anyway」.
 | `md` *c* | take the *c* pair away; `md m` is 「whichever pair it is, take the innermost one away」 |
 | `mr` *c* *d* | turn the *c* pair into the *d* pair; `mr m` *d* turns the innermost one |
 
+**With the cursor on a bracket, its partner is lit in 金** — one cell, and the far half
+only: the cursor is already sitting on the near one. No setting turns it off.
+
 The `m` in `md m` and `mr m` is helix's spelling (its `surround_delete` takes it too).
 `md m` also takes away markdown's `**` `*` `~~` `==` `` ` `` and links.
 

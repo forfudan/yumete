@@ -4406,16 +4406,22 @@ fn is_wide(c: char) -> bool {
 }
 
 /// The matching `close` for the `open` at `from`, counting nesting.
+///
+/// Warning: **走迭代器，不是逐格 `rope.char(i)`**（2026-10-08 量出來的）。`char(i)` 每一
+/// 格都從樹根重新索一遍，而這兩支走的是一整條連續的字符——四十萬字掃到底，
+/// `char(i)` 是 **22.8 ms**，`chars_at` 是 **1.3–2.3 ms**（release，同一臺機器，
+/// `editor::matching::tests::how_long_does_the_worst_case_take` 重跑得了）。
+/// 從前只有按鍵那一路問得到它（`mm`/`md`/`mr`），22 ms 看不出來；
+/// `matching_bracket` 是**一幀問一次**，於是這一條成了畫面的事。
 fn find_forward(rope: &Rope, from: usize, open: char, close: char) -> Option<usize> {
     let mut depth = 0usize;
-    for i in from..rope.len_chars() {
-        let c = rope.char(i);
+    for (at, c) in (from..).zip(rope.chars_at(from.min(rope.len_chars()))) {
         if c == open {
             depth += 1;
         } else if c == close {
             depth -= 1;
             if depth == 0 {
-                return Some(i);
+                return Some(at);
             }
         }
     }
@@ -4423,16 +4429,20 @@ fn find_forward(rope: &Rope, from: usize, open: char, close: char) -> Option<usi
 }
 
 /// The matching `open` for the `close` at `from`, counting nesting.
+///
+/// 同上一支：往回也走迭代器（`Chars::prev`），不逐格索引。
 fn find_backward(rope: &Rope, from: usize, open: char, close: char) -> Option<usize> {
     let mut depth = 0usize;
-    for i in (0..=from).rev() {
-        let c = rope.char(i);
+    let mut at = (from + 1).min(rope.len_chars());
+    let mut chars = rope.chars_at(at);
+    while let Some(c) = chars.prev() {
+        at -= 1;
         if c == close {
             depth += 1;
         } else if c == open {
             depth -= 1;
             if depth == 0 {
-                return Some(i);
+                return Some(at);
             }
         }
     }

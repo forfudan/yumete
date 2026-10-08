@@ -10,21 +10,43 @@ use super::*;
 impl Editor {
     // ---- Match mode (Helix `m`) -------------------------------------------
 
-    /// Link to the bracket matching the one under the cursor (`mm`).
-    pub(super) fn goto_matching_bracket(&mut self) {
+    /// **光標底下那個括號的另一半在哪**（2026-10-08），字符下標。
+    ///
+    /// 光標不在括號上、或者那一半不存在（括號沒配對）就是 `None`。
+    ///
+    /// Warning: **一幀問一次，所以它不許把緩衝攤開。** 走的是 `mm` 那兩支
+    /// （`find_forward`/`find_backward`），一個 `String`、一個 `Vec` 都不造。
+    ///
+    /// 最壞的那一檔是「光標停在一個**配不上**的括號上」——那時要從光標一路掃到
+    /// 檔尾。量過（2026-10-08，release，四十萬字一行，跑三趟）：**1.3–2.3 ms**。
+    /// 原本是 22.8 ms——掃法本來是逐格 `rope.char(i)`，為這一支改成走迭代器了
+    /// （理由寫在 `find_forward` 那裏）。配得上的時候掃到那一半就停，正常稿子上
+    /// 是幾微秒。所以不設上限：那一檔要湊齊「一行四十萬字」加「光標正停在一個配
+    /// 不上的括號上」纔碰得到，而它已經比畫一幀便宜。
+    ///
+    /// Warning: **引號不算一對**（`closing_of`/`opening_of` 跳過 `open == close`）。
+    /// `"` 的兩半長得一樣，站在一個上面說不出另一半在左還是在右——helix 那一支
+    /// 走語法樹，也只認括號。
+    pub fn matching_bracket(&self) -> Option<usize> {
         let rope = self.current_buffer().rope();
-        if self.sel.head() >= rope.len_chars() {
-            return;
+        let here = self.sel.head();
+        if here >= rope.len_chars() {
+            return None;
         }
-        let here = rope.char(self.sel.head());
-        let target = if let Some(close) = closing_of(here) {
-            find_forward(rope, self.sel.head(), here, close)
-        } else if let Some(open) = opening_of(here) {
-            find_backward(rope, self.sel.head(), open, here)
-        } else {
-            None
-        };
-        if let Some(pos) = target {
+        let c = rope.char(here);
+        if let Some(close) = closing_of(c) {
+            return find_forward(rope, here, c, close);
+        }
+        let open = opening_of(c)?;
+        find_backward(rope, here, open, c)
+    }
+
+    /// Link to the bracket matching the one under the cursor (`mm`).
+    ///
+    /// **跳的那一格和畫成金的那一格是同一個答案**（2026-10-08）：兩支寫兩遍就意味
+    /// 着頁面指着一格而 `mm` 跳到另一格。
+    pub(super) fn goto_matching_bracket(&mut self) {
+        if let Some(pos) = self.matching_bracket() {
             self.move_head(pos);
         }
     }
@@ -1341,4 +1363,78 @@ fn pair_is_made_of_marks(
     let (open, _, close, _) = pair;
     let (out, inn, inn_end, out_end) = markup;
     (out..inn).contains(&open) && (inn_end..out_end).contains(&close)
+}
+
+// Warning: **測試模組擺在檔尾。** `messages.rs` 那張「每個標籤都有條目」的網把源碼切在
+// 第一個頂格的 `#[cfg(test)]\nmod ` 處，擺在檔案中間它後面所有的 `say!` 都從網裏消失。
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 把 `text` 放進一份新的緩衝，光標坐在第 `at` 格上。
+    fn at_char(text: &str, at: usize) -> Editor {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().replace(0..0, text).unwrap();
+        ed.sel.collapse_to(at);
+        ed
+    }
+
+    /// **三族括號各問一次**，兩頭都認：站在開的那一半上往後找，站在閉的那一半上往前找。
+    #[test]
+    fn the_partner_of_the_bracket_under_the_cursor() {
+        assert_eq!(at_char("a(bc)d", 1).matching_bracket(), Some(4), "( 的另一半");
+        assert_eq!(at_char("a(bc)d", 4).matching_bracket(), Some(1), ") 的另一半");
+        assert_eq!(at_char("a[bc]d", 1).matching_bracket(), Some(4), "[ 的另一半");
+        assert_eq!(at_char("a[bc]d", 4).matching_bracket(), Some(1), "] 的另一半");
+        assert_eq!(at_char("a{bc}d", 1).matching_bracket(), Some(4), "花括號的另一半");
+        assert_eq!(at_char("a{bc}d", 4).matching_bracket(), Some(1), "花括號，從閉的那一半");
+        // 中文稿子裏的括號也一樣——`PAIRS` 十九對全收。
+        assert_eq!(at_char("他說（不）了", 2).matching_bracket(), Some(4), "全角括號的另一半");
+    }
+
+    /// **巢狀的數層數**：外面那一對配外面那一對。
+    #[test]
+    fn nesting_is_counted_not_guessed() {
+        // 套着的：(a(b)c)
+        let text = "(a(b)c)";
+        assert_eq!(at_char(text, 0).matching_bracket(), Some(6), "外層");
+        assert_eq!(at_char(text, 6).matching_bracket(), Some(0), "外層，從閉的那一半數回去");
+        assert_eq!(at_char(text, 2).matching_bracket(), Some(4), "內層");
+        assert_eq!(at_char(text, 4).matching_bracket(), Some(2), "內層，從閉的那一半數回去");
+        // 並排的：((a)(b))——第 1 格那個 `(` 配的是第 3 格，不是最外面那一個。
+        let text = "((a)(b))";
+        assert_eq!(at_char(text, 0).matching_bracket(), Some(7), "最外層");
+        assert_eq!(at_char(text, 1).matching_bracket(), Some(3), "並排的第一對");
+        assert_eq!(at_char(text, 4).matching_bracket(), Some(6), "並排的第二對");
+        assert_eq!(at_char(text, 7).matching_bracket(), Some(0), "從最外面那一半數回去");
+    }
+
+    /// **光標不在括號上就什麼都不說。** 這一條是整件事的閘：答了就有一格被塗成金的。
+    #[test]
+    fn an_ordinary_character_has_no_partner() {
+        assert_eq!(at_char("a(bc)d", 0).matching_bracket(), None, "字母 a");
+        assert_eq!(at_char("a(bc)d", 2).matching_bracket(), None, "括號裏面的 b");
+        assert_eq!(at_char("a(bc)d", 5).matching_bracket(), None, "字母 d");
+        assert_eq!(at_char("", 0).matching_bracket(), None, "空緩衝");
+        // 配不上的括號也沒有另一半——掃到底，答 `None`。
+        assert_eq!(at_char("a(bc", 1).matching_bracket(), None, "沒有閉的那一半");
+        // 引號的兩半長得一樣，說不出另一半在哪一邊（見那一支的 Warning）。
+        assert_eq!(at_char("a\"bc\"d", 1).matching_bracket(), None, "半角雙引號");
+    }
+
+    /// **量一量：最壞的那一檔有多貴。**
+    ///
+    /// 一幀問一次，所以要緊的是「配不上的括號」那一檔——它要從光標一路掃到檔尾。
+    /// 2026-10-08 量的那個數記在 `matching_bracket` 的註釋裏；留着這一支是為了重跑得了。
+    #[test]
+    #[ignore = "量數用的，不是斷言"]
+    fn how_long_does_the_worst_case_take() {
+        let text = format!("({}", "字".repeat(400_000));
+        let ed = at_char(&text, 0);
+        let began = std::time::Instant::now();
+        let found = ed.matching_bracket();
+        let took = began.elapsed();
+        assert_eq!(found, None, "配不上，所以整條掃到底了");
+        println!("四十萬字掃到底：{took:?}");
+    }
 }
