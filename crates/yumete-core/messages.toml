@@ -6392,6 +6392,20 @@ zhs = "显示帮助信息"
 en = "the help pages"
 
 [[message]]
+# 開場屏：:keymap 那一行
+key = "intro.keymap"
+zht = "修改鍵位 (vim / helix)"
+zhs = "修改键位 (vim / helix)"
+en = "change the key map (vim / helix)"
+
+[[message]]
+# 開場屏：:lang 那一行
+key = "intro.lang"
+zht = "修改顯示語言"
+zhs = "修改显示语言"
+en = "change the display language"
+
+[[message]]
 # 開場屏：走一遍教程
 key = "intro.learn"
 zht = "打開基本教程"
