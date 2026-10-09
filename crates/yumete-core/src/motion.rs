@@ -409,12 +409,17 @@ struct Window {
     hi: usize,
     /// 行的兩頭（不含換行）。窗的那一頭正好落在這上面，那一頭的邊界就是真的。
     line: (usize, usize),
+    /// **窗左邊外頭最後一條詞的終點**，不知道就是 `None`。
+    ///
+    /// 窗往前推的時候，被丟掉那一扇裏「終點不超過新 `lo`」的那幾條還是真的，
+    /// 最靠右的那一條就是這一格——[`Window::leading`] 要的正是它。
+    prior: Option<usize>,
 }
 
 impl Window {
     /// 整行就是一扇窗——短行走的這一條，兩頭都是真邊界。
     fn whole(words: Vec<(usize, usize)>, line: (usize, usize)) -> Window {
-        Window { words, lo: line.0, hi: line.1, line }
+        Window { words, lo: line.0, hi: line.1, line, prior: None }
     }
 
     /// 只切 `[lo, hi]` 這一段。
@@ -425,13 +430,14 @@ impl Window {
         hi: usize,
         grain: Grain,
         seg: &dyn Segmenter,
+        prior: Option<usize>,
     ) -> Window {
         let text = rope.slice(lo..hi).to_string();
         let words = segment_text(&text, grain, seg)
             .into_iter()
             .map(|(a, b)| (lo + a, lo + b))
             .collect();
-        Window { words, lo, hi, line }
+        Window { words, lo, hi, line, prior }
     }
 
     /// 這扇窗罩着 `pos` 嗎——也就是「`pos` 在不在詞裏」這種問題它答不答得出。
@@ -449,6 +455,21 @@ impl Window {
     fn ended(&self) -> &[(usize, usize)] {
         let cut = self.hi < self.line.1 && self.words.last().is_some_and(|&(_, e)| e == self.hi);
         &self.words[..self.words.len() - usize::from(cut)]
+    }
+
+    /// **第 `k` 條詞前面那條詞的終點** —— `e` 要的那半個邊界（見 [`next_word_end`]）。
+    ///
+    /// Warning: **`k == 0` 的時候不許拿行首頂替**（2026-10-09）。窗是往前推出來的
+    /// 時候，第一條詞前面那條詞落在窗外，而它的終點**可能在 `pos` 後面**：光標正站
+    /// 在一個詞的末字上、下一個詞的尾巴又遠在這扇窗之外，那條邊界就是 `pos + 1`。
+    /// 拿行首頂替會讓 `e` 把光標那個字一起收進去，`de` 就多吃一個字。被丟掉的那一
+    /// 扇窗替我們記住了它（[`Window::prior`]）；真的誰都不知道的時候，那條邊界必定
+    /// 在 `pos` 前面（不然推窗之前就問出來了），行首與它同一個答案。
+    fn leading(&self, k: usize) -> usize {
+        match k {
+            0 => self.prior.unwrap_or(self.line.0),
+            _ => self.words[k - 1].1,
+        }
     }
 }
 
@@ -482,18 +503,24 @@ fn near_words<T>(
     let pos = pos.clamp(ls, le);
     let mut lo = pos.saturating_sub(WORD_REACH).max(ls);
     let mut hi = (pos + WORD_REACH).min(le);
+    let mut prior = None;
     loop {
-        if let Some(found) = pick(&Window::cut(rope, (ls, le), lo, hi, grain, seg)) {
+        let window = Window::cut(rope, (ls, le), lo, hi, grain, seg, prior);
+        if let Some(found) = pick(&window) {
             return Some(found);
         }
         match forward {
             true if hi < le => {
                 lo = hi - WORD_SEAM;
                 hi = (lo + 2 * WORD_REACH).min(le);
+                // 丟掉這一扇之前，把它左半邊那條真邊界留下來（`Window::prior`）。
+                prior = window.words.iter().map(|&(_, e)| e).filter(|&e| e <= lo).max().or(prior);
             }
             false if lo > ls => {
                 hi = lo + WORD_SEAM;
                 lo = hi.saturating_sub(2 * WORD_REACH).max(ls);
+                // 往回推的時候窗的左邊往外挪，上一扇記下的那條邊界就不在窗外了。
+                prior = None;
             }
             // 推到行頭了：這一行真的沒有。
             _ => return None,
@@ -1006,12 +1033,12 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
 /// The end (last character) of the next word after `pos` (`e` / `E`).
 pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> (usize, usize) {
     for line in line_of(rope, pos)..rope.len_lines() {
-        // Warning: **窗把前一條切掉的時候，`leading` 照樣對**（2026-10-08）。那一格
-        // 只在它等於 `pos + 1` 的時候改得了答案——也就是「前一個詞的末字正是 `pos`」
-        // ——因爲被跳過的那一條末字不超過 `pos`，所以它的終點不超過 `pos + 1`，再往
-        // 前就一律被 `pos.max(..)` 壓掉了。而 `pos + 1` 這條邊界在罩着 `pos` 那一扇
-        // 窗的正中間，窗答得出；真答不出的那幾扇（往後推過去的）裏 `k == 0` 走的是
-        // 行首那一枝，`pos.max(行首)` 仍舊是 `pos`，與整行那一版同一個答案。
+        // Warning: **那半個邊界要跟着窗走**（2026-10-09 改）。從前這裏論證過「窗把
+        // 前一條切掉也不要緊」，論證是錯的：`pos + 1` 這條邊界只在**罩着 `pos` 那一
+        // 扇**窗的正中間，而窗一往前推，`pos` 就落在窗外了——光標站在一個詞的末字
+        // 上、下一個詞的尾巴又遠在一扇窗之外（`ab` ＋ 兩萬個 `x`，光標在 `b`），推
+        // 過去那一扇裏 `k == 0`，拿行首頂替就把 `b` 一起收進了選區，`de` 多吃一個
+        // 字。現在那條邊界由被丟掉的那一扇記下來，見 [`Window::leading`]。
         let found = near_words(rope, line, pos, grain, seg, true, |w| {
             let words = w.ended();
             let (k, &(_, end)) =
@@ -1021,10 +1048,7 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
             // selection starts at the end of the word before, not at the start
             // of this one, and `類` + `e` gives `␠你也是人類` rather than
             // dropping the space on the floor.
-            let leading = match k {
-                0 => rope.line_to_char(line),
-                _ => words[k - 1].1,
-            };
+            let leading = w.leading(k);
             // …but never *behind* the caret: when the caret is already inside
             // this word, `e` takes the rest of it and nothing before.
             Some((pos.max(leading), end.saturating_sub(1)))
@@ -1701,6 +1725,34 @@ mod tests {
                     "{grain:?} 第 {at} 格的 `b` 錨點（詞首要不要退一格）"
                 );
             }
+        }
+    }
+
+    /// **一個詞長過一扇窗的時候，`e` 的錨點還是對的**（#315，2026-10-09）。
+    ///
+    /// 靶造得極小：`ab` ＋ 一個空格 ＋ 兩萬個 `x`，光標按在 `b` 上。`b` 是前一個詞
+    /// 的末字，而下一個詞的尾巴在兩萬格之外——窗要往前推四趟纔問得出來，而 `pos`
+    /// 在第一趟之後就落在窗外了。從前推過去那一扇用行首頂替那條邊界，於是 `e` 從
+    /// `b` 起選（`de` 把 `b` 一起吃掉）；對的答案是從那個空格起選。
+    ///
+    /// 上面那一支逐位對照的測試看不見這個：[`one_long_line`] 裏最長的「詞」不過十
+    /// 幾個字，窗邊永遠落在一條真邊界附近，推一扇窗從來不會跨過一整個詞。
+    #[test]
+    fn a_word_longer_than_a_window_still_leaves_the_caret_out_of_the_span() {
+        let mut text = String::from("ab ");
+        text.push_str(&"x".repeat(5 * WORD_REACH));
+        text.push('\n');
+        let len = text.chars().count() - 1;
+        assert!(len > WORD_WINDOW_LINE, "靶行要長到走窗口：{len}");
+        let r = rope(&text);
+        let seg = CategorySegmenter;
+        for grain in [Grain::Coarse, Grain::Big, Grain::Word] {
+            assert_eq!(
+                next_word_end(&r, 1, grain, &seg),
+                whole_next_word_end(&r, 1, grain, &seg),
+                "{grain:?}：`b` 上的 `e`"
+            );
+            assert_eq!(next_word_end(&r, 1, grain, &seg), (2, len - 1), "{grain:?}");
         }
     }
 
