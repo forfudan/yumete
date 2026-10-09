@@ -10428,11 +10428,14 @@ fn widening_a_pattern_never_makes_it_stop_compiling() {
     assert_eq!(ed.search().total, 1);
 }
 
-/// **`R` 動得太多就走中央那扇窗**（2026-10-03 定）。
+/// **`R` 動一個以上的檔就走中央那扇窗**（2026-10-09 定）。
 ///
-/// 原話：「我觉得要同时满足两个条件吧：1. 超过10个文件 2. 超过100处。」兩個條件
-/// 都過了纔停下來；不到的照舊是狀態欄上那一行。同 `:w` 那一條的精神——平日改個
-/// 錯字一次都不彈。
+/// 原話：「whenever we changed more than one buffer/files, we do a confirm」。
+/// 兩個檔就彈；只動一個檔的照舊是狀態欄上那一行。
+///
+/// Warning: **從前的閘是「超過 10 個文件**而且**超過 100 處」**（2026-10-03 定：「我觉得
+/// 要同时满足两个条件吧」）。那條線底下三個檔和一個檔一字不差，而那正是「看得見
+/// 的那一處」和「看不見的那一本」的分界。
 #[test]
 fn replacing_a_whole_book_asks_in_the_middle_of_the_screen() {
     let armed = |files: usize, hits: usize| {
@@ -10454,19 +10457,22 @@ fn replacing_a_whole_book_asks_in_the_middle_of_the_screen() {
         ed
     };
 
-    // 兩個都過了：中央那一扇。
+    // 一本書：中央那一扇。
     let ed = armed(20, 2000);
     let asked = ed.query().expect("中央那一扇要擺出來");
     assert_eq!(asked.title, say!("write.oversize-title"), "和 :w 同一個標題");
     assert_eq!(asked.body, say!("search.replace-all-what", 20, 2000));
     assert_eq!(asked.choices.len(), 2, "繼續/取消，沒有「看一眼」");
 
-    // 檔數夠而處數不夠：狀態欄一行。
-    let ed = armed(20, 30);
-    assert!(ed.query().is_none(), "三十處不必停下來");
-    // 處數夠而檔數不夠：同上。
-    let ed = armed(3, 2000);
-    assert!(ed.query().is_none(), "三個檔不必停下來");
+    // **兩個檔也彈**，哪怕只有兩處——這是 2026-10-09 換掉的那一條。
+    let ed = armed(2, 2);
+    let asked = ed.query().expect("兩個檔就該停一下");
+    assert_eq!(asked.body, say!("search.replace-all-what", 2, 2));
+
+    // 一個檔：狀態欄一行就夠。
+    let ed = armed(1, 9);
+    assert!(ed.query().is_none(), "一個檔不必停下來");
+    assert_eq!(ed.status(), say!("search.replace-all-sure", 9));
 }
 
 /// **`R` 問的問題要和名單上那個一樣**（2026-10-02 一輪審查報來的，會丟字）。
@@ -10572,9 +10578,12 @@ fn replacing_them_all_reaches_the_files_past_the_end_of_the_list() {
 
     ed.search_for_test().field = crate::search_panel::Field::Results;
     ed.on_key(Key::Char('R'));
+    // 兩個檔，所以走中央那一扇（2026-10-09 起的閘）。數的是**真會動的那幾個檔**，
+    // 不是名單——名單封頂 500 條，兩個數一分家，問句就在替一件和它說的不一樣的
+    // 事徵求同意。
     assert_eq!(
-        ed.status(),
-        say!("search.replace-all-sure-files", MOST + 102, 2),
+        ed.query().expect("兩個檔走中央那一扇").body,
+        say!("search.replace-all-what", 2, MOST + 102),
         "問句說的檔數要是真會動的那幾個"
     );
     ed.on_key(Key::Char('y'));
@@ -24426,4 +24435,134 @@ fn a_walk_told_to_stop_stops_at_the_next_entry() {
     crate::editor::walk_until_told(&dir, &sieve, &stop, &mut |_| none += 1);
     assert_eq!(none, 0, "一開頭就停");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **撤回一次跨檔替換也要先問**（2026-10-09 定）。
+///
+/// 原話：「whenever we changed more than one buffer/files, we do a confirm」。替換問
+/// 一次，撤回也問一次，兩頭對稱。唯二兩個做得出「一個手勢跨檔撤回」的編輯器都是
+/// 這樣（IntelliJ 的 `Undo Replace?`、VS Code 的 `Undo in N Files`/`Undo this File`）。
+#[test]
+fn taking_a_cross_file_replacement_back_asks_first() {
+    let (dir, mut ed) = a_book_with_frost("ask");
+    assert_eq!(ed.current_buffer().rope().to_string(), "霜丙\n", "出發的是丙");
+    replace_the_frost(&mut ed);
+    // 三個檔都換了，人回到出發那一份。
+    assert_eq!(ed.status(), say!("search.replaced", 3));
+
+    ed.on_key(Key::Char('u'));
+    let asked = ed.query().expect("三個檔要先問一句");
+    assert_eq!(asked.title, say!("write.oversize-title"), "和替換那一扇同一個標題");
+    assert_eq!(asked.body, say!("search.undo-all-what", 3, 3));
+    // 三顆：全部撤銷／只撤銷眼前這一份／不撤銷。眼前這一份是丙，它也在這一批裏。
+    let labels: Vec<&str> = asked.choices.iter().map(|one| &*one.label).collect();
+    assert_eq!(
+        labels,
+        [
+            say!("search.undo-all-go"),
+            say!("search.undo-all-one", "丙.md"),
+            say!("search.undo-all-no")
+        ],
+        "「只撤銷」寫的是眼前那一份的名字"
+    );
+
+    // 「不撤銷」：一個字都不動，而那一批留在案上。
+    ed.on_key(Key::Char('n'));
+    assert!(ed.query().is_none(), "窗關了");
+    assert_eq!(ed.current_buffer().rope().to_string(), "雪丙\n", "還是換過的樣子");
+
+    // 再按一下 `u`，窗照樣出來——那一批沒丟。
+    ed.on_key(Key::Char('u'));
+    assert!(ed.query().is_some(), "那一批還在案上");
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.status(), say!("search.undone-files", 3));
+    for name in ["甲.md", "乙.md", "丙.md"] {
+        ed.open_file(dir.join(name)).unwrap();
+        assert!(ed.current_buffer().rope().to_string().starts_with('霜'), "{name} 復原了");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **只撤銷眼前這一份，別的留着**（2026-10-09 定）。
+#[test]
+fn taking_back_only_the_file_you_are_in_leaves_the_others() {
+    let (dir, mut ed) = a_book_with_frost("one");
+    replace_the_frost(&mut ed);
+    ed.on_key(Key::Char('u'));
+    assert!(ed.query().is_some());
+    // `o` ＝「只撤銷 丙.md」。
+    ed.on_key(Key::Char('o'));
+    assert_eq!(ed.status(), say!("search.undone"), "一份，所以是單數那一句");
+    let seen = |ed: &mut Editor, name: &str| {
+        ed.open_file(dir.join(name)).unwrap();
+        ed.current_buffer().rope().to_string()
+    };
+    assert_eq!(seen(&mut ed, "丙.md"), "霜丙\n", "眼前那一份回去了");
+    assert_eq!(seen(&mut ed, "甲.md"), "雪甲\n", "別的兩份還換着");
+    assert_eq!(seen(&mut ed, "乙.md"), "雪乙\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **後來又改過的那一份不許撤**（2026-10-09 定，這一條會吃掉作者自己打的字）。
+///
+/// 從前面板那個 `u` 照單撤一步，而一步撤銷不等於那次替換：`R` 之後在那幾個檔裏手
+/// 打過字，按 `u` 撤掉的是**那幾個字**，屏幕上卻寫着「撤回了剛纔那次替換」。現在
+/// 比一次撤銷棧的深度，對不上就跳過並且點名。IntelliJ 攔的是同一件事。
+#[test]
+fn a_file_edited_after_the_replacement_is_left_alone_and_named() {
+    let (dir, mut ed) = a_book_with_frost("moved");
+    replace_the_frost(&mut ed);
+    // 人在丙上。換完之後再動它一次——這一份於是「後來又改過」。
+    // Warning: 鍵還在面板手裏（換完不交還），所以這一下走命令，不走鍵。
+    ed.execute(":s/丙/丙！/").unwrap();
+    assert_eq!(ed.current_buffer().rope().to_string(), "雪丙！\n", "那一下落下了");
+
+    ed.on_key(Key::Char('u'));
+    assert!(ed.query().is_some(), "三個檔要先問一句");
+    // 眼前這一份改過了，可它還在案上——按鈕照給，撤的時候纔攔。
+    ed.on_key(Key::Char('y'));
+    // 另兩份復原了，丙沒動，而且屏幕上點了名。
+    let told = ed.query().expect("要說出是哪幾個檔沒撤");
+    assert!(told.body.starts_with(&say!("search.undone-but-changed")), "{:?}", told.body);
+    assert!(told.body.ends_with("丙.md"), "名字接在那句話後面：{:?}", told.body);
+    assert_eq!(told.choices.len(), 1, "一顆按鈕的窗，不問什麼");
+    ed.on_key(Key::Char('y'));
+
+    let seen = |ed: &mut Editor, name: &str| {
+        ed.open_file(dir.join(name)).unwrap();
+        ed.current_buffer().rope().to_string()
+    };
+    assert_eq!(seen(&mut ed, "丙.md"), "雪丙！\n", "手打的那一下還在，替換也還在");
+    assert_eq!(seen(&mut ed, "甲.md"), "霜甲\n", "沒動過的那兩份復原了");
+    assert_eq!(seen(&mut ed, "乙.md"), "霜乙\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// 上面三支共用的台：三個檔各一處「霜」，人站在丙上，面板開着替換那一行。
+fn a_book_with_frost(tag: &str) -> (std::path::PathBuf, Editor) {
+    let dir = std::env::temp_dir()
+        .join(format!("yumete-undo-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for name in ["甲", "乙", "丙"] {
+        std::fs::write(dir.join(format!("{name}.md")), format!("霜{name}\n")).unwrap();
+    }
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("丙.md")).unwrap();
+    ed.execute(":replace-working").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('雪'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+    (dir, ed)
+}
+
+/// 同上：按 `R`、答應那一扇窗。
+fn replace_the_frost(ed: &mut Editor) {
+    ed.on_key(Key::Char('R'));
+    assert!(ed.query().is_some(), "三個檔要先問一句");
+    ed.on_key(Key::Char('y'));
 }

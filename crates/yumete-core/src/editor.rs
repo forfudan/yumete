@@ -646,6 +646,25 @@ impl Drop for Filling {
     }
 }
 
+/// **一次跨檔替換動過的一份緩衝**，記得住它當時的樣子（2026-10-09 定）。
+///
+/// 從前這裏只記一個號。號夠用來「逐份撤回」，不夠用來回答兩個問題：**這一份後來
+/// 有沒有又被改過**（`depth`），和**按鈕上該寫哪個名字**（`name`）。少了第一個，
+/// `R` 之後手打幾個字再按 `u`，撤掉的是那幾個字而屏幕上寫着「撤回了剛纔那次替換」。
+pub(crate) struct Undone {
+    pub buffer: u64,
+    /// 換完那一刻這一份的撤銷棧有多深（[`crate::buffer::Buffer::undo_depth`]）。
+    pub depth: usize,
+    /// 給人看的名字。
+    pub name: String,
+    /// **這一份換掉了幾處**。
+    ///
+    /// Warning: **不能問 `replace_tally`**（2026-10-09 查出來的）：那一格在報完「共替換
+    /// N 處」的時候就被 `mem::take` 拿走了，於是撤回那扇窗上寫着「涉及 2 個文件
+    /// **0** 處」。一批做完就沒了的數，不能在它死後再問一次。
+    pub hits: usize,
+}
+
 /// **Where a shell command's output goes** (2026-10-06, helix's four).
 ///
 /// helix spells them `|`, `A-|`, `!`, `A-!` and calls them `Replace`,
@@ -3132,7 +3151,7 @@ pub struct Editor {
     /// `R` 一次能改好幾個檔，而 `u` 只撤回**當前那一份**——於是按一下 `u`，一個
     /// 檔回去了、別的檔照舊改着，編輯器還說「已經到最早了」，接着 `:write-all`
     /// 就把沒撤回的那幾個寫進磁盤。記下來，`u` 纔撤得回一整批。
-    replaced_in: Vec<u64>,
+    replaced_in: Vec<Undone>,
     /// **那句「換不換」問的是哪一個檔**，`None` ＝ 問的是全部（2026-09-27）。
     ///
     /// 從前只有 `R` 會先問一句，而站在檔名那一行上按 `r` **一聲不吭就把整個檔
@@ -3453,6 +3472,21 @@ enum Asking {
     /// 兩個條件都過了纔走中央這扇窗；不到的照舊是狀態欄上那一行 `y`/`n`。
     /// 和 `:w` 那一條同一個精神——平日改個錯字一次都不彈。
     ReplaceEverywhere,
+    /// **撤回一次跨檔替換，也要先問**（2026-10-09 定）。
+    ///
+    /// 原話：「whenever we changed more than one buffer/files, we do a confirm」。
+    /// 動好幾個檔是一件看不見全貌的事，撤回它同樣是——所以替換問一次，撤回也問
+    /// 一次，兩頭對稱。這也是唯二兩個做得出「一個手勢跨檔撤回」的編輯器各自的做法
+    /// （IntelliJ 的 `Undo Replace?`、VS Code 的 `Undo in N Files`/`Undo this File`）。
+    ///
+    /// Warning: **一個檔不問**（同一天定的）：那時「全部撤銷」和「只撤銷這一個」是同一
+    /// 顆按鈕，問句就只有一個真答案。而那正是最常走的一趟——在寫着的這一章裏替換。
+    UndoTheReplace,
+    /// **有幾個檔沒撤回**，撤完報一句（2026-10-09 定）。
+    ///
+    /// 一個按鈕的窗，不是問句：名單可以有三十行，而「這幾個檔**沒有**復原」是最
+    /// 不該從狀態欄滑過去的一句話。IntelliJ 同樣用一扇窗交代它。
+    ReplaceUndoneInPart,
 }
 
 /// An error from running an editor command.

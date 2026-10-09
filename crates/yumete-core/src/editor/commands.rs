@@ -1338,6 +1338,20 @@ impl Editor {
                     self.status = say!("search.replace-all-stopped");
                 }
             },
+            // **撤回一次跨檔替換，也要先問**（2026-10-09 定）。原話：「whenever we
+            // changed more than one buffer/files, we do a confirm」。
+            Asking::UndoTheReplace => match answer {
+                'y' => self.take_the_replacement_back(None),
+                // 「只撤銷這一個」＝眼前這一份（`Editor::this_file_in_the_batch`）。
+                'o' => {
+                    let one = self.current_buffer().id();
+                    self.take_the_replacement_back(Some(one));
+                }
+                // 不撤銷：那一批留在案上，下一下 `u` 還撤得回來。
+                _ => {}
+            },
+            // 一顆按鈕的窗，按了就關——它不問什麼，只是不讓那句話從狀態欄滑過去。
+            Asking::ReplaceUndoneInPart => {}
             Asking::OversizeWrite { path } => match answer {
                 // Yes: the same save, with the gate already answered.
                 'y' => {

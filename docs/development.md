@@ -20502,6 +20502,33 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.150 Both sides of a cross-file replace ask, and a file that moved on is left alone (2026-10-09)
+
+The open item read 「cross-file `R` undo」, and the first thing to find was that it already exists:
+the panel's `u` undoes the whole batch in one press (`find.rs`, since 2026-09-27). The question
+asked was whether undo should be *removed* past the warning threshold, since a multi-file replace
+is expensive to take back. Checked six editors: **not one couples undo-availability to a warning.**
+Undo lives or dies on one mechanical fact — is the changed text still in a buffer that still holds
+its history. VS Code and IntelliJ both write straight to disk and still undo in one gesture
+(`Undo in N Files`, `Undo Replace?`); where a warning exists its text never mentions undo, only
+scale. The editors that lost undo (Notepad++, `:argdo` without `'hidden'`) lost it as a side
+effect and have been complained about for years. We are already in the best regime: every hit
+file is a buffer and nothing reaches disk until `:write-all`.
+
+So undo stays, and the decision was 「whenever we changed more than one buffer/files, we do a
+confirm」 — **both sides**. `R` now opens the central window whenever more than one file is
+involved (it was more than 10 files *and* more than 100 hits); `u` opens one too, with
+`全部撤銷` / `只撤銷 <this file>` / `不撤銷`. One file asks neither: there the two buttons would be
+the same button.
+
+Each file's undo depth is recorded when `R` edits it (`Buffer::undo_depth`). A file edited since is
+skipped and named, instead of silently undoing the writer's own later typing while reporting that
+the replacement was undone — IntelliJ refuses the same way. Two measurements changed the design
+mid-build: `replace_tally` is `mem::take`n when the 「共替換 N 處」 line is said, so the count had to
+move onto each file's own record; and the results list is **empty** after a replace (the pattern no
+longer matches — `hits=0 files=0`), so 「the highlighted row」 could not be what `只撤銷` points at.
+It points at the file you are in, which is where `R` puts you back.
+
 ## 5.149 The picker streams, so it has no ceiling and nothing to freeze (2026-10-09)
 
 Chosen: 「流式化，和 helix 一樣不設上限」. The walk ran on the key thread, so it needed two

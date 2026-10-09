@@ -1088,26 +1088,7 @@ impl Editor {
             // 者要先 `C-w` 出去、按 `u`、再走回來，而那一路上他站在名單的哪一條
             // 早就忘了。換完再看一眼那一行，覺得不對就按 `u`：這纔是「預覽」該有
             // 的樣子。
-            Key::Char('u') if self.search.replacing => {
-                let batch = std::mem::take(&mut self.replaced_in);
-                let empty = batch.is_empty();
-                let mut back = 0usize;
-                match empty {
-                    // 沒有記在案的那一批：撤回當前這一份，和從前一樣。
-                    true => self.undo(),
-                    // Warning: **一次 `R` 能動好幾個檔，而 `undo` 只管當前那一份。**
-                    // 逐份撤回，光標不動——`with_buffer` 只是借那一格站一下。
-                    false => {
-                        for id in batch {
-                            if let Some(i) = self.buffer_with(id) {
-                                self.with_buffer(i, |ed| ed.undo());
-                                back += 1;
-                            }
-                        }
-                    }
-                }
-                self.after_replacing_undone((!empty).then_some(back));
-            }
+            Key::Char('u') if self.search.replacing => self.undo_the_replacement(),
             // Warning: **`R` 也只在名單那一邊活着**（2026-09-29 定，同 `r`）。提示行
             // 上不寫它的時候，它就是一個沒綁的鍵；名單空着也一樣。
             Key::Char('R')
@@ -1129,10 +1110,8 @@ impl Editor {
                     self.query = Some(query);
                     return;
                 }
-                self.status = match self.search.files.len() {
-                    0 | 1 => say!("search.replace-all-sure", self.search.total),
-                    n => say!("search.replace-all-sure-files", self.search.total, n),
-                };
+                // 只剩一個檔那一句：不止一個的全走上面那一扇窗了（2026-10-09）。
+                self.status = say!("search.replace-all-sure", self.search.total);
                 // Warning: **`ReplaceAll`, not `Confirm`.** The latter is `:s …c`'s
                 // per-match walker: with nothing to walk it clears itself on
                 // the next key, so the question was asked and the answer went
@@ -1748,7 +1727,8 @@ impl Editor {
                 let done =
                     self.with_buffer(index, |ed| ed.swap_one(&look, &with, hit.line, hit.nth));
                 if done {
-                    self.replaced_in = vec![self.buffers[index].id()];
+                    self.replaced_in.clear();
+                    self.remember_what_was_replaced(index, hit.file.as_deref(), 1);
                 }
                 match done {
                     true => self.after_replacing(1),
@@ -1783,12 +1763,36 @@ impl Editor {
         };
         let done = self.with_buffer(index, |ed| ed.swap_all(&look, &with));
         if done > 0 {
-            let id = self.buffers[index].id();
-            if !self.replaced_in.contains(&id) {
-                self.replaced_in.push(id);
-            }
+            self.remember_what_was_replaced(index, rel, done);
         }
         done
+    }
+
+    /// **記下這一份換完之後的樣子**，給撤回那一下用（2026-10-09，見
+    /// [`crate::editor::Undone`]）。
+    fn remember_what_was_replaced(&mut self, index: usize, shown: Option<&Path>, hits: usize) {
+        let one = crate::editor::Undone {
+            buffer: self.buffers[index].id(),
+            depth: self.buffers[index].undo_depth(),
+            hits,
+            // Warning: **名字要和名單上那一行一樣**，不是緩衝自己的 `display_name`。
+            // 「只撤銷這一個」那顆按鈕要和讀者眼前那一行對得上號，而名單上那一行
+            // 寫的是搜索交出來的拼法。
+            name: match shown {
+                Some(path) => path.display().to_string(),
+                None => self.buffers[index].display_name(),
+            },
+        };
+        match self.replaced_in.iter_mut().find(|had| had.buffer == one.buffer) {
+            // 同一份在一批裏換第二次（`r` 一處、再 `R` 全部）：深度記新的那個，
+            // 處數**加上去**——問的是「這一份一共換掉了幾處」。
+            Some(had) => {
+                had.depth = one.depth;
+                had.name = one.name;
+                had.hits += one.hits;
+            }
+            None => self.replaced_in.push(one),
+        }
     }
 
     /// `R`: change every hit there is, once the reader has said yes.
@@ -1855,15 +1859,18 @@ impl Editor {
         self.after_replacing(done);
     }
 
-    /// **多到要停一下的那一條線**（2026-10-03 定）：兩個條件都過纔算。
-    const REPLACE_ASKS_TWICE_FILES: usize = 10;
-    const REPLACE_ASKS_TWICE_HITS: usize = 100;
-
-    /// 中央那一扇「安全核驗」，或者 `None`（不到那條線，狀態欄一行就夠）。
+    /// 中央那一扇「安全核驗」，或者 `None`（只動一個檔，狀態欄一行就夠）。
+    ///
+    /// **動一個以上的檔就走中央那一扇**（2026-10-09 定）。原話：「whenever we changed
+    /// more than one buffer/files, we do a confirm」——兩個檔就彈。
+    ///
+    /// Warning: **從前的閘是「超過 10 個文件**而且**超過 100 處」**（2026-10-03 定）。
+    /// 那條線底下走的是狀態欄上一行 `y`/`n`，而那一行按順手了就過去了——三個檔
+    /// 和一個檔的差別，正是「看得見的那一處」和「看不見的那一本」的差別。
     fn replace_everywhere_query(&self) -> Option<crate::editor::Query> {
         let files = self.search.files.len();
         let hits = self.search.total;
-        if files <= Self::REPLACE_ASKS_TWICE_FILES || hits <= Self::REPLACE_ASKS_TWICE_HITS {
+        if files <= 1 {
             return None;
         }
         Some(crate::editor::Query {
@@ -2215,6 +2222,110 @@ impl Editor {
         }
     }
 
+    /// **面板裏按 `u`**：撤回剛纔那一次替換（2026-09-27 定），而動過一個以上的檔
+    /// 要先問一句（2026-10-09 定，見 [`crate::editor::Asking::UndoTheReplace`]）。
+    fn undo_the_replacement(&mut self) {
+        match self.replaced_in.len() {
+            // 沒有記在案的那一批：撤回當前這一份，和正文裏按 `u` 一樣。
+            0 => {
+                self.undo();
+                self.after_replacing_undone(None);
+            }
+            // **一個檔不問**：那時「全部撤銷」和「只撤銷這一個」是同一顆按鈕。
+            1 => self.take_the_replacement_back(None),
+            _ => self.query = Some(self.undo_the_replace_query()),
+        }
+    }
+
+    /// 中央那一扇「撤銷全部替換？」。
+    fn undo_the_replace_query(&self) -> crate::editor::Query {
+        let mut choices =
+            vec![crate::editor::Answer { key: 'y', label: say!("search.undo-all-go") }];
+        // 眼前這一份在這一批裏，纔給「只撤銷這一個」。
+        if let Some(name) = self.this_file_in_the_batch() {
+            choices
+                .push(crate::editor::Answer { key: 'o', label: say!("search.undo-all-one", name) });
+        }
+        choices.push(crate::editor::Answer { key: 'n', label: say!("search.undo-all-no") });
+        crate::editor::Query {
+            // 和替換那一扇、`:w` 那一扇同一個標題：「這一下動得比你想的多」。
+            title: say!("write.oversize-title"),
+            body: say!(
+                "search.undo-all-what",
+                self.replaced_in.len(),
+                self.replaced_in.iter().map(|one| one.hits).sum::<usize>()
+            ),
+            choices,
+            what: crate::editor::Asking::UndoTheReplace,
+        }
+    }
+
+    /// **你眼前這一份，如果它在這一批裏**——「只撤銷這一個」那顆按鈕寫的名字。
+    ///
+    /// Warning: **不是名單上高亮那一行**（2026-10-09 量出來的）。換完 `after_replacing`
+    /// 會把搜索重跑一遍，而剛換掉的那幾處再也配不上那個式子——名單是空的
+    /// （實測 `hits=0 files=0`），沒有一行可指。而且它不是一直空：替換裏還含着
+    /// 式子的時候（`霜` → `霜雪`）名單又滿了，於是那顆按鈕會時有時無，而「有沒
+    /// 有」取決於讀者根本沒在想的一件事。
+    ///
+    /// `R` 換完把人送回出發那一份（`replace_home`），而那一份正是最可能想單獨要
+    /// 回來的——你本來就在那一章裏寫着。不在這一批裏就不給那顆按鈕。
+    pub(super) fn this_file_in_the_batch(&self) -> Option<String> {
+        let id = self.current_buffer().id();
+        self.replaced_in.iter().find(|one| one.buffer == id).map(|one| one.name.clone())
+    }
+
+    /// **撤回記在案的那一批**——`only` ＝ 只撤名字是它的那一份。
+    ///
+    /// Warning: **後來又改過的那幾份不動**（2026-10-09 定）。撤銷棧的深度對不上，就說明
+    /// 那一步撤銷不再是那次替換，而是讀者自己寫的東西——從前這裏不問，於是 `R`
+    /// 之後手打幾個字再按 `u`，撤掉的是那幾個字，而屏幕上寫着「撤回了剛纔那次替
+    /// 換」。IntelliJ 攔的是同一件事。
+    ///
+    /// Warning: **撤不了的那幾份從案上劃掉，沒撤的留着。** 「只撤銷這一個」之後別的幾份
+    /// 還撤得回來，再按一下 `u` 就是。
+    pub(super) fn take_the_replacement_back(&mut self, only: Option<u64>) {
+        let batch = std::mem::take(&mut self.replaced_in);
+        let mut keep: Vec<crate::editor::Undone> = Vec::new();
+        let mut moved: Vec<String> = Vec::new();
+        let mut back = 0usize;
+        for one in batch {
+            if only.is_some_and(|id| id != one.buffer) {
+                keep.push(one);
+                continue;
+            }
+            let Some(index) = self.buffer_with(one.buffer) else { continue };
+            if self.buffers[index].undo_depth() != one.depth {
+                moved.push(one.name);
+                continue;
+            }
+            // 逐份撤回，光標不動——`with_buffer` 只是借那一格站一下。
+            self.with_buffer(index, |ed| ed.undo());
+            back += 1;
+        }
+        self.replaced_in = keep;
+        self.after_replacing_undone(Some(back));
+        if !moved.is_empty() {
+            self.query = Some(crate::editor::Query {
+                title: say!("write.oversize-title"),
+                // 名字接在那句話後面，一行一個。Warning: **不許寫進那張表**——它交出
+                // 去的是檔案本身的切片，`\n` 到讀者眼前還是兩個字符
+                // （`tests/messages.rs` 的 `an_escape_is_not_a_thing_this_file_understands`
+                // 攔的就是這個）。
+                body: format!(
+                    "{}\n{}",
+                    say!("search.undone-but-changed"),
+                    moved.join("\n")
+                ),
+                choices: vec![crate::editor::Answer {
+                    key: 'y',
+                    label: say!("search.undone-ok"),
+                }],
+                what: crate::editor::Asking::ReplaceUndoneInPart,
+            });
+        }
+    }
+
     /// 撤回一次替換之後，名單要跟着回來——被換掉的那幾處又在了。
     fn after_replacing_undone(&mut self, files: Option<usize>) {
         // `undo` 自己說過一句話，而底下重跑一趟搜索可能把它蓋掉。
@@ -2227,9 +2338,11 @@ impl Editor {
         // 寫的：面板裏按 `u`、而這一輪一處都沒替換過，屏幕上照樣寫「撤回了剛纔
         // 那次替換」——撤掉的其實是讀者自己上一筆改動。按 `u` 的人正是慌了神的
         // 那個人，這一句話告訴他剛纔發生的是另一件事。
+        // Warning: **一處都沒撤回就別說撤回了**（2026-10-09）：那一批全是後來又改過的
+        // 檔，說話的是那扇窗，不是這一行。
         self.status = match files {
-            None => said,
-            Some(0 | 1) => say!("search.undone"),
+            None | Some(0) => said,
+            Some(1) => say!("search.undone"),
             Some(n) => say!("search.undone-files", n),
         };
     }
