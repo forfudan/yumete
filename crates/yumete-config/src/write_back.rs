@@ -126,6 +126,52 @@ pub fn rewrite(
         }
     }
 
+    // **不認得的表頭：整節註釋掉，並說出來**（2026-10-09 審出來的）。
+    //
+    // Warning: **一個打錯的表頭比一個打錯的鍵名更狠。** `RawConfig` 是
+    // `deny_unknown_fields`，所以 `[editr]` 一行就讓**整份**配置讀不進去；而下面那
+    // 一支只掃六張認得的表**裏面的鍵**，表頭自己從來沒人掃。實測：配置寫
+    // `[editr]`，面板上改一項存下去，狀態欄說「設置存進…」，而下次啓動是
+    // 「unknown field `editr`」——舊設置和剛改的那一項一起作廢，而這扇面板存在的
+    // 全部理由就是「一個打錯的名字不該讓整份配置作廢」。
+    //
+    // 這十個名字是 `RawConfig` 的全部欄位。其中 `syntax`／`sidebar`／`language`／
+    // `lsp` 的鍵是使用者自己取的（擴展名、語言名…），所以下面那一支不掃它們裏面，
+    // 可表頭本身照樣是認得的。
+    const TABLES: [&str; 10] = [
+        "editor", "theme", "panel", "ime", "syntax", "sidebar", "keys", "export", "language",
+        "lsp",
+    ];
+    let strangers: Vec<String> = doc
+        .iter()
+        .map(|(name, _)| name.to_string())
+        .filter(|name| !TABLES.contains(&name.as_str()))
+        .collect();
+    for name in strangers {
+        let Some(item) = doc.get(&name) else { continue };
+        // 整節連表頭一起拿出來渲染，所以跨行的值與使用者自己的註釋都在裏面。
+        let mut lone = DocumentMut::new();
+        lone.insert(&name, item.clone());
+        // Warning: **每一行都要那個 `#`**，同下面那一支——漏一行整份 toml 就讀不進去。
+        // 本來就是註釋的那幾行會變成 `# # …`，照舊是註釋。
+        let body: String = lone
+            .to_string()
+            .lines()
+            .map(|one| match one.trim().is_empty() {
+                true => String::new(),
+                false => format!("# {one}"),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        doc.remove(&name);
+        said.commented_out.push(name.clone());
+        // Warning: **挪到檔尾**：鍵有它的表頭可以掛，表頭沒有上一層。位置變了，字一個
+        // 不少——同下面那一支的那筆賬（「挪一行註釋掉的字比為了位置精確而動別人的行
+        // 便宜」）。
+        let had = doc.trailing().as_str().unwrap_or("").to_string();
+        doc.set_trailing(format!("{had}\n{body}    # {STRANGER}\n"));
+    }
+
     // 不認得的鍵：註釋掉，並說出來。
     for table in ["editor", "theme", "panel", "ime", "keys", "export"] {
         let Some(Item::Table(t)) = doc.get_mut(table) else { continue };
@@ -261,6 +307,47 @@ soft_wrap = true    # 行尾這一句也是我寫的
         // 那兩條對的照舊。
         assert!(after.contains("line_numbers = \"absolute\""), "{after}");
         assert!(after.contains("soft_wrap = true"), "{after}");
+    }
+
+    /// **不認得的表頭也註釋掉**（2026-10-09 審出來的）。
+    ///
+    /// Warning: 表頭比鍵名更狠：`[editr]` 一行就讓**整份**配置讀不進去，而面板那頭
+    /// 照舊說「設置存進…」。整節連使用者自己的註釋一起搬到檔尾，字一個不少。
+    #[test]
+    fn a_table_yumete_does_not_know_is_commented_out_too() {
+        let before = "\
+# 我自己寫的
+[editr]
+# 為什麽這麽設
+indent = 4
+things = [
+  \"a\",
+  \"b\",
+]
+
+[editor]
+line_numbers = \"absolute\"
+";
+        let (after, said) = rewrite(before, &[], &known).unwrap();
+        assert_eq!(said.commented_out, vec!["editr"]);
+        // 活的表頭只剩認得的那一張。
+        let alive: Vec<&str> = after.lines().filter(|l| l.trim_start().starts_with('[')).collect();
+        assert_eq!(alive, vec!["[editor]"], "剩下的活表頭：\n{after}");
+        // 字一個不少，而且每一行都帶上了 `#`（漏一行整份 toml 就讀不進去）。
+        for had in ["[editr]", "indent = 4", "things = [", "\"a\",", "]", "# 為什麽這麽設"] {
+            assert!(after.contains(had), "{had} 不見了：\n{after}");
+        }
+        for line in after.lines() {
+            let t = line.trim();
+            let known_live = t.is_empty()
+                || t.starts_with('#')
+                || t == "[editor]"
+                || t.starts_with("line_numbers");
+            assert!(known_live, "這一行裸着留下了：{line}\n{after}");
+        }
+        assert!(after.contains(STRANGER), "而且說了為什麽：\n{after}");
+        // 而且重讀得進去。
+        let _: DocumentMut = after.parse().unwrap_or_else(|e| panic!("讀不進去：{e}\n{after}"));
     }
 
     /// 檔裏還沒有這一張表，就補一張。
