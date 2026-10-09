@@ -399,6 +399,34 @@ impl Editor {
         at - rope.line_to_char(rope.char_to_line(at))
     }
 
+    /// **光標前面有幾個字** —— 狀態欄那個「字 N」（2026-10-09 作者定）。
+    ///
+    /// Warning: **這不是 [`Self::cursor_column`]。** 那一支交的是**字符下標**，而兩處
+    /// 要的正是下標：內嵌 preedit 擺在第幾個字符上（`set_candidate`），和
+    /// `drawn_runs_on_line` 裏那些跨度的比較。這一支交的是**讀者數出來的那個數**，
+    /// 一個字素算一個——`葛`＋異體字選擇符是一個字，而 `:count` 的字數也是這麼算的
+    /// （作者的原則：「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint」）。
+    ///
+    /// Warning: **不許從行首數起。** 那一行每幀都問一次，而從行首走到光標是 O(前綴)：
+    /// 量過，四百萬字單行上走到行尾每幀多花 70 毫秒，他那條 1240 萬字的行按此推是
+    /// 210 毫秒。所以長行上從 [`crate::wrap::Widths`] 最近的那條切點起算，剩下那一截
+    /// 不到一個 `BLOCK`；短行（四千字以下）索引根本不建，整段走過去也是幾微秒。
+    pub fn cursor_grapheme(&self) -> usize {
+        let rope = self.current_buffer().rope();
+        let at = self.caret().min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        let head = rope.line_to_char(line);
+        let (from, before) = match self.line_widths(rope, line, at - head) {
+            Some(index) => {
+                let (cut, seen) = index.clusters_before(at - head);
+                (head + cut, seen)
+            }
+            None => (head, 0),
+        };
+        let tail: String = rope.slice(from..at).to_string();
+        before + yumete_cjk::graphemes(&tail).count()
+    }
+
     /// The cursor's visual column (summed display width within its line).
     ///
     /// **The page's column, not the text's** (#374). What is drawn before the

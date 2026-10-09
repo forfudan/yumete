@@ -1211,6 +1211,14 @@ pub struct Widths {
     /// `(字符下標, 行首到這個下標的累計寬度)`，按下標遞增，第一條恆為 `(0, 0)`、
     /// 最後一條恆為行末。
     cuts: Vec<(usize, usize)>,
+    /// **每一條切點上「行首到這裏有幾個字素」**，與 [`Self::cuts`] 同下標
+    /// （2026-10-09 作者定）。
+    ///
+    /// 狀態欄那個「字 N」要的是字素數（`葛`＋異體字選擇符是**一個**字，作者的原則：
+    /// 「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint」），而那一行每幀
+    /// 都問一次。從行首數起要走過光標前面那一整段——量過：四百萬字單行上走到行尾，
+    /// 每幀多花 70 毫秒。於是搭在這一份索引上，和寬度同一趟走出來，一個字節不多讀。
+    clusters: Vec<usize>,
 }
 
 impl Widths {
@@ -1227,23 +1235,28 @@ impl Widths {
         let block = block.max(1);
         let text = line_text(rope, line);
         let mut cuts: Vec<(usize, usize)> = vec![(0, 0)];
+        let mut clusters: Vec<usize> = vec![0];
         let mut at = 0usize;
         let mut width = 0usize;
+        let mut seen = 0usize;
         let mut before: Option<char> = None;
         for g in graphemes(&text) {
             // 切點記在**這一個字素之前**：它左邊那個字符是上一個字素的末字符。
             if at - cuts[cuts.len() - 1].0 >= block && before.is_some_and(clean_cut) {
                 cuts.push((at, width));
+                clusters.push(seen);
             }
             width += grapheme_width(g);
             at += g.chars().count();
+            seen += 1;
             before = g.chars().last();
         }
         // 行末也是一條：它在任何一種分段裏都是邊界，所以當得了右邊那個接點。
         if cuts[cuts.len() - 1].0 != at {
             cuts.push((at, width));
+            clusters.push(seen);
         }
-        Widths { cuts }
+        Widths { cuts, clusters }
     }
 
     /// 最小的、不小於 `at` 的切點。
@@ -1256,6 +1269,16 @@ impl Widths {
     fn at_or_before(&self, at: usize) -> Option<(usize, usize)> {
         let i = self.cuts.partition_point(|&(c, _)| c <= at);
         self.cuts.get(i.checked_sub(1)?).copied()
+    }
+
+    /// **行首到 `at` 之間，最近的那一條切點，和到它為止有幾個字素**（2026-10-09）。
+    ///
+    /// 交 `(那條切點的字符下標, 到它為止的字素數)`。剩下那一截不到一個 [`BLOCK`]，
+    /// 由呼叫方自己走——見 `Editor::cursor_grapheme`。第一條切點恆為 `(0, 0)`，所以
+    /// 這一支永遠答得出。
+    pub fn clusters_before(&self, at: usize) -> (usize, usize) {
+        let i = self.cuts.partition_point(|&(c, _)| c <= at).saturating_sub(1);
+        (self.cuts[i].0, self.clusters[i])
     }
 
     /// 這一行有多長（行末那一條切點）。
