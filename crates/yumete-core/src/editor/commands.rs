@@ -970,7 +970,16 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowDetail(want) => {
-                let want = want.unwrap_or(!self.detail_visible());
+                // Warning: **光的那一下翻的是「讀者要不要」，不是「此刻畫着沒有」**
+                // （2026-10-09 審出來的）。從前寫的是 `!self.detail_visible()`，而那一
+                // 支還要問「這一格有沒有記錄可畫」——站在表頭或者 `| --- |` 那一行上
+                // 沒有，於是它恆假、`!` 恆真：`:table-detail on` 之後再按一下光的，
+                // 答的還是「記錄：開」，開關只有一個方向。
+                //
+                // `show_detail` 是讀者說過的話，`detail_visible()` 是此刻的樣子；翻的
+                // 該是前者。沒說過話就從「這一格本來開不開」翻起。
+                let want = want
+                    .unwrap_or_else(|| !self.show_detail.unwrap_or_else(|| self.detail_opens_here()));
                 self.show_detail = Some(want);
                 self.status = match want {
                     true => say!("ui.detail-panel-on"),
