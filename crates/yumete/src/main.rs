@@ -1045,17 +1045,7 @@ fn main() -> ExitCode {
         // `:theme-fill on` look like」 gets the answer instead of a warning.
         // The ones below genuinely need the loop: they hold an input method, a
         // child process, the clipboard or the window system.
-        if let Some((name, mood)) = editor.take_theme_request() {
-            let said = yumete_tui::set_theme(&config, name, mood);
-            editor.set_status(said);
-        }
-        if let Some(on) = editor.take_fill_request() {
-            let on = yumete_tui::theme::set_fill(on, &config);
-            editor.set_status(match on {
-                true => yumete_core::say!("theme.fill-on"),
-                false => yumete_core::say!("theme.fill-off"),
-            });
-        }
+        take_the_colours(&mut editor, &config);
         let mut unheard: Vec<String> = Vec::new();
         if let Some(asked) = editor.take_scheme_request() {
             // Warning: **印出去的要是打得出來的那一行**（2026-10-02 一輪掃查報來的）。
@@ -1212,6 +1202,25 @@ fn main() -> ExitCode {
     }
 }
 
+/// **收下核心擺在那裏的主題請求**（`:theme`／`:theme-mode`／`:theme-fill`）。
+///
+/// 顏色是畫之前就定下來的全局，不是主循環握着的狀態，所以離屏那條路也honour得了
+/// （#470）。擺成一支是因為**兩處都要叫**：一鍵一收（見 [`press`]），和整串鍵跑完
+/// 再收一次（最後那一鍵留下的那一個）。
+fn take_the_colours(editor: &mut Editor, config: &yumete_config::Config) {
+    if let Some((name, mood)) = editor.take_theme_request() {
+        let said = yumete_tui::set_theme(config, name, mood);
+        editor.set_status(said);
+    }
+    if let Some(on) = editor.take_fill_request() {
+        let on = yumete_tui::theme::set_fill(on, config);
+        editor.set_status(match on {
+            true => yumete_core::say!("theme.fill-on"),
+            false => yumete_core::say!("theme.fill-off"),
+        });
+    }
+}
+
 /// Press `keys` on the editor, for `--keys`.
 ///
 /// The escapes are the ones a keyboard has and a string does not: `\e` Esc,
@@ -1251,6 +1260,13 @@ fn press(
         if editor.take_owed_search() {
             editor.run_owed_search();
         }
+        // **主題那兩格也是一鍵一收**（2026-10-09 審出來的）。
+        //
+        // 它們是**一格**，不是一個隊列：`--keys=':theme bw\n:theme-mode light\n'` 從前
+        // 整串鍵跑完纔收一次，於是第一句被第二句頂掉——畫出來是出廠主題的淺色，而
+        // `:theme bw` 一聲不吭地沒了。審前端靠的就是這支工具，它少做一件事，報告就
+        // 錯一條。
+        take_the_colours(editor, config);
         // **而且要等它跑完**（§5.93，2026-10-06）。走磁碟那一趟現在跑在旁邊，主循環
         // 每一幀收一批；這裏沒有循環可等，所以就地等到底。
         //
