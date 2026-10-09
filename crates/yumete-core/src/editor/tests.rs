@@ -23893,3 +23893,38 @@ fn a_big_file_is_neither_hidden_from_the_picker_nor_from_the_search() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+
+/// **認詞不許把一個巨檔吐進內存**（2026-10-09 審查量出來的）。
+///
+/// 「讀到一共 16 MB 就停」是在每一個檔**之前**問的，所以擋不住單一一個大檔：
+/// 實測一個 2 GB 的純文本讓 `:word-discover-project` 跑了 99 秒、峰值 8.2 GB，而它跑在
+/// 畫面線程上。4 MB 那道闸 2026-10-08 拿掉了（那是為**搜索**定的，搜索按行流著讀），
+/// 這裏把保護補在讀的那一步上。
+#[test]
+fn word_discovery_reads_a_budget_not_a_whole_file() {
+    let dir = std::env::temp_dir().join(format!("yumete-discover-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // 比預算大得多的一個檔：以前整個讀進來，現在只讀預算那么多。
+    let line = "春天裏的風很暖。\n";
+    let big = line.repeat(24 * 1024 * 1024 / line.len());
+    assert!(big.len() > crate::editor::DISCOVER_MAX_BYTES, "靶子要比預算大");
+    std::fs::write(dir.join("大.md"), &big).unwrap();
+    // 一個二進制：連讀都不該讀。
+    std::fs::write(dir.join("b.bin"), [0u8; 4096]).unwrap();
+
+    let (_, files, han) = crate::editor::detect_words_in(&dir, &|_| false);
+    assert_eq!(files, 1, "二進制那個不算");
+    // 讀進來的漢字數要對得上預算，而不是整個檔。
+    let whole = crate::discover::han_count(&big);
+    assert!(han < whole, "讀了 {han} 個漢字，整個檔有 {whole} 個——沒停");
+    assert!(han > 0, "也不該一個都沒讀");
+    // 每個漢字三個字節，所以讀進來的字節數不該超過預算。
+    assert!(
+        han * 3 <= crate::editor::DISCOVER_MAX_BYTES + 64,
+        "讀了 {han} 個漢字，比預算還多"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

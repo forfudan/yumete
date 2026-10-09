@@ -313,10 +313,16 @@ impl Editor {
                     .map(|b| b.text());
                 let more = match open {
                     Some(text) => text,
-                    None => match std::fs::read_to_string(path) {
-                        Ok(text) => text,
-                        Err(_) => return,
-                    },
+                    // 最多讀到預算用完為止，而不是把整個檔吐進內存——見
+                    // `editor::read_some`。二進制也不認詞。
+                    None if crate::editor::looks_binary(path) => return,
+                    None => {
+                        let room = crate::editor::DISCOVER_MAX_BYTES.saturating_sub(text.len());
+                        match crate::editor::read_some(path, room) {
+                            Some(text) => text,
+                            None => return,
+                        }
+                    }
                 };
                 files += 1;
                 text.push_str(&more);
