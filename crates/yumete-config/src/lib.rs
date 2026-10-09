@@ -3276,7 +3276,10 @@ impl RawConfig {
             // is tall enough and the eye loses the sweep anyway.
             // `0` is not a length, it is "as long as the window allows", so it
             // passes through rather than being clamped up to four.
-            config.editor.zong_length = if length == 0 { 0 } else { length.clamp(4, 64) };
+            // **下界 8，和 `:view-wrap-vertical` 同一個數**（2026-10-09）。從前這裏是 4
+            // 而命令那一頭是 `MIN_WRAP_WIDTH`（8）——同一個設置兩個下界。8 是安全線
+            // 不是口味：比它窄，一個全角字會被擠到自己那一行上，沒完沒了。
+            config.editor.zong_length = if length == 0 { 0 } else { length.clamp(8, 64) };
         }
         if let Some(gap) = self.editor.zong_gap {
             config.editor.zong_gap = gap.min(4);

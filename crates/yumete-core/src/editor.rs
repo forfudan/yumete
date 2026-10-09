@@ -3322,10 +3322,19 @@ pub struct Editor {
     /// The width the *writer* wants to write to, if they have said one.
     ///
     /// A measure, in the typesetter's sense: not how wide the terminal is, but
-    /// how wide a line of this book should be. Horizontally it is where the
-    /// text wraps and where the margin begins; vertically it is how long a 縱
-    /// runs. `None` means the page is as wide as the window.
+    /// how wide a line of this book should be — where the text wraps and where
+    /// the margin begins. `None` means the page is as wide as the window.
+    ///
+    /// Warning: **橫排的，只管橫排**（2026-10-09 作者定）。從前這一格兩種排版共用：
+    /// 橫排是行寬，一切到竖排同一個數就變成「一列幾個字」，於是 `:view-wrap 40`
+    /// 改的是哪一件事要看當時是什麽排版。作者的話：「一个东西怎么能有两个命令」
+    /// ——反過來也不成立，一個命令不該是兩件事。竖排那一個在 [`Self::zong_measure`]。
     measure: Option<usize>,
+    /// **一列寫幾個字**（竖排，`:view-wrap-vertical`）。`None` ＝ 窗口有多高就寫多長。
+    ///
+    /// 和 [`Self::measure`] 各管各的排版，所以在橫排裏設它、切過去就生效，不會被
+    /// 橫排那個數蓋掉。
+    zong_measure: Option<usize>,
 }
 
 /// What should happen after a key press.
@@ -3752,6 +3761,7 @@ impl Editor {
             wrap_width: None,
             tab_stop: 8,
             measure: None,
+            zong_measure: None,
             autosave: true,
             last_swap: None,
             swap_warned: false,
