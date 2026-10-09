@@ -2882,6 +2882,13 @@ en = "wrap long paragraphs to the next row; `:view-wrap 50` sets a measure, `off
 find = "折行 換行 换行 自動換行 自动换行 寬度 宽度 wrap width"
 
 [[message]]
+# 命令：:view-wrap-vertical —— 竖排一列寫幾個字
+key = "cmd.view.wrap-vertical"
+zht = "竖排一列寫幾個字；`:view-wrap-vertical 30` 定長度，`0` 跟着窗口"
+zhs = "竖排一列写几个字；`:view-wrap-vertical 30` 定长度，`0` 跟着窗口"
+en = "how many characters go in one vertical column; `0` follows the window"
+
+[[message]]
 # : 命令選單裏 color 那一項的說明（wiki 組）
 key = "cmd.wikis.color"
 zht = "詞條名染成金色，橫排竪排一樣（出廠）"
@@ -3101,6 +3108,13 @@ zht = "太寬的段落折到下一行"
 zhs = "太宽的段落折到下一行"
 en = "wrap a paragraph too wide for the window"
 find = "折行 換行 换行 自動 自动 on"
+
+[[message]]
+# 命令：:view-wrap-vertical 的 `0`
+key = "cmd.wrap.zong-0"
+zht = "跟着窗口：窗口有多高就寫多長"
+zhs = "跟着窗口：窗口有多高就写多长"
+en = "follow the window: as long as the window is tall"
 
 [[message]]
 # : 命令選單裏 all 那一項的說明（write 組）
@@ -6967,6 +6981,19 @@ en = "layout: vertical"
 
 # ── lookfor ───────────────────────────────────────────────────────────
 
+[[message]]
+# 竖排：定了一列幾個字
+key = "layout.zong-measure"
+zht = "一列寫 {0} 個字"
+zhs = "一列写 {0} 个字"
+en = "{0} characters to a column"
+
+[[message]]
+# 竖排：一列跟着窗口
+key = "layout.zong-measure-window"
+zht = "一列跟着窗口"
+zhs = "一列跟着窗口"
+en = "a column is as long as the window is tall"
 [[message]]
 # 級別名：基本（出廠）
 key = "level.basic"

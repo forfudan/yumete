@@ -155,14 +155,27 @@ impl Editor {
     /// than that would fold a single wide character onto its own row forever.
     pub fn set_measure(&mut self, measure: Option<usize>) {
         self.measure = measure.map(|m| m.clamp(crate::wrap::MIN_WRAP_WIDTH, 400));
-        if let Some(m) = self.measure {
-            if self.layout() == Layout::Vertical {
-                self.set_zong_length(m);
-            }
-        }
         self.status = match self.measure {
             Some(m) => say!("layout.measure-columns", m),
             None => say!("layout.measure-window"),
+        };
+    }
+
+    /// **一列寫幾個字** —— `:view-wrap-vertical`。`None` ＝ 窗口有多高就寫多長。
+    pub fn zong_measure(&self) -> Option<usize> {
+        self.zong_measure
+    }
+
+    /// 定它。`None` ＝ 跟着窗口。
+    ///
+    /// Warning: **下界和橫排同一個數，而且是一條安全線不是口味**（`MIN_WRAP_WIDTH`，
+    /// 8）：比它窄的時候一個全角字會被擠到自己那一行上，沒完沒了。上界 64 是設置
+    /// 面板與手冊本來就寫着的那個數。
+    pub fn set_zong_measure(&mut self, measure: Option<usize>) {
+        self.zong_measure = measure.map(|m| m.clamp(crate::wrap::MIN_WRAP_WIDTH, 64));
+        self.status = match self.zong_measure {
+            Some(m) => say!("layout.zong-measure", m),
+            None => say!("layout.zong-measure-window"),
         };
     }
 

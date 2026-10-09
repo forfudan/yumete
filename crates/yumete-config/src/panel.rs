@@ -765,12 +765,15 @@ mod tests {
     /// **面板顯示的要是編輯器真用的那個值**（2026-10-09 作者定）。
     ///
     /// 面板自己撥不到域外的數，可檔是人手改的——`zong_length = 2` 寫進去，從前面板
-    /// 畫 2 而 `into_config` 按 4 排版。`markers` 空的時候 `into_config` 留出廠那一
+    /// 畫 2 而 `into_config` 按下界排版。`markers` 空的時候 `into_config` 留出廠那一
     /// 串，而面板畫的是空白，候選欄照舊 １２３。
+    ///
+    /// Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-vertical` 對齊（那一頭用
+    /// 的是 `wrap::MIN_WRAP_WIDTH`）。從前面板說 4、命令說 8、檔案說 4。
     #[test]
     fn the_panel_shows_what_the_editor_takes_not_what_the_file_says() {
         let p = panel("[editor]\nzong_length = 2\nbands = 99\n\n[panel]\nmarkers = \"\"\n", "");
-        assert_eq!(p.shown(find("editor.zong_length")).value, "4", "域是「0，或者 4 到 64」");
+        assert_eq!(p.shown(find("editor.zong_length")).value, "8", "域是「0，或者 8 到 64」");
         assert_eq!(p.shown(find("editor.bands")).value, "4", "上限夾住");
         assert_eq!(
             p.shown(find("panel.markers")).value,

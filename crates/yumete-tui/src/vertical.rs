@@ -156,7 +156,7 @@ impl Metrics {
         let Look {
             ruby,
             hanging,
-            measure,
+            zong,
             gap,
             margin,
             bands,
@@ -191,7 +191,7 @@ impl Metrics {
         // the editor has no business making one on the writer's behalf. `:view-wrap
         // 40` is that decision, in either layout, and vertically the measure
         // *is* the length of a column.
-        let want = measure
+        let want = zong
             .or((config.editor.zong_length > 0).then_some(config.editor.zong_length))
             .unwrap_or(usize::MAX);
         let zong_len = want.min(rows.saturating_sub(1)).max(1);
@@ -612,8 +612,13 @@ pub struct Look {
     pub ruby: bool,
     /// Whether 句讀 hang in the margin.
     pub hanging: bool,
-    /// The 縱 length the writer asked for, if any.
-    pub measure: Option<usize>,
+    /// **一列寫幾個字**（`:view-wrap-vertical`），if the writer asked.
+    ///
+    /// Warning: **橫排那個 measure 不在這裏**（2026-10-09 作者定）。從前這一格就是
+    /// `editor.measure()`，於是 `:view-wrap 40` 在橫排是行寬、切到竖排同一個 40 就
+    /// 成了一列的長度——一條命令兩件事。現在各管各的，這一格只有
+    /// `:view-wrap-vertical` 填得出來。
+    pub zong: Option<usize>,
     /// The gap between 縱 the writer asked for, if any.
     pub gap: Option<usize>,
     /// Which 縱 keep the margin lane (`:view-margin`).
@@ -638,7 +643,7 @@ impl Look {
         Look {
             ruby: !editor.ruby().is_empty(),
             hanging: editor.hanging_punctuation(),
-            measure: editor.measure(),
+            zong: editor.zong_measure(),
             gap: editor.zong_gap(),
             margin: editor.margin(),
             bands: editor.bands(),

@@ -252,6 +252,8 @@ pub enum Command {
     /// `:view-wrap <n>` — write to a measure of `n` columns rather than to the
     /// window; `:view-wrap 0` gives the window back (Feature #113).
     SetMeasure(Option<usize>),
+    /// 竖排：一列寫幾個字。`None` ＝ 跟着窗口。
+    SetZongMeasure(Option<usize>),
     /// `:version` —— 這一版是哪一版，以及東西都放在哪。
     Version,
     /// `:yuhao` — hand the 宇浩 input-method site to the system's browser.
@@ -1776,6 +1778,13 @@ const RENDER: &[Word] = &[
 ];
 
 /// What `:view-wrap` takes.
+/// `:view-wrap-vertical` 的那一個詞。沒有 `on`/`off`——軟折行是橫排的事。
+const ZONG_WRAP: &[Word] = &[Word {
+    name: "0",
+    help: "cmd.wrap.zong-0",
+    needs: &[],
+}];
+
 const WRAP: &[Word] = &[
     Word {
         name: "on",
@@ -3513,6 +3522,21 @@ pub const COMMANDS: &[Entry] = &[
             "off" => Ok(Command::SetSoftWrap(false)),
             "0" => Ok(Command::SetMeasure(None)),
             _ => Ok(Command::SetMeasure(Some(p.number(0)?))),
+        }),
+    },
+    Entry {
+        name: "view-wrap-vertical",
+        aliases: &[],
+        help: "cmd.view.wrap-vertical",
+        needs: &[],
+        params: &[Param::WordsOr {
+            of: ZONG_WRAP,
+            default: Some("0"),
+            or: "<幾字>",
+        }],
+        build: Some(|p| match p.need(0)? {
+            "0" => Ok(Command::SetZongMeasure(None)),
+            _ => Ok(Command::SetZongMeasure(Some(p.number(0)?))),
         }),
     },
     Entry {
@@ -6439,7 +6463,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +15");
+        assert_eq!(row("", "view-"), ":view- +16");
         assert_eq!(row("", "check-"), ":check- +5");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
@@ -6501,7 +6525,10 @@ mod tests {
         assert_eq!(found("punct"), ["check-punct", "view-punct"]);
         // A word that is still a word — a parameter — is reached the way it
         // always was.
-        assert_eq!(found("vert"), ["layout vertical", "help vertical"]);
+        assert_eq!(
+            found("vert"),
+            ["view-wrap-vertical", "layout vertical", "help vertical"]
+        );
         // …and a prefix that names something at the top level is answered
         // about that, with nothing dredged up from below it.
         assert_eq!(found("diff"), ["diff"]);
@@ -6809,7 +6836,12 @@ mod tests {
         // `:help` has a 竪排 topic too, and a topic is by construction named
         // after the thing it is about — so it comes second. Doing beats
         // reading about doing.
-        assert_eq!(written("vert"), ["layout vertical", "help vertical"]);
+        // `:view-wrap-vertical` 是一條真命令（2026-10-09 起），名字裏就有這個詞，
+        // 所以它排在參數那兩條前面——打 `vert` 的人多半是要那一條。
+        assert_eq!(
+            written("vert"),
+            ["view-wrap-vertical", "layout vertical", "help vertical"]
+        );
         assert_eq!(written("horiz"), ["layout horizontal"]);
 
         // And the fallback reaches past the first level: a scheme's name is

@@ -1266,6 +1266,14 @@ impl Editor {
                 self.refresh_goal_column();
                 Ok(CommandOutcome::Continue)
             }
+            // **竖排那一個自己一條命令**（2026-10-09 作者定）。從前 `:view-wrap` 兩種
+            // 排版共用一個數：橫排是行寬，竖排是一列幾個字。原話：「一个东西怎么能有
+            // 两个命令……view-wrap 只在横排生效，view-wrap-vertical 只在竖排生效」。
+            Command::SetZongMeasure(measure) => {
+                self.set_zong_measure(measure);
+                self.refresh_goal_column();
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetSoftWrap(on) => {
                 // **縱書 has nothing to turn off.** A 縱 is broken by the
                 // height of the window, and that is not the writer's to set —

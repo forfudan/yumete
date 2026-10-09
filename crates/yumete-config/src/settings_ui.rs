@@ -272,10 +272,14 @@ pub const SETTINGS: &[Setting] = &[
         key: "zong_length",
         group: Group::Layout,
         // Warning: **`low` 是「最小的非零值」，不是「最小值」。** `into_config` 寫的是
-        // `if length == 0 {0} else {length.clamp(4,64)}`——真正的域是「0，或者
-        // 4 到 64」，中間那三個數不存在。寫 `low: 0` 的時候面板停得到 1/2/3，
-        // 寫進檔裏而編輯器按 4 排版。2026-09-24 審出來的。
-        kind: Kind::Count { low: 4, high: 64, zero: Some("set.zero.as-tall-as-the-window") },
+        // `if length == 0 {0} else {length.clamp(8,64)}`——真正的域是「0，或者
+        // 8 到 64」。寫 `low: 0` 的時候面板停得到 1/2/3，寫進檔裏而編輯器按下界
+        // 排版。2026-09-24 審出來的。
+        //
+        // Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-vertical` 對齊：那一頭
+        // 用的是 `wrap::MIN_WRAP_WIDTH`，而比它窄會把一個全角字擠到自己那一行上。
+        // 從前面板說 4、命令說 8、檔案說 4——同一個設置三個下界。
+        kind: Kind::Count { low: 8, high: 64, zero: Some("set.zero.as-tall-as-the-window") },
         label: "set.editor.zong-length",
         hint: "set.editor.zong-length.hint",
         factory: "0",

@@ -9345,7 +9345,7 @@ fn the_wheel_step_can_be_said_and_asked_about() {
 }
 
 #[test]
-fn a_measure_is_a_width_to_write_to_in_either_layout() {
+fn a_measure_is_a_width_to_write_to_and_a_column_has_its_own() {
     let mut ed = typed("那年冬天，山下起了大雪。");
     ed.set_wrap_width(120);
     assert_eq!(ed.wrap_width(), Some(120), "the window, to begin with");
@@ -9367,15 +9367,27 @@ fn a_measure_is_a_width_to_write_to_in_either_layout() {
     ed.execute("view-wrap 40").unwrap();
     assert!(ed.soft_wrap());
 
-    // Vertically the measure is the length of a 縱.
+    // **竖排那一個是另一條命令，另一格數**（2026-10-09 作者定：「一个东西怎么能有
+    // 两个命令……view-wrap 只在横排生效，view-wrap-vertical 只在竖排生效」）。從前
+    // 這兩件事共用 `measure` 一格：橫排是行寬，一切到竖排同一個數就成了一列的長度。
     ed.execute("layout vertical").unwrap();
-    ed.execute("view-wrap 12").unwrap();
-    assert_eq!(ed.zong_length(), 12);
+    ed.execute("view-wrap-vertical 12").unwrap();
+    assert_eq!(ed.zong_measure(), Some(12));
+    assert_eq!(ed.measure(), Some(40), "橫排那一格一動沒動");
+    ed.execute("view-wrap 20").unwrap();
+    assert_eq!(ed.zong_measure(), Some(12), "橫排那條命令伸不進竖排");
 
-    // `:view-wrap 0` gives the window back; plain `:view-wrap` still just turns
-    // wrapping on, and leaves the measure where it was.
+    // 下界 8 兩頭同一個，比它窄會把一個全角字擠到自己那一行上。
+    ed.execute("view-wrap-vertical 2").unwrap();
+    assert_eq!(ed.zong_measure(), Some(8), "夾到安全線上");
+
+    // `0` 把窗口還回去。
+    ed.execute("view-wrap-vertical 0").unwrap();
+    assert_eq!(ed.zong_measure(), None);
+
+    // 平的 `:view-wrap` 照舊只是把折行打開，不動寬度。
     ed.execute("view-wrap").unwrap();
-    assert_eq!(ed.measure(), Some(12), "`:view-wrap` is not `:view-wrap 0`");
+    assert_eq!(ed.measure(), Some(20), "`:view-wrap` is not `:view-wrap 0`");
     ed.execute("view-wrap 0").unwrap();
     assert_eq!(ed.measure(), None);
     ed.set_wrap_width(120);
@@ -9399,9 +9411,9 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
     assert!(ed.soft_wrap(), "…and untouched: there was nothing to turn");
     assert!(ed.status().contains("縱書不折行"), "{}", ed.status());
 
-    // The measure is a different question, and it *is* answered here.
-    ed.execute("view-wrap 12").unwrap();
-    assert_eq!(ed.zong_length(), 12);
+    // 一列幾個字是另一個問題，而且歸另一條命令（2026-10-09 起）。
+    ed.execute("view-wrap-vertical 12").unwrap();
+    assert_eq!(ed.zong_measure(), Some(12));
 
     // Horizontally it works as it always did.
     ed.execute("layout horizontal").unwrap();

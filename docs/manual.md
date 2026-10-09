@@ -1190,8 +1190,8 @@ With it off, a paragraph is **one line**, however long that is, and the page fol
 the cursor left and right — `gl` goes to the end of the line and the window goes
 along. The line-number lane stays put; it is furniture, not text. **Vertical layout
 has nothing of this kind**: a column breaks at the height of the window, and over
-there `:view-wrap off` simply tells you this command is a horizontal setting
-(`:view-wrap 40` counts in both, see chapter 6).
+there `:view-wrap` is a horizontal setting and does nothing — a column's length
+is `:view-wrap-vertical`, see chapter 6.
 
 A break obeys two rules: a Latin word is not cut in the middle (`Helix` does not
 become `Hel` and `ix`), a line does not begin with closing punctuation like 。、」）,
@@ -1246,12 +1246,16 @@ always meant — turn wrapping on — and leaves the measure alone. When the win
 is narrower than the measure the window wins: a line that will not fit cannot be
 read.
 
-**Vertical layout takes this command too**: `:view-wrap 40` means **forty
-characters to a column**. The measure of horizontal layout is the line width,
-the measure of vertical layout is the column length; it is the same thing in two
-directions.
+**Vertical layout has a command of its own**: `:view-wrap-vertical 30` means
+**thirty characters to a column**. They are the same idea in two directions — how
+long a line of this book runs — but they are two settings and two commands, so
+`:view-wrap` cannot reach into 竪書 and the number you set for one is not the
+number you set for the other. `0` on either means 「as much as the window gives」.
+A column is 8 to 64 characters: below eight, one full-width character would be
+pushed onto a line of its own.
 
-To have it every time, write it into `config.toml`: `[editor] measure = 50`.
+To have them every time, write them into `config.toml`: `[editor] measure = 50`
+for across, `zong_length = 30` for down.
 `ruler` only draws; `measure` really wraps.
 
 ### First-line indent
@@ -6013,8 +6017,8 @@ hanging_punctuation = false  # 。，、？！：；「」 hang in the margin (h
 soft_wrap = true             # set across, a long paragraph folds to the next line; off, it runs past the right edge out of sight
 autosave = true              # keep a rescue copy next to the file while it is unsaved
 ruler = 0                    # how long you mean to write: what runs past this **body** column changes colour. 0 = off
-measure = 0                  # really write this wide: the line breaks here, and what is right of it is margin. 0 = use the window width
-                             # Set down it is how many characters to a column. `:view-wrap 40` is the same thing
+measure = 0                  # really write this wide: the line breaks here, and what is right of it is margin. 0 = use the window width. Across only
+zong_length = 0              # set down, how many characters to a column (8-64). 0 = as long as the window is tall. `:view-wrap-vertical` is the same thing
 char_info = true             # the right end of the status bar says the code point and Unicode block name of the character under the cursor
 command_line = true          # one more line below the status bar: typing commands, what just happened, what you can press
 smart_case = true            # no capital in the pattern and case is ignored; one capital and it is respected
