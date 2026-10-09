@@ -208,6 +208,7 @@ impl Editor {
                 // The session just ended is what `.` replays.
                 self.insert_recording.clear();
                 self.mode = Mode::Normal;
+                self.step_back_out_of_insert();
                 // 那一則簽名是打字當口的東西，出了插入態就不是答案了。
                 self.signature = None;
                 self.signature_query = None;

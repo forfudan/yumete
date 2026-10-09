@@ -2510,6 +2510,13 @@ pub struct Editor {
     /// vim's rule, and vim's alone: helix's `i` ignores a count, so this is
     /// only ever set under the vim preset.
     insert_again: usize,
+    /// **出插入態的時候光標要往回退一格嗎**（2026-10-09，照 helix 的 `restore_cursor`）。
+    ///
+    /// `a` 記這一格，`A`／`i`／`o` 不記——這不是我們定的，是量出來的：真的 helix 裏
+    /// `append_mode` 置 `doc.restore_cursor = true`（`helix-term/src/commands.rs:3142`）
+    /// 而 `insert_at_line_end` 不置，於是 `a` `Esc` 回到最後一個字上、`A` `Esc` 停在
+    /// 行尾那一格。vim 不看這一格：它的 `Esc` 無條件往左退一格。
+    restore_caret: bool,
     /// **vim 的 `R`：打一個字蓋一個字**（2026-10-06 定，只在 vim 鍵位下）。
     ///
     /// 不是一個新的 `Mode`：`Mode` 上有幾十處窮盡的 `match`，而這一件事只在
@@ -3543,6 +3550,7 @@ impl Editor {
             signature: None,
             signature_query: None,
             signature_asked_at: None,
+            restore_caret: false,
             signature_on: None,
             signature_doc_query: None,
             theme_request: None,
