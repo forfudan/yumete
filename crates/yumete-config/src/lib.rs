@@ -2088,6 +2088,96 @@ impl Config {
             }
         }
 
+        // **打錯的設定要出聲：還有二十六格漏了**（2026-10-09 作者定，審出來的）。
+        //
+        // 2026-10-07 那一輪立的規矩在底下，而它只掃到了一部分。漏的是兩族：
+        //
+        // - **二十六個顏色格**（`[theme]` 的二十四個品色 ＋ `[panel] ink`／`paper`）。
+        //   寫錯一個色，`parse_hex` 回 `None`，`into_config` 那一支就留着主題自己的
+        //   顏色——而「留着主題的顏色」和「這一行沒生效」在屏幕上一模一樣。
+        // - **七個有閉合詞表的格**：`theme.ground`／`status_bar`、`editor.layout`／
+        //   `tabs`／`word_level`／`word_mark`。
+        //
+        // ⚠ `editor.language_key` 還沒補：那個字串是前端的鍵盤解析器認的
+        //   （`C-^` 這種寫法），這一層看不見它認不認。
+        for (name, value) in [
+            ("[theme] ink", &raw.theme.ink),
+            ("[theme] paper", &raw.theme.paper),
+            ("[theme] ink_light", &raw.theme.ink_light),
+            ("[theme] paper_light", &raw.theme.paper_light),
+            ("[theme] mark", &raw.theme.mark),
+            ("[theme] mark_light", &raw.theme.mark_light),
+            ("[theme] gold", &raw.theme.gold),
+            ("[theme] gold_light", &raw.theme.gold_light),
+            ("[theme] purple", &raw.theme.purple),
+            ("[theme] purple_light", &raw.theme.purple_light),
+            ("[theme] green", &raw.theme.green),
+            ("[theme] green_light", &raw.theme.green_light),
+            ("[theme] azure", &raw.theme.azure),
+            ("[theme] azure_light", &raw.theme.azure_light),
+            ("[theme] amber", &raw.theme.amber),
+            ("[theme] amber_light", &raw.theme.amber_light),
+            ("[theme] orange", &raw.theme.orange),
+            ("[theme] orange_light", &raw.theme.orange_light),
+            ("[theme] pink", &raw.theme.pink),
+            ("[theme] pink_light", &raw.theme.pink_light),
+            ("[theme] cyan", &raw.theme.cyan),
+            ("[theme] cyan_light", &raw.theme.cyan_light),
+            ("[theme] lime", &raw.theme.lime),
+            ("[theme] lime_light", &raw.theme.lime_light),
+            ("[panel] ink", &raw.panel.ink),
+            ("[panel] paper", &raw.panel.paper),
+        ] {
+            if let Some(word) = value.as_deref() {
+                if parse_hex(word).is_none() {
+                    problems.push(format!("{name} = \"{word}\" 只能是一個 #RRGGBB"));
+                }
+            }
+        }
+        if let Some(word) = raw.theme.ground.as_deref() {
+            if !matches!(
+                word.trim().to_ascii_lowercase().as_str(),
+                "paint" | "theme" | "自己" | "terminal" | "終端" | "终端"
+            ) {
+                problems.push(format!("[theme] ground = \"{word}\" 只能是 paint 或 terminal"));
+            }
+        }
+        if let Some(word) = raw.theme.status_bar.as_deref() {
+            if !matches!(
+                word.trim().to_ascii_lowercase().as_str(),
+                "raised" | "quiet" | "淡" | "sunken" | "deep" | "沉"
+            ) {
+                problems
+                    .push(format!("[theme] status_bar = \"{word}\" 只能是 raised 或 sunken"));
+            }
+        }
+        if let Some(word) = raw.editor.layout.as_deref() {
+            if yumete_cjk::Layout::parse(word).is_none() {
+                problems
+                    .push(format!("[editor] layout = \"{word}\" 只能是 vertical 或 horizontal"));
+            }
+        }
+        if let Some(word) = raw.editor.tabs.as_deref() {
+            if Tabs::parse(word).is_none() {
+                problems
+                    .push(format!("[editor] tabs = \"{word}\" 只能是 auto、always、never"));
+            }
+        }
+        if let Some(word) = raw.editor.word_level.as_deref() {
+            if yumete_cjk::WordLevel::parse(word).is_none() {
+                problems.push(format!(
+                    "[editor] word_level = \"{word}\" 只能是 off、strict、balanced、full"
+                ));
+            }
+        }
+        if let Some(word) = raw.editor.word_mark.as_deref() {
+            if yumete_cjk::WordMark::parse(word).is_none() {
+                problems.push(format!(
+                    "[editor] word_mark = \"{word}\" 只能是 tint、ink、color、line"
+                ));
+            }
+        }
+
         // **打錯的設定要出聲，不許默默退回出廠值**（2026-10-07 一輪審查報來的）。
         //
         // 這一族底下每一條的形狀都一樣：`parse` 回 `None` 就落回缺省，而落回缺省
