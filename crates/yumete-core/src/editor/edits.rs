@@ -929,7 +929,31 @@ impl Editor {
                     self.yanks.insert(0, text.clone());
                     self.yanks.truncate(YANKS);
                 }
-                self.register = text;
+                // **一段選區一份**（2026-10-09，見 [`Editor::register_parts`]）。
+                //
+                // `edit_nth` 是這一段在**文檔次序**裏的序號（`#` 寄存器讀的也是它），
+                // 所以收下來那幾份本來就是按順序排好的，哪一趟先跑不要緊。
+                //
+                // Warning: **「這一趟」要分得出來**：`edit_each` 每開一輪就把 `edit_round`
+                // 往上加一格，而這裏記下存的時候是第幾輪。不記的話，下一個命令的第
+                // 一段會接在上一個命令留下的那幾份後面。
+                match self.edit_nth {
+                    None => {
+                        self.register_parts.clear();
+                        self.register = text;
+                    }
+                    Some(nth) => {
+                        if self.parts_round != self.edit_round {
+                            self.parts_round = self.edit_round;
+                            self.register_parts.clear();
+                        }
+                        if self.register_parts.len() <= nth {
+                            self.register_parts.resize(nth + 1, String::new());
+                        }
+                        self.register_parts[nth] = text;
+                        self.register = self.register_parts.concat();
+                    }
+                }
             }
         }
     }
@@ -997,7 +1021,17 @@ impl Editor {
             // 說得通的，而貼一個空字符串看起來像鍵沒按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
             Some(name) => self.registers.get(&name).cloned().unwrap_or_default(),
-            None => self.register.clone(),
+            // **一段選區一份**（2026-10-09）：N 段剪下來、N 段貼回去，逐字節還原
+            // ——`d` 再 `P` 是「把它放回去」的那一下，而它從前只放得回一段。
+            //
+            // 段數對不上的時候交整份（接起來的）：一個光標上 `P` 貼的是剪下來的全部，
+            // 真 helix 也是這樣。
+            None => match self.edit_nth {
+                Some(nth) if self.register_parts.len() > 1 => {
+                    self.register_parts.get(nth).cloned().unwrap_or_default()
+                }
+                _ => self.register.clone(),
+            },
         }
     }
 
