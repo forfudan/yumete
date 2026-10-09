@@ -114,11 +114,50 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
 ///
 /// 竪排 turns both round, and for the same reason: there a wide box cuts the
 /// tops off many 縱 at once (「這樣不會打破行文」).
-pub fn room(area: Rect, vertical: bool) -> (u16, u16) {
-    match vertical {
-        false => (area.width * 2 / 3, area.height / 3),
-        true => (area.width / 3, area.height * 2 / 3),
+///
+/// **A key table is scanned once rather than read**, so neither argument above
+/// is about it: there is no measure to keep to, and a third of a 24-row
+/// terminal is six rows inside the ring — which the 23 items of the `空格`
+/// menu do not fit into at any column count. Measured 2026-10-09 against the
+/// reading room: 100×20 loses 4 of them, 100×16 loses 14, and 80×12 is cut to
+/// three. So it takes the whole width and **half** the page.
+///
+/// Half, and no longer the half-plus-one it took until 2026-10-09: 「超過一半
+/// 確實危險，寧可更寬」. The row it gave up costs nothing above 16 rows — the
+/// menu reaches that cap only on a short terminal, and it answers depth it
+/// cannot have by spreading into another column.
+/// **A field list sits between the two.** 記錄 and the five 信息 panels are
+/// read, so the measure applies to their width — but a column of
+/// `name  value` pairs is not a paragraph, and a third of a short terminal is
+/// two rows inside the ring, too few to wrap a cell value into. They take the
+/// reading width and the scanning depth.
+pub fn room(area: Rect, vertical: bool, what: Use) -> (u16, u16) {
+    match (what, vertical) {
+        (Use::Read, false) => (area.width * 2 / 3, area.height / 3),
+        (Use::Read, true) => (area.width / 3, area.height * 2 / 3),
+        (Use::Fields, false) => (area.width * 2 / 3, area.height / 2),
+        (Use::Fields, true) => (area.width / 2, area.height * 2 / 3),
+        // Layout does not turn this one round: a key table is drawn across in
+        // both layouts, so there is no 縱 for a wide box to cut the top off.
+        (Use::Scan, _) => (area.width, area.height / 2),
     }
+}
+
+/// **What a float is for**, which is the whole of what its size depends on.
+///
+/// Three kinds, and before 2026-10-09 they were three expressions in three
+/// places: the reading room here, `area.height / 2 + 1` in `panel::draw`, and
+/// `(area.height - 2) / 2` beside the key table — the last two spellings of
+/// one intent, kept in step by hand, and the field list silently taking one
+/// from each.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Use {
+    /// Prose: a 百科 entry, a footnote, a note about the text.
+    Read,
+    /// `name  value` pairs: 記錄 and the five 信息 panels.
+    Fields,
+    /// A key table: scanned once, for the one row being looked for.
+    Scan,
 }
 
 pub enum Anchor {
