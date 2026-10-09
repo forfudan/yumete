@@ -159,8 +159,13 @@ impl Editor {
                 }
                 self.refresh_goal_column();
             }
-            None if scoped => self.status = say!("find.not-in-table", pattern),
-            None => self.status = say!("find.not-found", pattern),
+            // Warning: **說給人看的式子裏不許有我們自己加的那一段**（2026-10-09 審出
+            // 來的）。智能大小寫把 `(?i)` 寫進式子裏（`smart_cased`，那是正則引擎自
+            // 己的旗標，不另外實現一套），而面板那一路把穿好衣服的那一整條存進了
+            // `last_search`——於是找不到的時候狀態欄寫着「找不到：(?i)zhongguo」。那
+            // 四個字符不是打的人寫的。
+            None if scoped => self.status = say!("find.not-in-table", as_typed(&pattern)),
+            None => self.status = say!("find.not-found", as_typed(&pattern)),
         }
     }
 
@@ -601,4 +606,14 @@ impl Editor {
         }
         self.ask_or_finish(walk);
     }
+}
+
+/// **一條式子裏，打的人自己寫的那一段** —— 報給他看的時候用這一支。
+///
+/// 智能大小寫把 `(?i)` 寫在式子前面（見 [`Editor::smart_cased`]：那是正則引擎自己的
+/// 旗標，不另外實現一套），而搜索面板把穿好衣服的那一整條存進了 `last_search`。於是
+/// 找不到的時候狀態欄寫着「找不到：(?i)zhongguo」——那四個字符是編輯器加的，不該讓
+/// 人回去找自己哪裏打錯了。
+fn as_typed(pattern: &str) -> &str {
+    pattern.strip_prefix("(?i)").unwrap_or(pattern)
 }
