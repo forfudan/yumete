@@ -1802,9 +1802,9 @@ find = "宇浩 官網 官网 輸入法 输入法 website"
 [[message]]
 # : 命令選單裏 yume 那一項的說明（commands 組）
 key = "cmd.commands.yume"
-zht = "輸入法：現在用的是哪一個；換方案、拆分注解"
-zhs = "输入法：现在用的是哪一个；换方案、拆分注解"
-en = "the IME: which one is answering, changing scheme, the 拆分 annotation"
+zht = "宇夢輸入引擎開關：on 中文、off 關閉、abc 英文模式"
+zhs = "宇梦输入引擎开关：on 中文、off 关闭、abc 英文模式"
+en = "the Yume input engine's switch: on 中文, off, abc English"
 find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin yo"
 
 [[message]]
