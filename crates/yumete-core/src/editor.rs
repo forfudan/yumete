@@ -618,6 +618,34 @@ pub(crate) struct Searching {
     pub since: std::time::Instant,
 }
 
+/// **一趟正在背景跑的走查，喂着挑選器**（2026-10-09 作者定：「流式化，和 helix 一樣
+/// 不設上限」）。
+///
+/// 從前走查跑在按鍵那一下上，所以要兩道閘護着畫面：兩萬個檔封頂、五秒硬停。代價有
+/// 兩個——大目錄裏開一次 `空格 f` 凍最多五秒（中間一幀都不說它在幹什麼），而第兩萬
+/// 個之後的檔**打出全名也搜不到**（名單一次建好再打分，不在名單上的就不存在）。
+/// helix 把走查的每一條路徑流着喂給 `nucleo`，所以它連上限都不需要。
+///
+/// 這一支和 [`Searching`] 同形，照它寫的：旁邊一條線程、每幀收一批、一格 `stop`。
+pub(crate) struct Filling {
+    pub heard: std::sync::mpsc::Receiver<Vec<(std::path::PathBuf, String)>>,
+    /// 面板一關就撥上去（[`walk_until_told`] 下一個條目上收攤）。
+    pub stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// 什麼時候開跑的——轉圈那一支照它算第幾格，同 `Searching::since`。
+    pub since: std::time::Instant,
+}
+
+/// **落地就叫停。** 面板關了、編輯器整個沒了，那一趟就不必走下去。
+///
+/// Warning: **不能只靠「送不出去就自己停」。** 那一句要等下一批滿了（五百一十二個檔）
+/// 纔發現收的人走了；一棵大樹上那是好幾秒的白跑，而測試裏那是幾條在背景裏搶磁盤
+/// 的線程。撥這一格是立刻的：走查每一個條目看它一眼。
+impl Drop for Filling {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// **Where a shell command's output goes** (2026-10-06, helix's four).
 ///
 /// helix spells them `|`, `A-|`, `!`, `A-!` and calls them `Replace`,
@@ -1765,13 +1793,29 @@ pub(crate) struct Walked {
 }
 
 pub(crate) fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
-    walk_inner(root, &Sieve::default(), false, f);
+    walk_inner(root, &Sieve::default(), false, None, f);
 }
 
 /// [`walk`]，但篩子由呼叫方說——`ye --files` 的 `--hidden`/`--glob=`/`--exclude=`
 /// 就是靠它（2026-10-03）。
 pub(crate) fn walk_with(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -> Walked {
-    walk_inner(root, sieve, false, f)
+    walk_inner(root, sieve, false, None, f)
+}
+
+/// [`walk_with`], **but it can be told to stop** — the picker's walk runs beside
+/// the key thread now and has to end when the panel does (2026-10-09).
+///
+/// Warning: **這是取消，不是封頂。** 挑選器那一趟撥的是 `Sieve::uncapped`（名單沒有
+/// 上限，見 `open_file_picker_in`），所以唯一停得下它的就是這一格——面板一關就撥
+/// 上去，下一個條目上它自己收攤。沒有這一格，一個 `/` 上開一次挑選器會留下一條
+/// 遍歷整塊磁盤的線程。
+pub(crate) fn walk_until_told(
+    root: &Path,
+    sieve: &Sieve,
+    stop: &std::sync::atomic::AtomicBool,
+    f: &mut impl FnMut(&Path),
+) -> Walked {
+    walk_inner(root, sieve, false, Some(stop), f)
 }
 
 /// [`walk`] for **prose**: a file whose first kilobyte holds a NUL is not
@@ -1785,7 +1829,7 @@ pub(crate) fn walk_with(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -
 /// 沒有這一道，開着「搜索隱藏和忽略」搜 yumete 自己的倉要**從盤上讀 5.26 GB 的
 /// `.o` 與 `.rlib` 進內存，再一個個因為不是 UTF-8 丟掉**；探頭 1 KB 只要 44 MB。
 pub(crate) fn walk_prose(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -> Walked {
-    walk_inner(root, sieve, true, f)
+    walk_inner(root, sieve, true, None, f)
 }
 
 /// 頭 1 KB 裏有沒有 NUL —— 讀不開的也當二進制，反正搜不了。
@@ -1819,6 +1863,7 @@ fn walk_inner(
     root: &Path,
     sieve: &Sieve,
     prose_only: bool,
+    stop: Option<&std::sync::atomic::AtomicBool>,
     f: &mut impl FnMut(&Path),
 ) -> Walked {
     let mut walked = Walked::default();
@@ -1871,6 +1916,10 @@ fn walk_inner(
         // 名單還說自己是全的。`visited` 本來就該是「看過幾個條目」，不是「看過幾
         // 個文件」；那是 `seen`。
         visited += 1;
+        // **叫停就停**，而且和那幾道閘不一樣：這不算「半截」，是面板關了沒人要了。
+        if stop.is_some_and(|one| one.load(std::sync::atomic::Ordering::Relaxed)) {
+            break;
+        }
         if walk_is_done(seen, visited, started.elapsed(), prose_only, sieve.uncapped) {
             walked.cut = true;
             break;
@@ -2552,6 +2601,8 @@ pub struct Editor {
     /// **延伸關掉那一刻的那一段**，`gv` 拿它重選（vim，2026-10-06）。
     /// **背景跑着的那一趟搜索**（§5.93，2026-10-06）。
     searching: Option<Searching>,
+    /// 正在長的那張挑選器名單——見 [`Filling`]。
+    filling: Option<Filling>,
     /// 這一趟搜索走不走背景——只有 `run_owed_search` 撥上去，見那裏。
     in_the_background: bool,
     /// 第幾趟。新的一趟把它加一，舊線程交回來的一概丟掉。
@@ -3563,6 +3614,7 @@ impl Editor {
             insert_recording: String::new(),
             insert_again: 0,
             searching: None,
+            filling: None,
             in_the_background: false,
             search_generation: 0,
             search_progress: std::sync::Arc::default(),

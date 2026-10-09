@@ -841,6 +841,9 @@ pub fn run(
             // **背景那一趟交回來的，每一幀收一批**（§5.93）。收完就畫，所以名單
             // 是在長的，而右上角那個「N+」跟着跳。
             editor.collect_search_results();
+            // **挑選器的名單也是長出來的**（2026-10-09）：`空格 f` 的走查跑在旁邊，
+            // 每一幀收一批，所以面板立刻就開得出來，不再凍最多五秒。
+            editor.collect_picker_items();
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
@@ -1177,6 +1180,9 @@ pub fn run(
                 editor.docs_due_in(),
                 // 搜索在旁邊跑的時候要醒過來收（同上面那幾個鬧鐘）。
                 editor.searching_due_in(),
+                // 挑選器的走查在旁邊跑的時候同理。四十毫秒比轉圈那一格（八十）還
+                // 密，所以腳注那個圈靠它就轉得起來，不必另加一個鬧鐘。
+                editor.filling_due_in(),
                 servers.due_in(),
                 // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
                 // 了一個不動的點（同上面那幾個鬧鐘）。
@@ -9172,18 +9178,28 @@ fn draw_picker(
     // 不該是兩種意思。
     // **走查半途停了就多一個 `+`**（2026-10-09 作者定）。搜索那一頭一直是這個寫法
     // （`N+結果`）：分母數的是篩過的這些，而 `+` 說的是「沒走到的那些裏可能還有」。
+    // **走查還在跑的時候，兩個記號一起說**（2026-10-09 作者定，問的是「兩個都要」）。
+    //
+    // `+` 說的是「這個數還會漲」——和搜索那一頭的 `N+結果` 同一個寫法，也是那個字
+    // 從前的用處（走查撞上封頂停了）。封頂隨流式化去掉之後它空了出來，現在歸
+    // 「還沒走完」。轉圈說的是另一半：**正在做事**。原話：「两个说的不完全是一件事」。
+    //
+    // Warning: 轉圈不轉的時候 `frame` 回的是一個空格（留位，不讓旁邊的字跳），而底下
+    // 那一句 `trim_end` 正好把它收掉——走完了就只剩一個乾淨的數目。
+    let plus = match editor.still_filling_the_picker() {
+        true => "+",
+        false => "",
+    };
     let counted = format!(
-        "{}/{}{}  ",
+        "{}/{}{}  {}",
         if items.is_empty() {
             0
         } else {
             picker.selected() + 1
         },
         items.len(),
-        match picker.cut {
-            true => "+",
-            false => "",
-        },
+        plus,
+        spinner::frame(editor.filling_since()),
     );
     // **腳注只剩一個數目**（2026-10-01 定）。查詢詞挪進了列表上面那個框（原話：
     // 「我其实有点想在文件下方加一行输入框」，後來定了畫在**上面**，和搜索
@@ -21388,6 +21404,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         let config = Config::default();
         editor.open_file_picker_with("", root.clone(), yumete_core::editor::Sieve::default());
+        // 走查跑在旁邊，而這裏沒有主循環替它收（同 `wait_for_the_search`）。
+        editor.wait_for_the_picker();
         // `Tab` 走一條，不是 `j`——2026-10-08 起 `j` 是查詢詞裏的一個字母。
         for _ in 0..20 {
             editor.on_key(Key::Tab);
@@ -21529,6 +21547,7 @@ fn squeezed(text: &str) -> String {
         ed.on_key(Key::Char(' '));
         ed.on_key(Key::Char('f'));
         assert!(ed.picker().is_some(), "空格 f 開得了挑選器");
+        ed.wait_for_the_picker();
         let fresh = grounds(&ed);
         assert!(!fresh.contains(&ink.text()), "開門那一下就不該整條反白");
         assert!(fresh.contains(&ink.at(yumete_config::rung::BAND)), "照舊畫着，只是淡一檔");
@@ -23007,5 +23026,45 @@ fn squeezed(text: &str) -> String {
         assert_eq!(gold.len(), 1, "一格，不是兩格也不是零格：{gold:?}");
         // 竪排把括號換成竪着的那一式（`）` → `︶`，U+FE36），所以對的是那一個。
         assert_eq!(gold[0].2, "\u{fe36}", "金的那一格畫的是閉的那一半：{gold:?}");
+    }
+
+    /// **走查還在跑的時候，腳注上兩個記號**（2026-10-09 作者定：「兩個都要」）。
+    ///
+    /// `+` 說「這個數還會漲」（那個字從前的用處是走查撞上封頂停了，封頂隨流式化
+    /// 去掉之後空了出來），轉圈說「正在做事」。走完兩個一起收，只剩一個乾淨的數目。
+    ///
+    /// Warning: **這一格不靠時序。** 收是主循環（或者 `wait_for_the_picker`）做的事，而
+    /// 這裏誰都還沒收過——所以「名單還是空的、走查還在跑」是確定的，不是賭線程慢。
+    #[test]
+    fn the_pickers_footnote_says_the_walk_is_still_going() {
+        let dir = std::env::temp_dir().join(format!("yumete-picker-spin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("make the fixture");
+        std::fs::write(dir.join("一.md"), "一行\n").expect("write");
+        let config = Config::default();
+        let mut ed = Editor::new();
+        ed.set_root(&dir);
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('f'));
+        let going = buffer_to_text(&render_with(&ed, &config, no_ime(), 80, 24));
+        assert!(going.contains("0/0+"), "名單還空着，而那個 + 說它會漲：{going}");
+        let turning = (0..8).any(|k| {
+            let was = std::time::Instant::now() - crate::spinner::TICK * k;
+            going.contains(crate::spinner::frame(Some(was)))
+        });
+        assert!(turning, "八格裏有一格畫在上面：{going}");
+
+        ed.wait_for_the_picker();
+        let done = buffer_to_text(&render_with(&ed, &config, no_ime(), 80, 24));
+        assert!(done.contains("1/1"), "走完了，一條：{done}");
+        assert!(!done.contains("1/1+"), "沒有半截那個記號了：{done}");
+        assert!(
+            !(0..8).any(|k| {
+                let was = std::time::Instant::now() - crate::spinner::TICK * k;
+                done.contains(crate::spinner::frame(Some(was)))
+            }),
+            "圈也收了：{done}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
