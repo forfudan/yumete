@@ -1016,14 +1016,23 @@ impl Editor {
     ///
     /// `gd` 與 hover 問的是同一個位置，答案的算法也只該有一份。
     fn where_the_cursor_is_in_code(&self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.where_in_code(self.sel.head())
+    }
+
+    /// **代碼裏第 `at` 格在哪** —— `(路徑, 行, utf16 列)`，問服務器用的坐標。
+    ///
+    /// 光標那一格是 [`Self::where_the_cursor_is_in_code`]；問別的格子的只有一處，
+    /// 見 [`Self::a_hover_on_the_callee`]。
+    fn where_in_code(&self, at: usize) -> Option<(std::path::PathBuf, usize, usize)> {
         if !self.writes_code() {
             return None;
         }
         let path = self.current_buffer().path()?.to_path_buf();
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let at = at.min(rope.len_chars());
+        let line = rope.char_to_line(at);
         let text = rope.line(line).to_string();
-        let chars = self.sel.head() - rope.line_to_char(line);
+        let chars = at - rope.line_to_char(line);
         Some((path, line, crate::problem::utf16_column(&text, chars)))
     }
 
@@ -1367,9 +1376,40 @@ impl Editor {
                 self.signature_asked_at = None;
                 self.signature = Some((self.sel.head(), one));
             }
-            // 沒有簽名：把問過的那個地方排成一句 hover，下一趟發出去。
-            None => self.signature_doc_query = self.signature_asked_at.take(),
+            // 沒有簽名：回頭問一句 hover，問在**被調用的那個名字**上。
+            None => self.signature_doc_query = self.a_hover_on_the_callee(),
         }
+    }
+
+    /// **那一句回退的 hover 要問在哪一格**（2026-10-09）。
+    ///
+    /// Warning: **不是問簽名的那一格。** 他報了三次「`println!(` 還是不出簽名」，根子
+    /// 在這裏：從前這一句排的是 [`Self::signature_asked_at`]，也就是**問簽名的那個
+    /// 坐標**——左括號後面那一格。那一格對 signatureHelp 是對的（協議要的就是「我
+    /// 正在填第幾個參數」），可 hover 問的是另一件事：「這一格上是什麽東西」。括號
+    /// 裏面空無一物，於是 rust-analyzer 兩句都回 `null`，回退等於沒有回退。
+    ///
+    /// 要問的那一格一直就在手邊：[`Self::signature_on`] 記着這一次調用的左括號，被
+    /// 調用的那個名字就貼在它前面。從括號往前走到第一個字母/數字/下劃線為止，
+    /// `println!(` 跳過那個 `!` 落在 `n` 上。往前最多走四格——觸發字符本來就該挨着
+    /// 名字，走得更遠就不是這一次調用的事了。
+    fn a_hover_on_the_callee(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.signature_asked_at = None;
+        let bracket = self.signature_on?;
+        let rope = self.current_buffer().rope();
+        let head = rope.line_to_char(rope.char_to_line(bracket.min(rope.len_chars())));
+        let mut at = bracket.min(rope.len_chars());
+        for _ in 0..4 {
+            if at == head {
+                return None;
+            }
+            at -= 1;
+            let c = rope.char(at);
+            if c.is_alphanumeric() || c == '_' {
+                return self.where_in_code(at);
+            }
+        }
+        None
     }
 
     /// **回退那一句 hover 答回來了**：只取正文第一段（2026-10-08 定）。
