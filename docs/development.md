@@ -20502,6 +20502,35 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.151 What the manual is for, measured against eight others (2026-10-09)
+
+Found by the author searching his own manual and hitting a wall of 「（2026-09-25 定）」:
+「你这个是用户手册还是开发记录？？？？」. He was right, and the cause was mine — I maintained the
+manual append-only, adding a paragraph for every behaviour change instead of editing the
+paragraph that describes the behaviour, in the register of a code comment (date + quote +
+reason). 68 dates and 72 past-behaviour lines are the fossil record.
+
+Measured against vim, nvim, emacs, helix, kakoune, micro, nano and zed. The decisive line:
+**kakoune documents 640 items in 20,665 words; we document 636 in 73,606.** Across 212,000
+words of those eight manuals there is **not one decision date**, and the five modern ones
+quote **no user, ever**. Vim ran this exact cleanup (patch 8.1.1280: 「Remarks about
+functionality not in Vi clutters the help」) and fenced the lot into `vi_diff.txt`.
+
+The rule, as the author set it: 「most of the yumete users are vimers and helixers, so
+putting too much words on these already-known-muscle memories would cause users to lose
+patience」. So prose is spent on **only** two things — what is unique to yumete, and what
+visibly deviates from vim/helix in the matching mode. Everything else is one table row with
+its description in the cell (helix keeps 61% of its words in tables; we keep 75% in prose).
+Basics go to `:tutor`. Deviations get one file, the `vi_diff.txt` genre. No dates, no quotes,
+no 「從前」; rationale lives here and is linked, not restated. `Warning:` at most ~4 per 1000
+lines (peers 0.9–7.6, we run 23.4). Target ≈ 20,000 words.
+
+Also settled: **the Chinese manual is frozen** until yumete is stable, the README no longer
+links it, and `documented_keys` no longer reads it — a frozen document cannot be guarded,
+because the next rename would turn it red and the only way to green would be to edit the file
+we just decided to stop editing. The English manual may still carry Chinese in parentheses and
+examples. And this file moves to English from here on.
+
 ## 5.150 Both sides of a cross-file replace ask, and a file that moved on is left alone (2026-10-09)
 
 The open item read 「cross-file `R` undo」, and the first thing to find was that it already exists:

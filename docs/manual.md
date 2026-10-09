@@ -873,13 +873,13 @@ and it will tell you why** — `:view-code` with no argument is a report: whethe
 on, which grammars it knows, and whether the paragraph at the cursor is too long.
 
 **A file that is code all through has no such ceiling** and is coloured however long it
-is (2026-09-30). It goes another way: the parsed tree is kept, only the **hundred-odd
+is. It goes another way: the parsed tree is kept, only the **hundred-odd
 lines you can see** are coloured, and one character changed parses only the part that
 changed again. Measured on a twenty-thousand-line `lib.rs`: 0.08 ms to type a character,
 0.55 ms to scroll into a block that has never been drawn.
 
-**A line longer than 50,000 characters is left plain** (`:view-long-line`, 2026-10-08;
-the threshold was raised on 10-09). Past that many characters a line gets no markdown
+**A line longer than 50,000 characters is left plain** (`:view-long-line`). Past that
+many characters a line gets no markdown
 markup, no syntax colour and no word tint — the three things worked out per *line*, which
 costs nothing on an ordinary paragraph and everything on a file that is one line.
 Measured: a minified `.js` of 1.5 million ASCII characters on one line went from **2.54 s
@@ -898,8 +898,8 @@ glyph by glyph, which is the very cost this gate exists to avoid. `:view-long-li
 removes the limit, a number sets it, and the bare word reports which it is.
 
 Why only these: every grammar takes up space in the executable. The first seven
-came to 1.3 MB together; Rust and Go were added on 2026-09-19 and measured 1.28 MB for
-the pair (13.41 MB → 14.69 MB), which is worth it — people write those two in it. Below
+came to 1.3 MB together; Rust and Go cost 1.28 MB for the pair
+(13.41 MB → 14.69 MB), which is worth it — people write those two in it. Below
 that the arithmetic changes: `bash` alone wants 1.3 MB, and all hundred-odd grammars
 helix ships would be tens of MB, and that is when 「install a grammar pack separately」
 becomes the road to take.
@@ -1204,7 +1204,7 @@ press it by mistake you can see what it is about to do**, and Esc backs out.
 The trailing newline follows whatever the original had: none there, none added;
 one there, it is kept — it will not glue two lines into one.
 
-**Four keys in all, following helix** (2026-10-06):
+**Four keys in all, following helix**:
 
 | Key | Command | What it does | Is the selection fed in |
 |---|---|---|---|
@@ -1217,10 +1217,6 @@ Warning: **`!` and `A-!` do not feed the selection in.** That is helix's rule,
 and it is also what vi's "read a command's output in here" meant: "run a
 command, put the answer here" — which paragraph the cursor is in has nothing to
 do with it. To send the selected text in, use `\|` or `A-\|`.
-
-Warning: **`!` used to do what `\|` does** (changed 2026-10-06). A helix hand
-pressing `!date⏎` thought they were inserting a line, and in fact replaced the
-selected text.
 
 **A command that fails does not touch your text.** Mistyping a flag (`tr -D ' '`
 instead of `-d`) happens all the time, and what that command spits out is an
@@ -1323,13 +1319,11 @@ blocks, from every source, plus the short codes; it carries **no words**, so
 whole-sentence input falls back to one character at a time. The panel reports it
 as 「出廠自帶 精華版 ⋯⋯」, which tells it apart from an installed table.
 
-- **The binary does not depend on the machine that compiled it.** It used to:
-  with 宇浩 installed the complete 3.69 MB 靈明 went in, and without it the
-  精華版. 2026-10-07: 「編譯不是跟着電腦走的！！！！編譯應該是穩定的！！！爲什
-  麽必須帶靈明精華版是爲了壓縮二進制尺寸！！！」 On a machine with 宇浩
-  installed those 3.69 MB were read by nobody anyway — an installed table wins
-  at run time — so they were pure weight. CI and your own `cargo build` now
-  produce the same bytes.
+- **The binary does not depend on the machine that compiled it.** What goes in
+  is the 精華版, whether or not 宇浩 is installed on the machine doing the
+  compiling. An installed table wins at run time anyway, so carrying the whole
+  3.69 MB 靈明 as well would be weight nobody reads. CI and your own
+  `cargo build` produce the same bytes.
 - **Where they come from**: `yume` generates them and publishes them in the
   `yumete-data` release of `forfudan/yume-release` (public, no token needed).
   The build downloads them **once** into `~/.cache/yumete/builtin/` and reads
@@ -1374,8 +1368,7 @@ installed** — each platform by that platform's own rules:
   `/usr/share` — the machine-wide install is there).
 
 On a macOS with yume installed there is therefore nothing to configure:
-`:yume-scheme` simply has all five schemes. (Before 2026-09-07 it only knew the
-Linux set of paths, so a fully loaded Mac could not find a single scheme.)
+`:yume-scheme` simply has all five schemes.
 
 **Schemes you built yourself are found just as well.** The factory schemes are
 one file each, `schemes/<名字>.toml`; the ones a user installs each take a
@@ -1533,7 +1526,7 @@ Under a parent, the noun has already been said by the parent, and the child is l
 with the **verb** half:
 
 Warning: **`:search` later came back to life**: after giving way to `:table-find` the
-name sat empty for a while, and it is now the command for the search panel (#419) — the
+name sat empty for a while, and it is now the command for the search panel — the
 same word, an entirely different thing. So is `:replace`: it used to mean "replace
 everything `:grep` just found", and now it is one more row in that panel.
 
