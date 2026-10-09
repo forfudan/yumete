@@ -20499,6 +20499,49 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.145 Thirteen more, and one number I had got wrong (2026-10-09)
+
+He stayed awake and worked through most of the remaining questions. What he chose:
+
+- **A character is a grapheme cluster, not a codepoint.** His words, and now the rule: `:count`
+  counts clusters (`葛`＋U+E0100 is **one** 字, not two) and so does the caret's 字 readout.
+  ⚠ `cursor_column` stays a **char offset** — two callers need the index into the line, not the
+  reader's count (the inline preedit's position, and the comparison in `drawn_runs_on_line`), so
+  the readout got its own `cursor_grapheme`.
+- ⚠ **And the cost I quoted for it was wrong.** I said 70 ms a frame on a four-million-character
+  line, measured as `(ge) − (open)`. That 70 ms is **`ge`'s own cost**: `gh` pays it too, and
+  `gh` does no counting at all. A/B on the same keys, best of five: old 0.21 s, indexed 0.21 s,
+  naive prefix walk 0.22 s; on a 12.4 M line 0.65 / 0.63 — the naive one *faster*, inside the
+  noise. `--shot` draws **one** frame, so a per-frame cost hidden behind an expensive motion
+  cannot be seen at all with this harness. The index stayed because it removes an O(prefix)
+  per-frame term by construction, not because the measurement called for it.
+- **`:s` is case-sensitive, `/` stays smart — and the widening is said out loud.** Two new hint
+  panels: `/` and `?` now open one of their own, and the `:s` panel spells out each flag under
+  his existing line (kept whole — it already carries the ranges and the separator rule).
+- **The picker offers every file the walk found.** `PICKER_LIMIT` is gone: it capped not 「how
+  many are shown」 but 「how many can be found」, since the list is built once and then scored.
+  The real bound was always `WALK_CEILING`. Measured worst case (the whole repo including
+  `target/`, 20 000 entries): 220 ms to open, ~40 ms a keystroke; the ordinary repo root is 176
+  entries and nothing changed. A cut walk now shows a `+` on the count, the shape search uses.
+  ⚠ helix has **no** cap at all — it streams every path into `nucleo`. That is a separate round.
+- **A chunk holding a line past the long-line gate is not coloured at all** — the per-line gate
+  could not reach the bill (42 ms a frame at 50 000 characters, 165 at 200 000, because a short
+  neighbour still asked for the whole 128-line chunk's parse and paint). The check sits **before**
+  `hold_the_tree` and caches nothing, since `by_chunk` does not record which file it holds.
+- **Go and Python get back the difference between calling a method and reading a field** — but
+  **not** by flipping the precedence rule. The review's premise (「tree-sitter and helix take the
+  first pattern」) does not survive checking: flipping fixes Go and **breaks JavaScript**, because
+  the two upstream queries are written in opposite orders. helix is right about both because it
+  **curates its own query files** — its Go query has no catch-all `@property` — and those files
+  are MPL-2.0 against this repo's Apache-2.0. So one rule of our own is appended instead; last
+  pattern wins, the appended one wins, and the other fourteen languages are untouched.
+- **The settings list scrolls**; **all three table switches report when asked bare** while the key
+  that flips the header goes on flipping it (a key has no bare form); **twenty-six settings that
+  fell back without a word** now say what they would have taken; **the word tint asks the palette
+  whether there is a hue to spend**, so 黑白 stays grey and the other nine themes are pixel-identical.
+- **`:yume` is described as the switch it is** — his words: 「宇夢輸入引擎開關：on 中文、off 關閉、
+  abc 英文模式」. The old line described the whole `:yume-*` family.
+
 ## 5.144 Nine decisions, taken awake between the rounds (2026-10-09)
 
 The review rounds left twenty questions. He came back for a few minutes and answered nine of
