@@ -172,6 +172,8 @@ impl super::Editor {
         //
         // 同上面那三格，每一段開跑之前擺回去；跑完之後照舊留最後一趟那一份。
         let mode = self.mode;
+        // 寄存器要分得出「這一趟」——見 `Editor::store`。
+        self.edit_round += 1;
         for (nth, one) in was.iter().enumerate() {
             self.sel = crate::selection::Selections::one(*one);
             self.pending = pending;
@@ -229,6 +231,7 @@ impl super::Editor {
         let named = self.pending_register;
         // 模式同上一支，見那裏的註釋。
         let mode = self.mode;
+        self.edit_round += 1;
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
         let ranges: Vec<Range> = was.iter().copied().collect();

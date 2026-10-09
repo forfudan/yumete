@@ -2145,6 +2145,23 @@ pub struct Editor {
     /// still there.
     register: String,
     registers: HashMap<char, String>,
+    /// **無名寄存器裏，每一段選區各自那一份**（2026-10-09 審出來的）。
+    ///
+    /// 從前整個寄存器是一個字串，而 `edit_each` 會逐段 `store`——於是 N 段選區剪下來
+    /// 只剩一份活着，`d` 之後 `P` 把同一截貼到每一段上。實測三行上 `wCCd;P` 出來的是
+    /// 「甲一行…／乙**一**行…／丙**一**行…」：乙和丙那兩截除了撤銷棧之外哪兒都沒有，
+    /// 而結果讀起來像通順的句子，所以什麽都不會提醒寫的人。真 helix 的寄存器是一段
+    /// 選區一份，同一串鍵在那裏逐字節還原。
+    ///
+    /// [`Editor::register`] 照舊是「整份」（按文檔次序接起來）：選區只剩一段的時候
+    /// `P` 貼的就是它，`C-r` 與那張寄存器單子也讀它。
+    ///
+    /// ⚠ **具名寄存器還是一份**（`"a`）：同一個洞還在那裏，沒一起改。
+    register_parts: Vec<String>,
+    /// [`Self::register_parts`] 是哪一趟存下的——見 [`Editor::store`]。
+    parts_round: u64,
+    /// 多選區的編輯跑過幾趟了。只用來分辨「這一趟是新存的，還是上一趟留下的」。
+    edit_round: u64,
     /// What the unnamed register held before, newest first.
     ///
     /// Every yank and every delete overwrites one register, so the text you cut
@@ -3440,6 +3457,9 @@ impl Editor {
             vim_lines: false,
             register: String::new(),
             registers: HashMap::new(),
+            register_parts: Vec::new(),
+            parts_round: 0,
+            edit_round: 0,
             yanks: Vec::new(),
             pending_register: None,
             recording: None,

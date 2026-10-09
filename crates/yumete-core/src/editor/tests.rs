@@ -23823,6 +23823,33 @@ fn vim_x_and_d_stop_at_the_line_break() {
     assert_eq!(after("dl"), "bcde\nsecond\n");
 }
 
+/// **N 段剪下來，N 段貼回去，逐字節還原**（2026-10-09 審出來的）。
+///
+/// 寄存器從前是一個字串，而 `edit_each` 逐段 `store`——於是三段剪下來只剩一份活着，
+/// `P` 把同一截貼到每一段上：「甲一行…／乙**一**行…／丙**一**行…」。乙和丙那兩截除了
+/// 撤銷棧之外哪兒都沒有，而結果讀起來像通順的句子，所以什麽都不提醒寫的人。
+///
+/// 拿真 helix 對過：同一串鍵在那裏逐字節還原。
+///
+/// ⚠ 還沒做的那一半：`y` 不走 `edit_each`，所以多選區複製仍舊只拿主選區那一段
+/// （`development.md` 早記着「`y` 逐段複製」）。那是少一個功能，不是丟字。
+#[test]
+fn cutting_at_many_cursors_and_putting_it_back_restores_every_piece() {
+    let was = "甲一行寫了很多字。\n乙二行也寫了些。\n丙三行最後收尾。\n";
+    let mut ed = typed(was);
+    press(&mut ed, "gg");
+    // `w` 選一個詞，`C` 把光標複製到下一行，兩下＝三段。
+    press(&mut ed, "wCC");
+    press(&mut ed, "d");
+    // 這一支的分詞器沒有詞典（`typed` 配的是按字類切的那一個），所以 `w` 取的是一
+    // 個字；取幾個字不是這一格要驗的事，三段各剪掉自己那一個纔是。
+    let cut = ed.current_buffer().rope().to_string();
+    assert_eq!(cut, "甲行寫了很多字。\n乙行也寫了些。\n丙行最後收尾。\n", "三段都剪掉了");
+    // `;` 把每一段收成一點（不是只留主選區），`P` 各貼各的。
+    press(&mut ed, ";P");
+    assert_eq!(ed.current_buffer().rope().to_string(), was, "逐字還原");
+}
+
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
 ///
 /// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是
