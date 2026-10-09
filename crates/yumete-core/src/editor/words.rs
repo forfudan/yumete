@@ -107,7 +107,9 @@ impl Editor {
                 };
             }
             WordCommand::Show(on) => {
-                let on = on.unwrap_or(!self.show_segmentation);
+                // **裸的報告，帶參數的纔設**（2026-10-09 作者定）。同
+                // `:view-numbers-fill`：從前裸的輪替，於是問不出它現在是開還是關。
+                let on = on.unwrap_or(self.show_segmentation);
                 self.show_segmentation = on;
                 self.status = match on {
                     true => say!("word.tint-on"),
