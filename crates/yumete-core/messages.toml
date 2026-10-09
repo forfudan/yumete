@@ -11272,9 +11272,9 @@ en = "the screen is on the clipboard"
 [[message]]
 # `/` 與 `?` 那一扇面板的第一行
 key = "ui.search-is-a-regex"
-zht = "收的是正則式：`.` 任一字、`␣*` 若干個、`^$` 行首行尾"
-zhs = "收的是正则式：`.` 任一字、`␣*` 若干个、`^$` 行首行尾"
-en = "a regular expression: `.` any character, `␣*` several, `^$` the line's ends"
+zht = "收的是正則式：`.` 任一字、`.*` 任一串、`^$` 行首行尾"
+zhs = "收的是正则式：`.` 任一字、`.*` 任一串、`^$` 行首行尾"
+en = "a regular expression: `.` any character, `.*` any run, `^$` the line's ends"
 
 [[message]]
 # `/` 與 `?` 那一扇面板的第二行
