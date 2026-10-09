@@ -2251,7 +2251,7 @@ impl Config {
         for (key, bound) in &raw.keys.normal {
             if yumete_cjk::actions::misspelt(bound) {
                 problems.push(format!(
-                    "[keys.normal] {key} = \"{bound}\" 不是動作名，這一條没裝上——`:keymap actions` 列出全部"
+                    "[keys.normal] {key} = \"{bound}\" 不是動作名，這一條没裝上——`:keymap-actions` 列出全部"
                 ));
             }
         }

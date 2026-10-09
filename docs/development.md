@@ -453,7 +453,7 @@ x  = "delete_selection"   # 動作名
 ```
 
 三種右邊按這個順序認：`:` 開頭是命令行；認得的動作名是那個動作；剩下的當鍵。
-`yumete_cjk::actions::ALL` 是那張表（八十條），`:keymap actions` 把它列成三列——名字、
+`yumete_cjk::actions::ALL` 是那張表（八十條），`:keymap-actions` 把它列成三列——名字、
 做什麽、現在是哪個鍵。名字取 helix 的，理由是從那邊來的人猜得到、往那邊去的人搜得到。
 
 **第二層乙（#429，2026-09-18 同日落地）**：vim 預設下 `d` `c` `y` 是**真的操作符**——按下去
@@ -18983,7 +18983,7 @@ bug 的入口（已修）。
 `keep_drafts_in`：`knows_the_build()` ＋ `knows_its_paths()`。項目那一份不必告訴——核心
 自己認得 `.yumete` 這個記號（`project_root` 用的就是它），算得出來。
 
-畫出來是一張 Markdown 表，走現成的 `show_listing`（和 `:keymap actions` 同一支）。
+畫出來是一張 Markdown 表，走現成的 `show_listing`（和 `:keymap-actions` 同一支）。
 
 ### 開場屏（第 11 條）
 

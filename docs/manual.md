@@ -833,7 +833,7 @@ command line; a **name** it knows is that action; the rest are keys. The good th
 about a name is that it does not move when the defaults move — the day `d` goes
 somewhere else, `x = "delete_selection"` still deletes.
 
-**`:keymap actions` lists them all** (eighty-odd), in three columns: name, what it
+**`:keymap-actions` lists them all** (eighty-odd), in three columns: name, what it
 does, which key it is on now. The names match helix, so anyone coming from there can
 guess — including the pairs helix spells with `_noyank`:
 

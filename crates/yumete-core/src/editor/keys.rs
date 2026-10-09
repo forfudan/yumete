@@ -3102,7 +3102,7 @@ impl Editor {
 
     /// The two that read differently depending on which way `[` / `]` points.
     ///
-    /// Warning: **段落那一行借的是 `:keymap actions` 的名字**（`action.goto-next-paragraph`
+    /// Warning: **段落那一行借的是 `:keymap-actions` 的名字**（`action.goto-next-paragraph`
     /// / `action.goto-prev-paragraph`）：同一件事在兩張表上，寫成兩句話只會讓
     /// 它們慢慢說岔。
     pub(super) const HOP_KEYS_FORWARD: &'static [(&'static str, &'static str)] =
@@ -3454,7 +3454,7 @@ fn hold_in_line(rope: &crate::Rope, at: usize, floor: usize) -> usize {
 /// `"\u{f}"` is `C-o`, `"\u{1b}"` is Esc. Played as `Key::Char`, those reached
 /// the editor as nothing at all — which is why four named actions
 /// (`jump_backward`, `collapse_selection`, `increment`, `decrement`) were
-/// listed by `:keymap actions`, bindable, and **dead** until 2026-09-19.
+/// listed by `:keymap-actions`, bindable, and **dead** until 2026-09-19.
 fn pressed(c: char) -> Key {
     match c {
         '\u{1b}' => Key::Esc,
