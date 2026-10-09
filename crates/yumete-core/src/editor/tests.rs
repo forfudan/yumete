@@ -23790,6 +23790,39 @@ fn an_append_at_every_selection_lands_after_each_of_them() {
     );
 }
 
+/// **vim 的 `x` 不吃換行符**（2026-10-09 審出來的，`:h x`「does not delete a line
+/// break」）。
+///
+/// 從前按住 `x` 會走過整篇稿子：一行的字用完了，helix 那一格寬的光標罩着的就是換行
+/// 符，於是第六下把兩行併了，第七下開始啃下一段，而**屏幕上一處都不停**。`D` 在那
+/// 一端拼成 `d$`，空行上那一段寬是零而 `apply` 要多吃一個字素，同一個洞。
+///
+/// 每一格都和 nvim 對過。helix 那一邊**不許跟着改**：那裏 `gldd` 本來就是刪末字再
+/// 併行，拿真 helix 逐格對過。
+#[test]
+fn vim_x_and_d_stop_at_the_line_break() {
+    let after = |keys: &str| -> String {
+        let mut ed = typed_vim("abcde\nsecond\n");
+        press(&mut ed, keys);
+        ed.current_buffer().rope().to_string()
+    };
+    // 一行五個字，第六下什麽都不做。
+    assert_eq!(after("x"), "bcde\nsecond\n");
+    assert_eq!(after("6x"), "\nsecond\n", "`6x`：五個字刪完就停");
+    assert_eq!(after("20x"), "\nsecond\n");
+    assert_eq!(after("xxxxxx"), "\nsecond\n", "按住不放也停");
+    // `D` 拼成 `d$`，空行上同樣不做。
+    assert_eq!(after("DD"), "\nsecond\n");
+    assert_eq!(after("D."), "\nsecond\n");
+    assert_eq!(after("Dx"), "\nsecond\n");
+    // 整行那一路照舊：`dd` 連換行一起拿走，那是 vim 的規矩。
+    assert_eq!(after("dd"), "second\n", "`dd` 是整行的");
+    assert_eq!(after("2dd"), "", "兩行都走");
+    // 非空行的末字上照舊刪得掉那個字。
+    assert_eq!(after("glx"), "abcd\nsecond\n");
+    assert_eq!(after("dl"), "bcde\nsecond\n");
+}
+
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
 ///
 /// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是
