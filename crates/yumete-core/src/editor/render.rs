@@ -690,6 +690,13 @@ impl Editor {
     /// Kept against a hash of the line's own text, like the 平仄 beside it: a
     /// note is worked out from that line and nothing else, so it can never go
     /// stale the way a finding stored from a walk of the file does.
+    ///
+    /// Warning: **the long-line gate is tested before the memo, not inside the
+    /// work** (2026-10-09). `:view-long-line` is a setting, so an answer worked
+    /// out under one threshold and kept under the line's own hash *would* be
+    /// stale after the threshold moved — and the only thing that stops it is
+    /// the order of those two lines below. Every gated producer here keeps that
+    /// order; a new one must too.
     fn notes_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
         use crate::drawn::{Ink, Run};
         if !self.notes || !self.markup_visible() {

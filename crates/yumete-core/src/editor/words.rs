@@ -749,6 +749,11 @@ impl Editor {
         // invalidates only the one being typed into. Ranges are relative to the
         // line, so a matching hash is a correct answer whatever else in the
         // document has moved.
+        //
+        // Warning: **`:view-long-line` 不在這個印記裏**（2026-10-09）。那是一個設置，
+        // 門槛一動，照舊門槛算出來、按行文哈希收着的答案就過期了——攔住它的是那道
+        // 閘擺在這一句**之前**（這一支開頭就問 `line_is_too_long`），不是這個印記。
+        // 再加一個走這道閘的生產者，順序要照這個擺。
         let stamp = super::memo::stamp(&text);
         self.segment_memo
             .or_work_out(self.current_buffer().id(), line, stamp, || {
