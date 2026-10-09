@@ -101,10 +101,21 @@ fn prose(line: &str, in_fence: &mut bool) -> Vec<char> {
     if *in_fence {
         return vec![' '; chars.len()];
     }
+    let mut out = chars.clone();
+    // **腳註定義開頭那一段是語法，不是散文**（2026-10-09 審出來的）。
+    //
+    // 一行以 `[^1]:` 起頭的時候，那個半角冒號是 markdown 寫的，不是打字的人少按了
+    // 一下 Shift——而提示就畫在它旁邊：`[^1]:：這是註腳的正文。`。照着那個提示改，
+    // 改壞的是這個編輯器自己正在渲染的那一條腳註。表格的 `|`、圍欄、`<ruby>` 標籤
+    // 和正文裏引用的 `[^1]` 都已經讓開了，定義那一行的冒號漏在外頭。
+    if let Some(colon) = footnote_colon(&chars) {
+        for c in out.iter_mut().take(colon + 1) {
+            *c = ' ';
+        }
+    }
     // An inline span runs from a backtick to the next one; an unclosed
     // backtick closes at the end of the line, the way every Markdown renderer
     // treats it.
-    let mut out = chars.clone();
     let mut at = 0;
     while at < chars.len() {
         if chars[at] == '`' {
@@ -122,6 +133,23 @@ fn prose(line: &str, in_fence: &mut bool) -> Vec<char> {
         at += 1;
     }
     out
+}
+
+/// **一行腳註定義裏那個冒號在第幾格** —— `[^1]: 正文` 的那個 `:`。
+///
+/// `None` ＝這一行不是腳註定義。認的是 markdown 的形狀：行首的空白、`[^`、一段不含
+/// `]` 的名字、`]`、緊跟一個 `:`。
+fn footnote_colon(chars: &[char]) -> Option<usize> {
+    let mut at = chars.iter().position(|c| !c.is_whitespace())?;
+    if chars.get(at) != Some(&'[') || chars.get(at + 1) != Some(&'^') {
+        return None;
+    }
+    at += 2;
+    let close = chars[at..].iter().position(|&c| c == ']')? + at;
+    match chars.get(close + 1) {
+        Some(':') => Some(close + 1),
+        _ => None,
+    }
 }
 
 /// Whether the nearest non-space neighbour on either side is Chinese.
