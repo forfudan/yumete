@@ -7,9 +7,22 @@
 //! width), so wide CJK glyphs, combining marks, and IVS behave correctly. The
 //! width and grapheme primitives come from [`yumete_cjk`].
 //!
-//! Motions operate on one line at a time, materializing that line's text (prose
-//! lines are short). A very long single line could later use an incremental
-//! grapheme cursor over the rope's chunks; that optimization is deferred.
+//! Motions operate on one line at a time. **Where that line is materialized,
+//! and where it is not, is now a list** (2026-10-09 — three commits on
+//! 10-08 did part of the deferred work and this paragraph still promised all
+//! of it):
+//!
+//! - **Not materialized**: finding a line's length ([`line_char_len`]), the
+//!   visual column of a position ([`visual_column`], a 64-character slice),
+//!   and word boundaries ([`near_words`], a window of [`WORD_REACH`]).
+//! - **Still materialized, still O(line)**: [`left`], [`right`] and
+//!   [`prev_grapheme`] each copy the whole line to step one grapheme, and
+//!   [`pos_at_visual_column`] copies it to count columns. Measured: `w` on a
+//!   single line costs ~14 ms per million characters, all of it here —
+//!   [`unit_forward`] calls [`prev_grapheme`] once or twice per `w`.
+//!
+//! What the rest of them want is an incremental grapheme cursor over the
+//! rope's chunks; `ropey`'s `chars_at` is the handle for it.
 
 use ropey::Rope;
 use yumete_cjk::{
@@ -26,14 +39,6 @@ pub(crate) fn line_text(rope: &Rope, line: usize) -> String {
         }
     }
     s
-}
-
-/// Byte offset of the `char_col`-th character in `s` (or `s.len()` at the end).
-fn byte_of_col(s: &str, char_col: usize) -> usize {
-    s.char_indices()
-        .nth(char_col)
-        .map(|(b, _)| b)
-        .unwrap_or(s.len())
 }
 
 /// Number of characters in `s` up to (not including) byte offset `byte`.
@@ -93,6 +98,19 @@ pub fn last_line(rope: &Rope) -> usize {
     }
 }
 
+/// 一個字簇最多往外看多少個字——[`left`]／[`right`] 只拿光標旁邊這一截。
+///
+/// Warning: **這是 O(行長) 換 O(1) 的那一刀**（2026-10-09）。這兩支從前各
+/// `line_text` 一次，於是「往左走一個字」在一行一千二百萬字的稿子上要抄 37 MB；
+/// 而它們要的只是光標緊鄰那一個字簇的邊界。[`visual_column`] 早就是這麽切的，
+/// 餘量取的也是這個數：真實文字裏一個字簇兩三個碼位就到頂（帶異體字選擇符的漢
+/// 字是兩個），64 是十幾倍的餘量。
+///
+/// Warning: **代價是分簇的上下文只有這麽長。** 一串超過三十二個國旗（區域指示
+/// 符兩個一對，配對要從頭數）或者一條六十四個碼位以上的 ZWJ 連寫，邊界會判錯一
+/// 格。那不是稿子裏的東西，而正文每按一下都要付的那筆賬是真的。
+const GRAPHEME_REACH: usize = 64;
+
 /// One grapheme to the left, staying within the current line.
 pub fn left(rope: &Rope, pos: usize) -> usize {
     let line = rope.char_to_line(pos);
@@ -101,24 +119,23 @@ pub fn left(rope: &Rope, pos: usize) -> usize {
     if col == 0 {
         return pos;
     }
-    let text = line_text(rope, line);
-    let byte = byte_of_col(&text, col);
-    let prev = prev_grapheme_boundary(&text, byte);
-    ls + col_of_byte(&text, prev)
+    let from = pos.saturating_sub(GRAPHEME_REACH).max(ls);
+    let text: String = rope.slice(from..pos).to_string();
+    let prev = prev_grapheme_boundary(&text, text.len());
+    from + col_of_byte(&text, prev)
 }
 
 /// One grapheme to the right, staying within the current line.
 pub fn right(rope: &Rope, pos: usize) -> usize {
     let line = rope.char_to_line(pos);
     let ls = rope.line_to_char(line);
-    let text = line_text(rope, line);
-    let col = pos - ls;
-    if col >= text.chars().count() {
+    let le = ls + line_char_len(rope, line);
+    if pos >= le {
         return pos;
     }
-    let byte = byte_of_col(&text, col);
-    let next = next_grapheme_boundary(&text, byte);
-    ls + col_of_byte(&text, next)
+    let text: String = rope.slice(pos..(pos + GRAPHEME_REACH).min(le)).to_string();
+    let next = next_grapheme_boundary(&text, 0);
+    pos + col_of_byte(&text, next)
 }
 
 /// One grapheme to the right **in the buffer**, stepping over a line break
@@ -156,7 +173,7 @@ pub fn prev_grapheme(rope: &Rope, pos: usize) -> usize {
         return pos;
     }
     let previous = line - 1;
-    rope.line_to_char(previous) + line_text(rope, previous).chars().count()
+    rope.line_to_char(previous) + line_char_len(rope, previous)
 }
 
 /// The visual column (summed display width) of `pos` within its line.
@@ -191,18 +208,37 @@ pub fn visual_column(rope: &Rope, pos: usize) -> usize {
 /// and by vim's `|`).
 pub fn pos_at_visual_column(rope: &Rope, line: usize, goal: usize) -> usize {
     let ls = rope.line_to_char(line);
-    let text = line_text(rope, line);
-    let mut width = 0;
-    let mut chars = 0;
-    for g in graphemes(&text) {
-        let gw = grapheme_width(g);
-        if width + gw > goal {
-            break;
+    let le = ls + line_char_len(rope, line);
+    // Warning: **一截一截地拿，不抄整行**（2026-10-09）。這一支在 `goal` 列上就斷，
+    // 所以後面的字一個也用不着——可 `line_text` 把整行物化，而 `j`／`k` 每按一下都
+    // 問它一次。
+    //
+    // 為什麽是迴圈而不是像 [`visual_column`] 那樣一刀切：那一支數的是**字**
+    // （`chars >= col`），`col + 64` 個字一定夠；這一支數的是**列**，而一個字簇可以
+    // 有好幾個字，於是 `goal` 列要幾個字事先說不準（每個字都帶一個組合符號的文字
+    // 就是兩倍）。斷在手裏這一截的末尾附近就加倍再來一趟，加倍的總開銷還是線性。
+    let mut span = (goal + GRAPHEME_REACH).max(256);
+    loop {
+        let upto = (ls + span).min(le);
+        let text: String = rope.slice(ls..upto).to_string();
+        let mut width = 0;
+        let mut chars = 0;
+        let mut stopped = false;
+        for g in graphemes(&text) {
+            let gw = grapheme_width(g);
+            if width + gw > goal {
+                stopped = true;
+                break;
+            }
+            width += gw;
+            chars += g.chars().count();
         }
-        width += gw;
-        chars += g.chars().count();
+        // 斷得離這一截的邊界還遠，或者這一截已經是整行了：答案是真的。
+        if upto == le || (stopped && chars + GRAPHEME_REACH <= upto - ls) {
+            return ls + chars;
+        }
+        span *= 2;
     }
-    ls + chars
 }
 
 /// Up one line, keeping the visual column `goal`.
@@ -312,8 +348,15 @@ pub fn buffer_end(rope: &Rope, _pos: usize) -> usize {
 /// | | what a word is | who asks |
 /// | --- | --- | --- |
 /// | [`Grain::Big`] | a run of non-whitespace | `W` `B` `E` |
-/// | [`Grain::Word`] | whatever `seg` says | `w` `b` |
-/// | [`Grain::Coarse`] | a run of one category, 漢字 as letters | `e` |
+/// | [`Grain::Word`] | whatever `seg` says | `w` |
+/// | [`Grain::Coarse`] | a run of one category, 漢字 as letters | `e` `b` |
+///
+/// Warning: **`b` is in the third row, not the second** (2026-10-09 — the table
+/// said `w` `b` and a reviewer nearly filed the real behaviour as a bug off the
+/// strength of it). `b` is `e`'s partner: it walks back to where an `e` would
+/// have started, and there is no 「back one word」 key to pair with `w`. The
+/// binding has always said so — see `keys.rs`, 「**`b` is `e`'s partner, not
+/// `w`'s**」.
 ///
 /// `Coarse` is not a third opinion for its own sake. Chinese has no spaces, so
 /// a `w` and an `e` that both consult the dictionary do nearly the same thing;
@@ -364,6 +407,11 @@ fn segment_text(text: &str, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, us
 /// `break`（`helix-core/src/movement.rs:255` 與 `:468-480`），代價跟着**走了多遠**
 /// 算，不跟着行長算。這一節要的是同一件事，差別只在漢語的分詞器要的是一段上下
 /// 文，不是一個遊標。
+///
+/// Warning: **這一支管的只是分詞那一筆賬**（2026-10-09 補）。從前這一段寫的是「代
+/// 價不跟着行長算」，而量出來不是：`w` 在單行上仍舊是每一百萬字十四毫秒，那幾毫
+/// 秒花在 [`prev_grapheme`] 與 [`left`]／[`right`] 上——它們各自把整行抄一遍。窗口
+/// 攔住的是分詞器，攔不住它們，模塊開頭那張單子列着誰還沒改。
 ///
 /// 4096 的來由：這是**一下按出去走多遠**的量，不是上下文的量（那是
 /// [`WORD_SEAM`]）。一扇窗（8192 字）走一趟 Viterbi 是十微秒的量級，按住鍵也追得
