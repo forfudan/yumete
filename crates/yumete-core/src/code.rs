@@ -150,7 +150,12 @@ impl Language {
         Some(match extension.as_str() {
             "adb" | "ads" | "ada" => Language::Ada,
             "asm" | "nasm" => Language::Nasm,
-            "c" => Language::C,
+            // **`.h` 走 C**（2026-10-09 作者定，helix 也是這麼分的）。
+            //
+            // 一份 C++ 的頭文件於是也走 C 的語法：絕大部分構造判得對，`template`／
+            // `class` 那幾個詞判不對。代價說明白了還是比「一個顏色都沒有」好——而
+            // `.cpp`／`.ts` 老實地一個都不認（沒帶那兩種語法）。
+            "c" | "h" => Language::C,
             "css" => Language::Css,
             "go" => Language::Go,
             "html" | "htm" | "xhtml" => Language::Html,
@@ -248,7 +253,14 @@ impl Language {
     fn highlights(self) -> &'static str {
         match self {
             // **Ada 與 Pascal 這兩份是我們自己寫的**（2026-10-08 定：「我們自己寫，最
-            // 安全」）。兩個 crate 包裏有 `queries/highlights.scm` 這個**檔**，可
+            // 安全」）。
+            //
+            // Pascal 那一份 2026-10-09 補了 `@function`／`@type`（作者定）：從前只認
+            // 關鍵詞，於是 `function Add(A: Integer): Integer;` 裏 `Add`／`A`／
+            // `Integer` 全是素色。節點名是從語法自己的 `src/node-types.json` 讀出來的
+            // ——那是**生成的 API 描述**，不是那份 `.scm`。
+            //
+            // 兩個 crate 包裏有 `queries/highlights.scm` 這個**檔**，可
             // `bindings/rust/lib.rs` 裏那一行 `pub const HIGHLIGHTS_QUERY` 是**注掉的**，
             // 跨 crate 的 `include_str!` 做不到。抄那兩份 `.scm` 要帶它們的授權聲明，
             // 自己寫沒這一層事——同 `objects()`／`indents()` 那一條規矩。
@@ -286,6 +298,10 @@ impl Language {
                     ] @operator
 "##,
             Language::Pascal => r#"
+                    (declProc name: (identifier) @function)
+                    (declProp name: (identifier) @function)
+                    (declType name: (identifier) @type)
+                    (typeref) @type
                     (comment) @comment
                     [(literalString) (literalChar)] @string
                     (literalNumber) @number
@@ -1233,9 +1249,18 @@ mod tests {
         })
     }
 
+    /// Warning: **說出編不過的那一句話**（2026-10-09 補）。從前它只印語言的名字，而
+    /// 那是最沒用的一半——手寫的查詢（Ada、Pascal）和追加的那幾條
+    /// （[`Language::extra_highlights`]）都是人寫的，寫壞的時候要知道壞在哪一個節點
+    /// 名上。當天自己踩了一次：`(declArg type: (typeref) …)` 裏那一格收的是 `type`，
+    /// 而測試只說「pascal」。
     #[test]
     fn every_shipped_grammar_compiles_its_own_query() {
         for language in Language::ALL {
+            let source = format!("{}{}", language.highlights(), language.extra_highlights());
+            if let Err(why) = tree_sitter::Query::new(&language.grammar(), &source) {
+                panic!("{}: {why}", language.name());
+            }
             assert!(language.query().is_some(), "{}", language.name());
         }
     }
