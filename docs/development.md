@@ -20418,6 +20418,87 @@ nothing read that count; `ye --grep` did (`main.rs:1579`), the **editor** did no
 first kilobyte) keeps `.ygram` and `.tar` off the path, and `WALK_CEILING` and friends guard the
 drawing thread.
 
+## 5.134 `e` swallowed the character the caret stood on (2026-10-09, review)
+
+On a line past `WORD_WINDOW_LINE`, `e` takes the span `[previous word's end, this word's end]`
+(#304: a word owns the whitespace in front of it). That left boundary came from `words[k - 1]`,
+and at `k == 0` the code fell back to the line's head — with a comment arguing that the fallback
+could never change the answer. The argument was wrong in one case: it holds only while the window
+still covers `pos`, and a window that has been **pushed forward** does not. Minimal repro: `ab `
+plus twenty thousand `x`, caret on the `b`. The next word's end is four pushes away, and by then
+the boundary `pos + 1` is behind the window — so `e` selected from the `b` and `de` ate it.
+
+`Window` now carries `prior`: when a window is thrown away, the rightmost word end at or before
+the next `lo` is kept. Everything the windows have already walked is contiguous, so that is the
+real boundary; `None` can only mean the boundary is behind `pos`, where the line head gives the
+same answer. The oracle test that compares windowed answers against whole-line answers could not
+see this — its fixture's longest 「word」 is a dozen characters, so no push ever crosses one.
+
+## 5.135 The long-line gate was vim's number for code, used on prose (2026-10-09, review)
+
+`LONG_LINE` was 3000, taken from vim's `synmaxcol`. Two reviewers measured the same consequence
+independently: **a 3371-character Chinese paragraph silently loses its typography** — 詞 tint,
+`**bold**` and its marker hiding, the `[^1]` superscript, 標點 hints — out of the box, with
+nothing on screen saying so. vim's number is about *syntax colour on code*; this gate also
+carries markup hiding and 分詞, which is what prose is made of.
+
+Raised to **50 000**, from measurement (cost per frame above baseline): 4 千字 2 ms, 2 萬 4 ms,
+5 萬 7 ms, 10 萬 12 ms, 50 萬 52 ms, 150 萬 152 ms. Fifty thousand characters is 「幾十頁擠成一
+段」, which `WORD_WINDOW_LINE` already calls something a manuscript does not have, and the case
+the gate was written for (one line of 1.5 M) is still caught. A markup-dense line is dearer — one
+with a `**` pair every fifty characters costs 165 ms at 100 千字 — and that is what the setting
+is for.
+
+⚠ **Still open, his to decide: the gate counts characters, every string calls it 列數.** Counting
+columns would mean measuring the width of the line, which is the very cost this gate exists to
+avoid. So either the three strings change word, or the gate changes unit and the number doubles.
+
+## 5.136 A reading drawn over its own tags (2026-10-09, review)
+
+Ruby has two halves: `markup_off_line` hides the `<ruby>…<rt>…` tags, and the horizontal page
+draws the reading above the row. Both ask `readings_on_line`. The gate above was put in
+`markup_off_line` only, so past it the tags showed **and** the reading floated over them, six
+cells off. `footnote_spans` states this rule in its own comment — 「兩邊要是各算各的，就會出現
+『藏了沒畫』或者『畫了沒藏』」 — and ruby was outside it. The gate moved into `readings_on_line`,
+where one answer serves both halves. Two riders from the same review: `markup_off_line`'s early
+return dropped 竪排's table slack, which the page hides unconditionally (「藏了沒量」), and
+`set_long_line` now forgets all four memos instead of two — the other two were safe only because
+their gate sits before their lookup, and a reader seeing the two-memo wipe would assume otherwise.
+
+## 5.137 The stand-in hover asked about the brackets (2026-10-09, reported three times)
+
+> 还是錯的。我先打了 std::env::var，显示了签名。然后我打 println!(，打到括號的时候顯示的还是
+> std:env:var 的签名。
+
+§5.123 fell back to `hover` when `signatureHelp` answered `null`, and asked it **at the position
+it had asked signatureHelp**: one past the `(`. That position is right for signatureHelp, whose
+question is 「which argument am I filling」; `hover` asks 「what is this thing」, and inside empty
+brackets there is nothing. Driven against the real server, on the line `    println!(`:
+signatureHelp at character 13 → `null`, hover at 13 → `null`, hover at **10** (the `n` of
+`println`) → the whole macro doc. The fallback now walks back from the bracket (which
+`signature_on` already holds) to the first identifier character, at most four cells.
+
+Second break behind it: `Told.text` has already been through `lsp::inline`, so the fences are
+gone and `first_paragraph`'s fence-skipping never fired — it would have answered `` `std::macros` ``.
+A line that is wholly one inline-code span is now skipped before the prose starts. Both tests
+were feeding the server's **raw** shape, which is why neither saw it; they feed the production
+shape now.
+
+## 5.138 One grapheme at a time, without copying the line (2026-10-09, review)
+
+`WORD_REACH`'s doc claimed the cost of a word motion no longer follows the line's length. Measured
+false: `w` cost ~14 ms per million characters, exactly linear. The window bounds the *segmenter*;
+`left`, `right` and `prev_grapheme` each still materialised the whole line to step one grapheme,
+and `unit_forward` calls `prev_grapheme` once or twice per `w`. They now read `GRAPHEME_REACH`
+= 64 characters beside the caret, the bargain `visual_column` already struck.
+`pos_at_visual_column` needs a loop rather than one slice, because it counts *columns* and a
+cluster can be several characters; it doubles its slice until the answer stops touching the edge.
+
+Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 ms** (was 14 /
+28 / 56.5). Nearly flat, and the residue is `char_to_line`'s own O(log n). The cost of being
+wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
+64-codepoint ZWJ chain, written down where the constant is.
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 Two 「大綱」 rows in the space menu. He asked first whether helix has those two keys spoken
