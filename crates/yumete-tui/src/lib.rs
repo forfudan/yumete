@@ -12296,6 +12296,23 @@ fn draw_panel_rows(
 
     // Prefer just below the cursor; flip above if it would overflow the bottom.
     let x = cursor_x.min(area.x + area.width.saturating_sub(panel_w));
+    // Warning: **翻上去的時候很可能落在光標自己那一行上**（2026-10-09 審出來的，
+    // **沒修**）。翻上去寫的是 `cursor_y - panel_h`，而 `saturating_sub` 在
+    // `cursor_y < panel_h` 的時候歸零，於是框的底邊就是光標那一行——正在打的那個字
+    // 被框線蓋住。這個檔自己三千行上為行內那個小浮標寫過相反的規矩：「絕對不許蓋在
+    // 它身上：正在打的那個字是這扇面板唯一不許藏的東西」，那一支的做法是乾脆不畫。
+    //
+    // 三件事攔住了順手改它，都寫下來：
+    //
+    // 1. **報來那一幀我復現不出。** 同樣 100x14、同樣的鍵，掃了 1 到 40 行、三種窗
+    //    口大小，一格都沒蓋住——`page_for_window` 已經按光標下方的餘量縮過頁。報的
+    //    人自己標了「未驗證」的那一條（`[panel] page_size = 9`，面板高 12，24 行的
+    //    終端）纔走得到那一枝。
+    // 2. **這一支不只畫候選面板。** 快捷符號表走的也是它，而那一張**有意**鋪滿整個
+    //    區域、自己在末尾加一行「還有更多」——`a_shortcut_table_taller_than_the_window_says_there_is_more`
+    //    就攔在這裏。「不許蓋住光標」是候選面板那一扇的規矩，不是這一支的。
+    // 3. **兩邊都擺不下的時候該怎麽辦是作者定的事**：縮頁、挪到別的列、還是像行內
+    //    那個浮標一樣乾脆不畫。
     let below = cursor_y + 1;
     let y = if below + panel_h <= area.y + area.height {
         below
