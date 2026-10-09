@@ -2934,9 +2934,7 @@ and whether that table is a `.csv` or three rows inside a chapter makes no diffe
 
 #### Four surfaces, item by item
 
-The table above says what they are; this one says what they do. **Every cell was
-measured**, not copied out of a comment — this code has already had three comments older
-than the code.
+The table above says what they are; this one says what they do.
 
 | | **Source `空格 t o`** | **Table keys `空格 t b`** | **Drawn in place `空格 t f`** | **The whole window `空格 t t`** |
 | --- | --- | --- | --- | --- |
@@ -2984,13 +2982,10 @@ A few that are easy to get wrong:
   `空格 t f` alike; press `空格 t i` to see it. Only `空格 t t` (the window given
   entirely to the table) opens it by itself: there is no text to mind there, and with
   long cells folded the panel is the way to read the whole content.
-  **`空格 t f` used to open it by itself**, and the reason it was taken back is the
-  cost: the panel takes a fifth of the width, and the moment it appears the paragraphs
-  above and below the table **reflow on the spot** — 「markdown
-  中如果向下移动遇到表格总是会发生 wrap 跳动」. A panel bought with a whole page of
-  reflow is not worth opening unasked. Once `空格 t i` has said one way or the other it
-  obeys you for good, and changing levels will not quietly change it back — the same
-  rule as `空格 t w`.
+  The panel takes a fifth of the width, and the moment it appears the paragraphs above
+  and below the table **reflow on the spot** — not worth paying unasked. Once `空格 t i`
+  has said one way or the other it obeys you for good, and changing levels will not
+  quietly change it back, the same rule as `空格 t w`.
 
 - **The four kinds of punctuation make no difference**: markdown's `|`, csv's `,`, tsv's
   tab and Excel's `;` run through the same code under `空格 t b` and `空格 t f` and look
@@ -4395,6 +4390,8 @@ and replacing ask the same question, so `sifuqi` reaches 「伺服器」 for `r`
 Warning: `$1` in the replacement is understood only on the regex path — pinyin and fuzzy
 have no groups to expand.
 
+#### Where it reckons from: the working directory and the project
+
 **The ignore rules are read from `.gitignore`** (walking directories uses ripgrep's
 library for exactly this), whether or not the book has a `.git`; a `.gitignore` higher
 up counts too. The sidebar's tree asks the same question, so what you can see and what
@@ -4428,6 +4425,8 @@ is what tells them apart —
 Typing `yumete 第一章.md` inside `卷一/`: `空格 f` searches all of `三體/` (`附録/`
 included), and `空格 F` only searches `卷一/`.
 
+#### Carrying on tomorrow: `--continue`
+
 **In the morning, carry on from yesterday.** `yumete --continue` reopens the files you
 had open, each one at the line you left it on, and then says one line in the status bar:
 "picking up where you left off: opened 5 file(s)". With no `-c` and no file name either,
@@ -4444,11 +4443,15 @@ putting an error on your screen every morning. It remembers **24** at most, the 
 are in first — one cross-file change opens every file, and with no ceiling tomorrow
 morning would be a hundred and twenty.
 
-**Marks.** `M` plus a letter writes this spot down, `'` plus the same letter goes back —
+#### Marks
+
+`M` plus a letter writes this spot down, `'` plus the same letter goes back —
 **across files**, and that file opens itself. `C-o` goes back to where you pressed `'`.
 `M`/`'` rather than vi's `m`/`'`, because `m` here is match mode.
 
-**The book's own words.** 阿寧 — the name on every page — is the word no dictionary will
+#### The book's own words: `.yumete/words.txt`
+
+阿寧 — the name on every page — is the word no dictionary will
 ever have. Left to the segmenter it is cut into `[阿][寧]`: `w` has to be pressed
 twice to get past it, and the segmentation tint draws it as two words.
 
@@ -4477,6 +4480,8 @@ Warning: **This file is yours; yumete only reads it, never writes it.** The auto
 word discovery below writes a separate list for you to read, but **never touches this
 one** — nothing will put back what you wrote here, or what you deleted.
 
+#### Words it finds by itself: `:word-discover`
+
 **It is already discovering on its own.** When a file is opened, yumete reads through it
 on the way and picks out the strings that "look like words and are not in the
 dictionary", then takes them straight to segmentation — **you do nothing, and you do not
@@ -4486,35 +4491,22 @@ finishes `w` gets across 「落霞鎮」. Saving with `:w` asks again — **the 
 only really recomputed five minutes later**, while a different file is recomputed at
 once.
 
-It reads **two passes**: this file first, then the **folder** this file is in
-(subdirectories included).
-
-**Two passes, rather than reading them as one stretch.** It looks the same and
-is very different. Measured on 宇浩's own documentation: 「宇夢」 is **8th** of the 60
-candidates in the file that discusses it, 46th of the 181 in that folder, and
-**disappears entirely** among the 969 of the whole repository — where the top of that
-board is `习习`, `火火`, `宀八`, radicals out of a few hundred 拆分 tables. Its count is
-24 the whole way through, **never once lower**. What loses it is the **quota** (only the
-first few hundred are kept) and the **pruning** (a long string that is common elsewhere
-absorbs it).
-
-So this file **gets a pass of its own, and holds half the quota**: nothing in the folder
-can absorb its words or crowd them out. To read wider, say so with the three commands
-below.
+It reads **two passes** — this file first, then the **folder** it sits in,
+subdirectories included — rather than both as one stretch. The file gets a pass of its
+own and **holds half the quota**, so nothing in the folder can crowd its words out or
+absorb them into a longer string that is common elsewhere. Read wider with the three
+commands below.
 
 It counts three things:
 
     cohesion                do these characters crowd together far more often than they would apart
     left and right entropy  can they hold all sorts of characters on either side, or always the same one
 
-The first tells 「阿寧」 from 「的時」; the second tells 「阿寧」 from 「阿寧説」 —
-a real word can hold anything on either side, while a fragment has one habitual
-neighbour.
-Neither can be left out. **The segmenter is asked last**: anything it already joins is
-never reported, so 「説道」 and 「突然」 never appear on the list, and the threshold can
-therefore be set loose. **At least** 200 are used at a time, and one more for every thousand 字 beyond
-that (a long novel turns up six thousand candidates, and the ones further down merely
-"appeared twice").
+The first tells 「阿寧」 from 「的時」, the second tells 「阿寧」 from 「阿寧説」 — a real
+word holds anything on either side, a fragment has one habitual neighbour — and neither
+can be left out. **The segmenter is asked last**, so anything it already joins (「説道」,
+「突然」) never reaches the list and the threshold can be set loose. At least 200 are kept,
+and one more for every thousand 字 beyond that.
 
 **This list lives only in memory.** No file, no buffer, not one sentence for you to
 agree to — close yumete and it is gone, and the next time a file is opened it is worked
