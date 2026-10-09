@@ -1223,6 +1223,9 @@ impl Editor {
         // not.
         self.sequence = None;
         self.sort_keys.clear();
+        // 問服務器的那幾句記的是字元下標，換了文檔就不算了——見
+        // [`Editor::forget_what_was_asked`]，換檔那一條路也叫它。
+        self.forget_what_was_asked();
     }
     /// Comment the selected lines out, or bring them back (#409).
     ///

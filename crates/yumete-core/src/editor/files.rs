@@ -902,6 +902,7 @@ impl Editor {
         // buffer A must not silence the warning buffer B has coming (#214).
         self.last_disk_check = None;
         self.reload_warned = false;
+        self.forget_what_was_asked();
         self.forget_the_text();
         // The hits are *not* thrown away: they name their own buffer and
         // revision now, so they are simply not an answer while you are
@@ -917,6 +918,29 @@ impl Editor {
             self.other = None;
             self.live_pane = 0;
         }
+    }
+
+    /// **問服務器的那幾句，和它答的那一則**（2026-10-09 補）。
+    ///
+    /// 它們記的是**字元下標**，而下標只在它自己那一份文檔裏有意思：`signature_on`
+    /// 指着上一份裏那個左括號，換了檔之後拿它到這一份的 rope 上算坐標
+    /// （[`Editor::a_hover_on_the_callee`]），問出去的就是一句問在別處的話。
+    ///
+    /// Warning: **開檔與換檔是兩條路，所以這是一張單子而不是幾行**。
+    /// [`Self::forget_the_document`] 走換檔與關檔，`Editor::add_buffer` 走開新檔，
+    /// 而那一支清的從來是另一個子集——`forget_the_document` 自己的註釋記着這個形狀
+    /// 怎麽出過事（「三支姊妹函數各清一個子集」）。兩條路都叫這一支。
+    ///
+    /// 那張補全單子不在裏面：`Offering::stands_here` 自己認緩衝區與下標，同搜索的
+    /// 命中表——不在眼前就不算答案，回來還算。
+    pub(super) fn forget_what_was_asked(&mut self) {
+        self.signature = None;
+        self.signature_query = None;
+        self.signature_asked_at = None;
+        self.signature_on = None;
+        self.signature_doc_query = None;
+        self.completion_query = None;
+        self.completion_at = None;
     }
 
     /// Let go of everything derived from **the text**, the document staying the
