@@ -161,9 +161,8 @@ paragraph.
 **It prints as it searches, and nothing caps it.** The first hit prints as soon as the
 first file has been read, without waiting for the whole tree to be walked;
 `ye --grep 霜 | head -2` takes two lines and packs up on the spot, leaving the rest of
-the tree unwalked. The two gates inside the editor (stop at twenty thousand files, skip
-a file over four megabytes) protect the thread that draws the screen; **on the command
-line there is not one of them** — slower is only slower, whereas "quietly looked at half
+the tree unwalked. The gate inside the editor (stop at twenty thousand files) protects the
+thread that draws the screen; **on the command line there is not one of it** — slower is only slower, whereas "quietly looked at half
 of it and said it was done" is another matter. So the two sentences
 `the walk stopped early` and `file(s) too big to read` never appear in a pipe again.
 
@@ -382,7 +381,7 @@ the rest is not done, and the status line says so.
 | `]d` `]D` | the next **diagnostic** / straight to the last one |
 | `]g` `]m` | the next **change** / the next **merge conflict** |
 | `]p` `]空格` | the next **paragraph** / add a blank line below (the cursor stays) |
-| `Delete` (Insert) | delete the character **before** the cursor (the mirror of Backspace; at the end of a line it deletes the line break) |
+| `Delete` (Insert) | delete the character **after** the cursor (Backspace takes the one before; at the end of a line it takes the line break) |
 | `Home` `End` `C-a` `C-e` (Insert) | the start / the end of the line — the same set as the `:` line's |
 | `J` `K` | **join lines** / **keep only the selections an expression matches** (as in helix) |
 | `C-d` `C-u` | **half a page** — Helix's own chords |
@@ -423,10 +422,6 @@ breaks after 」, not before. A half-width period only counts as a sentence end 
 whitespace follows it, so `3.14` is not a sentence. When this paragraph has no next
 sentence, it goes to the first sentence of the next one.
 
-**A key with nothing on it will tell you what the thing is called here.** `$`, `^`, `@`
-and the like, which mean something in other editors and are not bound here, do not fall
-flat when pressed — the command line says "the end of the line is `gl`". It does **not
-do it for you**: this is not a compatibility layer, it is a dictionary worth using.
 ### Selection
 
 | | |
@@ -3141,22 +3136,24 @@ the same thing in the same place every time. A message used to be able to squeez
 position out, or push it off the line entirely, and a single `:` would replace the
 whole line; that was because several questions were crowded onto one line.
 
-The gold word at the front is the mode, five in all:
+The gold word at the front is the mode, seven in all:
 
 | | What it means |
 | --- | --- |
 | `NOR` | Normal — every key is a command |
 | `INS` | Insert — typing |
 | `SEL` | a selection is growing (`v`) |
+| `REP` | overwriting — vim's `R`, under the vim keys |
 | `PAN.NOR` | **the keys are in a sidebar panel**, pressing keys |
 | `PAN.INS` | the keys are in a field in the panel, typing |
+| `PIC.INS` | the keys are in the picker's box, typing |
 
 Those two `PAN.` ones answer "when I press a key, does the manuscript move or the
 panel?". Pressing `d` on a list of search results clears the search term; pressing `d`
 in the text deletes the line — so those two places cannot be written with the same
 word.
 
-`:`, `/`, ruby, `::` and the picker **write no mode word**: the line below already
+`:`, `/`, ruby and `::` **write no mode word**: the line below already
 says `:`, `搜索:`, `注`, and writing it again is one sentence said twice, while every
 cell on this line has someone fighting for it — narrow the window and the file name,
 the position and the character readout give way one at a time.
@@ -3342,8 +3339,9 @@ and any other key dismisses it.
 The mark in that square left of the line number is not governed by these two; it stays
 lit — that is "this line has something to say", and it does not interrupt.
 
-**The list comes up while you type.** Pause halfway through a word in a program file
-(three hundred milliseconds) and if the server has something to offer, a list floats. It
+**The list comes up while you type.** Type halfway through a word in a program file
+and if the server has something to offer, a list floats — this one does **not** wait out
+the three hundred milliseconds the hover documentation waits. It
 does not come up right after a space, a bracket or a semicolon — that is a word ending.
 To call it yourself, `C-n`.
 
@@ -3836,7 +3834,7 @@ surrounds it is somebody else's prose. To really tidy it up, `:convert-table` it
 | `a` | into the cell, stopping **after the last character** (`A` is the same) |
 | `空格 t/` `空格 t?` | **who used it** — searching column by column. `/` searches here, `?` looks in the other area. `空格 t1/` searches column 1 only, `空格 t2-10?` columns 2–10 |
 | `n` `N` | walk the rows just found |
-| `T` | **switch the grain**: by character ⇄ by cell (by character is the default) |
+| `空格 t T` | **switch the grain**: by character ⇄ by cell (by character is the default). Bare `T` is vi's till, and stays that |
 | `Tab` `S-Tab` | next cell/previous cell — under both grains |
 | `o` `O` | open a new **row** — delimiters included, not a blank line |
 | `空格 t r` `空格 t R` `空格 t d` | add a row (below/above)/delete this row |
@@ -4088,7 +4086,7 @@ are the boundaries, walking up and down to the blank lines, so the stretches of 
 manuscript do not get dragged in with it.
 
 **When the delimiter cannot be seen it asks you**; it does not guess. There is only one
-thing it judges: which of tab, comma and semicolon **appears the same number of times on
+thing it judges: which of tab, comma, semicolon and `&` **appears the same number of times on
 every line**. A CSV has the same number of commas on every line; a passage of Chinese
 prose breaks its sentences with `，、。`, which touches none of the three guesses, so
 nothing moves and the status line tells you to say which:
@@ -5187,8 +5185,9 @@ a real word can hold anything on either side, while a fragment has one habitual
 neighbour.
 Neither can be left out. **The segmenter is asked last**: anything it already joins is
 never reported, so 「説道」 and 「突然」 never appear on the list, and the threshold can
-therefore be set loose. At most 200 are used at a time (a long novel turns up six
-thousand candidates, and the ones further down merely "appeared twice").
+therefore be set loose. **At least** 200 are used at a time, and one more for every thousand 字 beyond
+that (a long novel turns up six thousand candidates, and the ones further down merely
+"appeared twice").
 
 **This list lives only in memory.** No file, no buffer, not one sentence for you to
 agree to — close yumete and it is gone, and the next time a file is opened it is worked
@@ -6054,7 +6053,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:view-typewriter` [`on`｜`off`] | Typewriter: the cursor's row stays in the middle of the screen and the paper moves up |
 | `:view-meter` [`on`｜`off`] | 平仄: the tone class of every character in the margin (`○` 平, `●` 仄), the 韻腳 at the end of a 句 (`△▲`). **Modern readings** — 入聲 has been redistributed into the other three, see §5.9 |
 | `:view-punct` [`on`｜`off`] | Punctuation hints: half-width marks in Chinese and `...`, with the mark that should have been there drawn beside it. Not a character in the file, see §5.10 |
-| `:view-code` [`on`｜`off`] | Code in a fence coloured by its own grammar (nine grammars; with no argument it reports) |
+| `:view-code` [`on`｜`off`] | Code in a fence coloured by its own grammar (sixteen grammars; with no argument it reports) |
 | `:view-focus` [`on`｜`off`] | Focus: the **paragraph** you are writing stays as it is and the rest of the page steps back one level. The paragraph, not the column — a wrap is not a unit of writing, and when one paragraph wraps into three columns all three are the paragraph you are writing |
 | `:view-margin always` | A margin beside every column and above every row |
 | `:table` [*rows* *columns*] | Write an empty table: `:table 3 4` is three rows by four columns, the first row the column names (the rule row does not count as a row), a blank line left above and below, the cursor waiting in the first column name ready to type. With no numbers it is 3×3. Only on a blank line: in the middle of a paragraph it refuses rather than guess where the paragraph ends |
@@ -6184,7 +6183,7 @@ key is called, and you don't have to go looking up which keys exist.
 value it covers. Factory → global → project, each one covering the one before; the line
 in the picture above, "indent 2 project ← factory 0", means "this project sets it to 2,
 and the factory value is 0". Warning: **when there is no room for it the column is not
-drawn at all** (under 50 columns); the value column stays.
+drawn at all** (under 58 columns); the value column stays.
 
 Warning: **when the layer you are editing is covered by one above it, the line
 underneath says so.** The project sets `indent`, and you press space on it in global —
@@ -6216,7 +6215,7 @@ That sounds like meddling, and it is really a repair: a key `RawConfig` does not
 **voids the whole config**, and not one of the correct settings in the same file takes
 effect. Once it is commented out the file works again, and not a character is lost.
 
-**Eight groups, fifty-three items**, one group to a page:
+**Eight groups, fifty-four items**, one group to a page:
 
 | Group | What is in it |
 | --- | --- |
@@ -6285,7 +6284,7 @@ zong_gap = 0                 # half-width cells between columns, 0–4. 0 (defau
                              # against column; the ruby lane counts separately, see margin
 tatechuyoko = 4              # how many consecutive half-width characters go in one cell (tatechuyoko).
                              # 4 (default) holds a year and a chapter number; 0 = off, 2 is exactly one cell wide, up to 8
-code_highlight = true        # colour code blocks by syntax (nine languages); false paints the whole block one purple
+code_highlight = true        # colour code blocks by syntax (sixteen languages); false paints the whole block one purple
 hanging_punctuation = false  # 。，、？！：；「」 hang in the margin (hanging punctuation)
 soft_wrap = true             # set across, a long paragraph folds to the next line; off, it runs past the right edge out of sight
 autosave = true              # keep a rescue copy next to the file while it is unsaved
@@ -6352,7 +6351,7 @@ start = false                # load the 碼表 at startup. Off by default — th
 system = "auto"              # in Normal mode, ask the system IME to step aside; where you type, ask only when the status line has the mark.
                              # "keep" never says a word
 
-[theme]                        # a theme has only three colours, everything else is computed. See the next section
+[theme]                        # a theme names its four inks, everything else is computed. See the next section
 name = "墨香"                   # just a name; "moxiang" works the same
 mode = "auto"                  # "auto" asks the terminal for its ground | "dark" | "light"
 ground = "paint"               # "paint" paints its own paper | "terminal" gives the ground back to the terminal

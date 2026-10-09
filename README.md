@@ -162,10 +162,10 @@ stay this editor's, and the manual lists key by key what it costs a helix hand.
 
 Twenty-odd commands is past the point where they can be guessed, so `:` on its
 own lists them in aligned columns with a line each, narrowing as you type; `::`
-searches those descriptions **in Chinese** when you have forgotten the name. A
-key that means something in another editor and nothing here says what this one
-calls it — `$` answers 「行尾是 gl」 rather than doing nothing. `:tutor` opens a
-lesson you learn by editing it, written on Chinese prose, where `w` and 縱書 can
+searches those descriptions **in Chinese** when you have forgotten the name.
+`:keymap` and the manual's own table say where another editor's keys went, and
+an unbound key says nothing at all — a hint would be the editor deciding why you
+pressed it. `:tutor` opens a lesson you learn by editing it, written on Chinese prose, where `w` and 縱書 can
 actually be taught.
 
 ### A book is many files
