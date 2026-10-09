@@ -527,7 +527,7 @@ pub enum Command {
     /// `:keymap [helix|vim]` — lay a shipped keymap under the reader's own
     /// aliases; bare reports which (#428).
     SetKeymap(Option<yumete_cjk::KeyPreset>),
-    /// `:keymap actions` — every name a key may be bound to, in a listing
+    /// `:keymap-actions` — every name a key may be bound to, in a listing
     /// (#429).
     ListActions,
     /// `:write-as <path>` (and `:write-as!`) — write this buffer to another file
@@ -1965,7 +1965,6 @@ const INDENT_LEVELS: &[Word] = &[
 const KEYMAPS: &[Word] = &[
     Word { name: "helix", help: "cmd.keymaps.helix", needs: &[] },
     Word { name: "vim", help: "cmd.keymaps.vim", needs: &[] },
-    Word { name: "actions", help: "cmd.keymaps.actions", needs: &[] },
 ];
 
 /// What Tab types in Insert mode.
@@ -3187,14 +3186,21 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.keymap",
         needs: &[],
         params: &[Param::Words { of: KEYMAPS, default: None }],
-        build: Some(|p| {
-            Ok(match p.arg(0) {
-                // 「What can I bind a key to」 is the other half of a keymap,
-                // so it is asked of the same command (#429).
-                Some("actions") => Command::ListActions,
-                word => Command::SetKeymap(word.and_then(yumete_cjk::KeyPreset::parse)),
-            })
-        }),
+        build: Some(|p| Ok(Command::SetKeymap(p.arg(0).and_then(yumete_cjk::KeyPreset::parse)))),
+    },
+    Entry {
+        // **A name of its own, not a third word in `:keymap`** (2026-10-10 定：
+        // 「他不应该是 option 而是一个命令」). `helix` and `vim` are what a
+        // keymap *is*; listing what a key may be bound to is a different verb,
+        // and a word that answers a different question is half a command name
+        // sitting in someone else's parameter list — the same shape
+        // `reload-config` and the other three were taken out of 2026-10-07.
+        name: "keymap-actions",
+        aliases: &[],
+        help: "cmd.keymap.actions",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::ListActions)),
     },
     Entry {
         // **這個名字 2026-10-08 讓給了「這份檔案是什麼」**，即時顯示那一條改叫

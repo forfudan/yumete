@@ -13401,7 +13401,7 @@ fn a_binding_takes_an_action_name_or_a_command_or_keys() {
 /// caught in review). A chord has no letter of its own, so the table spells it
 /// as the control byte it is (`"\u{1b}"` is Esc, `"\u{1}"` is `C-a`) — and the
 /// player sent every character as `Key::Char`, which the editor answers with
-/// nothing. Four named actions were listed by `:keymap actions`, bindable, and
+/// nothing. Four named actions were listed by `:keymap-actions`, bindable, and
 /// dead: binding a key to `increment` simply did nothing.
 #[test]
 fn an_action_bound_to_a_chord_is_really_pressed() {

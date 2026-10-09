@@ -46,7 +46,7 @@
 # ── autoreload ────────────────────────────────────────────────────────
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.append-mode"
 zht = "在選區後插入"
 zhs = "在选区后插入"
@@ -54,7 +54,7 @@ en = "insert after the selection"
 find = "插入 追加 後面 后面 append insert"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.buffer-picker"
 zht = "打開緩衝區選擇器"
 zhs = "打开缓冲区选择器"
@@ -62,7 +62,7 @@ en = "open the buffer picker"
 find = "緩衝 缓冲 稿子 切換 切换 開著的 开着的 buffer picker"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.change-selection"
 zht = "剪切後改寫"
 zhs = "剪切后改写"
@@ -70,7 +70,7 @@ en = "cut into the register, then change"
 find = "改 改寫 改写 換 换 替換 替换 剪切 剪 change cut"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.change-selection-noyank"
 zht = "改寫選區（不動寄存器）"
 zhs = "改写选区（不动寄存器）"
@@ -78,7 +78,7 @@ en = "change the selection, leaving the register"
 find = "改 改寫 改写 換 换 替換 替换 change"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.collapse-selection"
 zht = "選區收回光標"
 zhs = "选区收回光标"
@@ -86,7 +86,7 @@ en = "collapse the selection to the cursor"
 find = "收 收回 取消選區 取消选区 collapse"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.command-menu"
 zht = "所有命令"
 zhs = "所有命令"
@@ -94,7 +94,7 @@ en = "every command"
 find = "命令 所有命令 列表 清單 清单 command menu palette"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.comment-block"
 zht = "整段註釋"
 zhs = "整段注释"
@@ -102,7 +102,7 @@ en = "comment this block"
 find = "註釋 注释 整段 塊 块 comment block"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.comment-line"
 zht = "註釋這一行"
 zhs = "注释这一行"
@@ -110,7 +110,7 @@ en = "comment this line"
 find = "註釋 注释 一行 comment line"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.copy-to-clipboard"
 zht = "複製到系統剪貼簿"
 zhs = "复制到系统剪贴板"
@@ -118,7 +118,7 @@ en = "copy to the system clipboard"
 find = "複製 复制 剪貼板 剪贴板 系統 系统 copy clipboard"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.count-progress"
 zht = "今天寫了多少"
 zhs = "今天写了多少"
@@ -126,7 +126,7 @@ en = "how much was written today"
 find = "字數 字数 進度 进度 今天 寫了多少 写了多少 count progress"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.decrement"
 zht = "光標處的數字減一"
 zhs = "光标处的数字减一"
@@ -134,7 +134,7 @@ en = "the number under the cursor, minus one"
 find = "數字 数字 減 减 減一 减一 decrement"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 # Warning: **2026-10-08 這四句換了主人，一個字都沒改。** 從前 `delete_selection`
 # 掛的是「不動寄存器」那一句，而它真按的是 `d`——`d` 自 2026-09-28 起進寄存器。
 key = "action.delete-selection"
@@ -144,7 +144,7 @@ en = "cut the selection into the register"
 find = "剪切 剪 寄存器 刪 删 delete cut"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.delete-selection-noyank"
 zht = "刪除選區（不動寄存器）"
 zhs = "删除选区（不动寄存器）"
@@ -152,7 +152,7 @@ en = "delete the selection, leaving the register"
 find = "刪 删 刪除 删除 去掉 delete"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.dictionary"
 zht = "字典：光標下那個字的拆分"
 zhs = "字典：光标下那个字的拆分"
@@ -160,7 +160,7 @@ en = "the 拆分 of the character under the cursor"
 find = "字典 拆分 部件 查字 dictionary chaifen"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.extend-mode"
 zht = "延伸模式：移動把選區撑大"
 zhs = "延伸模式：移动把选区撑大"
@@ -168,7 +168,7 @@ en = "extend mode: moving grows the selection"
 find = "延伸 選擇 选择 擴大 扩大 選區 选区 extend select visual"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.extend-to-line-bounds"
 zht = "把選區撑到整行邊界"
 zhs = "把选区撑到整行边界"
@@ -176,7 +176,7 @@ en = "grow the selection to whole lines"
 find = "整行 行邊界 行边界 撑 extend line"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.file-picker"
 zht = "打開文件選擇器"
 zhs = "打开文件选择器"
@@ -184,7 +184,7 @@ en = "open the file picker"
 find = "打開 打开 文件 檔案 档案 挑 picker open file"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.follow-link"
 zht = "跟着光標下的鏈接走"
 zhs = "跟着光标下的链接走"
@@ -192,7 +192,7 @@ en = "follow the link under the cursor"
 find = "鏈接 链接 跟着 跳過去 跳过去 link follow"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-definition"
 zht = "去它指着的地方"
 zhs = "去它指着的地方"
@@ -200,7 +200,7 @@ en = "go to what this points at"
 find = "定義 定义 腳註 脚注 跳過去 跳过去 definition goto"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-file-end"
 zht = "文件末尾"
 zhs = "文件末尾"
@@ -208,7 +208,7 @@ en = "the end of the file"
 find = "末尾 最後 最后 檔尾 档尾 end bottom"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-file-start"
 zht = "文件開頭"
 zhs = "文件开头"
@@ -216,7 +216,7 @@ en = "the start of the file"
 find = "開頭 开头 檔頭 档头 最前 start top"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-first-nonwhitespace"
 zht = "第一個非空白字符"
 zhs = "第一个非空白字符"
@@ -224,7 +224,7 @@ en = "the first character that is not a space"
 find = "非空白 行首 第一個字 第一个字 nonblank first"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-last-line"
 zht = "最後一行"
 zhs = "最后一行"
@@ -232,7 +232,7 @@ en = "the last line"
 find = "最後一行 最后一行 末行 last line"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-line-end"
 zht = "行尾"
 zhs = "行尾"
@@ -240,7 +240,7 @@ en = "the end of the line"
 find = "行尾 末尾 end"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-line-start"
 zht = "行首"
 zhs = "行首"
@@ -248,7 +248,7 @@ en = "the start of the line"
 find = "行首 開頭 开头 start"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-next-paragraph"
 zht = "下一段"
 zhs = "下一段"
@@ -256,7 +256,7 @@ en = "the next paragraph"
 find = "下一段 段落 next paragraph"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-next-sentence"
 zht = "下一句"
 zhs = "下一句"
@@ -264,7 +264,7 @@ en = "the next sentence"
 find = "下一句 句子 next sentence"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-prev-paragraph"
 zht = "上一段"
 zhs = "上一段"
@@ -272,7 +272,7 @@ en = "the previous paragraph"
 find = "上一段 段落 previous paragraph"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-prev-sentence"
 zht = "上一句"
 zhs = "上一句"
@@ -280,7 +280,7 @@ en = "the previous sentence"
 find = "上一句 句子 previous sentence"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.half-page-down"
 zht = "前進半頁"
 zhs = "前进半页"
@@ -288,7 +288,7 @@ en = "half a page down"
 find = "半頁 半页 往下 翻頁 翻页 down half page"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.half-page-up"
 zht = "後退半頁"
 zhs = "后退半页"
@@ -296,7 +296,7 @@ en = "half a page up"
 find = "半頁 半页 往上 翻頁 翻页 up half page"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.increment"
 zht = "光標處的數字加一"
 zhs = "光标处的数字加一"
@@ -304,7 +304,7 @@ en = "the number under the cursor, plus one"
 find = "數字 数字 加 加一 increment"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.indent"
 zht = "增加縮進"
 zhs = "增加缩进"
@@ -312,7 +312,7 @@ en = "indent"
 find = "縮進 缩进 右移 indent"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.insert-at-line-end"
 zht = "在行尾插入"
 zhs = "在行尾插入"
@@ -320,7 +320,7 @@ en = "insert at the end of the line"
 find = "行尾 插入 append end"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.insert-at-line-start"
 zht = "在行首插入"
 zhs = "在行首插入"
@@ -328,7 +328,7 @@ en = "insert at the start of the line"
 find = "行首 插入 insert start"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.insert-mode"
 zht = "在選區前插入"
 zhs = "在选区前插入"
@@ -336,7 +336,7 @@ en = "insert before the selection"
 find = "插入 打字 輸入 输入 insert"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.join-lines"
 zht = "與下一行合併"
 zhs = "与下一行合并"
@@ -344,7 +344,7 @@ en = "join with the next line"
 find = "合併 合并 併行 并行 連起來 连起来 焊 join merge"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.jump-backward"
 zht = "跳轉表：回到剛纔那個位置"
 zhs = "跳转表：回到刚才那个位置"
@@ -352,7 +352,7 @@ en = "back to where you jumped from"
 find = "回去 返回 跳轉 跳转 剛纔 刚才 back jump"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-char-left"
 zht = "左一個字"
 zhs = "左一个字"
@@ -360,7 +360,7 @@ en = "one character left"
 find = "左 左邊 左边 一個字 一个字 left"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-char-right"
 zht = "右一個字"
 zhs = "右一个字"
@@ -368,7 +368,7 @@ en = "one character right"
 find = "右 右邊 右边 一個字 一个字 right"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-line-down"
 zht = "下一行（屏幕上的）"
 zhs = "下一行（屏幕上的）"
@@ -376,7 +376,7 @@ en = "one line down, on screen"
 find = "下 下一行 往下 down"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-line-up"
 zht = "上一行（屏幕上的）"
 zhs = "上一行（屏幕上的）"
@@ -384,7 +384,7 @@ en = "one line up, on screen"
 find = "上 上一行 往上 up"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-long-word-end"
 zht = "下一個大詞尾"
 zhs = "下一个大词尾"
@@ -392,7 +392,7 @@ en = "the next long word's end"
 find = "大詞 大词 詞尾 词尾 空格 WORD end"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-long-word-start"
 zht = "下一個大詞首（按空格分）"
 zhs = "下一个大词首（按空格分）"
@@ -400,7 +400,7 @@ en = "the next long word's start"
 find = "大詞 大词 詞首 词首 空格 WORD"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-word-end"
 zht = "下一個詞尾"
 zhs = "下一个词尾"
@@ -408,7 +408,7 @@ en = "the next word's end"
 find = "詞尾 词尾 詞 词 word end"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-word-start"
 zht = "下一個詞首"
 zhs = "下一个词首"
@@ -416,7 +416,7 @@ en = "the next word's start"
 find = "詞首 词首 詞 词 下一個詞 下一个词 word"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-prev-long-word-start"
 zht = "上一個大詞首"
 zhs = "上一个大词首"
@@ -424,7 +424,7 @@ en = "the previous long word's start"
 find = "大詞 大词 上一個 上一个 WORD back"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-prev-word-start"
 zht = "上一個詞首"
 zhs = "上一个词首"
@@ -432,7 +432,7 @@ en = "the previous word's start"
 find = "詞首 词首 上一個詞 上一个词 word back"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.next-buffer"
 zht = "切換到下一個緩衝區"
 zhs = "切换到下一个缓冲区"
@@ -440,7 +440,7 @@ en = "the next buffer"
 find = "緩衝 缓冲 下一份 切換 切换 next buffer"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.next-region"
 zht = "下一個區域"
 zhs = "下一个区域"
@@ -448,7 +448,7 @@ en = "the next region"
 find = "區域 区域 分屏 窗口 next region window"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.open-above"
 zht = "在上方開新行"
 zhs = "在上方开新行"
@@ -456,7 +456,7 @@ en = "open a line above"
 find = "新行 上面 開行 开行 open above"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.open-below"
 zht = "在下方開新行"
 zhs = "在下方开新行"
@@ -464,7 +464,7 @@ en = "open a line below"
 find = "新行 下面 開行 开行 open below"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.open-here"
 zht = "打開本行寫的檔名"
 zhs = "打开本行写的文件名"
@@ -472,7 +472,7 @@ en = "open the file this line names"
 find = "打開 打开 檔名 档名 路徑 路径 open here"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.outline"
 zht = "大綱邊欄"
 zhs = "大纲边栏"
@@ -480,7 +480,7 @@ en = "the outline"
 find = "大綱 大纲 目錄 目录 標題 标题 outline symbols"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.paste-after"
 zht = "向後粘貼"
 zhs = "向后粘贴"
@@ -488,7 +488,7 @@ en = "paste after"
 find = "粘貼 粘贴 貼 贴 後面 后面 paste"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.paste-before"
 zht = "向前粘貼"
 zhs = "向前粘贴"
@@ -496,7 +496,7 @@ en = "paste before"
 find = "粘貼 粘贴 貼 贴 前面 paste before"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.paste-from-clipboard"
 zht = "從系統剪貼簿粘貼"
 zhs = "从系统剪贴板粘贴"
@@ -504,7 +504,7 @@ en = "paste from the system clipboard"
 find = "粘貼 粘贴 剪貼板 剪贴板 系統 系统 paste clipboard"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.paste-menu"
 zht = "粘貼選單：挑一個寄存器"
 zhs = "粘贴菜单：挑一个寄存器"
@@ -512,7 +512,7 @@ en = "the paste menu"
 find = "寄存器 粘貼 粘贴 選單 选单 register paste"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.prev-buffer"
 zht = "切換到上一個緩衝區"
 zhs = "切换到上一个缓冲区"
@@ -520,7 +520,7 @@ en = "the previous buffer"
 find = "緩衝 缓冲 上一份 切換 切换 previous buffer"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.quit"
 zht = "關掉這一個"
 zhs = "关掉这一个"
@@ -528,7 +528,7 @@ en = "close this one"
 find = "關 关 退出 關掉 关掉 quit close"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.redo"
 zht = "重做"
 zhs = "重做"
@@ -536,7 +536,7 @@ en = "redo"
 find = "重做 恢復 恢复 redo"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.repeat-last-change"
 zht = "再做一次剛纔那個改動"
 zhs = "再做一次刚才那个改动"
@@ -544,7 +544,7 @@ en = "do that change again"
 find = "重複 重复 再做一次 repeat"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.replace-with-yanked"
 zht = "用寄存器內容替換選區"
 zhs = "用寄存器内容替换选区"
@@ -552,7 +552,7 @@ en = "replace the selection with the register"
 find = "替換 替换 寄存器 粘貼 粘贴 replace register"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.rsearch"
 zht = "往後搜索"
 zhs = "往后搜索"
@@ -560,7 +560,7 @@ en = "search backward"
 find = "搜索 搜尋 搜寻 查找 往後 往后 反向 search backward"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.ruby"
 zht = "注音/旁註"
 zhs = "注音/旁注"
@@ -568,7 +568,7 @@ en = "ruby"
 find = "注音 旁註 旁注 拼音 讀音 读音 ruby"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.save-and-quit"
 zht = "存盤並關掉"
 zhs = "存盘并关掉"
@@ -576,7 +576,7 @@ en = "save and close"
 find = "存 存盤 存盘 保存 退出 關掉 关掉 save quit"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.save-file"
 zht = "存盤"
 zhs = "存盘"
@@ -584,7 +584,7 @@ en = "save"
 find = "存 存盤 存盘 保存 寫入 写入 save write"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.search"
 zht = "往前搜索"
 zhs = "往前搜索"
@@ -592,7 +592,7 @@ en = "search forward"
 find = "搜索 搜尋 搜寻 查找 找 search find"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-next"
 zht = "下一處"
 zhs = "下一处"
@@ -600,7 +600,7 @@ en = "the next match"
 find = "下一處 下一处 再找一次 next"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-panel"
 zht = "高級搜索面板"
 zhs = "高级搜索面板"
@@ -608,7 +608,7 @@ en = "the search panel"
 find = "搜索 搜尋 搜寻 面板 跨文件 替換 替换 panel replace"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-prev"
 zht = "上一處"
 zhs = "上一处"
@@ -616,7 +616,7 @@ en = "the previous match"
 find = "上一處 上一处 往回 previous"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-selection"
 zht = "找選中的那段"
 zhs = "找选中的那段"
@@ -624,7 +624,7 @@ en = "look for what is selected"
 find = "這個詞 这个词 還在哪 还在哪 選中 选中 search selection"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.select-all"
 zht = "選中整個文件"
 zhs = "选中整个文件"
@@ -632,7 +632,7 @@ en = "select the whole file"
 find = "全選 全选 整個文件 整个文件 all"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.select-line"
 zht = "選中當前行"
 zhs = "选中当前行"
@@ -640,7 +640,7 @@ en = "select this line"
 find = "選行 选行 整行 當前行 当前行 line"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.sidebar"
 zht = "左邊欄（開關）"
 zhs = "左边栏（开关）"
@@ -648,7 +648,7 @@ en = "the left sidebar"
 find = "邊欄 边栏 側欄 侧栏 左邊 左边 sidebar"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.switch-case"
 zht = "大小寫互換"
 zhs = "大小写互换"
@@ -656,7 +656,7 @@ en = "switch case"
 find = "大小寫 大小写 互換 互换 case swap"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.undo"
 zht = "撤銷"
 zhs = "撤销"
@@ -664,7 +664,7 @@ en = "undo"
 find = "撤銷 撤销 回退 後悔 后悔 undo"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.unindent"
 zht = "減少縮進"
 zhs = "减少缩进"
@@ -672,7 +672,7 @@ en = "unindent"
 find = "縮進 缩进 左移 減少 减少 unindent outdent"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.wiki-panel"
 zht = "百科頁"
 zhs = "百科页"
@@ -680,7 +680,7 @@ en = "the wiki page"
 find = "百科 詞條 词条 人物 設定 设定 wiki"
 
 [[message]]
-# :keymap actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.yank"
 zht = "複製"
 zhs = "复制"
@@ -2032,8 +2032,8 @@ en = "indent width: the spaces Tab types, and how far > and < shift"
 find = "縮進 缩进 寬度 宽度 空格 indent width"
 
 [[message]]
-# :keymap 的 actions 那一項
-key = "cmd.keymaps.actions"
+# :keymap-actions 做什麼
+key = "cmd.keymap.actions"
 zht = "列出每個能綁的動作名"
 zhs = "列出每个能绑的动作名"
 en = "list every action a key can be bound to"
@@ -6476,14 +6476,14 @@ zhs = "已记下此处，C-o 可返回"
 en = "saved; C-o comes back"
 
 [[message]]
-# :keymap actions 那張清單的開頭一段
+# :keymap-actions 那張清單的開頭一段
 key = "keys.actions-head"
 zht = "把名字寫在配置的 `[keys.normal]` 右邊：`x = 「delete_selection」`。右邊也可以是 `:命令`，或者一串鍵。"
 zhs = "把名字写在配置的 `[keys.normal]` 右边：`x = 「delete_selection」`。右边也可以是 `:命令`，或者一串键。"
 en = "Write a name on the right of `[keys.normal]`: `x = 「delete_selection」`. The right may also be a `:command`, or keys."
 
 [[message]]
-# :keymap actions 那個緩衝區的名字
+# :keymap-actions 那個緩衝區的名字
 key = "keys.actions-title"
 zht = "能綁定的動作"
 zhs = "能绑定的动作"
