@@ -2163,9 +2163,9 @@ KEYS (Normal mode, Helix-style):
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:search-project` results)
-    Space     menu: o outline, f files, b buffers, / search, ? commands,
-              d 字典 (how the character under the cursor is written), y copy,
-              r 旁注 (edit the reading here)
+    Space     menu: s outline, f files (F from the working directory),
+              b buffers, / search, ? commands, n 字典 (how the character under
+              the cursor is written), d diagnostics, y copy, t tables, w areas
     C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
     {{ }}     previous / next paragraph — here a paragraph is a logical line
@@ -2191,7 +2191,8 @@ KEYS (Normal mode, Helix-style):
     A-;       flip which end of the selection the cursor is on
     C-d C-u   half a page onward / back (down the lines, or across the 縱)
     C-f C-b   a whole page
-    gJ        join with the line below (no space between two 全角 characters)
+    gJ        join with the line below, under the vim keys (no space between
+              two 全角 characters). `J` is the one in the default keys
     `         letter case: `l lower, `u upper, `` switch
     >  <      indent / unindent the selected lines
     C-a C-x   increment / decrement the number at the cursor
@@ -2229,7 +2230,7 @@ KEYS (Normal mode, Helix-style):
               :indent off|basic|full|<n>   first-line indent — a Chinese
                           paragraph's mark; full also folds the blank line
               :view-bands [n|off]   段組: divide the 縱書 page into bands
-              :word-list reload   reread .yumete/words.txt — this book's own names
+              :word-list-reload   reread .yumete/words.txt — this book's own names
               :word-habit      口頭禪: what this one says far more than prose does
               :table [off|basic|full|check]   edit as a grid; check looks the
                           whole over
