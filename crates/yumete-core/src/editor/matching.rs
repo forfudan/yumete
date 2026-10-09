@@ -777,52 +777,23 @@ impl Editor {
             .max_by_key(|&(start, _)| start)
     }
 
-    /// Recompute the goal column `j` and `k` aim at.
+    /// **Forget the goal column `j` and `k` aim at**, so the next one works it out.
     ///
-    /// With soft wrap on it is the column within the *visual row*, not within
-    /// the paragraph — otherwise `j` from the middle of a wrapped line would
-    /// aim at a column hundreds of cells wide and always land at a row's end.
+    /// Warning: **它從前就地算一次，而那是打字時最貴的一筆**（2026-10-09 查出來的）。
+    /// `sample` 指得很準：一行四百萬字的稿子上，插入態每按一個鍵
+    /// `on_insert_key` → `refresh_goal_column` → `wrap::position` →
+    /// `line_rows_for_caret`，把**整行的字素走一遍**——4559 個採樣裏 4357 個在這一
+    /// 條路上，合**每打一個字 75 毫秒**（他那條 1240 萬字的行按此推是 230 毫秒）。
+    /// 四十四處呼叫它，每一處都付這一筆，而開不開折行一樣貴。
+    ///
+    /// 不必算：`j`／`k` 那一支本來就寫着「沒記過就現算一次」，而算完它自己記回去
+    /// （[`Editor::step_row`] 那一段註釋說的正是這件事）。把這一支改成「忘掉」，
+    /// 答案一個字不變——中間沒有別的東西動過光標，所以現算出來的就是這裏本來要算
+    /// 的那一個——而那筆 O(行長) 挪到了**真按 `j` 的那一下**，付一次。
+    ///
+    /// 名字照舊叫 refresh：四十四個呼叫方要的本來就是「目標列現在不算數了」。
     pub(super) fn refresh_goal_column(&mut self) {
-        // The measure borrows the editor — a row's width depends on what is on
-        // the page — so it is built here and dropped before anything is set.
-        let column = {
-            let hide = |line: usize| self.hidden_on_line(line);
-            let fold = |line: usize| self.line_is_folded(line);
-            let rope = self.current_buffer().rope();
-            // …with the indent, because the indent is where a row *breaks*: a
-            // measure without it wraps a different page from the one being
-            // drawn, and `j` then lands on the character under a column nobody
-            // is looking at. Same for the folds: a row the page does not draw
-            // is a row `j` must not stop on.
-            //
-            // **Wrap off goes the same way**, at [`crate::wrap::NO_WRAP`]: one
-            // row per paragraph is what a very large width gives, and the
-            // alternative was a second answer to「which column is this」 that
-            // did not know what is off the page.
-            let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
-            let drawn = |line: usize| self.drawn_on_line(line);
-            let typed = |line: usize| self.typed_on_line(line);
-            // A table row is one row (#275) — and `j` has to be walking the
-            // same page the renderer drew, or it steps into a row that is not
-            // on the screen.
-            let flat = |line: usize| self.table_row_at(line);
-            // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
-            // 不必每動一下就把前面那一整段逐字素走一遍。
-            let widths = |rope: &ropey::Rope, line: usize, span: usize| self.line_widths(rope, line, span);
-            let m = crate::wrap::Measure::new(width, &hide)
-                .with_indent(self.paragraph_indent())
-                .with_folds(&fold)
-                .with_drawn(&drawn)
-                .with_typed_drawn(&typed)
-                .with_unwrapped(&flat)
-                .with_widths(&widths)
-                .with_version(self.current_buffer().id(), self.current_buffer().revision())
-                .with_edit(self.current_buffer().edit())
-                .with_open_line(self.open_line())
-                .with_caret(Some(self.caret_in_line()));
-            crate::wrap::column_of(rope, self.sel.head(), m)
-        };
-        self.sel.set_goal(Some(column));
+        self.sel.set_goal(None);
     }
 
     /// `j`/`k` inside a grid, by cell rather than by screen column.

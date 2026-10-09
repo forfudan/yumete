@@ -23860,6 +23860,44 @@ fn cutting_at_many_cursors_and_putting_it_back_restores_every_piece() {
     assert_eq!(ed.current_buffer().rope().to_string(), was, "逐字還原");
 }
 
+/// **打字不許算目標列**（2026-10-09 查出來的，打一個字 75 毫秒）。
+///
+/// `sample` 指的是這一條路：`on_insert_key` → `refresh_goal_column` →
+/// `wrap::position` → `line_rows_for_caret`，把整行的字素走一遍。改成「忘掉」之後
+/// 那一筆挪到真按 `j` 的那一下，付一次——而 `j`／`k` 的答案一個字不變，下面兩半各
+/// 盯一半。
+#[test]
+fn typing_forgets_the_goal_column_instead_of_working_it_out() {
+    let mut ed = typed("abcdefghijklmnop\nxy\nabcdefghijklmnop\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "10l");
+    // 動過光標，目標列是「還沒算」——按 `j` 的那一下纔算。
+    assert_eq!(ed.sel.goal(), None, "動完不算");
+    press(&mut ed, "j");
+    assert_eq!(ed.sel.goal(), Some(10), "`j` 現算一次並記住");
+    // 插入態每一鍵都忘一次，而不是每一鍵算一次。
+    press(&mut ed, "ix");
+    assert_eq!(ed.sel.goal(), None, "打字只忘，不算");
+    ed.on_key(Key::Esc);
+
+    // 而 `j`／`k` 保得住那一列：短行夾到行尾，回到長行還是原來那一列。
+    let column = |ed: &Editor| -> usize {
+        ed.cursor_visual_column() + 1
+    };
+    let mut ed = typed("abcdefghijklmnop\nxy\nabcdefghijklmnop\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "10l");
+    assert_eq!(column(&ed), 11);
+    press(&mut ed, "j");
+    assert_eq!(column(&ed), 3, "短行夾到它的行尾");
+    press(&mut ed, "j");
+    assert_eq!(column(&ed), 11, "回到長行還是第 11 列");
+    press(&mut ed, "k");
+    assert_eq!(column(&ed), 3);
+    press(&mut ed, "k");
+    assert_eq!(column(&ed), 11);
+}
+
 /// **狀態欄那個「字」數的是字素**（2026-10-09 作者定）。
 ///
 /// 原話：「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint。」`葛`＋U+E0100
