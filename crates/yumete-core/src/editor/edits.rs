@@ -639,7 +639,7 @@ impl Editor {
     /// 白白多出一個撤銷點，一句話從此要按兩次 `u` 纔退得乾淨。
     pub(super) fn insert_register(&mut self, name: Option<char>) {
         let text = match name {
-            Some(name) => self.registers.get(&name).cloned().unwrap_or_default(),
+            Some(name) => self.held(name),
             None => self.register.clone(),
         };
         if text.is_empty() {
@@ -915,11 +915,38 @@ impl Editor {
         self.pending_register.take()
     }
 
+    /// **一格寄存器裝着的那一整份**——N 段存進去的接起來。
+    pub(super) fn held(&self, name: char) -> String {
+        self.registers.get(&name).map(|p| p.concat()).unwrap_or_default()
+    }
+
     /// Put `text` in the register named by a pending `"`, or the unnamed one.
     pub(super) fn store(&mut self, text: String) {
+        // **一段選區一份**（2026-10-09，見 [`Editor::register_parts`]）。有名字的格子和
+        // 無名那一格走同一條規矩——helix 的寄存器無論叫不叫得出名字都是一串值。
+        //
+        // `edit_nth` 是這一段在**文檔次序**裏的序號（`#` 寄存器讀的也是它），所以收下來
+        // 那幾份本來就是按順序排好的，哪一趟先跑不要緊。
+        //
+        // Warning: **「這一趟」要分得出來**：`edit_each` 每開一輪就把 `edit_round` 往上加
+        // 一格，而這裏記下存的時候是第幾輪。不記的話，下一個命令的第一段會接在上一個
+        // 命令留下的那幾份後面。
+        let nth = self.edit_nth.unwrap_or(0);
+        let fresh = match self.edit_nth {
+            None => true,
+            Some(_) => {
+                let first = self.parts_round != self.edit_round;
+                self.parts_round = self.edit_round;
+                first
+            }
+        };
         match self.take_register() {
             Some(name) => {
-                self.registers.insert(name, text);
+                let parts = self.registers.entry(name).or_default();
+                if fresh {
+                    parts.clear();
+                }
+                keep_one_piece(parts, nth, text);
             }
             None => {
                 // The ring keeps what the register is about to lose. Not
@@ -929,31 +956,11 @@ impl Editor {
                     self.yanks.insert(0, text.clone());
                     self.yanks.truncate(YANKS);
                 }
-                // **一段選區一份**（2026-10-09，見 [`Editor::register_parts`]）。
-                //
-                // `edit_nth` 是這一段在**文檔次序**裏的序號（`#` 寄存器讀的也是它），
-                // 所以收下來那幾份本來就是按順序排好的，哪一趟先跑不要緊。
-                //
-                // Warning: **「這一趟」要分得出來**：`edit_each` 每開一輪就把 `edit_round`
-                // 往上加一格，而這裏記下存的時候是第幾輪。不記的話，下一個命令的第
-                // 一段會接在上一個命令留下的那幾份後面。
-                match self.edit_nth {
-                    None => {
-                        self.register_parts.clear();
-                        self.register = text;
-                    }
-                    Some(nth) => {
-                        if self.parts_round != self.edit_round {
-                            self.parts_round = self.edit_round;
-                            self.register_parts.clear();
-                        }
-                        if self.register_parts.len() <= nth {
-                            self.register_parts.resize(nth + 1, String::new());
-                        }
-                        self.register_parts[nth] = text;
-                        self.register = self.register_parts.concat();
-                    }
+                if fresh {
+                    self.register_parts.clear();
                 }
+                keep_one_piece(&mut self.register_parts, nth, text);
+                self.register = self.register_parts.concat();
             }
         }
     }
@@ -989,10 +996,10 @@ impl Editor {
         for (i, text) in self.yanks.iter().enumerate() {
             out.push((format!("{i}"), text.clone()));
         }
-        let mut named: Vec<(&char, &String)> = self.registers.iter().collect();
+        let mut named: Vec<&char> = self.registers.keys().collect();
         named.sort();
-        for (name, text) in named {
-            out.push((format!("\"{name}"), text.clone()));
+        for name in named {
+            out.push((format!("\"{name}"), self.held(*name)));
         }
         out
     }
@@ -1020,7 +1027,13 @@ impl Editor {
             // Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
             // 說得通的，而貼一個空字符串看起來像鍵沒按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
-            Some(name) => self.registers.get(&name).cloned().unwrap_or_default(),
+            Some(name) => match (self.registers.get(&name), self.edit_nth) {
+                (Some(parts), Some(nth)) if parts.len() > 1 => {
+                    parts.get(nth).cloned().unwrap_or_default()
+                }
+                (Some(parts), _) => parts.concat(),
+                (None, _) => String::new(),
+            },
             // **一段選區一份**（2026-10-09）：N 段剪下來、N 段貼回去，逐字節還原
             // ——`d` 再 `P` 是「把它放回去」的那一下，而它從前只放得回一段。
             //
@@ -1319,4 +1332,15 @@ impl Editor {
         self.sel.set_head(crate::motion::prev_grapheme(self.current_buffer().rope(), last).max(start));
         self.refresh_goal_column();
     }
+}
+
+/// **把一截擺進第 `nth` 格**，短了就先補空格子（`store` 的兩條路共用）。
+///
+/// Warning: **不許 `push`。** 逐段編輯是**從後往前**跑的，所以到手的次序和格子的次序
+/// 正好相反；`nth` 是文檔次序，照它落座纔對得上貼回去那一下。
+fn keep_one_piece(parts: &mut Vec<String>, nth: usize, text: String) {
+    if parts.len() <= nth {
+        parts.resize(nth + 1, String::new());
+    }
+    parts[nth] = text;
 }

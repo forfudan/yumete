@@ -24338,3 +24338,21 @@ fn a_linewise_visual_cut_takes_whole_lines_at_every_cursor() {
         "三段各拿走自己那一整行"
     );
 }
+
+/// **名字叫得出的格子也是一段一份**（2026-10-09，`y`／`d` 那一條的最後一塊）。
+///
+/// `"a` 那幾格從前存的是一個字串，於是 N 段各 `store` 一次，**後一段蓋掉前一段**——
+/// 無名那一格至少還接得起來，名下那一格只剩最後跑的那一段——逐段編輯從後往前跑，所
+/// 以剩下的是文檔上最前面那一截，於是三段貼出來是「甲一行…／乙**一**行…／丙**一**行…」。
+/// helix 的寄存器無論有沒有名字都是一串值。
+#[test]
+fn a_named_register_keeps_a_piece_for_every_cursor() {
+    let was = "甲一行寫了很多字。\n乙二行也寫了些。\n丙三行最後收尾。\n";
+    let mut ed = typed(was);
+    press(&mut ed, "gg");
+    press(&mut ed, "wCC");
+    // `"a` 指定格子，`d` 剪進去。
+    press(&mut ed, "\"ad");
+    press(&mut ed, ";\"aP");
+    assert_eq!(ed.current_buffer().rope().to_string(), was, "逐字還原");
+}

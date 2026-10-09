@@ -2152,7 +2152,9 @@ pub struct Editor {
     /// first — copy a paragraph to `a`, go and fetch something else, and it is
     /// still there.
     register: String,
-    registers: HashMap<char, String>,
+    /// Warning: **一格一串值，不是一個字串**（2026-10-09）：N 段選區各存自己那一截，同
+    /// [`Self::register_parts`]。讀的時候段數對不上就交接起來的那一整份。
+    registers: HashMap<char, Vec<String>>,
     /// **無名寄存器裏，每一段選區各自那一份**（2026-10-09 審出來的）。
     ///
     /// 從前整個寄存器是一個字串，而 `edit_each` 會逐段 `store`——於是 N 段選區剪下來
