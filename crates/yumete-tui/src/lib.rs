@@ -4791,7 +4791,8 @@ fn draw(
             height: status_area.y.saturating_sub(area.y).max(1),
             ..area
         };
-        draw_panel_rows(frame, config, room, cursor_x, cursor_y, seek_rows, None);
+        let what = Floating { rows: seek_rows, lit: None, keep_off_the_caret: false };
+        draw_panel_rows(frame, config, room, cursor_x, cursor_y, what);
     }
     // **設置面板鋪滿整個窗口**（2026-09-25 報的：「设置界面是独占的全屏，所以是
     // 不是可以把下方的状态栏和命令栏覆盖掉？」）。
@@ -12247,7 +12248,8 @@ fn draw_candidate_panel(
         let room = area.width.saturating_sub(4).min(56);
         let mut rows = vec![say!("ime.shortcut")];
         rows.extend(shortcut_lines(&shortcut, room));
-        return draw_panel_rows(frame, config, area, cursor_x, cursor_y, rows, None);
+        let what = Floating { rows, lit: None, keep_off_the_caret: false };
+        return draw_panel_rows(frame, config, area, cursor_x, cursor_y, what);
     }
 
     // Build the content lines: preedit header, then the candidates.
@@ -12278,7 +12280,8 @@ fn draw_candidate_panel(
         rows.push(row);
     }
 
-    draw_panel_rows(frame, config, area, cursor_x, cursor_y, rows, Some(highlight));
+    let what = Floating { rows, lit: Some(highlight), keep_off_the_caret: true };
+    draw_panel_rows(frame, config, area, cursor_x, cursor_y, what);
 }
 
 /// 快捷符號's rows: `鍵 文本` cells packed across `room` columns.
@@ -12338,15 +12341,31 @@ fn shortcut_lines(rows: &[(String, String)], room: u16) -> Vec<String> {
 /// the clamping are the same job — only the rows and whether anything is
 /// selected differ. `lit` is `None` for 快捷符號: nothing there is selected,
 /// and a lit first row would read as 「press Space for this one」.
+/// **一扇浮在光標旁邊的框裏裝着什麽**（2026-10-09 收成一格）。
+///
+/// 三個呼叫方穿同一個框：候選面板、快捷符號表、多字母定位。
+struct Floating {
+    /// 一行一條，第一行多半是碼串或者標題。
+    rows: Vec<String>,
+    /// 哪一條是選中的（候選面板的首選）。
+    lit: Option<usize>,
+    /// **這一扇不許蓋住光標那一行。**
+    ///
+    /// 只有候選面板是 `true`：「正在打的那個字是這扇面板唯一不許藏的東西」只是它
+    /// 那一扇的規矩。快捷符號表**有意**鋪滿整個區域（它自己在末尾加一行「還有更
+    /// 多」），`a_shortcut_table_taller_than_the_window_says_there_is_more` 攔過一次。
+    keep_off_the_caret: bool,
+}
+
 fn draw_panel_rows(
     frame: &mut Frame,
     config: &Config,
     area: Rect,
     cursor_x: u16,
     cursor_y: u16,
-    rows: Vec<String>,
-    lit: Option<usize>,
+    what: Floating,
 ) {
+    let Floating { rows, lit, keep_off_the_caret } = what;
     let skin = vertical::Skin::from(config);
     // Size the panel to its content (plus borders), clamped to the text area.
     let content_w = rows
@@ -12360,28 +12379,49 @@ fn draw_panel_rows(
 
     // Prefer just below the cursor; flip above if it would overflow the bottom.
     let x = cursor_x.min(area.x + area.width.saturating_sub(panel_w));
-    // Warning: **翻上去的時候很可能落在光標自己那一行上**（2026-10-09 審出來的，
-    // **沒修**）。翻上去寫的是 `cursor_y - panel_h`，而 `saturating_sub` 在
-    // `cursor_y < panel_h` 的時候歸零，於是框的底邊就是光標那一行——正在打的那個字
-    // 被框線蓋住。這個檔自己三千行上為行內那個小浮標寫過相反的規矩：「絕對不許蓋在
-    // 它身上：正在打的那個字是這扇面板唯一不許藏的東西」，那一支的做法是乾脆不畫。
+    // Warning: **翻上去的時候要真的有地方**（2026-10-09 作者定）。翻上去寫的是
+    // `cursor_y - panel_h`，而 `saturating_sub` 在 `cursor_y < panel_h` 的時候歸零，
+    // 於是框的底邊就是光標那一行——正在打的那個字被框線蓋住。這個檔自己三千行上為
+    // 行內那個小浮標寫過同一條規矩：「絕對不許蓋在它身上：正在打的那個字是這扇面板
+    // 唯一不許藏的東西」。那一支的做法是乾脆不畫，候選面板不能那樣（看不見候選就打
+    // 不出字），所以兩邊都裝不下整扇的時候取**寬的那一邊，縮到裝得下**。
     //
-    // 三件事攔住了順手改它，都寫下來：
-    //
-    // 1. **報來那一幀我復現不出。** 同樣 100x14、同樣的鍵，掃了 1 到 40 行、三種窗
-    //    口大小，一格都沒蓋住——`page_for_window` 已經按光標下方的餘量縮過頁。報的
-    //    人自己標了「未驗證」的那一條（`[panel] page_size = 9`，面板高 12，24 行的
-    //    終端）纔走得到那一枝。
-    // 2. **這一支不只畫候選面板。** 快捷符號表走的也是它，而那一張**有意**鋪滿整個
-    //    區域、自己在末尾加一行「還有更多」——`a_shortcut_table_taller_than_the_window_says_there_is_more`
-    //    就攔在這裏。「不許蓋住光標」是候選面板那一扇的規矩，不是這一支的。
-    // 3. **兩邊都擺不下的時候該怎麽辦是作者定的事**：縮頁、挪到別的列、還是像行內
-    //    那個浮標一樣乾脆不畫。
-    let below = cursor_y + 1;
-    let y = if below + panel_h <= area.y + area.height {
-        below
-    } else {
-        cursor_y.saturating_sub(panel_h).max(area.y)
+    // Warning: **只有 `keep_off_the_caret` 那一扇走這一條。** 快捷符號表有意鋪滿整個
+    // 區域，而報來那一幀我復現不出（同樣 100x14、掃了 1 到 40 行、三種窗口大小，一
+    // 格都沒蓋住——`page_for_window` 已經按光標下方的餘量縮過頁）；走得到那一枝的是
+    // `[panel] page_size = 9` 配上 24 行的終端。所以這是**算得出來的那條路堵上**，
+    // 不是照着一幀改的。
+    let below_room = (area.y + area.height).saturating_sub(cursor_y + 1);
+    let above_room = cursor_y.saturating_sub(area.y);
+    let (y, panel_h) = match keep_off_the_caret {
+        false => {
+            let below = cursor_y + 1;
+            let y = match below + panel_h <= area.y + area.height {
+                true => below,
+                false => cursor_y.saturating_sub(panel_h).max(area.y),
+            };
+            (y, panel_h)
+        }
+        true if panel_h <= below_room => (cursor_y + 1, panel_h),
+        true if panel_h <= above_room => (cursor_y - panel_h, panel_h),
+        // 兩邊都擺不下一條候選（連框線算上要三行）：縮到那也沒有意思了，夾進
+        // `area` 就是，底下那一句 `#387` 的夾子接着做。
+        true if below_room.max(above_room) < 3 => (cursor_y + 1, panel_h),
+        true if below_room >= above_room => (cursor_y + 1, below_room),
+        true => (cursor_y - above_room, above_room),
+    };
+    // 縮過了就少畫幾條，而**選中那一條必須留着**——讀者是照着它按的。
+    let (rows, lit) = match !keep_off_the_caret || panel_h as usize >= rows.len() + 2 {
+        true => (rows, lit),
+        false => {
+            let keep = (panel_h as usize).saturating_sub(2).max(1);
+            let first = match lit {
+                Some(at) if at >= keep => at + 1 - keep,
+                _ => 0,
+            };
+            let kept: Vec<String> = rows.into_iter().skip(first).take(keep).collect();
+            (kept, lit.map(|at| at.saturating_sub(first)))
+        }
     };
     // **And then clamped into `area` whatever the caret said.** Neither branch
     // above is a bound when the caret is *outside* `area`, which is exactly
@@ -19756,7 +19796,14 @@ fn squeezed(text: &str) -> String {
             terminal
                 .draw(|frame| {
                     let area = Rect::new(0, 0, w, 10);
-                    draw_panel_rows(frame, &config, area, 0, 0, rows.clone(), Some(1));
+                    draw_panel_rows(
+                        frame,
+                        &config,
+                        area,
+                        0,
+                        0,
+                        Floating { rows: rows.clone(), lit: Some(1), keep_off_the_caret: false },
+                    );
                 })
                 .unwrap();
             let shot = terminal.backend().buffer().clone();
@@ -19776,7 +19823,14 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| {
                 let area = Rect::new(0, 0, 14, 10);
-                draw_panel_rows(frame, &config, area, 0, 0, rows.clone(), Some(1));
+                draw_panel_rows(
+                        frame,
+                        &config,
+                        area,
+                        0,
+                        0,
+                        Floating { rows: rows.clone(), lit: Some(1), keep_off_the_caret: false },
+                    );
             })
             .unwrap();
         let shot = terminal.backend().buffer().clone();
