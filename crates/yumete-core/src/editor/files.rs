@@ -104,7 +104,18 @@ impl Editor {
     pub(super) fn counts_of(&self, text: &str) -> (usize, usize, usize) {
         let paragraphs = text.lines().filter(|l| !l.trim().is_empty()).count();
         let prose = self.without_markup(text);
-        let chars = prose.iter().filter(|c| !c.is_whitespace()).count();
+        // **一個字是一個字簇，不是一個碼位**（2026-10-09 作者定）。
+        //
+        // 原話：「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint。」量出來的：
+        // `葛`＋U+E0100（異體字選擇符）是**一個**字，而從前這一句按碼位數，`:count`
+        // 報「漢字 1  字數 2」。列數一直是對的（它本來就按字簇算），於是同一幀裏兩個
+        // 數說的不是一件事。
+        //
+        // 漢字那一格不用改：選擇符不是漢字，`is_han` 本來就只數到基字那一個。
+        let whole: String = prose.iter().collect();
+        let chars = yumete_cjk::graphemes(&whole)
+            .filter(|g| !g.chars().all(char::is_whitespace))
+            .count();
         let han = prose.iter().filter(|&&c| is_han(c)).count();
         (han, chars, paragraphs)
     }
