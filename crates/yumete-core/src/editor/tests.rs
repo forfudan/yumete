@@ -14927,6 +14927,21 @@ fn a_backward_search_lands_where_the_full_sweep_did() {
 
 /// `N` costs what `n` costs (#319).
 ///
+/// **The lowest of a few runs**, for the handful of tests that compare two costs.
+///
+/// Wall-clock noise on a busy machine is **one-sided**: another test thread can only
+/// make a run slower, never faster. So the minimum of a few runs is a steady estimate
+/// of what the code costs, while a single run is a lottery — and a *ratio* of two
+/// single runs is two lotteries multiplied.
+///
+/// Warning: **not an average**, which moves with the load the way a single run does.
+/// Warning: **it cannot help a measurement that is unrepeatable by nature** — the cold
+/// half of `a_tab_on_a_very_long_line_is_measured_once_not_once_a_row` is cold exactly
+/// once, and a second run of it would be measuring the cache.
+fn best_of(times: usize, mut run: impl FnMut() -> std::time::Duration) -> std::time::Duration {
+    (0..times.max(1)).map(|_| run()).min().expect("at least one run")
+}
+
 /// **A ratio, on purpose** — see the note on
 /// [`a_step_down_a_table_costs_the_same_however_long_it_is`]. Both keys travel
 /// the same distance to the same kind of match, so on a file of any size they
@@ -14966,8 +14981,14 @@ fn n_and_shift_n_cost_the_same() {
         began.elapsed() / n
     };
     press('n');
-    let forward = press('n');
-    let backward = press('N');
+    // Warning: **best of three, not one each** (2026-10-09). Measured once each, this
+    // went red under a loaded `cargo test --workspace` and green on its own — see
+    // [`best_of`].
+    let forward = best_of(3, || press('n'));
+    let backward = best_of(3, || press('N'));
+    // Measured unloaded: the ratio is 0.99–1.15, so six is five times the headroom.
+    // The threshold was never the trouble here — one unlucky sample was, and [`best_of`]
+    // is the answer to that.
     assert!(
         backward <= forward * 6,
         "`N` cost {backward:?} against `n`'s {forward:?} — it is reading the whole file"
@@ -16929,11 +16950,19 @@ fn a_step_down_a_table_costs_the_same_however_long_it_is() {
     // The first table pays for whatever the process has not warmed up yet, so
     // it is thrown away rather than measured.
     cost(1_000);
-    let small = cost(1_000);
-    let big = cost(8_000);
+    // Best of three apiece: reproduced red under load at 411µs against 108µs, where the
+    // same pair unloaded is well inside the bound. See [`best_of`].
+    let small = best_of(3, || cost(1_000));
+    let big = best_of(3, || cost(8_000));
     std::fs::remove_dir_all(&dir).ok();
+    // **Why four.** Measured unloaded, five runs: the ratio is **0.91–0.94** — eight
+    // times the rows genuinely cost the same, which is the whole claim. The regression
+    // this guards (a `j` reading the table again) would make it about **8**, so four
+    // sits with four times the headroom under it and half the distance to the fault
+    // above it. Three was not wrong about the code; it was too close to the noise, and
+    // a single unlucky sample under a loaded `cargo test --workspace` reached 3.8.
     assert!(
-        big <= small * 3,
+        big <= small * 4,
         "eight times the rows cost {big:?} against {small:?} — a `j` is reading the table again"
     );
 }
