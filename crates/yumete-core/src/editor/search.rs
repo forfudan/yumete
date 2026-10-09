@@ -15,7 +15,21 @@ impl Editor {
     /// `n` and `N` ask for the same pattern over and over, so the compiled form
     /// is kept until the pattern changes.
     pub(super) fn compile(&self, pattern: &str) -> Result<Regex, String> {
-        let pattern = &self.smart_cased(pattern);
+        self.compile_exactly(&self.smart_cased(pattern))
+    }
+
+    /// [`Self::compile`]，但**不走**智能大小寫 —— `:s` 走這一條（2026-10-09 作者定）。
+    ///
+    /// 原話：「我覺得替換不應該智能大小寫的，因為本質他是個正則，既然是正則就應該
+    /// 默認嚴格。`/` 放寬了智能大小寫，我們必須說明。」
+    ///
+    /// 量過三家：helix 的 `/` 是智能大小寫（`search.smart-case` 出廠 `true`，書裏的
+    /// 原話是「case-insensitive unless pattern contains upper case characters」，和
+    /// 這一頭逐字相同），而 **helix 根本沒有 `:s`**；vim 的 `/` 與 `:s` 兩個都分大小
+    /// 寫。所以 `:s` 這一格沒有 helix 的答案可抄，而 vim 的答案是「分」。
+    ///
+    /// 放寬那一次要在 `:s/…/…/i` 裏明說。
+    pub(super) fn compile_exactly(&self, pattern: &str) -> Result<Regex, String> {
         // **Keyed on the pattern that is actually compiled**, not on what was
         // typed: `(?i)` is part of it, so `/todo` and `/TODO` are two entries
         // and never hand each other their answer.
@@ -207,7 +221,9 @@ impl Editor {
             true => format!("(?i){wanted}"),
             false => wanted,
         };
-        let re = match self.compile(&cased) {
+        // **替換不走智能大小寫**（見 [`Self::compile_exactly`]）：`i` 旗標是放寬那
+        // 一次的唯一辦法，而 `cased` 上面已經按它寫好了。
+        let re = match self.compile_exactly(&cased) {
             Ok(re) => re,
             Err(message) => {
                 self.status = message;

@@ -13970,12 +13970,18 @@ fn aligning_a_table_measures_what_the_terminal_draws() {
 #[test]
 fn the_word_command_is_one_subject_from_three_sides() {
     let mut ed = Editor::new();
-    // 著色: named on and off, and flipped when neither is said.
+    // 著色: named on and off, and **reported** when neither is said
+    // （2026-10-09 作者定：裸的報告，帶參數的纔設，同 `:view-numbers-fill`）。
     assert!(!ed.segmentation_visible());
     ed.execute(":word-show on").unwrap();
     assert!(ed.segmentation_visible());
     ed.execute(":word-show").unwrap();
+    assert!(ed.segmentation_visible(), "裸的不許撥動它");
+    assert!(ed.status().contains("開") || ed.status().contains("on"), "{}", ed.status());
+    ed.execute(":word-show off").unwrap();
     assert!(!ed.segmentation_visible());
+    ed.execute(":word-show").unwrap();
+    assert!(!ed.segmentation_visible(), "裸的不許撥動它");
 
     // 粒度: it says which, and it takes which.
     ed.execute(":word-level").unwrap();
@@ -23878,6 +23884,36 @@ fn a_substitution_never_reaches_the_line_break() {
     assert_eq!(after("abc\nxabc\n", ":%s/x*/-/g"), "-a-b-c-\n-a-b-c-\n");
     // 行首那一半本來就是對的，別碰壞。
     assert_eq!(after("ba\nbb\n", ":%s/^b/Y/g"), "Ya\nYb\n");
+}
+
+/// **替換默認分大小寫，搜索照舊智能**（2026-10-09 作者定）。
+///
+/// 原話：「我覺得替換不應該智能大小寫的，因為本質他是個正則，既然是正則就應該默認
+/// 嚴格。`/` 放寬了智能大小寫，我們必須說明。」
+///
+/// 量過三家：helix 的 `/` 是智能大小寫而 **helix 沒有 `:s`**；vim 的 `/` 與 `:s` 兩
+/// 個都分。所以 `:s` 這一格只有 vim 的答案，而 `/` 這一格照 helix。
+#[test]
+fn a_substitution_is_case_sensitive_and_a_search_is_not() {
+    let after = |cmd: &str| -> String {
+        let mut ed = typed("the The THE\n");
+        ed.execute(cmd).unwrap();
+        ed.current_buffer().rope().to_string()
+    };
+    assert_eq!(after(":%s/the/X/g"), "X The THE\n", "`:s` 分大小寫，同 vim");
+    assert_eq!(after(":%s/the/X/gi"), "X X X\n", "`i` 旗標是放寬那一次的辦法");
+    assert_eq!(after(":%s/The/X/g"), "the X THE\n");
+    // `/` 那一邊照舊智能：全小寫不分大小寫，大寫一出現就分。
+    let found = |pattern: &str| -> usize {
+        let mut ed = typed("ABC the The\n");
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char('/'));
+        press(&mut ed, pattern);
+        ed.on_key(Key::Enter);
+        ed.caret() - ed.current_buffer().rope().line_to_char(0) + 1
+    };
+    assert_eq!(found("the"), 7, "`/the` 停在第一處 `the` 的末字上");
+    assert_eq!(found("The"), 11, "`/The` 跳過小寫那一處");
 }
 
 /// **沒有的那一行不許悄悄夾到末行**（2026-10-09 審出來的）。
