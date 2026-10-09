@@ -3852,7 +3852,18 @@ pub const COMMANDS: &[Entry] = &[
             // three.
             let spec = p.arg(0).unwrap_or("");
             let mut numbers = spec.split(['x', 'X', '×', ' ', '\t']).filter(|w| !w.is_empty());
-            let rows = numbers.next().unwrap_or("3");
+            let first = numbers.next();
+            // Warning: **分隔符自己不是一個數**（2026-10-09 審出來的）。`:table x`、
+            // `:table ×`、`:table xXx` 切完一個數都不剩，於是兩個 `unwrap_or("3")`
+            // 一起開火，默默作一張出廠的 3×3——而那個 `x` 是人打出來的。理由同下面
+            // 那一條（第三個數是打錯了，不是可以丟掉的）。
+            if first.is_none() && !spec.trim().is_empty() {
+                return Err(CommandError::InvalidArgument {
+                    command: "table",
+                    value: spec.to_string(),
+                });
+            }
+            let rows = first.unwrap_or("3");
             let columns = numbers.next().unwrap_or("3");
             // Warning: **第三個數是打錯了，不是可以丟掉的**（2026-10-03）。
             // `:table-new 3 4 5` 從前默默作一張 3×4 的表，而那個 `5` 是人打出來
@@ -4812,7 +4823,11 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 true => {
                     standing.push(head);
                     out.push(Choice {
-                        family: Some(under - 1),
+                        // Warning: **「還有零個」不是一句話**（2026-10-09 審出來的）。`under`
+                        // 數的是**篩過之後**還剩幾條，所以打到只剩它自己的時候
+                        // （`:w` 只配得中 `:count`）這一格是 0，而那一行畫出來是
+                        // 「:count (wc) +0」。沒有別的了就別說。
+                        family: (under > 1).then(|| under - 1),
                         ..c
                     });
                 }
@@ -5223,7 +5238,8 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     // 參數不是一張詞表的（`:view-wrap 10` 那個數目）就停下來，說命令自己的事：
     // 那時候單子上一條都配不中，而那一句仍舊是按下 Enter 會發生的事。
     for (at, word) in line.split_whitespace().skip(1).enumerate() {
-        let Some(list) = e.params.get(at).and_then(Param::words) else { break };
+        let Some(param) = e.params.get(at) else { break };
+        let Some(list) = param.words() else { break };
         match pick(word.trim_end_matches('!'), list) {
             // **命令的說明留着，參數的說明加在它下面**：一支函數和它的一個參數
             // 是兩句話，不是一句換掉另一句。
@@ -5232,6 +5248,14 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
                 said.needs = w.needs;
                 said.spelt = None;
             }
+            // Warning: **`WordsOr` 的詞表配不中不是錯**（2026-10-09 審出來的）。那一種
+            // 參數的全部意思就是「詞表之外還收別的」——`:view-wrap 40` 的 40、
+            // `:indent 4` 的 4、`:theme 某個名字`——配不中就落到命令自己的解析器上。
+            // 上面那一段的本意寫着「參數不是一張詞表的就停下來」，可 `Param::words()`
+            // 對 `Words` 和 `WordsOr` 都交得出一張表，於是這一枝照樣走到了：面板上
+            // 寫着「view-wrap：不認得『40』」，而按下 Enter 是「寫到 40 欄寬」。
+            // **說的和做的不是一回事，而這一行存在的理由就是提前說出做的那件事。**
+            None if matches!(param, Param::WordsOr { .. }) => break,
             // 這張表不認得這個詞——按下 Enter 報的就是這一句，提前說出來。
             None => {
                 said.wrong = Some(say!("cmd.not-one-of-its-values", e.name, word));
