@@ -4997,11 +4997,12 @@ boxes sit one above the other and are filled one after the other.
 | `j` `k` | one step, **the text jumps along**, that hit highlighted |
 | | other hits on the same screen are marked with **a fainter ground** — saying "there is one here too" |
 | `r` on a hit | change **this one** |
-| `r` on a file's row | change **every one in this file** |
-| `R` | change **all of them** — Warning: this is the only one that asks first |
-| `u` | undo the last one |
+| `r` on a file's row | change **every one in this file** — it asks first |
+| `R` | change **all of them** — it asks first whenever more than one file is involved |
+| `u` | take the last replacement back — across every file it touched, and it asks too |
 
-The first two are changes your eyes are on. Every file of a book is not.
+`r` on a hit is a change your eyes are on, and it is the one that does not ask. Every file
+of a book is not.
 
 **One step and you see it, without pressing `Enter`** (decided 2026-09-27, in the
 original words: 「在搜索栏结果列表中移动的时候，编辑区应当也跳转到对应的行……用户也不
@@ -5035,10 +5036,28 @@ that hit**, and that changed on 2026-09-27: the preview is in the text now, and 
 the same thing twice took up exactly the moment you want to read the keys.
 
 Warning: **Not one byte is written to disk first.** Every file with a hit is **opened as
-a buffer** and changed in there, so each one can `u` its own way back and `gn` through
-them one at a time, and `:write-all` is the moment you say yes. That is where the safety
-in this lives — **there is no global replace you can type with your eyes shut**: the
-pattern is the one you just used, and the hits are already listed in front of you.
+a buffer** and changed in there, so `gn` walks them one at a time and `:write-all` is the
+moment you say yes. That is where the safety in this lives — **there is no global replace
+you can type with your eyes shut**: the pattern is the one you just used, and the hits are
+already listed in front of you.
+
+**Both sides of a cross-file replace ask** (decided 2026-10-09, in the original words:
+「whenever we changed more than one buffer/files, we do a confirm」). `R` opens a window in
+the middle of the screen as soon as more than one file is involved, and says how many files
+and how many matches. `u` in the panel opens one too, because it takes the **whole run**
+back in a single press, in every file it touched: `全部撤銷` all of them, `只撤銷 <name>`
+only the file you are standing in, `不撤銷` leave them. Saying no keeps the run on the
+books — press `u` again and the same window is there. One file asks neither: the first two
+buttons would be the same button, and `u` simply does it. Warning: **`u` in the text is a
+different key** — there it is the ordinary undo and takes back one step in one file, which
+is also how you take one file back after saying 「不撤銷」.
+
+Warning: **A file you have written in since is left alone, and named.** `u` remembers how
+deep each file's undo stack was when the replacement went in. If you have typed in one of
+those files since, the step `u` would take there is **your** writing, not the replacement —
+so that file is skipped, the rest go back, and a window says which ones were left. Without
+that check the editor would quietly undo an afternoon's work and report that the
+replacement had been undone.
 
 After a replace the panel **looks again** (every offset is void now) and the count falls
 with it. If some line has since been changed by something else and that hit is no longer
@@ -5227,7 +5246,7 @@ hundred and twenty chapters have to change.
                 every hit is there to be seen
 Esc  j          out of the box, onto a hit
 r               change this one
-R  y            change all of them (the only one that asks)
+R  y            change all of them (more than one file, and it asks)
 :write-all      save once you are sure
 ```
 
@@ -5239,9 +5258,9 @@ after its `Esc`.
 
 The safety is in the **order**: **there is no global replace you can type with your eyes
 shut**. What is going to change is listed in front of you first, and not one byte is
-written to disk before that — each file is opened as a buffer and changed in there, each
-one can `u` its way back and `gn` through them one at a time, and `:write-all` is the
-moment you say yes.
+written to disk before that — each file is opened as a buffer and changed in there, `gn`
+walks them one at a time, `u` in the panel takes the whole run back in one press, and
+`:write-all` is the moment you say yes.
 
 `:toc` opens the outline column, and `:toc 3` jumps straight to the third entry.
 Headings are Markdown's `#` and Typst's `=` — there is no parser; a heading is those few
