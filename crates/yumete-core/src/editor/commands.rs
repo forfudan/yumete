@@ -973,16 +973,16 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowDetail(want) => {
-                // Warning: **光的那一下翻的是「讀者要不要」，不是「此刻畫着沒有」**
-                // （2026-10-09 審出來的）。從前寫的是 `!self.detail_visible()`，而那一
-                // 支還要問「這一格有沒有記錄可畫」——站在表頭或者 `| --- |` 那一行上
-                // 沒有，於是它恆假、`!` 恆真：`:table-detail on` 之後再按一下光的，
-                // 答的還是「記錄：開」，開關只有一個方向。
+                // Warning: **裸的報告，帶參數的纔設**（2026-10-09 作者定，三個表格開關
+                // 一起）。從前裸形寫的是 `!self.detail_visible()`，而那一支還要問「這
+                // 一格有沒有記錄可畫」——站在表頭或者 `| --- |` 那一行上沒有，於是它
+                // 恆假、`!` 恆真：`:table-detail on` 之後再按一下光的，答的還是
+                // 「記錄：開」，開關只有一個方向。
                 //
-                // `show_detail` 是讀者說過的話，`detail_visible()` 是此刻的樣子；翻的
-                // 該是前者。沒說過話就從「這一格本來開不開」翻起。
+                // 報的是**讀者說過的話**（`show_detail`），不是此刻畫着沒有
+                // （`detail_visible()`）；沒說過話就報「這一格本來開不開」。
                 let want = want
-                    .unwrap_or_else(|| !self.show_detail.unwrap_or_else(|| self.detail_opens_here()));
+                    .unwrap_or_else(|| self.show_detail.unwrap_or_else(|| self.detail_opens_here()));
                 self.show_detail = Some(want);
                 self.status = match want {
                     true => say!("ui.detail-panel-on"),
@@ -1147,7 +1147,9 @@ impl Editor {
                 );
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetTableNumbers(on) => {
+            Command::SetTableNumbers(want) => {
+                // 裸的報告，帶參數的纔設（2026-10-09 作者定）。
+                let on = want.unwrap_or(self.table_numbers);
                 self.table_numbers = on;
                 self.status = match on {
                     true => say!("table.column-numbers-on"),
@@ -1156,7 +1158,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableHeader(want) => {
-                self.set_table_header(want);
+                // 裸的報告，帶參數的纔設（2026-10-09 作者定）。`空格 t H` 那個**鍵**
+                // 照舊翻——規矩擺在這裏，不擺在 `set_table_header` 裏。
+                let now = self.table.as_ref().map(|view| view.schema.header);
+                self.set_table_header(want.or(now));
                 Ok(CommandOutcome::Continue)
             }
             Command::OpenTableSchema => {

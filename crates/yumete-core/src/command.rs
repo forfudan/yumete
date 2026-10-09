@@ -300,7 +300,7 @@ pub enum Command {
     /// `:view-long-line`：一行長過多少列就不上色。`None` ＝裸的，報告現在多少。
     SetLongLine(Option<Option<usize>>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
-    SetTableNumbers(bool),
+    SetTableNumbers(Option<bool>),
     /// `:search` — open the search panel (#419).
     ///
     /// Warning: **It takes no pattern, only a place.** What to look for is typed in
@@ -4176,8 +4176,10 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.numbers",
         needs: &[Need::Table],
-        params: &[Param::Words { of: ON_OFF, default: Some("on") }],
-        build: Some(|p| Ok(Command::SetTableNumbers(p.need(0)? == "on"))),
+        // **裸的報告，帶參數的纔設**（2026-10-09 作者定，三個表格開關一起）。從前
+        // `default: Some("on")` 讓裸形永遠報「欄號：開」——問不出它現在是哪一種。
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| Ok(Command::SetTableNumbers(p.arg(0).map(|w| w == "on")))),
     },
     Entry {
         name: "table-header",

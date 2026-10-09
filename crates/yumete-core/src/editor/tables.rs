@@ -3561,6 +3561,11 @@ impl Editor {
                 return;
             }
         }
+        // Warning: **`None` 在這一支是「翻」，不是「報告」**（2026-10-09）。
+        //
+        // 裸的**命令**改成報告了（作者定，三個表格開關一起），可 `空格 t H` 是一個
+        // **鍵**——鍵沒有「裸形」可言，按下去就得做事。所以那條規矩擺在命令那一頭
+        // （`Command::SetTableHeader` 自己把當前值填進來），這一支照舊翻。
         let want = want.unwrap_or(!view.schema.header);
         // **Names a person wrote are not undone by a keystroke.** A schema file
         // names the columns itself, so turning its first row into data changes
