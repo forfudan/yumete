@@ -21079,11 +21079,13 @@ fn squeezed(text: &str) -> String {
         }
     }
 
-    /// #294: the panel takes **the corner the caret is not in** — on both
-    /// axes. A fixed corner is right half the time and covers the very line
-    /// being read the other half.
+    /// #294, settled again 2026-10-09: 橫排 the panel **keeps to the right**
+    /// and moves only up and down. 「We always write from left to right, so
+    /// the line start can always be visible」 — so what it may cover is the
+    /// tail of the lines it sits on, and it flips up only when it would
+    /// otherwise sit on the caret itself.
     #[test]
-    fn the_note_panel_takes_the_corner_the_caret_is_not_in() {
+    fn the_note_panel_keeps_right_and_flips_up_only_to_get_off_the_caret() {
         let config = Config::default();
         // Where the panel's top-left corner landed, and how the page reads.
         let corner = |editor: &Editor| -> ((u16, u16), Vec<String>) {
@@ -21100,11 +21102,13 @@ fn squeezed(text: &str) -> String {
         // A manuscript whose reference sits on line `mark` of `lines` body
         // rows, with the caret standing on it. The note is two rows long at
         // this width — see the flip below for why that matters.
-        let note = |lines: usize, mark: usize| -> Editor {
+        let note = |lines: usize, mark: usize, pad: usize| -> Editor {
             let mut body: Vec<String> = (1..=lines)
                 .map(|i| format!("第 {i} 段。那一年的雨下得久，他站在門口。"))
                 .collect();
-            body[mark] = format!("末段的雨停了一次[^1]，{}", body[mark]);
+            // `pad` pushes the marker right, which is what decides whether the
+            // caret ends up under the panel's own columns.
+            body[mark] = format!("{}末段的雨停了一次[^1]，{}", "雨".repeat(pad), body[mark]);
             let text = format!(
                 "[^1]: 舊城的屋簷極寬，一到雨季，簷下就成了另一條街，走過去要低頭。\n\n{}",
                 body.join("\n")
@@ -21120,27 +21124,33 @@ fn squeezed(text: &str) -> String {
             editor
         };
 
+        let flush_right = |page: &[String], y: u16| {
+            page[y as usize].ends_with('\u{256e}') || page[y as usize].ends_with('\u{2510}')
+        };
+
         // Caret high on the page and hard left: the panel goes low and right.
         // 「Right」 is its **far** edge against the page's — a narrow panel's
         // left corner is nowhere near the middle of the screen.
-        let ((x, y), page) = corner(&note(40, 0));
+        let ((x, y), page) = corner(&note(40, 0, 0));
         assert!(x > 0, "panel should be off the left wall: {x}, {page:?}");
-        assert!(
-            page[y as usize].ends_with('\u{256e}') || page[y as usize].ends_with('\u{2510}'),
-            "panel should be flush right: {page:?}"
-        );
+        assert!(flush_right(&page, y), "panel should be flush right: {page:?}");
         assert!(y > 20 / 2, "panel should be low: {y}, {page:?}");
 
-        // Caret down among the rows the panel wanted: it moves to the top.
-        // Not 「the caret passed the middle」 — 「the caret is in the way」.
-        //
-        // **The page keeps three rows under the caret**, so how far down the
-        // caret can be is fixed and what varies is how far up the panel
-        // reaches: a two-row note is four rows of ring, and its top row is the
-        // row the caret is on. That is the collision, and it is the common
-        // one — a note of any length at all wraps.
-        let ((_, y), page) = corner(&note(40, 15));
+        // **Caret low but still at the start of its line: the panel stays
+        // low.** This is the 2026-10-09 change. The old rule read 「is the
+        // caret in these rows」 and flipped to the top here — but the panel
+        // stands in the right of the page and the caret is nowhere near it,
+        // so the flip bought nothing and moved the panel for no reason.
+        let ((_, y), page) = corner(&note(40, 15, 0));
+        assert!(y > 20 / 2, "panel should have stayed low: {y}, {page:?}");
+        assert!(flush_right(&page, y), "and still flush right: {page:?}");
+
+        // Caret low **and pushed into the panel's own columns**: now it is
+        // genuinely in the way, so the panel flips to the top — and keeps to
+        // the right, because that side never moves 橫排.
+        let ((_, y), page) = corner(&note(40, 15, 14));
         assert_eq!(y, 0, "panel should have flipped to the top: {page:?}");
+        assert!(flush_right(&page, y), "and still flush right: {page:?}");
     }
 
     #[test]
