@@ -63,12 +63,12 @@ Here are the features Yumete has for people writing in 漢字:
 - **`mi s` takes the sentence the cursor is in.** This editor already treats the
   sentence as a unit (`H`/`L` walk by sentence, `:view-sentence` gives one sentence a
   column), and `mi s`/`ma s` hand it to `d`, `c` and `y` (under the vim keymap preset,
-  `dis`/`cis`/`das`). Warning: Chinese sentences have no whitespace between them, so
+  `dis`/`cis`/`das`). Chinese sentences have no whitespace between them, so
   `ma s` and `mi s` get the same stretch.
 - **`mi m` takes the piece of markup the cursor is in.** `**粗**`, `*斜*`, `~~刪~~`,
   `==標==`, `` `碼` ``, `[文字](地址)`, `[[雙鏈]]`, `%%批注%%`, footnotes — one key for
   all of them: `mi m` takes the text inside, `ma m` takes the markup with it (under the
-  vim keymap preset, `dim`/`dam`). Warning: it follows the file's syntax, so in a
+  vim keymap preset, `dim`/`dam`). It follows the file's syntax, so in a
   `:syntax text` file it takes nothing.
 - Vertical layout is supported (see section 5), punctuation turns with it, and readings
   can be set beside the characters.
@@ -368,10 +368,10 @@ the rest is not done, and the status line says so.
 | `gj` `gk` | the next line / the previous line **in the file**, staying in the same column — a paragraph is a line, so this is the next paragraph / the previous paragraph (as in helix; `j`/`k` walk the lines on the screen) |
 | `J` `gK` | join the next line / join up into the line above. **As many lines as you selected get joined** (select a paragraph and press `J` to make it one sentence); it takes a number too, and the number says **how many lines become one** (`3J` welds three lines into one, as in vi) |
 | `A-J` | the same as `J`, **and the space it added stays selected** (as in Helix). The seam is worked out — nothing between 漢字, one space between Latin words — so selecting it is how you see what was decided, and typing replaces it on the spot |
-| `gw` | **Jump anywhere on this screen at a glance.** Press it and the first character of every short clause turns into a label; type that label and you fly there (`C-o` comes back). **When there are fewer than twenty-six landing spots the label is a single letter**, and only beyond that does it take two — a label together with the cell it borrows is exactly one 漢字 wide, so the layout does not shift by a cell. Warning: the landing spots are `e`'s units — 「那年冬天，雪下得早。」 is two of them, not six, so a screen holds sixty labels, not six hundred. Any wrong key only takes the labels away; it will not touch the manuscript. Vertical layout is the same: one column holds exactly one label. |
+| `gw` | **Jump anywhere on this screen at a glance.** Press it and the first character of every short clause turns into a label; type that label and you fly there (`C-o` comes back). **When there are fewer than twenty-six landing spots the label is a single letter**, and only beyond that does it take two — a label together with the cell it borrows is exactly one 漢字 wide, so the layout does not shift by a cell. The landing spots are `e`'s units — 「那年冬天，雪下得早。」 is two of them, not six, so a screen holds sixty labels, not six hundred. Any wrong key only takes the labels away; it will not touch the manuscript. Vertical layout is the same: one column holds exactly one label. |
 | `go` | **Type what is written there, and jump.** The other way round from `gw`: `gw` has the screen hand out numbers, this has you type the **two letters** the target **literally** spells. Press `do` and every `do…` on the screen turns into a label on the spot; type the label and you fly there (`C-o` comes back). **Fewer than twenty-six landing spots and one letter is enough**, which for this one is nearly every time. It only asks about Western text; Chinese goes through `gu`. A lone `a` is followed by a space, and **the space is the second letter**. |
 | `gu` | **Type a reading, jump to that 漢字.** The same reversal as `go`, except that what you type is a **reading**, and it is **not limited to two letters**: `zh`, `sh`, `ji` and the like can match twenty-odd characters on one screen, more than two letters can hold, so you keep typing until the candidates are few enough (`zho` leaves four). The 漢字 that match are listed in a small panel (`-`/`=` for pages), and a **number** picks one; each of its places on this screen then gets a label of its own. **Space, `;` and `'` pick the first, the second and the third**, the same feel as the IME. |
-| `gd` | **go** where it points: a footnote's note, a link, `[[章節]]`, `[雪](#雪夜)` (`C-o` comes back). Warning: **nothing happens on ordinary prose** — to ask "where else is this word" use `g/` |
+| `gd` | **go** where it points: a footnote's note, a link, `[[章節]]`, `[雪](#雪夜)` (`C-o` comes back). **Nothing happens on ordinary prose** — to ask "where else is this word" use `g/` |
 | `gD` | **look** at the same place — in the other work area, without moving you |
 | (both the same) | if the footnote has not been written yet, one is written first, and `gd` lands at the end of it, ready to type |
 | `C-w`/`空格 w` | **the region group**: `w` steps one, `hjkl` steps by direction, `e i` open and close the left and right sidebars, `E I` enter them, `s` cuts one in two, `q` closes, `o` keeps only this one |
@@ -384,8 +384,8 @@ the rest is not done, and the status line says so.
 | `J` `K` | **join lines** / **keep only the selections an expression matches** (as in helix) |
 | `C-d` `C-u` | **half a page** — Helix's own chords |
 | `C-f` `C-b` | **a whole page** — the chord spelling of `PageDown`/`PageUp` |
-| `C-n` `C-p` | down / up **two thirds of a page**. Warning: in Insert, `C-n` is completion, not paging |
-| `PageUp` `PageDown` | a whole page — the two keys the keyboard already has, in Insert too. Warning: **when "info" is floating they page through that** (see below) |
+| `C-n` `C-p` | down / up **two thirds of a page**. In Insert, `C-n` is completion, not paging |
+| `PageUp` `PageDown` | a whole page — the two keys the keyboard already has, in Insert too. **When "info" is floating they page through that** (see below) |
 | `gg` `ge` | the start of the file / the last line; `10gg` goes to line 10 |
 | `gt` `gc` `gb` | the cursor to the top, middle or bottom of the screen; `3gt` is the third row down. The `z` layer is the opposite: it moves the window |
 | `G` | the last line; `30G` (or `g30g`) goes to line 30 |
@@ -432,14 +432,14 @@ sentence, it goes to the first sentence of the next one.
 | `A-;` | put the cursor at the other end of the selection |
 | `C` `A-C` | **one more selection below/above**: another cursor on the same column. A line too short to reach that column is skipped, and it keeps looking downwards |
 | `,` | back to one — keep only the primary selection |
-| `s` | **select every match inside each selection**. Warning: what it opens is **the search row**, so pinyin, simplified/traditional, fuzzy and regex — all four switches — are live: searching 「书斋」 finds 「書齋」 |
+| `s` | **select every match inside each selection**. What it opens is **the search row**, so pinyin, simplified/traditional, fuzzy and regex — all four switches — are live: searching 「书斋」 finds 「書齋」 |
 | `S` | take the match as a **separator** and cut each selection apart on it |
 | `A-s` | cut on **lines**. This one needs no pattern typed |
 | `A-k` `A-K` | keep only / drop the selections that match |
 | `(` `)` | **make another selection the primary one**, backwards/forwards. No selection moves; what moves is which one the hardware cursor follows |
 | `A-(` `A-)` | **rotate the text held in the selections**, the boundaries staying put. Swapping two columns of a table and swapping what two people say in a dialogue are this one thing |
 | `_` | trim the whitespace off both ends of each selection. The ones that are whitespace all through are dropped |
-| `&` | **align the start of every selection on one column**. Warning: it counts display width, and a 漢字 is two cells |
+| `&` | **align the start of every selection on one column**. It counts display width, and a 漢字 is two cells |
 | `"#p` | **paste an N into the Nth selection**. `#` is not a box that holds something, it is the answer to 「which selection is this」 — a run of list items to number is four cursors and one keypress |
 | `C-a` `C-x` (with several selections) | the number in each selection up / down by one |
 
@@ -462,7 +462,7 @@ sentence, it goes to the first sentence of the next one.
 | `>` `<` | indent / unindent the selected lines |
 | `C-a` `C-x` | the number at the cursor up / down by one |
 | `u` `U` | undo / redo. **One insertion is one undo** — from `i` to `Esc`, however many characters you typed and however many times the IME committed, it counts once. To cut it yourself when it runs long: `C-g` in insert mode (vim's `C-g u` is taken too) |
-| `A-u` `A-U` | the same, in Helix's other spelling. Warning: Helix's two walk a tree — undo, then type something else, and the old branch is still reachable — while this history is a single line, so here the two keys are `u` and `U` |
+| `A-u` `A-U` | the same, in Helix's other spelling. Helix's two walk a tree — undo, then type something else, and the old branch is still reachable — while this history is a single line, so here the two keys are `u` and `U` |
 | `.` | **do that last change again** — `r`, `d`, `c…Esc`, `ms(`, a paste, they all count |
 
 ### Search
@@ -548,7 +548,7 @@ has a `/` in it already — a date, a path, a URL — use another one:
 | `:.-$s/…` | from this line to the end of the file (`.` is this line, `$` is the last one) |
 | `:40s/…` | line 40 only |
 
-Warning: **`-` is one span, `,` is a few lines**, and that is one rule across the whole
+**`-` is one span, `,` is a few lines**, and that is one rule across the whole
 editor (`空格 t2-10/` is ten columns in a row, `空格 t1,5,9s` is those three columns,
 read the same way). So vi's `:1,40s` is forty lines and here it is **two** — line 1 and
 line 40. For those forty lines write `:1-40s`. The two mixed together (`:1-5,9s`) is not
@@ -571,7 +571,7 @@ every character you type stands only for itself:
 :%s/$5.00/$6.00/f         # money is money
 ```
 
-Warning: **`f` is literal on both sides.** There are no groups on the left any more, so
+**`f` is literal on both sides.** There are no groups on the left any more, so
 the `$1` on the right has nothing to point at, and `$` is always a dollar sign. `\n` (a
 newline) and `\t` (a tab) still work as before — Enter on the command line sends the
 line, and there is no other way to type those two characters.
@@ -591,7 +591,7 @@ replaced; with `c`, it stops at the first hit, shows you that hit selected, writ
 Any other key does not count, and the question is still there. At the end it says 「N
 replaced, M left alone」.
 
-Warning: **the whole run is one step** — however many hits you replaced along the way,
+**The whole run is one step** — however many hits you replaced along the way,
 one `u` puts them all back. Press `q` having replaced none and `u` undoes your previous
 edit, because this run left nothing behind.
 
@@ -642,7 +642,7 @@ Coming from Helix or vi, this table tells you how many places your fingers have 
 change. **Every cell was measured**: the Helix column was pressed key by key through
 the thirty lessons of `runtime/tutor`, the vi column against
 `/usr/share/vim/vim91/` (the tutor and `doc/motion.txt`).
-Warning: **what cannot be measured is not written.** There was an Emacs column here
+**What cannot be measured is not written.** There was an Emacs column here
 once, filled in from memory — with no source to check against, a column that looks
 confident and has in fact never been verified is worse than no column at all.
 
@@ -689,7 +689,7 @@ instead, and so is `:keymap`.
 | add / drop / change a surround | `ms(` `md(` `mr([` | same | a plugin |
 | save / quit | `:w` `:q` `:wq` | same | same |
 
-Warning: **`t` and `T` are vi's till** (`t，` stops one cell before the comma, `T，`
+**`t` and `T` are vi's till** (`t，` stops one cell before the comma, `T，`
 goes backwards). helix's own `t` is till as well, so that one key would owe both
 sets of hands; the table group is on `空格 t` instead.
 
@@ -811,7 +811,7 @@ with space kept for walking:
 "" = "h"  # backspace moves left (a control character, written as its code point)
 ```
 
-Warning: **a prefix cannot be bound to an "action name"** — an action is one thing,
+**A prefix cannot be bound to an "action name"** — an action is one thing,
 while a prefix is still waiting for a second key, and binding it that way swallows the
 whole group. Binding it to a **key** always worked; the manual simply never said so.
 
@@ -856,7 +856,7 @@ so those four lines would quietly outlive the reason you wrote them.
 The factory answer is `on`: `d` and `c` cut, as in helix and as in vi, and
 `A-d`/`A-c` leave the register alone.
 
-Warning: a misspelt name is **said out loud on the spot** instead of being typed into
+A misspelt name is **said out loud on the spot** instead of being typed into
 your text: a right side with an underscore in it that is not recognised is reported at
 startup as "not an action name", and **that binding is not installed** — otherwise
 pressing the key would type `delete_slection` into the manuscript one letter at a
@@ -874,7 +874,7 @@ where the lines break, and what the margins carry.
 as `⁽¹⁾` — a superscript number, the way print has set it for four hundred years; the
 `[^1]:` on the note's own line goes the same way and begins with `⁽¹⁾ `. Put the cursor
 on it and the source comes back (as with `**`), so editing it is still editing the
-source. Warning: **only an all-digit number can be swapped**: Unicode's superscript
+source. **Only an all-digit number can be swapped**: Unicode's superscript
 letters are incomplete, so `[^note]` stays as it is — what cannot be drawn should not be
 drawn.
 
@@ -1024,7 +1024,7 @@ whole book」.) What you type is matched against the whole path and the filename
 so typing `雨` finds `卷二/雨夜` without typing the folder first; the column on the
 right notes which folder it is in; this file itself is not listed.
 
-Warning: what goes in is the **title**, not the filename — `[[卷二/雨夜]]`, with no
+What goes in is the **title**, not the filename — `[[卷二/雨夜]]`, with no
 suffix. The suffix is this book's business (see the 「Following a link」 section above),
 you do not have to type it, and `gx` fills it in when it follows the link.
 
@@ -1094,7 +1094,7 @@ It parses only the lines **inside the fence**, never the whole manuscript — th
 per-paragraph cache rule is untouched; change the text somewhere else and this block is
 not parsed again.
 
-Warning: **a block pasted into a manuscript is not coloured past five thousand lines; it
+**A block pasted into a manuscript is not coloured past five thousand lines; it
 keeps one colour.** That one is parsed whole, and the parse has to be redone on every
 change (cached by content, so only a change to it counts) — a data file pasted in,
 parsed once per keypress, is not worth it. **When it is not coloured, press `:view-code`
@@ -1416,7 +1416,7 @@ that can show a book. Two different questions, two different words.
 **The typst preview follows your keystrokes, and does not need saving.** Every
 character you type pushes the text over a websocket to the typesetter, which
 recompiles incrementally (measured: 68 µs) — **not one byte on disk moves**, so
-you can see how an unsaved manuscript sets. Warning: what is pushed is **the
+you can see how an unsaved manuscript sets. What is pushed is **the
 file you are writing**, not the one being previewed: a book is one main file
 that `include`s a few dozen chapters, and a person spends all day inside a
 chapter; the range is confined to the directory of the previewed file.
@@ -1445,7 +1445,7 @@ address, and a way to stop it.
 is always drawn across; `:layout vertical` and `-v` both answer with one line, "a
 program file is always laid out across" — indentation and alignment are part of that
 language's syntax and turning the page loses them, and the line numbers and the
-diagnostics lane are both built on "one line, one row". Warning: **this is said about
+diagnostics lane are both built on "one line, one row". **This is said about
 this one file, it does not throw a switch on your settings**: with a manuscript set
 vertically, go and look at some code, come back, and the manuscript is still vertical.
 
@@ -1502,7 +1502,7 @@ is one step on the scale (see "Themes").
 **Numbers are two digits to a row** — a column is two cells wide to begin with and a
 half-width digit takes one cell, so `18` takes one row and `1280` takes two rather
 than four. This is the old Japanese way of setting vertical numbers (tatechuyoko).
-Warning: the price is that two numbers sit very close together, and `23` `24` reads as
+The price is that two numbers sit very close together, and `23` `24` reads as
 `2324`, so **every other column's number drops a step** — the same trick as shading
 alternate rows of a table. Odd and even go by **the line number itself**, not by which
 column it is on screen, so the scale does not crawl as you scroll. The number on the
@@ -1554,7 +1554,7 @@ would make `1997` read as the two numbers `19` and `97`.
   point is lay the whole run on its side, **turned 90°**, and a terminal cannot turn a
   glyph — that is a hard constraint.
 
-Warning: **the cursor still walks one character at a time**: the cell is a unit of the
+**The cursor still walks one character at a time**: the cell is a unit of the
 picture. Press `j` four times on that `1997` cell and the cursor passes four digits
 while the cell stays boxed whole, with "Heng" in the status bar moving and "Zong"
 standing still.
@@ -1614,8 +1614,8 @@ and takes the rows above that character.
 
 ### 6.4 Ruby (furigana)
 
-Readings are written into the file as markup and **laid out** by yumete. Warning:
-**vertical and horizontal lay them out differently**, because a reading lives in a
+Readings are written into the file as markup and **laid out** by yumete.
+**Vertical and horizontal lay them out differently**, because a reading lives in a
 different place on each: vertical puts it in the half-width cell to the right of its
 column and **spreads the base characters out to match it**, so two neighbouring
 readings can never collide; horizontal puts it on the row above, and collisions are
@@ -1649,7 +1649,7 @@ column of the character it annotates. Only a row that **has a reading** costs an
 row — one annotated character in a paragraph does not turn the whole book into double
 spacing.
 
-Warning: **a reading wider than its base character runs over, and the next one is
+**A reading wider than its base character runs over, and the next one is
 pushed one cell right.** Annotate 「永和」 with 「ㄩㄥˇ」 and 「ㄏㄜˊ」 and four cells of
 base cannot hold two three-cell readings, so the second one steps aside. **It does not
 spread the base out** — spreading it in horizontal would shove the whole rest of the
@@ -1925,7 +1925,7 @@ at startup**, rather than letting you press for a while and find out. There, 中
 question a Shift tap does, so rebinding Shift to something else in yume moves this key
 with it; and all three states are always reachable with `:yume on|abc|off`.
 
-Warning: old terminals send `Ctrl+^` and `Ctrl+6` as the same byte and cannot tell them
+Old terminals send `Ctrl+^` and `Ctrl+6` as the same byte and cannot tell them
 apart — so in `language_key` those two names are one key.
 
 **The system input method has to stand aside too.** yumete carries yume with it, but the
@@ -1955,7 +1955,7 @@ The row with no sign (`:yume off`, or no 碼表 loaded at all — the factory
 漢字 then, and pushing the system's input method away as well would leave you unable to
 type any Chinese at all. **Anyone writing Japanese in yumete lives on that row too.**
 
-Warning: **the top two rows never switch at all.** While yume is typing for you the
+**The top two rows never switch at all.** While yume is typing for you the
 whole row says "stand aside", so the `i` and the Esc you press dozens of times a minute
 change nothing. Only the bottom row follows the mode — and even there the menu bar shows
 no movement: standing aside is not swapping the input method out, it is asking it not to
@@ -1981,7 +1981,7 @@ Upstream's fcitx5 plugin has no "modal suspend" in it, so on Linux yumete **send
 nothing** at this step; when upstream has it, one line goes in here. On Linux, or with
 anybody else's input method, switch to English yourself in Normal mode.
 
-Warning: **it does not switch input sources.** The first version switched them the way
+**It does not switch input sources.** The first version switched them the way
 `im-select` does, and that road is broken on macOS: when a background process reselects
 an IMK input method, about one time in three it does not come back — the same for 宇浩
 as for 鼠鬚管, and **the same with the editor and the terminal taken out of the picture
@@ -1994,7 +1994,7 @@ single notification.
 pickers (`空格 f`, `空格 b`), and **the keys that are waiting for one character** —
 `f`, `F`, `r`, `mi`, `ma`, `ms`, `mr`.
 
-Warning: **the `:` command line types no Chinese at all**, not in the arguments either
+**The `:` command line types no Chinese at all**, not in the arguments either
 — one answer for the whole line. Splitting it at the cursor, ASCII for the command
 name and Chinese allowed in the arguments, would be two kinds of trouble: a rule you
 have to keep in your head, and a border the cursor crosses on every `←`, with a word
@@ -2005,10 +2005,10 @@ stand aside too" above).
 picker, where you type Chinese to filter, with completion, no typos, and the files in
 sight.
 
-Warning: **the picker also knows simplified, traditional, variant forms and pinyin**
+**The picker also knows simplified, traditional, variant forms and pinyin**
 : typing `书斋` finds `洞庭湖.md`, and so does `shuzhai`. Same table and same
 rule as the search panel — **full spellings only** (`sz` does not count).
-Warning: **the literal comes first**: `md` is both a string of readings and a file
+**The literal comes first**: `md` is both a string of readings and a file
 suffix, and nine times out of ten whoever typed it is looking for `.md`, so if the
 literal catches something the readings are not asked.
 `::` finds a command by **what it does**, `/` finds words; those three are where Chinese
@@ -2255,13 +2255,13 @@ expands, a file opens — and `h` folds up, or steps back out a level.
 editor region — the same directions `hjkl` have in the text. **A region that is not
 open gets opened.** Two doors: `C-w` and `空格 w`, with the same letters after them.
 
-Warning: **`h`/`l` open "the first panel on that side"**, and which panels belong to
+**`h`/`l` open "the first panel on that side"**, and which panels belong to
 which side is configurable (`:sidebar-left`, `:sidebar-right`), so what it asks is
 your configuration, not a hard-coded "left is the file tree". Out of the box the file
 tree is on the left and "Info" on the right (dictionary, wiki, record, docs and
 diagnostics share that slot, see below).
 
-Warning: **the digits on the `空格` layer belong to the buffers**, not to the regions:
+**The digits on the `空格` layer belong to the buffers**, not to the regions:
 naming a region and going there, and closing one from afar, are in the `C-w` group. Every
 buffer carries a number before its file name (one digit up to nine, zero-padded to
 two from ten on), so that is a prefix code which needs no space to confirm it.
@@ -2330,7 +2330,7 @@ as 「出廠自帶 精華版 ⋯⋯」, which tells it apart from an installed t
 - **Offline with an empty cache**: the binary carries no 碼表 and the panel says
   so plainly, rather than the build failing.
 
-Warning: **not one of these tables is in yumete's repository.** They are
+**Not one of these tables is in yumete's repository.** They are
 generated — the 碼表 is cut from 宇浩's `ling.txt` and `xing.txt`, the
 segmentation word list from its language model — and a generated file is
 rewritten whole with every new version, so committing one means paying its full
@@ -2445,12 +2445,12 @@ helix's `C-w`).
 | `C-w q` | close the region you are standing in (in a sidebar, the same thing as `q`) |
 | `C-w o` | keep only this region |
 
-Warning: **"go there" and "open it" are two actions**: `C-w w` only walks among the
-open ones, and a second editor region has to be asked for with `C-w s`. Warning:
+**"go there" and "open it" are two actions**: `C-w w` only walks among the
+open ones, and a second editor region has to be asked for with `C-w s`.
 **`C-w q` does nothing when you are standing in the only region**, it just says a
 line — closing the last one would be quitting, and that is `:q`'s job.
 
-Warning: **lower case goes there, upper case does not.** `C-w e`/`C-w i` are
+**Lower case goes there, upper case does not.** `C-w e`/`C-w i` are
 toggles: after pressing one the keys are still in the text — you can fold the sidebar
 away mid-sentence and bring it back without the caret moving a step. To step in it is
 `C-w E`/`C-w I`, and that pair only opens.
@@ -2465,7 +2465,7 @@ When the keys are over in the sidebar, the status line **writes out the sidebar'
 keys** (including how to get back) — whoever takes the keys has a duty to say how to
 give them back.
 
-Warning: **look at the frame.** The sidebar is framed all the way round: a wall on
+**Look at the frame.** The sidebar is framed all the way round: a wall on
 each side, a line along the bottom, and **the topmost line is its title**. The column
 holding the keys is **filled gold** all the way round; one that is not holding them
 has a thin grey line (`╭─╮` `│` `╰─╯`). Weight and colour each say it once, so it
@@ -2514,7 +2514,7 @@ sends it into the sidebar.
 down (the mainland, Taiwan and Hong Kong 拆分 listed one after another often do not
 fit a screen), and `C-w` gets out. While the keys are in there the caret does not
 move, so that character still holds and the panel will not vanish halfway through
-your reading. Warning: pressing `Tab` mid-word to ask about a candidate **does not
+your reading. Pressing `Tab` mid-word to ask about a candidate **does not
 take the keys** — you are writing a word then, and the panel is only there for a
 glance.
 
@@ -2525,7 +2525,7 @@ of it is open, what shape the chapter in front of you has — so they take turns
 place instead of being three panels. Each view remembers where it was left, so `Tab`
 back and forth does not return you to the top. `空格 s` opens straight on the outline.
 
-Warning: **`Tab` changes the panel**, while which kind the "Info" slot holds is
+**`Tab` changes the panel**, while which kind the "Info" slot holds is
 decided by the caret and the key you pressed (`空格 d`/`空格 k`/`空格 i`/
 `空格 t i`), not changed by `Tab`.
 
@@ -2550,7 +2550,7 @@ outline = "right"   # the outline on the far side, in sight the whole time you w
 info    = "left"    # the Info slot over on the left
 ```
 
-Warning: **`Tab` only cycles within one slot.** All three views on the left is the
+**`Tab` only cycles within one slot.** All three views on the left is the
 factory layout; move the outline to the right, and `Tab` on the left walks between
 files and buffers, while the right has only the outline, where `Tab` will say "this
 side has only this one panel".
@@ -2564,12 +2564,12 @@ and from the last notch it comes back to 2/10. The status line writes exactly th
 fraction — **the denominator is always ten**, so `3/10` to `4/10` is one notch up at a
 glance, with no need to remember whether 「綽」 is narrower or wider than 「寬」.
 
-Warning: **the width is a property of that side, not of the panel.** So: changing view does not change it, and closing and reopening does not
+**The width is a property of that side, not of the panel.** So: changing view does not change it, and closing and reopening does not
 either; whichever thing is sitting in the Info slot, `w` works the same — they are
 only borrowing the slot. You made the left column wide because your screen is wide,
 not because you are looking at the file tree.
 
-Warning: **the text always keeps `max(窗口/3, 24)` columns.** If the two columns
+**The text always keeps `max(窗口/3, 24)` columns.** If the two columns
 together go over that, they **shrink together in proportion**, so the same notch is
 the same width on the left as on the right. With both columns open and the window
 small, the last few notches get bitten down to the same size — the notches still
@@ -2587,7 +2587,7 @@ is those few hashes at the start of a line. Select one, press Enter, and you are
 there. A `.txt` novel without a single hash in it has an outline too; those rules are
 in the section "A long novel".
 
-Warning: **there has to be a space after the hash**, `#128` is not a heading.
+**There has to be a space after the hash**, `#128` is not a heading.
 This is CommonMark's rule (§4.2), not yumete's: the original Markdown
 1.0 was loose, `#foo` counted as a heading too, and so `#128`, `#!/bin/sh` and
 `#include` at the start of a line all got taken for level-one headings — that family
@@ -2745,7 +2745,7 @@ order (diagnostics, line numbers, diff gutter):
    i 10   // 說明             `i` is information, `·` is a hint
 ```
 
-Warning: **this column only appears on code files.** It asks the text for two squares,
+**This column only appears on code files.** It asks the text for two squares,
 two squares in Chinese are one whole character, and a novel will never have a language
 server — so your manuscript pays nothing at all.
 
@@ -2767,7 +2767,7 @@ have that character.)
 
 **`gd` goes to where it is written.** Stand on a function, a type, a variable and press
 `gd`, and the cursor goes to the line that defines it — across files too, with `C-o` to
-come back. Warning: **the answer takes a moment to come back** (the server is in another
+come back. **The answer takes a moment to come back** (the server is in another
 process), so what you see on pressing is "asking where this is written…", and the cursor
 moves a moment later.
 
@@ -2777,7 +2777,7 @@ server.
 
 **`空格 k` asks "what is this", `空格 K` opens it in the sidebar.** Stand on a name and
 press it, and what the server says floats beside it: a function's signature, what a type
-is, what the doc comment says. Warning: it takes a moment too, and **it was asked for,
+is, what the doc comment says. It takes a moment too, and **it was asked for,
 so it is gone the moment the cursor moves** — the thing that comes up by itself and
 follows the cursor is diagnostics, and only that one stays. The first press may give you
 nothing (the server is still reading the project); press again and it is there.
@@ -2795,7 +2795,7 @@ sidebar**, the same rule as the dictionary pair (`空格 n`/`空格 N`).
 helix.)
 
 **`空格 d` asks "what is wrong on this line", `空格 D` opens it in the sidebar.** Lower
-case floats, upper case to the sidebar, one rule with the pair above. Warning: **it does
+case floats, upper case to the sidebar, one rule with the pair above. **It does
 not have to wait** — errors and warnings are pushed by the server itself and are already
 in hand, so they are there the instant you press.
 
@@ -2830,13 +2830,13 @@ file」, as a page. The one below is about *when* the editor asks, not about the
   `空格 k` the wiki or the docs, `空格 d` the diagnostics, `空格 t i` the record. Upper
   case always means "into the sidebar, whatever else".
 
-Warning: if two of them were automatic they would fight over the same patch of screen,
+If two of them were automatic they would fight over the same patch of screen,
 and "show the docs if there are docs, diagnostics only if there are none" cannot be
 decided until the docs question answers back; in that one second anything you draw is
 wrong — draw the diagnostics and it flickers, draw nothing and it sits empty. So only
 ever one is automatic.
 
-Warning: **this is key for key the same as helix** (`ui/popup.rs`): while the popup is
+**This is key for key the same as helix** (`ui/popup.rs`): while the popup is
 open those four keys belong to the popup, with it closed they page the text as before,
 and any other key dismisses it.
 
@@ -2868,17 +2868,17 @@ its own line if there is more. `println!(` gives you 「Prints to the standard o
 with a newline.」 The whole page is still `空格 k`'s job: no editor worth copying puts a
 screenful of documentation up while you are typing.
 
-Warning: **the signature and a diagnostic never fight over that float**: a diagnostic is
+**The signature and a diagnostic never fight over that float**: a diagnostic is
 never drawn in insert mode (see below), which is exactly when the signature is.
 
-Warning: **this list and the IME's candidate bar do not fight.** While the code string
+**This list and the IME's candidate bar do not fight.** While the code string
 is still in the IME's hands the editor does not know you are typing at all; the space
 bar and `2390` belong to the IME throughout. Only once a word is committed is it the
 server's turn to be asked. So completion works inside Chinese comments too. (The list
 offers no number keys to pick with, exactly so they do not collide with the candidate
 keys.)
 
-Warning: **no such panel pops up in insert mode.** The line you are typing is broken by
+**No such panel pops up in insert mode.** The line you are typing is broken by
 definition, reporting it means nothing, and it would jump in front of completion. The
 square left of the line number stays lit as before; `Esc` back to Normal and the words
 float out by themselves. (Neovim ships this way too — `update_in_insert = false`.)
@@ -3091,7 +3091,7 @@ A few that are easy to get wrong:
 - **On a text page the record panel never opens by itself** — `空格 t o`, `空格 t b` and
   `空格 t f` alike; press `空格 t i` to see it. Only `空格 t t` (the window given
   entirely to the table) opens it by itself: there is no text to mind there, and with
-  long cells folded the panel is the way to read the whole content. Warning:
+  long cells folded the panel is the way to read the whole content.
   **`空格 t f` used to open it by itself**, and the reason it was taken back is the
   cost: the panel takes a fifth of the width, and the moment it appears the paragraphs
   above and below the table **reflow on the spot** — 「markdown
@@ -3352,7 +3352,7 @@ searching the grid, when that is the one thing the name `gd` ought to do. Now `g
 `g/` `g?` know the whole manuscript only, and the table's own questions go to `空格 t/`,
 `空格 t?` and `:table-jump`.
 
-Warning: **this group is on `空格 t`, not on `t`.** `t`/`T` is vi's till, and helix's
+**This group is on `空格 t`, not on `t`.** `t`/`T` is vi's till, and helix's
 own `t` is till as well — one key cannot owe two hands at once, and the table is not
 the group pressed most often.
 
@@ -3932,7 +3932,7 @@ When nothing changed they write nothing, and the status line says "unchanged; no
 written". This is why vi and helix keep `:x` and `:wq` apart, and why yumete does not
 treat `:x` as an alias of `:wq`.
 
-Warning: **Give it a path and it always writes**: `:x 第二章.md` says "save it under
+**Give it a path and it always writes**: `:x 第二章.md` says "save it under
 this name", and that is an instruction, not an idle save.
 
 ### The file was changed outside
@@ -4015,7 +4015,7 @@ chapter to a novel gets stopped. Together they state the shape of the thing: the
 **While the question is up, the keyboard belongs to it.** A key that is not one of those
 three answers will not leak through onto the manuscript underneath.
 
-Warning: **Only `:write` has this door today.** `:w!` says "write over it" on its own;
+**Only `:write` has this door today.** `:w!` says "write over it" on its own;
 `:wq` and `:wa` are each one line away, left until this way of asking has worn in.
 
 ### Trading text with the outside
@@ -4056,10 +4056,10 @@ and that is it, for copying the status line and other things that are not in the
 
 A novel is a hundred-odd files. Most of what finding and looking things up produces,
 yumete **turns into text** — and text is something this editor already has good tools
-for. Warning: **Search is the exception**, it has a panel of its own (below), because
+for. **Search is the exception**, it has a panel of its own (below), because
 searching means changing the terms while you watch the results, and text cannot do that.
 
-Warning: **`:grep` means something else now** — it used to be a command that ran once on
+**`:grep` means something else now** — it used to be a command that ran once on
 its own, and now it is an alias of `:search`, opening that panel (`:search-project` is
 the scope the old `:grep` had). **So does `:replace`**: it used to be "change everything
 `:grep` just found", and now it opens the same panel with one more row, "replace with".
@@ -4068,7 +4068,7 @@ the scope the old `:grep` had). **So does `:replace`**: it used to be "change ev
 
 **`空格 /` (or `:search`, short `:s`) opens a panel**, in the sidebar.
 
-Warning: **`:s` without a slash is this panel**: `s` in vi is substitute, and this panel
+**`:s` without a slash is this panel**: `s` in vi is substitute, and this panel
 is substitute writ large — find and replace on one sheet. With a slash
 (`:s/find/replace/`) it is still vi's one line: one shot, this line only.
 
@@ -4110,7 +4110,7 @@ it is a one-of-four and takes no typing.
 | **grey text** | the line written on an empty box: the word you searched last (just after `空格 /` opens the panel), or "what to find". `Tab` takes it into the box, `Enter` finds it again straight away, and typing makes it go by itself |
 | **solid black** | typing |
 
-Warning: **None of those three lays down a background.** Every box has
+**None of those three lays down a background.** Every box has
 `In:`/`Search:`/`Repl:`/`only:`/`except:` written in front of it, so a background
 would be a second way of saying the same thing. The three states that are left say
 **what is going on** (typing / selected / where the keys are), not "you can type here".
@@ -4121,14 +4121,14 @@ the same kind of thing as the switches above it, and **`6`** changes it a notch 
 and right do the same while you stand on it). It is drawn below those switch rows and
 above "only" and "except": all four of those say "where to search, which ones to
 search", and they are one group. Four notches round the circle: **this file → open
-buffers → working directory → the project → back to this file**. Warning: **That box
-takes no typing**, press `i` and it will tell you it is a one-of-four. Warning: **The
+buffers → working directory → the project → back to this file**. **That box
+takes no typing**, press `i` and it will tell you it is a one-of-four. **The
 word "Search" is the panel's name and is not inside that box**, so it does not go
 reversed along with it.
 
 **The fifth notch, "a folder…", can only be reached by command**, and is not on the
 circle: `:search 稿`. Once you are in it the panel cannot change it, and `6` goes back
-to this file. Warning: Name a folder that does not exist and the status line says so on
+to this file. Name a folder that does not exist and the status line says so on
 the spot — **it does not quietly fall back to "just this file"** and hand you a short
 list that looks real.
 
@@ -4137,7 +4137,7 @@ list that looks real.
 on the command line — every path in this editor counts from the same place. The `~` in
 `~/稿` expands. To search the project, press `6` to that notch; no need to type a path.
 
-Warning: **It used to count from the project, and a leading `/` was the project root
+**It used to count from the project, and a leading `/` was the project root
 too.** That rule cost two things: inside `crates/`, typing `:search yumete-core` would
 say "no such folder" while `:open` in the same spot opened it; and worse, **an absolute
 path could not be typed at all** — `/usr/share/dict` was read as "usr/share/dict under
@@ -4150,7 +4150,7 @@ selected** — so typing straight away is a new word, and `Enter` straight away 
 with the last one. If you have a stretch marked by hand (more than one character) it
 uses that: you meant it when you marked it, and it is already on the screen.
 
-Warning: **The command does not take the word to find.** `:search 卵` is "a folder
+**The command does not take the word to find.** `:search 卵` is "a folder
 called 卵", not "search for 卵" — and that is on purpose: a command says only **where to
 look**, and what to look for is always typed in the box.
 
@@ -4168,7 +4168,7 @@ repo with `gd` and the scope is still the project you came from; to search over 
 symbol picker when there is no language server", and its source comment explains that is
 for two projects open in a split, which we do not have.
 
-Warning: **Only the three that walk the disk read what is on the disk, and the copy on
+**Only the three that walk the disk read what is on the disk, and the copy on
 the disk does not always count**: if the file is open, what gets searched is the copy in
 the buffer. Changes you have not saved are found all the same, while **the ones you
 changed that are not in the scope are not**, and neither is a new file that was never
@@ -4200,13 +4200,13 @@ A pattern written wrong and the status line says so, and **that run does not sea
 throwing the bad term away and searching anyway hands you the answer to a different
 question.
 
-Warning: **With this file or open buffers chosen, that whole row is not drawn.**
+**With this file or open buffers chosen, that whole row is not drawn.**
 Those two notches are a list already in front of you, and sieving it by
 path means nothing — while three grey rows take the place of the result list. So the
 panel for this file is eight rows, eleven for the ones that walk the disk, twelve with
 replace open as well.
 
-Warning: **A folder is always searched together with its subdirectories.** To search
+**A folder is always searched together with its subdirectories.** To search
 only this level, write `*` in the "only" box.
 
 Warning: **Binary files are not searched.** One NUL in the first thousand and
@@ -4221,20 +4221,20 @@ passed**, and **stops at five whatever happens**. When it stops, the count box r
 `21+ hits`, and that plus is "not finished counting". Normally (respecting `.gitignore`)
 a project is a few hundred files and tens of milliseconds, and none of this comes up.
 
-Warning: **Every scope's anchor is the working directory**, never the current file.
+**Every scope's anchor is the working directory**, never the current file.
 
-Warning: **Only "this file" searches as you type.** The rest wait for **`Enter`** before
+**Only "this file" searches as you type.** The rest wait for **`Enter`** before
 they go looking: a hundred chapters cannot be read through once per letter. While it
 waits, the top right says "Enter to search", and only when it is done does that turn
 into the count. The panel's title says all along where it is looking right now.
 
-Warning: **Edit the text and the list is out of date**: the top
+**Edit the text and the list is out of date**: the top
 right turns to "Enter to search" there and then, whether you are in the panel or in the
 text. This holds for the "this file" notch too — it does search as you type, but the
 moment you hand the keys back to the text and change a character, the list you are
 holding describes how things were before.
 
-**Results across files are a tree**: one row per file, its hits underneath. Warning:
+**Results across files are a tree**: one row per file, its hits underneath.
 **The hit rows are not indented** — the file row carries its own
 `▾`/`▸` and is bold gold besides, so indenting is a third way of saying it, and every
 cell of the sidebar is wanted for the text. The line-number column is **as wide as it is
@@ -4249,10 +4249,10 @@ Name a folder that does not exist and it **says so**, instead of quietly falling
 | In the box | |
 | --- | --- |
 | `Enter` | **run the search, then hand the keys back to the panel** — whichever box you are in you stay in, and you carry on into the results with `j` |
-| `↓` `↑` | next box / previous box. Warning: **not `Tab`**: `Tab` is the sidebar's own key, and what it changes is the view |
+| `↓` `↑` | next box / previous box. **Not `Tab`**: `Tab` is the sidebar's own key, and what it changes is the view |
 | `Esc` | leave the box, back to the panel's Normal — **what you typed stays**, and the "In:" box lands there and then |
 
-Warning: **`Enter` = "done typing, go look"**: run the search, then hand the keys
+**`Enter` = "done typing, go look"**: run the search, then hand the keys
 back to the panel. It never jumps to the first result, so it does the same thing
 whether or not anything was found, and **whichever box you are in you stay in**.
 Carry on into the results with `j`, and back with `k`.
@@ -4261,7 +4261,7 @@ Carry on into the results with `j`, and back with `k`.
 | --- | --- |
 | `j` `k` | walk the boxes: search → (replace) → (only → except) → results. **The switches and "In:" cannot be walked onto**, they go by number; in the results box it walks the hits — stand on the first and press `k` and you are back in the box, never trapped in the list |
 | `h` `l` | **move the cursor inside the box**, the same feel as in the text; in the results box they fold a file up and open it |
-| `/` | **back to the search row**: wherever you stand, the cursor goes to the end of the search box with what you typed still in it. Warning: **It does not enter typing** — one more press of `a`/`c`/`i` and you can type. This panel has four boxes (query / replace with / only / except), and `aci` has to be kept for "insert right here", so crossing boxes falls to `/`. The picker (`空格 f`) has no `/` and no boxes to cross: it is one box, and the keys are in it from the moment it opens |
+| `/` | **back to the search row**: wherever you stand, the cursor goes to the end of the search box with what you typed still in it. **It does not enter typing** — one more press of `a`/`c`/`i` and you can type. This panel has four boxes (query / replace with / only / except), and `aci` has to be kept for "insert right here", so crossing boxes falls to `/`. The picker (`空格 f`) has no `/` and no boxes to cross: it is one box, and the keys are in it from the moment it opens |
 | `i` `a` | type right here: `i` **inserts from the cursor**, `a` inserts after it |
 | `I` `A` | insert at the start of the line / at the end of it — "to the start and the end of the line" inside a box is these two |
 | `d` `D` | delete the one the cursor covers / delete to the end of the line |
@@ -4269,7 +4269,7 @@ Carry on into the results with `j`, and back with `k`.
 | `6` | **change the scope**: this file → open buffers → working directory → the project → back to this file |
 | `1` … `7` | flip those seven rows; the number is written at the start of each one. `7` is only drawn under a scope that walks the disk |
 | `Enter` | **look again**. One exception only: standing on a result with a list that is not out of date, that is "go to it" |
-| `Tab` | change the view — the sidebar's own key, **not** the next box. Warning: **In a box (PAN.INS) it is "next box"**; and when the box is empty with the last word written there in grey, the first `Tab` takes that word in |
+| `Tab` | change the view — the sidebar's own key, **not** the next box. **In a box (PAN.INS) it is "next box"**; and when the box is empty with the last word written there in grey, the first `Tab` takes that word in |
 | `C-w` `q` | next region / close this one |
 
 **A block cursor stands in the box**, the same thing as the one covering a character in
@@ -4278,22 +4278,22 @@ inserts from it. **Every one of these keys means in the box what it means in the
 with not one of them newly invented. Press `i` to type and it becomes a bar — the same
 rule as in the text.
 
-Warning: **`gh`/`gl` and `w` `b` `e` were not moved into the box**: they are for a long
+**`gh`/`gl` and `w` `b` `e` were not moved into the box**: they are for a long
 line of prose, and this is a box of two or three characters — `A`/`I` brought the start
 and the end of the line along already. So `hl` does not walk the boxes — characters
 sideways, boxes up and down, the same rule as in the text.
 
-Warning: **`Enter` in the panel is "look again"**: the same from every box. Typing has
+**`Enter` in the panel is "look again"**: the same from every box. Typing has
 six doors of its own — `i` `a` `I` `A` `c` and `/` — and flipping a switch has `1`–`7`,
 which leaves `Enter` free for the one thing only it can do.
 
-Warning: **Standing on a result with the list out of date, `Enter` runs first and does
+**Standing on a result with the list out of date, `Enter` runs first and does
 not jump**: the screen says "Enter to search" right now, so do what it says; besides,
 once the text has moved, that hit's line number is long out of true, and jumping there
 would most likely land on some other character. The run leaves a fresh list, and one
 more press goes.
 
-Warning: **A switch does not need the cursor walked onto it.** `jk` goes straight
+**A switch does not need the cursor walked onto it.** `jk` goes straight
 between the box and the results, past the five switch rows, and a switch goes by number.
 
 **Seven rows, each one "number, name, box".** The number is the
@@ -4316,7 +4316,7 @@ every 漢字 you type folds into "it and its variants" — written straight that
 **less**: `[^書]` now means "neither 書 nor 书", and `[^干]` excludes 乾幹榦 as well.
 For the original meaning, press `2` and turn 繁簡 off.
 
-Warning: **Matching is a one-of-three, not three checkboxes**: literal, regex, fuzzy.
+**Matching is a one-of-three, not three checkboxes**: literal, regex, fuzzy.
 Regex is **off by default**, because in a manuscript you are more often looking for
 `(注)`, `[^1]`, `A.B`.
 
@@ -4335,7 +4335,7 @@ word** — so it sits right next to it. One character expands into all the ways 
 written in 通規簡體, 通規繁體, 古籍繁體, 臺灣繁體, 香港繁體 and opencc 繁體, in one
 table lookup.
 
-Warning: **The vague character is loosened and the precise one stays precise**, and that
+**The vague character is loosened and the precise one stays precise**, and that
 asymmetry is on purpose:
 
 | search | finds | does not find |
@@ -4349,35 +4349,35 @@ hit is one more row on a list, and that is exactly why **search** can use a tabl
 characters while `:convert` **cannot** — the latter has to pick between 發 and 髮, and
 picking wrong ruins the manuscript.
 
-Warning: **It works under regex too.** The pattern is parsed first, so **only the
+**It works under regex too.** The pattern is parsed first, so **only the
 characters you typed in plainly** are rewritten, leaving `.`, `*`, `\d`, `^$` and brackets alone. `書.*齋`
 becomes `[書书].*[齋斋]`, and `\d書` becomes `\d[書书]`. A character written as a code
 point like `\x{66F8}` is not folded — writing it that way says that is the one you mean.
 
-Warning: **It works under fuzzy too**, in the panel as well as in the picker.
+**It works under fuzzy too**, in the panel as well as in the picker.
 
 **Pinyin: `shuzhai` finds 「書齋」 and 「书斋」.** On from the factory.
 
 The third of the same family — **do two spellings that differ count as the same word**.
 What you type is Latin letters, and what it matches is the sound of a 漢字.
 
-Warning: **Full spellings only**: every character has to eat **a whole syllable**. In
+**Full spellings only**: every character has to eat **a whole syllable**. In
 `shuzhai`, neither `sz` nor `shuzh` hits. The initials-only road is a few hundred places
 in one book, and what you want is the one place. (`tian` does hit — it is a whole
 syllable by itself, and what it hits is every 天.)
 
-Warning: **Every reading counts**: `chang` and `zhang` both find 「長」. A search
+**Every reading counts**: `chang` and `zhang` both find 「長」. A search
 missing a reading is "cannot find it", while one reading too many is one more row on a
 list.
 
-Warning: **The two roads' hits are merged, not swapped in**: it only runs when the query
+**The two roads' hits are merged, not swapped in**: it only runs when the query
 is **all letters**, and the literal road runs anyway — so searching `hello` finds the
 `hello` in your manuscript first, and having it on gets in the way not at all.
 
-Warning: **It works with regex on**: it makes its own pass, unlike the one above, which
+**It works with regex on**: it makes its own pass, unlike the one above, which
 has to put something into the pattern.
 
-Warning: **Only in this panel**: the text's `n`/`N` run a regex, and "the readings of a
+**Only in this panel**: the text's `n`/`N` run a regex, and "the readings of a
 few 漢字 strung together come out as exactly this run of letters" cannot be written as a
 regex — syllable boundaries have to be settled while matching. Same for the fuzzy road.
 ### The panel's fuzzy and the picker's fuzzy are not the same thing
@@ -4404,14 +4404,14 @@ sentence but those few characters — type `他説` and 「他輕輕地説」 co
 characters you typed count as a hit when they **appear in order** and **sit close
 together**.
 
-Warning: **"close together" has a ruler**: all of the hit must fall inside a stretch no
+**"close together" has a ruler**: all of the hit must fall inside a stretch no
 longer than "characters typed ×2 ＋ 4". Without that ruler it becomes "these characters
 are somewhere on this line", and lines of prose are long — nine results out of ten are
 worthless. So `他説` finds 「他輕輕地説」 (five characters) and does not find
 「他走了很久……有人説話」, half a sentence apart. What it draws is **the tightest
 stretch**: in 「他。他説」 it marks 「他説」, not everything from one end to the other.
 
-Warning: **"fuzzy" is the third notch on the "matching" row**: literal, regex, fuzzy,
+**"fuzzy" is the third notch on the "matching" row**: literal, regex, fuzzy,
 one of three, so choosing fuzzy already means not regex, and neither has to grey out
 the other. What it does rule out is "whole word" on another row — when the question is
 "roughly these characters", word boundaries do not hold. Case works as before.
@@ -4431,12 +4431,12 @@ your manuscript over a range it is unsure of. Found it? `Esc` out and change it
 yourself. **Turning replace off does not turn fuzzy on** — that would be deciding
 something you never said.
 
-Warning: **Under "fuzzy", `n`/`N` walk the exact ones** (the near ones the panel lists
+**Under "fuzzy", `n`/`N` walk the exact ones** (the near ones the panel lists
 are a superset of them): no regex can write "roughly", and rather than hand the page a
 pattern that does not fit, it hands it the characters you typed.
 
 **The panel searches the same search `/` does**: `n`/`N` walk the same hits, and they
-are still there once the panel closes. Warning: but `n` does **not** bring the panel
+are still there once the panel closes. But `n` does **not** bring the panel
 back — the sidebar eats columns, and springing it back reflows the whole page; while you
 are writing you should not pay that for one press of `n`. To get the panel back, press
 `空格 /` again.
@@ -4486,12 +4486,12 @@ ordinary buffer.
 **Standing on a hit, a block grows under the list: "after"**: what
 that spot looks like once changed. The context is printed once and the part that changes
 is printed twice — what goes out is **朱 with a strikethrough**, what comes in is
-**green**. Warning: not every terminal can draw a strikethrough, so the 朱 is saying the
+**green**. Not every terminal can draw a strikethrough, so the 朱 is saying the
 same thing.
 
 That block takes **at most a third of the panel**, and the list keeps at least three
 rows — the list is the main thing, so a short panel squeezes the block first.
-Warning: it appears only when "replace" is on, you are standing on a hit, and the
+It appears only when "replace" is on, you are standing on a hit, and the
 replace box is not empty; take away any one of the three and those rows go back to the
 list.
 
@@ -4541,10 +4541,10 @@ With it on: all caps in the original comes out all caps, an initial capital come
 with an initial capital, anything else is written as you typed it. So searching `server`
 and replacing with `daemon` gives `DAEMON_DEBUG` out of `SERVER_DEBUG` and
 `Daemon notes` out of `Server notes`. **Off from the factory** (as in VS Code): what you
-type is what gets written, which is the notch that surprises nobody. Warning: 漢字 have
+type is what gets written, which is the notch that surprises nobody. 漢字 have
 no case, so this notch is empty for Chinese.
 
-Warning: **The hits pinyin and fuzzy found can be replaced just the same.** Finding
+**The hits pinyin and fuzzy found can be replaced just the same.** Finding
 and replacing ask the same question, so `sifuqi` reaches 「伺服器」 for `r` as well.
 Warning: `$1` in the replacement is understood only on the regex path — pinyin and fuzzy
 have no groups to expand.
@@ -4643,7 +4643,7 @@ once.
 It reads **two passes**: this file first, then the **folder** this file is in
 (subdirectories included).
 
-Warning: **Two passes, rather than reading them as one stretch.** It looks the same and
+**Two passes, rather than reading them as one stretch.** It looks the same and
 is very different. Measured on 宇浩's own documentation: 「宇夢」 is **8th** of the 60
 candidates in the file that discusses it, 46th of the 181 in that folder, and
 **disappears entirely** among the 969 of the whole repository — where the top of that
@@ -4712,7 +4712,7 @@ R  y            change all of them (more than one file, and it asks)
 :write-all      save once you are sure
 ```
 
-Warning: **`r` changes "this one", so there has to be a this one first** — press it
+**`r` changes "this one", so there has to be a this one first** — press it
 while standing in the box and the panel says so. `R` does not pick a spot; it can be pressed
 from anywhere. While you are typing in the box, the hint row writes those two keys right
 after its `Esc`.
@@ -4849,17 +4849,17 @@ question.
 the sidebar if the Wiki page is open there, floating if not — **until the cursor
 moves**.
 
-Warning: **a misspelt name, or one in the wrong order, is still found**: `朱浩宇` finds
+**A misspelt name, or one in the wrong order, is still found**: `朱浩宇` finds
 「朱宇浩」. The rule is 「every character you typed is somewhere in the name」, with the
-right order ranked first and the scrambled ones underneath. Warning: **one character
+right order ranked first and the scrambled ones underneath. **One character
 short does not count** — what was loosened is the order, not 「however many of them
 match」. This went into the file picker, the buffer picker and the command picker at the
 same time; all three gained from it.
 
-Warning: **the body in the right half is drawn, not searched**: typing 「冬天」 looks for
+**The body in the right half is drawn, not searched**: typing 「冬天」 looks for
 the entry **called** 冬天, not every entry that mentions it.
 
-Warning: **They are hyphenated, not `:wiki <verb>`** — they are all functions rather
+**They are hyphenated, not `:wiki <verb>`** — they are all functions rather
 than arguments, which leaves the argument slot to `:wiki <詞條名>`.
 
 Saving any wiki file — including the ones pulled in — re-reads it by itself; no command
@@ -4882,24 +4882,24 @@ name inside a code fence or a note — what is written there is something else.
 supposed to look like, so when 「醉翁亭」 was written 「醉翁停」 in one place, this
 command finds it — one place in the whole book, which reading will not catch.
 
-Warning: **only homophones are reported.** 「one character off」 is not a finding in
+**Only homophones are reported.** 「one character off」 is not a finding in
 Chinese: 醉翁亭 is one character off 醉翁路 too, and a novel is full of those. The real
 slip is **the same sound** — the IME's wrong candidate taken, or a homophone written by
 hand (亭 and 停 are both ting, 塵 and 尘 are both chen). So it asks the reading table,
 and **with no reading table it reports nothing at all**: better silent than a page of
-noise. Warning: a name spelled right does not count (and neither do two names that are
+noise. A name spelled right does not count (and neither do two names that are
 one character apart from each other, like 李明 and 李朋 in the same book).
 
-Warning: **an entry written and no mark showing — `:wiki` tells you which ones.** The
+**An entry written and no mark showing — `:wiki` tells you which ones.** The
 mark follows segmentation, so a name can sit plainly in the sentence and never light up
 once: 「有身體」 loses to 「這裏有/身體」, and a name with a space or Latin letters in it
 (`A 計劃`) never becomes one word at all. Rather than let that pass in silence,
 `:wiki` has a section 「in this chapter but not marked」 with the names and their line numbers, and reading it tells you whether to
-rename or to let it go. Warning: it counts **only the chapter that is open** (press
+rename or to let it go. It counts **only the chapter that is open** (press
 `:wiki` again inside the report and that section is gone — there is no manuscript there
 to count), and with many names and a long chapter it takes a fraction of a second.
 
-Warning: the dotted line needs the terminal to support it (Ghostty, kitty, WezTerm,
+The dotted line needs the terminal to support it (Ghostty, kitty, WezTerm,
 foot and iTerm2 all do; Apple's own Terminal does not). A terminal that cannot draw it
 **falls back to a solid line**, not to nothing at all.
 
@@ -4926,10 +4926,10 @@ their pickers in text entry and close them on one `Esc`, and so does this one.
 | `Esc` | Close |
 
 Editing the query is what it is on the `:` line: `←` `→` `Home` `End` `C-a` `C-e`
-move, Backspace and `Delete` delete, `C-u` clears back to the start. Warning:
+move, Backspace and `Delete` delete, `C-u` clears back to the start.
 **Backspace on an empty query does nothing** — it is not a second way out.
 
-Warning: **There is no second layer.** `Esc` closes the picker outright rather than
+**There is no second layer.** `Esc` closes the picker outright rather than
 stepping back to a list, and every letter — `i I a A d D c C` `g G q` included — is a
 letter of a file name, not a command.
 
@@ -5324,7 +5324,7 @@ together where they stand. `⏎` is a line break gained or lost: a change you ca
 see is exactly the kind that most needs drawing, so it is drawn, in colour like the
 rest.
 
-Warning: **the colour is painted on; in the file it reads `[-很早-]{+極早+}`.** Copy
+**The colour is painted on; in the file it reads `[-很早-]{+極早+}`.** Copy
 the listing out, search it with `/`, open it with something else, and those four
 marks are what you see — they are only kept off the screen, because the colour
 already says the same thing more plainly. `:render` has no say here: those four
@@ -5345,11 +5345,11 @@ manuscript, and word by word tells you nothing.
 and the same report, with only 「against what」 changed: `:git-diff` means `HEAD`, and
 `:git-diff HEAD~3` or `:git-diff v1.0` means that commit.
 
-Warning: **it compares the copy in the editor, unsaved changes and all** — the
+**It compares the copy in the editor, unsaved changes and all** — the
 question is 「what have I changed this sitting」, and the strokes still warm in your
 hand are part of this sitting too. So its answer need not match the command-line
 `git diff` word for word, and that is on purpose.
-Warning: **one file at a time.** When there is no answer to be had — not in a git
+**One file at a time.** When there is no answer to be had — not in a git
 repository, this file never committed, no such commit — **git's own sentence is
 passed straight through**: those three want different things done about them, and one
 sentence covering all three would get all three wrong.
@@ -5389,17 +5389,17 @@ colour it started from.
 than the lightness: every other word turns a **pale blue** and the rest keep the
 original ink, with **the brightness all but unmoved** (1.007:1 on a dark page,
 1.047:1 on a light one; `字色` is 1.38:1), so the words are told apart without one of
-them sounding louder than its neighbour. Warning: the blue on a light page is
+them sounding louder than its neighbour. The blue on a light page is
 **stronger than the one on a dark page**: the dimmer the ink, the worse the eye is at
 telling hues apart, and the same chroma on ink at L\* 17 simply cannot be seen. The
 axis is **blue↔yellow**, not red↔green: red-green colour blindness runs at about 8%
 of men, and being told apart is this mark's entire value.
 
-Warning: equal lightness is not equal brightness: HSL's L is `(max+min)/2`, which has
+Equal lightness is not equal brightness: HSL's L is `(max+min)/2`, which has
 nothing to do with the eye. So that blue is **bisected out of the original ink's
 luminance**, not taken at the same L.
 
-Warning: **writing that already has a colour is not touched at all** — a heading's
+**Writing that already has a colour is not touched at all** — a heading's
 gold and a link's blue stay as they were. Turning the hue throws away the colour
 something already had (gold turned blue or yellow is no longer gold), and writing
 that already carries a colour is set apart from prose anyway, which is most of what
@@ -5421,7 +5421,7 @@ word (step 50, far fainter than the underline on a markdown link). Across, it is
 rule under the whole word, broken between one word and the next; down a column a word
 is a vertical run, and underlining the run only puts a stroke under every character,
 so vertical **marks the word's last cell only** — on screen, a short stroke between
-one word and the next. Warning: **nothing is drawn on a link**: a link has an
+one word and the next. **Nothing is drawn on a link**: a link has an
 underline of its own, and the two stacked were tried — it computes to `#002857`,
 which on a dark page is a black line.
 
@@ -5512,7 +5512,7 @@ outright** — keeping two spellings would mean this philosophy was only talk:
 | `:view-wrap/bands/sentence/hanging/numbers/typewriter/focus/meter/punct/hud/preview` | `:wrap` `:bands` `:sentence` `:hanging` `:numbers` `:typewriter` `:focus` `:meter` `:note` `:hud` `:preview` |
 | `:count-progress` `:count-target 3000` | `:progress` `:prog` `:target` |
 | `:write-all` `:write-as 新名.md` | `:wall` `:saveas` `:sav` |
-| `:table-jump 木` `:table-find column 甲` | `:row` `:search`（Warning: `:search` came back to life later, see below） |
+| `:table-jump 木` `:table-find column 甲` | `:row` `:search`（`:search` came back to life later, see below） |
 | `:check-merge` | `:conflicts` |
 | `:buffer-close` | `:bclose` |
 | `:theme-mode system/dark/light` | `:appearance` |
@@ -5528,7 +5528,7 @@ meaning by itself, which is why they were long: `conflicts` `search` `row` `note
 Under a parent, the noun has already been said by the parent, and the child is left
 with the **verb** half:
 
-Warning: **`:search` later came back to life**: after giving way to `:table-find` the
+**`:search` later came back to life**: after giving way to `:table-find` the
 name sat empty for a while, and it is now the command for the search panel — the
 same word, an entirely different thing. So is `:replace`: it used to mean "replace
 everything `:grep` just found", and now it is one more row in that panel.
@@ -5573,7 +5573,7 @@ command, `:write-all` a kind of write, and the menu walks down into them level b
 level. The other is **a pair** — `:write-quit` is not a kind of writing, it is "write,
 then quit", two verbs.
 
-Warning: **both use a hyphen, and neither uses a space.** What follows `:write` is a
+**Both use a hyphen, and neither uses a space.** What follows `:write` is a
 **path**, so `:write all` can only guess between a sub-command and a file named `all` —
 it used to guess the latter, and really did write a file called `all` into the current
 directory, while not one of the other changed buffers was saved. Now it says "no such
@@ -5958,7 +5958,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:buffer-close` `:bc` (`:buffer-close!`) | Close this file, not the editor |
 | `:buffer` | List the open files |
 | `:toc` (`:toc 3`) | List the headings / go to the third |
-| `:search` [*folder*] | The search panel (`空格 /` too). Warning: **it takes no search text** — that is typed in the panel |
+| `:search` [*folder*] | The search panel (`空格 /` too). **It takes no search text** — that is typed in the panel |
 | `:search-buffers` | The same, across every open buffer |
 | `:search-working` | The same, across the working directory (subdirectories included) |
 | `:search-project` | The same, across the project directory (subdirectories included) |
@@ -6131,10 +6131,10 @@ key is called, and you don't have to go looking up which keys exist.
 **The third column says which layer this item comes from right now**, followed by the
 value it covers. Factory → global → project, each one covering the one before; the line
 in the picture above, "indent 2 project ← factory 0", means "this project sets it to 2,
-and the factory value is 0". Warning: **when there is no room for it the column is not
+and the factory value is 0". **When there is no room for it the column is not
 drawn at all** (under 58 columns); the value column stays.
 
-Warning: **when the layer you are editing is covered by one above it, the line
+**When the layer you are editing is covered by one above it, the line
 underneath says so.** The project sets `indent`, and you press space on it in global —
 the line on screen **will not move** (the project value still wins), and with nothing
 said it looks like a dead key.
@@ -6143,12 +6143,12 @@ Warning: **saving does not take effect on the spot** — getting a setting wrong
 no way back is worse than waiting. After saving press
 **`:reload-config`**, or wait for the next start.
 
-Warning: **it changes the line you changed and not one other byte.** The comments you
+**It changes the line you changed and not one other byte.** The comments you
 wrote, the order you put things in, the blank lines you left are all still there — that
 file is probably in git, and having one save flatten it into something a machine wrote
 is not acceptable.
 
-Warning: **it does not matter if the file is changed from outside while the panel is
+**It does not matter if the file is changed from outside while the panel is
 open** (another yumete, a sync, `git checkout`): `:w` edits **the copy on disk at that
 moment**, so other settings someone else changed are not knocked out. Only the values on
 the page in front of you may be stale; the status line says so, and reopening
@@ -6177,7 +6177,7 @@ effect. Once it is commented out the file works again, and not a character is lo
 | files | interface language, ambiguous width, the key that switches 中/ABC |
 | keys | the helix set or the vim set |
 
-Warning: **two more kinds are not drawn**, and hand-written toml always works for them:
+**Two more kinds are not drawn**, and hand-written toml always works for them:
 **the twenty-four colour slots** (the ten built-in themes are enough as it is, a
 terminal has no colour picker, and laying out twenty-four `#RRGGBB` lines would only
 make people stare); and **anything whose value is a list or a command line**
@@ -6398,7 +6398,7 @@ command = "ruff"
 args = ["server"]
 ```
 
-Warning: **why a string of "tables" and not a string of names**: every candidate takes
+**Why a string of "tables" and not a string of names**: every candidate takes
 different arguments (`ruff server`, `ty server`, while `jedi-language-server` takes
 none). helix's `languages.toml` has the same shape for the same reason.
 
@@ -6453,7 +6453,7 @@ theme's own colour), step 100 is most the theme's colour, and **paper sits at
 step 90**. The ticks underneath run 0–10000, **a hundred ticks to a step**, so a
 step number is its tick divided by a hundred — no second set of numbers to
 remember.
-Warning: **the steps are not evenly spaced** — the dozen or so that have names
+**The steps are not evenly spaced** — the dozen or so that have names
 sit where they were measured to sit, not where dividing the range would put
 them; step numbers are for talking about it, ticks are for the eye. To give a
 step a name, add a line whenever you like.
@@ -6475,7 +6475,7 @@ step a name, add a line whenever you like.
 | **90** | 9000 | **Paper** — the ground the writing sits on |
 | **100** | 10000 | **The status bar** — the level that sits heavier than paper |
 
-Warning: **Steps 73 and 63 are nailed down.** In a table three grounds stack up
+**Steps 73 and 63 are nailed down.** In a table three grounds stack up
 — the selection, the cursor's row, the column ground — and all three have to be
 distinguishable from each other (1.24:1). Move them two steps further toward the
 paper and morandi's light mode drops to 1.20, and then you cannot tell which row
@@ -6571,7 +6571,7 @@ for now the variants are used only in code colouring:
 | blue | cyan | escapes, `{…}` interpolation |
 | green | yellow-green | HTML tags |
 
-Warning: **Red is red; it does not lean orange.** Red has only ever said "this
+**Red is red; it does not lean orange.** Red has only ever said "this
 is wrong"; if code wants an orange for its numbers, it gets an orange of its
 own, not a loan from the red. In every theme that means its red to be red, the
 red is corrected to a true red (OKLCH hue 29–30°, exactly the hue of pure red on
@@ -6607,30 +6607,30 @@ Their grounds are like **a thin sheet of coloured glass laid on the paper**:
 toward the dark in dark mode — until it is **1.08:1** (light) / **1.12:1**
 (dark) from the paper.
 
-Warning: **The two knobs turn separately.** Pull the saturation down along with
+**The two knobs turn separately.** Pull the saturation down along with
 it and you get grey (which is exactly how the first version was wrong); close
 the distance without keeping the saturation and it is still that colour, only
 thinner. The colour stays; it is just pale.
 
-Warning: **Why the light-mode number is smaller**: the same ratio is the same
+**Why the light-mode number is smaller**: the same ratio is the same
 ΔL\* on both sides (measured: 1.5:1 is 15 either way), but **the weight is not
 the same at all** — cutting light out of a bright sheet the eye has already
 adapted to is not the same thing as adding a little light to a dark one.
 
-Warning: **Yellow is the exception; it has to be more saturated than the
+**Yellow is the exception; it has to be more saturated than the
 paper.** The light-mode paper is itself a warm cream at 45° and saturation 46,
 and the yellow is at 38° — seven degrees of hue apart. With the saturation also
 at 42 it would not be yellow, it would be "paper, a little darker than the
 paper". So whichever colour is **in the paper's own family** (within thirty
 degrees, and the paper itself has colour) gets its saturation lifted above the
 paper's; the other four are more than a hundred degrees from the paper and do
-not need this. Warning: one grey ground for all four would be the safer-looking
+not need this. One grey ground for all four would be the safer-looking
 choice — "four grey grounds differ from each other by only 1.4–2.4 ΔE and cannot be
 told apart" — but that argument is about **grey**. What separates these is hue, and how far each sits from the paper is set by the same one rule —
 **distance says "this is a block", hue says "which block"** — and once each
 thing does its own job, both hold.
 
-Warning: **Red stays in the heaviest slot**, even though purple outranks it in
+**Red stays in the heaviest slot**, even though purple outranks it in
 the robes. Red is the one colour in this editor with a hard meaning — merge
 conflict markers, footnote numbers, rows whose column count is off all use it —
 and two colours both saying "this is wrong" is the same as neither saying it.
@@ -6668,7 +6668,7 @@ one with no argument asks what it is now. They **do not touch the config file** 
 that is for the afternoon when the room brightens; what you want every day is
 what you write into `[theme] mode`.
 
-Warning: **`:theme` only takes the name of a theme.** `:theme light` does not change
+**`:theme` only takes the name of a theme.** `:theme light` does not change
 light and dark as well, and `:theme ink dark` cannot ask two things in one line — that
 would let the one word "theme" say two things.
 
