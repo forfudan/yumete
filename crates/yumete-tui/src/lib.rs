@@ -4593,6 +4593,7 @@ fn draw(
     // the command row would be drawn over the position readout.
     let footer = status_area;
     panels.extend(draw_command_menu(frame, editor, config, area, footer));
+    panels.extend(draw_search_hint(frame, editor, config, area, footer));
     panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
     panels.extend(draw_reference_menu(frame, editor, config, area, footer));
     // Where the picker put its caret, so the candidate panel can stand under
@@ -6574,6 +6575,55 @@ pub(crate) fn put_text(
 }
 
 /// The `:` command menu — Helix's completion popup, not a wall.
+/// **`/` 與 `?` 那一扇：收的是什麼，大小寫怎麼算**（2026-10-09 作者定）。
+///
+/// 原話：「`/` 放寬了智能大小寫，我們必須說明。」替換是正則、默認嚴格
+/// （[`yumete_core::editor`] 那頭的 `compile_exactly`），搜索放寬了一格——而放寬的
+///那一格不說出來，讀者就無從知道 `/the` 為什麽把 `The` 也找了出來。
+///
+/// Warning: **只有 `/` 和 `?`。** 篩選那一族（`s`／`S`／`&`／`_`）借的是同一扇提示行，
+/// 可它們各自的前綴說的是另一件事（選出、切開、只留、去掉），那幾句不歸這裏。
+fn draw_search_hint(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    status: Rect,
+) -> Option<Rect> {
+    let (prefix, _) = editor.prompt()?;
+    if !matches!(prefix, "/" | "?") {
+        return None;
+    }
+    let ink = crate::theme::Palette::of(config);
+    let about = vec![say!("ui.search-is-a-regex"), say!("ui.search-smart-case")];
+    // 面板的名字不帶提示行那個冒號：`ui.prompt-search` 是**畫在打的字前面**的那一
+    // 截（「搜索:」），而環上那個名字和「命令」並排，不帶標點。
+    let label = editor.prompt_label().unwrap_or_else(|| prefix.to_string());
+    let title = label.trim_end_matches([':', '：', ' ']).to_string();
+    draw_list(
+        frame,
+        ink,
+        config.panel.rounded,
+        area,
+        status.y,
+        List {
+            deep_as_the_page: false,
+            about: &about,
+            wide: true,
+            over_status: true,
+            // 沒有單子——整扇面板就是那兩句話，底下那道橫線不必畫。
+            items: &[],
+            focus: 0,
+            highlight: None,
+            footer: "",
+            columns: false,
+            title: &title,
+            cap: MENU_WIDTH as usize,
+            whole: None,
+        },
+    )
+}
+
 fn draw_command_menu(
     frame: &mut Frame,
     editor: &Editor,

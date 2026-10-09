@@ -181,6 +181,9 @@ fn said() -> BTreeMap<String, String> {
         // 那一句。開口寫足 `zero: Some(` 而不是光一個 `Some(`：後者會把全樹每一個
         // `Some("…")` 都掃進來，而那裏面躺着檔名、擴展名、命令名。
         tags.extend(literals(&text, "zero: Some("));
+        // `Described { word: Some("cmd.substitute.flags") }` —— 命令的說明之外那一行
+        // （2026-10-09）。同上一條，開口寫足 `word: Some(` 而不是光一個 `Some(`。
+        tags.extend(literals(&text, "word: Some("));
         tags.extend(literals(&text, "', "));
         tags.extend(literals(&text, "\", "));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {

@@ -2552,6 +2552,13 @@ en = "solid │"
 find = "欄線 栏线 實線 实线 solid"
 
 [[message]]
+# `:s` 那一扇面板上，命令說明之外那一行：旗標逐個，和大小寫
+key = "cmd.substitute.flags"
+zht = "正則式，分大小寫；g 每一處・n 只數・c 逐處問・i 不分大小寫・f 照字面"
+zhs = "正则式，分大小写；g 每一处・n 只数・c 逐处问・i 不分大小写・f 照字面"
+en = "a regular expression, case-sensitive; g every one on the line, n count only, c ask each, i ignore case, f take it literally"
+
+[[message]]
 # : 命令選單裏 python、json 這些代碼語言的說明（syntaxes 組）——同一句
 key = "cmd.syntaxes.code"
 zht = "代碼：整個文件按這種語言的語法上色，沒有標記"
@@ -11261,6 +11268,20 @@ key = "ui.screenshot-taken"
 zht = "畫面已放進剪貼板"
 zhs = "画面已放进剪贴板"
 en = "the screen is on the clipboard"
+
+[[message]]
+# `/` 與 `?` 那一扇面板的第一行
+key = "ui.search-is-a-regex"
+zht = "收的是正則式：`.` 任一字、`␣*` 若干個、`^$` 行首行尾"
+zhs = "收的是正则式：`.` 任一字、`␣*` 若干个、`^$` 行首行尾"
+en = "a regular expression: `.` any character, `␣*` several, `^$` the line's ends"
+
+[[message]]
+# `/` 與 `?` 那一扇面板的第二行
+key = "ui.search-smart-case"
+zht = "全小寫不分大小寫；帶一個大寫就分"
+zhs = "全小写不分大小写；带一个大写就分"
+en = "all lower case ignores case; one capital makes it matter"
 
 [[message]]
 # `:shot` 把這一幀畫成檔案了
