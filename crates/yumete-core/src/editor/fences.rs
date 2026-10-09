@@ -198,8 +198,30 @@ impl Editor {
         // `hold_the_tree` 連叫都沒叫到，那一格於是永遠不清。
         //
         // 放在前面不貴：同一個檔同一版的時候 `hold_the_tree` 就是三個比較。
-        self.hold_the_tree(language);
+        // **一塊裏有一條過長的行，整塊就不上色**（2026-10-09 作者定）。
+        //
+        // Warning: **按行攔攔不住這筆賬。** `markup_runs` 那頭的閘只丟掉**那一條長行
+        // 自己**的跨度，而旁邊一條短行照樣叫整塊的解析與上色，而那一塊的字節範圍蓋
+        // 着長行——於是一行五萬字的 `.rs` 每幀多花 42 毫秒，20 萬字 165 毫秒，線性，
+        // 每千字約 0.8 毫秒。改一個字 `by_chunk` 全清，所以那一筆每次編輯都要再付。
+        //
+        // Warning: **擺在 `hold_the_tree` 前面，而且不進緩存。** 兩件事各有理由：
+        // ① 整塊不上色的時候那棵樹根本用不着，而整檔解析正是剩下那 80 毫秒；
+        // ② `by_chunk` 不記是哪個檔（見下面 #423 那一段），往裏塞一個空的就等於替
+        //    下一個檔記下「這一塊沒有顏色」。所以這一枝一個字都不記，每次重問——問
+        //    的是 128 次 `len_chars`（`rope.line(n)` 是切片，不造字串），一幀下來幾
+        //    千次 O(log n)，量不出來。
+        //
+        // 代價寫明：那一塊裏的短行（最多 127 條）跟着沒有顏色。另一條路是把長行的
+        // 字節從查詢範圍裏摘出去，那要按行拆範圍，而跨行的構造（跨行字串、塊註釋）
+        // 會跟着判錯——作者選了這一條。
         let chunk = line / CHUNK;
+        let gated = self.long_line.is_some()
+            && (chunk * CHUNK..(chunk + 1) * CHUNK).any(|row| self.line_is_too_long(row));
+        if gated {
+            return Vec::new();
+        }
+        self.hold_the_tree(language);
         if let Some(found) = self.code_cache.borrow().by_chunk.get(&chunk) {
             return found.get(line - chunk * CHUNK).cloned().unwrap_or_default();
         }
