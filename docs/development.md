@@ -20499,6 +20499,36 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.144 Nine decisions, taken awake between the rounds (2026-10-09)
+
+The review rounds left twenty questions. He came back for a few minutes and answered nine of
+them; what follows is what he chose and why, so none of it has to be asked twice.
+
+- **`:s` is case-sensitive; `/` stays smart.** 原話：「我覺得替換不應該智能大小寫的，因為本質他
+  是個正則，既然是正則就應該默認嚴格。`/` 放寬了智能大小寫，我們必須說明。」 Measured first:
+  helix's `/` *is* smart-case (`search.smart-case`, factory `true`, documented as 「case-insensitive
+  unless pattern contains upper case characters」 — word for word this editor's rule) and **helix
+  has no `:s` at all**; vim's `/` and `:s` are both case-sensitive. So `/` follows helix and `:s`
+  follows vim, and `compile_exactly` is the door the substitute goes through.
+- **And the widening has to be said out loud**, which is two new panels he asked for in the same
+  breath: `/` and `?` now open a hint panel of their own (「收的是正則式…」 / 「全小寫不分大小寫；
+  帶一個大寫就分」), and the `:s` panel spells out every flag under his existing line — kept whole,
+  because it already carries the ranges and the separator rule.
+- **The long-line gate counts characters, so the copy says 字數** (three places, and the parameter
+  is `<幾字>`). Measuring a line's width in columns is the very cost the gate exists to avoid.
+- **A chunk holding a line past the gate is not coloured at all.** Per-line gating could not reach
+  the bill: a short neighbour still asked for the whole 128-line chunk's parse and paint, whose
+  byte range covers the long line — 42 ms a frame at 50 000 characters, 165 ms at 200 000. The
+  check sits **before** `hold_the_tree` and caches nothing (`by_chunk` does not record which file
+  it holds, so an empty entry would be a lie told to the next file). Cost he accepted: the short
+  lines in that one chunk lose their colour too.
+- **The settings list scrolls.** Thirteen rows in a twelve-row window left six of them changeable
+  only blind — no row lit, space toggling something invisible. The offset is derived from
+  `panel.row` rather than remembered, so switching groups or resizing cannot leave a stale one.
+- **`:word-show` and `:view-numbers-fill` report when asked bare**, like every other switch.
+- **The table hints name the space key**: 「␣t q」, the spelling the hint row already uses.
+- 連結 → 鏈接, and both messages I had to write to ship a fix stand as written.
+
 ## 5.139 The line break was in the haystack (2026-10-09, review round 3)
 
 Search and replace handed the regex each line **including its `\n`** (`split_inclusive('\n')`),
