@@ -9681,6 +9681,11 @@ fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
     let rows: Vec<(String, String)> = vec![
         (":tutor".into(), say!("intro.learn")),
         (":help".into(), say!("intro.help")),
+        // **語言與鍵位排在 `:help` 底下**（2026-10-09 提的）。它們是新來的人最先
+        // 要改的兩件，而這一屏正是他看見的第一樣東西；兩者都藏在命令裏，不寫出來
+        // 就只有讀過手冊的人知道。
+        (":lang".into(), say!("intro.lang")),
+        (":keymap".into(), say!("intro.keymap")),
         (say!("intro.space-f-key"), say!("intro.open-a-file")),
         (say!("intro.space-question-key"), say!("intro.all-commands")),
         (":yuhao".into(), say!("intro.yuhao")),
