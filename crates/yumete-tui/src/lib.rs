@@ -2514,6 +2514,12 @@ pub fn set_theme(
             Mood::System => crate::theme::terminal_answer().unwrap_or(crate::theme::dark()),
         });
     }
+    // Warning: **說出來之前先把明暗定下來**（2026-10-09 審出來的）。這一句問
+    // `dark()`，而那一格在還沒 settle 過的時候交的是預設值——離屏那條路
+    // （`--shot`）正是這樣：`:theme bw` 之後狀態欄寫「（淺色）」，而 `frame_to` 隨後
+    // settle 出來的是深色，於是**同一幀裏話和畫對不上**。`settle` 對「有人明說過
+    // 明暗」是空操作（`CHOSEN_MOOD`），所以上面那一段剛選過的不會被它蓋掉。
+    crate::theme::settle(config, crate::theme::terminal_answer());
     let mood = match crate::theme::dark() {
         true => say!("cmd.moods.dark"),
         false => say!("cmd.moods.light"),
