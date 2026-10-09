@@ -8,6 +8,16 @@
 //! Nobody needs a better algorithm to find `ch63` among a hundred chapters, and
 //! a scoring function nobody can predict is worse than one that is merely
 //! adequate.
+//!
+//! Warning: **這張名單是長出來的**（2026-10-09 作者定：「流式化，和 helix 一樣不設上
+//! 限」）。走查跑在旁邊那條線程上，每一幀收一批（`Editor::collect_picker_items`），
+//! 所以 [`Picker::total`] 在走完之前一直在漲。腳注那個 `+` 與那個轉圈說的就是這
+//! 件事，問的是 `Editor::still_filling_the_picker`。
+//!
+//! Warning: **從前這裏有過兩種「半截」，兩種都沒了**：`PICKER_LIMIT` 四千條（砍的不
+//! 是「顯示多少條」而是「能搜到多少條」——名單一次建好再打分，裝不進的那幾千條打出
+//! 全名也找不着），和走查自己的 `WALK_CEILING` 兩萬條。前者 2026-10-09 去掉，後者
+//! 同一天隨流式化去掉（那一趟撥 `Sieve::uncapped`）。
 
 /// What a picker offers, and what choosing it does.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,18 +95,6 @@ pub struct Picker {
     /// 裏現成的東西，篩子對它們沒有意思，`A-h` 在那裏什麼都不做，提示行上也就不
     /// 寫它——沒綁的鍵不許寫進提示。只有 `Editor::open_file_picker_in` 那一支填得出它。
     pub sieve: Option<crate::editor::Sieve>,
-    /// **這張名單是半截的嗎** —— 走查自己停下來了（2026-10-09 作者定）。
-    ///
-    /// `Walked.cut`：走查撞上 `WALK_CEILING` 或者 `WALK_DEADLINE` 就停，而
-    /// `Walked` 自己的註釋寫着「呼叫方有義務說出來」。腳注那個數目因此多一個
-    /// `+`，和搜索那一頭的 `N+結果` 同一個寫法——分母本來就是篩過的那些，加一個
-    /// `+` 說的正是「沒走到的那些裏可能還有」。
-    ///
-    /// Warning: 從前還有第二種半截：`PICKER_LIMIT` 四千條裝滿了。那一道閘 2026-10-09
-    /// 去掉了——它砍的不是「顯示多少條」而是「**能搜到多少條**」（名單一次建好再
-    /// 打分，裝不進的那幾千條打出名字也找不着），而真正的上限本來就是走查自己的
-    /// `WALK_CEILING`。
-    pub cut: bool,
     /// **What to put near the top before anything is typed**, one number per
     /// item (2026-09-18).
     ///
@@ -108,6 +106,13 @@ pub struct Picker {
     /// match's own score, so typing still decides what matches best, and this
     /// decides which of two equally good matches is offered first.
     bonus: Vec<i64>,
+    /// **散文檔排在其餘的前面**，一個 `bool` 一條（2026-10-09）。
+    ///
+    /// Warning: **從前這件事是靠次序做的**：收名單那一支先收散文檔、再把其餘的接在
+    /// 後面，於是「散文檔在前」就是「下標較小」。走查搬到旁邊流着進來之後次序由
+    /// 磁盤決定，那個辦法沒了——所以它成了一格明寫出來的平手條件，排在分數後面、
+    /// 收到的次序前面。答案和從前逐條相同。
+    prose: Vec<bool>,
     /// **收不收「跳着配」和「亂序」**。缺省**收**，`空格 f` 那一扇一格沒變。
     ///
     /// Warning: **只有 `ye --files` 把它關掉**（2026-10-04 定）。那一邊把全部印出來，
@@ -146,8 +151,8 @@ impl Picker {
             caret: 0,
             root: None,
             sieve: None,
-            cut: false,
             bonus: vec![0; count],
+            prose: vec![false; count],
             loose: true,
             // 畫之前先按過鍵的話（`--keys`、測試），一頁就是這個數。
             rows: 10,
@@ -170,6 +175,21 @@ impl Picker {
         self.bonus.resize(self.items.len(), 0);
     }
 
+    /// **再收一批進來** —— 走查在旁邊跑，名單是長出來的（2026-10-09）。
+    ///
+    /// 每一條帶着它自己那兩格：加分（最近開過的排前面）和「是不是散文檔」。
+    ///
+    /// Warning: **高亮停在原處，不跟着名單跳。** 新來的一條可能排得比它高，於是站着不
+    /// 動的那一行底下換了人——helix 流式化之後也是這樣。按過 `j` 的人至少知道自己
+    /// 按過；一邊收一邊把高亮拖回第一行纔是真的按不住。
+    pub fn take_more(&mut self, more: Vec<(Item, i64, bool)>) {
+        for (item, bonus, prose) in more {
+            self.items.push(item);
+            self.bonus.push(bonus);
+            self.prose.push(prose);
+        }
+    }
+
     /// What has been typed so far.
     pub fn query(&self) -> &str {
         &self.query
@@ -186,27 +206,30 @@ impl Picker {
     /// paths, and being always right about what is on screen is worth more here
     /// than saving a scan.
     pub fn matches(&self) -> Vec<&Item> {
-        let mut scored: Vec<(i64, usize, &Item)> = match self.query.is_empty() {
+        // 平手的第二條：散文檔在前（`false` 排前面，所以存的是「不是散文」）。
+        let rest = |i: usize| !self.prose.get(i).copied().unwrap_or(false);
+        let mut scored: Vec<(i64, bool, usize, &Item)> = match self.query.is_empty() {
             true => self
                 .items
                 .iter()
                 .enumerate()
-                .map(|(i, item)| (self.bonus.get(i).copied().unwrap_or(0), i, item))
+                .map(|(i, item)| (self.bonus.get(i).copied().unwrap_or(0), rest(i), i, item))
                 .collect(),
             false => self
                 .items
                 .iter()
                 .enumerate()
                 .filter_map(|(i, item)| {
-                    matched(item.label(), &self.query, self.loose)
-                        .map(|(s, _)| (s + self.bonus.get(i).copied().unwrap_or(0), i, item))
+                    matched(item.label(), &self.query, self.loose).map(|(s, _)| {
+                        (s + self.bonus.get(i).copied().unwrap_or(0), rest(i), i, item)
+                    })
                 })
                 .collect(),
         };
-        // Best score first; ties keep the order they were gathered in, which for
-        // files is alphabetical and so is chapter order.
-        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-        scored.into_iter().map(|(_, _, item)| item).collect()
+        // Best score first; then prose before the rest; then the order they were
+        // gathered in, which for files is alphabetical and so is chapter order.
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        scored.into_iter().map(|(_, _, _, item)| item).collect()
     }
 
     /// **Which characters of `label` the query is standing on**, so the front

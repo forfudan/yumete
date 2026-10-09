@@ -1615,63 +1615,136 @@ impl Editor {
         self.open_file_picker_with(&query, root, sieve);
     }
 
+    /// 一批送幾條。送一條一則消息，二十三萬個檔就是二十三萬則。
+    const FILL_BATCH: usize = 512;
+
+    /// **開一扇空的挑選器，把走查交給旁邊那條線程**（2026-10-09 作者定：「流式化，
+    /// 和 helix 一樣不設上限」，見 [`crate::editor::Filling`]）。
+    ///
+    /// Warning: **`uncapped` 在這裏是撥上的。** 走查那兩道閘（兩萬條封頂、五秒硬停）
+    /// 護的是畫面那條線程，而這一趟已經不在它上面了——同搜索面板 2026-10-06 搬走
+    /// 的那一趟（§5.93）。停得下它的是 `Filling::stop`：面板一關就撥。
+    ///
+    /// Warning: **「這裏沒有檔」要等走完纔說得出來。** 從前名單一次建好，空的就不開面
+    /// 板；現在開面板的那一刻還不知道。所以面板照開（helix 也是開一扇空的），那
+    /// 句話挪到收完最後一批的時候說（[`Self::collect_picker_items`]）。
     fn open_file_picker_in(&mut self, root: PathBuf, sieve: crate::editor::Sieve) {
-        let mut prose = Vec::new();
-        let mut rest = Vec::new();
-        // **走查看得見的就搜得到，而半截的名單要說出來**（2026-10-09 作者定）。
-        //
-        // Warning: **`PICKER_LIMIT` 去掉了。** 那一道閘砍的不是「顯示多少條」，是
-        // 「**能搜到多少條**」——名單一次建好再模糊打分，裝不進的那幾千條打出名字也
-        // 找不着（今晚那個 golden source CSV 搜不到就是這一族）。真正的上限本來就是
-        // 走查自己的 `WALK_CEILING`（兩萬）。量過最壞情形（整個倉含 `target/`，兩萬
-        // 條）：開一次 220 毫秒，之後每打一個字 40 毫秒；平常的倉根 176 條，量不出來。
-        //
-        // helix 連這個上限都沒有：它把走查的每一條路徑**流式**喂給 `nucleo`，邊走邊
-        // 篩。那一條另開一輪（要改挑選器的整個模型），所以今天只去閘。
-        //
-        // 半截那一半照搜索的寫法：`Walked.cut` 記在挑選器身上，腳注那個數目多一個
-        // `+`。`Walked` 自己的註釋要的就是這一句（「呼叫方有義務說出來」）。
-        let walked = crate::editor::walk_with(&root, &sieve, &mut |path| {
-            let shown = path.strip_prefix(&root).unwrap_or(path).display().to_string();
-            let is_prose = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| PROSE.contains(&&*e.to_lowercase()));
-            match is_prose {
-                true => prose.push((path.to_path_buf(), shown)),
-                false => rest.push((path.to_path_buf(), shown)),
+        self.stop_filling_the_picker();
+        let mut picker = crate::picker::Picker::new(&say!("picker.files"), Vec::new());
+        // 挑選器的根存在挑選器身上，不借 `listing_root` 那個槽——見 `Picker::root`。
+        picker.root = Some(root.clone());
+        // 篩子也存在它身上：`A-h` 轉一格要知道此刻跳過的是哪些，提示行要寫出來。
+        picker.sieve = Some(sieve.clone());
+        self.picker = Some(picker);
+        self.mode = Mode::Picker;
+
+        let sieve = crate::editor::Sieve { uncapped: true, ..sieve };
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (say, heard) = std::sync::mpsc::channel();
+        let flag = std::sync::Arc::clone(&stop);
+        std::thread::spawn({
+            let stop = std::sync::Arc::clone(&stop);
+            move || {
+                let mut batch: Vec<(PathBuf, String)> = Vec::with_capacity(Self::FILL_BATCH);
+                crate::editor::walk_until_told(&root, &sieve, &stop, &mut |path| {
+                    let shown =
+                        path.strip_prefix(&root).unwrap_or(path).display().to_string();
+                    batch.push((path.to_path_buf(), shown));
+                    // 收的那一頭走了（面板關了），自己叫停。
+                    if batch.len() >= Self::FILL_BATCH
+                        && say.send(std::mem::take(&mut batch)).is_err()
+                    {
+                        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                });
+                // 最後那一截，空的也送——送完 `say` 一落地，收的那一頭就知道走完了。
+                let _ = say.send(batch);
             }
         });
-        prose.append(&mut rest);
-        if prose.is_empty() {
-            self.status = say!("picker.no-files-here");
-            return;
+        self.filling = Some(crate::editor::Filling {
+            heard,
+            stop,
+            since: std::time::Instant::now(),
+        });
+    }
+
+    /// **叫停正在長的那張名單。** 面板一關、`A-h` 轉一格再走一趟，都撥它。
+    pub(super) fn stop_filling_the_picker(&mut self) {
+        // 撥那一格是 `Filling` 落地時自己做的事，見它的 `Drop`。
+        self.filling = None;
+    }
+
+    /// 走查還在跑嗎 —— 轉圈和「等到底」那兩支問它。
+    pub fn still_filling_the_picker(&self) -> bool {
+        self.filling.is_some()
+    }
+
+    /// 這一趟什麼時候開跑的，`None` ＝ 沒在跑（轉圈那一支照它算第幾格）。
+    pub fn filling_since(&self) -> Option<std::time::Instant> {
+        self.filling.as_ref().map(|one| one.since)
+    }
+
+    /// 主循環閒着的時候隔多久醒一次來收（同 `searching_due_in`）。
+    pub fn filling_due_in(&self) -> Option<std::time::Duration> {
+        self.filling.as_ref().map(|_| std::time::Duration::from_millis(40))
+    }
+
+    /// **收一批回來**，每一幀叫一次。回「名單變了沒有」。
+    pub fn collect_picker_items(&mut self) -> bool {
+        let Some(one) = self.filling.as_ref() else { return false };
+        let mut got: Vec<(PathBuf, String)> = Vec::new();
+        let mut done = false;
+        // 一次收一批就走，別把一幀的時間全花在這裏。
+        for _ in 0..64 {
+            match one.heard.try_recv() {
+                Ok(batch) => got.extend(batch),
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    done = true;
+                    break;
+                }
+            }
+        }
+        if done {
+            self.filling = None;
         }
         // Newest first, so the head of `visited` is worth the most. The step is
         // small beside a match's own score (a run of two adjacent letters is
         // worth 800), which is what keeps this a tie-breaker.
-        let bonus = prose
-            .iter()
-            .map(|(full, _)| {
-                self.visited()
+        let more: Vec<(crate::picker::Item, i64, bool)> = got
+            .into_iter()
+            .map(|(full, shown)| {
+                let bonus = self
+                    .visited()
                     .iter()
-                    .position(|seen| seen == full)
-                    .map_or(0, |n| (VISITED_BONUS - n as i64 * 20).max(20))
+                    .position(|seen| *seen == full)
+                    .map_or(0, |n| (VISITED_BONUS - n as i64 * 20).max(20));
+                let prose = full
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| PROSE.contains(&&*e.to_lowercase()));
+                (crate::picker::Item::File(shown), bonus, prose)
             })
             .collect();
-        let items = prose
-            .into_iter()
-            .map(|(_, shown)| crate::picker::Item::File(shown))
-            .collect();
-        let mut picker = crate::picker::Picker::new(&say!("picker.files"), items);
-        // 挑選器的根存在挑選器身上，不借 `listing_root` 那個槽——見 `Picker::root`。
-        picker.root = Some(root);
-        // 篩子也存在它身上：`A-h` 轉一格要知道此刻跳過的是哪些，提示行要寫出來。
-        picker.sieve = Some(sieve);
-        picker.cut = walked.cut;
-        picker.prefer(bonus);
-        self.picker = Some(picker);
-        self.mode = Mode::Picker;
+        let moved = !more.is_empty();
+        if let Some(picker) = self.picker.as_mut() {
+            picker.take_more(more);
+        }
+        // 走完了而一條都沒有——那句話從前在開面板之前說，現在只有這時候說得出來。
+        if done && self.picker.as_ref().is_some_and(|p| p.total() == 0) {
+            self.status = say!("picker.no-files-here");
+        }
+        moved || done
+    }
+
+    /// 等背景那一趟走完，邊等邊收。給沒有主循環的呼叫方用（同
+    /// `wait_for_the_search`）。
+    pub fn wait_for_the_picker(&mut self) {
+        while self.still_filling_the_picker() {
+            if !self.collect_picker_items() {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
     }
 
     /// Open a picker over the buffers already open (`Space b`).
@@ -1756,6 +1829,7 @@ impl Editor {
 
     /// Shut the picker and go back to Normal.
     fn close_picker(&mut self) {
+        self.stop_filling_the_picker();
         self.picker = None;
         self.mode = Mode::Normal;
     }

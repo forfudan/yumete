@@ -1233,6 +1233,45 @@ fn take_the_colours(editor: &mut Editor, config: &yumete_config::Config) {
 /// Warning: **`:settings` 之後的鍵歸那扇面板**，和主循環一樣。不接這一下，
 /// `--shot --keys=':settings\nljj '` 拍到的永遠是面板剛開的樣子——而這個倉審前端
 /// 就是靠拍照，一扇按不動的面板等於一扇沒法審的面板。回來的是那扇面板（要畫它）。
+/// **主循環在兩個鍵之間做的事**，這裏一件都不許少（#406，2026-10-02）。
+///
+/// `--keys` 一口氣餵完整串鍵，而真的循環在每一下之間畫一幀、收一批、把欠着的那幾
+/// 件慢事做掉。少做一件，拍到的面板和人按出來的面板就不是同一扇——而這個倉審前端
+/// 靠的就是拍照。
+///
+/// Warning: **每一個鍵之前叫一次，整串鍵之後再叫一次。** 2026-10-09 撞上的正是漏掉的
+/// 那第二次：`--keys='\{space}f'` 的最後一下開了挑選器，而它的走查跑在旁邊，於是
+/// 後面沒有鍵替它收——照片上 `0/0`，一條都沒有。同一個洞搜索那一族也有，只是它總
+/// 有鍵跟在後面，所以一直沒露出來。
+fn catch_up_with_the_loop(editor: &mut Editor, config: &yumete_config::Config) {
+    if editor.take_owed_search() {
+        editor.run_owed_search();
+    }
+    // **主題那兩格也是一鍵一收**（2026-10-09 審出來的）。
+    //
+    // 它們是**一格**，不是一個隊列：`--keys=':theme bw\n:theme-mode light\n'` 從前
+    // 整串鍵跑完纔收一次，於是第一句被第二句頂掉——畫出來是出廠主題的淺色，而
+    // `:theme bw` 一聲不吭地沒了。
+    take_the_colours(editor, config);
+    // **而且要等它跑完**（§5.93，2026-10-06）。走磁碟那一趟現在跑在旁邊，主循環每一
+    // 幀收一批；這裏沒有循環可等，所以就地等到底。按完 `Enter` 名單是空的，後面每
+    // 一個 `j` 都走在空名單上，而拍出來的照片卻是全的（拍的時候早收完了）。
+    while editor.still_searching() {
+        if !editor.collect_search_results() {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+    // 挑選器的名單同理（2026-10-09）：它也搬到旁邊去了。
+    editor.wait_for_the_picker();
+    // **全部替換也是欠着做的**（2026-10-03）：主循環一批八十毫秒、中間畫一幀報進
+    // 度，而這裏沒有循環可畫——一口氣做完就是。不補這一下，`--shot` 拍到的是「按
+    // 了 `y`，什麼都沒發生」。
+    while editor.replacing_a_batch() {
+        editor.run_a_batch_of_replacing();
+    }
+    editor.refresh_the_edited_file();
+}
+
 fn press(
     editor: &mut Editor,
     keys: &str,
@@ -1257,35 +1296,7 @@ fn press(
         // 和底下 `gw` 那一處同一族（#406），也和這支函數開頭說的 `:settings`
         // 同一族：**主循環在兩個鍵之間做的事，這裏一件都不許少**，不然拍到的
         // 面板和人按出來的面板不是同一扇。只是這一件便宜，不必真畫一幀。
-        if editor.take_owed_search() {
-            editor.run_owed_search();
-        }
-        // **主題那兩格也是一鍵一收**（2026-10-09 審出來的）。
-        //
-        // 它們是**一格**，不是一個隊列：`--keys=':theme bw\n:theme-mode light\n'` 從前
-        // 整串鍵跑完纔收一次，於是第一句被第二句頂掉——畫出來是出廠主題的淺色，而
-        // `:theme bw` 一聲不吭地沒了。審前端靠的就是這支工具，它少做一件事，報告就
-        // 錯一條。
-        take_the_colours(editor, config);
-        // **而且要等它跑完**（§5.93，2026-10-06）。走磁碟那一趟現在跑在旁邊，主循環
-        // 每一幀收一批；這裏沒有循環可等，所以就地等到底。
-        //
-        // Warning: **這是同一族的第二次**——上面那一段說的是「主循環在兩個鍵之間做
-        // 的事，這裏一件都不許少」，而搜索一搬到線程上就又少了一件：按完
-        // `Enter` 名單是空的，後面每一個 `j` 都走在空名單上。拍出來的照片卻是
-        // 全的（拍的時候早收完了），於是看起來像「名單走不動」。
-        while editor.still_searching() {
-            if !editor.collect_search_results() {
-                std::thread::sleep(std::time::Duration::from_millis(2));
-            }
-        }
-        // **全部替換也是欠着做的**（2026-10-03）：主循環一批八十毫秒、中間畫一幀
-        // 報進度，而這裏沒有循環可畫——一口氣做完就是。不補這一下，`--shot` 拍到
-        // 的是「按了 `y`，什麼都沒發生」。
-        while editor.replacing_a_batch() {
-            editor.run_a_batch_of_replacing();
-        }
-        editor.refresh_the_edited_file();
+        catch_up_with_the_loop(editor, config);
         let key = match c {
             '\\' => match chars.next() {
                 Some('e') => Key::Esc,
@@ -1452,11 +1463,10 @@ fn press(
             }
         }
     }
-    // **最後一個鍵欠下的那一批也要做完**：迴圈頂上那一下只補得了鍵**之間**的，
-    // 而 `R y` 正是按在最後。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
-    while editor.replacing_a_batch() {
-        editor.run_a_batch_of_replacing();
-    }
+    // **最後一個鍵欠下的那幾件也要做完**：迴圈頂上那一下只補得了鍵**之間**的，
+    // 而 `R y` 正是按在最後，`\{space}f` 也是（2026-10-09 補齊的那一半，見
+    // [`catch_up_with_the_loop`]）。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
+    catch_up_with_the_loop(editor, config);
     settings.panel
 }
 

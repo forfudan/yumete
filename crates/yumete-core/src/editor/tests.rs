@@ -19287,6 +19287,8 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('f'));
     assert!(ed.picker().is_some(), "空格 f 開得了挑選器");
+    // 走查跑在旁邊，而這裏沒有主循環替它收（同 `wait_for_the_search`）。
+    ed.wait_for_the_picker();
 
     // The preview is the file the highlight is on — the open buffer where
     // there is one, so unsaved writing shows.
@@ -19348,6 +19350,7 @@ fn alt_h_cycles_what_the_picker_skips_and_keeps_the_query() {
     let mut ed = Editor::new();
     ed.set_root(&dir);
     type_keys(&mut ed, " f");
+    ed.wait_for_the_picker();
 
     // 出廠那一格：隱藏和忽略都不搜，所以 `.隱/` 底下那一份不在單子上。
     let skipping = |ed: &Editor| {
@@ -19355,8 +19358,11 @@ fn alt_h_cycles_what_the_picker_skips_and_keeps_the_query() {
         (sieve.hidden, sieve.ignored)
     };
     assert_eq!(skipping(&ed), (false, false), "出廠是「不搜隱藏＋忽略」");
-    let listed = |ed: &Editor| ed.picker().expect("開着").total();
-    let plain = listed(&ed);
+    let listed = |ed: &mut Editor| {
+        ed.wait_for_the_picker();
+        ed.picker().expect("開着").total()
+    };
+    let plain = listed(&mut ed);
 
     // 打幾個字，往後每一格都要原封不動留着。
     ed.on_key(Key::Char('稿'));
@@ -19370,7 +19376,7 @@ fn alt_h_cycles_what_the_picker_skips_and_keeps_the_query() {
     // 第三格：隱藏的搜、忽略的不搜——`.隱/乙稿.md` 這下進來了。
     ed.on_key(Key::Alt('h'));
     assert_eq!(skipping(&ed), (true, false));
-    assert!(listed(&ed) > plain, "隱藏那一檔真的管用：{} > {plain}", listed(&ed));
+    assert!(listed(&mut ed) > plain, "隱藏那一檔真的管用：{} > {plain}", listed(&mut ed));
     assert_eq!(ed.picker().map(|p| p.query()), Some("稿"));
 
     // 第四格：全部搜索。
@@ -19380,7 +19386,7 @@ fn alt_h_cycles_what_the_picker_skips_and_keeps_the_query() {
     // 再一下繞回出廠那一格。
     ed.on_key(Key::Alt('h'));
     assert_eq!(skipping(&ed), (false, false), "四態繞回來");
-    assert_eq!(listed(&ed), plain, "單子也回到原樣");
+    assert_eq!(listed(&mut ed), plain, "單子也回到原樣");
     assert_eq!(ed.picker().map(|p| p.query()), Some("稿"));
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -24355,4 +24361,69 @@ fn a_named_register_keeps_a_piece_for_every_cursor() {
     press(&mut ed, "\"ad");
     press(&mut ed, ";\"aP");
     assert_eq!(ed.current_buffer().rope().to_string(), was, "逐字還原");
+}
+
+/// **挑選器開門那一刻名單是空的，走查在旁邊跑**（2026-10-09 作者定：「流式化，和
+/// helix 一樣不設上限」）。
+///
+/// 從前走查跑在按鍵那一下上，封頂兩萬個檔、硬停五秒：大目錄裏開一次 `空格 f` 凍
+/// 最多五秒，而第兩萬個之後的檔打出全名也搜不到。
+///
+/// 第二半盯的是**散文檔排在前面**那一條。從前它是靠次序做的（先收散文檔、再把其
+/// 餘接在後面），流式之後次序由磁盤決定，所以改成了一格明寫的平手條件。三個檔按
+/// 路徑排是 丙.md／乙.rs／甲.md，而名單上要是 丙.md／甲.md／乙.rs。
+#[test]
+fn the_picker_opens_before_the_walk_has_found_anything() {
+    let dir = std::env::temp_dir().join(format!("yumete-picker-stream-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for name in ["甲.md", "乙.rs", "丙.md"] {
+        std::fs::write(dir.join(name), "一行\n").unwrap();
+    }
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    type_keys(&mut ed, " f");
+    assert!(ed.picker().is_some(), "面板立刻就開");
+    // 收是主循環（或者 `wait_for_the_picker`）做的事，而這裏誰都還沒收過。
+    assert_eq!(ed.picker().unwrap().total(), 0, "開門那一刻名單是空的");
+    assert!(ed.still_filling_the_picker(), "走查在旁邊跑");
+
+    ed.wait_for_the_picker();
+    assert!(!ed.still_filling_the_picker(), "走完就撤");
+    let names: Vec<&str> =
+        ed.picker().unwrap().matches().iter().map(|one| one.label()).collect();
+    assert_eq!(names, ["丙.md", "甲.md", "乙.rs"], "散文檔在前，各按走查次序");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **說停就停，不是走完纔停**（2026-10-09）。
+///
+/// 挑選器那一趟撥的是 `Sieve::uncapped`（名單沒有上限），所以停得下它的只有這一
+/// 格。沒有它，一個 `/` 上開一次挑選器會留下一條遍歷整塊磁盤的線程。
+#[test]
+fn a_walk_told_to_stop_stops_at_the_next_entry() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let dir = std::env::temp_dir().join(format!("yumete-walk-stop-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for n in 0..20 {
+        std::fs::write(dir.join(format!("{n:02}.md")), "一行\n").unwrap();
+    }
+    let sieve = crate::editor::Sieve::default();
+
+    // 第一個檔上就撥，於是只走得到那一個。
+    let stop = AtomicBool::new(false);
+    let mut seen = 0usize;
+    crate::editor::walk_until_told(&dir, &sieve, &stop, &mut |_| {
+        seen += 1;
+        stop.store(true, Ordering::Relaxed);
+    });
+    assert_eq!(seen, 1, "二十個檔，走了一個就停");
+
+    // 開跑之前就撥上去的話，一個都不走。
+    let stop = AtomicBool::new(true);
+    let mut none = 0usize;
+    crate::editor::walk_until_told(&dir, &sieve, &stop, &mut |_| none += 1);
+    assert_eq!(none, 0, "一開頭就停");
+    std::fs::remove_dir_all(&dir).ok();
 }

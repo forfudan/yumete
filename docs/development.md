@@ -20502,6 +20502,29 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.149 The picker streams, so it has no ceiling and nothing to freeze (2026-10-09)
+
+Chosen: 「流式化，和 helix 一樣不設上限」. The walk ran on the key thread, so it needed two
+gates — 20 000 files and a hard 5 s — and both were visible: opening `空格 f` in a big tree
+froze for up to five seconds with no frame saying why, and a file past the 20 000th **could not
+be found by its full name**, because the list was built once and only then scored. It now runs
+beside the key thread with `Sieve::uncapped`, batched 512 at a time, drained a batch a frame
+(`collect_picker_items`, next to `collect_search_results`). Measured on a 25 000-file tree: the
+footnote says **1/25000**, and the whole headless run is 0.48 s.
+
+`Filling::stop` is what ends it — the walk looks at that flag on every entry, and `Drop` sets it,
+so closing the panel or dropping the editor stops the thread at once rather than at the next
+batch. Three things the old shape did by accident had to be written down: 「prose first」 was the
+order two vectors were appended in and is now a tie-breaker in `matches` (same answer, file by
+file); 「no files here」 can only be said once the walk is done; and the footnote's `+`, freed by
+the ceiling going away, now means 「this number will grow」, beside the spinner's 「working」
+(both, he said — 「两个说的不完全是一件事」).
+
+One hole this opened, found by shooting it: `press` ran the between-keys catch-up *before* each
+key, so the **last** key's owed work was never done — `--keys='\{space}f'` photographed `0/0`.
+It is one `catch_up_with_the_loop` now, called in both places. Search had the same hole and had
+hidden it by always having another key behind it.
+
 ## 5.148 Four things a key forgets when it runs once per selection (2026-10-09)
 
 `y` did not run once per selection: `self.span()` asks the primary, so three cursors copied one
