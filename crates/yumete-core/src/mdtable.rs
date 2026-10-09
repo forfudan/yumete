@@ -975,6 +975,14 @@ pub const MAX_COLUMN: usize = 32;
 /// carries on, and it is one cell in every terminal there is.
 pub const FOLD_MARK: &str = ">";
 
+/// The mark that stands where a cell's **head** has been scrolled past.
+///
+/// The mirror of [`FOLD_MARK`], and ASCII for the same reason. It appears only
+/// in the cell the caret is in, and only once the caret has been carried past
+/// the column's width: the cell then scrolls inside itself so that what is
+/// being typed stays on the page, and this says the cell did not begin here.
+pub const HEAD_MARK: &str = "<";
+
 /// The tail of each cell of `line` that is drawn wider than `cap`.
 ///
 /// Spans of the **file's own characters**, to be hidden — the same currency

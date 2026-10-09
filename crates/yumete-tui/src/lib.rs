@@ -13429,6 +13429,63 @@ fn squeezed(text: &str) -> String {
         config
     }
 
+    /// #726, reported 2026-10-09: 「The cursor location in the table is
+    /// incorrect (insert mode)」.
+    ///
+    /// A cell longer than the column it sits in was always drawn from its
+    /// first character, so the tail — which is where the typing is — fell off
+    /// the right edge and the caret stopped at the column's last cell and
+    /// stayed there: every further keystroke changed the file and nothing on
+    /// the page, neither the characters nor the cursor. The cell scrolls
+    /// inside itself now, the way the query boxes already did.
+    #[test]
+    fn a_cell_scrolls_inside_itself_so_the_caret_cannot_be_typed_off_the_page() {
+        let config = Config::default();
+        let _ = ink(&config);
+        let mut editor = editor_with("| 名 | 說明 |\n| --- | --- |\n| 甲 | 第一條 |\n");
+        let mut seats = Seats::default();
+        let (w, h) = (36u16, 8u16);
+        // The caret's row as drawn, and the character the cursor stands on.
+        let look = |editor: &Editor, seats: &mut Seats| -> (String, String) {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| draw(frame, editor, &config, no_ime(), seats, None))
+                .unwrap();
+            let at = terminal.get_cursor_position().unwrap();
+            let row: String = (0..w)
+                .map(|x| terminal.backend().buffer()[(x, at.y)].symbol())
+                .collect();
+            (row, terminal.backend().buffer()[(at.x, at.y)].symbol().to_string())
+        };
+        // 全窗, into the second column, and type far past its width.
+        for key in [' ', 't', 't', 'l', 'i'] {
+            editor.on_key(Key::Char(key));
+        }
+        for key in "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸".chars() {
+            editor.on_key(Key::Char(key));
+            let (row, under) = look(&editor, &mut seats);
+            // **What was just typed is on the page.** This is the whole of the
+            // complaint: it used to stop appearing at the fifteenth character.
+            assert!(
+                row.contains(key),
+                "typing {key} left nothing on the page:\n{row}"
+            );
+            // **And the cursor is not standing on a mark.** A cell is reserved
+            // at each end for them, so the caret has its own.
+            assert!(
+                under != yumete_core::mdtable::FOLD_MARK
+                    && under != yumete_core::mdtable::HEAD_MARK,
+                "the caret is sitting on the {under} that says the cell is cut:\n{row}"
+            );
+        }
+        // Once it has scrolled, the cell says so at the front.
+        let (row, _) = look(&editor, &mut seats);
+        assert!(
+            row.contains(yumete_core::mdtable::HEAD_MARK),
+            "a scrolled cell says its head is behind it:\n{row}"
+        );
+    }
+
     /// Type `text` into a fresh editor and return to Normal mode.
     fn editor_with(text: &str) -> Editor {
         let mut editor = Editor::new();
