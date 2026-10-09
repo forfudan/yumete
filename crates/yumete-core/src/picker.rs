@@ -85,6 +85,18 @@ pub struct Picker {
     /// 裏現成的東西，篩子對它們沒有意思，`A-h` 在那裏什麼都不做，提示行上也就不
     /// 寫它——沒綁的鍵不許寫進提示。只有 `Editor::open_file_picker_in` 那一支填得出它。
     pub sieve: Option<crate::editor::Sieve>,
+    /// **這張名單是半截的嗎** —— 走查自己停下來了（2026-10-09 作者定）。
+    ///
+    /// `Walked.cut`：走查撞上 `WALK_CEILING` 或者 `WALK_DEADLINE` 就停，而
+    /// `Walked` 自己的註釋寫着「呼叫方有義務說出來」。腳注那個數目因此多一個
+    /// `+`，和搜索那一頭的 `N+結果` 同一個寫法——分母本來就是篩過的那些，加一個
+    /// `+` 說的正是「沒走到的那些裏可能還有」。
+    ///
+    /// Warning: 從前還有第二種半截：`PICKER_LIMIT` 四千條裝滿了。那一道閘 2026-10-09
+    /// 去掉了——它砍的不是「顯示多少條」而是「**能搜到多少條**」（名單一次建好再
+    /// 打分，裝不進的那幾千條打出名字也找不着），而真正的上限本來就是走查自己的
+    /// `WALK_CEILING`。
+    pub cut: bool,
     /// **What to put near the top before anything is typed**, one number per
     /// item (2026-09-18).
     ///
@@ -134,6 +146,7 @@ impl Picker {
             caret: 0,
             root: None,
             sieve: None,
+            cut: false,
             bonus: vec![0; count],
             loose: true,
             // 畫之前先按過鍵的話（`--keys`、測試），一頁就是這個數。
