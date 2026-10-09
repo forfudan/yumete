@@ -91,8 +91,8 @@ pub struct Panel {
     pub pages: bool,
     /// **這一扇是拿來讀的，不是一張鍵表**（#426，2026-09-30 報的）。
     ///
-    /// 決定它多大：讀的那幾扇按 2/3 × 1/3 擺（`chrome::room`），鍵表按老規矩
-    /// （半頁高，能塞幾欄塞幾欄）。Warning: **判準是「拿來幹什麽」，不是
+    /// 決定它多大：讀的那幾扇按 2/3 × 1/3 擺，鍵表按整寬、半頁高——兩者都在
+    /// `chrome::room` 裏，由 `chrome::Use` 分。Warning: **判準是「拿來幹什麽」，不是
     /// `Body` 是哪一種。** 記錄畫成兩欄字段（`Body::Keys`），可它是讀的——它
     /// 從前跟着 `空格` 選單一起吃了「鍵表」那一套，於是鋪滿整個屏幕寬。
     pub reading: bool,
@@ -512,23 +512,26 @@ pub fn draw(
     panel: &Panel,
 ) -> Option<Rect> {
     let ink = crate::theme::Palette::of(config);
-    // How much of the page this may take — two thirds by one third 橫排, the
-    // transpose 竪排 (`chrome::room`).
+    // How much of the page this may take. **Both answers live in
+    // `chrome::room`** and nothing works one out here — this used to say
+    // `area.height / 2 + 1` while the key table below said
+    // `(area.height - 2) / 2`, two spellings of one intent that had to be
+    // kept in step by hand.
     //
-    // Warning: **Prose only.** The 2/3 × 1/3 shape is an argument about *reading*:
-    // a measure the eye can take in, and rows of the manuscript covered by
-    // halves rather than whole. A key table is not read that way — it is
-    // scanned once — and a third of a 24-row terminal is seven rows, which
-    // the `空格` menu does not fit into at all: it simply stopped being drawn.
-    // Menus keep the older rule (half the page, as many columns as fit).
-    let prose = matches!(panel.body, Body::Prose(_));
     // Warning: **判準是「拿來讀的嗎」，不只是 `Body` 哪一種**（2026-09-30
     // 報的：記錄那一扇「size 和 location 看着不對」）。記錄畫成兩欄字段，可它
     // 和別的四種信息一樣是讀的，該和它們一樣大。
-    let (room_w, room_h) = match prose || panel.reading {
-        true => crate::chrome::room(area, vertical),
-        false => (area.width, area.height / 2 + 1),
+    let prose = matches!(panel.body, Body::Prose(_));
+    let what = match (prose, panel.reading) {
+        (true, _) => crate::chrome::Use::Read,
+        (false, true) => crate::chrome::Use::Fields,
+        (false, false) => crate::chrome::Use::Scan,
     };
+    let (room_w, room_h) = crate::chrome::room(area, vertical, what);
+    // **How many rows of content the ring leaves**, read off `room_h` once and
+    // used by everything below: the key table's depth, and the cut a body too
+    // tall for the room takes.
+    let cap = room_h.saturating_sub(2).max(1) as usize;
     let title_w = yumete_cjk::str_width(&panel.title);
     // **翻得動的時候，底邊右端寫「怎麽翻」**（2026-09-30 定：「浮窗或者右侧
     // 面板，可以显示『PgUp/PgDn 翻页』。『␣K 进边栏』似乎反而不是很重要的信息」）。
@@ -713,10 +716,9 @@ pub fn draw(
                 .map(|(k, what)| key_w.max(yumete_cjk::str_width(k)) + 2 + yumete_cjk::str_width(what))
                 .max()
                 .unwrap_or(0);
-            // **Half the page and no more.** A menu is a thing you glance at
-            // beside your writing; one that fills the window has stopped
-            // being a menu.
-            let half = (area.height.saturating_sub(2) / 2).max(1) as usize;
+            // **No deeper than the room** (`cap`, above). A menu is a thing you
+            // glance at beside your writing; one that fills the window has
+            // stopped being a menu.
             // Warning: **…and never deeper than the page can actually place**
             // (2026-09-19, caught in review). `chrome::place` refuses a box
             // taller than the rows between the top of the page and the footer,
@@ -725,7 +727,7 @@ pub fn draw(
             // did nothing」 rather than as 「there is no room」. The key table
             // had no height cap of its own — two columns was all it knew.
             let tall = bottom.saturating_sub(area.y).min(area.height);
-            let deep_max = half.min((tall.saturating_sub(2) as usize).max(1));
+            let deep_max = cap.min((tall.saturating_sub(2) as usize).max(1));
             // Too deep is answered by going **wider** first: as many columns
             // as the depth asks for. A short wide menu is still a menu, and a
             // key whose meaning is cut short still tells the reader which key
@@ -770,7 +772,6 @@ pub fn draw(
     // Warning: **竪書不走這一段**，它在上面自己截過了：這裏的 `count` 對竪書是「一縱
     // 幾個字」而 `lines` 是一條條的縱，兩者不是同一個維度，照這裏辦會把最左那
     // 一縱換成「…」並且把框高壓成縱的條數。
-    let cap = room_h.saturating_sub(2).max(1) as usize;
     // **讀到第幾行 / 共幾行**，寫在底邊左端（2026-09-30 定）。`None` ＝ 整則
     // 都在眼前，那時一個數字都不寫——數字出現本身就是「還有沒露出來的」。
     let mut read: Option<(usize, usize)> = None;
@@ -803,14 +804,9 @@ pub fn draw(
         .max(tag_w + 4)
         // 底邊兩頭各站一個，中間至少留一格橫線。
         .max(read_w + tag_w + 7)
-        .min(match &panel.body {
-            // Prose keeps to the room (above); a key menu has its own rule
-            // about how many columns it may spread into — and 記錄 is read,
-            // not scanned, so it keeps to the room too.
-            Body::Prose(_) => (room_w as usize).max(24),
-            Body::Keys(_) if panel.reading => (room_w as usize).max(24),
-            Body::Keys(_) => area.width as usize,
-        })
+        // Every float keeps to its room (above); which room that is was
+        // settled once, by what the float is for.
+        .min((room_w as usize).max(24))
         .min(area.width as usize) as u16;
     let height = (deep + 2) as u16;
     // Where it stands, and whether there is room at all — one rule, in
