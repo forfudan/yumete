@@ -1101,6 +1101,24 @@ impl Palette {
             return None;
         }
         let Color::Rgb(r, g, b) = from else { return None };
+        // **先問調色板有沒有顏色可花**（2026-10-09 作者定）。
+        //
+        // Warning: 【黑白】那一版的本意是「一點顏色都沒有」——#471 把它的三個官服品色都
+        // 抹成了灰，而 `docs/development.md` 記着 「greys only」。可這一支走的是寫死的
+        // 一條偏藍方向，不問調色板，而分詞與「換顏色」出廠都開着：於是深色下正文畫成
+        // `#D7E9F8`，一片淡藍，而黑白自己的青是 `#A3A3A3`。
+        //
+        // 判準是**調色板自己的藍有沒有色度**：有就照舊走那條按眼睛定過的方向（別的九
+        // 個主題一個像素都不變），沒有就退回 [`Self::word_ink`] 那一檔——在一個沒有顏
+        // 色的主題裏，深淺是剩下的唯一一根軸，而分詞總得看得見。
+        if let (Color::Rgb(ar, ag, ab), Color::Rgb(tr, tg, tb)) = (self.azure(), from) {
+            let (blue, ink) = (lab((ar, ag, ab)), lab((tr, tg, tb)));
+            let chroma = ((blue.1 - ink.1).powi(2) + (blue.2 - ink.2).powi(2)).sqrt();
+            // 4 是「肉眼分得出一點色相」的下限（CIE76 的 ΔE 裏 2–3 已經是可見）。
+            if chroma < 4.0 {
+                return Some(self.word_ink());
+            }
+        }
         // **A luminance-neutral direction, walked in linear light.** Summed
         // against the luminance weights this vector comes to 0.026 — so moving
         // along it changes the hue and leaves the brightness where it was,
