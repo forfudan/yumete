@@ -4087,11 +4087,8 @@ A pattern written wrong and the status line says so, and **that run does not sea
 throwing the bad term away and searching anyway hands you the answer to a different
 question.
 
-**With this file or open buffers chosen, that whole row is not drawn.**
-Those two notches are a list already in front of you, and sieving it by
-path means nothing — while three grey rows take the place of the result list. So the
-panel for this file is eight rows, eleven for the ones that walk the disk, twelve with
-replace open as well.
+**With this file or open buffers chosen, that whole row is not drawn**: those two
+notches are a list already in front of you, and sieving it by path means nothing.
 
 **A folder is always searched together with its subdirectories.** To search
 only this level, write `*` in the "only" box.
@@ -4101,12 +4098,11 @@ twenty-four bytes and it is not prose, so it is not even read — `.o`, `.png`, 
 are all of this kind. The picker still lists them: opening a `.png` is a normal thing to
 do, searching it is not.
 
-**How long one run may take.** The walk has two floors and a watch: twenty thousand text
-files and two hundred thousand entries are the **floors**, and it goes at least that far
-however slow it is; after a floor it **carries on as long as three seconds have not
-passed**, and **stops at five whatever happens**. When it stops, the count box reads
-`21+ hits`, and that plus is "not finished counting". Normally (respecting `.gitignore`)
-a project is a few hundred files and tens of milliseconds, and none of this comes up.
+**A run that will not end is stopped.** It always reaches twenty thousand text files
+and two hundred thousand entries, carries on while three seconds have not passed, and
+stops at five however far it got. Then the count box reads `21+ hits`, and that plus
+means 「not finished counting」. Respecting `.gitignore`, a project is a few hundred
+files and tens of milliseconds, so none of this comes up.
 
 **Every scope's anchor is the working directory**, never the current file.
 
@@ -4122,11 +4118,9 @@ moment you hand the keys back to the text and change a character, the list you a
 holding describes how things were before.
 
 **Results across files are a tree**: one row per file, its hits underneath.
-**The hit rows are not indented** — the file row carries its own
-`▾`/`▸` and is bold gold besides, so indenting is a third way of saying it, and every
-cell of the sidebar is wanted for the text. The line-number column is **as wide as it is
-really needed**: a three-hundred-line manuscript gets one or two, not five for ever. `h`
-folds a file up, `l` opens it, `Enter` on a file row folds and opens too, and on a hit
+**The hit rows are not indented** — the file row already carries a `▾`/`▸` and is bold
+gold, and every cell of the sidebar is wanted for the text. The line-number column is
+only as wide as it needs to be. `h` folds a file up, `l` opens it, `Enter` on a file row folds and opens too, and on a hit
 row it **opens that file and jumps there**. Unsaved characters count as well — an open
 file is searched in its buffer, not in the copy on the disk.
 
