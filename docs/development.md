@@ -20525,6 +20525,21 @@ Basics go to `:tutor`. Deviations get one file, the `vi_diff.txt` genre. No date
 no 「從前」; rationale lives here and is linked, not restated. `Warning:` at most ~4 per 1000
 lines (peers 0.9–7.6, we run 23.4). Target ≈ 20,000 words.
 
+**Where it was left (2026-10-09).** The register work is done and guarded:
+`tests/manual_register.rs` bans dates, issue numbers, `(decided …)` and 原話 outside code
+spans, and caps `Warning:` at 22. Dates 68→6 (all example data), 原話 1→0, issue numbers
+13→0, past behaviour 10.6→2.4 per 1000 lines, `Warning:` 23.4→2.7 (155→18). Chapter 4 is
+a keys chapter again (13,107→2,363 prose words, table-dominant) and its display material
+is chapter 5, 「The page」; chapter 8 is 51 sections at a median of 320 prose words instead
+of grab-bags of seven topics each.
+
+**The size work is 4% done and deliberately parked.** 73,768→70,006 words against a
+kakoune-density target of ~20,000. The cheap categories are spent — content helix already
+documents, colour science, prose restating its own table — and the curve flattened hard:
+the last three edits returned a quarter of what the first five did for the same cost.
+**Trimming bottoms out near 60–65k; below that is a rewrite from the key tables outward,
+not an edit.** Resume by chapter, not by sweep.
+
 Also settled: **the Chinese manual is frozen** until yumete is stable, the README no longer
 links it, and `documented_keys` no longer reads it — a frozen document cannot be guarded,
 because the next rename would turn it red and the only way to green would be to edit the file
