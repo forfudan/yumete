@@ -212,6 +212,39 @@ impl Language {
         }
     }
 
+    /// **一條追加的規則，讓調用看起來像調用**（2026-10-09 作者定的那件事）。
+    ///
+    /// 他要的是「同一個構造在十六種語言裏同一個顏色」。報來的辦法是「照 helix，改成
+    /// 第一條規則贏」，而那個前提查不實：
+    ///
+    /// | | `@function.method` 在第幾行 | 兜底的 `@property` | 最後一條贏 | 第一條贏 |
+    /// | --- | --- | --- | --- | --- |
+    /// | Go | 12 | 25 | 調用與字段同色 ✗ | 分得開 ✓ |
+    /// | JavaScript | 19／27 | 9 | 分得開 ✓ | 同色 ✗ |
+    ///
+    /// 兩家查詢寫的順序正好相反，所以**翻比較器只是把錯處從一邊搬到另一邊**（實測
+    /// 過：Go 對了，JS 的 `o.run()` 從藍變成金）。helix 兩邊都對，是因為**它自己策過
+    /// 那些查詢檔**——它的 Go 查詢裏根本沒有那條兜底的 `@property`。
+    ///
+    /// Warning: **而 helix 的查詢檔抄不得**：MPL-2.0，這個倉是 Apache-2.0（同
+    /// `objects()` 那一條）。所以這裏走第三條路：**自己追加一條**。最後一條贏，追加
+    /// 的就贏，而另外十四種語言一個像素都不動。
+    fn extra_highlights(self) -> &'static str {
+        match self {
+            // `fmt.Println(1)` 的 `Println` 是一個 `field_identifier`，而 Go 的查詢
+            // 先捕成 `@function.method`、後又被兜底的 `(field_identifier) @property`
+            // 蓋掉。把調用那一種再捕一次，擺在最後。
+            Language::Go => {
+                "\n(call_expression function: (selector_expression                  field: (field_identifier) @function.method))\n"
+            }
+            // `os.getcwd()` 的 `getcwd` 同理：Python 的查詢把它兜底成了 `@attribute`。
+            Language::Python => {
+                "\n(call (attribute attribute: (identifier) @function.method))\n"
+            }
+            _ => "",
+        }
+    }
+
     fn highlights(self) -> &'static str {
         match self {
             // **Ada 與 Pascal 這兩份是我們自己寫的**（2026-10-08 定：「我們自己寫，最
@@ -532,7 +565,8 @@ impl Language {
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
-                let query = Query::new(&self.grammar(), self.highlights()).ok()?;
+                let source = format!("{}{}", self.highlights(), self.extra_highlights());
+                let query = Query::new(&self.grammar(), &source).ok()?;
                 let tokens = query.capture_names().iter().map(|n| token_of(n)).collect();
                 Some((query, tokens))
             })
