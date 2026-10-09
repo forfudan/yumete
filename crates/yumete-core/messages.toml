@@ -7130,8 +7130,8 @@ en = "no language server configured for {0} — set one in :settings"
 [[message]]
 # 空格 k 按在稿子上——那裏沒有語言服務器
 key = "lsp.not-code"
-zht = "這不是程序文件，沒有服務器可問"
-zhs = "这不是程序文件，没有服务器可问"
+zht = "非程序文件，無服務器可問"
+zhs = "非程序文件，无服务器可问"
 en = "not a program file — no server to ask"
 
 [[message]]
@@ -7144,8 +7144,8 @@ en = "{0} is not on this machine — check the spelling in :settings, or install
 [[message]]
 # 服務器提不出任何候選
 key = "lsp.nothing-to-offer"
-zht = "這裏接不下什麽"
-zhs = "这里接不下什么"
+zht = "此處無候選"
+zhs = "此处無候選"
 en = "nothing fits here"
 
 [[message]]

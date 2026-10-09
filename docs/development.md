@@ -19934,7 +19934,7 @@ line was wider than the terminal, so it wrapped and `\r\x1b[2K` cleared only the
 Fix: fold the path from the left (`elide_head`), then `elide` the whole line to the terminal
 width less one cell.
 
-## 5.105 拼音那一路為什麼慢，和作者定的那道閘（2026-10-07）
+## 5.105 拼音那一路為什麼慢，和那道定下來的閘（2026-10-07）
 
 On a 794 MB corpus file, one word: `rg` 0.14 s, `ye -G` **10.44 s**, `--chinese=off` 0.86,
 `--chinese=pinyin` 10.33. **The pinyin path is the entire cost, glyph folding is free**, and it
@@ -20502,13 +20502,42 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.153 One rule for how big a float may be, and the `空格` menu stops being the exception (2026-10-09)
+
+「我覺得可以和其他的看齊，超過一半確實危險，寧可更寬。」 `chrome::Use` now names the three
+sizes in one place: `Read` 2/3 × 1/3, `Fields` (記錄 and the five 信息) the reading width
+with the scanning depth, `Scan` the whole width and **half** the page — no longer half
+plus a row, and no longer worked out again beside the key table as `(h - 2) / 2`.
+
+At 80×20 the menu goes from 3 columns × 8 rows to 4 × 6: all 23 items either way, two
+rows of manuscript given back, each meaning cut a little shorter (accepted — 「说明一般看
+开头就可以了」). Giving it the reading 1/3 instead was measured and refused: it loses 4
+items at 100×20, 14 at 100×16, and cuts 80×12 to three. The note in the code that said a
+third 「does not fit at all」 had gone stale — 「too deep is answered by going wider first」
+landed after it, and a menu now spends depth it cannot have on another column.
+
+## 5.152 A float keeps to the line's far side and flips on the other axis (2026-10-09)
+
+Reported as 「always show the panel at the right … because we always write from left to
+right, so the line start can always be visible」; 竪排 「面板永远在下而不是在右」.
+
+The old rule took the corner the caret was *not* in on **both** axes, so the panel jumped
+across the page whenever the caret passed the middle column. Now one side is fixed: 橫排
+the right, tried 右下 → 右上 → 左下 → 左上; 竪排 the bottom, 左下 → 右下 → 左上 → 右上 (the
+縱 run right to left, so the left is where the writing has not reached). Each corner is
+asked whether the **box** would contain the caret, not whether its rows would — with the
+column fixed, a caret at the start of a long line is not under a box at the right. All
+four blocked draws at the first: covering the caret beats drawing nothing. Canonical —
+Floating UI `flip`, VS Code's two-pass suggest widget, blink.cmp, corfu-popupinfo: twelve
+of twelve fix one axis and flip the other.
+
 ## 5.151 What the manual is for, measured against eight others (2026-10-09)
 
-Found by the author searching his own manual and hitting a wall of 「（2026-09-25 定）」:
-「你这个是用户手册还是开发记录？？？？」. He was right, and the cause was mine — I maintained the
-manual append-only, adding a paragraph for every behaviour change instead of editing the
-paragraph that describes the behaviour, in the register of a code comment (date + quote +
-reason). 68 dates and 72 past-behaviour lines are the fossil record.
+Found by a search of the manual running into a wall of 「（2026-09-25 定）」:
+「你这个是用户手册还是开发记录？？？？」. The cause: it had been kept append-only — a paragraph
+added for every behaviour change instead of editing the paragraph that describes the
+behaviour, in the register of a code comment (date + quote + reason). 68 dates and 72
+past-behaviour lines are the fossil record.
 
 Measured against vim, nvim, emacs, helix, kakoune, micro, nano and zed. The decisive line:
 **kakoune documents 640 items in 20,665 words; we document 636 in 73,606.** Across 212,000
@@ -20516,7 +20545,7 @@ words of those eight manuals there is **not one decision date**, and the five mo
 quote **no user, ever**. Vim ran this exact cleanup (patch 8.1.1280: 「Remarks about
 functionality not in Vi clutters the help」) and fenced the lot into `vi_diff.txt`.
 
-The rule, as the author set it: 「most of the yumete users are vimers and helixers, so
+The rule as set: 「most of the yumete users are vimers and helixers, so
 putting too much words on these already-known-muscle memories would cause users to lose
 patience」. So prose is spent on **only** two things — what is unique to yumete, and what
 visibly deviates from vim/helix in the matching mode. Everything else is one table row with
@@ -21172,7 +21201,7 @@ got a failing test first, and five had the fix backed out again to confirm the t
 | picker query cursor not clamped | that row clamps **by cell** now (`window_on`) — 24 cells is 12 Hanzi, and the cursor used to sit nineteen columns outside the box |
 | `MAX_PER_DIR` cut before sorting | sort then cut; it used to keep an arbitrary 500 in filesystem order, so `ch0001.md` could be missing while `ch0600.md` was there |
 | root `reveal` through a symlink | paths arrive canonicalised while the root is what the project said (macOS `/tmp` → `/private/tmp`), so nothing expanded. New `Sidebar::in_my_world` |
-| LSP snippets | we advertise `snippetSupport: false`, so a well-behaved server sends none — but being wrong costs **characters in the author's file that he did not type**, so `insertTextFormat` is read and the holes filled in |
+| LSP snippets | we advertise `snippetSupport: false`, so a well-behaved server sends none — but being wrong costs **characters in the writer's file that nobody typed**, so `insertTextFormat` is read and the holes filled in |
 | LSP request ids as strings | the protocol allows a string `id` and this read `as_i64()`, so such a request parsed as `Nothing` and **was never answered** — a server waiting for its own registration echo simply stopped |
 | server death leaked a child | dropping a `Child` neither kills nor reaps it, so a broken pipe left an unowned process still holding the pipe. New `Servers::bury` |
 

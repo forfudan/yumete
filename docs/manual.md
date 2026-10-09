@@ -2492,8 +2492,9 @@ already, fold it away. So the same key twice always returns to where you started
 the least any switch owes you — while another key is "change view", not "close".
 
 **`空格 n` floats a dictionary out, `空格 N` opens it into the sidebar.** The lower
-case one is only a glance: it floats in a corner (a fixed corner, the one far from the
-caret, so it does not cover where you are writing), **the sidebar does not move at
+case one is only a glance: it floats in a corner (the right of the page, or the bottom
+when the page is vertical, so it never covers the start of the line you are on),
+**the sidebar does not move at
 all**, pressing again folds it away, and it is gone the moment the caret leaves. If
 the answer is too long to read, press the upper case one — the same answer goes into
 the right sidebar, the keys go with it, and `j`/`k` get you to the bottom. Everything
@@ -2883,11 +2884,15 @@ itself, and the line it is written on:
                           ╰──────────────第 24 行─╯
 ```
 
-**It stands at the cursor's diagonal** — cursor to the left and it goes right; cursor
-low enough that it would cover the line you are reading and it flips to the corner
-above. **It takes no line away from the page** — a note is a line or two of text, and a
-full-width bar four lines deep would leave the width empty and spend four lines of
-paper however short the note was. Vertical has it too, with the corners worked out in the vertical direction.
+**It keeps to the right and moves only up and down.** Writing runs left to right, so
+the start of every line stays visible and what a float may cover is the tail of the
+lines it sits on; it rises to the top corner only when the bottom one would sit on the
+cursor itself. **It takes no line away from the page** — a note is a line or two of
+text, and a full-width bar four lines deep would leave the width empty and spend four
+lines of paper however short the note was. Vertical turns the rule rather than
+repeating it: there the columns run top to bottom and right to left, so the panel keeps
+to the bottom and flips left and right, preferring the left — the side the writing has
+not reached.
 
 `gd` goes there, `gd` comes back — **one key, two directions**, because from the note
 the only place you can want to go is the sentence you just left. You come back onto the
