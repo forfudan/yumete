@@ -2733,10 +2733,9 @@ of the number band all along.
 
 ### Where the program is wrong: the language server
 
-Open a `.rs` or a `.go` and yumete starts a **language server** behind your back
-(`rust-analyzer` for rust, `gopls` for go) and hands it the file. Where it says a line
-is wrong, a block of colour appears **to the left of the line number** — in helix's
-order (diagnostics, line numbers, diff gutter):
+LSP works the way it does in helix — `gd` goes to the definition, `空格 k` asks what a
+name is, `C-n` completes, errors arrive by themselves. What follows is the part that is
+not the same.
 
 ```
       7   let 稿子 = "那年冬天，雪下得很大。";
@@ -2745,168 +2744,61 @@ order (diagnostics, line numbers, diff gutter):
    i 10   // 說明             `i` is information, `·` is a hint
 ```
 
-**This column only appears on code files.** It asks the text for two squares,
-two squares in Chinese are one whole character, and a novel will never have a language
-server — so your manuscript pays nothing at all.
+| | |
+| --- | --- |
+| `gd` | go to where it is written, across files; `C-o` comes back |
+| `空格 k` / `空格 K` | what is this — floating / in the sidebar |
+| `空格 d` / `空格 D` | what is wrong on this line — floating / in the sidebar |
+| `C-n` | in Insert, the completion list; `C-p` back, `Tab` takes one, `Esc` puts it away |
+| `(` and `,` | in Insert, the call's signature beside the caret, the parameter you are filling in gold |
+| `PageUp` `PageDown` `C-u` `C-d` | page whatever is floating — key for key helix's `ui/popup.rs` |
+| `:diagnostics-all` | every word from every file in one `path:line:` list, `gf` to jump |
+| `:instant-info <name>` | which of the five comes up by itself; bare, it decides by the manuscript |
 
-**An error is a filled block of vermilion with nothing written on it** — the colour at
-full strength, **the loudest thing on the page**. Warnings, information and hints are a
-very pale ground with one character on it (`!`, `i`, `·`): the ground is too pale to
-tell the three apart on its own, so the character says which it is, and they have no
-need to be loud.
+**The gutter costs a manuscript nothing.** That column is drawn only on files a server
+is attached to — a novel will never have one.
 
-Two levels is not only prettier: eight men in a hundred cannot tell red from green, but
-"a filled block of bright colour" against "a single character" they can tell apart, so
-they can still see which line is wrong.
+**Two levels, not four colours.** An error is a filled vermilion block with nothing
+written on it; a warning, information and a hint are a very pale ground carrying `!`,
+`i` or `·`. Eight men in a hundred cannot tell red from green, but a filled block
+against a single character they can. helix draws `●` here, and that is the one thing
+that could not be copied: `●` is one cell in a latin font and **two in a CJK font**, so
+it either clips in half or shoves the line sideways.
 
-(Why not a round dot: it was measured. One square in a CJK monospace font is 7.5 pixels,
-and `●` `⬤` `■` `◉` are all 15 — **two squares exactly**, so forcing one into a single
-square either clips it in half or shoves the whole line sideways. What helix draws is
-exactly `●`, which happens to be one square wide in a latin font; Chinese fonts do not
-have that character.)
+**`gd` is one key asking two worlds.** In a manuscript it follows footnotes, links and
+`[[章節]]`; a `.rs` has none of those, so there the same key asks the server.
 
-**`gd` goes to where it is written.** Stand on a function, a type, a variable and press
-`gd`, and the cursor goes to the line that defines it — across files too, with `C-o` to
-come back. **The answer takes a moment to come back** (the server is in another
-process), so what you see on pressing is "asking where this is written…", and the cursor
-moves a moment later.
+**Lower case floats, upper case goes to the sidebar** — the same rule as the dictionary
+pair. What the server sends is Markdown and is drawn as Markdown: bold is bold, code
+takes the ink of code, headings are gold, exactly as in a manuscript.
 
-This is the question `gd` has always asked. In a manuscript it follows footnotes, links
-and encyclopedia names; a `.rs` has none of those three, so the same key asks the
-server.
+**One slot, five things, one of them automatic.** The dictionary, the wiki, the record,
+the docs and the diagnostics take turns in that one float (the right sidebar when it is
+open). Which one comes up unasked follows what you are writing — the wiki in prose, the
+diagnostics in code, the record on a table row — and the other four you press for. Only
+ever one is automatic: two would fight over the same patch of screen, and the question
+「docs if there are docs, diagnostics if there are none」 cannot be answered until the
+docs answer back.
 
-**`空格 k` asks "what is this", `空格 K` opens it in the sidebar.** Stand on a name and
-press it, and what the server says floats beside it: a function's signature, what a type
-is, what the doc comment says. It takes a moment too, and **it was asked for,
-so it is gone the moment the cursor moves** — the thing that comes up by itself and
-follows the cursor is diagnostics, and only that one stays. The first press may give you
-nothing (the server is still reading the project); press again and it is there.
+**Nothing floats in Insert except completion and the signature.** A line you are halfway
+through typing is broken by definition, so diagnostics wait for `Esc` (neovim ships this
+way too, `update_in_insert = false`), and the signature never collides with them.
 
-What the server sends is Markdown, and yumete **draws it as Markdown**: `**粗的**` comes
-out bold, `` `代碼` `` gets the ink of code, headings are gold — exactly what you see in
-a manuscript. A function signature arrives inside a fence, and the popup draws inline
-marks, so it becomes one line of inline code; the ink does not change.
+**Completion does not fight the IME.** While the code string is still in the IME's hands
+the editor does not know you are typing at all — the space bar and the number keys
+belong to the IME — so the server's turn comes only once a word is committed. That is
+what makes completion work inside Chinese comments, and it is why the list offers no
+number keys to pick with.
 
-Too long to read, press `空格 K` — the same answer goes into the sidebar, the keys go
-with it, and `j`/`k` read it to the bottom. **Lower case floats, upper case goes to the
-sidebar**, the same rule as the dictionary pair (`空格 n`/`空格 N`).
+**A macro has no signature, so the first paragraph of its doc stands in.** rust-analyzer
+answers `null` to `signatureHelp` for every macro — a macro is not a call — while
+`hover` at the same place answers perfectly well. `println!(` gives you 「Prints to the
+standard output, with a newline.」, with a `…` on its own line if there is more.
 
-(`K` on its own is not this — it keeps only the selections that match a pattern, as in
-helix.)
+**The first read takes a moment, and it says so once.** A big project keeps the server
+busy for a dozen seconds; afterwards recomputing is milliseconds, and a line that kept
+flashing would be noise.
 
-**`空格 d` asks "what is wrong on this line", `空格 D` opens it in the sidebar.** Lower
-case floats, upper case to the sidebar, one rule with the pair above. **It does
-not have to wait** — errors and warnings are pushed by the server itself and are already
-in hand, so they are there the instant you press.
-
-**Of the five, only one comes up by itself.** That one popup beside the cursor (the
-right sidebar, when the right sidebar is open) ever holds one thing, and five things
-take turns in it: **the dictionary, the wiki, the record, the docs, the diagnostics**.
-Which one comes up by itself depends on what you are writing — the wiki in prose, the
-diagnostics in code, the record when you are standing on a row of a table; the other
-four you ask for.
-
-- **`PageUp`/`PageDown`/`C-u`/`C-d` page it**, and the cursor never has to leave the
-  text — a long entry, a long stretch of documentation, a long string of diagnostics,
-  all read through from where you stand. Once it is read through, those four keys page
-  the text as before. (The dictionary and the record are two columns of fields and do
-  not page by line; their way out is the sidebar — the dictionary `空格 N`, the record
-  `空格 I`, or `C-w l`.)
-- **The left end of the bottom edge says how far you have read**, like `8/11`, and the
-  right end says `PgUp/PgDn to page`. When the whole thing is in front of you neither
-  end says anything — **the number appearing is itself "there is more below"**. Both the
-  popup and the sidebar write it.
-- **When the command line has nothing to say it says how to send this into the
-  sidebar**, like `␣K shows it in the sidebar` (which key depends on what is in front of
-  you: the dictionary `␣N`, the wiki and the docs `␣K`, diagnostics `␣D`, the record
-  `␣I`).
-**`:info` is a different command** and answers a different question — 「what is this
-file」, as a page. The one below is about *when* the editor asks, not about the file.
-
-- **`:instant-info <name>`** changes which one comes up by itself; the five names are
-  `record`/`diagnostics`/`dictionary`/`wiki`/`docs`. A bare `:instant-info` goes back to
-  deciding by the manuscript.
-- Each of the five has its own key, so press the one you want: `空格 n` the dictionary,
-  `空格 k` the wiki or the docs, `空格 d` the diagnostics, `空格 t i` the record. Upper
-  case always means "into the sidebar, whatever else".
-
-If two of them were automatic they would fight over the same patch of screen,
-and "show the docs if there are docs, diagnostics only if there are none" cannot be
-decided until the docs question answers back; in that one second anything you draw is
-wrong — draw the diagnostics and it flickers, draw nothing and it sits empty. So only
-ever one is automatic.
-
-**This is key for key the same as helix** (`ui/popup.rs`): while the popup is
-open those four keys belong to the popup, with it closed they page the text as before,
-and any other key dismisses it.
-
-The mark in that square left of the line number is not governed by these two; it stays
-lit — that is "this line has something to say", and it does not interrupt.
-
-**The list comes up while you type.** Type halfway through a word in a program file
-and if the server has something to offer, a list floats — this one does **not** wait out
-the three hundred milliseconds the hover documentation waits. It
-does not come up right after a space, a bracket or a semicolon — that is a word ending.
-To call it yourself, `C-n`.
-
-**`C-n` asks "what can I type next".** Press it in insert mode and the names the server
-offers line up in a list: on the left the name that can be typed in, on the right its
-type or signature. `C-n`/`C-p` (or the arrow keys) move a line, **`Tab` takes this
-one**, `Esc` puts it away. What goes in is the clean name — it will not drag along a
-`(${1:…})` placeholder form.
-
-**Typing `(` asks what goes in it.** In insert mode an open bracket — and every `,`
-after it — asks the server for the call's signature, and it floats **beside the caret**
-under the name 「簽名」: `fn push(&mut self, value: T)`, with **the parameter you are
-filling** in gold. Nothing to press. `)`, `Esc`, or leaving insert mode puts it away.
-
-**A macro has no signature, so the first paragraph of its doc stands in.** Measured:
-rust-analyzer answers `null` to `signatureHelp` for every macro — a macro is not a call
-— while `hover` at the same place answers perfectly well. So when the signature comes
-back empty the editor asks `hover` instead and draws **one paragraph**, with a `…` on
-its own line if there is more. `println!(` gives you 「Prints to the standard output,
-with a newline.」 The whole page is still `空格 k`'s job: no editor worth copying puts a
-screenful of documentation up while you are typing.
-
-**The signature and a diagnostic never fight over that float**: a diagnostic is
-never drawn in insert mode (see below), which is exactly when the signature is.
-
-**This list and the IME's candidate bar do not fight.** While the code string
-is still in the IME's hands the editor does not know you are typing at all; the space
-bar and `2390` belong to the IME throughout. Only once a word is committed is it the
-server's turn to be asked. So completion works inside Chinese comments too. (The list
-offers no number keys to pick with, exactly so they do not collide with the candidate
-keys.)
-
-**No such panel pops up in insert mode.** The line you are typing is broken by
-definition, reporting it means nothing, and it would jump in front of completion. The
-square left of the line number stays lit as before; `Esc` back to Normal and the words
-float out by themselves. (Neovim ships this way too — `update_in_insert = false`.)
-
-**To find out what the error is, move the cursor onto that line.** The words float
-beside it: the title is the severity, the body is what the server said, and the
-parentheses say who said it (when `rustc` and `clippy` each have a word about the same
-line, that is the only clue that tells them apart). When one line has several, the
-loudest comes first.
-
-**`:diagnostics-all`** lines every word up in one list (in `path:line:` shape, with `gf`
-to jump there), the files you have not opened included — one server looks at the whole
-project, and the errors you will never page past are exactly what this list is for.
-
-**The first time you wait.** The server has to read the whole project once: a second or
-two for a small project, a dozen for a big one, and during that the status line says
-"rust-analyzer is reading this project… the first time takes a moment". **It says it
-this once only** — recomputing afterwards takes milliseconds, and something that keeps
-flashing is noise.
-
-**Whether to install one, and which one**, is your business. **rust, go and python are
-filled in**; if the program is not on the machine it says so and the file opens as
-usual, only with nobody checking it for you. For another language write a line of your
-own (see the "Configuration" chapter).
-
-**A manuscript starts no server.** Markdown and Typst have language servers out there
-too, but this editor is itself the tool for writing manuscripts, and hiring a second
-consultant for your novel is nobody's idea of a good thing.
 
 ### What you have typed — the sign beside the cursor
 
@@ -4252,11 +4144,6 @@ Name a folder that does not exist and it **says so**, instead of quietly falling
 | `↓` `↑` | next box / previous box. **Not `Tab`**: `Tab` is the sidebar's own key, and what it changes is the view |
 | `Esc` | leave the box, back to the panel's Normal — **what you typed stays**, and the "In:" box lands there and then |
 
-**`Enter` = "done typing, go look"**: run the search, then hand the keys
-back to the panel. It never jumps to the first result, so it does the same thing
-whether or not anything was found, and **whichever box you are in you stay in**.
-Carry on into the results with `j`, and back with `k`.
-
 | Out of the box (the panel's Normal) | |
 | --- | --- |
 | `j` `k` | walk the boxes: search → (replace) → (only → except) → results. **The switches and "In:" cannot be walked onto**, they go by number; in the results box it walks the hits — stand on the first and press `k` and you are back in the box, never trapped in the list |
@@ -4272,33 +4159,17 @@ Carry on into the results with `j`, and back with `k`.
 | `Tab` | change the view — the sidebar's own key, **not** the next box. **In a box (PAN.INS) it is "next box"**; and when the box is empty with the last word written there in grey, the first `Tab` takes that word in |
 | `C-w` `q` | next region / close this one |
 
-**A block cursor stands in the box**, the same thing as the one covering a character in
-the text's Normal: `h`/`l` move it, `d` deletes it, `c` changes it, `i`
-inserts from it. **Every one of these keys means in the box what it means in the text**,
-with not one of them newly invented. Press `i` to type and it becomes a bar — the same
-rule as in the text.
+**Every one of those keys means in the box what it means in the text**, with not one of
+them newly invented: a block cursor stands in the box, `i` turns it into a bar. `gh`/`gl`
+and `w` `b` `e` are the exception — they are for a long line of prose, and this is a box
+of two or three characters that `A`/`I` already reach the ends of.
 
-**`gh`/`gl` and `w` `b` `e` were not moved into the box**: they are for a long
-line of prose, and this is a box of two or three characters — `A`/`I` brought the start
-and the end of the line along already. So `hl` does not walk the boxes — characters
-sideways, boxes up and down, the same rule as in the text.
+**Standing on a result with an out-of-date list, `Enter` runs first and does not jump.**
+Once the text has moved, that hit's line number is out of true and jumping would land on
+some other character. The run leaves a fresh list, and one more press goes.
 
-**`Enter` in the panel is "look again"**: the same from every box. Typing has
-six doors of its own — `i` `a` `I` `A` `c` and `/` — and flipping a switch has `1`–`7`,
-which leaves `Enter` free for the one thing only it can do.
-
-**Standing on a result with the list out of date, `Enter` runs first and does
-not jump**: the screen says "Enter to search" right now, so do what it says; besides,
-once the text has moved, that hit's line number is long out of true, and jumping there
-would most likely land on some other character. The run leaves a fresh list, and one
-more press goes.
-
-**A switch does not need the cursor walked onto it.** `jk` goes straight
-between the box and the results, past the five switch rows, and a switch goes by number.
-
-**Seven rows, each one "number, name, box".** The number is the
-row's place counting from the top; the box is after the name, and what is in it is the
-state that row is in right now.
+**Seven rows, each one 「number, name, box」**, the number counting from the top and the
+box holding the state that row is in right now.
 
 | | | |
 | --- | --- | --- |
@@ -4382,75 +4253,50 @@ few 漢字 strung together come out as exactly this run of letters" cannot be wr
 regex — syllable boundaries have to be settled while matching. Same for the fuzzy road.
 ### The panel's fuzzy and the picker's fuzzy are not the same thing
 
-Both are called "fuzzy", but what they compare is not the same, so they were
-deliberately built as two:
+**Fuzzy is 「roughly these characters」.** What a novelist remembers is rarely the
+sentence but a few of its characters: type `他説` and 「他輕輕地説」 comes up. They count
+when they appear **in order** and **close together**.
 
-| | panel (`crate::nearby`) | picker (the `空格 f` one) |
-| --- | --- | --- |
-| compares | a wide field of prose | one short label (a file name, a buffer name, a command name) |
-| window | **yes**: a few characters may only scatter across a stretch that wide | none, the whole label is the unit |
-| out of order | does not count | if in order finds nothing, it tries again out of order |
-| ranking | none, listed in the order they appear | scored on "how tightly it holds, and whether it lands on the file name or the directory" |
-| case | follows the `1` row, smart by default | **never distinguishes** |
+**「Close together」 has a ruler**: the whole hit must fall inside a stretch no longer
+than 「characters typed ×2 ＋ 4」. So `他説` finds 「他輕輕地説」 and not
+「他走了很久……有人説話」, half a sentence apart. Without the ruler it would mean
+「somewhere on this line」, and a line of prose is long enough that nine hits in ten
+would be worthless. What is marked is the **tightest** stretch: in 「他。他説」 it marks
+「他説」.
 
-**The window is the whole point of the panel's version**: without it, 「他説」 is found
-wherever those two characters fall in order in any chapter, and the feature is worthless
-on the spot. The picker compares short labels, so it needs none — `ycsr` ought to match
-`yumete-core/src/editor/find.rs` across the whole path, and that is exactly what a file
-picker should be.
+**The picker's fuzzy is a different thing with the same name.** It compares one short
+label, so it has no window — `ycsr` ought to reach `yumete-core/src/editor/find.rs`
+across the whole path — it ranks what it finds, it will try out of order if nothing
+matches in order, and it never distinguishes case. The panel compares a wide field of
+prose: window, no ranking, and case follows the `1` row.
 
-**Fuzzy: "roughly these characters".** What a novelist remembers is usually not the
-sentence but those few characters — type `他説` and 「他輕輕地説」 comes up with it: the
-characters you typed count as a hit when they **appear in order** and **sit close
-together**.
+**It is the third notch on the 「matching」 row**, so choosing it already means not
+regex. It does rule out 「whole word」: when the question is 「roughly these characters」,
+word boundaries do not hold.
 
-**"close together" has a ruler**: all of the hit must fall inside a stretch no
-longer than "characters typed ×2 ＋ 4". Without that ruler it becomes "these characters
-are somewhere on this line", and lines of prose are long — nine results out of ten are
-worthless. So `他説` finds 「他輕輕地説」 (five characters) and does not find
-「他走了很久……有人説話」, half a sentence apart. What it draws is **the tightest
-stretch**: in 「他。他説」 it marks 「他説」, not everything from one end to the other.
+Warning: **「fuzzy」 is for finding, not for replacing.** The moment replace leaves
+「off」, matching falls back to 「literal」, and while replace is on, `3` turns only
+between 「literal」 and 「regex」. The stretch that matched holds characters you did not
+type, so replacing over it means letting the editor change your manuscript across a
+range it is unsure of. Found it? `Esc` out and change it yourself. Turning replace off
+again does not turn fuzzy back on — that would be deciding something you never said.
 
-**"fuzzy" is the third notch on the "matching" row**: literal, regex, fuzzy,
-one of three, so choosing fuzzy already means not regex, and neither has to grey out
-the other. What it does rule out is "whole word" on another row — when the question is
-"roughly these characters", word boundaries do not hold. Case works as before.
+**Under fuzzy, `n`/`N` walk the exact ones**: no regex can write 「roughly」, so rather
+than hand the page a pattern that does not fit, it hands it the characters you typed.
 
-**"Replace" is one row with three notches.** "Found it, now fix it" is the most common
-thing to do after a search, so it is a row here rather than a separate `:replace`.
-One press of `5`
-is "as typed": a "replace with" row appears under the query box, and `r`/`R` come alive
-with it. Another press is "keep case" (below); the third goes back to "off". The panel
-`:replace` opens is this notch set in advance.
+**The panel searches what `/` searches**: the same hits, still there once the panel
+closes. `n` does not bring the panel back, though — the sidebar costs columns and
+springing it open reflows the page. `空格 /` brings it back.
 
-Warning: **"fuzzy" is for finding, not for replacing.** The moment replace leaves "off",
-matching falls back to "literal"; while replace is on, `3` only turns between "literal"
-and "regex" and never passes through "fuzzy". The reason: the stretch that matched
-contains characters you did not type, so a bulk replace means letting the editor change
-your manuscript over a range it is unsure of. Found it? `Esc` out and change it
-yourself. **Turning replace off does not turn fuzzy on** — that would be deciding
-something you never said.
+**Walking the list leaves the text where it is**; `Enter` jumps. The context around the
+highlighted entry is written on the bottom line, which is as wide as the window while
+the panel is thirty-odd columns.
 
-**Under "fuzzy", `n`/`N` walk the exact ones** (the near ones the panel lists
-are a superset of them): no regex can write "roughly", and rather than hand the page a
-pattern that does not fit, it hands it the characters you typed.
-
-**The panel searches the same search `/` does**: `n`/`N` walk the same hits, and they
-are still there once the panel closes. But `n` does **not** bring the panel
-back — the sidebar eats columns, and springing it back reflows the whole page; while you
-are writing you should not pay that for one press of `n`. To get the panel back, press
-`空格 /` again.
-
-**Walking the list leaves the text where it is** (same as the outline); `Enter` is what
-jumps there. The context around that entry **is written on the bottom line** — the panel
-is only thirty-odd columns wide, and that line is as wide as the whole window.
-
-With the box empty the top right corner says **nothing**: "not searched yet" and "not
-one anywhere" are two different things, and the second says "none". A pattern that does
-not compile says "bad pattern" in **朱** in that same spot, while **the list keeps the
-last batch that did compile, drawn grey** — typing a regex necessarily passes through
-`[`, `(` and other states that do not compile, and clearing and refilling on every
-keystroke would flicker.
+**An empty box says nothing in the top right corner** — 「not searched yet」 and 「none
+anywhere」 are different answers. A pattern that does not compile says 「bad pattern」
+there in **朱**, and the list keeps the last batch that did compile, drawn grey: a regex
+being typed passes through `[` and `(` on its way, and refilling on every keystroke
+would flicker.
 
 #### Found it, now change it
 
@@ -4906,59 +4752,37 @@ foot and iTerm2 all do; Apple's own Terminal does not). A terminal that cannot d
 
 ### Picking a file: `空格 f`
 
-The panel opens in the middle of the screen, **the file list on the left and its
-preview on the right** — the preview is the first few lines of the highlighted file,
-and a file already open is previewed from the **buffer**, so unsaved words show too.
-
-**The top line is the search box**, reading `Search:`, with a rule between it and the list.
-
-**One state: the keys are in the search box from the first keystroke**, and `Esc`
-closes the panel. There is no mode in here — helix, VS Code, Zed and nvim all open
-their pickers in text entry and close them on one `Esc`, and so does this one.
+The panel opens in the middle of the screen, **the list on the left and a preview on the
+right**. Keys and shape are a picker's usual ones — it opens in text entry and `Esc`
+closes it outright, as helix, VS Code, Zed and nvim all do.
 
 | | |
 | --- | --- |
-| *anything printable* | into the query, which narrows the list (subsequence matching, so `ch63` finds `卷三/ch63.md`) |
-| `Tab` `S-Tab` | down and up the list. `C-n` `C-p` and `↓` `↑` do the same thing |
+| *anything printable* | into the query, which narrows the list (subsequence, so `ch63` finds `卷三/ch63.md`) |
+| `Tab` `S-Tab` | down and up the list; `C-n` `C-p` and `↓` `↑` do the same |
 | `PageDown` `PageUp` | a page at a time |
-| `A-h` | **what the walk skips**, four ways round: skip hidden + ignored → skip hidden → skip ignored → search everything → back to the first. What you have typed stays in the box |
-| `Enter` | Open |
-| `Esc` | Close |
+| `A-h` | **what the walk skips**, four ways round: hidden + ignored → hidden → ignored → nothing skipped. What you typed stays |
+| `Enter` `Esc` | open / close |
 
-Editing the query is what it is on the `:` line: `←` `→` `Home` `End` `C-a` `C-e`
-move, Backspace and `Delete` delete, `C-u` clears back to the start.
-**Backspace on an empty query does nothing** — it is not a second way out.
+Editing the query is what it is on the `:` line. Backspace on an empty query does
+nothing — it is not a second way out.
 
-**There is no second layer.** `Esc` closes the picker outright rather than
-stepping back to a list, and every letter — `i I a A d D c C` `g G q` included — is a
-letter of a file name, not a command.
+**A file already open is previewed from the buffer**, so words you have not saved show.
 
-**The cursor is always a bar in here**, because the next key always becomes a
-character — one rule throughout the editor.
+**The matched characters are 金**, which is the only way to see why a name with its
+letters scattered through it is on the list.
 
-**The matched characters are 金**, so you can see why a line is on the list — when the
-letters are scattered through the name, that is the only way to make it clear.
+**Order, before you type**: files opened this session first, newest at the top, then
+path order — chapter order, for a book — and prose (`.md` `.txt` `.typ`) ahead of code
+and build output. Once you type, the match decides: letters adjacent, letters at the
+start of a word, and letters in the **file name** rather than a directory score higher,
+and a short name beats a long one. The two orders above only break ties.
 
-**Order**: before anything is typed, **the files opened this session come first** (the
-most recent at the top) and the rest follow path order, which for a book is chapter
-order; the files you write in — `.md` `.txt` `.typ` — come before code and build
-output. Once you type, the match speaks: letters next to each other, letters at the
-start of a word, and letters **in the file name** rather than in a directory name all
-score higher, and a short name beats a long one. Those two orders above only decide
-ties.
+**The first line is pre-selected and previewed, drawn a shade dimmer** than a
+highlighted line elsewhere: a whole row reversed means 「the cursor is here」, and the
+cursor is in the search box. `Enter` opens it all the same.
 
-**The first line is pre-selected and previewed, and drawn a shade dimmer than a
-highlighted line elsewhere.** A whole row reversed means 「the cursor is here」 in this
-editor, and the cursor is in the search box: 「it allows you to pre-select the first
-result (and preview) it … but not give me a feeling that the cursor is on this line」.
-`Enter` opens it all the same.
-
-**The key hints are on the command line**; the panel does not list keys itself, and the height that saves goes to the list. The `A-h` cell names
-the state it is in now, and it is only written for the pickers that walk the disk —
-the buffer list and the wiki list have nothing to skip.
-
-`空格 b` is the same panel listing the open buffers, and `:open` entered with no path
-opens it too.
+`空格 b` is the same panel over the open buffers, and `:open` with no path opens it too.
 
 ### How much was written today: `:count-progress`
 
@@ -5374,61 +5198,26 @@ cut for itself. If you do not want the tint at all, `:word-show off`, or
 
 **Four ways of drawing it**, told apart in one sentence: **ink** moves the lightness,
 **hue** moves the colour, **tint** moves the paper, and **line** moves nothing at all
-and only draws a rule under the word.
+and draws a rule under the word.
 
-**Ink** (`:word-show ink`): **the paper stays put** and every other word takes a
-slightly fainter ink of its own (step 15), so the mark lands on the writing and a
-page still reads as a page of prose. The price is that the second ink is **dimmer**,
-and the dimmer words are easily read as emphasis — measured, the two inks differ by
-1.38:1, which is why it is **not the factory default**. One thing it can still
-do that none of the others can: inside writing that already carries a colour (a
-heading, a link) it tells words apart all the same, because 「one step back」 keeps the
-colour it started from.
+| `:word-show` | config | what it moves | the catch |
+| --- | --- | --- | --- |
+| `色相` / `color` | `"color"` (factory) | every other word turns a **pale blue**, brightness all but unmoved | writing that already has a colour — a heading, a link — is left alone, so boundaries do not show inside it |
+| `字色` / `ink` | `"ink"` | every other word takes a slightly fainter ink; the paper stays put | the two inks differ by 1.38:1, so the fainter word reads as emphasis |
+| `底色` / `tint` | `"tint"` | a very faint colour on the paper | a ground is a block: it marks the space a word fills, not the word, and it piles up badly on `==標記==` and `::: 提示` |
+| `線` / `line` | `"line"` | a rule under the word, neither ink nor paper touched | nothing is drawn on a link, which has an underline of its own |
 
-**Hue** (`:word-show 色相`/`color`, **the factory default**) changes the colour rather
-than the lightness: every other word turns a **pale blue** and the rest keep the
-original ink, with **the brightness all but unmoved** (1.007:1 on a dark page,
-1.047:1 on a light one; `字色` is 1.38:1), so the words are told apart without one of
-them sounding louder than its neighbour. The blue on a light page is
-**stronger than the one on a dark page**: the dimmer the ink, the worse the eye is at
-telling hues apart, and the same chroma on ink at L\* 17 simply cannot be seen. The
-axis is **blue↔yellow**, not red↔green: red-green colour blindness runs at about 8%
-of men, and being told apart is this mark's entire value.
+The axis for `色相` is **blue↔yellow**, not red↔green: red-green colour blindness runs
+at about 8% of men, and being told apart is this mark's whole value. One thing `字色`
+can do that none of the others can is tell words apart **inside** coloured writing,
+because 「one step back」 keeps the colour it started from.
 
-Equal lightness is not equal brightness: HSL's L is `(max+min)/2`, which has
-nothing to do with the eye. So that blue is **bisected out of the original ink's
-luminance**, not taken at the same L.
+Down a column a word is a vertical run, so `線` marks **the word's last cell only** — a
+short stroke between one word and the next, rather than a stroke under every character.
 
-**Writing that already has a colour is not touched at all** — a heading's
-gold and a link's blue stay as they were. Turning the hue throws away the colour
-something already had (gold turned blue or yellow is no longer gold), and writing
-that already carries a colour is set apart from prose anyway, which is most of what
-this mark buys. The price is that word boundaries do not show inside those passages;
-`字色` has no such limit, since it takes 「whatever colour is underfoot, one step
-back」, so gold stays gold.
-
-**Tint** (`:word-show 底色`/`tint`) — every other word gets a very faint colour laid
-on the paper. It states the boundary more firmly, and pays for it by being 「vague and
-noisy at once」: a ground is a **block**, and it marks the space a word occupies
-rather than the word itself, so a page of blocks is something the eye has to get past
-before it reaches the writing. It loses most where the page already has grounds of
-its own (`==標記==`, `::: 提示` and the like) — pile grounds up and you cannot tell
-which layer is which.
-
-**Line** (`:word-show 線`/`line`) is the lightest of the four: **neither the ink of
-the writing nor the colour of the paper moves at all**, and a rule is drawn under the
-word (step 50, far fainter than the underline on a markdown link). Across, it is one
-rule under the whole word, broken between one word and the next; down a column a word
-is a vertical run, and underlining the run only puts a stroke under every character,
-so vertical **marks the word's last cell only** — on screen, a short stroke between
-one word and the next. **Nothing is drawn on a link**: a link has an
-underline of its own, and the two stacked were tried — it computes to `#002857`,
-which on a dark page is a black line.
-
-In the config it is `word_mark = "color"` (factory)/`"ink"` / `"tint"` / `"line"`.
-The first three mark strictly every other word, so an unmarked word always sits
-between two marked ones and says just as much; line does not alternate — every word
-has its own rule, because that rule is drawn on the boundary anyway.
+The first three mark strictly every other word, so an unmarked word always sits between
+two marked ones and says just as much. `線` does not alternate: its rule is drawn on the
+boundary anyway.
 
 ---
 
