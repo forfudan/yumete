@@ -360,9 +360,16 @@ impl Editor {
         // 一行 150 萬字的 `.txt`，只摔住 `markup_runs` 是 0.35 秒一幀，兩支都摔
         // 住是 0.04。
         //
-        // 藏與不藏要**量的和畫的一致**，而兩邊問的都是這一支，所以摔在這裏安全。
+        // 藏與不藏要**量的和畫的一致**：記號這一頭兩邊問的都是 `markup_runs`，它自
+        // 己帶着同一道閘；注音那一頭的閘在 `readings_on_line` 裏（兩頭同一支）。
+        //
+        // Warning: **表格的襯墊不在這道閘裏面**（2026-10-09 補）。它是竪排自己要藏
+        // 的那幾格，而頁那一頭（[`Self::markup_hidden_on_line`]）無條件藏——這裏一
+        // 早返回就成了「藏了沒量」，底下七十行那條規矩說的正是它。
         if self.line_is_too_long(line) {
-            return Spans::new();
+            let mut off: Spans = self.table_slack_off_the_page(line);
+            off.sort_unstable();
+            return off;
         }
         // A reading that is being *laid out* is drawn beside the base, so its
         // markup comes off the page whatever `:render` says — leaving the tags
@@ -1365,6 +1372,17 @@ impl Editor {
     pub fn readings_on_line(&self, line: usize) -> Vec<crate::ruby::Ruby> {
         let dialects = self.ruby();
         if dialects.is_empty() {
+            return Vec::new();
+        }
+        // **太長的一行連注音也不排**（`:view-long-line`，2026-10-09）。
+        //
+        // Warning: **這道閘只能擺在這裏。** 注音這一件事有兩頭——標籤由
+        // [`Self::markup_off_line`] 藏起來，讀音由橫排那一行疊在上面畫——而兩頭問的
+        // 都是這一支。從前閘擺在 `markup_off_line` 裏，於是長行上標籤露着、讀音照樣
+        // 畫在它上面：`長段<ruby>甲<rt>jiǎ</rt></ruby>開頭` 的源碼上頭浮着一個錯開
+        // 六格的 `jiǎ`。[`Self::footnote_spans`] 那一段說過這條規矩（「兩邊要是各算
+        // 各的，就會出現『藏了沒畫』或者『畫了沒藏』」），注音漏在外頭了。
+        if self.line_is_too_long(line) {
             return Vec::new();
         }
         let rope = self.current_buffer().rope();
