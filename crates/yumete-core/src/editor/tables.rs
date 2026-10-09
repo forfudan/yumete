@@ -166,8 +166,20 @@ impl Editor {
                 let delimiter = crate::table::sniff(&lines).unwrap_or(',');
                 let head = self.current_buffer().rope().line(0).to_string();
                 let schema = crate::table::Schema::from_header(&head, delimiter);
+                // Warning: **名字說了的那幾種不必「每行欄數一樣」**（2026-10-09 審出
+                // 來的）。`looks_delimited` 那道閘的理由是「別把一頁散文當成表格」，
+                // 而 `.csv` 這個名字**本身就是作者在說它是什麽**
+                // （[`Self::names_itself_a_grid`]）。於是前二十行裏有一行欄數不齊，
+                // 整個檔就降級成「文中的區塊」——而區塊那一支是 `header: false`：表頭
+                // 成了第一條數據，`t1s` 排一次序就把它沉到了檔尾。欄數不齊是要讓人
+                // **看見**的損傷（`Schema::shows` 說的就是這件事），不是改判這個檔是
+                // 什麽的理由。
+                let declared = self
+                    .current_buffer()
+                    .path()
+                    .is_some_and(|p| self.names_itself_a_grid(p));
                 if schema.columns.len() < 2
-                    || !self.looks_delimited(delimiter, schema.columns.len())
+                    || (!declared && !self.looks_delimited(delimiter, schema.columns.len()))
                 {
                     // The **file** is not a table. A run of its lines still
                     // may be (#216): a 碼表 under a heading, a `dict.yaml`
@@ -2636,6 +2648,21 @@ impl Editor {
                 .join("\n"),
             None => self.current_buffer().text(),
         };
+        // Warning: **一條記錄跨兩行的時候不許排**（2026-10-09 審出來的）。
+        //
+        // 這一支底下按 `text.lines()` 一行一條記錄地重排，而一個引號裏夾了換行的欄位
+        // 是**一條記錄兩行**。開檔那道門攔得住它，可那道門只讀前二十行
+        // （`looks_delimited`／`first_lines(20)`），於是第二十一行之後的那一個照樣進得
+        // 來——排完 `zz,"line1` 落到檔尾、`line2"` 升成第二行，記錄碎了、引號也不成
+        // 對，整個檔從此讀不進去。字一個沒少，可那比少幾個字更糟。
+        //
+        // 所以這裏自己問一遍整份，報的還是開檔那道門報的那一句。`:table-check` 早就
+        // 指得出那一行，只是排序沒問過它。
+        if text.lines().any(|l| crate::table::field_runs_on(l, delimiter)) {
+            let name = self.current_buffer().display_name();
+            self.status = say!("table.field-runs-on", name);
+            return;
+        }
         let ends_with_newline = block.is_none() && text.ends_with('\n');
         // **Whatever this file ends its lines with, it goes on ending them with
         // it.** `str::lines` strips `\r\n` and a naive rejoin writes `\n`, so
