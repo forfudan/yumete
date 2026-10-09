@@ -295,6 +295,19 @@ impl Editor {
                 reshape,
                 rows,
             } => {
+                // **範圍寫反了就問一句**（2026-10-09 作者定，照 vim）。
+                //
+                // 從前 `substitution_rows` 默默 `a.min(b)..a.max(b)` 就改了，而「我寫
+                // 反了」和「我故意寫反」在屏幕上長得一樣。對調過的那一條存起來，`y`
+                // 再跑——它走的是正向那一枝，不會問第二次。
+                if let Some((first, second)) = self.a_backwards_range(&rows) {
+                    if !std::mem::take(&mut self.swapping_is_fine) {
+                        self.swap_asked = Some(line.to_string());
+                        self.pending = Pending::SwapRange;
+                        self.status = say!("find.range-runs-backwards", first, second);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                }
                 self.substitute(Substitution {
                     pattern: &pattern,
                     replacement: &replacement,

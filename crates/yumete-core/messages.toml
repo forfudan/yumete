@@ -4151,6 +4151,13 @@ zhs = "只有这一处：{0}"
 en = "only here: {0}"
 
 [[message]]
+# :s 的範圍兩頭寫反了（照 vim，問一句再改）
+key = "find.range-runs-backwards"
+zht = "範圍數字是反向的：第 {0} 行到第 {1} 行——y 對調着改、n 不動"
+zhs = "范围数字是反向的：第 {0} 行到第 {1} 行——y 对调着改、n 不动"
+en = "the range runs backwards: line {0} to line {1} — y swaps and changes, n leaves it"
+
+[[message]]
 # :s 換好了，報處數
 key = "find.substitute-changed"
 zht = "換了 {0} 處"
