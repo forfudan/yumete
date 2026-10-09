@@ -2171,6 +2171,9 @@ impl Editor {
                 let pos = self.append_position();
                 self.set_cursor(pos);
                 self.enter_insert();
+                // **`a` 出門的時候要退回那一個字上**（2026-10-09，照 helix）。
+                // `enter_insert` 剛把這一格清了，所以擺在它後面。
+                self.restore_caret = true;
                 self.type_it_again(count, None);
             }
             Key::Char('I') => {

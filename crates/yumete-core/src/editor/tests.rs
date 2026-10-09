@@ -23731,6 +23731,45 @@ fn switching_the_document_drops_what_was_asked_about_the_last_one() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **出插入態要退一格，兩個神諭的答案在這裏是同一個**（2026-10-09 量的）。
+///
+/// 從前一步都不退，於是行末 `a` `Esc` 之後 `字` 比那一行的字數大一個，再按 `l` 跳行、
+/// `d` 吃換行符；行中也偏右一格。真機量出來的那張表（vim 9.1／nvim 0.12.5 逐格相同、
+/// helix 25.07.1）就是下面這幾格——`A` 那一條兩家**不同**，所以它分鍵位。
+#[test]
+fn leaving_insert_steps_the_caret_back_the_way_vim_and_helix_do() {
+    // `press` 不認 Esc，所以這裏逐鍵走：`^` 當 Esc。
+    let at = |preset, keys: &str| -> usize {
+        let mut ed = typed("abcde\nzzz\n");
+        ed.set_key_preset(preset);
+        for c in keys.chars() {
+            let _ = match c {
+                '^' => ed.on_key(Key::Esc),
+                c => ed.on_key(Key::Char(c)),
+            };
+        }
+        // 1 起算的「字」，與狀態欄同一個數。
+        ed.caret() - ed.current_buffer().rope().line_to_char(0) + 1
+    };
+    use yumete_cjk::KeyPreset::{Helix, Vim};
+    // 行末（`gl` 落在最後一個字上，兩家都是這個答案）。
+    assert_eq!(at(Helix, "gl"), 5, "helix：`gl`");
+    assert_eq!(at(Helix, "gla^"), 5, "helix：`a` 記了 restore_cursor");
+    assert_eq!(at(Helix, "glA^"), 6, "helix：`A` 不記，停在行尾那一格");
+    assert_eq!(at(Helix, "gli^"), 5, "helix：`i` 不退");
+    assert_eq!(at(Vim, "gla^"), 5, "vim：無條件退一格");
+    assert_eq!(at(Vim, "glA^"), 5, "vim：`A` 也退");
+    assert_eq!(at(Vim, "gli^"), 4, "vim：`i` 也退");
+    // 行中：`a` 從前在兩套鍵位下都偏右一格。
+    assert_eq!(at(Helix, "ghll"), 3, "站在 `c` 上");
+    assert_eq!(at(Helix, "ghlla^"), 3, "helix：回到 `c`");
+    assert_eq!(at(Vim, "ghlla^"), 3, "vim：回到 `c`");
+    assert_eq!(at(Vim, "ghlli^"), 2, "vim：退到 `b`");
+    // 列 1 上退不動。
+    assert_eq!(at(Vim, "ghi^"), 1, "vim：行首不動");
+    assert_eq!(at(Helix, "gha^"), 1, "helix：行首的 `a` 退回第一個字");
+}
+
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
 ///
 /// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是

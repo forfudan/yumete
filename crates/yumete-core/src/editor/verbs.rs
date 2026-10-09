@@ -29,6 +29,8 @@ impl Editor {
         // 變成五個。進門清，比每一條出門的路都清一遍可靠。
         self.insert_again = 0;
         self.insert_opened = None;
+        // 出門退不退那一格，由進門的那一個鍵說（`a` 說退）——所以進門先清。
+        self.restore_caret = false;
         // 覆寫是 `R` 自己打開的，別的入口一律是普通插入。
         self.overwriting = false;
         self.overwritten.clear();
@@ -36,7 +38,42 @@ impl Editor {
         self.mode = Mode::Insert;
     }
 
-    /// Take the pending count prefix, defaulting to one.
+    /// **出插入態的時候光標往回退一格**（2026-10-09，兩個神諭量出來的）。
+    ///
+    /// 這一條不是「對齊哪一邊」的取捨：`a` 打完按 `Esc`，**vim 與 helix 的答案是同
+    /// 一個**——回到剛纔站的那個字上。從前這裏一步都不退，於是行末 `a` `Esc` 之後
+    /// 光標停在最後一個字**之外**，狀態欄報的 `字` 比那一行的字數還大一個，再按 `l`
+    /// 直接跳到下一行，`d` 吃掉的是換行符。行中也一樣偏右一格（插點在 `c` 上
+    /// `a` `Esc`，兩家都回 `c`，這裏停在 `d`）。
+    ///
+    /// 兩套鍵位的規矩不同，都是量出來的：
+    ///
+    /// | | 退不退 |
+    /// | --- | --- |
+    /// | vim | **無條件退一格**（`a` `A` `i` `o` `R` 都退，列 1 上不動） |
+    /// | helix | 只有 `a` 退（`restore_cursor`）；`A` 停在行尾那一格 |
+    ///
+    /// Warning: **格子裏不許退出那一格。** 表格的插入態是按單元格劃界的
+    /// （[`Editor::insert_bounds`]），退到格子的左牆為止——不然 `a` 打完一個格子，
+    /// 光標就落進左邊那一格的字裏了。
+    pub(super) fn step_back_out_of_insert(&mut self) {
+        let back = match self.key_preset {
+            yumete_cjk::KeyPreset::Vim => true,
+            _ => self.restore_caret,
+        };
+        self.restore_caret = false;
+        if !back {
+            return;
+        }
+        let stepped = motion::left(self.current_buffer().rope(), self.sel.head());
+        let stepped = match self.insert_bounds() {
+            Some((start, _)) => stepped.max(start),
+            None => stepped,
+        };
+        self.set_cursor(stepped);
+    }
+
+    /// Take the pending count prefix, defaulting to one.    /// Take the pending count prefix, defaulting to one.
     pub(super) fn take_count(&mut self) -> usize {
         self.count.take().unwrap_or(1).max(1)
     }
