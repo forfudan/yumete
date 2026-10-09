@@ -969,11 +969,18 @@ impl Editor {
     pub(super) fn md_row_at_cursor(&self) -> bool {
         // Warning: **不造字串**（2026-10-08）。這一支在**每一鍵的末尾**被問一次
         // （`find_the_table_here`），而從前它 `rope.line(line).to_string()`——一行 1240 萬
-        // 字的稿子上就是**每按一下拷 37 MB**。`opens_with_a_pipe` 問的是同一件事，
-        // 一個字一個字讀 rope，一個字节也不配。
+        // 字的稿子上就是**每按一下拷 37 MB**。[`Self::opens_a_row`] 問的是同一件事，
+        // 一個字一個字讀 rope，一個字節也不配。
+        //
+        // Warning: **要問的是 `opens_a_row`，不是另外那一支**（2026-10-09 審出來的）。
+        // 當天這裏新寫了一支 `opens_with_a_pipe`，而倉裏三百八十行之外早有同一支；
+        // 兩支只差一處：舊的跳的是 `char::is_whitespace`（`mdtable::is_row` 的 `trim`
+        // 就是這一套），新的只跳半角空格與製表符。於是用全角空格縮進的 `|` 行，在
+        // `mdtable::row_lines` 與 `line_is_table_row` 眼裏還是表格，在光標這一問眼裏
+        // 就不是了。重複的那一支已經刪掉。
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.caret().min(rope.len_chars()));
-        self.opens_with_a_pipe(line)
+        self.opens_a_row(line)
     }
 
     /// Whether the cursor's line looks like a table row but is inside a fence.
@@ -1389,7 +1396,7 @@ impl Editor {
         // （按版本緩存，可每改一次就重掃一次），而絕大多數行根本不以 `|` 開頭。
         // 順序搭錯的代價量過：`a_paste_asked_for_a_million_stops_at_the_ceiling`
         // 在 0.99 秒與 41 秒之間。
-        if !self.opens_with_a_pipe(line) {
+        if !self.opens_a_row(line) {
             return false;
         }
         if !self.table_view_opens_itself() || self.syntax() != crate::syntax::Syntax::Markdown {
@@ -1402,19 +1409,6 @@ impl Editor {
         }
         crate::mdtable::region(|i| self.line_text(i), line)
             .is_some_and(|region| self.md_table_parses(&region))
-    }
-
-    /// 這一行是不是以 `|` 開頭並且後面還有字——**一個字一個字讀，不造字串**。
-    ///
-    /// 與 `mdtable::is_row` 同一個意思，差別只在成本：那一支收 `&str`，而這裏要問的行
-    /// 可能有兩萬個字。散文行第一個非空白字就回假。
-    fn opens_with_a_pipe(&self, line: usize) -> bool {
-        let rope = self.current_buffer().rope();
-        if line >= rope.len_lines() {
-            return false;
-        }
-        let mut chars = rope.line(line).chars().skip_while(|c| *c == ' ' || *c == '\t');
-        chars.next() == Some('|') && chars.any(|c| !c.is_whitespace())
     }
 
     /// Where `line`'s cells are told apart, when it belongs to a table that is

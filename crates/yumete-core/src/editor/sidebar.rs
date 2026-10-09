@@ -1618,7 +1618,17 @@ impl Editor {
     fn open_file_picker_in(&mut self, root: PathBuf, sieve: crate::editor::Sieve) {
         let mut prose = Vec::new();
         let mut rest = Vec::new();
-        crate::editor::walk_with(&root, &sieve, &mut |path| {
+        // Warning: **這張單子可能是半截的，而此刻一個字都不說**（2026-10-09 審出來的）。
+        //
+        // 兩種半截：走查自己停了（`Walked.cut` ——`WALK_CEILING`／`WALK_DEADLINE`），
+        // 和 `PICKER_LIMIT` 四千條裝滿了。`Walked` 自己的註釋寫着「呼叫方有義務說出
+        // 來」，搜索那一頭說得出（`search.hits-more`），這一頭兩種都沒說。
+        //
+        // 沒有順手補：要寫的是一則**新的界面文案**（而且得把兩種成因說清楚），那歸
+        // 作者定——`PICKER_LIMIT` 那一則本來就在等他的那張單子上。接上文案之後，這
+        // 裏要收的是 `walk_with` 的回值與 `prose.len() + rest.len() >= PICKER_LIMIT`
+        // 這一格。
+        let _half = crate::editor::walk_with(&root, &sieve, &mut |path| {
             if prose.len() + rest.len() >= PICKER_LIMIT {
                 return;
             }

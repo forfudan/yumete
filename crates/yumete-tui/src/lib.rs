@@ -6926,7 +6926,9 @@ fn text_at(
             let flat = |line: usize| editor.table_row_at(line);
             // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
             // 不必每動一下就把前面那一整段逐字素走一遍。
-            let widths = |rope: &yumete_core::Rope, line: usize, span: usize| editor.line_widths(rope, line, span);
+            let widths = |rope: &yumete_core::Rope, line: usize, span: usize| {
+                editor.line_widths(rope, line, span)
+            };
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
                 .with_folds(&fold)
@@ -6935,9 +6937,9 @@ fn text_at(
                 .with_unwrapped(&flat)
                 .with_widths(&widths)
                 .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
-        .with_edit(editor.current_buffer().edit())
+                .with_edit(editor.current_buffer().edit())
                 .with_open_line(editor.open_line())
-        .with_caret(Some(editor.caret_in_line()));
+                .with_caret(Some(editor.caret_in_line()));
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
             // would land a click one row low for every reading above it.
@@ -9753,16 +9755,17 @@ fn draw_horizontal(
     // row is not in its column any more, so a table row is one row however long
     // it is and what runs off the right edge is reached by scrolling sideways.
     let flat = |line: usize| editor.table_row_at(line);
-            // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
-            // 不必每動一下就把前面那一整段逐字素走一遍。
-            let widths = |rope: &yumete_core::Rope, line: usize, span: usize| editor.line_widths(rope, line, span);
+    // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
+    // 不必每動一下就把前面那一整段逐字素走一遍。
+    let widths =
+        |rope: &yumete_core::Rope, line: usize, span: usize| editor.line_widths(rope, line, span);
     let measure = wrap::Measure::new(width, &hide)
         .with_indent(editor.paragraph_indent())
         .with_folds(&fold)
         .with_drawn(&drawn)
         .with_typed_drawn(&typed)
         .with_unwrapped(&flat)
-                .with_widths(&widths)
+        .with_widths(&widths)
         .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
         .with_edit(editor.current_buffer().edit())
         .with_open_line(editor.open_line())

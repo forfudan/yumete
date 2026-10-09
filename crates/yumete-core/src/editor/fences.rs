@@ -127,8 +127,15 @@ impl Editor {
 
     pub fn set_long_line(&mut self, upto: Option<usize>) {
         self.long_line = upto;
-        // 上過色的那幾行記在備忘裏，换了門槛就不算數了。
+        // **走這道閘的備忘，四份一起忘**（2026-10-09 改）。
+        //
+        // Warning: 從前只忘兩份（記號與代碼），另兩份（分詞與標點）靠的是「那道閘擺
+        // 在備忘查詢**之前**」——按今天的代碼確實不會過期，可那就成了「兩份靠順序、
+        // 兩份靠清空」，而讀代碼的人看見清空這一句，自然以為把閘擺在查詢後面也行。
+        // 門槛是一個設置，動一次就這麼一下，四份全忘最便宜也最說得清。
         self.markup_memo.forget();
+        self.segment_memo.forget();
+        self.note_memo.forget();
         self.code_cache.borrow_mut().by_chunk.clear();
     }
 
