@@ -455,7 +455,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetNumberFill(on) => {
-                self.number_fill = on.unwrap_or(!self.number_fill);
+                // **裸的報告，帶參數的纔設**（2026-10-09 作者定）。從前裸的是輪替，
+                // 而兄弟那幾個（`:readonly`／`:reload-auto`／`:yank-on-delete`／
+                // `:view-code`）裸的都報告——於是這一個現在是開還是關，沒有辦法問。
+                self.number_fill = on.unwrap_or(self.number_fill);
                 self.status = match self.number_fill {
                     true => say!("layout.line-numbers-on-a-band"),
                     false => say!("layout.line-numbers-on-the-page"),

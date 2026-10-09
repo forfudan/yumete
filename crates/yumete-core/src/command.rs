@@ -3678,7 +3678,9 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::WordsOr {
             of: OFF_ONLY,
             default: None,
-            or: "<幾列>",
+            // 數的是**字**，不是列（2026-10-09 作者定）：量一行有多少列要逐字量寬度，
+            // 而那正是這道閘要省的開銷。見 `Editor::LONG_LINE`。
+            or: "<幾字>",
         }],
         build: Some(|p| {
             Ok(Command::SetLongLine(match p.arg(0) {
