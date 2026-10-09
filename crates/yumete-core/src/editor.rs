@@ -4253,6 +4253,8 @@ fn scan(
                 &owned
             }
         };
+        // 換行符不進正則，見 [`line_body`]。
+        let (text, _) = line_body(text);
         let begin = byte_of_char(text, from.saturating_sub(at));
         if let Some(found) = text.get(begin..).and_then(|rest| pattern.find(rest)) {
             let start = at + text[..begin + found.start()].chars().count();
@@ -4261,6 +4263,29 @@ fn scan(
         at += slice.len_chars();
     }
     None
+}
+
+/// **一行的字，和它末尾那個換行符** —— 餵給正則的只許是前一半（2026-10-09）。
+///
+/// Warning: **這一支是三個毀檔缺陷的共同解藥。** 從前搜索與替換把整行**連換行符**
+/// 一起交給正則（`split_inclusive('\n')`），而這一節的註釋寫着「式子裏不可能有換行
+/// 符，所以一處匹配不會跨行」——那句話是錯的：`\s`、`\S`、`\W`、`\D` 和每一個取反
+/// 的字類都夠得着那個 `\n`。量出來的三件事：
+///
+/// - `:%s/\s+$//g` 把 `alpha  \nbeta  \ngamma\n` 變成 `alphabetagamma`，三行併成
+///   一行、末尾那個換行符也沒了。**那是最常見的一條清理式子**，沒有閘攔它。
+/// - `$` 永遠配不中行末（正則的 `$` 是「整段的末尾」，而那一段以 `\n` 收尾），於是
+///   `:%s/said$/SAID/g` 報「換了 0 處」，`/said$` 報找不到。
+/// - 零寬的匹配落在換行符**後面**：`:%s/$/</g` 把每一個 `<` 寫到了下一行的行首，
+///   最後那一個寫在檔尾的換行符之後，於是檔案多出一行、而且不再以換行符收尾。
+///
+/// 兩段都交出來，是因為呼叫方多半要把那個換行符原樣寫回去（CRLF 也原樣）。
+pub(crate) fn line_body(line: &str) -> (&str, &str) {
+    let body = match line.strip_suffix('\n') {
+        Some(rest) => rest.strip_suffix('\r').unwrap_or(rest),
+        None => line,
+    };
+    (body, &line[body.len()..])
 }
 
 /// The byte offset of character `n` in `text`, or its length.
@@ -4333,6 +4358,8 @@ fn scan_back(
                 &owned
             }
         };
+        // 換行符不進正則，見 [`line_body`]。
+        let (text, _) = line_body(text);
         // A line is read forwards whichever way the file is being read: the
         // matches on it have to be found in order to know which is the last.
         let mut byte = 0usize;

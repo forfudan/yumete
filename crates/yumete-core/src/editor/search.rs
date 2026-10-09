@@ -220,7 +220,13 @@ impl Editor {
         };
 
         let text = self.current_buffer().text();
-        let chosen = self.substitution_rows(rows);
+        let chosen = match self.substitution_rows(rows) {
+            Ok(chosen) => chosen,
+            Err(why) => {
+                self.status = why;
+                return;
+            }
+        };
         // **`c` — 逐處確認** (#415): 「防止一下子全部都替换了」. `n` still wins
         // when both were written: it says change nothing, which is the safer
         // of the two readings of a line that asks for both.
@@ -233,9 +239,13 @@ impl Editor {
 
         for (idx, line) in text.split_inclusive('\n').enumerate() {
             if chosen.has(idx) {
-                let (new_line, n) = replace_in_line(line, &re, &replacement, global);
+                // 換行符不進正則，原樣寫回去（CRLF 也原樣）——見
+                // [`crate::editor::line_body`]。
+                let (body, eol) = crate::editor::line_body(line);
+                let (new_line, n) = replace_in_line(body, &re, &replacement, global);
                 count += n;
                 rebuilt.push_str(&new_line);
+                rebuilt.push_str(eol);
             } else {
                 rebuilt.push_str(line);
             }
@@ -255,7 +265,11 @@ impl Editor {
             self.status = say!("find.substitute-nothing-changed", count);
             return;
         }
-        if count > 0 {
+        // Warning: **配中了不等於改了**（2026-10-09 審出來的）。零寬的式子（` *$`、
+        // `x*`）每一行都配得中，而換上去的和換下來的一模一樣；從前照樣記一個撤銷點、
+        // 掛上 `[+]`、`:w` 真的寫一遍盤。報的處數不動（vim 也報配中幾處），只是檔沒
+        // 變就什麽都不做。
+        if count > 0 && rebuilt != text {
             self.snapshot();
             let len = self.current_buffer().char_count();
             let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
@@ -270,24 +284,36 @@ impl Editor {
     }
 
     /// The lines a `:s` range names, as a question a line number can be put to.
-    fn substitution_rows(&self, rows: crate::command::Rows) -> Chosen {
+    fn substitution_rows(&self, rows: crate::command::Rows) -> Result<Chosen, String> {
         use crate::command::{Bound, Rows};
         let rope = self.current_buffer().rope();
         let last_line = motion::last_line(rope);
-        let resolve = |b: Bound| match b {
-            Bound::Line(n) => n.saturating_sub(1).min(last_line),
-            Bound::Cursor => rope.char_to_line(self.caret().min(rope.len_chars())),
-            Bound::Last => last_line,
+        // Warning: **沒有的那一行不許悄悄夾到末行**（2026-10-09 審出來的）。從前寫的是
+        // `n.saturating_sub(1).min(last_line)`，於是三行的檔上 `:99s/a/X/` 改的是**第
+        // 三行**，還報「換了 1 處」——把 `:9s` 打成 `:91s` 就是這樣改掉了一章的結尾。
+        // `:0s` 同理，它改的是第一行。vim 兩種都報 `E16: Invalid range`，一個字不動。
+        let resolve = |b: Bound| -> Result<usize, String> {
+            match b {
+                Bound::Line(0) => Err(say!("find.no-such-line", 0, last_line + 1)),
+                Bound::Line(n) if n > last_line + 1 => {
+                    Err(say!("find.no-such-line", n, last_line + 1))
+                }
+                Bound::Line(n) => Ok(n - 1),
+                Bound::Cursor => Ok(rope.char_to_line(self.caret().min(rope.len_chars()))),
+                Bound::Last => Ok(last_line),
+            }
         };
-        match rows {
+        Ok(match rows {
             Rows::All => Chosen::Span(0, last_line),
             Rows::Span(a, b) => {
-                let (a, b) = (resolve(a), resolve(b));
+                let (a, b) = (resolve(a)?, resolve(b)?);
                 Chosen::Span(a.min(b), a.max(b))
             }
             // `1,5,9` — these and no others. Written in any order, and a line
             // named twice is still one line.
-            Rows::List(bounds) => Chosen::These(bounds.into_iter().map(resolve).collect()),
+            Rows::List(bounds) => Chosen::These(
+                bounds.into_iter().map(resolve).collect::<Result<Vec<_>, _>>()?,
+            ),
             // No range written: the lines the *selection* covers. Reading the
             // cursor's line instead meant that after `x` — which leaves the
             // cursor on the line below the one it selected — `:s` edited a
@@ -302,7 +328,7 @@ impl Editor {
                 };
                 Chosen::Span(first, last)
             }
-        }
+        })
     }
 
     // ---- `:s …c` — one match at a time (#415) -----------------------------
@@ -341,6 +367,8 @@ impl Editor {
         let mut at = 0usize;
         for (idx, line) in text.split_inclusive('\n').enumerate() {
             if walk.chosen.has(idx) {
+                // 換行符不進正則，見 [`crate::editor::line_body`]。
+                let (line, _) = crate::editor::line_body(line);
                 for caps in walk.re.captures_iter(line) {
                     let m = caps.get(0).expect("group 0 is the whole match");
                     let start = at + line[..m.start()].chars().count();
@@ -398,15 +426,18 @@ impl Editor {
                 at += line.chars().count();
                 continue;
             }
-            // Byte cursor inside `line`: everything before it is already in
+            // 換行符不進正則，原樣寫回去——見 [`crate::editor::line_body`]。
+            // `at` 數的仍舊是**整行**，它是跨行的字元計數。
+            let (body, eol) = crate::editor::line_body(line);
+            // Byte cursor inside `body`: everything before it is already in
             // `rebuilt`. `captures_iter` yields non-overlapping matches in
             // order, so it only ever moves forward.
             let mut copied = 0usize;
-            for caps in walk.re.captures_iter(line) {
+            for caps in walk.re.captures_iter(body) {
                 let m = caps.get(0).expect("group 0 is the whole match");
-                let start = at + line[..m.start()].chars().count();
+                let start = at + body[..m.start()].chars().count();
                 if start >= walk.from {
-                    rebuilt.push_str(&line[copied..m.start()]);
+                    rebuilt.push_str(&body[copied..m.start()]);
                     // `$1` resolved for this match, as in `next_hit`.
                     caps.expand(&walk.replacement, &mut rebuilt);
                     copied = m.end();
@@ -418,7 +449,8 @@ impl Editor {
                     break;
                 }
             }
-            rebuilt.push_str(&line[copied..]);
+            rebuilt.push_str(&body[copied..]);
+            rebuilt.push_str(eol);
             at += line.chars().count();
         }
         if changed == 0 {

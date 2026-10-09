@@ -2797,9 +2797,12 @@ fn take_the_line(
     sink: &mut Option<&mut dyn FnMut(&Hit) -> bool>,
     stop: &mut bool,
 ) -> bool {
-    for (nth, (start, end)) in look.spans(text).into_iter().enumerate() {
+    // 換行符不進式子，見 [`crate::editor::line_body`]：`--grep 'o$' --regex` 從前一處
+    // 都找不到，而 `grep -n 'o$'` 找得到。`at` 數的仍舊是整行。
+    let (body, _) = crate::editor::line_body(text);
+    for (nth, (start, end)) in look.spans(body).into_iter().enumerate() {
         *total += 1;
-        let hit = excerpt(Some(shown.to_path_buf()), text, *at, start, end, line, nth);
+        let hit = excerpt(Some(shown.to_path_buf()), body, *at, start, end, line, nth);
         if let Some(s) = sink.as_deref_mut() {
             if !s(&hit) {
                 *stop = true;

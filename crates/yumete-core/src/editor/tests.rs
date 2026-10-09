@@ -14857,7 +14857,11 @@ fn a_backward_search_lands_where_the_full_sweep_did() {
             .lines_at(within.start.min(rope.len_lines()))
             .take(within.end.saturating_sub(within.start))
         {
-            let text = slice.to_string();
+            let whole = slice.to_string();
+            // **換行符不進正則**，同被測的那一支（2026-10-09 改）。這個神諭原先把整
+            // 行連換行符一起餵進去，於是它和被測的那一支**同病**：`甲$` 兩邊都答
+            // 「沒有」，而對的答案是末行那個甲。見 `crate::editor::line_body`。
+            let text = crate::editor::line_body(&whole).0.to_string();
             let mut byte = 0usize;
             while let Some(m) = text.get(byte..).and_then(|rest| pattern.find(rest)) {
                 let start = at + text[..byte + m.start()].chars().count();
@@ -23848,6 +23852,52 @@ fn cutting_at_many_cursors_and_putting_it_back_restores_every_piece() {
     // `;` 把每一段收成一點（不是只留主選區），`P` 各貼各的。
     press(&mut ed, ";P");
     assert_eq!(ed.current_buffer().rope().to_string(), was, "逐字還原");
+}
+
+/// **行末那個換行符不進正則**（2026-10-09 審出來的，三條毀檔缺陷一個根）。
+///
+/// 每一格的「對的答案」都是拿 vim／nvim 量出來的。見 `crate::editor::line_body`。
+#[test]
+fn a_substitution_never_reaches_the_line_break() {
+    let after = |text: &str, cmd: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(cmd).unwrap();
+        ed.current_buffer().rope().to_string()
+    };
+    // ① 最常見的那一條清理式子，從前把三行併成一行、末尾的換行符也沒了。
+    assert_eq!(
+        after("alpha  \nbeta  \ngamma\n", ":%s/\\s+$//g"),
+        "alpha\nbeta\ngamma\n"
+    );
+    assert_eq!(after("a\nb\nc\n", ":%s/\\s/-/g"), "a\nb\nc\n", "行裏沒有空白就不動");
+    assert_eq!(after("ab\ncd\n", ":%s/[^a]/-/g"), "a-\n--\n", "取反的字類也夠不着");
+    // ② `$` 從前永遠配不中行末（正則的 `$` 是整段的末尾，而那一段以換行符收尾）。
+    assert_eq!(after("he said\nshe said\n", ":%s/said$/SAID/g"), "he SAID\nshe SAID\n");
+    // ③ 零寬的匹配從前落在換行符**後面**，於是檔尾多一行、而且不以換行符收尾。
+    assert_eq!(after("aaa\nbbb\n", ":%s/$/</g"), "aaa<\nbbb<\n");
+    assert_eq!(after("abc\nxabc\n", ":%s/x*/-/g"), "-a-b-c-\n-a-b-c-\n");
+    // 行首那一半本來就是對的，別碰壞。
+    assert_eq!(after("ba\nbb\n", ":%s/^b/Y/g"), "Ya\nYb\n");
+}
+
+/// **沒有的那一行不許悄悄夾到末行**（2026-10-09 審出來的）。
+///
+/// 三行的檔上 `:99s/a/X/` 從前改的是**第三行**，還報「換了 1 處」——`:9s` 打成
+/// `:91s` 就這樣改掉了一章的結尾。vim 兩種都報 `E16: Invalid range`。
+#[test]
+fn a_substitution_refuses_a_line_the_file_does_not_have() {
+    let after = |cmd: &str| -> String {
+        let mut ed = typed("a1\na2\na3\n");
+        ed.execute(cmd).unwrap();
+        ed.current_buffer().rope().to_string()
+    };
+    assert_eq!(after(":99s/a/X/"), "a1\na2\na3\n", "第 99 行不存在");
+    assert_eq!(after(":0s/a/X/"), "a1\na2\na3\n", "沒有第 0 行");
+    assert_eq!(after(":1,5s/a/X/"), "a1\na2\na3\n", "一組裏有一個不存在就整個不做");
+    // 存在的照舊。
+    assert_eq!(after(":3s/a/X/"), "a1\na2\nX3\n");
+    assert_eq!(after(":1,3s/a/X/"), "X1\na2\nX3\n");
+    assert_eq!(after(":1-3s/a/X/"), "X1\nX2\nX3\n");
 }
 
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
