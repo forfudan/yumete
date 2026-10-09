@@ -3613,6 +3613,12 @@ after it out of place.) Press `空格 t w` again and they all spread back. The f
 not move one character: when `空格 t F` lines the table up into the file it reads the
 source, not the page.
 
+**The cell you are typing in scrolls inside itself.** Type past the width the column
+has and the cell slides left under the cursor rather than letting it run off the edge,
+with a `<` in front to say its head is behind you; walk back and it slides the other
+way. Nothing is cut and nothing moves in the file — this is only which stretch of the
+cell the column has room to show.
+
 **Walking over it does not spread it; changing characters does.** The cursor stops on a
 folded cell and it stays folded — **to read the whole thing, open the record panel with
 `空格 t i`** (not one character is missing there, and it wraps). Press `i`/`a`/`c`

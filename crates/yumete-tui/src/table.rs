@@ -763,7 +763,33 @@ pub fn draw(
                         cell.set_symbol(" ").set_style(style);
                     }
                 }
-                let content = parts[i].get(k).map(String::as_str).unwrap_or("");
+                // **Where the caret stands in this cell, before the cell is
+                // drawn** — because it decides *which part of it* is drawn.
+                // `None` unless the caret is in this cell and on this one of
+                // its lines.
+                let step_here = here
+                    .then(|| {
+                        let from = editor
+                            .cell_span(line, i)
+                            .map(|(a, _)| a)
+                            .unwrap_or(usize::MAX);
+                        caret_in(&parts[i], editor.cursor().saturating_sub(from))
+                    })
+                    .filter(|(at, _)| *at == k)
+                    .map(|(_, step)| step);
+                let whole = parts[i].get(k).map(String::as_str).unwrap_or("");
+                // The caret's own cell scrolls inside itself ([`window_at`]).
+                // A cell that merely holds the other pane's search hit does
+                // not: nothing is being typed there, and its head is what a
+                // reader needs to recognise the row by.
+                let (shown, step_here) = match step_here.filter(|_| peek.is_none()) {
+                    Some(step) => {
+                        let (shown, step, _) = window_at(whole, step, w as usize);
+                        (shown, Some(step))
+                    }
+                    None => (whole.to_string(), step_here),
+                };
+                let content = shown.as_str();
                 // **A cut cell says so**, in the same `>` the prose page marks
                 // a folded tail with — one symbol, one meaning, whichever
                 // surface the table is drawn on. Nothing is cut under 折行:
@@ -812,21 +838,15 @@ pub fn draw(
                         }
                     }
                 }
-                if here {
+                if let Some(step) = step_here {
                     // Where typing would land — which is *inside* the cell, not
                     // at its start. Reading by character (`Tab`), and typing in
                     // Insert, both move the cursor within the cell, and a caret
                     // pinned to the cell's first 字 says they did not. Under
-                    // 折行 it is on the line the caret's own character is on.
-                    let from = editor
-                        .cell_span(line, i)
-                        .map(|(a, _)| a)
-                        .unwrap_or(usize::MAX);
-                    let into = editor.cursor().saturating_sub(from);
-                    let (at, step) = caret_in(&parts[i], into);
-                    if at == k {
-                        caret = ((x + (step as u16).min(w)).min(right.saturating_sub(1)), y);
-                    }
+                    // 折行 it is on the line the caret's own character is on,
+                    // and past the column's width it is wherever the cell has
+                    // scrolled to.
+                    caret = ((x + (step as u16).min(w)).min(right.saturating_sub(1)), y);
                 }
                 // The seam after the cell: the page's own ground, except on the
                 // row the cursor is on, where the band runs unbroken so the row
@@ -1085,6 +1105,48 @@ pub fn draw_detail(
             y += 1;
         }
     }
+}
+
+
+/// **The run of `line` to draw when the caret has been carried past `room`**,
+/// where the caret then stands, and whether a head was left behind.
+///
+/// A column is only as wide as the page can give it, and a cell can be longer.
+/// Drawn always from its first character, the tail — which is where the typing
+/// is — falls off the right edge and the caret with it: it stopped at the
+/// column's last cell and stayed there however much more was typed, so neither
+/// the characters nor the cursor moved (reported 2026-10-09: 「The cursor
+/// location in the table is incorrect (insert mode)」). So the cell scrolls
+/// inside itself, which is what a spreadsheet's active cell does — and what
+/// this editor's own query boxes already do ([`crate::window_on`]).
+///
+/// A cell is reserved at each end: [`HEAD_MARK`] in front, and the room
+/// [`FOLD_MARK`] needs behind, so the caret is never standing on a mark.
+fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
+    let head = yumete_cjk::str_width(yumete_core::mdtable::HEAD_MARK);
+    let fold = yumete_cjk::str_width(yumete_core::mdtable::FOLD_MARK);
+    // Nothing to do while the caret is still inside the room — and nothing
+    // that *can* be done once the two marks would leave it no cell to stand in.
+    if caret + fold < room || room <= head + fold {
+        return (line.to_string(), caret, false);
+    }
+    let want = caret + head + fold + 1 - room;
+    let (mut dropped, mut from) = (0usize, 0usize);
+    for g in yumete_cjk::graphemes(line) {
+        if dropped >= want {
+            break;
+        }
+        // **A wide glyph goes whole or not at all**: half a 漢字 is not a cell
+        // the terminal can draw, and charging one for two walks every column
+        // after it out of line.
+        dropped += yumete_cjk::grapheme_width(g).max(1);
+        from += g.len();
+    }
+    (
+        format!("{}{}", yumete_core::mdtable::HEAD_MARK, &line[from..]),
+        caret + head - dropped,
+        true,
+    )
 }
 
 /// Which line of a wrapped cell the caret is on, and how far into it.
