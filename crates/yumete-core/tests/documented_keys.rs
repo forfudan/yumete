@@ -17,19 +17,20 @@
 use yumete_core::command;
 use yumete_core::editor::Editor;
 
-/// The two documents, read from the tree rather than embedded.
+/// The documents this net is cast over, read from the tree rather than embedded.
+///
+/// Warning: **The Chinese manual is no longer read** (2026-10-09). It is frozen until
+/// yumete settles, and a frozen document is one this test cannot help: the next
+/// command rename would turn it red and the only way to green would be to edit
+/// the very file we have decided to stop editing. Guarding it would reimpose the
+/// work that freezing it was meant to remove. It comes back when it is translated
+/// again.
 fn documents() -> Vec<(&'static str, String)> {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
     vec![
         (
             "docs/manual.md",
             std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual"),
-        ),
-        // **兩份手冊都讀**（2026-10-06）。英文那一份是正本，繁體那一份是同一本書
-        // 的中文版——兩邊教的鍵要一樣，所以兩邊都走一遍這張網。
-        (
-            "docs/manual_tc.md",
-            std::fs::read_to_string(format!("{root}/docs/manual_tc.md")).expect("the manual"),
         ),
         ("tutor.rs", yumete_core::tutor::LESSON.to_string()),
     ]
