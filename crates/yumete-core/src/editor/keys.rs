@@ -1422,6 +1422,21 @@ impl Editor {
                 self.answer_confirm(key);
                 return;
             }
+            Pending::SwapRange => {
+                self.pending = Pending::None;
+                let asked = self.swap_asked.take();
+                // `y` 纔改，別的鍵一律是「不動」——同下面那一問的理由：一個沒人
+                // 想按的鍵不該替一條會改幾行字的命令答「好」。
+                if matches!(key, Key::Char('y') | Key::Enter) {
+                    if let Some(line) = asked {
+                        self.swapping_is_fine = true;
+                        let _ = self.execute(&line);
+                        self.swapping_is_fine = false;
+                    }
+                } else {
+                    self.status = String::new();
+                }
+            }
             Pending::ReplaceAll => {
                 self.pending = Pending::None;
                 match key {

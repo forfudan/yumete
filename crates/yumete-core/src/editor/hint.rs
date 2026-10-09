@@ -365,6 +365,9 @@ impl Editor {
         let keys = match self.pending {
             // 撤銷已經斷了，剩下那個 `u` 吞不吞都行——没什麽要提示的。
             Pending::UndoBreak => return None,
+            // 範圍寫反了那一問自己把鍵寫在句子裏（「y 對調着改、n 不動」），所以
+            // 這一行不必再畫一張鍵表——同 `ReplaceAll` 的區別就在那一句帶不帶鍵。
+            Pending::SwapRange => return None,
             Pending::None => {
                 // A count on its own is a sequence too — `3` is waiting for the
                 // motion it multiplies.

@@ -244,6 +244,12 @@ enum Pending {
     /// file are changes a reader is looking straight at, and every file in a
     /// book is not (#419).
     ReplaceAll,
+    /// **`:3-1s` 的範圍是反的**，問一句再改（2026-10-09 作者定）。
+    ///
+    /// 從前它默默對調成 1–3 就改了。vim 問「Backwards range given, OK to swap
+    /// (y/n)?」——而「我寫反了」和「我故意寫反」在屏幕上長得一樣，所以它問。
+    /// 同 [`Pending::ReplaceAll`]：狀態欄一行 `y`／`n`，不開中央那扇窗。
+    SwapRange,
     /// `` ` `` — 「不改它說什麼，只改它長什麼樣」 (§5.2.3 ②).
     ///
     /// Helix spends three top-level keys here (`` ` `` 小寫, `` A-` `` 大寫,
@@ -282,7 +288,7 @@ impl Pending {
             // `y`/`n`/`a`/`q`/`l` name what to do, not what to write；
             // `C-g` 後面那個 `u` 也不是要寫進去的字。
             Pending::UndoBreak
-            | Pending::Confirm | Pending::ReplaceAll | Pending::None
+            | Pending::Confirm | Pending::ReplaceAll | Pending::SwapRange | Pending::None
             | Pending::Goto
             | Pending::Space
             | Pending::Register
@@ -2116,6 +2122,14 @@ pub struct Editor {
     status: String,
     /// A pending multi-key operator (goto `g…` or find `f`/`t`/`F`/`T`).
     pending: Pending,
+    /// **範圍寫反了的那一條 `:s`**，等 `y` 再跑（2026-10-09）。
+    ///
+    /// 存的是**那一行原文**：`execute` 只收字串，沒有「跑一條已解析命令」的入口，而
+    /// 原文再跑一遍是最老實的一種重放——按 `y` 的人要的正是「我剛打的那一句，照
+    /// 對調過的範圍做」。
+    swap_asked: Option<String>,
+    /// 問過了，這一趟不必再問（[`Self::swap_asked`] 那一問的答覆）。
+    swapping_is_fine: bool,
     /// The `:s …c` walk `Pending::Confirm` is the keyboard half of.
     confirming: Option<Confirming>,
     /// The count typed before a pending operator, kept because the count is
@@ -3565,6 +3579,8 @@ impl Editor {
             signature_query: None,
             signature_asked_at: None,
             restore_caret: false,
+            swap_asked: None,
+            swapping_is_fine: false,
             signature_on: None,
             signature_doc_query: None,
             theme_request: None,

@@ -23951,6 +23951,34 @@ fn a_substitution_is_case_sensitive_and_a_search_is_not() {
     assert_eq!(found("The"), 11, "`/The` 跳過小寫那一處");
 }
 
+/// **範圍寫反了先問一句**（2026-10-09 作者定，照 vim）。
+///
+/// 從前 `:3-1s` 默默對調成 1–3 就改了，而「我寫反了」和「我故意寫反」在屏幕上長得
+/// 一樣。vim 問「Backwards range given, OK to swap (y/n)?」。
+#[test]
+fn a_backwards_range_is_asked_about_before_it_is_swapped() {
+    let run = |keys: &str| -> String {
+        let mut ed = typed("a1\na2\na3\n");
+        ed.execute(":3-1s/a/X/").unwrap();
+        for c in keys.chars() {
+            let _ = match c {
+                '^' => ed.on_key(Key::Esc),
+                c => ed.on_key(Key::Char(c)),
+            };
+        }
+        ed.current_buffer().rope().to_string()
+    };
+    // 問的時候一個字都不動。
+    assert_eq!(run(""), "a1\na2\na3\n", "問着的時候不動");
+    assert_eq!(run("y"), "X1\nX2\nX3\n", "`y` 對調着改——`-` 是跨段，1 到 3 三行都改");
+    assert_eq!(run("n"), "a1\na2\na3\n", "`n` 不動");
+    assert_eq!(run("^"), "a1\na2\na3\n", "Esc 也是不動");
+    // 正向的不問。
+    let mut ed = typed("a1\na2\na3\n");
+    ed.execute(":1-3s/a/X/").unwrap();
+    assert_eq!(ed.current_buffer().rope().to_string(), "X1\nX2\nX3\n", "正向直接做");
+}
+
 /// **沒有的那一行不許悄悄夾到末行**（2026-10-09 審出來的）。
 ///
 /// 三行的檔上 `:99s/a/X/` 從前改的是**第三行**，還報「換了 1 處」——`:9s` 打成

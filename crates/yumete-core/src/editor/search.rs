@@ -304,6 +304,28 @@ impl Editor {
         self.status = say!("find.substitute-changed", count);
     }
 
+    /// **這個範圍是反的嗎** —— 是就交寫的那兩個行號（2026-10-09）。
+    ///
+    /// 只有 `Rows::Span` 可能反（`,` 那一種是一張單子，順序不說明什麽）。交的是
+    /// **讀者寫的那兩個數**，所以 `:$-1s` 在三行的檔上報的是「第 3 行到第 1 行」，
+    /// 而不是 `$`。對調本身照舊由 [`Self::substitution_rows`] 做。
+    ///
+    /// 行號越界的那一種不在這裏答——那一支是 [`Self::substitution_rows`]，它報
+    /// 「沒有第 N 行」，而一個不存在的行談不上方向。
+    pub(super) fn a_backwards_range(&self, rows: &crate::command::Rows) -> Option<(usize, usize)> {
+        use crate::command::{Bound, Rows};
+        let Rows::Span(a, b) = rows else { return None };
+        let rope = self.current_buffer().rope();
+        let last = motion::last_line(rope);
+        let shown = |b: &Bound| match b {
+            Bound::Line(n) => *n,
+            Bound::Cursor => rope.char_to_line(self.caret().min(rope.len_chars())) + 1,
+            Bound::Last => last + 1,
+        };
+        let (first, second) = (shown(a), shown(b));
+        (first > second).then_some((first, second))
+    }
+
     /// The lines a `:s` range names, as a question a line number can be put to.
     fn substitution_rows(&self, rows: crate::command::Rows) -> Result<Chosen, String> {
         use crate::command::{Bound, Rows};
