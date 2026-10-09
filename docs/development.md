@@ -20502,6 +20502,28 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.148 Four things a key forgets when it runs once per selection (2026-10-09)
+
+`y` did not run once per selection: `self.span()` asks the primary, so three cursors copied one
+piece and `P` pasted that piece at all three — 「甲**三**一行…／乙**三**二行…」, two of them
+wrong and none of it looking wrong. It goes through `each_selection` (not `edit_each`: copying
+changes no text, so it needs neither an undo point nor the back-to-front order), which now also
+sets `edit_nth` — the slot `store` keys the per-selection register pieces on (§5.146).
+
+Writing that test turned up two more members of the same family. `each_selection` and
+`edit_each` already put back `pending`, `count`, the named register and the mode before each
+selection, because each is spent by the first run. They did not put back:
+
+- **`extend`** — and missing it changes what the key *means*. Under the vim preset `d` cuts at
+  once in visual mode and is an operator waiting for a motion outside it; cutting leaves visual
+  mode, so from the second selection on the key only armed an operator. `Vd` on three cursors
+  cut one line.
+- **`vim_lines`** — 「this selection is a whole line」, spent by the first
+  `extend_to_line_bounds`; the rest fell back to the character path.
+
+Reachable only through `A-C`: under the vim preset `C` is `c$` and `s` substitutes a character,
+so that is the one key there that makes a second selection.
+
 ## 5.147 Seventy-five milliseconds a keystroke, and where they went (2026-10-09)
 
 The performance reviewer's agent hit the usage limit mid-run; its last line was 「every edit

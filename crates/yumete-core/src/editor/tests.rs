@@ -24291,3 +24291,50 @@ fn word_discovery_reads_a_budget_not_a_whole_file() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **N 段複製，N 段貼回去**（2026-10-09，`d` 那一條的另一半）。
+///
+/// `y` 從前不逐段做：`self.span()` 只問主選區，於是三段複製拿回來的是同一截，`P`
+/// 把它貼到每一段上——「甲**三**一行…／乙**三**二行…／丙三三行…」，兩段對不上而
+/// 讀起來不像壞的。拿真 helix 對過：那裏三段各貼各的。
+#[test]
+fn copying_at_many_cursors_puts_each_piece_at_its_own_cursor() {
+    let mut ed = typed("甲一行寫了很多字。\n乙二行也寫了些。\n丙三行最後收尾。\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "wCC");
+    press(&mut ed, "y");
+    press(&mut ed, ";P");
+    assert_eq!(
+        ed.current_buffer().rope().to_string(),
+        "甲一一行寫了很多字。\n乙二二行也寫了些。\n丙三三行最後收尾。\n",
+        "三段各貼自己那一截"
+    );
+}
+
+/// **`extend` 和 `V` 那一格每一段都要看得見**（2026-10-09，同 `pending`／`count`／模式）。
+///
+/// 兩格各漏一次，病得不一樣：
+///
+/// - `vim_lines` 說的是「這一段選的是整行」，第一趟的 `extend_to_line_bounds` 會把它花掉，
+///   後面幾段於是按字符那一路走。
+/// - `extend` 漏掉**改的是鍵的意思**：vim 鍵位下 `d` 在可視模式裏當場剪，出了可視模式就
+///   變成一個等移動的算符。而剪完那一下編輯器自己就出了可視模式——於是第二段起那一鍵
+///   只是立了個算符，什麽都沒剪，`Vd` 三段只有一段走。
+#[test]
+fn a_linewise_visual_cut_takes_whole_lines_at_every_cursor() {
+    let mut ed = typed("一行\n二行\n三行\n四行\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "ggjj");
+    // Warning: **vim 鍵位下造第二段只有 `A-C` 這一條路**：`C` 在那一端是 `c$`、`s` 是換
+    // 一個字，兩個都被別名搶走了，只有往上加一段的 `A-C` 到得了多選區那一支。
+    ed.on_key(Key::Alt('C'));
+    ed.on_key(Key::Alt('C'));
+    assert_eq!(ed.sel.len(), 3, "第三、二、一行各一段");
+    press(&mut ed, "V");
+    press(&mut ed, "d");
+    assert_eq!(
+        ed.current_buffer().rope().to_string(),
+        "四行\n",
+        "三段各拿走自己那一整行"
+    );
+}

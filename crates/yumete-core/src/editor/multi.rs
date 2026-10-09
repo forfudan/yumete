@@ -172,6 +172,14 @@ impl super::Editor {
         //
         // 同上面那三格，每一段開跑之前擺回去；跑完之後照舊留最後一趟那一份。
         let mode = self.mode;
+        // Warning: **`extend` 和模式是同一件事的兩半**（2026-10-09）：合起來纔說得出「現在
+        // 在哪個模式裏」。vim 鍵位下漏掉它會改掉鍵的意思——`d` 在可視模式裏當場剪，
+        // 出了可視模式就變成一個等移動的算符（`Pending::VimOperator`）。
+        let extend = self.extend;
+        // Warning: **`V` 立起來的那一格也是一次性的**（2026-10-09）：`vim_lines` 說的是
+        // 「這一段選的是整行」，而第一趟的 `extend_to_line_bounds` 會把它花掉，後面幾
+        // 段於是按字符那一路走——`Vy` 三段只有一段拿整行。同上面那四格。
+        let lines = self.vim_lines;
         // 寄存器要分得出「這一趟」——見 `Editor::store`。
         self.edit_round += 1;
         for (nth, one) in was.iter().enumerate() {
@@ -180,7 +188,13 @@ impl super::Editor {
             self.count = count;
             self.pending_register = named;
             self.mode = mode;
+            self.extend = extend;
+            self.vim_lines = lines;
+            // **複製也要一段一份**（2026-10-09）：`y` 走的是這一支（它不改文本），而
+            // `store` 按 `edit_nth` 把 N 段各擺一格。見 [`Editor::copies_every_selection`]。
+            self.edit_nth = Some(nth);
             what(self);
+            self.edit_nth = None;
             if *one == primary {
                 which = nth;
             }
@@ -188,6 +202,20 @@ impl super::Editor {
         }
         let merged = self.sel.rebuild(out, which);
         self.say_the_merge(merged);
+    }
+
+    /// **`y` 要不要逐段各複製一次**（2026-10-09）。
+    ///
+    /// 它不改文本，所以走的是 [`Self::each_selection`] 那一支：不報撤銷點，也不開 undo
+    /// group。要的只是 `edit_nth`——`store` 按它把 N 段各擺一格寄存器（`d` 那一條 2026-10-09
+    /// 做的），於是 `y` 再 `P` 和 `d` 再 `P` 一樣逐段還原。
+    ///
+    /// Warning: **vim 鍵位下沒選東西的時候 `y` 不是複製，是個算符**（`Pending::VimOperator`，
+    /// 它在等一個移動）。那一下讓它照舊走一次就好：立一個算符立 N 次是白跑。
+    pub(super) fn copies_every_selection(&self, key: crate::input::Key) -> bool {
+        matches!(key, crate::input::Key::Char('y'))
+            && matches!(self.pending, Pending::None)
+            && !(self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend)
     }
 
     /// **逐段各編輯一次：從後往前做，只留一個撤銷點**（#405 Phase 1 第五步）。
@@ -229,8 +257,10 @@ impl super::Editor {
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
         let named = self.pending_register;
-        // 模式同上一支，見那裏的註釋。
+        // 模式、`extend` 與 `V` 那一格同上一支，見那裏的註釋。
         let mode = self.mode;
+        let extend = self.extend;
+        let lines = self.vim_lines;
         self.edit_round += 1;
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
@@ -252,6 +282,8 @@ impl super::Editor {
             self.count = count;
             self.pending_register = named;
             self.mode = mode;
+            self.extend = extend;
+            self.vim_lines = lines;
             // Warning: **文檔次序，不是執行次序**：這一趟從後往前跑，而讀者數的是從上往下
             // 第幾個。`#` 寄存器讀它。
             self.edit_nth = Some(nth);
@@ -788,8 +820,9 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
 /// 來的理由是它們要**逐段各進各的插入點**，然後插入模式那一支
 /// （[`types_at_every_selection`]）接着把每一個鍵送到 N 處。
 ///
-/// Warning: **`y` 不在。** 複製不改文本，可是 N 段複製出來在寄存器裏怎麽擺（helix 是各存一格、
-/// 貼的時候一段對一段）是寄存器那一族的事，不是這一步的。
+/// Warning: **`y` 不在，它走 [`Editor::each_selection`]。** 複製不改文本，用不着撤銷點，也
+/// 用不着從後往前；要的只是那一支同樣給的 `edit_nth`。派它的那道閘在
+/// [`Editor::copies_every_selection`]。
 pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input::Key) -> bool {
     use crate::input::Key;
     match pending {
