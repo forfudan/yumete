@@ -5215,7 +5215,16 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
         || head == "s"
         || head.starts_with("s/");
     if shaped {
-        return Ok(Described { help: "cmd.commands.substitute", word: None, wrong: None, spelt: None, needs: &[] });
+        // **旗標逐個寫出來，自成一行**（2026-10-09 作者定）。`word` 這一格的本意
+        // 正是「命令的說明之外再加一行」，而替換沒有參數詞表可挑，這一行就歸它。
+        // 說明那一句是作者寫的（範圍與分隔符都在裏面），一個字不動。
+        return Ok(Described {
+            help: "cmd.commands.substitute",
+            word: Some("cmd.substitute.flags"),
+            wrong: None,
+            spelt: None,
+            needs: &[],
+        });
     }
     let Some(e) = entry_named(head) else {
         return Err(Some(head.to_string()));
