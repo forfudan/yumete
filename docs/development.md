@@ -20499,6 +20499,103 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.139 The line break was in the haystack (2026-10-09, review round 3)
+
+Search and replace handed the regex each line **including its `\n`** (`split_inclusive('\n')`),
+under a comment that said 「a pattern cannot contain a newline, so a match never straddles a line
+break」. False: `\s`, `\S`, `\W`, `\D` and every negated class reach that `\n`. Three defects,
+one root, all measured against vim and nvim:
+
+- `:%s/\s+$//g` — the commonest cleanup regex there is — turned `alpha  \nbeta  \ngamma\n` into
+  `alphabetagamma`: three lines welded into one and the final newline gone. No gate, no confirm.
+- `$` could never match the end of a line, so `:%s/said$/SAID/g` reported 「換了 0 處」, `/said$`
+  said not found, and `ye --grep 'o$' --regex` disagreed with `grep -n`.
+- A zero-width match landed **after** the break: `:%s/$/</g` wrote every `<` at the start of the
+  next line and the last one past the file's final newline.
+
+`editor::line_body` now splits a line into (writing, break) and every regex sees only the first
+half; the break is written back verbatim, CRLF included. Two riders from the same review: a line
+number the file does not have is refused instead of clamped to the last line (`:99s` on a 3-line
+file rewrote line **3** and said 「換了 1 處」 — `:9s` mistyped as `:91s` is how a chapter's ending
+goes), and a substitution that matched but changed nothing no longer snapshots, dirties and saves.
+
+⚠ The test that compares backward search against a full forward sweep had the **same bug in its
+own oracle**, so it stayed green through all of it.
+
+## 5.140 Two caret rules, both measured off vim and helix (2026-10-09, review round 2)
+
+A subagent drove real vim 9.1, nvim 0.12.5 and helix 25.07.1 and tabulated the caret after leaving
+insert. Two findings, neither of them a 「which side do we align with」 question:
+
+- **`a` then `Esc` steps the caret back one grapheme — vim and helix give the same answer**, and
+  this editor gave neither. At a line's end that left the caret *past* the last character, so 字
+  read one more than the line holds, the next `l` jumped to the following line, and `d` ate the
+  break. Mid-line too: on `c`, `a` `Esc` left it on `d`. helix's own mechanism is
+  `doc.restore_cursor`, set by `append_mode` and **not** by `insert_at_line_end` — so `A` `Esc`
+  stays on the line-end cell in helix and steps back in vim. Both are now implemented per preset.
+- **Under the vim keys, `x` does not delete a line break** (`:h x`). It is spelt `;{n}D` here, and
+  helix's one-wide cursor covers the newline once a line's writing is used up — so the sixth `x`
+  on `abcde` welded two lines and the seventh started on the next paragraph. **Holding the key
+  walked the cursor through the manuscript with nothing on screen stopping it.** `20x`, `DD`,
+  `D.`, `9s` were the same hole (`D` is `d$`); visual-mode `x` still takes whole selections.
+
+## 5.141 Two ways a multi-cursor edit lost text (2026-10-09, review round 2)
+
+- **One register, N cursors.** `registers` held one `String` and `edit_each` stores per selection,
+  so cutting at three cursors kept only one piece and `P` put that one back three times:
+  「甲一行…／乙**一**行…／丙**一**行…」. The other two pieces existed nowhere but the undo stack, and
+  the result reads as plausible prose, so nothing tells the writer. The unnamed register now keeps
+  one piece per cursor (`register_parts`, in document order) and `recall` hands each cursor its
+  own; fewer cursors than pieces get the lot, joined, which is what helix does. ⚠ Named registers
+  are still one piece, and `y` still does not route through `edit_each` (「`y` 逐段複製」, still open).
+- **`a` at N cursors landed one grapheme early for all but the last.** `edit_each` restored
+  `pending`, `count` and the register for each selection but not the **mode** — the first pass
+  leaves insert mode on, and `selection()` in insert mode does not include the cell under the
+  caret, so `append_position` answered that cell itself. Measured `第一句話很長!。中間!。…。!`
+  against helix's `第一句話很長。!中間。!…。!`.
+- Same review: `.` after an **IME** change deleted the target and put nothing back, because a
+  commit is a string handed in by the front end and never entered the `.` key stream.
+
+## 5.142 Three things that reported success (2026-10-09, review rounds 2 and 3)
+
+- **A table sort tore a record that spans two lines.** The open door refuses a quoted field with a
+  newline in it, but only looks at the first twenty lines; `sort_table` rebuilds from
+  `text.lines()`. Past line 20 the sort left `zz,"line1` at the end of the file and `line2"` as
+  row 2 — no byte missing and the file no longer parses. It now asks the whole buffer and refuses
+  with the same message the door uses.
+- **A file named `.csv` was demoted by one ragged row.** `looks_delimited` wants every one of the
+  first twenty lines to have the same field count; that gate is there to stop a page of prose
+  becoming a grid, and a name like `.csv` is the writer already saying what the file is. One
+  ragged row sent the whole file to the block reader, which reads `header: false` — so the header
+  became data row 1 and the first sort sank it to the bottom.
+- **`:w` through a symlink whose target is gone** replaced the link with a regular file, wrote
+  nowhere real, and said 「存了」; **`:reload` reported 「重讀了」 over its own failure**; and a
+  config with one mistyped **table** header (`[editr]`) voided every setting in the file while the
+  panel said it had saved. The key sweep had commented out unknown *keys* since 2026-09-23 and
+  nobody swept the headers.
+
+## 5.143 Eighteen reviewers in one night: what it cost and what it caught (2026-10-09)
+
+Three rounds — 8, 6 and 4 read-only subagents, each told 一個檔都不許改 and given the headless
+`--shot`/`--keys` harness as its only instrument. Worth recording because the shape of the yield
+was not what I expected:
+
+- **Every finding that mattered came with a reproduction.** The ones phrased as 「suspicion,
+  unverified」 were, without exception, the ones I could not reproduce either.
+- **Two reviewers measured the same thing independently** (the long-line gate at 3000 characters
+  stripping a 3371-character paragraph) and their numbers agreed to the millisecond. That is what
+  made raising it to 50 000 a measurement rather than a preference.
+- ⚠ **Three of them reported `--keys=':%s/\s+$//g'`-shaped reproductions whose backslash the
+  harness had eaten** (`press` turns an unknown `\x` into `x`). The defects were real; the
+  commands in the reports are not runnable as printed. **Write `\\s` in `--keys`.**
+- ⚠ **One reported frame I could not reproduce at all** (a candidate panel landing on the caret).
+  The code path they named is real and reachable with `[panel] page_size = 9`; my fix for it broke
+  a different panel's deliberate full-window behaviour, so it is reverted and written down where
+  the code is. **A finding you cannot reproduce is not a finding you may fix.**
+- The harness itself was lying: `--shot --keys` drained the theme request once after all the keys
+  (so `:theme bw` followed by `:theme-mode light` silently dropped the first) and reported a mood
+  it had not settled. Fixed first, because every other report depends on it.
+
 ## 5.118 `空格 o` 和 `空格 s` 都開大綱，去重（2026-10-08 定）
 
 Two 「大綱」 rows in the space menu. He asked first whether helix has those two keys spoken
