@@ -768,6 +768,13 @@ zhs = "这个文件是只读的——先 chmod，或者换个文件名存"
 en = "this file is read-only — chmod it, or save under another name"
 
 [[message]]
+# 存檔時那個檔是一個指不到東西的符號連結
+key = "buffer.link-points-nowhere"
+zht = "{0} 是一個連結，而它指的那一份不在了——`:write-as 別的路徑` 存到別處"
+zhs = "{0} 是一个链接，而它指的那一份不在了——`:write-as 别的路径` 存到别处"
+en = "{0} is a link and what it points at is gone — `:write-as <path>` saves it elsewhere"
+
+[[message]]
 # gf 用在沒有檔名的行上
 key = "buffer.no-file-named-on-this-line"
 zht = "這一行沒寫文件名"

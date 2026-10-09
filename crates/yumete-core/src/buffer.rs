@@ -1574,7 +1574,23 @@ fn write_bytes_with_model(
     // Through the link, not over it: a chapter that is a symlink into a sync
     // folder used to become a regular file here, and everything downstream
     // went on reading the stale copy it pointed at.
-    let path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    //
+    // Warning: **指不到東西的連結要拒掉，不許退回原路**（2026-10-09 審出來的）。
+    // `canonicalize` 在目標不存在的時候是失敗的，而那一句 `unwrap_or_else` 退回了連
+    // 結自己的路徑——於是重命名把臨時檔蓋在**連結上面**：連結沒了，變成一個普通檔，
+    // 字寫進了本地這一份，而所有照真路徑讀的人什麽都看不見，狀態欄照舊說「存了」。
+    // 真會發生的那一幕：章節連到一個外置卷或者同步目錄，而那個目錄這會兒沒掛上。
+    // 連結還在、目標不在，就說出來——這不是編輯器該替人決定的事。
+    let path = match fs::canonicalize(path) {
+        Ok(real) => real,
+        Err(_) if fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                say!("buffer.link-points-nowhere", path.display().to_string()),
+            ));
+        }
+        Err(_) => path.to_path_buf(),
+    };
     let dir = match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
         _ => PathBuf::from("."),
