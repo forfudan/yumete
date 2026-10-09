@@ -161,12 +161,22 @@ pub enum Use {
 }
 
 pub enum Anchor {
-    /// **The corner the caret is not in.** A fixed corner is right half the
-    /// time and covers what is being worked on the other half. One rule for
-    /// both layouts, because in both of them the caret has a column.
+    /// **One side is fixed, the other flips** (2026-10-09 定).
+    ///
+    /// 橫排 the box stands at the **right** and moves only up and down:
+    /// 「we always write from left to right, so the line start can always be
+    /// visible」. What a float may cover is the tail of the lines it sits on,
+    /// never their beginnings — and a float that also slid left and right
+    /// jumped across the page as the caret passed the middle column, for no
+    /// reason the reader could see.
+    ///
+    /// 竪排 is the same argument turned: there the 縱 run top to bottom and
+    /// right to left, so the box stands at the **bottom** and flips left and
+    /// right, 「面板永遠在下而不是在右」, defaulting to the left — the side
+    /// the writing has not reached yet.
     ///
     /// `bottom` is the row the floats stack up from — the top of the footer;
-    /// `vertical` picks which way [`room`] is turned.
+    /// `vertical` picks which way [`room`] is turned, and which side is fixed.
     Caret { at: (u16, u16), bottom: u16, vertical: bool },
     /// **貼着光標，畫在它下面那一行**（2026-10-08 定）。
     ///
@@ -216,30 +226,32 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             // Warning: **The policy caps belong to the caller, this only asks
             // whether it physically fits** (2026-09-18). A 竪書 note is two
             // thirds of the page *tall* by design — half-page refusal here
-            // threw it away and nothing was drawn at all. What protects the
-            // caret is that one axis always separates them: 橫排 the box is a
-            // third tall and stands in the third the caret is not in; 竪排 it
-            // is a third wide and stands in the third the caret is not in.
-            let _ = vertical;
+            // threw it away and nothing was drawn at all.
             if bottom < area.y + height {
                 return None;
             }
-            let far = area.x + area.width.saturating_sub(width);
-            let x = match at.0 >= area.x + area.width / 2 {
-                true => area.x,
-                false => far,
-            };
-            // Along the bottom, unless the caret is standing in the rows the
-            // box would take — then the top, which is the corner diagonally
-            // opposite. Asked as 「would this cover the line you are on」
-            // rather than 「is the caret low on the page」: it only has to move
-            // when it is actually in the way, and one that jumps to the top
-            // the moment you pass the middle of the page moves for no reason.
+            let right = area.x + area.width.saturating_sub(width);
             let low = bottom - height;
-            let y = match at.1 >= low && at.1 < bottom {
-                true => area.y,
-                false => low,
+            // **Four corners, tried in order**, the first that does not sit on
+            // the caret. The fixed side comes first twice, so the box only
+            // leaves it when both of its corners are in the way.
+            let corners = match vertical {
+                false => [(right, low), (right, area.y), (area.x, low), (area.x, area.y)],
+                true => [(area.x, low), (right, low), (area.x, area.y), (right, area.y)],
             };
+            // 「Would this cover the place you are typing」, asked of the whole
+            // box rather than of its rows: with the column fixed, a caret at
+            // the start of a long line is not under a box that stands at the
+            // right of the page, and a float that moved for it would be
+            // moving for nothing.
+            let covers = |(x, y): &(u16, u16)| {
+                at.0 >= *x && at.0 < x + width && at.1 >= *y && at.1 < y + height
+            };
+            // All four covered means the box is wider than half the page and
+            // taller than half of it too. Draw it at the first corner anyway:
+            // covering the caret is worse than not covering it, and better
+            // than drawing nothing at all (the same answer `UnderCaret` gives).
+            let (x, y) = corners.iter().find(|c| !covers(c)).copied().unwrap_or(corners[0]);
             Some(Rect::new(x, y, width, height))
         }
     }
@@ -278,5 +290,38 @@ mod tests {
         // 靠右的光標：往左推到裝得下為止，不許伸出紙外。
         let it = under((75, 3), 6);
         assert_eq!((it.x, it.y), (60, 4), "靠右就推回來");
+    }
+
+    /// **一邊釘死，另一邊翻**（2026-10-09 定）。橫排釘右邊，竪排釘下邊；
+    /// 只有當那個角真的壓在光標上纔換一個角。
+    #[test]
+    fn a_caret_anchored_box_keeps_its_fixed_side_and_flips_on_the_other() {
+        let page = Rect::new(0, 0, 80, 24);
+        let bottom = 22;
+        let at = |want, caret, vertical| {
+            let it = place(page, want, Anchor::Caret { at: caret, bottom, vertical })
+                .expect("放得下");
+            (it.x, it.y)
+        };
+        // 橫排：盒子 40 寬擺在右邊就是第 40 欄起，下邊是第 14 行起。
+        let small = (40, 8);
+        // 光標在左上 —— 右下那個角本來就不壓它。
+        assert_eq!(at(small, (2, 2), false), (40, 14), "右下");
+        // 光標在**左下**：行還是那幾行，可盒子在右半邊，壓不到它。
+        // 從前這一格會翻到上面去，而那一翻什麽也沒買到。
+        assert_eq!(at(small, (2, 18), false), (40, 14), "左下的光標不讓它動");
+        // 光標在右下 —— 這纔是真的壓上了，翻到右上。
+        assert_eq!(at(small, (60, 18), false), (40, 0), "右上");
+        // **兩個右角一起壓着纔讓出橫軸。** 要兩個都壓得到，盒子得高過半頁：
+        // 12 行的盒子，上角佔 0..12、下角佔 10..22，第 11 行兩個都在。
+        assert_eq!(at((40, 12), (60, 11), false), (0, 10), "左下");
+
+        // 竪排轉九十度：釘下邊，左右翻，缺省朝左——字還沒走到的那一側。
+        assert_eq!(at(small, (60, 2), true), (0, 14), "左下");
+        assert_eq!(at(small, (2, 2), true), (0, 14), "上面的光標不讓它動");
+        assert_eq!(at(small, (2, 18), true), (40, 14), "右下");
+        // 同樣地，兩個下角一起壓着纔讓出竪軸：50 寬的盒子左角佔 0..50、
+        // 右角佔 30..80，第 40 欄兩個都在。
+        assert_eq!(at((50, 8), (40, 18), true), (0, 0), "兩個下角都壓着就上去");
     }
 }
