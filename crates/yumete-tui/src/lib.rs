@@ -9296,20 +9296,17 @@ fn draw_picker(
     // 一頁一頁地讓是 helix 的答案：窗口停着不動，高亮在這一頁裏走，走出去了纔
     // 整頁翻。它還正好和 [`Picker::page`] 對上——那一支翻的就是 `deep` 條。
     let first = at - at % deep.max(1);
-    // **選中那一條一律畫得淡一檔**（2026-10-08 報的）。
+    // **選中那一條畫成選中的樣子**（2026-10-09 定）。
     //
-    // 原話：「My cursor is in the search line. But the first result is also highlighted
-    // so I am confused sometimes where I am. … highlighting (and thus with preview) the
-    // first result with a dimmer color … allows you to pre-select the first result (and
-    // preview) it … but not give me a feeling that the cursor is on this line.」
+    // Warning: **這一格 2026-10-08 到 10-09 之間是淡的，而那是一條過期的結論。** 當時
+    // 挑選器剛從兩層改成一層，而兩層的時候整條反白讀作「鍵在單子上」——有兩個地方
+    // 可去，所以高亮在哪一邊是一句要緊的話。一層之後**光標永遠在搜索框裏**，單子
+    // 不是鍵能去的地方，於是那條反白再也說不出「鍵在這兒」，它只剩一個意思：選中
+    // 的是這一條。沒有第二個地方可誤解，就沒有要靠「淡一檔」去避的誤解。
     //
-    // 所以**不是不選**：它照舊選着、照舊預覽、`Enter` 照舊開得了它——只是那一條
-    // 整條反白會讓人以為光標在那裏。淡的那一檔用的是 `BAND`（制表位那一片、搜索
-    // 命中那一行用的同一個底色），不是寫死一個灰。
-    //
-    // Warning: **從前它分兩種畫法**，整條反白那一種留給「鍵在單子上」。同日挑選器只剩
-    // 打字一層，鍵永遠不在單子上——淡的那一種是唯一的那一種了。
-    let on = Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.text());
+    // 作者 2026-10-09 原話：「Now we do not have the two-layer design, we can go back to
+    // use the normal color to highlight the item in the list.」
+    let on = Style::default().bg(ink.at(yumete_config::rung::SELECTION)).fg(ink.text());
     let limit = left.x + names - 1;
     // Warning: **沒有 `+ 1`**（2026-10-06 報的：「There is too much space between
     // : and the search box. One space is enough.」）。`search.label.query` 這則本身
@@ -21545,16 +21542,17 @@ fn squeezed(text: &str) -> String {
         );
     }
 
-    /// **選中那一條一律淡一檔**（2026-10-08 報的）。
+    /// **選中那一條畫成選中的樣子**（2026-10-09 定）。
     ///
-    /// 「整條反白」在這個編輯器裏說的是「光標在這裏」。鍵在搜索行上而第一條照樣
-    /// 整條反白，於是屏幕上有兩個「這裏」。淡一檔之後它還是選着的——`Enter` 照舊
-    /// 開得了它，預覽也照舊——只是不再冒充光標。
+    /// Warning: **這一格一度是淡的，而那條結論的前提已經沒有了。** 挑選器從前分兩層：
+    /// 鍵可以在單子上，也可以在搜索框裏。那時整條反白讀作「鍵在這一邊」，而第一條
+    /// 被選中也整條反白，屏幕上就有兩個「這裏」。
     ///
-    /// Warning: 同日早些時候它分兩種畫法，整條反白那一種留給「鍵在單子上」。挑選器只剩
-    /// 打字一層之後鍵永遠不在單子上，淡的那一種是唯一的那一種了。
+    /// 一層之後**鍵永遠在搜索框裏**，單子不是鍵去得了的地方——那條反白說不出「鍵在
+    /// 這兒」了，剩下的唯一意思就是「選中的是這一條」。沒有第二個地方可去，就沒有
+    /// 要避的混淆。
     #[test]
-    fn the_picked_row_is_always_the_dimmer_one() {
+    fn the_picked_row_wears_the_selection_ground() {
         let config = Config::default();
         let ink = ink(&config);
         let grounds = |ed: &Editor| -> Vec<ratatui::style::Color> {
@@ -21566,14 +21564,17 @@ fn squeezed(text: &str) -> String {
         ed.on_key(Key::Char('f'));
         assert!(ed.picker().is_some(), "空格 f 開得了挑選器");
         ed.wait_for_the_picker();
+        let lit = ink.at(yumete_config::rung::SELECTION);
         let fresh = grounds(&ed);
-        assert!(!fresh.contains(&ink.text()), "開門那一下就不該整條反白");
-        assert!(fresh.contains(&ink.at(yumete_config::rung::BAND)), "照舊畫着，只是淡一檔");
-        // 打過字、走過一條，還是淡的那一種。
+        assert!(fresh.contains(&lit), "開門那一下第一條就選着，而且看得出來");
+        assert!(
+            !fresh.contains(&ink.at(yumete_config::rung::BAND)),
+            "不再是淡的那一檔"
+        );
+        // 打過字、走過一條，照樣是選中那一種。
         ed.on_key(Key::Char('m'));
         ed.on_key(Key::Tab);
-        let walked = grounds(&ed);
-        assert!(!walked.contains(&ink.text()), "走一條也不整條反白");
+        assert!(grounds(&ed).contains(&lit), "走一條也畫得出來");
         // 而它**還是選着的**——`Enter` 照舊開得了它。
         assert!(ed.picker().expect("開着").chosen().is_some(), "照舊預選着");
     }
