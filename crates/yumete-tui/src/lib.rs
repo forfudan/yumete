@@ -1574,10 +1574,20 @@ pub fn run(
                     *config = fresh;
                     // 主題是進程級的一格，要重新問一次，否則配色改了畫面不動。
                     crate::theme::settle(config, None);
-                    editor.set_status(match said.is_empty() {
-                        true => say!("config.reloaded"),
-                        false => say!("config.reload-said", said.join(&say!("label.comma"))),
-                    });
+                    // Warning: **存完那一句不許被蓋掉**（2026-10-09）。設置面板存完會自己
+                    // 要求重載，而讀者要看見的是「存進哪一份」——「配置重新載入了」是
+                    // `:reload-config` 自己按下去的時候纔有人在等的答案。
+                    //
+                    // 報錯那一路照說不誤，而且蓋過存盤那一句：打錯的設定要出聲，那比
+                    // 存進哪一份要緊（同 `lib.rs` 載入那一支的規矩）。
+                    match said.is_empty() {
+                        false => editor
+                            .set_status(say!("config.reload-said", said.join(&say!("label.comma")))),
+                        true if editor.status().is_empty() => {
+                            editor.set_status(say!("config.reloaded"))
+                        }
+                        true => {}
+                    }
                 }
                 // 那扇設置面板（`:settings`）：開、存、關。
                 settings.settle(editor);

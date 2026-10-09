@@ -1037,6 +1037,16 @@ impl Editor {
     }
 
     /// **有人按過 `:config-reload`** —— 前端去重讀配置檔並推一遍。
+    /// **設置面板存完之後也要重讀一遍**（2026-10-09 作者報的）。
+    ///
+    /// 從前 `:w` 只把檔寫出去，而 `settings::apply` 一共只有兩個呼叫方：啓動，和
+    /// `:reload-config`。於是把排版方向改成竪排、存、屏幕一動不動，螢幕上也沒有一句話
+    /// 說編輯器跑的還是舊的那一份——面板自己的註釋卻寫着「落完由 `:reload-config`
+    /// 那條同一支推進編輯器」，那個打算從來沒接上線。
+    pub fn set_config_reload(&mut self) {
+        self.config_reload = true;
+    }
+
     pub fn take_config_reload(&mut self) -> bool {
         std::mem::take(&mut self.config_reload)
     }

@@ -108,17 +108,39 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         return true;
     }
     match key {
-        Key::Char('q') | Key::Esc => return false,
+        Key::Char('q') => return false,
+        // **`Esc` 退一步，走是 `q`**（2026-10-09 作者報的：「a defensive esc to the
+        // normal mode will accidently quit the TUI」）。這扇面板從前是全編輯器唯一一個
+        // `Esc` 會整個關掉的——邊欄那一族是 `q` 關、`Esc` 只把輸入法的掛起再說一遍
+        // （`sidebar.rs`），而搜索面板的 `Esc` 早就改成了「退一步」。
+        //
+        // 查過十一個終端程序：`Esc` 關掉整扇設置的只有三個（htop／btop／mc），而那三個
+        // **改一下生效一下**，它們的 `Esc` 讀作「做完了」。這一扇要按 `:w` 纔算數，
+        // 那個讀法在這裏不成立。nconf 把話說死：「`<Esc>` always leaves the current
+        // window」——退一層，不是退出。
+        Key::Esc => match panel.pane {
+            Pane::Settings => panel.across(false),
+            // 左欄上已經沒有別的可退了。走要按 `q`，提示行上寫着。
+            Pane::Groups => {}
+        },
         Key::Char('j') | Key::Down => panel.step(true),
         Key::Char('k') | Key::Up => panel.step(false),
         Key::Char('h') | Key::Left => panel.across(false),
-        Key::Char('l') | Key::Right | Key::Enter => panel.across(true),
+        Key::Char('l') | Key::Right => panel.across(true),
+        // **`Enter` 改這一項**，撥的撥、打字的打字（2026-10-09 作者定，見
+        // `Panel::change_here`）。左欄上它照舊是「進到右邊那一欄」。
+        Key::Enter => match panel.pane {
+            Pane::Groups => panel.across(true),
+            Pane::Settings => panel.change_here(),
+        },
         Key::Char(' ') => match panel.pane {
             // 左欄上的空格是「進去」，不是「切換」——那一欄沒有東西可切。
             Pane::Groups => panel.across(true),
             Pane::Settings => panel.press(),
         },
-        Key::Char('i') => panel.begin_typing(),
+        // `i` 和 `Enter` 一樣，照這一項自己的改法來。從前 `i` 停在一個勾或者一個
+        // 幾選一上**一聲不吭地什麽都不做**，而提示行每一行都寫着 `i 改`。
+        Key::Char('i') => panel.change_here(),
         Key::Char('d') => panel.drop_here(),
         Key::Tab => panel.flip_into(),
         Key::Char('g') => {
@@ -175,7 +197,13 @@ impl Seat {
         if editor.mode() == yumete_core::input::Mode::Command {
             return false;
         }
-        if key == Some(Key::Char(':')) {
+        // Warning: **打字的時候 `:` 是一個字**（2026-10-09 作者報的那一族）。這道門
+        // 從前排在打字那一支前面，於是站在主題上按 `i`、打 `bw`、再打 `:w`：那個 `:`
+        // 溜到命令行上**而框還開着**，`w` 和 `q` 跟着被當成字母吃進去，框裏成了
+        // `inkbwq`，而 `page.dirty()` 是假的，螢幕上寫「沒有改動」——打的字沒了，
+        // 還被告知沒有東西要存。這個檔自己早有這條規矩，測試就叫
+        // `while_typing_q_is_a_letter`；只是 `:` 不在它管的範圍裏。
+        if key == Some(Key::Char(':')) && page.typing.is_none() {
             return false;
         }
         // Warning: **認不出的鍵也算收下了**：面板開着的時候一個 F13 不該掉進正文。
@@ -217,6 +245,9 @@ impl Seat {
                     false => Ok(None),
                     true => page.save().map(Some),
                 };
+                // **存完要讓編輯器重讀一遍**（2026-10-09，見 `Editor::set_config_reload`）。
+                // 沒有這一下，存盤只是把字寫進檔裏，眼前這一頁照舊按舊設置畫。
+                let wrote = matches!(said, Ok(Some(_)));
                 editor.set_status(match said {
                     Ok(None) => say!("set.nothing-to-save"),
                     // 這期間那個檔被外面改過 —— 說一句，那比「有幾個鍵註釋掉了」
@@ -232,6 +263,9 @@ impl Seat {
                     ),
                     Err(why) => say!("set.cannot-save", why),
                 });
+                if wrote {
+                    editor.set_config_reload();
+                }
                 self.warned = false;
             }
         }
@@ -399,8 +433,17 @@ pub fn draw(
     }
 
     // ---- 左邊：八組 --------------------------------------------------------
-    for (i, named) in GROUPS.iter().enumerate() {
-        let y = area.y + 2 + i as u16;
+    // **這一欄也要跟着光標滾**（2026-10-09）。右邊那一欄當天早些時候修過同一個毛病，
+    // 左邊漏了：十行高的窗口上按七下 `j`，右欄畫的是「鍵盤」那一組的項，而左欄停在
+    // 版面…輸入法，**一行都沒有高亮**——光標在畫面外。算法同右欄，不記偏移，由
+    // `panel.group` 現算。
+    let room_for_groups = foot.saturating_sub(area.y + 2) as usize;
+    let first_group = match room_for_groups {
+        0 => 0,
+        _ => panel.group.saturating_sub(room_for_groups - 1),
+    };
+    for (i, named) in GROUPS.iter().enumerate().skip(first_group) {
+        let y = area.y + 2 + (i - first_group) as u16;
         if y >= foot {
             break;
         }
@@ -445,6 +488,24 @@ pub fn draw(
         let here = i == panel.row && panel.pane == Pane::Settings;
         let shown = panel.shown(setting);
         let label = said(setting.label);
+        // **整行鋪底**，同左邊那一欄（它上面那一段的理由：只有字那麽寬的高亮「讀起來
+        // 像一塊污漬」）。2026-10-09 作者報的：從前亮的是**名字**那幾格，而 `i` 改的
+        // 是**值** —— 眼睛落在一處，鍵動的是另一處。原話：「the title is highlighted
+        // and you press i on title to edit the value」。
+        // Warning: **`BAND` 是看不見的。** 量過四種明暗：`BAND` 對面板自己的 `CHROME`
+        // 只有 1.06–1.10，而這個倉自己的數是「兩塊平底色要分得開需要 1.24」
+        // （`lib.rs` 換行那一族）。`HEAD` 是 1.19–1.32，夠。
+        let band = match here {
+            true => ink.ground(yumete_config::rung::HEAD),
+            false => ground,
+        };
+        if here {
+            for x in from..right {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_symbol(" ").set_style(band);
+                }
+            }
+        }
         // 名字 —— 畫到值那一欄為止，長名字截住而不是推開值。
         put_text(
             buf,
@@ -453,7 +514,7 @@ pub fn draw(
             col.value.saturating_sub(1),
             &label,
             match here {
-                true => on,
+                true => band.fg(ink.text()),
                 false => text,
             },
         );
@@ -462,11 +523,18 @@ pub fn draw(
             (true, Some(typed)) => format!("{typed}▏"),
             _ => drawn(setting, &shown.value),
         };
-        let value_style = match (panel.typing.is_some() && here, shown.from) {
-            (true, _) => ground.fg(ink.gold()),
-            (false, Layer::Factory) => text,
+        // **底色說「在這一行」，反白的那一格說「動的是它」**（2026-10-09）。兩個記號
+        // 分做兩件事，而且兩個樣式這個檔裏本來就有——表格那一族的原話是「游標那一列
+        // 鋪 `HEAD`，格子本身用 `SELECTION`」。
+        //
+        // 三種狀態讀得出來：沒站在上面（出廠灰／改過的藍）、站着（反白，按一下就改）、
+        // 正在打字（金的，帶一條豎綫；不反白，不然那條綫看不見）。
+        let value_style = match (here, panel.typing.is_some(), shown.from) {
+            (true, true, _) => band.fg(ink.gold()),
+            (true, false, _) => band.fg(ink.gold()).add_modifier(Modifier::REVERSED),
+            (false, _, Layer::Factory) => text,
             // 動過的那些亮一點：一頁十二行裏哪三行是自己設的，要一眼看得出。
-            (false, _) => ground.fg(ink.azure()),
+            (false, _, _) => ground.fg(ink.azure()),
         };
         // Warning: **切了要看得出來。** `put_text` 到了邊界就停，一聲不吭——「候選的序號」
         // 那九個全角字正好比值欄寬一格，畫出來是 `１２３４５６７８`，看着像設定
@@ -480,12 +548,25 @@ pub fn draw(
                 Some(ratatui::layout::Position { x: at.min(col.value_ends().saturating_sub(1)), y });
         }
         // 從哪一層來，以及被蓋掉的那一個 —— 窄窗口下這一欄整個不畫。
-        if let Some(at) = col.layer {
+        // **只標例外，不標常態**（2026-10-09）。從前這一欄在二十三行裏寫了二十一次
+        // 「出廠」，於是真正帶着消息的那兩行——自己設過的——淹在自己那一欄裏。Emacs 的
+        // Customize 把同一條寫進了樣式表：九種狀態裏只有 `STANDARD` 沒有任何裝飾。
+        if let (Some(at), false) = (col.layer, shown.from == Layer::Factory) {
             let mut whence = said(shown.from.label());
             if let Some((under, was)) = &shown.under {
                 whence.push_str(&format!("  ← {} {}", said(under.label()), drawn(setting, was)));
             }
-            put_text(buf, at, y, right, &whence, quiet);
+            put_text(
+                buf,
+                at,
+                y,
+                right,
+                &whence,
+                match here {
+                    true => band.fg(ink.quiet()),
+                    false => quiet,
+                },
+            );
         }
     }
 
@@ -597,14 +678,17 @@ mod tests {
         assert!(page.contains("hl 換欄"), "底下那一行鍵：\n{page}");
     }
 
-    /// **一項都沒設的時候，每一行都說「出廠」。**
+    /// **一項都沒設的時候，那一欄一個字都不寫**（2026-10-09 改的）。
+    ///
+    /// 從前每一行都寫「出廠」，於是二十三行裏寫了二十一次，而真正帶着消息的那兩行
+    /// ——自己設過的——淹在自己那一欄裏。Emacs 的 Customize 把同一條寫進了樣式表：
+    /// 九種狀態裏只有 `STANDARD` 沒有任何裝飾。**標例外，不標常態。**
     #[test]
-    fn an_untouched_config_says_factory_on_every_row() {
+    fn an_untouched_config_says_nothing_in_the_layer_column() {
         let page = shot(&Panel::open(None, None), 110, 24);
         let rows = page.lines().filter(|l| l.contains('│')).count();
-        let factory = page.matches("出廠").count();
-        assert!(factory >= 12, "十二項都該說出廠，只有 {factory}：\n{page}");
         assert!(rows >= 12, "{rows} 行：\n{page}");
+        assert_eq!(page.matches("出廠").count(), 0, "一項都沒設，那一欄該空着：\n{page}");
     }
 
     /// **本項目蓋了全局，那一行要把被蓋掉的那個也說出來。**
@@ -658,15 +742,122 @@ mod tests {
         assert!(page.contains("32▏"), "框裏那段字與光標：\n{page}");
     }
 
-    /// `q` 與 `Esc` 關掉，別的鍵不關。
+    /// **走是 `q`；`Esc` 退一步，不關**（2026-10-09 作者報的：「a defensive esc to the
+    /// normal mode will accidently quit the TUI」）。
+    ///
+    /// 查過十一個終端程序：`Esc` 關掉整扇設置的只有三個，而那三個都是改一下生效一下，
+    /// 它們的 `Esc` 讀作「做完了」。這一扇要按 `:w` 纔算數。nconf 那一條說得最乾淨：
+    /// 「`<Esc>` always leaves the current window」——退一層。
     #[test]
-    fn q_closes_it_and_the_walking_keys_do_not() {
+    fn q_closes_it_and_esc_only_steps_back() {
         let mut p = Panel::open(None, None);
-        assert!(!press(&mut p, Key::Char('q')));
-        assert!(!press(&mut p, Key::Esc));
+        assert!(!press(&mut p, Key::Char('q')), "`q` 走");
+
+        let mut p = Panel::open(None, None);
+        p.across(true);
+        assert_eq!(p.pane, Pane::Settings, "先進到右邊那一欄");
+        assert!(press(&mut p, Key::Esc), "`Esc` 不關");
+        assert_eq!(p.pane, Pane::Groups, "退回左邊那一欄");
+        assert!(press(&mut p, Key::Esc), "左欄上再按也不關——走要按 `q`");
+        assert_eq!(p.pane, Pane::Groups);
+
         for key in [Key::Char('j'), Key::Char('l'), Key::Char(' '), Key::Tab] {
             assert!(press(&mut p, key), "{key:?} 不該關掉它");
         }
+    }
+
+    /// **正在打字的時候 `:` 也是一個字**（2026-10-09 查出來的，會丟字）。
+    ///
+    /// 那道「`:` 交給命令行」的門排在打字那一支前面，於是站在一個值上按 `i`、打幾個
+    /// 字、再打 `:w`：`:` 溜到命令行上**而框還開着**，`w` 與 `q` 跟着被當成字母吃進
+    /// 框裏，而 `page.dirty()` 是假的——螢幕上寫「沒有改動」，打的字沒了，人還被告知
+    /// 沒有東西要存。這個檔早有這條規矩（見上一支），只是 `:` 不在它管的範圍裏。
+    #[test]
+    fn while_typing_a_colon_is_a_letter_too() {
+        let mut ed = Editor::new();
+        let mut page = Panel::open(None, None);
+        page.across(true);
+        page.row = page.rows().iter().position(|s| s.key == "bands").unwrap();
+        page.begin_typing();
+        let mut seat = Seat { panel: Some(page), ..Default::default() };
+
+        assert!(seat.took(&mut ed, Some(Key::Char(':'))), "打字的時候 `:` 歸面板");
+        let page = seat.panel.as_ref().expect("還開着");
+        assert_eq!(page.typing.as_deref(), Some("1:"), "那個冒號落進框裏");
+        assert_ne!(ed.mode(), yumete_core::input::Mode::Command, "命令行沒有開");
+
+        // 沒在打字的時候它照舊是命令行那條路。
+        let mut seat = Seat { panel: Some(Panel::open(None, None)), ..Default::default() };
+        assert!(!seat.took(&mut ed, Some(Key::Char(':'))), "沒打字就交出去");
+    }
+
+    /// **`i` 和 `Enter` 一樣，照這一項自己的改法來**（2026-10-09）。
+    ///
+    /// 從前 `i` 停在一個勾或者一個幾選一上一聲不吭地什麽都不做，而提示行每一行都
+    /// 寫着 `i 改`。查過的十一個終端程序裏，一個鍵管所有種類是多數做法；按種類分鍵
+    /// 的那兩個（WeeChat 七個鍵、menuconfig）都要靠一張圖例纔用得了。
+    #[test]
+    fn i_changes_a_tick_the_way_enter_does() {
+        let flip = |key: Key| {
+            let mut p = Panel::open(None, None);
+            p.across(true);
+            p.row = p.rows().iter().position(|s| s.key == "soft_wrap").unwrap();
+            let was = p.shown(p.here().unwrap()).value;
+            assert!(press(&mut p, key), "還開着");
+            let now = p.shown(p.here().unwrap()).value;
+            (was, now)
+        };
+        for key in [Key::Char('i'), Key::Enter, Key::Char(' ')] {
+            let (was, now) = flip(key);
+            assert_ne!(was, now, "{key:?} 該把這個勾撥一下");
+        }
+    }
+
+    /// **存完要讓編輯器重讀一遍**（2026-10-09 作者報的，這一條是「fuzzy」的真身）。
+    ///
+    /// 從前 `:w` 只把檔寫出去：`settings::apply` 一共只有兩個呼叫方，啓動和
+    /// `:reload-config`。於是把排版方向改成竪排、存、屏幕一動不動，而螢幕上沒有一句
+    /// 話說編輯器跑的還是舊的那一份。
+    #[test]
+    fn saving_asks_the_editor_to_read_the_config_again() {
+        let dir = std::env::temp_dir().join(format!("yumete-setsave-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let sheet = dir.join("config.toml");
+        let mut ed = Editor::new();
+        // 核心要知道面板開着，`:w` 纔會交給它，而不是去存眼前那一章
+        // （`commands.rs` 的 `Command::Write`）。
+        ed.set_settings_open(true);
+        let mut page = Panel::open(Some(sheet.clone()), None);
+        page.into = yumete_config::panel::Which::Global;
+        page.across(true);
+        page.row = page.rows().iter().position(|s| s.key == "soft_wrap").unwrap();
+        page.press();
+        assert!(page.dirty(), "攢了一筆");
+        let mut seat = Seat { panel: Some(page), ..Default::default() };
+
+        ed.execute(":w").expect("面板開着，`:w` 歸它");
+        seat.settle(&mut ed);
+        assert!(sheet.exists(), "寫出去了");
+        assert!(ed.take_config_reload(), "而且要求重讀一遍");
+
+        // 沒有改動的那一趟不必驚動誰。
+        seat.settle(&mut ed);
+        assert!(!ed.take_config_reload(), "沒存就沒有重讀");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **左邊那一欄也跟着光標滾**（2026-10-09）。右邊那一欄當天早些時候修過同一個毛
+    /// 病，左邊漏了：矮窗口上走到底下幾組，左欄停在頭幾組，一行高亮都沒有。
+    #[test]
+    fn the_group_column_scrolls_with_the_cursor() {
+        let mut p = Panel::open(None, None);
+        p.group = GROUPS.len() - 1;
+        let page = shot(&p, 110, 10);
+        let last = said(GROUPS[GROUPS.len() - 1].label);
+        assert!(page.contains(&last), "最後那一組要看得見：\n{page}");
+        let first = said(GROUPS[0].label);
+        assert!(!page.contains(&first), "頭一組該滾出去了：\n{page}");
     }
 
     /// **正在打字的時候 `q` 是一個字**，不是「走」。
