@@ -4102,6 +4102,13 @@ zhs = "这一行上没有「{0}」"
 en = "no '{0}' on this line"
 
 [[message]]
+# :s 的行號超出這一份的行數
+key = "find.no-such-line"
+zht = "這一份只有 {1} 行，沒有第 {0} 行"
+zhs = "这一份只有 {1} 行，没有第 {0} 行"
+en = "this one has {1} lines, so there is no line {0}"
+
+[[message]]
 # 表格裏一欄一欄地找，沒找到
 key = "find.not-found"
 zht = "找不到：{0}"
