@@ -1947,6 +1947,35 @@ pub struct DetectAsk {
 /// smaller dictionary there than the one in force only leaves a few redundant
 /// words in the list — words already joined cannot be joined harder.
 ///
+/// 讀一個檔，**最多 `room` 個字節**，而且切在字符邊界上（2026-10-09）。
+///
+/// Warning: **「讀到一共 16 MB 就停」擋不住一個 2 GB 的檔。** 那一條是在每一個檔
+/// **之前**問的，而 `read_to_string` 一口氣把整個檔吐進內存——實測（審查量的）：
+/// 一個 2 GB 的純文本檔让 `:word-discover-project` 跑了 **99 秒、峰值 8.2 GB**，而它跑在
+/// 畫面那條線程上。从前有 4 MB 那道闸持著；闸在 2026-10-08 拿掉了（那是為搜索定的，
+/// 搜索是按行流著讀的，認詞不是），這一支就是把保護補回到**讀的那一步**上。
+///
+/// 比按檔大小摔整個檔好：一個 2 GB 的稿子前面那幾兆字照樣數得着，而內存封頂在
+/// [`DISCOVER_MAX_BYTES`]，跟檔多大沒關係。
+fn read_some(path: &Path, room: usize) -> Option<String> {
+    use std::io::Read;
+    if room == 0 {
+        return None;
+    }
+    let mut got = Vec::new();
+    std::fs::File::open(path).ok()?.take(room as u64).read_to_end(&mut got).ok()?;
+    // 切在字符邊界上：最後那個字可能被 `take` 攔成了半個。
+    match String::from_utf8(got) {
+        Ok(text) => Some(text),
+        Err(bad) => {
+            let upto = bad.utf8_error().valid_up_to();
+            let mut got = bad.into_bytes();
+            got.truncate(upto);
+            String::from_utf8(got).ok()
+        }
+    }
+}
+
 /// Answers the words, how many files were read, and **how many 漢字 they held**
 /// — the last is what [`crate::discover::cap`] is measured against.
 pub fn detect_words_in(
@@ -1959,7 +1988,12 @@ pub fn detect_words_in(
         if text.len() >= DISCOVER_MAX_BYTES {
             return;
         }
-        let Ok(more) = std::fs::read_to_string(path) else {
+        // 二進制不認詞，而且讀它是白讀（`read_to_string` 會把整個扔進內存再因為
+        // 不是 UTF-8 丟掉：實測一個 600 MB 的檔花 652 MB 峰值）。
+        if looks_binary(path) {
+            return;
+        }
+        let Some(more) = read_some(path, DISCOVER_MAX_BYTES.saturating_sub(text.len())) else {
             return;
         };
         files += 1;
