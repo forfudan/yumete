@@ -914,6 +914,20 @@ impl Editor {
         // 已經決定了「插入模式下不記」，而 `edit_each` 在選區是複數的時候**自己
         // 又記一個**——於是四個光標下一句話上屏八次就是八下 `u`，而同一句話在一
         // 個光標下是一下。敲鍵那一路早就是 `edit_each_from(false, …)`，這裏跟上。
+        // Warning: **上屏的字也要進 `.` 的那一串鍵**（2026-10-09 審出來的）。
+        //
+        // `.` 重放的是**鍵**（`last_edit_keys`），而一次上屏是前端遞進來的一個**字
+        // 串**，不走 `on_key`——於是 `wc` ＋ 上屏「紅」＋ `Esc` 之後按 `.`，重放的是
+        // `w` `c` `Esc`：目標字被刪掉，什麽都不補回去。實測 `wc紅\e w .` 出來的是
+        // 「第紅行春日…」，那個「：」沒了。`r` 那一條早就在 `repeat_edit` 裏單獨補
+        // 過（`last_replacement`），插入這一條漏了。
+        //
+        // 補的辦法是把上屏的字當成敲進去的字記下來：重放的時候 `Key::Char('紅')` 在
+        // 插入態就是插一個「紅」，和人打出來的結果逐字相同。記的條件與 `on_key` 那
+        // 頭同一個（`watching`）——重放當口不許再記，不然 `.` 會自己長出字來。
+        if !self.repeating_edit && !self.expanding_alias {
+            self.edit_keys.extend(text.chars().map(Key::Char));
+        }
         let text = text.to_string();
         self.edit_each_from(self.mode != Mode::Insert, move |e| {
             e.insert_recording.push_str(&text);

@@ -23674,6 +23674,33 @@ fn no_signature_falls_back_to_one_paragraph_of_the_doc() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **中文改完按 `.`，要和西文一樣再改一處**（2026-10-09 審出來的）。
+///
+/// `.` 重放的是鍵，而上屏是前端遞進來的字串，不走 `on_key`——於是從前它只重放了
+/// `c` 和 `Esc`：目標被刪掉，什麽都不補回去，兩下 `u` 纔救得回來。而一句中文要上屏
+/// 七八次，`n.n.n.` 正是校稿的那個迴圈。
+#[test]
+fn a_dot_after_a_chinese_change_puts_the_chinese_back() {
+    let mut ed = typed("甲：乙\n甲：乙\n");
+    press(&mut ed, "gg");
+    // 西文那一路先立個標杆：`c` 打一個字，`.` 到下一處再來一次。
+    press(&mut ed, "cX");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "j");
+    press(&mut ed, "gh.");
+    assert_eq!(ed.current_buffer().rope().to_string(), "X：乙\nX：乙\n", "西文：兩處都改了");
+
+    // 中文那一路要給出同一個答案。
+    let mut ed = typed("甲：乙\n甲：乙\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "c");
+    ed.insert_committed("紅");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "j");
+    press(&mut ed, "gh.");
+    assert_eq!(ed.current_buffer().rope().to_string(), "紅：乙\n紅：乙\n", "中文：兩處都改了");
+}
+
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
 ///
 /// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是
