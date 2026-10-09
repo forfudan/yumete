@@ -883,14 +883,23 @@ lines you can see** are coloured, and one character changed parses only the part
 changed again. Measured on a twenty-thousand-line `lib.rs`: 0.08 ms to type a character,
 0.55 ms to scroll into a block that has never been drawn.
 
-**A line longer than 3000 columns is left plain** (`:view-long-line`, 2026-10-08). Past
-that many columns a line gets no markdown markup, no syntax colour and no word tint —
-the three things worked out per *line*, which costs nothing on an ordinary paragraph and
-everything on a file that is one line. Measured: a minified `.js` of 1.5 million ASCII
-characters on one line went from **2.54 s a frame to 0.05 s**; the same characters as
-15,000 lines are 0.04 s either way, so a manuscript pays nothing. vim's `synmaxcol` is
-the same rule and the same number, and its documentation says why: 「This helps to avoid
-very slow redrawing for an XML file that is one long line.」 `:view-long-line off`
+**A line longer than 50,000 characters is left plain** (`:view-long-line`, 2026-10-08;
+the threshold was raised on 10-09). Past that many characters a line gets no markdown
+markup, no syntax colour and no word tint — the three things worked out per *line*, which
+costs nothing on an ordinary paragraph and everything on a file that is one line.
+Measured: a minified `.js` of 1.5 million ASCII characters on one line went from **2.54 s
+a frame to 0.05 s**; the same characters as 15,000 lines are 0.04 s either way, so a
+manuscript pays nothing.
+
+The number was vim's `synmaxcol`, 3000, and that was wrong: vim's gate is about *syntax
+colour on code*, and this one also carries markup hiding and 分詞, which is what prose is
+made of. At 3000 a Chinese paragraph of 3,371 characters silently lost its typography.
+The cost per frame, measured: 4,000 characters 2 ms, 50,000 **7 ms**, 500,000 52 ms,
+1.5 million 152 ms. Fifty thousand characters is tens of pages written as one paragraph,
+and the case the gate exists for is still caught.
+
+It counts **characters, not columns**: a line's width in columns has to be measured
+glyph by glyph, which is the very cost this gate exists to avoid. `:view-long-line off`
 removes the limit, a number sets it, and the bare word reports which it is.
 
 Why only these: every grammar takes up space in the executable. The first seven
