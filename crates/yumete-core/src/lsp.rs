@@ -713,6 +713,21 @@ pub fn first_paragraph(told: &str) -> Option<String> {
         if fenced {
             continue;
         }
+        // **那一對圍欄這一路上早被拆過了**（2026-10-09 補）。
+        //
+        // Warning: 這一支收的是 [`Told::text`]，而 `Told` 裏那段字已經過了
+        // [`inline`]——圍欄一行不剩，裏面那幾行各自裹上了一對反引號。於是上面那道
+        // 跳圍欄的閘一次也沒開過，`println!` 的 hover 交出來的是 `` `std::macros` ``
+        // 而不是「Prints to the standard output」。整行就是一段行內代碼的，在散文
+        // 開始之前一律當簽名跳掉；反引號只有首尾那兩個纔算，不然「`甲` 和 `乙`」
+        // 這種真散文也會被當成簽名。
+        let only_code = trimmed.len() >= 2
+            && trimmed.starts_with('`')
+            && trimmed.ends_with('`')
+            && trimmed.matches('`').count() == 2;
+        if said.is_empty() && only_code {
+            continue;
+        }
         // `---` 是 rust-analyzer 拿來隔開簽名與說明的，不是正文。
         if trimmed.chars().all(|c| c == '-') && trimmed.len() >= 3 {
             continue;
@@ -1455,5 +1470,21 @@ mod tests {
         );
         // 只有簽名，沒有散文：什麼都不畫。
         assert_eq!(first_paragraph("```rust\nfn f()\n```\n"), None);
+
+        // **真正遞進來的是過了 `inline` 的那一份**（2026-10-09）。上面那幾格餵的是
+        // 服務器原話，而 `Told::text` 早被 `inline` 拆過圍欄了——這幾格走的是產線
+        // 上那條路，不走一遍就看不見「跳圍欄」那道閘一次也沒開過。
+        assert_eq!(
+            first_paragraph(&inline(told)).as_deref(),
+            Some("Prints to the standard output, with a newline.\n…"),
+            "產線上的形狀：圍欄已經變成行內代碼"
+        );
+        assert_eq!(first_paragraph(&inline(one)).as_deref(), Some("Does a thing."));
+        assert_eq!(first_paragraph(&inline("```rust\nfn f()\n```\n")), None);
+        // 真散文裏的行內代碼不許被當成簽名跳掉。
+        assert_eq!(
+            first_paragraph("`甲` 和 `乙` 都是字。\n").as_deref(),
+            Some("`甲` 和 `乙` 都是字。")
+        );
     }
 }

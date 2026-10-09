@@ -23637,15 +23637,23 @@ fn no_signature_falls_back_to_one_paragraph_of_the_doc() {
 
     ed.on_key(Key::Char('('));
     assert!(ed.take_signature_query().is_some(), "`(` 問了一次");
-    // 服務器說「沒有簽名」——那就在同一處排一句 hover。
+    // 服務器說「沒有簽名」——那就回頭問一句 hover，**問在那個名字上**。
+    //
+    // Warning: **這一格是他報了三次的那個 bug**（2026-10-09）。從前補問的坐標是問
+    // 簽名那一格（左括號後面），而括號裏什麼都沒有，hover 照樣回 `null`。行是
+    // `    println!(`，`(` 在第 12 列，被調用的那個名字的末字 `n` 在第 10 列。
     ed.show_signature(None);
-    assert!(ed.take_signature_doc_query().is_some(), "補問那一句排上了");
+    let asked = ed.take_signature_doc_query();
+    assert_eq!(asked.as_ref().map(|(_, l, c)| (*l, *c)), Some((1, 10)), "問在 `println` 上");
     // 而且只排一次：取走了就沒了。
     assert!(ed.take_signature_doc_query().is_none(), "只問一遍");
 
     // 答案回來：只留正文第一段，後面還有就單排一個 `…`。
+    //
+    // Warning: **餵的是過了 `lsp::inline` 的那一份**——產線上遞進來的就是它，圍欄
+    // 已經拆成行內代碼了。餵服務器原話的話，這一格看不見「跳圍欄」那道閘已經失效。
     ed.show_signature_from_doc(
-        "```rust\nstd::macros\n```\n\n---\n\nPrints to the standard output, with a newline.\n\nOn all platforms…\n",
+        "`std::macros`\n\nPrints to the standard output, with a newline.\n\nOn all platforms…",
     );
     assert_eq!(
         ed.signature_here().map(|s| s.label.as_str()),
