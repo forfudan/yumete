@@ -2837,9 +2837,10 @@ pub struct Editor {
     block_cache: RefCell<Option<BlockCache>>,
     /// Whether fenced code is coloured by its own grammar (#420, `:view-code`).
     code_colours: bool,
-    /// **一行長過多少列就不上色**（`:view-long-line`，2026-10-08）。
+    /// **一行長過多少字就不上色**（`:view-long-line`，2026-10-08）。
     ///
-    /// `None` ＝沒有上限（vim 的 `synmaxcol=0`）。出廠 3000，與 vim 同數。
+    /// `None` ＝沒有上限（vim 的 `synmaxcol=0`）。出廠 [`Editor::LONG_LINE`]，那個
+    /// 數怎麽量出來的寫在它自己那裏。
     ///
     /// 量出來的（2026-10-08）：同樣 1.5M 字，切成 15000 行是每幀 0.04 秒，擠成一行
     /// 是 0.33 秒，壓縮過的 `.js`（一行 150 萬 ASCII）是 2.54 秒。**慢的不是檔有多大，
