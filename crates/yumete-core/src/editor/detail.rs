@@ -23,7 +23,7 @@ impl Editor {
     /// unasked, and `t i` opens it in one keystroke for the reader who wants
     /// it. A note in prose is not a row and is not affected: there is nothing
     /// on the page that says what a footnote holds.
-    fn detail_opens_here(&self) -> bool {
+    pub(super) fn detail_opens_here(&self) -> bool {
         !(self.detail_shows_a_row()
             && !self.table.as_ref().is_some_and(|view| view.pane))
     }
