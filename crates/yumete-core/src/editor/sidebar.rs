@@ -1543,8 +1543,8 @@ impl Editor {
     /// 問的就是它的 `matches()`——所以 `ye --files jia` 和編輯器裏 `空格 f` 打
     /// `jia` 永遠是同一份答案。管道那一邊另寫一份一定會分岔。
     ///
-    /// Warning: **不封頂。** 挑選器封在 `PICKER_LIMIT`（四千）條，因為那是給人翻的；
-    /// 管道印給別的程序看，少印一條就是錯一條。
+    /// Warning: **不封頂。** 挑選器那一頭的上限是走查自己的 `WALK_CEILING`（兩萬，
+    /// 護的是畫面）；管道印給別的程序看，少印一條就是錯一條，所以它連那一道也不認。
     pub fn files_matching(&self, root: &Path, query: &str, sieve: &crate::editor::Sieve) -> Vec<String> {
         let mut names = Vec::new();
         // Warning: **篩子要傳進來**（2026-10-03 一輪審查報來的）。從前這裏寫死
@@ -1618,20 +1618,20 @@ impl Editor {
     fn open_file_picker_in(&mut self, root: PathBuf, sieve: crate::editor::Sieve) {
         let mut prose = Vec::new();
         let mut rest = Vec::new();
-        // Warning: **這張單子可能是半截的，而此刻一個字都不說**（2026-10-09 審出來的）。
+        // **走查看得見的就搜得到，而半截的名單要說出來**（2026-10-09 作者定）。
         //
-        // 兩種半截：走查自己停了（`Walked.cut` ——`WALK_CEILING`／`WALK_DEADLINE`），
-        // 和 `PICKER_LIMIT` 四千條裝滿了。`Walked` 自己的註釋寫着「呼叫方有義務說出
-        // 來」，搜索那一頭說得出（`search.hits-more`），這一頭兩種都沒說。
+        // Warning: **`PICKER_LIMIT` 去掉了。** 那一道閘砍的不是「顯示多少條」，是
+        // 「**能搜到多少條**」——名單一次建好再模糊打分，裝不進的那幾千條打出名字也
+        // 找不着（今晚那個 golden source CSV 搜不到就是這一族）。真正的上限本來就是
+        // 走查自己的 `WALK_CEILING`（兩萬）。量過最壞情形（整個倉含 `target/`，兩萬
+        // 條）：開一次 220 毫秒，之後每打一個字 40 毫秒；平常的倉根 176 條，量不出來。
         //
-        // 沒有順手補：要寫的是一則**新的界面文案**（而且得把兩種成因說清楚），那歸
-        // 作者定——`PICKER_LIMIT` 那一則本來就在等他的那張單子上。接上文案之後，這
-        // 裏要收的是 `walk_with` 的回值與 `prose.len() + rest.len() >= PICKER_LIMIT`
-        // 這一格。
-        let _half = crate::editor::walk_with(&root, &sieve, &mut |path| {
-            if prose.len() + rest.len() >= PICKER_LIMIT {
-                return;
-            }
+        // helix 連這個上限都沒有：它把走查的每一條路徑**流式**喂給 `nucleo`，邊走邊
+        // 篩。那一條另開一輪（要改挑選器的整個模型），所以今天只去閘。
+        //
+        // 半截那一半照搜索的寫法：`Walked.cut` 記在挑選器身上，腳注那個數目多一個
+        // `+`。`Walked` 自己的註釋要的就是這一句（「呼叫方有義務說出來」）。
+        let walked = crate::editor::walk_with(&root, &sieve, &mut |path| {
             let shown = path.strip_prefix(&root).unwrap_or(path).display().to_string();
             let is_prose = path
                 .extension()
@@ -1668,6 +1668,7 @@ impl Editor {
         picker.root = Some(root);
         // 篩子也存在它身上：`A-h` 轉一格要知道此刻跳過的是哪些，提示行要寫出來。
         picker.sieve = Some(sieve);
+        picker.cut = walked.cut;
         picker.prefer(bonus);
         self.picker = Some(picker);
         self.mode = Mode::Picker;

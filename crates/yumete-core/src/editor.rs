@@ -413,12 +413,6 @@ const EVERY_FONT_HAS: [char; 2] = ['〇', '々'];
 /// one or two megabytes and never reaches it.
 const DISCOVER_MAX_BYTES: usize = 16 * 1024 * 1024;
 
-/// How many files the picker offers.
-///
-/// A project with more than this is not one a writer is choosing a chapter
-/// from, and gathering all of it would make `Space f` pause before it drew.
-const PICKER_LIMIT: usize = 4000;
-
 /// **What a writer's files are named** — the extensions `空格 f` lists first.
 ///
 /// Not a filter: a manuscript folder holds a `.png` of a map and a `.csv` of
@@ -1690,7 +1684,7 @@ pub(crate) const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_
 /// Warning: **只有搜索那一趟肯為了多走幾個檔多等三秒**（2026-10-02 審出來的回歸）。那
 /// 個寬限本來是給 [`walk_prose`] 的，可它從前寫在共用的走查裏，於是挑選器和 `[[`
 /// 補全也繼承了——而那兩個是**按鍵上同步跑的**，中間沒有「正在找…」那一幀，而且
-/// 它們自己早就夠了（`PICKER_LIMIT` 四千條）。量出來的（`$HOME`，同一個進程同一
+/// 它們自己有走查的地板護着（`WALK_CEILING` 兩萬條）。量出來的（`$HOME`，同一個進程同一
 /// 棵樹）：到地板就停是 `seen=20000 138ms`，等滿三秒是 `seen=323177 3.00s`。
 ///
 /// Warning: **管道那一邊一條都不認**（2026-10-03 定）。那三道閘護的是畫面；
