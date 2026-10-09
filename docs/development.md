@@ -20524,6 +20524,11 @@ selection, because each is spent by the first run. They did not put back:
 Reachable only through `A-C`: under the vim preset `C` is `c$` and `s` substitutes a character,
 so that is the one key there that makes a second selection.
 
+Named registers held one string, so N selections overwrote each other and `"a` kept only the
+last run — worse than the unnamed one, which at least joined. They are `Vec<String>` now, on the
+same rule, read back joined when the selection count does not match. helix holds a list either
+way.
+
 ## 5.147 Seventy-five milliseconds a keystroke, and where they went (2026-10-09)
 
 The performance reviewer's agent hit the usage limit mid-run; its last line was 「every edit

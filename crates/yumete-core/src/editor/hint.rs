@@ -440,11 +440,13 @@ impl Editor {
             // Warning: `#` 不是格子，是問題的答案（見 `edits::recall`），所以它沒有內容
             // 可印，只能寫一句說明，也只有它一行是說明。它排在最後。
             Pending::Register => {
-                let mut named: Vec<(&char, &String)> = self.registers.iter().collect();
+                let mut named: Vec<&char> = self.registers.keys().collect();
                 named.sort();
                 let mut rows: KeyRows = named
                     .into_iter()
-                    .map(|(name, text)| (name.to_string().into(), Self::register_preview(text)))
+                    .map(|name| {
+                        (name.to_string().into(), Self::register_preview(&self.held(*name)))
+                    })
                     .collect();
                 rows.push(("#".into(), say!("hint.register.hash")));
                 (say!("hint.register.title"), rows)
