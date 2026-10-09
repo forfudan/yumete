@@ -20499,6 +20499,39 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.146 The last seven, and a trap the repo had already written down (2026-10-09)
+
+- **A range written backwards asks first.** `:3-1s` used to swap to 1–3 and change it, and 「I
+  wrote it backwards」 looks exactly like 「I meant it backwards」. vim asks; so does this now,
+  on the status line with the keys in the sentence, the way the `:s …c` walk writes its own.
+  What is stored is **the line as typed** — `execute` takes a string and there is no entry point
+  for a parsed `Command`, so re-running the line is the honest replay, with one flag saying the
+  question has been answered.
+- **The candidate panel keeps off the caret's row, and only it.** The first attempt at this was
+  reverted on 10-09 because `draw_panel_rows` dresses three panels and the shortcut table
+  **means** to fill the area. The flag now says which panel is asking.
+- **The settings panel shows the value the editor takes.** A hand-edited `zong_length = 2` drew
+  as 2 while `into_config` laid the page out at 4. The clamp reads the setting's **own** declared
+  domain (`Kind::Count { low, high, zero }`), so it cannot drift from the other half; the one
+  non-numeric case is `[panel] markers`, where an empty list keeps the factory's digits.
+- **`.h` is C** (helix does the same; a C++ header gets C's grammar, which is right about
+  everything but `template`/`class`). **Pascal names its functions and types**: the node names
+  came from the grammar's own `src/node-types.json` — the generated API description, not the
+  crate's `.scm`, which carries its own licence.
+- ⚠ **And writing that query cost an hour to the trap this file already names.** `compiled()` is
+  `Query::new(…).ok()?`: one wrong node name and the language loses **every** colour, silently —
+  my first version wrote `(declArg type: (typeref) …)` where that field takes `type`, and Pascal
+  went from keywords-only to nothing at all. The ⚠ at `code.rs` says exactly this, and
+  `every_shipped_grammar_compiles_its_own_query` is the test for it — **it printed only
+  「pascal」**. It now prints the error and the offending line, which found it in one run.
+- **Ten statements in the manual, three inside `--help`.** Each one pressed before it was
+  rewritten: the deleted phrasebook paragraph (the manual contradicted itself 1400 lines later),
+  `T` and `t/` as table keys (they are `空格 t T` / `空格 t /`), Insert's `Delete` direction,
+  five modes (seven), nine grammars (sixteen), the 4 MB gate that no longer exists, 53 settings
+  (54), 50 columns (58), 「at most 200」 (a floor), three delimiter guesses (four), the 300 ms
+  the completion list does **not** wait, three theme colours (four inks), and the Space menu's
+  `o`/`d`/`r` (`s`/`n`/—).
+
 ## 5.145 Thirteen more, and one number I had got wrong (2026-10-09)
 
 He stayed awake and worked through most of the remaining questions. What he chose:
