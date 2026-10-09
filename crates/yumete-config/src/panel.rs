@@ -528,6 +528,23 @@ impl Panel {
     }
 
     /// `i` —— 進去打字。數字與一段字纔有得打。
+    /// **`Enter`：改這一項，按這一項自己的改法**（2026-10-09 作者定）。
+    ///
+    /// 從前改一項要看它是哪一種：撥的用空格，打字的用 `i`，而兩個鍵各自在另一種
+    /// 上**一聲不吭地什麽都不做**——`i` 停在一個勾上沒有反應，看起來像面板壞了。
+    /// 原話：「the way to use it is a little bit fuzzy」。兩個鍵都留着，`Enter` 是
+    /// 那個不必先判斷種類的。
+    pub fn change_here(&mut self) {
+        let Some(setting) = self.here() else { return };
+        match setting.kind {
+            // 撥得動的：撥一格。
+            Kind::Tick | Kind::Pick(_) => self.press(),
+            // 數和字：打進去。數也打字而不是一格一格撥——`zong_length` 的域是 4 到
+            // 64，按空格按到 40 不是一個人會做的事。
+            _ => self.begin_typing(),
+        }
+    }
+
     pub fn begin_typing(&mut self) {
         let Some(setting) = self.here() else { return };
         if matches!(setting.kind, Kind::Tick | Kind::Pick(_)) {
