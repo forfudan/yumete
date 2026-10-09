@@ -108,3 +108,28 @@ fn regex_lite_hit(mark: &str, text: &str) -> bool {
         _ => false,
     }
 }
+
+/// **A manual with 155 warnings has none** (2026-10-09).
+///
+/// `Warning:` had become an emphasis marker: 23.1 per 1000 lines, against 0.9–7.6 across
+/// vim, nvim, emacs, helix, kakoune, micro, nano and zed. 137 of them were ordinary
+/// sentences wearing a label, and dropping the label cost the prose nothing. What is left
+/// is data loss, a silently wrong result, or a limitation the reader walks into: `[^書]`
+/// excluding `书`, `$1` working only on the regex path, a config file yumete overwrites.
+///
+/// The ceiling is a **ratchet, with a little headroom**. It is not a law of nature — if a
+/// genuine new hazard turns up, raise it in the same commit that adds the warning, which
+/// is exactly the moment to ask whether it is really one.
+#[test]
+fn the_manual_warns_about_few_enough_things_to_be_believed() {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    let text = std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual");
+    const CEILING: usize = 22;
+    let found = text.matches("Warning:").count();
+    assert!(
+        found <= CEILING,
+        "{found} `Warning:` blocks in the manual, ceiling {CEILING}. \
+         Is the new one data loss, a silently wrong result, or a limitation? \
+         If not, it is a sentence — drop the label. If it is, raise the ceiling here."
+    );
+}
