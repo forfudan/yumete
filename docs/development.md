@@ -14508,6 +14508,9 @@ review 讀不到的地方，於是同一條被反覆「發現」。原話：「�
 
 | 會被當成 bug 的 | 答案在哪 | 一句話 |
 | --- | --- | --- |
+| CSS 的 `#ff0000` 畫成字符串綠、TOML 頂層裸鍵畫成型別 | `code.rs` 的 `highlights()` | **照上游，不動**（2026-10-09 定）。兩處都是上游查詢自己分的（`@string.special`／`(bare_key) @type`），而「照抄參考實現」那一條在這裏就是不動它——改了就是開始維護自己的一套配色哲學，而上游每次改查詢都要再對一遍。 |
+| 分詞著色在搜索／替換裏「少配了」或者「多配了」 | §5.12.37 與上面兩條 | 已經各答過一次，別混成一件。 |
+| `:s` 為什麽不智能大小寫而 `/` 智能 | `search.rs` 的 `compile_exactly` | **定過的**（2026-10-09）。原話：「替換本質他是個正則，既然是正則就應該默認嚴格。」量過三家：helix 的 `/` 智能而**它沒有 `:s`**，vim 兩個都分。放寬那一格由 `i` 旗標說，而 `/` 那一扇面板寫明了它放寬過。 |
 | 表格列寬跟着**可見行**變，滾動時整表橫跳 | `crates/yumete-tui/src/table.rs:62` | 量整張表會讓一千行外的一個長單元格把別的列擠出右邊。**這個代價是選定的**，2026-09-15 那次 review 記過、當時就答了，2026-09-24 又記了一次。 |
 | `:convert` 為什麼不自己做簡繁 | `crates/yumete-core/src/convert.rs` 開頭 | 發/髮 要看上下文，那是 OpenCC 做了十五年的事。Warning: 搜索那邊的簡繁折疊是**另一個問題**（見 §5.12.37），別把兩件事混成一件。 |
 | 橫排注音撞車時「滑到別的字頭上」 | `crates/yumete-tui/src/lib.rs:9196` | 比基字寬的讀音會壓過去，後一個**往右推**。不撑開（橫排撑開要把整行後面推走，版心不能這麼動；竪排撑得起是因為它買的是旁邊那一縱），也不丟（「一個差一格的注音讀者看得見、能自己校正；一個沒畫出來的注音，他永遠不知道它在過」）。Warning: 2026-09-25 手冊兩處都還寫着舊說法，已改。 |
@@ -20498,6 +20501,37 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 28 / 56.5). Nearly flat, and the residue is `char_to_line`'s own O(log n). The cost of being
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
+
+## 5.147 Seventy-five milliseconds a keystroke, and where they went (2026-10-09)
+
+The performance reviewer's agent hit the usage limit mid-run; its last line was 「every edit
+re-pays the whole-line scan. Typing costs ~77 ms **per character**」. It was right, and it was
+the biggest number left in the editor.
+
+Measured first: on a four-million-character line, typing 20 characters took 1.71 s against a
+0.21 s baseline — **75 ms a character**, linear, and the same with `:view-wrap off`,
+`:view-long-line off` and `:word-show off`, so none of those gates was paying it. `sample` then
+named the path exactly: **4357 of 4559 samples** in
+
+    on_insert_key → refresh_goal_column → wrap::position → line_rows_for_caret → graphemes()
+
+`refresh_goal_column` worked the column out **on the spot**, and forty-four call sites ask it to.
+On a line that is a whole chapter that is one grapheme walk of the whole line, per keystroke.
+
+It does not have to be worked out: `step_row` already carries 「沒記過就現算一次」 and writes the
+answer back (its own comment explains why — `j` does not call `refresh_goal_column`, and that is
+how it keeps the column across repeats). So the function now **forgets** the goal instead, and the
+O(line) walk moves to the first `j`/`k` after a move, paid once and only if a vertical motion is
+actually pressed. Nothing between the forgetting and the `j` moves the caret, so the answer is
+identical — `10l j j k k` lands on columns 11, 3, 11, 3, 11 exactly as before.
+
+| | before | after |
+| --- | --- | --- |
+| a keystroke on a 4 M line | 75 ms | **0.5 ms** |
+| a keystroke on a 12.4 M line | ~230 ms (extrapolated) | **2 ms** |
+
+Both oracles re-run at their baselines afterwards (vim 2256/9, helix 240/3) — this one touches
+vertical motion, so that check was the point.
 
 ## 5.146 The last seven, and a trap the repo had already written down (2026-10-09)
 
