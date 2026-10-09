@@ -164,11 +164,20 @@ impl super::Editor {
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
         let named = self.pending_register;
+        // Warning: **模式也是一次性的**（2026-10-09 審出來的）。一組選區上按 `a`：第一趟
+        // 跑完編輯器已經在插入態了，而 `selection()` **在插入態不含光標下那一格**（那時
+        // 光標是兩個字之間的一條綫），於是第二趟起 `append_position` 交出來的是那一格
+        // 本身——`!` 插在 `。` 前面而不是後面。實測 `%s。` 再 `a!`：
+        // 「第一句話很長!。中間!。第三句也在這裏。!」，只有最後那一段落對。
+        //
+        // 同上面那三格，每一段開跑之前擺回去；跑完之後照舊留最後一趟那一份。
+        let mode = self.mode;
         for (nth, one) in was.iter().enumerate() {
             self.sel = crate::selection::Selections::one(*one);
             self.pending = pending;
             self.count = count;
             self.pending_register = named;
+            self.mode = mode;
             what(self);
             if *one == primary {
                 which = nth;
@@ -218,6 +227,8 @@ impl super::Editor {
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
         let named = self.pending_register;
+        // 模式同上一支，見那裏的註釋。
+        let mode = self.mode;
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
         let ranges: Vec<Range> = was.iter().copied().collect();
@@ -237,6 +248,7 @@ impl super::Editor {
             self.pending = pending;
             self.count = count;
             self.pending_register = named;
+            self.mode = mode;
             // Warning: **文檔次序，不是執行次序**：這一趟從後往前跑，而讀者數的是從上往下
             // 第幾個。`#` 寄存器讀它。
             self.edit_nth = Some(nth);

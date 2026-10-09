@@ -23770,6 +23770,26 @@ fn leaving_insert_steps_the_caret_back_the_way_vim_and_helix_do() {
     assert_eq!(at(Helix, "gha^"), 1, "helix：行首的 `a` 退回第一個字");
 }
 
+/// **一組選區上按 `a`，每一段都插在它自己後面**（2026-10-09 審出來的）。
+///
+/// 從前只有最後那一段對：`edit_each` 每一段都把 `pending`／`count`／寄存器擺回去，
+/// 模式沒擺——第一趟跑完已經在插入態，而 `selection()` 在插入態不含光標下那一格。
+/// 拿真 helix 對過：`第一句話很長。!中間。!第三句也在這裏。!`。
+#[test]
+fn an_append_at_every_selection_lands_after_each_of_them() {
+    let mut ed = typed("第一句話很長。中間。第三句也在這裏。\nz\n");
+    press(&mut ed, "gg");
+    // `%` 選全檔，`s。` 把它篩成每一個 `。` 一段。
+    press(&mut ed, "%s。");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "a!");
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().rope().to_string(),
+        "第一句話很長。!中間。!第三句也在這裏。!\nz\n"
+    );
+}
+
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
 ///
 /// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是
