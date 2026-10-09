@@ -23860,6 +23860,41 @@ fn cutting_at_many_cursors_and_putting_it_back_restores_every_piece() {
     assert_eq!(ed.current_buffer().rope().to_string(), was, "逐字還原");
 }
 
+/// **狀態欄那個「字」數的是字素**（2026-10-09 作者定）。
+///
+/// 原話：「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint。」`葛`＋U+E0100
+/// 是一個字，從前狀態欄的字號從 1 跳到 3，而列數一直是對的。
+///
+/// 長行那一枝走 [`crate::wrap::Widths`] 的字簇前綴索引（切點每 `BLOCK` 個字一條），
+/// 所以這裏的靶子要比 `BLOCK` 長，不然走的是短行那一枝。
+#[test]
+fn the_caret_is_counted_in_graphemes_not_codepoints() {
+    let ivs = "\u{845B}\u{E0100}";
+    // 短行：索引根本不建。
+    let mut ed = typed(&format!("{ivs}乙🙂丙\n"));
+    press(&mut ed, "gg");
+    assert_eq!(ed.cursor_grapheme(), 0, "行首");
+    for want in [1, 2, 3] {
+        press(&mut ed, "l");
+        assert_eq!(ed.cursor_grapheme(), want, "走第 {want} 下 l");
+    }
+    // 而字符下標另算——內嵌 preedit 與 `drawn_runs` 要的是它。
+    assert_eq!(ed.cursor_column(), 4, "三個字素走完是第 4 個字符（異體字佔兩個）");
+
+    // 長行：過了 `BLOCK` 纔有索引，兩枝的答案要一樣。
+    let long = format!("{}{ivs}甲\n", "文".repeat(crate::wrap::BLOCK + 500));
+    let mut ed = typed(&long);
+    press(&mut ed, "gg");
+    press(&mut ed, "gl");
+    // 一行是 BLOCK+500 個「文」、一個異體字組、一個「甲」；`gl` 停在最後一個字上。
+    assert_eq!(ed.cursor_grapheme(), crate::wrap::BLOCK + 501, "索引那一枝");
+    assert_eq!(
+        ed.cursor_column(),
+        crate::wrap::BLOCK + 502,
+        "字符下標比它多一個——異體字選擇符"
+    );
+}
+
 /// **行末那個換行符不進正則**（2026-10-09 審出來的，三條毀檔缺陷一個根）。
 ///
 /// 每一格的「對的答案」都是拿 vim／nvim 量出來的。見 `crate::editor::line_body`。

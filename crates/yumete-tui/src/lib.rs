@@ -12168,7 +12168,9 @@ fn position_in(editor: &Editor, full: bool) -> String {
             "ui.position",
             editor.cursor_line() + 1,
             editor.cursor_visual_column() + 1,
-            editor.cursor_column() + 1
+            // **「字」數的是字素，不是碼位**（2026-10-09 作者定）——`cursor_column`
+            // 交的是字符下標，那是別處要的東西。見 `Editor::cursor_grapheme`。
+            editor.cursor_grapheme() + 1
         ),
         false => say!(
             "ui.position-short",
