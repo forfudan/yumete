@@ -646,10 +646,8 @@ Warning: **what cannot be measured is not written.** There was an Emacs column h
 once, filled in from memory — with no source to check against, a column that looks
 confident and has in fact never been verified is worse than no column at all.
 
-**An unbound key says nothing at all.** The command line used to answer `$` with
-"end of line is `gl`", and a dozen other keys likewise — a phrasebook of what
-another editor's keys are called here. There is no such hint, because a
-hint like that assumes why you pressed the key: press `D` and being told to
+**An unbound key says nothing at all.** No phrasebook answers `$` with "end of line
+is `gl`", because a hint like that assumes why you pressed the key: press `D` and being told to
 press `A-d` is the editor deciding what you meant. This table is the answer
 instead, and so is `:keymap`.
 
@@ -974,9 +972,8 @@ themselves are dimmed and read as scaffolding; the text they fence steps forward
 Headings, `` `碼` ``, `~~删~~`, `*斜*` and `[文字](目標)` are the same. `:render off`
 turns the colouring off.
 
-**Horizontal and vertical are the same.** Vertical layout used to hide and not colour,
-which was half of WYSIWYG; now all three layers (the block tint, the inline colouring,
-the selection) are one set in both directions.
+**Horizontal and vertical are the same.** All three layers — the block tint, the
+inline colouring, the selection — are one set in both directions.
 
 The syntax it knows:
 
@@ -1666,9 +1663,9 @@ the base spread out to match it — that is how vertical setting has always done
 it is the arrangement in which two readings can never collide.
 
 A reading may be **full-width** — Bopomofo (ㄩㄥˇ), Japanese kana — and then the ruby
-lane widens to two cells, the same across the whole page. It used to be hard-wired to
-one, so every full-width reading pushed all the columns after it one cell left and the
-page collapsed into a staircase; and this feature is called furigana, after all. Pinyin
+lane widens to two cells, the same across the whole page — a lane hard-wired to one
+would push every column after a full-width reading one cell left, and the page would
+collapse into a staircase. Pinyin
 is half-width and still takes one cell (unless you set `ambiguous_width` to `wide` and
 the reading has a toned vowel in it — then it is two cells as well, because that is how
 the terminal draws it).
@@ -1887,9 +1884,9 @@ while yume holds the keyboard, it switches between 中文 and ABC.
 | ABC | a Shift tap / `:yume abc` | `[ABC]` |
 | off | `:yume off` | nothing at all |
 
-**The sign is there in every mode.** It used to be drawn only where composition actually
-happens — Insert, `/`, the arguments of `:` — so in Normal mode you could not tell
-whether the next `i` would land you in 中文 or in ABC until you typed the wrong thing.
+**The sign is there in every mode**, not only where composition actually happens
+(Insert, `/`, the arguments of `:`). In Normal mode it is what tells you whether the
+next `i` will land you in 中文 or in ABC, before you type the wrong thing.
 Now the status line carries it at all times. Squeezed down to sixty columns, what gives
 way first is the readout for the character under the cursor (`冬 U+51AC · CJK…` shrinks
 to `U+51AC`), not the sign — that character is already visible on the page.
@@ -2641,9 +2638,7 @@ NOR  ch01.md   Ln 12, Col 8                       螭 U+87ED · CJK Unified Ideo
 
 **The upper line is "where I am"** — the mode, Chinese or English, the file name, the
 position, the character under the caret. It **never changes shape**, so the eye finds
-the same thing in the same place every time. A message used to be able to squeeze the
-position out, or push it off the line entirely, and a single `:` would replace the
-whole line; that was because several questions were crowded onto one line.
+the same thing in the same place every time.
 
 The gold word at the front is the mode, seven in all:
 
@@ -2994,10 +2989,9 @@ itself, and the line it is written on:
 
 **It stands at the cursor's diagonal** — cursor to the left and it goes right; cursor
 low enough that it would cover the line you are reading and it flips to the corner
-above. **It takes no line away from the page**: it used to be a full-width bar four
-lines deep, and a note is a line or two of text, so the bar both left the width empty
-and took four lines of paper unconditionally, however short the note was. Vertical has
-it too, with the corners worked out in the vertical direction.
+above. **It takes no line away from the page** — a note is a line or two of text, and a
+full-width bar four lines deep would leave the width empty and spend four lines of
+paper however short the note was. Vertical has it too, with the corners worked out in the vertical direction.
 
 `gd` goes there, `gd` comes back — **one key, two directions**, because from the note
 the only place you can want to go is the sentence you just left. You come back onto the
@@ -3153,10 +3147,8 @@ hands the window back (to whichever one you were in before),
 `空格 t o`/`空格 t b`/`空格 t f` change the surface, and `空格 t ]`/`空格 t [` go to
 the next table.
 
-It used to leak: one press of `G` and the cursor jumped into the chapter below, where
-the window had no table to draw, so the window quietly handed itself back to the text —
-**the whole-window table would end when nobody had asked it to**. Plugging that hole
-takes a whole class of corner cases away with it, and it is also what buys the next
+**The window never ends unless you end it.** `G` cannot walk the cursor out into the
+chapter below and leave the window with no table to draw, which is what buys the next
 paragraph.
 
 **Line numbers in the window are this table's own** (row 1, row 2…), not the file's. The
@@ -3242,8 +3234,7 @@ and once there are column names it can line up and walk by cells. The delimiter 
 guessed as well, by exactly the same rule as `:convert-table`: whichever of tab, comma
 and semicolon appears the same number of times on every line is the one, and only when
 none does is it treated as a comma. So a file written out by `:export tsv` can be read
-back by `-t` — this used to have the comma hard-coded, and a tab-split file was always
-told it was not a table.
+back by `-t`.
 
 **A `.txt` whose every line is cut into the same number of columns by the same mark
 opens as a table.** No `-t` needed and no schema: of tab, comma, semicolon and space,
@@ -3508,11 +3499,10 @@ from being a grid, opening the table tells you so directly; when the file is a g
 the whole, `:table-check` lists that row on its own and says "this quote is never
 closed", instead of vaguely reporting a wrong column count.
 
-**An error in the schema is said out loud.** A schema with a typo in it used to be
-dropped in silence — twenty-eight labels, two computed fields and the whole jump
-mechanism gone, with the only clue being the status line saying "by its own header row"
-instead of "by division.toml". Now it tells you which file, which line and what is
-wrong.
+**An error in the schema is said out loud** — which file, which line, and what is
+wrong. A schema dropped in silence would take twenty-eight labels, two computed fields
+and the whole jump mechanism with it, and the only clue would be the status line saying
+"by its own header row" instead of "by division.toml".
 
 **Rows with the wrong column count are marked, and still editable.** Table mode is
 exactly the tool for fixing such a row, and a row broken badly enough that it will not
@@ -3671,7 +3661,7 @@ nothing to remember about which is which.
 deleted — it is the column names.
 
 A cell pasted by `空格 t p` **that carries a delimiter is refused as a batch**; it will
-not filter it out for you: `長, 久` pasted into a CSV used to become `長 久` in silence.
+not filter it out for you, because `長, 久` pasted into a CSV would mean `長 久`.
 The status line reports the row and column it was going to land on, not one character
 has moved, and there is nothing to undo. Pasting into a `|` table escapes by Markdown's
 rule instead (`|` written as `\|`, backslashes doubled), so whatever was in the cell is
@@ -3696,8 +3686,7 @@ because of that it is free to mean "this column".
 **`-` is a range, `,` is a roll call or a pair.** `空格 t2-10/` is columns two to ten
 (one stretch of one kind of thing), `空格 t1,5,9s` is columns one, five and nine
 (several of the same kind of thing), and `空格 t20,20g` is row 20, column 20 (two kinds
-of thing). One key used to do both, and the day `空格 t20,20g` was written down they
-collided.
+of thing) — one key cannot do both.
 
 **The line number is the number in the line-number slot.** In the text that is the
 file's line number; in the whole-window table it is this table's own (see below). Both
@@ -3737,9 +3726,8 @@ characters that are not drawn on the page; one `Esc` back to Normal and it folds
 This rule was bought with the lag, and it was well bought: **whether a cell is spread
 depends only on whether characters are being changed, and not at all on where the cursor
 is**, so the whole table's layout is computed once and used from then on, and one step
-does not reflow it. It used to be "whichever cell you walk into spreads", which meant
-every press of `j` remeasured the entire table — 15 milliseconds a step, walking up and
-down a two-character-wide `#` column of a 286-row table.
+does not reflow it. "Whichever cell you walk into spreads" would remeasure the entire
+table at every press of `j` — 15 milliseconds a step on a 286-row table.
 
 **A spread cell does not widen its whole column**: it pushes out to the right from its
 own wall, the columns after it on that row shift right with it, and **no other row moves
@@ -3858,8 +3846,8 @@ that column.
 After each component comes its row number; a component with no row of its own is marked
 with a red `—`, and for a division table that "no" is itself the finding.
 
-**`空格 t i` toggles it** (it used to be `空格 d`). It is a table key, and it ought to
-live with the table group; `空格 d` is the dictionary now. Tables split by spaces or
+**`空格 t i` toggles it.** It is a table key and lives with the table group; `空格 d`
+is the dictionary. Tables split by spaces or
 tabs (the code-table kind) are listed as well — such a table has no heading, so the
 column names are the column numbers.
 
@@ -3872,10 +3860,10 @@ more.
 ### A buffer with no name gets a crash copy too
 
 `yumete` started with no arguments, written in for an hour — that is the normal way to
-open a scene, and it used to be the **one buffer with no safety net**: the recovery copy
+open a scene, and it would be the **one buffer with no safety net**: the recovery copy
 goes next to the file, and it has no file.
 
-Now it has one in the data directory (`drafts/scratch-<process>-<n>.yumete`), on the
+So it has one in the data directory (`drafts/scratch-<process>-<n>.yumete`), on the
 same autosave as a buffer that has a file. **It only gets a name once something was
 really typed** — an empty buffer nobody ever typed into should leave nothing behind.
 
@@ -3892,12 +3880,12 @@ ever bring it up.
 
 ### `u` does not undo "nothing happened"
 
-The undo point used to be recorded when a command **announced** an edit, not when it
-really moved a character. So three `d`s that deleted nothing left three `u`s with
-nothing to undo; `i` followed straight by `Esc` was another one. `u` became "works
-sometimes" — the fastest way there is to stop somebody trusting an editor.
+Recording an undo point when a command **announces** an edit, rather than when it
+really moves a character, makes `u` "work sometimes" — three `d`s that deleted nothing
+would leave three `u`s with nothing to undo, and `i` followed straight by `Esc` another
+one. That is the fastest way there is to stop somebody trusting an editor.
 
-Now an undo point is **earned**: it is held when the edit is announced (ropey's
+So an undo point is **earned**: it is held when the edit is announced (ropey's
 copy-shared structure, so holding an edit that never happened costs one pointer), and it
 goes on the undo stack only once a character **really moved**. Same for an edit a guard
 stopped — it moved no characters, so it is not a place worth going back to.
@@ -3941,8 +3929,8 @@ So there is a second pair that **writes only if something changed**:
 | `:up` (`:update`) | write if changed, do not quit |
 
 When nothing changed they write nothing, and the status line says "unchanged; nothing
-written". This is why vi and helix keep `:x` and `:wq` apart; yumete used to treat `:x`
-as an alias of `:wq`, and that threw the distinction away.
+written". This is why vi and helix keep `:x` and `:wq` apart, and why yumete does not
+treat `:x` as an alias of `:wq`.
 
 Warning: **Give it a path and it always writes**: `:x 第二章.md` says "save it under
 this name", and that is an instruction, not an idle save.
@@ -4292,7 +4280,7 @@ rule as in the text.
 
 Warning: **`gh`/`gl` and `w` `b` `e` were not moved into the box**: they are for a long
 line of prose, and this is a box of two or three characters — `A`/`I` brought the start
-and the end of the line along already. So `hl` no longer walks the boxes — characters
+and the end of the line along already. So `hl` does not walk the boxes — characters
 sideways, boxes up and down, the same rule as in the text.
 
 Warning: **`Enter` in the panel is "look again"**: the same from every box. Typing has
@@ -4615,8 +4603,8 @@ morning would be a hundred and twenty.
 `M`/`'` rather than vi's `m`/`'`, because `m` here is match mode.
 
 **The book's own words.** 阿寧 — the name on every page — is the word no dictionary will
-ever have. It used to be cut into `[阿][寧]`: `w` had to be pressed twice to get past
-it, and the segmentation tint drew it as two words.
+ever have. Left to the segmenter it is cut into `[阿][寧]`: `w` has to be pressed
+twice to get past it, and the segmentation tint draws it as two words.
 
 Write them down one per line in `.yumete/words.txt` (`#` starts a comment):
 
@@ -4824,8 +4812,8 @@ after another, this book's first and the global ones under 「global」. It fold
 when the cursor leaves.
 
 **To write with it open all the time**, `:wiki-panel` puts the Wiki page in the
-sidebar: the entry is shown there instead, following the cursor, and **it no longer
-floats** — one place at a time. Type it again to close it. **To scroll it, `C-w` into
+sidebar: the entry is shown there instead, following the cursor, and **it does not
+float** — one place at a time. Type it again to close it. **To scroll it, `C-w` into
 it**: `j`/`k` a line, `J`/`K` half a page, `g`/`G` the two ends, `w` for width, `q`
 closes. While the keys are in
 there the page is frozen on that one entry; `C-w` back out to write.
@@ -4905,9 +4893,8 @@ one character apart from each other, like 李明 and 李朋 in the same book).
 Warning: **an entry written and no mark showing — `:wiki` tells you which ones.** The
 mark follows segmentation, so a name can sit plainly in the sentence and never light up
 once: 「有身體」 loses to 「這裏有/身體」, and a name with a space or Latin letters in it
-(`A 計劃`) never becomes one word at all. This used to be **silent** — the entry was
-written, and nothing happened. Now `:wiki` has a section 「in this chapter but not
-marked」 with the names and their line numbers, and reading it tells you whether to
+(`A 計劃`) never becomes one word at all. Rather than let that pass in silence,
+`:wiki` has a section 「in this chapter but not marked」 with the names and their line numbers, and reading it tells you whether to
 rename or to let it go. Warning: it counts **only the chapter that is open** (press
 `:wiki` again inside the report and that section is gone — there is no manuscript there
 to count), and with many names and a long chapter it takes a fraction of a second.
@@ -4966,8 +4953,7 @@ editor, and the cursor is in the search box: 「it allows you to pre-select the 
 result (and preview) it … but not give me a feeling that the cursor is on this line」.
 `Enter` opens it all the same.
 
-**The key hints are on the command line**; the panel no longer
-lists keys itself, and the height that saves goes to the list. The `A-h` cell names
+**The key hints are on the command line**; the panel does not list keys itself, and the height that saves goes to the list. The `A-h` cell names
 the state it is in now, and it is only written for the pickers that walk the disk —
 the buffer list and the wiki list have nothing to skip.
 
@@ -5271,9 +5257,8 @@ isn't.
 it is a copy.
 
 **Annotations stay out of the book.** `%%這裏要改%%` is a note to yourself, as the
-manual has always said, and it used to go straight into the file you hand the
-publisher. Now it leaves nothing behind on export, like the markup characters
-themselves.
+manual has always said, and it leaves nothing behind on export, like the markup
+characters themselves — it does not travel into the file you hand the publisher.
 
 ### The draft it keeps
 
@@ -5395,7 +5380,7 @@ and only draws a rule under the word.
 slightly fainter ink of its own (step 15), so the mark lands on the writing and a
 page still reads as a page of prose. The price is that the second ink is **dimmer**,
 and the dimmer words are easily read as emphasis — measured, the two inks differ by
-1.38:1, which is why it is **no longer the factory default**. One thing it can still
+1.38:1, which is why it is **not the factory default**. One thing it can still
 do that none of the others can: inside writing that already carries a colour (a
 heading, a link) it tells words apart all the same, because 「one step back」 keeps the
 colour it started from.
@@ -5490,7 +5475,7 @@ is highlighted has its explanation on the line below anyway.
 **The `:` and `/` line can be edited.** `←` `→` move, `Home` `End` go to the two ends,
 `C-w` takes back a word, `C-u` the whole line, `Delete` kills the character under the
 cursor, and `↑` `↓` walk what you typed in this session — `:` and `/` each keep their
-own. One wrong character in a long `:%s` no longer means typing it all again.
+own. One wrong character in a long `:%s` does not mean typing it all again.
 
 The rule in one line: **a prefix that is not shared counts**, for commands and for
 arguments alike. `:y` is `:yume` — the head of a family never collides with the
@@ -6271,7 +6256,7 @@ fuzzy_search = false         # whether the search panel's "fuzzy" switch starts 
                              # because the edge where the colour changes is that line
 paper_ticks = 0              # a paper tick every so many characters when set down (drawn in the margin). 0 = off
                              # turning it on gives every column a margin (the rightmost
-                             # column used to sit against the edge), so the page steps one cell left
+                             # column would otherwise sit against the edge), so the page steps one cell left
 tabs = "auto"                # the tab bar on top: "auto" (drawn only with >1 file) | "always" | "never"
 ambiguous_width = "auto"     # how many cells an "East Asian ambiguous width" character takes: "auto" | "wide"
                              #                              | "narrow"
@@ -6530,7 +6515,7 @@ runs from ink to paper, which is to say from the **theme's opposite** to the
 that "one level heavier than the writing" has somewhere to stand. The status bar
 stands there — blacker than the writing in a dark theme, whiter in a light one,
 one statement either way, no need for two. `[theme] status_bar = "raised"` puts
-it back the way it used to be, one step up toward the ink.
+it one step up toward the ink.
 
 The furniture step is 900, not a hair from the paper. The status bar sits at the very
 bottom, so the last line of the writing rests right against it, and 970 against the
@@ -6639,10 +6624,9 @@ at 42 it would not be yellow, it would be "paper, a little darker than the
 paper". So whichever colour is **in the paper's own family** (within thirty
 degrees, and the paper itself has colour) gets its saturation lifted above the
 paper's; the other four are more than a hundred degrees from the paper and do
-not need this. Warning: these four used to share one grey ground, on the grounds
-that "four grey grounds differ from each other by only 1.4–2.4 ΔE and cannot be
-told apart". That was not wrong, but it was about **grey**: what separates them
-now is hue, and how far each sits from the paper is set by the same one rule —
+not need this. Warning: one grey ground for all four would be the safer-looking
+choice — "four grey grounds differ from each other by only 1.4–2.4 ΔE and cannot be
+told apart" — but that argument is about **grey**. What separates these is hue, and how far each sits from the paper is set by the same one rule —
 **distance says "this is a block", hue says "which block"** — and once each
 thing does its own job, both hold.
 
@@ -6684,10 +6668,9 @@ one with no argument asks what it is now. They **do not touch the config file** 
 that is for the afternoon when the room brightens; what you want every day is
 what you write into `[theme] mode`.
 
-Warning: `:theme light` used to change light and dark as well, and
-`:theme ink dark` could ask two things in one line. That let the one word
-"theme" say two things, so it was split: `:theme` now only takes the name of a
-theme.
+Warning: **`:theme` only takes the name of a theme.** `:theme light` does not change
+light and dark as well, and `:theme ink dark` cannot ask two things in one line — that
+would let the one word "theme" say two things.
 
 ---
 
