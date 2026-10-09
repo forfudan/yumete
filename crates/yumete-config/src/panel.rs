@@ -329,10 +329,39 @@ impl Panel {
         }
         let (from, value) = stack.pop().expect("出廠那一層永遠在");
         Shown {
-            value,
+            value: Self::as_the_editor_takes_it(setting, value),
             from,
             under: stack.pop(),
         }
+    }
+
+    /// **面板顯示的要是編輯器真用的那個值**（2026-10-09 作者定）。
+    ///
+    /// 面板**撥**不到域外的數（`Kind::Count` 的 `low`／`high` 就是為這個寫的，
+    /// `tests/settings_ui.rs::every_value_the_panel_can_set_is_its_own` 盯着），可
+    /// 檔是人手改的：`zong_length = 2` 寫進去，面板畫 2 而 `into_config` 按 4 排版
+    /// ——**面板顯示的值不是編輯器用的值**，而這扇面板存在的理由就是終結這件事。
+    ///
+    /// 鉗的依據是這一項**自己declare 的域**，不是另抄一份數字，所以它不會和
+    /// `into_config` 分岔。`zero` 那一格的意思是「0 另有意思」，所以 0 照過。
+    ///
+    /// ⚠ 非數字那一族只有一個：`[panel] markers` 空的時候 `into_config` 留出廠那一
+    /// 串（它那一句註釋寫着「keep the default rather than silently taking the
+    /// numbers away」），所以空的就畫出廠那一串。
+    fn as_the_editor_takes_it(setting: &Setting, value: String) -> String {
+        if setting.table == "panel" && setting.key == "markers" {
+            let bare = value.trim().trim_matches('"');
+            if bare.is_empty() {
+                return setting.factory.to_string();
+            }
+            return value;
+        }
+        let Kind::Count { low, high, zero } = setting.kind else { return value };
+        let Ok(n) = value.trim().parse::<usize>() else { return value };
+        if n == 0 && zero.is_some() {
+            return value;
+        }
+        n.clamp(low, high).to_string()
     }
 
     /// 改動要落到的那一份。
@@ -714,6 +743,26 @@ mod tests {
         let bare = panel("", "");
         let shown = bare.shown(find("editor.indent"));
         assert_eq!((shown.value.as_str(), shown.from, shown.under), ("0", Layer::Factory, None));
+    }
+
+    /// **面板顯示的要是編輯器真用的那個值**（2026-10-09 作者定）。
+    ///
+    /// 面板自己撥不到域外的數，可檔是人手改的——`zong_length = 2` 寫進去，從前面板
+    /// 畫 2 而 `into_config` 按 4 排版。`markers` 空的時候 `into_config` 留出廠那一
+    /// 串，而面板畫的是空白，候選欄照舊 １２３。
+    #[test]
+    fn the_panel_shows_what_the_editor_takes_not_what_the_file_says() {
+        let p = panel("[editor]\nzong_length = 2\nbands = 99\n\n[panel]\nmarkers = \"\"\n", "");
+        assert_eq!(p.shown(find("editor.zong_length")).value, "4", "域是「0，或者 4 到 64」");
+        assert_eq!(p.shown(find("editor.bands")).value, "4", "上限夾住");
+        assert_eq!(
+            p.shown(find("panel.markers")).value,
+            find("panel.markers").factory,
+            "空的留出廠那一串"
+        );
+        // `0` 另有意思的那幾項照過，不許夾到 `low`。
+        let zero = panel("[editor]\nzong_length = 0\n", "");
+        assert_eq!(zero.shown(find("editor.zong_length")).value, "0", "0 ＝與窗口同高");
     }
 
     /// 空格：打勾翻面、幾選一走下一個、數字加一。
