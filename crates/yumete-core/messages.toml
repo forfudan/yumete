@@ -5646,9 +5646,9 @@ en = "back to the panel"
 [[message]]
 # 搜索面板的鍵位行：全部換
 key = "hint.search.replace-all"
-zht = "全部換"
-zhs = "全部换"
-en = "replace all"
+zht = "替換所有文件"
+zhs = "替换所有文件"
+en = "replace all files"
 
 [[message]]
 # 搜索面板的鍵位行：站在檔名那一行上，r 換整個檔
@@ -8428,13 +8428,6 @@ zhs = "把这 {0} 处全部换掉？"
 en = "change all {0}?"
 
 [[message]]
-# 全部換，而且不止一個檔
-key = "search.replace-all-sure-files"
-zht = "把 {1} 個檔裏的 {0} 處全部換掉？"
-zhs = "把 {1} 个档里的 {0} 处全部换掉？"
-en = "Replace all {0} matches, across {1} files?"
-
-[[message]]
 # 搜索：同上，正文（{0} 幾個檔、{1} 幾處）
 key = "search.replace-all-what"
 zht = "本次操作會替換{0}個文件中的{1}處文字。"
@@ -8512,11 +8505,47 @@ zhs = "这几个键改的是搜索框里的字。要去那一处改正文，按 
 en = "those keys edit the search box — press Enter to go and edit the text there"
 
 [[message]]
+# 搜索：同上，「全部撤銷」
+key = "search.undo-all-go"
+zht = "全部撤銷"
+zhs = "全部撤销"
+en = "Undo all of them"
+
+[[message]]
+# 搜索：同上，「不撤銷」
+key = "search.undo-all-no"
+zht = "不撤銷"
+zhs = "不撤销"
+en = "Leave them undone"
+
+[[message]]
+# 搜索：同上，只撤名單上高亮那一行那一份（{0} 它的名字）
+key = "search.undo-all-one"
+zht = "只撤銷 {0}"
+zhs = "只撤销 {0}"
+en = "Undo {0} only"
+
+[[message]]
+# 搜索：撤回一次跨檔替換，中央那扇窗問一次——正文（{0} 幾個檔、{1} 幾處）
+key = "search.undo-all-what"
+zht = "撤銷全部替換，涉及 {0} 個文件 {1} 處？"
+zhs = "撤销全部替换，涉及 {0} 个文件 {1} 处？"
+en = "Undo the whole replacement — {1} matches across {0} files?"
+
+[[message]]
 # 撤回了剛纔那一次替換
 key = "search.undone"
 zht = "撤回了剛纔那次替換"
 zhs = "撤回了刚才那次替换"
 en = "that replacement is undone"
+
+[[message]]
+# 搜索：撤回之後，有幾個檔因為後來又改過而沒撤。名字由呼叫方接在後面，一行一個
+# ——這張表交出去的是檔案本身的切片，`\n` 不會解碼（見 tests/messages.rs）
+key = "search.undone-but-changed"
+zht = "下列文件因存在後續改動而未撤銷。其餘文件都成功撤銷批量替換。"
+zhs = "下列文件因存在后续改动而未撤销。其余文件都成功撤销批量替换。"
+en = "These files were changed afterwards and were left alone. The rest were undone."
 
 [[message]]
 # 撤回了剛纔那一次替換，動了好幾個檔
@@ -8525,6 +8554,12 @@ zht = "撤回了剛纔那次替換，{0} 個檔都復原了"
 zhs = "撤回了刚才那次替换，{0} 个档都复原了"
 en = "that replacement is undone in all {0} files"
 
+[[message]]
+# 搜索：同上那扇窗唯一那顆按鈕
+key = "search.undone-ok"
+zht = "知道了"
+zhs = "知道了"
+en = "Got it"
 [[message]]
 # 搜索：在哪裏找——這個檔
 key = "search.where.buffer"

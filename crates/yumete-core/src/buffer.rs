@@ -1162,6 +1162,19 @@ impl Buffer {
 
     /// Stop announcing undo points until [`Self::end_undo_group`], and say what
     /// the setting was — a group opened inside a group is still one group.
+    /// **撤銷棧上現在有幾個點**（2026-10-09）。
+    ///
+    /// `R` 動一個檔的時候記下這個數，撤回的時候比一次：對不上就是這個檔**後來又
+    /// 改過**，那一步撤銷不再是那次替換，而是讀者自己寫的東西。IntelliJ 攔的是同
+    /// 一件事（「The following files affected by this action have been already
+    /// changed」）。
+    ///
+    /// Warning: **數的是**掙到的**那些**，不是報過的。一個報了而正文沒動的點不在這條
+    /// 棧上（見 [`History::pending`]），所以「按了一個鍵而什麼都沒改」不算改過。
+    pub fn undo_depth(&self) -> usize {
+        self.history.undo.len()
+    }
+
     pub fn begin_undo_group(&mut self) -> bool {
         std::mem::replace(&mut self.history.grouping, true)
     }

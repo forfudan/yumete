@@ -4961,6 +4961,14 @@ fn wrap_to(text: &str, width: usize) -> Vec<String> {
     let mut line = String::new();
     let mut wide = 0usize;
     for ch in text.chars() {
+        // **換行符就在那裏換**（2026-10-09）。中央那扇窗的正文現在也裝得下一張名
+        // 單（「這幾個檔沒有撤銷」底下一行一個名字），而從前這一支把它當成一個要
+        // 量寬度的字推進行裏去。
+        if ch == '\n' {
+            lines.push(std::mem::take(&mut line));
+            wide = 0;
+            continue;
+        }
         let w = yumete_cjk::str_width(&ch.to_string());
         if wide + w > width && !line.is_empty() && !NO_START.contains(ch) {
             lines.push(std::mem::take(&mut line));
