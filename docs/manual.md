@@ -1,7 +1,5 @@
 # The yumete manual
 
-> This manual also comes in [繁體](manual_tc.md) and [简体](manual_sc.md).
-
 **yumete** (宇夢終端編輯器, the Yume terminal editor) is a CJK-aware, Helix-like
 terminal editor: it takes Helix's design philosophy, is tuned deeply for CJK text,
 segments Chinese into words itself, carries the Yume IME engine inside it, and offers a
@@ -638,6 +636,240 @@ corner brackets around it」. Commit a word and only its first character is take
 
 ---
 
+### Next to other editors
+
+Coming from Helix or vi, this table tells you how many places your fingers have to
+change. **Every cell was measured**: the Helix column was pressed key by key through
+the thirty lessons of `runtime/tutor`, the vi column against
+`/usr/share/vim/vim91/` (the tutor and `doc/motion.txt`).
+Warning: **what cannot be measured is not written.** There was an Emacs column here
+once, filled in from memory — with no source to check against, a column that looks
+confident and has in fact never been verified is worse than no column at all.
+
+**An unbound key says nothing at all.** The command line used to answer `$` with
+"end of line is `gl`", and a dozen other keys likewise — a phrasebook of what
+another editor's keys are called here. There is no such hint, because a
+hint like that assumes why you pressed the key: press `D` and being told to
+press `A-d` is the editor deciding what you meant. This table is the answer
+instead, and so is `:keymap`.
+
+| What | yumete | Helix | vi |
+| --- | --- | --- | --- |
+| one character | `h` `l` | same | same |
+| one line (on screen) | `j` `k` | same | `gj` `gk` |
+| one line (in the file) | `gj` `gk` | same | `j` `k` |
+| start / end of line | `gh` `gl` | same | `0` `$` |
+| one word | `w` `b` `e` | same | same |
+| one paragraph | `{` `}` | `[p` `]p` | same |
+| **one sentence** | **`H` `L`** | none | `(` `)` |
+| half page / whole page | `C-d` `C-u` / `C-f` `C-b` | same as left | both sets the same; `C-n` `C-p` is two thirds |
+| start / end of file | `gg` `ge` / `G` | `gg` `ge` | `gg` `G` |
+| go to line n | `nG` / `:n` | `:n` | `nG` |
+| back where I was / forward again | `C-o` `C-i` | same | same |
+| find a character | `f` `t` | same | same |
+| find that same character again | `A-.` | same | `;` |
+| search / next | `/` `n` `N` | same | same |
+| search for what is selected | `g/` (`*` works too) | `*` | `*` |
+| replace in this file | `:s/舊/新/` | none (`s` plus many cursors) | same |
+| search the whole project | `:search-project` (panel) | `空格 /` | `:vimgrep` |
+| replace in the whole project | `:replace-project` (panel) | none | `:cdo s//新/g \| update` |
+| select whole lines | `x` | same | `V` |
+| select all | `%` | same | `ggVG` |
+| delete / change the selection, register untouched | `A-d` `A-c` | same | `"_d` `"_c` |
+| cut / cut then change | `d` `c` | same | `d{motion}` `c{motion}` |
+| copy / put | `y` `p` `P` | same | same |
+| system clipboard | `空格 y` `空格 p` | same | `"+y` `"+p` |
+| undo / redo | `u` `U` | same | `u` `C-r` |
+| case | the `` ` `` group (`~` works too) | `` ` `` `~` `` Alt-` `` | `~` `gu` `gU` |
+| join lines | `J` | `J` | `J` |
+| indent | `>` `<` | same | `>>` `<<` |
+| comment out | `空格 c` `空格 C` | `C-c` | none |
+| increment / decrement | `C-a` `C-x` | same | same |
+| record a macro / play it back | `Q` `q` | same | `qa` `@a` |
+| matching bracket | `mm` | same | `%` |
+| select inside / around brackets | `mi(` `ma(` | same | `vi(` `va(` |
+| add / drop / change a surround | `ms(` `md(` `mr([` | same | a plugin |
+| save / quit | `:w` `:q` `:wq` | same | same |
+
+Warning: **`t` and `T` are vi's till** (`t，` stops one cell before the comma, `T，`
+goes backwards). helix's own `t` is till as well, so that one key would owe both
+sets of hands; the table group is on `空格 t` instead.
+
+**Three deliberate differences — do not take them for defects:**
+
+- **`w` `b` `e` walk by the dictionary**, not by spaces. Chinese words have no spaces
+  between them, so cutting at spaces is not cutting at all. `:word-level off` goes
+  back to "a 漢字 is a letter", and then `w` behaves exactly as it does in Helix.
+- **`e` and `b` are a pair, and what they take is the "sentence", not the "word"** —
+  the stretch between two marks of punctuation. The Helix tutor teaches "`e` then `b`
+  selects the word the cursor is on"; our `e` then `b` selects the **clause** the
+  cursor is in. An English word has many letters, a Chinese word averages two and a
+  half characters, so here the clause is the more useful one.
+- **`H` `L` are a sentence, not a page.** Helix has no sentence unit; vi uses `(` `)`,
+  and Helix took those two keys for rotating the selection, so we leave them free
+  (under the vim preset those two are sentences again).
+
+### vim's hands: `[keys] preset = "vim"`
+
+Coming from vim, what hurts most are the few keys that **damage the wrong text when
+you press them**: `x` here selects a line, and `dd` deletes two characters. One line
+in the config translates them — not a second vim, but vim's way of pressing turned
+into keys that already exist here:
+
+```toml
+[keys]
+preset = "vim"
+```
+
+If you would rather not touch the config, type **`:keymap vim`** in the editor; it
+takes effect at once and only for this run. `:keymap helix` goes back, and `:keymap`
+on its own says which set is in force.
+
+| vim's hand | what happens here | result |
+| --- | --- | --- |
+| `d` `c` `y` | **waits for a motion** | see below |
+| `x` | translated to `;D` | cut the character under the cursor |
+| `X` | already there | cut the character before the cursor, as far as the start of the line (the old `X`, which grew the selection to whole lines, gave up the key; select lines with `V`) |
+| `s` | translated to `;c` | change the character under the cursor |
+| `V` | translated to `x` | select the whole line (the `x` here gave way to cutting a character) |
+| `^` `$` `0` | translated to `gs` `gl` `gh` | first character on the line / end of line / start of line |
+| `>` `<` | **operators too** | `>>` indents the line, `>j` two lines, `>ap` a paragraph |
+| `C-r` | already there | redo (normally `U` here) |
+| `U` | **new** | undo the whole run of recent changes on this line (as in vim; redo on this side is `C-r`) |
+| `gJ` | **new** | join the next line **adding no space at all** (the bare `J` works its seam out: nothing between 漢字, one space between Latin words) |
+| `*` | translated to `g/` | where else is this word |
+| `%` | translated to `mm` | jump to the matching bracket (`%` here is select all) |
+| `m`*a* | **already there, spelled differently** | set a mark (`'`*a* jumps back) — `m` is normally the door into match mode |
+| `N\|` | **new** | go to **cell** N (a 漢字 is two cells, which lines up with the ruler) |
+| `q` `Q` | swapped back | `q` starts recording a macro and a second press stops it; `Q` plays it once (the two are the other way round here) |
+| `R` | **new** | overwrite mode: each character you type covers one, `Esc` leaves, backspace gives back what was covered (the status bar says `REP`) |
+| `gv` | **new** | select that last stretch again |
+| `g;` `g,` | **new** | walk the places you changed, older / newer (one entry per line, a hundred at most, as in vim) |
+| `C-o` in insert | **new** | run one Normal command and come straight back to insert (a several-key one like `gg` or `3j` is waited out) |
+| `(` `)` | **already there, spelled differently** | previous / next sentence (`(` `)` here normally rotate the primary selection) |
+| `` ` ``*a* | **new** | jump to the cell mark *a* recorded (`'`*a* goes to its line). The glyph group moves to ``g` `` on this side: ``g`l`` lowercases, ``g`s`` goes traditional to simplified |
+| `gu` `gU` `g~` | **new** | case operators, each waiting for a motion: `guw` a word, `guu` a whole line, `gUU` uppercase |
+| `gn` `gN` | **new** | the next/previous match (here `gn` is normally the next file, as it is in Helix; on this side that pair is `空格 b`) |
+| `H` `M` `L` | **new** | go to the top / middle / bottom of this screen (normally those three are previous sentence / set a mark / next sentence) |
+| `ys` `ds` `cs` | **already there, spelled differently** | add / drop / change brackets, as in vim-surround |
+| `D` `C` | translated to `d$` `c$` | delete / change to end of line |
+| `Y` | translated to `y$` | copy to end of line, as in nvim (`yy` still copies the whole line) |
+| `S` | translated to `cc` | change the whole line |
+| `;` `,` | already there | repeat the last `f` / repeat it backwards |
+| `ZZ` `ZQ` | translated to `:x` `:quit!` | save and quit / throw away and quit |
+
+**Deliberately not translated**, and why:
+
+| key | why |
+| --- | --- |
+| `K` | vim's look-up word (`空格 k`); `J` joins lines in both sets |
+| vim's gu, gU, g~ | changing case is the `` ` `` group here |
+| `w` `b` `e` | same keys, **but they go through the segmenter** — a Chinese 「詞」 is segmented, not cut at spaces, so they will not stop where vim stops |
+
+**`d` `c` `y` are real operators**: pressing one waits for a motion, and nothing
+happens until it gets one.
+
+| what can follow | |
+| --- | --- |
+| word | `w` `W` `b` `B` `e` `E` |
+| within the line | `$` `0` `^` |
+| by lines | `j` `k` `G` `gg` (whole lines at a time, as in vim) |
+| paragraph, sentence | `{` `}`, sentences are `(` `)` |
+| find a character | `f`*c* `F`*c*; `t`*c* `T`*c* stop just before it |
+| one character | `l` `h` — `dl` is `x`, `d3l` is three |
+| text object | `i`*c* `a`*c* — `di(`, `ci"`, `ya[`; `ip` / `ap` is a **paragraph** |
+| press it again | `dd` `yy` `cc` take the whole line; `d_` `y_` do the same thing |
+| brackets | `ys`*motion**bracket* adds, `ds`*bracket* drops, `cs`*old**new* changes (as in vim-surround) |
+| first character of the next line | `Enter` `+`, and `-` goes back |
+
+Once you press `d` the status bar carries a digest of this table. `Esc` lets go, and a
+key that is not a motion is told so outright: "`z` is not a motion". **Registers
+follow vim's rules**: `d` `c` and `y` all go to a register, so `p` after `dd` puts it
+back.
+
+Counts work as usual, and **it does not matter where you write them**: `3dw` and `d3w`
+are both three words, `2d3w` is six (multiplied, as in vim); `3dd` is three lines,
+`2x` two characters. **A count before `i` `a` `I` `A` `o` `O` means "type this passage
+that many times"**: `5ix` then `Esc` gives five `x`, `3o甲` gives three lines of 「甲」;
+the whole passage counts as one command, and one `u` takes it all back. `d`, `c` and
+`y` **wait a moment** when pressed, to see whether the next key is a `d` or a `w`: if
+it is, the table above applies; if not, the original key goes through. `Esc` cancels.
+**What you write in `[keys.normal]` yourself beats the same key in the preset**, and
+the left side may be a run of keys: `"dj" = "xxd"`.
+
+**`A-d` and `C-o` are written that way on either side**, chord and all — `"A-d" = …`
+binds the one chord, not the three keys `A`, `-`, `d`.
+
+### Prefix keys rebind too
+
+The menu `空格` opens, and the groups opened by `g` `m` `t` — **write that prefix key
+itself on the right** and the whole group moves. vim's hands like the leader on `;`,
+with space kept for walking:
+
+```toml
+[keys.normal]
+";" = " "      # semicolon opens that menu
+" " = "l"      # space moves one cell right
+"" = "h"  # backspace moves left (a control character, written as its code point)
+```
+
+Warning: **a prefix cannot be bound to an "action name"** — an action is one thing,
+while a prefix is still waiting for a second key, and binding it that way swallows the
+whole group. Binding it to a **key** always worked; the manual simply never said so.
+
+### Bind to what it does, not to another key
+
+A run of keys on the right means "pressing this counts as pressing that" — handy, but
+you have to know first that `d` here is delete. **The right side can also be the name
+of the thing itself**:
+
+```toml
+[keys.normal]
+x = "delete_selection"      # an action name
+"\\" = ":write"              # or a command
+"dj" = "xxd"                # or still a run of keys (the old spelling stands)
+```
+
+Three kinds of right side, recognised in this order: anything starting with `:` is the
+command line; a **name** it knows is that action; the rest are keys. The good thing
+about a name is that it does not move when the defaults move — the day `d` goes
+somewhere else, `x = "delete_selection"` still deletes.
+
+**`:keymap actions` lists them all** (eighty-odd), in three columns: name, what it
+does, which key it is on now. The names match helix, so anyone coming from there can
+guess — including the pairs helix spells with `_noyank`:
+
+```toml
+# What a helix discussion with ninety-odd votes asks for: delete and change
+# stop filling the register, and the Alt keys do the cutting.
+[keys.normal]
+"A-d" = "delete_selection"
+"d" = "delete_selection_noyank"
+"A-c" = "change_selection"
+"c" = "change_selection_noyank"
+```
+
+**There is a switch for exactly this, and it is the better way**: `:yank-on-delete
+off` swaps the same two pairs, in a table's cells as well as in prose, and
+`yank_on_delete = false` under `[editor]` makes it the default. Prefer it over the
+four lines above: a **binding** goes on overriding whatever the defaults become,
+so those four lines would quietly outlive the reason you wrote them.
+
+The factory answer is `on`: `d` and `c` cut, as in helix and as in vi, and
+`A-d`/`A-c` leave the register alone.
+
+Warning: a misspelt name is **said out loud on the spot** instead of being typed into
+your text: a right side with an underscore in it that is not recognised is reported at
+startup as "not an action name", and **that binding is not installed** — otherwise
+pressing the key would type `delete_slection` into the manuscript one letter at a
+time. (No key is spelled with an underscore, so an underscore means you meant a name.
+Underscores inside a `:命令` do not count.)
+
+## 5. The page
+
+How the writing is drawn: which markup it is in, how it is coloured,
+where the lines break, and what the margins carry.
+
 ### WYSIWYG
 
 **Footnotes are drawn the way print draws them.** After `:render full`, `[^1]` is drawn
@@ -949,6 +1181,35 @@ know some scheme. An absolute path (`/etc/…`) is not followed either — that 
 chapter of this book. And the step that hands it over **never goes through a shell**
 from start to finish: the URL is passed to `open`/`xdg-open` as one argument, and
 nowhere is a command line assembled.
+
+### Soft wrap
+
+In horizontal layout a paragraph too wide for the window **wraps onto the next line**
+and carries on. A Chinese paragraph is often one line of several hundred characters,
+and without wrapping you would have to scroll rightwards the whole way to read it, so
+this is on by default; `:view-wrap off` turns it off, `:view-wrap` turns it back on.
+
+With it off, a paragraph is **one line**, however long that is, and the page follows
+the cursor left and right — `gl` goes to the end of the line and the window goes
+along. The line-number lane stays put; it is furniture, not text. **Vertical layout
+has nothing of this kind**: a column breaks at the height of the window, and over
+there `:view-wrap off` simply tells you this command is a horizontal setting
+(`:view-wrap 40` counts in both, see chapter 6).
+
+A break obeys two rules: a Latin word is not cut in the middle (`Helix` does not
+become `Hel` and `ix`), a line does not begin with closing punctuation like 。、」）,
+and does not end with an opener like 「（ — that is **kinsoku** (禁則處理).
+
+When a paragraph fills a line exactly, an empty line appears under it: that is where
+the cursor stands. The cell after the end of a line does not exist on screen, and the
+next character has to have somewhere to go.
+
+What matters is that `j` `k` walk **the line on screen**, not the whole paragraph.
+When a paragraph runs to several hundred characters, a `j` that moves by logical
+lines jumps a whole screen at a time, and that is not where the reader's eyes are.
+The number is printed only on the **first line** of a paragraph: the number belongs
+to the paragraph, and repeating it on every line would read as several paragraphs.
+
 ### How long you want to write
 
 With `[editor] ruler = 80`, **everything past column 80 gets a different
@@ -1144,98 +1405,6 @@ it something different — Ghostty has `adjust-cell-width`, kitty has
 the whole terminal turns thinner, horizontal layout and the status line
 included.
 
-### Running a command: `:sh` and `:!`
-
-Two verbs, because there are two situations, and each has its own right answer.
-
-**`:sh wc -w ch01.md`** wants a **number**, and wants it **where the text is** —
-so the output is caught and opened as a buffer (the same sort of place the
-`:check-usage` list goes). You can search it, copy from it, keep it around while
-you write. `git log`, `typst compile` and `pandoc` are all this kind.
-
-**`:!make`** wants you to **watch it run** — in colour, with a progress bar,
-maybe asking you a question along the way. A captured pipe cannot do any of
-those three. So the editor **gets out of the way**: it leaves the alternate
-screen, hands the terminal back to the command, and when it is done prints one
-line, "press any key to return to yumete…".
-
-> So, your question about where you see it run — **in the terminal you started
-> yumete in**. For the length of `:!` yumete gets off the screen entirely, and
-> takes the screen back when it returns. This is what vi did from the very
-> beginning, and it is the only honest answer.
-
-The command goes through your `$SHELL -c`, so pipes and globs count:
-`:sh wc -w *.md | sort -n` is one command, not a few words that got split apart.
-
-**A third one: `|` — send the selected text out, and replace it with what comes
-back.**
-
-"pipe" is the Unix pipe: the selected text is **fed into** a command's input,
-and what that command **spits out** replaces it. The original goes out, the
-result comes back, in place.
-
-```
-那年 冬 天        ← select this line
-|                 the command line becomes :pipe ▊
-tr -d ' ' ⏎       tr -d ' ' means "delete every space"
-那年冬天          ← done
-u                 one undo, and the text is back
-```
-
-`tr -d ' '` is not a yumete thing, it is a command your system already has.
-What `|` is for is **turning every command on your system into a yumete editing
-command**:
-
-| What you type | What the selected text becomes |
-|---|---|
-| `tr -d ' '` | every space deleted |
-| `LC_ALL=C sort` | sorted by code point (that is how the 拆分 table is sorted) |
-| `nl` | a line number in front of every line |
-| `tail -r` | the lines in reverse order |
-| `python3 -c '…'` | whatever processing you write on the spot |
-
-**Be careful with `sort` on Chinese.** It sorts by your locale, not by strokes
-and not by pinyin; and under `en_US.UTF-8`, `sort -u` treats 「木」 and 「目」 as
-the same character and deletes one of them. To sort by code point, write
-`LC_ALL=C sort`.
-
-`|` only types the verb for you — it is not a second mechanism, and **if you
-press it by mistake you can see what it is about to do**, and Esc backs out.
-The trailing newline follows whatever the original had: none there, none added;
-one there, it is kept — it will not glue two lines into one.
-
-**Four keys in all, following helix**:
-
-| Key | Command | What it does | Is the selection fed in |
-|---|---|---|---|
-| `\|` | `:pipe` | **replace** the selection with the output | fed |
-| `!` | `:pipe-before` | put the output **before the selection**, original untouched | **not fed** |
-| `A-!` | `:pipe-after` | put the output **after the selection**, original untouched | **not fed** |
-| `A-\|` | `:pipe-to` | send the selection out and **keep nothing back** | fed |
-
-Warning: **`!` and `A-!` do not feed the selection in.** That is helix's rule,
-and it is also what vi's "read a command's output in here" meant: "run a
-command, put the answer here" — which paragraph the cursor is in has nothing to
-do with it. To send the selected text in, use `\|` or `A-\|`.
-
-**A command that fails does not touch your text.** Mistyping a flag (`tr -D ' '`
-instead of `-d`) happens all the time, and what that command spits out is an
-error message — replacing a paragraph with an error message is an edit nobody
-asked for, and whether it can be undone is beside the point. So the replacement
-happens only when the command says it succeeded (exit code 0); otherwise not one
-character of the original moves, and the status line tells you what it
-complained about:
-
-```
-your text is untouched: tr: illegal option -- D
-```
-
-Succeeded with a warning: the text is replaced, and the warning is said anyway.
-
-By the way, `:sh` is the opposite — there stderr and stdout go into the buffer
-together, because there the two of them **together are what happened**, and it
-is not editing your text.
-
 ### `:view-preview`: hand it to a real typesetter
 
 `:render full` is how much of the result **this screen** shows; `:view-preview`
@@ -1271,815 +1440,7 @@ to be, and building a terminal emulator inside yumete in order to do it — and
 yumete already runs inside a terminal. So it is a **task**: a handle, an
 address, and a way to stop it.
 
-### You open the IME yourself
-
-**Come back and find the IME still on? Press Esc again in Normal mode.** When
-you have been typing with the system IME in another window and switch back, it
-is sometimes still lit, and keys get swallowed — the editor's side remembers
-"it has already been told to step aside", and in fact it has not. Pressing Esc
-once more is saying that sentence over again (it counts only when Esc has
-nothing else to do; closing a window and dropping a selection both come first).
-
-yume's data holds two things, and they deserve different treatment.
-
-**The language model** — the word-frequency table and the lexicon, **both of
-them independent of the scheme** — is what `w` `b` `e` use to walk by word, and
-the reason this editor's word jumps are more accurate than an editor has any
-business being. **27 milliseconds, and everybody gets it.**
-
-**The 碼表** is another 109 milliseconds, and it is only any use to someone
-typing 宇浩. Loading it for everyone means paying at every start-up for an input
-method most people never asked for. So it **waits for you to say so**:
-
-```
-:yume-scheme            use the scheme in the config (靈明 by default)
-:yume-scheme riyue      name one
-:yume-s l               the same — a prefix counts as long as no second word matches
-:yume-scheme !          the 碼表 inside the binary, even when one is installed
-:yume-scheme ! xingchen the same, for 星陳 (a scheme the binary has no table for says so)
-:yume-scheme ~          back to the installed one
-:yume-scheme =<path>    a 碼表 file of your own
-```
-
-The last four are for when the panel answers something you did not expect: `!`
-and `~` are the same scheme read from two different places, so trying both says
-which of the two tables is at fault.
-
-A prefix counts at every level: `s` is the only word under `:yume` beginning
-with s, and `l` is the only scheme beginning with l. If two words both match it
-picks **neither**, rather than quietly taking whichever was written first.
-
-**You can type with nothing installed at all.** Every yumete binary carries two
-碼表 of its own — **靈明精華版** (0.25 MB) and **星陳精簡版** (0.27 MB), plus the
-symbol table — and **every build carries the same two**.
-
-精華版 takes **every character** in CJK Basic and Extension A, the 宇浩 radical
-block, and the characters from the seven character sets that fall outside those
-blocks, from every source, plus the short codes; it carries **no words**, so
-whole-sentence input falls back to one character at a time. The panel reports it
-as 「出廠自帶 精華版 ⋯⋯」, which tells it apart from an installed table.
-
-- **The binary does not depend on the machine that compiled it.** What goes in
-  is the 精華版, whether or not 宇浩 is installed on the machine doing the
-  compiling. An installed table wins at run time anyway, so carrying the whole
-  3.69 MB 靈明 as well would be weight nobody reads. CI and your own
-  `cargo build` produce the same bytes.
-- **Where they come from**: `yume` generates them and publishes them in the
-  `yumete-data` release of `forfudan/yume-release` (public, no token needed).
-  The build downloads them **once** into `~/.cache/yumete/builtin/` and reads
-  that cache from then on; delete it to pick up a newer 精華版. Nothing expires
-  on its own, because a build that quietly changes what it embeds is the thing
-  this is here to stop. `YUMETE_BUILTIN_DIR` points the build at a directory of
-  your own instead, and is checked **before** the cache, so it never touches
-  the network.
-- **Offline with an empty cache**: the binary carries no 碼表 and the panel says
-  so plainly, rather than the build failing.
-
-Warning: **not one of these tables is in yumete's repository.** They are
-generated — the 碼表 is cut from 宇浩's `ling.txt` and `xing.txt`, the
-segmentation word list from its language model — and a generated file is
-rewritten whole with every new version, so committing one means paying its full
-size over again each time. They are **build-time inputs**: the 碼表 come from
-the release above, and `scripts/build.sh` generates the word list on your own
-machine (`scripts/make_words.py`).
-
-An installed 碼表 **wins** — the factory one is the fallback, and `:yume-scheme !`
-is how to ask for it anyway. The other three schemes are not carried; with
-nothing installed they are honestly unavailable, rather than quietly turning
-into 靈明.
-
-**Where it looks**: first where you pointed it yourself (`[ime] data_dirs`,
-`$YUMETE_DATA_DIR`), then yumete's own data directory (`scripts/build.sh`
-installs here; `brew install yume-data` lands here too,
-`<yumete 執行檔>/../../share/yumete`), and last **wherever yume itself is
-installed** — each platform by that platform's own rules:
-
-- **macOS**: `~/Library/Application Support/Yume/data/compiled/` (a recompiled
-  one comes first), `~/Library/Application Support/Yume/`, then the input
-  method's own app: `~/Library/Input Methods/Yume.app/Contents/Resources`
-  (installed for you alone) and
-  `/Library/Input Methods/Yume.app/Contents/Resources` (installed for the whole
-  machine).
-- **Windows**: `%APPDATA%\Yume\data\compiled\`, `%APPDATA%\Yume\`, and the
-  `Resources\` beside the `.exe`.
-- **Linux**: `$XDG_DATA_HOME/yume/data/compiled/`, `$XDG_DATA_HOME/yume/`,
-  `$YUME_DATADIR`, and the `yume/` inside every one of `$XDG_DATA_DIRS` (with
-  that variable unset it looks at the standard defaults, `/usr/local/share` and
-  `/usr/share` — the machine-wide install is there).
-
-On a macOS with yume installed there is therefore nothing to configure:
-`:yume-scheme` simply has all five schemes.
-
-**Schemes you built yourself are found just as well.** The factory schemes are
-one file each, `schemes/<名字>.toml`; the ones a user installs each take a
-**slot** — `…/Yume/installed/<八位十六進制>/`, one scheme to a slot, holding
-`custom.ytab` (the 碼表), `custom.yzg` (the radicals), `custom.ycdv` (this
-scheme's own 拆分) and `custom.yscm` (this scheme's own settings). Every slot
-found is one more scheme, named whatever the scheme's author wrote in
-`custom.yscm`:
-
-```
-:yume-scheme custom.6947b838      冰雪清韻
-:yume-scheme custom.cc2d1290      天碼
-```
-
-The code length, the 選重 keys, whether 頂功 is on — **none of it is guessed**:
-it goes by `custom.yscm`, the same file the input method uses. Two other slot
-locations are recognised as well (Windows's `data/custom/`, and the bare
-`custom/` from before there was scheme management), and the same slot is only
-counted once.
-
-**To ask which one is in use right now:**
-
-```
-:yume                 靈明 · 碼表 /Users/…/.local/share/yumete/schemes/ling.ytab · chaifen off
-:yume-builtin         switch to the factory one (when the installed one is broken, or older than it)
-```
-
-The factory one **says how old it is** — `出廠自帶 2026-08-28 13:08`, taken from
-the build time in `VERSION` inside the 宇夢 release package; data you compiled
-yourself has no such file, so it reports the date of the 碼表 itself. A 碼表
-compiled into a binary is a **snapshot**, and when you see a candidate you do
-not recognise, you ought to know how old the snapshot is before you go looking
-for a bug over in 宇浩.
-
-(It reports the time and not a version number: the question is "how old is
-this", and "3.12.0" asks you to remember when that was.)
-
-**Files that are installed but not in use — `:yume` says that too.** The binary
-format follows yume-core, and after a format change an old data directory looks
-perfectly fine — every file is in place, the core just takes none of them, so
-the 拆分 annotations vanish wholesale and nothing anywhere mentions it. That
-sentence now comes on the end:
-
-```
-靈明 · 碼表 …/ling.ytab · chaifen on · commit delayed (頂字)
-  · data/chaifen.ydiv was refused by the core: bad division magic (expected YDV20260904, the file says YDV20260828)
-```
-
-When you see this, run `scripts/build.sh` again. **Files that are not installed
-do not count** — half the list is optional to begin with, and listing it for
-real would bury the one line that matters.
-
-If you type all the time, write it into the config:
-
-```toml
-[ime]
-scheme = "lingming"
-start = true          # load the 碼表 at start-up
-```
-
-Start-up is therefore **instant** — `yumete --version` and
-`yumete --preview 章節.md` are both 0.00 seconds.
-### Commands: remember the verb, not the argument
-
-Type `:` and every command is listed; type a few letters and the list narrows — that
-much was always there. What is new: **type one space and it tells you what can come
-next**.
-
-```
-:view-margin ▊    never no lane   dense by visual column   loose by paragraph   always every column
-:syntax ▊         markdown 「#」headings, 「**bold**」   typst 「=」headings, 「#import」
-:yume ▊           on   abc English for now   off  (sub-commands: the :yume-scheme family)
-:ruby-html ▊      on   off
-```
-
-`Tab` cycles between those words, and what it completes is **the word you are typing**,
-not the whole line.
-
-**The parenthesis holds the shortest spelling**, and it is **computed**:
-
-```
-:yume (y)     :render (ren)     :table (ta)     scheme (s)     format (f)
-```
-
-**Rows whose name is a code carry a grey note behind it.** Schemes are the only group
-like that — a scheme yume installed is named after its slot, and a column of
-hexadecimal tells you nothing about which is which:
-
-```
-scheme custom.6947b838   冰雪清韻
-scheme custom.cc2d1290   天碼
-scheme lingming          靈明
-```
-
-What you type is still the **code** (names change and collide, slots do not); the note
-is only there so you can tell which one it is — **and it searches**: after
-`:yume-scheme ` tap Shift for Chinese, type 「冰雪」 and only that one is left. The other
-rows carry no note: writing 「on」 a second time beside `on` is noise, and whatever row
-is highlighted has its explanation on the line below anyway.
-
-**The `:` and `/` line can be edited.** `←` `→` move, `Home` `End` go to the two ends,
-`C-w` takes back a word, `C-u` the whole line, `Delete` kills the character under the
-cursor, and `↑` `↓` walk what you typed in this session — `:` and `/` each keep their
-own. One wrong character in a long `:%s` no longer means typing it all again.
-
-The rule in one line: **a prefix that is not shared counts**, for commands and for
-arguments alike. `:y` is `:yume` — the head of a family never collides with the
-commands beneath it — and `:yume-s l` is `:yume-scheme lingming`. When a prefix hits
-two words, **neither one is chosen**: `:re` is at once the prefix of `recover`, `redo`
-and `render`, so it says there is no such command instead of quietly picking one.
-
-A short name already declared **beats** the prefix rule, so a spelling you know does
-not change meaning: `w` is the prefix of three commands, but `:w` is still `write`, and
-`:e` still opens a file rather than meaning `export`.
-
-The one in the parenthesis is **computed, not written down**, so if a command that
-collides with it is added later, this hint grows longer **in that same change** and
-leaves behind no short name that teaches you a wrong spelling.
-
-**A "parent command" is not a second mechanism.** `:yume-scheme` is simply an argument
-whose values happen to be verbs — so once argument completion is written, grouping the
-commands comes free: no second code path to maintain, and nothing second for you to
-learn. Go as deep as you like (`:ruby-format html` is three levels); completion does
-not know the difference.
-
-Grouping is done only where **a group really exists**, and **the old name is deleted
-outright** — keeping two spellings would mean this philosophy was only talk:
-
-| now | gone |
-|---|---|
-| `:yume-scheme 靈明` `:yume-chaifen` | `:scheme` `:chaifen` `:cf` |
-| `:ruby-render full/off` `:ruby-html on` `:ruby-format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
-| `:layout vertical` | `:vertical` `:horizontal` |
-| `:view-wrap off` | `:nowrap` |
-| `:render off/basic/full` | `:markup` `:wysiwyg` `:source` |
-| `:buffer` `:buffer-next/previous/close` | `:buffers` `:ls` `:bd` |
-| `:clipboard-yank/paste` | `:cy` `:cp` |
-| `:view-wrap/bands/sentence/hanging/numbers/typewriter/focus/meter/punct/hud/preview` | `:wrap` `:bands` `:sentence` `:hanging` `:numbers` `:typewriter` `:focus` `:meter` `:note` `:hud` `:preview` |
-| `:count-progress` `:count-target 3000` | `:progress` `:prog` `:target` |
-| `:write-all` `:write-as 新名.md` | `:wall` `:saveas` `:sav` |
-| `:table-jump 木` `:table-find column 甲` | `:row` `:search`（Warning: `:search` came back to life later, see below） |
-| `:check-merge` | `:conflicts` |
-| `:buffer-close` | `:bclose` |
-| `:theme-mode system/dark/light` | `:appearance` |
-
-The test is one question: **is this name a thing, or one value of some thing?**
-`vertical` is a value of `layout`, `ruby-on` a value of `ruby`, `nowrap` a value of
-`wrap` — a value does not deserve a command name of its own. While `:w` `:q` `:e` `:s`
-`:toc` are each a thing in itself, with a short name already; forcing them into a
-family would only make it worse.
-
-**Once grouped, a name has to be given again.** An old name had to carry the whole
-meaning by itself, which is why they were long: `conflicts` `search` `row` `note`.
-Under a parent, the noun has already been said by the parent, and the child is left
-with the **verb** half:
-
-Warning: **`:search` later came back to life**: after giving way to `:table-find` the
-name sat empty for a while, and it is now the command for the search panel — the
-same word, an entirely different thing. So is `:replace`: it used to mean "replace
-everything `:grep` just found", and now it is one more row in that panel.
-
-| now | before | the parent has said it |
-|---|---|---|
-| `:check-merge` | `:conflicts` | check = what might be wrong |
-| `:table-find` | `:search`（that name has another owner now） | table = inside the grid |
-| `:table-jump` | `:row` | table = a row of the grid |
-| `:view-punct` | `:note` | view = only how it looks, the text untouched |
-
-`:table search` reads as "table search", `:table-find` as "find inside the table" — the
-second is the thing you are doing. `:view note` is worse: it sounds like "look at the
-notes", while that command draws punctuation faint.
-
-**Type the old name and it tells you where the new one is.** `:bands` is no longer a
-command, but typing it does not only say it is unknown:
-
-```
-:bands
-no such command as 'bands' — you want `:view-bands`
-```
-
-That sentence is **computed** — walk the command tree and find the child whose name
-matches. So the next time something is folded, the directions are right on their own,
-with nobody having to remember to come back and fix them. The only ones it cannot
-compute are the ones that were renamed — the four in the table above, plus
-`:bclose`→`:buffer-close`, `:wall`→`:write-all`, `:saveas`→`:write-as`,
-`:appearance`→`:theme`, `:dense` and `:view-dense`→`:view-margin` — because the word
-`conflicts` no longer exists anywhere in the tree, so those are kept in a table of
-their own.
-
-### Short forms
-
-A full command is folded and can say what it does; **its short form is its initials,
-and nothing else is** — `:bc` exists, `:bclose` does not, because that is neither the
-full name nor the initials: it is exactly the kind of spelling the folding was there to
-remove.
-
-**The hyphen has two uses.** One is **a tree** — `:buffer-close` is a kind of buffer
-command, `:write-all` a kind of write, and the menu walks down into them level by
-level. The other is **a pair** — `:write-quit` is not a kind of writing, it is "write,
-then quit", two verbs.
-
-Warning: **both use a hyphen, and neither uses a space.** What follows `:write` is a
-**path**, so `:write all` can only guess between a sub-command and a file named `all` —
-it used to guess the latter, and really did write a file called `all` into the current
-directory, while not one of the other changed buffers was saved. Now it says "no such
-command as 'write all' — it is spelled `:write-all`".
-If you really want a file called `all`, write `:write ./all`.
-
-| short | is |
-| --- | --- |
-| `:bc` `:bn` `:bp` | `:buffer-close` `:buffer-next` `:buffer-previous` |
-| `:qa` | `:quit-all` |
-| `:wa` | `:write-all` |
-| `:wq` | `:write-quit` |
-| `:x` `:xit` | `:exit` |
-| `:up` | `:update` |
-| `:y` | `:yume` = Chinese on — the head of a family, two keys |
-
-A short form is only an **expansion**: `:bc!` is `:buffer-close!`, and whatever the long
-command grows later, the short form gets it too. Completion follows the same rule —
-type `:wq` and the hint says `write quit`, because that is the spelling that can say
-what it means.
-
-**The word `:wysiwyg` is gone as well.** It and `:markup` were always three stops on one
-axis — the code admitted as much long ago with `wysiwyg && show_markup`: with no
-colouring, "hide the markup" means nothing; that is not putting the markup away, it is
-**throwing away** the fact that this was bold here. So they became one:
-
-| | |
-|---|---|
-| `:render off` | the source, uncoloured |
-| `:render basic` | coloured, the markup left on the page (the default) |
-| `:render full` | the markup comes off, and opens only where the cursor is (WYSIWYG) |
-
-Three values on one axis, and the fourth combination does not exist in the type any
-more.
-
-The last time this was done (schemes, readings, vertical and horizontal, colouring) the
-commands went from 42 to 26; another fold put 21 names under 7 parents
-(`view` `check` `table` `count` `write` `buffer` `theme`), and **that one** took the top
-level from 61 down to 41. The editor grew more features in the meantime than the names
-that were folded away — **what folds is the names, not the features** — and it keeps
-growing after a fold: for today's top-level count, press `:` and read the `1/n` at the
-bottom right of the panel. No number is written down here to go stale.
-
-### The whole tree
-
-Above was **how to remember**; this section is **how to look up**: first-level commands
-flush left, second-level indented one step, and the values a level deeper after a `｜`.
-The same material opens as a searchable buffer with `:help commands`, and `::` finds it
-by what it does — this one is for running your eye down from the top.
-
-`（括號）` holds the declared aliases; the shortest spelling is **computed**, and the `:`
-line will tell you itself.
-
-- `:open`（o/e/edit） — open a file
-- `:new`（enew） — start an empty buffer
-- `:write`（w） — save; a path writes a copy, `:write-as` moves to it
-  - `all` — save every file that changed
-  - `as` path — save under a new name and edit that one (`:w <文件名>` only copies, and you stay here)
-- `:wq` — save, then leave
-- `:recover` — ask whether to use the draft
-- `:reload` — read the file again; ! throws away what you changed here
-- `:reload-auto` ｜ `on` `off` — re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own
-- `:readonly`（ro） ｜ `on` `off` — read-only: lock this one against editing
-- `:goto` — go to a line (`:42` will do)
-- `:count`（wc） — how much has been written
-- `:count-progress` — how much was written today, and how far the target still is
-- `:count-target` <count>｜off — how many 字 a day; `:count-target off` stops counting against one
-- `:check-usage` — check 用字: where the file wrote something both ways<!-- verbatim -->（裏/裡、為/爲、你自己配的人名）<!-- verbatim -->, listing the side in the minority
-- `:check-names` — check names: a wiki name written with one homophone out of place (醉翁亭 as 醉翁停)
-- `:diagnostics-all` — check code: everything the language servers have complained about, as a listing gf can walk
-- `:check-charset` — check 字集: characters in none of 通用規範, Taiwan, Hong Kong or 古籍 — a typesetter's font will most likely not have them either
-- `:check-merge` — list the merge conflicts in this file
-- `:check-punct` — check 標點: half-width commas and periods in Chinese, `...`, and a 「」（）《》 opened and never closed
-- `:convert` — 簡繁 conversion, run by opencc — :convert lists the pairs it can do
-  - `s` t｜tw｜hk｜c｜g — simplified（说 为 内 吴 里 发 台）
-  - `t` s｜tw｜hk｜jp｜c｜g — opencc 繁體, <!-- verbatim -->港臺字形（說 爲 內 吳 裏 髮 臺）<!-- verbatim -->
-  - `tw` s｜t｜c｜g — <!-- verbatim -->臺灣正體（說 為 內 吳 裡 髮 臺）<!-- verbatim -->
-  - `hk` s｜t｜c｜g — 香港繁體（説 爲 内 吴 裏 髮 台）
-  - `jp` t｜c｜g — Japanese 新字体（説 爲 内 呉 裏 髪 台）
-  - `c` s｜t｜tw｜hk｜jp｜g — 大陸通規繁體（説 爲 内 吴 裏 髮 臺）
-  - `g` s｜t｜tw｜hk｜jp｜c — <!-- verbatim -->古籍通規繁體（説 爲 内 吳 裏 髮 臺）<!-- verbatim -->
-  - `opencc` ｜ `install` `update` — opencc itself: install it, or bring it up to date
-- `:quit`（q） — close this file; leave only when it was the last one (`quit!` ignores changes)
-- `:quit-all`（`:qa`） — leave everything, however many are open (`:quit-all!` ignores changes)
-- `:undo`（u） — undo the last change
-- `:redo`（red） — redo
-- `:word`（wd） — words: which list, the tint, the level
-  - `show` ｜ `on` `off` `ink` `color` `tint` `line` — the word tint
-  - `list` ｜ `local` `global` `reload` — the word list: which one is used, edit it, reread it
-  - `level` ｜ `off` `strict` `balanced` `full` — word level: how many characters make a word
-  - `discover` — mine this book's own words: names of people and places no dictionary has
-  - `habit` — habit words: what this one says far more than others do
-- `:layout`（lay） — flip horizontal and vertical
-  - `vertical` — vertical, 縱 running from the right
-  - `horizontal` — horizontal
-- `:theme` — theme: which set of inks (light or dark is `:theme-mode`)
-  - `ink` — moxiang: black, white-gold, gold and red ink; every other shade computed
-  - `bw` — heibai: black, white and grey only — weight says it, colour says nothing
-  - `cyanotype` — cyanotype: white lines on Prussian blue — the one theme of the ten whose ground truly carries colour
-  - `amber` — amber: one colour for the whole page
-  - `mogao` — mogao: the brown-black the murals really oxidised into; the gold is not gold but malachite — the caves' own mineral
-  - `morandi` — morandi: the lowest text contrast and the greyest ground of the ten
-  - `firefly` — firefly: a near-black ground, cool grey text, and warmth only in that gold — a firefly is not neon, a page should hold a few sparks
-  - `meridian` — meridian: the 朱 is not red but blue, so red-green blindness tells it apart too
-  - `kiln` — kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold
-  - `complement` — complement: colour lives in the grounds only, the writing stays neutral grey
-- `:shot` — a picture: the clipboard by default, or png/html/txt saved as a file (into the downloads folder)
-  - `screen` — photograph the window onto the clipboard
-  - `png` path — photograph the window into a PNG
-  - `html` path — draw this page as coloured HTML
-  - `txt` path — draw this page as plain text
-- `:yume` — the IME: which one is answering, changing scheme, the 拆分 annotation
-  - `scheme` <scheme> — start typing: load a scheme (with no name, the configured one); the list is whatever is installed
-  - `chaifen` ｜ `on` `off` — the 拆分 annotation beside the candidates
-  - `commit` ｜ `delayed` `unique` `fluency` — commit method: delayed (頂字), unique, whole-sentence
-  - `panel` ｜ `full` `off` — whether the candidate bar is drawn
-  - `preedit` ｜ `header` `code` `top` — the part being typed: the panel's first row / the code in the text / the first candidate in the text
-  - `which` — which scheme is in use, and where its 碼表 came from (the full path of that `.ytab`)
-  - `where` — **where 碼表 and 字料 are looked for**: six layers, where each one is and what it holds, opened as a new buffer
-  - `on` — start typing 漢字 (loading the 碼表 if it is not loaded)
-  - `abc` — ABC: yume still holds the keyboard, the keys type what they say (one tap of Shift does this too)
-  - `off` — hand the keyboard back to the system (its own input method works again)
-  - `installed` — use the 碼表 the system has installed (builtin's other half)
-  - `builtin` — use the built-in 靈明 table, whatever else is installed
-  - `table` path — use your own table (a Rime .dict.yaml will do)
-- `:syntax`（syn） — which markup this file is written in (with no argument, which one it is now)
-  - `markdown` — `#` headings, `**bold**`
-  - `typst` — `=` headings, `#import`
-  - `text` — no markup: every character in the file is only itself
-- `:pipe` — send the selection through a command and replace it with the output (`|`); `-before`/`-after` insert before or after instead of replacing (`!`/`A-!`), `-to` keeps nothing back (`A-|`)
-- `:sh` — run a command and keep its output in a buffer
-- `:!command` — hand the terminal over and watch it run (vi's spelling)
-- `:view-wrap` ｜ `on` `off` `0` `<幾欄>` — wrap long paragraphs to the next row; `:view-wrap 50` sets the measure
-- `:view-margin` ｜ `never` `dense` `loose` `always` — margin: when the lane for readings, hung punctuation, emphasis dots and 平仄 is kept
-- `:view-bands` ｜ `on` `off` `<幾條，1–4>` — bands: divide the vertical page across — top right to top left, then bottom right to bottom left
-- `:view-sentence` ｜ `on` `off` — one sentence to a column: vertically, each sentence starts its own column — a view of the page, not an edit
-- `:view-hanging` ｜ `on` `off` — hung punctuation: 句讀 sit in the margin
-- `:view-numbers-fill` ｜ `on` `off` — the line-number band: whether it has a ground of its own
-- `:view-diff` ｜ `on` `off` `toggle` — change bar: the cell beside the line number says which lines differ from git
-- `:view-typewriter` ｜ `on` `off` `toggle` — typewriter: the row you are writing stays in the middle and the paper moves
-- `:view-focus` ｜ `on` `off` `toggle` — focus: the 段 you are writing stays lit and the rest of the page stands back
-- `:view-meter` ｜ `on` `off` `toggle` — 平仄: the tone class of every character in the margin, 韻腳 at the end of a 句 (modern readings, 入聲 already distributed into the other three)
-- `:view-punct` ｜ `on` `off` `toggle` — inline notes: the full-width mark a half-width one or a ... should have been
-- `:view-code` ｜ `on` `off` `toggle` — code colours: code in a fence, coloured by its own grammar
-- `:view-hud` ｜ `off` `basic` `full` — the little sign beside the caret: nothing, a pill, a bordered panel; with no argument it reports which one it is
-- `:view-preview` ｜ `on` `off` — hand it to a real typesetter and read it in a browser
-- `:render` — how much of the result the page shows: source, coloured, WYSIWYG
-  - `off` — the source, uncoloured
-  - `basic` — basic: coloured, and not one character hidden (the default)
-  - `full` — the markup comes off, and opens only where the cursor is
-- `:indent` ｜ `off` `basic` `full` `<幾格>` — how a paragraph opens: `basic` indents and keeps the blank line, `full` folds the blank line between paragraphs too; with no argument it reports which level it is
-- `:keymap` ｜ `helix` `vim` `actions` — keymap preset: vim's `x` `s` `dd` `^` `$` translated into the keys here; with no argument it reports
-- `:indent-hint` ｜ `none` `color` `symbol` — what is drawn in a paragraph's opening two squares
-- `:indent-tab` ｜ `spaces` `tab` — what Tab types in insert mode: spaces (the default, filling to the next indent stop) or a tab; Shift-Tab types the other
-- `:indent-width` ｜ `<1–8>` — indent width: how many spaces Tab types, and how far `>` `<` shift
-- `:table` <rows> <columns> — an empty table: `:table 3 4` is three rows by four columns, the first row the headings. Only on a blank line, so it can never break a paragraph; with no numbers it is 3×3
-  - `render` ｜ `off` `basic` `full` `window` — how much of a table is drawn: the source, basic, full, or window view; bare reports the mode. The same four as `空格 t o` `空格 t b` `空格 t f` `空格 t t`
-  - `check` — look the whole table over: repeated row names, components with no row, rows of the wrong width, characters outside the 字集
-  - `rules` ｜ `off` `color` `line` — column rules: how the columns are told apart
-  - `sort` <column> a｜d … — sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending
-  - `detail` ｜ `on` `off` — the detail column (its width is `w` inside the panel)
-  - `numbers` ｜ `on` `off` — the row of column numbers: that is what t3/ and t20,20g count with
-  - `header` ｜ `on` `off` — whether the first row names the columns or is a row of data like any other
-  - `schema` — open this table's schema in the other area — writing a starting one if there is none
-  - `jump` <the row's name> — go to the row this table names (`:table-jump 木`)
-  - `find` ｜ `row` `column` — search: `row` runs across (that is `/`), `column` runs down (that is t/ t? in a table)
-- `:wheel` — how far one notch of the wheel moves; `:wheel 1` is the terminal's own
-- `:clipboard` — the paste menu: the clipboard and what was yanked, pick one (`空格 "` does it too)
-- `:clipboard-yank` — put the selection on the system clipboard
-- `:clipboard-paste` — paste from the system clipboard
-- `:buffer` — list the open files
-  - `next` — the next one
-  - `previous` — the previous one
-  - `close` — close this one (`close!` ignores changes)
-- `:format`（fmt） — format this file the way the config says ([language.markdown] format = …)
-- `:run` — run the command this language names in the config
-- `:markdown-footnote` ｜ `inline` — a footnote: the next free number, and its note opened with it
-- `:tutor` — a lesson: the text is copied into a file of your own, and you learn by editing it
-- `:help` — the keys and the commands, opened as a file you can read and search
-  - `chinese` — 漢字, punctuation, readings, the IME
-  - `vertical` — vertical writing
-  - `table` — grids, and the 拆分表
-  - `commands` — every : command
-- `:export`（ex） — write it out as html or typst, layout and all
-  - `html` <filename> — one HTML page, still vertical if the manuscript is
-  - `typst` <filename> — Typst source, horizontal, for setting a printed book
-  - `csv` <filename> — the table under the cursor, comma separated
-  - `tsv` <filename> — the table under the cursor, tab separated
-- `:search`（short `:s`, and a vim hand may write `:grep`）— open the search panel (`空格 /` does it too); `-buffers`/`-working`/`-project` say where to look
-- `:diff` — what changed, by word rather than by line
-- `:git-diff` — the same, against what git has (`HEAD` unless a commit is named)
-- `:toc`（outline） — list the headings; `:toc 3` goes to the third
-- `:ruby` — edit the reading here; how much is drawn is `:ruby-render`
-  - `render` ｜ `off` `basic` `full` — how much of a reading is drawn: the source, read but not laid out, or beside the base; bare says which it is now
-  - `auto` — write the readings in, by word (the selection, or the file)
-  - `html` ｜ `on` `off` — read `<ruby>`
-  - `typst` ｜ `on` `off` — read `#ruby(…)`
-  - `format` ｜ `html` `typst` — rewrite the readings in another dialect
-- `:s/pat/rep/` — substitute, in the selection; `%s` the whole file, `1-40s` a span, `1,5,9s` a few rows; flags g i f n t; the delimiter can change (s#a/b#c#)
-### `::`: forget the name, say what it does
-
-The whole section before this one rests on one thing: **you remember the verb**. But
-the verbs are English and what you are thinking is 「竖排模式」. A command you cannot
-type does not exist.
-
-**Press `:` once more** (on an empty line) and that line turns from "what is the
-command called" into "what does the command do":
-
-```
-::竖排           → :layout vertical    turn the page vertical, 縱 running from the right
-::排序           → :table-sort         sort by these columns
-::lyt            → :layout             horizontal or vertical
-::合併行         → J                   join with the line below
-```
-
-**Commands and shortcuts are on one list.** What you are asking is
-「how do I do this」, and whether the answer is a command or a key is the editor's
-business rather than yours. `⇥` steps to the next row, `⇧⇥` back, and it wraps; `Enter` does the highlighted one —
-runs the command, or presses the key. The run printed on the list is the run your own
-fingers will make next time.
-
-**The unlikely ones are left out**: anything scoring below a quarter of the top row
-is noise and is cut. The better you type the question, the shorter the list.
-
-- **Type Chinese straight in.** The input method is on for this line (one tap of
-  Shift switches to Chinese, same as `/` search), because the line was made for a
-  Chinese question in the first place.
-- **All three languages are searched, only the one you are using is shown.** The
-  descriptions are written three times over: traditional, simplified, English. On the
-  traditional build you can type 「竖排」 (simplified) and still find it, and if all you
-  remember is the English name you find it too.
-- **A partial spelling works.** `lyt` finds `layout`, `tbsort` finds `table sort` —
-  the letters only have to be in **order**, not next to each other. A slip like
-  `laoyut` still lands (command names only, English of three letters or more, two
-  letters of slack).
-- **`↑` `↓` to pick, `⇥` to take it.**
-
-**`⇥` runs nothing.** It writes the whole command **back onto the `:` line** with the
-cursor after it, and then you press Enter yourself. So Enter always runs the line you
-can **see**, not something it guessed — `:q!` cannot be undone.
-
-`::` and `:` are two modes and you can walk between them: a second `:` on an empty
-line goes in, backspacing until it is empty comes back to `:`, and one `Esc` returns
-to the text.
-
-**There is a layer of invisible words under the descriptions.** Every command can
-carry one line in `messages.toml`: `find = "直排 縱書 tategaki columns"` — findable,
-never shown. So a description can stay short while "the other four ways of saying the
-same thing" still turn up. Another way of saying it is another word, not a code
-change.
-
-### Soft wrap
-
-In horizontal layout a paragraph too wide for the window **wraps onto the next line**
-and carries on. A Chinese paragraph is often one line of several hundred characters,
-and without wrapping you would have to scroll rightwards the whole way to read it, so
-this is on by default; `:view-wrap off` turns it off, `:view-wrap` turns it back on.
-
-With it off, a paragraph is **one line**, however long that is, and the page follows
-the cursor left and right — `gl` goes to the end of the line and the window goes
-along. The line-number lane stays put; it is furniture, not text. **Vertical layout
-has nothing of this kind**: a column breaks at the height of the window, and over
-there `:view-wrap off` simply tells you this command is a horizontal setting
-(`:view-wrap 40` counts in both, see chapter 5).
-
-A break obeys two rules: a Latin word is not cut in the middle (`Helix` does not
-become `Hel` and `ix`), a line does not begin with closing punctuation like 。、」）,
-and does not end with an opener like 「（ — that is **kinsoku** (禁則處理).
-
-When a paragraph fills a line exactly, an empty line appears under it: that is where
-the cursor stands. The cell after the end of a line does not exist on screen, and the
-next character has to have somewhere to go.
-
-What matters is that `j` `k` walk **the line on screen**, not the whole paragraph.
-When a paragraph runs to several hundred characters, a `j` that moves by logical
-lines jumps a whole screen at a time, and that is not where the reader's eyes are.
-The number is printed only on the **first line** of a paragraph: the number belongs
-to the paragraph, and repeating it on every line would read as several paragraphs.
-
-### Next to other editors
-
-Coming from Helix or vi, this table tells you how many places your fingers have to
-change. **Every cell was measured**: the Helix column was pressed key by key through
-the thirty lessons of `runtime/tutor`, the vi column against
-`/usr/share/vim/vim91/` (the tutor and `doc/motion.txt`).
-Warning: **what cannot be measured is not written.** There was an Emacs column here
-once, filled in from memory — with no source to check against, a column that looks
-confident and has in fact never been verified is worse than no column at all.
-
-**An unbound key says nothing at all.** The command line used to answer `$` with
-"end of line is `gl`", and a dozen other keys likewise — a phrasebook of what
-another editor's keys are called here. There is no such hint, because a
-hint like that assumes why you pressed the key: press `D` and being told to
-press `A-d` is the editor deciding what you meant. This table is the answer
-instead, and so is `:keymap`.
-
-| What | yumete | Helix | vi |
-| --- | --- | --- | --- |
-| one character | `h` `l` | same | same |
-| one line (on screen) | `j` `k` | same | `gj` `gk` |
-| one line (in the file) | `gj` `gk` | same | `j` `k` |
-| start / end of line | `gh` `gl` | same | `0` `$` |
-| one word | `w` `b` `e` | same | same |
-| one paragraph | `{` `}` | `[p` `]p` | same |
-| **one sentence** | **`H` `L`** | none | `(` `)` |
-| half page / whole page | `C-d` `C-u` / `C-f` `C-b` | same as left | both sets the same; `C-n` `C-p` is two thirds |
-| start / end of file | `gg` `ge` / `G` | `gg` `ge` | `gg` `G` |
-| go to line n | `nG` / `:n` | `:n` | `nG` |
-| back where I was / forward again | `C-o` `C-i` | same | same |
-| find a character | `f` `t` | same | same |
-| find that same character again | `A-.` | same | `;` |
-| search / next | `/` `n` `N` | same | same |
-| search for what is selected | `g/` (`*` works too) | `*` | `*` |
-| replace in this file | `:s/舊/新/` | none (`s` plus many cursors) | same |
-| search the whole project | `:search-project` (panel) | `空格 /` | `:vimgrep` |
-| replace in the whole project | `:replace-project` (panel) | none | `:cdo s//新/g \| update` |
-| select whole lines | `x` | same | `V` |
-| select all | `%` | same | `ggVG` |
-| delete / change the selection, register untouched | `A-d` `A-c` | same | `"_d` `"_c` |
-| cut / cut then change | `d` `c` | same | `d{motion}` `c{motion}` |
-| copy / put | `y` `p` `P` | same | same |
-| system clipboard | `空格 y` `空格 p` | same | `"+y` `"+p` |
-| undo / redo | `u` `U` | same | `u` `C-r` |
-| case | the `` ` `` group (`~` works too) | `` ` `` `~` `` Alt-` `` | `~` `gu` `gU` |
-| join lines | `J` | `J` | `J` |
-| indent | `>` `<` | same | `>>` `<<` |
-| comment out | `空格 c` `空格 C` | `C-c` | none |
-| increment / decrement | `C-a` `C-x` | same | same |
-| record a macro / play it back | `Q` `q` | same | `qa` `@a` |
-| matching bracket | `mm` | same | `%` |
-| select inside / around brackets | `mi(` `ma(` | same | `vi(` `va(` |
-| add / drop / change a surround | `ms(` `md(` `mr([` | same | a plugin |
-| save / quit | `:w` `:q` `:wq` | same | same |
-
-Warning: **`t` and `T` are vi's till** (`t，` stops one cell before the comma, `T，`
-goes backwards). helix's own `t` is till as well, so that one key would owe both
-sets of hands; the table group is on `空格 t` instead.
-
-**Three deliberate differences — do not take them for defects:**
-
-- **`w` `b` `e` walk by the dictionary**, not by spaces. Chinese words have no spaces
-  between them, so cutting at spaces is not cutting at all. `:word-level off` goes
-  back to "a 漢字 is a letter", and then `w` behaves exactly as it does in Helix.
-- **`e` and `b` are a pair, and what they take is the "sentence", not the "word"** —
-  the stretch between two marks of punctuation. The Helix tutor teaches "`e` then `b`
-  selects the word the cursor is on"; our `e` then `b` selects the **clause** the
-  cursor is in. An English word has many letters, a Chinese word averages two and a
-  half characters, so here the clause is the more useful one.
-- **`H` `L` are a sentence, not a page.** Helix has no sentence unit; vi uses `(` `)`,
-  and Helix took those two keys for rotating the selection, so we leave them free
-  (under the vim preset those two are sentences again).
-
-### vim's hands: `[keys] preset = "vim"`
-
-Coming from vim, what hurts most are the few keys that **damage the wrong text when
-you press them**: `x` here selects a line, and `dd` deletes two characters. One line
-in the config translates them — not a second vim, but vim's way of pressing turned
-into keys that already exist here:
-
-```toml
-[keys]
-preset = "vim"
-```
-
-If you would rather not touch the config, type **`:keymap vim`** in the editor; it
-takes effect at once and only for this run. `:keymap helix` goes back, and `:keymap`
-on its own says which set is in force.
-
-| vim's hand | what happens here | result |
-| --- | --- | --- |
-| `d` `c` `y` | **waits for a motion** | see below |
-| `x` | translated to `;D` | cut the character under the cursor |
-| `X` | already there | cut the character before the cursor, as far as the start of the line (the old `X`, which grew the selection to whole lines, gave up the key; select lines with `V`) |
-| `s` | translated to `;c` | change the character under the cursor |
-| `V` | translated to `x` | select the whole line (the `x` here gave way to cutting a character) |
-| `^` `$` `0` | translated to `gs` `gl` `gh` | first character on the line / end of line / start of line |
-| `>` `<` | **operators too** | `>>` indents the line, `>j` two lines, `>ap` a paragraph |
-| `C-r` | already there | redo (normally `U` here) |
-| `U` | **new** | undo the whole run of recent changes on this line (as in vim; redo on this side is `C-r`) |
-| `gJ` | **new** | join the next line **adding no space at all** (the bare `J` works its seam out: nothing between 漢字, one space between Latin words) |
-| `*` | translated to `g/` | where else is this word |
-| `%` | translated to `mm` | jump to the matching bracket (`%` here is select all) |
-| `m`*a* | **already there, spelled differently** | set a mark (`'`*a* jumps back) — `m` is normally the door into match mode |
-| `N\|` | **new** | go to **cell** N (a 漢字 is two cells, which lines up with the ruler) |
-| `q` `Q` | swapped back | `q` starts recording a macro and a second press stops it; `Q` plays it once (the two are the other way round here) |
-| `R` | **new** | overwrite mode: each character you type covers one, `Esc` leaves, backspace gives back what was covered (the status bar says `REP`) |
-| `gv` | **new** | select that last stretch again |
-| `g;` `g,` | **new** | walk the places you changed, older / newer (one entry per line, a hundred at most, as in vim) |
-| `C-o` in insert | **new** | run one Normal command and come straight back to insert (a several-key one like `gg` or `3j` is waited out) |
-| `(` `)` | **already there, spelled differently** | previous / next sentence (`(` `)` here normally rotate the primary selection) |
-| `` ` ``*a* | **new** | jump to the cell mark *a* recorded (`'`*a* goes to its line). The glyph group moves to ``g` `` on this side: ``g`l`` lowercases, ``g`s`` goes traditional to simplified |
-| `gu` `gU` `g~` | **new** | case operators, each waiting for a motion: `guw` a word, `guu` a whole line, `gUU` uppercase |
-| `gn` `gN` | **new** | the next/previous match (here `gn` is normally the next file, as it is in Helix; on this side that pair is `空格 b`) |
-| `H` `M` `L` | **new** | go to the top / middle / bottom of this screen (normally those three are previous sentence / set a mark / next sentence) |
-| `ys` `ds` `cs` | **already there, spelled differently** | add / drop / change brackets, as in vim-surround |
-| `D` `C` | translated to `d$` `c$` | delete / change to end of line |
-| `Y` | translated to `y$` | copy to end of line, as in nvim (`yy` still copies the whole line) |
-| `S` | translated to `cc` | change the whole line |
-| `;` `,` | already there | repeat the last `f` / repeat it backwards |
-| `ZZ` `ZQ` | translated to `:x` `:quit!` | save and quit / throw away and quit |
-
-**Deliberately not translated**, and why:
-
-| key | why |
-| --- | --- |
-| `K` | vim's look-up word (`空格 k`); `J` joins lines in both sets |
-| vim's gu, gU, g~ | changing case is the `` ` `` group here |
-| `w` `b` `e` | same keys, **but they go through the segmenter** — a Chinese 「詞」 is segmented, not cut at spaces, so they will not stop where vim stops |
-
-**`d` `c` `y` are real operators**: pressing one waits for a motion, and nothing
-happens until it gets one.
-
-| what can follow | |
-| --- | --- |
-| word | `w` `W` `b` `B` `e` `E` |
-| within the line | `$` `0` `^` |
-| by lines | `j` `k` `G` `gg` (whole lines at a time, as in vim) |
-| paragraph, sentence | `{` `}`, sentences are `(` `)` |
-| find a character | `f`*c* `F`*c*; `t`*c* `T`*c* stop just before it |
-| one character | `l` `h` — `dl` is `x`, `d3l` is three |
-| text object | `i`*c* `a`*c* — `di(`, `ci"`, `ya[`; `ip` / `ap` is a **paragraph** |
-| press it again | `dd` `yy` `cc` take the whole line; `d_` `y_` do the same thing |
-| brackets | `ys`*motion**bracket* adds, `ds`*bracket* drops, `cs`*old**new* changes (as in vim-surround) |
-| first character of the next line | `Enter` `+`, and `-` goes back |
-
-Once you press `d` the status bar carries a digest of this table. `Esc` lets go, and a
-key that is not a motion is told so outright: "`z` is not a motion". **Registers
-follow vim's rules**: `d` `c` and `y` all go to a register, so `p` after `dd` puts it
-back.
-
-Counts work as usual, and **it does not matter where you write them**: `3dw` and `d3w`
-are both three words, `2d3w` is six (multiplied, as in vim); `3dd` is three lines,
-`2x` two characters. **A count before `i` `a` `I` `A` `o` `O` means "type this passage
-that many times"**: `5ix` then `Esc` gives five `x`, `3o甲` gives three lines of 「甲」;
-the whole passage counts as one command, and one `u` takes it all back. `d`, `c` and
-`y` **wait a moment** when pressed, to see whether the next key is a `d` or a `w`: if
-it is, the table above applies; if not, the original key goes through. `Esc` cancels.
-**What you write in `[keys.normal]` yourself beats the same key in the preset**, and
-the left side may be a run of keys: `"dj" = "xxd"`.
-
-**`A-d` and `C-o` are written that way on either side**, chord and all — `"A-d" = …`
-binds the one chord, not the three keys `A`, `-`, `d`.
-
-### Prefix keys rebind too
-
-The menu `空格` opens, and the groups opened by `g` `m` `t` — **write that prefix key
-itself on the right** and the whole group moves. vim's hands like the leader on `;`,
-with space kept for walking:
-
-```toml
-[keys.normal]
-";" = " "      # semicolon opens that menu
-" " = "l"      # space moves one cell right
-"" = "h"  # backspace moves left (a control character, written as its code point)
-```
-
-Warning: **a prefix cannot be bound to an "action name"** — an action is one thing,
-while a prefix is still waiting for a second key, and binding it that way swallows the
-whole group. Binding it to a **key** always worked; the manual simply never said so.
-
-### Bind to what it does, not to another key
-
-A run of keys on the right means "pressing this counts as pressing that" — handy, but
-you have to know first that `d` here is delete. **The right side can also be the name
-of the thing itself**:
-
-```toml
-[keys.normal]
-x = "delete_selection"      # an action name
-"\\" = ":write"              # or a command
-"dj" = "xxd"                # or still a run of keys (the old spelling stands)
-```
-
-Three kinds of right side, recognised in this order: anything starting with `:` is the
-command line; a **name** it knows is that action; the rest are keys. The good thing
-about a name is that it does not move when the defaults move — the day `d` goes
-somewhere else, `x = "delete_selection"` still deletes.
-
-**`:keymap actions` lists them all** (eighty-odd), in three columns: name, what it
-does, which key it is on now. The names match helix, so anyone coming from there can
-guess — including the pairs helix spells with `_noyank`:
-
-```toml
-# What a helix discussion with ninety-odd votes asks for: delete and change
-# stop filling the register, and the Alt keys do the cutting.
-[keys.normal]
-"A-d" = "delete_selection"
-"d" = "delete_selection_noyank"
-"A-c" = "change_selection"
-"c" = "change_selection_noyank"
-```
-
-**There is a switch for exactly this, and it is the better way**: `:yank-on-delete
-off` swaps the same two pairs, in a table's cells as well as in prose, and
-`yank_on_delete = false` under `[editor]` makes it the default. Prefer it over the
-four lines above: a **binding** goes on overriding whatever the defaults become,
-so those four lines would quietly outlive the reason you wrote them.
-
-The factory answer is `on`: `d` and `c` cut, as in helix and as in vi, and
-`A-d`/`A-c` leave the register alone.
-
-Warning: a misspelt name is **said out loud on the spot** instead of being typed into
-your text: a right side with an underscore in it that is not recognised is reported at
-startup as "not an action name", and **that binding is not installed** — otherwise
-pressing the key would type `delete_slection` into the manuscript one letter at a
-time. (No key is spelled with an underscore, so an underscore means you meant a name.
-Underscores inside a `:命令` do not count.)
-
-## 5. Vertical layout (縱書)
+## 6. Vertical layout (縱書)
 
 `:layout vertical`, or `yumete --vertical`, or `layout = "vertical"` in the config.
 
@@ -2099,7 +1460,7 @@ long a column runs is a decision about this book, and the editor is in no positi
 make it for you. `:view-wrap 32` or `[editor] zong_length = 32` is you making that
 decision (somewhere around 32 characters is the comfortable ceiling for prose).
 
-### 5.1 Moving
+### 6.1 Moving
 
 `h j k l` keep their **screen directions**. `j` and `k` read down and up along the
 column, which is forward and backward in the text; `h` and `l` move to the column on
@@ -2124,7 +1485,7 @@ number), vertical **Heng** = horizontal **Col** (how many cells down), and **Chr
 how many characters down. Zong and Heng rather than line and column, so that one
 glance tells you which kind of page you are looking at.
 
-### 5.2 What the layout does on its own
+### 6.2 What the layout does on its own
 
 `[editor] paper_ticks = 10` puts a faint tick in the margin every ten characters, the
 way real manuscript paper has them — traditional paper is squared (20×20 = 400
@@ -2200,7 +1561,7 @@ Warning: **the cursor still walks one character at a time**: the cell is a unit 
 picture. Press `j` four times on that `1997` cell and the cursor passes four digits
 while the cell stays boxed whole, with "Heng" in the status bar moving and "Zong"
 standing still.
-### 5.3 Hanging punctuation
+### 6.3 Hanging punctuation
 
 `:view-hanging` (written alone it flips; `:view-hanging on` / `:view-hanging off` pin
 it), or `hanging_punctuation = true` in the config.
@@ -2254,7 +1615,7 @@ Punctuation and ruby compete for the same margin, and **punctuation wins** — a
 belongs on its own character's row — so when both turn up the ruby gives way upwards
 and takes the rows above that character.
 
-### 5.4 Ruby (furigana)
+### 6.4 Ruby (furigana)
 
 Readings are written into the file as markup and **laid out** by yumete. Warning:
 **vertical and horizontal lay them out differently**, because a reading lives in a
@@ -2312,7 +1673,7 @@ is half-width and still takes one cell (unless you set `ambiguous_width` to `wid
 the reading has a toned vowel in it — then it is two cells as well, because that is how
 the terminal draws it).
 
-### 5.5 Ruby mode
+### 6.5 Ruby mode
 
 Once readings are laid out, an `<rt>` on screen is the finished reading, not markup —
 move the cursor into that span and the whole source comes out for you to edit (the same
@@ -2337,7 +1698,7 @@ Split a reading with `|` into as many parts as there are base characters and you
 one reading per character: `hàn|zì` gives 漢字 two groups, while `hàn zì` is one reading
 for the whole word.
 
-### 5.6 Readings written in for you: `:ruby-auto`
+### 6.6 Readings written in for you: `:ruby-auto`
 
 Annotating one character at a time never ends. `:ruby-auto` walks the selection — the
 whole manuscript if there is no selection — word by word, writes in every reading it
@@ -2374,7 +1735,7 @@ reading. Which is to say: the ones a reader really will stall on.
 The readings come from 宇夢's **拆分表** (the one `:yume-scheme` loads). With none
 loaded the command does nothing but say so on the status line.
 
-### 5.7 Emphasis dots
+### 6.7 Emphasis dots
 
 漢字 do not slant. Western emphasis leans the letters to the right; 漢字 have no such
 thing. Chinese emphasis puts **a dot beside every character** — the 着重號 — and in
@@ -2402,7 +1763,7 @@ gives way one cell to the left. A column with no emphasis spends nothing. Nothin
 drawn under `:view-margin never` or `:render off`; in the latter, `*` is a literal
 asterisk.
 
-### 5.8 One sentence to a column: `:view-sentence`
+### 6.8 One sentence to a column: `:view-sentence`
 
 Proofreading means reading one sentence at a time. The old trick was `:%s/。/。\n/g` to
 split the manuscript apart and undo it when you were done — **that is editing the file
@@ -2428,7 +1789,7 @@ column you see is exactly where `)` would stop.
 It is only a way of looking at the vertical page, like `:view-margin` or `:view-bands`:
 the file has not changed, and `:w` writes the same paragraph you had.
 
-### 5.9 平仄: `:view-meter`
+### 6.9 平仄: `:view-meter`
 
 Writing in the old verse forms, or filling in a 詞 pattern, means counting 平仄 by ear
 one character at a time. `:view-meter` draws it for you, in the notation the 詞譜
@@ -2475,7 +1836,7 @@ When the lane holds a reading or a hung mark, 平仄 gives way to them — a rea
 something written in the file, while 平仄 is the editor talking from the side. Emphasis
 dots come after 平仄.
 
-### 5.10 The right mark written beside the wrong one: `:view-punct`
+### 6.10 The right mark written beside the wrong one: `:view-punct`
 
 `:check-punct` gives you a list and you jump to each entry. `:view-punct` does it the
 other way round: **the mark that should have been written is written beside the one that
@@ -2510,7 +1871,7 @@ either — a `,` is correct there.
 
 ---
 
-## 6. The IME
+## 7. The IME
 
 The 宇夢 engine is built in — no FFI, no second process. Type a code in Insert mode and
 the candidate bar appears.
@@ -2908,6 +2269,167 @@ naming a region and going there, and closing one from afar, are in the `C-w` gro
 buffer carries a number before its file name (one digit up to nine, zero-padded to
 two from ten on), so that is a prefix code which needs no space to confirm it.
 
+### You open the IME yourself
+
+**Come back and find the IME still on? Press Esc again in Normal mode.** When
+you have been typing with the system IME in another window and switch back, it
+is sometimes still lit, and keys get swallowed — the editor's side remembers
+"it has already been told to step aside", and in fact it has not. Pressing Esc
+once more is saying that sentence over again (it counts only when Esc has
+nothing else to do; closing a window and dropping a selection both come first).
+
+yume's data holds two things, and they deserve different treatment.
+
+**The language model** — the word-frequency table and the lexicon, **both of
+them independent of the scheme** — is what `w` `b` `e` use to walk by word, and
+the reason this editor's word jumps are more accurate than an editor has any
+business being. **27 milliseconds, and everybody gets it.**
+
+**The 碼表** is another 109 milliseconds, and it is only any use to someone
+typing 宇浩. Loading it for everyone means paying at every start-up for an input
+method most people never asked for. So it **waits for you to say so**:
+
+```
+:yume-scheme            use the scheme in the config (靈明 by default)
+:yume-scheme riyue      name one
+:yume-s l               the same — a prefix counts as long as no second word matches
+:yume-scheme !          the 碼表 inside the binary, even when one is installed
+:yume-scheme ! xingchen the same, for 星陳 (a scheme the binary has no table for says so)
+:yume-scheme ~          back to the installed one
+:yume-scheme =<path>    a 碼表 file of your own
+```
+
+The last four are for when the panel answers something you did not expect: `!`
+and `~` are the same scheme read from two different places, so trying both says
+which of the two tables is at fault.
+
+A prefix counts at every level: `s` is the only word under `:yume` beginning
+with s, and `l` is the only scheme beginning with l. If two words both match it
+picks **neither**, rather than quietly taking whichever was written first.
+
+**You can type with nothing installed at all.** Every yumete binary carries two
+碼表 of its own — **靈明精華版** (0.25 MB) and **星陳精簡版** (0.27 MB), plus the
+symbol table — and **every build carries the same two**.
+
+精華版 takes **every character** in CJK Basic and Extension A, the 宇浩 radical
+block, and the characters from the seven character sets that fall outside those
+blocks, from every source, plus the short codes; it carries **no words**, so
+whole-sentence input falls back to one character at a time. The panel reports it
+as 「出廠自帶 精華版 ⋯⋯」, which tells it apart from an installed table.
+
+- **The binary does not depend on the machine that compiled it.** What goes in
+  is the 精華版, whether or not 宇浩 is installed on the machine doing the
+  compiling. An installed table wins at run time anyway, so carrying the whole
+  3.69 MB 靈明 as well would be weight nobody reads. CI and your own
+  `cargo build` produce the same bytes.
+- **Where they come from**: `yume` generates them and publishes them in the
+  `yumete-data` release of `forfudan/yume-release` (public, no token needed).
+  The build downloads them **once** into `~/.cache/yumete/builtin/` and reads
+  that cache from then on; delete it to pick up a newer 精華版. Nothing expires
+  on its own, because a build that quietly changes what it embeds is the thing
+  this is here to stop. `YUMETE_BUILTIN_DIR` points the build at a directory of
+  your own instead, and is checked **before** the cache, so it never touches
+  the network.
+- **Offline with an empty cache**: the binary carries no 碼表 and the panel says
+  so plainly, rather than the build failing.
+
+Warning: **not one of these tables is in yumete's repository.** They are
+generated — the 碼表 is cut from 宇浩's `ling.txt` and `xing.txt`, the
+segmentation word list from its language model — and a generated file is
+rewritten whole with every new version, so committing one means paying its full
+size over again each time. They are **build-time inputs**: the 碼表 come from
+the release above, and `scripts/build.sh` generates the word list on your own
+machine (`scripts/make_words.py`).
+
+An installed 碼表 **wins** — the factory one is the fallback, and `:yume-scheme !`
+is how to ask for it anyway. The other three schemes are not carried; with
+nothing installed they are honestly unavailable, rather than quietly turning
+into 靈明.
+
+**Where it looks**: first where you pointed it yourself (`[ime] data_dirs`,
+`$YUMETE_DATA_DIR`), then yumete's own data directory (`scripts/build.sh`
+installs here; `brew install yume-data` lands here too,
+`<yumete 執行檔>/../../share/yumete`), and last **wherever yume itself is
+installed** — each platform by that platform's own rules:
+
+- **macOS**: `~/Library/Application Support/Yume/data/compiled/` (a recompiled
+  one comes first), `~/Library/Application Support/Yume/`, then the input
+  method's own app: `~/Library/Input Methods/Yume.app/Contents/Resources`
+  (installed for you alone) and
+  `/Library/Input Methods/Yume.app/Contents/Resources` (installed for the whole
+  machine).
+- **Windows**: `%APPDATA%\Yume\data\compiled\`, `%APPDATA%\Yume\`, and the
+  `Resources\` beside the `.exe`.
+- **Linux**: `$XDG_DATA_HOME/yume/data/compiled/`, `$XDG_DATA_HOME/yume/`,
+  `$YUME_DATADIR`, and the `yume/` inside every one of `$XDG_DATA_DIRS` (with
+  that variable unset it looks at the standard defaults, `/usr/local/share` and
+  `/usr/share` — the machine-wide install is there).
+
+On a macOS with yume installed there is therefore nothing to configure:
+`:yume-scheme` simply has all five schemes.
+
+**Schemes you built yourself are found just as well.** The factory schemes are
+one file each, `schemes/<名字>.toml`; the ones a user installs each take a
+**slot** — `…/Yume/installed/<八位十六進制>/`, one scheme to a slot, holding
+`custom.ytab` (the 碼表), `custom.yzg` (the radicals), `custom.ycdv` (this
+scheme's own 拆分) and `custom.yscm` (this scheme's own settings). Every slot
+found is one more scheme, named whatever the scheme's author wrote in
+`custom.yscm`:
+
+```
+:yume-scheme custom.6947b838      冰雪清韻
+:yume-scheme custom.cc2d1290      天碼
+```
+
+The code length, the 選重 keys, whether 頂功 is on — **none of it is guessed**:
+it goes by `custom.yscm`, the same file the input method uses. Two other slot
+locations are recognised as well (Windows's `data/custom/`, and the bare
+`custom/` from before there was scheme management), and the same slot is only
+counted once.
+
+**To ask which one is in use right now:**
+
+```
+:yume                 靈明 · 碼表 /Users/…/.local/share/yumete/schemes/ling.ytab · chaifen off
+:yume-builtin         switch to the factory one (when the installed one is broken, or older than it)
+```
+
+The factory one **says how old it is** — `出廠自帶 2026-08-28 13:08`, taken from
+the build time in `VERSION` inside the 宇夢 release package; data you compiled
+yourself has no such file, so it reports the date of the 碼表 itself. A 碼表
+compiled into a binary is a **snapshot**, and when you see a candidate you do
+not recognise, you ought to know how old the snapshot is before you go looking
+for a bug over in 宇浩.
+
+(It reports the time and not a version number: the question is "how old is
+this", and "3.12.0" asks you to remember when that was.)
+
+**Files that are installed but not in use — `:yume` says that too.** The binary
+format follows yume-core, and after a format change an old data directory looks
+perfectly fine — every file is in place, the core just takes none of them, so
+the 拆分 annotations vanish wholesale and nothing anywhere mentions it. That
+sentence now comes on the end:
+
+```
+靈明 · 碼表 …/ling.ytab · chaifen on · commit delayed (頂字)
+  · data/chaifen.ydiv was refused by the core: bad division magic (expected YDV20260904, the file says YDV20260828)
+```
+
+When you see this, run `scripts/build.sh` again. **Files that are not installed
+do not count** — half the list is optional to begin with, and listing it for
+real would bury the one line that matters.
+
+If you type all the time, write it into the config:
+
+```toml
+[ime]
+scheme = "lingming"
+start = true          # load the 碼表 at start-up
+```
+
+Start-up is therefore **instant** — `yumete --version` and
+`yumete --preview 章節.md` are both 0.00 seconds.
+
 ## One word: region
 
 **A workspace and a sidebar are the same kind of thing — a "region".** There are four: **the main editor region, the secondary editor region,
@@ -3106,7 +2628,7 @@ Enter, and a chapter written in another file **opens that file** and jumps, land
 the heading line. `#import` is not a chapter — that is borrowing a template, not
 adding a chapter.
 
-## 7. Day to day
+## 8. Day to day
 
 ### The bottom two lines
 
@@ -5925,7 +5447,491 @@ has its own rule, because that rule is drawn on the boundary anyway.
 
 ---
 
-## 8. Commands
+## 9. Commands
+
+### Commands: remember the verb, not the argument
+
+Type `:` and every command is listed; type a few letters and the list narrows — that
+much was always there. What is new: **type one space and it tells you what can come
+next**.
+
+```
+:view-margin ▊    never no lane   dense by visual column   loose by paragraph   always every column
+:syntax ▊         markdown 「#」headings, 「**bold**」   typst 「=」headings, 「#import」
+:yume ▊           on   abc English for now   off  (sub-commands: the :yume-scheme family)
+:ruby-html ▊      on   off
+```
+
+`Tab` cycles between those words, and what it completes is **the word you are typing**,
+not the whole line.
+
+**The parenthesis holds the shortest spelling**, and it is **computed**:
+
+```
+:yume (y)     :render (ren)     :table (ta)     scheme (s)     format (f)
+```
+
+**Rows whose name is a code carry a grey note behind it.** Schemes are the only group
+like that — a scheme yume installed is named after its slot, and a column of
+hexadecimal tells you nothing about which is which:
+
+```
+scheme custom.6947b838   冰雪清韻
+scheme custom.cc2d1290   天碼
+scheme lingming          靈明
+```
+
+What you type is still the **code** (names change and collide, slots do not); the note
+is only there so you can tell which one it is — **and it searches**: after
+`:yume-scheme ` tap Shift for Chinese, type 「冰雪」 and only that one is left. The other
+rows carry no note: writing 「on」 a second time beside `on` is noise, and whatever row
+is highlighted has its explanation on the line below anyway.
+
+**The `:` and `/` line can be edited.** `←` `→` move, `Home` `End` go to the two ends,
+`C-w` takes back a word, `C-u` the whole line, `Delete` kills the character under the
+cursor, and `↑` `↓` walk what you typed in this session — `:` and `/` each keep their
+own. One wrong character in a long `:%s` no longer means typing it all again.
+
+The rule in one line: **a prefix that is not shared counts**, for commands and for
+arguments alike. `:y` is `:yume` — the head of a family never collides with the
+commands beneath it — and `:yume-s l` is `:yume-scheme lingming`. When a prefix hits
+two words, **neither one is chosen**: `:re` is at once the prefix of `recover`, `redo`
+and `render`, so it says there is no such command instead of quietly picking one.
+
+A short name already declared **beats** the prefix rule, so a spelling you know does
+not change meaning: `w` is the prefix of three commands, but `:w` is still `write`, and
+`:e` still opens a file rather than meaning `export`.
+
+The one in the parenthesis is **computed, not written down**, so if a command that
+collides with it is added later, this hint grows longer **in that same change** and
+leaves behind no short name that teaches you a wrong spelling.
+
+**A "parent command" is not a second mechanism.** `:yume-scheme` is simply an argument
+whose values happen to be verbs — so once argument completion is written, grouping the
+commands comes free: no second code path to maintain, and nothing second for you to
+learn. Go as deep as you like (`:ruby-format html` is three levels); completion does
+not know the difference.
+
+Grouping is done only where **a group really exists**, and **the old name is deleted
+outright** — keeping two spellings would mean this philosophy was only talk:
+
+| now | gone |
+|---|---|
+| `:yume-scheme 靈明` `:yume-chaifen` | `:scheme` `:chaifen` `:cf` |
+| `:ruby-render full/off` `:ruby-html on` `:ruby-format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
+| `:layout vertical` | `:vertical` `:horizontal` |
+| `:view-wrap off` | `:nowrap` |
+| `:render off/basic/full` | `:markup` `:wysiwyg` `:source` |
+| `:buffer` `:buffer-next/previous/close` | `:buffers` `:ls` `:bd` |
+| `:clipboard-yank/paste` | `:cy` `:cp` |
+| `:view-wrap/bands/sentence/hanging/numbers/typewriter/focus/meter/punct/hud/preview` | `:wrap` `:bands` `:sentence` `:hanging` `:numbers` `:typewriter` `:focus` `:meter` `:note` `:hud` `:preview` |
+| `:count-progress` `:count-target 3000` | `:progress` `:prog` `:target` |
+| `:write-all` `:write-as 新名.md` | `:wall` `:saveas` `:sav` |
+| `:table-jump 木` `:table-find column 甲` | `:row` `:search`（Warning: `:search` came back to life later, see below） |
+| `:check-merge` | `:conflicts` |
+| `:buffer-close` | `:bclose` |
+| `:theme-mode system/dark/light` | `:appearance` |
+
+The test is one question: **is this name a thing, or one value of some thing?**
+`vertical` is a value of `layout`, `ruby-on` a value of `ruby`, `nowrap` a value of
+`wrap` — a value does not deserve a command name of its own. While `:w` `:q` `:e` `:s`
+`:toc` are each a thing in itself, with a short name already; forcing them into a
+family would only make it worse.
+
+**Once grouped, a name has to be given again.** An old name had to carry the whole
+meaning by itself, which is why they were long: `conflicts` `search` `row` `note`.
+Under a parent, the noun has already been said by the parent, and the child is left
+with the **verb** half:
+
+Warning: **`:search` later came back to life**: after giving way to `:table-find` the
+name sat empty for a while, and it is now the command for the search panel — the
+same word, an entirely different thing. So is `:replace`: it used to mean "replace
+everything `:grep` just found", and now it is one more row in that panel.
+
+| now | before | the parent has said it |
+|---|---|---|
+| `:check-merge` | `:conflicts` | check = what might be wrong |
+| `:table-find` | `:search`（that name has another owner now） | table = inside the grid |
+| `:table-jump` | `:row` | table = a row of the grid |
+| `:view-punct` | `:note` | view = only how it looks, the text untouched |
+
+`:table search` reads as "table search", `:table-find` as "find inside the table" — the
+second is the thing you are doing. `:view note` is worse: it sounds like "look at the
+notes", while that command draws punctuation faint.
+
+**Type the old name and it tells you where the new one is.** `:bands` is no longer a
+command, but typing it does not only say it is unknown:
+
+```
+:bands
+no such command as 'bands' — you want `:view-bands`
+```
+
+That sentence is **computed** — walk the command tree and find the child whose name
+matches. So the next time something is folded, the directions are right on their own,
+with nobody having to remember to come back and fix them. The only ones it cannot
+compute are the ones that were renamed — the four in the table above, plus
+`:bclose`→`:buffer-close`, `:wall`→`:write-all`, `:saveas`→`:write-as`,
+`:appearance`→`:theme`, `:dense` and `:view-dense`→`:view-margin` — because the word
+`conflicts` no longer exists anywhere in the tree, so those are kept in a table of
+their own.
+
+### Short forms
+
+A full command is folded and can say what it does; **its short form is its initials,
+and nothing else is** — `:bc` exists, `:bclose` does not, because that is neither the
+full name nor the initials: it is exactly the kind of spelling the folding was there to
+remove.
+
+**The hyphen has two uses.** One is **a tree** — `:buffer-close` is a kind of buffer
+command, `:write-all` a kind of write, and the menu walks down into them level by
+level. The other is **a pair** — `:write-quit` is not a kind of writing, it is "write,
+then quit", two verbs.
+
+Warning: **both use a hyphen, and neither uses a space.** What follows `:write` is a
+**path**, so `:write all` can only guess between a sub-command and a file named `all` —
+it used to guess the latter, and really did write a file called `all` into the current
+directory, while not one of the other changed buffers was saved. Now it says "no such
+command as 'write all' — it is spelled `:write-all`".
+If you really want a file called `all`, write `:write ./all`.
+
+| short | is |
+| --- | --- |
+| `:bc` `:bn` `:bp` | `:buffer-close` `:buffer-next` `:buffer-previous` |
+| `:qa` | `:quit-all` |
+| `:wa` | `:write-all` |
+| `:wq` | `:write-quit` |
+| `:x` `:xit` | `:exit` |
+| `:up` | `:update` |
+| `:y` | `:yume` = Chinese on — the head of a family, two keys |
+
+A short form is only an **expansion**: `:bc!` is `:buffer-close!`, and whatever the long
+command grows later, the short form gets it too. Completion follows the same rule —
+type `:wq` and the hint says `write quit`, because that is the spelling that can say
+what it means.
+
+**The word `:wysiwyg` is gone as well.** It and `:markup` were always three stops on one
+axis — the code admitted as much long ago with `wysiwyg && show_markup`: with no
+colouring, "hide the markup" means nothing; that is not putting the markup away, it is
+**throwing away** the fact that this was bold here. So they became one:
+
+| | |
+|---|---|
+| `:render off` | the source, uncoloured |
+| `:render basic` | coloured, the markup left on the page (the default) |
+| `:render full` | the markup comes off, and opens only where the cursor is (WYSIWYG) |
+
+Three values on one axis, and the fourth combination does not exist in the type any
+more.
+
+The last time this was done (schemes, readings, vertical and horizontal, colouring) the
+commands went from 42 to 26; another fold put 21 names under 7 parents
+(`view` `check` `table` `count` `write` `buffer` `theme`), and **that one** took the top
+level from 61 down to 41. The editor grew more features in the meantime than the names
+that were folded away — **what folds is the names, not the features** — and it keeps
+growing after a fold: for today's top-level count, press `:` and read the `1/n` at the
+bottom right of the panel. No number is written down here to go stale.
+
+### The whole tree
+
+Above was **how to remember**; this section is **how to look up**: first-level commands
+flush left, second-level indented one step, and the values a level deeper after a `｜`.
+The same material opens as a searchable buffer with `:help commands`, and `::` finds it
+by what it does — this one is for running your eye down from the top.
+
+`（括號）` holds the declared aliases; the shortest spelling is **computed**, and the `:`
+line will tell you itself.
+
+- `:open`（o/e/edit） — open a file
+- `:new`（enew） — start an empty buffer
+- `:write`（w） — save; a path writes a copy, `:write-as` moves to it
+  - `all` — save every file that changed
+  - `as` path — save under a new name and edit that one (`:w <文件名>` only copies, and you stay here)
+- `:wq` — save, then leave
+- `:recover` — ask whether to use the draft
+- `:reload` — read the file again; ! throws away what you changed here
+- `:reload-auto` ｜ `on` `off` — re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own
+- `:readonly`（ro） ｜ `on` `off` — read-only: lock this one against editing
+- `:goto` — go to a line (`:42` will do)
+- `:count`（wc） — how much has been written
+- `:count-progress` — how much was written today, and how far the target still is
+- `:count-target` <count>｜off — how many 字 a day; `:count-target off` stops counting against one
+- `:check-usage` — check 用字: where the file wrote something both ways<!-- verbatim -->（裏/裡、為/爲、你自己配的人名）<!-- verbatim -->, listing the side in the minority
+- `:check-names` — check names: a wiki name written with one homophone out of place (醉翁亭 as 醉翁停)
+- `:diagnostics-all` — check code: everything the language servers have complained about, as a listing gf can walk
+- `:check-charset` — check 字集: characters in none of 通用規範, Taiwan, Hong Kong or 古籍 — a typesetter's font will most likely not have them either
+- `:check-merge` — list the merge conflicts in this file
+- `:check-punct` — check 標點: half-width commas and periods in Chinese, `...`, and a 「」（）《》 opened and never closed
+- `:convert` — 簡繁 conversion, run by opencc — :convert lists the pairs it can do
+  - `s` t｜tw｜hk｜c｜g — simplified（说 为 内 吴 里 发 台）
+  - `t` s｜tw｜hk｜jp｜c｜g — opencc 繁體, <!-- verbatim -->港臺字形（說 爲 內 吳 裏 髮 臺）<!-- verbatim -->
+  - `tw` s｜t｜c｜g — <!-- verbatim -->臺灣正體（說 為 內 吳 裡 髮 臺）<!-- verbatim -->
+  - `hk` s｜t｜c｜g — 香港繁體（説 爲 内 吴 裏 髮 台）
+  - `jp` t｜c｜g — Japanese 新字体（説 爲 内 呉 裏 髪 台）
+  - `c` s｜t｜tw｜hk｜jp｜g — 大陸通規繁體（説 爲 内 吴 裏 髮 臺）
+  - `g` s｜t｜tw｜hk｜jp｜c — <!-- verbatim -->古籍通規繁體（説 爲 内 吳 裏 髮 臺）<!-- verbatim -->
+  - `opencc` ｜ `install` `update` — opencc itself: install it, or bring it up to date
+- `:quit`（q） — close this file; leave only when it was the last one (`quit!` ignores changes)
+- `:quit-all`（`:qa`） — leave everything, however many are open (`:quit-all!` ignores changes)
+- `:undo`（u） — undo the last change
+- `:redo`（red） — redo
+- `:word`（wd） — words: which list, the tint, the level
+  - `show` ｜ `on` `off` `ink` `color` `tint` `line` — the word tint
+  - `list` ｜ `local` `global` `reload` — the word list: which one is used, edit it, reread it
+  - `level` ｜ `off` `strict` `balanced` `full` — word level: how many characters make a word
+  - `discover` — mine this book's own words: names of people and places no dictionary has
+  - `habit` — habit words: what this one says far more than others do
+- `:layout`（lay） — flip horizontal and vertical
+  - `vertical` — vertical, 縱 running from the right
+  - `horizontal` — horizontal
+- `:theme` — theme: which set of inks (light or dark is `:theme-mode`)
+  - `ink` — moxiang: black, white-gold, gold and red ink; every other shade computed
+  - `bw` — heibai: black, white and grey only — weight says it, colour says nothing
+  - `cyanotype` — cyanotype: white lines on Prussian blue — the one theme of the ten whose ground truly carries colour
+  - `amber` — amber: one colour for the whole page
+  - `mogao` — mogao: the brown-black the murals really oxidised into; the gold is not gold but malachite — the caves' own mineral
+  - `morandi` — morandi: the lowest text contrast and the greyest ground of the ten
+  - `firefly` — firefly: a near-black ground, cool grey text, and warmth only in that gold — a firefly is not neon, a page should hold a few sparks
+  - `meridian` — meridian: the 朱 is not red but blue, so red-green blindness tells it apart too
+  - `kiln` — kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold
+  - `complement` — complement: colour lives in the grounds only, the writing stays neutral grey
+- `:shot` — a picture: the clipboard by default, or png/html/txt saved as a file (into the downloads folder)
+  - `screen` — photograph the window onto the clipboard
+  - `png` path — photograph the window into a PNG
+  - `html` path — draw this page as coloured HTML
+  - `txt` path — draw this page as plain text
+- `:yume` — the IME: which one is answering, changing scheme, the 拆分 annotation
+  - `scheme` <scheme> — start typing: load a scheme (with no name, the configured one); the list is whatever is installed
+  - `chaifen` ｜ `on` `off` — the 拆分 annotation beside the candidates
+  - `commit` ｜ `delayed` `unique` `fluency` — commit method: delayed (頂字), unique, whole-sentence
+  - `panel` ｜ `full` `off` — whether the candidate bar is drawn
+  - `preedit` ｜ `header` `code` `top` — the part being typed: the panel's first row / the code in the text / the first candidate in the text
+  - `which` — which scheme is in use, and where its 碼表 came from (the full path of that `.ytab`)
+  - `where` — **where 碼表 and 字料 are looked for**: six layers, where each one is and what it holds, opened as a new buffer
+  - `on` — start typing 漢字 (loading the 碼表 if it is not loaded)
+  - `abc` — ABC: yume still holds the keyboard, the keys type what they say (one tap of Shift does this too)
+  - `off` — hand the keyboard back to the system (its own input method works again)
+  - `installed` — use the 碼表 the system has installed (builtin's other half)
+  - `builtin` — use the built-in 靈明 table, whatever else is installed
+  - `table` path — use your own table (a Rime .dict.yaml will do)
+- `:syntax`（syn） — which markup this file is written in (with no argument, which one it is now)
+  - `markdown` — `#` headings, `**bold**`
+  - `typst` — `=` headings, `#import`
+  - `text` — no markup: every character in the file is only itself
+- `:pipe` — send the selection through a command and replace it with the output (`|`); `-before`/`-after` insert before or after instead of replacing (`!`/`A-!`), `-to` keeps nothing back (`A-|`)
+- `:sh` — run a command and keep its output in a buffer
+- `:!command` — hand the terminal over and watch it run (vi's spelling)
+- `:view-wrap` ｜ `on` `off` `0` `<幾欄>` — wrap long paragraphs to the next row; `:view-wrap 50` sets the measure
+- `:view-margin` ｜ `never` `dense` `loose` `always` — margin: when the lane for readings, hung punctuation, emphasis dots and 平仄 is kept
+- `:view-bands` ｜ `on` `off` `<幾條，1–4>` — bands: divide the vertical page across — top right to top left, then bottom right to bottom left
+- `:view-sentence` ｜ `on` `off` — one sentence to a column: vertically, each sentence starts its own column — a view of the page, not an edit
+- `:view-hanging` ｜ `on` `off` — hung punctuation: 句讀 sit in the margin
+- `:view-numbers-fill` ｜ `on` `off` — the line-number band: whether it has a ground of its own
+- `:view-diff` ｜ `on` `off` `toggle` — change bar: the cell beside the line number says which lines differ from git
+- `:view-typewriter` ｜ `on` `off` `toggle` — typewriter: the row you are writing stays in the middle and the paper moves
+- `:view-focus` ｜ `on` `off` `toggle` — focus: the 段 you are writing stays lit and the rest of the page stands back
+- `:view-meter` ｜ `on` `off` `toggle` — 平仄: the tone class of every character in the margin, 韻腳 at the end of a 句 (modern readings, 入聲 already distributed into the other three)
+- `:view-punct` ｜ `on` `off` `toggle` — inline notes: the full-width mark a half-width one or a ... should have been
+- `:view-code` ｜ `on` `off` `toggle` — code colours: code in a fence, coloured by its own grammar
+- `:view-hud` ｜ `off` `basic` `full` — the little sign beside the caret: nothing, a pill, a bordered panel; with no argument it reports which one it is
+- `:view-preview` ｜ `on` `off` — hand it to a real typesetter and read it in a browser
+- `:render` — how much of the result the page shows: source, coloured, WYSIWYG
+  - `off` — the source, uncoloured
+  - `basic` — basic: coloured, and not one character hidden (the default)
+  - `full` — the markup comes off, and opens only where the cursor is
+- `:indent` ｜ `off` `basic` `full` `<幾格>` — how a paragraph opens: `basic` indents and keeps the blank line, `full` folds the blank line between paragraphs too; with no argument it reports which level it is
+- `:keymap` ｜ `helix` `vim` `actions` — keymap preset: vim's `x` `s` `dd` `^` `$` translated into the keys here; with no argument it reports
+- `:indent-hint` ｜ `none` `color` `symbol` — what is drawn in a paragraph's opening two squares
+- `:indent-tab` ｜ `spaces` `tab` — what Tab types in insert mode: spaces (the default, filling to the next indent stop) or a tab; Shift-Tab types the other
+- `:indent-width` ｜ `<1–8>` — indent width: how many spaces Tab types, and how far `>` `<` shift
+- `:table` <rows> <columns> — an empty table: `:table 3 4` is three rows by four columns, the first row the headings. Only on a blank line, so it can never break a paragraph; with no numbers it is 3×3
+  - `render` ｜ `off` `basic` `full` `window` — how much of a table is drawn: the source, basic, full, or window view; bare reports the mode. The same four as `空格 t o` `空格 t b` `空格 t f` `空格 t t`
+  - `check` — look the whole table over: repeated row names, components with no row, rows of the wrong width, characters outside the 字集
+  - `rules` ｜ `off` `color` `line` — column rules: how the columns are told apart
+  - `sort` <column> a｜d … — sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending
+  - `detail` ｜ `on` `off` — the detail column (its width is `w` inside the panel)
+  - `numbers` ｜ `on` `off` — the row of column numbers: that is what t3/ and t20,20g count with
+  - `header` ｜ `on` `off` — whether the first row names the columns or is a row of data like any other
+  - `schema` — open this table's schema in the other area — writing a starting one if there is none
+  - `jump` <the row's name> — go to the row this table names (`:table-jump 木`)
+  - `find` ｜ `row` `column` — search: `row` runs across (that is `/`), `column` runs down (that is t/ t? in a table)
+- `:wheel` — how far one notch of the wheel moves; `:wheel 1` is the terminal's own
+- `:clipboard` — the paste menu: the clipboard and what was yanked, pick one (`空格 "` does it too)
+- `:clipboard-yank` — put the selection on the system clipboard
+- `:clipboard-paste` — paste from the system clipboard
+- `:buffer` — list the open files
+  - `next` — the next one
+  - `previous` — the previous one
+  - `close` — close this one (`close!` ignores changes)
+- `:format`（fmt） — format this file the way the config says ([language.markdown] format = …)
+- `:run` — run the command this language names in the config
+- `:markdown-footnote` ｜ `inline` — a footnote: the next free number, and its note opened with it
+- `:tutor` — a lesson: the text is copied into a file of your own, and you learn by editing it
+- `:help` — the keys and the commands, opened as a file you can read and search
+  - `chinese` — 漢字, punctuation, readings, the IME
+  - `vertical` — vertical writing
+  - `table` — grids, and the 拆分表
+  - `commands` — every : command
+- `:export`（ex） — write it out as html or typst, layout and all
+  - `html` <filename> — one HTML page, still vertical if the manuscript is
+  - `typst` <filename> — Typst source, horizontal, for setting a printed book
+  - `csv` <filename> — the table under the cursor, comma separated
+  - `tsv` <filename> — the table under the cursor, tab separated
+- `:search`（short `:s`, and a vim hand may write `:grep`）— open the search panel (`空格 /` does it too); `-buffers`/`-working`/`-project` say where to look
+- `:diff` — what changed, by word rather than by line
+- `:git-diff` — the same, against what git has (`HEAD` unless a commit is named)
+- `:toc`（outline） — list the headings; `:toc 3` goes to the third
+- `:ruby` — edit the reading here; how much is drawn is `:ruby-render`
+  - `render` ｜ `off` `basic` `full` — how much of a reading is drawn: the source, read but not laid out, or beside the base; bare says which it is now
+  - `auto` — write the readings in, by word (the selection, or the file)
+  - `html` ｜ `on` `off` — read `<ruby>`
+  - `typst` ｜ `on` `off` — read `#ruby(…)`
+  - `format` ｜ `html` `typst` — rewrite the readings in another dialect
+- `:s/pat/rep/` — substitute, in the selection; `%s` the whole file, `1-40s` a span, `1,5,9s` a few rows; flags g i f n t; the delimiter can change (s#a/b#c#)
+
+### `::`: forget the name, say what it does
+
+The whole section before this one rests on one thing: **you remember the verb**. But
+the verbs are English and what you are thinking is 「竖排模式」. A command you cannot
+type does not exist.
+
+**Press `:` once more** (on an empty line) and that line turns from "what is the
+command called" into "what does the command do":
+
+```
+::竖排           → :layout vertical    turn the page vertical, 縱 running from the right
+::排序           → :table-sort         sort by these columns
+::lyt            → :layout             horizontal or vertical
+::合併行         → J                   join with the line below
+```
+
+**Commands and shortcuts are on one list.** What you are asking is
+「how do I do this」, and whether the answer is a command or a key is the editor's
+business rather than yours. `⇥` steps to the next row, `⇧⇥` back, and it wraps; `Enter` does the highlighted one —
+runs the command, or presses the key. The run printed on the list is the run your own
+fingers will make next time.
+
+**The unlikely ones are left out**: anything scoring below a quarter of the top row
+is noise and is cut. The better you type the question, the shorter the list.
+
+- **Type Chinese straight in.** The input method is on for this line (one tap of
+  Shift switches to Chinese, same as `/` search), because the line was made for a
+  Chinese question in the first place.
+- **All three languages are searched, only the one you are using is shown.** The
+  descriptions are written three times over: traditional, simplified, English. On the
+  traditional build you can type 「竖排」 (simplified) and still find it, and if all you
+  remember is the English name you find it too.
+- **A partial spelling works.** `lyt` finds `layout`, `tbsort` finds `table sort` —
+  the letters only have to be in **order**, not next to each other. A slip like
+  `laoyut` still lands (command names only, English of three letters or more, two
+  letters of slack).
+- **`↑` `↓` to pick, `⇥` to take it.**
+
+**`⇥` runs nothing.** It writes the whole command **back onto the `:` line** with the
+cursor after it, and then you press Enter yourself. So Enter always runs the line you
+can **see**, not something it guessed — `:q!` cannot be undone.
+
+`::` and `:` are two modes and you can walk between them: a second `:` on an empty
+line goes in, backspacing until it is empty comes back to `:`, and one `Esc` returns
+to the text.
+
+**There is a layer of invisible words under the descriptions.** Every command can
+carry one line in `messages.toml`: `find = "直排 縱書 tategaki columns"` — findable,
+never shown. So a description can stay short while "the other four ways of saying the
+same thing" still turn up. Another way of saying it is another word, not a code
+change.
+
+### Running a command: `:sh` and `:!`
+
+Two verbs, because there are two situations, and each has its own right answer.
+
+**`:sh wc -w ch01.md`** wants a **number**, and wants it **where the text is** —
+so the output is caught and opened as a buffer (the same sort of place the
+`:check-usage` list goes). You can search it, copy from it, keep it around while
+you write. `git log`, `typst compile` and `pandoc` are all this kind.
+
+**`:!make`** wants you to **watch it run** — in colour, with a progress bar,
+maybe asking you a question along the way. A captured pipe cannot do any of
+those three. So the editor **gets out of the way**: it leaves the alternate
+screen, hands the terminal back to the command, and when it is done prints one
+line, "press any key to return to yumete…".
+
+> So, your question about where you see it run — **in the terminal you started
+> yumete in**. For the length of `:!` yumete gets off the screen entirely, and
+> takes the screen back when it returns. This is what vi did from the very
+> beginning, and it is the only honest answer.
+
+The command goes through your `$SHELL -c`, so pipes and globs count:
+`:sh wc -w *.md | sort -n` is one command, not a few words that got split apart.
+
+**A third one: `|` — send the selected text out, and replace it with what comes
+back.**
+
+"pipe" is the Unix pipe: the selected text is **fed into** a command's input,
+and what that command **spits out** replaces it. The original goes out, the
+result comes back, in place.
+
+```
+那年 冬 天        ← select this line
+|                 the command line becomes :pipe ▊
+tr -d ' ' ⏎       tr -d ' ' means "delete every space"
+那年冬天          ← done
+u                 one undo, and the text is back
+```
+
+`tr -d ' '` is not a yumete thing, it is a command your system already has.
+What `|` is for is **turning every command on your system into a yumete editing
+command**:
+
+| What you type | What the selected text becomes |
+|---|---|
+| `tr -d ' '` | every space deleted |
+| `LC_ALL=C sort` | sorted by code point (that is how the 拆分 table is sorted) |
+| `nl` | a line number in front of every line |
+| `tail -r` | the lines in reverse order |
+| `python3 -c '…'` | whatever processing you write on the spot |
+
+**Be careful with `sort` on Chinese.** It sorts by your locale, not by strokes
+and not by pinyin; and under `en_US.UTF-8`, `sort -u` treats 「木」 and 「目」 as
+the same character and deletes one of them. To sort by code point, write
+`LC_ALL=C sort`.
+
+`|` only types the verb for you — it is not a second mechanism, and **if you
+press it by mistake you can see what it is about to do**, and Esc backs out.
+The trailing newline follows whatever the original had: none there, none added;
+one there, it is kept — it will not glue two lines into one.
+
+**Four keys in all, following helix**:
+
+| Key | Command | What it does | Is the selection fed in |
+|---|---|---|---|
+| `\|` | `:pipe` | **replace** the selection with the output | fed |
+| `!` | `:pipe-before` | put the output **before the selection**, original untouched | **not fed** |
+| `A-!` | `:pipe-after` | put the output **after the selection**, original untouched | **not fed** |
+| `A-\|` | `:pipe-to` | send the selection out and **keep nothing back** | fed |
+
+Warning: **`!` and `A-!` do not feed the selection in.** That is helix's rule,
+and it is also what vi's "read a command's output in here" meant: "run a
+command, put the answer here" — which paragraph the cursor is in has nothing to
+do with it. To send the selected text in, use `\|` or `A-\|`.
+
+**A command that fails does not touch your text.** Mistyping a flag (`tr -D ' '`
+instead of `-d`) happens all the time, and what that command spits out is an
+error message — replacing a paragraph with an error message is an edit nobody
+asked for, and whether it can be undone is beside the point. So the replacement
+happens only when the command says it succeeded (exit code 0); otherwise not one
+character of the original moves, and the status line tells you what it
+complained about:
+
+```
+your text is untouched: tr: illegal option -- D
+```
+
+Succeeded with a warning: the text is replaced, and the warning is said anyway.
+
+By the way, `:sh` is the opposite — there stderr and stdout go into the buffer
+together, because there the two of them **together are what happened**, and it
+is not editing your text.
 
 Type `:` and the commands are listed above the command line, narrowing as you type.
 **What the completion would add** shows pale after the cursor; **Tab** takes it,
@@ -6009,8 +6015,8 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:format` | Format this file the way the config says for its kind |
 | `:run` *name* | Run the command this kind of file names for itself |
 | `:view-typewriter` [`on`｜`off`] | Typewriter: the cursor's row stays in the middle of the screen and the paper moves up |
-| `:view-meter` [`on`｜`off`] | 平仄: the tone class of every character in the margin (`○` 平, `●` 仄), the 韻腳 at the end of a 句 (`△▲`). **Modern readings** — 入聲 has been redistributed into the other three, see §5.9 |
-| `:view-punct` [`on`｜`off`] | Punctuation hints: half-width marks in Chinese and `...`, with the mark that should have been there drawn beside it. Not a character in the file, see §5.10 |
+| `:view-meter` [`on`｜`off`] | 平仄: the tone class of every character in the margin (`○` 平, `●` 仄), the 韻腳 at the end of a 句 (`△▲`). **Modern readings** — 入聲 has been redistributed into the other three, see §6.9 |
+| `:view-punct` [`on`｜`off`] | Punctuation hints: half-width marks in Chinese and `...`, with the mark that should have been there drawn beside it. Not a character in the file, see §6.10 |
 | `:view-code` [`on`｜`off`] | Code in a fence coloured by its own grammar (sixteen grammars; with no argument it reports) |
 | `:view-focus` [`on`｜`off`] | Focus: the **paragraph** you are writing stays as it is and the rest of the page steps back one level. The paragraph, not the column — a wrap is not a unit of writing, and when one paragraph wraps into three columns all three are the paragraph you are writing |
 | `:view-margin always` | A margin beside every column and above every row |
@@ -6095,7 +6101,7 @@ for**, so searching for the same thing again is `/` and a Tab.
 | `:ruby-auto` `:ruby-auto-rare` | Write the readings in by word (the whole file, or the selection); `rare` annotates only the rare characters |
 
 ---
-## 9. Configuration
+## 10. Configuration
 
 `~/.config/yumete/config.toml`, then the first `.yumete/config.toml` found by walking
 up from the working directory, overriding it item by item.
@@ -6685,7 +6691,7 @@ theme.
 
 ---
 
-## 10. Not there yet
+## 11. Not there yet
 
 Said plainly, so you do not go looking for it:
 
