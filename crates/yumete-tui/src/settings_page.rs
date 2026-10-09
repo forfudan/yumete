@@ -423,8 +423,22 @@ pub fn draw(
     if rows.is_empty() {
         put_text(buf, from, area.y + 2, right, &say!("set.group.not-yet"), quiet);
     }
-    for (i, setting) in rows.iter().enumerate() {
-        let y = area.y + 2 + i as u16;
+    // **光標走到哪，那一行就跳進畫面**（2026-10-09 作者定）。
+    //
+    // Warning: **從前這一欄一行都不滾**，而 `Panel::step` 夾的是 `rows().len()`，不是畫
+    // 得出來的那幾行——於是 12 行的窗口上「標記」那一組 13 行裏有 6 行只能盲着改：
+    // 沒有一行高亮、按一下空格撥了一個看不見的開關，而頂上那句話變成「改了還沒存」。
+    //
+    // 沒有記下滾到哪，是故意的：由 `panel.row` 現算，所以撥組、換窗口大小、存完重畫
+    // 都不會留下一個對不上的偏移。往下走的時候光標貼着下邊沿，往上走貼着上邊沿——
+    // 和 vim 的 `scrolloff` 開到最大同一種手感。
+    let room = foot.saturating_sub(area.y + 2) as usize;
+    let first = match room {
+        0 => 0,
+        _ => panel.row.saturating_sub(room - 1),
+    };
+    for (i, setting) in rows.iter().enumerate().skip(first) {
+        let y = area.y + 2 + (i - first) as u16;
         if y >= foot {
             break;
         }
