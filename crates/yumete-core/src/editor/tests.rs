@@ -23701,6 +23701,36 @@ fn a_dot_after_a_chinese_change_puts_the_chinese_back() {
     assert_eq!(ed.current_buffer().rope().to_string(), "紅：乙\n紅：乙\n", "中文：兩處都改了");
 }
 
+/// **換了檔，問服務器的那幾句就不算了**（2026-10-09 審出來的）。
+///
+/// `signature_on` 記的是字元下標，而下標只在它自己那一份文檔裏有意思。回退那一句
+/// hover 現在要拿它到當前 rope 上算坐標（見 `a_hover_on_the_callee`），所以一格留在
+/// 身上的舊下標會問出一句問在別處的話。
+#[test]
+fn switching_the_document_drops_what_was_asked_about_the_last_one() {
+    let dir = std::env::temp_dir().join(format!("yumete-sigswap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let one = dir.join("a.rs");
+    let two = dir.join("b.rs");
+    std::fs::write(&one, "fn main() {\n    println!\n}\n").unwrap();
+    std::fs::write(&two, "fn other() {\n    let x = 1;\n}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&one).unwrap();
+    ed.goto_line(2);
+    press(&mut ed, "A");
+    ed.on_key(Key::Char('('));
+    assert!(ed.take_signature_query().is_some(), "`(` 問了一次");
+
+    // 答案還沒回來就翻到另一份。
+    ed.open_file(&two).unwrap();
+    ed.show_signature(None);
+    assert!(ed.take_signature_doc_query().is_none(), "別問在另一份檔的下標上");
+    assert!(ed.signature_here().is_none(), "也不許浮着上一份的答案");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **行尾一個 `(`，下一行多縮一級**（2026-10-08 作者問的，查完三家之後定的）。
 ///
 /// vim 的 `autoindent` 不縮、`smartindent` 只認 `{`、`cindent` 和 helix 都縮——定的是
