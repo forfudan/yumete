@@ -174,7 +174,14 @@ impl Editor {
         if self.current_buffer().is_modified() && !force {
             return Err(EditorError::UnsavedChanges);
         }
-        self.reread_now();
+        // Warning: **讀失敗了就不許說「重讀了」**（2026-10-09 審出來的）。從前這一句
+        // 無條件蓋在 `reread_now` 剛寫的那一則上，於是 `:reload!` 一個不存在的檔，狀
+        // 態欄說「重讀了 ghost.md」而緩衝區還是原來那一份、還掛着 `[+]`。連帶的是
+        // `reload.failed` 這一則**只有自動重讀那一路到得了**，人按出來的那一路永遠
+        // 看不見它。而被告知「重讀了」的人會以為自己和磁碟同步了。
+        if !self.reread_now() {
+            return Ok(());
+        }
         self.status = say!("buffer.re-read", self.current_buffer().display_name());
         Ok(())
     }
@@ -183,7 +190,10 @@ impl Editor {
     ///
     /// Three caches answer questions *about the whole document* and every one
     /// of them is now about a document that is no longer here.
-    fn reread_now(&mut self) {
+    ///
+    /// Returns whether it worked — the caller may not say 「re-read」 over a
+    /// failure (see [`Self::reload`]).
+    fn reread_now(&mut self) -> bool {
         // A locked buffer is still re-readable: read-only is about **editing**
         // it, and taking a fresh copy of the file is the one thing a reader
         // does want.
@@ -194,7 +204,7 @@ impl Editor {
             // answers `changed_underneath` yes for ever, and the failure
             // would stamp over whatever the reader is actually reading.
             self.reload_warned = true;
-            return;
+            return false;
         }
         self.clamp_cursor();
         // The one list, not the three caches this used to clear: a re-read is
@@ -203,6 +213,7 @@ impl Editor {
         self.forget_the_document();
         // 磁碟上那一份換了人——改動條記的是跟它比出來的，也得重問（#55）。
         self.refresh_vcs(true);
+        true
     }
 
     /// Notice a file that changed underneath, if `:reload-auto on` (Feature
