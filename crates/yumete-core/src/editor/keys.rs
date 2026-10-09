@@ -1035,6 +1035,26 @@ impl Editor {
             self.pending = Pending::Surround;
             return;
         }
+        // Warning: **動作落在換行符上，vim 就是「什麽都沒動」**（2026-10-09 審出來的）。
+        //
+        // `D` 在這一端拼成 `d$`，而 `$` 走 `line_last`——空行上那一格正是換行符，段寬
+        // 是零。可 `apply` 要往後多吃一個字素（helix 的光標含自己那一格），於是
+        // `DD` 的第二下把兩行焊成了一行，`D.....` 一路啃下去。`line_last` 自己的註釋
+        // 早寫過這件事（#382：「`d` 吃掉那條換行，把兩行焊成一行」），只是零寬那一格
+        // 漏在外頭。
+        //
+        // 只擋「整段就是那個換行符」：非空行的末字上 `dl`／`x` 照舊刪得掉它（那一格
+        // 不是換行符），而 `dw` 從空行走到下一行是真的跨行，段寬不是零，不受影響。
+        if matches!(op, 'd' | 'c' | 'y') {
+            if let motion::Span::Over { anchor, head } = span {
+                let rope = self.current_buffer().rope();
+                let on_a_break =
+                    rope.get_char(anchor).is_some_and(|c| c == '\n' || c == '\r');
+                if anchor == head && on_a_break {
+                    return;
+                }
+            }
+        }
         self.snapshot();
         match op {
             // vim's `d` and `c` fill the unnamed register.
@@ -2109,6 +2129,7 @@ impl Editor {
                 // and neither knows the other exists.
                 // **`V` means whole lines**, however far along one the caret
                 // stopped (B3).
+                let whole_lines = self.vim_lines;
                 if self.vim_lines {
                     self.extend_to_line_bounds();
                     self.vim_lines = false;
@@ -2130,6 +2151,39 @@ impl Editor {
                     },
                 };
                 let (anchor, head) = self.span();
+                // Warning: **vim 的 `x` 不吃換行符**（2026-10-09 審出來的，`:h x`
+                // 「does not delete a line break」）。這一支在 vim 鍵位下是 `x` 與 `s`
+                // 走的那一條（它們拼成 `;{n}D`／`;{n}Di`），而 helix 的光標是一格寬的
+                // 選區——一行的字用完了，那一格罩着的就是換行符。於是 `abcde` 上按第
+                // 六下 `x` 把兩行併了，第七下開始啃下一段：**按住 `x` 走過整篇稿子，
+                // 而屏幕上一處都不停**。nvim 第六下什麽都不做。`20x`、`DD`、`D.`、
+                // `9s` 都是同一條（`D` 在那一端拼成 `d$`）。
+                //
+                // 只在 vim 鍵位下夾，而且只夾到**本行末**：helix 的 `d` 本來就取光標
+                // 那一格（真 helix 逐格對過，一樣），`dd`／`V` 那一路是整行的
+                // （`whole_lines`），而 `dw`／`d}` 那一路不經過這一支。
+                //
+                // Warning: **可視模式不夾**（`vim_visual_mode_acts_on_the_whole_selection`
+                // 攔下來的）。vim 的可視模式裏 `x` 刪的是**整段選區**，跨幾行就跨幾行；
+                // 那一支把 `x` 當成 `d` 轉進來（`vim_visual_key`），`extend` 還掛着，
+                // 問它就分得開。不夾的只是這一種：Normal 的 `x` 從來沒有真選區。
+                let (anchor, head) = match self.key_preset == yumete_cjk::KeyPreset::Vim
+                    && !whole_lines
+                    && !self.extend
+                {
+                    false => (anchor, head),
+                    true => {
+                        let rope = self.current_buffer().rope();
+                        let line = rope.char_to_line(anchor.min(rope.len_chars()));
+                        let breaks_at =
+                            rope.line_to_char(line) + motion::line_char_len(rope, line);
+                        // 這一行的字已經用完了（空行，或者光標停在換行符上）。
+                        if anchor >= breaks_at {
+                            return;
+                        }
+                        (anchor, head.min(breaks_at - 1))
+                    }
+                };
                 self.apply(op, motion::Span::Over { anchor, head });
             }
             // Yank / paste (Helix `y` / `p` / `P`).
