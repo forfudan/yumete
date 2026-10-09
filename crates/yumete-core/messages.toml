@@ -6458,7 +6458,7 @@ en = "nowhere on this screen to jump to"
 # C-s：把這個選區記進跳轉表，C-o 回得來
 key = "jump.selection-saved"
 zht = "已記下此處，C-o 可返回"
-zhs = "已記下此處，C-o 可返回"
+zhs = "已记下此处，C-o 可返回"
 en = "saved; C-o comes back"
 
 [[message]]
@@ -6660,10 +6660,10 @@ zhs = "{0}：跑完了"
 en = "{0}: done"
 
 [[message]]
-# 設定裏那條命令其實是伺服器
+# 設定裏那條命令其實是服務器
 key = "language.is-a-server"
-zht = "{0} 是個伺服器——用 :view-preview 開它"
-zhs = "{0} 是个伺服器——用 :view-preview 开它"
+zht = "{0} 是個服務器——用 :view-preview 開它"
+zhs = "{0} 是个服务器——用 :view-preview 开它"
 en = "{0} is a server — :view-preview starts it"
 
 [[message]]
@@ -7145,7 +7145,7 @@ en = "{0} is not on this machine — check the spelling in :settings, or install
 # 服務器提不出任何候選
 key = "lsp.nothing-to-offer"
 zht = "此處無候選"
-zhs = "此处無候選"
+zhs = "此处无候选"
 en = "nothing fits here"
 
 [[message]]
@@ -7202,8 +7202,8 @@ en = "the language server is starting…"
 [[message]]
 # 語言服務器死了
 key = "lsp.stopped"
-zht = "{0} 的語言服務器停了——它說過的都不再算數，下一個檔會重新起一個"
-zhs = "{0} 的语言服务器停了——它说过的都不再算数，下一个档会重新起一个"
+zht = "{0} 的語言服務器已停止——其所言不再可信，下一文檔會重開一個"
+zhs = "{0} 的语言服务器已停止——其所言不再可信，下一文档会重开一个"
 en = "the {0} language server stopped — what it said no longer counts, and the next file starts a new one"
 
 [[message]]
@@ -7216,8 +7216,8 @@ en = "Tab completes · C-n/C-p to move"
 [[message]]
 # gd 跳到了定義那一行
 key = "lsp.went"
-zht = "{0} 第 {1} 行（C-o 回來）"
-zhs = "{0} 第 {1} 行（C-o 回来）"
+zht = "{0} 第 {1} 行（C-o 返回）"
+zhs = "{0} 第 {1} 行（C-o 返回）"
 en = "{0} line {1} (C-o comes back)"
 
 
@@ -7238,7 +7238,7 @@ zhs = "{0}/{1} · Tab 补全"
 en = "{0}/{1} · Tab completes"
 
 [[message]]
-# 還沒錄過巨集就按了播放
+# 還沒錄過宏就按了播放
 key = "macro.nothing-recorded"
 zht = "還沒有錄過——Q 開始錄，再按 Q 停"
 zhs = "还没有录过——Q 开始录，再按 Q 停"
@@ -7322,8 +7322,8 @@ en = "vertical layout"
 [[message]]
 # 跟着註走，註就在本行
 key = "note.already-on-this-line"
-zht = "註就在這一行"
-zhs = "注就在这一行"
+zht = "註釋就在本行"
+zhs = "注释就在本行"
 en = "the note is on this line"
 
 [[message]]
@@ -7539,14 +7539,14 @@ zhs = "这个文件没有标记，没有什么可以预览的"
 en = "this file has no markup, so there is nothing to preview"
 
 [[message]]
-# 啓動時停掉上次留下的預覽伺服器
+# 啓動時停掉上次留下的預覽服務器
 key = "preview.orphan-stopped"
-zht = "上次留下的預覽伺服器（{0}）停掉了"
-zhs = "上次留下的预览伺服器（{0}）停掉了"
+zht = "上次留下的預覽服務器（{0}）停掉了"
+zhs = "上次留下的预览服务器（{0}）停掉了"
 en = "stopped the preview server left over from last time ({0})"
 
 [[message]]
-# 預覽伺服器起來了
+# 預覽服務器開啟了
 key = "preview.running"
 zht = "預覽：{0}（`:view-preview off` 停）"
 zhs = "预览：{0}（`:view-preview off` 停）"
@@ -7560,14 +7560,14 @@ zhs = "先保存——排版器读的是文件"
 en = "save first — the typesetter reads the file"
 
 [[message]]
-# 預覽伺服器起來中
+# 預覽服務器開啟中
 key = "preview.starting"
-zht = "預覽：{0} 起來中……"
-zhs = "预览：{0} 起来中……"
+zht = "預覽：{0} 開啟中……"
+zhs = "预览：{0} 开启中……"
 en = "preview: starting {0}…"
 
 [[message]]
-# 預覽伺服器停了
+# 預覽服務器停了
 key = "preview.stopped"
 zht = "預覽：{0} 已停"
 zhs = "预览：{0} 已停"
@@ -7576,8 +7576,8 @@ en = "preview: {0} stopped"
 [[message]]
 # :view-preview 一份 Typst 稿子，排版器正在起來
 key = "preview.typst-starting"
-zht = "預覽：tinymist 起來中……"
-zhs = "预览：tinymist 起来中……"
+zht = "預覽：tinymist 開啟中……"
+zhs = "预览：tinymist 开启中……"
 en = "preview: tinymist starting…"
 
 
@@ -8990,9 +8990,9 @@ en = "language key"
 [[message]]
 # 設置：界面语言——一句話
 key = "set.editor.language.hint"
-zht = "編輯器自己説話用哪種語言。和文件内容無關"
-zhs = "编辑器自己说话用哪种语言。和文件内容无关"
-en = "language"
+zht = "編輯器界面顯示語言"
+zhs = "编辑器界面显示语言"
+en = "interface language"
 
 [[message]]
 # 設置：排版方向
@@ -9060,8 +9060,8 @@ en = "measure"
 [[message]]
 # 設置：正文寬度——一句話
 key = "set.editor.measure.hint"
-zht = "真的寫到這麽寬：行在這裏折，右邊是邊距"
-zhs = "真的写到这么宽：行在这里折，右边是边距"
+zht = "行在這裏折疊，右邊是頁邊距"
+zhs = "行在这里折叠，右边是页边距"
 en = "the line really breaks here; what is right of it is margin"
 
 [[message]]
