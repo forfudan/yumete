@@ -24744,3 +24744,27 @@ fn r_at_the_end_of_a_line_does_not_swallow_the_line_ending() {
     // 從前這裏是 `abcdfghij`：兩行接成了一行。
     assert_eq!(ed.current_buffer().rope().to_string(), "abcd\nfghij");
 }
+
+/// **`Esc` 按下去之後，再叫一次就該回來——不必先動光標**（2026-10-10 報的）。
+///
+/// 原話：「如果按 Esc 关闭了文档，再把 space-k 按冒烟也不会出文档，必须要动一下
+/// 光标才能再开。」`Esc` 立的是一個「這個位置上別浮」的閂，而它從前只有光標挪開
+/// 纔解得掉；手動叫的那一句沒碰它，於是內容放回去了而畫面照樣壓着。
+#[test]
+fn asking_for_the_float_again_outranks_the_esc_that_hushed_it() {
+    let mut ed = typed("| 名 | 說明 |\n| --- | --- |\n| 甲 | 第一條 |");
+    ed.execute("goto 3").unwrap();
+    let summon = |ed: &mut Editor| {
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('i'));
+    };
+    summon(&mut ed);
+    assert!(ed.info_afloat().is_some(), "空格 i 浮出記錄");
+    ed.on_key(Key::Esc);
+    assert!(ed.info_afloat().is_none(), "Esc 把它按下去");
+    summon(&mut ed);
+    assert!(
+        ed.info_afloat().is_some(),
+        "再叫一次就回來，光標一步沒動"
+    );
+}

@@ -42,11 +42,10 @@ impl Editor {
             }
             return;
         }
-        // **再按一次同一個鍵就收起來**，同別的四種。Warning: 判準是
-        // `detail_visible()` 而不是 `info_asked`——記錄在 `t t` 那一檔下是**即
-        // 時**的（沒人叫過它），而 `t i` 照樣該收得掉它。
-        let here = self.info_in_the_sidebar().is_none();
-        if self.detail_visible() && here == afloat {
+        // **再按一次同一個鍵就收起來**，同別的四種——而且問的是同一句
+        // （[`Editor::info_on_screen`]）。從前這裏問 `detail_visible()`，它不知道
+        // `Esc` 把浮窗按下去了，於是按下去之後再按 `空格 i` 當場又收一次。
+        if self.info_on_screen(crate::sidebar::Info::Record, afloat) {
             self.show_detail = Some(false);
             self.info_asked = None;
             self.status = say!("ui.detail-panel-off");
