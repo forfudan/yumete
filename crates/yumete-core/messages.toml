@@ -2889,6 +2889,34 @@ zhs = "竖排一列写几个字；`:view-wrap-vertical 30` 定长度，`0` 跟�
 en = "how many characters go in one vertical column; `0` follows the window"
 
 [[message]]
+# :which-wrap 收到不認得的字母
+key = "cmd.which-wrap.bad"
+zht = "出現了不合法字母。只允許 b h l < > ~"
+zhs = "出现了不合法字母。只允许 b h l < > ~"
+en = "that is not one of the letters. only b h l < > ~"
+
+[[message]]
+# :which-wrap 裸寫，而一個鍵都不跨
+key = "cmd.which-wrap.none"
+zht = "無"
+zhs = "无"
+en = "none"
+
+[[message]]
+# :which-wrap 裸寫：此刻是哪幾個字母
+key = "cmd.which-wrap.now"
+zht = "當前跨行按鍵：{0}"
+zhs = "当前跨行按键：{0}"
+en = "keys that cross a line end: {0}"
+
+[[message]]
+# :which-wrap 收到 s——vim 有這一檔，我們沒有
+key = "cmd.which-wrap.space"
+zht = "s 不是合法字母。空格在yumete中是菜單鍵"
+zhs = "s 不是合法字母。空格在yumete中是菜单键"
+en = "s is not one of the letters. Space is the menu key here"
+
+[[message]]
 # : 命令選單裏 color 那一項的說明（wiki 組）
 key = "cmd.wikis.color"
 zht = "詞條名染成金色，橫排竪排一樣（出廠）"

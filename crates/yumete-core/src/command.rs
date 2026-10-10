@@ -249,6 +249,8 @@ pub enum Command {
     /// `:view-wrap` / `:view-wrap off` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
+    /// `:which-wrap`——哪些鍵走得出一行的兩頭。`None` ＝ 裸寫，報現狀。
+    WhichWrap(Option<String>),
     /// `:view-wrap <n>` — write to a measure of `n` columns rather than to the
     /// window; `:view-wrap 0` gives the window back (Feature #113).
     SetMeasure(Option<usize>),
@@ -3512,6 +3514,16 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: None,
+    },
+    Entry {
+        // **和 `[editor] which_wrap` 是同一格**，命令只是不開配置檔也改得動它。
+        // 說明借設置那一條的（同一句話，沒有第二種說法）。
+        name: "which-wrap",
+        aliases: &[],
+        help: "set.editor.which-wrap.hint",
+        needs: &[],
+        params: &[Param::Free("<字母>")],
+        build: Some(|p| Ok(Command::WhichWrap(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "view-wrap",

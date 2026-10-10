@@ -1274,6 +1274,39 @@ impl Editor {
                 self.refresh_goal_column();
                 Ok(CommandOutcome::Continue)
             }
+            // **裸寫報現狀**，同別的開關（2026-10-09 立的規矩）。
+            Command::WhichWrap(None) => {
+                let now = match self.which_wrap().is_empty() {
+                    true => say!("cmd.which-wrap.none"),
+                    false => self.which_wrap().to_string(),
+                };
+                self.status = say!("cmd.which-wrap.now", now);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::WhichWrap(Some(written)) => {
+                // 校驗和配置檔那一邊是同一句（`yumete_cjk::read_which_wrap`）。
+                // **`off` 清空。** vim 那邊是 `:set whichwrap=`，而一條命令的參數
+                // 寫不出空串（2026-10-10 定）。
+                let (kept, bad) = match written.trim() {
+                    "off" => (String::new(), Vec::new()),
+                    word => yumete_cjk::read_which_wrap(word),
+                };
+                if bad.contains(&'s') {
+                    self.status = say!("cmd.which-wrap.space");
+                    return Ok(CommandOutcome::Continue);
+                }
+                if !bad.is_empty() {
+                    self.status = say!("cmd.which-wrap.bad");
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.set_which_wrap(kept);
+                let now = match self.which_wrap().is_empty() {
+                    true => say!("cmd.which-wrap.none"),
+                    false => self.which_wrap().to_string(),
+                };
+                self.status = say!("cmd.which-wrap.now", now);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetSoftWrap(on) => {
                 // **縱書 has nothing to turn off.** A 縱 is broken by the
                 // height of the window, and that is not the writer's to set —
