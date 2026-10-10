@@ -2348,6 +2348,19 @@ impl Config {
         )
     }
 
+    /// Parse one source **and keep what it had to say**.
+    ///
+    /// `from_toml` throws the complaints away (it is a test helper and two
+    /// callers want only the values). This is the entry the domain test uses:
+    /// 「每一項聲明的域，配置那一頭真的攔得住嗎」。
+    pub fn from_toml_saying(source: &str) -> (Config, Vec<String>) {
+        let mut problems = Vec::new();
+        let config = toml::from_str::<RawConfig>(source)
+            .unwrap_or_default()
+            .into_config_saying(&mut problems);
+        (config, problems)
+    }
+
     /// Parse a single TOML source (used for a one-file config or in tests).
     pub fn from_toml(source: &str) -> Config {
         toml::from_str::<RawConfig>(source)
@@ -3241,27 +3254,55 @@ impl RawConfig {
             }
             got
         }
+        /// **按那一項自己聲明的域鉗，而不是在這裏另寫一遍**（2026-10-10 報的）。
+        ///
+        /// 域寫在 `settings_ui::SETTINGS` 的 `Kind::Count` 上，面板照它畫、照它
+        /// 停。從前這一支另手寫一遍，於是 `indent_width` 這裏只有 `.max(1)` 而
+        /// 面板寫着 1–16：配置檔裏 `999` 靜靜收下，一下 `>` 把正文推到第 1008 欄
+        /// 推出屏幕——而同一個 `999` 從 `:indent-width` 打進去是拒的。
+        /// `tests/settings_ui.rs::every_count_the_panel_declares_is_held_coming_in`
+        /// 盯着「每一行聲明的上界都真的攔得住」。
+        fn as_declared(
+            problems: &mut Vec<String>,
+            table: &str,
+            key: &str,
+            want: usize,
+            fallback: usize,
+        ) -> usize {
+            let Some((low, high, zeroed)) = crate::settings_ui::counted(table, key) else {
+                return fallback;
+            };
+            let got = match zeroed && want == 0 {
+                true => 0,
+                false => want.clamp(low, high),
+            };
+            let range = match zeroed {
+                true => format!("0，或者 {low} 到 {high}"),
+                false => format!("{low} 到 {high}"),
+            };
+            held(problems, &format!("[{table}] {key}"), want, got, &range)
+        }
         let mut config = Config::default();
         if let Some(width) = self.editor.indent_width {
             config.editor.indent_width =
-                held(problems, "[editor] indent_width", width, width.max(1), "1 起");
+                as_declared(problems, "editor", "indent_width", width, width.max(1));
         }
         if let Some(tab) = self.editor.tab_width {
             config.editor.tab_width =
-                held(problems, "[editor] tab_width", tab, tab.max(1), "1 起");
+                as_declared(problems, "editor", "tab_width", tab, tab.max(1));
         }
         if let Some(mode) = self.editor.line_numbers {
             config.editor.line_numbers = parse_line_numbers(&mode);
         }
         if let Some(off) = self.editor.scrolloff {
-            config.editor.scrolloff = off;
+            config.editor.scrolloff = as_declared(problems, "editor", "scrolloff", off, off);
         }
         // Zero is 「the terminal's own step」, which is one notch, one unit —
         // not 「do not scroll」, which is a setting nobody wants and which a
         // stuck mouse would be indistinguishable from.
         if let Some(step) = self.editor.wheel_step {
             config.editor.wheel_step =
-                held(problems, "[editor] wheel_step", step, step.max(1), "1 起");
+                as_declared(problems, "editor", "wheel_step", step, step.max(1));
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;

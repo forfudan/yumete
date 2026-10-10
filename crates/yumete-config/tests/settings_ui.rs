@@ -367,3 +367,39 @@ fn every_theme_the_panel_can_turn_to_is_one_the_editor_knows() {
         missing.join("\n")
     );
 }
+
+/// **每一行聲明的數域，配置那一頭也要攔得住**（2026-10-10 報的）。
+///
+/// 域寫在 `Kind::Count` 上，面板照它畫、照它停；而 `into_config` 從前另手寫一遍，
+/// 於是 `indent_width` 從配置檔進來只有 `.max(1)`——`999` 靜靜收下，一下 `>` 把
+/// 正文推到第 1008 欄推出屏幕，而同一個數從 `:indent-width` 打進去是拒的。
+/// `tab_width`、`wheel_step` 的上界與 `scrolloff` 的整個域同病。
+#[test]
+fn every_count_the_panel_declares_is_held_coming_in() {
+    use yumete_config::settings_ui::{Kind, SETTINGS};
+    let mut loose = Vec::new();
+    for one in SETTINGS {
+        let Kind::Count { low, high, zero } = one.kind else {
+            continue;
+        };
+        for (what, value) in [("上界", high + 1), ("下界", low.saturating_sub(1))] {
+            // `0` 另有意思的那幾項，`low - 1` 就是那個 `0`，它是合法的。
+            if what == "下界" && (value == 0 && zero.is_some() || low == 0) {
+                continue;
+            }
+            let source = format!("[{}]\n{} = {value}\n", one.table, one.key);
+            let (_, problems) = yumete_config::Config::from_toml_saying(&source);
+            if !problems.iter().any(|p| p.contains(one.key)) {
+                loose.push(format!(
+                    "[{}] {} 聲明的是 {low}–{high}，而 {value} 靜靜收下了（{what}）",
+                    one.table, one.key
+                ));
+            }
+        }
+    }
+    assert!(
+        loose.is_empty(),
+        "面板聲明的域，配置那一頭沒攔住：\n{}",
+        loose.join("\n")
+    );
+}
