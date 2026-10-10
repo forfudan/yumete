@@ -362,9 +362,14 @@ impl Editor {
     }
 
     pub(super) fn on_command_key(&mut self, key: Key) -> KeyOutcome {
-        // Anything but Tab abandons the completion in progress, so the next Tab
-        // starts from what is actually on the line.
-        if !matches!(key, Key::Tab | Key::BackTab) {
+        // Anything but the four walking keys abandons the completion in
+        // progress, so the next one starts from what is actually on the line.
+        //
+        // Warning: **`C-n`/`C-p` belong in this list too** (2026-10-10). Added
+        // to the walk below and left out of here, they moved one step and then
+        // stuck: each press threw away the prefix the last one was walking, so
+        // the second `C-n` started over and wrote the first match again.
+        if !matches!(key, Key::Tab | Key::BackTab | Key::Ctrl('n') | Key::Ctrl('p')) {
             self.completion = None;
         }
         // Anything but Up/Down leaves the history where it was: walking back
@@ -385,11 +390,15 @@ impl Editor {
             // 下面那個 `other` 分支——而那裏纔是喊預覽的地方。於是手打
             // `:theme mogao` 預覽得了，⇥ 到同一個名字上一點反應都沒有，而 ⇥ 正是
             // 挑主題最順手的那條路（名字就在單子上）。
-            Key::Tab => {
+            // **`C-n`/`C-p` 走同一條路**（2026-10-10 用戶問的：「冒號命令模式裏，
+            // 能不能用 ctrl+n/p 上下翻？」）。挑選器與插入態那張單子早就認這一對，
+            // 而命令行上它們掉進下面 `Key::Ctrl(_) => {}` 那個兜底裏，按下去什麽
+            // 都不動——同一個手勢在相鄰兩扇面板上一扇認一扇不認。
+            Key::Tab | Key::Ctrl('n') => {
                 self.cycle_completion(1);
                 self.ask_for_a_trial();
             }
-            Key::BackTab => {
+            Key::BackTab | Key::Ctrl('p') => {
                 self.cycle_completion(-1);
                 self.ask_for_a_trial();
             }
@@ -477,8 +486,8 @@ impl Editor {
             // 一改也把相鄰兩行上同一個鍵的兩種意思合回了一種。
             //
             // **走到頭繞回來**：這是一張排過序的短名單，不是一份目錄。
-            Key::Tab | Key::Down => self.walk_lookfor(1),
-            Key::BackTab | Key::Up => self.walk_lookfor(-1),
+            Key::Tab | Key::Down | Key::Ctrl('n') => self.walk_lookfor(1),
+            Key::BackTab | Key::Up | Key::Ctrl('p') => self.walk_lookfor(-1),
             Key::Enter => self.adopt_lookfor(),
             other => {
                 self.edit_prompt(other);
