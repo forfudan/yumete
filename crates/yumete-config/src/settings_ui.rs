@@ -590,42 +590,6 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "panel",
-        key: "display",
-        group: Group::Interface,
-        kind: Kind::Pick(PANEL_DISPLAY_WAYS),
-        label: "set.panel.display",
-        hint: "set.panel.display.hint",
-        factory: r#""full""#,
-    },
-    Setting {
-        table: "panel",
-        key: "preedit",
-        group: Group::Interface,
-        kind: Kind::Pick(PANEL_PREEDIT_WAYS),
-        label: "set.panel.preedit",
-        hint: "set.panel.preedit.hint",
-        factory: r#""header""#,
-    },
-    Setting {
-        table: "panel",
-        key: "page_size",
-        group: Group::Interface,
-        kind: Kind::Count { low: 1, high: 9, zero: None },
-        label: "set.panel.page-size",
-        hint: "set.panel.page-size.hint",
-        factory: "6",
-    },
-    Setting {
-        table: "panel",
-        key: "markers",
-        group: Group::Interface,
-        kind: Kind::Text,
-        label: "set.panel.markers",
-        hint: "set.panel.markers.hint",
-        factory: r#""１２３４５６７８９""#,
-    },
-    Setting {
-        table: "panel",
         key: "rounded",
         group: Group::Interface,
         kind: Kind::Tick,
@@ -704,6 +668,50 @@ pub const SETTINGS: &[Setting] = &[
         label: "set.ime.system",
         hint: "set.ime.system.hint",
         factory: r#""auto""#,
+    },
+    // **候選欄那幾項歸「輸入法」，不歸「界面」**（2026-10-10 作者提）。原話：
+    // 「An English-speaking user who never use Yume IME will be at loss when
+    // they see these option in the Interface tab.」擺在 `ime.*` 後面，因為「用
+    // 哪一張碼表」是先問的那一句。
+    //
+    // Warning: **`panel.rounded` 沒跟過來**，它不只管候選欄：`panel.rs` 那一支
+    // 畫的是編輯器自己每一扇浮動面板（`空格` which-key、腳注、`:write` 核驗、
+    // 命令行、`:` 選單），候選欄只是它的第二個讀者。作者定的判準就是這一條。
+    Setting {
+        table: "panel",
+        key: "display",
+        group: Group::Ime,
+        kind: Kind::Pick(PANEL_DISPLAY_WAYS),
+        label: "set.panel.display",
+        hint: "set.panel.display.hint",
+        factory: r#""full""#,
+    },
+    Setting {
+        table: "panel",
+        key: "preedit",
+        group: Group::Ime,
+        kind: Kind::Pick(PANEL_PREEDIT_WAYS),
+        label: "set.panel.preedit",
+        hint: "set.panel.preedit.hint",
+        factory: r#""header""#,
+    },
+    Setting {
+        table: "panel",
+        key: "page_size",
+        group: Group::Ime,
+        kind: Kind::Count { low: 1, high: 9, zero: None },
+        label: "set.panel.page-size",
+        hint: "set.panel.page-size.hint",
+        factory: "6",
+    },
+    Setting {
+        table: "panel",
+        key: "markers",
+        group: Group::Ime,
+        kind: Kind::Text,
+        label: "set.panel.markers",
+        hint: "set.panel.markers.hint",
+        factory: r#""１２３４５６７８９""#,
     },
     Setting {
         table: "editor",
