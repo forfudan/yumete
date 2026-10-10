@@ -561,7 +561,15 @@ impl Panel {
         if matches!(setting.kind, Kind::Tick | Kind::Pick(_)) {
             return;
         }
-        self.typing = Some(unwritten(&self.mine_now(setting)));
+        // Warning: **`PickOr` 從空的開始**（2026-10-10 報的）。從前這裏一律把現在
+        // 那個值放進去、光標擺在末尾，於是在主題那一行按 `i` 再打字得到的是
+        // `ink我的主題`——要先按三下退格纔打得出自己的名字。`Count` 和 `Text` 照舊
+        // 帶着現在那個值（把 16 改成 12 是改，不是重打），而 `PickOr` 的本意就是
+        // 「打一個表裏沒有的名字」，現在那個名字永遠不是你要的那一個。
+        self.typing = Some(match setting.kind {
+            Kind::PickOr(_) => String::new(),
+            _ => unwritten(&self.mine_now(setting)),
+        });
     }
 
     /// 打完了 —— `Enter`。打的不是個數就原樣不動。

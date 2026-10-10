@@ -8023,9 +8023,9 @@ en = "markup: {0}"
 [[message]]
 # :markup 給了不認得的語法
 key = "render.no-such-markup"
-zht = "沒有「{0}」這種語法——markdown 或 typst"
-zhs = "没有「{0}」这种语法——markdown 或 typst"
-en = "no such markup as '{0}' — markdown or typst"
+zht = "沒有「{0}」這種語法——:syntax 按一下 Tab 看有哪些"
+zhs = "没有「{0}」这种语法——:syntax 按一下 Tab 看有哪些"
+en = "no such syntax as '{0}' — press Tab after :syntax to see them"
 
 [[message]]
 # :render off，原文照畫
