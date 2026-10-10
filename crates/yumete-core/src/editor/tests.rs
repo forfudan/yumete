@@ -24768,3 +24768,38 @@ fn asking_for_the_float_again_outranks_the_esc_that_hushed_it() {
         "再叫一次就回來，光標一步沒動"
     );
 }
+
+/// 同上一條，釘的是**報上來的那個鍵**：`空格 k`（2026-10-10）。
+///
+/// 原話：「如果按 Esc 关闭了文档，再把 space-k 按冒烟也不会出文档，必须要动一下
+/// 光标才能再开。」文檔那一扇要有語言服務器纔出得來，所以這裏照
+/// `asking_again_after_walking_back_opens_it_in_one_press` 的辦法，自己把答覆餵
+/// 進去。
+#[test]
+fn space_k_after_an_esc_opens_the_doc_again_without_moving() {
+    let dir = std::env::temp_dir().join(format!("yumete-hover-esc-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "gg");
+
+    press(&mut ed, " k");
+    let _ = ed.take_hover_query();
+    ed.show_hover("fn compile_the_table()");
+    assert!(ed.hover_afloat().is_some(), "開着");
+
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.hover_afloat(), None, "Esc 把它按下去");
+
+    // Warning: **光標一步沒動。** 從前那個閂只認「光標挪開」，於是這一下白按。
+    press(&mut ed, " k");
+    assert!(
+        ed.hover_afloat().is_some(),
+        "再按一次就回來：{}",
+        ed.status()
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
