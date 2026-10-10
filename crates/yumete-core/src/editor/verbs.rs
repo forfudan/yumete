@@ -61,6 +61,7 @@ impl Editor {
             yumete_cjk::KeyPreset::Vim => true,
             _ => self.restore_caret,
         };
+        let keeping = std::mem::take(&mut self.keep_anchor_while_inserting);
         self.restore_caret = false;
         if !back {
             return;
@@ -70,7 +71,13 @@ impl Editor {
             Some((start, _)) => stepped.max(start),
             None => stepped,
         };
-        self.set_cursor(stepped);
+        // **留住錨點的那一趟，出門只動頭**：剛打的那一段連同原來那個字就是新的
+        // 選區（2026-10-10，照 helix 的 `restore_cursor`）。退到錨點前面就塌回一
+        // 點——刪回頭了，選區沒有東西可圈。
+        match keeping && stepped >= self.sel.anchor() {
+            true => self.sel.set_head(stepped),
+            false => self.set_cursor(stepped),
+        }
     }
 
     /// Take the pending count prefix, defaulting to one.    /// Take the pending count prefix, defaulting to one.

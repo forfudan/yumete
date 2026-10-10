@@ -24870,3 +24870,35 @@ fn j_walks_out_of_a_paragraph_in_vertical_under_both_keymaps() {
     }
 }
 
+
+/// **`a` 打完 `Esc`，剛寫的那一段連同原來那個字就是選區**（2026-10-10，照 helix）。
+///
+/// helix 的光標本來就是一個寬度 1 的選區，而 `a` 是「在**選區**後面插入」
+/// （`book/src/keymap.md`）：頭往前推一格，插入點落在選區裏面，打進去的字自然被
+/// 圈進來。它自己的測試釘着這一條：`("#[foo|]#", "abar<esc>", "#[foobar|]#")`。
+///
+/// Warning: **vim 不是這樣。** 那邊 `a` 打完 `Esc` 只剩一個字的光標，所以這一條
+/// 兩套鍵位各走各的。
+#[test]
+fn append_leaves_what_you_typed_selected_in_helix_but_not_in_vim() {
+    let span = |vim: bool| -> (usize, usize) {
+        let mut ed = typed("abc");
+        ed.set_key_preset(match vim {
+            true => yumete_cjk::KeyPreset::Vim,
+            false => yumete_cjk::KeyPreset::Helix,
+        });
+        ed.execute("goto 1").unwrap();
+        for key in "la".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        for key in "XY".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        ed.on_key(Key::Esc);
+        ed.selection()
+    };
+    // `abXYc`：錨點在 `b`（下標 1），選區到 `Y`（下標 3）為止，交出來的末端是排他的。
+    assert_eq!(span(false), (1, 4), "helix：b X Y 都在選區裏");
+    // vim：只剩一個字的光標，停在剛打的最後一個字上。
+    assert_eq!(span(true), (3, 4), "vim：一個字的光標");
+}

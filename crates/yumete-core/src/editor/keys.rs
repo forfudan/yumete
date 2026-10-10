@@ -2275,12 +2275,22 @@ impl Editor {
             }
             Key::Char('a') => {
                 self.snapshot();
+                // **錨點留在選區的開頭**（2026-10-10，照 helix）：`a` 是「在選區
+                // 後面插入」，所以打進去的字和原來那一段一起成為新的選區。
+                let from = self.selection().0;
                 let pos = self.append_position();
                 self.set_cursor(pos);
                 self.enter_insert();
                 // **`a` 出門的時候要退回那一個字上**（2026-10-09，照 helix）。
                 // `enter_insert` 剛把這一格清了，所以擺在它後面。
                 self.restore_caret = true;
+                // Warning: **只有 helix 鍵位。** vim 的 `a` 打完 `Esc` 只剩一個字的
+                // 光標；兩套在這一條上真的不一樣，而 vim 那邊 `x` ＝ `;D`，`;`
+                // 先把選區塌掉——所以「看起來對」掩得住這個錯，要問選區纔問得出來。
+                if self.key_preset != yumete_cjk::KeyPreset::Vim {
+                    self.sel.set_anchor(from);
+                    self.keep_anchor_while_inserting = true;
+                }
                 self.type_it_again(count, None);
             }
             Key::Char('I') => {
