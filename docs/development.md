@@ -20502,6 +20502,27 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.158 One file, one name (2026-10-10)
+
+`Buffer::open` kept whatever the reader typed, so `yumete src/main.rs` stored `src/main.rs`.
+`lsp::uri_of` only prefixes `file://`, so the server was told about `file:///src/main.rs` — a
+file that does not exist. It answered about the real path, and from then on the diagnostics sat
+under one key while the buffer asked under another: no gutter marks, `空格 d` said this line has
+none, and `:diagnostics-all` listed them anyway (it does not look up by buffer path), so it read
+as 「the server is running, this line is just fine」. Opening a file by a relative path is the
+ordinary way to open one.
+
+The same spelling gap had quietly disabled a second feature: `空格 f`'s 「recently visited
+first」 compares `visited` (buffer paths) against the walk's absolute paths, and the two never
+matched, so the bonus had never once applied. A golden frame was recording that.
+
+`open` now absolutises. It does **not** resolve symlinks: that turned fifteen tests red, because
+they compare against `std::env::temp_dir()` and macOS spells it `/var/folders/…` for
+`/private/var/folders/…`. **So the symlink half is still open** — under `/tmp`, `/var`, or a
+symlinked project directory the server still answers about a path the buffer does not recognise.
+Fixing it means one canonical form on both sides of `Problems::by_source` (insert from the
+server, look up from the buffer) rather than in `Buffer::open`.
+
 ## 5.157 A sentence ends where the paragraph does, and the oracle said where (2026-10-10)
 
 `dis`/`das` differed from nvim in 254 of 310 cells. Two causes, both in `sentence_object_span`:
