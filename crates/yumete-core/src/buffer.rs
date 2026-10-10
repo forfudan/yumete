@@ -375,7 +375,29 @@ impl Buffer {
     /// save creates it — this matches what writers expect from `yumete newfile`.
     /// Any other I/O error (permissions, a directory, invalid UTF-8) is returned.
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        // **一份檔只許有一個名字**（2026-10-10 一輪審查報來的，LSP 整個靜靜地死）。
+        //
+        // 從前這裏原樣收下人打的那一個，於是 `yumete src/main.rs` 存的是
+        // `src/main.rs`，而 `lsp::uri_of` 只在前面貼 `file://`——告訴服務器的是
+        // `file:///src/main.rs`，一個根本不存在的檔。服務器回話用的是它自己算出
+        // 來的真路徑，於是診斷存在一個鍵上、緩衝區問的是另一個鍵：行號槽不標、
+        // `空格 d` 說這一行沒有診斷，而 `:diagnostics-all` 列得出來（它不按緩衝區
+        // 路徑查），所以看着像「服務器在跑，只是這一行沒事」。
+        //
+        // macOS 上軟鏈接讓同一件事在**絕對路徑**下也會發生：`/var` 是
+        // `/private/var` 的鏈接，所以 `$TMPDIR` 裏的檔必中。
+        //
+        // Warning: **只絕對化，不解析軟鏈接。** 解析了同一天就弄紅十五條測試——它
+        // 們拿 `std::env::temp_dir()` 的路徑作比較，而 macOS 上那是 `/var/folders/…`
+        // 的鏈接。軟鏈接那一半留在 LSP 那一層自己收（見那裏的註釋）。
         let path = path.as_ref();
+        let full = match path.is_absolute() {
+            true => path.to_path_buf(),
+            false => std::env::current_dir()
+                .map(|here| here.join(path))
+                .unwrap_or_else(|_| path.to_path_buf()),
+        };
+        let path = full.as_path();
         let mut read_as = None;
         // **What the file was, to be written back as** (#309, #310).
         let mut marked = false;
@@ -2418,6 +2440,39 @@ mod tests {
         let err = b.save().unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
+    /// **一份檔只許有一個名字**（2026-10-10 一輪審查報來的）。
+    ///
+    /// `yumete src/main.rs` 從前存的是 `src/main.rs`，而 `lsp::uri_of` 只在前面貼
+    /// `file://`——發給服務器的是 `file:///src/main.rs`，一個不存在的檔，於是整個
+    /// LSP 靜靜地什麼都不說。
+    #[test]
+    fn a_file_opened_by_a_relative_path_still_knows_where_it_is() {
+        let dir = std::env::temp_dir().join(format!("yumete-relpath-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
+
+        let here = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&dir).unwrap();
+        let opened = Buffer::open("src/main.rs");
+        std::env::set_current_dir(&here).unwrap();
+        let buffer = opened.unwrap();
+
+        let path = buffer.path().expect("有檔名");
+        assert!(path.is_absolute(), "相對路徑要絕對化：{}", path.display());
+        assert!(path.ends_with("src/main.rs"), "{}", path.display());
+        assert!(
+            crate::lsp::uri_of(path).contains("src/main.rs"),
+            "發給服務器的 uri 要指得到那個檔"
+        );
+        assert!(
+            !crate::lsp::uri_of(path).starts_with("file:///src/main.rs"),
+            "從前發的是這個——一個根本不存在的檔"
+        );
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
     /// **pid 撞號不許蓋掉那一份沒人撿的草稿**（2026-10-10 報的）。
     ///
     /// 重啓之後 pid 從小號重發，於是這一輪的名字正好是上一回崩掉那一份的名字。
