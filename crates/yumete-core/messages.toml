@@ -5072,9 +5072,9 @@ en = "every command"
 [[message]]
 # g 選單裏的 j k（橫排）
 key = "hint.goto.by-file-line"
-zht = "下/上一行（文件裏的行：一段是一行，所以是下一段/上一段）"
-zhs = "下/上一行（文件里的行：一段是一行，所以是下一段/上一段）"
-en = "down / up a line of the file — a paragraph, where it is one line"
+zht = "下/上一邏輯行（有行號）"
+zhs = "下/上一逻辑行（有行号）"
+en = "down / up a logical line (with line number)"
 
 [[message]]
 # g 選單裏的 h l（縱書：方向跟 hjkl 一起轉）
