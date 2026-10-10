@@ -19,7 +19,7 @@ impl Editor {
             self.answer_query(key);
             return KeyOutcome::Continue;
         }
-        // **按「那裏寫的什麼」跳的時候，鍵先歸它**（`go`/`gu`，§5.73）——和底下
+        // **按「那裏寫的什麼」跳的時候，鍵先歸它**（`gx`/`gz`，§5.73）——和底下
         // `gw` 同一個理由，而且同樣擺在錄製之前：打進去的那兩個字母是**這一屏上**
         // 的事，回放的時候屏幕上不是同一批字。
         if self.seeking().is_some() && self.seek_key(key) {
@@ -2802,8 +2802,8 @@ impl Editor {
             }
             // **vim 的 `gu`／`gU`／`g~` 是大小寫算子**（2026-10-06，`:h gu`）：等一個
             // 動作，`guw` 把一個詞轉小寫，`guu` 轉一整行（算子加倍那條規矩是通用的，
-            // 所以這三個白拿）。helix 鍵位下 `gu` 仍是「打讀音跳漢字」——那一支在
-            // 兩套鍵位下都另有一個門，`空格 u`。
+            // 所以這三個白拿）。**helix 鍵位下 `gu` 現在什麼都不是**：打讀音跳漢字
+            // 2026-10-10 搬去了 `gz`，兩套鍵位一個拼法，見 `handle_goto` 那一條。
             Key::Char(op @ ('u' | 'U' | '~'))
                 if self.key_preset == yumete_cjk::KeyPreset::Vim =>
             {
@@ -2905,10 +2905,10 @@ impl Editor {
             // Open the file named on this line — a `:grep` hit, or a line
             // pasted in from any other tool that prints `path:line:`.
             Key::Char('f') => self.goto_file_under_cursor(),
-            // **`gx` follows what is written here.** vim and Helix both keep
+            // **`gL` follows what is written here.** vim and Helix both keep
             // 「open the thing under the cursor」 on this key, and in a
             // manuscript the thing under the cursor is a link.
-            Key::Char('x') => self.follow_link(),
+            Key::Char('L') => self.follow_link(),
             // **`gd` goes, `gD` shows.** The pair every editor has: `gd` is
             // *go to definition* — on a footnote that is the note, in a 拆分
             // column the row the component names — and `gD` is the same
@@ -2932,9 +2932,14 @@ impl Editor {
             // 地方——見 `seek.rs` 開頭。
             //
             // Warning: **字母是查出來的，不是挑出來的。** `s`/`S`（flash 用的那兩個）
-            // 在這個倉是「選出所有匹配」「拿匹配當分隔符」；`g` 組兩邊都空着的小寫
-            // 只有 `o q u v z`——`gb` 會撞 helix 的 goto_window_bottom，`gx` 這裏
-            // 已經是「跟着鏈接走」。
+            // 在這個倉是「選出所有匹配」「拿匹配當分隔符」。
+            //
+            // Warning: **這裏從前寫着「`g` 組兩邊都空着的小寫只有 `o q u v z`」，
+            // 那是錯的**（2026-10-10 查出來的）：`o`／`q`／`u`／`v` 四個 vim 自己
+            // 都占着，而同一個檔上面幾十行就把 vim 的 `gu` 綁成了大小寫算子。按兩
+            // 家自己的源頭數（`vim/runtime/doc/index.txt` 的 Normal mode 索引、
+            // helix 的 `keymap/default.rs:39-63`），**兩邊都空着的小寫只有 `x`
+            // 和 `z`**。挑鍵之前去那兩個檔裏數，別讀這一類注釋。
             // **`gv` 重選上一次那一段**（vim，2026-10-06）。helix 沒有這個命令，
             // 所以它只在 vim 鍵位下——`g` 那一組在這一端本來就空着一個 `v`。
             Key::Char('v') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
@@ -2949,8 +2954,22 @@ impl Editor {
                 self.clamp_cursor();
                 self.refresh_goal_column();
             }
-            Key::Char('o') => self.start_seek(false),
-            Key::Char('u') => self.start_seek(true),
+            // **`gx` 跳單詞、`gz` 跳漢字，兩套鍵位同一個拼法**（2026-10-10 定）。
+            //
+            // 從前是 `go`／`gu`，而**那兩個字母 vim 自己都占着**：`go` 是
+            // 「cursor to byte N」（`runtime/doc/index.txt:798`）、`gu` 是小寫算
+            // 子。`gu` 那一邊讓了（vim 下跑算子），於是跳漢字在 vim 下沒有 `g`
+            // 門，只好另開一個 `空格 u`——一個格子買一件 helix 那端已經有的事。
+            // `go` 那一邊連讓都沒讓。
+            //
+            // 兩家自己的源頭量出來：vim 的 `g` 占 `adefghijkmnopqrstuvw`，helix
+            // 的占 `abcdefghjklmnprstwy`（`keymap/default.rs:39-63`），**兩家都
+            // 空着的小寫只有 `x` 和 `z`**。所以這兩件事搬到那兩個字母上，兩套鍵
+            // 位一個拼法，`空格 u` 也就不必存在了。
+            //
+            // 「跟着鏈接走」讓出 `gx`，去 `gL`（link），兩家都沒占。
+            Key::Char('x') => self.start_seek(false),
+            Key::Char('z') => self.start_seek(true),
             // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
             // or what the cursor is on — searched across the whole document.
             // `g/` is the sugar `/` has always wanted: search for *this*,
@@ -2972,42 +2991,33 @@ impl Editor {
         }
     }
 
-    /// The keys `Space` opens, and what each of them is for — the list the
-    /// which-key overlay draws, so what is offered and what happens cannot
-    /// drift apart.
-    // Warning: **`空格 e` is gone** (2026-09-18): 「我覺得空格 e 和空格 f 重了，我覺得
-    // 留空格 f 就够了」. The file *sidebar* is still there — `:sidebar-left`
-    // opens it, and `:sidebar-left files` says so exactly — but a key on this
-    // menu is the scarcest thing the editor has, and the picker is what
-    // 「open a file」 means now.
+    // The keys `Space` opens, and what each of them is for — the list the
+    // which-key overlay draws, so what is offered and what happens cannot
+    // drift apart.
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
-        ('s', "hint.goto.outline"),
-        ('f', "hint.goto.open-file"),
+        ('s', "hint.space.outline"),
+        ('f', "hint.space.open-file"),
         // **`空格 F`：搜工作路徑**（2026-10-01，照 helix 的
         // `file_picker_in_current_directory`）。與 `空格 f` 的分別見
         // [`Editor::working_dir`]。
-        ('F', "hint.goto.open-file-here"),
-        ('b', "hint.goto.switch-buffer"),
-        ('/', "hint.goto.advanced-search"),
-        ('?', "hint.goto.all-commands"),
-        ('y', "hint.goto.copy-to-clipboard"),
-        ('p', "hint.goto.paste-from-clipboard"),
+        ('F', "hint.space.open-file-here"),
+        ('b', "hint.space.switch-buffer"),
+        ('/', "hint.space.advanced-search"),
+        ('?', "hint.space.all-commands"),
+        ('y', "hint.space.copy-to-clipboard"),
+        ('p', "hint.space.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
-        ('n', "hint.goto.dictionary"),
+        ('n', "hint.space.dictionary"),
         ('N', "hint.space.dictionary-panel"),
         ('k', "hint.space.what-is-this"),
         ('K', "hint.space.what-is-this-panel"),
-        // **診斷在 `d`**（2026-09-30 定，照 helix：`space d` 是 diagnostics
-        // picker）。五種信息同一個形狀——小寫浮，大寫進邊欄。
-        ('d', "hint.space.problems"),
+        ('d', "hint.space.problems"), // diagnostics
         ('D', "hint.space.problems-panel"),
-        ('u', "hint.goto.seek-reading"),
-        // **`空格 空格` 開關輸入法**（2026-10-10 用戶提的：「两下空格搞定」）。
-        // 兩邊都空着：helix 的 Space 選單裏沒有 space 這一項，這裏也沒有。而
-        // 「引擎挂沒挂上」是寫漢字的人一天按得最多的那一個開關，從前只有 `:y`。
-        (' ', "hint.space.ime"),
         ('i', "hint.space.record"),
         ('I', "hint.space.record-panel"),
+        // **`空格 空格` 開關輸入法**
+        // 兩邊都空着：helix 的 Space 選單裏沒有 space 這一項，這裏也沒有。
+        (' ', "hint.space.ime"),
         // **`空格 w` 是區域那一組的門**（2026-09-30 定，照 helix 的 `C-w`：
         // `keymap/default.rs:193` 與 `:260` 是同一組，兩扇門）。
         //
@@ -3038,10 +3048,10 @@ impl Editor {
         ("h l", "hint.goto.line-start-or-end"),
         ("s", "hint.goto.first-non-blank"),
         ("f", "hint.goto.open-this-file"),
-        ("x", "hint.goto.follow-link"),
+        ("L", "hint.goto.follow-link"),
         ("w", "hint.goto.jump-labels"),
-        ("o", "hint.goto.seek-written"),
-        ("u", "hint.goto.seek-reading"),
+        ("x", "hint.goto.seek-written"),
+        ("z", "hint.goto.seek-reading"),
         ("n p", "hint.goto.next-or-previous-file"),
         ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),
@@ -3073,10 +3083,10 @@ impl Editor {
         ("k j", "hint.goto.line-start-or-end"),
         ("s", "hint.goto.first-non-blank"),
         ("f", "hint.goto.open-this-file"),
-        ("x", "hint.goto.follow-link"),
+        ("L", "hint.goto.follow-link"),
         ("w", "hint.goto.jump-labels"),
-        ("o", "hint.goto.seek-written"),
-        ("u", "hint.goto.seek-reading"),
+        ("x", "hint.goto.seek-written"),
+        ("z", "hint.goto.seek-reading"),
         ("n p", "hint.goto.next-or-previous-file"),
         ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),
@@ -3405,10 +3415,6 @@ impl Editor {
             // name……Then users can use space + N to quickly switch between
             // them.」——檔數上十位就補零，所以那是一套不必按空格確認的前綴碼。
             Key::Char('w') => self.pending = Pending::Region,
-            // **`空格 u` 也是「打讀音跳漢字」**（2026-10-06）。`gu` 在 vim 鍵位下讓給了
-            // 大小寫算子，而這一支是中文稿子上天天按的——所以它在兩套鍵位下都另有
-            // 一個門，不是只在讓位的那一端補一個。
-            Key::Char('u') => self.start_seek(true),
             // **大綱在 `空格 s`，只在這一格**（2026-10-08 去重）。
             //
             // helix 把「這份檔裏的符號」放在 `空格 s`（`lsp_or_syntax_symbol_picker`），

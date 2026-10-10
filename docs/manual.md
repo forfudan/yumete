@@ -369,8 +369,8 @@ the rest is not done, and the status line says so.
 | `J` `gK` | join the next line / join up into the line above. **As many lines as you selected get joined** (select a paragraph and press `J` to make it one sentence); it takes a number too, and the number says **how many lines become one** (`3J` welds three lines into one, as in vi) |
 | `A-J` | the same as `J`, **and the space it added stays selected** (as in Helix). The seam is worked out — nothing between 漢字, one space between Latin words — so selecting it is how you see what was decided, and typing replaces it on the spot |
 | `gw` | **Jump anywhere on this screen at a glance.** Press it and the first character of every short clause turns into a label; type that label and you fly there (`C-o` comes back). **When there are fewer than twenty-six landing spots the label is a single letter**, and only beyond that does it take two — a label together with the cell it borrows is exactly one 漢字 wide, so the layout does not shift by a cell. The landing spots are `e`'s units — 「那年冬天，雪下得早。」 is two of them, not six, so a screen holds sixty labels, not six hundred. Any wrong key only takes the labels away; it will not touch the manuscript. Vertical layout is the same: one column holds exactly one label. |
-| `go` | **Type what is written there, and jump.** The other way round from `gw`: `gw` has the screen hand out numbers, this has you type the **two letters** the target **literally** spells. Press `do` and every `do…` on the screen turns into a label on the spot; type the label and you fly there (`C-o` comes back). **Fewer than twenty-six landing spots and one letter is enough**, which for this one is nearly every time. It only asks about Western text; Chinese goes through `gu`. A lone `a` is followed by a space, and **the space is the second letter**. |
-| `gu` | **Type a reading, jump to that 漢字.** The same reversal as `go`, except that what you type is a **reading**, and it is **not limited to two letters**: `zh`, `sh`, `ji` and the like can match twenty-odd characters on one screen, more than two letters can hold, so you keep typing until the candidates are few enough (`zho` leaves four). The 漢字 that match are listed in a small panel (`-`/`=` for pages), and a **number** picks one; each of its places on this screen then gets a label of its own. **Space, `;` and `'` pick the first, the second and the third**, the same feel as the IME. |
+| `gx` | **Type what is written there, and jump.** The other way round from `gw`: `gw` has the screen hand out numbers, this has you type the **two letters** the target **literally** spells. Press `do` and every `do…` on the screen turns into a label on the spot; type the label and you fly there (`C-o` comes back). **Fewer than twenty-six landing spots and one letter is enough**, which for this one is nearly every time. It only asks about Western text; Chinese goes through `gz`. A lone `a` is followed by a space, and **the space is the second letter**. |
+| `gz` | **Type a reading, jump to that 漢字.** The same reversal as `gx`, except that what you type is a **reading**, and it is **not limited to two letters**: `zh`, `sh`, `ji` and the like can match twenty-odd characters on one screen, more than two letters can hold, so you keep typing until the candidates are few enough (`zho` leaves four). The 漢字 that match are listed in a small panel (`-`/`=` for pages), and a **number** picks one; each of its places on this screen then gets a label of its own. **Space, `;` and `'` pick the first, the second and the third**, the same feel as the IME. |
 | `gd` | **go** where it points: a footnote's note, a link, `[[章節]]`, `[雪](#雪夜)` (`C-o` comes back). **Nothing happens on ordinary prose** — to ask "where else is this word" use `g/` |
 | `gD` | **look** at the same place — in the other work area, without moving you |
 | (both the same) | if the footnote has not been written yet, one is written first, and `gd` lands at the end of it, ready to type |
@@ -399,7 +399,7 @@ the rest is not done, and the status line says so.
 | `Z` | the same layer, **and it stays open**: `Zjjjj` scrolls all the way, `Esc` closes it (Helix's sticky view mode) |
 | a wrong key | press something unbound in any of these groups and the command line says `ze is not a key combination here — try again`, naming the whole run your fingers made rather than the last letter alone |
 | `gf` | open the `文件名:行號` written on this line (the listings from `:check-usage` and its kin jump with this) |
-| `gx` | follow the link under the cursor (see "Following a link"); Ctrl-click does the same |
+| `gL` | follow the link under the cursor (see "Following a link"); Ctrl-click does the same |
 | `空格` | open the menu (see below)|
 | `gh` `gl` `gs` | the start of the line / the end of the line / the first character that is not whitespace (the line in the file, which is to say the whole paragraph) |
 | `Home` `End` | the start / the end of the line |
@@ -1038,7 +1038,7 @@ right notes which folder it is in; this file itself is not listed.
 
 What goes in is the **title**, not the filename — `[[卷二/雨夜]]`, with no
 suffix. The suffix is this book's business (see the 「Following a link」 section above),
-you do not have to type it, and `gx` fills it in when it follows the link.
+you do not have to type it, and `gL` fills it in when it follows the link.
 
 **Block and inline are two layers, and they compose.** The block layer tints the whole
 row (the tint of `::: warning` runs the width of the line, not just under the text), and
@@ -1164,8 +1164,9 @@ for years — here they are not bound by those rules. Three: a renderer is desig
 
 #### Following a link
 
-`gx` opens the link under the cursor — vim and Helix both put 「open the thing under the
-cursor」 on the same key. **Ctrl and a click** is the same thing, said with the mouse.
+`gL` opens the link under the cursor. vim and Helix both spell this `gx`, and this editor
+needs that letter for something a writer of Chinese presses far more often, so the link
+moved one key over — `L` for link, which neither of them uses. **Ctrl and a click** is the same thing, said with the mouse.
 Any part of the link counts: the text, the square brackets, the target WYSIWYG has
 hidden — they are all this link.
 
@@ -2217,7 +2218,6 @@ without leaving the page:
 | | |
 | --- | --- |
 | `空格 s` | the sidebar, opened straight onto the outline — Helix puts "the symbols in this file" on this key too |
-| `空格 u` | type a reading and jump to that 漢字 (the same as `gu`; under the vim preset `gu` is the lowercase operator, so this door stands open in both) |
 | `空格 f` | open a file: a panel in the middle, the list on the left and the preview on the right (see "Picking a file"); searches the **project path** |
 | `空格 F` | the same, but searches the **working path** (`:cd` changes it, `:pwd` shows it) |
 | `空格 b` | switch buffer |

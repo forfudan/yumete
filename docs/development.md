@@ -20502,6 +20502,25 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.156 Count the keys in vim and helix's own sources, not in a comment (2026-10-10)
+
+Reported: 「You told me that `gu` is free for both vim and helix, so I decided to use `gu`.
+Now you tell me that it is taken in vim.」 It was taken, and the wrong answer was sitting in
+the tree: a comment in `keys.rs` read 「`g` 組兩邊都空着的小寫只有 `o q u v z`」 while forty
+lines above it the same file bound vim's `gu`/`gU`/`g~` to the case operators, on the same day.
+The `g` which-key panel under vim listed `u` **twice** — once as seek-by-reading, which it is
+not there.
+
+Counted from the two upstreams, which are cloned next door: vim's `g` holds
+`adefghijkmnopqrstuvw` (`vim/runtime/doc/index.txt`, the Normal-mode index) and helix's holds
+`abcdefghjklmnprstwy` (`helix-term/src/keymap/default.rs:39-63`). **The only lowercase letters
+neither takes are `x` and `z`.** So seek-by-word moved `go` → `gx`, seek-by-reading `gu` → `gz`,
+one spelling under both presets; following a link gave up `gx` for `gL`, which neither upstream
+uses either. `空格 u` existed only because `gu` was unreachable under vim, and is gone.
+
+**The rule this leaves**: to pick a key, read `~/Programs/vim/runtime/doc/index.txt` and
+`~/Programs/helix/helix-term/src/keymap/default.rs`. A comment in this repo is not evidence.
+
 ## 5.155 A config file that is wrong says the whole file is wrong (2026-10-10)
 
 TOML is all-or-nothing and every `Raw*` carries `deny_unknown_fields`, so **one misspelt key

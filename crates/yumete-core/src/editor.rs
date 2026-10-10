@@ -2748,7 +2748,7 @@ pub struct Editor {
     /// there so it can say so on the status bar, hand the address back when
     /// asked, and refuse to start a second one.
     preview_at: Option<String>,
-    /// A link the reader followed to a page on the web (`gx`), waiting for
+    /// A link the reader followed to a page on the web (`gL`), waiting for
     /// the front end — only it can hand a URL to the machine, and only ever as
     /// one argument to `open`/`xdg-open`.
     open_request: Option<String>,
@@ -3216,12 +3216,12 @@ pub struct Editor {
     labels: Vec<labels::Jump>,
     /// 標籤已經被打進去的那幾個字母。
     jump_typed: String,
-    /// **按「那裏寫的什麼」跳，走到哪一步了**（`go`/`gu`，§5.73）。
+    /// **按「那裏寫的什麼」跳，走到哪一步了**（`gx`/`gz`，§5.73）。
     ///
     /// Warning: 和 `labels` 不是一回事：那個是 `gw`——屏幕**發**號碼；這個是打**那裏
     /// 寫的字**。兩種機制，各存各的。
     seeking: Option<seek::Seeking>,
-    /// **欠着一次 `go`/`gu`**（`true` ＝ 只問中文）：和 `owed_jump` 同病，落腳點只在
+    /// **欠着一次 `gx`/`gz`**（`true` ＝ 只問中文）：和 `owed_jump` 同病，落腳點只在
     /// 這一屏上，而屏幕畫了哪一段要等前端畫完一幀纔知道。
     owed_seek: Option<bool>,
     /// **欠着一次 `gw`**：按鍵記一筆，前端畫完一幀交了範圍再跑（見 `labels.rs`）。
@@ -3930,7 +3930,7 @@ impl Editor {
         self.preview_request.take()
     }
 
-    /// The web page `gx` was pressed on, once.
+    /// The web page `gL` was pressed on, once.
     pub fn take_open_request(&mut self) -> Option<String> {
         self.open_request.take()
     }
