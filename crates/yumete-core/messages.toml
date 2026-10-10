@@ -10273,6 +10273,13 @@ zhs = "这一边只有这一格"
 en = "the only panel on this side"
 
 [[message]]
+# 窗口窄到畫不下側欄：鍵還給正文
+key = "sidebar.too-narrow"
+zht = "窗口過窄，無法顯示側欄"
+zhs = "窗口过窄，无法显示侧栏"
+en = "the window is too narrow for a sidebar"
+
+[[message]]
 # 邊欄：鍵在正文裏，說不出「這一格」是哪一格
 key = "sidebar.which-panel"
 zht = "先進到一格裏，或者寫出名字：files buffers outline search info"
