@@ -464,6 +464,20 @@ impl Editor {
     /// 離屏那一支在按鍵**之前**報，否則 `--shot` 看不見窄窗口下的行為。
     pub fn note_window(&mut self, columns: u16, rows: u16) {
         self.window = (columns, rows);
+        // Warning: **這道閘要在這裏，不在那四個開面板的入口上**（2026-10-10 報的）。
+        //
+        // 擺不下的時候檔案樹／緩衝區／大綱／信息四扇是「拿着鍵、一個字不畫」：狀態
+        // 欄寫 `PAN.NOR`、提示行列着鍵位，而那一塊是空的，按下去的鍵還真的生效
+        // （在一扇看不見的面板上）。[`Self::room_for_a_panel`] 從前全樹只有搜索那
+        // 一支問——規矩只加在一邊，正是這個倉反覆在拆的那一族。
+        //
+        // 擺在「每一幀報一次窗口」這一處，三種情形一次蓋住：窄窗口下按 `空格 w E`、
+        // 開機就是窄的（`window` 出廠是 `u16::MAX`，開面板那一刻還沒人報過，所以
+        // 開面板那裏問永遠問不住）、以及**把終端拖窄**的那一刻。
+        if !self.room_for_a_panel() && self.panel_focus.is_some() {
+            self.panel_focus = None;
+            self.status = say!("sidebar.too-narrow");
+        }
     }
 
     /// **這一刻站在第幾區。** 編號就是 `空格 1`–`4` 那四個號。

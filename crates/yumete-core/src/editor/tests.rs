@@ -11748,6 +11748,41 @@ fn the_panels_go_where_the_settings_put_them() {
 }
 
 /// `C-w` walks the regions, `Esc` does nothing, `q` closes — Feature #293.
+/// **窄到畫不下的時候，面板不許拿着鍵**（2026-10-10 報的）。
+///
+/// 從前四扇常駐面板是「拿着鍵、一個字不畫」：狀態欄 `PAN.NOR`、提示行列着鍵位，
+/// 而那一塊是空的。搜索那一支自己問過 `room_for_a_panel`，別的四扇沒有。
+#[test]
+fn a_window_too_narrow_for_a_panel_does_not_let_one_hold_the_keys() {
+    use crate::sidebar::Side;
+    let dir = std::env::temp_dir().join(format!("yumete-narrow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "一\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.note_window(100, 30);
+    ed.open_sidebar_at(&dir);
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "寬窗口下進得去");
+
+    // 把終端拖窄：鍵自己回正文，而且說一句。
+    ed.note_window(26, 30);
+    assert_eq!(ed.panel_focus(), None, "窄到畫不下就不許拿着鍵");
+    assert!(ed.status().contains("過窄"), "{}", ed.status());
+
+    // 窄着的時候再按也進不去。
+    ed.open_sidebar_at(&dir);
+    ed.note_window(26, 30);
+    assert_eq!(ed.panel_focus(), None);
+
+    // 拉寬回來就照舊。
+    ed.note_window(100, 30);
+    ed.open_sidebar_at(&dir);
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "拉寬回來進得去");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **鎖住的那一趟裏，連「丟棄恢復文件」也按不動**（2026-10-10 報的）。
 ///
 /// 從前 `y` 那一條路有 `refuse_readonly` 而 `d` 沒有，於是唯一按得動的是毀掉那
