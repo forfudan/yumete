@@ -11748,6 +11748,45 @@ fn the_panels_go_where_the_settings_put_them() {
 }
 
 /// `C-w` walks the regions, `Esc` does nothing, `q` closes — Feature #293.
+/// **一個站着的草稿問題跟着緩衝走，不跟着屏幕走**（2026-10-10 報的，會丟字）。
+///
+/// 第二問站着的時候換一份檔，從前面板原封不動留着問 `b.md`，而按 `y` 換掉的是
+/// 屏幕上那一份 `a.md`。
+#[test]
+fn a_standing_recover_question_is_dropped_when_the_buffer_changes() {
+    let dir = std::env::temp_dir().join(format!("yumete-askwho-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (a, b) = (dir.join("a.md"), dir.join("b.md"));
+    std::fs::write(&a, "A disk text\n").unwrap();
+    std::fs::write(&b, "B disk text\n").unwrap();
+    std::fs::write(dir.join(".a.md.yumete.900001"), "AAAA draft of a\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    ed.open_file(&b).unwrap();
+    // b.md 沒有草稿，所以翻到它的時候沒有問題站着。
+    assert!(ed.query().is_none(), "b.md 沒草稿，不該有問題");
+
+    // 翻回 a.md：第一問擺出來，按 `y` 進第二問。
+    ed.show_buffer_at(0);
+    assert!(ed.query().is_some(), "a.md 有草稿，該問");
+    ed.answer_query(Key::Char('y'));
+    assert!(ed.query().is_some(), "第二問");
+
+    // 第二問還站着就換到 b.md——問題要跟着走掉。
+    ed.show_buffer_at(1);
+    assert!(
+        ed.query().is_none(),
+        "問 a.md 的面板不許留在 b.md 的屏幕上"
+    );
+    // 而且 b.md 一個字沒動。
+    ed.answer_query(Key::Char('y'));
+    assert_eq!(ed.current_buffer().text(), "B disk text\n");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     use crate::sidebar::Side;

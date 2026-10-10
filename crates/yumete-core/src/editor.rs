@@ -3434,6 +3434,13 @@ pub struct Query {
     pub choices: Vec<Answer>,
     /// What the question is about, and so what each answer does.
     what: Asking,
+    /// **哪一份緩衝在問**（2026-10-10 報的，會丟字）。
+    ///
+    /// 答案動的是 `current_buffer()`，所以一個站着的問題跟着屏幕走就會答錯檔：
+    /// 鼠標點一下標籤，面板還問着 `b.md` 而 `y` 換掉的是 `a.md`。問題與它的緩
+    /// 衝綁在一起之後，換了檔就把它收走（沒答過的那一份不算「暫時不管」，翻回
+    /// 去自己會再問）。`None` ＝ 跟緩衝無關的問題，例如 `:w` 那個大小核驗。
+    pub(crate) about: Option<usize>,
 }
 
 /// One answer to a [`Query`]: the key that takes it, and what it says.

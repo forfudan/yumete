@@ -1883,6 +1883,7 @@ impl Editor {
                 crate::editor::Answer { key: 'n', label: say!("search.replace-all-no") },
             ],
             what: crate::editor::Asking::ReplaceEverywhere,
+            about: None,
         })
     }
 
@@ -2257,6 +2258,7 @@ impl Editor {
             ),
             choices,
             what: crate::editor::Asking::UndoTheReplace,
+            about: None,
         }
     }
 
@@ -2322,6 +2324,7 @@ impl Editor {
                     label: say!("search.undone-ok"),
                 }],
                 what: crate::editor::Asking::ReplaceUndoneInPart,
+                about: None,
             });
         }
     }
