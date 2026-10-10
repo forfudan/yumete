@@ -30,9 +30,10 @@ use std::ops::Range;
 use std::path::Path;
 
 /// 一段行的來歷。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Change {
     /// 這幾行是新添的。
+    #[default]
     Added,
     /// 這幾行改過。
     Changed,
@@ -56,16 +57,35 @@ impl Change {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Changes {
     /// 按起點排好、互不重疊。
-    runs: Vec<(Range<usize>, Change)>,
+    runs: Vec<Run>,
+}
+
+/// 一段改動：它佔新檔的哪幾行、是哪一種、以及 `HEAD` 那一份原來寫的是什麼。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Run {
+    /// 新檔這一側的行（0 起算）。剪口那兩種佔一行，是記號不是內容。
+    pub at: Range<usize>,
+    pub how: Change,
+    /// **改之前這裏寫的是什麼**（2026-10-11）。
+    ///
+    /// 從前 `parse` 只讀 `@@` 那一行、把 `-` 那幾行扔了——畫行號槽只要知道「這幾
+    /// 行動過」，而「改之前長什麼樣」要的正是被扔掉的那一半。純添的那一段是空的
+    /// （本來就沒有舊文本）。
+    pub was: Vec<String>,
 }
 
 impl Changes {
     /// 第 `line` 行（0 起算）的來歷，沒有就是沒動過。
     pub fn at(&self, line: usize) -> Option<Change> {
+        self.run_at(line).map(|run| run.how)
+    }
+
+    /// **這一行屬於哪一段改動**，連它改之前寫的是什麼一起（2026-10-11）。
+    pub fn run_at(&self, line: usize) -> Option<&Run> {
         // 區間互不重疊且按起點排好，所以「起點 ≤ line 的最後一條」是唯一可能命中的。
-        let i = self.runs.partition_point(|(r, _)| r.start <= line);
-        let (range, change) = self.runs.get(i.checked_sub(1)?)?;
-        range.contains(&line).then_some(*change)
+        let i = self.runs.partition_point(|run| run.at.start <= line);
+        let run = self.runs.get(i.checked_sub(1)?)?;
+        run.at.contains(&line).then_some(run)
     }
 
     /// **下一處/上一處改動的起點行**（`]g`/`[g`，2026-10-06）。
@@ -77,7 +97,7 @@ impl Changes {
     /// 不動也不說話；這個倉的規矩是「一個不說話的鍵看起來就是壞的」，而繞回去
     /// 既不用說話也不會讓人以為按壞了。
     pub fn hunk_from(&self, line: usize, forward: bool) -> Option<usize> {
-        let starts = || self.runs.iter().map(|(r, _)| r.start);
+        let starts = || self.runs.iter().map(|run| run.at.start);
         match forward {
             true => starts().find(|&s| s > line).or_else(|| starts().next()),
             false => starts().rfind(|&s| s < line).or_else(|| starts().next_back()),
@@ -232,9 +252,30 @@ fn hunk(header: &str) -> Option<(usize, usize, usize)> {
 
 /// [`Changes::from_diff`] 的本體。
 fn parse(diff: &str, lines: usize) -> Changes {
-    let mut runs: Vec<(Range<usize>, Change)> = Vec::new();
-    for header in diff.lines().filter(|l| l.starts_with("@@ ")) {
+    let mut runs: Vec<Run> = Vec::new();
+    // 一段一段地收 `-` 那幾行，和 `runs` 同一個下標。
+    let mut was: Vec<Vec<String>> = Vec::new();
+    let mut taken: Vec<String> = Vec::new();
+    let mut seen_a_header = false;
+    for row in diff.lines() {
+        if !row.starts_with("@@ ") {
+            // Warning: **`---` 是檔頭不是刪掉的行。** `-U0` 的輸出頭上有
+            // `--- a/…`，照收就會把它當成原文的第一行。
+            if seen_a_header && row.starts_with('-') && !row.starts_with("---") {
+                taken.push(row[1..].to_string());
+            }
+            continue;
+        }
+        let header = row;
+        if seen_a_header {
+            was.push(std::mem::take(&mut taken));
+        }
+        seen_a_header = true;
         let Some((old_n, new_at, new_n)) = hunk(header) else {
+            // 這一條讀不懂，它收的那幾行也不要——下一條 header 來的時候
+            // `was` 會比 `runs` 多一格，所以這裏就把它對齊掉。
+            taken.clear();
+            seen_a_header = false;
             continue;
         };
         // 1 起算 → 0 起算。`+0,n` 不合規矩，但飽和減一句比一個 panic 便宜。
@@ -243,7 +284,7 @@ fn parse(diff: &str, lines: usize) -> Changes {
             // 一行沒去、一行沒來：git 不會寫出這種，寫得出也沒話說。
             (0, 0) => {}
             // 純添。`+c,d` 的 c 是 1 起算的第一條新行。
-            (0, _) => runs.push((from..from + new_n, Change::Added)),
+            (0, _) => runs.push(Run { at: from..from + new_n, how: Change::Added, was: Vec::new() }),
             // 純刪。Warning: **`+c,0` 的 c 是缺口上面那一行**（1 起算），所以 0 起算
             // 的 `c` 正好是缺口**下面**那一行——剪口畫在它頭上。刪在檔頭時
             // c ＝ 0，0 起算的 0 就是第一行，同一條式子。
@@ -251,23 +292,31 @@ fn parse(diff: &str, lines: usize) -> Changes {
                 // 刪在檔尾：下面沒有行了，剪口改記在最後一行的腳下。
                 true => {
                     if lines > 0 {
-                        runs.push((lines - 1..lines, Change::CutBelow));
+                        runs.push(Run { at: lines - 1..lines, how: Change::CutBelow, was: Vec::new() });
                     }
                 }
-                false => runs.push((new_at..new_at + 1, Change::CutAbove)),
+                false => runs.push(Run { at: new_at..new_at + 1, how: Change::CutAbove, was: Vec::new() }),
             },
-            _ => runs.push((from..from + new_n, Change::Changed)),
+            _ => runs.push(Run { at: from..from + new_n, how: Change::Changed, was: Vec::new() }),
         }
     }
     // `-U0` 的 hunk 在新檔那一側本來就互不重疊——git 把貼着的改動併成一條。
     // 這兩句是保險：剪口那一條是算出來的，算錯了寧可少畫一格，不許畫出一條
     // 起點倒退的區間讓 `at` 的二分查找答出鬼話。
-    runs.sort_by_key(|(r, c)| (r.start, c.is_cut()));
+    // 收尾：最後一條的 `-` 行還在手上。
+    if seen_a_header {
+        was.push(std::mem::take(&mut taken));
+    }
+    // **舊文本按它那一條的下標配回去**，要在排序之前——排完下標就不是原來那個了。
+    for (run, old) in runs.iter_mut().zip(was) {
+        run.was = old;
+    }
+    runs.sort_by_key(|run| (run.at.start, run.how.is_cut()));
     let mut end = 0usize;
-    runs.retain(|(r, _)| {
-        let keep = r.start >= end;
+    runs.retain(|run| {
+        let keep = run.at.start >= end;
         if keep {
-            end = r.end;
+            end = run.at.end;
         }
         keep
     });
@@ -277,6 +326,29 @@ fn parse(diff: &str, lines: usize) -> Changes {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **改之前寫的是什麼，也要留着**（2026-10-11）。
+    ///
+    /// `-U0` 的 `-` 那幾行從前整個扔了，而「看這一塊改前長什麼樣」要的正是它們。
+    #[test]
+    fn a_change_remembers_what_the_line_used_to_say() {
+        let c = parse(
+            "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-老的那一行\n+新的那一行\n@@ -5,2 +6,0 @@\n-甲\n-乙\n",
+            9,
+        );
+        let changed = c.run_at(0).expect("第一行改過");
+        assert_eq!(changed.how, Change::Changed);
+        assert_eq!(changed.was, ["老的那一行"], "改之前那一行");
+        // 剪掉的那兩行記在剪口上。
+        let cut = c.run_at(5).or_else(|| c.run_at(6)).expect("剪口在");
+        assert!(cut.how.is_cut());
+        assert_eq!(cut.was, ["甲", "乙"], "剪掉的是這兩行");
+        // Warning: `--- a/x` 是檔頭，不是刪掉的行。
+        assert!(
+            c.runs.iter().all(|run| !run.was.iter().any(|line| line.starts_with("-- a/"))),
+            "檔頭混進原文了"
+        );
+    }
 
     #[test]
     fn a_pure_insertion_is_added() {
