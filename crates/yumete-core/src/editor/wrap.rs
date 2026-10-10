@@ -328,19 +328,20 @@ impl Editor {
     }
 
     pub fn typed_so_far(&self) -> String {
-        // **`go`/`gu` 打到一半，HUD 寫的是 `goa`、`gudon`**（2026-10-04 定）。
+        // **`gx`/`gz` 打到一半，HUD 寫的是 `gxa`、`gzdon`**（2026-10-04 定；鍵在
+        // 2026-10-10 從 `go`/`gu` 搬過來，見 `handle_goto`）。
         //
-        // Warning: **按下 `o`/`u` 的那一刻 `pending` 就回到了 `None`**，而這兩個鍵
+        // Warning: **按下 `x`/`z` 的那一刻 `pending` 就回到了 `None`**，而這兩個鍵
         // 還要再打幾個字母才算完——HUD 從那一刻起到標籤亮起來為止一個字都不說，
-        // 人會以為自己回到了 Normal。原話：「HUD 一直顯示到出現雙字母標籤。
-        // 比如我打了 `goab`，那就等到打完 `b` 之後再清除 HUD，打 `a` 的時候這個
-        // HUD 依舊是存在的。」
+        // 人會以為自己回到了 Normal。原話（那時這個鍵還拼作 `go`）：「HUD 一直
+        // 顯示到出現雙字母標籤。比如我打了 `goab`，那就等到打完 `b` 之後再清除
+        // HUD，打 `a` 的時候這個 HUD 依舊是存在的。」
         //
         // 和 vim operator 那一條同一個道理：**把打進去的那幾個字符原樣交回來**。
         if let Some(seeking) = self.seeking.as_ref().filter(|s| s.labels.is_empty()) {
             let key = match seeking.reading {
-                true => 'u',
-                false => 'o',
+                true => 'z',
+                false => 'x',
             };
             return format!("g{key}{}", seeking.typed);
         }

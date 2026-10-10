@@ -271,7 +271,7 @@ fn a_link_to_the_web_is_handed_over_and_nothing_else_is() {
     // reader can see; the destination it opens is the half 所見即所得 does
     // not draw at all.
     let mut ed = markdown("[雪](https://example.com/一)\n");
-    press(&mut ed, "gx");
+    press(&mut ed, "gL");
     assert_eq!(
         ed.take_open_request().as_deref(),
         Some("https://example.com/一")
@@ -288,7 +288,7 @@ fn a_scheme_the_editor_does_not_know_is_named_and_refused() {
     // loud rather than run.
     for line in ["[寫信](mailto:a@b.c)\n", "[開](x-anything:do-it)\n"] {
         let mut ed = markdown(line);
-        press(&mut ed, "gx");
+        press(&mut ed, "gL");
         assert_eq!(ed.take_open_request(), None, "{line}");
         assert!(
             ed.status().contains("http"),
@@ -301,13 +301,13 @@ fn a_scheme_the_editor_does_not_know_is_named_and_refused() {
 #[test]
 fn a_link_into_this_same_file_is_a_heading_not_a_file() {
     let mut ed = markdown("[雪](#雪)\n\n## 雪\n那一夜。\n");
-    press(&mut ed, "gx");
+    press(&mut ed, "gL");
     assert_eq!(ed.take_open_request(), None);
     // `## 雪` is the third line, and its first non-blank is the `#`.
     assert_eq!(ed.cursor(), 9, "{}", ed.status());
     // A heading that is not there is said, not guessed at.
     let mut ed = markdown("[夏](#夏)\n\n## 雪\n");
-    press(&mut ed, "gx");
+    press(&mut ed, "gL");
     assert!(ed.status().contains('夏'), "{}", ed.status());
 }
 
@@ -322,7 +322,7 @@ fn a_link_to_another_chapter_opens_it_where_it_sits() {
     // Spelled out, with the suffix.
     let mut ed = Editor::new();
     ed.open_file(&one).unwrap();
-    press(&mut ed, "lgx");
+    press(&mut ed, "lgL");
     assert_eq!(ed.current_buffer().display_name(), "二.md", "{}", ed.status());
 
     // And named, without one — `[[二]]` is a page of this manuscript, and
@@ -330,7 +330,7 @@ fn a_link_to_another_chapter_opens_it_where_it_sits() {
     // heading once the file is open.
     let mut ed = Editor::new();
     ed.open_file(&one).unwrap();
-    press(&mut ed, "jlgx");
+    press(&mut ed, "jlgL");
     assert_eq!(ed.current_buffer().display_name(), "二.md", "{}", ed.status());
     assert_eq!(ed.cursor(), 0, "the heading is the first line");
 
@@ -338,7 +338,7 @@ fn a_link_to_another_chapter_opens_it_where_it_sits() {
     std::fs::write(&one, "見[密](/etc/passwd)。\n").unwrap();
     let mut ed = Editor::new();
     ed.open_file(&one).unwrap();
-    press(&mut ed, "lgx");
+    press(&mut ed, "lgL");
     assert_eq!(ed.buffer_count(), 1, "{}", ed.status());
     assert!(ed.status().contains("/etc/passwd"), "{}", ed.status());
 

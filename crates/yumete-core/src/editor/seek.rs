@@ -361,7 +361,7 @@ mod tests {
         press(&mut ed, "do");
         let found = &ed.seeking().expect("還開着").found;
         assert_eq!(found.latin, [2], "dock 的 do");
-        assert!(found.han.is_empty(), "冬 讀 dong，可那是 gu 的事");
+        assert!(found.han.is_empty(), "冬 讀 dong，可那是 gz 的事");
         // 打滿兩個就不收查詢字母了——往後那幾鍵是標籤的事。
         assert!(!ed.seeking().unwrap().takes_more());
     }
@@ -399,7 +399,7 @@ mod tests {
         let mut ed = on_screen("dock 東邊冬天", true);
         press(&mut ed, "do");
         let found = &ed.seeking().unwrap().found;
-        assert!(found.latin.is_empty(), "gu 不問西文");
+        assert!(found.latin.is_empty(), "gz 不問西文");
         assert_eq!(found.han.len(), 2, "東 和 冬");
         assert!(ed.seeking().unwrap().takes_more(), "還收");
         // 再打一個字母收窄。
@@ -488,17 +488,17 @@ mod tests {
         };
 
         let mut ed = on_screen("冬天東風都城", true);
-        assert_eq!(ed.typed_so_far(), "gu", "還沒打字母");
+        assert_eq!(ed.typed_so_far(), "gz", "還沒打字母");
         assert_eq!(says(&ed), "請輸入拼音");
         press(&mut ed, "don");
-        assert_eq!(ed.typed_so_far(), "gudon", "整串按鍵");
+        assert_eq!(ed.typed_so_far(), "gzdon", "整串按鍵");
         assert_eq!(says(&ed), "請輸入拼音：don");
 
         let mut ed = on_screen("在 dock 旁邊", false);
-        assert_eq!(ed.typed_so_far(), "go");
+        assert_eq!(ed.typed_so_far(), "gx");
         assert_eq!(says(&ed), "請輸入兩個字母");
         press(&mut ed, "d");
-        assert_eq!(ed.typed_so_far(), "god");
+        assert_eq!(ed.typed_so_far(), "gxd");
         assert_eq!(says(&ed), "請輸入兩個字母：d");
     }
 

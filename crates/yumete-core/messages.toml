@@ -5076,20 +5076,6 @@ zhs = "看这条注（没有就写一条）"
 en = "show the note (or write one)"
 
 [[message]]
-# g 組：全項目搜索
-key = "hint.goto.advanced-search"
-zht = "搜索面板"
-zhs = "搜索面板"
-en = "the search panel"
-
-[[message]]
-# g 組：命令一覽
-key = "hint.goto.all-commands"
-zht = "命令一覽"
-zhs = "命令一览"
-en = "every command"
-
-[[message]]
 # g 選單裏的 j k（橫排）
 key = "hint.goto.by-file-line"
 zht = "下/上一邏輯行（有行號）"
@@ -5110,20 +5096,6 @@ key = "hint.goto.case-operators"
 zht = "轉小寫/轉大寫/大小寫互換，等待動作"
 zhs = "转小写/转大写/大小写互换，等待动作"
 en = "to lower, to upper, swap them — each waits for a motion"
-
-[[message]]
-# g 組：複製到系統剪貼簿
-key = "hint.goto.copy-to-clipboard"
-zht = "複製到系統剪貼板"
-zhs = "复制到系统剪贴板"
-en = "copy to the system clipboard"
-
-[[message]]
-# 空格組：字典
-key = "hint.goto.dictionary"
-zht = "字典：查這個字的拆分與編碼"
-zhs = "字典：查这个字的拆分与编码"
-en = "dictionary: how this character is written and coded"
 
 [[message]]
 # g 組：檔尾
@@ -5203,39 +5175,11 @@ zhs = "下一个/上一个打开的文件"
 en = "the next / previous open file"
 
 [[message]]
-# g 組：開啟檔案
-key = "hint.goto.open-file"
-zht = "打開文件（項目路徑）"
-zhs = "打开文件（项目路径）"
-en = "open a file (project)"
-
-[[message]]
-# 空格 F：選擇器開在工作路徑上（2026-10-01 定）
-key = "hint.goto.open-file-here"
-zht = "打開文件（工作目錄）"
-zhs = "打开文件（工作目录）"
-en = "open a file (working directory)"
-
-[[message]]
 # g 組：開這個檔
 key = "hint.goto.open-this-file"
 zht = "打開這個文件"
 zhs = "打开这个文件"
 en = "open this file"
-
-[[message]]
-# g 組：大綱
-key = "hint.goto.outline"
-zht = "大綱"
-zhs = "大纲"
-en = "the outline"
-
-[[message]]
-# g 組：從系統剪貼簿貼上
-key = "hint.goto.paste-from-clipboard"
-zht = "從系統剪貼板粘貼"
-zhs = "从系统剪贴板粘贴"
-en = "paste from the system clipboard"
 
 [[message]]
 # g 選單裏的 v（只在 vim 鍵位下）——重選上一次那一段
@@ -5254,16 +5198,16 @@ en = "the cursor to the top, middle or bottom of the screen"
 [[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
 key = "hint.goto.seek-reading"
-zht = "多字母定位並跳轉當前屏幕某漢字"
-zhs = "多字母定位并跳转当前屏幕某汉字"
-en = "more letters to place a 漢字 and go, on this screen"
+zht = "多字母定位並跳轉某漢字"
+zhs = "多字母定位并跳转某汉字"
+en = "more letters to place a char and go"
 
 [[message]]
 # `go`：只問西文，打目標處**字面**寫的那兩個字母
 key = "hint.goto.seek-written"
-zht = "兩字母定位並跳轉當前屏幕某單詞"
-zhs = "两字母定位并跳转当前屏幕某单词"
-en = "two letters to place a word and go, on this screen"
+zht = "兩字母定位並跳轉某單詞"
+zhs = "两字母定位并跳转某单词"
+en = "two letters to place a word and go"
 
 [[message]]
 # g 組：檔首
@@ -5271,13 +5215,6 @@ key = "hint.goto.start-of-file"
 zht = "文件開頭（g30g 去第 30 行）"
 zhs = "文件开头（g30g 去第 30 行）"
 en = "start of the file (g30g goes to line 30)"
-
-[[message]]
-# g 組：切換緩衝區
-key = "hint.goto.switch-buffer"
-zht = "切換緩衝區"
-zhs = "切换缓冲区"
-en = "switch buffer"
 
 [[message]]
 # g 組提示的標題
@@ -5777,6 +5714,20 @@ zhs = "宽窄"
 en = "wide / narrow"
 
 [[message]]
+# g 組：全項目搜索
+key = "hint.space.advanced-search"
+zht = "搜索面板"
+zhs = "搜索面板"
+en = "the search panel"
+
+[[message]]
+# g 組：命令一覽
+key = "hint.space.all-commands"
+zht = "命令一覽"
+zhs = "命令一览"
+en = "every command"
+
+[[message]]
 # 空格 C：塊注釋（沒有塊注釋的格式退到行注釋）
 key = "hint.space.comment-block"
 zht = "塊注釋"
@@ -5791,11 +5742,25 @@ zhs = "行注释"
 en = "comment out, by the line"
 
 [[message]]
-# 空格選單裏那一行：把字典開進邊欄（浮窗是小寫的 d）
+# g 組：複製到系統剪貼簿
+key = "hint.space.copy-to-clipboard"
+zht = "複製到系統剪貼板"
+zhs = "复制到系统剪贴板"
+en = "copy to the system clipboard"
+
+[[message]]
+# 空格組：字典
+key = "hint.space.dictionary"
+zht = "顯示漢字信息（浮窗）"
+zhs = "显示汉字信息（浮窗）"
+en = "show info of character (float)"
+
+[[message]]
+# 空格選單裏那一行：把漢字信息開進邊欄（浮窗是小寫的 d）
 key = "hint.space.dictionary-panel"
-zht = "字典開進邊欄（讀得完長的）"
-zhs = "字典开进边栏（读得完长的）"
-en = "the dictionary in the sidebar (room to read)"
+zht = "顯示漢字信息（邊欄）"
+zhs = "显示汉字信息（边栏）"
+en = "show info of character (sidebar)"
 
 [[message]]
 # 空格選單：空格 空格
@@ -5805,6 +5770,27 @@ zhs = "开关输入法"
 en = "turn the IME on or off"
 
 [[message]]
+# g 組：開啟檔案
+key = "hint.space.open-file"
+zht = "打開文件（項目路徑）"
+zhs = "打开文件（项目路径）"
+en = "open a file (project)"
+
+[[message]]
+# 空格 F：選擇器開在工作路徑上（2026-10-01 定）
+key = "hint.space.open-file-here"
+zht = "打開文件（工作目錄）"
+zhs = "打开文件（工作目录）"
+en = "open a file (working directory)"
+
+[[message]]
+# g 組：大綱
+key = "hint.space.outline"
+zht = "大綱"
+zhs = "大纲"
+en = "the outline"
+
+[[message]]
 # 空格組：從系統剪貼簿貼在前面
 key = "hint.space.paste-before"
 zht = "從系統剪貼板貼在前面"
@@ -5812,35 +5798,49 @@ zhs = "从系统剪贴板贴在前面"
 en = "paste before, from the system clipboard"
 
 [[message]]
-# 空格選單：這一行的診斷，浮窗（2026-09-29 寫的）
+# g 組：從系統剪貼簿貼上
+key = "hint.space.paste-from-clipboard"
+zht = "從系統剪貼板粘貼"
+zhs = "从系统剪贴板粘贴"
+en = "paste from the system clipboard"
+
+[[message]]
+# 空格選單：這一行的診斷，浮窗
 key = "hint.space.problems"
 zht = "顯示診斷信息（浮窗）"
 zhs = "显示诊断信息（浮窗）"
 en = "show diagnostics (float)"
 
 [[message]]
-# 空格選單：這一行的診斷，邊欄（2026-09-29 寫的）
+# 空格選單：這一行的診斷，邊欄
 key = "hint.space.problems-panel"
 zht = "顯示診斷信息（邊欄）"
 zhs = "显示诊断信息（边栏）"
 en = "show diagnostics (sidebar)"
 
 [[message]]
-# 空格選單：這一行攤開，浮窗（#426，2026-09-30）
+# 空格選單：這一行攤開，浮窗
 key = "hint.space.record"
-zht = "顯示這一行的記錄（浮窗）"
-zhs = "显示这一行的记录（浮窗）"
-en = "show this row's record (float)"
+zht = "顯示表格行記錄（浮窗）"
+zhs = "显示表格行记录（浮窗）"
+en = "show row record of table (float)"
 
 [[message]]
 # 空格選單：這一行攤開，邊欄
 key = "hint.space.record-panel"
-zht = "顯示這一行的記錄（邊欄）"
-zhs = "显示这一行的记录（边栏）"
-en = "show this row's record (sidebar)"
+zht = "顯示表格行記錄（邊欄）"
+zhs = "显示表格行记录（边栏）"
+en = "show row record of table (sidebar)"
 
 [[message]]
-# 空格 t：表格那一組（2026-09-21 從 `t` 搬來）
+# g 組：切換緩衝區
+key = "hint.space.switch-buffer"
+zht = "切換緩衝區"
+zhs = "切换缓冲区"
+en = "switch buffer"
+
+[[message]]
+# 空格 t：表格那一組
 key = "hint.space.table"
 zht = "表格操作"
 zhs = "表格操作"
@@ -5856,16 +5856,16 @@ en = "Space"
 [[message]]
 # 空格選單裏那一行：問語言服務器這是什麽
 key = "hint.space.what-is-this"
-zht = "顯示光標位置之信息（浮窗）"
-zhs = "显示光标位置之信息（浮窗）"
-en = "show info at the cursor (float)"
+zht = "顯示定義文檔（浮窗）"
+zhs = "显示定义文档（浮窗）"
+en = "show docs of definition (float)"
 
 [[message]]
 # 空格選單：把服務器那段話開進邊欄（浮窗是小寫的 k）
 key = "hint.space.what-is-this-panel"
-zht = "顯示光標位置之信息（邊欄）"
-zhs = "显示光标位置之信息（边栏）"
-en = "show info at the cursor (sidebar)"
+zht = "顯示定義文檔（邊欄）"
+zhs = "显示定义文档（边栏）"
+en = "show docs of definition (sidebar)"
 
 [[message]]
 # 表格提示：加一欄
