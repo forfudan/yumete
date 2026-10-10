@@ -80,24 +80,62 @@ CASES = [
 # `set_page_span`（`the_vim_hml_go_to_the_screen` 就是那麼做的）。
 
 
+# ── 文本對象（2026-10-10 加）──────────────────────────────────────────
+#
+# 自己一套固定裝置，因為對象要的是**結構**：括號、引號、空行分開的段、句號分開
+# 的句。擺在上面那張表裏會讓每一式都多跑一遍它用不上的文字，而那一張是按
+# 「固定裝置 × 式 × 每一個起點」掃的，乘起來很貴。
+#
+# ⚠ **`t` 這一格兩家不同，所以不在表上**：vim 的 `dit`/`dat` 是 HTML 標籤，
+# yumete 的 `t` 照 helix 是「類」（`matching.rs:84`）。同樣不在表上的還有
+# yumete 自己的 `m`（Markdown 標記）和代碼檔裏的 `a`/`c`（參數／註釋）。
+OBJECT_FIXTURES = [
+    "he said (no, yes) then;\nxx [a b] y\nz\n",
+    'say "one two" and \'three\' ok\n{a, b}\nq\n',
+    "First one. Second one here. Third.\nxx\n\nnext 段 starts\nand goes on\nz\n",
+    "  你也是人類, ok（不是）\nzz\n",
+]
+
+OBJECT_CASES = [
+    "diw", "daw", "ciw\x1b", "caw\x1b", "diW", "daW",
+    "dip", "dap", "dis", "das",
+    "di(", "da(", "di)", "da)", "dib", "dab",
+    "di[", "da[", "di]", "da]",
+    "di{", "da{", "di}", "da}", "diB", "daB",
+    'di"', 'da"', "di'", "da'",
+    "d2iw", "d2aw", "d2i(", "yiwP", "vi(d", "va(d",
+]
+
+
 def main(only):
     setup()
-    cases = only or CASES
     bad = total = 0
-    for text in FIXTURES:
-        width = len(text.split("\n")[0])
-        for c in cases:
-            for pos in range(0, width + 2):
-                total += 1
-                lead = "gg0" + "l" * pos
-                n = nvim(text, lead + c)
-                y = yumete(text, lead + c.replace("\x1b", "\\e"))
-                if n != y:
-                    bad += 1
-                    print(f"DIFF {c!r} at {pos} in {text.splitlines()[0]!r}")
-                    print(f"  nvim   {n!r}")
-                    print(f"  yumete {y!r}")
+    sweeps = [(FIXTURES, only or CASES), (OBJECT_FIXTURES, only or OBJECT_CASES)]
+    # ⚠ **每一式都要記下它咬着沒有。** 兩邊都原封不動的那一格證明不了任何事，而
+    # 2026-10-02 這一支栽過一次：2,350 格全綠而一格都沒驗。末尾印出「在每一張
+    # 固定裝置的每一個起點上都沒咬着」的那幾式。
+    bit = {}
+    for fixtures, cases in sweeps:
+        for text in fixtures:
+            width = len(text.split("\n")[0])
+            for c in cases:
+                for pos in range(0, width + 2):
+                    total += 1
+                    lead = "gg0" + "l" * pos
+                    n = nvim(text, lead + c)
+                    y = yumete(text, lead + c.replace("\x1b", "\\e"))
+                    bit.setdefault(c, False)
+                    if n != text or y != text:
+                        bit[c] = True
+                    if n != y:
+                        bad += 1
+                        print(f"DIFF {c!r} at {pos} in {text.splitlines()[0]!r}")
+                        print(f"  nvim   {n!r}")
+                        print(f"  yumete {y!r}")
     print(f"{total} cases, {bad} differ")
+    idle = sorted(c for c, hit in bit.items() if not hit)
+    if idle:
+        print(f"{len(idle)} never bit anywhere — they prove nothing: {idle}")
     return 1 if bad else 0
 
 
