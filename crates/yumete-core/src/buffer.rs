@@ -921,13 +921,19 @@ impl Buffer {
     /// Take the draft over: this session's text is what the copy should hold
     /// from now on. Called once the writer has loaded it.
     pub fn adopt_draft(&mut self) {
+        // Warning: **別刪還活着的那一個進程的保險**（2026-10-10 報的）。見
+        // [`owner_still_running`]：A 打了字沒存、B 開同一個檔按下恢復，A 那一份
+        // 草稿就從盤上沒了，而 A 只要不再敲鍵就不會重寫——那段字一份都不剩。
+        // 撿它的文字一直是對的，刪它不是。
         // Warning: **收下了就把那一份刪掉**（2026-10-02，跟着「按 pid 分家」一起
         // 改的）。從前這裏刪的是自己那一份——那時收下草稿等於接手**正名**，於是
         // 下一次 `write_swap` 寫的就是草稿原來那個檔，把它蓋掉。分了家之後自己
         // 永遠寫自己那個名字，蓋不到它；不刪的話那一份會一直被當成「還沒人撿的
         // 草稿」，每次開檔都再問一遍。自己這一份照舊留着——它是現在的保險。
         if let Some(theirs) = self.pending_swap.take() {
-            let _ = fs::remove_file(theirs);
+            if !owner_still_running(&theirs) {
+                let _ = fs::remove_file(theirs);
+            }
         }
         self.pending_draft = None;
         self.owns_swap = true;
@@ -1681,6 +1687,47 @@ fn write_bytes_with_model(
     Ok(())
 }
 
+/// **那一份草稿的主人還在跑嗎**（2026-10-10 報的）。
+///
+/// 草稿的名字帶着寫它的那個進程：有檔名的是 `.卷一.md.yumete.<pid>`，沒檔名的是
+/// `scratch-<pid>-<序號>.yumete`。崩掉的那一回留下的沒人收，**可還活着的那一個
+/// 進程留下的是它此刻唯一的保險**——它打了字還沒存，而只要它不再敲鍵就不會重寫
+/// （`draft_is_stale` 是假的）。從前收下草稿與撿孤兒兩條路都無條件把那個檔刪了。
+///
+/// `kill(pid, 0)` 不發信號，只問「這個號還在不在、我夠不夠格發」：回 0 是在，
+/// `EPERM` 是在而不歸我管（照樣算在），`ESRCH` 纔是不在。
+///
+/// Warning: **pid 會重用**，所以這一問偶爾會把一個不相干的進程當成主人、於是
+/// 多留一份草稿在盤上。多留一份只是下次開檔多問一句；刪錯一份是把字丟了。
+#[cfg(unix)]
+pub(crate) fn owner_still_running(draft: &std::path::Path) -> bool {
+    let Some(name) = draft.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+        return false;
+    };
+    let tag = match name.strip_prefix("scratch-") {
+        Some(rest) => rest.split('-').next().unwrap_or(""),
+        None => name.rsplit('.').next().unwrap_or(""),
+    };
+    let Ok(pid) = tag.parse::<i32>() else {
+        return false;
+    };
+    // pid 1 是 init／launchd，永遠不會是一個 yumete；自己那一份走的是別的路。
+    if pid <= 1 || pid == std::process::id() as i32 {
+        return false;
+    }
+    // SAFETY: `kill` with signal 0 reads the process table and sends nothing.
+    match unsafe { libc::kill(pid, 0) } {
+        0 => true,
+        _ => std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM),
+    }
+}
+
+/// 不是 unix 的機器上問不出來，照舊當作「主人走了」。
+#[cfg(not(unix))]
+pub(crate) fn owner_still_running(_draft: &std::path::Path) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2321,4 +2368,29 @@ mod tests {
         let err = b.save().unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
+    /// **還活着的那個進程留下的草稿不許刪**（2026-10-10 報的）。
+    #[test]
+    fn a_draft_whose_owner_is_still_running_is_not_an_orphan() {
+        use std::path::Path;
+        let me = std::process::id();
+        // 自己不算「別人還在跑」——自己那一份走的是別的路。
+        assert!(!owner_still_running(Path::new(&format!(".a.md.yumete.{me}"))));
+        // 父進程（跑測試的那個 shell／cargo）確實活着，而且不是我。
+        // SAFETY: `getppid` 只讀自己的進程表項。
+        let parent = unsafe { libc::getppid() };
+        if parent > 1 {
+            assert!(
+                owner_still_running(Path::new(&format!(".a.md.yumete.{parent}"))),
+                "pid {parent} 明明在跑"
+            );
+            assert!(
+                owner_still_running(Path::new(&format!("scratch-{parent}-3.yumete"))),
+                "沒檔名那一種的名字也要認得出 pid"
+            );
+        }
+        // 認不出 pid 的名字、以及 #305 之前的老名字，照舊當「主人走了」。
+        assert!(!owner_still_running(Path::new(".a.md.yumete")));
+        assert!(!owner_still_running(Path::new("scratch-nope-1.yumete")));
+    }
+
 }
