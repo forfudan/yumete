@@ -24803,3 +24803,40 @@ fn space_k_after_an_esc_opens_the_doc_again_without_moving() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **vim 的 `whichwrap`：哪些鍵走得出一行的兩頭**（2026-10-10 用戶提的）。
+///
+/// 出廠和 vim 出廠一樣（`b`，也就是只有普通模式的退格跨得出去）；`h` `l` `<` `>`
+/// 各管各的鍵，所以 `which_wrap = "h"` 只放開 `h`，方向鍵照舊停在行頭。
+#[test]
+fn which_wrap_says_which_keys_step_across_a_line_end() {
+    // `abc` / `def`：往右跨落在 `d`（下一行第一個字），往左跨落在 `c`。
+    let at = |flags: &str, keys: &[Key], vim: bool| -> usize {
+        let mut ed = typed("abc\ndef");
+        ed.set_key_preset(match vim {
+            true => yumete_cjk::KeyPreset::Vim,
+            false => yumete_cjk::KeyPreset::Helix,
+        });
+        ed.set_which_wrap(flags.to_string());
+        ed.execute("goto 1").unwrap();
+        for key in keys {
+            ed.on_key(*key);
+        }
+        ed.cursor()
+    };
+    let (l, r, bs) = (Key::Char('l'), Key::Right, Key::Backspace);
+    // 行尾按 `l`：沒有那個字母就停在 `c`（下標 2），有就到 `d`（下標 4）。
+    assert_eq!(at("", &[l, l, l], true), 2, "出廠不跨");
+    assert_eq!(at("l", &[l, l, l], true), 4, "寫了 l 就跨");
+    // **方向鍵歸 `<`/`>` 管，不歸 `h`/`l`。** vim 分開管，我們也分開。
+    assert_eq!(at("l", &[l, l, r], true), 2, "l 放開了，→ 照舊停住");
+    assert_eq!(at(">", &[l, l, r], true), 4, "寫了 > 纔輪到 →");
+    // 往左：`h` 從下一行的行頭回到上一行最後一個字，不是回到換行符。
+    assert_eq!(at("h", &[Key::Char('j'), Key::Char('h')], true), 2, "回到 c");
+    assert_eq!(at("", &[Key::Char('j'), Key::Char('h')], true), 4, "沒寫就不動");
+    // 普通模式的退格是 `b`，而它是出廠就開着的那一個（同 vim）。
+    assert_eq!(at("b", &[Key::Char('j'), bs], true), 2, "退格跨得回去");
+    assert_eq!(at("", &[Key::Char('j'), bs], true), 4, "沒寫就不動");
+    // **helix 鍵位讀都不讀它**：那一邊本來就永遠跨。
+    assert_eq!(at("", &[l, l, l], false), 3, "helix 走到換行符上");
+}

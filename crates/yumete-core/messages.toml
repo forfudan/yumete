@@ -5077,10 +5077,11 @@ zhs = "下/上一逻辑行（有行号）"
 en = "down / up a logical line (with line number)"
 
 [[message]]
+# 豎排時
 # g 選單裏的 h l（縱書：方向跟 hjkl 一起轉）
 key = "hint.goto.by-file-line-vertical"
-zht = "下/上一段（文件裏的一行，往左是往後）"
-zhs = "下/上一段（文件里的一行，往左是往后）"
+zht = "下/上一邏輯縱（有縱號）"
+zhs = "下/上一逻辑縱（有縱号）"
 en = "next / previous line of the file — leftward is onward"
 
 [[message]]
@@ -9287,6 +9288,20 @@ key = "set.editor.wheel-step.hint"
 zht = "滚輪撥一下走幾行。1 就是終端自己那一格"
 zhs = "滚轮拨一下走几行。1 就是终端自己那一格"
 en = "wheel step"
+
+[[message]]
+# 設置頁：哪些鍵跨行
+key = "set.editor.which-wrap"
+zht = "哪些鍵跨行"
+zhs = "哪些键跨行"
+en = "which wrap"
+
+[[message]]
+# 設置頁：哪些鍵跨行，說明
+key = "set.editor.which-wrap.hint"
+zht = "哪些按鍵會跨越行尾（vim 功能）。只允許 b h l < > ~"
+zhs = "哪些按键会跨越行尾（vim 功能）。只允许 b h l < > ~"
+en = "which keys cross a line end, spelled as in vim: b h l < > ~ — vim keys only"
 
 [[message]]
 # 設置：分词松紧

@@ -225,3 +225,35 @@ pub fn vim_motion(typed: &str) -> Option<VimMotion> {
 pub fn vim_motion_ahead(typed: &str) -> bool {
     VIM_MOTIONS.iter().any(|(k, _)| k.len() > typed.len() && k.starts_with(typed))
 }
+
+/// **vim 的 `whichwrap` 認得的字母**，照它的拼法：`b` 退格、`h`、`l`、`<` `>` 兩個
+/// 方向鍵、`~`。
+///
+/// Warning: **`s` 不在裏面。** vim 出廠的 `b,s` 裏那個 `s` 是普通模式的空格，而空格
+/// 在這個編輯器裏是菜單引導鍵（2026-10-10 定）。
+pub const WHICH_WRAP: &str = "bhl<>~";
+
+/// 讀一串 `whichwrap`：留下的字母，和說不通的那幾個。
+///
+/// 逗號和空格隨便加（`"<,>,b"` 和 `"<>b"` 一樣），重複的只留一次。回出來的次序
+/// 照 [`WHICH_WRAP`]，所以同一組字母永遠印成同一個樣子。
+///
+/// Warning: **一份校驗，兩個讀者。** 配置檔那一邊和 `:which-wrap` 那一邊問的是同
+/// 一句話；分兩處寫就是下一個「兩處記同一件事」。
+pub fn read_which_wrap(written: &str) -> (String, Vec<char>) {
+    let (mut kept, mut bad) = (String::new(), Vec::new());
+    for c in written.chars() {
+        match c {
+            ',' | ' ' => {}
+            c if WHICH_WRAP.contains(c) => {
+                if !kept.contains(c) {
+                    kept.push(c);
+                }
+            }
+            c if !bad.contains(&c) => bad.push(c),
+            _ => {}
+        }
+    }
+    let kept = WHICH_WRAP.chars().filter(|c| kept.contains(*c)).collect();
+    (kept, bad)
+}

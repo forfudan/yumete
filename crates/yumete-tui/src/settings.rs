@@ -69,6 +69,7 @@ pub fn apply(
     }
     editor.set_key_aliases(config.keys.normal.clone());
     editor.set_key_preset(config.keys.preset);
+    editor.set_which_wrap(config.editor.which_wrap.clone());
     // **`d`/`c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。和上面兩句同一族：
     // 鍵位那一層的事，所以擺在一起。
     editor.set_yank_on_delete(config.editor.yank_on_delete);

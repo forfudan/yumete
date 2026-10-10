@@ -493,6 +493,16 @@ impl Editor {
         self.lay_aliases();
     }
 
+    /// **哪些鍵走得出一行的兩頭**（vim 的 `whichwrap`，vim 鍵位專用）。
+    pub fn set_which_wrap(&mut self, flags: String) {
+        self.which_wrap = flags;
+    }
+
+    /// 此刻那幾個字母。
+    pub fn which_wrap(&self) -> &str {
+        &self.which_wrap
+    }
+
     /// Which shipped keymap is laid under the reader's aliases.
     pub fn key_preset(&self) -> yumete_cjk::KeyPreset {
         self.key_preset
