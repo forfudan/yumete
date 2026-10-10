@@ -24842,3 +24842,31 @@ fn which_wrap_says_which_keys_step_across_a_line_end() {
     // **helix 鍵位讀都不讀它**：那一邊本來就永遠跨。
     assert_eq!(at("", &[l, l, l], false), 3, "helix 走到換行符上");
 }
+
+/// **竪排下 `j` 走得出一段**，vim 鍵位也一樣（2026-10-10 量出來的）。
+///
+/// 竪排裏「一行」是一整段，而 vim 鍵位那道「不出這一行」的閘是橫排紙上的規矩
+/// （`whichwrap`）。兩個撞在一起，`j` 走到段尾就停死——正是 2026-09 報過、橫排
+/// 那一側早就修好的那一條（「竖排的时候按 JK，无法跨行」），在 vim 那一側還活着。
+#[test]
+fn j_walks_out_of_a_paragraph_in_vertical_under_both_keymaps() {
+    let after = |vim: bool, presses: usize| -> usize {
+        let mut ed = typed("那年冬天。\n雪下得早。");
+        ed.set_key_preset(match vim {
+            true => yumete_cjk::KeyPreset::Vim,
+            false => yumete_cjk::KeyPreset::Helix,
+        });
+        ed.set_layout(yumete_cjk::Layout::Vertical);
+        ed.execute("goto 1").unwrap();
+        for _ in 0..presses {
+            ed.on_key(Key::Char('j'));
+        }
+        ed.cursor()
+    };
+    // 第一段五個字（下標 0–4），下標 5 是換行，6 起是第二段。
+    for vim in [false, true] {
+        assert_eq!(after(vim, 4), 4, "vim={vim}：走到段尾那個字");
+        assert!(after(vim, 6) >= 6, "vim={vim}：走得出去，拿到 {}", after(vim, 6));
+    }
+}
+
