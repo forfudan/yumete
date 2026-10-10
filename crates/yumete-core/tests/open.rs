@@ -7,10 +7,16 @@ use yumete_core::{Editor, TextStore};
 
 /// Build a unique temp path in the OS temp dir (avoids extra dev-dependencies).
 fn temp_path(name: &str) -> std::path::PathBuf {
-    let mut p = std::env::temp_dir();
+    let mut p = tmp();
     let pid = std::process::id();
     p.push(format!("yumete-test-{pid}-{name}"));
     p
+}
+
+/// `$TMPDIR`，照編輯器的說法拼——`Buffer::open` 解析軟鏈接（2026-10-11）。
+fn tmp() -> std::path::PathBuf {
+    let dir = std::env::temp_dir();
+    std::fs::canonicalize(&dir).unwrap_or(dir)
 }
 
 #[test]

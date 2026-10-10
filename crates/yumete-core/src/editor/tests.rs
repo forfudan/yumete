@@ -39,6 +39,16 @@ fn typed(text: &str) -> Editor {
 
 /// Feature #210. The core holds the runs and hands them to whatever asks
 /// where a character is; it does not decide what they say.
+/// **`$TMPDIR`，照編輯器的說法拼**（2026-10-11）。
+///
+/// `Buffer::open` 解析軟鏈接，而 macOS 的 `std::env::temp_dir()` 回的是
+/// `/var/folders/…`——`/private/var/folders/…` 的鏈接。測試拿前者作比較就永遠對不
+/// 上，而它對不上的正是「一份檔只許有一個名字」那一條。
+fn tmp() -> std::path::PathBuf {
+    let dir = std::env::temp_dir();
+    std::fs::canonicalize(&dir).unwrap_or(dir)
+}
+
 #[test]
 fn drawn_runs_are_held_wholesale_and_answered_by_line() {
     let mut ed = typed("春夏\n秋冬\n");
@@ -313,7 +323,7 @@ fn a_link_into_this_same_file_is_a_heading_not_a_file() {
 
 #[test]
 fn a_link_to_another_chapter_opens_it_where_it_sits() {
-    let dir = std::env::temp_dir().join(format!("yumete-link-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-link-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("二.md"), "## 雪\n那一夜。\n").unwrap();
     let one = dir.join("一.md");
@@ -550,7 +560,7 @@ fn the_ruby_command_opens_the_reading_prompt() {
 /// session on a buffer it has nothing to do for.
 #[test]
 fn the_editor_says_when_a_recovery_copy_is_owed() {
-    let dir = std::env::temp_dir().join(format!("yumete-owed-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-owed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("ch1.md");
@@ -602,7 +612,7 @@ fn the_editor_says_when_a_recovery_copy_is_owed() {
 /// drawing, the caret and the write path each asked `line_count()` instead.
 #[test]
 fn a_grid_puts_no_row_after_the_last_line_of_the_file() {
-    let dir = std::env::temp_dir().join(format!("yumete-phantom-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-phantom-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let open = |name: &str, text: &str| {
@@ -648,7 +658,7 @@ fn a_capital_s_sorts_a_delimited_file_downwards() {
     //
     // The bare spelling is gone (§5.7) and `t0s` is what asks for 「the
     // column I am standing in」 — the same question, said out loud.
-    let dir = std::env::temp_dir().join(format!("yumete-sortS-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sortS-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let sorted = |name: &str, keys: &str| {
@@ -1056,7 +1066,7 @@ fn submit_reading_cancelled(ed: &mut Editor, reading: &str) {
 
 #[test]
 fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-diff-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-diff-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("ch01.txt");
@@ -1092,7 +1102,7 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
 
 #[test]
 fn diff_can_be_told_which_draft_to_compare_with() {
-    let dir = std::env::temp_dir().join(format!("yumete-diff2-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-diff2-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("ch01.txt"), "他說好。\n").unwrap();
@@ -1232,7 +1242,7 @@ fn auto_ruby_annotates_the_selection_and_nothing_outside_it() {
 
 #[test]
 fn auto_ruby_writes_the_dialect_the_file_is_written_in() {
-    let dir = std::env::temp_dir().join(format!("yumete-auto-ruby-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-auto-ruby-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("ch01.typ");
@@ -2493,7 +2503,7 @@ fn the_overlay_segments_a_paragraph_once_until_it_changes() {
 /// 只算它底下那幾個字，跨行也不許把行首行尾算漏。
 #[test]
 fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
-    let dir = std::env::temp_dir().join(format!("yumete-han-rope-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-han-rope-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("一.md");
@@ -2600,7 +2610,7 @@ fn yanking_a_column_and_putting_it_back_changes_nothing() {
 /// （0x22）排，落在 `Amy` 前面。排序排的是人看得見的那幾個字。
 #[test]
 fn a_quoted_field_sorts_by_its_text_not_its_quote() {
-    let dir = std::env::temp_dir().join(format!("yumete-csvsort-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-csvsort-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("q.csv");
@@ -2752,7 +2762,7 @@ fn a_line_of_nothing_but_delimiters_is_a_rule_not_emphasis() {
 /// 說「存了 z.md」。同一個會話裏讀和寫對「相對於哪裏」給出兩種答案。
 #[test]
 fn a_path_typed_into_a_write_command_is_reckoned_from_the_working_directory() {
-    let dir = std::env::temp_dir().join(format!("yumete-writepath-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-writepath-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("卷一")).unwrap();
     let here = dir.join("甲.md");
@@ -2966,8 +2976,8 @@ fn a_count_on_find_is_the_nth_and_a_repeat_moves_on() {
 /// 混在真的章節中間——而「目標 2000」那個數就是照這本賬算的。
 #[test]
 fn a_file_from_somewhere_else_does_not_enter_this_book_s_ledger() {
-    let dir = std::env::temp_dir().join(format!("yumete-ledger-{}", std::process::id()));
-    let away = std::env::temp_dir().join(format!("yumete-ledger-away-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ledger-{}", std::process::id()));
+    let away = tmp().join(format!("yumete-ledger-away-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&away);
     std::fs::create_dir_all(&dir).unwrap();
@@ -3008,7 +3018,7 @@ fn a_file_from_somewhere_else_does_not_enter_this_book_s_ledger() {
 #[test]
 fn a_second_buffer_gets_its_own_colours_not_the_first_ones() {
     use crate::code::Language;
-    let dir = std::env::temp_dir().join(format!("yumete-two-tongues-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-two-tongues-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let rs = dir.join("a.rs");
@@ -3042,7 +3052,7 @@ fn a_second_buffer_gets_its_own_colours_not_the_first_ones() {
 /// 寫作進度 — the ledger is opened by asking, kept by saving (#244).
 #[test]
 fn the_book_keeps_a_ledger_of_what_was_written_today() {
-    let dir = std::env::temp_dir().join(format!("yumete-progress-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-progress-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("第一章.md");
@@ -3232,7 +3242,7 @@ fn a_paragraph_is_not_quietly_cut_into_columns() {
 
 #[test]
 fn a_table_exports_as_a_file_without_being_converted_in_place() {
-    let dir = std::env::temp_dir().join(format!("yumete-csv-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-csv-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("人物.md");
@@ -3336,7 +3346,7 @@ fn a_table_exports_as_a_file_without_being_converted_in_place() {
 
 #[test]
 fn a_shot_names_a_file_and_waits_for_the_frame_it_is_a_picture_of() {
-    let dir = std::env::temp_dir().join(format!("yumete-shot-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-shot-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
     std::fs::write(&path, "永和九年。\n").unwrap();
@@ -3406,7 +3416,7 @@ fn a_shot_names_a_file_and_waits_for_the_frame_it_is_a_picture_of() {
         })
     );
     // 絕對路徑原樣過去。
-    let named = std::env::temp_dir().join("yumete-shot-absolute.txt");
+    let named = tmp().join("yumete-shot-absolute.txt");
     ed.execute(&format!(":shot txt {}", named.display())).unwrap();
     assert_eq!(
         ed.take_screenshot_request(),
@@ -3428,7 +3438,7 @@ fn a_shot_names_a_file_and_waits_for_the_frame_it_is_a_picture_of() {
 
 #[test]
 fn a_shot_refuses_a_file_that_is_already_there_and_one_that_is_open() {
-    let dir = std::env::temp_dir().join(format!("yumete-shot2-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-shot2-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
     std::fs::write(&path, "永和九年。\n").unwrap();
@@ -3475,7 +3485,7 @@ fn a_shot_refuses_a_file_that_is_already_there_and_one_that_is_open() {
 
 #[test]
 fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
-    let dir = std::env::temp_dir().join(format!("yumete-ex-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ex-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
     std::fs::write(&path, "# 第一章\n\n<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年。\n").unwrap();
@@ -3508,7 +3518,7 @@ fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
 /// 而 `:export!` 從前在 `--readonly` 的會話裏照樣把一個**不相干**的檔整個蓋掉。
 #[test]
 fn a_locked_session_does_not_export_either() {
-    let dir = std::env::temp_dir().join(format!("yumete-exro-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-exro-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
@@ -3537,7 +3547,7 @@ fn a_locked_session_does_not_export_either() {
 
 #[test]
 fn a_main_file_that_imports_its_chapters_is_a_table_of_contents() {
-    let dir = std::env::temp_dir().join(format!("yumete-imp-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-imp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("ch01.typ"), "= 初雪\n那年冬天。\n").unwrap();
@@ -3589,7 +3599,7 @@ fn a_novel_with_no_markup_still_has_chapters() {
     // 資治通鑑 is a `.txt` with 700 chapters in it and not one `#`. The
     // outline used to be empty for exactly the file where 「go to chapter
     // 412」 is worth a key.
-    let dir = std::env::temp_dir().join(format!("yumete-toc-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-toc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let novel = dir.join("novel.txt");
@@ -3638,7 +3648,7 @@ fn the_last_line_of_a_table_of_contents_is_not_the_first_chapter() {
     // 紅樓夢's 目錄 ends 「第百二十回　甄士隱詳說太虛情」, and then the 校閱
     // 參考 notes begin. Three lines of writing under it, so it was read as a
     // chapter — and, being early in the file, it sat above 第一回 (#390).
-    let dir = std::env::temp_dir().join(format!("yumete-toc-listing-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-toc-listing-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let novel = dir.join("novel.txt");
@@ -3715,7 +3725,7 @@ fn a_chapter_wearing_a_navigation_bar_is_still_a_chapter() {
     // 三國演義's 120 回 are all written 「◀上一回 第二回　… 下一回▶」 — the
     // export kept the arrows the web page walked on, and the outline of a
     // 120-chapter book was one row long (#402).
-    let dir = std::env::temp_dir().join(format!("yumete-toc-nav-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-toc-nav-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let novel = dir.join("novel.txt");
@@ -3756,7 +3766,7 @@ fn a_chapter_wearing_a_navigation_bar_is_still_a_chapter() {
 fn a_book_that_only_numbers_its_chapters_is_counted() {
     // 天龍八部 writes all fifty of its chapters 「一 青衫磊落險峰行」: no 第,
     // no 章, nothing but the count. Its outline was one row — 「后记」 (#402).
-    let dir = std::env::temp_dir().join(format!("yumete-toc-count-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-toc-count-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let novel = dir.join("novel.txt");
@@ -3902,7 +3912,7 @@ fn the_chords_turn_the_page() {
 
 /// A directory holding a small division table and the schema for it.
 fn a_table(tag: &str) -> (PathBuf, PathBuf) {
-    let dir = std::env::temp_dir().join(format!("yumete-table-{tag}-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-table-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -3956,7 +3966,7 @@ fn a_grid_without_a_schema_is_split_on_what_its_lines_agree_about() {
     // writes — came back 「不是表格」 while a page of prose whose lines
     // happen to hold one comma each still came back a grid. Both are the
     // sniffer's question, so both are asked of the sniffer.
-    let dir = std::env::temp_dir().join(format!("yumete-grid-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-grid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 
@@ -3989,7 +3999,7 @@ fn a_grid_without_a_schema_is_split_on_what_its_lines_agree_about() {
 
 #[test]
 fn a_column_goes_back_on_the_rows_it_was_taken_from() {
-    let dir = std::env::temp_dir().join(format!("yumete-col-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-col-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("讀音.csv");
@@ -4507,7 +4517,7 @@ fn the_detail_panel_says_what_the_whole_row_is() {
 /// A delimited grid sorts by one column or several, and keeps its rows.
 #[test]
 fn a_grid_sorts_by_the_columns_it_is_told() {
-    let dir = std::env::temp_dir().join(format!("yumete-sort-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sort-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -4564,7 +4574,7 @@ fn a_grid_sorts_by_the_columns_it_is_told() {
 /// acts.
 #[test]
 fn a_sort_names_its_columns_before_it_acts() {
-    let dir = std::env::temp_dir().join(format!("yumete-sortkeys-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sortkeys-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("d.csv");
@@ -4795,7 +4805,7 @@ fn a_delimited_block_in_a_chapter_sorts_without_touching_the_chapter() {
 /// schema beside it has only the answer the reader gave it by hand.
 #[test]
 fn sorting_keeps_the_table_open() {
-    let dir = std::env::temp_dir().join(format!("yumete-sortview-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sortview-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("plain.csv");
@@ -4882,7 +4892,7 @@ fn a_sequence_argument_belongs_to_its_own_sequence() {
 
 #[test]
 fn a_component_leads_to_its_own_row() {
-    let dir = std::env::temp_dir().join(format!("yumete-jump-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-jump-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -4925,7 +4935,7 @@ fn the_key_index_is_not_rebuilt_while_a_cell_is_being_typed_in() {
     // The panel resolves the cell's components on every frame, so the
     // index behind it must not be rebuilt on every keystroke — over a
     // hundred thousand rows that was ten milliseconds a character.
-    let dir = std::env::temp_dir().join(format!("yumete-index-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-index-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -5068,7 +5078,7 @@ fn every_key_the_table_group_lists_does_something() {
         ed
     };
 
-    let dir = std::env::temp_dir().join(format!("yumete-tkeys-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-tkeys-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("t.csv");
@@ -5127,7 +5137,7 @@ fn every_key_the_table_group_lists_does_something() {
 /// 一頭改成反過來問——它**不**該再寫這一條。
 #[test]
 fn the_table_group_offers_the_key_that_really_changes_the_grain() {
-    let dir = std::env::temp_dir().join(format!("yumete-grain-hint-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-grain-hint-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -5171,7 +5181,7 @@ fn the_table_group_offers_the_key_that_really_changes_the_grain() {
 
 #[test]
 fn t_says_whether_a_step_is_a_cell_or_a_character() {
-    let dir = std::env::temp_dir().join(format!("yumete-grain-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-grain-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -5235,7 +5245,7 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
 fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
     // Dropping the parse error cost every label, both computed fields and
     // the whole jump, and the only clue was 「照首行」 in the status line.
-    let dir = std::env::temp_dir().join(format!("yumete-badschema-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-badschema-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     let schema = dir.join(".yumete").join("tables").join("t.toml");
@@ -5307,7 +5317,7 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     // Standing on 卵 in the key column, `Enter` used to say 「這一格不指向
     // 任何一行」 — true, and useless. The question a 拆分表 is corrected by
     // is the other way round: *who uses this?*
-    let dir = std::env::temp_dir().join(format!("yumete-who-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-who-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -5392,7 +5402,7 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
 /// timestamp as 「this changed」. `:update` is the same gate without leaving.
 #[test]
 fn a_file_nobody_changed_is_not_written_again() {
-    let dir = std::env::temp_dir().join(format!("yumete-update-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-update-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("ch01.md");
@@ -5462,7 +5472,7 @@ fn a_file_changed_underneath_is_not_written_over() {
     // The one silent way to lose a day's work: a file open here and changed
     // out there — by git, a sync folder, `:!sed -i`, or the same file open
     // in another editor — used to be overwritten without a word.
-    let dir = std::env::temp_dir().join(format!("yumete-stamp-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-stamp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("ch01.md");
@@ -6008,7 +6018,7 @@ fn a_locked_buffer_refuses_the_line_that_would_have_been_added() {
 /// would still have adopted — and thrown the work away.
 #[test]
 fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
-    let dir = std::env::temp_dir().join(format!(
+    let dir = tmp().join(format!(
         "yumete-lock-rec-{}-{}",
         std::process::id(),
         "a_locked_buffer_keeps_the_draft_it_cannot_open"
@@ -6077,7 +6087,7 @@ fn a_refused_delete_leaves_the_selection_where_it_was() {
 /// #213: `--readonly` locks the ones already open *and* the next one.
 #[test]
 fn the_readonly_flag_is_about_the_session_not_one_file() {
-    let dir = std::env::temp_dir().join(format!("yumete-ro-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ro-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let a = dir.join("a.md");
     let b = dir.join("b.md");
@@ -6099,7 +6109,7 @@ fn the_readonly_flag_is_about_the_session_not_one_file() {
 #[test]
 fn a_file_the_disk_calls_read_only_comes_up_locked() {
     use std::os::unix::fs::PermissionsExt;
-    let dir = std::env::temp_dir().join(format!("yumete-ro444-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ro444-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("別動.md");
     std::fs::write(&file, "這一份不要改\n").unwrap();
@@ -6124,7 +6134,7 @@ fn a_file_the_disk_calls_read_only_comes_up_locked() {
 /// is the one thing a reader does want.
 #[test]
 fn a_locked_buffer_can_still_be_re_read() {
-    let dir = std::env::temp_dir().join(format!("yumete-rorl-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rorl-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("表.txt");
     std::fs::write(&file, "第一版\n").unwrap();
@@ -6144,7 +6154,7 @@ fn a_locked_buffer_can_still_be_re_read() {
 /// so in its name.
 #[test]
 fn reload_stops_at_unsaved_changes_and_the_bang_does_not() {
-    let dir = std::env::temp_dir().join(format!("yumete-rl-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rl-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("章.md");
     std::fs::write(&file, "原稿\n").unwrap();
@@ -6190,7 +6200,7 @@ fn reload_stops_at_unsaved_changes_and_the_bang_does_not() {
 /// #214: the automatic half takes a clean buffer and never a dirty one.
 #[test]
 fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
-    let dir = std::env::temp_dir().join(format!("yumete-rlauto-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rlauto-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("同步中.md");
     std::fs::write(&file, "第一版\n").unwrap();
@@ -7069,7 +7079,7 @@ fn an_indented_table_stays_in_its_list_item() {
 fn prose_with_a_comma_in_it_is_not_a_table() {
     // The header-row fallback used to take any first line with a comma,
     // so `:table` on a manuscript turned the chapter into a grid.
-    let dir = std::env::temp_dir().join(format!("yumete-prose-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-prose-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("章.md");
     std::fs::write(&file, "他說，這不是表格。\n下一段沒有逗號\n又一段，有兩個，逗號\n").unwrap();
@@ -7333,7 +7343,7 @@ fn row_goes_straight_to_the_row_a_character_names() {
     // The index has always been built and has always answered in about
     // 300 ns; nothing let a person ask it. Finding 木 in a 123,380-row
     // table meant `/^木,` and hoping no other row started that way.
-    let dir = std::env::temp_dir().join(format!("yumete-row-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-row-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let tables = dir.join(".yumete").join("tables");
     std::fs::create_dir_all(&tables).unwrap();
@@ -7408,7 +7418,7 @@ fn a_hidden_column_is_read_and_written_but_not_walked() {
     // Two of the 拆分表's twenty-eight columns are empty in all 123,380
     // rows and cost eight cells each across the whole page. `hidden` is
     // for those — the file still has them, this reader does not care.
-    let dir = std::env::temp_dir().join(format!("yumete-hide-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-hide-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let tables = dir.join(".yumete").join("tables");
     std::fs::create_dir_all(&tables).unwrap();
@@ -7446,7 +7456,7 @@ fn a_hidden_column_is_read_and_written_but_not_walked() {
 
 #[test]
 fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
-    let dir = std::env::temp_dir().join(format!("yumete-check-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-check-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let tables = dir.join(".yumete").join("tables");
     std::fs::create_dir_all(&tables).unwrap();
@@ -7779,7 +7789,7 @@ fn a_column_search_reads_down_before_across() {
     // `/` reads the page the way a page is read; a table has a second way
     // a document does not have. The only difference is the direction: the
     // pattern is a regex, the match is the selection, `n` walks, it wraps.
-    let dir = std::env::temp_dir().join(format!("yumete-colsearch-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-colsearch-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("d.csv");
@@ -7837,7 +7847,7 @@ fn a_column_search_reads_down_before_across() {
 /// column 10」.
 #[test]
 fn paging_through_a_table_keeps_to_the_column() {
-    let dir = std::env::temp_dir().join(format!("yumete-page-column-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-page-column-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("wide.csv");
@@ -7938,7 +7948,7 @@ fn paging_through_a_pipe_table_stops_at_its_last_row() {
 fn a_table_with_no_declared_scope_searches_all_of_it() {
     // It used to refuse: 「這張表沒說哪些是拆分欄」. A schema is an
     // optimisation — two columns instead of twenty-eight — not a licence.
-    let dir = std::env::temp_dir().join(format!("yumete-scope-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-scope-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("d.csv");
@@ -8271,7 +8281,7 @@ fn an_unnamed_buffer_leaves_a_crash_copy_too() {
     // `yumete` with no argument and an hour of typing is an ordinary way to
     // start a scene, and it used to be the one buffer with no safety net:
     // recovery copies live beside the file, and there is no file.
-    let dir = std::env::temp_dir().join(format!("yumete-drafts-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-drafts-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 
@@ -8328,7 +8338,7 @@ fn an_unnamed_buffer_leaves_a_crash_copy_too() {
 /// alone: one closed terminal and yumete had destroyed it itself.
 #[test]
 fn recovering_with_autosave_off_still_leaves_a_copy() {
-    let dir = std::env::temp_dir().join(format!("yumete-recover-off-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-recover-off-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let orphan = dir.join("scratch-1-0.yumete");
@@ -8365,7 +8375,7 @@ fn recovering_with_autosave_off_still_leaves_a_copy() {
 /// 會兒自動存檔那一拍會寫」，可那一拍最遠在五秒之後，這五秒裏那段文字一份都沒有。
 #[test]
 fn recovering_with_autosave_on_leaves_a_copy_too() {
-    let dir = std::env::temp_dir().join(format!("yumete-recover-on-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-recover-on-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let orphan = dir.join("scratch-1-0.yumete");
@@ -8668,7 +8678,7 @@ fn what_was_cut_three_edits_ago_is_still_reachable() {
 fn every_far_jump_leaves_a_way_back() {
     // A table's `Enter` used to be a one-way door: following 相 → 木 and
     // coming back meant remembering 相 and searching for it again.
-    let dir = std::env::temp_dir().join(format!("yumete-jumps-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-jumps-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -9019,7 +9029,7 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
 #[test]
 fn a_file_with_no_schema_is_read_by_its_own_header() {
     // What `yumete -t` falls back on.
-    let dir = std::env::temp_dir().join(format!("yumete-bare-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-bare-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("anything.csv");
@@ -9051,7 +9061,7 @@ fn a_file_with_no_schema_is_read_by_its_own_header() {
 fn a_table_with_no_schema_gets_one_written_beside_it() {
     // #218. This project's own 碼表 has no header and a tab between its two
     // columns, and both facts have to survive into the file.
-    let dir = std::env::temp_dir().join(format!("yumete-schema-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-schema-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let codes = dir.join("codes.txt");
@@ -9103,7 +9113,7 @@ fn a_table_with_no_schema_gets_one_written_beside_it() {
 
 #[test]
 fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
-    let dir = std::env::temp_dir().join(format!("yumete-inc-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-inc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("ch01.txt"), "== 舊硯臺\n那年冬天。\n").unwrap();
@@ -9467,7 +9477,7 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
 
 #[test]
 fn one_key_moves_between_the_two_panes() {
-    let dir = std::env::temp_dir().join(format!("yumete-panes-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-panes-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("ch01.md"), "那年冬天\n").unwrap();
@@ -9514,7 +9524,7 @@ fn one_key_moves_between_the_two_panes() {
 
 #[test]
 fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-toggle-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-toggle-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("ch01.md"), "# 第一章\n").unwrap();
@@ -9561,7 +9571,7 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
 
 #[test]
 fn the_sidebar_shows_three_views_of_the_same_question() {
-    let dir = std::env::temp_dir().join(format!("yumete-views-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-views-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("ch01.md"), "# 第一章\n那年\n## 一\n雪\n").unwrap();
@@ -9615,7 +9625,7 @@ fn the_sidebar_shows_three_views_of_the_same_question() {
 
 #[test]
 fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
-    let dir = std::env::temp_dir().join(format!("yumete-sidekeys-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sidekeys-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("卷一")).unwrap();
     std::fs::write(dir.join("卷一/ch01.md"), "第一章\n").unwrap();
@@ -10254,7 +10264,7 @@ fn the_box_opens_holding_the_last_pattern_or_what_is_marked() {
 /// a `.gitignore` beside them.
 #[cfg(test)]
 fn a_little_book(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("yumete-{name}-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("卷一")).unwrap();
     std::fs::write(dir.join("卷一/a.md"), "霜降於石階。\n").unwrap();
@@ -10615,7 +10625,7 @@ fn replacing_them_all_asks_the_question_the_list_answered() {
 #[test]
 fn replacing_them_all_reaches_the_files_past_the_end_of_the_list() {
     use crate::search_panel::MOST;
-    let dir = std::env::temp_dir().join(format!("yumete-capreplace-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-capreplace-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(".yumete.toml"), "").unwrap();
@@ -11226,7 +11236,7 @@ fn opening_the_picker_does_not_move_where_gf_looks() {
 /// 判準照抄 helix：`BinaryDetection::quit(b'\x00')`（`commands.rs:2649`）。
 #[test]
 fn a_file_with_a_nul_in_it_is_not_prose() {
-    let dir = std::env::temp_dir().join(format!("yumete-binwalk-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-binwalk-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("稿.md"), "霜降於石階。\n").unwrap();
@@ -11264,7 +11274,7 @@ fn a_file_with_a_nul_in_it_is_not_prose() {
 /// （2026-10-08 定：「拿掉闸，搜全部」）；③ 出口回 `false` 就當場收攝。
 #[test]
 fn the_pipe_has_no_ceiling_and_hands_hits_over_as_it_finds_them() {
-    let dir = std::env::temp_dir().join(format!("yumete-nocap-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-nocap-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // 剛好越過那道閘，命中擺在最後一行——整個檔讀不下來就找不着它。
@@ -11330,7 +11340,7 @@ fn the_pipe_has_no_ceiling_and_hands_hits_over_as_it_finds_them() {
 /// `[隱藏+忽略]`（出廠）→`[隱藏]`→`[忽略]`→`[無]`。
 #[test]
 fn hidden_and_ignored_are_two_switches_not_one() {
-    let dir = std::env::temp_dir().join(format!("yumete-twoswitch-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-twoswitch-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("子倉")).unwrap();
     std::fs::write(dir.join(".gitignore"), "/子倉/\n").unwrap();
@@ -11469,7 +11479,7 @@ fn the_project_is_the_first_marked_folder_above_the_working_directory() {
     );
 
     // 一個標記都沒有的地方：就是那一層，不往上爬到 `/`。
-    let bare = std::env::temp_dir().join(format!("yumete-noroot-{}", std::process::id()));
+    let bare = tmp().join(format!("yumete-noroot-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&bare);
     std::fs::create_dir_all(&bare).unwrap();
     assert_eq!(crate::editor::book_root(&bare), bare);
@@ -11671,7 +11681,7 @@ fn a_hit_found_by_its_sound_can_be_replaced() {
 #[test]
 fn the_panels_go_where_the_settings_put_them() {
     use crate::sidebar::{Panel, Side, View};
-    let dir = std::env::temp_dir().join(format!("yumete-sides-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sides-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("a.md"), "那年冬天\n").unwrap();
@@ -11755,7 +11765,7 @@ fn the_panels_go_where_the_settings_put_them() {
 #[test]
 fn a_window_too_narrow_for_a_panel_does_not_let_one_hold_the_keys() {
     use crate::sidebar::Side;
-    let dir = std::env::temp_dir().join(format!("yumete-narrow-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-narrow-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("a.md"), "一\n").unwrap();
@@ -11789,7 +11799,7 @@ fn a_window_too_narrow_for_a_panel_does_not_let_one_hold_the_keys() {
 /// 一格。
 #[test]
 fn a_readonly_run_cannot_throw_the_draft_away_either() {
-    let dir = std::env::temp_dir().join(format!("yumete-rodrop-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rodrop-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("r.md");
@@ -11822,7 +11832,7 @@ fn a_readonly_run_cannot_throw_the_draft_away_either() {
 /// 屏幕上那一份 `a.md`。
 #[test]
 fn a_standing_recover_question_is_dropped_when_the_buffer_changes() {
-    let dir = std::env::temp_dir().join(format!("yumete-askwho-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-askwho-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let (a, b) = (dir.join("a.md"), dir.join("b.md"));
@@ -11858,7 +11868,7 @@ fn a_standing_recover_question_is_dropped_when_the_buffer_changes() {
 #[test]
 fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     use crate::sidebar::Side;
-    let dir = std::env::temp_dir().join(format!("yumete-regions-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-regions-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("a.md"), "一\n").unwrap();
@@ -12066,7 +12076,7 @@ fn space_y_hands_the_selection_to_the_front_end() {
 
 #[test]
 fn a_file_already_open_is_shown_rather_than_opened_twice() {
-    let dir = std::env::temp_dir().join(format!("yumete-dup-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-dup-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
     std::fs::write(&path, "第一稿\n").unwrap();
@@ -12286,7 +12296,7 @@ fn no_writer_changes_how_many_cells_a_row_has() {
 /// rules: `#ruby("永", "ㄩㄥˇ")` carries a comma into every cell it touches.
 #[test]
 fn reformatting_the_readings_does_not_reshape_a_grid() {
-    let dir = std::env::temp_dir().join(format!("yumete-rubygrid-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rubygrid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
     std::fs::write(
@@ -12507,7 +12517,7 @@ fn the_help_teaches_no_command_the_parser_refuses() {
 
 #[test]
 fn a_second_preview_asks_where_the_first_one_is() {
-    let dir = std::env::temp_dir().join(format!("yumete-prev-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-prev-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let book = dir.join("book.typ");
@@ -12573,7 +12583,7 @@ fn a_full_stop_typed_into_the_text_is_still_an_edit() {
 /// that had not been saved. It is a value now, not a string.
 #[test]
 fn a_path_command_says_what_it_actually_did() {
-    let dir = std::env::temp_dir().join(format!("yumete-said-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-said-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let chapter = dir.join("ch1.md");
@@ -12614,7 +12624,7 @@ fn a_path_command_says_what_it_actually_did() {
 /// generated file is the save.
 #[test]
 fn a_save_that_multiplies_the_file_stops_to_ask() {
-    let dir = std::env::temp_dir().join(format!("yumete-oversize-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-oversize-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let chapter = dir.join("ch1.md");
@@ -12677,7 +12687,7 @@ fn a_save_that_multiplies_the_file_stops_to_ask() {
 /// overwrite *this file*, not 「a 17× file is what I meant」.
 #[test]
 fn every_writer_passes_the_oversize_gate() {
-    let dir = std::env::temp_dir().join(format!("yumete-gate-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-gate-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let chapter = dir.join("ch1.md");
@@ -12743,7 +12753,7 @@ fn every_writer_passes_the_oversize_gate() {
 /// which has no size on disk to have multiplied.
 #[test]
 fn an_ordinary_save_is_never_asked_about() {
-    let dir = std::env::temp_dir().join(format!("yumete-ordinary-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ordinary-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 
@@ -12787,7 +12797,7 @@ fn an_ordinary_save_is_never_asked_about() {
 /// through to the manuscript behind it — `x` here used to be a deletion.
 #[test]
 fn a_stray_key_does_not_get_past_the_question() {
-    let dir = std::env::temp_dir().join(format!("yumete-stray-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-stray-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let chapter = dir.join("ch1.md");
@@ -12820,7 +12830,7 @@ fn a_stray_key_does_not_get_past_the_question() {
 /// copy and then refuse to leave.
 #[test]
 fn write_quit_with_a_name_saves_that_name() {
-    let dir = std::env::temp_dir().join(format!("yumete-wqn-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wqn-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let chapter = dir.join("ch1.md");
@@ -12905,7 +12915,7 @@ fn j_and_k_in_a_grid_keep_the_cell_they_are_in() {
     // one set of columns under a page laid out to another and the caret
     // drifted sideways as it went down. Two rows whose cells are wildly
     // different widths make the two answers disagree on purpose.
-    let dir = std::env::temp_dir().join(format!("yumete-gridjk-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-gridjk-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let doc = dir.join("book.md");
@@ -12961,7 +12971,7 @@ fn a_search_in_the_grid_stays_in_the_table() {
     // the caret back to the table's edge — **onto no match at all** — and the
     // next `n` searched from there and found the same unreachable hit again.
     // So `n` stopped going round the table, which is the one thing it is for.
-    let dir = std::env::temp_dir().join(format!("yumete-gridfind-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-gridfind-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let doc = dir.join("book.md");
@@ -13023,7 +13033,7 @@ fn a_quoted_field_is_read_as_the_one_field_it_is() {
     // back from the wrong pieces (`2500,"Smith,ZZ,note`), and the answer for a
     // while was to refuse the row outright. It reads the quotes now, so there
     // is nothing to refuse: the row is a row and its cells are its cells.
-    let dir = std::env::temp_dir().join(format!("yumete-quoted-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-quoted-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("people.csv");
@@ -13064,7 +13074,7 @@ fn the_grid_is_drawn_where_the_cursor_goes() {
     // (#379) — which numbers the columns off the drawing — named one column
     // while pointing at another. Nothing was written wrongly, because writing
     // goes through the cells; it was the picture that was false.
-    let dir = std::env::temp_dir().join(format!("yumete-drawn-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-drawn-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("people.csv");
@@ -13091,7 +13101,7 @@ fn the_grid_is_drawn_where_the_cursor_goes() {
 /// (#391).
 #[test]
 fn a_record_that_runs_on_is_named_by_the_check() {
-    let dir = std::env::temp_dir().join(format!("yumete-runs-on-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-runs-on-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("people.csv");
@@ -13115,7 +13125,7 @@ fn a_record_that_runs_on_is_named_by_the_check() {
 
 #[test]
 fn a_pasted_spreadsheet_lands_in_a_csv_too() {
-    let dir = std::env::temp_dir().join(format!("yumete-paste-grid-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-paste-grid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("d.csv");
@@ -13151,7 +13161,7 @@ fn one_cell_of_text_is_not_a_spreadsheet() {
 
 #[test]
 fn no_writer_replaces_a_file_the_editor_is_holding() {
-    let dir = std::env::temp_dir().join(format!("yumete-ident-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ident-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let book = dir.join("main.typ");
@@ -13213,7 +13223,7 @@ fn no_writer_replaces_a_file_the_editor_is_holding() {
 /// `:w <path>` copies and stays; `:write-as <path>` rebinds and says so.
 #[test]
 fn writing_a_copy_does_not_move_the_manuscript() {
-    let dir = std::env::temp_dir().join(format!("yumete-copy-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-copy-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let chapter = dir.join("ch1.md");
@@ -13251,7 +13261,7 @@ fn writing_a_copy_does_not_move_the_manuscript() {
 
 #[test]
 fn write_saves_the_active_buffer_and_quit_then_succeeds() {
-    let mut path = std::env::temp_dir();
+    let mut path = tmp();
     path.push(format!("yumete-editor-write-{}.md", std::process::id()));
 
     let mut ed = Editor::new();
@@ -13701,7 +13711,7 @@ fn a_book_can_teach_the_editor_its_own_names() {
     // 阿寧 — the name on every page — is the one word no dictionary has,
     // so `w` stepped through it a character at a time and the overlay
     // tinted it as two words.
-    let dir = std::env::temp_dir().join(format!("yumete-words-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-words-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     let file = dir.join("ch01.md");
@@ -13747,7 +13757,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // The same 阿寧, found rather than typed in (Feature #239). Six
     // sightings spread over three chapters, in different company each
     // time, and nowhere else in the language.
-    let dir = std::env::temp_dir().join(format!("yumete-discover-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-discover-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // Prose for the name to stand out against. Repeated four times, which
@@ -13905,7 +13915,7 @@ fn joining_up_and_joining_down_are_one_edit() {
 fn a_mark_names_a_place_and_survives_the_afternoon() {
     // The jump list remembers where you came *from*; a mark remembers
     // where you meant to come back **to**.
-    let dir = std::env::temp_dir().join(format!("yumete-marks-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-marks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let one = dir.join("ch01.md");
@@ -13948,7 +13958,7 @@ fn a_mark_names_a_place_and_survives_the_afternoon() {
 /// 這一份是全局的 `places.txt`，記一千個，答的是「不管從哪裏打開，這個檔我停在哪」。
 #[test]
 fn opening_a_file_by_name_goes_back_to_where_i_was() {
-    let dir = std::env::temp_dir().join(format!("yumete-places-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-places-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("data")).unwrap();
     let one = dir.join("ch01.md");
@@ -13981,7 +13991,7 @@ fn opening_a_file_by_name_goes_back_to_where_i_was() {
 #[test]
 fn the_session_opens_again_what_was_open() {
     // Five `:open`s every morning is five too many.
-    let dir = std::env::temp_dir().join(format!("yumete-session-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-session-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("state")).unwrap();
     let one = dir.join("ch01.md");
@@ -14022,7 +14032,7 @@ fn closing_a_file_does_not_send_a_jump_into_a_different_one() {
     // `close_buffer` removes one and every later buffer shifts down, so a
     // jump list and a mark kept by *index* came to name a different
     // chapter than the one they were set in.
-    let dir = std::env::temp_dir().join(format!("yumete-ids-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ids-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let (a, b, c) = (dir.join("a.md"), dir.join("b.md"), dir.join("c.md"));
@@ -14266,7 +14276,7 @@ fn a_filter_over_the_whole_buffer_replaces_the_whole_buffer() {
 /// 上寫，後存的蓋掉先存的。`Buffer::id` 自己的文檔早就寫着「下標會變，號不會」。
 #[test]
 fn two_unnamed_drafts_never_share_a_file() {
-    let dir = std::env::temp_dir().join(format!("yumete-two-drafts-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-two-drafts-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let mut ed = Editor::new();
@@ -14300,7 +14310,7 @@ fn two_unnamed_drafts_never_share_a_file() {
 
 #[test]
 fn recover_loads_the_draft_and_undo_takes_it_back() {
-    let dir = std::env::temp_dir().join(format!("yumete-rec-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rec-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
     std::fs::write(&path, "第一稿\n").unwrap();
@@ -14360,7 +14370,7 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
 /// things must not touch it: quitting, `:q!`, and the next keystroke.
 #[test]
 fn an_untaken_draft_survives_quitting_and_typing() {
-    let dir = std::env::temp_dir().join(format!("yumete-keep-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-keep-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
     let swap = dir.join(".chapter.md.yumete");
@@ -14401,7 +14411,7 @@ fn an_untaken_draft_survives_quitting_and_typing() {
 /// 下去，而它一按就把屏幕上的正文整個換掉。
 #[test]
 fn a_draft_is_decided_when_the_file_is_opened_and_takes_two_answers() {
-    let dir = std::env::temp_dir().join(format!("yumete-ask-rec-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ask-rec-{}", std::process::id()));
     let fresh = |dir: &std::path::Path| {
         let _ = std::fs::remove_dir_all(dir);
         std::fs::create_dir_all(dir).unwrap();
@@ -14459,7 +14469,7 @@ fn a_draft_is_decided_when_the_file_is_opened_and_takes_two_answers() {
 /// 如果有十幾個文件你寫得完嗎？」——一行放不下，而每一份自己有面板。
 #[test]
 fn each_file_with_a_draft_is_asked_about_when_you_turn_to_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-two-drafts-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-two-drafts-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     for n in ["a", "b"] {
@@ -14495,7 +14505,7 @@ fn each_file_with_a_draft_is_asked_about_when_you_turn_to_it() {
 
 #[test]
 fn a_failed_save_as_leaves_the_buffer_where_it_was() {
-    let dir = std::env::temp_dir().join(format!("yumete-badsave-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-badsave-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chapter.md");
     std::fs::write(&path, "第一稿\n").unwrap();
@@ -14525,7 +14535,7 @@ fn a_failed_save_as_leaves_the_buffer_where_it_was() {
 
 #[test]
 fn quitting_takes_the_recovery_copies_with_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-recq-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-recq-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("draft.md");
     std::fs::write(&path, "初稿\n").unwrap();
@@ -14835,7 +14845,7 @@ fn quit_closes_this_file_and_only_leaves_on_the_last_one() {
 
 #[test]
 fn write_quit_saves_where_it_is_told_and_refuses_a_nameless_buffer() {
-    let dir = std::env::temp_dir().join(format!("yumete-wq-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wq-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("saved.txt");
 
@@ -14855,7 +14865,7 @@ fn write_quit_saves_where_it_is_told_and_refuses_a_nameless_buffer() {
 
 #[test]
 fn the_project_says_which_markup_its_files_are_in() {
-    let dir = std::env::temp_dir().join(format!("yumete-synconf-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-synconf-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // A chapter that is nothing but writing: there is no Typst in it to
@@ -14881,7 +14891,7 @@ fn the_project_says_which_markup_its_files_are_in() {
 
 #[test]
 fn a_txt_that_is_typst_is_read_as_typst() {
-    let dir = std::env::temp_dir().join(format!("yumete-syn-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-syn-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // A novel written in Typst but filed as `.txt` is an ordinary thing to
@@ -15245,7 +15255,7 @@ fn searching_a_big_table() {
             0x4E00 + (i % 20000)
         ));
     }
-    let dir = std::env::temp_dir().join("yumete-table-bench");
+    let dir = tmp().join("yumete-table-bench");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("division.csv");
     std::fs::write(&path, &csv).unwrap();
@@ -15547,7 +15557,7 @@ fn a_block_is_entered_on_the_delimiter_the_cursor_is_standing_on() {
     // Both a tab and a comma hold every line together. Standing on the
     // comma says which one is meant — nothing has to be prompted for.
     let mut ed = Editor::new();
-    let dir = std::env::temp_dir().join(format!("yumete-block-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-block-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("章.md");
@@ -15977,7 +15987,7 @@ fn a_caret_walking_off_a_row_puts_its_markup_back_away() {
 /// nowhere near it. **A grid guards the lines it occupies and no others.**
 #[test]
 fn prose_beside_a_table_still_gives_up_its_line_break() {
-    let dir = std::env::temp_dir().join(format!("yumete-cut-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-cut-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("beside.md");
     std::fs::write(&path, "甲乙\n丙丁\n\n| a | b |\n| - | - |\n| c | d |\n").unwrap();
@@ -16090,7 +16100,7 @@ fn the_block_scan_reads_the_same_document_however_the_rope_holds_it() {
         text.push_str("```rust\nlet x = 1;\n```\n\n");
         text.push_str("> 引用一行\n\n");
     }
-    let dir = std::env::temp_dir().join(format!("yumete-scanshape-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-scanshape-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let doc = dir.join("shape.md");
     std::fs::write(&doc, &text).unwrap();
@@ -16148,7 +16158,7 @@ fn the_cost_of_a_key_in_a_long_file() {
             text.push_str("She said nothing for a long while.\n\n");
             text.push_str("```\nlet x = 1;\n```\n\n");
         }
-        let dir = std::env::temp_dir().join(format!("yumete-blockbench-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-blockbench-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let doc = dir.join(format!("m{paragraphs}.md"));
         std::fs::write(&doc, &text).unwrap();
@@ -16201,7 +16211,7 @@ fn the_cost_of_a_key_in_a_long_file() {
 fn the_cost_of_a_key_in_one_paragraph() {
     use std::time::Instant;
     for chars in [20_000usize, 200_000, 1_000_000] {
-        let dir = std::env::temp_dir().join(format!("yumete-wrapbench-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-wrapbench-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let doc = dir.join(format!("p{chars}.txt"));
         std::fs::write(&doc, "甲乙丙丁戊己庚辛".repeat(chars / 8)).unwrap();
@@ -16254,7 +16264,7 @@ fn the_cost_of_a_key_in_a_table() {
         for i in 0..rows {
             text.push_str(&format!("| 第{i}行 | 甲乙丙丁 |\n"));
         }
-        let dir = std::env::temp_dir().join(format!("yumete-padbench-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-padbench-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let doc = dir.join(format!("t{rows}.md"));
         std::fs::write(&doc, &text).unwrap();
@@ -16362,7 +16372,7 @@ fn commenting_takes_whole_lines_and_keeps_them_selected() {
 /// `open_file` 就足以把根挪過去；現在要 `set_root`——而那正是命令行做的事。
 #[test]
 fn the_project_root_prefers_yumete_then_git_then_here() {
-    let dir = std::env::temp_dir().join(format!("yumete-root-order-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-root-order-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let repo = dir.join("repo");
     let book = repo.join("book");
@@ -16415,7 +16425,7 @@ fn the_project_root_prefers_yumete_then_git_then_here() {
 /// ground that draws made it look like a broken table.
 #[test]
 fn a_txt_that_is_plainly_a_grid_opens_as_one_and_says_so() {
-    let dir = std::env::temp_dir().join(format!("yumete-txt-grid-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-txt-grid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("拆分.txt");
@@ -16443,7 +16453,7 @@ fn a_txt_that_is_plainly_a_grid_opens_as_one_and_says_so() {
 /// worse than not having it.
 #[test]
 fn source_mode_is_remembered_for_a_guessed_grid_and_taken_back() {
-    let dir = std::env::temp_dir().join(format!("yumete-txt-off-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-txt-off-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let data = dir.join("data");
     std::fs::create_dir_all(&data).unwrap();
@@ -16507,7 +16517,7 @@ fn a_paste_asked_for_a_million_stops_at_the_ceiling() {
 /// **A find with nothing to find looks once** (#318).
 #[test]
 fn a_huge_count_on_f_costs_one_look_when_the_character_is_not_there() {
-    let dir = std::env::temp_dir().join(format!("yumete-find-count-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-find-count-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("long.txt");
@@ -16573,7 +16583,7 @@ fn a_macro_asked_for_a_million_stops_at_the_ceiling() {
 /// remaining 9998 would each copy a million characters again — thirty seconds.
 #[test]
 fn a_macro_that_moves_nothing_stops_replaying() {
-    let dir = std::env::temp_dir().join(format!("yumete-macro-count-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-macro-count-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("big.txt");
@@ -16602,7 +16612,7 @@ fn a_macro_that_moves_nothing_stops_replaying() {
 /// one that never waits.
 #[test]
 fn a_round_of_recovery_copies_is_bounded_and_the_backlog_drains() {
-    let dir = std::env::temp_dir().join(format!("yumete-swap-budget-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-swap-budget-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let body = "雪".repeat(23_000); // a 70 KB chapter, at the small end
@@ -16706,7 +16716,7 @@ fn a_round_of_recovery_copies_is_bounded_and_the_backlog_drains() {
 /// question is `draft_is_stale`: has anything happened since the copy.
 #[test]
 fn a_recovery_copy_that_is_current_is_not_written_again() {
-    let dir = std::env::temp_dir().join(format!("yumete-swap-idle-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-swap-idle-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let mut ed = Editor::new();
@@ -16773,7 +16783,7 @@ fn a_recovery_copy_that_is_current_is_not_written_again() {
 /// character 300 000 and took the process down with it.
 #[test]
 fn write_all_that_stops_to_ask_stands_on_that_file_properly() {
-    let dir = std::env::temp_dir().join(format!("yumete-wa-ask-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wa-ask-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let long = dir.join("long.md");
@@ -16825,7 +16835,7 @@ fn write_all_that_stops_to_ask_stands_on_that_file_properly() {
 /// end hands back a formatted buffer, and `:convert`.
 #[test]
 fn a_whole_document_rewrite_will_not_break_a_row() {
-    let dir = std::env::temp_dir().join(format!("yumete-rewrite-grid-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rewrite-grid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("人物.csv");
@@ -17102,7 +17112,7 @@ fn an_arrow_key_off_the_end_of_a_table_does_not_open_a_row() {
 #[test]
 fn a_step_down_a_table_costs_the_same_however_long_it_is() {
     use std::time::{Duration, Instant};
-    let dir = std::env::temp_dir().join(format!("yumete-rowcost-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rowcost-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let cost = |rows: usize| -> Duration {
         let mut text = String::from("| 字 | 讀音 |\n| -- | ---- |\n");
@@ -17163,7 +17173,7 @@ fn the_cost_of_a_step_down_a_table() {
         for i in 0..rows {
             text.push_str(&format!("| 木{i} | mu   |\n"));
         }
-        let dir = std::env::temp_dir().join(format!("yumete-rowbench-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-rowbench-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let doc = dir.join(format!("t{rows}.md"));
         std::fs::write(&doc, &text).unwrap();
@@ -17300,7 +17310,7 @@ fn a_continuation_earns_no_undo_point_of_its_own() {
 /// rather than a wall.
 #[test]
 fn a_heading_in_the_outline_folds_what_is_under_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-fold-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-fold-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
@@ -17472,7 +17482,7 @@ fn a_closing_bracket_already_typed_is_left_alone() {
 /// what is under that, **not** the book.
 #[test]
 fn a_wiki_link_offers_the_files_near_this_one() {
-    let dir = std::env::temp_dir().join(format!("yumete-wiki-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wiki-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("卷一/卷二")).unwrap();
     std::fs::write(dir.join("卷一/一.md"), "# 卷一\n").unwrap();
@@ -17521,7 +17531,7 @@ fn a_wiki_link_offers_the_files_near_this_one() {
 /// a tag or an anchor.
 #[test]
 fn a_wiki_link_survives_a_space_in_the_name() {
-    let dir = std::env::temp_dir().join(format!("yumete-wikispace-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wikispace-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("此章.md"), "本\n").unwrap();
@@ -17548,7 +17558,7 @@ fn a_wiki_link_survives_a_space_in_the_name() {
 /// #418 三. Two brackets are wanted, however many are already there.
 #[test]
 fn a_wiki_link_closes_with_as_many_brackets_as_are_missing() {
-    let dir = std::env::temp_dir().join(format!("yumete-wikiclose-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wikiclose-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("此章.md"), "本\n").unwrap();
@@ -17856,7 +17866,7 @@ fn a_vim_operator_waits_for_any_motion_the_editor_has() {
 /// 條線程。搬到旁邊之後那道閘對面板不再成立。
 #[test]
 fn the_panel_finds_as_many_as_the_pipe_does() {
-    let dir = std::env::temp_dir().join(format!("yumete-bg-search-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-bg-search-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("卷一")).unwrap();
     std::fs::write(dir.join(".yumete"), "").unwrap();
@@ -19174,7 +19184,7 @@ fn a_code_span_in_double_backticks_is_not_a_note() {
 /// says what was read, and saving a wiki file reads it again.
 #[test]
 fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
-    let dir = std::env::temp_dir().join(format!("yumete-wiki-editor-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wiki-editor-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     std::fs::write(dir.join(".yumete/wiki.md"), "# 地理\n<!-- [yumete] 地理.md -->\n").unwrap();
@@ -19212,7 +19222,7 @@ fn a_wiki_name_is_one_word_and_the_report_says_where_it_came_from() {
 /// fuzzy，防止用户打错了字或者顺序错了，比如 朱宇浩 打成了 朱浩宇」。
 #[test]
 fn a_named_entry_opens_a_picker_and_stays_put_until_the_cursor_moves() {
-    let dir = std::env::temp_dir().join(format!("yumete-wiki-find-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wiki-find-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     std::fs::write(
@@ -19274,7 +19284,7 @@ fn a_named_entry_opens_a_picker_and_stays_put_until_the_cursor_moves() {
 #[test]
 fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
     use crate::editor::WikiLine;
-    let dir = std::env::temp_dir().join(format!("yumete-wiki-panel-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wiki-panel-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     std::fs::write(
@@ -19321,7 +19331,7 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
 /// frame at 5000 lines and 30 ms at 20000, measured.
 #[test]
 fn a_long_wiki_entry_is_only_read_as_far_as_the_panel_can_draw() {
-    let dir = std::env::temp_dir().join(format!("yumete-wiki-long-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wiki-long-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     let body: String = (0..5000).map(|i| format!("第{i}句。\n")).collect();
@@ -19352,7 +19362,7 @@ fn a_long_wiki_entry_is_only_read_as_far_as_the_panel_can_draw() {
 /// was written, nothing happened, and the report said all was well.
 #[test]
 fn the_wiki_report_names_what_this_chapter_could_not_mark() {
-    let dir = std::env::temp_dir().join(format!("yumete-wiki-missed-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wiki-missed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     // 「A 計劃」 has a space and a Latin letter, so it can never be one token —
@@ -19414,7 +19424,7 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
         }
     }
 
-    let dir = std::env::temp_dir().join(format!("yumete-check-names-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-check-names-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     std::fs::write(dir.join(".yumete/wiki.md"), "## 醉翁亭\n一座亭子。\n").unwrap();
@@ -19447,7 +19457,7 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
 /// them, in three modes, and never inside a fence.
 #[test]
 fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-wiki-mark-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-wiki-mark-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".yumete")).unwrap();
     std::fs::write(dir.join(".yumete/wiki.md"), "## 落霞鎮\n小鎮。\n## 墨\n一個字。\n").unwrap();
@@ -19494,7 +19504,7 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
 /// Warning: **`j`、`q`、`i` 現在是查詢詞裏的字母。** 從前它們是列表那一層的命令。
 #[test]
 fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
-    let dir = std::env::temp_dir().join(format!("yumete-picker-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-picker-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("一.md"), "第一章的頭一句。\n第二句。\n").unwrap();
@@ -19560,7 +19570,7 @@ fn the_pickers_old_commands_are_letters_of_the_query_now() {
 /// (f,f)`。隱藏那一檔真的管用——點開頭的目錄本來一條都不列，撥到第三格就列得出來。
 #[test]
 fn alt_h_cycles_what_the_picker_skips_and_keeps_the_query() {
-    let dir = std::env::temp_dir().join(format!("yumete-picker-sieve-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-picker-sieve-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(".隱")).unwrap();
     std::fs::write(dir.join("甲稿.md"), "一行\n").unwrap();
@@ -19885,7 +19895,7 @@ fn the_line_the_cursor_is_on_says_what_the_server_said() {
         message: message.to_string(),
         source: who.map(str::to_string),
     };
-    let dir = std::env::temp_dir().join(format!("yumete-here-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-here-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("a.rs");
     std::fs::write(&path, "one
@@ -20243,7 +20253,7 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
 fn an_answer_to_a_question_that_was_dropped_is_not_shown() {
     use crate::lsp::Offer;
     // Warning: 要一個**真的路徑**：問服務器問的是「哪個檔的哪一行哪一列」。
-    let dir = std::env::temp_dir().join(format!("yumete-drop-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-drop-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let rs = dir.join("a.rs");
@@ -20876,7 +20886,7 @@ fn the_goto_dot_key_says_so_when_nothing_has_changed() {
 /// **`ga` 切回剛纔那一份稿子**（helix 的 `goto_last_accessed_file`）。
 #[test]
 fn the_goto_a_key_goes_back_to_the_file_before_this_one() {
-    let dir = std::env::temp_dir().join(format!("yumete-ga-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-ga-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let one = dir.join("一.md");
@@ -21295,7 +21305,7 @@ fn the_editor_says_when_it_holds_many_selections() {
 /// 正是表格最常做的事。
 #[test]
 fn a_full_pane_table_holds_one_cursor() {
-    let dir = std::env::temp_dir().join(format!("yumete-tblsel-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-tblsel-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // Warning: **要一個整檔就是一張表的檔**（`Bounds::WholeFile`）：Markdown 的 `|` 表格永遠
@@ -21700,7 +21710,7 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
 /// 問題的答案，看着像剛問的。
 #[test]
 fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
-    let dir = std::env::temp_dir().join("yumete-hover-walks-off");
+    let dir = tmp().join("yumete-hover-walks-off");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
@@ -21734,7 +21744,7 @@ fn a_hover_is_thrown_away_once_the_cursor_walks_off_it() {
 /// 被當成「又按了一次」，去收一扇早就不在的窗。第一下白按，第二下纔開。
 #[test]
 fn asking_again_after_walking_back_opens_it_in_one_press() {
-    let dir = std::env::temp_dir().join(format!("yumete-hover-again-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-hover-again-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
@@ -21774,7 +21784,7 @@ fn asking_again_after_walking_back_opens_it_in_one_press() {
 #[test]
 fn the_info_command_picks_which_one_follows_the_cursor() {
     use crate::sidebar::{Info, View};
-    let dir = std::env::temp_dir().join("yumete-docs-follow");
+    let dir = tmp().join("yumete-docs-follow");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\nfn other() {}\n").unwrap();
@@ -21813,7 +21823,7 @@ fn the_info_command_picks_which_one_follows_the_cursor() {
 /// 弹窗显示。」兩個面在說同一件事，是這個編輯器一直在拆的東西。
 #[test]
 fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
-    let dir = std::env::temp_dir().join("yumete-docs-or-float");
+    let dir = tmp().join("yumete-docs-or-float");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
@@ -21842,7 +21852,7 @@ fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
 /// 同 helix 的 `ui/popup.rs:289-297`）。
 #[test]
 fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
-    let dir = std::env::temp_dir().join("yumete-docs-paging");
+    let dir = tmp().join("yumete-docs-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
@@ -21881,7 +21891,7 @@ fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
 #[test]
 fn the_five_kinds_share_one_slot_so_tab_only_sees_one() {
     use crate::sidebar::{Side, View};
-    let dir = std::env::temp_dir().join("yumete-wiki-or-docs");
+    let dir = tmp().join("yumete-wiki-or-docs");
     let _ = std::fs::create_dir_all(&dir);
     std::fs::write(dir.join("a.rs"), "fn one() {}\n").unwrap();
     std::fs::write(dir.join("b.md"), "一段散文。\n").unwrap();
@@ -21926,7 +21936,7 @@ fn the_five_kinds_share_one_slot_so_tab_only_sees_one() {
 #[test]
 fn the_width_key_works_in_the_info_panel() {
     use crate::sidebar::{Info, Side, View, Width};
-    let dir = std::env::temp_dir().join("yumete-docs-width");
+    let dir = tmp().join("yumete-docs-width");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn one() {}\n").unwrap();
@@ -22007,7 +22017,7 @@ fn in_a_manuscript_those_two_keys_ask_the_wiki_instead() {
 #[test]
 fn asking_and_showing_are_two_separate_things() {
     use crate::sidebar::{Info, View};
-    let dir = std::env::temp_dir().join("yumete-docs-two-axes");
+    let dir = tmp().join("yumete-docs-two-axes");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();
@@ -22071,7 +22081,7 @@ fn asking_and_showing_are_two_separate_things() {
 #[test]
 fn only_one_kind_is_ever_live() {
     use crate::sidebar::Info;
-    let dir = std::env::temp_dir().join("yumete-docs-or-problems");
+    let dir = tmp().join("yumete-docs-or-problems");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn one() {}\n").unwrap();
@@ -22095,7 +22105,7 @@ fn only_one_kind_is_ever_live() {
 /// 掉文檔的浮窗」）。
 #[test]
 fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
-    let dir = std::env::temp_dir().join("yumete-no-stacking");
+    let dir = tmp().join("yumete-no-stacking");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn one() {}\n").unwrap();
@@ -22333,7 +22343,7 @@ fn the_region_group_toggles_a_bar_without_going_into_it() {
 #[test]
 fn the_slot_is_a_place_whatever_is_in_it() {
     use crate::sidebar::{Info, View};
-    let dir = std::env::temp_dir().join("yumete-either-slot");
+    let dir = tmp().join("yumete-either-slot");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn one() {}\n").unwrap();
@@ -22386,7 +22396,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
 #[test]
 fn the_slot_opens_showing_whichever_it_ought_to() {
     use crate::sidebar::{Info, View};
-    let dir = std::env::temp_dir().join("yumete-slot-opens");
+    let dir = tmp().join("yumete-slot-opens");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn one() {}\n").unwrap();
@@ -22429,7 +22439,7 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
 /// 那一對鍵，而 helix 拿它們滾浮窗（`ui/popup.rs:289-297`）。
 #[test]
 fn the_four_keys_scroll_whichever_kind_is_showing() {
-    let dir = std::env::temp_dir().join("yumete-info-paging");
+    let dir = tmp().join("yumete-info-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn one() {}\nfn two() {}\n").unwrap();
@@ -22471,7 +22481,7 @@ fn the_four_keys_scroll_whichever_kind_is_showing() {
 /// ——於是它既沒翻格，又因為讓了路而沒翻別的。#426 把那個輪換整個撤了。
 #[test]
 fn the_grid_keeps_the_paging_keys() {
-    let dir = std::env::temp_dir().join("yumete-grid-paging");
+    let dir = tmp().join("yumete-grid-paging");
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("g.csv");
     let mut rows = vec!["甲,乙,丙".to_string()];
@@ -23195,7 +23205,7 @@ fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
 #[test]
 fn closing_a_buffer_redraws_the_buffer_list() {
     use crate::sidebar::Side;
-    let dir = std::env::temp_dir().join(format!("yumete-bd-panel-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-bd-panel-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("one.md"), "甲\n").unwrap();
@@ -23257,7 +23267,7 @@ fn the_outline_keeps_the_heading_it_was_standing_on() {
 /// 上出現兩次，處數也憑空多出來。
 #[test]
 fn the_fast_rescan_refuses_when_the_counts_describe_another_buffer() {
-    let dir = std::env::temp_dir().join(format!("yumete-rescanmine-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-rescanmine-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("one.md"), "甲\n").unwrap();
@@ -23307,7 +23317,7 @@ fn the_fast_rescan_refuses_when_the_counts_describe_another_buffer() {
 /// 留下的是任意的五百個，`ch0001.md` 可能不在樹上而 `ch0600.md` 在。
 #[test]
 fn a_huge_directory_keeps_the_first_names_not_an_arbitrary_five_hundred() {
-    let dir = std::env::temp_dir().join(format!("yumete-bigdir-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-bigdir-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     for n in 1..=600 {
@@ -23693,7 +23703,7 @@ fn the_offer_list_is_ranked_by_what_has_been_typed() {
 /// `:instant-info`，這個名字讓給真正回答那件事的一頁。
 #[test]
 fn the_file_report_says_what_this_file_is() {
-    let dir = std::env::temp_dir().join(format!("yumete-fileinfo-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-fileinfo-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(".yumete.toml"), "").unwrap();
@@ -23739,7 +23749,7 @@ fn the_file_report_says_what_this_file_is() {
 /// 三條規矩一起釘住：只在代碼裏、只在插入態、`)` 收。
 #[test]
 fn typing_an_open_bracket_asks_what_goes_in_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-sig-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sig-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("a.rs");
@@ -23794,7 +23804,7 @@ fn typing_an_open_bracket_asks_what_goes_in_it() {
 /// `first_time_ever(` but typed println!, the signature panel still persists.」
 #[test]
 fn a_signature_goes_away_with_the_bracket_that_asked_for_it() {
-    let dir = std::env::temp_dir().join(format!("yumete-sigstale-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sigstale-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("a.rs");
@@ -23860,7 +23870,7 @@ fn a_signature_goes_away_with_the_bracket_that_asked_for_it() {
 /// `hover` 答得好好的（`println!` 就是）。回退那一段**最多一段**。
 #[test]
 fn no_signature_falls_back_to_one_paragraph_of_the_doc() {
-    let dir = std::env::temp_dir().join(format!("yumete-sigdoc-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sigdoc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("a.rs");
@@ -23943,7 +23953,7 @@ fn a_dot_after_a_chinese_change_puts_the_chinese_back() {
 /// 身上的舊下標會問出一句問在別處的話。
 #[test]
 fn switching_the_document_drops_what_was_asked_about_the_last_one() {
-    let dir = std::env::temp_dir().join(format!("yumete-sigswap-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-sigswap-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let one = dir.join("a.rs");
@@ -24269,7 +24279,7 @@ fn a_substitution_refuses_a_line_the_file_does_not_have() {
 #[test]
 fn an_open_bracket_indents_the_next_line_one_more_level() {
     let code = |text: &str| {
-        let dir = std::env::temp_dir().join(format!("yumete-tsindent-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-tsindent-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let file = dir.join("a.rs");
         std::fs::write(&file, text).unwrap();
@@ -24301,7 +24311,7 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.current_buffer().text(), "fn f() {\n\n", "答不出來就不動");
 
-    let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!("yumete-tsindent-{}", std::process::id())));
+    let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
 }
 
 
@@ -24418,7 +24428,7 @@ fn a_tab_on_a_very_long_line_is_measured_once_not_once_a_row() {
 /// `forget_a_guessed_table` 在 `hold_the_pane` 前面跑，把猜來的視圖先扔了。
 #[test]
 fn the_window_holds_you_even_when_the_table_was_guessed() {
-    let dir = std::env::temp_dir().join(format!("yumete-tsvhold-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-tsvhold-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("a.txt");
@@ -24456,7 +24466,7 @@ fn the_window_holds_you_even_when_the_table_was_guessed() {
 /// 那四態管的是隱藏與 `.gitignore`，不管大小。
 #[test]
 fn a_big_file_is_neither_hidden_from_the_picker_nor_from_the_search() {
-    let dir = std::env::temp_dir().join(format!("yumete-bigpick-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-bigpick-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("small.txt"), "hi\n").unwrap();
@@ -24491,7 +24501,7 @@ fn a_big_file_is_neither_hidden_from_the_picker_nor_from_the_search() {
 /// 這裏把保護補在讀的那一步上。
 #[test]
 fn word_discovery_reads_a_budget_not_a_whole_file() {
-    let dir = std::env::temp_dir().join(format!("yumete-discover-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-discover-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // 比預算大得多的一個檔：以前整個讀進來，現在只讀預算那么多。
@@ -24593,7 +24603,7 @@ fn a_named_register_keeps_a_piece_for_every_cursor() {
 /// 路徑排是 丙.md／乙.rs／甲.md，而名單上要是 丙.md／甲.md／乙.rs。
 #[test]
 fn the_picker_opens_before_the_walk_has_found_anything() {
-    let dir = std::env::temp_dir().join(format!("yumete-picker-stream-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-picker-stream-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     for name in ["甲.md", "乙.rs", "丙.md"] {
@@ -24622,7 +24632,7 @@ fn the_picker_opens_before_the_walk_has_found_anything() {
 #[test]
 fn a_walk_told_to_stop_stops_at_the_next_entry() {
     use std::sync::atomic::{AtomicBool, Ordering};
-    let dir = std::env::temp_dir().join(format!("yumete-walk-stop-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-walk-stop-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     for n in 0..20 {
@@ -24750,7 +24760,7 @@ fn a_file_edited_after_the_replacement_is_left_alone_and_named() {
 
 /// 上面三支共用的台：三個檔各一處「霜」，人站在丙上，面板開着替換那一行。
 fn a_book_with_frost(tag: &str) -> (std::path::PathBuf, Editor) {
-    let dir = std::env::temp_dir()
+    let dir = tmp()
         .join(format!("yumete-undo-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -24902,7 +24912,7 @@ fn asking_for_the_float_again_outranks_the_esc_that_hushed_it() {
 /// 進去。
 #[test]
 fn space_k_after_an_esc_opens_the_doc_again_without_moving() {
-    let dir = std::env::temp_dir().join(format!("yumete-hover-esc-{}", std::process::id()));
+    let dir = tmp().join(format!("yumete-hover-esc-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("a.rs");
     std::fs::write(&file, "fn compile_the_table() {}\n").unwrap();

@@ -323,6 +323,15 @@ impl Default for Servers {
     }
 }
 
+/// **問不出去的理由，以及它會不會自己過去。**
+///
+/// `for_now` ＝ 再等一下就問得出去（服務器正在起）。這一種的問話要**留着**，不然
+/// 人在握手那一兩秒裏按的 `空格 k` 就永遠沒有答案。
+struct Cannot {
+    word: String,
+    for_now: bool,
+}
+
 impl Servers {
     /// **Which program answers for this language**, or `None` for 「none」.
     ///
@@ -387,7 +396,7 @@ impl Servers {
             .path()
             .and_then(|p| p.parent())
             .map(Path::to_path_buf)
-            .unwrap_or_else(|| editor.project_root())
+            .unwrap_or_else(|| editor.lsp_root())
     }
 
     /// The language a buffer is, as LSP spells it — `None` for prose.
@@ -719,10 +728,10 @@ impl Servers {
         editor: &Editor,
         config: &yumete_config::Config,
         language: &str,
-    ) -> Option<String> {
+    ) -> Option<Cannot> {
         // 一、設置裏這個語言根本沒寫服務器。
         let Some(wanted) = config.lsp.get(language).filter(|v| !v.is_empty()) else {
-            return Some(say!("lsp.no-server-configured", language));
+            return Some(Cannot { word: say!("lsp.no-server-configured", language), for_now: false });
         };
         // 二、寫了，可這臺機器上一個都找不到。
         //
@@ -730,15 +739,15 @@ impl Servers {
         // 候選（`ty`/`ruff`/`pylsp`/`jedi-language-server`，抄的 helix），而
         // 從前這句話只說第一個——讀者於是只會去裝 `ty`，其實裝哪一個都行。
         if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
-            return Some(say!("lsp.not-installed", Self::the_names(wanted)));
+            return Some(Cannot { word: say!("lsp.not-installed", Self::the_names(wanted)), for_now: false });
         }
         // 三、稿子還沒存盤——服務器答的是檔案，沒有路徑就沒得問。
         if editor.current_buffer().path().is_none() {
-            return Some(say!("lsp.buffer-unsaved"));
+            return Some(Cannot { word: say!("lsp.buffer-unsaved"), for_now: false });
         }
         // 四、試過了，起不來，此後不再試（`failed`）。
         if self.failed.contains(language) {
-            return Some(say!("lsp.start-failed"));
+            return Some(Cannot { word: say!("lsp.start-failed"), for_now: false });
         }
         // 五、正在起，或者剛握上手還沒說 ready。
         // 起了幾個就看幾個：只要有一個 ready 就問得出去。
@@ -746,7 +755,8 @@ impl Servers {
             self.running.get(name).is_some_and(|server| server.ready)
         }) {
             true => None,
-            false => Some(say!("lsp.starting")),
+            // **這一種是暫時的**，所以問話留着（見 `ask_what`）。
+            false => Some(Cannot { word: say!("lsp.starting"), for_now: true }),
         }
     }
 
@@ -762,11 +772,27 @@ impl Servers {
         // Warning: **從前這五種只有一句話**：`no_hover()` 的「服務器對這個沒什麽
         // 可說的」。那句話字面的意思是「它答了，說沒有」，而服務器根本沒起來的
         // 時候說的也是它——隔壁註釋還寫着「照實說」。原話：「现在太含混了。」
-        if let Some(word) = self.why_it_cannot_ask(editor, config, language) {
+        if let Some(cannot) = self.why_it_cannot_ask(editor, config, language) {
             // Warning: **只有人按了鍵纔說**。跟着光標走的那一問（`:docs on`）是編
             // 輯器自己發的，每走到一個標點就罵一句不是人要的。
-            if editor.take_hover_query().is_some() {
-                self.says = Some(word);
+            //
+            // Warning: **問不出去是暫時的那一種，問話要留着**（2026-10-10 一輪審查
+            // 報來的）。從前這裏一律 `take`，於是開檔頭一兩秒按 `空格 k`——握手還
+            // 沒完，正是人最想看一眼「這是什麼」的那一刻——那一問當場被毀掉，之後
+            // 按任何鍵都補不回來；而 `ask_for_info` 已經把那一格佔住了，狀態欄報
+            // 「浮窗在」而屏幕上什麼都沒畫。隔壁 `busy_since` 那道閘早就是留着的
+            //（#431），只是這一道排在它前面，先把話毀了。
+            match cannot.for_now {
+                true => {
+                    if editor.hover_query_is_pending() {
+                        self.says = Some(cannot.word);
+                    }
+                }
+                false => {
+                    if editor.take_hover_query().is_some() {
+                        self.says = Some(cannot.word);
+                    }
+                }
             }
             return;
         }
@@ -1256,7 +1282,7 @@ fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::
         // Warning: **The project root, not the editor's cwd.** A server asked to
         // analyse a crate from somewhere else finds no `Cargo.toml` and
         // answers about nothing at all, silently.
-        .current_dir(editor.project_root())
+        .current_dir(editor.lsp_root())
         .spawn()?;
 
     let (to, outgoing) = std::sync::mpsc::channel::<String>();
@@ -1321,7 +1347,7 @@ fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::
         working_since: None,
         asked_next: None,
     };
-    server.say_now(lsp::initialize(HELLO, &editor.project_root()));
+    server.say_now(lsp::initialize(HELLO, &editor.lsp_root()));
     Ok(server)
 }
 
@@ -1417,7 +1443,7 @@ mod tests {
     /// A real file on disk, opened — a server answers about files, and an
     /// unnamed buffer has no URI to answer about.
     fn editor_on(name: &str, text: &str) -> (Editor, PathBuf) {
-        let dir = std::env::temp_dir().join(format!("yumete-lsp-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-lsp-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(name);
         std::fs::write(&path, text).unwrap();
@@ -1429,6 +1455,12 @@ mod tests {
     fn method(message: &str) -> String {
         let value: serde_json::Value = serde_json::from_str(message).expect(message);
         value["method"].as_str().unwrap_or_default().to_string()
+    }
+
+    /// `$TMPDIR`，照編輯器的說法拼——`Buffer::open` 解析軟鏈接（2026-10-11）。
+    fn tmp() -> std::path::PathBuf {
+        let dir = std::env::temp_dir();
+        std::fs::canonicalize(&dir).unwrap_or(dir)
     }
 
     #[test]
@@ -1490,7 +1522,7 @@ mod tests {
         // 一、設置裏這個語言根本沒寫服務器。
         let bare = Servers::default();
         assert_eq!(
-            bare.why_it_cannot_ask(&editor, &none, "rust"),
+            bare.why_it_cannot_ask(&editor, &none, "rust").map(|c| c.word),
             Some(say!("lsp.no-server-configured", "rust")),
         );
 
@@ -1507,7 +1539,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            bare.why_it_cannot_ask(&editor, &missing, "rust"),
+            bare.why_it_cannot_ask(&editor, &missing, "rust").map(|c| c.word),
             Some(say!("lsp.not-installed", "no-such-analyzer")),
         );
 
@@ -1515,7 +1547,7 @@ mod tests {
         let (fresh, _heard, _tell) = Servers::pretend("rust");
         let blank = Editor::new();
         assert_eq!(
-            fresh.why_it_cannot_ask(&blank, &stocked, "rust"),
+            fresh.why_it_cannot_ask(&blank, &stocked, "rust").map(|c| c.word),
             Some(say!("lsp.buffer-unsaved")),
         );
 
@@ -1523,7 +1555,7 @@ mod tests {
         let mut written_off = Servers::default();
         written_off.failed.insert("rust".to_string());
         if yumete_config::factory_servers().contains_key("rust") {
-            let told = written_off.why_it_cannot_ask(&editor, &stocked, "rust");
+            let told = written_off.why_it_cannot_ask(&editor, &stocked, "rust").map(|c| c.word);
             // 這臺機器上那個命令可能真的不在，那時二先答——兩句都對，不是這一條要釘的。
             assert!(
                 told == Some(say!("lsp.start-failed")) || matches!(&told, Some(t) if t.contains("找不到")),
@@ -1533,7 +1565,21 @@ mod tests {
 
         // 五、起來了、也 ready 了：問得出去，不說話。
         let (ready, _heard, _tell) = Servers::pretend("rust");
-        assert_eq!(ready.why_it_cannot_ask(&editor, &stocked, "rust"), None, "問得出去");
+        assert!(ready.why_it_cannot_ask(&editor, &stocked, "rust").is_none(), "問得出去");
+
+        // **只有「正在起」那一種是暫時的**，而只有暫時的那一種纔留着問話
+        //（2026-10-10）。前四種再等多久都不會變。
+        let (mut starting, _h, _t) = Servers::pretend("rust");
+        for server in starting.running.values_mut() {
+            server.ready = false;
+        }
+        let waiting = starting.why_it_cannot_ask(&editor, &stocked, "rust");
+        assert_eq!(waiting.as_ref().map(|c| c.word.clone()), Some(say!("lsp.starting")));
+        assert!(waiting.is_some_and(|c| c.for_now), "正在起：等一下就問得出去");
+        assert!(
+            bare.why_it_cannot_ask(&editor, &none, "rust").is_some_and(|c| !c.for_now),
+            "沒配服務器：等多久都一樣"
+        );
     }
 
     /// **項目自己帶的那個可執行檔找得到，而且贏過 `PATH`**（2026-09-29 定）。
@@ -1546,7 +1592,7 @@ mod tests {
     /// vim 沒有內建 LSP。這一條是我們自己加的。
     #[test]
     fn a_server_that_lives_in_the_project_is_found_before_the_one_on_the_path() {
-        let dir = std::env::temp_dir().join(format!("yumete-bins-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-bins-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         // 一棵假的項目樹：根上有 `.git` 和 pixi 的環境，稿子埋在兩層底下。
         let deep = dir.join("crates/one/src");

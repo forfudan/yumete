@@ -377,6 +377,48 @@ impl Editor {
         book_root(here)
     }
 
+    /// **這個檔屬於哪個項目**——從它自己往上找，不從 cwd 找（2026-10-10 一輪審查
+    /// 報來的）。
+    ///
+    /// 語言服務器要的是這一個：它既是 `rootUri`，也是子進程的工作目錄。從前那裏
+    /// 用的是 [`Self::project_root`]（＝從 cwd 往上找），於是**在別的目錄裏打開
+    /// 一個項目的檔，服務器被起在錯的根上**，一條診斷都不回。helix 分得很清楚：
+    /// `find_workspace` 看 cwd，而 `find_lsp_workspace` 從那個檔往上爬。
+    ///
+    /// 沒有檔名的緩衝回 `project_root()` —— 那時候 cwd 是唯一的線索。
+    pub fn lsp_root(&self) -> PathBuf {
+        let Some(dir) = self.current_buffer().path().and_then(|p| p.parent()) else {
+            return self.project_root();
+        };
+        // **語言自己的根記號先問**（2026-10-11，照 helix 的 `roots`）。
+        //
+        // `book_root` 只認 `.yumete` 和 `.git`——那是**這本書**的根，而服務器要的
+        // 是**這個項目**的根。一個沒有 `.git` 的 crate（`cargo new` 之後還沒
+        // `git init`，測試的固定裝置也是）於是把 `src/` 本身當成根交出去，
+        // rust-analyzer 找不到 `Cargo.toml`，`gd` 答「未查到定義位置」——而診斷和
+        // hover 照樣有，因為那兩樣單檔也答得出來，所以看着像只有 `gd` 壞了。
+        //
+        // Warning: **最外面那一個贏**。工作區裏一個 crate 的 `Cargo.toml` 和倉根
+        // 的那一個都在，要的是倉根那一個（`cargo` 自己也是這麼找工作區的）。
+        const ROOTS: [&str; 6] = [
+            "Cargo.toml",
+            "go.mod",
+            "pyproject.toml",
+            "package.json",
+            "pixi.toml",
+            "compile_commands.json",
+        ];
+        let outermost = dir
+            .ancestors()
+            .filter(|step| ROOTS.iter().any(|mark| step.join(mark).exists()))
+            .last()
+            .map(Path::to_path_buf);
+        match outermost {
+            Some(root) => root,
+            None => self.project_root_from(dir),
+        }
+    }
+
     /// This book's log as it stands on disk. Missing is empty, not an error.
     fn progress_log(&self, path: &Path) -> crate::progress::Log {
         std::fs::read_to_string(path)

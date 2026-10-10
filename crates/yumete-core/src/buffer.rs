@@ -387,16 +387,20 @@ impl Buffer {
         // macOS 上軟鏈接讓同一件事在**絕對路徑**下也會發生：`/var` 是
         // `/private/var` 的鏈接，所以 `$TMPDIR` 裏的檔必中。
         //
-        // Warning: **只絕對化，不解析軟鏈接。** 解析了同一天就弄紅十五條測試——它
-        // 們拿 `std::env::temp_dir()` 的路徑作比較，而 macOS 上那是 `/var/folders/…`
-        // 的鏈接。軟鏈接那一半留在 LSP 那一層自己收（見那裏的註釋）。
+        // Warning: **軟鏈接也要解析**（2026-10-11）。macOS 的 `/var` 是
+        // `/private/var` 的鏈接，所以 `$TMPDIR` 底下必中：我們說 `/var/…`，服務器
+        // 答 `/private/var/…`，兩個名字指同一個檔而編輯器認不出來。`gd` 於是答
+        // 「未查到定義位置」。
+        //
+        // Warning: **還沒存在的檔 canonicalize 不了**（`:open 新章.md`），那就只絕
+        // 對化——它一存下來，下一次開它走的是上面那條路。
         let path = path.as_ref();
-        let full = match path.is_absolute() {
+        let full = fs::canonicalize(path).unwrap_or_else(|_| match path.is_absolute() {
             true => path.to_path_buf(),
             false => std::env::current_dir()
                 .map(|here| here.join(path))
                 .unwrap_or_else(|_| path.to_path_buf()),
-        };
+        });
         let path = full.as_path();
         let mut read_as = None;
         // **What the file was, to be written back as** (#309, #310).
@@ -1816,9 +1820,19 @@ mod tests {
     ///
     /// It matters beyond a missed reload: the same answer is what stops `:w`
     /// writing over a file somebody else changed.
-    #[test]
+    /// **`$TMPDIR`，照編輯器的說法拼**（2026-10-11）。
+///
+/// `Buffer::open` 解析軟鏈接，而 macOS 的 `std::env::temp_dir()` 回的是
+/// `/var/folders/…`——`/private/var/folders/…` 的鏈接。測試拿前者作比較就永遠對不
+/// 上，而它對不上的正是「一份檔只許有一個名字」那一條。
+fn tmp() -> std::path::PathBuf {
+    let dir = std::env::temp_dir();
+    std::fs::canonicalize(&dir).unwrap_or(dir)
+}
+
+#[test]
     fn a_same_length_rewrite_in_the_same_tick_is_still_seen() {
-        let dir = std::env::temp_dir().join(format!("yumete-racy-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-racy-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("fixture dir");
         let path = dir.join("同步中.md");
@@ -1861,7 +1875,7 @@ mod tests {
         // already owns that name and removes the directory when it finishes.
         // Two tests, one process id, one directory — green alone, red in the
         // suite, and the failure lands in whichever of them is slower.
-        let dir = std::env::temp_dir().join(format!("yumete-bomswap-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-bomswap-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("fixture dir");
         let path = dir.join("bom.md");
@@ -1902,7 +1916,7 @@ mod tests {
     #[test]
     fn a_recovery_copy_is_as_private_as_the_manuscript() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("yumete-perm-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-perm-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("fixture dir");
         let manuscript = dir.join("日記.md");
@@ -1964,7 +1978,7 @@ mod tests {
     /// 說「乾淨」：`[+]` 不寫、`:q` 不問、救命稿不寫，三道一起失效。
     #[test]
     fn a_save_inside_an_undo_group_leaves_no_clean_point() {
-        let dir = std::env::temp_dir().join(format!("yumete-groupsave-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-groupsave-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("章.md");
@@ -2021,7 +2035,7 @@ mod tests {
     /// 一句。
     #[test]
     fn undoing_past_a_save_is_not_clean() {
-        let dir = std::env::temp_dir().join(format!("yumete-cleanpoint-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-cleanpoint-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("章.md");
@@ -2061,7 +2075,7 @@ mod tests {
     /// `:w` 照樣把檔重寫一遍（inode 都換了），順手把救命稿刪了。
     #[test]
     fn a_locked_buffer_refuses_to_be_written_at_all() {
-        let dir = std::env::temp_dir().join(format!("yumete-lockedsave-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-lockedsave-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("章.md");
@@ -2086,7 +2100,7 @@ mod tests {
     #[test]
     fn a_read_only_manuscript_is_not_written_over() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("yumete-ro-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-ro-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("locked.md");
@@ -2111,7 +2125,7 @@ mod tests {
     /// A write that cannot finish takes its temporary file with it.
     #[test]
     fn a_failed_write_leaves_nothing_behind() {
-        let dir = std::env::temp_dir().join(format!("yumete-tmpclean-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-tmpclean-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("ch1.md");
@@ -2174,7 +2188,7 @@ mod tests {
 
     #[test]
     fn save_writes_atomically_and_clears_modified() {
-        let mut path = std::env::temp_dir();
+        let mut path = tmp();
         path.push(format!("yumete-buf-save-{}.txt", std::process::id()));
 
         let mut b = Buffer::open(&path).expect("open (creates empty buffer)");
@@ -2190,7 +2204,7 @@ mod tests {
 
     #[test]
     fn a_recovery_copy_survives_a_crash_and_is_cleared_by_a_save() {
-        let dir = std::env::temp_dir().join(format!("yumete-swap-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-swap-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("chapter.md");
         fs::write(&path, "第一稿\n").unwrap();
@@ -2224,7 +2238,7 @@ mod tests {
         // one** (#305). Refusing to write over a draft nobody had recovered was
         // right; refusing to write at all was not, and it meant: crash once,
         // reopen, work all day, crash again — and the day is gone.
-        let dir = std::env::temp_dir().join(format!("yumete-after-crash-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-after-crash-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("chapter.md");
@@ -2261,7 +2275,7 @@ mod tests {
     /// 就報「有 1 份沒存的草稿」——而取回來的是一張白紙。
     #[test]
     fn an_empty_scratch_buffer_keeps_no_draft() {
-        let dir = std::env::temp_dir().join(format!("yumete-blank-draft-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-blank-draft-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("fixture dir");
         let draft = dir.join("scratch-1-1.yumete");
@@ -2296,7 +2310,7 @@ mod tests {
         // Ownership was a `bool` inside a process, and the second process
         // cannot see a field: both wrote the same path, and whichever ticked
         // last won (#305).
-        let dir = std::env::temp_dir().join(format!("yumete-two-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-two-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("shared.md");
@@ -2331,7 +2345,7 @@ mod tests {
     fn a_draft_kept_under_a_name_of_its_own_is_still_found() {
         // If the *second* session is the one that crashes, its copy is the only
         // place its work is — so recovery has to look past the canonical name.
-        let dir = std::env::temp_dir().join(format!("yumete-pid-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-pid-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("ch.md");
@@ -2359,7 +2373,7 @@ mod tests {
     /// 人救過的活兒，和我什麼時候存檔沒有關係。
     #[test]
     fn another_sessions_draft_survives_my_save() {
-        let dir = std::env::temp_dir().join(format!("yumete-others-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-others-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("a.md");
@@ -2379,7 +2393,7 @@ mod tests {
 
     #[test]
     fn a_stale_recovery_copy_is_not_offered() {
-        let dir = std::env::temp_dir().join(format!("yumete-stale-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-stale-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("note.txt");
 
@@ -2399,7 +2413,7 @@ mod tests {
 
     #[test]
     fn a_byte_order_mark_is_not_the_first_character_of_the_book() {
-        let dir = std::env::temp_dir().join(format!("yumete-bom-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-bom-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("bom.txt");
         fs::write(
@@ -2418,7 +2432,7 @@ mod tests {
 
     #[test]
     fn a_big5_manuscript_is_refused_in_words_its_author_can_act_on() {
-        let dir = std::env::temp_dir().join(format!("yumete-big5-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-big5-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("old.txt");
         // 「第一段」 in Big5.
@@ -2447,7 +2461,7 @@ mod tests {
     /// LSP 靜靜地什麼都不說。
     #[test]
     fn a_file_opened_by_a_relative_path_still_knows_where_it_is() {
-        let dir = std::env::temp_dir().join(format!("yumete-relpath-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-relpath-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("src")).unwrap();
         fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
@@ -2478,7 +2492,7 @@ mod tests {
     /// 重啓之後 pid 從小號重發，於是這一輪的名字正好是上一回崩掉那一份的名字。
     #[test]
     fn a_reused_pid_moves_the_unclaimed_draft_aside_instead_of_writing_over_it() {
-        let dir = std::env::temp_dir().join(format!("yumete-pidclash-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-pidclash-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let file = dir.join("f.md");

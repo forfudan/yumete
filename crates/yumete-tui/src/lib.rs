@@ -15274,6 +15274,10 @@ fn squeezed(text: &str) -> String {
         std::fs::write(&path, text).unwrap();
         let mut editor = Editor::new();
         editor.open_file(&path).unwrap();
+        // **回緩衝區說的那個名字，不是我們拼的那個**（2026-10-11）。`Buffer::open`
+        // 解析軟鏈接，而 `$TMPDIR` 在 macOS 上就是一條；拿我們拼的那個去
+        // `set_problems`，診斷存在一個鍵上而畫的時候問的是另一個。
+        let path = editor.current_buffer().path().unwrap().to_path_buf();
         (editor, path)
     }
 
@@ -18518,6 +18522,12 @@ fn squeezed(text: &str) -> String {
     /// How long a book takes to open, and to draw. A measurement, not an
     /// assertion — run it with
     /// `cargo test -p yumete-tui --release opening_a_book -- --ignored --nocapture`.
+    /// `$TMPDIR`，照編輯器的說法拼——`Buffer::open` 解析軟鏈接（2026-10-11）。
+    fn tmp() -> std::path::PathBuf {
+        let dir = std::env::temp_dir();
+        std::fs::canonicalize(&dir).unwrap_or(dir)
+    }
+
     #[test]
     #[ignore]
     fn what_a_frame_costs() {
@@ -18552,7 +18562,7 @@ fn squeezed(text: &str) -> String {
         // documents on one page could therefore mean two full walks a frame,
         // which is the shape #282 cost 8.26 s. This is the line that says
         // whether they need a second slot.
-        let dir = std::env::temp_dir().join(format!("yumete-split-cost-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-split-cost-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let other = dir.join("other.md");
         std::fs::write(&other, a_book_of(20_000)).unwrap();
@@ -18577,7 +18587,7 @@ fn squeezed(text: &str) -> String {
         use std::time::Instant;
         println!("{:>10}  {:>10}  {:>12}  {:>12}  {:>10}", "字", "open", "first frame", "40 × j", "G");
         for chars in [10_000usize, 100_000, 1_000_000, 10_000_000] {
-            let dir = std::env::temp_dir().join(format!("yumete-open-{chars}"));
+            let dir = tmp().join(format!("yumete-open-{chars}"));
             std::fs::create_dir_all(&dir).unwrap();
             let path = dir.join("book.txt");
             std::fs::write(&path, a_book_of(chars)).unwrap();
@@ -19238,7 +19248,7 @@ fn squeezed(text: &str) -> String {
         // whichever file the keys happen to be in. Open the split on 乙, walk
         // the live half back to 甲, and the page said 甲 twice under two
         // different names.
-        let dir = std::env::temp_dir().join(format!("yumete-281-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-281-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("jia.md"), "甲甲甲\n").unwrap();
         std::fs::write(dir.join("yi.md"), "乙乙乙\n").unwrap();
@@ -19282,7 +19292,7 @@ fn squeezed(text: &str) -> String {
         // #295. Every other panel here dodges the caret; this one does not,
         // because the editor is stopped behind it. Centre, border, name in
         // gold — and the numbers on the page, so the answer can be checked.
-        let dir = std::env::temp_dir().join(format!("yumete-295-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-295-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let chapter = dir.join("ch1.md");
@@ -20451,7 +20461,7 @@ fn squeezed(text: &str) -> String {
 
     #[test]
     fn the_pane_holding_the_keys_says_how_to_give_them_back() {
-        let dir = std::env::temp_dir().join(format!("yumete-hint-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-hint-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("ch01.md"), "").unwrap();
@@ -20482,7 +20492,7 @@ fn squeezed(text: &str) -> String {
 
     #[test]
     fn the_sidebar_takes_its_columns_off_the_page() {
-        let dir = std::env::temp_dir().join(format!("yumete-side-tui-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-side-tui-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("卷一")).unwrap();
         std::fs::write(dir.join("notes.md"), "").unwrap();
@@ -20743,7 +20753,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     #[ignore = "a picture, not a test"]
     fn the_code_table_in_every_mode() {
-        let dir = std::env::temp_dir().join(format!("yumete-mabiao-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-mabiao-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("m.txt");
@@ -21515,7 +21525,7 @@ fn squeezed(text: &str) -> String {
     /// ——窗口停着，高亮在這一頁裏走。
     #[test]
     fn the_pickers_list_turns_by_pages_instead_of_dragging_the_bottom_row() {
-        let root = std::env::temp_dir().join(format!("yumete-picker-pages-{}", std::process::id()));
+        let root = tmp().join(format!("yumete-picker-pages-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("make the fixture");
         for n in 1..=40 {
@@ -22671,7 +22681,7 @@ fn squeezed(text: &str) -> String {
     /// of this family, after 字典, the inline candidate and the settings page.
     #[test]
     fn a_photograph_of_a_search_over_files_has_the_results_in_it() {
-        let dir = std::env::temp_dir().join(format!("yumete-shot-find-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-shot-find-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("一.md"), "那年冬天很冷。\n").unwrap();
@@ -23028,7 +23038,7 @@ fn squeezed(text: &str) -> String {
     /// 檔、38 GB，頭一處命中在一分鐘開外——搜索沒壞，是它一聲不吭。
     #[test]
     fn the_panel_says_which_file_the_walk_is_on() {
-        let dir = std::env::temp_dir().join(format!("yumete-going-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-going-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         // 夠多的檔，走查纔來得及被看見還在走。
         std::fs::create_dir_all(dir.join("深")).unwrap();
@@ -23161,7 +23171,7 @@ fn squeezed(text: &str) -> String {
     /// 這裏誰都還沒收過——所以「名單還是空的、走查還在跑」是確定的，不是賭線程慢。
     #[test]
     fn the_pickers_footnote_says_the_walk_is_still_going() {
-        let dir = std::env::temp_dir().join(format!("yumete-picker-spin-{}", std::process::id()));
+        let dir = tmp().join(format!("yumete-picker-spin-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("make the fixture");
         std::fs::write(dir.join("一.md"), "一行\n").expect("write");
