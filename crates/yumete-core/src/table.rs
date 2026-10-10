@@ -801,10 +801,19 @@ pub fn delimiter_named(word: &str) -> Option<char> {
         "comma" => Some(','),
         "semicolon" => Some(';'),
         "\" \"" | "' '" => Some(' '),
+        // Warning: **一個字母不是分隔符，是打了一半的名字**（2026-10-10 報的）。
+        // 上面每一個名字都以字母開頭，所以打 `p` 的人想的是 `pipe`、打 `c` 的人想
+        // 的是 `csv`（還是 `comma`？兩個都對，正是不許猜的理由）。從前這裏照單收
+        // 下，於是 `:convert-table p` **當場把那張表改寫成 `甲p乙`**，而狀態欄說
+        // 「用「p」分欄」，看着像成功。兩個字母早就是拒的（`pi` → 「不認得」），
+        // 漏的只有一個字母這一格。
+        //
+        // 別的單個字符照舊收：`;`、`|`、`#`、`、` 這些真的是分隔符，而且沒有一個
+        // 名字叫它們。
         _ => {
             let mut chars = word.chars();
             match (chars.next(), chars.next()) {
-                (Some(c), None) if !c.is_whitespace() => Some(c),
+                (Some(c), None) if !c.is_whitespace() && !c.is_ascii_alphabetic() => Some(c),
                 _ => None,
             }
         }
@@ -1138,5 +1147,22 @@ to = "char"
         // One line is not evidence of a shape.
         assert_eq!(of("字,讀音"), None);
         assert_eq!(of(""), None);
+    }
+
+    /// **一個字母是打了一半的名字，不是分隔符**（2026-10-10 報的）。
+    ///
+    /// `:convert-table p` 從前當場把表改寫成 `甲p乙` 並報「用「p」分欄」。
+    #[test]
+    fn one_letter_is_half_a_name_and_not_a_delimiter() {
+        for half in ["p", "c", "t", "s", "P", "z"] {
+            assert_eq!(delimiter_named(half), None, "{half}");
+            assert_eq!(Shape::named(half), None, "{half}");
+        }
+        // 真的分隔符照舊收，名字也照舊。
+        assert_eq!(delimiter_named(";"), Some(';'));
+        assert_eq!(delimiter_named("、"), Some('、'));
+        assert_eq!(delimiter_named("tab"), Some('\t'));
+        assert_eq!(Shape::named("csv"), Some(Shape::Delimited(',')));
+        assert_eq!(Shape::named("pipe"), Some(Shape::Pipe));
     }
 }
