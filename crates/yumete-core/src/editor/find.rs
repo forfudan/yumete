@@ -1230,7 +1230,7 @@ impl Editor {
             // 「`w` 寬窄」。一個寫在屏幕上、按下去沒反應的鍵，讀者只會以為自己記
             // 錯了（同 §5.12.39 那一族）。
             other => {
-                if !self.panel_key_in_common(other, side) {
+                if !self.panel_key_in_common(other) {
                     self.on_sidebar_key_after_the_list(other);
                 }
             }

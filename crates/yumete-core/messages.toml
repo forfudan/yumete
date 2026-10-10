@@ -5737,16 +5737,16 @@ en = "switch area"
 [[message]]
 # 邊欄底下那一行按鍵說明
 key = "hint.sidebar.keys"
-zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w 去下一區 · q 關"
-zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换视图 · w 宽窄 · R 重读 · C-w 去下一区 · q 关"
-en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w next region · q close"
+zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w 去下一區 · q 回編輯區"
+zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换视图 · w 宽窄 · R 重读 · C-w 去下一区 · q 回编辑区"
+en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w next region · q back to text"
 
 [[message]]
 # 邊欄底下那一行按鍵說明：百科那一頁是一段文章，沒有行可以進、可以收
 key = "hint.sidebar.keys-wiki"
-zht = "j k 滾動 · J K 半頁 · g G 兩端 · Tab 換視圖 · w 寬窄 · C-w 去下一區 · q 關"
-zhs = "j k 滚动 · J K 半页 · g G 两端 · Tab 换视图 · w 宽窄 · C-w 去下一区 · q 关"
-en = "j k scroll · J K half a page · g G ends · Tab view · w width · C-w next region · q close"
+zht = "j k 滾動 · J K 半頁 · g G 兩端 · Tab 換視圖 · w 寬窄 · C-w 去下一區 · q 回編輯區"
+zhs = "j k 滚动 · J K 半页 · g G 两端 · Tab 换视图 · w 宽窄 · C-w 去下一区 · q 回编辑区"
+en = "j k scroll · J K half a page · g G ends · Tab view · w width · C-w next region · q back to text"
 
 [[message]]
 # 提示：上下移動

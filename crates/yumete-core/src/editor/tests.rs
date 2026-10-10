@@ -9635,11 +9635,17 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "but the tree stays up");
 
     // The keys are with the text now, so `空格 w` walks back into the tree;
-    // `q` in the panel is the door out.
+    // `q` sends them back to the writing and leaves the tree up, and `C-w q`
+    // is the one that puts it away.
     type_keys(&mut ed, " ww");
     assert!(ed.sidebar_focused());
     ed.on_key(Key::Char('q'));
-    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "q closes it");
+    assert!(!ed.sidebar_focused(), "q 把鍵還給正文");
+    assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "樹留着");
+    type_keys(&mut ed, " ww");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "C-w q closes it");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -11769,9 +11775,18 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), Some(Side::Left), "and round again");
 
-    // `q` is the other door: this slot goes away and the keys come back.
+    // **`q` 把鍵還給正文，面板留着**（2026-10-10 定）。它和 `C-w w` 在這一刻
+    // 看起來一樣，因為這個環只有兩格；三格的時候 `C-w w` 走到下一格，`q` 直接
+    // 回正文。關掉那一格是 `C-w q`。
     ed.on_key(Key::Char('q'));
-    assert!(ed.panel(Side::Left).is_none());
+    assert_eq!(ed.panel_focus(), None, "q 把鍵還給正文");
+    assert!(ed.panel(Side::Left).is_some(), "面板留着");
+
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert!(ed.panel(Side::Left).is_none(), "C-w q 纔收走那一格");
     assert_eq!(ed.panel_focus(), None);
 
     // Nothing open but the writing: one region, and neither key has anywhere
@@ -21924,9 +21939,10 @@ fn asking_and_showing_are_two_separate_things() {
     assert_eq!(ed.hover_afloat(), None, "有邊欄就不浮");
     assert_eq!(ed.info_now(), Some(Info::Docs), "進邊欄");
 
-    // 再關掉它：回到浮窗，開關一個字都沒動。
+    // 再關掉它：回到浮窗，開關一個字都沒動。`q` 從 2026-10-10 起是「鍵還給
+    // 正文」，收走那一格的是 `空格 w q`（＝`C-w q`）。
     press(&mut ed, " wI");
-    press(&mut ed, "q");
+    press(&mut ed, " wq");
     assert!(ed.showing(View::Info).is_none(), "關掉了");
     assert_eq!(ed.info_live(), Info::Docs, "開關沒動");
     ed.on_key(Key::Char('l'));
