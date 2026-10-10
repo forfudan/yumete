@@ -884,6 +884,11 @@ fn main() -> ExitCode {
     // A config file that does not parse is worth one line: silence is how a
     // typo comes to look like a setting that does not work. **After `-t`**,
     // because a broken config outranks a file that is not a grid.
+    // **再加上那幾格只有前端判得了的**（2026-10-10）：`syntax`／`table_rules`／
+    // `indent_hint`／`[sidebar]` 的判準在 `yumete-core` 裏，而 `yumete-config` 是
+    // 它的兄弟、看不見它。見 [`yumete_tui::settings::complaints`]。
+    let mut config_problems = config_problems;
+    config_problems.extend(yumete_tui::settings::complaints(&config));
     if !config_problems.is_empty() {
         for problem in &config_problems {
             eprintln!("yumete: {problem}");
