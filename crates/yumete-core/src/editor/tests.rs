@@ -24651,3 +24651,61 @@ fn replace_the_frost(ed: &mut Editor) {
     assert!(ed.query().is_some(), "三個檔要先問一句");
     ed.on_key(Key::Char('y'));
 }
+
+/// **`j`/`k` 是 vim 和 helix 真的答不一樣的一處**（2026-10-10 量出來的）。
+///
+/// vim 的 `j` 走文件的行——一段是一行，所以在長段落裏它跳整段——而 `gj` 走屏幕
+/// 的行；helix 正好反過來（`default.rs` 的 `"j" | "down" => move_visual_line_down`，
+/// `g` 那一層纔是 `move_line_down`）。兩套從前共用一份，照的是 helix，於是 vim
+/// 那半是反的。
+///
+/// Warning: **這一式只能在這一層驗。** `--shot --keys` 在畫第一幀**之前**重放按鍵，
+/// 而折行寬度是 `frame_to()` 裏纔設的（`yumete-tui/src/lib.rs`），所以那一頭
+/// `wrap_width()` 恆為 `None`，`move_row` 一律回落到文件的行——兩套鍵位看起來
+/// 一模一樣，而那是離屏的假象，不是編輯器的行為。
+#[test]
+fn j_walks_the_screen_in_helix_and_the_file_in_vim() {
+    // 一段長到要折三行，後面跟着另一段。
+    let long = "那年冬天山下起了大雪".repeat(6);
+    let where_to = |vim: bool| -> (usize, usize) {
+        let mut ed = typed(&format!("{long}\n第二段。"));
+        if vim {
+            ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        }
+        ed.set_wrap_width(40);
+        ed.execute("goto 1").unwrap();
+        ed.on_key(Key::Char('j'));
+        let rope = ed.current_buffer().rope();
+        let at = ed.cursor();
+        (rope.char_to_line(at), at - rope.line_to_char(rope.char_to_line(at)))
+    };
+    // helix：一屏行，所以還在第一段裏，只是往後挪了一屏的字。
+    let (line, column) = where_to(false);
+    assert_eq!(line, 0, "helix 的 j 還在第一段裏");
+    assert!(column > 0, "而且往後挪了：第 {column} 個字");
+    // vim：一整段，所以落在第二段的開頭。
+    assert_eq!(where_to(true), (1, 0), "vim 的 j 跳到下一段");
+}
+
+/// `gj`/`gk` 是同一對的另一半，所以跟着翻過來（2026-10-10）。
+#[test]
+fn gj_walks_the_file_in_helix_and_the_screen_in_vim() {
+    let long = "那年冬天山下起了大雪".repeat(6);
+    let where_to = |vim: bool| -> (usize, usize) {
+        let mut ed = typed(&format!("{long}\n第二段。"));
+        if vim {
+            ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        }
+        ed.set_wrap_width(40);
+        ed.execute("goto 1").unwrap();
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('j'));
+        let rope = ed.current_buffer().rope();
+        let at = ed.cursor();
+        (rope.char_to_line(at), at - rope.line_to_char(rope.char_to_line(at)))
+    };
+    assert_eq!(where_to(false), (1, 0), "helix 的 gj 跳到下一段");
+    let (line, column) = where_to(true);
+    assert_eq!(line, 0, "vim 的 gj 還在第一段裏");
+    assert!(column > 0, "而且往後挪了：第 {column} 個字");
+}

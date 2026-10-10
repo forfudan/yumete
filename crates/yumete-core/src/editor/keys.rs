@@ -1742,8 +1742,29 @@ impl Editor {
             Key::Char('l') | Key::Right => {
                 self.repeat(count, |e| e.move_horizontal(motion::next_grapheme))
             }
-            Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_vertical(true)),
-            Key::Char('j') | Key::Down => self.repeat(count, |e| e.move_vertical(false)),
+            // **`j`/`k` 是 vim 和 helix 真的答不一樣的一處**（2026-10-10 量出來的）。
+            // vim 的 `j` 走**文件的行**（一段是一行，所以是下一段），`gj` 纔走屏幕
+            // 的行；helix 正好反過來——它的 `j` 綁的是 `move_visual_line_down`。
+            // 從前這兩套共用這一份，而這一份照的是 helix，於是 vim 那半是反的：
+            // 一個 vim 的手在長段落裏按 `j` 只走一屏行，`gj` 纔跳整段。
+            //
+            // 兩個參考實現都實測過（nvim `--clean`：`j` 到第 2 行、`gj` 到第 1 行
+            // 第 41 欄；helix 的 `default.rs:10` 是 `"j" | "down" => move_visual_line_down`、
+            // `:59` 的 `g` 層纔是 `move_line_down`）。
+            Key::Char('k') | Key::Up => {
+                let up = true;
+                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    true => self.repeat(count, |e| e.move_textual_line(up)),
+                    false => self.repeat(count, |e| e.move_vertical(up)),
+                }
+            }
+            Key::Char('j') | Key::Down => {
+                let up = false;
+                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    true => self.repeat(count, |e| e.move_textual_line(up)),
+                    false => self.repeat(count, |e| e.move_vertical(up)),
+                }
+            }
             Key::Home => {
                 let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
                 self.move_head(pos);
@@ -2837,13 +2858,21 @@ impl Editor {
             // the same column. Warning: Until 2026-09-17 this was a copy of `j`/`k`,
             // on a comment that had helix the wrong way round (「In helix the
             // plain pair walks logical lines」 — it is `move_visual_line_down`).
+            // `gj`/`gk` 是同一對的另一半，所以跟着翻過來：vim 的 `gj` 走屏幕的
+            // 行，helix 的 `gj` 走文件的行。
             Key::Char('j') | Key::Down => {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                self.repeat(count, |e| e.move_textual_line(false))
+                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    true => self.repeat(count, |e| e.move_vertical(false)),
+                    false => self.repeat(count, |e| e.move_textual_line(false)),
+                }
             }
             Key::Char('k') | Key::Up => {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                self.repeat(count, |e| e.move_textual_line(true))
+                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    true => self.repeat(count, |e| e.move_vertical(true)),
+                    false => self.repeat(count, |e| e.move_textual_line(true)),
+                }
             }
             // Goto the next / previous buffer, as Helix binds them.
             Key::Char('n') => self.next_buffer(),
