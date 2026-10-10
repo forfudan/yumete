@@ -1437,6 +1437,50 @@ fn tab_cycles_the_command_completion() {
     assert_eq!(ed.command_menu().1, None);
 }
 
+/// **`C-n`/`C-p` 走同一張單子**（2026-10-10 用戶問的：「冒號命令模式裏，能不能用
+/// ctrl+n/p 上下翻？」）。挑選器與插入態那張單子早就認這一對；命令行上它們從前
+/// 掉進一個兜底裏，按下去什麽都不動。
+#[test]
+fn ctrl_n_and_ctrl_p_walk_the_command_completion_like_tab() {
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char(':'));
+    for c in "ru".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.prompt(), Some((":", "rules")));
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.prompt(), Some((":", "run")));
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt(), Some((":", "rules")));
+    // 一張單子，兩副鍵：⇥ 接着 `C-n` 停下的地方走，不另起一輪。
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.prompt(), Some((":", "run")));
+}
+
+/// 同一對鍵在 `::` 那張單子上（2026-10-10）。
+#[test]
+fn ctrl_n_and_ctrl_p_walk_the_lookfor_list_like_tab() {
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Char(':'));
+    for c in "keymap".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let rows = ed.lookfor_menu().0.len();
+    assert!(rows >= 3, "這一式要一張有幾行的單子，拿到 {rows} 行");
+    assert_eq!(ed.lookfor_menu().1, 0);
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.lookfor_menu().1, 1);
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.lookfor_menu().1, 2);
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.lookfor_menu().1, 1);
+    // ⇥ 和它們是同一格游標。
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.lookfor_menu().1, 2);
+}
+
 #[test]
 fn the_command_line_guesses_the_rest_of_the_name() {
     let mut ed = Editor::new();
