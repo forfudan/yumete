@@ -480,8 +480,18 @@ impl Editor {
         if !self.overwrite(start, end.max(start), &text) {
             return;
         }
+        // **頭是新文本的最後一個字素，不是它後面那一格**（2026-10-10 報的）。
+        // 這一頭的約定是光標**在選區裏**，而 `selection()` 交出來的末端是光標再
+        // 往前一個字素（`modes.rs` 的 `next_grapheme`）——所以把頭放在排他的末端
+        // 上，選區就寬了一格：`R` 之後按 `d`，連下一個字一起刪掉，而在行尾那一格
+        // 是換行符，於是兩行被悄悄接成一行。
+        //
+        // 隔壁兩支 `r` 一直是對的（`replace_str`、`replace_chars`），這一支漏了
+        // 退那一步。helix 的 `replace_with_yanked` 連選區都不自己設，純靠舊區間
+        // 過一次變更映射，落下來正好是那一段替換文本。
+        let end = start + text.chars().count();
         self.sel.set_anchor(start);
-        self.sel.set_head(start + text.chars().count());
+        self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
         self.clamp_cursor();
     }
     /// Indent (`>`) or unindent (`<`) every line the selection touches.

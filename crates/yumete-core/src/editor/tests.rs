@@ -24709,3 +24709,38 @@ fn gj_walks_the_file_in_helix_and_the_screen_in_vim() {
     assert_eq!(line, 0, "vim 的 gj 還在第一段裏");
     assert!(column > 0, "而且往後挪了：第 {column} 個字");
 }
+
+/// **`R` 之後選區正好是換上去的那一段**（2026-10-10 報的）。
+///
+/// 原話：「In yumete (helix mode), when I press R, the selected char is replaced
+/// by the one in the register (this is good), but the selection is **extended**
+/// and include the next char」。看不見顏色的地方怎麼驗選區：**按 `d` 看刪掉了
+/// 什麼**——這個倉的兩個神諭用的也是這一招。
+#[test]
+fn what_r_puts_in_is_what_is_selected_afterwards() {
+    let after = |keys: &str| -> String {
+        let mut ed = typed("abcde");
+        ed.execute("goto 1").unwrap();
+        for key in keys.chars() {
+            ed.on_key(Key::Char(key));
+        }
+        ed.current_buffer().rope().to_string()
+    };
+    // `y` 取走 `a`，`ll` 站到 `c` 上，`R` 把 `c` 換成 `a`。
+    assert_eq!(after("yllR"), "abade");
+    // 再按 `d`：選區只有剛換上去的那一個字，所以只刪它。
+    // 從前這裏是 `abe`——`d` 把後面那個 `d` 一起帶走了。
+    assert_eq!(after("yllRd"), "abde");
+}
+
+/// 同一條在行尾最難看：多出來的那一格是換行符，於是兩行被接成一行。
+#[test]
+fn r_at_the_end_of_a_line_does_not_swallow_the_line_ending() {
+    let mut ed = typed("abcde\nfghij");
+    ed.execute("goto 1").unwrap();
+    for key in "yllllRd".chars() {
+        ed.on_key(Key::Char(key));
+    }
+    // 從前這裏是 `abcdfghij`：兩行接成了一行。
+    assert_eq!(ed.current_buffer().rope().to_string(), "abcd\nfghij");
+}
