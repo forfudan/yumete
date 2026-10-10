@@ -2615,6 +2615,14 @@ pub struct Editor {
     /// 而 `insert_at_line_end` 不置，於是 `a` `Esc` 回到最後一個字上、`A` `Esc` 停在
     /// 行尾那一格。vim 不看這一格：它的 `Esc` 無條件往左退一格。
     restore_caret: bool,
+    /// **這一趟插入要留住錨點**——`a` 開的那一種（2026-10-10，照 helix）。
+    ///
+    /// helix 的光標本來就是一個寬度 1 的選區，而 `a` 說的是「在**選區**後面插入」
+    /// （`book/src/keymap.md`：Insert after selection）：它把頭往前推一格，插入點
+    /// 落在選區**裏面**，於是打進去的字自然被圈進來。打完 `Esc`，剛寫的那一段就是
+    /// 選區，下一個動作直接作用在它上面——這是 selection → action 那個模型的回報。
+    /// helix 自己的測試釘着：`("#[foo|]#", "abar<esc>", "#[foobar|]#")`。
+    keep_anchor_while_inserting: bool,
     /// **vim 的 `R`：打一個字蓋一個字**（2026-10-06 定，只在 vim 鍵位下）。
     ///
     /// 不是一個新的 `Mode`：`Mode` 上有幾十處窮盡的 `match`，而這一件事只在
@@ -3680,6 +3688,7 @@ impl Editor {
             signature_query: None,
             signature_asked_at: None,
             restore_caret: false,
+            keep_anchor_while_inserting: false,
             swap_asked: None,
             swapping_is_fine: false,
             signature_on: None,

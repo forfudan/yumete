@@ -220,7 +220,10 @@ impl Editor {
             return;
         }
         self.sel.set_head(at + text.chars().count());
-        self.sel.set_anchor(self.sel.head());
+        // **`a` 開的那一趟不塌錨點**（2026-10-10，照 helix）：選區跟着打的字長。
+        if !self.keep_anchor_while_inserting {
+            self.sel.set_anchor(self.sel.head());
+        }
         self.refresh_goal_column();
     }
 

@@ -449,7 +449,7 @@ sentence, it goes to the first sentence of the next one.
 | --- | --- |
 | `d` `c` | cut / cut and write over the selection: into the register first, then deleted |
 | `A-d` `A-c` | the same, but **they leave the register alone** — the piece you just copied is still there |
-| `i` `a` | insert before / after the selection |
+| `i` `a` | insert before / after the selection. **`a` keeps the selection and grows it**: what you type joins it, so on `Esc` the selection is the old one plus everything you just wrote, ready for the next action. `i` does not — it leaves the cursor where it is. (Under the vim keys, `a` leaves a one-character cursor, as it does there.) |
 | `I` `A` | insert at the start / end of the line |
 | `o` `O` | open a new line below / above |
 | `y` `p` `P` | copy / paste after / paste before. **Where it lands depends on what you copied**: if what you copied **carries no newline** (half a sentence, one word), it lands after the character the cursor covers, or after the selection if you have one; if what you copied **carries a newline** (`xy` copies a whole line, so it does), it lands as a whole line below and is never pushed into the middle of another line. `P` is always the 「before」 end |
