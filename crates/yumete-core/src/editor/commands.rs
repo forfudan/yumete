@@ -1415,6 +1415,12 @@ impl Editor {
             // 二問放上去就接得上，不必另加機關。
             Asking::RecoverDraft => match answer {
                 'y' => self.query = self.recover_confirm_query(),
+                // Warning: **鎖住的時候這一格也不許按**（2026-10-10 報的）。
+                // `y` 那一條路有 `refuse_readonly`，而這一條從前一個字都沒問，於是
+                // 鎖着的那一趟裏**唯一按得動的是毀掉那一格**——被告知「只讀，撿不
+                // 了」的人去按 `d` 清掉那個提醒，是很順的一步。§5.61 把「鎖住」定
+                // 成「這一趟不寫盤」，而刪一個檔比寫一個檔更算。
+                'd' if self.refuse_readonly() => {}
                 'd' => {
                     self.current_buffer_mut().discard_swap();
                     self.status = say!("recover.draft-dropped");

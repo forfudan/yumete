@@ -11748,6 +11748,39 @@ fn the_panels_go_where_the_settings_put_them() {
 }
 
 /// `C-w` walks the regions, `Esc` does nothing, `q` closes — Feature #293.
+/// **鎖住的那一趟裏，連「丟棄恢復文件」也按不動**（2026-10-10 報的）。
+///
+/// 從前 `y` 那一條路有 `refuse_readonly` 而 `d` 沒有，於是唯一按得動的是毀掉那
+/// 一格。
+#[test]
+fn a_readonly_run_cannot_throw_the_draft_away_either() {
+    let dir = std::env::temp_dir().join(format!("yumete-rodrop-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("r.md");
+    std::fs::write(&file, "r text\n").unwrap();
+    let draft = dir.join(".r.md.yumete.900001");
+    std::fs::write(&draft, "draft of r\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute("readonly on").unwrap();
+    // 離屏這一支不走 `announce_recovery`，`:recover` 擺的是同一問。
+    ed.execute("recover").unwrap();
+    assert!(ed.query().is_some(), "那一問該在：{}", ed.status());
+    ed.answer_query(Key::Char('d'));
+    assert!(draft.exists(), "鎖住的時候不許刪草稿");
+    assert!(ed.status().contains("只讀"), "{}", ed.status());
+
+    // 解開之後照舊刪得掉。
+    ed.execute("readonly off").unwrap();
+    ed.execute("recover").unwrap();
+    ed.answer_query(Key::Char('d'));
+    assert!(!draft.exists(), "解開之後該刪得動");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **一個站着的草稿問題跟着緩衝走，不跟着屏幕走**（2026-10-10 報的，會丟字）。
 ///
 /// 第二問站着的時候換一份檔，從前面板原封不動留着問 `b.md`，而按 `y` 換掉的是
