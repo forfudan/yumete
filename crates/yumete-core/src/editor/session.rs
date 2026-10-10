@@ -504,9 +504,14 @@ impl Editor {
     /// The drafts left behind by a session that did not end properly.
     ///
     /// Anything in the drafts directory that is not this session's. A draft
-    /// belonging to a *live* other session will be listed too — offering it is
-    /// harmless, since taking it copies the text into a new buffer and leaves
-    /// the file alone.
+    /// belonging to a *live* other session is listed too: offering it costs
+    /// nothing, because taking it copies the text into a new buffer.
+    ///
+    /// Warning: **它說「leaves the file alone」說了八天，而底下那一句在刪檔**
+    /// （2026-10-10 報的）。拿走孤兒那一支寫完替代的草稿就把原件刪了，於是一個
+    /// 還在跑、打了字還沒存的 yumete 的唯一保險被別人清掉了——而它只要不再敲鍵
+    /// 就不會重寫。現在刪之前問一句
+    /// [`crate::buffer::owner_still_running`]。
     pub fn orphan_drafts(&self) -> Vec<PathBuf> {
         let Some(dir) = &self.drafts_dir else {
             return Vec::new();
@@ -584,7 +589,7 @@ impl Editor {
                     None => false,
                 }
             };
-            if kept {
+            if kept && !crate::buffer::owner_still_running(path.as_path()) {
                 let _ = std::fs::remove_file(path);
             }
             taken += 1;
