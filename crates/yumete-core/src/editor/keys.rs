@@ -3013,6 +3013,8 @@ impl Editor {
         ('K', "hint.space.what-is-this-panel"),
         ('d', "hint.space.problems"), // diagnostics
         ('D', "hint.space.problems-panel"),
+        ('x', "hint.space.change"),
+        ('X', "hint.space.change-panel"),
         ('i', "hint.space.record"),
         ('I', "hint.space.record-panel"),
         // **`空格 空格` 開關輸入法**
@@ -3471,6 +3473,11 @@ impl Editor {
             // diagnostics picker）。同形：小寫浮，大寫進邊欄。
             Key::Char('d') => self.show_the_problem_here(true),
             Key::Char('D') => self.show_the_problem_here(false),
+            // **`空格 x`/`X`：這一塊改之前寫的是什麼**（2026-10-11）。小寫浮、大寫
+            // 進邊欄，同那一族的別的四個。`v` 是更好按的那一格，留着——這一件不是
+            // 天天按的（原話：「感觉 git 还原不一定常用」）。
+            Key::Char('x') => self.show_the_change_here(true),
+            Key::Char('X') => self.show_the_change_here(false),
             // **記錄**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
             // 格的事），這一對是順手。
             // 切哪一頭由前端定——它手裏纔有「此刻挂着沒有」。

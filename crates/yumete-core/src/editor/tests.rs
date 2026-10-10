@@ -11865,6 +11865,53 @@ fn a_standing_recover_question_is_dropped_when_the_buffer_changes() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`空格 x`：這一塊改之前寫的是什麼，以及 `u` 把它還原**（2026-10-11）。
+///
+/// 三種改動各走一遍：改過的（上下都有）、純添的（沒有上半）、剪口（沒有下半）。
+#[test]
+fn a_change_shows_what_head_said_and_u_puts_it_back() {
+    use crate::vcs::Changes;
+    let put = |ed: &mut Editor, text: &str, diff: &str| {
+        *ed = typed(text);
+        let lines = ed.current_buffer().rope().len_lines();
+        ed.set_vcs(Changes::from_diff(diff, lines));
+    };
+    let mut ed = Editor::new();
+
+    // ① 改過的一行：上下都畫得出來，`u` 換回舊的。
+    put(&mut ed, "一\n改過的二\n三\n", "@@ -2 +2 @@\n-二\n+改過的二\n");
+    ed.goto_line(2);
+    assert_eq!(
+        ed.change_here().map(|run| run.was.clone()),
+        Some(vec!["二".to_string()]),
+        "改之前寫的"
+    );
+    assert_eq!(ed.change_now(), ["改過的二"], "現在寫的");
+    assert!(ed.restore_the_change_here(), "還原得了");
+    assert_eq!(ed.current_buffer().text(), "一\n二\n三\n");
+
+    // ② 純添的一行：沒有上半，`u` 把它拿掉。
+    put(&mut ed, "一\n新添\n二\n", "@@ -1,0 +2 @@\n+新添\n");
+    ed.goto_line(2);
+    assert!(ed.change_here().is_some_and(|run| run.was.is_empty()), "純添沒有舊文本");
+    assert!(ed.restore_the_change_here());
+    assert_eq!(ed.current_buffer().text(), "一\n二\n");
+
+    // ③ 剪口：沒有下半，`u` 把剪掉的插回那個縫，一行都不刪。
+    put(&mut ed, "一\n三\n", "@@ -2 +1,0 @@\n-二\n");
+    ed.goto_line(2);
+    assert_eq!(ed.change_now(), Vec::<String>::new(), "剪口在新檔裏不佔內容");
+    assert!(ed.restore_the_change_here());
+    assert_eq!(ed.current_buffer().text(), "一\n二\n三\n");
+
+    // ④ 沒改過的那一行：說一句，不開面板。
+    put(&mut ed, "一\n二\n", "");
+    ed.goto_line(1);
+    assert!(ed.change_here().is_none());
+    assert!(!ed.restore_the_change_here());
+    assert!(ed.status().contains("無任何改動"), "{}", ed.status());
+}
+
 #[test]
 fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     use crate::sidebar::Side;

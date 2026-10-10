@@ -731,6 +731,29 @@ impl Editor {
         changes.at(line)
     }
 
+    /// **光標這一行屬於哪一段改動**，連它改之前寫的是什麼（`空格 x`，2026-10-11）。
+    ///
+    /// Warning: **不問 `diff_gutter`。** 那一格管的是「行號槽畫不畫」，而按鍵問的
+    /// 是「這裏改了什麼」——關掉行號槽的人照樣問得出這一句。
+    pub fn change_here(&self) -> Option<&crate::vcs::Run> {
+        let (_, changes) = self.vcs.get(&self.current_buffer().id())?;
+        changes.run_at(self.cursor_line())
+    }
+
+    /// 這一段改動現在寫的是什麼——新檔那一側的那幾行。
+    ///
+    /// 剪口那兩種在新檔裏不佔內容（它只是一個記號），所以回的是空的。
+    pub fn change_now(&self) -> Vec<String> {
+        let Some(run) = self.change_here() else { return Vec::new() };
+        if run.how.is_cut() {
+            return Vec::new();
+        }
+        let rope = self.current_buffer().rope();
+        (run.at.start..run.at.end.min(rope.len_lines()))
+            .map(|n| rope.line(n).to_string().trim_end_matches('\n').to_string())
+            .collect()
+    }
+
     /// **跳到下一處/上一處改動**（`]g`/`[g`，2026-10-06，helix 的
     /// `goto_next_change`/`goto_prev_change`）。
     ///
@@ -1015,6 +1038,62 @@ impl Editor {
         self.ask_for_info(crate::sidebar::Info::Problems, afloat);
     }
 
+    /// **`空格 x`/`X`：這一塊改之前寫的是什麼**（2026-10-11）。
+    ///
+    /// helix 沒有這一件（它只有 `]g`/`[g` 跳塊、`空格 g` 那張改過的檔單子），vim
+    /// 要靠插件；gitsigns／gitgutter／signify 三家的形狀一樣——行號槽標出塊、一個
+    /// 鍵看、一個鍵還原——這裏照它們做。跳塊 `]g`/`[g` 本來就有。
+    pub(super) fn show_the_change_here(&mut self, afloat: bool) {
+        if self.change_here().is_none() {
+            self.status = say!("change.none-here");
+            // 同 `show_the_problem_here`：大寫是「強制在邊欄」，開好了等着。
+            if !afloat {
+                self.make_room_for_the_info();
+            }
+            return;
+        }
+        self.ask_for_info(crate::sidebar::Info::Change, afloat);
+    }
+
+    /// **把這一塊還原成 `HEAD` 那一份**（改動那一格裏的 `u`，2026-10-11）。
+    ///
+    /// Warning: **它是一次改稿，不是一次 undo。** 所以走和別的改稿同一條路——記進
+    /// 歷史、`u` 退得回來。三家插件也是這麼做的（`reset_hunk` 寫的是緩衝區，不是
+    /// 盤上那個檔）。
+    pub(super) fn restore_the_change_here(&mut self) -> bool {
+        let Some(run) = self.change_here() else {
+            self.status = say!("change.none-here");
+            return false;
+        };
+        let (at, was) = (run.at.clone(), run.was.clone());
+        let cut = run.how.is_cut();
+        let rope = self.current_buffer().rope();
+        // 剪口不佔內容：那幾行是從它**上面**（`CutAbove` 是從它自己那一行上面）
+        // 剪掉的，所以還原就是把它們插回那個縫裏，一行都不刪。
+        let (from, to) = match cut {
+            true => {
+                let seam = rope.line_to_char(at.start.min(rope.len_lines()));
+                (seam, seam)
+            }
+            false => {
+                let start = rope.line_to_char(at.start.min(rope.len_lines()));
+                let end = rope.line_to_char(at.end.min(rope.len_lines()));
+                (start, end)
+            }
+        };
+        let text = match was.is_empty() {
+            // 純添的那一段：還原就是把它拿掉。
+            true => String::new(),
+            false => format!("{}\n", was.join("\n")),
+        };
+        self.snapshot();
+        let _ = self.current_buffer_mut().replace(from..to, &text);
+        // 光標擺在還原出來那一段的頭上——下一下 `]g` 纔從這裏往下找。
+        self.set_cursor(from.min(self.current_buffer().rope().len_chars()));
+        self.clamp_cursor();
+        true
+    }
+
     /// 這一刻該不該浮那一則診斷，和它是什麽。
     pub fn problem_afloat(&self) -> Option<(crate::problem::Severity, Vec<String>)> {
         (self.info_afloat() == Some(crate::sidebar::Info::Problems))
@@ -1233,6 +1312,10 @@ impl Editor {
             Info::Docs => Some(self.hover_here()?.lines().count()),
             Info::Wiki => Some(self.wiki_here()?.as_prose().lines().count()),
             Info::Problems => Some(self.problem_here()?.1.len()),
+            Info::Change => {
+                let run = self.change_here()?;
+                Some(run.was.len() + self.change_now().len())
+            }
             // Warning: **成對字段的那兩種不收這四個鍵**（2026-09-30 量出來的）。
             // 一是它們畫成兩欄（`Body::Keys`），本來就不按行翻；二是記錄**一直
             // 浮着**——讀成格子的時候它跟着光標，於是收了鍵就等於把格子的翻頁

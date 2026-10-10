@@ -152,6 +152,7 @@ impl Editor {
             Some(crate::sidebar::Info::Dictionary) => self.dictionary_rows(),
             Some(crate::sidebar::Info::Docs) => self.hover_rows(),
             Some(crate::sidebar::Info::Problems) => self.problem_rows(),
+            Some(crate::sidebar::Info::Change) => self.change_rows(),
             _ => Vec::new(),
         }
     }
@@ -429,6 +430,19 @@ impl Editor {
             }
             Key::Char('g') | Key::Home => self.panel_scroll = 0,
             Key::Char('G') | Key::End => self.panel_scroll = last,
+            // **改動那一格自己的兩個鍵**（2026-10-11，照 gitsigns／gitgutter／
+            // signify 三家）：`u` 把這一塊還原成 `HEAD` 那一份，`y` 複製它改之前
+            // 寫的那幾行。只有那一格有，別的四格照舊落到下面那一支。
+            Key::Char('u') if self.info_in_this_sidebar(side) == Some(crate::sidebar::Info::Change) => {
+                if self.restore_the_change_here() {
+                    self.refresh_sidebar();
+                }
+            }
+            Key::Char('y') if self.info_in_this_sidebar(side) == Some(crate::sidebar::Info::Change) => {
+                let Some(run) = self.change_here() else { return };
+                let text = run.was.join("\n");
+                self.clipboard_request = Some(text);
+            }
             // Warning: **落到 `on_sidebar_key_after_the_list`，不是直接落到
             // `panel_key_in_common`**（2026-09-30 修）。那一支纔認 `w`（寬窄）、
             // `R`（重讀）、`Tab`、`Esc`——只落到後者的話，信息那一格裏 `w` 又
@@ -1034,6 +1048,26 @@ impl Editor {
     ///
     /// 診斷不必問——它是服務器自己推過來的，早就在內存裏，所以這一支和百科一樣
     /// 是現算的純函數。
+    /// **這一段改動：改之前那幾行，然後現在這幾行**（`空格 x`/`X`，2026-10-11）。
+    ///
+    /// 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。純添的那一段沒有
+    /// 上半，剪口那兩種沒有下半——那正是它們和「改過」的分別。
+    pub(super) fn change_rows(&self) -> Vec<crate::sidebar::Row> {
+        let Some(run) = self.change_here() else { return Vec::new() };
+        let was: Vec<String> = run.was.iter().map(|line| format!("-　{line}")).collect();
+        let now = self.change_now().into_iter().map(|line| format!("+　{line}"));
+        was.into_iter()
+            .chain(now)
+            .map(|name| crate::sidebar::Row {
+                path: PathBuf::new(),
+                name,
+                depth: 0,
+                is_dir: false,
+                expanded: false,
+            })
+            .collect()
+    }
+
     pub(super) fn problem_rows(&self) -> Vec<crate::sidebar::Row> {
         let Some((loud, said)) = self.problem_here() else { return Vec::new() };
         let head = match loud {

@@ -84,6 +84,11 @@ pub enum Info {
     Docs,
     /// 語言服務器說這一行哪兒不對。
     Problems,
+    /// **這一段改動，`HEAD` 那一份原來寫的是什麼**（`空格 x`/`X`，2026-10-11）。
+    ///
+    /// helix 沒有這一格（它只有 `]g`/`[g` 跳塊和 `空格 g` 那張改過的檔單子），
+    /// vim 要靠插件；gitsigns／gitgutter／signify 三家的形狀一樣，這裏照它們做。
+    Change,
 }
 
 impl Info {
@@ -91,8 +96,8 @@ impl Info {
     ///
     /// 次序是**由近及遠**：字典百科講的是眼前這個詞，記錄講這一行，文檔診斷是
     /// 服務器從整份稿子裏看出來的。
-    pub const ALL: [Info; 5] =
-        [Info::Dictionary, Info::Wiki, Info::Record, Info::Docs, Info::Problems];
+    pub const ALL: [Info; 6] =
+        [Info::Dictionary, Info::Wiki, Info::Record, Info::Docs, Info::Problems, Info::Change];
 
     /// 每一種的名字，當標題用。
     pub fn tag(self) -> &'static str {
@@ -102,6 +107,7 @@ impl Info {
             Info::Record => "label.panel.record",
             Info::Docs => "label.panel.docs",
             Info::Problems => "label.panel.problems",
+            Info::Change => "label.panel.change",
         }
     }
 
@@ -113,6 +119,7 @@ impl Info {
             Info::Record => "record",
             Info::Docs => "docs",
             Info::Problems => "diagnostics",
+            Info::Change => "change",
         }
     }
 

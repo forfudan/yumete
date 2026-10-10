@@ -2491,6 +2491,7 @@ const INFO_KINDS: &[Word] = &[
     Word { name: "record", help: "label.panel.record", needs: &[] },
     Word { name: "docs", help: "label.panel.docs", needs: &[] },
     Word { name: "diagnostics", help: "label.panel.problems", needs: &[] },
+    Word { name: "change", help: "label.panel.change", needs: &[] },
 ];
 
 /// What `:sidebar-left` and `:sidebar-right` take: `off`, or a panel to open

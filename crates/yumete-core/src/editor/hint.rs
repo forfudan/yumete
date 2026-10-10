@@ -98,7 +98,17 @@ impl Editor {
                         ("w".into(), say!("hint.sidebar.width")),
                         ("q".into(), say!("hint.to-the-text")),
                         (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
-                    ]);
+                    ]
+                    .into_iter()
+                    // **改動那一格多兩個自己的鍵**（2026-10-11）。擺在最前面：這一
+                    // 格是為它們開的，而通用那幾個每一扇都有。
+                    .chain(match self.info_in_this_sidebar(side) {
+                        Some(crate::sidebar::Info::Change) => {
+                            vec![("u y".into(), say!("hint.change.keys"))]
+                        }
+                        _ => Vec::new(),
+                    })
+                    .collect::<Vec<_>>());
             }
         }
         // **In the box, before anything about the panel around it** (#419):

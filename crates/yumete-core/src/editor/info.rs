@@ -87,6 +87,7 @@ impl Editor {
             Info::Record => self.detail_is_a_panel(),
             Info::Docs => self.hover_here().is_some(),
             Info::Problems => self.problem_here().is_some(),
+            Info::Change => self.change_here().is_some(),
         }
     }
 
@@ -250,9 +251,9 @@ impl Editor {
             }
             Info::Docs => self.hovered = None,
             Info::Record => self.show_detail = Some(false),
-            // 百科與診斷是稿子自己的事實，沒有一份「答案」可丟——收起來就是不
-            // 再叫它，即時那一輪要不要畫是另一回事。
-            Info::Wiki | Info::Problems => {}
+            // 百科、診斷、改動都是稿子自己的事實，沒有一份「答案」可丟——收起來
+            // 就是不再叫它，即時那一輪要不要畫是另一回事。
+            Info::Wiki | Info::Problems | Info::Change => {}
         }
     }
 

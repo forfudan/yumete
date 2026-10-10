@@ -937,6 +937,13 @@ en = "{0}:{1}: {2} columns here, {3} expected"
 # ── check ─────────────────────────────────────────────────────────────
 
 [[message]]
+# 空格 x：光標那一行沒改過
+key = "change.none-here"
+zht = "本行無任何改動"
+zhs = "本行无任何改动"
+en = "nothing changed on this line"
+
+[[message]]
 # :check-charset 查完，每個字都在某個字集裏
 key = "check.charset-clean"
 zht = "{0}：每個字都在字集裏"
@@ -4971,6 +4978,13 @@ zhs = "换成"
 en = "change to"
 
 [[message]]
+# 改動那一格底下那一行鍵
+key = "hint.change.keys"
+zht = "u 還原此處改動 · y 複製先前版本"
+zhs = "u 还原此处改动 · y 复制先前版本"
+en = "u restore this change · y copy what it said"
+
+[[message]]
 # 提示：關
 key = "hint.close"
 zht = "關"
@@ -5728,6 +5742,20 @@ zhs = "命令一览"
 en = "every command"
 
 [[message]]
+# 空格組：這一塊改之前寫的是什麼（浮窗）
+key = "hint.space.change"
+zht = "顯示改動（浮窗）"
+zhs = "显示改动（浮窗）"
+en = "show the change (float)"
+
+[[message]]
+# 空格組：同上，進邊欄
+key = "hint.space.change-panel"
+zht = "顯示改動（邊欄）"
+zhs = "显示改动（边栏）"
+en = "show the change (sidebar)"
+
+[[message]]
 # 空格 C：塊注釋（沒有塊注釋的格式退到行注釋）
 key = "hint.space.comment-block"
 zht = "塊注釋"
@@ -5777,7 +5805,7 @@ zhs = "打开文件（项目路径）"
 en = "open a file (project)"
 
 [[message]]
-# 空格 F：選擇器開在工作路徑上（2026-10-01 定）
+# 空格 F：選擇器開在工作路徑上
 key = "hint.space.open-file-here"
 zht = "打開文件（工作目錄）"
 zhs = "打开文件（工作目录）"
@@ -6586,6 +6614,13 @@ key = "label.panel.buffers"
 zht = "緩衝"
 zhs = "缓冲"
 en = "Buffers"
+
+[[message]]
+# 「改動」那一格的標題（空格 x / X）
+key = "label.panel.change"
+zht = "改動"
+zhs = "改动"
+en = "Change"
 
 [[message]]
 # 標籤：字典

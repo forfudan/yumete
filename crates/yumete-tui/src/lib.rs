@@ -6193,6 +6193,35 @@ fn draw_note(
             vertical_text: vertical,
         });
     }
+    // **這一塊改之前寫的是什麼，浮在旁邊**（`空格 x`，2026-10-11）。
+    //
+    // 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。一條一行，所以走
+    // `Body::Lines` 那一種（同字典、記錄、診斷），不是百科那種軟折行的文章。
+    if editor.info_afloat() == Some(Info::Change) && !writing {
+        let was: Vec<String> =
+            editor.change_here().map(|run| run.was.clone()).unwrap_or_default();
+        let lines: Vec<String> = was
+            .iter()
+            .map(|line| format!("-　{line}"))
+            .chain(editor.change_now().into_iter().map(|line| format!("+　{line}")))
+            .collect();
+        if !lines.is_empty() {
+            return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
+                stand: panel::Stand::Corner,
+                accent: None,
+                pages: true,
+                reading: true,
+                scroll: editor.info_scroll(),
+                title: yumete_core::messages::say(Info::Change.tag(), &[]),
+                lede: None,
+                entry: false,
+                body: panel::Body::Prose(lines.join("\n")),
+                tag: Some(say!("hint.change.keys")),
+                marked: false,
+                vertical_text: vertical,
+            });
+        }
+    }
     // **這一行的字段，浮在旁邊**（#426，2026-09-30）。
     //
     // Warning: **記錄從前只有邊欄一種形態**：它是光標頂上來的「臨時面板」，自己
