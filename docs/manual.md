@@ -1899,9 +1899,14 @@ while yume holds the keyboard, it switches between 中文 and ABC.
 
 | State | How to get there | What the bottom line says |
 | --- | --- | --- |
-| 中文 | `:yume on` / a Shift tap (from ABC) | `[靈明]` |
-| ABC | a Shift tap / `:yume abc` | `[ABC]` |
-| off | `:yume off` | nothing at all |
+| 中文 | `空格 空格` / `:yume on` / a Shift tap (from ABC) | `[靈明]` |
+| ABC | a Shift tap | `[ABC]` |
+| off | `空格 空格` / `:yume off` | nothing at all |
+
+**Two axes, not three states.** `:yume` and `空格 空格` answer one question — is the
+engine holding the keyboard at all — and a Shift tap answers the other, 中文 or ABC,
+while it is. The old third word did both at once and so could not say which of them
+it was turning off; it is gone.
 
 **The sign is there in every mode**, not only where composition actually happens
 (Insert, `/`, the arguments of `:`). In Normal mode it is what tells you whether the
@@ -2219,6 +2224,7 @@ without leaving the page:
 | `C-w`/`空格 w` | the region group (see "One word: region") |
 | `空格 /` | the search panel: type what you are looking for in the box |
 | `空格 ?` | all the commands |
+| `空格 空格` | turn the IME on or off — on lands you in 中文, and a Shift tap crosses to ABC from there |
 | `空格 y` | copy the selection to the system clipboard (`:clipboard-yank`) |
 | `空格 p` `空格 P` | paste from the system clipboard / paste before |
 | `空格 n` | the dictionary: the 拆分 and the code of this character (a float; press again to fold it) |

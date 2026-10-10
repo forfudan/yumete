@@ -2992,6 +2992,10 @@ impl Editor {
         ('d', "hint.space.problems"),
         ('D', "hint.space.problems-panel"),
         ('u', "hint.goto.seek-reading"),
+        // **`空格 空格` 開關輸入法**（2026-10-10 用戶提的：「两下空格搞定」）。
+        // 兩邊都空着：helix 的 Space 選單裏沒有 space 這一項，這裏也沒有。而
+        // 「引擎挂沒挂上」是寫漢字的人一天按得最多的那一個開關，從前只有 `:y`。
+        (' ', "hint.space.ime"),
         ('i', "hint.space.record"),
         ('I', "hint.space.record-panel"),
         // **`空格 w` 是區域那一組的門**（2026-09-30 定，照 helix 的 `C-w`：
@@ -3270,6 +3274,18 @@ impl Editor {
     ];
 
     /// A table of key names read out in the reader's language.
+    /// **空格鍵在鍵名那一欄寫成 `␣`**（2026-10-10）。
+    ///
+    /// `空格 空格` 一加進來就露出這件事：鍵名是原樣畫出去的 `char`，而一個空格畫
+    /// 出來就是一片空白——那一行看着像沒有鍵。`␣` 是這個倉本來就在用的寫法
+    /// （`HOP_DOWN_KEYS` 的「空行」那一條、竪排提示行裏的 `Pending::Space`）。
+    pub(super) fn key_name(key: char) -> std::borrow::Cow<'static, str> {
+        match key {
+            ' ' => "␣".into(),
+            other => other.to_string().into(),
+        }
+    }
+
     pub(super) fn said(
         rows: impl IntoIterator<Item = (&'static str, &'static str)>,
     ) -> KeyRows {
@@ -3441,6 +3457,8 @@ impl Editor {
             Key::Char('D') => self.show_the_problem_here(false),
             // **記錄**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
             // 格的事），這一對是順手。
+            // 切哪一頭由前端定——它手裏纔有「此刻挂着沒有」。
+            Key::Char(' ') => self.scheme_request = Some("lang:toggle".to_string()),
             Key::Char('i') => self.show_the_record_here(true),
             Key::Char('I') => self.show_the_record_here(false),
             Key::Char('"') => self.open_paste_picker(),

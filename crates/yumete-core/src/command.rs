@@ -1813,9 +1813,14 @@ const WRAP: &[Word] = &[
 /// on macOS and Windows. `auto` is taken as 唯一 because that is what the
 /// habit calls it — 自動上屏.
 /// How much of 靈明 is answering — `:yume` on its own means the first of them.
+/// **引擎挂沒挂上，兩檔**（2026-10-10 定）。
+///
+/// Warning: **`abc` 2026-10-10 從這裏拿掉了。** 它說的是另一根軸——引擎挂着而打的是
+/// 字母——而那一根由 Shift 管（`press_modifier`），和「挂沒挂上」是兩件事。一句
+/// 命令同時動兩根軸，於是 `:y abc` 既是「開」又是「別出中文」，說不清它關掉了什麼。
+/// 原話：「两者是解耦的，所以 :yume 中应该只有 on off 两个选项（引擎开关）」。
 const ENGAGEMENT: &[Word] = &[
     Word { name: "on", help: "cmd.yume.on", needs: &[] },
-    Word { name: "abc", help: "cmd.yume.abc", needs: &[] },
     Word { name: "off", help: "cmd.yume.off", needs: &[] },
 ];
 
@@ -3326,7 +3331,6 @@ pub const COMMANDS: &[Entry] = &[
             // and `:y` is then the whole of it.
             Ok(Command::YumeLanguage(match p.need(0)? {
                 "on" => Engagement::Chinese,
-                "abc" => Engagement::Ascii,
                 _ => Engagement::Off,
             }))
         }),
@@ -5978,9 +5982,14 @@ mod tests {
             parse(":yume on"),
             Ok(Command::YumeLanguage(Engagement::Chinese))
         );
+        // **`abc` 2026-10-10 拿掉了**：它動的是另一根軸（引擎挂着而打字母），
+        // 那一根歸 Shift。一句命令同時動兩根，說不清它關掉了什麼。
         assert_eq!(
             parse(":yume abc"),
-            Ok(Command::YumeLanguage(Engagement::Ascii))
+            Err(CommandError::InvalidArgument {
+                command: "yume",
+                value: "abc".into()
+            })
         );
         assert_eq!(parse(":yume off"), Ok(Command::YumeLanguage(Engagement::Off)));
         assert_eq!(parse(":yume-installed"), Ok(Command::InstalledScheme));

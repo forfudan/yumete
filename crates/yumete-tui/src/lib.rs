@@ -3770,6 +3770,14 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         let want = match want {
             "chinese" => Engagement::Chinese,
             "abc" => Engagement::Ascii,
+            // **`空格 空格` 翻個面**（2026-10-10）。哪一頭由這裏答，因為「此刻
+            // 挂着沒有」只有這一邊知道——核心那頭發的是「翻一下」，不是一個狀態。
+            // 挂着就摘下來；摘着的就挂上**並且直接是中文**（原話：「开启后直接是
+            // 中文（和现在一样）」）。中文還是字母那一根軸歸 Shift。
+            "toggle" => match ime.engaged() {
+                true => Engagement::Off,
+                false => Engagement::Chinese,
+            },
             _ => Engagement::Off,
         };
         return engage(ime, want, config);
@@ -21301,13 +21309,16 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_language_requests_are_spelled_the_way_the_loop_reads_them() {
         let mut editor = Editor::new();
-        for line in ["yume on", "yume abc", "yume off"] {
+        // `yume abc` 2026-10-10 拿掉了（那一根軸歸 Shift）；`空格 空格` 發的
+        // `lang:toggle` 走同一條路，所以它也在這裏。
+        for line in ["yume on", "yume off"] {
             editor.execute(line).unwrap();
             let tag = editor
                 .take_scheme_request()
                 .unwrap_or_else(|| panic!("{line} asked the front end nothing"));
             assert!(answers_the_language(&tag), "{line} sent {tag:?}");
         }
+        assert!(answers_the_language("lang:toggle"), "`空格 空格` 發的那一個");
         // …and the requests about the 碼表 are not answers about the
         // language: putting the borrow back after one of those is right.
         for line in ["yume-scheme", "yume-panel", "yume-commit"] {
