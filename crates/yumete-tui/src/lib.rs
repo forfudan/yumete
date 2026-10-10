@@ -685,7 +685,7 @@ pub fn run(
         // written. `composes_here` is the one gate that already knows all of
         // this: the preedit, the candidate panel and the lone-Shift tap light
         // up together with it, and now so does this.
-        let yume_has_the_keys = ime.available() && ime.engaged();
+        let yume_has_the_keys = ime.holding_the_keys();
         // **Normal 下按過 Esc 而它没別的事可做**：把挂起再說一遍（2026-09-22）。
         // 抹掉信念，下面那一句自己會重發——它本來就是冪等的。
         if editor.take_say_it_again() {
@@ -966,7 +966,7 @@ pub fn run(
         // tap — the switch a writer actually reaches for — needs no key of
         // its own at all.
         if enhanced {
-            let want = ime.available() && ime.engaged();
+            let want = ime.holding_the_keys();
             if want != all_keys {
                 let _ = match want {
                     true => execute!(
@@ -1238,7 +1238,7 @@ pub fn run(
                 // activity is swallowed so it never reaches the editor.
                 match shift.update(&key) {
                     ShiftResult::Tap(tapped) => {
-                        if composes_here(editor) && ime.available() && ime.engaged() {
+                        if composes_here(editor) && ime.holding_the_keys() {
                             // The same answer as `:yume on`, given by the hand
                             // rather than by the command line, so it ends the
                             // borrow the same way (#225) — but only when the
@@ -3774,7 +3774,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             // 挂着沒有」只有這一邊知道——核心那頭發的是「翻一下」，不是一個狀態。
             // 挂着就摘下來；摘着的就挂上**並且直接是中文**（原話：「开启后直接是
             // 中文（和现在一样）」）。中文還是字母那一根軸歸 Shift。
-            "toggle" => match ime.engaged() {
+            "toggle" => match ime.holding_the_keys() {
                 true => Engagement::Off,
                 false => Engagement::Chinese,
             },
@@ -4061,7 +4061,7 @@ fn ime_handle(
 /// 所以離屏與真機從此只有一份答案。
 pub fn offline_ime_key(ime: &mut ImeSession, editor: &mut Editor, key: Key) -> bool {
     let (code, mods) = terminal_key(key);
-    composes_here(editor) && ime.available() && ime.engaged() && ime_handle(ime, editor, code, mods)
+    composes_here(editor) && ime.holding_the_keys() && ime_handle(ime, editor, code, mods)
 }
 
 /// [`map_key`] 的另一半：一個核心的 [`Key`] 寫成終端機報出來的那一對。

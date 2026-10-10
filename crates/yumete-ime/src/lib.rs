@@ -846,6 +846,19 @@ impl ImeSession {
         self.engaged
     }
 
+    /// **鍵盤此刻在不在 yume 手裏**——`engaged` 與 `available` 的合取。
+    ///
+    /// Warning: **「挂上了」不等於「在用」。** 會話一建出來 `engaged` 就是 `true`，
+    /// 而碼表是第一次切到中文纔載的，所以開機那一刻 `engaged() == true` 而屏幕上
+    /// 一個字都沒有。2026-10-10 報的：`空格 空格` 只問了 `engaged`，於是開機第一下
+    /// 讀成「開着」，去把它關了一次——「必须再按两下 space 才可以开启」。
+    ///
+    /// 這一句是前端判斷「yume 收不收這一鍵」用的同一句（四處），問的也是狀態欄那
+    /// 一格畫不畫得出東西。要問「開着沒有」，問這一句。
+    pub fn holding_the_keys(&self) -> bool {
+        self.available() && self.engaged()
+    }
+
     /// Take the keyboard, or hand it back.
     ///
     /// Handing it back does **not** change 中/ABC: coming back should come
@@ -2417,6 +2430,27 @@ mod data_faults {
         assert!(matches!(problem.fault, DataFault::Rejected { .. }));
         // … and the 拆分表 is in the engine anyway.
         assert_eq!(engine.annotations().divisions().roots(), &['木']);
+    }
+}
+
+#[cfg(test)]
+mod holding {
+    use super::*;
+
+    /// **「挂上了」不等於「在用」**（2026-10-10 報的）。
+    ///
+    /// 原話：「ye 打开编辑器，两下空格，它提是『输入法交还给系统了』，yume 輸入法
+    /// 引擎并没有开启。必须再按两下 space 才可以开启。」成因：會話一建出來
+    /// `engaged` 就是 `true`，而碼表要第一次切到中文纔載——於是開機那一刻
+    /// `engaged()` 答「開着」而屏幕上一個字都沒有，`空格 空格` 照它去關了一次。
+    ///
+    /// 要問「開着沒有」只許問 [`ImeSession::holding_the_keys`]。
+    #[test]
+    fn a_fresh_session_is_engaged_but_is_not_holding_the_keys() {
+        let fresh = ImeSession::empty(Scheme::LINGMING);
+        assert!(fresh.engaged(), "挂是挂上了");
+        assert!(!fresh.available(), "可是手上沒有碼表");
+        assert!(!fresh.holding_the_keys(), "所以鍵盤還不在它手裏");
     }
 }
 
