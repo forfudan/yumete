@@ -20502,6 +20502,34 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.155 A config file that is wrong says the whole file is wrong (2026-10-10)
+
+TOML is all-or-nothing and every `Raw*` carries `deny_unknown_fields`, so **one misspelt key
+means the file takes effect nowhere**. The message only named that key, so a reader who fixed it
+never learnt that forty other settings had been off. Measured: four lines in `[editor]`, only
+`zong_length` misspelt, and `layout = "vertical"` plus `line_numbers = "none"` both silently
+did not apply. `describe` now leads with 「{本地|全局}配置檔出錯，使用出廠設置」 (2026-10-10).
+The manual's own `[editor]` example spelt `zong_length` twice, which TOML rejects — so copying
+it hit exactly this; the stale one (with the old `4–64`) is gone.
+
+**Two asked for, not built** (2026-10-10): ① a key in the settings panel that opens the
+matching `config.toml` (global or local); ② LSP-shaped diagnostics over that file — an *error*
+on the line that makes the whole file invalid, a *warning* on a key or value that parses but is
+never applied. The second one has a ready inventory: `into_config_saying` already collects every
+such problem, and §5.154 lists the eleven keys that are still silent.
+
+## 5.154 A terminal probe must put raw mode back the way it found it (2026-10-10)
+
+Reported: after `:settings`, `d`, `:w`, `q`, every key draws itself on screen as `^[[104u` and a
+mouse click draws a run of them. Both probes — `theme::ask_the_terminal` (「你的底色是深是淺」)
+and `ambiguous::ask_the_terminal_about_width` — did `enable_raw_mode()` on the way in and
+`disable_raw_mode()` on the way out. That is right at start-up, where the editor is not in raw
+mode yet; but `settings.rs`'s 「每一項設定，推一遍」 reaches them whenever `ambiguous_width` or
+the theme mode is `auto`, which is **every time a setting is applied mid-session**. The probe
+then switched off the raw mode the editor was using, the terminal started echoing, and the Kitty
+keyboard layer was still pushed — so each key echoed as its CSI-u escape. `enable_raw_mode` does
+not count, so both now ask `is_raw_mode_enabled()` first and only undo what they did.
+
 ## 5.153 One rule for how big a float may be, and the `空格` menu stops being the exception (2026-10-09)
 
 「我覺得可以和其他的看齊，超過一半確實危險，寧可更寬。」 `chrome::Use` now names the three
