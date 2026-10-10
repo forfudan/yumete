@@ -1660,12 +1660,51 @@ impl Editor {
             })
     }
 
+    /// **代碼檔的大綱：它自己的函數和類**（2026-10-11）。
+    ///
+    /// 名字取那一段的**首行**，照它原樣寫着的樣子——不另解析一次簽名。讀者在大綱
+    /// 上找的是「那一行長什麼樣」，而簽名本來就寫在第一行；真要漂亮得再問一次語法
+    /// 樹，而那是 `documentSymbol` 接上之後自然就有的東西。
+    ///
+    /// 類比函數淺一級，和 Markdown 的 `##`／`###` 同一個讀法。
+    fn code_outline(&self) -> Vec<(usize, usize, String)> {
+        let rope = self.current_buffer().rope();
+        let mut out: Vec<(usize, usize, String)> = self
+            .definitions_here()
+            .into_iter()
+            .filter_map(|(from, _, kind)| {
+                let line = rope.try_char_to_line(from).ok()?;
+                let title = rope.line(line).to_string().trim().to_string();
+                if title.is_empty() {
+                    return None;
+                }
+                let level = match kind {
+                    crate::code::Define::Class => 1,
+                    crate::code::Define::Function => 2,
+                };
+                Some((line, level, title))
+            })
+            .collect();
+        // 一行上可能落下兩個（`impl` 裏的 `fn` 和它自己），按行去重；次序照行。
+        out.sort_by_key(|&(line, level, _)| (line, level));
+        out.dedup_by_key(|&mut (line, _, _)| line);
+        out
+    }
+
     /// The headings of the active buffer, as `(line, depth, title)`.
     ///
     /// Markdown's `#` — no parser, no LSP, no tree-sitter: a heading in a
     /// manuscript is a line that starts with hashes, and that is the whole
     /// rule. A 縱書 draft in Typst uses `=` the same way, so both are read.
     pub fn outline(&self) -> Vec<(usize, usize, String)> {
+        // **代碼檔列的是它自己的符號**（2026-10-11）。helix 的 `空格 s` 在代碼上
+        // 是 `lsp_or_syntax_symbol_picker`，而這一格從前對代碼一律是空的——按下去
+        // 開一扇什麼都沒有的面板。tree-sitter 那一半這裏本來就有（`mi f`/`mi t`
+        // 用的是同一支 `definitions_here`），所以先走它；LSP 的
+        // `textDocument/documentSymbol` 還沒接，接上之後它優先、這一支當退路。
+        if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
+            return self.code_outline();
+        }
         let rope = self.current_buffer().rope();
         let mut out = Vec::new();
         for line in 0..rope.len_lines() {

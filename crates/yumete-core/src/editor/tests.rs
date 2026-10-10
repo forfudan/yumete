@@ -17775,7 +17775,17 @@ fn a_code_file_is_coloured_whole_and_has_no_headings() {
     };
     assert_eq!(kinds(&ed, 0), [Kind::Token(Token::Comment)]);
     assert_eq!(kinds(&ed, 1).first(), Some(&Kind::Token(Token::Keyword)));
-    assert!(ed.outline().is_empty(), "a comment is not a chapter");
+    // **`#` 開頭那一行不是章節**，這一條照舊守着；而大綱本身 2026-10-11 起列的是
+    // 這個檔自己的符號（照 helix 的 `空格 s`），所以它不再是空的。
+    let outline = ed.outline();
+    assert!(
+        !outline.iter().any(|(_, _, title)| title.contains("註")),
+        "a comment is not a chapter: {outline:?}"
+    );
+    assert!(
+        outline.iter().any(|(_, _, title)| title.starts_with("def f")),
+        "而函數在大綱上: {outline:?}"
+    );
 }
 
 /// Tab types spaces to the next indent stop, Shift-Tab a TAB — and
