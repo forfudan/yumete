@@ -291,6 +291,21 @@ const EDITOR_AMBIGUOUS_WIDTH_WAYS: &[Choice] = &[
 /// Warning: **八組都有東西了**（2026-09-24）。[`LATER`] 裏剩下的是二十四個色位（收在
 /// 二級入口，見那張表自己的註釋）和幾項要新控件纔畫得出來的（列表、路徑）。
 /// 那張一致性測試讀的是三張表的**並集**，所以漏一項照樣紅。
+/// **一項設定自己聲明的數域**，`(最小、最大、`0` 另有意思嗎)`。
+///
+/// 給 `into_config` 用的：鉗的規矩和面板畫的規矩必須是**同一個事實**。從前兩邊
+/// 各寫一遍，於是 `indent_width` 從配置檔進來沒有上界（`999` 一下 `>` 把正文推
+/// 到第 1008 欄推出屏幕），而同一個數從 `:indent-width` 打進去是拒的；
+/// `tab_width`、`wheel_step` 的上界與 `scrolloff` 的整個域同病（2026-10-10 報的）。
+pub fn counted(table: &str, key: &str) -> Option<(usize, usize, bool)> {
+    SETTINGS.iter().find_map(|one| match one.kind {
+        Kind::Count { low, high, zero } if one.table == table && one.key == key => {
+            Some((low, high, zero.is_some()))
+        }
+        _ => None,
+    })
+}
+
 pub const SETTINGS: &[Setting] = &[
     // ---- 版面 ----------------------------------------------------------
     Setting {
