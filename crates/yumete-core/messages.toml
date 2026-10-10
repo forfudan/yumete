@@ -3169,14 +3169,6 @@ en = "whether `d` and `c` fill the register. Off swaps them with `A-d` and `A-c`
 find = "寄存器 剪 剪切 刪 删 刪除 删除 剪貼板 剪贴板 yank register cut delete"
 
 [[message]]
-# : 命令選單裏 abc 那一項的說明（yume 組）
-key = "cmd.yume.abc"
-zht = "ABC：yume 還接着鍵盤，按鍵直通英文（Shift 點一下也是這個）"
-zhs = "ABC：yume 还接着键盘，按键直通英文（Shift 点一下也是这个）"
-en = "ABC: yume still holds the keyboard, the keys type what they say"
-find = "英文 english abc 直通 shift"
-
-[[message]]
 # : 命令選單裏 autocompletion 那一項的說明（yume 組）
 key = "cmd.yume.autocompletion"
 zht = "輸入預測：碼沒打完就先給候選"
@@ -5804,6 +5796,13 @@ key = "hint.space.dictionary-panel"
 zht = "字典開進邊欄（讀得完長的）"
 zhs = "字典开进边栏（读得完长的）"
 en = "the dictionary in the sidebar (room to read)"
+
+[[message]]
+# 空格選單：空格 空格
+key = "hint.space.ime"
+zht = "開關輸入法"
+zhs = "开关输入法"
+en = "turn the IME on or off"
 
 [[message]]
 # 空格組：從系統剪貼簿貼在前面

@@ -12333,6 +12333,8 @@ fn help_is_the_editor_describing_itself() {
     // Every key the Space menu declares is in it, because it is *made* of
     // that list rather than written beside it.
     for (key, _) in Editor::SPACE_KEYS {
+        // 鍵名走同一支（`Editor::key_name`）：空格鍵在表裏是 `' '`，畫出來是 `␣`。
+        let key = Editor::key_name(*key);
         assert!(text.contains(&format!("\u{2423}{key}")), "\u{2423}{key} missing");
     }
     assert!(text.contains("g/") && text.contains("gd"), "{text}");

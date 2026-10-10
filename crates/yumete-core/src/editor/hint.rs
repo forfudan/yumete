@@ -394,7 +394,7 @@ impl Editor {
                     // key to make it into one; the key column is a `Cow` now,
                     // so the owned string simply goes in.
                     .map(|(key, what)| {
-                        (key.to_string().into(), crate::messages::say(what, &[]))
+                        (Self::key_name(*key), crate::messages::say(what, &[]))
                     })
                     .collect(),
             ),

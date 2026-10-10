@@ -148,6 +148,7 @@ impl Editor {
         }
         out.push_str(&format!("\n## {}\n\n", say!("help.common.space-title")));
         for (key, what) in Self::SPACE_KEYS {
+            let key = Self::key_name(*key);
             out.push_str(&format!(
                 "- `\u{2423}{key}` — {}
 ",

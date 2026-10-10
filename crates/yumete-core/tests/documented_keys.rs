@@ -297,6 +297,12 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
         // there really does nothing, which is what `t s` is doing in
         // [`DISOWNED_KEYS`]. So a spelling with arithmetic in it is checked
         // one level up only: this table's vocabulary is keys, not columns.
+        // **`空格 空格` 是「按兩下空格」**（2026-10-10）。手冊照人讀得懂的寫法寫；
+        // 編輯器那張表裏它是 `' '`，所以這裏把那兩個漢字折回那一個字符。寫成
+        // `空格 ␣` 也對得上，可那一行是給人看的。
+        if lead == '空' && key == "空格" {
+            return Some((lead, " ".to_string()));
+        }
         let mut key = key.chars();
         let first = key.next()?;
         let rest: String = key.collect();
