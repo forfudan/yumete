@@ -858,6 +858,22 @@ impl Buffer {
             self.swapped_at = Some(self.revision);
             return Ok(());
         }
+        // Warning: **pid 會重用，而這個名字是用 pid 綴的**（2026-10-10 報的）。
+        // 重啓之後 pid 從小號重發，於是「我的名字」偶爾正好是上一回崩掉、**還沒
+        // 人撿**的那一份草稿。從前這裏無條件往那個名字寫，崩的那一回的字當場沒了
+        // ——而狀態欄還掛着 `[draft]` 說「有一份等你撿」，再崩一次撿回來的是自己。
+        // #305 那條「不許蓋掉沒人撿的草稿」從前是靠「名字不會撞」成立的。
+        //
+        // 撞上了就說明**原主人一定走了**（這個號現在是我的），所以把那一份挪到旁
+        // 邊一個空名字上，照舊端出來。不改自己的名字：名字裏那個 pid 正是別的
+        // session 用來看「這一份的主人還在不在」的（見 `owner_still_running`）。
+        if self.pending_swap.as_deref() == Some(swap.as_path()) {
+            if let Some(aside) = draft_moved_aside(&swap) {
+                if fs::rename(&swap, &aside).is_ok() {
+                    self.pending_swap = Some(aside);
+                }
+            }
+        }
         // The manuscript is the model for the copy's permissions — see
         // `write_atomically_like`. A scratch buffer has no manuscript, and
         // there the umask is the only answer there is.
@@ -1687,6 +1703,23 @@ fn write_bytes_with_model(
     Ok(())
 }
 
+/// 給一份撞了名字的草稿找一個空名字，**而且還要找得回來**。
+///
+/// `read_draft` 掃目錄時只認「`.<名字>.yumete.` 後面全是數字」的那些，所以挪過去
+/// 的名字也得是純數字。在原來那個 pid 後面接三位數就夠：它比任何一個真 pid 都長，
+/// 所以 `owner_still_running` 解不出來、判作「主人走了」——而那正是實情。
+fn draft_moved_aside(swap: &Path) -> Option<PathBuf> {
+    let name = swap.file_name()?.to_string_lossy().into_owned();
+    let (stem, tag) = name.rsplit_once('.')?;
+    for n in 0..1000u32 {
+        let candidate = swap.with_file_name(format!("{stem}.{tag}{n:03}"));
+        if !candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// **那一份草稿的主人還在跑嗎**（2026-10-10 報的）。
 ///
 /// 草稿的名字帶着寫它的那個進程：有檔名的是 `.卷一.md.yumete.<pid>`，沒檔名的是
@@ -2368,6 +2401,46 @@ mod tests {
         let err = b.save().unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
+    /// **pid 撞號不許蓋掉那一份沒人撿的草稿**（2026-10-10 報的）。
+    ///
+    /// 重啓之後 pid 從小號重發，於是這一輪的名字正好是上一回崩掉那一份的名字。
+    #[test]
+    fn a_reused_pid_moves_the_unclaimed_draft_aside_instead_of_writing_over_it() {
+        let dir = std::env::temp_dir().join(format!("yumete-pidclash-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("f.md");
+        fs::write(&file, "base text\n").unwrap();
+
+        // 上一回崩掉那一份，名字綴的正好是**這一輪**的 pid。
+        let first = Buffer::open(&file).unwrap();
+        let clash = first.session_swap_path().unwrap();
+        fs::write(&clash, "CRASHED WORK nobody has picked up\n").unwrap();
+
+        // 這一輪開同一個檔：那一份被端出來（還沒撿），然後打字、寫救命稿。
+        let mut now = Buffer::open(&file).unwrap();
+        assert_eq!(
+            now.recovered_draft().map(str::to_string),
+            Some("CRASHED WORK nobody has picked up\n".to_string())
+        );
+        let _ = now.insert(0, "NEW-");
+        now.write_swap().unwrap();
+
+        // 崩的那一回的字還在，只是換了個名字；而且還端得出來。
+        assert!(fs::read_to_string(&clash).unwrap().starts_with("NEW-"), "自己那一份寫在原名上");
+        let moved = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| fs::read_to_string(p).is_ok_and(|t| t.starts_with("CRASHED")));
+        assert!(moved.is_some(), "沒人撿的那一份被蓋掉了");
+        assert_eq!(now.pending_swap.as_deref(), moved.as_deref());
+        let again = Buffer::open(&file).unwrap();
+        assert!(again.recovered_draft().is_some(), "挪過去之後下一次開檔還找得到");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
     /// **還活着的那個進程留下的草稿不許刪**（2026-10-10 報的）。
     #[test]
     fn a_draft_whose_owner_is_still_running_is_not_an_orphan() {
