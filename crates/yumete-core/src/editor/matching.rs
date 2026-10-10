@@ -859,13 +859,25 @@ impl Editor {
         if self.key_preset != yumete_cjk::KeyPreset::Vim {
             return pos;
         }
+        // **竪排永遠跨**（2026-10-10 量出來的）。那一頭 `j`/`k` 走的就是這一支
+        // （`keys.rs` 的竪排分支），而竪排裏「一行」是一整段——攔在行內就是
+        // 「`j` 走到段尾停死，下一縱根本到不了」，2026-09 報過、橫排那一側早就
+        // 修好的那一條，在 vim 這一側還活着。vim 的 `whichwrap` 說的是橫排紙上
+        // 左右走到頭，竪排的上下走是文字本身的方向，不歸它管。
+        //
+        // Warning: **是「跨」不是「不攔」。** 直接放行會讓光標停在換行符上，而
+        // `keep_off_the_newline` 下一刻就把它拉回來——那條規矩是對的（停在換行上
+        // 一個 `x` 就把兩段接起來）。所以走的是底下那條落點規矩：一步落到下一段
+        // 的第一個字，換行符本身從來不是終點。
+        let across = self.layout() == yumete_cjk::Layout::Vertical
+            || flag.is_some_and(|c| self.which_wrap.contains(c));
         let rope = self.current_buffer().rope();
         let here = self.sel.head();
         let (first, last) = (motion::line_start(rope, here), motion::line_last(rope, here));
         if (first..=last).contains(&pos) {
             return pos;
         }
-        if !flag.is_some_and(|c| self.which_wrap.contains(c)) {
+        if !across {
             return pos.clamp(first, last);
         }
         let line = rope.char_to_line(here);
