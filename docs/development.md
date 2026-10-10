@@ -20502,6 +20502,27 @@ Measured after, on one line, per keystroke: 1 M 0.80 ms, 2 M 0.90 ms, 4 M **1.3 
 wrong is a mis-split cluster for a run of more than thirty-two regional-indicator flags or a
 64-codepoint ZWJ chain, written down where the constant is.
 
+## 5.157 A sentence ends where the paragraph does, and the oracle said where (2026-10-10)
+
+`dis`/`das` differed from nvim in 254 of 310 cells. Two causes, both in `sentence_object_span`:
+it read `line_chars(rope, line)`, so a sentence with no closing mark ended at the line break
+rather than at the end of the paragraph; and any whitespace under the caret was treated as the
+previous sentence's tail, where vim gives the run between two sentences an object of its own
+(「a sentence, or the white space between sentences」) while whitespace *inside* one belongs to it.
+
+Four more rules came out of the sweep rather than out of reading vim's docs, each one found by
+the cells that stayed red: the paragraph's **last** newline is part of its last sentence (so a
+whole-paragraph sentence takes it) while a newline **inside** the paragraph is not; the leading
+whitespace of a paragraph belongs to its first sentence; and `as` on the gap between sentences
+is simply `as` on the sentence after it, which is how 「no trailing space, so take the leading
+one」 keeps applying. 310 of 310 now agree.
+
+**Two fixture traps, both of which made green and red both lie.** An emptied buffer is written
+as 0 bytes by nvim and as `\n` by yumete, so every fixture whose only paragraph was the whole
+file produced a difference that said nothing about sentences — 123 cells of it. Every fixture
+now carries a second paragraph. And `--keys` swallows a lone backslash (`\s` arrives as `s`),
+which had three `:s` oracle cells passing without biting.
+
 ## 5.156 Count the keys in vim and helix's own sources, not in a comment (2026-10-10)
 
 Reported: 「You told me that `gu` is free for both vim and helix, so I decided to use `gu`.
