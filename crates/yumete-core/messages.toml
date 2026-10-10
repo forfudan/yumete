@@ -6128,6 +6128,13 @@ zhs = "取这栏/贴一栏"
 en = "yank this column / paste a column"
 
 [[message]]
+# 面板底下那一行：q 把鍵還給正文，面板留着（關那一格是 C-w q）
+key = "hint.to-the-text"
+zht = "回編輯區"
+zhs = "回编辑区"
+en = "back to text"
+
+[[message]]
 # 提示：打一種括號
 key = "hint.type-a-bracket"
 zht = "輸入包住的符號"
@@ -9514,8 +9521,8 @@ en = "system"
 [[message]]
 # 設置面板：底下那一行鍵
 key = "set.keys"
-zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 換存到哪一份  :w 存  q 走"
-zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 换存到哪一份  :w 存  q 走"
+zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 切換全局/本地設置  :w 存  q 離開"
+zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 切换全局/本地设置  :w 存  q 离开"
 en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  q leave"
 
 [[message]]

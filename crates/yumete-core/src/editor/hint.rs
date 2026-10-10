@@ -96,7 +96,7 @@ impl Editor {
                         // 而且 w 无效」）。兩件事一起壞的：這一行沒說它，而它
                         // 本來也真的不管用（見 `on_info_key`）。
                         ("w".into(), say!("hint.sidebar.width")),
-                        ("q".into(), say!("hint.close")),
+                        ("q".into(), say!("hint.to-the-text")),
                         (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
                     ]);
             }
@@ -206,7 +206,7 @@ impl Editor {
                 };
                 keys.push((numbers.into(), say!("hint.search.switches")));
                 keys.push(("Enter".into(), say!("hint.search.use-it")));
-                keys.push(("q".into(), say!("hint.close")));
+                keys.push(("q".into(), say!("hint.to-the-text")));
                 keys.push((back_to_text_key().into(), say!("hint.sidebar.back-to-text")));
                 keys.push(("/".into(), say!("hint.search.new-word")));
                 // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
@@ -244,7 +244,7 @@ impl Editor {
                     ("Tab".into(), say!("hint.sidebar.other-view")),
                     ("w".into(), say!("hint.sidebar.width")),
                     (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
-                    ("q".into(), say!("hint.close")),
+                    ("q".into(), say!("hint.to-the-text")),
                 ]);
         }
         // A reference standing half-typed, with the panel already open under
