@@ -764,6 +764,10 @@ arrows, `~`. vim's `s` is not among them: there it is Space, and Space here is t
 door into the `空格` menu. Helix has no such option and none of this reaches it —
 `h` and `l` always cross on that side.
 
+**`:which-wrap hl`** sets the same thing for this run, **`:which-wrap off`** takes
+them all back (vim writes that as `:set whichwrap=`, which a command's argument
+cannot spell), and **`:which-wrap`** on its own says which letters are in force.
+
 **Deliberately not translated**, and why:
 
 | key | why |
