@@ -6026,7 +6026,6 @@ language_key = "C-^"         # on terminals that cannot report a bare Shift, thi
                              # so the two names are the same key here
 
 layout = "horizontal"        # "horizontal" | "vertical"
-zong_length = 0              # characters to a column, 4–64; 0 = as long as the window will give
 indent = 0                   # cells of first-line indent; the Chinese convention for a paragraph is 2
 bands = 1                    # bands: how many strips a set-down page is cut into across, 1–4
 margin = "dense"             # the interlinear lane: "never" | "dense" (default) | "loose" | "always"

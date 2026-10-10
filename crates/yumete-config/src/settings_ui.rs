@@ -96,7 +96,7 @@ pub enum Kind {
     ///
     /// Warning: **`zero` 不是 `None` 的時候，`low` 是「最小的**非零**值」**，而真正的
     /// 域是「0，或者 `low` 到 `high`」——中間沒有別的。`zong_length` 是「0，或者
-    /// 4 到 64」，`tatechuyoko` 是「0，或者 2 到 8」。把 `low` 寫成 0 的話面板停
+    /// 8 到 64」，`tatechuyoko` 是「0，或者 2 到 8」。把 `low` 寫成 0 的話面板停
     /// 得到域外的數，寫進檔裏而 `into_config` 當場鉗掉——**面板顯示的值不是編輯器
     /// 用的值**。`tests/settings_ui.rs` 那條
     /// `every_value_the_panel_can_set_is_its_own` 盯着這件事。
