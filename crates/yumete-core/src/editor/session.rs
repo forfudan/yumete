@@ -616,6 +616,7 @@ impl Editor {
                 Answer { key: 'n', label: say!("recover.ask-later") },
             ],
             what: Asking::RecoverDraft,
+            about: Some(self.current),
         })
     }
 
@@ -631,6 +632,7 @@ impl Editor {
                 Answer { key: 'n', label: say!("recover.confirm-no") },
             ],
             what: Asking::RecoverConfirm,
+            about: Some(self.current),
         })
     }
 
@@ -716,8 +718,18 @@ impl Editor {
         // 西：沒答過的那一份不算「暫時不管」，翻回去自己會再問。
         //
         // 別的問題（`:w` 那個大小核驗）不碰——那一問問的是一條還沒做完的命令。
-        let standing = matches!(self.query.as_ref().map(|q| &q.what), Some(Asking::RecoverDraft));
-        if (self.query.is_none() || standing) && self.current_buffer().draft_wants_asking() {
+        // Warning: **兩問都要收，不只第一問**（2026-10-10 報的，會丟字）。從前這
+        // 一句只認 `RecoverDraft`，而真正換掉正文的是第二問；於是第二問站着的時候
+        // 點一下標籤，面板原封不動留着問 `b.md`，按 `y` 換掉的卻是 `a.md`。
+        // 「是不是上一份的」現在由問題自己記的那一格答（`Query::about`），不是猜。
+        let elsewhere = self
+            .query
+            .as_ref()
+            .is_some_and(|q| q.about.is_some_and(|b| b != self.current));
+        if elsewhere {
+            self.query = None;
+        }
+        if self.query.is_none() && self.current_buffer().draft_wants_asking() {
             self.query = self.recover_query();
         }
     }

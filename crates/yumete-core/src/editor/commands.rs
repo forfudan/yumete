@@ -1479,6 +1479,7 @@ impl Editor {
                 Answer { key: 'n', label: say!("write.oversize-no") },
             ],
             what: Asking::OversizeWrite { path: path.map(str::to_string) },
+            about: None,
         })
     }
 
