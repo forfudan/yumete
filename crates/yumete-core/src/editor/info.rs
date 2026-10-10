@@ -111,6 +111,31 @@ impl Editor {
         self.info_in_the_sidebar().is_none().then(|| self.info_now()).flatten()
     }
 
+    /// **這一種此刻真的畫在屏幕上，而且畫在這一鍵要的那個地方。**
+    ///
+    /// 「它開着沒有」只許問這一句。從前兩個 toggle 各自問各自的——`ask_for_info`
+    /// 問「叫過沒有、容器對不對、有沒有內容」三句，`show_the_record_here` 問
+    /// `detail_visible()`——而 `Esc` 立的那個閂（[`Editor::hush_the_float`]）兩邊
+    /// 都不知道。於是按下去之後再叫一次，被當成「又按了一次」當場收回去，按冒煙
+    /// 也不出來，動一下光標纔好（2026-10-10 報的）。
+    ///
+    /// Warning: **它問的是畫面，不是「誰叫的」。** 即時浮出來的那一則，按它自己
+    /// 那個鍵照樣收得掉——`t i` 早就是這個規矩（`detail.rs` 那段註釋），這一句讓
+    /// 五種都一樣。
+    pub(super) fn info_on_screen(&self, one: Info, afloat: bool) -> bool {
+        // Warning: **槽位留給它 ≠ 屏幕上有它。** `空格 k` 把問題發出去之後，答覆回來
+        // 之前那一格是**空着等**的——`info_now()` 照樣答 `Docs`，不然即時的那一種
+        // 下一幀就把它頂掉了。所以「畫出來沒有」要連內容一起問（2026-10-08 那一條
+        // 釘的就是這半句：走開再走回來，位置又對上了而說明早就作廢）。
+        if !self.info_has_body(one) {
+            return false;
+        }
+        match afloat {
+            true => self.info_afloat() == Some(one),
+            false => self.info_in_the_sidebar().is_some() && self.info_now() == Some(one),
+        }
+    }
+
     /// **`Esc`：把浮着的那一扇按下去**，回 `true` 說明這一下用掉了。
     ///
     /// Warning: **不是關掉「即時顯示」那個功能**（原話：「只是给用户一个可以
@@ -149,18 +174,11 @@ impl Editor {
         // 再按一次同一個鍵就收起來——此刻擺的就是它，而且畫在這一鍵要的那個
         // 地方。Warning: 判準要連容器一起看：浮着的時候按 `空格 K`，說的是「搬進邊
         // 欄」，不是「關掉」。
-        let here = self.info_in_the_sidebar().is_none();
-        // Warning: **有東西可收纔收**（2026-10-08 報的：「space+k/K 開啓文檔窗口後，移動
-        // cursor 後下次要開文檔得按兩次」）。
-        //
-        // 走一步再走回來，鍵記着的那個位置又對上了（[`Self::info_asked_now`] 比的
-        // 就是位置），於是這一支把它當成「又按了一次」——而屏幕上**早就沒有東西
-        // 了**：那一則說明跟着光標走（`hover_here` 比位置），中間問過別處的話
-        // `hovered` 也已經換了人。於是第一下白按，第二下纔開。
-        //
-        // `info_has_body` 就是為這件事存在的（它那段註釋寫着「這一支不問光標在不
-        // 在原處」）——兩個問題分開問，合起來纔是「此刻那一扇真的開着」。
-        if self.info_asked_now() == Some(one) && here == afloat && self.info_has_body(one) {
+        // Warning: **問的是屏幕，不是記憶**（2026-10-08 和 2026-10-10 各報過一次）。
+        // 這裏從前是三個條件——叫過沒有、容器對不對、有沒有內容——而每加一樣能
+        // 把那一扇弄沒的東西（光標走開、`Esc` 按下去），就得記得多問一句，漏一句
+        // 就是「第一下白按」。[`Self::info_on_screen`] 把它們收成一句。
+        if self.info_on_screen(one, afloat) {
             self.info_asked = None;
             self.stop_showing_this_info(one);
             // Warning: **收起來要連容器一起收**（2026-09-30 審出來的）。這一鍵
@@ -193,6 +211,17 @@ impl Editor {
         if !afloat {
             self.make_room_for_the_info();
         }
+        // **叫它出來就解掉 `Esc` 立的那個閂**（2026-10-10 報的：「如果按 Esc 关闭
+        // 了文档，再把 space-k 按冒烟也不会出文档，必须要动一下光标才能再开」）。
+        //
+        // 那個閂說的是「這個位置上別**自己**浮」，它擋的是即時顯示那一種；而按
+        // `空格 k` 是讀者**指名要它，就在這裏**。主動的請求壓得過被動的壓制，所以
+        // 解它的不止「光標挪開」一條路。
+        //
+        // Warning: **解在這一句裏，不是在各個鍵上。** 五種信息、八個入口都收在這
+        // 一句（見上面那行註釋），而這一族的毛病正是「又多一處要記得清的狀態」
+        // ——`info_asked` 已經讓三個入口各踩過一次了。
+        self.info_hushed = None;
         self.info_asked = Some((one, self.sel.head()));
     }
 
