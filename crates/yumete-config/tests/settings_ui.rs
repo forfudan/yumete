@@ -222,7 +222,7 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
             // 十六個被試過**。而這條測試逮到的那一次（`ime.system` 寫了兩個不存在
             // 的詞）純屬運氣：壞詞正好排第二。排第三就逃掉了。
             // 2026-09-24 審出來的。
-            Kind::Pick(choices) => {
+            Kind::Pick(choices) | Kind::PickOr(choices) => {
                 let now = setting.factory.trim_matches('"');
                 for choice in choices.iter().filter(|c| c.word != now) {
                     assert_ne!(
@@ -305,7 +305,7 @@ fn every_factory_value_parses_as_the_kind_it_says_it_is() {
         let fits = match setting.kind {
             Kind::Tick => v.is_bool(),
             Kind::Count { .. } => v.is_integer(),
-            Kind::Pick(_) | Kind::Text => v.is_str(),
+            Kind::Pick(_) | Kind::PickOr(_) | Kind::Text => v.is_str(),
         };
         assert!(
             fits,
@@ -326,4 +326,44 @@ fn every_factory_value_parses_as_the_kind_it_says_it_is() {
             );
         }
     }
+}
+
+/// **每一個撥得到的主題都真的建得出來**（2026-10-10）。
+///
+/// 面板那一圈是一張手抄的名單（`THEME_NAMES`），而真正認得主題的是
+/// `ThemeConfig::named`。抄錯一個字，面板撥過去就是一個不存在的主題名寫進
+/// `config.toml`，而顏色一聲不吭地回落到出廠那一套。
+///
+/// Warning: **反方向查不了。** `named` 是一串 `match` 的臂，列舉不出來，所以
+/// 「config 多了一套主題而面板沒跟上」這一半沒有閘——加主題的時候兩處一起改。
+#[test]
+fn every_theme_the_panel_can_turn_to_is_one_the_editor_knows() {
+    let mut missing = Vec::new();
+    for setting in yumete_config::settings_ui::SETTINGS {
+        let (yumete_config::settings_ui::Kind::Pick(choices)
+        | yumete_config::settings_ui::Kind::PickOr(choices)) = setting.kind
+        else {
+            continue;
+        };
+        if (setting.table, setting.key) != ("theme", "name") {
+            continue;
+        }
+        for choice in choices {
+            match yumete_config::ThemeConfig::named(choice.word) {
+                // **而且撥出去的是正名，不是別名。** `lanshai` 也開得出藍曬，可
+                // 寫進檔裏的該是 `cyanotype`——面板下次讀它纔對得上這一圈。
+                Some(theme) if theme.name == choice.word => {}
+                Some(theme) => missing.push(format!(
+                    "「{}」是別名，正名是「{}」",
+                    choice.word, theme.name
+                )),
+                None => missing.push(format!("「{}」不是任何主題", choice.word)),
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "設置面板撥得到這些主題，而編輯器建不出來：\n{}",
+        missing.join("\n")
+    );
 }

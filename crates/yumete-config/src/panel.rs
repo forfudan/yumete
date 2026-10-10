@@ -512,12 +512,17 @@ impl Panel {
                 };
                 Change::Count(next as i64)
             }
-            Kind::Pick(choices) => {
+            Kind::Pick(choices) | Kind::PickOr(choices) => {
                 let word = unwritten(now.as_str());
                 let word = word.as_str();
-                let at = choices.iter().position(|c| c.word == word).unwrap_or(0);
-                let next = choices[(at + 1) % choices.len()].word;
-                Change::Text(next.to_string())
+                let next = match choices.iter().position(|c| c.word == word) {
+                    Some(at) => (at + 1) % choices.len(),
+                    // **一個不認得的名字撥到第一個，不是第二個。** `PickOr` 裝
+                    // 得下讀者自己的主題或碼表，而從那裏邁出一步該落在一個名字
+                    // 上，不該跳過一個。檔裏拼錯了的 `Pick` 同理。
+                    None => 0,
+                };
+                Change::Text(choices[next].word.to_string())
             }
             Kind::Text => {
                 self.typing = Some(unwritten(now.as_str()));
@@ -539,6 +544,11 @@ impl Panel {
         match setting.kind {
             // 撥得動的：撥一格。
             Kind::Tick | Kind::Pick(_) => self.press(),
+            // **`PickOr` 走打字那一支**（2026-10-10）。這一種兩條路都有，所以
+            // 兩個鍵各守各的本義：空格是「撥一格」，`i` 是「我自己打」——讀者
+            // 自己裝的主題或碼表只有這一條路進得來。`Tick` 和 `Pick` 沒得打，
+            // 那時 `i` 纔替人撥（2026-10-09 定的那一條，原話「`i` 停在一個勾上
+            // 一聲不吭」）。
             // 數和字：打進去。數也打字而不是一格一格撥——`zong_length` 的域是 4 到
             // 64，按空格按到 40 不是一個人會做的事。
             _ => self.begin_typing(),
@@ -547,6 +557,7 @@ impl Panel {
 
     pub fn begin_typing(&mut self) {
         let Some(setting) = self.here() else { return };
+        // **`PickOr` 不在這裏**：它收得下表外的名字，而 `i` 就是打那個名字用的。
         if matches!(setting.kind, Kind::Tick | Kind::Pick(_)) {
             return;
         }

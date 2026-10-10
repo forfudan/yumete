@@ -108,6 +108,13 @@ pub enum Kind {
     },
     /// 幾選一，狀態名裝在方括號裏——同搜索面板的 `[智能] 大小寫`。
     Pick(&'static [Choice]),
+    /// 幾選一，**可是別的也收**：撥得過這幾個，也可以自己打一個名字進去。
+    ///
+    /// 主題與方案是這一種（2026-10-10 定）。原話：「It is limited to a set so I
+    /// should not manually type 『lingming』」——可它並不是真的只有那幾個：讀者
+    /// 自己裝的主題和碼表不在表裏，而 `:theme` 的參數也正是 `WordsOr` 不是
+    /// `Words`。所以空格與 `Enter` 在出廠那幾個之間輪，`i` 永遠是「我自己打」。
+    PickOr(&'static [Choice]),
     /// 一段自己打的字。
     Text,
 }
@@ -142,6 +149,34 @@ impl Setting {
         format!("{}.{}", self.table, self.key)
     }
 }
+
+/// 出廠的主題，**與 `command.rs` 的 `THEMES` 同名同序**。
+///
+/// Warning: **兩張表要一起改。** 那一張是 `:theme` 的參數，這一張是設置面板撥的
+/// 那一圈；`yumete-config` 看不見 `yumete-core`，所以對不上只能由
+/// `yumete-core/tests/settings_words.rs` 當場說出來。說明用的是同一批 tag，
+/// 所以兩邊的字永遠一樣。
+const THEME_NAMES: &[Choice] = &[
+    Choice { word: "ink", label: "cmd.themes.ink" },
+    Choice { word: "bw", label: "cmd.themes.bw" },
+    Choice { word: "cyanotype", label: "cmd.themes.cyanotype" },
+    Choice { word: "amber", label: "cmd.themes.amber" },
+    Choice { word: "mogao", label: "cmd.themes.mogao" },
+    Choice { word: "morandi", label: "cmd.themes.morandi" },
+    Choice { word: "firefly", label: "cmd.themes.firefly" },
+    Choice { word: "meridian", label: "cmd.themes.meridian" },
+    Choice { word: "kiln", label: "cmd.themes.kiln" },
+    Choice { word: "complement", label: "cmd.themes.complement" },
+];
+
+/// 出廠的碼表，**與 `command.rs` 的 `SCHEMES` 同名同序**（同上）。
+const SCHEME_NAMES: &[Choice] = &[
+    Choice { word: "lingming", label: "cmd.schemes.lingming" },
+    Choice { word: "xingchen", label: "cmd.schemes.xingchen" },
+    Choice { word: "qingyun", label: "cmd.schemes.qingyun" },
+    Choice { word: "riyue", label: "cmd.schemes.riyue" },
+    Choice { word: "pinyin", label: "cmd.schemes.pinyin" },
+];
 
 const LAYOUT_WAYS: &[Choice] = &[
     Choice { word: "horizontal", label: "set.layout.horizontal" },
@@ -578,7 +613,7 @@ pub const SETTINGS: &[Setting] = &[
         table: "theme",
         key: "name",
         group: Group::Colours,
-        kind: Kind::Text,
+        kind: Kind::PickOr(THEME_NAMES),
         label: "set.theme.name",
         hint: "set.theme.name.hint",
         factory: r#""ink""#,
@@ -623,7 +658,7 @@ pub const SETTINGS: &[Setting] = &[
         table: "ime",
         key: "scheme",
         group: Group::Ime,
-        kind: Kind::Text,
+        kind: Kind::PickOr(SCHEME_NAMES),
         label: "set.ime.scheme",
         hint: "set.ime.scheme.hint",
         factory: r#""lingming""#,

@@ -298,13 +298,26 @@ impl Seat {
 /// Warning: **打勾與幾選一戴的是同一副方括號** —— 同搜索面板那條規矩（2026-09-23
 /// 原話：「這樣用戶就知道這裏是可以空格切換的」）。數字與一段字不戴：它們按空格
 /// 也動，但動的是「加一」而不是「換一個」，戴上會讓人以為只有兩三個值。
+/// **值那一格要的是名字，不是那一句話。**
+///
+/// 幾選一的說明有兩種形狀。多數本來就是名字（`[問終端]`、`[橫排]`），而主題那十個
+/// 寫的是「墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來」——那是給 `:theme`
+/// 的菜單寫的，那裏一行一個詞，整句放得下。值那一格放不下，撥一格就只換了半句話
+/// 的開頭。冒號前面那一截就是名字，而這十條都是那個形狀；沒有冒號的原樣不動。
+fn name_of(label: String) -> String {
+    match label.split_once('：') {
+        Some((name, _)) => name.to_string(),
+        None => label,
+    }
+}
+
 fn drawn(setting: &Setting, value: &str) -> String {
     match setting.kind {
         Kind::Tick => match value {
             "true" => "[x]".to_string(),
             _ => "[ ]".to_string(),
         },
-        Kind::Pick(choices) => {
+        Kind::Pick(choices) | Kind::PickOr(choices) => {
             // 同底下那一支：`trim_matches` 不是 toml 轉義的反函數，而字面串
             // （`layout = 'horizontal'`）它一個字都剝不掉。
             let word = yumete_config::panel::unwritten(value);
@@ -312,7 +325,7 @@ fn drawn(setting: &Setting, value: &str) -> String {
             let label = choices
                 .iter()
                 .find(|c| c.word == word)
-                .map(|c| said(c.label))
+                .map(|c| name_of(said(c.label)))
                 // 檔裏寫了一個我們不認得的詞：照原樣畫出來，別假裝它是第一個。
                 .unwrap_or_else(|| word.to_string());
             format!("[{label}]")
