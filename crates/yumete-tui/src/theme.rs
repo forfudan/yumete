@@ -237,7 +237,16 @@ pub fn ask_the_terminal() -> Option<bool> {
     }
     // Raw, or the terminal would echo the reply onto the screen and hand it
     // over a line at a time — which is to say, never.
-    let raw = ratatui::crossterm::terminal::enable_raw_mode().is_ok();
+    // Warning: **還原原來那個狀態，不是無條件關掉**（2026-10-10 報的）。從前這裏是
+    // `enable_raw_mode()` 開、結束 `disable_raw_mode()` 關——啓動時對（那會兒編輯器
+    // 還沒進 raw mode），而這一支**在循環跑起來之後還會被叫**：`settings.rs` 的
+    // 「每一項設定，推一遍」在 `ambiguous_width = auto`／`theme mode = auto` 底下就
+    // 走到這裏，於是 `:settings` 裏改一項再 `:w`，探針問完就把正在用的 raw mode
+    // 關了。症狀是**終端開始回顯，而 Kitty 鍵盤協議那一層還挂着**，於是每一鍵顯示
+    // 成 `^[[104u`、鼠標點擊顯示成一串報告，看着像輸入法壞了。
+    // `enable_raw_mode` 不計數，所以配對只能靠自己先問一句。
+    let was_raw = ratatui::crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
+    let raw = was_raw || ratatui::crossterm::terminal::enable_raw_mode().is_ok();
     let answer = (|| {
         out.write_all(b"\x1b]11;?\x1b\\").ok()?;
         out.flush().ok()?;
@@ -285,7 +294,7 @@ pub fn ask_the_terminal() -> Option<bool> {
             }
         }
     })();
-    if raw {
+    if raw && !was_raw {
         let _ = ratatui::crossterm::terminal::disable_raw_mode();
     }
     answer
