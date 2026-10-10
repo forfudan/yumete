@@ -2205,7 +2205,7 @@ impl Config {
         }
         if let Some(word) = raw.theme.mode.as_deref() {
             if Mode::parse(word).is_none() {
-                problems.push(format!("[theme] mode = \"{word}\" 只能是 system、dark、light"));
+                problems.push(format!("[theme] mode = \"{word}\" 只能是 auto、system、dark、light"));
             }
         }
         if let Some(word) = raw.editor.line_numbers.as_deref() {
