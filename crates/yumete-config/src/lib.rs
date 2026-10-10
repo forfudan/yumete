@@ -1988,7 +1988,7 @@ impl Config {
         match Self::read_config(&global) {
             Ok(Some(text)) => match toml::from_str::<RawConfig>(&text) {
                 Ok(parsed) => raw.merge(parsed),
-                Err(err) => problems.push(Self::describe(&global, &err)),
+                Err(err) => problems.push(Self::describe(&global, &err, false)),
             },
             Ok(None) => {}
             Err(why) => problems.push(why),
@@ -2047,7 +2047,7 @@ impl Config {
                             }
                             raw.merge(parsed);
                         }
-                        Err(err) => problems.push(Self::describe(&local, &err)),
+                        Err(err) => problems.push(Self::describe(&local, &err, true)),
                     }
                 }
             }
@@ -2326,11 +2326,26 @@ impl Config {
         }
     }
 
-    fn describe(path: &Path, err: &toml::de::Error) -> String {
+    /// **說「整份沒生效」，不只說哪一個鍵錯了**（2026-10-10 作者定，原話：
+    /// 「{本地|全局}配置文件出错，使用出厂设置」）。
+    ///
+    /// TOML 要麼整份成要麼整份敗，而每個 `Raw*` 都帶 `deny_unknown_fields`——所以
+    /// **一處打錯 ＝ 這個檔一條都不生效**。從前那句話只提打錯的那一個鍵，於是讀者
+    /// 改完它，另外四十項又一起回來了，而他從頭到尾不知道剛纔它們全沒生效。量過的
+    /// 樣子：`[editor]` 四行裏只有 `zong_length` 打成了 `zong_lenght`，屏幕上是橫排
+    /// 帶行號——上面 `layout = "vertical"` 和 `line_numbers = "none"` 兩項都沒生效。
+    fn describe(path: &Path, err: &toml::de::Error, local: bool) -> String {
         // toml's message names the offending key and what was expected instead;
         // its first line is the part a status bar has room for.
         let detail = err.message().lines().next().unwrap_or("could not be read");
-        format!("{}: {detail}", path.display())
+        let which = match local {
+            true => "本地",
+            false => "全局",
+        };
+        format!(
+            "{which}配置檔出錯，使用出廠設置。{}: {detail}",
+            path.display()
+        )
     }
 
     /// Parse a single TOML source (used for a one-file config or in tests).
@@ -4015,9 +4030,14 @@ mod tests {
         let Err(err) = toml::from_str::<RawConfig>("[editor]\nzong_lenght = 24\n") else {
             panic!("a misspelled key parsed as if it were valid");
         };
-        let line = Config::describe(Path::new("config.toml"), &err);
+        let line = Config::describe(Path::new("config.toml"), &err, false);
         assert!(line.contains("zong_lenght"), "{line}");
-        assert!(line.starts_with("config.toml: "), "{line}");
+        assert!(line.contains("config.toml: "), "{line}");
+        // **而且說整份沒生效**（2026-10-10）：改完那一個鍵，別的幾十項纔回來，而
+        // 從前沒有一處說過它們剛纔不在。
+        assert!(line.starts_with("全局配置檔出錯"), "{line}");
+        let local = Config::describe(Path::new("config.toml"), &err, true);
+        assert!(local.starts_with("本地配置檔出錯"), "{local}");
     }
 
     #[test]
