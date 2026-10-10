@@ -1736,11 +1736,26 @@ impl Editor {
             // one sentence lands on the start of the next, and `h` walks back
             // over the break the same way. The line-bound pair is still what
             // measures a line; it is not what a reader walking a page wants.
-            Key::Char('h') | Key::Left => {
-                self.repeat(count, |e| e.move_horizontal(motion::prev_grapheme))
+            // **四個鍵分開寫，因為 vim 分開管**：`whichwrap` 給 `h`/`l` 和兩個
+            // 方向鍵各一個字母（`h` `l` `<` `>`），所以 `which_wrap = "h"` 只放開
+            // `h`，方向鍵照舊停在行頭。綁在一起的話那一格就只剩「全放開」一檔。
+            Key::Char('h') => {
+                self.repeat(count, |e| e.step_sideways(motion::prev_grapheme, Some('h')))
             }
-            Key::Char('l') | Key::Right => {
-                self.repeat(count, |e| e.move_horizontal(motion::next_grapheme))
+            Key::Left => {
+                self.repeat(count, |e| e.step_sideways(motion::prev_grapheme, Some('<')))
+            }
+            Key::Char('l') => {
+                self.repeat(count, |e| e.step_sideways(motion::next_grapheme, Some('l')))
+            }
+            Key::Right => {
+                self.repeat(count, |e| e.step_sideways(motion::next_grapheme, Some('>')))
+            }
+            // **普通模式的退格是「左一格」**（`:h <BS>`；2026-10-10 補的）。vim 裏
+            // 它一直是個移動，而這裏從前什麽都不做——`whichwrap` 的 `b` 管的就是
+            // 它，沒有這個綁定那個字母無處可掛。helix 不綁它，所以只在 vim 鍵位下。
+            Key::Backspace if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.repeat(count, |e| e.step_sideways(motion::prev_grapheme, Some('b')))
             }
             // **`j`/`k` 是 vim 和 helix 真的答不一樣的一處**（2026-10-10 量出來的）。
             // vim 的 `j` 走**文件的行**（一段是一行，所以是下一段），`gj` 纔走屏幕

@@ -2284,6 +2284,9 @@ pub struct Editor {
     /// The two layers `key_aliases` is laid from (#428).
     user_aliases: HashMap<String, String>,
     key_preset: yumete_cjk::KeyPreset,
+    /// vim 的 `whichwrap`：哪些鍵走得出一行的兩頭。見
+    /// [`yumete_config::Editor::which_wrap`]；helix 鍵位下讀都不讀。
+    which_wrap: String,
     /// The keys typed so far of an alias that may still be completed (#428).
     alias_held: String,
     /// **The digits typed *inside* a held sequence** (2026-09-18).
@@ -3579,6 +3582,7 @@ impl Editor {
             key_aliases: HashMap::new(),
             user_aliases: HashMap::new(),
             key_preset: yumete_cjk::KeyPreset::Helix,
+            which_wrap: String::new(),
             alias_held: String::new(),
             alias_count: None,
             expanding_alias: false,

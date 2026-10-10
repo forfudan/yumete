@@ -47,7 +47,7 @@ pub use grapheme::{
     cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme,
     prev_grapheme_boundary,
 };
-pub use keymap::KeyPreset;
+pub use keymap::{read_which_wrap, KeyPreset, WHICH_WRAP};
 pub use reading::{split_charset, NoReader, Reader, CHARSET_TAGS};
 pub use segment::{
     best_path, CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo,

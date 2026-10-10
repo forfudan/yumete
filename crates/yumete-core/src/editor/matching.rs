@@ -826,9 +826,21 @@ impl Editor {
 
     /// Apply a horizontal motion, moving the head (extending if in select mode).
     pub(super) fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
+        self.step_sideways(motion, None)
+    }
+
+    /// 同上，而且這一鍵在 `whichwrap` 裏有自己那個字母。
+    ///
+    /// `flag` ＝ vim 給這一鍵的那個字母（`h`、`l`、`<`、`>`）。`None` ＝ 這一步
+    /// 永遠不跨行（命令行上的左右就是，那裏只有一行）。
+    pub(super) fn step_sideways(
+        &mut self,
+        motion: fn(&ropey::Rope, usize) -> usize,
+        flag: Option<char>,
+    ) {
         let pos = motion(self.current_buffer().rope(), self.sel.head());
         let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head());
-        self.move_head(self.on_this_line_under_vim(pos));
+        self.move_head(self.on_this_line_under_vim(pos, flag));
     }
 
     /// **vim 鍵位下 `h`/`l` 不出這一行**（`:h l`；2026-10-02 定照參考實現）。
@@ -838,15 +850,38 @@ impl Editor {
     /// 吃掉的是換行，兩行焊成一行。2026-10-02 拿 nvim 逐欄比，這是最後一條兩家
     /// 真的不一樣的地方（中文分詞那三格除外）。
     ///
-    /// 跨行一併擋住，那也是 vim 自己的規矩（`whichwrap` 出廠不含 `<`、`>`）。
+    /// 跨行一併擋住，那也是 vim 自己的規矩（`whichwrap` 出廠不含 `<`、`>`）——
+    /// **而讀者撥得開它**（2026-10-10）：`flag` 那個字母寫進 `[editor] which_wrap`
+    /// 的話，這一步就跨得出去，落在 vim 落的那一格（往右是下一行的頭一個字，往
+    /// 左是上一行的最後一個字，兩個都不是換行符本身）。
     /// helix 鍵位照舊：那一邊「走一頁」是有意的，記在上面 `h`/`l` 那一條。
-    fn on_this_line_under_vim(&self, pos: usize) -> usize {
+    fn on_this_line_under_vim(&self, pos: usize, flag: Option<char>) -> usize {
         if self.key_preset != yumete_cjk::KeyPreset::Vim {
             return pos;
         }
         let rope = self.current_buffer().rope();
         let here = self.sel.head();
-        pos.clamp(motion::line_start(rope, here), motion::line_last(rope, here))
+        let (first, last) = (motion::line_start(rope, here), motion::line_last(rope, here));
+        if (first..=last).contains(&pos) {
+            return pos;
+        }
+        if !flag.is_some_and(|c| self.which_wrap.contains(c)) {
+            return pos.clamp(first, last);
+        }
+        let line = rope.char_to_line(here);
+        match pos > last {
+            // 下一行的頭一個字。沒有下一行就停在原地（vim 也停）。
+            true => match line + 1 < rope.len_lines() {
+                true => rope.line_to_char(line + 1),
+                false => last,
+            },
+            // 上一行的最後一個字——`first - 1` 是上一行的換行符，`line_last`
+            // 從那裏退到它前面那個字。
+            false => match first > 0 {
+                true => motion::line_last(rope, first - 1),
+                false => first,
+            },
+        }
     }
 
     /// Step `at` clear of anything a table is keeping off the page, in the

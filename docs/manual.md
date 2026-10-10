@@ -756,6 +756,14 @@ on its own says which set is in force.
 | `;` `,` | already there | repeat the last `f` / repeat it backwards |
 | `ZZ` `ZQ` | translated to `:x` `:quit!` | save and quit / throw away and quit |
 
+**`whichwrap` is vim's, by the same name and the same letters.** `h` and `l` stop at
+the two ends of a line here as they do in vim; write the letter for a key into
+`[editor] which_wrap` and that key steps onto the neighbouring line instead — `b`
+(Backspace, the one that ships on, as in vim), `h`, `l`, `<` and `>` for the two
+arrows, `~`. vim's `s` is not among them: there it is Space, and Space here is the
+door into the `空格` menu. Helix has no such option and none of this reaches it —
+`h` and `l` always cross on that side.
+
 **Deliberately not translated**, and why:
 
 | key | why |

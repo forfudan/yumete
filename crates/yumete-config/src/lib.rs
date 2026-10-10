@@ -248,6 +248,18 @@ pub struct EditorConfig {
     /// screen row (Feature #77). On by default: a Chinese paragraph is one long
     /// line, and unwrapped most of it cannot be seen at all.
     pub soft_wrap: bool,
+    /// **Which keys may step across a line end**, spelled as vim spells
+    /// `whichwrap`: one letter each for `b` (Backspace), `h`, `l`, `<` and `>`
+    /// (the arrows) and `~`.
+    ///
+    /// Warning: **vim 鍵位專用。** helix 沒有這個選項——那一邊 `h`/`l` 永遠跨行
+    /// （`helix_core::movement::move_horizontal` 走的是整份文本的字素邊界，一道
+    /// 行邊界的閘都沒有），所以這一格在 helix 鍵位下讀都不讀。
+    ///
+    /// Warning: **`s` 這一檔沒有。** vim 出廠的 `b,s` 裏那個 `s` 是普通模式的空格，
+    /// 而空格在這裏是菜單引導鍵。出廠因此是 `b` 而不是 `b,s`——行為與 vim 出廠
+    /// 一模一樣，只是不擺一個做不了事的字母（2026-10-10 定）。
+    pub which_wrap: String,
     /// Whether a recovery copy is kept beside each document while it has
     /// unsaved changes (Feature #79). On by default, and removed on save and on
     /// quit, so in an ordinary session it is never seen.
@@ -423,6 +435,7 @@ impl Default for EditorConfig {
             code_highlight: true,
             hanging_punctuation: false,
             soft_wrap: true,
+            which_wrap: "b".to_string(),
             autosave: true,
             ambiguous_width: Ambiguity::default(),
             syntax: String::new(),
@@ -2872,6 +2885,7 @@ struct RawEditor {
     code_highlight: Option<bool>,
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
+    which_wrap: Option<String>,
     autosave: Option<bool>,
     ambiguous_width: Option<String>,
     tabs: Option<String>,
@@ -3030,6 +3044,9 @@ impl RawConfig {
         }
         if other.editor.hanging_punctuation.is_some() {
             self.editor.hanging_punctuation = other.editor.hanging_punctuation;
+        }
+        if other.editor.which_wrap.is_some() {
+            self.editor.which_wrap = other.editor.which_wrap.clone();
         }
         if other.editor.soft_wrap.is_some() {
             self.editor.soft_wrap = other.editor.soft_wrap;
@@ -3347,6 +3364,25 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.soft_wrap {
             config.editor.soft_wrap = on;
+        }
+        // **`whichwrap`，照 vim 的拼法。** 逗號和空格隨便加（`"<,>,b,h,l"` 和
+        // `"<>bhl"` 一樣），重複的字母只記一次。
+        //
+        // Warning: **只查人寫出來的那一份。** 出廠值不過這道閘——不然每個人開機都
+        // 要挨一句抱怨，而出廠值是我們自己寫的。
+        if let Some(written) = self.editor.which_wrap.as_deref() {
+            let (kept, bad) = yumete_cjk::read_which_wrap(written);
+            if bad.contains(&'s') {
+                problems.push(format!(
+                    "[editor] which_wrap = \"{written}\"：s 不是合法字母。空格在yumete中是菜單鍵"
+                ));
+            }
+            if bad.iter().any(|c| *c != 's') {
+                problems.push(format!(
+                    "[editor] which_wrap = \"{written}\"：出現了不合法字母。只允許 b h l < > ~"
+                ));
+            }
+            config.editor.which_wrap = kept;
         }
         if let Some(on) = self.editor.autosave {
             config.editor.autosave = on;

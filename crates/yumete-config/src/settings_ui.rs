@@ -366,6 +366,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "which_wrap",
+        group: Group::Keys,
+        kind: Kind::Text,
+        label: "set.editor.which-wrap",
+        hint: "set.editor.which-wrap.hint",
+        factory: r#""b""#,
+    },
+    Setting {
+        table: "editor",
         key: "soft_wrap",
         group: Group::Layout,
         kind: Kind::Tick,
