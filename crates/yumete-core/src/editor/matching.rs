@@ -438,21 +438,94 @@ impl Editor {
     /// Warning: **一句不跨行**：這個倉的解析是逐行的，`sentence_starts` 也是。一段話寫成一
     /// 行（中文稿子的常態）的時候這沒有分別；硬折過行的稿子裏，`mi s` 取的是這一行裏
     /// 的那一句。
+    /// **光標所在那一段的字符範圍**（2026-10-10 抽出來的）。
+    ///
+    /// 「一段」照 [`Self::paragraph_span`] 的判準：連着的同一種行（都空或都不空）。
+    /// 句對象要它，因為一句話的邊界是段落不是行。
+    fn paragraph_here(&self) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let here = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let last = motion::last_line(rope);
+        let blank = |line: usize| rope.line(line).to_string().trim().is_empty();
+        let same = blank(here);
+        let mut first = here;
+        while first > 0 && blank(first - 1) == same {
+            first -= 1;
+        }
+        let mut end = here;
+        while end < last && blank(end + 1) == same {
+            end += 1;
+        }
+        let start = rope.line_to_char(first);
+        // **末行那個換行算段落的一部分**（2026-10-10 量出來的）：vim 的句對象在段
+        // 末連它一起取——`dis` 站在一段沒有句末標點的話上，整段連換行一起沒。
+        let stop = match end < last {
+            true => rope.line_to_char(end + 1),
+            false => rope.len_chars(),
+        };
+        (start, stop.max(start))
+    }
+
     fn sentence_object_span(&self, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope();
         let head = self.sel.head().min(rope.len_chars());
-        let line = rope.char_to_line(head);
-        let start = rope.line_to_char(line);
-        let chars = crate::zong::line_chars(rope, line);
+        // **一句話的邊界是段落，不是行**（2026-10-10 定，照 vim）。從前這裏取的是
+        // `line_chars(rope, line)`，於是一行沒有句末標點的時候那一句就在換行處結
+        // 束——vim 裏它跑到段落結束（`alpha beta, gamma delta` 換行 `xx` 同一段，
+        // `das` 兩行一起沒）。中文稿一段常常就是一行，所以這一條在那裏看不出來；
+        // 英文草稿換行多就常撞。`scripts/oracle/vim_sweep.py` 的 `dis`/`das` 逐格
+        // 對 nvim。
+        let (start, stop) = self.paragraph_here();
+        let chars: Vec<char> = rope.slice(start..stop).chars().collect();
         if chars.is_empty() {
             return motion::Span::Missed;
         }
-        let at = (head - start).min(chars.len().saturating_sub(1));
+        let at = (head.saturating_sub(start)).min(chars.len().saturating_sub(1));
+        // **站在空白上，`is` 要的就是那一段空白**（同上，照 vim）。從前空白算前一
+        // 句的尾巴，於是光標在 `First one.| Second one` 那個空格上按 `dis` 刪掉的
+        // 是整句 `First one.`，而 vim 刪的是那一個空格。
         let starts = motion::sentence_starts(&chars);
-        let Some(which) = starts.iter().rposition(|&s| s <= at) else {
-            return motion::Span::Missed;
+        let mut at = at;
+        if chars[at].is_whitespace() {
+            let mut from = at;
+            while from > 0 && chars[from - 1].is_whitespace() {
+                from -= 1;
+            }
+            let mut end = at + 1;
+            while end < chars.len() && chars[end].is_whitespace() {
+                end += 1;
+            }
+            // Warning: **只有「兩句之間」那一段空白自成一段**。句子**裏面**的空格
+            // （`alpha| beta`）照舊屬於那一句——vim 的說法是「a sentence, or the
+            // white space between sentences」，而這一段空白是不是「之間」，問的是
+            // 它後面緊接着的是不是一句的開頭。2026-10-10 第一版把任何空白都當成
+            // 「之間」，於是 `alpha| beta` 上的 `dis` 只刪掉一個空格。
+            let between = from > 0 && starts.contains(&end);
+            if between {
+                match around {
+                    // **`as` 站在句間空白上就是「後面那一句的 `as`」**（2026-10-10
+                    // 逐格量出來的）：`First one.| Second one…` 上按 `das`，nvim 留
+                    // 下 `First one. Third.`——那個空格還在，刪的是後面那一句連它
+                    // 自己的尾巴。所以不在這裏另算一遍，把光標挪過去走同一條路：
+                    // 「尾巴上沒有空格就拿前面的」那條規矩纔跟着一起生效。
+                    true => at = end,
+                    false => {
+                        let (anchor, head) =
+                            (start + from, start + end.saturating_sub(1).max(from));
+                        return motion::Span::Over { anchor, head: head.max(anchor) };
+                    }
+                }
+            }
+        }
+        // **段首那一段空白屬於第一句**（2026-10-10 量出來的）：`starts[0]` 是第一個
+        // 非空白，所以光標站在它前面的時候沒有哪一句「開始得比它早」。從前這裏回
+        // `Missed`，於是 `  he said…` 開頭兩格上按 `dis` 什麼都不發生，而 vim 取
+        // 的是整句（連那兩格空白）。
+        let which = starts.iter().rposition(|&s| s <= at).unwrap_or(0);
+        let mut from = match which {
+            0 => 0,
+            n => starts[n],
         };
-        let mut from = starts[which];
         let to = starts.get(which + 1).copied().unwrap_or(chars.len());
         let mut end = to;
         match around {
@@ -463,16 +536,38 @@ impl Editor {
                 if end == to && to == from {
                     return motion::Span::Missed;
                 }
-                if !(from..to).any(|i| chars[i].is_whitespace()) || to == chars.len() {
-                    while from > 0 && chars[from - 1].is_whitespace() {
+                // Warning: **句末那一段空白裏不算換行**（2026-10-10 量出來的）。
+                // `as` 要的是「這一句連着它後面那一段空白」，而行末那個換行屬於
+                // 下一行，不是這一句的尾巴：`…here. |Third.\nxx` 上按 `das`，nvim
+                // 刪的是 ` Third.`（連**前面**那個空格），換行留着。
+                // ……可段**末**那一個換行是這一段的一部分，照取（同 `is`）。
+                let last_of_the_paragraph = to == chars.len();
+                if !last_of_the_paragraph {
+                    while end > from && chars[end - 1] == '\n' {
+                        end -= 1;
+                    }
+                }
+                let trails =
+                    end > from && chars[end - 1].is_whitespace() && chars[end - 1] != '\n';
+                if !trails {
+                    while from > 0 && chars[from - 1].is_whitespace() && chars[from - 1] != '\n' {
                         from -= 1;
                     }
                 }
             }
             // `is`：句子本身，句末那一段空白不要。
+            //
+            // Warning: **只有段**末**那個換行算進來**（2026-10-10 逐格量出來的）。
+            // 段落**裏面**的換行和句末的空格一樣削掉（`…here. |Third.` 上按 `dis`
+            // 留下 `…here. \nxx`），而段落最後那一個換行是這一段的一部分，vim 連它
+            // 一起取——「整段沒有句末標點」那一種因此整段連換行一起沒。
             false => {
+                let last_of_the_paragraph = to == chars.len();
                 while end > from && chars[end - 1].is_whitespace() {
                     end -= 1;
+                }
+                if last_of_the_paragraph {
+                    end = chars.len();
                 }
             }
         }

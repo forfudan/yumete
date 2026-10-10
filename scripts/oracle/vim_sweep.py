@@ -55,9 +55,11 @@ def yumete(text, keys):
     return open(src, encoding="utf-8").read()
 
 
+# ⚠ 每一張都有第二段，理由同 `OBJECT_FIXTURES`：段落等於整個檔的時候，刪完
+# nvim 的緩衝就空了，而空緩衝 nvim 寫 0 字節、yumete 寫一個 `\n`。
 FIXTURES = [
-    "alpha beta, gamma delta\nxx\n",
-    "  he said (no) then;\n\t你也是人類, ok\nz\n",
+    "alpha beta, gamma delta\nxx\n\ntail 段\n",
+    "  he said (no) then;\n\t你也是人類, ok\nz\n\ntail 段\n",
 ]
 
 CASES = [
@@ -89,11 +91,15 @@ CASES = [
 # ⚠ **`t` 這一格兩家不同，所以不在表上**：vim 的 `dit`/`dat` 是 HTML 標籤，
 # yumete 的 `t` 照 helix 是「類」（`matching.rs:84`）。同樣不在表上的還有
 # yumete 自己的 `m`（Markdown 標記）和代碼檔裏的 `a`/`c`（參數／註釋）。
+# ⚠ **每一張都要有第二段**（2026-10-10）。句對象在沒有句末標點的時候跑到段落結
+# 束，而段落要是正好等於整個檔，刪完 nvim 的緩衝就空了——**空緩衝 nvim 寫 0 字節**
+# （`ggVGd` 單獨驗過），yumete 寫一個 `\n`，於是那一格永遠不一樣而它說的不是句對
+# 象的事。第一版四張裏有三張沒有第二段，123 格假的不一樣全是這個。
 OBJECT_FIXTURES = [
-    "he said (no, yes) then;\nxx [a b] y\nz\n",
-    'say "one two" and \'three\' ok\n{a, b}\nq\n',
+    "he said (no, yes) then;\nxx [a b] y\nz\n\ntail 段\n",
+    'say "one two" and \'three\' ok\n{a, b}\nq\n\ntail 段\n',
     "First one. Second one here. Third.\nxx\n\nnext 段 starts\nand goes on\nz\n",
-    "  你也是人類, ok（不是）\nzz\n",
+    "  你也是人類, ok（不是）\nzz\n\ntail 段\n",
 ]
 
 OBJECT_CASES = [
