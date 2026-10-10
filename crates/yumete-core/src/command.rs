@@ -1955,6 +1955,56 @@ const SYNTAXES: &[Word] = &[
         help: "cmd.syntaxes.code",
         needs: &[],
     },
+    // Warning: **這張表就是 `:syntax` 收得了什麼**（2026-10-10 報的）。前綴規則
+    // （`pick`）跑在它上面，而真正解析參數的 `Syntax::parse` 認二十幾個名字——
+    // 於是 `c` 在十個詞裏唯一命中 `css`、`java` 唯一命中 `javascript`，而 C 和
+    // Java 都是真語言，`:syntax` 卻**一個都選不到**。少寫一行不是少一條補全，
+    // 是少一個答案。
+    Word {
+        name: "ada",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "c",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "gas",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "go",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "java",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "nasm",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "pascal",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "r",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
+    Word {
+        name: "rust",
+        help: "cmd.syntaxes.code",
+        needs: &[],
+    },
 ];
 
 /// Which way the page runs.
@@ -6797,9 +6847,44 @@ mod tests {
         let words = |line: &str| -> Vec<&str> { complete(line).iter().map(|c| c.name).collect() };
         assert_eq!(words("view-margin "), ["never", "dense", "loose", "always"]);
         assert_eq!(words("view-margin l"), ["loose"]);
+        // **這張表就是 `:syntax` 收得了什麼**（2026-10-10 補齊）。少寫一行不是少
+        // 一條補全，是少一個答案：從前 C 和 Java 不在表上，於是 `c` 在十個詞裏唯
+        // 一命中 `css`、`java` 唯一命中 `javascript`，兩種語言一個都選不到。
         assert_eq!(
             words("syntax "),
-            ["markdown", "typst", "text", "python", "javascript", "json", "yaml", "toml", "html", "css"]
+            [
+                "markdown",
+                "typst",
+                "text",
+                "python",
+                "javascript",
+                "json",
+                "yaml",
+                "toml",
+                "html",
+                "css",
+                "ada",
+                "c",
+                "gas",
+                "go",
+                "java",
+                "nasm",
+                "pascal",
+                "r",
+                "rust"
+            ]
+        );
+        // 補全照舊列出每一個以它開頭的，而**全名解析得到自己**——從前 `c` 和
+        // `java` 這兩個全名只能解析成 `css` 和 `javascript`。
+        assert_eq!(words("syntax c"), ["css", "c"]);
+        assert_eq!(words("syntax java"), ["javascript", "java"]);
+        assert_eq!(
+            crate::syntax::Syntax::parse("c"),
+            Some(crate::syntax::Syntax::Code(crate::code::Language::C))
+        );
+        assert_eq!(
+            crate::syntax::Syntax::parse("java"),
+            Some(crate::syntax::Syntax::Code(crate::code::Language::Java))
         );
         assert_eq!(words("layout v"), ["vertical"]);
 
