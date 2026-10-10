@@ -1204,6 +1204,9 @@ next character has to have somewhere to go.
 What matters is that `j` `k` walk **the line on screen**, not the whole paragraph.
 When a paragraph runs to several hundred characters, a `j` that moves by logical
 lines jumps a whole screen at a time, and that is not where the reader's eyes are.
+**Under the vim keys the pair is the other way round** — `j` takes the paragraph and
+`gj` takes the screen line — because that is what each editor binds, and this is one
+of the few places the two disagree outright.
 The number is printed only on the **first line** of a paragraph: the number belongs
 to the paragraph, and repeating it on every line would read as several paragraphs.
 
