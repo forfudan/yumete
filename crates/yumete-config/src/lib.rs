@@ -2286,7 +2286,8 @@ impl Config {
                 }
             }
         }
-        (raw.into_config(), problems)
+        let config = raw.into_config_saying(&mut problems);
+        (config, problems)
     }
 
     /// One line naming a config file and what is wrong with it.
@@ -3188,12 +3189,34 @@ impl RawConfig {
     }
 
     fn into_config(self) -> Config {
+        self.into_config_saying(&mut Vec::new())
+    }
+
+    /// **鉗掉了就說一聲**（2026-10-10 作者定）。
+    ///
+    /// 從前一個超出範圍的數是**靜靜**換掉的：檔裏寫着 `zong_length = 999`，編輯器
+    /// 用 64，設置面板上顯示的也是 64——文件說的和編輯器做的不是一回事，而沒有一處
+    /// 說過。拼錯的鍵 2026-10-07 起會出聲，拼錯的詞 2026-10-09 起會出聲；這是同一件
+    /// 事剩下的那一半。
+    ///
+    /// Warning: **`into_config()` 那一支把話丟掉**。它是兩個測試助手的入口
+    /// （`from_toml`／`from_sources`），那裏沒有人收；真正讀檔的那條路走這一支。
+    fn into_config_saying(self, problems: &mut Vec<String>) -> Config {
+        /// `want` 鉗進 `low..=high`，鉗動了就記一條。`range` 是給人看的那半句。
+        fn held(problems: &mut Vec<String>, at: &str, want: usize, got: usize, range: &str) -> usize {
+            if got != want {
+                problems.push(format!("{at}：輸入的 {want} 不在合法範圍 {range}"));
+            }
+            got
+        }
         let mut config = Config::default();
         if let Some(width) = self.editor.indent_width {
-            config.editor.indent_width = width.max(1);
+            config.editor.indent_width =
+                held(problems, "[editor] indent_width", width, width.max(1), "1 起");
         }
         if let Some(tab) = self.editor.tab_width {
-            config.editor.tab_width = tab.max(1);
+            config.editor.tab_width =
+                held(problems, "[editor] tab_width", tab, tab.max(1), "1 起");
         }
         if let Some(mode) = self.editor.line_numbers {
             config.editor.line_numbers = parse_line_numbers(&mode);
@@ -3205,7 +3228,8 @@ impl RawConfig {
         // not 「do not scroll」, which is a setting nobody wants and which a
         // stuck mouse would be indistinguishable from.
         if let Some(step) = self.editor.wheel_step {
-            config.editor.wheel_step = step.max(1);
+            config.editor.wheel_step =
+                held(problems, "[editor] wheel_step", step, step.max(1), "1 起");
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;
@@ -3260,10 +3284,10 @@ impl RawConfig {
         if let Some(n) = self.editor.indent {
             // Two is the Chinese convention and eight is more than anyone
             // means; a number outside that is a typo, not a preference.
-            config.editor.indent = n.min(8);
+            config.editor.indent = held(problems, "[editor] indent", n, n.min(8), "0 到 8");
         }
         if let Some(n) = self.editor.bands {
-            config.editor.bands = n.clamp(1, 4);
+            config.editor.bands = held(problems, "[editor] bands", n, n.clamp(1, 4), "1 到 4");
         }
         if let Some(on) = self.editor.session {
             config.editor.session = on;
@@ -3279,10 +3303,12 @@ impl RawConfig {
             // **下界 8，和 `:view-wrap-vertical` 同一個數**（2026-10-09）。從前這裏是 4
             // 而命令那一頭是 `MIN_WRAP_WIDTH`（8）——同一個設置兩個下界。8 是安全線
             // 不是口味：比它窄，一個全角字會被擠到自己那一行上，沒完沒了。
-            config.editor.zong_length = if length == 0 { 0 } else { length.clamp(8, 64) };
+            let kept = if length == 0 { 0 } else { length.clamp(8, 64) };
+            config.editor.zong_length =
+                held(problems, "[editor] zong_length", length, kept, "0，或者 8 到 64");
         }
         if let Some(gap) = self.editor.zong_gap {
-            config.editor.zong_gap = gap.min(4);
+            config.editor.zong_gap = held(problems, "[editor] zong_gap", gap, gap.min(4), "0 到 4");
         }
         if let Some(on) = self.editor.show_chaifen {
             config.editor.show_chaifen = on;
@@ -3297,9 +3323,20 @@ impl RawConfig {
             config.editor.usage_groups = groups;
         }
         if let Some(RawTatechuyoko::Count(at_most)) = self.editor.tatechuyoko {
-            config.editor.tatechuyoko = match at_most >= TATECHUYOKO_CLASSIC {
+            let kept = match at_most >= TATECHUYOKO_CLASSIC {
                 true => at_most.min(TATECHUYOKO_MAX),
                 false => 0,
+            };
+            // `0` 本來就是「不用」，所以只有真的寫了一個數纔算鉗動。
+            config.editor.tatechuyoko = match at_most {
+                0 => kept,
+                _ => held(
+                    problems,
+                    "[editor] tatechuyoko",
+                    at_most,
+                    kept,
+                    &format!("0，或者 {TATECHUYOKO_CLASSIC} 到 {TATECHUYOKO_MAX}"),
+                ),
             };
         }
         if let Some(on) = self.editor.code_highlight {
@@ -3315,10 +3352,11 @@ impl RawConfig {
             config.editor.autosave = on;
         }
         if let Some(ruler) = self.editor.ruler {
-            config.editor.ruler = ruler.min(400);
+            config.editor.ruler = held(problems, "[editor] ruler", ruler, ruler.min(400), "0 到 400");
         }
         if let Some(measure) = self.editor.measure {
-            config.editor.measure = measure.min(400);
+            config.editor.measure =
+                held(problems, "[editor] measure", measure, measure.min(400), "0 到 400");
         }
         if let Some(on) = self.editor.char_info {
             config.editor.char_info = on;
@@ -3341,7 +3379,8 @@ impl RawConfig {
             _ => {}
         }
         if let Some(ticks) = self.editor.paper_ticks {
-            config.editor.paper_ticks = ticks.min(64);
+            config.editor.paper_ticks =
+                held(problems, "[editor] paper_ticks", ticks, ticks.min(64), "0 到 64");
         }
         if let Some(syntax) = self.editor.syntax {
             config.editor.syntax = syntax;
@@ -3493,7 +3532,8 @@ impl RawConfig {
             // Above nine there is no key left to choose with. **One is allowed**
             // — yume itself allows it, and a page of one is a real setting: the
             // panel then says what Space would commit and nothing else.
-            config.panel.page_size = size.clamp(1, 9);
+            config.panel.page_size =
+                held(problems, "[panel] page_size", size, size.clamp(1, 9), "1 到 9");
         }
         if let Some(rounded) = self.panel.rounded {
             config.panel.rounded = rounded;
