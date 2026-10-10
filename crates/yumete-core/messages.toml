@@ -7823,11 +7823,18 @@ zhs = "抢救文稿"
 en = "a draft was kept"
 
 [[message]]
-# 同一面板的正文，{0} 是檔名
+# 同一面板的正文，{0} 是檔名、{1} 是草稿的時間、{2} 是檔存檔的時間
 key = "recover.ask-what"
-zht = "《{0}》有一份比文件新的草稿，是上一次沒存好就結束的那一回留下的。"
-zhs = "《{0}》有一份比文件新的草稿，是上一次没存好就结束的那一回留下的。"
-en = "《{0}》 has a draft newer than the file, left by a run that ended before it saved."
+zht = "《{0}》有一份 {1} 的草稿，是上一次沒存好就結束的那一回留下的；檔本身是 {2} 存的。"
+zhs = "《{0}》有一份 {1} 的草稿，是上一次没存好就结束的那一回留下的；档本身是 {2} 存的。"
+en = "《{0}》 has a draft from {1}, left by a run that ended before it saved; the file itself was saved at {2}."
+
+[[message]]
+# 同上，可是盤上還沒有這個檔
+key = "recover.ask-what-no-file"
+zht = "《{0}》有一份 {1} 的草稿，是上一次沒存好就結束的那一回留下的；這個檔還沒存過。"
+zhs = "《{0}》有一份 {1} 的草稿，是上一次没存好就结束的那一回留下的；这个档还没存过。"
+en = "《{0}》 has a draft from {1}, left by a run that ended before it saved; the file itself has never been saved."
 
 [[message]]
 # 第二問的第一個選項：真的換上去
