@@ -11923,7 +11923,22 @@ fn draw_command(
         Hint::Keys(name, keys) => {
             put(&name, label, &mut x);
             put("  ", what, &mut x);
+            // Warning: **整對整對地丟，放不下就畫一個 `…`**（2026-10-10 報的）。
+            //
+            // 從前這一行是硬切的，於是搜索那一扇在 100 欄下停在 `… aA 追加  iI`
+            // ——一個**寫在屏幕上而沒有意思**的鍵，比沒畫出來更糟（§5.12.39 那一
+            // 族）。`…` 說的是「還有，這裏放不下」，和候選欄、搜索面板同一條規矩。
+            let mut cut = false;
             for (k, doing) in keys {
+                let wide = |t: &str| yumete_cjk::str_width(t) as u16;
+                let need = match k.is_empty() {
+                    true => wide(&doing) + 2,
+                    false => wide(&k) + 1 + wide(&doing) + 2,
+                };
+                if x + need > right {
+                    cut = true;
+                    break;
+                }
                 if !k.is_empty() {
                     put(&k, key, &mut x);
                     put(" ", what, &mut x);
@@ -11933,6 +11948,13 @@ fn draw_command(
                 // what groups a key with its meaning, and a separator between
                 // groups only competes with it.
                 put("  ", what, &mut x);
+            }
+            if cut {
+                // **擠也要擠下去**：最後那一對後面的兩個空格可能已經頂到邊，而
+                // `put` 到了邊就直接回頭——於是「切了」這件事沒人說。頂到邊就蓋掉
+                // 最後一格畫它。
+                let at = x.min(right.saturating_sub(1));
+                put_text(buf, at, area.y, right, "…", what);
             }
         }
     }
