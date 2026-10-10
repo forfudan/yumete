@@ -18,6 +18,51 @@ pub fn stamp() -> String {
     format!("{y:04}{mo:02}{d:02}{h:02}{mi:02}{s:02}")
 }
 
+/// **一個時刻讀給人看**：`10-10 12:01`，本地時間（2026-10-10 加）。
+///
+/// 開檔那一問要說草稿是什麼時候的、檔是什麼時候存的——從前它一律說「比文件新」，
+/// 而別人那一份是**不看時間**就端出來的，於是兩小時前的字也被說成新的。
+///
+/// Warning: **帶月日，不只時分。** 上週那一份光寫 `12:01` 照樣騙人，而這一句存在
+/// 的全部理由就是別騙人。
+pub fn when(at: std::time::SystemTime) -> String {
+    let seconds = match at.duration_since(std::time::UNIX_EPOCH) {
+        Ok(since) => since.as_secs() as i64,
+        // 1970 之前。算得出來，只是沒人會有這種稿子。
+        Err(before) => -(before.duration().as_secs() as i64),
+    };
+    let (_, mo, d, h, mi, _) = broken_down(seconds);
+    format!("{mo:02}-{d:02} {h:02}:{mi:02}")
+}
+
+/// 本地時區裏，那一秒是幾年幾月幾日幾點幾分幾秒。
+#[cfg(unix)]
+fn broken_down(seconds: i64) -> (i64, u32, u32, u32, u32, u32) {
+    // SAFETY: `localtime_r` fills a `tm` we own, and writes into it rather
+    // than into a static another thread could be reading.
+    unsafe {
+        let seconds = seconds as libc::time_t;
+        let mut broken: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&seconds, &mut broken).is_null() {
+            return civil(seconds as i64);
+        }
+        (
+            broken.tm_year as i64 + 1900,
+            broken.tm_mon as u32 + 1,
+            broken.tm_mday as u32,
+            broken.tm_hour as u32,
+            broken.tm_min as u32,
+            broken.tm_sec as u32,
+        )
+    }
+}
+
+/// 問不出時區的平臺上只好當 UTC——差幾個鐘頭，但不會差一個檔。
+#[cfg(not(unix))]
+fn broken_down(seconds: i64) -> (i64, u32, u32, u32, u32, u32) {
+    civil(seconds)
+}
+
 /// Year, month, day, hour, minute, second — local where the platform will say.
 #[cfg(unix)]
 fn now() -> (i64, u32, u32, u32, u32, u32) {

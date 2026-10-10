@@ -609,7 +609,22 @@ impl Editor {
         self.current_buffer().recovered_draft()?;
         Some(Query {
             title: say!("recover.ask-title"),
-            body: say!("recover.ask-what", self.current_buffer().display_name()),
+            body: match self.current_buffer().draft_and_file_times() {
+                Some((draft, Some(file))) => {
+                    say!("recover.ask-what", self.current_buffer().display_name(), draft, file)
+                }
+                Some((draft, None)) => say!(
+                    "recover.ask-what-no-file",
+                    self.current_buffer().display_name(),
+                    draft
+                ),
+                // 問不出時間（草稿剛被人從底下拿走）：至少別說一個錯的新舊。
+                None => say!(
+                    "recover.ask-what-no-file",
+                    self.current_buffer().display_name(),
+                    "?"
+                ),
+            },
             choices: vec![
                 Answer { key: 'y', label: say!("recover.ask-take") },
                 Answer { key: 'd', label: say!("recover.ask-drop") },

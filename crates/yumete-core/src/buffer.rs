@@ -934,6 +934,23 @@ impl Buffer {
         self.pending_draft.as_deref()
     }
 
+    /// **那一份草稿是什麼時候的，檔是什麼時候存的**（2026-10-10 報的）。
+    ///
+    /// 開檔那一問從前一律說「比文件新」，而別人那一份是**不看時間**就端出來的
+    /// （故意的，`read_draft` 的 `someone_elses`：沒人救過的活不該漏掉）。於是一
+    /// 份兩小時前的草稿也被說成新的，人照那句話按 `y` 就是用舊字換掉正文。現在
+    /// 把兩個時間都說出來，新舊由讀者自己看。檔還沒存過的時候回 `None`。
+    pub fn draft_and_file_times(&self) -> Option<(String, Option<String>)> {
+        let at = self.pending_swap.as_ref()?;
+        let draft = fs::metadata(at).and_then(|m| m.modified()).ok()?;
+        let file = self
+            .path
+            .as_ref()
+            .and_then(|p| fs::metadata(p).and_then(|m| m.modified()).ok())
+            .map(crate::clock::when);
+        Some((crate::clock::when(draft), file))
+    }
+
     /// Take the draft over: this session's text is what the copy should hold
     /// from now on. Called once the writer has loaded it.
     pub fn adopt_draft(&mut self) {
