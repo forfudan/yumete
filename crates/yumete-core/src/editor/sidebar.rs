@@ -338,19 +338,21 @@ impl Editor {
     ///
     /// `Esc` is deliberately **not** here — see `on_sidebar_key`: a panel with
     /// a field in it spends `Esc` on leaving Insert, and one press too many
-    /// would then put the panel away. `q` is the door, and the hint row says
-    /// so in every panel.
-    pub(super) fn panel_key_in_common(&mut self, key: Key, side: crate::sidebar::Side) -> bool {
+    /// would then take the keys off it. `q` is the way out, and the hint row
+    /// says so in every panel.
+    pub(super) fn panel_key_in_common(&mut self, key: Key) -> bool {
         match key {
             // **邊欄裏 `C-w` 也是那一組的門**（2026-09-30）。從前它在這裏直接
             // 走下一區，而在正文裏是前綴——同一個和弦兩個意思，正是這一輪在
             // 拆的毛病。走下一區照舊是 `C-w w`，兩處一樣。
             Key::Ctrl('w') => self.pending = Pending::Region,
-            // Warning: **信息那一格的 `q` 連內容一起丟**，見 `close_the_info`。
-            Key::Char('q') => match self.info_in_this_sidebar(side).is_some() {
-                true => self.close_the_info(side),
-                false => self.close_panel(side),
-            },
+            // **`q` 把鍵還給正文，面板留着**（2026-10-10 定）。
+            //
+            // 從前它是「關掉」，而關掉已經有 `C-w q` 了——同一件事兩個鍵，而「讀完
+            // 了，手回去寫字」這件每天做幾十次的事反倒沒有鍵：`空格 w` 是「換一個
+            // 區域」，不是「回正文」。原話：「q 就重复了。建议 q 改成返回编辑区但
+            // 不关闭搜索面板」。
+            Key::Char('q') => self.panel_focus = None,
             // **`:` opens the command line from in here too.** It used to be
             // swallowed, so a reader with the keys in a panel had no way to
             // run a command at all — and `:panel-left` is a command
@@ -587,6 +589,12 @@ impl Editor {
     /// 丟稿子。
     pub(super) fn close_this_region(&mut self) {
         if let Some(side) = self.panel_focus() {
+            // **信息那一格要連「誰叫的」一起丟**（#426，2026-10-10 從 `q` 挪來）。
+            // `q` 現在是「鍵還給正文」，所以收走那一格的鍵只剩這一個——而光
+            // `close_panel` 收不乾淨：那一則下一幀會浮到光標旁邊去。
+            if self.info_in_this_sidebar(side).is_some() {
+                return self.close_the_info(side);
+            }
             return self.close_panel(side);
         }
         if self.other_pane().is_none() {
@@ -832,7 +840,7 @@ impl Editor {
             // 邊欄這一支從前根本收不到那一下 `Esc`——它在這裏什麼都不做。
             Key::Esc => self.say_it_again = true,
             other => {
-                self.panel_key_in_common(other, side);
+                self.panel_key_in_common(other);
             }
         }
     }

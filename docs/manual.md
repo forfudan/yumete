@@ -374,7 +374,7 @@ the rest is not done, and the status line says so.
 | `gd` | **go** where it points: a footnote's note, a link, `[[章節]]`, `[雪](#雪夜)` (`C-o` comes back). **Nothing happens on ordinary prose** — to ask "where else is this word" use `g/` |
 | `gD` | **look** at the same place — in the other work area, without moving you |
 | (both the same) | if the footnote has not been written yet, one is written first, and `gd` lands at the end of it, ready to type |
-| `C-w`/`空格 w` | **the region group**: `w` steps one, `hjkl` steps by direction, `e i` open and close the left and right sidebars, `E I` enter them, `s` cuts one in two, `q` closes, `o` keeps only this one |
+| `C-w`/`空格 w` | **the region group**: `w` steps one, `hjkl` steps by direction, `e i` open and close the left and right sidebars, `E I` enter them, `s` cuts one in two, `q` closes this one, `o` keeps only this one |
 | `]c` `]f` `]t` | the next **comment** / the next **function** / the next **class** (`[` goes back) |
 | `]d` `]D` | the next **diagnostic** / straight to the last one |
 | `]g` `]m` | the next **change** / the next **merge conflict** |
@@ -2467,7 +2467,7 @@ helix's `C-w`).
 | `C-w e` `C-w i` | **toggle** the left / right sidebar, **the keys do not go over** |
 | `C-w E` `C-w I` | open the left / right sidebar **and step into it** (opens only, never closes) |
 | `C-w s` | **one cut**: split into two editor regions, one above the other |
-| `C-w q` | close the region you are standing in (in a sidebar, the same thing as `q`) |
+| `C-w q` | close the region you are standing in — in a sidebar, the only key that puts the slot away |
 | `C-w o` | keep only this region |
 
 **"go there" and "open it" are two actions**: `C-w w` only walks among the
@@ -2480,7 +2480,9 @@ toggles: after pressing one the keys are still in the text — you can fold the 
 away mid-sentence and bring it back without the caret moving a step. To step in it is
 `C-w E`/`C-w I`, and that pair only opens.
 
-A sidebar has **two doors**: `C-w` leaves, and the tree stays; `q` closes the slot.
+A sidebar has **two doors, and neither of them throws it away**: `q` hands the keys
+straight back to the writing, and `C-w w` walks on to the next region. The panel stays
+up through both — what puts the slot away is `C-w q`.
 **`Esc` does nothing here** — it is everyone's "get out" key, but a panel will one day
 have a field you can type into, and `Esc` has to be kept for leaving Insert mode; one
 key press too many folding the panel away is a thing that really happens. The status
@@ -2556,7 +2558,7 @@ decided by the caret and the key you pressed (`空格 d`/`空格 k`/`空格 i`/
 `空格 t i`), not changed by `Tab`.
 
 **Which slot sits on which side is your business.** There is one slot on each side of
-the page, one panel to a slot — **you opened it, and `q` is what makes it go**. There
+the page, one panel to a slot — **you opened it, and `C-w q` is what makes it go**. There
 are five in all: the file tree, buffers, the outline, search, and **Info**.
 
 **"Info" is one panel, not five.** The dictionary, the wiki, the
@@ -4182,7 +4184,7 @@ Name a folder that does not exist and it **says so**, instead of quietly falling
 | `1` … `7` | flip those seven rows; the number is written at the start of each one. `7` is only drawn under a scope that walks the disk |
 | `Enter` | **look again**. One exception only: standing on a result with a list that is not out of date, that is "go to it" |
 | `Tab` | change the view — the sidebar's own key, **not** the next box. **In a box (PAN.INS) it is "next box"**; and when the box is empty with the last word written there in grey, the first `Tab` takes that word in |
-| `C-w` `q` | next region / close this one |
+| `C-w` `q` | next region / back to the writing |
 
 **Every one of those keys means in the box what it means in the text**, with not one of
 them newly invented: a block cursor stands in the box, `i` turns it into a bar. `gh`/`gl`
@@ -4683,8 +4685,8 @@ when the cursor leaves.
 sidebar: the entry is shown there instead, following the cursor, and **it does not
 float** — one place at a time. Type it again to close it. **To scroll it, `C-w` into
 it**: `j`/`k` a line, `J`/`K` half a page, `g`/`G` the two ends, `w` for width, `q`
-closes. While the keys are in
-there the page is frozen on that one entry; `C-w` back out to write.
+back to the writing, `C-w q` to close. While the keys are in
+there the page is frozen on that one entry; `q` back out to write.
 
 **Stand on a `[yumete]` line** and the panel says what became of that file: how many
 entries it gave, that it cannot be found, that it is outside the book and was not read,
