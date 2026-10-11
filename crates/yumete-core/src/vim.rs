@@ -124,7 +124,11 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         }
         // ---- Text objects, which are their own ends ------------------------
         ("i", None) | ("a", None) => asking(
-            Motion::Object { what: crate::motion::Object::Word { big: false }, around: false },
+            Motion::Object {
+                what: crate::motion::Object::Word { big: false },
+                around: false,
+                count: 1,
+            },
             Reach::Object,
         ),
         ("i", Some(c)) => step(object(c, false)?, Reach::Object),
@@ -150,7 +154,8 @@ fn object(c: char, around: bool) -> Option<Motion> {
             crate::motion::Object::Pair { open, close }
         }
     };
-    Some(Motion::Object { what, around })
+    // 數目由執行那一頭補上（它纔數得到 `2iw` 的那個 2）。
+    Some(Motion::Object { what, around, count: 1 })
 }
 
 /// Whether more keys could still make a motion (`g` before `gg`).

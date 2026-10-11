@@ -816,7 +816,13 @@ pub enum Motion {
     /// Warning: **An object knows both its ends**, which is why it is not two
     /// motions: `i(` is not 「forward to `)`」, it is 「the thing this caret is
     /// inside of」, and from anywhere in it the answer is the same.
-    Object { what: Object, around: bool },
+    /// **`count` 只有詞對象用得上**（2026-10-11）：vim 的 `2iw` 是「兩個單位」，
+    /// 單位在詞和空白之間交替；`2aw` 是兩個「詞 ＋ 它後面那道縫」。
+    ///
+    /// Warning: **括號那一族的數目是另一個意思**，所以這一格對它們沒有作用。`2i(`
+    /// 在 vim 裏是「往外數第二層括號」，不是「兩個括號對」——那是另一件事，和
+    /// 「往前找」一起留在後面做。
+    Object { what: Object, around: bool, count: usize },
 }
 
 /// **What a verb does to a span** — the other half of the grammar layer

@@ -95,7 +95,7 @@ impl Editor {
                 }
             },
         };
-        let span = self.run_motion(motion::Motion::Object { what, around });
+        let span = self.run_motion(motion::Motion::Object { what, around, count: 1 });
         if span == motion::Span::Missed {
             self.status = match what {
                 motion::Object::Word { .. } => say!("edit.no-word-here"),
@@ -645,7 +645,7 @@ impl Editor {
     /// Warning: **`aw` 在中文裏會退化成 `iw`**：它取的是「詞加它後面那段空白」，而中文詞之間
     /// 沒有空白，於是 `daw` 和 `diw` 拿到同一段。這是 vim 那條規矩在中文裏的自然結果，
     /// 不是這一支算錯了。
-    fn word_object_span(&self, around: bool, big: bool) -> motion::Span {
+    fn word_object_span(&self, around: bool, big: bool, count: usize) -> motion::Span {
         let rope = self.current_buffer().rope().clone();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let start = rope.line_to_char(line);
@@ -690,23 +690,85 @@ impl Editor {
             return motion::Span::Missed;
         };
         // 空白那一支已經把 `around` 算進去了，下面那一段只管詞本身。
+        // Warning: **原來那個 `around` 還要用**（2026-10-11）：數目那一段每多要一個
+        // 單位都要知道這是 `iw` 還是 `aw`，而這裏把它壓成了 `false`。
+        let asked_around = around;
         let around = around && here.is_some();
         let (mut a, mut b) = (from, to.saturating_sub(1).max(from));
+        let line_end = start + crate::zong::line_chars(&rope, line).len();
+        // 這一趟有沒有把後面那道縫吃進去——「沒有就改取前面那一道」那條退路要
+        // 等整個對象取完了纔問一次（見下面）。
+        let mut ate_trailing = false;
         if around {
-            let line_end = start + crate::zong::line_chars(&rope, line).len();
             let mut at = to;
             while at < line_end && rope.char(at).is_whitespace() {
                 at += 1;
             }
-            match at > to {
-                // 後面有空白：連它一起。
-                true => b = at.saturating_sub(1),
-                // 没有就取前面那一段——`daw` 在一行的末尾也該把那道縫帶走。
-                false => {
-                    while a > start && rope.char(a - 1).is_whitespace() {
-                        a -= 1;
+            if at > to {
+                b = at.saturating_sub(1);
+                ate_trailing = true;
+            }
+        }
+        // **數目：再要幾個單位**（2026-10-11 從 nvim 神諭上量出來的，182 格）。
+        //
+        // vim 的 `2iw` 是「兩個單位」，而單位在**詞**和**空白**之間交替——所以
+        // `he said` 上的 `d2iw` 刪掉 `he ` 而不是 `he`。`2aw` 數的是兩個「詞 ＋
+        // 它後面那道縫」，上面那一段已經替第一個算過了。
+        //
+        // Warning: **要不夠就一個都不取**（2026-10-11 問過 nvim）。`one two` 上
+        // `d9iw` 在 vim 裏**整行不動**——數目湊不齊，整個對象就不成立。從前這裏
+        // 「有多少取多少」，於是同一下把一行清空了。寫這一條之前我按常識猜的正
+        // 是「取到有的為止」，而那是錯的。
+        let mut taken = 1;
+        while taken < count {
+            if b + 1 >= line_end {
+                return motion::Span::Missed;
+            }
+            let at = b + 1;
+            let mut end = match rope.char(at).is_whitespace() {
+                true => {
+                    let mut e = at;
+                    while e < line_end && rope.char(e).is_whitespace() {
+                        e += 1;
+                    }
+                    e
+                }
+                false => match words.iter().find(|&&(s, e)| (s..e).contains(&at)) {
+                    Some(&(_, e)) => e,
+                    None => return motion::Span::Missed,
+                },
+            };
+            // **`aw` 的一個單位是一個詞連着它旁邊那道縫。** 從詞起就往後帶縫，
+            // 從縫起就往後帶詞——後者正是光標停在空白上那一種（`d2aw` 在
+            // `  he said` 的行首：兩個單位是 `  he` 和 ` said`）。
+            if asked_around {
+                match rope.char(at).is_whitespace() {
+                    true => {
+                        if let Some(&(_, e)) = words.iter().find(|&&(s, _)| s >= end) {
+                            end = e;
+                        }
+                        ate_trailing = false;
+                    }
+                    false => {
+                        let was = end;
+                        while end < line_end && rope.char(end).is_whitespace() {
+                            end += 1;
+                        }
+                        ate_trailing = end > was;
                     }
                 }
+            }
+            b = end.saturating_sub(1).max(b);
+            taken += 1;
+        }
+        // **「後面沒有縫就取前面那一道」問的是整個對象，不是每一個單位**
+        //（2026-10-11 從神諭上量出來的）。`alpha beta, gamma` 上 `2aw` 站在
+        // `beta` 的頭上，vim 刪的是 `beta, `——第一個單位後面確實沒有縫（跟着的是
+        // 逗號），可第二個有，所以那條退路一次都不該走。逐個單位問的話就多吞了
+        // `alpha` 後面那個空格。
+        if around && !ate_trailing {
+            while a > start && rope.char(a - 1).is_whitespace() {
+                a -= 1;
             }
         }
         motion::Span::Over { anchor: a, head: b.max(a) }
@@ -1380,20 +1442,21 @@ impl Editor {
                 };
                 at(rope.line_to_char(want))
             }
-            motion::Motion::Object { what: motion::Object::Word { big }, around } => {
-                self.word_object_span(around, big)
+            motion::Motion::Object { what: motion::Object::Word { big }, around, count } => {
+                self.word_object_span(around, big, count)
             }
-            motion::Motion::Object { what: motion::Object::Markup, around } => {
+            motion::Motion::Object { what: motion::Object::Markup, around, .. } => {
                 self.markup_object_span(around)
             }
-            motion::Motion::Object { what: motion::Object::Sentence, around } => {
+            motion::Motion::Object { what: motion::Object::Sentence, around, .. } => {
                 self.sentence_object_span(around)
             }
             motion::Motion::Object {
                 what: motion::Object::Pair { open, close },
                 around,
+                ..
             } => self.pair_span(open, close, around),
-            motion::Motion::Object { what: motion::Object::Paragraph, around } => {
+            motion::Motion::Object { what: motion::Object::Paragraph, around, .. } => {
                 self.paragraph_span(around)
             }
         }

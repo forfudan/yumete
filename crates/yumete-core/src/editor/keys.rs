@@ -848,6 +848,18 @@ impl Editor {
         };
         // **An object is already both ends**; everything else is walked to.
         if step.reach == crate::vim::Reach::Object {
+            // **數目交給詞對象**（2026-10-11）。`vim::object` 造動作的時候數不到
+            // 它——那個 2 在 `d2iw` 裏是按鍵，而按鍵在這一層纔收齊。別的對象照舊
+            // 是 1：`2i(` 在 vim 裏是「往外第二層」，不是「兩個括號對」。
+            let step = match step.motion {
+                motion::Motion::Object { what: what @ motion::Object::Word { .. }, around, .. } => {
+                    crate::vim::Step {
+                        motion: motion::Motion::Object { what, around, count: n },
+                        ..step
+                    }
+                }
+                _ => step,
+            };
             let span = self.read_motion(step.motion, motion::Reading::Caret);
             if span == motion::Span::Missed {
                 // Warning: **The refusal has to reach the edit, not just the status

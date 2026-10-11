@@ -12091,6 +12091,58 @@ fn a_hover_stays_while_the_cursor_walks_the_thing_it_describes() {
     assert!(ed.hover_here().is_none(), "走出去就收");
 }
 
+/// **詞對象認數目**（2026-10-11 從 nvim 神諭上量出來的，182 格）。
+///
+/// vim 的 `2iw` 是「兩個單位」，單位在詞和空白之間交替；`2aw` 是兩個「詞連着它
+/// 旁邊那道縫」。從前數目在對象這條路上整個掉了：`d2iw` 和 `diw` 一模一樣。
+#[test]
+fn a_word_object_takes_as_many_as_it_is_asked_for() {
+    // Warning: **起點要釘死。** `typed` 把光標留在正文末尾，而 `goto_line` 記着那
+    // 一行的目標欄——`goto_line(1)` 之後光標不在第 0 欄上。這一條第一版就是這麼
+    // 寫的，兩格裏有一格是矇對的。`gg0` 和神諭那一支用的是同一串鍵。
+    let vim = |text: &str, at: usize| {
+        let mut ed = typed(text);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        press(&mut ed, "gg0");
+        for _ in 0..at {
+            ed.on_key(Key::Char('l'));
+        }
+        assert_eq!(ed.cursor(), at, "起點");
+        ed
+    };
+
+    // `2iw` ＝ 詞 ＋ 它後面那道縫。
+    let mut ed = vim("he said one\nxx\n", 0);
+    press(&mut ed, "d2iw");
+    assert_eq!(ed.current_buffer().text(), "said one\nxx\n");
+
+    // `3iw` 再加一個詞。
+    let mut ed = vim("he said one\nxx\n", 0);
+    press(&mut ed, "d3iw");
+    assert_eq!(ed.current_buffer().text(), " one\nxx\n");
+
+    // **`2aw`：那條「後面沒縫就取前面」的退路問的是整個對象。** `beta` 後面跟
+    // 的是逗號，可第二個單位後面有縫，所以 `alpha` 後面那個空格留着。
+    let line = "alpha beta, gamma delta\nxx\n";
+    let mut ed = vim(line, 6);
+    press(&mut ed, "d2aw");
+    assert_eq!(ed.current_buffer().text(), "alpha gamma delta\nxx\n");
+
+    // 從空白起的 `2aw`：兩個單位是「縫 ＋ 詞」兩回。
+    let mut ed = vim("  he said (no)\nxx\n", 0);
+    press(&mut ed, "d2aw");
+    assert_eq!(ed.current_buffer().text(), " (no)\nxx\n");
+
+    // **要不夠就一個都不取**（問過 nvim：`one two` 上 `d9iw` 整行不動）。
+    let mut ed = vim("one two\nxx\n", 0);
+    press(&mut ed, "d9iw");
+    assert_eq!(ed.current_buffer().text(), "one two\nxx\n", "湊不齊就不動");
+    // 剛好夠的那一下照做。
+    let mut ed = vim("one two\nxx\n", 0);
+    press(&mut ed, "d3iw");
+    assert_eq!(ed.current_buffer().text(), "\nxx\n");
+}
+
 /// **`iW`／`aW` 是「一串非空白」，不是「一次一類」**（2026-10-11 從 nvim 神諭上
 /// 量出來的，103 格）。
 ///
@@ -12104,10 +12156,11 @@ fn a_big_word_object_runs_to_the_blanks() {
         let mut ed = typed(&format!("{line}\nxx\n"));
         // `diW` 是 vim 鍵位的寫法；出廠是 helix，那邊 `d` 刪完 `i` 就進插入了。
         ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
-        ed.goto_line(1);
+        press(&mut ed, "gg0");
         for _ in 0..n {
             ed.on_key(Key::Char('l'));
         }
+        assert_eq!(ed.cursor(), n, "起點");
         ed
     };
     // 站在 `(` 上：整串 `(no,` 都是一個 WORD。
