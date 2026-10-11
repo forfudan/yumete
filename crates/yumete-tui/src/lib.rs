@@ -869,7 +869,13 @@ pub fn run(
             // 同一個辦法：剛畫的那一幀寫着「正在替換… 1200/3000 個檔」，然後做
             // 八十毫秒，再回來畫一幀。三千個檔那一趟從前是十幾秒的死屏。
             if editor.replacing_a_batch() {
-                editor.run_a_batch_of_replacing();
+                // **Esc 從隊列裏挑出來，別的鍵照舊排着**（2026-10-11 定）。一批
+                // 做完就 `continue`，所以替換期間鍵一個都沒派出去——攢到做完纔
+                // 一起落下。中止是唯一一件「現在就要」的事，所以只挑它一個。
+                match take_an_escape(&mut inbox) {
+                    true => editor.ask_whether_to_stop_replacing(),
+                    false => editor.run_a_batch_of_replacing(),
+                }
                 continue;
             }
             // **欠着的那一次 `gw`，同一個辦法**（#406）：剛畫完的這一幀量出了這一頁
@@ -1877,6 +1883,23 @@ fn spawn_reader() -> std::sync::mpsc::Receiver<io::Result<Event>> {
 }
 
 /// Move everything the reader has ready into the inbox, without waiting.
+/// **把隊列裏的一個 `Esc` 挑走**，有就回 `true`（2026-10-11）。
+///
+/// 替換那一趟每做完一批就 `continue`，鍵全排在收件箱裏等着——而「停」這一件
+/// 等不得。別的鍵原樣留在隊列裏，次序也不動：挑走的只有 `Esc`。
+fn take_an_escape(inbox: &mut std::collections::VecDeque<Event>) -> bool {
+    let at = inbox.iter().position(|event| {
+        matches!(event, Event::Key(key) if key.code == KeyCode::Esc && key.kind != KeyEventKind::Release)
+    });
+    match at {
+        Some(at) => {
+            inbox.remove(at);
+            true
+        }
+        None => false,
+    }
+}
+
 fn take_what_arrived(
     events: &std::sync::mpsc::Receiver<io::Result<Event>>,
     inbox: &mut std::collections::VecDeque<Event>,
@@ -4846,6 +4869,7 @@ fn draw(
     }
     // Last, and over everything: the editor is stopped behind it (#295).
     draw_query(frame, editor, config, area);
+    draw_replacing(frame, editor, config, area);
     // …and last of all, the sweep: whatever any of the above put on the page,
     // no cell of it is a character the terminal obeys.
     settle_control_characters(frame.buffer_mut());
@@ -4897,6 +4921,74 @@ fn settle_control_characters(buf: &mut ratatui::buffer::Buffer) {
 /// not: the editor is stopped behind it (`Editor::on_key` gives it every key),
 /// and a modal question that hides in a corner is one a writer answers without
 /// reading. Centre, border, name in gold — #273's panel, at the middle.
+/// **替換走到哪了**，畫在剛纔問話那一扇窗的位置上（2026-10-11 定）。
+///
+/// 和 [`draw_query`] 同一個殼、同一個落點：按下 `y` 的那一下窗不該跳走，它只是
+/// 從一個問句變成一條進度。所以這一支是那一支去掉選項、加上一條槽和一個檔名。
+///
+/// Warning: **問句站着的時候不畫**——按了 `Esc` 之後擺在那裏的是那一問，兩扇疊在
+/// 同一個位置上就只剩一團亂碼。
+fn draw_replacing(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    if editor.query().is_some() {
+        return;
+    }
+    let Some((done, total, name)) = editor.replace_progress() else { return };
+    let ink = crate::theme::Palette::of(config);
+    let head = say!("search.replacing-progress", done, total);
+    let foot = say!("hint.replacing.stop");
+    let inner = [&head, &name, &foot]
+        .iter()
+        .map(|line| yumete_cjk::str_width(line))
+        .max()
+        .unwrap_or(0)
+        .max(30);
+    let width = (inner + 4).min(area.width as usize) as u16;
+    // 三行正文（數字、槽、檔名）＋ 一行空＋ 一行鍵提示 ＋ 上下兩道牆。
+    let height = 7u16;
+    if width < 16 || height + 2 > area.height {
+        return;
+    }
+    let Some(panel) = crate::chrome::place(area, (width, height), crate::chrome::Anchor::Centre)
+    else {
+        return;
+    };
+    crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+        foot: None,
+        rounded: config.panel.rounded,
+        open_sides: false,
+        border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
+        ground: Style::default().bg(crate::chrome::panel_ground(ink)),
+        title: Some((
+            say!("write.oversize-title"),
+            Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
+        )),
+    });
+    let ground = Style::default();
+    let limit = panel.x + width - 1;
+    let left = panel.x + 2;
+    let room = (width as usize).saturating_sub(4);
+    let buf = frame.buffer_mut();
+    put_text(buf, left, panel.y + 1, limit, &head, ground.fg(ink.text()));
+    // **槽畫成兩段同一個字符，分色**——不是 `█` 配 `░`：那兩個字在不同字體下
+    // 寬窄不一樣，而這一條要和上下兩行逐格對齊。
+    let filled = match total {
+        0 => 0,
+        _ => room * done / total,
+    };
+    let bar: String = "─".repeat(room);
+    put_text(buf, left, panel.y + 2, limit, &bar, ground.fg(ink.rule()));
+    put_text(
+        buf,
+        left,
+        panel.y + 2,
+        limit,
+        &"━".repeat(filled),
+        ground.fg(ink.gold()),
+    );
+    put_text(buf, left, panel.y + 3, limit, &name, ground.fg(ink.quiet()));
+    put_text(buf, left, panel.y + 5, limit, &foot, ground.fg(ink.quiet()));
+}
+
 fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     let Some(asked) = editor.query() else { return };
     let ink = crate::theme::Palette::of(config);
@@ -14530,6 +14622,69 @@ fn squeezed(text: &str) -> String {
     }
 
     /// The command row: the bottom row of all, and the one a `:` is typed into.
+    /// **替換進行中那一扇窗**（2026-10-11 定）：數字、槽、檔名、`Esc 終止替換`。
+    ///
+    /// Warning: **`--shot` 看不到它。** 那一支畫一幀之前會把欠着的活先做完，而這一扇
+    /// 正是「活還沒做完」纔有的——所以它只能在這裏驗，手裏攥着循環的那一邊。
+    ///
+    /// 範圍走「所有緩衝」而不是「工作路徑」：後者問的是進程的當前目錄，而當前目錄
+    /// 是進程全局的，測試裏動它會弄紅鄰居。
+    #[test]
+    fn the_window_says_how_far_the_replacing_has_got() {
+        // 過 `REPLACE_IN_ONE_GO`（32）纔分批，分批纔停得下來。
+        let dir = tmp().join(format!("yumete-replacing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut editor = Editor::new();
+        for n in 0..40 {
+            let path = dir.join(format!("卷{n:02}.md"));
+            std::fs::write(&path, "霜降之後，草木搖落。\n").unwrap();
+            editor.open_file(&path).unwrap();
+        }
+
+        editor.execute(":replace-buffers").unwrap();
+        editor.on_key(Key::Char('霜'));
+        editor.on_key(Key::Tab);
+        editor.on_key(Key::Char('雪'));
+        editor.on_key(Key::Enter);
+        // 走查跑在旁邊，每一幀收一批——這裏沒有幀，所以自己收到收完為止。
+        for _ in 0..2000 {
+            editor.collect_search_results();
+        }
+        // 走到結果那一格（搜/換/七個開關/包含/排除…），`R` 只在那裏活着。
+        for _ in 0..12 {
+            editor.on_key(Key::Char('j'));
+        }
+        editor.on_key(Key::Char('R'));
+        assert!(editor.query().is_some(), "中央那一扇先問一句");
+        editor.on_key(Key::Char('y'));
+        assert!(editor.replacing_a_batch(), "分批做着");
+
+        let config = Config::default();
+        let page = |editor: &Editor| -> Vec<String> {
+            let buffer = render_with(editor, &config, no_ime(), 100, 30);
+            (0..buffer.area.height).map(|y| row_text(&buffer, y)).collect()
+        };
+        let shown = page(&editor);
+        let said = |page: &[String], needle: &str| page.iter().any(|row| row.contains(needle));
+        let (done, total, name) = editor.replace_progress().expect("走到哪了");
+        assert!(
+            said(&shown, &say!("search.replacing-progress", done, total)),
+            "{}",
+            shown.join("\n")
+        );
+        assert!(said(&shown, &name), "此刻動的那一個：{name}\n{}", shown.join("\n"));
+        assert!(said(&shown, &say!("hint.replacing.stop")), "{}", shown.join("\n"));
+
+        // **按了 Esc 之後那一扇讓位給問句**——兩扇疊在同一個落點上只剩一團亂碼。
+        editor.ask_whether_to_stop_replacing();
+        let asking = page(&editor);
+        assert!(said(&asking, &say!("search.abort-what", done)), "{}", asking.join("\n"));
+        assert!(!said(&asking, &say!("hint.replacing.stop")), "{}", asking.join("\n"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn command_line(buffer: &ratatui::buffer::Buffer) -> String {
         row_text(buffer, buffer.area.height - 1)
     }

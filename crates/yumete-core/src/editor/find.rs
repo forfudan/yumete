@@ -1821,8 +1821,71 @@ impl Editor {
     const REPLACE_IN_ONE_GO: usize = 32;
 
     /// **還在換嗎**——前端每一幀問一次，欠着就再做一批。
+    ///
+    /// Warning: **停下來等人答話的時候回 `false`**（2026-10-11）。欠着的那一批還在
+    /// `owed_replace` 裏；這一句答的是「這一幀要不要再做一批」，不是「做完沒有」。
     pub fn replacing_a_batch(&self) -> bool {
-        self.owed_replace.is_some()
+        self.owed_replace.is_some() && !self.replace_paused
+    }
+
+    /// **走到哪了**——`(已做幾個檔, 一共幾個, 這會兒動的那一個)`，前端每一幀問
+    /// 一次（2026-10-11）。`None` ＝ 沒在替換。
+    ///
+    /// 停下來等人答話的時候照樣答得出：那扇問句上寫着的數就是這一個。
+    pub fn replace_progress(&self) -> Option<(usize, usize, String)> {
+        let at = self.owed_replace?;
+        let name = match self.replace_queue.get(at) {
+            // 只寫檔名，不寫目錄——這一行底下就是進度條，而整條路徑會把它撐寬。
+            Some((Some(path), _)) => path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string_lossy().into_owned()),
+            // 沒有名字的那一份草稿——它只可能是眼前這一個。
+            Some((None, _)) => self.current_buffer().display_name(),
+            None => String::new(),
+        };
+        Some((at, self.replace_queue.len(), name))
+    }
+
+    /// **`Esc` 按在替換當中：先問一句**（2026-10-11 定）。
+    ///
+    /// 手上那一個檔已經做完了——一批是整檔整檔做的，所以停在兩批之間就是停在檔
+    /// 與檔之間。原話：「我建議繼續把正在替換的文件替換完再問，防止一個文件替換
+    /// 到一半」。
+    pub fn ask_whether_to_stop_replacing(&mut self) {
+        let Some(at) = self.owed_replace else { return };
+        if self.query.is_some() {
+            return;
+        }
+        self.replace_paused = true;
+        self.query = Some(crate::editor::Query {
+            // 和替換那一扇、撤回那一扇同一個標題。
+            title: say!("write.oversize-title"),
+            body: say!("search.abort-what", at),
+            choices: vec![
+                crate::editor::Answer { key: 'y', label: say!("search.abort-keep") },
+                crate::editor::Answer { key: 'u', label: say!("search.abort-undo") },
+                crate::editor::Answer { key: 'n', label: say!("search.abort-go-on") },
+            ],
+            what: crate::editor::Asking::AbortTheReplace,
+            about: None,
+        });
+    }
+
+    /// 答了那一問之後：`keep` ＝ 留着已經換掉的，否則全撤回。
+    pub(super) fn stop_replacing(&mut self, keep: bool) {
+        self.replace_paused = false;
+        self.owed_replace = None;
+        self.replace_queue.clear();
+        self.finish_replacing();
+        if !keep {
+            self.take_the_replacement_back(None);
+        }
+    }
+
+    /// 答了「繼續替換」。
+    pub(super) fn go_on_replacing(&mut self) {
+        self.replace_paused = false;
     }
 
     /// 做一小批，做完就回來；整批做完纔收尾。
@@ -1843,11 +1906,15 @@ impl Editor {
         }
         if at < files.len() {
             self.owed_replace = Some(at);
-            self.status = say!("search.replacing-progress", at, files.len());
             self.replace_queue = files;
             return;
         }
         self.owed_replace = None;
+        self.finish_replacing();
+    }
+
+    /// 一批替換走完（或者被中止）之後的收尾，兩條路共用。
+    fn finish_replacing(&mut self) {
         // **換完要回到你出發的那一份。** `replace_file` 底下的 `buffer_for` 為了
         // 動一個還沒打開的檔會真的 `open_file`，那一下就把 `current` 挪走了。
         if let Some(back) = self.buffer_with(self.replace_home) {
@@ -1906,17 +1973,19 @@ impl Editor {
         // **一批一批地做，中間把屏幕還回去**（2026-10-03 定：「不給取消，只給
         // 進度」）。從前這裏是一個跑到底的 `for`，而三千個檔那一趟十幾秒裏屏幕
         // 完全靜止——看不出它在做事，也看不出還剩多少。
+        //
+        // 2026-10-11 補上了取消，而進度從狀態欄那一行挪進了剛纔問話的那一扇窗
+        // （`draw_replacing`）：那裏還放得下一條槽和此刻動着的那個檔名。狀態欄
+        // 那一句去掉了——同一個數說兩遍，其中一遍還會被別的話蓋掉。
         self.owed_replace = Some(0);
         // **少到看不出來就別分批。** 分批的代價是多畫幾幀，而幾個檔的替換是幾毫秒
-        // 的事——報一行「正在替換… 0/3 個檔」再立刻蓋掉，只是閃一下。
+        // 的事——開一扇窗說「正在替換 0/3 個文件」再立刻關掉，只是閃一下。
         if self.replace_queue.len() < Self::REPLACE_IN_ONE_GO {
             // Warning: **要繞到底**：一批是按時間切的，三十一個檔也可能跨過八十毫秒。
             while self.owed_replace.is_some() {
                 self.run_a_batch_of_replacing();
             }
-            return;
         }
-        self.status = say!("search.replacing-progress", 0, self.replace_queue.len());
     }
 
     /// Change **one match on one line** of the buffer being worked on.

@@ -1391,6 +1391,15 @@ impl Editor {
                 // 不撤銷：那一批留在案上，下一下 `u` 還撤得回來。
                 _ => {}
             },
+            // **替換做到一半按了 `Esc`**（2026-10-11 定）。三條路：留着、全撤回、
+            // 接着做。`Esc` 本身在這裏是「不中止」——`answer_query` 把 `Esc` 讀成
+            // `n`，而這一扇的 `n` 正是「繼續替換」，所以按順手了也不會把一趟做了
+            // 一半的替換丟在那裏。
+            Asking::AbortTheReplace => match answer {
+                'y' => self.stop_replacing(true),
+                'u' => self.stop_replacing(false),
+                _ => self.go_on_replacing(),
+            },
             // 一顆按鈕的窗，按了就關——它不問什麼，只是不讓那句話從狀態欄滑過去。
             Asking::ReplaceUndoneInPart => {}
             Asking::OversizeWrite { path } => match answer {

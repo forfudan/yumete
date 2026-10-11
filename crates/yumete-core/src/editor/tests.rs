@@ -10560,6 +10560,61 @@ fn replacing_a_whole_book_asks_in_the_middle_of_the_screen() {
     assert_eq!(ed.status(), say!("search.replace-all-sure", 9));
 }
 
+/// **替換做到一半按 `Esc`：先問一句，三條路**（2026-10-11 定）。
+///
+/// 原話：「已替换 1700 個文件，確定終止嗎？y 終止並保留當前替換結果 / u 全部撤回
+/// / n 繼續替換」。這一條驗的是那三條路各自落在哪裏，以及 `Esc` 讀成「不中止」。
+#[test]
+fn stopping_a_replace_halfway_asks_which_of_three_things_to_do() {
+    // 四十個檔：過了 `REPLACE_IN_ONE_GO`，所以它是分批做的，中間停得下來。
+    let armed = || {
+        let mut ed = typed("霜降\n");
+        ed.execute(":replace").unwrap();
+        ed.on_key(Key::Char('霜'));
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Char('雪'));
+        ed.on_key(Key::Enter);
+        ed.on_key(Key::Esc);
+        let panel = ed.search_for_test();
+        panel.field = crate::search_panel::Field::Results;
+        panel.total = 40;
+        panel.files = (0..40)
+            .map(|n| (Some(std::path::PathBuf::from(format!("卷{n}.md"))), None))
+            .collect();
+        ed.on_key(Key::Char('R'));
+        // 中央那一扇問「動得太多」——答應它。
+        ed.on_key(Key::Char('y'));
+        assert!(ed.replacing_a_batch(), "分批做着");
+        ed
+    };
+
+    let mut ed = armed();
+    assert_eq!(ed.replace_progress(), Some((0, 40, "卷0.md".to_string())), "走到哪了");
+
+    // `Esc`：三條路擺出來，而且這會兒不往下做了。
+    ed.ask_whether_to_stop_replacing();
+    let asked = ed.query().expect("要問一句");
+    assert_eq!(asked.body, say!("search.abort-what", 0));
+    assert_eq!(asked.choices.len(), 3, "留着/全撤回/繼續");
+    assert!(!ed.replacing_a_batch(), "問着的時候不往下做");
+
+    // `n`：接着做。
+    ed.on_key(Key::Char('n'));
+    assert!(ed.query().is_none());
+    assert!(ed.replacing_a_batch(), "答了繼續就接着做");
+
+    // `Esc` 本身讀成「不中止」——順手按下去不會把一趟做了一半的替換丟在那裏。
+    ed.ask_whether_to_stop_replacing();
+    ed.on_key(Key::Esc);
+    assert!(ed.replacing_a_batch(), "Esc ＝ n ＝ 繼續");
+
+    // `y`：停在這裏。
+    ed.ask_whether_to_stop_replacing();
+    ed.on_key(Key::Char('y'));
+    assert!(!ed.replacing_a_batch(), "不做了");
+    assert_eq!(ed.replace_progress(), None, "那一批不在了");
+}
+
 /// **`R` 問的問題要和名單上那個一樣**（2026-10-02 一輪審查報來的，會丟字）。
 ///
 /// `swap_all` 從前把整份稿子接成一條字符串再跑一次式子，而名單是**逐行**跑出來的。

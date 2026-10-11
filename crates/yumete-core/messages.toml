@@ -5581,6 +5581,13 @@ zhs = "确认"
 en = "yes"
 
 [[message]]
+# 跨檔替換進行中那一扇窗，底下那一行
+key = "hint.replacing.stop"
+zht = "Esc 終止替換"
+zhs = "Esc 终止替换"
+en = "Esc to stop replacing"
+
+[[message]]
 # 提示：鍵已經交回正文，而結果名單還開着——回名單
 key = "hint.search.back-to-the-list"
 zht = "回名單"
@@ -8245,6 +8252,34 @@ en = "{0}'s table is not installed — put it in {1}, or a table of your own in 
 # ── search ────────────────────────────────────────────────────────────
 
 [[message]]
+# 跨檔替換做到一半按了 Esc：接着做下去的那一條
+key = "search.abort-go-on"
+zht = "繼續替換"
+zhs = "继续替换"
+en = "go on replacing"
+
+[[message]]
+# 同上：停在這裏，已經換掉的留着
+key = "search.abort-keep"
+zht = "終止並保留當前替換結果"
+zhs = "终止并保留当前替换结果"
+en = "stop and keep what has been replaced"
+
+[[message]]
+# 同上：停在這裏，已經換掉的全撤回
+key = "search.abort-undo"
+zht = "全部撤回"
+zhs = "全部撤回"
+en = "stop and take it all back"
+
+[[message]]
+# 跨檔替換做到一半按了 Esc，問那一句（2026-10-11 定的措辭）
+key = "search.abort-what"
+zht = "已替換 {0} 個文件，確定終止嗎？"
+zhs = "已替换 {0} 个文件，确定终止吗？"
+en = "{0} files have been replaced — stop here?"
+
+[[message]]
 # 搜索面板底下那一塊：這一處換完長什麼樣。寫在一道雙橫線的左端。
 key = "search.after"
 zht = "替換預覽"
@@ -8623,9 +8658,9 @@ en = "replace"
 [[message]]
 # 搜索：全部替換正在做，已經做到第幾個檔
 key = "search.replacing-progress"
-zht = "正在替換… {0}/{1} 個檔"
-zhs = "正在替换… {0}/{1} 个档"
-en = "replacing… {0}/{1} files"
+zht = "正在替換 {0}/{1} 個文件"
+zhs = "正在替换 {0}/{1} 个文件"
+en = "replacing {0}/{1} files"
 
 [[message]]
 # 搜索：正在走磁盤
