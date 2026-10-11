@@ -780,6 +780,24 @@ pub fn draw(
             // had no height cap of its own — two columns was all it knew.
             let tall = bottom.saturating_sub(area.y).min(area.height);
             let deep_max = cap.min((tall.saturating_sub(2) as usize).max(1));
+            // Warning: **量的要和夾的是同一個數**（2026-10-12 看出來的）。上面那個
+            // `widest` 是**整個屏幕**減二，而下面 `width` 會把框夾進
+            // `chrome::room`——於是一張分了欄的表按屏幕寬分欄、按房間寬畫，第二
+            // 欄整個落在框外，`put_text` 停在框邊：
+            //
+            // ```text
+            // │方案拆分      彳亍                      讀音          h│
+            // │編碼          KKcu                      字集           │
+            // ```
+            //
+            // 「讀音 h」。切在欄**裏**是這一支有意的（底下那個 `one.min(..)`，
+            // 「a key whose meaning is cut short still tells the reader which
+            // key it is」），切在框**外**不是。
+            let widest = (room_w as usize)
+                .max(24)
+                .min(area.width as usize)
+                .saturating_sub(2 + pad * 2)
+                .max(1);
             // Too deep is answered by going **wider** first: as many columns
             // as the depth asks for. A short wide menu is still a menu, and a
             // key whose meaning is cut short still tells the reader which key
@@ -1259,6 +1277,73 @@ mod tests {
             .collect();
         assert!(down2.contains('/'), "數字還在：{down2:?}");
         assert_ne!(down2, down, "讀到第幾縱變了");
+    }
+
+    /// **一張分了欄的表，第二欄不許落在框外**（2026-10-12 看出來的）。
+    ///
+    /// 分欄按**整個屏幕**減二算，而框寬會被 `chrome::room` 夾一道——兩個數不是
+    /// 同一個，於是第二欄整個站在框外，`put_text` 停在框邊，畫出來是
+    /// 「`讀音          h`」：一個字母，而且看不出那是被切的。
+    #[test]
+    fn a_two_column_key_table_cuts_inside_the_column_not_at_the_border() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let (w, h) = (86u16, 16u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let rows: Vec<(String, String)> = [
+            ("方案拆分", "彳亍"),
+            ("編碼", "KKcu"),
+            ("分節編碼", "Ki-Kcu"),
+            ("讀音", "háng xíng héng xìng hàng"),
+            ("字集", "簡繁古臺港 CJK"),
+            ("統一碼", "U+884C"),
+        ]
+        .iter()
+        .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
+        .collect();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, w, h);
+                // `bottom` 壓到六行：放不下六條，這一支於是分欄——要驗的正是
+                // 分欄之後的那一下。
+                got = draw(frame, &config, area, 6, (2, 0), false, &Panel {
+                    stand: Stand::Corner,
+                    accent: None,
+                    pages: false,
+                    reading: true,
+                    scroll: 0,
+                    title: "行".into(),
+                    lede: None,
+                    entry: false,
+                    body: Body::Keys(rows),
+                    vertical_text: false,
+                    tag: None,
+                    marked: false,
+                });
+            })
+            .unwrap();
+        let rect = got.expect("the panel is drawn");
+        let buf = terminal.backend().buffer();
+        // Warning: **寬字的第二格在 `TestBackend` 裏讀不出來**，所以逐行取完符號
+        // 之後把空白去掉再比——量的是「讀音後面還剩幾個字」，不是版面。
+        let row_at = |y: u16| -> String {
+            (rect.x + 1..rect.x + rect.width - 1)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+                .replace(' ', "")
+        };
+        let found = (rect.y + 1..rect.y + rect.height - 1)
+            .map(row_at)
+            .find_map(|row| row.split_once("讀音").map(|(_, rest)| rest.to_string()))
+            .expect("讀音 那一行畫出來了");
+        // 被框邊切掉的時候剩的是一個字母（`h`）；切在欄裏剩的是一截帶省略號的
+        // 讀音，一欄放得下的時候剩的是整串。
+        assert!(found.chars().count() > 1, "第二欄被框邊切了：{found:?}");
+        assert!(
+            found.ends_with('…') || found.ends_with("hàng"),
+            "切了就要看得出是切的：{found:?}"
+        );
     }
 
     /// **兩段之間那一縱空白留着**（2026-10-12 報的：「In vertical mode, you
