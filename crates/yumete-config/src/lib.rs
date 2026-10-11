@@ -264,6 +264,16 @@ pub struct EditorConfig {
     /// unsaved changes (Feature #79). On by default, and removed on save and on
     /// quit, so in an ordinary session it is never seen.
     pub autosave: bool,
+    /// **盤上那一份變了就讀回來**（`:reload-auto`，2026-10-11 起出廠開着）。
+    ///
+    /// vim 的 `autoread` 出廠是關的，而那是 1978 年的判斷：那時「檔在你底下變
+    /// 了」多半是共享機器上**另一個人**動的。今天這件事幾乎全是自己幹的——切分
+    /// 支、rebase、跑一遍格式化、或者另一個窗口開着同一個檔。helix 連這個選項都
+    /// 沒有，那不是一種設計選擇，是缺一個功能。
+    ///
+    /// 危險的那一半早就切掉了（`Editor::disk_tick`）：稿子改過就只說一句、檔被刪
+    /// 了不讀也只說一次、時間戳太新就改讀內容再比。
+    pub reload_auto: bool,
     /// How wide East-Asian Ambiguous characters — `—` `…` `“” ‘’` `·` — are
     /// drawn (Feature #81, #193). `"auto"` by default, which asks the terminal;
     /// `"wide"` and `"narrow"` say so outright.
@@ -437,6 +447,7 @@ impl Default for EditorConfig {
             soft_wrap: true,
             which_wrap: "b".to_string(),
             autosave: true,
+            reload_auto: true,
             ambiguous_width: Ambiguity::default(),
             syntax: String::new(),
             ruler: 0,
@@ -2915,6 +2926,7 @@ struct RawEditor {
     soft_wrap: Option<bool>,
     which_wrap: Option<String>,
     autosave: Option<bool>,
+    reload_auto: Option<bool>,
     ambiguous_width: Option<String>,
     tabs: Option<String>,
     syntax: Option<String>,
@@ -3078,6 +3090,9 @@ impl RawConfig {
         }
         if other.editor.soft_wrap.is_some() {
             self.editor.soft_wrap = other.editor.soft_wrap;
+        }
+        if other.editor.reload_auto.is_some() {
+            self.editor.reload_auto = other.editor.reload_auto;
         }
         if other.editor.autosave.is_some() {
             self.editor.autosave = other.editor.autosave;
@@ -3439,6 +3454,9 @@ impl RawConfig {
                 ));
             }
             config.editor.which_wrap = kept;
+        }
+        if let Some(on) = self.editor.reload_auto {
+            config.editor.reload_auto = on;
         }
         if let Some(on) = self.editor.autosave {
             config.editor.autosave = on;

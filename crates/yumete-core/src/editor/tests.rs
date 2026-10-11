@@ -6207,21 +6207,30 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
 
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
-    // Off by default: nothing happens on its own until it is asked for.
+    // **出廠開着**（2026-10-11 定）。vim 的 `autoread` 出廠是關的，而那是 1978 年
+    // 的判斷：那時「檔在你底下變了」多半是共享機器上另一個人動的。今天幾乎全是
+    // 自己幹的——切分支、格式化、另一個窗口。危險的那一半由下面三條閘守着。
     std::fs::write(&file, "第二版\n").unwrap();
     ed.disk_tick();
-    assert_eq!(ed.current_buffer().text(), "第一版\n", "off by default");
+    assert_eq!(ed.current_buffer().text(), "第二版\n", "on by default, and the buffer is clean");
+    assert!(ed.status().contains("外面改了"), "{}", ed.status());
+
+    // 關得掉，關了就真的不動。
+    assert!(ed.execute("reload-auto off").is_ok());
+    std::fs::write(&file, "第三版\n").unwrap();
+    ed.disk_tick();
+    assert_eq!(ed.current_buffer().text(), "第二版\n", "off, so it leaves it alone");
 
     assert!(ed.execute("reload-auto on").is_ok());
     ed.disk_tick();
-    assert_eq!(ed.current_buffer().text(), "第二版\n", "clean, so it reads");
+    assert_eq!(ed.current_buffer().text(), "第三版\n", "clean, so it reads");
     assert!(ed.status().contains("外面改了"), "{}", ed.status());
 
     // Now type into it, and let the file move again.
     press(&mut ed, "i");
     ed.on_key(Key::Char('我'));
     ed.on_key(Key::Esc);
-    std::fs::write(&file, "第三版\n").unwrap();
+    std::fs::write(&file, "第四版\n").unwrap();
     // Re-asking for the setting also resets the clock, which is what a
     // writer who just turned it on means by turning it on.
     assert!(ed.execute("reload-auto on").is_ok());

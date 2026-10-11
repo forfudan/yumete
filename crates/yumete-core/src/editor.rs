@@ -3788,7 +3788,9 @@ impl Editor {
             swap_cursor: 0,
             swap_backlog: false,
             readonly_default: false,
-            reload_auto: false,
+            // **出廠開着**（2026-10-11 定）。理由與三道安全閘見
+            // `yumete_config::EditorConfig::reload_auto`。
+            reload_auto: true,
             last_disk_check: None,
             reload_warned: false,
             compiled: RefCell::new(None),

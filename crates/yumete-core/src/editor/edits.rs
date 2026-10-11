@@ -197,6 +197,11 @@ impl Editor {
         self.reload_auto
     }
 
+    /// 配置說它開不開（2026-10-11 起它進得了 `config.toml`）。
+    pub fn set_reload_auto(&mut self, on: bool) {
+        self.reload_auto = on;
+    }
+
     /// Insert `text` at the cursor and advance past it.
     pub(super) fn insert_str(&mut self, text: &str) {
         let at = self.sel.head();

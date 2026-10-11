@@ -9170,6 +9170,20 @@ zhs = "竖排时每几个字在边栏点一个淡刻度，像真的稿纸"
 en = "a faint tick in the margin every so many cells, the way squared paper has"
 
 [[message]]
+# 設置面板：盤上那一份變了就讀回來
+key = "set.editor.reload-auto"
+zht = "自動重載"
+zhs = "自动重载"
+en = "auto reload"
+
+[[message]]
+# 同上那一行底下的說明
+key = "set.editor.reload-auto.hint"
+zht = "自動重新載入文檔以反映外部更改"
+zhs = "自动重新加载文档以反映外部更改"
+en = "reload the file when something outside changes it"
+
+[[message]]
 # 設置：想寫多長
 key = "set.editor.ruler"
 zht = "想寫多長"

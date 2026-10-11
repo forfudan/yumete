@@ -742,6 +742,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "reload_auto",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "set.editor.reload-auto",
+        hint: "set.editor.reload-auto.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "autosave",
         group: Group::Files,
         kind: Kind::Tick,

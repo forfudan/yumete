@@ -169,6 +169,7 @@ pub fn apply(
             .collect(),
     );
     editor.set_autosave(config.editor.autosave);
+    editor.set_reload_auto(config.editor.reload_auto);
     editor.set_smart_case(config.editor.smart_case);
     editor.set_fuzzy_search(config.editor.fuzzy_search);
     editor.set_wheel_step(config.editor.wheel_step);
