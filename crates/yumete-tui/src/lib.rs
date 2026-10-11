@@ -6200,10 +6200,17 @@ fn draw_note(
     if editor.info_afloat() == Some(Info::Change) && !writing {
         let was: Vec<String> =
             editor.change_here().map(|run| run.was.clone()).unwrap_or_default();
-        let lines: Vec<String> = was
+        // **整行上淡底，和 `:git-diff` 一樣**（2026-10-11）。色不是另挑的：刪掉
+        // 的走 `Accent::Mark`、新添的走 `Accent::Green`，與那一頭逐字相同。
+        let lines: Vec<(String, Option<crate::theme::Accent>)> = was
             .iter()
-            .map(|line| format!("-　{line}"))
-            .chain(editor.change_now().into_iter().map(|line| format!("+　{line}")))
+            .map(|line| (format!("-　{line}"), Some(crate::theme::Accent::Mark)))
+            .chain(
+                editor
+                    .change_now()
+                    .into_iter()
+                    .map(|line| (format!("+　{line}"), Some(crate::theme::Accent::Green))),
+            )
             .collect();
         if !lines.is_empty() {
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
@@ -6215,7 +6222,7 @@ fn draw_note(
                 title: yumete_core::messages::say(Info::Change.tag(), &[]),
                 lede: None,
                 entry: false,
-                body: panel::Body::Prose(lines.join("\n")),
+                body: panel::Body::Tinted(lines),
                 tag: Some(say!("hint.change.keys")),
                 marked: false,
                 vertical_text: vertical,
@@ -9100,7 +9107,17 @@ fn draw_dictionary(
     let buf = frame.buffer_mut();
     for slot in 0..visible.min(rows.len().saturating_sub(first)) {
         let row = &rows[first + slot];
-        let style = if row.is_dir { head } else { text };
+        // **整行鋪一層淡底**——改動那一格（2026-10-11），色與 `:git-diff` 同一套。
+        let style = match row.wash {
+            Some(yumete_core::sidebar::Wash::Gone) => {
+                text.bg(ink.short_wash(crate::theme::Accent::Mark))
+            }
+            Some(yumete_core::sidebar::Wash::Added) => {
+                text.bg(ink.short_wash(crate::theme::Accent::Green))
+            }
+            None if row.is_dir => head,
+            None => text,
+        };
         let y = area.y + 1 + slot as u16;
         // Warning: **服務器送的是 Markdown，邊欄裏也照 Markdown 畫**——和浮窗裏那一份
         // 一個字不差（2026-09-22）。走的是正文用的那一支墨色表。
@@ -9115,7 +9132,17 @@ fn draw_dictionary(
             // 格這件事也一起算過了。
             false => {
                 let room = to.saturating_sub(from + 1) as usize;
-                put_text(buf, from + 1, y, to, &panel::clip(&row.name, room), style)
+                // **鋪底色就鋪整行**（2026-10-11）：半行底色讀起來是兩塊東西，而
+                // 這一行說的是「這一整行是刪掉的／新添的」。
+                let shown = match row.wash.is_some() {
+                    true => {
+                        let cut = panel::clip(&row.name, room);
+                        let wide = yumete_cjk::str_width(&cut);
+                        format!("{cut}{}", " ".repeat(room.saturating_sub(wide)))
+                    }
+                    false => panel::clip(&row.name, room),
+                };
+                put_text(buf, from + 1, y, to, &shown, style)
             }
         };
     }
@@ -20557,8 +20584,8 @@ fn squeezed(text: &str) -> String {
         // is discoverable without leaving the page.
         editor.on_key(Key::Char(' '));
         let text = page_text(&render_with(&editor, &config, no_ime(), 60, 24));
-        assert!(text.contains("打開文件"), "{text:?}");
-        assert!(text.contains("切換緩衝區"), "{text:?}");
+        assert!(text.contains("挑選器"), "{text:?}");
+        assert!(text.contains("緩衝區"), "{text:?}");
 
         // `b` replaces it with the picker, which names where you are in a list
         // it does not have to show all of.

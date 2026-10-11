@@ -690,16 +690,16 @@ find = "複製 复制 拷貝 拷贝 copy yank"
 [[message]]
 # 外面改了，你這裏也改了
 key = "autoreload.both-changed"
-zht = "文件已被外部修改，你也有所改動。可使用 :reload! 丟棄你的更改"
-zhs = "文件已被外部修改，你也有所改动。可使用 :reload! 丢弃你的更改"
+zht = "文件被外部修改，你也有所改動。可使用 :reload! 丟棄你的更改"
+zhs = "文件被外部修改，你也有所改动。可使用 :reload! 丢弃你的更改"
 en = "the file changed outside and you have changes too — `:reload!` throws yours away"
 
 [[message]]
 # 外面改了，自動重讀完成
 key = "autoreload.reread"
-zht = "外面改了，重讀了 {0}"
-zhs = "外面改了，重读了 {0}"
-en = "changed outside; re-read {0}"
+zht = "文件被外部修改，已同步加載 {0}"
+zhs = "文件被外部修改，已同步加載 {0}"
+en = "the file changed outside; re-read {0}"
 
 [[message]]
 # 自動重讀開關換好了
@@ -5524,10 +5524,10 @@ zhs = "切成两个编辑区"
 en = "split in two"
 
 [[message]]
-# C-w/空格 w 那一組的標題（2026-09-30，照 helix 的 window）
+# C-w/空格 w 那一組的標題
 key = "hint.region.title"
-zht = "區域"
-zhs = "区域"
+zht = "工作區域"
+zhs = "工作区域"
 en = "region"
 
 [[message]]
@@ -5798,35 +5798,39 @@ zhs = "开关输入法"
 en = "turn the IME on or off"
 
 [[message]]
-# g 組：開啟檔案
+# space f：open a file
+# 開啟文件
 key = "hint.space.open-file"
-zht = "打開文件（項目路徑）"
-zhs = "打开文件（项目路径）"
-en = "open a file (project)"
+zht = "文件挑選器(項目路徑)"
+zhs = "文件挑选器(项目路径)"
+en = "open file picker (project dir)"
 
 [[message]]
-# 空格 F：選擇器開在工作路徑上
+# space F
+# 選擇器開在工作路徑上
 key = "hint.space.open-file-here"
-zht = "打開文件（工作目錄）"
-zhs = "打开文件（工作目录）"
-en = "open a file (working directory)"
+zht = "打開文件挑選器(工作路徑)"
+zhs = "打开文件挑选器(工作路径)"
+en = "open file picker (working dir)"
 
 [[message]]
-# g 組：大綱
+# space g: outline 
+# 大綱
 key = "hint.space.outline"
-zht = "大綱"
-zhs = "大纲"
-en = "the outline"
+zht = "顯示大綱"
+zhs = "顯示大纲"
+en = "show outline"
 
 [[message]]
-# 空格組：從系統剪貼簿貼在前面
+# space P: 從系統剪貼簿貼在前面
 key = "hint.space.paste-before"
 zht = "從系統剪貼板貼在前面"
 zhs = "从系统剪贴板贴在前面"
 en = "paste before, from the system clipboard"
 
 [[message]]
-# g 組：從系統剪貼簿貼上
+# space p:
+# 從系統剪貼簿貼上
 key = "hint.space.paste-from-clipboard"
 zht = "從系統剪貼板粘貼"
 zhs = "从系统剪贴板粘贴"
@@ -5835,37 +5839,38 @@ en = "paste from the system clipboard"
 [[message]]
 # 空格選單：這一行的診斷，浮窗
 key = "hint.space.problems"
-zht = "顯示診斷信息（浮窗）"
-zhs = "显示诊断信息（浮窗）"
+zht = "顯示診斷信息(浮窗)"
+zhs = "显示诊断信息(浮窗)"
 en = "show diagnostics (float)"
 
 [[message]]
 # 空格選單：這一行的診斷，邊欄
 key = "hint.space.problems-panel"
-zht = "顯示診斷信息（邊欄）"
-zhs = "显示诊断信息（边栏）"
+zht = "顯示診斷信息(邊欄)"
+zhs = "显示诊断信息(边栏)"
 en = "show diagnostics (sidebar)"
 
 [[message]]
 # 空格選單：這一行攤開，浮窗
 key = "hint.space.record"
-zht = "顯示表格行記錄（浮窗）"
-zhs = "显示表格行记录（浮窗）"
+zht = "顯示表格行記錄(浮窗)"
+zhs = "显示表格行记录(浮窗)"
 en = "show row record of table (float)"
 
 [[message]]
 # 空格選單：這一行攤開，邊欄
 key = "hint.space.record-panel"
-zht = "顯示表格行記錄（邊欄）"
-zhs = "显示表格行记录（边栏）"
+zht = "顯示表格行記錄(邊欄)"
+zhs = "显示表格行记录(边栏)"
 en = "show row record of table (sidebar)"
 
 [[message]]
-# g 組：切換緩衝區
+# space b: 
+# Open buffer picker
 key = "hint.space.switch-buffer"
-zht = "切換緩衝區"
-zhs = "切换缓冲区"
-en = "switch buffer"
+zht = "緩衝區挑選器"
+zhs = "缓冲区挑选器"
+en = "open buffer picker"
 
 [[message]]
 # 空格 t：表格那一組

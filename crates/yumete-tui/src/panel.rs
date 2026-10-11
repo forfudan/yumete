@@ -24,6 +24,12 @@ pub enum Body {
     /// block: a ragged left edge on a list of two-character keys reads as
     /// noise.
     Keys(Vec<(String, String)>),
+    /// **一行一條，各帶各的淡底**——改動那一格（`空格 x`，2026-10-11）。
+    ///
+    /// 和 `Keys` 同一個形狀（一條一行、不折行），差別只在它不分兩欄，而且每一
+    /// 條自己說要什麼底色。`None` ＝ 不上色。色由 `:git-diff` 那一套來：刪掉的
+    /// 是 `Accent::Mark`、新添的是 `Accent::Green`，一字不差。
+    Tinted(Vec<(String, Option<crate::theme::Accent>)>),
 }
 
 /// **這一扇站在哪裏**（2026-10-08）。
@@ -566,6 +572,7 @@ pub fn draw(
         // 格反而把它推離中間。
         Body::Keys(_) if panel.reading => 1,
         Body::Keys(_) => 0,
+        Body::Tinted(_) => 1,
     };
     // **Which of the lines are not the body** (2026-09-18). Three inks,
     // and the order is the same in both layouts: the name in 金, the 章節 line
@@ -760,6 +767,23 @@ pub fn draw(
                 one,
             )
         }
+        // **一欄，一條一行**——量法是 `Keys` 去掉分欄那一半。
+        Body::Tinted(rows) => {
+            if rows.is_empty() {
+                return None;
+            }
+            let widest = rows
+                .iter()
+                .map(|(line, _)| yumete_cjk::str_width(line))
+                .max()
+                .unwrap_or(1)
+                .min(room_w.saturating_sub(2 + pad as u16 * 2) as usize)
+                .max(1);
+            let tall = bottom.saturating_sub(area.y).min(area.height);
+            let deep_max = cap.min((tall.saturating_sub(2) as usize).max(1));
+            let shown = rows.len().min(deep_max.max(1));
+            (widest, shown, Vec::new(), 1, 0, widest)
+        }
     };
 
     // **Prose too tall for half the page is cut, not dropped** (2026-09-17).
@@ -920,6 +944,22 @@ pub fn draw(
                     continue;
                 }
                 crate::put_marked_text(buf, x, y, limit, line, plain, ink);
+            }
+        }
+        // **一條一行，整行上淡底**——和 `:git-diff` 逐字同一套色（2026-10-11）。
+        Body::Tinted(rows) => {
+            for (i, (line, wash)) in rows.iter().take(count).enumerate() {
+                let x = rect.x + 1 + pad as u16;
+                let y = rect.y + 1 + i as u16;
+                let style = match wash {
+                    Some(accent) => ground.bg(ink.short_wash(*accent)).fg(ink.text()),
+                    None => ground.fg(ink.text()),
+                };
+                // 底色要鋪**整行**，不只鋪有字那一截——半行底色讀起來是兩塊東西。
+                let room = limit.saturating_sub(x) as usize;
+                let wide = yumete_cjk::str_width(line);
+                let padded = format!("{line}{}", " ".repeat(room.saturating_sub(wide)));
+                put_text(buf, x, y, limit, &padded, style);
             }
         }
         Body::Keys(keys) => {

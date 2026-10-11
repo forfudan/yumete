@@ -2990,23 +2990,19 @@ impl Editor {
             _ => {}
         }
     }
-
+    
+    // shortcut: space group
     // The keys `Space` opens, and what each of them is for — the list the
     // which-key overlay draws, so what is offered and what happens cannot
     // drift apart.
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
-        ('s', "hint.space.outline"),
-        ('f', "hint.space.open-file"),
-        // **`空格 F`：搜工作路徑**（2026-10-01，照 helix 的
-        // `file_picker_in_current_directory`）。與 `空格 f` 的分別見
-        // [`Editor::working_dir`]。
-        ('F', "hint.space.open-file-here"),
+        ('f', "hint.space.open-file"),  // project dir
+        ('F', "hint.space.open-file-here"),  // working dir
         ('b', "hint.space.switch-buffer"),
-        ('/', "hint.space.advanced-search"),
-        ('?', "hint.space.all-commands"),
         ('y', "hint.space.copy-to-clipboard"),
         ('p', "hint.space.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
+        ('s', "hint.space.outline"),
         ('n', "hint.space.dictionary"),
         ('N', "hint.space.dictionary-panel"),
         ('k', "hint.space.what-is-this"),
@@ -3017,30 +3013,15 @@ impl Editor {
         ('X', "hint.space.change-panel"),
         ('i', "hint.space.record"),
         ('I', "hint.space.record-panel"),
-        // **`空格 空格` 開關輸入法**
-        // 兩邊都空着：helix 的 Space 選單裏沒有 space 這一項，這裏也沒有。
-        (' ', "hint.space.ime"),
-        // **`空格 w` 是區域那一組的門**（2026-09-30 定，照 helix 的 `C-w`：
-        // `keymap/default.rs:193` 與 `:260` 是同一組，兩扇門）。
-        //
-        // Warning: **這裏從前躺着三套說同一件事的詞彙**——`1234`（點名去）、
-        // `!@#$`（隔空關）、`w/W/q/Q`（走一步/全開/關/只留）。一組一套之
-        // 後，數字整塊空了出來，留給緩衝區（2026-09-30 定：每個緩衝區在
-        // 檔名前帶一個號，十個起補零，於是那是一套不必按空格確認的前綴碼）。
         ('w', "hint.region.title"),
+        ('t', "hint.space.table"),
         ('"', "menu.paste.title"),
         ('c', "hint.space.comment-line"),
         ('C', "hint.space.comment-block"),
-        // Warning: **`m`, not `c`** (#409, 2026-09-12). Merge conflicts had `空格 c`
-        // and gave it up: helix teaches `空格 c` for commenting, and on an
-        // editor for novels a conflict is far the rarer of the two. `m` is
-        // merge, and the two letters do not compete for the same word.
         ('m', "hint.conflict.title"),
-        // Warning: **The table group moved here** (2026-09-21) so that `t`/`T` could
-        // go back to being vi's till-keys — helix spells them that way too
-        // (`keymap/default.rs:14`). One slot of this menu buys a whole group,
-        // which is the best trade a slot here can make.
-        ('t', "hint.space.table"),
+        (' ', "hint.space.ime"),
+        ('/', "hint.space.advanced-search"),
+        ('?', "hint.space.all-commands"),
     ];
 
     /// What `g` may be finished with.

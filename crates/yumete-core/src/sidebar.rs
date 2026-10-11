@@ -315,6 +315,20 @@ pub struct Row {
     pub is_dir: bool,
     /// Whether it is a directory that is showing its contents.
     pub expanded: bool,
+    /// **整行鋪一層淡底**——改動那一格用它（`空格 X`，2026-10-11）。
+    ///
+    /// 核心不認識顏色，所以這裏說的是「哪一種」，由前端去調色板上取：
+    /// `Wash::Gone` 是刪掉的、`Wash::Added` 是新添的，和 `:git-diff` 同一套。
+    pub wash: Option<Wash>,
+}
+
+/// 一行底下鋪哪一種淡底。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wash {
+    /// 改之前寫的那幾行。
+    Gone,
+    /// 現在寫的那幾行。
+    Added,
 }
 
 /// One heading of the 大綱, before any of it is folded away (#37).
@@ -677,6 +691,7 @@ impl Sidebar {
                 depth,
                 is_dir: true,
                 expanded,
+                wash: None,
             });
             if expanded {
                 self.push_dir(&path, depth + 1);
@@ -689,6 +704,7 @@ impl Sidebar {
                 depth,
                 is_dir: false,
                 expanded: false,
+                wash: None,
             });
         }
     }
@@ -788,6 +804,7 @@ mod tests {
                 depth: 0,
                 is_dir: false,
                 expanded: true,
+                wash: None,
             },
             Row {
                 path: PathBuf::new(),
@@ -795,6 +812,7 @@ mod tests {
                 depth: 1,
                 is_dir: false,
                 expanded: false,
+                wash: None,
             },
         ]);
         sidebar.step(true);

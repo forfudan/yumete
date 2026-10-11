@@ -781,6 +781,7 @@ impl Editor {
                     depth: i,
                     is_dir: false,
                     expanded: i == self.current,
+                wash: None,
                 })
                 .collect(),
             View::Outline => self.outline_rows(),
@@ -937,6 +938,7 @@ impl Editor {
                 depth: heading.line,
                 is_dir: has_children,
                 expanded: has_children && !shut,
+                wash: None,
             });
         }
         rows
@@ -1054,16 +1056,25 @@ impl Editor {
     /// 上半，剪口那兩種沒有下半——那正是它們和「改過」的分別。
     pub(super) fn change_rows(&self) -> Vec<crate::sidebar::Row> {
         let Some(run) = self.change_here() else { return Vec::new() };
-        let was: Vec<String> = run.was.iter().map(|line| format!("-　{line}")).collect();
-        let now = self.change_now().into_iter().map(|line| format!("+　{line}"));
+        use crate::sidebar::Wash;
+        let was: Vec<(String, Wash)> = run
+            .was
+            .iter()
+            .map(|line| (format!("-　{line}"), Wash::Gone))
+            .collect();
+        let now = self
+            .change_now()
+            .into_iter()
+            .map(|line| (format!("+　{line}"), Wash::Added));
         was.into_iter()
             .chain(now)
-            .map(|name| crate::sidebar::Row {
+            .map(|(name, wash)| crate::sidebar::Row {
                 path: PathBuf::new(),
                 name,
                 depth: 0,
                 is_dir: false,
                 expanded: false,
+                wash: Some(wash),
             })
             .collect()
     }
@@ -1083,6 +1094,7 @@ impl Editor {
                 depth: 0,
                 is_dir: false,
                 expanded: false,
+                wash: None,
             })
             .collect()
     }
@@ -1098,6 +1110,7 @@ impl Editor {
                 depth: 0,
                 is_dir: false,
                 expanded: false,
+                wash: None,
             })
             .collect()
     }
@@ -1110,6 +1123,7 @@ impl Editor {
             depth: 0,
             is_dir: true,
             expanded: false,
+                wash: None,
         };
         let Some((ch, answer)) = self.dictionary.as_ref() else {
             return Vec::new();
@@ -1128,6 +1142,7 @@ impl Editor {
                 depth: 0,
                 is_dir: false,
                 expanded: false,
+                wash: None,
             });
             return rows;
         }
@@ -1149,6 +1164,7 @@ impl Editor {
                 depth: 0,
                 is_dir: false,
                 expanded: false,
+                wash: None,
             });
         }
         rows
