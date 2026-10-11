@@ -277,18 +277,6 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
 /// Warning: **「…」 is East Asian *Ambiguous*** — one cell for most readers and **two**
 /// under `ambiguous_width = "wide"`, which is what a CJK reader on a CJK font
 /// sets. Charged as one, every cut ran a cell long. Ask the width table.
-/// **一個數逐字換成漢數字**——`128` → `一二八`（2026-10-11）。
-///
-/// 讀的是位，不是值：`128` 是「一二八」不是「一百二十八」。竪排那一扇一縱一個
-/// 字，位數對得齊比讀得順要緊。
-fn han(n: usize) -> String {
-    const DIGITS: [char; 10] = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-    n.to_string()
-        .chars()
-        .map(|c| c.to_digit(10).map_or(c, |d| DIGITS[d as usize]))
-        .collect()
-}
-
 pub(crate) fn clip(text: &str, cells: usize) -> String {
     if yumete_cjk::str_width(text) <= cells {
         return text.to_string();
@@ -479,7 +467,7 @@ fn by_block<T>(
 /// The two are measured differently — prose by [`yumete_core::zong::zong_rows`]
 /// and a grid by [`table_zong`] — so the entry is walked block by block rather
 /// than handed to one wrapper whole.
-fn entry_zong(text: &str, tall: usize, indent: &dyn Fn(&str) -> String) -> Vec<String> {
+fn entry_zong(text: &str, tall: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let lines: Vec<&str> = text.split('\n').collect();
     let mut at = 0;
@@ -498,7 +486,7 @@ fn entry_zong(text: &str, tall: usize, indent: &dyn Fn(&str) -> String) -> Vec<S
                     at += 1;
                 }
                 let prose = lines[from..at].join("\n");
-                out.extend(yumete_core::zong::zong_rows(&indent(&prose), tall));
+                out.extend(yumete_core::zong::zong_rows(&prose, tall));
             }
         }
     }
@@ -620,28 +608,16 @@ pub fn draw(
     // 竪排那一支自己算「讀到第幾縱／共幾縱」——它的 `count` 是「一縱幾個字」，
     // 和橫排那一段數的不是同一個維度，所以那一段跳過它（見下面）。
     let mut zong_read: Option<(usize, usize)> = None;
-    // 段落的縮進：一格（2026-09-18：「所有的段落不用空行，但是加一格縮
-    // 進」。兩格試過，太重）。一個全角空格，橫竪一樣——竪排它就是那一縱頭上的
-    // 一個空位。
-    let indented = |text: &str| -> String {
-        text.split('\n')
-            .filter(|para| !para.trim().is_empty())
-            // **竪排不縮進**（2026-10-11 定）。縮進是段落的記號，而竪排那一扇的
-            // 段落記號本來就是「換一縱」——每一縱頭上再空一格，是把一個已經說過
-            // 的事說兩遍，而一縱只有十來個字，那一格很貴。
-            .map(|para| match panel.entry
-                && !panel.vertical_text
-                && !para.trim_start().starts_with('─')
-            {
-                // Warning: Not the 「──」 that divides two entries of one name: that
-                // is the panel's own furniture, and an indent on it reads as a
-                // paragraph that begins with a rule.
-                true => format!("　{para}"),
-                false => para.to_string(),
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    // **正文原樣交出去**（2026-10-11 定）。
+    //
+    // 這裏從前有一支 `indented`：**空行濾掉、每段頭上加一個全角空格**
+    // （2026-09-18：「所有的段落不用空行，但是加一格縮進」）。那是為了省地方——
+    // 讀不完也得讓它看起來讀得完。翻得動之後省地方不再是理由，而縮進本身要錢：
+    // 橫排一格，竪排是一縱裏的一個**字**，而一縱只裝十來個字。
+    //
+    // 原話：「橫排也不要縮進，不要移除空行，保持對齊」，連着那條更一般的
+    // 「除非不行，否則應該減少邏輯特例」——所以不是給竪排開一個例外，是兩邊
+    // 一起把這一層拿掉。段落之間回到空行，那是 Markdown 自己的分法。
     // `lines` is the prose, already wrapped; a key list draws itself from
     // `panel.body` and needs only its `count`.
     let (inner, count, lines, columns, key_w, one) = match &panel.body {
@@ -675,7 +651,7 @@ pub fn draw(
                 zong.extend(rows);
             }
             zong.push(String::new());
-            zong.extend(entry_zong(text, tall, &indented));
+            zong.extend(entry_zong(text, tall));
             // **裝不下的是「縱」，不是「行」**（2026-09-18）。橫排那一段截斷
             // （下面的 `cap`）數的是行，竪排這裏一行是一個字，照它辦就變成
             // 「把最左那一縱整根換成……，框高等於縱的條數」——高度塌掉、正文
@@ -727,8 +703,8 @@ pub fn draw(
             // 畫在框線上（它本來就在那兒），所以這裏没有「標題後空一行」——框
             // 線已經是那一道界。
             let body = match &panel.lede {
-                Some(lede) => format!("{lede}\n\n{}", indented(text)),
-                None => indented(text),
+                Some(lede) => format!("{lede}\n\n{text}"),
+                None => text.to_string(),
             };
             // How wide the entry wants to be: its longest paragraph, or the
             // width a table needs — whichever asks for more, clamped to the
@@ -1142,14 +1118,39 @@ pub fn draw(
     // 被擠出去的（報的：「现在似乎顶到了前头」）。上邊那一行的標題本來就是
     // 「╭ 文檔」，這一行照它。
     if let Some((at, all)) = read {
-        // **竪排那一扇用漢數字**（2026-10-11 定，原話「58/128 五八／一二八」）。
-        // 逐字換，不是讀成「五十八」——一行一個字的時候，位數對得齊比讀得順要
-        // 緊，而那一扇裏每一個阿拉伯數字都是半角，夾在全角的字中間也不好看。
-        let said = match panel.vertical_text {
-            true => format!(" {}／{} ", han(at), han(all)),
-            false => format!(" {at}/{all} "),
-        };
-        put_text(buf, rect.x + 1, floor, limit, &said, ground.fg(ink.quiet()));
+        match panel.vertical_text {
+            // **竪排寫在左邊那條框綫上，往下讀**（2026-10-11 定）。竪書從右往
+            // 左讀，所以「讀到哪了」屬於左邊那一頭，和橫排擺在底邊左端是同一個
+            // 位置——都是正文走完的地方。
+            //
+            // Warning: **半角數字，不是漢數字。** 框綫只有一格寬而漢字佔兩格，寫
+            // 上去會壓到最左那一縱的字。作者看過兩種擺法之後定的：「10 / 36
+            // 這樣就行」。
+            true => {
+                let room = rect.height.saturating_sub(2) as usize;
+                // 放不下就把兩邊的空氣擠掉；再放不下就不寫——一個截一半的
+                // 「10 / 3」說的是假話。
+                let said = match (format!("{at} / {all}"), format!("{at}/{all}")) {
+                    (airy, _) if airy.chars().count() <= room => airy,
+                    (_, tight) if tight.chars().count() <= room => tight,
+                    _ => String::new(),
+                };
+                for (n, c) in said.chars().enumerate() {
+                    put_text(
+                        buf,
+                        rect.x,
+                        rect.y + 1 + n as u16,
+                        limit,
+                        &c.to_string(),
+                        ground.fg(ink.quiet()),
+                    );
+                }
+            }
+            false => {
+                let said = format!(" {at}/{all} ");
+                put_text(buf, rect.x + 1, floor, limit, &said, ground.fg(ink.quiet()));
+            }
+        }
     }
     Some(rect)
 }
@@ -1218,24 +1219,27 @@ mod tests {
         let long: String = (0..18)
             .map(|n| format!("第{n}段天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往。\n"))
             .collect();
-        let (_, first) = zong_at(&long, 60, 18, 0);
+        let (rect, first) = zong_at(&long, 60, 18, 0);
         let head = said(&first);
         assert!(!head.contains('…'), "省略號去掉了：還有多少由數字說");
-        assert!(head.contains('／'), "底邊寫着「讀到第幾／共幾」：{head:?}");
-        // **漢數字，逐字換**（原話「58/128 五八／一二八」）。
-        assert!(
-            head.contains('〇')
-                || head.contains('一')
-                || head.contains('二')
-                || head.contains('三'),
-            "那個數是漢字"
-        );
-        assert!(!head.contains('/'), "竪排那一扇不用半角斜杠");
 
-        // 翻到底：畫的是最後那幾縱，和第一屏不一樣。
-        let (_, last) = zong_at(&long, 60, 18, 999);
+        // **數字竪着寫在左邊那條框綫上**（2026-10-11 定，原話「10 / 36 這樣就
+        // 行」）。竪書從右往左讀，所以「讀到哪了」屬於左邊那一頭——和橫排擺在底
+        // 邊左端是同一個位置。半角，因為框綫只有一格寬。
+        let down: String = (1..rect.height)
+            .map(|y| first[(rect.x, rect.y + y)].symbol().to_string())
+            .collect();
+        assert!(down.contains('/'), "左邊那一條上寫着數字：{down:?}");
+        assert!(down.chars().any(|c| c.is_ascii_digit()), "{down:?}");
+
+        // 翻到底：畫的是最後那幾縱，和第一屏不一樣，而數字跟着走。
+        let (rect2, last) = zong_at(&long, 60, 18, 999);
         assert_ne!(said(&last), head, "翻過去就換了內容");
-        assert!(said(&last).contains('／'), "數字還在");
+        let down2: String = (1..rect2.height)
+            .map(|y| last[(rect2.x, rect2.y + y)].symbol().to_string())
+            .collect();
+        assert!(down2.contains('/'), "數字還在：{down2:?}");
+        assert_ne!(down2, down, "讀到第幾縱變了");
     }
 
     /// **一行帶行內標記的標題出現在浮窗正文裏，從前會當場崩**（2026-09-28）。
@@ -1315,7 +1319,10 @@ mod tests {
             .map(|(x, y)| buffer[(rect.x + x, rect.y + y)].symbol().to_string())
             .collect();
         assert!(!text.contains('︙'), "省略號去掉了：{text:?}");
-        assert!(text.contains('／'), "改由數字說還有多少：{text:?}");
+        let down: String = (1..rect.height)
+            .map(|y| buffer[(rect.x, rect.y + y)].symbol().to_string())
+            .collect();
+        assert!(down.contains('/'), "改由左邊那一條上的數字說：{down:?}");
 
         // 禁則, down the column: no 縱 may open with a mark that closes
         // something. Hand-chopping the horizontal wrapper's rows put 「，」 at
