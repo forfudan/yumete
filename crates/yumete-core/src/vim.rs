@@ -124,7 +124,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         }
         // ---- Text objects, which are their own ends ------------------------
         ("i", None) | ("a", None) => asking(
-            Motion::Object { what: crate::motion::Object::Word { coarse: false }, around: false },
+            Motion::Object { what: crate::motion::Object::Word { big: false }, around: false },
             Reach::Object,
         ),
         ("i", Some(c)) => step(object(c, false)?, Reach::Object),
@@ -138,8 +138,8 @@ fn object(c: char, around: bool) -> Option<Motion> {
     let what = match c {
         // Warning: **`w` 和 `W` 分開了**（2026-09-28）：`iw` 走分詞器，`iW` 是 vim 那個
         // 「一串非空白」。從前兩個折成同一個，於是 `diW` 和 `diw` 一模一樣。
-        'w' => crate::motion::Object::Word { coarse: false },
-        'W' => crate::motion::Object::Word { coarse: true },
+        'w' => crate::motion::Object::Word { big: false },
+        'W' => crate::motion::Object::Word { big: true },
         'p' => crate::motion::Object::Paragraph,
         // `dim`/`dam`：光標所在的那一段 Markdown 標記（2026-09-28）。
         'm' => crate::motion::Object::Markup,

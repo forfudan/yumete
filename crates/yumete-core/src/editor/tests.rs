@@ -12091,6 +12091,41 @@ fn a_hover_stays_while_the_cursor_walks_the_thing_it_describes() {
     assert!(ed.hover_here().is_none(), "走出去就收");
 }
 
+/// **`iW`／`aW` 是「一串非空白」，不是「一次一類」**（2026-10-11 從 nvim 神諭上
+/// 量出來的，103 格）。
+///
+/// `Grain::Big` 和 `Grain::Coarse` 的名字裏都有一個「粗」字，而它們是兩條規矩。
+/// 挑錯那一格之後 `diW` 做的是 `diw` 的事：站在 `(no, yes)` 的 `(` 上只刪掉一個
+/// 括號，而 vim 刪 `(no,`。
+#[test]
+fn a_big_word_object_runs_to_the_blanks() {
+    let line = "he said (no, yes) then";
+    let at = |n: usize| {
+        let mut ed = typed(&format!("{line}\nxx\n"));
+        // `diW` 是 vim 鍵位的寫法；出廠是 helix，那邊 `d` 刪完 `i` 就進插入了。
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        ed.goto_line(1);
+        for _ in 0..n {
+            ed.on_key(Key::Char('l'));
+        }
+        ed
+    };
+    // 站在 `(` 上：整串 `(no,` 都是一個 WORD。
+    let mut ed = at(line.find('(').unwrap());
+    press(&mut ed, "diW");
+    assert_eq!(ed.current_buffer().text(), "he said  yes) then\nxx\n", "標點和字同屬一串");
+
+    // 站在 `no,` 的 `n` 上：同一串，答案一樣。
+    let mut ed = at(line.find("no,").unwrap());
+    press(&mut ed, "diW");
+    assert_eq!(ed.current_buffer().text(), "he said  yes) then\nxx\n", "從串中間按也是整串");
+
+    // `iw` 照舊按類分：只拿 `no`。
+    let mut ed = at(line.find("no,").unwrap());
+    press(&mut ed, "diw");
+    assert_eq!(ed.current_buffer().text(), "he said (, yes) then\nxx\n", "小寫那一個不變");
+}
+
 /// **粘貼面板右邊那半扇：系統剪貼板也畫得出來**（2026-10-11 報的）。
 ///
 /// 只有前端讀得了系統剪貼板，所以核心開面板的時候立一面旗，前端讀一次交回來。
@@ -21093,15 +21128,18 @@ fn the_word_object_walks_the_segmenter_like_w_does() {
         ed.current_buffer().text()
     );
 
-    // Warning: `diW` 還是粗的：整串漢字一口氣沒了，只剩標點。粗粒度按字符類別切，所以句號
-    // 自成一類留了下來——那不是 vim「一串非空白」的完整意思，是這個倉
-    // `word_ranges_coarse` 的意思，而它正是 `iw` 從前唯一的答案。
+    // Warning: **`diW` 是「一串非空白」，整行連句號一起沒了**（2026-10-11 改正）。
+    //
+    // 這一條從前斷言的是 `"。\n"`——句號留着，因為那時 `iW` 錯挑了
+    // `Grain::Coarse`（一次一類，標點自成一類）。當時的註釋自己寫着「那不是 vim
+    // 『一串非空白』的完整意思」，然後照着實現斷言下去：**一條釘住了缺陷的測試**。
+    // nvim 問過了（`diW` 在這一行上寫出一個空檔），現在兩邊一樣。
     let mut ed = vim("今天天氣很好。\n");
     press(&mut ed, "diW");
     assert_eq!(
         ed.current_buffer().text(),
-        "。\n",
-        "W 一律粗粒度：{:?}",
+        "\n",
+        "W 數的是空白，而這一行一個空白都沒有：{:?}",
         ed.current_buffer().text()
     );
 

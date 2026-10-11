@@ -62,8 +62,8 @@ impl Editor {
         // what only the editor can do: name the pair the key stands for, and
         // say the sentence when there is nothing to take.
         let what = match c {
-            'w' => motion::Object::Word { coarse: false },
-            'W' => motion::Object::Word { coarse: true },
+            'w' => motion::Object::Word { big: false },
+            'W' => motion::Object::Word { big: true },
             // helix has this one too (`mi p`, `commands.rs:6314`), and in a
             // manuscript it is the handier of the two: a 段 is the unit a
             // writer moves around, a word is the unit they fix.
@@ -645,12 +645,20 @@ impl Editor {
     /// Warning: **`aw` 在中文裏會退化成 `iw`**：它取的是「詞加它後面那段空白」，而中文詞之間
     /// 沒有空白，於是 `daw` 和 `diw` 拿到同一段。這是 vim 那條規矩在中文裏的自然結果，
     /// 不是這一支算錯了。
-    fn word_object_span(&self, around: bool, coarse: bool) -> motion::Span {
+    fn word_object_span(&self, around: bool, big: bool) -> motion::Span {
         let rope = self.current_buffer().rope().clone();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let start = rope.line_to_char(line);
-        let grain = match coarse {
-            true => crate::motion::Grain::Coarse,
+        // Warning: **`iW` 是 `Grain::Big`，不是 `Grain::Coarse`**（2026-10-11 從 nvim
+        // 神諭上量出來的，103 格）。兩個名字裏都有一個「粗」字，而它們是兩條規
+        // 矩：`Big` 是「一串非空白」（vim 的 `W`），`Coarse` 是「一次一類」
+        // （`e` 的規矩，標點自成一段）。挑錯的那一格讓 `diW` 站在 `(no, yes)` 的
+        // `(` 上只刪掉一個括號，而 vim 刪 `(no,`——也就是 `iW` 做的是 `iw` 的事。
+        //
+        // 詞**動作**那一頭一直是對的（`select_word_forward` 的 `big`），所以同一
+        // 個編輯器裏 `W` 走一串非空白而 `iW` 只取一類，兩個答案。
+        let grain = match big {
+            true => crate::motion::Grain::Big,
             false => self.word_grain(),
         };
         let words = crate::motion::line_words(&rope, line, grain, self.segmenter.as_ref());
@@ -1372,8 +1380,8 @@ impl Editor {
                 };
                 at(rope.line_to_char(want))
             }
-            motion::Motion::Object { what: motion::Object::Word { coarse }, around } => {
-                self.word_object_span(around, coarse)
+            motion::Motion::Object { what: motion::Object::Word { big }, around } => {
+                self.word_object_span(around, big)
             }
             motion::Motion::Object { what: motion::Object::Markup, around } => {
                 self.markup_object_span(around)

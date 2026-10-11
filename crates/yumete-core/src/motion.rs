@@ -866,13 +866,18 @@ pub enum Object {
     /// A word — or, standing on blanks, that run of blanks (vim's rule, and
     /// the one that makes `wdiw` the handiest press in this editor).
     ///
-    /// Warning: **`coarse` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`/`b` 同一個
-    /// 答案；`iW` 一律粗粒度，也就是 vim 的「一串非空白」。從前這裏沒有這一格，`iw` 寫
-    /// 死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w` 走三步。
-    /// 一個編輯器對「詞」只能有一個答案。
+    /// Warning: **`big` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`/`b` 同一個
+    /// 答案；`iW` 走 [`Grain::Big`]，也就是 vim 的「一串非空白」。從前這裏沒有這一格，
+    /// `iw` 寫死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w`
+    /// 走三步。一個編輯器對「詞」只能有一個答案。
     ///
-    /// Warning: 詞典關着的時候兩個一樣——`word_grain()` 那時本來就回 `Coarse`。
-    Word { coarse: bool },
+    /// Warning: **這一格 2026-10-11 之前叫 `coarse`，而那個名字把它送進了
+    /// [`Grain::Coarse`]**——兩個名字裏都有「粗」，可那是「一次一類」（`e` 的規矩），
+    /// 不是「一串非空白」。改名是為了讓那個挑選再也寫不錯：`big` 對着
+    /// `select_word_forward` 的 `big`，兩頭同一個字。
+    ///
+    /// Warning: 詞典關着的時候 `iw` 和 `w` 一樣——`word_grain()` 那時本來就回 `Coarse`。
+    Word { big: bool },
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
     /// **`mi m`/`ma m` — 光標所在的那一段 Markdown 標記**（2026-09-28）。
