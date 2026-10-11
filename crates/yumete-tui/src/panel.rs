@@ -823,6 +823,20 @@ pub fn draw(
     // **讀到第幾行 / 共幾行**，寫在底邊左端（2026-09-30 定）。`None` ＝ 整則
     // 都在眼前，那時一個數字都不寫——數字出現本身就是「還有沒露出來的」。
     let mut read: Option<(usize, usize)> = None;
+    // **帶子也翻得動**（2026-10-11 報的）。一塊六十行的改動在二十四行的屏幕上
+    // 從前只畫得出九行，而且**一個字都不說**——讀者看見的是「改了九行」，底下
+    // 那一半（新的那幾行）一次都露不出來。和散文那一支同一個辦法：`panel.scroll`
+    // 挑從第幾條起，底邊左端那個 `9/120` 說還有多少。
+    //
+    // Warning: **帶子的 `pages` 是關着的**，所以底邊右端留給 `u`／`y` 那一句，
+    // 不被「怎麼翻」頂掉——那兩個鍵纔是這一扇的用處。
+    let tinted_cut = matches!(&panel.body, Body::Tinted(rows) if rows.len() > count);
+    if tinted_cut {
+        if let Body::Tinted(rows) = &panel.body {
+            let from = panel.scroll.min(rows.len().saturating_sub(count));
+            read = Some((from + count, rows.len()));
+        }
+    }
     let (count, lines) = match &panel.body {
         Body::Prose(_) if panel.vertical_text => (count, lines),
         Body::Prose(_) if count > cap && cap > 0 => {
@@ -988,7 +1002,9 @@ pub fn draw(
             // **左右不收口的那一種從最左畫起**（2026-10-11）：沒有左牆可跳，也沒
             // 有內邊距——帶子要和正文逐格對齊，差一格就全差了。
             let band = matches!(panel.stand, Stand::Band) && !vertical;
-            for (i, row) in rows.iter().take(count).enumerate() {
+            // 翻過頁的話從第幾條起——最多翻到「最後一屏」，同散文那一支。
+            let from = panel.scroll.min(rows.len().saturating_sub(count));
+            for (i, row) in rows.iter().skip(from).take(count).enumerate() {
                 let x = match band {
                     true => rect.x,
                     false => rect.x + 1 + pad as u16,

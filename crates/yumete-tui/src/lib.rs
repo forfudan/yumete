@@ -6360,7 +6360,10 @@ fn draw_note(
                     false => panel::Stand::Band,
                 },
                 accent: None,
-                pages: true,
+                // **底邊右端留給 `u`／`y`**（2026-10-11）：`pages` 開着的話，
+                // 「還有，翻得動」那一句會把它頂掉，而那兩個鍵纔是這一扇的用處。
+                // 「還有多少」由底邊左端那個 `9/120` 說，它不佔同一頭。
+                pages: false,
                 reading: true,
                 scroll: editor.info_scroll(),
                 // **帶子不掛名字**（2026-10-11）：它不是一扇飄在正文上的窗，而是
@@ -14683,6 +14686,45 @@ fn squeezed(text: &str) -> String {
         assert!(!said(&asking, &say!("hint.replacing.stop")), "{}", asking.join("\n"));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **一塊改動比帶子放得下還高**（2026-10-11 量出來的）。
+    ///
+    /// 六十行改六十行 ＝ 一百二十條，而二十四行的屏幕上帶子只畫得下九條。從前它
+    /// 畫那九條**而且一個字都不說**：讀者看見的是「改了九行」，新的那一側一次都
+    /// 露不出來。現在底邊左端寫着 `9/120`，而 `C-f` 那一族翻得到最後一條。
+    #[test]
+    fn a_change_taller_than_the_band_says_how_much_is_hidden() {
+        let was: Vec<String> = (1..=60).map(|n| format!("第{n}行 原來的樣子")).collect();
+        let now: Vec<String> = (1..=60).map(|n| format!("第{n}行 改過的樣子")).collect();
+        let mut editor = editor_with(&format!("{}\n", now.join("\n")));
+        let diff = format!(
+            "@@ -1,60 +1,60 @@\n{}{}",
+            was.iter().map(|one| format!("-{one}\n")).collect::<String>(),
+            now.iter().map(|one| format!("+{one}\n")).collect::<String>(),
+        );
+        let lines = editor.current_buffer().rope().len_lines();
+        editor.set_vcs(yumete_core::vcs::Changes::from_diff(&diff, lines));
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('x'));
+
+        let config = Config::default();
+        let page = |editor: &Editor| -> Vec<String> {
+            let buffer = render_with(editor, &config, no_ime(), 60, 24);
+            (0..buffer.area.height).map(|y| row_text(&buffer, y)).collect()
+        };
+        let shown = page(&editor);
+        let joined = shown.join("\n");
+        assert!(joined.contains("/120"), "說得出藏了多少：\n{joined}");
+        assert!(joined.contains("第1行 原來的樣子"), "從舊的那一側起：\n{joined}");
+
+        // `C-f` 那一族翻得到最後一條——新的那一側不是看不見的。
+        for _ in 0..20 {
+            editor.on_key(Key::Ctrl('f'));
+        }
+        let joined = page(&editor).join("\n");
+        assert!(joined.contains("第60行 改過的樣子"), "翻得到新的那一側：\n{joined}");
+        assert!(joined.contains("120/120"), "翻到底就停住：\n{joined}");
     }
 
     fn command_line(buffer: &ratatui::buffer::Buffer) -> String {

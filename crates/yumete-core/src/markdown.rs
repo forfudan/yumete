@@ -2629,4 +2629,70 @@ mod tests {
         assert!(kinds("snake_case_here").is_empty(), "snake_case 還是要保住");
     }
 
+    /// **一長串 `=` 不是反覆的 `==高亮==`**（2026-10-11 報的）。
+    ///
+    /// 十四個 `=` 畫出來只剩六個：掃描器把它們兩個兩個配成 `==…==`，每配成一對
+    /// 就把那四個字符當標記收走。光標走過去那一行在 6／10／14 格之間跳，因為所
+    /// 見即所得只在光標不在那一行的時候把標記藏起來。
+    #[test]
+    fn a_run_of_equals_is_not_a_row_of_highlights() {
+        for line in ["==============", "=====", "===="] {
+            let marks: usize = spans(line)
+                .into_iter()
+                .filter(|s| s.kind == Kind::Marker)
+                .map(|s| s.end - s.start)
+                .sum();
+            assert_eq!(marks, 0, "{line:?} 整條都是正文，一個標記都不該有");
+        }
+        // 真的高亮照舊。
+        let kinds = |line: &str| spans(line).into_iter().map(|s| s.kind).collect::<Vec<_>>();
+        assert_eq!(kinds("==重點=="), vec![Kind::Marker, Kind::Highlight, Kind::Marker]);
+    }
+
+    /// **`***三個***` 兩層都算數**（2026-10-11 報的）。
+    ///
+    /// CommonMark 把它讀成 `<em><strong>`。這裏不做 delimiter stack，可至少不該
+    /// 吃掉一半——從前畫出來是 `*粗斜**`。
+    #[test]
+    fn three_stars_are_both_layers() {
+        let line = "***又粗又斜***";
+        let body: Vec<String> = spans(line)
+            .into_iter()
+            .filter(|s| s.kind == Kind::Strong || s.kind == Kind::Emphasis)
+            .map(|s| line.chars().skip(s.start).take(s.end - s.start).collect())
+            .collect();
+        assert!(
+            body.iter().any(|one| one == "又粗又斜"),
+            "裏頭那四個字要整段算進去：{body:?}"
+        );
+        // 標記一個不剩地收走：三個開、三個閉。
+        let marks: usize = spans(line)
+            .into_iter()
+            .filter(|s| s.kind == Kind::Marker)
+            .map(|s| s.end - s.start)
+            .sum();
+        assert_eq!(marks, 6, "六個星號全是標記");
+    }
+
+    /// **嵌套的強調，裏層不許把外層的閉合吃掉**（2026-10-11 報的）。
+    ///
+    /// `*斜 **粗** 斜*` 從前畫成 `斜 *粗** 斜`——找閉合那一步不跳過比自己長的
+    /// 那一串分隔符，於是外層的 `*` 配到了裏層 `**` 的第一個星號上。
+    #[test]
+    fn the_inner_emphasis_does_not_eat_the_outer_one() {
+        let line = "*斜 **粗** 斜*";
+        let got: Vec<(Kind, String)> = spans(line)
+            .into_iter()
+            .map(|s| (s.kind, line.chars().skip(s.start).take(s.end - s.start).collect()))
+            .collect();
+        let said = |kind: Kind| -> Vec<String> {
+            got.iter().filter(|(k, _)| *k == kind).map(|(_, t)| t.clone()).collect()
+        };
+        assert_eq!(said(Kind::Strong), ["粗"], "裏層：{got:?}");
+        assert!(
+            said(Kind::Emphasis).iter().any(|one| one.contains("斜 ") && one.ends_with(" 斜")),
+            "外層從頭斜到尾：{got:?}"
+        );
+    }
+
 }
