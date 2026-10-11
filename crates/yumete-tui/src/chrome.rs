@@ -177,9 +177,11 @@ pub enum Anchor {
     /// 的 item 248）；蓋一層在觀感上沒有分別，而它本來就是臨時的——`Esc` 或者光
     /// 標走開就收。
     ///
-    /// `rows` 是它要蓋住的那幾行（屏幕行，含上下兩道牆）。裝不下就往上挪，再裝
-    /// 不下由呼叫方退回浮窗。
-    Band { top: u16 },
+    /// **落點只有上下兩個**（2026-10-11 定）：「因为他的宽度是整个编辑区，所以
+    /// 右下 -> 右上 就等于下方和上方显示」——通欄之後 [`Anchor::Caret`] 那四個角
+    /// 塌成兩個，規矩還是同一條（先站不擋光標的那一個）。跟着光標走過一版，收
+    /// 了：帶子蓋的那幾行裏光標一動它就跳。
+    Band { at: (u16, u16), bottom: u16 },
     /// **One side is fixed, the other flips** (2026-10-09 定).
     ///
     /// 橫排 the box stands at the **right** and moves only up and down:
@@ -224,10 +226,19 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
         return None;
     }
     match anchor {
-        // 通欄：`x` 和寬度都由 `area` 說了算，呼叫方只挑從哪一行起。
-        Anchor::Band { top } => {
-            let top = top.min(area.y + area.height.saturating_sub(height));
-            Some(Rect::new(area.x, top.max(area.y), area.width, height))
+        // 通欄：`x` 和寬度都由 `area` 說了算，只剩上下兩個落點。
+        Anchor::Band { at, bottom } => {
+            if bottom < area.y + height {
+                return None;
+            }
+            let low = bottom - height;
+            // 先站下面；光標正落在那幾行裏纔翻到上面。兩個都擋得住（帶子比半頁
+            // 還高）就照樣站下面——擋着總比一格不畫好，同 [`Anchor::Caret`]。
+            let y = match at.1 >= low && at.1 < low + height {
+                false => low,
+                true => area.y,
+            };
+            Some(Rect::new(area.x, y, area.width, height))
         }
         Anchor::Centre => Some(Rect::new(
             area.x + (area.width.saturating_sub(width)) / 2,
@@ -295,6 +306,24 @@ pub fn panel_ground(ink: crate::theme::Palette) -> ratatui::style::Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **帶子只有上下兩個落點，先下，光標在裏頭纔翻上**（2026-10-11）。
+    #[test]
+    fn a_band_stands_clear_of_the_caret() {
+        let page = Rect::new(0, 0, 80, 24);
+        let bottom = 22;
+        let band = |at: (u16, u16), height: u16| {
+            place(page, (80, height), Anchor::Band { at, bottom }).expect("放得下")
+        };
+        // 光標在上半頁：帶子站底下，腳貼着頁腳。
+        let low = band((12, 3), 6);
+        assert_eq!((low.x, low.y, low.width), (0, 16, 80), "通欄，站下面");
+        // 光標正落在那幾行裏：翻到頁頂。
+        let high = band((12, 18), 6);
+        assert_eq!((high.x, high.y, high.width), (0, 0, 80), "擋着就翻上去");
+        // 光標在底下那一行之外（第 15 行，帶子從 16 起）：照舊站下面。
+        assert_eq!(band((12, 15), 6).y, 16, "差一行，不用翻");
+    }
 
     /// **貼着光標那一種：下面放得下就放下面，放不下翻到上面**（2026-10-08）。
     #[test]

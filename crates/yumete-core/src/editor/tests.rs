@@ -12016,6 +12016,14 @@ fn the_change_band_holds_while_the_cursor_walks_the_block() {
     press(&mut ed, "j");
     assert_eq!(ed.cursor_line(), 3, "出了那一塊");
     assert_eq!(ed.info_afloat(), None, "走出那幾行就收");
+
+    // **走回去不會自己再冒出來**（2026-10-11 報的）：那一問已經過去了，要再看
+    // 就再按一次 `空格 x`。
+    press(&mut ed, "k");
+    assert_eq!(ed.cursor_line(), 2, "又回到那一塊裏");
+    assert_eq!(ed.info_afloat(), None, "走回去也不自己開");
+    press(&mut ed, " x");
+    assert_eq!(ed.info_afloat(), Some(Info::Change), "再按一次纔開");
 }
 
 /// **帶子開着的時候 `u` 是「還原這一塊」，收了之後 `u` 回到撤銷**（2026-10-11）。

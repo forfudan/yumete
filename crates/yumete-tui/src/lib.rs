@@ -6262,12 +6262,10 @@ fn draw_note(
             }))
             .collect();
         if !lines.is_empty() {
-            // 帶子從光標那一行起往下鋪（裝不下由 `place` 往上挪）。
-            let top = caret.1;
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
                 stand: match vertical {
                     true => panel::Stand::Corner,
-                    false => panel::Stand::Band(top),
+                    false => panel::Stand::Band,
                 },
                 accent: None,
                 pages: true,

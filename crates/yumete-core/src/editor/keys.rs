@@ -65,6 +65,8 @@ impl Editor {
         // `空格 k` 問來的那一則說明同理：光標走開就作廢，不許走回去又冒出來
         // （2026-09-29 報的）。
         self.forget_a_hover_nobody_is_looking_at();
+        // 改動那一條問的是一塊而不是一個字，所以它有自己那一句（2026-10-11）。
+        self.forget_a_change_the_cursor_has_left();
         self.unhush_the_float_once_the_cursor_has_left();
         // 跟着光標走的那一問，光標一動就重新等它停穩。
         self.the_cursor_moved_under_the_docs();

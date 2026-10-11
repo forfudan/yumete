@@ -158,6 +158,22 @@ impl Editor {
         true
     }
 
+    /// **光標走出帶子蓋的那幾行，那一問就作廢**（2026-10-11 報的）。
+    ///
+    /// Warning: **少了這一句，走出去再走回來帶子自己又冒出來。** [`Editor::info_asked_now`]
+    /// 是一句問話，每一幀重新算一遍「還在不在那一塊」——答案當然又變回「在」。
+    /// 「走開過」這件事只有記下來纔算數，同
+    /// [`Editor::forget_a_hover_nobody_is_looking_at`]：要再看就再按一次 `空格 x`。
+    ///
+    /// 掃在派鍵之前，所以挪開光標的那一鍵掃的時候光標還沒挪，下一鍵纔掃得掉。
+    pub(super) fn forget_a_change_the_cursor_has_left(&mut self) {
+        let Some((Info::Change, at)) = self.info_asked else { return };
+        if at == self.sel.head() || self.reading_the_info() || self.still_the_same_change(at) {
+            return;
+        }
+        self.info_asked = None;
+    }
+
     /// 光標離開了按下去的那一格，那一下就作廢。
     ///
     /// Warning: **要在派鍵之前掃，而且記的是「離開過」不是「不在」**（2026-10-01）。

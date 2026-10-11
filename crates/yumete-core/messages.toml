@@ -6203,11 +6203,11 @@ zhs = "打一个字"
 en = "type a character"
 
 [[message]]
-# 提示：打一個字蓋掉選區（中文也打得，上屏什麼就換成什麼）
+# hint: type a char to replace the selection
 key = "hint.type-a-character-to-overwrite"
-zht = "打一個字蓋掉選區，中文也打得"
-zhs = "打一个字盖掉选区，中文也打得"
-en = "type a character to write over it — 中文 too"
+zht = "打一個字替換選區"
+zhs = "打一个字替换选区"
+en = "type a character to write over it"
 
 [[message]]
 # mr/cs 在等第一個字符：要被換掉的是哪一對
