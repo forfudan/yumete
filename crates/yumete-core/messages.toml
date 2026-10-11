@@ -7224,6 +7224,13 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
+# 語言服務器起來了、進程活着，卻一直不回 initialize（2026-10-11 定的 10 秒）
+key = "lsp.no-answer"
+zht = "{0} 的語言服務器已開啟但{1}秒未響應"
+zhs = "{0} 的语言服务器已开启但{1}秒未响应"
+en = "the {0} language server started but has not answered in {1} seconds"
+
+[[message]]
 # 按 空格 k 的時候：這個語言在設置裏根本沒寫服務器（2026-09-29 寫的）
 key = "lsp.no-server-configured"
 zht = "未爲{0}文件指定語言服務器，請在設置中填寫"

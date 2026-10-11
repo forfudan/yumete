@@ -146,6 +146,15 @@ struct Server {
     working_since: Option<std::time::Instant>,
 }
 
+/// **一個服務器是怎麼走的**（2026-10-11）——說出口的那一句不一樣。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Gone {
+    /// 管子斷了，或者進程自己退了。
+    Died,
+    /// 進程還活着，只是從頭到尾沒回過 `initialize`。
+    Mute,
+}
+
 impl Server {
     /// **此刻在不在忙，從什麽時候起**（2026-10-01）。
     ///
@@ -626,6 +635,12 @@ impl Servers {
             .min()
     }
 
+    /// **握手等這麼久就不等了**（2026-10-11）。見 `collect` 裏那一段的理由。
+    ///
+    /// Warning: **這個數寫進了 `lsp.no-answer` 那句話裏**（當參數傳，不是另寫一遍），
+    /// 所以改它不會讓屏幕上那句話說謊。
+    const HANDSHAKE_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
     /// **A file that is not open any more is not our business any more.**
     ///
     /// Warning: 從前 `lsp::did_close` 全樹一處都没調用（2026-09-23 審出來的）。關掉
@@ -949,6 +964,9 @@ impl Servers {
     pub fn collect(&mut self, editor: &mut Editor) -> bool {
         let mut anything = false;
         let mut gone: Vec<String> = Vec::new();
+        // 走的那幾個裏，哪幾個是「起來了卻不應聲」——那一句和「起來就沒了」不是
+        // 同一件事，所以要分得開。
+        let mut mute: HashSet<String> = HashSet::new();
         // 借出來給下面那個迴圈用——它同時要借 `self.running`。
         let mut answered = std::mem::take(&mut self.waiting_on);
         let mut said_so = false;
@@ -1043,6 +1061,21 @@ impl Servers {
             if ended && !gone.contains(whose) {
                 gone.push(whose.clone());
             }
+            // **起來了卻一直不回 `initialize`**（2026-10-11）。進程活着、管子也
+            // 沒斷，所以上面兩條都看不見它；而 [`Server::busy_since`] 在握手完成
+            // 之前一律答「還在啓動」，於是 `gd` 永遠停在「語言服務器啟動中，請稍
+            // 候」——那句話是真的，只是永遠不會變成別的。
+            //
+            // Warning: **超時的是握手，不是建索引。** 量過：`initialize` 的答覆是
+            // 毫秒級的，慢的是它**之後**那一段讀項目，而那時 `ready` 早就是 true
+            // 了。所以十秒不是「這臺機器慢」，是「它不會答了」。
+            if !server.ready
+                && server.started.elapsed() > Self::HANDSHAKE_GRACE
+                && !gone.contains(whose)
+            {
+                gone.push(whose.clone());
+                mute.insert(whose.clone());
+            }
         }
         // **全都答完了纔說「沒什麽可說的」**（#425）。一個問題發給了好幾個服務
         // 器，第一個答得出東西的算數；有一個還沒回話，就再等一輪。
@@ -1053,7 +1086,11 @@ impl Servers {
             self.says = Some(String::new());
         }
         for language in gone {
-            self.lost(&language, editor);
+            let why = match mute.contains(&language) {
+                true => Gone::Mute,
+                false => Gone::Died,
+            };
+            self.lost(&language, editor, why);
             anything = true;
         }
         anything
@@ -1082,7 +1119,7 @@ impl Servers {
     /// Warning: **Its complaints go with it.** Leaving them on the page would show
     /// errors from a program that is no longer watching, and every one of them
     /// would stay until the session ended.
-    fn lost(&mut self, command: &str, editor: &mut Editor) {
+    fn lost(&mut self, command: &str, editor: &mut Editor, why: Gone) {
         // Warning: **進來的是命令名，不是語言名**（#425，2026-09-30）。一種語言
         // 跑得了好幾個，死的是其中一個——別的還在聽。
         let Some(language) = self
@@ -1128,6 +1165,11 @@ impl Servers {
             self.waiting_on.remove(path);
         }
         // （那句「分析中」不必單獨收——下面這一句無論如何都要蓋上去。）
+        if why == Gone::Mute {
+            self.failed.insert(language.to_string());
+            self.says = Some(say!("lsp.no-answer", language, Self::HANDSHAKE_GRACE.as_secs()));
+            return;
+        }
         self.says = Some(match ran {
             // A crash after it was working is not 「this machine has no
             // rust-analyzer」: the next file starts a fresh one, which is the
@@ -1853,6 +1895,34 @@ mod tests {
         let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
         servers.follow(&mut editor, &config);
         assert!(servers.running.is_empty());
+    }
+
+    /// **起來了卻不回 `initialize`，十秒之後就不等了**（2026-10-11）。
+    ///
+    /// 和上一條的分別是進程還活着：管子沒斷，`try_wait` 說它在跑，所以那兩條路
+    /// 都看不見它。看不見的代價是 `gd` 永遠停在「啓動中，請稍候」。
+    #[test]
+    fn a_server_that_never_answers_the_handshake_is_given_up_on() {
+        let (mut editor, _path) = editor_on("f.rs", "fn main() {}\n");
+        let (mut servers, _heard, _tell) = Servers::pretend("rust");
+        {
+            let server = servers.running.get_mut("rust-analyzer").unwrap();
+            server.ready = false;
+            // 剛起來那一下不許放棄——慢一點的機器要有喘氣的工夫。
+            server.started = std::time::Instant::now();
+        }
+        servers.collect(&mut editor);
+        assert!(servers.running.contains_key("rust-analyzer"), "十秒之內照舊等着");
+        assert!(!servers.failed.contains("rust"));
+
+        // 把起來的時刻推到十秒之前：這一趟就該放棄了。
+        servers.running.get_mut("rust-analyzer").unwrap().started =
+            std::time::Instant::now() - Servers::HANDSHAKE_GRACE - std::time::Duration::from_secs(1);
+        servers.collect(&mut editor);
+        assert!(servers.running.is_empty(), "不等了");
+        assert!(servers.failed.contains("rust"), "也不再起一個");
+        let said = servers.says.clone().unwrap_or_default();
+        assert!(said.contains("未響應"), "說的是「不應聲」而不是「起來就沒了」：{said}");
     }
 
     /// The loop blocks on the terminal, so something has to ask it to look in
