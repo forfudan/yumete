@@ -37,7 +37,7 @@ tree-sitter-javascript = "0.25"
 tree-sitter-json = "0.24"
 # **這一份是我們自己的**（2026-10-11 發的）：`forfudan/tree-sitter-mojo`，
 # 從零寫起而不是 fork `tree-sitter-python`，真實 Mojo 語料 99.75%。
-tree-sitter-mojo = { git = "https://github.com/forfudan/tree-sitter-mojo", tag = "v0.2.0" }
+tree-sitter-mojo = { git = "https://github.com/forfudan/tree-sitter-mojo", tag = "v0.3.0" }
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-toml-ng = "0.7"

@@ -428,6 +428,10 @@ impl Language {
             Language::Java => tree_sitter_java::TAGS_QUERY,
             Language::JavaScript => tree_sitter_javascript::TAGS_QUERY,
             Language::Python => tree_sitter_python::TAGS_QUERY,
+            // **這一份的 `tags.scm` 是我們自己寫的**（2026-10-11）——語法是這個倉
+            // 作者的，所以沒有別人的可用，也沒有授權那一層事。函數、結構、特徵、
+            // 擴展四種；`alias` 捕不到，那是語法那一頭的事（見那個檔的註釋）。
+            Language::Mojo => tree_sitter_mojo::TAGS_QUERY,
             Language::R => tree_sitter_r::TAGS_QUERY,
             Language::Rust => tree_sitter_rust::TAGS_QUERY,
             // 這幾種沒有定義可言，語法 crate 也不帶 tags。
@@ -440,11 +444,7 @@ impl Language {
             | Language::Nasm
             // 這兩門的 crate 同樣沒把 `tags.scm` 導出來。
             | Language::Ada
-            | Language::Pascal
-            // 這一份是我們自己的語法，而它還沒出 `queries/tags.scm`——`]f`／`]c`
-            // 與大綱因此在 Mojo 檔上沒有東西可走（同 Ada、Pascal）。補它要回到
-            // `forfudan/tree-sitter-mojo` 那個倉。
-            | Language::Mojo => return None,
+            | Language::Pascal => return None,
         })
     }
 
