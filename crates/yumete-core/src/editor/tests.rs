@@ -12091,6 +12091,48 @@ fn a_hover_stays_while_the_cursor_walks_the_thing_it_describes() {
     assert!(ed.hover_here().is_none(), "走出去就收");
 }
 
+/// **撤回棧分了叉、而正文又回到盤上那一份**（2026-10-11 報的）。
+///
+/// 報的是 `:diff` 說「和《…》一個字都不差」而 `:q` 說「還有沒存的改動」。兩句話
+/// 各照自己的判準說了實話：`:diff` 比的是正文，`[+]` 從前只看撤回棧的深度——而
+/// 撤回幾步再改一筆，重做那一支沒了，存檔那個深度從此走不回去。
+#[test]
+fn a_forked_history_back_at_the_file_s_own_text_is_clean() {
+    let dir = std::env::temp_dir().join(format!("yumete-forked-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("章.md");
+    std::fs::write(&path, "一行\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    assert!(!ed.current_buffer().is_modified(), "剛開是乾淨的");
+
+    // 改一筆、撤回去：深度認得出來，這一條本來就對。
+    press(&mut ed, "i甲");
+    ed.on_key(Key::Esc);
+    assert!(ed.current_buffer().is_modified());
+    press(&mut ed, "u");
+    assert!(!ed.current_buffer().is_modified(), "走回存檔那個深度");
+
+    // **分叉**：撤回之後再改一筆，重做那一支沒了。
+    press(&mut ed, "i乙");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    press(&mut ed, "i丙");
+    ed.on_key(Key::Esc);
+    assert!(ed.current_buffer().is_modified(), "正文和盤上不一樣");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "一行\n", "正文又和盤上一樣了");
+    assert!(!ed.current_buffer().is_modified(), "所以它是乾淨的");
+
+    // 再改一筆照舊說髒——答案按 `revision` 存着，別存成一個永遠的「乾淨」。
+    press(&mut ed, "i丁");
+    ed.on_key(Key::Esc);
+    assert!(ed.current_buffer().is_modified(), "改了就是改了");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **詞對象認數目**（2026-10-11 從 nvim 神諭上量出來的，182 格）。
 ///
 /// vim 的 `2iw` 是「兩個單位」，單位在詞和空白之間交替；`2aw` 是兩個「詞連着它

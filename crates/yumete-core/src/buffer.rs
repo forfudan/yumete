@@ -216,6 +216,16 @@ pub struct Buffer {
     /// reflex and then types it at the real one too. So when the stamp says
     /// "maybe", this says whether it actually did.
     read_as: Option<u64>,
+    /// 上一次替 [`Buffer::is_modified`] 算的那個答案，連它算的是哪一版
+    /// （2026-10-11）。只有撤回棧分了叉之後纔用得上。
+    clean_at: std::cell::Cell<Option<(u64, bool)>>,
+    /// **這一份的字不是從盤上那一份來的**（2026-10-11）。
+    ///
+    /// 救回來的草稿就是這一種：`adopt_draft` 把草稿檔刪了，於是在存檔之前它是
+    /// **唯一的一份**，和盤上那一份一樣不一樣都不算數。[`Buffer::is_modified`]
+    /// 問指紋那一條退路對它不成立，所以要和「撤回棧分了叉」分得開——兩者都讓
+    /// `saved_depth` 作廢，可只有分叉那一種還回得到「乾淨」。
+    beyond_the_file: bool,
 
 }
 
@@ -305,6 +315,8 @@ impl Buffer {
             owns_swap: false,
             seen: None,
             read_as: None,
+            clean_at: std::cell::Cell::new(None),
+            beyond_the_file: false,
             scratch_swap: None,
             readonly: false,
         }
@@ -317,6 +329,7 @@ impl Buffer {
     /// without a word, which is the whole of a crashed session's work.
     pub fn mark_modified(&mut self) {
         self.modified = true;
+        self.beyond_the_file = true;
         // Warning: **連「哪裏算乾淨」一起作廢**（2026-10-02 補）。這一支是給救回來的
         // 草稿用的：它的字從一個崩掉的 session 來，盤上沒有任何一份和它一樣。
         // 不作廢的話撤回棧走回棧底就會報「乾淨」——而棧底正是那段救回來的字。
@@ -363,6 +376,8 @@ impl Buffer {
             owns_swap: false,
             seen: None,
             read_as: None,
+            clean_at: std::cell::Cell::new(None),
+            beyond_the_file: false,
             scratch_swap: None,
             readonly: false,
         }
@@ -458,6 +473,8 @@ impl Buffer {
             syntax_guessed: named.is_none(),
             seen,
             read_as,
+            clean_at: std::cell::Cell::new(None),
+            beyond_the_file: false,
             scratch_swap: None,
             // **What the disk says, asked now rather than at `:w`.** A file
             // somebody `chmod 444`-ed is one they meant nobody to change, and
@@ -576,6 +593,7 @@ impl Buffer {
         let bytes = fs::read(&path)?;
         let text = decode(&bytes, &path)?;
         self.read_as = Some(digest(&text));
+        self.beyond_the_file = false;
         self.rope = Rope::from_str(text.as_ref());
         self.seen = seen;
         self.modified = false;
@@ -684,8 +702,39 @@ impl Buffer {
     }
 
     /// Whether the buffer has unsaved modifications.
+    ///
+    /// Warning: **撤回棧分了叉之後，這一問只有正文答得了**（2026-10-11 報的）。
+    /// 「乾淨」平時是按**深度**認的：存檔那一刻記下棧有多深，走回那個深度就乾淨
+    /// 了。撤回幾步再改一個字，重做那一支整個沒了——存檔那個深度從此走不回去，
+    /// `saved_depth` 作廢，於是 `[+]` 再也落不下來。而正文完全可能又和盤上一樣：
+    /// 報的原話是 `:diff` 說「一個字都不差」而 `:q` 說「還有沒存的改動」，兩句話
+    /// 都照着自己的判準說了實話。
+    ///
+    /// 盤上那一份的指紋本來就在手上（`read_as`，存檔和讀檔各記一次），所以深度
+    /// 認不出來的時候改問它。兩句話從此問的是同一件事。
+    ///
+    /// Warning: **答案按 `revision` 存着。** 這一句每一幀都要問（狀態欄那個 `[+]`），
+    /// 而算一次指紋要把整條繩子攤成字符串——三十一兆的稿子上那是每幀三十毫秒。
+    /// `revision` 每改一筆漲一次，所以一筆編輯最多算一次。
     pub fn is_modified(&self) -> bool {
-        self.modified
+        if !self.modified {
+            return false;
+        }
+        // 深度還認得出存檔那一刻：它已經答過了（走回去的那一下就清掉了）。
+        if self.saved_depth.is_some() || self.beyond_the_file {
+            return true;
+        }
+        let Some(had) = self.read_as else {
+            return true;
+        };
+        if let Some((at, answer)) = self.clean_at.get() {
+            if at == self.revision {
+                return answer;
+            }
+        }
+        let answer = digest(&self.rope.to_string()) != had;
+        self.clean_at.set(Some((self.revision, answer)));
+        answer
     }
 
     /// Insert `text` at character index `char_idx`, marking the buffer modified.
@@ -1049,6 +1098,7 @@ impl Buffer {
         self.seen = stamp_of(&path);
         self.read_as = Some(digest(&self.rope.to_string()));
         self.modified = false;
+        self.beyond_the_file = false;
         self.saved_depth = Some(self.history.undo.len());
         self.saves += 1;
         // The document *is* the recovery copy now — but only ours goes; a draft
