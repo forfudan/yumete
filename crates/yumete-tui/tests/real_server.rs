@@ -18,7 +18,7 @@
 //! cargo test -p yumete-tui --test real_server -- --ignored --nocapture
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// A throwaway crate with one deliberate mistake in it.
@@ -479,6 +479,126 @@ fn typing_alone_brings_the_list_up() {
 ///
 /// 所以留一個開關：`YUMETE_LSP_TESTS=1` 的時候，找不到工具就**紅**。CI 或者
 /// 真要驗協議的那一趟帶上它，平常照舊跳過。2026-09-23 加的。
+/// **Mojo 的服務器真的答得上話**（2026-10-11 報的：打開 `.mojo` 說「未爲 mojo 文件
+/// 指定語言服務器」）。
+///
+/// 缺的是出廠那張表上的一行，不是找路那一半——`mojo-lsp-server` 和 `mojo` 一起裝
+/// 在 pixi 環境的 `bin/` 底下，而 `found_here` 本來就展開 `.pixi/envs/*/bin`。
+///
+/// Warning: **這一支要 `mojo-lsp-server` 在 `PATH` 上。** 它平常不在——它在項目的
+/// pixi 環境裏。要跑就自己指一條：
+///
+/// ```text
+/// PATH="$HOME/Programs/decimo/.pixi/envs/default/bin:$PATH" \
+///   cargo test -p yumete-tui --test real_server -- --ignored mojo
+/// ```
+#[test]
+#[ignore = "needs mojo-lsp-server on the machine, and takes seconds"]
+fn the_mojo_server_really_answers() {
+    if no_tool("mojo-lsp-server") {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("yumete-mojo-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // `nowhere` 不是一個東西，而它寫在第 1 行（0 起算）。
+    std::fs::write(dir.join("m.mojo"), "fn main():\n    nowhere()\n").unwrap();
+
+    let mut editor = yumete_core::editor::Editor::new();
+    editor.open_file(dir.join("m.mojo")).unwrap();
+    let config = yumete_config::Config {
+        lsp: yumete_config::factory_servers(),
+        ..Default::default()
+    };
+    assert!(config.lsp.contains_key("mojo"), "出廠那張表上要有 mojo 這一行");
+    let mut servers = yumete_tui::server::Servers::default();
+
+    let gave_up = Instant::now() + Duration::from_secs(60);
+    let mut said = 0;
+    while Instant::now() < gave_up {
+        servers.follow(&mut editor, &config);
+        servers.collect(&mut editor);
+        said = editor.problem_count();
+        if said > 0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    servers.stop();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(said > 0, "mojo-lsp-server 一句話都沒說（60 秒）：{}", editor.status());
+    assert!(editor.problem_on_line(1).is_some(), "錯處標在第 2 行上");
+}
+
+/// **一份真的 Mojo 檔上不許冒出假診斷**（2026-10-11 報的第二件事）。
+///
+/// 補上出廠那一行之後服務器起來了，而它報了 **138 條**
+/// `unable to locate module 'std'`——它找不到自己那套標準庫，整份檔從頭紅到尾。
+/// `pixi run` 會設 `MODULAR_HOME`，直接拿絕對路徑起的不會；`in_its_environment`
+/// 補上之後 138 → 0。這一條驗的就是那個 0。
+///
+/// Warning: **這一支要一個 pixi 環境**，`PATH` 上那個 `mojo-lsp-server` 不算數——它
+/// 要的是 `.pixi/envs/<名>/bin/` 底下的那一個，因為判準正是那條路徑。指一個項目：
+///
+/// ```text
+/// YUMETE_MOJO_PROJECT=~/Programs/decimo \
+///   cargo test -p yumete-tui --test real_server -- --ignored no_false
+/// ```
+#[test]
+#[ignore = "needs a pixi project with mojo in it"]
+fn a_real_mojo_file_gets_no_false_diagnostics() {
+    let Some(root) = std::env::var_os("YUMETE_MOJO_PROJECT").map(PathBuf::from) else {
+        return;
+    };
+    let Some(one) = first_mojo_under(&root.join("src")) else {
+        eprintln!("{} 底下沒有 .mojo", root.display());
+        return;
+    };
+
+    let mut editor = yumete_core::editor::Editor::new();
+    editor.open_file(&one).unwrap();
+    let config = yumete_config::Config {
+        lsp: yumete_config::factory_servers(),
+        ..Default::default()
+    };
+    let mut servers = yumete_tui::server::Servers::default();
+
+    // 這裏沒有「讀完了」的信號，所以跑滿一段時間再看——冒出來的假診斷是一口氣
+    // 全來的，真的沒有纔會一直是 0。
+    let until = Instant::now() + Duration::from_secs(30);
+    while Instant::now() < until {
+        servers.follow(&mut editor, &config);
+        servers.collect(&mut editor);
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let said = editor.problem_count();
+    servers.stop();
+    // Warning: **驗的是「沒有洪水」，不是「一條都沒有」。** 找不到標準庫的時候
+    // 它報的是**每一個 `Int`、每一條 `from std…`**——那一份檔 138 條。項目自己
+    // 那個包（`from decimo import …`）找不到是另一回事：它要 `-I src`，而那是
+    // 這個項目的事，不是出廠默認——寫在項目的 `.yumete/config.toml` 裏：
+    //
+    // ```toml
+    // [[lsp.mojo]]
+    // command = "mojo-lsp-server"
+    // args = ["-I", "src"]
+    // ```
+    assert!(said < 10, "{} 上冒出了 {said} 條診斷——標準庫又找不到了", one.display());
+}
+
+/// 那個目錄樹底下第一個 `.mojo`，名字排序，所以兩次跑的是同一個。
+fn first_mojo_under(dir: &Path) -> Option<PathBuf> {
+    let mut here: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
+    here.sort();
+    for one in &here {
+        if one.extension().is_some_and(|e| e == "mojo") {
+            return Some(one.clone());
+        }
+    }
+    here.iter().filter(|one| one.is_dir()).find_map(|one| first_mojo_under(one))
+}
+
 fn no_tool(program: &str) -> bool {
     if which(program).is_some() {
         return false;

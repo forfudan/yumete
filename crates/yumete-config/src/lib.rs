@@ -1859,6 +1859,11 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // 答案**，所以這兩種填一個就够。
         ("rust".to_string(), vec![one("rust-analyzer", &[])]),
         ("go".to_string(), vec![one("gopls", &[])]),
+        // **Mojo 的服務器跟着 Mojo 一起裝**（2026-10-11）：`mojo-lsp-server` 和
+        // `mojo` 同在 pixi 環境的 `bin/` 底下，而 `found_here` 本來就展開
+        // `.pixi/envs/*/bin`——所以缺的只是這一行，不是找路那一半。
+        // 它不用參數，stdio 是它的默認（`--help` 裏連一個傳輸選項都沒有）。
+        ("mojo".to_string(), vec![one("mojo-lsp-server", &[])]),
         // Warning: **python 没有那個顯然的答案**，所以它是一串。helix 給 python 列了
         // 五個（`languages.toml`：`["ty", "ruff", "jedi", "pylsp", "zuban"]`），
         // 而且每一個的命令都不一樣。填一個等於替人在五個裏猜一個，猜錯了他每次

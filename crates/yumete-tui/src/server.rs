@@ -1337,11 +1337,56 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
     std::env::split_paths(&path).map(|dir| dir.join(command)).find(|p| p.is_file())
 }
 
+/// **一個裝在 pixi 環境裏的服務器要拿到那個環境**（2026-10-11 報的）。
+///
+/// 報的是「打開 `.mojo` 說未指定語言服務器」，而補上出廠那一行之後冒出第二件事：
+/// `mojo-lsp-server` 起得來、答得出話，答的是 **138 條假診斷**——`unable to locate
+/// module 'std'`、`use of unknown declaration 'Int'`，整份檔從頭紅到尾。比沒有服務
+/// 器還糟。
+///
+/// 原因是它找不到自己那套標準庫：`pixi run` 會設 `MODULAR_HOME`，而我們是直接
+/// 拿絕對路徑起的，什麼都沒設。量過：`MODULAR_HOME` 一加，138 → **0**。
+///
+/// Warning: **這一支不特判 Mojo，判的是「它住在哪」。** 路徑長成
+/// `…/.pixi/envs/<環境>/bin/<命令>` 就是「這個二進制屬於那個環境」，而一個環境裏
+/// 的程序本來就該在那個環境裏跑。於是兩件事一起給：那個環境的 `bin` 排進 `PATH`
+/// 的最前面（它要叫別的工具就叫到同一環境裏那一個），`share/max` 真的在就設
+/// `MODULAR_HOME`。別的語言用不上第二條，而第一條對它們都是對的。
+fn in_its_environment(command: &mut Command, at: &Path) {
+    // `<環境>/bin/<命令>` → `<環境>`。兩級都要對得上，不然隨便一個 `bin/` 都算。
+    let Some(env) = at.parent().filter(|bin| bin.file_name() == Some("bin".as_ref())).and_then(Path::parent)
+    else {
+        return;
+    };
+    // 真的是 pixi 的環境纔算：`.pixi/envs/<名字>`。
+    let pixi = env
+        .parent()
+        .is_some_and(|envs| envs.file_name() == Some("envs".as_ref())
+            && envs.parent().is_some_and(|p| p.file_name() == Some(".pixi".as_ref())));
+    if !pixi {
+        return;
+    }
+    let bin = env.join("bin");
+    if let Some(path) = std::env::var_os("PATH") {
+        let mut dirs = vec![bin];
+        dirs.extend(std::env::split_paths(&path));
+        if let Ok(joined) = std::env::join_paths(dirs) {
+            command.env("PATH", joined);
+        }
+    }
+    let max = env.join("share").join("max");
+    if max.is_dir() {
+        command.env("MODULAR_HOME", max);
+    }
+}
+
 /// Start one server and get its threads going.
 fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::Result<Server> {
     // Warning: **起的是找到的那一個絕對路徑**，不是配置裏那個名字——不然 `Command`
     // 自己又去問一遍 `PATH`，項目裏那一個白找了（2026-09-29）。
-    let mut child = Command::new(at)
+    let mut command = Command::new(at);
+    in_its_environment(&mut command, at);
+    let mut child = command
         .args(&named.args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -1895,6 +1940,47 @@ mod tests {
         let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
         servers.follow(&mut editor, &config);
         assert!(servers.running.is_empty());
+    }
+
+    /// **pixi 環境裏的服務器拿得到那個環境**（2026-10-11 報的）。
+    ///
+    /// 判的是路徑的形狀，不是命令的名字——`.pixi/envs/<名>/bin/<命令>`。
+    #[test]
+    fn a_server_out_of_a_pixi_environment_is_given_that_environment() {
+        let dir = std::env::temp_dir().join(format!("yumete-pixi-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let env = dir.join(".pixi").join("envs").join("default");
+        std::fs::create_dir_all(env.join("bin")).unwrap();
+        std::fs::create_dir_all(env.join("share").join("max")).unwrap();
+        let exe = env.join("bin").join("mojo-lsp-server");
+        std::fs::write(&exe, "").unwrap();
+
+        let mut command = std::process::Command::new(&exe);
+        in_its_environment(&mut command, &exe);
+        let given: std::collections::HashMap<_, _> = command
+            .get_envs()
+            .filter_map(|(k, v)| Some((k.to_string_lossy().into_owned(), v?.to_string_lossy().into_owned())))
+            .collect();
+        assert_eq!(
+            given.get("MODULAR_HOME").map(String::as_str),
+            Some(env.join("share").join("max").to_string_lossy().as_ref()),
+            "標準庫找得着——沒有它 mojo-lsp-server 會報 138 條假診斷"
+        );
+        assert!(
+            given.get("PATH").is_some_and(|p| p.starts_with(env.join("bin").to_string_lossy().as_ref())),
+            "同一個環境的 bin 排在最前：{given:?}"
+        );
+
+        // 不在 pixi 環境裏的照舊什麼都不給——`PATH` 由父進程繼承就好。
+        let plain = dir.join("bin");
+        std::fs::create_dir_all(&plain).unwrap();
+        let other = plain.join("rust-analyzer");
+        std::fs::write(&other, "").unwrap();
+        let mut command = std::process::Command::new(&other);
+        in_its_environment(&mut command, &other);
+        assert_eq!(command.get_envs().count(), 0, "不是 pixi 環境就不動它");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **起來了卻不回 `initialize`，十秒之後就不等了**（2026-10-11）。
