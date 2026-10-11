@@ -1485,7 +1485,19 @@ impl Editor {
                 Some((name, lines))
             }
             // A clipboard entry is already the whole of what it is.
-            crate::picker::Item::Paste(_, _) => None,
+            // **寄存器那一扇也有預覽**（2026-10-11 報的）。從前這裏一律回 `None`，
+            // 而畫的那一支「有沒有東西都把框畫出來」——於是右邊那半扇**永遠**是
+            // 一個空框。名單上那一行只容得下一行（`one_line`），而取過的東西常
+            // 常是好幾行：要看全的正是這裏。
+            //
+            // Warning: **系統剪貼板那一條照舊沒有。** 只有前端讀得了系統剪貼板，而
+            // 高亮每挪一格就去讀一次是一件有副作用的事。核心手上沒有的東西，這
+            // 一支不猜。
+            crate::picker::Item::Paste(Some(which), _) => {
+                let (name, text) = self.paste_menu().into_iter().nth(which)?;
+                Some((name, head(&text)))
+            }
+            crate::picker::Item::Paste(None, _) => None,
             // **The entry itself, beside the list of names** (2026-09-25).
             // The preview a picker already has is exactly the 「選中的條目浮窗
             // 顯示」 the request asked for — no second mechanism.

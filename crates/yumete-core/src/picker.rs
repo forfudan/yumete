@@ -226,9 +226,27 @@ impl Picker {
                 })
                 .collect(),
         };
-        // Best score first; then prose before the rest; then the order they were
-        // gathered in, which for files is alphabetical and so is chapter order.
-        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        // Best score first; then prose before the rest; then **the shallower
+        // path**, and only then the order they were gathered in.
+        //
+        // **根目錄在前**（2026-10-11 報的）。收進來的次序就是完整路徑的字典序
+        // （走查那一頭 `sort_by_file_path`），而那把 `misc/置闰法.txt` 排在
+        // `template.typ` 前面——只因為 `m` < `t`，而根目錄那幾個檔的名字是漢字、
+        // 漢字排在 ASCII 後面。原話：「to me the root path should come first」。
+        //
+        // 對着這個編輯器它是對的：稿子躺在根上，`設定/`、`misc/`、`辭典/` 是旁
+        // 邊的東西。先按深淺分層，等於先給稿子、再給那些圍着它的。
+        //
+        // Warning: **代價是同一棵子樹會被層拆開**：`設定/a.md` 和
+        // `設定/深/b.md` 不再挨着。同一層裏次序沒動（還是路徑序），所以一個目錄
+        // 底下的檔照舊連在一起——拆開的只有「目錄裏還有目錄」那一種。
+        let deep = |one: &Item| one.label().matches(['/', '\\']).count();
+        scored.sort_by(|a, b| {
+            b.0.cmp(&a.0)
+                .then(a.1.cmp(&b.1))
+                .then_with(|| deep(a.3).cmp(&deep(b.3)))
+                .then(a.2.cmp(&b.2))
+        });
         scored.into_iter().map(|(_, _, _, item)| item).collect()
     }
 
@@ -625,6 +643,34 @@ mod tests {
         // 全都開過：線底下沒有東西，不畫。
         picker.prefer(vec![300, 290, 280, 270]);
         assert_eq!(picker.rule_after(), None, "全都在線上面就不畫");
+    }
+
+    /// **根目錄的檔排在子目錄前面**（2026-10-11 報的）。
+    ///
+    /// 收進來的次序是完整路徑的字典序，而那把 `misc/置闰法.txt` 排在
+    /// `template.typ` 前面——`m` < `t`，而根上那幾個檔的名字是漢字。
+    #[test]
+    fn what_sits_at_the_root_comes_before_what_sits_in_a_folder() {
+        let picker = files(&[
+            "misc/置闰法.txt",
+            "template.typ",
+            "天門真境.txt",
+            "設定/人物.md",
+            "設定/深/再深.md",
+        ]);
+        let shown: Vec<String> =
+            picker.matches().iter().map(|one| one.label().to_string()).collect();
+        assert_eq!(
+            shown,
+            [
+                "template.typ",
+                "天門真境.txt",
+                "misc/置闰法.txt",
+                "設定/人物.md",
+                "設定/深/再深.md",
+            ],
+            "先按深淺，同一層裏照舊是路徑序"
+        );
     }
 
     #[test]
