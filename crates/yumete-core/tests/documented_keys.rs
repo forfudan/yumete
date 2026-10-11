@@ -25,6 +25,19 @@ use yumete_core::editor::Editor;
 /// the very file we have decided to stop editing. Guarding it would reimpose the
 /// work that freezing it was meant to remove. It comes back when it is translated
 /// again.
+///
+/// **Frozen does not mean 「may say false things about the keys」** (2026-10-11 定).
+/// It stopped being translated; it did not stop being read by people. When a key
+/// or a command is renamed, the old name in there becomes an instruction to press
+/// something that now does something else — `gx` was documented as 「follow the
+/// link」 for two days while it opened the seek prompt. That is a typo's class of
+/// error and is fixed in passing. What the freeze rules out is the rest: chasing
+/// new features, filling gaps, and **a test that would force either**.
+///
+/// Warning: **reading this comment is not enough.** 2026-10-11 I read it, then argued
+/// the freeze had lapsed because the file had been edited twice that day — by me,
+/// an hour earlier, having read this. A premise does not lapse because you acted
+/// against it.
 fn documents() -> Vec<(&'static str, String)> {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
     vec![
