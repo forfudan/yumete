@@ -11878,6 +11878,34 @@ fn a_standing_recover_question_is_dropped_when_the_buffer_changes() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`` `f ``／`` `h ``：全形 ↔ 半形**（2026-10-11）。
+///
+/// 只動 Unicode 那張正式的對應表，所以來回一趟一個字不差；中文標點不在那張表
+/// 上，一個都不碰。
+#[test]
+fn width_goes_both_ways_and_leaves_the_chinese_marks_alone() {
+    let both = "甲（１２３，ＡＢ）乙「丙」、丁。";
+    let half = "甲(123,AB)乙「丙」、丁。";
+
+    let mut ed = typed(both);
+    press(&mut ed, "x`h");
+    assert_eq!(ed.current_buffer().text().trim_end(), half, "全形那一批轉過去了");
+    assert!(
+        ed.current_buffer().text().contains("「丙」、丁。"),
+        "中文標點一個都不許碰：{}",
+        ed.current_buffer().text()
+    );
+
+    // 轉回去，一個字不差——這正是「只走那張表」換來的。
+    press(&mut ed, "x`f");
+    assert_eq!(ed.current_buffer().text().trim_end(), both, "來回一趟回到原樣");
+
+    // 全形空格也在那張表上（`3000` 對 `20`）。
+    let mut ed = typed("甲\u{3000}乙");
+    press(&mut ed, "x`h");
+    assert_eq!(ed.current_buffer().text().trim_end(), "甲 乙");
+}
+
 /// **`空格 x`：這一塊改之前寫的是什麼，以及 `u` 把它還原**（2026-10-11）。
 ///
 /// 三種改動各走一遍：改過的（上下都有）、純添的（沒有上半）、剪口（沒有下半）。

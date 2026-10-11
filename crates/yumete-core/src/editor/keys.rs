@@ -1464,7 +1464,16 @@ impl Editor {
                     Key::Char('s') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::S),
                     Key::Char('t') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::T),
                     Key::Char('w') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Tw),
-                    Key::Char('h') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Hk),
+                    // **香港繁從 `h` 讓到 `k`**（2026-10-11）：`h` 給了半形，而
+                    // 這一族的首字母取的是目標的名字（`l`ower／`u`pper／`s`簡／
+                    // `t`繁），`h`alfwidth 與 `f`ullwidth 正是這條規矩。
+                    Key::Char('k') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Hk),
+                    // **全形 ↔ 半形**（2026-10-11）。只動 Unicode 那張正式的對應表
+                    // （`FF01`–`FF5E` 對 `21`–`7E`，外加全形空格）：逐字一對一、
+                    // 兩邊都轉得回來。中文標點 `「」『』、。` 不在那張表上，一個
+                    // 都不碰——見 `to_halfwidth` 的註釋。
+                    Key::Char('h') => self.map_selection(crate::editor::to_halfwidth),
+                    Key::Char('f') => self.map_selection(crate::editor::to_fullwidth),
                     Key::Char('c') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::C),
                     Key::Char('g') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::G),
                     // Warning: **這一個從繁體起步，另外六個從簡體。** opencc 只有
@@ -3035,15 +3044,13 @@ impl Editor {
         ("w", "hint.goto.jump-labels"),
         ("x", "hint.goto.seek-written"),
         ("z", "hint.goto.seek-reading"),
+        ("a", "hint.goto.last-file"),
         ("n p", "hint.goto.next-or-previous-file"),
         ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),
         ("j k", "hint.goto.by-file-line"),
         (".", "hint.goto.last-change"),
         ("t c b", "hint.goto.screen-top-middle-bottom"),
-        ("a", "hint.goto.last-file"),
-        // Warning: **`J` 不在這張表上了**（2026-10-06）。`gJ` 撤掉的時候這一行漏了，
-        // 於是提示行列着一個按下去什麼都不做的鍵。`gK` 還在，它沒有單鍵拼法。
         ("K", "hint.join-with-line-above"),
     ];
 
@@ -3102,7 +3109,9 @@ impl Editor {
         ("s", "hint.case.to-s"),
         ("t", "hint.case.to-t"),
         ("w", "hint.case.to-tw"),
-        ("h", "hint.case.to-hk"),
+        ("f", "hint.case.to-full"),
+        ("h", "hint.case.to-half"),
+        ("k", "hint.case.to-hk"),
         ("c", "hint.case.to-c"),
         ("g", "hint.case.to-g"),
         ("j", "hint.case.to-jp"),

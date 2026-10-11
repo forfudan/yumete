@@ -4610,6 +4610,36 @@ fn opening_of(c: char) -> Option<char> {
         .map(|&(open, _)| open)
 }
 
+/// **全形 → 半形**，照 Unicode 自己那張表（`` `h ``，2026-10-11）。
+///
+/// `FF01`–`FF5E` 對 `21`–`7E`（`！` 到 `～` 對 `!` 到 `~`），加上全形空格
+/// `3000` 對 `20`。這張表是**逐字一對一、兩邊都轉得回來**的，所以一段轉過去再
+/// 轉回來和原來一個字不差。
+///
+/// Warning: **中文標點不在這張表上，一個都不碰。** `「」『』、。` 沒有半形形式
+///——把「」寫成 `""` 是翻譯不是寬度轉換，而且轉回來的時候不知道該給哪一個。
+/// 作者 2026-10-11 定：只轉那張表上的。
+fn to_halfwidth(c: char) -> String {
+    match c as u32 {
+        0xFF01..=0xFF5E => char::from_u32(c as u32 - 0xFF01 + 0x21)
+            .map(String::from)
+            .unwrap_or_else(|| c.to_string()),
+        0x3000 => " ".to_string(),
+        _ => c.to_string(),
+    }
+}
+
+/// **半形 → 全形**，同一張表反着讀（`` `f ``，2026-10-11）。
+fn to_fullwidth(c: char) -> String {
+    match c as u32 {
+        0x21..=0x7E => char::from_u32(c as u32 - 0x21 + 0xFF01)
+            .map(String::from)
+            .unwrap_or_else(|| c.to_string()),
+        0x20 => "\u{3000}".to_string(),
+        _ => c.to_string(),
+    }
+}
+
 /// Swap the case of `c`, leaving anything caseless (every 漢字) alone.
 fn switch_case(c: char) -> String {
     // **Whole expansions, not their first character** (#325): `ß` turns into

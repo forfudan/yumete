@@ -4915,11 +4915,25 @@ zhs = "简→大陆繁"
 en = "simplified → mainland 繁"
 
 [[message]]
+# ` 組：轉全角（只動 Unicode 那張對應表上的字）
+key = "hint.case.to-full"
+zht = "轉全角"
+zhs = "转全角"
+en = "to fullwidth"
+
+[[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-g"
 zht = "簡→古籍繁"
 zhs = "简→古籍繁"
 en = "simplified → 古籍 繁"
+
+[[message]]
+# ` 組：轉半角
+key = "hint.case.to-half"
+zht = "轉半角"
+zhs = "转半角"
+en = "to halfwidth"
 
 [[message]]
 # `` 那一組：換一種寫法
@@ -5135,9 +5149,9 @@ en = "follow the link"
 [[message]]
 # g 組：去/看它指的地方
 key = "hint.goto.follow-note"
-zht = "去/看它指的地方"
-zhs = "去/看它指的地方"
-en = "go to / show what it points at"
+zht = "前往定義(當前區/另一區)"
+zhs = "前往定义(当前区/另一区)"
+en = "go to / show where it is defined"
 
 [[message]]
 # vim 鍵位下 g 選單裏的 J ——併行，一個空格都不補
@@ -5163,9 +5177,9 @@ en = "back to the last change"
 [[message]]
 # g 選單裏的 a ——切回剛纔看的那一份稿子
 key = "hint.goto.last-file"
-zht = "切回剛纔那一份"
-zhs = "切回刚才那一份"
-en = "back to the file before this one"
+zht = "最近打開的緩衝"
+zhs = "最近打开的缓冲"
+en = "back to the buffer before this one"
 
 [[message]]
 # g 組：行首/行尾
@@ -5247,8 +5261,8 @@ en = "an older / newer change"
 [[message]]
 # 這一句是 g/ g? 的說明
 key = "hint.goto.word-elsewhere"
-zht = "這個詞還在哪裏：這邊找/那邊看"
-zhs = "这个词还在哪里：这边找/那边看"
+zht = "搜索這個詞(當前區/另一區)"
+zhs = "搜索这个词(当前区/另一区)"
 en = "where else this word is: / here, ? in the other area"
 
 [[message]]
