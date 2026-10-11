@@ -2462,7 +2462,14 @@ pub struct Editor {
     ///
     /// Warning: 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
     /// 冒出來的診斷不是這一種——那一種是文件的事實，走到哪都還在。
-    hovered: Option<(usize, crate::lsp::Told)>,
+    /// **那一則說明，連它說的是哪一段**（範圍是字偏移，2026-10-11 改的）。
+    ///
+    /// 從前記的是「問的時候光標在第幾個字」，於是在 `counted` 裏走一格那一則就
+    /// 作廢、重問、重畫——報的原話：「moving cursor within the same identifier
+    /// should keep the docs on screen」。服務器本來就說得出它說的是哪一段
+    /// （`Hover.range`，兩家都給），所以判準換成「光標還在那一段裏」。
+    /// 服務器不給的時候退回一個字，也就是從前那條規矩。
+    hovered: Option<(std::ops::Range<usize>, crate::lsp::Told)>,
     /// **手動叫出來的那一種信息，和叫的時候光標在哪**（#426，2026-09-30）。
     ///
     /// 光標一走就作廢——那一則是問出來的，問題已經過去了。`None` ＝ 沒人叫過，

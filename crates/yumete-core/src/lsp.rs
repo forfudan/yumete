@@ -510,9 +510,16 @@ fn told(result: Option<&serde_json::Value>) -> Option<Told> {
         true => inline(&raw),
         false => raw.trim_end().to_string(),
     };
+    let over = result.and_then(|r| r.get("range")).and_then(|range| {
+        let spot = |which: &str| {
+            let at = range.get(which)?;
+            Some((at.get("line")?.as_u64()? as usize, at.get("character")?.as_u64()? as usize))
+        };
+        Some(Over { from: spot("start")?, to: spot("end")? })
+    });
     match text.is_empty() {
         true => None,
-        false => Some(Told { text, markdown }),
+        false => Some(Told { text, markdown, over }),
     }
 }
 
@@ -530,12 +537,27 @@ pub struct Told {
     pub text: String,
     /// Whether [`Self::text`] is Markdown and should be set with its inks.
     pub markdown: bool,
+    /// **這一則說的是哪一段**（LSP 的 `Hover.range`，2026-10-11）。
+    ///
+    /// 協議說它是可選的，而兩家都給：量過，rust-analyzer 與 mojo-lsp-server
+    /// 回的都正好是光標底下那個名字的起訖。給了它，「光標還在同一個東西上」
+    /// 就是一個問得出口的問題——不必拿「還在同一個字符上」去猜。
+    ///
+    /// 行與 **UTF-16 列**，兩頭都照服務器說的，換算留給編輯器（它手上纔有正文）。
+    pub over: Option<Over>,
+}
+
+/// 一段正文，行與 UTF-16 列——[`Told::over`] 的那個範圍。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Over {
+    pub from: (usize, usize),
+    pub to: (usize, usize),
 }
 
 impl From<String> for Told {
     /// Markdown, which is what every shape but an explicit `plaintext` means.
     fn from(text: String) -> Self {
-        Self { text, markdown: true }
+        Self { text, markdown: true, over: None }
     }
 }
 

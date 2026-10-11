@@ -1316,7 +1316,8 @@ impl Editor {
     /// Warning: **記下問的時候光標在哪**：這一則是**問出來的**，所以光標一走它就該
     /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
     pub fn show_hover(&mut self, told: impl Into<crate::lsp::Told>) {
-        self.hovered = Some((self.sel.head(), told.into()));
+        let told: crate::lsp::Told = told.into();
+        self.hovered = Some((self.what_the_hover_covers(&told), told));
         self.info_scroll = 0;
         self.status = String::new();
         // Warning: **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
@@ -1361,6 +1362,17 @@ impl Editor {
         }
         let at = self.sel.head();
         if self.docs_asked_at == Some(at) {
+            return None;
+        }
+        // **手上那一則還說着這個東西，就別再問一遍**（2026-10-11 報的）。
+        //
+        // 從前的判準是「光標還在問過的那一個字上」，所以在 `counted` 裏走一格就
+        // 是一次新的問答：面板收掉、三百毫秒、再問、再畫。原話：「it is very
+        // inefficient」——對的，而且那一閃一閃纔是讀者看見的東西。服務器說得出
+        // 它說的是哪一段，那就以那一段為準。
+        if self.hovered.as_ref().is_some_and(|(over, _)| over.contains(&at)) {
+            self.docs_asked_at = Some(at);
+            self.docs_moved = None;
             return None;
         }
         let moved = *self.docs_moved.get_or_insert_with(std::time::Instant::now);
@@ -1463,18 +1475,41 @@ impl Editor {
     /// 挪開光標的那一鍵掃的時候光標還沒挪，掃不掉；下一鍵纔掃得掉——而那正是
     /// 「走回去」的那一鍵，所以它回不來。
     pub(super) fn forget_a_hover_nobody_is_looking_at(&mut self) {
-        let Some((asked_at, _)) = self.hovered.as_ref() else { return };
+        let Some((over, _)) = self.hovered.as_ref() else { return };
         // 送進邊欄的那一份（`空格 K`），鍵在它身上的時候光標本來就不動。
-        if self.reading_the_info() || *asked_at == self.sel.head() {
+        if self.reading_the_info() || over.contains(&self.sel.head()) {
             return;
         }
         self.hovered = None;
     }
 
-    /// 這會兒該不該畫那一則說明——光標還在問的地方纔算。
+    /// **那一則說的是正文的哪一段**，換成字偏移（2026-10-11）。
+    ///
+    /// 服務器給的是行與 UTF-16 列，而這一頭數的是字——換算要那一行的正文，所以
+    /// 它在這裏做，同 [`Editor::go_to_definition`]。
+    ///
+    /// 不給範圍的那種服務器退回「問的那一個字」，也就是 2026-10-11 之前的規矩。
+    fn what_the_hover_covers(&self, told: &crate::lsp::Told) -> std::ops::Range<usize> {
+        let here = self.sel.head();
+        let Some(over) = told.over else { return here..here + 1 };
+        let rope = self.current_buffer().rope();
+        let spot = |(line, utf16): (usize, usize)| {
+            let line = line.min(crate::motion::last_line(rope));
+            let text = rope.line(line).to_string();
+            rope.line_to_char(line) + crate::problem::char_column(&text, utf16)
+        };
+        let (from, to) = (spot(over.from), spot(over.to));
+        match from < to {
+            true => from..to,
+            // 服務器給了一個空範圍（有的對關鍵詞就這樣）：照舊算一個字。
+            false => here..here + 1,
+        }
+    }
+
+    /// 這會兒該不該畫那一則說明——光標還在它說的那一段裏纔算。
     pub fn hover_here(&self) -> Option<&str> {
-        let (asked_at, told) = self.hovered.as_ref()?;
-        (*asked_at == self.sel.head()).then_some(told.text.as_str())
+        let (over, told) = self.hovered.as_ref()?;
+        over.contains(&self.sel.head()).then_some(told.text.as_str())
     }
 
     /// **那一則是不是 Markdown**——服務器自己說的（`MarkupContent.kind`）。

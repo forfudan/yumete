@@ -12050,6 +12050,47 @@ fn width_goes_both_ways_and_leaves_the_chinese_marks_alone() {
     assert_eq!(ed.current_buffer().text().trim_end(), "甲 乙");
 }
 
+/// **光標在同一個名字裏走，那一則說明不收也不重問**（2026-10-11 報的）。
+///
+/// 原話：「moving cursor within the same identifier should keep the docs on
+/// screen……it is very inefficient」。服務器說得出它說的是哪一段
+/// （`Hover.range`，rust-analyzer 與 mojo-lsp-server 量過都給），所以判準是
+/// 那一段，不是「還在問過的那一個字上」。
+#[test]
+fn a_hover_stays_while_the_cursor_walks_the_thing_it_describes() {
+    use crate::lsp::{Over, Told};
+    let mut ed = typed("let n = counted(x)\n");
+    ed.set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Rust));
+    // `counted` 坐在第 8..15 個字上。
+    let line = "let n = counted(x)";
+    let (from, to) = (line.find("counted").unwrap(), line.find("counted").unwrap() + 7);
+    ed.goto_line(1);
+    for _ in 0..from {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(ed.cursor(), from, "站在名字頭上");
+
+    ed.show_hover(Told {
+        text: "fn counted(text: &str) -> usize".to_string(),
+        markdown: false,
+        over: Some(Over { from: (0, from), to: (0, to) }),
+    });
+    assert!(ed.hover_here().is_some(), "問到了");
+
+    // 在名字裏走：那一則照舊在，而且不再欠一次問。
+    for step in 1..(to - from) {
+        ed.on_key(Key::Char('l'));
+        assert_eq!(ed.cursor(), from + step);
+        assert!(ed.hover_here().is_some(), "走到第 {step} 格還在");
+        assert_eq!(ed.docs_owed(), None, "第 {step} 格不必重問");
+    }
+
+    // 走出去：收掉。
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.cursor(), to, "出了那個名字");
+    assert!(ed.hover_here().is_none(), "走出去就收");
+}
+
 /// **磁碟那一眼是鬧鐘之一，不是它自己一條路**（2026-10-11 報的）。
 ///
 /// 即時文檔要三到五秒纔出來，而 `空格 k` 立刻就出來。前端從前對自動重載開一條
