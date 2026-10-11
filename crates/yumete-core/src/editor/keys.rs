@@ -3469,19 +3469,19 @@ impl Editor {
             // 定義 (#215): the 拆分表 on the character under the cursor. The
             // table detail panel this key used to open is a table key, and now
             // lives in the table group as `t i`.
-            // **`空格 d` 只開浮窗**（2026-09-22 定）：看一眼那個字，邊欄一點都
+            // **`空格 n` 只開浮窗**（2026-09-22 定）：看一眼那個字，邊欄一點都
             // 不動。Warning: 再按一次收起來。
-            Key::Char('n') => match self.char_at_cursor() {
+            Key::Char('n') => match self.grapheme_at_cursor() {
                 Some(ch) => {
-                    self.look_up_afloat(ch);
+                    self.look_up_afloat(&ch);
                 }
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },
-            // **`空格 D` 在邊欄裏開**——同一份答案，鍵跟過去，讀得完長的那些。
+            // **`空格 N` 在邊欄裏開**——同一份答案，鍵跟過去，讀得完長的那些。
             // 大寫是「同一件事的更大版本」，同 `空格 c`/`空格 C`。
-            Key::Char('N') => match self.char_at_cursor() {
+            Key::Char('N') => match self.grapheme_at_cursor() {
                 Some(ch) => {
-                    self.look_up(ch, true);
+                    self.look_up(&ch, true);
                 }
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },

@@ -1174,12 +1174,22 @@ impl ImeSession {
             .collect()
     }
 
-    /// Everything the 拆分表 knows about one character — Feature #215.
+    /// Everything the 拆分表 knows about one 字 — Feature #215.
     ///
     /// The candidate list can only afford one line, so what it shows is
     /// 拆分 and a code and nothing else. This is the same knowledge with the
-    /// room to say all of it: 拆分、編碼、分節編碼、讀音、注釋、字集、統一碼碼位
-    /// and the untruncated 全息拆分, as `(名, 值)` pairs a panel can draw.
+    /// room to say all of it, as `(名, 值)` pairs a panel can draw.
+    ///
+    /// **兩層，而只有上面那一層要方案**（2026-10-12 定）。全息拆分表不分方案，
+    /// 所以「這個字怎麼拆、怎麼讀、在哪幾個字集裏、碼位是多少」四行**沒載方案也
+    /// 答得出**（[`shared_divisions`]）；方案拆分・編碼・分節編碼那三行要方案的
+    /// 字根表，載了纔加在最上面。報的原話：「When scheme is not loaded, show only
+    /// the fields of the chaifen table」。
+    ///
+    /// **拆分只畫一行**（2026-10-12 定）。核心交兩份：`decomposition` 是字根表編
+    /// 碼時真用到的那幾個根（帶省略號），`own_decomposition` 是自定義碼表自己那
+    /// 張拆分表的全串——後者只在字根表**編不出碼**的時候是獨一份的消息。原話：
+    /// 「能不能這兩個同時存在的時候只取第一個，還是叫『方案拆分』？」
     ///
     /// **A character with more than one 拆法 answers more than once.** 陸、臺、
     /// 港 disagree about a few thousand characters, and which one you are
@@ -1187,14 +1197,19 @@ impl ImeSession {
     /// each source gets its own run of rows, headed by an empty value, rather
     /// than the first one winning silently.
     ///
-    /// Empty when the scheme has no 拆分 layer at all (拼音), or the character
-    /// is not in the table. The caller shows that as「查不到」rather than an
-    /// empty panel, because those are different findings.
-    pub fn glosses(&self, ch: char) -> Vec<(String, String)> {
-        let table = self.engine.annotations();
-        let text = ch.to_string();
-        let sources = table.sources_of(&text);
-        let found = table.annotations_for(&text);
+    /// Empty when the character is in no table at all. The caller shows that
+    /// as「查不到」rather than an empty panel, because those are different
+    /// findings.
+    pub fn glosses(&self, ch: &str) -> Vec<(String, String)> {
+        // 引擎手上那一份要麼是方案帶來的（字料層 ＋ 字根層），要麼根本没有——
+        // 没有就回到那一份共享的，它答得出不靠方案的那幾行。
+        let mine = self.engine.annotations();
+        let table = match mine.is_empty() {
+            true => shared_divisions(),
+            false => mine,
+        };
+        let sources = table.sources_of(ch);
+        let found = table.annotations_for(ch);
         let mut out = Vec::new();
         for (i, a) in found.iter().enumerate() {
             // The heading only earns its row when there is something to tell
@@ -1208,15 +1223,23 @@ impl ImeSession {
                     .unwrap_or("陸");
                 out.push((label.to_string(), String::new()));
             }
+            let division = match a.decomposition.is_empty() {
+                true => &a.own_decomposition,
+                false => &a.decomposition,
+            };
+            // **分隔符改成空格**（2026-10-12 報的）。核心用 `_` 串讀音、用 `-`
+            // 接字集與區塊，那是**存**的寫法；讀的人看見的該是幾個並列的東西，
+            // 而不是一個帶標點的長詞。核心是另一個倉的，所以改在這裏。
+            let reading = a.reading.replace('_', " ");
+            let charset = a.charset.replace('-', " ");
             for (name, value) in [
-                ("拆分", &a.decomposition),
+                ("方案拆分", division),
                 ("編碼", &a.code),
                 ("分節編碼", &a.segmented),
-                ("讀音", &a.reading),
+                ("宇浩全息拆分", &a.full_decomposition),
+                ("讀音", &reading),
                 ("注釋", &a.note),
-                ("字集", &a.charset),
-                ("全息拆分", &a.full_decomposition),
-                ("方案拆分", &a.own_decomposition),
+                ("字集", &charset),
             ] {
                 if !value.is_empty() {
                     out.push((name.to_string(), value.clone()));
@@ -1225,11 +1248,26 @@ impl ImeSession {
             // The code point is the one field that is true of the character
             // rather than of a 拆法, so it is written the way a reader looks
             // it up elsewhere — `U+` and all — and only once.
+            // **一個字簇可以有好幾個碼位**（2026-10-12）：`🈚️` 是 U+1F21A ＋
+            // U+FE0F。核心用 `+` 串起來，這裏拆開逐個寫 `U+`——`U+1F21A+FE0F`
+            // 讀起來像一個碼位加了個尾巴。
             if i + 1 == found.len() && !a.unicode.is_empty() {
-                out.push(("統一碼".to_string(), format!("U+{}", a.unicode)));
+                let points: Vec<String> =
+                    a.unicode.split('+').map(|c| format!("U+{c}")).collect();
+                out.push(("統一碼".to_string(), points.join(" ")));
             }
         }
         out
+    }
+
+    /// **查一個字答得出東西嗎**——`空格 n` 空手回來時，說的是「表裏沒有這個
+    /// 字」還是「根本沒有表」（2026-10-12）。
+    ///
+    /// 不建表，只問在不在：換一次方案就問一次，而建那一張要解析 3.2 MB。
+    pub fn chaifen_available(&self) -> bool {
+        !self.engine.annotations().is_empty()
+            || has_builtin_chaifen()
+            || chaifen_on_disk().is_some()
     }
 
     /// Whether this scheme can annotate at all — 拼音 has no 拆分 layer.
@@ -1510,6 +1548,49 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
 /// from.
 mod builtin {
     include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
+}
+
+/// **沒有方案也查得出一個字**（2026-10-12 定）。
+///
+/// 全息拆分表不分方案——每一個方案讀的都是這一張，而「這個字怎麼拆、怎麼讀、
+/// 在哪幾個字集裏」是一個**還沒載碼表**的人也會問的問題。所以它和引擎分開住。
+///
+/// 兩條路，和碼表同一個次序：**磁碟上有就讀磁碟上那一份**（它是這臺機器的
+/// `scripts/build.sh` 自己編的，比二進制裏那張新），沒有纔讀嵌進來的。
+///
+/// 沒有字根表，所以它答得出的只有字料層那幾行（宇浩全息拆分・讀音・注釋・
+/// 字集・統一碼）；編碼要方案，見 [`ImeSession::glosses`]。
+///
+/// 只在真要用到的時候建一次：引擎手上有字料層的時候（＝載了方案、而且這臺機器
+/// 裝了 `chaifen.ydiv`）這一支一輩子不跑，那 3.2 MB 也就不會在內存裏躺第二份。
+fn shared_divisions() -> &'static AnnotationTable {
+    static ONCE: std::sync::OnceLock<AnnotationTable> = std::sync::OnceLock::new();
+    ONCE.get_or_init(|| {
+        let mut table = AnnotationTable::new();
+        let disk = chaifen_on_disk().and_then(|p| std::fs::read(p).ok());
+        if let Some(bytes) = disk.as_deref().or(builtin::BUILTIN_CHAIFEN) {
+            let _ = table.load_division_bytes(bytes);
+        }
+        table
+    })
+}
+
+/// **磁碟上那一份全息拆分表在哪**，沒有就是 `None`。
+///
+/// 名字只寫一遍：它在清單裏，而清單是載方案那條路也在讀的那一份。問「在不在」
+/// 走這一支而不是 [`shared_divisions`]，因為後者要解析 3.2 MB，而換一次方案就
+/// 會問一次。
+fn chaifen_on_disk() -> Option<PathBuf> {
+    let dirs = yumete_config::data_search_dirs();
+    data_manifest::shared()
+        .into_iter()
+        .find(|f| matches!(f.kind, DataKind::Annotations))
+        .and_then(|f| find_file(&dirs, &f.file))
+}
+
+/// **這一份二進制帶不帶全息拆分表**——`:yume-where` 那一行問的。
+pub fn has_builtin_chaifen() -> bool {
+    builtin::BUILTIN_CHAIFEN.is_some()
 }
 
 /// 這個方案有沒有一張出廠自帶的精簡碼表。
@@ -2050,6 +2131,50 @@ mod tests {
         let mut table = CodeTable::new();
         table.load_text("a 啊\nb 吧 八\n");
         ImeSession::from_engine(Engine::new(table), Scheme::LINGMING)
+    }
+
+    /// **沒有方案也查得出一個字**（2026-10-12 報的：「space-n does not work
+    /// because the yume-scheme is not loaded. This is inconvenient.」）。
+    ///
+    /// 全息拆分表不分方案，所以字料層那幾行不等方案。驗的是一個**空會話**——
+    /// 和剛啓動、`[yume] start = false` 的那一刻逐字節相同。
+    ///
+    /// Warning: **取不到就跳過**：拆分表是編譯時從 `yume-release` 取的（或者從這臺
+    /// 機器裝好的那一份拿的），離綫又沒裝的機器上這一條什麼也證明不了，同隔壁
+    /// 那條出廠碼表的辦法。
+    #[test]
+    fn a_character_answers_with_no_scheme_loaded_at_all() {
+        let ime = ImeSession::empty(Scheme::LINGMING);
+        if !ime.chaifen_available() {
+            return;
+        }
+        let got = ime.glosses("行");
+        let named = |n: &str| got.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
+        assert_eq!(named("宇浩全息拆分"), Some("彳亍"), "{got:?}");
+        assert_eq!(named("統一碼"), Some("U+884C"), "{got:?}");
+        // **分隔符是空格，不是 `_` 和 `-`**（2026-10-12 定）：核心那兩個記號是
+        // 存的寫法，讀的人看見的該是幾個並列的東西。
+        assert_eq!(named("讀音"), Some("háng xíng héng xìng hàng"), "{got:?}");
+        assert!(named("字集").is_some_and(|s| !s.contains('-')), "{got:?}");
+        // 字根層要方案，沒方案就一行都不該有。
+        for gone in ["編碼", "分節編碼", "方案拆分"] {
+            assert_eq!(named(gone), None, "{gone} 要方案纔算數：{got:?}");
+        }
+    }
+
+    /// **一個字簇可以有好幾個碼位**（2026-10-12）——`㐂󠄁` 是 U+3402 ＋ 一個
+    /// Plane-14 的異體字選擇符，而拆分表裏它自成一條（和光禿禿的 `㐂` 拆得不
+    /// 一樣）。按碼位問只問得到頭一個。
+    #[test]
+    fn an_ivs_cluster_is_its_own_row_and_names_every_code_point() {
+        let ime = ImeSession::empty(Scheme::LINGMING);
+        if !ime.chaifen_available() {
+            return;
+        }
+        let got = ime.glosses("\u{3402}\u{E0101}");
+        let named = |n: &str| got.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
+        assert_eq!(named("統一碼"), Some("U+3402 U+E0101"), "{got:?}");
+        assert!(named("宇浩全息拆分").is_some(), "{got:?}");
     }
 
     /// **出廠自帶的那幾張，一個方案一張**（2026-10-07 加星陳）。

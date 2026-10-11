@@ -829,6 +829,10 @@ fn main() -> ExitCode {
         false => Some(Box::new(load)),
     };
 
+    // **拆分表在不在，和方案無關**（2026-10-12）。它嵌在二進制裏，載不載碼表都
+    // 答得出——所以這一格撥在這裏，不跟着 `set_ime_available` 走：那一支只在
+    // 真去載方案的那幾條路上叫得到，而 `空格 n` 一開始就按得動。
+    editor.set_chaifen_available(ime.chaifen_available());
     mark("輸入法", &mut marks);
     // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
     //

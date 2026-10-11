@@ -282,8 +282,8 @@ fn frame_to(
     // 這一支是一幀一趟。而這個倉審前端就是靠拍照，一張會吞字的照片比沒有照片壞。
     // 2026-09-24 審出來的。
     if let Some(ch) = editor.take_dictionary_query() {
-        let found = ime.glosses(ch);
-        editor.set_dictionary(ch, found);
+        let found = ime.glosses(&ch);
+        editor.set_dictionary(&ch, found);
     }
     // …and the search that is owed, for the same reason and with the same
     // Warning: : **before the page is measured**, because the sidebar's width is
@@ -787,8 +787,8 @@ pub fn run(
         // here — before the draw, so the panel is filled on the very frame the
         // key opened it.
         if let Some(ch) = editor.take_dictionary_query() {
-            let found = ime.glosses(ch);
-            editor.set_dictionary(ch, found);
+            let found = ime.glosses(&ch);
+            editor.set_dictionary(&ch, found);
         }
         // The frame is drawn **and kept**: `draw` hands back the buffer it just
         // filled, and that is the only honest way to reach it — see the picture
@@ -938,6 +938,7 @@ pub fn run(
                 editor.set_status(said);
             }
             editor.set_ime_available(ime.available());
+            editor.set_chaifen_available(ime.chaifen_available());
             let words = ime.segmenter();
             if words.is_available() {
                 editor.set_segmenter(Box::new(words));
@@ -1636,6 +1637,7 @@ pub fn run(
                         editor.set_status(switch_scheme(ime, &tag, config));
                     }
                     editor.set_ime_available(ime.available());
+                    editor.set_chaifen_available(ime.chaifen_available());
                     // The scheme's own language data may be better than what
                     // was loaded before it.
                     let words = ime.segmenter();
@@ -3672,7 +3674,11 @@ fn where_report(ime: &ImeSession) -> String {
     // **一家一行**（2026-10-08 定）。從前這裏寫死「靈明碼表 {版本}」，而 2026-10-07
     // 起二進制裏是兩張（靈明 ＋ 星陳）——報出來的只有一張。
     let built_in = yumete_ime::builtin_tables();
-    match built_in.is_empty() {
+    // **全息拆分表也在裏面**（2026-10-12）。它不分方案，所以是自己一行，沒有版
+    // 本——上面那個日期是 `VERSION` 裏碼表的戳記。這張單子是全樹唯一答得出「我
+    // 這份二進制到底帶了什麼」的地方，而 `空格 n` 查不出東西時缺的可能正是它。
+    let chaifen = yumete_ime::has_builtin_chaifen();
+    match built_in.is_empty() && !chaifen {
         true => {
             let _ = writeln!(out, "    {}", say!("yume.where.nothing"));
         }
@@ -3681,6 +3687,9 @@ fn where_report(ime: &ImeSession) -> String {
                 let name = scheme.factory_name().unwrap_or_else(|| scheme.tag());
                 let when = yumete_ime::builtin_version().unwrap_or_default();
                 let _ = writeln!(out, "    {}", say!("yume.where.builtin-is", name, when));
+            }
+            if chaifen {
+                let _ = writeln!(out, "    {}", say!("yume.where.builtin-chaifen"));
             }
         }
     }
@@ -4046,7 +4055,9 @@ fn ime_handle(
         // undo ever bought.
         KeyCode::Tab if composing => match ime.panel_is_full() {
             true => {
-                if let Some(ch) = ime.top_candidate().chars().next() {
+                // 一個候選的頭一個**字簇**，不是頭一個碼位：帶變體選擇符的
+                // 候選（`🈚️`）按碼位切出來是殘的，查不着。
+                if let Some(ch) = yumete_cjk::graphemes(&ime.top_candidate()).next() {
                     let _ = editor.look_up(ch, false);
                 }
             }
@@ -6431,7 +6442,7 @@ fn draw_note(
             }
             // 查過了，表裏没有這個字——除非根本還沒載表。
             Some(_) => vec![(
-                match editor.ime_available() {
+                match editor.chaifen_available() {
                     true => say!("ui.not-in-the-table"),
                     false => say!("ui.no-table-yet"),
                 },
@@ -16975,9 +16986,9 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Esc);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
-        editor.look_up('那', true);
+        editor.look_up("那", true);
         editor.take_dictionary_query();
-        editor.set_dictionary('那', vec![
+        editor.set_dictionary("那", vec![
             ("拆分".to_string(), "刀二阝".to_string()),
             ("分節編碼".to_string(), "vf-b".to_string()),
         ]);
@@ -17018,10 +17029,10 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Esc);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
-        editor.look_up('那', true);
+        editor.look_up("那", true);
         editor.take_dictionary_query();
         let long = "nà_nā_nuó_nuò_né_ne_nèi_nǎ_něi".to_string();
-        editor.set_dictionary('那', vec![
+        editor.set_dictionary("那", vec![
             ("讀音".to_string(), long.clone()),
             ("編碼".to_string(), "WSGu".to_string()),
         ]);
@@ -17055,7 +17066,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.take_dictionary_query(), None, "…and only the panel");
 
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
-        assert_eq!(editor.take_dictionary_query(), Some('吧'));
+        assert_eq!(editor.take_dictionary_query(), Some("吧".to_string()));
         assert_eq!(editor.info_now(), Some(Info::Dictionary));
         // The keys stay with the word: the reader is mid-composition, and the
         // panel is only there to be glanced at.
@@ -17068,7 +17079,7 @@ fn squeezed(text: &str) -> String {
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
         ime.input('b');
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
-        assert_eq!(editor.take_dictionary_query(), Some('吧'));
+        assert_eq!(editor.take_dictionary_query(), Some("吧".to_string()));
     }
 
     /// #211: the setting, the command, and the question, in the writer's words.

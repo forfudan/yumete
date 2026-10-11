@@ -500,4 +500,35 @@ impl Editor {
                 .filter(|&c| c != '\n' && c != '\r'),
         }
     }
+
+    /// **一個字簇，不是一個 `char`**——查字典問的就是這個（2026-10-12）。
+    ///
+    /// [`char_at_cursor`](Self::char_at_cursor) 答的是一個碼位，而屏幕上的一個
+    /// 「字」可以是好幾個：`🈚️` 是 U+1F21A ＋ 變體選擇符，一個帶 IVS 的漢字是
+    /// 漢字 ＋ 一個 Plane-14 的標籤。按碼位問，查出來的是那一串的頭一個，而使用
+    /// 者指着的是整個。
+    ///
+    /// 和 `char_at_cursor` 同一條收尾規矩：行末沒有字就答前面那一個。
+    pub fn grapheme_at_cursor(&self) -> Option<String> {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
+        let start = rope.line_to_char(line);
+        let text = rope.line(line).to_string();
+        let text = text.trim_end_matches(['\n', '\r']);
+        // 行裏的第幾個字符 → 它落在哪一個字簇上。走過去而不是切片，因為字簇的
+        // 邊界不在字符上。
+        let want = self.caret().saturating_sub(start);
+        let mut at = 0usize;
+        let mut last: Option<&str> = None;
+        for g in yumete_cjk::graphemes(text) {
+            let n = g.chars().count();
+            if want < at + n {
+                return Some(g.to_string());
+            }
+            at += n;
+            last = Some(g);
+        }
+        // 走到了行尾（或者空行）：答前面那一個，同 `char_at_cursor`。
+        last.map(str::to_string)
+    }
 }

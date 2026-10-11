@@ -12086,6 +12086,14 @@ zhs = "出厂自带（前面都没有的时候）"
 en = "built in (when none of the above answered)"
 
 [[message]]
+# `:yume-where`：二進制裏那張全息拆分表（2026-10-12 加的）。它不分方案，所以不
+# 走 `builtin-is` 那一行，也沒有自己的版本——那個日期是碼表的。
+key = "yume.where.builtin-chaifen"
+zht = "宇浩拆分表"
+zhs = "宇浩拆分表"
+en = "宇浩 decomposition table"
+
+[[message]]
 # `:yume-where`：出廠自帶的碼表，一家一行。{0} 是方案名，{1} 是版本（「精華版
 # 日期」那一段是編譯時戳的，見 `yumete-ime/build.rs`）。
 key = "yume.where.builtin-is"

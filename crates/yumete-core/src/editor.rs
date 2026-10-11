@@ -2383,6 +2383,9 @@ pub struct Editor {
     table_numbers: bool,
     /// Whether a 碼表 is loaded, as last reported by the front end.
     ime_available: bool,
+    /// Whether a 字料層 (全息拆分表) is answering — the other half of
+    /// [`Editor::ime_available`], and no longer the same question (2026-10-12).
+    chaifen_available: bool,
     /// Whether the answer is being **shown in the other work area** (`gw`,
     /// `g?`, `t?`) or **gone to** (`gd`, `g/`, `t/`). Set as the key is pressed
     /// and read wherever the landing happens — including a page later, when a
@@ -2391,7 +2394,7 @@ pub struct Editor {
     /// A `:shot` waiting for the frame it is a picture of.
     screenshot_request: Option<ShotJob>,
     /// A character whose 字料 the front end has not looked up yet (#215).
-    dictionary_query: Option<char>,
+    dictionary_query: Option<String>,
     /// **`gd` 在代碼檔上問出去的那一句**（#53 ②，2026-09-21）——檔、行、列。
     ///
     /// 和字典那一問同一個形狀（#215）：編輯器不握有答案，服務器纔有，而只有前端
@@ -2520,7 +2523,7 @@ pub struct Editor {
     /// — the panel shows the character alone. `Some(ch, Some([]))`: answered,
     /// and the 拆分表 has nothing for it, which the panel has to say out loud
     /// rather than draw as an empty box.
-    dictionary: Option<(char, Option<Vec<Gloss>>)>,
+    dictionary: Option<(String, Option<Vec<Gloss>>)>,
     /// The other work area, when the page is split (Feature #176).
     other: Option<Pane>,
     /// Which half of the screen holds the keys — **screen order**, so
@@ -3657,6 +3660,7 @@ impl Editor {
             focus: false,
             wheel_step: 3,
             ime_available: false,
+            chaifen_available: false,
             definition_preview: false,
             screenshot_request: None,
             dictionary_query: None,

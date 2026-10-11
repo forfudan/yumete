@@ -9186,7 +9186,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(ed.info_in_this_sidebar(right), Some(crate::sidebar::Info::Dictionary));
     assert_eq!(ed.panel_focus(), Some(right), "the keys go along");
     assert!(ed.panel(Side::Left).is_none(), "and nothing was opened on the left");
-    assert_eq!(ed.take_dictionary_query(), Some('那'));
+    assert_eq!(ed.take_dictionary_query(), Some("那".to_string()));
     assert_eq!(ed.take_dictionary_query(), None, "asked once, answered once");
 
     // Until the answer arrives the panel is the character alone — not an
@@ -9194,7 +9194,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(ed.info_rows(right).len(), 1);
 
     ed.set_dictionary(
-        '那',
+        "那",
         vec![
             ("拆分".to_string(), "刀二阝".to_string()),
             ("編碼".to_string(), "vfb".to_string()),
@@ -9342,29 +9342,55 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     );
 }
 
+/// **游標下的是一個字簇，不是一個碼位**（2026-10-12）。
+///
+/// 查字典問的是使用者指着的那一個「字」，而屏幕上的一個字可以是好幾個碼位：
+/// `🈚️` 是 U+1F21A ＋ 變體選擇符，一個帶 IVS 的漢字是漢字 ＋ 一個 Plane-14 的
+/// 標籤。按碼位問，問出去的是那一串的頭一個——拆分表裏 `㐂` 和 `㐂󠄁` 是兩條，
+/// 拆得不一樣。
+#[test]
+fn the_character_under_the_caret_is_a_whole_cluster() {
+    let mut ed = typed("\u{3402}\u{E0101}a");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('0'));
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("\u{3402}\u{E0101}"));
+    assert_eq!(ed.char_at_cursor(), Some('\u{3402}'), "碼位那一支照舊答頭一個");
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("a"), "l 走過整個字簇");
+    // 行末沒有字就答前面那一個，同 `char_at_cursor` 的收尾。
+    ed.on_key(Key::Char('$'));
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("a"));
+}
+
 /// 「查不到」and「還沒問」are different findings.
+///
+/// **問的是拆分表在不在，不是碼表在不在**（2026-10-12 改的）：全息拆分表嵌進了
+/// 二進制，載不載方案都答得出，所以「碼表沒載」不再是一次空手而回的理由。
 #[test]
 fn a_character_the_table_has_nothing_for_says_so() {
     let mut ed = typed("那年冬天");
-    ed.set_ime_available(true);
+    ed.set_chaifen_available(true);
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
-    ed.set_dictionary('那', Vec::new());
+    ed.set_dictionary("那", Vec::new());
     let rows = ed.info_rows(crate::sidebar::Side::Right);
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!(rows[1].name, say!("ui.not-in-the-table"));
 }
 
-/// ……而「根本還沒載表」是第三種，出廠正是這一種（`[yume] start = false`）。
-/// 從前它也說「拆分表裏沒有這個字」——剛裝好的人問哪個字都得到這句假話。
+/// ……而「根本沒有表」是第三種。2026-10-12 之前出廠正是這一種
+/// （`[yume] start = false`，而拆分表跟着方案走）；現在只剩一種機器落在這裏：
+/// 編譯時取不到全息拆分表、本機也沒裝的那一種。
 #[test]
 fn with_no_table_loaded_the_panel_says_that_rather_than_blaming_the_character() {
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
-    ed.set_dictionary('那', Vec::new());
+    ed.set_dictionary("那", Vec::new());
     let rows = ed.info_rows(crate::sidebar::Side::Right);
     assert_eq!(rows[1].name, say!("ui.no-table-yet"), "{rows:?}");
 }
@@ -9380,9 +9406,9 @@ fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
-    ed.look_up('年', true);
-    ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
-    assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some('年'));
+    ed.look_up("年", true);
+    ed.set_dictionary("那", vec![("拆分".to_string(), "刀二阝".to_string())]);
+    assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some("年"));
     assert_eq!(ed.info_rows(crate::sidebar::Side::Right).len(), 1, "still waiting");
 }
 

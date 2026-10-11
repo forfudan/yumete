@@ -1128,14 +1128,14 @@ impl Editor {
         let Some((ch, answer)) = self.dictionary.as_ref() else {
             return Vec::new();
         };
-        let mut rows = vec![heading(ch.to_string())];
+        let mut rows = vec![heading(ch.clone())];
         let Some(fields) = answer else {
             return rows;
         };
         if fields.is_empty() {
             rows.push(Row {
                 path: PathBuf::new(),
-                name: match self.ime_available() {
+                name: match self.chaifen_available() {
                     true => say!("ui.not-in-the-table"),
                     false => say!("ui.no-table-yet"),
                 },
@@ -1170,14 +1170,14 @@ impl Editor {
         rows
     }
 
-    /// Look this character up in the 拆分表 — `Space d`, and `Tab` on a
+    /// Look this character up in the 拆分表 — `空格 n`, and `Tab` on a
     /// candidate (#215).
     ///
     /// The editor does not hold the table: yume does, and only the front end
     /// has it. So the character is parked here and the panel is opened empty;
     /// the answer arrives on the next pass through the loop, one frame later,
     /// which is not long enough for a reader to see the gap.
-    pub fn look_up(&mut self, ch: char, focus: bool) -> bool {
+    pub fn look_up(&mut self, ch: &str, focus: bool) -> bool {
         self.look_up_here(ch, false, focus)
     }
 
@@ -1187,15 +1187,15 @@ impl Editor {
     /// 欄**：邊欄是容器，只由人開由人關，看一眼字不該讓工作區變樣。
     ///
     /// 回 `false` 表示這一下是**關掉**（再按一次收起來）。
-    pub fn look_up_afloat(&mut self, ch: char) -> bool {
+    pub fn look_up_afloat(&mut self, ch: &str) -> bool {
         self.look_up_here(ch, true, false)
     }
 
     /// 兩個問法共用的那一半（#426：它們差的只是容器）。
-    fn look_up_here(&mut self, ch: char, afloat: bool, focus: bool) -> bool {
+    fn look_up_here(&mut self, ch: &str, afloat: bool, focus: bool) -> bool {
         // Warning: **同一個字再問一次纔算「收起來」。** `Tab` 選候選也走這一支，
         // 問的是另一個字——那是換一份答案，不是關窗，所以它走不收起的那一支。
-        let same = self.dictionary.as_ref().is_some_and(|(at, _)| *at == ch);
+        let same = self.dictionary.as_ref().is_some_and(|(at, _)| at == ch);
         match same {
             true if !self.ask_for_info(crate::sidebar::Info::Dictionary, afloat) => {
                 self.panel_focus = None;
@@ -1204,10 +1204,10 @@ impl Editor {
             true => {}
             false => self.put_this_info_here(crate::sidebar::Info::Dictionary, afloat),
         }
-        self.dictionary_query = Some(ch);
+        self.dictionary_query = Some(ch.to_string());
         // Asked, unanswered: what is showing until the answer arrives is the
         // character alone, which is not the same panel as 「查不到」.
-        self.dictionary = Some((ch, None));
+        self.dictionary = Some((ch.to_string(), None));
         // **Where the question was asked from.** The answer stays up while the
         // cursor is still there and goes when it leaves — nothing has to close
         // it, which is the whole of why this slot holds no state (#293).
@@ -1231,7 +1231,7 @@ impl Editor {
 
     /// The character `Space d` or `Tab` asked about, for the front end to
     /// answer once (#215).
-    pub fn take_dictionary_query(&mut self) -> Option<char> {
+    pub fn take_dictionary_query(&mut self) -> Option<String> {
         self.dictionary_query.take()
     }
 
@@ -1239,25 +1239,25 @@ impl Editor {
     ///
     /// Dropped if the reader has since asked about a different character —
     /// the answer to last frame's question must not overwrite this frame's.
-    pub fn set_dictionary(&mut self, ch: char, fields: Vec<Gloss>) {
-        if self.dictionary.as_ref().is_some_and(|(at, _)| *at != ch) {
+    pub fn set_dictionary(&mut self, ch: &str, fields: Vec<Gloss>) {
+        if self.dictionary.as_ref().is_some_and(|(at, _)| at != ch) {
             return;
         }
-        self.dictionary = Some((ch, Some(fields)));
+        self.dictionary = Some((ch.to_string(), Some(fields)));
         self.refresh_sidebar();
     }
 
     /// **這一則字典該不該浮在光標旁邊**——那一格沒開，而此刻擺的正是字典。
-    pub fn dictionary_afloat(&self) -> Option<(char, Option<&[Gloss]>)> {
+    pub fn dictionary_afloat(&self) -> Option<(&str, Option<&[Gloss]>)> {
         (self.info_afloat() == Some(crate::sidebar::Info::Dictionary))
             .then(|| self.dictionary())
             .flatten()
     }
 
-    pub fn dictionary(&self) -> Option<(char, Option<&[Gloss]>)> {
+    pub fn dictionary(&self) -> Option<(&str, Option<&[Gloss]>)> {
         self.dictionary
             .as_ref()
-            .map(|(ch, answer)| (*ch, answer.as_deref()))
+            .map(|(ch, answer)| (ch.as_str(), answer.as_deref()))
     }
 
     /// Whether the keys are in either panel.

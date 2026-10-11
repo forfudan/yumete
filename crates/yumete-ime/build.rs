@@ -41,7 +41,8 @@ fn main() {
     // **精華版，永遠**——裝好的那份完整表這裏不看，理由在模塊開頭。沒有就去取
     // 一次，取進一個自己填的 `YUMETE_BUILTIN_DIR`（同一套 `schemes/`＋`data/`
     // 的擺法），於是下面兩支 `find` 一個字都不用改。
-    if std::env::var_os("YUMETE_BUILTIN_DIR").is_none() && find(LINGMING).is_none() {
+    let nothing_cached = find(LINGMING).is_none() || find(CHAIFEN).is_none();
+    if std::env::var_os("YUMETE_BUILTIN_DIR").is_none() && nothing_cached {
         fetch_the_builtin();
     }
     let table = find(LINGMING);
@@ -49,10 +50,19 @@ fn main() {
     // The 符號表 is the same file either way — 精華版's is cut from the same
     // 15,716 rows — so there is no mixture to worry about.
     let symbols = find(SYMBOLS).or_else(|| find("symbols.ytab"));
+    // **全息拆分表也進來**（2026-10-12 定）。它不是碼表，不分方案——每個方案讀
+    // 的都是這一張，而「這個字怎麼拆、怎麼讀、在哪幾個字集裏」是一個不打字的人
+    // 也會問的問題。沒有它，一份沒裝數據的二進制就算載了出廠碼表，按 `空格 n`
+    // 照樣每個字都答「拆分表裏沒有這個字」。
+    //
+    // 3.2 MB，原樣。作者 2026-10-12 權衡過壓縮（gzip 1.22 MB／4 ms）之後選的
+    // 原樣：多一個依賴、多一段解壓代碼，換 2 MB。
+    let chaifen = find(CHAIFEN).or_else(|| find("chaifen.ydiv"));
     let mut body = String::new();
     body.push_str(&declare("BUILTIN_LINGMING", table.as_deref()));
     body.push_str(&declare("BUILTIN_XINGCHEN", xingchen.as_deref()));
     body.push_str(&declare("BUILTIN_SYMBOLS", symbols.as_deref()));
+    body.push_str(&declare("BUILTIN_CHAIFEN", chaifen.as_deref()));
     // Say *which* table, not just how old. `:yume` prints this, and 「出廠自帶
     // 2026-09-12」 beside a candidate list with no 詞 in it is an answer that
     // sends the reader looking for a bug in 宇浩.
@@ -202,6 +212,7 @@ fn watch(path: &Path) {
 const LINGMING: &str = "schemes/lingming_essential.ytab";
 const XINGCHEN: &str = "schemes/xingchen_essential.ytab";
 const SYMBOLS: &str = "data/symbols.ytab";
+const CHAIFEN: &str = "data/chaifen.ydiv";
 const RELEASE: &str =
     "https://github.com/forfudan/yume-release/releases/download/yumete-data";
 
@@ -217,16 +228,26 @@ fn fetch_the_builtin() {
             return;
         }
     }
-    // **靈明那三個要麼齊要麼不算**，星陳是添頭：少了它星陳打不了字，少了那三個裏
-    // 任何一個是連漢字都打不了。所以前者缺了收攤，後者缺了只說一聲。
+    // **靈明那三個要麼齊要麼不算**，星陳與全息拆分表是添頭：少了星陳那一張星陳打
+    // 不了字，少了拆分表 `空格 n` 查不出字，而少了頭三個裏任何一個是連漢字都打不
+    // 了。所以前者缺了收攤，後者缺了只說一聲。
     let mut got = Vec::new();
     for (asset, into, needed) in [
         ("lingming_essential.ytab", LINGMING, true),
         ("symbols.ytab", SYMBOLS, true),
         ("VERSION", "VERSION", true),
         ("xingchen_essential.ytab", XINGCHEN, false),
+        // 添頭，同星陳：少了它打得了字，只是查不出拆分。
+        ("chaifen.ydiv", CHAIFEN, false),
     ] {
         let to = cache.join(into);
+        // Warning: **已經在快取裏的別再取一遍**（2026-10-12）。從前這一支只在
+        // 「一張表都没有」的時候跑，所以不必問；現在少了拆分表也跑，而下面那句
+        // 取不到就 `remove_file(&to)` 的收尾會把**本來好好的那一份刪掉**——一臺
+        // 離綫的機器於是每編一次就少一張表。
+        if to.metadata().is_ok_and(|m| m.len() > 0) {
+            continue;
+        }
         let ok = std::process::Command::new("curl")
             .args(["-fsSL", "--max-time", "60", "-o"])
             .arg(&to)
@@ -237,7 +258,7 @@ fn fetch_the_builtin() {
         if !ok {
             let _ = std::fs::remove_file(&to);
             if !needed {
-                println!("cargo:warning=取不到 {asset}，這一份二進制不帶那個方案的出廠碼表");
+                println!("cargo:warning=取不到 {asset}，這一份二進制不帶它");
                 continue;
             }
             // 半份不留：下一趟編譯要麼乾淨地再取一次，要麼乾淨地沒有表。

@@ -637,6 +637,21 @@ impl Editor {
         self.ime_available
     }
 
+    /// Tell the editor whether a 全息拆分表 is answering — only the front end
+    /// knows, same as the 碼表 above.
+    pub fn set_chaifen_available(&mut self, available: bool) {
+        self.chaifen_available = available;
+    }
+
+    /// **「表裏沒有這個字」和「根本沒有表」是兩個答案**，and since 2026-10-12
+    /// the 拆分表 is its own question: it is embedded in the binary and read
+    /// without a scheme, so 「碼表沒載」 stopped being the reason a lookup
+    /// comes back empty. 一個不在表裏的字（emoji、拉丁字母）載了方案照樣不在，
+    /// 而從前答的是「`:yume-scheme` 載一次」——載了也沒用。
+    pub fn chaifen_available(&self) -> bool {
+        self.chaifen_available
+    }
+
     /// What is drawn in a paragraph's opening squares.
     pub fn indent_hint(&self) -> crate::zong::IndentHint {
         self.indent_hint
