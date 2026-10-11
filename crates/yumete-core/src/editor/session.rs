@@ -223,6 +223,24 @@ impl Editor {
     /// on most keys: `changed_underneath` costs a `stat` on the cheap path and
     /// a whole read on the expensive one, and a held-down `j` would pay it per
     /// row.
+    /// **還有多久該看一眼磁碟**，`None` ＝ 沒開自動重載（2026-10-11）。
+    ///
+    /// Warning: **這一支是從前端那個 `continue` 裏救出來的。** 循環從前對自動重載
+    /// 開一條自己的路：`recv_timeout(兩秒)`，超時就 `continue`——而那一下**跳過了
+    /// 底下算所有鬧鐘最小值的那一段**。於是自動重載一開（它是出廠默認），別的
+    /// 鬧鐘全被壓成兩秒一次：跟着光標那一問要等它停穩三百毫秒纔發得出去，發出去
+    /// 之後答案又要等一次醒來纔收得到——量出來三到五秒，而 `空格 k` 立刻就出來
+    /// （按鍵本身把循環叫醒了）。磁碟這一眼不是另一條路，它就是又一個鬧鐘。
+    pub fn disk_due_in(&self) -> Option<std::time::Duration> {
+        if !self.reload_auto {
+            return None;
+        }
+        Some(match self.last_disk_check {
+            Some(last) => DISK_INTERVAL.saturating_sub(last.elapsed()),
+            None => std::time::Duration::ZERO,
+        })
+    }
+
     pub fn disk_tick(&mut self) {
         if !self.reload_auto {
             return;

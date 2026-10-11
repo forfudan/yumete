@@ -1147,18 +1147,6 @@ pub fn run(
         if server_said_something {
             continue;
         }
-        if editor.reload_auto() && inbox.is_empty() {
-            match events.recv_timeout(DISK_POLL) {
-                Ok(Ok(event)) => inbox.push_back(event),
-                Ok(Err(err)) => break Err(err),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    editor.disk_tick();
-                    editor.status_tick();
-                    continue;
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break Ok(()),
-            }
-        }
         diag::beat(diag::Stage::Reading, 0);
         let arrived = match inbox.pop_front() {
             Some(event) => Ok(event),
@@ -1184,6 +1172,12 @@ pub fn run(
                 editor.status_due_in(),
                 // 跟着光標的那一問（`空格 K`）：光標停穩三百毫秒就該問一句。
                 editor.docs_due_in(),
+                // Warning: **磁碟那一眼是鬧鐘之一，不是它自己一條路**（2026-10-11
+                // 報的：即時文檔要等三到五秒纔出來）。從前自動重載在這一段**之
+                // 前**自己 `recv_timeout(兩秒)` 然後 `continue`，於是它一開——而
+                // 它是出廠默認——底下這張鬧鐘表整個算不到：跟着光標那一問的三百
+                // 毫秒要等到兩秒那一跳纔發得出去，答案再等下一跳纔收得到。
+                editor.disk_due_in(),
                 // 搜索在旁邊跑的時候要醒過來收（同上面那幾個鬧鐘）。
                 editor.searching_due_in(),
                 // 挑選器的走查在旁邊跑的時候同理。四十毫秒比轉圈那一格（八十）還
@@ -1209,6 +1203,10 @@ pub fn run(
                         editor.vcs_tick();
                         editor.autosave_tick();
                         editor.status_tick();
+                        // 自動重載那一眼從前在這一段上面自己睡自己醒；現在它和
+                        // 別的鬧鐘一起排隊，所以也要在這裏問一句。自己節流，
+                        // 所以不到兩秒按幾次都不花什麽。
+                        editor.disk_tick();
                         // One frame is redrawn on the way round — the loop
                         // draws at its head — and exactly one, because writing
                         // the copy makes the draft no longer stale and the next
@@ -1649,8 +1647,9 @@ pub fn run(
                 // Throttled inside, so this is a clock check on most keys.
                 editor.autosave_tick();
                 // …and ask the disk whether the file moved under us
-                // (Feature #214). Throttled inside too, and off by default.
-                // Also asked on the idle path above, which is where it matters.
+                // (Feature #214). Throttled inside too, and **on by default**
+                // since 2026-10-11. Also asked on the idle path above, which
+                // is where it matters.
                 editor.disk_tick();
                 // **預覽：打到一半就照它畫**（2026-10-07，helix 的三個 prompt 事件）。
                 //
@@ -1943,13 +1942,6 @@ fn drain_the_flick(
     }
     more
 }
-
-/// How long an idle `:reload-auto` session waits before looking at the disk.
-///
-/// The same two seconds the core throttles at, so the wait and the throttle do
-/// not beat against each other: one look per wake, and no wake at all while
-/// the setting is off.
-const DISK_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// The longest the page may go unrefreshed while input is still arriving (#314).
 ///

@@ -12050,6 +12050,32 @@ fn width_goes_both_ways_and_leaves_the_chinese_marks_alone() {
     assert_eq!(ed.current_buffer().text().trim_end(), "甲 乙");
 }
 
+/// **磁碟那一眼是鬧鐘之一，不是它自己一條路**（2026-10-11 報的）。
+///
+/// 即時文檔要三到五秒纔出來，而 `空格 k` 立刻就出來。前端從前對自動重載開一條
+/// 自己的路（`recv_timeout(兩秒)` 然後 `continue`），跳過了算所有鬧鐘最小值那一
+/// 段——於是它一開（而它是出廠默認），三百毫秒那一問要等到兩秒那一跳纔發得出
+/// 去，答案再等下一跳纔收得到。
+#[test]
+fn the_disk_look_reports_a_deadline_like_every_other_clock() {
+    let mut ed = typed("那年冬天\n");
+    ed.set_reload_auto(false);
+    assert_eq!(ed.disk_due_in(), None, "沒開自動重載就沒有這個鬧鐘");
+
+    ed.set_reload_auto(true);
+    assert_eq!(
+        ed.disk_due_in(),
+        Some(std::time::Duration::ZERO),
+        "還沒看過，那就是現在"
+    );
+
+    // 看過一眼之後，下一次是兩秒後——而不是「我自己睡兩秒」。
+    ed.disk_tick();
+    let left = ed.disk_due_in().expect("開着就有");
+    assert!(left > std::time::Duration::ZERO, "剛看過，還早");
+    assert!(left <= std::time::Duration::from_secs(2), "最多兩秒：{left:?}");
+}
+
 /// **帶子在塊裏走得動，走出那幾行就收**（2026-10-11：「能走，走出那幾行就收」）。
 ///
 /// 別的四種信息問的是「光標底下這個字」，一個字就是一個問題；改動問的是一塊。
