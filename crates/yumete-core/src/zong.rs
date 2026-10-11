@@ -1307,8 +1307,9 @@ fn zong_span(breaks: &[usize], total: usize, index: usize) -> (usize, usize) {
 /// 「，」 ends up at the head of the next 縱. Both are what this function's
 /// caller — [`zong_breaks`] — already gets right for the page.
 ///
-/// Blank paragraphs are dropped: on the page they are the space between two
-/// paragraphs, and in a ring they are a column of nothing.
+/// **空段落照樣是一縱**（2026-10-12 改的）。從前這裏把它濾掉了，理由是「在框
+/// 裏它是一縱空白」——而框裏的那一縱空白正是兩段之間的界，和頁面上是同一回事。
+/// 翻得動之後省那一縱不再值錢，橫排那一邊也從來沒省過它。
 pub fn zong_rows(text: &str, zong_len: usize) -> Vec<String> {
     let rope = Rope::from_str(text);
     let grid = Grid::plain(zong_len, Dialects::NONE);
@@ -1319,7 +1320,6 @@ pub fn zong_rows(text: &str, zong_len: usize) -> Vec<String> {
         .into_iter()
         .map(|z| rope.slice(z.start..z.end).to_string())
         .map(|z| z.trim_end_matches('\n').to_string())
-        .filter(|z| !z.trim().is_empty())
         .collect()
 }
 

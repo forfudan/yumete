@@ -490,6 +490,11 @@ fn entry_zong(text: &str, tall: usize) -> Vec<String> {
             }
         }
     }
+    // 段落之間那一縱空白是作者放的，留着（2026-10-12）；**末尾那幾縱不是**——
+    // 詞條以換行收尾就會多出一縱，而它在框裏只是左邊一條白邊。
+    while out.last().is_some_and(|z| z.trim().is_empty()) {
+        out.pop();
+    }
     out
 }
 
@@ -562,7 +567,18 @@ pub fn draw(
     // used by everything below: the key table's depth, and the cut a body too
     // tall for the room takes.
     let cap = room_h.saturating_sub(2).max(1) as usize;
-    let title_w = yumete_cjk::str_width(&panel.title);
+    // **框上寫得下什麽，纔由什麽定寬**（2026-10-12 報的：竪排那一扇左邊空了一
+    // 大片）。下面三道底綫——名字、那一句話、讀到第幾——量的都是**畫在框綫上**
+    // 的東西，而竪排一樣都不畫在那兒：名字是第一縱，數字順着左框往下走。照橫排
+    // 的尺寸撐出來的那二十幾格於是全是空的。
+    //
+    // 所以這裏量的不是「有沒有」，是「這一扇畫不畫它」——同一個問題問一次，
+    // 寬度和下面那幾支畫的人讀的是同一個答案。
+    let named = !panel.title.is_empty() && !(panel.vertical_text && prose);
+    let title_w = match named {
+        true => yumete_cjk::str_width(&panel.title),
+        false => 0,
+    };
     // **翻得動的時候，底邊右端寫「怎麽翻」**（2026-09-30 定：「浮窗或者右侧
     // 面板，可以显示『PgUp/PgDn 翻页』。『␣K 进边栏』似乎反而不是很重要的信息」）。
     // 「進邊欄」挪到了命令行（`hint.rs` 的 `the_way_back_to_the_list`）。
@@ -574,7 +590,7 @@ pub fn draw(
         .as_deref()
         .map(yumete_cjk::str_width)
         .unwrap_or(0)
-        .max(match panel.pages {
+        .max(match panel.pages && !panel.vertical_text {
             true => yumete_cjk::str_width(&paged),
             false => 0,
         });
@@ -864,7 +880,11 @@ pub fn draw(
         }
         _ => (count, lines),
     };
-    let read_w = read.map_or(0, |(at, all)| yumete_cjk::str_width(&format!("{at}/{all}")));
+    // 竪排的那個數字站在左框上，一格寬，往下讀——它不佔底邊，所以不進這一道。
+    let read_w = match panel.vertical_text {
+        true => 0,
+        false => read.map_or(0, |(at, all)| yumete_cjk::str_width(&format!("{at}/{all}"))),
+    };
     let deep = count.div_ceil(columns);
     let width = (inner + 2 + pad * 2)
         .max(title_w + 4)
@@ -907,13 +927,12 @@ pub fn draw(
         // ① 竦書的散文把名字畫成第一縱（見下面），框上再寫一遍是同一個詞兩格之隔；
         // ② 補全那一扈有意不要名字（2026-10-08 原話：「自動補全這個 title 太吸引
         // 眼球，建議不要。這個面板就是空的標題，這樣不會干扰視線」）。
-        title: match (panel.vertical_text && prose) || panel.title.is_empty() {
-            true => None,
-            false => Some((
+        title: named.then(|| {
+            (
                 panel.title.clone(),
                 Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
-            )),
-        },
+            )
+        }),
     });
     // Warning: **The body sets no ground of its own** (2026-09-18: 「命令行文字
     // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
@@ -1240,6 +1259,66 @@ mod tests {
             .collect();
         assert!(down2.contains('/'), "數字還在：{down2:?}");
         assert_ne!(down2, down, "讀到第幾縱變了");
+    }
+
+    /// **兩段之間那一縱空白留着**（2026-10-12 報的：「In vertical mode, you
+    /// still removed the empty line between paragraphs」）。
+    ///
+    /// 縮進那一層 2026-10-11 從兩邊一起拿掉了，可空行還少一處：`zong_rows` 自己
+    /// 把空段落濾了，理由寫着「在框裏它是一縱空白」——而那一縱空白正是兩段之間
+    /// 的界。橫排那一邊從來沒省過它。
+    #[test]
+    fn a_vertical_entry_keeps_the_blank_between_two_paragraphs() {
+        let (_, buf) = zong("第一段天地玄黃。\n\n第二段宇宙洪荒。\n", 40, 14);
+        let page = said(&buf);
+        let (one, two) = (page.find('第').unwrap(), page.rfind('第').unwrap());
+        assert_ne!(one, two, "兩段都畫出來了");
+        // 兩段各一縱，中間空一縱：所以「第」與「第」隔着的不止一縱的寬度。
+        let (rect, _) = zong("第一段天地玄黃。\n\n第二段宇宙洪荒。\n", 40, 14);
+        let (rect_tight, _) = zong("第一段天地玄黃。\n第二段宇宙洪荒。\n", 40, 14);
+        assert_eq!(
+            rect.width,
+            rect_tight.width + 2,
+            "空行自己佔一縱，所以框寬多兩格"
+        );
+    }
+
+    /// **竪排的框不許比正文寬**（2026-10-12 報的：「there seemed to be a minimum
+    /// width of the panel so that there are much space padded at left」）。
+    ///
+    /// 三道底綫——名字、「怎麼翻」、讀到第幾——量的都是**畫在框綫上**的東西，而
+    /// 竪排一樣都不畫在那兒：名字是第一縱，數字順着左框往下走。照橫排撐出來的那
+    /// 二十幾格於是全是空的。
+    #[test]
+    fn a_vertical_panel_is_no_wider_than_what_it_holds() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let (w, h) = (60u16, 20u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, w, h);
+                got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                    stand: Stand::Corner,
+                    accent: None,
+                    // 翻得動、而且名字很長：兩道底綫都站得最高的時候。
+                    pages: true,
+                    reading: false,
+                    scroll: 0,
+                    title: "洞庭湖畔的那一座樓".into(),
+                    lede: None,
+                    entry: true,
+                    body: Body::Prose("短。".into()),
+                    vertical_text: true,
+                    tag: None,
+                    marked: false,
+                });
+            })
+            .unwrap();
+        let rect = got.expect("the panel is drawn");
+        // 兩縱（標題、空、正文）＝ 六格，加兩格空氣、兩格框。
+        assert_eq!(rect.width, 3 * 2 + 2 + 2, "{rect:?}");
     }
 
     /// **一行帶行內標記的標題出現在浮窗正文裏，從前會當場崩**（2026-09-28）。
