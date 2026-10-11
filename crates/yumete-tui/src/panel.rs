@@ -277,6 +277,18 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
 /// Warning: **「…」 is East Asian *Ambiguous*** — one cell for most readers and **two**
 /// under `ambiguous_width = "wide"`, which is what a CJK reader on a CJK font
 /// sets. Charged as one, every cut ran a cell long. Ask the width table.
+/// **一個數逐字換成漢數字**——`128` → `一二八`（2026-10-11）。
+///
+/// 讀的是位，不是值：`128` 是「一二八」不是「一百二十八」。竪排那一扇一縱一個
+/// 字，位數對得齊比讀得順要緊。
+fn han(n: usize) -> String {
+    const DIGITS: [char; 10] = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    n.to_string()
+        .chars()
+        .map(|c| c.to_digit(10).map_or(c, |d| DIGITS[d as usize]))
+        .collect()
+}
+
 pub(crate) fn clip(text: &str, cells: usize) -> String {
     if yumete_cjk::str_width(text) <= cells {
         return text.to_string();
@@ -605,13 +617,22 @@ pub fn draw(
     // them after the blank that separates the two.
     let mut gold = 0usize;
     let mut quiet: std::ops::Range<usize> = 0..0;
+    // 竪排那一支自己算「讀到第幾縱／共幾縱」——它的 `count` 是「一縱幾個字」，
+    // 和橫排那一段數的不是同一個維度，所以那一段跳過它（見下面）。
+    let mut zong_read: Option<(usize, usize)> = None;
     // 段落的縮進：一格（2026-09-18：「所有的段落不用空行，但是加一格縮
     // 進」。兩格試過，太重）。一個全角空格，橫竪一樣——竪排它就是那一縱頭上的
     // 一個空位。
     let indented = |text: &str| -> String {
         text.split('\n')
             .filter(|para| !para.trim().is_empty())
-            .map(|para| match panel.entry && !para.trim_start().starts_with('─') {
+            // **竪排不縮進**（2026-10-11 定）。縮進是段落的記號，而竪排那一扇的
+            // 段落記號本來就是「換一縱」——每一縱頭上再空一格，是把一個已經說過
+            // 的事說兩遍，而一縱只有十來個字，那一格很貴。
+            .map(|para| match panel.entry
+                && !panel.vertical_text
+                && !para.trim_start().starts_with('─')
+            {
                 // Warning: Not the 「──」 that divides two entries of one name: that
                 // is the panel's own furniture, and an indent on it reads as a
                 // paragraph that begins with a rule.
@@ -664,16 +685,24 @@ pub fn draw(
             // Warning: **「…」接在末縱的腳下，不自己占一縱**（2026-09-18：「最後
             // 的省略號後面有個空行」）。自己占一縱的話那一縱只有一個字，底下
             // 一大片白——讀起來就是「這裏空了一行」，而它要說的是「話還没完」。
+            // **放不下的那幾縱翻得到，不是丟掉**（2026-10-11 定）。從前這裏
+            // `truncate` 完接一個「…」——於是那四個翻頁鍵在竪排下按了也沒有反
+            // 應，**不是攔住了，是後面根本沒有字**。報的原話：「我們截取了只能
+            // 顯示一頁的文本，剩下的都用…省略了」。
+            //
+            // 省略號一併去掉，同橫排 2026-09-30 那一條：還有多少由底邊那個數字
+            // 說，而它順帶說得出「還有多少」。
             let box_w = (room_w as usize).max(24).min(area.width as usize);
             let fits = box_w.saturating_sub(2 + pad * 2) / 2;
             if fits > 0 && zong.len() > fits {
+                let all = zong.len();
+                let from = panel.scroll.min(all - fits);
+                zong_read = Some((from + fits, all));
+                zong = zong.split_off(from);
                 zong.truncate(fits);
-                if let Some(last) = zong.last_mut() {
-                    while last.chars().count() >= tall {
-                        last.pop();
-                    }
-                    last.push('…');
-                }
+                // 金與灰數的是縱的序號，而上面剛切掉了前面幾縱。
+                gold = gold.saturating_sub(from);
+                quiet = quiet.start.saturating_sub(from)..quiet.end.saturating_sub(from);
             }
             let deep = zong.iter().map(|z| z.chars().count()).max().unwrap_or(1).max(1);
             let across = zong.len().max(1);
@@ -822,7 +851,7 @@ pub fn draw(
     // 一縱換成「…」並且把框高壓成縱的條數。
     // **讀到第幾行 / 共幾行**，寫在底邊左端（2026-09-30 定）。`None` ＝ 整則
     // 都在眼前，那時一個數字都不寫——數字出現本身就是「還有沒露出來的」。
-    let mut read: Option<(usize, usize)> = None;
+    let mut read: Option<(usize, usize)> = zong_read;
     // **帶子也翻得動**（2026-10-11 報的）。一塊六十行的改動在二十四行的屏幕上
     // 從前只畫得出九行，而且**一個字都不說**——讀者看見的是「改了九行」，底下
     // 那一半（新的那幾行）一次都露不出來。和散文那一支同一個辦法：`panel.scroll`
@@ -1078,7 +1107,20 @@ pub fn draw(
     // written, not part of what it says.
     let floor = rect.y + height - 1;
     // 翻得動就寫「怎麽翻」，否則寫這一扇自己的那句話（註寫在第幾行、開哪個檔）。
-    let right = match panel.pages && read.is_some() {
+    // Warning: **竪排那一扇不在框上寫鍵**（2026-10-11 定，原話「though we do not
+    // write the hints on the border of the panel」）。它的框是橫的而正文是竪的，
+    // 一句橫着的提示貼在那條邊上讀起來像另一扇窗的東西；數字不一樣，它是一個記
+    // 號不是一句話。
+    // Warning: **竪排那一扇不在框上寫「怎麼翻」**（2026-10-11 定，原話「though we
+    // do not write the hints on the border of the panel」）。它的框是橫的而正文是
+    // 竪的，一句橫着的提示貼在那條邊上讀起來像另一扇窗的東西；數字不一樣，它是
+    // 一個記號不是一句話。
+    //
+    // Warning: **收的只有那一句，不是整條邊。** 面板自己那一句（`tag`）照舊寫——
+    // 改動帶子在竪排下是一扇浮窗，而它那一句是 `u 還原此處改動 · y 複製先前版
+    // 本`，是**按得動的兩個鍵**，不是「還有，翻得動」。第一版把兩者一起收了，金
+    // 樣當場紅了一幀。
+    let right = match panel.pages && read.is_some() && !panel.vertical_text {
         true => Some(paged),
         false => panel.tag.clone(),
     };
@@ -1100,7 +1142,13 @@ pub fn draw(
     // 被擠出去的（報的：「现在似乎顶到了前头」）。上邊那一行的標題本來就是
     // 「╭ 文檔」，這一行照它。
     if let Some((at, all)) = read {
-        let said = format!(" {at}/{all} ");
+        // **竪排那一扇用漢數字**（2026-10-11 定，原話「58/128 五八／一二八」）。
+        // 逐字換，不是讀成「五十八」——一行一個字的時候，位數對得齊比讀得順要
+        // 緊，而那一扇裏每一個阿拉伯數字都是半角，夾在全角的字中間也不好看。
+        let said = match panel.vertical_text {
+            true => format!(" {}／{} ", han(at), han(all)),
+            false => format!(" {at}/{all} "),
+        };
         put_text(buf, rect.x + 1, floor, limit, &said, ground.fg(ink.quiet()));
     }
     Some(rect)
@@ -1115,6 +1163,22 @@ mod tests {
     /// Draw one 竪書 panel on a `w × h` page and hand back its rectangle and
     /// what was written.
     fn zong(text: &str, w: u16, h: u16) -> (Rect, ratatui::buffer::Buffer) {
+        zong_at(text, w, h, 0)
+    }
+
+    /// 全部畫出來的字，連成一條——找一句話在不在用得上。
+    fn said(buffer: &ratatui::buffer::Buffer) -> String {
+        let mut out = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                out.push_str(buffer[(x, y)].symbol());
+            }
+        }
+        out
+    }
+
+    /// 同上，`scroll` ＝ 從第幾縱起畫。
+    fn zong_at(text: &str, w: u16, h: u16, scroll: usize) -> (Rect, ratatui::buffer::Buffer) {
         let config = Config::default();
         // **先 settle，再畫**——同 `render_with` 那一句（§5.12.58）。`Palette::of`
         // 讀的是進程全局的明暗，沒人撥過它就停在 0（＝淺），而那和「有人定成淺」
@@ -1130,7 +1194,7 @@ mod tests {
                     accent: None,
                     pages: false,
                     reading: false,
-            scroll: 0,
+            scroll,
                     title: "洞庭湖".into(),
                     lede: None,
                     entry: true,
@@ -1142,6 +1206,36 @@ mod tests {
             })
             .unwrap();
         (got.expect("the panel is drawn"), terminal.backend().buffer().clone())
+    }
+
+    /// **竪排的浮窗翻得動，而且說得出還有多少**（2026-10-11 報的）。
+    ///
+    /// 從前放不下的那幾縱是被 `truncate` 丟掉的，末縱接一個「…」——於是那四個
+    /// 翻頁鍵按了沒反應，**不是攔住了，是後面根本沒有字**。原話：「我們截取了只
+    /// 能顯示一頁的文本，剩下的都用…省略了」。
+    #[test]
+    fn a_vertical_panel_pages_and_says_how_far_it_has_got() {
+        let long: String = (0..18)
+            .map(|n| format!("第{n}段天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往。\n"))
+            .collect();
+        let (_, first) = zong_at(&long, 60, 18, 0);
+        let head = said(&first);
+        assert!(!head.contains('…'), "省略號去掉了：還有多少由數字說");
+        assert!(head.contains('／'), "底邊寫着「讀到第幾／共幾」：{head:?}");
+        // **漢數字，逐字換**（原話「58/128 五八／一二八」）。
+        assert!(
+            head.contains('〇')
+                || head.contains('一')
+                || head.contains('二')
+                || head.contains('三'),
+            "那個數是漢字"
+        );
+        assert!(!head.contains('/'), "竪排那一扇不用半角斜杠");
+
+        // 翻到底：畫的是最後那幾縱，和第一屏不一樣。
+        let (_, last) = zong_at(&long, 60, 18, 999);
+        assert_ne!(said(&last), head, "翻過去就換了內容");
+        assert!(said(&last).contains('／'), "數字還在");
     }
 
     /// **一行帶行內標記的標題出現在浮窗正文裏，從前會當場崩**（2026-09-28）。
@@ -1213,12 +1307,15 @@ mod tests {
         // confusion, and it is what tripped the cap.
         assert!(rect.height <= 45 * 2 / 3);
 
-        // What did not fit says so, in the vertical ellipsis, at the far left.
+        // **放不下的那一截由底邊那個數字說**（2026-10-11 改的）。從前這裏是一個
+        // 竪排的省略號 `︙`，而那時放不下就是丟掉；翻得動之後它換成了「讀到第幾
+        // ／共幾」，而那個數還順帶說了「還有多少」——同橫排 2026-09-30 那一條。
         let text: String = (0..rect.height)
             .flat_map(|y| (0..rect.width).map(move |x| (x, y)))
             .map(|(x, y)| buffer[(rect.x + x, rect.y + y)].symbol().to_string())
             .collect();
-        assert!(text.contains('︙'), "the cut is marked: {text:?}");
+        assert!(!text.contains('︙'), "省略號去掉了：{text:?}");
+        assert!(text.contains('／'), "改由數字說還有多少：{text:?}");
 
         // 禁則, down the column: no 縱 may open with a mark that closes
         // something. Hand-chopping the horizontal wrapper's rows put 「，」 at
@@ -1230,14 +1327,9 @@ mod tests {
             assert!(!head.contains(mark), "{mark} opens a 縱: {head:?}");
         }
 
-        // And the 「…」 hangs off the foot of the last 縱 rather than standing
-        // in one of its own with a column of white under it.
-        let ellipsis_row = (0..rect.height)
-            .find(|&y| {
-                (0..rect.width).any(|x| buffer[(rect.x + x, rect.y + y)].symbol() == "︙")
-            })
-            .expect("the ellipsis is drawn");
-        assert!(ellipsis_row > 1, "the 「…」 is a column of its own: row {ellipsis_row}");
+        // Warning: **這裏從前還驗「省略號掛在末縱的腳下、不自己占一縱」**。那一條
+        // 連同省略號本身一起沒了（2026-10-11）：放不下的那幾縱現在翻得到，而
+        // 「還有」由底邊那個數字說。
         // And the title is still its own 縱, in the box rather than on the ring.
         assert!(text.contains('洞') && text.contains('典'), "{text:?}");
     }
