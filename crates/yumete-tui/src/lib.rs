@@ -6217,24 +6217,48 @@ fn draw_note(
         // 號碼那一截和正文**逐格相同**：`gutter_text` 排的是 `{:>w$}` 外加
         // `GUTTER_AIR` 兩格空氣，這裏把中間那一格空氣換成 `+ -`。
         let digits = gutter.saturating_sub(GUTTER_AIR);
-        let row = |n: usize, mark: char, text: &str| {
+        // 回的是「整行」和「正文從第幾個字節起」——行內那幾段改動的偏移要跟着
+        // 這一截前綴挪，不然逐字上色會指到行號上。
+        let row = |n: usize, mark: char, text: &str| -> (String, usize) {
             let num = match digits > 0 && n.to_string().len() <= digits {
                 true => format!("{n:>digits$}"),
                 // 號太長放不下就只留記號（作者 2026-10-11 定：機率很小）。
                 false => " ".repeat(digits),
             };
-            format!("{num}{mark} {text}")
+            let head = format!("{num}{mark} ");
+            let at = head.len();
+            (format!("{head}{text}"), at)
         };
         // **整行上淡底，和 `:git-diff` 一樣**（2026-10-11）。色不是另挑的：刪掉
         // 的走 `Accent::Mark`、新添的走 `Accent::Green`，與那一頭逐字相同。
-        let lines: Vec<(String, Option<crate::theme::Accent>)> = was
+        //
+        // **逐字上色**（2026-10-11 定的設計裏那一句：「Exact changed chars are in
+        // red/green」）。哪幾個字是核心逐詞比出來的（`change_marks`，與
+        // `:git-diff` 同一套），這一頭只把偏移往右挪過行號槽那一截。
+        let (gone, came) = editor.change_marks();
+        let shift = |marks: Option<&Vec<std::ops::Range<usize>>>, at: usize| {
+            marks
+                .map(|spans| spans.iter().map(|s| s.start + at..s.end + at).collect())
+                .unwrap_or_default()
+        };
+        let lines: Vec<panel::Tint> = was
             .iter()
             .enumerate()
             .map(|(i, line)| {
-                (row(was_at + i, '-', line), Some(crate::theme::Accent::Mark))
+                let (text, at) = row(was_at + i, '-', line);
+                panel::Tint {
+                    text,
+                    wash: Some(crate::theme::Accent::Mark),
+                    marks: shift(gone.get(i), at),
+                }
             })
             .chain(editor.change_now().into_iter().enumerate().map(|(i, line)| {
-                (row(now_at + i, '+', &line), Some(crate::theme::Accent::Green))
+                let (text, at) = row(now_at + i, '+', &line);
+                panel::Tint {
+                    text,
+                    wash: Some(crate::theme::Accent::Green),
+                    marks: shift(came.get(i), at),
+                }
             }))
             .collect();
         if !lines.is_empty() {

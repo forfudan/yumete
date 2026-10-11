@@ -6,6 +6,9 @@
 
 use super::*;
 
+/// **一塊改動裏逐行的字節區間**——[`Editor::change_marks`] 的兩半各是一份。
+pub type ChangeMarks = Vec<Vec<std::ops::Range<usize>>>;
+
 impl Editor {
     // ---- Layout (Feature #61) ---------------------------------------------
 
@@ -738,6 +741,88 @@ impl Editor {
     pub fn change_here(&self) -> Option<&crate::vcs::Run> {
         let (_, changes) = self.vcs.get(&self.current_buffer().id())?;
         changes.run_at(self.cursor_line())
+    }
+
+    /// **這一塊裏真正改掉的是哪幾個字**——帶子逐字上色用的（2026-10-11）。
+    ///
+    /// 回兩組，各按行：舊的那幾行裏哪幾段**走了**，新的那幾行裏哪幾段**來了**，
+    /// 區間是那一行自己的字節偏移。走的是 `:git-diff` 那一套逐詞比對，所以兩處
+    /// 指的是同一批字。
+    ///
+    /// Warning: **純添與剪口回空的。** 它們只有一側，「哪幾個字改了」沒有意義——
+    /// 整行淡底已經說完了那件事，再逐字指一遍是把整行重說一次。相差太遠
+    /// （`diff::script` 回 `None`）也回空：那時逐詞比出來的東西讀不成話。
+    pub fn change_marks(&self) -> (ChangeMarks, ChangeMarks) {
+        let none = (Vec::new(), Vec::new());
+        let Some(run) = self.change_here() else { return none };
+        let (old, new) = (run.was.join("\n"), self.change_now().join("\n"));
+        if old.is_empty() || new.is_empty() {
+            return none;
+        }
+        let segment = |line: &str| self.segmenter.segment(line);
+        let (a, b) = (crate::diff::tokens(&old, &segment), crate::diff::tokens(&new, &segment));
+        let Some(ops) = crate::diff::script(&a, &b) else { return none };
+
+        let mut gone: Vec<Vec<std::ops::Range<usize>>> = vec![Vec::new(); run.was.len()];
+        let mut came: Vec<Vec<std::ops::Range<usize>>> = vec![Vec::new(); new.split('\n').count()];
+        // 一行裏連着的同命 token 併成一段——`[-很早-][-很早-]` 讀起來是兩處改動。
+        let mark = |rows: &mut Vec<Vec<std::ops::Range<usize>>>, line: usize, span: std::ops::Range<usize>| {
+            let Some(row) = rows.get_mut(line) else { return };
+            match row.last_mut() {
+                Some(last) if last.end == span.start => last.end = span.end,
+                _ => row.push(span),
+            }
+        };
+        let (mut old_line, mut old_at, mut new_line, mut new_at) = (0usize, 0usize, 0usize, 0usize);
+        for op in &ops {
+            match *op {
+                crate::diff::Op::Same("\n") => {
+                    old_line += 1;
+                    new_line += 1;
+                    old_at = 0;
+                    new_at = 0;
+                }
+                crate::diff::Op::Same(t) => {
+                    old_at += t.len();
+                    new_at += t.len();
+                }
+                crate::diff::Op::Gone("\n") => {
+                    old_line += 1;
+                    old_at = 0;
+                }
+                crate::diff::Op::Gone(t) => {
+                    mark(&mut gone, old_line, old_at..old_at + t.len());
+                    old_at += t.len();
+                }
+                crate::diff::Op::New("\n") => {
+                    new_line += 1;
+                    new_at = 0;
+                }
+                crate::diff::Op::New(t) => {
+                    mark(&mut came, new_line, new_at..new_at + t.len());
+                    new_at += t.len();
+                }
+            }
+        }
+        (gone, came)
+    }
+
+    /// **問的時候光標在那一塊裏，現在還在不在。**
+    ///
+    /// `at` ＝ 按 `空格 x` 那一刻光標在哪（字偏移）。兩頭各問一次「這一行屬於哪一
+    /// 塊」，比的是塊的行範圍——塊彼此不重疊，所以「同一塊」就等於「沒走出去」。
+    pub(super) fn still_the_same_change(&self, at: usize) -> bool {
+        let Some((_, changes)) = self.vcs.get(&self.current_buffer().id()) else {
+            return false;
+        };
+        let rope = self.current_buffer().rope();
+        if at > rope.len_chars() {
+            return false;
+        }
+        match (changes.run_at(rope.char_to_line(at)), changes.run_at(self.cursor_line())) {
+            (Some(asked), Some(here)) => asked.at == here.at,
+            _ => false,
+        }
     }
 
     /// 這一段改動現在寫的是什麼——新檔那一側的那幾行。

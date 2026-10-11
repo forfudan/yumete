@@ -2248,6 +2248,38 @@ impl Editor {
                 };
                 self.apply(op, motion::Span::Over { anchor, head });
             }
+            // **改動的帶子開着的時候，`u`／`y` 歸它**（2026-10-11）。
+            //
+            // Warning: **浮窗不收鍵是通則，這一種是例外。** 定下來的形狀是
+            // 「The hint about restore and and copy the previous version will be
+            // displayed in the command line」——底邊那一行寫着 `u 還原此處改動`，
+            // 而那一行是人照着按的。少了這兩條，那句提示是空話：按下去走的是撤銷
+            // 與複製選區，和它說的兩件事都不是。
+            //
+            // 帶子只在按過 `空格 x` 之後的那一會兒開着，走出那幾行或 `Esc` 就收，
+            // 所以這一下搶不到別的時候的 `u`；而數字開頭（`3u`）明說了是撤銷三步，
+            // 讓給撤銷。還原本身記進歷史，所以按錯了 `u` 再按一次就退得回來。
+            //
+            // Warning: **問的是「帶子開着**而且**這裏真有一塊」**。還原完那一塊
+            // 就不在了，而 `info_asked` 還記着——光問帶子，下一下 `u` 會落進
+            // 「本行無任何改動」，把人的撤銷吃掉。
+            Key::Char('u')
+                if operator_count.is_none()
+                    && self.info_afloat() == Some(crate::sidebar::Info::Change)
+                    && self.change_here().is_some() =>
+            {
+                self.restore_the_change_here();
+                // 問題答完了，帶子收起來——它畫的那幾行此刻已經是另一份文本。
+                self.info_asked = None;
+            }
+            Key::Char('y')
+                if operator_count.is_none()
+                    && self.info_afloat() == Some(crate::sidebar::Info::Change)
+                    && self.change_here().is_some() =>
+            {
+                let text = self.change_here().map(|run| run.was.join("\n"));
+                self.clipboard_request = text;
+            }
             // Yank / paste (Helix `y` / `p` / `P`).
             Key::Char('y') => {
                 if self.vim_lines {

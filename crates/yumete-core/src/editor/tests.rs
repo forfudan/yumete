@@ -11995,6 +11995,88 @@ fn width_goes_both_ways_and_leaves_the_chinese_marks_alone() {
     assert_eq!(ed.current_buffer().text().trim_end(), "甲 乙");
 }
 
+/// **帶子在塊裏走得動，走出那幾行就收**（2026-10-11：「能走，走出那幾行就收」）。
+///
+/// 別的四種信息問的是「光標底下這個字」，一個字就是一個問題；改動問的是一塊。
+#[test]
+fn the_change_band_holds_while_the_cursor_walks_the_block() {
+    use crate::sidebar::Info;
+    use crate::vcs::Changes;
+    let mut ed = typed("一\n改二\n改三\n四\n");
+    let lines = ed.current_buffer().rope().len_lines();
+    ed.set_vcs(Changes::from_diff("@@ -2,2 +2,2 @@\n-二\n-三\n+改二\n+改三\n", lines));
+    ed.goto_line(2);
+    press(&mut ed, " x");
+    assert_eq!(ed.info_afloat(), Some(Info::Change), "帶子開着");
+
+    press(&mut ed, "j");
+    assert_eq!(ed.cursor_line(), 2, "第二行，還在那一塊裏（行號從 0 數）");
+    assert_eq!(ed.info_afloat(), Some(Info::Change), "塊裏走，照舊開着");
+
+    press(&mut ed, "j");
+    assert_eq!(ed.cursor_line(), 3, "出了那一塊");
+    assert_eq!(ed.info_afloat(), None, "走出那幾行就收");
+}
+
+/// **帶子開着的時候 `u` 是「還原這一塊」，收了之後 `u` 回到撤銷**（2026-10-11）。
+///
+/// 底邊那一行寫着 `u 還原此處改動`，所以按下去必須是那一件；而還原本身記進歷史，
+/// 所以下一下 `u` 退得回來——這一條驗的就是那個來回。
+#[test]
+fn u_restores_the_block_while_the_band_is_up_and_undoes_after() {
+    use crate::vcs::Changes;
+    let put = |ed: &mut Editor| {
+        *ed = typed("一\n改二\n三\n");
+        let lines = ed.current_buffer().rope().len_lines();
+        ed.set_vcs(Changes::from_diff("@@ -2 +2 @@\n-二\n+改二\n", lines));
+        ed.goto_line(2);
+    };
+    let mut ed = Editor::new();
+
+    put(&mut ed);
+    press(&mut ed, " xu");
+    assert_eq!(ed.current_buffer().text(), "一\n二\n三\n", "`u` 還原了那一塊");
+    // 帶子收了（它畫的那幾行此刻是另一份文本），所以這一下是撤銷。
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "一\n改二\n三\n", "再按一次退得回來");
+
+    // `3u` 明說了是撤銷三步，不許被帶子搶走——還原過的那一份文本不許出現。
+    put(&mut ed);
+    press(&mut ed, " x");
+    press(&mut ed, "3u");
+    assert_ne!(ed.current_buffer().text(), "一\n二\n三\n", "帶子沒搶數字開頭那一下");
+
+    // `y` 複製的是 `HEAD` 說的那幾行，不是選區。
+    put(&mut ed);
+    press(&mut ed, " xy");
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some("二"), "複製的是先前版本");
+}
+
+/// **帶子逐字指出改掉的是哪幾個**（2026-10-11：「Exact changed chars are in red/green」）。
+#[test]
+fn the_change_band_marks_the_characters_that_moved() {
+    use crate::vcs::Changes;
+    let mut ed = typed("春風又綠江南岸\n");
+    let lines = ed.current_buffer().rope().len_lines();
+    ed.set_vcs(Changes::from_diff("@@ -1 +1 @@\n-春風又到江南岸\n+春風又綠江南岸\n", lines));
+    ed.goto_line(1);
+    let (gone, came) = ed.change_marks();
+    let cut = |text: &str, rows: &[Vec<std::ops::Range<usize>>]| -> Vec<String> {
+        rows.iter()
+            .flat_map(|row| row.iter().map(|at| text[at.clone()].to_string()))
+            .collect()
+    };
+    assert_eq!(cut("春風又到江南岸", &gone), ["到"], "舊的那一行走了哪個字");
+    assert_eq!(cut("春風又綠江南岸", &came), ["綠"], "新的那一行來了哪個字");
+
+    // 純添沒有「改了哪幾個字」——整行淡底已經說完了。
+    let mut ed = typed("一\n新添\n");
+    let lines = ed.current_buffer().rope().len_lines();
+    ed.set_vcs(Changes::from_diff("@@ -1,0 +2 @@\n+新添\n", lines));
+    ed.goto_line(2);
+    assert_eq!(ed.change_marks(), (Vec::new(), Vec::new()), "純添不逐字指");
+}
+
 /// **`空格 x`：這一塊改之前寫的是什麼，以及 `u` 把它還原**（2026-10-11）。
 ///
 /// 三種改動各走一遍：改過的（上下都有）、純添的（沒有上半）、剪口（沒有下半）。

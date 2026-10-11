@@ -27,9 +27,25 @@ pub enum Body {
     /// **一行一條，各帶各的淡底**——改動那一格（`空格 x`，2026-10-11）。
     ///
     /// 和 `Keys` 同一個形狀（一條一行、不折行），差別只在它不分兩欄，而且每一
-    /// 條自己說要什麼底色。`None` ＝ 不上色。色由 `:git-diff` 那一套來：刪掉的
-    /// 是 `Accent::Mark`、新添的是 `Accent::Green`，一字不差。
-    Tinted(Vec<(String, Option<crate::theme::Accent>)>),
+    /// 條自己說要什麼底色。色由 `:git-diff` 那一套來：刪掉的是 `Accent::Mark`、
+    /// 新添的是 `Accent::Green`，一字不差。
+    Tinted(Vec<Tint>),
+}
+
+/// **帶子裏的一行**（`空格 x`，2026-10-11）。
+///
+/// 兩層底色，因為它們答兩個問題：整行那一層說「這一行是改動的哪一側」，行內那
+/// 幾段說「真正動了的是這幾個字」。
+pub struct Tint {
+    /// 要畫的那一行，**行號槽也在裏頭**——帶子從最左畫起。
+    pub text: String,
+    /// 整行那一層淡底。`None` ＝ 不上色。
+    pub wash: Option<crate::theme::Accent>,
+    /// `text` 的字節區間，上重一檔的底。
+    ///
+    /// Warning: **偏移要連行號槽一起算**（調用方加的那一截前綴）——`text` 是整
+    /// 行，區間也必須是整行上的。
+    pub marks: Vec<std::ops::Range<usize>>,
 }
 
 /// **這一扇站在哪裏**（2026-10-08）。
@@ -779,7 +795,7 @@ pub fn draw(
             }
             let widest = rows
                 .iter()
-                .map(|(line, _)| yumete_cjk::str_width(line))
+                .map(|row| yumete_cjk::str_width(&row.text))
                 .max()
                 .unwrap_or(1)
                 .min(room_w.saturating_sub(2 + pad as u16 * 2) as usize)
@@ -964,21 +980,37 @@ pub fn draw(
             // **左右不收口的那一種從最左畫起**（2026-10-11）：沒有左牆可跳，也沒
             // 有內邊距——帶子要和正文逐格對齊，差一格就全差了。
             let band = matches!(panel.stand, Stand::Band(_)) && !vertical;
-            for (i, (line, wash)) in rows.iter().take(count).enumerate() {
+            for (i, row) in rows.iter().take(count).enumerate() {
                 let x = match band {
                     true => rect.x,
                     false => rect.x + 1 + pad as u16,
                 };
                 let y = rect.y + 1 + i as u16;
-                let style = match wash {
-                    Some(accent) => ground.bg(ink.short_wash(*accent)).fg(ink.text()),
+                let style = match row.wash {
+                    // **整行那一層走 `washed`，行內那幾段走 `short_wash`**
+                    //（2026-10-11）。兩個數之差正是主題自己的那條理由——響度由
+                    // 面積定：一行攤開是 1.08–1.12，幾個字是 1.5。整行也上
+                    // 1.5 的時候，「改掉的是哪幾個字」在滿屏同一個底色裏說不出來。
+                    Some(accent) => ground.bg(ink.washed(accent)).fg(ink.text()),
                     None => ground.fg(ink.text()),
                 };
                 // 底色要鋪**整行**，不只鋪有字那一截——半行底色讀起來是兩塊東西。
                 let room = limit.saturating_sub(x) as usize;
-                let wide = yumete_cjk::str_width(line);
-                let padded = format!("{line}{}", " ".repeat(room.saturating_sub(wide)));
+                let wide = yumete_cjk::str_width(&row.text);
+                let padded = format!("{}{}", row.text, " ".repeat(room.saturating_sub(wide)));
                 put_text(buf, x, y, limit, &padded, style);
+                // 真改掉的那幾段再蓋一遍，底重一檔。
+                let Some(accent) = row.wash else { continue };
+                let strong = ground.bg(ink.short_wash(accent)).fg(ink.text());
+                for at in &row.marks {
+                    let (Some(before), Some(text)) =
+                        (row.text.get(..at.start), row.text.get(at.clone()))
+                    else {
+                        continue;
+                    };
+                    let from = x + yumete_cjk::str_width(before) as u16;
+                    put_text(buf, from, y, limit, text, strong);
+                }
             }
         }
         Body::Keys(keys) => {

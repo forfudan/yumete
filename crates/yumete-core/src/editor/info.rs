@@ -67,7 +67,13 @@ impl Editor {
     /// 對它不成立——長的一則讀到一半，判準要換成「你正在讀它」。
     fn info_asked_now(&self) -> Option<Info> {
         let (one, at) = self.info_asked?;
-        (at == self.sel.head() || self.reading_the_info()).then_some(one)
+        if at == self.sel.head() || self.reading_the_info() {
+            return Some(one);
+        }
+        // **改動那一條問的是一塊，不是一個字**（2026-10-11 定：「能走，走出那幾行
+        // 就收」）。帶子蓋着好幾行，光標在那幾行裏走它照舊算數——別的四種都是
+        // 「光標底下這個東西」，一個字就是一個問題，所以只有這一種要放寬。
+        (one == Info::Change && self.still_the_same_change(at)).then_some(one)
     }
 
     /// 鍵此刻是不是就在那一格裏。
