@@ -1018,6 +1018,10 @@ impl Editor {
 
     /// Open the picker over everything that could be pasted (`Space \"`).
     pub(super) fn open_paste_picker(&mut self) {
+        // 右邊那半扇要畫系統剪貼板，而只有前端讀得了它——問一次，面板開着的這
+        // 一趟都用那一份（2026-10-11 報的）。
+        self.clipboard_peek = true;
+        self.clipboard_seen = None;
         let mut items = vec![crate::picker::Item::Paste(
             None,
             say!("register.system-clipboard"),

@@ -12091,6 +12091,36 @@ fn a_hover_stays_while_the_cursor_walks_the_thing_it_describes() {
     assert!(ed.hover_here().is_none(), "走出去就收");
 }
 
+/// **粘貼面板右邊那半扇：系統剪貼板也畫得出來**（2026-10-11 報的）。
+///
+/// 只有前端讀得了系統剪貼板，所以核心開面板的時候立一面旗，前端讀一次交回來。
+/// 一扇一次——讀一次是一個 `pbpaste` 行程，綁在方向鍵上就是把副作用綁在走路上。
+///
+/// Warning: **`--shot` 驗不了這一條**：那一支畫一幀就走，從來不進循環（它自己會
+/// 說這句話），而旗是循環裏收的。所以驗在這裏。
+#[test]
+fn the_paste_panel_can_show_what_is_on_the_system_clipboard() {
+    let mut ed = typed("那年冬天\n");
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('"'));
+    assert!(ed.take_clipboard_peek(), "開面板就問一次");
+    assert!(!ed.take_clipboard_peek(), "問過就不再問——一扇一次");
+
+    // 還沒答上來：那一格空着，不猜。
+    assert_eq!(ed.picker_preview(8), None, "沒答之前不畫");
+
+    ed.set_clipboard_seen(Some("剪貼板第一行\n還有第二行\n".to_string()));
+    let (name, lines) = ed.picker_preview(8).expect("畫得出來了");
+    assert_eq!(name, say!("register.system-clipboard"), "標題是那一條自己的名字");
+    assert_eq!(lines, ["剪貼板第一行", "還有第二行"], "多行的全在");
+
+    // 讀不着（別的平臺、沒有 pbpaste）就照舊空着，不是一句錯話。
+    ed.set_clipboard_seen(None);
+    assert_eq!(ed.picker_preview(8), None);
+    ed.set_clipboard_seen(Some(String::new()));
+    assert_eq!(ed.picker_preview(8), None, "空的也算沒有");
+}
+
 /// **磁碟那一眼是鬧鐘之一，不是它自己一條路**（2026-10-11 報的）。
 ///
 /// 即時文檔要三到五秒纔出來，而 `空格 k` 立刻就出來。前端從前對自動重載開一條

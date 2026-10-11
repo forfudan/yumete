@@ -2716,6 +2716,15 @@ pub struct Editor {
     /// out through the terminal itself (OSC 52), but almost every terminal
     /// refuses to *read* that way, so this one really does need the front end.
     clipboard_read: Option<Pasting>,
+    /// **開粘貼面板那一刻問一次系統剪貼板**，為的是右邊那半扇畫得出東西
+    /// （2026-10-11 報的）。
+    ///
+    /// Warning: **一扇一次，不是一格一次。** 只有前端讀得了系統剪貼板，而讀一次是
+    /// `pbpaste` 一個行程——高亮每挪一格就讀，那是把一個有副作用的動作綁在方向
+    /// 鍵上。所以問的時機是面板開那一下，答案存着，面板關了就扔。
+    clipboard_peek: bool,
+    /// 上一次問來的那一份，`None` ＝ 還沒答或者讀不着。
+    clipboard_seen: Option<String>,
     /// How much of the result is shown: the source, the source coloured, or
     /// the page with the markup taken off it.
     render: Render,
@@ -3732,6 +3741,8 @@ impl Editor {
             previewing: false,
             clipboard_request: None,
             clipboard_read: None,
+            clipboard_peek: false,
+            clipboard_seen: None,
             render: Render::Basic,
             sequence: None,
             sort_keys: Vec::new(),

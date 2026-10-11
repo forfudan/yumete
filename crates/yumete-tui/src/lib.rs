@@ -1327,6 +1327,12 @@ pub fn run(
                 }
                 // …and reading it needs the platform, because almost every
                 // terminal refuses an OSC 52 read.
+                // **粘貼面板開了：讀一次剪貼板給它畫**（2026-10-11 報的）。
+                // 讀不着就交 `None`，那一格照舊空着——一句「讀不了」擺在狀態欄上
+                // 是錯的，開那扇面板的人問的不是剪貼板。
+                if editor.take_clipboard_peek() {
+                    editor.set_clipboard_seen(read_clipboard());
+                }
                 if let Some(how) = editor.take_clipboard_read() {
                     match read_clipboard() {
                         Some(text) => editor.provide_clipboard(&text, how),

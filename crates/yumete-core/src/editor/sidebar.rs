@@ -1497,7 +1497,10 @@ impl Editor {
                 let (name, text) = self.paste_menu().into_iter().nth(which)?;
                 Some((name, head(&text)))
             }
-            crate::picker::Item::Paste(None, _) => None,
+            // 系統剪貼板那一條：面板開那一刻問來的那一份（`take_clipboard_peek`）。
+            crate::picker::Item::Paste(None, name) => {
+                Some((name, head(self.clipboard_seen.as_deref()?)))
+            }
             // **The entry itself, beside the list of names** (2026-09-25).
             // The preview a picker already has is exactly the 「選中的條目浮窗
             // 顯示」 the request asked for — no second mechanism.
@@ -2063,6 +2066,16 @@ impl Editor {
     }
 
     /// Take a pending clipboard read, and what to do with what comes back.
+    /// **前端，去讀一次系統剪貼板**——粘貼面板開着要畫它（2026-10-11）。
+    pub fn take_clipboard_peek(&mut self) -> bool {
+        std::mem::take(&mut self.clipboard_peek)
+    }
+
+    /// 讀來的那一份。讀不着就交 `None`，那一格照舊空着。
+    pub fn set_clipboard_seen(&mut self, text: Option<String>) {
+        self.clipboard_seen = text.filter(|one| !one.is_empty());
+    }
+
     pub fn take_clipboard_read(&mut self) -> Option<crate::editor::Pasting> {
         self.clipboard_read.take()
     }
