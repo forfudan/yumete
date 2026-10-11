@@ -2544,6 +2544,11 @@ pub struct Editor {
     /// 「没話說」，那一條會被刪掉——於是它永遠看着像没問過，空閒的鐘就每 300
     /// 毫秒喊一次 git，喊到天亮。
     vcs_asked: HashMap<u64, u64>,
+    /// **`HEAD` 上一次問的時候指着哪裏**（2026-10-11 報的）。
+    ///
+    /// 提交之後檔案沒變、`revision` 也沒變，所以光看它們永遠不會重算——而改動條
+    /// 說的正是「跟 `HEAD` 比」。見 [`crate::vcs::Changes::head_mark`]。
+    vcs_head: HashMap<u64, String>,
     /// **每個路徑的真名**，問過一次就記住（2026-10-03）。
     ///
     /// 「這個檔開着沒有」是按真名比的，不按拼法——`./甲.md` 與 `甲.md` 是同一個
@@ -3661,6 +3666,7 @@ impl Editor {
             vcs: HashMap::new(),
             vcs_base: HashMap::new(),
             vcs_asked: HashMap::new(),
+            vcs_head: HashMap::new(),
             canonical: RefCell::new(HashMap::new()),
             problems: crate::problem::Problems::default(),
             object_missed: false,

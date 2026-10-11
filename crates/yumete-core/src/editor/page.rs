@@ -815,10 +815,20 @@ impl Editor {
             self.vcs.remove(&id);
             return;
         };
+        // **`HEAD` 動過也算「要重算」**（2026-10-11 報的）。提交之後檔案一個字節
+        // 都沒變、`revision` 也沒變，於是這道快取一直答「不用算」，而改動條說的
+        // 正是「跟 `HEAD` 比」——人只好手動 `:reload`（那一下把 `revision` 推了
+        // 一格，所以看着像是重讀檔救的）。問一次只讀兩個小檔，不生子進程。
+        let lines = buffer.line_count();
+        let head_now = crate::vcs::Changes::head_mark(&path);
+        let force = force || self.vcs_head.get(&id) != head_now.as_ref();
         if !force && self.vcs_asked.get(&id) == Some(&revision) {
             return;
         }
-        let lines = buffer.line_count();
+        match head_now {
+            Some(mark) => self.vcs_head.insert(id, mark),
+            None => self.vcs_head.remove(&id),
+        };
         self.vcs_asked.insert(id, revision);
         // **跟緩衝區比，不跟磁碟比**（2026-09-19：在一段上面插一行，下面那
         // 一段的竪綫就没了——記號釘在磁碟那一份的行號上，而緩衝區已經挪過了）。

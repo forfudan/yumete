@@ -27,7 +27,7 @@
 //! 另算。
 
 use std::ops::Range;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// 一段行的來歷。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -119,6 +119,48 @@ impl Changes {
     /// 裏存的是 CRLF 而緩衝區是 LF——逐字節比會說**每一行都改過**，整篇亮起來。
     /// 這正是 helix 在同一個檔案上掉進去的坑（`git diff` 自己不會，因為它兩邊都
     /// 過一遍 git 的換行轉換；`--no-index` 不過）。
+    /// **`HEAD` 此刻指着哪一個提交**——不喊 git，只讀兩個檔（2026-10-11 報的）。
+    ///
+    /// 提交之後檔案一個字節都沒變，變的是 `HEAD`，所以按檔的 mtime 或者 buffer 的
+    /// `revision` 判「要不要重算」的那一套看不見它：行號槽上的改動條一直是提交前
+    /// 的樣子，直到人手動 `:reload`。原話：「the problem is not about
+    /// autoreloading the file per se as the file is the same. It is about the
+    /// detection of the git HEAD.」
+    ///
+    /// 答的是一個**指紋**，不是提交號：`.git/HEAD` 的內容（分支名，或者 detached
+    /// 時就是提交號）加上它指的那個 ref 檔的內容。切分支、提交、rebase、reset
+    /// 都動得了這兩者之一。
+    ///
+    /// Warning: **一個子進程都不生。** 這一支要在每一次停手時問，而 `git rev-parse`
+    /// 一次十幾毫秒；讀兩個小檔是微秒級的。倉在哪由 `.git` 往上找，和
+    /// `book_root` 同一個走法。
+    pub fn head_mark(path: &Path) -> Option<String> {
+        let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        let git = dir.ancestors().map(|d| d.join(".git")).find(|d| d.exists())?;
+        // 工作樹（`git worktree`）的 `.git` 是一個檔，寫着真正的 git 目錄在哪。
+        let git = match git.is_dir() {
+            true => git,
+            false => {
+                let said = std::fs::read_to_string(&git).ok()?;
+                let at = said.strip_prefix("gitdir:")?.trim();
+                PathBuf::from(at)
+            }
+        };
+        let head = std::fs::read_to_string(git.join("HEAD")).ok()?;
+        let head = head.trim().to_string();
+        // `ref: refs/heads/main` —— 再讀那個 ref 纔知道它此刻是哪一個提交。
+        // 讀不到不要緊（packed-refs 裏的分支就讀不到），那時候分支名本身還在，
+        // 切分支照樣看得出來；同一條分支上的提交由 `logs/HEAD` 兜住。
+        let Some(at) = head.strip_prefix("ref:").map(str::trim) else {
+            return Some(head);
+        };
+        let now = std::fs::read_to_string(git.join(at)).unwrap_or_default();
+        // reflog 每一次 `HEAD` 動過都追加一行，所以它的長度也是指紋的一部分——
+        // packed-refs 底下那個 ref 檔不存在，光靠分支名看不出提交。
+        let logged = std::fs::metadata(git.join("logs/HEAD")).map(|m| m.len()).unwrap_or(0);
+        Some(format!("{head}\u{1}{}\u{1}{logged}", now.trim()))
+    }
+
     pub fn head_text(path: &Path) -> Option<String> {
         Changes::text_at(path, "HEAD").ok()
     }

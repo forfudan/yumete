@@ -11878,6 +11878,59 @@ fn a_standing_recover_question_is_dropped_when_the_buffer_changes() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **提交之後改動條自己更新**（2026-10-11 報的）。
+///
+/// 原話：「the problem is not about autoreloading the file per se as the file
+/// is the same. It is about the detection of the git HEAD.」
+#[test]
+fn committing_moves_head_so_the_gutter_catches_up() {
+    let dir = tmp().join(format!("yumete-head-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
+            .output()
+            .expect("git")
+    };
+    git(&["init", "-q", "."]);
+    let file = dir.join("a.md");
+    std::fs::write(&file, "一\n二\n三\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "one"]);
+
+    let before = crate::vcs::Changes::head_mark(&file);
+    assert!(before.is_some(), "倉裏問得出 HEAD");
+
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute("view-diff on").unwrap();
+    // 改一行（不存檔也算，改動條比的是緩衝區）。
+    ed.goto_line(2);
+    press(&mut ed, "A改\u{1b}");
+    ed.refresh_vcs(true);
+    assert!(ed.vcs_mark(1).is_some(), "改過的那一行有改動條");
+
+    // 存檔、提交——**檔案從此和 HEAD 一樣，改動條該沒了**。
+    ed.execute("w").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "two"]);
+    let after = crate::vcs::Changes::head_mark(&file);
+    assert_ne!(before, after, "提交動了 HEAD 的指紋");
+
+    // Warning: **`vcs_tick` 不帶 force**，正是報來的那一條走的路：從前它只看
+    // `revision`，而提交既不改檔也不改 `revision`。
+    ed.vcs_tick();
+    assert!(ed.vcs_mark(1).is_none(), "提交之後那一行不該再有改動條");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`x` 在行尾只選這一行**（2026-10-11 報的，照 helix）。
 ///
 /// 原話：「Press x at this location (end of line) will choose this line and
