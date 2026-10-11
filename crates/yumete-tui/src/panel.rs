@@ -987,10 +987,11 @@ pub fn draw(
                 };
                 let y = rect.y + 1 + i as u16;
                 let style = match row.wash {
-                    // **整行那一層走 `washed`，行內那幾段走 `short_wash`**
-                    //（2026-10-11）。兩個數之差正是主題自己的那條理由——響度由
-                    // 面積定：一行攤開是 1.08–1.12，幾個字是 1.5。整行也上
-                    // 1.5 的時候，「改掉的是哪幾個字」在滿屏同一個底色裏說不出來。
+                    // **整行那一層走 `washed`，行內那幾段走 `vcs`**（2026-10-11）。
+                    // 兩個數之差正是主題自己的那條理由——響度由面積定：一行攤
+                    // 開是 1.08–1.12，幾個字 3:1。重的那一檔不是另挑的，就是改
+                    // 動條的底色，而它旁邊那一格 `+ -` 本來就是改動條。中間那
+                    // 一檔（`short_wash`，1.5）量過，離淡底太近，一眼分不出來。
                     Some(accent) => ground.bg(ink.washed(accent)).fg(ink.text()),
                     None => ground.fg(ink.text()),
                 };
@@ -1001,7 +1002,7 @@ pub fn draw(
                 put_text(buf, x, y, limit, &padded, style);
                 // 真改掉的那幾段再蓋一遍，底重一檔。
                 let Some(accent) = row.wash else { continue };
-                let strong = ground.bg(ink.short_wash(accent)).fg(ink.text());
+                let strong = ground.bg(ink.vcs(accent)).fg(ink.text());
                 for at in &row.marks {
                     let (Some(before), Some(text)) =
                         (row.text.get(..at.start), row.text.get(at.clone()))
