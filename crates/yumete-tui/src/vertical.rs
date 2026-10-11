@@ -1939,6 +1939,7 @@ pub fn draw_candidate_panel(
     let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
+        open_sides: false,
         border: Style::default().fg(skin.border()).bg(skin.paper()),
         ground,
         title: None,

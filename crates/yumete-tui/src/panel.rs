@@ -41,6 +41,11 @@ pub enum Stand {
     Corner,
     /// 貼着光標下面那一行（裝不下就上面）。補全那張單子用這一個。
     UnderCaret,
+    /// **通欄，從第 `top` 行起**——行內 diff 那一條帶子（2026-10-11）。
+    ///
+    /// 左右不收口（`open_sides`），寬度是整個編輯區，所以它看着不像一扇窗而像
+    /// 「這幾行此刻換了一種畫法」。竪排不走這一種（見 `Band` 的註釋）。
+    Band(u16),
 }
 
 /// A floating panel: what it is called, what it holds, and one short thing
@@ -832,12 +837,19 @@ pub fn draw(
         // settled once, by what the float is for.
         .min((room_w as usize).max(24))
         .min(area.width as usize) as u16;
+    // **帶子吃滿整個編輯區**（2026-10-11）：它要和正文逐格對齊，所以寬度不由內容
+    // 說了算。`place` 的 `Anchor::Band` 也從 `area.x` 起畫，兩邊是同一個意思。
+    let width = match (&panel.stand, vertical) {
+        (Stand::Band(_), false) => area.width,
+        _ => width,
+    };
     let height = (deep + 2) as u16;
     // Where it stands, and whether there is room at all — one rule, in
     // `chrome`, shared with everything else that floats (2026-09-18).
     // Warning: **站在光標底下那一種只管橫排**。竦書的「下一行」在旁邊不在底下，
     // 而補全那張單子只在代碼檔裏出來（代碼檔不竦排），所以竦的那一邊回老規矩。
     let stand = match (&panel.stand, vertical) {
+        (Stand::Band(top), false) => crate::chrome::Anchor::Band { top: *top },
         (Stand::UnderCaret, false) => crate::chrome::Anchor::UnderCaret { at: caret, bottom },
         _ => crate::chrome::Anchor::Caret { at: caret, bottom, vertical },
     };
@@ -845,6 +857,7 @@ pub fn draw(
     crate::chrome::draw(frame, rect, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
+        open_sides: matches!(panel.stand, Stand::Band(_)) && !vertical,
         // `rule()`, the rung every other ring on the screen is drawn at.
         border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
         ground: Style::default().bg(crate::chrome::panel_ground(ink)),
@@ -948,8 +961,14 @@ pub fn draw(
         }
         // **一條一行，整行上淡底**——和 `:git-diff` 逐字同一套色（2026-10-11）。
         Body::Tinted(rows) => {
+            // **左右不收口的那一種從最左畫起**（2026-10-11）：沒有左牆可跳，也沒
+            // 有內邊距——帶子要和正文逐格對齊，差一格就全差了。
+            let band = matches!(panel.stand, Stand::Band(_)) && !vertical;
             for (i, (line, wash)) in rows.iter().take(count).enumerate() {
-                let x = rect.x + 1 + pad as u16;
+                let x = match band {
+                    true => rect.x,
+                    false => rect.x + 1 + pad as u16,
+                };
                 let y = rect.y + 1 + i as u16;
                 let style = match wash {
                     Some(accent) => ground.bg(ink.short_wash(*accent)).fg(ink.text()),

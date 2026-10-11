@@ -25,6 +25,11 @@ pub struct Ring {
     /// `[panel] rounded` — the reader's own answer, asked of the config by the
     /// caller so this file never reads settings.
     pub rounded: bool,
+    /// **只畫上下兩道牆**（2026-10-11）。
+    ///
+    /// 行內 diff 那一條帶子要「看着像正文的一部分」：通欄、左右不收口，上下兩道
+    /// 橫綫把它和上下文隔開就夠。左右畫了反而像一扇飄在上面的窗。
+    pub open_sides: bool,
     /// The ring itself: its ink on the panel's ground.
     pub border: Style,
     /// The ground, painted over the whole rectangle.
@@ -53,7 +58,10 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     // with its whole left wall missing. Blank the glyph; the wall gets a cell.
     crate::vertical::clear_wide_left_edge(frame.buffer_mut(), rect);
     let mut block = Block::default()
-        .borders(Borders::ALL)
+        .borders(match ring.open_sides {
+            true => Borders::TOP | Borders::BOTTOM,
+            false => Borders::ALL,
+        })
         .border_type(match ring.rounded {
             true => BorderType::Rounded,
             false => BorderType::Plain,
@@ -161,6 +169,17 @@ pub enum Use {
 }
 
 pub enum Anchor {
+    /// **通欄，貼着某幾行**——行內 diff 那一條帶子（2026-10-11）。
+    ///
+    /// 它不是一扇飄在正文上的窗，而是「這幾行**此刻**換一種畫法」：寬度就是整個
+    /// 編輯區（連行號槽一起），所以上下兩道橫綫一拉，看着就像正文裏多出來的一
+    /// 段。插一行真的虛行要動 `wrap::Row` 和九十處讀它的地方（`development.md`
+    /// 的 item 248）；蓋一層在觀感上沒有分別，而它本來就是臨時的——`Esc` 或者光
+    /// 標走開就收。
+    ///
+    /// `rows` 是它要蓋住的那幾行（屏幕行，含上下兩道牆）。裝不下就往上挪，再裝
+    /// 不下由呼叫方退回浮窗。
+    Band { top: u16 },
     /// **One side is fixed, the other flips** (2026-10-09 定).
     ///
     /// 橫排 the box stands at the **right** and moves only up and down:
@@ -205,6 +224,11 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
         return None;
     }
     match anchor {
+        // 通欄：`x` 和寬度都由 `area` 說了算，呼叫方只挑從哪一行起。
+        Anchor::Band { top } => {
+            let top = top.min(area.y + area.height.saturating_sub(height));
+            Some(Rect::new(area.x, top.max(area.y), area.width, height))
+        }
         Anchor::Centre => Some(Rect::new(
             area.x + (area.width.saturating_sub(width)) / 2,
             area.y + (area.height.saturating_sub(height)) / 2,

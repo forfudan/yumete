@@ -4930,6 +4930,7 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
+        open_sides: false,
         border: Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink)),
         ground: Style::default().bg(crate::chrome::panel_ground(ink)),
         title: Some((
@@ -5444,6 +5445,7 @@ fn draw_list(
     // which-key panel's: two panels that open in the same place and do the
     // same kind of thing should not look like two different programs.
     crate::chrome::draw(frame, menu, &crate::chrome::Ring {
+        open_sides: false,
         // 計數寫在下邊框上，省一行——標題寫在上邊框上，同一個辦法。
         foot: match said.is_empty() {
             true => None,
@@ -5824,6 +5826,7 @@ fn draw_hud_panel(
     crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
+        open_sides: false,
         // The same ring at the same rung as every other panel on the screen:
         // what separates a panel from the page is its rule and its 金墨, not a
         // lighter ground.
@@ -6198,28 +6201,61 @@ fn draw_note(
     // 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。一條一行，所以走
     // `Body::Lines` 那一種（同字典、記錄、診斷），不是百科那種軟折行的文章。
     if editor.info_afloat() == Some(Info::Change) && !writing {
-        let was: Vec<String> =
-            editor.change_here().map(|run| run.was.clone()).unwrap_or_default();
+        let run = editor.change_here();
+        let was: Vec<String> = run.map(|r| r.was.clone()).unwrap_or_default();
+        let was_at = run.map_or(0, |r| r.was_at);
+        let now_at = run.map_or(0, |r| r.at.start + 1);
+        // **帶着行號槽一起畫**（2026-10-11 定）。行號右邊那一格本來就是改動條的
+        // 位置（`GUTTER_AIR`），`+ -` 放進去是物歸原主——而且這樣一來「從哪裏對
+        // 齊」這個問題不存在了：整條帶子從最左畫到最右，和正文逐格對得上。
+        //
+        // 刪掉的那幾行在**現在這份檔**裏沒有行號，所以標的是它們在 `HEAD` 裏的號
+        //（`Run::was_at`）。號太長放不下就只留 `+ -`。
+        let lines = editor.current_buffer().line_count();
+        let gutter =
+            gutter_width(lines, config.editor.line_numbers, editor.writes_code());
+        // 號碼那一截和正文**逐格相同**：`gutter_text` 排的是 `{:>w$}` 外加
+        // `GUTTER_AIR` 兩格空氣，這裏把中間那一格空氣換成 `+ -`。
+        let digits = gutter.saturating_sub(GUTTER_AIR);
+        let row = |n: usize, mark: char, text: &str| {
+            let num = match digits > 0 && n.to_string().len() <= digits {
+                true => format!("{n:>digits$}"),
+                // 號太長放不下就只留記號（作者 2026-10-11 定：機率很小）。
+                false => " ".repeat(digits),
+            };
+            format!("{num}{mark} {text}")
+        };
         // **整行上淡底，和 `:git-diff` 一樣**（2026-10-11）。色不是另挑的：刪掉
         // 的走 `Accent::Mark`、新添的走 `Accent::Green`，與那一頭逐字相同。
         let lines: Vec<(String, Option<crate::theme::Accent>)> = was
             .iter()
-            .map(|line| (format!("-　{line}"), Some(crate::theme::Accent::Mark)))
-            .chain(
-                editor
-                    .change_now()
-                    .into_iter()
-                    .map(|line| (format!("+　{line}"), Some(crate::theme::Accent::Green))),
-            )
+            .enumerate()
+            .map(|(i, line)| {
+                (row(was_at + i, '-', line), Some(crate::theme::Accent::Mark))
+            })
+            .chain(editor.change_now().into_iter().enumerate().map(|(i, line)| {
+                (row(now_at + i, '+', &line), Some(crate::theme::Accent::Green))
+            }))
             .collect();
         if !lines.is_empty() {
+            // 帶子從光標那一行起往下鋪（裝不下由 `place` 往上挪）。
+            let top = caret.1;
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-                stand: panel::Stand::Corner,
+                stand: match vertical {
+                    true => panel::Stand::Corner,
+                    false => panel::Stand::Band(top),
+                },
                 accent: None,
                 pages: true,
                 reading: true,
                 scroll: editor.info_scroll(),
-                title: yumete_core::messages::say(Info::Change.tag(), &[]),
+                // **帶子不掛名字**（2026-10-11）：它不是一扇飄在正文上的窗，而是
+                // 「這幾行此刻換了一種畫法」——上邊框只是一道綫。竪排那一邊照舊
+                // 是浮窗，名字留着。
+                title: match vertical {
+                    true => yumete_core::messages::say(Info::Change.tag(), &[]),
+                    false => String::new(),
+                },
                 lede: None,
                 entry: false,
                 body: panel::Body::Tinted(lines),
@@ -9333,6 +9369,7 @@ fn draw_picker(
     crate::chrome::draw(frame, left, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
+        open_sides: false,
         border: ground.fg(ink.rule()),
         ground,
         title: Some((picker.title.clone(), ground.fg(ink.gold()))),
@@ -9592,6 +9629,7 @@ fn draw_preview(
     crate::chrome::draw(frame, area, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
+        open_sides: false,
         border: ground.fg(ink.rule()),
         ground,
         title: Some((name.clone(), ground.fg(ink.gold()))),
@@ -12630,6 +12668,7 @@ fn draw_panel_rows(
     let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
+        open_sides: false,
         border: Style::default().fg(skin.border()).bg(skin.paper()),
         ground,
         title: None,

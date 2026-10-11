@@ -72,6 +72,11 @@ pub struct Run {
     /// 行動過」，而「改之前長什麼樣」要的正是被扔掉的那一半。純添的那一段是空的
     /// （本來就沒有舊文本）。
     pub was: Vec<String>,
+    /// **`was` 那幾行在 `HEAD` 裏從第幾行起**（1 起算；沒有舊文本時是 0）。
+    ///
+    /// 行內 diff 給「刪掉的」那幾行標號要它——那幾行在現在這份檔裏沒有行號，
+    /// 而讀者要認出「原來第 2341 行寫的是什麼」（2026-10-11）。
+    pub was_at: usize,
 }
 
 impl Changes {
@@ -276,7 +281,7 @@ impl Changes {
 
 /// 一條 `@@ -a,b +c,d @@` 裏用得着的三個數：舊邊幾行、新邊從第幾行起、幾行。
 /// 省掉的 `,b` 照 unified diff 的規矩算 1。
-fn hunk(header: &str) -> Option<(usize, usize, usize)> {
+fn hunk(header: &str) -> Option<(usize, usize, usize, usize)> {
     let rest = header.strip_prefix("@@ ")?;
     let (spec, _) = rest.split_once(" @@")?;
     let (old, new) = spec.split_once(' ')?;
@@ -287,9 +292,11 @@ fn hunk(header: &str) -> Option<(usize, usize, usize)> {
             None => Some((s.parse().ok()?, 1)),
         }
     };
-    let (_, old_n) = count(old, '-')?;
+    // `old_at` 是**這一段在 `HEAD` 裏從第幾行起**（1 起算）。行內 diff 要拿它給
+    // 「刪掉的」那幾行標號——那幾行在現在這份檔裏根本沒有行號（2026-10-11）。
+    let (old_at, old_n) = count(old, '-')?;
     let (new_at, new_n) = count(new, '+')?;
-    Some((old_n, new_at, new_n))
+    Some((old_at, old_n, new_at, new_n))
 }
 
 /// [`Changes::from_diff`] 的本體。
@@ -313,7 +320,7 @@ fn parse(diff: &str, lines: usize) -> Changes {
             was.push(std::mem::take(&mut taken));
         }
         seen_a_header = true;
-        let Some((old_n, new_at, new_n)) = hunk(header) else {
+        let Some((old_at, old_n, new_at, new_n)) = hunk(header) else {
             // 這一條讀不懂，它收的那幾行也不要——下一條 header 來的時候
             // `was` 會比 `runs` 多一格，所以這裏就把它對齊掉。
             taken.clear();
@@ -326,7 +333,7 @@ fn parse(diff: &str, lines: usize) -> Changes {
             // 一行沒去、一行沒來：git 不會寫出這種，寫得出也沒話說。
             (0, 0) => {}
             // 純添。`+c,d` 的 c 是 1 起算的第一條新行。
-            (0, _) => runs.push(Run { at: from..from + new_n, how: Change::Added, was: Vec::new() }),
+            (0, _) => runs.push(Run { at: from..from + new_n, how: Change::Added, was: Vec::new(), was_at: old_at }),
             // 純刪。Warning: **`+c,0` 的 c 是缺口上面那一行**（1 起算），所以 0 起算
             // 的 `c` 正好是缺口**下面**那一行——剪口畫在它頭上。刪在檔頭時
             // c ＝ 0，0 起算的 0 就是第一行，同一條式子。
@@ -334,12 +341,12 @@ fn parse(diff: &str, lines: usize) -> Changes {
                 // 刪在檔尾：下面沒有行了，剪口改記在最後一行的腳下。
                 true => {
                     if lines > 0 {
-                        runs.push(Run { at: lines - 1..lines, how: Change::CutBelow, was: Vec::new() });
+                        runs.push(Run { at: lines - 1..lines, how: Change::CutBelow, was: Vec::new(), was_at: old_at });
                     }
                 }
-                false => runs.push(Run { at: new_at..new_at + 1, how: Change::CutAbove, was: Vec::new() }),
+                false => runs.push(Run { at: new_at..new_at + 1, how: Change::CutAbove, was: Vec::new(), was_at: old_at }),
             },
-            _ => runs.push(Run { at: from..from + new_n, how: Change::Changed, was: Vec::new() }),
+            _ => runs.push(Run { at: from..from + new_n, how: Change::Changed, was: Vec::new(), was_at: old_at }),
         }
     }
     // `-U0` 的 hunk 在新檔那一側本來就互不重疊——git 把貼着的改動併成一條。
@@ -385,6 +392,9 @@ mod tests {
         let cut = c.run_at(5).or_else(|| c.run_at(6)).expect("剪口在");
         assert!(cut.how.is_cut());
         assert_eq!(cut.was, ["甲", "乙"], "剪掉的是這兩行");
+        // **舊行號**：`@@ -1 +1 @@` 的第一段、`@@ -5,2 +6,0 @@` 的第五行。
+        assert_eq!(changed.was_at, 1, "改過的那一段在 HEAD 裏從第 1 行起");
+        assert_eq!(cut.was_at, 5, "剪掉的那兩行在 HEAD 裏從第 5 行起");
         // Warning: `--- a/x` 是檔頭，不是刪掉的行。
         assert!(
             c.runs.iter().all(|run| !run.was.iter().any(|line| line.starts_with("-- a/"))),
