@@ -699,9 +699,52 @@ impl Editor {
         let last = motion::last_line(rope);
         let (start, end) = self.selection();
         let anchor_line = rope.char_to_line(start);
-        let cursor_line = rope.char_to_line(end);
+        // **算末行之前先退一個字簇**（2026-10-11 報的，照 helix 的
+        // `Range::line_range`，`selection.rs:110-114`）。
+        //
+        // 選區的末端是**開區間**，所以光標停在行尾那個換行上的時候它已經落在下
+        // 一行的開頭了——照它算行號就多算一行，`x` 於是選了兩行。原話：「Press x
+        // at this location (end of line) will choose this line and also the
+        // next line. In helix only this line is selected.」
+        //
+        // Warning: **「已經選滿了」和「光標停在行尾」要分得開。** helix 的選區**含**
+        // 行尾那個換行，所以它一句 `range.to() == end` 就問得出「這一行整個在選區
+        // 裏嗎」；這裏的選區**不含**換行（頭停在最後一個看得見的字上），兩種情形
+        // 的 `end` 長得一樣，只能各問各的。
+        //
+        // 所以：末端落在換行上纔退一格（那是「光標停在行尾」），而「已經選滿」由
+        // `covers_whole_lines` 另外答——它答是，就往下再吃一行，這就是 helix 連按
+        // `x` 一次多一行的那條路。
+        // **末端是開區間，所以算行號之前退一格**（2026-10-11 報的，照 helix 的
+        // `Range::line_range`，`selection.rs:110-114`）。
+        //
+        // `selection()` 回的 `end` 在光標站的那一格**後面**：光標停在行尾那個換行
+        // 上時 `end` 已經落在下一行的第一個字上，照它算行號就多算一行，`x` 於是
+        // 選了兩行。原話：「Press x at this location (end of line) will choose
+        // this line and also the next line. In helix only this line is
+        // selected.」
+        let last_char = motion::prev_grapheme(rope, end).max(start);
+        let cursor_line = rope.char_to_line(last_char);
         let sel_start = rope.line_to_char(anchor_line);
-        let next_line = cursor_line + 1;
+        // 這一段是不是正好從行首到行尾：是的話 `x` 再按一下往下長一行。
+        let line_tail = match cursor_line + 1 > last {
+            true => rope.len_chars(),
+            false => motion::prev_grapheme(rope, rope.line_to_char(cursor_line + 1)),
+        };
+        // **「已經選滿」只有真的是一段選區時纔算數。** 光標停在行尾的時候 `start`
+        // 和 `end` 是同一點，照「頭在行尾」判就把它也當成選滿了，於是 `x` 又往下
+        // 吃一行——那正是 2026-10-11 報的那一條。
+        // Warning: **比的是頭站的那一格，不是開區間的 `end`。** 一行只有一個字的
+        // 時候 `end` 正好等於 `line_tail`，照它判第一下 `x` 就被當成「已經選滿」、
+        // 一口吃兩行（2026-10-11，`一\n二\n三\n四\n` 上的 `xxx` 選了四行）。
+        let covers_whole_lines = start == sel_start && last_char == line_tail;
+        // 已經選滿了就往下再吃一行（連按 `x` 一次多一行），否則就是「把這一行
+        // 整個選上」。Warning: **兩個 `match` 加起來永遠是 `+1` 的寫法等於沒寫**，
+        // 2026-10-11 第一版就是那樣，trace 打出 `covers=true next=1` 纔看出來。
+        let next_line = match covers_whole_lines {
+            true => cursor_line + 2,
+            false => cursor_line + 1,
+        };
         let sel_end = if next_line > last {
             rope.len_chars()
         } else {

@@ -11878,6 +11878,42 @@ fn a_standing_recover_question_is_dropped_when_the_buffer_changes() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`x` 在行尾只選這一行**（2026-10-11 報的，照 helix）。
+///
+/// 原話：「Press x at this location (end of line) will choose this line and
+/// also the next line. In helix only this line is selected.」
+#[test]
+fn x_at_the_end_of_a_line_takes_that_line_and_no_more() {
+    let text = "第一行\n第二行\n第三行\n";
+    let after = |keys: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, keys);
+        let (a, h) = ed.selection();
+        (a, h, ed.current_buffer().rope().char_to_line(a), ed.cursor())
+    };
+    // 先量清楚光標停在哪：`gl` 是行尾。
+    let (_, _, _, at) = after("gl");
+    assert!(at <= 3, "行尾在 0..=3 之間，量到 {at}");
+    // **`A` 打完 `Esc` 也是行尾**，走的和 `gl` 同一條路。
+    let mut ed = typed(text);
+    press(&mut ed, "A");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "xd");
+    assert_eq!(ed.current_buffer().text(), "第二行\n第三行\n", "只去掉第一行");
+
+    let mut ed = typed(text);
+    press(&mut ed, "glxd");
+    assert_eq!(ed.current_buffer().text(), "第二行\n第三行\n", "只去掉第一行");
+
+    // 連按照舊一次多一行。
+    let mut ed = typed(text);
+    press(&mut ed, "xxd");
+    assert_eq!(ed.current_buffer().text(), "第三行\n", "兩行");
+    let mut ed = typed(text);
+    press(&mut ed, "xd");
+    assert_eq!(ed.current_buffer().text(), "第二行\n第三行\n", "一行");
+}
+
 /// **`` `f ``／`` `h ``：全形 ↔ 半形**（2026-10-11）。
 ///
 /// 只動 Unicode 那張正式的對應表，所以來回一趟一個字不差；中文標點不在那張表
