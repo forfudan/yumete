@@ -232,6 +232,26 @@ impl Picker {
         scored.into_iter().map(|(_, _, _, item)| item).collect()
     }
 
+    /// **「最近開過的」排到第幾條為止**，`None` ＝ 不畫那條線（2026-10-11 報的）。
+    ///
+    /// 空查詢的時候名單的頭一層是 `bonus`——開着的緩衝、最近開過的檔——而那個數
+    /// 看不見。報的原話：「I know why some files are ranked higher」。所以在它和
+    /// 其餘之間畫一條虛線：次序不動，只是把看不見的那一刀畫出來。
+    ///
+    /// 三種情形不畫：**打了字**（那時次序由分數定，最近開過的不再連在一起，一條
+    /// 線會說謊）、一條都沒開過、以及全都開過（線底下沒有東西）。
+    ///
+    /// Warning: **數的是 `bonus > 0` 有幾個，不是走一遍 `matches()`。** 兩個答案相同
+    /// ——`bonus` 遞減是排序的第一層，所以有加分的那些必然連在最前面——而這一支
+    /// 每一幀都問，不該再排一次序。
+    pub fn rule_after(&self) -> Option<usize> {
+        if !self.query.is_empty() {
+            return None;
+        }
+        let n = self.bonus.iter().take(self.items.len()).filter(|&&b| b > 0).count();
+        (n > 0 && n < self.items.len()).then_some(n)
+    }
+
     /// **Which characters of `label` the query is standing on**, so the front
     /// end can light them up — the one thing that tells a reader why this name
     /// is on the list at all when the letters are scattered through it.
@@ -581,6 +601,30 @@ mod tests {
         let picker = files(&["ch01.md", "ch02.md"]);
         assert_eq!(picker.matches().len(), 2);
         assert_eq!(picker.chosen(), Some(Item::File("ch01.md".to_string())));
+    }
+
+    /// **最近開過的和其餘之間那條虛線，畫在第幾條之後**（2026-10-11 報的）。
+    #[test]
+    fn the_rule_sits_under_the_files_that_were_opened_lately() {
+        let mut picker = files(&["ch01.md", "ch02.md", "ch03.md", "ch04.md"]);
+        assert_eq!(picker.rule_after(), None, "一條都沒開過就不畫");
+
+        // 兩條有加分：它們排在最前，線畫在第二條之後。
+        picker.prefer(vec![0, 300, 0, 280]);
+        assert_eq!(picker.rule_after(), Some(2));
+        let shown: Vec<String> =
+            picker.matches().iter().map(|one| one.label().to_string()).collect();
+        assert_eq!(shown[..2], ["ch02.md", "ch04.md"], "有加分的連在最前：{shown:?}");
+
+        // **打了字就不畫**：那時次序由分數定，最近開過的不再連在一起，一條線會說謊。
+        picker.push('c');
+        assert_eq!(picker.rule_after(), None, "打了字就收");
+        picker.backspace();
+        assert_eq!(picker.rule_after(), Some(2), "退回空的又回來");
+
+        // 全都開過：線底下沒有東西，不畫。
+        picker.prefer(vec![300, 290, 280, 270]);
+        assert_eq!(picker.rule_after(), None, "全都在線上面就不畫");
     }
 
     #[test]

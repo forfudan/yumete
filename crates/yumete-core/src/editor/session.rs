@@ -546,6 +546,15 @@ impl Editor {
                     .and_then(|n| n.to_str())
                     .is_some_and(|n| n.starts_with("scratch-") && !n.starts_with(&mine))
             })
+            // **主人還開着的那一份不是孤兒**（2026-10-11 報的）。
+            //
+            // 判準從前只是「不是我這個行程的」，於是**另一扇開着的 yumete** 裏一個
+            // 沒名字的緩衝，就讓這一扇在啓動時說「有 1 份沒存的草稿」——那句話說
+            // 的是崩潰留下的東西，而什麼都沒崩，他的編輯器就開在旁邊。
+            //
+            // `owner_still_running` 本來就在（問 `kill(pid, 0)`），只是這一支沒問。
+            // 那一扇真的崩了之後，pid 沒了，這一份當場又算孤兒——話晚說，不會不說。
+            .filter(|p| !crate::buffer::owner_still_running(p))
             .collect();
         found.sort();
         found

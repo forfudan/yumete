@@ -153,7 +153,12 @@ shoot() {
         # 工作路徑底下的檔，而工作路徑從前是**這個倉**——於是 `挑選器` 那一幀預覽
         # 着真實的 `CHANGELOG.md`，我每改一次變更記錄它就「變了」。底片要只跟代碼
         # 走，不跟倉裏有哪些檔走。
-        if ! ( cd "${work}" && "${BIN}" --shot="${size}" --keys="${pressed}" 文.md ) \
+        # Warning: **底片不許看見使用者那一邊的東西**（2026-10-11 又踩一次，§5.77 記過
+        # 一回）。`XDG_DATA_HOME` 底下有兩樣會進畫面：沒存的草稿（啓動時狀態欄報
+        # 「有 N 份沒存的草稿」）和他自己的詞庫（分詞着色看得見）。這一趟指到
+        # `target/` 底下一個空的，所以底片只跟代碼走——他那邊開着幾扇 yumete、
+        # 詞庫裏有什麼，一格都影響不到。
+        if ! ( cd "${work}" && XDG_DATA_HOME="${PWD}/../data" "${BIN}" --shot="${size}" --keys="${pressed}" 文.md ) \
             > "${into}/${name}.txt" 2> "${whined}"; then
             printf 'Warning: 拍 %s 的時候 yumete 自己就退出了：\n' "${name}" >&2
             sed 's/^/    /' "${whined}" >&2

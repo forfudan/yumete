@@ -9505,7 +9505,23 @@ fn draw_picker(
     //
     // 一頁一頁地讓是 helix 的答案：窗口停着不動，高亮在這一頁裏走，走出去了纔
     // 整頁翻。它還正好和 [`Picker::page`] 對上——那一支翻的就是 `deep` 條。
-    let first = at - at % deep.max(1);
+    // **「最近開過的」和其餘之間一條虛線**（2026-10-11 報的）。
+    //
+    // 它不是一條名單裏的東西：選不中、不計進腳注那個數、不佔一個下標。可它**佔
+    // 一行**，所以翻頁要按**行**算而不是按條算——不然名單跨過它那一頁會少畫一
+    // 條，而選中的那一條正好可能是少掉的那一個。下面兩支把「第幾條」和「第幾行」
+    // 換來換去，`first_row` 之後的每一步都在行的世界裏。
+    let rule_after = picker.rule_after();
+    let row_of = |item: usize| item + usize::from(rule_after.is_some_and(|n| item >= n));
+    let item_of = |row: usize| match rule_after {
+        Some(n) if row == n => None,
+        Some(n) if row > n => Some(row - 1),
+        _ => Some(row),
+    };
+    let first = {
+        let here = row_of(at);
+        here - here % deep.max(1)
+    };
     // **選中那一條畫成選中的樣子**（2026-10-09 定）。
     //
     // Warning: **這一格 2026-10-08 到 10-09 之間是淡的，而那是一條過期的結論。** 當時
@@ -9537,11 +9553,26 @@ fn draw_picker(
     {
         let buf = frame.buffer_mut();
         for slot in 0..deep {
-            let Some(item) = items.get(first + slot) else {
+            let row = first + slot;
+            let y = list_at + slot as u16;
+            // 那條虛線：整列一道 `┄`，和別的框綫同一支墨，所以讀起來是「這裏分了
+            // 一下」而不是「這是另一塊區域」——報的原話：「a soft division」。
+            let Some(which) = item_of(row) else {
+                let wide = limit.saturating_sub(left.x + 1) as usize;
+                put_text(
+                    buf,
+                    left.x + 1,
+                    y,
+                    limit,
+                    &"┄".repeat(wide),
+                    ground.fg(ink.rule()),
+                );
+                continue;
+            };
+            let Some(item) = items.get(which) else {
                 break;
             };
-            let y = list_at + slot as u16;
-            let picked = first + slot == at;
+            let picked = which == at;
             let style = match picked {
                 true => on,
                 false => ground.fg(ink.text()),
