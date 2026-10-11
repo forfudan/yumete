@@ -1083,6 +1083,13 @@ pub fn draw(
         false => panel.tag.clone(),
     };
     if let Some(tag) = right {
+        // **放不下就截，別讓它跑出左牆**（2026-10-11 從金樣幀上看出來的）。寬度
+        // 是由內容算的，上面又被 `room_w` 和 `area.width` 夾過兩道——夾完之後這
+        // 一句話可能比底邊還長。從前它照 `limit - w - 1` 起筆，於是起點落在框
+        // 外，畫出來是「y 複製先前版╯」：最後一個字被角吃掉，而讀者看不出那是
+        // 被截的。兩頭各留一格空氣，同左端那個數字。
+        let room = (width as usize).saturating_sub(3);
+        let tag = clip(&tag, room);
         let w = yumete_cjk::str_width(&tag) as u16;
         put_text(buf, limit.saturating_sub(w + 1), floor, limit, &tag, ground.fg(ink.quiet()));
     }
