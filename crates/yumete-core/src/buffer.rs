@@ -1044,6 +1044,7 @@ impl Buffer {
                 say!("buffer.changed-outside"),
             ));
         }
+        Buffer::room_for(&path, force)?;
         self.write_atomically(&path)?;
         self.seen = stamp_of(&path);
         self.read_as = Some(digest(&self.rope.to_string()));
@@ -1077,6 +1078,11 @@ impl Buffer {
             self.seen = old_seen;
             self.read_as = old_read_as;
             return Err(io::Error::other(say!("buffer.file-already-exists")));
+        }
+        if let Err(why) = Buffer::room_for(&target, force) {
+            self.seen = old_seen;
+            self.read_as = old_read_as;
+            return Err(why);
         }
         self.path = Some(target);
         // A new name, so no copy of ours is out there under it yet — and no
@@ -1116,7 +1122,44 @@ impl Buffer {
         if !force && path.exists() {
             return Err(io::Error::other(say!("buffer.file-already-exists")));
         }
+        Buffer::room_for(path, force)?;
         self.write_atomically(path)
+    }
+
+    /// **父目錄不在就不寫**，`force`（`:w!`）＝ 把它建出來（2026-10-11 報的）。
+    ///
+    /// 從前一路落到 `File::create` 上，於是在一個沒有 `.yumete/` 的項目裏
+    /// `ye .yumete/config.toml` 再 `:w`，狀態欄回的是一句光禿禿的
+    /// `No such file or directory (os error 2)`——哪個檔、哪一級不在、怎麼辦，
+    /// 三件事一件都沒說。
+    ///
+    /// 兩家參考都是「拒絕」：helix 的話連出路一起說（`document.rs`：「can't save
+    /// file, parent directory does not exist (use :w! to create it)」），vim 至少
+    /// 把檔名說出來（`E212`）。這裏照 helix——`:w!` 本來就是「照我說的辦」。
+    ///
+    /// Warning: **救命稿那條路不走這一支。** 它的父目錄就是文檔自己的目錄，本來
+    /// 就在；而一份草稿不該有權力替人建目錄。
+    fn room_for(path: &Path, force: bool) -> io::Result<()> {
+        let Some(parent) = path.parent().filter(|one| !one.as_os_str().is_empty()) else {
+            return Ok(());
+        };
+        if parent.is_dir() {
+            return Ok(());
+        }
+        match force {
+            true => fs::create_dir_all(parent),
+            // Warning: **說的是他打的那個路徑，不是絕對路徑。** 狀態欄那一行很貴
+            // ——整條 `/private/tmp/claude-501/…/proj/.yumete` 把後半句
+            // 「使用 :w! …」整個擠出了屏幕，而那半句纔是出路。同語言服務器那一
+            // 條的理由（`server.rs`：「不寫目錄——狀態欄那一行很貴」）。
+            false => {
+                let shown = std::env::current_dir()
+                    .ok()
+                    .and_then(|here| parent.strip_prefix(here).ok())
+                    .unwrap_or(parent);
+                Err(io::Error::other(say!("buffer.no-such-path", shown.display())))
+            }
+        }
     }
 
     /// Write the rope to `path` atomically via a temporary file + rename.
@@ -1831,6 +1874,29 @@ fn tmp() -> std::path::PathBuf {
 }
 
 #[test]
+    fn saving_into_a_directory_that_is_not_there_says_so_and_w_bang_makes_it() {
+        let dir = tmp().join(format!("yumete-noroom-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("fixture dir");
+        // `.yumete` 不存在——報的那一下就是這個形狀。
+        let path = dir.join(".yumete").join("config.toml");
+
+        fs::write(dir.join("在.md"), "").expect("seed");
+        let mut b = Buffer::open(dir.join("在.md")).expect("open");
+        let why = b.save_as(path.clone(), false).expect_err("父目錄不在，存不了");
+        let said = why.to_string();
+        assert!(said.contains(".yumete"), "說得出是哪一級不在：{said}");
+        assert!(said.contains(":w!"), "說得出怎麼辦：{said}");
+        assert!(!path.exists(), "什麼都沒寫下去");
+
+        // `:w!` 建出來並存下去。
+        b.save_as(path.clone(), true).expect("`:w!` 建得出來");
+        assert!(path.is_file(), "存到了 {}", path.display());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_same_length_rewrite_in_the_same_tick_is_still_seen() {
         let dir = tmp().join(format!("yumete-racy-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);

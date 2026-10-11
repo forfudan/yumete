@@ -789,6 +789,13 @@ zhs = "这份稿子还没有名字——:w 名字 存成新文件"
 en = "this manuscript has no name yet — :w <name> writes it as a new file"
 
 [[message]]
+# :w 到一個父目錄還不存在的路徑（2026-10-11 報的措辭）
+key = "buffer.no-such-path"
+zht = "路徑 {0} 不存在，使用 :w! 建立路徑並儲存文檔"
+zhs = "路径 {0} 不存在，使用 :w! 建立路径并储存文档"
+en = "there is no path {0} — :w! makes it and saves"
+
+[[message]]
 # 只開了一個檔案時切換緩衝區
 key = "buffer.only-one-open"
 zht = "只開了一個文件"
