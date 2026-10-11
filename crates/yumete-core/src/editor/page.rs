@@ -1055,6 +1055,17 @@ impl Editor {
         self.definition_query.take()
     }
 
+    /// **那一句問話，看一眼而不取走**（2026-10-11）。
+    ///
+    /// Warning: **發出去不等於問完了。** 從前發的那一下就把它取走，於是服務器答
+    /// 一句空的就只能當「哪兒都沒寫」——而還在建索引的 rust-analyzer 對
+    /// `textDocument/definition` 答的正是一個空數組。問話留到**答案說得準**那
+    /// 一刻纔取（[`Editor::take_definition_query`]），中間那幾趟它還在手上，
+    /// 服務器忙完了自己會再問一次。
+    pub fn definition_query(&self) -> Option<(std::path::PathBuf, usize, usize)> {
+        self.definition_query.clone()
+    }
+
     /// **答案回來了：去那兒**（#53 ②）。
     ///
     /// Warning: **列是 UTF-16 的，而這一頭數字符**——換算要那一行的正文，所以它在這裏

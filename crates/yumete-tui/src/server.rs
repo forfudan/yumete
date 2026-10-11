@@ -225,8 +225,28 @@ impl Heard {
             _ => {}
         }
         match self.place {
-            Some(Some(place)) => editor.go_to_definition(&place),
-            Some(None) if !waiting(|s| s.asked_where) => editor.no_definition(),
+            Some(Some(place)) => {
+                editor.take_definition_query();
+                editor.go_to_definition(&place);
+            }
+            Some(None) if !waiting(|s| s.asked_where) => {
+                // **還在建索引的時候那句空答案不算數**（2026-10-11 量出來的）。
+                // rust-analyzer 在 `rustAnalyzer/Fetching` 期間對
+                // `textDocument/definition` 回的是一個**空數組**，而它和「這個
+                // 東西哪兒都沒寫」長得一模一樣。`ask` 那一頭的閘攔不住第一問：
+                // 問話發出去的那一趟，服務器的 `$/progress begin` 還躺在管子裏
+                // 沒收上來，於是那一刻它看上去並不忙。
+                //
+                // 所以判準挪到這裏——答案回來的時候忙不忙是知道的。忙就把問話
+                // 留着，`ask` 等它閒下來自己再問一次。
+                match servers.busy_since(editor).is_some() {
+                    true => editor.set_status(say!("lsp.server-starting")),
+                    false => {
+                        editor.take_definition_query();
+                        editor.no_definition();
+                    }
+                }
+            }
             _ => {}
         }
         match self.offers {
@@ -678,7 +698,12 @@ impl Servers {
         if !self.told_the_latest(editor) {
             return;
         }
-        let Some((path, line, column)) = editor.take_definition_query() else { return };
+        // **已經發出去、還沒回話的時候別再發一遍。** 問話留在編輯器手上直到答案
+        // 說得準為止（見 `Editor::definition_query`），所以這一道閘是它的另一半。
+        if self.running.values().any(|server| server.asked_where.is_some()) {
+            return;
+        }
+        let Some((path, line, column)) = editor.definition_query() else { return };
         self.ask_them_all(
             language,
             |server, id| server.asked_where = Some(id),
