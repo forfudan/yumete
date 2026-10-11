@@ -69,6 +69,9 @@ pub enum Language {
     Java,
     JavaScript,
     Json,
+    /// Mojo（`.mojo` `.🔥`）——語法是這個倉作者自己寫的，見
+    /// <https://github.com/forfudan/tree-sitter-mojo>。
+    Mojo,
     /// NASM（`.asm` `.S` `.nasm`）——見 [`Language::Gas`]。
     Nasm,
     Pascal,
@@ -81,7 +84,7 @@ pub enum Language {
 
 impl Language {
     /// Every language, for `:view-code`'s report and the tests.
-    pub const ALL: [Language; 16] = [
+    pub const ALL: [Language; 17] = [
         Language::Ada,
         Language::C,
         Language::Css,
@@ -91,6 +94,7 @@ impl Language {
         Language::Java,
         Language::JavaScript,
         Language::Json,
+        Language::Mojo,
         Language::Nasm,
         Language::Pascal,
         Language::Python,
@@ -122,6 +126,7 @@ impl Language {
             "java" | "jav" => Language::Java,
             "javascript" | "js" | "mjs" | "cjs" | "jsx" | "node" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
+            "mojo" => Language::Mojo,
             "pascal" | "delphi" | "pas" => Language::Pascal,
             "python" | "py" | "python3" | "py3" => Language::Python,
             "r" => Language::R,
@@ -162,6 +167,8 @@ impl Language {
             "java" | "jav" | "pde" => Language::Java,
             "js" | "mjs" | "cjs" | "jsx" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
+            // **第二個是真的副檔名**：Mojo 收 `.mojo` 和 `.🔥`（上游自己這麼定的）。
+            "mojo" | "🔥" => Language::Mojo,
             "pas" | "pp" | "dpr" | "dpk" | "lpr" => Language::Pascal,
             "py" | "pyw" => Language::Python,
             "r" => Language::R,
@@ -184,6 +191,7 @@ impl Language {
             Language::Java => "java",
             Language::JavaScript => "javascript",
             Language::Json => "json",
+            Language::Mojo => "mojo",
             Language::Nasm => "nasm",
             Language::Pascal => "pascal",
             Language::Python => "python",
@@ -208,6 +216,7 @@ impl Language {
             Language::Java => tree_sitter_java::LANGUAGE.into(),
             Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
             Language::Json => tree_sitter_json::LANGUAGE.into(),
+            Language::Mojo => tree_sitter_mojo::LANGUAGE.into(),
             Language::Python => tree_sitter_python::LANGUAGE.into(),
             Language::Pascal => tree_sitter_pascal::LANGUAGE.into(),
             Language::R => tree_sitter_r::LANGUAGE.into(),
@@ -297,6 +306,51 @@ impl Language {
                       ">>" "|"
                     ] @operator
 "##,
+            // **Mojo 那一份也是自己寫的**（2026-10-11）——它的語法就是這個倉作者
+            // 寫的（`forfudan/tree-sitter-mojo`），所以根本沒有別人的 `.scm` 可
+            // 抄，也沒有授權那一層事。節點名與詞表是從它自己的
+            // `src/node-types.json` 讀出來的。
+            //
+            // `__generator_type`／`__match`／`__mlir_region` 這幾個帶雙下劃線的
+            // 是 Mojo 真有的關鍵詞，不是筆誤。
+            Language::Mojo => r#"
+                    (comment) @comment
+                    [(string) (t_string) (concatenated_string)] @string
+                    [(integer) (float)] @number
+                    [(true) (false) (none)] @constant
+                    (function_definition name: (identifier) @function)
+                    (struct_definition name: (identifier) @type)
+                    (trait_definition name: (identifier) @type)
+                    (extension_definition name: (identifier) @type)
+                    (conformance (identifier) @type)
+                    (parameter type: (identifier) @type)
+                    (assignment type: (identifier) @type)
+                    (decorator) @attribute
+                    (keyword_argument name: (identifier) @property)
+                    (attribute attribute: (identifier) @property)
+                    (dot_member attribute: (identifier) @property)
+                    (call function: (identifier) @function)
+                    ; Warning: 這兩條要擺在 @property 後面——最後一條贏（同
+                    ; extra_highlights 那一節），不然 x.f() 的 f 被兜底成字段。
+                    ; 查詢語言的註釋是分號，不是 //（寫錯整條查詢不編譯）。
+                    (call function: (attribute attribute: (identifier) @function))
+                    (call function: (dot_member attribute: (identifier) @function))
+                    [
+                      "__extension" "__generator_type" "__match" "__mlir_region"
+                      "abi" "alias" "and" "as" "assert" "async" "await"
+                      "borrowed" "capturing" "case" "comptime" "def" "deinit"
+                      "del" "elif" "else" "except" "finally" "fn" "for" "from"
+                      "global" "if" "imm" "import" "in" "inout" "is" "lambda"
+                      "mut" "nonlocal" "not" "or" "out" "owned" "raise" "raises"
+                      "read" "ref" "register_passable" "return" "struct" "thin"
+                      "trait" "try" "var" "where" "while" "with"
+                    ] @keyword
+                    [
+                      "!=" "%" "%=" "&" "&=" "*" "**" "**=" "*=" "+" "+="
+                      "-" "-=" "->" "/" "//" "//=" "/=" ":=" "<" "<<" "<<="
+                      "<=" "=" "==" ">" ">=" ">>" ">>=" "@=" "^" "^=" "|" "|=" "~"
+                    ] @operator
+"#,
             Language::Pascal => r#"
                     (declProc name: (identifier) @function)
                     (declProp name: (identifier) @function)
@@ -386,7 +440,11 @@ impl Language {
             | Language::Nasm
             // 這兩門的 crate 同樣沒把 `tags.scm` 導出來。
             | Language::Ada
-            | Language::Pascal => return None,
+            | Language::Pascal
+            // 這一份是我們自己的語法，而它還沒出 `queries/tags.scm`——`]f`／`]c`
+            // 與大綱因此在 Mojo 檔上沒有東西可走（同 Ada、Pascal）。補它要回到
+            // `forfudan/tree-sitter-mojo` 那個倉。
+            | Language::Mojo => return None,
         })
     }
 
@@ -429,6 +487,11 @@ impl Language {
             Language::R => {
                 "(parameters (parameter) @parameter)\n                 (comment) @comment\n"
             }
+            // Mojo 的 `parameters` 只收 `parameter` 一種子節點（`node-types.json`
+            // 查過），所以寫得明白，不必像 R 那樣躲逗號。
+            Language::Mojo => {
+                "(parameters (parameter) @parameter)\n                 (comment) @comment\n"
+            }
             Language::Css
             | Language::Html
             | Language::Json
@@ -444,7 +507,7 @@ impl Language {
 
     /// 編好的那份，連着每一格捕獲算哪一種對象。
     fn object_query(self) -> Option<&'static Objects> {
-        static CELLS: [OnceLock<Option<Objects>>; 16] = [const { OnceLock::new() }; 16];
+        static CELLS: [OnceLock<Option<Objects>>; 17] = [const { OnceLock::new() }; 17];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -465,7 +528,7 @@ impl Language {
 
     /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
     fn defines(self) -> Option<&'static Defines> {
-        static CELLS: [OnceLock<Option<Defines>>; 16] = [const { OnceLock::new() }; 16];
+        static CELLS: [OnceLock<Option<Defines>>; 17] = [const { OnceLock::new() }; 17];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -525,6 +588,13 @@ impl Language {
                     (set) (tuple) (parenthesized_expression)] @indent
                    ["}" "]" ")"] @outdent"#
             }
+            // Mojo 和 Python 同形（冒號 ＋ 縮進），節點名是它自己的：括起來那一個
+            // 叫 `parenthesised_expression`（英式拼法），形參表另有 `type_parameters`。
+            Language::Mojo => {
+                r#"[(block) (argument_list) (parameters) (type_parameters)
+                    (list) (dictionary) (set) (tuple) (parenthesised_expression)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
             // Java 的塊、三種體、兩種參數表、陣列初始化、`switch` 體與註解的參數表。
             Language::Java => {
                 r#"[(block) (class_body) (interface_body) (enum_body)
@@ -567,7 +637,7 @@ impl Language {
 
     /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
     fn indent_query(self) -> Option<&'static Query> {
-        static CELLS: [OnceLock<Option<Query>>; 16] = [const { OnceLock::new() }; 16];
+        static CELLS: [OnceLock<Option<Query>>; 17] = [const { OnceLock::new() }; 17];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         let text = self.indents();
         if text.is_empty() {
@@ -577,7 +647,7 @@ impl Language {
     }
 
     fn query(self) -> Option<&'static Compiled> {
-        static CELLS: [OnceLock<Option<Compiled>>; 16] = [const { OnceLock::new() }; 16];
+        static CELLS: [OnceLock<Option<Compiled>>; 17] = [const { OnceLock::new() }; 17];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -1310,7 +1380,7 @@ mod tests {
     /// Warning: **「編得起來」與「匹配得上」是兩件事。**`Query::new` 只檢查節點名
     /// 存不存在；寫對了名字卻搭錯了形狀，查詢照樣編得過、一個字也不上色。
     #[test]
-    fn the_two_queries_we_wrote_ourselves_really_paint() {
+    fn the_three_queries_we_wrote_ourselves_really_paint() {
         let got = highlight(
             Language::Ada,
             &lines("procedure Hello is\n   -- 打個招呼\nbegin\n   Put_Line (\"你好\");\nend Hello;"),
@@ -1329,6 +1399,23 @@ mod tests {
         assert_eq!(at(&got, 1, 0), Some(Token::Comment), "{:?}", got[1]);
         assert_eq!(at(&got, 2, 0), Some(Token::Keyword), "begin：{:?}", got[2]);
         assert_eq!(at(&got, 3, 10), Some(Token::String), "{:?}", got[3]);
+
+        // Mojo（2026-10-11）。`fn`／`struct` 是關鍵詞，名字是函數與類型，`#` 起
+        // 的那一行是註釋，三引號那一種**不是**——它是字符串。
+        let got = highlight(
+            Language::Mojo,
+            &lines(
+                "# 打個招呼\nstruct Greeter:\n    fn hello(self, name: String) -> None:\n        print(\"你好\")",
+            ),
+        );
+        assert_eq!(at(&got, 0, 0), Some(Token::Comment), "{:?}", got[0]);
+        assert_eq!(at(&got, 1, 0), Some(Token::Keyword), "struct：{:?}", got[1]);
+        assert_eq!(at(&got, 1, 7), Some(Token::Type), "結構的名字：{:?}", got[1]);
+        assert_eq!(at(&got, 2, 4), Some(Token::Keyword), "fn：{:?}", got[2]);
+        assert_eq!(at(&got, 2, 7), Some(Token::Function), "函數的名字：{:?}", got[2]);
+        assert_eq!(at(&got, 2, 25), Some(Token::Type), "參數的類型：{:?}", got[2]);
+        assert_eq!(at(&got, 3, 8), Some(Token::Function), "print：{:?}", got[3]);
+        assert_eq!(at(&got, 3, 15), Some(Token::String), "{:?}", got[3]);
     }
 
     #[test]

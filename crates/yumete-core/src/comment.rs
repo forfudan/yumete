@@ -42,9 +42,10 @@ pub fn marks(syntax: Syntax) -> Marks {
             use crate::code::Language;
             match language {
                 // R 的註釋和 Python 同形（`#'` 是 roxygen 的文檔註釋，不是另一種）。
-                Language::Python | Language::Toml | Language::Yaml | Language::R => {
-                    Marks { line: Some("#"), block: None }
-                }
+                // Mojo 也是 `#`，而且**只有**行註釋——它沒有塊註釋（三引號那一種
+                // 是文檔字符串，是值不是註釋，`gc` 拿它當註釋會把代碼改壞）。
+                Language::Python | Language::Toml | Language::Yaml | Language::R
+                | Language::Mojo => Marks { line: Some("#"), block: None },
                 // C 那一族的兩種註釋：`//` 與 `/* */`。
                 Language::JavaScript
                 | Language::Go
