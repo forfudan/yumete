@@ -569,6 +569,68 @@ impl From<&str> for Told {
 
 /// A hover answer's Markdown, in the shapes a one-paragraph float can set.
 /// See [`told`].
+/// **把 HTML 實體還原成字**（2026-10-11 報的）。
+///
+/// 報的是 hover 面板上畫着 `&nbsp;&nbsp;A string showing…`。那兩個實體是**服務器
+/// 自己寫的**——`mojo-lsp-server` 把文檔字符串的縮進寫成了 `&nbsp;`，而
+/// VS Code 把 hover 當 HTML 畫，所以在那邊看不出來。
+///
+/// Markdown 收內聯 HTML，實體是它的一部分，所以「照字面畫出來」是**我們**這一頭
+/// 的毛病。helix 走 `pulldown_cmark`，而那個庫把實體解成文本（`&nbsp;` → U+00A0）
+/// 再交給它畫——這一支做的是同一件事。
+///
+/// Warning: **圍欄裏不解。** CommonMark 說代碼塊裏的 `&lt;` 就是那五個字符，
+/// `pulldown_cmark` 也是這麼做的；呼叫處只對圍欄外的行叫這一支。
+///
+/// 只認真會出現的那幾個 ＋ 數字實體。一整張 HTML 實體表不值得為一行懸停文字背。
+fn entities(text: &str) -> String {
+    if !text.contains('&') {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        rest = &rest[at..];
+        // 一個實體最長也就 `&#x10FFFF;` 這種長度，不必掃到天邊。
+        let end = rest[1..].find(';').map(|n| n + 2).filter(|&n| n <= 10);
+        let Some(end) = end else {
+            out.push('&');
+            rest = &rest[1..];
+            continue;
+        };
+        let body = &rest[1..end - 1];
+        let got = match body {
+            "nbsp" => Some('\u{a0}'),
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            _ => match body.strip_prefix('#') {
+                Some(number) => match number.strip_prefix(['x', 'X']) {
+                    Some(hex) => u32::from_str_radix(hex, 16).ok().and_then(char::from_u32),
+                    None => number.parse().ok().and_then(char::from_u32),
+                },
+                None => None,
+            },
+        };
+        match got {
+            Some(c) => {
+                out.push(c);
+                rest = &rest[end..];
+            }
+            // 認不得的原樣留着——一句話裏的 `&` 不是實體的時候遠比是的時候多。
+            None => {
+                out.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 fn inline(raw: &str) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut fenced = false;
@@ -596,7 +658,13 @@ fn inline(raw: &str) -> String {
             // A horizontal rule is how rust-analyzer separates the signature
             // from the documentation. One blank line says the same thing.
             "---" | "***" | "___" => out.push(String::new()),
-            _ => out.push(bare.to_string()),
+            // **一個空標題**：`mojo-lsp-server` 在簽名和正文之間寫一行光禿禿的
+            // `###`（2026-10-11 從真的答覆裏量出來的）。它一個字都沒說，而畫出
+            // 來是一行灰色的井號，佔一行。當成空行。
+            _ if start.trim_end_matches('#').is_empty() && start.starts_with('#') => {
+                out.push(String::new())
+            }
+            _ => out.push(entities(bare)),
         }
     }
     let out: Vec<&str> = out.iter().map(String::as_str).collect();
@@ -1327,6 +1395,26 @@ mod tests {
         let raw = "```rust\nlet x = `y`;\nfn f()\n```";
         assert_eq!(inline(raw), "let x = `y`;\n`fn f()`");
     }
+
+    /// **HTML 實體還原成字，空標題當空行**（2026-10-11 報的）。
+    ///
+    /// 這一則是 `mojo-lsp-server` 對 `internal_representation` 真的答覆，一字未改。
+    #[test]
+    fn a_hover_does_not_show_the_server_s_html_entities() {
+        let raw = "```mojo\n(function) def internal_representation(self) -> String\n```\n---\n\n###\nReturns the internal representation details as a String.\n\n#### Returns:\n&nbsp;&nbsp;A formatted string showing the number and its individual words.\n\n";
+        let got = inline(raw);
+        assert!(!got.contains("&nbsp;"), "實體不許畫成字面：\n{got}");
+        assert!(got.contains("\u{a0}\u{a0}A formatted"), "還原成兩個不斷行空格：\n{got}");
+        assert!(!got.lines().any(|line| line.trim() == "###"), "空標題不佔一行：\n{got}");
+        assert!(got.contains("#### Returns:"), "有字的標題照舊：\n{got}");
+        assert!(got.contains("`(function) def internal_representation(self) -> String`"));
+
+        // 認得的那幾個，連數字實體。
+        assert_eq!(entities("a &lt;b&gt; &amp; &quot;c&quot; &#39;d&#39; &#x41;"), "a <b> & \"c\" 'd' A");
+        // 認不得的原樣留着——「Smith & Sons」裏那個 `&` 遠比實體常見。
+        assert_eq!(entities("Smith & Sons &verylongthing; &"), "Smith & Sons &verylongthing; &");
+    }
+
 
     /// **片段不許照字面插進稿子裏**（2026-10-07 審出來的）。
     ///
