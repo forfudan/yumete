@@ -178,8 +178,8 @@ find = "整行 行邊界 行边界 撑 extend line"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.file-picker"
-zht = "打開文件選擇器"
-zhs = "打开文件选择器"
+zht = "打開文件挑選器"
+zhs = "打开文件挑选器"
 en = "open the file picker"
 find = "打開 打开 文件 檔案 档案 挑 picker open file"
 
@@ -698,14 +698,14 @@ en = "the file changed outside and you have changes too — `:reload!` throws yo
 # 外面改了，自動重讀完成
 key = "autoreload.reread"
 zht = "文件被外部修改，已同步加載 {0}"
-zhs = "文件被外部修改，已同步加載 {0}"
+zhs = "文件被外部修改，已同步加载 {0}"
 en = "the file changed outside; re-read {0}"
 
 [[message]]
 # 自動重讀開關換好了
 key = "autoreload.set"
-zht = "改在外面就自動重讀：{0}"
-zhs = "改在外面就自动重读：{0}"
+zht = "文件被外部修改則自動同步加載：{0}"
+zhs = "文件被外部修改则自动同步加载：{0}"
 en = "auto re-read on outside change: {0}"
 
 
@@ -5226,8 +5226,8 @@ en = "two letters to place a word and go"
 [[message]]
 # g 組：檔首
 key = "hint.goto.start-of-file"
-zht = "文件開頭（g30g 去第 30 行）"
-zhs = "文件开头（g30g 去第 30 行）"
+zht = "文件開頭(g30g前往第30行)"
+zhs = "文件开头(g30g前往第30行)"
 en = "start of the file (g30g goes to line 30)"
 
 [[message]]
@@ -5526,8 +5526,8 @@ en = "split in two"
 [[message]]
 # C-w/空格 w 那一組的標題
 key = "hint.region.title"
-zht = "工作區域"
-zhs = "工作区域"
+zht = "工作區域操作"
+zhs = "工作区域操作"
 en = "region"
 
 [[message]]
@@ -5779,15 +5779,15 @@ en = "copy to the system clipboard"
 [[message]]
 # 空格組：字典
 key = "hint.space.dictionary"
-zht = "顯示漢字信息（浮窗）"
-zhs = "显示汉字信息（浮窗）"
+zht = "顯示漢字信息(浮窗)"
+zhs = "显示汉字信息(浮窗)"
 en = "show info of character (float)"
 
 [[message]]
 # 空格選單裏那一行：把漢字信息開進邊欄（浮窗是小寫的 d）
 key = "hint.space.dictionary-panel"
-zht = "顯示漢字信息（邊欄）"
-zhs = "显示汉字信息（边栏）"
+zht = "顯示漢字信息(邊欄)"
+zhs = "显示汉字信息(边栏)"
 en = "show info of character (sidebar)"
 
 [[message]]
@@ -5809,8 +5809,8 @@ en = "open file picker (project dir)"
 # space F
 # 選擇器開在工作路徑上
 key = "hint.space.open-file-here"
-zht = "打開文件挑選器(工作路徑)"
-zhs = "打开文件挑选器(工作路径)"
+zht = "文件挑選器(工作路徑)"
+zhs = "文件挑选器(工作路径)"
 en = "open file picker (working dir)"
 
 [[message]]
@@ -5824,8 +5824,8 @@ en = "show outline"
 [[message]]
 # space P: 從系統剪貼簿貼在前面
 key = "hint.space.paste-before"
-zht = "從系統剪貼板貼在前面"
-zhs = "从系统剪贴板贴在前面"
+zht = "從系統剪貼板粘貼在前"
+zhs = "从系统剪贴板粘贴在前"
 en = "paste before, from the system clipboard"
 
 [[message]]
@@ -6490,8 +6490,8 @@ en = "leave the editor"
 [[message]]
 # 開場屏：空格 f 做什麼
 key = "intro.open-a-file"
-zht = "打開文件選擇器"
-zhs = "打开文件选择器"
+zht = "打開文件挑選器"
+zhs = "打开文件挑选器"
 en = "the file picker"
 
 [[message]]

@@ -6213,7 +6213,9 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     std::fs::write(&file, "第二版\n").unwrap();
     ed.disk_tick();
     assert_eq!(ed.current_buffer().text(), "第二版\n", "on by default, and the buffer is clean");
-    assert!(ed.status().contains("外面改了"), "{}", ed.status());
+    // 找「被外部修改」而不是整句：這一句是手改的，三種語言各一份，而
+    // 「外部修改」是它裏頭不會跟着措辭走的那一截。
+    assert!(ed.status().contains("被外部修改"), "{}", ed.status());
 
     // 關得掉，關了就真的不動。
     assert!(ed.execute("reload-auto off").is_ok());
@@ -6224,7 +6226,9 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     assert!(ed.execute("reload-auto on").is_ok());
     ed.disk_tick();
     assert_eq!(ed.current_buffer().text(), "第三版\n", "clean, so it reads");
-    assert!(ed.status().contains("外面改了"), "{}", ed.status());
+    // 找「被外部修改」而不是整句：這一句是手改的，三種語言各一份，而
+    // 「外部修改」是它裏頭不會跟着措辭走的那一截。
+    assert!(ed.status().contains("被外部修改"), "{}", ed.status());
 
     // Now type into it, and let the file move again.
     press(&mut ed, "i");

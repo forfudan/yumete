@@ -12127,9 +12127,26 @@ fn window_on(text: &str, caret: usize, room: usize, keep_tail: bool) -> (String,
     }
     let caret = caret.min(chars.len());
     match keep_tail {
-        // 往左數到裝不下為止，光標那一格自己也要有位置站。
+        // **窗口含住光標，而光標後面那一截照畫**（2026-10-11 報的）。
+        //
+        // 從前這一支回的是 `chars[from..caret]`——到光標為止，**光標後面一個字都
+        // 不畫**。於是打完一長串再按 `h` 往左走，字一個一個消失；按 `l` 往右走纔
+        // 一個一個露回來。原話：「The chars at and after the cursor are not
+        // displayed.」
+        //
+        // 現在先往右占滿，再把剩下的預算往左補：光標貼着右邊的時候和從前一樣
+        //（那正是打字的常態），而光標退回中間的時候後面那一截還在。
         true => {
             let mut wide = 0usize;
+            let mut upto = caret;
+            while upto < chars.len() {
+                let w = yumete_cjk::char_width(chars[upto]);
+                if wide + w > room {
+                    break;
+                }
+                wide += w;
+                upto += 1;
+            }
             let mut from = caret;
             while from > 0 {
                 let w = yumete_cjk::char_width(chars[from - 1]);
@@ -12139,7 +12156,7 @@ fn window_on(text: &str, caret: usize, room: usize, keep_tail: bool) -> (String,
                 wide += w;
                 from -= 1;
             }
-            (chars[from..caret].iter().collect(), caret - from)
+            (chars[from..upto].iter().collect(), caret - from)
         }
         false => {
             let mut wide = 0usize;
