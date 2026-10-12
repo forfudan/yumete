@@ -365,8 +365,15 @@ jobs:
           esac
           # …and it draws a page. `--shot` runs the whole launch, so this
           # catches a binary that starts and then cannot render.
+          #
+          # Warning: **no `tee /dev/stderr`** (2026-10-12). git-bash has no such
+          # path, and the whole smoke test died on it after the package, the
+          # version and the 碼表 had all checked out. Hold the frame in a
+          # variable and print it, which is what the half below already does.
           printf '那年冬天。\n' > "$RUNNER_TEMP/a.md"
-          "$YE" --shot=40x6 "$RUNNER_TEMP/a.md" | tee /dev/stderr | grep -q '那年冬天'
+          drawn=$("$YE" --shot=40x6 "$RUNNER_TEMP/a.md")
+          printf '%s\n' "$drawn" >&2
+          printf '%s' "$drawn" | grep -q '那年冬天'
           # …**and it can type** (2026-10-04). `\{ime}` hands the keys that
           # follow to the engine, so this walks the whole path the tables are
           # fetched for: 碼表 loaded, code read, candidate chosen, 漢字 on the
