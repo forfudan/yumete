@@ -13810,6 +13810,16 @@ fn squeezed(text: &str) -> String {
         crate::theme::Palette::of(config)
     }
 
+    /// **光標那一塊畫出來了嗎**——問底色，不問 `Modifier::REVERSED`。
+    ///
+    /// 2026-10-12 起竪排的光標是**自己算出來的顏色**（`Palette::reversed`），不再
+    /// 是交給終端的反顯屬性：一個漢字兩格，而第二格 ratatui 從來不發，顏色終端跟
+    /// 着頭一格走而屬性不跟，於是 Windows Terminal 上那一塊只亮左半格。頁面的底
+    /// 色是紙，光標那一塊不是，問這個就夠。
+    fn blocked(buffer: &ratatui::buffer::Buffer, x: u16, y: u16, ink: crate::theme::Palette) -> bool {
+        buffer[(x, y)].style().bg == Some(ink.text())
+    }
+
     fn vertical_config() -> Config {
         let mut config = Config::default();
         config.editor.layout = WritingLayout::Vertical;
@@ -15296,9 +15306,7 @@ fn squeezed(text: &str) -> String {
             }
             let config = vertical_config();
             let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
-            let block = |x: u16, y: u16| {
-                buffer[(x, y)].style().add_modifier.contains(Modifier::REVERSED)
-            };
+            let block = |x: u16, y: u16| blocked(&buffer, x, y, ink(&config));
             (block(17, 0), block(19, 0), block(19, 1))
         };
         // 站在 曰 上：反白蓋的是正文那一格，旁邊兩個標記一個都不碰。
@@ -16289,12 +16297,7 @@ fn squeezed(text: &str) -> String {
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
-        let reversed = |x: u16, y: u16| {
-            buffer[(x, y)]
-                .style()
-                .add_modifier
-                .contains(Modifier::REVERSED)
-        };
+        let reversed = |x: u16, y: u16| blocked(&buffer, x, y, ink(&config));
         // Half-width characters hang against the slot's right edge.
         assert_eq!(at(&buffer, 19, 1), "a");
         assert!(reversed(18, 1), "cursor cell not highlighted");
@@ -19461,13 +19464,19 @@ fn squeezed(text: &str) -> String {
 
         // The cursor is in the first paragraph, which wraps: the rightmost two
         // 縱 are both it, and both are lit.
-        let ink = |x: u16| buffer[(x, 0)].fg;
-        assert_eq!(at(&buffer, 18, 0), "長");
+        //
+        // Warning: **not the cursor's own cell.** Since 2026-10-12 the block is
+        // painted as two explicit colours rather than as `Modifier::REVERSED`
+        // (see `Palette::reversed`), so the cell the cursor stands on says the
+        // cursor's ink, not the paragraph's. Ask the slot below it — same 縱,
+        // same 段, no block on it.
+        let ink = |x: u16, y: u16| buffer[(x, y)].fg;
+        assert_eq!(at(&buffer, 18, 1), "長");
         assert_eq!(at(&buffer, 15, 0), "長", "the same 段, wrapped");
-        assert_eq!(ink(18), ink(15), "a wrap point is not a unit of writing");
+        assert_eq!(ink(18, 1), ink(15, 0), "a wrap point is not a unit of writing");
         // The next paragraph is another one, and stands back.
         assert_eq!(at(&buffer, 12, 0), "短");
-        assert_ne!(ink(12), ink(18));
+        assert_ne!(ink(12, 0), ink(18, 1));
     }
 
     /// **`PAN.INS` 下，整扇面板退後一步，只剩正在打字的那一行亮着**（2026-10-04
@@ -20637,9 +20646,7 @@ fn squeezed(text: &str) -> String {
         let reversed = |buf: &ratatui::buffer::Buffer, w: u16, h: u16| -> Vec<(u16, u16, String)> {
             (0..w)
                 .flat_map(|x| (0..h).map(move |y| (x, y)))
-                .filter(|&(x, y)| {
-                    buf[(x, y)].style().add_modifier.contains(Modifier::REVERSED)
-                })
+                .filter(|&(x, y)| blocked(buf, x, y, ink(&config)))
                 .map(|(x, y)| (x, y, buf[(x, y)].symbol().to_string()))
                 .collect()
         };

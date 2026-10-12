@@ -38,7 +38,7 @@
 /// 都在解釋這件事；名字一取，那段話就有地方掛了。
 pub type Rgb = (u8, u8, u8);
 
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::RwLock;
 use yumete_config::{rung, Config, Ground, Ladder, Mode, ThemeConfig};
@@ -758,6 +758,22 @@ impl Palette {
     pub fn band(self) -> Color {
         self.at(rung::BAND)
     }
+    /// **反顯自己算出來，別交給終端**（2026-10-12 在 Windows 上報的）。
+    ///
+    /// Warning: **一個漢字兩格，而第二格 ratatui 從來不發**——`Buffer::diff` 碰上一個
+    /// 寬符號就 `to_skip = 1`（`buffer.rs:502`）。那半格長什麽樣由終端自己說，而兩
+    /// 家說法不同：**顏色跟着頭一格走，屬性不跟**。於是同一頁上選區（`bg(…)`，顏色）
+    /// 滿格，而光標（`Modifier::REVERSED`，屬性）只亮左半格——報上來的原話是
+    /// 「half correct half black」。macOS 那幾個終端兩樣都跟，所以那一端永遠看不見。
+    ///
+    /// 紙當墨、墨當紙，畫出來與從前逐像素相同，而送出去的是顏色。別的修飾（粗、斜）
+    /// 原樣留着——反顯換掉的只是那兩個顏色。
+    pub fn reversed(self, style: Style) -> Style {
+        let fg = style.bg.unwrap_or_else(|| self.paper());
+        let bg = style.fg.unwrap_or_else(|| self.text());
+        style.fg(fg).bg(bg).remove_modifier(Modifier::REVERSED)
+    }
+
     /// The selection's ground — and only its ground.
     pub fn selection(self) -> Color {
         self.at(rung::SELECTION)

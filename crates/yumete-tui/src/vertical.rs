@@ -1803,7 +1803,7 @@ pub fn draw(
             .is_some_and(|c| !c.symbol().trim().is_empty());
         if on_the_hung_mark && hung_is_drawn {
             if let Some(cell) = buf.cell_mut((mx, cursor_y)) {
-                cell.set_style(cell.style().add_modifier(Modifier::REVERSED));
+                cell.set_style(ink.reversed(cell.style()));
             }
             return (cursor_x, caret_y);
         }
@@ -1820,7 +1820,7 @@ pub fn draw(
         let here = at_cursor.and_then(|p| p.slots.get(cursor_pos.slot));
         let cells = here.map_or(SLOT_WIDTH, |row| zong::slot_cells(&row.text) as u16);
         if cells > SLOT_WIDTH {
-            let block = Style::default().add_modifier(Modifier::REVERSED);
+            let block = ink.reversed(Style::default());
             let from = (cursor_x + SLOT_WIDTH).saturating_sub(cells);
             // 組裏第幾個字 → 從組的左端起第幾格。按**寬度**走而不是按字數，
             // 組裏混着半角和全角的時候纔對得上。
@@ -1850,7 +1850,9 @@ pub fn draw(
                 .map(|c| c.symbol().to_string())
                 .filter(|sym| !sym.trim().is_empty())
         };
-        let block = Style::default().add_modifier(Modifier::REVERSED);
+        // 顏色而不是屬性，見 `Palette::reversed`：那半格的屬性在 Windows Terminal
+        // 上不跟着頭一格走。
+        let block = ink.reversed(Style::default());
         match (read(cursor_x), read(cursor_x + 1)) {
             (Some(left), _) => put_slot(buf, cursor_x, cursor_y, &left, block),
             (None, Some(right)) => put_slot_right(buf, cursor_x, cursor_y, &right, block),
