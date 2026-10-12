@@ -14039,11 +14039,22 @@ fn squeezed(text: &str) -> String {
     fn no_cell_of_a_frame_holds_a_character_the_terminal_obeys() {
         // **A file whose name holds a tab**, which is the case no guard
         // upstream covers: the tab bar and the pane title take the name and
-        // hand it straight to a span. It is a legal name on every system this
-        // runs on, and one `curl` of a badly-made archive puts one on disk.
+        // hand it straight to a span. One `curl` of a badly-made archive puts
+        // one on disk.
+        //
+        // Warning: **not on Windows** (2026-10-12). A control character is no
+        // legal part of a filename there — `fs::write` answers
+        // `InvalidFilename` — so that row takes a plain name and the rest of
+        // this test carries it: a tab in the text, under the cursor, in the
+        // status line and in a message. What this comment used to claim,
+        // 「a legal name on every system this runs on」, stopped being true the
+        // day that row was added.
         let dir = std::env::temp_dir().join(format!("yumete-tab-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a directory to write in");
-        let path = dir.join("ta\tb.txt");
+        let path = dir.join(match cfg!(windows) {
+            true => "tab.txt",
+            false => "ta\tb.txt",
+        });
         std::fs::write(&path, "ch\t錐\n").expect("a file to open");
 
         // …and a status line with a tab under the cursor, a message quoting

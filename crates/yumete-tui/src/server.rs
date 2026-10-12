@@ -1275,7 +1275,45 @@ fn on_the_path(command: &str, from: Option<&Path>) -> bool {
 /// 一個包管理器裝的工具躺在項目裏，不在 `PATH` 上——`pixi add python-lsp-server`
 /// 之後 `pylsp` 只有 `pixi run` 進得去。原話：「我们很多时候会使用包管理且装
 /// 在项目文件夹中。比如 pixi uv 还有 .env 这种文件夹。都值得搜索。」
-const BINS: &[&str] = &[".venv/bin", "venv/bin", "node_modules/.bin"];
+///
+/// Warning: **Windows 把它們擺在 `Scripts`**（2026-10-12）：`python -m venv` 在那邊
+/// 建的是 `.venv\Scripts\pylsp.exe`，conda／pixi 同理。`node_modules/.bin` 兩邊同
+/// 名，只是裏面躺的是 `.cmd` 殼。
+const BINS: &[&str] =
+    &[".venv/bin", "venv/bin", ".venv/Scripts", "venv/Scripts", "node_modules/.bin"];
+
+/// 嵌套環境裏放執行檔的那幾層。conda 系（pixi 就是）在 Windows 上用 `Scripts`，
+/// 而有些東西直接躺在環境根上。unix 上那兩層本來就沒有執行檔，問一下不要錢。
+const LEAVES: &[&str] = &["bin", "Scripts", ""];
+
+/// **這個命令在這個目錄裏嗎**——帶上 Windows 那幾個後綴（2026-10-12）。
+///
+/// Warning: **Windows 的 `PATH` 上沒有一個叫「`rust-analyzer`」的檔**，有的是
+/// `rust-analyzer.exe`。從前這裏只問裸名字，於是那一端**一個語言服務器都找不到**：
+/// 配了也照樣說「這臺機器上沒裝」，而 `--lib` 那九條 LSP 測試在 Windows 的 runner
+/// 上全紅，說的就是這件事。
+///
+/// 後綴照 `PATHEXT`（那是系統自己說的那張表），讀不到就用慣常那幾個。命令自己已經
+/// 帶了後綴就照原樣問。**unix 不加後綴**：那邊一個檔叫什麽就是什麽。
+fn executable_in(dir: &Path, command: &str) -> Option<PathBuf> {
+    let bare = dir.join(command);
+    if bare.is_file() {
+        return Some(bare);
+    }
+    if !cfg!(windows) || Path::new(command).extension().is_some() {
+        return None;
+    }
+    let listed = std::env::var("PATHEXT").unwrap_or_default();
+    let exts = match listed.trim().is_empty() {
+        true => ".COM;.EXE;.BAT;.CMD".to_string(),
+        false => listed,
+    };
+    exts.split(';')
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .map(|e| dir.join(format!("{command}{e}")))
+        .find(|p| p.is_file())
+}
 
 /// 這幾個底下還隔着一層（環境名/版本），所以要展開一級。
 const NESTED: &[&str] = &[".pixi/envs", ".direnv"];
@@ -1300,8 +1338,14 @@ const NESTED: &[&str] = &[".pixi/envs", ".direnv"];
 /// 目的解釋器、依賴對得上，全局那一個不一定。
 fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
     let named = Path::new(command);
-    if named.is_absolute() || command.contains(std::path::MAIN_SEPARATOR) {
-        return named.is_file().then(|| named.to_path_buf());
+    // **帶着路徑寫下來的就照那個路徑問。** `/` 也算一種路徑：Windows 收它，而一份
+    // 配置常常是從另一臺機器抄過來的。後綴那一層同樣要認（見 `executable_in`）。
+    if named.is_absolute() || command.contains('/') || command.contains(std::path::MAIN_SEPARATOR) {
+        if named.is_file() {
+            return Some(named.to_path_buf());
+        }
+        let (dir, file) = (named.parent()?, named.file_name()?.to_str()?);
+        return executable_in(dir, file);
     }
     // 先量出邊界：最外層那個帶 `.git` 的祖先。一個都沒有就只爬到 `from` 自己。
     let outermost = from
@@ -1311,8 +1355,7 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
         .last();
     for step in from.into_iter().flat_map(|d| d.ancestors()) {
         for bin in BINS {
-            let found = step.join(bin).join(command);
-            if found.is_file() {
+            if let Some(found) = executable_in(&step.join(bin), command) {
                 return Some(found);
             }
         }
@@ -1323,9 +1366,14 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
             let mut names: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
             names.sort();
             for env in names {
-                let found = env.join("bin").join(command);
-                if found.is_file() {
-                    return Some(found);
+                for leaf in LEAVES {
+                    let dir = match leaf.is_empty() {
+                        true => env.clone(),
+                        false => env.join(leaf),
+                    };
+                    if let Some(found) = executable_in(&dir, command) {
+                        return Some(found);
+                    }
                 }
             }
         }
@@ -1334,7 +1382,7 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
         }
     }
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|dir| dir.join(command)).find(|p| p.is_file())
+    std::env::split_paths(&path).find_map(|dir| executable_in(&dir, command))
 }
 
 /// **一個裝在 pixi 環境裏的服務器要拿到那個環境**（2026-10-11 報的）。
@@ -1502,17 +1550,33 @@ mod tests {
             // 跑着就起一個」——假服務器掛在語言名下面的話它看不見，於是測試裏
             // **真的把機器上的 rust-analyzer 起了起來**：慢，而且多出一個誰都
             // 沒答的服務器，把「全都答空了纔說沒有」那一條卡在半路上。
-            let (heard, tell) = servers.pretend_one(language, &Self::factory_command(language));
+            let (heard, tell) = servers.pretend_one(language, &Self::findable());
             (servers, heard, tell)
         }
 
-        /// 出廠配置裏這種語言的頭一個命令名。
-        fn factory_command(language: &str) -> String {
-            yumete_config::factory_servers()
-                .get(language)
-                .and_then(|all| all.first())
-                .map(|s| s.command.clone())
-                .unwrap_or_else(|| language.to_string())
+        /// **一個一定找得到的命令名**：測試自己那個執行檔的絕對路徑。
+        ///
+        /// Warning: **自測不許問機器上裝了什麽。** 從前這裏用出廠配置裏那個
+        /// `rust-analyzer`，於是 `why_it_cannot_ask` 第二關問的是「這臺機器上裝
+        /// 了沒有」——作者的 Mac 上有，所以綠；Windows 的 runner 上沒有，所以這
+        /// 一族九條一起紅（2026-10-12）；而換一臺沒裝 rust-analyzer 的 Mac 同樣
+        /// 會紅。要驗的是**規則**，不是這臺機器裝了什麽。
+        ///
+        /// 絕對路徑，`found_here` 照「帶着路徑寫下來的」那一支答，所以永遠在。而
+        /// 它同時還是 `running` 裏那個假服務器的名字，於是 `follow` 看得見它已經
+        /// 跑着，一個真的服務器都不會被起起來（那是 2026-09-30 抓到的另一件事）。
+        fn findable() -> String {
+            std::env::current_exe().expect("測試自己的執行檔").display().to_string()
+        }
+
+        /// 出廠配置，只把這種語言那一行換成一個一定找得到的命令。
+        fn stocked(language: &str) -> yumete_config::Config {
+            let mut lsp = yumete_config::factory_servers();
+            lsp.insert(
+                language.to_string(),
+                vec![yumete_config::Server { command: Self::findable(), ..Default::default() }],
+            );
+            yumete_config::Config { lsp, ..Default::default() }
         }
 
         /// 再給同一種語言添一個——`ruff` 挑毛病、`pylsp` 講文檔那一種（#425）。
@@ -1564,6 +1628,34 @@ mod tests {
         (editor, path)
     }
 
+    /// **一個命令按這個平臺的規矩找**（2026-10-12）：Windows 上問 `foo` 要找得到
+    /// `foo.exe`，unix 上一個檔叫什麽就是什麽。
+    ///
+    /// Warning: **Windows 上別比完整路徑。** `PATHEXT` 裏寫的是 `.EXE`，拼出來的
+    /// 就是 `foo.EXE`——那邊路徑不分大小寫，檔是同一個，而字串不是同一個。
+    #[test]
+    fn a_command_is_looked_for_with_the_suffixes_this_platform_uses() {
+        let dir = tmp().join(format!("yumete-exe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("plain-9x"), "x").unwrap();
+        std::fs::write(dir.join("suffixed-9x.exe"), "x").unwrap();
+
+        // 裸名字兩邊都認。
+        assert_eq!(executable_in(&dir, "plain-9x"), Some(dir.join("plain-9x")));
+        // 一個目錄裏沒有的，兩邊都是沒有。
+        assert_eq!(executable_in(&dir, "absent-9x"), None);
+        // 帶後綴那一個只有 Windows 找得到。
+        let found = executable_in(&dir, "suffixed-9x");
+        assert_eq!(found.is_some(), cfg!(windows), "{found:?}");
+        // 命令自己帶了後綴就照原樣問，兩邊都一樣。
+        assert_eq!(
+            executable_in(&dir, "suffixed-9x.exe"),
+            Some(dir.join("suffixed-9x.exe"))
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn method(message: &str) -> String {
         let value: serde_json::Value = serde_json::from_str(message).expect(message);
         value["method"].as_str().unwrap_or_default().to_string()
@@ -1577,7 +1669,7 @@ mod tests {
 
     #[test]
     fn a_file_is_opened_once_and_changed_after_that() {
-        let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+        let config = Servers::stocked("rust");
         let (mut editor, _path) = editor_on("a.rs", "fn main() {}\n");
         let (mut servers, heard, _tell) = Servers::pretend("rust");
 
@@ -1604,7 +1696,7 @@ mod tests {
     #[test]
     fn a_waiting_completion_sends_the_text_at_once() {
         let config =
-            yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+            Servers::stocked("rust");
         let (mut editor, _path) = editor_on("b.rs", "fn main() {}\n");
         let (mut servers, heard, _tell) = Servers::pretend("rust");
 
@@ -1628,7 +1720,7 @@ mod tests {
     fn a_question_that_cannot_be_asked_says_which_of_the_five_it_is() {
         let none = yumete_config::Config::default();
         let stocked =
-            yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+            Servers::stocked("rust");
         let (editor, _path) = editor_on("c.rs", "fn main() {}\n");
 
         // 一、設置裏這個語言根本沒寫服務器。
@@ -1760,7 +1852,7 @@ mod tests {
     fn opening_a_file_says_once_that_this_machine_has_no_server_for_it() {
         // 出廠給 python 配了四個候選，而這臺跑測試的機器上多半一個都沒有。
         let config =
-            yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+            Servers::stocked("rust");
         let (mut editor, _path) = editor_on("d.py", "import decimal\n");
         let mut servers = Servers::default();
         servers.follow(&mut editor, &config);
@@ -1786,7 +1878,7 @@ mod tests {
     /// about a chapter is not what anybody asked for.
     #[test]
     fn a_manuscript_starts_nothing() {
-        let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+        let config = Servers::stocked("rust");
         let (mut editor, _path) = editor_on("第一章.md", "那年冬天。\n");
         let mut servers = Servers::default();
         servers.follow(&mut editor, &config);
@@ -1796,7 +1888,7 @@ mod tests {
 
     #[test]
     fn what_a_server_says_lands_on_the_page() {
-        let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+        let config = Servers::stocked("rust");
         let (mut editor, path) = editor_on("b.rs", "fn main() {}\n");
         let (mut servers, _heard, tell) = Servers::pretend("rust");
         servers.follow(&mut editor, &config);
@@ -1846,10 +1938,10 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn sleep");
-        if let Some(server) = servers.running.get_mut("rust-analyzer") {
+        if let Some(server) = servers.running.get_mut(&Servers::findable()) {
             server.child = Some(child);
         }
-        let mut buried = servers.bury("rust-analyzer").expect("那條記錄在");
+        let mut buried = servers.bury(&Servers::findable()).expect("那條記錄在");
         let child = buried.child.as_mut().expect("子進程在");
         // Warning: **先看一眼，再無論如何收一次**：斷言炸了也不許留一個 `sleep` 在機器
         // 上（clippy 的 `zombie_processes` 攔的就是這個）。
@@ -1930,14 +2022,14 @@ mod tests {
     fn a_server_that_dies_before_it_ever_answers_is_not_started_again() {
         let (mut editor, _path) = editor_on("f.rs", "fn main() {}\n");
         let (mut servers, _heard, tell) = Servers::pretend("rust");
-        servers.running.get_mut("rust-analyzer").unwrap().ready = false;
+        servers.running.get_mut(&Servers::findable()).unwrap().ready = false;
         drop(tell);
         servers.collect(&mut editor);
         assert!(servers.failed.contains("rust"), "不再試了");
         assert!(servers.says.is_some(), "說一聲為什麼");
 
         // …and a later `follow` really does not start another one.
-        let config = yumete_config::Config { lsp: yumete_config::factory_servers(), ..Default::default() };
+        let config = Servers::stocked("rust");
         servers.follow(&mut editor, &config);
         assert!(servers.running.is_empty());
     }
@@ -1992,17 +2084,17 @@ mod tests {
         let (mut editor, _path) = editor_on("f.rs", "fn main() {}\n");
         let (mut servers, _heard, _tell) = Servers::pretend("rust");
         {
-            let server = servers.running.get_mut("rust-analyzer").unwrap();
+            let server = servers.running.get_mut(&Servers::findable()).unwrap();
             server.ready = false;
             // 剛起來那一下不許放棄——慢一點的機器要有喘氣的工夫。
             server.started = std::time::Instant::now();
         }
         servers.collect(&mut editor);
-        assert!(servers.running.contains_key("rust-analyzer"), "十秒之內照舊等着");
+        assert!(servers.running.contains_key(&Servers::findable()), "十秒之內照舊等着");
         assert!(!servers.failed.contains("rust"));
 
         // 把起來的時刻推到十秒之前：這一趟就該放棄了。
-        servers.running.get_mut("rust-analyzer").unwrap().started =
+        servers.running.get_mut(&Servers::findable()).unwrap().started =
             std::time::Instant::now() - Servers::HANDSHAKE_GRACE - std::time::Duration::from_secs(1);
         servers.collect(&mut editor);
         assert!(servers.running.is_empty(), "不等了");
@@ -2017,7 +2109,7 @@ mod tests {
     fn an_idle_editor_gives_the_loop_no_deadline_at_all() {
         let (mut servers, _heard, tell) = Servers::pretend("rust");
         assert_eq!(servers.due_in(), None, "閒着就一直等，不燒電");
-        servers.running.get_mut("rust-analyzer").unwrap().waiting = true;
+        servers.running.get_mut(&Servers::findable()).unwrap().waiting = true;
         assert_eq!(servers.due_in(), Some(LOOK_IN));
         // The answer comes, and the deadline goes with it.
         let (mut editor, path) = editor_on("e.rs", "fn main() {}\n");
@@ -2033,7 +2125,7 @@ mod tests {
     fn a_question_still_out_keeps_the_loop_awake_when_a_diagnostic_lands() {
         let (mut servers, _heard, tell) = Servers::pretend("rust");
         let (mut editor, path) = editor_on("e.rs", "fn main() {}\n");
-        servers.running.get_mut("rust-analyzer").unwrap().asked_where = Some(FIRST_ASK);
+        servers.running.get_mut(&Servers::findable()).unwrap().asked_where = Some(FIRST_ASK);
         tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), Some(LOOK_IN), "問出去的還沒答，就不許睡死");
@@ -2056,10 +2148,7 @@ mod tests {
         let (mut servers, ruff, from_ruff) = Servers::pretend("rust");
         let (pylsp, from_pylsp) = servers.pretend_one("rust", "second");
         let (mut editor, path) = editor_on("two.rs", "fn main() {}\n");
-        let config = yumete_config::Config {
-            lsp: yumete_config::factory_servers(),
-            ..Default::default()
-        };
+        let config = Servers::stocked("rust");
 
         servers.follow(&mut editor, &config);
         // 一、兩個都收到了 didOpen。
@@ -2109,10 +2198,7 @@ mod tests {
         let (mut servers, _quiet, from_quiet) = Servers::pretend("rust");
         let (_wise, from_wise) = servers.pretend_one("rust", "second");
         let (mut editor, path) = editor_on("ask.rs", "fn main() {}\n");
-        let config = yumete_config::Config {
-            lsp: yumete_config::factory_servers(),
-            ..Default::default()
-        };
+        let config = Servers::stocked("rust");
         servers.follow(&mut editor, &config);
 
         // 問一次「這是什麽」——兩個都收到了。
@@ -2167,10 +2253,7 @@ mod tests {
         let (mut servers, _a, from_a) = Servers::pretend("rust");
         let (_b, from_b) = servers.pretend_one("rust", "second");
         let (mut editor, path) = editor_on("quiet.rs", "fn main() {}\n");
-        let config = yumete_config::Config {
-            lsp: yumete_config::factory_servers(),
-            ..Default::default()
-        };
+        let config = Servers::stocked("rust");
         servers.follow(&mut editor, &config);
         editor.on_key(yumete_core::input::Key::Char(' '));
         editor.on_key(yumete_core::input::Key::Char('k'));
@@ -2203,10 +2286,7 @@ mod tests {
     fn one_server_behaves_exactly_as_before() {
         let (mut servers, heard, tell) = Servers::pretend("rust");
         let (mut editor, path) = editor_on("one.rs", "fn main() {}\n");
-        let config = yumete_config::Config {
-            lsp: yumete_config::factory_servers(),
-            ..Default::default()
-        };
+        let config = Servers::stocked("rust");
 
         servers.follow(&mut editor, &config);
         let said = heard.try_recv().expect("didOpen 發出去了");
