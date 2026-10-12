@@ -8,6 +8,11 @@
     python3 scripts/oracle/vim_sweep.py            # 跑全套，只印不一樣的
     python3 scripts/oracle/vim_sweep.py dw d2b     # 只跑這幾式
 
+**剩下那一百八十幾格是有意的，不是紅的**（2026-10-12 逐格核過）：全是中文那一族，
+兩種——`（）` 這一族全形括號 nvim 根本不認，而 `你也是人類` 在 nvim 眼裏是**一個**
+「詞」（它沒有分詞器）。兩件都是這個編輯器存在的理由。數字會隨固定裝置變，判準是
+「差異只出現在有中文的那幾行上」。
+
 要有 nvim（`NVIM=/usr/bin/nvim` 可以指）。yumete 要先 `cargo build --release`。
 
 Warning: **`-c` 在 `-s` 之前跑。** 所以存檔那一句不能寫成 `-c 'w! out'`——那是在重放
@@ -18,7 +23,7 @@ Warning: **`-c` 在 `-s` 之前跑。** 所以存檔那一句不能寫成 `-c 'w
 Warning: **固定裝置的行不許對得整整齊齊。** 兩行寬度一樣的文字會被 yumete 認成表格，
 從此每一個動作都跑在格子坐標裏，而 nvim 眼裏它只是兩行字。固定裝置要參差。
 """
-import os, subprocess, sys
+import concurrent.futures as cf, os, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -35,8 +40,8 @@ def setup():
         f.write('[keys]\npreset = "vim"\n')
 
 
-def nvim(text, keys):
-    src, out, ks = (os.path.join(WORK, n) for n in ("n.txt", "n.out", "n.keys"))
+def nvim(text, keys, work):
+    src, out, ks = (os.path.join(work, n) for n in ("n.txt", "n.out", "n.keys"))
     open(src, "w", encoding="utf-8").write(text)
     open(ks, "w", encoding="utf-8").write(keys + f"\x1b:w! {out}\r:qa!\r")
     if os.path.exists(out):
@@ -46,13 +51,33 @@ def nvim(text, keys):
     return open(out, encoding="utf-8").read() if os.path.exists(out) else "<no output>"
 
 
-def yumete(text, keys):
-    src = os.path.join(WORK, "y.txt")
+def yumete(text, keys, work):
+    src = os.path.join(work, "y.txt")
     open(src, "w", encoding="utf-8").write(text)
-    env = dict(os.environ, XDG_CONFIG_HOME=CFG)
+    # Warning: **資料目錄也要指走**（2026-10-12）。只指了配置的時候，這一支每跑一
+    # 格就往使用者真的 `~/.local/share/yumete` 裏寫一份 session——六千格六千次，
+    # 而且和同時在跑的 `cargo test` 搶同一批檔。
+    env = dict(os.environ, XDG_CONFIG_HOME=CFG, XDG_DATA_HOME=os.path.join(WORK, "data"))
     subprocess.run([YUMETE, src, "--lang=en", "--shot=78x16", f"--keys={keys}:w\\n"],
                    cwd=ROOT, env=env, capture_output=True, text=True, timeout=20)
     return open(src, encoding="utf-8").read()
+
+
+def one(job):
+    """一格：同一段文字同一串鍵餵給兩邊，回 (式, 起點, 文字, nvim, yumete)。
+
+    **自己一個工作目錄**，所以並行跑不會互相踩——兩邊都是「寫檔、跑、讀檔」，
+    共用一個目錄的話一格的輸出會被另一格覆蓋掉。
+    """
+    text, case, pos = job
+    work = tempfile.mkdtemp(prefix="oracle-", dir=WORK)
+    try:
+        lead = "gg0" + "l" * pos
+        n = nvim(text, lead + case, work)
+        y = yumete(text, lead + case.replace("\x1b", "\\e"), work)
+        return case, pos, text, n, y
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 # ⚠ 每一張都有第二段，理由同 `OBJECT_FIXTURES`：段落等於整個檔的時候，刪完
@@ -100,6 +125,10 @@ OBJECT_FIXTURES = [
     'say "one two" and \'three\' ok\n{a, b}\nq\n\ntail 段\n',
     "First one. Second one here. Third.\nxx\n\nnext 段 starts\nand goes on\nz\n",
     "  你也是人類, ok（不是）\nzz\n\ntail 段\n",
+    # **套起來的括號**（2026-10-12 補）。沒有這一張，`d2i(`（往外第二層）在**每一
+    # 張固定裝置的每一個起點上都沒咬着**——末尾那張「它們證明不了任何事」的單子
+    # 自己報的。一條規矩要是沒有一格文字碰得到它，驗的就是空氣。
+    "a (b (c) d) e and [f [g] h]\nxx\n\ntail 段\n",
 ]
 
 OBJECT_CASES = [
@@ -121,23 +150,28 @@ def main(only):
     # 2026-10-02 這一支栽過一次：2,350 格全綠而一格都沒驗。末尾印出「在每一張
     # 固定裝置的每一個起點上都沒咬着」的那幾式。
     bit = {}
-    for fixtures, cases in sweeps:
-        for text in fixtures:
-            width = len(text.split("\n")[0])
-            for c in cases:
-                for pos in range(0, width + 2):
-                    total += 1
-                    lead = "gg0" + "l" * pos
-                    n = nvim(text, lead + c)
-                    y = yumete(text, lead + c.replace("\x1b", "\\e"))
-                    bit.setdefault(c, False)
-                    if n != text or y != text:
-                        bit[c] = True
-                    if n != y:
-                        bad += 1
-                        print(f"DIFF {c!r} at {pos} in {text.splitlines()[0]!r}")
-                        print(f"  nvim   {n!r}")
-                        print(f"  yumete {y!r}")
+    # **並行**（2026-10-12）。一格是兩個行程、十幾毫秒的活，而六千格串起來要兩個
+    # 鐘頭——久到沒人在改完之後跑它，於是這一支只在「我記得要跑」的時候纔跑。
+    # 每一格自己一個工作目錄（見 `one`），機器有幾個核就開幾個。
+    jobs = [
+        (text, c, pos)
+        for fixtures, cases in sweeps
+        for text in fixtures
+        for c in cases
+        for pos in range(0, len(text.split("\n")[0]) + 2)
+    ]
+    total = len(jobs)
+    workers = min(12, (os.cpu_count() or 4) * 2)
+    with cf.ThreadPoolExecutor(max_workers=workers) as pool:
+        for c, pos, text, n, y in pool.map(one, jobs):
+            bit.setdefault(c, False)
+            if n != text or y != text:
+                bit[c] = True
+            if n != y:
+                bad += 1
+                print(f"DIFF {c!r} at {pos} in {text.splitlines()[0]!r}")
+                print(f"  nvim   {n!r}")
+                print(f"  yumete {y!r}")
     print(f"{total} cases, {bad} differ")
     idle = sorted(c for c, hit in bit.items() if not hit)
     if idle:

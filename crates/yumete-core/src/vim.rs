@@ -149,6 +149,12 @@ fn object(c: char, around: bool) -> Option<Motion> {
         'm' => crate::motion::Object::Markup,
         // `dis`/`das`：光標所在的那一句（2026-09-28）。
         's' => crate::motion::Object::Sentence,
+        // **`b` 和 `B` 是 vim 給括號的兩個別名**（2026-10-12 神諭上掃出來的）：
+        // `ib` ＝ `i(`、`iB` ＝ `i{`。從前落到底下那一支，而 `b` 不是任何一對的
+        // 半邊，於是 `dib` 整個不成一個動作——按下去 `d` 等着，`i` 不是動作，三
+        // 個鍵一聲不吭地散掉。
+        'b' => crate::motion::Object::Pair { open: '(', close: ')' },
+        'B' => crate::motion::Object::Pair { open: '{', close: '}' },
         c => {
             let (open, close) = crate::editor::pair_for(c)?;
             crate::motion::Object::Pair { open, close }

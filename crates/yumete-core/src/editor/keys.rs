@@ -848,11 +848,21 @@ impl Editor {
         };
         // **An object is already both ends**; everything else is walked to.
         if step.reach == crate::vim::Reach::Object {
-            // **數目交給詞對象**（2026-10-11）。`vim::object` 造動作的時候數不到
-            // 它——那個 2 在 `d2iw` 裏是按鍵，而按鍵在這一層纔收齊。別的對象照舊
-            // 是 1：`2i(` 在 vim 裏是「往外第二層」，不是「兩個括號對」。
+            // **數目交給對象**（2026-10-11；2026-10-12 連括號引號一起交）。
+            // `vim::object` 造動作的時候數不到它——那個 2 在 `d2iw` 裏是按鍵，而
+            // 按鍵在這一層纔收齊。
+            //
+            // 這裏從前只交給詞對象，註腳寫着「`2i(` 在 vim 裏是『往外第二層』，
+            // 不是『兩個括號對』」——那句話是對的，而它是 `pair_span` 該怎麼讀這
+            // 個數的事，不是該不該給它。給了之後 `2i(` 真的往外數一層，`2i"` 連
+            // 引號一起拿（vim 的 `count < 2` 那一條）。
             let step = match step.motion {
-                motion::Motion::Object { what: what @ motion::Object::Word { .. }, around, .. } => {
+                motion::Motion::Object { what, around, .. }
+                    if matches!(
+                        what,
+                        motion::Object::Word { .. } | motion::Object::Pair { .. }
+                    ) =>
+                {
                     crate::vim::Step {
                         motion: motion::Motion::Object { what, around, count: n },
                         ..step

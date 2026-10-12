@@ -25906,3 +25906,124 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
         assert_eq!(at(&ed), 1, "{layout:?}：`gj` 是檔案的下一行");
     }
 }
+
+/// **對象找不着就往前找**——vim 的 `current_block`／`current_quote` 都有這一步
+/// （2026-10-12 從 nvim 神諭上量的，那一輪 554 格差異裏的大半）。
+///
+/// 從前這兩族只認「包着光標的那一對」，於是 `ab (cd) ef` 上游標在行首按 `di(`
+/// 一動不動——而 vim 刪掉 `cd`。括號往前找**不限行**（vim 的
+/// `findmatchlimit(FM_FORWARD)`），引號只在自己那一行上找。
+#[test]
+fn a_bracket_object_looks_ahead_and_a_quote_object_only_on_its_line() {
+    let after = |text: &str, keys: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg0");
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    // 同一行上，游標在 `(` 之前。
+    assert_eq!(after("ab (cd) ef\nxx\n", "di("), "ab () ef\nxx\n");
+    // 下一行纔有——括號那一族不限行。
+    assert_eq!(after("ab\n(cd) ef\nxx\n", "di("), "ab\n() ef\nxx\n");
+    // 引號只在自己那一行上找，所以這一格一動不動。
+    assert_eq!(after("ab\n\"cd\" ef\nxx\n", "di\""), "ab\n\"cd\" ef\nxx\n");
+    // 同一行上的就找得到。
+    assert_eq!(after("ab \"cd\" ef\nxx\n", "di\""), "ab \"\" ef\nxx\n");
+    // Warning: **一對引號不許跨行。** 從前這裏掃整棵繩子，於是把換行一起吞了。
+    assert_eq!(after("a \"one\ntwo\" b\nxx\n", "lldi\""), "a \"one\ntwo\" b\nxx\n");
+}
+
+/// **光標正停在引號上的時候，從行首一對一對數起**（vim 的 `current_quote`，
+/// `textobject.c:1747`）。
+///
+/// `a "b" "c" d` 上游標停在 `"b"` 的收引號上：往回最近的引號就是它自己，當成開
+/// 引號配下一對的開引號，`di"` 刪的是兩段之間那個空格。vim 刪的是 `b`。
+#[test]
+fn a_quote_under_the_cursor_is_paired_from_the_start_of_the_line() {
+    let mut ed = typed("a \"b\" \"c\" d\nxx\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg0lllldi\"");
+    assert_eq!(ed.current_buffer().text(), "a \"\" \"c\" d\nxx\n");
+}
+
+/// **`a"` 連空白一起拿，`a(` 不拿**（vim 的 `current_quote` 末尾）：收引號後面
+/// 那一串，沒有就拿開引號前面那一串。和 `aw` 同一條規矩。
+#[test]
+fn the_a_quote_object_takes_the_space_beside_it() {
+    let after = |text: &str, keys: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg0");
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(after("ab \"cd\" ef\nxx\n", "lllllda\""), "ab ef\nxx\n", "後面那一串");
+    assert_eq!(after("ab \"cd\"ef\nxx\n", "lllllda\""), "abef\nxx\n", "後面沒有就拿前面");
+    // 括號那一族沒有這一條。
+    assert_eq!(after("ab (cd) ef\nxx\n", "llllllda("), "ab  ef\nxx\n");
+}
+
+/// **`ib` 和 `iB` 是 vim 給括號的兩個別名**（2026-10-12）：`ib` ＝ `i(`、
+/// `iB` ＝ `i{`。從前落到「這個字符是哪一對的半邊」那一支，而 `b` 一對都不是，
+/// 於是三個鍵一聲不吭地散掉。
+#[test]
+fn ib_and_ib_capital_are_vims_two_names_for_the_bracket_objects() {
+    let after = |text: &str, keys: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg0");
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(after("ab (cd) ef\nxx\n", "dib"), "ab () ef\nxx\n");
+    assert_eq!(after("ab {cd} ef\nxx\n", "diB"), "ab {} ef\nxx\n");
+    assert_eq!(after("ab (cd) ef\nxx\n", "dab"), "ab  ef\nxx\n");
+}
+
+/// **`aw` 那一串空白跨得過一個換行，`iw` 跨不過**（2026-10-12 從神諭上量的）。
+///
+/// Warning: **至多一個。** 下一行是空行的時候 vim 停在那裏——空行在它眼裏自成一
+/// 個「詞」，不歸這一串空白。
+#[test]
+fn an_around_word_on_trailing_space_reaches_over_one_line_break() {
+    let after = |text: &str, keys: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg0");
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(after("ab  \ncd ef\nxx\n", "lldaw"), "ab ef\nxx\n", "空白 ＋ 下一行那個詞");
+    assert_eq!(after("ab  \ncd ef\nxx\n", "lldiw"), "ab\ncd ef\nxx\n", "`iw` 停在行末");
+    assert_eq!(after("ab  \n\ncd\nxx\n", "lldaw"), "ab\ncd\nxx\n", "下一行是空行就停");
+}
+
+/// **數目：括號往外數一層，引號連引號一起拿，詞對象跨得過換行**
+/// （2026-10-12 逐條問過 nvim）。
+#[test]
+fn a_count_on_an_object_reads_the_way_vim_reads_it() {
+    let after = |text: &str, keys: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg0");
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    // `2i(` ＝ 往外第二層——**光標在裏面的時候**。
+    assert_eq!(after("a (b (c) d) e\nxx\n", "lllllld2i("), "a () e\nxx\n");
+    // Warning: **一對都沒包着光標的時候，那個數目換了意思**：往前數第幾個開括
+    // 號。vim 的 `current_block` 兩條路各用各的（`findmatch` 往回 vs
+    // `findmatchlimit(FM_FORWARD)` 往前，各連叫 count 次）。行首按 `d2a(` 刪的
+    // 是**裏面**那一對，不是外面那一層。
+    assert_eq!(after("a (b (c) d) e\nxx\n", "d2a("), "a (b  d) e\nxx\n");
+    assert_eq!(after("a (b (c) d) e\nxx\n", "d2i("), "a (b () d) e\nxx\n");
+    // Warning: **層數不夠就一個字都不動**，同 `d9iw`。
+    assert_eq!(after("a (b) c\nxx\n", "llld2i("), "a (b) c\nxx\n");
+    // 引號上 `2i"` ＝ 連引號一起（vim 的 `count < 2` 那一條），空白不拿。
+    assert_eq!(after("a \"b\" c\nxx\n", "llld2i\""), "a  c\nxx\n");
+    // 詞對象的單位跨得過換行，而換行**自己不算一個單位**——`;` 和 `ef` 是兩個，
+    // 中間那個換行是順帶被圈進來的。
+    assert_eq!(after("ab cd;\nef gh\nxx\n", "llllld2iw"), "ab cd gh\nxx\n");
+    assert_eq!(after("ab cd;\nef gh\nxx\n", "d5iw"), " gh\nxx\n");
+}

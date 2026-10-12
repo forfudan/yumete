@@ -4781,6 +4781,81 @@ fn find_backward(rope: &Rope, from: usize, open: char, close: char) -> Option<us
     None
 }
 
+/// 這一行的頭和尾（不含換行），`pos` 落在哪一行就是哪一行。
+fn line_bounds(rope: &Rope, pos: usize) -> (usize, usize) {
+    let len = rope.len_chars();
+    let line = rope.char_to_line(pos.min(len));
+    let from = rope.line_to_char(line);
+    let mut to = from;
+    while to < len && rope.char(to) != '\n' {
+        to += 1;
+    }
+    (from, to)
+}
+
+/// **光標那一行上，包着它的那一對引號**——vim 的 `current_quote`，照抄
+/// （`textobject.c:1747`，2026-10-12）。
+///
+/// 兩條路，而分岔的判準是「光標是不是正停在一個引號上」：
+///
+/// * **停在引號上**：從**行首**起一對一對地數，數到包住光標的那一對為止。單看
+///   「往回最近的那一個」是不行的——`a "b" "c" d` 裏光標停在 `"b"` 的收引號上，
+///   往回最近的就是它自己，於是把它當成開引號、和下一對的開引號配成一對，`di"`
+///   刪掉的是兩段之間那個空格。vim 刪的是 `b`。
+/// * **不在引號上**：往回找一個引號當開引號（嚴格在光標之前），沒有就往前找；
+///   收引號是它後面那一個。Warning: **這一支不驗光標是不是真在兩者之間**，vim 也
+///   不驗——`a "b" "c" d` 裏光標停在兩段之間的空格上，取到的是 `" "`，於是
+///   `da"` 刪掉 `" "` 那三格。看着古怪，而那是它的規矩。
+fn quoted(rope: &Rope, pos: usize, quote: char) -> Option<(usize, usize)> {
+    let len = rope.len_chars();
+    if len == 0 {
+        return None;
+    }
+    let pos = pos.min(len.saturating_sub(1));
+    let (from, to) = line_bounds(rope, pos);
+    let next = |at: usize| (at..to).find(|&i| rope.char(i) == quote);
+    if rope.char(pos) == quote {
+        let mut start = from;
+        loop {
+            let open = next(start)?;
+            if open > pos {
+                return None;
+            }
+            let close = next(open + 1)?;
+            if open <= pos && pos <= close {
+                return Some((open, close));
+            }
+            start = close + 1;
+        }
+    }
+    let open = (from..pos).rev().find(|&i| rope.char(i) == quote).or_else(|| next(pos))?;
+    let close = next(open + 1)?;
+    Some((open, close))
+}
+
+/// **往前數第 `nth` 個 `open`，連它配對的那個 `close`。**
+///
+/// vim 的 `current_block` 在「一對都沒包着光標」那條路上把 `count` 用在這裏：
+/// 每一趟從上一個開括號再往前找一個（`findmatchlimit(FM_FORWARD)` 連叫 count
+/// 次）。`a (b (c) d) e` 的行首按 `d2a(` 刪的是 `(c)`，不是外面那一層。
+fn nth_ahead(
+    rope: &Rope,
+    pos: usize,
+    open: char,
+    close: char,
+    nth: usize,
+) -> Option<(usize, usize)> {
+    let mut at = pos;
+    for step in 0..nth.max(1) {
+        let from = match step {
+            0 => at,
+            _ => at + 1,
+        };
+        at = (from..rope.len_chars()).find(|&i| rope.char(i) == open)?;
+    }
+    find_forward(rope, at, open, close).map(|end| (at, end))
+}
+
 /// The innermost `open`…`close` enclosing `pos`, as (opener index, closer index).
 ///
 /// A pair whose halves are identical (`"`, `'`) cannot be nested, so those are
@@ -4792,8 +4867,13 @@ fn surrounding(rope: &Rope, pos: usize, open: char, close: char) -> Option<(usiz
         return None;
     }
     if open == close {
-        let start = (0..=pos).rev().find(|&i| rope.char(i) == open)?;
-        let end = (pos.max(start) + 1..len).find(|&i| rope.char(i) == close)?;
+        // Warning: **同一個字符的一對不許跨行**（2026-10-12，vim 的 `current_quote`
+        // 整支都在一個 `line` 上跑）。從前這裏掃整棵繩子，於是
+        // `a "one` ⏎ `two" b` 上的 `di"` 把換行一起吞了，而 vim 一個字都不動
+        // ——那兩個引號不是一對。
+        let (from, to) = line_bounds(rope, pos);
+        let start = (from..=pos).rev().find(|&i| rope.char(i) == open)?;
+        let end = (pos.max(start) + 1..to).find(|&i| rope.char(i) == close)?;
         return Some((start, end));
     }
     // Sitting on a delimiter counts as being inside its own pair.

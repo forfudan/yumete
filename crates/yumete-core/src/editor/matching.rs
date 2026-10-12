@@ -335,26 +335,100 @@ impl Editor {
     }
 
     /// The span a pair of delimiters encloses, `around` taking the marks too.
-    fn pair_span(&self, open: char, _close: char, around: bool) -> motion::Span {
+    fn pair_span(&self, open: char, _close: char, around: bool, count: usize) -> motion::Span {
         let rope = self.current_buffer().rope();
         // Warning: **一個鍵管一族括號**（2026-09-28）：按 `(` 找得到 `()` 也找得到 `（）`，
         // 按 `[` 連 `【】`『』一起找。取**最裏面**那一對——`【他說（不）】` 裏光標在
         // 「不」上按 `di[`，要的是 `（）` 還是 `【】`？答案跟 `md` 一致：最裏面那一對。
         // 這張族表在 `editor.rs` 的 `FAMILIES`，理由記在那裏。
-        let Some((start, end)) = super::pair_family(open)
-            .into_iter()
-            .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
-            .max_by_key(|&(start, _)| start)
-        else {
+        //
+        // Warning: **沒有包着光標的那一對，就往前找**（2026-10-12，vim 的
+        // `current_block`／`current_quote` 都有這一步）。從前沒有，於是
+        // `ab (cd) ef` 上游標在行首按 `di(` 一動不動——而 vim 刪掉 `cd`。神諭上
+        // 那 433 格差異大半是這一條。
+        //
+        // 括號和引號是兩支：括號往前找**不限行**，引號只在自己那一行上找，而且
+        // 「光標正停在引號上」要從行首一對一對數起（見 `quoted`）。
+        let here = self.sel.head();
+        let family = super::pair_family(open);
+        // Warning: **數目在兩條路上不是同一個意思**（2026-10-12 從 nvim 神諭上量
+        // 的）。vim 的 `current_block` 先往回找包着光標的那一對，找到了就把
+        // `count` 用在**往外數幾層**上；一對都沒包着的時候走另一條路，而那一條
+        // 把 `count` 用在**往前數第幾個開括號**上。`a (b (c) d) e` 的行首按
+        // `d2a(` 刪的是 `(c)`——往前第二個 `(`，不是外面那一層。
+        let enclosing = family
+            .iter()
+            .filter_map(|&(open, close)| match open == close {
+                true => super::quoted(rope, here, open),
+                false => super::surrounding(rope, here, open, close),
+            })
+            // 同族套着的時候取最裏面那一對（`【他說（不）】`）。
+            .max_by_key(|&(start, _)| start);
+        let ahead = || {
+            family
+                .iter()
+                .filter(|&&(open, close)| open != close)
+                .filter_map(|&(open, close)| super::nth_ahead(rope, here, open, close, count))
+                .min_by_key(|&(start, _)| start)
+        };
+        let Some((mut start, mut end)) = enclosing.or_else(ahead) else {
             return motion::Span::Missed;
         };
+        // 往前找到的那一對已經把數目用掉了。
+        let count = match enclosing.is_some() {
+            true => count,
+            false => 1,
+        };
+        // **`2i(` 往外數一層**（2026-10-12 從 nvim 神諭上量的）。vim 的
+        // `current_block` 把 `count` 交給 `findmatch` 連問幾次，每一次從上一層的
+        // 開括號再往外找。Warning: **層數不夠就一個字都不動**——`a (b) c` 上
+        // `d2i(` 在 vim 裏整行不變，而不是退回那一層。同 `d9iw` 那一條。
+        //
+        // 引號沒有「外一層」（一行上的引號不套），它那邊 `count` 另有意思，見下。
+        let nests = rope.char(start) != rope.char(end);
+        if nests {
+            for _ in 1..count {
+                let (open, close) = (rope.char(start), rope.char(end));
+                let outer = match start {
+                    0 => None,
+                    _ => super::surrounding(rope, start - 1, open, close),
+                };
+                match outer {
+                    Some((a, b)) => (start, end) = (a, b),
+                    None => return motion::Span::Missed,
+                }
+            }
+        }
         // `end` is the closing bracket's own index. The head goes on the last
         // character the selection covers, not one past it — the cursor's
         // grapheme is inside the selection.
-        let (anchor, head) = match around {
+        // **引號上數目 ≥2 ＝ 連引號一起拿**（vim 的 `current_quote`：
+        // `if (!include && count < 2) ++col_start;`，收那一頭同理）。空白不拿，
+        // 那是 `a` 纔有的。
+        let whole = around || (!nests && count > 1);
+        let (mut anchor, head) = match whole {
             true => (start, end),
             false => (start + 1, end.saturating_sub(1)),
         };
+        let mut head = head;
+        // **`a"` 連空白一起拿，`a(` 不拿**（vim 的 `current_quote` 末尾那一段，
+        // 2026-10-12 量過）：收引號後面那一串空白，沒有就拿開引號前面那一串。
+        // 和 `aw` 同一條規矩，而括號那一族沒有這一條。
+        if around && !nests {
+            let (from, to) = super::line_bounds(rope, here);
+            let mut at = head + 1;
+            while at < to && rope.char(at).is_whitespace() {
+                at += 1;
+            }
+            match at > head + 1 {
+                true => head = at - 1,
+                false => {
+                    while anchor > from && rope.char(anchor - 1).is_whitespace() {
+                        anchor -= 1;
+                    }
+                }
+            }
+        }
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
@@ -676,12 +750,36 @@ impl Editor {
             while a > start && rope.char(a - 1).is_whitespace() {
                 a -= 1;
             }
+            // Warning: **`aw` 那一串空白跨得過一個換行，`iw` 跨不過**（2026-10-12
+            // 從 nvim 神諭上量的）。`ab␣␣` ⏎ `cd ef` 上游標停在行末那個空格，
+            // `daw` 刪掉 `␣␣⏎cd` 而 `diw` 只刪掉 `␣␣`。
+            //
+            // Warning: **至多一個換行。** 下一行要是空的（`ab␣␣` ⏎ ⏎ `cd`），vim
+            // 停在那裏——空行在它眼裏自成一個「詞」，不歸這一串空白。
             let mut b = self.sel.head();
-            while b < line_end && rope.char(b).is_whitespace() {
+            let mut crossed = false;
+            while b < rope.len_chars() {
+                match rope.char(b) {
+                    '\n' if around && !crossed => crossed = true,
+                    '\n' => break,
+                    c if c.is_whitespace() => {}
+                    _ => break,
+                }
                 b += 1;
             }
             if around {
-                if let Some(&(_, end)) = words.iter().find(|&&(s, _)| s >= b) {
+                // 跟着的那個詞可能在下一行上，所以問的是 `b` 落在哪一行。
+                let bline = rope.char_to_line(b.min(rope.len_chars()));
+                let ahead = match bline == line {
+                    true => words.clone(),
+                    false => crate::motion::line_words(
+                        &rope,
+                        bline,
+                        grain,
+                        self.segmenter.as_ref(),
+                    ),
+                };
+                if let Some(&(_, end)) = ahead.iter().find(|&&(s, _)| s >= b) {
                     b = end;
                 }
             }
@@ -721,19 +819,39 @@ impl Editor {
         // 是「取到有的為止」，而那是錯的。
         let mut taken = 1;
         while taken < count {
-            if b + 1 >= line_end {
+            // Warning: **換行不算一個單位，跨過去就是了**（2026-10-12 從 nvim 神諭
+            // 上量的）。`ab cd;` ⏎ `ef gh` 上游標停在 `;`，vim 的 `d2iw` 刪掉
+            // `;⏎ef`——兩個單位是 `;` 和 `ef`，中間那個換行是**被圈進來的**，不
+            // 是第二個。從前這裏撞上行尾就 `Missed`，於是跨行的數目一格都不走。
+            let mut at = b + 1;
+            if at < rope.len_chars() && rope.char(at) == '\n' {
+                at += 1;
+            }
+            if at >= rope.len_chars() {
                 return motion::Span::Missed;
             }
-            let at = b + 1;
+            // 單位可能落在下一行上，所以每一趟都問「`at` 在哪一行」。
+            let at_line = rope.char_to_line(at);
+            let at_end = rope.line_to_char(at_line)
+                + crate::zong::line_chars(&rope, at_line).len();
+            let ahead = match at_line == line {
+                true => words.clone(),
+                false => crate::motion::line_words(
+                    &rope,
+                    at_line,
+                    grain,
+                    self.segmenter.as_ref(),
+                ),
+            };
             let mut end = match rope.char(at).is_whitespace() {
                 true => {
                     let mut e = at;
-                    while e < line_end && rope.char(e).is_whitespace() {
+                    while e < at_end && rope.char(e).is_whitespace() {
                         e += 1;
                     }
                     e
                 }
-                false => match words.iter().find(|&&(s, e)| (s..e).contains(&at)) {
+                false => match ahead.iter().find(|&&(s, e)| (s..e).contains(&at)) {
                     Some(&(_, e)) => e,
                     None => return motion::Span::Missed,
                 },
@@ -744,14 +862,14 @@ impl Editor {
             if asked_around {
                 match rope.char(at).is_whitespace() {
                     true => {
-                        if let Some(&(_, e)) = words.iter().find(|&&(s, _)| s >= end) {
+                        if let Some(&(_, e)) = ahead.iter().find(|&&(s, _)| s >= end) {
                             end = e;
                         }
                         ate_trailing = false;
                     }
                     false => {
                         let was = end;
-                        while end < line_end && rope.char(end).is_whitespace() {
+                        while end < at_end && rope.char(end).is_whitespace() {
                             end += 1;
                         }
                         ate_trailing = end > was;
@@ -1454,8 +1572,8 @@ impl Editor {
             motion::Motion::Object {
                 what: motion::Object::Pair { open, close },
                 around,
-                ..
-            } => self.pair_span(open, close, around),
+                count,
+            } => self.pair_span(open, close, around, count),
             motion::Motion::Object { what: motion::Object::Paragraph, around, .. } => {
                 self.paragraph_span(around)
             }
