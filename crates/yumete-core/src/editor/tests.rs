@@ -161,7 +161,7 @@ fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
     // Warning: **設定是一個數，不是開關**：`tatechuyoko = 2` 只擠兩個，長過它的一串
     // 數字照日文書的辦法一個一格豎着排（`1997` 擠成 `19`/`97` 讀起來是兩個數）。
     let mut ed = typed("26年的冬天\n");
-    ed.execute(":layout vertical").unwrap();
+    ed.execute(":vertical").unwrap();
 
     // 縦中横關着：一個字一格，兩個數一路相等。
     ed.set_tatechuyoko(0);
@@ -192,7 +192,7 @@ fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
 fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     // 兩個的設定裝不下四個數：一個一格，四下纔走到「年」。
     let mut ed = typed("1997年\n");
-    ed.execute(":layout vertical").unwrap();
+    ed.execute(":vertical").unwrap();
     ed.set_tatechuyoko(2);
     for _ in 0..4 {
         ed.on_key(Key::Char('l'));
@@ -203,7 +203,7 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     // 四個的設定：`1997` 是**一格**——四個數走過去，格數一個都沒動；「年」纔是
     // 第二格。光標仍然一個字一個字地走（格是畫面上的單位，不是光標的）。
     let mut ed = typed("1997年\n");
-    ed.execute(":layout vertical").unwrap();
+    ed.execute(":vertical").unwrap();
     ed.set_tatechuyoko(4);
     for step in 1..=3 {
         ed.on_key(Key::Char('l'));
@@ -218,7 +218,7 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
 
     // 五個超過了那個數，於是**整串都不擠**——半格半格地填會讀成兩個數。
     let mut ed = typed("12345年\n");
-    ed.execute(":layout vertical").unwrap();
+    ed.execute(":vertical").unwrap();
     ed.set_tatechuyoko(4);
     for step in 1..=5 {
         ed.on_key(Key::Char('l'));
@@ -233,7 +233,7 @@ fn the_caret_and_the_grid_agree_about_a_candidate() {
     let mut ed = typed("春夏秋冬\n");
     ed.set_candidate(vec![(0, 2, "候補".to_string())]);
     // Down the column: two rows of candidate between 夏 and 秋.
-    ed.execute(":layout vertical").unwrap();
+    ed.execute(":vertical").unwrap();
     assert_eq!(ed.zong_position().slot, 0);
     // Warning: **往下一個字是 `l`**（2026-10-12 起出廠的行文那一套）：竪排的
     // `hjkl` 和橫排逐鍵相同，`l` 走字、`j` 走行。版面那一套下纔是 `j`。
@@ -1370,7 +1370,7 @@ fn a_colon_further_along_the_line_is_only_a_colon() {
 }
 
 /// The whole point of the mode: the reader is thinking 「竖排」 and the
-/// command is called `layout vertical`.
+/// command is called `vertical`.
 #[test]
 fn a_chinese_word_on_that_line_finds_the_english_command() {
     let mut ed = Editor::new();
@@ -1382,7 +1382,7 @@ fn a_chinese_word_on_that_line_finds_the_english_command() {
     let names: Vec<String> = found.iter().map(|h| h.written()).collect();
     assert_eq!(
         names.first().map(String::as_str),
-        Some("layout vertical"),
+        Some("vertical"),
         "{names:?}"
     );
     assert_eq!(focus, 0);
@@ -5943,7 +5943,7 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
     // asked on a 橫排 page it answers 「還不行，需要：竪排」 and changes
     // nothing, which would make every assertion below pass for the wrong
     // reason.
-    assert!(ed.execute("layout vertical").is_ok());
+    assert!(ed.execute("vertical").is_ok());
     assert!(ed.execute("view-margin dense").is_ok());
     for _ in 0..2 {
         assert!(ed.execute("view-hanging off").is_ok());
@@ -9011,7 +9011,7 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
     assert_eq!(ed.layout(), Layout::Horizontal, "a grid is read across");
 
     // …and it stays turned: the command is refused, not silently ignored.
-    ed.execute("layout vertical").unwrap();
+    ed.execute("vertical").unwrap();
     assert_eq!(ed.layout(), Layout::Horizontal);
     assert!(ed.status().contains(":table-render off"), "{}", ed.status());
 
@@ -9464,7 +9464,7 @@ fn a_measure_is_a_width_to_write_to_and_a_column_has_its_own() {
     // **竖排那一個是另一條命令，另一格數**（2026-10-09 作者定：「一个东西怎么能有
     // 两个命令……view-wrap 只在横排生效，view-wrap-vertical 只在竖排生效」）。從前
     // 這兩件事共用 `measure` 一格：橫排是行寬，一切到竖排同一個數就成了一列的長度。
-    ed.execute("layout vertical").unwrap();
+    ed.execute("vertical").unwrap();
     ed.execute("view-wrap-vertical 12").unwrap();
     assert_eq!(ed.zong_measure(), Some(12));
     assert_eq!(ed.measure(), Some(40), "橫排那一格一動沒動");
@@ -9498,7 +9498,7 @@ fn a_measure_is_a_width_to_write_to_and_a_column_has_its_own() {
 #[test]
 fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
     let mut ed = typed("那年冬天，山下起了大雪。");
-    ed.execute("layout vertical").unwrap();
+    ed.execute("vertical").unwrap();
     assert!(ed.soft_wrap(), "on, as it always is");
 
     ed.execute("view-wrap off").unwrap();
@@ -9510,7 +9510,7 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
     assert_eq!(ed.zong_measure(), Some(12));
 
     // Horizontally it works as it always did.
-    ed.execute("layout horizontal").unwrap();
+    ed.execute("horizontal").unwrap();
     ed.execute("view-wrap off").unwrap();
     assert!(!ed.soft_wrap());
 }
@@ -20610,7 +20610,7 @@ fn a_program_file_is_drawn_across_and_the_manuscript_keeps_its_vertical() {
     assert_eq!(ed.layout_wanted(), Layout::Vertical, "設定一個字没動");
 
     // `:vertical` 在程序文件上是**說一句**，不是偷偷把設定關掉。
-    ed.execute(":layout vertical").unwrap();
+    ed.execute(":vertical").unwrap();
     assert_eq!(ed.status(), say!("layout.code-is-horizontal"));
     assert_eq!(ed.layout_wanted(), Layout::Vertical, "說完了設定還在");
 
@@ -21839,7 +21839,7 @@ fn the_alt_parens_turn_what_the_selections_hold() {
 #[test]
 fn every_selection_remembers_its_own_goal_slot_in_vertical() {
     let mut ed = typed("甲乙丙丁戊\n己庚辛\n壬癸子丑寅\n");
-    ed.execute(":layout vertical").unwrap();
+    ed.execute(":vertical").unwrap();
     press(&mut ed, "gg");
     // 兩段，各在第一縱的第二格和第五格。
     ed.sel = crate::selection::Selections::one(crate::selection::Range::at(1));

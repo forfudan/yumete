@@ -1135,7 +1135,7 @@ impl Need {
     /// The command that brings it about, for the message and for `force`.
     pub fn how(self) -> &'static str {
         match self {
-            Need::Vertical => ":layout vertical",
+            Need::Vertical => ":vertical",
             Need::Margin => ":view-margin dense",
             Need::Table => ":table-render full",
             Need::Scheme => ":yume-scheme",
@@ -1671,7 +1671,7 @@ fn deep(
 
 /// The same, from the top: every subcommand of every command.
 ///
-/// Sorted shallowest first, so `:layout vertical` is offered before something
+/// Sorted shallowest first, so `:vertical` is offered before something
 /// three words down that happens to share the prefix.
 ///
 /// **`:help`'s own words go last.** Every one of them is the name of something
@@ -1682,7 +1682,7 @@ fn deep_from_root(typed: &str) -> Vec<Choice> {
     let mut out = Vec::new();
     for e in COMMANDS {
         // **Every parameter, not only the first.** `:vert` reaches
-        // `:layout vertical` because `vertical` is what `:layout`'s one
+        // `:vertical` because `vertical` is what `:layout`'s one
         // parameter may be; a mood is what `:theme-mode`'s may be, and a
         // reader typing `dark` means that just as plainly.
         //
@@ -2266,19 +2266,6 @@ const VERTICAL_KEY_WAYS: &[Word] = &[
     Word {
         name: "visual",
         help: "cmd.vertical-keys.visual",
-        needs: &[],
-    },
-];
-
-const LAYOUTS: &[Word] = &[
-    Word {
-        name: "vertical",
-        help: "cmd.layouts.vertical",
-        needs: &[],
-    },
-    Word {
-        name: "horizontal",
-        help: "cmd.layouts.horizontal",
         needs: &[],
     },
 ];
@@ -3175,27 +3162,20 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["lay"],
         help: "cmd.commands.layout",
         needs: &[],
-        params: &[Param::WordsOr { of: LAYOUTS, default: None, or: "<竪排｜横排>" }],
-        build: Some(|p| {
-            // `:layout` alone flips it; the two long forms name the layout
-            // outright, in either language.
-            match p.arg(0) {
-                None => Ok(Command::SetLayout(None)),
-                Some(word) => Layout::parse(word)
-                    .map(|l| Command::SetLayout(Some(l)))
-                    .ok_or_else(|| CommandError::InvalidArgument {
-                        command: "layout",
-                        value: word.to_string(),
-                    }),
-            }
-        }),
+        // **一件事一種說法**（2026-10-12）。從前這裏收 `vertical`/`horizontal`
+        // 兩個參數，而那兩個詞同時又是 `:vertical`／`:horizontal` 兩條命令——
+        // 兩種拼法說同一件事，正是手冊那一節自己定的規矩要去掉的東西（「the
+        // old name is deleted outright — keeping two spellings would mean this
+        // philosophy was only talk」）。留下來的是互換，那是它自己一件事。
+        params: &[],
+        build: Some(|_| Ok(Command::SetLayout(None))),
     },
     // **`:vertical` 和 `:horizontal` 各自一條**（2026-10-12 定）。
     //
     // 起因是 `:vertical-keys` 加進來之後 `vertical` 成了它的唯一前綴——一個想把
     // 頁轉過來而打 `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁沒轉而
-    // 手下四個鍵全變了意思。原話：「:layout horizontal 改成 :horizontal，
-    // :layout vertical 改成 :vertical，對吧？那我同意。」
+    // 手下四個鍵全變了意思。原話：「:horizontal 改成 :horizontal，
+    // :vertical 改成 :vertical，對吧？那我同意。」
     //
     // 順帶比從前好：`:vertical` 從前深搜出三個候選，而第一個是
     // `view-wrap-vertical`（名字裏有這個詞的真命令排前面，見 `complete` 那一段的
@@ -4920,7 +4900,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 && name.as_bytes()[head.len()] == b'-'
         }
         // **Only the names at the top level.** What the deep fallback finds
-        // is a *word* under some command — `:vert` reaches `layout vertical`
+        // is a *word* under some command — `:vert` reaches `vertical`
         // and `help vertical`, two different things that happen to share a
         // spelling — and folding those together would answer one question
         // with the other.
@@ -5145,7 +5125,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         },
     };
     // Nothing at this depth knows that word — so look for it deeper (#223).
-    // `:vert` is answered with `:layout vertical`, and `:yume ling` with
+    // `:vert` is answered with `:vertical`, and `:yume ling` with
     // `scheme lingming`, because in both the reader named the leaf and not the
     // path. Guarded on an empty result rather than merged into it: a word that
     // *does* name something here has been answered already.
@@ -6049,33 +6029,23 @@ mod tests {
 
     #[test]
     fn parses_layout_commands() {
+        // **一件事一種說法**（2026-10-12 定）。`:layout` 只剩互換，兩個方向各自
+        // 是一條命令——而不是 `:layout` 的兩個參數**加上**兩條同名命令，那就成
+        // 了兩種拼法說同一件事，正是手冊那一節自己要去掉的東西。
+        //
+        // 起因是 `:vertical-keys`：它一加，`vertical` 成了唯一前綴，打
+        // `:vertical` 的人會靜靜地撥到 `hjkl` 那個設置上去。
         assert_eq!(parse(":layout"), Ok(Command::SetLayout(None)));
-        assert_eq!(
-            parse(":layout vertical"),
-            Ok(Command::SetLayout(Some(Layout::Vertical)))
-        );
-        assert_eq!(
-            parse(":layout h"),
-            Ok(Command::SetLayout(Some(Layout::Horizontal)))
-        );
-        // **`:vertical` 和 `:horizontal` 回來了**（2026-10-12），不過是作為兩條
-        // 自己的命令，不是 `:layout` 的值：`:vertical-keys` 加進來之後
-        // `vertical` 成了它的唯一前綴，一個想轉頁的人會靜靜地撥到 `hjkl` 那個
-        // 設置上去。
         assert_eq!(parse(":vertical"), Ok(Command::SetLayout(Some(Layout::Vertical))));
         assert_eq!(
             parse(":horizontal"),
             Ok(Command::SetLayout(Some(Layout::Horizontal)))
         );
+        // `:layout` 不再收參數。
+        assert!(parse(":layout vertical").is_err());
         // 而 `:vertical-keys` 是另一條，一個字都沒被搶走。
         assert_eq!(parse(":vertical-keys"), Ok(Command::SetVerticalKeys(None)));
-        assert_eq!(
-            parse(":layout sideways"),
-            Err(CommandError::InvalidArgument {
-                command: "layout",
-                value: "sideways".into()
-            })
-        );
+        assert!(parse(":layout sideways").is_err());
     }
 
     #[test]
@@ -6953,7 +6923,8 @@ mod tests {
             crate::syntax::Syntax::parse("java"),
             Some(crate::syntax::Syntax::Code(crate::code::Language::Java))
         );
-        assert_eq!(words("layout v"), ["vertical"]);
+        // `:layout` 2026-10-12 起不收參數了，兩個方向各自是一條命令。
+        assert!(words("layout ").is_empty());
 
         // A parent command is not a mechanism of its own — its subcommands are
         // simply the words it takes, and they go as deep as they like.
@@ -7027,8 +6998,8 @@ mod tests {
         );
 
         // What Tab replaces is the word that was typed, and the word starts at
-        // the top of the line — so `:vert` becomes `:layout vertical` and not
-        // `:vertlayout vertical`.
+        // the top of the line — so `:vert` becomes `:vertical` and not
+        // `:vertvertical`.
         assert_eq!(complete_at("vert").0, 0);
 
         // **Only when nothing matched at this depth.** `:t` names commands, so
@@ -7070,7 +7041,7 @@ mod tests {
             "table-sort",
             "table-render window",
             "view-wrap",
-            "layout vertical",
+            "vertical",
             "yume-scheme lingming",
             "theme mogao",
         ] {

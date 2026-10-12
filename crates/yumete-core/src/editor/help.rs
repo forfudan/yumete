@@ -193,7 +193,7 @@ impl Editor {
     pub(super) fn help_vertical() -> String {
         let mut out = format!("# {}\n\n", say!("help.vertical.title"));
         for (keys, what) in [
-            (":layout vertical", say!("help.vertical.turn-vertical")),
+            (":vertical", say!("help.vertical.turn-vertical")),
             ("h l", say!("help.vertical.previous-next-column")),
             ("j k", say!("help.vertical.down-up-column")),
             (":view-wrap 24", say!("help.vertical.column-length")),

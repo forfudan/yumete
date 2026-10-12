@@ -45,7 +45,7 @@ pub const HALF_A_WORD: f32 = 0.3;
 /// Everything one row offers to a search.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Row<'a> {
-    /// What has to be typed to run it — `layout vertical`.
+    /// What has to be typed to run it — `vertical`.
     pub name: &'a str,
     /// Words searched but never shown: 「直排 縱書 tategaki columns」.
     pub find: &'a str,
@@ -390,7 +390,7 @@ pub struct Hit {
 ///
 /// 原話：「we can instead enrich the current find command functionality by making
 /// it find commands **or shortcuts**」. The two are the same question asked of the
-/// same reader — 「怎麼把這一頁轉成竖排」 is answered by `:layout vertical` and by
+/// same reader — 「怎麼把這一頁轉成竖排」 is answered by `:vertical` and by
 /// a key, and which of the two exists is the editor's business, not theirs.
 #[derive(Debug, Clone)]
 pub enum What {
@@ -410,7 +410,7 @@ impl Hit {
         }
     }
 
-    /// The name as the reader will see it: `layout vertical`, or `空格 f`.
+    /// The name as the reader will see it: `vertical`, or `空格 f`.
     pub fn written(&self) -> String {
         match &self.what {
             What::Command(c) => c.written(),
@@ -603,8 +603,8 @@ mod tests {
 
     fn corpus() -> Vec<Row<'static>> {
         vec![
-            Row { name: "layout vertical", find: "直排 縱書 tategaki columns", help: ["把整頁轉成竖排模式，一行一行從右往左", "", ""] },
-            Row { name: "layout horizontal", find: "橫排 yokogaki", help: ["橫排模式，照舊從左往右", "", ""] },
+            Row { name: "vertical", find: "直排 縱書 tategaki columns", help: ["把整頁轉成竖排模式，一行一行從右往左", "", ""] },
+            Row { name: "horizontal", find: "橫排 yokogaki", help: ["橫排模式，照舊從左往右", "", ""] },
             Row { name: "table-sort", find: "排序 order", help: ["照這幾欄排；t1a2d8as 是鍵盤上的同一件事", "", ""] },
             Row { name: "table-new", find: "", help: ["寫一張空表，首行是欄名", "", ""] },
             Row { name: "wheel", find: "滾輪", help: ["滾輪一格走多遠", "", ""] },
@@ -621,7 +621,7 @@ mod tests {
             .filter_map(|r| score("竖排", *r, &idf).map(|s| (s, r.name)))
             .collect();
         ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
-        assert_eq!(ranked.first().map(|r| r.1), Some("layout vertical"), "{ranked:?}");
+        assert_eq!(ranked.first().map(|r| r.1), Some("vertical"), "{ranked:?}");
     }
 
     #[test]
@@ -634,7 +634,7 @@ mod tests {
                 .filter_map(|r| score(query, *r, &idf).map(|s| (s, r.name)))
                 .collect();
             ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
-            assert_eq!(ranked.first().map(|r| r.1), Some("layout vertical"), "{query}: {ranked:?}");
+            assert_eq!(ranked.first().map(|r| r.1), Some("vertical"), "{query}: {ranked:?}");
         }
     }
 
@@ -650,7 +650,10 @@ mod tests {
             ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
             ranked.first().map(|r| r.1).unwrap_or("—")
         };
-        assert_eq!(best("lyt"), "layout vertical");
+        // Warning: **`lyt` 從前對的是 `layout vertical`**（l-y-t 是那三個詞裏
+        // 挑出來的）。2026-10-12 那條命令改叫 `vertical`，`lyt` 自然就不對它
+        // 了——換一個真的在名字裏的縮寫。
+        assert_eq!(best("vtcl"), "vertical");
         assert_eq!(best("tbsrt"), "table-sort");
     }
 

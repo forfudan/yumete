@@ -1427,7 +1427,9 @@ key = "cmd.commands.layout"
 zht = "橫排竪排互換"
 zhs = "横排竖排互换"
 en = "flip horizontal and vertical"
-find = "竖排 竪排 直排 縱書 纵书 橫排 横排 tategaki vertical horizontal 方向"
+# 「竖排」那幾個詞 2026-10-12 讓給了 `:vertical`：打那個詞的人要的是**轉過去**，
+# 不是**互換**，而互換這一條照樣被「互換」「切換」找得到。
+find = "互換 互换 切換 切换 翻轉 翻转 方向 排版 flip toggle layout"
 
 [[message]]
 # : 命令選單裏 new 那一項的說明（commands 組）
@@ -2113,22 +2115,6 @@ zht = "简体中文"
 zhs = "简体中文"
 en = "简体中文"
 find = "简体 簡體 zhs simplified"
-
-[[message]]
-# : 命令選單裏 horizontal 那一項的說明（layouts 組）
-key = "cmd.layouts.horizontal"
-zht = "橫排"
-zhs = "横排"
-en = "horizontal"
-find = "橫排 横排 橫書 横书 horizontal"
-
-[[message]]
-# : 命令選單裏 vertical 那一項的說明（layouts 組）
-key = "cmd.layouts.vertical"
-zht = "竪排，縱從右往左"
-zhs = "竖排，纵从右往左"
-en = "vertical, 縱 running from the right"
-find = "竖排 竪排 直排 縱書 纵书 tategaki vertical"
 
 [[message]]
 # `:view-margin` 可选的一档：always

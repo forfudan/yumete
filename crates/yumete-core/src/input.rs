@@ -123,7 +123,7 @@ impl Mode {
     /// look for what a keyboard puts out as ASCII, which in a novel is almost
     /// nothing. Ruby: a reading is kana or 拼音. `::` (Feature #224): the
     /// whole point of it is that the reader is thinking 「竖排模式」 and the
-    /// command is called `layout vertical`. The picker (§5.2.2 fault 9): it
+    /// command is called `vertical`. The picker (§5.2.2 fault 9): it
     /// filters a list of 「第三章.md」.
     ///
     /// `:` answers **false**, and is the one mode where this is not the whole

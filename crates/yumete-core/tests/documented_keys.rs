@@ -171,6 +171,12 @@ const DISOWNED: &[&str] = &[
     ":scheme",
     ":chaifen",
     ":cf",
+    // **反過來的一次**（2026-10-12）：`:layout vertical` 是被**拆開**的那一個，
+    // 兩個方向各自成了一條命令。拆開的理由在手冊 §6：`:vertical-keys` 一加，
+    // `vertical` 成了它的唯一前綴，打 `:vertical` 的人會靜靜地撥到 hjkl 那個設
+    // 置上去；把兩個方向定成命令，就是把那個詞佔住。
+    ":layout vertical",
+    ":layout horizontal",
     // Warning: **`:vertical` 和 `:horizontal` 2026-10-12 回來了**，和 `:grep`
     // 一樣從這張單子上下去。不是翻案「舊名字一律刪掉」那條規矩，是前提變了：
     // `:vertical-keys` 加進來之後 `vertical` 成了它的唯一前綴，一個想轉頁的人

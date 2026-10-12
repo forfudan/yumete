@@ -38,9 +38,9 @@ scenes() {
 横排-正文|80x20|
 横排-選區|80x20|vjjw
 横排-插入|80x20|iあ那年冬天
-竪排-正文|60x24|:layout vertical\n
-竪排-選區|60x24|:layout vertical\nvjj
-竪排-表格|60x24|:layout vertical\n:open TABLE\n
+竪排-正文|60x24|:vertical\n
+竪排-選區|60x24|:vertical\nvjj
+竪排-表格|60x24|:vertical\n:open TABLE\n
 表格-文中|80x20|:open TABLE\n
 表格-滿版|80x20|:open TABLE\ntt
 搜索面板|100x24|:s\n那\n
@@ -48,7 +48,7 @@ scenes() {
 挑選器|90x24| f
 挑選器-查詢|90x24| f雪
 跳轉標籤|80x20|gw
-跳轉標籤-竪排|60x24|:layout vertical\ngw
+跳轉標籤-竪排|60x24|:vertical\ngw
 大綱|90x24|:open MANUAL\n s
 設置頁|100x30|:settings\n
 命令選單|80x20|:
@@ -56,23 +56,23 @@ scenes() {
 幫助|100x30|:help\n
 注音|80x20|:open RUBY\n
 多選區|40x12|ggllCCC
-多選區-竪排|60x24|:layout vertical\nggjjCC
+多選區-竪排|60x24|:vertical\nggjjCC
 折行-窄|40x16|
 折行-極窄|24x10|
 搜索面板-窄|40x16|:s\n那\n
 搜索面板-太窄|32x16|:s\n那\n
 代碼-Rust|80x20|:open RUST\n
 代碼-Mojo|80x20|:open MOJO\n
-代碼-竪排是橫的|60x24|:open RUST\n:layout vertical\n
+代碼-竪排是橫的|60x24|:open RUST\n:vertical\n
 合併衝突|80x20|:open CONFLICT\n
 輸入法-候選|80x20|i\{ime}nahnian
-輸入法-候選-竪排|60x24|:layout vertical\ni\{ime}nahnian
+輸入法-候選-竪排|60x24|:vertical\ni\{ime}nahnian
 改動帶子|80x24|:open GIT\nj x
 改動帶子-還原|80x24|:open GIT\nj xu
 改動帶子-裝不下|60x20|:open GITBIG\n x
 改動帶子-翻到底|60x20|:open GITBIG\n x\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}
-改動帶子-竪排是浮窗|60x24|:open GIT\n:layout vertical\nj x
-竪排-極窄|24x12|:layout vertical\n
+改動帶子-竪排是浮窗|60x24|:open GIT\n:vertical\nj x
+竪排-極窄|24x12|:vertical\n
 SCENES
 }
 

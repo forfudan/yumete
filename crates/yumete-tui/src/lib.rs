@@ -22458,7 +22458,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn an_escaped_pipe_is_not_a_wall_on_the_turned_page() {
         let mut editor = editor_with("| 甲 | 乙 |\n| --- | --- |\n| a \\| b | 丙 |\n");
-        editor.execute(":layout vertical").unwrap();
+        editor.execute(":vertical").unwrap();
         let config = Config::default();
         let ime = ImeSession::empty(Scheme::LINGMING);
         let shot = frame_to_text(&mut editor, &config, &ime, 44, 14, None);
@@ -22483,7 +22483,7 @@ fn squeezed(text: &str) -> String {
     fn a_centred_column_turns_like_any_other() {
         let shoot = |rule: &str| {
             let mut editor = editor_with(&format!("| 甲 | 乙 |\n| {rule} | {rule} |\n| 一 | 二 |\n"));
-            editor.execute(":layout vertical").unwrap();
+            editor.execute(":vertical").unwrap();
             let config = Config::default();
             let ime = ImeSession::empty(Scheme::LINGMING);
             frame_to_text(&mut editor, &config, &ime, 34, 9, None)
@@ -22504,7 +22504,7 @@ fn squeezed(text: &str) -> String {
         // The cursor is left on the paragraph above: standing in the block
         // it paints its own cell and that row would be two cells short.
         let mut editor = editor_with("前面一段話。\n\n::: tip\n短。\n這一行長一些，字數不同。\n:::\n");
-        editor.execute(":layout vertical").unwrap();
+        editor.execute(":vertical").unwrap();
         let config = Config::default();
         let ime = ImeSession::empty(Scheme::LINGMING);
         let html = frame_to_html(&mut editor, &config, &ime, 30, 12, None);
