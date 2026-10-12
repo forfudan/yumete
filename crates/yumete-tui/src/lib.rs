@@ -12528,10 +12528,20 @@ fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
     if !config.editor.char_info || editor.prompt().is_some() {
         return nothing();
     }
-    let Some(c) = editor.char_at_cursor() else {
+    // **一個字簇，不是一個碼位**（2026-10-12）。屏幕上的一個「字」可以是好幾個：
+    // 帶異體字選擇符的漢字是漢字 ＋ 一個 Plane-14 的標籤，`🈚️` 是 U+1F21A ＋
+    // U+FE0F。按碼位問，這一欄說的是那一串的頭一個——而讀者指着的是整個，同
+    // `空格 n` 那一扇（`glosses`）。
+    let Some(g) = editor.grapheme_at_cursor().filter(|g| !g.is_empty()) else {
         return nothing();
     };
-    let point = yumete_cjk::blocks::codepoint(c);
+    // 逐個寫 `U+`，不把後面幾個接在頭一個屁股上：`U+3402+E0101` 讀起來像一個
+    // 碼位多了條尾巴。
+    let point = g
+        .chars()
+        .map(yumete_cjk::blocks::codepoint)
+        .collect::<Vec<_>>()
+        .join(" ");
     // **A character with no printable form is named, not shown** (#375). The
     // readout put the character itself at the front, and for a TAB that is a
     // literal `\t` handed to the terminal: nought cells to `char_width`, so the
@@ -12544,11 +12554,17 @@ fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
     // The same shape as #374, one floor up: a tab counted as nothing by a
     // measure and advanced over by whoever draws it. There is nothing to show
     // for `U+0009`, so it shows nothing and says the name.
-    let short = match yumete_cjk::char_width(c) {
-        0 => point.clone(),
-        _ => format!("{c} {point}"),
+    // Warning: **問的是底字畫不畫得出來，不是整簇佔幾格**。`grapheme_width` 給
+    // ASCII 控制符記一格（那是給頁面排版用的，見它自己的說明），拿它問就把 `\t`
+    // 當成畫得出來的字——#375 原樣回來。底字的 `char_width` 纔是那一條問的。
+    let shows = g.chars().next().is_some_and(|c| yumete_cjk::char_width(c) > 0);
+    let short = match shows {
+        false => point.clone(),
+        true => format!("{g} {point}"),
     };
-    match yumete_cjk::blocks::block_of(c) {
+    // 區塊名問的是**底字**：一個異體字選擇符自己在 Variation Selectors
+    // Supplement 裏，而讀者要知道的是那個漢字在哪一區。
+    match g.chars().next().and_then(yumete_cjk::blocks::block_of) {
         Some(block) => [format!("{short} · {block}"), short, point],
         None => [short.clone(), short, point],
     }
@@ -13897,6 +13913,28 @@ fn squeezed(text: &str) -> String {
         assert!(!long.contains('\t'), "{long:?}");
         assert!(!short.contains('\t'), "{short:?}");
         assert!(long.starts_with("U+0009"), "{long:?}");
+    }
+
+    /// **狀態欄右端說的是一個字簇，不是一個碼位**（2026-10-12 報的：「狀態欄右
+    /// 端那個碼位還是按碼位算」）。
+    ///
+    /// `㐂󠄁` 是 U+3402 ＋ 一個異體字選擇符，而從前這一欄只寫得出 `U+3402`——同一
+    /// 幀裏 `空格 n` 那一扇已經寫着兩個碼位了。區塊名問的是底字：選擇符自己在
+    /// Variation Selectors Supplement 裏，而讀者要知道的是那個漢字在哪一區。
+    #[test]
+    fn the_readout_names_every_code_point_of_a_cluster() {
+        let config = Config::default();
+        let mut editor = editor_with("\u{3402}\u{E0101}a\n");
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('0'));
+        let [long, short, point] = char_info(&editor, &config);
+        assert_eq!(point, "U+3402 U+E0101", "{point:?}");
+        assert_eq!(short, "\u{3402}\u{E0101} U+3402 U+E0101", "{short:?}");
+        assert!(long.ends_with("Extension A"), "區塊名問的是底字：{long:?}");
+        // 走過整個字簇之後是下一個字，不是那個選擇符。
+        editor.on_key(Key::Char('l'));
+        assert_eq!(char_info(&editor, &config)[2], "U+0061");
     }
 
     /// The second latch on its own, which is the one that does not depend on
