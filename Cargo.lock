@@ -1156,6 +1156,7 @@ dependencies = [
  "libc",
  "ratatui",
  "serde_json",
+ "windows-sys 0.61.2",
  "yumete-cjk",
  "yumete-config",
  "yumete-core",

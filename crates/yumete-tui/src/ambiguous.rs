@@ -179,6 +179,7 @@ fn cpr_span(reply: &[u8]) -> std::ops::Range<usize> {
     start..end + 1
 }
 
+#[cfg(unix)]
 fn cursor_moved_two(reply: &[u8]) -> Option<bool> {
     let text = std::str::from_utf8(reply).ok()?;
     let rest = text.split(';').nth(1)?;

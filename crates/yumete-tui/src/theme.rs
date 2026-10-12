@@ -338,10 +338,15 @@ fn osc_span(reply: &[u8]) -> std::ops::Range<usize> {
 }
 
 /// The first index at which `needle` appears in `hay`.
+///
+/// Gated like [`reply_span`], and for the same reason: only the unix probe
+/// reads a reply, so elsewhere this is dead code rather than a warning.
+#[cfg(unix)]
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
     hay.windows(needle.len()).position(|w| w == needle)
 }
 
+#[cfg(unix)]
 fn ground_is_dark(reply: &[u8]) -> Option<bool> {
     let text = std::str::from_utf8(reply).ok()?;
     let rest = text.split("rgb:").nth(1)?;

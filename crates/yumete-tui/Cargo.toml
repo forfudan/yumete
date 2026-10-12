@@ -23,3 +23,10 @@ serde_json = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# `SetConsoleCtrlHandler`, so `:!` can take `C-c` without the editor taking it
+# too — see `run_in_the_terminal`. 0.61 because the tree already carries that
+# version (`ignore` -> `winapi-util`), and it links through the small
+# `windows-link` rather than pulling the whole `windows-targets` set.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

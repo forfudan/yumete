@@ -2461,6 +2461,7 @@ impl Ran {
 ///
 /// `SIGQUIT`（`C-\`）同理一起管。沒動 `SIGTSTP`（`C-z`）：那要整套作業控制
 /// （`setpgid` ＋ `tcsetpgrp` ＋ 躲 `SIGTTOU`），而這一支只是為了讓 `C-c` 停對人。
+#[cfg(not(windows))]
 fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::process::ExitStatus> {
     use std::os::unix::process::CommandExt;
     let mut cmd = shell_command(line, in_dir);
@@ -2484,6 +2485,37 @@ fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::
         libc::signal(libc::SIGINT, was_int);
         libc::signal(libc::SIGQUIT, was_quit);
     }
+    status
+}
+
+/// 同一件事在 Windows 上的形狀：沒有 POSIX 信號，兩手併成一手。
+///
+/// 控制臺上按 `C-c`，Windows 在**掛在那個控制臺上的每一個進程**裏起一條執行緒去跑
+/// 它自己那串處理函數；誰都沒裝，默認就是死。所以這一端只要**編輯器自己裝一個什麽
+/// 都不做、回 `TRUE` 的處理函數**，跑完撤掉。
+///
+/// Warning: **裝的得是一個真的處理函數，不能是 `SetConsoleCtrlHandler(None, TRUE)`。**
+/// 後者是「本進程忽略 `C-c`」那一格旗標，而那一格**跨 `CreateProcess` 繼承**——於是
+/// 命令自己也不理 `C-c` 了，正是 unix 那一端 `pre_exec` 要撤掉的同一個坑。處理函數
+/// 是每個進程自己的、不繼承，所以子進程照樣收得到、照樣自己死。
+///
+/// 只接 `C-c` 與 `C-Break`，別的（關窗口、註銷、關機）回 `FALSE` 讓默認那串接着
+/// 走——那幾則說的不是「停下手上這條命令」。
+#[cfg(windows)]
+fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::process::ExitStatus> {
+    use windows_sys::Win32::System::Console::{
+        CTRL_BREAK_EVENT, CTRL_C_EVENT, SetConsoleCtrlHandler,
+    };
+    unsafe extern "system" fn swallow(kind: u32) -> i32 {
+        match kind {
+            CTRL_C_EVENT | CTRL_BREAK_EVENT => 1,
+            _ => 0,
+        }
+    }
+    // Safety: 往本進程那串處理函數上掛一個，再摘掉同一個。
+    unsafe { SetConsoleCtrlHandler(Some(swallow), 1) };
+    let status = shell_command(line, in_dir).status();
+    unsafe { SetConsoleCtrlHandler(Some(swallow), 0) };
     status
 }
 
