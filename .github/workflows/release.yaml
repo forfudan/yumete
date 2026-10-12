@@ -83,8 +83,16 @@ jobs:
     # Everything runs inside this repository's own checkout — see the header
     # for why there are two. Steps that need the workspace root say so with
     # `working-directory: .`, which is resolved against `$GITHUB_WORKSPACE`.
+    # Warning: **`shell:` has to be repeated here.** A job-level `defaults.run`
+    # replaces the workflow-level one rather than merging key by key, so this
+    # block — which only means to say *where* commands run — was also quietly
+    # saying 「and in whatever shell the runner prefers」. On Linux and macOS
+    # that is bash either way, so it stayed hidden until a Windows row ran the
+    # sibling-key guard through PowerShell and got
+    # 「Missing '(' after 'if'」 (2026-10-12). Same in `test.yaml`.
     defaults:
       run:
+        shell: bash
         working-directory: yumete
     steps:
       - uses: actions/checkout@v4
@@ -169,8 +177,10 @@ jobs:
       # Empty on every row but Windows, which is the same as unset — there is
       # no `.cargo/config.toml` in this tree for it to clobber.
       RUSTFLAGS: ${{ matrix.rustflags }}
+    # `shell:` repeated for the reason given above.
     defaults:
       run:
+        shell: bash
         working-directory: yumete
     steps:
       - uses: actions/checkout@v4

@@ -48,8 +48,16 @@ jobs:
         os: [ubuntu-latest, macos-14, windows-latest]
     # Everything runs inside this repository's own checkout — see `release.yaml`
     # for why there are two side by side.
+    # Warning: **`shell:` has to be repeated here.** A job-level `defaults.run`
+    # replaces the workflow-level one rather than merging key by key, so this
+    # block — which only means to say *where* commands run — was also quietly
+    # saying 「and in whatever shell the runner prefers」. On Linux and macOS
+    # that is bash either way, so it stayed hidden until a Windows row ran the
+    # sibling-key guard through PowerShell and got
+    # 「Missing '(' after 'if'」 (2026-10-12).
     defaults:
       run:
+        shell: bash
         working-directory: yumete
     steps:
       - uses: actions/checkout@v4
