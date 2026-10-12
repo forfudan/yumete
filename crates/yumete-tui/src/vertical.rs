@@ -1013,7 +1013,17 @@ pub fn draw(
     let cursor_column = match editor.page_inset(found, last_column, scrolloff) {
         None => found.unwrap_or(0),
         Some(inset) => {
-            let inset = inset.min(visible / 2).max(match found {
+            // Warning: **沒有「不許超過半頁」這一道**（2026-10-12 報的兩條都是它）。
+            // 從前這裏寫 `inset.min(visible / 2)`，於是**每一個落位都被夾進半頁以
+            // 內**：`zb` 要的是 `last - scrolloff`（30 縱的頁上是 26），夾完成了
+            // 15，正中；走出左邊那一下要的也是 26，同樣成了正中——報上來的原話是
+            // 「the next j will also move this zong to the middle」與「`zb` put the
+            // zong in the middle」。
+            //
+            // 而那道夾子本來想防的是跳轉：跳轉落在正中，`page_inset` 自己就回
+            // `last / 2`，本來就不超過半頁。所以它對跳轉是空操作，對其餘一律是錯
+            // 的。退到頭停在開頭那一條由 `zong::retreat` 自己管，不靠這裏。
+            let inset = inset.max(match found {
                 Some(d) if d < scrolloff => scrolloff,
                 _ => 0,
             });
