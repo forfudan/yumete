@@ -1422,16 +1422,6 @@ en = "which language the editor speaks: `zh` 繁體 / `zhs` 简体 / `en` Englis
 find = "語言 语言 繁體 繁体 简体 簡體 英文 english language lang 界面"
 
 [[message]]
-# : 命令選單裏 layout 那一項的說明（commands 組）
-key = "cmd.commands.layout"
-zht = "橫排竪排互換"
-zhs = "横排竖排互换"
-en = "flip horizontal and vertical"
-# 「竖排」那幾個詞 2026-10-12 讓給了 `:vertical`：打那個詞的人要的是**轉過去**，
-# 不是**互換**，而互換這一條照樣被「互換」「切換」找得到。
-find = "互換 互换 切換 切换 翻轉 翻转 方向 排版 flip toggle layout"
-
-[[message]]
 # : 命令選單裏 new 那一項的說明（commands 組）
 key = "cmd.commands.new"
 zht = "開一個空的緩衝區"

@@ -334,10 +334,7 @@ impl Editor {
                 // left. There is no honest way to draw one as the other, so the
                 // command is refused rather than quietly doing something else —
                 // and it says which key gets you out.
-                let wants_vertical = match direction {
-                    Some(l) => l == Layout::Vertical,
-                    None => self.layout() == Layout::Horizontal,
-                };
+                let wants_vertical = direction == Layout::Vertical;
                 if self.grid_is_drawn() && wants_vertical {
                     self.status = say!("table.vertical-not-allowed");
                     return Ok(CommandOutcome::Continue);
@@ -351,13 +348,8 @@ impl Editor {
                     self.status = say!("layout.code-is-horizontal");
                     return Ok(CommandOutcome::Continue);
                 }
-                let layout = match direction {
-                    Some(l) => {
-                        self.set_layout(l);
-                        l
-                    }
-                    None => self.toggle_layout(),
-                };
+                self.set_layout(direction);
+                let layout = direction;
                 // Not `layout.label()`: that is the config's spelling, in
                 // English, and it was being read out inside a Chinese
                 // sentence to a reader who had just switched to 竪排.

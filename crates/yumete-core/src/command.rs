@@ -235,9 +235,11 @@ pub enum Command {
     /// `:yank-on-delete [on|off]` — 「`d` 和 `c` 刪掉的東西進不進寄存器」
     /// （2026-10-08）。`None` 是不帶參數，報當前這一格。
     YankOnDelete(Option<bool>),
-    /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
-    /// choose the layout (Feature #61). `None` toggles between the two.
-    SetLayout(Option<Layout>),
+    /// `:vertical` / `:horizontal` — 把這一頁轉過去（Feature #61）。
+    ///
+    /// **一件事一種說法**（2026-10-12 定）：從前是 `:layout` 的兩個參數，加上一
+    /// 個不帶參數的 `:layout` 互換；現在兩個方向各自一條，互換那一條沒了。
+    SetLayout(Layout),
     /// `:vertical-keys [logical|visual]` — 竪排時 `hjkl` 走行文還是走版面。
     /// `None` 是互換。
     SetVerticalKeys(Option<yumete_cjk::VerticalKeys>),
@@ -3157,36 +3159,24 @@ pub const COMMANDS: &[Entry] = &[
         params: &[],
         build: Some(|_| Ok(Command::Word(WordCommand::Habit))),
     },
-    Entry {
-        name: "layout",
-        aliases: &["lay"],
-        help: "cmd.commands.layout",
-        needs: &[],
-        // **一件事一種說法**（2026-10-12）。從前這裏收 `vertical`/`horizontal`
-        // 兩個參數，而那兩個詞同時又是 `:vertical`／`:horizontal` 兩條命令——
-        // 兩種拼法說同一件事，正是手冊那一節自己定的規矩要去掉的東西（「the
-        // old name is deleted outright — keeping two spellings would mean this
-        // philosophy was only talk」）。留下來的是互換，那是它自己一件事。
-        params: &[],
-        build: Some(|_| Ok(Command::SetLayout(None))),
-    },
-    // **`:vertical` 和 `:horizontal` 各自一條**（2026-10-12 定）。
+    // **兩個方向各自一條命令，`:layout` 整條沒了**（2026-10-12 定）。
     //
-    // 起因是 `:vertical-keys` 加進來之後 `vertical` 成了它的唯一前綴——一個想把
-    // 頁轉過來而打 `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁沒轉而
-    // 手下四個鍵全變了意思。原話：「:horizontal 改成 :horizontal，
-    // :vertical 改成 :vertical，對吧？那我同意。」
+    // 從前是 `:layout [vertical|horizontal]`，外加一個不帶參數的 `:layout` 互
+    // 換。起因是 `:vertical-keys`：它一加，`vertical` 就成了它的唯一前綴——一個
+    // 想把頁轉過來而打 `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁沒
+    // 轉而手下四個鍵全變了意思。把兩個方向定成命令，就是把那個詞佔住。
     //
-    // 順帶比從前好：`:vertical` 從前深搜出三個候選，而第一個是
-    // `view-wrap-vertical`（名字裏有這個詞的真命令排前面，見 `complete` 那一段的
-    // 註釋）——打這個詞的人九成要的是轉頁，而那一條排第二。
+    // Warning: **是替換，不是加別名。** 原話：「我的意思是替换。」倉裏那條規矩
+    // 也寫着舊拼法刪掉不留別名，而手冊那一節自己說「keeping two spellings would
+    // mean this philosophy was only talk」。互換那一條也一併刪了——沒有人想「互
+    // 換」，想的是「轉成竪排」。
     Entry {
         name: "vertical",
         aliases: &[],
         help: "cmd.commands.vertical",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::SetLayout(Some(Layout::Vertical)))),
+        build: Some(|_| Ok(Command::SetLayout(Layout::Vertical))),
     },
     Entry {
         name: "horizontal",
@@ -3194,7 +3184,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.horizontal",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::SetLayout(Some(Layout::Horizontal)))),
+        build: Some(|_| Ok(Command::SetLayout(Layout::Horizontal))),
     },
     Entry {
         name: "vertical-keys",
@@ -6035,17 +6025,14 @@ mod tests {
         //
         // 起因是 `:vertical-keys`：它一加，`vertical` 成了唯一前綴，打
         // `:vertical` 的人會靜靜地撥到 `hjkl` 那個設置上去。
-        assert_eq!(parse(":layout"), Ok(Command::SetLayout(None)));
-        assert_eq!(parse(":vertical"), Ok(Command::SetLayout(Some(Layout::Vertical))));
-        assert_eq!(
-            parse(":horizontal"),
-            Ok(Command::SetLayout(Some(Layout::Horizontal)))
-        );
-        // `:layout` 不再收參數。
+        assert_eq!(parse(":vertical"), Ok(Command::SetLayout(Layout::Vertical)));
+        assert_eq!(parse(":horizontal"), Ok(Command::SetLayout(Layout::Horizontal)));
+        // **`:layout` 整條沒了**，連同它那個不帶參數的互換。
+        assert!(parse(":layout").is_err());
         assert!(parse(":layout vertical").is_err());
+        assert!(parse(":lay").is_err());
         // 而 `:vertical-keys` 是另一條，一個字都沒被搶走。
         assert_eq!(parse(":vertical-keys"), Ok(Command::SetVerticalKeys(None)));
-        assert!(parse(":layout sideways").is_err());
     }
 
     #[test]
@@ -7088,7 +7075,9 @@ mod tests {
             "yume",
             "buffer",
             "clipboard-yank",
-            "layout",
+            // `:layout` 2026-10-12 整條刪了，兩個方向各自一條。
+            "vertical",
+            "horizontal",
             "view-wrap",
             "wheel",
             "table",

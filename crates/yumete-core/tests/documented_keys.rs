@@ -177,6 +177,9 @@ const DISOWNED: &[&str] = &[
     // 置上去；把兩個方向定成命令，就是把那個詞佔住。
     ":layout vertical",
     ":layout horizontal",
+    // 連那個不帶參數的互換也一併沒了：「沒有人想互換，想的是轉成竪排」。
+    ":layout",
+    ":lay",
     // Warning: **`:vertical` 和 `:horizontal` 2026-10-12 回來了**，和 `:grep`
     // 一樣從這張單子上下去。不是翻案「舊名字一律刪掉」那條規矩，是前提變了：
     // `:vertical-keys` 加進來之後 `vertical` 成了它的唯一前綴，一個想轉頁的人
