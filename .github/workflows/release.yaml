@@ -266,6 +266,7 @@ jobs:
           get xingchen_essential.ytab "${dir}/schemes/xingchen_essential.ytab" || true
           get symbols.ytab            "${dir}/data/symbols.ytab" || true
           get common_words.txt        "${dir}/data/common_words.txt" || true
+          get chaifen.ydiv            "${dir}/data/chaifen.ydiv" || true
           get VERSION                 "${dir}/VERSION" || true
           # A half-written file is worse than none: the loader would take a
           # truncated table and answer nonsense from it. Weigh each one and
@@ -279,7 +280,7 @@ jobs:
           # so far ships a 星陳 that cannot type.
           short=0
           for f in schemes/lingming_essential.ytab schemes/xingchen_essential.ytab \
-                   data/symbols.ytab data/common_words.txt; do
+                   data/symbols.ytab data/common_words.txt data/chaifen.ydiv; do
             p="${dir}/$f"
             if [[ ! -s "$p" ]] || [[ $(wc -c < "$p") -lt 10000 ]]; then
               echo "!! ${f}: missing, or too small to be it — dropped" >&2
@@ -287,6 +288,19 @@ jobs:
               short=1
             fi
           done
+          # Warning: **a size is not a format.** 「拆分表」 is a `.ydiv`, and its
+          # magic has been bumped once already (`YDV20260828` → `YDV20260904`,
+          # 2026-09); an old file is refused by `from_binary` at *run* time and
+          # the symptom is 「the annotations are simply gone」. Sniff the three
+          # letters here — the version is deliberately **not** pinned, because
+          # the table and the reader move together and a pinned number would
+          # fail a release that is perfectly correct. What catches a stale
+          # version is the smoke test below, which asks the built binary for a
+          # real 拆分.
+          if ! head -c 3 "${dir}/data/chaifen.ydiv" | grep -q YDV; then
+            echo "!! chaifen.ydiv does not begin YDV — not a division table" >&2
+            short=1
+          fi
           ls -l "${dir}"/schemes "${dir}"/data
           if [[ "$short" == 1 ]]; then
             echo "!! a release without its tables is a package that cannot type." >&2
@@ -409,6 +423,23 @@ jobs:
           # the console's code page on Windows, so the 漢字 this line exists to
           # find came back as cp1252 mojibake — **no error, just an answer of
           # 「none」** while the frame above it plainly showed 不是.
+          # …**and it knows what a 漢字 is made of** (2026-10-12). `空格 n` reads
+          # the 全息拆分表, which is a different file from the 碼表 and arrived
+          # by a different route — a package can type perfectly and still answer
+          # 「碼表沒載」 to this. Measured the day it was added: the CI build said
+          # exactly that while the one built on a machine with 宇浩 installed
+          # answered 「宇浩全息拆分 且 / 讀音 zǔ zhù」.
+          #
+          # This is also the check that catches a `.ydiv` whose magic has moved
+          # on: the fetch step can only see that the file is a division table,
+          # not that *this* reader accepts it.
+          printf '阻\n' > "$RUNNER_TEMP/c.md"
+          split=$("$YE" --shot=60x12 --keys='\{space}n' "$RUNNER_TEMP/c.md")
+          printf '%s\n' "$split" >&2
+          if ! printf '%s' "$split" | grep -q '宇浩全息拆分'; then
+            echo "!! no 拆分表 in this build: 空格 n has nothing to say about 阻" >&2
+            exit 1
+          fi
           if ! printf '%s' "$typed" | head -1 | "$py" -c \
             'import sys; t = sys.stdin.buffer.read().decode("utf-8", "replace"); sys.exit(0 if any("\u4e00" <= c <= "\u9fff" for c in t) else 1)'; then
             echo "!! the engine put no 漢字 on the page" >&2
