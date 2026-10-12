@@ -11692,11 +11692,20 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     ed.search_go_to_file_with(1);
     ed.on_key(Key::Char('j'));
     assert!(matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))));
+    // Warning: **換完之後眼前這一份未必還是剛改的那一份**（2026-10-13 起換完跟着高亮
+    // 走，而下一處多半在別的檔裏）。所以按下去之前先記住改的是誰——這一條問的是
+    // 「改在緩衝區裏、沒落到盤上」，不是「光標停在哪」。
+    let changed = match ed.search().row() {
+        Some(crate::search_panel::Row::Hit(at)) => ed.search().hits[at].file.clone(),
+        _ => None,
+    }
+    .expect("一處命中帶着它的檔名");
     ed.on_key(Key::Char('r'));
     assert_eq!(ed.search().total, 3, "{}", ed.status());
     // Warning: **Nothing reached the disk.**
     assert_eq!(std::fs::read_to_string(dir.join("卷一/a.md")).unwrap(), "阿甯站在門口。\n");
-    assert!(ed.current_buffer().is_modified());
+    ed.open_file(dir.join(&changed)).unwrap();
+    assert!(ed.current_buffer().is_modified(), "{}", changed.display());
 
     // **One file**, from its header row — the one with two hits under it, so
     // that 「a file」 and 「a hit」 cannot be mistaken for each other.
@@ -25079,7 +25088,7 @@ fn the_window_holds_you_even_when_the_table_was_guessed() {
     press(&mut ed, " tq");
     assert!(!ed.table().unwrap().takes_the_pane(), "回到內嵌：{}", ed.status());
     press(&mut ed, "gg");
-    assert!(ed.table().is_none(), "不占窗的時候走出去就忘掉：{}", ed.status());
+    assert!(ed.table().is_none(), "不佔窗的時候走出去就忘掉：{}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -26127,4 +26136,128 @@ fn substitute_takes_a_pinyin_flag_and_a_glyph_flag() {
     let mut ed = typed(text);
     assert!(ed.execute(":%s/a/b/z").is_err(), "z 不是旗標");
     assert!(ed.execute(":%s/a/b/yj").is_ok(), "y 與 j 是");
+}
+
+/// **換掉一處之後，編輯區跟着高亮走，而名單上檔的先後不動**（2026-10-13 報的）。
+///
+/// 兩件事報上來的原話：「此時编辑区没有跟着移到高亮这一项的位置，而是继续保持在已經
+/// 替換的這個的位置」「这个文件和他的匹配结果就直接一起跳到了結果列表最上方……我又要
+/// 向下移动找到剛剛的位置」。
+///
+/// 根子是同一支 `look_again_and_stand_still`：它只挪高亮不看一眼，而那一趟重搜會把
+/// 剛動過的那個檔排到最前面——它開在緩衝區裏，從內存搜，先跑完。
+#[test]
+fn replacing_one_hit_follows_the_highlight_and_leaves_the_file_order_alone() {
+    use crate::search_panel::{Field, Row};
+    let dir = a_little_book("replaceorder");
+    std::fs::write(dir.join("卷一/a.md"), "阿甯站在門口。\n").unwrap();
+    std::fs::write(dir.join("卷一/b.md"), "阿甯回頭。\n阿甯沒有說話。\n").unwrap();
+    std::fs::write(dir.join("c.md"), "第二天，阿甯走了。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":replace-project").unwrap();
+    for c in "阿甯".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Down);
+    for c in "阿寧".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 4);
+    while ed.search().field != Field::Results {
+        ed.on_key(Key::Char('j'));
+    }
+
+    // 名單上檔的先後，換之前記一次。
+    let files_before: Vec<_> = ed
+        .search()
+        .rows()
+        .iter()
+        .filter_map(|row| match row {
+            Row::File { path, .. } => Some(path.clone()),
+            Row::Hit(_) => None,
+        })
+        .collect();
+    assert!(files_before.len() >= 2, "{files_before:?}");
+
+    // 走到第二個檔底下的頭一處，換掉它。
+    ed.search_go_to_file_with(2);
+    ed.on_key(Key::Char('j'));
+    let was = match ed.search().row() {
+        Some(Row::Hit(at)) => ed.search().hits[at].clone(),
+        _ => panic!("該站在一處命中上"),
+    };
+    ed.on_key(Key::Char('r'));
+    assert_eq!(ed.search().total, 3, "{}", ed.status());
+
+    // ① 編輯區跟着高亮走：眼前這一份就是高亮那一處所在的那個檔。
+    let now = match ed.search().row() {
+        Some(Row::Hit(at)) => ed.search().hits[at].clone(),
+        _ => panic!("換完該站在下一處命中上"),
+    };
+    assert_ne!(now.line, was.line, "高亮該挪到下一處去了");
+    let here = ed.current_buffer().path().map(|p| p.to_path_buf());
+    let wanted = now.file.as_ref().map(|f| dir.join(f));
+    assert_eq!(
+        here.and_then(|p| std::fs::canonicalize(p).ok()),
+        wanted.and_then(|p| std::fs::canonicalize(p).ok()),
+        "編輯區該站在高亮那一處所在的檔上"
+    );
+
+    // ② 名單上檔的先後一格不動——剛動過的那一個不許竄到最前面。
+    let files_after: Vec<_> = ed
+        .search()
+        .rows()
+        .iter()
+        .filter_map(|row| match row {
+            Row::File { path, .. } => Some(path.clone()),
+            Row::Hit(_) => None,
+        })
+        .collect();
+    assert_eq!(files_before, files_after, "檔的先後不該因為重搜而變");
+}
+
+/// **`r` 站在檔名那一行上，問句走中央那扇窗**（2026-10-13 定）。
+///
+/// 從前它只在狀態欄問一行，而 `R` 動得多的時候走中央窗——同一類動作兩種形狀。作者
+/// 問過兩者的分別：按鍵數一樣（都是一下 `y`），差的是**會不會真的讀它**。
+#[test]
+fn replacing_a_whole_file_asks_in_the_middle_of_the_page() {
+    use crate::search_panel::{Field, Row};
+    let dir = a_little_book("replacewindow");
+    std::fs::write(dir.join("卷一/b.md"), "阿甯回頭。\n阿甯沒有說話。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/b.md")).unwrap();
+    ed.execute(":replace-project").unwrap();
+    for c in "阿甯".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Down);
+    for c in "阿寧".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    while ed.search().field != Field::Results {
+        ed.on_key(Key::Char('j'));
+    }
+    ed.search_go_to_file_with(2);
+    assert!(matches!(ed.search().row(), Some(Row::File { .. })));
+
+    ed.on_key(Key::Char('r'));
+    let asked = ed.query().expect("該開中央那扇窗");
+    assert!(asked.body.contains('2'), "問句要說換幾處：{}", asked.body);
+    assert!(
+        asked.choices.iter().any(|c| c.key == 'y'),
+        "y 要在那扇窗上",
+    );
+    // 落點與 `R` 那一扇同一個，所以 `y` 按下去真的換。
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.search().total, 0, "{}", ed.status());
 }

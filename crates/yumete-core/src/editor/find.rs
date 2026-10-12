@@ -1070,11 +1070,18 @@ impl Editor {
                     // 緩衝區那一檔要連號一起記下來，見 `replace_file`——而那個號
                     // 現在就寫在這一行上（2026-10-02 起 `Row::File` 自己帶着它，
                     // 從前是拿名字回頭去 `hits` 裏撈第一條，兩份同名的草稿就撈錯）。
+                    // Warning: **整個檔全換走中央那扇窗**（2026-10-13 定）。從前它只在
+                    // 狀態欄問一行，而 `R` 動得多的時候走中央窗——同一類動作兩種形
+                    // 狀。作者問過兩者的分別：按鍵數一樣（都是一下 `y`），差的是
+                    // **會不會真的讀它**——狀態欄那一行和「已保存」共用一個位置，
+                    // 一天按過十幾次，手比眼睛快。中央窗是減速帶，不是多一步。
+                    //
+                    // 2026-10-03 那條「超過 10 個檔且超過 100 處纔開中央窗」就此只
+                    // 管 `R`：判準從「動得多不多」改成「是不是整個檔全換」。
                     Some(crate::search_panel::Row::File { path, buffer, hits, .. }) => {
                         let name = path.display().to_string();
-                        self.status = say!("search.replace-file-sure", hits, name);
                         self.replace_this_file = Some((path, buffer));
-                        self.pending = Pending::ReplaceAll;
+                        self.query = Some(self.replace_file_query(hits, &name));
                     }
                     _ => self.replace_hit(),
                 }
@@ -1934,6 +1941,45 @@ impl Editor {
     /// Warning: **從前的閘是「超過 10 個文件**而且**超過 100 處」**（2026-10-03 定）。
     /// 那條線底下走的是狀態欄上一行 `y`/`n`，而那一行按順手了就過去了——三個檔
     /// 和一個檔的差別，正是「看得見的那一處」和「看不見的那一本」的差別。
+    /// **`r` 站在檔名那一行上：那一扇中央窗**（2026-10-13 定）。
+    ///
+    /// 標題與 `R` 那一扇同一個（「安全核驗」），正文還是從前狀態欄上那一句——
+    /// 換的是窗，不是話。落點也同一個：`Asking::ReplaceEverywhere` 的 `y` 走
+    /// `replace_what_was_asked`，而要動哪一個檔早就記在 `replace_this_file` 上了。
+    fn replace_file_query(&self, hits: usize, name: &str) -> crate::editor::Query {
+        crate::editor::Query {
+            title: say!("write.oversize-title"),
+            body: say!("search.replace-file-sure", hits, name),
+            choices: vec![
+                crate::editor::Answer { key: 'y', label: say!("search.replace-all-go") },
+                crate::editor::Answer { key: 'n', label: say!("search.replace-all-no") },
+            ],
+            what: crate::editor::Asking::ReplaceEverywhere,
+            about: None,
+        }
+    }
+
+    /// **重搜之後，把檔與檔的先後擺回讀者看慣的那個樣子**（2026-10-13 報的）。
+    ///
+    /// 名單的次序是 `hits` 的次序（`rows()` 把連着的同一個檔歸成一組），而重搜一趟
+    /// 之後剛動過的那個檔會竄到最前面——它開在緩衝區裏，從內存搜，先跑完。
+    ///
+    /// 穩定排序，所以：老次序裏有的照老次序，老次序裏沒有的（新冒出來的檔）排在後
+    /// 面、彼此之間照發現的次序。一個檔裏那幾處的先後一格不動。
+    fn keep_the_old_file_order(&mut self, order: &[(Option<PathBuf>, Option<u64>)]) {
+        if order.is_empty() {
+            return;
+        }
+        let rank = |file: &Option<PathBuf>, buffer: Option<u64>| {
+            order
+                .iter()
+                .position(|(f, b)| f == file && *b == buffer)
+                .unwrap_or(usize::MAX)
+        };
+        self.search.hits.sort_by_key(|hit| rank(&hit.file, hit.buffer));
+        self.search.files.sort_by_key(|(file, buffer)| rank(file, *buffer));
+    }
+
     fn replace_everywhere_query(&self) -> Option<crate::editor::Query> {
         let files = self.search.files.len();
         let hits = self.search.total;
@@ -2263,12 +2309,30 @@ impl Editor {
         let was = self.the_hit_under_the_highlight();
         // 折起來的那幾個檔也是讀者說過的話，重搜一趟不該把它們全掀開。
         let folds = self.search.folded.clone();
+        // Warning: **名單上檔與檔的先後也是**（2026-10-13 報的）。檔之間的次序是
+        // 「誰先跑完誰先到」，而剛換過的那一個**已經開在緩衝區裏**——它是從內存
+        // 搜的，不再讀盤，於是每換一處它就竄到名單最上面。報的原話：「這個文件和
+        // 他的匹配結果就直接一起跳到了結果列表最上方……我又要向下移動找到剛剛的
+        // 位置」。
+        //
+        // 存一次、恢復一次，同上面那一行摺疊：重搜要換的是**還有哪幾處**，不是
+        // 讀者看着的這張名單怎麼排。新冒出來的檔排在後面（老次序裏沒有它）。
+        let order = self.search.files.clone();
         match self.search.scope.live() {
             true => self.run_search(),
             false => self.search_now(),
         }
         self.search.folded = folds;
+        self.keep_the_old_file_order(&order);
         self.stand_on_that_hit(was);
+        // Warning: **高亮挪了，編輯區也要跟着挪**（2026-10-13 報的）。`stand_on_that_hit`
+        // 只設 `search.selected`，而名單裏走每一步用的 `stand_on_and_look` 是
+        // 「站上去 ＋ 看一眼」兩句——換完一處少的就是第二句。症狀：換掉一處之後
+        // 高亮落到下一處，而右邊那一半還停在剛換掉的地方，要預覽得先走開再走回
+        // 來。原話：「我认为应该和高亮的结果保持一致才对」。
+        if self.search.field == Field::Results {
+            self.show_hit();
+        }
     }
 
     /// 高亮那一行說的是哪一處命中——重搜之前問一次。
