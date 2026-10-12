@@ -10177,10 +10177,18 @@ fn draw_horizontal(
         None => found.unwrap_or(0),
         Some(inset) => {
             // `k` at the top edge is one row away, not a jump: it nudges.
+            //
+            // Warning: **指定過坐在第幾行的就別推**（2026-10-12）。`C-u` 走半頁，
+            // 落腳點常常**正好在視窗上邊一行**——於是這一條把「坐回原來那一
+            // 行」改判成「貼着上邊推三行」，視窗只挪三行而光標一下跳到頂上。
+            // 報的原話：「翻页会自动把 cursor 挪到屏幕底部；再按 ctrl+d 又回到
+            // 中间」，`C-u` 是它的鏡像。`zt`/`zz`/`zb` 本來也中這一條，只是它
+            // 們很少落在邊上一行。
             let inset = match found.is_none()
                 && wrap::distance(rope, cursor_anchor, *viewport, measure, scrolloff + 1).is_some()
                 && !editor.typewriter()
                 && !editor.jumped()
+                && !editor.aimed()
             {
                 true => scrolloff,
                 false => inset,
@@ -20538,6 +20546,44 @@ fn squeezed(text: &str) -> String {
             .flat_map(|x| (0..12).map(move |y| (x, y)))
             .any(|(x, y)| at(&buffer, x, y) == "1");
         assert!(found, "the digit was painted over by the caret");
+    }
+
+    /// **縱中橫裏，反白的是光標那一個字，不是整組**（2026-10-12 報的）。
+    ///
+    /// 原話：「在纵中横里，高亮整个单词，看不清 cursor 位置，按 j/k 调整时没有
+    /// 任何反馈，体验上就是一直按 j 时 cursor 卡在单词里不动」。`1997` 是四個
+    /// 落腳點，而從前四格一起反白，四幀逐像素相同。
+    #[test]
+    fn the_caret_inside_a_縦中横_group_marks_one_character() {
+        let config = vertical_config();
+        let reversed = |buf: &ratatui::buffer::Buffer, w: u16, h: u16| -> Vec<(u16, u16, String)> {
+            (0..w)
+                .flat_map(|x| (0..h).map(move |y| (x, y)))
+                .filter(|&(x, y)| {
+                    buf[(x, y)].style().add_modifier.contains(Modifier::REVERSED)
+                })
+                .map(|(x, y)| (x, y, buf[(x, y)].symbol().to_string()))
+                .collect()
+        };
+        // 游標逐個走過 `1`、`9`、`9`、`7`：每一步反白一格，而且是**不同的**一格。
+        let mut seen: Vec<(u16, u16, String)> = Vec::new();
+        for (n, want) in [(3usize, "1"), (4, "9"), (5, "9"), (6, "7")] {
+            let mut editor = editor_with("那是 1997 年的事");
+            // 鍵也要走竪排那一套：`j` 在竪排裏是「縱裏往下一個字」。
+            editor.set_layout(WritingLayout::Vertical);
+            // Warning: **這一格是 `settings.rs` 推進來的，測試裏要自己撥**——不撥
+            // 的話 `1997` 一個數字一格，根本不成組，這一條就什麼都沒驗到。
+            editor.set_tatechuyoko(config.editor.tatechuyoko);
+            for _ in 0..n {
+                editor.on_key(Key::Char('j'));
+            }
+            let buffer = render_vertical(&mut editor, &config, 52, 12);
+            let marked = reversed(&buffer, 52, 12);
+            assert_eq!(marked.len(), 1, "j×{n}：只反白一格，{marked:?}");
+            assert_eq!(marked[0].2, want, "j×{n}");
+            assert!(!seen.contains(&marked[0]), "j×{n}：和前一步是同一格，等於沒反饋");
+            seen.push(marked[0].clone());
+        }
     }
 
     #[test]

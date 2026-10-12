@@ -25623,3 +25623,60 @@ fn append_leaves_what_you_typed_selected_in_helix_but_not_in_vim() {
     // vim：只剩一個字的光標，停在剛打的最後一個字上。
     assert_eq!(span(true), (3, 4), "vim：一個字的光標");
 }
+
+/// **翻頁走的是視窗，光標只是跟着**（2026-10-12 報的）。
+///
+/// 原話：「一直按 ctrl+d 翻页时，当 cursor 位于屏幕中间一行时，最下方一行在视
+/// 野内，翻页会自动把 cursor 挪到屏幕底部；再按 ctrl+d 又回到中间」。量出來的
+/// 形狀（66 行的屏幕，游標在正中第 33 行）：
+///
+/// ```text
+///        從前                 現在
+///   C-d  視窗 4..69          視窗 34..99
+///   C-d  視窗 67..132        視窗 67..132
+///   C-u  視窗 67..132        視窗 34..99
+/// ```
+///
+/// 從前視窗只按 `scrolloff` 跟一步，隔一下又追一大步；現在每一下都是整半頁，
+/// 光標在屏幕上一動不動——vim 的 `CTRL-D`（「the cursor stays in the same
+/// screen line」）和 helix 的 `page_cursor_half_down` 都是這樣。
+#[test]
+fn a_half_page_keeps_the_cursor_on_the_same_screen_row() {
+    let text: String = (1..=200).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed(&text);
+    ed.set_page(66, 10);
+    ed.goto_line(33);
+    // 跳轉那一格是一次性的，按一下清掉——不清的話下面問到的是「跳轉落在正中」。
+    ed.on_key(Key::Char('l'));
+    // 畫一幀：視窗 1..66，游標第 33 行，坐在第 32 列。
+    assert_eq!(ed.page_inset(Some(32), 65, 3), None, "舒舒服服在頁面上，別動");
+    assert_eq!(ed.sat_at(), Some(32), "坐在第幾行，畫的那一支自己記下來");
+
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(ed.cursor_line(), 65, "游標走了半頁");
+    // 走完之後它離舊視窗的頭 65 行——換句話說貼着底邊。釘住的話視窗跟着挪。
+    assert_eq!(ed.page_inset(Some(65), 65, 3), Some(32), "視窗跟着走，光標原地不動");
+
+    // 回來一樣。Warning: **`C-u` 常常正好落在視窗上邊一行**，而畫的那一支有一條
+    // 「貼上邊就推 scrolloff」的修正——指定過坐在第幾行的時候那一條要讓路，
+    // 否則視窗只挪三行而光標一下跳到頂上（`editor.aimed()`）。
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(ed.cursor_line(), 32);
+    assert!(ed.aimed(), "釘住了，畫的那一支不許再推它");
+    assert_eq!(ed.page_inset(None, 65, 3), Some(32));
+}
+
+/// 到頭了就別釘：一步都沒挪的時候釘住反而會把視窗拉過來，而使用者看到的是
+/// 「按了沒反應，頁面卻動了一下」。
+#[test]
+fn a_half_page_that_cannot_move_does_not_pin_the_page() {
+    let text: String = (1..=200).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed(&text);
+    ed.set_page(66, 10);
+    ed.goto_line(1);
+    ed.on_key(Key::Char('l'));
+    ed.page_inset(Some(0), 65, 3);
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(ed.cursor_line(), 0, "已經在第一行");
+    assert!(!ed.aimed(), "没挪就不釘");
+}

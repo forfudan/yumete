@@ -295,7 +295,7 @@ pub fn char_at(
     // The same page the drawing laid out, 着重號 and all: a click lands on the
     // character it looks like it landed on only if both agree where the 縱 are.
     let markup = Markup::of(editor);
-    let page = layout_page(
+    let Laid { page, .. } = layout_page(
         buffer.rope(),
         viewport,
         grid,
@@ -416,6 +416,18 @@ impl<'a> Markup<'a> {
     }
 }
 
+/// **這一頁，加上「這塊螢幕放得下幾縱」**。
+///
+/// 後面那個數和文章有多長**無關**——它是版面的性質，不是內容的。分開交出來，是
+/// 因為 2026-10-12 報上來的那一族 bug 就是把兩者當成了一個數，見
+/// [`how_many_fit`]。
+struct Laid {
+    page: Page,
+    /// 這塊地方放得下幾縱，當作後面還有字。`page.len()` 是它和「文章還剩幾縱」
+    /// 裏小的那一個。
+    holds: usize,
+}
+
 /// Lay out a page from `anchor`: fetch the 縱, work out their rows, and place
 /// them right to left until the width runs out.
 fn layout_page(
@@ -426,7 +438,7 @@ fn layout_page(
     area: Rect,
     capacity: usize,
     dotted: &dyn Fn(usize, usize, usize) -> bool,
-) -> Page {
+) -> Laid {
     let metered = metrics.metered;
     let zongs = zong::zongs_from(rope, anchor, grid, capacity);
     let slots: Vec<Vec<zong::Slot>> = zongs
@@ -520,7 +532,9 @@ fn layout_page(
             spots.push((x, top));
         }
     }
-    zongs
+    // **這塊螢幕放得下幾縱**——當作文章後面還有字。見 [`how_many_fit`]。
+    let holds = how_many_fit(&metrics, area, &margins, &overhangs, capacity);
+    let page = zongs
         .into_iter()
         .zip(slots)
         .zip(margins)
@@ -534,7 +548,55 @@ fn layout_page(
             overhang,
             margin_cells: metrics.ruby_cell(margin),
         })
-        .collect()
+        .collect();
+    Laid { page, holds }
+}
+
+/// **游標那一頁放得下幾縱**——量一次版面，不要那一頁的內容。
+///
+/// 和 [`how_many_fit`] 是同一個問題問在另一個錨點上：跳轉那一幀的視口還是舊
+/// 的，從它量出來的寬度不是跳完之後那一頁的寬度。
+#[allow(clippy::too_many_arguments)]
+fn found_at_cursor(
+    rope: &Rope,
+    cursor: Anchor,
+    grid: zong::Grid,
+    metrics: &Metrics,
+    area: Rect,
+    capacity: usize,
+    markup: &Markup,
+) -> usize {
+    layout_page(rope, cursor, grid, metrics, area, capacity, &|line, from, to| {
+        markup.dotted(line, from, to)
+    })
+    .holds
+}
+
+/// **這塊地方放得下幾縱**，當作文章後面還有字。
+///
+/// Warning: **這不是 `page.len()`**（2026-10-12 報的那一族 bug 的根）。`page.len()` 是
+/// 「從這個視口起畫得出幾縱」，文章快到頭的時候它自己變小——而視口那一層拿它當
+/// 「這一頁有多大」來算 `scrolloff`，於是：末尾那幾縱觸發一次捲動，捲完
+/// `page.len()` 更小，下一幀再觸發一次……原話是「**閃三四下直到左邊空白越來越
+/// 多**」，量出來是 9 → 6 → 4 → 3 縱，每約一秒半一下。
+///
+/// 已經排好的那幾縱用它們自己的邊欄，後面補的用出廠寬度：一塊地方放得下幾縱和
+/// 文章在哪兒結束無關，和**眼前這幾縱有多寬**有關。
+fn how_many_fit(
+    metrics: &Metrics,
+    area: Rect,
+    margins: &[Margin],
+    overhangs: &[u16],
+    capacity: usize,
+) -> usize {
+    if margins.len() >= capacity {
+        return place(metrics, area, margins, overhangs).len();
+    }
+    let mut margins = margins.to_vec();
+    let mut overhangs = overhangs.to_vec();
+    margins.resize(capacity, Margin::default());
+    overhangs.resize(capacity, 0);
+    place(metrics, area, &margins, &overhangs).len()
 }
 
 /// Where each 縱 of a page starts, right to left, and how many of them fit.
@@ -901,7 +963,7 @@ pub fn draw(
     // page actually being drawn.
     let capacity = metrics.capacity(area.width);
     let markup = Markup::of(editor);
-    let mut page = layout_page(
+    let Laid { mut page, holds } = layout_page(
         rope,
         *viewport,
         grid,
@@ -910,7 +972,27 @@ pub fn draw(
         capacity,
         &|line, from, to| markup.dotted(line, from, to),
     );
-    let visible = page.len().max(1);
+    // **一頁有多大，問的是螢幕，不是文章**（2026-10-12 報的）。
+    //
+    // 從前這兩行數的是 `page.len()` ——「從這個視口起畫得出幾縱」。文章快到頭的
+    // 時候它自己變小，而這一頁的「末端」跟着往前挪，於是末尾那幾縱無限觸發捲
+    // 動：捲一下 `page.len()` 更小，下一幀再捲一下。報上來的三種樣子是同一個根：
+    //
+    // * 短檔按 `G` 或 `o`：整篇只有六縱、螢幕放得下二十幾縱，而它照樣把前面兩
+    //   縱推出右邊，左半片空着（「左側又被整個浪費掉」）；
+    // * 「移至 5 縱時左右各 2、3 縱；移至 6 縱時各 1、2 縱；移至 7 縱時右側只
+    //   有 1 縱」——末三縱逐格複現；
+    // * 長文按 `ge`／`G` 之後**沒有按鍵也自己動**，9 → 6 → 4 → 3 縱，每約一秒
+    //   半一下（「過半秒向右閃移一縱，大概閃三四下」）。
+    // Warning: **從游標那一縱量，不從視口量**（2026-10-12 的第二道）。`holds` 算的
+    // 是眼前這幾縱有多寬，而「眼前」在跳轉那一幀是**舊的**那一頁——跳完之後畫
+    // 的是另一批縱，寬度不同，於是下一幀量出另一個 `holds`、又挪一下。跳轉之後
+    // 畫的就是游標周圍那幾縱，從那裏量，兩幀量的是同一批，落在哪就停在哪。
+    let holds = match found_at_cursor(rope, cursor_anchor, grid, &metrics, area, capacity, &markup) {
+        0 => holds,
+        n => n,
+    };
+    let visible = holds.max(1);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
     let last_column = visible.saturating_sub(1);
     // **Where the cursor sits on a page is the editor's answer** — the same
@@ -921,17 +1003,22 @@ pub fn draw(
     //
     // `capacity` is the *bound* — the most 縱 that could fit were every one of
     // them flush. With a gap, or with 稿紙 ticks, the page holds fewer, so
-    // centring on the bound pushed the cursor's 縱 off the left edge.
+    // centring on the bound pushed the cursor's 縱 off the left edge. 夾一道，
+    // Warning: **夾在 `holds` 上，不是 `page.len()` 上**——這裏是上面那條規矩的第
+    // 二份抄件（2026-10-12 修完上面纔露出來的）。`:6` 是一次跳轉，跳轉落在正
+    // 中，而「正中」照 `page.len()` 算就是「剩下這幾縱的正中」：整篇七縱的時候
+    // 它是第四縱，於是跳到第六縱照樣往左退兩縱。照 `holds` 算是螢幕的正中，退
+    // 到頭就停在開頭，一縱都不動。
     let found = zong::distance(rope, *viewport, cursor_anchor, grid, last_column);
     let cursor_column = match editor.page_inset(found, last_column, scrolloff) {
         None => found.unwrap_or(0),
         Some(inset) => {
-            let inset = inset.min(page.len().max(1) / 2).max(match found {
+            let inset = inset.min(visible / 2).max(match found {
                 Some(d) if d < scrolloff => scrolloff,
                 _ => 0,
             });
             *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
-            page = layout_page(
+            let laid = layout_page(
                 rope,
                 *viewport,
                 grid,
@@ -940,6 +1027,9 @@ pub fn draw(
                 capacity,
                 &|line, from, to| markup.dotted(line, from, to),
             );
+            // `holds` 不重量：它是版面的性質，而這一趟只換了視口的起點。重量
+            // 一次就是把剛纔那個迴路從兩幀縮成一幀，不是修好它。
+            page = laid.page;
             zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
         }
     };
@@ -1717,18 +1807,34 @@ pub fn draw(
             }
             return (cursor_x, caret_y);
         }
-        // **A long 縦中横 group is one slot and the block covers all of it**
-        // (2026-09-21). The cursor stands on the group, not on its last two
-        // digits, and a block over `97` alone would say `1997` is two rows.
-        // The cells are already drawn and every one of them holds a character,
-        // so the style is patched over them rather than re-put.
-        let cells = at_cursor
-            .and_then(|p| p.slots.get(cursor_pos.slot))
-            .map_or(SLOT_WIDTH, |row| zong::slot_cells(&row.text) as u16);
+        // **長的縦中横是一格，而光標只站在它裏頭的一個字上**（2026-10-12 報的）。
+        //
+        // 這裏從前把整組一起反白，理由寫着「The cursor stands on the group, not
+        // on its last two digits」（2026-09-21）——那個前提不成立：`1997` 是**四
+        // 個**落腳點（狀態列逐步走 字 4→5→6→7），而四格一起反白，畫面逐像素
+        // 相同。原話：「按 j/k 调整时没有任何反馈，体验上就是一直按 j 时 cursor
+        // 卡在单词里不动」「视觉上需要调整 cursor 着色以便能看清位置」。
+        //
+        // 那句老話擔心的是「只畫右半格」那種幾何殘影——一個漢字兩格，畫半格就
+        // 像把它劈開了。一個字母本來就占一格，畫它自己那一格不會有那個毛病。
+        let here = at_cursor.and_then(|p| p.slots.get(cursor_pos.slot));
+        let cells = here.map_or(SLOT_WIDTH, |row| zong::slot_cells(&row.text) as u16);
         if cells > SLOT_WIDTH {
             let block = Style::default().add_modifier(Modifier::REVERSED);
             let from = (cursor_x + SLOT_WIDTH).saturating_sub(cells);
-            for at in from..cursor_x + SLOT_WIDTH {
+            // 組裏第幾個字 → 從組的左端起第幾格。按**寬度**走而不是按字數，
+            // 組裏混着半角和全角的時候纔對得上。
+            let (skip, wide) = here.map_or((0, SLOT_WIDTH), |row| {
+                let line_at = rope.line_to_char(cursor_pos.line);
+                let in_line = at.saturating_sub(line_at);
+                let nth = in_line.saturating_sub(row.start);
+                let before: usize = row.text.chars().take(nth).map(yumete_cjk::char_width).sum();
+                let own = row.text.chars().nth(nth).map_or(1, yumete_cjk::char_width).max(1);
+                (before as u16, own as u16)
+            });
+            let head = (from + skip).min(cursor_x + SLOT_WIDTH);
+            let tail = (head + wide).min(from + cells);
+            for at in head..tail {
                 if let Some(cell) = buf.cell_mut((at, cursor_y)) {
                     cell.set_style(block);
                 }

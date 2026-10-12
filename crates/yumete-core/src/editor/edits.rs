@@ -871,6 +871,22 @@ impl Editor {
     /// layout: down the lines when set horizontally, across the 縱 when set
     /// vertically. Both are "onward through the text", which is what the key
     /// means.
+    ///
+    /// **翻頁走的是視窗，光標只是跟着**（2026-10-12 報的）。從前這一支只挪光
+    /// 標，視窗靠 `page_inset` 那條「離邊上不足 scrolloff 就推一把」的規矩跟，
+    /// 於是按 `C-d` 的手感是一下一下**跳**的：
+    ///
+    /// ```text
+    /// 66 行的屏幕，光標在第 33 行（正中）
+    ///   C-d → 光標 66 行，上 62 下 3   ← 視窗只挪了 3 行
+    ///   C-d → 光標 99 行，上 32 下 33  ← 視窗一口氣挪了 63 行
+    /// ```
+    ///
+    /// 原話：「翻页会自动把 cursor 挪到屏幕底部；再按 ctrl+d 又回到中间」。
+    /// helix 的 `scroll()` 是**先把視窗挪半頁、再把光標同步過去**
+    /// （`commands.rs:1931`，`page_cursor_half_down`），vim 的 `CTRL-D` 一樣：
+    /// 「the cursor stays in the same screen line」。這裏沒有「視窗位置」這個
+    /// 概念（§5.98），同一件事的說法是**光標坐在第幾行不變**。
     pub(super) fn move_page(&mut self, count: usize, back: bool, fraction: f64) {
         let vertical = self.layout() == Layout::Vertical;
         let page = if vertical {
@@ -878,7 +894,10 @@ impl Editor {
         } else {
             self.page_lines
         };
+        // 挪之前先記下它坐在第幾行——挪完就問不出來了。
+        let sat_at = self.sat_at();
         let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
+        let mut moved = 0usize;
         for _ in 0..steps {
             let before = self.sel.head();
             if vertical {
@@ -888,6 +907,14 @@ impl Editor {
             }
             if self.sel.head() == before {
                 break;
+            }
+            moved += 1;
+        }
+        // Warning: **一步都沒挪就別釘**（到頭了）：釘住反而會把視窗拉過來，而使用者
+        // 看到的是「按了沒反應，頁面卻動了一下」。
+        if moved > 0 {
+            if let Some(row) = sat_at {
+                self.aim = Some(crate::editor::Aim::Row(row));
             }
         }
     }

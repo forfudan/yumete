@@ -2745,6 +2745,8 @@ pub struct Editor {
     /// Whether the move that just happened was a **jump** — a search hit, a
     /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
     jumped: bool,
+    /// 光標上一幀坐在第幾行——見 [`Editor::sat_at`]。
+    sat_at: std::cell::Cell<Option<usize>>,
     /// **`z` 那一層要把光標放在第幾行**（`zz`/`zt`/`zb`，2026-09-28）。
     ///
     /// Warning: **這個編輯器沒有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
@@ -3751,6 +3753,7 @@ impl Editor {
             sequence: None,
             sort_keys: Vec::new(),
             jumped: false,
+            sat_at: std::cell::Cell::new(None),
             aim: None,
             language_run: None,
             preview_request: None,
@@ -3921,6 +3924,15 @@ impl Editor {
         self.jumped
     }
 
+    /// **這一幀有人指定了光標坐在第幾行嗎**——`zt`/`zz`/`zb`/`zj`/`zk`，以及
+    /// 翻頁那一族（[`Editor::move_page`]）。
+    ///
+    /// 繪製那一層問它，是為了讓自己那幾條「貼邊就推一把」的修正讓路：指定過的
+    /// 位置是讀者剛剛親口說的，推一把就把它推沒了。
+    pub fn aimed(&self) -> bool {
+        self.aim.is_some()
+    }
+
     /// **Replace the whole document**, as one undoable edit.
     ///
     /// What a formatter does: the buffer went out, this came back, and `u`
@@ -3990,7 +4002,25 @@ impl Editor {
     /// `distance` is how far the cursor is from the page's top, if it is on the
     /// page at all; `last` is the page's last row. `None` means 「leave the
     /// page where it is」.
+    /// **光標上一幀坐在第幾行**（竪排是第幾縱），`None` ＝ 還沒畫過。
+    ///
+    /// 由 [`Editor::page_inset`] 自己記下——它就是決定這件事的那一支，而三個
+    /// 繪製面都問它，所以記在這裏三面通用。`C-d`／`C-u` 要的正是這個數：翻頁
+    /// 是**視窗**走半頁，光標跟着走，於是它在屏幕上一動不動（見
+    /// [`Editor::move_page`]）。
+    pub fn sat_at(&self) -> Option<usize> {
+        self.sat_at.get()
+    }
+
     pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
+        let answer = self.page_inset_now(distance, last, scrolloff);
+        // 記下光標**實際**坐在第幾行：回了一個位置就是那個，回「別動」就是它本來
+        // 那個。畫一幀問一次，所以這一格永遠是上一幀的事實。
+        self.sat_at.set(answer.or(distance));
+        answer
+    }
+
+    fn page_inset_now(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
         // **`z` 那一層先說話**（2026-09-28）：讀者剛剛親口說了這一行要坐在哪。
         //
         // Warning: **`zt` 瞄的是第 `scrolloff` 行，不是第 0 行**，`zb` 同理往回留一截。
