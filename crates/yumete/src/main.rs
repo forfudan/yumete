@@ -1403,6 +1403,21 @@ fn press(
                         // 整個截斷**而退出碼仍然是 0——`frames.sh` 裏兩個場景因此
                         // 拍了不知多久的錯誤信息，而金樣比對一直是綠的（它比的是
                         // 「和上次一樣嗎」，上次也可以是錯的）。
+                        // **`\{A-j}` 與 `\{C-d}`**（2026-10-12 補，同上一條的
+                        // 理由）。`Key` 一直有這兩族，而這張表沒有——於是離屏驗
+                        // 不了任何一個 Alt 或 Ctrl 綁的鍵，包括搜索行上那個
+                        // 繁簡拼音通配。大小寫原樣留着：`A-j` 和 `A-J` 是兩個鍵。
+                        other if other.len() == 3 && other.as_bytes()[1] == b'-' => {
+                            let c = other.chars().nth(2).expect("三個字符");
+                            match other.chars().next() {
+                                Some('A' | 'a') => Key::Alt(c),
+                                Some('C' | 'c') => Key::Ctrl(c),
+                                _ => {
+                                    eprintln!("yumete: --keys: no key called {other:?}");
+                                    std::process::exit(2);
+                                }
+                            }
+                        }
                         other => {
                             eprintln!("yumete: --keys: no key called {other:?}");
                             std::process::exit(2);

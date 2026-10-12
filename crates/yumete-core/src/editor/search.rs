@@ -117,7 +117,12 @@ impl Editor {
         // **`/` 和面板走同一支掃描器**（2026-10-12）。通配關着的時候這就是一條光
         // 禿禿的式子，答案與從前拿裸正則掃的逐字相同；開着的時候同一個 `Look` 多
         // 帶了折過的字形與讀音，而掃描器一個字都不用改。
-        let look = super::find::Look::plain(re);
+        let look = match self.search.wild {
+            false => super::find::Look::plain(re),
+            // 折不出來（式子解析不了）就照舊用那條光禿禿的——通配是錦上添花，
+            // 添不上就不添，同 `search_pattern` 裏那一條。
+            true => self.wild_look(&pattern).unwrap_or_else(|| super::find::Look::plain(re)),
+        };
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();
 

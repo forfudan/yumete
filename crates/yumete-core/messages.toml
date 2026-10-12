@@ -4237,6 +4237,20 @@ en = "{0} hit(s), nothing changed"
 # ── goto ──────────────────────────────────────────────────────────────
 
 [[message]]
+# 同上，關掉時
+key = "find.wild-off"
+zht = "繁簡拼音通配：關"
+zhs = "繁简拼音通配：关"
+en = "matching across glyph variants and pinyin: off"
+
+[[message]]
+# 搜索行上按 `A-j` 把通配打開時說一句
+key = "find.wild-on"
+zht = "繁簡拼音通配：開"
+zhs = "繁简拼音通配：开"
+en = "matching across glyph variants and pinyin: on"
+
+[[message]]
 # 在跳轉表裏前後走
 key = "goto.jump-list-position"
 zht = "跳轉表 {0}/{1}"
@@ -11587,6 +11601,13 @@ key = "ui.search-smart-case"
 zht = "全小寫不分大小寫；帶一個大寫就分"
 zhs = "全小写不分大小写；带一个大写就分"
 en = "all lower case ignores case; one capital makes it matter"
+
+[[message]]
+# `/` 與 `?` 那一扇面板的第三行——那一行上 `A-j` 做什麼
+key = "ui.search-wild"
+zht = "`A-j` 繁簡拼音通配"
+zhs = "`A-j` 繁简拼音通配"
+en = "`A-j` match across glyph variants and pinyin"
 
 [[message]]
 # `:shot` 把這一幀畫成檔案了

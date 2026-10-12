@@ -2151,6 +2151,29 @@ impl Editor {
     /// 做」）。
     ///
     /// `None` ＝ 式子寫壞了。
+    /// **`/` 那一行通配開着時的 `Look`**（2026-10-12）。
+    ///
+    /// 和面板那一支同一套零件，只是式子來自參數而不是 `search.query`，而兩個開關
+    /// 一起算開着——那一行只有一個鍵（`A-j`），分不開也不必分。
+    ///
+    /// 字形在**式子裏**折（`widen_pattern` 先解析再動手，`.`、`\d`、`^$`、括號一律
+    /// 不碰），讀音是**另一組跨度**掛上去的，兩者疊得起來；模糊疊不上去——它是
+    /// `How` 的另一臂，不是加在正則之上的東西。
+    pub(super) fn wild_look(&self, pattern: &str) -> Option<Look> {
+        let widened = crate::glyphs::widen_pattern(pattern)
+            .filter(|wide| regex::Regex::new(wide).is_ok())
+            .unwrap_or_else(|| pattern.to_string());
+        Some(Look {
+            how: How::Pattern(self.compile(&widened).ok()?),
+            said: crate::pinyin::atoms(pattern),
+            keep_case: false,
+            doubled: false,
+            shapes: true,
+            // `/` 的規矩：式子裏有大寫纔分大小寫。
+            fold_case: !pattern.chars().any(char::is_uppercase),
+        })
+    }
+
     pub(super) fn looker(&self) -> Option<Look> {
         // **拼音那一路切成一段一段地問**（2026-10-03 定）。從前它只收「整條全
         // 是字母」的查詢，於是字母和漢字混不起來——`zhongguo很大`、`zhong国`、

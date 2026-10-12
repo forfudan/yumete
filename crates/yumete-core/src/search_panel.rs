@@ -566,6 +566,15 @@ pub struct Search {
     pub glyphs: bool,
     /// **拼音**：`shuzhai` 找得到「書齋」。出廠開着，見 [`Field::Pinyin`]。
     pub pinyin: bool,
+    /// **`/` 那一行的「繁簡拼音通配」**（2026-10-12 定，`A-j` 翻它）。
+    ///
+    /// 開着的時候 `/` 的式子折一道字形、再掛上讀音那一路——與這張面板上那兩個
+    /// 勾同一套機制，只是面板分得開而那一行只有一個鍵。
+    ///
+    /// Warning: **出廠是關的，而面板上那兩個勾出廠是開的**（作者 2026-10-12 定）。
+    /// 兩個數不一樣不是忘了對齊：`/` 是最常按的那一個鍵，而拼音通配會讓
+    /// `/de`、`/shi` 這種英文短詞連帶配上一堆漢字。那一行要的是「按一下才通配」。
+    pub wild: bool,
     /// Read the pattern as a regular expression.
     pub regex: bool,
     /// How much case matters.

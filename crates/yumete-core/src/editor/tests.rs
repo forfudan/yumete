@@ -26046,3 +26046,43 @@ fn a_count_on_an_object_reads_the_way_vim_reads_it() {
     assert_eq!(after("ab cd;\nef gh\nxx\n", "llllld2iw"), "ab cd gh\nxx\n");
     assert_eq!(after("ab cd;\nef gh\nxx\n", "d5iw"), " gh\nxx\n");
 }
+
+/// **`/` 那一行的繁簡拼音通配**（2026-10-12 定，`A-j` 翻它）。
+///
+/// 出廠是關的，而那扇面板上那兩個勾出廠是開的——作者的理由：`/` 是最常按的鍵，而
+/// 拼音通配會讓 `/de`、`/shi` 這種英文短詞連帶配上一堆漢字，那一行要的是「按一下
+/// 纔通配」。
+///
+/// 兩樣一起翻：那一行只有一個鍵，分不開也不必分，要分得開就開那扇面板。
+#[test]
+fn the_search_line_matches_across_glyphs_and_pinyin_when_asked() {
+    let text = "第一行無關。\n這一行有书字。\n第三行有書齋。\n";
+    let found = |wild: bool, pattern: &str| -> usize {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char('/'));
+        if wild {
+            ed.on_key(Key::Alt('j'));
+        }
+        press(&mut ed, pattern);
+        ed.on_key(Key::Enter);
+        ed.cursor_line()
+    };
+    // 關着：繁體只配繁體，拼音一條都不配（光標留在原處）。
+    assert_eq!(found(false, "書"), 2, "關着，配的是第三行那個繁體");
+    assert_eq!(found(false, "shuzhai"), 0, "關着，拼音不配，光標沒動");
+
+    // 開着：簡體也配得上，拼音也配得上。
+    assert_eq!(found(true, "書"), 1, "開着，配到第二行那個簡體");
+    assert_eq!(found(true, "shuzhai"), 2, "開着，shuzhai 配到「書齋」");
+
+    // Warning: **它是一格留着的狀態，不是這一次的**——按兩下翻回去。
+    let mut ed = typed(text);
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Alt('j'));
+    ed.on_key(Key::Alt('j'));
+    press(&mut ed, "書");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.cursor_line(), 2, "翻回去就又只配繁體");
+}

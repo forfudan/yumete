@@ -6894,7 +6894,11 @@ fn draw_search_hint(
         return None;
     }
     let ink = crate::theme::Palette::of(config);
-    let about = vec![say!("ui.search-is-a-regex"), say!("ui.search-smart-case")];
+    let about = vec![
+        say!("ui.search-is-a-regex"),
+        say!("ui.search-smart-case"),
+        say!("ui.search-wild"),
+    ];
     // 面板的名字不帶提示行那個冒號：`ui.prompt-search` 是**畫在打的字前面**的那一
     // 截（「搜索:」），而環上那個名字和「命令」並排，不帶標點。
     let label = editor.prompt_label().unwrap_or_else(|| prefix.to_string());

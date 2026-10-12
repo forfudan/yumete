@@ -669,6 +669,16 @@ impl Editor {
             // Tab takes the rest of the last pattern, so searching for the same
             // thing again is a keystroke rather than retyping it.
             Key::Tab => self.adopt_ghost(),
+            // **`A-j`：繁簡拼音通配**（2026-10-12 定）。`/` 收不了旗標（`:s` 的
+            // `y`／`j` 是那一頭的辦法），所以這一行用一個鍵。兩樣一起翻：這一行
+            // 分不開也不必分，要分得開就開那扇面板。
+            Key::Alt('j') => {
+                self.search.wild = !self.search.wild;
+                self.status = match self.search.wild {
+                    true => say!("find.wild-on"),
+                    false => say!("find.wild-off"),
+                };
+            }
             Key::Up | Key::Down => self.walk_history(key == Key::Up, true),
             Key::Enter => {
                 let pattern = std::mem::take(&mut self.command_line);
