@@ -192,6 +192,13 @@ impl Seat {
     /// Warning: **`:` 不歸。** 它交給編輯器去開命令行，`:w`/`:q` 就是在那條行上打的
     /// （核心認得 `settings_open`，於是那幾條說的是面板）。命令行已經開着的時候
     /// 當然也不歸，否則那條命令打不完。
+    /// **那扇窗開着嗎？** 開着的時候一個鍵都到不了輸入法——`took` 把它們全收下了，
+    /// 所以那一頁上打不出中文，而孤零零一下 Shift 也就不該在那裏翻 中/ABC
+    /// （2026-10-12 定）。
+    pub fn open(&self) -> bool {
+        self.panel.is_some()
+    }
+
     pub fn took(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {
         let Some(page) = self.panel.as_mut() else { return false };
         if editor.mode() == yumete_core::input::Mode::Command {

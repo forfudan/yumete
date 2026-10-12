@@ -1239,26 +1239,11 @@ pub fn run(
         }
         match arrived {
             Ok(Event::Key(key)) => {
-                // A lone-Shift tap toggles 中/英 in Insert mode; other Shift
-                // activity is swallowed so it never reaches the editor.
+                // A lone-Shift tap answers 中/ABC; other Shift activity is
+                // swallowed so it never reaches the editor.
                 match shift.update(&key) {
                     ShiftResult::Tap(tapped) => {
-                        if composes_here(editor) && ime.holding_the_keys() {
-                            // The same answer as `:yume on`, given by the hand
-                            // rather than by the command line, so it ends the
-                            // borrow the same way (#225) — but only when the
-                            // hand is answering about Insert (#338).
-                            borrowed.answered_in(editor.mode());
-                            // **What Shift means here is yume's to say.** On an
-                            // empty buffer the factory value is the 中/英
-                            // toggle; mid-code it commits the raw code first,
-                            // so a half-typed 拆分 lands in the manuscript
-                            // instead of vanishing. Rebind it in yume and this
-                            // follows, because nothing here decides it.
-                            if ime.press_modifier(tapped) {
-                                editor.insert_committed(&ime.take_committed());
-                            }
-                        }
+                        answer_a_shift_tap(ime, editor, &mut borrowed, tapped, settings.open());
                         continue;
                     }
                     ShiftResult::Consumed => continue,
@@ -2098,6 +2083,50 @@ impl Borrow {
     fn settled(&mut self) {
         self.owed = None;
     }
+}
+
+/// **A lone-Shift tap answers 中/ABC, in every mode** (2026-10-12).
+///
+/// Returns whether the tap was answered. 中 and ABC decide what the next
+/// letter means, and that answer is wanted before entering Insert as much as
+/// inside it: `i` lands in whichever one is standing. The stand-in key (#339)
+/// has worked in every mode all along — this is the same question asked with
+/// the hand instead, so it gives the same answer.
+///
+/// Warning: **the settings panel is the one place left out.** That page takes
+/// every key before the IME is offered one, so nothing on it composes and no
+/// letter there could be Chinese; a stray tap would only flip the switch in
+/// silence, under a page that cannot use either side of it.
+fn answer_a_shift_tap(
+    ime: &mut ImeSession,
+    editor: &mut Editor,
+    borrowed: &mut Borrow,
+    tapped: FuncKey,
+    settings_open: bool,
+) -> bool {
+    if !ime.holding_the_keys() || settings_open {
+        return false;
+    }
+    // The same answer as `:yume on`, given by the hand rather than by the
+    // command line, so it ends the borrow the same way (#225) — but only when
+    // the hand is answering about Insert (#338).
+    borrowed.answered_in(editor.mode());
+    // **What Shift means here is yume's to say.** On an empty buffer the
+    // factory value is the 中/英 toggle; mid-code it commits the raw code
+    // first, so a half-typed 拆分 lands in the manuscript instead of
+    // vanishing. Rebind it in yume and this follows, because nothing here
+    // decides it. Outside a place that composes there is no code to commit
+    // and nothing to insert, so the tap is only the switch — the same split
+    // the stand-in key makes.
+    match composes_here(editor) {
+        true => {
+            if ime.press_modifier(tapped) {
+                editor.insert_committed(&ime.take_committed());
+            }
+        }
+        false => ime.toggle_language(),
+    }
+    true
 }
 
 /// Whether a key event should drive the editor.
@@ -22722,6 +22751,51 @@ fn squeezed(text: &str) -> String {
             tap.update(&key(shift(), KeyEventKind::Release)),
             ShiftResult::Consumed
         ));
+    }
+
+    /// **一下 Shift 在哪裏都翻得動 中/ABC**（2026-10-12）。
+    ///
+    /// 從前這一臂先問 `composes_here`，於是 Normal 模式按下去一聲不吭——而那個替身
+    /// 鍵（#339）一向在每個模式裏都管用，兩條路對同一個問題給了兩種答案。
+    ///
+    /// Warning: **設置面板那一頁不算。** 那扇窗把每一鍵都收下（`Seat::took`），輸入法
+    /// 一個鍵都看不見，所以那裏打不出中文；一下誤觸只會悄悄把開關翻過去。
+    #[test]
+    fn a_lone_shift_tap_answers_in_every_mode_but_not_on_the_settings_page() {
+        let answer = |settings_open: bool, enter_insert: bool| -> bool {
+            let mut editor = Editor::new();
+            if enter_insert {
+                editor.on_key(Key::Char('i'));
+            }
+            let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧\n");
+            let mut borrowed = Borrow::default();
+            assert!(ime.is_chinese(), "開機是中文");
+            answer_a_shift_tap(
+                &mut ime,
+                &mut editor,
+                &mut borrowed,
+                FuncKey::ShiftL,
+                settings_open,
+            );
+            !ime.is_chinese()
+        };
+        assert!(answer(false, false), "Normal 模式也翻");
+        assert!(answer(false, true), "Insert 模式照舊");
+        assert!(!answer(true, false), "設置面板開着就不翻");
+
+        // 鍵盤不在 yume 手裏的時候更不翻——那時候 中/ABC 本來就沒有一格。
+        let mut editor = Editor::new();
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧\n");
+        ime.set_engaged(false);
+        let mut borrowed = Borrow::default();
+        assert!(!answer_a_shift_tap(
+            &mut ime,
+            &mut editor,
+            &mut borrowed,
+            FuncKey::ShiftL,
+            false
+        ));
+        assert!(ime.is_chinese(), "`:yume off` 之下一動不動");
     }
 
     #[test]
