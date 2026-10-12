@@ -199,6 +199,10 @@ pub enum Command {
         replacement: String,
         /// `g`: every match on a line, not only the first.
         global: bool,
+        /// `y`：讀音也算數——`shuzhai` 換得動「書齋」。
+        pinyin: bool,
+        /// `j`：簡繁異體算同一個字——`书` 換得動「書」。
+        glyphs: bool,
         /// `i`: ignore case.
         ignore_case: bool,
         /// `f`: **照字面** — the pattern is the characters typed, not a regex,
@@ -5727,7 +5731,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     let flags = fields.get(2).cloned().unwrap_or_default();
     // Saying so beats doing the substitution the flag was meant to hold back:
     // `n` in vi means "count, change nothing", and it used to *substitute*.
-    if let Some(bad) = flags.chars().find(|c| !"ginctf".contains(*c)) {
+    if let Some(bad) = flags.chars().find(|c| !"ginctfyj".contains(*c)) {
         return Some(Err(CommandError::InvalidArgument {
             command: "substitute",
             value: say!("substitute.unknown-flag", bad),
@@ -5750,6 +5754,11 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
         confirm: flags.contains('c'),
         count_only: flags.contains('n'),
         reshape: flags.contains('t'),
+        // **`y` 讀音、`j` 繁簡**（2026-10-12 作者定的字母：音、簡）。兩個各自管
+        // 各自，疊得起來，也疊得到正則之上——`/` 那一行只有一個鍵所以兩樣一起
+        // 翻，而這裏有旗標，分得開就分開。
+        pinyin: flags.contains('y'),
+        glyphs: flags.contains('j'),
         rows,
     }))
 }
@@ -6140,6 +6149,8 @@ mod tests {
             confirm: false,
             count_only: false,
             reshape: false,
+            pinyin: false,
+            glyphs: false,
             rows: Rows::Selection,
         };
         assert_eq!(parse(":s/foo/bar/"), Ok(plain("foo", "bar")));
@@ -6154,6 +6165,8 @@ mod tests {
                 confirm: false,
                 count_only: false,
             reshape: false,
+            pinyin: false,
+            glyphs: false,
                 rows: Rows::All,
             })
         );
@@ -6176,6 +6189,8 @@ mod tests {
             confirm: false,
             count_only: false,
             reshape: false,
+            pinyin: false,
+            glyphs: false,
             rows: Rows::Selection,
         };
         assert_eq!(parse(":s#2024/01#2025/02#"), Ok(want.clone()));
@@ -6200,6 +6215,8 @@ mod tests {
                 confirm: false,
                 count_only: false,
             reshape: false,
+            pinyin: false,
+            glyphs: false,
                 rows: Rows::All,
             })
         );
@@ -6207,7 +6224,9 @@ mod tests {
         assert!(matches!(
             parse(":%s/a/b/n"),
             Ok(Command::Substitute { count_only: true,
-            reshape: false, .. })
+            reshape: false,
+            pinyin: false,
+            glyphs: false, .. })
         ));
         // `f` — 照字面, the pattern is characters and not a regex.
         assert!(matches!(

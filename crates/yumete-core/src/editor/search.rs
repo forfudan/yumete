@@ -209,6 +209,8 @@ impl Editor {
             confirm,
             count_only,
             reshape,
+            pinyin,
+            glyphs,
             rows,
         } = how;
         if pattern.is_empty() {
@@ -249,6 +251,16 @@ impl Editor {
             false => unescape_replacement(replacement),
         };
 
+        // 同 `/` 那一頭：一支匹配器，兩個旗標只改它怎麼造（2026-10-12）。
+        //
+        // `j` 折字形是**式子變換**（折完還是一條正則，`$1` 照樣展得開），`y` 讀音
+        // 是**另一組跨度**——兩樣都掛在同一個 `Look` 上，疊得起來。
+        let look = match (pinyin, glyphs) {
+            (false, false) => super::find::Look::plain(re),
+            _ => self
+                .flagged_look(&cased, pinyin, glyphs)
+                .unwrap_or_else(|| super::find::Look::plain(re)),
+        };
         let text = self.current_buffer().text();
         let chosen = match self.substitution_rows(rows) {
             Ok(chosen) => chosen,
@@ -261,7 +273,7 @@ impl Editor {
         // when both were written: it says change nothing, which is the safer
         // of the two readings of a line that asks for both.
         if confirm && !count_only {
-            self.start_confirming(re, replacement, global, chosen, reshape);
+            self.start_confirming(look, replacement, global, chosen, reshape);
             return;
         }
         let mut count = 0usize;
@@ -272,7 +284,7 @@ impl Editor {
                 // 換行符不進正則，原樣寫回去（CRLF 也原樣）——見
                 // [`crate::editor::line_body`]。
                 let (body, eol) = crate::editor::line_body(line);
-                let (new_line, n) = replace_in_line(body, &re, &replacement, global);
+                let (new_line, n) = replace_in_line(body, &look, &replacement, global);
                 count += n;
                 rebuilt.push_str(&new_line);
                 rebuilt.push_str(eol);
@@ -388,7 +400,7 @@ impl Editor {
     /// Open the walk and put the first question.
     fn start_confirming(
         &mut self,
-        re: Regex,
+        re: super::find::Look,
         replacement: String,
         global: bool,
         chosen: Chosen,
@@ -421,19 +433,28 @@ impl Editor {
             if walk.chosen.has(idx) {
                 // 換行符不進正則，見 [`crate::editor::line_body`]。
                 let (line, _) = crate::editor::line_body(line);
-                for caps in walk.re.captures_iter(line) {
-                    let m = caps.get(0).expect("group 0 is the whole match");
-                    let start = at + line[..m.start()].chars().count();
+                // **跨度，不是捕獲**（2026-10-12）：讀音那一路的命中不是正則配上
+                // 的，`captures_iter` 看不見它。`$1` 照樣在 `expand` 裏展開——那一
+                // 支自己分得清哪一路配上的。
+                let cuts: Vec<usize> = line
+                    .char_indices()
+                    .map(|(b, _)| b)
+                    .chain(std::iter::once(line.len()))
+                    .collect();
+                for (a, b) in walk.re.spans(line) {
+                    let start = at + a;
                     if start >= walk.from {
-                        // `$1` resolved **for this match**, so the question
-                        // shows what will actually be written.
-                        let mut text = String::new();
-                        caps.expand(&walk.replacement, &mut text);
+                        let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
+                            continue;
+                        };
+                        let found = &line[b0..b1];
                         return Some(Hit {
                             start,
-                            end: start + m.as_str().chars().count(),
-                            found: m.as_str().to_string(),
-                            text,
+                            end: at + b,
+                            found: found.to_string(),
+                            // `$1` resolved **for this match**, so the question
+                            // shows what will actually be written.
+                            text: walk.re.expand(found, &walk.replacement),
                         });
                     }
                     // Without `g`, only the first match on a line is offered —
@@ -482,17 +503,29 @@ impl Editor {
             // `at` 數的仍舊是**整行**，它是跨行的字元計數。
             let (body, eol) = crate::editor::line_body(line);
             // Byte cursor inside `body`: everything before it is already in
-            // `rebuilt`. `captures_iter` yields non-overlapping matches in
-            // order, so it only ever moves forward.
+            // `rebuilt`. `spans` comes back in order, so it only ever moves
+            // forward（2026-10-12 從 `captures_iter` 換過來的，理由同 `next_hit`：
+            // 讀音那一路的命中不是正則配上的）。
+            let cuts: Vec<usize> = body
+                .char_indices()
+                .map(|(b, _)| b)
+                .chain(std::iter::once(body.len()))
+                .collect();
             let mut copied = 0usize;
-            for caps in walk.re.captures_iter(body) {
-                let m = caps.get(0).expect("group 0 is the whole match");
-                let start = at + body[..m.start()].chars().count();
-                if start >= walk.from {
-                    rebuilt.push_str(&body[copied..m.start()]);
+            for (a, b) in walk.re.spans(body) {
+                let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
+                    continue;
+                };
+                // 疊着的兩處（正則一處、讀音一處）只認頭一處：已經抄過去的那一段
+                // 不許再動。
+                if b0 < copied {
+                    continue;
+                }
+                if at + a >= walk.from {
+                    rebuilt.push_str(&body[copied..b0]);
                     // `$1` resolved for this match, as in `next_hit`.
-                    caps.expand(&walk.replacement, &mut rebuilt);
-                    copied = m.end();
+                    rebuilt.push_str(&walk.re.expand(&body[b0..b1], &walk.replacement));
+                    copied = b1;
                     changed += 1;
                 }
                 // Without `g`, only the first match on a line was ever

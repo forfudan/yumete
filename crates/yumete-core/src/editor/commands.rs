@@ -293,6 +293,8 @@ impl Editor {
                 confirm,
                 count_only,
                 reshape,
+                pinyin,
+                glyphs,
                 rows,
             } => {
                 // **範圍寫反了就問一句**（2026-10-09 作者定，照 vim）。
@@ -317,6 +319,8 @@ impl Editor {
                     confirm,
                     count_only,
                     reshape,
+                    pinyin,
+                    glyphs,
                     rows,
                 });
                 Ok(CommandOutcome::Continue)

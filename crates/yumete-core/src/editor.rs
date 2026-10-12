@@ -4205,6 +4205,10 @@ struct Substitution<'a> {
     count_only: bool,
     /// The `t` flag: the writer means to change how many cells a row has.
     reshape: bool,
+    /// The `y` flag: readings count too — `shuzhai` replaces 書齋.
+    pinyin: bool,
+    /// The `j` flag: 簡繁異體 are one character — `书` replaces 書.
+    glyphs: bool,
     rows: crate::command::Rows,
 }
 
@@ -4244,7 +4248,9 @@ struct Hit {
 /// sees each match before it changes, so the walk outlives the command that
 /// started it and lives here between keystrokes.
 struct Confirming {
-    re: Regex,
+    /// 2026-10-12 起是  而不是光禿禿的正則： 的 ／ 要的那兩路
+    /// （折過的字形、讀音）都從它的  出來。見 。
+    re: find::Look,
     /// Still with its `$1` in it; expanded per match.
     replacement: String,
     /// `g`: every match on a line, not only the first.
@@ -4355,25 +4361,43 @@ fn is_ids_operator(c: char) -> bool {
 /// Replace occurrences of `pattern` in a single line (which may include a
 /// trailing newline). Returns the new line text and the number of replacements.
 /// With `global`, every match is replaced; otherwise only the first.
+/// Warning: **這一支收的是 `Look`，不是光禿禿的正則**（2026-10-12）。`:s` 的
+/// `j`／`y` 兩個旗標要的就是這個：折過字形的式子還是一條正則，而讀音那一路**根本
+/// 不是**——它是另一組跨度。兩樣都從 `Look::spans` 出來，於是這裏只認跨度，不認
+/// 匹配器是哪一種。通配兩個都不開的時候 `Look::plain` 走的仍是正則那一路，`$1`
+/// 照樣展得開（`Look::expand` 的 `How::Pattern` 那一臂）。
+///
+/// **從後往前換**：換上去的那一段和換下來的那一段不一樣長，從前往後走會把後面每
+/// 一處的位置都推着走。同 `find.rs` 的 `swap_all`。
 fn replace_in_line(
     line: &str,
-    pattern: &Regex,
+    look: &find::Look,
     replacement: &str,
     global: bool,
 ) -> (String, usize) {
-    let count = if global {
-        pattern.find_iter(line).count()
-    } else {
-        usize::from(pattern.is_match(line))
-    };
-    if count == 0 {
+    let spans = look.spans(line);
+    if spans.is_empty() {
         return (line.to_string(), 0);
     }
-    let limit = if global { 0 } else { 1 };
-    (
-        pattern.replacen(line, limit, replacement).into_owned(),
-        count,
-    )
+    let cuts: Vec<usize> = line
+        .char_indices()
+        .map(|(b, _)| b)
+        .chain(std::iter::once(line.len()))
+        .collect();
+    let chosen: Vec<(usize, usize)> = match global {
+        true => spans,
+        false => vec![spans[0]],
+    };
+    let mut out = line.to_string();
+    let mut count = 0usize;
+    for &(a, b) in chosen.iter().rev() {
+        let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
+            continue;
+        };
+        out.replace_range(b0..b1, &look.expand(&line[b0..b1], replacement));
+        count += 1;
+    }
+    (out, count)
 }
 
 /// A replacement string with its backslash escapes resolved.

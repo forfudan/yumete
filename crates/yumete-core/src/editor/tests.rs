@@ -26086,3 +26086,45 @@ fn the_search_line_matches_across_glyphs_and_pinyin_when_asked() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.cursor_line(), 2, "翻回去就又只配繁體");
 }
+
+/// **`:s` 的 `y`（拼音）與 `j`（繁簡）**（2026-10-12 定的字母：音、簡）。
+///
+/// 兩個各自管各自，也疊得到正則之上——`/` 那一行只有一個鍵所以兩樣一起翻，這裏
+/// 有旗標，分得開就分開。
+#[test]
+fn substitute_takes_a_pinyin_flag_and_a_glyph_flag() {
+    let text = "這一行有书字。\n第三行有書齋。\n";
+    let after = |cmd: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(cmd).unwrap();
+        ed.current_buffer().text()
+    };
+    // 不帶旗標：繁體只換繁體，拼音一條都不配。
+    assert_eq!(after(":%s/書/X/g"), "這一行有书字。\n第三行有X齋。\n");
+    assert_eq!(after(":%s/shuzhai/書屋/g"), text, "沒有 y，拼音不配");
+
+    // `j`：簡體也換得動。
+    assert_eq!(after(":%s/書/X/gj"), "這一行有X字。\n第三行有X齋。\n");
+    // `y`：讀音也換得動。
+    assert_eq!(after(":%s/shuzhai/書屋/gy"), "這一行有书字。\n第三行有書屋。\n");
+
+    // Warning: **讀音那一路把非字母照字面配**（量出來的，不是推的）。於是一條帶
+    // 着正則語法的式子在 `y` 底下**配不上任何讀音**——`(shu)zhai` 裏那兩個括號是
+    // 真的括號，而「書齋」裏沒有括號。正則那一半照舊管用，兩路各配各的。
+    assert_eq!(
+        after(":%s/(shu)zhai/[$1]/gy"),
+        text,
+        "式子裏有括號，讀音那一路就配不上了"
+    );
+    // 而正則那一半在同一條命令裏照樣管用——拿一條配得上的式子驗。
+    assert_eq!(
+        after(":%s/(書)齋/[$1]/gy"),
+        "這一行有书字。\n第三行有[書]。\n",
+        "正則那一路的分組照樣展得開"
+    );
+
+    // 認不得的旗標照舊說一句，而 y 與 j 現在認得了。
+    let mut ed = typed(text);
+    assert!(ed.execute(":%s/a/b/z").is_err(), "z 不是旗標");
+    assert!(ed.execute(":%s/a/b/yj").is_ok(), "y 與 j 是");
+}

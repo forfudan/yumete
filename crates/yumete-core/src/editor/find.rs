@@ -2174,6 +2174,31 @@ impl Editor {
         })
     }
 
+    /// **`:s` 的 `y`／`j` 要的那個 `Look`**（2026-10-12）。
+    ///
+    /// 和 [`Self::wild_look`] 同一套零件，只是兩個開關分得開——那一行只有一個鍵，
+    /// 這裏有旗標。式子用的是**穿好 `i` 旗標那一版**（`cased`），因為替換不走智
+    /// 能大小寫，大小寫的話已經在上游說完了。
+    pub(super) fn flagged_look(&self, cased: &str, pinyin: bool, glyphs: bool) -> Option<Look> {
+        let body = match glyphs {
+            true => crate::glyphs::widen_pattern(cased)
+                .filter(|wide| regex::Regex::new(wide).is_ok())
+                .unwrap_or_else(|| cased.to_string()),
+            false => cased.to_string(),
+        };
+        Some(Look {
+            how: How::Pattern(self.compile_exactly(&body).ok()?),
+            said: match pinyin {
+                true => crate::pinyin::atoms(cased),
+                false => None,
+            },
+            keep_case: false,
+            doubled: false,
+            shapes: glyphs,
+            fold_case: false,
+        })
+    }
+
     pub(super) fn looker(&self) -> Option<Look> {
         // **拼音那一路切成一段一段地問**（2026-10-03 定）。從前它只收「整條全
         // 是字母」的查詢，於是字母和漢字混不起來——`zhongguo很大`、`zhong国`、
@@ -3128,7 +3153,7 @@ impl Look {
     ///
     /// Warning: **`$1` 只有正則那一路認得。** 拼音和 模糊 沒有分組可以展開，那兩路換
     /// 的就是字面——而讀者在那兩種模式下也寫不出一個有分組的式子。
-    fn expand(&self, matched: &str, with: &str) -> String {
+    pub(super) fn expand(&self, matched: &str, with: &str) -> String {
         let grown = match &self.how {
             How::Pattern(re) => match re.captures(matched) {
                 Some(caps)
