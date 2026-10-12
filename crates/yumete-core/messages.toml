@@ -4237,20 +4237,6 @@ en = "{0} hit(s), nothing changed"
 # ── goto ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 同上，關掉時
-key = "find.wild-off"
-zht = "繁簡拼音通配：關"
-zhs = "繁简拼音通配：关"
-en = "matching across glyph variants and pinyin: off"
-
-[[message]]
-# 搜索行上按 `A-j` 把通配打開時說一句
-key = "find.wild-on"
-zht = "繁簡拼音通配：開"
-zhs = "繁简拼音通配：开"
-en = "matching across glyph variants and pinyin: on"
-
-[[message]]
 # 在跳轉表裏前後走
 key = "goto.jump-list-position"
 zht = "跳轉表 {0}/{1}"
@@ -11568,6 +11554,20 @@ zhs = "倒搜: "
 en = "rsearch: "
 
 [[message]]
+# `?` 的提示符，同上
+key = "ui.prompt-search-back-wild"
+zht = "通配倒搜: "
+zhs = "通配倒搜: "
+en = "wide rsearch: "
+
+[[message]]
+# `/` 的提示符，繁簡拼音通配開着的時候（`A-j`）
+key = "ui.prompt-search-wild"
+zht = "通配搜索: "
+zhs = "通配搜索: "
+en = "wide search: "
+
+[[message]]
 # 狀態欄：這一份是只讀的（:readonly on，或磁盤上就不許寫）
 key = "ui.readonly-tag"
 zht = " [只讀]"
@@ -11605,9 +11605,9 @@ en = "all lower case ignores case; one capital makes it matter"
 [[message]]
 # `/` 與 `?` 那一扇面板的第三行——那一行上 `A-j` 做什麼
 key = "ui.search-wild"
-zht = "`A-j` 繁簡拼音通配"
-zhs = "`A-j` 繁简拼音通配"
-en = "`A-j` match across glyph variants and pinyin"
+zht = "A-j 繁簡拼音通配開關"
+zhs = "A-j 繁简拼音通配开关"
+en = "A-j matches across glyph variants and pinyin"
 
 [[message]]
 # `:shot` 把這一幀畫成檔案了

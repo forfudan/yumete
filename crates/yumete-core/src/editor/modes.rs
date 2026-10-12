@@ -212,9 +212,15 @@ impl Editor {
     pub fn prompt_label(&self) -> Option<String> {
         let (prefix, _) = self.prompt()?;
         Some(match self.mode {
-            Mode::Search => match self.search_forward {
-                true => say!("ui.prompt-search"),
-                false => say!("ui.prompt-search-back"),
+            // **提示符自己說通配開着沒有**（2026-10-12 作者定）。狀態欄這一行正
+            // 被提示符佔着，所以按下 `A-j` 之後說一句是**看不見**的——量過，屏幕
+            // 上一個字都不變。一個看不見的開關等於沒有開關，所以狀態寫在這一行
+            // 自己身上。
+            Mode::Search => match (self.search_forward, self.search.wild) {
+                (true, false) => say!("ui.prompt-search"),
+                (true, true) => say!("ui.prompt-search-wild"),
+                (false, false) => say!("ui.prompt-search-back"),
+                (false, true) => say!("ui.prompt-search-back-wild"),
             },
             _ => prefix.to_string(),
         })
