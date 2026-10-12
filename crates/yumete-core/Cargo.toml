@@ -56,7 +56,9 @@ libc = "0.2"
 
 # `GetFileInformationByHandle` — the only way to ask NTFS whether two paths are
 # one file, since the standard library keeps the answer behind an unstable
-# trait — and `GetLocalTime`, which is that same offset. Already in the lock
-# file by way of crossterm, so it costs no build.
+# trait — `GetLocalTime`, which is that same offset, and `OpenProcess` for
+# 「is the process that left this draft still running」 (there are no signals to
+# borrow there). Already in the lock file by way of crossterm, so it costs no
+# build.
 [target.'cfg(windows)'.dependencies]
-windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_SystemInformation"]}
+windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_SystemInformation", "Win32_System_Threading"]}

@@ -1863,37 +1863,86 @@ fn draft_moved_aside(swap: &Path) -> Option<PathBuf> {
 /// 進程留下的是它此刻唯一的保險**——它打了字還沒存，而只要它不再敲鍵就不會重寫
 /// （`draft_is_stale` 是假的）。從前收下草稿與撿孤兒兩條路都無條件把那個檔刪了。
 ///
-/// `kill(pid, 0)` 不發信號，只問「這個號還在不在、我夠不夠格發」：回 0 是在，
-/// `EPERM` 是在而不歸我管（照樣算在），`ESRCH` 纔是不在。
-///
 /// Warning: **pid 會重用**，所以這一問偶爾會把一個不相干的進程當成主人、於是
 /// 多留一份草稿在盤上。多留一份只是下次開檔多問一句；刪錯一份是把字丟了。
-#[cfg(unix)]
 pub(crate) fn owner_still_running(draft: &std::path::Path) -> bool {
-    let Some(name) = draft.file_name().map(|n| n.to_string_lossy().into_owned()) else {
-        return false;
-    };
+    match owner_pid(draft) {
+        Some(pid) => pid_is_running(pid),
+        None => false,
+    }
+}
+
+/// 草稿的名字裏那個 pid——認不出來、或者那個號不可能是另一個 yumete，就沒有。
+///
+/// 名字怎麼拼與怎麼問是**兩件事**，所以分成兩支：下面問的那一半每個平臺一種寫
+/// 法，而這一半是同一個（2026-10-12 補 Windows 那一支時分開的）。
+fn owner_pid(draft: &std::path::Path) -> Option<u32> {
+    let name = draft.file_name()?.to_string_lossy().into_owned();
     let tag = match name.strip_prefix("scratch-") {
         Some(rest) => rest.split('-').next().unwrap_or(""),
         None => name.rsplit('.').next().unwrap_or(""),
     };
-    let Ok(pid) = tag.parse::<i32>() else {
-        return false;
-    };
-    // pid 1 是 init／launchd，永遠不會是一個 yumete；自己那一份走的是別的路。
-    if pid <= 1 || pid == std::process::id() as i32 {
-        return false;
+    let pid = tag.parse::<u32>().ok()?;
+    // 頭幾個號是系統自己的（unix 的 init／launchd 是 1，Windows 的 System 是 4），
+    // 永遠不會是一個 yumete；自己那一份走的是別的路。
+    match pid <= 1 || pid == std::process::id() {
+        true => None,
+        false => Some(pid),
     }
+}
+
+/// **這個號此刻還在跑嗎**——unix 那一種問法。
+///
+/// `kill(pid, 0)` 不發信號，只問「這個號還在不在、我夠不夠格發」：回 0 是在，
+/// `EPERM` 是在而不歸我管（照樣算在），`ESRCH` 纔是不在。
+#[cfg(unix)]
+fn pid_is_running(pid: u32) -> bool {
     // SAFETY: `kill` with signal 0 reads the process table and sends nothing.
-    match unsafe { libc::kill(pid, 0) } {
+    match unsafe { libc::kill(pid as i32, 0) } {
         0 => true,
         _ => std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM),
     }
 }
 
-/// 不是 unix 的機器上問不出來，照舊當作「主人走了」。
-#[cfg(not(unix))]
-pub(crate) fn owner_still_running(_draft: &std::path::Path) -> bool {
+/// **這個號此刻還在跑嗎**——Windows 那一種問法（2026-10-12）。
+///
+/// 沒有信號可借，所以是「開個把手，問它退了沒有」：`OpenProcess` 要的權限是
+/// `PROCESS_QUERY_LIMITED_INFORMATION`（最小的那一檔，別人的進程也開得了），
+/// 回空就看 errno——`ERROR_ACCESS_DENIED`（5）是「在而不歸我管」，與 unix 那邊
+/// 的 `EPERM` 同一回事，照樣算在。開得了就 `GetExitCodeProcess`：`STILL_ACTIVE`
+/// 纔算在跑。
+///
+/// Warning: **從前這一支是一句 `false`**，於是 2026-10-10 修的那一條（還活着的另
+/// 一個 yumete 留下的草稿不許當無主的）在 Windows 上整個沒修：兩個 yumete 開着，
+/// 各自把對方的救命稿報成「上次沒存好」，收下來就把對方正在打的字蓋掉。
+///
+/// Warning: **`STILL_ACTIVE` 是 259，而一個進程也可以拿 259 退出。** 真撞上就是多
+/// 留一份草稿——與上面 pid 重用那一條同一個方向，而那是安全的那一邊。
+#[cfg(windows)]
+fn pid_is_running(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    // SAFETY: 只開一個查詢用的把手，問完就關。
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if handle.is_null() {
+        const ACCESS_DENIED: i32 = 5;
+        return std::io::Error::last_os_error().raw_os_error() == Some(ACCESS_DENIED);
+    }
+    let mut code: u32 = 0;
+    // SAFETY: `handle` 剛開出來，`code` 是一個真的 `u32`。
+    let asked = unsafe {
+        windows_sys::Win32::System::Threading::GetExitCodeProcess(handle, &mut code)
+    };
+    // SAFETY: 同一個把手，開出來之後一次。
+    unsafe { CloseHandle(handle) };
+    asked != 0 && code == STILL_ACTIVE as u32
+}
+
+/// 別的平臺問不出來，照舊當作「主人走了」。
+#[cfg(not(any(unix, windows)))]
+fn pid_is_running(_pid: u32) -> bool {
     false
 }
 
@@ -2658,27 +2707,40 @@ fn tmp() -> std::path::PathBuf {
         let me = std::process::id();
         // 自己不算「別人還在跑」——自己那一份走的是別的路。
         assert!(!owner_still_running(Path::new(&format!(".a.md.yumete.{me}"))));
-        // 父進程（跑測試的那個 shell／cargo）確實活着，而且不是我。
+        // **起一個真的子進程，問它，殺掉它，再問一次。**
         //
-        // Warning: **只在 unix 上問得出來**，而且不只是 `getppid` 沒有對應：
-        // `owner_still_running` 自己在別的平臺上就是一句 `false`（往上看），
-        // 所以 Windows 上那個 2026-10-10 的缺陷**還在**——還活着的另一個
-        // yumete 留下的草稿會被當成無主的。記在 development.md §5.195。
-        #[cfg(unix)]
-        {
-        // SAFETY: `getppid` 只讀自己的進程表項。
-        let parent = unsafe { libc::getppid() };
-        if parent > 1 {
-            assert!(
-                owner_still_running(Path::new(&format!(".a.md.yumete.{parent}"))),
-                "pid {parent} 明明在跑"
-            );
-            assert!(
-                owner_still_running(Path::new(&format!("scratch-{parent}-3.yumete"))),
-                "沒檔名那一種的名字也要認得出 pid"
-            );
-        }
-        }
+        // Warning: **從前這裏問的是 `getppid`**，那是 unix 獨有的問法，於是
+        // Windows 上這一半整個驗不到——而那一端 `pid_is_running` 2026-10-12 之前
+        // 就是一句 `false`。現在換成一個兩邊都能起、而且**兩個方向都驗**的寫法：
+        // 活着要說活着，收屍之後要說走了。後一半從前一次都沒驗過。
+        //
+        // 子進程是一個等在 stdin 上的殼（unix 的 `sh`、Windows 的 `cmd`）：管子在
+        // 我們手裏不關，它就一直等，所以問得到。
+        let shell = match cfg!(windows) {
+            true => "cmd",
+            false => "sh",
+        };
+        let mut child = std::process::Command::new(shell)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("一個等在 stdin 上的殼");
+        let pid = child.id();
+        assert!(
+            owner_still_running(Path::new(&format!(".a.md.yumete.{pid}"))),
+            "pid {pid} 明明在跑"
+        );
+        assert!(
+            owner_still_running(Path::new(&format!("scratch-{pid}-3.yumete"))),
+            "沒檔名那一種的名字也要認得出 pid"
+        );
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(
+            !owner_still_running(Path::new(&format!(".a.md.yumete.{pid}"))),
+            "收過屍了就不是「還在跑」"
+        );
         // 認不出 pid 的名字、以及 #305 之前的老名字，照舊當「主人走了」。
         assert!(!owner_still_running(Path::new(".a.md.yumete")));
         assert!(!owner_still_running(Path::new("scratch-nope-1.yumete")));
