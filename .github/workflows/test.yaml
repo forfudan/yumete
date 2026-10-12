@@ -8,11 +8,14 @@ name: Tests
 # to have been failing since 09-10: seventeen days in which the thing it checks
 # was not being checked (`docs/development.md` §5.12.58).
 #
-# Warning: **Two rows, and the second one is the point.** That particular test was
+# Warning: **Three rows, and the second one is the point.** That particular test was
 # **green on Linux and red on macOS** — it read a process-global (the theme's
 # light/dark mood) before anything settled it, so which machine saw it red came
 # down to which thread ran first. One runner would have gone on saying green.
-# Both are free here: `forfudan/yumete` is public.
+# Both are free here: `forfudan/yumete` is public — and so is the third,
+# Windows, added 2026-10-12 when that side started shipping. It is the row most
+# likely to find something: every other `cfg` in the tree has one arm nobody
+# runs, and the paths there use the other separator.
 #
 # Warning: **No 碼表 and no word list.** `release.yaml` fetches them because it is
 # packaging; a bare `cargo test` has never needed them, and pulling 36 MB per
@@ -42,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [ubuntu-latest, macos-14, windows-latest]
     # Everything runs inside this repository's own checkout — see `release.yaml`
     # for why there are two side by side.
     defaults:

@@ -7,6 +7,13 @@ name: Build release tarballs
 #   yumete-<version>-darwin-arm64.tar.gz
 #   yumete-<version>-linux-x86_64.tar.gz
 #   yumete-<version>-linux-aarch64.tar.gz
+#   yumete-<version>-windows-x86_64.zip
+#
+# **A zip on Windows, and nothing else.** Explorer opens one with nothing
+# installed, and both package managers on that side expect one: `scoop` reads
+# it straight (`extract_dir` ＋ `bin` shims) and `winget` takes it as
+# `InstallerType: zip` with `NestedInstallerType: portable`. Windows 10 has
+# `tar`, but nothing over there reaches for it.
 #
 # Warning: **The IME data is not in them** ([^135]). It is 36 MB compressed, it is
 # **platform-independent** — yume's own `fetch_data_linux.sh` says so, and
@@ -127,10 +134,24 @@ jobs:
           # glibc (2.35). A newer runner would raise the floor for no gain.
           - os: ubuntu-22.04
             target: linux-x86_64
+            ext: tar.gz
           - os: ubuntu-22.04-arm
             target: linux-aarch64
+            ext: tar.gz
           - os: macos-14          # Apple Silicon (arm64)
             target: darwin-arm64
+            ext: tar.gz
+          # Warning: **`+crt-static` is not a tuning flag here.** Without it the
+          # binary wants `VCRUNTIME140.dll`, and a reader who unpacked a zip
+          # has no installer to pull the redistributable in — the report is
+          # 「it says a DLL is missing」, which says nothing about this program.
+          # Static CRT makes the one file the whole package. (Nothing links a
+          # C++ DLL of ours; the tree-sitter grammars are C, and `cc` follows
+          # the same flag.)
+          - os: windows-latest
+            target: windows-x86_64
+            ext: zip
+            rustflags: "-C target-feature=+crt-static"
     # **Test and build share one environment**, so what was tested is what
     # ships. Two of these matter:
     #
@@ -145,6 +166,9 @@ jobs:
     env:
       YUMETE_RELEASE: "1"
       YUMETE_BUILTIN_DIR: ${{ github.workspace }}/yumete-data
+      # Empty on every row but Windows, which is the same as unset — there is
+      # no `.cargo/config.toml` in this tree for it to clobber.
+      RUSTFLAGS: ${{ matrix.rustflags }}
     defaults:
       run:
         working-directory: yumete
@@ -217,26 +241,34 @@ jobs:
           FROM: forfudan/yume-release
         run: |
           set -uo pipefail
-          mkdir -p "${YUMETE_BUILTIN_DIR}/schemes" "${YUMETE_BUILTIN_DIR}/data"
+          # Warning: **`$GITHUB_WORKSPACE` is a Windows path on that runner**
+          # (`D:\a\yumete`), and the shell here is git-bash, where a backslash
+          # inside quotes stays a literal character — `mkdir -p` would make one
+          # directory whose *name* contains them. `cygpath` is what git-bash
+          # ships for exactly this. The build itself keeps the native path:
+          # it is `build.rs` that reads the variable, and Rust wants it that way.
+          dir="${YUMETE_BUILTIN_DIR}"
+          command -v cygpath > /dev/null && dir=$(cygpath -u "${dir}")
+          mkdir -p "${dir}/schemes" "${dir}/data"
           base="https://github.com/${FROM}/releases/download/${TAG}"
           get() { curl -fsSL --retry 3 --retry-delay 2 -o "$2" "${base}/$1"; }
-          get lingming_essential.ytab "${YUMETE_BUILTIN_DIR}/schemes/lingming_essential.ytab" || true
-          get symbols.ytab            "${YUMETE_BUILTIN_DIR}/data/symbols.ytab" || true
-          get common_words.txt        "${YUMETE_BUILTIN_DIR}/data/common_words.txt" || true
-          get VERSION                 "${YUMETE_BUILTIN_DIR}/VERSION" || true
+          get lingming_essential.ytab "${dir}/schemes/lingming_essential.ytab" || true
+          get symbols.ytab            "${dir}/data/symbols.ytab" || true
+          get common_words.txt        "${dir}/data/common_words.txt" || true
+          get VERSION                 "${dir}/VERSION" || true
           # A half-written file is worse than none: the loader would take a
           # truncated table and answer nonsense from it. Weigh each one and
           # throw away anything that plainly did not arrive whole.
           short=0
           for f in schemes/lingming_essential.ytab data/symbols.ytab data/common_words.txt; do
-            p="${YUMETE_BUILTIN_DIR}/$f"
+            p="${dir}/$f"
             if [[ ! -s "$p" ]] || [[ $(wc -c < "$p") -lt 10000 ]]; then
               echo "!! ${f}: missing, or too small to be it — dropped" >&2
               rm -f "$p"
               short=1
             fi
           done
-          ls -l "${YUMETE_BUILTIN_DIR}"/schemes "${YUMETE_BUILTIN_DIR}"/data
+          ls -l "${dir}"/schemes "${dir}"/data
           if [[ "$short" == 1 ]]; then
             echo "!! a release without its tables is a package that cannot type." >&2
             echo "   the download is the usual suspect (it has flaked once per" >&2
@@ -254,8 +286,10 @@ jobs:
       - name: Build
         run: cargo build --release --locked -p yumete
 
+      # The `.exe` spelt out: git-bash does append it when it resolves a path,
+      # but a release step is the wrong place to lean on that.
       - name: Say what went in
-        run: ./target/release/yumete --version
+        run: ./target/release/yumete${{ runner.os == 'Windows' && '.exe' || '' }} --version
 
       - name: Package
         run: |
@@ -263,8 +297,10 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           PKG="yumete-${VERSION}-${{ matrix.target }}"
           STAGE="dist/${PKG}"
+          EXE=""
+          [[ "${{ runner.os }}" == Windows ]] && EXE=".exe"
           mkdir -p "${STAGE}/bin" "${STAGE}/docs"
-          cp target/release/yumete "${STAGE}/bin/"
+          cp "target/release/yumete${EXE}" "${STAGE}/bin/"
           # Warning: No `2>/dev/null || …` here. It used to fall back to copying only
           # the README, so the day LICENSE moved, an Apache-2.0 project would
           # have shipped tarballs with no licence text and a green build.
@@ -280,11 +316,22 @@ jobs:
           # one of them would leave half the readers reading the other half's
           # characters.
           cp docs/manual.md docs/manual_sc.md "${STAGE}/docs/"
-          ( cd dist && tar -czf "${PKG}.tar.gz" "${PKG}" )
+          # See the header for why Windows gets a zip. `7z` is on that image;
+          # `-mx=9` because this travels over a package manager's network, not
+          # ours.
+          case "${{ matrix.ext }}" in
+            zip) ( cd dist && 7z a -tzip -mx=9 "${PKG}.zip" "${PKG}" > /dev/null ) ;;
+            *)   ( cd dist && tar -czf "${PKG}.tar.gz" "${PKG}" ) ;;
+          esac
           # From inside `dist/`, so the file records a bare name and
           # `shasum -c` works where the reader unpacked it. Piped through
           # `tee` the path would be `dist/yumete-…`, which resolves nowhere.
-          ( cd dist && shasum -a 256 "${PKG}.tar.gz" | tee "${PKG}.tar.gz.sha256" )
+          #
+          # `shasum` is perl's and is not on every image; `sha256sum` is
+          # coreutils'. Both print the same two fields in the same order, so
+          # whichever is there writes a file the other can check.
+          sum() { if command -v shasum > /dev/null; then shasum -a 256 "$1"; else sha256sum "$1"; fi; }
+          ( cd dist && sum "${PKG}.${{ matrix.ext }}" | tee "${PKG}.${{ matrix.ext }}.sha256" )
 
       # Run it from somewhere unrelated to the build, so a binary that only
       # works beside its own build tree is caught here rather than by a reader.
@@ -293,11 +340,14 @@ jobs:
           set -euo pipefail
           VERSION="${{ needs.version.outputs.version }}"
           PKG="yumete-${VERSION}-${{ matrix.target }}"
+          EXE=""
+          [[ "${{ runner.os }}" == Windows ]] && EXE=".exe"
+          YE="$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete${EXE}"
           mkdir -p "$RUNNER_TEMP/elsewhere"
           cp -R "dist/${PKG}" "$RUNNER_TEMP/elsewhere/"
           # The binary must say exactly the version the tarball is named for.
           # `--version` prints `yumete <version> — …`, so match the field.
-          got=$("$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" --version)
+          got=$("$YE" --version)
           echo "$got"
           case "$got" in
             "yumete ${VERSION} "*|"yumete ${VERSION}") ;;
@@ -306,15 +356,14 @@ jobs:
           # …and it draws a page. `--shot` runs the whole launch, so this
           # catches a binary that starts and then cannot render.
           printf '那年冬天。\n' > "$RUNNER_TEMP/a.md"
-          "$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" --shot=40x6 "$RUNNER_TEMP/a.md" | tee /dev/stderr | grep -q '那年冬天'
+          "$YE" --shot=40x6 "$RUNNER_TEMP/a.md" | tee /dev/stderr | grep -q '那年冬天'
           # …**and it can type** (2026-10-04). `\{ime}` hands the keys that
           # follow to the engine, so this walks the whole path the tables are
           # fetched for: 碼表 loaded, code read, candidate chosen, 漢字 on the
           # page. An empty file, so the only 漢字 there can be is one the
           # engine put there.
           : > "$RUNNER_TEMP/b.md"
-          typed=$("$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" \
-            --shot=70x6 --keys='i\{ime}ui\{space}\{ime}' "$RUNNER_TEMP/b.md")
+          typed=$("$YE" --shot=70x6 --keys='i\{ime}ui\{space}\{ime}' "$RUNNER_TEMP/b.md")
           printf '%s\n' "$typed" >&2
           # The scheme's name on the status line is what says the 碼表 loaded —
           # it is exactly what was missing the day this check was written.
@@ -325,7 +374,12 @@ jobs:
           # And a 漢字 really landed. **Not a particular one** — the table is
           # refreshed in place, and a smoke test that pins a character would
           # fail the day 不 stops being the first candidate for `ui`.
-          if ! printf '%s' "$typed" | head -1 | python3 -c \
+          #
+          # `python3` on the Windows image is `python`, so ask for whichever
+          # answers rather than hard-coding the name of one of them.
+          py=python3
+          command -v python3 > /dev/null || py=python
+          if ! printf '%s' "$typed" | head -1 | "$py" -c \
             'import sys; sys.exit(0 if any("\u4e00" <= c <= "\u9fff" for c in sys.stdin.read()) else 1)'; then
             echo "!! the engine put no 漢字 on the page" >&2
             exit 1
@@ -337,7 +391,7 @@ jobs:
           # Warning: `path:` is resolved against `$GITHUB_WORKSPACE`, **not** against
           # `defaults.run.working-directory` — so it carries the checkout
           # directory even though every `run:` above does not.
-          path: yumete/dist/yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}.tar.gz*
+          path: yumete/dist/yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}.${{ matrix.ext }}*
           if-no-files-found: error
           retention-days: 14
 
@@ -362,8 +416,19 @@ jobs:
       - name: Upload to the release
         run: |
           set -euo pipefail
-          gh release upload "$TAG" \
-            dist/*.tar.gz dist/*.tar.gz.sha256 \
+          # `nullglob` and an explicit list, because the rows do not all have
+          # the same suffix any more and `fail-fast: false` means one platform
+          # can be missing. An unmatched glob would otherwise reach `gh` as a
+          # literal `dist/*.zip` and be reported as a missing file — true, but
+          # about the wrong thing.
+          shopt -s nullglob
+          files=(dist/*.tar.gz dist/*.tar.gz.sha256 dist/*.zip dist/*.zip.sha256)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "!! no packages were built — nothing to attach." >&2
+            exit 1
+          fi
+          printf '%s\n' "${files[@]}"
+          gh release upload "$TAG" "${files[@]}" \
             --clobber --repo "$GITHUB_REPOSITORY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
             --json assets -q '.assets[].name'
