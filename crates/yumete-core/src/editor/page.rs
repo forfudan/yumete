@@ -436,7 +436,7 @@ impl Editor {
         self.hanging
     }
 
-    /// How many half-width characters share a slot (縦中横); `0` for none.
+    /// How many half-width characters share a slot (緃中横); `0` for none.
     pub fn set_tatechuyoko(&mut self, at_most: usize) {
         self.tatechuyoko = at_most.min(crate::zong::TATECHUYOKO_MAX);
     }

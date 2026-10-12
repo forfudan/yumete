@@ -40,7 +40,7 @@ pub const DEFAULT_ZONG_LENGTH: usize = 32;
 /// something in its margin still buys that cell for itself — see `place`.
 pub const DEFAULT_ZONG_GAP: usize = 0;
 
-/// How many half-width characters a 縦中横 group holds at the classic setting.
+/// How many half-width characters a 緃中横 group holds at the classic setting.
 ///
 /// Two, and it is the number every account of the form gives: JIS X 4051 §4.8
 /// is 「usually applied to two-digit numbers」 (W3C, *Requirements for Japanese
@@ -49,10 +49,10 @@ pub const DEFAULT_ZONG_GAP: usize = 0;
 /// without disturbing a thing.
 pub const TATECHUYOKO_CLASSIC: usize = 2;
 
-/// The largest 縦中横 group yumete will set, in half-width characters.
+/// The largest 緃中横 group yumete will set, in half-width characters.
 ///
 /// **Print stops at four**: CSS Writing Modes 3 writes the automatic form as
-/// `text-combine-upright: digits <integer [2,4]>`, InDesign's 自動縦中横設定
+/// `text-combine-upright: digits <integer [2,4]>`, InDesign's 自動緃中横設定
 /// offers 組数字 2/3/4, and past two the group is wider than the column and
 /// has to be squeezed back into it — 「if the combined text is wider than 1em,
 /// the user agent must fit the contents within 1em」. A terminal cannot squeeze

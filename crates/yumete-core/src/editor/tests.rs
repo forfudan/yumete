@@ -163,7 +163,7 @@ fn a_note_follows_the_line_as_it_is_written() {
 
 /// 縱書的 `橫` 和 `字` 會分家（#500）。
 ///
-/// 縦中横把**兩個半角字擠進一個格**，所以一串寫成數字的縱，格數比字數少。
+/// 緃中横把**兩個半角字擠進一個格**，所以一串寫成數字的縱，格數比字數少。
 /// 「纵和字是相等的……如果有可能不相等，那就也加一下字」——會，所以狀態欄兩個都報。
 #[test]
 fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
@@ -172,7 +172,7 @@ fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
     let mut ed = typed("26年的冬天\n");
     ed.execute(":vertical").unwrap();
 
-    // 縦中横關着：一個字一格，兩個數一路相等。
+    // 緃中横關着：一個字一格，兩個數一路相等。
     ed.set_tatechuyoko(0);
     for _ in 0..2 {
         ed.on_key(Key::Char('l'));
@@ -182,7 +182,7 @@ fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
     assert_eq!(
         (at.slot_in_line, ed.cursor_column()),
         (2, 2),
-        "沒有縦中横，格與字同步"
+        "沒有緃中横，格與字同步"
     );
 
     // 開着：`26` 佔一格，所以「年」這個第三個字只在第二格上。
@@ -1496,7 +1496,7 @@ fn ctrl_n_and_ctrl_p_walk_the_lookfor_list_like_tab() {
     assert_eq!(ed.lookfor_menu().1, 2);
     ed.on_key(Key::Ctrl('p'));
     assert_eq!(ed.lookfor_menu().1, 1);
-    // ⇥ 和它們是同一格游標。
+    // ⇥ 和它們是同一格光標。
     ed.on_key(Key::Tab);
     assert_eq!(ed.lookfor_menu().1, 2);
 }
@@ -2273,7 +2273,7 @@ fn md_and_mr_are_told_which_pair() {
 /// **vim-surround 的三個拼法**（2026-10-06，十三條的第六條）。
 ///
 /// `ys{動作}{括號}`、`ds{括號}`、`cs{舊}{新}`，外加 `yss` 整行。`s` 不在
-/// [`yumete_cjk::VIM_MOTIONS`] 上，所以這三條和在原生 vim 裏一樣沒人占。
+/// [`yumete_cjk::VIM_MOTIONS`] 上，所以這三條和在原生 vim 裏一樣沒人佔。
 #[test]
 fn vim_keys_spell_surround_the_way_vim_surround_does() {
     let vim = |text: &str, steps: &str| {
@@ -9352,7 +9352,7 @@ fn the_search_panel_walks_the_way_it_is_drawn() {
     );
 }
 
-/// **游標下的是一個字簇，不是一個碼位**（2026-10-12）。
+/// **光標下的是一個字簇，不是一個碼位**（2026-10-12）。
 ///
 /// 查字典問的是使用者指着的那一個「字」，而屏幕上的一個字可以是好幾個碼位：
 /// `🈚️` 是 U+1F21A ＋ 變體選擇符，一個帶 IVS 的漢字是漢字 ＋ 一個 Plane-14 的
@@ -25680,7 +25680,7 @@ fn append_leaves_what_you_typed_selected_in_helix_but_not_in_vim() {
 ///
 /// 原話：「一直按 ctrl+d 翻页时，当 cursor 位于屏幕中间一行时，最下方一行在视
 /// 野内，翻页会自动把 cursor 挪到屏幕底部；再按 ctrl+d 又回到中间」。量出來的
-/// 形狀（66 行的屏幕，游標在正中第 33 行）：
+/// 形狀（66 行的屏幕，光標在正中第 33 行）：
 ///
 /// ```text
 ///        從前                 現在
@@ -25700,12 +25700,12 @@ fn a_half_page_keeps_the_cursor_on_the_same_screen_row() {
     ed.goto_line(33);
     // 跳轉那一格是一次性的，按一下清掉——不清的話下面問到的是「跳轉落在正中」。
     ed.on_key(Key::Char('l'));
-    // 畫一幀：視窗 1..66，游標第 33 行，坐在第 32 列。
+    // 畫一幀：視窗 1..66，光標第 33 行，坐在第 32 列。
     assert_eq!(ed.page_inset(Some(32), 65, 3), None, "舒舒服服在頁面上，別動");
     assert_eq!(ed.sat_at(), Some(32), "坐在第幾行，畫的那一支自己記下來");
 
     ed.on_key(Key::Ctrl('d'));
-    assert_eq!(ed.cursor_line(), 65, "游標走了半頁");
+    assert_eq!(ed.cursor_line(), 65, "光標走了半頁");
     // 走完之後它離舊視窗的頭 65 行——換句話說貼着底邊。釘住的話視窗跟着挪。
     assert_eq!(ed.page_inset(Some(65), 65, 3), Some(32), "視窗跟着走，光標原地不動");
 
@@ -25929,7 +25929,7 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
 /// **對象找不着就往前找**——vim 的 `current_block`／`current_quote` 都有這一步
 /// （2026-10-12 從 nvim 神諭上量的，那一輪 554 格差異裏的大半）。
 ///
-/// 從前這兩族只認「包着光標的那一對」，於是 `ab (cd) ef` 上游標在行首按 `di(`
+/// 從前這兩族只認「包着光標的那一對」，於是 `ab (cd) ef` 上光標在行首按 `di(`
 /// 一動不動——而 vim 刪掉 `cd`。括號往前找**不限行**（vim 的
 /// `findmatchlimit(FM_FORWARD)`），引號只在自己那一行上找。
 #[test]
@@ -25941,7 +25941,7 @@ fn a_bracket_object_looks_ahead_and_a_quote_object_only_on_its_line() {
         press(&mut ed, keys);
         ed.current_buffer().text()
     };
-    // 同一行上，游標在 `(` 之前。
+    // 同一行上，光標在 `(` 之前。
     assert_eq!(after("ab (cd) ef\nxx\n", "di("), "ab () ef\nxx\n");
     // 下一行纔有——括號那一族不限行。
     assert_eq!(after("ab\n(cd) ef\nxx\n", "di("), "ab\n() ef\nxx\n");
@@ -25956,7 +25956,7 @@ fn a_bracket_object_looks_ahead_and_a_quote_object_only_on_its_line() {
 /// **光標正停在引號上的時候，從行首一對一對數起**（vim 的 `current_quote`，
 /// `textobject.c:1747`）。
 ///
-/// `a "b" "c" d` 上游標停在 `"b"` 的收引號上：往回最近的引號就是它自己，當成開
+/// `a "b" "c" d` 上光標停在 `"b"` 的收引號上：往回最近的引號就是它自己，當成開
 /// 引號配下一對的開引號，`di"` 刪的是兩段之間那個空格。vim 刪的是 `b`。
 #[test]
 fn a_quote_under_the_cursor_is_paired_from_the_start_of_the_line() {

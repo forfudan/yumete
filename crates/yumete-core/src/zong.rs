@@ -120,7 +120,7 @@ pub struct Grid<'a> {
     /// back. `usize::MAX` for none.
     pub open_line: usize,
 
-    /// **How many half-width characters share one slot** (縦中横) — `0` for
+    /// **How many half-width characters share one slot** (緃中横) — `0` for
     /// none, and never more than [`TATECHUYOKO_MAX`].
     ///
     /// Zero by default. Turned sideways a pair reads as a syllable — `yume` set
@@ -418,7 +418,7 @@ impl Slot {
 /// Split a line into the rows a 縱 draws it as.
 ///
 /// With `ruby` off this is just the slot run: one grapheme per row, half-width
-/// alphanumerics paired 縦中横. With it on, a `<ruby>` group is *laid out*: the
+/// alphanumerics paired 緃中横. With it on, a `<ruby>` group is *laid out*: the
 /// markup disappears, the reading is dealt out down the ruby column, and the
 /// base is centred over however many rows the reading needs. That spacing is
 /// what real typesetting does and is why two adjacent readings never collide.
@@ -978,7 +978,7 @@ fn rotate(body: &str) -> String {
 /// The char offset of every **slot** boundary in `text`, including the end.
 ///
 /// A slot is one row of a 縱. Usually it holds one grapheme, but a run of up to
-/// `at_most` half-width characters is packed into one slot 縦中横-style — see
+/// `at_most` half-width characters is packed into one slot 緃中横-style — see
 /// [`TATECHUYOKO_MAX`]. Everything else in this module is defined in terms of
 /// these offsets, so packing here is what makes the cursor, the wrap length,
 /// motion and the renderer all agree that `12` is one row.
@@ -996,7 +996,7 @@ fn slot_offsets(text: &str, at_most: usize) -> Vec<usize> {
     let mut chars = 0usize;
     let mut i = 0;
     // A run of half-width *alphanumerics* may share a slot; anything else —
-    // full-width, punctuation, a space — stands on its own. 縦中横 is for
+    // full-width, punctuation, a space — stands on its own. 緃中横 is for
     // numbers and short Latin, and packing a comma in beside a letter would
     // only look like a mistake.
     let narrow = |g: &str| grapheme_width(g) == 1 && g.chars().all(char::is_alphanumeric);
@@ -1356,7 +1356,7 @@ pub fn position(rope: &Rope, pos: usize, grid: Grid) -> Position {
     let total = slots.len();
 
     // Which slot the cursor sits in (or `total`, past the last one). A slot may
-    // span several characters — a 縦中横 pair, or a whole ruby group's markup —
+    // span several characters — a 緃中横 pair, or a whole ruby group's markup —
     // so this is the last one that *starts* at or before the cursor, not the
     // first one that reaches it.
     let col = pos.saturating_sub(start);
@@ -1694,7 +1694,7 @@ pub fn zong_index(zongs: &[Zong], pos: usize) -> usize {
 
 /// Split `text` into what each slot draws, punctuation already rotated.
 ///
-/// The renderer walks this rather than the graphemes, so a 縦中横 pair arrives
+/// The renderer walks this rather than the graphemes, so a 緃中横 pair arrives
 /// as one two-cell string and lands in one row.
 ///
 /// Takes the one setting it uses rather than a whole [`Grid`]: it used to take
@@ -1720,7 +1720,7 @@ pub fn slot_text(text: &str, at_most: usize) -> Vec<String> {
 pub const SLOT_CELLS: usize = 2;
 
 /// How many cells one slot **draws in**, which is [`SLOT_CELLS`] for everything
-/// but a long 縦中横 group.
+/// but a long 緃中横 group.
 ///
 /// A group of three or four half-width characters is one row and three or four
 /// cells across, so it hangs out of its own 縱 — see [`zong_overhang`], which is
@@ -1784,7 +1784,7 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
         .iter()
         .map(|(_, margin, _)| usize::from(margin.iter().any(Option::is_some)))
         .collect();
-    // What a long 縦中横 group hangs into the 行間, per 縱 — the same number the
+    // What a long 緃中横 group hangs into the 行間, per 縱 — the same number the
     // terminal's `place` walks with. 縱 `i` hangs to its **left**, which is the
     // space between it and 縱 `i + 1`, so that space is what has to be widened.
     let overhang: Vec<usize> = columns.iter().map(|&(_, _, over)| over).collect();
@@ -1803,7 +1803,7 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
                     // of a ruby group's padding — is two cells of nothing, not
                     // one; padding it to one walked the rest of the row left.
                     Some(g) => {
-                        // A long 縦中横 group is wider than the 縱 and is hung
+                        // A long 緃中横 group is wider than the 縱 and is hung
                         // by its **right** edge, so it takes back the cells
                         // reserved for it just before this 縱 was written.
                         // They are blank by construction: the region below is
@@ -1877,7 +1877,7 @@ mod tests {
         ..G
     };
 
-    /// Half-width pairs packed at the classic setting, for the 縦中横 tests.
+    /// Half-width pairs packed at the classic setting, for the 緃中横 tests.
     const PACKED: Grid = Grid {
         tatechuyoko: TATECHUYOKO_CLASSIC,
         ..G
@@ -2317,7 +2317,7 @@ mod tests {
         assert_eq!(render_page(&rope("上下\n"), G, 1), vec!["上", "下"]);
     }
 
-    /// A 縦中横 group wider than the 字 is one row, and the page opens the
+    /// A 緃中横 group wider than the 字 is one row, and the page opens the
     /// 行間 for it rather than letting it land on the 縱 beside it
     /// (2026-09-21).
     #[test]
@@ -2490,7 +2490,7 @@ mod tests {
 
     /// Slots are grapheme clusters, so an ideographic variation sequence takes
     /// one row, not two.
-    /// 縦中横: a short run of half-width characters is turned sideways into one
+    /// 緃中横: a short run of half-width characters is turned sideways into one
     /// slot, so a year or a chapter number reads as a number.
     #[test]
     fn digits_pack_sideways_into_one_slot_when_asked() {

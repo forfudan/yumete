@@ -1959,7 +1959,7 @@ fn walk_inner(
         // 正是 `Walked` 自己的註釋禁止的那件事。
         //
         // 拿掉之前量過代價並且給他看過：那個倉 9,193 個檔、共 13.3 GB，而 154 個超過
-        // 4 MB 的就占了 12.7 GB（兩個純文本語料共 7.6 GB）。看完這個數字還是定
+        // 4 MB 的就佔了 12.7 GB（兩個純文本語料共 7.6 GB）。看完這個數字還是定
         // 「拿掉闸，搜全部」，理由是他自己說的：「因为搜索是默认本文件的，所以还好。
         // 用户切换到搜索路径也必须 enter 触发搜索，因此我们算是有安全保障。」
         // ——走整棵樹那一趡是人按下 Enter 要的，不是編輯器自己跑的。
@@ -2937,7 +2937,7 @@ pub struct Editor {
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
     ruby_target: Option<RubyTarget>,
-    /// How many half-width characters share a slot in vertical layout (縦中横);
+    /// How many half-width characters share a slot in vertical layout (緃中横);
     /// `0` for none.
     tatechuyoko: usize,
     /// Whether 句讀 hang in the margin (標點旁置).

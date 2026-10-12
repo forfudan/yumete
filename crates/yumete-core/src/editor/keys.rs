@@ -213,8 +213,8 @@ impl Editor {
         // markdown 裏停在表格第一行，txt 裏的制表符表格跑到文首。
         //
         // 換個順序就對了：留住之後光標回到格子裏，忘掉那一支自己就不再成立。
-        // Warning: 內嵌那一種（不占整窗）不受影響：`hold_the_pane` 第二句就問
-        // `takes_the_pane()`，不占窗就直接回來，走出猜來的塊照舊把它忘掉。
+        // Warning: 內嵌那一種（不佔整窗）不受影響：`hold_the_pane` 第二句就問
+        // `takes_the_pane()`，不佔窗就直接回來，走出猜來的塊照舊把它忘掉。
         self.hold_the_pane(held);
         self.forget_a_guessed_table();
         self.keep_the_last_selection(was_extending);
@@ -3060,7 +3060,7 @@ impl Editor {
             //
             // Warning: **這裏從前寫着「`g` 組兩邊都空着的小寫只有 `o q u v z`」，
             // 那是錯的**（2026-10-10 查出來的）：`o`／`q`／`u`／`v` 四個 vim 自己
-            // 都占着，而同一個檔上面幾十行就把 vim 的 `gu` 綁成了大小寫算子。按兩
+            // 都佔着，而同一個檔上面幾十行就把 vim 的 `gu` 綁成了大小寫算子。按兩
             // 家自己的源頭數（`vim/runtime/doc/index.txt` 的 Normal mode 索引、
             // helix 的 `keymap/default.rs:39-63`），**兩邊都空着的小寫只有 `x`
             // 和 `z`**。挑鍵之前去那兩個檔裏數，別讀這一類注釋。
@@ -3080,18 +3080,18 @@ impl Editor {
             }
             // **`gx` 跳單詞、`gz` 跳漢字，兩套鍵位同一個拼法**（2026-10-10 定）。
             //
-            // 從前是 `go`／`gu`，而**那兩個字母 vim 自己都占着**：`go` 是
+            // 從前是 `go`／`gu`，而**那兩個字母 vim 自己都佔着**：`go` 是
             // 「cursor to byte N」（`runtime/doc/index.txt:798`）、`gu` 是小寫算
             // 子。`gu` 那一邊讓了（vim 下跑算子），於是跳漢字在 vim 下沒有 `g`
             // 門，只好另開一個 `空格 u`——一個格子買一件 helix 那端已經有的事。
             // `go` 那一邊連讓都沒讓。
             //
-            // 兩家自己的源頭量出來：vim 的 `g` 占 `adefghijkmnopqrstuvw`，helix
-            // 的占 `abcdefghjklmnprstwy`（`keymap/default.rs:39-63`），**兩家都
+            // 兩家自己的源頭量出來：vim 的 `g` 佔 `adefghijkmnopqrstuvw`，helix
+            // 的佔 `abcdefghjklmnprstwy`（`keymap/default.rs:39-63`），**兩家都
             // 空着的小寫只有 `x` 和 `z`**。所以這兩件事搬到那兩個字母上，兩套鍵
             // 位一個拼法，`空格 u` 也就不必存在了。
             //
-            // 「跟着鏈接走」讓出 `gx`，去 `gL`（link），兩家都沒占。
+            // 「跟着鏈接走」讓出 `gx`，去 `gL`（link），兩家都沒佔。
             Key::Char('x') => self.start_seek(false),
             Key::Char('z') => self.start_seek(true),
             // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,

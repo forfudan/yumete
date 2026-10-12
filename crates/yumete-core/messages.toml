@@ -20,7 +20,7 @@
 # 大陆用语 — and convert it to `zht`; that is the
 # rule of 2026-09-08, and the reason for it is that 簡體 is not only
 # different characters, it is sometimes a different word (檔案/文件,
-# 預設/默认, 程式/程序, 游標/光标), and a sentence composed in the second
+# 預設/默认, 程式/程序, 光標/光标), and a sentence composed in the second
 # language picks the second language's vocabulary without meaning to.
 #
 # `zht` must still be filled in, because it is what the editor shows by default
@@ -3501,7 +3501,7 @@ zhs = "这份文件里没有合并冲突"
 en = "no merge conflicts in this file"
 
 [[message]]
-# 空格 m 而游標不在任何衝突裏
+# 空格 m 而光標不在任何衝突裏
 key = "conflict.not-in-one"
 zht = "光標不在衝突裏"
 zhs = "光标不在冲突里"
@@ -6126,7 +6126,7 @@ zhs = "下一张表/上一张表"
 en = "the next table / the one before"
 
 [[message]]
-# 表格提示：游標不在任何一張表裏，底下那些鍵沒有東西可動
+# 表格提示：光標不在任何一張表裏，底下那些鍵沒有東西可動
 key = "hint.table.not-in-a-table"
 zht = "光標不在表格裏 —— ␣t ] 走到下一張"
 zhs = "光标不在表格里 —— ␣t ] 走到下一张"
@@ -10974,7 +10974,7 @@ zhs = "表里没有「{0}」"
 en = "no '{0}' in this table"
 
 [[message]]
-# :table-csv：游標不在 | 表格裏
+# :table-csv：光標不在 | 表格裏
 key = "table.not-in-a-pipe-table"
 zht = "光標不在 | 表格裏"
 zhs = "光标不在 | 表格里"
@@ -11498,7 +11498,7 @@ zhs = "拆分表里没有这个字"
 en = "not in the decomposition table"
 
 [[message]]
-# 空格 d：游標下沒有字可查
+# 空格 d：光標下沒有字可查
 key = "ui.nothing-to-look-up"
 zht = "光標下沒有字可查"
 zhs = "光标下没有字可查"

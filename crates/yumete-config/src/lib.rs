@@ -229,7 +229,7 @@ pub struct EditorConfig {
     /// what a manuscript slips on over a year.
     pub usage_groups: Vec<String>,
     /// **How many half-width characters share one slot in vertical layout**
-    /// (縦中横). `0` is one letter to a row, hung right;
+    /// (緃中横). `0` is one letter to a row, hung right;
     /// [`TATECHUYOKO_CLASSIC`] is what fits the grid, and up to
     /// [`TATECHUYOKO_MAX`] hangs out into the 行間. Anything above that is
     /// clamped, and `1` is no group at all and reads as `0`.
@@ -4162,7 +4162,7 @@ mod tests {
         assert_eq!(c.editor.zong_gap, 4);
     }
 
-    /// 縦中横 is a count now (2026-09-21), and the count is clamped at both
+    /// 緃中横 is a count now (2026-09-21), and the count is clamped at both
     /// ends: one is no group, and past [`TATECHUYOKO_MAX`] the group would
     /// hang further into the 行間 than the 行間 is wide.
     #[test]

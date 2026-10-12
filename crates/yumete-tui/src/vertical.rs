@@ -308,7 +308,7 @@ pub fn char_at(
     // Which band the row fell in, then which 縱 of it the column fell in — or,
     // failing that, the nearest one to its right, since a click in a gap means
     // the 縱 beside it.
-    // A 縱 holding a long 縦中横 group reaches `overhang` cells past its own
+    // A 縱 holding a long 緃中横 group reaches `overhang` cells past its own
     // left edge, and those cells are its own — the page bought them for it.
     let left = |p: &Placed| p.x.saturating_sub(p.overhang);
     let placed = page
@@ -333,7 +333,7 @@ pub struct Placed {
     pub x: u16,
     /// The row its first slot is drawn on — which band it landed in.
     pub top: u16,
-    /// **How many cells this 縱 hangs past its own left edge** — what a 縦中横
+    /// **How many cells this 縱 hangs past its own left edge** — what a 緃中横
     /// group longer than a 字 costs, from [`zong::zong_overhang`].
     ///
     /// Carried for the same reason `margin_cells` is: the page paid for these
@@ -510,7 +510,7 @@ fn layout_page(
     // widens the margin for all of them.
     let mut metrics = *metrics;
     metrics.ruby_width = ruby_width_of(&slots);
-    // What a long 縦中横 group hangs into the 行間, per 縱 — nothing at all
+    // What a long 緃中横 group hangs into the 行間, per 縱 — nothing at all
     // unless a group is wider than the 字 it stands in.
     let overhangs: Vec<u16> = slots
         .iter()
@@ -552,7 +552,7 @@ fn layout_page(
     Laid { page, holds }
 }
 
-/// **游標那一頁放得下幾縱**——量一次版面，不要那一頁的內容。
+/// **光標那一頁放得下幾縱**——量一次版面，不要那一頁的內容。
 ///
 /// 和 [`how_many_fit`] 是同一個問題問在另一個錨點上：跳轉那一幀的視口還是舊
 /// 的，從它量出來的寬度不是跳完之後那一頁的寬度。
@@ -603,7 +603,7 @@ fn how_many_fit(
 ///
 /// Positions are walked rather than computed, because a 縱's width is no longer
 /// the same for all of them: with the gap set to zero, one carrying a reading
-/// takes a cell more than one that does not, and one holding a long 縦中横
+/// takes a cell more than one that does not, and one holding a long 緃中横
 /// group hangs past its own left edge.
 fn place(metrics: &Metrics, area: Rect, margins: &[Margin], overhangs: &[u16]) -> Vec<u16> {
     let hang = |i: usize| overhangs.get(i).copied().unwrap_or(0);
@@ -614,7 +614,7 @@ fn place(metrics: &Metrics, area: Rect, margins: &[Margin], overhangs: &[u16]) -
         // costs whichever is larger, and the rightmost 縱 pays for a reading
         // alone, since it has no neighbour to borrow the cell from.
         //
-        // A long 縦中横 group in the 縱 to the **right** hangs into that same
+        // A long 緃中横 group in the 縱 to the **right** hangs into that same
         // space, and is **added** to the reading rather than sharing it: the
         // reading's cell belongs to the character it is written against, and a
         // digit landing on it would rub out one or the other. Against the gap
@@ -638,7 +638,7 @@ fn place(metrics: &Metrics, area: Rect, margins: &[Margin], overhangs: &[u16]) -
 }
 
 /// How many rows the paragraph-number header needs: two digits stack into one
-/// row 縦中横-style, so a four-digit novel needs two rows.
+/// row 緃中横-style, so a four-digit novel needs two rows.
 pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
     match mode {
         LineNumbers::None => 0,
@@ -784,7 +784,7 @@ fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) 
 
 /// Paint a slot body of any width, hung against the 縱's **right** edge.
 ///
-/// A 縦中横 group of three or more half-width characters is one row and wider
+/// A 緃中横 group of three or more half-width characters is one row and wider
 /// than the 縱 it stands in, so it is drawn from the 縱's right edge *leftward*,
 /// into the cells the page bought for it when it placed the neighbour (see
 /// [`zong::zong_overhang`]). Hung right for the same reason a lone letter is:
@@ -811,12 +811,12 @@ fn put_slot_wide(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) {
     }
 }
 
-/// One column of a vertical panel, with half-width runs set 縦中横.
+/// One column of a vertical panel, with half-width runs set 緃中横.
 ///
 /// A 漢字 is a row to itself, as it is anywhere in 縱書. Latin letters and
 /// digits are not: set one to a row they read as a column of nothing and cost
 /// a row each, so consecutive ones are paired into a single slot — which is
-/// what 縦中横 is for, and what the page's own text already does with a year.
+/// what 緃中横 is for, and what the page's own text already does with a year.
 fn packed(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut half = String::new();
@@ -855,10 +855,10 @@ pub(crate) fn index_mark(markers: &str, i: usize) -> String {
     }
 }
 
-/// Draw a paragraph number above its 縱, two digits to a row (縦中横), so it
+/// Draw a paragraph number above its 縱, two digits to a row (緃中横), so it
 /// reads as a number rather than a stack of loose digits.
 fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: Style) {
-    // Warning: **Two digits to a row — 縦中横, which is what a Japanese book does with
+    // Warning: **Two digits to a row — 緃中横, which is what a Japanese book does with
     // a number in a column** (#512). A 縱 is two cells wide and a digit is one,
     // so the pair costs nothing and a four-digit line number is two rows deep
     // instead of four. On an eighty-row terminal that is two rows of every
@@ -931,7 +931,7 @@ pub fn draw(
 
     // The grid the editor navigates by, at the wrap length this page settled on.
     // It must be *the editor's* grid and not a fresh one, or a setting the
-    // editor holds — 縦中横, say — would apply to motion and not to drawing, and
+    // editor holds — 緃中横, say — would apply to motion and not to drawing, and
     // the cursor would sit a row out from the character it is on.
     // The same two answers the horizontal page is drawn from — asked of the
     // editor, not worked out again here.
@@ -984,10 +984,10 @@ pub fn draw(
     //   有 1 縱」——末三縱逐格複現；
     // * 長文按 `ge`／`G` 之後**沒有按鍵也自己動**，9 → 6 → 4 → 3 縱，每約一秒
     //   半一下（「過半秒向右閃移一縱，大概閃三四下」）。
-    // Warning: **從游標那一縱量，不從視口量**（2026-10-12 的第二道）。`holds` 算的
+    // Warning: **從光標那一縱量，不從視口量**（2026-10-12 的第二道）。`holds` 算的
     // 是眼前這幾縱有多寬，而「眼前」在跳轉那一幀是**舊的**那一頁——跳完之後畫
     // 的是另一批縱，寬度不同，於是下一幀量出另一個 `holds`、又挪一下。跳轉之後
-    // 畫的就是游標周圍那幾縱，從那裏量，兩幀量的是同一批，落在哪就停在哪。
+    // 畫的就是光標周圍那幾縱，從那裏量，兩幀量的是同一批，落在哪就停在哪。
     let holds = match found_at_cursor(rope, cursor_anchor, grid, &metrics, area, capacity, &markup) {
         0 => holds,
         n => n,
@@ -1332,7 +1332,7 @@ pub fn draw(
                 }
             }
         }
-        // Rows, not graphemes: a 縦中横 pair is one row holding two characters, a
+        // Rows, not graphemes: a 緃中横 pair is one row holding two characters, a
         // ruby group is however many rows its reading needs, and the punctuation
         // is already rotated.
         for (slot, row) in slots.iter().cloned().enumerate() {
@@ -1389,7 +1389,7 @@ pub fn draw(
                         .filter(|(l, _)| *l == zong.line)
                         .and_then(|(_, marks)| {
                             // A slot may hold more than one character — a ruby
-                            // group, a 縦中横 pair — and the mark belongs to the
+                            // group, a 緃中横 pair — and the mark belongs to the
                             // first of them, which is the one the reader sees.
                             marks.iter().find(|m| m.column == row.start).copied()
                         })
@@ -1549,7 +1549,7 @@ pub fn draw(
             // this page had not. A highlight exists *to be* a ground.
             let mut highlighted = false;
             // A slot is one display unit and may hold several characters — a
-            // ruby group, or a 縦中横 pair — so it takes the style of any run it
+            // ruby group, or a 緃中横 pair — so it takes the style of any run it
             // overlaps. `runs` is empty when markup is not being rendered.
             for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
                 highlighted |= run.kind == yumete_core::markdown::Kind::Highlight;
@@ -1677,7 +1677,7 @@ pub fn draw(
             // …和配對的那一半，一格金。擺在最後，同橫排那一頭：它只改墨色，上面
             // 每一層改的都是底色。
             //
-            // Warning: **一格可能裝着好幾個字符**（注音的一組、縦中横的一對），所以問的是
+            // Warning: **一格可能裝着好幾個字符**（注音的一組、緃中横的一對），所以問的是
             // 「那一半落在這一格裏嗎」，不是「這一格就是那一格嗎」。
             if partner.is_some_and(|mate| at <= mate && mate < at + len.max(1)) {
                 style = style.fg(ink.gold());
@@ -1685,7 +1685,7 @@ pub fn draw(
 
             // Hung right, so half-width characters line up as one edge running
             // down the 縱 beside the 漢字 rather than drifting to its left — and
-            // a 縦中横 group too long for the 字 hangs out to the left from
+            // a 緃中横 group too long for the 字 hangs out to the left from
             // there, into the cells the page bought it.
             match boxy {
                 true => put_slot(buf, x, y, &symbol, style),
@@ -1817,7 +1817,7 @@ pub fn draw(
             }
             return (cursor_x, caret_y);
         }
-        // **長的縦中横是一格，而光標只站在它裏頭的一個字上**（2026-10-12 報的）。
+        // **長的緃中横是一格，而光標只站在它裏頭的一個字上**（2026-10-12 報的）。
         //
         // 這裏從前把整組一起反白，理由寫着「The cursor stands on the group, not
         // on its last two digits」（2026-09-21）——那個前提不成立：`1997` 是**四
@@ -1995,7 +1995,7 @@ pub fn draw_candidate_panel(
     let pitch = SLOT_WIDTH;
 
     // The code as typed runs down the rightmost column — but **packed**: a run
-    // of half-width letters goes two to a row (縦中横), the way a year does in
+    // of half-width letters goes two to a row (緃中横), the way a year does in
     // 縱書. `Dyu_Do_Ne` set one letter to a row is nine rows of nothing, and
     // with 拆分 on it made the panel taller than the page it was covering.
     // 編碼那一列：內嵌的時候不畫，那一段已經在正文裏了（2026-09-27）。

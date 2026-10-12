@@ -86,7 +86,7 @@ the file keeps the blank line Markdown needs), **段組** (a tall page halved in
 bands read top-right to top-left, then bottom-right to bottom-left, the way a
 文庫本 is set), 圈點 in that same margin, `:view-margin never` for a page that spends
 every column on writing, and 禁則處理 in both directions — a column never opens
-with 。 or closes with 「. 稿紙 ticks (`paper_ticks`) and 縦中横
+with 。 or closes with 「. 稿紙 ticks (`paper_ticks`) and 緃中横
 (`tatechuyoko`, which turns `yume` sideways into two syllables that are not
 there) are off by default and asked for by name.
 

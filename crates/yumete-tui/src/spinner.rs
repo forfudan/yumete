@@ -9,7 +9,7 @@
 //! 的純函數——所以一個地方要用它，只要記得自己是什麽時候開始忙的，別的什麽都
 //! 不必記，也不會有兩處轉得不同步。
 //!
-//! Warning: **不轉的時候也要占那一格。** 旁邊的字纔不會每八十毫秒跳一次；helix
+//! Warning: **不轉的時候也要佔那一格。** 旁邊的字纔不會每八十毫秒跳一次；helix
 //! 的註釋原話是「Even if there's no spinner; reserve its space to avoid
 //! elements frequently shifting」（`ui/statusline.rs`）。所以 [`frame`] 不轉的
 //! 時候回的是一個空格，不是空串。
@@ -50,10 +50,10 @@ pub const FRAMES: [&str; 8] = ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", 
 /// 得不晃眼。
 pub const TICK: Duration = Duration::from_millis(80);
 
-/// 它占幾欄。不轉的時候也占這麽寬（見模組頭上那一段）。
+/// 它佔幾欄。不轉的時候也佔這麽寬（見模組頭上那一段）。
 pub const WIDTH: u16 = 1;
 
-/// **轉到第幾格**——`None` ＝ 沒在忙，回一個空格占位。
+/// **轉到第幾格**——`None` ＝ 沒在忙，回一個空格佔位。
 ///
 /// ```text
 /// let mark = spinner::frame(servers.busy_since());
@@ -108,7 +108,7 @@ mod tests {
         );
     }
 
-    /// 不忙的時候占一格空白——占住了，旁邊的字纔不會跳。
+    /// 不忙的時候佔一格空白——佔住了，旁邊的字纔不會跳。
     #[test]
     fn it_holds_its_place_when_nothing_is_running() {
         assert_eq!(frame(None), " ");

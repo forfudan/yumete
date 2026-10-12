@@ -4303,11 +4303,11 @@ const CUT_BELOW: &str = "▁";
 ///
 /// **畫一個字，不塗滿一格**（2026-09-19，對着 helix 看出來的：「我們的這個
 /// 底色竪綫爲什麽比 helix 的粗？它的更細而且和正文中間還有一些距離」）。helix
-/// 畫的就是這個字（`helix-view/src/gutter.rs:125`），用前景色——字形只占格子的
+/// 畫的就是這個字（`helix-view/src/gutter.rs:125`），用前景色——字形只佔格子的
 /// 八分之五又靠左，所以右邊自己留出一條縫，離正文遠一點。塗滿底色的那一版又粗
 /// 又貼着字。
 ///
-/// Warning: 和剪口同一個毛病：整個方塊區是 East Asian Ambiguous，CJK 字體下占兩格。
+/// Warning: 和剪口同一個毛病：整個方塊區是 East Asian Ambiguous，CJK 字體下佔兩格。
 /// 量出兩格就退回塗滿底色——那一版寬窄是對的，只是粗。
 const CHANGE_BAR: &str = "▍";
 
@@ -4918,7 +4918,7 @@ fn draw(
         let what = Floating { rows: seek_rows, lit: None, keep_off_the_caret: false };
         draw_panel_rows(frame, config, room, cursor_x, cursor_y, what);
     }
-    // **設置面板鋪滿整個窗口**（2026-09-25 報的：「设置界面是独占的全屏，所以是
+    // **設置面板鋪滿整個窗口**（2026-09-25 報的：「设置界面是独佔的全屏，所以是
     // 不是可以把下方的状态栏和命令栏覆盖掉？」）。
     //
     // Warning: **狀態行在這一頁上是一句假話**：它報的是 `development.md 行 262`——一個
@@ -8115,7 +8115,7 @@ pub(crate) fn sidebar_shell(
     let focused = editor.panel_focus() == Some(side);
     // **有焦點：同一個框，換成雙線、金色**（2026-10-04 定）。從前是整圈刷成
     // 金底實心條，原話：「我覺得有點刺眼。」雙線一樣說得出「鍵在這一邊」，可它
-    // 是**線**不是**塊**——占的墨少了一個數量級。
+    // 是**線**不是**塊**——佔的墨少了一個數量級。
     let line = match focused {
         true => ground.fg(ink.gold()),
         false => ground.fg(ink.quiet()),
@@ -8680,7 +8680,7 @@ fn draw_search(
         // 原話：「這個转圈可以放到『搜:』之前（1 上方）……这样的好处是，就不需要
         // 为框线設計复杂的逻辑了。因爲『搜:』的前面是真空格。」——對的：那一格是
         // 面板自己的底色，而且本來就是號碼那一欄（底下七個開關的 `1`…`7` 就在它
-        // 正下方），所以轉與不轉都占着，一個字都不會跳。
+        // 正下方），所以轉與不轉都佔着，一個字都不會跳。
         if which == Field::Query {
             // **金的，和正下方那七個號碼同一個墨**（2026-10-08 定，原話：
             // 「那個 8 點轉轉用金色（和下面的 1234）數字顏色一致，而且更加醒目」。
@@ -8941,7 +8941,7 @@ fn draw_search(
     // 不變暗**（10 行的窗口復現得了，24 行的看不出來）。
     'list: {
     // **開關和名單之間畫一道雙橫線**（2026-10-04 定）。那一行本來就是空着的
-    // ——一道線不多占地方，而它把「設定」和「找到了什麼」分成兩塊。
+    // ——一道線不多佔地方，而它把「設定」和「找到了什麼」分成兩塊。
     //
     // Warning: **從牆畫到牆，兩頭是丁字**（看了第一版報的：「沒有和兩邊豎線相
     // 連」）。接頭跟着邊框的粗細走，墨色也跟着它——`shell.floor_ink` 就是邊框那
@@ -9992,7 +9992,7 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
 /// 現在不畫它的話是一片空白加一個 `[scratch]`——一個新來的人不知道可以按什麼。vim
 /// 那一屏至少說了三件事：這是什麼、怎麼學、怎麼出去。
 ///
-/// Warning: **居中，可是不占行**：它寫進已經畫好的那些格子裏，所以窗口多高、正文
+/// Warning: **居中，可是不佔行**：它寫進已經畫好的那些格子裏，所以窗口多高、正文
 /// 將來有多少字，都和它無關。
 fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     let ink = crate::theme::Palette::of(config);
@@ -10093,7 +10093,7 @@ fn tint_the_rules(
         for y in text_area.y..text_area.y + text_area.height {
             // **跱到哪個字就塗整個字**（2026-10-05 定）。
             //
-            // Warning: **一道底紋落在漢字的後半格上，整行就沒有了。** 一個漢字占兩
+            // Warning: **一道底紋落在漢字的後半格上，整行就沒有了。** 一個漢字佔兩
             // 格，而 ratatui 把第二格存成一個默認樣式的空格；終端畫完寬字形就
             // **跳過那一格**（`Buffer::diff` 按 `symbol().width()` 算跳幾格），於是
             // 塗在那裏的顏色寫進了緩衝區、永遠送不出去。三種樣子輪流出現：半角字
@@ -11521,7 +11521,7 @@ fn draw_status(
             false => editor.status().to_string(),
         };
         // Warning: **那兩格是畫出來的，不是算出來的**（2026-10-03）。這一行畫的是
-        // 「行首一格留白 ＋ 模式 ＋ 轉圈那一格 ＋ 其餘」，轉不轉都占着（見下面
+        // 「行首一格留白 ＋ 模式 ＋ 轉圈那一格 ＋ 其餘」，轉不轉都佔着（見下面
         // 那段註釋），所以左半邊真正能用的比 `width` 少兩格。從前這裏按整個寬度
         // 算，於是算到頭「剛好擺得下」的那一行到了屏幕上被切掉兩格——26 欄下
         // 「窗口過窄，改用行內搜索」畫出來是「窗口過窄，改用行內搜」。
@@ -11646,7 +11646,7 @@ fn draw_status(
     // ——helix 的次序就是 `Mode → Spinner → FileName`
     // （`helix-view/src/editor.rs:694`）。
     //
-    // Warning: **那一格不轉的時候也占着**（同 helix：「reserve its space to
+    // Warning: **那一格不轉的時候也佔着**（同 helix：「reserve its space to
     // avoid elements frequently shifting」），所以這一行永遠是「一格空白 ＋
     // NOR ＋ 空格 ＋ 那一格 ＋ 空格 ＋ 檔名」，轉不轉都一樣寬。
     let used = yumete_cjk::str_width(&status) + 2;
@@ -12409,7 +12409,7 @@ fn window_on(text: &str, caret: usize, room: usize, keep_tail: bool) -> (String,
         // 一個一個露回來。原話：「The chars at and after the cursor are not
         // displayed.」
         //
-        // 現在先往右占滿，再把剩下的預算往左補：光標貼着右邊的時候和從前一樣
+        // 現在先往右佔滿，再把剩下的預算往左補：光標貼着右邊的時候和從前一樣
         //（那正是打字的常態），而光標退回中間的時候後面那一截還在。
         true => {
             let mut wide = 0usize;
@@ -12556,7 +12556,7 @@ fn position_in(editor: &Editor, full: bool) -> String {
         //   horizontal page carries one 行 number.
         // * 橫 is how far along that line, in slots — the 列.
         // * 字 is how far along in characters. It parts company with 橫 wherever
-        //   縦中横 packs two half-width characters into one slot.
+        //   緃中横 packs two half-width characters into one slot.
         // **Spelt out both ways, not looked up.** `messages.toml` is audited
         // against the literal tags the tree says, so a key held in a variable
         // reads as a tag nobody says.
@@ -15676,7 +15676,7 @@ fn squeezed(text: &str) -> String {
         let bar = bar_column(&editor, &config);
         let page = ink.page().bg;
         // **一個字，不是一塊底色**（2026-09-19，對着 helix：「它的更細而且
-        // 和正文中間還有一些距離」）。`▍` 只占格子的八分之五又靠左，右邊那條縫
+        // 和正文中間還有一些距離」）。`▍` 只佔格子的八分之五又靠左，右邊那條縫
         // 是字形自己留的。所以驗的是**墨**和**那個字**，底色一路是紙。
         assert_eq!(buffer[(bar, 0)].symbol(), " ", "第 1 行没動過");
         assert_eq!(buffer[(bar, 1)].symbol(), super::CHANGE_BAR, "第 2 行是新添的");
@@ -20652,7 +20652,7 @@ fn squeezed(text: &str) -> String {
     /// 任何反馈，体验上就是一直按 j 时 cursor 卡在单词里不动」。`1997` 是四個
     /// 落腳點，而從前四格一起反白，四幀逐像素相同。
     #[test]
-    fn the_caret_inside_a_縦中横_group_marks_one_character() {
+    fn the_caret_inside_a_緃中横_group_marks_one_character() {
         let config = vertical_config();
         let reversed = |buf: &ratatui::buffer::Buffer, w: u16, h: u16| -> Vec<(u16, u16, String)> {
             (0..w)
@@ -20661,7 +20661,7 @@ fn squeezed(text: &str) -> String {
                 .map(|(x, y)| (x, y, buf[(x, y)].symbol().to_string()))
                 .collect()
         };
-        // 游標逐個走過 `1`、`9`、`9`、`7`：每一步反白一格，而且是**不同的**一格。
+        // 光標逐個走過 `1`、`9`、`9`、`7`：每一步反白一格，而且是**不同的**一格。
         let mut seen: Vec<(u16, u16, String)> = Vec::new();
         for (n, want) in [(3usize, "1"), (4, "9"), (5, "9"), (6, "7")] {
             let mut editor = editor_with("那是 1997 年的事");
@@ -23487,7 +23487,7 @@ fn squeezed(text: &str) -> String {
     ///
     /// > rules 的底色有問題。
     ///
-    /// Warning: **一道底紋落在漢字的後半格上，整行就沒有了。** 一個漢字占兩格，而
+    /// Warning: **一道底紋落在漢字的後半格上，整行就沒有了。** 一個漢字佔兩格，而
     /// ratatui 把第二格存成一個默認樣式的空格；終端畫完寬字形就**跳過那一格**，
     /// 於是塗在那裏的顏色寫進了緩衝區、永遠送不出去。一頁中文看着就是一道忽粗
     /// 忽斷的線。半格畫不出來，所以往左退一格塗整個字。
@@ -23496,7 +23496,7 @@ fn squeezed(text: &str) -> String {
         let config = Config::default();
         let ink = ink(&config);
         let tint = ink.at(yumete_config::rung::BAND);
-        // 一行漢字：每一個占兩格，所以**奇數欄全是後半格**。
+        // 一行漢字：每一個佔兩格，所以**奇數欄全是後半格**。
         let mut editor = editor_with(&"那年冬天很冷".repeat(4));
         let band = {
             let buffer = render(&editor, &config, 90, 6);
@@ -23591,7 +23591,7 @@ fn squeezed(text: &str) -> String {
         /// 「rust-analyzer 正在讀這個項目……第一次要等一會」，佔滿整條命令行，而它
         /// 說的只是「在忙」——那件事一格就夠了，命令行空着纔放得下別的話。
         ///
-        /// Warning: **不忙的時候那一格是空格，不是沒有。** 位子一直占着，`NOR` 和它
+        /// Warning: **不忙的時候那一格是空格，不是沒有。** 位子一直佔着，`NOR` 和它
         /// 右邊的每一個字纔不會每八十毫秒跳一次（同 helix 的
         /// `ui/statusline.rs`：「reserve its space to avoid elements frequently
         /// shifting」）。這一條兩頭都驗。
@@ -23703,7 +23703,7 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char('l'));
         }
         let mut config = Config::default();
-        // 號碼欄、分詞、折疊標誌都會自己拿金的那一格或者占掉座標——這一條只驗
+        // 號碼欄、分詞、折疊標誌都會自己拿金的那一格或者佔掉座標——這一條只驗
         // 括號那一格。
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;

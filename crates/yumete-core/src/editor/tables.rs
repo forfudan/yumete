@@ -3393,7 +3393,7 @@ impl Editor {
     /// not change what those mean either.
     ///
     /// Warning: **`T` is till again, in a grid too**（2026-09-30 定，原話
-    /// 「这个可能要改成 _tT了，因为 T 现在 till 占用的」）。#356 給了 `T` 換
+    /// 「这个可能要改成 _tT了，因为 T 现在 till 佔用的」）。#356 給了 `T` 換
     /// 粒度，理由是「在格子裏往回 till 沒人用」；一個頂層字母鍵在一種文件裏
     /// 換意思，代價比那個理由大。粒度現在在 [`Self::toggle_table_grain`]，掛
     /// 在表格那一組上。
