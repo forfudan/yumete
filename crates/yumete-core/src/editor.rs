@@ -4417,7 +4417,7 @@ fn unescape_replacement(replacement: &str) -> String {
 /// used to do — copies 800 KB for every press of `n`.
 fn search_forward(
     rope: &Rope,
-    pattern: &Regex,
+    look: &find::Look,
     from: usize,
     within: std::ops::Range<usize>,
 ) -> Option<(usize, usize)> {
@@ -4433,8 +4433,8 @@ fn search_forward(
     // so the wrap covers the part of that line before the cursor too — where
     // 「the end」 and 「the top」 are the ends of `within`, which is the whole
     // buffer unless a table holds the pane (#354).
-    scan(rope, pattern, start_line, within.end, from).or_else(|| {
-        scan(rope, pattern, within.start, start_line + 1, rope.line_to_char(within.start))
+    scan(rope, look, start_line, within.end, from).or_else(|| {
+        scan(rope, look, within.start, start_line + 1, rope.line_to_char(within.start))
     })
 }
 
@@ -4442,7 +4442,7 @@ fn search_forward(
 /// half-open range of char indices.
 fn scan(
     rope: &Rope,
-    pattern: &Regex,
+    look: &find::Look,
     from_line: usize,
     to_line: usize,
     from: usize,
@@ -4462,10 +4462,13 @@ fn scan(
         };
         // 換行符不進正則，見 [`line_body`]。
         let (text, _) = line_body(text);
-        let begin = byte_of_char(text, from.saturating_sub(at));
-        if let Some(found) = text.get(begin..).and_then(|rest| pattern.find(rest)) {
-            let start = at + text[..begin + found.start()].chars().count();
-            return Some((start, start + found.as_str().chars().count()));
+        // **一行問一次，拿回所有命中**（2026-10-12）。從前這裏是
+        // `pattern.find(rest)`，只問得出正則那一路；`Look::spans` 把字形折過的式
+        // 子、模糊、拼音三路合在一起答，於是 `/` 和面板用的是同一套判準而不是兩
+        // 套。跨度是**這一行裏的字序號**。
+        let want = from.saturating_sub(at);
+        if let Some(&(a, b)) = look.spans(text).iter().find(|&&(a, _)| a >= want) {
+            return Some((at + a, at + b));
         }
         at += slice.len_chars();
     }
@@ -4495,11 +4498,6 @@ pub(crate) fn line_body(line: &str) -> (&str, &str) {
     (body, &line[body.len()..])
 }
 
-/// The byte offset of character `n` in `text`, or its length.
-fn byte_of_char(text: &str, n: usize) -> usize {
-    text.char_indices().nth(n).map_or(text.len(), |(b, _)| b)
-}
-
 /// The last occurrence of `pattern` before char index `from`, wrapping past the
 /// start of the buffer back to its end.
 ///
@@ -4515,7 +4513,7 @@ fn byte_of_char(text: &str, n: usize) -> usize {
 /// is carried along rather than asked for.
 fn search_backward(
     rope: &Rope,
-    pattern: &Regex,
+    look: &find::Look,
     from: usize,
     within: std::ops::Range<usize>,
 ) -> Option<(usize, usize)> {
@@ -4530,15 +4528,15 @@ fn search_backward(
     // From the cursor up to the top, then from the bottom back down to the
     // cursor's line, so the wrap covers the part of that line after the cursor
     // too — the same two halves [`search_forward`] takes, walked the other way.
-    scan_back(rope, pattern, within.start, start_line + 1, from)
-        .or_else(|| scan_back(rope, pattern, start_line, within.end, usize::MAX))
+    scan_back(rope, look, within.start, start_line + 1, from)
+        .or_else(|| scan_back(rope, look, start_line, within.end, usize::MAX))
 }
 
 /// The last match starting before `from` within `lines`, searching backward, as
 /// a half-open range of char indices.
 fn scan_back(
     rope: &Rope,
-    pattern: &Regex,
+    look: &find::Look,
     from_line: usize,
     to_line: usize,
     from: usize,
@@ -4549,7 +4547,7 @@ fn scan_back(
     // nothing. `yumete` opens on exactly that document, and `x*` matches in
     // it.
     if rope.len_chars() == 0 {
-        return (from_line == 0 && to_line > 0 && from > 0 && pattern.is_match(""))
+        return (from_line == 0 && to_line > 0 && from > 0 && !look.spans("").is_empty())
             .then_some((0, 0));
     }
     let mut at = rope.line_to_char(to_line);
@@ -4569,17 +4567,13 @@ fn scan_back(
         let (text, _) = line_body(text);
         // A line is read forwards whichever way the file is being read: the
         // matches on it have to be found in order to know which is the last.
-        let mut byte = 0usize;
-        let mut best = None;
-        while let Some(m) = text.get(byte..).and_then(|rest| pattern.find(rest)) {
-            let start = at + text[..byte + m.start()].chars().count();
-            if start >= from {
-                break;
-            }
-            best = Some((start, start + m.as_str().chars().count()));
-            // An empty match would otherwise stand still forever.
-            byte += m.end().max(m.start() + 1);
-        }
+        // `spans` 本來就是按起點排好的，所以「最後一處」就是倒着數第一個。
+        let best = look
+            .spans(text)
+            .iter()
+            .rev()
+            .find(|&&(a, _)| at + a < from)
+            .map(|&(a, b)| (at + a, at + b));
         if best.is_some() {
             return best;
         }

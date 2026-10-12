@@ -15668,15 +15668,19 @@ fn a_backward_search_lands_where_the_full_sweep_did() {
             // 行連換行符一起餵進去，於是它和被測的那一支**同病**：`甲$` 兩邊都答
             // 「沒有」，而對的答案是末行那個甲。見 `crate::editor::line_body`。
             let text = crate::editor::line_body(&whole).0.to_string();
-            let mut byte = 0usize;
-            while let Some(m) = text.get(byte..).and_then(|rest| pattern.find(rest)) {
-                let start = at + text[..byte + m.start()].chars().count();
+            // Warning: **照正則引擎自己的枚舉走**（2026-10-12）。這裏從前自己按
+            // 位元組往前挪（`byte += m.end().max(m.start() + 1)`），而空匹配之後挪
+            // 的那一格**落在漢字中間**——`text.get(byte..)` 回 `None`，迴圈就停
+            // 了。於是 `x*` 在「一行而已」上只數得出開頭那一處，而引擎數得出五
+            // 處。被測的那一支 2026-10-12 起用 `find_iter`，神諭也該用它：神諭不
+            // 該自己實現一遍切分。
+            for m in pattern.find_iter(&text) {
+                let start = at + text[..m.start()].chars().count();
                 let range = (start, start + m.as_str().chars().count());
                 if start < from {
                     before = Some(range);
                 }
                 last = Some(range);
-                byte += m.end().max(m.start() + 1);
             }
             at += slice.len_chars();
         }
@@ -15699,6 +15703,9 @@ fn a_backward_search_lands_where_the_full_sweep_did() {
         let lines = rope.len_lines();
         for pattern in patterns {
             let re = Regex::new(pattern).unwrap();
+            // 掃描器 2026-10-12 起收 ：通配關着就是一條光禿禿的式子，而這
+            // 條對照測試驗的正是那一路與老實掃一遍的結果逐個相同。
+            let look = crate::editor::find::Look::plain(re.clone());
             for from in 0..=rope.len_chars() {
                 for within in [0..lines, 0..lines.min(2), lines.saturating_sub(2)..lines, 1..lines]
                 {
@@ -15706,7 +15713,7 @@ fn a_backward_search_lands_where_the_full_sweep_did() {
                         continue;
                     }
                     assert_eq!(
-                        search_backward(&rope, &re, from, within.clone()),
+                        search_backward(&rope, &look, from, within.clone()),
                         sweep(&rope, &re, from, within.clone()),
                         "/{pattern}/ from {from} within {within:?} of {text:?}"
                     );

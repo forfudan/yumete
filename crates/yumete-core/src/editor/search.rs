@@ -114,6 +114,10 @@ impl Editor {
                 return;
             }
         };
+        // **`/` 和面板走同一支掃描器**（2026-10-12）。通配關着的時候這就是一條光
+        // 禿禿的式子，答案與從前拿裸正則掃的逐字相同；開着的時候同一個 `Look` 多
+        // 帶了折過的字形與讀音，而掃描器一個字都不用改。
+        let look = super::find::Look::plain(re);
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();
 
@@ -138,9 +142,9 @@ impl Editor {
         // Warning: **匹配只有一個字的時候它是好的**——那時光標就在開頭上。中文搜的多
         // 半是兩個字以上，英文搜一個字母的多，所以這個洞躲了很久。
         let found = if forward {
-            search_forward(rope, &re, (self.sel.head() + 1).min(len), within)
+            search_forward(rope, &look, (self.sel.head() + 1).min(len), within)
         } else {
-            search_backward(rope, &re, self.sel.anchor().min(self.sel.head()), within)
+            search_backward(rope, &look, self.sel.anchor().min(self.sel.head()), within)
         };
 
         match found {

@@ -3083,6 +3083,24 @@ pub(super) enum How {
 }
 
 impl Look {
+    /// **一條光禿禿的式子**——不折字形、不問讀音，就是這個正則本身。
+    ///
+    /// `/` 與 `:s` 在通配關着的時候拿它：**同一支掃描器、同一個 `spans`**，而答案
+    /// 與從前拿裸正則掃的逐字相同。這一支存在的理由就是「別為關着的那一半另留
+    /// 一條路」——2026-10-12 作者的原話：「The options should be decoupled …
+    /// It is already okay in the search panel and should also be okay in `/`
+    /// and `:s`」。
+    pub(super) fn plain(re: Regex) -> Look {
+        Look {
+            how: How::Pattern(re),
+            keep_case: false,
+            said: None,
+            doubled: false,
+            shapes: false,
+            fold_case: false,
+        }
+    }
+
     /// **換上去的那一段**，`matched` 是換下來的那一段。
     ///
     /// Warning: **`$1` 只有正則那一路認得。** 拼音和 模糊 沒有分組可以展開，那兩路換
