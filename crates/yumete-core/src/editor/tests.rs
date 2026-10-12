@@ -13747,13 +13747,16 @@ fn no_writer_replaces_a_file_the_editor_is_holding() {
     let mut ed = Editor::new();
     ed.open_file(&book).unwrap();
 
-    // Every spelling of this buffer's own file.
-    let link = dir.join("draft.typ");
+    // Every spelling of this buffer's own file. On Windows there is only the
+    // one: a symlink there needs a privilege a test cannot assume it has.
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&book, &link).unwrap();
-    let mut spellings = vec![book.display().to_string()];
-    #[cfg(unix)]
-    spellings.push(link.display().to_string());
+    let spellings = {
+        let link = dir.join("draft.typ");
+        std::os::unix::fs::symlink(&book, &link).unwrap();
+        vec![book.display().to_string(), link.display().to_string()]
+    };
+    #[cfg(not(unix))]
+    let spellings = vec![book.display().to_string()];
     for spelling in &spellings {
         ed.execute(&format!(":export typst {spelling}")).unwrap();
         assert!(

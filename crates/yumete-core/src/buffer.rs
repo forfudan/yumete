@@ -2213,15 +2213,23 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
+    /// Warning: **`set_readonly` and not the mode bits.** 0o444 is a unix
+    /// sentence; the question — 「can a manuscript the filesystem is protecting
+    /// be written over」 — is every platform's, and `std::fs` has one word for
+    /// it (on Windows it is the read-only attribute). 2026-10-12.
     #[test]
     fn a_read_only_manuscript_is_not_written_over() {
-        use std::os::unix::fs::PermissionsExt;
+        let locked = |path: &std::path::Path, yes: bool| {
+            let mut perms = fs::metadata(path).unwrap().permissions();
+            perms.set_readonly(yes);
+            fs::set_permissions(path, perms).unwrap();
+        };
         let dir = tmp().join(format!("yumete-ro-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("locked.md");
         fs::write(&path, "不要動\n").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o444)).unwrap();
+        locked(&path, true);
 
         let err = write_file_atomically(&path, "動了\n").expect_err("a read-only file is refused");
         assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
@@ -2234,7 +2242,7 @@ fn tmp() -> std::path::PathBuf {
             .collect();
         assert!(leftovers.is_empty(), "{leftovers:?}");
 
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        locked(&path, false);
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -2651,6 +2659,13 @@ fn tmp() -> std::path::PathBuf {
         // 自己不算「別人還在跑」——自己那一份走的是別的路。
         assert!(!owner_still_running(Path::new(&format!(".a.md.yumete.{me}"))));
         // 父進程（跑測試的那個 shell／cargo）確實活着，而且不是我。
+        //
+        // Warning: **只在 unix 上問得出來**，而且不只是 `getppid` 沒有對應：
+        // `owner_still_running` 自己在別的平臺上就是一句 `false`（往上看），
+        // 所以 Windows 上那個 2026-10-10 的缺陷**還在**——還活着的另一個
+        // yumete 留下的草稿會被當成無主的。記在 development.md §5.195。
+        #[cfg(unix)]
+        {
         // SAFETY: `getppid` 只讀自己的進程表項。
         let parent = unsafe { libc::getppid() };
         if parent > 1 {
@@ -2662,6 +2677,7 @@ fn tmp() -> std::path::PathBuf {
                 owner_still_running(Path::new(&format!("scratch-{parent}-3.yumete"))),
                 "沒檔名那一種的名字也要認得出 pid"
             );
+        }
         }
         // 認不出 pid 的名字、以及 #305 之前的老名字，照舊當「主人走了」。
         assert!(!owner_still_running(Path::new(".a.md.yumete")));
