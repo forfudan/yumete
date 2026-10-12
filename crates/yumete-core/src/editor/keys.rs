@@ -1703,6 +1703,52 @@ impl Editor {
             return;
         }
 
+        // **行文那一套是在門口把四個字母對調換出來的**（2026-10-12 定）。
+        //
+        // 底下這一塊寫的是**視覺**那一套：`h` 往左 ＝ 下一縱，`j` 往下 ＝ 下一個
+        // 字。出廠的行文那一套要的是和橫排逐鍵相同——`h` 上一個字、`j` 下一行
+        // ——而那正好是把兩對字母對調：
+        //
+        // ```text
+        //   想要 h（上一個字）＝ 視覺的 k        想要 j（下一行）＝ 視覺的 h
+        //   想要 l（下一個字）＝ 視覺的 j        想要 k（上一行）＝ 視覺的 l
+        // ```
+        //
+        // Warning: **是一個四元環，不是兩組對調**（h→k→l→j→h）。第一版寫成了
+        // h↔k、l↔j 兩組互換，於是 `j` 走的是上一行、`k` 走的是下一行——兩個鍵
+        // 正好反着，而且「按 j 不動」看起來像它根本沒接上。
+        //
+        // Warning: **只換字母，不換方向鍵**（原話：「方向鍵永遠視覺，不跟開關」）。
+        // 三家參考都按名字分家：Emacs 的 `C-f` 永遠邏輯而 `→` 看方向，CSS 規範裏
+        // `forward`/`backward` 是邏輯而 `left`/`right` 是視覺。一個箭頭是方向的
+        // 圖，一個字母是一個詞。Insert 模式那一支（`prompt.rs`）本來就只認方向
+        // 鍵，所以一個字都不用動。
+        //
+        // Warning: **別名展開出來的那幾個鍵，永遠按行文那一套算**——而在這個倉
+        // 裏那意味着**要換**，不是不換（2026-10-12 量出來的）。
+        //
+        // 規矩是 vim 的（`normal.c:874`：「Only when typed by the user
+        // directly, not when the result of a mapping or `x` translated to
+        // `dl`」）：寫 `"x" = "dl"` 的人說的是「刪一個字」，那是 `l` 的通用意
+        // 思。vim 的引擎底子是邏輯的，所以「不換」就等於通用意思；**這裏的引擎
+        // 底子是視覺的**（底下那一塊），通用意思要換出來。照抄那個 `!` 就反了。
+        //
+        // 抓到它的是 vim 鍵位的 `+`——它是 `("+", "jgs")`，展開的 `j` 没換，於
+        // 是「下一行行首」在竪排下一行都不走。
+        let turn = self.vertical_letters_follow_the_text() || {
+            self.layout() == Layout::Vertical && self.expanding_alias
+        };
+        let key = match turn {
+            false => key,
+            true => match key {
+                Key::Char('h') => Key::Char('k'),
+                Key::Char('k') => Key::Char('l'),
+                Key::Char('l') => Key::Char('j'),
+                Key::Char('j') => Key::Char('h'),
+                key => key,
+            },
+        };
+
         // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
         // meaning: `j` still reads onward down the 縱, and `h` still steps left,
         // which is now the next 縱 rather than the next line.
@@ -2790,11 +2836,20 @@ impl Editor {
         // on a 縱書 page the line runs down the 縱 and the lines stack
         // leftward, so running along is `k`/`j` and crossing is `h`/`l` —
         // `h`, leftward, being onward, as it is for `h` alone.
+        //
+        // Warning: **行文那一套下四個字母不轉**（2026-10-12）：`gh` 在橫排是行首，
+        // 行文那一套要它在竪排也是行首，而行首這件事本來就不分方向。轉的只剩視
+        // 覺那一套，和方向鍵——後者永遠視覺。
+        //
+        // 別名展開出來的也不轉，同上面那一段：寫 `gj` 的人說的是「下一行」。
+        let turn = !self.vertical_letters_follow_the_text() && !self.expanding_alias;
         let key = match (self.layout() == Layout::Vertical, key) {
-            (true, Key::Char('h')) => Key::Char('j'),
-            (true, Key::Char('l')) => Key::Char('k'),
-            (true, Key::Char('j') | Key::Down) => Key::Char('l'),
-            (true, Key::Char('k') | Key::Up) => Key::Char('h'),
+            (true, Key::Char('h')) if turn => Key::Char('j'),
+            (true, Key::Char('l')) if turn => Key::Char('k'),
+            (true, Key::Char('j')) if turn => Key::Char('l'),
+            (true, Key::Char('k')) if turn => Key::Char('h'),
+            (true, Key::Down) => Key::Char('l'),
+            (true, Key::Up) => Key::Char('h'),
             (_, key) => key,
         };
         // `gg` and `ge` cross a document; `gh`, `gl` and `gs` cross a line.

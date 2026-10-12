@@ -185,6 +185,8 @@ pub struct EditorConfig {
     pub word_mark: yumete_cjk::WordMark,
     /// Horizontal (default) or vertical layout (Feature #61).
     pub layout: Layout,
+    /// 竪排時 `hjkl` 依照行文邏輯還是視覺方向（2026-10-12）。方向鍵不歸它管。
+    pub vertical_keys: yumete_cjk::VerticalKeys,
     /// How many characters fit in one 縱 in vertical layout.
     ///
     /// `0` — the default — means **as many as the window allows**, which is the
@@ -431,6 +433,7 @@ impl Default for EditorConfig {
             word_level: yumete_cjk::WordLevel::default(),
             word_mark: yumete_cjk::WordMark::default(),
             layout: Layout::Horizontal,
+            vertical_keys: yumete_cjk::VerticalKeys::default(),
             zong_length: 0,
             indent: 0,
             bands: 1,
@@ -2206,6 +2209,13 @@ impl Config {
                 ));
             }
         }
+        if let Some(word) = raw.editor.vertical_keys.as_deref() {
+            if yumete_cjk::VerticalKeys::parse(word).is_none() {
+                problems.push(format!(
+                    "[editor] vertical_keys = \"{word}\" 只能是 logical、visual"
+                ));
+            }
+        }
 
         // **打錯的設定要出聲，不許默默退回出廠值**（2026-10-07 一輪審查報來的）。
         //
@@ -2911,6 +2921,7 @@ struct RawEditor {
     yank_on_delete: Option<bool>,
     word_level: Option<String>,
     word_mark: Option<String>,
+    vertical_keys: Option<String>,
     /// Retired. Kept so a config that still sets it is *told*, rather than
     /// refused by the unknown-key check with no idea what to write instead.
     segmentation_threshold: Option<i64>,
@@ -3044,6 +3055,9 @@ impl RawConfig {
         }
         if other.editor.word_mark.is_some() {
             self.editor.word_mark = other.editor.word_mark.clone();
+        }
+        if other.editor.vertical_keys.is_some() {
+            self.editor.vertical_keys = other.editor.vertical_keys.clone();
         }
         if other.editor.segmentation_threshold.is_some() {
             self.editor.segmentation_threshold = other.editor.segmentation_threshold;
@@ -3366,6 +3380,14 @@ impl RawConfig {
             .and_then(yumete_cjk::WordMark::parse)
         {
             config.editor.word_mark = mark;
+        }
+        if let Some(way) = self
+            .editor
+            .vertical_keys
+            .as_deref()
+            .and_then(yumete_cjk::VerticalKeys::parse)
+        {
+            config.editor.vertical_keys = way;
         }
         if let Some(layout) = self.editor.layout {
             // An unrecognised value keeps the default rather than refusing to

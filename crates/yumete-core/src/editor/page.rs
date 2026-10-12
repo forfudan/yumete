@@ -51,6 +51,26 @@ impl Editor {
         matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_))
     }
 
+    /// **竪排時 `hjkl` 走行文還是走版面**，此刻是哪一種。
+    pub fn vertical_keys(&self) -> yumete_cjk::VerticalKeys {
+        self.vertical_keys
+    }
+
+    /// 撥那一格。
+    pub fn set_vertical_keys(&mut self, way: yumete_cjk::VerticalKeys) {
+        self.vertical_keys = way;
+    }
+
+    /// **竪排，而且 `hjkl` 跟着行文走**（出廠那一種）。
+    ///
+    /// 問得這麼細，是因為繪製那一層和按鍵那一層對「竪排的 `hjkl`」各有一套默認
+    /// 想法：鍵那一層的代碼寫的是**視覺**那一套（`h` 往左 ＝ 下一縱），所以行文
+    /// 那一套是**在門口把四個字母對調**換出來的，見 `keys.rs`。
+    pub(crate) fn vertical_letters_follow_the_text(&self) -> bool {
+        self.layout() == Layout::Vertical
+            && self.vertical_keys == yumete_cjk::VerticalKeys::Logical
+    }
+
     /// Switch the layout.
     pub fn set_layout(&mut self, layout: Layout) {
         // One choke point for a rule with three ways in — the config, `-v`, and

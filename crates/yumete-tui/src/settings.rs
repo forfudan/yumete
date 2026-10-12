@@ -152,6 +152,7 @@ pub fn apply(
     editor.set_tab_spaces(config.editor.tab_spaces);
     editor.set_tab_stop(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
+    editor.set_vertical_keys(config.editor.vertical_keys);
     editor.set_code_colours(config.editor.code_highlight);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     editor.set_soft_wrap(config.editor.soft_wrap);

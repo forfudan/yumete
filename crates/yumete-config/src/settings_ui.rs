@@ -209,6 +209,11 @@ const EDITOR_WORD_MARK_WAYS: &[Choice] = &[
     Choice { word: "line", label: "set.pick.word-mark.line" },
 ];
 
+const EDITOR_VERTICAL_KEYS_WAYS: &[Choice] = &[
+    Choice { word: "logical", label: "set.pick.vertical-keys.logical" },
+    Choice { word: "visual", label: "set.pick.vertical-keys.visual" },
+];
+
 const EDITOR_INDENT_HINT_WAYS: &[Choice] = &[
     Choice { word: "none", label: "set.pick.indent-hint.none" },
     Choice { word: "symbol", label: "set.pick.indent-hint.symbol" },
@@ -316,6 +321,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "set.editor.layout",
         hint: "set.editor.layout.hint",
         factory: r#""horizontal""#,
+    },
+    Setting {
+        table: "editor",
+        key: "vertical_keys",
+        group: Group::Layout,
+        kind: Kind::Pick(EDITOR_VERTICAL_KEYS_WAYS),
+        label: "set.editor.vertical-keys",
+        hint: "set.editor.vertical-keys.hint",
+        factory: r#""logical""#,
     },
     Setting {
         table: "editor",

@@ -126,6 +126,62 @@ impl Margin {
     }
 }
 
+/// **竪排時 `hjkl` 依照行文邏輯還是視覺方向**（2026-10-12 定）。
+///
+/// 橫排下兩者是同一件事——行往右跑，`l` 既是「下一個字」也是「往右」。竪排下它
+/// 們分家，而四個鍵只能挑一邊：
+///
+/// ```text
+///          橫排        竪排・邏輯      竪排・視覺
+///   h    上一個字      上一個字        下一行（往左）
+///   l    下一個字      下一個字        上一行（往右）
+///   j    下一行        下一行          下一個字（往下）
+///   k    上一行        上一行          上一個字（往上）
+/// ```
+///
+/// **出廠是邏輯**，理由是數目和操作符：視覺那一套下 `3h` 在橫排是三個字、在竪排
+/// 是三行，於是同一個巨集、同一條 `[keys.normal]`、手冊上同一張表，換一次排版就
+/// 換了意思。邏輯那一套下每一個數目、每一個操作符在兩種排版下說同一句話。
+///
+/// Warning: **方向鍵不歸這裏管，永遠是視覺的。** 三家參考都按名字分家：Emacs 的
+/// `C-f` 永遠邏輯而 `→` 看方向，CSS 規範裏 `forward`/`backward` 是邏輯、
+/// `left`/`right` 是視覺。一個箭頭是方向的圖，一個字母是一個詞。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VerticalKeys {
+    /// `h`/`l` 走字、`j`/`k` 走行——和橫排逐鍵相同。
+    #[default]
+    Logical,
+    /// 四個鍵指哪就走哪，等於把橫排那一套順時針轉九十度。
+    Visual,
+}
+
+impl VerticalKeys {
+    /// 另一個。
+    pub fn toggled(self) -> VerticalKeys {
+        match self {
+            VerticalKeys::Logical => VerticalKeys::Visual,
+            VerticalKeys::Visual => VerticalKeys::Logical,
+        }
+    }
+
+    /// Parse a `:vertical-keys` argument or a `vertical_keys` config value.
+    pub fn parse(value: &str) -> Option<VerticalKeys> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "logical" | "text" | "邏輯" | "逻辑" | "行文" => Some(VerticalKeys::Logical),
+            "visual" | "screen" | "視覺" | "视觉" | "版面" => Some(VerticalKeys::Visual),
+            _ => None,
+        }
+    }
+
+    /// Its name, as the config writes it.
+    pub fn name(self) -> &'static str {
+        match self {
+            VerticalKeys::Logical => "logical",
+            VerticalKeys::Visual => "visual",
+        }
+    }
+}
+
 /// The layout the editor arranges text in (Feature #61).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Layout {

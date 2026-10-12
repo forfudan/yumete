@@ -3104,6 +3104,9 @@ pub struct Editor {
     /// one is closed — 2026-09-21 定：「见到程序文件，强制不允许开启竖排模式」，
     /// 而那不能反過來把讀者正在寫的小說也扳平。
     layout_wanted: Layout,
+    /// 竪排時 `hjkl` 依照行文邏輯還是視覺方向——見
+    /// [`yumete_cjk::VerticalKeys`]。方向鍵不歸它管。
+    vertical_keys: yumete_cjk::VerticalKeys,
     /// How many graphemes fit in one 縱. The renderer lowers this when the
     /// terminal is too short to draw a full 縱.
     zong_length: usize,
@@ -3820,6 +3823,7 @@ impl Editor {
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             ruby_drawn: true,
             layout_wanted: Layout::default(),
+            vertical_keys: yumete_cjk::VerticalKeys::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
             zong_motion: false,
             soft_wrap: true,

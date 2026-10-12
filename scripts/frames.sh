@@ -71,7 +71,7 @@ scenes() {
 改動帶子-還原|80x24|:open GIT\nj xu
 改動帶子-裝不下|60x20|:open GITBIG\n x
 改動帶子-翻到底|60x20|:open GITBIG\n x\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}
-改動帶子-竪排是浮窗|60x24|:open GIT\n:layout vertical\nh x
+改動帶子-竪排是浮窗|60x24|:open GIT\n:layout vertical\nj x
 竪排-極窄|24x12|:layout vertical\n
 SCENES
 }

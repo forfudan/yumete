@@ -1382,6 +1382,14 @@ en = "the keys and the commands, opened as a file you can read and search"
 find = "幫助 帮助 說明 说明 手冊 手册 keys manual"
 
 [[message]]
+# `:horizontal` ——`:layout horizontal` 的一個字的寫法
+key = "cmd.commands.horizontal"
+zht = "把這一頁轉成橫排"
+zhs = "把这一页转成横排"
+en = "turn this page across"
+find = "橫排 横排 橫書 横书 排版 方向 layout horizontal across"
+
+[[message]]
 # : 命令選單裏 indent 那一項的說明（commands 組）
 key = "cmd.commands.indent"
 zht = "首行縮進：`off`/`basic`（縮進，空行留着）/`full`（連段間空行一起收），或幾格"
@@ -1748,6 +1756,22 @@ zht = "這是哪一版，以及配置、數據、日誌都放在哪"
 zhs = "这是哪一版，以及配置、数据、日志都放在哪"
 en = "which build this is, and where the config, data and log live"
 find = "版本 version ver 配置 config 路徑 路径 path"
+
+[[message]]
+# `:vertical` ——`:layout vertical` 的一個字的寫法
+key = "cmd.commands.vertical"
+zht = "把這一頁轉成竪排"
+zhs = "把这一页转成竖排"
+en = "turn this page down"
+find = "竪排 竖排 縱書 纵书 直排 排版 方向 layout vertical down"
+
+[[message]]
+# `:vertical-keys` 這條命令自己
+key = "cmd.commands.vertical-keys"
+zht = "竪排的 hjkl 走行文還是走版面"
+zhs = "竖排的 hjkl 走行文还是走版面"
+en = "whether hjkl follow the text or the screen when the page runs down"
+find = "hjkl 鍵位 键位 方向 移動 移动 竪排 竖排 邏輯 逻辑 視覺 视觉 keys motion logical visual"
 
 [[message]]
 # : 命令選單裏 wheel 那一項的說明（commands 組）
@@ -2782,6 +2806,20 @@ key = "cmd.themes.morandi"
 zht = "莫蘭迪：十套裏最低的正文對比、最灰的地"
 zhs = "莫兰迪：十套里最低的正文对比、最灰的地"
 en = "morandi: the lowest text contrast and the greyest ground of the ten"
+
+[[message]]
+# `:vertical-keys` 選單上那兩個詞——邏輯那一個
+key = "cmd.vertical-keys.logical"
+zht = "h l 走字、j k 走行，和橫排一樣"
+zhs = "h l 走字、j k 走行，和横排一样"
+en = "h l by character, j k by line, as across"
+
+[[message]]
+# `:vertical-keys` 選單上那兩個詞——視覺那一個
+key = "cmd.vertical-keys.visual"
+zht = "四個鍵指哪就走哪"
+zhs = "四个键指哪就走哪"
+en = "each key goes where it points"
 
 [[message]]
 # : 命令選單裏 bands 那一項的說明（view 組）
@@ -9434,6 +9472,20 @@ zhs = "竖排时一格里横着塞几个半角字，年份和页码就不会一�
 en = "half-width characters set across inside one cell, so a year is not one digit to a row"
 
 [[message]]
+# 設置：竪排時 hjkl 怎麼走
+key = "set.editor.vertical-keys"
+zht = "竪排的 hjkl"
+zhs = "竖排的 hjkl"
+en = "hjkl when the page runs down"
+
+[[message]]
+# 設置：竪排的 hjkl——一句話
+key = "set.editor.vertical-keys.hint"
+zht = "竪排時 hjkl 依照行文邏輯還是視覺方向"
+zhs = "竖排时 hjkl 依照行文逻辑还是视觉方向"
+en = "in vertical layout, whether hjkl follow the text or the screen"
+
+[[message]]
 # 設置：滚轮一格
 key = "set.editor.wheel-step"
 zht = "滚輪一格"
@@ -10082,6 +10134,20 @@ key = "set.pick.tabs.never"
 zht = "不畫"
 zhs = "不画"
 en = "tabs.never"
+
+[[message]]
+# 設置：竪排的 hjkl——邏輯那一種
+key = "set.pick.vertical-keys.logical"
+zht = "邏輯：h l 走字、j k 走行，和橫排一樣"
+zhs = "逻辑：h l 走字、j k 走行，和横排一样"
+en = "logical: h l by character, j k by line, as across"
+
+[[message]]
+# 設置：竪排的 hjkl——視覺那一種
+key = "set.pick.vertical-keys.visual"
+zht = "視覺：四個鍵指哪就走哪"
+zhs = "视觉：四个键指哪就走哪"
+en = "visual: each key goes where it points"
 
 [[message]]
 # 設置：分词松紧——适中
@@ -11646,6 +11712,34 @@ key = "version.title"
 zht = "宇夢編輯器"
 zhs = "宇梦编辑器"
 en = "yumete"
+
+[[message]]
+# `:vertical-keys logical` 撥好了，而且這一扇正在竪排
+key = "vertical-keys.logical"
+zht = "竪排的 hjkl：h l 走字、j k 走行"
+zhs = "竖排的 hjkl：h l 走字、j k 走行"
+en = "hjkl down the page: h l by character, j k by line"
+
+[[message]]
+# 同上，而這一扇是橫排——撥是撥上了，看不見
+key = "vertical-keys.logical-later"
+zht = "竪排的 hjkl 改成 h l 走字、j k 走行（這一扇是橫排，轉過去纔看得見）"
+zhs = "竖排的 hjkl 改成 h l 走字、j k 走行（这一扇是横排，转过去才看得见）"
+en = "hjkl down the page now go by character and line (this pane runs across)"
+
+[[message]]
+# `:vertical-keys visual` 撥好了，而且這一扇正在竪排
+key = "vertical-keys.visual"
+zht = "竪排的 hjkl：指哪就走哪"
+zhs = "竖排的 hjkl：指哪就走哪"
+en = "hjkl down the page: each key goes where it points"
+
+[[message]]
+# 同上，而這一扇是橫排
+key = "vertical-keys.visual-later"
+zht = "竪排的 hjkl 改成指哪就走哪（這一扇是橫排，轉過去纔看得見）"
+zhs = "竖排的 hjkl 改成指哪就走哪（这一扇是横排，转过去才看得见）"
+en = "hjkl down the page now go where they point (this pane runs across)"
 
 [[message]]
 # 滾輪一格走多遠——問的時候

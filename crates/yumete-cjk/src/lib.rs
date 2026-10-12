@@ -55,7 +55,7 @@ pub use segment::{
 };
 pub use vertical::{
     hangs_in_the_margin, margin_form, narrow_form, opens_a_pair, vertical_form,
-    vertical_grapheme, Layout,
+    vertical_grapheme, Layout, VerticalKeys,
     DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, Margin, TATECHUYOKO_CLASSIC, TATECHUYOKO_MAX,
 };
 pub use width::{

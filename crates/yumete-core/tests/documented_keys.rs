@@ -171,8 +171,11 @@ const DISOWNED: &[&str] = &[
     ":scheme",
     ":chaifen",
     ":cf",
-    ":vertical",
-    ":horizontal",
+    // Warning: **`:vertical` 和 `:horizontal` 2026-10-12 回來了**，和 `:grep`
+    // 一樣從這張單子上下去。不是翻案「舊名字一律刪掉」那條規矩，是前提變了：
+    // `:vertical-keys` 加進來之後 `vertical` 成了它的唯一前綴，一個想轉頁的人
+    // 打 `:vertical` 會靜靜地撥到 `hjkl` 那個設置上。把這兩個詞定下來，那條路
+    // 就封住了。
     ":nowrap",
     ":markup",
     ":wysiwyg",

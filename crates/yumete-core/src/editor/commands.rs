@@ -367,6 +367,24 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetVerticalKeys(way) => {
+                let way = match way {
+                    Some(way) => way,
+                    None => self.vertical_keys().toggled(),
+                };
+                self.set_vertical_keys(way);
+                // **橫排下撥它也算數，只是現在看不見**。說一句，否則一個在橫排
+                // 裏試這個命令的人會以為它壞了。
+                self.status = match (way, self.layout() == Layout::Vertical) {
+                    (yumete_cjk::VerticalKeys::Logical, true) => say!("vertical-keys.logical"),
+                    (yumete_cjk::VerticalKeys::Visual, true) => say!("vertical-keys.visual"),
+                    (yumete_cjk::VerticalKeys::Logical, false) => {
+                        say!("vertical-keys.logical-later")
+                    }
+                    (yumete_cjk::VerticalKeys::Visual, false) => say!("vertical-keys.visual-later"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::Ruby => {
                 self.enter_ruby_mode();
                 Ok(CommandOutcome::Continue)

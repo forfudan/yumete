@@ -166,7 +166,7 @@ fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
     // 縦中横關着：一個字一格，兩個數一路相等。
     ed.set_tatechuyoko(0);
     for _ in 0..2 {
-        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Char('l'));
     }
     let at = ed.zong_position();
     assert_eq!(ed.cursor(), 2, "兩個字下去，停在「年」上");
@@ -195,7 +195,7 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     ed.execute(":layout vertical").unwrap();
     ed.set_tatechuyoko(2);
     for _ in 0..4 {
-        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Char('l'));
     }
     assert_eq!(ed.cursor(), 4, "1/9/9/7 各一格");
     assert_eq!(ed.zong_position().slot_in_line, 4);
@@ -206,12 +206,12 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     ed.execute(":layout vertical").unwrap();
     ed.set_tatechuyoko(4);
     for step in 1..=3 {
-        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Char('l'));
         let at = ed.zong_position();
         assert_eq!(ed.cursor(), step, "第 {step} 個字");
         assert_eq!(at.slot_in_line, 0, "還在那一格裏：{at:?}");
     }
-    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('l'));
     let at = ed.zong_position();
     assert_eq!(ed.cursor(), 4, "「年」");
     assert_eq!(at.slot_in_line, 1, "第二格：{at:?}");
@@ -221,7 +221,7 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     ed.execute(":layout vertical").unwrap();
     ed.set_tatechuyoko(4);
     for step in 1..=5 {
-        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Char('l'));
         assert_eq!(ed.zong_position().slot_in_line, step, "一個數一格");
     }
 }
@@ -235,9 +235,10 @@ fn the_caret_and_the_grid_agree_about_a_candidate() {
     // Down the column: two rows of candidate between 夏 and 秋.
     ed.execute(":layout vertical").unwrap();
     assert_eq!(ed.zong_position().slot, 0);
-    // Down the column is `j`: the keys follow the screen, not the file.
-    ed.on_key(Key::Char('j'));
-    ed.on_key(Key::Char('j'));
+    // Warning: **往下一個字是 `l`**（2026-10-12 起出廠的行文那一套）：竪排的
+    // `hjkl` 和橫排逐鍵相同，`l` 走字、`j` 走行。版面那一套下纔是 `j`。
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('l'));
     assert_eq!(ed.cursor(), 2, "two 字 along");
     assert_eq!(
         ed.zong_position().slot,
@@ -15286,13 +15287,26 @@ fn a_count_reaches_the_operators_too() {
 
 #[test]
 fn a_count_moves_that_many_zong() {
-    let mut ed = typed("一二三四五六七八九十");
-    ed.set_layout(crate::zong::Layout::Vertical);
-    ed.set_zong_length(32);
-    type_keys(&mut ed, "gg");
-    let before = ed.cursor();
-    type_keys(&mut ed, "5j");
-    assert_eq!(ed.cursor() - before, 5, "vertical hjkl dropped the count");
+    // 兩套鍵位各問各的那個「走字」鍵：行文那一套是 `l`，版面那一套是 `j`
+    // （2026-10-12）。驗的是數目到不到得了竪排那幾支，不是哪個字母。
+    for (way, key) in [
+        (yumete_cjk::VerticalKeys::Logical, '5'),
+        (yumete_cjk::VerticalKeys::Visual, '5'),
+    ] {
+        let walk = match way {
+            yumete_cjk::VerticalKeys::Logical => "5l",
+            yumete_cjk::VerticalKeys::Visual => "5j",
+        };
+        let _ = key;
+        let mut ed = typed("一二三四五六七八九十");
+        ed.set_layout(crate::zong::Layout::Vertical);
+        ed.set_vertical_keys(way);
+        ed.set_zong_length(32);
+        type_keys(&mut ed, "gg");
+        let before = ed.cursor();
+        type_keys(&mut ed, walk);
+        assert_eq!(ed.cursor() - before, 5, "{way:?}：vertical hjkl dropped the count");
+    }
 }
 
 #[test]
@@ -18365,6 +18379,10 @@ fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
 
     let mut ed = typed(text);
     ed.set_layout(crate::zong::Layout::Vertical);
+    // **這一條講的就是「跟着 `hjkl` 轉」**，所以釘在版面那一套上（2026-10-12
+    // 起那是要撥的，出廠的行文那一套下 `gh` 照舊是行首——`gh`「行首」這件事
+    // 本來就不分方向）。
+    ed.set_vertical_keys(yumete_cjk::VerticalKeys::Visual);
     press(&mut ed, "ggjj");
     press(&mut ed, "gj");
     assert_eq!(at(&ed), (0, 15), "down the 縱 to the end of the line");
@@ -21834,13 +21852,15 @@ fn every_selection_remembers_its_own_goal_slot_in_vertical() {
     };
 
     // 跨到下一縱：中間那一縱只有三個字，第五格到不了。
-    press(&mut ed, "h");
+    // Warning: **換縱的鍵 2026-10-12 換了**：出廠的行文那一套下是 `j`（下一行），
+    // `h` 成了「上一個字」。驗的是目標格每段各記一份，和哪個字母無關。
+    press(&mut ed, "j");
     let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
     at.sort();
     assert_eq!(ed.sel.len(), 2, "兩段還在：{at:?}");
 
     // Warning: 再跨一縱：各自回到自己原來那一格。
-    press(&mut ed, "h");
+    press(&mut ed, "j");
     let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
     at.sort();
     let slots: Vec<usize> = at.iter().map(|&a| slot(&ed, a)).collect();
@@ -25571,23 +25591,36 @@ fn which_wrap_says_which_keys_step_across_a_line_end() {
 /// 那一側早就修好的那一條（「竖排的时候按 JK，无法跨行」），在 vim 那一側還活着。
 #[test]
 fn j_walks_out_of_a_paragraph_in_vertical_under_both_keymaps() {
-    let after = |vim: bool, presses: usize| -> usize {
+    // Warning: **問的是「走字那個鍵」，不是字母 `j`**（2026-10-12）。出廠的行文
+    // 那一套下走字的是 `l`，版面那一套下纔是 `j`——規矩是同一條，鍵名換了。
+    let after = |vim: bool, way: yumete_cjk::VerticalKeys, presses: usize| -> usize {
         let mut ed = typed("那年冬天。\n雪下得早。");
         ed.set_key_preset(match vim {
             true => yumete_cjk::KeyPreset::Vim,
             false => yumete_cjk::KeyPreset::Helix,
         });
         ed.set_layout(yumete_cjk::Layout::Vertical);
+        ed.set_vertical_keys(way);
         ed.execute("goto 1").unwrap();
+        let walk = match way {
+            yumete_cjk::VerticalKeys::Logical => 'l',
+            yumete_cjk::VerticalKeys::Visual => 'j',
+        };
         for _ in 0..presses {
-            ed.on_key(Key::Char('j'));
+            ed.on_key(Key::Char(walk));
         }
         ed.cursor()
     };
     // 第一段五個字（下標 0–4），下標 5 是換行，6 起是第二段。
-    for vim in [false, true] {
-        assert_eq!(after(vim, 4), 4, "vim={vim}：走到段尾那個字");
-        assert!(after(vim, 6) >= 6, "vim={vim}：走得出去，拿到 {}", after(vim, 6));
+    for way in [yumete_cjk::VerticalKeys::Logical, yumete_cjk::VerticalKeys::Visual] {
+        for vim in [false, true] {
+            assert_eq!(after(vim, way, 4), 4, "vim={vim} {way:?}：走到段尾那個字");
+            assert!(
+                after(vim, way, 6) >= 6,
+                "vim={vim} {way:?}：走得出去，拿到 {}",
+                after(vim, way, 6)
+            );
+        }
     }
 }
 
@@ -25679,4 +25712,197 @@ fn a_half_page_that_cannot_move_does_not_pin_the_page() {
     ed.on_key(Key::Ctrl('u'));
     assert_eq!(ed.cursor_line(), 0, "已經在第一行");
     assert!(!ed.aimed(), "没挪就不釘");
+}
+
+/// **竪排的 `hjkl` 跟行文走，和橫排逐鍵相同**（2026-10-12 定，出廠）。
+///
+/// 從前竪排把四個鍵轉了九十度——`h` 往左 ＝ 下一行、`j` 往下 ＝ 下一個字。那一套
+/// 的代價量得出來：`3h` 在橫排是三個字、在竪排是三行，`3j` 反過來。**同一串按鍵
+/// 在兩種排版下量的不是同一個單位**，於是數目、操作符、巨集、`[keys.normal]` 裏
+/// 寫的那幾行、手冊上那張動作表，換一次排版全部改了意思。
+fn walked(layout: crate::zong::Layout, way: yumete_cjk::VerticalKeys, keys: &str) -> (usize, usize) {
+    let mut ed = typed("第一行天地玄黃宇宙
+第二行天地玄黃宇宙
+第三行天地玄黃宇宙
+第四行天地玄黃宇宙
+");
+    ed.set_layout(layout);
+    ed.set_vertical_keys(way);
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    for key in keys.chars() {
+        ed.on_key(Key::Char(key));
+    }
+    let rope = ed.current_buffer().rope();
+    let line = rope.char_to_line(ed.cursor());
+    (line, ed.cursor() - rope.line_to_char(line))
+}
+
+#[test]
+fn vertical_hjkl_say_the_same_thing_as_horizontal_by_default() {
+    use crate::zong::Layout;
+    use yumete_cjk::VerticalKeys::Logical;
+    for keys in ["ll", "llh", "lll l", "llj", "lljk", "ll3j", "3lj", "ll3h"] {
+        let keys: String = keys.chars().filter(|c| !c.is_whitespace()).collect();
+        assert_eq!(
+            walked(Layout::Vertical, Logical, &keys),
+            walked(Layout::Horizontal, Logical, &keys),
+            "`{keys}`：竪排和橫排說的不是同一句話"
+        );
+    }
+}
+
+/// 視覺那一套照舊——四個鍵指哪就走哪，等於把橫排那一套順時針轉九十度。
+#[test]
+fn the_visual_setting_turns_the_four_keys_ninety_degrees() {
+    use crate::zong::Layout::Vertical;
+    use yumete_cjk::VerticalKeys::{Logical, Visual};
+    // 竪排視覺下 `3h` 走三**行**，而行文那一套下 `3j` 纔走三行。
+    assert_eq!(walked(Vertical, Visual, "3h"), walked(Vertical, Logical, "3j"));
+    // 反過來：視覺的 `3j` ＝ 行文的 `3l`，三個**字**。
+    assert_eq!(walked(Vertical, Visual, "3j"), walked(Vertical, Logical, "3l"));
+    // 而且兩套真的不同——上面兩條若是恆等式就什麼都沒驗到。
+    assert_ne!(walked(Vertical, Visual, "3h"), walked(Vertical, Logical, "3h"));
+}
+
+/// **方向鍵永遠視覺，不跟這個開關**（2026-10-12 定）。
+///
+/// 三家參考都按名字分家：Emacs 的 `C-f` 永遠邏輯而 `→` 看方向，CSS 規範裏
+/// `forward`/`backward` 是邏輯而 `left`/`right` 是視覺。一個箭頭是方向的圖。
+#[test]
+fn the_arrow_keys_point_where_they_point_in_either_setting() {
+    use crate::zong::Layout::Vertical;
+    use yumete_cjk::VerticalKeys::{Logical, Visual};
+    let arrow = |way, key| {
+        let mut ed = typed("第一行天地玄黃宇宙
+第二行天地玄黃宇宙
+第三行天地玄黃宇宙
+");
+        ed.set_layout(Vertical);
+        ed.set_vertical_keys(way);
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        // Warning: **起手式也得是方向鍵**：`l` 在兩個模式下說的不是同一句話，
+        // 拿它開頭，兩邊的目標欄就從不同的地方出發，驗到的是起手式不是箭頭。
+        ed.on_key(Key::Down);
+        ed.on_key(key);
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    for key in [Key::Left, Key::Right, Key::Up, Key::Down] {
+        assert_eq!(arrow(Logical, key), arrow(Visual, key), "{key:?}");
+    }
+    // 竪排下 `←` 走的是下一**行**（行往左排），`↓` 走的是下一個**字**。
+    assert_eq!(arrow(Logical, Key::Left).0, 1, "← 到了第二行");
+    assert_eq!(arrow(Logical, Key::Down), (0, 2), "↓ 再走一個字");
+    assert_eq!(arrow(Logical, Key::Up), (0, 0), "↑ 走回去");
+}
+
+/// **只換使用者親手敲的鍵**，同 vim 的 `NV_RL`（`normal.c:874`：「not when the
+/// result of a mapping or `x` translated to `dl`」）。
+///
+/// `[keys.normal]` 裏寫 `"Q" = "l"` 的人說的是「下一個字」。視覺那一套下若連展開
+/// 出來的 `l` 也轉，它就成了「上一行」——而寫那一行的人看不見這一層。
+#[test]
+fn an_alias_expansion_is_not_turned_with_the_typed_keys() {
+    use crate::zong::Layout::Vertical;
+    use yumete_cjk::VerticalKeys::Logical;
+    let mut aliased = std::collections::HashMap::new();
+    aliased.insert("Q".to_string(), "l".to_string());
+    let go = |alias: bool| {
+        let mut ed = typed("第一行天地玄黃宇宙
+第二行天地玄黃宇宙
+");
+        ed.set_layout(Vertical);
+        ed.set_vertical_keys(Logical);
+        if alias {
+            ed.set_key_aliases(aliased.clone());
+        }
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char(if alias { 'Q' } else { 'l' }));
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    assert_eq!(go(true), go(false), "`Q` 展開成 `l`，走的該和 `l` 一樣");
+}
+
+/// **逐鍵把關：竪排出廠那一套，每一個動作都該和橫排說同一句話**（2026-10-12
+/// 作者要的：「其他键也有影响，比如 gj gk 这种，还有 J，你帮我都把关一下」）。
+///
+/// 一頁的大小兩邊撥成一樣（`set_page`），於是連翻頁那一族都比得了——不然竪排一
+/// 頁幾縱和橫排一頁幾行本來就不同，差出來的是螢幕不是鍵。
+///
+/// Warning: **這一條是張網，不是一條規矩。** 往後誰再給哪個鍵加一條「竪排下特別
+/// 處理」，它當場紅。
+#[test]
+fn every_motion_lands_in_the_same_place_in_either_layout() {
+    use crate::zong::Layout;
+    let land = |layout: Layout, preset: yumete_cjk::KeyPreset, keys: &str| -> (usize, usize) {
+        // Warning: **每一段都要短過兩邊的折行寬度**。`j` 走的是**畫出來的**那一
+        // 行（橫排）／那一縱（竪排），`gj` 纔是檔案的行——helix 的分法，兩種排
+        // 版逐鍵相同。段落一旦折了，兩邊折的寬度不同，差出來的是折行不是鍵。
+        let text: String = (1..=60).map(|n| format!("第{n}行天地玄黃。\n")).collect();
+        let mut ed = typed(&text);
+        ed.set_key_preset(preset);
+        ed.set_layout(layout);
+        // 兩邊一樣大，翻頁那一族纔比得了。
+        ed.set_page(12, 12);
+        ed.set_zong_length(40);
+        type_keys(&mut ed, "20G");
+        // 從中段、行中出發：貼着邊的時候「走不動」和「走對了」長得一樣。
+        type_keys(&mut ed, "lll");
+        type_keys(&mut ed, keys);
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    let every = [
+        "h", "l", "j", "k", "3h", "3l", "3j", "3k",
+        "w", "b", "e", "W", "B", "E",
+        "0", "$", "^",
+        "gh", "gl", "gj", "gk", "gs", "gg", "ge",
+        "{", "}", "(", ")", "H", "L",
+        "+", "-", "J", "K",
+        "f天", "t天", "F天", "T天",
+    ];
+    for preset in [yumete_cjk::KeyPreset::Helix, yumete_cjk::KeyPreset::Vim] {
+        for keys in every {
+            assert_eq!(
+                land(Layout::Vertical, preset, keys),
+                land(Layout::Horizontal, preset, keys),
+                "{preset:?} `{keys}`：竪排和橫排落在不同的地方"
+            );
+        }
+    }
+}
+
+
+/// **`j` 走畫出來的那一行，`gj` 走檔案的那一行——兩種排版同一條規矩**。
+///
+/// 這是 helix 的分法，而竪排的「畫出來的那一行」就是一縱：一段折成三縱，`j` 走
+/// 一縱，`gj` 直接到下一段。2026-10-12 逐鍵把關的時候差點把它當成不一致——橫排
+/// 那邊沒折、竪排那邊折了，看起來像兩個鍵說了兩句話，其實是折行寬度不同。
+#[test]
+fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
+    use crate::zong::Layout;
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        rope.char_to_line(ed.cursor())
+    };
+    // 一段二十四個字，折成每行／每縱八個：三行三縱。
+    let text = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸子丑寅卯\n天地玄黃\n";
+    for layout in [Layout::Horizontal, Layout::Vertical] {
+        let mut ed = typed(text);
+        ed.set_layout(layout);
+        ed.set_wrap_width(16); // 八個漢字
+        ed.set_zong_length(8);
+        type_keys(&mut ed, "gg");
+        type_keys(&mut ed, "j");
+        assert_eq!(at(&ed), 0, "{layout:?}：`j` 還在這一段裏，走的是畫出來的那一行");
+        type_keys(&mut ed, "gj");
+        assert_eq!(at(&ed), 1, "{layout:?}：`gj` 是檔案的下一行");
+    }
 }

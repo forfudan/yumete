@@ -238,6 +238,9 @@ pub enum Command {
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
+    /// `:vertical-keys [logical|visual]` — 竪排時 `hjkl` 走行文還是走版面。
+    /// `None` 是互換。
+    SetVerticalKeys(Option<yumete_cjk::VerticalKeys>),
     /// `:yume-chaifen [on|off]` — the 拆分 annotation beside candidates
     /// (Feature #66). `None` is the bare word, which toggles.
     SetChaifen(Option<bool>),
@@ -2253,6 +2256,20 @@ const LANGUAGES: &[Word] = &[
     },
 ];
 
+/// What `:vertical-keys` may be given.
+const VERTICAL_KEY_WAYS: &[Word] = &[
+    Word {
+        name: "logical",
+        help: "cmd.vertical-keys.logical",
+        needs: &[],
+    },
+    Word {
+        name: "visual",
+        help: "cmd.vertical-keys.visual",
+        needs: &[],
+    },
+];
+
 const LAYOUTS: &[Word] = &[
     Word {
         name: "vertical",
@@ -3171,6 +3188,48 @@ pub const COMMANDS: &[Entry] = &[
                         value: word.to_string(),
                     }),
             }
+        }),
+    },
+    // **`:vertical` 和 `:horizontal` 各自一條**（2026-10-12 定）。
+    //
+    // 起因是 `:vertical-keys` 加進來之後 `vertical` 成了它的唯一前綴——一個想把
+    // 頁轉過來而打 `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁沒轉而
+    // 手下四個鍵全變了意思。原話：「:layout horizontal 改成 :horizontal，
+    // :layout vertical 改成 :vertical，對吧？那我同意。」
+    //
+    // 順帶比從前好：`:vertical` 從前深搜出三個候選，而第一個是
+    // `view-wrap-vertical`（名字裏有這個詞的真命令排前面，見 `complete` 那一段的
+    // 註釋）——打這個詞的人九成要的是轉頁，而那一條排第二。
+    Entry {
+        name: "vertical",
+        aliases: &[],
+        help: "cmd.commands.vertical",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SetLayout(Some(Layout::Vertical)))),
+    },
+    Entry {
+        name: "horizontal",
+        aliases: &[],
+        help: "cmd.commands.horizontal",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SetLayout(Some(Layout::Horizontal)))),
+    },
+    Entry {
+        name: "vertical-keys",
+        aliases: &["vk"],
+        help: "cmd.commands.vertical-keys",
+        needs: &[],
+        params: &[Param::WordsOr { of: VERTICAL_KEY_WAYS, default: None, or: "<logical｜visual>" }],
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::SetVerticalKeys(None)),
+            Some(word) => yumete_cjk::VerticalKeys::parse(word)
+                .map(|w| Command::SetVerticalKeys(Some(w)))
+                .ok_or_else(|| CommandError::InvalidArgument {
+                    command: "vertical-keys",
+                    value: word.to_string(),
+                }),
         }),
     },
     Entry {
@@ -5999,8 +6058,17 @@ mod tests {
             parse(":layout h"),
             Ok(Command::SetLayout(Some(Layout::Horizontal)))
         );
-        // `:vertical` was the value wearing the setting's name; it is gone.
-        assert_eq!(parse(":vertical"), Err(CommandError::Unknown("vertical".into())));
+        // **`:vertical` 和 `:horizontal` 回來了**（2026-10-12），不過是作為兩條
+        // 自己的命令，不是 `:layout` 的值：`:vertical-keys` 加進來之後
+        // `vertical` 成了它的唯一前綴，一個想轉頁的人會靜靜地撥到 `hjkl` 那個
+        // 設置上去。
+        assert_eq!(parse(":vertical"), Ok(Command::SetLayout(Some(Layout::Vertical))));
+        assert_eq!(
+            parse(":horizontal"),
+            Ok(Command::SetLayout(Some(Layout::Horizontal)))
+        );
+        // 而 `:vertical-keys` 是另一條，一個字都沒被搶走。
+        assert_eq!(parse(":vertical-keys"), Ok(Command::SetVerticalKeys(None)));
         assert_eq!(
             parse(":layout sideways"),
             Err(CommandError::InvalidArgument {
@@ -6601,12 +6669,10 @@ mod tests {
         // **not** the two families they came from, which is what a fold would
         // have made of them.
         assert_eq!(found("punct"), ["check-punct", "view-punct"]);
-        // A word that is still a word — a parameter — is reached the way it
-        // always was.
-        assert_eq!(
-            found("vert"),
-            ["view-wrap-vertical", "layout vertical", "help vertical"]
-        );
+        // **`vert` 現在是兩條真命令的前綴**（2026-10-12）。從前它一條都不是，
+        // 於是深搜挖出三個參數；現在 `:vertical` 和 `:vertical-keys` 都在頂層，
+        // 答的就是它們兩個——而深搜本來就是「頂層找不着纔往下挖」。
+        assert_eq!(found("vert"), ["vertical", "vertical-keys"]);
         // …and a prefix that names something at the top level is answered
         // about that, with nothing dredged up from below it.
         assert_eq!(found("diff"), ["diff"]);
@@ -6946,16 +7012,12 @@ mod tests {
 
         // The case that started it. The whole path is what Tab writes, so the
         // line ends up sayable rather than clever.
-        // `:help` has a 竪排 topic too, and a topic is by construction named
-        // after the thing it is about — so it comes second. Doing beats
-        // reading about doing.
-        // `:view-wrap-vertical` 是一條真命令（2026-10-09 起），名字裏就有這個詞，
-        // 所以它排在參數那兩條前面——打 `vert` 的人多半是要那一條。
-        assert_eq!(
-            written("vert"),
-            ["view-wrap-vertical", "layout vertical", "help vertical"]
-        );
-        assert_eq!(written("horiz"), ["layout horizontal"]);
+        //
+        // **`vert` 2026-10-12 起不再往下挖**：`:vertical` 和 `:vertical-keys`
+        // 都是頂層的真命令了，而深搜的前提是「頂層一條都找不着」。`horiz` 還是
+        // 往下挖的那一種——`:horizontal` 是頂層一條，所以它答的是那一條。
+        assert_eq!(written("vert"), ["vertical", "vertical-keys"]);
+        assert_eq!(written("horiz"), ["horizontal"]);
 
         // And the fallback reaches past the first level: a scheme's name is
         // two words below `:yume`.
