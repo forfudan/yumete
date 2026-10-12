@@ -542,7 +542,7 @@ pub fn draw(
     config: &Config,
     area: Rect,
     bottom: u16,
-    caret: (u16, u16),
+    caret: crate::chrome::Spot,
     vertical: bool,
     panel: &Panel,
 ) -> Option<Rect> {
@@ -925,9 +925,16 @@ pub fn draw(
     // Warning: **站在光標底下那一種只管橫排**。竦書的「下一行」在旁邊不在底下，
     // 而補全那張單子只在代碼檔裏出來（代碼檔不竦排），所以竦的那一邊回老規矩。
     let stand = match (&panel.stand, vertical) {
-        (Stand::Band, false) => crate::chrome::Anchor::Band { at: caret, bottom },
-        (Stand::UnderCaret, false) => crate::chrome::Anchor::UnderCaret { at: caret, bottom },
-        _ => crate::chrome::Anchor::Caret { at: caret, bottom, vertical },
+        (Stand::Band, false) => crate::chrome::Anchor::Band { at: caret.at, bottom },
+        (Stand::UnderCaret, false) => {
+            crate::chrome::Anchor::UnderCaret { at: caret.at, bottom }
+        }
+        _ => crate::chrome::Anchor::Caret {
+            at: caret.at,
+            keep: caret.keep,
+            bottom,
+            vertical,
+        },
     };
     let rect = crate::chrome::place(area, (width, height), stand)?;
     crate::chrome::draw(frame, rect, &crate::chrome::Ring {
@@ -1227,7 +1234,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
-                got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                got = draw(frame, &config, area, h, crate::chrome::Spot::cell((w - 2, 0)), true, &Panel {
                     stand: Stand::Corner,
                     accent: None,
                     pages: false,
@@ -1307,7 +1314,7 @@ mod tests {
                 let area = Rect::new(0, 0, w, h);
                 // `bottom` 壓到六行：放不下六條，這一支於是分欄——要驗的正是
                 // 分欄之後的那一下。
-                got = draw(frame, &config, area, 6, (2, 0), false, &Panel {
+                got = draw(frame, &config, area, 6, crate::chrome::Spot::cell((2, 0)), false, &Panel {
                     stand: Stand::Corner,
                     accent: None,
                     pages: false,
@@ -1384,7 +1391,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
-                got = draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                got = draw(frame, &config, area, h, crate::chrome::Spot::cell((w - 2, 0)), true, &Panel {
                     stand: Stand::Corner,
                     accent: None,
                     // 翻得動、而且名字很長：兩道底綫都站得最高的時候。
@@ -1423,7 +1430,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = Rect::new(0, 0, w, h);
-                draw(frame, &config, area, h, (w - 2, 0), true, &Panel {
+                draw(frame, &config, area, h, crate::chrome::Spot::cell((w - 2, 0)), true, &Panel {
                     stand: Stand::Corner,
                     accent: None,
                     pages: false,
@@ -1527,7 +1534,7 @@ mod tests {
                 let body = (0..keys)
                     .map(|n| (format!("k{n}"), format!("第{n}個動作")))
                     .collect::<Vec<_>>();
-                got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, (0, 0), false, &Panel {
+                got = draw(frame, &config, Rect::new(0, 0, w, h), h - 1, crate::chrome::Spot::cell((0, 0)), false, &Panel {
                     stand: Stand::Corner,
                     accent: None,
                     pages: false,
@@ -1598,7 +1605,7 @@ mod tests {
         let mut got = None;
         terminal
             .draw(|frame| {
-                got = draw(frame, &config, Rect::new(0, 0, 80, 24), 23, (0, 0), false, &Panel {
+                got = draw(frame, &config, Rect::new(0, 0, 80, 24), 23, crate::chrome::Spot::cell((0, 0)), false, &Panel {
                     stand: Stand::Corner,
                     accent: Some(span),
                     pages: false,
@@ -1641,7 +1648,7 @@ mod tests {
         let mut got = None;
         terminal
             .draw(|frame| {
-                got = draw(frame, &config, Rect::new(0, 0, 80, 24), 23, (0, 0), false, &Panel {
+                got = draw(frame, &config, Rect::new(0, 0, 80, 24), 23, crate::chrome::Spot::cell((0, 0)), false, &Panel {
                     stand: Stand::Corner,
                     accent: None,
                     pages: false,

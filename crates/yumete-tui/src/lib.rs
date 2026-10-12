@@ -4742,10 +4742,17 @@ fn draw(
     // It used to be four unconditional calls, later ones painting over
     // earlier ones — and the comment here claimed the opposite of what the
     // code did (the note was drawn *after* the which-key, so the note won).
+    // **要讓開的是那個詞，不是光標那一格**（2026-10-12 報的）。一個漢字就佔兩格，
+    // 而百科那一扇講的那個詞條常常好幾個字——核心按分詞量出「光標之前幾格、從光標
+    // 起算幾格」，橫排往左右攤，竪排往上下攤（見 `chrome::Spot`）。
+    let spot = crate::chrome::Spot {
+        at: (cursor_x, cursor_y),
+        keep: editor.word_cells_here(),
+    };
     let taken = !panels.is_empty() || picker_caret.is_some();
     let keys_panel = match taken {
         true => None,
-        false => draw_which_key(frame, editor, config, text_area, footer.y, (cursor_x, cursor_y)),
+        false => draw_which_key(frame, editor, config, text_area, footer.y, spot),
     };
     // The footnote, the comment, or the 百科 entry the cursor is standing on
     // (#294, #287) — the quietest of the four, and the first to give way.
@@ -4759,7 +4766,7 @@ fn draw(
     // answers it.
     let note_panel = match taken || editor.pending_menu().is_some() {
         true => None,
-        false => draw_note(frame, editor, config, text_area, footer.y, (cursor_x, cursor_y)),
+        false => draw_note(frame, editor, config, text_area, footer.y, spot),
     };
     panels.extend(keys_panel);
     panels.extend(note_panel);
@@ -4786,7 +4793,7 @@ fn draw(
         config,
         ime,
         text_area,
-        (cursor_x, cursor_y),
+        spot,
         &panels,
         candidate_panel,
     );
@@ -5747,7 +5754,7 @@ fn draw_hud(
     config: &Config,
     ime: &ImeSession,
     page: Rect,
-    caret: (u16, u16),
+    caret: crate::chrome::Spot,
     panels: &[Rect],
     candidate_panel: bool,
 ) {
@@ -5760,7 +5767,7 @@ fn draw_hud(
         return;
     }
     let ink = crate::theme::Palette::of(config);
-    let (caret_x, caret_y) = caret;
+    let (caret_x, caret_y) = caret.at;
     if how == Hud::Full {
         draw_hud_panel(
             frame,
@@ -5947,7 +5954,7 @@ fn draw_hud_panel(
     config: &Config,
     ink: crate::theme::Palette,
     page: Rect,
-    caret: (u16, u16),
+    caret: crate::chrome::Spot,
     typed: &str,
     panels: &[Rect],
     candidate_panel: bool,
@@ -5955,7 +5962,7 @@ fn draw_hud_panel(
     if candidate_panel {
         return;
     }
-    let (caret_x, caret_y) = caret;
+    let (caret_x, caret_y) = caret.at;
     let width = yumete_cjk::str_width(typed) as u16 + 2;
     if width > page.width || page.height < 3 {
         return;
@@ -6026,7 +6033,7 @@ fn draw_which_key(
     config: &Config,
     area: Rect,
     bottom: u16,
-    caret: (u16, u16),
+    caret: crate::chrome::Spot,
 ) -> Option<Rect> {
     let (title, keys) = editor.pending_menu()?;
     let vertical = editor.layout() == WritingLayout::Vertical;
@@ -6168,7 +6175,7 @@ fn draw_note(
     config: &Config,
     area: Rect,
     bottom: u16,
-    caret: (u16, u16),
+    caret: crate::chrome::Spot,
 ) -> Option<Rect> {
     let vertical = editor.layout() == WritingLayout::Vertical;
     // **What the language server said about this line** (#53/#54,
@@ -22296,7 +22303,7 @@ fn squeezed(text: &str) -> String {
         crate::theme::settle(&config, None);
         terminal
             .draw(|frame| {
-                panel::draw(frame, &config, area, 28, (10, 2), false, &panel::Panel {
+                panel::draw(frame, &config, area, 28, crate::chrome::Spot::cell((10, 2)), false, &panel::Panel {
             stand: panel::Stand::Corner,
             accent: None,
             pages: false,

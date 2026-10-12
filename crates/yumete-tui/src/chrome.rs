@@ -168,6 +168,24 @@ pub enum Use {
     Scan,
 }
 
+/// **光標那一點，連同要讓開的那一段**（2026-10-12）。
+///
+/// `keep` 是 `(光標之前幾格, 從光標起算幾格)`——浮動的面板要讓開的是**那個詞**，
+/// 不是光標站的那一格：一個漢字就佔兩格，而面板在講的那個詞條常常好幾個字。
+/// 格數而不是位置，所以橫竪兩種版面共用一個值，各自往自己行文的方向攤開。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Spot {
+    pub at: (u16, u16),
+    pub keep: (u16, u16),
+}
+
+impl Spot {
+    /// 只有一格要讓開的那一種——沒有詞可問的地方（測試、沒有正文的面板）。
+    pub fn cell(at: (u16, u16)) -> Spot {
+        Spot { at, keep: (0, 1) }
+    }
+}
+
 pub enum Anchor {
     /// **通欄，貼着某幾行**——行內 diff 那一條帶子（2026-10-11）。
     ///
@@ -198,7 +216,11 @@ pub enum Anchor {
     ///
     /// `bottom` is the row the floats stack up from — the top of the footer;
     /// `vertical` picks which way [`room`] is turned, and which side is fixed.
-    Caret { at: (u16, u16), bottom: u16, vertical: bool },
+    ///
+    /// `keep` 是**要讓開的那一段**，不是光標那一格：`(光標之前幾格, 從光標起算
+    /// 幾格)`。橫排往左右量，竪排往上下量。從前這裏只有一個格子，於是一個漢字
+    /// 被蓋掉右半邊，而一個好幾個字的詞條被蓋掉大半——2026-10-12 報的。
+    Caret { at: (u16, u16), keep: (u16, u16), bottom: u16, vertical: bool },
     /// **貼着光標，畫在它下面那一行**（2026-10-08 定）。
     ///
     /// 補全那張單子用的是這一個，而不是「光標不在的那個角」。原話：「this
@@ -257,7 +279,7 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             let far = area.x + area.width.saturating_sub(width);
             Some(Rect::new(at.0.min(far), y, width, height))
         }
-        Anchor::Caret { at, bottom, vertical } => {
+        Anchor::Caret { at, keep, bottom, vertical } => {
             // Warning: **The policy caps belong to the caller, this only asks
             // whether it physically fits** (2026-09-18). A 竪書 note is two
             // thirds of the page *tall* by design — half-page refusal here
@@ -279,8 +301,18 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             // the start of a long line is not under a box that stands at the
             // right of the page, and a float that moved for it would be
             // moving for nothing.
+            //
+            // Warning: **問的是整個詞，不是光標那一格**（2026-10-12 報的）。一個
+            // 漢字佔兩格，而面板說的那個詞條常常好幾個字——只問一格的話，箱子
+            // 從那一格的右邊起畫，蓋掉的正是它在講的那個詞。`keep` 把那一段攤
+            // 開：橫排往左右，竪排往上下，因為讓開的方向就是行文的方向。
+            let (back, on) = keep;
+            let (from, to) = match vertical {
+                false => ((at.0.saturating_sub(back), at.1), (at.0 + on, at.1 + 1)),
+                true => ((at.0, at.1.saturating_sub(back)), (at.0 + 2, at.1 + on)),
+            };
             let covers = |(x, y): &(u16, u16)| {
-                at.0 >= *x && at.0 < x + width && at.1 >= *y && at.1 < y + height
+                from.0 < x + width && to.0 > *x && from.1 < y + height && to.1 > *y
             };
             // All four covered means the box is wider than half the page and
             // taller than half of it too. Draw it at the first corner anyway:
@@ -306,6 +338,37 @@ pub fn panel_ground(ink: crate::theme::Palette) -> ratatui::style::Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **浮動的窗讓開整個詞，不只是光標那一格**（2026-10-12 報的）。
+    ///
+    /// 原話：「the char under the cursor is a full-width char, so the panel still
+    /// cover half of it … the word to show wiki may be several characters, so the
+    /// floating panel can still cover the word」。
+    #[test]
+    fn a_float_stands_clear_of_the_whole_word() {
+        let page = Rect::new(0, 0, 80, 24);
+        let bottom = 22;
+        let put = |at: (u16, u16), keep: (u16, u16), want: (u16, u16)| {
+            place(page, want, Anchor::Caret { at, keep, bottom, vertical: false }).expect("放得下")
+        };
+        let hits = |b: Rect, from: u16, to: u16, y: u16| {
+            b.y <= y && y < b.y + b.height && b.x < to && b.x + b.width > from
+        };
+
+        // 「文高曲」在一行的末尾，光標停在中間那個字上：詞佔 46..52，而光標只在 48。
+        // 箱子站右邊、站那一行所在的那一半，從前只問 48 一格，於是從 49 起畫，蓋掉
+        // 「曲」——現在四個角都讓開 46..52。
+        let wide = put((48, 12), (2, 4), (30, 8));
+        assert!(!hits(wide, 46, 52, 12), "蓋住了詞：{wide:?}");
+
+        // 一個漢字自己也是兩格。箱子寬到只剩一條縫的時候，那兩格都得讓開。
+        let one = put((40, 12), (0, 2), (40, 8));
+        assert!(!hits(one, 40, 42, 12), "蓋住了光標底下那個字：{one:?}");
+
+        // 讓不開就照舊畫在第一個角上——蓋住總比一格不畫好，同這個檔裏別處的規矩。
+        let huge = put((40, 12), (0, 2), (80, 20));
+        assert_eq!((huge.width, huge.height), (80, 20), "放不下也要畫出來");
+    }
 
     /// **帶子只有上下兩個落點，先下，光標在裏頭纔翻上**（2026-10-11）。
     #[test]
@@ -352,7 +415,7 @@ mod tests {
         let page = Rect::new(0, 0, 80, 24);
         let bottom = 22;
         let at = |want, caret, vertical| {
-            let it = place(page, want, Anchor::Caret { at: caret, bottom, vertical })
+            let it = place(page, want, Anchor::Caret { at: caret, keep: (0, 1), bottom, vertical })
                 .expect("放得下");
             (it.x, it.y)
         };

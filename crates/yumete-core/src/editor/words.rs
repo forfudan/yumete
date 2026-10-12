@@ -735,6 +735,39 @@ impl Editor {
     /// 反倒被滤掉。塗出來的正好是反的，看着像 verbatim 錯了位。
     /// 現在兩件事都問 [`yumete_cjk::is_segmentable`]：能上色的必須整段都是它，
     /// 邊界則是「不是它」——一段拉丁文對眼睛來說本來就是一道界。
+    /// **光標底下那個詞佔幾格**，分成「光標之前」與「從光標起算」兩段。
+    ///
+    /// 浮動的面板靠它讓開**整個詞**，而不只是光標站的那一格（2026-10-12 報的：
+    /// 「the panel still cover half of it … the word to show wiki may be several
+    /// characters」）。一個漢字本來就是兩格，而詞條常常好幾個字。
+    ///
+    /// 回的是格數不是位置，所以兩種版面共用一句：橫排往左右讓，竪排往上下讓。
+    /// 光標不在任何一個詞上就回它自己那一個字的寬度。
+    pub fn word_cells_here(&self) -> (u16, u16) {
+        let rope = self.current_buffer().rope();
+        let line = self.cursor_line();
+        let chars = crate::zong::line_chars(rope, line);
+        let at = self.sel.head().saturating_sub(rope.line_to_char(line));
+        let own = chars
+            .get(at)
+            .map_or(1, |&c| yumete_cjk::char_width(c))
+            .max(1) as u16;
+        let Some(&(a, b)) = self
+            .segment_line(line)
+            .iter()
+            .find(|&&(a, b)| at >= a && at < b)
+        else {
+            return (0, own);
+        };
+        let cells = |from: usize, to: usize| -> u16 {
+            chars[from.min(chars.len())..to.min(chars.len())]
+                .iter()
+                .map(|&c| yumete_cjk::char_width(c).max(1) as u16)
+                .sum()
+        };
+        (cells(a, at), cells(at, b).max(own))
+    }
+
     pub fn segment_line(&self, line: usize) -> Vec<(usize, usize)> {
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
