@@ -263,14 +263,23 @@ jobs:
           base="https://github.com/${FROM}/releases/download/${TAG}"
           get() { curl -fsSL --retry 3 --retry-delay 2 -o "$2" "${base}/$1"; }
           get lingming_essential.ytab "${dir}/schemes/lingming_essential.ytab" || true
+          get xingchen_essential.ytab "${dir}/schemes/xingchen_essential.ytab" || true
           get symbols.ytab            "${dir}/data/symbols.ytab" || true
           get common_words.txt        "${dir}/data/common_words.txt" || true
           get VERSION                 "${dir}/VERSION" || true
           # A half-written file is worse than none: the loader would take a
           # truncated table and answer nonsense from it. Weigh each one and
           # throw away anything that plainly did not arrive whole.
+          # Warning: **星陳 was fetched by nobody** (2026-10-12). `build.rs` looks
+          # **only** in `YUMETE_BUILTIN_DIR` when that is set — which this job
+          # sets — so a table this step does not fetch is a table the release
+          # does not carry, however happily `build.rs` would have fetched it on
+          # a developer's machine. The asset has been on that release since
+          # 2026-10-07; this step simply never asked for it, and every release
+          # so far ships a 星陳 that cannot type.
           short=0
-          for f in schemes/lingming_essential.ytab data/symbols.ytab data/common_words.txt; do
+          for f in schemes/lingming_essential.ytab schemes/xingchen_essential.ytab \
+                   data/symbols.ytab data/common_words.txt; do
             p="${dir}/$f"
             if [[ ! -s "$p" ]] || [[ $(wc -c < "$p") -lt 10000 ]]; then
               echo "!! ${f}: missing, or too small to be it — dropped" >&2
