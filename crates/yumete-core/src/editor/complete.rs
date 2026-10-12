@@ -21,6 +21,24 @@ use super::*;
 /// are narrowing by typing anyway.
 const MOST: usize = 24;
 
+/// **A path as a wiki link spells it: `/`, on every platform** (2026-10-12).
+///
+/// Warning: **this one goes into the manuscript.** Windows spells its own paths
+/// with a backslash, and a link typed there would not resolve on the machine
+/// the next chapter is written on — while `/` resolves on both, because Windows
+/// takes it too. So the link is normalised, and the folder named beside it in
+/// the panel says the same thing.
+///
+/// Only the Windows spelling is rewritten: a backslash is a legal character in
+/// a unix filename, and a file really called `a\b.md` keeps its name.
+fn as_a_link_spells_it(path: &std::path::Path) -> String {
+    let text = path.to_string_lossy();
+    match cfg!(windows) {
+        true => text.replace('\\', "/"),
+        false => text.into_owned(),
+    }
+}
+
 /// How far back from the caret a trigger may be.
 const LOOK_BACK: usize = 96;
 
@@ -261,7 +279,7 @@ impl Editor {
                 Some(e) if Some(e) == suffix.as_deref() || e == "md" => rel.with_extension(""),
                 _ => rel.to_path_buf(),
             };
-            let shown = page.to_string_lossy().to_string();
+            let shown = as_a_link_spells_it(&page);
             // **Matched on the whole path and on the name alone**, so `雨` finds
             // 「卷二/雨夜.md」 without anybody typing the folder first.
             let name = path
@@ -271,7 +289,7 @@ impl Editor {
             let fits = typed.is_empty()
                 || shown.to_lowercase().contains(&typed.to_lowercase())
                 || name.to_lowercase().contains(&typed.to_lowercase());
-            let under = page.parent().map(|d| d.to_string_lossy().to_string());
+            let under = page.parent().map(as_a_link_spells_it);
             if !fits {
                 return;
             }

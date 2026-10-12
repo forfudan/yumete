@@ -49,6 +49,15 @@ fn tmp() -> std::path::PathBuf {
     std::fs::canonicalize(&dir).unwrap_or(dir)
 }
 
+/// 面板裏存的是一個**相對 `PathBuf`**，分隔符是哪一個由平臺決定（Windows 上是
+/// `\`）。下面那幾條斷言問的是**哪幾個檔、各幾處**，不是一個路徑怎麼拼，所以比之前
+/// 先正規化成 `/`（2026-10-12 加 Windows 那一行 CI 時）。
+///
+/// 寫進稿子的那一種另有規矩，見 `complete.rs::as_a_link_spells_it`。
+fn slashes(path: &std::path::Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
+
 #[test]
 fn drawn_runs_are_held_wholesale_and_answered_by_line() {
     let mut ed = typed("春夏\n秋冬\n");
@@ -10395,7 +10404,7 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     let files: Vec<String> = rows
         .iter()
         .filter_map(|r| match r {
-            Row::File { path, hits, .. } => Some(format!("{} {hits}", path.display())),
+            Row::File { path, hits, .. } => Some(format!("{} {hits}", slashes(path))),
             Row::Hit(_) => None,
         })
         .collect();
@@ -22281,7 +22290,7 @@ fn the_panel_follows_an_edit_and_only_rescans_the_file_that_changed() {
         .rows()
         .iter()
         .filter_map(|r| match r {
-            Row::File { path, hits, .. } => Some(format!("{} {hits}", path.display())),
+            Row::File { path, hits, .. } => Some(format!("{} {hits}", slashes(path))),
             Row::Hit(_) => None,
         })
         .collect();
