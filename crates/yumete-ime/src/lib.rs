@@ -527,11 +527,7 @@ impl ImeSession {
         // this binary was built on a machine that had it.
         // **哪個方案有出廠表就認哪個**（2026-10-07 加星陳）。從前這裏寫死
         // `== Scheme::LINGMING`，於是多嵌一張也沒人讀得到。
-        let mut builtin = false;
-        if !available {
-            available = load_builtin(&mut engine, scheme);
-            builtin = available;
-        }
+        let builtin = stand_in(&mut engine, scheme, &mut available);
         ImeSession {
             engine,
             scheme,
@@ -890,7 +886,15 @@ impl ImeSession {
         // new engine, and a preference that evaporated when you tried another
         // scheme would look like a setting that does not stick.
         let chosen = self.commit_override();
-        let (engine, available, problems) = build_engine(scheme, &self.data_dirs);
+        let (mut engine, mut available, problems) = build_engine(scheme, &self.data_dirs);
+        // Warning: **換方案也要退得到出廠表**（2026-10-12 量到的）。這一句從前只寫在
+        // `new` 裏，而這一支直接拿 `build_engine` 的答案——於是一臺沒裝宇浩的機器上
+        // 開機打得了靈明，`:yume-scheme xingchen` 卻說「碼表沒有裝」，哪怕那張星陳
+        // 的出廠表就嵌在同一個二進制裏。兩條路現在同一句。
+        self.builtin = stand_in(&mut engine, scheme, &mut available);
+        // 上一個方案若是從一個上傳的碼表載的，那個檔名不再說的是這一個。
+        self.table_file = None;
+        self.table_skipped = 0;
         self.engine = engine;
         self.scheme = scheme;
         self.available = available;
@@ -1591,6 +1595,18 @@ fn chaifen_on_disk() -> Option<PathBuf> {
 /// **這一份二進制帶不帶全息拆分表**——`:yume-where` 那一行問的。
 pub fn has_builtin_chaifen() -> bool {
     builtin::BUILTIN_CHAIFEN.is_some()
+}
+
+/// **裝不出來就退到出廠自帶的那一張**，回「用的是不是它」。
+///
+/// 開機（[`ImeSession::new`]）與換方案（[`ImeSession::set_scheme`]）走的是同一句：
+/// 從前只有前者寫着，後者就少了這條退路。
+fn stand_in(engine: &mut Engine, scheme: Scheme, available: &mut bool) -> bool {
+    if *available {
+        return false;
+    }
+    *available = load_builtin(engine, scheme);
+    *available
 }
 
 /// 這個方案有沒有一張出廠自帶的精簡碼表。
@@ -2389,6 +2405,29 @@ mod tests {
         let other = ImeSession::new(Scheme::RIYUE, vec![PathBuf::from("/no/such/dir")]);
         assert!(!other.available());
         assert_eq!(other.scheme(), Scheme::RIYUE);
+    }
+
+    /// **換方案也退得到出廠表**（2026-10-12 量到的）。
+    ///
+    /// 那句退路從前只寫在 `new` 裏，而 `set_scheme` 直接拿 `build_engine` 的答案。
+    /// 症狀：一臺沒裝宇浩的機器上開機打得了靈明，`:yume-scheme xingchen` 卻說
+    /// 「碼表沒有裝」——而那張星陳的出廠表就嵌在同一個二進制裏。拿發布包在一個空
+    /// 的 HOME 底下量到的，新舊兩個包都這麽說。
+    ///
+    /// 同上一條的規矩：嵌了什麽由建這個二進制的機器決定，所以驗的是**兩件事對不
+    /// 對得上**——說自己帶了星陳，就得切得過去並且答得出候選。
+    #[test]
+    fn switching_scheme_falls_back_to_a_built_in_table_too() {
+        let mut s = ImeSession::new(Scheme::LINGMING, vec![PathBuf::from("/no/such/dir")]);
+        if !builtin_tables().contains(&Scheme::XINGCHEN) {
+            assert!(!s.set_scheme(Scheme::XINGCHEN), "沒嵌星陳就該說不行");
+            return;
+        }
+        assert!(s.set_scheme(Scheme::XINGCHEN), "嵌了星陳就該切得過去");
+        assert_eq!(s.scheme(), Scheme::XINGCHEN);
+        assert!(s.is_builtin(), "用的是出廠那一張，說得出來");
+        s.input('a');
+        assert!(!s.page_candidates().is_empty(), "而且真答得出候選");
     }
 
 }
