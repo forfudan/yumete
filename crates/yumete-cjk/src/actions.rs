@@ -50,6 +50,51 @@ pub struct Action {
 /// 翻，中間那一段纔是這個字。
 pub const ALT: char = '\u{e000}';
 
+/// **有名字的那幾個鍵**：配置裏寫 `<tab>`，表裏存成一個 `char`。
+///
+/// Warning: **左邊那一串是「一串按鍵」**（`"dj" = …` 是 d 跟 j 兩下），所以鍵名不能
+/// 光着寫——`"tab"` 的意思是 t、a、b 三下。尖括號是 vim 的辦法，和一串按鍵永遠
+/// 不會撞（2026-10-12 定）。
+///
+/// 有自己字節的就用那個字節（Tab 是 `\t`、Enter 是 `\n`、空格就是空格），沒有的
+/// 借私用區一個碼位，同 [`ALT`]。於是一個鍵在表裏仍然是一兩個 `char`，查表那一層
+/// 一個字都不用改。
+///
+/// Warning: **`Esc` 不在這張表上。** 它是「鬆手」那一下——按鍵序列按了一半要靠它
+/// 退出來（`keys.rs` 的 `alias_held`）。綁掉它就沒有退路了。
+///
+/// `S-` 是 vim／helix／kakoune 三家共同的 Shift 寫法；字母的 Shift 本來就寫成大寫
+/// 本身，所以 `S-` 只出現在有名字的鍵前面。
+pub const NAMED: &[(&str, char)] = &[
+    ("tab", '\t'),
+    ("S-tab", '\u{e001}'),
+    ("enter", '\n'),
+    ("space", ' '),
+    ("backspace", '\u{e002}'),
+    ("delete", '\u{e003}'),
+    ("up", '\u{e004}'),
+    ("down", '\u{e005}'),
+    ("left", '\u{e006}'),
+    ("right", '\u{e007}'),
+    ("home", '\u{e008}'),
+    ("end", '\u{e009}'),
+    ("pageup", '\u{e00a}'),
+    ("pagedown", '\u{e00b}'),
+];
+
+/// `<tab>` 裏那個名字 → 它的 `char`，大小寫不計。
+pub fn named_key(name: &str) -> Option<char> {
+    NAMED
+        .iter()
+        .find(|(n, _)| n.eq_ignore_ascii_case(name))
+        .map(|&(_, c)| c)
+}
+
+/// 反過來：一個 `char` → 寫在 `:keymap` 上的那個名字。
+fn key_name(c: char) -> Option<&'static str> {
+    NAMED.iter().find(|&&(_, k)| k == c).map(|&(n, _)| n)
+}
+
 /// **把人寫的那一串翻成內部拼法**：`A-d` → [`ALT`] ＋ `d`，`C-o` → `\u{f}`。
 ///
 /// `[keys.normal]` 的左邊和預設表都走這一支。從前它不存在，於是配置裏寫
@@ -59,6 +104,27 @@ pub const ALT: char = '\u{e000}';
 /// Warning: **`C-` 只翻字母。** `C-[`、`C-]` 那幾個在舊終端上和數字鍵撞車（見
 /// `Config::language_key` 的註釋），這裏不替它們猜。
 pub fn written(spelled: &str) -> String {
+    let mut out = String::new();
+    let mut rest = spelled;
+    // **`<名字>` 先認**（2026-10-12）：認不得的原樣留着，於是一個真的 `<` 照舊是
+    // 它自己。
+    while let Some(at) = rest.find('<') {
+        let Some(shut) = rest[at..].find('>').map(|n| at + n) else { break };
+        let Some(key) = named_key(&rest[at + 1..shut]) else {
+            out.push_str(&rest[..=at]);
+            rest = &rest[at + 1..];
+            continue;
+        };
+        out.push_str(&modifiers(&rest[..at]));
+        out.push(key);
+        rest = &rest[shut + 1..];
+    }
+    out.push_str(&modifiers(rest));
+    out
+}
+
+/// `A-`／`C-` 那一層，[`written`] 的另一半。
+fn modifiers(spelled: &str) -> String {
     let mut out = String::new();
     let mut chars = spelled.chars().peekable();
     while let Some(c) = chars.next() {
@@ -95,6 +161,13 @@ pub fn spell(keys: &str) -> String {
         match c {
             ' ' => out.push_str("空格 "),
             '\u{1b}' => out.push_str("Esc"),
+            // 有名字的那幾個鍵寫回名字——`\t` 畫出來是一段空白，讀的人看不出
+            // 那是 Tab（2026-10-12）。
+            c if key_name(c).is_some() => {
+                out.push('<');
+                out.push_str(key_name(c).unwrap_or_default());
+                out.push('>');
+            }
             ALT => {
                 out.push_str("A-");
                 if let Some(next) = chars.next() {
@@ -224,12 +297,18 @@ pub const ALL: &[Action] = &[
     keys("open_here", "action.open-here", "gf"),
     keys("follow_link", "action.follow-link", "gx"),
     // ---- Files, panels, the session --------------------------------------
+    // Warning: **`空格` 那一組的鍵搬過家，這張表要跟**（2026-10-12 掃出來的）。
+    // `outline` 還寫着 ` o`——那一格 2026-10-08 讓給了 `s` 而 `o` 從此沒綁，於是
+    // `x = "outline"` 按下去一聲不吭；`dictionary` 還寫着 ` d`，而那一格 2026-09-30
+    // 讓給了診斷，於是它**打開的是另一扇窗**。`ruby` 的 ` r` 根本沒綁過，改走它
+    // 自己的命令。守着這三條的是 `keys.rs` 那一條「每個 ` x` 都要在 `SPACE_KEYS`
+    // 裏」的測試。
     keys("file_picker", "action.file-picker", " f"),
     keys("buffer_picker", "action.buffer-picker", " b"),
     keys("next_buffer", "action.next-buffer", "gn"),
     keys("prev_buffer", "action.prev-buffer", "gp"),
-    keys("outline", "action.outline", " o"),
-    keys("dictionary", "action.dictionary", " d"),
+    keys("outline", "action.outline", " s"),
+    keys("dictionary", "action.dictionary", " n"),
     keys("next_region", "action.next-region", " s"),
     keys("search_panel", "action.search-panel", " /"),
     keys("command_menu", "action.command-menu", "?"),
@@ -238,7 +317,7 @@ pub const ALL: &[Action] = &[
     keys("comment_block", "action.comment-block", " C"),
     keys("copy_to_clipboard", "action.copy-to-clipboard", " y"),
     keys("paste_from_clipboard", "action.paste-from-clipboard", " p"),
-    keys("ruby", "action.ruby", " r"),
+    command("ruby", "action.ruby", "ruby"),
     command("sidebar", "action.sidebar", "sidebar-left"),
     command("wiki_panel", "action.wiki-panel", "wiki panel"),
     command("save_file", "action.save-file", "write"),

@@ -1591,7 +1591,11 @@ impl Editor {
                 // Warning: 從前這裏只認 `Key::Char`，於是配置裏寫 `"A-d" = …` 綁的是
                 // `A`、`-`、`d` 三個鍵連按：那個鍵永遠按不出來，而配置照收。
                 Key::Alt(c) => Some(format!("{}{c}", yumete_cjk::actions::ALT)),
-                _ => None,
+                // **其餘的鍵也綁得了**（2026-10-12）：`C-x` 那一族、`<tab>`、
+                // `<S-tab>`、方向鍵。寫在 [`typed_as`] 裏一處，和 [`pressed`]
+                // 逐條對着——少一邊就是「寫得進配置而按不出來」。
+                Key::Char(_) => None,
+                key => typed_as(key).map(|c| c.to_string()),
             };
             if key == Key::Esc && !self.alias_held.is_empty() {
                 self.alias_held.clear();
@@ -3577,6 +3581,9 @@ fn hold_in_line(rope: &crate::Rope, at: usize, floor: usize) -> usize {
 /// (`jump_backward`, `collapse_selection`, `increment`, `decrement`) were
 /// listed by `:keymap-actions`, bindable, and **dead** until 2026-09-19.
 fn pressed(c: char) -> Key {
+    if let Some(key) = named_key(c) {
+        return key;
+    }
     match c {
         '\u{1b}' => Key::Esc,
         // Warning: **Enter before the control-byte rule**: `\n` is 0x0A, which that
@@ -3585,5 +3592,161 @@ fn pressed(c: char) -> Key {
         '\n' | '\r' => Key::Enter,
         c if (c as u32) < 32 => Key::Ctrl((b'a' + c as u8 - 1) as char),
         c => Key::Char(c),
+    }
+}
+
+/// **有名字的那幾個鍵，兩個方向**（2026-10-12）——`<tab>`／`<S-tab>`／方向鍵那
+/// 一族。表在 [`yumete_cjk::actions::NAMED`]，這裏只把它和 [`Key`] 接上。
+///
+/// 一支函數管兩頭，是因為兩頭必須逐條相同：[`pressed`] 把別名右邊那一串放回
+/// 鍵，[`typed_as`] 把按下的鍵翻成查表用的那一串。少一邊，寫得進配置而按不出
+/// 來——`C-o` 就是這麼死了一輪（手冊第 810 行一直寫着它能綁）。
+fn named_key(c: char) -> Option<Key> {
+    use yumete_cjk::actions::named_key as of;
+    let is = |name: &str| of(name) == Some(c);
+    match () {
+        () if is("tab") => Some(Key::Tab),
+        () if is("S-tab") => Some(Key::BackTab),
+        () if is("enter") => Some(Key::Enter),
+        () if is("backspace") => Some(Key::Backspace),
+        () if is("delete") => Some(Key::Delete),
+        () if is("up") => Some(Key::Up),
+        () if is("down") => Some(Key::Down),
+        () if is("left") => Some(Key::Left),
+        () if is("right") => Some(Key::Right),
+        () if is("home") => Some(Key::Home),
+        () if is("end") => Some(Key::End),
+        () if is("pageup") => Some(Key::PageUp),
+        () if is("pagedown") => Some(Key::PageDown),
+        _ => None,
+    }
+}
+
+/// 按下的這個鍵，在鍵位表裏寫成哪一串——[`pressed`] 的反面。
+///
+/// `None` ＝ 這個鍵綁不了。今天只有 `Esc` 落在這裏，有意的：按鍵序列按了一半要
+/// 靠它鬆手（見 `alias_held`），綁掉就沒有退路。
+fn typed_as(key: Key) -> Option<char> {
+    use yumete_cjk::actions::named_key as of;
+    let named = |name: &str| of(name);
+    match key {
+        Key::Char(c) => Some(c),
+        // **Alt 借一個私用區的碼位**（2026-10-08）：它沒有自己的字節。
+        Key::Alt(c) => Some(c),
+        // Warning: **`C-x` 從前綁不了**（2026-10-12 查出來的）：這一支只認
+        // `Key::Char` 和 `Key::Alt`，而 `written("C-o")` 交的是那個控制字節，
+        // 兩邊永遠對不上。配置照收、一聲不吭，手冊卻寫着它能綁。
+        Key::Ctrl(c) if c.is_ascii_alphabetic() => {
+            Some((c.to_ascii_lowercase() as u8 - b'a' + 1) as char)
+        }
+        Key::Ctrl(_) => None,
+        Key::Tab => named("tab"),
+        Key::BackTab => named("S-tab"),
+        Key::Enter => named("enter"),
+        Key::Backspace => named("backspace"),
+        Key::Delete => named("delete"),
+        Key::Up => named("up"),
+        Key::Down => named("down"),
+        Key::Left => named("left"),
+        Key::Right => named("right"),
+        Key::Home => named("home"),
+        Key::End => named("end"),
+        Key::PageUp => named("pageup"),
+        Key::PageDown => named("pagedown"),
+        Key::Esc => None,
+    }
+}
+
+#[cfg(test)]
+mod key_table_tests {
+    use super::*;
+
+    /// **`:keymap-actions` 說的鍵要真的按得出那件事**（2026-10-12 掃出來的）。
+    ///
+    /// 空格那一組的鍵搬過幾次家，而 `actions.rs` 那張表沒跟上：`outline` 還寫着
+    /// `空格 o`（那一格 2026-10-08 讓給了 `s`，`o` 從此沒綁），`dictionary` 還寫
+    /// 着 `空格 d`（那一格 2026-09-30 讓給了診斷）——於是 `x = "outline"` 一聲不
+    /// 吭，而 `x = "dictionary"` **打開的是另一扇窗**。兩種都比沒有這條記錄更壞。
+    ///
+    /// 這裏只驗得了空格那一組（它有一張明寫的表）；別的前綴各自散在 `match` 裏，
+    /// 窮舉不出來。
+    #[test]
+    fn every_action_on_the_space_menu_names_a_key_it_offers() {
+        let offered: Vec<char> = Editor::SPACE_KEYS.iter().map(|&(c, _)| c).collect();
+        for action in yumete_cjk::actions::ALL {
+            let yumete_cjk::actions::How::Keys(keys) = action.how else {
+                continue;
+            };
+            let mut chars = keys.chars();
+            if chars.next() != Some(' ') {
+                continue;
+            }
+            let Some(second) = chars.next() else { continue };
+            assert!(
+                offered.contains(&second),
+                "{}：表裏寫着 `空格 {second}`，而空格那一組沒有這一格",
+                action.name
+            );
+        }
+    }
+
+    /// **一個鍵寫得進配置，就要按得出來**——兩個方向逐條對着（2026-10-12）。
+    ///
+    /// `C-o` 寫得進配置而永遠按不出來，整整漏了一輪：查表那一支只認 `Key::Char`
+    /// 和 `Key::Alt`，而手冊第 810 行一直寫着它能綁。
+    #[test]
+    fn every_bindable_key_round_trips_through_the_table() {
+        let every = [
+            Key::Char('a'),
+            Key::Ctrl('o'),
+            Key::Alt('d'),
+            Key::Tab,
+            Key::BackTab,
+            Key::Enter,
+            Key::Backspace,
+            Key::Delete,
+            Key::Up,
+            Key::Down,
+            Key::Left,
+            Key::Right,
+            Key::Home,
+            Key::End,
+            Key::PageUp,
+            Key::PageDown,
+        ];
+        for key in every {
+            let written = typed_as(key).unwrap_or_else(|| panic!("{key:?} 綁不了"));
+            // Alt 在表裏是前綴 ＋ 字母兩個 `char`，其餘一個。
+            let back = match key {
+                Key::Alt(c) => Key::Alt(c),
+                _ => pressed(written),
+            };
+            assert_eq!(back, key, "{key:?} 轉一圈回來變了");
+        }
+        // Warning: **`Esc` 有意綁不了**：按鍵序列按了一半要靠它鬆手。
+        assert_eq!(typed_as(Key::Esc), None);
+    }
+
+    /// 配置裏寫的 `<tab>`，和按下 Tab 時查表用的那一串，要是同一串。
+    #[test]
+    fn a_named_key_in_the_config_meets_the_key_a_hand_presses() {
+        for (name, key) in [
+            ("tab", Key::Tab),
+            ("S-tab", Key::BackTab),
+            ("enter", Key::Enter),
+            ("pagedown", Key::PageDown),
+            ("left", Key::Left),
+        ] {
+            let in_the_file = yumete_cjk::actions::written(&format!("<{name}>"));
+            let under_the_hand = typed_as(key).map(|c| c.to_string()).unwrap_or_default();
+            assert_eq!(in_the_file, under_the_hand, "<{name}>");
+        }
+        // 大小寫不計，而認不得的名字原樣留着（它可能真是個尖括號）。
+        assert_eq!(
+            yumete_cjk::actions::written("<TAB>"),
+            yumete_cjk::actions::written("<tab>")
+        );
+        assert_eq!(yumete_cjk::actions::written("<nope>"), "<nope>");
+        assert_eq!(yumete_cjk::actions::written("a<b"), "a<b");
     }
 }
