@@ -396,8 +396,12 @@ jobs:
           # answers rather than hard-coding the name of one of them.
           py=python3
           command -v python3 > /dev/null || py=python
+          # Warning: **read bytes and say UTF-8** (2026-10-12). `sys.stdin` takes
+          # the console's code page on Windows, so the 漢字 this line exists to
+          # find came back as cp1252 mojibake — **no error, just an answer of
+          # 「none」** while the frame above it plainly showed 不是.
           if ! printf '%s' "$typed" | head -1 | "$py" -c \
-            'import sys; sys.exit(0 if any("\u4e00" <= c <= "\u9fff" for c in sys.stdin.read()) else 1)'; then
+            'import sys; t = sys.stdin.buffer.read().decode("utf-8", "replace"); sys.exit(0 if any("\u4e00" <= c <= "\u9fff" for c in t) else 1)'; then
             echo "!! the engine put no 漢字 on the page" >&2
             exit 1
           fi
