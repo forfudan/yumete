@@ -2857,12 +2857,9 @@ impl Editor {
     /// `g` ＋ 上下在竪排下走一縱嗎——vim 的 `gj`/`gk` 是視覺行，而竪排的視覺行
     /// 就是一縱。見 `handle_goto` 裏那兩臂。
     ///
-    /// Warning: **只在行文那一套下**（2026-10-13）。視覺那一套下四個字母本來就是
-    /// 螢幕的方向，`h` 已經是「下一縱」了，`gh` 轉進來再走一縱就和它重複——而那
-    /// 一格從前（靠 `move_vertical` 在竪排下退化）走的是**下一段**，是 vim 使用者
-    /// 在那一套下唯一的跨段鍵。視覺那一套整個留到下一輪，別順手拿走它。
+    /// 兩套方案同一個答案：`g` 那一層不跟着 `hjkl` 轉（見 `handle_goto` 開頭）。
     fn walks_a_zong_with_g(&self) -> bool {
-        self.vertical_letters_follow_the_text() && self.key_preset == yumete_cjk::KeyPreset::Vim
+        self.layout() == Layout::Vertical && self.key_preset == yumete_cjk::KeyPreset::Vim
     }
 
     fn handle_goto(&mut self, key: Key, continuing_zong: bool) {
@@ -2875,23 +2872,15 @@ impl Editor {
                 return self.goto_line(n);
             }
         }
-        // **縱書 turns the four the way it turns `hjkl`** (2026-09-17). On the
-        // horizontal page `gj`/`gk` cross lines and `gh`/`gl` run along one;
-        // on a 縱書 page the line runs down the 縱 and the lines stack
-        // leftward, so running along is `k`/`j` and crossing is `h`/`l` —
-        // `h`, leftward, being onward, as it is for `h` alone.
+        // **`g` 那一層的四個字母一個都不轉**（2026-10-13 定）。2026-09-17 到
+        // 10-13 之間，視覺那一套下它們跟着 `hjkl` 轉了九十度（行文那一套從
+        // 10-12 起就不轉了）。現在兩套方案的 `g` 層逐格相同，原話：「竖排视觉方
+        // 案只影响 hjkl 四个键……hjkl 是最常用的方向键，所以用户难以調整。gh gj
+        // gk gl 的逻辑性更大，所以不需要更改」——差異壓到最小的那四個鍵上。
         //
-        // Warning: **行文那一套下四個字母不轉**（2026-10-12）：`gh` 在橫排是行首，
-        // 行文那一套要它在竪排也是行首，而行首這件事本來就不分方向。轉的只剩視
-        // 覺那一套，和方向鍵——後者永遠視覺。
-        //
-        // 別名展開出來的也不轉，同上面那一段：寫 `gj` 的人說的是「下一行」。
-        let turn = !self.vertical_letters_follow_the_text() && !self.expanding_alias;
+        // 方向鍵仍舊轉：它們永遠按螢幕走，而竪排的「往下」就是順着這一行讀下去，
+        // 也就是它的末尾。
         let key = match (self.layout() == Layout::Vertical, key) {
-            (true, Key::Char('h')) if turn => Key::Char('j'),
-            (true, Key::Char('l')) if turn => Key::Char('k'),
-            (true, Key::Char('j')) if turn => Key::Char('l'),
-            (true, Key::Char('k')) if turn => Key::Char('h'),
             (true, Key::Down) => Key::Char('l'),
             (true, Key::Up) => Key::Char('h'),
             (_, key) => key,

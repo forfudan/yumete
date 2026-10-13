@@ -18385,11 +18385,14 @@ fn tab_types_spaces_to_the_next_stop_and_shift_tab_types_a_tab() {
 }
 
 /// helix's four, on the horizontal page — `gj`/`gk` a line of the *file*,
-/// `gh`/`gl` its ends — and the same four turned with `hjkl` on a 縱書 page:
-/// `gh`/`gl` the next and previous line, `gk`/`gj` the start and end
-/// (2026-09-17).
+/// `gh`/`gl` its ends — and **the same four, unturned, on a 縱書 page**.
+///
+/// 2026-09-17 到 2026-10-13 之間這四個鍵跟着 `hjkl` 轉了九十度（10-12 起只在視覺
+/// 那一套下轉）。現在一個都不轉，原話：「竖排视觉方案只影响 hjkl 四个键……hjkl 是
+/// 最常用的方向键，所以用户难以調整。gh gj gk gl 的逻辑性更大，所以不需要更改」
+/// ——它們名字裏那件事（一段、它的兩端）本來就不分方向。
 #[test]
-fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
+fn gj_gk_gh_gl_are_helix_s_four_and_do_not_turn_with_the_page() {
     let text = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳\n天地玄黃\n";
     let at = |ed: &Editor| {
         let rope = ed.current_buffer().rope();
@@ -18410,21 +18413,22 @@ fn gj_gk_gh_gl_are_helix_across_and_turn_with_the_page() {
     press(&mut ed, "gh");
     assert_eq!(at(&ed), (0, 0));
 
-    let mut ed = typed(text);
-    ed.set_layout(crate::zong::Layout::Vertical);
-    // **這一條講的就是「跟着 `hjkl` 轉」**，所以釘在版面那一套上（2026-10-12
-    // 起那是要撥的，出廠的行文那一套下 `gh` 照舊是行首——`gh`「行首」這件事
-    // 本來就不分方向）。
-    ed.set_vertical_keys(yumete_cjk::VerticalKeys::Visual);
-    press(&mut ed, "ggjj");
-    press(&mut ed, "gj");
-    assert_eq!(at(&ed), (0, 15), "down the 縱 to the end of the line");
-    press(&mut ed, "gk");
-    assert_eq!(at(&ed), (0, 0), "up to its start");
-    press(&mut ed, "gh");
-    assert_eq!(at(&ed).0, 1, "leftward is onward: the next line");
-    press(&mut ed, "gl");
-    assert_eq!(at(&ed).0, 0, "and back");
+    // 竪排：**兩套方案逐格相同**，而且和橫排那四句話相同。
+    for way in [yumete_cjk::VerticalKeys::Visual, yumete_cjk::VerticalKeys::Logical] {
+        let mut ed = typed(text);
+        ed.set_layout(crate::zong::Layout::Vertical);
+        ed.set_vertical_keys(way);
+        ed.set_zong_length(5); // 一縱五個字：第一段四縱
+        press(&mut ed, "gg");
+        press(&mut ed, "gj");
+        assert_eq!(at(&ed).0, 1, "{way:?}：`gj` 是檔案的下一行");
+        press(&mut ed, "gk");
+        assert_eq!(at(&ed).0, 0, "{way:?}：`gk` 回去");
+        press(&mut ed, "gl");
+        assert_eq!(at(&ed), (0, 15), "{way:?}：`gl` 是段末");
+        press(&mut ed, "gh");
+        assert_eq!(at(&ed), (0, 0), "{way:?}：`gh` 是段首");
+    }
 }
 
 /// **The operator waits for a motion** (#429, 2026-09-18) — which is what
