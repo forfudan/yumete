@@ -283,7 +283,10 @@ fn frame_to(
     // 2026-09-24 審出來的。
     if let Some(ch) = editor.take_dictionary_query() {
         let found = ime.glosses(&ch);
-        editor.set_dictionary(&ch, found);
+        editor.set_dictionary(&ch, yumete_core::editor::Found {
+            rows: found.rows,
+            divided: found.divided,
+        });
     }
     // …and the search that is owed, for the same reason and with the same
     // Warning: : **before the page is measured**, because the sidebar's width is
@@ -814,7 +817,10 @@ pub fn run(
         // key opened it.
         if let Some(ch) = editor.take_dictionary_query() {
             let found = ime.glosses(&ch);
-            editor.set_dictionary(&ch, found);
+            editor.set_dictionary(&ch, yumete_core::editor::Found {
+                rows: found.rows,
+                divided: found.divided,
+            });
         }
         // The frame is drawn **and kept**: `draw` hands back the buffer it just
         // filled, and that is the only honest way to reach it — see the picture
@@ -4149,7 +4155,7 @@ fn ime_handle(
                 // 一個候選的頭一個**字簇**，不是頭一個碼位：帶變體選擇符的
                 // 候選（`🈚️`）按碼位切出來是殘的，查不着。
                 if let Some(ch) = yumete_cjk::graphemes(&ime.top_candidate()).next() {
-                    let _ = editor.look_up(ch, false);
+                    let _ = editor.look_up(ch);
                 }
             }
             false => {
@@ -6552,17 +6558,23 @@ fn draw_note(
     // 鍵之後才存在**，所以它在這裏就等於「按過鍵」。不按，它根本不在。
     if let Some((ch, answer)) = editor.dictionary_afloat() {
         let rows: Vec<(String, String)> = match answer {
-            Some(fields) if !fields.is_empty() => {
-                fields.iter().map(|(n, v)| (n.clone(), v.clone())).collect()
+            Some(found) => {
+                let mut rows: Vec<(String, String)> = found.rows.clone();
+                // **「沒有拆法」寫在下面，隔一行**（2026-10-13 定，同邊欄那一半）。
+                // 一行空名字的在 `Body::Keys` 裏畫得淡——上面幾行是這個字的事實，
+                // 這一句是這一次查詢的事實。
+                if !found.divided {
+                    rows.push((String::new(), String::new()));
+                    rows.push((
+                        String::new(),
+                        match editor.chaifen_available() {
+                            true => say!("ui.not-in-the-table"),
+                            false => say!("ui.no-table-yet"),
+                        },
+                    ));
+                }
+                rows
             }
-            // 查過了，表裏没有這個字——除非根本還沒載表。
-            Some(_) => vec![(
-                match editor.chaifen_available() {
-                    true => say!("ui.not-in-the-table"),
-                    false => say!("ui.no-table-yet"),
-                },
-                String::new(),
-            )],
             // 問出去了，答案還没回來——前端下一趟循環纔去查。
             None => vec![(say!("ui.looking-it-up"), String::new())],
         };
@@ -8041,6 +8053,9 @@ fn draw_sidebar(
             on
         } else if row.is_dir {
             dir
+        } else if row.quiet {
+            // 一句關於這一扇窗的話，不是窗裏的一條內容——退一級，同浮窗那一半。
+            text.fg(ink.quiet())
         } else {
             text
         };
@@ -17172,12 +17187,15 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Esc);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
-        editor.look_up("那", true);
+        editor.look_up("那");
         editor.take_dictionary_query();
-        editor.set_dictionary("那", vec![
-            ("拆分".to_string(), "刀二阝".to_string()),
-            ("分節編碼".to_string(), "vf-b".to_string()),
-        ]);
+        editor.set_dictionary("那", yumete_core::editor::Found {
+            rows: vec![
+                ("拆分".to_string(), "刀二阝".to_string()),
+                ("分節編碼".to_string(), "vf-b".to_string()),
+            ],
+            divided: true,
+        });
 
         let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
         // Warning: **100 欄，不是 60**（2026-09-26）：寬度從此只看檔位，面板說不上話，
@@ -17215,13 +17233,16 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Esc);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
-        editor.look_up("那", true);
+        editor.look_up("那");
         editor.take_dictionary_query();
         let long = "nà_nā_nuó_nuò_né_ne_nèi_nǎ_něi".to_string();
-        editor.set_dictionary("那", vec![
-            ("讀音".to_string(), long.clone()),
-            ("編碼".to_string(), "WSGu".to_string()),
-        ]);
+        editor.set_dictionary("那", yumete_core::editor::Found {
+            rows: vec![
+                ("讀音".to_string(), long.clone()),
+                ("編碼".to_string(), "WSGu".to_string()),
+            ],
+            divided: true,
+        });
         let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
         let buffer = render_with(&editor, &Config::default(), &ime, 100, 8);
         let rows: Vec<String> = (0..6).map(|y| past_the_wall(&buffer, y)).collect();
@@ -21431,12 +21452,20 @@ fn squeezed(text: &str) -> String {
                 .map(|x| buffer[(x, 1)].style().fg == Some(gold))
                 .collect()
         };
+        // Warning: **`空格 N` 不收鍵**（2026-10-13 定），所以鍵還在 `空格 s` 開的
+        // 那一欄裏——左邊。右邊那一扇是開着的，只是沒人在裏面。
         let buffer = render(&editor, &config, 80, 10);
         assert_eq!(
             walls(&buffer),
-            [false, false, true, true],
-            "兩欄各兩堵牆，鍵在右邊那一欄，所以右邊那兩堵是金的"
+            [true, true, false, false],
+            "字典開在右邊而鍵沒跟過去，金的還是左邊那兩堵"
         );
+
+        // 走到右欄，金的就換過去——問的是「誰拿着鍵」，不是「誰剛開」。
+        editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('w'));
+        let buffer = render(&editor, &config, 80, 10);
+        assert_eq!(walls(&buffer), [false, false, true, true], "走進右欄");
 
         // `C-w` 回正文，四堵都是細線。
         //

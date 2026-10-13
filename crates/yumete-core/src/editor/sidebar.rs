@@ -782,6 +782,7 @@ impl Editor {
                     is_dir: false,
                     expanded: i == self.current,
                 wash: None,
+                quiet: false,
                 })
                 .collect(),
             View::Outline => self.outline_rows(),
@@ -939,6 +940,7 @@ impl Editor {
                 is_dir: has_children,
                 expanded: has_children && !shut,
                 wash: None,
+                quiet: false,
             });
         }
         rows
@@ -1075,6 +1077,7 @@ impl Editor {
                 is_dir: false,
                 expanded: false,
                 wash: Some(wash),
+                quiet: false,
             })
             .collect()
     }
@@ -1095,6 +1098,7 @@ impl Editor {
                 is_dir: false,
                 expanded: false,
                 wash: None,
+                quiet: false,
             })
             .collect()
     }
@@ -1111,6 +1115,7 @@ impl Editor {
                 is_dir: false,
                 expanded: false,
                 wash: None,
+                quiet: false,
             })
             .collect()
     }
@@ -1123,29 +1128,26 @@ impl Editor {
             depth: 0,
             is_dir: true,
             expanded: false,
-                wash: None,
+            wash: None,
+            quiet: false,
+        };
+        let plain = |name: String, quiet: bool| Row {
+            path: PathBuf::new(),
+            name,
+            depth: 0,
+            is_dir: false,
+            expanded: false,
+            wash: None,
+            quiet,
         };
         let Some((ch, answer)) = self.dictionary.as_ref() else {
             return Vec::new();
         };
         let mut rows = vec![heading(ch.clone())];
-        let Some(fields) = answer else {
+        let Some(found) = answer else {
             return rows;
         };
-        if fields.is_empty() {
-            rows.push(Row {
-                path: PathBuf::new(),
-                name: match self.chaifen_available() {
-                    true => say!("ui.not-in-the-table"),
-                    false => say!("ui.no-table-yet"),
-                },
-                depth: 0,
-                is_dir: false,
-                expanded: false,
-                wash: None,
-            });
-            return rows;
-        }
+        let fields = &found.rows;
         let width = fields
             .iter()
             .filter(|(_, value)| !value.is_empty())
@@ -1158,41 +1160,57 @@ impl Editor {
                 continue;
             }
             let pad = " ".repeat(width.saturating_sub(yumete_cjk::str_width(name)));
-            rows.push(Row {
-                path: PathBuf::new(),
-                name: format!("{name}{pad}  {value}"),
-                depth: 0,
-                is_dir: false,
-                expanded: false,
-                wash: None,
-            });
+            rows.push(plain(format!("{name}{pad}  {value}"), false));
+        }
+        // **「沒有拆法」寫在下面，淡的，隔一行**（2026-10-13 定）。上面那幾行是
+        // 這個字的事實，這一句是這一次查詢的事實——擺在上面會讀成一條欄目，擺在
+        // 貼着的下一行會讀成最後一欄的註腳。
+        //
+        // 兩句話分得開：表載了而字不在表裏（符號本來就沒有拆法），和根本還沒載
+        // 表（那是要人去做一件事）。
+        if !found.divided {
+            rows.push(plain(String::new(), false));
+            rows.push(plain(
+                match self.chaifen_available() {
+                    true => say!("ui.not-in-the-table"),
+                    false => say!("ui.no-table-yet"),
+                },
+                true,
+            ));
         }
         rows
     }
 
-    /// Look this character up in the 拆分表 — `空格 n`, and `Tab` on a
+    /// Look this character up in the 拆分表 — `空格 N`, and `Tab` on a
     /// candidate (#215).
     ///
     /// The editor does not hold the table: yume does, and only the front end
     /// has it. So the character is parked here and the panel is opened empty;
     /// the answer arrives on the next pass through the loop, one frame later,
     /// which is not long enough for a reader to see the gap.
-    pub fn look_up(&mut self, ch: &str, focus: bool) -> bool {
-        self.look_up_here(ch, false, focus)
+    ///
+    /// Warning: **The keys stay in the editor.** The panel is opened to be glanced
+    /// at while the writing goes on, so nothing is gained by moving the cursor
+    /// into it — the same rule `空格 K` keeps (2026-10-13: 「The focus should be
+    /// kept in the main editor (just like space K). This is because there is no
+    /// need to change the focus there.」). `q` in the sidebar is still the way
+    /// in, for a gloss too long to read at a glance.
+    pub fn look_up(&mut self, ch: &str) -> bool {
+        self.look_up_here(ch, false)
     }
 
-    /// **`空格 d`：只浮一個窗**（2026-09-22 定）。
+    /// **`空格 n`：只浮一個窗**（2026-09-22 定）。
     ///
     /// 同一個問題、同一份答案，畫在光標旁邊而不是邊欄裏——而且**一點都不碰邊
     /// 欄**：邊欄是容器，只由人開由人關，看一眼字不該讓工作區變樣。
     ///
     /// 回 `false` 表示這一下是**關掉**（再按一次收起來）。
     pub fn look_up_afloat(&mut self, ch: &str) -> bool {
-        self.look_up_here(ch, true, false)
+        self.look_up_here(ch, true)
     }
 
     /// 兩個問法共用的那一半（#426：它們差的只是容器）。
-    fn look_up_here(&mut self, ch: &str, afloat: bool, focus: bool) -> bool {
+    fn look_up_here(&mut self, ch: &str, afloat: bool) -> bool {
         // Warning: **同一個字再問一次纔算「收起來」。** `Tab` 選候選也走這一支，
         // 問的是另一個字——那是換一份答案，不是關窗，所以它走不收起的那一支。
         let same = self.dictionary.as_ref().is_some_and(|(at, _)| at == ch);
@@ -1213,18 +1231,9 @@ impl Editor {
         // it, which is the whole of why this slot holds no state (#293).
         self.dictionary_anchor = Some(self.sel.head());
         self.panel_scroll = 0;
-        // Asked from the page, the keys go with the question. Asked while a
-        // word is being typed, they must not — the reader is mid-word, and the
-        // panel is only there to be glanced at.
-        // Warning: **問的時候不交鍵，就把鍵留在原地**——別清成 `None`。從前寫的是
-        // `focus.then(..)`，於是從檔案樹裏按 `空格 d`（那條路是通的：面板裏的
-        // 空格照樣開選單）會把鍵從樹裏悄悄拿走，而 `空格 d` 的說明寫着「一點都
-        // 不碰邊欄」（2026-09-23 審出來的）。
-        if focus {
-            if let Some(side) = self.info_in_the_sidebar() {
-                self.panel_focus = Some(side);
-            }
-        }
+        // **問的時候不交鍵。** 鍵留在原處——編輯區、檔案樹，哪兒來的還在哪兒。
+        // 從前 `空格 N` 把鍵交給邊欄，而那一扇是給人瞥一眼的，交了鍵就得按 `q`
+        // 纔寫得下去。2026-10-13 定，同 `空格 K`。
         self.refresh_sidebar();
         true
     }
@@ -1239,25 +1248,25 @@ impl Editor {
     ///
     /// Dropped if the reader has since asked about a different character —
     /// the answer to last frame's question must not overwrite this frame's.
-    pub fn set_dictionary(&mut self, ch: &str, fields: Vec<Gloss>) {
+    pub fn set_dictionary(&mut self, ch: &str, found: Found) {
         if self.dictionary.as_ref().is_some_and(|(at, _)| at != ch) {
             return;
         }
-        self.dictionary = Some((ch.to_string(), Some(fields)));
+        self.dictionary = Some((ch.to_string(), Some(found)));
         self.refresh_sidebar();
     }
 
     /// **這一則字典該不該浮在光標旁邊**——那一格没開，而此刻擺的正是字典。
-    pub fn dictionary_afloat(&self) -> Option<(&str, Option<&[Gloss]>)> {
+    pub fn dictionary_afloat(&self) -> Option<(&str, Option<&Found>)> {
         (self.info_afloat() == Some(crate::sidebar::Info::Dictionary))
             .then(|| self.dictionary())
             .flatten()
     }
 
-    pub fn dictionary(&self) -> Option<(&str, Option<&[Gloss]>)> {
+    pub fn dictionary(&self) -> Option<(&str, Option<&Found>)> {
         self.dictionary
             .as_ref()
-            .map(|(ch, answer)| (ch.as_str(), answer.as_deref()))
+            .map(|(ch, answer)| (ch.as_str(), answer.as_ref()))
     }
 
     /// Whether the keys are in either panel.

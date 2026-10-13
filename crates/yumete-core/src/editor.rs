@@ -132,6 +132,19 @@ type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 /// 枚舉。
 pub type Gloss = (String, String);
 
+/// 字典面板查一個字查到的東西。
+///
+/// 兩件事，不是一件：畫哪幾欄，以及**拆分表裏到底有沒有這個字**。符號有碼位而
+/// 沒有拆法，漢字在碼表沒載的時候也是——兩種的欄目長得一樣，而底下要說的那一句
+/// 不一樣（2026-10-13）。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Found {
+    /// 要畫的那幾欄，照畫的次序。**不會是空的**：每個字都有碼位。
+    pub rows: Vec<Gloss>,
+    /// 拆分表裏有沒有這個字。
+    pub divided: bool,
+}
+
 /// Every line's block and every merge conflict in the document, against the
 /// buffer they were worked out for and that buffer's revision — the two things
 /// that decide whether they are still true.
@@ -2521,7 +2534,7 @@ pub struct Editor {
     /// — the panel shows the character alone. `Some(ch, Some([]))`: answered,
     /// and the 拆分表 has nothing for it, which the panel has to say out loud
     /// rather than draw as an empty box.
-    dictionary: Option<(String, Option<Vec<Gloss>>)>,
+    dictionary: Option<(String, Option<Found>)>,
     /// The other work area, when the page is split (Feature #176).
     other: Option<Pane>,
     /// Which half of the screen holds the keys — **screen order**, so

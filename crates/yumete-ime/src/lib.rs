@@ -1201,10 +1201,13 @@ impl ImeSession {
     /// each source gets its own run of rows, headed by an empty value, rather
     /// than the first one winning silently.
     ///
-    /// Empty when the character is in no table at all. The caller shows that
-    /// as「查不到」rather than an empty panel, because those are different
-    /// findings.
-    pub fn glosses(&self, ch: &str) -> Vec<(String, String)> {
+    /// **Never empty**: a character always has a code point, and that is worth
+    /// saying about a character the 拆分表 has never heard of. 2026-10-13:
+    /// 「the space n functionality can be applied to all characters, even not
+    /// in the chaifen table, e.g., symbols」. [`Lookup::divided`] is how the
+    /// caller still tells 「a symbol, which has no 拆法」 from 「the table is
+    /// not loaded」 — two different findings, and two different sentences.
+    pub fn glosses(&self, ch: &str) -> Lookup {
         // 引擎手上那一份要麼是方案帶來的（字料層 ＋ 字根層），要麼根本没有——
         // 没有就回到那一份共享的，它答得出不靠方案的那幾行。
         let mine = self.engine.annotations();
@@ -1249,19 +1252,27 @@ impl ImeSession {
                     out.push((name.to_string(), value.clone()));
                 }
             }
-            // The code point is the one field that is true of the character
-            // rather than of a 拆法, so it is written the way a reader looks
-            // it up elsewhere — `U+` and all — and only once.
-            // **一個字簇可以有好幾個碼位**（2026-10-12）：`🈚️` 是 U+1F21A ＋
-            // U+FE0F。核心用 `+` 串起來，這裏拆開逐個寫 `U+`——`U+1F21A+FE0F`
-            // 讀起來像一個碼位加了個尾巴。
-            if i + 1 == found.len() && !a.unicode.is_empty() {
-                let points: Vec<String> =
-                    a.unicode.split('+').map(|c| format!("U+{c}")).collect();
-                out.push(("統一碼".to_string(), points.join(" ")));
-            }
         }
-        out
+        // The code point and its block are true of the *character*, not of a
+        // 拆法 — so they are written once, at the end, and they are worked out
+        // from the character itself rather than read off a table row. That is
+        // what lets them stand under a symbol the table has never heard of.
+        //
+        // **一個字簇可以有好幾個碼位**（2026-10-12）：`🈚️` 是 U+1F21A ＋ U+FE0F，
+        // 逐個寫 `U+`——`U+1F21A+FE0F` 讀起來像一個碼位加了條尾巴。
+        let points: Vec<String> = ch.chars().map(yumete_cjk::blocks::codepoint).collect();
+        if !points.is_empty() {
+            out.push(("統一碼".to_string(), points.join(" ")));
+        }
+        // 區塊問的是**底字**：一個異體字選擇符自己在 Variation Selectors
+        // Supplement 裏，而讀者要知道的是那個漢字在哪一區。同狀態欄那一格。
+        //
+        // 名字照英文寫，和狀態欄一致（2026-10-13 定）：Unicode 的區塊名本來就是
+        // 標準英文術語，拿它去別處查也是查英文。
+        if let Some(block) = ch.chars().next().and_then(yumete_cjk::blocks::block_of) {
+            out.push(("統一碼區塊".to_string(), block.to_string()));
+        }
+        Lookup { rows: out, divided: !found.is_empty() }
     }
 
     /// **查一個字答得出東西嗎**——`空格 n` 空手回來時，說的是「表裏沒有這個
@@ -1553,6 +1564,21 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
 mod builtin {
     include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
 }
+/// What [`ImeSession::glosses`] found about one character.
+///
+/// Two answers, not one: the rows to draw, and whether the 拆分表 had this
+/// character at all. A symbol has a code point and no 拆法, and so does a 漢字
+/// while no 碼表 is loaded — the rows look the same, and the sentence the
+/// reader needs underneath them does not.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Lookup {
+    /// The fields, in the order they are drawn. Never empty: every character
+    /// has a code point.
+    pub rows: Vec<(String, String)>,
+    /// Whether the 拆分表 had this character.
+    pub divided: bool,
+}
+
 
 /// **沒有方案也查得出一個字**（2026-10-12 定）。
 ///
@@ -2165,7 +2191,7 @@ mod tests {
             return;
         }
         let got = ime.glosses("行");
-        let named = |n: &str| got.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
+        let named = |n: &str| got.rows.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
         assert_eq!(named("宇浩全息拆分"), Some("彳亍"), "{got:?}");
         assert_eq!(named("統一碼"), Some("U+884C"), "{got:?}");
         // **分隔符是空格，不是 `_` 和 `-`**（2026-10-12 定）：核心那兩個記號是
@@ -2188,9 +2214,51 @@ mod tests {
             return;
         }
         let got = ime.glosses("\u{3402}\u{E0101}");
-        let named = |n: &str| got.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
+        let named = |n: &str| got.rows.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
         assert_eq!(named("統一碼"), Some("U+3402 U+E0101"), "{got:?}");
         assert!(named("宇浩全息拆分").is_some(), "{got:?}");
+    }
+
+    /// **碼位和區塊答得了每一個字，不只是表裏那些**（2026-10-13 定）。
+    ///
+    /// 原話：「the unicode and the Unicode block can be calculated and mapped
+    /// without chaifen table……Thus, the space n functionality can be applied
+    /// to all characters, even not in the chaifen table, e.g., symbols.」
+    #[test]
+    fn every_character_has_a_code_point_and_a_block_even_a_symbol() {
+        let ime = ImeSession::empty(Scheme::LINGMING);
+        let named = |got: &Lookup, n: &str| {
+            got.rows.iter().find(|(name, _)| name == n).map(|(_, v)| v.clone())
+        };
+        // 一個符號：表裏沒有它，而這兩行照樣答得出。
+        let got = ime.glosses("※");
+        assert!(!got.divided, "符號不在拆分表裏");
+        assert_eq!(named(&got, "統一碼").as_deref(), Some("U+203B"), "{got:?}");
+        assert_eq!(
+            named(&got, "統一碼區塊").as_deref(),
+            Some("General Punctuation"),
+            "{got:?}"
+        );
+        // 一個拉丁字母也一樣。
+        let got = ime.glosses("a");
+        assert_eq!(named(&got, "統一碼").as_deref(), Some("U+0061"), "{got:?}");
+        assert_eq!(named(&got, "統一碼區塊").as_deref(), Some("Basic Latin"), "{got:?}");
+        // **區塊問的是底字**：異體字選擇符自己在別的區裏，而讀者問的是那個漢字。
+        let got = ime.glosses("\u{3402}\u{E0101}");
+        assert_eq!(named(&got, "統一碼").as_deref(), Some("U+3402 U+E0101"), "{got:?}");
+        assert_eq!(
+            named(&got, "統一碼區塊").as_deref(),
+            Some("CJK Unified Ideographs Extension A"),
+            "{got:?}"
+        );
+        // 表裏有的字照舊報 `divided`，而那兩行擺在最後。
+        if ime.chaifen_available() {
+            let got = ime.glosses("行");
+            assert!(got.divided, "{got:?}");
+            let last: Vec<&str> =
+                got.rows.iter().rev().take(2).map(|(n, _)| n.as_str()).collect();
+            assert_eq!(last, ["統一碼區塊", "統一碼"], "兩行在最後，區塊貼着碼位");
+        }
     }
 
     /// **出廠自帶的那幾張，一個方案一張**（2026-10-07 加星陳）。

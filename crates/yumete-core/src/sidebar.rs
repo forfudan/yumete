@@ -320,6 +320,12 @@ pub struct Row {
     /// 核心不認識顏色，所以這裏說的是「哪一種」，由前端去調色板上取：
     /// `Wash::Gone` 是刪掉的、`Wash::Added` 是新添的，和 `:git-diff` 同一套。
     pub wash: Option<Wash>,
+    /// **整行退一級**——它是一句關於這一扇窗的話，不是窗裏的一條內容。
+    ///
+    /// 字典那一扇用它說「拆分表裏沒有這個字」：那一句和上面幾行不是同一種東西，
+    /// 上面是這個字的事實，它是這一次查詢的事實（2026-10-13 定，原話「put the
+    /// words in grey below (with a gap line) the two unicode lines」）。
+    pub quiet: bool,
 }
 
 /// 一行底下鋪哪一種淡底。
@@ -692,6 +698,7 @@ impl Sidebar {
                 is_dir: true,
                 expanded,
                 wash: None,
+                quiet: false,
             });
             if expanded {
                 self.push_dir(&path, depth + 1);
@@ -705,6 +712,7 @@ impl Sidebar {
                 is_dir: false,
                 expanded: false,
                 wash: None,
+                quiet: false,
             });
         }
     }
@@ -805,6 +813,7 @@ mod tests {
                 is_dir: false,
                 expanded: true,
                 wash: None,
+                quiet: false,
             },
             Row {
                 path: PathBuf::new(),
@@ -813,6 +822,7 @@ mod tests {
                 is_dir: false,
                 expanded: false,
                 wash: None,
+                quiet: false,
             },
         ]);
         sidebar.step(true);

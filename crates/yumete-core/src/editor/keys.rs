@@ -3647,7 +3647,7 @@ impl Editor {
             // 大寫是「同一件事的更大版本」，同 `空格 c`/`空格 C`。
             Key::Char('N') => match self.grapheme_at_cursor() {
                 Some(ch) => {
-                    self.look_up(&ch, true);
+                    self.look_up(&ch);
                 }
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },

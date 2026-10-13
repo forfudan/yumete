@@ -11,6 +11,14 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`空格 N` no longer takes the keyboard.** It opens the character panel in the
+  sidebar and leaves the caret in the text, so you can keep typing — the same rule
+  `空格 K` already kept. `C-w w` walks in when an answer needs scrolling.
+- **The character panel answers for every character, not only the ones in the 拆分
+  table.** 統一碼 and the new 統一碼區塊 are computed from the character itself, so a
+  symbol, a letter or an emoji now gets `U+203B` and `General Punctuation` instead of
+  one line saying there is nothing to show. Where the 拆分 is genuinely missing, that
+  is said underneath, quietly, after a blank line.
 - **A bare `G` now does nothing under the helix keymap**, which is what helix does — `ge`
   is the last line there. `30G` still goes to line 30 under either keymap, and under the
   vim keymap a bare `G` is still the last line, as in vim. It used to be the last line

@@ -1107,7 +1107,10 @@ pub fn draw(
                     (_, true) => (key.clone(), format!("{what} …")),
                     _ => (key.clone(), what.clone()),
                 };
-                let said = match last {
+                // **名字空着的那一行是一句話，不是一條內容**——退一級。字典那一扇
+                // 用它寫「拆分表裏沒有這個字」（2026-10-13 定），而「還有 17 個」
+                // 那一行退一級的理由是同一條：它說的是這扇窗，不是窗裏的東西。
+                let said = match last || key.is_empty() {
                     true => ink.quiet(),
                     false => ink.text(),
                 };
@@ -1116,9 +1119,19 @@ pub fn draw(
                 // its column was written straight across the column beside it
                 // — which only showed once a menu could have more than two.
                 let edge = (x + one as u16).min(limit);
-                let at = x + key_w as u16 + 2;
+                // **名字空着的那一行從最左起筆**，不縮進到值那一欄：它是一整句
+                // 話，不是某一欄的值，縮進會讀成上一行的續行（2026-10-13，同邊
+                // 欄那一半——那邊它也頂着左邊）。
+                let bare = key.is_empty();
+                let at = match bare {
+                    true => x,
+                    false => x + key_w as u16 + 2,
+                };
                 put_text(buf, x, y, edge, &key, ground.fg(ink.gold()));
-                let room = one.saturating_sub(key_w + 2);
+                let room = match bare {
+                    true => one,
+                    false => one.saturating_sub(key_w + 2),
+                };
                 put_text(buf, at, y, edge, &clip(&what, room), ground.fg(said));
             }
         }

@@ -9193,8 +9193,8 @@ fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
 /// when it comes, is laid out in columns.
 #[test]
 fn the_dictionary_asks_about_the_character_under_the_cursor() {
-    // Warning: **`空格 D`，大寫。** 2026-09-22 定：小寫的 `空格 d` 只浮一個窗、邊欄一點
-    // 都不動；進邊欄、鍵跟過去的是大寫那一個。這一條測的一直是後者。
+    // Warning: **`空格 N`，大寫。** 2026-09-22 定：小寫的 `空格 n` 只浮一個窗、邊欄
+    // 一點都不動；進邊欄的是大寫那一個。這一條測的一直是後者。
     use crate::sidebar::{Side};
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
@@ -9202,7 +9202,9 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
 
     let right = Side::Right;
     assert_eq!(ed.info_in_this_sidebar(right), Some(crate::sidebar::Info::Dictionary));
-    assert_eq!(ed.panel_focus(), Some(right), "the keys go along");
+    // **鍵不跟過去**（2026-10-13 定，同 `空格 K`）：那一扇是給人瞥一眼的，交了鍵
+    // 就得按 `q` 纔寫得下去。
+    assert_eq!(ed.panel_focus(), None, "the keys stay in the writing");
     assert!(ed.panel(Side::Left).is_none(), "and nothing was opened on the left");
     assert_eq!(ed.take_dictionary_query(), Some("那".to_string()));
     assert_eq!(ed.take_dictionary_query(), None, "asked once, answered once");
@@ -9211,13 +9213,13 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     // empty panel, and not last character's answer.
     assert_eq!(ed.info_rows(right).len(), 1);
 
-    ed.set_dictionary(
-        "那",
-        vec![
+    ed.set_dictionary("那", crate::editor::Found {
+        rows: vec![
             ("拆分".to_string(), "刀二阝".to_string()),
             ("編碼".to_string(), "vfb".to_string()),
         ],
-    );
+        divided: true,
+    });
     let rows: Vec<String> = ed
         .info_rows(right)
         .iter()
@@ -9227,7 +9229,12 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(rows[1], "拆分  刀二阝");
     assert_eq!(rows[2], "編碼  vfb", "names are padded to a column");
 
-    // **It scrolls, because a long answer is why it takes the keys at all.**
+    // **It scrolls, because a long answer is why the panel exists** — but the
+    // reader has to walk into it first now that the key does not hand the
+    // keyboard over (2026-10-13).
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.panel_focus(), Some(right), "walked in");
     ed.on_key(Key::Char('j'));
     assert_eq!(ed.panel_scroll(), 1);
     ed.on_key(Key::Char('G'));
@@ -9393,10 +9400,14 @@ fn a_character_the_table_has_nothing_for_says_so() {
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
-    ed.set_dictionary("那", Vec::new());
+    ed.set_dictionary("那", crate::editor::Found::default());
     let rows = ed.info_rows(crate::sidebar::Side::Right);
-    assert_eq!(rows.len(), 2, "{rows:?}");
-    assert_eq!(rows[1].name, say!("ui.not-in-the-table"));
+    // 標題、空的一行、那一句。**統一碼那兩行不在**：這一條餵的是一份空答案，而
+    // 它們是 `glosses` 算出來的（見 `yumete-ime`），不是邊欄補的。
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert_eq!(rows[1].name, "", "隔一行");
+    assert_eq!(rows[2].name, say!("ui.not-in-the-table"));
+    assert!(rows[2].quiet, "淡的：它是這一次查詢的事，不是這個字的事");
 }
 
 /// ……而「根本没有表」是第三種。2026-10-12 之前出廠正是這一種
@@ -9408,9 +9419,10 @@ fn with_no_table_loaded_the_panel_says_that_rather_than_blaming_the_character() 
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
-    ed.set_dictionary("那", Vec::new());
+    ed.set_dictionary("那", crate::editor::Found::default());
     let rows = ed.info_rows(crate::sidebar::Side::Right);
-    assert_eq!(rows[1].name, say!("ui.no-table-yet"), "{rows:?}");
+    assert_eq!(rows[2].name, say!("ui.no-table-yet"), "{rows:?}");
+    assert!(rows[2].quiet, "{rows:?}");
 }
 
 /// The answer to last frame's question must not overwrite this frame's.
@@ -9424,8 +9436,11 @@ fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('N'));
     ed.take_dictionary_query();
-    ed.look_up("年", true);
-    ed.set_dictionary("那", vec![("拆分".to_string(), "刀二阝".to_string())]);
+    ed.look_up("年");
+    ed.set_dictionary("那", crate::editor::Found {
+        rows: vec![("拆分".to_string(), "刀二阝".to_string())],
+        divided: true,
+    });
     assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some("年"));
     assert_eq!(ed.info_rows(crate::sidebar::Side::Right).len(), 1, "still waiting");
 }
@@ -11904,20 +11919,21 @@ fn the_panels_go_where_the_settings_put_them() {
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "先是文件樹");
     ed.on_key(Key::Char(' '));
-    // Warning: 大寫：進邊欄的是 `空格 D`（2026-09-22）。
+    // Warning: 大寫：進邊欄的是 `空格 N`（2026-09-22）。
     ed.on_key(Key::Char('N'));
     assert_eq!(ed.info_in_this_sidebar(Side::Left), Some(crate::sidebar::Info::Dictionary));
     assert_eq!(ed.info_in_this_sidebar(Side::Right), None, "右邊一格都没開");
     assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Info, "那一扇換成了信息");
 
-    // 一個槽一個座位：這一格、正文，轉回來。
-    assert_eq!(ed.panel_focus(), Some(Side::Left));
-    ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('w'));
-    assert_eq!(ed.panel_focus(), None, "the writing");
+    // **開了，而鍵留在原處**（2026-10-13 定）：`空格 N` 從前把鍵交給邊欄。
+    // 一個槽一個座位，所以 `C-w w` 照舊轉得過去。
+    assert_eq!(ed.panel_focus(), None, "the keys stay in the writing");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), Some(Side::Left), "round to the panel");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.panel_focus(), None, "the writing");
 
     // 再按一次 `空格 N` 就收起來——連那一格一起還回去，不留一扇空的。
     ed.on_key(Key::Char(' '));
