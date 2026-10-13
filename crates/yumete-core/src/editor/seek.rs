@@ -15,7 +15,7 @@
 //! Warning: **一個鍵一種文字**（2026-10-04 定）。當天早先那一版是 `go` 兩種一起
 //! 收——字母標籤和漢字候選面板同時畫出來，數字挑字、字母走標籤，兩個集合不重疊所以
 //! 不含糊。可**面板落在光標處，正好蓋住光標附近那幾處匹配**，而那恰恰是人要跳去的
-//! 地方。分開之後 `go` 根本不開面板，遮擋從源頭上沒有了；中文那一路也沒損失——`gu`
+//! 地方。分開之後 `go` 根本不開面板，遮擋從源頭上没有了；中文那一路也没損失——`gu`
 //! 不限長，想要兩個字母的那種速度，打兩個字母照樣按得到數字。
 //!
 //! `zh`/`sh`/`ji` 那幾個擁擠的聲母（量出來一屏 21–23 個字，量在 [`crate::written`]）
@@ -37,7 +37,7 @@ pub struct Seeking {
     /// Warning: **一個鍵一種文字**（2026-10-04 定，改掉了當天早先那一版）。
     /// 先前 `go` 是「兩個字母同時問西文和中文」，候選面板和西文標籤一起畫在屏幕
     /// 上——而面板落在光標處，正好蓋住光標附近那幾處匹配。分開之後 `go` 根本不開
-    /// 面板，遮擋這件事從源頭上沒有了；中文那一路也沒損失，`gu` 不限長，打兩個
+    /// 面板，遮擋這件事從源頭上没有了；中文那一路也没損失，`gu` 不限長，打兩個
     /// 字母照樣按得到數字。
     pub reading: bool,
     /// 打進去的那幾個字母。
@@ -59,8 +59,8 @@ pub struct Seeking {
     ///
     /// Warning: **這個不等於「標籤亮着」。** `go` 打滿兩個字母的那一刻，西文的標籤
     /// 和漢字的候選面板**同時**在屏幕上——下一鍵是字母就去標籤，是數字就是在挑字
-    /// （2026-10-04 定的那個關竅）。拿 `labels.is_empty()` 當「面板收了沒有」
-    /// 會把這兩樣攪成一樣，`go` 的中文那一半就整個沒了。
+    /// （2026-10-04 定的那個關竅）。拿 `labels.is_empty()` 當「面板收了没有」
+    /// 會把這兩樣攪成一樣，`go` 的中文那一半就整個没了。
     pub picked: bool,
 }
 
@@ -75,7 +75,7 @@ impl Seeking {
         self.reading || self.typed.chars().count() < 2
     }
 
-    /// 候選一共幾頁（一個字都沒有時是 1，空面板也是一頁）。
+    /// 候選一共幾頁（一個字都没有時是 1，空面板也是一頁）。
     pub fn pages(&self) -> usize {
         self.found.han.len().div_ceil(PER_PAGE).max(1)
     }
@@ -92,7 +92,7 @@ impl Seeking {
     /// 打進去的那幾個字母一行（帶頁碼，同搜索面板那個 `1/31`），一個字一行：
     /// 號碼、字、它在這一屏上出現幾處。
     ///
-    /// Warning: **一行都沒有就交空的**——畫不畫由前端定，可「畫幾行」是這裏的事。
+    /// Warning: **一行都没有就交空的**——畫不畫由前端定，可「畫幾行」是這裏的事。
     /// 核心答內容、前端只管擺，和這個倉別處一樣。
     pub fn rows(&self) -> Vec<String> {
         if self.found.han.is_empty() {
@@ -115,7 +115,7 @@ impl Editor {
         self.owed_seek = Some(reading);
     }
 
-    /// 欠着沒有——問一句，不取走（`--shot` 那條路用它）。
+    /// 欠着没有——問一句，不取走（`--shot` 那條路用它）。
     pub fn owes_a_seek(&self) -> bool {
         self.owed_seek.is_some()
     }
@@ -188,7 +188,7 @@ impl Editor {
     /// 這一步裏的一鍵。回 `true` ＝ 吃掉了。
     ///
     /// Warning: **不認得的鍵一律收攤並吃掉它自己**，同 `gw`（`labels.rs` 的 `jump_key`）：
-    /// 「按錯一個鍵就跳到別處去」比「按錯一個鍵什麼都沒發生」壞得多。
+    /// 「按錯一個鍵就跳到別處去」比「按錯一個鍵什麼都没發生」壞得多。
     pub(super) fn seek_key(&mut self, key: Key) -> bool {
         let Some(seeking) = self.seeking.as_ref() else { return false };
         let Key::Char(c) = key else {
@@ -197,7 +197,7 @@ impl Editor {
         };
         // **空格也是一個字母**（2026-10-04 問的）：「a bus」那個孤零零的 `a`
         // 後面就是空格，不收的話它永遠去不了。帶空格的查詢自己就不問讀音了
-        // （沒有哪個字讀作「a 」），所以不必在這裏分。
+        // （没有哪個字讀作「a 」），所以不必在這裏分。
         // **候選面板還開着的時候，挑字與翻頁那幾個鍵歸面板。**
         let panel = !seeking.picked && !seeking.found.han.is_empty();
         if panel {
@@ -207,7 +207,7 @@ impl Editor {
             // （`Semicolon` → 選二、`Quote` → 選三），翻頁的 `-`/`=` 也是同一對
             // ——**這一扇面板長得像輸入法，手就該和輸入法一樣**。
             //
-            // Warning: **沒有歧義是因為這一支只在 `gu` 上開。** `gu` 問的是讀音，
+            // Warning: **没有歧義是因為這一支只在 `gu` 上開。** `gu` 問的是讀音，
             // 讀音是字母串，所以空格、`;`、`'` 在查詢裏一個都用不上；而 `go` 的
             // 空格是**第二個字母**（「a bus」那個孤零零的 `a`），它那邊 `found.han`
             // 恆空、`panel` 恆假，這一段碰都碰不到。
@@ -249,7 +249,7 @@ impl Editor {
         }
         if let Some(seeking) = self.seeking.as_mut() {
             seeking.typed.push(c.to_ascii_lowercase());
-            // 名單整個換了，停在第三頁沒有意思。
+            // 名單整個換了，停在第三頁没有意思。
             seeking.page = 0;
         }
         self.look_again_for_targets();
@@ -258,7 +258,7 @@ impl Editor {
         true
     }
 
-    /// 面板上畫的那幾行——沒開着、挑過字了、或者一個漢字都沒配上，就是空的。
+    /// 面板上畫的那幾行——没開着、挑過字了、或者一個漢字都没配上，就是空的。
     pub fn seek_rows(&self) -> Vec<String> {
         self.seeking
             .as_ref()
@@ -370,7 +370,7 @@ mod tests {
     ///
     /// Warning: **這一條守的是「面板不許遮住光標附近」**（2026-10-04 定）。
     /// 面板落在光標處，而 `go` 要跳的那幾處正在光標附近——兩樣東西搶同一塊地方。
-    /// 分成一鍵一種文字之後，`go` 這一路根本不開面板，遮擋從源頭上沒有了。
+    /// 分成一鍵一種文字之後，`go` 這一路根本不開面板，遮擋從源頭上没有了。
     #[test]
     fn go_never_opens_a_panel() {
         let mut ed = on_screen("在 dock 旁邊的冬天東風", false);
@@ -419,7 +419,7 @@ mod tests {
         let mut ed = on_screen("冬天東風都城", true);
         press(&mut ed, "du");
         assert_eq!(ed.seek_rows().len(), 2, "查詢一行，「都」一行");
-        assert!(ed.seek_labels().is_empty(), "沒有自己挑定");
+        assert!(ed.seek_labels().is_empty(), "没有自己挑定");
         // 人照舊打得完整個讀音。
         press(&mut ed, "1");
         assert_eq!(ed.seek_labels().len(), 1, "按了數字纔貼標籤");
@@ -441,14 +441,14 @@ mod tests {
         assert_eq!(pick("'"), 1, "引號挑第三個：至，一處");
     }
 
-    /// Warning: **沒有第三個候選的時候，`'` 照舊收攤**，同按了一個沒有行的數字。
+    /// Warning: **没有第三個候選的時候，`'` 照舊收攤**，同按了一個没有行的數字。
     #[test]
     fn a_selection_key_with_no_row_behind_it_closes_it() {
         let mut ed = on_screen("冬天東風", true);
         press(&mut ed, "d");
         assert_eq!(ed.seek_rows().len(), 3, "查詢一行，冬 東 各一行");
         press(&mut ed, "'");
-        assert!(ed.seeking().is_none(), "沒有第三個");
+        assert!(ed.seeking().is_none(), "没有第三個");
     }
 
     /// Warning: **`go` 那邊空格仍然是第二個字母。** 這一支只在 `gu` 上開——`go`
@@ -488,7 +488,7 @@ mod tests {
         };
 
         let mut ed = on_screen("冬天東風都城", true);
-        assert_eq!(ed.typed_so_far(), "gz", "還沒打字母");
+        assert_eq!(ed.typed_so_far(), "gz", "還没打字母");
         assert_eq!(says(&ed), "請輸入拼音");
         press(&mut ed, "don");
         assert_eq!(ed.typed_so_far(), "gzdon", "整串按鍵");
@@ -556,7 +556,7 @@ mod tests {
         assert!(ed.seek_key(Key::Char('!')));
         assert!(ed.seeking().is_none());
 
-        // 打滿兩個之後再來一個字母，也是收攤（那時字母是標籤的事，還沒做）。
+        // 打滿兩個之後再來一個字母，也是收攤（那時字母是標籤的事，還没做）。
         let mut ed = on_screen("冬天", false);
         press(&mut ed, "do");
         assert!(ed.seeking().is_some());
@@ -572,13 +572,13 @@ mod tests {
         assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
     }
 
-    /// 一個漢字都沒配上，面板就是空的——畫不畫是前端的事，可行數是這裏答的。
+    /// 一個漢字都没配上，面板就是空的——畫不畫是前端的事，可行數是這裏答的。
     #[test]
     fn no_character_means_no_panel() {
         let mut ed = on_screen("dock and dog", false);
         press(&mut ed, "do");
         assert!(!ed.seeking().unwrap().found.latin.is_empty(), "西文那一邊有");
-        assert!(ed.seek_rows().is_empty(), "可漢字那一邊沒有，面板不畫");
+        assert!(ed.seek_rows().is_empty(), "可漢字那一邊没有，面板不畫");
     }
 
     /// **`-`/`=` 翻頁，寫死的兩個鍵**（不跟方案走——IME 的翻頁鍵各家不同，而跳轉
@@ -604,7 +604,7 @@ mod tests {
         assert_eq!(ed.seeking().unwrap().page, 1, "`-` 往回也轉得動");
     }
 
-    /// 再打一個字母，頁碼歸零——名單整個換了，停在第二頁沒有意思。
+    /// 再打一個字母，頁碼歸零——名單整個換了，停在第二頁没有意思。
     #[test]
     fn narrowing_goes_back_to_the_first_page() {
         let mut ed = on_screen("大地東冬都動斷到燈等", true);
@@ -615,8 +615,8 @@ mod tests {
         assert_eq!(ed.seeking().unwrap().page, 0);
     }
 
-    /// Warning: **`-`/`=` 不許把面板關掉**，可是一個漢字都沒有的時候它們不是翻頁鍵
-    /// ——那時沒有頁可翻，照「不認得的鍵就收攤」辦。
+    /// Warning: **`-`/`=` 不許把面板關掉**，可是一個漢字都没有的時候它們不是翻頁鍵
+    /// ——那時没有頁可翻，照「不認得的鍵就收攤」辦。
     #[test]
     fn minus_closes_it_when_there_is_nothing_to_page() {
         let mut ed = on_screen("dock", false);
@@ -665,7 +665,7 @@ mod tests {
     /// 打了一個字母：剩下以它開頭的那些，別的當場滅掉。
     ///
     /// Warning: **要三十處纔測得到這一條。** 不到二十六處標籤就只有一個字母，一鍵就
-    /// 跳完了，根本沒有「剩下第二個字母」這一步（見 `labels.rs` 的 `LABEL`）。
+    /// 跳完了，根本没有「剩下第二個字母」這一步（見 `labels.rs` 的 `LABEL`）。
     #[test]
     fn one_letter_of_a_label_narrows_what_is_left() {
         let mut ed = on_screen(&"東".repeat(30), true);
@@ -693,7 +693,7 @@ mod tests {
         assert!(ed.seek_labels().iter().all(|(_, l)| l.chars().count() == 2), "多一處就兩個");
     }
 
-    /// 面板上沒有那一號，按下去就收攤——不是悄悄什麼都不做。
+    /// 面板上没有那一號，按下去就收攤——不是悄悄什麼都不做。
     #[test]
     fn a_digit_with_no_row_behind_it_closes_it() {
         let mut ed = on_screen("東邊冬天", true);
@@ -703,7 +703,7 @@ mod tests {
         assert!(ed.seeking().is_none());
     }
 
-    /// 還沒畫過一幀就按——`page_span` 是空的，一處都找不到，可也不許炸。
+    /// 還没畫過一幀就按——`page_span` 是空的，一處都找不到，可也不許炸。
     #[test]
     fn before_the_first_frame_there_is_simply_nothing() {
         let mut ed = Editor::new();

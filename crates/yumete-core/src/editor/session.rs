@@ -223,7 +223,7 @@ impl Editor {
     /// on most keys: `changed_underneath` costs a `stat` on the cheap path and
     /// a whole read on the expensive one, and a held-down `j` would pay it per
     /// row.
-    /// **還有多久該看一眼磁碟**，`None` ＝ 沒開自動重載（2026-10-11）。
+    /// **還有多久該看一眼磁碟**，`None` ＝ 没開自動重載（2026-10-11）。
     ///
     /// Warning: **這一支是從前端那個 `continue` 裏救出來的。** 循環從前對自動重載
     /// 開一條自己的路：`recv_timeout(兩秒)`，超時就 `continue`——而那一下**跳過了
@@ -300,7 +300,7 @@ impl Editor {
         &self.build
     }
 
-    /// **這一次是空手打開的**——前端說的，因為只有它看得見命令行上有沒有檔名。
+    /// **這一次是空手打開的**——前端說的，因為只有它看得見命令行上有没有檔名。
     pub fn opened_with_nothing(&mut self) {
         self.opened_empty = true;
     }
@@ -310,7 +310,7 @@ impl Editor {
         self.start_note = note;
     }
 
-    /// 那一句，空着就是沒有。
+    /// 那一句，空着就是没有。
     pub fn start_note(&self) -> &str {
         &self.start_note
     }
@@ -318,7 +318,7 @@ impl Editor {
     /// **開場屏畫不畫。**
     ///
     /// Warning: **一有字就不畫了，不必誰去清它**——問的是「緩衝區還空着嗎」，所以
-    /// 打第一個字它自己就沒了（2026-10-05 定：「打一個字就消失」）。按 `j`
+    /// 打第一個字它自己就没了（2026-10-05 定：「打一個字就消失」）。按 `j`
     /// 這種不改稿子的鍵它照舊在，同 vim。
     pub fn intro(&self) -> bool {
         self.opened_empty
@@ -345,7 +345,7 @@ impl Editor {
         self.session_file = Some(dir.join(format!("{key}.txt")));
     }
 
-    /// **那份「我在哪裏」在哪**（`places.txt`），沒有數據目錄就是沒有。
+    /// **那份「我在哪裏」在哪**（`places.txt`），没有數據目錄就是没有。
     fn places_file(&self) -> Option<PathBuf> {
         self.where_data.as_ref().map(|d| d.join(PLACES_FILE))
     }
@@ -409,8 +409,8 @@ impl Editor {
         self.buffers[self.current].save_cursor(here);
         // **「我在哪裏」先記，它不靠會話**（2026-10-06 修）。
         //
-        // Warning: **這一句本來排在底下那道閘後面**，於是沒有會話檔的時候——`:w` 之後
-        // 直接 `:q`、或者 `[editor] session` 關着——它一次都沒寫過，而我拿 `--shot`
+        // Warning: **這一句本來排在底下那道閘後面**，於是没有會話檔的時候——`:w` 之後
+        // 直接 `:q`、或者 `[editor] session` 關着——它一次都没寫過，而我拿 `--shot`
         // 驗的正是那一種。會話答的是「這個工作路徑上次開着哪幾個」，這一份答的是
         // 「這個檔我上次停在哪」，兩件事不該綁在一起。
         let places: Vec<(String, usize)> = self
@@ -527,7 +527,7 @@ impl Editor {
     ///
     /// Warning: **它說「leaves the file alone」說了八天，而底下那一句在刪檔**
     /// （2026-10-10 報的）。拿走孤兒那一支寫完替代的草稿就把原件刪了，於是一個
-    /// 還在跑、打了字還沒存的 yumete 的唯一保險被別人清掉了——而它只要不再敲鍵
+    /// 還在跑、打了字還没存的 yumete 的唯一保險被別人清掉了——而它只要不再敲鍵
     /// 就不會重寫。現在刪之前問一句
     /// [`crate::buffer::owner_still_running`]。
     pub fn orphan_drafts(&self) -> Vec<PathBuf> {
@@ -549,11 +549,11 @@ impl Editor {
             // **主人還開着的那一份不是孤兒**（2026-10-11 報的）。
             //
             // 判準從前只是「不是我這個行程的」，於是**另一扇開着的 yumete** 裏一個
-            // 沒名字的緩衝，就讓這一扇在啓動時說「有 1 份沒存的草稿」——那句話說
-            // 的是崩潰留下的東西，而什麼都沒崩，他的編輯器就開在旁邊。
+            // 没名字的緩衝，就讓這一扇在啓動時說「有 1 份没存的草稿」——那句話說
+            // 的是崩潰留下的東西，而什麼都没崩，他的編輯器就開在旁邊。
             //
-            // `owner_still_running` 本來就在（問 `kill(pid, 0)`），只是這一支沒問。
-            // 那一扇真的崩了之後，pid 沒了，這一份當場又算孤兒——話晚說，不會不說。
+            // `owner_still_running` 本來就在（問 `kill(pid, 0)`），只是這一支没問。
+            // 那一扇真的崩了之後，pid 没了，這一份當場又算孤兒——話晚說，不會不說。
             .filter(|p| !crate::buffer::owner_still_running(p))
             .collect();
         found.sort();
@@ -599,15 +599,15 @@ impl Editor {
             // write fails the old file stays. A crash between the two costs
             // nothing: the draft is still there and gets offered again.
             // Warning: `write_swap` answers `Ok(())` for a buffer with nowhere to
-            // put a copy, so「沒有出錯」is not「留下了一份」. The recovered
+            // put a copy, so「没有出錯」is not「留下了一份」. The recovered
             // buffer is unnamed, and it is `name_scratch_drafts` that gives an
             // unnamed buffer somewhere to write — so that runs first, and the
             // proof is `recovery_copy()`, not the return value.
             //
             // Warning: **從前這一句是 `self.autosave || { … }`**（2026-10-02 查出來的）。
-            // 自動存檔出廠開着，於是那個 `||` 一路短路：**替代的那一份根本沒寫，
+            // 自動存檔出廠開着，於是那個 `||` 一路短路：**替代的那一份根本没寫，
             // 而底下照樣把舊的刪了**。靠的是「待會兒自動存檔那一拍會寫」——而那
-            // 一拍最遠在五秒之後（`SWAP_INTERVAL`），這五秒裏那段文字一份都沒有。
+            // 一拍最遠在五秒之後（`SWAP_INTERVAL`），這五秒裏那段文字一份都没有。
             // 上面那三行寫的正是不許有這個窗口。
             let kept = {
                 self.name_scratch_drafts();
@@ -630,7 +630,7 @@ impl Editor {
     /// 個字之後再按 recover 這是不對的。」
     ///
     /// Warning: **只問眼前這一個。** 面板一次只站一個問題（[`Query`] 的文檔寫着
-    /// 沒有隊列），而恢復上一次的會話可能一口氣開十章。所以問的是正在看的那一
+    /// 没有隊列），而恢復上一次的會話可能一口氣開十章。所以問的是正在看的那一
     /// 章，其餘的照舊在狀態欄上排隊，翻過去的時候再問。
     pub(super) fn recover_query(&self) -> Option<Query> {
         self.current_buffer().recovered_draft()?;
@@ -709,16 +709,16 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        // **救回來的字在盤上沒有第二份**（2026-10-03 一輪審查報來的，會丟字）。
+        // **救回來的字在盤上没有第二份**（2026-10-03 一輪審查報來的，會丟字）。
         //
         // 上面那句「`u` 把盤上那一份放回來，所以恢復是收得回的決定」只說對了一半：
         // 底下 `adopt_draft` 會把草稿檔刪掉，而撤回一步正好退到棧底——棧底的深度
         // 就是 `saved_depth`，於是緩衝報「乾淨」，`[+]` 不亮，`:q` 一聲不響地走人。
         // 那一刻**救回來的字只在重做棧裏**，而退出把重做棧扔了。重現過，看着盤上
-        // 的字節沒的。
+        // 的字節没的。
         //
         // Warning: **要在 `snapshot()` 之前撥**。撤回那一支恢復的是**快照裏記着的**那個
-        // 髒標記（`EditSnapshot::modified`），所以在快照之後撥等於沒撥——我第一
+        // 髒標記（`EditSnapshot::modified`），所以在快照之後撥等於没撥——我第一
         // 遍就是撥在後面，測試當場紅了。[`Buffer::mark_modified`] 順帶把「哪裏算
         // 乾淨」也作廢，這正是它自己的文檔寫的用途。
         self.current_buffer_mut().mark_modified();
@@ -749,7 +749,7 @@ impl Editor {
         self.ask_about_the_draft();
     }
 
-    /// **翻到一份還沒決定過的草稿，就在那一刻問。**
+    /// **翻到一份還没決定過的草稿，就在那一刻問。**
     ///
     /// 開檔、換檔走的都是這一支。說過「暫時不管」的不再自己站出來；要它回來就
     /// 打 `:recover`。
@@ -757,9 +757,9 @@ impl Editor {
         // Warning: **問的永遠是屏幕上那一份。** 一個還站着的草稿問題是**上一份**
         // 的——命令行上兩個檔、或者連着兩句 `:open`，第二句換了屏幕而第一句的
         // 面板還掛在那裏，於是看着 `b.md` 被問 `a.md` 要不要恢復。換掉它不丟東
-        // 西：沒答過的那一份不算「暫時不管」，翻回去自己會再問。
+        // 西：没答過的那一份不算「暫時不管」，翻回去自己會再問。
         //
-        // 別的問題（`:w` 那個大小核驗）不碰——那一問問的是一條還沒做完的命令。
+        // 別的問題（`:w` 那個大小核驗）不碰——那一問問的是一條還没做完的命令。
         // Warning: **兩問都要收，不只第一問**（2026-10-10 報的，會丟字）。從前這
         // 一句只認 `RecoverDraft`，而真正換掉正文的是第二問；於是第二問站着的時候
         // 點一下標籤，面板原封不動留着問 `b.md`，按 `y` 換掉的卻是 `a.md`。
@@ -778,7 +778,7 @@ impl Editor {
 
     /// `:recover` — **把開檔時那一問再擺一次**。
     ///
-    /// Warning: **沒有 `:recover!` 了**（2026-10-02 定）。刪草稿在面板裏是
+    /// Warning: **没有 `:recover!` 了**（2026-10-02 定）。刪草稿在面板裏是
     /// 「丟棄恢復文件」那一格，而一個不問就刪的拼法等於在那條規矩上開後門。
     pub(super) fn recover(&mut self) -> Result<CommandOutcome, EditorError> {
         if self.current_buffer().recovered_draft().is_none() {
@@ -794,7 +794,7 @@ impl Editor {
             return Ok(CommandOutcome::Continue);
         }
         // Warning: **`:recover` 自己不換，它把那一問再擺一次**（2026-10-02 定）。
-        // 「暫時不管」之後還回得來，而回來看見的是同樣三個選項——決定沒有
+        // 「暫時不管」之後還回得來，而回來看見的是同樣三個選項——決定没有
         // 因為拖了一會兒就變成一個無聲的鍵。真正換上去的那一步在
         // [`Self::take_the_draft`]，而它要走完兩問纔到得了。
         self.query = self.recover_query();
@@ -864,12 +864,12 @@ impl Editor {
     /// 一支比較、同一種報告，只換了「跟誰比」：磁碟上那一份 → `git show
     /// <提交>:<檔>`。不帶參數就是 `HEAD`。
     ///
-    /// **比的是編輯器裏這一份，含還沒存的**（定的）：問的是「我這次坐下來改了
+    /// **比的是編輯器裏這一份，含還没存的**（定的）：問的是「我這次坐下來改了
     /// 什麼」，而手上還熱的那幾筆也是這次改的。所以它和 `git diff` 命令行給的
     /// 結果不一定逐字相同——那是有意的。
     ///
     /// Warning: **粒度是詞，不是行。** 一個中文段落就是一行，行級 diff 把整段塗紅再塗
-    /// 綠，說的是真話卻沒有用（`crate::diff` 開頭那一段）。
+    /// 綠，說的是真話卻没有用（`crate::diff` 開頭那一段）。
     pub(super) fn git_diff_against(&mut self, commit: Option<&str>) {
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
             self.status = say!("diff.no-file");
@@ -878,7 +878,7 @@ impl Editor {
         let commit = commit.map(str::trim).filter(|c| !c.is_empty()).unwrap_or("HEAD");
         let old = match crate::vcs::Changes::text_at(&path, commit) {
             Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
-            // git 自己那一句話就是答案：「不在倉裏」和「這個檔還沒提交過」是兩件
+            // git 自己那一句話就是答案：「不在倉裏」和「這個檔還没提交過」是兩件
             // 事，而編一句概括它們的話會把兩件都說不準。
             Err(why) => {
                 self.status = say!("diff.git-said", commit, why);

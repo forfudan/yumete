@@ -45,7 +45,7 @@ impl Editor {
     /// `servers` 是**前端填的那一行**——哪幾個語言服務器在看着這一份，只有它知道
     /// （`Servers::watching`）。核心這一頭把整張表排好，留那一格給它，於是表的形
     /// 狀只有一處說得算。
-    /// `:info` 問出去了沒有——前端每輪取一次。
+    /// `:info` 問出去了没有——前端每輪取一次。
     pub fn take_file_info_request(&mut self) -> bool {
         std::mem::take(&mut self.file_info_request)
     }
@@ -255,7 +255,7 @@ impl Editor {
     /// 它當前緩衝區排第一、再數別的緩衝區，認「已經有 `progress.tsv`」或「有
     /// 一個 `.yumete/` 目録」——和項目根那一支的走法不一樣（那一支還認 `.git`）。
     /// 五份各走各的「往上找 `.yumete`」，這是其中一份。順帶解決了那條註釋說的
-    /// 事：清單沒有自己的檔名，而項目根本來就不問緩衝區。
+    /// 事：清單没有自己的檔名，而項目根本來就不問緩衝區。
     fn progress_path(&self) -> Option<PathBuf> {
         Some(self.root().join(".yumete").join("progress.tsv"))
     }
@@ -290,10 +290,10 @@ impl Editor {
     /// Warning: **它是[工作路徑][`Editor::working_dir`]的函數，不存**（2026-10-01
     /// 照 helix 重做）。從前有三個答案：一格釘死的 `workspace_root`、一支按打開
     /// 的緩衝區現算的 `project_root`、再加一格 `working_dir`——而全樹只有七處
-    /// 問第一個，整個 TUI 一次都沒問過它。helix 只有一個可變的東西（cwd），工作
+    /// 問第一個，整個 TUI 一次都没問過它。helix 只有一個可變的東西（cwd），工作
     /// 區是 `find_workspace()` 當場從它往上算出來的；這裏照辦。
     ///
-    /// 於是：`gd` 跳進別人的源碼它**不動**（工作路徑沒動），`:cd` 一改它**跟着
+    /// 於是：`gd` 跳進別人的源碼它**不動**（工作路徑没動），`:cd` 一改它**跟着
     /// 改**。
     pub fn root(&self) -> PathBuf {
         self.project_root()
@@ -311,7 +311,7 @@ impl Editor {
             .map(PathBuf::from)
     }
 
-    /// 開頭那個 `~` 換成家目錄；沒有 `~` 就原樣。
+    /// 開頭那個 `~` 換成家目錄；没有 `~` 就原樣。
     ///
     /// Warning: **只認 `~` 自己和 `~/`**（2026-10-01 審出來的）。從前它剝掉任何
     /// 開頭的 `~`，於是 `~notyou/x.md`（別人的家目錄，shell 的寫法）成了
@@ -323,7 +323,7 @@ impl Editor {
     ///
     /// Warning: **一條規矩，一處寫**（2026-10-02）。`:open` 2026-10-01 就改對了
     /// （從前它原樣交給作業系統，按**進程的 cwd** 解，於是 `:pwd` 報的那個目録
-    /// `:open` 不認），可**寫出去的那幾個從來沒改**：`:cd sub` 之後
+    /// `:open` 不認），可**寫出去的那幾個從來没改**：`:cd sub` 之後
     /// `:write-as z.md` 把檔存進了上一層，而狀態欄說「存了 z.md」。同一個會話裏
     /// 讀和寫對「相對於哪裏」給出兩種答案。
     ///
@@ -359,7 +359,7 @@ impl Editor {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
     }
 
-    /// `:cd <路徑>`。回 `false` ＝ 那裏沒有這個目錄。
+    /// `:cd <路徑>`。回 `false` ＝ 那裏没有這個目錄。
     pub fn set_working_dir(&mut self, at: &Path) -> bool {
         let full = match at.is_absolute() {
             true => at.to_path_buf(),
@@ -374,7 +374,7 @@ impl Editor {
         true
     }
 
-    /// `:cd -`。回 `None` ＝ 還沒有上一個。
+    /// `:cd -`。回 `None` ＝ 還没有上一個。
     pub fn working_dir_back(&mut self) -> Option<PathBuf> {
         let back = self.working_dir_before.take()?;
         self.working_dir_before = Some(self.working_dir());
@@ -391,7 +391,7 @@ impl Editor {
     /// `ye 卷一/一.md` 從 `/tmp` 敲時 `空格 f` 會列出 `/tmp`。可**那一改對項目
     /// 路徑毫無幫助**：`cd /repo && ye docs/manual.md` 兩種規矩算出來的項目都是
     /// `/repo`（往上走本來就會走過 `docs/`），它只在「從項目外面敲一個項目裏的
-    /// 檔」那一種纔有用。而代價是每一次從子目録啓動都要付：`:pwd` 報一個你沒打
+    /// 檔」那一種纔有用。而代價是每一次從子目録啓動都要付：`:pwd` 報一個你没打
     /// 過的目録、`:open README.md` 解到 `docs/` 底下去（那個檔不在就**一聲不吭
     /// 地**開一個空緩衝，`:w` 在錯的地方造檔）、`!cargo test` 跑在 `docs/` 裏。
     /// 判詞：撤回去。
@@ -425,7 +425,7 @@ impl Editor {
     /// 一個項目的檔，服務器被起在錯的根上**，一條診斷都不回。helix 分得很清楚：
     /// `find_workspace` 看 cwd，而 `find_lsp_workspace` 從那個檔往上爬。
     ///
-    /// 沒有檔名的緩衝回 `project_root()` —— 那時候 cwd 是唯一的線索。
+    /// 没有檔名的緩衝回 `project_root()` —— 那時候 cwd 是唯一的線索。
     pub fn lsp_root(&self) -> PathBuf {
         let Some(dir) = self.current_buffer().path().and_then(|p| p.parent()) else {
             return self.project_root();
@@ -433,7 +433,7 @@ impl Editor {
         // **語言自己的根記號先問**（2026-10-11，照 helix 的 `roots`）。
         //
         // `book_root` 只認 `.yumete` 和 `.git`——那是**這本書**的根，而服務器要的
-        // 是**這個項目**的根。一個沒有 `.git` 的 crate（`cargo new` 之後還沒
+        // 是**這個項目**的根。一個没有 `.git` 的 crate（`cargo new` 之後還没
         // `git init`，測試的固定裝置也是）於是把 `src/` 本身當成根交出去，
         // rust-analyzer 找不到 `Cargo.toml`，`gd` 答「未查到定義位置」——而診斷和
         // hover 照樣有，因為那兩樣單檔也答得出來，所以看着像只有 `gd` 壞了。
@@ -506,7 +506,7 @@ impl Editor {
             return;
         };
         let full = self.current_buffer().path().map(Path::to_path_buf);
-        // Warning: **只記這本書自己的檔**（2026-10-02 查出來的）。從前它只問「有沒有
+        // Warning: **只記這本書自己的檔**（2026-10-02 查出來的）。從前它只問「有没有
         // 這本賬」，不問「這一份在不在這本書裏」——於是**在書開着的時候隨手存一
         // 個別處的檔，那個檔名就進了寫稿人的寫作進度**。
         //
@@ -542,7 +542,7 @@ impl Editor {
         };
         let mut log = self.progress_log(&path);
         // Asking is enough to open the ledger: `:count-progress` on a book that has
-        // never been counted answers 「還沒有記錄」 *and* starts today's row, so
+        // never been counted answers 「還没有記錄」 *and* starts today's row, so
         // that the next save has somewhere to go. Nothing else in this editor
         // asks a writer to say 「yes, really」 twice.
         let name = self
@@ -694,7 +694,7 @@ impl Editor {
         // `ga` 會帶你去另一章。`Pane` 為同一個理由早就記 id 了。
         self.last_file = Some(self.current_buffer().id());
         self.current = index;
-        // **翻到一份還沒決定過的草稿，就在那一刻問**（2026-10-02 定）。開檔
+        // **翻到一份還没決定過的草稿，就在那一刻問**（2026-10-02 定）。開檔
         // 是一條路，換檔是另一條——而「第一次看見這一份」在兩條路上是同一件事。
         self.ask_about_the_draft();
         let restored = self.current_buffer().saved_cursor();
@@ -875,8 +875,8 @@ impl Editor {
 
     /// **一個路徑的真名**，問過一次就記住——見 [`Editor::canonical`]。
     ///
-    /// Warning: **問不出來就回 `None`，而且不記。** 盤上還沒有那個檔是常事
-    /// （`:w` 寫一個新檔），記下來就永遠當它沒有。
+    /// Warning: **問不出來就回 `None`，而且不記。** 盤上還没有那個檔是常事
+    /// （`:w` 寫一個新檔），記下來就永遠當它没有。
     pub(super) fn real_path(&self, path: &Path) -> Option<std::path::PathBuf> {
         if let Some(found) = self.canonical.borrow().get(path) {
             return Some(found.clone());
@@ -886,7 +886,7 @@ impl Editor {
         Some(real)
     }
 
-    /// **這個文件開着沒有**，按真實路徑比，不按拼法。
+    /// **這個文件開着没有**，按真實路徑比，不按拼法。
     pub(super) fn buffer_showing(&self, path: &Path) -> Option<usize> {
         let same = self.real_path(path);
         self.buffers.iter().position(|b| match (b.path(), &same) {
@@ -963,7 +963,7 @@ impl Editor {
             self.set_cursor(0);
             self.forget_the_document();
             // Warning: **關掉一個緩衝區也要重畫那張單子**（2026-10-07 審出來的）。換
-            // 緩衝區那條路（[`Self::show_buffer`]）一直有這一句，關掉這一條沒
+            // 緩衝區那條路（[`Self::show_buffer`]）一直有這一句，關掉這一條没
             // 有——而緩衝區那一扇面板的行是推進去存着的，不是每幀現算。於是
             // `:bd` 之後單子上那一條還在，上面還標着「你在這裏」；按下去打開
             // 的是一個已經不在的號碼。
@@ -1132,7 +1132,7 @@ impl Editor {
         // 文件失效了」). `gd` has always opened the file an entry is written in
         // — but 「open the file this names」 is exactly what `gf` is for, and a
         // name on the page names one. Standing on 滕子京 and pressing `gf` used
-        // to answer 「這一行沒寫文件名」, which is true of the line and false of
+        // to answer 「這一行没寫文件名」, which is true of the line and false of
         // the word under the cursor. `gd` is unchanged; this is the same door
         // with the other handle.
         if self.follow_wiki() {
@@ -1595,7 +1595,7 @@ impl Editor {
         }
         // **導出的那一份跟着源文件走**（2026-10-07 定）：它帶 BOM 就寫 BOM，它是
         // CRLF 就寫 CRLF。從前這裏寫死了 `\n`、也不寫 BOM——而一份 BOM ＋ CRLF 的
-        // `.csv` 導出來兩樣都沒了，Excel 打開就是亂碼。那三個字節正是
+        // `.csv` 導出來兩樣都没了，Excel 打開就是亂碼。那三個字節正是
         // `tests/byte_fidelity.rs` 存在的理由之一，它的註釋寫着「the thing Excel
         // reads to decide a `.csv` is UTF-8」。
         let ending = self.current_buffer().ending();
@@ -1634,7 +1634,7 @@ fn how_big(bytes: u64) -> String {
 ///
 /// 自己從 Unix 紀元算起，不拉一個日期庫進來：這一處是整個倉裏唯一要把時刻寫成
 /// 字的地方（`:yume-where` 那個版本號是編譯時戳好的字串）。閏年認，閏秒不認——
-/// 一份稿子的修改時間差一秒沒有人會發現，而多一條依賴是要養的。
+/// 一份稿子的修改時間差一秒没有人會發現，而多一條依賴是要養的。
 fn when_was(when: std::time::SystemTime) -> String {
     let secs = match when.duration_since(std::time::UNIX_EPOCH) {
         Ok(it) => it.as_secs() as i64,

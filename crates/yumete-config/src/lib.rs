@@ -107,9 +107,9 @@ pub struct EditorConfig {
     /// **出廠開着**，跟這個編輯器裏別的「出廠關着」不一樣。那些關着的——注音、
     /// markup、拆分——畫的是**正文上面**的東西，出廠開着就等於替讀者決定了稿子
     /// 該怎麼看。這一格是**傢俱**，而且那一格本來就是空的（`GUTTER_AIR` 早就把
-    /// 它留出來了），所以開着不佔版心、不挪一個字；沒進版本庫、沒動過、機器上
-    /// 沒有那個程序——三種情形都是一筆都不畫。一個要自己去找纔知道存在的東西，
-    /// 等於沒有。
+    /// 它留出來了），所以開着不佔版心、不挪一個字；没進版本庫、没動過、機器上
+    /// 没有那個程序——三種情形都是一筆都不畫。一個要自己去找纔知道存在的東西，
+    /// 等於没有。
     ///
     /// 代價是開檔與存檔各多一個子進程；量過，見 `docs/development.md`。
     pub diff_gutter: bool,
@@ -254,11 +254,11 @@ pub struct EditorConfig {
     /// `whichwrap`: one letter each for `b` (Backspace), `h`, `l`, `<` and `>`
     /// (the arrows) and `~`.
     ///
-    /// Warning: **vim 鍵位專用。** helix 沒有這個選項——那一邊 `h`/`l` 永遠跨行
+    /// Warning: **vim 鍵位專用。** helix 没有這個選項——那一邊 `h`/`l` 永遠跨行
     /// （`helix_core::movement::move_horizontal` 走的是整份文本的字素邊界，一道
-    /// 行邊界的閘都沒有），所以這一格在 helix 鍵位下讀都不讀。
+    /// 行邊界的閘都没有），所以這一格在 helix 鍵位下讀都不讀。
     ///
-    /// Warning: **`s` 這一檔沒有。** vim 出廠的 `b,s` 裏那個 `s` 是普通模式的空格，
+    /// Warning: **`s` 這一檔没有。** vim 出廠的 `b,s` 裏那個 `s` 是普通模式的空格，
     /// 而空格在這裏是菜單引導鍵。出廠因此是 `b` 而不是 `b,s`——行為與 vim 出廠
     /// 一模一樣，只是不擺一個做不了事的字母（2026-10-10 定）。
     pub which_wrap: String,
@@ -271,7 +271,7 @@ pub struct EditorConfig {
     /// vim 的 `autoread` 出廠是關的，而那是 1978 年的判斷：那時「檔在你底下變
     /// 了」多半是共享機器上**另一個人**動的。今天這件事幾乎全是自己幹的——切分
     /// 支、rebase、跑一遍格式化、或者另一個窗口開着同一個檔。helix 連這個選項都
-    /// 沒有，那不是一種設計選擇，是缺一個功能。
+    /// 没有，那不是一種設計選擇，是缺一個功能。
     ///
     /// 危險的那一半早就切掉了（`Editor::disk_tick`）：稿子改過就只說一句、檔被刪
     /// 了不讀也只說一次、時間戳太新就改讀內容再比。
@@ -878,7 +878,7 @@ pub mod rung {
     //! 步，於是像「比表格的底再沉一點點」這種量根本落不到格子上（那一條現在是
     //! 第 87 檔）。
     //!
-    //! Warning: **紙不在盡頭。** 從前紙就是梯子的末端，於是「比正文再沉一級」沒有
+    //! Warning: **紙不在盡頭。** 從前紙就是梯子的末端，於是「比正文再沉一級」没有
     //! 地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的方向。現在
     //! 紙在第 90 檔，後面十檔留給比紙更主題色的東西。
     /// **第 15 檔** — the writing, one small step back, for the *other* word in
@@ -939,7 +939,7 @@ pub mod rung {
     /// （2026-10-04 定）。
     ///
     /// Warning: **它比旁註、比 markup 都還要退後**。別的提示字是「讀它，只是它不是
-    /// 正文」；這一句要的是**看得見、可是一眼就知道那裏沒有字**——它畫在輸入框
+    /// 正文」；這一句要的是**看得見、可是一眼就知道那裏没有字**——它畫在輸入框
     /// 的底色上，而那一檔比紙還沉，所以同一個墨在這裏讀起來比在正文上更淡。
     /// 一度用旁註那一檔（第 25 檔），原話：「這個不够灰，感覺還是像有個字在里
     /// 面而不是提示……必須更淡更淡。」
@@ -1298,7 +1298,7 @@ impl ThemeConfig {
                 // Warning: **這四格從前是繼承來的**（2026-10-07 一輪審查量出來的）。
                 // 十套主題裏，除了墨香與黑白，每一套都自己定了第二梯隊那四個
                 // （橙粉青綠），卻都繼承了第一梯隊這四個——重新調了配角、讓主角
-                // 留在原主題，沒有人會故意這麼做。在這一套的紙上量出來是 紫 4.07、
+                // 留在原主題，没有人會故意這麼做。在這一套的紙上量出來是 紫 4.07、
                 // 綠 3.38、藍 4.44、黃 3.52，四個全在 WCAG 的 4.5:1 以下，而它自己
                 // 定的那四個穩穩在 4.8。
                 //
@@ -1773,7 +1773,7 @@ impl Runner {
         while let Some(at) = rest.find('{') {
             let after = &rest[at + 1..];
             let Some(end) = after.find('}') else {
-                return Some("{ 沒有配對的 }".to_string());
+                return Some("{ 没有配對的 }".to_string());
             };
             let name = &after[..end];
             if !["file", "dir", "name"].contains(&name) {
@@ -1784,7 +1784,7 @@ impl Runner {
             rest = &after[end + 1..];
         }
         if self.argv("x").is_none() {
-            return Some("引號沒有配對".to_string());
+            return Some("引號没有配對".to_string());
         }
         None
     }
@@ -1865,7 +1865,7 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // **Mojo 的服務器跟着 Mojo 一起裝**（2026-10-11）：`mojo-lsp-server` 和
         // `mojo` 同在 pixi 環境的 `bin/` 底下，而 `found_here` 本來就展開
         // `.pixi/envs/*/bin`——所以缺的只是這一行，不是找路那一半。
-        // 它不用參數，stdio 是它的默認（`--help` 裏連一個傳輸選項都沒有）。
+        // 它不用參數，stdio 是它的默認（`--help` 裏連一個傳輸選項都没有）。
         ("mojo".to_string(), vec![one("mojo-lsp-server", &[])]),
         // Warning: **python 没有那個顯然的答案**，所以它是一串。helix 給 python 列了
         // 五個（`languages.toml`：`["ty", "ruff", "jedi", "pylsp", "zuban"]`），
@@ -1983,7 +1983,7 @@ impl Config {
     ///
     /// Warning: 從前只有一條路，而它從**進程的 cwd** 往上走——`ye ~/書/三體/卷一/
     /// 第一章.md` 在 `/tmp` 敲的時候，編輯器的根算出來是 `~/書/三體`，而
-    /// `.yumete/config.toml` 一個都沒載。命令行說了一個地方，那就從那裏找。
+    /// `.yumete/config.toml` 一個都没載。命令行說了一個地方，那就從那裏找。
     pub fn load_reporting_from(from: &Path) -> (Config, Vec<String>) {
         Config::load_reporting_in(Some(from))
     }
@@ -2077,7 +2077,7 @@ impl Config {
         // way to find out that the question is now spelled `word_level`.
         if raw.editor.segmentation_threshold.is_some() {
             problems.push(
-                "segmentation_threshold 已經沒有了——改成 word_level = \"strict\"/\"balanced\"/\"full\""
+                "segmentation_threshold 已經没有了——改成 word_level = \"strict\"/\"balanced\"/\"full\""
                     .to_string(),
             );
         }
@@ -2126,11 +2126,11 @@ impl Config {
         //
         // - **二十六個顏色格**（`[theme]` 的二十四個品色 ＋ `[panel] ink`／`paper`）。
         //   寫錯一個色，`parse_hex` 回 `None`，`into_config` 那一支就留着主題自己的
-        //   顏色——而「留着主題的顏色」和「這一行沒生效」在屏幕上一模一樣。
+        //   顏色——而「留着主題的顏色」和「這一行没生效」在屏幕上一模一樣。
         // - **七個有閉合詞表的格**：`theme.ground`／`status_bar`、`editor.layout`／
         //   `tabs`／`word_level`／`word_mark`。
         //
-        // ⚠ `editor.language_key` 還沒補：那個字串是前端的鍵盤解析器認的
+        // ⚠ `editor.language_key` 還没補：那個字串是前端的鍵盤解析器認的
         //   （`C-^` 這種寫法），這一層看不見它認不認。
         for (name, value) in [
             ("[theme] ink", &raw.theme.ink),
@@ -2336,7 +2336,7 @@ impl Config {
     /// Warning: **一個讀不出來的配置從前一聲不吭**（2026-10-02 一輪掃查報來的）。
     /// 那兩處都是 `if let Ok(text) = fs::read_to_string(…)`，於是一份存成 UTF-16
     /// 的 `config.toml`（記事本的「Unicode」就是這個）**存在、讀不了、什麼都不
-    /// 說**——編輯器照出廠設定開起來，而唯一的跡象是「設定沒生效」。這一節開頭
+    /// 說**——編輯器照出廠設定開起來，而唯一的跡象是「設定没生效」。這一節開頭
     /// 那段註釋說的正是不許這樣：「used to be dropped in silence, and the only
     /// sign was that a setting did not take」。
     ///
@@ -2352,14 +2352,14 @@ impl Config {
         }
     }
 
-    /// **說「整份沒生效」，不只說哪一個鍵錯了**（2026-10-10 作者定，原話：
+    /// **說「整份没生效」，不只說哪一個鍵錯了**（2026-10-10 作者定，原話：
     /// 「{本地|全局}配置文件出错，使用出厂设置」）。
     ///
     /// TOML 要麼整份成要麼整份敗，而每個 `Raw*` 都帶 `deny_unknown_fields`——所以
     /// **一處打錯 ＝ 這個檔一條都不生效**。從前那句話只提打錯的那一個鍵，於是讀者
-    /// 改完它，另外四十項又一起回來了，而他從頭到尾不知道剛纔它們全沒生效。量過的
+    /// 改完它，另外四十項又一起回來了，而他從頭到尾不知道剛纔它們全没生效。量過的
     /// 樣子：`[editor]` 四行裏只有 `zong_length` 打成了 `zong_lenght`，屏幕上是橫排
-    /// 帶行號——上面 `layout = "vertical"` 和 `line_numbers = "none"` 兩項都沒生效。
+    /// 帶行號——上面 `layout = "vertical"` 和 `line_numbers = "none"` 兩項都没生效。
     fn describe(path: &Path, err: &toml::de::Error, local: bool) -> String {
         // toml's message names the offending key and what was expected instead;
         // its first line is the part a status bar has room for.
@@ -2604,7 +2604,7 @@ fn env_data_dirs() -> Vec<PathBuf> {
 /// method bundle** (`~/Library/Input Methods/Yume.app`, or the same path under
 /// `/Library` when it was installed for everyone) and keeps what it compiles
 /// and what the writer installed under `~/Library/Application Support/Yume`.
-/// So a Mac with five schemes installed and working answered 「沒有裝」 to
+/// So a Mac with five schemes installed and working answered 「没有裝」 to
 /// every question yumete could ask (2026-09-07: 「我安装了 yume 并且
 /// 有五个方案，但是 :yume-installed 没有办法检测到他们」).
 ///
@@ -2776,7 +2776,7 @@ pub fn data_search_layers() -> Vec<SearchDir> {
     found
 }
 
-/// **這個項目自己的那一份配置**，`None` ＝ 沒有。
+/// **這個項目自己的那一份配置**，`None` ＝ 没有。
 ///
 /// Warning: **只看這一層，不往上走**（2026-10-01 改，照 helix）。helix 是
 /// `find_workspace().0.join(".helix").join("config.toml")`——**先把工作區找出
@@ -3274,12 +3274,12 @@ impl RawConfig {
     /// **鉗掉了就說一聲**（2026-10-10 作者定）。
     ///
     /// 從前一個超出範圍的數是**靜靜**換掉的：檔裏寫着 `zong_length = 999`，編輯器
-    /// 用 64，設置面板上顯示的也是 64——文件說的和編輯器做的不是一回事，而沒有一處
+    /// 用 64，設置面板上顯示的也是 64——文件說的和編輯器做的不是一回事，而没有一處
     /// 說過。拼錯的鍵 2026-10-07 起會出聲，拼錯的詞 2026-10-09 起會出聲；這是同一件
     /// 事剩下的那一半。
     ///
     /// Warning: **`into_config()` 那一支把話丟掉**。它是兩個測試助手的入口
-    /// （`from_toml`／`from_sources`），那裏沒有人收；真正讀檔的那條路走這一支。
+    /// （`from_toml`／`from_sources`），那裏没有人收；真正讀檔的那條路走這一支。
     fn into_config_saying(self, problems: &mut Vec<String>) -> Config {
         /// `want` 鉗進 `low..=high`，鉗動了就記一條。`range` 是給人看的那半句。
         fn held(problems: &mut Vec<String>, at: &str, want: usize, got: usize, range: &str) -> usize {
@@ -3417,7 +3417,7 @@ impl RawConfig {
             // passes through rather than being clamped up to four.
             // **下界 8，和 `:view-wrap-vertical` 同一個數**（2026-10-09）。從前這裏是 4
             // 而命令那一頭是 `MIN_WRAP_WIDTH`（8）——同一個設置兩個下界。8 是安全線
-            // 不是口味：比它窄，一個全角字會被擠到自己那一行上，沒完沒了。
+            // 不是口味：比它窄，一個全角字會被擠到自己那一行上，没完没了。
             let kept = if length == 0 { 0 } else { length.clamp(8, 64) };
             config.editor.zong_length =
                 held(problems, "[editor] zong_length", length, kept, "0，或者 8 到 64");
@@ -3927,7 +3927,7 @@ mod tests {
             vec![PathBuf::from("/usr/local/share/yume"), PathBuf::from("/usr/share/yume")],
             "unset means the spec's default, not nothing"
         );
-        // An empty (or blank) setting is not「這臺機器沒有共用目錄」either —
+        // An empty (or blank) setting is not「這臺機器没有共用目錄」either —
         // it is a shell that exported the variable without a value.
         assert_eq!(shared_data_dirs(Some(" ")), shared_data_dirs(None));
         assert_eq!(
@@ -4119,8 +4119,8 @@ mod tests {
         let line = Config::describe(Path::new("config.toml"), &err, false);
         assert!(line.contains("zong_lenght"), "{line}");
         assert!(line.contains("config.toml: "), "{line}");
-        // **而且說整份沒生效**（2026-10-10）：改完那一個鍵，別的幾十項纔回來，而
-        // 從前沒有一處說過它們剛纔不在。
+        // **而且說整份没生效**（2026-10-10）：改完那一個鍵，別的幾十項纔回來，而
+        // 從前没有一處說過它們剛纔不在。
         assert!(line.starts_with("全局配置檔出錯"), "{line}");
         let local = Config::describe(Path::new("config.toml"), &err, true);
         assert!(local.starts_with("本地配置檔出錯"), "{local}");
@@ -4347,7 +4347,7 @@ mod screenshot_tests {
     ///
     /// 從前是 `if let Ok(text) = fs::read_to_string(…)`，於是一份存成 UTF-16 的
     /// `config.toml`（記事本的「Unicode」就是這個）**存在、讀不了、什麼都不說**
-    /// ——編輯器照出廠設定開起來，而唯一的跡象是「設定沒生效」。
+    /// ——編輯器照出廠設定開起來，而唯一的跡象是「設定没生效」。
     #[test]
     fn a_config_that_cannot_be_read_says_so() {
         let dir = std::env::temp_dir().join(format!("yumete-cfgread-{}", std::process::id()));

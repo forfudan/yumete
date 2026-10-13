@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn a_conflict_that_never_closes_is_not_one() {
         // Prose about merges — a paragraph of this manual is exactly this.
-        let text = "說明：衝突長這樣\n<<<<<<< HEAD\n然後就沒有然後了\n";
+        let text = "說明：衝突長這樣\n<<<<<<< HEAD\n然後就没有然後了\n";
         assert!(scan(&rope(text)).is_empty());
         // A head and a split with no foot is still not one.
         let text = "<<<<<<< HEAD\n甲\n=======\n乙\n";

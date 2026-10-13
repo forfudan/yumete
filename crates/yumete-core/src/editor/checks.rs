@@ -371,7 +371,7 @@ impl Editor {
         // **哪個服務器在答，在哪**——頂上一行（2026-09-29 定）。
         //
         // Warning: 「乾淨」和「根本没人說過話」在這張單子上長得一模一樣，而這一行
-        // 正是分得開它們的那一句：有它就是有人在聽，沒有它就是沒人在聽。
+        // 正是分得開它們的那一句：有它就是有人在聽，没有它就是没人在聽。
         let head = self.the_server_line().map(str::to_string);
         let n = all.len();
         if n == 0 {
@@ -410,7 +410,7 @@ impl Editor {
     /// **It needs a 詞頻表, and says so when it has none.** The fallback
     /// segmenter gives every 漢字 a word of its own and knows no rates; asked
     /// this question it would either say nothing or report every proper noun in
-    /// the book. The answer to 「為什麼一個字都沒有」 has to be a sentence, not
+    /// the book. The answer to 「為什麼一個字都没有」 has to be a sentence, not
     /// an empty listing.
     pub(super) fn habit_words(&mut self) {
         let name = self
@@ -461,11 +461,11 @@ impl Editor {
     /// **`:version` —— 這一版是哪一版，以及東西都放在哪。**
     ///
     /// Warning: **重點是路徑，不是版本號**（2026-10-05 一個用的人報的）。人裝完軟件
-    /// 第一個問題是「我該去改哪個文件」，而在這之前沒有任何命令說得出來。四個地方
+    /// 第一個問題是「我該去改哪個文件」，而在這之前没有任何命令說得出來。四個地方
     /// 各答一個問題：全局配置「我的設定在哪」、項目配置「這本書自己的設定在哪」、
-    /// 數據目錄「我沒存的稿子跑哪去了」、日誌「報 bug 要貼哪個檔」。
+    /// 數據目錄「我没存的稿子跑哪去了」、日誌「報 bug 要貼哪個檔」。
     ///
-    /// **不存在的標「（沒有）」**：他要知道那個檔是不是該自己建。
+    /// **不存在的標「（没有）」**：他要知道那個檔是不是該自己建。
     pub(super) fn show_the_build(&mut self) {
         let shown = |path: Option<std::path::PathBuf>| match path {
             Some(path) => format!("`{}`", path.display()),
@@ -521,7 +521,7 @@ impl Editor {
     ) {
         let mut buffer = Buffer::from_text(&listing);
         buffer.name_as(&name);
-        // 同 [`Editor::open_report`]：算出來的單子沒有檔案，改它改不到任何地方。
+        // 同 [`Editor::open_report`]：算出來的單子没有檔案，改它改不到任何地方。
         buffer.set_readonly(true);
         if let Some(syntax) = syntax {
             buffer.set_syntax(syntax);

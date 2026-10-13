@@ -1,11 +1,11 @@
 //! **那張設置表和 `RawConfig` 對不對得上** —— 讀源碼核，不靠記性。
 //!
 //! Warning: **少一項是一個無聲的洞**：加了新設定而忘了加進 `settings_ui::SETTINGS`，
-//! 面板上就沒有它，而編譯照過、面板照樣顯示別的設定的對的值。記事本裏那條「全局
+//! 面板上就没有它，而編譯照過、面板照樣顯示別的設定的對的值。記事本裏那條「全局
 //! 設置加一項要動三處，漏掉第三處編譯照過、面板照樣顯示對的值」說的就是這一族。
 //!
 //! 讀源碼是這個倉已有的辦法（`yumete-core/tests/messages.rs` 讀 `say!`）——
-//! Rust 沒有反射，而一張**手抄的**字段名單正是這條測試要防的東西。
+//! Rust 没有反射，而一張**手抄的**字段名單正是這條測試要防的東西。
 
 use std::collections::BTreeSet;
 
@@ -46,7 +46,7 @@ fn every_key() -> BTreeSet<String> {
         ("export", "RawExport"),
     ] {
         let found = fields_of(&source, what);
-        assert!(!found.is_empty(), "{what} 一個字段都沒讀出來——形狀變了？");
+        assert!(!found.is_empty(), "{what} 一個字段都没讀出來——形狀變了？");
         for key in found {
             out.insert(format!("{table}.{key}"));
         }
@@ -58,12 +58,12 @@ fn every_key() -> BTreeSet<String> {
 ///
 /// Warning: [`every_key`] 走的是一張**手抄**的表名單子，而那個模組的文檔自己寫着「一張
 /// 手抄的字段名單正是這條測試要防的東西」。手抄的表名單子是同一件事，只是矮了一層：
-/// 加一個 `RawFoo` 進 `RawConfig` 而忘了加進那張單子，它底下每一個鍵都沒人管，而
+/// 加一個 `RawFoo` 進 `RawConfig` 而忘了加進那張單子，它底下每一個鍵都没人管，而
 /// 「每個設定都有着落」那條照樣綠。2026-09-24 審出來的。
 ///
 /// Warning: **鍵集開放的表不算**（`syntax`/`sidebar`/`language`/`lsp`，都是
 /// `HashMap`）：它們的鍵是擴展名、面板名、語言名——任意的，數不出一張名單來，所以
-/// 「每個鍵都有着落」對它們沒有意義。`NOT_IN_THE_PANEL` 的判準二說的就是這一族。
+/// 「每個鍵都有着落」對它們没有意義。`NOT_IN_THE_PANEL` 的判準二說的就是這一族。
 #[test]
 fn the_six_tables_are_every_table_that_has_a_shape() {
     let source = std::fs::read_to_string(
@@ -76,16 +76,16 @@ fn the_six_tables_are_every_table_that_has_a_shape() {
         .lines()
         .filter_map(|line| {
             let (name, ty) = line.trim().trim_end_matches(',').split_once(": ")?;
-            // `RawEditor` 有形狀；`HashMap<…>` 沒有。
+            // `RawEditor` 有形狀；`HashMap<…>` 没有。
             ty.starts_with("Raw").then(|| name.to_string())
         })
         .collect();
-    assert!(shaped.len() >= 5, "一個帶形狀的表都沒讀出來——`RawConfig` 的寫法變了？");
+    assert!(shaped.len() >= 5, "一個帶形狀的表都没讀出來——`RawConfig` 的寫法變了？");
     let walked = ["editor", "theme", "panel", "ime", "keys", "export"];
     let missed: Vec<&String> = shaped.iter().filter(|t| !walked.contains(&t.as_str())).collect();
     assert!(
         missed.is_empty(),
-        "`RawConfig` 多了帶形狀的表而 `every_key` 沒走它：{missed:?}\n         走它（把表名加進 `every_key`），那張表底下的每個鍵纔算有人管。"
+        "`RawConfig` 多了帶形狀的表而 `every_key` 没走它：{missed:?}\n         走它（把表名加進 `every_key`），那張表底下的每個鍵纔算有人管。"
     );
 }
 
@@ -99,7 +99,7 @@ fn every_setting_names_a_key_that_exists() {
         .collect();
     assert!(
         wrong.is_empty(),
-        "設置表裏這幾個鍵 `RawConfig` 裏沒有——改了名字，還是打錯了？\n  {}",
+        "設置表裏這幾個鍵 `RawConfig` 裏没有——改了名字，還是打錯了？\n  {}",
         wrong.join("\n  ")
     );
 }
@@ -116,7 +116,7 @@ fn every_key_is_either_in_the_panel_or_accounted_for() {
     let missing: Vec<String> = every_key().into_iter().filter(|k| !spoken.contains(k)).collect();
     assert!(
         missing.is_empty(),
-        "這幾個設定沒人管——放進 SETTINGS（做了）、LATER（還沒輪到）或 \
+        "這幾個設定没人管——放進 SETTINGS（做了）、LATER（還没輪到）或 \
          NOT_IN_THE_PANEL（有理由不做）裏的一張：\n  {}",
         missing.join("\n  ")
     );
@@ -156,14 +156,14 @@ fn every_range_is_a_range() {
 
 // ── 出廠值那一欄 ────────────────────────────────────────────────────────
 //
-// `Setting::factory` 是**抄來的**字面量（面板要說「你沒設，出廠是這個」），所以
+// `Setting::factory` 是**抄來的**字面量（面板要說「你没設，出廠是這個」），所以
 // 它一定會漂——除非有人盯着。下面兩條就是盯着的那兩隻眼睛，而且**都不寫一行
 // per-key 的代碼**：表長到八十七項的那天，它們照樣管用。
 
-/// **出廠態 —— 讀一份什麽都沒說的配置。**
+/// **出廠態 —— 讀一份什麽都没說的配置。**
 ///
 /// Warning: **不是 `Config::default()`。** 那一個的 `lsp` 是空的，而 `into_config` 會替
-/// 沒寫 `[lsp.*]` 的配置填上出廠的三個語言服務器（`factory_servers`）。面板眼裏的
+/// 没寫 `[lsp.*]` 的配置填上出廠的三個語言服務器（`factory_servers`）。面板眼裏的
 /// 「出廠」是後者：一份空配置跑出來的樣子。
 fn nothing_said() -> yumete_config::Config {
     yumete_config::Config::from_toml("")
@@ -228,7 +228,7 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
                     assert_ne!(
                         Config::from_toml(&one(setting, &format!("\"{}\"", choice.word))),
                         nothing_said(),
-                        "{} 設成 {:?} 之後什麽都沒變——那個詞 `into_config` 不認得，\
+                        "{} 設成 {:?} 之後什麽都没變——那個詞 `into_config` 不認得，\
                          而面板照樣讓人選、照樣寫進 toml",
                         setting.path(),
                         choice.word
@@ -236,13 +236,13 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
                 }
                 continue;
             }
-            // 一段自己打的字沒有「另一個值」可推——跳過，那一族靠上面那條。
+            // 一段自己打的字没有「另一個值」可推——跳過，那一族靠上面那條。
             Kind::Text => continue,
         };
         assert_ne!(
             Config::from_toml(&one(setting, &other)),
             nothing_said(),
-            "{} 設成 {other} 之後什麽都沒變——鍵名打錯了？（打錯的話整份配置被丟掉，\
+            "{} 設成 {other} 之後什麽都没變——鍵名打錯了？（打錯的話整份配置被丟掉，\
              而丟掉之後正好等於出廠設定，所以另一條測試是綠的）",
             setting.path()
         );
@@ -335,7 +335,7 @@ fn every_factory_value_parses_as_the_kind_it_says_it_is() {
 /// `config.toml`，而顏色一聲不吭地回落到出廠那一套。
 ///
 /// Warning: **反方向查不了。** `named` 是一串 `match` 的臂，列舉不出來，所以
-/// 「config 多了一套主題而面板沒跟上」這一半沒有閘——加主題的時候兩處一起改。
+/// 「config 多了一套主題而面板没跟上」這一半没有閘——加主題的時候兩處一起改。
 #[test]
 fn every_theme_the_panel_can_turn_to_is_one_the_editor_knows() {
     let mut missing = Vec::new();
@@ -399,7 +399,7 @@ fn every_count_the_panel_declares_is_held_coming_in() {
     }
     assert!(
         loose.is_empty(),
-        "面板聲明的域，配置那一頭沒攔住：\n{}",
+        "面板聲明的域，配置那一頭没攔住：\n{}",
         loose.join("\n")
     );
 }

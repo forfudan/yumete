@@ -43,7 +43,7 @@
 /// 那張表是 Unicode 自己的 `Blocks.txt`，`every_han_block_is_segmentable`
 /// 逐區塊比對兩邊，所以下次補一個擴展區時漏改這裏會紅。
 ///
-/// 日文目前**沒有分詞數據**，所以假名進得來、卻只會被逐字切開——等有了詞表，
+/// 日文目前**没有分詞數據**，所以假名進得來、卻只會被逐字切開——等有了詞表，
 /// 這裏一個字都不用改。
 pub fn is_segmentable(c: char) -> bool {
     matches!(
@@ -60,7 +60,7 @@ pub fn is_segmentable(c: char) -> bool {
         | 0x4E00..=0x9FFF    // 基本區
         | 0xF900..=0xFAFF    // 兼容漢字
         | 0x20000..=0x2A6DF  // 擴展 B
-        | 0x2A700..=0x2EE5F  // 擴展 C D E F I（連號，中間沒有別的區塊）
+        | 0x2A700..=0x2EE5F  // 擴展 C D E F I（連號，中間没有別的區塊）
         | 0x2F800..=0x2FA1F  // 兼容漢字補充
         | 0x30000..=0x3347F  // 擴展 G H J（同上）
     )

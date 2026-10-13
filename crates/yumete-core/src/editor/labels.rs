@@ -34,7 +34,7 @@
 //! Warning: **記一筆，可是不挪版面**（2026-10-04 修）。從前走的是 `remember_jump()`，
 //! 而那一支順帶把落腳行挪到屏幕正中——居中是給「跳到看不見的地方」的（`n`、`gd`、
 //! 搜索結果），而這裏那個地方**本來就在屏幕上、你正盯着它**，挪走它這一跳就白跳。
-//! helix 也不挪（`jump_to_label` 跳完只有 `set_selection`，沒有 `align_view`）。
+//! helix 也不挪（`jump_to_label` 跳完只有 `set_selection`，没有 `align_view`）。
 //! 現在走 `note_where_we_came_from()`。
 
 use super::*;
@@ -98,18 +98,18 @@ pub(super) fn label_them(spots: impl IntoIterator<Item = usize>) -> Vec<Jump> {
 /// gu        2     45       99%
 /// ```
 ///
-/// 所以這一改**對 `gw` 等於沒改**（它永遠落在兩個字母那一檔），對 `go`/`gu` 是按鍵數
+/// 所以這一改**對 `gw` 等於没改**（它永遠落在兩個字母那一檔），對 `go`/`gu` 是按鍵數
 /// 直接少一半。
 ///
 /// 另一條當時的理由是肌肉記憶——「永遠兩個，手指學會加兩下」。2026-10-04 撤了：
 /// 「之前我觉得单字母跳转是怕影响肌肉记忆，现在想来似乎还好，因为是
 /// interactive 的，用户不存在肌肉记忆。」標籤本來就得看了才知道打什麼。
 ///
-/// Warning: **沒做大寫那一檔。** 提過「超過 26×26 就動用大寫，湊成 52×52」。量下來
+/// Warning: **没做大寫那一檔。** 提過「超過 26×26 就動用大寫，湊成 52×52」。量下來
 /// 最大 239，離 676 還差一半還多——那會是一段永遠跑不到的代碼，而大寫要按 Shift，
 /// 在「越快越好」這件事上是負的。
 ///
-/// Warning: **全屏一致，所以沒有前綴問題。** 要麼全是一個字母、要麼全是兩個，不會出現
+/// Warning: **全屏一致，所以没有前綴問題。** 要麼全是一個字母、要麼全是兩個，不會出現
 /// 「`a` 和 `ab` 同時是標籤」。avy/easymotion 為混長度做的那套前綴樹這裏不需要。
 ///
 /// 塌掉的兩處一併刪了：全角標籤（兩個半角字母本來就正好兩格，一個縱、一個漢字都填
@@ -140,14 +140,14 @@ impl Editor {
                 if a < from || a >= to {
                     continue;
                 }
-                // **標點自成一段的不給標籤。** 一個字母數字都沒有就是那一種——
+                // **標點自成一段的不給標籤。** 一個字母數字都没有就是那一種——
                 // 漢字在 Unicode 眼裏是 alphanumeric，「，」不是。
                 if !rope.slice(a..b).chars().any(char::is_alphanumeric) {
                     continue;
                 }
                 // Warning: **兩格都蓋不下就不標。** 標籤是蓋在那個單位頭上的，蓋過了頭
                 // 就吃掉它後面那個東西——英文的 `a` 只有一格，兩個字母蓋下去連它
-                // 後面的空格一起沒了，於是前後兩個詞黏在一起。helix 也跳過短詞
+                // 後面的空格一起没了，於是前後兩個詞黏在一起。helix 也跳過短詞
                 // （它的說法是「two or more characters」），這裏按**格數**算，因為
                 // 中文一個字就有兩格：`a` 不標，而單獨一個「我」標得了。
                 let wide: usize = rope
@@ -168,7 +168,7 @@ impl Editor {
     ///
     /// Warning: **落腳點只算屏幕上的，而「屏幕上」是畫的那一方纔知道的事**——所以不能
     /// 在按鍵這一刻算：`--shot` 只畫一幀，按鍵跑在那一幀之前，那時候
-    /// [`Editor::set_page_span`] 還沒被餵過，落腳點一個都找不到。前端畫完一幀、
+    /// [`Editor::set_page_span`] 還没被餵過，落腳點一個都找不到。前端畫完一幀、
     /// 把這一頁的範圍交過來，再回頭把它跑掉（[`Editor::run_owed_jump`]）。
     ///
     /// 同欠着那一趟搜索的辦法（`owed_search`），也同載入碼表那一處。
@@ -176,7 +176,7 @@ impl Editor {
         self.owed_jump = true;
     }
 
-    /// 欠着沒有——問一句，不取走。
+    /// 欠着没有——問一句，不取走。
     ///
     /// `--shot` 那條路用它：一批鍵是一次餵完的，而 `gw` 之後那一鍵打的是屏幕上發
     /// 的號碼，所以餵到欠着的那一刻要先畫一幀把號碼算出來。
@@ -184,7 +184,7 @@ impl Editor {
         self.owed_jump
     }
 
-    /// 前端畫完一幀、交了範圍之後，回頭問一句欠着沒有。
+    /// 前端畫完一幀、交了範圍之後，回頭問一句欠着没有。
     pub fn take_owed_jump(&mut self) -> bool {
         std::mem::take(&mut self.owed_jump)
     }
@@ -200,7 +200,7 @@ impl Editor {
         self.jump_typed.clear();
     }
 
-    /// 標籤亮着沒有。
+    /// 標籤亮着没有。
     pub fn jumping(&self) -> bool {
         !self.labels.is_empty()
     }
@@ -228,7 +228,7 @@ impl Editor {
         }
     }
 
-    /// 有沒有標籤亮着（哪一種都算）。
+    /// 有没有標籤亮着（哪一種都算）。
     pub fn showing_labels(&self) -> bool {
         self.jumping() || !self.seek_labels().is_empty()
     }
@@ -242,7 +242,7 @@ impl Editor {
     /// 標籤亮着的時候，這一鍵怎麼算。
     ///
     /// Warning: **不認得的鍵一律收掉標籤並吃掉它自己。** 「按錯一個鍵就跳到別處去」比
-    /// 「按錯一個鍵什麼都沒發生」壞得多——而標籤亮着的時候整個鍵盤都是標籤，讀者
+    /// 「按錯一個鍵什麼都没發生」壞得多——而標籤亮着的時候整個鍵盤都是標籤，讀者
     /// 心裏清楚自己在一個臨時的狀態裏。
     pub(super) fn jump_key(&mut self, key: Key) -> bool {
         let Key::Char(c) = key else {
@@ -336,7 +336,7 @@ mod measure {
         }
         let show = |name: &str, v: &mut Vec<usize>| {
             if v.is_empty() {
-                println!("{name:4} 沒有樣本");
+                println!("{name:4} 没有樣本");
                 return;
             }
             v.sort_unstable();

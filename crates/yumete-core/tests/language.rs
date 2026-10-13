@@ -68,8 +68,8 @@ fn everything_the_editor_says_follows_the_language_in_force() {
     )));
     for (language, want) in [
         (Language::English, "2 entries (built in)"),
-        (Language::Simplified, "2 条（内置）"),
-        (Language::Traditional, "2 條（內置）"),
+        (Language::Simplified, "2 条(内置)"),
+        (Language::Traditional, "2 條(內置)"),
     ] {
         messages::set_language(language);
         assert_eq!(editor.words_in_force(), want, "{language:?}");

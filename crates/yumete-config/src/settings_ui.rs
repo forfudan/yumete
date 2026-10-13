@@ -10,11 +10,11 @@
 //! 域**抄 `into_config`**，不是想出來的——那一支纔是真正在鉗值的地方。
 //!
 //! Warning: **一張 Rust 常量表，不是一個 toml。** Yume 那頭是 `settings_layout.toml`
-//! ＋ codegen，這個倉沒有那一套；而這張表要和 `RawEditor` 的字段名對得上，
+//! ＋ codegen，這個倉没有那一套；而這張表要和 `RawEditor` 的字段名對得上，
 //! **編譯期對得上比運行期對得上好**——`tests/settings_ui.rs` 讀源碼逐條核，少一
 //! 項就紅。
 //!
-//! Warning: **少一項是一個無聲的洞。** 加了新設定而忘了加進這張表，面板上就沒有它，
+//! Warning: **少一項是一個無聲的洞。** 加了新設定而忘了加進這張表，面板上就没有它，
 //! 而編譯照過、面板照樣顯示別的設定的對的值——記事本裏那條「全局設置加一項要動
 //! 三處，漏掉第三處編譯照過」說的就是這一族。
 
@@ -50,7 +50,7 @@ pub enum Group {
 /// Warning: **名字寫成一個 `label:` 字段，不是一支 `match`。** 兩個理由，第二個是硬的：
 /// ① 次序與名字在同一張表上，加一組不會只加一半；② `messages.rs` 那張「每個標籤
 /// 都有條目」的網是**讀源碼**找的，而它看得見 `label:`，看不見 `match` 的返回值
-/// ——寫成 `match` 的話，八個組名可以一條條目都沒有而全樹皆綠，面板上逐行寫着
+/// ——寫成 `match` 的話，八個組名可以一條條目都没有而全樹皆綠，面板上逐行寫着
 /// `set.group.layout`。
 pub struct Named {
     pub group: Group,
@@ -95,7 +95,7 @@ pub enum Kind {
     /// 一個數，**鉗在這個範圍裏**——範圍抄 `into_config`，那一支纔是真在鉗的。
     ///
     /// Warning: **`zero` 不是 `None` 的時候，`low` 是「最小的**非零**值」**，而真正的
-    /// 域是「0，或者 `low` 到 `high`」——中間沒有別的。`zong_length` 是「0，或者
+    /// 域是「0，或者 `low` 到 `high`」——中間没有別的。`zong_length` 是「0，或者
     /// 8 到 64」，`tatechuyoko` 是「0，或者 2 到 8」。把 `low` 寫成 0 的話面板停
     /// 得到域外的數，寫進檔裏而 `into_config` 當場鉗掉——**面板顯示的值不是編輯器
     /// 用的值**。`tests/settings_ui.rs` 那條
@@ -103,7 +103,7 @@ pub enum Kind {
     Count {
         low: usize,
         high: usize,
-        /// `0` 另有意思的時候，這裏是那句話的 tag；沒有就是 `None`。
+        /// `0` 另有意思的時候，這裏是那句話的 tag；没有就是 `None`。
         zero: Option<&'static str>,
     },
     /// 幾選一，狀態名裝在方括號裏——同搜索面板的 `[智能] 大小寫`。
@@ -134,7 +134,7 @@ pub struct Setting {
     pub hint: &'static str,
     /// **出廠是什麽，照 toml 的寫法**：`0`、`true`、`"horizontal"`。
     ///
-    /// 面板要說「這一項你沒設，出廠是這個」，而那句話得有個地方來。Warning: 它是一個
+    /// 面板要說「這一項你没設，出廠是這個」，而那句話得有個地方來。Warning: 它是一個
     /// **抄來的**字面量，所以一定會漂——除非有人盯着。盯着的是
     /// `tests/settings_ui.rs` 那兩條：把整張表的 `factory` 拼成一份 toml 讀回來，
     /// 必須和 `Config::default()` 逐位元組相同；再逐項餵一個**不是**出廠的值，
@@ -261,7 +261,7 @@ const THEME_STATUS_BAR_WAYS: &[Choice] = &[
     Choice { word: "raised", label: "set.pick.status-bar.raised" },
 ];
 
-/// Warning: **兩個詞，沒有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
+/// Warning: **兩個詞，没有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
 /// 字一律讀成 `auto`。所以這裏不許多寫一個「看着像」的選項——面板上切過去、檔裏
 /// 寫下去，而編輯器當它是 `auto`。2026-09-24 那條「改一項要真的改得動」逮到的。
 const KEYS_PRESET_WAYS: &[Choice] = &[
@@ -299,7 +299,7 @@ const EDITOR_AMBIGUOUS_WIDTH_WAYS: &[Choice] = &[
 /// **一項設定自己聲明的數域**，`(最小、最大、`0` 另有意思嗎)`。
 ///
 /// 給 `into_config` 用的：鉗的規矩和面板畫的規矩必須是**同一個事實**。從前兩邊
-/// 各寫一遍，於是 `indent_width` 從配置檔進來沒有上界（`999` 一下 `>` 把正文推
+/// 各寫一遍，於是 `indent_width` 從配置檔進來没有上界（`999` 一下 `>` 把正文推
 /// 到第 1008 欄推出屏幕），而同一個數從 `:indent-width` 打進去是拒的；
 /// `tab_width`、`wheel_step` 的上界與 `scrolloff` 的整個域同病（2026-10-10 報的）。
 pub fn counted(table: &str, key: &str) -> Option<(usize, usize, bool)> {
@@ -688,7 +688,7 @@ pub const SETTINGS: &[Setting] = &[
     // they see these option in the Interface tab.」擺在 `ime.*` 後面，因為「用
     // 哪一張碼表」是先問的那一句。
     //
-    // Warning: **`panel.rounded` 沒跟過來**，它不只管候選欄：`panel.rs` 那一支
+    // Warning: **`panel.rounded` 没跟過來**，它不只管候選欄：`panel.rs` 那一支
     // 畫的是編輯器自己每一扇浮動面板（`空格` which-key、腳注、`:write` 核驗、
     // 命令行、`:` 選單），候選欄只是它的第二個讀者。作者定的判準就是這一條。
     Setting {
@@ -846,17 +846,17 @@ pub const SETTINGS: &[Setting] = &[
     },
 ];
 
-/// **還沒填進 [`SETTINGS`] 的那些。**
+/// **還没填進 [`SETTINGS`] 的那些。**
 ///
 /// 一組一組填，這張表跟着縮短。Warning: **它不是「不做」的名單**——那一張是
-/// [`NOT_IN_THE_PANEL`]，兩者的區別是「還沒輪到」與「有理由不進去」。
+/// [`NOT_IN_THE_PANEL`]，兩者的區別是「還没輪到」與「有理由不進去」。
 pub const LATER: &[&str] = &[
     "editor.ruby_dialects",
     "editor.usage_groups",
     "editor.syntax",
     // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**
     // `ThemeConfig` 自己的註釋寫着「A theme is a few numbers, not a table of
-    // colours」，十個內置主題已經覆蓋；而 TUI 裏沒有取色器，只有 `#RRGGBB` 文本
+    // colours」，十個內置主題已經覆蓋；而 TUI 裏没有取色器，只有 `#RRGGBB` 文本
     // 框——擺二十四行等於讓人在一張色號表上發呆，正是這扇面板要消滅的那種發呆。
     "theme.ink",
     "theme.paper",

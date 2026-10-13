@@ -131,7 +131,7 @@ pub struct Style {
     pub paper: Paper,
     /// **源檔是什麼語法**（2026-09-28）。
     ///
-    /// Warning: **這一格從前沒有，於是導出永遠按 Markdown 解析源檔**——一份 Typst 稿子裏的
+    /// Warning: **這一格從前没有，於是導出永遠按 Markdown 解析源檔**——一份 Typst 稿子裏的
     /// `*粗*`、`$a+b$`、`@引用` 一個都認不出來，原樣（並且轉義）寫進導出的檔。
     /// `Format` 說的是**寫成什麼**，這一格說的是**讀的是什麼**，兩件事。
     pub source: crate::syntax::Syntax,
@@ -329,7 +329,7 @@ fn render(
                 let start = at.max(span.start);
                 let end = span.end.min(to);
                 // **這三種不往裏走。** 代碼與批注裏寫的就是字面（`spans()` 本來
-                // 也不往它們裏面遞），而分隔符自己沒有內容。
+                // 也不往它們裏面遞），而分隔符自己没有內容。
                 let leaf = matches!(span.kind, Kind::Code | Kind::Comment | Kind::Marker);
                 let body = match leaf {
                     true => {
@@ -381,7 +381,7 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
         // 式了。HTML 那一端也留着 `$…$`：瀏覽器自己不認，可是掛了 MathJax 的頁認，
         // 而換成 `<code>` 是連掛了也認不出來。
         (Kind::Math, _) => format!("${text}$"),
-        // 交叉引用在 Typst 裏原樣就對；HTML 沒有對應的東西，留着字面比丟掉好。
+        // 交叉引用在 Typst 裏原樣就對；HTML 没有對應的東西，留着字面比丟掉好。
         (Kind::Ref, _) => text.to_string(),
         // 標籤是稿子的腳手架：Typst 要，書不要。
         (Kind::Label, Dialect::Typst) => text.to_string(),

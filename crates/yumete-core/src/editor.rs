@@ -295,7 +295,7 @@ impl Pending {
             | Pending::Aim
             | Pending::AimStuck
             // 區域那一組等的是 `w`/`hjkl`/`e i E I`/`s q o`，一個要寫進去的
-            // 字都沒有。
+            // 字都没有。
             | Pending::Region
             | Pending::Conflict => false,
             // **A vim operator is waiting for a *motion*, which is keys** — the
@@ -329,8 +329,8 @@ impl Pending {
     /// 全角那一族不靠輸入法：`pair_family` 讓 `ma(` 認得（）〔〕、`ma[` 認得
     /// 「」，ASCII 一個鍵到底（量過）。
     ///
-    /// Warning: **沒有去拒收非 ASCII。** 挂不起系統輸入法的平臺上（fcitx5 那一端
-    /// 還沒有模態挂起）`ma「` 照樣要管用，所以 [`Self::takes_a_character`] 仍然
+    /// Warning: **没有去拒收非 ASCII。** 挂不起系統輸入法的平臺上（fcitx5 那一端
+    /// 還没有模態挂起）`ma「` 照樣要管用，所以 [`Self::takes_a_character`] 仍然
     /// 收它——這裏改的只是「不主動請輸入法來」。
     fn wants_the_ime(self) -> bool {
         self.takes_a_character() && !matches!(self, Pending::MatchPair { .. })
@@ -627,7 +627,7 @@ pub(crate) struct Filling {
     pub since: std::time::Instant,
 }
 
-/// **落地就叫停。** 面板關了、編輯器整個沒了，那一趟就不必走下去。
+/// **落地就叫停。** 面板關了、編輯器整個没了，那一趟就不必走下去。
 ///
 /// Warning: **不能只靠「送不出去就自己停」。** 那一句要等下一批滿了（五百一十二個檔）
 /// 纔發現收的人走了；一棵大樹上那是好幾秒的白跑，而測試裏那是幾條在背景裏搶磁盤
@@ -641,7 +641,7 @@ impl Drop for Filling {
 /// **一次跨檔替換動過的一份緩衝**，記得住它當時的樣子（2026-10-09 定）。
 ///
 /// 從前這裏只記一個號。號夠用來「逐份撤回」，不夠用來回答兩個問題：**這一份後來
-/// 有沒有又被改過**（`depth`），和**按鈕上該寫哪個名字**（`name`）。少了第一個，
+/// 有没有又被改過**（`depth`），和**按鈕上該寫哪個名字**（`name`）。少了第一個，
 /// `R` 之後手打幾個字再按 `u`，撤掉的是那幾個字而屏幕上寫着「撤回了剛纔那次替換」。
 pub(crate) struct Undone {
     pub buffer: u64,
@@ -653,7 +653,7 @@ pub(crate) struct Undone {
     ///
     /// Warning: **不能問 `replace_tally`**（2026-10-09 查出來的）：那一格在報完「共替換
     /// N 處」的時候就被 `mem::take` 拿走了，於是撤回那扇窗上寫着「涉及 2 個文件
-    /// **0** 處」。一批做完就沒了的數，不能在它死後再問一次。
+    /// **0** 處」。一批做完就没了的數，不能在它死後再問一次。
     pub hits: usize,
 }
 
@@ -1183,7 +1183,7 @@ pub enum Aim {
     Bottom,
     /// `zj`／`zk` — **光標這一行坐在第幾個屏幕行上**（2026-10-06）。
     ///
-    /// 滾視窗和挪光標是同一件事的兩面：視窗往下滾一行，光標的文字沒動，於是它
+    /// 滾視窗和挪光標是同一件事的兩面：視窗往下滾一行，光標的文字没動，於是它
     /// 在屏幕上**往上**坐了一行。helix 的 `scroll_up`／`scroll_down` 就是這麼
     /// 定義的，所以這裏不必另開一個「視窗位置」的概念——那一個在渲染層，核心
     /// 改不動（§5.98 記着為什麼）。
@@ -1226,7 +1226,7 @@ pub enum Bounds {
 /// **The rule, 2026-09-05**, and the reason it is safe:
 ///
 /// > 有明確表格語法定義的文檔（csv tsv markdown），可以在文件任何位置通過 `ti`
-/// > `tt` 進入表格視圖…對於這個文件中所有的表格都生效。如果一個文件沒有確切的
+/// > `tt` 進入表格視圖…對於這個文件中所有的表格都生效。如果一個文件没有確切的
 /// > 表格語法，比如 txt、yaml 用空格制表符隔開，那麼我們就…在制表符上按 `ti`
 /// > `tt` 將這一段進入表格模式，離開表格立刻回到 prose 狀態。
 ///
@@ -1569,7 +1569,7 @@ fn downloads_dir() -> PathBuf {
 /// `find_workspace`）。從前它先問當前緩衝區、再問別的緩衝區，於是 `gd` 跳進
 /// rustup 的源碼之後「項目」整個跟着跑了——選擇器、`:grep`、詞表、百科各自在
 /// 不同的時刻算，答案還互相對不上。現在它是**工作路徑的函數**：`gd` 跳走它不
-/// 動（工作路徑沒動），`:cd` 一改它跟着改。
+/// 動（工作路徑没動），`:cd` 一改它跟着改。
 /// [`book_root`] for callers outside this crate — `main.rs` keys the session
 /// by the project, and it has to answer the same question the editor will.
 pub fn book_root_of(here: &Path) -> PathBuf {
@@ -1606,8 +1606,8 @@ pub(crate) fn book_root(here: &Path) -> PathBuf {
 /// **一趟走最多看幾個檔。**
 ///
 /// 2026-09-27 報的：「位置」那一格是自由文本，隨手打一個 `/` 進去，編輯器就去
-/// 遍歷整塊磁盤——沒有進度、沒有上限、按不了取消，只能 `kill -9`。一本書幾百個
-/// 檔，一個項目幾千個；到了這個數還沒走完，走的就不是一本書了。
+/// 遍歷整塊磁盤——没有進度、没有上限、按不了取消，只能 `kill -9`。一本書幾百個
+/// 檔，一個項目幾千個；到了這個數還没走完，走的就不是一本書了。
 pub(crate) const WALK_CEILING: usize = 20_000;
 
 /// **哪些文件算在裏面** —— 搜索面板底下那三格（2026-10-01 定）。
@@ -1628,10 +1628,10 @@ pub struct Sieve {
     pub include: String,
     /// 這幾條 glob 配得上的不走。
     pub exclude: String,
-    /// **沒有畫面要護的那一趟，一道閘都不加**（2026-10-03 定）。
+    /// **没有畫面要護的那一趟，一道閘都不加**（2026-10-03 定）。
     ///
     /// 編輯器裏那幾道闸（[`WALK_CEILING`] 那一族）護的是**畫面那條
-    /// 線程**：走查跑在它上面，不封頂就是凍住。`ye --grep` 沒有畫面——它慢一點只
+    /// 線程**：走查跑在它上面，不封頂就是凍住。`ye --grep` 没有畫面——它慢一點只
     /// 是慢一點，而「悄悄少看了一半還說找完了」是另一回事。原話：「rg 会打印全
     /// 部，我们会跳过大文件，也会提早停止」。
     ///
@@ -1668,7 +1668,7 @@ impl Sieve {
     /// 深度的 `.py`，而 `docs/*.py` 釘在根上——和 VS Code 的「包含文件」框同形。
     /// 帶 `!` 的那幾條是排除，正是這個機制本來的用法。
     ///
-    /// `None` 是「有一條寫錯了」，呼叫方要說出來，不許悄悄當成沒寫。
+    /// `None` 是「有一條寫錯了」，呼叫方要說出來，不許悄悄當成没寫。
     fn overrides(&self, root: &Path) -> Option<ignore::overrides::Override> {
         if self.include.trim().is_empty() && self.exclude.trim().is_empty() {
             return Some(ignore::overrides::Override::empty());
@@ -1699,7 +1699,7 @@ pub(crate) const VISIT_CEILING: usize = 200_000;
 /// 着走。
 ///
 /// Warning: **只有 [`walk_prose`] 肯等**（2026-10-02 修）。挑選器與 `[[` 補全走的是
-/// 同一支 [`walk_inner`]，可它們在按鍵上同步跑、中間沒有「正在找…」那一幀，到了
+/// 同一支 [`walk_inner`]，可它們在按鍵上同步跑、中間没有「正在找…」那一幀，到了
 /// 地板就該停。
 ///
 /// Warning: **代價是同一次搜索兩次跑可能給出不同的數目**（盤忙的時候少走幾個）。它只
@@ -1708,14 +1708,14 @@ pub(crate) const WALK_GRACE: std::time::Duration = std::time::Duration::from_sec
 
 /// **走到這裏無論如何都停**（2026-10-01 定，原話：「算满3秒，5秒硬停」）。
 ///
-/// 沒有這一道的話最壞情況是「走完地板要多久」，而那是盤說了算的：這台機器上量過，
+/// 没有這一道的話最壞情況是「走完地板要多久」，而那是盤說了算的：這台機器上量過，
 /// 二十萬個條目要 5.3 秒，兩萬個文本檔要 2.5 秒（暖盤；`-uu` 走 yumete 這個倉是
 /// 51,673 個條目、1.37 秒，約三萬七千條目一秒，其中 86% 是二進制、只探 1 KB）。
 /// 換一塊慢盤或者一個網絡掛載，同樣的地板可以凍住幾十秒——而這一趟是同步跑完的，
 /// 按不了取消。
 ///
 /// Warning: **所以上面那兩個數不是真的「地板」**（2026-10-02 審出來的措辭錯）：這一條
-/// 不管有沒有碰到地板都會停，慢盤上走不滿兩萬個檔就被切斷是正常的。而且真正的
+/// 不管有没有碰到地板都會停，慢盤上走不滿兩萬個檔就被切斷是正常的。而且真正的
 /// 上界是「這個數**加上**再處理一個條目的時間」——錶只在 `flatten()` 交出一個條
 /// 目的時候讀，卡死在 `readdir` 上的掛載誰也攔不住。
 pub(crate) const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
@@ -1728,12 +1728,12 @@ pub(crate) const WALK_DEADLINE: std::time::Duration = std::time::Duration::from_
 ///
 /// Warning: **只有搜索那一趟肯為了多走幾個檔多等三秒**（2026-10-02 審出來的回歸）。那
 /// 個寬限本來是給 [`walk_prose`] 的，可它從前寫在共用的走查裏，於是挑選器和 `[[`
-/// 補全也繼承了——而那兩個是**按鍵上同步跑的**，中間沒有「正在找…」那一幀，而且
+/// 補全也繼承了——而那兩個是**按鍵上同步跑的**，中間没有「正在找…」那一幀，而且
 /// 它們自己有走查的地板護着（`WALK_CEILING` 兩萬條）。量出來的（`$HOME`，同一個進程同一
 /// 棵樹）：到地板就停是 `seen=20000 138ms`，等滿三秒是 `seen=323177 3.00s`。
 ///
 /// Warning: **管道那一邊一條都不認**（2026-10-03 定）。那三道閘護的是畫面；
-/// `ye --grep` 沒有畫面，而「悄悄少看了一半」在那裏是一個錯的答案。連那五秒硬停
+/// `ye --grep` 没有畫面，而「悄悄少看了一半」在那裏是一個錯的答案。連那五秒硬停
 /// 也不認——它是「卡死不如交一半」的保險絲，而管道裏卡着的只是一個命令行程序，
 /// Ctrl-C 就是了。
 pub(crate) fn walk_is_done(
@@ -1756,11 +1756,11 @@ pub(crate) fn walk_is_done(
 /// **走查走到哪一個檔了** —— 畫面讀，走查寫（2026-10-07）。
 ///
 /// 一個共用的格子，不是一條通道。走一個檔發一則消息，在那個資料夾裏就是二十三萬
-/// 則；而要答的問題只有「**此刻**在看誰」，所以舊的一則永遠沒人要。寫是每個檔一
-/// 次（比讀那個檔便宜得多），讀是畫面自己按它的節拍來，沒人看的時候一文不花。
+/// 則；而要答的問題只有「**此刻**在看誰」，所以舊的一則永遠没人要。寫是每個檔一
+/// 次（比讀那個檔便宜得多），讀是畫面自己按它的節拍來，没人看的時候一文不花。
 ///
 /// 量過的：`-uu` 開着的那個資料夾是 **239,125 個檔、38 GB**，命令行同一個詞頭
-/// 30 秒一行都不印——走查沒壞，是它不吭聲（§5.101）。
+/// 30 秒一行都不印——走查没壞，是它不吭聲（§5.101）。
 #[derive(Default)]
 pub struct Progress {
     looked: std::sync::atomic::AtomicUsize,
@@ -1790,7 +1790,7 @@ impl Progress {
         self.looked.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// 此刻在看哪一個——還沒開始走就是空的。
+    /// 此刻在看哪一個——還没開始走就是空的。
     pub fn at(&self) -> String {
         self.at.lock().map(|held| held.clone()).unwrap_or_default()
     }
@@ -1799,7 +1799,7 @@ impl Progress {
 /// 一趟走查交代了什麼。
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct Walked {
-    /// **沒走完就停了** —— 交出來的那張單子是半截的，呼叫方有義務說出來。
+    /// **没走完就停了** —— 交出來的那張單子是半截的，呼叫方有義務說出來。
     pub cut: bool,
 }
 
@@ -1816,9 +1816,9 @@ pub(crate) fn walk_with(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -
 /// [`walk_with`], **but it can be told to stop** — the picker's walk runs beside
 /// the key thread now and has to end when the panel does (2026-10-09).
 ///
-/// Warning: **這是取消，不是封頂。** 挑選器那一趟撥的是 `Sieve::uncapped`（名單沒有
+/// Warning: **這是取消，不是封頂。** 挑選器那一趟撥的是 `Sieve::uncapped`（名單没有
 /// 上限，見 `open_file_picker_in`），所以唯一停得下它的就是這一格——面板一關就撥
-/// 上去，下一個條目上它自己收攤。沒有這一格，一個 `/` 上開一次挑選器會留下一條
+/// 上去，下一個條目上它自己收攤。没有這一格，一個 `/` 上開一次挑選器會留下一條
 /// 遍歷整塊磁盤的線程。
 pub(crate) fn walk_until_told(
     root: &Path,
@@ -1837,13 +1837,13 @@ pub(crate) fn walk_until_told(
 ///
 /// 判準照抄 helix：`BinaryDetection::quit(b'\x00')`
 /// （`helix-term/src/commands.rs:2649`，符號搜索那一支 `syntax.rs:235` 同樣一行）。
-/// 沒有這一道，開着「搜索隱藏和忽略」搜 yumete 自己的倉要**從盤上讀 5.26 GB 的
+/// 没有這一道，開着「搜索隱藏和忽略」搜 yumete 自己的倉要**從盤上讀 5.26 GB 的
 /// `.o` 與 `.rlib` 進內存，再一個個因為不是 UTF-8 丟掉**；探頭 1 KB 只要 44 MB。
 pub(crate) fn walk_prose(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -> Walked {
     walk_inner(root, sieve, true, None, f)
 }
 
-/// 頭 1 KB 裏有沒有 NUL —— 讀不開的也當二進制，反正搜不了。
+/// 頭 1 KB 裏有没有 NUL —— 讀不開的也當二進制，反正搜不了。
 pub(crate) fn looks_binary(path: &Path) -> bool {
     use std::io::Read;
     let Ok(mut file) = std::fs::File::open(path) else { return true };
@@ -1901,7 +1901,7 @@ fn walk_inner(
         // two, and the cost of looking is a whole build tree.
         .filter_entry({
             // Warning: **開了忽略那一半，這道地板也要讓開**（2026-10-01）。它本來是
-            // 「沒有 .gitignore 的文件夾也不該搜 build 產物」的兜底，而那一半說的
+            // 「没有 .gitignore 的文件夾也不該搜 build 產物」的兜底，而那一半說的
             // 是「忽略的也搜」。`target/` 與 `node_modules/` 不是隱藏文件，所以
             // 它歸忽略那一半管，不歸隱藏那一半。
             let floor = !sieve.ignored;
@@ -1916,7 +1916,7 @@ fn walk_inner(
     let mut visited = 0usize;
     for entry in walker.flatten() {
         // Warning: **走到地板、而且錶也到了，纔停。** 停下來交出走到的那些，比卡死強：
-        // 交出來的是真的，而卡死的時候屏幕上一個字都沒有。地板與錶的分工見
+        // 交出來的是真的，而卡死的時候屏幕上一個字都没有。地板與錶的分工見
         // [`WALK_GRACE`]。
         //
         // Warning: **這一句要排在「是不是文件」前面**（2026-10-02 查出來的）。從前它在
@@ -1927,7 +1927,7 @@ fn walk_inner(
         // 名單還說自己是全的。`visited` 本來就該是「看過幾個條目」，不是「看過幾
         // 個文件」；那是 `seen`。
         visited += 1;
-        // **叫停就停**，而且和那幾道閘不一樣：這不算「半截」，是面板關了沒人要了。
+        // **叫停就停**，而且和那幾道閘不一樣：這不算「半截」，是面板關了没人要了。
         if stop.is_some_and(|one| one.load(std::sync::atomic::Ordering::Relaxed)) {
             break;
         }
@@ -1945,9 +1945,9 @@ fn walk_inner(
         if is_build_output(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        // **「太大就不搜」那一道闸沒有了**（2026-10-08 定）。從前超過 `GREP_MAX_BYTES`
+        // **「太大就不搜」那一道闸没有了**（2026-10-08 定）。從前超過 `GREP_MAX_BYTES`
         // （4 MB）的檔在編輯器裏整個跳過，**而且不說**——`Walked.skipped` 算得出來、
-        // 存進了 `search.skipped`，全樹沒有一處讀它。一次搜索漏掉一個檔而一聲不吺，
+        // 存進了 `search.skipped`，全樹没有一處讀它。一次搜索漏掉一個檔而一聲不吺，
         // 正是 `Walked` 自己的註釋禁止的那件事。
         //
         // 拿掉之前量過代價並且給他看過：那個倉 9,193 個檔、共 13.3 GB，而 154 個超過
@@ -2022,7 +2022,7 @@ pub struct DetectAsk {
 /// 搜索是按行流著讀的，認詞不是），這一支就是把保護補回到**讀的那一步**上。
 ///
 /// 比按檔大小摔整個檔好：一個 2 GB 的稿子前面那幾兆字照樣數得着，而內存封頂在
-/// [`DISCOVER_MAX_BYTES`]，跟檔多大沒關係。
+/// [`DISCOVER_MAX_BYTES`]，跟檔多大没關係。
 fn read_some(path: &Path, room: usize) -> Option<String> {
     use std::io::Read;
     if room == 0 {
@@ -2190,7 +2190,7 @@ pub struct Editor {
     pending: Pending,
     /// **範圍寫反了的那一條 `:s`**，等 `y` 再跑（2026-10-09）。
     ///
-    /// 存的是**那一行原文**：`execute` 只收字串，沒有「跑一條已解析命令」的入口，而
+    /// 存的是**那一行原文**：`execute` 只收字串，没有「跑一條已解析命令」的入口，而
     /// 原文再跑一遍是最老實的一種重放——按 `y` 的人要的正是「我剛打的那一句，照
     /// 對調過的範圍做」。
     swap_asked: Option<String>,
@@ -2225,14 +2225,14 @@ pub struct Editor {
     ///
     /// 從前整個寄存器是一個字串，而 `edit_each` 會逐段 `store`——於是 N 段選區剪下來
     /// 只剩一份活着，`d` 之後 `P` 把同一截貼到每一段上。實測三行上 `wCCd;P` 出來的是
-    /// 「甲一行…／乙**一**行…／丙**一**行…」：乙和丙那兩截除了撤銷棧之外哪兒都沒有，
+    /// 「甲一行…／乙**一**行…／丙**一**行…」：乙和丙那兩截除了撤銷棧之外哪兒都没有，
     /// 而結果讀起來像通順的句子，所以什麽都不會提醒寫的人。真 helix 的寄存器是一段
     /// 選區一份，同一串鍵在那裏逐字節還原。
     ///
     /// [`Editor::register`] 照舊是「整份」（按文檔次序接起來）：選區只剩一段的時候
     /// `P` 貼的就是它，`C-r` 與那張寄存器單子也讀它。
     ///
-    /// ⚠ **具名寄存器還是一份**（`"a`）：同一個洞還在那裏，沒一起改。
+    /// ⚠ **具名寄存器還是一份**（`"a`）：同一個洞還在那裏，没一起改。
     register_parts: Vec<String>,
     /// [`Self::register_parts`] 是哪一趟存下的——見 [`Editor::store`]。
     parts_round: u64,
@@ -2403,7 +2403,7 @@ pub struct Editor {
     definition_query: Option<(PathBuf, usize, usize)>,
     /// **`gd` 問出去的那一刻，光標在哪個緩衝區的哪一格**（2026-10-07 審出來的）。
     ///
-    /// 答案是隔幾百毫秒纔回來的，而那幾百毫秒裏人沒有停下來。從前答案一回來就
+    /// 答案是隔幾百毫秒纔回來的，而那幾百毫秒裏人没有停下來。從前答案一回來就
     /// `open_file` ＋ `set_cursor`，於是按下 `gd` 之後順手按 `i` 開始打字的人，
     /// **打到一半緩衝區在腳底下換了**，後面每一個字都落進那個定義所在的檔。
     /// 懸停（`hovered`）與補全（`completion_at`）早就各記了一格問這件事，`gd`
@@ -2435,7 +2435,7 @@ pub struct Editor {
     settings_open: bool,
     /// 面板開着時按過 `:w`。
     settings_save: bool,
-    /// 面板開着時按過 `:q` —— `Some(force)`，`force` 是打了 `!`（不管沒存的）。
+    /// 面板開着時按過 `:q` —— `Some(force)`，`force` 是打了 `!`（不管没存的）。
     settings_close: Option<bool>,
     /// **`空格 k` 問出去的那一句**（#53 ③，2026-09-21）——同上一個形狀。
     hover_query: Option<(PathBuf, usize, usize)>,
@@ -2461,7 +2461,7 @@ pub struct Editor {
     offering: Option<Offering>,
     /// **服務器對光標下那個東西說的話，和問它時光標在哪**（#53 ③）。
     ///
-    /// Warning: 位置要記下來，因為這一則是**問出來的**：光標一走它就該沒。跟着光標自己
+    /// Warning: 位置要記下來，因為這一則是**問出來的**：光標一走它就該没。跟着光標自己
     /// 冒出來的診斷不是這一種——那一種是文件的事實，走到哪都還在。
     /// **那一則說明，連它說的是哪一段**（範圍是字偏移，2026-10-11 改的）。
     ///
@@ -2473,7 +2473,7 @@ pub struct Editor {
     hovered: Option<(std::ops::Range<usize>, crate::lsp::Told)>,
     /// **手動叫出來的那一種信息，和叫的時候光標在哪**（#426，2026-09-30）。
     ///
-    /// 光標一走就作廢——那一則是問出來的，問題已經過去了。`None` ＝ 沒人叫過，
+    /// 光標一走就作廢——那一則是問出來的，問題已經過去了。`None` ＝ 没人叫過，
     /// 那就看即時的那一種。
     info_asked: Option<(crate::sidebar::Info, usize)>,
     /// **按 `Esc` 把浮窗按下去的那一格**（2026-10-01 提的）。
@@ -2505,10 +2505,10 @@ pub struct Editor {
     /// **`:diagnostics-all` 頂上那一行**：哪個語言服務器、在哪、什麽狀態。
     ///
     /// Warning: **前端寫進來的**——`Servers` 住在那一側，核心看不見它。同 `says`
-    /// 那一條的理由。空着就是「還沒有服務器接上」，而那與「接上了、一句話都沒說」
+    /// 那一條的理由。空着就是「還没有服務器接上」，而那與「接上了、一句話都没說」
     /// 是兩回事，`:diagnostics-all` 分得出來纔說得清。
     server_line: Option<String>,
-    /// **語言服務器從什麽時候起沒回話**，`None` ＝ 沒在等（2026-09-30，#426）。
+    /// **語言服務器從什麽時候起没回話**，`None` ＝ 没在等（2026-09-30，#426）。
     ///
     /// 給狀態行上轉圈那八個點用。Warning: **前端寫進來的**，同 `server_line` 那
     /// 一條的理由：`Servers` 住在那一側，核心看不見它。存的是**起點**而不是
@@ -2541,7 +2541,7 @@ pub struct Editor {
     ///
     /// 鍵是 buffer 的 id 而不是它在清單裏的位置：`:bd` 關掉一個，後面每一個都往
     /// 前挪一格，而快取要跟着那一本書走。revision 是「還用不用再喊一次 git」的
-    /// 全部判準——存了兩次中間一個字沒改，第二次就不再喊。
+    /// 全部判準——存了兩次中間一個字没改，第二次就不再喊。
     vcs: HashMap<u64, (u64, crate::vcs::Changes)>,
     /// `HEAD` 裏那一份的正文，按 buffer 存着。取它要一個子進程，而它只在存檔、
     /// 換檔、或者 git 那邊動過的時候纔變——**每一次停手**都重取一遍就白花了。
@@ -2554,17 +2554,17 @@ pub struct Editor {
     vcs_asked: HashMap<u64, u64>,
     /// **`HEAD` 上一次問的時候指着哪裏**（2026-10-11 報的）。
     ///
-    /// 提交之後檔案沒變、`revision` 也沒變，所以光看它們永遠不會重算——而改動條
+    /// 提交之後檔案没變、`revision` 也没變，所以光看它們永遠不會重算——而改動條
     /// 說的正是「跟 `HEAD` 比」。見 [`crate::vcs::Changes::head_mark`]。
     vcs_head: HashMap<u64, String>,
     /// **每個路徑的真名**，問過一次就記住（2026-10-03）。
     ///
-    /// 「這個檔開着沒有」是按真名比的，不按拼法——`./甲.md` 與 `甲.md` 是同一個
+    /// 「這個檔開着没有」是按真名比的，不按拼法——`./甲.md` 與 `甲.md` 是同一個
     /// 檔。可是那個比法對**每一個**已開的緩衝都問一次文件系統，而 `R` 又對每一個
-    /// 要改的檔問一次「開着沒有」：三千個檔就是四百五十萬次 `realpath`。
+    /// 要改的檔問一次「開着没有」：三千個檔就是四百五十萬次 `realpath`。
     ///
-    /// Warning: **問不出來的不記。** 盤上還沒有那個檔的時候 `canonicalize` 會失敗，
-    /// 而它待會兒可能就有了（`:w` 寫一個新檔）——記下來就永遠當它沒有。
+    /// Warning: **問不出來的不記。** 盤上還没有那個檔的時候 `canonicalize` 會失敗，
+    /// 而它待會兒可能就有了（`:w` 寫一個新檔）——記下來就永遠當它没有。
     canonical: RefCell<HashMap<std::path::PathBuf, std::path::PathBuf>>,
     /// 語言服務器說了什麽不對（#53/#54），按**路徑**存。
     ///
@@ -2572,10 +2572,10 @@ pub struct Editor {
     /// 不一定開着——rust-analyzer 看一個 crate，報回來的多半是你還没打開的那幾
     /// 個檔。路徑收得下這些，buffer id 收不下。
     problems: crate::problem::Problems,
-    /// 剛纔那個**文本對象**沒找到東西（`mi(` 外面沒有括號、`miw` 不在一個詞上）。
+    /// 剛纔那個**文本對象**没找到東西（`mi(` 外面没有括號、`miw` 不在一個詞上）。
     ///
-    /// Warning: 一個字的選區和「沒動」在數據上**一模一樣**（`anchor == cursor` 兩者都
-    /// 成立），所以操作符不能靠比較位置來判斷對象有沒有命中——`wdiw`（光標停在
+    /// Warning: 一個字的選區和「没動」在數據上**一模一樣**（`anchor == cursor` 兩者都
+    /// 成立），所以操作符不能靠比較位置來判斷對象有没有命中——`wdiw`（光標停在
     /// 一個空格上）就是這麽被拒掉的。對象自己說。
     object_missed: bool,
     /// What is drawn in a paragraph's opening squares, if anything.
@@ -2660,7 +2660,7 @@ pub struct Editor {
     /// 不用改。按下去先回 Normal；那一鍵走完，`on_key` 的出口把模式放回來。
     one_normal_key: Option<crate::input::Mode>,
     overwriting: bool,
-    /// 蓋掉的字，一個進去的字一格——原處沒有字（蓋到行尾外面去了）就是 `None`。
+    /// 蓋掉的字，一個進去的字一格——原處没有字（蓋到行尾外面去了）就是 `None`。
     /// 退格照這張單子倒着還回去，同 vim。
     overwritten: Vec<Option<char>>,
     /// Whether the insert was opened with `o` (`Some(true)`) or `O`
@@ -2704,7 +2704,7 @@ pub struct Editor {
     /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
     /// prompt 事件）。前端每幀取一次。
     trial: Option<Trial>,
-    /// 眼下有沒有一條預覽在場——退出去的時候要不要還原，問的是它。
+    /// 眼下有没有一條預覽在場——退出去的時候要不要還原，問的是它。
     previewing: bool,
     /// Text waiting to be put on the system clipboard, which only the front end
     /// can reach (it owns the terminal).
@@ -2724,7 +2724,7 @@ pub struct Editor {
     /// `pbpaste` 一個行程——高亮每挪一格就讀，那是把一個有副作用的動作綁在方向
     /// 鍵上。所以問的時機是面板開那一下，答案存着，面板關了就扔。
     clipboard_peek: bool,
-    /// 上一次問來的那一份，`None` ＝ 還沒答或者讀不着。
+    /// 上一次問來的那一份，`None` ＝ 還没答或者讀不着。
     clipboard_seen: Option<String>,
     /// How much of the result is shown: the source, the source coloured, or
     /// the page with the markup taken off it.
@@ -2747,7 +2747,7 @@ pub struct Editor {
     sat_at: std::cell::Cell<Option<usize>>,
     /// **`z` 那一層要把光標放在第幾行**（`zz`/`zt`/`zb`，2026-09-28）。
     ///
-    /// Warning: **這個編輯器沒有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
+    /// Warning: **這個編輯器没有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
     /// 不是視圖——視圖自己滾了，下一幀光標要留在屏幕上的時候會被拉回去。視口住在 TUI
     /// 那一側（`Seats`）。
     ///
@@ -2756,7 +2756,7 @@ pub struct Editor {
     ///
     /// Warning: **一次性的，和 `jumped` 同一套**：按下去的時候立起來，下一個鍵按下去的時候
     /// （`on_key` 開頭）放倒。中間那一幀已經畫過了，視口就停在那裏——再下一幀
-    /// `page_inset` 回 `None`（光標舒舒服服在頁面上），沒人會把它拉回去。
+    /// `page_inset` 回 `None`（光標舒舒服服在頁面上），没人會把它拉回去。
     aim: Option<Aim>,
     /// A pending `:format` or `:run <name>`, waiting for the front end — the
     /// editor knows *what* was asked for and the front end knows how to run a
@@ -2842,9 +2842,9 @@ pub struct Editor {
     /// `yumete-config`——「只有前端知道數據目錄在哪」（`main.rs` 那一段註釋）。
     /// 項目那一份不在這裏：核心自己認得 `.yumete` 這個記號（見 `project_root`），
     /// 算得出來。
-    /// **這一次是空手打開的，還沒人動過**——開場屏畫不畫看它。
+    /// **這一次是空手打開的，還没人動過**——開場屏畫不畫看它。
     ///
-    /// 前端在啓動時說一句（它纔知道命令行上有沒有給檔名）；一有東西寫進緩衝區、
+    /// 前端在啓動時說一句（它纔知道命令行上有没有給檔名）；一有東西寫進緩衝區、
     /// 或者開了一個檔，就自己滅掉。
     opened_empty: bool,
     /// **開場屏底下那一句**——現在只有「用的是哪一套鍵位」。空着就不畫。
@@ -2970,7 +2970,7 @@ pub struct Editor {
     /// **製表符把格寬補到哪裏，算過就記著**（2026-10-08）。
     ///
     /// 量出來的：一行 47 萬字、裏面有 97 個製表符的檔，一幀 0.43 秒；同樣長、同樣
-    /// 內容、**一個製表符也沒有**的是 0.04 秒。差別在於：那一支要把整行走一遍字簇
+    /// 內容、**一個製表符也没有**的是 0.04 秒。差別在於：那一支要把整行走一遍字簇
     /// 才算得出每一個製表符的列，而折行每量一行就問一次——十幾行就是十幾遍。
     /// 答案只跟著正文與那幾個輸入變，所以記起來就是一次改動算一遍。
     tab_memo: memo::LineMemo<Vec<crate::drawn::Run>>,
@@ -3012,7 +3012,7 @@ pub struct Editor {
     code_colours: bool,
     /// **一行長過多少字就不上色**（`:view-long-line`，2026-10-08）。
     ///
-    /// `None` ＝沒有上限（vim 的 `synmaxcol=0`）。出廠 [`Editor::LONG_LINE`]，那個
+    /// `None` ＝没有上限（vim 的 `synmaxcol=0`）。出廠 [`Editor::LONG_LINE`]，那個
     /// 數怎麽量出來的寫在它自己那裏。
     ///
     /// 量出來的（2026-10-08）：同樣 1.5M 字，切成 15000 行是每幀 0.04 秒，擠成一行
@@ -3165,8 +3165,8 @@ pub struct Editor {
     width: [crate::sidebar::Width; 2],
     /// **上一幀的窗口有多大**，前端每一幀告訴一次（欄、行）。
     ///
-    /// 編輯器本身沒有視口（見 [`Editor::scroll`]），這一格不是視口——它只用來答
-    /// 一個問題：**這扇面板擺得下嗎**。出廠是「大得很」，所以沒有前端的時候
+    /// 編輯器本身没有視口（見 [`Editor::scroll`]），這一格不是視口——它只用來答
+    /// 一個問題：**這扇面板擺得下嗎**。出廠是「大得很」，所以没有前端的時候
     /// （測試、`:export`）一切照舊。
     window: (u16, u16),
     /// **Which slot each panel lives in**, indexed by
@@ -3188,7 +3188,7 @@ pub struct Editor {
     ///
     /// `R` 一次能改好幾個檔，而 `u` 只撤回**當前那一份**——於是按一下 `u`，一個
     /// 檔回去了、別的檔照舊改着，編輯器還說「已經到最早了」，接着 `:write-all`
-    /// 就把沒撤回的那幾個寫進磁盤。記下來，`u` 纔撤得回一整批。
+    /// 就把没撤回的那幾個寫進磁盤。記下來，`u` 纔撤得回一整批。
     replaced_in: Vec<Undone>,
     /// **那句「換不換」問的是哪一個檔**，`None` ＝ 問的是全部（2026-09-27）。
     ///
@@ -3198,7 +3198,7 @@ pub struct Editor {
     replace_this_file: Option<(std::path::PathBuf, Option<u64>)>,
     /// **這一節坐在哪本書上**，開 yumete 的時候定一次，此後不動（2026-09-27 定）。
     ///
-    /// 從前沒有這個東西：文件樹問 `project_root()`、「工作區」問 shell 的 cwd、
+    /// 從前没有這個東西：文件樹問 `project_root()`、「工作區」問 shell 的 cwd、
     /// 「本文件夾」問**當前緩衝**的所在文件夾（那一檔 2026-10-01 刪了），而位置
     /// 那一格裏的 `.` 也跟着當前緩衝走——於是換一個 buffer，`.` 就換了意思，而
     /// 屏幕上看不出來。
@@ -3208,9 +3208,9 @@ pub struct Editor {
     /// 檔只是多一個緩衝，不把根撐大。
     ///
     /// Warning: **2026-10-01 這一格刪了。** 它是第三份答案：全樹只有七處問
-    /// [`Editor::root`]，整個 TUI 一次都沒問過，而別處各自按緩衝區現算。helix
+    /// [`Editor::root`]，整個 TUI 一次都没問過，而別處各自按緩衝區現算。helix
     /// 讀了源碼之後發現它只有**一個**可變的東西（cwd），工作區是當場算出來的
-    /// （`find_workspace()`）——照辦之後這一格就沒有存在的理由了。
+    /// （`find_workspace()`）——照辦之後這一格就没有存在的理由了。
     /// 見 [`Editor::working_dir`] 與 [`Editor::root`]。
     /// **欠着一趟走磁盤的搜索**（2026-09-27 報的：「掃描期間表頭是完全靜止的」）。
     ///
@@ -3224,7 +3224,7 @@ pub struct Editor {
     ///
     /// `R` 動的是每一個有命中的檔，而三千個檔那一趟要十幾秒——從前那十幾秒裏
     /// 屏幕一動不動。同 [`Editor::owed_search`] 的辦法：先畫一幀說話，再做一小
-    /// 批，做完再畫一幀。**沒有取消**（2026-10-03 定：「不給取消，只給進度」）。
+    /// 批，做完再畫一幀。**没有取消**（2026-10-03 定：「不給取消，只給進度」）。
     owed_replace: Option<usize>,
     /// **按了 `Esc`，正等人答那一問**（2026-10-11）。欠着的那一批還在
     /// `owed_replace` 裏，只是這會兒不往下做——答「繼續」就接着走。
@@ -3285,14 +3285,14 @@ pub struct Editor {
     ///
     /// Warning: 和 [`Editor::info_scroll`]（浮窗那一份）是兩格，因為它們是兩個
     /// 容器：邊欄走得進去、按 `j`/`k` 一行一行讀，浮窗走不進去、只收 `C-u`/
-    /// `C-d`。合成一格的話從邊欄退回浮窗會把讀到哪帶過去，而那兩件事沒有關係。
+    /// `C-d`。合成一格的話從邊欄退回浮窗會把讀到哪帶過去，而那兩件事没有關係。
     panel_scroll: usize,
     /// **百科那一頁讀到哪了**，以及讀的是站在哪個字上的那一條（2026-09-22 報的：
     /// 「無法用 j/k/J/K 向上下翻動」）。
     ///
     /// Warning: **百科是一段文章，不是一張單子。** 邊欄裏別的視圖都是行的列表，`j` 走
-    /// 下一行；這一個沒有行可走，要的是**滾動**。從前它連 rows 都不產生
-    /// （`View::Wiki => return`），於是 `j` 落在 `sidebar.step()` 上什麼都沒發生。
+    /// 下一行；這一個没有行可走，要的是**滾動**。從前它連 rows 都不產生
+    /// （`View::Wiki => return`），於是 `j` 落在 `sidebar.step()` 上什麼都没發生。
     ///
     /// 記着光標在哪，是因為光標一走詞條就換了——換了還停在第七行，讀的是另一條
     /// 的中間。
@@ -3394,7 +3394,7 @@ pub enum KeyOutcome {
 ///
 /// Warning: **這是一張白名單，永遠不許反過來寫**。預覽的意思是「這條命令在你按下
 /// Enter 之前就跑了」——`:w`、`:quit`、`:pipe`、`:convert` 跑一次就回不去了。
-/// 所以沒有「預設可預覽」這回事：一條命令進了這張表纔預覽，而進表的前提是它
+/// 所以没有「預設可預覽」這回事：一條命令進了這張表纔預覽，而進表的前提是它
 /// **還原得回去**。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shown {
@@ -3412,7 +3412,7 @@ pub enum Trial {
     Show(Shown),
     /// 按了 Enter：留着，記下的舊樣子不必再留。
     Keep,
-    /// 按了 Esc，或者名字被退格退沒了：放回原來那個。
+    /// 按了 Esc，或者名字被退格退没了：放回原來那個。
     Undo,
 }
 
@@ -3468,7 +3468,7 @@ pub struct Query {
     ///
     /// 答案動的是 `current_buffer()`，所以一個站着的問題跟着屏幕走就會答錯檔：
     /// 鼠標點一下標籤，面板還問着 `b.md` 而 `y` 換掉的是 `a.md`。問題與它的緩
-    /// 衝綁在一起之後，換了檔就把它收走（沒答過的那一份不算「暫時不管」，翻回
+    /// 衝綁在一起之後，換了檔就把它收走（没答過的那一份不算「暫時不管」，翻回
     /// 去自己會再問）。`None` ＝ 跟緩衝無關的問題，例如 `:w` 那個大小核驗。
     pub(crate) about: Option<usize>,
 }
@@ -3516,7 +3516,7 @@ enum Asking {
     ///
     /// 原話：「recover 必須在用戶重新打開這個文件的時候立刻決定。用戶打了 800
     /// 個字之後再按 recover 這是不對的。」從前開檔只在狀態欄寫一句，而
-    /// `:recover` 永遠按得下去——打了一上午再按一下，那一上午就從屏幕上沒了
+    /// `:recover` 永遠按得下去——打了一上午再按一下，那一上午就從屏幕上没了
     /// （`u` 退得回來，但那是「知道的人纔救得回來」）。
     ///
     /// 「暫時不管」之後 `:recover` 再問同樣這三個。
@@ -3550,9 +3550,9 @@ enum Asking {
     /// 間——同一天定的：「我建議繼續把正在替換的文件替換完再問，防止一個文件替
     /// 換到一半」。
     AbortTheReplace,
-    /// **有幾個檔沒撤回**，撤完報一句（2026-10-09 定）。
+    /// **有幾個檔没撤回**，撤完報一句（2026-10-09 定）。
     ///
-    /// 一個按鈕的窗，不是問句：名單可以有三十行，而「這幾個檔**沒有**復原」是最
+    /// 一個按鈕的窗，不是問句：名單可以有三十行，而「這幾個檔**没有**復原」是最
     /// 不該從狀態欄滑過去的一句話。IntelliJ 同樣用一扇窗交代它。
     ReplaceUndoneInPart,
 }
@@ -3579,7 +3579,7 @@ impl fmt::Display for EditorError {
                 write!(f, "{}", say!("buffer.unsaved-changes"))
             }
             // A dead end otherwise: this is the first thing a new file says
-            // back, and 「沒有檔名」 alone does not tell you how to give it one.
+            // back, and 「没有檔名」 alone does not tell you how to give it one.
             EditorError::NoFileName => {
                 write!(f, "{}", say!("buffer.no-name-yet"))
             }
@@ -3681,7 +3681,7 @@ impl Editor {
             info_hushed: None,
             // 啓動時的 cwd，記下來。Warning: **不是每次問的時候再去取**——那就
             // 成了「進程此刻的 cwd」，而這一格的意思是「你敲 yumete 的那個目
-            // 錄」。眼下沒有誰 `chdir`，所以兩者相同；記下來是為了它一直相同。
+            // 錄」。眼下没有誰 `chdir`，所以兩者相同；記下來是為了它一直相同。
             working_dir: std::env::current_dir().ok(),
             working_dir_before: None,
             info_live: None,
@@ -3910,7 +3910,7 @@ impl Editor {
     ///
     /// Warning: 屏幕上只有三個位置值得一個鍵：頂、中、底。helix 的 `z` 層還有 `zm`（橫向居
     /// 中），而這個倉橫向滾動只在 `:view-wrap off` 下才動得起來，那時整段是一行——
-    /// 「橫向居中」在一行裏沒有意義。
+    /// 「橫向居中」在一行裏没有意義。
     pub fn aim_the_page(&mut self, aim: Aim) {
         self.aim = Some(aim);
         self.status = match aim {
@@ -3930,7 +3930,7 @@ impl Editor {
     /// 翻頁那一族（[`Editor::move_page`]）。
     ///
     /// 繪製那一層問它，是為了讓自己那幾條「貼邊就推一把」的修正讓路：指定過的
-    /// 位置是讀者剛剛親口說的，推一把就把它推沒了。
+    /// 位置是讀者剛剛親口說的，推一把就把它推没了。
     pub fn aimed(&self) -> bool {
         self.aim.is_some()
     }
@@ -4004,7 +4004,7 @@ impl Editor {
     /// `distance` is how far the cursor is from the page's top, if it is on the
     /// page at all; `last` is the page's last row. `None` means 「leave the
     /// page where it is」.
-    /// **光標上一幀坐在第幾行**（竪排是第幾縱），`None` ＝ 還沒畫過。
+    /// **光標上一幀坐在第幾行**（竪排是第幾縱），`None` ＝ 還没畫過。
     ///
     /// 由 [`Editor::page_inset`] 自己記下——它就是決定這件事的那一支，而三個
     /// 繪製面都問它，所以記在這裏三面通用。`C-d`／`C-u` 要的正是這個數：翻頁
@@ -4505,7 +4505,7 @@ fn scan(
 /// 的字類都夠得着那個 `\n`。量出來的三件事：
 ///
 /// - `:%s/\s+$//g` 把 `alpha  \nbeta  \ngamma\n` 變成 `alphabetagamma`，三行併成
-///   一行、末尾那個換行符也沒了。**那是最常見的一條清理式子**，沒有閘攔它。
+///   一行、末尾那個換行符也没了。**那是最常見的一條清理式子**，没有閘攔它。
 /// - `$` 永遠配不中行末（正則的 `$` 是「整段的末尾」，而那一段以 `\n` 收尾），於是
 ///   `:%s/said$/SAID/g` 報「換了 0 處」，`/said$` 報找不到。
 /// - 零寬的匹配落在換行符**後面**：`:%s/$/</g` 把每一個 `<` 寫到了下一行的行首，
@@ -4626,7 +4626,7 @@ const PAIRS: &[(char, char)] = &[
     ('\'', '\''),
     ('`', '`'),
     // 真正的全角形式（U+FF02/FF07/FF40）。中文輸入法出的是 “” ‘’，這三個少見，
-    // 收進來是為了「不分全半角」這條規矩沒有例外（2026-09-28）。
+    // 收進來是為了「不分全半角」這條規矩没有例外（2026-09-28）。
     ('＂', '＂'),
     ('＇', '＇'),
     ('｀', '｀'),
@@ -4709,7 +4709,7 @@ fn opening_of(c: char) -> Option<char> {
 /// `3000` 對 `20`。這張表是**逐字一對一、兩邊都轉得回來**的，所以一段轉過去再
 /// 轉回來和原來一個字不差。
 ///
-/// Warning: **中文標點不在這張表上，一個都不碰。** `「」『』、。` 沒有半形形式
+/// Warning: **中文標點不在這張表上，一個都不碰。** `「」『』、。` 没有半形形式
 ///——把「」寫成 `""` 是翻譯不是寬度轉換，而且轉回來的時候不知道該給哪一個。
 /// 作者 2026-10-11 定：只轉那張表上的。
 fn to_halfwidth(c: char) -> String {
@@ -4818,7 +4818,7 @@ fn line_bounds(rope: &Rope, pos: usize) -> (usize, usize) {
 ///   「往回最近的那一個」是不行的——`a "b" "c" d` 裏光標停在 `"b"` 的收引號上，
 ///   往回最近的就是它自己，於是把它當成開引號、和下一對的開引號配成一對，`di"`
 ///   刪掉的是兩段之間那個空格。vim 刪的是 `b`。
-/// * **不在引號上**：往回找一個引號當開引號（嚴格在光標之前），沒有就往前找；
+/// * **不在引號上**：往回找一個引號當開引號（嚴格在光標之前），没有就往前找；
 ///   收引號是它後面那一個。Warning: **這一支不驗光標是不是真在兩者之間**，vim 也
 ///   不驗——`a "b" "c" d` 裏光標停在兩段之間的空格上，取到的是 `" "`，於是
 ///   `da"` 刪掉 `" "` 那三格。看着古怪，而那是它的規矩。
@@ -4851,7 +4851,7 @@ fn quoted(rope: &Rope, pos: usize, quote: char) -> Option<(usize, usize)> {
 
 /// **往前數第 `nth` 個 `open`，連它配對的那個 `close`。**
 ///
-/// vim 的 `current_block` 在「一對都沒包着光標」那條路上把 `count` 用在這裏：
+/// vim 的 `current_block` 在「一對都没包着光標」那條路上把 `count` 用在這裏：
 /// 每一趟從上一個開括號再往前找一個（`findmatchlimit(FM_FORWARD)` 連叫 count
 /// 次）。`a (b (c) d) e` 的行首按 `d2a(` 刪的是 `(c)`，不是外面那一層。
 fn nth_ahead(

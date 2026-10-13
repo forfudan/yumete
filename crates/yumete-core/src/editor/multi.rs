@@ -13,7 +13,7 @@ use crate::selection::Range;
 /// **正則那一族在等什麽**（#405 Phase 2）。
 ///
 /// 四個鍵共用搜索那一扇提示行——於是**拼音、簡繁、模糊、正則四個開關一起白拿**，
-/// 搜「书斋」選得出「書齋」。helix 沒有這一件，它的 `s` 只認正則。
+/// 搜「书斋」選得出「書齋」。helix 没有這一件，它的 `s` 只認正則。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sift {
     /// `s` — 在每一段選區**裏面**選出所有匹配。
@@ -101,8 +101,8 @@ impl super::Editor {
                 while placed < count {
                     let (next_anchor, next_head) =
                         (step(anchor, anchor_goal), step(head, head_goal));
-                    // 兩端都走不動了就是到頭了。Warning: 判的是「有沒有動」而不是「在不在檔
-                    // 尾」：折行、摺疊、表格都會讓「還有沒有下一行」不等於「行號還夠」。
+                    // 兩端都走不動了就是到頭了。Warning: 判的是「有没有動」而不是「在不在檔
+                    // 尾」：折行、摺疊、表格都會讓「還有没有下一行」不等於「行號還夠」。
                     if next_anchor == anchor && next_head == head {
                         break;
                     }
@@ -155,7 +155,7 @@ impl super::Editor {
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
         // Warning: **一次性的那幾格要每一段都看得見。** 第一段跑完就把 `pending` 吃掉了
-        // （`f` 補上字符之後 `Pending::Find` 就沒了），後面幾段於是把那個字符當成一個
+        // （`f` 補上字符之後 `Pending::Find` 就没了），後面幾段於是把那個字符當成一個
         // 普通的鍵——`f丙` 只有第一段走得動，別的原地不動。`count` 同理（`3w`）。
         // 每一段開跑之前擺回去，跑完之後留最後一段的那一份。
         let pending = self.pending;
@@ -210,7 +210,7 @@ impl super::Editor {
     /// group。要的只是 `edit_nth`——`store` 按它把 N 段各擺一格寄存器（`d` 那一條 2026-10-09
     /// 做的），於是 `y` 再 `P` 和 `d` 再 `P` 一樣逐段還原。
     ///
-    /// Warning: **vim 鍵位下沒選東西的時候 `y` 不是複製，是個算符**（`Pending::VimOperator`，
+    /// Warning: **vim 鍵位下没選東西的時候 `y` 不是複製，是個算符**（`Pending::VimOperator`，
     /// 它在等一個移動）。那一下讓它照舊走一次就好：立一個算符立 N 次是白跑。
     pub(super) fn copies_every_selection(&self, key: crate::input::Key) -> bool {
         matches!(key, crate::input::Key::Char('y'))
@@ -268,7 +268,7 @@ impl super::Editor {
         for (nth, one) in ranges.iter().enumerate().rev() {
             let before = self.current_buffer().rope().len_chars();
             // Warning: **每一趟都先收進當下的文本裏**（2026-09-28 修）。從後往前做保住的是
-            // 下標**不被後面的編輯挪走**，保不住「前面那幾段本來就沒越界」——`%` 那個
+            // 下標**不被後面的編輯挪走**，保不住「前面那幾段本來就没越界」——`%` 那個
             // bug 就是這麽炸的：手上留着兩段舊的，第一刀把整檔刪光，第二段指着虛空，
             // `apply` 裏的 `next_grapheme` 當場 panic。
             //
@@ -374,19 +374,19 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
-    /// **這裏開得了多選區沒有。**
+    /// **這裏開得了多選區没有。**
     ///
     /// Warning: **佔滿整扇窗的那種表格裏開不了**（§5.13.8 三，2026-09-28 落地）。
     ///
     /// 硬衝突只有一條，而且只在那一種裏：**橫向滾動的規矩是「把光標那一格整個留在屏幕
-    /// 上」**（`yumete-tui/src/table.rs`），兩個光標在不同列的時候這句話沒有答案。滿版
+    /// 上」**（`yumete-tui/src/table.rs`），兩個光標在不同列的時候這句話没有答案。滿版
     /// 的表格是 CSV、碼表那一類——整個檔就是一張表（`Bounds::WholeFile`）。
     ///
     /// Warning: **稿子裏的 `|` 表格不擋，量過。** §5.13.8 當時還列了第二條理由（格內光標是一
     /// 個 `Option` 不是一個列表），可是那是**建模上的**不順，不是畫面上的壞：格子的底
     /// 色跟着主選區走，和硬件光標、候選面板一樣，一屏上本來就只有一個。實測在稿子裏的
     /// 表格上按 `C`，兩塊選區底色畫得好好的。而**批量改一整欄正是表格最常做的事**，把
-    /// 它一起擋掉是拿一條沒發生的毛病換一件真用得上的功能。
+    /// 它一起擋掉是拿一條没發生的毛病換一件真用得上的功能。
     ///
     /// Warning: 用「表格模式開着」當閘試過，太寬：開檔的時候編輯器會**自己猜**出一張表，於是
     /// 稿子裏的表格一個都開不了多選區。
@@ -420,8 +420,8 @@ impl super::Editor {
     /// 0（`selection.rs` 三處都留着同一句 `// TODO: figure out a new primary index`），
     /// 於是在第八十行選出二十處之後，屏幕當場跳回檔首。§5.13.11 的坑 6。
     ///
-    /// Warning: **一個都不剩就什麽都不做**，並且說一句。把選區清空是沒有這個狀態的
-    /// （`Selections` 永遠至少一段），而靜靜地留在原地會讓人以為是鍵沒按上。
+    /// Warning: **一個都不剩就什麽都不做**，並且說一句。把選區清空是没有這個狀態的
+    /// （`Selections` 永遠至少一段），而靜靜地留在原地會讓人以為是鍵没按上。
     pub(super) fn sift(&mut self, what: Sift) {
         if !self.can_be_plural() {
             return;
@@ -544,10 +544,10 @@ impl super::Editor {
     /// 在最靠右的那一段之前的每一段前面補空格，補到大家的開頭在同一格上。
     ///
     /// Warning: **算的是顯示寬度，不是字數。** 一個漢字兩格，所以「三個字」和「三個字母」
-    /// 對不齊——這一族在中文稿子裏用不對齊就等於沒用。
+    /// 對不齊——這一族在中文稿子裏用不對齊就等於没用。
     ///
     /// Warning: **一行只認一段。** 同一行上有兩段的時候，補在前一段前面的空格會把後一段推
-    /// 走，「對齊」就成了一句沒有意義的話。helix 同樣只處理每行第一段。
+    /// 走，「對齊」就成了一句没有意義的話。helix 同樣只處理每行第一段。
     ///
     /// Warning: **從後往前插**，並且把已經處理過的那幾段跟着挪——同 [`Self::edit_each`]，
     /// 理由也一樣。一個撤銷點。
@@ -753,7 +753,7 @@ impl super::Editor {
     /// **合併是靜默地少掉一段，所以要說一句**（2026-09-28 定）。
     ///
     /// helix 不說。中文更常撞上：打一個字要按好幾下，相鄰的兩個光標很容易在中途撞到一
-    /// 起，而那一刻屏幕上少一個光標、沒有任何提示。走 murmur 而不是 status，因為它不該
+    /// 起，而那一刻屏幕上少一個光標、没有任何提示。走 murmur 而不是 status，因為它不該
     /// 擋住鍵位提示。
     pub(super) fn say_the_merge(&mut self, merged: usize) {
         if merged > 0 {
@@ -816,7 +816,7 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
 /// **哪些鍵要逐段各編輯一次**（#405 Phase 1 第五步）。
 ///
 /// Warning: **進插入模式的那幾個也在裏面**（`i` `a` `I` `A` `o` `O` `c` `A-c`）。它們有的不改
-/// 文本（`i` 只是把光標挪到選區開頭），走同一支不虧：文本沒動的時候那一趟挪位是零。收進
+/// 文本（`i` 只是把光標挪到選區開頭），走同一支不虧：文本没動的時候那一趟挪位是零。收進
 /// 來的理由是它們要**逐段各進各的插入點**，然後插入模式那一支
 /// （[`types_at_every_selection`]）接着把每一個鍵送到 N 處。
 ///

@@ -461,14 +461,14 @@ mod spans_tests {
         assert!(kinds("a.md:12: 那年冬天。").is_empty());
     }
 
-    /// Warning: **沒有配對就什麼都不是。** 半個括號、空的一對、跨不到底的開頭，都照字面
-    /// 留着——畫錯比不畫壞：一段沒關上的紅底會一路吃到行尾。
+    /// Warning: **没有配對就什麼都不是。** 半個括號、空的一對、跨不到底的開頭，都照字面
+    /// 留着——畫錯比不畫壞：一段没關上的紅底會一路吃到行尾。
     #[test]
     fn half_a_pair_is_just_characters() {
-        assert!(kinds("[-沒關上").is_empty());
+        assert!(kinds("[-没關上").is_empty());
         assert!(kinds("關上了-]").is_empty());
         assert!(kinds("[--]").is_empty(), "空的一對是零寬，不畫");
-        assert!(kinds("{+沒關上").is_empty());
+        assert!(kinds("{+没關上").is_empty());
     }
 
     /// 換行畫成 `⏎`，而它也要進着色的那一段（2026-09-15：「留着，带颜色」）。

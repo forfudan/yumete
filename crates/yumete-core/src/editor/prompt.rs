@@ -9,7 +9,7 @@ use super::*;
 impl Editor {
     // Warning: **`Key::Esc` 那一支不收 `collapsible_match`**（2026-10-01）：收了就
     // 成了 `Key::Esc if self.drop_the_offering()`，一個**帶副作用的守衛**——中間
-    // 插一支 arm 進來就換了意思，而「按 Esc 一定要把那張單子撤掉」跟它撤沒撤成
+    // 插一支 arm 進來就換了意思，而「按 Esc 一定要把那張單子撤掉」跟它撤没撤成
     // 是兩件事。
     //
     // Warning: **這裏原先寫的是 `collapsible_if`，壓不住它**（2026-10-02）。
@@ -71,7 +71,7 @@ impl Editor {
                 // （`clippy::collapsible_if` 提的，不收）
                 // （2026-10-01 `clippy --fix` 提的，退回來了）。守衛裏帶副作用
                 // 是給下一個讀的人埋的坑：中間插一支 arm 進來就換了意思，而
-                // 「按 Esc 一定要把那張單子撤掉」跟它撤沒撤成是兩件事。
+                // 「按 Esc 一定要把那張單子撤掉」跟它撤没撤成是兩件事。
                 Key::Esc => {
                     if self.drop_the_offering() {
                         return;
@@ -249,7 +249,7 @@ impl Editor {
             Key::Backspace | Key::Ctrl('h') => {
                 self.insert_recording.pop();
                 // **覆寫模式的退格是「還回去」**，同 vim：往回走一格，把那個位置
-                // 上原來的字放回來。蓋到行尾外面去的那幾個沒有原文，就只是刪掉。
+                // 上原來的字放回來。蓋到行尾外面去的那幾個没有原文，就只是刪掉。
                 if self.overwriting {
                     if let Some(was) = self.overwritten.pop() {
                         return self.put_back_what_was_overwritten(was);
@@ -271,7 +271,7 @@ impl Editor {
             Key::Ctrl('w') => self.delete_word_before_cursor(),
             Key::Ctrl('u') => self.delete_to_line_start(),
             // readline 的另一半（2026-09-28）。`C-u` 早就有了，一個只做了一半的對子
-            // 比兩個都沒有更難記。
+            // 比兩個都没有更難記。
             Key::Ctrl('k') => self.delete_to_line_end(),
             // **`C-r` 把一個寄存器插進來**，vi 的拼法。Warning: 它在等一個字符——`"` 是無名
             // 的那一個（同 vi），別的字母是具名的。
@@ -280,7 +280,7 @@ impl Editor {
             // 寫稿子寫到一半要 `gg` 看一眼開頭、要 `p` 貼一段、要 `x` 刪一個字，
             // 而出插入態再進來會斷掉一次撤銷、也丟了 `A` 那個位置。
             //
-            // Warning: **只在 vim 鍵位下。** helix 沒有這個鍵，它那邊插入態的 `C-o`
+            // Warning: **只在 vim 鍵位下。** helix 没有這個鍵，它那邊插入態的 `C-o`
             // 什麼都不是；兩邊各跟各的。
             Key::Ctrl('o') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                 self.one_normal_key = Some(Mode::Insert);
@@ -388,7 +388,7 @@ impl Editor {
             // Warning: **⇥ 也要預覽**（2026-10-07 報的：「命令面板 tab 到主題的時候會暫時
             // preview 這個主題，但是我發現没有效果」）。這兩個鍵自己一支，走不到
             // 下面那個 `other` 分支——而那裏纔是喊預覽的地方。於是手打
-            // `:theme mogao` 預覽得了，⇥ 到同一個名字上一點反應都沒有，而 ⇥ 正是
+            // `:theme mogao` 預覽得了，⇥ 到同一個名字上一點反應都没有，而 ⇥ 正是
             // 挑主題最順手的那條路（名字就在單子上）。
             // **`C-n`/`C-p` 走同一條路**（2026-10-10 用戶問的：「冒號命令模式裏，
             // 能不能用 ctrl+n/p 上下翻？」）。挑選器與插入態那張單子早就認這一對，
@@ -440,7 +440,7 @@ impl Editor {
     /// 什麼」，就是每一條都有機會記錯；記在這一處，`:theme` 之外再加一條只要
     /// 進那張白名單，不必再寫一次還原。
     ///
-    /// 名字被退格退沒了也要還原——helix 那邊同一句話：「Ensures that a preview
+    /// 名字被退格退没了也要還原——helix 那邊同一句話：「Ensures that a preview
     /// theme gets cleaned up if the user backspaces until the prompt is empty」。
     fn ask_for_a_trial(&mut self) {
         match crate::command::preview_of(&self.command_line) {
@@ -452,7 +452,7 @@ impl Editor {
         }
     }
 
-    /// 收場：`Keep` 留着，`Undo` 放回去。沒有預覽在場就什麼都不做。
+    /// 收場：`Keep` 留着，`Undo` 放回去。没有預覽在場就什麼都不做。
     fn end_a_trial(&mut self, how: crate::editor::Trial) {
         if self.previewing {
             self.previewing = false;
@@ -480,7 +480,7 @@ impl Editor {
             // results」）。
             //
             // Warning: **從前 ⇥ 是「拿走這一條」，而挪高亮只有方向鍵**——於是第二條
-            // 根本沒有辦法挑：腳注寫着 ⇥，按下去卻把第一條拿走了。作者的原話是
+            // 根本没有辦法挑：腳注寫着 ⇥，按下去卻把第一條拿走了。作者的原話是
             // 「Tab just fill the command line with the command, how can I choose
             // the 2nd, 3rd one?」。`:` 那一行上的 ⇥ 一直是「走到下一條」，所以這
             // 一改也把相鄰兩行上同一個鍵的兩種意思合回了一種。

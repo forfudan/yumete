@@ -46,7 +46,7 @@
 //! ## The placeholders are numbered
 //!
 //! `{0}` and `{1}`, not `{}` — because the three languages do not put things
-//! in the same order. 「{0} 個檔案裏都沒有「{1}」」 is "no 「{1}」 in {0} files":
+//! in the same order. 「{0} 個檔案裏都没有「{1}」」 is "no 「{1}」 in {0} files":
 //! the same two values, the other way round, and a positional hole is what
 //! lets a translator move them.
 
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn the_holes_are_numbered_so_a_translation_may_reorder_them() {
-        assert_eq!(fill("{0} 個檔案裏都沒有「{1}」", &["3", "阿寧"]), "3 個檔案裏都沒有「阿寧」");
+        assert_eq!(fill("{0} 個檔案裏都没有「{1}」", &["3", "阿寧"]), "3 個檔案裏都没有「阿寧」");
         assert_eq!(fill("no 「{1}」 in {0} files", &["3", "阿寧"]), "no 「阿寧」 in 3 files");
         // Braces a message actually means.
         assert_eq!(fill("{{0}}", &["x"]), "{0}");

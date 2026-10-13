@@ -113,7 +113,7 @@ impl Editor {
         // **`None` or the level's own view** (#283). The test used to be
         // `table.is_none()`, which was the same set until the level began
         // building a `Bounds::Md` view on its own — after which `t i` from the
-        // paragraph between two tables answered 「沒有檔名，就沒有 schema」.
+        // paragraph between two tables answered 「没有檔名，就没有 schema」.
         // A schema'd file and a 碼表 block are somebody's claim on the buffer
         // and still win here; an `Md` view is only the level being read.
         if self.syntax() == crate::syntax::Syntax::Markdown
@@ -672,7 +672,7 @@ impl Editor {
         // `.csv` in the name, nobody to declare it — and yet every line has
         // the same number of tabs in it, which is a thing prose never manages.
         // It used to open as source and look like a bug: the tabs advanced to
-        // their stops and drew a grey ground, so 「tb 沒對齊」 was reported
+        // their stops and drew a grey ground, so 「tb 没對齊」 was reported
         // about a file that had never been in tb at all.
         // A schema that did not parse has already said so, and it was
         // written *about this file* — guessing over the top of that reply
@@ -1392,7 +1392,7 @@ impl Editor {
         if self.table_lines_at(line).is_some() {
             return true;
         }
-        // **光標還沒站進去過的時候，這一行自己也說得出來**（2026-10-08 報的）。
+        // **光標還没站進去過的時候，這一行自己也說得出來**（2026-10-08 報的）。
         //
         // 上面那一句要 `self.table` 先存在，而它只由 [`Self::find_the_table_here`] 建，
         // 那一支又要求「光標此刻站在一個 `|` 行上」——於是 `:info` 剛開出來、
@@ -1758,7 +1758,7 @@ impl Editor {
             // **A `|` table says what it is on every one of its own lines**,
             // so the mode is the file's (#275): every `|` table in the file is
             // read as one, and walking into the paragraph between two of them
-            // leaves both drawn. The second class of file — 「沒有確切的表格
+            // leaves both drawn. The second class of file — 「没有確切的表格
             // 語法，比如 txt、yaml 用空格制表符隔開」 — is the *guessed* block,
             // and that is `enter_block_table`'s.
             reach: Reach::File,
@@ -1872,7 +1872,7 @@ impl Editor {
         // 的，會毀檔）。`ye --table 表.csv` 開出來的是一張**整檔**的網格，而這一
         // 支只認「空行之間那幾行」：`␣t x t` 於是只轉了光標所在的那一段，檔子落
         // 得一半 CSV 一半 TSV，而 schema 說的還是逗號。`:export` 一直是分情形的
-        // （`Bounds::WholeFile` 自己一支），轉換這一邊沒跟上。
+        // （`Bounds::WholeFile` 自己一支），轉換這一邊没跟上。
         //
         // Warning: **選區優先。** 真圈了幾行的人說的是那幾行，整檔那一條讓給他。
         let blank = |i: usize| {
@@ -1883,7 +1883,7 @@ impl Editor {
         //
         // 「文中一段」那一種本來就這樣（底下那兩個 `while`），而整檔與選區那兩種
         // 從前是把範圍裏的空行**濾掉**再拼——四行帶一個空行的 CSV 轉出來是一張四
-        // 行的表，那個空行沒了，一聲不吭。`|` 表格本來就裝不下空行，所以「停在它
+        // 行的表，那個空行没了，一聲不吭。`|` 表格本來就裝不下空行，所以「停在它
         // 前面」是唯一不丟字的做法。判詞：「如果一個文件是csv的話，那么它就是
         // 「一個表格」的意思。如果出現空行，説明是文件有問題。」
         let upto = |from: usize, last: usize| -> usize {
@@ -1942,9 +1942,9 @@ impl Editor {
 
     /// `:convert-table` — **把光標這裏的表寫成另一種樣子**（2026-10-02 定）。
     ///
-    /// 源沒說就自己嗅：光標站在 `|` 表格裏就是 `|` 表格，否則看那一塊用的是什麼
-    /// 分隔符。嗅源這一條照 org-mode 和 markdown-mode——兩家都是看有沒有 TAB、
-    /// 有沒有逗號，要強制纔多給一個參數。
+    /// 源没說就自己嗅：光標站在 `|` 表格裏就是 `|` 表格，否則看那一塊用的是什麼
+    /// 分隔符。嗅源這一條照 org-mode 和 markdown-mode——兩家都是看有没有 TAB、
+    /// 有没有逗號，要強制纔多給一個參數。
     pub(super) fn convert_table(&mut self, to: crate::table::Shape, from: Option<crate::table::Shape>) {
         use crate::table::Shape;
         // **先說在圍欄裏**，再說看不出分隔符：後面那一句在這裏是假話，它會讓人
@@ -1960,7 +1960,7 @@ impl Editor {
         match (source, to) {
             (Shape::Pipe, Shape::Pipe) => self.status = say!("table.already-a-pipe-table"),
             (Shape::Pipe, Shape::Delimited(c)) => self.table_to_delimited(c),
-            // 源說了就按源那個分隔符切，沒說就讓那一支自己嗅——它本來就會。
+            // 源說了就按源那個分隔符切，没說就讓那一支自己嗅——它本來就會。
             (Shape::Delimited(_), Shape::Pipe) => {
                 let said = match from {
                     Some(Shape::Delimited(c)) => Some(c),
@@ -1995,7 +1995,7 @@ impl Editor {
 
     /// 分隔符換一個——CSV 轉 TSV 那一種（2026-10-02 定「任一到任一」）。
     ///
-    /// Warning: **這一條不 `trim`。** 轉成 `|` 表格的時候格子兩邊的空白一定沒
+    /// Warning: **這一條不 `trim`。** 轉成 `|` 表格的時候格子兩邊的空白一定没
     /// （`|` 表格存不下，見 `mdtable::from_delimited`），而分隔符換一個是存得下
     /// 的——`  padded  ,1` 轉成 TSV 還是 `  padded  \t1`。
     fn redelimit(&mut self, from: char, to: char) {
@@ -2093,7 +2093,7 @@ impl Editor {
         // this editor is something you walk by cell.
         self.enter_table();
         // Warning: **分隔符要報名字，不許把那個字符本身印進句子**（2026-10-03）。
-        // 製表符畫出來什麼都沒有，於是這一句成了「照「」分的」——引號裏空着，讀
+        // 製表符畫出來什麼都没有，於是這一句成了「照「」分的」——引號裏空着，讀
         // 着像壞了。空格同病。`named_delimiter` 那一支就是幹這個的，另一個方向
         // （`table.now-delimited`）本來就在用。
         self.status = say!("table.now-a-pipe-table", rows, columns, named_delimiter(delimiter));
@@ -2264,13 +2264,13 @@ impl Editor {
     /// Warning: **先問那兩道閘**（2026-10-02 一輪掃查報來的，會改壞表）。
     ///
     /// [`crate::mdtable::format`] 攔着兩種表不許重排：**撕開的**（某一行的格數和
-    /// 標題不一樣，#328）和**跑飛的**（某一欄寬得沒有窗口放得下，#292）。那邊的
+    /// 標題不一樣，#328）和**跑飛的**（某一欄寬得没有窗口放得下，#292）。那邊的
     /// 註釋寫着「Every door into this module passes here … so the guard cannot be
     /// walked around by an edit」——而這一支直接叫 `compose`，於是**十個鍵從旁邊
     /// 繞過去了**：排序、加行、加列、刪列、挪列，連三個對齊鍵都算。
     ///
     /// 代價是真的改壞表。一格裏打了一個裸的 `|`（`torn` 的註釋說的正是這一種），
-    /// 按一下 `t1s` 排序：**每一行都多出一格空的，標題多出一個沒名字的欄**——而
+    /// 按一下 `t1s` 排序：**每一行都多出一格空的，標題多出一個没名字的欄**——而
     /// 排序一行字都不該動。跑飛那一種是 543 字節變 1736。
     ///
     /// `␣tF` 一直是對的（它走 `format`），所以兩個鍵對同一張表給出兩種答案。
@@ -2283,7 +2283,7 @@ impl Editor {
     ) {
         // Warning: **問的是盤上那張表，不是手裏這份改好的。** 排序、加行、加列那幾
         // 支在交過來之前已經 `Parts::square()` 過了——撕開的那一行補齊了，問它
-        // 只會說「沒事」。要問的是「這張表本來准不准動」。
+        // 只會說「没事」。要問的是「這張表本來准不准動」。
         let before = crate::mdtable::parse(&self.md_lines(region));
         if let Some((column, width)) = crate::mdtable::runaway(&before) {
             self.status = say!("table.column-too-wide", column + 1, width);
@@ -2557,7 +2557,7 @@ impl Editor {
 
     /// `s`/`S` 收尾那一下：把 `a`/`d` 關掉的那幾欄和還在打的那幾欄合起來排。
     ///
-    /// Warning: **一塊和一份檔案共用這一支**（2026-10-03）。從前塊那一支裏根本沒有
+    /// Warning: **一塊和一份檔案共用這一支**（2026-10-03）。從前塊那一支裏根本没有
     /// `s`，於是 `␣tt` 進了格子再 `␣t1s` 一聲不響地落到兜底那一句。
     fn sort_the_named_columns(&mut self, key: Key) {
         let down = key == Key::Char('S');
@@ -2654,10 +2654,10 @@ impl Editor {
         // 是**一條記錄兩行**。開檔那道門攔得住它，可那道門只讀前二十行
         // （`looks_delimited`／`first_lines(20)`），於是第二十一行之後的那一個照樣進得
         // 來——排完 `zz,"line1` 落到檔尾、`line2"` 升成第二行，記錄碎了、引號也不成
-        // 對，整個檔從此讀不進去。字一個沒少，可那比少幾個字更糟。
+        // 對，整個檔從此讀不進去。字一個没少，可那比少幾個字更糟。
         //
         // 所以這裏自己問一遍整份，報的還是開檔那道門報的那一句。`:table-check` 早就
-        // 指得出那一行，只是排序沒問過它。
+        // 指得出那一行，只是排序没問過它。
         if text.lines().any(|l| crate::table::field_runs_on(l, delimiter)) {
             let name = self.current_buffer().display_name();
             self.status = say!("table.field-runs-on", name);
@@ -2669,7 +2669,7 @@ impl Editor {
         // one keystroke rewrote all 123,381 lines of a Windows-authored 拆分表
         // and nothing on the screen said so.
         //
-        // Warning: It is the buffer's **dominant** ending, not「有沒有出現過 CRLF」.
+        // Warning: It is the buffer's **dominant** ending, not「有没有出現過 CRLF」.
         // The old test was `text.contains("\r\n")`, which made one stray CRLF
         // — a single line pasted from somewhere else — convert every other
         // line on the next sort: a 123,381-line diff for a change of order.
@@ -3394,7 +3394,7 @@ impl Editor {
     ///
     /// Warning: **`T` is till again, in a grid too**（2026-09-30 定，原話
     /// 「这个可能要改成 _tT了，因为 T 现在 till 佔用的」）。#356 給了 `T` 換
-    /// 粒度，理由是「在格子裏往回 till 沒人用」；一個頂層字母鍵在一種文件裏
+    /// 粒度，理由是「在格子裏往回 till 没人用」；一個頂層字母鍵在一種文件裏
     /// 換意思，代價比那個理由大。粒度現在在 [`Self::toggle_table_grain`]，掛
     /// 在表格那一組上。
     pub(super) fn table_motion(&mut self, key: Key, count: usize) -> bool {
@@ -3490,8 +3490,8 @@ impl Editor {
             // 行自己承諾過「一個鍵不會因爲光標停在哪裏就換一個意思」。
             //
             // 中間改過一版「`d` 進、`D` 不進」，當天就被問到點子上：**爲什麽格子
-            // 裏沒有 `A-d`？有了不就不用 `D` 了嗎。** 量過——`A-d` 在格子裏是個
-            // 死鍵，按下去一點反應都沒有，它只是從來沒人給它接上。接上了，`D` 就
+            // 裏没有 `A-d`？有了不就不用 `D` 了嗎。** 量過——`A-d` 在格子裏是個
+            // 死鍵，按下去一點反應都没有，它只是從來没人給它接上。接上了，`D` 就
             // 刪掉：不留別名，也不出「你要的是 A-d」那種提示。
             Key::Char('d') if self.sel.anchor() == self.sel.head() => {
                 self.clear_cell(self.yank_on_delete())
@@ -3503,7 +3503,7 @@ impl Editor {
             // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
             // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
             // 意思」。這兩處（按字、按格各一）是那次搬家漏下的，留着它等於錢
-            // 花了東西沒拿到。
+            // 花了東西没拿到。
             // `o` in a grid means a new row, and on the header row the new row
             // has to go under the rule rather than between it and its names.
             Key::Char('o') if self.md_region().is_some() => self.md_new_row(true),
@@ -3564,7 +3564,7 @@ impl Editor {
         // Warning: **`None` 在這一支是「翻」，不是「報告」**（2026-10-09）。
         //
         // 裸的**命令**改成報告了（作者定，三個表格開關一起），可 `空格 t H` 是一個
-        // **鍵**——鍵沒有「裸形」可言，按下去就得做事。所以那條規矩擺在命令那一頭
+        // **鍵**——鍵没有「裸形」可言，按下去就得做事。所以那條規矩擺在命令那一頭
         // （`Command::SetTableHeader` 自己把當前值填進來），這一支照舊翻。
         let want = want.unwrap_or(!view.schema.header);
         // **Names a person wrote are not undone by a keystroke.** A schema file
@@ -3892,8 +3892,8 @@ impl Editor {
             // **`f`, not `a`** (2026-09-06): 排齊 gave the letter up
             // and went to `t F`, where the capital reads as the confirmation a
             // whole-file reformat should always have asked for.
-            // **轉換格式也是「有沒有表格都按得下」的一個**（2026-10-02 定）：
-            // 把一段分隔文本變成 `|` 表格，正是**還沒有表格**的時候要做的事，所
+            // **轉換格式也是「有没有表格都按得下」的一個**（2026-10-02 定）：
+            // 把一段分隔文本變成 `|` 表格，正是**還没有表格**的時候要做的事，所
             // 以這一格要排在「光標不在表格裏」那道閘的前面。
             Key::Char('x') => {
                 self.pending = crate::editor::Pending::TableConvert;
@@ -3975,7 +3975,7 @@ impl Editor {
         // reader who typed `t2-10g` got row 2, column 10 — a plausible answer
         // to a question nobody asked.
         if key == Key::Char('g') {
-            // **一個數都沒給也要答一句**（2026-10-01 測出來的）。單子上寫着
+            // **一個數都没給也要答一句**（2026-10-01 測出來的）。單子上寫着
             // `g 去某一格（␣t 20,20g）`，而光按 `␣t g` 從前掉到最底下那個兜
             // 底——回的是「`t` 之後可以按這些」，等於把那張單子再念一遍。
             if self.sequence.is_none() {
@@ -4645,7 +4645,7 @@ impl Editor {
         self.show_table_hit();
         // Only when nobody said which columns: a schema's `[table.link] from`,
         // or the number the reader just typed. `t2-10/` *is* saying so, and
-        // being told 「你沒說範圍，從第一欄找起」 about the range you named is
+        // being told 「你没說範圍，從第一欄找起」 about the range you named is
         // the editor disagreeing with what it just did.
         match (declared.is_none(), asked.as_deref()) {
             (true, None) => {

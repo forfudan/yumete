@@ -195,7 +195,7 @@ impl Editor {
     }
 
     /// **A table cell's own padding, off a 竪排 page** (2026-09-19:
-    /// 「表格的單元格寬度有問題，不夠 compact」/「表頭沒對齊」).
+    /// 「表格的單元格寬度有問題，不夠 compact」/「表頭没對齊」).
     ///
     /// Two kinds of space live between a wall and the writing, and 竪排 can
     /// afford neither:
@@ -209,7 +209,7 @@ impl Editor {
     ///   its cells, and those were measured in **cells**. A 縱 counts 字: six
     ///   spaces after 「級別」 are six rows, while the 「總監察」 under it has
     ///   four, so the bands drift apart and the header ends up beside the
-    ///   wrong one. That is 「表頭沒對齊」, and it only shows on a file that
+    ///   wrong one. That is 「表頭没對齊」, and it only shows on a file that
     ///   has been squared up — a hand-typed table looks fine.
     ///
     /// What replaces both is the padding this page works out for itself, in
@@ -640,7 +640,7 @@ impl Editor {
             // **離開的那一半帶着自己的名字走**（2026-09-26）。分隔線上寫的是**正
             // 在讀**的那一半叫什麼（站着的那一半由狀態行說），所以一換過去，剛纔
             // 那一半就成了要具名的那一個。從前這裏是空字串，於是 `空格 2` 換過去
-            // 之後分隔線上什麼都沒有——而它本來是有字的。
+            // 之後分隔線上什麼都没有——而它本來是有字的。
             caption: self.current_buffer().display_name().to_string(),
         };
         // The place is clamped rather than trusted: the other pane may have
@@ -689,7 +689,7 @@ impl Editor {
     /// `:rules` — 設那幾欄，空着就是關掉。
     ///
     /// Warning: **出廠一道都不鋪。** 這主要是一個寫稿子的編輯器，而「第 80 欄」
-    /// 對一頁散文沒有意思；要它的人打一次 `:rules` 就有（不帶數字＝ 80）。
+    /// 對一頁散文没有意思；要它的人打一次 `:rules` 就有（不帶數字＝ 80）。
     pub fn set_rules(&mut self, mut columns: Vec<usize>) {
         columns.retain(|&n| n > 0);
         columns.sort_unstable();
@@ -769,7 +769,7 @@ impl Editor {
     /// 區間是那一行自己的字節偏移。走的是 `:git-diff` 那一套逐詞比對，所以兩處
     /// 指的是同一批字。
     ///
-    /// Warning: **純添與剪口回空的。** 它們只有一側，「哪幾個字改了」沒有意義——
+    /// Warning: **純添與剪口回空的。** 它們只有一側，「哪幾個字改了」没有意義——
     /// 整行淡底已經說完了那件事，再逐字指一遍是把整行重說一次。相差太遠
     /// （`diff::script` 回 `None`）也回空：那時逐詞比出來的東西讀不成話。
     pub fn change_marks(&self) -> (ChangeMarks, ChangeMarks) {
@@ -830,7 +830,7 @@ impl Editor {
     /// **問的時候光標在那一塊裏，現在還在不在。**
     ///
     /// `at` ＝ 按 `空格 x` 那一刻光標在哪（字偏移）。兩頭各問一次「這一行屬於哪一
-    /// 塊」，比的是塊的行範圍——塊彼此不重疊，所以「同一塊」就等於「沒走出去」。
+    /// 塊」，比的是塊的行範圍——塊彼此不重疊，所以「同一塊」就等於「没走出去」。
     pub(super) fn still_the_same_change(&self, at: usize) -> bool {
         let Some((_, changes)) = self.vcs.get(&self.current_buffer().id()) else {
             return false;
@@ -862,7 +862,7 @@ impl Editor {
     /// **跳到下一處/上一處改動**（`]g`/`[g`，2026-10-06，helix 的
     /// `goto_next_change`/`goto_prev_change`）。
     ///
-    /// Warning: **一度以為我們沒有 git diff 層**（夜審那份報告就是這麼寫的，我也跟着
+    /// Warning: **一度以為我們没有 git diff 層**（夜審那份報告就是這麼寫的，我也跟着
     /// 寫進了 §5.84）。更正：「git diff 我們已經有了。就是在行號右側用底色表
     /// 示修改的情况。」——`crate::vcs` 整支都在，`diff_cell` 畫它。所以這兩個鍵
     /// 補得起來，不是「不適用」。
@@ -907,7 +907,7 @@ impl Editor {
     /// 重算現在這個 buffer 的 git 逐行差。
     ///
     /// `force` ＝ 「不管快取記的是哪個 revision，重來一次」：`:view-diff on` 與
-    /// 存檔要的是這個，因為**磁碟上那一份變了而 revision 沒變**（存檔不是一次
+    /// 存檔要的是這個，因為**磁碟上那一份變了而 revision 没變**（存檔不是一次
     /// 編輯）。平時 revision 對得上就直接回來，一個子進程都不生。
     pub fn refresh_vcs(&mut self, force: bool) {
         if !self.diff_gutter {
@@ -916,12 +916,12 @@ impl Editor {
         let buffer = self.current_buffer();
         let (id, revision) = (buffer.id(), buffer.revision());
         let Some(path) = buffer.path().map(|p| p.to_path_buf()) else {
-            // 無名的 buffer（`:grep` 的結果、剛開的空頁）沒有磁碟上那一份可比。
+            // 無名的 buffer（`:grep` 的結果、剛開的空頁）没有磁碟上那一份可比。
             self.vcs.remove(&id);
             return;
         };
         // **`HEAD` 動過也算「要重算」**（2026-10-11 報的）。提交之後檔案一個字節
-        // 都沒變、`revision` 也沒變，於是這道快取一直答「不用算」，而改動條說的
+        // 都没變、`revision` 也没變，於是這道快取一直答「不用算」，而改動條說的
         // 正是「跟 `HEAD` 比」——人只好手動 `:reload`（那一下把 `revision` 推了
         // 一格，所以看着像是重讀檔救的）。問一次只讀兩個小檔，不生子進程。
         let lines = buffer.line_count();
@@ -961,8 +961,8 @@ impl Editor {
             Some(changes) => {
                 self.vcs.insert(id, (revision, changes));
             }
-            // 不在 git 倉裏、倉裏還沒有第一個提交、機器上沒有 git——三種都是
-            // 「沒話說」，不是錯。畫面上是什麼都不畫。
+            // 不在 git 倉裏、倉裏還没有第一個提交、機器上没有 git——三種都是
+            // 「没話說」，不是錯。畫面上是什麼都不畫。
             None => {
                 self.vcs.remove(&id);
             }
@@ -1066,7 +1066,7 @@ impl Editor {
     }
 
     /// `gd` 問出去的那一句，給前端發（下一趟循環取走）。
-    /// **此刻有沒有一句 `gd` 等着發**——前端拿它決定要不要解釋為什麽還沒發。
+    /// **此刻有没有一句 `gd` 等着發**——前端拿它決定要不要解釋為什麽還没發。
     pub fn definition_query_is_pending(&self) -> bool {
         self.definition_query.is_some()
     }
@@ -1078,7 +1078,7 @@ impl Editor {
     /// **那一句問話，看一眼而不取走**（2026-10-11）。
     ///
     /// Warning: **發出去不等於問完了。** 從前發的那一下就把它取走，於是服務器答
-    /// 一句空的就只能當「哪兒都沒寫」——而還在建索引的 rust-analyzer 對
+    /// 一句空的就只能當「哪兒都没寫」——而還在建索引的 rust-analyzer 對
     /// `textDocument/definition` 答的正是一個空數組。問話留到**答案說得準**那
     /// 一刻纔取（[`Editor::take_definition_query`]），中間那幾趟它還在手上，
     /// 服務器忙完了自己會再問一次。
@@ -1094,7 +1094,7 @@ impl Editor {
         // **問完就走開的人，不許把他拽回來**（2026-10-07）。答案隔幾百毫秒纔到，
         // 而那幾百毫秒裏光標可能已經挪開、緩衝區可能已經換掉、人可能已經在插入
         // 態打字——那時候 `open_file` ＋ `set_cursor` 是把正在寫的那一段從腳下
-        // 抽走。懸停與補全都各有這一道閘，這一支從前沒有。
+        // 抽走。懸停與補全都各有這一道閘，這一支從前没有。
         let here = (self.current_buffer().id(), self.sel.head());
         if self.asked_where_from.take() != Some(here) {
             return;
@@ -1150,7 +1150,7 @@ impl Editor {
     /// **`空格 i`/`空格 I`：把這一行的診斷拿出來看**（2026-09-29 定）。
     ///
     /// 和 `空格 k`/`空格 K` 一個形狀：小寫浮、大寫進邊欄。Warning: **診斷不必問**
-    /// ——它是服務器自己推過來的，早就在內存裏，所以這一支不發任何請求，也沒有
+    /// ——它是服務器自己推過來的，早就在內存裏，所以這一支不發任何請求，也没有
     /// 那道三百毫秒的閘。
     pub(super) fn show_the_problem_here(&mut self, afloat: bool) {
         if self.problem_here().is_none() {
@@ -1166,7 +1166,7 @@ impl Editor {
 
     /// **`空格 x`/`X`：這一塊改之前寫的是什麼**（2026-10-11）。
     ///
-    /// helix 沒有這一件（它只有 `]g`/`[g` 跳塊、`空格 g` 那張改過的檔單子），vim
+    /// helix 没有這一件（它只有 `]g`/`[g` 跳塊、`空格 g` 那張改過的檔單子），vim
     /// 要靠插件；gitsigns／gitgutter／signify 三家的形狀一樣——行號槽標出塊、一個
     /// 鍵看、一個鍵還原——這裏照它們做。跳塊 `]g`/`[g` 本來就有。
     pub(super) fn show_the_change_here(&mut self, afloat: bool) {
@@ -1255,9 +1255,9 @@ impl Editor {
     /// **設置面板存完之後也要重讀一遍**（2026-10-09 作者報的）。
     ///
     /// 從前 `:w` 只把檔寫出去，而 `settings::apply` 一共只有兩個呼叫方：啓動，和
-    /// `:reload-config`。於是把排版方向改成竪排、存、屏幕一動不動，螢幕上也沒有一句話
+    /// `:reload-config`。於是把排版方向改成竪排、存、屏幕一動不動，螢幕上也没有一句話
     /// 說編輯器跑的還是舊的那一份——面板自己的註釋卻寫着「落完由 `:reload-config`
-    /// 那條同一支推進編輯器」，那個打算從來沒接上線。
+    /// 那條同一支推進編輯器」，那個打算從來没接上線。
     pub fn set_config_reload(&mut self) {
         self.config_reload = true;
     }
@@ -1274,7 +1274,7 @@ impl Editor {
     /// 前端進出那扇面板時說一聲。
     ///
     /// Warning: **核心要知道它開着**，因為 `:w` 與 `:q` 在那時說的是面板，不是緩衝區。
-    /// 不說的話，設置面板上按 `:w` 會把眼前那一章存一遍——看起來像沒反應，其實
+    /// 不說的話，設置面板上按 `:w` 會把眼前那一章存一遍——看起來像没反應，其實
     /// 動的是別的東西。
     pub fn set_settings_open(&mut self, on: bool) {
         self.settings_open = on;
@@ -1291,7 +1291,7 @@ impl Editor {
 
     /// 面板開着時按過 `:q` —— `Some(force)`。
     ///
-    /// `force` ＝ 打了 `!`（`:q!`/`:x!`），那時不問「有改動沒存」。
+    /// `force` ＝ 打了 `!`（`:q!`/`:x!`），那時不問「有改動没存」。
     pub fn take_settings_close(&mut self) -> Option<bool> {
         self.settings_close.take()
     }
@@ -1311,17 +1311,17 @@ impl Editor {
         self.server_busy_since = since;
     }
 
-    /// 從什麽時候起在等，`None` ＝ 沒在等。
+    /// 從什麽時候起在等，`None` ＝ 没在等。
     pub fn server_busy_since(&self) -> Option<std::time::Instant> {
         self.server_busy_since
     }
 
-    /// `:diagnostics-all` 頂上那一行，沒有服務器就是 `None`。
+    /// `:diagnostics-all` 頂上那一行，没有服務器就是 `None`。
     pub(super) fn the_server_line(&self) -> Option<&str> {
         self.server_line.as_deref()
     }
 
-    /// **此刻有沒有一句問話等着發**——前端拿它決定要不要解釋為什麽發不出去。
+    /// **此刻有没有一句問話等着發**——前端拿它決定要不要解釋為什麽發不出去。
     pub fn hover_query_is_pending(&self) -> bool {
         self.hover_query.is_some()
     }
@@ -1334,7 +1334,7 @@ impl Editor {
     /// **答案回來了：浮出來**（#53 ③）。
     ///
     /// Warning: **記下問的時候光標在哪**：這一則是**問出來的**，所以光標一走它就該
-    /// 沒——跟着光標自己冒出來的是診斷，那一種纔該一直在。
+    /// 没——跟着光標自己冒出來的是診斷，那一種纔該一直在。
     pub fn show_hover(&mut self, told: impl Into<crate::lsp::Told>) {
         let told: crate::lsp::Told = told.into();
         self.hovered = Some((self.what_the_hover_covers(&told), told));
@@ -1355,7 +1355,7 @@ impl Editor {
     pub fn no_hover(&mut self) {
         self.hovered = None;
         // 手動叫出來的那一次要當場作廢，不然那一格會空着等到光標動——而「空着」
-        // 的意思是「還在問」，不是「問完了，沒有」。
+        // 的意思是「還在問」，不是「問完了，没有」。
         //
         // Warning: **只作廢文檔那一次。** 這一句是服務器隔了一趟循環纔回的，那時
         // `info_asked` 可能早已經是別人了（問完 `空格 k` 馬上按 `空格 d`）——
@@ -1423,7 +1423,7 @@ impl Editor {
     ///
     /// Warning: **五種都收**（#426，原話：「也可以对五类信息进行翻页」）。
     /// 從前只有文檔收，而散文稿子裏默認浮的是**百科**——一條長詞條被切在「…」
-    /// 上，`C-u`/`C-d` 卻去翻了正文，等於沒有出路。
+    /// 上，`C-u`/`C-d` 卻去翻了正文，等於没有出路。
     ///
     /// Warning: **那一格開着的時候翻的是那一格**。五種共用一個容器，那就該共用
     /// 一套翻頁鍵——而「光標就在編輯區」正是這四個鍵的全部價值：讀完一條長詞
@@ -1439,10 +1439,10 @@ impl Editor {
         true
     }
 
-    /// 此刻擺着的那一則有幾行——`None` ＝ 什麽都沒擺。
+    /// 此刻擺着的那一則有幾行——`None` ＝ 什麽都没擺。
     ///
     /// Warning: **數的是折行**前**的行**，和畫的那一頭數出來的不是同一個數。夾不
-    /// 準沒關係：畫的那一趟自己再夾一次（`panel.rs` 的 `count - cap`），這裏只要
+    /// 準没關係：畫的那一趟自己再夾一次（`panel.rs` 的 `count - cap`），這裏只要
     /// 別讓它一路翻進空白裏。
     fn how_tall_the_info_is(&self) -> Option<usize> {
         use crate::sidebar::Info;
@@ -1462,10 +1462,10 @@ impl Editor {
         }
     }
 
-    /// **還有多久該問那一句**，`None` ＝ 沒什麽等着（2026-09-29）。
+    /// **還有多久該問那一句**，`None` ＝ 没什麽等着（2026-09-29）。
     ///
     /// Warning: **不給這個數，那一問永遠不會自己發出去。** 光標是按鍵挪的，那一下把
-    /// 循環叫醒了，可那時三百毫秒還沒到；循環接着睡，而睡着的循環不會再看一眼
+    /// 循環叫醒了，可那時三百毫秒還没到；循環接着睡，而睡着的循環不會再看一眼
     /// 鬧鐘——除非有人先告訴它鬧鐘幾點響。同 `autosave_due_in` 那一族。
     pub fn docs_due_in(&self) -> Option<std::time::Duration> {
         let moved = self.docs_moved?;
@@ -1475,8 +1475,8 @@ impl Editor {
 
     /// 按了一個鍵——跟着走的那一問要重新等它停穩。
     ///
-    /// Warning: **不問光標動沒動**（2026-09-29 修）。這一支跑在派鍵**之前**，那時
-    /// 光標還沒挪——拿「動沒動」當條件，答完一次之後的下一鍵就重新起不了錶，於是
+    /// Warning: **不問光標動没動**（2026-09-29 修）。這一支跑在派鍵**之前**，那時
+    /// 光標還没挪——拿「動没動」當條件，答完一次之後的下一鍵就重新起不了錶，於是
     /// 那一問要等到再下一鍵纔算數。按住 `j` 連走照樣一格都不問：攔住它的是
     /// `docs_asked_at`（同一格不重複問）和這隻錶本身。
     pub(super) fn the_cursor_moved_under_the_docs(&mut self) {
@@ -1492,7 +1492,7 @@ impl Editor {
     /// 出來的，問題已經過去了。
     ///
     /// 同 [`Editor::forget_a_dictionary_nobody_is_reading`]，在派鍵**之前**掃：
-    /// 挪開光標的那一鍵掃的時候光標還沒挪，掃不掉；下一鍵纔掃得掉——而那正是
+    /// 挪開光標的那一鍵掃的時候光標還没挪，掃不掉；下一鍵纔掃得掉——而那正是
     /// 「走回去」的那一鍵，所以它回不來。
     pub(super) fn forget_a_hover_nobody_is_looking_at(&mut self) {
         let Some((over, _)) = self.hovered.as_ref() else { return };
@@ -1605,7 +1605,7 @@ impl Editor {
             self.signature = None;
             self.signature_on = self.sel.head().checked_sub(1);
         } else if self.signature_on.is_none() {
-            // 一開始就打在一個現成的調用裏的逗號上：沒有左括號可記，那就記逗號自己。
+            // 一開始就打在一個現成的調用裏的逗號上：没有左括號可記，那就記逗號自己。
             self.signature_on = self.sel.head().checked_sub(1);
         }
         self.signature_query = Some((path, line, utf16));
@@ -1613,7 +1613,7 @@ impl Editor {
 
     /// 簽名那一問，交給前端發。
     ///
-    /// **問的地方記下來**：服務器說「沒有簽名」的時候要在**同一處**回頭問一句
+    /// **問的地方記下來**：服務器說「没有簽名」的時候要在**同一處**回頭問一句
     /// hover（見 [`Self::show_signature`]）。
     pub fn take_signature_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         let asked = self.signature_query.take();
@@ -1640,7 +1640,7 @@ impl Editor {
                 self.signature_asked_at = None;
                 self.signature = Some((self.sel.head(), one));
             }
-            // 沒有簽名：回頭問一句 hover，問在**被調用的那個名字**上。
+            // 没有簽名：回頭問一句 hover，問在**被調用的那個名字**上。
             None => self.signature_doc_query = self.a_hover_on_the_callee(),
         }
     }
@@ -1651,7 +1651,7 @@ impl Editor {
     /// 在這裏：從前這一句排的是 [`Self::signature_asked_at`]，也就是**問簽名的那個
     /// 坐標**——左括號後面那一格。那一格對 signatureHelp 是對的（協議要的就是「我
     /// 正在填第幾個參數」），可 hover 問的是另一件事：「這一格上是什麽東西」。括號
-    /// 裏面空無一物，於是 rust-analyzer 兩句都回 `null`，回退等於沒有回退。
+    /// 裏面空無一物，於是 rust-analyzer 兩句都回 `null`，回退等於没有回退。
     ///
     /// 要問的那一格一直就在手邊：[`Self::signature_on`] 記着這一次調用的左括號，被
     /// 調用的那個名字就貼在它前面。從括號往前走到第一個字母/數字/下劃線為止，
@@ -1708,7 +1708,7 @@ impl Editor {
         // 原先那一格上現在是 `p`，就是這一條接住的。
         let at = self.signature_on?;
         let rope = self.current_buffer().rope();
-        // 那一格不再是標點，或者光標退到了它前面：那一次調用沒了。
+        // 那一格不再是標點，或者光標退到了它前面：那一次調用没了。
         if at >= rope.len_chars()
             || !matches!(rope.char(at), '(' | ',')
             || self.sel.head() <= at
@@ -1884,7 +1884,7 @@ impl Editor {
             //
             // **說的是哪一行也要對得上**：這一頭只蓋得了光標所在的那一行，而服務
             // 器給的範圍可能在別處（多行的編輯，或者照着一份舊文本算出來的）。對
-            // 不上就當作「沒給範圍」——什麼都不蓋，只在光標處插入。
+            // 不上就當作「没給範圍」——什麼都不蓋，只在光標處插入。
             Some(span) if span.line == line => (
                 head + crate::problem::char_column(&text, span.from),
                 head + crate::problem::char_column(&text, span.to),

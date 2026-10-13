@@ -12,7 +12,7 @@ impl Editor {
 
     /// **光標底下那個括號的另一半在哪**（2026-10-08），字符下標。
     ///
-    /// 光標不在括號上、或者那一半不存在（括號沒配對）就是 `None`。
+    /// 光標不在括號上、或者那一半不存在（括號没配對）就是 `None`。
     ///
     /// Warning: **一幀問一次，所以它不許把緩衝攤開。** 走的是 `mm` 那兩支
     /// （`find_forward`/`find_backward`），一個 `String`、一個 `Vec` 都不造。
@@ -75,7 +75,7 @@ impl Editor {
             // **`mi f`/`mi t`：光標所在的那個函數/類**（2026-10-06，helix 的
             // `mi f`/`mi t`）。語法樹那一邊的事，所以不走 `Object`——它是
             // 純文本的一支，而這個要問那棵樹。整份是代碼的檔才有，`ma` 和 `mi`
-            // 在這裏是同一段：一個定義沒有「連着外面那層」可言。
+            // 在這裏是同一段：一個定義没有「連着外面那層」可言。
             //
             // Warning: **類是 `t` 不是 `c`**（2026-10-06 當天改正）。先按記憶綁成了
             // `c`，而 helix 的 `c` 是**註釋**、`t` 纔是類
@@ -270,7 +270,7 @@ impl Editor {
     /// **`zj`／`zk`：視窗滾一行，光標的文字不動**（2026-10-06，helix 的
     /// `scroll_down`／`scroll_up`）。
     ///
-    /// 滾視窗和挪光標是同一件事的兩面——文字沒動而視窗下去了，光標在屏幕上就
+    /// 滾視窗和挪光標是同一件事的兩面——文字没動而視窗下去了，光標在屏幕上就
     /// 往上坐了一行。所以這一支只說「坐第幾行」（[`crate::editor::Aim::Row`]），
     /// 不必給核心一個它改不動的視窗位置。
     ///
@@ -342,8 +342,8 @@ impl Editor {
         // 「不」上按 `di[`，要的是 `（）` 還是 `【】`？答案跟 `md` 一致：最裏面那一對。
         // 這張族表在 `editor.rs` 的 `FAMILIES`，理由記在那裏。
         //
-        // Warning: **沒有包着光標的那一對，就往前找**（2026-10-12，vim 的
-        // `current_block`／`current_quote` 都有這一步）。從前沒有，於是
+        // Warning: **没有包着光標的那一對，就往前找**（2026-10-12，vim 的
+        // `current_block`／`current_quote` 都有這一步）。從前没有，於是
         // `ab (cd) ef` 上光標在行首按 `di(` 一動不動——而 vim 刪掉 `cd`。神諭上
         // 那 433 格差異大半是這一條。
         //
@@ -353,7 +353,7 @@ impl Editor {
         let family = super::pair_family(open);
         // Warning: **數目在兩條路上不是同一個意思**（2026-10-12 從 nvim 神諭上量
         // 的）。vim 的 `current_block` 先往回找包着光標的那一對，找到了就把
-        // `count` 用在**往外數幾層**上；一對都沒包着的時候走另一條路，而那一條
+        // `count` 用在**往外數幾層**上；一對都没包着的時候走另一條路，而那一條
         // 把 `count` 用在**往前數第幾個開括號**上。`a (b (c) d) e` 的行首按
         // `d2a(` 刪的是 `(c)`——往前第二個 `(`，不是外面那一層。
         let enclosing = family
@@ -384,7 +384,7 @@ impl Editor {
         // 開括號再往外找。Warning: **層數不夠就一個字都不動**——`a (b) c` 上
         // `d2i(` 在 vim 裏整行不變，而不是退回那一層。同 `d9iw` 那一條。
         //
-        // 引號沒有「外一層」（一行上的引號不套），它那邊 `count` 另有意思，見下。
+        // 引號没有「外一層」（一行上的引號不套），它那邊 `count` 另有意思，見下。
         let nests = rope.char(start) != rope.char(end);
         if nests {
             for _ in 1..count {
@@ -412,8 +412,8 @@ impl Editor {
         };
         let mut head = head;
         // **`a"` 連空白一起拿，`a(` 不拿**（vim 的 `current_quote` 末尾那一段，
-        // 2026-10-12 量過）：收引號後面那一串空白，沒有就拿開引號前面那一串。
-        // 和 `aw` 同一條規矩，而括號那一族沒有這一條。
+        // 2026-10-12 量過）：收引號後面那一串空白，没有就拿開引號前面那一串。
+        // 和 `aw` 同一條規矩，而括號那一族没有這一條。
         if around && !nests {
             let (from, to) = super::line_bounds(rope, here);
             let mut at = head + 1;
@@ -444,7 +444,7 @@ impl Editor {
     ///
     /// Warning: **眼下套不起來，因為解析器不套。** 量過（2026-09-28）：``**粗的`碼`**`` 交出
     /// 來的是 `Marker`/`Strong`/`Marker` 三段，中間那一段連反引號一起算成粗體的正文，
-    /// 沒有內層的 `Code`。所以這裏「取起點最靠後的那一個」現在永遠只有一個候選。留着這
+    /// 没有內層的 `Code`。所以這裏「取起點最靠後的那一個」現在永遠只有一個候選。留着這
     /// 一句是因為解析器哪天學會套的時候，這一支不必跟着改。
     ///
     /// Warning: **標記本身（`Kind::Marker`）不算一種**。光標停在星號上按 `mi m`，要的是它
@@ -458,7 +458,7 @@ impl Editor {
         let start = rope.line_to_char(line);
         let at = head - start;
         let runs = self.markup_runs(line);
-        // 收哪幾種：**有一對標記裹着一段文字**的那些。標題不在裏面（它沒有閉標記，
+        // 收哪幾種：**有一對標記裹着一段文字**的那些。標題不在裏面（它没有閉標記，
         // 整行就是它，而整行有 `x`），`Marker` 自己也不在（見上面那一條）。
         let takes = |kind: Kind| {
             matches!(
@@ -510,7 +510,7 @@ impl Editor {
     /// 同一支。兩個答案就意味着 `mi s` 選的那一段和版面斷行的地方對不上。
     ///
     /// Warning: **一句不跨行**：這個倉的解析是逐行的，`sentence_starts` 也是。一段話寫成一
-    /// 行（中文稿子的常態）的時候這沒有分別；硬折過行的稿子裏，`mi s` 取的是這一行裏
+    /// 行（中文稿子的常態）的時候這没有分別；硬折過行的稿子裏，`mi s` 取的是這一行裏
     /// 的那一句。
     /// **光標所在那一段的字符範圍**（2026-10-10 抽出來的）。
     ///
@@ -532,7 +532,7 @@ impl Editor {
         }
         let start = rope.line_to_char(first);
         // **末行那個換行算段落的一部分**（2026-10-10 量出來的）：vim 的句對象在段
-        // 末連它一起取——`dis` 站在一段沒有句末標點的話上，整段連換行一起沒。
+        // 末連它一起取——`dis` 站在一段没有句末標點的話上，整段連換行一起没。
         let stop = match end < last {
             true => rope.line_to_char(end + 1),
             false => rope.len_chars(),
@@ -544,9 +544,9 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let head = self.sel.head().min(rope.len_chars());
         // **一句話的邊界是段落，不是行**（2026-10-10 定，照 vim）。從前這裏取的是
-        // `line_chars(rope, line)`，於是一行沒有句末標點的時候那一句就在換行處結
+        // `line_chars(rope, line)`，於是一行没有句末標點的時候那一句就在換行處結
         // 束——vim 裏它跑到段落結束（`alpha beta, gamma delta` 換行 `xx` 同一段，
-        // `das` 兩行一起沒）。中文稿一段常常就是一行，所以這一條在那裏看不出來；
+        // `das` 兩行一起没）。中文稿一段常常就是一行，所以這一條在那裏看不出來；
         // 英文草稿換行多就常撞。`scripts/oracle/vim_sweep.py` 的 `dis`/`das` 逐格
         // 對 nvim。
         let (start, stop) = self.paragraph_here();
@@ -581,7 +581,7 @@ impl Editor {
                     // 逐格量出來的）：`First one.| Second one…` 上按 `das`，nvim 留
                     // 下 `First one. Third.`——那個空格還在，刪的是後面那一句連它
                     // 自己的尾巴。所以不在這裏另算一遍，把光標挪過去走同一條路：
-                    // 「尾巴上沒有空格就拿前面的」那條規矩纔跟着一起生效。
+                    // 「尾巴上没有空格就拿前面的」那條規矩纔跟着一起生效。
                     true => at = end,
                     false => {
                         let (anchor, head) =
@@ -592,7 +592,7 @@ impl Editor {
             }
         }
         // **段首那一段空白屬於第一句**（2026-10-10 量出來的）：`starts[0]` 是第一個
-        // 非空白，所以光標站在它前面的時候沒有哪一句「開始得比它早」。從前這裏回
+        // 非空白，所以光標站在它前面的時候没有哪一句「開始得比它早」。從前這裏回
         // `Missed`，於是 `  he said…` 開頭兩格上按 `dis` 什麼都不發生，而 vim 取
         // 的是整句（連那兩格空白）。
         let which = starts.iter().rposition(|&s| s <= at).unwrap_or(0);
@@ -603,9 +603,9 @@ impl Editor {
         let to = starts.get(which + 1).copied().unwrap_or(chars.len());
         let mut end = to;
         match around {
-            // `as`：連句末那一段空白。Warning: 中文句子之間沒有空白，所以這一支在中文裏和
-            // `is` 拿到同一段——vim 那條規矩在沒有空白的文字裏的自然結果，不是算錯。
-            // 後面沒有空白就取前面的，同 `aw`。
+            // `as`：連句末那一段空白。Warning: 中文句子之間没有空白，所以這一支在中文裏和
+            // `is` 拿到同一段——vim 那條規矩在没有空白的文字裏的自然結果，不是算錯。
+            // 後面没有空白就取前面的，同 `aw`。
             true => {
                 if end == to && to == from {
                     return motion::Span::Missed;
@@ -634,7 +634,7 @@ impl Editor {
             // Warning: **只有段**末**那個換行算進來**（2026-10-10 逐格量出來的）。
             // 段落**裏面**的換行和句末的空格一樣削掉（`…here. |Third.` 上按 `dis`
             // 留下 `…here. \nxx`），而段落最後那一個換行是這一段的一部分，vim 連它
-            // 一起取——「整段沒有句末標點」那一種因此整段連換行一起沒。
+            // 一起取——「整段没有句末標點」那一種因此整段連換行一起没。
             false => {
                 let last_of_the_paragraph = to == chars.len();
                 while end > from && chars[end - 1].is_whitespace() {
@@ -717,7 +717,7 @@ impl Editor {
     /// 光标所在词（目前的表现会忽略中文分词器）」。`coarse` 為真的是 `iW`，那個一律粗。
     ///
     /// Warning: **`aw` 在中文裏會退化成 `iw`**：它取的是「詞加它後面那段空白」，而中文詞之間
-    /// 沒有空白，於是 `daw` 和 `diw` 拿到同一段。這是 vim 那條規矩在中文裏的自然結果，
+    /// 没有空白，於是 `daw` 和 `diw` 拿到同一段。這是 vim 那條規矩在中文裏的自然結果，
     /// 不是這一支算錯了。
     fn word_object_span(&self, around: bool, big: bool, count: usize) -> motion::Span {
         let rope = self.current_buffer().rope().clone();
@@ -794,7 +794,7 @@ impl Editor {
         let around = around && here.is_some();
         let (mut a, mut b) = (from, to.saturating_sub(1).max(from));
         let line_end = start + crate::zong::line_chars(&rope, line).len();
-        // 這一趟有沒有把後面那道縫吃進去——「沒有就改取前面那一道」那條退路要
+        // 這一趟有没有把後面那道縫吃進去——「没有就改取前面那一道」那條退路要
         // 等整個對象取完了纔問一次（見下面）。
         let mut ate_trailing = false;
         if around {
@@ -879,9 +879,9 @@ impl Editor {
             b = end.saturating_sub(1).max(b);
             taken += 1;
         }
-        // **「後面沒有縫就取前面那一道」問的是整個對象，不是每一個單位**
+        // **「後面没有縫就取前面那一道」問的是整個對象，不是每一個單位**
         //（2026-10-11 從神諭上量出來的）。`alpha beta, gamma` 上 `2aw` 站在
-        // `beta` 的頭上，vim 刪的是 `beta, `——第一個單位後面確實沒有縫（跟着的是
+        // `beta` 的頭上，vim 刪的是 `beta, `——第一個單位後面確實没有縫（跟着的是
         // 逗號），可第二個有，所以那條退路一次都不該走。逐個單位問的話就多吞了
         // `alpha` 後面那個空格。
         if around && !ate_trailing {
@@ -938,7 +938,7 @@ impl Editor {
                 motion::Span::Over { anchor: out, head: out_end },
                 motion::Span::Over { anchor: inn, head: inn_end },
             ) if out < inn || out_end > inn_end => Some((out, inn, inn_end + 1, out_end + 1)),
-            // 兩段一樣寬 ＝ 這個構造沒有標記可刪。
+            // 兩段一樣寬 ＝ 這個構造没有標記可刪。
             _ => None,
         };
         // **取內層的那一個**，和 `innermost_pair` 自己在 `PAIRS` 之間挑的規矩一樣：
@@ -982,7 +982,7 @@ impl Editor {
             // Warning: **一個鍵管一族括號**（2026-10-06 夜審報的）。取對象那條路
             // （`mi(`/`di(`）走的是 `pair_family`——按 `(` 找得到 `（）`，按 `[`
             // 連 `「」`【】一起找。這一支從前逐字符精確，於是 `md(` 在 `（甲乙）`
-            // 上答「外面沒有成對的符號」，而 `mi(` 選得中。vim 的 `ds[` 在中文稿
+            // 上答「外面没有成對的符號」，而 `mi(` 選得中。vim 的 `ds[` 在中文稿
             // 子上同病。同族套着的時候取最裏面那一對，同 `pair_span`。
             ch => {
                 let rope = self.current_buffer().rope();
@@ -1023,7 +1023,7 @@ impl Editor {
         };
         let rope = self.current_buffer().rope();
         // **`m` ＝ 最內層那一對**，同 helix（`surround_replace` 那一支也認它）。
-        // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都沒有。
+        // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都没有。
         let found = match from {
             'm' => self.innermost_pair(),
             // 同 `surround_delete`：一個鍵管一族，同族套着取最裏面那一對。
@@ -1069,9 +1069,9 @@ impl Editor {
     /// 條路上，合**每打一個字 75 毫秒**（他那條 1240 萬字的行按此推是 230 毫秒）。
     /// 四十四處呼叫它，每一處都付這一筆，而開不開折行一樣貴。
     ///
-    /// 不必算：`j`／`k` 那一支本來就寫着「沒記過就現算一次」，而算完它自己記回去
+    /// 不必算：`j`／`k` 那一支本來就寫着「没記過就現算一次」，而算完它自己記回去
     /// （[`Editor::step_row`] 那一段註釋說的正是這件事）。把這一支改成「忘掉」，
-    /// 答案一個字不變——中間沒有別的東西動過光標，所以現算出來的就是這裏本來要算
+    /// 答案一個字不變——中間没有別的東西動過光標，所以現算出來的就是這裏本來要算
     /// 的那一個——而那筆 O(行長) 挪到了**真按 `j` 的那一下**，付一次。
     ///
     /// 名字照舊叫 refresh：四十四個呼叫方要的本來就是「目標列現在不算數了」。
@@ -1147,7 +1147,7 @@ impl Editor {
         // 一個 `x` 就把兩段接起來）。所以走的是底下那條落點規矩：一步落到下一段
         // 的第一個字，換行符本身從來不是終點。
         let across = match flag {
-            // **沒有自己那個字母的那一步，就是「順着文字讀下去」的那一鍵**，所以
+            // **没有自己那個字母的那一步，就是「順着文字讀下去」的那一鍵**，所以
             // 竪排下它跨：竪排的 `j`/`k` 走的是這一支（`keys.rs` 的竪排分支，經
             // `move_horizontal`），而竪排裏「一行」是一整段——攔在行內就是「`j`
             // 走到段尾停死，下一縱根本到不了」，2026-09 報過、橫排那一側早就修好
@@ -1170,7 +1170,7 @@ impl Editor {
         }
         let line = rope.char_to_line(here);
         match pos > last {
-            // 下一行的頭一個字。沒有下一行就停在原地（vim 也停）。
+            // 下一行的頭一個字。没有下一行就停在原地（vim 也停）。
             true => match line + 1 < rope.len_lines() {
                 true => rope.line_to_char(line + 1),
                 false => last,
@@ -1321,7 +1321,7 @@ impl Editor {
                 .with_edit(self.current_buffer().edit())
                 .with_open_line(self.open_line())
                 .with_caret(Some(self.caret_in_line()));
-            // Warning: **目標列現在在這一段自己身上**（#405）。沒記過就現算一次——新長出來
+            // Warning: **目標列現在在這一段自己身上**（#405）。没記過就現算一次——新長出來
             // 的選區、剛從別處跳過來的光標都會落到這一支上。
             //
             // Warning: **算完要記回去**：`j` 自己不叫 `refresh_goal_column`（那正是它保得住
@@ -1449,7 +1449,7 @@ impl Editor {
     ) -> motion::Span {
         let rope = self.current_buffer().rope();
         let seg = self.segmenter.as_ref();
-        // **落點就是落點**：動了沒有、動不了算不算失敗，是**動詞**的問題，不是
+        // **落點就是落點**：動了没有、動不了算不算失敗，是**動詞**的問題，不是
         // 動作的。見 `keys.rs::run_vim_step` 裏那一條 `:h exclusive`。
         let at = |p: usize| motion::Span::Over { anchor: p, head: p };
         let caret = how == motion::Reading::Caret;
@@ -1462,7 +1462,7 @@ impl Editor {
             }
             // Warning: **退不動就是整個動作失敗**（2026-10-02 拿 nvim 量的）：第 1 欄
             // 按 `dge`，nvim 什麼都不做。`ge` 是**包含**的，所以光靠文法那條
-            // 「排他的落在原處就是零寬」攔不住它——要動作自己說沒動到。
+            // 「排他的落在原處就是零寬」攔不住它——要動作自己說没動到。
             motion::Motion::WordEndBack(grain) => {
                 let here = self.sel.head();
                 match motion::prev_word_end(rope, here, grain, seg) {
@@ -1731,8 +1731,8 @@ mod tests {
         assert_eq!(at_char("a(bc)d", 2).matching_bracket(), None, "括號裏面的 b");
         assert_eq!(at_char("a(bc)d", 5).matching_bracket(), None, "字母 d");
         assert_eq!(at_char("", 0).matching_bracket(), None, "空緩衝");
-        // 配不上的括號也沒有另一半——掃到底，答 `None`。
-        assert_eq!(at_char("a(bc", 1).matching_bracket(), None, "沒有閉的那一半");
+        // 配不上的括號也没有另一半——掃到底，答 `None`。
+        assert_eq!(at_char("a(bc", 1).matching_bracket(), None, "没有閉的那一半");
         // 引號的兩半長得一樣，說不出另一半在哪一邊（見那一支的 Warning）。
         assert_eq!(at_char("a\"bc\"d", 1).matching_bracket(), None, "半角雙引號");
     }

@@ -56,7 +56,7 @@ Here is `記.md` on disk — ASCII ruby markup, ordinary 全角 punctuation:
 ```raw
 那年冬天，雪下得比往常都早。<ruby>漢字<rt>hàn|zì</rt></ruby>寫在旁邊。
 
-「你來了。」他說。她點頭，沒有回答。
+「你來了。」他說。她點頭，没有回答。
 ```
 
 and the page the editor sets from it — the marks hung in the margin, `hàn|zì`
@@ -75,7 +75,7 @@ $ yumete --shot=22x18 --vertical --keys=':ruby-render full\n:view-hanging force\
     她    漢 得
     點    字 比
     頭,   寫 往
-    沒    在 常
+    没    在 常
     有    旁 都
     回    邊｡早｡
     答｡

@@ -65,7 +65,7 @@ impl Range {
         (self.anchor.min(self.head), self.anchor.max(self.head))
     }
 
-    /// 兩端是不是同一個地方——「這只是一個光標，沒有選中東西」。
+    /// 兩端是不是同一個地方——「這只是一個光標，没有選中東西」。
     pub fn is_caret(self) -> bool {
         self.anchor == self.head
     }
@@ -77,7 +77,7 @@ impl Range {
 /// 面板、頁面滾動跟誰、LSP 問哪一處。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selections {
-    /// Warning: **永遠至少一段。** 沒有「沒有光標」這個狀態。排好序、互不重疊，由
+    /// Warning: **永遠至少一段。** 没有「没有光標」這個狀態。排好序、互不重疊，由
     /// [`Selections::normalize`] 保證。
     ranges: Vec<Range>,
     /// 主選區在 `ranges` 裏的下標。Warning: 永遠 `< ranges.len()`。
@@ -102,7 +102,7 @@ impl Selections {
     }
 
     /// 從一串重新裝一組，`primary` 說哪一段是主的。Warning: **裝完就整理**（排序、合併），
-    /// 回傳併掉了幾段。`ranges` 空着的話退回一段塌在 0 上的——沒有「沒有光標」這個狀態。
+    /// 回傳併掉了幾段。`ranges` 空着的話退回一段塌在 0 上的——没有「没有光標」這個狀態。
     pub fn rebuild(&mut self, ranges: Vec<Range>, primary: usize) -> usize {
         if ranges.is_empty() {
             *self = Selections::at(0);
@@ -135,7 +135,7 @@ impl Selections {
         self.ranges.is_empty()
     }
 
-    /// 有沒有多於一段——`jumping()` 那一類謂詞將來問的就是它。
+    /// 有没有多於一段——`jumping()` 那一類謂詞將來問的就是它。
     pub fn is_plural(&self) -> bool {
         self.ranges.len() > 1
     }
@@ -326,7 +326,7 @@ impl Selections {
     }
 }
 
-/// 兩段疊在一起沒有。
+/// 兩段疊在一起没有。
 ///
 /// Warning: 第一項 `from == from` 是專門給**零寬**那一種的：`[5,5)` 和 `[5,9)` 算疊着，而
 /// `[0,5)` 和 `[5,9)` 不算。照搬「區間相交」的標準定義會在「光標剛好停在某段起點」時
@@ -360,7 +360,7 @@ mod tests {
         // 疊上去的那一段被併掉。
         let merged = s.push(at(1, 12));
         assert_eq!(merged, 2, "它同時蓋住了 [0,3) 和那個塌着的 10");
-        assert_eq!(s.len(), 2, "而 [20,25) 沒被蓋住，還在");
+        assert_eq!(s.len(), 2, "而 [20,25) 没被蓋住，還在");
         assert_eq!(s.primary().span(), (0, 12));
 
         // 只留主選區之後還是至少一段。

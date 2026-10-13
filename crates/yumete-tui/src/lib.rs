@@ -19860,7 +19860,7 @@ fn squeezed(text: &str) -> String {
         let page = rows.join("\n");
 
         assert!(page.contains("安全核驗"), "the panel is named: {page}");
-        for answer in ["繼續保存", "查看區別", "取消保存"] {
+        for answer in ["繼續保存", "查看區别", "取消保存"] {
             assert!(page.contains(answer), "{answer} is offered: {page}");
         }
         assert!(page.contains("MB"), "the sizes are on the page: {page}");

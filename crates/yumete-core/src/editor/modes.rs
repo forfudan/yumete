@@ -93,7 +93,7 @@ impl Editor {
         )
     }
 
-    /// **手上有不止一段選區沒有。**
+    /// **手上有不止一段選區没有。**
     ///
     /// 前端問它是為了一件事：Warning: **多選區下不畫內嵌的 preedit**（2026-09-28 定，原話：
     /// 「我觉得是不是 multiselection 的时候应当禁止 pre-edit 而是用候选面板。这样的话防止
@@ -112,10 +112,10 @@ impl Editor {
     /// （#405，2026-09-28）。
     ///
     /// Warning: **塌着的那些也要交出來。** 主選區塌着的時候有光標替它說話——橫排是終端自己
-    /// 那個，竪排是畫進頁面的反白方塊——而次選區沒有光標，它塌着的時候能被看見的只有
+    /// 那個，竪排是畫進頁面的反白方塊——而次選區没有光標，它塌着的時候能被看見的只有
     /// 它站的那一格底色。`C` 往下複製出來的那一串空光標全靠這個。
     ///
-    /// 只有一段的時候回空，所以在沒有人造出第二段之前，畫面一格不動。
+    /// 只有一段的時候回空，所以在没有人造出第二段之前，畫面一格不動。
     pub fn secondary_selections(&self) -> Vec<(usize, usize)> {
         if !self.sel.is_plural() {
             return Vec::new();
@@ -212,9 +212,9 @@ impl Editor {
     pub fn prompt_label(&self) -> Option<String> {
         let (prefix, _) = self.prompt()?;
         Some(match self.mode {
-            // **提示符自己說通配開着沒有**（2026-10-12 作者定）。狀態欄這一行正
+            // **提示符自己說通配開着没有**（2026-10-12 作者定）。狀態欄這一行正
             // 被提示符佔着，所以按下 `A-j` 之後說一句是**看不見**的——量過，屏幕
-            // 上一個字都不變。一個看不見的開關等於沒有開關，所以狀態寫在這一行
+            // 上一個字都不變。一個看不見的開關等於没有開關，所以狀態寫在這一行
             // 自己身上。
             Mode::Search => match (self.search_forward, self.search.wild) {
                 (true, false) => say!("ui.prompt-search"),
@@ -347,7 +347,7 @@ impl Editor {
     ///
     /// 誰該用它：**確認一下剛纔那個按鍵做了什麼**的那一類。邊欄寬了一檔、換了
     /// 一個區——按的人自己看得見結果，那句話只是個回聲。錯誤、問句、以及「這件事
-    /// 沒做成」不許用：那幾種要一直站在那裏，等人讀到。
+    /// 没做成」不許用：那幾種要一直站在那裏，等人讀到。
     pub(crate) fn murmur(&mut self, message: String) {
         self.status_fades = Some((std::time::Instant::now() + Self::MURMUR, message.clone()));
         self.status = message;
@@ -356,7 +356,7 @@ impl Editor {
     /// 一句話站多久。
     const MURMUR: std::time::Duration = std::time::Duration::from_secs(3);
 
-    /// 還有多久輪到它走。`None` ＝ 沒有欠着的。
+    /// 還有多久輪到它走。`None` ＝ 没有欠着的。
     pub fn status_due_in(&self) -> Option<std::time::Duration> {
         let (at, _) = self.status_fades.as_ref()?;
         Some(at.saturating_duration_since(std::time::Instant::now()))
@@ -455,17 +455,17 @@ impl Editor {
             .map(|run| yumete_cjk::str_width(&run.text))
             .sum();
         // Warning: **藏起來的那些也要減掉**（2026-10-02 一輪掃查報來的）。這一支加
-        // 了畫出來的（註號、補齊的格寬），卻從來沒減過藏起來的（`**`、`(url)`、
+        // 了畫出來的（註號、補齊的格寬），卻從來没減過藏起來的（`**`、`(url)`、
         // `[^1]` 的本體）——於是 `:render full` 底下報出來的列號**比那一行畫出來
         // 的還長**：五百七十三個光標位置裏有四十九個這樣，最遠超出二十三格。
         //
         // 畫的那一邊問的是 [`crate::wrap::position`]，它**先濾掉藏起來的**再加畫
-        // 出來的。兩邊是同一條規矩的兩份推導，只在「什麼都沒藏」的時候一致——
-        // `:render off`/`basic` 下一直對，所以沒人發現。
-        // Warning: **沒藏東西就別把那一行拿出來**（2026-10-08）。`line_text` 把一整行物化成
+        // 出來的。兩邊是同一條規矩的兩份推導，只在「什麼都没藏」的時候一致——
+        // `:render off`/`basic` 下一直對，所以没人發現。
+        // Warning: **没藏東西就別把那一行拿出來**（2026-10-08）。`line_text` 把一整行物化成
         // `String` 再拆成 `Vec<char>`，而這一支每幀都要問一次——一行 150 萬字的
         // 檔上就是每幀兩次大拷貝（`sample` 指的就是這裏）。藏起來的那一列空著的
-        // 時候這筆賬是零，而「空著」正是沒開 `:render` 與長行門槛下的常態。
+        // 時候這筆賬是零，而「空著」正是没開 `:render` 與長行門槛下的常態。
         let hidden = self.hidden_on_line(line);
         let gone: usize = match hidden.is_empty() {
             true => 0,
@@ -514,7 +514,7 @@ impl Editor {
     /// 漢字 ＋ 一個 Plane-14 的標籤。按碼位問，查出來的是那一串的頭一個，而使用
     /// 者指着的是整個。
     ///
-    /// 和 `char_at_cursor` 同一條收尾規矩：行末沒有字就答前面那一個。
+    /// 和 `char_at_cursor` 同一條收尾規矩：行末没有字就答前面那一個。
     pub fn grapheme_at_cursor(&self) -> Option<String> {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.caret().min(rope.len_chars()));

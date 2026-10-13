@@ -6,7 +6,7 @@
 use super::*;
 
 /// **認詞只認得動一本書**（2026-10-13）。認詞掃的是整份正文，而「正在寫的這一篇」
-/// 再長也就幾 MB；一個語料檔走進來，掃它一遍既沒有意義，又要把整份物化一次。
+/// 再長也就幾 MB；一個語料檔走進來，掃它一遍既没有意義，又要把整份物化一次。
 const BIGGEST_TO_DETECT: usize = 16 * 1024 * 1024;
 
 impl Editor {
@@ -293,7 +293,7 @@ impl Editor {
         // of a short file, of an ASCII file, or of a tree with no 漢字 in it
         // returns empty — and the writer, who asked a question, would have
         // watched every tinted word on the page go out while the status line
-        // said only 「沒有找到」. A question that finds nothing must not also
+        // said only 「没有找到」. A question that finds nothing must not also
         // take away the last answer.
         let had = self.take_detected_words();
         let mut text = String::new();
@@ -401,7 +401,7 @@ impl Editor {
     /// are the same words.
     ///
     /// Warning: **緩衝區那一檔也回 `None`**：它和本文件一樣是內存裏的一張表，不是一
-    /// 個可以走的根。認詞那一支走的是「有沒有根」這條岔路，所以兩檔同形。
+    /// 個可以走的根。認詞那一支走的是「有没有根」這條岔路，所以兩檔同形。
     fn discover_root(&self, scope: &crate::search_panel::Where) -> Option<PathBuf> {
         use crate::search_panel::Where;
         match scope {
@@ -411,7 +411,7 @@ impl Editor {
             // Warning: **同 `search_root_of`：`~` 要展開，相對路徑從工作路徑算起**
             // （2026-10-02 審出來的——1afa2b6 漏了這一支）。同一個範圍交給兩支
             // 代碼算，答案必須是同一個；從前這裏把 `~/稿` 原樣交給 `walk`，
-            // `ignore` 交出一個錯誤條目、`flatten()` 把它丟掉，於是一個字都沒挖
+            // `ignore` 交出一個錯誤條目、`flatten()` 把它丟掉，於是一個字都没挖
             // 到而且一聲不吭。
             Where::Named(path) => {
                 let full = Self::expand_tilde(&path.to_string_lossy());
@@ -431,7 +431,7 @@ impl Editor {
         self.project_root().join(".yumete").join("discovered_words.txt")
     }
 
-    /// Read `.yumete/words.txt` again.回的是**從哪個檔讀的**，沒有就是 `None`。
+    /// Read `.yumete/words.txt` again.回的是**從哪個檔讀的**，没有就是 `None`。
     ///
     /// The name on every page of a novel is the one word no dictionary has —
     /// 阿寧 segments as `[阿][寧]`, so `w` steps through it a character at a
@@ -440,15 +440,15 @@ impl Editor {
     /// to the manuscript, not to the session that opened it.
     ///
     /// Warning: **它一聲不吭**（2026-09-30 報的）。這一支有七個呼叫方，六個是
-    /// 編輯器自己讀的——啓動、輸入法的分詞器晚一秒送到、存檔之後。人什麽都沒
-    /// 做，卻被告知一個他沒在想的檔案在不在：「我打开任何非程序文檔或者新建一
+    /// 編輯器自己讀的——啓動、輸入法的分詞器晚一秒送到、存檔之後。人什麽都没
+    /// 做，卻被告知一個他没在想的檔案在不在：「我打开任何非程序文檔或者新建一
     /// 个 buffer，都会有这个消息在命令栏……我怕用户会感到奇怪。」
     ///
     /// Warning: **報結果的那一句本來就有，而且更好。** `:word-list-reload` 與
     /// 存下 `words.txt` 都會走前端那一句 `word.lists-reread`，它問的是
     /// [`Editor::words_in_force`]——「宇浩語言模型 1250000 條 ＋ 本書 312 個
-    /// 詞」，兩半一起說。沒有 `words.txt` 的時候後半句自己不出現，那正是「這本
-    /// 書沒有」的說法。從前這裏另說一句「沒有找到 .yumete/words.txt」，是**同一
+    /// 詞」，兩半一起說。没有 `words.txt` 的時候後半句自己不出現，那正是「這本
+    /// 書没有」的說法。從前這裏另說一句「没有找到 .yumete/words.txt」，是**同一
     /// 件事的第二套說法**，而且說成了抱怨——當場就看出那是不一致的。
     pub fn reload_project_words(&mut self) -> Option<PathBuf> {
         // Warning: **讀的那一頭也問[項目根][`Editor::root`]**（2026-10-01 審出來
@@ -537,7 +537,7 @@ impl Editor {
     pub(super) fn ask_for_detection(&mut self) {
         // **太大的檔不認詞**（2026-10-13）。認詞讀的是「正在寫的這一篇」——一本長篇
         // 也就幾 MB，而掃一遍是整份的（`discover::words`）。一個語料檔走進來，掃它
-        // 一遍既沒有意義，又要在工作執行緒上把整份物化成 `String`。
+        // 一遍既没有意義，又要在工作執行緒上把整份物化成 `String`。
         if self.current_buffer().rope().len_bytes() > BIGGEST_TO_DETECT {
             self.detect_request = None;
             return;
@@ -644,7 +644,7 @@ impl Editor {
         self.ime_available = available;
     }
 
-    /// Whether a 碼表 is loaded. **「表裏沒有這個字」和「根本沒有表」是兩個
+    /// Whether a 碼表 is loaded. **「表裏没有這個字」和「根本没有表」是兩個
     /// answer**，出廠 `[yume] start = false`，所以剛裝好的人問哪個字都會得到
     /// 前一句——而那是假話（2026-09-23 審出來的）。
     pub fn ime_available(&self) -> bool {
@@ -657,11 +657,11 @@ impl Editor {
         self.chaifen_available = available;
     }
 
-    /// **「表裏沒有這個字」和「根本沒有表」是兩個答案**，and since 2026-10-12
+    /// **「表裏没有這個字」和「根本没有表」是兩個答案**，and since 2026-10-12
     /// the 拆分表 is its own question: it is embedded in the binary and read
-    /// without a scheme, so 「碼表沒載」 stopped being the reason a lookup
+    /// without a scheme, so 「碼表没載」 stopped being the reason a lookup
     /// comes back empty. 一個不在表裏的字（emoji、拉丁字母）載了方案照樣不在，
-    /// 而從前答的是「`:yume-scheme` 載一次」——載了也沒用。
+    /// 而從前答的是「`:yume-scheme` 載一次」——載了也没用。
     pub fn chaifen_available(&self) -> bool {
         self.chaifen_available
     }
@@ -902,7 +902,7 @@ impl Editor {
         // put it and learns 中文 instead: press `r`, the panel opens, and
         // whatever you choose is what the selection becomes.
         // Warning: **也要落在每一段選區上**（2026-10-02 查出來的，#405 Phase 4 漏的
-        // 那一半）。底下那一支插入的已經走 `edit_each` 了，可這兩支早退的沒有：
+        // 那一半）。底下那一支插入的已經走 `edit_each` 了，可這兩支早退的没有：
         // 三個光標按 `r` 再打一個「好」，只有主選區換掉了；同樣三個光標按 `r` 再
         // 敲一個字母，三段全換。**同一個鍵，中文和西文兩種答案**——而
         // `keys.rs` 那一段寫着這個字符「有兩條路進來，一個是鍵，一個是上屏」，
@@ -983,7 +983,7 @@ impl Editor {
         // `.` 重放的是**鍵**（`last_edit_keys`），而一次上屏是前端遞進來的一個**字
         // 串**，不走 `on_key`——於是 `wc` ＋ 上屏「紅」＋ `Esc` 之後按 `.`，重放的是
         // `w` `c` `Esc`：目標字被刪掉，什麽都不補回去。實測 `wc紅\e w .` 出來的是
-        // 「第紅行春日…」，那個「：」沒了。`r` 那一條早就在 `repeat_edit` 裏單獨補
+        // 「第紅行春日…」，那個「：」没了。`r` 那一條早就在 `repeat_edit` 裏單獨補
         // 過（`last_replacement`），插入這一條漏了。
         //
         // 補的辦法是把上屏的字當成敲進去的字記下來：重放的時候 `Key::Char('紅')` 在

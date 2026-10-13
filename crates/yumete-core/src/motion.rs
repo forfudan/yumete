@@ -291,7 +291,7 @@ pub fn line_first_non_blank(rope: &Rope, pos: usize) -> usize {
             return ls + chars;
         }
     }
-    // 走到頭都沒碰上一個實字：這一行沒有「第一個非空白」，所以不動。
+    // 走到頭都没碰上一個實字：這一行没有「第一個非空白」，所以不動。
     ls
 }
 
@@ -411,7 +411,7 @@ fn segment_text(text: &str, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, us
 /// Warning: **這一支管的只是分詞那一筆賬**（2026-10-09 補）。從前這一段寫的是「代
 /// 價不跟着行長算」，而量出來不是：`w` 在單行上仍舊是每一百萬字十四毫秒，那幾毫
 /// 秒花在 [`prev_grapheme`] 與 [`left`]／[`right`] 上——它們各自把整行抄一遍。窗口
-/// 攔住的是分詞器，攔不住它們，模塊開頭那張單子列着誰還沒改。
+/// 攔住的是分詞器，攔不住它們，模塊開頭那張單子列着誰還没改。
 ///
 /// 4096 的來由：這是**一下按出去走多遠**的量，不是上下文的量（那是
 /// [`WORD_SEAM`]）。一扇窗（8192 字）走一趟 Viterbi 是十微秒的量級，按住鍵也追得
@@ -426,7 +426,7 @@ const WORD_REACH: usize = 4096;
 /// 多兩個數量級，而逐字掃的那兩種粒度（`Big`/`Coarse`）只看相鄰兩個字。
 ///
 /// Warning: **別把這個數和 [`WORD_REACH`] 合成一個。** 重疊取 `WORD_REACH` 的時候
-/// 推一次只前進半扇窗，於是「一行裏一個空白都沒有」那種檔上 `W` 要把整行分兩遍
+/// 推一次只前進半扇窗，於是「一行裏一個空白都没有」那種檔上 `W` 要把整行分兩遍
 /// （量出來和整行分詞一樣慢，49.8 ms 一鍵，白推）。分開之後推一次前進
 /// `2 * WORD_REACH - WORD_SEAM`，整行總共只多分 6%。
 const WORD_SEAM: usize = 512;
@@ -523,11 +523,11 @@ impl Window {
 
 /// **在 `pos` 附近一段一段地問，問到有答案為止**（2026-10-08）。
 ///
-/// 第一扇窗是 `[pos - WORD_REACH, pos + WORD_REACH]`，夾在這一行裏；窗裏沒有答
+/// 第一扇窗是 `[pos - WORD_REACH, pos + WORD_REACH]`，夾在這一行裏；窗裏没有答
 /// 案就往 `forward` 的方向再推一扇，推到行的那一頭為止。
 ///
-/// Warning: **推，不是停下來。** 一行裏一個空白都沒有的時候，`E` 真要走到行尾，
-/// 而那段路一扇窗裝不下；窗裏找不着邊界就當成「沒有」交出去，光標會卡在原地。
+/// Warning: **推，不是停下來。** 一行裏一個空白都没有的時候，`E` 真要走到行尾，
+/// 而那段路一扇窗裝不下；窗裏找不着邊界就當成「没有」交出去，光標會卡在原地。
 /// 兩扇窗重疊 [`WORD_SEAM`]：上一扇窗邊上那條不可信的邊界，在新窗裏離窗邊有五百
 /// 個字，是中間那些可信的邊界之一。
 ///
@@ -570,7 +570,7 @@ fn near_words<T>(
                 // 往回推的時候窗的左邊往外挪，上一扇記下的那條邊界就不在窗外了。
                 prior = None;
             }
-            // 推到行頭了：這一行真的沒有。
+            // 推到行頭了：這一行真的没有。
             _ => return None,
         }
     }
@@ -652,7 +652,7 @@ pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter)
     //
     // helix 的 `range_to_target` 把換行當成一個**目標**（`movement.rs:470`）：`w`
     // 停在行末，再按一下纔過去；真跨過去的時候 `anchor = head`，所以選中的裏面
-    // 永遠沒有那個換行。實測（`helix-core` 079a789e8，`alpha beta gamma` 那一行）：
+    // 永遠没有那個換行。實測（`helix-core` 079a789e8，`alpha beta gamma` 那一行）：
     // 第 14 格按 `w` 選的是 `ma`，第 15 格按 `w` 選的是下一行的縮進 `  `。
     //
     // Warning: **這兩條只給 `w` 用。** [`next_word_start`] 是 vim 的 `dw` 直接用的
@@ -708,7 +708,7 @@ pub fn unit_forward(rope: &Rope, from: usize, next: impl Fn(&Rope, usize) -> usi
 /// Warning: **動不了就是 `Missed`**（2026-10-02 改，原話「Never `Missed` — at the
 /// top of the buffer it collapses」）。往前那一支（[`unit_forward`]）動不了的時候
 /// 交的是 `Missed`，往回這一支交一格——而 `Span::Missed` 自己的註釋說得很清楚，
-/// 那個分別「是 `wdiw` 在檔尾打開的」：動詞要分得出「那裏什麼都沒有」和「那裏有
+/// 那個分別「是 `wdiw` 在檔尾打開的」：動詞要分得出「那裏什麼都没有」和「那裏有
 /// 一格」。
 ///
 /// 少了這個信號，兩套文法只好各自用位置去猜，而且**同一天我把同一條規矩打了兩個
@@ -716,7 +716,7 @@ pub fn unit_forward(rope: &Rope, from: usize, next: impl Fn(&Rope, usize) -> usi
 /// `keys.rs` 判一次（檔首按 `db` 不許刪一個字）。兩處都是這一行欠的。
 ///
 /// Warning: **往前和往回本來就不對稱，這不是抄錯。** 往前動不了照樣蓋住你站的那
-/// 一格——`dl` 停在行末，`l` 動不了而 vim 照樣刪掉那個字；往回動不了就是真的沒有
+/// 一格——`dl` 停在行末，`l` 動不了而 vim 照樣刪掉那個字；往回動不了就是真的没有
 /// 東西可拿。所以兩支各說各的方向的規矩，而不是一條。
 pub fn unit_back(rope: &Rope, from: usize, prev: impl Fn(&Rope, usize) -> usize) -> Span {
     let head = prev(rope, from);
@@ -747,7 +747,7 @@ pub enum Motion {
     WordEnd(Grain),
     /// `ge` / `gE` — **往回到上一個詞的末尾**（vim；2026-10-02 定，照參考實現）。
     ///
-    /// Warning: **helix 沒有這一個**，而 `ge` 在 helix 鍵位裏是「到檔尾」。所以這
+    /// Warning: **helix 没有這一個**，而 `ge` 在 helix 鍵位裏是「到檔尾」。所以這
     /// 一支只有 vim 文法問得到，兩邊的 `ge` 各是各的。
     WordEndBack(Grain),
     /// **vim 的 `cw`，而 `cw` 不是 `ce`** — 光標**所在**那一段的末尾。
@@ -819,7 +819,7 @@ pub enum Motion {
     /// **`count` 只有詞對象用得上**（2026-10-11）：vim 的 `2iw` 是「兩個單位」，
     /// 單位在詞和空白之間交替；`2aw` 是兩個「詞 ＋ 它後面那道縫」。
     ///
-    /// Warning: **括號那一族的數目是另一個意思**，所以這一格對它們沒有作用。`2i(`
+    /// Warning: **括號那一族的數目是另一個意思**，所以這一格對它們没有作用。`2i(`
     /// 在 vim 裏是「往外數第二層括號」，不是「兩個括號對」——那是另一件事，和
     /// 「往前找」一起留在後面做。
     Object { what: Object, around: bool, count: usize },
@@ -873,7 +873,7 @@ pub enum Object {
     /// the one that makes `wdiw` the handiest press in this editor).
     ///
     /// Warning: **`big` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`/`b` 同一個
-    /// 答案；`iW` 走 [`Grain::Big`]，也就是 vim 的「一串非空白」。從前這裏沒有這一格，
+    /// 答案；`iW` 走 [`Grain::Big`]，也就是 vim 的「一串非空白」。從前這裏没有這一格，
     /// `iw` 寫死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w`
     /// 走三步。一個編輯器對「詞」只能有一個答案。
     ///
@@ -908,7 +908,7 @@ pub enum Object {
     /// [`sentence_starts`]，和那三處同一支：兩個答案就意味着光標停在版面不斷行的地方。
     ///
     /// Warning: **`as` 在中文裏會退化成 `is`**，同 `aw`：它多取句末那一段空白，而中文句子之間
-    /// 沒有空白。
+    /// 没有空白。
     Sentence,
     /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
     ///
@@ -1023,7 +1023,7 @@ pub fn word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> S
 /// Warning: **這是模型層，兩套鍵位一起改。** vim 的 `db` 刪的也是
 /// `[prev_word_start, cursor)`——同樣不含光標那一格——所以兩邊要的是同一個答案。
 pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
-    // Warning: **往回也停在行首**，和 `w` 停在行末是同一條（`word_forward`）。沒有
+    // Warning: **往回也停在行首**，和 `w` 停在行末是同一條（`word_forward`）。没有
     // 這一條，行首縮進裏按 `b` 會一路退到上一行的詞上，把中間那個換行圈進來。
     // helix 第 18 格（縮進的第二個空格）選的是 `␣␣`，不是 `gamma␊␣`。
     let stop_at_line_start = |r: &Rope, p: usize| -> usize {
@@ -1043,7 +1043,7 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
     let Span::Over { anchor, head } = unit_back(rope, pos, stop_at_line_start) else {
         return Span::Missed;
     };
-    // Warning: **後面沒東西了就什麼都不做**，不是「選中一格」。`Span::Missed` 自己的
+    // Warning: **後面没東西了就什麼都不做**，不是「選中一格」。`Span::Missed` 自己的
     // 註釋說的正是這個分別。helix 在檔首按 `b` 原地不動，而從前這裏交出一格，於是
     // `2bd` 在檔首刪掉一個字。
     if head >= anchor {
@@ -1069,7 +1069,7 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
     }
     // Warning: **錨點退到和 head 同一格，那也是一段**（2026-10-04 修）。倒着走的
     // `Span::Over` 是閉區間，所以 `anchor == head` 說的是「選中一個字」，不是
-    // 「什麼都沒選中」。從前這裏寫 `anchor > head`，於是**上一個詞只有一個字符的
+    // 「什麼都没選中」。從前這裏寫 `anchor > head`，於是**上一個詞只有一個字符的
     // 時候交出 `Missed`**——而 `Missed` 的意思是「哪兒也不去」，光標就卡死了：
     //
     // ```
@@ -1130,10 +1130,10 @@ pub fn word_end_here(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
     // Warning: **窗裏問的是「`pos` 後面第一個可信的詞尾」**，不是「罩着 `pos` 那一條
     // 的詞尾」（2026-10-08）。兩者在整行上是同一個答案——詞不重疊，`pos` 前面那幾條
     // 的終點都不超過 `pos`——而光標那一條的尾巴落在窗外的時候只有前者還答得出：推
-    // 一扇窗之後 `pos` 已經不在窗裏了（一行全是漢字沒有標點的時候，`E` 的「本詞」就
+    // 一扇窗之後 `pos` 已經不在窗裏了（一行全是漢字没有標點的時候，`E` 的「本詞」就
     // 是整行）。
     let end = near_words(rope, line, pos, grain, seg, true, |w| {
-        // 「光標在不在詞裏」只有罩着 `pos` 那一扇答得出，而那正是第一扇。空白上沒有
+        // 「光標在不在詞裏」只有罩着 `pos` 那一扇答得出，而那正是第一扇。空白上没有
         // 「本詞」可言，`Some(None)` 就是這個回答，外面那一層照老路退回下一個詞的尾。
         if w.holds(pos) && !w.words.iter().any(|&(start, end)| (start..end).contains(&pos)) {
             return Some(None);
@@ -1665,7 +1665,7 @@ mod tests {
         }
     }
 
-    /// **窗裏沒有邊界就推一扇，不是停在原地**（2026-10-08）。
+    /// **窗裏没有邊界就推一扇，不是停在原地**（2026-10-08）。
     ///
     /// 一行幾萬個同一個漢字，粗粒度看就是**一個詞**——`e` 真要走到行尾，而那段路
     /// 一扇窗（`2 * WORD_REACH`）裝不下。從前整行分詞答得出，所以這一條守的是
@@ -1913,7 +1913,7 @@ mod tests {
             Span::Over { anchor: 11, head: 15 }
         );
         // 第 15 格（`gamma` 的最後一個字）：這一下纔過去，而錨點落在下一行的開頭
-        // ——選中的裏面沒有那個換行。
+        // ——選中的裏面没有那個換行。
         assert_eq!(
             word_forward(&r, 15, Grain::Coarse, &seg),
             Span::Over { anchor: 17, head: 18 }
@@ -1978,7 +1978,7 @@ mod tests {
     /// 根子是末尾那道閘寫成了 `anchor > head`。倒着走的 `Span::Over` 是**閉區間**，
     /// 所以 `anchor == head` 說的是「選中一個字」；前一個詞只有一個字符（反引號、
     /// 逗號、括號、「」都是）的時候，詞首那一下的錨點正好退到和 head 同一格，於是
-    /// 它被當成「沒地方可去」交了 `Missed`——而 `Missed` 的意思是光標不動。
+    /// 它被當成「没地方可去」交了 `Missed`——而 `Missed` 的意思是光標不動。
     ///
     /// 神諭量過（`helix-core`，`` aa `bb` cc ``，光標在第 4 格）：
     /// `anchor=4 head=3 span=[3,4) text="`"`——走到第 3 格，選中那個反引號。

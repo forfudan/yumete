@@ -20,8 +20,8 @@ impl Editor {
     pub fn open_report(&mut self, name: &str, text: &str) {
         let mut buffer = Buffer::from_text(text);
         buffer.name_as(name);
-        // **生成出來的頁面是只讀的**（2026-10-08 定）。它沒有檔案，改了存不到任何
-        // 地方，而改一下就掛上「改過沒存」那個 `+`，`:q` 於是攔着不讓走——為一份
+        // **生成出來的頁面是只讀的**（2026-10-08 定）。它没有檔案，改了存不到任何
+        // 地方，而改一下就掛上「改過没存」那個 `+`，`:q` 於是攔着不讓走——為一份
         // 編輯器自己算出來的東西。`:readonly off` 照舊解得開。
         buffer.set_readonly(true);
         self.add_buffer(buffer);
@@ -48,7 +48,7 @@ impl Editor {
         // > vim 有的話就对齐它。不要让用户有 unexpected。两步走，先删掉当前实现
         // > （宁可没有不能让人有错误预期），然后再实现行地址。
         //
-        // 所以現在 `:/foo` 答的是「沒有這條命令」，和別的打錯的名字一樣。行地址
+        // 所以現在 `:/foo` 答的是「没有這條命令」，和別的打錯的名字一樣。行地址
         // 那一套（`:/a/,/b/s/…`）要整套 Ex 文法，記在 §5.80 第 5 條底下。
         // What this command needs before it can mean anything (Feature #170).
         // A setting whose prerequisite is missing used to be *set* and then
@@ -159,7 +159,7 @@ impl Editor {
             Command::Open(path) => {
                 // **相對路徑按[工作路徑][`Editor::working_dir`]算**（2026-10-01）。
                 // 從前它原樣交給 `Buffer::open`，由作業系統按**進程的 cwd** 解
-                // ——於是 `:pwd` 報的那個目録 `:open` 不認，`:cd` 改了也沒用。
+                // ——於是 `:pwd` 報的那個目録 `:open` 不認，`:cd` 改了也没用。
                 self.open_file(self.here_path(path.as_ref())).map_err(EditorError::Io)?;
                 // A file opened mid-session can carry a draft just as one named
                 // on the command line can.
@@ -172,7 +172,7 @@ impl Editor {
             }
             Command::Write(path) => {
                 // **設置面板開着的時候，`:w` 說的是它。** 不分這一下，面板上按
-                // 存盤會把眼前那一章寫一遍——看起來像沒反應，而動的是別的東西。
+                // 存盤會把眼前那一章寫一遍——看起來像没反應，而動的是別的東西。
                 if self.settings_open {
                     self.settings_save = true;
                     return Ok(CommandOutcome::Continue);
@@ -430,7 +430,7 @@ impl Editor {
                 self.write_current(None)?;
                 Ok(CommandOutcome::Continue)
             }
-            // Warning: **`:wa` 也要存面板。** 「全都存」而設定一個字節沒落盤，狀態行
+            // Warning: **`:wa` 也要存面板。** 「全都存」而設定一個字節没落盤，狀態行
             // 還報存成功——同 `:w` 那條的理由逐字相同。緩衝區照舊存。
             Command::WriteAll if self.settings_open => {
                 self.settings_save = true;
@@ -484,7 +484,7 @@ impl Editor {
             Command::SetNumberFill(on) => {
                 // **裸的報告，帶參數的纔設**（2026-10-09 作者定）。從前裸的是輪替，
                 // 而兄弟那幾個（`:readonly`／`:reload-auto`／`:yank-on-delete`／
-                // `:view-code`）裸的都報告——於是這一個現在是開還是關，沒有辦法問。
+                // `:view-code`）裸的都報告——於是這一個現在是開還是關，没有辦法問。
                 self.number_fill = on.unwrap_or(self.number_fill);
                 self.status = match self.number_fill {
                     true => say!("layout.line-numbers-on-a-band"),
@@ -495,8 +495,8 @@ impl Editor {
             Command::SetDiffGutter(on) => {
                 self.set_diff_gutter(on.unwrap_or(!self.diff_gutter));
                 self.status = match self.diff_gutter {
-                    // 開了卻什麼都沒有的情形太容易被當成「壞了」：這個檔不在
-                    // git 倉裏，或者倉裏還沒有第一個提交，當場說出來。
+                    // 開了卻什麼都没有的情形太容易被當成「壞了」：這個檔不在
+                    // git 倉裏，或者倉裏還没有第一個提交，當場說出來。
                     true => match self.vcs.contains_key(&self.current_buffer().id()) {
                         true => say!("layout.diff-gutter-on"),
                         false => say!("layout.diff-gutter-not-in-git"),
@@ -523,7 +523,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetIndentHint(hint) => {
-                // 沒給就只回答「現在是哪一檔」，用的是同一句話。
+                // 没給就只回答「現在是哪一檔」，用的是同一句話。
                 let hint = hint.unwrap_or(self.indent_hint);
                 self.indent_hint = hint;
                 self.status = say!("layout.indent-hint", hint.name());
@@ -1002,12 +1002,12 @@ impl Editor {
             Command::ShowDetail(want) => {
                 // Warning: **裸的報告，帶參數的纔設**（2026-10-09 作者定，三個表格開關
                 // 一起）。從前裸形寫的是 `!self.detail_visible()`，而那一支還要問「這
-                // 一格有沒有記錄可畫」——站在表頭或者 `| --- |` 那一行上沒有，於是它
+                // 一格有没有記錄可畫」——站在表頭或者 `| --- |` 那一行上没有，於是它
                 // 恆假、`!` 恆真：`:table-detail on` 之後再按一下光的，答的還是
                 // 「記錄：開」，開關只有一個方向。
                 //
-                // 報的是**讀者說過的話**（`show_detail`），不是此刻畫着沒有
-                // （`detail_visible()`）；沒說過話就報「這一格本來開不開」。
+                // 報的是**讀者說過的話**（`show_detail`），不是此刻畫着没有
+                // （`detail_visible()`）；没說過話就報「這一格本來開不開」。
                 let want = want
                     .unwrap_or_else(|| self.show_detail.unwrap_or_else(|| self.detail_opens_here()));
                 self.show_detail = Some(want);
@@ -1269,9 +1269,9 @@ impl Editor {
                 //
                 // Warning: **從前這裏是 `if measure.is_some()`**，於是 `0`（＝按窗口
                 // 寬折）是唯一一個「給了寬度卻可能什麼都不發生」的參數：從 `off`
-                // 出發按 `:view-wrap 0`，屏幕一點反應都沒有。一位 vim 用戶就是在
+                // 出發按 `:view-wrap 0`，屏幕一點反應都没有。一位 vim 用戶就是在
                 // 這裏斷定「不能禁止 wrap」的（`:view-wrap 500` 同樣一聲不響，
-                // 而真正關掉它的是 `off`，說明裏當時也沒寫）。
+                // 而真正關掉它的是 `off`，說明裏當時也没寫）。
                 //
                 // 整條命令現在一句話說得完：**給一個寬度就是折（`0` ＝ 窗口寬）；
                 // `off` 是不折；`on` 是接着用上次那個寬度。**
@@ -1384,7 +1384,7 @@ impl Editor {
             return;
         }
         match asked.what {
-            // **`R` 動得太多那一問**（2026-10-03 定）。沒有「看一眼」那一格：
+            // **`R` 動得太多那一問**（2026-10-03 定）。没有「看一眼」那一格：
             // 要看的名單就在旁邊，人正站在上面。
             Asking::ReplaceEverywhere => match answer {
                 'y' => self.replace_what_was_asked(),
@@ -1439,7 +1439,7 @@ impl Editor {
             Asking::RecoverDraft => match answer {
                 'y' => self.query = self.recover_confirm_query(),
                 // Warning: **鎖住的時候這一格也不許按**（2026-10-10 報的）。
-                // `y` 那一條路有 `refuse_readonly`，而這一條從前一個字都沒問，於是
+                // `y` 那一條路有 `refuse_readonly`，而這一條從前一個字都没問，於是
                 // 鎖着的那一趟裏**唯一按得動的是毀掉那一格**——被告知「只讀，撿不
                 // 了」的人去按 `d` 清掉那個提醒，是很順的一步。§5.61 把「鎖住」定
                 // 成「這一趟不寫盤」，而刪一個檔比寫一個檔更算。
@@ -1458,7 +1458,7 @@ impl Editor {
             },
             Asking::RecoverConfirm => match answer {
                 'y' => self.take_the_draft(),
-                // 看完再決定——對比開在另一個緩衝裏，稿子一個字沒動。
+                // 看完再決定——對比開在另一個緩衝裏，稿子一個字没動。
                 'd' => self.diff_against_draft(),
                 _ => {
                     self.current_buffer_mut().leave_the_draft_alone();
@@ -1654,7 +1654,7 @@ impl Editor {
         let word_list = matches!(saved, Ok(Wrote::Saved)) && self.note_word_list_saved();
         if matches!(saved, Ok(Wrote::Saved)) {
             // 改動條：存檔是喊 git 的三個時刻之一（#55）。`force`，因為變的是
-            // **磁碟上那一份**而 revision 沒動——存檔不是一次編輯。
+            // **磁碟上那一份**而 revision 没動——存檔不是一次編輯。
             self.refresh_vcs(true);
             self.note_progress();
             // **A save is when new prose exists** (#448), so it is when 自動認詞

@@ -28,7 +28,7 @@ pub fn stamp() -> String {
 pub fn when(at: std::time::SystemTime) -> String {
     let seconds = match at.duration_since(std::time::UNIX_EPOCH) {
         Ok(since) => since.as_secs() as i64,
-        // 1970 之前。算得出來，只是沒人會有這種稿子。
+        // 1970 之前。算得出來，只是没人會有這種稿子。
         Err(before) => -(before.duration().as_secs() as i64),
     };
     let (_, mo, d, h, mi, _) = broken_down(seconds);

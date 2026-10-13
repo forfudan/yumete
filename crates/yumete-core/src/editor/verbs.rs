@@ -23,9 +23,9 @@ impl Editor {
         // grew a selection instead of moving.
         self.extend = false;
         self.insert_recording.clear();
-        // Warning: **沒花掉的插入計數在這裏清**（2026-10-06 夜審報的）。從前它只在
+        // Warning: **没花掉的插入計數在這裏清**（2026-10-06 夜審報的）。從前它只在
         // `Esc` 那一臂清，而回 Normal 的路不止那一條（`show_buffer` 就是一條），
-        // 於是一個沒走完的 `5i` 會把那個 5 記到下一次插入上——下一次打一個字就
+        // 於是一個没走完的 `5i` 會把那個 5 記到下一次插入上——下一次打一個字就
         // 變成五個。進門清，比每一條出門的路都清一遍可靠。
         self.insert_again = 0;
         self.insert_opened = None;
@@ -73,7 +73,7 @@ impl Editor {
         };
         // **留住錨點的那一趟，出門只動頭**：剛打的那一段連同原來那個字就是新的
         // 選區（2026-10-10，照 helix 的 `restore_cursor`）。退到錨點前面就塌回一
-        // 點——刪回頭了，選區沒有東西可圈。
+        // 點——刪回頭了，選區没有東西可圈。
         match keeping && stepped >= self.sel.anchor() {
             true => self.sel.set_head(stepped),
             false => self.set_cursor(stepped),
@@ -225,7 +225,7 @@ impl Editor {
     ///
     /// **`gK` — join this line onto the one above it.**
     ///
-    /// **`gK` 沒有自己的函數了**（2026-09-19）。它從前是「站到上一行去，然後
+    /// **`gK` 没有自己的函數了**（2026-09-19）。它從前是「站到上一行去，然後
     /// 照常合併」，重複的時候一次比一次高，於是合出了選區之外。現在 `handle_goto`
     /// 的 `K` 那一支自己先上去一行，再把 `join_lines` 重複該重複的次數——合併的
     /// 接縫規矩（拉丁詞之間一個空格、漢字之間不留）始終只有這一處。
@@ -294,15 +294,15 @@ impl Editor {
         let after = (next < len).then(|| rope.char(next));
         // **接縫是一支一支寫出來的，不是從 `_` 掉出來的**（#326）。
         let glue = match (before, after) {
-            // 一頭是空的——行首或檔尾——就沒有接縫可言。
+            // 一頭是空的——行首或檔尾——就没有接縫可言。
             (None, _) | (_, None) => "",
-            // Warning: **下一行是空行，也沒有接縫**（2026-10-03，拿 nvim 比出來的）。
+            // Warning: **下一行是空行，也没有接縫**（2026-10-03，拿 nvim 比出來的）。
             // 空行在這裏露面的樣子是一個換行符，而它既不是全角也不是空白，於是
             // 從前掉進底下那個 `_`：`first\n\nsecond` 併出來是 `first \n` ——
-            // **行尾多一個誰也沒打過的空格**，而 nvim 併出來的是乾淨的 `first`。
+            // **行尾多一個誰也没打過的空格**，而 nvim 併出來的是乾淨的 `first`。
             // #326 修過「行尾本來就有的空白」，漏的是「空白從下一行來」這一種。
             (_, Some('\n' | '\r')) => "",
-            // 兩邊都是全角：中文行末本來就不帶空格，補一個就是插進了沒人打過
+            // 兩邊都是全角：中文行末本來就不帶空格，補一個就是插進了没人打過
             // 的字。
             (Some(a), Some(b)) if is_wide(a) && is_wide(b) => "",
             // 一頭全角一頭半角：`hello 漢字` 讀得順，這是有意的。
@@ -315,7 +315,7 @@ impl Editor {
             return;
         }
         // **`A-J` 選中補出來的那一格**（2026-10-06，helix 的 `join_selections_space`）。
-        // 接縫是算出來的，所以人看不見補了沒有——選中它就看得見了，而且要改成
+        // 接縫是算出來的，所以人看不見補了没有——選中它就看得見了，而且要改成
         // 別的（換行、全角空格）當場就打得掉。接縫是空的就退回原來那樣，收成一點。
         match self.select_the_seam && !glue.is_empty() {
             true => {

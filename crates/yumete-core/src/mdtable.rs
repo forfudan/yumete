@@ -513,7 +513,7 @@ impl Parts {
             return Err("標題行不能刪：它是欄名");
         }
         if at >= self.rows.len() {
-            return Err("沒有這一行");
+            return Err("没有這一行");
         }
         self.rows.remove(at);
         // Land on the row that took its place, or on the last one when the
@@ -553,7 +553,7 @@ impl Parts {
             return Err("只剩一欄了");
         }
         if at >= self.columns() {
-            return Err("沒有這一欄");
+            return Err("没有這一欄");
         }
         for row in &mut self.rows {
             row.remove(at);
@@ -1420,12 +1420,12 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
         .map(|line| {
             crate::table::cells(line, delimiter)
                 .into_iter()
-                // Warning: **格子兩邊的空白在這裏沒了，而這是定過的**（2026-10-02）。
+                // Warning: **格子兩邊的空白在這裏没了，而這是定過的**（2026-10-02）。
                 // `  padded  ,1` 轉出來是 `| padded | 1 |`，整格三個空格的轉成空
-                // 格子——按 RFC 4180，CSV 裏沒加引號的空格就是欄位內容。
+                // 格子——按 RFC 4180，CSV 裏没加引號的空格就是欄位內容。
                 //
                 // 不是「該不該 `trim`」：**`|` 表格本身存不下那幾個空格**（讀的時
-                // 候格子兩邊一律去掉），所以轉過去就沒地方放。也不報一句，原話：
+                // 候格子兩邊一律去掉），所以轉過去就没地方放。也不報一句，原話：
                 // 「我觉得 csv -> pipe 这个过程本身就是有歧义的，用户做这件事情
                 // 就已经做好了心理准备了。」`u` 退得回來。
                 // **讀出值，不是讀出它在檔裏的寫法**（2026-10-03 修）：`"Smith,
@@ -1452,12 +1452,12 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
 ///
 /// **A cell holding the delimiter is quoted, not refused**（2026-10-03 改）。
 ///
-/// Warning: 這裏從前拒絕，理由寫着「一個格子加了引號而別的沒加，在一個程序裏讀得對、
+/// Warning: 這裏從前拒絕，理由寫着「一個格子加了引號而別的没加，在一個程序裏讀得對、
 /// 在另一個裏整列右移」。那個擔心是不成立的——**按欄位決定加不加引號正是
 /// RFC 4180 的規矩**，不是權宜。而這一條其實早就定過了（`development.md` 腳註 311：
 /// 「`:export` 遇到含分隔符的格子就**拒絕**——現在加引號就好了，那纔是一次 `.csv`
 /// 讀者讀得對的轉換」），只是那一改當時只落在 `:export` 整檔網格那一支上，`|`
-/// 表格這一支和 `:convert-table` 都沒跟上，於是同一個倉裏兩種答案。
+/// 表格這一支和 `:convert-table` 都没跟上，於是同一個倉裏兩種答案。
 ///
 /// 轉換從此**不會失敗**，所以不再交 `Result`。
 pub fn to_delimited(lines: &[String], delimiter: char) -> Vec<String> {
@@ -2171,13 +2171,13 @@ mod proof_292 {
         // 所以「下一個功能行就撞紅」是假警報，**那張表眼下不必拆**。真正在往線上
         // 走的是累計那一句——而它本來就是「注定被反覆消音」的那一句。
         //
-        // **沒有動 `worst` 那一句，也沒有改這一句的形狀**——「累計該不該換成一個不隨
-        // 文檔長大的說法（比如補的字節不許超過表格自身）」還沒定，記在這裏等着定。
+        // **没有動 `worst` 那一句，也没有改這一句的形狀**——「累計該不該換成一個不隨
+        // 文檔長大的說法（比如補的字節不許超過表格自身）」還没定，記在這裏等着定。
         // 眼下只把數字讓開，好讓工作樹是綠的。
         //
         // Warning: **26 萬 → 32 萬，2026-10-06**：手冊那天多了一個英文正本（§5.95），
         // 於是同一批表在 `docs/` 底下存了兩份，累計從 230,637 跳到 **291,046**
-        // （+60,409）。`worst` 那一句沒動——英文版最壞的那一張比中文版還窄。
+        // （+60,409）。`worst` 那一句没動——英文版最壞的那一張比中文版還窄。
         // 這正是上面說的「注定被反覆消音」：這一次連成因都寫得出來。
         assert!(total < 320_000, "every table together would add {total} bytes");
     }

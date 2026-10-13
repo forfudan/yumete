@@ -28,8 +28,8 @@ const LONGEST: usize = 5_000;
 /// 對這一類檔拿掉了，理由是「留樹 ＋ 窗口查詢 ＋ 增量解析，多長都染得起」——那三件
 /// 事省的是**每按一鍵**的時間，不是**一份**的記憶體，而那一份是線性的。
 ///
-/// 16 MiB：這個倉最大的源碼檔是 1.2 MB，所以沒有一份真的代碼碰得到它；碰得到的是
-/// 貼進來的數據檔，而那一種「沒人靠顏色讀」（同 [`LONGEST`] 那一條的理由）。
+/// 16 MiB：這個倉最大的源碼檔是 1.2 MB，所以没有一份真的代碼碰得到它；碰得到的是
+/// 貼進來的數據檔，而那一種「没人靠顏色讀」（同 [`LONGEST`] 那一條的理由）。
 const BIGGEST: usize = 16 * 1024 * 1024;
 
 /// Enough parsed fences to cover several open chapters without growing for as
@@ -133,7 +133,7 @@ impl Editor {
     /// 賬。界面上那幾則文案現在說的是「列數」，對不上——那是文案，等作者定。
     pub const LONG_LINE: usize = 50_000;
 
-    /// 那個門槛，`None` ＝沒有上限。
+    /// 那個門槛，`None` ＝没有上限。
     pub fn long_line(&self) -> Option<usize> {
         self.long_line
     }
@@ -208,7 +208,7 @@ impl Editor {
         // the coloring of the python file is incorrect」）。`by_chunk` 只按
         // 「第幾塊」記，**不記是哪個檔**——所以從 `build.rs` 切到 `sc2tc.py`，
         // 第 0 塊早就在裏頭了，直接命中的是**上一個檔的顏色**，而
-        // `hold_the_tree` 連叫都沒叫到，那一格於是永遠不清。
+        // `hold_the_tree` 連叫都没叫到，那一格於是永遠不清。
         //
         // 放在前面不貴：同一個檔同一版的時候 `hold_the_tree` 就是三個比較。
         // **一塊裏有一條過長的行，整塊就不上色**（2026-10-09 作者定）。
@@ -221,11 +221,11 @@ impl Editor {
         // Warning: **擺在 `hold_the_tree` 前面，而且不進緩存。** 兩件事各有理由：
         // ① 整塊不上色的時候那棵樹根本用不着，而整檔解析正是剩下那 80 毫秒；
         // ② `by_chunk` 不記是哪個檔（見下面 #423 那一段），往裏塞一個空的就等於替
-        //    下一個檔記下「這一塊沒有顏色」。所以這一枝一個字都不記，每次重問——問
+        //    下一個檔記下「這一塊没有顏色」。所以這一枝一個字都不記，每次重問——問
         //    的是 128 次 `len_chars`（`rope.line(n)` 是切片，不造字串），一幀下來幾
         //    千次 O(log n)，量不出來。
         //
-        // 代價寫明：那一塊裏的短行（最多 127 條）跟着沒有顏色。另一條路是把長行的
+        // 代價寫明：那一塊裏的短行（最多 127 條）跟着没有顏色。另一條路是把長行的
         // 字節從查詢範圍裏摘出去，那要按行拆範圍，而跨行的構造（跨行字串、塊註釋）
         // 會跟着判錯——作者選了這一條。
         let chunk = line / CHUNK;
@@ -257,7 +257,7 @@ impl Editor {
     /// **這一份裏每一個定義**，位置是**字符**（`]f`/`]c`/`mi f`，2026-10-06）。
     ///
     /// 只在「整份是代碼」的檔上回得出東西：markdown 裏的圍欄各有各的樹，而一段
-    /// 稿子裏的 `def` 不是這本書的結構。空的回空——按鍵那一頭照這個說「這裏沒有」。
+    /// 稿子裏的 `def` 不是這本書的結構。空的回空——按鍵那一頭照這個說「這裏没有」。
     pub(super) fn definitions_here(&self) -> Vec<(usize, usize, crate::code::Define)> {
         let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
             return Vec::new();
@@ -303,7 +303,7 @@ impl Editor {
     /// 自己的註釋寫着理由——「incomplete queries, incomplete source code &
     /// differing indentation styles」——而這三樣每一樣這裏都有。所以源碼打到一半
     /// 解析不出來的時候（實測：`fn f() {` 自己一份檔，tree-sitter 給的是
-    /// `(source_file (ERROR …))`，一個 `block` 都沒有），兩頭都答 0，差也是 0，
+    /// `(source_file (ERROR …))`，一個 `block` 都没有），兩頭都答 0，差也是 0，
     /// 於是照抄上一行——和 2026-10-08 早些時候做的 `autoindent` 一字不差。
     pub(super) fn levels_to_open(&self, closing: Option<char>) -> isize {
         let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
@@ -378,7 +378,7 @@ impl Editor {
         let was = cache.whole.take().filter(|h| h.buffer == id && h.language == language);
         // **手上那一棵已經不算數了，畫過的那幾塊也就不算數**——擺在這裏而不是
         // 擺在最後，因為下面那一句解析失敗會直接 `return`，而那時候
-        // `cache.whole` 已經被 `take` 走了：留着舊的 `by_chunk` 就是一張沒有樹
+        // `cache.whole` 已經被 `take` 走了：留着舊的 `by_chunk` 就是一張没有樹
         // 的顏色表，下一次查還會命中它。
         cache.by_chunk.clear();
         let tree = match was {
@@ -388,7 +388,7 @@ impl Editor {
                     edited.edit(&edit);
                     crate::code::parse(language, &source, Some(&edited))
                 }
-                // 一個字都沒改（換了 revision 卻同一份正文——撤銷回原處就是）。
+                // 一個字都没改（換了 revision 卻同一份正文——撤銷回原處就是）。
                 None => Some(held.tree),
             },
             None => crate::code::parse(language, &source, None),
@@ -402,7 +402,7 @@ impl Editor {
     ///
     /// Warning: The cap exists (parsing runs on every edit, so a pasted data file
     /// would be re-parsed per keystroke), but a cap that says nothing reads as
-    /// a broken feature: 「顏色到這裏就沒了」. `:view-code` asks this, so the
+    /// a broken feature: 「顏色到這裏就没了」. `:view-code` asks this, so the
     /// question 「why is this not coloured」 has an answer where a reader would
     /// look for it.
     pub(super) fn code_too_long_here(&self) -> Option<(usize, usize)> {
@@ -412,9 +412,9 @@ impl Editor {
         let line = self.cursor_line();
         let rope = self.current_buffer().rope();
         let long = |n: usize| (n > LONGEST).then_some((n, LONGEST));
-        // Warning: **整份是代碼的檔沒有這個閘了**（#423，2026-09-30）：它走留樹
+        // Warning: **整份是代碼的檔没有這個閘了**（#423，2026-09-30）：它走留樹
         // ＋窗口查詢＋增量解析那一條，多長都染得起。閘只剩給稿子裏貼的那一段
-        // ——那一種是整份解析的，而一份貼進來的數據檔沒人靠顏色讀。
+        // ——那一種是整份解析的，而一份貼進來的數據檔没人靠顏色讀。
         if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
             return None;
         }

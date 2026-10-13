@@ -365,7 +365,7 @@ impl Editor {
         //
         // Warning: **表格的襯墊不在這道閘裏面**（2026-10-09 補）。它是竪排自己要藏
         // 的那幾格，而頁那一頭（[`Self::markup_hidden_on_line`]）無條件藏——這裏一
-        // 早返回就成了「藏了沒量」，底下七十行那條規矩說的正是它。
+        // 早返回就成了「藏了没量」，底下七十行那條規矩說的正是它。
         if self.line_is_too_long(line) {
             let mut off: Spans = self.table_slack_off_the_page(line);
             off.sort_unstable();
@@ -416,7 +416,7 @@ impl Editor {
             // （`markdown::hidden(…, self.selected_columns(line))`、註號那一支的
             // `!Self::caret_within(…)`）。不問的後果不是看着怪，是**寫錯地方**：
             // 光標畫在 `ours` 的 `o` 上，按 `i!`，稿子裏出來的是 `!<<<<<<< ours`，
-            // 而屏幕上從來沒有過那七個尖括號。而且那七格光標進得去出不來——按七下
+            // 而屏幕上從來没有過那七個尖括號。而且那七格光標進得去出不來——按七下
             // `l` 畫面一格不動，`wrap::position` 把它們都算在同一格上。
             if block == crate::markdown::Block::Conflict(None) {
                 let text = self.current_buffer().rope().line(line).to_string();
@@ -478,11 +478,11 @@ impl Editor {
         // Warning: **「這一行有製表符嗎」要先問，而且不造字串**（2026-10-08）。
         //
         // 從前是先 `line_text`（一整行物化成 `String`）再 `contains('\t')`。絕大多數行
-        // 一個製表符都沒有，而這一支每幀每行要問一次——一行 150 萬字的檔上就是
+        // 一個製表符都没有，而這一支每幀每行要問一次——一行 150 萬字的檔上就是
         // 每幀一次 4.5 MB 的拷貝。rope 自己按塊存著，一塊一塊找字節不配任何內存。
         //
         // ⚠ **這一支不走長行門槛**：製表符的格寬是**量出來的位置**，不是裝飾——
-        // 不畫它光標就停在一個那一頁沒有的列上。一行很長的 TSV 正是這種檔。
+        // 不畫它光標就停在一個那一頁没有的列上。一行很長的 TSV 正是這種檔。
         let stop = self.tab_stop();
         let hidden = self.hidden_on_line(line);
         // A tab a table has taken over as its separator is not indentation
@@ -494,7 +494,7 @@ impl Editor {
         // 這一支要把整行走一遍字簇才算得出每一個製表符的列（製表符補到哪一格，
         // 跟它前面所有字的寬度走），而折行每量一行就問一次——一屏十幾行就是十幾遍。
         // 實測他那兩份稿子：**47 萬字、97 個製表符的那份 0.43 秒一幀，206 萬字、
-        // 一個製表符也沒有的那份 0.16 秒**——小四倍的檔慢兩倍多，差別全在這裏。
+        // 一個製表符也没有的那份 0.16 秒**——小四倍的檔慢兩倍多，差別全在這裏。
         //
         // 答案只跟著「正文、製表位寬、藏起來的那幾段、表格的牆」走，四樣都進指紋；
         // 光標走一步不改其中任何一樣，所以一次改動算一遍就夠。
@@ -514,7 +514,7 @@ impl Editor {
         })
     }
 
-    /// [`Self::tab_stops_on_line`] 算那一遍的那一半——只在備忘沒命中的時候走。
+    /// [`Self::tab_stops_on_line`] 算那一遍的那一半——只在備忘没命中的時候走。
     fn tab_stops_worked_out(
         &self,
         line: usize,
@@ -587,7 +587,7 @@ impl Editor {
     /// 註號——和表格摺疊畫那個 `>` 是同一條路（藏掉一段、原地立一個記號）。
     ///
     /// Warning: **只有純數字的註號換得了。** 上標數字 Unicode 齊全，上標字母不齊
-    /// （`ᵠ` 有、`ᵡ` 沒有），所以 `[^note]` 這種**原樣留着**——畫不出來就別畫，
+    /// （`ᵠ` 有、`ᵡ` 没有），所以 `[^note]` 這種**原樣留着**——畫不出來就別畫，
     /// 半套字形比源碼更難認。
     fn footnote_marks_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
         if !self.wysiwyg() {
@@ -605,7 +605,7 @@ impl Editor {
     ///
     /// 一處算，兩處用——[`Self::markup_off_line`] 拿它決定藏哪一段，
     /// [`Self::footnote_marks_on_line`] 拿它決定原地畫什麽。兩邊要是各算各的，
-    /// 就會出現「藏了沒畫」或者「畫了沒藏」。
+    /// 就會出現「藏了没畫」或者「畫了没藏」。
     fn footnote_spans(&self, line: usize) -> Vec<(usize, usize, String)> {
         const HIGH: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
         let rope = self.current_buffer().rope();
@@ -1388,7 +1388,7 @@ impl Editor {
         // 都是這一支。從前閘擺在 `markup_off_line` 裏，於是長行上標籤露着、讀音照樣
         // 畫在它上面：`長段<ruby>甲<rt>jiǎ</rt></ruby>開頭` 的源碼上頭浮着一個錯開
         // 六格的 `jiǎ`。[`Self::footnote_spans`] 那一段說過這條規矩（「兩邊要是各算
-        // 各的，就會出現『藏了沒畫』或者『畫了沒藏』」），注音漏在外頭了。
+        // 各的，就會出現『藏了没畫』或者『畫了没藏』」），注音漏在外頭了。
         if self.line_is_too_long(line) {
             return Vec::new();
         }
@@ -1601,7 +1601,7 @@ impl Editor {
 
     /// 同上，**但不問標記畫不畫得出來**。
     ///
-    /// Warning: `:markup off` 說的是「別上色」，不是「這份檔沒有標記」——後者是
+    /// Warning: `:markup off` 說的是「別上色」，不是「這份檔没有標記」——後者是
     /// `:syntax text`，而那一條在下面的 `match` 裏本來就交空。取文本物件（`mi m`）問的
     /// 是檔裏有什麼，不是屏幕上畫了什麼，所以走這一支。
     #[cfg(test)]
@@ -1618,7 +1618,7 @@ impl Editor {
         //
         // 這一句摔在最前面是有意的：下面兩條路都按**整行**算——散文那一條把一整行
         // 物化成 `String` 再走 `markdown::spans()`，代碼那一條的 `hold_the_tree` 要把
-        // 整份源碼解一遍。正常稿子一行幾十個字，沒人撞得到；一行就是全文的時候，
+        // 整份源碼解一遍。正常稿子一行幾十個字，没人撞得到；一行就是全文的時候，
         // 那筆賬每幀付一次。量出來的數在 [`Editor::long_line`] 上。
         //
         // vim 的 `synmaxcol` 說的就是這件事（`options.txt`）：「This helps to avoid
@@ -1699,9 +1699,9 @@ impl Editor {
     pub fn outline(&self) -> Vec<(usize, usize, String)> {
         // **代碼檔列的是它自己的符號**（2026-10-11）。helix 的 `空格 s` 在代碼上
         // 是 `lsp_or_syntax_symbol_picker`，而這一格從前對代碼一律是空的——按下去
-        // 開一扇什麼都沒有的面板。tree-sitter 那一半這裏本來就有（`mi f`/`mi t`
+        // 開一扇什麼都没有的面板。tree-sitter 那一半這裏本來就有（`mi f`/`mi t`
         // 用的是同一支 `definitions_here`），所以先走它；LSP 的
-        // `textDocument/documentSymbol` 還沒接，接上之後它優先、這一支當退路。
+        // `textDocument/documentSymbol` 還没接，接上之後它優先、這一支當退路。
         if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
             return self.code_outline();
         }

@@ -14,7 +14,7 @@
 //! 所以 [`Picker::total`] 在走完之前一直在漲。腳注那個 `+` 與那個轉圈說的就是這
 //! 件事，問的是 `Editor::still_filling_the_picker`。
 //!
-//! Warning: **從前這裏有過兩種「半截」，兩種都沒了**：`PICKER_LIMIT` 四千條（砍的不
+//! Warning: **從前這裏有過兩種「半截」，兩種都没了**：`PICKER_LIMIT` 四千條（砍的不
 //! 是「顯示多少條」而是「能搜到多少條」——名單一次建好再打分，裝不進的那幾千條打出
 //! 全名也找不着），和走查自己的 `WALK_CEILING` 兩萬條。前者 2026-10-09 去掉，後者
 //! 同一天隨流式化去掉（那一趟撥 `Sieve::uncapped`）。
@@ -92,8 +92,8 @@ pub struct Picker {
     /// **走檔的時候跳過哪些** —— `A-h` 轉一格（2026-10-08）。
     ///
     /// `None` 是「這一扇不走磁碟」：緩衝區、百科、粘貼單子、跳轉那幾扇列的是內存
-    /// 裏現成的東西，篩子對它們沒有意思，`A-h` 在那裏什麼都不做，提示行上也就不
-    /// 寫它——沒綁的鍵不許寫進提示。只有 `Editor::open_file_picker_in` 那一支填得出它。
+    /// 裏現成的東西，篩子對它們没有意思，`A-h` 在那裏什麼都不做，提示行上也就不
+    /// 寫它——没綁的鍵不許寫進提示。只有 `Editor::open_file_picker_in` 那一支填得出它。
     pub sieve: Option<crate::editor::Sieve>,
     /// **What to put near the top before anything is typed**, one number per
     /// item (2026-09-18).
@@ -110,10 +110,10 @@ pub struct Picker {
     ///
     /// Warning: **從前這件事是靠次序做的**：收名單那一支先收散文檔、再把其餘的接在
     /// 後面，於是「散文檔在前」就是「下標較小」。走查搬到旁邊流着進來之後次序由
-    /// 磁盤決定，那個辦法沒了——所以它成了一格明寫出來的平手條件，排在分數後面、
+    /// 磁盤決定，那個辦法没了——所以它成了一格明寫出來的平手條件，排在分數後面、
     /// 收到的次序前面。答案和從前逐條相同。
     prose: Vec<bool>,
-    /// **收不收「跳着配」和「亂序」**。缺省**收**，`空格 f` 那一扇一格沒變。
+    /// **收不收「跳着配」和「亂序」**。缺省**收**，`空格 f` 那一扇一格没變。
     ///
     /// Warning: **只有 `ye --files` 把它關掉**（2026-10-04 定）。那一邊把全部印出來，
     /// 長尾就是噪音；`空格 f` 是一張排過序的單子，只看前十條，長尾不要錢——而跳着
@@ -125,7 +125,7 @@ pub struct Picker {
     loose: bool,
     /// **名單那一列有幾行**——翻一頁翻的就是這個數（2026-10-07）。
     ///
-    /// 這個編輯器沒有 viewport（`Editor::page_lines` 那一格同理），所以畫的那一
+    /// 這個編輯器没有 viewport（`Editor::page_lines` 那一格同理），所以畫的那一
     /// 支每一幀量一次，告訴核心。上一幀的答案，而窗口的高度上一幀和這一幀一樣。
     rows: usize,
 }
@@ -238,7 +238,7 @@ impl Picker {
         // 邊的東西。先按深淺分層，等於先給稿子、再給那些圍着它的。
         //
         // Warning: **代價是同一棵子樹會被層拆開**：`設定/a.md` 和
-        // `設定/深/b.md` 不再挨着。同一層裏次序沒動（還是路徑序），所以一個目錄
+        // `設定/深/b.md` 不再挨着。同一層裏次序没動（還是路徑序），所以一個目錄
         // 底下的檔照舊連在一起——拆開的只有「目錄裏還有目錄」那一種。
         let deep = |one: &Item| one.label().matches(['/', '\\']).count();
         scored.sort_by(|a, b| {
@@ -257,7 +257,7 @@ impl Picker {
     /// 其餘之間畫一條虛線：次序不動，只是把看不見的那一刀畫出來。
     ///
     /// 三種情形不畫：**打了字**（那時次序由分數定，最近開過的不再連在一起，一條
-    /// 線會說謊）、一條都沒開過、以及全都開過（線底下沒有東西）。
+    /// 線會說謊）、一條都没開過、以及全都開過（線底下没有東西）。
     ///
     /// Warning: **數的是 `bonus > 0` 有幾個，不是走一遍 `matches()`。** 兩個答案相同
     /// ——`bonus` 遞減是排序的第一層，所以有加分的那些必然連在最前面——而這一支
@@ -355,7 +355,7 @@ impl Picker {
     /// Remove the character before the caret.
     ///
     /// Warning: **框空着的時候它什麼都不做**（2026-10-08 定）。從前它交出一個
-    /// `false`，而呼叫方拿那個 `false` 去換層——挑選器只剩一層之後沒有層可換，
+    /// `false`，而呼叫方拿那個 `false` 去換層——挑選器只剩一層之後没有層可換，
     /// 而「退格到頭就把窗關掉」是另一回事：打空了接着打纔是人要的。
     pub fn backspace(&mut self) {
         self.selected = 0;
@@ -456,7 +456,7 @@ fn matched(label: &str, query: &str, loose: bool) -> Option<(i64, Vec<usize>)> {
     //
     // Warning: **從前這裏自己先折一遍**，而且只能取 `to_lowercase()` 的第一個字
     // （İ 折出來是兩個），理由是「交回去的下標是要拿來高亮的，一對多就會點亮錯
-    // 的格子」。共用那一支比的是**兩個字**、不改下標，所以那個將就沒有了。
+    // 的格子」。共用那一支比的是**兩個字**、不改下標，所以那個將就没有了。
     let haystack: Vec<char> = label.chars().collect();
     let needle: Vec<char> = query.chars().collect();
     if needle.is_empty() {
@@ -468,7 +468,7 @@ fn matched(label: &str, query: &str, loose: bool) -> Option<(i64, Vec<usize>)> {
     // **整條被篩掉、根本不出現**。
     //
     // Warning: **兩檔之間差着 [`IN_ORDER`] 分**，所以順序對的永遠在上面，顛倒的墊在
-    // 底下——放寬不會把本來就對的那一批攪亂。門檻沒有：詞條、檔名這些單子本來就
+    // 底下——放寬不會把本來就對的那一批攪亂。門檻没有：詞條、檔名這些單子本來就
     // 不長（定的，原話：「寧可多列」）。
     // **簡繁異體照樣算同一個字**（2026-09-26 原話：「中文搜索的匹配繁简体和匹配
     // 拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。和高級搜索那一扇用
@@ -597,7 +597,7 @@ fn anyhow(
         positions.push(found);
     }
     positions.sort_unstable();
-    // Warning: **這一檔也要限窗**（2026-10-04）。順序那一檔限了而它沒限，放水的就
+    // Warning: **這一檔也要限窗**（2026-10-04）。順序那一檔限了而它没限，放水的就
     // 全走它這一條——而它本來就是最鬆的一檔。
     let (first, last) = (positions[0], positions[positions.len() - 1]);
     reach.is_none_or(|reach| last - first < reach).then_some(positions)
@@ -625,7 +625,7 @@ mod tests {
     #[test]
     fn the_rule_sits_under_the_files_that_were_opened_lately() {
         let mut picker = files(&["ch01.md", "ch02.md", "ch03.md", "ch04.md"]);
-        assert_eq!(picker.rule_after(), None, "一條都沒開過就不畫");
+        assert_eq!(picker.rule_after(), None, "一條都没開過就不畫");
 
         // 兩條有加分：它們排在最前，線畫在第二條之後。
         picker.prefer(vec![0, 300, 0, 280]);
@@ -640,7 +640,7 @@ mod tests {
         picker.backspace();
         assert_eq!(picker.rule_after(), Some(2), "退回空的又回來");
 
-        // 全都開過：線底下沒有東西，不畫。
+        // 全都開過：線底下没有東西，不畫。
         picker.prefer(vec![300, 290, 280, 270]);
         assert_eq!(picker.rule_after(), None, "全都在線上面就不畫");
     }
@@ -800,7 +800,7 @@ mod tests {
 
     /// **框空着的時候退格什麼都不做**（2026-10-08 定）。
     ///
-    /// 從前它交出一個 `false`，呼叫方拿它換層；挑選器只剩一層之後沒有層可換，而
+    /// 從前它交出一個 `false`，呼叫方拿它換層；挑選器只剩一層之後没有層可換，而
     /// 「退格到頭就關窗」是另一回事。
     #[test]
     fn backspacing_an_empty_query_does_nothing_at_all() {
@@ -861,7 +861,7 @@ mod tests {
     /// `ye --files` 把全部印出來，長尾就是噪音。
     ///
     /// 量出來的（本倉）：`ye --files lib` 從 13 行剩 **5 行**——正好那五個 `lib.rs`，
-    /// 而 `build.rs`/`table.rs`/`labels.rs` 那幾條（`l`…`i`…`b` 跳着湊的）沒了。
+    /// 而 `build.rs`/`table.rs`/`labels.rs` 那幾條（`l`…`i`…`b` 跳着湊的）没了。
     /// 同一個查詢在 `空格 f` 裏仍是 13 條。
     #[test]
     fn the_pipe_takes_a_name_literally() {
@@ -878,7 +878,7 @@ mod tests {
         assert!(matched("crates/yumete-core/src/lib.rs", "lib", false).is_some());
 
         // Warning: **關掉的是兩檔，不是五個。** 大小寫、繁簡、拼音在緊的這一檔裏
-        // 一格沒動——讀音配上的那一段本來就是連着的。
+        // 一格没動——讀音配上的那一段本來就是連着的。
         assert!(matched("README.md", "readme", false).is_some(), "大小寫不分");
         assert!(matched("雜記/書齋夜話.md", "书斋", false).is_some(), "繁簡");
         assert!(matched("朱宇浩的手稿.md", "zhuyuhao", false).is_some(), "拼音");
@@ -901,14 +901,14 @@ mod tests {
         assert!(matched("crates/yumete-core/src/lib.rs", "release", true).is_none());
         // 同樣七個字母，連在一起的那一條照舊中。
         assert!(matched("scripts/release_card.py", "release", true).is_some());
-        // 跳着配沒有被取消，只是不許跳得太遠：`rlcrd` 在 `release_card` 裏跨 11 個
+        // 跳着配没有被取消，只是不許跳得太遠：`rlcrd` 在 `release_card` 裏跨 11 個
         // 字，窗口是 14。
         assert!(matched("scripts/release_card.py", "rlcrd", true).is_some());
         // 亂序那一檔也限窗——它本來就是最鬆的一檔，不限就全走它那一條。
         assert!(matched("crates/yumete-core/src/lib.rs", "esaeler", true).is_none());
         assert!(matched("scripts/release_card.py", "saeler", true).is_some(), "亂序、可是挨着");
 
-        // Warning: **中文那幾路一格都沒動**，窗口是按字算的，而它們本來就是連着的。
+        // Warning: **中文那幾路一格都没動**，窗口是按字算的，而它們本來就是連着的。
         assert!(matched("朱宇浩的手稿.md", "zhuyuhao", true).is_some(), "拼音");
         assert!(matched("雜記/書齋夜話.md", "shuzhai", true).is_some(), "拼音，跨目錄");
         assert!(matched("雜記/書齋夜話.md", "书斋", true).is_some(), "繁簡");
@@ -973,7 +973,7 @@ mod tests {
         assert_eq!(picker.selected(), 0, "`j` 照舊繞回去");
     }
 
-    /// 窗口還沒量過（`--keys`、測試裏按鍵在畫之前）就是十，和從前一樣。
+    /// 窗口還没量過（`--keys`、測試裏按鍵在畫之前）就是十，和從前一樣。
     #[test]
     fn a_page_before_the_first_frame_is_ten() {
         let names: Vec<String> = (1..=40).map(|n| format!("ch{n:02}.md")).collect();

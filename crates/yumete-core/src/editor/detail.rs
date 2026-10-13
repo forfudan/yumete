@@ -34,7 +34,7 @@ impl Editor {
     pub(super) fn show_the_record_here(&mut self, afloat: bool) {
         if self.detail().is_none() {
             // Warning: **不是字典那一句**（2026-09-30 報的）。從前這裏借用
-            // 「光標下沒有字可查」——那是 `空格 d` 查不到字時說的，跟這一鍵沒
+            // 「光標下没有字可查」——那是 `空格 d` 查不到字時說的，跟這一鍵没
             // 有關係，而讀者只會以為自己按錯了鍵。
             self.status = say!("ui.cursor-is-not-in-a-table");
             if !afloat {
@@ -89,7 +89,7 @@ impl Editor {
         // **Whatever the cursor is standing in answers** (#283). It used to
         // be whatever the *file* was: a `Bounds::Md` view sent every question
         // to the note panel, so `t i` inside a Markdown table — a table key,
-        // pressed in a table — answered 「這裏沒有註」 and the row panel could
+        // pressed in a table — answered 「這裏没有註」 and the row panel could
         // only ever be reached by opening a `.csv`.
         //
         // The old reasoning was that a Markdown table is a page of a document
@@ -201,7 +201,7 @@ impl Editor {
         // Warning: **最裏面那一條，不是第一條**（2026-09-28）。`spans` 交出來的是嵌套的：
         // `# 見[^1]` 交 `HeadingMark`/`Heading 1..6`/`Footnote 2..6`，而 `Heading`
         // 排在前面。取第一條拿到的是標題那個構造，再去它裏面找腳註當然找不到——
-        // **標題裏的腳註從此沒有詳情面板**。不變式保證「起點最靠後的那一條」就是最內層。
+        // **標題裏的腳註從此没有詳情面板**。不變式保證「起點最靠後的那一條」就是最內層。
         let construct = runs
             .iter()
             .filter(|s| within >= s.start && within < s.end)
@@ -391,7 +391,7 @@ impl Editor {
         let (from, to) = self.selection();
         // Warning: **一個字寬的「選區」是光標，不是選中**（2026-10-06）。這個編輯器
         // 裏每一次移動都留下選區，而光標蓋着自己那一格——所以 `to > from` 恆真，
-        // 下面那條「取光標下那個詞」的路**一次都沒走到過**。搜索面板那一扇早就
+        // 下面那條「取光標下那個詞」的路**一次都没走到過**。搜索面板那一扇早就
         // 按這條規矩辦（`open_search` 的 `to > from + 1`），這裏跟上。
         let needle = match to > from + 1 {
             true => rope.slice(from..to.min(rope.len_chars())).to_string(),
@@ -401,7 +401,7 @@ impl Editor {
                 // 掉（`words.rs`：「標點 runs and Latin words are never words to
                 // paint」）——於是這裏在英文上永遠落到下面那條退路，取的是**一個
                 // 字母**。實測 `one two three alpha` 站在 `o` 上按 `*`，搜的是 `o`、
-                // 報「第 2 處，共 5 處」；`l*` 搜 `n`。中文從來沒事，所以躲了很久。
+                // 報「第 2 處，共 5 處」；`l*` 搜 `n`。中文從來没事，所以躲了很久。
                 //
                 // `line_words` 正是 `w`/`b` 問的那一支（`word_object_span` 也問
                 // 它），所以這一行的註釋「which is what `w` would have taken」
@@ -437,7 +437,7 @@ impl Editor {
         // 洞要等到 `g/` 真的取整個詞之後才露出來。
         let from_here = self.sel.anchor().min(here);
         let at = match back {
-            // 往回：光標**之前**最後一處；前面沒有就繞到最末一處。
+            // 往回：光標**之前**最後一處；前面没有就繞到最末一處。
             true => spans
                 .iter()
                 .rposition(|&(from, _)| from < from_here)

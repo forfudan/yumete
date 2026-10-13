@@ -12,7 +12,7 @@
 //!
 //! 字形那一路（[`crate::glyphs`]）是把查詢裏的每個字換成 `[…]`，掃描仍舊交給正則
 //! 引擎。**拼音不行**：查詢是拉丁字母，要配的是漢字，而「幾個漢字的讀音連起來正好
-//! 是這一串字母」沒有正則寫法——音節邊界要邊配邊定。所以它自己走一趟，命中與字面
+//! 是這一串字母」没有正則寫法——音節邊界要邊配邊定。所以它自己走一趟，命中與字面
 //! 命中**合並**（同一條線上的兩種問法，見 `find.rs` 的 `Look`）。
 //!
 //! 同一個道理，它和 模糊 一樣**只在高級搜索面板裏管用**：正文的 `n`/`N` 走的是
@@ -22,7 +22,7 @@
 //!
 //! 每一個起點做一次深度優先，深度不超過查詢的字母數。**分支幾乎不存在**：一個字
 //! 的幾個讀音互不為前綴（`長` 是 `zhang chang`），所以每一步至多一條路走得通。
-//! 表用 `include_str!` 編進二進制，首次用到時解析——碼表沒裝的機器上照樣能搜。
+//! 表用 `include_str!` 編進二進制，首次用到時解析——碼表没裝的機器上照樣能搜。
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -131,9 +131,9 @@ pub enum Atom {
     Just(char),
 }
 
-/// **查詢切成 [`Atom`]**，`None` ＝ 這一條沒有拼音可問。
+/// **查詢切成 [`Atom`]**，`None` ＝ 這一條没有拼音可問。
 ///
-/// 兩種情形回 `None`：**一個字母都沒有**（那就全是字面，交給字面那一路就夠了，
+/// 兩種情形回 `None`：**一個字母都没有**（那就全是字面，交給字面那一路就夠了，
 /// 問讀音是白跑一趟），以及**某一串字母長過 [`LONGEST`]**（那是關遞歸的門）。
 ///
 /// Warning: **大小寫在這裏收掉**，回的是小寫那一份——表裏是小寫，而讀者打 `ShuZhai`
@@ -215,12 +215,12 @@ pub fn spans_cased(text: &str, atoms: &[Atom], fold: bool, fold_case: bool) -> V
     // **一整條都是字母的查詢，整行都是 ASCII 就不必問**（2026-10-03 量出來的）。
     //
     // 這一檔裏 `eat` 的 `literal_ok` 是假的（`atoms.len() > 1` 不成立），於是每一段
-    // 都只能走 `say`——而 `say` 查的是讀音表，**表裏一個 ASCII 字符都沒有**
+    // 都只能走 `say`——而 `say` 查的是讀音表，**表裏一個 ASCII 字符都没有**
     // （`no_ascii_character_has_a_reading` 把整張表掃過）。所以整行都是 ASCII 的
     // 時候，這一趟**不可能**配上任何東西，而從前它照樣要 `chars().collect()` 一個
     // Vec、再從每一個位置試一遍。`is_ascii` 是按字節掃的，還會向量化。
     //
-    // Warning: **判準只能是 ASCII，不能是「有沒有漢字」。** 先寫的是後者，而
+    // Warning: **判準只能是 ASCII，不能是「有没有漢字」。** 先寫的是後者，而
     // `every_character_with_a_reading_is_a_han_character` 當場把它否了：讀音表裏有
     // 假名、注音符號、康熙部首——搜 `ka` 配得上「か」，而那道閘會把只有假名的行
     // 整行跳掉，真會丟命中。
@@ -424,7 +424,7 @@ fn eat(
 /// 一串字母當讀音吃：從第 `i` 個字、第 `q` 個字母起。
 ///
 /// Warning: **讀音按表裏的次序試，先到先得**：表裏常用的在前，所以歧義處取的是常用那
-/// 一讀。找的是「有沒有」，不是「哪一種最好」——搜索交出一段就夠了。
+/// 一讀。找的是「有没有」，不是「哪一種最好」——搜索交出一段就夠了。
 #[allow(clippy::too_many_arguments)]
 fn say(
     hay: &[char],
@@ -484,7 +484,7 @@ mod tests {
         assert_eq!(look("卷03/第120章.md", "di120"), [(4, 8)]);
         assert_eq!(look("卷03/第120章.md", "juan03/di120"), [(0, 8)]);
 
-        // **一個字母都沒有就不勞駕這一路**：那是字面那一路的事。
+        // **一個字母都没有就不勞駕這一路**：那是字面那一路的事。
         assert!(atoms("很大").is_none());
         assert!(atoms("").is_none());
 
@@ -497,7 +497,7 @@ mod tests {
         assert!(look("卷03/第120章.md", "md").is_empty());
     }
 
-    /// **那道閘的前提：讀音表裏一個 ASCII 字符都沒有。**
+    /// **那道閘的前提：讀音表裏一個 ASCII 字符都没有。**
     ///
     /// `spans_cased` 的快路是「整行都是 ASCII 就不必問」。表裏要是混進一個 ASCII
     /// 的鍵，那道閘就會**悄悄漏掉一處命中**——整張表掃一遍，比推理可靠。
@@ -505,10 +505,10 @@ mod tests {
     fn no_ascii_character_has_a_reading() {
         let ascii: Vec<char> = table().keys().copied().filter(char::is_ascii).collect();
         assert!(ascii.is_empty(), "ASCII 竟然有讀音：{ascii:?}");
-        assert!(table().len() > 10_000, "表要是空的，上面那一句什麼都沒驗：{}", table().len());
+        assert!(table().len() > 10_000, "表要是空的，上面那一句什麼都没驗：{}", table().len());
     }
 
-    /// **判準不許換成「有沒有漢字」。**
+    /// **判準不許換成「有没有漢字」。**
     ///
     /// 2026-10-03 先寫的就是那一版，而這一條當場把它否了：讀音表裏有假名、注音符
     /// 號、康熙部首——搜 `ka` 配得上「か」，可「か」不是漢字（`is_han` 的註釋寫得
@@ -525,7 +525,7 @@ mod tests {
     /// **整行都是 ASCII 的時候，整條都是字母的查詢直接跳過**（2026-10-03 量出來的）。
     ///
     /// 這是一道提速的閘（`ye --grep zhuyuhao -uu` 在帶 `target/` 的倉上 12.74 秒 →
-    /// 2.46 秒），所以這裏驗的是**它沒有順手扔掉任何東西**：混着寫的那一檔照字面
+    /// 2.46 秒），所以這裏驗的是**它没有順手扔掉任何東西**：混着寫的那一檔照字面
     /// 配 ASCII 的本事要一點不少。
     #[test]
     fn an_ascii_line_still_answers_a_mixed_query() {
@@ -539,7 +539,7 @@ mod tests {
         assert_eq!(spans_of("在書齋裏", &one, true), [(1, 3)]);
 
         // ② **混着寫的那一檔不許套那道閘**：`zhong` 這一段許照字面配 ASCII，
-        //    而整行一個漢字都沒有。
+        //    而整行一個漢字都没有。
         let mixed = atoms("zhong-guo").unwrap();
         assert!(mixed.len() > 1, "混着寫纔有不止一段");
         assert_eq!(
@@ -569,7 +569,7 @@ mod tests {
         // ü 兩種寫法都在。
         assert!(readings('女').any(|s| s == "nv"));
         assert!(readings('女').any(|s| s == "nu"));
-        // 不是漢字的，安靜地沒有讀音。
+        // 不是漢字的，安靜地没有讀音。
         assert_eq!(readings('a').count(), 0);
     }
 
@@ -644,7 +644,7 @@ mod can_it_be_read {
     ///
     /// [`say`] 只吃得下整個音節，所以 `zhongg` 從前走完整趟慢路、一處也配不上。
     /// 逐鍵搜的時候這一路於是自己開關：打到 `zhong` 纔開，`zhongg` 又關上，而
-    /// 關着的那幾鍵本來就沒有拼音命中可給。
+    /// 關着的那幾鍵本來就没有拼音命中可給。
     #[test]
     fn half_a_syllable_turns_the_path_off_and_loses_nothing() {
         let said = |q: &str| atoms(q).map(|a| spans_of("中國人", &a, true)).unwrap_or_default();
@@ -660,7 +660,7 @@ mod can_it_be_read {
         }
     }
 
-    /// 一個字母都沒有的查詢本來就不問讀音——那是字面那一路的事。
+    /// 一個字母都没有的查詢本來就不問讀音——那是字面那一路的事。
     #[test]
     fn a_query_with_no_letters_never_asked_in_the_first_place() {
         assert!(atoms("中國").is_none());

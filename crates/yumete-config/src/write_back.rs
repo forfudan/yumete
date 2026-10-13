@@ -27,7 +27,7 @@
 //! soft_wrap = true
 //! ```
 //!
-//! stderr 上報一行，而同一個檔裏那兩條對的設定**一條都沒生效**。
+//! stderr 上報一行，而同一個檔裏那兩條對的設定**一條都没生效**。
 //!
 //! 所以存盤要管這件事。2026-09-23 定的是「移除」，商量之後改成**註釋掉**：
 //!
@@ -35,7 +35,7 @@
 //! # nosuchkey = 42    # yumete 不認得這個名字
 //! ```
 //!
-//! 三個理由：**什麽都沒丟**（那可能是從新版文檔抄來的）、**檔當場能用了**、
+//! 三個理由：**什麽都没丟**（那可能是從新版文檔抄來的）、**檔當場能用了**、
 //! **看得見發生過什麽**（刪掉是無聲的）。
 
 use toml_edit::{DocumentMut, Item, Value};
@@ -71,11 +71,11 @@ pub struct Said {
 
 /// **一份 toml，改幾處，字節級別地不動別的。**
 ///
-/// `text` 是檔裏原樣的那一份（空字串 ＝ 還沒有這個檔）。`changes` 是
+/// `text` 是檔裏原樣的那一份（空字串 ＝ 還没有這個檔）。`changes` 是
 /// `("表.鍵", 怎麽改)`。回來的是新的正文與有話說的那幾句。
 ///
 /// Warning: **不認得的鍵在這裏一併註釋掉**，因為它們和「存盤」是同一件事：面板存完盤
-/// 之後那個檔必須是**讀得進去的**，否則使用者按了保存而設定一條都沒生效。
+/// 之後那個檔必須是**讀得進去的**，否則使用者按了保存而設定一條都没生效。
 pub fn rewrite(
     text: &str,
     changes: &[(String, Change)],
@@ -96,7 +96,7 @@ pub fn rewrite(
             }
             _ => {
                 // Warning: **`or_insert` 一張 implicit table 會寫成 `[表]` 一行**，
-                // 而那正是我們要的：檔裏沒有 `[editor]` 的時候補一個出來。
+                // 而那正是我們要的：檔裏没有 `[editor]` 的時候補一個出來。
                 let entry = doc
                     .entry(table)
                     .or_insert_with(|| Item::Table(toml_edit::Table::new()));
@@ -111,7 +111,7 @@ pub fn rewrite(
                 };
                 match t.get_mut(key) {
                     // Warning: **只換值，不換這一行。** `t[key] = value!(…)` 會把這一
-                    // 行連 decor 一起換掉——行尾那句 `# 我為什麽這麽設` 就沒了。
+                    // 行連 decor 一起換掉——行尾那句 `# 我為什麽這麽設` 就没了。
                     Some(Item::Value(old)) => {
                         let decor = old.decor().clone();
                         let mut fresh = value;
@@ -130,7 +130,7 @@ pub fn rewrite(
     //
     // Warning: **一個打錯的表頭比一個打錯的鍵名更狠。** `RawConfig` 是
     // `deny_unknown_fields`，所以 `[editr]` 一行就讓**整份**配置讀不進去；而下面那
-    // 一支只掃六張認得的表**裏面的鍵**，表頭自己從來沒人掃。實測：配置寫
+    // 一支只掃六張認得的表**裏面的鍵**，表頭自己從來没人掃。實測：配置寫
     // `[editr]`，面板上改一項存下去，狀態欄說「設置存進…」，而下次啓動是
     // 「unknown field `editr`」——舊設置和剛改的那一項一起作廢，而這扇面板存在的
     // 全部理由就是「一個打錯的名字不該讓整份配置作廢」。
@@ -165,7 +165,7 @@ pub fn rewrite(
             .join("\n");
         doc.remove(&name);
         said.commented_out.push(name.clone());
-        // Warning: **挪到檔尾**：鍵有它的表頭可以掛，表頭沒有上一層。位置變了，字一個
+        // Warning: **挪到檔尾**：鍵有它的表頭可以掛，表頭没有上一層。位置變了，字一個
         // 不少——同下面那一支的那筆賬（「挪一行註釋掉的字比為了位置精確而動別人的行
         // 便宜」）。
         let had = doc.trailing().as_str().unwrap_or("").to_string();
@@ -278,10 +278,10 @@ soft_wrap = true    # 行尾這一句也是我寫的
         let (after, _) =
             rewrite(before, &[("editor.indent".into(), Change::Count(4))], &known).unwrap();
         assert!(after.contains("indent = 4"), "{after}");
-        assert!(after.contains("# 中文慣例"), "行尾那句沒了：\n{after}");
+        assert!(after.contains("# 中文慣例"), "行尾那句没了：\n{after}");
     }
 
-    /// `d` 撤掉本項目的覆蓋 —— 鍵沒了，周圍的註釋還在。
+    /// `d` 撤掉本項目的覆蓋 —— 鍵没了，周圍的註釋還在。
     #[test]
     fn dropping_a_key_leaves_its_neighbours_alone() {
         let before = "[editor]\n# 上面這一句\nline_numbers = \"absolute\"\nsoft_wrap = true\n";
@@ -350,7 +350,7 @@ line_numbers = \"absolute\"
         let _: DocumentMut = after.parse().unwrap_or_else(|e| panic!("讀不進去：{e}\n{after}"));
     }
 
-    /// 檔裏還沒有這一張表，就補一張。
+    /// 檔裏還没有這一張表，就補一張。
     #[test]
     fn a_table_that_is_not_there_yet_is_written() {
         let (after, _) =

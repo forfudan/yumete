@@ -158,8 +158,8 @@ impl Language {
             // **`.h` 走 C**（2026-10-09 作者定，helix 也是這麼分的）。
             //
             // 一份 C++ 的頭文件於是也走 C 的語法：絕大部分構造判得對，`template`／
-            // `class` 那幾個詞判不對。代價說明白了還是比「一個顏色都沒有」好——而
-            // `.cpp`／`.ts` 老實地一個都不認（沒帶那兩種語法）。
+            // `class` 那幾個詞判不對。代價說明白了還是比「一個顏色都没有」好——而
+            // `.cpp`／`.ts` 老實地一個都不認（没帶那兩種語法）。
             "c" | "h" => Language::C,
             "css" => Language::Css,
             "go" => Language::Go,
@@ -238,7 +238,7 @@ impl Language {
     ///
     /// 兩家查詢寫的順序正好相反，所以**翻比較器只是把錯處從一邊搬到另一邊**（實測
     /// 過：Go 對了，JS 的 `o.run()` 從藍變成金）。helix 兩邊都對，是因為**它自己策過
-    /// 那些查詢檔**——它的 Go 查詢裏根本沒有那條兜底的 `@property`。
+    /// 那些查詢檔**——它的 Go 查詢裏根本没有那條兜底的 `@property`。
     ///
     /// Warning: **而 helix 的查詢檔抄不得**：MPL-2.0，這個倉是 Apache-2.0（同
     /// `objects()` 那一條）。所以這裏走第三條路：**自己追加一條**。最後一條贏，追加
@@ -272,7 +272,7 @@ impl Language {
             // 兩個 crate 包裏有 `queries/highlights.scm` 這個**檔**，可
             // `bindings/rust/lib.rs` 裏那一行 `pub const HIGHLIGHTS_QUERY` 是**注掉的**，
             // 跨 crate 的 `include_str!` 做不到。抄那兩份 `.scm` 要帶它們的授權聲明，
-            // 自己寫沒這一層事——同 `objects()`／`indents()` 那一條規矩。
+            // 自己寫没這一層事——同 `objects()`／`indents()` 那一條規矩。
             //
             // ⚠ **節點名是從語法自己的 `src/node-types.json` 生成的，不是記的。**
             // 一個名字寫錯，`Query::new` 整條失敗，那一門語言**一個字都不上色**
@@ -307,8 +307,8 @@ impl Language {
                     ] @operator
 "##,
             // **Mojo 那一份也是自己寫的**（2026-10-11）——它的語法就是這個倉作者
-            // 寫的（`forfudan/tree-sitter-mojo`），所以根本沒有別人的 `.scm` 可
-            // 抄，也沒有授權那一層事。節點名與詞表是從它自己的
+            // 寫的（`forfudan/tree-sitter-mojo`），所以根本没有別人的 `.scm` 可
+            // 抄，也没有授權那一層事。節點名與詞表是從它自己的
             // `src/node-types.json` 讀出來的。
             //
             // `__generator_type`／`__match`／`__mlir_region` 這幾個帶雙下劃線的
@@ -429,12 +429,12 @@ impl Language {
             Language::JavaScript => tree_sitter_javascript::TAGS_QUERY,
             Language::Python => tree_sitter_python::TAGS_QUERY,
             // **這一份的 `tags.scm` 是我們自己寫的**（2026-10-11）——語法是這個倉
-            // 作者的，所以沒有別人的可用，也沒有授權那一層事。函數、結構、特徵、
+            // 作者的，所以没有別人的可用，也没有授權那一層事。函數、結構、特徵、
             // 擴展四種；`alias` 捕不到，那是語法那一頭的事（見那個檔的註釋）。
             Language::Mojo => tree_sitter_mojo::TAGS_QUERY,
             Language::R => tree_sitter_r::TAGS_QUERY,
             Language::Rust => tree_sitter_rust::TAGS_QUERY,
-            // 這幾種沒有定義可言，語法 crate 也不帶 tags。
+            // 這幾種没有定義可言，語法 crate 也不帶 tags。
             Language::Css
             | Language::Html
             | Language::Json
@@ -442,7 +442,7 @@ impl Language {
             | Language::Yaml
             | Language::Gas
             | Language::Nasm
-            // 這兩門的 crate 同樣沒把 `tags.scm` 導出來。
+            // 這兩門的 crate 同樣没把 `tags.scm` 導出來。
             | Language::Ada
             | Language::Pascal => return None,
         })
@@ -457,7 +457,7 @@ impl Language {
     ///
     /// ⚠ **代價是上游改語法我們自己盯**：下面這些節點名是寫死的，`tree-sitter-*`
     /// 升一版把某個節點改了名，查詢就**靜悄悄地不匹配**——不報錯、不編譯失敗，
-    /// `mi a` 就是沒反應。所以每一種語言各釘一格測試
+    /// `mi a` 就是没反應。所以每一種語言各釘一格測試
     /// （`our_textobject_queries_still_match_these_grammars`）。
     ///
     /// 節點名是從語法自己的 `src/node-types.json` 裏讀出來的，不是記的。
@@ -497,7 +497,7 @@ impl Language {
             | Language::Json
             | Language::Toml
             | Language::Yaml
-            // 匯編裏沒有「參數」這種東西。
+            // 匯編裏没有「參數」這種東西。
             | Language::Gas
             | Language::Nasm
             | Language::Ada
@@ -623,7 +623,7 @@ impl Language {
             Language::Html => "[(element)] @indent",
             // TOML 與 YAML 的縮進是**語法本身**（一個鍵一行、靠縮進分層），
             // 多縮一級是錯的——這兩種不給查詢。
-            // 匯編沒有塊：標籤下面那一段縮不縮是寫稿子的人自己的事。
+            // 匯編没有塊：標籤下面那一段縮不縮是寫稿子的人自己的事。
             Language::Toml
             | Language::Yaml
             | Language::Gas
@@ -858,9 +858,9 @@ pub fn open_levels(
         }
     }
     // Warning: **順着祖先鏈走，不許拿範圍去套**（寫的時候當場撞的兩個）。
-    // ① 沒閉合的塊（`fn f() {` 正打到一半，而這正是按 Enter 的那一刻）**結束在
+    // ① 没閉合的塊（`fn f() {` 正打到一半，而這正是按 Enter 的那一刻）**結束在
     // 檔尾**，所以 `to > byte` 是假的，一級都數不出來；② 改成 `to >= byte` 又把
-    // 「光標剛好停在 `}` 後面」那一種錯數成在塊裏。祖先鏈兩種都答得對：沒閉合的
+    // 「光標剛好停在 `}` 後面」那一種錯數成在塊裏。祖先鏈兩種都答得對：没閉合的
     // 塊仍然罩着這個位置，而閉合完了的不再罩着。
     let at = tree
         .root_node()
@@ -890,7 +890,7 @@ pub fn open_levels(
     }
     let mut level = lines.len();
     // 新那一行開頭是個 `@outdent` 的字：退一級，它自己回到和開的那一行齊平。
-    // 查的是**字**不是節點——那一行還沒進語法樹，它正要被打出來。
+    // 查的是**字**不是節點——那一行還没進語法樹，它正要被打出來。
     if let Some(c) = closing {
         if shutters.iter().any(|t| t.starts_with(c)) {
             level = level.saturating_sub(1);
@@ -1116,7 +1116,7 @@ fn span(start: usize, end: usize, token: Token) -> Span {
         start,
         end,
         kind: Kind::Token(token),
-        // 代碼裏沒有嵌套的標記，全在頂層。
+        // 代碼裏没有嵌套的標記，全在頂層。
         depth: 0,
         // Every run its own construct: none of this is markup, so none of it
         // is ever hidden or opened together.
@@ -1132,7 +1132,7 @@ mod tests {
     ///
     /// ⚠ 這一格就是「自己寫不抄 helix」的全部代價。查詢裏的節點名是寫死的，
     /// `tree-sitter-*` 升一版把某個節點改了名，查詢**靜悄悄地不匹配**——不報錯、
-    /// 不編譯失敗，`mi a` 就是沒反應。所以這裏逐種語言餵一段真代碼，數它找到
+    /// 不編譯失敗，`mi a` 就是没反應。所以這裏逐種語言餵一段真代碼，數它找到
     /// 幾個。**看見這一格紅，先去看那一版的 `src/node-types.json`。**
     #[test]
     fn our_textobject_queries_still_match_these_grammars() {
@@ -1244,14 +1244,14 @@ mod tests {
         assert_eq!(at(source, in_block, Some('}')), 0);
 
         // Warning: **半截的源碼問不出東西來**（2026-10-08 量的）：`fn f() {` 自己一份檔，
-        // tree-sitter 給的是 `(source_file (ERROR …))`——**一個 block 節點都沒有**，
+        // tree-sitter 給的是 `(source_file (ERROR …))`——**一個 block 節點都没有**，
         // 所以這一支答 0。那一刻靠的是上一行的真實縮進（見上面那一段），和從前一樣。
         assert_eq!(at("fn f() {\n", 9, None), 0, "半截的源碼：答不出來，不是答錯");
     }
 
     /// **每一門的縮進查詢都編得起來，而且真數得出級**。2026-10-08 加 C／Java／R
     /// 那一輪的教訓：查詢編不起來是 `None`，**不報錯**——節點名寫錯了只是
-    /// 「那一門永遠不縮」，沒人會知道。
+    /// 「那一門永遠不縮」，没人會知道。
     #[test]
     fn every_indent_query_opens_a_level_where_a_bracket_opens_one() {
         let cases = [
@@ -1296,7 +1296,7 @@ mod tests {
         assert_eq!(
             marks(Syntax::Code(Language::Nasm)),
             Marks { line: Some(";"), block: None },
-            "NASM 沒有塊註釋"
+            "NASM 没有塊註釋"
         );
     }
 
@@ -1320,7 +1320,7 @@ mod tests {
     }
 
     /// Warning: **說出編不過的那一句話**（2026-10-09 補）。從前它只印語言的名字，而
-    /// 那是最沒用的一半——手寫的查詢（Ada、Pascal）和追加的那幾條
+    /// 那是最没用的一半——手寫的查詢（Ada、Pascal）和追加的那幾條
     /// （[`Language::extra_highlights`]）都是人寫的，寫壞的時候要知道壞在哪一個節點
     /// 名上。當天自己踩了一次：`(declArg type: (typeref) …)` 裏那一格收的是 `type`，
     /// 而測試只說「pascal」。
@@ -1504,7 +1504,7 @@ struct 三 { 甲: u8 }
         ];
         for (what, from, to) in edits {
             let after = before.replacen(from, to, 1);
-            assert_ne!(after, before, "{what}：這一改沒改動任何東西");
+            assert_ne!(after, before, "{what}：這一改没改動任何東西");
 
             let tree = parse(Language::Rust, before, None).expect("解析得了");
             let edit = what_changed(before, &after).expect("看得出改了");
@@ -1525,7 +1525,7 @@ struct 三 { 甲: u8 }
         }
     }
 
-    /// 一模一樣的兩份，`what_changed` 要說「沒改」——不然每一幀白解析一次。
+    /// 一模一樣的兩份，`what_changed` 要說「没改」——不然每一幀白解析一次。
     #[test]
     fn nothing_changed_is_nothing_to_do() {
         assert!(what_changed("abc", "abc").is_none());
@@ -1590,7 +1590,7 @@ struct 三 { 甲: u8 }
     fn the_three_numbers_behind_423() {
         // Warning: **出廠那個路徑要從倉根算起，不是從當前目録**（2026-10-01）：
         // `cargo test` 跑在**這個 crate 的目録**裏，相對路徑於是找不到檔，一跑就
-        // `NotFound`。帶 `#[ignore]` 的不進閘，所以沒人發現。
+        // `NotFound`。帶 `#[ignore]` 的不進閘，所以没人發現。
         let path = std::env::var("YUMETE_BENCH").unwrap_or_else(|_| {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../yumete-tui/src/lib.rs")

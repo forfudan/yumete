@@ -324,7 +324,7 @@ impl Editor {
     pub fn wiki_here(&self) -> Option<WikiView<'_>> {
         // **釘住的那一條先說話**（2026-09-25）。`:wiki <詞條名>` 挑完一條之後，
         // 眼前這一條是人**指名要看的**，而光標底下那一個只是碰巧站在那裏——
-        // 指名的那一個大。光標一動它就沒了（`forget_a_pinned_entry`）。
+        // 指名的那一個大。光標一動它就没了（`forget_a_pinned_entry`）。
         if let Some((name, at)) = &self.wiki_pinned {
             if *at == self.sel.head() {
                 return self.wiki_view_of(name);
@@ -395,10 +395,10 @@ impl Editor {
     /// （`wiki_floating`）。所以這兩個鍵在散文裏只管一件事——**畫在哪**，和它們
     /// 在代碼裏管的是同一件事。
     pub(super) fn show_the_wiki_here(&mut self, afloat: bool) -> bool {
-        // 光標底下什麽都沒有就說一句——一個按了沒反應的鍵，讀者只會以為自己記
+        // 光標底下什麽都没有就說一句——一個按了没反應的鍵，讀者只會以為自己記
         // 錯了鍵。Warning: **大寫那一下照樣把那一格開出來**（2026-09-30 審出來
         // 的）：原話是「space K 强制在邊欄显示」，而「強制」是一個持續的意
-        // 思——開好了等着，不是這一刻沒東西就當沒按過。
+        // 思——開好了等着，不是這一刻没東西就當没按過。
         if self.wiki_here().is_none() {
             self.status = say!("wiki.panel-empty");
             if !afloat {
@@ -415,7 +415,7 @@ impl Editor {
         match self.wiki.by_name.contains_key(&name) {
             true => {
                 self.wiki_pinned = Some((name, self.sel.head()));
-                // 側欄的百科頁開着就畫在那裏，沒開就浮窗——兩條路都走 `wiki_here`，
+                // 側欄的百科頁開着就畫在那裏，没開就浮窗——兩條路都走 `wiki_here`，
                 // 所以這裏什麼都不必選，釘上就是了。
             }
             false => self.status = say!("wiki.no-such-entry", name),
@@ -425,7 +425,7 @@ impl Editor {
     /// 光標一走，釘住的那一條當場鬆開——和字典那一份同一條規矩（#293）。
     ///
     /// Warning: **當場丟掉，不是「留着等光標回來」**：回到同一個字上再把它變出來，
-    /// 是一個沒人按過的按鍵做了一件事。
+    /// 是一個没人按過的按鍵做了一件事。
     pub(super) fn forget_a_pinned_entry(&mut self) {
         if self.wiki_pinned.as_ref().is_some_and(|(_, at)| *at != self.sel.head()) {
             self.wiki_pinned = None;

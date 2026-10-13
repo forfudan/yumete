@@ -21,7 +21,7 @@
 //! | 即時的是哪一種 | [`Editor::info_live`] | 只存 `:info` 的覆蓋 |
 //! | 手動叫的是哪一種 | `info_asked` | **存**，光標一走就作廢 |
 //! | 畫在哪 | [`Editor::info_afloat`] / [`Editor::info_in_the_sidebar`] | 不存 |
-//! | 有沒有東西可畫 | [`Editor::info_has_body`] | 不存 |
+//! | 有没有東西可畫 | [`Editor::info_has_body`] | 不存 |
 
 use super::*;
 use crate::sidebar::{Info, Side, View};
@@ -35,7 +35,7 @@ impl Editor {
     /// 明說纔即時顯示。
     ///
     /// Warning: **永遠有一種。** 定下來的模型是「它永远只有一个信息可以即时显示」
-    /// ——沒有「都關掉」這一檔，所以這一支不回 `Option`。
+    /// ——没有「都關掉」這一檔，所以這一支不回 `Option`。
     pub fn info_live(&self) -> Info {
         if let Some(one) = self.info_live {
             return one;
@@ -49,7 +49,7 @@ impl Editor {
         }
     }
 
-    /// **此刻那一格擺的是哪一種**，`None` ＝ 什麽都沒有（標題寫「信息」）。
+    /// **此刻那一格擺的是哪一種**，`None` ＝ 什麽都没有（標題寫「信息」）。
     ///
     /// 手動叫的那一種蓋過即時的那一種，而它光標一走就作廢——那一則是問出來的，
     /// 問題已經過去了。即時的那一種要有東西纔畫。
@@ -81,7 +81,7 @@ impl Editor {
         self.info_in_the_sidebar().is_some_and(|side| self.panel_focus == Some(side))
     }
 
-    /// **那一種此刻有沒有東西可畫**（#426）。
+    /// **那一種此刻有没有東西可畫**（#426）。
     ///
     /// 五個內容各有各的來源，這裏只問它們一句同樣的話。Warning: 這一支**不問光標在
     /// 不在原處**——那是 [`Editor::info_asked_now`] 的事，兩件事分開問纔不會又
@@ -97,7 +97,7 @@ impl Editor {
         }
     }
 
-    /// **那一格開在哪一側**，`None` ＝ 沒開（那就浮）。
+    /// **那一格開在哪一側**，`None` ＝ 没開（那就浮）。
     ///
     /// 這一支就是「容器」那一半：邊欄開着，浮窗就不用開了。
     pub fn info_in_the_sidebar(&self) -> Option<Side> {
@@ -120,8 +120,8 @@ impl Editor {
 
     /// **這一種此刻真的畫在屏幕上，而且畫在這一鍵要的那個地方。**
     ///
-    /// 「它開着沒有」只許問這一句。從前兩個 toggle 各自問各自的——`ask_for_info`
-    /// 問「叫過沒有、容器對不對、有沒有內容」三句，`show_the_record_here` 問
+    /// 「它開着没有」只許問這一句。從前兩個 toggle 各自問各自的——`ask_for_info`
+    /// 問「叫過没有、容器對不對、有没有內容」三句，`show_the_record_here` 問
     /// `detail_visible()`——而 `Esc` 立的那個閂（[`Editor::hush_the_float`]）兩邊
     /// 都不知道。於是按下去之後再叫一次，被當成「又按了一次」當場收回去，按冒煙
     /// 也不出來，動一下光標纔好（2026-10-10 報的）。
@@ -132,7 +132,7 @@ impl Editor {
     pub(super) fn info_on_screen(&self, one: Info, afloat: bool) -> bool {
         // Warning: **槽位留給它 ≠ 屏幕上有它。** `空格 k` 把問題發出去之後，答覆回來
         // 之前那一格是**空着等**的——`info_now()` 照樣答 `Docs`，不然即時的那一種
-        // 下一幀就把它頂掉了。所以「畫出來沒有」要連內容一起問（2026-10-08 那一條
+        // 下一幀就把它頂掉了。所以「畫出來没有」要連內容一起問（2026-10-08 那一條
         // 釘的就是這半句：走開再走回來，位置又對上了而說明早就作廢）。
         if !self.info_has_body(one) {
             return false;
@@ -165,7 +165,7 @@ impl Editor {
     /// 「走開過」這件事只有記下來纔算數，同
     /// [`Editor::forget_a_hover_nobody_is_looking_at`]：要再看就再按一次 `空格 x`。
     ///
-    /// 掃在派鍵之前，所以挪開光標的那一鍵掃的時候光標還沒挪，下一鍵纔掃得掉。
+    /// 掃在派鍵之前，所以挪開光標的那一鍵掃的時候光標還没挪，下一鍵纔掃得掉。
     pub(super) fn forget_a_change_the_cursor_has_left(&mut self) {
         let Some((Info::Change, at)) = self.info_asked else { return };
         if at == self.sel.head() || self.reading_the_info() || self.still_the_same_change(at) {
@@ -180,7 +180,7 @@ impl Editor {
     /// 光比「此刻在不在那一格」不夠：走開再走回同一個字，比出來還是「在」，於
     /// 是那一扇再也浮不出來——而回到一個詞上正是要再看一眼的時候。同
     /// [`Editor::forget_a_hover_nobody_is_looking_at`]，挪開光標的那一鍵掃的時
-    /// 候光標還沒挪，下一鍵纔掃得掉。
+    /// 候光標還没挪，下一鍵纔掃得掉。
     pub(super) fn unhush_the_float_once_the_cursor_has_left(&mut self) {
         if self.info_hushed.is_some_and(|at| at != self.sel.head()) {
             self.info_hushed = None;
@@ -189,7 +189,7 @@ impl Editor {
 
     /// **手動叫一種出來**——`空格 k`/`空格 i`/`空格 d`/`t i` 都走這一句。
     ///
-    /// `afloat` ＝ 小寫那一下：只在那一格沒開的時候纔浮。大寫那一下先把那一格開
+    /// `afloat` ＝ 小寫那一下：只在那一格没開的時候纔浮。大寫那一下先把那一格開
     /// 出來（鍵不交過去），開了之後「畫在哪」自己就答對了，不必再記一個字段。
     ///
     /// 回 `false` ＝ 這一下是**收起來**（再按一次同一個鍵）。
@@ -198,8 +198,8 @@ impl Editor {
         // 地方。Warning: 判準要連容器一起看：浮着的時候按 `空格 K`，說的是「搬進邊
         // 欄」，不是「關掉」。
         // Warning: **問的是屏幕，不是記憶**（2026-10-08 和 2026-10-10 各報過一次）。
-        // 這裏從前是三個條件——叫過沒有、容器對不對、有沒有內容——而每加一樣能
-        // 把那一扇弄沒的東西（光標走開、`Esc` 按下去），就得記得多問一句，漏一句
+        // 這裏從前是三個條件——叫過没有、容器對不對、有没有內容——而每加一樣能
+        // 把那一扇弄没的東西（光標走開、`Esc` 按下去），就得記得多問一句，漏一句
         // 就是「第一下白按」。[`Self::info_on_screen`] 把它們收成一句。
         if self.info_on_screen(one, afloat) {
             self.info_asked = None;
@@ -251,7 +251,7 @@ impl Editor {
     /// **把那一格開出來**（鍵不交過去），已經開着就什麽都不做。
     ///
     /// 大寫那幾個鍵（`空格 K`/`空格 D`/`空格 I`）說的是「**強制**在邊欄顯示」
-    /// ——那是一個持續的意思，所以光標底下這會兒沒東西也照開：那一格自己會說
+    /// ——那是一個持續的意思，所以光標底下這會兒没東西也照開：那一格自己會說
     /// 「光標走到有內容的地方，這裏就顯示它」，而下一步本來就是把光標挪過去。
     pub(super) fn make_room_for_the_info(&mut self) {
         if self.info_in_the_sidebar().is_none() {
@@ -273,7 +273,7 @@ impl Editor {
             }
             Info::Docs => self.hovered = None,
             Info::Record => self.show_detail = Some(false),
-            // 百科、診斷、改動都是稿子自己的事實，沒有一份「答案」可丟——收起來
+            // 百科、診斷、改動都是稿子自己的事實，没有一份「答案」可丟——收起來
             // 就是不再叫它，即時那一輪要不要畫是另一回事。
             Info::Wiki | Info::Problems | Info::Change => {}
         }
@@ -281,7 +281,7 @@ impl Editor {
 
     /// **`:info <名>`：換即時顯示的那一種**（#426）。
     ///
-    /// `None` ＝ `:info` 光打了名字以外的什麽都沒有，回到按稿子算。
+    /// `None` ＝ `:info` 光打了名字以外的什麽都没有，回到按稿子算。
     pub fn set_info_live(&mut self, one: Option<Info>) {
         self.info_live = one;
         // 撥一次開關是一次新的意思，蓋過上一次按鍵叫出來的那一種。
@@ -310,13 +310,13 @@ impl Editor {
     /// 底邊那一頭讓給了「怎麽翻頁」。
     ///
     /// Warning: **五種各有自己的大寫鍵之後，這裏不再說區號了。** 從前記錄那一
-    /// 種沒有自己的鍵，走的是那一格的區號（`空格 3`/`空格 4`，跟着面板配在哪
+    /// 種没有自己的鍵，走的是那一格的區號（`空格 3`/`空格 4`，跟着面板配在哪
     /// 一側走）；2026-09-30 它拿到了 `空格 I`。
     pub fn the_key_into_the_info_panel(&self) -> String {
         // 五種**各有**自己的大寫鍵（2026-09-30 對齊 helix 之後），所以這裏一律
         // 是那一個。
         //
-        // Warning: **這張表 2026-09-30 換過鍵，而這一句沒跟上**（2026-10-01 審出
+        // Warning: **這張表 2026-09-30 換過鍵，而這一句没跟上**（2026-10-01 審出
         // 來的）：字典從 `D` 搬到了 `N`，診斷從 `I` 搬到了 `D`，記錄拿到了
         // `I`——於是命令行說的那個鍵按下去是**另一扇面板**。它跟的是
         // `SPACE_KEYS`（`keys.rs`），改鍵的時候兩處要一起改。

@@ -28,7 +28,7 @@ impl Editor {
     /// 是 `AAA\nBBB\nCCCaa\nbbb\nccc\n`——整份重了一遍，還少一個字。
     ///
     /// 一個撤回點，所以 `u` 收得回；可這是**看得見纔知道**的那一種壞，而格式化
-    /// 完多半沒人逐行看。
+    /// 完多半没人逐行看。
     pub fn provide_formatted_text(&mut self, output: &str) {
         if self.refuse_readonly() {
             return;
@@ -53,7 +53,7 @@ impl Editor {
 
     /// **只有兩個把選區餵進去**（2026-10-06，逐條照 helix 的 `shell_impl`）：
     /// `|` 與 `A-|` 餵，`!` 與 `A-!` 不餵——`!date` 是 vi 的 `:r !date`，「跑一條
-    /// 命令，把答案放這裏」，光標在哪一段跟它沒關係。
+    /// 命令，把答案放這裏」，光標在哪一段跟它没關係。
     pub(super) fn ask_the_shell(&mut self, line: String, put: crate::editor::Put) {
         use crate::editor::Put;
         let fed = match put {

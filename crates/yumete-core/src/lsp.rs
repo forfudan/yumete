@@ -185,7 +185,7 @@ pub fn hover(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
 /// 不一樣。helix 的 `auto-signature-help` 問的就是它。
 ///
 /// `documentationFormat` 只報 `plaintext`：這一則畫在一行上（見
-/// [`Signature`]），Markdown 在那裏沒有地方施展。
+/// [`Signature`]），Markdown 在那裏没有地方施展。
 pub fn signature_help(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/signatureHelp","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
@@ -264,7 +264,7 @@ pub enum Notice {
     ///
     /// Warning: **號碼照 JSON 原樣帶着，不是 `i64`**（2026-10-07 審出來的）。協議說
     /// `id` 可以是數字**也可以是字串**，而從前這裏是 `as_i64()`：字串號碼的請求
-    /// 讀成了 [`Notice::Nothing`]，於是**永遠沒人答**，而那正是這一格存在的理由
+    /// 讀成了 [`Notice::Nothing`]，於是**永遠没人答**，而那正是這一格存在的理由
     /// ——等自己註冊回音的服務器就停在那裏。`"3"` 原樣回 `"3"`，數字原樣回數字。
     Asked { id: String },
     /// **The answer to something we asked**, with the id that says which.
@@ -312,7 +312,7 @@ pub struct Signature {
     pub label: String,
     /// **正在填第幾個參數**，以及它在 `label` 裏的哪一段（字符下標，不是字節）。
     ///
-    /// `None` ＝ 服務器沒說，或者說的是一個這一頭對不上的形狀。畫的那一頭拿它把
+    /// `None` ＝ 服務器没說，或者說的是一個這一頭對不上的形狀。畫的那一頭拿它把
     /// 那一段加重——「填到哪了」正是這一則存在的理由。
     pub active: Option<(usize, usize)>,
 }
@@ -659,7 +659,7 @@ fn inline(raw: &str) -> String {
             // from the documentation. One blank line says the same thing.
             "---" | "***" | "___" => out.push(String::new()),
             // **一個空標題**：`mojo-lsp-server` 在簽名和正文之間寫一行光禿禿的
-            // `###`（2026-10-11 從真的答覆裏量出來的）。它一個字都沒說，而畫出
+            // `###`（2026-10-11 從真的答覆裏量出來的）。它一個字都没說，而畫出
             // 來是一行灰色的井號，佔一行。當成空行。
             _ if start.trim_end_matches('#').is_empty() && start.starts_with('#') => {
                 out.push(String::new())
@@ -729,7 +729,7 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
     //
     // 這一頭報的是 `snippetSupport: false`（見 [`initialize`]），所以守規矩的服務
     // 器不會送片段來——可「不會送」靠的是對方守規矩，而這一條錯的代價是**在人的
-    // 檔裏留下幾個他沒打的字**。所以照實問一句，是片段就把洞填平。
+    // 檔裏留下幾個他没打的字**。所以照實問一句，是片段就把洞填平。
     //
     // 不拿 `label` 兜底：rust-analyzer 的 label 是 `counted(…)`，那個省略號比
     // `${1:text}` 還糟。
@@ -746,7 +746,7 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
             Some(range.get(which)?.get(part)?.as_u64()? as usize)
         };
         let line = at("start", "line")?;
-        // 跨行的範圍這一頭接不住——接住了也只能亂切。寧可當作「沒給範圍」，
+        // 跨行的範圍這一頭接不住——接住了也只能亂切。寧可當作「没給範圍」，
         // 那一檔的意思是「什麼都不蓋，只在光標處插入」。
         if at("end", "line")? != line {
             return None;
@@ -769,13 +769,13 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
 /// **把一段片段裏的洞填平**，留下的是它的字面那一半。
 ///
 /// `counted(${1:text})` → `counted(text)`，`println!("$0")` → `println!("")`。
-/// 規矩照 LSP 的片段語法：`$n`／`${n}` 是個光標位置，沒有字，去掉；
+/// 規矩照 LSP 的片段語法：`$n`／`${n}` 是個光標位置，没有字，去掉；
 /// `${n:默認}` 留那個默認；`${n|甲,乙|}` 留頭一個；`\$`／`\}`／`\\` 是轉義，
 /// 脫掉那條反斜線。
 ///
 /// Warning: **這不是片段引擎**——它不給跳轉，只保證插進去的是字，不是語法。真要做
-/// 跳轉是另一件事（報 `snippetSupport: true`、存一列洞、`Tab` 走），而那件事沒做
-/// 之前，這一支是那條「稿子裏不許出現沒打過的字」的底線。
+/// 跳轉是另一件事（報 `snippetSupport: true`、存一列洞、`Tab` 走），而那件事没做
+/// 之前，這一支是那條「稿子裏不許出現没打過的字」的底線。
 /// **一段 hover 裏的「正文第一段」**（2026-10-08 定）。
 ///
 /// 簽名回空時那一句回退用的（見 `Editor::show_signature_from_doc`）。三家都不在
@@ -784,7 +784,7 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
 /// 服務器把簽名與說明排在一起：rust-analyzer 的 hover 是「一對圍欄 ＋ `---`
 /// ＋ 正文」。所以跳過圍欄裏的東西與分隔線，第一行真正的散文起算一段。
 ///
-/// `None` ＝整段沒有一句散文（只有簽名）——那就什麼都不畫，寧可不說。
+/// `None` ＝整段没有一句散文（只有簽名）——那就什麼都不畫，寧可不說。
 pub fn first_paragraph(told: &str) -> Option<String> {
     let mut fenced = false;
     let mut said: Vec<&str> = Vec::new();
@@ -807,7 +807,7 @@ pub fn first_paragraph(told: &str) -> Option<String> {
         //
         // Warning: 這一支收的是 [`Told::text`]，而 `Told` 裏那段字已經過了
         // [`inline`]——圍欄一行不剩，裏面那幾行各自裹上了一對反引號。於是上面那道
-        // 跳圍欄的閘一次也沒開過，`println!` 的 hover 交出來的是 `` `std::macros` ``
+        // 跳圍欄的閘一次也没開過，`println!` 的 hover 交出來的是 `` `std::macros` ``
         // 而不是「Prints to the standard output」。整行就是一段行內代碼的，在散文
         // 開始之前一律當簽名跳掉；反引號只有首尾那兩個纔算，不然「`甲` 和 `乙`」
         // 這種真散文也會被當成簽名。
@@ -826,7 +826,7 @@ pub fn first_paragraph(told: &str) -> Option<String> {
             if said.is_empty() {
                 continue;
             }
-            // 一段完了。後面還有沒有字，決定要不要那一個 `…`。
+            // 一段完了。後面還有没有字，決定要不要那一個 `…`。
             more = told
                 .lines()
                 .skip_while(|l| !std::ptr::eq(l.as_ptr(), line.as_ptr()))
@@ -883,7 +883,7 @@ fn without_the_holes(snippet: &str) -> String {
                             _ => body.push(c),
                         }
                     }
-                    // `1:默認` 的默認那一半；沒有冒號就整個是個序號，沒有字。
+                    // `1:默認` 的默認那一半；没有冒號就整個是個序號，没有字。
                     match body.split_once(':') {
                         Some((_, text)) => out.push_str(&without_the_holes(text)),
                         None => {
@@ -896,7 +896,7 @@ fn without_the_holes(snippet: &str) -> String {
                     }
                 }
                 // `$1`、`$0`：一串數字，去掉。`$` 後面不是數字也不是 `{` 的話，
-                // 那個 `$` 就是個普通的錢號（服務器本該轉義，沒轉義就按字面算）。
+                // 那個 `$` 就是個普通的錢號（服務器本該轉義，没轉義就按字面算）。
                 Some(c) if c.is_ascii_digit() => {
                     while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
                         chars.next();
@@ -923,7 +923,7 @@ fn without_the_holes(snippet: &str) -> String {
 /// 問。VS Code、helix 都在這一頭篩。
 ///
 /// Warning: **只重排，不扔。** 配不上的落到最後，不從單子上消失——這一頭認的是 `label`，
-/// 而服務器真正拿來篩的是 `filterText`（還沒接）。兩者不一樣的那天，扔掉的就是人要
+/// 而服務器真正拿來篩的是 `filterText`（還没接）。兩者不一樣的那天，扔掉的就是人要
 /// 的那一條；排到後面只是看不見，`C-n` 一路走下去還找得到。
 ///
 /// 分五檔，檔內**保持服務器給的次序**（它那一檔是相關度，比這一頭懂得多）：
@@ -1001,7 +1001,7 @@ fn signature(result: Option<&serde_json::Value>) -> Option<Signature> {
                     crate::problem::char_column(&label, to),
                 ))
             }
-            // 一個名字：在簽名裏找它。找不到就當沒說——寧可不加重，也不許加重錯
+            // 一個名字：在簽名裏找它。找不到就當没說——寧可不加重，也不許加重錯
             // 的那一段。
             serde_json::Value::String(name) => {
                 let at = label.find(name.as_str())?;
@@ -1248,7 +1248,7 @@ mod tests {
             Notice::Asked { id: "2".into() }
         );
         // Warning: **號碼也可以是字串**（協議兩種都許，2026-10-07 審出來的）。從前這一
-        // 條讀成 `Nothing`：沒人答，而等自己註冊回音的服務器就停在那裏。回去的號
+        // 條讀成 `Nothing`：没人答，而等自己註冊回音的服務器就停在那裏。回去的號
         // 碼要和來的那個逐字節相同，所以引號也帶着。
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":"abc","method":"client/registerCapability"}"#, 1),
@@ -1336,9 +1336,9 @@ mod tests {
 
         // Warning: **問定義的答案不會被讀成 hover，反過來也一樣。**
         let where_ = r#"{"id":2,"result":{"uri":"file:///a.rs","range":{"start":{"line":3,"character":7},"end":{"line":3,"character":9}}}}"#;
-        assert_eq!(said(where_), None, "定義的答案裏沒有 contents");
+        assert_eq!(said(where_), None, "定義的答案裏没有 contents");
         match read(ra, 1) {
-            Notice::Answer { places, .. } => assert!(places.is_empty(), "hover 裏沒有地方"),
+            Notice::Answer { places, .. } => assert!(places.is_empty(), "hover 裏没有地方"),
             other => panic!("{other:?}"),
         }
     }
@@ -1372,7 +1372,7 @@ mod tests {
         assert!(told.markdown);
         assert!(!told.text.contains("---"), "`---` 變成了一個空行：{}", told.text);
 
-        // 沒有 `kind` 的那幾種舊形狀一律算 Markdown。
+        // 没有 `kind` 的那幾種舊形狀一律算 Markdown。
         for shape in [
             r#"{"id":3,"result":{"contents":"一句話"}}"#,
             r#"{"id":3,"result":{"contents":{"language":"rust","value":"usize"}}}"#,
@@ -1431,7 +1431,7 @@ mod tests {
         // 說是字面（1）就照字面——那一串裏的 `$` 是人家真要的字。
         let plain = r#"{"id":4,"result":[{"label":"x","insertText":"cost$1","insertTextFormat":1}]}"#;
         assert_eq!(offered(plain)[0].insert, "cost$1");
-        // 一根光禿禿的序號沒有字；轉義脫一層；`|甲,乙|` 留頭一個。
+        // 一根光禿禿的序號没有字；轉義脫一層；`|甲,乙|` 留頭一個。
         assert_eq!(without_the_holes("a${1}b"), "ab");
         assert_eq!(without_the_holes("\\$x"), "$x");
         assert_eq!(without_the_holes("${1|甲,乙|}"), "甲");
@@ -1461,11 +1461,11 @@ mod tests {
         assert_eq!(one.active, Some((15, 20)));
         assert_eq!(&one.label[15..20], "value");
 
-        // Warning: **找不到那個名字就當沒說**——寧可不加重，也不許加重錯的那一段。
+        // Warning: **找不到那個名字就當没說**——寧可不加重，也不許加重錯的那一段。
         let wrong = r#"{"id":4,"result":{"signatures":[{"label":"def push(self, value)","parameters":[{"label":"nowhere"}]}],"activeParameter":0}}"#;
         assert_eq!(answered(wrong).expect("有一條").active, None);
 
-        // 一條都沒有：沒什麼可畫。
+        // 一條都没有：没什麼可畫。
         assert_eq!(answered(r#"{"id":4,"result":{"signatures":[]}}"#), None);
         assert_eq!(answered(r#"{"id":4,"result":null}"#), None);
     }
@@ -1569,7 +1569,7 @@ mod tests {
             Some("Prints to the standard output, with a newline.\n…"),
             "一段，後面還有就單排一個 …"
         );
-        // 最後一段：沒有 `…`。
+        // 最後一段：没有 `…`。
         let one = "```rust\nfn f()\n```\n\n---\n\nDoes a thing.\n";
         assert_eq!(first_paragraph(one).as_deref(), Some("Does a thing."));
         // 一段可以是好幾行，空行才斷。
@@ -1578,12 +1578,12 @@ mod tests {
             first_paragraph(two).as_deref(),
             Some("One line\nand its continuation.\n…")
         );
-        // 只有簽名，沒有散文：什麼都不畫。
+        // 只有簽名，没有散文：什麼都不畫。
         assert_eq!(first_paragraph("```rust\nfn f()\n```\n"), None);
 
         // **真正遞進來的是過了 `inline` 的那一份**（2026-10-09）。上面那幾格餵的是
         // 服務器原話，而 `Told::text` 早被 `inline` 拆過圍欄了——這幾格走的是產線
-        // 上那條路，不走一遍就看不見「跳圍欄」那道閘一次也沒開過。
+        // 上那條路，不走一遍就看不見「跳圍欄」那道閘一次也没開過。
         assert_eq!(
             first_paragraph(&inline(told)).as_deref(),
             Some("Prints to the standard output, with a newline.\n…"),

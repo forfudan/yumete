@@ -733,7 +733,7 @@ mod tests {
         let page = shot(&p, 110, 24);
         assert!(page.contains("本項目"), "贏的那一層：\n{page}");
         assert!(page.contains("← 全局 4"), "被蓋掉的那一個：\n{page}");
-        assert!(page.contains("改了還沒存"), "頂上要說一句：\n{page}");
+        assert!(page.contains("改了還没存"), "頂上要說一句：\n{page}");
     }
 
     /// **矮窗口上不畫到框外面去。** 24 行的表，12 行的窗。

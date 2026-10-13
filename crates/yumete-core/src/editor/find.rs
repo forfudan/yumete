@@ -40,7 +40,7 @@ impl Editor {
     /// 一處命中上，正文只把那一處標出來，而同一頁上還有幾處要換、換完剩幾處，
     /// 屏幕上一個字都不說。
     ///
-    /// 空的時候：面板沒開、名單過期了（正文改過，偏移不作數）、或者這些命中不
+    /// 空的時候：面板没開、名單過期了（正文改過，偏移不作數）、或者這些命中不
     /// 在眼前這一份緩衝裏。
     pub fn search_marks(&self) -> Vec<(usize, usize)> {
         if self.search_is_stale() || !self.search_panel_is_open() {
@@ -48,10 +48,10 @@ impl Editor {
         }
         let here = self.search.here().map(|h| (h.at, h.end));
         // **緩衝區那一檔按緩衝區認，不按路徑**（2026-10-02 修）。那一檔的命中身
-        // 上帶的是 `buffer`，`file` 裏放的是給人看的名字——草稿根本沒有路徑——
+        // 上帶的是 `buffer`，`file` 裏放的是給人看的名字——草稿根本没有路徑——
         // 而它的根是空的。於是底下那條 `h.file == mine` 拿 `None` 去比，一條都
         // 配不上：**眼前這一份的淡色標記整個不見了**，而本文件那一檔是有的，
-        // 「换個範圍標記就沒了」看着像畫面出了毛病。
+        // 「换個範圍標記就没了」看着像畫面出了毛病。
         if matches!(self.search.scope, Where::Buffers) {
             let id = self.current_buffer().id();
             return self
@@ -64,7 +64,7 @@ impl Editor {
                 .collect();
         }
         // **命中身上的路徑是相對搜索的根的**，所以要拿眼前這一份的路徑去比同一
-        // 把尺。範圍是「本文件」的時候根是空的，那些命中身上也沒有路徑。
+        // 把尺。範圍是「本文件」的時候根是空的，那些命中身上也没有路徑。
         let mine = match &self.search.root {
             None => None,
             Some(root) => {
@@ -92,7 +92,7 @@ impl Editor {
             .collect()
     }
 
-    /// 這一節有沒有一扇搜索面板開着。
+    /// 這一節有没有一扇搜索面板開着。
     pub(super) fn search_panel_is_open(&self) -> bool {
         crate::sidebar::Side::BOTH.iter().any(|side| {
             self.panel(*side).map(|p| p.view()) == Some(crate::sidebar::View::Search)
@@ -174,7 +174,7 @@ impl Editor {
         // 就一直是圖中的狀態（Pan.ins) 卡住不動，没有在搜索。」查出來是這裏：
         // `search_now` 走的是**同步**那一條（`in_the_background` 是假的），於是
         // ① 整個啓動被走查堵住，② 同步那一條還帶着那道「最多走幾秒」的閘，到時
-        // 間就收手——`0+結果` 不是「還在找」，是「沒走完就停了」，而它停了。
+        // 間就收手——`0+結果` 不是「還在找」，是「没走完就停了」，而它停了。
         //
         // 欠着那一條正是為這件事寫的：前端先畫一幀（表頭寫「正在找…」），再在
         // 背景裏跑，每一幀收一批。`--shot` 與 `--keys` 那兩條路自己會等到底
@@ -182,7 +182,7 @@ impl Editor {
         self.owed_search = true;
         // **鍵落在名單上，不落在輸入框裏**（2026-10-07 定：「正常情况下應該是直接
         // 打開TUI界面，然后進入 pan.nor 模式，且開始搜索」）。詞已經在命令行上
-        // 打過了，沒有什麼要再打的；名單這一刻是空的，而它會一條一條長出來。
+        // 打過了，没有什麼要再打的；名單這一刻是空的，而它會一條一條長出來。
         self.mode = Mode::Normal;
         self.stand_on_and_look(Field::Results);
     }
@@ -221,7 +221,7 @@ impl Editor {
         // the fallback for a `/` typed on the page.
         // **剛選中的照填，記着的變灰**（2026-10-04 定）。你剛選中的那一段是你
         // 此刻做的動作，直接進框；上次搜過的詞只是一個猜測，所以寫成灰字，一打字
-        // 它自己就沒了，按 `Tab` 把它收進來。同 `/` 那一行。
+        // 它自己就没了，按 `Tab` 把它收進來。同 `/` 那一行。
         match !marked.is_empty() && !marked.contains('\n') {
             true => self.search.ask(marked),
             false => {
@@ -253,7 +253,7 @@ impl Editor {
         //
         // Warning: **2026-10-04 起「已經在框裏」只剩選中那一路。** 記着的那個詞現在
         // 是一行灰字，框是空的——於是這一趟搜的是空，名單空着，要按 `Enter`
-        // （它會先把灰字收進來）。這是對的：**沒人打過的詞不該讓整個項目跑一趟**。
+        // （它會先把灰字收進來）。這是對的：**没人打過的詞不該讓整個項目跑一趟**。
         match self.search.scope.live() {
             true => self.run_search(),
             false => self.search_now(),
@@ -269,7 +269,7 @@ impl Editor {
     /// **換成什麽** —— 和 [`Self::search_pattern`] 同一條規矩的另一半。
     ///
     /// Warning: **正則關着的時候，右邊也要照字面。** 左邊一直是照規矩辦的（`regex::
-    /// escape`），而右邊從前**無條件走展開**——於是「正則」那一格明明沒勾，
+    /// escape`），而右邊從前**無條件走展開**——於是「正則」那一格明明没勾，
     /// `US$100` 裏的 `$100` 還是被讀成第 100 個捕獲組（空的），換出來只剩 `US`。
     ///
     /// | 查 | 換成 | 從前得到 |
@@ -291,7 +291,7 @@ impl Editor {
     }
 
     fn search_pattern(&self) -> String {
-        // **折過字形的那一版先試，編不過就退回沒折的**（2026-10-02 查出來的）。
+        // **折過字形的那一版先試，編不過就退回没折的**（2026-10-02 查出來的）。
         //
         // 把一個字換成 `[…]` 是一次**合法性上的降級**，有三種式子過不去：
         //
@@ -307,7 +307,7 @@ impl Editor {
         //
         // Warning: **要試的是穿好衣服的那一整條**，不是中間那一段。`(?i)` 自己就
         // 佔一層嵌套（實測：248 層括號下 `[書书]` 編得過，`(?i)` 一加就編不過），
-        // 所以只驗中間那一段等於沒驗。
+        // 所以只驗中間那一段等於没驗。
         if self.search.regex && self.search.glyphs {
             if let Some(wide) = crate::glyphs::widen_pattern(&self.search.query) {
                 let whole = self.dressed(wide);
@@ -326,7 +326,7 @@ impl Editor {
             // `^$`、括號一律不碰。解析不了（打了一半）就原樣用，壞式子自有它那
             // 條路。
             //
-            // 折過的那一版上面試過了，到這裏就是「沒折成」或者「折了編不過」。
+            // 折過的那一版上面試過了，到這裏就是「没折成」或者「折了編不過」。
             (true, _) => self.search.query.clone(),
             // **「書齋」找得到「书斋」**：每個字換成它的字形集（`crate::glyphs`）。
             // 這一支自己就轉義，所以不必再 `escape` 一遍。
@@ -358,8 +358,8 @@ impl Editor {
             // 一份審閱說這裏該問 `self.search.query`，理由是 `\S`、`\D`、`\B`、
             // `\p{Han}` 都帶着大寫字母。可那幾個大寫**正是讀者自己按的**——
             // 兩邊看見的是同一個 `S`。`body` 裏唯一可能多出來的字符來自
-            // `regex::escape`（只加反斜杠）和字形折疊（那張表一個大寫都沒有，
-            // 逐字掃過），兩個都進不了這道問句。改了是空操作，所以沒改。
+            // `regex::escape`（只加反斜杠）和字形折疊（那張表一個大寫都没有，
+            // 逐字掃過），兩個都進不了這道問句。改了是空操作，所以没改。
             //
             // 剩下的那半句是真的：正則模式下打一個 `\S` 就等於要求區分大小寫。
             // vim 的 `smartcase` 看的同樣是打出來的那一串，所以這是照抄來的，
@@ -382,7 +382,7 @@ impl Editor {
     /// The same, for a scope that has not been adopted yet.
     fn search_root_of(&self, scope: &Where) -> Option<PathBuf> {
         match scope {
-            // Warning: **內存那兩檔沒有根。** 本文件與緩衝區都是一張現成的表，不走
+            // Warning: **內存那兩檔没有根。** 本文件與緩衝區都是一張現成的表，不走
             // 磁碟——`search_now` 走的是另一條岔路。
             Where::Buffer | Where::Buffers => None,
             Where::Working => Some(self.working_dir()),
@@ -397,23 +397,23 @@ impl Editor {
             // 一個搜索根、跑到工作區外面去（`queryBuilder.ts:459-472`）。真正拿兩
             // 道槓說「項目根」的是 Sublime，而它同樣把單槓留給絕對路徑。
             //
-            // 那條規矩還有一個沒人發現的代價：`strip_prefix("/")` 把**所有**絕對
-            // 路徑都接到了項目根後面，於是 `:search /usr/share/dict` 報「沒有這個
+            // 那條規矩還有一個没人發現的代價：`strip_prefix("/")` 把**所有**絕對
+            // 路徑都接到了項目根後面，於是 `:search /usr/share/dict` 報「没有這個
             // 文件夾」——絕對路徑根本打不進來。
             //
             // 要搜項目根就按號碼換到「項目路徑」那一檔，本來就有。
             Where::Named(path) => {
                 // **開頭那個 `~` 要展開**（2026-10-01 報的：`:s ~/Dropbox` 無效）。
-                // 從前它一路當相對路徑接在根後面，狀態欄說「沒有這個文件夾」——
-                // 聽着像那個目錄不在，其實是我們根本沒去那裏找。
+                // 從前它一路當相對路徑接在根後面，狀態欄說「没有這個文件夾」——
+                // 聽着像那個目錄不在，其實是我們根本没去那裏找。
                 let path = Self::expand_tilde(&path.to_string_lossy());
                 let full = match path.is_absolute() {
                     true => path,
                     false => self.working_dir().join(path),
                 };
                 // Warning: **是個檔就另說一句**（2026-10-02 審出來的）。`:search 卷一.md`
-                // 指着一個真的存在的東西，而狀態欄說「沒有這個文件夾」——正是
-                // `~` 那一條修的時候說過的毛病：聽着像它不在，其實是我們沒去。
+                // 指着一個真的存在的東西，而狀態欄說「没有這個文件夾」——正是
+                // `~` 那一條修的時候說過的毛病：聽着像它不在，其實是我們没去。
                 if full.is_file() {
                     return None;
                 }
@@ -457,7 +457,7 @@ impl Editor {
     ///
     /// `search_now` 的第一段，抽出來是因為「只重搜被改過的那一份」走的也是它
     /// （[`Editor::rescan_the_open_one`]）。Warning: **它從內存讀**：屏幕上是什麼就搜
-    /// 什麼，存沒存盤不算數。
+    /// 什麼，存没存盤不算數。
     ///
     /// `room` 是還能往名單裏放幾處；超出的只數不放，所以第二個回值纔是真數。
     fn scan_the_open_one(
@@ -488,7 +488,7 @@ impl Editor {
     /// 正在寫的那一份排在最前面，於是 `mine` 那一段還是名單開頭連續的一段，
     /// 只重搜那一份的那條快路照舊走得通。
     ///
-    /// Warning: **沒有名字的草稿也在裏面**（定下來的）。它沒有路徑可以回去，所以每一處
+    /// Warning: **没有名字的草稿也在裏面**（定下來的）。它没有路徑可以回去，所以每一處
     /// 命中身上記的是**緩衝區的號**（[`Hit::buffer`]），不是路徑。
     fn scan_every_buffer(&mut self, look: &Look) {
         let here = self.working_dir();
@@ -501,7 +501,7 @@ impl Editor {
         let mut mine_total = 0usize;
         for i in order {
             let id = self.buffers[i].id();
-            // 有名字的按工作路徑縮短，縮不動就印全名；沒名字的印它在狀態欄上
+            // 有名字的按工作路徑縮短，縮不動就印全名；没名字的印它在狀態欄上
             // 的那個名字。
             let label = match self.buffers[i].path() {
                 Some(path) => {
@@ -551,7 +551,7 @@ impl Editor {
             ignored: self.search.ignored,
             include: self.search.include.clone(),
             exclude: self.search.exclude.clone(),
-            // 管道那一邊沒有畫面要護——同 `Search::uncapped` 說的是一句話。
+            // 管道那一邊没有畫面要護——同 `Search::uncapped` 說的是一句話。
             uncapped: self.search.uncapped,
         };
         match self.search_root() {
@@ -569,7 +569,7 @@ impl Editor {
     ///
     /// `sink` 回 `false` 就收攤——管道那一邊 `ye --grep 霜 | head -2` 關掉了讀的那
     /// 一頭，接着走完整棵樹是白費。給了 `sink` 就**不留名單**：那一邊印完就不要
-    /// 了，而不封頂的時候名單是會漲到沒邊的。
+    /// 了，而不封頂的時候名單是會漲到没邊的。
     pub(super) fn search_now_into(&mut self, mut sink: Option<&mut dyn FnMut(&Hit) -> bool>) {
         // 上一趟要是還在跑，這一趟頂掉它——世代號加一那一步在
         // `search_in_the_background` 裏，而不走到那裏的幾條路（查詢空了、式子寫
@@ -733,7 +733,7 @@ impl Editor {
                 }
             };
             // **管道那一條路照舊同步**（`ye --grep`）：它印給別的程序看，印完就
-            // 退，沒有「界面」可以凍住。面板那一條路搬到旁邊去跑。
+            // 退，没有「界面」可以凍住。面板那一條路搬到旁邊去跑。
             match piping {
                 true => {
                     let hunt = Hunt {
@@ -801,7 +801,7 @@ impl Editor {
             // 條）。從前它在框裏什麼都不做，於是打完「搜」的詞按一下 Tab 再打
             // 「換」的詞，兩個詞連成了一個：`搜: 洞庭鄱陽`。而面板上方那一行
             // 正寫着 `Tab 文件 > 緩衝 > 大綱 > 搜索`——一個寫在屏幕上、在這個
-            // 狀態下按了沒反應的鍵。
+            // 狀態下按了没反應的鍵。
             //
             // Warning: **只在框裏。** 出了框 `Tab` 還是走邊欄那幾個視圖，那是它在每
             // 一扇面板裏的老意思。
@@ -864,19 +864,19 @@ impl Editor {
             // **`Esc` 出框，打的字留着**（2026-09-25 報的：「按下Esc，输入的东西
             // 就还原了。这个不是「退回到normal」，而是放弃编辑」）。
             //
-            // Warning: **從前也沒有真的還原**——`scope_text` 一直在，是**畫**的時候只在
+            // Warning: **從前也没有真的還原**——`scope_text` 一直在，是**畫**的時候只在
             // 打字態纔顯示它，出框就退回按真實範圍算出來的名字，看着像還原了。
             // 所以修法是讓它**落地**（定的，原話：「算，离开格子就落地」），這樣屏幕上
             // 寫着什麼就是什麼。
             // **`Esc` 在結果名單上是「退一步」**（2026-09-27 報的：「Esc — dead
             // in the result list……The universal escape hatch is a no-op」）。
             // vi 用戶最確定的那一個鍵，在這一格從前什麼都不做。退到搜索框上，
-            // 再按一次就沒有別的可退了，那時它是下面那一支。
+            // 再按一次就没有別的可退了，那時它是下面那一支。
             Key::Esc if self.mode == Mode::Normal && self.search.field == Field::Results => {
                 self.search.stand_on(Field::Query);
             }
             Key::Esc => {
-                // 已經在 Normal 了，這一下 `Esc` 沒有別的事可做——那就是「把輸入
+                // 已經在 Normal 了，這一下 `Esc` 没有別的事可做——那就是「把輸入
                 // 法的挂起再說一遍」，同正文與邊欄那兩處（2026-09-27）。
                 if self.mode == Mode::Normal {
                     self.say_it_again = true;
@@ -936,7 +936,7 @@ impl Editor {
             // 一個感覺：框裏站着一個塊光標，`h`/`l` 挪它，`i` 就從它那裏插。
             //
             // Warning: **格子之間從此只有 `jk`**（定的，原話：「行，格子只用 jk」）。從前
-            // `hl` 和 `jk` 走的是同一串格子，那時框裏沒有光標可挪，`hl` 也就沒有
+            // `hl` 和 `jk` 走的是同一串格子，那時框裏没有光標可挪，`hl` 也就没有
             // 別的事可做。
             //
             // 結果列表是例外：那裏 `h`/`l` 是摺起/打開一個檔，和文件樹、大綱說的
@@ -951,7 +951,7 @@ impl Editor {
                 self.search.fold(false);
             }
             // **位置那一格是個四選一，所以 `hl` 在它上面是換檔**（2026-09-27
-            // 定）。那一格沒有字可以挪光標，`hl` 也就沒有別的事可做；而「這一格
+            // 定）。那一格没有字可以挪光標，`hl` 也就没有別的事可做；而「這一格
             // 能換」本來就該用左右來說。
             //
             // Warning: **2026-10-01 起它永遠打不了字**：指定文件夾只能用命令進來，進來
@@ -983,9 +983,9 @@ impl Editor {
             },
             Key::Char('k') | Key::Up => match self.search.field {
                 // Warning: **到頂了就出去**（2026-09-23 報的：「我一旦將光標移動到了下面
-                // 文件的區域，就沒辦法使用 k 向上移動到選項和輸入框了」）。從前
+                // 文件的區域，就没辦法使用 k 向上移動到選項和輸入框了」）。從前
                 // `step(false)` 在第 0 條上飽和，於是列表是個進得去出不來的地
-                // 方——`Tab` 走得出去，可沒人會想到去按它。
+                // 方——`Tab` 走得出去，可没人會想到去按它。
                 Field::Results if self.search.selected == 0 => {
                     let back = self.search.walk(true);
                     self.stand_on_and_look(back);
@@ -1009,7 +1009,7 @@ impl Editor {
             // the row is drawn quiet, and a quiet row that still flipped would
             // be saying two things at once. `flip_switch` guards it.
             // **站在一個換不動的格子上按了改字的鍵**（2026-09-27）：位置那一格
-            // 平常是四選一，`i`/`a`/`d` 在它上面沒有東西可改。
+            // 平常是四選一，`i`/`a`/`d` 在它上面没有東西可改。
             //
             // Warning: **2026-10-04 走過一趟又回來了。** 中間做過一版「這六個在這裏改
             // 成回查詢框」，當天改了主意：「aci 都必須在那一行才能使用。`/`
@@ -1034,7 +1034,7 @@ impl Editor {
             // 更新之後，確實應該先觸發一次重搜再跳」）。
             //
             // 起因是「改完正文回到面板按 `Enter`，名單還是舊的」：那時 `Enter` 在
-            // 框上只是「進編輯」，在開關上是「翻一下」，沒有一個格子是重跑。
+            // 框上只是「進編輯」，在開關上是「翻一下」，没有一個格子是重跑。
             //
             // Warning: **結果那一格上，過期了先跑、不跳**。屏幕上此刻寫着「按 Enter
             // 重新查找」，那 `Enter` 就照它說的做；而且正文動過之後，那一處的行號
@@ -1042,7 +1042,7 @@ impl Editor {
             // 纔去。
             //
             // Warning: **進編輯不缺入口**：`i` `a` `I` `A` `c` 和 `/` 六個；開關也不缺，
-            // `1`–`7` 一個號碼一行。騰出 `Enter` 沒有讓誰沒路走。
+            // `1`–`7` 一個號碼一行。騰出 `Enter` 没有讓誰没路走。
             //
             // Warning: **空格翻不動開關**（2026-10-02 更正）。這句話從前寫着「`1`–`7`
             // 和空格都翻得動」，而面板裏光禿禿的空格一直是開空格選單——它在
@@ -1058,9 +1058,9 @@ impl Editor {
             // 不应该显示『r ....』的提示。因此如果用户按了 r，也不需要任何提示」）。
             //
             // 2026-09-25 那一輪是反過來的：站在框上按 `r` 要出一句「先 j 走到一
-            // 條命中上」，理由是「按了沒反應的鍵讀者會以為自己記錯了」。Warning: **那
+            // 條命中上」，理由是「按了没反應的鍵讀者會以為自己記錯了」。Warning: **那
             // 條理由的前提是提示行上寫着 `r`** ——現在不寫了（見 `hint.rs`），
-            // 於是它就是一個沒綁的鍵，和別的沒綁的鍵一樣不必解釋。
+            // 於是它就是一個没綁的鍵，和別的没綁的鍵一樣不必解釋。
             Key::Char('r') if self.search.replacing && self.search.field == Field::Results => {
                 match self.search.row() {
                     // Warning: **整個檔也要先問一句**（2026-09-27 三個試用的人都指出
@@ -1097,7 +1097,7 @@ impl Editor {
             // 的樣子。
             Key::Char('u') if self.search.replacing => self.undo_the_replacement(),
             // Warning: **`R` 也只在名單那一邊活着**（2026-09-29 定，同 `r`）。提示行
-            // 上不寫它的時候，它就是一個沒綁的鍵；名單空着也一樣。
+            // 上不寫它的時候，它就是一個没綁的鍵；名單空着也一樣。
             Key::Char('R')
                 if self.search.replacing
                     && self.search.field == Field::Results
@@ -1138,11 +1138,11 @@ impl Editor {
             // 办法用一些按键，比如 d 删除光标选区……用户必须移到最后，i进入
             // insertmode，然后从后向前删除」）。
             //
-            // Warning: **鍵全是正文裏同名同義的那幾個，一個都沒新發明**：`d` 在正文裏
+            // Warning: **鍵全是正文裏同名同義的那幾個，一個都没新發明**：`d` 在正文裏
             // 刪選區，框裏光標壓着一個字，那就是那一個；`c` 刪了進插入；
             // `a`/`I`/`A` 是正文的三個入口。
             //
-            // Warning: **`gh`/`gl` 和 `w b e` 沒有搬進來**——它們是為一長行散文準備的，
+            // Warning: **`gh`/`gl` 和 `w b e` 没有搬進來**——它們是為一長行散文準備的，
             // 而這是個兩三個字的框；`A`/`I` 本來就把行首行尾這兩個去處帶上了。
             // 再說 `g` 在結果那一格已經是「到第一條」，在框裏當引導鍵要多引一套
             // 待決狀態。
@@ -1180,7 +1180,7 @@ impl Editor {
             }
             // Warning: **站在結果上按 `i`，從前靜悄悄跳回搜索框接着打字**
             // （2026-09-27 兩個試用的人都撞上）：`server` 變成 `serverXX`、名單
-            // 變成「無結果」，而屏幕上一個字都沒說。vi 用戶站在一條命中上第一個
+            // 變成「無結果」，而屏幕上一個字都没說。vi 用戶站在一條命中上第一個
             // 按的就是 `i`，他想的是「去那裏改」——那是 `Enter`。
             Key::Char('i' | 'a' | 'c' | 'I' | 'A' | 'd' | 'D' | 'C')
                 if self.search.field == Field::Results =>
@@ -1193,12 +1193,12 @@ impl Editor {
             //
             // Warning: **從前只有 `i` 有這條退路**，`a`/`c`/`I`/`A`/`C` 都掛着
             // `if takes_text()` 那道閘——站在「位置」那一行上按下去，屏幕一點反應
-            // 都沒有。
+            // 都没有。
             //
             Key::Char('i') => {
                 // Warning: **從光標那裏插，不再跳到末尾**（2026-09-25 定）。`hl` 挪了
                 // 半天光標，一按 `i` 又回末尾，那就是挪了白挪。光標出廠就在末尾，
-                // 所以不挪的人感覺一點沒變。
+                // 所以不挪的人感覺一點没變。
                 if !self.search.takes_text() {
                     self.search.field = Field::Query;
                     self.search.caret = self.search.typed().chars().count();
@@ -1211,7 +1211,7 @@ impl Editor {
             // Warning: **數的是行，不是命中**（2026-10-02 查出來的）。`selected` 是
             // `rows()` 的下標，而跨檔的名單裏夾着檔名那幾行——四處命中分在三個檔
             // 裏是七行，`G` 卻跳到第 3 行，離底下還差三行。只在本文件那一檔裏湊
-            // 巧對：那時候名單裏沒有檔名行，行數正好等於命中數。
+            // 巧對：那時候名單裏没有檔名行，行數正好等於命中數。
             Key::Char('G') | Key::End if self.search.field == Field::Results => {
                 self.search.selected = self.search.rows().len().saturating_sub(1)
             }
@@ -1221,7 +1221,7 @@ impl Editor {
             // Warning: **接不住就往邊欄那一層再遞一手**（2026-09-26 報的：「搜索侧栏按
             // w 变宽后，再按就没办法变窄了」）。從前這裏把回報值丟掉，於是 `w`
             // 「寬窄」和 `R`「重讀」在這一扇裏是**啞的**——而狀態欄那一行照樣寫着
-            // 「`w` 寬窄」。一個寫在屏幕上、按下去沒反應的鍵，讀者只會以為自己記
+            // 「`w` 寬窄」。一個寫在屏幕上、按下去没反應的鍵，讀者只會以為自己記
             // 錯了（同 §5.12.39 那一族）。
             other => {
                 if !self.panel_key_in_common(other) {
@@ -1345,7 +1345,7 @@ impl Editor {
     /// 2026-09-27 定。面板那一欄窄，一行摘要放不下「從什麼變成什麼」，所以那件
     /// 事挪到名單底下一塊自己的地方去說，而那裏放得下更多上下文。
     ///
-    /// `None` 的時候：沒在替換、沒站在一處命中上、或者「換」那一格是空的——三個
+    /// `None` 的時候：没在替換、没站在一處命中上、或者「換」那一格是空的——三個
     /// 條件缺一，那幾行就還給名單。
     ///
     /// Warning: **換上去的那一段是算出來的，不是框裏那幾個字**：正則那一路的 `$1` 要
@@ -1374,10 +1374,10 @@ impl Editor {
         match which {
             Field::Case => self.search.case = self.search.case.next(),
             // **匹配模式三選一**（2026-10-01 定）：字面 → 正則 → 模糊 → 回字面。
-            // 從前是兩個獨立的勾，而「兩個都關」纔是默認——那一檔沒有名字。
+            // 從前是兩個獨立的勾，而「兩個都關」纔是默認——那一檔没有名字。
             Field::Matching => {
                 // Warning: **替換開着的時候轉不到模糊**（2026-09-20 定的那一條，合併之後
-                // 要在這裏守住）：鬆的匹配蓋住讀者沒打的字，「把它們全換掉」交
+                // 要在這裏守住）：鬆的匹配蓋住讀者没打的字，「把它們全換掉」交
                 // 出去的範圍他預測不了。那時只在 字面 和 正則 之間轉。
                 let loose = !self.search.replacing;
                 let (regex, fuzzy) = match (self.search.regex, self.search.fuzzy) {
@@ -1441,12 +1441,12 @@ impl Editor {
     /// **勾上「替換」就長出替換行**（2026-09-23 報的）。
     ///
     /// Warning: **和 模糊 互斥，而勾這一個的時候把那一個關掉、畫灰**（定的，原話：「我傾向
-    /// 自動關掉畫灰」）。理由是原來那一條：鬆的匹配蓋住讀者沒打的字，「把它們全
+    /// 自動關掉畫灰」）。理由是原來那一條：鬆的匹配蓋住讀者没打的字，「把它們全
     /// 換掉」交出去的範圍他預測不了。和 `flip_switch` 裏 正則/完整匹配 壓掉 模糊
     /// 是同一個寫法——**要一個就把打架的那個放下**，而不是留一個按了不算數的勾。
     ///
     /// Warning: **關掉替換不會自動把 模糊 打開**：它本來就是關着的那一個，替下去再彈
-    /// 回來是替讀者做了他沒說過的決定。
+    /// 回來是替讀者做了他没說過的決定。
     fn flip_replacing(&mut self) {
         // **一行三態**（2026-10-01 定）：關 → 字面替換 → 智能大小寫 → 回關。
         // 次序是定下來的：第二檔是出廠那一種（打什麼就寫什麼），按一下到的是平常
@@ -1463,7 +1463,7 @@ impl Editor {
             self.search.fuzzy = false;
             self.search.replace.clear();
         }
-        // 走到一個此刻不存在的格子上就沒地方站了——替換行剛沒，焦點若在它身上。
+        // 走到一個此刻不存在的格子上就没地方站了——替換行剛没，焦點若在它身上。
         if !self.search.replacing && self.search.field == Field::Replace {
             self.search.field = Field::Query;
         }
@@ -1472,7 +1472,7 @@ impl Editor {
 
     /// **此刻的範圍，寫成 `:search` 後面那個詞。**
     ///
-    /// Warning: 三個用命令開的範圍（`-cd`/`-wd`/`-gd`）**沒有**對應的 `:search` 參
+    /// Warning: 三個用命令開的範圍（`-cd`/`-wd`/`-gd`）**没有**對應的 `:search` 參
     /// 數，所以寫的是它們算出來的那個目錄——那是誠實的，而且改得動。
     fn scope_as_typed(&self) -> String {
         use crate::search_panel::Where;
@@ -1524,7 +1524,7 @@ impl Editor {
     pub fn run_owed_search(&mut self) {
         // **只有這一個入口走背景那一條**（§5.93，2026-10-06）。
         //
-        // Warning: **`search_now` 自己照舊同步**。沒有主循環替它收的呼叫方多着——
+        // Warning: **`search_now` 自己照舊同步**。没有主循環替它收的呼叫方多着——
         // 測試、`settle_search`、`ye --grep`——它們按完就要答案，而背景那一趟
         // 交回來的東西要有人每一幀去收。欠着那一條是前端專用的（前端先畫一幀
         // 「正在找…」再還），正好就是「有人收」的那一條。
@@ -1538,7 +1538,7 @@ impl Editor {
         self.owed_search
     }
 
-    /// **欠着就當場還掉。** 給沒有主循環的那些呼叫方用——測試，以及任何一個
+    /// **欠着就當場還掉。** 給没有主循環的那些呼叫方用——測試，以及任何一個
     /// 「按完就要答案」的地方。
     ///
     /// Warning: 前端不要用這一支：它跑的就是那件慢事，而前端的辦法是先畫一幀說「正在
@@ -1547,7 +1547,7 @@ impl Editor {
         if self.take_owed_search() {
             self.run_owed_search();
             // **還要等它跑完**（§5.93，2026-10-06）。`run_owed_search` 現在把走查
-            // 交給旁邊那一趟，而這一支的全部意思就是「我現在就要答案」——沒有
+            // 交給旁邊那一趟，而這一支的全部意思就是「我現在就要答案」——没有
             // 主循環替它收，就地收到底。
             self.wait_for_the_search();
             return;
@@ -1555,7 +1555,7 @@ impl Editor {
         self.refresh_the_edited_file();
     }
 
-    /// 等背景那一趟跑完，邊等邊收。給沒有主循環的呼叫方用。
+    /// 等背景那一趟跑完，邊等邊收。給没有主循環的呼叫方用。
     pub fn wait_for_the_search(&mut self) {
         while self.still_searching() {
             if !self.collect_search_results() {
@@ -1575,11 +1575,11 @@ impl Editor {
     ///
     /// 走這條捷徑要三個條件都成立，否則照舊掛着「按 Enter 重新查找」：
     ///
-    /// 1. **換的不是稿子**（`buffer` 沒變）。換一份稿子在寫，每一處命中身上的檔名
+    /// 1. **換的不是稿子**（`buffer` 没變）。換一份稿子在寫，每一處命中身上的檔名
     ///    都要重寫——那不是「重搜一份」，那是重搜。
     /// 2. **動的只有正在寫的這一份**（`every` 的增量等於 `revision` 的增量）。
     ///    別處也動了就交給整趟重搜，它知道怎麼把別人的那幾段也擺對。
-    /// 3. **名單沒有被 `MOST` 砍過。** 砍過就不知道後面漏了哪些，接不回去。
+    /// 3. **名單没有被 `MOST` 砍過。** 砍過就不知道後面漏了哪些，接不回去。
     pub fn refresh_the_edited_file(&mut self) {
         let Some(was) = self.search.looked_at else { return };
         // `stale` 是「框裏的詞改了、而這個範圍不邊打邊搜」，那件事等 Enter。
@@ -1607,7 +1607,7 @@ impl Editor {
     fn rescan_the_open_one(&mut self) {
         // Warning: **緩衝區那一檔不走這條快路**（2026-10-02 審出來的）。這一支拿
         // `my_label()` 給新命中貼名字，而那一支開頭就是 `search.root.as_ref()?`
-        // ——緩衝區那一檔沒有根（`scan_every_buffer` 有意設成 `None`），於是整
+        // ——緩衝區那一檔没有根（`scan_every_buffer` 有意設成 `None`），於是整
         // 段換上去的命中 `file` 和 `buffer` 全是 `None`：自己那幾處的檔頭變成
         // 一個空名字，而要是只剩自己那幾處，名單還會從樹悄悄塌成平的。
         //
@@ -1624,7 +1624,7 @@ impl Editor {
             true => self.scan_the_open_one(&look, &mine, self.search.most().saturating_sub(others)),
             false => (Vec::new(), 0),
         };
-        // 砍過就接不回去：後面漏了哪些沒人知道。整趟重跑，它自己會把數擺對。
+        // 砍過就接不回去：後面漏了哪些没人知道。整趟重跑，它自己會把數擺對。
         let most = self.search.most();
         if self.search.total > most || total + (self.search.total - self.search.mine_total) > most {
             return self.search_now();
@@ -1633,7 +1633,7 @@ impl Editor {
         //
         // Warning: 從前這裏算的是 `grew = 新的處數 - 舊的處數`，然後把 `selected` 加上
         // 它——而 `selected` 數的是**行**，行裏還有檔名那一種。於是眼前這一份從
-        // 「一處都沒有」變成「有」的那一下多出一行檔名，高亮整個錯一行；反過來
+        // 「一處都没有」變成「有」的那一下多出一行檔名，高亮整個錯一行；反過來
         // 掉到零也一樣。`selected >= was` 更是拿行號去比處數。
         //
         // 重搜那一支（[`Self::look_again_and_stand_still`]）早就不按號碼放回去了，
@@ -1645,7 +1645,7 @@ impl Editor {
         self.search.mine_total = total;
         // **那張「有命中的檔」也要跟着**（見 [`crate::search_panel::Search::files`]）。
         // 在正文裏打出第一個「霜」來，這一份就該進那張表；刪掉最後一個，就該出
-        // 去。不跟的話 `R` 要麼漏掉眼前這一份，要麼為一個早就沒有命中的檔白開一
+        // 去。不跟的話 `R` 要麼漏掉眼前這一份，要麼為一個早就没有命中的檔白開一
         // 趟——而問句數的也是那張表。
         let me = (mine.clone(), None);
         self.search.files.retain(|one| one != &me);
@@ -1668,7 +1668,7 @@ impl Editor {
     /// 兩條路都要問這一句：整趟重搜（[`Editor::search_now`]）和只重搜這一份
     /// （[`Editor::rescan_the_open_one`]）。Warning: **問成兩份就會留洞**——
     /// 2026-10-02 當天留過一個：整趟那一邊學會了「不在那個根底下就不搜」，而快路
-    /// 沒學會，於是 `:search 一個空文件夾` 報「無結果」，回正文打一個字，它又報
+    /// 没學會，於是 `:search 一個空文件夾` 報「無結果」，回正文打一個字，它又報
     /// 出兩處來。
     ///
     /// 兩條規矩：
@@ -1680,7 +1680,7 @@ impl Editor {
     ///    `a.md`、包含那一格寫 `*.txt`，它的命中照樣在名單上，而框上寫着「只搜
     ///    .txt」。
     ///
-    /// 沒有名字的草稿不在此列（它哪個根底下都不在，而它是你正在寫的那一份）。
+    /// 没有名字的草稿不在此列（它哪個根底下都不在，而它是你正在寫的那一份）。
     fn the_open_one_in_scope(&self) -> (Option<PathBuf>, bool) {
         let root = self.search_root();
         let here = self
@@ -1744,7 +1744,7 @@ impl Editor {
     /// `rel` 是名單上那個名字，`id` 是緩衝區那一檔記下的號——**有號就認號**。
     ///
     /// Warning: **2026-10-02 審出來的：從前它只認路徑。** 緩衝區那一檔的「名字」是
-    /// 標籤不是路徑，沒有名字的草稿更是字面的 `[scratch]`；拿它去
+    /// 標籤不是路徑，没有名字的草稿更是字面的 `[scratch]`；拿它去
     /// `buffer_for`，`open_file` 會給出一份**空的新緩衝**（`Buffer::open` 對不
     /// 存在的路徑回的是 `Ok` 加一條空繩），於是 `R` 換了 0 處、一聲不吭、還多
     /// 出一個叫 `[scratch]` 的空檔。
@@ -1820,13 +1820,13 @@ impl Editor {
     /// **還在換嗎**——前端每一幀問一次，欠着就再做一批。
     ///
     /// Warning: **停下來等人答話的時候回 `false`**（2026-10-11）。欠着的那一批還在
-    /// `owed_replace` 裏；這一句答的是「這一幀要不要再做一批」，不是「做完沒有」。
+    /// `owed_replace` 裏；這一句答的是「這一幀要不要再做一批」，不是「做完没有」。
     pub fn replacing_a_batch(&self) -> bool {
         self.owed_replace.is_some() && !self.replace_paused
     }
 
     /// **走到哪了**——`(已做幾個檔, 一共幾個, 這會兒動的那一個)`，前端每一幀問
-    /// 一次（2026-10-11）。`None` ＝ 沒在替換。
+    /// 一次（2026-10-11）。`None` ＝ 没在替換。
     ///
     /// 停下來等人答話的時候照樣答得出：那扇問句上寫着的數就是這一個。
     pub fn replace_progress(&self) -> Option<(usize, usize, String)> {
@@ -1837,7 +1837,7 @@ impl Editor {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.to_string_lossy().into_owned()),
-            // 沒有名字的那一份草稿——它只可能是眼前這一個。
+            // 没有名字的那一份草稿——它只可能是眼前這一個。
             Some((None, _)) => self.current_buffer().display_name(),
             None => String::new(),
         };
@@ -1887,7 +1887,7 @@ impl Editor {
 
     /// 做一小批，做完就回來；整批做完纔收尾。
     ///
-    /// Warning: **沒有取消**（2026-10-03 定）。所以這一支不讀鍵，也不必管「做了一半
+    /// Warning: **没有取消**（2026-10-03 定）。所以這一支不讀鍵，也不必管「做了一半
     /// 被打斷」——它要麼接着做，要麼做完。
     pub fn run_a_batch_of_replacing(&mut self) {
         let Some(mut at) = self.owed_replace else { return };
@@ -1913,7 +1913,7 @@ impl Editor {
     /// 一批替換走完（或者被中止）之後的收尾，兩條路共用。
     fn finish_replacing(&mut self) {
         // **換完要回到你出發的那一份。** `replace_file` 底下的 `buffer_for` 為了
-        // 動一個還沒打開的檔會真的 `open_file`，那一下就把 `current` 挪走了。
+        // 動一個還没打開的檔會真的 `open_file`，那一下就把 `current` 挪走了。
         if let Some(back) = self.buffer_with(self.replace_home) {
             if back != self.current {
                 self.show_buffer(back);
@@ -1954,7 +1954,7 @@ impl Editor {
     /// 名單的次序是 `hits` 的次序（`rows()` 把連着的同一個檔歸成一組），而重搜一趟
     /// 之後剛動過的那個檔會竄到最前面——它開在緩衝區裏，從內存搜，先跑完。
     ///
-    /// 穩定排序，所以：老次序裏有的照老次序，老次序裏沒有的（新冒出來的檔）排在後
+    /// 穩定排序，所以：老次序裏有的照老次序，老次序裏没有的（新冒出來的檔）排在後
     /// 面、彼此之間照發現的次序。一個檔裏那幾處的先後一格不動。
     fn keep_the_old_file_order(&mut self, order: &[(Option<PathBuf>, Option<u64>)]) {
         if order.is_empty() {
@@ -2078,7 +2078,7 @@ impl Editor {
     /// | --- | --- | --- |
     /// | `霜[\s\S]*三` | 1 處（第三行的「霜三」） | **整份稿子換成一個 `X`**，15 字節剩 2 |
     /// | `甲\s*乙` | 1 處 | 2 處，而且把一個換行吃掉了 |
-    /// | `^霜` | 3 處 | 1 處（沒有 `(?m)`，`^` 只認整份的開頭） |
+    /// | `^霜` | 3 處 | 1 處（没有 `(?m)`，`^` 只認整份的開頭） |
     ///
     /// 第一行是真的丟字：貪婪的 `*` 跨過換行，一口吃掉三行。`r` 在同一處做的是
     /// 對的事，所以同一個名單上 `r` 和 `R` 從前給的是兩種答案。
@@ -2095,7 +2095,7 @@ impl Editor {
             }
             let cuts = byte_cuts(&text);
             // **從後往前換。** 換上去的那一段和換下來的那一段不一樣長，從前往後
-            // 走會把這一行後面每一處的位置都推着走；倒着走，還沒動到的那幾處位
+            // 走會把這一行後面每一處的位置都推着走；倒着走，還没動到的那幾處位
             // 置一格不變。
             let mut row = text.clone();
             for &(a, b) in spans.iter().rev() {
@@ -2141,7 +2141,7 @@ impl Editor {
 
     /// Which buffer a hit is in, opening the file if it is not open yet.
     ///
-    /// Warning: **緩衝區那一檔記的是號，不是路徑**——沒有名字的草稿沒有路徑可以回去，
+    /// Warning: **緩衝區那一檔記的是號，不是路徑**——没有名字的草稿没有路徑可以回去，
     /// 而兩個草稿的名字是同一個 `[scratch]`。
     fn buffer_of(&mut self, hit: &Hit) -> Option<usize> {
         if let Some(id) = hit.buffer {
@@ -2163,7 +2163,7 @@ impl Editor {
         // Warning: **這一趟對每一個已開的緩衝問一次真名，所以它必須問得起**
         // （2026-10-03 量出來的）。`R` 每個檔叫一次這支，三千個檔就是四百五十萬次
         // `realpath`——上一輪（2026-10-02）斷定「不是這一行」是錯的：那一次加的
-        // 快路是「先按名字比、比不中再問」，而比不中正是常態，於是一次都沒省下
+        // 快路是「先按名字比、比不中再問」，而比不中正是常態，於是一次都没省下
         // 來。真名改成問一次就記住（[`Editor::real_path`]）之後，同一個 `R`
         // **101 秒 → 73 秒**。
         if let Some(i) = self
@@ -2173,7 +2173,7 @@ impl Editor {
         {
             return Some(i);
         }
-        // Warning: **盤上沒有這個檔就別開**（2026-10-02 審出來的）。`Buffer::open`
+        // Warning: **盤上没有這個檔就別開**（2026-10-02 審出來的）。`Buffer::open`
         // 對不存在的路徑回的是 `Ok` 加一條空繩——那是 `:open` 要的規矩（開一個
         // 新檔），在這裏卻是「名單上那個名字解錯了」被悄悄變成一份空緩衝。
         if !full.is_file() {
@@ -2253,12 +2253,12 @@ impl Editor {
     pub(super) fn looker(&self) -> Option<Look> {
         // **拼音那一路切成一段一段地問**（2026-10-03 定）。從前它只收「整條全
         // 是字母」的查詢，於是字母和漢字混不起來——`zhongguo很大`、`zhong国`、
-        // `di120` 一個都找不着，而真實的查詢幾乎都是混的。查詢裏一個字母都沒有的
+        // `di120` 一個都找不着，而真實的查詢幾乎都是混的。查詢裏一個字母都没有的
         // 時候它交 `None`：那就全是字面，問讀音是白跑一趟。
         // Warning: 正則開着也照跑：它自己走一趟，不往正則裏塞東西（不像簡繁異體）。
         // Warning: **「西文整詞匹配」開着的時候拼音那一路不跑**（2026-10-03 一輪審查
         // 報來的）。那個開關說的是拉丁詞的詞邊界，而拼音那一路配的是漢字——漢語
-        // 沒有詞邊界可言，於是它從前**一條命中都不受 `--word` 管**：`xxalpha中xx`
+        // 没有詞邊界可言，於是它從前**一條命中都不受 `--word` 管**：`xxalpha中xx`
         // 在 `--word` 底下照樣中。兩個開關說的不是一件事，那就別讓一個悄悄繞過
         // 另一個。
         let said = match self.search.pinyin && !self.search.whole {
@@ -2325,7 +2325,7 @@ impl Editor {
         // 位置」。
         //
         // 存一次、恢復一次，同上面那一行摺疊：重搜要換的是**還有哪幾處**，不是
-        // 讀者看着的這張名單怎麼排。新冒出來的檔排在後面（老次序裏沒有它）。
+        // 讀者看着的這張名單怎麼排。新冒出來的檔排在後面（老次序裏没有它）。
         let order = self.search.files.clone();
         match self.search.scope.live() {
             true => self.run_search(),
@@ -2346,7 +2346,7 @@ impl Editor {
 
     /// 高亮那一行說的是哪一處命中——重搜之前問一次。
     ///
-    /// 檔名那一行不算一處命中，所以答 `None`：那一行沒有「它之後的頭一處」可說。
+    /// 檔名那一行不算一處命中，所以答 `None`：那一行没有「它之後的頭一處」可說。
     fn the_hit_under_the_highlight(&self) -> Option<(Option<PathBuf>, usize, usize)> {
         self.search.row().and_then(|row| match row {
             crate::search_panel::Row::Hit(at) => self
@@ -2412,7 +2412,7 @@ impl Editor {
 
     fn after_replacing(&mut self, done: usize) {
         self.look_again_and_stand_still();
-        // Warning: **一處都沒換就不說話**（2026-09-29）：`R` 只在名單上有東西的時候
+        // Warning: **一處都没換就不說話**（2026-09-29）：`R` 只在名單上有東西的時候
         // 纔畫得出來，所以 `done == 0` 是走不到的；真走到了也不必解釋。
         if done > 0 {
             self.status = say!("search.replaced", done);
@@ -2435,7 +2435,7 @@ impl Editor {
     /// 要先問一句（2026-10-09 定，見 [`crate::editor::Asking::UndoTheReplace`]）。
     fn undo_the_replacement(&mut self) {
         match self.replaced_in.len() {
-            // 沒有記在案的那一批：撤回當前這一份，和正文裏按 `u` 一樣。
+            // 没有記在案的那一批：撤回當前這一份，和正文裏按 `u` 一樣。
             0 => {
                 self.undo();
                 self.after_replacing_undone(None);
@@ -2474,9 +2474,9 @@ impl Editor {
     ///
     /// Warning: **不是名單上高亮那一行**（2026-10-09 量出來的）。換完 `after_replacing`
     /// 會把搜索重跑一遍，而剛換掉的那幾處再也配不上那個式子——名單是空的
-    /// （實測 `hits=0 files=0`），沒有一行可指。而且它不是一直空：替換裏還含着
-    /// 式子的時候（`霜` → `霜雪`）名單又滿了，於是那顆按鈕會時有時無，而「有沒
-    /// 有」取決於讀者根本沒在想的一件事。
+    /// （實測 `hits=0 files=0`），没有一行可指。而且它不是一直空：替換裏還含着
+    /// 式子的時候（`霜` → `霜雪`）名單又滿了，於是那顆按鈕會時有時無，而「有没
+    /// 有」取決於讀者根本没在想的一件事。
     ///
     /// `R` 換完把人送回出發那一份（`replace_home`），而那一份正是最可能想單獨要
     /// 回來的——你本來就在那一章裏寫着。不在這一批裏就不給那顆按鈕。
@@ -2492,7 +2492,7 @@ impl Editor {
     /// 之後手打幾個字再按 `u`，撤掉的是那幾個字，而屏幕上寫着「撤回了剛纔那次替
     /// 換」。IntelliJ 攔的是同一件事。
     ///
-    /// Warning: **撤不了的那幾份從案上劃掉，沒撤的留着。** 「只撤銷這一個」之後別的幾份
+    /// Warning: **撤不了的那幾份從案上劃掉，没撤的留着。** 「只撤銷這一個」之後別的幾份
     /// 還撤得回來，再按一下 `u` 就是。
     pub(super) fn take_the_replacement_back(&mut self, only: Option<u64>) {
         let batch = std::mem::take(&mut self.replaced_in);
@@ -2545,11 +2545,11 @@ impl Editor {
         // **撤回也要出聲。** `r` 說「換掉 1 處」、`R` 說「換掉 8 處」，而 `u` 從前
         // 一個字都不說——剛按錯一次 `R` 的人最需要聽見的就是這一句
         // （2026-09-27 審出來的）。
-        // Warning: **沒換過就別說換過**（2026-10-02 查出來的）。這一句從前是無條件
-        // 寫的：面板裏按 `u`、而這一輪一處都沒替換過，屏幕上照樣寫「撤回了剛纔
+        // Warning: **没換過就別說換過**（2026-10-02 查出來的）。這一句從前是無條件
+        // 寫的：面板裏按 `u`、而這一輪一處都没替換過，屏幕上照樣寫「撤回了剛纔
         // 那次替換」——撤掉的其實是讀者自己上一筆改動。按 `u` 的人正是慌了神的
         // 那個人，這一句話告訴他剛纔發生的是另一件事。
-        // Warning: **一處都沒撤回就別說撤回了**（2026-10-09）：那一批全是後來又改過的
+        // Warning: **一處都没撤回就別說撤回了**（2026-10-09）：那一批全是後來又改過的
         // 檔，說話的是那扇窗，不是這一行。
         self.status = match files {
             None | Some(0) => said,
@@ -2632,7 +2632,7 @@ impl Editor {
                 Some(root) => root.join(&rel),
                 None => rel,
             };
-            // **開之前先問它本來開着沒有**：本來就開着的那一份不是我們開的，走
+            // **開之前先問它本來開着没有**：本來就開着的那一份不是我們開的，走
             // 開的時候不許收走。
             let was_open = self.buffer_showing(&full).is_some();
             if let Err(err) = self.open_file(&full) {
@@ -2677,10 +2677,10 @@ impl Editor {
         // 「名單還算不算數」問的是 [`Editor::search_mark`]，而那裏頭帶着**當前是
         // 哪一份緩衝**——所以面板自己為了預覽打開另一個檔的那一下，被它自己讀成
         // 了「稿子動過了」：走到第二個檔的命中上，標題就從「找到 2 處」變成「按
-        // Enter 重新查找」，而一個字都沒改。做 `ye --grep … --open` 的時候撞上
+        // Enter 重新查找」，而一個字都没改。做 `ye --grep … --open` 的時候撞上
         // 的，互動那一邊一模一樣（`j` 走過去就變）。
         //
-        // 重新蓋一次戳是誠實的：這一下是面板自己做的，它知道自己什麼都沒改。
+        // 重新蓋一次戳是誠實的：這一下是面板自己做的，它知道自己什麼都没改。
         self.search.looked_at = Some(self.search_mark());
         true
     }
@@ -2708,11 +2708,11 @@ impl Editor {
     ) {
         // **那兩道閘護的是畫面那條線程，而這一趟不在它上面**（§5.93，2026-10-06）。
         // `Sieve::uncapped` 的文檔自己寫着理由：「走查跑在它上面，不封頂就是
-        // 凍住」。搬開之後理由就沒了——撞上的正是這個：命令行四處，進編輯器
+        // 凍住」。搬開之後理由就没了——撞上的正是這個：命令行四處，進編輯器
         // 只剩一兩處，差的就是那三到五秒。
         //
         // Warning: **只鬆走查這一邊。** 名單仍舊只留 `MOST`（500）條，那是另一格
-        // （`Search::uncapped`），說的是「名單是拿來走的，沒人走兩萬行」。
+        // （`Search::uncapped`），說的是「名單是拿來走的，没人走兩萬行」。
         sieve.uncapped = true;
         self.stop_searching();
         self.search_generation += 1;
@@ -2734,7 +2734,7 @@ impl Editor {
                 if mine.load(std::sync::atomic::Ordering::Relaxed) {
                     return false;
                 }
-                // 收的那一頭沒了（編輯器關了，或者這一趟被頂掉了）就收攤。
+                // 收的那一頭没了（編輯器關了，或者這一趟被頂掉了）就收攤。
                 say.send((generation, found)).is_ok()
             });
             let _ = say.send((generation, Found::Done { cut: walked.cut }));
@@ -2759,7 +2759,7 @@ impl Editor {
         self.searching.is_some()
     }
 
-    /// **這一趟走查什麼時候開跑的**，`None` ＝ 沒在跑。
+    /// **這一趟走查什麼時候開跑的**，`None` ＝ 没在跑。
     ///
     /// 面板那個轉圈拿它算第幾格（`spinner::frame`）。走查跑在旁邊，而主循環每
     /// 四十毫秒醒一次收結果（[`Editor::searching_due_in`]）——所以這一處的圈是
@@ -2770,7 +2770,7 @@ impl Editor {
 
     /// **走查走到哪了**：看過幾個檔，此刻在看哪一個（§5.101，2026-10-07）。
     ///
-    /// 路徑是相對於搜索的根的，畫的人自己決定不夠寬時從哪一頭摺。走查還沒開始
+    /// 路徑是相對於搜索的根的，畫的人自己決定不夠寬時從哪一頭摺。走查還没開始
     /// （或者剛從頭數起）的時候路徑是空的。
     pub fn search_progress(&self) -> (usize, String) {
         (self.search_progress.looked(), self.search_progress.at())
@@ -2788,7 +2788,7 @@ impl Editor {
 
     /// **收一批回來**，每一幀叫一次。
     ///
-    /// 回「名單變了沒有」，前端拿它決定要不要重畫。
+    /// 回「名單變了没有」，前端拿它決定要不要重畫。
     pub fn collect_search_results(&mut self) -> bool {
         let Some(one) = self.searching.as_ref() else {
             return false;
@@ -2828,7 +2828,7 @@ impl Editor {
         //
         // `ye -GO 詞` 答應的是「進去鍵就在第一處命中上」，而命中現在是一條一條
         // 流進來的：開面板那一刻名單是空的，站無可站。所以這件事挪到這裏——只在
-        // 還沒有人動過（停在第 0 行）而第 0 行又是個檔名的時候做，那一行上正文
+        // 還没有人動過（停在第 0 行）而第 0 行又是個檔名的時候做，那一行上正文
         // 那半本來就是空的，站着也看不見東西。
         if first_hit && self.search.field == Field::Results && self.search.selected == 0 {
             let at = self
@@ -2872,7 +2872,7 @@ struct Hunt<'a> {
 /// **一個檔看一遍**，命中逐條交出去。回 `false` ＝ 收攤。
 ///
 /// 從走查裏抽出來的（2026-10-07），因為並行那一條要在別的線程上叫它。裏面一個
-/// `self` 都沒有，拿的全是共享的引用——這正是它搬得動的原因。
+/// `self` 都没有，拿的全是共享的引用——這正是它搬得動的原因。
 fn look_in_one_file(
     hunt: &Hunt<'_>,
     path: &std::path::Path,
@@ -3242,7 +3242,7 @@ impl Look {
 
     /// **換上去的那一段**，`matched` 是換下來的那一段。
     ///
-    /// Warning: **`$1` 只有正則那一路認得。** 拼音和 模糊 沒有分組可以展開，那兩路換
+    /// Warning: **`$1` 只有正則那一路認得。** 拼音和 模糊 没有分組可以展開，那兩路換
     /// 的就是字面——而讀者在那兩種模式下也寫不出一個有分組的式子。
     pub(super) fn expand(&self, matched: &str, with: &str) -> String {
         let grown = match &self.how {
@@ -3265,7 +3265,7 @@ impl Look {
         }
     }
 
-    /// `caps.expand` 沒跑到的時候，自己把加倍的 `$` 還原回來。見 [`Look::doubled`]。
+    /// `caps.expand` 没跑到的時候，自己把加倍的 `$` 還原回來。見 [`Look::doubled`]。
     fn undoubled(&self, with: &str) -> String {
         match self.doubled {
             true => with.replace("$$", "$"),
@@ -3313,7 +3313,7 @@ fn byte_cuts(text: &str) -> Vec<usize> {
 /// 三檔，同 VS Code 的 `AB`：原文**全大寫**就全大寫、**首字母大寫**就首字母大
 /// 寫、別的照打的寫。判的是換下來那一段，不是整行。
 ///
-/// Warning: **沒有一個字母就原樣交回去。** 漢字沒有大小寫，所以中文那一路走到這裏
+/// Warning: **没有一個字母就原樣交回去。** 漢字没有大小寫，所以中文那一路走到這裏
 /// 什麼都不做——這個開關對它是空的，而不是會出怪事。
 fn follow_the_case_of(was: &str, now: &str) -> String {
     let letters: Vec<char> = was.chars().filter(|c| c.is_alphabetic()).collect();

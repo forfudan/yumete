@@ -390,7 +390,7 @@ impl Editor {
 /// with the count of what the parser could not read.
 ///
 /// **The count is of the prose only.** A `<ruby>` inside a fence was never
-/// going to be rewritten, and reporting it as 「還有幾處沒讀懂」 would send the
+/// going to be rewritten, and reporting it as 「還有幾處没讀懂」 would send the
 /// writer hunting for a fault that is an example.
 ///
 /// Runs, not lines: a group may be written across a line break, and cutting

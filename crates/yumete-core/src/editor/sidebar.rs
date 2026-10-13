@@ -48,7 +48,7 @@ impl Editor {
             }
             Some(_) => {}
             // Warning: **只有這一格自己正拿着鍵的時候，鍵纔跟過去。** 從前的條件是
-            // 「焦點在 `was` 那一側」——`Layer` 在的時候那等於「在下層」，沒了
+            // 「焦點在 `was` 那一側」——`Layer` 在的時候那等於「在下層」，没了
             // 之後它也可能是**那一側的常駐面板**。於是
             // `:panel-dictionary left` 會把鍵從右邊的百科裏拽走
             // （2026-09-23 審出來的）。
@@ -331,7 +331,7 @@ impl Editor {
     /// 必須是同一份。分成三份各自維護的代價已經付過一次：常駐面板和搜索面板都
     /// 有 `q`，臨時層漏了，於是 `空格 d` 打開的字典**關不掉**——`q`、`Esc`、`j`
     /// 全被那一句 `_ => {}` 吃掉，唯一的出路是 `C-w` 再移動光標，兩步，而且提示
-    /// 行一個字都沒說。
+    /// 行一個字都没說。
     ///
     /// Tried **last**, so a panel's own meaning for a key still wins: the
     /// search panel spends `Space` on a switch when the keys are on one.
@@ -350,7 +350,7 @@ impl Editor {
             // **`q` 把鍵還給正文，面板留着**（2026-10-10 定）。
             //
             // 從前它是「關掉」，而關掉已經有 `C-w q` 了——同一件事兩個鍵，而「讀完
-            // 了，手回去寫字」這件每天做幾十次的事反倒沒有鍵：`空格 w` 是「換一個
+            // 了，手回去寫字」這件每天做幾十次的事反倒没有鍵：`空格 w` 是「換一個
             // 區域」，不是「回正文」。原話：「q 就重复了。建议 q 改成返回编辑区但
             // 不关闭搜索面板」。
             Key::Char('q') => self.panel_focus = None,
@@ -486,7 +486,7 @@ impl Editor {
         // 一支問——規矩只加在一邊，正是這個倉反覆在拆的那一族。
         //
         // 擺在「每一幀報一次窗口」這一處，三種情形一次蓋住：窄窗口下按 `空格 w E`、
-        // 開機就是窄的（`window` 出廠是 `u16::MAX`，開面板那一刻還沒人報過，所以
+        // 開機就是窄的（`window` 出廠是 `u16::MAX`，開面板那一刻還没人報過，所以
         // 開面板那裏問永遠問不住）、以及**把終端拖窄**的那一刻。
         if !self.room_for_a_panel() && self.panel_focus.is_some() {
             self.panel_focus = None;
@@ -534,7 +534,7 @@ impl Editor {
     /// 向走過去，`s` 切一刀，`q` 關掉，`o` 只留這一個。
     ///
     /// Warning: **`e`/`i` 是這一頭自己加的**：開關左右邊欄而**鍵不過去**。
-    /// helix 沒有邊欄，所以沒有這一對；原話：「_we / _wi for toggling left
+    /// helix 没有邊欄，所以没有這一對；原話：「_we / _wi for toggling left
     /// and right sidebars……will not move focus to the sidebar」。大寫那一對
     /// （`E`/`I`）是開了就走進去，而且**只開不關**——「it does not close the
     /// sidebar as _we/_wi will do this」。
@@ -553,13 +553,13 @@ impl Editor {
             // 按方向走。四個區域：左欄、正文、副編輯區、右欄。
             //
             // Warning: **走，不開**（2026-10-02 報的）。這四個從前和 `E`/`I`/
-            // `s` 共用 `go_to_region`，而那一支「沒有就開一個」——於是 `空格 w j`
-            // 在只有一個編輯區的時候**切出一個新的**，`空格 w h` 在沒開左欄的時候
+            // `s` 共用 `go_to_region`，而那一支「没有就開一個」——於是 `空格 w j`
+            // 在只有一個編輯區的時候**切出一個新的**，`空格 w h` 在没開左欄的時候
             // 把左欄開出來。原話：「_w + h/j/k/l 不是在可见的窗口里导航，而是会打
             // 开新的窗口。这个是不对的。」選單自己早就分清楚了：`h j k l` 是「按
             // 方向走」，`E I` 是「進左右欄」，`s` 是「切成兩個編輯區」。
             //
-            // 那個方向沒東西就**什麼都不做，也不說話**。原話：「你 j 到最下面一行
+            // 那個方向没東西就**什麼都不做，也不說話**。原話：「你 j 到最下面一行
             // 继续按 j 需要提示『没有更多行』吗？」——走到頭不是拒絕。
             Key::Char('h') | Key::Left => self.walk_to_region(3),
             Key::Char('l') | Key::Right => self.walk_to_region(4),
@@ -572,7 +572,7 @@ impl Editor {
             Key::Char('E') => self.go_to_region(3),
             Key::Char('I') => self.go_to_region(4),
             // 切一刀：眼下只有上下兩個編輯區，所以「切出來」和「走到第二個」
-            // 是同一件事（`go_to_region` 沒有就開一個）。Warning: 往後真有第三
+            // 是同一件事（`go_to_region` 没有就開一個）。Warning: 往後真有第三
             // 個編輯區的時候這兩件事要分家——`s` 是「再切一刀」，`j` 是「走下
             // 去」。原話「We will expand it to more possibilities in
             // future」指的就是這裏。
@@ -660,8 +660,8 @@ impl Editor {
 
     /// **按方向走到第 `nth` 個區域——只走到開着的那些。**
     ///
-    /// 和 [`Self::go_to_region`] 的分別就是這一句：那一支沒有就開一個（`E`、
-    /// `I`、`s` 要的正是這個），這一支沒有就不動。
+    /// 和 [`Self::go_to_region`] 的分別就是這一句：那一支没有就開一個（`E`、
+    /// `I`、`s` 要的正是這個），這一支没有就不動。
     fn walk_to_region(&mut self, nth: u32) {
         if self.region_open(nth) {
             self.go_to_region(nth);
@@ -673,7 +673,7 @@ impl Editor {
         match nth {
             1 | 2 => {
                 let want = usize::from(nth == 2);
-                // 沒有第二個工作區就開一個，開在站着的地方（`open_split` 的話）。
+                // 没有第二個工作區就開一個，開在站着的地方（`open_split` 的話）。
                 if want == 1 && self.other_pane().is_none() {
                     let at = self.sel.head();
                     let caption = self.current_buffer().display_name().to_string();
@@ -695,7 +695,7 @@ impl Editor {
                     //
                     // Warning: **從前這裏自己又找了一遍**（`View::ALL` 裏第一個歸這
                     // 一側的），於是它繞過了兩件 `side_view` 知道的事：這一份稿子
-                    // 容不容得下那一扇（散文沒有文檔），以及右邊那一格此刻「應該」
+                    // 容不容得下那一扇（散文没有文檔），以及右邊那一格此刻「應該」
                     // 擺文檔還是診斷。報上來的就是這個：在一行有警告的地方按
                     // `空格 4`，開出來的是**空的文檔面板**。
                     if self.views_on(side).is_empty() && self.side_view(side) == crate::sidebar::View::Explorer
@@ -789,7 +789,7 @@ impl Editor {
             // rows of a tree (#419).
             View::Search => return,
             // Drawn from the cursor every frame, not from rows (#287, #426):
-            // 五種內容各有各的來源，`info_rows` 現算，這裏沒有一份行要存。
+            // 五種內容各有各的來源，`info_rows` 現算，這裏没有一份行要存。
             View::Info => return,
         };
         if let Some(panel) = self.panel_mut(side) {
@@ -1052,8 +1052,8 @@ impl Editor {
     /// 是現算的純函數。
     /// **這一段改動：改之前那幾行，然後現在這幾行**（`空格 x`/`X`，2026-10-11）。
     ///
-    /// 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。純添的那一段沒有
-    /// 上半，剪口那兩種沒有下半——那正是它們和「改過」的分別。
+    /// 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。純添的那一段没有
+    /// 上半，剪口那兩種没有下半——那正是它們和「改過」的分別。
     pub(super) fn change_rows(&self) -> Vec<crate::sidebar::Row> {
         let Some(run) = self.change_here() else { return Vec::new() };
         use crate::sidebar::Wash;
@@ -1247,7 +1247,7 @@ impl Editor {
         self.refresh_sidebar();
     }
 
-    /// **這一則字典該不該浮在光標旁邊**——那一格沒開，而此刻擺的正是字典。
+    /// **這一則字典該不該浮在光標旁邊**——那一格没開，而此刻擺的正是字典。
     pub fn dictionary_afloat(&self) -> Option<(&str, Option<&[Gloss]>)> {
         (self.info_afloat() == Some(crate::sidebar::Info::Dictionary))
             .then(|| self.dictionary())
@@ -1271,7 +1271,7 @@ impl Editor {
     /// A pane that takes the keys has to say how to give them back, in the
     /// place a reader already looks for what is going on.
     ///
-    /// Warning: **百科那一頁是一段文章**，沒有行可以 `l` 進去、也沒有行可以 `h` 收
+    /// Warning: **百科那一頁是一段文章**，没有行可以 `l` 進去、也没有行可以 `h` 收
     /// 起，`R` 重讀的是一張單子而不是一條詞條——這一行從前照樣寫着那三個鍵
     /// （2026-09-23 審出來的：「拿走鍵的那一半有義務」說清楚）。
     pub fn sidebar_keys(&self) -> String {
@@ -1486,12 +1486,12 @@ impl Editor {
             }
             // A clipboard entry is already the whole of what it is.
             // **寄存器那一扇也有預覽**（2026-10-11 報的）。從前這裏一律回 `None`，
-            // 而畫的那一支「有沒有東西都把框畫出來」——於是右邊那半扇**永遠**是
+            // 而畫的那一支「有没有東西都把框畫出來」——於是右邊那半扇**永遠**是
             // 一個空框。名單上那一行只容得下一行（`one_line`），而取過的東西常
             // 常是好幾行：要看全的正是這裏。
             //
-            // Warning: **系統剪貼板那一條照舊沒有。** 只有前端讀得了系統剪貼板，而
-            // 高亮每挪一格就去讀一次是一件有副作用的事。核心手上沒有的東西，這
+            // Warning: **系統剪貼板那一條照舊没有。** 只有前端讀得了系統剪貼板，而
+            // 高亮每挪一格就去讀一次是一件有副作用的事。核心手上没有的東西，這
             // 一支不猜。
             crate::picker::Item::Paste(Some(which), _) => {
                 let (name, text) = self.paste_menu().into_iter().nth(which)?;
@@ -1522,15 +1522,15 @@ impl Editor {
     fn choose_from_picker(&mut self) {
         let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
         // Warning: **篩不出東西的時候 `Enter` 不關窗**（2026-10-02 一輪黑盒審查報來
-        // 的）。從前它照樣關掉，於是打錯一個字母按了 `Enter`，面板沒了、打過的
-        // 那幾個字也沒了，人回到正文裏看着一句「沒有符合的」——要重開一次、重打
+        // 的）。從前它照樣關掉，於是打錯一個字母按了 `Enter`，面板没了、打過的
+        // 那幾個字也没了，人回到正文裏看着一句「没有符合的」——要重開一次、重打
         // 一遍。helix 的挑選器在這一步什麼都不做。那句話照說，窗留着，退一格就
         // 改得動。
         if chosen.is_none() {
             self.status = say!("picker.nothing-matched");
             return;
         }
-        // **根要在關掉挑選器之前取**：關掉就連根一起沒了。
+        // **根要在關掉挑選器之前取**：關掉就連根一起没了。
         let root = self.picker.as_ref().and_then(|p| p.root.clone());
         self.close_picker();
         match chosen {
@@ -1685,7 +1685,7 @@ impl Editor {
     /// 器已經把 `C-t` 用在切預覽上了（它那一扇只用 Alt 做 `A-Enter`）。
     ///
     /// 打過的字留着：重走完一趟，那幾個字一個一個再 `push` 回去（`open_file_picker_with`）。
-    /// 不走磁碟的那幾扇（緩衝區、百科…）沒有篩子，這一下什麼都不做。
+    /// 不走磁碟的那幾扇（緩衝區、百科…）没有篩子，這一下什麼都不做。
     fn cycle_what_the_picker_skips(&mut self) {
         let Some(picker) = self.picker.as_ref() else { return };
         let (Some(root), Some(sieve)) = (picker.root.clone(), picker.sieve.clone()) else {
@@ -1712,7 +1712,7 @@ impl Editor {
     /// 護的是畫面那條線程，而這一趟已經不在它上面了——同搜索面板 2026-10-06 搬走
     /// 的那一趟（§5.93）。停得下它的是 `Filling::stop`：面板一關就撥。
     ///
-    /// Warning: **「這裏沒有檔」要等走完纔說得出來。** 從前名單一次建好，空的就不開面
+    /// Warning: **「這裏没有檔」要等走完纔說得出來。** 從前名單一次建好，空的就不開面
     /// 板；現在開面板的那一刻還不知道。所以面板照開（helix 也是開一扇空的），那
     /// 句話挪到收完最後一批的時候說（[`Self::collect_picker_items`]）。
     fn open_file_picker_in(&mut self, root: PathBuf, sieve: crate::editor::Sieve) {
@@ -1766,7 +1766,7 @@ impl Editor {
         self.filling.is_some()
     }
 
-    /// 這一趟什麼時候開跑的，`None` ＝ 沒在跑（轉圈那一支照它算第幾格）。
+    /// 這一趟什麼時候開跑的，`None` ＝ 没在跑（轉圈那一支照它算第幾格）。
     pub fn filling_since(&self) -> Option<std::time::Instant> {
         self.filling.as_ref().map(|one| one.since)
     }
@@ -1776,7 +1776,7 @@ impl Editor {
         self.filling.as_ref().map(|_| std::time::Duration::from_millis(40))
     }
 
-    /// **收一批回來**，每一幀叫一次。回「名單變了沒有」。
+    /// **收一批回來**，每一幀叫一次。回「名單變了没有」。
     pub fn collect_picker_items(&mut self) -> bool {
         let Some(one) = self.filling.as_ref() else { return false };
         let mut got: Vec<(PathBuf, String)> = Vec::new();
@@ -1817,14 +1817,14 @@ impl Editor {
         if let Some(picker) = self.picker.as_mut() {
             picker.take_more(more);
         }
-        // 走完了而一條都沒有——那句話從前在開面板之前說，現在只有這時候說得出來。
+        // 走完了而一條都没有——那句話從前在開面板之前說，現在只有這時候說得出來。
         if done && self.picker.as_ref().is_some_and(|p| p.total() == 0) {
             self.status = say!("picker.no-files-here");
         }
         moved || done
     }
 
-    /// 等背景那一趟走完，邊等邊收。給沒有主循環的呼叫方用（同
+    /// 等背景那一趟走完，邊等邊收。給没有主循環的呼叫方用（同
     /// `wait_for_the_search`）。
     pub fn wait_for_the_picker(&mut self) {
         while self.still_filling_the_picker() {
@@ -1873,7 +1873,7 @@ impl Editor {
     ///
     /// Warning: **從前有兩層**（2026-09-17 到 2026-10-08）：開門在「列表」那一層，`jk`
     /// 走單子、`i` 或 `/` 進打字、`Esc` 回列表、再一下纔出門。四個編輯器對過一遍
-    /// ——helix、VS Code、Zed、nvim **一個都沒有挑選器裏的模式**，四個都是開門就
+    /// ——helix、VS Code、Zed、nvim **一個都没有挑選器裏的模式**，四個都是開門就
     /// 打字、一下 `Esc` 關掉（helix 的 `helix-term/src/ui/picker.rs:1090-1108` 把
     /// `Tab`/`Down`/`ctrl-n`、`shift-Tab`/`Up`/`ctrl-p` 和
     /// `key!(Esc) | ctrl!('c') => return close_fn(self)` 寫在同一個 match 裏，配不
@@ -1887,7 +1887,7 @@ impl Editor {
             return;
         };
         match key {
-            // **一下就關。** 沒有層可退回去了。
+            // **一下就關。** 没有層可退回去了。
             Key::Esc => self.close_picker(),
             // Warning: **框空着的時候退格什麼都不做**。從前它換層（`i` 是怎麼進來的，
             // 退到頭就該退回去）；只剩一層之後那個去處不存在，而「退格到頭就關

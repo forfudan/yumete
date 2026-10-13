@@ -25,8 +25,8 @@ impl Editor {
     ///
     /// 量過三家：helix 的 `/` 是智能大小寫（`search.smart-case` 出廠 `true`，書裏的
     /// 原話是「case-insensitive unless pattern contains upper case characters」，和
-    /// 這一頭逐字相同），而 **helix 根本沒有 `:s`**；vim 的 `/` 與 `:s` 兩個都分大小
-    /// 寫。所以 `:s` 這一格沒有 helix 的答案可抄，而 vim 的答案是「分」。
+    /// 這一頭逐字相同），而 **helix 根本没有 `:s`**；vim 的 `/` 與 `:s` 兩個都分大小
+    /// 寫。所以 `:s` 這一格没有 helix 的答案可抄，而 vim 的答案是「分」。
     ///
     /// 放寬那一次要在 `:s/…/…/i` 裏明說。
     pub(super) fn compile_exactly(&self, pattern: &str) -> Result<Regex, String> {
@@ -167,7 +167,7 @@ impl Editor {
                 // （`default.rs:359-360`），而 `/` 的 `search` 在 select 下走
                 // `Movement::Extend`、**模式不變**（`commands.rs` 的 `search_impl`）。
                 // 從前這裏無條件 `self.extend = false`，於是 `v` 之後按一下 `/`
-                // 就掉回 Normal，選區也沒了——實測 `v w w Esc` 之後 `d` 只刪一個
+                // 就掉回 Normal，選區也没了——實測 `v w w Esc` 之後 `d` 只刪一個
                 // 空格。錨點留着，頭走到這一處**去的那一頭**：往前是最後一個字，
                 // 往回是第一個字。
                 match self.extend {
@@ -309,7 +309,7 @@ impl Editor {
         }
         // Warning: **配中了不等於改了**（2026-10-09 審出來的）。零寬的式子（` *$`、
         // `x*`）每一行都配得中，而換上去的和換下來的一模一樣；從前照樣記一個撤銷點、
-        // 掛上 `[+]`、`:w` 真的寫一遍盤。報的處數不動（vim 也報配中幾處），只是檔沒
+        // 掛上 `[+]`、`:w` 真的寫一遍盤。報的處數不動（vim 也報配中幾處），只是檔没
         // 變就什麽都不做。
         if count > 0 && rebuilt != text {
             self.snapshot();
@@ -332,7 +332,7 @@ impl Editor {
     /// 而不是 `$`。對調本身照舊由 [`Self::substitution_rows`] 做。
     ///
     /// 行號越界的那一種不在這裏答——那一支是 [`Self::substitution_rows`]，它報
-    /// 「沒有第 N 行」，而一個不存在的行談不上方向。
+    /// 「没有第 N 行」，而一個不存在的行談不上方向。
     pub(super) fn a_backwards_range(&self, rows: &crate::command::Rows) -> Option<(usize, usize)> {
         use crate::command::{Bound, Rows};
         let Rows::Span(a, b) = rows else { return None };
@@ -352,7 +352,7 @@ impl Editor {
         use crate::command::{Bound, Rows};
         let rope = self.current_buffer().rope();
         let last_line = motion::last_line(rope);
-        // Warning: **沒有的那一行不許悄悄夾到末行**（2026-10-09 審出來的）。從前寫的是
+        // Warning: **没有的那一行不許悄悄夾到末行**（2026-10-09 審出來的）。從前寫的是
         // `n.saturating_sub(1).min(last_line)`，於是三行的檔上 `:99s/a/X/` 改的是**第
         // 三行**，還報「換了 1 處」——把 `:9s` 打成 `:91s` 就是這樣改掉了一章的結尾。
         // `:0s` 同理，它改的是第一行。vim 兩種都報 `E16: Invalid range`，一個字不動。

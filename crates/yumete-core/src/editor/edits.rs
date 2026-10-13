@@ -322,8 +322,8 @@ impl Editor {
     ///
     /// Warning: **只在代碼檔裏**（`Syntax::Code`）。報的那一條就是代碼的
     /// （「In `go file`, pressing enter …」），而散文這一頭本來就有自己的首行縮進
-    /// （`paragraph_indent`，那是畫出來的，檔案裏沒有空白）——給一本小說自動帶
-    /// 縮進，是往稿子裏寫作者沒打的空白。Markdown 的列表另有一條路
+    /// （`paragraph_indent`，那是畫出來的，檔案裏没有空白）——給一本小說自動帶
+    /// 縮進，是往稿子裏寫作者没打的空白。Markdown 的列表另有一條路
     /// （[`Self::continue_the_list`]），它在這一支之前就答完了。
     ///
     /// 全角空格（U+3000）也算空白：它在代碼註釋裏真出現過。
@@ -428,7 +428,7 @@ impl Editor {
     /// Warning: **每一段選區各插一條，而且不碰選區**（2026-10-06 夜審報的）。helix 的
     /// `add_newline_impl` 對每一段各做一次、吃計數、一段選區都不動；這裏從前只讀
     /// 主選區的頭，末尾還把選區塌成一個光標——函數自己的話是「不動光標」，頭確實
-    /// 沒動，錨動了。
+    /// 没動，錨動了。
     pub(super) fn add_blank_line(&mut self, below: bool, count: usize) {
         if self.refuse_readonly() {
             return;
@@ -532,7 +532,7 @@ impl Editor {
         self.refresh_goal_column();
     }
 
-    /// 覆寫模式下退格：往回一格，把 `was` 放回去（`None` 是那裏本來就沒有字）。
+    /// 覆寫模式下退格：往回一格，把 `was` 放回去（`None` 是那裏本來就没有字）。
     pub(super) fn put_back_what_was_overwritten(&mut self, was: Option<char>) {
         let at = self.sel.head();
         let rope = self.current_buffer().rope();
@@ -624,7 +624,7 @@ impl Editor {
     /// **刪到行尾**（Insert 裏的 `C-k`，2026-09-28）。
     ///
     /// `C-u` 是它的另一半，早就有了。這一對在 readline 裏是一起的，而一個只做了一半的
-    /// 對子比兩個都沒有更難記。
+    /// 對子比兩個都没有更難記。
     ///
     /// Warning: **不跨行**：光標已經在行尾的時候什麼都不做，不去吃那個換行。readline 的
     /// `C-k` 在行尾也不吃下一行。
@@ -743,7 +743,7 @@ impl Editor {
         // 一口吃兩行（2026-10-11，`一\n二\n三\n四\n` 上的 `xxx` 選了四行）。
         let covers_whole_lines = start == sel_start && last_char == line_tail;
         // 已經選滿了就往下再吃一行（連按 `x` 一次多一行），否則就是「把這一行
-        // 整個選上」。Warning: **兩個 `match` 加起來永遠是 `+1` 的寫法等於沒寫**，
+        // 整個選上」。Warning: **兩個 `match` 加起來永遠是 `+1` 的寫法等於没寫**，
         // 2026-10-11 第一版就是那樣，trace 打出 `covers=true next=1` 纔看出來。
         let next_line = match covers_whole_lines {
             true => cursor_line + 2,
@@ -889,7 +889,7 @@ impl Editor {
     /// 原話：「翻页会自动把 cursor 挪到屏幕底部；再按 ctrl+d 又回到中间」。
     /// helix 的 `scroll()` 是**先把視窗挪半頁、再把光標同步過去**
     /// （`commands.rs:1931`，`page_cursor_half_down`），vim 的 `CTRL-D` 一樣：
-    /// 「the cursor stays in the same screen line」。這裏沒有「視窗位置」這個
+    /// 「the cursor stays in the same screen line」。這裏没有「視窗位置」這個
     /// 概念（§5.98），同一件事的說法是**光標坐在第幾行不變**。
     pub(super) fn move_page(&mut self, count: usize, back: bool, fraction: f64) {
         let vertical = self.layout() == Layout::Vertical;
@@ -914,8 +914,8 @@ impl Editor {
             }
             moved += 1;
         }
-        // Warning: **一步都沒挪就別釘**（到頭了）：釘住反而會把視窗拉過來，而使用者
-        // 看到的是「按了沒反應，頁面卻動了一下」。
+        // Warning: **一步都没挪就別釘**（到頭了）：釘住反而會把視窗拉過來，而使用者
+        // 看到的是「按了没反應，頁面卻動了一下」。
         if moved > 0 {
             if let Some(row) = sat_at {
                 self.aim = Some(crate::editor::Aim::Row(row));
@@ -1111,7 +1111,7 @@ impl Editor {
             // 第二段貼「2」——編號列表那個用例就是這麼解開的。
             //
             // Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
-            // 說得通的，而貼一個空字符串看起來像鍵沒按上。
+            // 說得通的，而貼一個空字符串看起來像鍵没按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
             Some(name) => match (self.registers.get(&name), self.edit_nth) {
                 (Some(parts), Some(nth)) if parts.len() > 1 => {

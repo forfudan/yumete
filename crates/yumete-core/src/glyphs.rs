@@ -8,7 +8,7 @@
 //! [`crate::convert`] 開頭那一段說得很明白：簡繁**轉換**要在 發/髮 之間挑一個，
 //! 那需要詞典和分詞，所以它喊 opencc。
 //!
-//! **搜索問的是另一個問題**：「這兩個字有沒有可能是同一個字？」——不需要上下文。
+//! **搜索問的是另一個問題**：「這兩個字有没有可能是同一個字？」——不需要上下文。
 //! 搜「头发」順帶命中一條「頭發」在單子上只是多一行，而 `:convert` 把稿子裏的
 //! 「头发」轉成「頭發」是毀稿。**代價差着好幾個數量級**，所以這裏一張字表就夠。
 //!
@@ -28,13 +28,13 @@
 //!
 //! 含混的那個字放寬，精確的那個字保持精確。誰要是改成傳遞閉包就毀了它。
 //!
-//! ## 為什麼熱路徑上沒有東西要優化
+//! ## 為什麼熱路徑上没有東西要優化
 //!
 //! **折疊發生在查詢上，不在書上。** 每敲一個鍵的工作量是「查詢有幾個字」次查表，
 //! 掃描仍舊交給正則引擎。查詢就幾個字，和書多大無關。唯一的開銷是把這張表讀進
 //! 內存一次——`include_str!` 編進二進制，首次用到時解析。
 //!
-//! Warning: **編進二進制而不是讀數據目錄**：碼表沒裝的機器上搜索照樣得能用。
+//! Warning: **編進二進制而不是讀數據目錄**：碼表没裝的機器上搜索照樣得能用。
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -60,14 +60,14 @@ fn table() -> &'static HashMap<char, &'static str> {
     })
 }
 
-/// 這個字可以是的所有字形，**自己排在最前**。沒有別的寫法就只有它自己。
+/// 這個字可以是的所有字形，**自己排在最前**。没有別的寫法就只有它自己。
 pub fn shapes(ch: char) -> &'static str {
     table().get(&ch).copied().unwrap_or("")
 }
 
 /// **把一串要照字面找的字改寫成正則**，每個字換成它的字形集。
 ///
-/// 「書齋」→ `[書书][齋斋]`。沒有別的寫法的字原樣轉義過去，所以這一支對純西文的
+/// 「書齋」→ `[書书][齋斋]`。没有別的寫法的字原樣轉義過去，所以這一支對純西文的
 /// 查詢什麼都不做。
 ///
 /// Warning: **只給「照字面」那一條路用。** 正則開着的時候整串改寫會把 `.`、`*`、`[`
@@ -149,7 +149,7 @@ pub fn widen_pattern(pattern: &str) -> Option<String> {
     let mut out = String::with_capacity(pattern.len() * 2);
     let mut at = 0usize;
     for (from, to, ch) in spots {
-        // Warning: **這一道其實從來沒攔下過什麼**（2026-10-02 審出來的）。類裏的字面
+        // Warning: **這一道其實從來没攔下過什麼**（2026-10-02 審出來的）。類裏的字面
         // 字不是 `Ast` 節點，`regex-syntax` 的訪問器只從
         // `visit_class_set_item_*` 那一條路交出它們，所以兩個鉤子收不到同一個
         // 字——十六種刁鑽寫法逐個instrument過，`dupe=false overlap=false`。
@@ -190,14 +190,14 @@ mod tests {
             (r"\d書", true),
             (r"\p{Han}書", true),
             ("發呆", true),
-            // 沒有漢字就一個字節都不改。
+            // 没有漢字就一個字節都不改。
             ("a.b", false),
         ] {
             let grown = widen_pattern(pattern).expect("解析得了");
             let re = regex::Regex::new(&grown).expect("編譯得過：{grown}");
             assert_eq!(re.is_match(hay), want, "{pattern} → {grown}");
         }
-        assert_eq!(widen_pattern("a.b").as_deref(), Some("a.b"), "沒有漢字就原樣");
+        assert_eq!(widen_pattern("a.b").as_deref(), Some("a.b"), "没有漢字就原樣");
         assert_eq!(widen_pattern("書").as_deref(), Some("[書书]"));
         // Warning: **類裏也折，否定的類裏也折**——於是 `[^書]` **配得更少**：`书`
         // 從前配得上，開了中文匹配反而配不上（2026-10-02 定：照舊）。理由在

@@ -73,7 +73,7 @@ impl Editor {
             // Warning: **問的是「這一格是信息嗎」，不是「它此刻有東西嗎」**
             // （2026-09-30 看圖看出來的）。空着的時候問後者會落到下面那一行通用
             // 的邊欄提示上——而那一行寫着 `Tab 換視圖`、不寫 `PgUp PgDn`，於是
-            // 一個空面板教的是一套它沒有的鍵。標題同理：空着寫「信息」。
+            // 一個空面板教的是一套它没有的鍵。標題同理：空着寫「信息」。
             if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info) {
                 let what = match self.info_in_this_sidebar(side) {
                     Some(one) => crate::messages::say(one.tag(), &[]),
@@ -93,7 +93,7 @@ impl Editor {
                         // `j k J K g G`——只寫 `j k` 是漏報。
                         ("j k J K g G".into(), walk),
                         // Warning: **`w` 也要寫上**（2026-09-29 報的：「不仅没有提示
-                        // 而且 w 无效」）。兩件事一起壞的：這一行沒說它，而它
+                        // 而且 w 无效」）。兩件事一起壞的：這一行没說它，而它
                         // 本來也真的不管用（見 `on_info_key`）。
                         ("w".into(), say!("hint.sidebar.width")),
                         ("q".into(), say!("hint.to-the-text")),
@@ -128,7 +128,7 @@ impl Editor {
         // 鍵寫在自己的腳注上、命令行那一行空着——騰出來的那一行歸名單。
         //
         // **一扇挑選器只有一行提示**（2026-10-08 定）。從前是兩行、跟着層換，而層
-        // 沒有了。次序裏移動那一格把 `Tab`/`S-Tab` 寫在前面——原話：「这两个其实
+        // 没有了。次序裏移動那一格把 `Tab`/`S-Tab` 寫在前面——原話：「这两个其实
         // 更加顺手」。
         if let Some(picker) = self.picker() {
             let title = picker.title.clone();
@@ -136,8 +136,8 @@ impl Editor {
                 ("Enter".into(), say!("hint.picker.open")),
                 ("Tab S-Tab ↑ ↓".into(), say!("hint.sidebar.move")),
             ];
-            // **跳過哪些，只在走磁碟那幾扇寫**。緩衝區、百科、粘貼那幾扇沒有篩子，
-            // `A-h` 在那裏什麼都不做——沒綁的鍵不許寫進提示行。
+            // **跳過哪些，只在走磁碟那幾扇寫**。緩衝區、百科、粘貼那幾扇没有篩子，
+            // `A-h` 在那裏什麼都不做——没綁的鍵不許寫進提示行。
             if let Some(sieve) = picker.sieve.as_ref() {
                 let skipping = match (sieve.hidden, sieve.ignored) {
                     (false, false) => say!("hint.picker.skip-hidden-and-ignored"),
@@ -180,7 +180,7 @@ impl Editor {
                 // 的提示。因此如果用户按了 r，也不需要任何提示」，`R` 同）。
                 //
                 // Warning: 從前它們跟着「勾了替換」一起出現，於是站在搜索框上也寫着
-                // `r 換這一處`——按下去只換來一句解釋為什麽沒反應。鍵不在那裏
+                // `r 換這一處`——按下去只換來一句解釋為什麽没反應。鍵不在那裏
                 // 的時候就別說它在。
                 //
                 // Warning: **`u 撤銷` 一個字都不寫**（同日定：「理論上用戶是知道 u 是
@@ -208,7 +208,7 @@ impl Editor {
                 // Warning: **第七行只有走磁碟的範圍下纔畫**（2026-10-02 查出來的）。這
                 // 一行從前無條件寫着 `1–7`，而本文件和緩衝區那兩檔只有六行——按
                 // 下去的 `7` 什麼都不做也什麼都不說，而屏幕上寫着它管用。一個寫在
-                // 屏幕上、按下去沒反應的鍵，讀者只會以為自己記錯了（§5.12.39
+                // 屏幕上、按下去没反應的鍵，讀者只會以為自己記錯了（§5.12.39
                 // 那一族）。
                 let numbers = match self.search().on_disk() {
                     true => "1–7",
@@ -248,7 +248,7 @@ impl Editor {
                 _ => say!("hint.sidebar.move"),
             };
             // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，
-            // 另外四個管用卻沒人知道（2026-09-23 審出來的）。
+            // 另外四個管用卻没人知道（2026-09-23 審出來的）。
             return Hint::Keys(say!("hint.sidebar"), vec![
                     ("j k J K g G".into(), walking),
                     ("Tab".into(), say!("hint.sidebar.other-view")),
@@ -353,7 +353,7 @@ impl Editor {
         // 空了、`g` 那扇菜單也收了——而這兩個鍵恰恰是**還要再打幾個字母才算完**
         // 的。屏幕上一個字都不說話，人以為自己回到了 Normal，照 Normal 的習慣按
         // 鍵。原話：「我以为我现在在 normal 模式，但其实 yumete 是在等我打拼
-        // 音。這其實有些危險的。」`gw` 沒有這一族：它一按下去標籤就滿屏幕都是。
+        // 音。這其實有些危險的。」`gw` 没有這一族：它一按下去標籤就滿屏幕都是。
         //
         // Warning: **說的是一句話，不是再畫一遍 `g` 那扇菜單。** 做過那一版，當場
         // 被否：菜單上那些鍵這時候一個都按不了，而且 `gu` 的候選框一開，兩扇浮窗
@@ -515,7 +515,7 @@ impl Editor {
             // 與 `"` 共用 a–z 這一套名字卻是兩本帳：`"a` 裝的是一段話，`' a` 記的
             // 是一個地方。
             //
-            // Warning: **一個都沒記過的時候也要畫出一行來。** 空的 `Body::Keys` 畫不出
+            // Warning: **一個都没記過的時候也要畫出一行來。** 空的 `Body::Keys` 畫不出
             // 框（`panel.rs` 直接回 `None`），而按了 `'` 屏幕上什麽都不出，讀起來
             // 就是「這個鍵壞了」。
             Pending::Recall => {

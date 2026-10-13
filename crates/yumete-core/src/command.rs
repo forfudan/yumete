@@ -185,7 +185,7 @@ pub enum Command {
     GotoLine(usize),
     /// `:recover` — **問要不要用那一份草稿**（Feature #79）。
     ///
-    /// Warning: **沒有 `:recover!` 了**（2026-10-02 定）。它從前是「不問，直接把
+    /// Warning: **没有 `:recover!` 了**（2026-10-02 定）。它從前是「不問，直接把
     /// 草稿刪掉」，而刪草稿這件事面板裏本來就有一格——原話：「recover! 這個命
     /// 令不需要了，因為如果用戶想做的話，應該是在之前按 d」。留着它就是在「刪掉
     /// 草稿之前一定看得見那三個選項」這條規矩上開一個後門。
@@ -242,7 +242,7 @@ pub enum Command {
     /// `:vertical` / `:horizontal` — 把這一頁轉過去（Feature #61）。
     ///
     /// **一件事一種說法**（2026-10-12 定）：從前是 `:layout` 的兩個參數，加上一
-    /// 個不帶參數的 `:layout` 互換；現在兩個方向各自一條，互換那一條沒了。
+    /// 個不帶參數的 `:layout` 互換；現在兩個方向各自一條，互換那一條没了。
     SetLayout(Layout),
     /// `:vertical-keys [logical|visual]` — 竪排時 `hjkl` 走行文還是走版面。
     /// `None` 是互換。
@@ -355,10 +355,10 @@ pub enum Command {
     ///
     /// 一個詞是**目標**，源自己嗅（`|` 表格、製表符、逗號、空格對齊）；兩個詞
     /// 是「從哪種轉成哪種」，最後那個永遠是目標。嗅源這一條照 org-mode 和
-    /// markdown-mode——兩家都是看有沒有 TAB、有沒有逗號，要強制纔多給一個參數。
+    /// markdown-mode——兩家都是看有没有 TAB、有没有逗號，要強制纔多給一個參數。
     ///
     /// Warning: **從前這是兩條命令**（`:table-pipe` 和 `:table-csv`），而兩個都是
-    /// 名詞接名詞、**一個字都沒說方向**：`table-csv` 讀起來像「從 CSV 做表」，
+    /// 名詞接名詞、**一個字都没說方向**：`table-csv` 讀起來像「從 CSV 做表」，
     /// 正好反了。查過一圈，有反向命令的編輯器本來就少（org、markdown-mode、
     /// vim-table-mode、Obsidian 都只轉得進去），而把兩端都寫出來的那幾個
     /// （Word 的 Convert Text to Table、VS Code 那個擴展的 Convert Markdown
@@ -1334,7 +1334,7 @@ fn resolve(word: &str) -> &str {
 /// answer and a second list of it goes stale.
 ///
 /// It did: `recover` was in neither, so `:recover!` worked and `:rec!`
-/// `:recov!` `:recove!` were all 「沒有這個命令」 while `:rec` was fine. One
+/// `:recov!` `:recove!` were all 「没有這個命令」 while `:rec` was fine. One
 /// list cannot drift from itself.
 const FORCEABLE: &[&str] = &[
     // Spelled as a whole line, because the fold moved this bang off the head
@@ -1435,7 +1435,7 @@ pub fn shortest(
 /// ——於是 `:syntax MARKDOWN`、`:theme INK`、`:layout VERTICAL` 收得下，而
 /// `:language ZH`、`:export HTML`、`:render FULL`、`:keymap VIM` 一概不認。
 /// **同一種參數兩種脾氣**，而讀者分不出哪個命令走哪一路。表裏的詞全是小寫 ASCII，
-/// 所以折一下沒有別的影響。
+/// 所以折一下没有別的影響。
 pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
     let same = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
     if let Some(exact) = from.iter().find(|w| same(w.name, typed)) {
@@ -1789,7 +1789,7 @@ const RENDER: &[Word] = &[
 ];
 
 /// What `:view-wrap` takes.
-/// `:view-wrap-vertical` 的那一個詞。沒有 `on`/`off`——軟折行是橫排的事。
+/// `:view-wrap-vertical` 的那一個詞。没有 `on`/`off`——軟折行是橫排的事。
 const ZONG_WRAP: &[Word] = &[Word {
     name: "0",
     help: "cmd.wrap.zong-0",
@@ -1822,10 +1822,10 @@ const WRAP: &[Word] = &[
 /// on macOS and Windows. `auto` is taken as 唯一 because that is what the
 /// habit calls it — 自動上屏.
 /// How much of 靈明 is answering — `:yume` on its own means the first of them.
-/// **引擎挂沒挂上，兩檔**（2026-10-10 定）。
+/// **引擎挂没挂上，兩檔**（2026-10-10 定）。
 ///
 /// Warning: **`abc` 2026-10-10 從這裏拿掉了。** 它說的是另一根軸——引擎挂着而打的是
-/// 字母——而那一根由 Shift 管（`press_modifier`），和「挂沒挂上」是兩件事。一句
+/// 字母——而那一根由 Shift 管（`press_modifier`），和「挂没挂上」是兩件事。一句
 /// 命令同時動兩根軸，於是 `:y abc` 既是「開」又是「別出中文」，說不清它關掉了什麼。
 /// 原話：「两者是解耦的，所以 :yume 中应该只有 on off 两个选项（引擎开关）」。
 const ENGAGEMENT: &[Word] = &[
@@ -2190,7 +2190,7 @@ const THEMES: &[Word] = &[
 ];
 
 /// The table used to declare `Args::Free("<檔名>")` while `parse` read the
-/// format first, so `:export 第三章.md` was answered 「沒有『第三章.md』這種
+/// format first, so `:export 第三章.md` was answered 「没有『第三章.md』這種
 /// 格式」 by a prompt that had just asked for a file name. And because a free
 /// argument has no words in it, `html` `typst` `csv` `tsv` were the only words
 /// this editor accepts that appeared nowhere in `::`'s corpus: four names you
@@ -2469,8 +2469,8 @@ const ON_OFF: &[Word] = &[
     },
 ];
 
-/// `off` 和沒別的：`:view-long-line` 的參數不是開關，是一個數目，而 `off` 是那個
-/// 數目的「沒有上限」那一格（vim 的 `synmaxcol=0`）。
+/// `off` 和没別的：`:view-long-line` 的參數不是開關，是一個數目，而 `off` 是那個
+/// 數目的「没有上限」那一格（vim 的 `synmaxcol=0`）。
 const OFF_ONLY: &[Word] = &[Word {
     name: "off",
     help: "hint.close",
@@ -2707,7 +2707,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.goto",
         needs: &[],
         params: &[Param::Free("<行號>")],
-        // Warning: **讀不懂的數字不是「沒給」**（2026-10-02 一輪掃查報來的）。從前
+        // Warning: **讀不懂的數字不是「没給」**（2026-10-02 一輪掃查報來的）。從前
         // `:goto abc` 答的是「goto 後面要跟一個參數」——而參數明明給了。
         // [`Parsed::number`] 手裏就有對的那一句（「goto：不認得「abc」」），
         // 丟掉它纔換來一句假話。`:wheel abc` 一直是對的，比一下就看得出來。
@@ -2967,7 +2967,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.wiki",
         needs: &[],
         // Warning: **自由文本，不是一張詞表**：這裏收的是詞條名，而詞條名是這本書自己
-        // 的話（「朱宇浩」「洞庭湖」），沒有哪張表列得完。
+        // 的話（「朱宇浩」「洞庭湖」），没有哪張表列得完。
         params: &[Param::Free("<詞條名>")],
         build: Some(|p| {
             // **不帶名字也開那扇面板，空着查**（2026-09-25 定）：`:wiki` 就是
@@ -3163,16 +3163,16 @@ pub const COMMANDS: &[Entry] = &[
         params: &[],
         build: Some(|_| Ok(Command::Word(WordCommand::Habit))),
     },
-    // **兩個方向各自一條命令，`:layout` 整條沒了**（2026-10-12 定）。
+    // **兩個方向各自一條命令，`:layout` 整條没了**（2026-10-12 定）。
     //
     // 從前是 `:layout [vertical|horizontal]`，外加一個不帶參數的 `:layout` 互
     // 換。起因是 `:vertical-keys`：它一加，`vertical` 就成了它的唯一前綴——一個
-    // 想把頁轉過來而打 `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁沒
+    // 想把頁轉過來而打 `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁没
     // 轉而手下四個鍵全變了意思。把兩個方向定成命令，就是把那個詞佔住。
     //
     // Warning: **是替換，不是加別名。** 原話：「我的意思是替换。」倉裏那條規矩
     // 也寫着舊拼法刪掉不留別名，而手冊那一節自己說「keeping two spellings would
-    // mean this philosophy was only talk」。互換那一條也一併刪了——沒有人想「互
+    // mean this philosophy was only talk」。互換那一條也一併刪了——没有人想「互
     // 換」，想的是「轉成竪排」。
     Entry {
         name: "vertical",
@@ -3262,7 +3262,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         // **`:version` 的重點不是版本號，是「東西都在哪」**（2026-10-05 一個用的人
         // 報的：「這個命令很重要的一點是展示配置文件在哪里」）。人裝完軟件第一個
-        // 問題就是「我該去改哪個文件」，而在這之前**沒有任何命令說得出來**——只有
+        // 問題就是「我該去改哪個文件」，而在這之前**没有任何命令說得出來**——只有
         // `:reload-config`，它重讀，可不說路徑。
         name: "version",
         aliases: &["ver"],
@@ -3399,7 +3399,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "yume",
         // Warning: **`y` 是明寫的，不是前綴猜出來的**（2026-10-06）。`:yuhao` 一加
         // 進來，`y` 就同時是兩條命令的前綴，而 `:y` 從前一直是這一條——明寫的別名
-        // 壓過前綴規則（見 `names_something`），所以它一個字沒變。
+        // 壓過前綴規則（見 `names_something`），所以它一個字没變。
         //
         // Warning: **`:yu` 丟了**：它從前靠前綴走到這裏，現在兩邊都沾。`:y` 和 `:yum`
         // 都通，`:yuhao` 自己最短是 `:yuh`。只明寫 `y` 不明寫 `yu`，是因為選單
@@ -3605,7 +3605,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         // **和 `[editor] which_wrap` 是同一格**，命令只是不開配置檔也改得動它。
-        // 說明借設置那一條的（同一句話，沒有第二種說法）。
+        // 說明借設置那一條的（同一句話，没有第二種說法）。
         name: "which-wrap",
         aliases: &[],
         help: "set.editor.which-wrap.hint",
@@ -3719,7 +3719,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         // 跟 `:view-numbers-fill` 排在一起：兩個說的都是行號那一帶（#55）。
-        // 名字裏沒有 git——那一格將來也會說「跟磁碟上那一份比」（#298 第二步），
+        // 名字裏没有 git——那一格將來也會說「跟磁碟上那一份比」（#298 第二步），
         // 而那時要換的是**來源**，不是這個開關。
         name: "view-diff",
         aliases: &[],
@@ -3947,10 +3947,10 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Words { of: HINTS, default: None }],
         // Warning: **光打 `:indent-hint` 要答「現在是哪一檔」**（2026-10-02 一輪掃查
         // 報來的）。從前它把空字串交給 `parse`，解不出來，答的是「不認得「」」
-        // ——問的人連問了什麼都沒說，而編輯器怪他說錯了。[`Param::Words`] 自己的
+        // ——問的人連問了什麼都没說，而編輯器怪他說錯了。[`Param::Words`] 自己的
         // 註釋寫着一張值表「**幾乎總該**」有個缺省，理由是「a setting that cannot
         // answer 「which am I now」 is a setting with a hole in it」。這一支是全表
-        // 唯一一個沒有的。隔壁 `:indent-tab` 一直是對的，照它寫。
+        // 唯一一個没有的。隔壁 `:indent-tab` 一直是對的，照它寫。
         build: Some(|p| {
             let Some(given) = p.arg(0) else {
                 return Ok(Command::SetIndentHint(None));
@@ -4289,7 +4289,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.detail",
         needs: &[Need::Table],
-        // Warning: **`<寬>` 那個參數沒了**（2026-09-26）：寬度歸側欄，面板說不上話
+        // Warning: **`<寬>` 那個參數没了**（2026-09-26）：寬度歸側欄，面板說不上話
         // （原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
         // 要寬要窄按 `w`，三檔。
         params: &[Param::Words { of: ON_OFF, default: None }],
@@ -4836,7 +4836,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
 ///
 /// **The menu folds and the search does not.** `::` looks for a word anywhere
 /// in the list, and a list that had hidden eleven of twelve `view-…` behind
-/// their head would answer 「沒有『密排』這種東西」 about a command that is
+/// their head would answer 「没有『密排』這種東西」 about a command that is
 /// three keystrokes away.
 fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     let line = line.strip_prefix(':').unwrap_or(line);
@@ -4846,7 +4846,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // `%s/` 比不上 `s/pat/rep/`，於是整扇面板空着。範圍是 `:%s`、`:1-40s`、
     // `:1,5,9s` 這幾種寫法，它們說的是「改哪幾行」，不是命令叫什麼。
     //
-    // Warning: **只在前綴真的是一個範圍的時候剝**：`:set` 的 `s` 後面沒有分隔符，
+    // Warning: **只在前綴真的是一個範圍的時候剝**：`:set` 的 `s` 後面没有分隔符，
     // 被 [`parse_substitution`] 擋在外面，這裏同理只認「範圍 ＋ `s` ＋ 分隔符」。
     let line = match rows_before_a_substitution(line) {
         Some(at) => &line[at..],
@@ -4960,7 +4960,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                         // Warning: **「還有零個」不是一句話**（2026-10-09 審出來的）。`under`
                         // 數的是**篩過之後**還剩幾條，所以打到只剩它自己的時候
                         // （`:w` 只配得中 `:count`）這一格是 0，而那一行畫出來是
-                        // 「:count (wc) +0」。沒有別的了就別說。
+                        // 「:count (wc) +0」。没有別的了就別說。
                         family: (under > 1).then(|| under - 1),
                         ..c
                     });
@@ -5237,7 +5237,7 @@ pub fn needs_of(line: &str) -> &'static [Need] {
 /// **這個詞在這一行上作不作數。**
 ///
 /// 一張靜態的詞表答的是「這一格收哪些詞」，而 `:convert` 的第二格收哪些詞
-/// **取決於第一格**：opencc 裝着 `t2jp.json` 與 `jp2t.json`，**沒有
+/// **取決於第一格**：opencc 裝着 `t2jp.json` 與 `jp2t.json`，**没有
 /// `s2jp.json`**（2026-09-23 在本機 opencc 1.4.2 的 config 目錄裏數過）。於是
 /// `:convert s` 的選單從前列着一個它自己會拒絕的 `jp`——正是 §5.2.2 記着的那條
 /// 「幫助提供了一個命令不收的參數」。
@@ -5276,7 +5276,7 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Param> {
 /// Not `parse`: no argument is evaluated and nothing is run, so a line that is
 /// merely impossible at this moment — `:w` with no file, `:table-rules` with no
 /// table — still answers yes. It settles the one question a manual can get
-/// wrong all by itself, 「有沒有這條命令，它收不收後面這幾個字」, by walking
+/// wrong all by itself, 「有没有這條命令，它收不收後面這幾個字」, by walking
 /// the same `resolve` / `pick` rule the parser walks.
 ///
 /// The **first word it cannot place** comes back, so a document that has gone
@@ -5328,11 +5328,11 @@ pub fn still_naming(line: &str) -> bool {
 /// 原話：「我在命令行打任何東西的時候，横向上方的description都應該忠實反應我按下
 /// Enter時候會發生什麽，而不是顯示第一個command的描述」。
 ///
-/// 從前那一段畫的是**單子上第一條**的說明：剛按下 `:` 什麼都沒打，它說的是
+/// 從前那一段畫的是**單子上第一條**的說明：剛按下 `:` 什麼都没打，它說的是
 /// `:cd` 的事，而按下 Enter 什麼都不會發生；打了一個不存在的命令，它照樣說着別
 /// 人的事。
 ///
-/// `Err(None)` ＝ 什麼都沒打，`Err(Some(名字))` ＝ 沒有這個命令。
+/// `Err(None)` ＝ 什麼都没打，`Err(Some(名字))` ＝ 没有這個命令。
 pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     let line = line.strip_prefix(':').unwrap_or(line).trim();
     if line.is_empty() {
@@ -5348,7 +5348,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
         || head.starts_with("s/");
     if shaped {
         // **旗標逐個寫出來，自成一行**（2026-10-09 作者定）。`word` 這一格的本意
-        // 正是「命令的說明之外再加一行」，而替換沒有參數詞表可挑，這一行就歸它。
+        // 正是「命令的說明之外再加一行」，而替換没有參數詞表可挑，這一行就歸它。
         // 說明那一句是作者寫的（範圍與分隔符都在裏面），一個字不動。
         return Ok(Described {
             help: "cmd.commands.substitute",
@@ -5821,7 +5821,7 @@ mod tests {
     /// §5.2.2 fault 6: a bang has to survive every prefix that resolves
     /// without one.
     ///
-    /// `:rec` was `recover` and `:rec!` was 「沒有『rec』這個命令」, because
+    /// `:rec` was `recover` and `:rec!` was 「没有『rec』這個命令」, because
     /// the name lived in one of the two lists that had to agree and not the
     /// other. There is one list now; this walks it so a tenth forceable
     /// command cannot arrive half-registered.
@@ -6036,11 +6036,11 @@ mod tests {
         // `:vertical` 的人會靜靜地撥到 `hjkl` 那個設置上去。
         assert_eq!(parse(":vertical"), Ok(Command::SetLayout(Layout::Vertical)));
         assert_eq!(parse(":horizontal"), Ok(Command::SetLayout(Layout::Horizontal)));
-        // **`:layout` 整條沒了**，連同它那個不帶參數的互換。
+        // **`:layout` 整條没了**，連同它那個不帶參數的互換。
         assert!(parse(":layout").is_err());
         assert!(parse(":layout vertical").is_err());
         assert!(parse(":lay").is_err());
-        // 而 `:vertical-keys` 是另一條，一個字都沒被搶走。
+        // 而 `:vertical-keys` 是另一條，一個字都没被搶走。
         assert_eq!(parse(":vertical-keys"), Ok(Command::SetVerticalKeys(None)));
     }
 
@@ -6106,7 +6106,7 @@ mod tests {
             Ok(Command::YumePanel(Some("off".into())))
         );
         // Warning: `:yume-p` 從 2026-09-27 起兩頭都認（`yume-panel`/`yume-preedit`），
-        // 所以最短的寫法多了一個字母。前綴規矩沒變：認兩個就是誰都不認。
+        // 所以最短的寫法多了一個字母。前綴規矩没變：認兩個就是誰都不認。
         assert_eq!(
             parse(":yume-pa f"),
             Ok(Command::YumePanel(Some("full".into())))
@@ -7331,8 +7331,8 @@ mod which_commands_are_overloaded {
     /// a little bit confusing……A command with no option would be better
     /// defaulted to one of the branch.」
     ///
-    /// 這一支列出**第一個參數是一張詞表、而那張表沒有默認值**的命令：那些就是
-    /// 「不給參數」沒有自動答案的，裸着按下去要麼報錯，要麼另做一件事。
+    /// 這一支列出**第一個參數是一張詞表、而那張表没有默認值**的命令：那些就是
+    /// 「不給參數」没有自動答案的，裸着按下去要麼報錯，要麼另做一件事。
     #[test]
     #[ignore = "量數用的，不是斷言"]
     fn list_them() {
@@ -7346,7 +7346,7 @@ mod which_commands_are_overloaded {
             let runs_bare = super::parse(e.name).is_ok();
             loose.push((e.name, words.len(), runs_bare));
         }
-        println!("{} 條：第一個參數是詞表而沒有默認值", loose.len());
+        println!("{} 條：第一個參數是詞表而没有默認值", loose.len());
         for (name, n, bare) in &loose {
             let mark = match bare {
                 true => "⚠ 裸着也跑",

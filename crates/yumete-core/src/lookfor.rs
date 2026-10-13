@@ -726,7 +726,7 @@ mod how_well_does_it_find {
             };
             rows.push((name, a.help));
         }
-        let mut tally = [0usize; 4]; // 第 1、前 5、前 20、沒找着
+        let mut tally = [0usize; 4]; // 第 1、前 5、前 20、没找着
         let mut lost: Vec<String> = Vec::new();
         for (name, tag) in &rows {
             let Some(said) = table.get(tag).map(|e| e.zht) else { continue };
@@ -750,7 +750,7 @@ mod how_well_does_it_find {
             }
         }
         let all = rows.len();
-        println!("{all} 條：第一 {} ／前五 {} ／前二十 {} ／沒找着 {}",
+        println!("{all} 條：第一 {} ／前五 {} ／前二十 {} ／没找着 {}",
                  tally[0], tally[1], tally[2], tally[3]);
         println!("找不着的頭幾條：");
         for l in &lost {
@@ -762,7 +762,7 @@ mod how_well_does_it_find {
     /// **用「關鍵詞」去搜，那一條排第幾**——關鍵詞就是為這件事寫的。
     ///
     /// 說明裏本來就有的詞不算數（那一支見 `can_each_row_find_itself`）：關鍵詞
-    /// 要答的是「讀者想的那個同義詞」，所以只挑說明裏**沒有**的那些來問。
+    /// 要答的是「讀者想的那個同義詞」，所以只挑說明裏**没有**的那些來問。
     #[test]
     #[ignore = "量數用的，不是斷言"]
     fn can_a_keyword_find_its_row() {
