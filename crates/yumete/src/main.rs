@@ -961,19 +961,6 @@ fn main() -> ExitCode {
             // 寫着 `[中 靈明]`。互動那一支每一輪都撥一次。
             editor.set_ime_available(ime.available());
         }
-        // Warning: **按鍵之前先把頁夾好**（#516，2026-10-02）。互動的循環是
-        // 「畫一幀、讀一個鍵、再畫一幀」，所以按鍵那一刻用的是上一幀量出來的高
-        // 度；離屏這一支沒有循環，`--keys` 是在任何一幀之前跑完的。不補這一下，
-        // `--keys='…wo3'` 在六行的窗口上照樣上屏那個從沒畫出來的字——**而那正
-        // 是要驗的那個 bug**。
-        //
-        // Warning: **不能靠「先白畫一幀」把高度量出來。** 試過，`多選區` 那張金
-        // 樣當場變了：`frame_to_text` 收的是 `&mut Editor`，白畫那一幀給了編輯
-        // 器一個它本來沒有的視口，於是後面那幾個動作落在了别的地方。算出來，别
-        // 畫出來。
-        if let Some((w, h)) = shot {
-            yumete_tui::fit_the_page(&mut ime, &mut editor, &config, w, h);
-        }
         settings_page = press(&mut editor, pressed, &config, &mut ime, shot);
     }
     // Asked for on the command line, and run the same way `:tutor` runs it.
@@ -1306,6 +1293,24 @@ fn press(
         // 同一族：**主循環在兩個鍵之間做的事，這裏一件都不許少**，不然拍到的
         // 面板和人按出來的面板不是同一扇。只是這一件便宜，不必真畫一幀。
         catch_up_with_the_loop(editor, config);
+        // Warning: **按鍵之前先把頁夾好**（#516，2026-10-02）。互動的循環是
+        // 「畫一幀、讀一個鍵、再畫一幀」，所以按鍵那一刻用的是上一幀量出來的高
+        // 度；離屏這一支沒有循環。不補這一下，`--keys='…wo3'` 在六行的窗口上照
+        // 樣上屏那個從沒畫出來的字——**而那正是要驗的那個 bug**。
+        //
+        // Warning: **每一個鍵之前都要答，不是整串之前答一次**（2026-10-13）。
+        // `:vertical` 本身就是一個鍵，而版面一換，一縱多長就變了——從前這一句
+        // 站在迴圈外面，於是 `--keys=':vertical\n…h'` 裏的 `h` 走的是橫排留下
+        // 的格子（出廠縱長 32），在折了兩縱的段落上跳過整整一縱，而照片是按窗
+        // 口高度畫的。量到的和拍到的不是同一頁。
+        //
+        // Warning: **不能靠「先白畫一幀」把高度量出來。** 試過，`多選區` 那張金
+        // 樣當場變了：`frame_to_text` 收的是 `&mut Editor`，白畫那一幀給了編輯
+        // 器一個它本來沒有的視口，於是後面那幾個動作落在了别的地方。算出來，别
+        // 畫出來。
+        if let Some((w, h)) = shot {
+            yumete_tui::fit_the_page(ime, editor, config, w, h);
+        }
         let key = match c {
             '\\' => match chars.next() {
                 Some('e') => Key::Esc,

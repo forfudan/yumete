@@ -305,14 +305,12 @@ fn frame_to(
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
     let page = areas.panes[editor.live_pane().min(1)];
     let lines = editor.current_buffer().line_count();
+    settle_the_wrap(editor, config, page);
     if editor.layout() == WritingLayout::Vertical {
         let look = vertical::Look::of(editor);
-        editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
         let metrics = vertical::Metrics::new(config, page.height, lines, look);
         editor.set_page(page.height as usize, metrics.capacity(page.width));
     } else {
-        let gutter = gutter_width(lines, config.editor.line_numbers, editor.writes_code());
-        editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
         editor.set_page(page.height as usize, page.width.max(1) as usize);
     }
     // …and the candidate goes into the text, the same last step the loop takes
@@ -398,6 +396,25 @@ pub fn want_page_size(n: usize) {
 /// [`page_areas`] 算出來的，不是畫出來的——白畫一幀會動到編輯器（`多選區` 那張
 /// 金樣當場就變了）。**不叫的話離屏看不見這個 bug**，而這個倉審前端靠的就是離
 /// 屏那張圖。
+/// **Where the lines break** — the one answer motion and drawing have to share.
+///
+/// 竪排問的是一縱多長，橫排問的是折行的寬度，兩邊都是「`j` 走過的那一頁，要
+/// 就是螢幕上那一頁」。[`fit_the_page`] 在按鍵之前叫它，[`frame_to`] 在畫之前
+/// 叫它，所以離屏那一支量到的和拍到的是同一套格子。
+fn settle_the_wrap(editor: &mut Editor, config: &Config, page: Rect) {
+    let lines = editor.current_buffer().line_count();
+    match editor.layout() == WritingLayout::Vertical {
+        true => {
+            let look = vertical::Look::of(editor);
+            editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
+        }
+        false => {
+            let gutter = gutter_width(lines, config.editor.line_numbers, editor.writes_code());
+            editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
+        }
+    }
+}
+
 pub fn fit_the_page(
     ime: &mut ImeSession,
     editor: &mut Editor,
@@ -415,8 +432,17 @@ pub fn fit_the_page(
     };
     // 面板站在正文和狀態行之間，和 [`draw`] 給它的 `room` 是同一塊。
     let area = Rect::new(0, 0, width, height);
-    let room = page_areas(editor, config, area, 0).status.y.saturating_sub(area.y).max(1);
+    let areas = page_areas(editor, config, area, 0);
+    let room = areas.status.y.saturating_sub(area.y).max(1);
     let fits = page_for_window(wish, room);
+    // **行在哪裏斷，也要在按鍵之前答**（2026-10-13）。從前只有真畫那一步答
+    // （[`frame_to`]），而離屏這一支的 `--keys` 跑在任何一幀**之前**——於是動作
+    // 用的是出廠的縱長 32、畫面用的是窗口算出來的那個，竪排的 `h` 在折了兩縱的
+    // 段落上量到的落點與照片對不上（`gj` 同理，橫排那一側是 `wrap_width` 為
+    // `None`，於是「視覺行」與「行文行」在離屏下根本分不出來）。同一條「算出
+    // 來，别畫出來」——所以這裏只答折行，**不碰 `set_page`**：視口是另一件事，
+    // 按鍵之前給了它會讓動作落在别處（見 `main.rs` 這一支的呼叫處）。
+    settle_the_wrap(editor, config, areas.panes[editor.live_pane().min(1)]);
     // 兩行框 ＋ 一行編碼之後還剩得下一行嗎。剩不下就一個候選都畫不出來，而數字
     // 鍵那一道閘要知道這件事（見 `ImeSession::panel_has_room`）。
     ime.set_panel_has_room(usize::from(room) > 3);
