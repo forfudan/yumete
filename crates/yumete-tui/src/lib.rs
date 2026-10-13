@@ -18193,9 +18193,10 @@ fn squeezed(text: &str) -> String {
         let text = row_text(&buf, y);
         assert_eq!(buf[(column_of(&text, "木"), y)].bg, want, "{text:?}");
 
-        // Out of the table altogether. `G` is not a table motion, so this is
+        // Out of the table altogether. `ge` is not a table motion, so this is
         // the ordinary prose under it — no cell of anything.
-        editor.on_key(Key::Char('G'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('e'));
         assert_eq!(editor.cursor_line(), 3, "on the prose: {}", editor.status());
         let buf = render(&editor, &config, 30, 8);
         let y = row_with(&buf, "見");
@@ -18367,7 +18368,8 @@ fn squeezed(text: &str) -> String {
         assert_ne!(buffer[(x, y)].bg, want, "the rule row is not a cell");
 
         // And out of the table, onto a paragraph that merely holds a `|`.
-        editor.on_key(Key::Char('G'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('e'));
         assert_eq!(editor.cursor_line(), 3, "on the prose: {}", editor.status());
         let buffer = render_vertical(&mut editor, &config, 24, 14);
         let (x, y) = find(&buffer, "附");

@@ -715,8 +715,11 @@ fn one_g_goes_to_the_first_line() {
     assert_eq!(ed.cursor_line(), 0, "1G is the first line");
     press(&mut ed, "3G");
     assert_eq!(ed.cursor_line(), 2);
+    // 不帶數的 `G` 在 helix 鍵位下不動（2026-10-13 對齊 helix）：末行是 `ge`。
     press(&mut ed, "G");
-    assert_eq!(ed.cursor_line(), 3, "a bare G is still the last line");
+    assert_eq!(ed.cursor_line(), 2, "a bare G stands still here");
+    press(&mut ed, "ge");
+    assert_eq!(ed.cursor_line(), 3, "ge is the last line");
 }
 
 #[test]
@@ -6545,8 +6548,8 @@ fn the_window_holds_the_table_it_was_opened_on() {
     assert_eq!(ed.cursor_line(), first, "{}", ed.status());
     assert_eq!(ed.table_row_number(), 1, "and it is row 1 in the window");
     assert!(ed.status().contains("t q"), "it says so: {}", ed.status());
-    // `G` is its last row, not the file's last line.
-    press(&mut ed, "G");
+    // `ge` is its last row, not the file's last line.
+    press(&mut ed, "ge");
     assert_eq!(ed.cursor_line(), last, "{}", ed.status());
     assert_eq!(ed.table_row_number(), 3);
     // `t<n>g` counts the same rows the gutter draws.
@@ -18109,7 +18112,7 @@ fn a_footnote_tag_is_finished_from_what_the_file_already_holds() {
 #[test]
 fn what_is_typed_after_the_caret_narrows_the_tags() {
     let mut ed = typed("[^甲]和[^乙]\n\n[^甲]: 一\n[^乙]: 二\n");
-    ed.on_key(Key::Char('G'));
+    press(&mut ed, "ge");
     ed.on_key(Key::Char('A'));
     for c in "\n見[^甲".chars() {
         ed.on_key(match c {
@@ -18129,7 +18132,7 @@ fn what_is_typed_after_the_caret_narrows_the_tags() {
 #[test]
 fn a_link_is_finished_with_a_heading_of_this_file() {
     let mut ed = typed("# 卷一 開端\n\n## 第三節：雨\n\n見\n");
-    ed.on_key(Key::Char('G'));
+    press(&mut ed, "ge");
     ed.on_key(Key::Char('A'));
     for c in "[那裏](#".chars() {
         ed.on_key(Key::Char(c));
@@ -18149,7 +18152,7 @@ fn a_link_is_finished_with_a_heading_of_this_file() {
 #[test]
 fn a_closing_bracket_already_typed_is_left_alone() {
     let mut ed = typed("[^甲]\n\n[^甲]: 一\n");
-    ed.on_key(Key::Char('G'));
+    press(&mut ed, "ge");
     ed.on_key(Key::Char('A'));
     ed.on_key(Key::Enter);
     for c in "[^]".chars() {
@@ -18995,6 +18998,31 @@ fn the_vim_caret_never_rests_on_a_line_break() {
     ed.on_key(Key::Esc);
     press(&mut ed, "$");
     assert_eq!(ed.sel.head(), 2, "夾還在管事");
+}
+
+/// **不帶數的 `G` 隨鍵位**（2026-10-13 作者定：「請你和 helix 對齊」）。
+///
+/// helix 的 `G` 是 `goto_line`，不帶數就不動（`ge` 纔是末行）；vim 的 `G` 是末行。
+/// 量這一條起點不許在第 1 行，不然「不動」和「去第 1 行」分不開。
+#[test]
+fn a_bare_g_is_the_last_line_only_under_the_vim_keymap() {
+    let line_of = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+    // helix 鍵位：`jG` 停在第二行，和 `j` 一樣。
+    let mut ed = typed("a\nb\nc\nd\n");
+    press(&mut ed, "ggj");
+    let after_j = ed.sel.head();
+    press(&mut ed, "G");
+    assert_eq!(ed.sel.head(), after_j, "helix：不帶數的 G 不動");
+    // 帶數的照走。
+    press(&mut ed, "3G");
+    assert_eq!(line_of(&ed), 2, "helix：3G 去第三行");
+    press(&mut ed, "ge");
+    assert_eq!(line_of(&ed), 3, "helix：ge 纔是末行");
+    // vim 鍵位：末行。
+    let mut ed = typed("a\nb\nc\nd\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggjG");
+    assert_eq!(line_of(&ed), 3, "vim：G 去末行");
 }
 
 /// **vim 鍵位下檔尾那條虛行進不去，helix 鍵位下進得去**（2026-10-13 定）。

@@ -2750,28 +2750,37 @@ impl Editor {
             }
             Key::Char('R') => self.replace_with_register(),
             // Search for whatever is selected (Helix `*`).
-            // **`30G` goes to line 30**, and a bare `G` to the last line,
-            // which is what `G` means in vi; the key was unbound here.
-            // `10gg` and `:30` still work; this is the one a reader's fingers
-            // already know.
+            // **`30G` goes to line 30 under either preset.** A bare `G` is the
+            // vim preset's alone: there it is the last line, which is what `G`
+            // means in vi. **Under the helix preset a bare `G` does nothing**,
+            // because that is what helix does — `goto_line_impl` opens with
+            // `if cx.count.is_some()` (`helix-term/src/commands.rs`), and
+            // measured on helix 25.07.1 (`scripts/oracle/hx_keys.py`) `jG`
+            // leaves the cursor on line 2, it does not go to line 1.
             //
-            // Warning: **helix's bare `G` does nothing** (2026-10-06 correction —
-            // this comment used to claim it went to the last line there too).
-            // `goto_line_impl` opens with `if cx.count.is_some()`
-            // (`helix-term/src/commands.rs`), so an un-counted `G` falls
-            // through. Going somewhere useful is better than going nowhere,
-            // so the key stays as it is; only the claim was wrong.
+            // Warning: **this used to go to the last line under both presets**, on the
+            // reasoning that going somewhere useful beats going nowhere — and
+            // the manual was written to say so, which made the manual no
+            // evidence at all. 2026-10-13: 「是缺陷，因为这是你一个人自说自话的
+            // 决定。手册也是你写的。手册从来没说过这是『设计的偏离』。请你和
+            // helix 对齐。」 A divergence from the reference is the author's to
+            // make, not something a comment can grant itself.
             Key::Char('G') => {
-                self.remember_jump();
                 // `operator_count`, not `self.count`: the count was taken at
                 // the top of this function, so asking `self.count` here always
                 // said "no digits" and `1G` went to the *last* line.
                 match operator_count.is_some() {
-                    true => self.goto_line(count),
-                    false => {
+                    true => {
+                        self.remember_jump();
+                        self.goto_line(count);
+                    }
+                    false if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                        self.remember_jump();
                         let rope = self.current_buffer().rope();
                         self.move_head(motion::buffer_end(rope, self.sel.head()));
                     }
+                    // helix 鍵位：不帶數的 `G` 不動——`ge` 纔是末行。
+                    false => {}
                 }
             }
 

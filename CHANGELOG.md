@@ -9,6 +9,13 @@ in `docs/development.md` §5.2.
 
 ## 未發布 · Unreleased
 
+### Changed
+
+- **A bare `G` now does nothing under the helix keymap**, which is what helix does — `ge`
+  is the last line there. `30G` still goes to line 30 under either keymap, and under the
+  vim keymap a bare `G` is still the last line, as in vim. It used to be the last line
+  under both, which was never a decision anybody made.
+
 ### Fixed
 
 - **The newline at the end of a file is no longer numbered as a line of its own.** It is
