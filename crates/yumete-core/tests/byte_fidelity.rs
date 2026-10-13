@@ -74,6 +74,33 @@ fn a_save_ends_the_file_the_way_its_own_lines_end() {
     }
 }
 
+/// **補上去的那個行尾不算「被外部改過」**（2026-10-13 報的）。
+///
+/// 存檔之後 `read_as` 記的是「盤上那一份長什麼樣」，而補行尾那一步只動寫出去的位元組、
+/// 不動繩子——記下繩子的 digest 就和盤上對不上，下一個心跳當場判「文件被外部修改」，自
+/// 動重載把剛改的東西蓋回去。原話：「The command line first shows 存了…, then it shows
+/// 文件被外部修改，已同步加載…And a new empty line appears」。
+#[test]
+fn the_line_ending_a_save_adds_is_not_somebody_elses_edit() {
+    for (name, bytes) in [
+        ("lf.md", &b"line one\nline two"[..]),
+        ("crlf.md", &b"line one\r\nline two"[..]),
+        // 已經有行尾的：什麼都不補，照舊不算改過。
+        ("done.md", &b"line one\n"[..]),
+    ] {
+        let (mut ed, path) = open(name, bytes);
+        ed.execute("write").unwrap();
+        assert!(
+            !ed.current_buffer().changed_underneath(),
+            "{name}：剛存完的檔不該算是別人改的"
+        );
+        // 再存一次也一樣——盤上那一份這一刻起就穩定了。
+        ed.execute("write").unwrap();
+        assert!(!ed.current_buffer().changed_underneath(), "{name}：第二次也是");
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
 #[test]
 fn a_line_the_editor_adds_ends_the_way_the_file_does() {
     for (name, bytes, want) in [

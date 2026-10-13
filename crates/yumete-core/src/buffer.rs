@@ -42,13 +42,40 @@ fn digest(text: &str) -> u64 {
 /// [`digest`] 對同一份正文給同一個數。逐塊各自 `hash` 會每塊補一個 `0xff`，答案就
 /// 不一樣了，而這兩個數是互相比的（開檔記一個，存檔前再算一個）。
 fn digest_of(rope: &Rope) -> u64 {
+    digest_of_written(rope, "")
+}
+
+/// 這一次**寫出去的那一份**的 digest —— 連補上的那個行尾一起算（2026-10-13 報的）。
+///
+/// Warning: **不算它就等於替自己埋一個「被外部改過」。** 存檔之後 `read_as` 記的是
+/// 「盤上那一份長什麼樣」，而 `changed_underneath` 拿它和盤上的檔逐字比。補行尾那一步
+/// 只動寫出去的位元組、不動繩子，於是記下繩子的 digest 就和盤上對不上——下一個心跳
+/// 當場判「文件被外部修改」，自動重載把剛刪掉的那個空行又帶回來。報的原話：「The
+/// command line first shows 存了…, then it shows 文件被外部修改，已同步加載…And a new
+/// empty line appears」。
+fn digest_of_written(rope: &Rope, tail: &str) -> u64 {
     use std::hash::Hasher;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for chunk in rope.chunks() {
         hasher.write(chunk.as_bytes());
     }
+    hasher.write(tail.as_bytes());
     hasher.write_u8(0xff);
     hasher.finish()
+}
+
+/// 存這一份的時候，末尾要補上去的那一截（補不上就是空的）—— 見 [`Buffer::save_forcing`]
+/// 裏那一段，兩處要答得一樣。
+fn tail_for(rope: &Rope, ending: &str, finish: bool) -> &'static str {
+    let last = rope.len_chars().checked_sub(1);
+    let terminated = last.is_some_and(|at| rope.char(at) == '\n');
+    match finish && last.is_some() && !terminated {
+        true => match ending {
+            "\r\n" => "\r\n",
+            _ => "\n",
+        },
+        false => "",
+    }
 }
 
 /// A buffer that will not be written to (Feature #213).
@@ -1125,7 +1152,7 @@ impl Buffer {
         Buffer::room_for(&path, force)?;
         self.write_atomically(&path, finish)?;
         self.seen = stamp_of(&path);
-        self.read_as = Some(digest(&self.rope.to_string()));
+        self.read_as = Some(digest_of_written(&self.rope, tail_for(&self.rope, self.ending, finish)));
         self.modified = false;
         self.beyond_the_file = false;
         self.saved_depth = Some(self.history.undo.len());
@@ -1316,10 +1343,9 @@ impl Buffer {
             // 原話：「就算是老档案，當你按下 `:w` 的时候，你就应该預期到文檔发生了变
             // 化……其他任何时候只要文件不是空的，`:w` 都会加行尾」。§309 的「逐位元組
             // 往返」於是只剩 CRLF 與混行尾兩條，缺末尾換行那一條作廢。
-            let last = self.rope.len_chars().checked_sub(1);
-            let terminated = last.is_some_and(|at| self.rope.char(at) == '\n');
-            if finish && last.is_some() && !terminated {
-                file.write_all(self.ending.as_bytes())?;
+            let tail = tail_for(&self.rope, self.ending, finish);
+            if !tail.is_empty() {
+                file.write_all(tail.as_bytes())?;
             }
             Ok(())
         })
