@@ -35,6 +35,22 @@ fn digest(text: &str) -> u64 {
     hasher.finish()
 }
 
+/// The same digest, asked of a rope **without物化它**（2026-10-13）。
+///
+/// Warning: **逐塊寫位元組，最後補一個 `0xff`**——那正是 `impl Hash for str` 做的事
+/// （`state.write(self.as_bytes()); state.write_u8(0xff)`），所以這一支和
+/// [`digest`] 對同一份正文給同一個數。逐塊各自 `hash` 會每塊補一個 `0xff`，答案就
+/// 不一樣了，而這兩個數是互相比的（開檔記一個，存檔前再算一個）。
+fn digest_of(rope: &Rope) -> u64 {
+    use std::hash::Hasher;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for chunk in rope.chunks() {
+        hasher.write(chunk.as_bytes());
+    }
+    hasher.write_u8(0xff);
+    hasher.finish()
+}
+
 /// A buffer that will not be written to (Feature #213).
 ///
 /// The whole error: there is one reason an edit is refused at this level, and
@@ -417,22 +433,34 @@ impl Buffer {
                 .unwrap_or_else(|_| path.to_path_buf()),
         });
         let path = full.as_path();
-        let mut read_as = None;
         // **What the file was, to be written back as** (#309, #310).
         let mut marked = false;
         // Before the read, not after it — see [`Buffer::reread`] for why a
         // stamp taken afterwards can pin a half-written file down as current.
         let seen = stamp_of(path);
-        let rope = match fs::read(path) {
-            Ok(bytes) => {
-                let text = decode(&bytes, path)?;
-                marked = bytes.starts_with(BOM.as_bytes());
-                read_as = Some(digest(&text));
-                Rope::from_str(text.as_ref())
+        // Warning: **邊讀邊建，不要先把整個檔讀成一個 `Vec<u8>`**（2026-10-13 報
+        // 的：3.91 GB 的檔佔 40 GB）。`fs::read` 那一份和 rope 同時活着，峰值就是
+        // 兩份；而且 macOS 的 malloc 釋放之後不把頁還給系統，所以「峰值」就是住下
+        // 來的那個數。量過：361 MB 的檔，兩份是 775 MB，一份是 420 MB。
+        let rope = match fs::File::open(path) {
+            Ok(file) => {
+                let mut reader = io::BufReader::with_capacity(64 * 1024, file);
+                // BOM 要自己看：`Rope::from_reader` 不認它，而它既不算正文、也要
+                // 在存檔時原樣寫回去（#309、#310）。
+                let mut head = [0u8; 3];
+                let got = read_up_to(&mut reader, &mut head)?;
+                marked = got == 3 && head == BOM.as_bytes();
+                let rest: Box<dyn io::Read> = match marked {
+                    true => Box::new(reader),
+                    false => Box::new(io::Read::chain(&head[..got], reader)),
+                };
+                Rope::from_reader(rest).map_err(|err| not_utf8(err, path))?
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Rope::new(),
             Err(err) => return Err(err),
         };
+        // 開檔那一刻的樣子，逐塊算（見 [`digest_of`]）。
+        let read_as = Some(digest_of(&rope));
         // Whether a crash left a draft here is decided once, now: the status
         // line asks every frame, and the answer cannot change under us.
         let tag = std::process::id().to_string();
@@ -1471,19 +1499,41 @@ fn dominant_ending(rope: &Rope) -> &'static str {
 
 /// Read `bytes` as the text of `path`, or say — in words a writer can act on —
 /// why it could not be read.
+/// Fill `into` as far as the file goes, answering how many bytes that was.
+///
+/// `Read::read` is allowed to answer short, and the first call on a file very
+/// often does — so 「讀三個位元組看看是不是 BOM」 cannot be one `read`.
+fn read_up_to(reader: &mut impl io::Read, into: &mut [u8]) -> io::Result<usize> {
+    let mut got = 0;
+    while got < into.len() {
+        match reader.read(&mut into[got..])? {
+            0 => break,
+            n => got += n,
+        }
+    }
+    Ok(got)
+}
+
+/// Manuscripts in this part of the world are often Big5 or GB18030, and
+/// "stream did not contain valid UTF-8" tells their author nothing about what
+/// to do next.
+fn not_utf8(err: io::Error, path: &Path) -> io::Error {
+    if err.kind() != io::ErrorKind::InvalidData {
+        return err;
+    }
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "{} is not UTF-8 — an older Chinese manuscript is usually Big5 or GB18030; \
+             convert it first, e.g. `iconv -f big5 -t utf-8`",
+            path.display()
+        ),
+    )
+}
+
 fn decode<'a>(bytes: &'a [u8], path: &Path) -> io::Result<std::borrow::Cow<'a, str>> {
     let text = std::str::from_utf8(bytes).map_err(|_| {
-        // Manuscripts in this part of the world are often Big5 or GB18030, and
-        // "stream did not contain valid UTF-8" tells their author nothing about
-        // what to do next.
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{} is not UTF-8 — an older Chinese manuscript is usually Big5 or GB18030; \
-                 convert it first, e.g. `iconv -f big5 -t utf-8`",
-                path.display()
-            ),
-        )
+        not_utf8(io::Error::new(io::ErrorKind::InvalidData, "not utf-8"), path)
     })?;
     Ok(match text.strip_prefix(BOM) {
         Some(stripped) => std::borrow::Cow::Borrowed(stripped),
@@ -1993,6 +2043,21 @@ fn tmp() -> std::path::PathBuf {
         assert!(path.is_file(), "存到了 {}", path.display());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// **兩種算法要給同一個數**（2026-10-13）。開檔記的那個 digest 現在是逐塊算
+    /// 的（[`digest_of`]，不物化整份正文），而存檔前後比的那幾處算的是
+    /// [`digest`]。不一樣的話，「這個檔在盤上被别人改過了嗎」每次都答錯。
+    #[test]
+    fn the_two_digests_agree() {
+        for text in ["", "一", "那年冬天，雪下得早。\n山路斷了。\n", &"字".repeat(100_000)] {
+            assert_eq!(
+                digest(text),
+                digest_of(&Rope::from_str(text)),
+                "逐塊算的和整份算的要一樣：{} 個字節",
+                text.len()
+            );
+        }
     }
 
     #[test]
