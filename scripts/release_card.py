@@ -133,7 +133,14 @@ def render(md):
 # 終端畫面按「一個漢字兩格」排，這兩個數必須是這個比，不然整幅畫面散開。
 SHOT_PX = 15.0
 CELL = SHOT_PX / 2
-LEAD = 1.5  # 行高倍數
+# **行高就是格高**（2026-10-13 報的）。終端的一行就是一格高，而這一塊是在模仿終端：
+# 行高一旦大過 1，框綫字之間就空出一截，竪綫斷成虛綫——報的原話：「there a gaps in the
+# table border (vertical)」。
+#
+# Warning: **底下那個 `scaleY` 不夠補**：`│` 的墨跡只佔字身框的四分之三上下，1.45 倍在
+# 一格高的行裏剛好蓋滿，在 1.5 倍行高的行裏只蓋到 1.09／1.5。要靠拉伸撐住 1.5 的行高得
+# 拉到兩倍開外，而那會把 `┬`／`├` 的橫臂一起拉粗一倍——接點看着比旁邊那條橫綫胖一圈。
+LEAD = 1.0  # 行高倍數
 
 
 def cells(ch, nxt=""):
@@ -199,11 +206,21 @@ def pin(shot, wide):
             for i, ch in enumerate(text):
                 w = cells(ch, text[i + 1] if i + 1 < len(text) else "")
                 if w:
+                    # Warning: **一條 `transform`，不是兩條**（2026-10-13 修）。從前
+                    # 橫的一條、竪的一條各自往 `style` 上接，而 CSS 裏後一條直接頂掉
+                    # 前一條——`┬ ┴ ┼` 這幾個兩組都在的字於是只拉長不拉寬，接點比旁
+                    # 邊那條橫綫細一截。
+                    sx = 1.12 if ch in ACROSS else 1.0
+                    sy = 1.9 if ch in DOWN else 1.0
                     box = ""
-                    if ch in ACROSS:
-                        box += ";transform:scaleX(1.12)"
-                    if ch in DOWN:
-                        box += ";transform:scaleY(1.45)"
+                    if (sx, sy) != (1.0, 1.0):
+                        # Warning: **拉伸之外還要 `z-index`**（2026-10-13 修）。每一格
+                        # 自帶底色，而後畫的蓋先畫的——拉長的那一截伸進下一行，正好
+                        # 被下一行那一格的底色蓋掉，於是竪綫照樣是虛的。拉多少都沒
+                        # 用（1.45／1.7／1.9 三個量過，三張圖一模一樣），因為問題不
+                        # 在長度在次序。報的原話：「there a gaps in the table border
+                        # (vertical)」。
+                        box = f";transform:scale({sx},{sy});z-index:1"
                     out.append(
                         f'<i style="{style};left:{at * CELL:.1f}px;'
                         f'width:{w * CELL:.1f}px{box}">{html.escape(ch)}</i>'
