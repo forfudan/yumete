@@ -1396,7 +1396,7 @@ impl Editor {
                     return;
                 }
                 self.pending = Pending::None;
-                self.handle_goto(key);
+                self.handle_goto(key, continuing_zong);
                 self.operator_count = None;
                 self.sequence = None;
                 return;
@@ -1745,10 +1745,20 @@ impl Editor {
         //
         // 抓到它的是 vim 鍵位的 `+`——它是 `("+", "jgs")`，展開的 `j` 没換，於
         // 是「下一行行首」在竪排下一行都不走。
-        let turn = self.vertical_letters_follow_the_text() || {
-            self.layout() == Layout::Vertical && self.expanding_alias
-        };
-        let key = match turn {
+        let follow_the_text = self.vertical_letters_follow_the_text()
+            || (self.layout() == Layout::Vertical && self.expanding_alias);
+        // Warning: **vim 鍵位下這四個字母不轉，交還給底下那一層**（2026-10-13 報
+        // 的，「我用 helix，朋友用 vim」）。轉一圈進竪排那一支拿到的是**螢幕的單
+        // 位**：`j` 轉成 `h` 就是「下一縱」，而 vim 的 `j` 是行文的一行——段落折
+        // 成兩縱的時候那兩件事差整整一縱，`j` 只走到同一段的第二縱去。`h`/`l` 同
+        // 病：轉成 `k`/`j` 之後走的是全文的字，`whichwrap` 那道閘繞過去了。
+        //
+        // helix 不動一個字：helix 的 `j` 本來就是**視覺行**，而竪排的一個視覺行
+        // 正是一縱——所以轉進去是對的，這一條只分 vim 出來。底下那幾臂
+        // （`move_textual_line`／`step_sideways`）本來就是 vim 那一套行文的意思，
+        // 交還給它們就是答案，竪排不必再寫一份。
+        let vim_has_its_own = follow_the_text && self.key_preset == yumete_cjk::KeyPreset::Vim;
+        let key = match follow_the_text && !vim_has_its_own {
             false => key,
             true => match key {
                 Key::Char('h') => Key::Char('k'),
@@ -1762,7 +1772,10 @@ impl Editor {
         // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
         // meaning: `j` still reads onward down the 縱, and `h` still steps left,
         // which is now the next 縱 rather than the next line.
-        if self.layout() == Layout::Vertical {
+        // 方向鍵不在這道閘裏：它們永遠按螢幕走，兩套鍵位、兩套方案都一樣。
+        let letter_walks_the_screen =
+            !(vim_has_its_own && matches!(key, Key::Char('h' | 'j' | 'k' | 'l')));
+        if self.layout() == Layout::Vertical && letter_walks_the_screen {
             // The count applies here too — `10j` is exactly the key a 縱 of
             // thirty-two characters is long for. These arms used to return
             // before `repeat` could see it.
@@ -2048,6 +2061,10 @@ impl Editor {
             Key::Char('g') => {
                 self.pending = Pending::Goto;
                 self.operator_count = operator_count;
+                // **開一個序列不算走了一步**（2026-10-13）：這一支開頭就把
+                // `zong_motion` 取走了，而 `gj gj` 要和 `h h` 一樣守着同一個目標
+                // 格——下一鍵纔是那個動作。
+                self.zong_motion = continuing_zong;
             }
             // Helix's Space menu: the things that are not motions.
             Key::Char(' ') => self.pending = Pending::Space,
@@ -2831,7 +2848,18 @@ impl Editor {
             .max(1)
     }
 
-    fn handle_goto(&mut self, key: Key) {
+    /// `g` ＋ 上下在竪排下走一縱嗎——vim 的 `gj`/`gk` 是視覺行，而竪排的視覺行
+    /// 就是一縱。見 `handle_goto` 裏那兩臂。
+    ///
+    /// Warning: **只在行文那一套下**（2026-10-13）。視覺那一套下四個字母本來就是
+    /// 螢幕的方向，`h` 已經是「下一縱」了，`gh` 轉進來再走一縱就和它重複——而那
+    /// 一格從前（靠 `move_vertical` 在竪排下退化）走的是**下一段**，是 vim 使用者
+    /// 在那一套下唯一的跨段鍵。視覺那一套整個留到下一輪，別順手拿走它。
+    fn walks_a_zong_with_g(&self) -> bool {
+        self.vertical_letters_follow_the_text() && self.key_preset == yumete_cjk::KeyPreset::Vim
+    }
+
+    fn handle_goto(&mut self, key: Key, continuing_zong: bool) {
         // `10gg` is "goto line 10", the way Helix reads a count before `gg`;
         // a bare `gg` is the same thing with the count 1.
         if key == Key::Char('g') {
@@ -3009,6 +3037,30 @@ impl Editor {
             // plain pair walks logical lines」 — it is `move_visual_line_down`).
             // `gj`/`gk` 是同一對的另一半，所以跟着翻過來：vim 的 `gj` 走屏幕的
             // 行，helix 的 `gj` 走文件的行。
+            // Warning: **竪排下 vim 那一半走縱**（2026-10-13 報的）。vim 的 `gj`
+            // 是**視覺**行，而竪排的一個視覺行就是一縱；`move_vertical` 在竪排下
+            // 沒有視覺行可走（竪排不折行，`wrap_width` 是 `None`），於是退化成行
+            // 文行——`gj` 和 `j` 落在同一處，一段折成三縱也一步跨到下一段去。
+            // helix 那一半不動：它的 `gj` 要的就是檔案的那一行。
+            //
+            // 走到這一臂而且是竪排，就一定是行文那一套（視覺那一套在上面轉成了
+            // `gl`／`gh`），或者是別名展開出來的——後者說的也是「下一個視覺行」。
+            Key::Char('j') | Key::Down if self.walks_a_zong_with_g() => {
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                let mut first = continuing_zong;
+                self.repeat(count, move |e| {
+                    e.move_zong_from(true, first);
+                    first = true;
+                });
+            }
+            Key::Char('k') | Key::Up if self.walks_a_zong_with_g() => {
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                let mut first = continuing_zong;
+                self.repeat(count, move |e| {
+                    e.move_zong_from(false, first);
+                    first = true;
+                });
+            }
             Key::Char('j') | Key::Down => {
                 let count = self.operator_count.take().unwrap_or(1).max(1);
                 match self.key_preset == yumete_cjk::KeyPreset::Vim {

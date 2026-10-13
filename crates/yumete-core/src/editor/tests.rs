@@ -25618,16 +25618,21 @@ fn which_wrap_says_which_keys_step_across_a_line_end() {
     assert_eq!(at("", &[l, l, l], false), 3, "helix 走到換行符上");
 }
 
-/// **竪排下 `j` 走得出一段**，vim 鍵位也一樣（2026-10-10 量出來的）。
+/// **竪排下「走字」那個鍵走得出一段**（2026-10-10 量出來的）——而**那個鍵是誰，兩套
+/// 鍵位不同**，所以這道閘 2026-10-13 收窄了。
 ///
-/// 竪排裏「一行」是一整段，而 vim 鍵位那道「不出這一行」的閘是橫排紙上的規矩
-/// （`whichwrap`）。兩個撞在一起，`j` 走到段尾就停死——正是 2026-09 報過、橫排
-/// 那一側早就修好的那一條（「竖排的时候按 JK，无法跨行」），在 vim 那一側還活着。
+/// 竪排裏「一行」是一整段，2026-09 報過「竖排的时候按 JK，无法跨行」。10-10 的答案
+/// 是「竪排一律跨」，理由寫的是「`whichwrap` 是橫排紙上的規矩」。**那個理由收窄
+/// 了**：`whichwrap` 管的是 `h`/`l`/`<`/`>` 這幾個**字母**，不是「只在橫排管」。於
+/// 是視覺那一套下走字的是 `j`/`k`，vim 的 `whichwrap` 裏沒有這兩個字母，照舊跨；行
+/// 文那一套下走字的是 `h`/`l`，vim 鍵位下它們停在段尾，而 `[editor] which_wrap`
+/// 撥得開。helix 沒有這道閘，兩套方案都跨。
 #[test]
-fn j_walks_out_of_a_paragraph_in_vertical_under_both_keymaps() {
-    // Warning: **問的是「走字那個鍵」，不是字母 `j`**（2026-10-12）。出廠的行文
-    // 那一套下走字的是 `l`，版面那一套下纔是 `j`——規矩是同一條，鍵名換了。
-    let after = |vim: bool, way: yumete_cjk::VerticalKeys, presses: usize| -> usize {
+fn the_character_key_walks_out_of_a_paragraph_in_vertical() {
+    use yumete_cjk::VerticalKeys::{Logical, Visual};
+    // Warning: **問的是「走字那個鍵」，不是字母 `j`**（2026-10-12）：行文那一套下
+    // 走字的是 `l`，視覺那一套下纔是 `j`。
+    let after = |vim: bool, way: yumete_cjk::VerticalKeys, presses: usize, wrap: &str| -> usize {
         let mut ed = typed("那年冬天。\n雪下得早。");
         ed.set_key_preset(match vim {
             true => yumete_cjk::KeyPreset::Vim,
@@ -25635,10 +25640,11 @@ fn j_walks_out_of_a_paragraph_in_vertical_under_both_keymaps() {
         });
         ed.set_layout(yumete_cjk::Layout::Vertical);
         ed.set_vertical_keys(way);
+        ed.set_which_wrap(wrap.to_string());
         ed.execute("goto 1").unwrap();
         let walk = match way {
-            yumete_cjk::VerticalKeys::Logical => 'l',
-            yumete_cjk::VerticalKeys::Visual => 'j',
+            Logical => 'l',
+            Visual => 'j',
         };
         for _ in 0..presses {
             ed.on_key(Key::Char(walk));
@@ -25646,16 +25652,35 @@ fn j_walks_out_of_a_paragraph_in_vertical_under_both_keymaps() {
         ed.cursor()
     };
     // 第一段五個字（下標 0–4），下標 5 是換行，6 起是第二段。
-    for way in [yumete_cjk::VerticalKeys::Logical, yumete_cjk::VerticalKeys::Visual] {
+    for way in [Logical, Visual] {
         for vim in [false, true] {
-            assert_eq!(after(vim, way, 4), 4, "vim={vim} {way:?}：走到段尾那個字");
-            assert!(
-                after(vim, way, 6) >= 6,
-                "vim={vim} {way:?}：走得出去，拿到 {}",
-                after(vim, way, 6)
+            assert_eq!(after(vim, way, 4, ""), 4, "vim={vim} {way:?}：走到段尾那個字");
+            // 這一格是唯一停下來的：vim 的 `l`，而 `whichwrap` 空着。
+            let crosses = !(vim && way == Logical);
+            assert_eq!(
+                after(vim, way, 6, "") >= 6,
+                crosses,
+                "vim={vim} {way:?}：走得出去嗎，拿到 {}",
+                after(vim, way, 6, "")
             );
         }
     }
+    // 撥開那一格：`l` 寫進 `which_wrap`，vim 的行文那一套也跨得出去。
+    assert!(
+        after(true, Logical, 6, "l") >= 6,
+        "which_wrap = \"l\" 之後跨得出去，拿到 {}",
+        after(true, Logical, 6, "l")
+    );
+    // 而方向鍵永遠跨：它不歸 `vertical_keys` 管，也不歸 `whichwrap` 的字母管。
+    let mut ed = typed("那年冬天。\n雪下得早。");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.set_layout(yumete_cjk::Layout::Vertical);
+    ed.set_vertical_keys(Logical);
+    ed.execute("goto 1").unwrap();
+    for _ in 0..6 {
+        ed.on_key(Key::Down);
+    }
+    assert!(ed.cursor() >= 6, "`Down` 走得出去，拿到 {}", ed.cursor());
 }
 
 
@@ -25946,6 +25971,50 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
         type_keys(&mut ed, "gj");
         assert_eq!(at(&ed), 1, "{layout:?}：`gj` 是檔案的下一行");
     }
+}
+
+/// **折了行的那一縱纔分得出兩套鍵位**（2026-10-13 報的：「我用 helix，朋友用
+/// vim」）。
+///
+/// vim 的 `j` 是行文的一行、`gj` 是視覺行；helix 正好相反。竪排下「視覺行」就是一
+/// 縱，所以一段折成兩縱的時候，vim 的 `j` 要跨到**下一段**去，`gj` 只走到同一段的
+/// 第二縱。從前兩套鍵位在竪排下逐鍵相同（都走 helix 那一套）：四個字母轉一圈進竪
+/// 排那一支，拿到的是螢幕的單位。
+///
+/// Warning: **`every_motion_lands_in_the_same_place_in_either_layout` 攔不住它**，
+/// 而且是結構上攔不住：那一張網的固定裝置每一段都**短過**兩邊的折行寬度（它自己
+/// 的註釋寫着為什麼），於是「下一縱」和「下一段」是同一格，錯的和對的長得一樣。
+/// 要分得出來，段落必須折。
+#[test]
+fn a_wrapped_column_tells_the_two_presets_apart() {
+    use crate::zong::Layout;
+    use yumete_cjk::KeyPreset::{Helix, Vim};
+    // 兩段各二十二個字，一縱十一個：各折成兩縱。
+    let text = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥\n\
+                一二三四五六七八九十百千萬億兆京垓秭穰溝澗正\n";
+    let at = |preset, keys: &str| -> (usize, usize) {
+        let mut ed = typed(text);
+        ed.set_key_preset(preset);
+        ed.set_layout(Layout::Vertical);
+        ed.set_vertical_keys(yumete_cjk::VerticalKeys::Logical);
+        ed.set_zong_length(11);
+        type_keys(&mut ed, "gg");
+        type_keys(&mut ed, keys);
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    // `lll` 先走到第四個字上——貼着邊的時候「走不動」和「走對了」長得一樣。
+    assert_eq!(at(Vim, "lllj"), (1, 3), "vim 的 `j` 是行文的一行：下一段，同一個字序");
+    assert_eq!(at(Vim, "lllgj"), (0, 14), "vim 的 `gj` 是視覺行：同一段的第二縱");
+    assert_eq!(at(Helix, "lllj"), (0, 14), "helix 的 `j` 是視覺行");
+    assert_eq!(at(Helix, "lllgj"), (1, 3), "helix 的 `gj` 是檔案的一行");
+    // 回頭那一半也要對，不然 `gk` 會掉進退化的那一支去。
+    assert_eq!(at(Vim, "lllgjgk"), (0, 3), "vim 的 `gk` 走回第一縱");
+    assert_eq!(at(Vim, "llljk"), (0, 3), "vim 的 `k` 走回上一段");
+    // **vim 的 `h`/`l` 不出這一段**：`whichwrap` 出廠不含 `h`，而竪排從前一律跨。
+    assert_eq!(at(Vim, "jh"), (1, 0), "段首按 `h` 停在原地");
+    assert_eq!(at(Helix, "gjh"), (0, 22), "helix 那一邊照舊走出去——有意的");
 }
 
 /// **對象找不着就往前找**——vim 的 `current_block`／`current_quote` 都有這一步
