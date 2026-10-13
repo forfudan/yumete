@@ -16303,8 +16303,9 @@ fn squeezed(text: &str) -> String {
         // the first one's continuation and never drawn separately.
         let mut editor = editor_with("甲a丙");
         editor.set_layout(WritingLayout::Vertical);
-        // 2026-10-12：出廠的竪排鍵位是行文那一套——`l` 走字、`j` 走行。
-        editor.on_key(Key::Char('l')); // down the 縱, onto the `a`
+        // Warning: **走字用方向鍵**（2026-10-13）：`Down` 在竪排下永遠是下一個
+        // 字，而哪個字母走字歸 `vertical_keys` 管。這幾條驗的是畫面，不是鍵。
+        editor.on_key(Key::Down); // down the 縱, onto the `a`
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
@@ -17564,8 +17565,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("上山\n下海");
         let config = vertical_config();
         editor.set_layout(WritingLayout::Vertical);
-        // 2026-10-12：出廠的竪排鍵位是行文那一套——`l` 走字、`j` 走行。
-        editor.on_key(Key::Char('l')); // down the 縱
+        // 走字用方向鍵，理由同 `the_cursor_is_drawn_as_a_block_over_its_slot`。
+        editor.on_key(Key::Down); // down the 縱
         // Wide enough for all three fields **and** the readout — narrower, 字
         // gives way to it on purpose (#500).
         let buffer = render_vertical(&mut editor, &config, 80, 12);
@@ -17591,10 +17592,11 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&format!("一\n{}", "字".repeat(20)));
         editor.set_layout(WritingLayout::Vertical);
         // Into the long paragraph, then far enough down it to be past the first
-        // 縱's worth of characters（2026-10-12：`j` 走行、`l` 走字）。
-        editor.on_key(Key::Char('j'));
+        // 縱's worth of characters. `Left` 換縱、`Down` 走字，兩個都不隨出廠值翻
+        // （2026-10-13；第一段只有一個字，所以一縱就是一段）。
+        editor.on_key(Key::Left);
         for _ in 0..12 {
-            editor.on_key(Key::Char('l'));
+            editor.on_key(Key::Down);
         }
         let buffer = render_vertical(&mut editor, &config, 60, 12);
         let raw: String = (0..buffer.area.width)
@@ -18277,10 +18279,11 @@ fn squeezed(text: &str) -> String {
         editor.set_layout(WritingLayout::Vertical);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
-        // `j` walks to the next 縱, which is the next line of the file
-        // （2026-10-12：出廠的竪排鍵位是行文那一套）。
-        editor.on_key(Key::Char('j'));
-        editor.on_key(Key::Char('j'));
+        // `Left` walks to the next 縱, which on these short rows is the next
+        // line of the file — 方向鍵不歸 `vertical_keys` 管，所以這一條不隨出廠
+        // 值翻（2026-10-13）。
+        editor.on_key(Key::Left);
+        editor.on_key(Key::Left);
         assert!(editor.enter_table(), "{}", editor.status());
         for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         let config = vertical_config();
@@ -18336,12 +18339,12 @@ fn squeezed(text: &str) -> String {
         // it is where the cell's ground has to show through.
         let mut editor = editor_with("| 字 | 讀音 |\n| --- | --- |\n| 木頭 | mu |\n");
         editor.set_layout(WritingLayout::Vertical);
-        // 縱書 turns the motions with the text: `j` walks to the next 縱, which
-        // is the next line of the file（2026-10-12：出廠的竪排鍵位是行文那一套）。
+        // `Left` walks to the next 縱, which on these short rows is the next
+        // line of the file — 同上一條，方向鍵不隨出廠值翻。
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('j'));
-        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Left);
+        editor.on_key(Key::Left);
         assert!(
             editor.enter_table_as(false),
             "{}",
@@ -20665,13 +20668,13 @@ fn squeezed(text: &str) -> String {
         let mut seen: Vec<(u16, u16, String)> = Vec::new();
         for (n, want) in [(3usize, "1"), (4, "9"), (5, "9"), (6, "7")] {
             let mut editor = editor_with("那是 1997 年的事");
-            // 鍵要走竪排那一套：出廠的行文那一套下，`l` 是「縱裏往下一個字」。
+            // 走字用方向鍵：`Down` 在竪排下永遠是「縱裏往下一個字」。
             editor.set_layout(WritingLayout::Vertical);
             // Warning: **這一格是 `settings.rs` 推進來的，測試裏要自己撥**——不撥
             // 的話 `1997` 一個數字一格，根本不成組，這一條就什麼都沒驗到。
             editor.set_tatechuyoko(config.editor.tatechuyoko);
             for _ in 0..n {
-                editor.on_key(Key::Char('l'));
+                editor.on_key(Key::Down);
             }
             let buffer = render_vertical(&mut editor, &config, 52, 12);
             let marked = reversed(&buffer, 52, 12);

@@ -173,9 +173,12 @@ fn a_tatechuyoko_pair_makes_the_slot_and_the_character_part_company() {
     ed.execute(":vertical").unwrap();
 
     // 緃中横關着：一個字一格，兩個數一路相等。
+    // Warning: **走字用方向鍵**（2026-10-13）：`Down` 在竪排下永遠是下一個字，而
+    // 哪個字母走字歸 `vertical_keys` 管——這一條驗的是格與字，不是鍵，所以不該
+    // 跟着出廠值翻。從前寫 `l`，出廠值一改就紅。
     ed.set_tatechuyoko(0);
     for _ in 0..2 {
-        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Down);
     }
     let at = ed.zong_position();
     assert_eq!(ed.cursor(), 2, "兩個字下去，停在「年」上");
@@ -203,8 +206,9 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     let mut ed = typed("1997年\n");
     ed.execute(":vertical").unwrap();
     ed.set_tatechuyoko(2);
+    // Warning: 走字用方向鍵，理由同上一條。
     for _ in 0..4 {
-        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Down);
     }
     assert_eq!(ed.cursor(), 4, "1/9/9/7 各一格");
     assert_eq!(ed.zong_position().slot_in_line, 4);
@@ -215,12 +219,12 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     ed.execute(":vertical").unwrap();
     ed.set_tatechuyoko(4);
     for step in 1..=3 {
-        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Down);
         let at = ed.zong_position();
         assert_eq!(ed.cursor(), step, "第 {step} 個字");
         assert_eq!(at.slot_in_line, 0, "還在那一格裏：{at:?}");
     }
-    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Down);
     let at = ed.zong_position();
     assert_eq!(ed.cursor(), 4, "「年」");
     assert_eq!(at.slot_in_line, 1, "第二格：{at:?}");
@@ -230,7 +234,7 @@ fn a_long_group_is_one_slot_and_a_longer_one_is_not_packed_at_all() {
     ed.execute(":vertical").unwrap();
     ed.set_tatechuyoko(4);
     for step in 1..=5 {
-        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Down);
         assert_eq!(ed.zong_position().slot_in_line, step, "一個數一格");
     }
 }
@@ -244,10 +248,11 @@ fn the_caret_and_the_grid_agree_about_a_candidate() {
     // Down the column: two rows of candidate between 夏 and 秋.
     ed.execute(":vertical").unwrap();
     assert_eq!(ed.zong_position().slot, 0);
-    // Warning: **往下一個字是 `l`**（2026-10-12 起出廠的行文那一套）：竪排的
-    // `hjkl` 和橫排逐鍵相同，`l` 走字、`j` 走行。版面那一套下纔是 `j`。
-    ed.on_key(Key::Char('l'));
-    ed.on_key(Key::Char('l'));
+    // Warning: **往下一個字用方向鍵**（2026-10-13）：`Down` 在竪排下永遠是下一
+    // 個字，而哪個字母走字歸 `vertical_keys` 管（出廠的視覺那一套是 `j`，行文那
+    // 一套是 `l`）。這一條驗的是格與光標對不對得上，不是鍵。
+    ed.on_key(Key::Down);
+    ed.on_key(Key::Down);
     assert_eq!(ed.cursor(), 2, "two 字 along");
     assert_eq!(
         ed.zong_position().slot,
@@ -21880,15 +21885,16 @@ fn every_selection_remembers_its_own_goal_slot_in_vertical() {
     };
 
     // 跨到下一縱：中間那一縱只有三個字，第五格到不了。
-    // Warning: **換縱的鍵 2026-10-12 換了**：出廠的行文那一套下是 `j`（下一行），
-    // `h` 成了「上一個字」。驗的是目標格每段各記一份，和哪個字母無關。
-    press(&mut ed, "j");
+    // Warning: **換縱用方向鍵**（2026-10-13）：`Left` 在竪排下永遠是下一縱，而哪
+    // 個字母換縱歸 `vertical_keys` 管——驗的是目標格每段各記一份，和哪個字母無
+    // 關，所以不該跟着出廠值翻（2026-10-12 跟過一次，10-13 又要跟一次）。
+    ed.on_key(Key::Left);
     let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
     at.sort();
     assert_eq!(ed.sel.len(), 2, "兩段還在：{at:?}");
 
     // Warning: 再跨一縱：各自回到自己原來那一格。
-    press(&mut ed, "j");
+    ed.on_key(Key::Left);
     let mut at: Vec<usize> = ed.sel.iter().map(|r| r.head).collect();
     at.sort();
     let slots: Vec<usize> = at.iter().map(|&a| slot(&ed, a)).collect();
@@ -25857,8 +25863,9 @@ fn an_alias_expansion_is_not_turned_with_the_typed_keys() {
     assert_eq!(go(true), go(false), "`Q` 展開成 `l`，走的該和 `l` 一樣");
 }
 
-/// **逐鍵把關：竪排出廠那一套，每一個動作都該和橫排說同一句話**（2026-10-12
-/// 作者要的：「其他键也有影响，比如 gj gk 这种，还有 J，你帮我都把关一下」）。
+/// **逐鍵把關：竪排行文那一套，每一個動作都該和橫排說同一句話**（2026-10-12
+/// 定，原話「其他键也有影响，比如 gj gk 这种，还有 J，你帮我都把关一下」；那一天
+/// 行文是出廠值，2026-10-13 起出廠是視覺，而這一條守的仍是行文那一套）。
 ///
 /// 一頁的大小兩邊撥成一樣（`set_page`），於是連翻頁那一族都比得了——不然竪排一
 /// 頁幾縱和橫排一頁幾行本來就不同，差出來的是螢幕不是鍵。
@@ -25876,6 +25883,10 @@ fn every_motion_lands_in_the_same_place_in_either_layout() {
         let mut ed = typed(&text);
         ed.set_key_preset(preset);
         ed.set_layout(layout);
+        // Warning: **要驗的那一套要自己釘住**（2026-10-13）：這一張網問的是「行文
+        // 那一套下兩種排版說同一句話嗎」，而出廠值已經是視覺那一套了。靠出廠值
+        // 的話，出廠值一改這一條就紅，而紅的不是它要守的那件事。
+        ed.set_vertical_keys(yumete_cjk::VerticalKeys::Logical);
         // 兩邊一樣大，翻頁那一族纔比得了。
         ed.set_page(12, 12);
         ed.set_zong_length(40);
@@ -25925,6 +25936,8 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
     for layout in [Layout::Horizontal, Layout::Vertical] {
         let mut ed = typed(text);
         ed.set_layout(layout);
+        // 同上：這一條驗的是行文那一套下 `j` 與 `gj` 的分工。
+        ed.set_vertical_keys(yumete_cjk::VerticalKeys::Logical);
         ed.set_wrap_width(16); // 八個漢字
         ed.set_zong_length(8);
         type_keys(&mut ed, "gg");

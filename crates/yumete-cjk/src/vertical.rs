@@ -139,20 +139,21 @@ impl Margin {
 ///   k    上一行        上一行          上一個字（往上）
 /// ```
 ///
-/// **出廠是邏輯**，理由是數目和操作符：視覺那一套下 `3h` 在橫排是三個字、在竪排
-/// 是三行，於是同一個巨集、同一條 `[keys.normal]`、手冊上同一張表，換一次排版就
-/// 換了意思。邏輯那一套下每一個數目、每一個操作符在兩種排版下說同一句話。
+/// **出廠是視覺**（2026-10-13 改，原本是邏輯）。代價留在這裏備查：視覺那一套下
+/// `3h` 在橫排是三個字、在竪排是三行，於是同一個巨集、同一條 `[keys.normal]`、手
+/// 冊上同一張表，換一次排版就換了意思；邏輯那一套沒有這個代價，每一個數目、每一
+/// 個操作符在兩種排版下說同一句話。換回去是 `:vertical-keys logical`。
 ///
 /// Warning: **方向鍵不歸這裏管，永遠是視覺的。** 三家參考都按名字分家：Emacs 的
 /// `C-f` 永遠邏輯而 `→` 看方向，CSS 規範裏 `forward`/`backward` 是邏輯、
 /// `left`/`right` 是視覺。一個箭頭是方向的圖，一個字母是一個詞。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VerticalKeys {
-    /// `h`/`l` 走字、`j`/`k` 走行——和橫排逐鍵相同。
-    #[default]
-    Logical,
     /// 四個鍵指哪就走哪，等於把橫排那一套順時針轉九十度。
-    Visual,
+    #[default]
+    Visual, // Absolute direction
+    /// `h`/`l` 走字、`j`/`k` 走行——和橫排逐鍵相同。
+    Logical, // Writing direction
 }
 
 impl VerticalKeys {

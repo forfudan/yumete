@@ -329,7 +329,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Pick(EDITOR_VERTICAL_KEYS_WAYS),
         label: "set.editor.vertical-keys",
         hint: "set.editor.vertical-keys.hint",
-        factory: r#""logical""#,
+        factory: r#""visual""#,
     },
     Setting {
         table: "editor",
