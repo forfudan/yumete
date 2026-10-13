@@ -712,6 +712,7 @@ pub fn draw(
                         cursor_row.saturating_sub(base),
                         gutter as usize,
                         config.editor.line_numbers,
+                        false,
                     ),
                     _ => String::new(),
                 };

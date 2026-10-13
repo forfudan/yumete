@@ -857,7 +857,7 @@ pub(crate) fn index_mark(markers: &str, i: usize) -> String {
 
 /// Draw a paragraph number above its 縱, two digits to a row (緃中横), so it
 /// reads as a number rather than a stack of loose digits.
-fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: Style) {
+fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, digits: &str, style: Style) {
     // Warning: **Two digits to a row — 緃中横, which is what a Japanese book does with
     // a number in a column** (#512). A 縱 is two cells wide and a digit is one,
     // so the pair costs nothing and a four-digit line number is two rows deep
@@ -871,7 +871,6 @@ fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: St
     // colours, not one run. Position could never separate them here (the
     // number sits above the text, in the text's own columns), and colour is
     // what vertical layout has instead.
-    let digits = n.to_string();
     let room = rows as usize * 2;
     // A number too long for the header loses its leading digits rather than its
     // trailing ones: it is the units that tell two neighbouring 縱 apart.
@@ -1153,6 +1152,7 @@ pub fn draw(
     let mark = editor.word_mark();
     let cursor_line = editor.cursor_line();
     let numbers = config.editor.line_numbers;
+    let tail = crate::tail_row(rope);
 
     // Warning: **問算出來的那一格，不是配置**（2026-10-02 一輪掃查報來的）。
     // [`Metrics::ticks`] 自己的註釋寫着「Ticks live in the lane; with no lane
@@ -1239,11 +1239,16 @@ pub fn draw(
         let has_margin = x + SLOT_WIDTH < area.x + area.width;
 
         if numbers != LineNumbers::None && zong.starts_line() {
-            let n = match numbers {
-                LineNumbers::Relative if zong.line != cursor_line => {
-                    zong.line.abs_diff(cursor_line)
-                }
-                _ => zong.line + 1,
+            // 檔末換行符畫出來的那一縱寫 `~`，不是一個行號——理由同橫排的
+            // [`crate::tail_row`]。
+            let n = match Some(zong.line) == tail {
+                true => "~".to_string(),
+                false => match numbers {
+                    LineNumbers::Relative if zong.line != cursor_line => {
+                        zong.line.abs_diff(cursor_line).to_string()
+                    }
+                    _ => (zong.line + 1).to_string(),
+                },
             };
             // Set vertically the numbers sit *above* the 縱, in the text's own
             // columns — position separates nothing, so colour does the whole
@@ -1273,7 +1278,7 @@ pub fn draw(
             // to write in.
             let band_top = text_top.saturating_sub(metrics.head_rows);
             let rows = metrics.head_rows - metrics.diff_row;
-            put_number(buf, x, band_top, rows, n, style);
+            put_number(buf, x, band_top, rows, &n, style);
         }
 
         // **改動條，轉過九十度**（#55/#298）。橫排那一條是行號後面、貼着正文

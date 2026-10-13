@@ -9,6 +9,17 @@ in `docs/development.md` §5.2.
 
 ## 未發布 · Unreleased
 
+### Fixed
+
+- **The newline at the end of a file is no longer numbered as a line of its own.** It is
+  the terminator of the line above it, so the row it draws now carries `~` where a number
+  would be, the way helix marks it. Whether the cursor can stand there follows the keymap:
+  under helix it can, under vim it cannot — and under vim `j` on the last line of the file
+  now does nothing at all instead of sliding the cursor to the end of the line.
+- **`:w` on a file that ends without a newline no longer reloads itself.** The save added
+  the newline and then read its own byte back as somebody else's edit, so the status line
+  said 「存了」 and then 「文件被外部修改，已同步加載」, and the line came back.
+
 ## 0.8.0 · 2026-10-13
 
 Twenty-two commits since 0.7.0. The vertical keys, the vim preset, a four-gigabyte

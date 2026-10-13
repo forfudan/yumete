@@ -1335,6 +1335,11 @@ impl Editor {
             };
             (pos, goal)
         };
+        // vim 鍵位下檔尾那條虛行到不了，所以瞄到那裏的 `j` 是一次失手——連目標
+        // 列都不動（見 [`Editor::vim_cannot_reach`]）。
+        if self.vim_cannot_reach(self.current_buffer().rope(), pos) {
+            return;
+        }
         let remembered = self.sel.goal();
         self.sel.set_head(pos);
         if !self.extend {
@@ -1378,6 +1383,10 @@ impl Editor {
             };
             (goal, pos)
         };
+        // 同橫排：vim 鍵位下檔尾那條虛行到不了。
+        if self.vim_cannot_reach(self.current_buffer().rope(), pos) {
+            return;
+        }
         self.sel.set_head(pos);
         if !self.extend {
             self.sel.set_anchor(pos);

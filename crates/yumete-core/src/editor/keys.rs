@@ -336,6 +336,23 @@ impl Editor {
         });
     }
 
+    /// 檔尾那條虛行在 vim 鍵位下**到不了**，所以瞄到那裏的縱向動作是一次失手
+    /// （nvim 裏末行按 `j` 原地不動），不是一次「走過去再夾回來」。
+    ///
+    /// 夾回來也不是沒道理——[`Self::keep_off_the_newline`] 本來就把頭拉回最後一
+    /// 條真行——可是它夾的是**位置**，不是**列**：`foo\n` 的第一行按 `j`，光標
+    /// 走到虛行行首、被拉回上一行、落在行尾，看着就是往右跳了一格。
+    ///
+    /// 2026-10-13 定的後一半：「光标進得去嗎？這個随 keymap，vim keymap 的話进
+    /// 不去（`~` 表示这里有个结尾换行符而已），helix keymap 進得去。」前一半是
+    /// 畫法：那一格照畫，`~` 當行號，同 helix。
+    pub(super) fn vim_cannot_reach(&self, rope: &crate::Rope, pos: usize) -> bool {
+        self.key_preset == yumete_cjk::KeyPreset::Vim
+            && self.mode == Mode::Normal
+            && !(self.vim_lines && self.extend)
+            && rope.char_to_line(pos) > self.last_real_line(rope)
+    }
+
     /// 檔尾那條虛行之前的最後一條真行。
     ///
     /// Rope 把 `abc\n` 數成兩行——第二條是空的，在那個換行符後面。vim 没有它。

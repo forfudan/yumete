@@ -4294,8 +4294,25 @@ fn gutter_width(total_lines: usize, mode: LineNumbers, code: bool) -> usize {
     }
 }
 
+/// 檔末那個換行符後面的那一格，若有。
+///
+/// `foo\n` 在 ropey 裏是兩行，而寫稿的人只寫了一行：第二格是上一行的**結束符**
+/// 畫出來的，不是檔裏的一行。所以它不報行號——報了，末尾的換行符就看成「多出來
+/// 一行」，而那正是 2026-10-13 的這個問題：「最後一行的 \n 應該是不顯示爲新行的
+/// 吧？」helix 的答案是行還在、光標進得去，但號碼欄畫 `~`，這裏跟它一樣。
+///
+/// 空檔沒有這一格：它只有一行，而那一行不是誰的結束符畫出來的。
+pub(crate) fn tail_row(rope: &yumete_core::Rope) -> Option<usize> {
+    let last = rope.len_lines().checked_sub(1)?;
+    (last > 0 && rope.line(last).len_chars() == 0).then_some(last)
+}
+
 /// The gutter text for line `i` (0-based) given the cursor line and mode.
-fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) -> String {
+/// `tail` marks [`tail_row`], which gets `~` in place of a number.
+fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers, tail: bool) -> String {
+    if tail && mode != LineNumbers::None {
+        return format!("{:>w$}{}", "~", " ".repeat(GUTTER_AIR), w = width - GUTTER_AIR);
+    }
     match mode {
         LineNumbers::None => String::new(),
         LineNumbers::Absolute => {
@@ -10460,6 +10477,8 @@ fn draw_horizontal(
     //
     // Not in a pane that is only being read: that half is already a rung back.
     let focus = peek.is_none() && editor.focus();
+    // 檔末換行符畫出來的那一格，若有：它的號碼欄寫 `~`，不是一個行號。
+    let tail = tail_row(rope);
     let stood_back = ink.faded();
     let mut lines: Vec<Line> = Vec::new();
     // What the bar at the top of the page will hold, taken from the first row
@@ -10509,7 +10528,7 @@ fn draw_horizontal(
             // 診斷那一欄（若有）在最左，號碼那一條從它右邊開始。
             let numbers = gutter - problem_gutter;
             let label = if row.starts_line() {
-                gutter_text(row.line, cursor_line, numbers, mode)
+                gutter_text(row.line, cursor_line, numbers, mode, Some(row.line) == tail)
             } else {
                 " ".repeat(numbers)
             };
@@ -23061,7 +23080,7 @@ fn squeezed(text: &str) -> String {
         let buf = render_wrapped(&mut editor, &config, 12, 5);
         let gutter = gutter_width(1, LineNumbers::Absolute, false);
         let first = row_text(&buf, 0);
-        assert!(first.starts_with(&gutter_text(0, 0, gutter, LineNumbers::Absolute)));
+        assert!(first.starts_with(&gutter_text(0, 0, gutter, LineNumbers::Absolute, false)));
         // The second row of the same paragraph is numberless: the number names
         // the paragraph, not the screen row.
         let second = row_text(&buf, 1);
@@ -23069,6 +23088,23 @@ fn squeezed(text: &str) -> String {
         // Warning: Twelve cells, a two-cell gutter and 漢字 two cells wide: four
         // characters fit on the first row now rather than five (#484).
         assert_eq!(second.trim(), "春夏", "{first:?} / {second:?}");
+    }
+
+    #[test]
+    fn the_row_a_final_newline_draws_is_not_numbered() {
+        // 2026-10-13：「最後一行的 \n 應該是不顯示爲新行的吧？」——那一格是上
+        // 一行的結束符畫出來的，所以它報 `~`，不報一個行號。helix 一樣。
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "春\n").expect("the fixture buffer is writable");
+        let mut config = wrap_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let buf = render_wrapped(&mut editor, &config, 12, 5);
+        assert_eq!(row_text(&buf, 0).trim_end(), "1  春");
+        assert_eq!(row_text(&buf, 1).trim_end(), "~");
+        // 空檔只有一行，而那一行不是誰的結束符：它照樣報 1。
+        let mut editor = Editor::new();
+        let buf = render_wrapped(&mut editor, &config, 12, 5);
+        assert_eq!(row_text(&buf, 0).trim_end(), "1");
     }
 
     #[test]

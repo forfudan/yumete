@@ -18997,6 +18997,29 @@ fn the_vim_caret_never_rests_on_a_line_break() {
     assert_eq!(ed.sel.head(), 2, "夾還在管事");
 }
 
+/// **vim 鍵位下檔尾那條虛行進不去，helix 鍵位下進得去**（2026-10-13 定）。
+///
+/// 兩半：畫法一樣（那一格照畫，`~` 當行號，同 helix），走法隨鍵位。vim 裏末行
+/// 按 `j` 是一次**失手**，連列都不動——不是走過去再夾回來，那樣光標會落在行尾，
+/// 看着像往右跳了一格（`crates/yumete-core/src/editor/keys.rs` 的
+/// `vim_cannot_reach` 記了為什麽）。
+#[test]
+fn the_row_a_final_newline_draws_is_vim_unreachable() {
+    let mut ed = typed("foo\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    let was = ed.sel.head();
+    press(&mut ed, "j");
+    assert_eq!(ed.sel.head(), was, "vim：末行按 j 原地不動，連列都不動");
+    press(&mut ed, "G");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 0, "vim：G 也不去");
+    // helix 鍵位進得去：那一格是下一段要寫的地方。
+    let mut ed = typed("foo\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "j");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 1, "helix：進得去");
+}
+
 /// **夜審報出來的那幾條，各釘一格**（2026-10-06）。
 ///
 /// 一輪對齊做完之後請了一個只讀的審查，逐條實測。下面每一個斷言都對着它報的一條，
