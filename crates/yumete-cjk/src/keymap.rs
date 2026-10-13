@@ -44,13 +44,14 @@ impl KeyPreset {
             // cursor.
             KeyPreset::Vim => &[
                 ("x", ";{n}D"),
-                // Warning: **`s` cannot be 「collapse, then `c`」 any more**
-                // (2026-09-19). It was written before #429 made `c` an
-                // operator: now `;c` collapses and then *waits for a motion*,
-                // so a hand typing `shello` got no substitution and an opened
-                // line from the `o`. vim's `s` is 「cut this character and
-                // start typing」, which is what `x` does plus `i`.
-                ("s", ";{n}Di"),
+                // Warning: **`s` 是一筆，不是「剪掉 ＋ 插入」兩筆**（2026-10-13 報
+                // 的：「使用 2s 替換輸入時，會把 redo 動作變成兩步」）。從前它拼成
+                // `;{n}Di`，兩筆編輯就是兩次撤銷；vim 的 `s` 就是 `cl`（`:h s`：
+                // 「synonym for `cl`」），而 `c` 在這一端本來就是一個算子、一筆。
+                //
+                // 2026-09-19 那一版寫成 `;c` 是錯的（`c` 成了算子之後 `;c` 會停下
+                // 來等一個動作），而 `c{n}l` 把動作一起給了它，不等。
+                ("s", "c{n}l"),
                 // Warning: **`dd` `dw` `cw` `yy` `cc` `yw` are not in this table
                 // any more** (#429, 2026-09-18). They were six lines of a
                 // grammar that has hundreds, and a table cannot spell the rest

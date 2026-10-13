@@ -1281,6 +1281,29 @@ impl Buffer {
             for chunk in self.rope.chunks() {
                 file.write_all(chunk.as_bytes())?;
             }
+            // **一存就以行尾結尾**（2026-10-13 定，照 vim）。
+            //
+            // vim 的模型是「每一行都以行尾結束」，而它**只有 `:set binary` 時**纔保住
+            // 「原檔沒有末尾換行」這件事（`:h 'endofline'`：「When writing a file and
+            // this option is off **and the 'binary' option is on**, no <EOL> will be
+            // written」）。實測 nvim：`printf foo > a.txt` 之後開了就 `:wq`，一個字沒
+            // 改，出來的是 `foo\n`。
+            //
+            // 補的是**這個檔自己的行尾**，和 vim 一樣：dos 檔補 `\r\n`、unix 檔補
+            // `\n`（見 [`Buffer::ending`]）。
+            //
+            // Warning: **空的不補。** nvim 也不補：0 位元組的檔開了再存還是 0 位元組，
+            // 盤上沒有的檔 `:wq` 建出來也是 0 位元組。一個只有行尾的檔和一個空檔是兩
+            // 件事。
+            //
+            // 原話：「就算是老档案，當你按下 `:w` 的时候，你就应该預期到文檔发生了变
+            // 化……其他任何时候只要文件不是空的，`:w` 都会加行尾」。§309 的「逐位元組
+            // 往返」於是只剩 CRLF 與混行尾兩條，缺末尾換行那一條作廢。
+            let last = self.rope.len_chars().checked_sub(1);
+            let terminated = last.is_some_and(|at| self.rope.char(at) == '\n');
+            if last.is_some() && !terminated {
+                file.write_all(self.ending.as_bytes())?;
+            }
             Ok(())
         })
     }

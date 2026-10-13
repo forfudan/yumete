@@ -29,7 +29,6 @@ fn open(name: &str, bytes: &[u8]) -> (Editor, std::path::PathBuf) {
 fn opening_and_saving_changes_not_one_byte() {
     for (name, bytes) in [
         ("crlf.md", &b"line one\r\nline two\r\n"[..]),
-        ("no-final-newline.md", &b"line one\r\nline two"[..]),
         ("mixed.md", &b"one\r\ntwo\nthree\r\n"[..]),
         // Three bytes nobody would miss in prose — and the thing Excel reads
         // to decide a `.csv` is UTF-8. Without them 田中 comes back mojibake
@@ -41,6 +40,37 @@ fn opening_and_saving_changes_not_one_byte() {
         let (mut ed, path) = open(name, bytes);
         ed.execute("write").unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), bytes, "{name}");
+    }
+}
+
+/// **一存就以行尾結尾，而補的是這個檔自己的行尾**（2026-10-13 定，照 vim 與 helix）。
+///
+/// vim 的模型是「每一行都以行尾結束」，`'endofline'` 那一格**只在 `:set binary` 時**
+/// 算數——實測 nvim：`printf foo > a.txt` 之後開了就 `:wq`，一個字沒改，出來的是
+/// `foo\n`；`a\r\nfoo` 出來的是 `a\r\nfoo\r\n`。helix 的 `insert-final-newline`
+/// 預設也是 `true`。
+///
+/// Warning: **空的不補**：0 位元組的檔開了再存還是 0 位元組（nvim 也是）。一個只有行
+/// 尾的檔和一個空檔是兩件事。
+///
+/// 原話：「就算是老档案，當你按下 `:w` 的时候，你就应该預期到文檔发生了变化……其他任
+/// 何时候只要文件不是空的，`:w` 都会加行尾」。§309 那條「逐位元組往返」於是只剩 CRLF
+/// 與混行尾兩條。
+#[test]
+fn a_save_ends_the_file_the_way_its_own_lines_end() {
+    for (name, bytes, want) in [
+        ("lf.md", &b"line one\nline two"[..], &b"line one\nline two\n"[..]),
+        ("crlf.md", &b"line one\r\nline two"[..], &b"line one\r\nline two\r\n"[..]),
+        // 已經有了就不再補一個。
+        ("done.md", &b"line one\n"[..], &b"line one\n"[..]),
+        // 空的不補。
+        ("empty.md", &b""[..], &b""[..]),
+        // 只有一個行尾的檔不是空檔：它那一行（空的）已經結束了。
+        ("just-a-break.md", &b"\n"[..], &b"\n"[..]),
+    ] {
+        let (mut ed, path) = open(name, bytes);
+        ed.execute("write").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), want, "{name}");
     }
 }
 

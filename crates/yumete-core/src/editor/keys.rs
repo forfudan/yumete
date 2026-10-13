@@ -7,6 +7,16 @@
 
 use super::*;
 
+/// 一段是**整行**還是行內的一截——`do_vim_span` 那道「落在換行符上就什麼都不做」
+/// 的閘只擋後者（2026-10-13）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    /// `dd`／`yy`／`cc` 那一路：這一段就是整行，連它的行尾。
+    Lines,
+    /// 算子 ＋ 動作那一路：`dw`、`d$`、`x`、`D`。
+    Chars,
+}
+
 impl Editor {
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
@@ -792,7 +802,7 @@ impl Editor {
             return self.do_vim(op, motion::Span::Over { anchor, head });
         }
         let span = self.line_span(first, last, op == 'c');
-        self.do_vim(op, span);
+        self.do_vim_span(op, span, Shape::Lines);
     }
 
     /// The span whole lines cover. `keep_break` is `cc`'s rule: **`cc` keeps
@@ -1018,7 +1028,21 @@ impl Editor {
             // next line's indent** with it, which is text the hand never saw
             // itself select.
             _ => {
-                let end = match rope.char_to_line(target) > rope.char_to_line(before) {
+                let crossed = rope.char_to_line(target) > rope.char_to_line(before);
+                // Warning: **空行上沒有詞可停，取走的就是那個換行符**（2026-10-13 報
+                // 的：「在空行按 dd 和 dw 無效」）。上面那條「詞不跨行」說的是「最後
+                // 走過的那個**詞**在行末」——空行上一個詞都沒走過，走的是 vim 排他
+                // 的第一條規矩（`:h exclusive`）：終點落在第 1 欄，終點退到上一行的
+                // 末尾**而且動作變成包含式**，於是那個換行算在裏頭，空行就此消失。
+                //
+                // 交給 `Shape::Lines` 是因為這一段正是「一整行（空的）連它的行尾」，
+                // 而底下那道閘擋的是**量出來**零寬的那一種。
+                if crossed && motion::line_end(rope, before) == motion::line_start(rope, before) {
+                    let at = motion::line_start(rope, before);
+                    let span = motion::Span::Over { anchor: start.min(at), head: at };
+                    return self.do_vim_span(op, span, Shape::Lines);
+                }
+                let end = match crossed {
                     true => motion::line_end(rope, before),
                     false => target,
                 };
@@ -1034,11 +1058,17 @@ impl Editor {
     /// Whole lines, for a linewise motion (`dj`, `dG`).
     fn do_vim_lines(&mut self, op: char, first: usize, last: usize) {
         let span = self.line_span(first, last, op == 'c');
-        self.do_vim(op, span);
+        self.do_vim_span(op, span, Shape::Lines);
     }
 
     /// Do the verb, and say what the old `play_vim_motion` said about each.
     fn do_vim(&mut self, op: char, span: motion::Span) {
+        self.do_vim_span(op, span, Shape::Chars)
+    }
+
+    /// 同上，而且說清楚這一段是**整行**還是行內的一截——那道「落在換行符上就什麼
+    /// 都不做」的閘只擋行內的（見底下）。
+    fn do_vim_span(&mut self, op: char, span: motion::Span, shape: Shape) {
         // **`ys{motion}{bracket}`**: the motion only says what to wrap, so
         // nothing is edited yet and there is nothing to take a snapshot of.
         // Select what it named and wait for the bracket, which is what `ms`
@@ -1071,7 +1101,12 @@ impl Editor {
         //
         // 只擋「整段就是那個換行符」：非空行的末字上 `dl`／`x` 照舊刪得掉它（那一格
         // 不是換行符），而 `dw` 從空行走到下一行是真的跨行，段寬不是零，不受影響。
-        if matches!(op, 'd' | 'c' | 'y') {
+        //
+        // Warning: **整行那一路不在這道閘底下**（2026-10-13 報的）。`dd` 在空行上
+        // 產生的正是同一個形狀的段（anchor ＝ head ＝ 那個換行符），於是一起被擋
+        // 住——空行上 `dd` 什麼都不刪，只能進插入模式按退格。而 `dd` 要的恰恰是那
+        // 個換行符：vim 的 `dd` 刪的是「這一行連同它的行尾」。
+        if matches!(op, 'd' | 'c' | 'y') && shape == Shape::Chars {
             if let motion::Span::Over { anchor, head } = span {
                 let rope = self.current_buffer().rope();
                 let on_a_break =
@@ -1082,6 +1117,8 @@ impl Editor {
             }
         }
         self.snapshot();
+        // 見 [`Editor::yank_whole_lines`]：`dd`／`yy` 取的是整行，末行缺終止符就補。
+        self.yank_whole_lines = shape == Shape::Lines;
         match op {
             // vim's `d` and `c` fill the unnamed register.
             'd' => self.apply(motion::Operator::Cut, span),
@@ -1114,6 +1151,7 @@ impl Editor {
                 self.sel.set_anchor(head);
             }
         }
+        self.yank_whole_lines = false;
     }
 
     /// **What the right-hand side of a binding says to do** (#429).

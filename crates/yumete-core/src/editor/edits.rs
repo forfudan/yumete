@@ -1004,6 +1004,11 @@ impl Editor {
 
     /// Put `text` in the register named by a pending `"`, or the unnamed one.
     pub(super) fn store(&mut self, text: String) {
+        // 整行取出來的要帶着行尾——見 [`Editor::yank_whole_lines`]。
+        let text = match self.yank_whole_lines && !text.is_empty() && !text.ends_with('\n') {
+            true => text + self.current_buffer().ending(),
+            false => text,
+        };
         // **一段選區一份**（2026-10-09，見 [`Editor::register_parts`]）。有名字的格子和
         // 無名那一格走同一條規矩——helix 的寄存器無論叫不叫得出名字都是一串值。
         //
@@ -1204,7 +1209,12 @@ impl Editor {
         let (start, end) = (start, end.max(start));
         let at = if line_wise {
             let rope = self.current_buffer().rope();
-            let line = rope.char_to_line(if after { end.max(start) } else { start });
+            // Warning: **`end` 是排他的**（2026-10-13 報的）。選區含光標那一格，所以
+            // `end` 指着它**後面**那一個字——空行上那正是下一行的第一個字，於是
+            // 「貼在這一行之後」算成了「貼在下一行之後」。報的原話：「在 hello 之前
+            // 按 p 實際會粘到 hello 之後」。要的是選區**最後一個字**那一行。
+            let last = end.max(start).saturating_sub(1).max(start);
+            let line = rope.char_to_line(if after { last } else { start });
             if after {
                 let next = line + 1;
                 if next < rope.len_lines() {
@@ -1223,6 +1233,22 @@ impl Editor {
             }
         } else {
             start
+        };
+        // **貼在沒有終止符的末行後面：先補一個行尾**（2026-10-13 報的）。不補的話
+        // 整行就貼進了同一行——`Gyyp` 出 `barbar`。取來那一份自己的行尾不要了：原本
+        // 沒有末尾換行的檔，別從這裏憑空多出來一個（存檔那一側另有規矩）。
+        let rope = self.current_buffer().rope();
+        let at_the_unterminated_end = line_wise
+            && after
+            && at == rope.len_chars()
+            && at > 0
+            && rope.char(at - 1) != '\n';
+        let text = match at_the_unterminated_end {
+            true => {
+                let ending = self.current_buffer().ending().to_string();
+                format!("{ending}{}", text.strip_suffix(ending.as_str()).unwrap_or(&text))
+            }
+            false => text,
         };
         let len = text.chars().count();
         if !self.edit_insert(at, &text) {

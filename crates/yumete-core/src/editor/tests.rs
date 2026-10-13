@@ -13933,7 +13933,8 @@ fn write_saves_the_active_buffer_and_quit_then_succeeds() {
         .expect("write");
     assert_eq!(outcome, CommandOutcome::Continue);
     assert!(!ed.current_buffer().is_modified());
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "初稿");
+    // 存出去的以行尾結尾（2026-10-13 起，照 vim 與 helix）。
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "初稿\n");
 
     assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
 
@@ -15533,7 +15534,7 @@ fn write_quit_saves_where_it_is_told_and_refuses_a_nameless_buffer() {
     // `:wq <path>` is a save-as, like `:w <path>`.
     let out = ed.execute(&format!(":wq {}", path.display())).unwrap();
     assert_eq!(out, CommandOutcome::Quit);
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "文");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "文\n");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -26055,6 +26056,60 @@ fn counting_han_skips_the_ruby_teardown_without_changing_the_answer() {
     assert_eq!(count("<ruby>漢<rt>汉</rt></ruby>"), 1, "讀音裏的漢字不算");
     // 快路徑只看「有沒有可能」，所以一個假的 `<ruby` 也要走得通。
     assert_eq!(count("他寫了 <ruby 這三個字"), 7, "不成組的標記不改答案");
+}
+
+/// **vim 鍵位：空行上的 `dd`／`dw`、空行上的 `p`、末行的 `yy`**（2026-10-13 報的，
+/// 四條都拿 `nvim --clean` 逐格對過）。
+///
+/// - 空行上 `dd`／`dw` 什麼都不刪：2026-10-09 那道「段落在換行符上就不做」的閘是為
+///   `D`（`d$`）加的，而 `dd` 產生的正是同一形狀的段，一起被擋住了。`dw` 另走 vim 排
+///   他的第一條規矩（`:h exclusive`）：終點落在第 1 欄就退到上一行末尾、動作變成包含
+///   式——空行上一個詞都沒走過，取的就是那個換行。
+/// - 空行上 `p` 貼到了**下一行**之後：定位用的 `end` 是排他的，空行上它正是下一行的
+///   第一個字。
+/// - 末行沒有終止符時 `yy` 取不到換行，而貼回去那一支是靠「結尾有沒有換行」認整行的。
+#[test]
+fn vim_keys_on_an_empty_line_and_at_the_end_of_the_file() {
+    let book = "foo\n\nbar\n\nhello\n";
+    let after = |text: &str, keys: &str| -> String {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    // 空行（第 2 行）上刪得掉。
+    assert_eq!(after(book, "2Gdd"), "foo\nbar\n\nhello\n", "空行上的 `dd`");
+    assert_eq!(after(book, "2Gdw"), "foo\nbar\n\nhello\n", "空行上的 `dw`");
+    // 空行上 `p` 貼在**這一行**之後，不是下一行之後。
+    assert_eq!(
+        after(book, "yy2Gp"),
+        "foo\n\nfoo\nbar\n\nhello\n",
+        "空行上的 `p`"
+    );
+    // 末行沒有終止符：`yy` 取的仍是整行，`p` 另起一行。
+    assert_eq!(after("foo\nbar", "Gyyp"), "foo\nbar\nbar", "末行的 `yy` ＋ `p`");
+    assert_eq!(after("foo\nbar", "yyGp"), "foo\nbar\nfoo", "貼到沒有終止符的末行後面");
+}
+
+/// **`s` 是一筆，不是「剪掉 ＋ 插入」兩筆**（2026-10-13 報的）。
+///
+/// 原話：「使用 2s 替換輸入時，會把 redo 動作變成兩步: 先删除再插入。但 vim 下 2s 和
+/// cw 是一樣的，只有一步替換動作」。vim 自己說 `s` 是 `cl` 的同義詞（`:h s`）。
+#[test]
+fn vim_s_is_one_change_like_cw() {
+    let after = |keys: &str, esc: bool| -> String {
+        let mut ed = typed("abcdef\n");
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, keys);
+        if esc {
+            ed.on_key(Key::Esc);
+            press(&mut ed, "u");
+        }
+        ed.current_buffer().text()
+    };
+    assert_eq!(after("gg2sXY", false), "XYcdef\n", "`2s` 換掉兩個字");
+    assert_eq!(after("gg2sXY", true), "abcdef\n", "一次 `u` 就回去了");
+    assert_eq!(after("ggcwXY", true), "abcdef\n", "`cw` 本來就是一筆");
 }
 
 /// **太大的代碼檔不建樹**（2026-10-13 報的：3.91 GB 的 JSON 開進來佔 40 GB）。

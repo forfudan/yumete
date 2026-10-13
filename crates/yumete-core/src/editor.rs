@@ -3196,6 +3196,12 @@ pub struct Editor {
     /// 換掉了**——三個試用的人都指出這一條：不確認的那個鍵，正是標籤最容易被截掉
     /// 的那一個。現在兩個都問，而問句要說清楚問的是哪一個。
     replace_this_file: Option<(std::path::PathBuf, Option<u64>)>,
+    /// **手上這一筆取的是整行嗎**——`dd`／`yy` 撥上，`store` 看它一眼（2026-10-13）。
+    ///
+    /// 末行沒有終止符的時候 `rope.slice` 取不到換行，而貼回去那一支是靠「結尾有沒有
+    /// 換行」認整行的——於是末行 `yy` 之後 `p` 貼進了同一行裏。vim 的寄存器自己記着
+    /// 「這是整行」（linewise），這一端用那個換行當記號，所以補上它。
+    yank_whole_lines: bool,
     /// **這一節坐在哪本書上**，開 yumete 的時候定一次，此後不動（2026-09-27 定）。
     ///
     /// 從前没有這個東西：文件樹問 `project_root()`、「工作區」問 shell 的 cwd、
@@ -3855,6 +3861,7 @@ impl Editor {
             search_preview: None,
             replaced_in: Vec::new(),
             replace_this_file: None,
+            yank_whole_lines: false,
             owed_search: false,
             owed_replace: None,
             replace_paused: false,
