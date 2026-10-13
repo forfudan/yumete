@@ -9120,6 +9120,20 @@ zhs = "每段开头空几格。中文的惯例是 2"
 en = "cells at the head of a paragraph; the Chinese convention is 2"
 
 [[message]]
+# 設置面板：存檔時文末缺的那個換行符添不添（2026-10-13）
+key = "set.editor.insert-final-newline"
+zht = "文末添加換行符"
+zhs = "文末添加换行符"
+en = "add a final line ending"
+
+[[message]]
+# 同上那一行的說明
+key = "set.editor.insert-final-newline.hint"
+zht = "存檔時在文末添加缺少的換行符，用這個文件自己的行尾(CRLF 文件添 CRLF)。空文件不添"
+zhs = "存档时在文末添加缺少的换行符，用这个文件自己的行尾(CRLF 文件添 CRLF)。空文件不添"
+en = "on save, add the line ending this file's own lines use when the last one is missing it; an empty file stays empty"
+
+[[message]]
 # 設置：界面语言
 key = "set.editor.language"
 zht = "界面語言"

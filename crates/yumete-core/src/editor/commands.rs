@@ -196,8 +196,9 @@ impl Editor {
                         return Ok(CommandOutcome::Continue);
                     }
                 }
+                let self_finish = self.insert_final_newline();
                 self.current_buffer_mut()
-                    .save_as(target, force)
+                    .save_as(target, force, self_finish)
                     .map_err(EditorError::Io)?;
                 // 改了名就是換了一份磁碟上的東西，改動條要重問一次（#55）。
                 self.refresh_vcs(true);
@@ -1547,8 +1548,9 @@ impl Editor {
                         return Ok(CommandOutcome::Continue);
                     }
                 }
+                let self_finish = self.insert_final_newline();
                 self.current_buffer_mut()
-                    .save_as(target, false)
+                    .save_as(target, false, self_finish)
                     .map_err(EditorError::Io)?;
                 self.status = say!("buffer.saved", self.current_buffer().display_name());
             }
@@ -1597,6 +1599,9 @@ impl Editor {
                 return Ok(Wrote::Asked);
             }
         }
+        // 缺的那個行尾補不補（`[editor] insert_final_newline`）——在借出可變那一份
+        // 之前先問一次。
+        let self_finish = self.insert_final_newline();
         let saved: Result<Wrote, EditorError> = match path {
             // `:w path` writes a **copy** and stays here; `:w! path` writes it
             // over whatever is already there. Rebinding this buffer to another
@@ -1626,12 +1631,12 @@ impl Editor {
                     // after `:w 第一章.md` would ask again at the next save.
                     None if self.current_buffer().path().is_none() => self
                         .current_buffer_mut()
-                        .save_as(target, force)
+                        .save_as(target, force, self_finish)
                         .map(|()| Wrote::Saved)
                         .map_err(EditorError::Io),
                     None => self
                         .current_buffer()
-                        .write_copy(&target, force)
+                        .write_copy(&target, force, self_finish)
                         .map(|()| Wrote::Copied(target))
                         .map_err(EditorError::Io),
                 }
@@ -1641,7 +1646,7 @@ impl Editor {
                     return Err(EditorError::NoFileName);
                 }
                 self.current_buffer_mut()
-                    .save_forcing(force)
+                    .save_forcing(force, self_finish)
                     .map(|()| Wrote::Saved)
                     .map_err(EditorError::Io)
             }

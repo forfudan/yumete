@@ -517,6 +517,16 @@ impl Editor {
     }
 
     /// **哪些鍵走得出一行的兩頭**（vim 的 `whichwrap`，vim 鍵位專用）。
+    /// 存檔時缺的那個行尾補不補——`[editor] insert_final_newline`（2026-10-13）。
+    pub fn set_insert_final_newline(&mut self, on: bool) {
+        self.insert_final_newline = on;
+    }
+
+    /// 同上，存檔那幾支問它。
+    pub fn insert_final_newline(&self) -> bool {
+        self.insert_final_newline
+    }
+
     pub fn set_which_wrap(&mut self, flags: String) {
         self.which_wrap = flags;
     }

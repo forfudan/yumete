@@ -3196,6 +3196,10 @@ pub struct Editor {
     /// 換掉了**——三個試用的人都指出這一條：不確認的那個鍵，正是標籤最容易被截掉
     /// 的那一個。現在兩個都問，而問句要說清楚問的是哪一個。
     replace_this_file: Option<(std::path::PathBuf, Option<u64>)>,
+    /// **存檔時缺的那個行尾補不補**（`[editor] insert_final_newline`，2026-10-13）。
+    ///
+    /// 出廠開着，和 vim、helix 一致。關掉就回到逐位元組往返。
+    insert_final_newline: bool,
     /// **手上這一筆取的是整行嗎**——`dd`／`yy` 撥上，`store` 看它一眼（2026-10-13）。
     ///
     /// 末行沒有終止符的時候 `rope.slice` 取不到換行，而貼回去那一支是靠「結尾有沒有
@@ -3861,6 +3865,7 @@ impl Editor {
             search_preview: None,
             replaced_in: Vec::new(),
             replace_this_file: None,
+            insert_final_newline: true,
             yank_whole_lines: false,
             owed_search: false,
             owed_replace: None,

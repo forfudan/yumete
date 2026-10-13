@@ -404,6 +404,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "insert_final_newline",
+        group: Group::Layout,
+        kind: Kind::Tick,
+        label: "set.editor.insert-final-newline",
+        hint: "set.editor.insert-final-newline.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "soft_wrap",
         group: Group::Layout,
         kind: Kind::Tick,

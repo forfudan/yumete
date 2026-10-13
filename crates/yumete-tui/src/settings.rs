@@ -156,6 +156,7 @@ pub fn apply(
     editor.set_code_colours(config.editor.code_highlight);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     editor.set_soft_wrap(config.editor.soft_wrap);
+    editor.set_insert_final_newline(config.editor.insert_final_newline);
     // Warning: `--syntax` 是**這一趟**的答案，比配置大——所以 `main.rs` 在這一支之後
     // 再設一次。這裏設的是配置說的那一個，重載纔認得出它改了。
     editor.set_default_syntax(yumete_core::syntax::Syntax::parse(&config.editor.syntax));

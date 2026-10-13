@@ -981,7 +981,7 @@ impl Buffer {
         // `write_atomically_like`. A scratch buffer has no manuscript, and
         // there the umask is the only answer there is.
         let like = self.path.clone();
-        self.write_body(&swap, like.as_deref(), false)?;
+        self.write_body(&swap, like.as_deref(), false, false)?;
         self.wrote_at = Some(swap);
         self.swapped_at = Some(self.revision);
         // Only true of the canonical name: writing beside somebody's draft
@@ -1081,8 +1081,8 @@ impl Buffer {
     /// same directory and then renamed over the target, so a crash mid-write
     /// cannot leave a half-written document. Clears the modified flag on success.
     /// Returns [`io::ErrorKind::NotFound`] if the buffer has no bound path.
-    pub fn save(&mut self) -> io::Result<()> {
-        self.save_forcing(false)
+    pub fn save(&mut self, finish: bool) -> io::Result<()> {
+        self.save_forcing(false, finish)
     }
 
     /// The same, and `force` writes over a file that has changed since it was
@@ -1095,7 +1095,8 @@ impl Buffer {
     /// it is read and when it is written, and a stamp that no longer matches
     /// stops the save and says so. `:e!` is how you take the other version;
     /// `:w!` is how you keep yours.
-    pub fn save_forcing(&mut self, force: bool) -> io::Result<()> {
+    /// `finish` ＝ 缺的那個行尾補不補（`[editor] insert_final_newline`）。
+    pub fn save_forcing(&mut self, force: bool, finish: bool) -> io::Result<()> {
         // Warning: **鎖住的那一份，連寫都不寫**（2026-10-02 查出來的）。從前只有繩子
         // 上了鎖——`insert`/`remove`/`replace`/`undo`/`redo` 五支都攔着，而
         // 存檔這一支一個字都没問。三種後果，都實測過：
@@ -1122,7 +1123,7 @@ impl Buffer {
             ));
         }
         Buffer::room_for(&path, force)?;
-        self.write_atomically(&path)?;
+        self.write_atomically(&path, finish)?;
         self.seen = stamp_of(&path);
         self.read_as = Some(digest(&self.rope.to_string()));
         self.modified = false;
@@ -1141,7 +1142,7 @@ impl Buffer {
     /// that could not be written is one whose every later save and every later
     /// recovery write fails too, silently, while the only copy of the text is
     /// in memory.
-    pub fn save_as<P: Into<PathBuf>>(&mut self, path: P, force: bool) -> io::Result<()> {
+    pub fn save_as<P: Into<PathBuf>>(&mut self, path: P, force: bool, finish: bool) -> io::Result<()> {
         // `old_path` 只為了失敗時放回去；舊名字那一份救命稿不必在這裏管——
         // `save_forcing` 末尾的 `clear_swap` 拿的是 `wrote_at`，而那時它指的
         // 正是舊名字底下自己寫的那一份（2026-10-02 按 pid 分家之後成立）。
@@ -1167,7 +1168,7 @@ impl Buffer {
         // stamp either: the stamps described the *old* file, and leaving them
         // made every save-as look like a file that had changed underneath.
         self.owns_swap = false;
-        match self.save_forcing(true) {
+        match self.save_forcing(true, finish) {
             Ok(()) => Ok(()),
             Err(err) => {
                 self.path = old_path;
@@ -1193,7 +1194,7 @@ impl Buffer {
     /// 那一邊早就擋着（`files.rs`），而隔壁這一支没有：`--readonly` 開着的時候
     /// `:w! 別的檔` 照樣把內容寫了出去，蓋掉一個毫不相干的檔。鎖說的是「這一輪
     /// 不寫盤」，不是「這一輪不改這一個檔」。
-    pub fn write_copy(&self, path: &Path, force: bool) -> io::Result<()> {
+    pub fn write_copy(&self, path: &Path, force: bool, finish: bool) -> io::Result<()> {
         if self.readonly {
             return Err(io::Error::other(say!("readonly.refused")));
         }
@@ -1201,7 +1202,7 @@ impl Buffer {
             return Err(io::Error::other(say!("buffer.file-already-exists")));
         }
         Buffer::room_for(path, force)?;
-        self.write_atomically(path)
+        self.write_atomically(path, finish)
     }
 
     /// **父目錄不在就不寫**，`force`（`:w!`）＝ 把它建出來（2026-10-11 報的）。
@@ -1241,8 +1242,8 @@ impl Buffer {
     }
 
     /// Write the rope to `path` atomically via a temporary file + rename.
-    fn write_atomically(&self, path: &Path) -> io::Result<()> {
-        self.write_atomically_like(path, None)
+    fn write_atomically(&self, path: &Path, finish: bool) -> io::Result<()> {
+        self.write_atomically_like(path, None, finish)
     }
 
     /// The same, but taking its permissions from `like` when `path` itself has
@@ -1254,8 +1255,13 @@ impl Buffer {
     /// the first time it is written and so takes the umask: 0644. Every
     /// keystroke since the last save then sits in a world-readable
     /// `.日記.md.yumete` beside a diary the writer chmod'd shut.
-    fn write_atomically_like(&self, path: &Path, like: Option<&Path>) -> io::Result<()> {
-        self.write_body(path, like, self.marked)
+    fn write_atomically_like(
+        &self,
+        path: &Path,
+        like: Option<&Path>,
+        finish: bool,
+    ) -> io::Result<()> {
+        self.write_body(path, like, self.marked, finish)
     }
 
     /// The write itself. `mark` says whether the BOM the file arrived with goes
@@ -1267,7 +1273,18 @@ impl Buffer {
     /// for every BOM file forever — and `:recover`, which pushes the copy's
     /// bytes straight into the buffer, made `\u{feff}` the first character of
     /// the manuscript. The next `:w` then wrote a second BOM in front of it.
-    fn write_body(&self, path: &Path, like: Option<&Path>, mark: bool) -> io::Result<()> {
+    /// `finish` ＝ 缺的那個行尾補不補（`[editor] insert_final_newline`）。
+    ///
+    /// Warning: **救命稿永遠 `false`**：那一份是繩子的一張照片，`read_draft` 拿它和繩
+    /// 子逐字比（`rope == &draft[..]`）——補一個換行進去，它就永遠不等於繩子，於是每
+    /// 開一次檔都提一份根本沒有改動的「搶救稿」。
+    fn write_body(
+        &self,
+        path: &Path,
+        like: Option<&Path>,
+        mark: bool,
+        finish: bool,
+    ) -> io::Result<()> {
         write_bytes_atomically_like(path, like, |file| {
             // **The mark the file arrived with goes back on** (#310). Three
             // bytes, and for prose nobody would miss them — but a `.csv` is
@@ -1301,7 +1318,7 @@ impl Buffer {
             // 往返」於是只剩 CRLF 與混行尾兩條，缺末尾換行那一條作廢。
             let last = self.rope.len_chars().checked_sub(1);
             let terminated = last.is_some_and(|at| self.rope.char(at) == '\n');
-            if last.is_some() && !terminated {
+            if finish && last.is_some() && !terminated {
                 file.write_all(self.ending.as_bytes())?;
             }
             Ok(())
@@ -2061,14 +2078,14 @@ fn tmp() -> std::path::PathBuf {
 
         fs::write(dir.join("在.md"), "").expect("seed");
         let mut b = Buffer::open(dir.join("在.md")).expect("open");
-        let why = b.save_as(path.clone(), false).expect_err("父目錄不在，存不了");
+        let why = b.save_as(path.clone(), false, true).expect_err("父目錄不在，存不了");
         let said = why.to_string();
         assert!(said.contains(".yumete"), "說得出是哪一級不在：{said}");
         assert!(said.contains(":w!"), "說得出怎麼辦：{said}");
         assert!(!path.exists(), "什麼都没寫下去");
 
         // `:w!` 建出來並存下去。
-        b.save_as(path.clone(), true).expect("`:w!` 建得出來");
+        b.save_as(path.clone(), true, true).expect("`:w!` 建得出來");
         assert!(path.is_file(), "存到了 {}", path.display());
 
         let _ = fs::remove_dir_all(&dir);
@@ -2150,13 +2167,13 @@ fn tmp() -> std::path::PathBuf {
         assert_eq!(copy, "那年冬天。\n雪停了。\n");
 
         // …and the document still gets its mark back.
-        b.save().expect("save");
+        b.save(true).expect("save");
         assert!(fs::read_to_string(&path).expect("read").starts_with(BOM));
 
         // A copy identical to the document is not offered as a draft — the
         // check that a stray BOM used to defeat.
         let clean = Buffer::open(&path).expect("reopen");
-        clean.write_body(&swap, None, false).expect("rewrite the copy");
+        clean.write_body(&swap, None, false, false).expect("rewrite the copy");
         assert!(
             Buffer::open(&path).expect("reopen").pending_draft.is_none(),
             "a copy equal to the file has nothing to recover"
@@ -2251,7 +2268,7 @@ fn tmp() -> std::path::PathBuf {
         // 一組之內：改一下、存檔、再改一下。深度一格不動。
         let was = b.begin_undo_group();
         b.insert(0, "乙").unwrap();
-        b.save_forcing(false).unwrap();
+        b.save_forcing(false, true).unwrap();
         assert!(!b.is_modified(), "剛存完是乾淨的");
         b.insert(0, "丙").unwrap();
         b.end_undo_group(was);
@@ -2306,7 +2323,7 @@ fn tmp() -> std::path::PathBuf {
         b.snapshot(0);
         b.insert(0, "新").unwrap();
         assert!(b.is_modified());
-        b.save_forcing(false).unwrap();
+        b.save_forcing(false, true).unwrap();
         assert!(!b.is_modified(), "剛存完是乾淨的");
 
         // 按 `u`：屏幕回到原樣，而**盤上不是**——這就是没存的改動。
@@ -2343,15 +2360,15 @@ fn tmp() -> std::path::PathBuf {
         let mut buffer = Buffer::open(&path).unwrap();
         buffer.set_readonly(true);
         // 一個字没改也不許寫——重寫一遍會換掉 inode，也會刪掉救命稿。
-        assert!(buffer.save_forcing(false).is_err(), "鎖着還寫得出去");
+        assert!(buffer.save_forcing(false, true).is_err(), "鎖着還寫得出去");
         // 驚嘆號不開這道鎖：它說的是「外面改過了，用我的」，不是「解鎖」。
-        assert!(buffer.save_forcing(true).is_err(), "`:w!` 不是解鎖");
+        assert!(buffer.save_forcing(true, true).is_err(), "`:w!` 不是解鎖");
         assert_eq!(fs::read_to_string(&path).unwrap(), "原來這樣\n");
 
         // 解了鎖就寫得出去。
         buffer.set_readonly(false);
         buffer.replace(0..4, "改過了").unwrap();
-        buffer.save_forcing(false).unwrap();
+        buffer.save_forcing(false, true).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "改過了\n");
         fs::remove_dir_all(&dir).ok();
     }
@@ -2462,7 +2479,7 @@ fn tmp() -> std::path::PathBuf {
         b.insert(0, "草稿\n").expect("the fixture buffer is writable");
         assert!(b.is_modified());
 
-        b.save().expect("save");
+        b.save(true).expect("save");
         assert!(!b.is_modified());
         assert_eq!(fs::read_to_string(&path).unwrap(), "草稿\n");
 
@@ -2492,7 +2509,7 @@ fn tmp() -> std::path::PathBuf {
         assert_eq!(reopened.recovered_draft(), Some("改了：第一稿\n"));
 
         // Saving makes the document the draft, so nothing is left to recover.
-        b.save().unwrap();
+        b.save(true).unwrap();
         assert!(!swap.exists());
         assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
 
@@ -2529,7 +2546,7 @@ fn tmp() -> std::path::PathBuf {
         assert_eq!(fs::read_to_string(&mine).unwrap(), "今天的：第一稿\n");
 
         // A save clears only what this session wrote.
-        b.save().unwrap();
+        b.save(true).unwrap();
         assert!(!mine.exists());
         assert!(left.exists(), "somebody else's unrecovered work stays");
 
@@ -2601,7 +2618,7 @@ fn tmp() -> std::path::PathBuf {
 
         // Warning: **而且 `:w` 只拿走自己那一份**（2026-10-02 定）。這是當初
         // 報上來的那條——甲按一下存檔，乙没存的工作連救命稿都没有了，實測 6/6。
-        a.save().unwrap();
+        a.save(true).unwrap();
         assert!(!ja.exists(), "甲存檔，拿走的是甲自己那一份");
         assert_eq!(fs::read_to_string(&yi).unwrap(), "乙底稿\n", "乙的保險還在");
 
@@ -2718,7 +2735,7 @@ fn tmp() -> std::path::PathBuf {
     #[test]
     fn save_without_path_errors() {
         let mut b = Buffer::scratch();
-        let err = b.save().unwrap_err();
+        let err = b.save(true).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
     /// **一份檔只許有一個名字**（2026-10-10 一輪審查報來的）。

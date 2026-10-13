@@ -250,6 +250,14 @@ pub struct EditorConfig {
     /// screen row (Feature #77). On by default: a Chinese paragraph is one long
     /// line, and unwrapped most of it cannot be seen at all.
     pub soft_wrap: bool,
+    /// **存檔時缺的那個行尾補不補**（2026-10-13，helix 叫 `insert-final-newline`）。
+    ///
+    /// 出廠開着，和 vim、helix 一致：vim 的 `'endofline'` 只在 `:set binary` 時算數，
+    /// helix 這一格的預設也是 `true`。補的是**那個檔自己的行尾**（CRLF 檔補 `\r\n`），
+    /// 而空檔不補——一個只有行尾的檔和一個空檔是兩件事。
+    ///
+    /// 關掉就回到逐位元組往返：一份故意不帶末尾換行的資料檔，碰它也不會變。
+    pub insert_final_newline: bool,
     /// **Which keys may step across a line end**, spelled as vim spells
     /// `whichwrap`: one letter each for `b` (Backspace), `h`, `l`, `<` and `>`
     /// (the arrows) and `~`.
@@ -448,6 +456,7 @@ impl Default for EditorConfig {
             code_highlight: true,
             hanging_punctuation: false,
             soft_wrap: true,
+            insert_final_newline: true,
             which_wrap: "b".to_string(),
             autosave: true,
             reload_auto: true,
@@ -2940,6 +2949,7 @@ struct RawEditor {
     code_highlight: Option<bool>,
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
+    insert_final_newline: Option<bool>,
     which_wrap: Option<String>,
     autosave: Option<bool>,
     reload_auto: Option<bool>,
@@ -3109,6 +3119,9 @@ impl RawConfig {
         }
         if other.editor.soft_wrap.is_some() {
             self.editor.soft_wrap = other.editor.soft_wrap;
+        }
+        if other.editor.insert_final_newline.is_some() {
+            self.editor.insert_final_newline = other.editor.insert_final_newline;
         }
         if other.editor.reload_auto.is_some() {
             self.editor.reload_auto = other.editor.reload_auto;
@@ -3462,6 +3475,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.soft_wrap {
             config.editor.soft_wrap = on;
+        }
+        if let Some(on) = self.editor.insert_final_newline {
+            config.editor.insert_final_newline = on;
         }
         // **`whichwrap`，照 vim 的拼法。** 逗號和空格隨便加（`"<,>,b,h,l"` 和
         // `"<>bhl"` 一樣），重複的字母只記一次。
