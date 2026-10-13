@@ -1995,7 +1995,13 @@ fn walk_inner(
 #[derive(Debug, Clone)]
 pub struct DetectAsk {
     /// The text of the file being written, which is read on its own.
-    pub text: String,
+    ///
+    /// Warning: **一份 `Rope`，不是 `String`**（2026-10-13）。從前這裏存的是
+    /// `rope.to_string()`——開一個檔就把整本書複製一份，**而且留着**，直到前端來
+    /// 取。量過：361 MB 的檔，`Buffer::open` 之後 780 MB，`open_file` 回來 1162 MB，
+    /// 多出來的整整一份就是這一句。而前端常常決定不跑（同一個檔五分鐘內就跳過），
+    /// 那一份白複製。`Rope` 的 `clone` 是共享那棵樹，近乎免費。
+    pub text: ropey::Rope,
     /// The folder it is in, read after it — `None` when the buffer has no path
     /// and there is no folder to speak of.
     pub folder: Option<PathBuf>,

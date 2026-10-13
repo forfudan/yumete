@@ -11963,50 +11963,50 @@ en = "saved {0} — {1} word(s) now in force"
 [[message]]
 # 詞表重讀完了
 key = "word.lists-reread"
-zht = "詞表重讀了：{0}"
-zhs = "词表重读了：{0}"
+zht = "詞表已重讀：{0}"
+zhs = "词表已重读：{0}"
 en = "word lists reread: {0}"
 
 [[message]]
 # 分詞著色換成「色相」：明度一樣，換顏色
 key = "word.mark-color"
-zht = "分詞著色：色相"
-zhs = "分词著色：色相"
-en = "word tint: hue"
+zht = "分詞著色：色相差異"
+zhs = "分词著色：色相差异"
+en = "word tint: hue difference"
 
 [[message]]
 # 分詞著色改用字色：不動紙，隔一個詞換一種墨色
 key = "word.mark-ink"
-zht = "分詞著色：字色"
-zhs = "分词著色：字色"
-en = "word tint: ink"
+zht = "分詞著色：字色差異"
+zhs = "分词著色：字色差异"
+en = "word tint: ink difference"
 
 [[message]]
 # 分詞著色換成「線」：字本身不動，詞底下畫一道淡線
 key = "word.mark-line"
-zht = "分詞著色：線"
-zhs = "分词著色：线"
+zht = "分詞著色：底部横線"
+zhs = "分词著色：底部横线"
 en = "word tint: a rule under the word"
 
 [[message]]
 # 竪排選了「線」：畫不了，因爲 Insert 的光標就是那條下橫線
 key = "word.mark-line-not-vertical"
-zht = "竪排畫不了詞線——一格只有一條下橫線，Insert 的光標佔着它。分詞著色關了"
-zhs = "竖排画不了词线——一格只有一条下横线，Insert 的光标占着它。分词著色关了"
-en = "no word rule on a 縱書 page: one underline a cell, and the Insert caret is it — word tint off"
+zht = "竪排無法使用底部横線。分詞著色關閉"
+zhs = "竖排无法使用底部横线。分词著色关闭"
+en = "no word rule in vertical layout. word tint off"
 
 [[message]]
 # 分詞著色改用底色：隔一個詞在紙上鋪一層淡色
 key = "word.mark-tint"
-zht = "分詞著色：底色"
-zhs = "分词著色：底色"
-en = "word tint: background"
+zht = "分詞著色：底色差異"
+zhs = "分词著色：底色差异"
+en = "word tint: background color difference"
 
 [[message]]
 # 沒有資料目錄，沒有全域詞表
 key = "word.no-data-directory"
-zht = "不知道數據目錄在哪裏——這一台上沒有全域詞表"
-zhs = "不知道数据目录在哪里——这一台上没有全域词表"
+zht = "不知道數據目錄在哪裏。本機没有探查到全局詞表"
+zhs = "不知道数据目录在哪里。本机没有探查到全局词表"
 en = "no data directory known — this machine has no global word list"
 
 [[message]]

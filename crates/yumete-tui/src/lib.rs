@@ -1071,8 +1071,12 @@ pub fn run(
                     // and its longer ones absorb this file's — measured, 「宇夢」
                     // goes from 8th of 60 to gone. The words of the chapter
                     // being written are the ones the writer is looking at.
-                    let mine = yumete_core::discover::han_count(&ask.text);
-                    let mut out = yumete_core::discover::words(&ask.text, &joins);
+                    // **物化在這條執行緒上，而且只在真的要掃的時候**（2026-10-13）。
+                    // 請求裏帶的是一棵 `Rope`（共享，近乎免費）；從前帶的是
+                    // `String`，於是開一個檔就複製一份整本書，不管這一趟掃不掃。
+                    let text = ask.text.to_string();
+                    let mine = yumete_core::discover::han_count(&text);
+                    let mut out = yumete_core::discover::words(&text, &joins);
                     // **Half the list is this file's, and the list is a share
                     // of what was read** — 200 for a chapter, a thousand for a
                     // novel (`discover::cap`).

@@ -5,6 +5,10 @@
 
 use super::*;
 
+/// **認詞只認得動一本書**（2026-10-13）。認詞掃的是整份正文，而「正在寫的這一篇」
+/// 再長也就幾 MB；一個語料檔走進來，掃它一遍既沒有意義，又要把整份物化一次。
+const BIGGEST_TO_DETECT: usize = 16 * 1024 * 1024;
+
 impl Editor {
     // ---- Word segmentation (Feature #24) ----------------------------------
 
@@ -531,8 +535,18 @@ impl Editor {
     /// it actually runs, and reads the two apart (see
     /// [`DetectAsk`](crate::editor::DetectAsk)).
     pub(super) fn ask_for_detection(&mut self) {
+        // **太大的檔不認詞**（2026-10-13）。認詞讀的是「正在寫的這一篇」——一本長篇
+        // 也就幾 MB，而掃一遍是整份的（`discover::words`）。一個語料檔走進來，掃它
+        // 一遍既沒有意義，又要在工作執行緒上把整份物化成 `String`。
+        if self.current_buffer().rope().len_bytes() > BIGGEST_TO_DETECT {
+            self.detect_request = None;
+            return;
+        }
         self.detect_request = Some(crate::editor::DetectAsk {
-            text: self.current_buffer().text(),
+            // Warning: **`clone` 一棵樹，別物化**：`Rope` 的 `clone` 是共享，而
+            // `to_string()` 是整整一份副本，留在這個請求裏直到前端來取——而前端常常
+            // 決定不跑。見 [`DetectAsk`](crate::editor::DetectAsk)。
+            text: self.current_buffer().rope().clone(),
             folder: self.current_buffer().path().is_some().then(|| self.here_folder()),
         });
     }

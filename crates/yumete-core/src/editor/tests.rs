@@ -14376,7 +14376,9 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
     ed.open_file(dir.join("ch02.md")).unwrap();
     let ask = ed.take_detect_request().expect("開文件要請前端讀一遍");
-    assert!(ask.text.contains("阿寧"), "讀的是這一篇的正文");
+    // Warning: **請求裏帶的是一棵 `Rope`，不是一份 `String`**（2026-10-13）：那一份
+    // 副本開一個檔付一次，而前端常常決定不跑。`to_string()` 只在這裏驗內容用。
+    assert!(ask.text.to_string().contains("阿寧"), "讀的是這一篇的正文");
     assert_eq!(ask.folder.as_deref(), Some(dir.as_path()), "外加它所在的文件夾");
     assert!(ed.take_detect_request().is_none(), "只請一次");
 
