@@ -237,18 +237,10 @@ enum Pending {
     /// Unlike every other pending here this one is not opened by a key: the
     /// command opens it and it stays open across many keys, one per match.
     Confirm,
-    /// **`R` in the search panel is asking once**: change every hit there is?
-    ///
-    /// A different thing from [`Pending::Confirm`], which asks *per match* on
-    /// its way through a `:s …c`. This one is a single yes: one hit and one
-    /// file are changes a reader is looking straight at, and every file in a
-    /// book is not (#419).
-    ReplaceAll,
     /// **`:3-1s` 的範圍是反的**，問一句再改（2026-10-09 作者定）。
     ///
     /// 從前它默默對調成 1–3 就改了。vim 問「Backwards range given, OK to swap
     /// (y/n)?」——而「我寫反了」和「我故意寫反」在屏幕上長得一樣，所以它問。
-    /// 同 [`Pending::ReplaceAll`]：狀態欄一行 `y`／`n`，不開中央那扇窗。
     SwapRange,
     /// `` ` `` — 「不改它說什麼，只改它長什麼樣」 (§5.2.3 ②).
     ///
@@ -288,7 +280,7 @@ impl Pending {
             // `y`/`n`/`a`/`q`/`l` name what to do, not what to write；
             // `C-g` 後面那個 `u` 也不是要寫進去的字。
             Pending::UndoBreak
-            | Pending::Confirm | Pending::ReplaceAll | Pending::SwapRange | Pending::None
+            | Pending::Confirm | Pending::SwapRange | Pending::None
             | Pending::Goto
             | Pending::Space
             | Pending::Register

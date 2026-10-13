@@ -10588,17 +10588,19 @@ fn replacing_a_whole_book_asks_in_the_middle_of_the_screen() {
     let asked = ed.query().expect("中央那一扇要擺出來");
     assert_eq!(asked.title, say!("write.oversize-title"), "和 :w 同一個標題");
     assert_eq!(asked.body, say!("search.replace-all-what", 20, 2000));
-    assert_eq!(asked.choices.len(), 2, "繼續/取消，沒有「看一眼」");
+    assert_eq!(asked.choices.len(), 2, "繼續/取消，没有「看一眼」");
 
     // **兩個檔也彈**，哪怕只有兩處——這是 2026-10-09 換掉的那一條。
     let ed = armed(2, 2);
     let asked = ed.query().expect("兩個檔就該停一下");
     assert_eq!(asked.body, say!("search.replace-all-what", 2, 2));
 
-    // 一個檔：狀態欄一行就夠。
+    // **一個檔也停**（2026-10-13 報的）：從前它落到狀態欄上那一行小浮框，而站在檔
+    // 名那一行上按 `r`（動的是同一批字）走的是中央窗。問句和 `r` 那一扇同一句。
     let ed = armed(1, 9);
-    assert!(ed.query().is_none(), "一個檔不必停下來");
-    assert_eq!(ed.status(), say!("search.replace-all-sure", 9));
+    let asked = ed.query().expect("一個檔也要停一下");
+    assert!(asked.body.contains('9'), "說的是那 9 處：{}", asked.body);
+    assert_eq!(asked.title, say!("write.oversize-title"), "同一扇窗，同一個標題");
 }
 
 /// **替換做到一半按 `Esc`：先問一句，三條路**（2026-10-11 定）。
@@ -11649,13 +11651,68 @@ impl Editor {
     }
 }
 
+/// **換掉整個檔之後，高亮落在下一個檔的頭一處**（2026-10-13 報的）。
+///
+/// `r` 站在檔名那一行上換的是整個檔，而那一行**不是一處命中**——
+/// `the_hit_under_the_highlight` 於是答 `None`，從前就一路回到名單最頂上。原話：
+/// 「高亮跳到了搜索列表最上方，而並沒有移到下一個文件的結果……導致我如果要回到剛剛
+/// 的地方還需要自己用 j 移動」。
+#[test]
+fn replacing_a_whole_file_leaves_the_highlight_on_the_next_one() {
+    use crate::search_panel::{Field, Row};
+    let dir = a_little_book("replacewholefile");
+    std::fs::write(dir.join("卷一/a.md"), "阿甯站在門口。\n").unwrap();
+    std::fs::write(dir.join("卷一/b.md"), "阿甯回頭。\n阿甯没有說話。\n").unwrap();
+    std::fs::write(dir.join("c.md"), "第二天，阿甯走了。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":replace-project").unwrap();
+    for c in "阿甯".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Down);
+    for c in "阿寧".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    assert_eq!(ed.search().total, 4);
+    for _ in 0..3 {
+        ed.on_key(Key::Char('j'));
+    }
+    assert_eq!(ed.search().field, Field::Results);
+
+    // 站到有兩處命中的那個檔的檔名那一行上，換掉整個檔。
+    ed.search_go_to_file_with(2);
+    let two = match ed.search().row() {
+        Some(Row::File { path, .. }) => path,
+        other => panic!("要站在檔名那一行上：{other:?}"),
+    };
+    ed.on_key(Key::Char('r'));
+    assert!(ed.query().is_some(), "整個檔全換要先問一句");
+    ed.on_key(Key::Char('y'));
+    ed.settle_search();
+
+    // 那個檔沒了，而高亮**不在名單頂上**：它站在接下來那一處命中上。
+    assert_eq!(ed.search().total, 2, "那個檔的兩處換掉了");
+    let Some(Row::Hit(at)) = ed.search().row() else {
+        panic!("高亮該落在一處命中上：{:?}", ed.search().row())
+    };
+    let now = ed.search().hits[at].file.clone();
+    assert_ne!(now, Some(two), "換掉的那個檔不該還在高亮底下");
+    assert_ne!(ed.search().selected, 0, "也不該回到名單最頂上");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **Changing what was found** — #419 三.
 #[test]
 fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     use crate::search_panel::Field;
     let dir = a_little_book("searchreplace");
     std::fs::write(dir.join("卷一/a.md"), "阿甯站在門口。\n").unwrap();
-    std::fs::write(dir.join("卷一/b.md"), "阿甯回頭。\n阿甯沒有說話。\n").unwrap();
+    std::fs::write(dir.join("卷一/b.md"), "阿甯回頭。\n阿甯没有說話。\n").unwrap();
     std::fs::write(dir.join("c.md"), "第二天，阿甯走了。\n").unwrap();
 
     let mut ed = Editor::new();
@@ -11719,17 +11776,17 @@ fn the_panel_changes_one_hit_one_file_or_all_of_them() {
     // 那一行上一聲不吭就換掉整個檔——兩個鍵差一個 Shift，兩行差一個 `j`。
     ed.search_go_to_file_with(2);
     ed.on_key(Key::Char('r'));
-    assert_eq!(ed.search().total, 3, "還沒答應，一處都沒換：{}", ed.status());
+    assert_eq!(ed.search().total, 3, "還没答應，一處都没換：{}", ed.status());
     ed.on_key(Key::Char('n'));
-    assert_eq!(ed.search().total, 3, "答了不換，就真的沒換");
+    assert_eq!(ed.search().total, 3, "答了不換，就真的没換");
     ed.search_go_to_file_with(2);
     ed.on_key(Key::Char('r'));
     ed.on_key(Key::Char('y'));
     assert_eq!(ed.search().total, 1, "{}", ed.status());
 
-    // **All of them — and this one says how many.**
+    // **All of them — and this one asks in the window in the middle** (2026-10-13).
     ed.on_key(Key::Char('R'));
-    assert_eq!(ed.status(), say!("search.replace-all-sure", 1));
+    assert!(ed.query().is_some(), "全換要先問一句：{}", ed.status());
     ed.on_key(Key::Char('n'));
     assert_eq!(ed.search().total, 1, "answered no, nothing changed");
     ed.on_key(Key::Char('R'));

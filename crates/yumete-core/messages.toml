@@ -5573,33 +5573,19 @@ zhs = "开关左右栏"
 en = "toggle the left / right bar"
 
 [[message]]
-# " 之後那張小表：# 那一行（選區序號，#405 Phase 3）
+# " 之後那張小表：# 那一行(選區序號，#405 Phase 3)
 key = "hint.register.hash"
-zht = "（該選區之序號）"
-zhs = "（该选区之序号）"
+zht = "(該選區之序號)"
+zhs = "(该选区之序号)"
 en = "(this selection's number)"
 
 [[message]]
-# " 之後那張小表的標題（2026-09-29 定的名字）
+# " 之後那張小表的標題(2026-09-29 定的名字)
 key = "hint.register.title"
 zht = "寄存器·剪貼板"
 zhs = "寄存器·剪贴板"
 en = "registers"
 
-
-[[message]]
-# 提示：全部替換——不換
-key = "hint.replace-all.no"
-zht = "取消"
-zhs = "取消"
-en = "cancel"
-
-[[message]]
-# 提示：全部替換——全部換掉
-key = "hint.replace-all.yes"
-zht = "確認"
-zhs = "确认"
-en = "yes"
 
 [[message]]
 # 跨檔替換進行中那一扇窗，底下那一行
@@ -8614,21 +8600,14 @@ zhs = "取消替换"
 en = "Leave them alone"
 
 [[message]]
-# 搜索：同上，取消之後說的那一句
+# 搜索：同上，取消之後説的那一句
 key = "search.replace-all-stopped"
-zht = "沒換——一個字都沒動"
+zht = "没換——一個字都没動"
 zhs = "没换——一个字都没动"
 en = "Nothing was replaced"
 
 [[message]]
-# 搜索：全部替換之前問一次
-key = "search.replace-all-sure"
-zht = "把這 {0} 處全部換掉？"
-zhs = "把这 {0} 处全部换掉？"
-en = "change all {0}?"
-
-[[message]]
-# 搜索：同上，正文（{0} 幾個檔、{1} 幾處）
+# 搜索：同上，正文({0} 幾個檔、{1} 幾處)
 key = "search.replace-all-what"
 zht = "本次操作會替換{0}個文件中的{1}處文字。"
 zhs = "本次操作会替换{0}个文件中的{1}处文字。"

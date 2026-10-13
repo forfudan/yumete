@@ -1463,19 +1463,6 @@ impl Editor {
                     self.status = String::new();
                 }
             }
-            Pending::ReplaceAll => {
-                self.pending = Pending::None;
-                match key {
-                    Key::Char('y') | Key::Enter => self.replace_what_was_asked(),
-                    // Anything else is no. A question about a hundred files
-                    // answers 「no」 to a key nobody meant.
-                    //
-                    // Warning: **取消之後屏幕不說話**（2026-09-29 定）。問句本來就寫着
-                    // 「取消」，按下去問句就沒了——那已經是答覆。
-                    _ => self.forget_the_file_it_asked_about(),
-                }
-                return;
-            }
             Pending::Case => {
                 self.pending = Pending::None;
                 match key {
@@ -3292,19 +3279,6 @@ impl Editor {
         ("", "hint.vi.backtick"),
     ];
 
-    /// What a `:s …c` is waiting for at each match.
-    ///
-    /// vi's five answers, and the reason the flag is worth having: the writer
-    /// looks at this one match and says what happens to **it**.
-    /// What `R` in the search panel is asking — one yes, not one per match.
-    /// Warning: **Its own words, not [`Self::CONFIRM_KEYS`]'.** Those say 「換這一
-    /// 處」/「跳過，不換」 because a `:s …c` is asking about one match at a
-    /// time; this is asking about all of them at once, and borrowing that
-    /// wording would tell a reader the opposite of what `y` does.
-    pub(super) const REPLACE_ALL_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("y", "hint.replace-all.yes"),
-        ("n", "hint.replace-all.no"),
-    ];
 
     pub(super) const CONFIRM_KEYS: &'static [(&'static str, &'static str)] = &[
         ("y", "hint.confirm.yes"),

@@ -1109,21 +1109,8 @@ impl Editor {
                 // 500 條，而 `R` 動的是每一個有命中的檔；兩個數一分家，問句就在
                 // 替一件和它說的不一樣的事徵求同意。
                 self.replace_this_file = None;
-                // **動得太多就走「安全核驗」那一扇中央窗**（2026-10-03 定：
-                // 「要同時滿足兩個條件：1. 超過 10 個文件 2. 超過 100 處」）。
-                // 狀態欄上那一行 `y`/`n` 按順手了就過去了，而這一下動的是整本
-                // 書；`:w` 那一條的閘也是這個形狀——平日改個錯字一次都不彈。
-                if let Some(query) = self.replace_everywhere_query() {
-                    self.query = Some(query);
-                    return;
-                }
-                // 只剩一個檔那一句：不止一個的全走上面那一扇窗了（2026-10-09）。
-                self.status = say!("search.replace-all-sure", self.search.total);
-                // Warning: **`ReplaceAll`, not `Confirm`.** The latter is `:s …c`'s
-                // per-match walker: with nothing to walk it clears itself on
-                // the next key, so the question was asked and the answer went
-                // nowhere.
-                self.pending = Pending::ReplaceAll;
+                // **全換一律走「安全核驗」那一扇中央窗**（2026-10-13 報的）。
+                self.query = Some(self.replace_everything_query());
             }
             // **`F5` runs it again**, for a scope that does not run itself.
             Key::Char('F') if !self.search.scope.live() => self.search_now(),
@@ -1669,7 +1656,10 @@ impl Editor {
         // 站在別人那一段上的時候，那一處原封不動，找回去就是原處；站在自己這一
         // 段裏的時候，那幾處剛被這一筆改動挪過，於是落在「它或它之後」的頭一處
         // 上——和換掉一處之後接着換下一處是同一條規矩。
-        self.stand_on_that_hit(standing);
+        // 這一支是邊打邊搜那一路，高亮本來就站在一處命中上（`standing` 答得出來），
+        // 所以第二個參數只是那條回退路上的起點。
+        let stood_at = self.search.selected;
+        self.stand_on_that_hit(standing, stood_at);
         self.search.looked_at = Some(self.search_mark());
     }
 
@@ -1980,13 +1970,20 @@ impl Editor {
         self.search.files.sort_by_key(|(file, buffer)| rank(file, *buffer));
     }
 
-    fn replace_everywhere_query(&self) -> Option<crate::editor::Query> {
+    fn replace_everything_query(&self) -> crate::editor::Query {
         let files = self.search.files.len();
         let hits = self.search.total;
+        // **一個檔也走中央那扇窗**（2026-10-13 報的）。從前這裏回 `None`，於是本文件
+        // 那一檔的 `R` 落到狀態欄上那一行小浮框——而站在檔名那一行上按 `r`（動的是
+        // 同一批字）走的是中央窗。同一類動作兩種形狀，正是 10-13 早些時候把 `r` 改
+        // 成中央窗要去掉的那件事。原話：「替换缺人都是在中央弹窗」。
+        //
+        // 一個檔的時候連話也和 `r` 那一扇同一句（「把 X 裏的 N 處全部換掉？」）：
+        // 那時「全部」就是這一個檔，說檔名比說「1 個文件」準。
         if files <= 1 {
-            return None;
+            return self.replace_file_query(hits, &self.the_only_file());
         }
-        Some(crate::editor::Query {
+        crate::editor::Query {
             // Warning: **和 `:w` 那一扇同一個標題**，因為它們是同一件事的兩個入口：
             // 「這一下動得比你想的多」。兩個標題會讓人以為是兩種東西。
             title: say!("write.oversize-title"),
@@ -1997,22 +1994,30 @@ impl Editor {
             ],
             what: crate::editor::Asking::ReplaceEverywhere,
             about: None,
-        })
+        }
+    }
+
+    /// 名單上只有一個檔的時候，它叫什麼——沒有路徑的草稿報它在標籤上的名字。
+    fn the_only_file(&self) -> String {
+        match self.search.files.first() {
+            Some((Some(path), _)) => path.display().to_string(),
+            _ => self.current_buffer().display_name(),
+        }
     }
 
     pub(super) fn replace_all_found(&mut self) {
         self.replaced_in.clear();
         // Warning: **按（名字, 號）一對去重，不是只按名字**（2026-10-02 審出來的）。
-        // 緩衝區那一檔裏兩份沒有名字的草稿標籤都是 `[scratch]`，只按名字去重會
+        // 緩衝區那一檔裏兩份没有名字的草稿標籤都是 `[scratch]`，只按名字去重會
         // 把第二份整個漏掉。
         // Warning: **換完要回到你出發的那一份**（2026-10-02 查出來的）。`replace_file`
-        // 自己是用 `with_buffer` 借位的，可它底下的 `buffer_for` 為了動一個還沒
+        // 自己是用 `with_buffer` 借位的，可它底下的 `buffer_for` 為了動一個還没
         // 打開的檔會真的 `open_file`——那一下就把 `current` 挪走了，而 `with_buffer`
         // 記的「原來在哪」是挪過之後的。於是在第二十章寫到一半按個 `R`，人落在
-        // 書裏最後一個被改到的檔上、光標在 1 行 1 列，而那個檔你從來沒打開過。
+        // 書裏最後一個被改到的檔上、光標在 1 行 1 列，而那個檔你從來没打開過。
         //
         // 這一批是一件事，一件事該在它開始的地方結束。改掉的那幾份都還開着（它
-        // 們有沒存的改動），只是不站在那裏。
+        // 們有没存的改動），只是不站在那裏。
         self.replace_home = self.current_buffer().id();
         self.replace_tally = 0;
         self.replace_queue = self.search.files.clone();
@@ -2299,14 +2304,18 @@ impl Editor {
     ///
     /// 重搜一趟會 `selected = 0` 並且 `folded.clear()`（見 `search_now`），所以
     /// 重搜之後的行號和重搜之前**根本不是同一套**：折起來的檔全展開了，而剛換掉
-    /// 的那一處自己也從名單上沒了。照號碼放回去，高亮就落在一處讀者沒看過的命中
-    /// 上——而下一下 `r` 換的就是它。這是這個倉最貴的那一類：**改了一行人沒看過
+    /// 的那一處自己也從名單上没了。照號碼放回去，高亮就落在一處讀者没看過的命中
+    /// 上——而下一下 `r` 換的就是它。這是這個倉最貴的那一類：**改了一行人没看過
     /// 的字**。
     ///
     /// 撤回那一路也走這裏：撤完那一處**回來了**，於是「它或它之後的頭一處」正好
     /// 就是它自己。
     fn look_again_and_stand_still(&mut self) {
         let was = self.the_hit_under_the_highlight();
+        // **高亮站在第幾行上**——`was` 答不出來的時候（站在檔名那一行上，`r` 換掉整
+        // 個檔走的就是這一條）靠它。檔與檔的先後是復原過的，所以同一個行號現在指着
+        // 的正是下一個檔。
+        let stood_at = self.search.selected;
         // 折起來的那幾個檔也是讀者說過的話，重搜一趟不該把它們全掀開。
         let folds = self.search.folded.clone();
         // Warning: **名單上檔與檔的先後也是**（2026-10-13 報的）。檔之間的次序是
@@ -2324,7 +2333,7 @@ impl Editor {
         }
         self.search.folded = folds;
         self.keep_the_old_file_order(&order);
-        self.stand_on_that_hit(was);
+        self.stand_on_that_hit(was, stood_at);
         // Warning: **高亮挪了，編輯區也要跟着挪**（2026-10-13 報的）。`stand_on_that_hit`
         // 只設 `search.selected`，而名單裏走每一步用的 `stand_on_and_look` 是
         // 「站上去 ＋ 看一眼」兩句——換完一處少的就是第二句。症狀：換掉一處之後
@@ -2349,11 +2358,29 @@ impl Editor {
         })
     }
 
+    /// 從 `at` 這一行往下數的頭一處命中（檔名那一行不算）。
+    ///
+    /// 後面一處都沒有了就退到**最後**一處——換掉的是名單上最末那個檔的時候，往下
+    /// 沒有了，而回最頂上同樣是把人丟到他沒看過的地方。
+    fn first_hit_from(&self, at: usize) -> Option<usize> {
+        let hit = |row: &crate::search_panel::Row| matches!(row, crate::search_panel::Row::Hit(_));
+        let rows = self.search.rows();
+        rows.iter()
+            .skip(at)
+            .position(hit)
+            .map(|i| i + at)
+            .or_else(|| rows.iter().rposition(hit))
+    }
+
     /// 站回那一處命中上去。
     ///
     /// 剛換掉的那一處已經不在名單上了，所以站的是**它原來那個位置之後**的頭一處
     /// ——換完一處接着換下一處，本來就是這個手勢。
-    fn stand_on_that_hit(&mut self, was: Option<(Option<PathBuf>, usize, usize)>) {
+    fn stand_on_that_hit(
+        &mut self,
+        was: Option<(Option<PathBuf>, usize, usize)>,
+        stood_at: usize,
+    ) {
         self.search.selected = match was {
             Some((file, line, column)) => self
                 .search
@@ -2367,15 +2394,15 @@ impl Editor {
                         .is_some_and(|h| h.file == file && (h.line, h.column) >= (line, column)),
                     crate::search_panel::Row::File { .. } => false,
                 })
-                .or_else(|| {
-                    // 那個檔一處都不剩了：往下找第一處命中，別停在檔名那一行上。
-                    self.search
-                        .rows()
-                        .iter()
-                        .position(|row| matches!(row, crate::search_panel::Row::Hit(_)))
-                })
+                // 那個檔一處都不剩了：從**剛纔站的那一行**往下找，別回名單最頂上。
+                .or_else(|| self.first_hit_from(stood_at))
                 .unwrap_or(0),
-            None => 0,
+            // Warning: **高亮站在檔名那一行上**（`r` 換掉整個檔走的就是這一條，
+            // 2026-10-13 報的）。那個檔連它那幾行一起從名單上沒了，而檔與檔的先後是
+            // 復原過的——所以同一個行號現在指着的正是下一個檔的第一處。從前這裏答
+            // `0`，高亮跳回名單最頂上，原話：「導致我如果要回到剛剛的地方還需要自己
+            // 用 j 移動」。
+            None => self.first_hit_from(stood_at).unwrap_or(0),
         };
         self.search.selected = self
             .search

@@ -372,7 +372,6 @@ impl Editor {
             Pending::Find(FindKind::Till) => "t",
             Pending::Find(FindKind::TillBack) => "T",
             Pending::Replace => "r",
-            Pending::ReplaceAll => "R",
             Pending::Register => "\"",
             Pending::Match => "m",
             Pending::Aim => "z",

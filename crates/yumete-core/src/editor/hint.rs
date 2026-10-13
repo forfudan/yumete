@@ -435,19 +435,15 @@ impl Editor {
             Pending::Confirm => {
                 (say!("hint.confirm.title"), Self::said(Self::CONFIRM_KEYS.iter().copied()))
             }
-            Pending::ReplaceAll => (
-                self.status.clone(),
-                Self::said(Self::REPLACE_ALL_KEYS.iter().copied()),
-            ),
             // **每一格裝着什麼，就畫什麼**（2026-09-29 定：「Helix這個好」）。
             //
             // 從前這張表寫的是說明——「a–z 哪一個」——而那句話回答不了任何人的問
             // 題：a 是哪一個？哪一個什麼？helix 的答案是不解釋，直接把格子裏存着的
             // 那段字印在右邊（`helix-view/src/info.rs:60`，寬 30），於是「a 是一個
             // 存東西的格子」不必說，看一眼就知道了。**空的格子不列**，所以一個都
-            // 沒存過的時候這張表上只有 `#` 一行。
+            // 没存過的時候這張表上只有 `#` 一行。
             //
-            // Warning: `#` 不是格子，是問題的答案（見 `edits::recall`），所以它沒有內容
+            // Warning: `#` 不是格子，是問題的答案（見 `edits::recall`），所以它没有內容
             // 可印，只能寫一句說明，也只有它一行是說明。它排在最後。
             Pending::Register => {
                 let mut named: Vec<&char> = self.registers.keys().collect();
