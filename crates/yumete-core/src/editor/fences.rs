@@ -19,6 +19,19 @@ use crate::markdown::{Block, Span};
 /// reads by its colours, and parsing it on every edit is not free.
 const LONGEST: usize = 5_000;
 
+/// **整份是代碼的檔，大過這個就不建樹**（2026-10-13 報的：一個 3.91 GB 的 JSON 開
+/// 進來佔了 40 GB）。
+///
+/// 上色那條路的代價量過：`361 MB` 的 JSON，關掉上色峰值 1165 MB，開着 3526 MB——
+/// **檔案本身的 6.5 倍**，而且三份都是整份的：逐行切出來的 `Vec<String>`、接回去的
+/// `source`，和 tree-sitter 整份解析出來的那棵樹。#423（2026-09-30）把舊的五千行閘
+/// 對這一類檔拿掉了，理由是「留樹 ＋ 窗口查詢 ＋ 增量解析，多長都染得起」——那三件
+/// 事省的是**每按一鍵**的時間，不是**一份**的記憶體，而那一份是線性的。
+///
+/// 16 MiB：這個倉最大的源碼檔是 1.2 MB，所以沒有一份真的代碼碰得到它；碰得到的是
+/// 貼進來的數據檔，而那一種「沒人靠顏色讀」（同 [`LONGEST`] 那一條的理由）。
+const BIGGEST: usize = 16 * 1024 * 1024;
+
 /// Enough parsed fences to cover several open chapters without growing for as
 /// long as the session runs.
 ///
@@ -330,6 +343,16 @@ impl Editor {
     /// 秒；從頭解析要 50 毫秒，而那是**每按一個鍵**付一次。
     fn hold_the_tree(&self, language: Language) {
         let buffer = self.current_buffer();
+        // **太大就一棵樹都不建**（[`BIGGEST`]）。擺在最前面，因為底下每一句都是
+        // 整份的：`lines`、`source`、那棵樹，三份都按檔案大小走。
+        if buffer.rope().len_bytes() > BIGGEST {
+            let mut cache = self.code_cache.borrow_mut();
+            // 手上那一棵也放掉：檔案是會長大的（`:e!` 重讀、貼一大塊進來），而留着
+            // 一棵舊樹就是留着一張對不上號的顏色表。
+            cache.whole = None;
+            cache.by_chunk.clear();
+            return;
+        }
         let (id, revision) = (buffer.id(), buffer.revision());
         {
             let cache = self.code_cache.borrow();

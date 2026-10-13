@@ -25980,6 +25980,39 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
     }
 }
 
+/// **太大的代碼檔不建樹**（2026-10-13 報的：3.91 GB 的 JSON 開進來佔 40 GB）。
+///
+/// 量過的代價：361 MB 的 JSON，關掉上色峰值 1165 MB，開着 3526 MB——**檔案的 6.5
+/// 倍**，而且三份都是整份的（逐行的 `Vec<String>`、接回去的 `source`、整份解析的那
+/// 棵樹）。#423 把舊的五千行閘對這一類檔拿掉了，理由是增量解析省得起時間——省的是
+/// 時間，不是記憶體。
+#[test]
+fn a_code_file_past_the_cap_gets_no_tree() {
+    // Warning: **靶寫成檔再開，別用 `typed`**：那一支是逐鍵輸入的，16 MiB 要跑 91
+    // 秒，而這一條驗的是閘，不是輸入。
+    let dir = tmp().join(format!("yumete-big-code-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let one = "fn 甲() { let 乙 = 丙(丁); }\n";
+    let open = |name: &str, many: usize| {
+        let at = dir.join(name);
+        std::fs::write(&at, one.repeat(many)).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&at).unwrap();
+        ed
+    };
+    let big = open("大.rs", (16 * 1024 * 1024) / one.len() + 64);
+    assert!(big.current_buffer().rope().len_bytes() > 16 * 1024 * 1024, "靶要過得了閘");
+    assert!(big.code_file_line(0, crate::code::Language::Rust).is_empty(), "過了閘就沒有顏色");
+
+    // 同一份正文，小一點：照舊上色。
+    let small = open("小.rs", 64);
+    assert!(
+        !small.code_file_line(0, crate::code::Language::Rust).is_empty(),
+        "閘底下的檔照舊上色"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **vim 鍵位下 `gh`/`gl` 按不出來，而 `0`/`$` 照走**（2026-10-13 定「對齊」）。
 ///
 /// vim 的 `gh` 是進 Select 模式、`gl` 沒綁，行首行末那三個鍵是 `0`/`^`/`$`——借
