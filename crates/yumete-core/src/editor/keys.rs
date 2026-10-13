@@ -2848,6 +2848,12 @@ impl Editor {
             .max(1)
     }
 
+    /// `gh`/`gl` 這兩個字母，人按得出來嗎——helix 按得出，vim 鍵位下按不出，而
+    /// 別名展開的照走。見 `handle_goto` 裏那兩臂。
+    fn g_letter_is_pressable(&self) -> bool {
+        self.key_preset != yumete_cjk::KeyPreset::Vim || self.expanding_alias
+    }
+
     /// `g` ＋ 上下在竪排下走一縱嗎——vim 的 `gj`/`gk` 是視覺行，而竪排的視覺行
     /// 就是一縱。見 `handle_goto` 裏那兩臂。
     ///
@@ -2922,8 +2928,20 @@ impl Editor {
                 });
             }
             Key::Char('e') => return go(self, motion::Motion::FileEnd),
-            Key::Char('h') => return go(self, motion::Motion::LineStart),
-            Key::Char('l') => return go(self, motion::Motion::LineEnd),
+            // Warning: **vim 鍵位下這兩個字母按不出來**（2026-10-13 定「對齊」）。
+            // vim 的 `gh` 是進 Select 模式、`gl` 沒綁，而行首行末在那一套裏是
+            // `0`/`$`——借 helix 的字母再給一遍是重複，而且把 `gh` 佔住了。
+            //
+            // **別名照走**：`0`/`$`/`^` 在 vim 鍵位下就是展開成 `gh`/`gl`/`gs` 的
+            // （`keymap.rs` 那張表），那是這幾個動作的內部拼法，不是人按的鍵。所
+            // 以問的是「是不是人剛按出來的」，不是「這個鍵存不存在」——`::` 挑中
+            // 一個動作、`[keys.normal]` 裏寫 `"X" = "gl"`，走的都是別名那條路。
+            Key::Char('h') if self.g_letter_is_pressable() => {
+                return go(self, motion::Motion::LineStart)
+            }
+            Key::Char('l') if self.g_letter_is_pressable() => {
+                return go(self, motion::Motion::LineEnd)
+            }
             Key::Char('s') => return go(self, motion::Motion::LineFirstNonBlank),
             // helix 的 `goto_last_modification`（`keymap/default.rs:88`）。
             Key::Char('.') => return self.goto_last_modification(),

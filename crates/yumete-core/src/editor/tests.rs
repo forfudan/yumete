@@ -18897,7 +18897,9 @@ fn the_vim_caret_never_rests_on_a_line_break() {
         ed
     };
     // 報上來的那一式：第二下 `x` 從前把下一行接了上來。
-    let ed = vim("abc\ndef\n", "glxx");
+    // Warning: **行末那一鍵在 vim 鍵位下是 `$`**（2026-10-13）：`gh`/`gl` 那兩個
+    // 字母在那一套裏按不出來，vim 自己也是這麽拼的。
+    let ed = vim("abc\ndef\n", "$xx");
     assert_eq!(ed.current_buffer().text(), "a\ndef\n", "不許吃掉換行");
     // 走到行尾就停在最後一個字上，再走不出去。
     let ed = vim("abc\ndef\n", "lllll");
@@ -18927,7 +18929,7 @@ fn the_vim_caret_never_rests_on_a_line_break() {
     ed.execute(":keymap vim").unwrap();
     press(&mut ed, "ggV");
     ed.on_key(Key::Esc);
-    press(&mut ed, "gl");
+    press(&mut ed, "$");
     assert_eq!(ed.sel.head(), 2, "夾還在管事");
 }
 
@@ -24644,16 +24646,17 @@ fn leaving_insert_steps_the_caret_back_the_way_vim_and_helix_do() {
     assert_eq!(at(Helix, "gla^"), 5, "helix：`a` 記了 restore_cursor");
     assert_eq!(at(Helix, "glA^"), 6, "helix：`A` 不記，停在行尾那一格");
     assert_eq!(at(Helix, "gli^"), 5, "helix：`i` 不退");
-    assert_eq!(at(Vim, "gla^"), 5, "vim：無條件退一格");
-    assert_eq!(at(Vim, "glA^"), 5, "vim：`A` 也退");
-    assert_eq!(at(Vim, "gli^"), 4, "vim：`i` 也退");
+    // vim 鍵位下行首行末是 `0`/`$`，`gh`/`gl` 按不出來（2026-10-13）。
+    assert_eq!(at(Vim, "$a^"), 5, "vim：無條件退一格");
+    assert_eq!(at(Vim, "$A^"), 5, "vim：`A` 也退");
+    assert_eq!(at(Vim, "$i^"), 4, "vim：`i` 也退");
     // 行中：`a` 從前在兩套鍵位下都偏右一格。
     assert_eq!(at(Helix, "ghll"), 3, "站在 `c` 上");
     assert_eq!(at(Helix, "ghlla^"), 3, "helix：回到 `c`");
-    assert_eq!(at(Vim, "ghlla^"), 3, "vim：回到 `c`");
-    assert_eq!(at(Vim, "ghlli^"), 2, "vim：退到 `b`");
+    assert_eq!(at(Vim, "0lla^"), 3, "vim：回到 `c`");
+    assert_eq!(at(Vim, "0lli^"), 2, "vim：退到 `b`");
     // 列 1 上退不動。
-    assert_eq!(at(Vim, "ghi^"), 1, "vim：行首不動");
+    assert_eq!(at(Vim, "0i^"), 1, "vim：行首不動");
     assert_eq!(at(Helix, "gha^"), 1, "helix：行首的 `a` 退回第一個字");
 }
 
@@ -24706,7 +24709,7 @@ fn vim_x_and_d_stop_at_the_line_break() {
     assert_eq!(after("dd"), "second\n", "`dd` 是整行的");
     assert_eq!(after("2dd"), "", "兩行都走");
     // 非空行的末字上照舊刪得掉那個字。
-    assert_eq!(after("glx"), "abcd\nsecond\n");
+    assert_eq!(after("$x"), "abcd\nsecond\n");
     assert_eq!(after("dl"), "bcde\nsecond\n");
 }
 
@@ -25971,6 +25974,45 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
         type_keys(&mut ed, "gj");
         assert_eq!(at(&ed), 1, "{layout:?}：`gj` 是檔案的下一行");
     }
+}
+
+/// **vim 鍵位下 `gh`/`gl` 按不出來，而 `0`/`$` 照走**（2026-10-13 定「對齊」）。
+///
+/// vim 的 `gh` 是進 Select 模式、`gl` 沒綁，行首行末那三個鍵是 `0`/`^`/`$`——借
+/// helix 的字母再給一遍是重複，而且把 `gh` 佔住了。**這個編輯器沒有 Select 模式**
+/// （只有一個擴選模式，兩套鍵位都是 `v` 進），所以那個字母是**留空**，不是改派別
+/// 的意思。
+///
+/// Warning: **`gh`/`gl` 是這兩個動作在這個倉裏的內部拼法**，不只是鍵：`0`/`$`/`^`
+/// 在 vim 鍵位下就是展開成它們的（`keymap.rs` 那張表），`::` 挑一個動作、
+/// `[keys.normal]` 裏寫 `"X" = "gl"` 走的也是那條路。所以攔的是「人剛按出來的那一
+/// 下」，不是這個動作——攔錯了層，`0` 和 `$` 一起啞掉。
+#[test]
+fn the_vim_preset_hides_two_helix_letters_but_keeps_the_motions() {
+    use yumete_cjk::KeyPreset::{Helix, Vim};
+    let at = |preset, keys: &str| -> usize {
+        let mut ed = typed("abcde\nfghij\n");
+        ed.set_key_preset(preset);
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.sel.head()
+    };
+    // helix：照舊。
+    assert_eq!(at(Helix, "gl"), 4, "helix 的 `gl` 是行末");
+    assert_eq!(at(Helix, "llgh"), 0, "helix 的 `gh` 是行首");
+    // vim：那兩個字母什麼都不做，光標停在原處。
+    assert_eq!(at(Vim, "gl"), 0, "vim 的 `gl` 按不出來");
+    assert_eq!(at(Vim, "llgh"), 2, "vim 的 `gh` 按不出來");
+    // …而同一個動作，vim 自己那三個鍵走得到。
+    assert_eq!(at(Vim, "$"), 4, "vim 的 `$`");
+    assert_eq!(at(Vim, "ll0"), 0, "vim 的 `0`");
+    assert_eq!(at(Vim, "ll^"), 0, "vim 的 `^`");
+    // 別名也走得到：配置裏綁的、`::` 挑的，都是這條路。
+    let mut ed = typed("abcde\nfghij\n");
+    ed.set_key_preset(Vim);
+    ed.set_key_aliases([("X".to_string(), "gl".to_string())].into_iter().collect());
+    press(&mut ed, "ggX");
+    assert_eq!(ed.sel.head(), 4, "別名展開出來的 `gl` 照走");
 }
 
 /// **折了行的那一縱纔分得出兩套鍵位**（2026-10-13 報的：「我用 helix，朋友用
