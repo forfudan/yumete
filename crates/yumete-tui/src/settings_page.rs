@@ -103,18 +103,34 @@ struct Columns {
 }
 
 impl Columns {
-    fn of(area: Rect) -> Columns {
+    /// **按這一組實際的內容算寬度**（2026-10-13 報的）。
+    ///
+    /// 從前是按頁寬的比例算再鉗住（30%，14–24 格），於是「NORMAL模式下屏蔽系統宇夢
+    /// 輸入法」在 24 格上被切成「NORMAL模式下屏蔽系統」——**而且一聲不吭**，讀起來像
+    /// 設置項就叫那個名字。原話：「The first column is not finished without a ....
+    /// Users may got confused……I think that the columns can be more dynamic so that two
+    /// columns can show as complete as possible」。
+    ///
+    /// 現在量這一組最長的名字和最長的值：擺得下就兩欄都是完整的；擺不下纔分，而且值
+    /// 那一欄最多佔一半（它多半短得多，名字長的那一組不該把值也餓死）。
+    fn of(area: Rect, rows: &[&'static Setting], panel: &Panel) -> Columns {
         let right = area.x + area.width;
         let name = area.x + GROUPS_WIDE + 2;
         let room = right.saturating_sub(name);
-        // Warning: **按比例算再鉗住，不是純按比例。** 純比例在寬窗口下把兩欄拉得老遠
-        // ——名字最長五個漢字（10 格），而四成的 110 欄是 38 格，中間攤着一片空
-        // 白。鉗上去之後寬窗口是緊的，窄窗口照舊按比例縮。
-        // Warning: **名字那一欄不許把值擠成零。** 32 欄的窗口上 `room` 是 16，而下界
-        // 14 把值欄壓成一格——每一行畫出來都是一個省略號。留八格給值，再不夠就把名
-        // 字也縮下去（2026-10-13）。
-        let name_wide =
-            (room * 30 / 100).clamp(14, 24).min(room.saturating_sub(9)).max(6);
+        let widest = |it: &mut dyn Iterator<Item = String>| {
+            it.map(|t| yumete_cjk::str_width(&t) as u16).max().unwrap_or(0)
+        };
+        // 名字和值之間至少空兩格，不然長名字和值黏在一起。
+        let want_name = widest(&mut rows.iter().map(|s| said(s.label))) + 2;
+        let want_value =
+            widest(&mut rows.iter().map(|s| drawn(s, &panel.shown(s).value)));
+        let name_wide = match want_name + want_value <= room {
+            // 兩欄都擺得下：名字就是它要的那麽寬，剩下的全是值的。
+            true => want_name,
+            // 擺不下：值最多拿一半，名字拿剩下的——再窄也留六格給名字，不然那一欄
+            // 只剩一個省略號。
+            false => room.saturating_sub(want_value.min(room / 2)).clamp(6, room),
+        };
         Columns { name, value: name + name_wide, right }
     }
 
@@ -407,7 +423,8 @@ pub fn draw(
     let changed = ground.fg(ink.mark());
 
     frame.render_widget(Clear, area);
-    let col = Columns::of(area);
+    let rows = panel.rows();
+    let col = Columns::of(area, &rows, panel);
     let right = col.right;
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
@@ -581,7 +598,6 @@ pub fn draw(
 
     // ---- 右邊：這一組的那些項 ----------------------------------------------
     let mut caret = None;
-    let rows = panel.rows();
     let from = col.name;
     if rows.is_empty() {
         put_text(buf, from, area.y + 2, right, &say!("set.group.not-yet"), quiet);
@@ -626,7 +642,12 @@ pub fn draw(
                 }
             }
         }
-        // 名字 —— 畫到值那一欄為止，長名字截住而不是推開值。
+        // 名字 —— 畫到值那一欄為止。
+        //
+        // Warning: **切了要看得出來**（2026-10-13 報的，同值那一欄 2026-09-24 那一條）。
+        // `put_text` 到了邊界就停，一聲不吭——於是一個被切掉尾巴的名字讀起來像它本來
+        // 就叫那個，而設置項的名字正是人用來認它的那樣東西。
+        let label = crate::elide(&label, col.value.saturating_sub(from + 1) as usize);
         put_text(
             buf,
             from,
