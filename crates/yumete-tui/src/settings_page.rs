@@ -44,6 +44,46 @@ use crate::put_text;
 /// 左邊那張組單子有多寬（全角格）。
 const GROUPS_WIDE: u16 = 14;
 
+/// **一段話折成幾行**，按顯示寬度（2026-10-13）。
+///
+/// 中文可以在任何一個字之間斷，所以貪心地裝滿一行就斷；可是**空格那一種斷點更好
+/// 讀**——鍵那一行是 `hl 換欄  jk 上下  ␣ 切換` 這樣一組一組的，斷在組裏面會把一組
+/// 拆成兩半。所以裝滿之後往回找最近的那個空格，找得到就斷在那裏。
+///
+/// 往回找的範圍是**這一行的後四分之一**：再往回就不是「順手斷在空格上」，而是把半行
+/// 的空白留在螢幕上。
+fn fold(text: &str, wide: usize) -> Vec<String> {
+    if wide == 0 {
+        return Vec::new();
+    }
+    let mut rows: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut at = 0usize;
+    for g in yumete_cjk::graphemes(text) {
+        let w = yumete_cjk::grapheme_width(g).max(1);
+        if at + w > wide {
+            match line.rfind(' ').filter(|i| *i * 4 >= wide * 3) {
+                Some(cut) => {
+                    let rest = line.split_off(cut);
+                    rows.push(std::mem::take(&mut line));
+                    line = rest.trim_start().to_string();
+                    at = yumete_cjk::str_width(&line);
+                }
+                None => {
+                    rows.push(std::mem::take(&mut line));
+                    at = 0;
+                }
+            }
+        }
+        line.push_str(g);
+        at += w;
+    }
+    if !line.is_empty() {
+        rows.push(line);
+    }
+    rows
+}
+
 /// **右邊那三欄從哪裏開始**，以及它們各自到哪裏為止。
 ///
 /// Warning: **量出來的，不是寫死的。** 從前是兩個常量（22 與 38），於是 56 欄以下那扇
@@ -58,8 +98,6 @@ struct Columns {
     name: u16,
     /// 值那一欄。
     value: u16,
-    /// 「從哪一層來」那一欄；`None` ＝ 窄到擺不下，這一欄不畫。
-    layer: Option<u16>,
     /// 頁的右邊。
     right: u16,
 }
@@ -69,20 +107,25 @@ impl Columns {
         let right = area.x + area.width;
         let name = area.x + GROUPS_WIDE + 2;
         let room = right.saturating_sub(name);
-        // Warning: **按比例算再鉗住，不是純按比例。** 純比例在寬窗口下把三欄拉得老遠
+        // Warning: **按比例算再鉗住，不是純按比例。** 純比例在寬窗口下把兩欄拉得老遠
         // ——名字最長五個漢字（10 格），而四成的 110 欄是 38 格，中間攤着一片空
         // 白。鉗上去之後寬窗口是緊的，窄窗口照舊按比例縮。
-        let name_wide = (room * 30 / 100).clamp(14, 24);
-        let value_wide = (room * 22 / 100).clamp(12, 18);
-        let value = name + name_wide;
-        // 窄到擺不下第三欄就不畫它——一欄殘缺的「出廠」比沒有這一欄難讀。
-        let layer = (room >= name_wide + value_wide + 16).then(|| value + value_wide);
-        Columns { name, value, layer, right }
+        // Warning: **名字那一欄不許把值擠成零。** 32 欄的窗口上 `room` 是 16，而下界
+        // 14 把值欄壓成一格——每一行畫出來都是一個省略號。留八格給值，再不夠就把名
+        // 字也縮下去（2026-10-13）。
+        let name_wide =
+            (room * 30 / 100).clamp(14, 24).min(room.saturating_sub(9)).max(6);
+        Columns { name, value: name + name_wide, right }
     }
 
-    /// 值那一欄畫到哪裏為止。
+    /// 值那一欄畫到哪裏為止——**一直到頁的右邊**（2026-10-13 報的）。
+    ///
+    /// Warning: **從前它的右界是「從哪一層來」那一欄的起點**，而那一欄只在改過的行上
+    /// 纔畫字——於是右邊明明空着一大片，長值照樣在第 18 格上被省略號截掉。原話：
+    /// 「高亮的這一列明明右側有大量空間但是還是被…省略了」。那一欄現在整個搬到了右
+    /// 半邊的底下（見 [`draw`] 裏那一塊），一行只剩名字和值兩欄。
     fn value_ends(&self) -> u16 {
-        self.layer.unwrap_or(self.right).saturating_sub(1).max(self.value)
+        self.right.saturating_sub(1).max(self.value)
     }
 }
 
@@ -108,8 +151,7 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         return true;
     }
     match key {
-        Key::Char('q') => return false,
-        // **`Esc` 退一步，走是 `q`**（2026-10-09 作者報的：「a defensive esc to the
+        // **`Esc` 退一步，走是 `:q`**（2026-10-09 作者報的：「a defensive esc to the
         // normal mode will accidently quit the TUI」）。這扇面板從前是全編輯器唯一一個
         // `Esc` 會整個關掉的——邊欄那一族是 `q` 關、`Esc` 只把輸入法的掛起再說一遍
         // （`sidebar.rs`），而搜索面板的 `Esc` 早就改成了「退一步」。
@@ -118,9 +160,13 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         // **改一下生效一下**，它們的 `Esc` 讀作「做完了」。這一扇要按 `:w` 纔算數，
         // 那個讀法在這裏不成立。nconf 把話說死：「`<Esc>` always leaves the current
         // window」——退一層，不是退出。
+        //
+        // Warning: **`q` 2026-10-13 撤了。** 原話：「q 這個快捷鍵删掉，有 `:q` 就够
+        // 了。q 容易誤擊」——這一扇面板上一個字都不用打，而右手在 `jk` 上，`q` 就在
+        // 旁邊；誤擊一下丟的是還沒 `:w` 的那幾項。
         Key::Esc => match panel.pane {
             Pane::Settings => panel.across(false),
-            // 左欄上已經沒有別的可退了。走要按 `q`，提示行上寫着。
+            // 左欄上已經沒有別的可退了。走是 `:q`，提示行上寫着。
             Pane::Groups => {}
         },
         Key::Char('j') | Key::Down => panel.step(true),
@@ -372,20 +418,23 @@ pub fn draw(
         }
     }
 
-    // ---- 頂上那一行：標題，和改動落到哪一份 --------------------------------
-    put_text(buf, area.x + 1, area.y, right, &say!("set.title"), head);
+    // ---- 頂上那一行：標題帶着改動落到哪一層，右邊是那一份檔 ------------------
+    //
+    // Warning: **層寫進標題裏**（2026-10-13 報的）。從前標題只有「設置」兩個字，而
+    // 「改的是全局還是本項目」擠在右邊路徑的前面——那是這扇面板最要緊的一格狀態，
+    // 而它和路徑同一個顏色、同一個位置。原話：「左上標題改爲『設置 [{0}]』……用金字
+    // 會更醒目。右側的文件名用正常顔色」。
+    let title = format!("{} [{}]", say!("set.title"), said(panel.into.layer().label()));
+    put_text(buf, area.x + 1, area.y, right, &title, head);
     let sheet = panel.sheet();
-    let where_to = format!(
-        "[{}] {}",
-        said(panel.into.layer().label()),
-        match (&sheet.path, sheet.there) {
-            (Some(p), true) => shorten(p),
-            // Warning: **那個檔還沒有就明說，而路徑照畫** —— 本項目那一份多半不存在，
-            // 存盤時它是被**建出來**的，而建在哪裏是一件該先看得見的事。
-            (Some(p), false) => format!("{}（{}）", shorten(p), say!("set.no-file")),
-            (None, _) => say!("set.no-file"),
-        }
-    );
+    let where_to = match (&sheet.path, sheet.there) {
+        (Some(p), true) => shorten(p),
+        // Warning: **那個檔還沒有就在名字後面加一個 `+`** —— 本項目那一份多半不存在，
+        // 存盤時它是被**建出來**的，而建在哪裏是一件該先看得見的事。原話：「如果没有
+        // 文件，顯示{預期文件名}+ 表示保存後創建」。
+        (Some(p), false) => format!("{}+", shorten(p)),
+        (None, _) => say!("set.no-file"),
+    };
     let dirty = match panel.dirty() {
         true => format!("{}  {where_to}", say!("set.unsaved")),
         false => where_to,
@@ -393,8 +442,11 @@ pub fn draw(
     // Warning: **撞上標題就縮**。從前它只 `saturating_sub`，於是 40 欄的窗口上那條路徑
     // 直接蓋掉「設置」兩個字（`設置全局] ~/.config/…`）。先丟路徑只留 `[全局]`，
     // 再丟不下就整條不畫——標題不許被吃掉。2026-09-24 審出來的。
-    let title_ends = area.x + 1 + yumete_cjk::str_width(&say!("set.title")) as u16 + 2;
-    let short = format!("[{}]", said(panel.into.layer().label()));
+    let title_ends = area.x + 1 + yumete_cjk::str_width(&title) as u16 + 2;
+    let short = match (&sheet.path, sheet.there) {
+        (Some(p), false) => format!("{}+", shorten(p)),
+        _ => String::new(),
+    };
     // Warning: **「改了還沒存」是最後纔丟的那一個。** 從前這裏只有兩檔——完整那一行，
     // 或者光一個 `[全局]`——於是 74 欄以下**改了東西沒有任何提示**，而那正是這一
     // 行存在的理由。中間插一檔：徽章 ＋ `[全局]`，路徑先丟。2026-09-24 審出來的。
@@ -405,7 +457,7 @@ pub fn draw(
     let line = match right.saturating_sub(title_ends) as usize {
         room if room > yumete_cjk::str_width(&dirty) => Some(dirty),
         room if room > yumete_cjk::str_width(&badge) => Some(badge),
-        room if room > yumete_cjk::str_width(&short) => Some(short),
+        room if !short.is_empty() && room > yumete_cjk::str_width(&short) => Some(short),
         _ => None,
     };
     if let Some(line) = line {
@@ -418,37 +470,77 @@ pub fn draw(
             &line,
             match panel.dirty() {
                 true => changed,
-                false => quiet,
+                // **路徑用正常顏色**（2026-10-13 報的）：它是這一扇面板在改哪一份檔，
+                // 不是一句附註。
+                false => text,
             },
         );
     }
 
-    // ---- 兩道橫綫與一道竪綫 ------------------------------------------------
+    // ---- 底下那幾塊有多高，上面那一欄就剩多少 --------------------------------
+    //
+    // 從下往上排（2026-10-13 定）：鍵那一塊、一條橫線、說明那一塊、一條橫線（整頁
+    // 寬，帶 `┴`）、當前這一行的三層、一條橫線（只跨右半邊）。說明和鍵都可以折成幾
+    // 行，所以這幾塊的高度是**算出來的**，不是寫死的兩行。原話：「下方的空間之利用
+    // 率不高……上面是 description，下面是快捷鍵。可以允許多行」。
     let split = area.x + GROUPS_WIDE;
-    // Warning: **`foot` 不許爬到上面那道橫綫之上。** 可用高度 ≤3 時它會落到 `area.y`，
-    // 於是 `┬` 畫在 `┴` 下面、說明行蓋在橫綫上、標題被抹掉——整扇面板讀成一團。
-    // 2026-09-24 審出來的（110×5）。
-    let foot = (area.y + area.height.saturating_sub(3)).max(area.y + 2);
-    let rule = |buf: &mut ratatui::buffer::Buffer, y: u16, join: &str| {
-        for x in area.x..right {
+    let bottom = area.y + area.height;
+    let note = note_for(panel);
+    let keys = say!("set.keys");
+    let wide = right.saturating_sub(area.x + 2) as usize;
+    let note_rows = fold(&note, wide);
+    let keys_rows = fold(&keys, wide);
+    // Warning: **矮窗口上一塊一塊地讓**，不是一起縮。先讓三層那一塊（它是補充），再
+    // 讓說明的第二行起（第一行留着），鍵那一塊最後讓——按鍵列表是「現在能按什麼」，
+    // 它比別的都該活得久。`foot` 不許爬到頂上那道橫線之上（2026-09-24 審出來的
+    // 110×5：`┬` 畫在 `┴` 下面、說明蓋在橫線上、標題被抹掉）。
+    let want = |rows: usize| rows as u16 + 1;
+    let room = bottom.saturating_sub(area.y + 3);
+    let keys_high = want(keys_rows.len()).min(room);
+    let note_high = want(note_rows.len()).min(room.saturating_sub(keys_high));
+    let layers_high = 4u16.min(room.saturating_sub(keys_high + note_high));
+    let keys_at = bottom.saturating_sub(keys_high.saturating_sub(1));
+    let foot = bottom.saturating_sub(keys_high + note_high).max(area.y + 2);
+    let note_at = foot + 1;
+    let layers_at = foot.saturating_sub(layers_high.saturating_sub(1));
+    // 上面那一欄畫到哪裏為止：三層那一塊畫得下就讓給它（連同它上面那條橫線）。
+    let list_ends = match layers_high >= 4 {
+        true => layers_at.saturating_sub(1),
+        false => foot,
+    };
+    let rule = |buf: &mut ratatui::buffer::Buffer, y: u16, from: u16, join: Option<&str>| {
+        for x in from..right {
             if let Some(cell) = buf.cell_mut((x, y)) {
                 cell.set_symbol("─").set_style(quiet);
             }
         }
-        if let Some(cell) = buf.cell_mut((split, y)) {
-            cell.set_symbol(join).set_style(quiet);
+        if let Some(join) = join {
+            if let Some(cell) = buf.cell_mut((split, y)) {
+                cell.set_symbol(join).set_style(quiet);
+            }
         }
     };
-    let bottom = area.y + area.height;
     if area.y + 1 < bottom {
-        rule(buf, area.y + 1, "┬");
+        rule(buf, area.y + 1, area.x, Some("┬"));
     }
     if foot < bottom && foot > area.y + 1 {
-        rule(buf, foot, "┴");
+        rule(buf, foot, area.x, Some("┴"));
+    }
+    // 說明和鍵之間那一條：整頁寬，沒有接點。
+    if note_high > 0 && keys_high > 0 && keys_at > area.y + 1 {
+        rule(buf, keys_at.saturating_sub(1), area.x, None);
     }
     for y in area.y + 2..foot {
         if let Some(cell) = buf.cell_mut((split, y)) {
             cell.set_symbol("│").set_style(quiet);
+        }
+    }
+    // 三層那一塊上面那一條：**只跨右半邊**，左邊那一欄的八組照舊一路到底。
+    // Warning: **畫在那一條竪線之後**，不然 `├` 又被它蓋回 `│`。
+    if layers_high >= 4 && layers_at > area.y + 2 {
+        rule(buf, layers_at.saturating_sub(1), split + 1, None);
+        if let Some(cell) = buf.cell_mut((split, layers_at.saturating_sub(1))) {
+            cell.set_symbol("├").set_style(quiet);
         }
     }
 
@@ -495,14 +587,14 @@ pub fn draw(
     // 沒有記下滾到哪，是故意的：由 `panel.row` 現算，所以撥組、換窗口大小、存完重畫
     // 都不會留下一個對不上的偏移。往下走的時候光標貼着下邊沿，往上走貼着上邊沿——
     // 和 vim 的 `scrolloff` 開到最大同一種手感。
-    let room = foot.saturating_sub(area.y + 2) as usize;
+    let room = list_ends.saturating_sub(area.y + 2) as usize;
     let first = match room {
         0 => 0,
         _ => panel.row.saturating_sub(room - 1),
     };
     for (i, setting) in rows.iter().enumerate().skip(first) {
         let y = area.y + 2 + (i - first) as u16;
-        if y >= foot {
+        if y >= list_ends {
             break;
         }
         let here = i == panel.row && panel.pane == Pane::Settings;
@@ -567,31 +659,76 @@ pub fn draw(
             caret =
                 Some(ratatui::layout::Position { x: at.min(col.value_ends().saturating_sub(1)), y });
         }
-        // 從哪一層來，以及被蓋掉的那一個 —— 窄窗口下這一欄整個不畫。
-        // **只標例外，不標常態**（2026-10-09）。從前這一欄在二十三行裏寫了二十一次
-        // 「出廠」，於是真正帶着消息的那兩行——自己設過的——淹在自己那一欄裏。Emacs 的
-        // Customize 把同一條寫進了樣式表：九種狀態裏只有 `STANDARD` 沒有任何裝飾。
-        if let (Some(at), false) = (col.layer, shown.from == Layer::Factory) {
-            let mut whence = said(shown.from.label());
-            if let Some((under, was)) = &shown.under {
-                whence.push_str(&format!("  ← {} {}", said(under.label()), drawn(setting, was)));
+    }
+
+    // ---- 右半邊底下那一塊：當前這一行的三層 ----------------------------------
+    //
+    // **從每一行上搬下來的**（2026-10-13 報的）。從前它是一行的第三欄，只在改過的行
+    // 上寫字，於是右邊空着一大片而值欄在第 18 格上被截；而且它只說得出贏的那一層和
+    // 被它蓋掉的那一個。搬下來之後三層各佔一行，「設了什麼」和「沒設」一眼分得開。
+    if layers_high >= 4 {
+        if let (Pane::Settings, Some(setting)) = (panel.pane, panel.here()) {
+            let shown = panel.shown(setting);
+            for (i, (layer, said_value)) in panel.layers(setting).iter().enumerate() {
+                let y = layers_at + i as u16;
+                if y >= foot {
+                    break;
+                }
+                let value = match said_value {
+                    Some(v) => drawn(setting, v),
+                    None => say!("set.layer.unset"),
+                };
+                let name = said(layer.label());
+                let pad = 8usize.saturating_sub(yumete_cjk::str_width(&name));
+                let mut line = format!("{name}{}{value}", " ".repeat(pad));
+                // 擠不下就不說那一句：半句「← 現在」比沒有這一句難讀。
+                let mark = format!("   {}", say!("set.layer.in-force"));
+                let room = right.saturating_sub(split + 3) as usize;
+                if *layer == shown.from
+                    && yumete_cjk::str_width(&line) + yumete_cjk::str_width(&mark) <= room
+                {
+                    line.push_str(&mark);
+                }
+                put_text(
+                    buf,
+                    split + 3,
+                    y,
+                    right,
+                    &line,
+                    match (said_value.is_some(), *layer == shown.from) {
+                        (_, true) => text,
+                        (true, _) => ground.fg(ink.azure()),
+                        (false, _) => quiet,
+                    },
+                );
             }
-            put_text(
-                buf,
-                at,
-                y,
-                right,
-                &whence,
-                match here {
-                    true => band.fg(ink.quiet()),
-                    false => quiet,
-                },
-            );
         }
     }
 
-    // ---- 底下兩行：這一項是幹什麽的，和鍵 ----------------------------------
-    let note = match (panel.pane, panel.here()) {
+    // ---- 底下兩塊：這一項是幹什麽的，和鍵 ------------------------------------
+    //
+    // **正常顏色，而且折得了行**（2026-10-13 報的）：說明是要讀的那一句，從前和鍵一
+    // 樣暗、一樣只有一行，長一點就被截掉。
+    for (i, row) in note_rows.iter().enumerate() {
+        let y = note_at + i as u16;
+        if y >= keys_at.saturating_sub(1) || y >= bottom {
+            break;
+        }
+        put_text(buf, area.x + 2, y, right, row, text);
+    }
+    for (i, row) in keys_rows.iter().enumerate() {
+        let y = keys_at + i as u16;
+        if y >= bottom {
+            break;
+        }
+        put_text(buf, area.x + 2, y, right, row, quiet);
+    }
+    caret
+}
+
+/// 底下那一句說明：這一項是幹什麽的。
+fn note_for(panel: &Panel) -> String {
+    match (panel.pane, panel.here()) {
         (Pane::Settings, Some(setting)) => {
             let mut note = said(setting.hint);
             // `0` 另有意思的那幾項，把那句話跟在後面——它只在這一項上成立，
@@ -607,14 +744,7 @@ pub fn draw(
             note
         }
         _ => say!("set.pick-a-group"),
-    };
-    if foot + 1 < bottom {
-        put_text(buf, area.x + 2, foot + 1, right, &note, quiet);
     }
-    if foot + 2 < bottom {
-        put_text(buf, area.x + 2, foot + 2, right, &say!("set.keys"), quiet);
-    }
-    caret
 }
 
 /// 家目録寫成 `~`。
@@ -731,8 +861,13 @@ mod tests {
         p.finish_typing();
 
         let page = shot(&p, 110, 24);
-        assert!(page.contains("本項目"), "贏的那一層：\n{page}");
-        assert!(page.contains("← 全局 4"), "被蓋掉的那一個：\n{page}");
+        // **三層各佔一行，在右半邊底下那一塊裏**（2026-10-13 改）。從前這是一行的第
+        // 三欄，只說得出贏的那一層和被它蓋掉的那一個——而「全局設了 4、本項目又蓋成
+        // 2」要三行纔講得清。
+        assert!(page.contains("出廠    0"), "出廠那一層：\n{page}");
+        assert!(page.contains("全局    4"), "全局那一層：\n{page}");
+        assert!(page.contains("本項目  2"), "本項目那一層：\n{page}");
+        assert!(page.contains("← 現在用這一層"), "贏的那一層要標出來：\n{page}");
         assert!(page.contains("改了還没存"), "頂上要說一句：\n{page}");
     }
 
@@ -769,19 +904,18 @@ mod tests {
     /// 它們的 `Esc` 讀作「做完了」。這一扇要按 `:w` 纔算數。nconf 那一條說得最乾淨：
     /// 「`<Esc>` always leaves the current window」——退一層。
     #[test]
-    fn q_closes_it_and_esc_only_steps_back() {
-        let mut p = Panel::open(None, None);
-        assert!(!press(&mut p, Key::Char('q')), "`q` 走");
-
+    fn esc_only_steps_back_and_no_letter_closes_it() {
         let mut p = Panel::open(None, None);
         p.across(true);
         assert_eq!(p.pane, Pane::Settings, "先進到右邊那一欄");
         assert!(press(&mut p, Key::Esc), "`Esc` 不關");
         assert_eq!(p.pane, Pane::Groups, "退回左邊那一欄");
-        assert!(press(&mut p, Key::Esc), "左欄上再按也不關——走要按 `q`");
+        assert!(press(&mut p, Key::Esc), "左欄上再按也不關——走是 `:q`");
         assert_eq!(p.pane, Pane::Groups);
 
-        for key in [Key::Char('j'), Key::Char('l'), Key::Char(' '), Key::Tab] {
+        // Warning: **`q` 2026-10-13 撤了**（原話：「q 容易誤擊」）。這一扇面板上一個
+        // 字都不用打，而右手就在 `jk` 上——誤擊一下丟的是還沒 `:w` 的那幾項。
+        for key in [Key::Char('j'), Key::Char('l'), Key::Char(' '), Key::Tab, Key::Char('q')] {
             assert!(press(&mut p, key), "{key:?} 不該關掉它");
         }
     }

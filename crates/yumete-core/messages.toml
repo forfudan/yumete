@@ -9644,10 +9644,10 @@ zhs = "默认不载入——语言模型照常载入(分词要它)，码表等�
 en = "start"
 
 [[message]]
-# 設置：让开系统输入法
+# settings: suppress the system-level Yume IME in normal mode
 key = "set.ime.system"
-zht = "讓開系統輸入法"
-zhs = "让开系统输入法"
+zht = "NORMAL模式下屏蔽系統版宇夢輸入法"
+zhs = "NORMAL模式下屏蔽系统版宇梦输入法"
 en = "system"
 
 [[message]]
@@ -9660,9 +9660,9 @@ en = "system"
 [[message]]
 # 設置面板：底下那一行鍵
 key = "set.keys"
-zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 切換全局/本地設置  :w 存  q 離開"
-zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 切换全局/本地设置  :w 存  q 离开"
-en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  q leave"
+zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 切換全局/本地設置  :w 存"
+zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 切换全局/本地设置  :w 存"
+en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save"
 
 [[message]]
 # 設置：鍵位那一套
@@ -9693,11 +9693,25 @@ zhs = "全局"
 en = "global"
 
 [[message]]
+# 設置面板底下那一塊：三層裏現在算數的是這一層
+key = "set.layer.in-force"
+zht = "← 現在用這一層"
+zhs = "← 现在用这一层"
+en = "← in force"
+
+[[message]]
 # 設置面板：從本項目的配置來
 key = "set.layer.local"
 zht = "本項目"
 zhs = "本项目"
 en = "project"
+
+[[message]]
+# 設置面板底下那一塊：這一層沒有說話（2026-10-13）
+key = "set.layer.unset"
+zht = "未設"
+zhs = "未设"
+en = "unset"
 
 [[message]]
 # 設置：排版方向——橫排

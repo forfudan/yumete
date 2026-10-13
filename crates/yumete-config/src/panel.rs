@@ -314,6 +314,23 @@ impl Panel {
     }
 
     /// 一項此刻長什麽樣。
+    /// **三層各自說了什麼** —— 出廠、全局、本項目，照面板上那一塊的次序（2026-10-13）。
+    ///
+    /// `None` ＝ 那一層沒有說話。出廠那一層永遠有話說，所以它那一格永遠是 `Some`。
+    ///
+    /// Warning: **和 [`Panel::shown`] 問的是同一份東西，答的是不同的問題**：那一支答
+    /// 「贏的是誰」，這一支答「三個人各說了什麼」——面板底下那一塊要的是後者，而從前
+    /// 只有前者，於是「全局設了但被本項目蓋住」這件事看不見。
+    pub fn layers(&self, setting: &Setting) -> [(Layer, Option<String>); 3] {
+        let path = setting.path();
+        let said = |raw: Option<String>| raw.map(|v| Self::as_the_editor_takes_it(setting, v));
+        [
+            (Layer::Factory, Some(setting.factory.to_string())),
+            (Layer::Global, said(self.global.says(&path))),
+            (Layer::Local, said(self.local.says(&path))),
+        ]
+    }
+
     pub fn shown(&self, setting: &Setting) -> Shown {
         let path = setting.path();
         let factory = (Layer::Factory, setting.factory.to_string());
