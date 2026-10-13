@@ -9,6 +9,74 @@ in `docs/development.md` §5.2.
 
 ## 未發布 · Unreleased
 
+## 0.8.0 · 2026-10-13
+
+Twenty-two commits since 0.7.0. The vertical keys, the vim preset, a four-gigabyte
+file, and the settings panel.
+
+### Changed
+
+- **`h j k l` on a vertical page now go where they point.** `j` and `k` run down and up
+  inside a column, `h` steps leftward to the next column. The reading that follows the
+  text instead — `h` and `l` a character back and on, `j` and `k` a line down and up —
+  is `:vertical-keys logical` (or `[editor] vertical_keys = "logical"`). The setting
+  moves those four letters and nothing else: `gh` `gj` `gk` `gl` mean the same thing
+  either way, because a paragraph and its two ends do not point anywhere.
+
+- **The vim preset gets vim's own four letters under the writing-direction keys.** `j`
+  walks the paragraph and `gj` the column, which is the other way round from helix, and
+  `h` and `l` stop at the two ends of a paragraph unless their letter is in
+  `[editor] which_wrap`. `gh` and `gl` are not bound there at all — vim spells the line
+  ends `0` `^` `$` and keeps `gh` for Select mode — and `s` is one change like `cw`, so
+  one `u` takes it back.
+
+- **A saved file ends the way its own lines do.** A file whose lines end `\r\n` gets a
+  `\r\n`, one whose lines end `\n` gets a `\n`, and an empty file stays empty — what
+  vim and helix both do. `[editor] insert_final_newline = false` gives you the
+  byte-for-byte round trip back, for a data file meant to end without one.
+
+- **Replacing everything in the search panel always asks in the window in the middle**,
+  whether it is one file or a book; and replacing a whole file leaves the highlight on
+  the next file's first hit rather than at the top of the list.
+
+- **`q` no longer closes the settings panel.** `:q` does. It sits next to `jk`, and
+  nothing in that panel is typed, so a stray `q` only ever threw away unsaved changes.
+
+### Fixed
+
+- **A very large file opens in about a tenth of the memory.** The reported case — a
+  3.91 GB JSON — went from about 40 GB and 19 seconds to 4.3 GB and 6.8 seconds. Four
+  things: a code file past 16 MB gets no syntax tree (parsing one held the whole text
+  three more times over), opening a file no longer copies the whole book into a request
+  that may never be read, the file streams into the rope instead of being read whole
+  first, and guessing what a file is written in reads its first few lines rather than a
+  copy of all of it.
+
+- **An empty line answers `dd` and `dw`**, which did nothing before; **`p` on an empty
+  line** pastes after that line rather than after the one below it; and **`yy` on a last
+  line with no line ending** is still a whole line, so `p` starts a new one.
+
+- **Replacing one hit in the search panel follows the highlight**: the page moves to
+  where the highlight went, and the order of the files in the list stays put.
+
+### The settings panel
+
+Rebuilt around the item you are standing on.
+
+- **The value column runs to the right edge.** The "which layer" column that used to cut
+  it off at eighteen cells has moved: under the list there is now a block holding what
+  the item does and its three layers — factory, global, project — with the one in force
+  in gold and `unset` for a layer that says nothing. Both halves of one question
+  ("what is this, and what is it set to now") in one place.
+
+- **The two columns are sized from what the group actually holds**, so a long name like
+  「NORMAL模式下屏蔽系統版宇夢輸入法」 is shown whole where there is room, and ends in an
+  ellipsis where there is not — it used to be cut with nothing to say so.
+
+- **The title says which file an edit lands in** — `設置 [全局]`, `設置 [本項目]` — with
+  that file's name beside it, and a `+` when it is not there yet and saving will make it.
+
+
 ## 0.7.0 · 2026-10-12
 
 0.6.0 到這裏七十三個提交。挑七件。
