@@ -133,6 +133,23 @@ const ENOUGH: i32 = 3;
 /// commonest thing a `.txt` holds, and it is the reading that adds nothing to
 /// the page. A tie above the bar goes to Markdown, which is the friendlier of
 /// the two to be wrong about.
+/// Same question, asked of a rope — **and只切它真正要看的那一截**（2026-10-13）。
+///
+/// [`sniff`] 只讀頭 [`SAMPLE`] 行，而開檔那一處從前餵給它的是 `rope.to_string()`：
+/// 一份 `.txt` 就為了猜一次文體把整份正文複製一遍（`.txt` 不在副檔名表裏，所以**每
+/// 一份稿子都走這條路**）。量過：361 MB 的 `.txt`，這一句一個人佔 360 MB。
+///
+/// 兩道閘：頭 `SAMPLE` 行，再夾一個字符上限——「一行就是全文」的檔是有的，一個幾
+/// GB 的 JSON 可以只有一行。
+pub fn sniff_rope(rope: &ropey::Rope) -> Syntax {
+    let lines = SAMPLE.min(rope.len_lines());
+    let until = rope.line_to_char(lines).min(SNIFF_CHARS).min(rope.len_chars());
+    sniff(&rope.slice(..until).to_string())
+}
+
+/// 猜文體最多讀這麼多字符，不管它有幾行。
+const SNIFF_CHARS: usize = 64 * 1024;
+
 pub fn sniff(text: &str) -> Syntax {
     let mut typst = 0i32;
     let mut markdown = 0i32;
@@ -233,6 +250,26 @@ mod tests {
         assert_eq!(
             sniff("那年冬天，雪下得比往常都早。\n屋簷下掛滿了冰稜。\n"),
             Syntax::Text
+        );
+        // **問一棵樹，答案要和問整份正文一樣**（2026-10-13）：`sniff_rope` 只切
+        // 頭幾行出來，而那正是 `sniff` 唯一讀得到的部分。
+        for text in [
+            "#import \"a\"\n= 題\n",
+            "# 題\n雪下得**很早**。\n看[這裏](x)。\n",
+            "那年冬天，雪下得比往常都早。\n",
+        ] {
+            assert_eq!(
+                sniff(text),
+                sniff_rope(&ropey::Rope::from_str(text)),
+                "{text:?}"
+            );
+        }
+        // 頭幾行之後再長也不改答案——那一截根本沒讀。
+        let long = format!("那年冬天。\n{}", "# 題\n".repeat(SAMPLE * 2));
+        assert_eq!(
+            sniff_rope(&ropey::Rope::from_str(&long)),
+            sniff(&long),
+            "兩邊都只看得見頭 SAMPLE 行"
         );
         assert_eq!(sniff(""), Syntax::Text);
         // A list is a list in both, and settles nothing.

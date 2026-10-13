@@ -472,7 +472,7 @@ impl Buffer {
         // says; otherwise the file itself does.
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         let named = name.as_deref().and_then(crate::syntax::from_extension);
-        let syntax = named.unwrap_or_else(|| crate::syntax::sniff(&rope.to_string()));
+        let syntax = named.unwrap_or_else(|| crate::syntax::sniff_rope(&rope));
         Ok(Buffer {
             id: next_id(),
             ending: dominant_ending(&rope),
