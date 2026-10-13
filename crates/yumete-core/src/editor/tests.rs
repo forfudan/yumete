@@ -25982,6 +25982,24 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
     }
 }
 
+/// **數漢字那條快路徑不許改答案**（2026-10-13）。
+///
+/// 出廠的 `ruby` 是 `Dialects::only(Html)`，所以每一份稿子從前都走「逐行物化再逐行
+/// 拆注音」那一趟：412 萬行的檔上 7.9 秒，而整份只有兩行帶 `<ruby`。現在先一趟便宜
+/// 的掃描問「這裏面可能有注音嗎」，答不可能就一塊一塊地數——**兩條路的答案要一樣**。
+#[test]
+fn counting_han_skips_the_ruby_teardown_without_changing_the_answer() {
+    let ed = Editor::new();
+    let count = |text: &str| ed.han_in_rope(&ropey::Rope::from_str(text));
+    assert_eq!(count("那年冬天"), 4, "沒有注音：一塊一塊地數");
+    assert_eq!(count("abc 123\n"), 0, "一個漢字都沒有");
+    // 有注音的時候照舊拆：讀音那一半不算字數，底下那個字算。
+    assert_eq!(count("<ruby>漢字<rt>かんじ</rt></ruby>"), 2, "算底下那兩個字");
+    assert_eq!(count("<ruby>漢<rt>汉</rt></ruby>"), 1, "讀音裏的漢字不算");
+    // 快路徑只看「有沒有可能」，所以一個假的 `<ruby` 也要走得通。
+    assert_eq!(count("他寫了 <ruby 這三個字"), 7, "不成組的標記不改答案");
+}
+
 /// **太大的代碼檔不建樹**（2026-10-13 報的：3.91 GB 的 JSON 開進來佔 40 GB）。
 ///
 /// 量過的代價：361 MB 的 JSON，關掉上色峰值 1165 MB，開着 3526 MB——**檔案的 6.5

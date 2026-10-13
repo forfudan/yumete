@@ -550,6 +550,18 @@ fn find(chars: &[char], needle: &str, from: usize) -> Option<usize> {
 }
 
 /// Whether `chars` reads `needle` starting at `at`.
+/// **這一段裏可能有注音嗎**——一趟便宜的掃描（2026-10-13）。
+///
+/// 答「不可能」的時候，數漢字那一支就不必逐行拆解了：兩種方言的起手都是一個固定
+/// 的字串，沒有它就一定沒有注音組。量過：一個 3.91 GB 的檔上，逐行拆解要 7.9 秒
+/// （每一行一個 `String` 加一個 `Vec<char>`，412 萬行），而這一問之後是 1.5 秒。
+///
+/// Warning: **只許用來省工，不許用來判定**：它答「可能」的時候仍要真的拆一遍。
+pub fn might_be_in(text: &str, dialects: Dialects) -> bool {
+    (dialects.contains(Dialect::Html) && text.contains("<ruby"))
+        || (dialects.contains(Dialect::Typst) && text.contains("#ruby("))
+}
+
 fn starts_with(chars: &[char], needle: &str, at: usize) -> bool {
     let mut wanted = needle.chars();
     let mut got = chars[at.min(chars.len())..].iter().copied();

@@ -7,6 +7,10 @@
 
 use super::*;
 
+/// **寫作進度只記得動一本書**（2026-10-13）。記的是「開檔那一刻有多少字」，而數一
+/// 遍是整份的——一份語料檔既不該進進度表，也不值那一趟。
+const BIGGEST_TO_LOG: usize = 16 * 1024 * 1024;
+
 impl Editor {
     // ---- Editing (Features #9 / #10) --------------------------------------
 
@@ -1316,7 +1320,11 @@ impl Editor {
         // (Feature #244). Asked once per path: reopening a file that is already
         // in the map is the same session still writing it.
         let opened = self.buffers[self.current].path().map(Path::to_path_buf);
-        if let Some(path) = opened {
+        // **大過這個就不記起點**（2026-10-13）：數漢字是整份的，而這個數的用處是
+        // 「今天寫了多少」——語料檔不是稿子。沒有這一格，進度那一支回落到「現在這
+        // 個數」，也就是當天零字，正是想要的。量過：3.91 GB 的檔上這一句 3.2 秒。
+        let small_enough = self.buffers[self.current].rope().len_bytes() <= BIGGEST_TO_LOG;
+        if let Some(path) = opened.filter(|_| small_enough) {
             if !self.opened_with.contains_key(&path) {
                 let han = self.han_in_rope(self.buffers[self.current].rope());
                 self.opened_with.insert(path, han);

@@ -6,6 +6,10 @@
 
 use super::*;
 
+/// **拆注音只拆得動一本書**（2026-10-13）。拆是逐行的，而注音是稿子裏的東西——一份
+/// 語料檔裏偶爾出現的兩行 `<ruby` 不值那一趟。
+const BIGGEST_TO_COUNT_RUBY: usize = 16 * 1024 * 1024;
+
 impl Editor {
     /// A count of what has been written, for `:count`.
     ///
@@ -151,7 +155,12 @@ impl Editor {
     /// can never disagree about how long a chapter is.
     fn han_in_line(&self, line: &str) -> usize {
         let dialects = self.ruby;
-        // 沒有注音方言就沒有標記要還原——一趟掃過去，一個字節都不用抄。
+        // 這一行裏不可能有注音組的話，走和「沒有方言」一樣的那一趟（見
+        // [`crate::ruby::might_be_in`]）。
+        if !crate::ruby::might_be_in(line, dialects) {
+            return line.chars().filter(|&c| is_han(c)).count();
+        }
+        // 没有注音方言就没有標記要還原——一趟掃過去，一個字節都不用抄。
         if dialects.is_empty() {
             return line.chars().filter(|&c| is_han(c)).count();
         }
@@ -175,12 +184,43 @@ impl Editor {
     /// Warning: 從前是 `han_in(&rope.to_string())`——**每一次存檔**一次。八 MB 的稿
     /// 子於是每存一次先抄一份八 MB 的 `String`，`without_markup` 再抄一份
     /// `Vec<char>`（一個 `char` 四字節，三十二 MB）。這一支按行走，峯值是最長
-    /// 那一行；沒有注音方言的時候連行都不抄。
+    /// 那一行；没有注音方言的時候連行都不抄。
     pub(super) fn han_in_rope(&self, rope: &ropey::Rope) -> usize {
+        // **先問一句「這份正文裏到底有沒有注音」**（2026-10-13）。出廠的 `ruby` 是
+        // `Dialects::only(Html)`——**不是空的**——所以從前每一份稿子都走底下那一支：
+        // 逐行 `to_string()` 再逐行 `Vec<char>`，412 萬行就是 824 萬次分配。量過，
+        // 3.91 GB 的檔上 7.9 秒，而開一個檔必付一次（`add_buffer` 要記下「這一天從
+        // 哪裏開始」）。
+        //
+        // Warning: **一塊一塊地數，別走 `rope.chars()`**：答案逐字相同，而每個字過一
+        // 次樹要多付三倍（5.18 秒對 1.54 秒）。
+        let plain = || rope.chunks().map(|c| c.chars().filter(|&c| is_han(c)).count()).sum();
         if self.ruby.is_empty() {
-            return rope.chars().filter(|&c| is_han(c)).count();
+            return plain();
         }
-        (0..rope.len_lines()).map(|i| self.han_in_line(&rope.line(i).to_string())).sum()
+        // **大過這個就不拆注音**：逐行拆是整份的（412 萬行就是 412 萬趟），而注音是
+        // 稿子裏的東西。報上來那個 3.91 GB 的語料檔整份只有**兩行**帶 `<ruby`，為那
+        // 兩行付 6.7 秒；不拆的代價是那兩行裏注音自己的那幾個漢字也算進字數，而這個
+        // 數是「今天寫了多少」的起點，不是稿費。
+        if rope.len_bytes() > BIGGEST_TO_COUNT_RUBY {
+            return plain();
+        }
+        // 有沒有注音，先一趟便宜的掃描問一句——沒有就不必逐行拆。
+        if !rope.chunks().any(|c| crate::ruby::might_be_in(c, self.ruby)) {
+            return plain();
+        }
+        // Warning: **一個緩衝重複用，別一行一個 `String`**。報上來那個檔 412 萬行，而
+        // 整份裏只有**兩行**帶注音——真的要逐行拆的時候，貴的不是拆，是那 412 萬次
+        // 分配。`han_in_line` 自己也先問一句 `might_be_in`，所以其餘那 412 萬行走的
+        // 是和「沒有方言」一樣的那一趟。
+        let mut line = String::new();
+        (0..rope.len_lines())
+            .map(|i| {
+                line.clear();
+                line.extend(rope.line(i).chunks());
+                self.han_in_line(&line)
+            })
+            .sum()
     }
 
     /// Today, as the writer's own calendar has it (Feature #244).
