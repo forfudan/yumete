@@ -487,25 +487,37 @@ pub fn draw(
     let bottom = area.y + area.height;
     let note = note_for(panel);
     let keys = say!("set.keys");
-    let wide = right.saturating_sub(area.x + 2) as usize;
-    let note_rows = fold(&note, wide);
-    let keys_rows = fold(&keys, wide);
-    // Warning: **矮窗口上一塊一塊地讓**，不是一起縮。先讓三層那一塊（它是補充），再
-    // 讓說明的第二行起（第一行留着），鍵那一塊最後讓——按鍵列表是「現在能按什麼」，
-    // 它比別的都該活得久。`foot` 不許爬到頂上那道橫線之上（2026-09-24 審出來的
-    // 110×5：`┬` 畫在 `┴` 下面、說明蓋在橫線上、標題被抹掉）。
-    let want = |rows: usize| rows as u16 + 1;
+    // **說明和三層同一塊**（2026-10-13 報的）。原話：「描述欄可以合并到『出厂』『全
+    // 局』『本项目』這個框中……这样的话用户的閲讀顺序是符合的：描述+现在的状态和来
+    // 源」——它們是同一個問題的兩半，拆成兩塊讀起來要跳一次。所以說明也縮進右半邊，
+    // 和三層共用那一條只跨右半邊的橫線。
+    let note_wide = right.saturating_sub(split + 3) as usize;
+    let note_rows = fold(&note, note_wide);
+    let keys_rows = fold(&keys, right.saturating_sub(area.x + 2) as usize);
+    // Warning: **矮窗口上一塊一塊地讓**，不是一起縮。先讓那一整塊（它是補充），鍵那
+    // 一塊最後讓——按鍵列表是「現在能按什麼」，它比別的都該活得久。`foot` 不許爬到
+    // 頂上那道橫線之上（2026-09-24 審出來的 110×5：`┬` 畫在 `┴` 下面、說明蓋在橫線
+    // 上、標題被抹掉）。
     let room = bottom.saturating_sub(area.y + 3);
-    let keys_high = want(keys_rows.len()).min(room);
-    let note_high = want(note_rows.len()).min(room.saturating_sub(keys_high));
-    let layers_high = 4u16.min(room.saturating_sub(keys_high + note_high));
+    let keys_high = (keys_rows.len() as u16 + 1).min(room);
+    // 說明幾行 ＋ 一行空 ＋ 三層；擠不下就整塊不畫。
+    let block = note_rows.len() as u16 + 4;
+    // Warning: **留不下四行表就不畫那一塊。** 它是補充，而表是要走的那一樣東西——
+    // 96×12 上畫得「下」（算出來剛好夠），可表只剩兩行，整扇面板讀成一塊說明。
+    let fits = block < room.saturating_sub(keys_high)
+        && bottom.saturating_sub(keys_high + block + 1) >= area.y + 2 + 4;
+    let block_high = match fits {
+        true => block,
+        false => 0,
+    };
     let keys_at = bottom.saturating_sub(keys_high.saturating_sub(1));
-    let foot = bottom.saturating_sub(keys_high + note_high).max(area.y + 2);
-    let note_at = foot + 1;
-    let layers_at = foot.saturating_sub(layers_high.saturating_sub(1));
-    // 上面那一欄畫到哪裏為止：三層那一塊畫得下就讓給它（連同它上面那條橫線）。
-    let list_ends = match layers_high >= 4 {
-        true => layers_at.saturating_sub(1),
+    let foot = bottom.saturating_sub(keys_high).max(area.y + 2);
+    let block_at = foot.saturating_sub(block_high);
+    let note_at = block_at;
+    let layers_at = block_at + note_rows.len() as u16 + 1;
+    // 上面那一欄畫到哪裏為止：那一塊畫得下就讓給它（連同它上面那條橫線）。
+    let list_ends = match block_high > 0 {
+        true => block_at.saturating_sub(1),
         false => foot,
     };
     let rule = |buf: &mut ratatui::buffer::Buffer, y: u16, from: u16, join: Option<&str>| {
@@ -526,20 +538,16 @@ pub fn draw(
     if foot < bottom && foot > area.y + 1 {
         rule(buf, foot, area.x, Some("┴"));
     }
-    // 說明和鍵之間那一條：整頁寬，沒有接點。
-    if note_high > 0 && keys_high > 0 && keys_at > area.y + 1 {
-        rule(buf, keys_at.saturating_sub(1), area.x, None);
-    }
     for y in area.y + 2..foot {
         if let Some(cell) = buf.cell_mut((split, y)) {
             cell.set_symbol("│").set_style(quiet);
         }
     }
-    // 三層那一塊上面那一條：**只跨右半邊**，左邊那一欄的八組照舊一路到底。
+    // 那一塊上面那一條：**只跨右半邊**，左邊那一欄的八組照舊一路到底。
     // Warning: **畫在那一條竪線之後**，不然 `├` 又被它蓋回 `│`。
-    if layers_high >= 4 && layers_at > area.y + 2 {
-        rule(buf, layers_at.saturating_sub(1), split + 1, None);
-        if let Some(cell) = buf.cell_mut((split, layers_at.saturating_sub(1))) {
+    if block_high > 0 && block_at > area.y + 2 {
+        rule(buf, block_at.saturating_sub(1), split + 1, None);
+        if let Some(cell) = buf.cell_mut((split, block_at.saturating_sub(1))) {
             cell.set_symbol("├").set_style(quiet);
         }
     }
@@ -666,7 +674,7 @@ pub fn draw(
     // **從每一行上搬下來的**（2026-10-13 報的）。從前它是一行的第三欄，只在改過的行
     // 上寫字，於是右邊空着一大片而值欄在第 18 格上被截；而且它只說得出贏的那一層和
     // 被它蓋掉的那一個。搬下來之後三層各佔一行，「設了什麼」和「沒設」一眼分得開。
-    if layers_high >= 4 {
+    if block_high > 0 {
         if let (Pane::Settings, Some(setting)) = (panel.pane, panel.here()) {
             let shown = panel.shown(setting);
             for (i, (layer, said_value)) in panel.layers(setting).iter().enumerate() {
@@ -696,7 +704,9 @@ pub fn draw(
                     right,
                     &line,
                     match (said_value.is_some(), *layer == shown.from) {
-                        (_, true) => text,
+                        // **算數的那一層用金字**（2026-10-13 報的）：原話「这样就立马
+                        // 知道当前的设置和来源了」——這一行是整塊裏唯一要先看見的。
+                        (_, true) => ground.fg(ink.gold()),
                         (true, _) => ground.fg(ink.azure()),
                         (false, _) => quiet,
                     },
@@ -705,23 +715,26 @@ pub fn draw(
         }
     }
 
-    // ---- 底下兩塊：這一項是幹什麽的，和鍵 ------------------------------------
+    // 說明：那一塊的頭幾行，和三層同一個縮進。
     //
     // **正常顏色，而且折得了行**（2026-10-13 報的）：說明是要讀的那一句，從前和鍵一
     // 樣暗、一樣只有一行，長一點就被截掉。
-    for (i, row) in note_rows.iter().enumerate() {
-        let y = note_at + i as u16;
-        if y >= keys_at.saturating_sub(1) || y >= bottom {
-            break;
+    if block_high > 0 {
+        for (i, row) in note_rows.iter().enumerate() {
+            let y = note_at + i as u16;
+            if y >= foot {
+                break;
+            }
+            put_text(buf, split + 3, y, right, row, text);
         }
-        put_text(buf, area.x + 2, y, right, row, text);
     }
+    // 鍵：**也用正常顏色**（2026-10-13 報的）。它是「現在能按什麼」，不是附註。
     for (i, row) in keys_rows.iter().enumerate() {
         let y = keys_at + i as u16;
         if y >= bottom {
             break;
         }
-        put_text(buf, area.x + 2, y, right, row, quiet);
+        put_text(buf, area.x + 2, y, right, row, text);
     }
     caret
 }

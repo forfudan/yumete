@@ -9660,9 +9660,9 @@ en = "system"
 [[message]]
 # 設置面板：底下那一行鍵
 key = "set.keys"
-zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 切換全局/本地設置  :w 存"
-zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 切换全局/本地设置  :w 存"
-en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save"
+zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 切換全局/本地設置  :w 存  :q 退"
+zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 切换全局/本地设置  :w 存  :q 退"
+en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  :q leave"
 
 [[message]]
 # 設置：鍵位那一套
