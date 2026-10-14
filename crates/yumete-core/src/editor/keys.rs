@@ -3230,6 +3230,7 @@ impl Editor {
     /// What `g` may be finished with.
     pub(super) const GOTO_KEYS: &'static [(&'static str, &'static str)] = &[
         ("g", "hint.goto.start-of-file"),
+        ("<N>g", "hint.goto.line-n"),
         ("e", "hint.goto.end-of-file"),
         ("h l", "hint.goto.line-start-or-end"),
         ("s", "hint.goto.first-non-blank"),
@@ -3241,7 +3242,8 @@ impl Editor {
         ("a", "hint.goto.last-file"),
         ("n", "hint.goto.next-buffer"),
         ("p", "hint.goto.previous-buffer"),
-        ("d D", "hint.goto.follow-note"),
+        ("d", "hint.goto.follow-note"),
+        ("D", "hint.goto.follow-note-elsewhere"),
         ("/", "hint.goto.search-word"),
         ("?", "hint.goto.search-word-elsewhere"),
         ("j k", "hint.goto.by-file-line"),
@@ -3264,6 +3266,7 @@ impl Editor {
     /// `handle_goto`).
     pub(super) const GOTO_KEYS_VERTICAL: &'static [(&'static str, &'static str)] = &[
         ("g", "hint.goto.start-of-file"),
+        ("<N>g", "hint.goto.line-n"),
         ("e", "hint.goto.end-of-file"),
         ("k j", "hint.goto.line-start-or-end"),
         ("s", "hint.goto.first-non-blank"),
@@ -3274,7 +3277,8 @@ impl Editor {
         ("z", "hint.goto.seek-reading"),
         ("n", "hint.goto.next-buffer"),
         ("p", "hint.goto.previous-buffer"),
-        ("d D", "hint.goto.follow-note"),
+        ("d", "hint.goto.follow-note"),
+        ("D", "hint.goto.follow-note-elsewhere"),
         ("/", "hint.goto.search-word"),
         ("?", "hint.goto.search-word-elsewhere"),
         ("h l", "hint.goto.by-file-line-vertical"),

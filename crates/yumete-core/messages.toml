@@ -790,7 +790,7 @@ zhs = "这份稿子还没有名字——:w 名字 存成新文件"
 en = "this manuscript has no name yet — :w <name> writes it as a new file"
 
 [[message]]
-# :w 到一個父目錄還不存在的路徑(2026-10-11 報的措辭)
+# :w 到一個父目錄還不存在的路徑
 key = "buffer.no-such-path"
 zht = "路徑 {0} 不存在，使用 :w! 建立路徑並儲存文檔"
 zhs = "路径 {0} 不存在，使用 :w! 建立路径并储存文档"
@@ -5162,11 +5162,20 @@ zhs = "跟着链接走"
 en = "follow the link"
 
 [[message]]
-# g 組：去/看它指的地方
+# goto group
+# go to the definition
 key = "hint.goto.follow-note"
-zht = "前往定義(當前區/另一區)"
-zhs = "前往定义(当前区/另一区)"
-en = "go to / show where it is defined"
+zht = "前往定義"
+zhs = "前往定义"
+en = "go to definition"
+
+[[message]]
+# goto group
+# go to the definition (in second window)
+key = "hint.goto.follow-note-elsewhere"
+zht = "前往定義(副窗顯示)"
+zhs = "前往定义(副窗显示)"
+en = "go to definition in second window"
 
 [[message]]
 # vim 鍵位下 g 選單裏的 J ——併行，一個空格都不補
@@ -5195,6 +5204,13 @@ key = "hint.goto.last-file"
 zht = "回到最近打開的緩衝區"
 zhs = "回到最近打开的缓冲区"
 en = "back to the buffer before this one"
+
+[[message]]
+# goto: certain line
+key = "hint.goto.line-n"
+zht = "前往第 N 行"
+zhs = "前往第 N 行"
+en = "go to line N"
 
 [[message]]
 # g 組：行首/行尾
@@ -5253,32 +5269,32 @@ zhs = "搜索所选内容"
 en = "search the selection"
 
 [[message]]
-# goto: search the selection (in seceond editing region)
+# goto: search the selection, shown in the second window
 key = "hint.goto.search-word-elsewhere"
-zht = "搜索所選内容(副編輯區)"
-zhs = "搜索所选内容(副编辑区)"
-en = "search the selection in another editing region"
+zht = "搜索所選内容(副窗顯示)"
+zhs = "搜索所选内容(副窗显示)"
+en = "search the selection in second window"
 
 [[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
 key = "hint.goto.seek-reading"
-zht = "多字母定位並跳轉某漢字"
-zhs = "多字母定位并跳转某汉字"
-en = "more letters to place a char and go"
+zht = "多字母定位漢字"
+zhs = "多字母定位汉字"
+en = "more letters to locate a char"
 
 [[message]]
 # `go`：只問西文，打目標處**字面**寫的那兩個字母
 key = "hint.goto.seek-written"
-zht = "兩字母定位並跳轉某單詞"
-zhs = "两字母定位并跳转某单词"
-en = "two letters to place a word and go"
+zht = "兩字母定位單詞"
+zhs = "两字母定位单词"
+en = "two letters to locate a word"
 
 [[message]]
-# g 組：檔首
+# goto: head of file
 key = "hint.goto.start-of-file"
-zht = "文件開頭(g30g前往第30行)"
-zhs = "文件开头(g30g前往第30行)"
-en = "start of the file (g30g goes to line 30)"
+zht = "文件開頭"
+zhs = "文件开头"
+en = "start of the file"
 
 [[message]]
 # g 組提示的標題
@@ -6150,9 +6166,9 @@ en = "search down the columns (a column range can be given)"
 [[message]]
 # 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域(2026-09-30 寫的)
 key = "hint.table.search-columns-elsewhere"
-zht = "按列搜索(在另一區域顯示)"
-zhs = "按列搜索(在另一区域显示)"
-en = "search down the columns (shown in the other area)"
+zht = "按列搜索(副窗顯示)"
+zhs = "按列搜索(副窗显示)"
+en = "search down the columns in second window"
 
 [[message]]
 # 表格提示：照這欄順排/倒排
