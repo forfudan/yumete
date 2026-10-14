@@ -362,19 +362,20 @@ impl Editor {
     }
 
     pub(super) fn on_command_key(&mut self, key: Key) -> KeyOutcome {
-        // Anything but the four walking keys abandons the completion in
-        // progress, so the next one starts from what is actually on the line.
+        // Anything but ⇥ abandons the completion in progress, so the next one
+        // starts from what is actually on the line.
         //
-        // Warning: **`C-n`/`C-p` belong in this list too** (2026-10-10). Added
-        // to the walk below and left out of here, they moved one step and then
-        // stuck: each press threw away the prefix the last one was walking, so
-        // the second `C-n` started over and wrote the first match again.
-        if !matches!(key, Key::Tab | Key::BackTab | Key::Ctrl('n') | Key::Ctrl('p')) {
+        // Warning: **`C-n`/`C-p` are no longer in this list** (2026-10-13). They
+        // walked the completion from 2026-10-10 to then; they walk the history
+        // now, and a key that walks the history is a key that abandons the
+        // completion like any other.
+        if !matches!(key, Key::Tab | Key::BackTab) {
             self.completion = None;
         }
-        // Anything but Up/Down leaves the history where it was: walking back
-        // to a line and then editing it is editing *that line*, not browsing.
-        if !matches!(key, Key::Up | Key::Down) {
+        // Anything but the four history keys leaves the history where it was:
+        // walking back to a line and then editing it is editing *that line*,
+        // not browsing.
+        if !matches!(key, Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n')) {
             self.history_at = None;
         }
         match key {
@@ -390,15 +391,23 @@ impl Editor {
             // 下面那個 `other` 分支——而那裏纔是喊預覽的地方。於是手打
             // `:theme mogao` 預覽得了，⇥ 到同一個名字上一點反應都没有，而 ⇥ 正是
             // 挑主題最順手的那條路（名字就在單子上）。
-            // **`C-n`/`C-p` 走同一條路**（2026-10-10 用戶問的：「冒號命令模式裏，
-            // 能不能用 ctrl+n/p 上下翻？」）。挑選器與插入態那張單子早就認這一對，
-            // 而命令行上它們掉進下面 `Key::Ctrl(_) => {}` 那個兜底裏，按下去什麽
-            // 都不動——同一個手勢在相鄰兩扇面板上一扇認一扇不認。
-            Key::Tab | Key::Ctrl('n') => {
+            // Warning: **`C-n`/`C-p` 走歷史，不走這張單子**（2026-10-13 定，照 helix）。
+            //
+            // 2026-10-10 它們接在這裏，因為「挑選器與插入態那張單子早就認這一對」。
+            // 可是命令行上這一對在 vim 和 helix 裏都歸歷史，而這個編輯器一按冒號就
+            // 把補全攤開，於是那一對永遠輪不到歷史——報上來的原話：「在 vim 中可以
+            // 用 c-n/c-p 上下翻命令歷史，但在 yumete 中一按冒號就彈出補全窗口，於是
+            // c-n/c-p 變成了翻找補全而不是歷史」。
+            //
+            // helix 的分法（`helix-term/src/ui/prompt.rs:711`，讀過源碼）：
+            // `ctrl!('p') | key!(Up)` 和 `ctrl!('n') | key!(Down)` 在**同一個
+            // arm** 裏走歷史，`Tab`/`S-Tab` 走補全。所以兩對鍵各管一樣東西，
+            // 和命令行上打了什麼無關——「看得見的那張」始終是 ⇥ 走的那張。
+            Key::Tab => {
                 self.cycle_completion(1);
                 self.ask_for_a_trial();
             }
-            Key::BackTab | Key::Ctrl('p') => {
+            Key::BackTab => {
                 self.cycle_completion(-1);
                 self.ask_for_a_trial();
             }
@@ -407,8 +416,8 @@ impl Editor {
                 self.end_a_trial(crate::editor::Trial::Undo);
                 self.close_prompt();
             }
-            Key::Up | Key::Down => {
-                self.walk_history(key == Key::Up, false);
+            Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n') => {
+                self.walk_history(matches!(key, Key::Up | Key::Ctrl('p')), false);
                 // 翻出來的那一行也是一行：`:theme 墨香` 從歷史裏翻上來，照樣先畫。
                 self.ask_for_a_trial();
             }
@@ -657,7 +666,7 @@ impl Editor {
     }
 
     pub(super) fn on_search_key(&mut self, key: Key) {
-        if !matches!(key, Key::Up | Key::Down) {
+        if !matches!(key, Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n')) {
             self.history_at = None;
         }
         match key {
@@ -673,7 +682,12 @@ impl Editor {
             // `y`／`j` 是那一頭的辦法），所以這一行用一個鍵。兩樣一起翻：這一行
             // 分不開也不必分，要分得開就開那扇面板。
             Key::Alt('j') => self.search.wild = !self.search.wild,
-            Key::Up | Key::Down => self.walk_history(key == Key::Up, true),
+            // **`C-p`/`C-n` 也走歷史**，同命令行那一扇（2026-10-13）。helix 的
+            // `/` 和 `:` 共用一支 prompt，所以那一對在兩扇裏是同一件事；這裏兩
+            // 扇各一支，所以兩處都要寫——少一處就是「一扇認一扇不認」。
+            Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n') => {
+                self.walk_history(matches!(key, Key::Up | Key::Ctrl('p')), true)
+            }
             Key::Enter => {
                 let pattern = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;

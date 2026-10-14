@@ -11,6 +11,10 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`C-p`/`C-n` on the `:` and `/` prompts now walk the history, not the completion
+  menu.** `Tab`/`S-Tab` walk the menu, as they always did. The editor opens the
+  completion menu as soon as you press `:`, so those two keys could never reach the
+  history before — which is what vim and helix both give them.
 - **`空格 N` no longer takes the keyboard.** It opens the character panel in the
   sidebar and leaves the caret in the text, so you can keep typing — the same rule
   `空格 K` already kept. `C-w w` walks in when an answer needs scrolling.

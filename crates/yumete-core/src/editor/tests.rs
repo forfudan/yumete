@@ -1465,25 +1465,56 @@ fn tab_cycles_the_command_completion() {
     assert_eq!(ed.command_menu().1, None);
 }
 
-/// **`C-n`/`C-p` 走同一張單子**（2026-10-10 用戶問的：「冒號命令模式裏，能不能用
-/// ctrl+n/p 上下翻？」）。挑選器與插入態那張單子早就認這一對；命令行上它們從前
-/// 掉進一個兜底裏，按下去什麽都不動。
+/// **`C-p`/`C-n` 走歷史，`Tab`/`S-Tab` 走單子**（2026-10-13 定，照 helix）。
+///
+/// 報上來的原話：「在 vim 中可以用 c-n/c-p 上下翻命令歷史，但在 yumete 中一按冒號
+/// 就彈出補全窗口，於是 c-n/c-p 變成了翻找補全而不是歷史」。helix 的
+/// `ui/prompt.rs` 把 `ctrl!('p') | key!(Up)` 擺在同一個 arm 裏走歷史，`Tab` 走補全。
 #[test]
-fn ctrl_n_and_ctrl_p_walk_the_command_completion_like_tab() {
+fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
+    let mut ed = Editor::new();
+    // 兩條歷史：翻的時候新的在前。
+    for line in ["rules", "run"] {
+        ed.on_key(Key::Char(':'));
+        for c in line.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+    }
+    ed.on_key(Key::Char(':'));
+    assert_eq!(ed.prompt(), Some((":", "")), "空行");
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt(), Some((":", "run")), "最近那一條");
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt(), Some((":", "rules")), "再往回一條");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.prompt(), Some((":", "run")), "往回走得了");
+    // **`Up`/`Down` 是同一件事**，同 helix 那個 arm。
+    ed.on_key(Key::Up);
+    assert_eq!(ed.prompt(), Some((":", "rules")));
+    ed.on_key(Key::Down);
+    assert_eq!(ed.prompt(), Some((":", "run")));
+
+    // **歷史不按前綴過濾**（helix 的 `change_history` 一個字符都不比）：打了 `c`
+    // 再翻，翻出來的還是上一條命令，不是「以 c 開頭的上一條」。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Char('c'));
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt(), Some((":", "run")));
+
+    // ⇥ 走的是看得見那張單子，和歷史各走各的。
     let mut ed = Editor::new();
     ed.on_key(Key::Char(':'));
     for c in "ru".chars() {
         ed.on_key(Key::Char(c));
     }
-    ed.on_key(Key::Ctrl('n'));
+    ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "rules")));
-    ed.on_key(Key::Ctrl('n'));
-    assert_eq!(ed.prompt(), Some((":", "run")));
-    ed.on_key(Key::Ctrl('p'));
-    assert_eq!(ed.prompt(), Some((":", "rules")));
-    // 一張單子，兩副鍵：⇥ 接着 `C-n` 停下的地方走，不另起一輪。
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "run")));
+    ed.on_key(Key::BackTab);
+    assert_eq!(ed.prompt(), Some((":", "rules")));
 }
 
 /// 同一對鍵在 `::` 那張單子上（2026-10-10）。
