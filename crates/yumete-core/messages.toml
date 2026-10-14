@@ -3852,13 +3852,6 @@ zhs = "复制了 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
-# gK 按在第一行上——上面没有行可以併
-key = "edit.no-line-above"
-zht = "這已經是第一行，上面没有可以併的"
-zhs = "这已经是第一行，上面没有可以并的"
-en = "this is the first line; there is nothing above it to join"
-
-[[message]]
 # 按 mi m/ma m(di m/da m)，可是光標不在任何一段標記裏
 key = "edit.no-markup-here"
 zht = "這裏没有標記"
@@ -5128,8 +5121,8 @@ en = "show the note (or write one)"
 [[message]]
 # g 選單裏的 j k(橫排)
 key = "hint.goto.by-file-line"
-zht = "下/上一邏輯行(有行號)"
-zhs = "下/上一逻辑行(有行号)"
+zht = "下/上一邏輯行"
+zhs = "下/上一逻辑行"
 en = "down / up a logical line (with line number)"
 
 [[message]]
@@ -5157,9 +5150,9 @@ en = "end of file"
 [[message]]
 # g 組：首個非空白
 key = "hint.goto.first-non-blank"
-zht = "首個非空白"
-zhs = "首个非空白"
-en = "first non-blank"
+zht = "首個非空白字符"
+zhs = "首个非空白字符"
+en = "first non-blank character"
 
 [[message]]
 # g 組：跟着連結走
@@ -5199,8 +5192,8 @@ en = "back to the last change"
 [[message]]
 # g 選單裏的 a ——切回剛纔看的那一份稿子
 key = "hint.goto.last-file"
-zht = "最近打開的緩衝"
-zhs = "最近打开的缓冲"
+zht = "回到最近打開的緩衝區"
+zhs = "回到最近打开的缓冲区"
 en = "back to the buffer before this one"
 
 [[message]]
@@ -5211,18 +5204,18 @@ zhs = "行首/行尾"
 en = "line start / end"
 
 [[message]]
-# vim 鍵位下 g 選單裏的 n N ——下一處/上一處匹配(helix 那一端是換稿子)
-key = "hint.goto.next-match"
-zht = "前往下一處/上一處匹配"
-zhs = "前往下一处/上一处匹配"
-en = "the next or previous match"
+# goto group: goto next buffer
+key = "hint.goto.next-buffer"
+zht = "下一個緩衝區"
+zhs = "下一个缓冲区"
+en = "to the next buffer"
 
 [[message]]
-# g 組：切到下一個/上一個打開的檔案
-key = "hint.goto.next-or-previous-file"
-zht = "下一個/上一個打開的文件"
-zhs = "下一个/上一个打开的文件"
-en = "the next / previous open file"
+# vim 鍵位下 g 選單裏的 n N ——下一處/上一處匹配(helix 那一端是換稿子)
+key = "hint.goto.next-match"
+zht = "下一處/上一處匹配"
+zhs = "下一处/上一处匹配"
+en = "the next or previous match"
 
 [[message]]
 # g 組：開這個檔
@@ -5230,6 +5223,13 @@ key = "hint.goto.open-this-file"
 zht = "打開這個文件"
 zhs = "打开这个文件"
 en = "open this file"
+
+[[message]]
+# goto group: goto previous buffer
+key = "hint.goto.previous-buffer"
+zht = "上一個緩衝區"
+zhs = "上一个缓冲区"
+en = "to the previous buffer"
 
 [[message]]
 # g 選單裏的 v(只在 vim 鍵位下)——重選上一次那一段
@@ -5244,6 +5244,20 @@ key = "hint.goto.screen-top-middle-bottom"
 zht = "光標移至屏幕頂部/中部/底部"
 zhs = "光标移至屏幕顶部/中部/底部"
 en = "the cursor to the top, middle or bottom of the screen"
+
+[[message]]
+# goto: search the selection
+key = "hint.goto.search-word"
+zht = "搜索所選内容"
+zhs = "搜索所选内容"
+en = "search the selection"
+
+[[message]]
+# goto: search the selection (in seceond editing region)
+key = "hint.goto.search-word-elsewhere"
+zht = "搜索所選内容(副編輯區)"
+zhs = "搜索所选内容(副编辑区)"
+en = "search the selection in another editing region"
 
 [[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
@@ -5269,9 +5283,9 @@ en = "start of the file (g30g goes to line 30)"
 [[message]]
 # g 組提示的標題
 key = "hint.goto.title"
-zht = "g"
-zhs = "g"
-en = "g"
+zht = "前往"
+zhs = "前往"
+en = "goto"
 
 [[message]]
 # g 選單裏的 ; , (只在 vim 鍵位下)——在改過的地方之間走
@@ -5279,13 +5293,6 @@ key = "hint.goto.walk-changes"
 zht = "往舊/往新走一處改動"
 zhs = "往旧/往新走一处改动"
 en = "an older / newer change"
-
-[[message]]
-# 這一句是 g/ g? 的説明
-key = "hint.goto.word-elsewhere"
-zht = "搜索這個詞(當前區/另一區)"
-zhs = "搜索这个词(当前区/另一区)"
-en = "where else this word is: / here, ? in the other area"
 
 [[message]]
 # [空格：在上面加一條空行，光標不動
@@ -5356,13 +5363,6 @@ key = "hint.hop.problem"
 zht = "診斷(大寫：第一個/最後一個)"
 zhs = "诊断(大写：第一个/最后一个)"
 en = "a diagnostic (capital: the first / the last)"
-
-[[message]]
-# g 組：併上一行
-key = "hint.join-with-line-above"
-zht = "併到上一行去"
-zhs = "并到上一行去"
-en = "join onto the line above"
 
 [[message]]
 # 提示：收下
@@ -9639,8 +9639,8 @@ en = "start"
 [[message]]
 # 設置：启动就载入码表——一句話
 key = "set.ime.start.hint"
-zht = "默認不載入——語言模型照常載入(分詞要它)，碼表等你第一次打字"
-zhs = "默认不载入——语言模型照常载入(分词要它)，码表等你第一次打字"
+zht = "默認不載入——分詞模型照常載入，碼表等你第一次打字"
+zhs = "默认不载入——分词模型照常载入，码表等你第一次打字"
 en = "start"
 
 [[message]]
@@ -9730,8 +9730,8 @@ en = "down"
 [[message]]
 # 設置面板：走的時候還有没存的
 key = "set.leaving-unsaved"
-zht = "有改動没存——:w 存，再按一次 q 不存就走"
-zhs = "有改动没存——:w 存，再按一次 q 不存就走"
+zht = "有改動没存。:w 保存，再按一次 q 不存並退出"
+zhs = "有改动没存。:w 保存，再按一次 q 不存并退出"
 en = "unsaved changes — :w saves; q again leaves without saving"
 
 [[message]]
@@ -10122,16 +10122,16 @@ en = "tabs.never"
 [[message]]
 # 設置：竪排的 hjkl——邏輯那一種
 key = "set.pick.vertical-keys.logical"
-zht = "邏輯：h l 走字、j k 走行，和橫排一樣"
-zhs = "逻辑：h l 走字、j k 走行，和横排一样"
-en = "logical: h l by character, j k by line, as across"
+zht = "行文邏輯：h l 跨字、j k 跨行"
+zhs = "行文逻辑：h l 跨字、j k 跨行"
+en = "logical: h l by character, j k by line"
 
 [[message]]
 # 設置：竪排的 hjkl——視覺那一種
 key = "set.pick.vertical-keys.visual"
-zht = "視覺：四個鍵指哪就走哪"
-zhs = "视觉：四个键指哪就走哪"
-en = "visual: each key goes where it points"
+zht = "視覺方向：j k 下上、h l 左右"
+zhs = "视觉方向：j k 下上、h l 左右"
+en = "visual: j k down/up, h l left/right"
 
 [[message]]
 # 設置：分词松紧——适中
@@ -10141,80 +10141,82 @@ zhs = "适中"
 en = "word level.balanced"
 
 [[message]]
-# 設置：分词松紧——松
+# setting: word segmentation granularity - loose
+# less single-character words in identification
 key = "set.pick.word-level.full"
-zht = "松"
-zhs = "松"
+zht = "寬松"
+zhs = "宽松"
 en = "word level.full"
 
 [[message]]
-# 設置：分词松紧——严
+# setting: word segmentation granularity - strict
+# more single-character words in identification
 key = "set.pick.word-level.strict"
-zht = "嚴"
-zhs = "严"
+zht = "嚴格"
+zhs = "严格"
 en = "word level.strict"
 
 [[message]]
-# 設置：词怎么画——换颜色
+# setting: how to show word segmentation - color
 key = "set.pick.word-mark.color"
-zht = "換顔色"
-zhs = "换颜色"
+zht = "不同顔色"
+zhs = "不同颜色"
 en = "word mark.color"
 
 [[message]]
-# 設置：词怎么画——换明度
+# setting: how to show word segmentation - brightness
 key = "set.pick.word-mark.ink"
-zht = "換明度"
-zhs = "换明度"
+zht = "不同明度"
+zhs = "不同明度"
 en = "word mark.ink"
 
 [[message]]
-# 設置：词怎么画——画下线
+# setting: how to show word segmentation - underline
 key = "set.pick.word-mark.line"
-zht = "畫下線"
-zhs = "画下线"
+zht = "下劃線"
+zhs = "下划线"
 en = "word mark.line"
 
 [[message]]
-# 設置：词怎么画——铺淡色
+# setting: how to show word segmentation - tint
 key = "set.pick.word-mark.tint"
-zht = "鋪淡色"
-zhs = "铺淡色"
+zht = "不同底色"
+zhs = "不同底色"
 en = "word mark.tint"
 
 [[message]]
 # 設置面板：存好了({0} ＝ 檔名)
 key = "set.saved"
-zht = "設置存進 {0}——:reload-config 讓它生效，或者下次啓動"
-zhs = "设置存进 {0}——:reload-config 让它生效，或者下次启动"
-en = "settings written to {0} — :reload-config applies them, or the next start"
+zht = "設置存入 {0}。:reload-config 或者下次啓動生效"
+zhs = "设置存入 {0}。:reload-config 或者下次启动生效"
+en = "settings written to {0}. :reload-config or next start applies them"
 
 [[message]]
 # 設置面板：存好了，而這期間那個檔被外面改過({0} 檔名)
 key = "set.saved-moved"
-zht = "設置存進 {0}。Warning: 這期間它被外面改過——改的那幾項落在了新的那一份上，眼前這頁可能是舊的，:settings 重開一次"
-zhs = "设置存进 {0}。Warning: 这期间它被外面改过——改的那几项落在了新的那一份上，眼前这页可能是旧的，:settings 重开一次"
-en = "written to {0}. Warning: it changed underneath meanwhile — the edits landed on the new one, and this page may be stale; reopen with :settings"
+zht = "設置存入 {0}。警告：這期間它被外面動過。當前顯示可能已過時，:settings 重開一次"
+zhs = "设置存入 {0}。警告：这期间它被外面动过。当前显示可能已过时，:settings 重开一次"
+en = "written to {0}. Warning: it changed underneath meanwhile — this page may be stale; reopen with :settings"
 
 [[message]]
 # 設置面板：存好了，而有幾個鍵被註釋掉了({0} 檔名，{1} 鍵)
 key = "set.saved-said"
-zht = "設置存進 {0}。有幾個名字 yumete 不認得，註釋掉了(没删)：{1}"
-zhs = "设置存进 {0}。有几个名字 yumete 不认得，注释掉了(没删)：{1}"
-en = "written to {0}. Names yumete does not know were commented out, not deleted: {1}"
+zht = "設置存入 {0}。部分設置名 yumete 不認得，已註釋掉：{1}"
+zhs = "设置存入 {0}。部分设置名 yumete 不认得，已注释掉：{1}"
+en = "written to {0}. Names yumete does not know were commented out: {1}"
 
 [[message]]
 # 設置面板：改的那一層被上面蓋着，眼前那個值不會動
 key = "set.shadowed"
-zht = "Warning: 本項目蓋着這一項——改的是全局，眼前這個值不會動"
-zhs = "Warning: 本项目盖着这一项——改的是全局，眼前这个值不会动"
-en = "Warning: the project covers this one — you are editing global, so the value here will not move"
+zht = "警告: 你修改的是全局設置，項目設置正在生效中"
+zhs = "警告: 你修改的是全局设置，项目设置正在生效中"
+en = "Warning: you are editing global. The project covers this one."
 
 [[message]]
 # 設置：代码坐底色
 key = "set.theme.fill"
-zht = "代碼坐底色"
-zhs = "代码坐底色"
+zht = "代碼坐在底色上"
+zhs = "代码坐在底色上"
 en = "fill"
 
 [[message]]

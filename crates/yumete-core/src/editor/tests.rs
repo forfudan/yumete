@@ -2197,23 +2197,12 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "一二\n三\n四\n五\n");
 
-    // `gK` 同一套，往上合。
+    // Joining upwards is `k` then `J`, which is how vim and helix both say it:
+    // `gK` was taken out on 2026-10-14 for being in neither of them.
     let mut ed = typed(five);
     ed.goto_line(3);
-    press(&mut ed, "g2K");
+    press(&mut ed, "k2J");
     assert_eq!(ed.current_buffer().text(), "一\n二三\n四\n五\n", "{}", ed.current_buffer().text());
-
-    // Warning: **`gK` on a selection stays inside it, plus the line over it**
-    // (2026-09-19, caught in review). Repeating 「join with the line above」
-    // asks where the selection starts *now*, and after the first join that is
-    // one line higher — so `gK` on three picked lines welded two nobody had
-    // picked and left the picked ones alone. Three lines and the one above
-    // them make four, which is three joins.
-    let mut ed = typed(five);
-    ed.goto_line(3);
-    press(&mut ed, "xxx");
-    press(&mut ed, "gK");
-    assert_eq!(ed.current_buffer().text(), "一\n二三四五\n", "{}", ed.current_buffer().text());
 }
 
 #[test]
@@ -14654,40 +14643,43 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// `gJ` 與 `gK` 是同一個編輯的兩個問法（#485）。
+/// **Joining upwards is `k` then `J`** — one edit, reached from either side
+/// (#485).
 ///
-/// 「gK 就是 gJ 對稱语义，你可以考虑这两个共用部分逻辑」——共用的是整個接縫規則：
-/// 漢字之間不補空格、拉丁詞之間補、第二行的縮進吞掉。`gK` 只做一件自己的事：
-/// 站到上一行去。
+/// `gK` used to be the second way of saying it. It went on 2026-10-14: 「seems
+/// redundant (not in vim or helix)」, and in both of those the answer is to step
+/// up a line and join downwards. The seam rule is the thing worth pinning, and
+/// there is only one of it: no space between two 漢字, one between Latin words,
+/// and the next line's indent swallowed.
 #[test]
-fn joining_up_and_joining_down_are_one_edit() {
-    let both = |keys: &str, from: usize| -> String {
+fn joining_up_is_a_step_up_and_a_join_down() {
+    let from = |keys: &str, line: usize| -> String {
         let mut ed = typed("那年冬天\n山下起了雪\n");
-        ed.goto_line(from);
+        ed.goto_line(line);
         press(&mut ed, keys);
         ed.current_buffer().text()
     };
-    // 站在第一行按 gJ，與站在第二行按 gK，結果逐字相同——接縫也一樣，兩個漢字
-    // 之間不補空格。
-    assert_eq!(both("J", 1), both("gK", 2));
-    assert_eq!(both("J", 1), "那年冬天山下起了雪\n");
+    // `J` on the first line and `kJ` on the second give the same text, down to
+    // the seam: two 漢字 get no space between them.
+    assert_eq!(from("J", 1), from("kJ", 2));
+    assert_eq!(from("J", 1), "那年冬天山下起了雪\n");
 
-    // 拉丁詞之間補一個空格，兩邊同樣。
-    let latin = |keys: &str, from: usize| -> String {
+    // A space between Latin words, from either side.
+    let latin = |keys: &str, line: usize| -> String {
         let mut ed = typed("one\ntwo\n");
-        ed.goto_line(from);
+        ed.goto_line(line);
         press(&mut ed, keys);
         ed.current_buffer().text()
     };
-    assert_eq!(latin("J", 1), latin("gK", 2));
+    assert_eq!(latin("J", 1), latin("kJ", 2));
     assert_eq!(latin("J", 1), "one two\n");
 
-    // 第一行上按 gK 什麼都不動，並且說一句。
+    // On the first line `k` has nowhere to go, so `J` joins downwards from
+    // where it already is — the ordinary `J`, not a refusal.
     let mut ed = typed("那年冬天\n山下起了雪\n");
     ed.goto_line(1);
-    press(&mut ed, "gK");
-    assert_eq!(ed.current_buffer().text(), "那年冬天\n山下起了雪\n");
-    assert!(!ed.status().is_empty(), "要說一句：{}", ed.status());
+    press(&mut ed, "kJ");
+    assert_eq!(ed.current_buffer().text(), "那年冬天山下起了雪\n");
 }
 
 #[test]
@@ -14844,15 +14836,15 @@ fn closing_a_file_does_not_send_a_jump_into_a_different_one() {
 
 #[test]
 fn a_key_alias_may_name_a_sequence() {
-    // Warning: **The example used to be `"J" = "gJ"`** — joining was on `gJ` and
-    // `J` turned the page, and a vim reader wanted the two swapped back. Both
-    // are helix's own meanings since 2026-10-06, so the example had to be a
-    // sequence that still exists: `gK` joins this line onto the one above,
-    // which no single key spells.
+    // Warning: **The example has been rewritten twice.** It was `"J" = "gJ"` while
+    // joining was on `gJ` and `J` turned the page; both are helix's own
+    // meanings since 2026-10-06. It was then `"z" = "gK"`, and `gK` went on
+    // 2026-10-14 for being in neither vim nor helix. Joining upwards is now
+    // `kJ` — two keys, which is what makes it an example worth having here.
     let mut ed = typed("上一句\n下一句\n");
     ed.goto_line(2);
     let mut aliases = std::collections::HashMap::new();
-    aliases.insert("z".to_string(), "gK".to_string());
+    aliases.insert("z".to_string(), "kJ".to_string());
     ed.set_key_aliases(aliases);
     ed.on_key(Key::Char('z'));
     assert_eq!(ed.current_buffer().text(), "上一句下一句\n");

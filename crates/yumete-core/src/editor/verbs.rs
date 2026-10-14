@@ -223,17 +223,14 @@ impl Editor {
     /// space and joining two 漢字 with one would insert text nobody ever
     /// typed. Between Latin words the space is kept.
     ///
-    /// **`gK` — join this line onto the one above it.**
+    /// **vim's `gJ`: join, adding no space and removing no whitespace**
+    /// (2026-10-06, `:h gJ`).
     ///
-    /// **`gK` 没有自己的函數了**（2026-09-19）。它從前是「站到上一行去，然後
-    /// 照常合併」，重複的時候一次比一次高，於是合出了選區之外。現在 `handle_goto`
-    /// 的 `K` 那一支自己先上去一行，再把 `join_lines` 重複該重複的次數——合併的
-    /// 接縫規矩（拉丁詞之間一個空格、漢字之間不留）始終只有這一處。
-    /// **vim 的 `gJ`：併行，一個空格都不補、一個空白都不刪**（2026-10-06，`:h gJ`）。
-    ///
-    /// [`Self::join_lines`] 的接縫是算出來的——拉丁詞之間補一個空格、漢字之間不補、
-    /// 下一行的縮進吞掉。vim 的 `gJ` 存在的全部意義就是**不要那一套**：換行符拿掉，
-    /// 別的一個字節不動。寫稿子的時候那是「這兩行本來就是一行，是我手動折的」。
+    /// [`Self::join_lines`] works the seam out: a space between Latin words,
+    /// none between two 漢字, and the next line's indent swallowed. The whole
+    /// point of vim's `gJ` is to have **none of that** — the line break comes
+    /// out and not another byte moves. Writing prose, that says 「these two
+    /// lines were always one line; I broke it by hand」.
     pub(super) fn join_lines_raw(&mut self) {
         if self.refuse_readonly() {
             return;

@@ -2849,7 +2849,7 @@ impl Editor {
     /// Handle the second key of a goto (`g`) sequence, Helix-style: `gg` to the
     /// buffer start, `ge` to the last line, `gh`/`gl` to line start/end, `gs` to
     /// the first non-blank character.
-    /// How many joins `gJ`/`gK` should make (#518).
+    /// How many joins `J` should make (#518).
     ///
     /// Three ways to say it, in the order they are looked for:
     ///
@@ -3046,47 +3046,16 @@ impl Editor {
             Key::Char('a') => return self.goto_last_file(),
             _ => {}
         }
-        // What is left here either edits (`gJ`, `gK`) or goes somewhere that is
-        // not a motion of the page (a file, a definition, the other pane), so
-        // every arm answers for itself.
+        // What is left here goes somewhere that is not a motion of the page (a
+        // file, a definition, the other pane), so every arm answers for itself.
+        //
+        // Warning: **`gJ` and `gK` are both gone.** `gJ` went on 2026-10-06, when `J`
+        // itself became join-lines and `gJ` was left a second spelling of one
+        // thing (「gJ gK 的别名不需要了」). `gK` — join this line onto the one
+        // above — went on 2026-10-14: 「seems redundant (not in vim or helix).」
+        // Neither editor binds it, and joining upwards is `k` then `J`, which
+        // is how both of them expect you to say it.
         match key {
-            // Warning: **`gJ` 没有了**（2026-10-06）。`J` 自己就是合併行了，而 `gJ`
-            // 從那一刻起只是同一件事的第二個拼法——原話：「gJ gK 的别名不需
-            // 要了」。vim 鍵位表裏那一行 `("J", "gJ")` 也一併撤了（它映到的那個鍵
-            // 現在做的就是它要的事）。
-            //
-            // `gK` 留着：它**不是別名**，是「把這一行併到上面那一行」，helix 没有
-            // 這個命令，撤掉就没有第二條路了（#485）。
-            //
-            // …the other direction, which helix does not have (#485).
-            //
-            // Warning: **Step up once, then join downwards** (2026-09-19, caught in
-            // review). Repeating `join_with_above` walked *out* of what was
-            // selected: each call asks where the selection starts now, and
-            // after the first join that is one line higher — so `gK` on three
-            // selected lines welded two lines nobody had picked and left the
-            // selected ones alone. The line above and the selection is the
-            // whole of what `gK` may touch.
-            Key::Char('K') => {
-                let rope = self.current_buffer().rope();
-                let (start, end) = self.selection();
-                // **A selection joins to the line above it**, so there is one
-                // more seam to close than `gJ` has: three lines picked and the
-                // one over them make four, which is three joins.
-                let spans = end > start
-                    && rope.char_to_line(start)
-                        < rope.char_to_line((end - 1).min(rope.len_chars().saturating_sub(1)));
-                let count = self.join_count(None) + usize::from(spans);
-                let rope = self.current_buffer().rope();
-                let line = rope.char_to_line(self.selection().0);
-                if line == 0 {
-                    self.status = say!("edit.no-line-above");
-                    return;
-                }
-                let above = rope.line_to_char(line - 1);
-                self.set_cursor(above);
-                self.repeat_writing(count, |e| e.join_lines())
-            }
             // **`gj` and `gk` walk lines of the file, as helix's do** — `j`
             // and `k` walk the rows on the screen, and in a manuscript a line
             // of the file is a paragraph, so this is the next paragraph at
@@ -3270,13 +3239,14 @@ impl Editor {
         ("x", "hint.goto.seek-written"),
         ("z", "hint.goto.seek-reading"),
         ("a", "hint.goto.last-file"),
-        ("n p", "hint.goto.next-or-previous-file"),
+        ("n", "hint.goto.next-buffer"),
+        ("p", "hint.goto.previous-buffer"),
         ("d D", "hint.goto.follow-note"),
-        ("/ ?", "hint.goto.word-elsewhere"),
+        ("/", "hint.goto.search-word"),
+        ("?", "hint.goto.search-word-elsewhere"),
         ("j k", "hint.goto.by-file-line"),
         (".", "hint.goto.last-change"),
         ("t c b", "hint.goto.screen-top-middle-bottom"),
-        ("K", "hint.join-with-line-above"),
     ];
 
     /// **vim 鍵位下多出來的那一行**：`gv` 重選上一次那一段。helix 没有這個命令，
@@ -3302,14 +3272,15 @@ impl Editor {
         ("w", "hint.goto.jump-labels"),
         ("x", "hint.goto.seek-written"),
         ("z", "hint.goto.seek-reading"),
-        ("n p", "hint.goto.next-or-previous-file"),
+        ("n", "hint.goto.next-buffer"),
+        ("p", "hint.goto.previous-buffer"),
         ("d D", "hint.goto.follow-note"),
-        ("/ ?", "hint.goto.word-elsewhere"),
+        ("/", "hint.goto.search-word"),
+        ("?", "hint.goto.search-word-elsewhere"),
         ("h l", "hint.goto.by-file-line-vertical"),
         (".", "hint.goto.last-change"),
         ("t c b", "hint.goto.screen-top-middle-bottom"),
         ("a", "hint.goto.last-file"),
-        ("K", "hint.join-with-line-above"),
     ];
 
     /// What `m` may be finished with — 「這一對」，以及拿它做什麼.
