@@ -14430,6 +14430,38 @@ fn the_intro_does_not_come_back_once_the_buffer_has_been_edited() {
     assert!(!ed.intro(), "undo 之後也不回來");
 }
 
+/// **A bare count gets a panel of its own** (2026-10-14, asked for as 「I type
+/// 10 and HUD shows `10`, can there be a shortcut hint panel for this too」).
+///
+/// Only the keys where N means something other than 「do it N times」: 57 keys
+/// take a count, and a panel listing all of them is the whole keymap again.
+#[test]
+fn a_bare_count_lists_the_keys_where_the_number_is_not_a_repeat() {
+    let mut ed = Editor::new();
+    press(&mut ed, "10");
+    let (title, rows) = ed.pending_menu().expect("a count is a sequence too");
+    assert_eq!(title, say!("hint.count.title", 10));
+    // The count is written into every row: this panel exists to say what *this*
+    // number does, not what a number does.
+    assert!(rows.iter().all(|(_, what)| what.contains("10")), "{rows:?}");
+    let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_ref()).collect();
+    assert_eq!(keys, ["J", "gg", "G", "A-.", "gt gc gb", "…"], "helix spelling");
+
+    // Warning: **The vim keymap differs by one row**: repeating an `f`/`t` is `;`
+    // there, and under helix `;` collapses the selection instead.
+    let mut ed = Editor::new();
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "10");
+    let (_, rows) = ed.pending_menu().expect("the same panel, vim's spelling");
+    let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_ref()).collect();
+    assert_eq!(keys, ["J", "gg", "G", ";", "gt gc gb", "…"]);
+
+    // It goes the moment the count is spent.
+    let mut ed = Editor::new();
+    press(&mut ed, "10j");
+    assert!(ed.pending_menu().is_none(), "the count was spent");
+}
+
 #[test]
 fn the_prompt_remembers_what_was_typed_at_it() {
     let mut ed = typed("一二三\n");

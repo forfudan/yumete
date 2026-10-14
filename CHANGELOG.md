@@ -9,6 +9,16 @@ in `docs/development.md` §5.2.
 
 ## 未發布 · Unreleased
 
+### Added
+
+- **A count gets a hint panel of its own.** Type `10` and a small table appears, the way
+  `空格` and `g` already do: `J` welds ten lines into one, `gg`/`G` go to line ten,
+  `gt`/`gc`/`gb` take the tenth row on the screen, `A-.` (`;` under the vim keymap)
+  finds the tenth match after an `f` or a `t`, and one last row says that every other
+  key simply repeats ten times. It lists only the keys where the number is not a repeat
+  — fifty-seven of them take a count, and a panel holding all of those is the keymap
+  over again.
+
 ### Changed
 
 - **`C-p`/`C-n` on the `:` and `/` prompts now walk the history, not the completion

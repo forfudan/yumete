@@ -5091,11 +5091,46 @@ zhs = "合并冲突"
 en = "merge conflict"
 
 [[message]]
-# 提示行：數字打了一半，還没接動作
-key = "hint.count-pending"
-zht = "{0} 次 · 接一個動作或編輯"
-zhs = "{0} 次 · 接一个动作或编辑"
-en = "{0} times · now an action or an edit"
+# count panel: J welds N lines into one
+key = "hint.count.join"
+zht = "{0} 行併成一行"
+zhs = "{0} 行并成一行"
+en = "{0} lines become one"
+
+[[message]]
+# count panel: gg / G go to line N
+key = "hint.count.line"
+zht = "前往第 {0} 行"
+zhs = "前往第 {0} 行"
+en = "go to line {0}"
+
+[[message]]
+# count panel: the Nth occurrence, after f or t
+key = "hint.count.nth-find"
+zht = "第 {0} 個(接 f、t 之後)"
+zhs = "第 {0} 个(接 f、t 之后)"
+en = "the {0}th one (after f or t)"
+
+[[message]]
+# count panel: the last row — every other key just repeats
+key = "hint.count.otherwise"
+zht = "做 {0} 次"
+zhs = "做 {0} 次"
+en = "do it {0} times"
+
+[[message]]
+# count panel: gt / gc / gb, the Nth row on the screen
+key = "hint.count.screen-row"
+zht = "屏幕頂、中、底數第 {0} 行"
+zhs = "屏幕顶、中、底数第 {0} 行"
+en = "the {0}th row from the top, middle or bottom of the screen"
+
+[[message]]
+# count panel: the title, N already typed
+key = "hint.count.title"
+zht = "{0} 次"
+zhs = "{0} 次"
+en = "{0} times"
 
 [[message]]
 # 提示：找

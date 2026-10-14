@@ -18822,7 +18822,12 @@ fn squeezed(text: &str) -> String {
         // 出廠是 `full` since 2026-09-08; this one is about the 藥丸.
         editor.set_hud(Hud::Basic);
         let config = vertical_config();
-        let buffer = render_vertical(&mut editor, &config, 40, 16);
+        // Warning: **46×22, not 40×16** (2026-10-14). A bare count opens a panel of
+        // its own now (`COUNT_KEYS`), and on the smaller page that panel stood
+        // where the bottom of the 縱 was — so the assertion below, which is
+        // about the *pill* never covering the writing, failed on the panel
+        // instead. A page that holds both is the one this test is asking about.
+        let buffer = render_vertical(&mut editor, &config, 46, 22);
         let rows: Vec<String> = (0..buffer.area.height)
             .map(|y| (0..buffer.area.width).map(|x| at(&buffer, x, y)).collect())
             .collect();

@@ -379,11 +379,31 @@ impl Editor {
             // 這一行不必再畫一張鍵表——同 `ReplaceAll` 的區別就在那一句帶不帶鍵。
             Pending::SwapRange => return None,
             Pending::None => {
-                // A count on its own is a sequence too — `3` is waiting for the
-                // motion it multiplies.
-                return self
-                    .operator_count
-                    .map(|n| Hint::Says(say!("hint.count-pending", n)));
+                // A count on its own is a sequence too — `10` is waiting for
+                // the key it applies to, so it gets a panel like `空格` and `g`
+                // (2026-10-14, asked for as 「can there be a shortcut hint panel
+                // for this too」).
+                //
+                // Warning: **It reads `count`, not `operator_count`.** This arm used to
+                // ask `operator_count`, which is only filled while a vim
+                // operator is waiting — so a bare count matched nothing and the
+                // line it would have said was dead code from the day it was
+                // written. Typing `10` put a `10` in the HUD and said nothing
+                // else.
+                let n = self.count?;
+                let rows = match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    true => Self::COUNT_KEYS_VIM,
+                    false => Self::COUNT_KEYS,
+                };
+                let count = n.to_string();
+                return Some(Hint::Keys(
+                    say!("hint.count.title", n),
+                    rows.iter()
+                        .map(|(key, what)| {
+                            ((*key).into(), crate::messages::say(what, &[&count]))
+                        })
+                        .collect(),
+                ));
             }
             // **A vim operator is waiting** (#429): one line rather than a
             // panel, because what it is waiting for is the whole vocabulary of

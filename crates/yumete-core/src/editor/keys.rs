@@ -3227,6 +3227,46 @@ impl Editor {
         ('?', "hint.space.all-commands"),
     ];
 
+    /// **What a bare count may be finished with** — only the keys where N means
+    /// something other than 「do it N times」 (2026-10-14).
+    ///
+    /// Asked for as: 「I type 10 and HUD shows `10`, can there be a shortcut hint
+    /// panel for this too」. Fifty-seven keys in Normal mode take a count, so
+    /// listing them all would redraw the whole keymap — and the rule for these
+    /// panels is the one the manual already states: list only the keys **you
+    /// could not have guessed**. 「N times」 is guessable, so it is one row at
+    /// the bottom and the rest of the table is the exceptions.
+    ///
+    /// The key column is what to press **next**: the number is already typed,
+    /// so this says `gg`, not `<N>g`.
+    ///
+    /// Every description takes the count as `{0}`, which is why these rows are
+    /// built with [`crate::messages::say`] and not [`Self::said`].
+    pub(super) const COUNT_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("J", "hint.count.join"),
+        ("gg", "hint.count.line"),
+        ("G", "hint.count.line"),
+        ("A-.", "hint.count.nth-find"),
+        ("gt gc gb", "hint.count.screen-row"),
+        ("…", "hint.count.otherwise"),
+    ];
+
+    /// The same table in the vim keymap's spelling.
+    ///
+    /// One row differs: repeating an `f`/`t` is `;` there and `A-.` under helix
+    /// (measured 2026-10-14 — under helix `;` collapses the selection instead,
+    /// so `3;` goes nowhere). `H`/`M`/`L` are **not** the other spelling of
+    /// `gt`/`gc`/`gb` here: `H`/`L` are sentence motions in both keymaps and
+    /// `M` is the mark prefix, so screen rows are `gt`/`gc`/`gb` either way.
+    pub(super) const COUNT_KEYS_VIM: &'static [(&'static str, &'static str)] = &[
+        ("J", "hint.count.join"),
+        ("gg", "hint.count.line"),
+        ("G", "hint.count.line"),
+        (";", "hint.count.nth-find"),
+        ("gt gc gb", "hint.count.screen-row"),
+        ("…", "hint.count.otherwise"),
+    ];
+
     /// What `g` may be finished with.
     pub(super) const GOTO_KEYS: &'static [(&'static str, &'static str)] = &[
         ("g", "hint.goto.start-of-file"),
