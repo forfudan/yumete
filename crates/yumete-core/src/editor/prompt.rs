@@ -636,30 +636,44 @@ impl Editor {
         }
     }
 
-    /// Walk back through what has been typed at this prompt before.
+    /// Walk through what has been typed at this prompt before, **in either
+    /// direction and from either end**.
+    ///
+    /// `history` runs oldest first. Back is older, forward is newer, and from a
+    /// prompt nobody has walked yet the two keys start at opposite ends: back
+    /// at the newest, forward at the oldest. So one key reaches the whole list
+    /// going one way and the other reaches it going the other way, which is
+    /// what 2026-10-14 asked for: 「now only ctrl-p can cycle history from new
+    /// to old. But ctrl-n cannot cycle history from old to new……in helix, the
+    /// cycling can be done in both way (like rotating clockwise and
+    /// counterclockwise)」.
+    ///
+    /// This is helix's `Prompt::change_history` exactly (`helix-term/src/ui/
+    /// prompt.rs:341`, read 2026-10-14) — one index, clamped at both ends:
+    ///
+    /// ```text
+    /// Forward  => history_pos.map_or(0, |i| i + 1)
+    /// Backward => history_pos.unwrap_or(len).saturating_sub(1)
+    /// ```
+    ///
+    /// Warning: **It clamps, it does not come back empty.** Walking forward past
+    /// the newest used to clear the line, which is what vim does (`c_<Down>`
+    /// restores the line you were typing). The two references disagree here and
+    /// helix is the one followed, so the newest line is now the end of the road
+    /// — `C-u` is the way back to an empty prompt.
     fn walk_history(&mut self, back: bool, search: bool) {
         let history = match search {
             true => &self.search_history,
             false => &self.command_history,
         };
-        if history.is_empty() {
+        let Some(end) = history.len().checked_sub(1) else {
             return;
-        }
-        let at = match (self.history_at, back) {
-            (None, true) => history.len().saturating_sub(1),
-            (None, false) => return,
-            (Some(0), true) => 0,
-            (Some(n), true) => n - 1,
-            (Some(n), false) if n + 1 < history.len() => n + 1,
-            // Forward past the newest line gives back an empty prompt, which is
-            // where `Up` was pressed from.
-            (Some(_), false) => {
-                self.history_at = None;
-                self.command_line.clear();
-                self.command_caret = 0;
-                return;
-            }
         };
+        let at = match back {
+            true => self.history_at.unwrap_or(history.len()).saturating_sub(1),
+            false => self.history_at.map_or(0, |i| i + 1),
+        }
+        .min(end);
         self.history_at = Some(at);
         self.command_line = history[at].clone();
         self.command_caret = self.command_line.chars().count();

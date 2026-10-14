@@ -15,6 +15,10 @@ in `docs/development.md` §5.2.
   menu.** `Tab`/`S-Tab` walk the menu, as they always did. The editor opens the
   completion menu as soon as you press `:`, so those two keys could never reach the
   history before — which is what vim and helix both give them.
+- **Either direction reaches the whole history on its own.** From a prompt you have not
+  walked yet, `C-p` starts at the newest command and `C-n` at the oldest, so you can
+  come at the list from whichever end is nearer. Both stop at the far end instead of
+  wrapping, and forward past the newest no longer empties the line — `C-u` does that.
 - **`空格 N` no longer takes the keyboard.** It opens the character panel in the
   sidebar and leaves the caret in the text, so you can keep typing — the same rule
   `空格 K` already kept. `C-w w` walks in when an answer needs scrolling.

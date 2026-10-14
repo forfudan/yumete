@@ -1489,6 +1489,19 @@ fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
     assert_eq!(ed.prompt(), Some((":", "rules")), "再往回一條");
     ed.on_key(Key::Ctrl('n'));
     assert_eq!(ed.prompt(), Some((":", "run")), "往回走得了");
+    // **兩個方向各從一頭起**（2026-10-14，照 helix）：空行上 `C-n` 去最舊那一條，
+    // 於是一個鍵往一個方向就能走完整張單子。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.prompt(), Some((":", "rules")), "空行上 C-n 是最舊那一條");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.prompt(), Some((":", "run")));
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.prompt(), Some((":", "run")), "停在最新，不繞回去");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Ctrl('p'));
     // **`Up`/`Down` 是同一件事**，同 helix 那個 arm。
     ed.on_key(Key::Up);
     assert_eq!(ed.prompt(), Some((":", "rules")));
@@ -14403,8 +14416,18 @@ fn the_prompt_remembers_what_was_typed_at_it() {
     assert_eq!(ed.prompt(), Some((":", "toc")), "and it stops at the oldest");
     ed.on_key(Key::Down);
     assert_eq!(ed.prompt(), Some((":", "w")));
+    // **它停在最新那一條，不回到空行**（2026-10-14 定，照 helix 的
+    // `change_history`：兩頭都是夾，不是繞）。vim 的 `c_<Down>` 會把原來那一行還
+    // 回來，兩個參考實現在這一處不同，跟的是 helix。空行用 `C-u`。
     ed.on_key(Key::Down);
-    assert_eq!(ed.prompt(), Some((":", "")), "back to the empty line");
+    assert_eq!(ed.prompt(), Some((":", "w")), "and it stops at the newest");
+    // **從沒走過的空行上，兩個方向各從一頭起**：往回是最新，往前是最舊。
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Down);
+    assert_eq!(ed.prompt(), Some((":", "toc")), "forward from a fresh prompt is the oldest");
+    ed.on_key(Key::Down);
+    assert_eq!(ed.prompt(), Some((":", "w")));
     ed.on_key(Key::Esc);
 
     // The search prompt keeps its own, because patterns and commands are
