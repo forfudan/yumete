@@ -14397,6 +14397,50 @@ fn the_prompt_can_be_edited_in_the_middle() {
     assert_eq!(ed.prompt(), Some((":", "grep 甲　")));
 }
 
+/// **開場屏改過一次就不回來**（2026-10-14 報的，照 vim）。
+///
+/// 原話：「The opening texts now appears when you clear the buffer to empty. Vim
+/// did this in a different way, it only displays when you create a new file. As
+/// long as you edit it, even though it is emptied, the opening text will not
+/// show.」nvim 量過（`--clean`，按完重畫一次再看那一屏在不在）：打一個字之後
+/// 刪空不回來，undo 也不回來。
+#[test]
+fn the_intro_does_not_come_back_once_the_buffer_has_been_edited() {
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.opened_with_nothing();
+        ed
+    };
+    let mut ed = fresh();
+    assert!(ed.intro(), "空手打開就畫");
+
+    // 不改稿子的鍵不趕它走——走一步、翻一頁，它照舊在。
+    // Warning: **別用 `g` 收尾**：那一鍵是半句話，會把下一個 `i` 當成 `gi` 吃掉。
+    press(&mut ed, "jk");
+    ed.on_key(Key::Down);
+    assert!(ed.intro(), "走路的鍵不算改");
+
+    // 打一個字就没了。
+    press(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    assert!(!ed.intro(), "有字就不畫");
+
+    // **刪空也不回來**——這一條是這一輪修的。
+    // Warning: **全選再刪**：`Esc` 把光標留在剛打的那個字**後面**（列 2），光一個
+    // `d` 在那裏什麽都刪不掉，於是斷言「緩衝確實空了」紅得莫名其妙。
+    press(&mut ed, "%d");
+    assert_eq!(ed.current_buffer().char_count(), 0, "緩衝確實空了");
+    assert!(!ed.intro(), "空了也不回來");
+
+    // **undo 也不回來**：動過就是動過。
+    let mut ed = fresh();
+    press(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().char_count(), 0, "undo 把它撤回了空的");
+    assert!(!ed.intro(), "undo 之後也不回來");
+}
+
 #[test]
 fn the_prompt_remembers_what_was_typed_at_it() {
     let mut ed = typed("一二三\n");

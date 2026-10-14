@@ -34,6 +34,10 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **The opening screen no longer comes back when you empty the buffer.** It is shown on
+  a scratch buffer nobody has touched; once you have typed anything, deleting it all —
+  or undoing back to nothing — leaves the page blank, the way vim does it. Keys that
+  only move around still leave the screen up.
 - **The newline at the end of a file is no longer numbered as a line of its own.** It is
   the terminator of the line above it, so the row it draws now carries `~` where a number
   would be, the way helix marks it. Whether the cursor can stand there follows the keymap:

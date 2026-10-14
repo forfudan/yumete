@@ -320,10 +320,22 @@ impl Editor {
     /// Warning: **一有字就不畫了，不必誰去清它**——問的是「緩衝區還空着嗎」，所以
     /// 打第一個字它自己就没了（2026-10-05 定：「打一個字就消失」）。按 `j`
     /// 這種不改稿子的鍵它照舊在，同 vim。
+    ///
+    /// Warning: **改過一次就再也不回來**（2026-10-14 報的：「The opening texts now
+    /// appears when you clear the buffer to empty. Vim did this in a different
+    /// way, it only displays when you create a new file.」）。從前只問「現在空不
+    /// 空」，於是打了字再全刪掉，那一屏又浮上來——而那時候人是在寫東西，不是剛
+    /// 進來。nvim 量過（`--clean`，重畫一次再看）：**打一個字之後刪空不回來，
+    /// undo 也不回來**。
+    ///
+    /// 兩個條件各問一件事，都留着：`char_count` 問「現在還空着嗎」，`revision`
+    /// 問「有沒有動過」。後者蘊含前者（没動過的空緩衝自然還是空的），可是靠那層
+    /// 推論不如直接寫——哪天有一條路改了文字而没撥 `revision`，這裏還擋得住。
     pub fn intro(&self) -> bool {
         self.opened_empty
             && self.current_buffer().path().is_none()
             && self.current_buffer().char_count() == 0
+            && self.current_buffer().revision() == 0
     }
     pub fn knows_its_paths(&mut self, config: PathBuf, data: PathBuf) {
         self.where_config = Some(config);
