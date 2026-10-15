@@ -47,6 +47,11 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **`Tab` on a candidate no longer forces the sidebar open.** Asking about the
+  highlighted candidate floats the answer beside the caret, the way `空格 n` does; if
+  the sidebar is already showing info the answer goes in there instead. It used to do
+  what `空格 N` does — open a sidebar — which moved the page out from under you in the
+  middle of a word.
 - **The opening screen no longer comes back when you empty the buffer.** It is shown on
   a scratch buffer nobody has touched; once you have typed anything, deleting it all —
   or undoing back to nothing — leaves the page blank, the way vim does it. Keys that

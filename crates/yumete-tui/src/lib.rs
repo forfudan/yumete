@@ -4150,12 +4150,22 @@ fn ime_handle(
         // that a panel summoned by mistake can no longer be put away with a
         // second `Tab`; it goes away with the word, which is as long as the
         // undo ever bought.
+        //
+        // Warning: **It floats unless the sidebar is already showing info** (2026-10-15:
+        // 「the tab key on yume candidate panel forcely open the dict sidebar
+        // ……Please show it first in floating panel first and only in sidebar if
+        // the sidebar is open.」). This used to call `look_up`, which is `空格 N`
+        // — and that one *means* 「put it in the sidebar」, so it opened the
+        // sidebar and moved the page out from under somebody in the middle of
+        // typing a word. `look_up_afloat` is `空格 n`: it draws into the info
+        // slot when that slot is open and floats by the caret when it is not,
+        // and it never opens or closes the sidebar itself.
         KeyCode::Tab if composing => match ime.panel_is_full() {
             true => {
                 // 一個候選的頭一個**字簇**，不是頭一個碼位：帶變體選擇符的
                 // 候選（`🈚️`）按碼位切出來是殘的，查不着。
                 if let Some(ch) = yumete_cjk::graphemes(&ime.top_candidate()).next() {
-                    let _ = editor.look_up(ch);
+                    let _ = editor.look_up_afloat(ch);
                 }
             }
             false => {

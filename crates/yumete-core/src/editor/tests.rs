@@ -19163,6 +19163,38 @@ fn a_bare_g_is_the_last_line_only_under_the_vim_keymap() {
     assert_eq!(line_of(&ed), 3, "vim：G 去末行");
 }
 
+/// **`Tab` on a candidate floats; it does not open the sidebar** (2026-10-15).
+///
+/// Reported as 「the tab key on yume candidate panel forcely open the dict
+/// sidebar……Please show it first in floating panel first and only in sidebar if
+/// the sidebar is open.」 The front end used to call `look_up`, which is what
+/// `空格 N` means — 「put it in the sidebar」, so it opened one and moved the
+/// page out from under somebody mid-word. `look_up_afloat` is the half that
+/// never touches the sidebar: it draws into the info slot where that slot is
+/// already open, and floats by the caret where it is not.
+#[test]
+fn looking_a_candidate_up_never_opens_the_sidebar() {
+    use crate::sidebar::Info;
+    // Nothing open: it floats, and no sidebar appears.
+    let mut ed = typed("那年冬天");
+    assert!(ed.look_up_afloat("添"));
+    assert_eq!(ed.info_afloat(), Some(Info::Dictionary), "floating");
+    assert_eq!(ed.dictionary_afloat().map(|(ch, _)| ch), Some("添"), "about 添");
+    assert!(ed.info_in_the_sidebar().is_none(), "and the sidebar stayed shut");
+
+    // The info slot already open: the same question is answered in there, and
+    // nothing floats — one place at a time.
+    let mut ed = typed("那年冬天");
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('N'));
+    let side = ed.info_in_the_sidebar().expect("空格 N opened the slot");
+    ed.take_dictionary_query();
+    assert!(ed.look_up_afloat("添"));
+    assert_eq!(ed.info_in_this_sidebar(side), Some(Info::Dictionary));
+    assert!(ed.info_afloat().is_none(), "it is in the sidebar, so it does not float");
+    assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some("添"), "and it is the new character");
+}
+
 /// **vim 鍵位下檔尾那條虛行進不去，helix 鍵位下進得去**（2026-10-13 定）。
 ///
 /// 兩半：畫法一樣（那一格照畫，`~` 當行號，同 helix），走法隨鍵位。vim 裏末行

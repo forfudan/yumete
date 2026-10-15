@@ -5107,15 +5107,15 @@ en = "go to line {0}"
 [[message]]
 # count panel: the Nth occurrence, after f or t
 key = "hint.count.nth-find"
-zht = "第 {0} 個(接 f、t 之後)"
-zhs = "第 {0} 个(接 f、t 之后)"
+zht = "第 {0} 個(接 f / t 後)"
+zhs = "第 {0} 个(接 f / t 后)"
 en = "the {0}th one (after f or t)"
 
 [[message]]
 # count panel: the last row — every other key just repeats
 key = "hint.count.otherwise"
-zht = "做 {0} 次"
-zhs = "做 {0} 次"
+zht = "重複操作 {0} 次"
+zhs = "重复操作 {0} 次"
 en = "do it {0} times"
 
 [[message]]
@@ -5128,9 +5128,9 @@ en = "the {0}th row from the top, middle or bottom of the screen"
 [[message]]
 # count panel: the title, N already typed
 key = "hint.count.title"
-zht = "{0} 次"
-zhs = "{0} 次"
-en = "{0} times"
+zht = "{0}"
+zhs = "{0}"
+en = "{0}"
 
 [[message]]
 # 提示：找
@@ -5255,13 +5255,6 @@ zhs = "行首/行尾"
 en = "line start / end"
 
 [[message]]
-# goto group: goto next buffer
-key = "hint.goto.next-buffer"
-zht = "下一個緩衝區"
-zhs = "下一个缓冲区"
-en = "to the next buffer"
-
-[[message]]
 # vim 鍵位下 g 選單裏的 n N ——下一處/上一處匹配(helix 那一端是換稿子)
 key = "hint.goto.next-match"
 zht = "下一處/上一處匹配"
@@ -5269,18 +5262,18 @@ zhs = "下一处/上一处匹配"
 en = "the next or previous match"
 
 [[message]]
+# goto group: goto next buffer
+key = "hint.goto.next-or-previous-buffer"
+zht = "下/上一個緩衝區"
+zhs = "下/上一个缓冲区"
+en = "to next or previous buffer"
+
+[[message]]
 # g 組：開這個檔
 key = "hint.goto.open-this-file"
 zht = "打開這個文件"
 zhs = "打开这个文件"
 en = "open this file"
-
-[[message]]
-# goto group: goto previous buffer
-key = "hint.goto.previous-buffer"
-zht = "上一個緩衝區"
-zhs = "上一个缓冲区"
-en = "to the previous buffer"
 
 [[message]]
 # g 選單裏的 v(只在 vim 鍵位下)——重選上一次那一段
@@ -5334,9 +5327,9 @@ en = "start of the file"
 [[message]]
 # g 組提示的標題
 key = "hint.goto.title"
-zht = "前往"
-zhs = "前往"
-en = "goto"
+zht = "g 前往"
+zhs = "g 前往"
+en = "g goto"
 
 [[message]]
 # g 選單裏的 ; , (只在 vim 鍵位下)——在改過的地方之間走
@@ -6236,9 +6229,9 @@ en = "long cells wrap onto the next line"
 [[message]]
 # 表格提示：取這欄/貼一欄
 key = "hint.table.yank-or-paste-column"
-zht = "取這欄/貼一欄"
-zhs = "取这栏/贴一栏"
-en = "yank this column / paste a column"
+zht = "複製/粘貼該欄"
+zhs = "复制/粘贴该栏"
+en = "yank / paste this column"
 
 [[message]]
 # 面板底下那一行：q 把鍵還給正文，面板留着(關那一格是 C-w q)
