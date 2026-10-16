@@ -671,15 +671,20 @@ pub struct PanelConfig {
 /// [`InlinePreedit`] 的事，兩件事各走各的（2026-09-27 定，原話：「你搞错了 layout 和
 /// inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面板 ＋ 正在打的那
 /// 一段寫進正文」這個組合按不出來。
+/// 三種擺法（2026-10-16 定）：帶框的那一張、窗口最下面那一行、光標的下一行。
+/// 三種都畫得出全部候選，分別只在**擺在哪**與**蓋住什麼**。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PanelDisplay {
-    /// 光標邊上那個帶框的候選列表。
+    /// 光標邊上那個帶框的候選列表。一條候選一行，拆分與注解都寫得下，代價是
+    /// 蓋掉的稿子和候選一樣多。
     #[default]
-    On,
-    /// No box by the caret. The candidates are still there — they are drawn
-    /// across the command row at the foot of the window, which costs the
-    /// manuscript nothing because that row is reserved already (2026-10-16).
-    Off,
+    Box,
+    /// 窗口最下面那一行——`:` 與 `/` 打在的那一行。候選橫着排在上面，稿子
+    /// 一行都不少，因為那一行本來就空着。
+    Bottom,
+    /// 光標的下一行（竪排是光標左邊那一縱）。同底行那一條，只是擺到了眼睛跟
+    /// 前，代價是蓋住那一行稿子。
+    Inline,
 }
 
 impl PanelDisplay {
@@ -687,18 +692,28 @@ impl PanelDisplay {
     /// line — one word, both places.
     pub fn tag(self) -> &'static str {
         match self {
-            PanelDisplay::On => "on",
-            PanelDisplay::Off => "off",
+            PanelDisplay::Box => "box",
+            PanelDisplay::Bottom => "bottom",
+            PanelDisplay::Inline => "inline",
         }
     }
 
-    /// Read a name, or `None` — an unknown word is a typo, not a third mode.
+    /// Read a name, or `None` — an unknown word is a typo, not a fourth mode.
     pub fn parse(word: &str) -> Option<PanelDisplay> {
         match word {
-            "on" => Some(PanelDisplay::On),
-            "off" => Some(PanelDisplay::Off),
+            "box" => Some(PanelDisplay::Box),
+            "bottom" => Some(PanelDisplay::Bottom),
+            "inline" => Some(PanelDisplay::Inline),
             _ => None,
         }
+    }
+
+    /// Whether the candidates are a row (or a 縱) rather than the bordered box.
+    ///
+    /// The two strip shapes差 only in where the strip is put, so every place
+    /// that asks 「one line or a box」 asks this.
+    pub fn is_a_strip(self) -> bool {
+        self != PanelDisplay::Box
     }
 }
 
@@ -760,7 +775,7 @@ impl Default for PanelConfig {
             paper: (0x26, 0x2A, 0x27),
             page_size: 6,
             rounded: true,
-            display: PanelDisplay::On,
+            display: PanelDisplay::Box,
             inline_preedit: InlinePreedit::default(),
         }
     }
@@ -4085,17 +4100,25 @@ mod tests {
         assert_eq!(c.editor.word_level, yumete_cjk::WordLevel::Balanced);
     }
 
-    /// #211: 面板關不關是設置，不只是命令——想把整頁留給自己的人，是從每一節
-    /// 的第一個按鍵起就想要。
+    /// #211: 候選擺在哪是設置，不只是命令——想把整頁留給自己的人，是從每一節
+    /// 的第一個按鍵起就想要。三種擺法（2026-10-16）。
     #[test]
     fn the_panel_can_be_asked_to_get_out_of_the_way() {
-        assert_eq!(PanelConfig::default().display, PanelDisplay::On);
-        let c = Config::from_toml("[panel]\ndisplay = \"off\"\n");
-        assert_eq!(c.panel.display, PanelDisplay::Off);
-        // A typo is a typo, not a third mode: the panel stays.
+        assert_eq!(PanelConfig::default().display, PanelDisplay::Box);
+        for (word, want) in [
+            ("box", PanelDisplay::Box),
+            ("bottom", PanelDisplay::Bottom),
+            ("inline", PanelDisplay::Inline),
+        ] {
+            let c = Config::from_toml(&format!("[panel]\ndisplay = \"{word}\"\n"));
+            assert_eq!(c.panel.display, want, "{word}");
+            assert_eq!(want.tag(), word);
+        }
+        // A typo is a typo, not a fourth mode: the box stays.
         let c = Config::from_toml("[panel]\ndisplay = \"invisible\"\n");
-        assert_eq!(c.panel.display, PanelDisplay::On);
-        assert_eq!(PanelDisplay::Off.tag(), "off");
+        assert_eq!(c.panel.display, PanelDisplay::Box);
+        assert!(!PanelDisplay::Box.is_a_strip());
+        assert!(PanelDisplay::Bottom.is_a_strip() && PanelDisplay::Inline.is_a_strip());
     }
 
     /// **面板在不在，和正在打的那一段寫在哪，是兩件事**（2026-09-27 定）。四個
@@ -4103,14 +4126,14 @@ mod tests {
     #[test]
     fn where_the_composition_shows_is_its_own_setting() {
         assert_eq!(PanelConfig::default().inline_preedit, InlinePreedit::Off);
-        let c = Config::from_toml("[panel]\ndisplay = \"on\"\ninline_preedit = \"preview\"\n");
-        assert_eq!(c.panel.display, PanelDisplay::On, "面板照畫");
+        let c = Config::from_toml("[panel]\ndisplay = \"box\"\ninline_preedit = \"preview\"\n");
+        assert_eq!(c.panel.display, PanelDisplay::Box, "面板照畫");
         assert_eq!(c.panel.inline_preedit, InlinePreedit::Preview, "而正在打的那一段寫進正文");
-        // 從前的 `display = "bare"` 是這兩格一起：面板不畫，正文裏是首選。
-        let c = Config::from_toml("[panel]\ndisplay = \"off\"\ninline_preedit = \"preview\"\n");
+        // 從前的 `display = "bare"` 是這兩格一起：框不畫，正文裏是首選。
+        let c = Config::from_toml("[panel]\ndisplay = \"bottom\"\ninline_preedit = \"preview\"\n");
         assert_eq!(
             (c.panel.display, c.panel.inline_preedit),
-            (PanelDisplay::Off, InlinePreedit::Preview)
+            (PanelDisplay::Bottom, InlinePreedit::Preview)
         );
         // 打錯的字留着默認，同上面那一條。
         let c = Config::from_toml("[panel]\ninline_preedit = \"inline\"\n");

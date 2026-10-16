@@ -449,26 +449,45 @@ pub fn fit_the_page(
     // 兩行框 ＋ 一行編碼之後還剩得下一行嗎。剩不下就一個候選都畫不出來，而數字
     // 鍵那一道閘要知道這件事（見 `ImeSession::panel_has_room`）。
     //
-    // 底行那一條畫得下總有一個：它只佔一行，而那一行本來就在。
-    let boxed = the_box_is_up(editor, ime);
-    ime.set_panel_has_room(!boxed || usize::from(room) > 3);
-    // **底行是按寬度縮，框是按高度縮**（2026-10-16）。寬度要量真的候選，所以先
-    // 把頁開到使用者要的那麼大，問一次，再縮——縮過的頁讀不回原來要的是幾個，
-    // 同 `PAGE_WISH` 那一段。沒在打字就不必問，省掉每一幀一次的候選複製。
-    let fits = match boxed || !ime.is_composing() {
-        true => fits,
-        false => {
+    // 那兩條帶子畫得下總有一個：各佔一行（一縱），而行是現成的。
+    let shape = candidate_shape(editor, ime);
+    let pane = areas.panes[editor.live_pane().min(1)];
+    ime.set_panel_has_room(shape.is_a_strip() || usize::from(room) > 3);
+    // **帶子按長度縮，框按高度縮**（2026-10-16）。長度要量真的候選，所以先把頁
+    // 開到使用者要的那麼大，問一次，再縮——縮過的頁讀不回原來要的是幾個，同
+    // `PAGE_WISH` 那一段。沒在打字就不必問，省掉每一幀一次的候選複製。
+    let fits = match shape.is_a_strip() && ime.is_composing() {
+        false => fits,
+        true => {
             ime.set_page_size(wish);
             let head = match inline_text(editor, ime).is_empty() {
                 true => ime.display_buffer(),
                 false => String::new(),
             };
-            candidates_across(config, &head, &ime.page_candidates(), width)
+            let cands = ime.page_candidates();
+            match strip_runs_down(shape, editor.layout()) {
+                // 竪排的行中是一縱，量的是這一縱有幾格。
+                true => vertical::candidates_down(&head, &cands, pane.height),
+                // 別的都是一條橫的：底行通到窗口兩頭，行中通到這一欄兩頭。
+                false => {
+                    let room = match shape {
+                        PanelDisplay::Inline => pane.width,
+                        _ => width,
+                    };
+                    candidates_across(config, &head, &cands, room)
+                }
+            }
         }
     };
     if ime.page_size() != fits {
         ime.set_page_size(fits);
     }
+}
+
+/// **行中那一條在竪排下是豎着的**（2026-10-16，原話：「For vertical layout, it
+/// is just vertical」）。底行那一條不是：它是窗飾，窗飾一律橫着。
+fn strip_runs_down(shape: PanelDisplay, layout: WritingLayout) -> bool {
+    shape == PanelDisplay::Inline && layout == WritingLayout::Vertical
 }
 
 /// **How many candidates a page may hold in a window this tall.**
@@ -3534,8 +3553,9 @@ fn autocompletion(ime: &mut ImeSession, want: &str) -> String {
 /// The name a 候選面板 is called by, in the language the writer reads.
 fn panel_name(display: PanelDisplay) -> String {
     match display {
-        PanelDisplay::On => say!("panel.name.on"),
-        PanelDisplay::Off => say!("panel.name.off"),
+        PanelDisplay::Box => say!("panel.name.box"),
+        PanelDisplay::Bottom => say!("panel.name.bottom"),
+        PanelDisplay::Inline => say!("panel.name.inline"),
     }
 }
 
@@ -3659,8 +3679,8 @@ fn page_can_hold_a_candidate(editor: &Editor) -> bool {
     editor.prompt().is_none() && !editor.grid_has_the_pane()
 }
 
-/// **Which of the two shapes the candidates take on this frame** — the
-/// bordered box beside the caret, or the row across the foot (2026-10-16).
+/// **Which of the three shapes the candidates take on this frame**
+/// (2026-10-16).
 ///
 /// Asked in two places that have to agree: [`fit_the_page`], before the key,
 /// to settle how many candidates a page may hold; and [`draw`], to settle
@@ -3668,13 +3688,17 @@ fn page_can_hold_a_candidate(editor: &Editor) -> bool {
 /// never drawn, which is the bug #516 was about.
 ///
 /// The box wins over the setting in three places, all of them 「there is no
-/// command row free, or no page to read the row against」: a prompt and a grid
-/// (both [`page_can_hold_a_candidate`]), a picker, and a box inside a panel.
-fn the_box_is_up(editor: &Editor, ime: &ImeSession) -> bool {
-    ime.panel_is_full()
+/// row free, or no page to put one on」: a prompt and a grid (both
+/// [`page_can_hold_a_candidate`]), a picker, and a box inside a panel.
+fn candidate_shape(editor: &Editor, ime: &ImeSession) -> PanelDisplay {
+    match ime.panel_is_full()
         || !page_can_hold_a_candidate(editor)
         || editor.picker().is_some()
         || editor.mode() == Mode::Field
+    {
+        true => PanelDisplay::Box,
+        false => ime.panel_display(),
+    }
 }
 
 /// Switch the IME to the named scheme, and say what happened.
@@ -3870,7 +3894,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         // and wonders where it went is the only one who needs telling, and the
         // line is already four clauses long (Feature #211).
         let head = match ime.panel_display() {
-            PanelDisplay::On => head,
+            PanelDisplay::Box => head,
             display => format!("{head} · {}", say!("scheme.panel-is", panel_name(display))),
         };
         // 內嵌也只在不是出廠那一檔的時候纔報，理由同上：出廠的樣子不用告訴人。
@@ -4172,6 +4196,10 @@ fn ime_handle(
                 None => {}
             }
         }
+        // …and the two page keys page, whichever way the list is lying
+        // (2026-10-16 定).
+        KeyCode::PageDown if composing && !ime.is_shortcut() => ime.page_down(),
+        KeyCode::PageUp if composing && !ime.is_shortcut() => ime.page_up(),
         // Nothing else reaches the editor mid-composition.
         KeyCode::Left
         | KeyCode::Right
@@ -4234,13 +4262,18 @@ fn ime_handle(
 ///
 /// 兩個鍵走候選，另兩個翻頁，而**哪兩個要看候選排在哪一軸上**（原話：「ensure
 /// that the direction is correct according to the positions of candidates」）。
-/// 候選欄有三種擺法，所以這張表有三行：
+/// 候選欄有三種擺法，兩種排版，所以這張表有五行：
 ///
 /// | 擺在哪 | 候選順着 | 下一個 | 上一個 | 下一頁 | 上一頁 |
 /// | --- | --- | --- | --- | --- | --- |
-/// | 框，橫排 | 往下一列 | `↓` | `↑` | `→` | `←` |
-/// | 框，竪排 | 自右往左 | `←` | `→` | `↓` | `↑` |
-/// | 底行 | 自左往右 | `→` | `←` | `↓` | `↑` |
+/// | `box`，橫排 | 往下一列 | `↓` | `↑` | `→` | `←` |
+/// | `box`，竪排 | 自右往左 | `←` | `→` | `↓` | `↑` |
+/// | `bottom`，兩種 | 自左往右 | `→` | `←` | `↓` | `↑` |
+/// | `inline`，橫排 | 自左往右 | `→` | `←` | `↓` | `↑` |
+/// | `inline`，竪排 | 自上往下 | `↓` | `↑` | `←` | `→` |
+///
+/// 一條規矩推得出這五行：**走候選的那一軸就是候選排開的那一軸**，而翻頁走另一
+/// 軸，指着「這一頁讀完往哪走」的那一頭是下一頁——橫排往下往右，竪排往下往左。
 ///
 /// 走到這一頁的末一個再走，自己落到下一頁的頭一個上（`move_highlight` 本來就跨
 /// 頁繞）——原話：「at the last candidate, Left lands on the next page」。
@@ -4254,31 +4287,32 @@ enum CandidateStep {
 
 fn candidate_step(editor: &Editor, ime: &ImeSession, code: KeyCode) -> Option<CandidateStep> {
     use KeyCode::{Down, Left, Right, Up};
-    // 指着「下一個候選」的那一個鍵。
-    let forward = match (the_box_is_up(editor, ime), editor.layout()) {
-        // 橫排的框是一列，從上往下讀。
-        (true, WritingLayout::Horizontal) => Down,
-        // 竪排的框跟着頁面排版走：首選在最右（`vertical_candidate_panel_runs_right_to_left`）。
-        (true, WritingLayout::Vertical) => Left,
+    use PanelDisplay::{Bottom, Inline};
+    use WritingLayout::{Horizontal, Vertical};
+    // 指着「下一個候選」的那一個鍵，和指着「下一頁」的那一個。
+    let (forward, ahead) = match (candidate_shape(editor, ime), editor.layout()) {
+        // 橫排的框是一列，從上往下讀；翻頁走橫軸，橫排往右。
+        (PanelDisplay::Box, Horizontal) => (Down, Right),
+        // 竪排的框跟着頁面排版走：首選在最右
+        // （`vertical_candidate_panel_runs_right_to_left`）；翻頁走竪軸，往下。
+        (PanelDisplay::Box, Vertical) => (Left, Down),
         // 底行那一條是窗飾，窗飾一律自左往右——竪排也一樣（2026-10-16 定）。
-        (false, _) => Right,
+        (Bottom, _) => (Right, Down),
+        // 行中那一條在頁面上，所以跟着頁面轉：橫排是一行，竪排是一縱。
+        (Inline, Horizontal) => (Right, Down),
+        (Inline, Vertical) => (Down, Left),
     };
-    let back = match forward {
+    let other = |key: KeyCode| match key {
         Down => Up,
         Up => Down,
         Left => Right,
         _ => Left,
     };
-    // 翻頁走另一軸，順着讀的方向的那一頭是下一頁。
-    let (ahead, behind) = match forward {
-        Down | Up => (Right, Left),
-        _ => (Down, Up),
-    };
     match code {
         c if c == forward => Some(CandidateStep::Next),
-        c if c == back => Some(CandidateStep::Previous),
+        c if c == other(forward) => Some(CandidateStep::Previous),
         c if c == ahead => Some(CandidateStep::NextPage),
-        c if c == behind => Some(CandidateStep::PreviousPage),
+        c if c == other(ahead) => Some(CandidateStep::PreviousPage),
         _ => None,
     }
 }
@@ -4939,7 +4973,9 @@ fn draw(
     // Warning: `panel_caret.is_some()` too: the inline preview writes into the
     // *manuscript's* cells, and the characters being typed are in a box in a
     // panel. Previewing them on the page would put them where they are not.
-    let panel = the_box_is_up(editor, ime) || picker_caret.is_some() || panel_caret.is_some();
+    let shape = candidate_shape(editor, ime);
+    let panel =
+        shape == PanelDisplay::Box || picker_caret.is_some() || panel_caret.is_some();
     let composing_here = composes_here(editor) && ime.available() && ime.is_composing();
     let candidate_panel = panel && composing_here;
     // …and the same string beside the caret, where the eyes are.
@@ -5081,18 +5117,43 @@ fn draw(
             }
         }
     } else if composing_here {
-        // **The box is off, so the candidates are on the command row**
-        // (2026-10-16). One row, left to right in both writing layouts — the
-        // 竖排 box runs right to left because it is set the way the page is,
-        // and a single line at the foot is chrome, which reads the way the
-        // status line and the `:` prompt read.
-        //
-        // `prompt_area` rather than `command_area`: with `[editor]
-        // command_line = false`, or a window too short for two rows, the
-        // status line is where everything that row would have carried goes,
-        // and the candidates are now one of those things.
+        // **The box is not up, so the candidates are a strip** (2026-10-16),
+        // in one of the two places the setting names.
         let show_code = inline_text(editor, ime).is_empty();
-        draw_candidate_row(frame, ime, config, prompt_area, show_code);
+        let pane = areas.panes[editor.live_pane().min(1)];
+        match shape {
+            // `bottom`: the command row. One row, left to right in both
+            // writing layouts — the 竪排 box runs right to left because it is
+            // set the way the page is, and a single line at the foot is
+            // chrome, which reads the way the status line and the `:` prompt
+            // read.
+            //
+            // `prompt_area` rather than `command_area`: with `[editor]
+            // command_line = false`, or a window too short for two rows, the
+            // status line is where everything that row would have carried
+            // goes, and the candidates are now one of those things.
+            PanelDisplay::Bottom => {
+                draw_candidate_row(frame, ime, config, prompt_area, show_code)
+            }
+            // `inline`: the same strip, moved up against the caret — 「the
+            // candidate list will be closer to the cursor」 — at the cost of
+            // the line it covers. 竪排 is 「just vertical」: the 縱 to the left
+            // of the one being written, which is where 竪排's next line is.
+            PanelDisplay::Inline => match editor.layout() {
+                WritingLayout::Vertical => vertical::draw_candidate_strip(
+                    frame, ime, config, pane, cursor_x, cursor_y, show_code,
+                ),
+                WritingLayout::Horizontal => draw_candidate_row(
+                    frame,
+                    ime,
+                    config,
+                    under_the_caret(pane, cursor_y),
+                    show_code,
+                ),
+            },
+            // The box took the other branch.
+            PanelDisplay::Box => {}
+        }
     }
     // **按「那裏寫的什麼」跳的候選面板**（`go`/`gu`，§5.73）。
     //
@@ -13007,6 +13068,20 @@ fn draw_candidate_panel(
     draw_panel_rows(frame, config, area, cursor_x, cursor_y, what);
 }
 
+/// **行中那一條擺在哪一行上**（2026-10-16）：光標的下一行，蓋住它。
+///
+/// 下面沒有行了就翻到上面去，同候選框那一扇（[`draw_panel_rows`]）——光標那一
+/// 行是這一條唯一不許蓋的。整欄寬，所以行號那一格也在它底下。
+fn under_the_caret(pane: Rect, cursor_y: u16) -> Rect {
+    let below = cursor_y + 1;
+    let y = match below < pane.y + pane.height {
+        true => below,
+        false => cursor_y.saturating_sub(1).max(pane.y),
+    };
+    let y = y.min((pane.y + pane.height).saturating_sub(1));
+    Rect::new(pane.x, y, pane.width, 1)
+}
+
 /// 候選與候選之間，和編碼與第一個候選之間，隔這麼多格。
 const CANDIDATE_GAP: usize = 2;
 
@@ -17189,7 +17264,7 @@ fn squeezed(text: &str) -> String {
         // Out of the mode first: a second `;` *inside* it commits 「；」, which
         // is the `;;` exit and would leave nothing to draw.
         bare.escape();
-        bare.set_panel_display(PanelDisplay::Off);
+        bare.set_panel_display(PanelDisplay::Bottom);
         bare.set_inline_preedit(InlinePreedit::Preview);
         bare.input(';');
         assert!(bare.panel_is_full(), "bare 也要出這個面板");
@@ -17468,7 +17543,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
@@ -17522,7 +17597,7 @@ fn squeezed(text: &str) -> String {
         editor.set_hud(Hud::Basic);
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.set_inline_preedit(InlinePreedit::Composition);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
@@ -17600,7 +17675,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.input('b');
 
         let config = Config::default();
@@ -17624,7 +17699,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.set_inline_preedit(InlinePreedit::Composition);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
@@ -17643,7 +17718,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴 芭 疤 捌\n");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.input('b');
         let config = Config::default();
 
@@ -17669,7 +17744,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.input('b');
         let mut config = Config::default();
         config.editor.command_line = false;
@@ -17689,20 +17764,27 @@ fn squeezed(text: &str) -> String {
         use CandidateStep::{Next, NextPage, Previous, PreviousPage};
         let table = [
             // 框，橫排：一列，從上往下。
-            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Down, Next),
-            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Up, Previous),
-            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Right, NextPage),
-            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Left, PreviousPage),
+            (PanelDisplay::Box, WritingLayout::Horizontal, KeyCode::Down, Next),
+            (PanelDisplay::Box, WritingLayout::Horizontal, KeyCode::Up, Previous),
+            (PanelDisplay::Box, WritingLayout::Horizontal, KeyCode::Right, NextPage),
+            (PanelDisplay::Box, WritingLayout::Horizontal, KeyCode::Left, PreviousPage),
             // 框，竪排：首選在最右，所以往左是往下一個。
-            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Left, Next),
-            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Right, Previous),
-            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Down, NextPage),
-            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Up, PreviousPage),
+            (PanelDisplay::Box, WritingLayout::Vertical, KeyCode::Left, Next),
+            (PanelDisplay::Box, WritingLayout::Vertical, KeyCode::Right, Previous),
+            (PanelDisplay::Box, WritingLayout::Vertical, KeyCode::Down, NextPage),
+            (PanelDisplay::Box, WritingLayout::Vertical, KeyCode::Up, PreviousPage),
             // 底行：自左往右，竪排也一樣。
-            (PanelDisplay::Off, WritingLayout::Horizontal, KeyCode::Right, Next),
-            (PanelDisplay::Off, WritingLayout::Vertical, KeyCode::Right, Next),
-            (PanelDisplay::Off, WritingLayout::Vertical, KeyCode::Left, Previous),
-            (PanelDisplay::Off, WritingLayout::Vertical, KeyCode::Down, NextPage),
+            (PanelDisplay::Bottom, WritingLayout::Horizontal, KeyCode::Right, Next),
+            (PanelDisplay::Bottom, WritingLayout::Vertical, KeyCode::Right, Next),
+            (PanelDisplay::Bottom, WritingLayout::Vertical, KeyCode::Left, Previous),
+            (PanelDisplay::Bottom, WritingLayout::Vertical, KeyCode::Down, NextPage),
+            // 行中在頁面上，所以跟着頁面轉：橫排一行，竪排一縱。
+            (PanelDisplay::Inline, WritingLayout::Horizontal, KeyCode::Right, Next),
+            (PanelDisplay::Inline, WritingLayout::Horizontal, KeyCode::Down, NextPage),
+            (PanelDisplay::Inline, WritingLayout::Vertical, KeyCode::Down, Next),
+            (PanelDisplay::Inline, WritingLayout::Vertical, KeyCode::Up, Previous),
+            (PanelDisplay::Inline, WritingLayout::Vertical, KeyCode::Left, NextPage),
+            (PanelDisplay::Inline, WritingLayout::Vertical, KeyCode::Right, PreviousPage),
         ];
         for (display, layout, key, want) in table {
             let mut editor = Editor::new();
@@ -17718,13 +17800,67 @@ fn squeezed(text: &str) -> String {
         }
     }
 
+    /// **行中：候選蓋住光標的下一行**（2026-10-16 定）。
+    ///
+    /// 原話：「Just put the appearance of the bottom line under the line of
+    /// the the cursor (which means to cover the next line).」
+    #[test]
+    fn the_inline_strip_covers_the_line_under_the_caret() {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "第一行\n第二行\n第三行\n").expect("fresh buffer");
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Inline);
+        ime.input('b');
+
+        let buffer = render_with(&editor, &Config::default(), &ime, 40, 10);
+        let rows: Vec<String> = (0..buffer.area.height)
+            .map(|y| row_text(&buffer, y))
+            .collect();
+        assert!(rows[0].contains("第一行"), "{rows:#?}");
+        // 第二行 is gone under the strip; 第三行 is where it was.
+        assert!(rows[1].contains('吧') && rows[1].contains('八'), "{rows:#?}");
+        assert!(!rows[1].contains("第二行"), "{rows:#?}");
+        assert!(rows[2].contains("第三行"), "{rows:#?}");
+        // 底行那一條不在：這一檔不佔命令行。
+        assert!(!command_line(&buffer).contains('吧'), "{:?}", command_line(&buffer));
+    }
+
+    /// **竪排的行中是一縱**（2026-10-16，原話：「For vertical layout, it is just
+    /// vertical」）：光標左邊那一縱，候選自上往下。
+    #[test]
+    fn the_inline_strip_is_a_zong_in_vertical() {
+        let mut editor = Editor::new();
+        editor.set_layout(WritingLayout::Vertical);
+        editor.current_buffer_mut().insert(0, "第一行\n第二行\n").expect("fresh buffer");
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Inline);
+        ime.input('b');
+
+        let buffer = render_vertical_with(&mut editor, &vertical_config(), &ime, 30, 14);
+        let find = |needle: &str| {
+            (0..buffer.area.height)
+                .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+                .find(|&(x, y)| buffer[(x, y)].symbol() == needle)
+        };
+        let first = find("吧").unwrap_or_else(|| panic!("{}", buffer_text(&buffer)));
+        let second = find("八").unwrap_or_else(|| panic!("{}", buffer_text(&buffer)));
+        // 一縱裏自上往下：第二個在第一個下面，同一欄。
+        assert_eq!(first.0, second.0, "一縱裏：{}", buffer_text(&buffer));
+        assert!(second.1 > first.1, "自上往下：{}", buffer_text(&buffer));
+        // …而那一縱在光標那一縱的左邊。
+        let caret = find("第").unwrap_or_else(|| panic!("{}", buffer_text(&buffer)));
+        assert!(first.0 < caret.0, "在左邊：{}", buffer_text(&buffer));
+    }
+
     /// 走到末一個再走，自己落到下一頁的頭一個上。
     #[test]
     fn an_arrow_runs_on_into_the_next_page() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.set_page_size(2);
         ime.input('b');
         assert_eq!(ime.highlight(), 0);
@@ -17746,7 +17882,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
         assert!(!ime.panel_is_full());
@@ -17851,7 +17987,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
 
@@ -17879,17 +18015,20 @@ fn squeezed(text: &str) -> String {
 ");
         let said = panel_method(&mut ime, "");
         assert!(said.contains("候選框"), "{said}");
-        let said = panel_method(&mut ime, "off");
+        let said = panel_method(&mut ime, "bottom");
         assert!(said.contains("底行"), "{said}");
-        assert_eq!(ime.panel_display(), PanelDisplay::Off);
+        assert_eq!(ime.panel_display(), PanelDisplay::Bottom);
         // …and `:yume` says so, because where the candidates are is the thing
         // a writer asks about.
         let said = switch_scheme(&mut ime, "?", &Config::default());
         assert!(said.contains("面板 底行"), "{said}");
-        // A word it cannot read names the two rather than picking one.
+        let said = panel_method(&mut ime, "inline");
+        assert!(said.contains("行中"), "{said}");
+        assert_eq!(ime.panel_display(), PanelDisplay::Inline);
+        // A word it cannot read names the three rather than picking one.
         let said = panel_method(&mut ime, "invisible");
-        assert!(said.contains("invisible") && said.contains("off"), "{said}");
-        assert_eq!(ime.panel_display(), PanelDisplay::Off, "unchanged");
+        assert!(said.contains("invisible") && said.contains("bottom"), "{said}");
+        assert_eq!(ime.panel_display(), PanelDisplay::Inline, "unchanged");
     }
 
     /// **`!` 後面跟得了一個方案名**（2026-10-07 定）。從前這條路寫死靈明，於
@@ -17929,7 +18068,7 @@ fn squeezed(text: &str) -> String {
         let said = switch_scheme(&mut ime, "?", &Config::default());
         assert!(said.contains("正在打的那一段"), "{said}");
         // 面板那一格沒被動過——這正是分成兩格的意思。
-        assert_eq!(ime.panel_display(), PanelDisplay::On);
+        assert_eq!(ime.panel_display(), PanelDisplay::Box);
         let said = inline_preedit_method(&mut ime, "inline");
         assert!(said.contains("inline") && said.contains("composition"), "{said}");
         assert_eq!(ime.inline_preedit(), InlinePreedit::Preview, "unchanged");
@@ -17944,7 +18083,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('/'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);

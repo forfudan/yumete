@@ -21,34 +21,42 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
-- Warning: **Breaking: `:yume-panel off` now draws the candidates on the command row,
-  and the two commands are spelled differently.** `:yume-panel full|off` is
-  `:yume-panel on|off`, and `:yume-preedit header|code|top` is
+- Warning: **Breaking: the candidate bar has three places now, and the two commands are
+  spelled differently.** `:yume-panel full|off` is `:yume-panel box|bottom|inline`, and
+  `:yume-preedit header|code|top` is
   `:yume-inline-preedit off|composition|preview`; the config keys are `[panel] display`
-  (`"on"`/`"off"`) and `[panel] inline_preedit`. The old spellings are gone, not
-  aliased.
+  and `[panel] inline_preedit`. The old spellings are gone, not aliased.
 
-  `off` used to draw nothing at all, and `Tab` summoned the box for one word. It now
-  moves the same bar to the **command row** — the last row of the window, which is
-  reserved whether you are typing or not, so the manuscript loses nothing. The same
-  markers, the same ink, the same highlight; `1`–`9` pick, `=`/`-` page. What it drops
-  is the 拆分 and 注解 a bordered row has space for — a row at the foot carries the
-  number and the character and nothing else. How many fit is measured against the
-  width, so a narrow window shows fewer; `[panel] page_size` is still the ceiling.
+  - **`box`** is the bordered list beside the caret, as before.
+  - **`bottom`** is the same list laid across the **command row** — the last row of the
+    window, reserved whether you are typing or not, so the manuscript loses nothing.
+    `off` used to draw nothing at all and `Tab` summoned the box for one word.
+  - **`inline`** is that strip moved under the line you are writing, covering it, so
+    the candidates are where the eyes are. Set 竪排 it is a 縱 instead of a row — the
+    column left of the one being written — and with no line under the caret it flips
+    to the one above.
 
-  With no command row (`[editor] command_line = false`, or a window too short for two
-  rows) the candidates go on the status line while you compose. A `:`, a `/` or a
-  picker takes that row for itself, so the bordered box comes back while you type into
-  one of those.
+  The strips are the box moved, not a different thing: the same markers, the same ink,
+  the same highlight; `1`–`9` pick, `=`/`-` page. What they drop is the 拆分 and 注解 a
+  bordered row has space for — a strip carries the number and the character and nothing
+  else. How many fit is measured against the line, so a narrow window shows fewer;
+  `[panel] page_size` is still the ceiling.
+
+  Under `bottom` with no command row (`[editor] command_line = false`, or a window too
+  short for two rows) the candidates go on the status line while you compose. A `:`, a
+  `/` or a picker takes that row for itself, so the bordered box comes back while you
+  type into one of those.
 - **`Tab` asks the 字典 on the first press, whatever the panel setting is.** With the
   candidates always on screen there is nothing left for it to summon, so the two-press
   detour under `off` is gone.
-- **The arrow keys walk the candidate list.** Two of them move the highlight and two
-  page, and which two follows what is drawn: the box in 橫排 is a column, so `↓`/`↑`
-  move and `→`/`←` page; the box in 竪排 runs right to left, so `←`/`→` move and
-  `↓`/`↑` page; the row at the foot runs left to right in both layouts, so `→`/`←`
-  move and `↓`/`↑` page. Past the last candidate the highlight runs on into the next
-  page. They used to be swallowed.
+- **The arrow keys walk the candidate list, and PageUp/PageDown page it.** Two arrows
+  move the highlight and two page, and which two follows what is drawn: the box in 橫排
+  is a column, so `↓`/`↑` move and `→`/`←` page; the box in 竪排 runs right to left, so
+  `←`/`→` move and `↓`/`↑` page; the row at the foot runs left to right in both
+  layouts, so `→`/`←` move and `↓`/`↑` page; `inline` follows the page, so it is the
+  row's mapping in 橫排 and `↓`/`↑` to move, `←`/`→` to page in 竪排. Past the last
+  candidate the highlight runs on into the next page. All of these used to be
+  swallowed.
 - **The code is drawn in one place.** It used to appear beside the caret and at the
   right end of the status line whenever the panel was off and nothing was inline; it
   now heads the candidates, wherever they are.

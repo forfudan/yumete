@@ -235,8 +235,9 @@ const EDITOR_TABS_WAYS: &[Choice] = &[
 ];
 
 const PANEL_DISPLAY_WAYS: &[Choice] = &[
-    Choice { word: "on", label: "set.pick.display.on" },
-    Choice { word: "off", label: "set.pick.display.off" },
+    Choice { word: "box", label: "set.pick.display.box" },
+    Choice { word: "bottom", label: "set.pick.display.bottom" },
+    Choice { word: "inline", label: "set.pick.display.inline" },
 ];
 
 const PANEL_PREEDIT_WAYS: &[Choice] = &[
@@ -707,7 +708,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Pick(PANEL_DISPLAY_WAYS),
         label: "set.panel.display",
         hint: "set.panel.display.hint",
-        factory: r#""on""#,
+        factory: r#""box""#,
     },
     Setting {
         table: "panel",

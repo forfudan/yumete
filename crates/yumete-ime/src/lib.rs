@@ -1398,7 +1398,7 @@ impl ImeSession {
         // 快捷符號 has no inline form — 「一個分號」 is not a preview of
         // anything, and the letters to press are only on the panel. So that
         // mode draws its panel whatever the setting says.
-        self.is_shortcut() || self.display == PanelDisplay::On
+        self.is_shortcut() || self.display == PanelDisplay::Box
     }
 
     /// The candidate that would land on the page if you pressed Space now.
@@ -2299,10 +2299,10 @@ mod tests {
     #[test]
     fn the_box_is_the_setting_and_nothing_else() {
         let mut ime = synthetic_session();
-        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_panel_display(PanelDisplay::Bottom);
         ime.input('b');
         assert!(!ime.panel_is_full(), "the candidates are on the command row");
-        ime.set_panel_display(PanelDisplay::On);
+        ime.set_panel_display(PanelDisplay::Box);
         assert!(ime.panel_is_full());
     }
 

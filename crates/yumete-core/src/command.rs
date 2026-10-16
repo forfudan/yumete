@@ -469,8 +469,8 @@ pub enum Command {
     /// `:yume-commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
-    /// `:yume-panel on|off` — 候選面板是光標邊上那個框，還是命令行上那一條。
-    /// `None` asks which one is in force.
+    /// `:yume-panel box|bottom|inline` — 候選擺在哪：光標邊上那個框、窗口最下
+    /// 面那一行，還是光標的下一行。`None` asks which one is in force.
     ///
     /// Independent of [`Command::YumeCommit`]: **when** a word lands on the
     /// page and **where** you read the candidate are two questions, and the
@@ -1852,15 +1852,21 @@ const COMMITS: &[Word] = &[
     },
 ];
 
+/// 候選擺在哪——`:yume-panel` 的三個詞（2026-10-16）。
 const PANELS: &[Word] = &[
     Word {
-        name: "on",
-        help: "cmd.panels.on",
+        name: "box",
+        help: "cmd.panels.box",
         needs: &[],
     },
     Word {
-        name: "off",
-        help: "cmd.panels.off",
+        name: "bottom",
+        help: "cmd.panels.bottom",
+        needs: &[],
+    },
+    Word {
+        name: "inline",
+        help: "cmd.panels.inline",
         needs: &[],
     },
 ];
@@ -6141,19 +6147,19 @@ mod tests {
         // #211: 候選面板 is the other axis, and it parses by prefix too.
         assert_eq!(parse(":yume-panel"), Ok(Command::YumePanel(None)));
         assert_eq!(
-            parse(":yume-panel off"),
-            Ok(Command::YumePanel(Some("off".into())))
+            parse(":yume-panel box"),
+            Ok(Command::YumePanel(Some("box".into())))
         );
         // `:yume-p` 又是 `yume-panel` 一個人的了（2026-10-16）：2026-09-27 和它
         // 搶這個頭的 `yume-preedit` 改叫 `yume-inline-preedit` 了。
-        // Warning: `on` 與 `off` 同一個頭，所以參數那一頭最短是 `on` 和 `of`。
+        // Warning: `box` 與 `bottom` 同一個頭，所以參數那一頭最短是 `box` 和 `bot`。
         assert_eq!(
-            parse(":yume-p of"),
-            Ok(Command::YumePanel(Some("off".into())))
+            parse(":yume-p bot"),
+            Ok(Command::YumePanel(Some("bottom".into())))
         );
         assert_eq!(
-            parse(":yume-p on"),
-            Ok(Command::YumePanel(Some("on".into())))
+            parse(":yume-p i"),
+            Ok(Command::YumePanel(Some("inline".into())))
         );
         // 2026-09-27 分出來的那一格：面板畫不畫，和正在打的那一段寫在哪，兩件事。
         assert_eq!(

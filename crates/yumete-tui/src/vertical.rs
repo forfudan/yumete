@@ -27,7 +27,7 @@ use yumete_cjk::{graphemes, str_width, WordMark};
 use yumete_config::{Config, LineNumbers};
 use yumete_core::zong::{self, Anchor, IndentHint};
 use yumete_core::{Editor, Mode, Rope, TextStore};
-use yumete_ime::ImeSession;
+use yumete_ime::{Candidate, ImeSession};
 
 /// The width of one 縱 in cells. A full-width character is two cells, and the
 /// grid is built around that, not around any particular character's width.
@@ -2132,5 +2132,114 @@ pub fn draw_candidate_panel(
             };
             put_slot_right(buf, x, cy, symbol, style);
         }
+    }
+}
+
+/// **行中那一條，竪排的樣子**（2026-10-16 定）。
+///
+/// 原話：「For vertical layout, it is just vertical.」橫排的行中是光標下面那一
+/// 行，竪排的行中就是光標**左邊那一縱**——竪排的下一行往左走——而候選在那一縱
+/// 裏自上往下排，一條候選的編號在它自己的字上面，同候選框裏那一列。
+///
+/// 一縱寬，一頁高：蓋住的正是那一整縱稿子，和橫排那一條蓋住一整行是同一筆帳。
+/// 擺不下（光標已經在最左那一縱）就翻到右邊去，同 [`draw_candidate_panel`]。
+///
+/// 一條候選只有編號和字，拆分與注解不進來——那是 `Tab` 查字典的事（2026-10-16）。
+/// 編碼這一幀沒寫進正文的時候，它打頭，打包成緃中横，同面板那一列。
+pub fn candidate_slots(cand: &Candidate) -> usize {
+    // 編號一格，字各一格。
+    1 + graphemes(&cand.text).count()
+}
+
+/// **這一縱裝得下幾條候選**（2026-10-16）。
+///
+/// 同 `candidates_across` 的竪排對偶：量的是真的候選，`[panel] page_size` 仍是
+/// 上限。至少一條，擺不下就由畫那一頭切掉——一頁一條都沒有是打不了字的。
+pub fn candidates_down(code: &str, cands: &[Candidate], height: u16) -> usize {
+    let mut used = match code.is_empty() {
+        true => 0,
+        false => packed(code).len(),
+    };
+    let mut fits = 0;
+    for cand in cands {
+        // 一格空行隔開，然後編號，然後字。
+        let need = 1 + candidate_slots(cand);
+        if used + need > height as usize {
+            break;
+        }
+        used += need;
+        fits += 1;
+    }
+    fits.max(1)
+}
+
+/// Draw the strip down the 縱 beside the caret. `area` is the page.
+pub fn draw_candidate_strip(
+    frame: &mut Frame,
+    ime: &ImeSession,
+    config: &Config,
+    area: Rect,
+    cursor_x: u16,
+    cursor_y: u16,
+    show_code: bool,
+) {
+    let _ = cursor_y;
+    if area.width < SLOT_WIDTH || area.height == 0 {
+        return;
+    }
+    let candidates = ime.page_candidates();
+    let code = match show_code {
+        true => ime.display_buffer(),
+        false => String::new(),
+    };
+    if candidates.is_empty() && code.is_empty() {
+        return;
+    }
+    let skin = Skin::from(config);
+    let ground = Style::default().bg(skin.paper()).fg(skin.text());
+    let dim = ground.fg(skin.helper());
+    let chosen = Style::default().bg(skin.highlight()).fg(skin.on_highlight());
+    let highlight = ime.highlight();
+
+    // 左邊那一縱；擺不下就翻到右邊去。
+    let x = match cursor_x.checked_sub(SLOT_WIDTH) {
+        Some(x) if x >= area.x => x,
+        _ => (cursor_x + SLOT_WIDTH).min(area.x + area.width.saturating_sub(SLOT_WIDTH)),
+    };
+
+    // 一格一格排下去：編碼打頭，然後每條候選「空一格、編號、字」。
+    let mut slots: Vec<(String, Style)> = Vec::new();
+    for piece in packed(&code) {
+        slots.push((piece, dim));
+    }
+    for (i, cand) in candidates.iter().enumerate() {
+        if !slots.is_empty() {
+            slots.push((String::new(), ground));
+        }
+        let style = match i == highlight {
+            true => chosen,
+            false => ground,
+        };
+        slots.push((index_mark(&config.panel.markers, i), dim));
+        for g in graphemes(&cand.text) {
+            slots.push((g.to_string(), style));
+        }
+    }
+
+    let buf = frame.buffer_mut();
+    // 整縱先鋪成面板的紙，蓋住底下那一縱稿子——同橫排那一條先把那一行擦乾淨。
+    for y in area.y..area.y + area.height {
+        for dx in 0..SLOT_WIDTH {
+            if let Some(cell) = buf.cell_mut((x + dx, y)) {
+                cell.set_symbol(" ").set_style(ground);
+            }
+        }
+    }
+    for (slot, (symbol, style)) in slots.iter().enumerate() {
+        let y = area.y + slot as u16;
+        if y >= area.y + area.height {
+            break;
+        }
+        put_slot_right(buf, x, y, symbol, *style);
     }
 }

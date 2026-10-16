@@ -2292,20 +2292,28 @@ zhs = "把这一格挪到右边(不写名字就是手上这一格)"
 en = "move this panel to the right"
 
 [[message]]
-# : 命令選單裏 off 那一項的説明(panels 組)
-key = "cmd.panels.off"
+# : 命令選單裏 bottom 那一項的説明(panels 組)
+key = "cmd.panels.bottom"
 zht = "底行：候選橫着排在窗口最下面那一行，整頁留給稿子"
 zhs = "底行：候选横着排在窗口最下面那一行，整页留给稿子"
 en = "the command row: the candidates run across the foot, the page is yours"
-find = "候選 候选 面板 空空如也 底行 off"
+find = "候選 候选 面板 空空如也 底行 bottom"
 
 [[message]]
-# : 命令選單裏 on 那一項的説明(panels 組)
-key = "cmd.panels.on"
+# : 命令選單裏 box 那一項的説明(panels 組)
+key = "cmd.panels.box"
 zht = "候選框：光標旁邊的那張帶框的表"
 zhs = "候选框：光标旁边的那张带框的表"
 en = "候選框: the bordered list beside the caret"
-find = "候選 候选 面板 候選框 候选框 on"
+find = "候選 候选 面板 候選框 候选框 box"
+
+[[message]]
+# : 命令選單裏 inline 那一項的説明(panels 組)
+key = "cmd.panels.inline"
+zht = "行中：候選排在光標的下一行上，蓋住那一行稿子，離眼睛最近"
+zhs = "行中：候选排在光标的下一行上，盖住那一行稿子，离眼睛最近"
+en = "in the line: the candidates take the line under the caret, nearest the eye"
+find = "候選 候选 面板 行中 inline"
 
 [[message]]
 # :quit-all —— 全部關掉再走；短寫 :qa
@@ -3272,9 +3280,9 @@ find = "輸入法 输入法 中文 打字 on"
 [[message]]
 # : 命令選單裏 panel 那一項的説明(yume 組)
 key = "cmd.yume.panel"
-zht = "候選畫在哪：on 光標旁邊的候選框，off 窗口最下面那一行"
-zhs = "候选画在哪：on 光标旁边的候选框，off 窗口最下面那一行"
-en = "where the candidates are drawn: on the box by the caret, off the command row"
+zht = "候選畫在哪：box 光標旁邊的框，bottom 窗口最下面那一行，inline 光標的下一行"
+zhs = "候选画在哪：box 光标旁边的框，bottom 窗口最下面那一行，inline 光标的下一行"
+en = "where the candidates are drawn: box by the caret, bottom the command row, inline the line under the caret"
 find = "輸入法 输入法 候選 候选 面板 panel"
 
 [[message]]
@@ -7612,24 +7620,31 @@ en = "the file that half was showing is closed"
 
 [[message]]
 # 候選面板的名字：底行
-key = "panel.name.off"
+key = "panel.name.bottom"
 zht = "底行"
 zhs = "底行"
 en = "the command row"
 
 [[message]]
 # 候選面板的名字：候選框
-key = "panel.name.on"
+key = "panel.name.box"
 zht = "候選框"
 zhs = "候选框"
 en = "the bordered list (候選框)"
 
 [[message]]
+# 候選面板的名字：行中
+key = "panel.name.inline"
+zht = "行中"
+zhs = "行中"
+en = "the line under the caret"
+
+[[message]]
 # 没有這種候選面板
 key = "panel.no-such-panel"
-zht = "没有「{0}」這種候選面板——on、off"
-zhs = "没有「{0}」这种候选面板——on、off"
-en = "no candidate panel '{0}' — on, off"
+zht = "没有「{0}」這種候選面板——box、bottom、inline"
+zhs = "没有「{0}」这种候选面板——box、bottom、inline"
+en = "no candidate panel '{0}' — box, bottom, inline"
 
 [[message]]
 # 候選面板換好了
@@ -9830,8 +9845,8 @@ en = "display"
 [[message]]
 # 設置：候选怎么画——一句話
 key = "set.panel.display.hint"
-zht = "打字的時候候選畫在哪：光標旁邊的候選框，還是窗口最下面那一行"
-zhs = "打字的时候候选画在哪：光标旁边的候选框，还是窗口最下面那一行"
+zht = "打字的時候候選畫在哪：光標旁邊的候選框、窗口最下面那一行，還是光標的下一行"
+zhs = "打字的时候候选画在哪：光标旁边的候选框、窗口最下面那一行，还是光标的下一行"
 en = "display"
 
 [[message]]
@@ -9920,17 +9935,24 @@ en = "ambiguous width.wide"
 
 [[message]]
 # 設置：候选怎么画——底行
-key = "set.pick.display.off"
+key = "set.pick.display.bottom"
 zht = "底行"
 zhs = "底行"
-en = "display.off"
+en = "display.bottom"
 
 [[message]]
 # 設置：候选怎么画——候选框
-key = "set.pick.display.on"
+key = "set.pick.display.box"
 zht = "候選框"
 zhs = "候选框"
-en = "display.full"
+en = "display.box"
+
+[[message]]
+# 設置：候选怎么画——行中
+key = "set.pick.display.inline"
+zht = "行中"
+zhs = "行中"
+en = "display.inline"
 
 [[message]]
 # 設置：纸面——自己画纸
