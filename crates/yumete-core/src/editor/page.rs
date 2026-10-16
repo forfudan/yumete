@@ -793,6 +793,26 @@ impl Editor {
     /// Warning: **純添與剪口回空的。** 它們只有一側，「哪幾個字改了」没有意義——
     /// 整行淡底已經說完了那件事，再逐字指一遍是把整行重說一次。相差太遠
     /// （`diff::script` 回 `None`）也回空：那時逐詞比出來的東西讀不成話。
+    /// **這一塊改動的兩稿，一行一列**——三處共用的那一份（2026-10-16）。
+    ///
+    /// `空格 x` 的浮窗、`空格 X` 的邊欄、`:git-diff` 的報告，從前各算各的，於
+    /// 是行號、記號、底色的響度與折不折行四樣都不一樣（作者 2026-10-16 逐條報
+    /// 來）。現在都問這一支，差別只剩「怎麼畫」。
+    ///
+    /// 號碼照它自己那一稿算：舊的是 `HEAD` 裏的號（`Run::was_at`），新的是現在
+    /// 這份檔裏的號。
+    pub fn change_drafts(&self) -> Vec<crate::diff::DraftRow> {
+        let Some(run) = self.change_here() else { return Vec::new() };
+        let now = self.change_now();
+        let (was, new): (Vec<&str>, Vec<&str>) = (
+            run.was.iter().map(String::as_str).collect(),
+            now.iter().map(String::as_str).collect(),
+        );
+        let segment = |line: &str| self.segmenter.segment(line);
+        crate::diff::drafts(&was, run.was_at, &new, run.at.start + 1, &segment)
+            .unwrap_or_default()
+    }
+
     pub fn change_marks(&self) -> (ChangeMarks, ChangeMarks) {
         let none = (Vec::new(), Vec::new());
         let Some(run) = self.change_here() else { return none };

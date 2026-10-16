@@ -326,6 +326,12 @@ pub struct Row {
     /// 上面是這個字的事實，它是這一次查詢的事實（2026-10-13 定，原話「put the
     /// words in grey below (with a gap line) the two unicode lines」）。
     pub quiet: bool,
+    /// **這一行裏改掉的那幾段**，相對 [`Self::name`] 的字節區間（2026-10-16）。
+    ///
+    /// 只有改動那一格填它（`空格 X`）：整行那一層淡底說「這是哪一稿」，這幾段
+    /// 重一檔說「改的是這幾個字」。從前邊欄只有前一半，而浮窗兩半都有——同一
+    /// 份 diff 在兩處不一樣，正是作者 2026-10-16 報來的那一條。
+    pub marks: Vec<std::ops::Range<usize>>,
 }
 
 /// 一行底下鋪哪一種淡底。
@@ -699,6 +705,7 @@ impl Sidebar {
                 expanded,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
             });
             if expanded {
                 self.push_dir(&path, depth + 1);
@@ -713,6 +720,7 @@ impl Sidebar {
                 expanded: false,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
             });
         }
     }
@@ -814,6 +822,7 @@ mod tests {
                 expanded: true,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
             },
             Row {
                 path: PathBuf::new(),
@@ -823,6 +832,7 @@ mod tests {
                 expanded: false,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
             },
         ]);
         sidebar.step(true);

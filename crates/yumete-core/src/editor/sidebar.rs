@@ -783,6 +783,7 @@ impl Editor {
                     expanded: i == self.current,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
                 })
                 .collect(),
             View::Outline => self.outline_rows(),
@@ -941,6 +942,7 @@ impl Editor {
                 expanded: has_children && !shut,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
             });
         }
         rows
@@ -1056,28 +1058,39 @@ impl Editor {
     ///
     /// 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。純添的那一段没有
     /// 上半，剪口那兩種没有下半——那正是它們和「改過」的分別。
+    /// **改動那一格的兩稿**（`空格 X`）。
+    ///
+    /// 和浮窗（`空格 x`）、`:git-diff` 的報告同一份算出來的東西
+    /// （`Editor::change_drafts`）。從前這一支自己拼 `-　{line}`：沒有行號、
+    /// 沒有逐字的記號，而浮窗兩樣都有——同一份 diff 在兩處不一樣，正是作者
+    /// 2026-10-16 報來的那一條。
     pub(super) fn change_rows(&self) -> Vec<crate::sidebar::Row> {
-        let Some(run) = self.change_here() else { return Vec::new() };
-        use crate::sidebar::Wash;
-        let was: Vec<(String, Wash)> = run
-            .was
+        let drafts = self.change_drafts();
+        // 號碼靠右對齊，所以每一行的字都從同一欄起。
+        let digits = drafts.iter().map(|r| r.line).max().unwrap_or(1).to_string().len();
+        drafts
             .iter()
-            .map(|line| (format!("-　{line}"), Wash::Gone))
-            .collect();
-        let now = self
-            .change_now()
-            .into_iter()
-            .map(|line| (format!("+　{line}"), Wash::Added));
-        was.into_iter()
-            .chain(now)
-            .map(|(name, wash)| crate::sidebar::Row {
-                path: PathBuf::new(),
-                name,
-                depth: 0,
-                is_dir: false,
-                expanded: false,
-                wash: Some(wash),
-                quiet: false,
+            .map(|row| {
+                let mark = match row.gone {
+                    true => '-',
+                    false => '+',
+                };
+                let head = format!("{:>digits$}{mark} ", row.line);
+                let at = head.len();
+                crate::sidebar::Row {
+                    path: PathBuf::new(),
+                    name: format!("{head}{}", row.text),
+                    depth: 0,
+                    is_dir: false,
+                    expanded: false,
+                    wash: Some(match row.gone {
+                        true => crate::sidebar::Wash::Gone,
+                        false => crate::sidebar::Wash::Added,
+                    }),
+                    quiet: false,
+                    // 記號的偏移跟着前綴挪，不然逐字上色會指到行號上。
+                    marks: row.marks.iter().map(|s| s.start + at..s.end + at).collect(),
+                }
             })
             .collect()
     }
@@ -1099,6 +1112,7 @@ impl Editor {
                 expanded: false,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
             })
             .collect()
     }
@@ -1116,6 +1130,7 @@ impl Editor {
                 expanded: false,
                 wash: None,
                 quiet: false,
+                marks: Vec::new(),
             })
             .collect()
     }
@@ -1130,6 +1145,7 @@ impl Editor {
             expanded: false,
             wash: None,
             quiet: false,
+            marks: Vec::new(),
         };
         let plain = |name: String, quiet: bool| Row {
             path: PathBuf::new(),
@@ -1139,6 +1155,7 @@ impl Editor {
             expanded: false,
             wash: None,
             quiet,
+            marks: Vec::new(),
         };
         let Some((ch, answer)) = self.dictionary.as_ref() else {
             return Vec::new();

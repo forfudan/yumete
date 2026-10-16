@@ -41,6 +41,15 @@ in `docs/development.md` §5.2.
   The filename is gone from the rows: the whole report is about one file, which the
   buffer's own name already says, and repeating it cost 25 cells of every row on a
   long filename.
+- **`空格 x`, `空格 X` and `:git-diff` are one diff drawn three ways.** They used to
+  compute it three times over, and differed in four things: the sidebar had no line
+  numbers and no word marks at all, its rows wore the strength of ground meant for a
+  few characters rather than for a whole row, the float could not wrap so a long
+  paragraph simply stopped at the edge with nothing to say it was cut, and a
+  multi-line hunk listed every old row before every new one. All three now read the
+  same builder: `537-` / `533+`, a faint ground per row, the changed words brighter,
+  each line against its own earlier draft, and the float wraps the way the page does
+  (禁則 included), continuation rows indented to the text column.
 - **A generated report is read, not edited.** `:git-diff`, `:diff`, `:check-punct`,
   `:count-progress` and the `:write` verification stay fully rendered wherever the
   cursor is — the markup no longer opens up under it — and no info panel follows the

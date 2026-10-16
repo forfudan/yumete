@@ -6633,70 +6633,88 @@ fn draw_note(
             vertical_text: vertical,
         });
     }
+/// **帶子裏一條過長的改動，折成幾條**（2026-10-16）。
+///
+/// 原話：「The space x showing diff does not follow wrap setting, which means
+/// that it is not soft wrapped even when the soft wrap is on.」從前這一扇一條
+/// 一行、到邊就切，而且**一聲不吭**——一個長段落只看得見開頭那半句。
+///
+/// 折的是正文那一截，不是整行：`533+ ` 那個前綴只在第一條上，後面幾條縮同樣
+/// 寬的空格，所以字從同一欄起。折行照頁面自己那一套（`panel::wrap` → 禁則），
+/// 所以帶子裏的斷點和它底下那一段稿子的斷點是同一種。
+///
+/// 改過的那幾段跟着切：一段跨兩條就在兩條上各畫一半。
+fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Vec<panel::Tint> {
+    let wash = Some(match row.gone {
+        true => crate::theme::Accent::Mark,
+        false => crate::theme::Accent::Green,
+    });
+    let indent = yumete_cjk::str_width(&head);
+    let pieces = panel::wrap(&row.text, room.saturating_sub(indent).max(1));
+    let mut out = Vec::with_capacity(pieces.len());
+    let mut at = 0usize;
+    for (i, piece) in pieces.iter().enumerate() {
+        let lead = match i {
+            0 => head.clone(),
+            _ => " ".repeat(indent),
+        };
+        let shift = lead.len();
+        let (from, to) = (at, at + piece.len());
+        let marks = row
+            .marks
+            .iter()
+            .filter(|span| span.start < to && span.end > from)
+            .map(|span| {
+                span.start.max(from) - from + shift..span.end.min(to) - from + shift
+            })
+            .collect();
+        out.push(panel::Tint { text: format!("{lead}{piece}"), wash, marks });
+        at = to;
+    }
+    out
+}
+
     // **這一塊改之前寫的是什麼，浮在旁邊**（`空格 x`，2026-10-11）。
     //
     // 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。一條一行，所以走
     // `Body::Lines` 那一種（同字典、記錄、診斷），不是百科那種軟折行的文章。
     if editor.info_afloat() == Some(Info::Change) && !writing {
-        let run = editor.change_here();
-        let was: Vec<String> = run.map(|r| r.was.clone()).unwrap_or_default();
-        let was_at = run.map_or(0, |r| r.was_at);
-        let now_at = run.map_or(0, |r| r.at.start + 1);
+        // **一份算出來的，三處畫**（2026-10-16）：行號、記號、改過的詞都由
+        // `Editor::change_drafts` 給，和 `:git-diff` 的報告、邊欄那一扇逐格
+        // 相同。從前這一頭自己走一趟 `change_marks`，而那一趟不配行——一塊裏
+        // 三舊兩新的時候，詞級的記號會落在對不上的那一行上。
+        let drafts = editor.change_drafts();
         // **帶着行號槽一起畫**（2026-10-11 定）。行號右邊那一格本來就是改動條的
         // 位置（`GUTTER_AIR`），`+ -` 放進去是物歸原主——而且這樣一來「從哪裏對
         // 齊」這個問題不存在了：整條帶子從最左畫到最右，和正文逐格對得上。
         //
         // 刪掉的那幾行在**現在這份檔**裏沒有行號，所以標的是它們在 `HEAD` 裏的號
         //（`Run::was_at`）。號太長放不下就只留 `+ -`。
-        let lines = editor.current_buffer().line_count();
-        let gutter =
-            gutter_width(lines, config.editor.line_numbers, editor.writes_code());
+        let count = editor.current_buffer().line_count();
+        let gutter = gutter_width(count, config.editor.line_numbers, editor.writes_code());
         // 號碼那一截和正文**逐格相同**：`gutter_text` 排的是 `{:>w$}` 外加
         // `GUTTER_AIR` 兩格空氣，這裏把中間那一格空氣換成 `+ -`。
         let digits = gutter.saturating_sub(GUTTER_AIR);
-        // 回的是「整行」和「正文從第幾個字節起」——行內那幾段改動的偏移要跟着
-        // 這一截前綴挪，不然逐字上色會指到行號上。
-        let row = |n: usize, mark: char, text: &str| -> (String, usize) {
-            let num = match digits > 0 && n.to_string().len() <= digits {
-                true => format!("{n:>digits$}"),
-                // 號太長放不下就只留記號（作者 2026-10-11 定：機率很小）。
-                false => " ".repeat(digits),
-            };
-            let head = format!("{num}{mark} ");
-            let at = head.len();
-            (format!("{head}{text}"), at)
+        // 帶子從最左畫到最右，所以一條折得下的寬度就是這一塊的寬度；竪排那一
+        // 邊是浮窗，留給它自己的框去夾。
+        let room = match vertical {
+            true => usize::MAX,
+            false => area.width as usize,
         };
-        // **整行上淡底，和 `:git-diff` 一樣**（2026-10-11）。色不是另挑的：刪掉
-        // 的走 `Accent::Mark`、新添的走 `Accent::Green`，與那一頭逐字相同。
-        //
-        // **逐字上色**（2026-10-11 定的設計裏那一句：「Exact changed chars are in
-        // red/green」）。哪幾個字是核心逐詞比出來的（`change_marks`，與
-        // `:git-diff` 同一套），這一頭只把偏移往右挪過行號槽那一截。
-        let (gone, came) = editor.change_marks();
-        let shift = |marks: Option<&Vec<std::ops::Range<usize>>>, at: usize| {
-            marks
-                .map(|spans| spans.iter().map(|s| s.start + at..s.end + at).collect())
-                .unwrap_or_default()
-        };
-        let lines: Vec<panel::Tint> = was
+        let lines: Vec<panel::Tint> = drafts
             .iter()
-            .enumerate()
-            .map(|(i, line)| {
-                let (text, at) = row(was_at + i, '-', line);
-                panel::Tint {
-                    text,
-                    wash: Some(crate::theme::Accent::Mark),
-                    marks: shift(gone.get(i), at),
-                }
+            .flat_map(|row| {
+                let num = match digits > 0 && row.line.to_string().len() <= digits {
+                    true => format!("{:>digits$}", row.line),
+                    // 號太長放不下就只留記號（作者 2026-10-11 定：機率很小）。
+                    false => " ".repeat(digits),
+                };
+                let mark = match row.gone {
+                    true => '-',
+                    false => '+',
+                };
+                band_rows(row, format!("{num}{mark} "), room)
             })
-            .chain(editor.change_now().into_iter().enumerate().map(|(i, line)| {
-                let (text, at) = row(now_at + i, '+', &line);
-                panel::Tint {
-                    text,
-                    wash: Some(crate::theme::Accent::Green),
-                    marks: shift(came.get(i), at),
-                }
-            }))
             .collect();
         if !lines.is_empty() {
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
@@ -9614,10 +9632,23 @@ fn draw_dictionary(
                         true => vec![String::new()],
                         false => wrap_to(&row.name, width),
                     };
-                    folded.into_iter().map(move |name| yumete_core::sidebar::Row {
-                        name,
-                        ..row.clone()
-                    })
+                    // **改過的那幾段跟着折**（2026-10-16）：一段跨兩行就在兩行
+                    // 上各畫一半。別的面板沒有記號，這一步對它們是空轉。
+                    let mut at = 0usize;
+                    folded
+                        .into_iter()
+                        .map(move |name| {
+                            let (from, to) = (at, at + name.len());
+                            at = to;
+                            let marks = row
+                                .marks
+                                .iter()
+                                .filter(|span| span.start < to && span.end > from)
+                                .map(|span| span.start.max(from) - from..span.end.min(to) - from)
+                                .collect();
+                            yumete_core::sidebar::Row { name, marks, ..row.clone() }
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .collect()
         }
@@ -9633,12 +9664,17 @@ fn draw_dictionary(
     for slot in 0..visible.min(rows.len().saturating_sub(first)) {
         let row = &rows[first + slot];
         // **整行鋪一層淡底**——改動那一格（2026-10-11），色與 `:git-diff` 同一套。
+        //
+        // Warning: **走 `washed`，不走 `short_wash`**（2026-10-16 對齊三處時改）。
+        // 響度由面積定：一整行是 1.08–1.12，幾個字纔是 3:1。浮窗那一頭一直是
+        // 這麽畫的（`panel.rs` 那段註釋量過），邊欄從前拿幾個字那一檔鋪了一整
+        // 行——同一份 diff 在兩處兩個響度。
         let style = match row.wash {
             Some(yumete_core::sidebar::Wash::Gone) => {
-                text.bg(ink.short_wash(crate::theme::Accent::Mark))
+                text.bg(ink.washed(crate::theme::Accent::Mark))
             }
             Some(yumete_core::sidebar::Wash::Added) => {
-                text.bg(ink.short_wash(crate::theme::Accent::Green))
+                text.bg(ink.washed(crate::theme::Accent::Green))
             }
             None if row.is_dir => head,
             None => text,
@@ -9647,7 +9683,9 @@ fn draw_dictionary(
         // Warning: **服務器送的是 Markdown，邊欄裏也照 Markdown 畫**——和浮窗裏那一份
         // 一個字不差（2026-09-22）。走的是正文用的那一支墨色表。
         match marked {
-            true => put_marked_text(buf, from + 1, y, to, &row.name, style, ink),
+            true => {
+                put_marked_text(buf, from + 1, y, to, &row.name, style, ink);
+            }
             // 字典那一份不是 Markdown——它是拆分與編碼，一個 `*` 就是一個 `*`。
             //
             // **切了就說一聲**（2026-10-01）。文檔那一份折行，字典這一份是兩欄
@@ -9667,7 +9705,26 @@ fn draw_dictionary(
                     }
                     false => panel::clip(&row.name, room),
                 };
-                put_text(buf, from + 1, y, to, &shown, style)
+                put_text(buf, from + 1, y, to, &shown, style);
+                // **真改掉的那幾段再蓋一遍，底重一檔**（2026-10-16）——和浮窗
+                // 那一頭逐格相同（`panel.rs` 的 `Body::Tinted`）。邊欄從前只
+                // 鋪整行那一層，說得出「這一稿」說不出「改了哪幾個字」。
+                if let Some(accent) = match row.wash {
+                    Some(yumete_core::sidebar::Wash::Gone) => Some(crate::theme::Accent::Mark),
+                    Some(yumete_core::sidebar::Wash::Added) => Some(crate::theme::Accent::Green),
+                    None => None,
+                } {
+                    let strong = style.bg(ink.vcs(accent));
+                    for at in &row.marks {
+                        let (Some(before), Some(text)) =
+                            (row.name.get(..at.start), row.name.get(at.clone()))
+                        else {
+                            continue;
+                        };
+                        let x = from + 1 + yumete_cjk::str_width(before) as u16;
+                        put_text(buf, x, y, to, text, strong);
+                    }
+                }
             }
         };
     }

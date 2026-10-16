@@ -505,7 +505,7 @@ fn entry_zong(text: &str, tall: usize) -> Vec<String> {
 /// it does to the paragraph it belongs to — a 。 may not open a row, a 「 may
 /// not close one. Wrapping it any other way would put a full stop alone at the
 /// head of the panel's second line, which is the one thing everybody notices.
-fn wrap(text: &str, width: usize) -> Vec<String> {
+pub(crate) fn wrap(text: &str, width: usize) -> Vec<String> {
     // A line break in the text is a line break in the panel: a wiki entry is
     // several paragraphs and a heading, not one run of prose (#287).
     let mut rows: Vec<String> = Vec::new();
