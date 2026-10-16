@@ -47,6 +47,12 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **A 字根 is drawn two cells wide.** Characters in a Private Use Area — which is where
+  the 字根 Yuniversus carries live — were given one cell, because Annex #11 calls the
+  whole area Ambiguous and the editor had no reason to think otherwise. Every glyph in
+  that font is full width, so the ink painted over whatever stood in the next cell: in a
+  vertical 縱 the 字根 was hung against the right half of its slot and spilled into the
+  column beside it. They now take the two cells a 漢字 in their place would.
 - **`Tab` on a candidate no longer forces the sidebar open.** Asking about the
   highlighted candidate floats the answer beside the caret, the way `空格 n` does; if
   the sidebar is already showing info the answer goes in there instead. It used to do

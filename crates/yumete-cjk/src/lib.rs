@@ -59,7 +59,7 @@ pub use vertical::{
     DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, Margin, TATECHUYOKO_CLASSIC, TATECHUYOKO_MAX,
 };
 pub use width::{
-    ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width,
+    ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width, is_private_use,
     set_ambiguous_wide, stored_width, str_width, tab_width_at,
 };
 pub use word::{

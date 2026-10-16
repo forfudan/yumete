@@ -10005,6 +10005,52 @@ fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
 /// A 漢字 the cut lands in the middle of becomes air: half a 字 is not a
 /// character the terminal can draw, and drawing the whole one would put a
 /// column of writing where the reader is owed none.
+/// Give every private-use character the second cell this editor counts for it.
+///
+/// [`yumete_cjk::is_private_use`] makes a 字根 two cells wide and everything
+/// that measures in this editor agrees — but the manuscript body is handed to
+/// ratatui as spans, and ratatui lays spans out with plain Annex #11, where the
+/// private-use area is one cell. So it put the next character into the cell
+/// this side had already spent: `A` `字根` `B` came out `A` at 3, the 字根 at 4
+/// and `B` at **5**, where a 漢字 in the same place leaves 5 blank and puts `B`
+/// at 6. One column short per 字根, and the caret, the ground and the click map
+/// all counted the other way.
+///
+/// [`put_text`] never had this problem — it walks grapheme by grapheme and
+/// blanks the trailing cell itself, which is why the panels, the status line,
+/// the candidate bar and the vertical page needed nothing.
+///
+/// The space goes **inside the span the character is in**, so it carries that
+/// character's own style: a selected 字根 keeps its ground across both of its
+/// cells rather than half of one.
+///
+/// Warning: **After [`scrolled`], not before.** That one cuts the row in this editor's
+/// own cells, so it has to see the text the way the rest of the layout does.
+fn room_for_private_use(line: Line<'static>) -> Line<'static> {
+    if !line.spans.iter().any(|s| s.content.chars().any(yumete_cjk::is_private_use)) {
+        return line;
+    }
+    let style = line.style;
+    let spans: Vec<Span<'static>> = line
+        .spans
+        .into_iter()
+        .map(|span| match span.content.chars().any(yumete_cjk::is_private_use) {
+            false => span,
+            true => {
+                let mut text = String::with_capacity(span.content.len() + 4);
+                for c in span.content.chars() {
+                    text.push(c);
+                    if yumete_cjk::is_private_use(c) {
+                        text.push(' ');
+                    }
+                }
+                Span::styled(text, span.style)
+            }
+        })
+        .collect();
+    Line::from(spans).style(style)
+}
+
 fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
     if left == 0 {
         return line;
@@ -11145,7 +11191,7 @@ fn draw_horizontal(
                     over,
                 ));
             }
-            lines.push(scrolled(reading, gutter, left));
+            lines.push(room_for_private_use(scrolled(reading, gutter, left)));
         }
 
         // **別的那幾處命中，墊在最底下一層**——站着的那一處畫在它之後，所以蓋
@@ -11285,7 +11331,7 @@ fn draw_horizontal(
                 label_cells.push((text_area.x + (cell - left) as u16, y, label.to_string()));
             }
         }
-        lines.push(scrolled(Line::from(spans), gutter, left));
+        lines.push(room_for_private_use(scrolled(Line::from(spans), gutter, left)));
     }
     // `.style` paints the **whole area**, not only the rows there is writing
     // on: past the last line of a short file the page is still the page, and
@@ -21493,6 +21539,31 @@ fn squeezed(text: &str) -> String {
         assert_eq!(walls(&buffer), [false; 4], "鍵在正文裏，誰都不金");
     }
 
+    /// **A 字根 takes the two cells it is drawn in** (2026-10-16).
+    ///
+    /// Reported as 「Yuniversus.ttf 每個字符都是 1000 width，爲什麽這裏被畫成了半
+    /// 角？」 Annex #11 calls the private-use area Ambiguous, so the width crate
+    /// — and ratatui with it — gives it one cell; every glyph in the font that
+    /// carries 宇浩's 字根 is full width, so the ink then painted over whatever
+    /// stood in the next cell.
+    ///
+    /// The row below is the whole of it: a 字根 has to leave the same cells
+    /// blank that a 漢字 in its place would.
+    #[test]
+    fn a_private_use_character_is_drawn_two_cells_wide() {
+        let cells = |text: &str| -> Vec<String> {
+            let editor = editor_with(text);
+            let buffer = render(&editor, &Config::default(), 24, 4);
+            (0..8).map(|x| buffer[(x, 0)].symbol().to_string()).collect()
+        };
+        let han = cells("A\u{4e00}B");
+        let root = cells("A\u{e000}B");
+        assert_eq!(han[5], " ", "a 漢字 leaves its second cell blank: {han:?}");
+        assert_eq!(han[6], "B", "{han:?}");
+        assert_eq!(root[5], " ", "and so does a 字根: {root:?}");
+        assert_eq!(root[6], "B", "{root:?}");
+    }
+
     /// Draw the `:` menu at a real size, for looking at.
     #[test]
     #[ignore = "a picture, not a test"]
@@ -23913,3 +23984,4 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+

@@ -70,11 +70,37 @@ pub fn ambiguous_is_wide() -> bool {
 /// What is left for this one is what it says: **one** character's own width —
 /// a box-drawing glyph the terminal was asked about, a constant, an assertion.
 pub fn char_width(c: char) -> usize {
+    if is_private_use(c) {
+        return 2;
+    }
     if ambiguous_is_wide() {
         UnicodeWidthChar::width_cjk(c).unwrap_or(0)
     } else {
         UnicodeWidthChar::width(c).unwrap_or(0)
     }
+}
+
+/// Whether `c` is in a Private Use Area.
+///
+/// **These are two cells here, whatever Annex #11 says** (2026-10-16). The
+/// standard calls the whole PUA Ambiguous, which means 「ask the environment」,
+/// and the environment this editor is written for has one answer: every
+/// private-use code point it ever sees comes from Yuniversus, the font that
+/// carries 宇浩's 字根, and **every glyph in that font is 1000 units — full
+/// width, by construction**.
+///
+/// Reported as 「Yuniversus.ttf 每個字符都是 1000 width，爲什麽這裏被畫成了半
+/// 角？」 — a 字根 in a 縱 was hung against the right half of its slot (a
+/// half-width character's place) and its ink then painted over the 縱 beside
+/// it.
+///
+/// Warning: **The font's advance is not what decides this.** A terminal is a grid and
+/// the cells a character gets come from its width property, not from the font;
+/// what the font being full-width buys is that 2 is the *right* answer here,
+/// not that the terminal already knew it. See `yumete-tui`'s `ambiguous`
+/// module for the half that has to ask the terminal.
+pub fn is_private_use(c: char) -> bool {
+    matches!(c as u32, 0xE000..=0xF8FF | 0xF_0000..=0xF_FFFD | 0x10_0000..=0x10_FFFD)
 }
 
 /// The width of `s` **as it will be stored**, which the terminal has no say in
@@ -97,11 +123,18 @@ pub fn stored_width(s: &str) -> usize {
 /// The number of terminal cells the string `s` occupies, summed over its
 /// characters (control characters contribute `0`).
 pub fn str_width(s: &str) -> usize {
+    // Warning: **Walk it when there is a private-use character in it.** Those count
+    // two here and Annex #11 counts them one (see [`is_private_use`]), so the
+    // crate's own answer is short by one for each. The scan is a `memchr`-shaped
+    // pass over bytes and almost every string has none, so the walk is paid only
+    // by the strings that need it.
+    // Warning: **Only where the crate counted them narrow.** Under `width_cjk` the
+    // whole Ambiguous block — the PUA with it — is already two, so correcting
+    // there would make each one three.
     if ambiguous_is_wide() {
-        UnicodeWidthStr::width_cjk(s)
-    } else {
-        UnicodeWidthStr::width(s)
+        return UnicodeWidthStr::width_cjk(s);
     }
+    UnicodeWidthStr::width(s) + s.chars().filter(|&c| is_private_use(c)).count()
 }
 
 /// The width **a renderer that never heard of the setting** gives `s`.
@@ -173,6 +206,24 @@ pub fn tab_width_at(visual_x: usize, tab_width: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **私用區算兩格**（2026-10-16 報的）。
+    #[test]
+    fn a_private_use_character_is_two_cells() {
+        for cp in [0xE000u32, 0xE4E0, 0xF8FF, 0xF_0000, 0x10_FFFD] {
+            let c = char::from_u32(cp).unwrap();
+            assert!(is_private_use(c), "U+{cp:04X}");
+            assert_eq!(char_width(c), 2, "U+{cp:04X}");
+            assert_eq!(str_width(&format!("A{c}B")), 4, "U+{cp:04X}");
+        }
+        // 兩頭都不是：U+DFFF 之前、U+F900 之後。
+        assert!(!is_private_use('\u{D7FF}'));
+        assert!(!is_private_use('\u{F900}'));
+        // **存檔的寬度不跟着動**：那一份要在每台機器上一樣（見 `stored_width`）。
+        assert_eq!(stored_width("A\u{e000}B"), 3);
+        // ratatui 的那一份也不動——它排格子用的就是這一支。
+        assert_eq!(drawn_width("A\u{e000}B"), 3);
+    }
 
     /// The characters Annex #11 calls Ambiguous: one cell in a Latin font, two
     /// in a CJK one. A Chinese paragraph is full of them.
