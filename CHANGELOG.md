@@ -57,6 +57,11 @@ in `docs/development.md` §5.2.
   row's mapping in 橫排 and `↓`/`↑` to move, `←`/`→` to page in 竪排. Past the last
   candidate the highlight runs on into the next page. All of these used to be
   swallowed.
+- **`--shot` answers the `:yume-…` settings now.** `--keys=':yume-panel bottom\ni…'`
+  used to draw the box and print 「nobody acted on this」: the whole family was treated
+  as 「needs the event loop」, though five of them only move a dial on the session. The
+  offscreen path answers those five between one key and the next, which is what lets a
+  frame be taken of each candidate-bar setting at all.
 - **`:yume-commit default` hands the 上屏方式 back to the scheme.** The three methods
   are each a particular one, so once you had set one there was no way back to 「this
   scheme decides」 — which is what leaving `[ime] commit` out of the config has always

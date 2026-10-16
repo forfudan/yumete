@@ -67,6 +67,9 @@ scenes() {
 合併衝突|80x20|:open CONFLICT\n
 輸入法-候選|80x20|i\{ime}nahnian
 輸入法-候選-竪排|60x24|:vertical\ni\{ime}nahnian
+輸入法-底行|80x20|:yume-panel bottom\ni\{ime}nahnian
+輸入法-行中|80x20|:yume-panel inline\ni\{ime}nahnian
+輸入法-行中-竪排|60x24|:vertical\n:yume-panel inline\ni\{ime}nahnian
 改動帶子|80x24|:open GIT\nj x
 改動帶子-還原|80x24|:open GIT\nj xu
 改動帶子-裝不下|60x20|:open GITBIG\n x

@@ -3709,6 +3709,37 @@ fn candidate_shape(editor: &Editor, ime: &ImeSession) -> PanelDisplay {
     }
 }
 
+/// **The `:yume-…` requests that only move a dial on the session** (2026-10-16).
+///
+/// Two readers, one list. The interactive loop reads it through
+/// [`switch_scheme`], and `--shot` reads it directly, between one `--keys`
+/// press and the next.
+///
+/// Warning: **離屏那一支從前一句都不答**，整個 `:yume-…` 家族被當成「要事件循環」
+/// 丟掉，而這五句一不開進程、二不碰磁碟、三不等人——動的就是這一幀畫成什麼樣。
+/// 於是這個倉審前端靠的那張照片，恰恰照不到 `:yume-panel` 改出來的東西：三檔候
+/// 選欄一張金樣都拍不了。同 #470 給 `:theme` 開的那個口子，判準逐字相同。
+///
+/// `None` 是「這一句不歸這裏答」——換方案要讀磁碟，報告要印幾行，那些留給循環。
+pub fn settings_request(ime: &mut ImeSession, tag: &str) -> Option<String> {
+    if let Some(mode) = tag.strip_prefix("commit:") {
+        return Some(commit_method(ime, mode));
+    }
+    if let Some(mode) = tag.strip_prefix("panel:") {
+        return Some(panel_method(ime, mode));
+    }
+    if let Some(mode) = tag.strip_prefix("inline-preedit:") {
+        return Some(inline_preedit_method(ime, mode));
+    }
+    if let Some(n) = tag.strip_prefix("menu:") {
+        return Some(menu_size(ime, n));
+    }
+    if let Some(want) = tag.strip_prefix("predict:") {
+        return Some(autocompletion(ime, want));
+    }
+    None
+}
+
 /// Switch the IME to the named scheme, and say what happened.
 ///
 /// Only 靈明 ships with yumete. The others are yume's own data, installed the
@@ -3919,20 +3950,10 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             false => format!("{head} · {faults}"),
         };
     }
-    if let Some(mode) = tag.strip_prefix("commit:") {
-        return commit_method(ime, mode);
-    }
-    if let Some(mode) = tag.strip_prefix("panel:") {
-        return panel_method(ime, mode);
-    }
-    if let Some(mode) = tag.strip_prefix("inline-preedit:") {
-        return inline_preedit_method(ime, mode);
-    }
-    if let Some(n) = tag.strip_prefix("menu:") {
-        return menu_size(ime, n);
-    }
-    if let Some(want) = tag.strip_prefix("predict:") {
-        return autocompletion(ime, want);
+    // The five that only move a dial on the session — one list, two readers
+    // (see [`settings_request`]).
+    if let Some(said) = settings_request(ime, tag) {
+        return said;
     }
     if let Some(path) = tag.strip_prefix('=') {
         let path = std::path::PathBuf::from(shellexpand(path));
@@ -18033,6 +18054,28 @@ fn squeezed(text: &str) -> String {
         // 打錯的字照舊是打錯的字，而名單上多了一個。
         let said = commit_method(&mut ime, "defualt");
         assert!(said.contains("defualt") && said.contains("default"), "{said}");
+    }
+
+    /// **離屏那一支答得出哪幾句**（2026-10-16）。
+    ///
+    /// `--shot` 在兩個鍵之間叫 [`settings_request`]，答得出的就地辦了，答不出
+    /// 的放回去、末了報「沒人接」。這一條盯着那張名單：掉一句，`--keys` 裏那條
+    /// 命令就會一聲不吭地什麼都不做，而這個倉審前端靠的就是那張照片。
+    #[test]
+    fn the_offscreen_path_answers_every_setting_request() {
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        // Warning: **`menu:` 問，不撥**。撥一下寫的是 `PAGE_WISH`，而那是**進程全局**
+        // 的——`the_row_holds_as_many_as_the_width_allows` 當場從 6 變成 4，而
+        // 它單獨跑是綠的。同「改全局的測試要單獨一個二進制」那一族。
+        for tag in ["commit:fluency", "panel:bottom", "inline-preedit:preview", "menu:", "predict:on"] {
+            assert!(settings_request(&mut ime, tag).is_some(), "{tag} 沒人答");
+        }
+        assert_eq!(ime.panel_display(), PanelDisplay::Bottom);
+        assert_eq!(ime.inline_preedit(), InlinePreedit::Preview);
+        // 換方案要讀磁碟，報告要印幾行——那些留給循環。
+        for tag in ["?", "~", "!", "where", "xingchen", "=/tmp/x.txt"] {
+            assert!(settings_request(&mut ime, tag).is_none(), "{tag} 不該在這裏答");
+        }
     }
 
     /// #211: the setting, the command, and the question, in the writer's words.

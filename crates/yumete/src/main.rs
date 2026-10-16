@@ -1242,7 +1242,22 @@ fn take_the_colours(editor: &mut Editor, config: &yumete_config::Config) {
 /// 那第二次：`--keys='\{space}f'` 的最後一下開了挑選器，而它的走查跑在旁邊，於是
 /// 後面沒有鍵替它收——照片上 `0/0`，一條都沒有。同一個洞搜索那一族也有，只是它總
 /// 有鍵跟在後面，所以一直沒露出來。
-fn catch_up_with_the_loop(editor: &mut Editor, config: &yumete_config::Config) {
+fn catch_up_with_the_loop(
+    editor: &mut Editor,
+    config: &yumete_config::Config,
+    ime: &mut ImeSession,
+) {
+    // **設置那幾句，這一支自己答得出**（2026-10-16）。從前整個 `:yume-…` 家族
+    // 被當成「要事件循環」丟掉，於是 `--keys=':yume-panel bottom\ni\{ime}dk'`
+    // 拍出來的是候選框——三檔候選欄一張照片都拍不成，而這個倉審前端就是靠拍照。
+    // 答得出的那幾句只動會話上的一格（`yumete_tui::settings_request`）；答不出
+    // 的原樣放回去，末了那一段照舊報「沒人接這一句」。
+    if let Some(asked) = editor.take_scheme_request() {
+        match yumete_tui::settings_request(ime, &asked) {
+            Some(said) => editor.set_status(said),
+            None => editor.defer_scheme_request(asked),
+        }
+    }
     if editor.take_owed_search() {
         editor.run_owed_search();
     }
@@ -1295,7 +1310,7 @@ fn press(
         // 和底下 `gw` 那一處同一族（#406），也和這支函數開頭說的 `:settings`
         // 同一族：**主循環在兩個鍵之間做的事，這裏一件都不許少**，不然拍到的
         // 面板和人按出來的面板不是同一扇。只是這一件便宜，不必真畫一幀。
-        catch_up_with_the_loop(editor, config);
+        catch_up_with_the_loop(editor, config, ime);
         // Warning: **按鍵之前先把頁夾好**（#516，2026-10-02）。互動的循環是
         // 「畫一幀、讀一個鍵、再畫一幀」，所以按鍵那一刻用的是上一幀量出來的高
         // 度；離屏這一支沒有循環。不補這一下，`--keys='…wo3'` 在六行的窗口上照
@@ -1498,7 +1513,7 @@ fn press(
     // **最後一個鍵欠下的那幾件也要做完**：迴圈頂上那一下只補得了鍵**之間**的，
     // 而 `R y` 正是按在最後，`\{space}f` 也是（2026-10-09 補齊的那一半，見
     // [`catch_up_with_the_loop`]）。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
-    catch_up_with_the_loop(editor, config);
+    catch_up_with_the_loop(editor, config, ime);
     settings.panel
 }
 

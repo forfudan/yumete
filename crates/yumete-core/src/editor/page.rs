@@ -572,6 +572,17 @@ impl Editor {
         self.scheme_request.take()
     }
 
+    /// **Hand one back**: this front end could not answer it, and something
+    /// later might.
+    ///
+    /// The offscreen path (`--shot`) takes the request after every key so it
+    /// can honour the ones that only change a setting, and leaves the rest
+    /// where it found them — those are reported at the end as 「nobody acted
+    /// on this」, which is a line a reviewer needs to see.
+    pub fn defer_scheme_request(&mut self, tag: String) {
+        self.scheme_request = Some(tag);
+    }
+
     /// The other work area, if the page is split.
     pub fn other_pane(&self) -> Option<&Pane> {
         self.other.as_ref()
