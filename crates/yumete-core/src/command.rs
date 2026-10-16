@@ -1360,9 +1360,6 @@ const FORCEABLE: &[&str] = &[
     "convert!",
     "yume-chaifen!",
     "yume-commit!",
-    "yume-panel!",
-    "yume-inline-preedit!",
-    "yume-menu-size!",
     "yume-autocompletion!",
     "view-bands!",
     "view-sentence!",
@@ -3493,7 +3490,15 @@ pub const COMMANDS: &[Entry] = &[
         name: "yume-panel",
         aliases: &[],
         help: "cmd.yume.panel",
-        needs: &[Need::Scheme],
+        // Warning: **沒有 `needs:`**（2026-10-16 改）。從前整個 `:yume-…` 家族掛着同一
+        // 行 `Need::Scheme`，於是沒載碼表的時候這一條答「還不行，需要：載入碼
+        // 表」——原話：「我使用 `yume-panel` 爲什麽要載入碼表？」它不要：候選擺
+        // 在哪是會話上的一格，碼表在不在都有，而 `[panel] display` 開機就撥了
+        // 它。加 `!` 更糟，那是為了挪一條候選欄去載一張碼表。
+        //
+        // 同一條理由放了 `:yume-inline-preedit` 與 `:yume-menu-size`。還掛着的
+        // 三個（`chaifen`/`commit`/`autocompletion`）動的是引擎那一頭。
+        needs: &[],
         params: &[Param::Words { of: PANELS, default: None }],
         build: Some(|p| {
             // Likewise a question on its own — and one word for both halves of
@@ -3506,7 +3511,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "yume-inline-preedit",
         aliases: &[],
         help: "cmd.yume.inline-preedit",
-        needs: &[Need::Scheme],
+        needs: &[],
         params: &[Param::Words { of: PREEDITS, default: None }],
         build: Some(|p| Ok(Command::YumeInlinePreedit(p.arg(0).map(|w| w.to_string())))),
     },
@@ -3514,7 +3519,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "yume-menu-size",
         aliases: &[],
         help: "cmd.yume.menu-size",
-        needs: &[Need::Scheme],
+        needs: &[],
         params: &[Param::Free("<1–9>")],
         build: Some(|p| {
             // On its own it is the question, like `:yume-panel`.

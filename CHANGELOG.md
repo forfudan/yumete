@@ -57,6 +57,13 @@ in `docs/development.md` §5.2.
   row's mapping in 橫排 and `↓`/`↑` to move, `←`/`→` to page in 竪排. Past the last
   candidate the highlight runs on into the next page. All of these used to be
   swallowed.
+- **`:yume-panel`, `:yume-inline-preedit` and `:yume-menu-size` no longer ask for a
+  碼表.** All three say where things are drawn and how many of them, which is a setting
+  the session carries whether or not a table is loaded — the config file sets all three
+  at startup with nothing loaded. With no 碼表 they used to answer 「還不行，需要：載入
+  碼表」 and offer a `!` that would have loaded a table so you could move the candidate
+  bar. `:yume-chaifen`, `:yume-commit` and `:yume-autocompletion` still ask: those
+  three reach the engine.
 - **The code is drawn in one place.** It used to appear beside the caret and at the
   right end of the status line whenever the panel was off and nothing was inline; it
   now heads the candidates, wherever they are.

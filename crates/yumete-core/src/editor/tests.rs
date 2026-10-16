@@ -1321,6 +1321,22 @@ fn the_commit_method_rides_the_same_channel_as_the_scheme() {
     assert!(cold.status().contains("碼表"), "{}", cold.status());
 }
 
+/// **候選擺在哪不要碼表**（2026-10-16 改）。
+///
+/// 原話：「我使用 `yume-panel` 爲什麽要載入碼表？」從前整個 `:yume-…` 家族掛着
+/// 同一行 `Need::Scheme`，於是這三條在沒載碼表的時候答「還不行，需要：載入碼
+/// 表」——而它們動的是畫面上的一格，碼表在不在都有。`chaifen`/`commit`/
+/// `autocompletion` 還掛着，那三個動的是引擎那一頭。
+#[test]
+fn where_the_candidates_are_drawn_needs_no_table() {
+    for line in [":yume-panel bottom", ":yume-inline-preedit preview", ":yume-menu-size 4"] {
+        let mut cold = Editor::new();
+        cold.execute(line).unwrap();
+        assert!(!cold.status().contains("碼表"), "{line}: {}", cold.status());
+        assert!(cold.take_scheme_request().is_some(), "{line}: 請求照樣留下");
+    }
+}
+
 #[test]
 fn chaifen_command_leaves_a_request_for_the_ime() {
     let mut ed = Editor::new();
