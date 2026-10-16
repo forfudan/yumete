@@ -310,6 +310,14 @@ impl Editor {
         if !command::still_naming(asked) {
             return (rows, exact);
         }
+        // **先補「名字裏有這個詞」的那幾條**（2026-10-16 報的：「I search
+        // `:panel` but cannot see anything related to `:yume-panel`」）。命令名
+        // 是連字符分段的路徑，打的那個詞配上哪一段都算——這件事是「有或沒有」，
+        // 不該交給打分：`panel` 在這張表裏信息量太低，`yume-panel` 從來過不了
+        // `SURE_ENOUGH` 那道門檻。排在前綴那幾條後面，所以畫出來是淡的。
+        let named: Vec<&str> = rows.iter().map(|c| c.name).collect();
+        rows.extend(command::by_segment(asked).into_iter().filter(|c| !named.contains(&c.name)));
+        // …然後纔是猜的那一層，它答的是「我忘了它叫什麼」。
         let named: Vec<&str> = rows.iter().map(|c| c.name).collect();
         rows.extend(
             crate::lookfor::guesses(asked).into_iter().filter(|c| !named.contains(&c.name)),

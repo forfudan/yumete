@@ -14430,6 +14430,45 @@ fn the_intro_does_not_come_back_once_the_buffer_has_been_edited() {
     assert!(!ed.intro(), "undo 之後也不回來");
 }
 
+/// **一個詞配上命令名的哪一段都算**（2026-10-16 報的）。
+///
+/// 「I search `:panel` but cannot see anything related to `:yume-panel`」。
+/// `:` 那一行比的是前綴，而命令名是連字符分段的路徑；猜的那一層是打分的，而
+/// `panel` 在這張表裏信息量太低（`panel-left`、`panel-right` 和它們的說明裏都
+/// 有），`yume-panel` 從來過不了那道門檻。
+#[test]
+fn a_word_anywhere_in_a_command_name_finds_it() {
+    let mut ed = Editor::new();
+    press(&mut ed, ":panel");
+    let (rows, _) = ed.command_menu();
+    let names: Vec<&str> = rows.iter().map(|c| c.name).collect();
+    // 前綴那幾條照舊在，而且在前面。
+    assert_eq!(names.first(), Some(&"panel-left"), "{names:?}");
+    assert!(names.contains(&"panel-right"), "{names:?}");
+    // …而名字裏帶 `panel` 的那幾條也撈到了。
+    assert!(names.contains(&"yume-panel"), "{names:?}");
+    assert!(names.contains(&"wiki-panel"), "{names:?}");
+    // 前綴的排在段匹配的前面：畫出來前者亮、後者淡。
+    let prefix_last = names.iter().rposition(|n| n.starts_with("panel")).expect("{names:?}");
+    let segment_first = names.iter().position(|n| *n == "yume-panel").expect("{names:?}");
+    assert!(prefix_last < segment_first || names[..segment_first].contains(&"panel-left"),
+        "the prefix rows come first: {names:?}");
+
+    // **第一段不重複列**：`panel-left` 是前綴配中的，不該再從段匹配進來一次。
+    let twice = names.iter().filter(|n| **n == "panel-left").count();
+    assert_eq!(twice, 1, "{names:?}");
+
+    // 打了參數就不是在打名字了，段匹配不插話。
+    let mut ed = Editor::new();
+    press(&mut ed, ":yume-panel ");
+    let (rows, _) = ed.command_menu();
+    assert!(
+        rows.iter().all(|c| c.name != "wiki-panel"),
+        "{:?}",
+        rows.iter().map(|c| c.name).collect::<Vec<_>>()
+    );
+}
+
 /// **A bare count gets a panel of its own** (2026-10-14, asked for as 「I type
 /// 10 and HUD shows `10`, can there be a shortcut hint panel for this too」).
 ///

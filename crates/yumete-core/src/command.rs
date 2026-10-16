@@ -4820,6 +4820,65 @@ fn moved_to(word: &str) -> Option<String> {
 /// An empty prefix lists everything, which is what makes `:` on its own a menu
 /// rather than a guess. A prefix that is already a whole command still lists it,
 /// so the help stays visible while the arguments are typed.
+/// One row of the top level, however it was reached.
+fn one_row(e: &'static Entry) -> Choice {
+    Choice {
+        name: e.name,
+        family: None,
+        needs: e.needs,
+        alias: (!e.aliases.is_empty()).then(|| e.aliases.join(" ")),
+        // **Among the aliases too.** `:table-jump` has no alias of its own and
+        // no other *name* starts with `ro`, so the shortest walk over names
+        // alone offered `(ro)` — while `ro` is `:readonly`'s declared alias,
+        // and an exact alias beats a prefix in `resolve`. The menu was
+        // promising a spelling that did something else.
+        short: shortest(
+            e.name,
+            COMMANDS
+                .iter()
+                .filter(|c| c.name != e.name)
+                .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied())),
+        ),
+        help: e.help,
+        leading: ":",
+        under: String::new(),
+        note: None,
+    }
+}
+
+/// The commands whose name carries the typed word as **a later part of its
+/// own name** — `panel` finds `yume-panel`.
+///
+/// A command's name is a path of hyphen-separated words, which is already how
+/// the menu derives its families, and a reader who types one of those words
+/// means that word wherever it stands. [`complete`] answers the prefix, which
+/// is the question 「I am typing this name」; this answers 「there is a `panel`
+/// in there somewhere」, and the caller puts these after the prefix rows so
+/// they are drawn as the guesses they are.
+///
+/// Reported 2026-10-16: 「I search `:panel` but cannot see anything related to
+/// `:yume-panel`」. The guess layer below this one is scored, and `panel` is a
+/// low-information word in this table — it stands in `panel-left`,
+/// `panel-right` and both of their explanations — so `yume-panel` never
+/// cleared [`crate::lookfor::SURE_ENOUGH`]. A word in a name is not a thing to
+/// score: it is there or it is not.
+///
+/// The first part is skipped: that one is [`complete`]'s, and offering it here
+/// would list every prefix match twice.
+pub fn by_segment(line: &str) -> Vec<Choice> {
+    let typed = line.strip_prefix(':').unwrap_or(line);
+    // Only while a bare name is being typed — a line with a space on it is
+    // asking about an argument, and the walk below answers that.
+    if typed.is_empty() || typed.contains(' ') {
+        return Vec::new();
+    }
+    COMMANDS
+        .iter()
+        .filter(|e| e.name.split('-').skip(1).any(|part| part.starts_with(typed)))
+        .map(one_row)
+        .collect()
+}
+
 pub fn complete(prefix: &str) -> Vec<Choice> {
     complete_at(prefix).1
 }
@@ -5036,28 +5095,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // command says may follow — which is the same walk whether those words are
     // arguments or subcommands, because they are the same thing.
     // One row of the top level, however it was reached.
-    let row = |e: &'static Entry| Choice {
-        name: e.name,
-        family: None,
-        needs: e.needs,
-        alias: (!e.aliases.is_empty()).then(|| e.aliases.join(" ")),
-        // **Among the aliases too.** `:table-jump` has no alias of its own and
-        // no other *name* starts with `ro`, so the shortest walk over names
-        // alone offered `(ro)` — while `ro` is `:readonly`'s declared alias,
-        // and an exact alias beats a prefix in `resolve`. The menu was
-        // promising a spelling that did something else.
-        short: shortest(
-            e.name,
-            COMMANDS
-                .iter()
-                .filter(|c| c.name != e.name)
-                .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied())),
-        ),
-        help: e.help,
-        leading: ":",
-        under: String::new(),
-        note: None,
-    };
+    let row = one_row;
     let mut choices: Vec<Choice> = match words.first() {
         None => COMMANDS
             .iter()

@@ -21,6 +21,12 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **A word anywhere in a command's name now finds it.** A name is a path of
+  hyphen-separated words, so typing `panel` offers `:yume-panel` and `:wiki-panel`
+  alongside the `:panel-…` family rather than only the ones that begin with it, and
+  `scheme` finds `:yume-scheme`. They are listed after the prefix matches and drawn as
+  the guesses they are. The scored guess layer below this one could not do it — `panel`
+  is a low-information word in that table, so it never cleared the threshold.
 - **`C-p`/`C-n` on the `:` and `/` prompts now walk the history, not the completion
   menu.** `Tab`/`S-Tab` walk the menu, as they always did. The editor opens the
   completion menu as soon as you press `:`, so those two keys could never reach the
