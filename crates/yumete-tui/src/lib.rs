@@ -10037,8 +10037,16 @@ fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
 /// all counted the other way.
 ///
 /// [`put_text`] never had this problem — it walks grapheme by grapheme and
-/// blanks the trailing cell itself, which is why the panels, the status line,
-/// the candidate bar and the vertical page needed nothing.
+/// blanks the trailing cell itself, which is why the panels, the candidate bar
+/// and the vertical page needed nothing.
+///
+/// Warning: **Every `Paragraph` on the page goes through this**, not only the body.
+/// The status line was missed on the first pass and reported the next day:
+/// 「For PUA, the status bar show the char directly with the unicode (no
+/// space). But there is a space at the end」 — the readout is laid out against
+/// `str_width`, which counts the 字根 two, so the row was placed as if it were
+/// two cells and drawn as if it were one: the glyph's ink ate the space after
+/// it and the row finished a column short of its own edge.
 ///
 /// The space goes **inside the span the character is in**, so it carries that
 /// character's own style: a selected 字根 keeps its ground across both of its
@@ -10046,6 +10054,10 @@ fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
 ///
 /// Warning: **After [`scrolled`], not before.** That one cuts the row in this editor's
 /// own cells, so it has to see the text the way the rest of the layout does.
+fn with_room_for_private_use(lines: Vec<Line<'static>>) -> Vec<Line<'static>> {
+    lines.into_iter().map(room_for_private_use).collect()
+}
+
 fn room_for_private_use(line: Line<'static>) -> Line<'static> {
     if !line.spans.iter().any(|s| s.content.chars().any(yumete_cjk::is_private_use)) {
         return line;
@@ -11211,7 +11223,7 @@ fn draw_horizontal(
                     over,
                 ));
             }
-            lines.push(room_for_private_use(scrolled(reading, gutter, left)));
+            lines.push(scrolled(reading, gutter, left));
         }
 
         // **別的那幾處命中，墊在最底下一層**——站着的那一處畫在它之後，所以蓋
@@ -11351,12 +11363,15 @@ fn draw_horizontal(
                 label_cells.push((text_area.x + (cell - left) as u16, y, label.to_string()));
             }
         }
-        lines.push(room_for_private_use(scrolled(Line::from(spans), gutter, left)));
+        lines.push(scrolled(Line::from(spans), gutter, left));
     }
     // `.style` paints the **whole area**, not only the rows there is writing
     // on: past the last line of a short file the page is still the page, and
     // 墨香's light page on a dark terminal made that half of the window black.
-    frame.render_widget(Paragraph::new(lines).style(ink.page()), text_area);
+    frame.render_widget(
+        Paragraph::new(with_room_for_private_use(lines)).style(ink.page()),
+        text_area,
+    );
 
     // **空手打開的那一屏**（2026-10-05 定，照 vim 的開場）。
     //
@@ -11440,7 +11455,10 @@ fn draw_horizontal(
             scrolled(numbers.unwrap_or_else(blank), gutter, left),
             scrolled(names.unwrap_or_else(blank), gutter, left),
         ];
-        frame.render_widget(Paragraph::new(rows).style(head_bar), bar);
+        frame.render_widget(
+            Paragraph::new(with_room_for_private_use(rows)).style(head_bar),
+            bar,
+        );
     }
 
     // The margin: everything past the measure, whether or not there is writing
@@ -11565,11 +11583,11 @@ fn draw_status(
         // terminal that drops the attribute.
         let guess = bar.fg(ink.at(yumete_config::rung::RULE));
         frame.render_widget(
-            Paragraph::new(Line::from(vec![
+            Paragraph::new(room_for_private_use(Line::from(vec![
                 Span::styled(line, bar),
                 Span::styled(drawn, guess),
                 Span::styled(format!("{}{tag}", " ".repeat(gap)), bar),
-            ]))
+            ])))
             .style(bar),
             status_area,
         );
@@ -11800,7 +11818,7 @@ fn draw_status(
     let cut = mode.len().min(status.len());
     let (word, rest) = status.split_at(cut);
     frame.render_widget(
-        Paragraph::new(Line::from(vec![
+        Paragraph::new(room_for_private_use(Line::from(vec![
             // 左邊那一格是留白，和底下那一行對齊。
             Span::styled(" ".to_string(), bar),
             Span::styled(
@@ -11833,7 +11851,7 @@ fn draw_status(
                 bar,
             ),
             Span::styled(drawable(&format!("{}{tail}", " ".repeat(gap))).into_owned(), bar),
-        ]))
+        ])))
         .style(bar),
         status_area,
     );
@@ -13108,7 +13126,7 @@ fn draw_panel_rows(
     });
     // The rows go inside the ring rather than through a `Paragraph`'s own
     // block: the ring is `chrome`'s now, and one thing should draw it.
-    frame.render_widget(Paragraph::new(lines).style(ground), inner);
+    frame.render_widget(Paragraph::new(with_room_for_private_use(lines)).style(ground), inner);
 }
 
 #[cfg(test)]
@@ -21724,6 +21742,47 @@ fn squeezed(text: &str) -> String {
         assert_eq!(han[6], "B", "{han:?}");
         assert_eq!(root[5], " ", "and so does a 字根: {root:?}");
         assert_eq!(root[6], "B", "{root:?}");
+    }
+
+    /// **The status line's readout lines up on a 字根 too** (2026-10-16 報的).
+    ///
+    /// 「For non-PUA, the status bar show the char with a space between it and
+    /// the unicode point……For PUA, the status bar show the char directly with
+    /// the unicode (no space). But there is a space at the end」 — the row is
+    /// placed against `str_width`, which counts a 字根 two, and ratatui drew it
+    /// as one.
+    #[test]
+    fn the_status_readout_lines_up_on_a_private_use_character() {
+        let config = Config::default();
+        // Warning: **Read it as cells, not as a string.** A wide glyph leaves the cell
+        // beside it holding a blank, so collecting symbols gives a row with
+        // gaps in it that are not in the writing.
+        let readout = |text: &str| -> (Vec<String>, u16) {
+            let editor = editor_with(text);
+            let buffer = render(&editor, &config, 80, 6);
+            let cells: Vec<String> =
+                (0..80).map(|x| buffer[(x, 4)].symbol().to_string()).collect();
+            let last = (0..80)
+                .rev()
+                .find(|&x| !cells[x as usize].trim().is_empty())
+                .expect("the readout is on the status line");
+            (cells, last)
+        };
+        let (han, han_end) = readout("\u{9fb4}");
+        let (root, root_end) = readout("\u{f860}");
+        // Both run to the same last column: neither finishes one short of the
+        // edge, which is what the 字根 used to do.
+        assert_eq!(han_end, root_end, "both readouts end on the same column");
+        // Two cells for the character, one blank, then its code point —
+        // the same shape for either kind.
+        let at = |cells: &[String], c: &str| {
+            (0..80usize).find(|&x| cells[x] == c).expect("the character is on the line")
+        };
+        for (cells, c) in [(&han, "\u{9fb4}"), (&root, "\u{f860}")] {
+            let x = at(cells, c);
+            assert_eq!(cells[x + 2].trim(), "", "a blank after the two cells: {:?}", &cells[x..x + 4]);
+            assert_eq!(cells[x + 3], "U", "then the code point: {:?}", &cells[x..x + 6]);
+        }
     }
 
     /// **The block cursor is painted into the page, and is as wide as what it

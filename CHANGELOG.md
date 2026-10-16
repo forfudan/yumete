@@ -53,7 +53,10 @@ in `docs/development.md` §5.2.
   that font is full width, so the ink painted over whatever stood in the next cell: in a
   vertical 縱 the 字根 was hung against the right half of its slot and spilled into the
   column beside it. They now take the two cells a 漢字 in their place would, and the
-  block cursor covers both of them across the page as well.
+  block cursor covers both of them across the page as well. The status line's character
+  readout lines up on one too — it was placed as if the 字根 were two cells and drawn as
+  if it were one, so the glyph's ink ate the space after it and the row finished a column
+  short of its own edge.
 - **The block cursor is drawn by the editor, not by the terminal.** Across the page as
   well as down it, the block is painted into the page the way the vertical layout has
   always painted it: it is as wide as the character it stands on, its colour comes off
