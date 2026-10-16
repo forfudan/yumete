@@ -4908,12 +4908,30 @@ fn draw(
         // ratatui 就把它藏起來（`Terminal::draw` 裏 `None => hide_cursor()`）。
         // 打字的時候由下面那一段設回來。
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
-        // Vertically the terminal's cursor is shown only in Insert, where it is
-        // the caret; in Normal the block is painted into the page and a second,
-        // half-width cursor on top of it would only confuse.
-        frame.set_cursor_position(Position::new(cursor_x, cursor_y));
-        finish_the_block_on_a_wide_glyph(frame, editor, config, (cursor_x, cursor_y), areas.panes
-            [editor.live_pane().min(1)]);
+        // **A block is painted into the page; a bar is the terminal's.**
+        //
+        // The vertical page has always painted its own block, and 2026-10-16
+        // this page does too: 「和豎排的 block 光標一致，都是自己畫的……顔色可
+        // 控……大小可控……你 shot 截圖的時候就可以截到了」. The last one is the
+        // reason this was worth doing on its own: a cursor the terminal draws
+        // leaves no mark in the buffer, so every offscreen picture this repo
+        // reviews by was a picture with no cursor in it.
+        //
+        // The bar and the underscore stay the terminal's. They are one cell by
+        // nature, nothing about them is wrong, and the terminal blinks and
+        // shapes them the way the reader set it up to.
+        let vertical = editor.layout() == WritingLayout::Vertical;
+        let shape = caret_shape(editor.mode(), vertical, editor.is_extending());
+        match matches!(shape, SetCursorStyle::SteadyBlock) {
+            true => paint_the_caret_block(
+                frame,
+                editor,
+                config,
+                (cursor_x, cursor_y),
+                areas.panes[editor.live_pane().min(1)],
+            ),
+            false => frame.set_cursor_position(Position::new(cursor_x, cursor_y)),
+        }
     }
 
     if candidate_panel {
@@ -12488,51 +12506,43 @@ fn draw_command(
 /// `box_in` paints that one, and the two shapes then say the same thing
 /// everywhere — **bar means the next key is a character, block means it is a
 /// command**.
-/// Paint the second cell of a block cursor standing on a private-use character.
+/// Paint the block cursor over the character it stands on, as wide as that
+/// character is.
 ///
-/// **The terminal's block is as wide as the terminal thinks the character is.**
-/// For a 字根 it thinks one cell — Annex #11 calls the whole private-use area
-/// Ambiguous — while this editor and the font that carries them both say two
-/// ([`yumete_cjk::is_private_use`]). So the block covered the left half of the
-/// glyph and the right half stayed page colour, which is what was reported on
-/// 2026-10-16: 「when the cursor is moved onto that PUA, it highlighted only
-/// half (left cell), in the horizontal layout」.
+/// **The terminal's own block is as wide as the *terminal* thinks a character
+/// is**, and on a private-use character it thinks one cell while this editor
+/// and the font that carries 字根 both say two — so it covered the left half of
+/// the glyph and left the right half page-coloured (reported 2026-10-16). There
+/// is no asking a terminal to draw its cursor wider, so the whole block is
+/// drawn here instead, which also settles three other things: it is the same
+/// mechanism the vertical page has always used, its colour comes off the theme
+/// rather than out of the terminal's settings, and **it is in the buffer**, so
+/// an offscreen picture has a cursor in it.
 ///
-/// There is no asking the terminal to draw its own cursor wider, so the other
-/// half is painted here, in the colours the vertical page already paints its
-/// whole block with — that page has always drawn its own and is right for the
-/// same reason (see [`caret_shape`]).
-///
-/// Warning: **Only under a block.** Insert is a bar and 延伸 an underscore, and half a
-/// block standing next to either of those says something that is not true.
-///
-/// Warning: **Only inside the page.** A 字根 in the last column would otherwise paint
-/// its other half onto the sidebar's first cell.
-fn finish_the_block_on_a_wide_glyph(
+/// Warning: **Only inside the page.** A wide glyph in the last column would otherwise
+/// paint its other half onto the sidebar's first cell.
+fn paint_the_caret_block(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
     (cursor_x, cursor_y): (u16, u16),
     page: Rect,
 ) {
-    let shape = caret_shape(editor.mode(), false, editor.is_extending());
-    if !matches!(shape, SetCursorStyle::SteadyBlock) {
-        return;
-    }
-    let on_a_root = editor
+    // A line break and a tab are not glyphs — a tab's width is where the next
+    // stop is, not something the character carries, and neither is a thing the
+    // block is standing *on*. One cell for both, which is what the terminal
+    // drew for them.
+    let wide = editor
         .grapheme_at_cursor()
-        .and_then(|g| g.chars().next())
-        .is_some_and(yumete_cjk::is_private_use);
-    if !on_a_root {
-        return;
-    }
-    let other = cursor_x + 1;
-    if other >= page.x + page.width {
-        return;
-    }
+        .filter(|g| !matches!(g.as_str(), "\n" | "\r\n" | "\r" | "\t"))
+        .map_or(1, |g| yumete_cjk::grapheme_width(&g).max(1)) as u16;
     let ink = crate::theme::Palette::of(config);
-    if let Some(cell) = frame.buffer_mut().cell_mut((other, cursor_y)) {
-        cell.set_style(ink.reversed(Style::default()));
+    let block = ink.reversed(Style::default());
+    let end = (cursor_x + wide).min(page.x + page.width);
+    for x in cursor_x..end {
+        if let Some(cell) = frame.buffer_mut().cell_mut((x, cursor_y)) {
+            cell.set_style(block);
+        }
     }
 }
 
@@ -13648,7 +13658,7 @@ fn squeezed(text: &str) -> String {
             .draw(|frame| draw(frame, &ed, &config, no_ime(), &mut viewport, Some(&page)))
             .unwrap();
         assert_eq!(
-            terminal.get_cursor_position().unwrap(),
+            caret_of(&mut terminal, &config),
             Position::new(9, 9),
             "沒在打字，誰都不該去設那根光標"
         );
@@ -13911,8 +13921,80 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| draw(frame, editor, config, no_ime(), &mut viewport, None))
             .unwrap();
-        let at = terminal.get_cursor_position().ok();
-        (terminal.backend().buffer().clone(), at)
+        let buffer = terminal.backend().buffer().clone();
+        // **The block is painted into the page now**, so the terminal was never
+        // told where it is (2026-10-16, horizontal; the vertical page has
+        // always been this way). Ask the buffer first and fall back to the
+        // terminal, which is still where a bar and an underscore live.
+        let at = painted_caret(&buffer, config).or_else(|| terminal.get_cursor_position().ok());
+        (buffer, at)
+    }
+
+    /// The ground of the cell at `x, y`, stepping past the caret's block.
+    ///
+    /// The block is painted into the page (2026-10-16), so to anything reading
+    /// the buffer back it is a ground like any other — and a test asking 「what
+    /// colour is this row」 that happens to sample the cell the caret stands on
+    /// reads the block instead of the row. Every one of these tests is about a
+    /// *row's* ground, and a row's ground is the same all the way across, so
+    /// the honest reading is the first cell on it that is not the caret.
+    fn ground_at(buffer: &ratatui::buffer::Buffer, config: &Config, x: u16, y: u16) -> Option<Color> {
+        style_at(buffer, config, x, y).bg
+    }
+
+    /// The whole style of the cell at `x, y`, stepping past the caret's block.
+    /// See [`ground_at`] — the ink is covered by it as much as the ground is.
+    fn style_at(buffer: &ratatui::buffer::Buffer, config: &Config, x: u16, y: u16) -> Style {
+        let mut at = x;
+        while under_the_caret(buffer, config, at, y) && at + 1 < buffer.area.width {
+            at += 1;
+        }
+        buffer[(at, y)].style()
+    }
+
+    /// Whether the caret's block is painted over the cell at `x, y`.
+    ///
+    /// Two cells wide at most, and reading one cell too many is harmless to
+    /// every caller: they are all asking about a run whose colour is the same
+    /// all the way along.
+    fn under_the_caret(buffer: &ratatui::buffer::Buffer, config: &Config, x: u16, y: u16) -> bool {
+        painted_caret(buffer, config).is_some_and(|b| b.y == y && x >= b.x && x < b.x + 2)
+    }
+
+    /// Where the caret is, painted block first and the terminal's own after.
+    ///
+    /// Every test that asks 「where is the caret」 goes through this: the block
+    /// stopped being the terminal's on 2026-10-16, so asking the terminal alone
+    /// answers 「wherever it was last left」, which is 0,0 and looks like a
+    /// caret that never moved.
+    fn caret_of(terminal: &mut Terminal<TestBackend>, config: &Config) -> Position {
+        if let Some(at) = painted_caret(terminal.backend().buffer(), config) {
+            return at;
+        }
+        terminal.get_cursor_position().expect("a caret somewhere")
+    }
+
+    /// Where the block cursor was painted, if it was.
+    ///
+    /// The horizontal page stopped handing its block to the terminal on
+    /// 2026-10-16 — 「和豎排的 block 光標一致，都是自己畫的」 — so a test asking
+    /// 「where is the caret」 reads the page, exactly as the reader does.
+    /// Insert's bar and 延伸's underscore are still the terminal's and paint
+    /// nothing, so this answers `None` for them.
+    fn painted_caret(buffer: &ratatui::buffer::Buffer, config: &Config) -> Option<Position> {
+        // Warning: **Match the ground, not the whole style.** `Cell::set_style` patches
+        // — a field the block leaves unset keeps whatever the cell had — so the
+        // cell never compares equal to the style it was painted with.
+        let block = crate::theme::Palette::of(config).reversed(Style::default());
+        (0..buffer.area.height).find_map(|y| {
+            (0..buffer.area.width)
+                .find(|&x| {
+                    let cell = &buffer[(x, y)];
+                    cell.bg == block.bg.expect("the block has a ground")
+                        && Some(cell.fg) == block.fg
+                })
+                .map(|x| Position::new(x, y))
+        })
     }
 
     /// Render vertically, returning where the terminal's cursor was left — the
@@ -13933,8 +14015,13 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| draw(frame, editor, config, no_ime(), &mut viewport, None))
             .unwrap();
-        let at = terminal.get_cursor_position().ok();
-        (terminal.backend().buffer().clone(), at)
+        let buffer = terminal.backend().buffer().clone();
+        // **The block is painted into the page now**, so the terminal was never
+        // told where it is (2026-10-16, horizontal; the vertical page has
+        // always been this way). Ask the buffer first and fall back to the
+        // terminal, which is still where a bar and an underscore live.
+        let at = painted_caret(&buffer, config).or_else(|| terminal.get_cursor_position().ok());
+        (buffer, at)
     }
 
     /// Render vertically with ruby layout on.
@@ -14031,7 +14118,7 @@ fn squeezed(text: &str) -> String {
             terminal
                 .draw(|frame| draw(frame, editor, &config, no_ime(), seats, None))
                 .unwrap();
-            let at = terminal.get_cursor_position().unwrap();
+            let at = caret_of(&mut terminal, &config);
             let row: String = (0..w)
                 .map(|x| terminal.backend().buffer()[(x, at.y)].symbol())
                 .collect();
@@ -18195,7 +18282,11 @@ fn squeezed(text: &str) -> String {
         let row = row_holding(&buf, "| 木");
         let text = row_text(&buf, row);
         let mu = column_of(&text, "mu");
-        for x in mu..mu + 2 {
+        // Warning: **Not the cells the caret stands on.** This test stands *in* the
+        // cell on purpose, and the caret's block is painted into the page
+        // (2026-10-16) — so those cells carry the block's ground, not the
+        // cell's. Every other column of the cell still answers.
+        for x in (mu..mu + 2).filter(|&x| !under_the_caret(&buf, &config, x, row)) {
             assert_eq!(buf[(x, row)].bg, want, "column {x} of {text:?} is in the cell");
         }
         // The pipe that closes the cell is not in it.
@@ -18318,7 +18409,9 @@ fn squeezed(text: &str) -> String {
         // page twice and the first one is not in the table.
         let y = row_with(&buf, "| 木");
         let text = row_text(&buf, y);
-        assert_eq!(buf[(column_of(&text, "木"), y)].bg, want, "{text:?}");
+        // Warning: **Past the caret** — it stands in this very cell, and its block is
+        // painted into the page (2026-10-16).
+        assert_eq!(ground_at(&buf, &config, column_of(&text, "木"), y), Some(want), "{text:?}");
 
         // Out of the table altogether. `ge` is not a table motion, so this is
         // the ordinary prose under it — no cell of anything.
@@ -18432,7 +18525,8 @@ fn squeezed(text: &str) -> String {
         let text = row_text(&buf, row);
         let mu = column_of(&text, "mu");
         // `mu` itself, then the two columns of padding after it, all one cell.
-        for x in mu..mu + 4 {
+        // Warning: **Not the cells the caret stands on** — see the twin test above.
+        for x in (mu..mu + 4).filter(|&x| !under_the_caret(&buf, &config, x, row)) {
             assert_eq!(buf[(x, row)].bg, want, "column {x} of {text:?}");
         }
         // …and it stops at the pipe. **The pipe**, not `mu + 4`: the box holds
@@ -19598,7 +19692,11 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('j'));
 
         let lit = render_wrapped(&mut editor, &config, 30, 8);
-        let ink = |b: &ratatui::buffer::Buffer, y: u16| b[(0, y)].fg;
+        // Warning: **Past the caret** — its block is painted into the page, so the
+        // cell it stands on carries the block's ink, not the row's (2026-10-16).
+        let ink = |b: &ratatui::buffer::Buffer, y: u16| {
+            style_at(b, &config, 0, y).fg.unwrap_or(Color::Reset)
+        };
         // Nothing is stood back until it is asked for.
         assert_eq!(ink(&lit, 0), ink(&lit, 1), "{:?}", ink(&lit, 0));
 
@@ -19633,7 +19731,10 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('j'));
 
         let lit = render_wrapped(&mut editor, &config, 30, 8);
-        let ink = |b: &ratatui::buffer::Buffer, y: u16| b[(0, y)].fg;
+        // Warning: **Past the caret** — see the twin test above.
+        let ink = |b: &ratatui::buffer::Buffer, y: u16| {
+            style_at(b, &config, 0, y).fg.unwrap_or(Color::Reset)
+        };
         // The reader's own ink, on the reader's own ground.
         assert_eq!(ink(&lit, 0), ratatui::style::Color::Reset);
 
@@ -19840,7 +19941,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| draw(frame, editor, config, no_ime(), viewport, None))
             .unwrap();
-        terminal.get_cursor_position().ok()
+        Some(caret_of(&mut terminal, config))
     }
 
     #[test]
@@ -20874,6 +20975,12 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
+        // Warning: **Stand somewhere the assertions are not.** The caret's block is
+        // painted into the page (2026-10-16), and this test reads the ink of
+        // five named cells — one of which is where a fresh editor starts.
+        // 文末 is past all of them.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('e'));
         let buffer = render(&editor, &config, 40, 8);
 
         // The markup is still on the page — this is a manuscript, not a preview.
@@ -20977,7 +21084,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut viewport, None))
             .unwrap();
-        let at = terminal.get_cursor_position().unwrap();
+        let at = caret_of(&mut terminal, &config);
         // 那年冬 is six cells; the four asterisks took their columns with them.
         assert_eq!(at.x, 6, "the caret followed the markup off the page");
     }
@@ -21031,13 +21138,14 @@ fn squeezed(text: &str) -> String {
         config.editor.show_segmentation = false;
         let buffer = render(&editor, &config, 40, 10);
 
-        let prose = buffer[(0, 0)].style().bg;
-        let ours = buffer[(0, 2)].style().bg;
-        let theirs = buffer[(0, 4)].style().bg;
+        // Warning: **Past the caret** — see `ground_at`.
+        let prose = ground_at(&buffer, &config, 0, 0);
+        let ours = ground_at(&buffer, &config, 0, 2);
+        let theirs = ground_at(&buffer, &config, 0, 4);
         assert_ne!(ours, prose, "our side sits on a ground of its own");
         assert_ne!(theirs, prose, "and so does theirs");
         assert_ne!(ours, theirs, "which is the whole point of drawing them");
-        assert_eq!(buffer[(38, 4)].style().bg, theirs, "all the way across");
+        assert_eq!(ground_at(&buffer, &config, 38, 4), theirs, "all the way across");
         assert_eq!(buffer[(0, 6)].style().bg, prose, "and it ends where it says");
 
         // The markers are 朱 — the one thing on the page that says 這裏不對.
@@ -21064,12 +21172,15 @@ fn squeezed(text: &str) -> String {
 
         // Prose is on the page's own ground; the container is on its own, and
         // that ground runs the width of the row, not just under the words.
-        let prose = buffer[(0, 0)].style().bg;
-        let aside = buffer[(0, 2)].style().bg;
+        // Warning: **Read the grounds past the caret** — its block is painted into
+        // the page, so the cell it stands on carries the block's ground and not
+        // the row's (2026-10-16).
+        let prose = ground_at(&buffer, &config, 0, 0);
+        let aside = ground_at(&buffer, &config, 0, 2);
         assert_ne!(aside, prose, "the container has a ground of its own");
-        assert_eq!(buffer[(38, 2)].style().bg, aside, "all the way across");
+        assert_eq!(ground_at(&buffer, &config, 38, 2), aside, "all the way across");
         assert_eq!(
-            buffer[(0, 4)].style().bg,
+            ground_at(&buffer, &config, 0, 4),
             prose,
             "and it ends where it says"
         );
@@ -21099,12 +21210,13 @@ fn squeezed(text: &str) -> String {
         config.editor.show_segmentation = false;
         let buffer = render(&editor, &config, 40, 8);
 
-        let prose = buffer[(0, 0)].style().bg;
+        // Warning: **Past the caret** — see `ground_at`.
+        let prose = ground_at(&buffer, &config, 0, 0);
         // **Two grounds, and one of them is the page** (#480, #486). The body
         // alternates so one row's cells can be told from the next's when a cell
         // wraps; the header and the `---` under it are one thing and take the
         // page, because the header is told apart by its **ink**.
-        assert_eq!(buffer[(0, 1)].style().bg, prose, "the header is not banded");
+        assert_eq!(ground_at(&buffer, &config, 0, 1), prose, "the header is not banded");
         assert_eq!(buffer[(0, 2)].style().bg, prose, "…nor the rule under it");
         assert_ne!(buffer[(0, 3)].style().bg, prose, "the body is");
         let ink = ink(&config);
@@ -21612,6 +21724,42 @@ fn squeezed(text: &str) -> String {
         assert_eq!(han[6], "B", "{han:?}");
         assert_eq!(root[5], " ", "and so does a 字根: {root:?}");
         assert_eq!(root[6], "B", "{root:?}");
+    }
+
+    /// **The block cursor is painted into the page, and is as wide as what it
+    /// stands on** (2026-10-16).
+    ///
+    /// 「我覺得最好是横排的 block 方塊光標自己畫……和豎排的 block 光標一致，都是
+    /// 自己畫的……顔色可控……大小可控……你 shot 截圖的時候就可以截到了。」
+    #[test]
+    fn the_block_cursor_is_painted_and_covers_what_it_stands_on() {
+        let config = Config::default();
+        // `ink()` settles the mood first; `Palette::of` on its own panics in a
+        // test build (see `theme.rs`).
+        let block = ink(&config).reversed(Style::default());
+        let under = |text: &str, keys: &[Key], x: u16| {
+            let mut editor = editor_with(text);
+            for key in keys {
+                editor.on_key(*key);
+            }
+            let buffer = render(&editor, &config, 24, 4);
+            let cell = &buffer[(x, 0)];
+            cell.bg == block.bg.expect("a ground") && Some(cell.fg) == block.fg
+        };
+        // Warning: **A wide glyph carries its own second cell.** ratatui resets the
+        // cell a wide symbol runs into and the terminal paints the glyph across
+        // both from the leading cell's style, so a 漢字 needs the block on its
+        // first cell and nothing on the one after. A 字根 is the other case:
+        // ratatui thinks it narrow, so the cell beside it is a real one holding
+        // the space this editor pads with — and that one has to be painted.
+        assert!(under("那年", &[], 3), "the block is on 那");
+        assert!(!under("那年", &[], 5), "and not on 年");
+        // A letter is one cell.
+        assert!(under("ab", &[], 3));
+        assert!(!under("ab", &[], 4));
+        // **In Insert there is no block** — the bar is the terminal's, and it
+        // paints nothing into the page.
+        assert!(!under("那年", &[Key::Char('i')], 3), "a bar paints nothing");
     }
 
     /// **A block cursor on a 字根 covers both of its cells** (2026-10-16).
@@ -23330,7 +23478,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut viewport, None))
             .unwrap();
-        let at = terminal.get_cursor_position().unwrap();
+        let at = caret_of(&mut terminal, &config);
         assert_eq!((at.x, at.y), (0, 1));
     }
 
@@ -23394,7 +23542,7 @@ fn squeezed(text: &str) -> String {
         terminal
             .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut viewport, None))
             .unwrap();
-        let at = terminal.get_cursor_position().unwrap();
+        let at = caret_of(&mut terminal, &config);
         assert!(at.y < 3, "the caret stays on the page, was at row {}", at.y);
     }
     /// 疏排 and a reading over a paragraph that wraps: the row of air is bought

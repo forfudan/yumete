@@ -53,8 +53,13 @@ in `docs/development.md` §5.2.
   that font is full width, so the ink painted over whatever stood in the next cell: in a
   vertical 縱 the 字根 was hung against the right half of its slot and spilled into the
   column beside it. They now take the two cells a 漢字 in their place would, and the
-  block cursor covers both of them across the page as well — the terminal draws its own
-  block as wide as *it* thinks the character is, so the other half is painted in.
+  block cursor covers both of them across the page as well.
+- **The block cursor is drawn by the editor, not by the terminal.** Across the page as
+  well as down it, the block is painted into the page the way the vertical layout has
+  always painted it: it is as wide as the character it stands on, its colour comes off
+  the theme rather than out of the terminal's settings, and it is in the picture when
+  the page is photographed. Insert's bar and the underscore that marks 延伸 are still
+  the terminal's own.
 - **`Tab` on a candidate no longer forces the sidebar open.** Asking about the
   highlighted candidate floats the answer beside the caret, the way `空格 n` does; if
   the sidebar is already showing info the answer goes in there instead. It used to do
